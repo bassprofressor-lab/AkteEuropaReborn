@@ -1,116 +1,120 @@
 # Akte Europa Reborn
 
-Eine Neuimplementierung des Echtzeit-Strategiespiels **Akte Europa** (1997) in
-Godot 4 und C#.
+A reimplementation of the 1997 real-time strategy game **Akte Europa** in
+Godot 4 and C#, by **chr1zZo**.
 
-Das Projekt enthält **keinerlei Daten des Originalspiels**. Es liest die beiden
-Original-CDs, die man selbst besitzen muss, und leitet daraus auf dem eigenen
-Rechner alles ab, was zum Spielen nötig ist: Karten, Einheitengrafiken,
-Schriften, Tabellen, Missionstexte. Die ausgelieferte Programmdatei trägt nichts
-von 1997 in sich — die mitgelieferte `.pck` ist rund 200 KB groß.
+*[Deutsche Fassung](README.de.md)*
 
----
-
-![Mission 05 „Production"](docs/screenshots/04-mission.png)
-
-Die Missionsbriefings erscheinen auf dem Bildschirm des Originals — das Bild
-steckt in `BRIEFG.DAT`, der Text in `BRIEFG.TXT`, die Schrift ist die des
-Spiels:
-
-![Missionsbriefing](docs/screenshots/01-briefing.png)
-
-Die Karten werden in voller Größe gebacken, bis 10160 × 5285 Pixel. „River
-Combat" mit 321 Einheiten, ganz herausgezoomt:
-
-![Karte „River Combat"](docs/screenshots/03-uebersicht.png)
-
-Basis mit Seitenpanel und Übersichtskarte:
-
-![Basis](docs/screenshots/02-basis.png)
+The project ships **no data from the original game whatsoever**. It reads the two
+original CDs — which you need to own — and derives everything the game needs on
+your own machine: maps, unit graphics, fonts, tables, mission briefings. The
+shipped executable carries nothing from 1997; the bundled `.pck` is about 200 KB.
 
 ---
 
-## Stand
+![Mission 05 "Production"](docs/screenshots/04-mission.png)
 
-Spielbar sind Gefechte und die Kampagne mit 33 Missionen. Aus den zwei Discs
-entstehen beim ersten Start:
+Mission briefings appear on the original's own screen — the picture comes out of
+`BRIEFG.DAT`, the text out of `BRIEFG.TXT`, and the typeface is the game's own:
+
+![Mission briefing](docs/screenshots/01-briefing.png)
+
+Maps are baked at full size, up to 10160 × 5285 pixels. "River Combat" with 321
+units, zoomed all the way out:
+
+![Map "River Combat"](docs/screenshots/03-uebersicht.png)
+
+A base with the side panel and the overview map:
+
+![Base](docs/screenshots/02-basis.png)
+
+---
+
+## Download
+
+Grab the installer from the [releases page](../../releases/latest), run it, and
+point it at your CDs on first start.
+
+## Status
+
+Skirmishes and the 33-mission campaign are playable. From the two discs, the
+first launch derives:
 
 | | |
 |---|---|
-| Karten | 44, gebacken bis 10160 × 5285 Pixel |
-| Spielstände | 44 (Einheiten, Gebäude, Ziele, Vorkommen, Schienen …) |
-| Einheitenbilder | 4329, aus ROBO.CWR zusammengesetzt |
-| Tabellen | 11, aus Kartendateien und GAME.EXE |
-| Oberfläche | Originalschrift, Seitenpanel, Effekte, Missionsbriefings |
+| Maps | 44, baked up to 10160 × 5285 pixels |
+| Game states | 44 (units, buildings, objectives, deposits, rail lines …) |
+| Unit pictures | 4329, composed out of ROBO.CWR |
+| Tables | 11, from the map files and GAME.EXE |
+| Interface | original typeface, side panel, effects, mission briefings |
 
-Die Simulation läuft auf den Zahlen des Originals: Preise, Lebenspunkte, Angriff
-und Verteidigung, Reichweite, Nachladezeit, Geschwindigkeit, Treibstoff und
-Munition stammen aus den Datensätzen des Spiels und nicht aus geschätzten
-Konstanten. Wo etwas nicht rekonstruiert werden konnte, steht das als solches im
-Code — jede eigene Setzung ist dort ausdrücklich markiert.
+The simulation runs on the original's own numbers: prices, hit points, attack
+and defence, range, reload time, speed, fuel and ammunition all come from the
+game's records rather than from guessed constants. Where something could not be
+recovered, the code says so — every assumption of our own is marked as such.
 
-## Was man braucht
+## Requirements
 
-* Die beiden Original-CDs von *Akte Europa* (im Laufwerk oder als Ordner)
-* Windows; ein Build für andere Systeme ist bisher nicht eingerichtet
+* The two original *Akte Europa* CDs (in the drive or as folders)
+* Windows; builds for other systems are not set up yet
 
 ## Installation
 
-Den Installer aus den [Releases](../../releases) ausführen. Beim ersten Start
-fragt das Programm nach den Discs oder einem Installationsordner und leitet die
-Inhalte daraus ab. Das dauert einige Minuten; die abgeleiteten Dateien landen im
-Benutzerprofil, das Programmverzeichnis bleibt unberührt.
+Run the installer from the [releases page](../../releases/latest). On first
+start the program asks for the discs or an installation folder and derives the
+content from them. This takes a few minutes; the derived files go to your user
+profile and the program directory stays untouched.
 
-## Selbst bauen
+## Building it yourself
 
-Godot 4.7 (Mono/.NET) und das .NET-SDK werden gebraucht.
+You need Godot 4.7 (Mono/.NET) and the .NET SDK.
 
 ```bash
 dotnet build "Akte Europa Reborn.csproj"
 godot --path . --headless --export-release "Windows Desktop"
 ```
 
-Inhalte ohne Oberfläche importieren:
+Importing content without the interface:
 
 ```bash
-godot --path . --headless -- --import-cd          # Discs im Laufwerk
-godot --path . --headless -- --import=<Ordner>    # oder aus einer Installation
+godot --path . --headless -- --import-cd          # discs in the drive
+godot --path . --headless -- --import=<folder>    # or from an installation
 ```
 
-## Selbsttests
+## Self tests
 
-Die Leser für die Originalformate werden nicht nur gebaut, sondern gegen die
-Daten geprüft, aus denen sie lesen:
+The readers for the original formats are not merely built — they are checked
+against the data they read:
 
 ```bash
-godot --path . --headless -- --selftest-cwp=<Werkzeugordner>
+godot --path . --headless -- --selftest-cwp=<toolsdir>
 godot --path . --headless -- --selftest-designs
 godot --path . --headless -- --selftest-briefings
 ```
 
-Geprüft wird unter anderem: 13 Sprite-Rahmen pixelgenau gegen eine zweite
-Umsetzung, 26 Kartendateien restlos aufgebraucht, 4147 Einheitenbilder
-deckungsgleich, 601 Entwurfssätze exakt nachgerechnet, 33 Missionstexte
-zeichengleich.
+Among the things verified: 13 sprite frames pixel-identical against a second
+implementation, 26 map files consumed with zero bytes left over, 4147 unit
+pictures identical, 601 design records reproduced exactly, 33 mission texts
+character for character.
 
-## Wie das Projekt arbeitet
+## How this project works
 
-Jede Mechanik wird aus der Original-Binärdatei rekonstruiert, bevor sie
-implementiert wird — auch wenn Erfinden schneller wäre. Eine Deutung gilt erst,
-wenn eine Zahl dahintersteht: über alle Karten gezählt, gegen eine zweite
-Umsetzung gehalten, in der laufenden Engine nachgemessen. Was aus den Daten
-kommt und was von uns ist, wird getrennt und im Code benannt. Fehldeutungen
-werden zurückgezogen statt überschrieben.
+Every mechanic is reconstructed from the original binary before it is
+implemented — even where inventing something would be quicker. A reading only
+counts once there is a number behind it: counted across every map, held against
+a second implementation, measured in the running engine. What comes from the
+data and what comes from us is kept apart and named in the code. Misreadings get
+withdrawn rather than overwritten.
 
-Die Dateiformate wurden dabei einzeln aufgeschlossen: CWP (Kacheln und Objekte),
-CWM (Karten mit über 130 Abschnitten), CWR (Einheitensprites), CWD (Schriften),
-CWA (Effekte), das InstallShield-Kabinett der CD sowie die Tabellen in GAME.EXE.
+The file formats were opened up one at a time along the way: CWP (tiles and
+objects), CWM (maps with over 130 sections), CWR (unit sprites), CWD (fonts),
+CWA (effects), the CD's InstallShield cabinet, and the tables inside GAME.EXE.
 
-## Rechtliches
+## Legal
 
-Der Code steht unter der **GPL-3.0**, siehe [`LICENSE`](LICENSE).
+Copyright © 2026 **chr1zZo**. The code is licensed under the **GPL-3.0**, see
+[`LICENSE`](LICENSE).
 
-*Akte Europa* und alle zugehörigen Inhalte gehören ihren jeweiligen
-Rechteinhabern. Dieses Projekt ist weder von ihnen unterstützt noch mit ihnen
-verbunden und verbreitet keinerlei Originaldaten. Zum Spielen werden die
-Original-CDs benötigt.
+*Akte Europa* and all related content belong to their respective rights holders.
+This project is neither endorsed by nor affiliated with them, and distributes no
+original data. You need the original CDs to play.

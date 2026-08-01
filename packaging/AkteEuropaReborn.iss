@@ -12,7 +12,7 @@
 
 #define AppName        "Akte Europa Reborn"
 #define AppVersion     "0.2.0"
-#define AppPublisher   "Akte Europa Reborn"
+#define AppPublisher   "chr1zZo"
 #define AppExeName     "AkteEuropaReborn.exe"
 #define BuildDir       "..\build\windows"
 ; Godot legt die .NET-Laufzeit in einen Ordner NEBEN die .exe und sucht sie
@@ -25,6 +25,8 @@ AppId={{7C2B9A64-1E3D-4B7A-9C2E-AE1997CD0001}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
+AppCopyright=Copyright (C) 2026 chr1zZo — GPL-3.0
+AppPublisherURL=https://github.com/bassprofressor-lab/AkteEuropaReborn
 ; Ohne Adminrechte: das Spiel schreibt nichts in den Programmordner, die
 ; abgeleiteten Inhalte liegen unter %APPDATA%. Eine UAC-Abfrage waere also nur
 ; eine Huerde ohne Gegenwert — und in einer stillen Installation ein Haenger.
