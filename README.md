@@ -11,6 +11,25 @@ von 1997 in sich — die mitgelieferte `.pck` ist rund 200 KB groß.
 
 ---
 
+![Mission 05 „Production"](docs/screenshots/04-mission.png)
+
+Die Missionsbriefings erscheinen auf dem Bildschirm des Originals — das Bild
+steckt in `BRIEFG.DAT`, der Text in `BRIEFG.TXT`, die Schrift ist die des
+Spiels:
+
+![Missionsbriefing](docs/screenshots/01-briefing.png)
+
+Die Karten werden in voller Größe gebacken, bis 10160 × 5285 Pixel. „River
+Combat" mit 321 Einheiten, ganz herausgezoomt:
+
+![Karte „River Combat"](docs/screenshots/03-uebersicht.png)
+
+Basis mit Seitenpanel und Übersichtskarte:
+
+![Basis](docs/screenshots/02-basis.png)
+
+---
+
 ## Stand
 
 Spielbar sind Gefechte und die Kampagne mit 33 Missionen. Aus den zwei Discs

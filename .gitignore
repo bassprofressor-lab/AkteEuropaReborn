@@ -90,4 +90,5 @@ BUILD_MEMORY.md
 *.bak
 
 Screenshot*.png
+!docs/screenshots/*.png
 Screenshot*.png.import
