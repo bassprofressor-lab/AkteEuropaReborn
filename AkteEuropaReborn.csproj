@@ -1,0 +1,25 @@
+<Project Sdk="Godot.NET.Sdk/4.7.1">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <RootNamespace>AkteEuropaReborn</RootNamespace>
+    <AssemblyName>AkteEuropaReborn</AssemblyName>
+    <LangVersion>12</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Memory" Version="4.5.5" />
+    <PackageReference Include="System.Collections.Immutable" Version="8.0.0" />
+    <PackageReference Include="MessagePack" Version="2.5.192" />
+    <PackageReference Include="LiteNetLib" Version="0.9.8.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <GodotAdditionalFiles Include="**/*.gd" />
+    <GodotAdditionalFiles Include="**/*.tscn" />
+    <GodotAdditionalFiles Include="**/*.tres" />
+    <GodotAdditionalFiles Include="**/*.res" />
+    <GodotAdditionalFiles Include="**/*.cfg" />
+  </ItemGroup>
+</Project>

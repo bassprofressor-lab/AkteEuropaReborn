@@ -1,0 +1,93 @@
+# Godot 4
+.godot/
+**/.godot/
+**/project.godot.bak
+**/*.uid
+
+# Build artifacts
+build/
+bin/
+obj/
+*.exe
+*.pdb
+*.dll
+*.so
+*.dylib
+
+# C#
+*.csproj.user
+*.sln.cache
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svclog
+*.tlog
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Godot export templates
+export_templates/
+
+# Logs
+*.log
+logs/
+
+# User data
+user://
+*.save
+saves/
+
+# Legacy assets (not committed - user provides own)
+Assets/Legacy/
+*.cwp
+*.cwg
+*.cws
+*.pal
+*.lev
+*.cwi
+*.wsa
+*.vqa
+*.mix
+*.aud
+*.voc
+
+# Converted assets (generated)
+Assets/Converted/
+*.texarray
+*.tres
+*.res
+
+# Test output
+TestResults/
+coverage/
+
+# NuGet
+packages/
+*.nupkg
+
+# Editor
+*.tmp
+*.temp
+*.bak
+# Working notes and stale artefacts — not part of the published project
+.wolf/
+BUILD_MEMORY.md
+*.old
+*.old.*
+*.bak
+
+Screenshot*.png
+Screenshot*.png.import

@@ -1,0 +1,55 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="AkteEuropaReborn"
+config/description="Clean-room RTS remake of Akte Europa (1997)"
+run/main_scene="res://Scenes/Main/MainMenu.tscn"
+config/features=PackedStringArray("4.7", "C#")
+config/icon="res://Assets/Textures/Icon.svg"
+
+[autoload]
+
+GameManager="*res://Scripts/Core/GameManager.cs"
+AssetRegistry="*res://Scripts/Core/AssetRegistry.cs"
+FogOfWar="*res://Scripts/Rendering/FogOfWar.cs"
+Pathfinder="*res://Scripts/Simulation/Pathfinder.cs"
+NetworkManager="*res://Scripts/Network/NetworkManager.cs"
+; CampaignManager is a static class, not a Node — it holds the mission list and
+; the progress number and is asked, not ticked.
+AudioManager="*res://Scripts/Audio/AudioManager.cs"
+InputManager="*res://Scripts/Core/InputManager.cs"
+SelectionManager="*res://Scripts/UI/SelectionManager.cs"
+CommandManager="*res://Scripts/Simulation/CommandManager.cs"
+ReplayManager="*res://Scripts/Simulation/ReplayManager.cs"
+DebugOverlay="*res://Scripts/Debug/DebugOverlay.cs"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+
+[dotnet]
+
+project/assembly_name="Akte Europa Reborn"
+
+[localization]
+
+locale/filter="res://Localization/*.csv"
+
+[physics]
+
+2d/default_gravity=0
+
+[rendering]
+
+environment/defaults/default_clear_color=Color(0.1, 0.1, 0.12, 1)
+renderer/texture_filter="nearest"

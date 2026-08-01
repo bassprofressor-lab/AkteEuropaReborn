@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://od81j4olbro8"]
+
+[ext_resource type="Script" uid="uid://dfjwrkuygk6u6" path="res://Scripts/Core/AssetRegistry.cs" id="1"]
+
+[node name="TileMap" type="Node2D" unique_id=1515460143]
+script = ExtResource("1")
