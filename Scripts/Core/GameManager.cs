@@ -17,5 +17,7 @@ public partial class GameManager : Node
     public override void _Ready()
     {
         GD.Print("GameManager ready");
+        // one hook for the whole game: every button gets the original's click
+        Audio.GameSounds.HookButtons(GetTree());
     }
 }

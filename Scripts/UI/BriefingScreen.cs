@@ -24,16 +24,32 @@ public partial class BriefingScreen : CanvasLayer
     private readonly string _title;
     private readonly System.Action _go;
 
-    public BriefingScreen(string title, List<string> paragraphs, System.Action onContinue)
+    /// <summary>Which mission this is, so the narration can be found: the bank
+    /// holds it at 500 + this number. 0 means "no narration".</summary>
+    private readonly int _mission;
+
+    public BriefingScreen(string title, List<string> paragraphs, System.Action onContinue,
+                          int mission = 0)
     {
         _title = title;
         _paragraphs = paragraphs;
         _go = onContinue;
+        _mission = mission;
         Layer = 10;
     }
 
     public override void _Ready()
     {
+        // the original's own two sounds for this screen: @0x44d8b9 right after
+        // it prints "End of briefing starts", @0x44d976 after "End of briefing"
+        Audio.GameSounds.Play(Audio.GameSounds.BriefingStart);
+
+        // and the mission read aloud — sound 500 + mission, see
+        // GameSounds.BriefingVoice for how that was pinned down
+        if (_mission > 0 &&
+            Audio.SoundBankPlayer.PlayVoice(Audio.GameSounds.BriefingVoice(_mission)))
+            GD.Print($"Briefing: Sprachausgabe {Audio.GameSounds.BriefingVoice(_mission)}");
+
         // fully opaque: the menu behind it must not read through the text
         AddChild(new ColorRect
         {
@@ -102,6 +118,52 @@ public partial class BriefingScreen : CanvasLayer
     /// at exactly 320x240 — see <see cref="Import.BriefingExporter"/>.</summary>
     private const int BgW = 640, BgH = 480, PlateX = 296, PlateY = 79, PlateW = 320, PlateH = 240;
 
+    // ---- the radar monitor ---------------------------------------------------
+
+    private TextureRect? _radar;
+    private readonly List<Texture2D> _radarFrames = new();
+    private float _radarTime;
+
+    /// <summary>How long one of the ten frames stays up. OURS — the original's
+    /// pace is not read; a tenth of a second makes the cross-hair walk in over
+    /// a second, which is about as long as the screen takes to settle.</summary>
+    private const float RadarFrameSec = 0.10f;
+
+    /// <summary>The mission's own radar picture on the monitor the backdrop
+    /// already draws a frame around: MAP.DAT group (mission-1), ten frames, at
+    /// x=17 y=38 — the position the loader @0x45c093 reads them to. See
+    /// <see cref="Import.BriefingExporter.WriteRadar"/>.</summary>
+    private void BuildRadar(Vector2 at, int scale)
+    {
+        if (_mission <= 0) return;
+        for (int f = 0; f < Import.BriefingExporter.RadarFrames; f++)
+        {
+            string p = Core.Content.Path($"UI/radar/{_mission}/f{f}.png");
+            Texture2D? t = ResourceLoader.Exists(p) ? ResourceLoader.Load<Texture2D>(p) : null;
+            if (t == null && FileAccess.FileExists(p))
+            {
+                var im = Image.LoadFromFile(ProjectSettings.GlobalizePath(p));
+                if (im != null) t = ImageTexture.CreateFromImage(im);
+            }
+            if (t == null) break;
+            _radarFrames.Add(t);
+        }
+        if (_radarFrames.Count == 0) return;
+
+        _radar = new TextureRect
+        {
+            Texture = _radarFrames[0],
+            Position = at + new Vector2(Import.BriefingExporter.RadarX * scale,
+                                        Import.BriefingExporter.RadarY * scale),
+            Size = new Vector2(Import.BriefingExporter.RadarW * scale,
+                               Import.BriefingExporter.RadarH * scale),
+            TextureFilter = CanvasItem.TextureFilterEnum.Nearest,
+            StretchMode = TextureRect.StretchModeEnum.Scale,
+        };
+        AddChild(_radar);
+        GD.Print($"Briefing: Radarbild Mission {_mission}, {_radarFrames.Count} Bilder");
+    }
+
     /// <summary>Builds the faithful screen. False if the picture is not there,
     /// in which case the caller falls back to the plain layout.</summary>
     private bool BuildBackdrop()
@@ -131,6 +193,8 @@ public partial class BriefingScreen : CanvasLayer
             StretchMode = TextureRect.StretchModeEnum.Scale,
         };
         AddChild(pic);
+
+        BuildRadar(at, scale);
 
         var font = LegacyFont();
 
@@ -178,14 +242,17 @@ public partial class BriefingScreen : CanvasLayer
     /// <summary>The game's own bitmap font, loaded the way MapViewer loads it —
     /// imported resource first, raw .fnt second, because content derived on the
     /// player's machine never went through Godot's import step.</summary>
-    private static Font? LegacyFont()
+    /// <param name="second">FONT2.CWD when true — this screen's own typeface,
+    /// which the loader @0x45bddc reads immediately before the backdrop. The
+    /// start menu wants the other one, FONT.CWD, which is the game's everyday
+    /// face.</param>
+    public static Font? LegacyFont(bool second = true)
     {
-        // FONT2.CWD is this screen's own typeface — the loader @0x45bddc reads
-        // it immediately before the backdrop. FONT.CWD stands in for content
-        // imported before it was exported.
-        string path = Core.Content.Path("UI/akte_font2.fnt");
+        // FONT.CWD stands in when FONT2 was not exported (content imported
+        // before that reader existed), and the other way round.
+        string path = Core.Content.Path(second ? "UI/akte_font2.fnt" : "UI/akte_font.fnt");
         if (!FileAccess.FileExists(path) && !ResourceLoader.Exists(path))
-            path = Core.Content.Path("UI/akte_font.fnt");
+            path = Core.Content.Path(second ? "UI/akte_font.fnt" : "UI/akte_font2.fnt");
         FontFile? f = null;
         if (ResourceLoader.Exists(path) && ResourceLoader.Load(path) is FontFile res)
             f = (FontFile)res.Duplicate();       // ours to configure, not the HUD's
@@ -238,6 +305,14 @@ public partial class BriefingScreen : CanvasLayer
     /// what it actually looks like can be checked rather than assumed.</summary>
     public override void _Process(double delta)
     {
+        // the cross-hair walks in and stays on the last frame
+        if (_radar != null && _radarFrames.Count > 1)
+        {
+            _radarTime += (float)delta;
+            int f = Mathf.Min((int)(_radarTime / RadarFrameSec), _radarFrames.Count - 1);
+            if (_radar.Texture != _radarFrames[f]) _radar.Texture = _radarFrames[f];
+        }
+
         string want = "";
         foreach (string a in OS.GetCmdlineUserArgs())
             if (a.StartsWith("--briefing-shot=")) want = a["--briefing-shot=".Length..];
@@ -254,6 +329,8 @@ public partial class BriefingScreen : CanvasLayer
     {
         if (_done) return;
         _done = true;
+        Audio.SoundBankPlayer.StopVoice();       // the narration goes with the screen
+        Audio.GameSounds.Play(Audio.GameSounds.BriefingEnd);
         QueueFree();
         _go();
     }

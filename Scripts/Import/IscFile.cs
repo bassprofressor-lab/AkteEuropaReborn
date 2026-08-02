@@ -170,6 +170,39 @@ public sealed class IscFile
         return e == null ? null : Extract(e);
     }
 
+    /// <summary>Unpack one file straight to disk instead of into an array.
+    ///
+    /// SOUNDS.CWN is <b>79 MB</b> and lives inside the cabinet on the discs —
+    /// which is the whole reason this exists: taking it through
+    /// <see cref="Extract(Entry)"/> would hold the packed body and the unpacked
+    /// file in memory at once for no gain, since the sound reader wants a path
+    /// it can seek in anyway.
+    ///
+    /// Returns the number of bytes written, or -1 when the cabinet has no such
+    /// file.</summary>
+    public long ExtractTo(string name, string destPath)
+    {
+        var e = Find(name);
+        if (e == null) return -1;
+        using var f = File.OpenRead(Path);
+        var body = Read(f, e.Offset, e.Packed);
+        using var ms = new MemoryStream(body);
+        using var z = new DeflateStream(ms, CompressionMode.Decompress);
+        using var outp = new FileStream(destPath, FileMode.Create, FileAccess.Write);
+        var buf = new byte[1 << 20];
+        long got = 0;
+        while (got < e.Size)
+        {
+            int n = z.Read(buf, 0, (int)Math.Min(buf.Length, e.Size - got));
+            if (n <= 0) break;
+            outp.Write(buf, 0, n);
+            got += n;
+        }
+        if (got != e.Size)
+            throw new InvalidDataException($"{e.Name}: {got} statt {e.Size} Bytes");
+        return got;
+    }
+
     private static byte[] Read(FileStream f, long at, int n)
     {
         var b = new byte[n];

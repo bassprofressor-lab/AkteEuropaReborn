@@ -226,6 +226,19 @@ public static class DesignMath
         return off + 1 < r.Length ? r[off] | (r[off + 1] << 8) : 0;
     }
 
+    /// <summary>The sound class of a component — stats <b>+0x1c</b>.
+    ///
+    /// The shooting code @0x40c4c0 reads exactly this byte
+    /// (<c>mov cl, byte [edx*2 + 0x5045bc]</c>, and edx*2 is row*58, so the byte
+    /// is +0x1c of the record), multiplies it by 11 and indexes the 22-byte
+    /// fire-sound table at 0x4f98f2. Returns -1 when there is no such row, so a
+    /// caller can tell "no sound" from "class 0".</summary>
+    public static int SoundClass(int row)
+    {
+        if (row <= 0 || _rows == null || !_rows.TryGetValue(row, out var r)) return -1;
+        return Import.ExeTables.StatsSoundClass < r.Length ? r[Import.ExeTables.StatsSoundClass] : -1;
+    }
+
     // ---- the routine --------------------------------------------------------
 
     /// <summary>The tail of a design record, exactly as @0x4b1fb0 writes it.</summary>

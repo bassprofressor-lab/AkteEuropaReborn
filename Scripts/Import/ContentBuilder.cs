@@ -24,6 +24,7 @@ public sealed class ContentBuilder
 {
     public readonly List<string> Log = new();
     public int MapsBaked, TablesWritten, EntitiesWritten, SpriteFrames;
+    public int SoundsWritten, MusicWritten;
 
     /// <summary>The (chassis, weapon) pairs actually placed on the maps. They
     /// fall out of the baking anyway, so the sprite export composes exactly the
@@ -82,13 +83,21 @@ public sealed class ContentBuilder
     {
         string? loose = Find(name) ?? Find("DATA/" + name);
         if (loose != null) return File.ReadAllBytes(loose);
+        return Cabinet()?.Extract(name);
+    }
+
+    /// <summary>The cabinet, opened once and kept. Separate from
+    /// <see cref="Asset"/> because SOUNDS.CWN wants unpacking to a file rather
+    /// than into an array.</summary>
+    private IscFile? Cabinet()
+    {
         if (!_cabTried)
         {
             _cabTried = true;
             try { if (_src.Cabinet != null) _cab = IscFile.Load(_src.Cabinet); }
             catch (Exception) { _cab = null; }
         }
-        return _cab?.Extract(name);
+        return _cab;
     }
 
     /// <summary>The first root that holds this relative path, or null. The
@@ -228,12 +237,61 @@ public sealed class ContentBuilder
                 var dat = Asset("BRIEFG.DAT");
                 string? bgPal = Find("DATA/01.PAL");
                 if (dat != null && bgPal != null) br.WriteBackdrop(dat, PalFile.Load(bgPal), Say);
+                // the radar monitor on that same screen — MAP.DAT is 13 MB, so
+                // it goes through the path rather than Asset(), like SOUNDS.CWN
+                // loose in an installation, inside DATA1.CAB on a disc — 13 MB,
+                // so Asset() may hold it whole where SOUNDS.CWN may not
+                string? mapDat = Find("MAP.DAT") ?? Find("DATA/MAP.DAT");
+                byte[]? radar = mapDat != null ? File.ReadAllBytes(mapDat) : Asset("MAP.DAT");
+                if (radar != null && bgPal != null)
+                    br.WriteRadar(radar, PalFile.Load(bgPal), Say);
             }
         }
         catch (Exception e) { Say("Briefings: " + e.Message); }
 
+        // ---- the sound bank ---------------------------------------------------
+        // SOUNDS.CWN is 79 MB and lies loose beside the exe, so it is opened as
+        // a stream and never goes through Asset(), which reads a whole file into
+        // memory. The six .MID files are copied through: the original plays them
+        // with MCI and so do we, which means they are wanted as they are.
+        string? unpacked = null;
+        try
+        {
+            string? snd = Find("SOUNDS.CWN") ?? Find("sounds.cwn") ?? Find("DATA/SOUNDS.CWN");
+            // On the DISCS it is not lying about: SOUNDS.CWN, MAP.DAT and the
+            // rest are inside DATA1.CAB. Found the hard way — a CD install would
+            // have come out silent. It is unpacked to a file rather than into
+            // memory, because 79 MB and because the reader wants to seek.
+            if (snd == null && Cabinet() is { } cab && cab.Find("SOUNDS.CWN") != null)
+            {
+                unpacked = _dst + "/SOUNDS.CWN.tmp";
+                Say("SOUNDS.CWN liegt im Kabinett — wird ausgepackt (79 MB)");
+                long n = cab.ExtractTo("SOUNDS.CWN", unpacked);
+                if (n > 0) snd = unpacked;
+            }
+            if (snd == null) Say("SOUNDS.CWN nicht gefunden — kein Ton");
+            else
+            {
+                using var bank = new SoundBank(snd);
+                var se = new SoundExporter(_dst + "/Sound");
+                se.Write(bank, Say);
+                if (_exe != null) se.WriteWeaponSounds(_exe, Say);
+                se.WriteMusic(n => Find(n) ?? Find("DATA/" + n), Asset, Say);
+                SoundsWritten = se.Written;
+                MusicWritten = se.Music;
+            }
+        }
+        catch (Exception e) { Say("Ton: " + e.Message); }
+        finally
+        {
+            // the unpacked copy has done its job once the WAVs are written
+            if (unpacked != null)
+                try { File.Delete(unpacked); } catch (Exception) { /* leave it */ }
+        }
+
         Say($"fertig: {MapsBaked} Karten, {EntitiesWritten} Spielstaende, " +
-            $"{TablesWritten} Tabellen, {SpriteFrames} Einheitenbilder");
+            $"{TablesWritten} Tabellen, {SpriteFrames} Einheitenbilder, " +
+            $"{SoundsWritten} Klaenge, {MusicWritten} Musikstuecke");
         foreach (string m in Missing()) Say("fehlt noch: " + m);
         return MapsBaked > 0;
     }

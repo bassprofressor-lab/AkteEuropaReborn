@@ -133,6 +133,40 @@ public static class ContentSources
         };
     }
 
+    /// <summary>Several folders as ONE source, searched in the order given.
+    ///
+    /// A real installation is not always complete on its own: the one this was
+    /// written for holds GAME.EXE, ROBO.CWR, the typefaces and the 79 MB
+    /// SOUNDS.CWN loose in its folder, but no DATA/ and no LEVELS/ — those stay
+    /// on the discs. Importing from it alone therefore derives the sound and
+    /// then overwrites the campaign table with an empty one, which is exactly
+    /// how this was found. Whoever has the pieces in two places can now say so.
+    /// </summary>
+    public static Source? FromFolders(IEnumerable<string> dirs)
+    {
+        var roots = new List<string>();
+        string? exe = null, cab = null;
+        foreach (string d in dirs)
+        {
+            if (string.IsNullOrWhiteSpace(d)) continue;
+            string dir = d.TrimEnd('/', '\\');
+            if (!Directory.Exists(dir)) continue;
+            roots.Add(dir);
+            exe ??= ExeIn(dir);
+            cab ??= CabinetIn(dir);
+        }
+        if (roots.Count == 0) return null;
+        if (roots.Count == 1) return FromFolder(roots[0]);
+        return new Source
+        {
+            Kind = Kind.Installation,
+            Label = string.Join(" + ", roots),
+            Roots = roots,
+            Exe = exe,
+            Cabinet = cab,
+        };
+    }
+
     private static IEnumerable<string> DriveRoots()
     {
         DriveInfo[] drives;

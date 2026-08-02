@@ -114,7 +114,7 @@ public partial class MapViewer : Node2D
     private Vector2 _bandStart;   // where left went down (map)
     private Vector2 _dragLast;    // last pan reference (screen)
     private const float ClickSlop = 5f;    // px before a left-drag becomes a box
-    private const float KeyPanSpeed = 900f; // px/s at zoom 1 for WASD / arrows
+    private float _keyPanSpeed = 900f;     // px/s at zoom 1 for WASD / arrows (settings)
 
     public override void _Ready()
     {
@@ -150,6 +150,9 @@ public partial class MapViewer : Node2D
 
         BuildLegacyPanel();
         ApplyLegacyFont();
+
+        UI.Settings.Apply();
+        _keyPanSpeed = UI.Settings.PanSpeed;
 
         ParseCmdline();
         // a game started from the menu overrides the command line
@@ -297,6 +300,7 @@ public partial class MapViewer : Node2D
             string sw = _entities.ShipWatchLine();
             if (sw.Length > 0) GD.Print(sw);
             GD.Print(_entities.EventWatchLine());
+            GD.Print(_entities.VoiceWatchLine());
             GetTree().Quit();
         }
     }
@@ -649,7 +653,7 @@ public partial class MapViewer : Node2D
         if (Input.IsKeyPressed(Key.Up) || Input.IsKeyPressed(Key.W)) dir.Y -= 1;
         if (Input.IsKeyPressed(Key.Down) || Input.IsKeyPressed(Key.S)) dir.Y += 1;
         if (dir != Vector2.Zero)
-            _camera.Position += dir.Normalized() * (float)delta * KeyPanSpeed / _camera.Zoom.X;
+            _camera.Position += dir.Normalized() * (float)delta * _keyPanSpeed / _camera.Zoom.X;
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -679,11 +683,27 @@ public partial class MapViewer : Node2D
                     }
                     break;
                 case MouseButton.Right:
-                    // on an enemy -> attack, on the ground -> move;
-                    // with Shift the move is appended to what the unit already has
-                    if (mb.Pressed &&
-                        !_entities.IssueAttack(GetGlobalMousePosition(), mb.ShiftPressed))
-                        _entities.IssueMove(GetGlobalMousePosition(), mb.ShiftPressed);
+                    // A short right-click is an order — on an enemy attack, on
+                    // the ground move, with Shift appended to what the unit
+                    // already has. Holding and DRAGGING pans the map instead:
+                    // the middle button alone is no use on a laptop trackpad.
+                    if (mb.Pressed)
+                    {
+                        _rightDown = true;
+                        _rightDrag = false;
+                        _rightStart = mb.Position;
+                        _dragLast = mb.Position;
+                    }
+                    else
+                    {
+                        if (_rightDown && !_rightDrag)
+                        {
+                            if (!_entities.IssueAttack(GetGlobalMousePosition(), mb.ShiftPressed))
+                                _entities.IssueMove(GetGlobalMousePosition(), mb.ShiftPressed);
+                        }
+                        _rightDown = false;
+                        _rightDrag = false;
+                    }
                     break;
                 case MouseButton.Middle:
                     _panDrag = mb.Pressed;
@@ -705,7 +725,12 @@ public partial class MapViewer : Node2D
                 (motion.Position - _leftStart).Length() > ClickSlop)
                 _boxSelect = true;
 
-            if (_panDrag)
+            // the right button becomes a pan once it has travelled far enough
+            if (_rightDown && !_rightDrag && UI.Settings.RightDragPan &&
+                (motion.Position - _rightStart).Length() > ClickSlop)
+                _rightDrag = true;
+
+            if (_panDrag || _rightDrag)
             {
                 _camera.Position -= (motion.Position - _dragLast) / _camera.Zoom;
                 _dragLast = motion.Position;
@@ -717,6 +742,7 @@ public partial class MapViewer : Node2D
             else if (!_leftDown)
             {
                 _entities.HoverAt(GetGlobalMousePosition());
+                UpdateCursor(GetGlobalMousePosition());
             }
         }
         else if (@event is InputEventKey key && key.Pressed && !key.Echo)
@@ -815,6 +841,36 @@ public partial class MapViewer : Node2D
     {
         var e = _entities.StepEvent();
         if (e != null) _camera.Position = e.Value.Pos;
+    }
+
+    private bool _rightDown, _rightDrag;
+    private Vector2 _rightStart;
+    private Input.CursorShape _cursor = Input.CursorShape.Arrow;
+
+    /// <summary>Lets the pointer say what a click would do: a cross-hair over
+    /// something worth shooting at, a pointing hand over one's own unit, the
+    /// plain arrow over open ground. Only changed when it actually differs, so
+    /// this costs nothing while the mouse moves.</summary>
+    private void UpdateCursor(Vector2 mapPos)
+    {
+        if (!UI.Settings.CursorHints)
+        {
+            if (_cursor != Input.CursorShape.Arrow)
+            {
+                _cursor = Input.CursorShape.Arrow;
+                Input.SetDefaultCursorShape(_cursor);
+            }
+            return;
+        }
+        var want = _entities.CursorHintAt(mapPos) switch
+        {
+            MapEntityLayer.Hint.Enemy => Input.CursorShape.Cross,
+            MapEntityLayer.Hint.Own => Input.CursorShape.PointingHand,
+            _ => Input.CursorShape.Arrow,
+        };
+        if (want == _cursor) return;
+        _cursor = want;
+        Input.SetDefaultCursorShape(want);
     }
 
     private static Rect2 RectFrom(Vector2 a, Vector2 b)

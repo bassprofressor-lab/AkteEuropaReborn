@@ -1,0 +1,407 @@
+namespace AkteEuropaReborn.Audio;
+
+using System.Collections.Generic;
+using System.Text.Json;
+using Godot;
+
+/// <summary>
+/// Which sound belongs to which event — read out of GAME.EXE, not chosen by ear.
+///
+/// <para><b>How this was found.</b> Every sound in the game goes through one
+/// routine, <b>@0x4047e0</b> (thunk 0x40162c): it is guarded by the sound switch
+/// <c>byte[0x53c928]</c>, takes the sound number in the first argument and a mode
+/// 0..3 in the second (jump table @0x404a18; mode 1 takes an entity slot and
+/// plays at its position, which is why it compares against 0x1f40 = 8000).
+/// There are <b>111 call sites</b>, and <b>85 of them push a fixed number</b>.
+/// Naming them was then a matter of reading the debug line the game prints in
+/// the same routine — the game names its own events.</para>
+///
+/// <para><b>The four modes</b>, read off the jump table @0x404a18 — this is the
+/// whole sound API of the game:</para>
+/// <code>
+///   Sound(u16 number, u8 mode, ...)
+///     mode 0  @0x40482b   no position at all       (interface, announcements)
+///     mode 1  @0x404834   u16 entity slot          (cmp 0x1f40 = 8000 units)
+///     mode 2  @0x404896   u16 x, u16 y             (a map position)
+///     mode 3  @0x4048af   u16 index                (projectile array 0x884730,
+///                                                   stride 32, x at +0, y at +1)
+/// </code>
+///
+/// <para><b>The band the routine guards.</b> Numbers <b>150..253</b> need a
+/// second switch, <c>byte[0x991708]</c> (@0x4047fa: <c>cmp si,0x95 / cmp si,0xfe</c>).
+/// The bank's directory delimits exactly that block with holes on both sides:
+/// 144..149 empty, <b>150..253 filled, all 104 of them</b>, 254..259 empty. Code
+/// and data agree without either knowing about the other. It is the unit speech
+/// the options screen switches with "Sprachausgabe der Einheiten
+/// ein-/ausschalten", and <see cref="Voice"/> now picks from it the way the
+/// game does — see there for the routine and for the check that every number
+/// the rule can produce exists.</para>
+///
+/// <para><b>Four numbers the code names do not exist</b> in the bank: 40, 307,
+/// 309 and 399. The loader skips empty slots, so those calls are silent in the
+/// original too. They are kept in the list rather than quietly dropped.</para>
+///
+/// <para>Everything below carries the address it came from. Where no evidence
+/// was found the constant is simply absent — no sound is better than the wrong
+/// sound in the wrong place.</para>
+/// </summary>
+public static class GameSounds
+{
+    // ---- interface ---------------------------------------------------------
+
+    /// <summary>The interface click. Two tiny wrappers do nothing but play a
+    /// sound — @0x487c00 plays this one and is called from <b>89</b> places,
+    /// all in the window code (0x498000..0x49e000).</summary>
+    public const int Click = 600;
+
+    /// <summary>The second interface sound, @0x487c20, called from <b>62</b>
+    /// places in the same code. What separates the two sets has not been read,
+    /// so this is not used yet.</summary>
+    public const int Click2 = 601;
+
+    /// <summary>Refused: "Sie besitzen nicht genuegend Einzelteile." @0x44b6e9,
+    /// and the same number again @0x448961 among the hangar and parts
+    /// messages.</summary>
+    public const int Refused = 140;
+
+    /// <summary>Refused, the second kind: "Kann nicht starten." @0x44b8ad.</summary>
+    public const int Refused2 = 141;
+
+    /// <summary>Briefing opens — @0x44d8b9, immediately after the game prints
+    /// "End of briefing starts".</summary>
+    public const int BriefingStart = 306;
+
+    /// <summary>Briefing closes — @0x44d976, after "End of briefing".</summary>
+    public const int BriefingEnd = 350;
+
+    // ---- combat ------------------------------------------------------------
+
+    /// <summary>Infantry hit and destroyed — @0x40d37c, in the hit routine that
+    /// prints "Zasah" (Czech for hit) and, right before this call,
+    /// "Hit to exploding infantry!!!".</summary>
+    public const int InfantryDies = 131;
+
+    /// <summary>A target was acquired — @0x411ab0 in the seeker function
+    /// @0x4119d0, whose own trace lines are "Check seeker" and
+    /// "Check seeker: new target found".</summary>
+    public const int TargetFound = 37;
+
+    /// <summary>An aircraft explodes — @0x425f0f, right after "axplode air";
+    /// the same routine plays <see cref="AircraftExplodes2"/> a few
+    /// instructions later, so both belong to one explosion.</summary>
+    public const int AircraftExplodes = 70;
+    public const int AircraftExplodes2 = 138;
+
+    /// <summary>A bomber fires — @0x427416, after "bomber shoot".</summary>
+    public const int BomberShoots = 114;
+
+    /// <summary>The explosion, and it is <b>two sounds at once</b>.
+    ///
+    /// <para>@0x454510 is a four-line routine that takes an x and a y and plays
+    /// <b>410 then 400</b>, both in mode 2 (at a map position) with the same
+    /// coordinates — not one or the other, both, one after the next. 410 runs
+    /// 2.20 s and 400 runs 0.83 s, so it is a bang with a tail under it. The
+    /// eight missile handlers @0x452a50..0x452fe4 all call it.</para>
+    ///
+    /// <para>⚠ Read as "missile away" at first, which was wrong: the routine
+    /// takes a POSITION, and the missile branches call it where the missile
+    /// arrives, not where it leaves. Each of those branches also plays sound 0
+    /// in mode 3 — at the projectile's own place, out of the array at 0x884730
+    /// (stride 32) — in the same breath.</para></summary>
+    public const int ExplosionLow = 410, ExplosionHigh = 400;
+
+    /// <summary>Both halves of it, the way the original fires them.</summary>
+    public static void Explosion()
+    {
+        Play(ExplosionLow);
+        Play(ExplosionHigh);
+    }
+
+    // ---- buildings and base ------------------------------------------------
+
+    /// <summary>Your building is being taken — @0x43cc73, in the routine that
+    /// prints "Ihre Basis wird besetzt", "Ihre Waffenfabrik wird besetzt" and
+    /// the rest of that family.</summary>
+    public const int BuildingCaptured = 132;
+
+    /// <summary>Mining — @0x43e6cd, between the routine's own "mining 3" and
+    /// "mining 4".</summary>
+    public const int Mining = 128;
+
+    /// <summary>A building is being enlarged — @0x43e794, immediately after
+    /// "enlarging". Which of the remake's two jobs that is (Lagerausbau or
+    /// Produktionserweiterung) is OURS: "enlarging" is read as the storage one
+    /// and "upgrading" as the production one.</summary>
+    public const int Enlarging = 130;
+
+    /// <summary>A building is being upgraded — @0x43e837, immediately after
+    /// "upgrading".</summary>
+    public const int Upgrading = 129;
+
+    /// <summary><b>Repair has no sound</b>, and that is a finding rather than a
+    /// gap: @0x43e196 plays one after "mining 3", after "enlarging" and after
+    /// "upgrading", and there is no call at all between its "repair" and its
+    /// "enlarging". The original repairs silently.</summary>
+    public const int RepairIsSilent = -1;
+
+    /// <summary>Research reported — @0x4ab41b, right after "Nachricht des
+    /// FORSCHUNGSLABORS:" and in the routine that prints "Neue Waffe
+    /// erfunden".</summary>
+    public const int ResearchDone = 136;
+
+    /// <summary>Mirror switched on — @0x43a9b9, inside @0x43a978, the routine
+    /// already known as the Spiegelung (it sets UKOL to 0x16).</summary>
+    public const int MirrorOn = 59;
+
+    // ---- the spoken word ----------------------------------------------------
+
+    /// <summary>The narrated mission briefing: <b>500 + mission number</b>.
+    ///
+    /// <para><b>Proven against the text, not by ear.</b> The bank holds a block
+    /// of exactly <b>33 sounds at 501..533</b>, and the campaign has 33
+    /// missions. Holding each sound's length against the character count of the
+    /// matching record in BRIEFG.TXT gives <b>r = 0.984 over all 33</b>, at
+    /// <b>17.2 to 22.7 characters per second</b> — a narrow band around 19.8,
+    /// which is what German read aloud sounds like. Nothing else in the file
+    /// lines up that way.</para>
+    ///
+    /// <para>The call site agrees: @0x486603 does <c>mov eax,[0x8c34f4];
+    /// add ax,0x1f4</c> — 500 plus a counter — gated by
+    /// <c>cmp word[0x8c3ccc], 0x19</c>, a screen state, in the routine whose
+    /// loader also reads MAP.DAT and SYMBOL.DAT, i.e. the mission screen.</para>
+    /// </summary>
+    public const int BriefingVoiceBase = 500;
+
+    public static int BriefingVoice(int mission) => BriefingVoiceBase + mission;
+
+    /// <summary>The spoken help texts: <b>1000 + the number of the text in
+    /// HELPG.TXT</b>, switched by "Hilfe-Sprache" (<c>byte[0x8934c4]</c>,
+    /// checked @0x44330c right before the call @0x443323 that adds 0x3e8).
+    ///
+    /// <para>The index correspondence is measured: over the 222 texts that have
+    /// a sound the lengths correlate at <b>r = 0.60</b>, and shifting the
+    /// pairing by one in either direction collapses it to <b>-0.08 / -0.04</b>.
+    /// So the pairing is right. <b>It is not a reading of the text, though</b> —
+    /// the median comes out at 31 characters per second against the briefings'
+    /// 20, so the spoken help says a shorter version. That is stated rather than
+    /// smoothed over.</para></summary>
+    public const int HelpVoiceBase = 1000;
+
+    /// <summary>The band 150..253, all 104 of them, which the sound routine only
+    /// plays when <c>byte[0x991708]</c> is set (@0x4047fa:
+    /// <c>cmp si,0x95 / cmp si,0xfe</c>) — the options screen's <b>"Meldungen"</b>
+    /// switch.
+    ///
+    /// <para><b>They are the unit voices, keyed by chassis</b>, which also
+    /// settles that "Meldungen" and the help line's "Sprachausgabe der
+    /// Einheiten" are the same switch. The routine @0x429290 reads it out:</para>
+    /// <code>
+    ///   si = word[0x4fa0c8]                  ; what is selected, 0xFFFF = nothing
+    ///   si &gt;= 0x1f40 (8000)                  ; not a unit -> di = 0xb8
+    ///   entity +0x28 &gt; 0x32 (50)             ; the fuel tank: low fuel has its own set
+    ///   switch (entity +0x0a)                ; the kind
+    ///     0 -> di 0x98 bp 0x9c  (or the 0xa5/0xa9 set when the tank is low)
+    ///     1 -> switch ((entity +0x0b &gt;&gt; 1) - 1)   ; SPODEK, the chassis, 11 ways
+    ///     3 -> di 0xa5 bp 0xa9
+    ///     else di 0xb1
+    ///   bp += rand % 3 ; Sound(bp, 1, si)    ; three variants, played AT the unit
+    /// </code>
+    /// <para>The eleven chassis sets, as <c>di</c> / <c>bp</c>: default 189/193,
+    /// then 201/205, 213/217, 224/228, 235/239, 246/—, 250/—, 165/169. Two
+    /// groups of three or four per chassis, which is where the band's 104 go.
+    /// </para>
+    ///
+    /// <para>The eleven-way jump table @0x4293ec maps the chassis index onto
+    /// eight branches: 0 and 2 share one, 4..7 share the default, and 9 and 10
+    /// have no <c>bp</c> group at all. Which of the two groups is heard is a
+    /// throw: <b>one time in three</b> the <c>bp</c> line, otherwise
+    /// <c>di</c> — @0x429393 draws `rand % 3` and only a zero takes the
+    /// <c>bp</c> path.</para>
+    /// </summary>
+    public const int AnnounceFirst = 150, AnnounceLast = 253;
+
+    /// <summary>The two groups a unit speaks from, and how many variants each
+    /// holds. <c>Bp</c> 0 means the chassis has no second group.</summary>
+    private readonly record struct VoiceSet(int Di, int DiCount, int Bp);
+
+    /// <summary>The branches of @0x429290, in the order the jump table
+    /// @0x4293ec reaches them. Index = (chassis &gt;&gt; 1) - 1.</summary>
+    private static readonly VoiceSet[] ByChassis =
+    {
+        new(201, 2, 205),   // 0  -> 0x42934a
+        new(213, 2, 217),   // 1  -> 0x429354
+        new(201, 2, 205),   // 2  -> 0x42934a, same branch as 0
+        new(224, 2, 228),   // 3  -> 0x42935e
+        new(189, 2, 193),   // 4  -> the default @0x429340
+        new(189, 2, 193),   // 5
+        new(189, 2, 193),   // 6
+        new(189, 2, 193),   // 7
+        new(235, 2, 239),   // 8  -> 0x429368
+        new(246, 2, 0),     // 9  -> 0x429372, bp cleared
+        new(250, 3, 0),     // 10 -> 0x42937b, bl = 3
+    };
+
+    /// <summary>What a unit says when it is picked, straight off @0x429290.
+    /// Returns -1 when the routine would say nothing.
+    ///
+    /// <para><b>Checked against the data:</b> run over the <b>2863 units on all
+    /// the maps</b>, the rule can reach <b>36 different sound numbers, every one
+    /// of them present in the bank and every one inside the band 150..253</b>.
+    /// A wrong offset or a wrong shift would have produced numbers outside it or
+    /// numbers the bank has not got.</para></summary>
+    /// <param name="subclass">record +0x0a</param>
+    /// <param name="chassis">record +0x0b</param>
+    /// <param name="field28">record +0x28 — <b>not</b> the fuel tank (that is
+    /// +0x2e): it is 0 on 2847 of the 2863 units the maps carry, so a runtime
+    /// field rather than a stat, read beside +0x27 by the damage arithmetic
+    /// @0x40cd90. The routine compares it with 50. Carried unnamed.</param>
+    public static int Voice(int subclass, int chassis, int field28, System.Random? rng = null)
+    {
+        int Roll(int n) => n <= 1 ? 0 : (rng?.Next(n) ?? (int)(GD.Randi() % (uint)n));
+
+        VoiceSet v;
+        switch (subclass)
+        {
+            case 0:
+                // `cmp al,0x32; seta cl` on +0x28, then the branch at 0x429319.
+                // On a freshly loaded map that byte is 0 for all but sixteen
+                // units, so in practice this is the 152/156 set.
+                v = field28 > 50 ? new VoiceSet(165, 2, 169) : new VoiceSet(152, 2, 156);
+                break;
+            case 1:
+                // `cmp eax,0xa; ja 0x429340` — and eax is UNSIGNED, so a chassis
+                // of 0 or 1 (index -1) takes the default just as the ship hulls
+                // 60..101 (index 29..49) do
+                int i = (chassis >> 1) - 1;
+                v = i >= 0 && i < ByChassis.Length ? ByChassis[i] : new VoiceSet(189, 2, 193);
+                break;
+            case 3:
+                v = new VoiceSet(165, 2, 169);
+                break;
+            default:
+                v = new VoiceSet(177, 1, 0);
+                break;
+        }
+
+        // @0x42938e: no second group, or two throws in three, and it is a di line
+        if (v.Bp == 0 || Roll(3) != 0) return v.Di + Roll(v.DiCount);
+        return v.Bp + Roll(3);
+    }
+
+    /// <summary>What a unit says when it is hit — routine <b>@0x4297f0</b>,
+    /// called twice from the hit routine @0x40cc41, the second time right after
+    /// it prints "Hit to exploding infantry!!!".
+    ///
+    /// <para>Same shape as <see cref="Voice"/> but a single line, no variants,
+    /// and <b>mode 0</b> — no position at all, so it is heard wherever the
+    /// camera is. Its chassis table @0x429894 is its own: 210, 221, 210, 232,
+    /// 198 for 4..7, 243, 248, 253, and 198 for anything out of range.</para>
+    ///
+    /// <para><b>It is rate-limited by the game itself</b>, which is what keeps a
+    /// battle from turning into a chorus: both call sites only speak when the
+    /// clock at 0x4fa240 has passed 0x4f5aec, and then set that to
+    /// <c>clock + 250 + rand % 100</c> (@0x40ce1c and @0x40d158). See
+    /// <see cref="HitVoiceGapSec"/> for the one part of that which is ours.</para>
+    /// </summary>
+    public static int HitVoice(int subclass, int chassis, int field28)
+    {
+        switch (subclass)
+        {
+            case 0: return field28 > 50 ? 175 : 162;   // `sbb`/`and -13` on +0x28
+            case 3: return 175;
+            case 1:
+                int i = (chassis >> 1) - 1;
+                return i switch
+                {
+                    0 or 2 => 210, 1 => 221, 3 => 232,
+                    8 => 243, 9 => 248, 10 => 253,
+                    _ => 198,                           // 4..7 and out of range
+                };
+            default: return 182;
+        }
+    }
+
+    /// <summary>How long the hit line stays quiet, in seconds. The COUNT is the
+    /// game's — 250 plus a throw of 100 on the clock at 0x4fa240 — and only the
+    /// length of a tick is ours: at the 25 frames a second the movies run at,
+    /// that is 10 to 14 seconds, which is also what it sounds like.</summary>
+    public static float HitVoiceGapSec(System.Random? rng = null)
+        => (250 + (rng?.Next(100) ?? (int)(GD.Randi() % 100))) / 25f;
+
+    // ---- the fire sound of a weapon ----------------------------------------
+
+    private static int[]? _fire;
+    private static bool _tried;
+
+    /// <summary>The base sound for a weapon's sound class, or -1.
+    ///
+    /// The class is the component's stats byte at +0x1c, the base comes from the
+    /// table at 0x4f98f2 (stride 22) — both exported to
+    /// <c>Sound/weapon_sounds.json</c>. See
+    /// <see cref="Import.ExeTables.FireSoundTable"/> for the disassembly.</summary>
+    public static int FireBase(int soundClass)
+    {
+        if (!_tried)
+        {
+            _tried = true;
+            string path = Core.Content.Path("Sound/weapon_sounds.json");
+            if (FileAccess.FileExists(path))
+                try
+                {
+                    using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
+                    using var doc = JsonDocument.Parse(f.GetAsText());
+                    var list = new List<int>();
+                    foreach (var e in doc.RootElement.GetProperty("base").EnumerateArray())
+                        list.Add(e.GetInt32());
+                    _fire = list.ToArray();
+                }
+                catch (System.Exception e) { GD.PrintErr("Ton: weapon_sounds.json — " + e.Message); }
+        }
+        if (_fire == null || soundClass < 0 || soundClass >= _fire.Length) return -1;
+        return _fire[soundClass];
+    }
+
+    /// <summary>Plays the shot of a weapon component. The original picks the
+    /// base or the base plus one at random, so two shots never sound the same;
+    /// that is its behaviour, not our garnish.</summary>
+    public static void Fire(int weaponRow, System.Random? rng = null)
+    {
+        int cls = Simulation.DesignMath.SoundClass(weaponRow);
+        int b = FireBase(cls);
+        if (b < 0) return;
+        int pick = b + ((rng?.Next(2) ?? (int)(GD.Randi() & 1)));
+        SoundBankPlayer.Play(pick);
+    }
+
+    /// <summary>Shorthand for the events above.</summary>
+    public static void Play(int slot) => SoundBankPlayer.Play(slot);
+
+    // ---- the click, on every button there is --------------------------------
+
+    private static bool _hooked;
+
+    /// <summary>Gives every button in the game the original's click.
+    ///
+    /// The original does not attach a sound per control either — two wrappers
+    /// that do nothing but play one are called from 89 and 62 places in the
+    /// window code. Hooking the tree once has the same reach and leaves the
+    /// screens alone: a new button sounds without anybody remembering to say so.
+    /// </summary>
+    public static void HookButtons(SceneTree tree)
+    {
+        if (_hooked) return;
+        _hooked = true;
+        tree.NodeAdded += n =>
+        {
+            if (n is BaseButton b) b.Pressed += () => Play(Click);
+        };
+        // buttons that were already there when this ran
+        Walk(tree.Root);
+    }
+
+    private static void Walk(Node n)
+    {
+        if (n is BaseButton b) b.Pressed += () => Play(Click);
+        foreach (var c in n.GetChildren()) Walk(c);
+    }
+}

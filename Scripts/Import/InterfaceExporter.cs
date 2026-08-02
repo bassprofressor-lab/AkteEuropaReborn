@@ -33,6 +33,12 @@ public sealed class InterfaceExporter
     // ---- FONT.CWD -----------------------------------------------------------
 
     public const int GlyphRecord = 131, CellHeight = 13, GlyphCount = 160, AtlasCols = 16;
+
+    /// <summary>How dark the second colour slot is relative to the first — the
+    /// measured mean of the seven pairs the game's own callers pass. Kept as a
+    /// number so the Python reference and this agree by construction rather
+    /// than by memory: font_export.py has the same 0.76.</summary>
+    public const float ShadeF = 0.76f;
     public const string FontName = "akte_font";
 
     /// <summary>The second typeface, FONT2.CWD — same 160-glyph layout, thinner
@@ -47,12 +53,28 @@ public sealed class InterfaceExporter
     /// and the character is the record index plus 0x20 (glyph blitter
     /// @0x4ba2b0, which multiplies the index by 131).
     ///
-    /// The cell is a MASK, not a picture: the engine puts the current text
-    /// colour wherever it finds 0xFE. So the atlas stores text pixels WHITE,
-    /// which a Godot `font_color` then modulates, and shadow pixels (0x24)
-    /// BLACK, which survives the modulation and keeps the drop shadow dark
-    /// whatever colour the text is. 0xFF is transparent, anything else is a
-    /// literal palette index and is written as that colour.</summary>
+    /// The cell is a MASK, and it has <b>two</b> replaceable slots, not one.
+    /// The glyph blitter @0x4ba2b0 is four lines long:
+    /// <code>
+    ///   b == 0xFF -> skip          ; transparent
+    ///   b == 0xFE -> arg4          ; the first colour the caller passes
+    ///   b == 0x24 -> arg5          ; the second one
+    ///   else      -> write b       ; a literal palette index
+    /// </code>
+    ///
+    /// <para>⚠ <b>Corrected 02.08.2026.</b> This used to call 0x24 "the shadow
+    /// colour" and write it BLACK. It is not a shadow and it is not fixed: the
+    /// callers (@0x4ba499..0x4ba4c5 and @0x45c2f6) always push a PAIR out of one
+    /// ramp — (0x99,0x9c) (0x96,0xa9) (0x7c,0x7f) (0x54,0x57) (0x62,0x65)
+    /// (0x35,0x37) (6,7) — and measured in DATA/01.PAL the second is the same
+    /// hue at <b>0.62 to 0.84 of the first's brightness, mean 0.76</b>. It is a
+    /// shading colour.</para>
+    ///
+    /// <para>So 0xFE goes in WHITE and 0x24 at that 0.76 grey, and a Godot
+    /// `font_color` then modulates both — text in the colour, shading three
+    /// quarters of it, which is the relation the original has. Writing it black
+    /// is what swallowed the start menu's letters on a dark window.</para>
+    /// </summary>
     public void WriteFont(byte[] font, string name = FontName, string source = "FONT.CWD")
     {
         Directory.CreateDirectory(_ui);
@@ -88,8 +110,8 @@ public sealed class InterfaceExporter
                     if (v == 0xFF) continue;
                     Color c = v switch
                     {
-                        0xFE => new Color(1, 1, 1, 1),                 // text, modulated
-                        0x24 => new Color(0, 0, 0, 220f / 255f),       // shadow, stays dark
+                        0xFE => new Color(1, 1, 1, 1),                 // slot 1, modulated
+                        0x24 => new Color(ShadeF, ShadeF, ShadeF, 1),  // slot 2, three quarters of it
                         _ => Color.Color8(_pal.R[v], _pal.G[v], _pal.B[v], 255),
                     };
                     atlas.SetPixel(gx + x, gy + y, c);

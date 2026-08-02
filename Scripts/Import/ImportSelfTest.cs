@@ -982,4 +982,101 @@ public static class ImportSelfTest
                  $"dekodiert, {failed} Fehler");
         return failed == 0 ? 0 : 1;
     }
+
+    /// <summary>The sound bank, both halves of it.
+    ///
+    /// First the reader on its own: the directory of SOUNDS.CWN must tile the
+    /// file exactly — no gap, no overlap, last end on the file size. That is the
+    /// check that proved the layout in the first place, so it is the one worth
+    /// running against another copy of the game.
+    ///
+    /// Then the export against the Python reference, byte for byte:
+    /// <c>python sounds_cwn.py dump &lt;SOUNDS.CWN&gt; &lt;refdir&gt;</c> writes the same
+    /// 492 files, and every byte of every one of them has to match — WAVs are
+    /// compared as bytes, not as sound, because a decoder that drops the last
+    /// frame or shifts a sample would still play.</summary>
+    /// <param name="refDir">Where sounds_cwn.py dumped its WAVs.</param>
+    /// <param name="source">The player's installation, or the SOUNDS.CWN
+    /// itself. Optional — without it only the export is compared, because an
+    /// installation sits on a fixed drive and
+    /// <see cref="Core.ContentSources"/> only ever looks at removable ones.</param>
+    public static int RunSounds(string refDir, string? source = null)
+    {
+        refDir = refDir.TrimEnd('/', '\\');
+        if (!Directory.Exists(refDir))
+        { GD.PrintErr($"selftest-sounds: {refDir} gibt es nicht"); return 2; }
+
+        // ---- the reader against the player's own copy -----------------------
+        int rc = 0;
+        string? cwn = null;
+        if (!string.IsNullOrWhiteSpace(source))
+        {
+            if (File.Exists(source)) cwn = source;
+            else
+                foreach (string n in new[] { "SOUNDS.CWN", "sounds.cwn", "DATA/SOUNDS.CWN" })
+                    if (cwn == null && File.Exists(source.TrimEnd('/', '\\') + "/" + n))
+                        cwn = source.TrimEnd('/', '\\') + "/" + n;
+        }
+
+        // on a disc it is not lying about — unpack it out of DATA1.CAB, which is
+        // exactly the path a CD install takes
+        string? temp = null;
+        if (cwn == null && !string.IsNullOrWhiteSpace(source))
+        {
+            string? cab = Core.ContentSources.CabinetIn(source);
+            if (cab != null)
+                try
+                {
+                    var isc = IscFile.Load(cab);
+                    if (isc.Find("SOUNDS.CWN") != null)
+                    {
+                        temp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aer_sounds_test.cwn");
+                        if (isc.ExtractTo("SOUNDS.CWN", temp) > 0) cwn = temp;
+                        GD.Print($"selftest-sounds: aus dem Kabinett {cab} ausgepackt");
+                    }
+                }
+                catch (Exception e) { GD.PrintErr("selftest-sounds: Kabinett — " + e.Message); }
+        }
+
+        if (cwn == null) GD.Print("selftest-sounds: keine SOUNDS.CWN angegeben — Leserprobe uebersprungen");
+        else
+        {
+            try
+            {
+                using var bank = new SoundBank(cwn);
+                GD.Print($"selftest-sounds: {Path.GetFileName(cwn)} — {bank.Entries.Count} von " +
+                         $"{SoundBank.SlotCount} Plaetzen, {bank.Preloaded} vorgeladen / " +
+                         $"{bank.OnDemand} bei Bedarf, " +
+                         $"{bank.TotalBytes / SoundBank.SampleRate / 60} min; Kette " +
+                         (bank.Contiguous ? "lueckenlos bis aufs Dateiende" : "GEBROCHEN"));
+                if (!bank.Contiguous) rc = 1;
+            }
+            catch (Exception e) { GD.PrintErr("selftest-sounds: " + e.Message); rc = 1; }
+            finally
+            {
+                if (temp != null) try { File.Delete(temp); } catch (Exception) { }
+            }
+        }
+
+        // ---- the export against the Python reference ------------------------
+        string got = ProjectSettings.GlobalizePath(Core.Content.UserRoot + "Sound");
+        if (!Directory.Exists(got))
+        { GD.PrintErr("selftest-sounds: user://data/Sound fehlt — noch kein Import gelaufen"); return 1; }
+
+        int ok = 0, bad = 0, missing = 0;
+        foreach (string want in Directory.GetFiles(refDir, "s*.wav"))
+        {
+            string name = Path.GetFileName(want);
+            string mine = got + "/" + name;
+            if (!File.Exists(mine)) { missing++; GD.PrintErr($"   fehlt: {name}"); continue; }
+            var a = File.ReadAllBytes(want);
+            var b = File.ReadAllBytes(mine);
+            if (a.Length == b.Length && a.AsSpan().SequenceEqual(b)) { ok++; continue; }
+            bad++;
+            GD.PrintErr($"   abweichend: {name} ({a.Length} gegen {b.Length} Bytes)");
+        }
+
+        GD.Print($"selftest-sounds: {ok} Klaenge byte-genau gleich, {bad} abweichend, {missing} fehlen");
+        return rc == 0 && bad == 0 && missing == 0 && ok > 0 ? 0 : 1;
+    }
 }

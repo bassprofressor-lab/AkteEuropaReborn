@@ -62,6 +62,53 @@ public partial class MapEntityLayer : Node2D
 
     public bool SkirmishAiActive => _aiOn;
 
+    /// <summary>Slots that own at least one building — the slots a build-up
+    /// skirmish can actually be played from.</summary>
+    public List<int> PlayersWithBase()
+    {
+        var l = new List<int>();
+        foreach (var e in _entities)
+        {
+            if (!e.IsBuilding || e.Dead || e.IsProp) continue;
+            if (e.Owner is < 0 or > 7) continue;
+            if (!l.Contains(e.Owner)) l.Add(e.Owner);
+        }
+        l.Sort();
+        return l;
+    }
+
+    /// <summary>Buildings per start slot — the thing that decides a build-up
+    /// skirmish once the starting armies are gone.
+    ///
+    /// The player asked whether the NET maps are even. Measured across all
+    /// eight: <b>NET04 and NET05 give all eight slots a base, NET02 six,
+    /// NET01/03/08 four, NET07 three and NET06 exactly one</b>. Evenness is a
+    /// second question, which is what this count answers.</summary>
+    public int[] BasesPerSlot()
+    {
+        var n = new int[8];
+        foreach (var e in _entities)
+        {
+            if (!e.IsBuilding || e.Dead || e.IsProp) continue;
+            if (e.Owner is < 0 or > 7) continue;
+            n[e.Owner]++;
+        }
+        return n;
+    }
+
+    /// <summary>How lopsided the built slots are: the largest count divided by
+    /// the smallest, or 0 when fewer than two slots are built. 1.0 is even.
+    /// The threshold for calling a map uneven is OURS — twice the buildings is
+    /// where a start stops being a start.</summary>
+    public float BaseSpread()
+    {
+        var n = BasesPerSlot();
+        int lo = int.MaxValue, hi = 0, built = 0;
+        foreach (int v in n)
+            if (v > 0) { built++; lo = Mathf.Min(lo, v); hi = Mathf.Max(hi, v); }
+        return built < 2 ? 0f : (float)hi / lo;
+    }
+
     /// <summary>Player slots that own something on this map.</summary>
     public List<int> LivePlayers()
     {
@@ -75,17 +122,78 @@ public partial class MapEntityLayer : Node2D
     /// so the map still looks like itself.</summary>
     public int StartSkirmish(int human, int aiCount, AiLevel level)
     {
-        var live = LivePlayers();
+        // Since the starting armies go (see ClearStartingArmies), a slot is only
+        // playable if it owns a BUILDING — on map_NET07 that is three of the
+        // eight, the rest bringing nothing but troops. Taking the wider list
+        // would seat a player on an empty slot and lose him the same second.
+        var built = PlayersWithBase();
+        bool buildUp = built.Count > 0;
+        var live = buildUp ? built : LivePlayers();
         if (live.Count == 0) return -1;
         if (!live.Contains(human)) human = live[0];
         var foes = new List<int>();
         foreach (int p in live)
             if (p != human && foes.Count < aiCount) foes.Add(p);
+        if (foes.Count < aiCount)
+            GD.Print($"Gemetzel: die Karte hat nur {live.Count} " +
+                     $"{(buildUp ? "bebaute" : "besetzte")} Startplaetze, " +
+                     $"also {foes.Count} statt {aiCount} Gegner");
         ViewPlayer = human;
+
+        // ⚠ Measured across the eight NET maps: only THREE of them give any slot
+        // a building — NET01 (four slots, one each), NET06 (one slot with four)
+        // and NET07 (three slots with 1, 6 and 9). On NET02, NET03, NET04, NET05
+        // and NET08 nobody owns a structure at all. Taking their armies away
+        // there leaves the player with literally nothing, which is why a
+        // skirmish on NET02 used to end in MISSION GESCHEITERT the same second
+        // it started. So the armies only go where there is a base to build from;
+        // the other maps stay as they were drawn, and the line below says which
+        // of the two happened.
+        int cleared = buildUp ? ClearStartingArmies() : 0;
         EnableSkirmishAi(foes, level);
-        GD.Print($"Gemetzel: Spieler {human} gegen {foes.Count} KI ({level}); " +
-                 $"belegte Plaetze {string.Join(",", live)}");
+        var per = BasesPerSlot();
+        float spread = BaseSpread();
+        GD.Print($"Gemetzel: Spieler {human} (Startplatz {human + 1}) gegen {foes.Count} KI ({level}); " +
+                 (buildUp
+                    ? $"bebaute Plaetze {string.Join(",", live)}; " +
+                      $"Gebaeude je Platz {string.Join("/", System.Array.ConvertAll(live.ToArray(), p => per[p]))}; " +
+                      $"Verhaeltnis {spread:0.0}:1{(spread >= 2f ? " — UNAUSGEGLICHEN" : "")}; " +
+                      $"{cleared} mitgebrachte Einheiten entfernt"
+                    : $"besetzte Plaetze {string.Join(",", live)}; " +
+                      "KEIN Platz hat ein Gebaeude — die Karte wird gespielt, wie sie gezeichnet ist, " +
+                      "mit ihren Truppen"));
         return human;
+    }
+
+    /// <summary>Takes the armies the map brings with it off the board.
+    ///
+    /// The NET maps were drawn for the original's own multiplayer and come
+    /// stocked: hundreds of finished units on both sides, which meet within
+    /// seconds. What a skirmish wants instead is the usual build-up — a base,
+    /// an economy, and an army one has to earn. So every mobile unit is removed
+    /// at the start and only the structures stay.
+    ///
+    /// OURS, and knowingly so: this is not what the original did with these
+    /// maps. Buildings, deposits, rail lines and the map itself are untouched,
+    /// so what is removed is exactly the head start.</summary>
+    private int ClearStartingArmies()
+    {
+        int n = 0;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsProp || e.IsBuilding || e.Dead) continue;
+            e.Dead = true;
+            e.Hp = 0;
+            e.DeadTime = 999f;              // long dead: no wreck or smoke at t=0
+            e.Path = null;
+            e.Target = -1;
+            e.Orders.Clear();
+            _nav?.ClearOccupant(e.Col, e.Row, i);
+            n++;
+        }
+        _sel.Clear();
+        return n;
     }
 
     public string AiLine()

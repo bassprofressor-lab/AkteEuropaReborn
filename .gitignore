@@ -92,3 +92,6 @@ BUILD_MEMORY.md
 Screenshot*.png
 !docs/screenshots/*.png
 Screenshot*.png.import
+
+# Godot import stubs for the README screenshots (they are not exported)
+docs/**/*.import

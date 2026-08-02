@@ -23,7 +23,7 @@ public partial class MainMenu : Control
     /// They stay in the list because they carry things the .CWM levels do not —
     /// a filled sec47 design list above all — but they say so, so nobody
     /// wonders why "The Dam" appears twice.</summary>
-    private static readonly (string File, string Title)[] Maps =
+    private static readonly System.Collections.Generic.List<(string File, string Title)> Maps = new()
     {
         ("map_NET07", "Gefechtsfeld (NET07)"),
         ("map_NET02", "Zwei Ufer (NET02)"),
@@ -39,9 +39,104 @@ public partial class MainMenu : Control
     };
 
     private OptionButton _map = null!;
+    private OptionButton _slot = null!;
+    private TextureRect _preview = null!;
+    private Label _previewText = null!;
     private OptionButton _level = null!;
     private SpinBox _ai = null!;
     private Label _hint = null!;
+
+    /// <summary>The skirmish setup, which used to BE the menu and is now what
+    /// the start menu's added "Gefecht" row leads to.</summary>
+    private Control? _setup;
+    private StartMenuPanel? _start;
+
+    /// <summary>The start menu of 1997, rebuilt from the code that draws and
+    /// hit-tests it — see <see cref="StartMenuPanel"/> for the addresses. The
+    /// rows that have nowhere to go say so when clicked instead of being greyed
+    /// out and silent; the one row that is ours is marked in the caption.
+    /// </summary>
+    private void BuildStartMenu()
+    {
+        var missions = Campaign.CampaignManager.Missions;
+
+        var rows = new System.Collections.Generic.List<StartMenuPanel.Row>(
+            StartMenuPanel.Original(
+                newGame: missions.Count > 0 ? StartCampaign : null,
+                load: null,
+                net: null,
+                settings: () => AddChild(new SettingsScreen()),
+                encyclopedia: null,
+                intro: null,
+                credits: null,
+                demo: null,
+                quit: () => GetTree().Quit()));
+
+        // OURS, and the only row that is: the original had no skirmish against
+        // a computer opponent, only "Netzwerkspiel" against people.
+        rows.Add(new StartMenuPanel.Row(225, "Gefecht", -1,
+            "Gefecht gegen den Rechner — im Original gibt es das nicht", ShowSetup));
+
+        _start = new StartMenuPanel
+        {
+            Footer = missions.Count > 0
+                ? $"{missions.Count} Missionen · {Campaign.CampaignManager.Completed} geschafft"
+                : "Keine Kampagne importiert",
+        };
+        _start.Rows.AddRange(rows);
+        AddChild(_start);
+    }
+
+    private void StartCampaign()
+    {
+        var m = Campaign.CampaignManager.Next();
+        if (m == null) { Campaign.CampaignManager.Reset(); m = Campaign.CampaignManager.Next(); }
+        if (m != null) StartMission(m);
+    }
+
+    private void ShowSetup()
+    {
+        if (_start != null) _start.Visible = false;
+        if (_setup != null) _setup.Visible = true;
+    }
+
+    private void ShowStartMenu()
+    {
+        if (_setup != null) _setup.Visible = false;
+        if (_start != null) _start.Visible = true;
+    }
+
+    // ---- the harness: photograph the menu ------------------------------------
+    //
+    // MapViewer has had --shot since the map work; the menu had not, so every
+    // change to it was checked by eye and described from memory. Same flags:
+    //   Godot --path <proj> -- --shot=<datei.png> --shot-delay=<bilder>
+    // A headless run has no viewport to read, so this needs a window.
+
+    private string? _shotPath;
+    private int _shotDelay = 30;
+
+    private void ReadShotArgs()
+    {
+        foreach (string a in OS.GetCmdlineUserArgs())
+        {
+            if (a.StartsWith("--shot=")) _shotPath = a[7..];
+            else if (a.StartsWith("--shot-delay=")) _shotDelay = a[13..].ToInt();
+        }
+    }
+
+    public override void _Process(double delta)
+    {
+        if (_shotPath == null) return;
+        if (_shotDelay-- > 0) return;
+        var img = GetViewport().GetTexture().GetImage();
+        var err = img.SavePng(_shotPath);
+        GD.Print(err == Error.Ok
+            ? $"menu: Bild nach {_shotPath} ({img.GetWidth()}x{img.GetHeight()})"
+            : $"menu: Bild konnte nicht geschrieben werden ({err})");
+        _shotPath = null;
+        GetTree().Quit(err == Error.Ok ? 0 : 1);
+    }
 
     public override void _Ready()
     {
@@ -57,7 +152,9 @@ public partial class MainMenu : Control
             AnchorLeft = 0.5f, AnchorRight = 0.5f, AnchorTop = 0.5f, AnchorBottom = 0.5f,
             GrowHorizontal = GrowDirection.Both, GrowVertical = GrowDirection.Both,
             CustomMinimumSize = new Vector2(460, 0),
+            Visible = false,          // shown from the start menu's "Gefecht"
         };
+        _setup = box;
         box.AddThemeConstantOverride("separation", 10);
         AddChild(box);
 
@@ -80,8 +177,34 @@ public partial class MainMenu : Control
         box.AddChild(Row("Karte", _map = new OptionButton()));
         foreach (var (_, t) in Maps) _map.AddItem(t);
         _map.Selected = 0;
+        _map.ItemSelected += _ => ShowPreview();
+
+        // the picture of the chosen map, with its original name underneath
+        _preview = new TextureRect
+        {
+            CustomMinimumSize = new Vector2(0, 150),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+            TextureFilter = TextureFilterEnum.Nearest,
+        };
+        box.AddChild(_preview);
+        _previewText = new Label
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Modulate = new Color(0.7f, 0.75f, 0.8f),
+        };
+        box.AddChild(_previewText);
 
         box.AddChild(Row("Gegner", _ai = new SpinBox { MinValue = 1, MaxValue = 7, Value = 3 }));
+
+        // Which of the map's eight slots the human takes. The slots are the
+        // original's own — a NET map fills some and leaves others empty — so
+        // "Automatisch" means the first one this map actually uses, and a
+        // chosen slot that the map leaves empty falls back to the same.
+        box.AddChild(Row("Startplatz", _slot = new OptionButton()));
+        _slot.AddItem("Automatisch");
+        for (int p = 0; p < 8; p++) _slot.AddItem($"Spieler {p + 1}");
+        _slot.Selected = 0;
 
         box.AddChild(Row("Schwierigkeit", _level = new OptionButton()));
         _level.AddItem("Leicht");
@@ -125,28 +248,39 @@ public partial class MainMenu : Control
             box.AddChild(Hint($"{missions.Count} Missionen · " +
                               $"{Campaign.CampaignManager.Completed} geschafft"));
         }
-        var net = new Button { Text = "Netzwerk — noch nicht spielbar", Disabled = true };
-        box.AddChild(net);
-
-        var quit = new Button { Text = "Beenden" };
-        quit.Pressed += () => GetTree().Quit();
-        box.AddChild(quit);
+        var back = new Button { Text = "Zurueck zum Menue" };
+        back.Pressed += ShowStartMenu;
+        box.AddChild(back);
 
         _hint = new Label
         {
-            Text = "Links waehlen/ziehen = Auswahl · Rechts = Befehl · B bauen · N Auswahl · Esc zurueck",
+            Text = "Links waehlen/ziehen · Rechts klicken = Befehl, Rechts ziehen = Karte schieben · B bauen · Esc zurueck",
             HorizontalAlignment = HorizontalAlignment.Center,
             Modulate = new Color(0.55f, 0.6f, 0.66f),
         };
         box.AddChild(_hint);
+
+        BuildStartMenu();
+
+        Settings.Apply();
+        ShowPreview();
+        ReadShotArgs();
+        // --setup opens the skirmish panel straight away, so it can be
+        // photographed without a click
+        foreach (string a in OS.GetCmdlineUserArgs())
+            if (a == "--setup") { ShowSetup(); break; }
 
         // the porting harness: decode with the new C# reader and compare
         // against the Python reference before anything else happens
         foreach (string a in OS.GetCmdlineUserArgs())
             if (a.StartsWith("--import="))
             {
-                var b = new Import.ContentBuilder(a["--import=".Length..]);
-                bool ok = b.Run();
+                // several folders separated by ';': an installation is not
+                // always complete on its own — see ContentSources.FromFolders
+                string[] dirs = a["--import=".Length..].Split(';', System.StringSplitOptions.RemoveEmptyEntries);
+                var src = Core.ContentSources.FromFolders(dirs);
+                if (src == null) { GD.PrintErr("import: keiner der Ordner existiert"); GetTree().Quit(2); return; }
+                bool ok = new Import.ContentBuilder(src).Run();
                 GetTree().Quit(ok ? 0 : 1);
                 return;
             }
@@ -185,6 +319,19 @@ public partial class MainMenu : Control
             else if (a == "--selftest-briefings")
             {
                 GetTree().Quit(Import.ImportSelfTest.RunBriefings());
+                return;
+            }
+            else if (a == "--sound-probe")
+            {
+                foreach (var c in GetChildren()) (c as Node)?.QueueFree();
+                AddChild(new SoundProbe());
+                return;
+            }
+            else if (a.StartsWith("--selftest-sounds="))
+            {
+                // --selftest-sounds=<refdir>[,<Installation oder SOUNDS.CWN>]
+                string[] p = a["--selftest-sounds=".Length..].Split(',', 2);
+                GetTree().Quit(Import.ImportSelfTest.RunSounds(p[0], p.Length > 1 ? p[1] : null));
                 return;
             }
 
@@ -354,7 +501,7 @@ public partial class MainMenu : Control
         if (br == null) { GetTree().ChangeSceneToFile(SkirmishSetup.GameScene); return; }
         GD.Print($"Briefing: \"{br.Value.Title}\", {br.Value.Paragraphs.Count} Absaetze");
         AddChild(new BriefingScreen(m.Label, br.Value.Paragraphs,
-            () => GetTree().ChangeSceneToFile(SkirmishSetup.GameScene)));
+            () => GetTree().ChangeSceneToFile(SkirmishSetup.GameScene), m.Index));
     }
 
     /// <summary>Set by `--no-briefing`, so a scripted run reaches the map without
@@ -441,8 +588,28 @@ public partial class MainMenu : Control
             var parts = rest.Split(',', System.StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length > 0)
             {
-                int mi = System.Array.FindIndex(Maps, m => m.File == parts[0].Trim());
-                if (mi >= 0) _map.Selected = mi;
+                // A name that is not in the picker used to leave the selection on
+                // entry 0 and start THAT map instead — silently. Four NET maps
+                // are absent from the list, so every scripted check on them was
+                // really a check on map_NET07, with its numbers. Now an imported
+                // map that is missing from the list is added to it, and a name
+                // that exists nowhere stops the run instead of substituting one.
+                string want = parts[0].Trim();
+                int mi = Maps.FindIndex(m => m.File == want);
+                if (mi < 0 && FileAccess.FileExists(Core.Content.Path($"Maps/{want}.entities.json")))
+                {
+                    Maps.Add((want, want));
+                    _map.AddItem(want);
+                    mi = Maps.Count - 1;
+                    GD.Print($"skirmish: {want} steht nicht in der Auswahl, aber die Daten sind da — aufgenommen");
+                }
+                if (mi < 0)
+                {
+                    GD.PrintErr($"skirmish: die Karte {want} gibt es nicht");
+                    GetTree().Quit(2);
+                    return;
+                }
+                _map.Selected = mi;
             }
             if (parts.Length > 1 && int.TryParse(parts[1], out int n)) _ai.Value = n;
             if (parts.Length > 2)
@@ -450,9 +617,22 @@ public partial class MainMenu : Control
                 {
                     "easy" or "leicht" => 0, "hard" or "schwer" => 2, _ => 1,
                 };
+            // fourth field: the start slot, 1..8, for the harness
+            if (parts.Length > 3 && int.TryParse(parts[3], out int sl))
+                _slot.Selected = Mathf.Clamp(sl, 0, 8);
             CallDeferred(nameof(OnStart));
             return;
         }
+    }
+
+    /// <summary>Puts the chosen map's thumbnail on screen. The first call for
+    /// a map shrinks the baked PNG and caches it, so the menu does not carry a
+    /// 10160-pixel-wide picture around.</summary>
+    private void ShowPreview()
+    {
+        string file = Maps[Mathf.Clamp(_map.Selected, 0, Maps.Count - 1)].File;
+        _preview.Texture = MapPreview.Of(file);
+        _previewText.Text = MapPreview.Caption(file);
     }
 
     private static HBoxContainer Row(string label, Control field)
@@ -468,7 +648,8 @@ public partial class MainMenu : Control
 
     private void OnStart()
     {
-        SkirmishSetup.Map = Maps[Mathf.Clamp(_map.Selected, 0, Maps.Length - 1)].File;
+        SkirmishSetup.Map = Maps[Mathf.Clamp(_map.Selected, 0, Maps.Count - 1)].File;
+        SkirmishSetup.Human = _slot.Selected - 1;   // -1 = automatisch
         SkirmishSetup.AiCount = (int)_ai.Value;
         SkirmishSetup.Level = _level.Selected switch
         {

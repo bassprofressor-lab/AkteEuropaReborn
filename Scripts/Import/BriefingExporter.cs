@@ -100,6 +100,77 @@ public sealed class BriefingExporter
         say?.Invoke($"Briefing-Bildschirm: {BackdropW}x{BackdropH}, Textfeld {TextW}x{TextH}");
     }
 
+    // ---- MAP.DAT: the radar monitor on that screen ---------------------------
+
+    /// <summary>MAP.DAT — 13,465,320 bytes, and it divides without remainder:
+    /// <b>33 groups of 10 pictures of 202 x 202</b>. 33 is the number of
+    /// campaign missions, and the group is an animation.
+    ///
+    /// <para>The loader @0x45c093 says all of it. It seeks to
+    /// <c>(n-1) * 408040</c> — and 408040 is 10 x 202 x 202 — then reads
+    /// <b>202 rows of 202 bytes</b> into the work buffer at <b>x = 0x11 = 17,
+    /// y = 0x26 = 38</b>. That is exactly where the briefing backdrop has its
+    /// radar monitor.</para>
+    ///
+    /// <para>What the pictures are: the map of Europe with a small yellow cross
+    /// on the mission's own location, and the ten frames of a group close a
+    /// targeting reticle in around it. The backdrop carries a map of its own in
+    /// that monitor, but a different one — 34% of the bytes match, so the same
+    /// map drawn without this overlay.</para>
+    ///
+    /// <para><b>That the cross is the mission's place is checked, not assumed.</b>
+    /// Frame 0 of every group holds exactly one 20-pixel cross, all 33 of them at
+    /// different coordinates, and four land where the mission's own briefing says
+    /// they should: <b>5 at (4,168)</b>, the far south-west corner — "Die
+    /// Kanarischen Inseln"; <b>13 at (81,114)</b> — "bevor unsere Verbaende die
+    /// Pyrenaeen ueberqueren"; <b>25 at (85,82)</b> — "Expeditionseinheiten haben
+    /// endlich Belgien"; <b>26 at (111,50)</b>, the top — "Keine guten
+    /// Neuigkeiten aus dem Norden".</para>
+    ///
+    /// <para>Which of the ten the game shows when is not read; the remake plays
+    /// them in order and stops on the last, which is OURS.</para>
+    /// </summary>
+    public const int RadarW = 202, RadarH = 202, RadarFrames = 10, RadarX = 17, RadarY = 38;
+
+    /// <summary>How many missions were written.</summary>
+    public int Radars;
+
+    public void WriteRadar(byte[] map, PalFile pal, Action<string>? say = null)
+    {
+        if (_ui.Length == 0) return;
+        int group = RadarW * RadarH * RadarFrames;
+        int groups = map.Length / group;
+        if (groups == 0) { say?.Invoke("MAP.DAT zu kurz — kein Radarbild"); return; }
+
+        int frames = 0;
+        for (int m = 0; m < groups; m++)
+        {
+            string dir = $"{_ui}/radar/{m + 1}";
+            Directory.CreateDirectory(dir);
+            for (int f = 0; f < RadarFrames; f++)
+            {
+                int at = m * group + f * RadarW * RadarH;
+                var img = Godot.Image.CreateEmpty(RadarW, RadarH, false, Godot.Image.Format.Rgba8);
+                for (int y = 0; y < RadarH; y++)
+                    for (int x = 0; x < RadarW; x++)
+                    {
+                        byte v = map[at + y * RadarW + x];
+                        img.SetPixel(x, y, Godot.Color.Color8(pal.R[v], pal.G[v], pal.B[v], 255));
+                    }
+                img.SavePng($"{dir}/f{f}.png");
+                frames++;
+            }
+        }
+        Radars = groups;
+        File.WriteAllText($"{_ui}/radar/radar_index.json",
+            "{\"_note\":\"MAP.DAT, 33 groups of 10 pictures of 202x202; loader @0x45c093 seeks " +
+            "(mission-1)*408040 and reads 202 rows of 202 to x=17 y=38 of the briefing screen\"," +
+            $"\"missions\":{groups},\"frames\":{RadarFrames}," +
+            $"\"w\":{RadarW},\"h\":{RadarH},\"x\":{RadarX},\"y\":{RadarY}}}",
+            new UTF8Encoding(false));
+        say?.Invoke($"Radarbilder: {groups} Missionen mit je {RadarFrames} Bildern ({frames} Dateien)");
+    }
+
     /// <summary>One briefing: the mission it belongs to, its title and the
     /// body as paragraphs.</summary>
     public sealed class Briefing

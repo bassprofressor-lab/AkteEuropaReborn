@@ -92,6 +92,21 @@ public partial class MapEntityLayer : Node2D
                                             // (typ 16) sec29 pairs it with
         public bool IsTarget;      // listed in the mission's win conditions
         public int Infantry = -1;  // ROBO.CWR infantry set, -1 = not a foot soldier
+
+        /// <summary>Record +0x0b, the game's own SPODEK — the chassis. The voice
+        /// routine @0x429290 keys its eleven-way switch on (this &gt;&gt; 1) - 1.</summary>
+        public int Chassis = -1;
+
+        /// <summary>Record +0x0a. The same routine switches on it first: 0, 1
+        /// and 3 have their own sets, everything else falls to one line.</summary>
+        public int Subclass = -1;
+
+        /// <summary>Record +0x28, and it is NOT the fuel tank — that is +0x2e.
+        /// This one is <b>0 on 2847 of the 2863 units the maps carry</b>, so it
+        /// is a runtime field rather than a stat; the damage arithmetic
+        /// @0x40cd90 reads it beside +0x27. The voice routine compares it with
+        /// 50 and takes a different set above. Carried unnamed.</summary>
+        public int Field28;
         public string Combo => $"{UnitType}_{Weapon}";
 
         // ---- live movement state (Step E) ----
@@ -641,6 +656,11 @@ public partial class MapEntityLayer : Node2D
                     // which lands exactly on the 24 sets of ROBO.CWR's aux table.
                     Infantry = haveRaw && GetI(e, "unit_type", -1) is 148 or 149
                         ? HexByte(raw, 0x0b) : -1,
+                    // the two fields the voice routine @0x429290 keys on, plus
+                    // the tank it tests against 50 — see Audio.GameSounds.Voice
+                    Chassis = haveRaw ? HexByte(raw, 0x0b) : -1,
+                    Subclass = haveRaw ? HexByte(raw, 0x0a) : -1,
+                    Field28 = haveRaw ? HexByte(raw, 0x28) : 0,
                     AimFacing = haveRaw ? HexByte(raw, 0x03) & 7 : -1,
                     Footprint = CellRect(ox, oy, col, row, el), IsProp = false,
                 });
@@ -1287,7 +1307,46 @@ public partial class MapEntityLayer : Node2D
             else _sel.Add(hit);
         }
         SetPrimary();
+        SpeakSelected(hit);
         QueueRedraw();
+    }
+
+    /// <summary>The unit answers when it is picked — sound 150..253, chosen the
+    /// way @0x429290 chooses it (record +0x0a, then the chassis at +0x0b, then a
+    /// throw of three). Only for the player's own units, and only for units: the
+    /// original bails out at once when what is selected is not one
+    /// (<c>si &gt;= 0x1f40</c>), and a building answering back would be ours.
+    /// </summary>
+    private void SpeakSelected(int i)
+    {
+        if (!UI.Settings.Announcements) return;
+        if (i < 0 || i >= _entities.Count) return;
+        var e = _entities[i];
+        if (e.IsBuilding || e.IsProp || e.Dead || e.Chassis < 0) return;
+        if (e.Owner != ViewPlayer) return;
+        int s = Audio.GameSounds.Voice(e.Subclass, e.Chassis, e.Field28);
+        if (s >= 0) Audio.SoundBankPlayer.Play(s);
+    }
+
+    /// <summary>When the clock may next carry a hit line. The original keeps one
+    /// such gate for the whole game (0x4f5aec against the clock 0x4fa240), not
+    /// one per unit, and that is what stops a battle sounding like a chorus.
+    /// </summary>
+    private float _hitVoiceAt;
+
+    /// <summary>The unit that was hit says so — routine @0x4297f0, called from
+    /// the hit routine itself. Mode 0 there, so it is not placed on the map;
+    /// heard wherever the camera is, like a report coming in.</summary>
+    private void SpeakHit(Entity victim)
+    {
+        if (!UI.Settings.Announcements) return;
+        if (victim.IsBuilding || victim.IsProp || victim.Chassis < 0) return;
+        if (victim.Owner != ViewPlayer) return;      // ours: only our own report
+        float now = _clock;
+        if (now < _hitVoiceAt) return;
+        _hitVoiceAt = now + Audio.GameSounds.HitVoiceGapSec();
+        Audio.SoundBankPlayer.Play(
+            Audio.GameSounds.HitVoice(victim.Subclass, victim.Chassis, victim.Field28));
     }
 
     /// <summary>Rubber-band select: every owned, non-prop entity inside the box.</summary>
@@ -1867,6 +1926,12 @@ public partial class MapEntityLayer : Node2D
         _effects.Add(new Effect { Pos = shooter.Pos + dir * 12f - new Vector2(0, 8),
                                   Kind = "muzzle", FrameTime = 0.035f });
 
+        // the weapon's own report, out of the game's own table: a component
+        // names a sound class at stats +0x1c, the class picks a row of the
+        // fire-sound table @0x4f98f2, and the original plays that number or the
+        // next at random (@0x40c4c0). See Audio/GameSounds.Fire.
+        Audio.GameSounds.Fire(WeaponRowOf(shooter.Weapon));
+
         string? rocket = RocketKind(shooter.Weapon);
         if (rocket != null)
         {
@@ -1929,6 +1994,7 @@ public partial class MapEntityLayer : Node2D
         if (lethal) victim.Hp = 0;
 
         NoteEvent(victim, victim.Hp > 0 ? "unter Beschuss" : "verloren");
+        SpeakHit(victim);
 
         // shoot back: an idle armed unit engages whoever hit it
         if (victim.Hp > 0)
@@ -1963,6 +2029,9 @@ public partial class MapEntityLayer : Node2D
             // not a burning hull — just a small blast where it was hit
             _effects.Add(new Effect { Pos = victim.Pos - new Vector2(0, 8),
                                       Kind = "blast", FrameTime = 0.05f });
+            // the original's own sound for this: @0x40d37c, in the hit routine
+            // right after it prints "Hit to exploding infantry!!!"
+            Audio.GameSounds.Play(Audio.GameSounds.InfantryDies);
             return;
         }
         _effects.Add(new Effect { Pos = victim.Pos - new Vector2(0, 6),
@@ -2024,6 +2093,7 @@ public partial class MapEntityLayer : Node2D
             // impact
             _shots.RemoveAt(i);
             _effects.Add(new Effect { Pos = p.Aim, Kind = "explosion", FrameTime = 0.06f });
+            Audio.GameSounds.Explosion();
             if (p.Target >= 0 && p.Target < _entities.Count)
             {
                 var t = _entities[p.Target];
@@ -2696,6 +2766,13 @@ public partial class MapEntityLayer : Node2D
     private static int TurretOf(int designWeapon)
         => designWeapon >= 1 && designWeapon <= 19 ? designWeapon + 20 : 0;
 
+    /// <summary>The other way round: from the component a unit carries back to
+    /// the stats row, which is what the fire-sound class is stored in. Exactly
+    /// the inverse of <see cref="TurretOf"/> and nothing more — a component
+    /// outside 21..39 gets no sound rather than a guessed one.</summary>
+    private static int WeaponRowOf(int comp)
+        => comp >= 21 && comp <= 39 ? comp - 20 : -1;
+
     /// <summary>Factory building types: Waffen-, Fahrwerk- and Spezial-Fabrik.</summary>
     private static bool IsFactory(Entity e) => e.IsBuilding && (e.BType is 2 or 3 or 4);
 
@@ -2804,6 +2881,9 @@ public partial class MapEntityLayer : Node2D
         if (e.ResearchDone < ResearchTotal) return;
         _researchedStatic.Add(e.ResearchTech);
         _order = $"{_techs?.GetValueOrDefault(e.ResearchTech) ?? "?"} erforscht";
+        // @0x4ab41b, in the routine that prints "Nachricht des FORSCHUNGSLABORS:"
+        // and "Neue Waffe erfunden"
+        Audio.GameSounds.Play(Audio.GameSounds.ResearchDone);
         e.ResearchTech = 0;
         e.ResearchDone = 0;
         if (e.State == StResearch) e.State = StAktiv;
@@ -2818,9 +2898,18 @@ public partial class MapEntityLayer : Node2D
         {
             var e = _entities[i];
             if (!e.IsBuilding || e.Dead || e.HpMax <= 0) continue;
-            if (e.Hp >= e.HpMax) { _order = "unbeschaedigt"; continue; }
+            if (e.Hp >= e.HpMax)
+            {
+                _order = "unbeschaedigt";
+                Audio.GameSounds.Play(Audio.GameSounds.Refused);
+                continue;
+            }
             e.State = e.BType is 2 or 3 or 4 ? FaRepair : StRepair;
             _order = "Status : reparieren";
+            // NO sound here on purpose: the routine @0x43e196 plays one after
+            // "mining 3", after "enlarging" and after "upgrading", but there is
+            // no call between "repair" and "enlarging". Repairing is silent in
+            // the original, so it is silent here.
         }
         UpdatePanel();
         QueueRedraw();
@@ -2835,12 +2924,18 @@ public partial class MapEntityLayer : Node2D
         {
             var e = _entities[i];
             if (!IsFactory(e) || e.Dead) continue;
-            if (e.State != StAktiv) { _order = "Gebaeude beschaeftigt"; continue; }
+            if (e.State != StAktiv)
+            {
+                _order = "Gebaeude beschaeftigt";
+                Audio.GameSounds.Play(Audio.GameSounds.Refused);
+                continue;
+            }
             int owner = Mathf.Clamp(e.Owner, 0, 7);
             int cost = storage ? e.CostStore : e.CostProd;
             if (_money[owner] < cost)
             {
                 _order = "Sie haben nicht genug Geld";   // the game's own wording
+                Audio.GameSounds.Play(Audio.GameSounds.Refused);
                 continue;
             }
             _money[owner] -= cost;
@@ -2848,6 +2943,9 @@ public partial class MapEntityLayer : Node2D
             e.UpgradeStep = 0;
             _order = storage ? $"Lagerausbau $ {cost}"
                              : $"Produktionserw. $ {cost}";
+            // "enlarging" and "upgrading" — @0x43e794 and @0x43e837
+            Audio.GameSounds.Play(storage ? Audio.GameSounds.Enlarging
+                                          : Audio.GameSounds.Upgrading);
         }
         UpdatePanel();
         QueueRedraw();
@@ -3932,6 +4030,11 @@ public partial class MapEntityLayer : Node2D
             Owner = e.Owner, Team = e.Team, UnitType = d.Propulsion,
             Category = -1, Hp = hp, HpMax = hp, Elev = ElevOf(cell.Value.X, cell.Value.Y),
             Name = d.Name, Equipment = d.Equip, Weapon = TurretOf(d.Weapon),
+            // the spawn routine @0x4b1b9e copies design +0x2c into entity +0x0b,
+            // which is the field the voice routine switches on — so a unit off
+            // the line answers like the same chassis on the map does. Kind 1 is
+            // what a built vehicle is; a map unit brings its own +0x0a.
+            Chassis = d.Derived.ChassisComponent, Subclass = 1,
             Attack = d.Attack, Defence = d.Defence,
             Fuel = d.Fuel, FuelMax = d.Fuel,
             AmmoMax = ammo, Ammo = ammo,
@@ -4661,6 +4764,38 @@ public partial class MapEntityLayer : Node2D
         return sb.ToString();
     }
 
+    /// <summary>Runs the voice rule over every unit on this map and reports how
+    /// many of them can speak and whether any of the numbers it produces is
+    /// missing from the bank. A scripted run cannot click a unit, so this is how
+    /// the rule stays checked: it exercises exactly what a click would.</summary>
+    public string VoiceWatchLine()
+    {
+        Audio.SoundBankPlayer.Load();
+        var have = Audio.SoundBankPlayer.Index;
+        int units = 0, speak = 0, missing = 0, outside = 0;
+        var seen = new HashSet<int>();
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Chassis < 0) continue;
+            units++;
+            // every draw the rule can make, not just one throw, and the hit line
+            // beside it — both rules are checked by the same pass
+            for (int t = 0; t < 24; t++)
+            {
+                int s = t == 0
+                    ? Audio.GameSounds.HitVoice(e.Subclass, e.Chassis, e.Field28)
+                    : Audio.GameSounds.Voice(e.Subclass, e.Chassis, e.Field28);
+                if (s < 0) continue;
+                if (t == 0) speak++;
+                if (!seen.Add(s)) continue;
+                if (s < Audio.GameSounds.AnnounceFirst || s > Audio.GameSounds.AnnounceLast) outside++;
+                if (have.Count > 0 && !have.ContainsKey(s)) missing++;
+            }
+        }
+        return $"voices: {speak} von {units} Einheiten sprechen, {seen.Count} verschiedene Klaenge, " +
+               $"{missing} nicht in der Bank, {outside} ausserhalb 150..253";
+    }
+
     public Vector2? DebugDemoOrder(bool naval = false)
     {
         if (_nav == null) return null;
@@ -5155,6 +5290,24 @@ public partial class MapEntityLayer : Node2D
     {
         int h = Pick(mapPos);
         if (h != _hovered) { _hovered = h; QueueRedraw(); }
+    }
+
+    /// <summary>What a click at this spot would mean. OURS — the original had
+    /// one pointer for everything; this is the modern convenience the player
+    /// asked for, not a recovered behaviour.</summary>
+    public enum Hint { Ground, Own, Enemy }
+
+    /// <summary>Reads the cursor hint for a map position: something hostile
+    /// under the pointer while one has a selection means the click attacks,
+    /// one's own thing means it selects, anything else is open ground.</summary>
+    public Hint CursorHintAt(Vector2 mapPos)
+    {
+        int i = Pick(mapPos);
+        if (i < 0 || i >= _entities.Count) return Hint.Ground;
+        var e = _entities[i];
+        if (e.IsProp || e.Dead) return Hint.Ground;
+        if (e.Owner == ViewPlayer) return Hint.Own;
+        return _sel.Count > 0 ? Hint.Enemy : Hint.Ground;
     }
 
     public void ToggleDots() { _showDots = !_showDots; QueueRedraw(); }

@@ -74,6 +74,70 @@ public sealed class ExeTables
     public const uint MissionNames = 0x4f81c0;
     public const int MissionNameStride = 21, MissionNameCount = 37;
 
+    /// <summary>The fire-sound table: 22-byte records, and the first u16 of a
+    /// record is the sound number a weapon of that class fires with.
+    ///
+    /// Read off the shooting code @0x40c4c0, which is the only thing that needs
+    /// explaining here:
+    /// <code>
+    ///   mov cl, byte [edx*2 + 0x5045bc]   ; edx*2 = row*58, so this is stats+0x1c
+    ///   lea edx, [ecx + ecx*4]            ; 5*cl
+    ///   lea ecx, [ecx + edx*2]            ; 11*cl
+    ///   mov di, word [ecx*2 + 0x4f98f2]   ; table[cl], stride 22
+    ///   call rand ; and eax,1 ; add di, ax
+    /// </code>
+    /// So a weapon component names a <b>sound class</b> in its stats record at
+    /// <b>+0x1c</b>, the class picks a row of this table, and the game plays the
+    /// row's base number <b>or that plus one</b>, at random — two shots that
+    /// never sound quite the same.
+    ///
+    /// <para>The bases come out 0, 2, 4, 6, 8, 10, 12, 14, 18, 22, 24, 26, 32 —
+    /// even, two apart, and the sound bank's very first block is <b>exactly 40
+    /// sounds</b> (0..39, all preloaded). Twenty classes of two. That the two
+    /// counts meet is what makes this certain rather than likely.</para>
+    ///
+    /// <para>Two call sites reach into the same table with a fixed row instead
+    /// of a component's class: @0x40c522 uses 0x4f9aaa and @0x40c55f uses
+    /// 0x4f9ac0, which are rows 20 and 21 (0x4f9aaa - 0x4f98f2 = 20 x 22).</para>
+    /// </summary>
+    public const uint FireSoundTable = 0x4f98f2;
+    public const int FireSoundStride = 22, FireSoundRows = 22;
+
+    /// <summary>Where a component's sound class sits in its stats record.</summary>
+    public const int StatsSoundClass = 0x1c;
+
+    /// <summary>The base sound number of every class, by row.</summary>
+    public int[] FireSounds()
+    {
+        var v = new int[FireSoundRows];
+        for (int i = 0; i < FireSoundRows; i++)
+        {
+            var r = Read((uint)(FireSoundBase + i * FireSoundStride), 2);
+            v[i] = r.Length < 2 ? -1 : r[0] | (r[1] << 8);
+        }
+        return v;
+    }
+
+    /// <summary>Rows 1..7 of the fire-sound table run 2, 4, 6, 8, 10, 12, 14 and
+    /// rows 11..13 run 22, 24, 26 with row 16 at 32 — two apart because every
+    /// class owns two sounds. Row 0 is left out of the test: it is 0, and a run
+    /// of zeros would match it anywhere.</summary>
+    private static readonly (int Row, int Base)[] FireFingerprint =
+    {
+        (1, 2), (2, 4), (3, 6), (4, 8), (5, 10), (6, 12), (7, 14),
+        (11, 22), (12, 24), (13, 26), (16, 32),
+    };
+
+    private bool FireSoundsLookRight(uint va)
+    {
+        foreach (var (row, want) in FireFingerprint)
+        {
+            var r = Read((uint)(va + row * FireSoundStride), 2);
+            if (r.Length < 2 || (r[0] | (r[1] << 8)) != want) return false;
+        }
+        return true;
+    }
+
     // ---- where the tables actually are in THIS build ------------------------
 
     /// <summary>The addresses in use. They start at the documented ones and are
@@ -87,6 +151,14 @@ public sealed class ExeTables
     public uint OrderBase { get; private set; } = OrderVocabulary;
     public uint BuildingNameBase { get; private set; } = BuildingTypeNames;
     public uint MissionNameBase { get; private set; } = MissionNames;
+    public uint FireSoundBase { get; private set; } = FireSoundTable;
+
+    /// <summary>False when the fire-sound table could not be found at all — the
+    /// exporter then writes nothing rather than a table of nonsense. This was
+    /// found the hard way: the first run took the September 1997 executable of
+    /// the installation, read the January 1998 address and wrote out "16716",
+    /// which is the ASCII of a name.</summary>
+    public bool FireSoundsFound { get; private set; } = true;
     public bool Relocated { get; private set; }
 
     /// <summary>hp_max of twelve rows, read off the 1998 build and written down
@@ -149,6 +221,12 @@ public sealed class ExeTables
         {
             uint v = Scan(p => StatsLookRight(p));
             if (v != 0) { StatsBase = v; Relocated = true; }
+        }
+        if (!FireSoundsLookRight(FireSoundTable))
+        {
+            uint v = Scan(p => FireSoundsLookRight(p));
+            if (v != 0) { FireSoundBase = v; Relocated = true; }
+            else FireSoundsFound = false;
         }
         if (!StringTableLooksRight(OrderVocabulary, OrderCount, OrderStride, OrderCount))
         {
