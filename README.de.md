@@ -46,8 +46,8 @@ entstehen beim ersten Start:
 |---|---|
 | Karten | 44, gebacken bis 10160 × 5285 Pixel |
 | Spielstände | 44 (Einheiten, Gebäude, Ziele, Vorkommen, Schienen …) |
-| Einheitenbilder | 4329, aus ROBO.CWR zusammengesetzt |
-| Tabellen | 11, aus Kartendateien und GAME.EXE |
+| Einheitenbilder | 4307, aus ROBO.CWR zusammengesetzt |
+| Tabellen | 12, aus Kartendateien und GAME.EXE |
 | Oberfläche | Originalschrift, Seitenpanel, Effekte, Missionsbriefings |
 
 Die Simulation läuft auf den Zahlen des Originals: Preise, Lebenspunkte, Angriff

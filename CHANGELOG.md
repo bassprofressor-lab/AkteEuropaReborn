@@ -4,6 +4,42 @@ All notable changes to Akte Europa Reborn. The build ships **only the engine** �
 terrain, units, maps, tables and now sound are derived on your own machine from
 your own copy of the 1997 game.
 
+## 0.3.2 — 2026-08-02
+
+Two more things the play test of 0.3.1 turned up: there was no fog of war, and
+the turret lay in the tracks instead of on the hull.
+
+### Added
+
+- **Fog of war**, built on the original's own table. The game keeps a circle of
+  visibility per sight value at `0x4f8a48` — 20 rows, one per radius up to 19,
+  each row the half-width of the circle per scanline. That table is exported and
+  stamped: what no unit of yours has ever seen stays black, what you have seen
+  but nobody is watching stays dim, what a unit watches right now is clear.
+  Every unit's own sight (entity `+0x2c`) is used, the grid is restamped five
+  times a second, and enemy vehicles you are not watching are not drawn.
+  Checked against the table: radius 6 covers 121 cells, and the engine reports
+  121. Switchable in the settings and with **J** in game.
+
+### Fixed
+
+- **The turret sat down in the tracks.** Hull and weapon were stacked on the
+  same anchor — that is what this project and its Python tooling had always
+  done, and the note that called it "visually correct" had never checked. The
+  turret is now set down on the hull's deck, and the composed pictures are built
+  the same way, so a standing unit and a moving one look alike.
+
+  ⚠ **The mount point is ours, not the original's.** The game has a rule and we
+  have only half of it: the vehicle draw offsets the turret by `x + 0x10`,
+  `y + mount − 0x0c` with a mount per chassis (70 → 15, 71 → 2, 72 → 12) and
+  gives a weapon component ≤ `0x14` no turret at all — but that branch does not
+  fit the frames this importer writes, and the ordinary unit takes another case
+  of the draw's switch on entity `+0x47` whose frame source is not settled. So
+  the mount is measured from the art instead: the turret's bottom centre goes on
+  the middle of the hull's outline at **45 %** of its height, a factor picked by
+  laying 25/35/45/55 % side by side over the six commonest chassis. When the
+  real rule turns up, this goes.
+
 ## 0.3.1 — 2026-08-02
 
 A hotfix for two things a play test of 0.3.0 turned up.

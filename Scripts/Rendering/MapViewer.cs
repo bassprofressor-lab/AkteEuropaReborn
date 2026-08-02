@@ -301,6 +301,7 @@ public partial class MapViewer : Node2D
             if (sw.Length > 0) GD.Print(sw);
             GD.Print(_entities.EventWatchLine());
             GD.Print(_entities.VoiceWatchLine());
+            GD.Print(_entities.FogWatchLine());
             GetTree().Quit();
         }
     }
@@ -590,7 +591,7 @@ public partial class MapViewer : Node2D
             $"grid {dims}   tileset {tileset}   image {(int)size.X}x{(int)size.Y}px\n" +
             $"[{_mapIndex + 1}/{MapNames.Length}]   click/drag=select  RIGHT-click=move  X=stop  E=eingraben  M=konstruieren  B=bauen  N=auswahl  O=forschen  K=reparieren  V=lagerausbau  C=prod.erw.  L=schienen  Y=flugzeuge  " +
             $"WASD+middle-drag=pan  wheel=zoom\n" +
-            $"[ ]=map  F=fit  U=sprites  R=ranges  P=walkable  Z=zones  T=buildings  G=dots  H=karte  Tab=ereignis  Shift+rechts=anreihen  Esc=quit";
+            $"[ ]=map  F=fit  U=sprites  R=ranges  P=walkable  Z=zones  J=nebel  T=buildings  G=dots  H=karte  Tab=ereignis  Shift+rechts=anreihen  Esc=quit";
 
         _hudBase = _hud.Text;
         RefreshObjectives();
@@ -769,6 +770,7 @@ public partial class MapViewer : Node2D
                 case Key.F: FitToWindow(); break;
                 case Key.G: _entities.ToggleDots(); break;
                 case Key.Z: _entities.ToggleZones(); break;
+                case Key.J: _entities.ToggleFog(); break;
                 case Key.T: _entities.ToggleBuildings(); break;
                 case Key.U: _entities.ToggleSprites(); break;
                 case Key.P: _entities.ToggleNav(); break;

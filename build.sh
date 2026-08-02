@@ -25,11 +25,11 @@ check_command dotnet
 # Restore NuGet packages
 echo "--- Restoring NuGet packages ---"
 cd "$PROJECT_DIR"
-dotnet restore AkteEuropaReborn.csproj
+dotnet restore "Akte Europa Reborn.csproj"
 
 # Build C# project
 echo "--- Building C# project ---"
-dotnet build AkteEuropaReborn.csproj -c Release
+dotnet build "Akte Europa Reborn.csproj" -c Release
 
 # Run Godot headless for validation
 echo "--- Validating project with Godot ---"

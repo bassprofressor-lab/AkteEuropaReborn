@@ -137,7 +137,8 @@ public sealed class ContentBuilder
                 _exe = t;
                 WriteShips(t);
                 WriteAircraft(t);
-                TablesWritten += 2;
+                WriteSightCircle(t);
+                TablesWritten += 3;
                 Say($"Tabellen aus {where} geschrieben (Schiffe, Flugzeuge)" +
                     (t.Relocated ? " — anderer Programmstand, Tabellen inhaltlich gefunden" : ""));
                 // a Werft can build designs that stand on no map, so their
@@ -415,6 +416,29 @@ public sealed class ContentBuilder
         }
         sb.Append("],\"missions\":{},\"docks\":{}}");
         File.WriteAllText(_dst + "/Maps/ships.json", sb.ToString(), new UTF8Encoding(false));
+    }
+
+    /// <summary>The shape the game reveals around a unit — 20 x 20 spans out of
+    /// the executable, so the fog of war opens exactly the cells the original
+    /// opens. See <see cref="ExeTables.SightCircleTable"/> for how the main
+    /// loop's own "unexplored" step led to it.</summary>
+    private void WriteSightCircle(ExeTables t)
+    {
+        if (!t.SightCircleFound)
+        {
+            Log.Add("Sichtkreis: Tabelle in diesem Programmstand nicht gefunden");
+            return;
+        }
+        int[] v = t.SightCircle();
+        var sb = new StringBuilder(1 << 12);
+        sb.Append("{\"_note\":\"the reveal shape, 20x20 u16 at 0x4f8a48: row = sight radius, ");
+        sb.Append("column = steps in from the circle's rim, value = half-width. Read by the ");
+        sb.Append("stamp @0x4200c0, which clamps the radius to 19; the step that calls it is ");
+        sb.Append("the main loop's own 'unexplored' @0x4205b0, run every fifth tick\",");
+        sb.Append($"\"radii\":{ExeTables.SightRadii},\"max_radius\":{ExeTables.SightMax},\"span\":[");
+        for (int i = 0; i < v.Length; i++) { if (i > 0) sb.Append(','); sb.Append(v[i]); }
+        sb.Append("]}");
+        File.WriteAllText(_dst + "/Maps/sight_circle.json", sb.ToString(), new UTF8Encoding(false));
     }
 
     private void WriteAircraft(ExeTables t)

@@ -77,6 +77,9 @@ public partial class SettingsScreen : Control
         panRow.AddChild(panVal);
         box.AddChild(panRow);
 
+        box.AddChild(Check("Nebel des Krieges (im Spiel: Taste J)",
+            Settings.FogOfWar, v => Settings.FogOfWar = v));
+
         box.AddChild(new HSeparator());
         box.AddChild(Head("Ton"));
         box.AddChild(Check("Klaenge", Settings.SoundOn, v => Settings.SoundOn = v));

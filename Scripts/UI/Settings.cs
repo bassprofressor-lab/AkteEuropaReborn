@@ -39,6 +39,12 @@ public static class Settings
     /// <summary>Keyboard panning speed in map pixels per second at zoom 1.</summary>
     public static int PanSpeed { get => I("pan_speed", 900); set => Set("pan_speed", value); }
 
+    /// <summary>Nebel des Krieges. The original has the switch too — its
+    /// exploration step @0x4205b0 checks <c>byte[0x4f8a3c]</c> and, when that is
+    /// clear, marks everything seen instead of stamping. Default on, as the
+    /// game ships it.</summary>
+    public static bool FogOfWar { get => B("fog", true); set => Set("fog", value); }
+
     // ---- sound --------------------------------------------------------------
 
     /// <summary>Effects at all. Kept apart from the volume so silence is a

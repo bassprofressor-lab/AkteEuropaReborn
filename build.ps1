@@ -28,11 +28,11 @@ Check-Command dotnet
 # Restore NuGet packages
 Write-Host "--- Restoring NuGet packages ---" -ForegroundColor Yellow
 Set-Location $ProjectDir
-dotnet restore AkteEuropaReborn.csproj
+dotnet restore "Akte Europa Reborn.csproj"
 
 # Build C# project
 Write-Host "--- Building C# project ---" -ForegroundColor Yellow
-dotnet build AkteEuropaReborn.csproj -c Release
+dotnet build "Akte Europa Reborn.csproj" -c Release
 
 # Validate with Godot
 Write-Host "--- Validating project with Godot ---" -ForegroundColor Yellow

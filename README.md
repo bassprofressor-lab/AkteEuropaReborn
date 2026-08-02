@@ -44,8 +44,8 @@ first launch derives:
 |---|---|
 | Maps | 44, baked up to 10160 × 5285 pixels |
 | Game states | 44 (units, buildings, objectives, deposits, rail lines …) |
-| Unit pictures | 4329, composed out of ROBO.CWR |
-| Tables | 11, from the map files and GAME.EXE |
+| Unit pictures | 4307, composed out of ROBO.CWR |
+| Tables | 12, from the map files and GAME.EXE |
 | Interface | original typeface, side panel, effects, mission briefings |
 
 The simulation runs on the original's own numbers: prices, hit points, attack

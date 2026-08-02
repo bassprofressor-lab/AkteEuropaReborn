@@ -138,6 +138,58 @@ public sealed class ExeTables
         return true;
     }
 
+    /// <summary>The shape the game reveals around a unit: <b>20 x 20 u16</b>,
+    /// row = the sight radius, column = how far the row is from the circle's
+    /// rim, value = the half-width to open there.
+    ///
+    /// <para>Found by following the main loop's own trace labels. One of them
+    /// reads <b>"unexplored"</b> (@0x4f7a54), and the step it names runs
+    /// <b>@0x4205b0 on every fifth tick</b> (`[0x4fa240] % 5 == 1`). That step
+    /// clears a <b>65535-byte</b> grid at 0x678b58 — 256 x 256, recomputed from
+    /// scratch each pass — unless <c>byte[0x4f8a3c]</c> says fog is off, and
+    /// then stamps units through @0x4200c0, which <b>clamps the radius to 0x13 =
+    /// 19</b> and reads its spans out of this table:
+    /// <c>ax = word[(r*20 + d)*2 + 0x4f8a48]</c>.</para>
+    ///
+    /// <para>The numbers are a circle: at radius 19 the centre row opens 20 and
+    /// dy = 10 opens 17, against sqrt(400-100) = 17.3. It is exported rather
+    /// than recomputed, so the remake reveals exactly the cells the original
+    /// reveals, rounding included.</para></summary>
+    public const uint SightCircleTable = 0x4f8a48;
+    public const int SightRadii = 20;
+
+    /// <summary>The clamp @0x4200c8.</summary>
+    public const int SightMax = 19;
+
+    public int[] SightCircle()
+    {
+        var v = new int[SightRadii * SightRadii];
+        for (int i = 0; i < v.Length; i++)
+        {
+            var r = Read((uint)(SightCircleBase + i * 2), 2);
+            v[i] = r.Length < 2 ? 0 : r[0] | (r[1] << 8);
+        }
+        return v;
+    }
+
+    /// <summary>Row 0 is "1 then nothing", row 19 runs out at 20, and the middle
+    /// row of radius 10 opens 11 — enough to pin the table in another build.
+    /// </summary>
+    private bool SightCircleLooksRight(uint va)
+    {
+        (int At, int Want)[] fp =
+        {
+            (0, 1), (1, 0), (21, 2), (10 * 20 + 10, 11),
+            (19 * 20 + 0, 4), (19 * 20 + 19, 20),
+        };
+        foreach (var (at, want) in fp)
+        {
+            var r = Read((uint)(va + at * 2), 2);
+            if (r.Length < 2 || (r[0] | (r[1] << 8)) != want) return false;
+        }
+        return true;
+    }
+
     // ---- where the tables actually are in THIS build ------------------------
 
     /// <summary>The addresses in use. They start at the documented ones and are
@@ -152,6 +204,8 @@ public sealed class ExeTables
     public uint BuildingNameBase { get; private set; } = BuildingTypeNames;
     public uint MissionNameBase { get; private set; } = MissionNames;
     public uint FireSoundBase { get; private set; } = FireSoundTable;
+    public uint SightCircleBase { get; private set; } = SightCircleTable;
+    public bool SightCircleFound { get; private set; } = true;
 
     /// <summary>False when the fire-sound table could not be found at all — the
     /// exporter then writes nothing rather than a table of nonsense. This was
@@ -221,6 +275,12 @@ public sealed class ExeTables
         {
             uint v = Scan(p => StatsLookRight(p));
             if (v != 0) { StatsBase = v; Relocated = true; }
+        }
+        if (!SightCircleLooksRight(SightCircleTable))
+        {
+            uint v = Scan(p => SightCircleLooksRight(p));
+            if (v != 0) { SightCircleBase = v; Relocated = true; }
+            else SightCircleFound = false;
         }
         if (!FireSoundsLookRight(FireSoundTable))
         {

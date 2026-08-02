@@ -460,6 +460,98 @@ public partial class MapEntityLayer : Node2D
     private ImageTexture? _zoneTex;
     private Rect2 _zoneRect;
 
+    // ---- fog of war ---------------------------------------------------------
+
+    private Simulation.FogGrid? _fog;
+    private Rect2 _fogRect;
+    private ImageTexture? _fogTex;
+    private int _fogDrawn = -1;
+    private float _fogTick;
+
+    /// <summary>The original runs its "unexplored" step on every fifth tick
+    /// (@0x41678c: `[0x4fa240] % 5 == 1`). At the 25 ticks a second the movies
+    /// run at, that is a fifth of a second — the interval is the game's, the
+    /// seconds are ours.</summary>
+    private const float FogEverySec = 5f / 25f;
+
+    /// <summary>What a cell that has been seen but is not watched looks like,
+    /// and what one never seen looks like. OURS: the original keeps two arrays
+    /// and this keeps three states, so it can dim what a unit walked away
+    /// from.</summary>
+    private static readonly Color FogSeen = new(0, 0, 0, 0.45f);
+    private static readonly Color FogUnseen = new(0, 0, 0, 1f);
+
+    public bool FogActive => _fog != null && UI.Settings.FogOfWar;
+
+    /// <summary>Can the player see this cell right now?</summary>
+    private bool Watched(int col, int row)
+        => !FogActive || _fog!.IsWatched(col, row);
+
+    /// <summary>Rebuilds the visibility from everything the view player owns.
+    /// The original stamps from its units the same way; which entities count is
+    /// ours only in that a dead one does not.</summary>
+    private void UpdateFog()
+    {
+        if (_fog == null) return;
+        if (!UI.Settings.FogOfWar) { _fog.RevealAll(); return; }
+        _fog.Update(Watchers());
+    }
+
+    private IEnumerable<(int Col, int Row, int Sight)> Watchers()
+    {
+        foreach (var e in _entities)
+        {
+            if (e.Dead || e.IsProp) continue;
+            if (e.Owner != ViewPlayer) continue;
+            // a building watches from its whole footprint's corner; its sight
+            // field is the same +0x2c as a unit's
+            int s = e.Sight > 0 ? e.Sight : (e.IsBuilding ? 6 : 4);
+            yield return (e.Col, e.Row, s);
+        }
+    }
+
+    /// <summary>The fog as a W x H texture drawn over the map, the same trick
+    /// the zone overlay uses — one texture instead of a rectangle per cell.
+    /// </summary>
+    private byte[]? _fogPixels;
+
+    private void BuildFogTexture()
+    {
+        if (_fog == null) return;
+        int w = _fog.Width, h = _fog.Height;
+        // a byte buffer, not SetPixel: NET05 is 254 x 254 and this runs five
+        // times a second — 64k interop calls per rebuild would be paid for in
+        // frame time, and the picture is only three distinct colours
+        _fogPixels ??= new byte[w * h * 4];
+        byte seen = (byte)(FogSeen.A * 255f), unseen = (byte)(FogUnseen.A * 255f);
+        for (int r = 0, i = 0; r < h; r++)
+            for (int c = 0; c < w; c++, i += 4)
+            {
+                _fogPixels[i] = 0; _fogPixels[i + 1] = 0; _fogPixels[i + 2] = 0;
+                _fogPixels[i + 3] = _fog.At(c, r) switch
+                {
+                    Simulation.FogGrid.Watched => (byte)0,
+                    Simulation.FogGrid.Seen => seen,
+                    _ => unseen,
+                };
+            }
+        var img = Image.CreateFromData(w, h, false, Image.Format.Rgba8, _fogPixels);
+        if (_fogTex == null) _fogTex = ImageTexture.CreateFromImage(img);
+        else _fogTex.Update(img);
+        _fogDrawn = _fog.Version;
+    }
+
+    /// <summary>For a scripted run, which cannot look at the screen.</summary>
+    public string FogWatchLine()
+    {
+        if (_fog == null) return "fog: kein Gitter";
+        if (!UI.Settings.FogOfWar) return "fog: abgeschaltet";
+        var (u, s, w) = _fog.Counts();
+        int all = u + s + w;
+        return $"fog: {w} beobachtet, {s} erkundet, {u} unbekannt von {all} Feldern " +
+               $"({100f * w / all:0.0}% / {100f * s / all:0.0}% / {100f * u / all:0.0}%)";
+    }
+
     private Label _panel = null!;
 
     // unit_type -> (tier, name) from unit_catalog.json, loaded once. `name` is
@@ -1029,6 +1121,18 @@ public partial class MapEntityLayer : Node2D
             var zones = zv.AsGodotDictionary<string, Variant>();
             BuildZoneTexture(zones, ox, oy);
             _nav?.ApplyZones(zones);   // authoritative terrain classes
+        }
+
+        // the fog covers the same grid the map does
+        int fw = GetI(root, "width"), fh = GetI(root, "height");
+        if (fw > 0 && fh > 0)
+        {
+            Simulation.FogGrid.Load();
+            _fog = new Simulation.FogGrid(fw, fh);
+            _fogRect = new Rect2(ox, oy, fw * TileW, fh * TileH);
+            _fogDrawn = -1;
+            _fogTick = 0;
+            UpdateFog();
         }
 
         _source = "entities.json (RE game-state)";
@@ -4980,6 +5084,15 @@ public partial class MapEntityLayer : Node2D
         if (_nav == null) return;
         float dt = (float)delta;
         _clock += dt;
+
+        // the original's "unexplored" step, on its own slower beat
+        _fogTick += dt;
+        if (_fogTick >= FogEverySec)
+        {
+            _fogTick = 0;
+            UpdateFog();
+            QueueRedraw();
+        }
         UpdateAircraft(dt);
         if (_orderMarks.Count > 0) { UpdateOrderMarks(dt); QueueRedraw(); }
         DebugClock += delta;
@@ -5294,6 +5407,68 @@ public partial class MapEntityLayer : Node2D
     private Texture2D? GetTurretTexture(int weapon, int facing)
         => weapon == 0 ? null : LoadUnitPart("turret", weapon.ToString(), facing);
 
+    // ---- where the turret sits on the hull ----------------------------------
+
+    private static Dictionary<(string Set, int Key, int Facing), Vector2I>? _mount;
+
+    /// <summary>The offset to draw a turret at so its foot stands on the hull's
+    /// deck. Both points are measured by the exporter — see
+    /// <see cref="Import.UnitsExporter.DeckPercent"/> for why they are ours and
+    /// what the game's own rule looks like as far as it is read.</summary>
+    private static Vector2 TurretOffset(int unitType, int hullFacing, int weapon, int aimFacing)
+    {
+        LoadMounts();
+        if (_mount == null) return Vector2.Zero;
+        var deck = Point("hull", unitType, hullFacing);
+        var foot = Point("turret", weapon, aimFacing);
+        if (deck == null || foot == null) return Vector2.Zero;
+        return new Vector2(deck.Value.X - foot.Value.X, deck.Value.Y - foot.Value.Y);
+    }
+
+    /// <summary>Falls back to facing 0 exactly where the texture does — a
+    /// chassis without directions has one frame and one mount point.</summary>
+    private static Vector2I? Point(string set, int key, int facing)
+    {
+        if (_mount!.TryGetValue((set, key, facing), out var v)) return v;
+        if (facing != 0 && _mount.TryGetValue((set, key, 0), out var z)) return z;
+        return null;
+    }
+
+    private static void LoadMounts()
+    {
+        if (_mount != null) return;
+        _mount = new Dictionary<(string, int, int), Vector2I>();
+        string path = Core.Content.Path("Units/parts_index.json");
+        if (!FileAccess.FileExists(path)) return;
+        try
+        {
+            using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
+            using var doc = System.Text.Json.JsonDocument.Parse(f.GetAsText());
+            foreach (var (set, field) in new[] { ("hulls", "deck"), ("turrets", "foot") })
+            {
+                if (!doc.RootElement.TryGetProperty(set, out var group)) continue;
+                string kind = set == "hulls" ? "hull" : "turret";
+                foreach (var item in group.EnumerateObject())
+                {
+                    if (!int.TryParse(item.Name, out int key)) continue;
+                    if (!item.Value.TryGetProperty(field, out var arr)) continue;
+                    int fc = 0;
+                    foreach (var p in arr.EnumerateArray())
+                    {
+                        int facing = fc++;
+                        if (p.ValueKind != System.Text.Json.JsonValueKind.Array) continue;
+                        var xy = p.EnumerateArray().GetEnumerator();
+                        if (!xy.MoveNext()) continue;
+                        int x = xy.Current.GetInt32();
+                        if (!xy.MoveNext()) continue;
+                        _mount[(kind, key, facing)] = new Vector2I(x, xy.Current.GetInt32());
+                    }
+                }
+            }
+        }
+        catch (System.Exception e) { GD.PrintErr("Turmsitz: parts_index.json — " + e.Message); }
+    }
+
     private Texture2D? LoadUnitPart(string set, string key, int facing)
     {
         var k = (set + "/" + key, facing);
@@ -5348,6 +5523,17 @@ public partial class MapEntityLayer : Node2D
     public void ToggleDots() { _showDots = !_showDots; QueueRedraw(); }
 
     public void ToggleZones() { _showZones = !_showZones; QueueRedraw(); }
+
+    /// <summary>Nebel an/aus (key J). The original has the same switch, one byte
+    /// at 0x4f8a3c that its exploration step checks.</summary>
+    public void ToggleFog()
+    {
+        UI.Settings.FogOfWar = !UI.Settings.FogOfWar;
+        _fogTick = FogEverySec;          // take effect on the next tick, not in ten
+        UpdateFog();
+        _fogDrawn = -1;
+        QueueRedraw();
+    }
 
     public void ToggleBuildings() { _showBuildings = !_showBuildings; QueueRedraw(); }
 
@@ -5921,6 +6107,13 @@ public partial class MapEntityLayer : Node2D
                 continue;
             }
 
+            // under the fog: someone else's unit is only drawn where the player
+            // is actually watching. A BUILDING that has once been seen keeps
+            // standing — it is part of the baked picture anyway, and a base does
+            // not walk away while nobody looks.
+            if (FogActive && e.Owner != ViewPlayer && !e.IsBuilding && !Watched(e.Col, e.Row))
+                continue;
+
             // a fallen soldier keeps his own frames (12..14) and stays lying
             // there; for vehicles the wreck effect stands in for the sprite
             if (e.Dead && e.Infantry < 0) continue;
@@ -5969,7 +6162,9 @@ public partial class MapEntityLayer : Node2D
                 {
                     DrawTexture(hull, baseC - ComposedAnchor);
                     var turret = GetTurretTexture(e.Weapon, aim);
-                    if (turret != null) DrawTexture(turret, baseC - ComposedAnchor);
+                    if (turret != null)
+                        DrawTexture(turret, baseC - ComposedAnchor
+                                            + TurretOffset(e.UnitType, e.Facing, e.Weapon, aim));
                     continue;
                 }
                 var composed = GetComposedTexture(e.Combo, e.Facing);
@@ -6127,6 +6322,14 @@ public partial class MapEntityLayer : Node2D
         // muzzle flashes, explosions and tracers (ANIM.CWA)
         DrawEffects(ground: false);
         DrawOrderMarks();
+
+        // the fog goes over the battlefield and under the selection marks: what
+        // is not watched is dimmed, what was never seen is black
+        if (FogActive && _fog != null)
+        {
+            if (_fogTex == null || _fogDrawn != _fog.Version) BuildFogTexture();
+            if (_fogTex != null) DrawTextureRect(_fogTex, _fogRect, false);
+        }
 
         // rubber-band selection rectangle
         if (_band is { } band)
