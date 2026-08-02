@@ -83,6 +83,26 @@ public partial class StartMenuPanel : Control
 
     private Label _status = null!;
     private readonly List<(Row R, Panel Box, Label Text)> _rows = new();
+    private readonly Dictionary<string, Panel> _boxes = new();
+
+    /// <summary>Where a row sits on screen, for the harness: a scripted run
+    /// cannot click, and a menu whose rows only LOOK right is worth nothing.
+    /// Returns false when there is no such caption.</summary>
+    public bool RowCentre(string caption, out Vector2 at)
+    {
+        at = Vector2.Zero;
+        if (!_boxes.TryGetValue(caption, out var b) || !GodotObject.IsInstanceValid(b)) return false;
+        at = b.GetGlobalRect().GetCenter();
+        return true;
+    }
+
+    /// <summary>The captions in order, so the harness can report what it saw.</summary>
+    public List<string> Captions()
+    {
+        var l = new List<string>();
+        foreach (var (r, _, _) in _rows) l.Add(r.Caption);
+        return l;
+    }
     private Font? _font;
 
     /// <summary>How many screen pixels one of the original's. Integer, so the
@@ -91,6 +111,30 @@ public partial class StartMenuPanel : Control
 
     /// <summary>The rows to show, set before the panel enters the tree.</summary>
     public List<Row> Rows { get; } = new();
+
+    /// <summary>Puts a row of ours in after one of the original's and moves
+    /// everything below it down by one row's pitch.
+    ///
+    /// <para>The first try hung the added "Gefecht" on the end, below
+    /// <i>Beenden</i> — where nobody looks, and the player duly reported the
+    /// skirmish as missing from 0.3.0. It goes under <i>Netzwerkspiel</i> now,
+    /// which is where someone looks for a game against an opponent. The
+    /// original's order and its spacing survive; one row is inserted and the
+    /// rest slides, which is OURS and is the smallest change that makes the
+    /// entry findable.</para></summary>
+    public static List<Row> InsertAfter(IEnumerable<Row> rows, string afterCaption, Row added)
+    {
+        var list = new List<Row>(rows);
+        int at = list.FindIndex(r => r.Caption == afterCaption);
+        if (at < 0) { list.Add(added); return list; }
+
+        int pitch = EntryH;                       // 20, the original's own step
+        int y = list[at].Y + pitch;
+        list.Insert(at + 1, added with { Y = y });
+        for (int i = at + 2; i < list.Count; i++)
+            list[i] = list[i] with { Y = list[i].Y + pitch };
+        return list;
+    }
 
     /// <summary>Shown under the list — ours, because the original's help line
     /// lives in its side panel, which this screen has not got.</summary>
@@ -189,6 +233,7 @@ public partial class StartMenuPanel : Control
                 }
             };
             _rows.Add((row, box, text));
+            _boxes[row.Caption] = box;
         }
 
         // the help line. In the original it is shown in the side panel; there is

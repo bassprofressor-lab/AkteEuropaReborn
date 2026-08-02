@@ -60,7 +60,7 @@ public partial class MainMenu : Control
     {
         var missions = Campaign.CampaignManager.Missions;
 
-        var rows = new System.Collections.Generic.List<StartMenuPanel.Row>(
+        var original = new System.Collections.Generic.List<StartMenuPanel.Row>(
             StartMenuPanel.Original(
                 newGame: missions.Count > 0 ? StartCampaign : null,
                 load: null,
@@ -73,9 +73,13 @@ public partial class MainMenu : Control
                 quit: () => GetTree().Quit()));
 
         // OURS, and the only row that is: the original had no skirmish against
-        // a computer opponent, only "Netzwerkspiel" against people.
-        rows.Add(new StartMenuPanel.Row(225, "Gefecht", -1,
-            "Gefecht gegen den Rechner — im Original gibt es das nicht", ShowSetup));
+        // a computer opponent, only "Netzwerkspiel" against people. It sits
+        // right under that entry — the first version put it at the very end,
+        // below "Beenden", and the skirmish was reported as missing from 0.3.0
+        // because nobody looks there.
+        var rows = StartMenuPanel.InsertAfter(original, "Netzwerkspiel",
+            new StartMenuPanel.Row(0, "Gefecht", -1,
+                "Gefecht gegen den Rechner — im Original gibt es das nicht", ShowSetup));
 
         _start = new StartMenuPanel
         {
@@ -122,11 +126,34 @@ public partial class MainMenu : Control
         {
             if (a.StartsWith("--shot=")) _shotPath = a[7..];
             else if (a.StartsWith("--shot-delay=")) _shotDelay = a[13..].ToInt();
+            else if (a.StartsWith("--menu-click=")) _clickRow = a[13..];
         }
     }
 
+    /// <summary>`--menu-click=<caption>`: press a start-menu row through the
+    /// real input path after a few frames, so a scripted run checks that the
+    /// row WORKS and not merely that it is drawn.</summary>
+    private string? _clickRow;
+    private int _clickIn = 20;
+
     public override void _Process(double delta)
     {
+        if (_clickRow != null && _start != null && _clickIn-- <= 0)
+        {
+            string want = _clickRow;
+            _clickRow = null;
+            GD.Print("menu: Eintraege " + string.Join(" · ", _start.Captions()));
+            if (!_start.RowCentre(want, out var at))
+            { GD.PrintErr($"menu: keinen Eintrag \"{want}\" gefunden"); GetTree().Quit(2); return; }
+            foreach (bool down in new[] { true, false })
+                Input.ParseInputEvent(new InputEventMouseButton
+                {
+                    ButtonIndex = MouseButton.Left, Pressed = down,
+                    Position = at, GlobalPosition = at,
+                });
+            GD.Print($"menu: \"{want}\" bei ({at.X:0},{at.Y:0}) geklickt");
+        }
+
         if (_shotPath == null) return;
         if (_shotDelay-- > 0) return;
         var img = GetViewport().GetTexture().GetImage();
@@ -147,16 +174,29 @@ public partial class MainMenu : Control
             AnchorRight = 1, AnchorBottom = 1,
         });
 
-        var box = new VBoxContainer
+        // The setup is taller than a 720p window, and anchored to the middle it
+        // simply lost its title at the top and its hint line at the bottom. It
+        // lives in a scroller now, so a small window costs a scrollbar and not
+        // the content.
+        var scroll = new ScrollContainer
         {
-            AnchorLeft = 0.5f, AnchorRight = 0.5f, AnchorTop = 0.5f, AnchorBottom = 0.5f,
-            GrowHorizontal = GrowDirection.Both, GrowVertical = GrowDirection.Both,
-            CustomMinimumSize = new Vector2(460, 0),
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
             Visible = false,          // shown from the start menu's "Gefecht"
         };
-        _setup = box;
+        scroll.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        _setup = scroll;
+        AddChild(scroll);
+
+        var middle = new CenterContainer
+        {
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        scroll.AddChild(middle);
+
+        var box = new VBoxContainer { CustomMinimumSize = new Vector2(460, 0) };
         box.AddThemeConstantOverride("separation", 10);
-        AddChild(box);
+        middle.AddChild(box);
 
         var title = new Label
         {

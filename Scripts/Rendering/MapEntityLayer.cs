@@ -524,8 +524,23 @@ public partial class MapEntityLayer : Node2D
         _band = null;
         _order = "";
 
-        int ox = 0, oy = 0;
-        if (meta.TryGetValue("origin", out var origin) && origin.VariantType == Variant.Type.Array)
+        // ⚠ The origin is taken from the TILES, not from a metadata field.
+        //
+        // It used to be read from an "origin" array, which is what the Python
+        // baker writes — the C# importer writes "origin_y" instead, so on
+        // imported content the array was missing and the origin silently fell
+        // back to 0. Every entity was then drawn `origin` pixels too far north:
+        // on map_01 that is 115 px, nearly six rows, which put the campaign's
+        // first tank in the middle of a lake. And neither field was right on its
+        // own: the tiles are blitted at `origin_y + row*20 - elev*15 - 50`, so
+        // the ground origin is `origin_y - 50` and the array carried the
+        // unadjusted number.
+        //
+        // A tile knows where it was drawn, so the tiles are asked. Measured over
+        // map_01: `sy - (row*20 - elev*15)` is 115 for all 3024 of them.
+        int ox = 0, oy = TileOrigin(meta, out bool fromTiles);
+        if (!fromTiles && meta.TryGetValue("origin", out var origin) &&
+            origin.VariantType == Variant.Type.Array)
         {
             var oa = origin.AsGodotArray();
             if (oa.Count >= 2) { ox = oa[0].AsInt32(); oy = oa[1].AsInt32(); }
@@ -559,6 +574,26 @@ public partial class MapEntityLayer : Node2D
                  $"nav {_nav.Width}x{_nav.Height} " +
                  $"water {census.Water} / shore {census.Shore} / land {census.Land} / " +
                  $"props {census.Props}" + (_nav.HasZones ? " [sec2 terrain]" : " [tile-code fallback]"));
+    }
+
+    /// <summary>Where the baked picture's row 0 sits, read off the tiles: a tile
+    /// carries the `sy` it was drawn at, so `sy - (row*TileH - elev*ElevStep)`
+    /// is the origin and it is the same for every tile of a map. Returns 0 with
+    /// <paramref name="ok"/> false when the metadata has no tiles to ask.</summary>
+    private static int TileOrigin(GDict meta, out bool ok)
+    {
+        ok = false;
+        if (!meta.TryGetValue("tiles", out var tv) || tv.VariantType != Variant.Type.Array)
+            return 0;
+        foreach (var item in tv.AsGodotArray())
+        {
+            if (item.VariantType != Variant.Type.Dictionary) continue;
+            var t = item.AsGodotDictionary<string, Variant>();
+            if (!t.ContainsKey("sy")) return 0;              // an older bake
+            ok = true;
+            return GetI(t, "sy") - (GetI(t, "row") * TileH - GetI(t, "elev", 0) * 15);
+        }
+        return 0;
     }
 
     private static Dictionary<(int, int), int> BuildElevLookup(GDict meta)

@@ -4,6 +4,26 @@ All notable changes to Akte Europa Reborn. The build ships **only the engine** �
 terrain, units, maps, tables and now sound are derived on your own machine from
 your own copy of the 1997 game.
 
+## 0.3.1 — 2026-08-02
+
+A hotfix for two things a play test of 0.3.0 turned up.
+
+### Fixed
+
+- **Every unit and building was drawn nearly six rows too far north.** The
+  campaign's first tank stood in a lake. The map's draw origin was read from a
+  field the *Python* baker writes; the importer that runs on your machine writes
+  a different one, so the origin silently fell back to zero — 115 pixels on the
+  first campaign map. It is taken from the tiles themselves now, which know
+  where they were drawn: checked over all 44 maps, constant per map and always
+  the same value, no exception.
+- **The skirmish looked missing.** The added *Gefecht* entry had been hung on
+  the end of the start menu, below *Beenden*, where nobody looks. It sits under
+  *Netzwerkspiel* now, where one looks for a game against an opponent; the
+  original's own order and spacing are unchanged.
+- The skirmish setup lost its title and its hint line on a 720p window. It
+  scrolls now.
+
 ## 0.3.0 — 2026-08-02
 
 The release that gave the game its voice, and its own start screen.
