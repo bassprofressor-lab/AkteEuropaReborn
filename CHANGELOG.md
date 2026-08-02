@@ -4,6 +4,49 @@ All notable changes to Akte Europa Reborn. The build ships **only the engine** �
 terrain, units, maps, tables and now sound are derived on your own machine from
 your own copy of the 1997 game.
 
+## 0.3.3 — 2026-08-03
+
+0.3.2 put the turret on the deck with a number of our own, measured from the
+art, and said so. The game's own table has been found since, and it replaces it.
+
+### Fixed
+
+- **The turret mount is the original's now, not ours.** The ordinary unit is
+  drawn by case 0 of the draw list's switch, and after the hull goes down the
+  code moves the pen before the turret:
+
+      x += (t[chassis][0].x + t[chassis][k].x) / 2
+      y += (t[chassis][0].y + t[chassis][k].y) / 2
+
+  `t` is a table of **22 chassis × 5 (x, y) pairs** in GAME.EXE, and **k is the
+  FLAG byte of the tile the unit stands on** — the fourth byte of the map
+  record — with anything above 4 counting as 0. So a unit on flat ground takes
+  entry 0 and a unit on a slope is moved with the ground it stands on: 112,509
+  of the 1,282,512 tiles across the 44 maps carry such a flag, about one in
+  eleven. The table is read out of **your** executable, located by its own
+  shape, and the September 1997 disc yields the same numbers as the January
+  1998 build.
+
+- **Ships have their own rule and now get it.** Their case of the switch — the
+  one whose error path prints *"Wrong chassis of ship"* — puts the turret at
+  `x + 0x10`, `y + mount − 0x0c`, with a mount per hull (70 → 15, 71 → 2,
+  72 → 12) and no slope in it. Checked by measurement: the shift lands the
+  turret's middle within a few pixels of the hull's (41.5 against 41.0 for the
+  first, 39.5 against 42.0 for the second), where stacking on the shared anchor
+  left it 15 to 20 pixels behind the ship. Hulls 73, 100 and 101 fall into that
+  error path in the original itself, so there is no number to copy and they get
+  none.
+
+- **⚠ Withdrawn:** the note in 0.3.2 that "the game offsets the turret by +0x10
+  in x and mount − 0x0c in y" was the SHIP rule, quoted as if it were the tank's.
+  That is why it did not fit. The 45 % of hull height that 0.3.2 shipped is gone.
+
+### Known, and left as it is
+
+A turret on a slope is drawn from a tilted set of frames in the original
+(five blocks: 0, 16, 32, 8, 24). The importer writes block 0 only, so a unit on
+a slope stands in the right place with the flat turret.
+
 ## 0.3.2 — 2026-08-02
 
 Two more things the play test of 0.3.1 turned up: there was no fog of war, and

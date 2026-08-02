@@ -412,6 +412,7 @@ public partial class MapEntityLayer : Node2D
     private Rect2? _band;                 // live rubber-band rectangle (map coords)
     private int _ox, _oy;                 // map pixel origin
     private Dictionary<(int, int), int> _elevLookup = new();
+    private Dictionary<(int, int), int>? _flagLookup;
     // Per-unit movement speed, from the component stats table (unit_catalog.json
     // `speed_raw`, record[unit_type-1][+0x30] — the same tail off-by-one as the
     // component id). Raw values: immobile 2, drivable 4..14. The pixels-per-raw
@@ -643,6 +644,7 @@ public partial class MapEntityLayer : Node2D
         // elevation per cell (for correct vertical placement) from the map tiles.
         var elev = BuildElevLookup(meta);
         _elevLookup = elev;
+        _flagLookup = BuildFlagLookup(meta);
 
         // walkability grid over the same tiles (props / cliffs / water fallback);
         // the real terrain classes are layered on from the sec2 zones below
@@ -689,6 +691,15 @@ public partial class MapEntityLayer : Node2D
     }
 
     private static Dictionary<(int, int), int> BuildElevLookup(GDict meta)
+        => TileField(meta, "elev");
+
+    /// <summary>The tile's FLAG byte per cell — the fourth byte of the map
+    /// record, which the game reads through 0x41d110 as the slope class a
+    /// turret is mounted by.</summary>
+    private static Dictionary<(int, int), int> BuildFlagLookup(GDict meta)
+        => TileField(meta, "flag");
+
+    private static Dictionary<(int, int), int> TileField(GDict meta, string field)
     {
         var map = new Dictionary<(int, int), int>();
         if (meta.TryGetValue("tiles", out var tv) && tv.VariantType == Variant.Type.Array)
@@ -697,7 +708,7 @@ public partial class MapEntityLayer : Node2D
             {
                 if (item.VariantType != Variant.Type.Dictionary) continue;
                 var t = item.AsGodotDictionary<string, Variant>();
-                map[(GetI(t, "col"), GetI(t, "row"))] = GetI(t, "elev", 0);
+                map[(GetI(t, "col"), GetI(t, "row"))] = GetI(t, field, 0);
             }
         }
         return map;
@@ -5409,61 +5420,53 @@ public partial class MapEntityLayer : Node2D
 
     // ---- where the turret sits on the hull ----------------------------------
 
-    private static Dictionary<(string Set, int Key, int Facing), Vector2I>? _mount;
+    /// <summary>unit_type -> the five slope offsets of its chassis, exported
+    /// from the player's own GAME.EXE — see
+    /// <see cref="Import.ExeTables.TurretMountTable"/>.</summary>
+    private static Dictionary<int, Vector2I[]>? _mount;
 
-    /// <summary>The offset to draw a turret at so its foot stands on the hull's
-    /// deck. Both points are measured by the exporter — see
-    /// <see cref="Import.UnitsExporter.DeckPercent"/> for why they are ours and
-    /// what the game's own rule looks like as far as it is read.</summary>
-    private static Vector2 TurretOffset(int unitType, int hullFacing, int weapon, int aimFacing)
+    /// <summary>The game's own rule, @0x429CCB..0x429D1B: the turret is drawn
+    /// at the hull's place plus <c>(mount[0] + mount[k]) / 2</c>, where k is the
+    /// FLAG byte of the tile the unit stands on and anything above 4 counts as
+    /// 0. The halving truncates toward zero, as `sar` after `sub eax,edx` does.
+    /// </summary>
+    private Vector2 TurretOffset(int unitType, int col, int row)
     {
         LoadMounts();
-        if (_mount == null) return Vector2.Zero;
-        var deck = Point("hull", unitType, hullFacing);
-        var foot = Point("turret", weapon, aimFacing);
-        if (deck == null || foot == null) return Vector2.Zero;
-        return new Vector2(deck.Value.X - foot.Value.X, deck.Value.Y - foot.Value.Y);
+        if (_mount == null || !_mount.TryGetValue(unitType, out var m)) return Vector2.Zero;
+        int k = _flagLookup != null && _flagLookup.TryGetValue((col, row), out int fl) && fl <= 4 ? fl : 0;
+        if (k >= m.Length) k = 0;
+        return new Vector2(Halve(m[0].X + m[k].X), Halve(m[0].Y + m[k].Y));
     }
 
-    /// <summary>Falls back to facing 0 exactly where the texture does — a
-    /// chassis without directions has one frame and one mount point.</summary>
-    private static Vector2I? Point(string set, int key, int facing)
-    {
-        if (_mount!.TryGetValue((set, key, facing), out var v)) return v;
-        if (facing != 0 && _mount.TryGetValue((set, key, 0), out var z)) return z;
-        return null;
-    }
+    private static int Halve(int v) => v < 0 ? -((-v) >> 1) : v >> 1;
 
     private static void LoadMounts()
     {
         if (_mount != null) return;
-        _mount = new Dictionary<(string, int, int), Vector2I>();
+        _mount = new Dictionary<int, Vector2I[]>();
         string path = Core.Content.Path("Units/parts_index.json");
         if (!FileAccess.FileExists(path)) return;
         try
         {
             using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
             using var doc = System.Text.Json.JsonDocument.Parse(f.GetAsText());
-            foreach (var (set, field) in new[] { ("hulls", "deck"), ("turrets", "foot") })
+            if (!doc.RootElement.TryGetProperty("hulls", out var group)) return;
+            foreach (var item in group.EnumerateObject())
             {
-                if (!doc.RootElement.TryGetProperty(set, out var group)) continue;
-                string kind = set == "hulls" ? "hull" : "turret";
-                foreach (var item in group.EnumerateObject())
+                if (!int.TryParse(item.Name, out int ut)) continue;
+                if (!item.Value.TryGetProperty("mount", out var arr)) continue;
+                var row = new List<Vector2I>();
+                foreach (var p in arr.EnumerateArray())
                 {
-                    if (!int.TryParse(item.Name, out int key)) continue;
-                    if (!item.Value.TryGetProperty(field, out var arr)) continue;
-                    int fc = 0;
-                    foreach (var p in arr.EnumerateArray())
-                    {
-                        int facing = fc++;
-                        if (p.ValueKind != System.Text.Json.JsonValueKind.Array) continue;
-                        var xy = p.EnumerateArray().GetEnumerator();
-                        if (!xy.MoveNext()) continue;
-                        int x = xy.Current.GetInt32();
-                        if (!xy.MoveNext()) continue;
-                        _mount[(kind, key, facing)] = new Vector2I(x, xy.Current.GetInt32());
-                    }
+                    if (p.ValueKind != System.Text.Json.JsonValueKind.Array) continue;
+                    var xy = p.EnumerateArray().GetEnumerator();
+                    if (!xy.MoveNext()) continue;
+                    int x = xy.Current.GetInt32();
+                    if (!xy.MoveNext()) continue;
+                    row.Add(new Vector2I(x, xy.Current.GetInt32()));
                 }
+                if (row.Count > 0) _mount[ut] = row.ToArray();
             }
         }
         catch (System.Exception e) { GD.PrintErr("Turmsitz: parts_index.json — " + e.Message); }
@@ -6164,7 +6167,7 @@ public partial class MapEntityLayer : Node2D
                     var turret = GetTurretTexture(e.Weapon, aim);
                     if (turret != null)
                         DrawTexture(turret, baseC - ComposedAnchor
-                                            + TurretOffset(e.UnitType, e.Facing, e.Weapon, aim));
+                                            + TurretOffset(e.UnitType, e.Col, e.Row));
                     continue;
                 }
                 var composed = GetComposedTexture(e.Combo, e.Facing);

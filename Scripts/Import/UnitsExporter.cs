@@ -92,23 +92,14 @@ public sealed class UnitsExporter
 
             // composed: propulsion first, then the weapon on its deck
             string key = $"{ut}_{weap}";
+            var flat = FlatOffset(ut);
             bool newHull = !hulls.ContainsKey(ut);
             bool newTurret = weap > 0 && !turrets.Contains(weap);
             for (int f = 0; f < CwrFile.Facings; f++)
             {
-                // A facing the bank has no frame for stays out of the mount
-                // table too — the map layer falls back to facing 0 there, and
-                // the point it draws with has to fall back with it.
                 var hull = Stack(f, prop);
-                if (!_deck.ContainsKey((ut, f)) && !IsBlank(hull)) _deck[(ut, f)] = DeckPoint(hull);
-                Image? turret = null;
-                if (weap > 0)
-                {
-                    turret = Stack(f, weap);
-                    if (!_foot.ContainsKey((weap, f)) && !IsBlank(turret)) _foot[(weap, f)] = FootPoint(turret);
-                }
-                Save($"composed/{key}/f{f}.png",
-                     Mount(hull, turret, Deck(ut, f), weap > 0 ? Foot(weap, f) : Vector2I.Zero));
+                Image? turret = weap > 0 ? Stack(f, weap) : null;
+                Save($"composed/{key}/f{f}.png", Compose(hull, turret, flat));
                 if (newHull) Save($"hull/{ut}/f{f}.png", hull);
                 if (newTurret && turret != null) Save($"turret/{weap}/f{f}.png", turret);
             }
@@ -297,26 +288,32 @@ public sealed class UnitsExporter
         var sb = new StringBuilder();
         sb.Append("{\"_note\":\"hull (the propulsion alone) and turret (weapon) drawn separately ");
         sb.Append("so the weapon can aim independently; same 64x56 anchor\",");
-        sb.Append("\"_mount\":\"a hull carries a `deck` point per facing and a turret a `foot` ");
-        sb.Append("point; the turret is drawn with foot on deck. OURS, measured from the art at ");
-        sb.Append($"{DeckPercent}% of the hull's height - the game has its own rule (the vehicle ");
-        sb.Append("draw offsets the turret by +0x10 in x and mount-0x0c in y, per chassis) but ");
-        sb.Append("that branch does not fit these frames. Stacking both at the same anchor puts ");
-        sb.Append("every turret on the tracks\",");
-        sb.Append($"\"canvas\":[{CwrFile.CanvasW},{CwrFile.CanvasH}],\"hulls\":{{");
+        sb.Append("\"_mount\":\"a hull carries the five turret offsets of its chassis, read out ");
+        sb.Append("of the executable (GAME.EXE table at 0x4fa320, used @0x429CCB): the turret is ");
+        sb.Append("drawn at hull + (mount[0] + mount[k]) / 2, k = the tile's flag byte, 0 above 4. ");
+        sb.Append("mount[0] is flat ground. `slope_blocks` is the frame block a tilted turret is ");
+        sb.Append("drawn from (@0x429B05) - the exporter writes block 0 only, so a unit on a slope ");
+        sb.Append("shows the flat turret at the right place\",");
+        sb.Append($"\"canvas\":[{CwrFile.CanvasW},{CwrFile.CanvasH}],\"slope_blocks\":[");
+        for (int k = 0; k < _slopeBlocks.Length; k++)
+            sb.Append(k > 0 ? "," : "").Append(_slopeBlocks[k]);
+        sb.Append("],\"hulls\":{");
         bool first = true;
         foreach (var kv in hulls)
         {
             if (!first) sb.Append(',');
             first = false;
-            sb.Append($"\"{kv.Key}\":{{\"unit_type\":{kv.Key},\"name\":\"{Esc(kv.Value)}\",\"deck\":[");
-            for (int f = 0; f < CwrFile.Facings; f++)
+            sb.Append($"\"{kv.Key}\":{{\"unit_type\":{kv.Key},\"name\":\"{Esc(kv.Value)}\"");
+            sb.Append($",\"component\":{ComponentOf(kv.Key)}");
+            var m = Mount(kv.Key);
+            if (m != null)
             {
-                sb.Append(f > 0 ? "," : "");
-                if (_deck.TryGetValue((kv.Key, f), out var p)) sb.Append($"[{p.X},{p.Y}]");
-                else sb.Append("null");            // facing without a frame
+                sb.Append(",\"mount\":[");
+                for (int k = 0; k < m.Length; k++)
+                    sb.Append(k > 0 ? "," : "").Append($"[{m[k].X},{m[k].Y}]");
+                sb.Append(']');
             }
-            sb.Append("]}");
+            sb.Append('}');
         }
         sb.Append("},\"turrets\":{");
         first = true;
@@ -324,14 +321,7 @@ public sealed class UnitsExporter
         {
             if (!first) sb.Append(',');
             first = false;
-            sb.Append($"\"{t}\":{{\"component\":{t},\"foot\":[");
-            for (int f = 0; f < CwrFile.Facings; f++)
-            {
-                sb.Append(f > 0 ? "," : "");
-                if (_foot.TryGetValue((t, f), out var p)) sb.Append($"[{p.X},{p.Y}]");
-                else sb.Append("null");            // facing without a frame
-            }
-            sb.Append("]}");
+            sb.Append($"\"{t}\":{{\"component\":{t}}}");
         }
         sb.Append("}}");
         File.WriteAllText(_dst + "/parts_index.json", sb.ToString(), new UTF8Encoding(false));
@@ -419,85 +409,78 @@ public sealed class UnitsExporter
 
     // ---- where a turret sits on its hull ------------------------------------
     //
-    // ⚠ OURS, and only because the original's own rule could not be read out.
+    // READ OUT OF THE GAME, 03.08.2026 — this replaces the 45 % rule 0.3.2
+    // shipped, which was measured from the art because the table had not been
+    // found yet.
     //
-    // What IS read: the vehicle draw offsets the turret — @0x42adb7..0x42ae31
-    // puts it at `hull_x + 0x10`, `hull_y + mount - 0x0c` with a per-chassis
-    // mount (70 -> 15, 71 -> 2, 72 -> 12), and a weapon component <= 0x14 gets
-    // no turret at all. But that branch does not fit the frames this exporter
-    // writes, and the ordinary unit takes a different case of the draw's switch
-    // on entity +0x47 (jump table @0x42bcd8) whose frame source is not settled.
-    // Stacking both layers at the same anchor — which this exporter and
-    // compose_units.py both did, and which UNIT_SPRITES_RE.md called "visually
-    // correct" without checking — puts every turret down on the tracks.
+    // The ordinary unit is drawn by case 0 of the draw list's switch
+    // (@0x429900). The hull goes down at the list entry's own x/y, and then
+    // @0x429CCB..0x429D1B moves the pen before the turret:
+    //     x += (t[comp][0].x + t[comp][k].x) / 2
+    //     y += (t[comp][0].y + t[comp][k].y) / 2      t = ExeTables.TurretMount
+    // comp is the HULL component (entity +0x0b) and k the tile's flag byte,
+    // taken as 0 above 4 — so on flat ground the offset is row 0 of the table.
+    // See ExeTables.TurretMountTable for the addresses.
     //
-    // So the mount is MEASURED FROM THE ART instead: the turret's bottom centre
-    // is placed on the hull's deck, and the deck is taken as the middle of the
-    // hull's own outline at 45% of its height. The factor was picked by laying
-    // 0.25 / 0.35 / 0.45 / 0.55 side by side over the six commonest chassis and
-    // weapons; at 0.45 the turret ring sits on the mounting plate.
-    //
-    // It is a stand-in for a rule the game has and we have not found. When the
-    // real one turns up this whole block goes.
+    // The composed pictures below are built for FLAT ground (k = 0), which is
+    // what a picture without a map under it can mean; the map layer applies the
+    // slope entry per unit.
 
-    /// <summary>How far down the hull's outline the deck sits, in percent.
-    /// Whole numbers on purpose: the Python reference has to land on the same
-    /// pixel, and 0.45f times a height is not the same double as 0.45.</summary>
-    public const int DeckPercent = 45;
+    private readonly Dictionary<int, (int X, int Y)[]> _mount = new();
+    /// <summary>Filled from the executable in <see cref="Mount"/>; the values
+    /// here are what the January 1998 build holds, kept only so the file has a
+    /// sane line when the table cannot be located.</summary>
+    private int[] _slopeBlocks = { 0, 16, 32, 8, 24 };
 
-    private readonly Dictionary<(int Ut, int F), Vector2I> _deck = new();
-    private readonly Dictionary<(int W, int F), Vector2I> _foot = new();
+    /// <summary>The five slope offsets for a unit type's hull, or null when the
+    /// executable's table could not be read.</summary>
+    /// <summary>Ships are drawn by their own case of the switch (kind 4, whose
+    /// error path says "Wrong chassis of ship"): the turret goes to
+    /// <c>x + 0x10</c>, <c>y + mount - 0x0c</c> with these three mounts, and no
+    /// slope enters it (@0x42ADB7..0x42AE31). Chassis 73, 100 and 101 fall into
+    /// that error path in the original — it prints and then uses whatever was
+    /// on the stack — so there is no number to copy and they get none.</summary>
+    private static readonly Dictionary<int, int> ShipMount = new() { { 70, 15 }, { 71, 2 }, { 72, 12 } };
 
-    private Vector2I Deck(int ut, int f)
-        => _deck.TryGetValue((ut, f), out var v) ? v
-           : _deck.TryGetValue((ut, 0), out var z) ? z
-           : new Vector2I(CwrFile.CanvasW / 2, CwrFile.CanvasH / 2);
-
-    private Vector2I Foot(int w, int f)
-        => _foot.TryGetValue((w, f), out var v) ? v
-           : _foot.TryGetValue((w, 0), out var z) ? z
-           : new Vector2I(CwrFile.CanvasW / 2, CwrFile.CanvasH - 1);
-
-    private static (int X0, int Y0, int X1, int Y1)? Bounds(Image img)
+    private (int X, int Y)[]? Mount(int unitType)
     {
-        int x0 = int.MaxValue, y0 = int.MaxValue, x1 = -1, y1 = -1;
-        for (int y = 0; y < img.GetHeight(); y++)
-            for (int x = 0; x < img.GetWidth(); x++)
-                if (img.GetPixel(x, y).A > 0.01f)
-                {
-                    if (x < x0) x0 = x;
-                    if (y < y0) y0 = y;
-                    if (x > x1) x1 = x;
-                    if (y > y1) y1 = y;
-                }
-        return x1 < 0 ? null : (x0, y0, x1, y1);
+        if (_mount.TryGetValue(unitType, out var m)) return m;
+        var t = _exe;
+        if (t == null || !t.TurretMountFound) return null;
+        int comp = ComponentOf(unitType);
+        if (ShipMount.TryGetValue(comp, out int sm))
+        {
+            var ship = new (int X, int Y)[ExeTables.MountSlopes];
+            for (int k = 0; k < ship.Length; k++) ship[k] = (0x10, sm - 0x0c);
+            _mount[unitType] = ship;
+            return ship;
+        }
+        if (comp < 0 || comp >= ExeTables.MountRows) return null;
+        var all = t.TurretMount();
+        var row = new (int X, int Y)[ExeTables.MountSlopes];
+        for (int k = 0; k < row.Length; k++) row[k] = all[comp, k];
+        _mount[unitType] = row;
+        _slopeBlocks = t.SlopeBlocks();
+        return row;
     }
 
-    /// <summary>The point on the hull a turret is mounted at.</summary>
-    private static Vector2I DeckPoint(Image img)
+    /// <summary>The offset the turret is drawn at on flat ground.</summary>
+    private Vector2I FlatOffset(int unitType)
     {
-        if (Bounds(img) is not { } b) return new Vector2I(CwrFile.CanvasW / 2, CwrFile.CanvasH / 2);
-        return new Vector2I((b.X0 + b.X1) / 2,
-                            b.Y0 + (DeckPercent * (b.Y1 - b.Y0) + 50) / 100);
+        var m = Mount(unitType);
+        return m == null ? Vector2I.Zero : new Vector2I(m[0].X, m[0].Y);
     }
 
-    /// <summary>The point on the turret that stands on the deck.</summary>
-    private static Vector2I FootPoint(Image img)
-    {
-        if (Bounds(img) is not { } b) return new Vector2I(CwrFile.CanvasW / 2, CwrFile.CanvasH - 1);
-        return new Vector2I((b.X0 + b.X1) / 2, b.Y1);
-    }
-
-    /// <summary>Hull with the turret set down on its deck — the same offset the
-    /// map layer applies when it draws the two separately, so the composed
-    /// picture and the live unit agree.</summary>
-    private static Image Mount(Image hull, Image? turret, Vector2I deck, Vector2I foot)
+    /// <summary>Hull with the turret at the offset the game gives it on flat
+    /// ground — the same offset the map layer applies when it draws the two
+    /// separately, so the composed picture and the live unit agree.</summary>
+    private static Image Compose(Image hull, Image? turret, Vector2I offset)
     {
         var canvas = Image.CreateEmpty(CwrFile.CanvasW, CwrFile.CanvasH, false, Image.Format.Rgba8);
         canvas.Fill(new Color(0, 0, 0, 0));
         canvas.BlendRect(hull, new Rect2I(0, 0, CwrFile.CanvasW, CwrFile.CanvasH), Vector2I.Zero);
         if (turret != null)
-            canvas.BlendRect(turret, new Rect2I(0, 0, CwrFile.CanvasW, CwrFile.CanvasH), deck - foot);
+            canvas.BlendRect(turret, new Rect2I(0, 0, CwrFile.CanvasW, CwrFile.CanvasH), offset);
         return canvas;
     }
 

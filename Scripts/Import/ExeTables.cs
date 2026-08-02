@@ -190,6 +190,87 @@ public sealed class ExeTables
         return true;
     }
 
+    /// <summary>Where a turret sits on its hull: <b>22 rows of 5 (x, y) pairs
+    /// of i16</b>, row = the hull component (entity +0x0b), the five entries =
+    /// the slope classes of the ground the unit stands on.
+    ///
+    /// <para>The unit draw (kind 0 of the draw list, @0x429900) blits the hull
+    /// at the list entry's own x/y and then, at <b>@0x429CCB..0x429D1B</b>,
+    /// moves the pen before the turret:
+    /// <c>x += (t[comp][0].x + t[comp][k].x) / 2</c> and the same for y, with
+    /// <c>t = word[20*comp + 4*k + 0x4fa320]</c>. <b>k is the tile's FLAG
+    /// byte</b> — @0x429AD5 calls 0x41d110, which is
+    /// <c>byte[map + (row*width + col)*4 + 3]</c>, and a flag above 4 is taken
+    /// as 0 (@0x429AE1). So on flat ground the offset is simply row 0.</para>
+    ///
+    /// <para>The table is 440 bytes and ends exactly where the slope-to-frame
+    /// table begins (0x4fa4d8, five u16: 0, 16, 32, 8, 24 — the block a tilted
+    /// turret is drawn from). Rows 0..19 are the chassis and are plainly one
+    /// table: x is always (0, -a, 0, +a, 0) and y is between -3 and -16. Rows 20
+    /// and 21 do not follow that shape and no chassis in the game reaches them;
+    /// they are exported as they lie, not repaired.</para>
+    ///
+    /// <para>⚠ This replaces the 45 % rule 0.3.2 shipped, which was measured
+    /// from the art because this table had not been found.</para></summary>
+    public const uint TurretMountTable = 0x4fa320;
+    public const int MountRows = 22;
+    public const int MountSlopes = 5;
+
+    /// <summary>The five turret frame blocks for the slope classes, read at
+    /// @0x429B05 as <c>byte[k*2 + 0x4fa4d8]</c>. Sits right behind the mount
+    /// table, which is how the table's length is known.</summary>
+    public int[] SlopeBlocks()
+    {
+        var v = new int[MountSlopes];
+        for (int k = 0; k < MountSlopes; k++)
+        {
+            var r = Read((uint)(TurretMountBase + MountRows * 20 + k * 2), 2);
+            v[k] = r.Length < 2 ? 0 : r[0] | (r[1] << 8);
+        }
+        return v;
+    }
+
+    /// <summary>[component][slope] -> (x, y), straight out of the executable.
+    /// </summary>
+    public (int X, int Y)[,] TurretMount()
+    {
+        var v = new (int, int)[MountRows, MountSlopes];
+        for (int c = 0; c < MountRows; c++)
+            for (int k = 0; k < MountSlopes; k++)
+            {
+                var r = Read((uint)(TurretMountBase + c * 20 + k * 4), 4);
+                if (r.Length < 4) continue;
+                v[c, k] = ((short)(r[0] | (r[1] << 8)), (short)(r[2] | (r[3] << 8)));
+            }
+        return v;
+    }
+
+    /// <summary>The shape of the first twenty rows plus the five blocks behind
+    /// them — strong enough that it is unique in both builds.</summary>
+    private bool TurretMountLooksRight(uint va)
+    {
+        for (int c = 0; c < 20; c++)
+        {
+            var row = new (int X, int Y)[MountSlopes];
+            for (int k = 0; k < MountSlopes; k++)
+            {
+                var r = Read((uint)(va + c * 20 + k * 4), 4);
+                if (r.Length < 4) return false;
+                row[k] = ((short)(r[0] | (r[1] << 8)), (short)(r[2] | (r[3] << 8)));
+            }
+            if (row[0].X != 0 || row[2].X != 0 || row[4].X != 0) return false;
+            if (row[1].X > 0 || row[1].X != -row[3].X || row[1].X < -12) return false;
+            foreach (var p in row) if (p.Y >= 0 || p.Y < -40) return false;
+        }
+        int[] want = { 0, 16, 32, 8, 24 };
+        for (int k = 0; k < want.Length; k++)
+        {
+            var r = Read((uint)(va + MountRows * 20 + k * 2), 2);
+            if (r.Length < 2 || (r[0] | (r[1] << 8)) != want[k]) return false;
+        }
+        return true;
+    }
+
     // ---- where the tables actually are in THIS build ------------------------
 
     /// <summary>The addresses in use. They start at the documented ones and are
@@ -206,6 +287,8 @@ public sealed class ExeTables
     public uint FireSoundBase { get; private set; } = FireSoundTable;
     public uint SightCircleBase { get; private set; } = SightCircleTable;
     public bool SightCircleFound { get; private set; } = true;
+    public uint TurretMountBase { get; private set; } = TurretMountTable;
+    public bool TurretMountFound { get; private set; } = true;
 
     /// <summary>False when the fire-sound table could not be found at all — the
     /// exporter then writes nothing rather than a table of nonsense. This was
@@ -281,6 +364,12 @@ public sealed class ExeTables
             uint v = Scan(p => SightCircleLooksRight(p));
             if (v != 0) { SightCircleBase = v; Relocated = true; }
             else SightCircleFound = false;
+        }
+        if (!TurretMountLooksRight(TurretMountTable))
+        {
+            uint v = Scan(p => TurretMountLooksRight(p));
+            if (v != 0) { TurretMountBase = v; Relocated = true; }
+            else TurretMountFound = false;
         }
         if (!FireSoundsLookRight(FireSoundTable))
         {
