@@ -25,6 +25,50 @@ public static class CwmData
         public int StockW, StockF, StockS, Terranium;
         public string Name = "";
 
+        /// <summary>Record +0x18, and it is the flag that says "this entry is a
+        /// real building". The building tick @0x43CB29 refuses to do anything
+        /// without it. Measured over the 893 sec3 entries of the 23 levels: it
+        /// is 1 for every one of the 684 entries of type 1..16 and 0 for every
+        /// entry of type 17 and up — 0 counterexamples. The types above 16 are
+        /// the map's script placeholders and scenery records.</summary>
+        public int IsBuilt;
+
+        /// <summary>The doors, as cell offsets from <see cref="Col"/>/<see
+        /// cref="Row"/>. <see cref="Doors"/> of them, <b>three bytes each from
+        /// +0x35</b>: column offset, row offset, and a state byte.
+        ///
+        /// ⚠ CORRECTED 2026-08-06 (second reading, same day). The first reading
+        /// took +0x35/+0x36 for "the door" and +0x37/+0x38 for a second pair —
+        /// which fitted the numbers by accident, because +0x37 is door 0's
+        /// state (0 everywhere) and +0x38 is door 1's column. The building draw
+        /// @0x42B274 settles the stride: <c>byte[esi + 3*i + 0xc06947]</c>, and
+        /// the door tick @0x43D38C steps <c>edx</c> by 3.
+        ///
+        /// Constant per type over all 798 doors of the 23 levels: Basis (1) one
+        /// door at (4,2) 73 of 73; the three factories (2/3/4) <b>two</b>, at
+        /// (2,3) and (5,3), 99/91/68 of each; Kaserne (6) (2,3) 12 of 12;
+        /// Flughafen (9) (5,4) 39 of 39; Mine (10) (5,3) 49 of 49; type 12
+        /// (1,3) 36 of 36; type 15 (2,4) 10 of 10; Werft (16) (2,3) 13 of 13.
+        ///
+        /// A door tile is a tile OF the building — inside the footprint 121 of
+        /// 121 where one is known — and the imap leaves it free (511 of 519),
+        /// because it is where units come out: the production spawn writes the
+        /// new unit's cell as <c>col + door_col</c>, <c>row + door_row</c>
+        /// (@0x410441..0x41047C).
+        ///
+        /// The third byte is the door's own STATE and is <b>0 on all 798</b>,
+        /// so it is a runtime field and not exported. Its machine is at
+        /// @0x43D2EC: at 0 (shut) the door starts opening the moment the imap
+        /// cell holds anything below 14000 — that is, a unit stands in it — and
+        /// from 0x84 (open) it starts shutting again when the cell is empty.
+        /// That is the behaviour the player describes: the doors are shut and
+        /// open when something drives through.</summary>
+        public readonly List<(int Col, int Row)> DoorCells = new();
+
+        /// <summary>Door 0 — the one the capture block uses.</summary>
+        public int DoorCol => DoorCells.Count > 0 ? DoorCells[0].Col : 0;
+        public int DoorRow => DoorCells.Count > 0 ? DoorCells[0].Row : 0;
+
         /// <summary>The ground the building actually covers, in cells, relative
         /// to <see cref="Col"/>/<see cref="Row"/> — which is its top-left anchor.
         ///
@@ -62,6 +106,13 @@ public static class CwmData
         /// has always used so the file stays comparable.</summary>
         public int CodeBase, Hp, HpMax;
         public byte[] Raw = Array.Empty<byte>();
+
+        /// <summary>How many cells the unit really covers, taken from the imap:
+        /// the cells that carry its own slot number ARE its body. Most units are
+        /// 1x1; the ships on map_01 are 2x2, and drawing them on the middle of
+        /// their ANCHOR cell instead of the middle of their body was what put
+        /// them half a tile inland. 0 when the imap holds no cell for it.</summary>
+        public int FootW, FootH;
 
         /// <summary>The owner is the slot BLOCK, not a field: the hostility
         /// tests (@0x409bde, @0x40d058) and the sprite draw (@0x42a825) all
@@ -129,9 +180,19 @@ public static class CwmData
                 StockF = BitConverter.ToUInt16(s3, k + 0x2e),
                 StockS = BitConverter.ToUInt16(s3, k + 0x30),
                 Terranium = BitConverter.ToUInt16(s3, k + 0x32),
+                // +0x34 doors: the second gate of the capture block, and a
+                // COUNT — 240 buildings carry 1 and 279 carry 2, constant per
+                // type. 0 = cannot be taken: types 8, 11 (Hafen), 13, 14 and
+                // everything from 17 up. The doors themselves follow at +0x35,
+                // three bytes each; see Building.DoorCells.
                 Doors = s3[k + 0x34],
+                IsBuilt = s3[k + 0x18],
                 Ident = s3[k + 0x41],
             };
+            // the doors, three bytes each from +0x35 (see Building.DoorCells)
+            for (int d = 0; d < b.Doors && k + 0x35 + 3 * d + 2 < s3.Length; d++)
+                b.DoorCells.Add((s3[k + 0x35 + 3 * d], s3[k + 0x36 + 3 * d]));
+
             Footprint(m, b);
 
             var inst = Instance(m, b.Type, b.CisTyp);
@@ -281,10 +342,19 @@ public static class CwmData
     // ---- sec6: the spatial handle grid --------------------------------------
 
     /// <summary>sec6 — 256x256 u16, column major (dest 0xbdea80), linear index
-    /// col*256 + row (@0x41f345). A cell uses three handle spaces: below 8000 a
-    /// live entity slot (stamped @0x41f347), 10000..11999 an inline object code
-    /// (dir2 frame = v-10000, cf. sub 0x2710 @0x411133), from 50000 a static
-    /// object handle. 0xFFFC is empty, 0xFFFD..0xFFFF are sentinels.</summary>
+    /// col*256 + row (@0x41f345). The game calls it <b>imap</b> (its own debug
+    /// line `imap[rx+px][ry+py]:` @0x4f66b4) and it is the map every movement
+    /// question is asked of — see <see cref="Terrain"/> for the reading.
+    ///
+    /// A cell uses four handle spaces: below 8000 a live entity slot (stamped
+    /// @0x41f347), 10000..13999 an infantry CELL (index into the 4000 x 22
+    /// records at 0x7847e8, cf. `sub di,0x2710` @0x4129a8), from 50000 a static
+    /// object handle, and the three top values as terrain.
+    ///
+    /// ⚠ The older note here — "0xFFFC is empty, 0xFFFD..0xFFFF are sentinels" —
+    /// was wrong end about. <b>0xFFFE is the empty cell</b>; 0xFFFC is water and
+    /// 0xFFFD is rough ground. Read out of Can_go @0x4055D0, see
+    /// <see cref="Simulation.NavGrid"/>.</summary>
     public sealed class SpatialCell
     {
         public int Col, Row, Value, Ref;
@@ -366,6 +436,125 @@ public static class CwmData
         return g;
     }
 
+    // ---- the terrain the game itself moves on -------------------------------
+
+    /// <summary>The four terrain classes Can_go @0x4055D0 distinguishes, in the
+    /// order the numbers are written to the export.</summary>
+    public enum Ground : byte { Free = 0, Rough = 1, Water = 2, Blocked = 3 }
+
+    public sealed class TerrainGrid
+    {
+        public int Width, Height;
+        public byte[] Cells = Array.Empty<byte>();      // row major, <see cref="Ground"/>
+        public int[] Histogram = new int[4];
+        /// <summary>Cells whose imap value was a stamped occupant, so the ground
+        /// under them had to be inferred — see <see cref="Terrain"/>.</summary>
+        public int Inferred;
+        /// <summary>imap values that fell through every case, if any.</summary>
+        public List<int> Unknown = new();
+    }
+
+    /// <summary>
+    /// The passability map, straight out of the imap (sec6) and the rules
+    /// <c>Can_go</c> @0x4055D0 applies to it. Three of its values are terrain:
+    /// <c>0xFFFE</c> free, <c>0xFFFD</c> rough, <c>0xFFFC</c> water. Everything
+    /// from 14000 up (the static object handles, 50000+) and 0xFFFF walk into
+    /// the routine's own `nothing` path @0x405586 and block.
+    ///
+    /// Proven against the file rather than argued: over maps 01, 02, 05, 14 and
+    /// NET07, <b>0xFFFC sits on a water tile (ground code &lt;= 7) every single
+    /// time and on no land tile at all</b> — 463, 519, 2056, 7190 and 6452 cells,
+    /// no counter-example. And the objects that are baked into the map picture
+    /// are mostly <b>0xFFFE, that is free</b> (02: 498 cells, 14: 512, NET07:
+    /// 312) — bridges and roads among them; the ones that really block carry a
+    /// static handle instead. Blocking a cell because a prop is drawn on it, the
+    /// way this project used to, is what made bridges impassable.
+    ///
+    /// OURS, and only this: a cell that already carries an occupant (a unit slot
+    /// below 8000, or an infantry cell 10000..13999) does not say what is under
+    /// it. The occupant does — a ship stands on water, everything else on free
+    /// ground. It is a handful of cells per map (map_01: 30 of 3024) and the
+    /// count is reported as <see cref="TerrainGrid.Inferred"/>.
+    /// </summary>
+    public static TerrainGrid Terrain(CwmFile m, List<Entity> entities)
+    {
+        var g = new TerrainGrid { Width = m.Width, Height = m.Height };
+        var s = m.Sec(6);
+        if (s == null || m.Width <= 0 || m.Height <= 0) return g;
+        int n = s.Length / 2;
+
+        // which slots are naval — the original asks entity +0x0a (our Subclass),
+        // case 4 of the jump table @0x40678c, whose only terrain test is 0xFFFC
+        var naval = new HashSet<int>();
+        foreach (var e in entities) if (e.Subclass is 4 or 5) naval.Add(e.Slot);
+
+        g.Cells = new byte[m.Width * m.Height];
+        var unknown = new HashSet<int>();
+        for (int row = 0; row < m.Height; row++)
+            for (int col = 0; col < m.Width; col++)
+            {
+                int i = col * 256 + row;
+                int v = i < n ? BitConverter.ToUInt16(s, i * 2) : 0xFFFF;
+                Ground gr;
+                if (v == 0xFFFE) gr = Ground.Free;
+                else if (v == 0xFFFD) gr = Ground.Rough;
+                else if (v == 0xFFFC) gr = Ground.Water;
+                else if (v < 8000) { gr = naval.Contains(v) ? Ground.Water : Ground.Free; g.Inferred++; }
+                else if (v is >= 10000 and < 14000) { gr = Ground.Free; g.Inferred++; }
+                else { gr = Ground.Blocked; if (v is not 0xFFFF && v < 50000) unknown.Add(v); }
+                g.Cells[row * m.Width + col] = (byte)gr;
+                g.Histogram[(int)gr]++;
+            }
+        g.Unknown.AddRange(unknown);
+        g.Unknown.Sort();
+        return g;
+    }
+
+    /// <summary>sec16 — the infantry cells the imap points at: 4000 records of
+    /// 22 (dest 0x7847e8), `col, row, then nine u16 unit slots`. The stride and
+    /// the count come from the two routines that walk them: `pratelska_infa`
+    /// @0x433fe0 (`lea ebx,[eax*2 + 0x7847ec]` over 11*index, nine slots) and
+    /// `prejet` @0x412980. Only the cells the imap names are live, which is a
+    /// few dozen per map.</summary>
+    public sealed class InfantryCell
+    {
+        public int Index, Col, Row;
+        public List<int> Slots = new();
+    }
+
+    public static List<InfantryCell> InfantryCells(CwmFile m)
+    {
+        var list = new List<InfantryCell>();
+        var imap = m.Sec(6);
+        var inf = m.Sec(16);
+        if (imap == null || inf == null) return list;
+        int n = imap.Length / 2;
+
+        var wanted = new SortedSet<int>();
+        for (int col = 0; col < m.Width; col++)
+            for (int row = 0; row < m.Height; row++)
+            {
+                int i = col * 256 + row;
+                if (i >= n) continue;
+                int v = BitConverter.ToUInt16(imap, i * 2);
+                if (v is >= 10000 and < 14000) wanted.Add(v - 10000);
+            }
+
+        foreach (int idx in wanted)
+        {
+            int o = idx * 22;
+            if (o + 22 > inf.Length) continue;
+            var c = new InfantryCell { Index = idx, Col = inf[o], Row = inf[o + 1] };
+            for (int k = 0; k < 9; k++)
+            {
+                int slot = BitConverter.ToUInt16(inf, o + 2 + k * 2);
+                if (slot < 8000) c.Slots.Add(slot);       // the game's own test @0x4129cd
+            }
+            list.Add(c);
+        }
+        return list;
+    }
+
     /// <summary>sec5 — 8000 records of 78, eight blocks of 1000, one per
     /// player: the block a slot sits in IS its owner (`slot / 1000`).</summary>
     public static List<Entity> Entities(CwmFile m)
@@ -402,6 +591,48 @@ public static class CwmData
                 Raw = raw,
             });
         }
+        UnitFootprints(m, list);
         return list;
+    }
+
+    /// <summary>
+    /// The body of every placed unit, read off the imap: a unit is stamped into
+    /// it under its own slot number (@0x41f347 writes `col*256 + row`), and a
+    /// unit that covers more than one cell is stamped into all of them. So the
+    /// cells carrying slot N ARE unit N.
+    ///
+    /// The three ships of map_01 are the case that made this necessary: slots
+    /// 1004, 1005 and 1006 each hold FOUR cells — 1004 is (14,17) (14,18)
+    /// (15,17) (15,18) — while the record names only the first. Drawn on the
+    /// middle of that one cell a ship sits half a tile up and to the left of
+    /// where it belongs, and at the water's edge that is the difference between
+    /// floating and standing on the beach.
+    /// </summary>
+    private static void UnitFootprints(CwmFile m, List<Entity> list)
+    {
+        var s = m.Sec(6);
+        if (s == null || list.Count == 0) return;
+        int n = s.Length / 2;
+
+        var bySlot = new Dictionary<int, (int X0, int Y0, int X1, int Y1)>();
+        for (int col = 0; col < m.Width; col++)
+            for (int row = 0; row < m.Height; row++)
+            {
+                int i = col * 256 + row;
+                if (i >= n) continue;
+                int v = BitConverter.ToUInt16(s, i * 2);
+                if (v >= 8000) continue;                       // not a unit slot
+                if (bySlot.TryGetValue(v, out var b))
+                    bySlot[v] = (Math.Min(b.X0, col), Math.Min(b.Y0, row),
+                                 Math.Max(b.X1, col), Math.Max(b.Y1, row));
+                else bySlot[v] = (col, row, col, row);
+            }
+
+        foreach (var e in list)
+            if (bySlot.TryGetValue(e.Slot, out var b))
+            {
+                e.FootW = b.X1 - b.X0 + 1;
+                e.FootH = b.Y1 - b.Y0 + 1;
+            }
     }
 }

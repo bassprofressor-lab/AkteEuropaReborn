@@ -43,7 +43,7 @@ public partial class StartMenuPanel : Control
     /// Hard-coded rather than read at runtime: four numbers do not justify
     /// loading a palette, and they are written down here so the next reader can
     /// check them against the file.</summary>
-    private static Color Pal(int i) => i switch
+    internal static Color Pal(int i) => i switch
     {
         0x24 => Color.Color8(187, 179, 179),
         0x28 => Color.Color8(127, 115, 115),
@@ -227,7 +227,9 @@ public partial class StartMenuPanel : Control
             {
                 if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left })
                 {
-                    Audio.GameSounds.Play(Audio.GameSounds.Click);
+                    // silent, like the original: neither the row hit test
+                    // @0x461101 nor the draw @0x480430 nor the menu handler
+                    // @0x447940 calls the sound routine
                     if (row.Go != null) row.Go();
                     else _status.Text = row.Help + "  —  gibt es im Remake noch nicht";
                 }
@@ -249,5 +251,33 @@ public partial class StartMenuPanel : Control
             MouseFilter = MouseFilterEnum.Ignore,
         };
         AddChild(_status);
+
+        // The version, bottom right under the window. OURS entirely — the 1997
+        // menu shows no version anywhere. It reads `application/config/version`
+        // out of project.godot, which is the same string the installer script
+        // carries as AppVersion, so there is one place to change it.
+        var ver = new Label
+        {
+            Text = "v" + VersionString,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            AnchorLeft = 0, AnchorRight = 1, AnchorTop = 1, AnchorBottom = 1,
+            OffsetTop = -26, OffsetBottom = -8, OffsetRight = -12,
+            Modulate = new Color(0.52f, 0.56f, 0.62f),
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        if (_font != null) ver.AddThemeFontOverride("font", _font);
+        AddChild(ver);
+    }
+
+    /// <summary>The build's version, from project.godot. Empty settings fall
+    /// back to a dash rather than to an invented number.</summary>
+    public static string VersionString
+    {
+        get
+        {
+            var v = ProjectSettings.GetSetting("application/config/version");
+            string s = v.VariantType == Variant.Type.Nil ? "" : v.AsString();
+            return s.Length > 0 ? s : "—";
+        }
     }
 }

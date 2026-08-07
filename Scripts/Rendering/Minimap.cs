@@ -37,13 +37,18 @@ public partial class Minimap : Control
     private Func<List<Alarm>>? _alarms;
     private Action<Vector2>? _jump;
 
+    /// <summary>The fog, one pixel per cell, or null when it is switched off —
+    /// see <see cref="MapEntityLayer.FogTexture"/>.</summary>
+    private Func<Texture2D?>? _fog;
+
     /// <summary>How long a mark keeps glowing. Ours — the data says nothing
     /// about how long an alarm should last.</summary>
     public const float AlarmSeconds = 12f;
 
     public void Setup(Texture2D terrain, Vector2 mapPixels,
                       Func<List<(Vector2 Pos, int Owner, bool Building)>> dots,
-                      Func<Rect2> view, Func<List<Alarm>> alarms, Action<Vector2> jump)
+                      Func<Rect2> view, Func<List<Alarm>> alarms, Action<Vector2> jump,
+                      Func<Texture2D?>? fog = null)
     {
         _terrain = terrain;
         _mapPixels = mapPixels;
@@ -51,6 +56,7 @@ public partial class Minimap : Control
         _view = view;
         _alarms = alarms;
         _jump = jump;
+        _fog = fog;
         QueueRedraw();
     }
 
@@ -69,12 +75,71 @@ public partial class Minimap : Control
             ? Vector2.Zero
             : new Vector2(local.X / Size.X * _mapPixels.X, local.Y / Size.Y * _mapPixels.Y);
 
+    /// <summary>What was drawn last time, so the map only repaints when there is
+    /// something new to show.
+    ///
+    /// ⚠ It used to repaint <b>never</b>: <see cref="Setup"/> queued one redraw
+    /// and nothing ever queued another, so the view frame stayed wherever the
+    /// camera had been when the map loaded and the dots stayed with it. Reported
+    /// as "Mini Map bleibt immer auf dem Ursprungspunkt stehen", and that is
+    /// exactly what it was.</summary>
+    private Rect2 _lastView;
+    private float _dotTimer;
+
+    /// <summary>How often the dots are refreshed. Ours: the frame follows the
+    /// camera immediately because that is what the eye tracks, while units move
+    /// slowly enough that five times a second is plenty and costs nothing.</summary>
+    private const float DotRefresh = 0.2f;
+
+    /// <summary>Harness counters: how often the camera moved and how often the
+    /// map actually repainted. Before the fix the second one stayed at 1 no
+    /// matter what the first did, which is the whole of the bug.</summary>
+    public int ViewMoves { get; private set; }
+    public int Repaints { get; private set; }
+
+    /// <summary>How often the fog was actually drawn over the overview. Zero
+    /// while the fog is switched off, and zero would also be the symptom if the
+    /// texture never arrived — hence the counter.</summary>
+    public int FogDrawn { get; private set; }
+
+    public override void _Process(double delta)
+    {
+        if (_terrain == null) return;
+        bool due = false;
+        if (_view != null)
+        {
+            var r = _view();
+            if (r != _lastView) { _lastView = r; due = true; ViewMoves++; }
+        }
+        _dotTimer -= (float)delta;
+        if (_dotTimer <= 0f) { _dotTimer = DotRefresh; due = true; }
+        if (due) QueueRedraw();
+    }
+
     public override void _Draw()
     {
         if (_terrain == null) return;
+        Repaints++;
         var full = new Rect2(Vector2.Zero, Size);
 
         DrawTextureRect(_terrain, full, false, new Color(0.75f, 0.78f, 0.8f));
+
+        // The fog, over the terrain but UNDER the dots and the frame: what one
+        // remembers of the ground is dimmed, what one is watching right now
+        // stays bright, and what was never seen is black. The dots are drawn on
+        // top because the entity layer already decides which of them may be
+        // shown at all — dimming them a second time here would hide friendly
+        // units in their own remembered territory.
+        //
+        // Fehlerliste Punkt 23. Nothing new is computed: this is the map's own
+        // fog texture, one pixel per cell, stretched over the overview.
+        var fog = _fog?.Invoke();
+        if (fog != null)
+        {
+            DrawTextureRect(fog, full, false);
+            FogDrawn++;
+        }
+
         DrawRect(full, new Color(0.55f, 0.58f, 0.6f), false, 1);
 
         if (_dots != null)

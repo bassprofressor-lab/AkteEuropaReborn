@@ -35,7 +35,7 @@ using Godot;
 public sealed class MapBaker
 {
     public const int TileW = 40, TileH = 20, ElevStep = 15, GroundMax = 1666;
-    private const int BlitAnchor = -50;
+    public const int BlitAnchor = -50;
 
     private readonly CwmFile _map;
     private readonly CwpFile _tiles;
@@ -60,6 +60,99 @@ public sealed class MapBaker
     public MapBaker(CwmFile map, CwpFile tiles, PalFile pal)
     {
         _map = map; _tiles = tiles; _pal = pal;
+    }
+
+    /// <summary>How many object cells the last bake left to the live renderer
+    /// because a building stands on them — see <see cref="BuildingCells"/>.</summary>
+    public int BuildingCellsSkipped { get; private set; }
+
+    /// <summary>Cells whose object tile the map only carries because a BUILDING
+    /// stands there — those the live renderer draws, so they must not be baked
+    /// into the picture.</summary>
+    public int MissedBuildingCells { get; private set; }
+
+    /// <summary>
+    /// The grid cells that belong to a standing building.
+    ///
+    /// <para><b>Why this exists.</b> The original writes a building's tiles into
+    /// the map grid as <c>tile + 0x2710</c> (@0x4C8E2D), so to the baker they
+    /// look like any other object and used to be burnt into the map picture. A
+    /// destroyed building could then never stop being drawn — the pixels were
+    /// part of the map. Now the baker leaves them out and the renderer draws the
+    /// building itself, which is what lets it show its RUIN when it falls (see
+    /// <see cref="BuildingPatterns.RuinPattern"/>).</para>
+    ///
+    /// <para>A cell is only claimed when the grid code there is EXACTLY the
+    /// building's own tile plus <see cref="CwpFile.ObjectCodeBase"/>. Anything
+    /// else the map put on that cell stays baked, and the count of cells that did
+    /// NOT match is reported as <see cref="MissedBuildingCells"/> — if a reading
+    /// were wrong, that number would not be zero.</para>
+    /// </summary>
+    private bool[] BuildingCells(ushort[] code)
+    {
+        int w = Width, h = Height;
+        var claimed = new bool[w * h];
+        BuildingCellsSkipped = MissedBuildingCells = 0;
+        if (!_tiles.HasBuildings) return claimed;
+
+        foreach (var b in CwmData.Buildings(_map))
+        {
+            if (b.IsBuilt == 0) continue;                 // scenery / script slot
+            var bt = _tiles.GetBuildingType(b.Type);
+            if (bt.IsEmpty) continue;
+            for (int x = 0; x < CwpFile.PatternWidth; x++)
+                for (int y = 0; y < CwpFile.PatternHeight; y++)
+                {
+                    int t = _tiles.PatternTile(bt.FirstPattern, x, y);
+                    if (t == 0) continue;
+                    int c = b.Col + x, r = b.Row + y;
+                    if (c < 0 || c >= w || r < 0 || r >= h) continue;
+                    int i = r * w + c;
+                    if (code[i] == t + CwpFile.ObjectCodeBase)
+                    { claimed[i] = true; BuildingCellsSkipped++; }
+                    else MissedBuildingCells++;
+                }
+        }
+        return claimed;
+    }
+
+    /// <summary>
+    /// The pixels the last bake did NOT draw because a building stands there —
+    /// one flag per pixel of the finished picture, or null when nothing was
+    /// skipped.
+    ///
+    /// <para>Why a pixel mask and not the cell list: a building tile is far
+    /// taller than its cell and hangs upwards over its neighbours, so "which
+    /// cells belong to a building" does not say which pixels changed. This is
+    /// filled by <see cref="MarkSkipped"/>, which walks exactly the pixels
+    /// <see cref="Blit"/> would have written.</para>
+    ///
+    /// <para>Who needs it: <c>selftest-bake</c> holds our picture against the
+    /// Python reference, and that reference still BAKES its buildings. Without
+    /// this mask the test can only say "4 % of the pixels differ" and not
+    /// whether the ground underneath is still right.</para>
+    /// </summary>
+    public bool[]? SkippedPixels { get; private set; }
+
+    private void MarkSkipped(Sprite? s, int col, int row, int elev)
+    {
+        if (s == null) return;
+        SkippedPixels ??= new bool[PixelW * PixelH];
+        int sx = col * TileW;
+        int sy = OriginY + row * TileH - elev * ElevStep + BlitAnchor + s.YOff;
+        for (int y = 0; y < s.H; y++)
+        {
+            int dy = sy + y;
+            if (dy < 0 || dy >= PixelH) continue;
+            int srcRow = y * s.W * 4;
+            for (int x = 0; x < s.W; x++)
+            {
+                if (s.Rgba[srcRow + x * 4 + 3] == 0) continue;   // transparent
+                int dx = sx + x;
+                if (dx < 0 || dx >= PixelW) continue;
+                SkippedPixels[dy * PixelW + dx] = true;
+            }
+        }
     }
 
     private Sprite? Make(CwpFile.Frame? f)
@@ -211,13 +304,16 @@ public sealed class MapBaker
                 if (!isObj) Blit(Frame(code[i]), c, r, elev[i]);
             }
 
-        // pass C — objects, back to front
+        // pass C — objects, back to front. Buildings are left out: they are
+        // drawn live so they can fall down. See BuildingCells.
+        var isBuilding = BuildingCells(code);
         if (objects)
             for (int r = 0; r < h; r++)
                 for (int c = 0; c < w; c++)
                 {
                     int i = r * w + c;
                     if (code[i] < GroundMax) continue;
+                    if (isBuilding[i]) { MarkSkipped(ObjectSprite(code[i]), c, r, elev[i]); continue; }
                     Blit(ObjectSprite(code[i]), c, r, elev[i]);
                 }
 

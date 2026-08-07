@@ -82,6 +82,178 @@ public static class ImportSelfTest
     /// result against the entities.json the Python tooling wrote — the same
     /// files the game has been running on. Entities are compared by their raw
     /// 78 bytes, which is as exact as a check can get.</summary>
+    /// <summary>
+    /// The patterns against the maps — the measurement that decides which
+    /// pattern a placed building actually wears.
+    ///
+    /// <para><c>add_building</c> @0x4C8D60 takes its TILES from
+    /// <c>word[0xbb3208 + typ*10] − 2</c> and its block MASK from
+    /// <c>word[0xbb3202 + typ*10]</c>: two different patterns. Rather than
+    /// trust that reading, this walks every building of every level, lays each
+    /// of the type's patterns over the map's own tile codes, and reports which
+    /// one fits. If the reading is right, the winner is the same offset
+    /// everywhere.</para>
+    ///
+    /// <para>A map cell holds the grid code; codes at or above 10000 are
+    /// objects and the pattern stores <c>code − 10000</c> (the original's
+    /// <c>add ax, 0x2710</c>).</para>
+    ///
+    /// <para><b>RESULT (07.08.2026, 684 buildings over 23 levels): a placed
+    /// building wears its type's FIRST pattern — 684 of 684, not one
+    /// counterexample, and no other offset occurs at all.</b> 677 of them cover
+    /// it whole; the other seven wear the same pattern and miss between one and
+    /// four single cells (22/26, 25/26, 25/26, 13/14, 29/30, 36/39, 37/38),
+    /// which is the map author having overwritten a tile or two. So the
+    /// <c>TilePattern − 2</c> that add_building computes is NOT what a standing
+    /// building shows — what that index is for is still open.</para>
+    /// </summary>
+    public static int RunBuildPatterns(string aekernel)
+    {
+        aekernel = aekernel.TrimEnd('/', '\\');
+        string levels = aekernel + "/LEVELS", data = aekernel + "/DATA";
+        if (!Directory.Exists(levels)) { GD.PrintErr("selftest-build: LEVELS fehlt"); return 2; }
+        if (!Directory.Exists(data)) { GD.PrintErr("selftest-build: DATA fehlt"); return 2; }
+
+        var cwpCache = new Dictionary<int, CwpFile?>();
+        var offsets = new Dictionary<int, int>();     // winner − FirstPattern, counted
+        int buildings = 0, matched = 0, unmatched = 0, noPattern = 0;
+        var byType = new Dictionary<int, (int Ok, int No)>();
+
+        var paths = new List<string>(Directory.GetFiles(levels, "*.CWM"));
+        paths.Sort();
+
+        foreach (string path in paths)
+        {
+            CwmFile m;
+            try { m = CwmFile.Load(path); } catch { continue; }
+            if (!cwpCache.TryGetValue(m.Tileset, out var cwp))
+            {
+                string p = $"{data}/{m.Tileset:00}.CWP";
+                try { cwp = File.Exists(p) ? CwpFile.Load(p) : null; } catch { cwp = null; }
+                cwpCache[m.Tileset] = cwp;
+            }
+            if (cwp == null || !cwp.HasBuildings) continue;
+
+            var rec = m.Records;
+            foreach (var b in CwmData.Buildings(m))
+            {
+                if (b.IsBuilt == 0 || b.Type <= 0) continue;
+                var bt = cwp.GetBuildingType(b.Type);
+                if (bt.IsEmpty) { noPattern++; continue; }
+                buildings++;
+
+                // Search ALL patterns, not just the type's own run: if a
+                // building ever wore one from outside, counting only the run
+                // would hide it instead of showing it.
+                int best = -1, bestHits = -1;
+                int nearPat = -1, nearHits = -1, nearCells = 0;   // the closest miss
+                for (int pat = 0; pat < CwpFile.PatternCount; pat++)
+                {
+                    int hits = 0, cells = 0;
+                    for (int x = 0; x < CwpFile.PatternWidth; x++)
+                        for (int y = 0; y < CwpFile.PatternHeight; y++)
+                        {
+                            int tile = cwp.PatternTile(pat, x, y);
+                            if (tile == 0) continue;
+                            cells++;
+                            int c = b.Col + x, r = b.Row + y;
+                            if (c < 0 || r < 0 || c >= m.Width || r >= m.Height) continue;
+                            int code = BitConverter.ToUInt16(rec, (r * m.Width + c) * 4);
+                            if (code - CwpFile.ObjectCodeBase == tile) hits++;
+                        }
+                    if (cells > 0 && hits == cells && hits > bestHits) { bestHits = hits; best = pat; }
+                    if (cells > 0 && hits > nearHits) { nearHits = hits; nearPat = pat; nearCells = cells; }
+                }
+
+                var t = byType.TryGetValue(b.Type, out var v) ? v : (0, 0);
+                if (best >= 0)
+                {
+                    matched++;
+                    int off = best - bt.FirstPattern;
+                    offsets[off] = offsets.TryGetValue(off, out int n) ? n + 1 : 1;
+                    byType[b.Type] = (t.Item1 + 1, t.Item2);
+                }
+                else
+                {
+                    unmatched++;
+                    byType[b.Type] = (t.Item1, t.Item2 + 1);
+                    GD.Print($"   ohne Muster: {Path.GetFileName(path)} slot {b.Slot} typ {b.Type} " +
+                             $"bei ({b.Col},{b.Row}) — bestes Muster {nearPat} (= first{nearPat - bt.FirstPattern:+0;-0;+0}) " +
+                             $"trifft {nearHits} von {nearCells} Zellen");
+                }
+            }
+        }
+
+        RunDoorTable(aekernel, paths);
+
+        GD.Print($"selftest-build: {buildings} Gebaeude auf {paths.Count} Karten — " +
+                 $"{matched} decken ihr Muster ganz, {unmatched} bis auf einzelne Kacheln " +
+                 $"(alle mit demselben Versatz, siehe oben), {noPattern} Typen ohne Muster " +
+                 $"im Tileset");
+        var keys = new List<int>(offsets.Keys); keys.Sort();
+        foreach (int off in keys)
+            GD.Print($"   Musterversatz {off,3} gegen 'first': {offsets[off]} Gebaeude");
+        if (unmatched > 0)
+        {
+            var bad = new List<int>();
+            foreach (var kv in byType) if (kv.Value.No > 0) bad.Add(kv.Key);
+            bad.Sort();
+            foreach (int t in bad)
+                GD.Print($"   typ {t}: {byType[t].Ok} passend, {byType[t].No} nicht");
+        }
+        return unmatched;
+    }
+
+    /// <summary>
+    /// The exe's building stat table against the maps — two sources that share
+    /// nothing.
+    ///
+    /// <para>The doors of a NEW building come from the 10-byte row
+    /// <c>add_building</c> reads (found by shape, see
+    /// <c>ExeTables.BuildingStatBase</c>). The doors of a PLACED building sit
+    /// in its sec3 record. If the table was found and read right, the two agree
+    /// for every type on every map.</para>
+    /// </summary>
+    private static void RunDoorTable(string aekernel, List<string> paths)
+    {
+        string exePath = aekernel.TrimEnd('/', '\\') + "/GAME.EXE";
+        if (!File.Exists(exePath))
+        {
+            GD.Print("selftest-build Tueren: GAME.EXE fehlt — ungeprueft");
+            return;
+        }
+        ExeTables exe;
+        try { exe = ExeTables.Load(exePath); }
+        catch { GD.Print("selftest-build Tueren: GAME.EXE unlesbar — ungeprueft"); return; }
+        if (exe.BuildingStatBase == 0)
+        {
+            GD.Print("selftest-build Tueren: Statustabelle nicht gefunden — ungeprueft");
+            return;
+        }
+
+        int same = 0, differ = 0;
+        foreach (string path in paths)
+        {
+            CwmFile m;
+            try { m = CwmFile.Load(path); } catch { continue; }
+            foreach (var b in CwmData.Buildings(m))
+            {
+                if (b.IsBuilt == 0 || b.Type < 1 || b.Type > 16) continue;
+                var st = exe.BuildingStats(b.Type);
+                if (st.DoorCount == b.Doors) same++;
+                else
+                {
+                    differ++;
+                    if (differ <= 5)
+                        GD.PrintErr($"   {Path.GetFileName(path)} slot {b.Slot} typ {b.Type}: " +
+                                    $"Karte {b.Doors} Tueren, EXE {st.DoorCount}");
+                }
+            }
+        }
+        GD.Print($"selftest-build Tueren: EXE-Tabelle gegen sec3 — {same} gleich, {differ} abweichend " +
+                 $"(Tabelle bei 0x{exe.BuildingStatBase:x})");
+    }
+
     public static int RunCwm(string aekernel)
     {
         aekernel = aekernel.TrimEnd('/', '\\');
@@ -160,6 +332,9 @@ public static class ImportSelfTest
                             GetI(w, "owner") != g.Owner || GetI(w, "col") != g.Col ||
                             GetI(w, "row") != g.Row || GetI(w, "cis_typ") != g.CisTyp ||
                             GetI(w, "hp") != g.Hp || GetI(w, "hp_max") != g.HpMax ||
+                            // the capture fields: the door and the two gates
+                            GetI(w, "doors") != g.Doors || GetI(w, "built") != g.IsBuilt ||
+                            GetI(w, "door_col") != g.DoorCol || GetI(w, "door_row") != g.DoorRow ||
                             (w.TryGetValue("name", out var nv) ? nv.AsString() : "") != g.Name)
                             diff++;
                     }
@@ -498,6 +673,73 @@ public static class ImportSelfTest
         GD.Print($"selftest-designs: {ok} von {ok + bad} Entwuerfen exakt gerechnet, " +
                  $"{bad} abweichend" + (skipped > 0 ? $", {skipped} ohne Rohsatz" : ""));
         return bad == 0 && ok > 0 ? 0 : 1;
+    }
+
+    /// <summary>Does every weapon a map actually mounts have a name?
+    ///
+    /// This exists because the answer was NO for a long time without anything
+    /// saying so: the exporter read six of the fifty components the stats table
+    /// names, and `WeaponOf` quietly handed out component 24's name to the rest,
+    /// so 890 of 1446 armed units were labelled "2x Maschinengewehr". A silent
+    /// fallback cannot fail a test, so the fallback is gone and this counts
+    /// instead — over the imported game states, which is the population that
+    /// matters, not over the table.
+    ///
+    /// One gap is known and expected: component 61 on two units. It is reported
+    /// by number rather than smoothed over.</summary>
+    public static int RunWeapons()
+    {
+        string path = Core.Content.Path("Maps/weapons.json");
+        if (!Godot.FileAccess.FileExists(path))
+        {
+            GD.PrintErr("selftest-weapons: Maps/weapons.json fehlt");
+            return 1;
+        }
+        using var wf = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Read);
+        var wj = new Json();
+        if (wf == null || wj.Parse(wf.GetAsText()) != Error.Ok) return 1;
+        var wroot = wj.Data.AsGodotDictionary<string, Variant>();
+        if (!wroot.TryGetValue("weapons", out var wv)) return 1;
+        var named = new HashSet<int>();
+        foreach (var kv in wv.AsGodotDictionary<string, Variant>())
+            if (int.TryParse(kv.Key, out int c)) named.Add(c);
+
+        // the "types" block the design screen reads — empty on the stale file
+        int types = wroot.TryGetValue("types", out var tv)
+            ? tv.AsGodotDictionary<string, Variant>().Count : 0;
+
+        string dir = Core.Content.Path("Maps");
+        int armed = 0, ok = 0;
+        var gaps = new SortedDictionary<int, int>();
+        foreach (string p in Godot.DirAccess.GetFilesAt(dir))
+        {
+            if (!p.EndsWith(".entities.json")) continue;
+            using var f = Godot.FileAccess.Open($"{dir}/{p}", Godot.FileAccess.ModeFlags.Read);
+            var json = new Json();
+            if (f == null || json.Parse(f.GetAsText()) != Error.Ok) continue;
+            var root = json.Data.AsGodotDictionary<string, Variant>();
+            if (!root.TryGetValue("entities", out var ev)) continue;
+            foreach (var e in ev.AsGodotArray())
+            {
+                var d = e.AsGodotDictionary<string, Variant>();
+                string raw = d.TryGetValue("raw", out var rv) ? rv.AsString() : "";
+                if (raw.Length < 0x0d * 2) continue;
+                int comp = Convert.ToInt32(raw.Substring(0x0c * 2, 2), 16);
+                if (comp == 0) continue;           // unarmed, nothing to name
+                armed++;
+                if (named.Contains(comp)) ok++;
+                else gaps[comp] = gaps.GetValueOrDefault(comp) + 1;
+            }
+        }
+
+        foreach (var kv in gaps)
+            GD.Print($"   Luecke: Bauteil {kv.Key} auf {kv.Value} Einheiten ohne Namen");
+        GD.Print($"selftest-weapons: {named.Count} Bauteile benannt, {types} Bauarten; " +
+                 $"{ok} von {armed} bewaffneten Einheiten mit echtem Namen, " +
+                 $"{armed - ok} Luecke");
+        // 2 of 1446 is the measured floor (component 61); anything worse is a
+        // regression, and a missing "types" block breaks the design screen.
+        return armed > 0 && types > 0 && armed - ok <= 2 ? 0 : 1;
     }
 
     /// <summary>The briefings this reader gets out of the cabinet, against the
@@ -847,13 +1089,146 @@ public static class ImportSelfTest
         }
         GD.Print($"selftest-exe: Flugzeuge {aOk} Vorlagen gleich, {aBad} abweichend");
 
-        return bad == 0 && sBad == 0 && aBad == 0 && ok > 0 && sOk > 0 ? 0 : 1;
+        // the campaign's diplomacy — and this one is not a table but CODE, so
+        // the two sides really do read it differently: campaign_diplomacy.py
+        // disassembles mission_init @0x487c40 with Capstone, ExeTables walks the
+        // same branches by byte pattern. Agreement therefore means something.
+        int dOk = 0, dBad = 0, dFields = 0;
+        string diploPath = aekernel + "/campaign_diplomacy.json";
+        if (!File.Exists(diploPath))
+            GD.Print("selftest-exe: campaign_diplomacy.json fehlt — " +
+                     "'python campaign_diplomacy.py --json > campaign_diplomacy.json'");
+        else if (!t.HasCampaignDiplomacy)
+        {
+            dBad++;
+            GD.PrintErr("   Diplomatie: diese GAME.EXE traegt mission_init nicht an " +
+                        "den bekannten Adressen");
+        }
+        else
+        {
+            var root = ReadJson(diploPath);
+            if (root != null && root.TryGetValue("missions", out var mv) &&
+                mv.VariantType == Variant.Type.Array)
+            {
+                foreach (var entry in mv.AsGodotArray())
+                {
+                    var w = entry.AsGodotDictionary<string, Variant>();
+                    int mission = GetI(w, "mission");
+                    var g = t.CampaignDiplomacy(mission);
+                    if (g == null)
+                    {
+                        dBad++;
+                        GD.PrintErr($"   Diplomatie M{mission}: nicht gelesen");
+                        continue;
+                    }
+                    var notes = new List<string>();
+                    var wa = w["allied"].AsGodotArray();
+                    for (int a = 0; a < 8; a++)
+                    {
+                        var row = wa[a].AsGodotArray();
+                        for (int b = 0; b < 8; b++)
+                        {
+                            dFields++;
+                            bool want = row[b].AsInt32() != 0;
+                            if (want != g.Allied[a, b])
+                                notes.Add($"verbuendet[{a},{b}] {g.Allied[a, b]} statt {want}");
+                        }
+                    }
+                    var wn = new bool[8];
+                    foreach (var p in w["neutral"].AsGodotArray()) wn[p.AsInt32()] = true;
+                    for (int p = 0; p < 8; p++)
+                    {
+                        dFields++;
+                        if (wn[p] != g.Neutral[p])
+                            notes.Add($"neutral[{p}] {g.Neutral[p]} statt {wn[p]}");
+                    }
+                    if (notes.Count == 0) dOk++;
+                    else
+                    {
+                        dBad++;
+                        GD.PrintErr($"   Diplomatie M{mission}: {notes.Count} Abweichung(en) — " +
+                                    string.Join(", ", notes.GetRange(0, Math.Min(4, notes.Count))));
+                    }
+                }
+            }
+        }
+        GD.Print($"selftest-exe: Diplomatie {dOk} Missionen gleich, {dBad} abweichend " +
+                 $"({dFields} Felder geprueft)");
+
+        // the skirmish's resource option: four levels of five numbers, plus the
+        // type mapping the routine's own jump table gives
+        int rOk = 0, rBad = 0;
+        string resPath = aekernel + "/resources.json";
+        if (!File.Exists(resPath))
+            GD.Print("selftest-exe: resources.json fehlt — " +
+                     "'python resources_export.py --json > resources.json'");
+        else if (!t.HasResourceTables)
+        {
+            rBad++;
+            GD.PrintErr("   Rohstoffe: diese GAME.EXE traegt kein fill_resources");
+        }
+        else
+        {
+            var root = ReadJson(resPath);
+            var mine = t.ResourceLevels();
+            if (root != null && root.TryGetValue("levels", out var lv) &&
+                lv.VariantType == Variant.Type.Array)
+            {
+                var want = lv.AsGodotArray();
+                for (int i = 0; i < want.Count && i < mine.Count; i++)
+                {
+                    var w = want[i].AsGodotDictionary<string, Variant>();
+                    var g = mine[i];
+                    string wn = w.TryGetValue("name", out var nv) ? nv.AsString() : "";
+                    if (GetI(w, "weapons") == g.Weapons && GetI(w, "chassis") == g.Chassis &&
+                        GetI(w, "special") == g.Special && GetI(w, "terranium") == g.Terranium &&
+                        GetI(w, "deposit") == g.Deposit && wn == g.Name) rOk++;
+                    else
+                    {
+                        rBad++;
+                        GD.PrintErr($"   Rohstoffe Stufe {i} '{g.Name}'/'{wn}': " +
+                                    $"{g.Weapons}/{g.Chassis}/{g.Special} T{g.Terranium} " +
+                                    $"V{g.Deposit} gegen {GetI(w, "weapons")}/" +
+                                    $"{GetI(w, "chassis")}/{GetI(w, "special")} " +
+                                    $"T{GetI(w, "terranium")} V{GetI(w, "deposit")}");
+                    }
+                }
+            }
+            if (root != null && root.TryGetValue("fill", out var fv) &&
+                fv.VariantType == Variant.Type.Dictionary)
+                foreach (var kv in fv.AsGodotDictionary<string, Variant>())
+                {
+                    if (!int.TryParse(kv.Key, out int ty)) continue;
+                    string g = t.ResourceFillOf(ty).ToString().ToLowerInvariant();
+                    if (g == kv.Value.AsString()) rOk++;
+                    else
+                    {
+                        rBad++;
+                        GD.PrintErr($"   Rohstoffe Typ {ty}: '{g}' statt '{kv.Value.AsString()}'");
+                    }
+                }
+        }
+        GD.Print($"selftest-exe: Rohstoffe {rOk} Werte gleich, {rBad} abweichend");
+
+        return bad == 0 && sBad == 0 && aBad == 0 && dBad == 0 && rBad == 0 &&
+               ok > 0 && sOk > 0 ? 0 : 1;
     }
 
     /// <summary>Bake maps with the ported baker and hold the result against the
     /// PNGs the Python baker produced — the very pictures the game draws. The
     /// comparison is on the raw RGBA bytes, because these are up to
-    /// 10160x5285 and a per-pixel call would take all afternoon.</summary>
+    /// 10160x5285 and a per-pixel call would take all afternoon.
+    ///
+    /// <para>⚠ <b>The buildings are exempt, and that is not a loophole.</b> Since
+    /// 07.08.2026 our baker leaves a standing building out of the picture so the
+    /// renderer can draw it and show its ruin (see
+    /// <see cref="MapBaker.SkippedPixels"/>); the Python reference still bakes
+    /// its buildings in. Comparing the two therefore reported "4 % of the pixels
+    /// differ" on every map that has a building — measured 08.08.2026, and the
+    /// difference mask is five building-shaped blobs and nothing else. The test
+    /// now skips exactly the pixels the baker says it did not draw, and
+    /// <b>prints how many</b>: an exemption that could hide a real error has to
+    /// be visible.</para></summary>
     public static int RunBake(string aekernel, string[] stems)
     {
         aekernel = aekernel.TrimEnd('/', '\\');
@@ -887,24 +1262,34 @@ public static class ImportSelfTest
             if (want.GetFormat() != Image.Format.Rgba8) want.Convert(Image.Format.Rgba8);
             var a = want.GetData();
             var b = got.GetData();
-            long diff = 0;
+            var exempt = baker.SkippedPixels;
+            long diff = 0, skipped = 0, underBuilding = 0;
             for (int i = 0; i + 3 < a.Length; i += 4)
             {
                 // both transparent counts as equal whatever sits in the colour
                 if (a[i + 3] == 0 && b[i + 3] == 0) continue;
-                if (a[i] != b[i] || a[i + 1] != b[i + 1] ||
-                    a[i + 2] != b[i + 2] || a[i + 3] != b[i + 3]) diff++;
+                bool same = a[i] == b[i] && a[i + 1] == b[i + 1] &&
+                            a[i + 2] == b[i + 2] && a[i + 3] == b[i + 3];
+                if (exempt != null && exempt[i / 4])
+                {
+                    skipped++;
+                    if (!same) underBuilding++;
+                    continue;
+                }
+                if (!same) diff++;
             }
+            string note = skipped == 0 ? "" :
+                $", {skipped} Pixel unter Gebaeuden ausgenommen ({underBuilding} davon abweichend)";
             if (diff == 0)
             {
                 ok++;
-                GD.Print($"   {stem}: {got.GetWidth()}x{got.GetHeight()} deckungsgleich");
+                GD.Print($"   {stem}: {got.GetWidth()}x{got.GetHeight()} deckungsgleich{note}");
             }
             else
             {
                 bad++;
                 double pct = 100.0 * diff / (a.Length / 4.0);
-                GD.PrintErr($"   {stem}: {diff} Pixel abweichend ({pct:0.000}%)");
+                GD.PrintErr($"   {stem}: {diff} Pixel abweichend ({pct:0.000}%){note}");
             }
         }
         GD.Print($"selftest-bake: {ok} Karten deckungsgleich, {bad} abweichend, {skip} uebersprungen");
@@ -980,7 +1365,228 @@ public static class ImportSelfTest
         }
         GD.Print($"selftest-cwp: {files} Dateien, {frames} Kacheln und {objects} Objekte " +
                  $"dekodiert, {failed} Fehler");
+        failed += RunCwpBuildings(aekernel, dataDir);
         return failed == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// The building side tables, against the Python reader — rule 6, byte for
+    /// byte and not by eye.
+    ///
+    /// <para><c>cwp_building_ref.py</c> writes one line per (file, type):
+    /// count, first pattern, tile pattern, how many cells carry a tile, how
+    /// many the mask blocks, and FNV-1a/32 over every pattern byte the type
+    /// owns. We build the same lines here and compare them. A single wrong byte
+    /// anywhere moves the hash.</para>
+    ///
+    /// <para>Two properties are checked on top, because they are what the
+    /// reading of the table rests on: the pattern indices <b>chain without a
+    /// gap</b> (first + count == the next type's first, skipping the entries
+    /// with count 0, which carry an index but own nothing), and the mask holds
+    /// <b>only 0 and 255</b>.</para>
+    /// </summary>
+    private static int RunCwpBuildings(string aekernel, string dataDir)
+    {
+        string refPath = aekernel.TrimEnd('/', '\\') + "/cwp_building_ref.txt";
+        if (!File.Exists(refPath))
+        {
+            GD.Print("selftest-cwp: cwp_building_ref.txt fehlt — Gebaeudetabellen " +
+                     "ungeprueft (erzeugen mit aekernel-tools/cwp_building_ref.py)");
+            return 0;
+        }
+
+        var mine = new List<string>();
+        int chainOk = 0, chainBad = 0, maskOther = 0;
+
+        var paths = new List<string>(Directory.GetFiles(dataDir, "*.CWP"));
+        paths.Sort((a, b) => string.CompareOrdinal(
+            Path.GetFileName(a).ToUpperInvariant(), Path.GetFileName(b).ToUpperInvariant()));
+
+        foreach (string path in paths)
+        {
+            CwpFile f;
+            try { f = CwpFile.Load(path); } catch { continue; }
+            if (!f.HasBuildings) continue;
+            string name = Path.GetFileName(path).ToUpperInvariant();
+
+            var used = new List<(int Typ, CwpFile.BuildingType Bt)>();
+            for (int typ = 0; typ < CwpFile.BuildingTypeCount; typ++)
+            {
+                var bt = f.GetBuildingType(typ);
+                if (!bt.IsEmpty) used.Add((typ, bt));
+            }
+
+            for (int i = 0; i + 1 < used.Count; i++)
+            {
+                if (used[i].Bt.FirstPattern + used[i].Bt.PatternCount == used[i + 1].Bt.FirstPattern)
+                    chainOk++;
+                else
+                {
+                    chainBad++;
+                    GD.PrintErr($"   {name} typ {used[i].Typ}: {used[i].Bt.FirstPattern}" +
+                                $"+{used[i].Bt.PatternCount} != {used[i + 1].Bt.FirstPattern}");
+                }
+            }
+
+            foreach (var (typ, bt) in used)
+            {
+                int tiles = 0, masks = 0;
+                uint h = 2166136261u;                       // FNV-1a/32
+                for (int k = 0; k < bt.PatternCount; k++)
+                {
+                    int pat = bt.FirstPattern + k;
+                    for (int x = 0; x < CwpFile.PatternWidth; x++)
+                        for (int y = 0; y < CwpFile.PatternHeight; y++)
+                        {
+                            if (f.PatternTile(pat, x, y) != 0) tiles++;
+                            if (f.PatternBlocks(pat, x, y)) masks++;
+                        }
+                    foreach (byte b in f.PatternBytes(pat)) { h = (h ^ b) * 16777619u; }
+                    maskOther += f.MaskBytesOtherThanZeroOr255(pat);
+                }
+
+                // the cell animations the type owns, hashed the same way
+                uint ah = 2166136261u;
+                for (int k = 0; k < bt.AnimCount; k++)
+                    foreach (byte b in f.AnimRowBytes(bt.AnimFirst + k))
+                        ah = (ah ^ b) * 16777619u;
+
+                mine.Add($"{name} {typ} {bt.PatternCount} {bt.FirstPattern} " +
+                         $"{bt.TilePattern} {tiles} {masks} {h:x8} " +
+                         $"{bt.AnimCount} {bt.AnimFirst} {ah:x8}");
+            }
+        }
+
+        var theirs = new List<string>(File.ReadAllLines(refPath));
+        theirs.RemoveAll(string.IsNullOrWhiteSpace);
+
+        int same = 0, diff = 0;
+        int n = System.Math.Min(mine.Count, theirs.Count);
+        for (int i = 0; i < n; i++)
+        {
+            if (mine[i] == theirs[i].Trim()) same++;
+            else
+            {
+                diff++;
+                if (diff <= 5) GD.PrintErr($"   Zeile {i + 1}: C# «{mine[i]}» ≠ py «{theirs[i].Trim()}»");
+            }
+        }
+        if (mine.Count != theirs.Count)
+        {
+            diff += System.Math.Abs(mine.Count - theirs.Count);
+            GD.PrintErr($"   Zeilenzahl: C# {mine.Count}, py {theirs.Count}");
+        }
+
+        GD.Print($"selftest-cwp Gebaeude: {same} Zeilen deckungsgleich, {diff} abweichend; " +
+                 $"Musterkette {chainOk} lueckenlos / {chainBad} gebrochen; " +
+                 $"Maskenbytes ausser 0 und 255: {maskOther}");
+        return diff + chainBad + maskOther + RunExportedPatterns(paths);
+    }
+
+    /// <summary>
+    /// The exported <c>Buildings/tileset_nn.json</c> against the .CWP it came
+    /// from — cell for cell, both rasters, every pattern of every type.
+    ///
+    /// <para>The reader above is checked against Python; this checks the
+    /// EXPORTER, which is the other place a building could quietly lose its
+    /// shape. The engine only ever sees these files, so an error here would
+    /// never show up in the .CWP tests.</para>
+    /// </summary>
+    private static int RunExportedPatterns(List<string> cwpPaths)
+    {
+        string dir = ProjectSettings.GlobalizePath(Core.Content.UserRoot)
+                         .TrimEnd('/', '\\') + "/Buildings";
+        if (!Directory.Exists(dir))
+        {
+            GD.Print("selftest-cwp Muster-Export: noch nichts exportiert — uebersprungen");
+            return 0;
+        }
+
+        int files = 0, cells = 0, bad = 0, typesSame = 0, typesBad = 0, anims = 0;
+        foreach (string path in cwpPaths)
+        {
+            // DATA/<nn>.CWP -> Buildings/tileset_<nn>.json
+            string stem = Path.GetFileNameWithoutExtension(path);
+            string json = $"{dir}/tileset_{stem}.json";
+            if (!File.Exists(json)) continue;
+
+            CwpFile cwp;
+            try { cwp = CwpFile.Load(path); } catch { continue; }
+            if (!cwp.HasBuildings) continue;
+            var exported = BuildingPatterns.Load(json);
+            if (exported == null) { bad++; GD.PrintErr($"   {stem}: JSON unlesbar"); continue; }
+            files++;
+
+            for (int typ = 0; typ < CwpFile.BuildingTypeCount; typ++)
+            {
+                var a = cwp.GetBuildingType(typ);
+                var b = exported.GetBuildingType(typ);
+                // A type with count 0 owns no pattern. It still carries a first
+                // index (and sometimes a tile index) in the .CWP, but nothing
+                // reads them, so the export drops the row — that is not a
+                // difference worth reporting.
+                if (a.PatternCount == 0 && b.PatternCount == 0) continue;
+                if (a.PatternCount != b.PatternCount || a.FirstPattern != b.FirstPattern
+                    || a.TilePattern != b.TilePattern
+                    || a.AnimCount != b.AnimCount || a.AnimFirst != b.AnimFirst)
+                {
+                    typesBad++;
+                    GD.PrintErr($"   {stem} typ {typ}: CWP {a.PatternCount}/{a.FirstPattern}/" +
+                                $"{a.TilePattern}/{a.AnimCount}@{a.AnimFirst} != JSON " +
+                                $"{b.PatternCount}/{b.FirstPattern}/{b.TilePattern}/" +
+                                $"{b.AnimCount}@{b.AnimFirst}");
+                    continue;
+                }
+                if (a.IsEmpty) continue;
+                typesSame++;
+
+                // the cell animations, field for field and tile for tile
+                for (int k = 0; k < a.AnimCount; k++)
+                {
+                    int row = a.AnimFirst + k;
+                    var ra = cwp.GetAnimRow(row);
+                    var rb = exported.GetAnimRow(row);
+                    anims++;
+                    bool same = ra.Dx == rb.Dx && ra.Dy == rb.Dy && ra.Mode == rb.Mode
+                                && ra.LastPhase == rb.LastPhase;
+                    for (int t = 0; same && t < CwpFile.AnimTileCount; t++)
+                        same = ra.TileAt(t) == rb.TileAt(t);
+                    if (!same)
+                    {
+                        bad++;
+                        if (bad <= 5)
+                            GD.PrintErr($"   {stem} Animation {row}: CWP ({ra.Dx},{ra.Dy}) " +
+                                        $"Modus {ra.Mode} bis {ra.LastPhase} != JSON " +
+                                        $"({rb.Dx},{rb.Dy}) Modus {rb.Mode} bis {rb.LastPhase}");
+                    }
+                }
+
+                for (int k = 0; k < a.PatternCount; k++)
+                {
+                    int pat = a.FirstPattern + k;
+                    for (int x = 0; x < CwpFile.PatternWidth; x++)
+                        for (int y = 0; y < CwpFile.PatternHeight; y++)
+                        {
+                            cells++;
+                            if (cwp.PatternTile(pat, x, y) != exported.PatternTile(pat, x, y)
+                                || cwp.PatternBlocks(pat, x, y) != exported.PatternBlocks(pat, x, y))
+                            {
+                                bad++;
+                                if (bad <= 5)
+                                    GD.PrintErr($"   {stem} Muster {pat} ({x},{y}): CWP " +
+                                                $"{cwp.PatternTile(pat, x, y)}/{cwp.PatternBlocks(pat, x, y)}" +
+                                                $" != JSON {exported.PatternTile(pat, x, y)}/" +
+                                                $"{exported.PatternBlocks(pat, x, y)}");
+                            }
+                        }
+                }
+            }
+        }
+
+        GD.Print($"selftest-cwp Muster-Export: {files} Tilesets, {typesSame} Typen gleich / " +
+                 $"{typesBad} abweichend, {cells} Zellen und {anims} Animationszeilen " +
+                 $"geprueft, {bad} abweichend");
+        return bad + typesBad;
     }
 
     /// <summary>The sound bank, both halves of it.
@@ -1079,4 +1685,106 @@ public static class ImportSelfTest
         GD.Print($"selftest-sounds: {ok} Klaenge byte-genau gleich, {bad} abweichend, {missing} fehlen");
         return rc == 0 && bad == 0 && missing == 0 && ok > 0 ? 0 : 1;
     }
+
+    /// <summary>
+    /// The passability against the file it came out of.
+    ///
+    /// Two things are checked over every map, and both are claims that can be
+    /// wrong rather than opinions that cannot:
+    ///
+    /// (1) <b>Every derived class agrees with the raw imap cell</b> — the
+    ///     rewritten grid is re-read straight from sec6 and compared, so a
+    ///     packing or row/column slip shows up as a count, not as a hunch.
+    /// (2) <b>0xFFFC is water</b>: no tile whose ground code is &lt;= 7 may come
+    ///     out as anything but water, and 0xFFFC itself must sit on water.
+    ///
+    /// ⚠ The second half needed correcting the moment it was measured on all 36
+    /// maps instead of the five it was found on. It is <b>not</b> "no counter
+    /// example": 86 of 169,421 0xFFFC cells sit on a tile whose code is above 7.
+    /// 84 of them are OBJECT cells (code &gt;= 10000, 35 different codes, always
+    /// in groups of four or five) — piers and bridge heads standing in the
+    /// water, which is exactly where they belong. That leaves <b>2 cells in the
+    /// whole set</b> on plain land, and they are reported rather than explained
+    /// away. The first direction is clean: not one water tile comes out as free
+    /// or rough.
+    /// </summary>
+    public static int RunTerrain(string aekernel)
+    {
+        aekernel = aekernel.TrimEnd('/', '\\');
+        string levels = aekernel + "/LEVELS";
+        if (!Directory.Exists(levels)) { GD.PrintErr("selftest-terrain: LEVELS fehlt"); return 2; }
+
+        var paths = new List<string>(Directory.GetFiles(levels, "*.CWM"));
+        paths.AddRange(Directory.GetFiles(levels, "*.DM"));
+        paths.Sort();
+
+        int maps = 0, cells = 0, mismatch = 0, waterCells = 0;
+        int waterOnProp = 0, waterOnPlainLand = 0, wetNotWater = 0;
+        long inferred = 0;
+        var unknown = new SortedSet<int>();
+
+        foreach (string path in paths)
+        {
+            string stem = Path.GetFileNameWithoutExtension(path);
+            CwmFile m;
+            CwmData.TerrainGrid g;
+            try
+            {
+                m = CwmFile.Load(path);
+                g = CwmData.Terrain(m, CwmData.Entities(m));
+            }
+            catch (Exception e) { mismatch++; GD.PrintErr($"   {stem}: {e.Message}"); continue; }
+
+            var imap = m.Sec(6);
+            var rec = m.Records;
+            if (imap == null || g.Cells.Length == 0) continue;
+            maps++;
+            inferred += g.Inferred;
+            foreach (int v in g.Unknown) unknown.Add(v);
+
+            int n = imap.Length / 2;
+            for (int row = 0; row < m.Height; row++)
+                for (int col = 0; col < m.Width; col++)
+                {
+                    cells++;
+                    int i = col * 256 + row;
+                    int v = i < n ? BitConverter.ToUInt16(imap, i * 2) : 0xFFFF;
+                    var got = (CwmData.Ground)g.Cells[row * m.Width + col];
+
+                    // (1) the class the export wrote must be the class the cell says
+                    var want = v == 0xFFFE ? CwmData.Ground.Free
+                             : v == 0xFFFD ? CwmData.Ground.Rough
+                             : v == 0xFFFC ? CwmData.Ground.Water
+                             : v < 8000 || v is >= 10000 and < 14000 ? got   // occupied: inferred
+                             : CwmData.Ground.Blocked;
+                    if (got != want) mismatch++;
+
+                    // (2) 0xFFFC exactly on the water tiles
+                    int ro = (row * m.Width + col) * 4;
+                    if (ro + 4 > rec.Length) continue;
+                    int code = BitConverter.ToUInt16(rec, ro);
+                    bool wet = code <= NavGridWaterCodeMax;
+                    if (v == 0xFFFC)
+                    {
+                        waterCells++;
+                        if (!wet) { if (code >= 10000) waterOnProp++; else waterOnPlainLand++; }
+                    }
+                    else if (wet && v is 0xFFFE or 0xFFFD) wetNotWater++;
+                }
+        }
+
+        GD.Print($"selftest-terrain: {maps} Karten, {cells} Zellen, {mismatch} abweichend; " +
+                 $"0xFFFC {waterCells} Zellen, davon {waterOnProp} auf einer Objektzelle " +
+                 $"(Stege/Brueckenkoepfe im Wasser) und {waterOnPlainLand} auf blankem Land; " +
+                 $"{wetNotWater} Wasserkacheln als frei/grob gemeldet; " +
+                 $"{inferred} Zellen aus ihrem Besetzer abgeleitet" +
+                 (unknown.Count > 0 ? $"; unbekannte imap-Werte: {string.Join(",", unknown)}" : ""));
+        // The gate is the derivation and the direction that matters for play: a
+        // water tile must never come out passable for a land unit. The handful
+        // of 0xFFFC cells on dry tiles is measured and named, not gated on.
+        return mismatch == 0 && wetNotWater == 0 && maps > 0 ? 0 : 1;
+    }
+
+    /// <summary>Ground tile codes 0..7 are the animated water cycle.</summary>
+    private const int NavGridWaterCodeMax = 7;
 }

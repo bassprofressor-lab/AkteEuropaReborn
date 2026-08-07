@@ -85,6 +85,11 @@ packages/
 # Working notes and stale artefacts — not part of the published project
 .wolf/
 BUILD_MEMORY.md
+# Reverse-engineering workbench: the 87 Python readers and the five RE notes.
+# They are the reference side of every self-test (see rule 6), so they live
+# beside the project now instead of in %TEMP% — but the released repository
+# stays engine-only, so they are not committed.
+aekernel-tools/
 *.old
 *.old.*
 *.bak

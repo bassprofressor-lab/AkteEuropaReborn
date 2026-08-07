@@ -40,6 +40,44 @@ public static class MidiMusic
     /// <summary>What is playing, or -1.</summary>
     public static int Track { get; private set; } = -1;
 
+    /// <summary>How many pieces the game ships: 0.MID .. 5.MID.</summary>
+    public const int TrackCount = 6;
+
+    /// <summary>
+    /// Start the music for a mission, and keep it going.
+    ///
+    /// <para>⚠ WHICH piece belongs to WHICH mission is OURS. The original picks
+    /// it by name: <c>play_music</c> @0x4D5490 takes a file name and opens it
+    /// through MCI (<c>"open sequencer!%s alias playerSnd"</c>), and its caller
+    /// @0x416C10 assembles that name from several parts — which parts was not
+    /// read. Until it is, the mission number simply cycles through the six
+    /// pieces, and piece 0 is left to the menu.</para>
+    ///
+    /// <para>The original plays a piece and stops (see <see cref="Play"/>), so
+    /// this does the same; <see cref="Poll"/> starts the next one when the last
+    /// has run out, which is our doing as well.</para>
+    /// </summary>
+    public static void StartForMission(int mission)
+    {
+        if (!Available || !UI.Settings.MusicOn) return;
+        int t = TrackCount <= 1 ? 0 : 1 + Math.Abs(mission) % (TrackCount - 1);
+        bool ok = Play(t);
+        GD.Print(ok ? $"Musik: Stueck {t} laeuft (Mission {mission})"
+                    : $"Musik: Stueck {t} startet nicht — {LastError} (MCI {LastCode})");
+    }
+
+    /// <summary>Ours: when a piece has run out, put the next one on. Call it
+    /// from a tick; it costs one MCI status query and only when music is
+    /// supposed to be running.</summary>
+    public static void Poll()
+    {
+        if (!Available || !UI.Settings.MusicOn || Track < 0 || !_open) return;
+        var sb = new StringBuilder(64);
+        if (MciSendString($"status {Alias} mode", sb, sb.Capacity, IntPtr.Zero) != 0) return;
+        if (sb.ToString().Trim() != "stopped") return;
+        Play(TrackCount <= 1 ? 0 : 1 + (Track % (TrackCount - 1)));
+    }
+
     /// <summary>The last MCI return code and its own message — kept so a failure
     /// can be reported with a number instead of a shrug.</summary>
     public static int LastCode { get; private set; }

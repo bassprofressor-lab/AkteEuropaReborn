@@ -70,6 +70,22 @@ public sealed class FogGrid
     /// to rebuild its texture instead of doing it every frame.</summary>
     public int Version { get; private set; }
 
+    // ---- raw access, for saving and loading a game --------------------------
+    //
+    // The fog is part of a save: reloading a mission with the map fully lit
+    // again would give away every enemy the player had not found yet.
+
+    public int CellCount => _cells.Length;
+    public int CellAt(int i) => i >= 0 && i < _cells.Length ? _cells[i] : Unseen;
+
+    public void SetCellAt(int i, int v)
+    {
+        if (i >= 0 && i < _cells.Length) _cells[i] = (byte)Mathf.Clamp(v, 0, Watched);
+    }
+
+    /// <summary>Bumped by a load, so the overlay redraws itself.</summary>
+    public void MarkChanged() => Version++;
+
     /// <summary>One pass, the way @0x4205b0 does it: drop every "watched" back
     /// to "seen" and stamp it again from the watchers. What was once seen stays
     /// seen.</summary>

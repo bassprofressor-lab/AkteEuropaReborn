@@ -137,16 +137,25 @@ public static class DesignMath
         /// the panel's "Sicht".</summary>
         public int Sight => B(0x26);
 
-        /// <summary>Speed — design +0x1d, written to entity +0x20 (u16), which
-        /// the panel labels "Geschw.".
+        /// <summary>Speed — design +0x1d, written to entity +0x20, which the
+        /// panel labels "Geschw.".
         ///
-        /// Two independent readings agree here, which is why this one is named
-        /// where the others were not: the panel's label order (verified against
-        /// "Munition"), and the data — across 1863 units it tracks the chassis'
-        /// speed_raw monotonically over all 16 chassis types. The hit routine
-        /// writing it to 2 now reads as what it is: a unit slowed when struck.
+        /// Two independent readings agree that this is the speed: the panel's
+        /// label order (verified against "Munition"), and the data — across
+        /// 1863 units it tracks the chassis' speed_raw monotonically over all
+        /// 16 chassis types. The hit routine writing it to 2 now reads as what
+        /// it is: a unit slowed when struck.
+        ///
+        /// <para>⚠ CORRECTED 07.08.2026: it is ONE BYTE, not a word. Read as
+        /// u16 the 601 designs came out at up to <b>48643</b> with a median of
+        /// 17930; read as a byte they run <b>0..17</b> — and the units placed
+        /// on the maps carry exactly <b>0..17</b> in their own +0x20 (measured
+        /// over every map, fastest type 166 at 16..17). A built unit was
+        /// therefore thousands of times faster than the same unit off the map,
+        /// which is what the play test reported as "the AI's spiders in super
+        /// speed mode". The neighbouring byte belongs to the next field.</para>
         /// </summary>
-        public int Speed => W(0x1d);
+        public int Speed => B(0x1d);
 
         /// <summary>Reload time — design +0x2b, written to entity +0x3d, which
         /// the panel @0x474fe0 labels "Nachladen". Light weapons 20, the

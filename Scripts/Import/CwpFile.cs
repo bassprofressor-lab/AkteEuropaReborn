@@ -40,12 +40,15 @@ using Godot;
 /// The width is not stored: it is `max(leftoff + len)` over the rows.
 /// Everything outside a row's run is transparent.
 /// </summary>
-public sealed class CwpFile
+public sealed class CwpFile : IBuildingPatterns
 {
     private readonly byte[] _d;
     private readonly int _blobOff;
     private readonly uint[] _dir1;
     private readonly uint[] _dir2;
+    private readonly int _typeTabOff;      // -1 when the file has no tail
+    private readonly int _patternOff;
+    private readonly int _animOff;         // -1 together with the two above
 
     public int FrameCount => _dir1.Length;
     public int ObjectCount => _dir2.Length;
@@ -55,9 +58,47 @@ public sealed class CwpFile
 
     private const int AuxSize = 0x23a0;
 
-    private CwpFile(byte[] d, int blobOff, uint[] dir1, uint[] dir2)
+    // ---- the side tables behind the blob -----------------------------------
+    //
+    // Check_cwp @0x4C8680 (the F: build; the other one has it at 0x4c8ad0)
+    // reads the file strictly in order, and after the pixel blob come six more
+    // fixed blocks.  Two of them are the buildings:
+    //
+    //     0x28   1000 B  -> 0xbb3200   100 building types, 10 B each
+    //     0x29  72000 B  -> 0xb96b98   400 patterns, 180 B each
+    //     0x2a   3600 B  -> 0xbacba0   150 CELL ANIMATIONS, 24 B each
+    //     0x2b 1600 B  |  0x2c 5000 B, u16, 5000 B
+    //
+    // Measured, not assumed: over all 23 shipped .CWP the sum
+    //   12 + 0x23a0 + frames*4 + objects*4 + blob + 1000+72000+3600+1600+5000+2+5000
+    // hits the file length EXACTLY, 23 of 23.
+    public const int BuildingTypeCount = 100, BuildingTypeStride = 10;
+    public const int PatternCount = 400, PatternStride = 180;
+
+    /// <summary>The third tail block: the cell animations. 3600 / 24 = 150.</summary>
+    public const int AnimRowCount = 150, AnimRowStride = 24;
+
+    /// <summary>How many tiles a row can hold — the 24 bytes are 4 header and
+    /// ten u16.</summary>
+    public const int AnimTileCount = (AnimRowStride - 4) / 2;
+
+    /// <summary>The build loop reads ten columns and six rows, and no more —
+    /// `cmp cx, 0xa` @0x42052C and `cmp [0x541e4c], 6` @0x42053D.</summary>
+    public const int PatternWidth = 10, PatternHeight = 6;
+
+    /// <summary>A pattern's 180 bytes are two rasters, and the offset of the
+    /// second is in the code itself: 0xb96c10 − 0xb96b98 = 0x78.</summary>
+    private const int MaskOffset = 0x78;   // = 120 = PatternWidth * PatternHeight * 2
+
+    /// <summary>True when the file carries the building tail. Every shipped
+    /// .CWP does; the check exists so a truncated file fails loudly.</summary>
+    public bool HasBuildings => _typeTabOff >= 0;
+
+    private CwpFile(byte[] d, int blobOff, uint[] dir1, uint[] dir2,
+                    int typeTabOff, int patternOff, int animOff)
     {
         _d = d; _blobOff = blobOff; _dir1 = dir1; _dir2 = dir2;
+        _typeTabOff = typeTabOff; _patternOff = patternOff; _animOff = animOff;
     }
 
     public static CwpFile Load(string path) => FromBytes(File.ReadAllBytes(path));
@@ -85,7 +126,181 @@ public sealed class CwpFile
         var dir2 = new uint[objCount];
         for (int i = 0; i < objCount; i++) dir2[i] = BitConverter.ToUInt32(d, dir2Off + i * 4);
 
-        return new CwpFile(d, blobOff, dir1, dir2);
+        // the building tail, in the loader's own order
+        int typeTabOff = blobOff + (int)blobSize;
+        int patternOff = typeTabOff + BuildingTypeCount * BuildingTypeStride;
+        int animOff = patternOff + PatternCount * PatternStride;
+        if (patternOff + PatternCount * PatternStride > d.Length)
+            typeTabOff = patternOff = animOff = -1;
+        else if (animOff + AnimRowCount * AnimRowStride > d.Length)
+            animOff = -1;                       // patterns still usable
+
+        return new CwpFile(d, blobOff, dir1, dir2, typeTabOff, patternOff, animOff);
+    }
+
+    // ---- buildings ---------------------------------------------------------
+
+    /// <summary>One row of the 100-entry type table. The type number is the
+    /// game's own <c>typ</c>, 1-based: 1 Basis, 2..4 the factories, 5 Depot,
+    /// 7 Generator, 10 Mine, 15 Feld-Rohstoffmine, 16 Werft-Station.</summary>
+    public readonly struct BuildingType
+    {
+        /// <summary>How many patterns this type owns (field +0x00).</summary>
+        public readonly int PatternCount;
+        /// <summary>Index of the first (field +0x02); they run consecutively.
+        /// Verified over all 23 files: 387 of 387 hand-offs without a gap.</summary>
+        public readonly int FirstPattern;
+        /// <summary>Field +0x08 — the second pattern index, which add_building
+        /// @0x4C8D60 takes as the tile set (`word[0xbb3208 + typ*10]`).</summary>
+        public readonly int TilePattern;
+
+        /// <summary>Field +0x04 — how many CELL ANIMATIONS the type owns, as a
+        /// BYTE. The walk @0x4D5830 reads it with <c>mov bl, byte[10*typ +
+        /// 0xbb41a4]</c> and returns at once when it is zero.</summary>
+        public readonly int AnimCount;
+
+        /// <summary>Field +0x06 — the first of those rows (word, read signed by
+        /// the original: <c>movsx ecx, ax</c>).</summary>
+        public readonly int AnimFirst;
+
+        public bool IsEmpty => PatternCount == 0;
+
+        public BuildingType(int n, int first, int tile, int animCount = 0, int animFirst = 0)
+        {
+            PatternCount = n; FirstPattern = first; TilePattern = tile;
+            AnimCount = animCount; AnimFirst = animFirst;
+        }
+    }
+
+    public BuildingType GetBuildingType(int typ)
+    {
+        if (!HasBuildings || typ < 0 || typ >= BuildingTypeCount) return default;
+        int p = _typeTabOff + typ * BuildingTypeStride;
+        return new BuildingType(BitConverter.ToUInt16(_d, p),
+                                BitConverter.ToUInt16(_d, p + 2),
+                                BitConverter.ToUInt16(_d, p + 8),
+                                _d[p + 4],
+                                BitConverter.ToUInt16(_d, p + 6));
+    }
+
+    // ---- the cell animations -----------------------------------------------
+    //
+    // Read 08.08.2026 out of the two fields of the type row nobody had read yet.
+    // The game names the thing itself: the profiler section around the call is
+    // "animations of the buildings" @0x4f763c, right before "Flip pages".
+    //
+    //   driver  @0x4D5D10 : for all 255 buildings, if type != 0 and byte[+0x0a]
+    //                       < 100, call the walk below
+    //   walk    @0x4D5830 : for j in 0 .. type.AnimCount-1
+    //                         ph = byte[bld + 0x0b + j]      ; 0xff = off
+    //                         cell = (bld.x + row[0], bld.y + row[1])
+    //                         ph++
+    //                         if (ph <= row[3]) map[cell] = row.Tiles[ph]
+    //                         else if (row[2] == 1) { map[cell] = pattern cell; ph = 0; }
+    //                         else ph = 0xff
+    //
+    // So a row cycles: the plain pattern tile, then Tiles[1..LastPhase], then
+    // the plain tile again. Tiles[0] is 0 in every shipped file, which is the
+    // same statement from the data side.
+    //
+    // What they ARE, seen and not argued (cwp_anim_render.py): conveyor belts
+    // and a spinning drum on the two factories, the paddle wheel of the mine,
+    // the drum of the Feld-Rohstoffmine, and a light running along the runway of
+    // the airfield. They are NOT doors — see the note in BuildingPatterns.
+
+    /// <summary>One row of the 150-entry animation table.</summary>
+    public readonly struct CellAnim
+    {
+        /// <summary>The cell inside the type's pattern, column-major like every
+        /// other pattern read here. Nailed down by the reset branch @0x4D5940,
+        /// which restores <c>word[(90*first + 6*Dx + Dy)*2 + 0xb97b38]</c>.</summary>
+        public readonly int Dx, Dy;
+
+        /// <summary>Field +2. 1 = loop (every shipped row), 2 = one-shot with a
+        /// reset branch of its own; anything else stops after one pass.</summary>
+        public readonly int Mode;
+
+        /// <summary>Field +3 — the highest phase. The cycle is LastPhase+1 long
+        /// because phase 0 shows the pattern's own tile.</summary>
+        public readonly int LastPhase;
+
+        /// <summary>Ten u16 tile codes; index 0 is the unused phase-0 slot. Add
+        /// <see cref="ObjectCodeBase"/> for the grid code.</summary>
+        public readonly ushort[] Tiles;
+
+        public bool IsEmpty => Tiles == null || LastPhase == 0;
+
+        public CellAnim(int dx, int dy, int mode, int last, ushort[] tiles)
+        { Dx = dx; Dy = dy; Mode = mode; LastPhase = last; Tiles = tiles; }
+
+        /// <summary>The tile a phase shows, or 0 for "the pattern's own".</summary>
+        public int TileAt(int phase)
+            => Tiles == null || phase <= 0 || phase > LastPhase || phase >= Tiles.Length
+               ? 0 : Tiles[phase];
+    }
+
+    public bool HasAnimations => _animOff >= 0;
+
+    public CellAnim GetAnimRow(int row)
+    {
+        if (!HasAnimations || (uint)row >= AnimRowCount) return default;
+        int p = _animOff + row * AnimRowStride;
+        var tiles = new ushort[AnimTileCount];
+        for (int i = 0; i < AnimTileCount; i++)
+            tiles[i] = BitConverter.ToUInt16(_d, p + 4 + i * 2);
+        return new CellAnim(_d[p], _d[p + 1], _d[p + 2], _d[p + 3], tiles);
+    }
+
+    /// <summary>An animation row's raw 24 bytes — for the self-test.</summary>
+    public ReadOnlySpan<byte> AnimRowBytes(int row)
+        => !HasAnimations || (uint)row >= AnimRowCount
+           ? ReadOnlySpan<byte>.Empty
+           : new ReadOnlySpan<byte>(_d, _animOff + row * AnimRowStride, AnimRowStride);
+
+    /// <summary>The tile of a pattern cell, or 0 for "draw nothing". This is
+    /// the raster the build-site test walks — it checks a cell only where a
+    /// tile stands (@0x42041E). Add <see cref="ObjectCodeBase"/> to get the
+    /// grid code, exactly as the original does with its `add ax, 0x2710`.
+    /// </summary>
+    public int PatternTile(int pattern, int x, int y)
+    {
+        if (!HasBuildings || (uint)x >= PatternWidth || (uint)y >= PatternHeight
+            || (uint)pattern >= PatternCount) return 0;
+        return BitConverter.ToUInt16(_d, _patternOff + pattern * PatternStride
+                                         + (x * PatternHeight + y) * 2);
+    }
+
+    /// <summary>Whether a pattern cell BLOCKS. This is a different raster from
+    /// the tiles and deliberately so: add_building stamps the imap from the
+    /// mask, so roof and facade hang over ground one can still walk on.
+    /// Measured over all files: 7,199 cells carry both, 20,684 only a tile —
+    /// the overhang — and 586 only the mask. Only 0 and 255 ever occur.
+    /// </summary>
+    public bool PatternBlocks(int pattern, int x, int y)
+    {
+        if (!HasBuildings || (uint)x >= PatternWidth || (uint)y >= PatternHeight
+            || (uint)pattern >= PatternCount) return false;
+        return _d[_patternOff + pattern * PatternStride + MaskOffset
+                  + x * PatternHeight + y] != 0;
+    }
+
+    /// <summary>A pattern's raw 180 bytes — for the self-test, which hashes
+    /// them against the Python reader.</summary>
+    public ReadOnlySpan<byte> PatternBytes(int pattern)
+        => !HasBuildings || (uint)pattern >= PatternCount
+           ? ReadOnlySpan<byte>.Empty
+           : new ReadOnlySpan<byte>(_d, _patternOff + pattern * PatternStride, PatternStride);
+
+    /// <summary>How many of a pattern's mask bytes are neither 0 nor 255.
+    /// Measured over all 23 files: none are. If this ever returns non-zero the
+    /// mask is not the plain yes/no raster we read it as.</summary>
+    public int MaskBytesOtherThanZeroOr255(int pattern)
+    {
+        if (!HasBuildings || (uint)pattern >= PatternCount) return 0;
+        int at = _patternOff + pattern * PatternStride + MaskOffset, bad = 0;
+        for (int i = 0; i < PatternWidth * PatternHeight; i++)
+            if (_d[at + i] != 0 && _d[at + i] != 255) bad++;
+        return bad;
     }
 
     /// <summary>One decoded sprite: palette indices plus an opacity mask.</summary>

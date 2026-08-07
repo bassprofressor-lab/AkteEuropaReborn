@@ -78,6 +78,10 @@ public partial class MapEntityLayer : Node2D
 
         // ---- building state (Step A) — all four from the map data ----
         public int State;                   // instance record +0x02, see StateName
+        /// <summary>Record +0x0a. A freshly raised building starts at 100
+        /// (<c>add_building</c> @0x4C8F4C writes 0x64); placed ones carry
+        /// whatever the map gives them.</summary>
+        public int Condition = 100;
         public int ProdSpeed;               // sec24 +0x05 Produktionsgeschwindigkeit
         public int Capacity;                // sec24 +0x08 Lagerplatz
         public int CostStore;               // sec24 +0x0a Lagerausbaukosten
@@ -90,8 +94,26 @@ public partial class MapEntityLayer : Node2D
         public int HangarSize;              // sec27 +0x03, +2 per Erweiterung
         public int Shipyard = -1;           // Hafen (typ 11): the Schiffswerft
                                             // (typ 16) sec29 pairs it with
+        // ---- being taken (see Simulation/Capture.cs for the whole reading) ----
+        public int Built;                   // record +0x18, "is a real building"
+        public int Doors;                   // record +0x34, the door count 0/1/2
+        /// <summary>The doors as cell offsets, three bytes each from +0x35 in
+        /// the record. Door 0 first — that is the one the original's capture
+        /// block uses. See Import/CwmData.Building.DoorCells.</summary>
+        public readonly List<(int Col, int Row)> DoorCells = new();
+        public int DoorCol => DoorCells.Count > 0 ? DoorCells[0].Col : 0;
+        public int DoorRow => DoorCells.Count > 0 ? DoorCells[0].Row : 0;
+        public int CaptureTotal;            // +0x38, and it tracks the hit points
+        public int CaptureProgress;         // +0x3a
+        public int Intruder = -1;           // +0x3c, the player at the door
+        public int ShownOwner = -1;         // +0x3d, flickers while it is taken
+
         public bool IsTarget;      // listed in the mission's win conditions
         public int Infantry = -1;  // ROBO.CWR infantry set, -1 = not a foot soldier
+
+        /// <summary>Cells the unit really covers, from the imap. 1x1 for almost
+        /// everything; the map_01 ships are 2x2. See BodyCenter.</summary>
+        public int FootW = 1, FootH = 1;
 
         /// <summary>Record +0x0b, the game's own SPODEK — the chassis. The voice
         /// routine @0x429290 keys its eleven-way switch on (this &gt;&gt; 1) - 1.</summary>
@@ -100,6 +122,29 @@ public partial class MapEntityLayer : Node2D
         /// <summary>Record +0x0a. The same routine switches on it first: 0, 1
         /// and 3 have their own sets, everything else falls to one line.</summary>
         public int Subclass = -1;
+
+        /// <summary>Record +0x11 — the chassis' POSE GROUP.
+        ///
+        /// The draw code builds the hull's frame as
+        ///     base_frame[chassis] + facing + slope_block + (this &amp; 7) * 48
+        /// (`imul ax, ax, 0x30` @0x429b3b, used @0x429fc3), and 0xFF means
+        /// group 0 (@0x429b1b). The parts that own more than one group are the
+        /// interesting ones: Läufer eight, Abwehrstellung eight, Spinne and
+        /// Kugelroller three, Schwere Ketten two.
+        ///
+        /// ⚠ MEASURED, and it corrects the guess this session started with.
+        /// The 59 Läufer on the maps are spread over ALL EIGHT groups, and the
+        /// remake drew group 0 for every one of them. So the walkers were not
+        /// only stiff, they were mostly the wrong picture.
+        ///
+        /// ⚠ AND: this is NOT a gait the game plays. The only routine that
+        /// advances +0x11 is @0x406e75, and @0x406e29 gates it on subclass
+        /// (+0x0a) == 1, which is the INFANTRY; all 59 Läufer carry subclass 0.
+        /// Both the absolute scan and the register-base scan (rule 7 — only
+        /// @0x406ce3 holds the entity base in a register) find no other writer.
+        /// So a standing Läufer keeps the pose its map gave it, and inventing a
+        /// walk cycle here would be our fiction, not the game's.</summary>
+        public int Pose;
 
         /// <summary>Record +0x28, and it is NOT the fuel tank — that is +0x2e.
         /// This one is <b>0 on 2847 of the 2863 units the maps carry</b>, so it
@@ -112,7 +157,10 @@ public partial class MapEntityLayer : Node2D
         // ---- live movement state (Step E) ----
         public Vector2 Pos;              // ground point in map pixels (smooth)
         public bool Mobile;              // has a propulsion that can actually drive
-        public Simulation.NavGrid.Domain Domain;  // land or naval
+        /// <summary>Which branch of Can_go @0x4055D0 this unit takes — ship,
+        /// hover, walker or ordinary vehicle. Picked from +0x0a and +0x0b, the
+        /// way the original picks it.</summary>
+        public Simulation.NavGrid.MoveClass Move;
         public List<Vector2I>? Path;     // remaining waypoint cells
         public int PathIdx;
         public Vector2I Goal;            // final target cell (for re-pathing)
@@ -284,6 +332,7 @@ public partial class MapEntityLayer : Node2D
         public float Time;
         public float FrameTime;
         public bool Hold;                // freeze on the last frame (scorch mark)
+        public int Variant;              // wreck only: which rubble picture (0..2)
     }
 
     /// <summary>
@@ -343,6 +392,12 @@ public partial class MapEntityLayer : Node2D
     private const int TileW = 40;
     private const int TileH = 20;
 
+    /// <summary>How far the ground of a cell sits below the top of the tile
+    /// sprite that draws it. The baker blits a tile at
+    /// `origin_y + row*TileH - elev*15 - 50`, so the 20 px the cell actually
+    /// occupies begin 50 px further down.</summary>
+    private const int GroundLift = 50;
+
     // Faction colors by owner 0..7 (neutral placeholder palette, high-contrast).
     private static readonly Color[] Factions =
     {
@@ -388,14 +443,26 @@ public partial class MapEntityLayer : Node2D
     /// (stored goods), so they are not stats. These values are ours, chosen so a
     /// headquarters outlasts a radar mast.
     /// </summary>
-    private static int BuildingHp(int type) => type switch
+    /// <summary>
+    /// Hit points of a building type, from the game's own 10-byte stat row
+    /// (<c>building_types.json</c>, field <c>hp</c>) — <b>Basis 1200,
+    /// Spezial-Fabrik 800, everything else 1000</b>, and <b>700</b> for any
+    /// type from 17 up, which is the value <c>add_building</c> @0x4C8F1B writes
+    /// when the table has no row.
+    ///
+    /// <para>⚠ CORRECTED 07.08.2026. This used to be a table of OURS —
+    /// 800 for the three factories, 700 for Generator and Feldbahnhof, 300 for
+    /// the Radarstellung, 500 for the rest — and not one of those numbers was
+    /// the game's. It only ever showed when a map record carried no hp_max of
+    /// its own, which is why it survived so long. The real table is checked
+    /// against sec3 on every run: 684 buildings, 0 disagreements.</para>
+    /// </summary>
+    private static int BuildingHp(int type)
     {
-        1 => 1200,                    // Basis
-        2 or 3 or 4 => 800,           // the three factories
-        7 or 12 => 700,               // Generator, Feldbahnhof
-        8 => 300,                     // Radarstellung
-        _ => 500,
-    };
+        LoadBuildingNames();
+        return _bldHp != null && _bldHp.TryGetValue(type, out int hp) && hp > 0
+               ? hp : Import.ExeTables.BuildingHpDefault;
+    }
     private int _selected = -1;
     private int _hovered = -1;
     private bool _showDots;
@@ -445,7 +512,7 @@ public partial class MapEntityLayer : Node2D
     /// where it has one, the old flat interval where it does not.</summary>
     private static float ReloadOf(Entity e)
         => e.Reload > 0 ? e.Reload * ReloadTick : FireInterval;
-    private const int DefaultWeaponComp = 24;      // 2x Maschinengewehr
+    // ⚠ There is deliberately NO default weapon component any more — see WeaponOf.
     private static Dictionary<int, (string Name, int Damage, float RangeTiles)>? _weapons;
     private readonly List<Effect> _effects = new();
     private readonly Dictionary<string, List<Texture2D>> _fx = new();
@@ -482,7 +549,12 @@ public partial class MapEntityLayer : Node2D
     private static readonly Color FogSeen = new(0, 0, 0, 0.45f);
     private static readonly Color FogUnseen = new(0, 0, 0, 1f);
 
-    public bool FogActive => _fog != null && UI.Settings.FogOfWar;
+    /// <summary>`--fog` turns the fog on for THIS run without touching the
+    /// player's setting — the harness needs it on to show that the overview map
+    /// obeys it, and the setting on this machine has it off.</summary>
+    public static bool ForceFog;
+
+    public bool FogActive => _fog != null && (ForceFog || UI.Settings.FogOfWar);
 
     /// <summary>Can the player see this cell right now?</summary>
     private bool Watched(int col, int row)
@@ -494,9 +566,59 @@ public partial class MapEntityLayer : Node2D
     private void UpdateFog()
     {
         if (_fog == null) return;
-        if (!UI.Settings.FogOfWar) { _fog.RevealAll(); return; }
+        // through FogActive, not the setting: otherwise a run with `--fog` would
+        // filter the dots against a grid that RevealAll had just wiped
+        if (!FogActive) { _fog.RevealAll(); return; }
         _fog.Update(Watchers());
     }
+
+    /// <summary>
+    /// How many cells a building type covers, from the tileset patterns.
+    ///
+    /// <para>Measured on tileset 11: the Basis is 7x6, the three factories 8x5,
+    /// the Kraftwerk 5x6. Falls back to 5x4 when the patterns are not loaded —
+    /// a size in the right order rather than the 1x1 that made a building
+    /// almost unclickable.</para>
+    /// </summary>
+    public Vector2I BuildingFootprint(int bType)
+    {
+        if (_footprint.TryGetValue(bType, out var v)) return v;
+        var size = new Vector2I(5, 4);
+        var bt = Patterns?.GetBuildingType(bType) ?? default;
+        if (Patterns != null && !bt.IsEmpty)
+        {
+            int w = 0, h = 0;
+            for (int x = 0; x < Import.CwpFile.PatternWidth; x++)
+                for (int y = 0; y < Import.CwpFile.PatternHeight; y++)
+                    if (Patterns.PatternTile(bt.FirstPattern, x, y) != 0)
+                    { if (x + 1 > w) w = x + 1; if (y + 1 > h) h = y + 1; }
+            if (w > 0 && h > 0) size = new Vector2I(w, h);
+        }
+        _footprint[bType] = size;
+        return size;
+    }
+
+    /// <summary>
+    /// The offset from a building's corner cell to the point it watches from.
+    ///
+    /// <para><b>The game has a table for this</b> and the fog update looks it up
+    /// per type (@0x4206AB..0x4206D6, exported as <c>sight_col</c>/<c>sight_row</c>
+    /// — see <see cref="Import.ExeTables.SightCentre"/>). Half the footprint,
+    /// which is what stood here since 07.08., was close but ours: the original
+    /// puts the Basis at (3,3), all three factories at (3,2), the Flughafen at
+    /// (4,2) and the Mine at (4,3).</para>
+    ///
+    /// <para>Half the footprint stays as the fallback for a catalogue that
+    /// predates the table, and for a type the table does not name.</para>
+    /// </summary>
+    private Vector2I BuildingHalfSpan(int bType)
+    {
+        if (_bldSight != null && _bldSight.TryGetValue(bType, out var s)) return s;
+        var f = BuildingFootprint(bType);
+        return new Vector2I(f.X / 2, f.Y / 2);
+    }
+
+    private readonly Dictionary<int, Vector2I> _footprint = new();
 
     private IEnumerable<(int Col, int Row, int Sight)> Watchers()
     {
@@ -504,10 +626,25 @@ public partial class MapEntityLayer : Node2D
         {
             if (e.Dead || e.IsProp) continue;
             if (e.Owner != ViewPlayer) continue;
-            // a building watches from its whole footprint's corner; its sight
-            // field is the same +0x2c as a unit's
-            int s = e.Sight > 0 ? e.Sight : (e.IsBuilding ? 6 : 4);
-            yield return (e.Col, e.Row, s);
+            if (!e.IsBuilding)
+            {
+                yield return (e.Col, e.Row, e.Sight > 0 ? e.Sight : 4);
+                continue;
+            }
+
+            // A BUILDING watches from a point of its own, not from the corner
+            // cell its record names, and it sees TEN cells however big it is.
+            //
+            // Both numbers are the original's, read 08.08.2026 out of the fog
+            // update @0x4205B0: the radius is a literal `push 0xa` and the point
+            // comes out of a per-type table (see BuildingHalfSpan). Until then
+            // this was our own half-footprint with a radius of 6, which is what
+            // made "buildings seem to block the reveal" — the far side of a 7x6
+            // Basis fell outside its own circle. The fog blocks nothing;
+            // FogGrid.Stamp only ever opens a circle.
+            var half = BuildingHalfSpan(e.BType);
+            int s = BuildingSightRadius;
+            yield return (e.Col + half.X, e.Row + half.Y, s);
         }
     }
 
@@ -542,11 +679,28 @@ public partial class MapEntityLayer : Node2D
         _fogDrawn = _fog.Version;
     }
 
+    /// <summary>
+    /// The fog texture for anyone else who wants to draw it — the minimap does,
+    /// so that it can show the actively watched ground brighter than the merely
+    /// remembered ground (Fehlerliste Punkt 23).
+    ///
+    /// <para>It is the same texture the map itself uses, one pixel per cell, so
+    /// the overview cannot drift out of step with the battlefield: both read the
+    /// same three states out of the same grid. Returns null when the fog is off,
+    /// and then nothing is dimmed at all.</para>
+    /// </summary>
+    public Texture2D? FogTexture()
+    {
+        if (!FogActive || _fog == null) return null;
+        if (_fogTex == null || _fogDrawn != _fog.Version) BuildFogTexture();
+        return _fogTex;
+    }
+
     /// <summary>For a scripted run, which cannot look at the screen.</summary>
     public string FogWatchLine()
     {
         if (_fog == null) return "fog: kein Gitter";
-        if (!UI.Settings.FogOfWar) return "fog: abgeschaltet";
+        if (!FogActive) return "fog: abgeschaltet";
         var (u, s, w) = _fog.Counts();
         int all = u + s + w;
         return $"fog: {w} beobachtet, {s} erkundet, {u} unbekannt von {all} Feldern " +
@@ -602,10 +756,56 @@ public partial class MapEntityLayer : Node2D
         layer.AddChild(_panel);
     }
 
+    /// <summary>The buildable types of this map's tileset, or null when the
+    /// content predates the pattern export. Without it nothing can be raised —
+    /// the build-site test has no footprint to walk.</summary>
+    public Import.BuildingPatterns? Patterns { get; private set; }
+
+    /// <summary>MapBaker's own OriginY for this map — the number its Blit adds
+    /// before <c>row*TileH</c>. NOT <c>_oy</c>, which is the ground origin
+    /// (that one carries GroundLift on top). Stamping a building with the wrong
+    /// one would put it at a different height than the baked ones.</summary>
+    private int _originY;
+
+    private void LoadPatterns(GDict meta)
+    {
+        Patterns = null;
+        _originY = meta.TryGetValue("origin_y", out var oyv) &&
+                   oyv.VariantType != Variant.Type.Nil ? oyv.AsInt32() : 0;
+        if (!meta.TryGetValue("tileset", out var tv)) return;
+        int ts = tv.AsInt32();
+        string path = Core.Content.Path($"Buildings/tileset_{ts:00}.json");
+        if (!FileAccess.FileExists(path)) return;
+        using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
+        if (f == null) return;
+        var json = new Json();
+        if (json.Parse(f.GetAsText()) != Error.Ok ||
+            json.Data.VariantType != Variant.Type.Dictionary) return;
+        Patterns = Import.BuildingPatterns.FromDict(json.Data.AsGodotDictionary());
+
+        // and the pictures, so a raised building can be stamped into the map
+        string tj = Core.Content.Path($"Buildings/tileset_{ts:00}_tiles.json");
+        string tp = Core.Content.Path($"Buildings/tileset_{ts:00}_tiles.png");
+        if (!FileAccess.FileExists(tj) || !FileAccess.FileExists(tp)) return;
+        using var tf = FileAccess.Open(tj, FileAccess.ModeFlags.Read);
+        if (tf == null) return;
+        var tjson = new Json();
+        if (tjson.Parse(tf.GetAsText()) != Error.Ok ||
+            tjson.Data.VariantType != Variant.Type.Dictionary) return;
+        // NOT ResourceLoader: the atlas lives under user:// and was never
+        // imported, so Load<Texture2D> returns null there. Image.LoadFromFile
+        // reads it straight off disk.
+        var atlas = Image.LoadFromFile(ProjectSettings.GlobalizePath(tp));
+        if (atlas == null)
+            GD.PrintErr($"Bau-Atlas nicht lesbar: {tp}");
+        Patterns.LoadAtlas(tjson.Data.AsGodotDictionary(), atlas);
+    }
+
     public void Load(string name, GDict meta)
     {
         _entities.Clear();
         _ammoCap.Clear();
+        LoadPatterns(meta);
         _markers.Clear();
         _targetSlots.Clear();
         _selected = -1;
@@ -631,15 +831,48 @@ public partial class MapEntityLayer : Node2D
         //
         // A tile knows where it was drawn, so the tiles are asked. Measured over
         // map_01: `sy - (row*20 - elev*15)` is 115 for all 3024 of them.
-        int ox = 0, oy = TileOrigin(meta, out bool fromTiles);
-        if (!fromTiles && meta.TryGetValue("origin", out var origin) &&
-            origin.VariantType == Variant.Type.Array)
+        //
+        // ⚠ AND THAT WAS STILL 50 px SHORT (0.4.0). `sy` is the top of the tile
+        // SPRITE, which is 50 px taller than the cell it stands on: the cell's
+        // ground band runs from `sy+50` to `sy+70`. The layer used `sy` as the
+        // top of the cell, so every entity, every overlay and the fog sat two
+        // and a half rows north of the ground they belong to.
+        //
+        // Measured rather than reasoned. Every cell the imap calls water was
+        // sampled in the baked picture and asked whether the pixel is blue:
+        //   sample at sy+10 (what the old origin implied): map_01 91 of 475
+        //     wrong, map_05 133 of 2123, map_08 341 of 4092
+        //   sample at sy+60 (this origin):                 map_01 0 of 475,
+        //     map_05 0 of 2123, map_08 4 of 4092
+        // Inland the error was invisible; at the water's edge it is the
+        // difference between a ship floating and a ship standing on the beach,
+        // which is how it was found.
+        // Which also settles what the two written fields mean: `origin_y` and
+        // the Python baker's `origin[1]` ARE this number (map_01: 165), so the
+        // "-50" that 0.3.1 applied to them is withdrawn — they were right and
+        // the correction was the mistake. They are taken as they stand when the
+        // tiles cannot be asked.
+        int ox = 0, oy = TileOrigin(meta, out bool fromTiles) + GroundLift;
+        if (!fromTiles)
         {
-            var oa = origin.AsGodotArray();
-            if (oa.Count >= 2) { ox = oa[0].AsInt32(); oy = oa[1].AsInt32(); }
+            if (meta.TryGetValue("origin", out var origin) &&
+                origin.VariantType == Variant.Type.Array)
+            {
+                var oa = origin.AsGodotArray();
+                if (oa.Count >= 2) { ox = oa[0].AsInt32(); oy = oa[1].AsInt32(); }
+            }
+            else if (meta.TryGetValue("origin_y", out var oyv) &&
+                     oyv.VariantType != Variant.Type.Nil)
+                oy = oyv.AsInt32();
         }
         _ox = ox; _oy = oy;
         _mission = (meta.TryGetValue("mission", out var mv) ? mv.AsString() : name).ToUpper();
+
+        // The music. It was exported and playable all along, but nothing ever
+        // started it outside the sound probe — which is why the game was
+        // silent. Which piece belongs to which mission is OURS; see
+        // Audio.MidiMusic.StartForMission.
+        Audio.MidiMusic.StartForMission(UI.SkirmishSetup.CampaignMission);
 
         // elevation per cell (for correct vertical placement) from the map tiles.
         var elev = BuildElevLookup(meta);
@@ -666,8 +899,9 @@ public partial class MapEntityLayer : Node2D
         GD.Print($"MapEntityLayer: {_entities.Count} entities, {_markers.Count} markers, " +
                  $"{_entities.FindAll(x => x.IsBuilding).Count} buildings ({_source}); " +
                  $"nav {_nav.Width}x{_nav.Height} " +
-                 $"water {census.Water} / shore {census.Shore} / land {census.Land} / " +
-                 $"props {census.Props}" + (_nav.HasZones ? " [sec2 terrain]" : " [tile-code fallback]"));
+                 $"frei {census.Free} / grob {census.Rough} / wasser {census.Water} / " +
+                 $"gesperrt {census.Blocked}" +
+                 (_nav.HasTerrain ? $" [imap, {_nav.Inferred} abgeleitet]" : " [Kachelcode-Notbehelf]"));
     }
 
     /// <summary>Where the baked picture's row 0 sits, read off the tiles: a tile
@@ -797,9 +1031,14 @@ public partial class MapEntityLayer : Node2D
                     // the two fields the voice routine @0x429290 keys on, plus
                     // the tank it tests against 50 — see Audio.GameSounds.Voice
                     Chassis = haveRaw ? HexByte(raw, 0x0b) : -1,
+                    // 0xFF is the game's "no group" (@0x429b1b), and the draw
+                    // code masks the rest to three bits (@0x429b37).
+                    Pose = haveRaw && HexByte(raw, 0x11) != 0xFF ? HexByte(raw, 0x11) & 7 : 0,
                     Subclass = haveRaw ? HexByte(raw, 0x0a) : -1,
                     Field28 = haveRaw ? HexByte(raw, 0x28) : 0,
                     AimFacing = haveRaw ? HexByte(raw, 0x03) & 7 : -1,
+                    FootW = System.Math.Max(1, GetI(e, "foot_w", 1)),
+                    FootH = System.Math.Max(1, GetI(e, "foot_h", 1)),
                     Footprint = CellRect(ox, oy, col, row, el), IsProp = false,
                 });
                 var last = _entities[^1];
@@ -843,7 +1082,7 @@ public partial class MapEntityLayer : Node2D
                 if (hpMax <= 0) hpMax = BuildingHp(btype);
                 int hp = real ? GetI(bd, "hp", hpMax) : 0;
                 if (!real) hpMax = 0;
-                _entities.Add(new Entity
+                var bld = new Entity
                 {
                     Slot = GetI(bd, "slot", -1), Col = col, Row = row,
                     Owner = real ? owner : -1, Team = real ? owner : -1,
@@ -858,6 +1097,10 @@ public partial class MapEntityLayer : Node2D
                     EffDen = Mathf.Max(1, GetI(bd, "eff_den", 1)),
                     UpgradeStep = GetI(bd, "upgrade_step"),
                     IsBuilding = true, BType = btype,
+                    // the capture fields; content exported before 2026-08-06
+                    // carries no door, and CaptureDoorsMissing counts that
+                    Built = GetI(bd, "built"), Doors = GetI(bd, "doors"),
+                    ShownOwner = real ? owner : -1,
                     // w/ch/sp are the stored Waffen / Fahrwerk / Spezial parts —
                     // a Waffen-Fabrik only ever fills w, a Fahrwerk-Fabrik only
                     // ch, a Spezial-Fabrik only sp, and the Basis all three
@@ -872,7 +1115,31 @@ public partial class MapEntityLayer : Node2D
                               hgv.AsGodotArray(), v => v.AsInt32()))
                         : null,
                     Footprint = CellRect(ox, oy, col, row, el),
-                });
+                };
+                if (bd.TryGetValue("door_cells", out var dcv) &&
+                    dcv.VariantType == Variant.Type.Array)
+                    foreach (var dv in dcv.AsGodotArray())
+                    {
+                        if (dv.VariantType != Variant.Type.Dictionary) continue;
+                        var dd = dv.AsGodotDictionary<string, Variant>();
+                        bld.DoorCells.Add((GetI(dd, "col"), GetI(dd, "row")));
+                    }
+                else if (bld.Doors > 0)
+                    // content exported between the first and the second reading
+                    // of the door record: one pair, no list
+                    bld.DoorCells.Add((GetI(bd, "door_col"), GetI(bd, "door_row")));
+
+                // ⚠ CORRECTED 07.08.2026 — a building used to keep the default
+                // 1x1 here, and BodyRect turns FootW/FootH into the CLICK area.
+                // A Basis covers 7x6 cells, so its whole body was unclickable
+                // except for one tile at its corner: reported as "das Anwahlfeld
+                // ist immer links von den Gebaeuden ein kleines Feld". The size
+                // comes from the tileset patterns, the same place the fog and
+                // the doors read it from.
+                var foot = BuildingFootprint(bld.BType);
+                bld.FootW = foot.X;
+                bld.FootH = foot.Y;
+                _entities.Add(bld);
             }
         }
 
@@ -1127,12 +1394,20 @@ public partial class MapEntityLayer : Node2D
             }
         }
 
+        // sec2 stays what it is — a zone map for the Z overlay. It is NOT the
+        // passability: Can_go @0x4055D0 never reads it, and taking it for one
+        // is what let land units drive into the sea (on NET07 its class 0 covers
+        // 7115 cells where the water is 6452).
         if (root.TryGetValue("zones", out var zv) && zv.VariantType == Variant.Type.Dictionary)
-        {
-            var zones = zv.AsGodotDictionary<string, Variant>();
-            BuildZoneTexture(zones, ox, oy);
-            _nav?.ApplyZones(zones);   // authoritative terrain classes
-        }
+            BuildZoneTexture(zv.AsGodotDictionary<string, Variant>(), ox, oy);
+
+        // the map's own passability, straight off the imap (sec6)
+        if (root.TryGetValue("terrain", out var tev) && tev.VariantType == Variant.Type.Dictionary)
+            _nav?.ApplyTerrain(tev.AsGodotDictionary<string, Variant>());
+        else
+            GD.PrintErr($"{name}: der Spielstand kennt noch keine Passierbarkeit — die Karte " +
+                        "laeuft auf dem alten Kachelcode-Notbehelf (Bruecken sperren, Wasser " +
+                        "ungenau). Neu importieren, oder --reexport-states=<Quelle>.");
 
         // the fog covers the same grid the map does
         int fw = GetI(root, "width"), fh = GetI(root, "height");
@@ -1235,6 +1510,37 @@ public partial class MapEntityLayer : Node2D
         UpdatePanel();
     }
 
+    /// <summary>Select a unit from a script, so a headless run can photograph
+    /// the info panel. A click is the only other way in, and a scripted run
+    /// cannot click — the same gap <see cref="PanelWatchLine"/> works around,
+    /// except this one puts the real panel on screen.
+    ///
+    /// `which` is an index into the units that carry a weapon or a tank, so a
+    /// caller does not have to know slot numbers to land on something with
+    /// something to show.</summary>
+    public string SelectForShot(int which)
+    {
+        var pick = new List<int>();
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead) continue;
+            if (e.Weapon != 0 || e.FuelMax > 0) pick.Add(i);
+        }
+        if (pick.Count == 0) return "select: keine Einheit mit Waffe oder Tank";
+        int idx = pick[Mathf.PosMod(which, pick.Count)];
+        _sel.Clear();
+        _sel.Add(idx);
+        SetPrimary();
+        UpdatePanel();
+        QueueRedraw();
+        var s = _entities[idx];
+        return $"select: Platz {s.Slot} {LabelOf(s.UnitType)}, Waffe {s.Weapon} " +
+               $"\"{WeaponOf(s.Weapon).Name}\", Munition {s.Ammo}/{s.AmmoMax}, " +
+               $"Sprit {s.Fuel}/{s.FuelMax}  |  Panel: " +
+               _panel.Text.Replace("\n", " / ");
+    }
+
     /// <summary>Recall group n; dead members are dropped silently.</summary>
     public bool RecallGroup(int n)
     {
@@ -1320,16 +1626,49 @@ public partial class MapEntityLayer : Node2D
     // ---- what the overview map needs ---------------------------------------
 
     /// <summary>Every unit and building worth a dot on the overview map, with
-    /// its owner. Props — the scenery baked into the picture — are left out.</summary>
+    /// its owner. Props — the scenery baked into the picture — are left out.
+    ///
+    /// <b>The fog applies here too.</b> It did not, and the overview map handed
+    /// the player every enemy position on a map he had not scouted — the fog
+    /// over the battlefield was worth nothing while the little map beside it
+    /// told all. The rule is the one the battlefield already uses: one's own
+    /// things always; someone else's UNIT only while it is being watched; a
+    /// BUILDING once the cell has been seen, because a base does not walk away
+    /// while nobody looks.</summary>
     public List<(Vector2 Pos, int Owner, bool Building)> MinimapDots()
     {
         var list = new List<(Vector2, int, bool)>(_entities.Count);
+        _dotsMine = _dotsForeign = _dotsHidden = 0;
         foreach (var e in _entities)
         {
             if (e.IsProp || e.Dead) continue;
+            if (FogActive && e.Owner != ViewPlayer &&
+                !(e.IsBuilding ? _fog!.IsSeen(e.Col, e.Row) : _fog!.IsWatched(e.Col, e.Row)))
+            { _dotsHidden++; continue; }
+            if (e.Owner == ViewPlayer) _dotsMine++; else _dotsForeign++;
             list.Add((e.Pos, e.Owner, e.IsBuilding));
         }
         return list;
+    }
+
+    // what the last MinimapDots call put on the map, for the harness line
+    private int _dotsMine, _dotsForeign, _dotsHidden;
+
+    /// <summary>Whether the overview map keeps up and whether it obeys the fog —
+    /// the two changes that had never been shown to work.</summary>
+    public string MinimapWatchLine(Minimap? m)
+    {
+        MinimapDots();
+        var alive = new int[8];
+        foreach (var e in _entities)
+            if (!e.IsProp && !e.Dead && e.Owner is >= 0 and <= 7) alive[e.Owner]++;
+        return $"minimap: {(m == null ? "-" : m.Repaints.ToString())} Neuzeichnungen bei " +
+               $"{(m == null ? "-" : m.ViewMoves.ToString())} Kamerabewegungen, " +
+               $"{(m == null ? "-" : m.FogDrawn.ToString())} davon mit Nebelschicht; " +
+               $"Punkte {_dotsMine} eigene, {_dotsForeign} fremde sichtbar, " +
+               $"{_dotsHidden} vom Nebel verdeckt (Nebel {(FogActive ? "an" : "aus")}, " +
+               $"Spieler {ViewPlayer}, lebend " +
+               string.Join("/", System.Array.ConvertAll(alive, x => x.ToString())) + ")";
     }
 
     /// <summary>The recent incidents as marks, with how old each one is.</summary>
@@ -1391,9 +1730,29 @@ public partial class MapEntityLayer : Node2D
         => new(_ox + col * TileW + TileW / 2f,
                _oy + row * TileH - ElevOf(col, row) * 15 + TileH / 2f);
 
-    /// <summary>Current body rect of an entity — follows it while it drives.</summary>
+    /// <summary>
+    /// Where a unit's picture belongs: the middle of its BODY, not of its anchor
+    /// cell. The record names one cell, but the imap stamps a unit into every
+    /// cell it covers, and the importer measures that (CwmData.UnitFootprints).
+    /// For the 1x1 that everything else is, this is CellCenter unchanged.
+    /// </summary>
+    private Vector2 BodyCenter(Entity e)
+    {
+        if (e.FootW <= 1 && e.FootH <= 1) return CellCenter(e.Col, e.Row);
+        var a = CellCenter(e.Col, e.Row);
+        var b = CellCenter(e.Col + e.FootW - 1, e.Row + e.FootH - 1);
+        return (a + b) * 0.5f;
+    }
+
+    /// <summary>Current body rect of an entity — follows it while it drives, and
+    /// is as big as the unit really is. A ship covers 2x2 cells (the imap says
+    /// so, see CwmData.UnitFootprints); giving it a one-cell box made it hard to
+    /// click and drew a bracket a quarter of its size.</summary>
     private static Rect2 BodyRect(Entity e)
-        => new(e.Pos - new Vector2(TileW / 2f, TileH / 2f), new Vector2(TileW, TileH));
+    {
+        var size = new Vector2(TileW * Mathf.Max(1, e.FootW), TileH * Mathf.Max(1, e.FootH));
+        return new Rect2(e.Pos - size / 2f, size);
+    }
 
     /// <summary>Place every entity on its cell and claim that cell on the grid.</summary>
     private void InitEntityMovement()
@@ -1401,11 +1760,17 @@ public partial class MapEntityLayer : Node2D
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
-            e.Pos = CellCenter(e.Col, e.Row);
+            e.Pos = BodyCenter(e);
             e.Mobile = !e.IsProp && e.UnitType >= 0 && !ImmobileTypes.Contains(e.UnitType);
-            e.Domain = NavalTypes.Contains(e.UnitType)
-                ? Simulation.NavGrid.Domain.Naval
-                : Simulation.NavGrid.Domain.Land;
+            // Can_go branches on +0x0a first and on the chassis +0x0b second.
+            // A unit that came off a map carries both; one that was BUILT has no
+            // record behind it, so the hull number decides — that is the older
+            // NavalTypes reading, kept exactly where it is still the only source.
+            e.Move = e.Subclass >= 0
+                ? Simulation.NavGrid.ClassOf(e.Subclass, e.Chassis)
+                : NavalTypes.Contains(e.UnitType)
+                    ? Simulation.NavGrid.MoveClass.Ship
+                    : Simulation.NavGrid.MoveClass.Vehicle;
             e.Path = null;
             e.Reserved = null;
             // A Nachschub-Posten is driven ONTO: its tick @0x43e872 looks up
@@ -1413,7 +1778,7 @@ public partial class MapEntityLayer : Node2D
             // there, so neither the post itself nor the structure baked into
             // the map picture may block that cell.
             if (e.IsBuilding && e.BType == 14) _nav?.ClearStatic(e.Col, e.Row);
-            else _nav?.SetOccupant(e.Col, e.Row, i);
+            else _nav?.SetOccupant(e.Col, e.Row, i, e.Infantry >= 0);
         }
     }
 
@@ -1446,17 +1811,29 @@ public partial class MapEntityLayer : Node2D
         UpdatePanel();
     }
 
-    /// <summary>Click select: the entity under the cursor (frontmost), else clear.</summary>
+    /// <summary>Can the player pick this entity up and give it orders? Only his
+    /// own — clicking a foreign unit used to select it and let it be commanded,
+    /// which in a campaign mission meant playing the other side.</summary>
+    private bool Commandable(int i)
+        => i >= 0 && i < _entities.Count &&
+           !_entities[i].IsProp && !_entities[i].Dead &&
+           _entities[i].Owner == ViewPlayer;
+
+    /// <summary>Click select: the entity under the cursor (frontmost), else
+    /// clear. A foreign unit is still shown in the panel — it just cannot be
+    /// selected, so it can be looked at without being taken over.</summary>
     public void SelectAt(Vector2 mapPos, bool additive = false)
     {
         int hit = Pick(mapPos);
+        bool mine = Commandable(hit);
         if (!additive) _sel.Clear();
-        if (hit >= 0)
+        if (mine)
         {
             if (additive && !_sel.Add(hit)) _sel.Remove(hit);
             else _sel.Add(hit);
         }
         SetPrimary();
+        if (!mine && hit >= 0) { _selected = hit; UpdatePanel(); }   // look, do not touch
         SpeakSelected(hit);
         QueueRedraw();
     }
@@ -1499,6 +1876,537 @@ public partial class MapEntityLayer : Node2D
             Audio.GameSounds.HitVoice(victim.Subclass, victim.Chassis, victim.Field28));
     }
 
+    /// <summary>
+    /// A vehicle rolls onto a cell a foot soldier is standing on.
+    ///
+    /// The original asks two questions about that cell and both of them let the
+    /// vehicle through: `pratelska_infa` @0x433fe0 walks the cell's nine men and
+    /// passes when every one of them is friendly (`neutok[mine][theirs] != 0`
+    /// out of the alliance matrix @0x87b155), and `prejet` — the game's own word,
+    /// "to run over" — @0x412980 passes when NONE of them is. So friendly
+    /// infantry is driven through and hostile infantry is driven over; only the
+    /// second one dies. @0x412a50 then stamps the cell back to 0xFFFE, which is
+    /// what <see cref="Kill"/> does here by clearing the occupant.
+    ///
+    /// OURS: the original's cell holds up to nine men and ours holds one entity,
+    /// so "all nine" and "none" collapse into a single test.
+    /// </summary>
+    private void RunOverFoot(int driverIdx, Entity driver, int footIdx)
+    {
+        if (footIdx < 0 || footIdx >= _entities.Count) return;
+        var foot = _entities[footIdx];
+        if (foot.Dead || foot.Infantry < 0) return;
+        if (!IsHostile(driver, foot)) return;          // friendly: driven through
+        NoteEvent(foot, "ueberfahren");
+        Kill(footIdx, foot);
+        _crushed++;
+    }
+
+    /// <summary>How many foot soldiers have been run over — for the report line.</summary>
+    private int _crushed;
+
+    // ---- the doors on a building --------------------------------------------
+    //
+    // The buildings themselves are baked into the map picture, but their DOORS
+    // are not and never were: the original draws them at run time on top
+    // (@0x42B25C..@0x42B394), picking an ANIM.CWA frame from the door's state
+    // byte. That is why they were missing here.
+    //
+    // The rule for the state is the game's, @0x43D2EC: at 0 (shut) the door
+    // starts opening the moment its imap cell holds something, and from open it
+    // shuts again once the cell is empty.
+    //
+    // OURS: the speed of that swing (the original counts in its own ticks and
+    // that count is not read), and the placement — we centre the picture on the
+    // door cell, where the original computes an offset of its own.
+
+    private const float DoorOpenSpeed = 6f;      // ours: phases per second
+    private readonly Dictionary<int, float> _doorPhase = new();
+
+    /// <summary>Counters for `--door-check`: why a door is or is not drawn.</summary>
+    private int _doorsDrawn, _doorsNoCount, _doorsNoCells, _doorsNoPic, _doorsNoTex;
+
+    public string DoorCheck()
+    {
+        _doorsDrawn = _doorsNoCount = _doorsNoCells = _doorsNoPic = _doorsNoTex = 0;
+        int buildings = 0;
+        foreach (var e in _entities)
+        {
+            if (!e.IsBuilding || e.Dead) continue;
+            buildings++;
+            DrawBuildingDoors(e, count: true);
+        }
+        return $"door-check: {buildings} Gebaeude — {_doorsDrawn} Tore gezeichnet; " +
+               $"ohne Tueranzahl {_doorsNoCount}, ohne Tuerzellen {_doorsNoCells}, " +
+               $"ohne Bildnummer {_doorsNoPic}, ohne Bilddatei {_doorsNoTex}";
+    }
+
+    private void DrawBuildingDoors(Entity e, bool count = false)
+    {
+        if (!count && (!_drawSprites || _nav == null)) return;
+        if (e.Dead) return;
+        if (e.Doors <= 0) { _doorsNoCount++; return; }
+        var cells = BuildingDoors(e.BType);
+        if (cells.Count == 0) { _doorsNoCells++; return; }
+
+        for (int k = 0; k < cells.Count && k < e.Doors; k++)
+        {
+            int pic = Import.BuildingPatterns.DoorPicture(e.BType, 0, k);
+            if (pic < 0) { _doorsNoPic++; continue; }    // no constant tile for this type
+            int c = e.Col + cells[k].X, r = e.Row + cells[k].Y;
+            if (_nav != null && !_nav.InBounds(c, r)) continue;
+
+            // the game's own rule: something in the cell opens the door
+            int key = e.Slot * 4 + k;
+            float want = _nav != null && _nav.OccupantAt(c, r) >= 0
+                       ? Import.BuildingPatterns.DoorPhases - 1 : 0;
+            float have = _doorPhase.TryGetValue(key, out float p) ? p : 0f;
+            have = Mathf.MoveToward(have, want, DoorOpenSpeed * (float)GetProcessDeltaTime());
+            _doorPhase[key] = have;
+
+            var tex = DoorTexture(Import.BuildingPatterns.DoorPicture(e.BType, Mathf.RoundToInt(have), k));
+            if (tex == null) { _doorsNoTex++; continue; }
+            _doorsDrawn++;
+            if (count) continue;
+
+            // The original's own placement, @0x42B34B..0x42B379: it starts from
+            // the BUILDING's screen position and adds the door offset in whole
+            // cells — `byte[+0x36] * 4 * 5` = row*20 = TileH and
+            // `byte[+0x35] * 5 * 8` = col*40 = TileW. Note what it does NOT do:
+            // it never looks up the elevation of the door cell, it uses the
+            // building's own. Centring the picture in the cell (what we did
+            // first) put doors on open grass.
+            var at = CellRect(_ox, _oy, e.Col, e.Row, e.Elev);
+            DrawTexture(tex, new Vector2(
+                at.Position.X + cells[k].X * TileW,
+                at.Position.Y + cells[k].Y * TileH + TileH - tex.GetHeight()));
+        }
+    }
+
+    /// <summary>Buildings sorted so the ones further back are drawn first —
+    /// the order pass C of the baker used, which is why they nested correctly
+    /// in the baked picture. Rebuilt only when the list changes.</summary>
+    private List<Entity> BuildingsBackToFront()
+    {
+        if (_buildingOrder == null || _buildingOrderStamp != _entities.Count)
+        {
+            _buildingOrder = new List<Entity>();
+            foreach (var e in _entities)
+                if (e.IsBuilding && !e.IsProp) _buildingOrder.Add(e);
+            _buildingOrder.Sort((a, b) => a.Row != b.Row ? a.Row - b.Row : a.Col - b.Col);
+            _buildingOrderStamp = _entities.Count;
+        }
+        return _buildingOrder;
+    }
+
+    private List<Entity>? _buildingOrder;
+    private int _buildingOrderStamp = -1;
+
+    /// <summary>The atlas as one texture, made once — a building is a few dozen
+    /// tiles and every one of them is a region of this.</summary>
+    private Texture2D? _patternTex;
+
+    private Texture2D? PatternTexture()
+    {
+        if (_patternTex != null) return _patternTex;
+        if (Patterns?.AtlasImage == null) return null;
+        _patternTex = ImageTexture.CreateFromImage(Patterns.AtlasImage);
+        return _patternTex;
+    }
+
+    /// <summary>
+    /// A building's own body.
+    ///
+    /// <para>⚠ NEW 07.08.2026. Buildings used to be part of the baked map
+    /// picture, because the original writes their tiles into the map grid as
+    /// <c>tile + 0x2710</c> and the baker could not tell them from a tree. That
+    /// made a destroyed building impossible to remove: its pixels WERE the map.
+    /// The baker now leaves those cells out (MapBaker.BuildingCells) and the
+    /// building is drawn here instead — which is what lets it show its ruin.</para>
+    ///
+    /// <para>The picture is the type's frame: <c>FirstPattern</c> while it
+    /// stands, the last pattern once it has fallen. See
+    /// <see cref="Import.BuildingPatterns.RuinPattern"/> for where that reading
+    /// comes from. A type with only one pattern (17) has no ruin and simply keeps
+    /// standing — the original has no other picture for it either.</para>
+    /// </summary>
+    private void DrawBuildingBody(Entity e)
+    {
+        if (!_drawSprites || Patterns == null || e.IsProp) return;
+        var tex = PatternTexture();
+        if (tex == null) return;
+
+        int pattern = e.Dead
+            ? Import.BuildingPatterns.RuinPattern(Patterns, e.BType)
+            : Patterns.GetBuildingType(e.BType).FirstPattern;
+        if (pattern < 0) return;
+
+        // the cells the type animates, and the tile each shows right now
+        var anim = BuildingAnimCells(e);
+
+        // MapBaker.Blit's placement, cell for cell and elevation for elevation.
+        // The draw space and the baked picture share their origin (_oy is the
+        // map's own origin_y), so the same arithmetic has to hold here — if it
+        // did not, every building would jump the moment it stopped being baked.
+        for (int dx = 0; dx < Import.CwpFile.PatternWidth; dx++)
+            for (int dy = 0; dy < Import.CwpFile.PatternHeight; dy++)
+            {
+                int code = Patterns.PatternTile(pattern, dx, dy);
+                if (anim != null && anim.TryGetValue((dx, dy), out int swap) && swap != 0)
+                    code = swap;
+                if (code == 0 || !Patterns.TryGetTile(code, out var t)) continue;
+                int c = e.Col + dx, r = e.Row + dy;
+                float sx = _ox + c * Import.MapBaker.TileW;
+                float sy = _oy + r * Import.MapBaker.TileH
+                         - ElevOf(c, r) * Import.MapBaker.ElevStep
+                         + Import.MapBaker.BlitAnchor + t.YOff;
+                DrawTextureRectRegion(tex, new Rect2(sx, sy, t.W, t.H),
+                                      new Rect2(t.X, t.Y, t.W, t.H));
+            }
+    }
+
+    /// <summary>
+    /// How many phases a building animation steps through per second.
+    ///
+    /// <para>⚠ <b>OURS.</b> The original steps every row exactly one phase per
+    /// pass of the main loop — the profiler section is called "animations of the
+    /// buildings" (@0x4f763c) and sits directly before "Flip pages", so the rate
+    /// is whatever the machine managed. There is no timer and no divisor in
+    /// <c>@0x4D5830</c> or its driver <c>@0x4D5D10</c> to read a number off.
+    /// Six is the rate the doors already use, so the two look related.</para>
+    /// </summary>
+    public const float BuildingAnimFps = 6f;
+
+    /// <summary>
+    /// Which pattern cells of a building show an animation tile right now, or
+    /// null when the type has none.
+    ///
+    /// <para>The table is the third block of the .CWP tail; see
+    /// <see cref="Import.CwpFile.CellAnim"/> for how it was read. A row cycles
+    /// <c>LastPhase+1</c> pictures — phase 0 is the pattern's own tile, phases
+    /// 1..LastPhase are the row's. Each row rolls over at its own length, which
+    /// is what the original does too (every row carries its own counter in
+    /// <c>byte[bld + 0x0b + row]</c>), so the three belts of a factory drift
+    /// apart on purpose.</para>
+    ///
+    /// <para>A ruin does not animate: the picture is a different pattern and the
+    /// original's own guard @0x4D58B4 drops any cell whose map tile no longer
+    /// belongs to the building.</para>
+    /// </summary>
+    private Dictionary<(int, int), int>? BuildingAnimCells(Entity e)
+    {
+        if (Patterns == null || e.Dead) return null;
+        var bt = Patterns.GetBuildingType(e.BType);
+        if (bt.AnimCount <= 0) return null;
+
+        Dictionary<(int, int), int>? cells = null;
+        for (int k = 0; k < bt.AnimCount; k++)
+        {
+            var a = Patterns.GetAnimRow(bt.AnimFirst + k);
+            if (a.LastPhase <= 0) continue;
+            int phase = (int)(_clock * BuildingAnimFps) % (a.LastPhase + 1);
+            int tile = a.TileAt(phase);
+            if (tile == 0) continue;                 // phase 0 — the plain tile
+            (cells ??= new Dictionary<(int, int), int>())[(a.Dx, a.Dy)] = tile;
+        }
+        return cells;
+    }
+
+    /// <summary>
+    /// `--anim-check` — count the building cell animations on this map and say
+    /// for each whether it can actually be drawn.
+    ///
+    /// <para>Three ways a row can fail, and the report separates them: the type
+    /// owns no row, the row's cell sits outside the pattern, or the tile of a
+    /// phase is missing from the tileset atlas. The last one is the interesting
+    /// one — those tiles appear in no pattern, so the exporter had to be taught
+    /// to put them in.</para>
+    /// </summary>
+    public string AnimCheck()
+    {
+        if (Patterns == null) return "anim-check: keine Muster geladen";
+        int buildings = 0, animated = 0, rows = 0, offPattern = 0, noTile = 0, phases = 0;
+        var perType = new SortedDictionary<int, int>();
+
+        foreach (var e in _entities)
+        {
+            if (!e.IsBuilding || e.Dead) continue;
+            buildings++;
+            var bt = Patterns.GetBuildingType(e.BType);
+            if (bt.AnimCount <= 0) continue;
+            animated++;
+            perType[e.BType] = perType.TryGetValue(e.BType, out int n) ? n + 1 : 1;
+
+            for (int k = 0; k < bt.AnimCount; k++)
+            {
+                var a = Patterns.GetAnimRow(bt.AnimFirst + k);
+                rows++;
+                phases += a.LastPhase;
+                if (Patterns.PatternTile(bt.FirstPattern, a.Dx, a.Dy) == 0) offPattern++;
+                for (int ph = 1; ph <= a.LastPhase; ph++)
+                {
+                    int tile = a.TileAt(ph);
+                    if (tile == 0 || !Patterns.TryGetTile(tile, out _)) noTile++;
+                }
+            }
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"anim-check: {buildings} Gebaeude, {animated} mit Animation, ");
+        sb.Append($"{rows} Zeilen mit {phases} Bildern — ");
+        sb.Append($"Zelle ausserhalb des Musters {offPattern}, Kachel nicht im Atlas {noTile}");
+        foreach (var kv in perType) sb.Append($"\n   typ {kv.Key}: {kv.Value} Stueck");
+        return sb.ToString();
+    }
+
+    private readonly Dictionary<int, Texture2D?> _doorTex = new();
+
+    private Texture2D? DoorTexture(int pic)
+    {
+        if (pic < 0 || pic >= Import.BuildingPatterns.DoorPictureCount) return null;
+        if (_doorTex.TryGetValue(pic, out var cached)) return cached;
+        string path = Core.Content.Path($"Effects/door/f{pic:00}.png");
+        Texture2D? tex = null;
+        if (FileAccess.FileExists(path))
+        {
+            var img = Image.LoadFromFile(ProjectSettings.GlobalizePath(path));
+            if (img != null) tex = ImageTexture.CreateFromImage(img);
+        }
+        _doorTex[pic] = tex;
+        return tex;
+    }
+
+    /// <summary>
+    /// `--group-check` — pick every mobile unit of the viewed player, order them
+    /// all to one cell the way a right-click does, and report how many actually
+    /// got a route. Answers "why does only part of my group drive off" with a
+    /// number instead of an impression.
+    /// </summary>
+    public string GroupMoveCheck()
+    {
+        if (_nav == null) return "group-check: kein Gitter";
+        _sel.Clear();
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || !e.Mobile) continue;
+            if (e.Owner != ViewPlayer) continue;
+            _sel.Add(i);
+        }
+        if (_sel.Count == 0) return "group-check: nichts Bewegliches beim betrachteten Spieler";
+
+        // a goal far enough away that everyone has to travel
+        int firstIdx = -1;
+        foreach (int k in _sel) { firstIdx = k; break; }
+        var first = _entities[firstIdx];
+        var goal = new Vector2I(Mathf.Clamp(first.Col + 20, 0, _nav.Width - 1),
+                                Mathf.Clamp(first.Row + 20, 0, _nav.Height - 1));
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"group-check: {_sel.Count} Einheiten von Spieler {ViewPlayer} " +
+                  $"-> ({goal.X},{goal.Y})\n");
+
+        // how many find a route on their own, before any goal juggling
+        int solo = 0, blockedByOwn = 0;
+        foreach (int i in _sel)
+        {
+            var e = _entities[i];
+            if (_nav.FindPath(new Vector2I(e.Col, e.Row), goal, e.Move, i) != null) solo++;
+            else
+            {
+                // is it our own group that is in the way? try again with every
+                // selected unit's cell cleared
+                var saved = new List<(int C, int R, int Occ)>();
+                foreach (int k in _sel)
+                    if (k != i)
+                    {
+                        var o = _entities[k];
+                        saved.Add((o.Col, o.Row, _nav.OccupantAt(o.Col, o.Row)));
+                        _nav.ClearOccupant(o.Col, o.Row, k);
+                    }
+                if (_nav.FindPath(new Vector2I(e.Col, e.Row), goal, e.Move, i) != null)
+                    blockedByOwn++;
+                foreach (var (c, r, occ) in saved)
+                    if (occ >= 0) _nav.SetOccupant(c, r, occ, _entities[occ].Infantry >= 0);
+            }
+        }
+        sb.Append($"   Weg allein gefunden: {solo}/{_sel.Count}; " +
+                  $"davon zusaetzlich moeglich, wenn die EIGENE Gruppe nicht im Weg " +
+                  $"staende: {blockedByOwn}\n");
+
+        IssueMove(CellCenter(goal.X, goal.Y));
+        int withPath = 0;
+        foreach (int i in _sel) if (_entities[i].Path != null) withPath++;
+        sb.Append($"   nach dem Befehl: {withPath}/{_sel.Count} haben einen Pfad — " +
+                  $"Meldung: {_order}");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// `--infdeath-check` — kill one foot soldier and follow him, tick by tick:
+    /// the death flag, the clock, the animation block that comes out of it and
+    /// whether that block has a texture. Everything the drawing of a fallen
+    /// soldier depends on, in one line each.
+    /// </summary>
+    public string InfantryDeathCheck()
+    {
+        if (_nav == null) return "infdeath-check: kein Gitter";
+        int fi = -1;
+        for (int i = 0; i < _entities.Count; i++)
+            if (_entities[i].Infantry >= 0 && !_entities[i].Dead) { fi = i; break; }
+        if (fi < 0) return "infdeath-check: keine Infanterie auf dieser Karte";
+
+        var e = _entities[fi];
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"infdeath-check: slot {e.Slot}, Satz {e.Infantry}, Richtung {e.Facing}, " +
+                  $"Spieler {e.Owner}, HP {e.Hp}/{e.HpMax}\n");
+        sb.Append($"   vor dem Tod: Dead={e.Dead}, Block {InfBlock(e)}, " +
+                  $"Textur={(GetInfantryTexture(e.Infantry, e.Facing, InfBlock(e)) != null ? "ok" : "FEHLT")}\n");
+
+        Kill(fi, e);
+        sb.Append($"   nach Kill(): Dead={e.Dead}, DeadTime={e.DeadTime:0.00}, " +
+                  $"Belegung frei={(_nav.OccupantAt(e.Col, e.Row) < 0 ? "ja" : "NEIN")}\n");
+
+        // walk the clock the way _Process does for a dead entity
+        for (int step = 0; step <= 5; step++)
+        {
+            int b = InfBlock(e);
+            var tex = GetInfantryTexture(e.Infantry, e.Facing, b);
+            sb.Append($"   t={e.DeadTime:0.00}s -> Block {b}, " +
+                      $"Textur={(tex != null ? $"{tex.GetWidth()}x{tex.GetHeight()}" : "FEHLT")}\n");
+            e.DeadTime += 0.15f;
+        }
+
+        // and the two gates the draw loop puts in front of it
+        bool fogGate = FogActive && e.Owner != ViewPlayer && !e.IsBuilding && !Watched(e.Col, e.Row);
+        sb.Append($"   Zeichen-Tore: _drawSprites={_drawSprites}, " +
+                  $"Nebel blockt={(fogGate ? "JA — wird gar nicht gezeichnet" : "nein")}, " +
+                  $"Infantry={e.Infantry} (>=0 noetig)");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// `--crush-check` — why a foot soldier is or is not run over, condition by
+    /// condition, on the map as loaded. Every step the move code takes is asked
+    /// separately, so a failure names itself instead of having to be guessed.
+    /// </summary>
+    public string CrushCheck()
+    {
+        if (_nav == null) return "crush-check: kein Gitter";
+        var sb = new System.Text.StringBuilder();
+
+        var vehicles = new List<int>();
+        var feet = new List<int>();
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead) continue;
+            if (e.Infantry >= 0) feet.Add(i);
+            else if (e.Mobile) vehicles.Add(i);
+        }
+        sb.Append($"crush-check: {vehicles.Count} Fahrzeuge, {feet.Count} Infanteristen\n");
+        if (feet.Count == 0 || vehicles.Count == 0) return sb.ToString().TrimEnd();
+
+        int shown = 0, hostilePairs = 0, gridOk = 0, freeOk = 0;
+        foreach (int fi in feet)
+        {
+            var foot = _entities[fi];
+            // is the cell marked as a foot soldier at all?
+            bool crush = _nav.CrushableAt(foot.Col, foot.Row, -1) == fi;
+            if (crush) gridOk++;
+            // and does a vehicle of another owner consider him an enemy?
+            int driver = -1;
+            foreach (int vi in vehicles)
+                if (IsHostile(_entities[vi], foot)) { driver = vi; break; }
+            if (driver >= 0) hostilePairs++;
+            bool free = _nav.IsFree(foot.Col, foot.Row, Simulation.NavGrid.MoveClass.Vehicle, -1);
+            if (free) freeOk++;
+
+            if (shown < 6)
+            {
+                shown++;
+                sb.Append($"   Inf slot {foot.Slot} (Spieler {foot.Owner}) bei " +
+                          $"({foot.Col},{foot.Row}): Zelle-als-Fussvolk={(crush ? "ja" : "NEIN")}, " +
+                          $"befahrbar={(free ? "ja" : "NEIN")}, " +
+                          $"Feind-Fahrzeug={(driver >= 0 ? $"slot {_entities[driver].Slot}" : "KEINS")}");
+                if (driver >= 0)
+                {
+                    var v = _entities[driver];
+                    var path = _nav.FindPath(new Vector2I(v.Col, v.Row),
+                                             new Vector2I(foot.Col, foot.Row), v.Move, driver);
+                    sb.Append($", Weg dorthin={(path == null ? "KEINER" : $"{path.Count} Schritte")}");
+                }
+                sb.Append('\n');
+            }
+        }
+        sb.Append($"   zusammen: {gridOk}/{feet.Count} korrekt als Fussvolk im Gitter, " +
+                  $"{freeOk}/{feet.Count} befahrbar, {hostilePairs}/{feet.Count} mit einem " +
+                  $"feindlichen Fahrzeug auf der Karte");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Harness: ask the grid for a route and report it, cell by cell, together
+    /// with the ground class of every step. Used to show that a vehicle really
+    /// crosses a bridge and really refuses the water beside it — a script cannot
+    /// click, so the route has to be quoted.
+    /// </summary>
+    public void NavProbe(string spec)
+    {
+        if (_nav == null) { GD.Print("nav-probe: kein Gitter"); return; }
+        var p = spec.Split(',');
+        if (p.Length < 4) { GD.Print("nav-probe: c0,r0,c1,r1[,klasse]"); return; }
+        var a = new Vector2I(p[0].ToInt(), p[1].ToInt());
+        var b = new Vector2I(p[2].ToInt(), p[3].ToInt());
+        var mc = p.Length > 4
+            ? System.Enum.Parse<Simulation.NavGrid.MoveClass>(p[4], true)
+            : Simulation.NavGrid.MoveClass.Vehicle;
+
+        string Cell(Vector2I v) => $"({v.X},{v.Y}){TerrainName(_nav.GroundAt(v.X, v.Y))[..1]}";
+        var path = _nav.FindPath(a, b, mc);
+        if (path == null) { GD.Print($"nav-probe {mc} {Cell(a)} -> {Cell(b)}: KEIN WEG"); return; }
+
+        var hist = new Dictionary<Simulation.NavGrid.Ground, int>();
+        foreach (var v in path)
+        {
+            var g = _nav.GroundAt(v.X, v.Y);
+            hist[g] = hist.TryGetValue(g, out int n) ? n + 1 : 1;
+        }
+        var parts = new List<string>();
+        foreach (var kv in hist) parts.Add($"{TerrainName(kv.Key)}={kv.Value}");
+        GD.Print($"nav-probe {mc} {Cell(a)} -> {Cell(b)}: {path.Count} Schritte, " +
+                 string.Join(" ", parts));
+        var line = new List<string>();
+        foreach (var v in path) line.Add($"{v.X},{v.Y}");
+        GD.Print("   Weg: " + string.Join(" ", line));
+    }
+
+    /// <summary>
+    /// Harness: hold the grid against the picture. For every cell the imap calls
+    /// water, look at the pixel the layer would place a unit on and ask whether
+    /// it is blue. The two are produced by different code — the baker draws the
+    /// tiles, the layer places the units — so agreement between them is a real
+    /// check on the drawing origin, and a disagreement is exactly the fault that
+    /// put the ships of mission 1 on the beach.
+    /// </summary>
+    public string GroundCheck(Image img)
+    {
+        if (_nav == null || img == null) return "ground-check: kein Gitter";
+        int water = 0, blue = 0, off = 0, outside = 0;
+        for (int r = 0; r < _nav.Height; r++)
+            for (int c = 0; c < _nav.Width; c++)
+            {
+                if (_nav.GroundAt(c, r) != Simulation.NavGrid.Ground.Water) continue;
+                water++;
+                var p = CellCenter(c, r);
+                int x = Mathf.RoundToInt(p.X), y = Mathf.RoundToInt(p.Y);
+                if (x < 0 || y < 0 || x >= img.GetWidth() || y >= img.GetHeight()) { outside++; continue; }
+                var col = img.GetPixel(x, y);
+                if (col.B > col.G + 0.06f && col.B > col.R + 0.06f) blue++; else off++;
+            }
+        return $"ground-check: {water} Wasserzellen, {blue} unter blauem Pixel, " +
+               $"{off} daneben, {outside} ausserhalb des Bildes";
+    }
+
     /// <summary>Rubber-band select: every owned, non-prop entity inside the box.</summary>
     public void BoxSelect(Rect2 mapRect, bool additive)
     {
@@ -1506,9 +2414,8 @@ public partial class MapEntityLayer : Node2D
         var norm = mapRect.Abs();
         for (int i = 0; i < _entities.Count; i++)
         {
-            var e = _entities[i];
-            if (e.IsProp) continue;
-            if (norm.Intersects(BodyRect(e))) _sel.Add(i);
+            if (!Commandable(i)) continue;
+            if (norm.Intersects(BodyRect(_entities[i]))) _sel.Add(i);
         }
         SetPrimary();
         _band = null;
@@ -1578,11 +2485,11 @@ public partial class MapEntityLayer : Node2D
                         if (Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dy)) != rad) continue;
                         var c = new Vector2I(cell.Value.X + dx, cell.Value.Y + dy);
                         if (taken.Contains(c)) continue;
-                        if (_nav.IsFree(c.X, c.Y, e.Domain, i)) goal = c;
+                        if (_nav.IsFree(c.X, c.Y, e.Move, i)) goal = c;
                     }
             if (goal == null) { failed++; continue; }
 
-            var path = _nav.FindPath(new Vector2I(e.Col, e.Row), goal.Value, e.Domain, i);
+            var path = _nav.FindPath(new Vector2I(e.Col, e.Row), goal.Value, e.Move, i);
             if (path == null || path.Count == 0) { failed++; continue; }
 
             taken.Add(goal.Value);
@@ -1669,7 +2576,7 @@ public partial class MapEntityLayer : Node2D
             return;
         }
 
-        var path = _nav.FindPath(new Vector2I(e.Col, e.Row), next.Cell, e.Domain, i);
+        var path = _nav.FindPath(new Vector2I(e.Col, e.Row), next.Cell, e.Move, i);
         if (path == null || path.Count == 0)
         {
             // unreachable now — drop it and try whatever comes after
@@ -1704,6 +2611,16 @@ public partial class MapEntityLayer : Node2D
     /// Place the info text inside the recessed display box of the original
     /// PANEL.DTA frame (screen coordinates, supplied by MapViewer).
     /// </summary>
+    /// <summary>The info text and the production list share the display box, so
+    /// one steps aside for the other.</summary>
+    public void SetPanelTextVisible(bool on)
+    {
+        _panelTextOn = on;
+        _panel.Visible = on;
+    }
+
+    private bool _panelTextOn = true;
+
     public void SetPanelBox(Rect2 box)
     {
         _compactPanel = true;
@@ -1742,7 +2659,54 @@ public partial class MapEntityLayer : Node2D
             var d = kv.Value.AsGodotDictionary<string, Variant>();
             string nm = d.TryGetValue("name", out var nv) ? nv.AsString() : "";
             if (nm.Length > 0) _bldNames[t] = nm;
+            // hit points and doors of a NEW building, straight out of the
+            // exe's own 10-byte stat row (see ExeTables.BuildingStats)
+            if (d.TryGetValue("hp", out var hv) && hv.AsInt32() > 0)
+                _bldHp![t] = hv.AsInt32();
+            if (d.TryGetValue("door_cells", out var dcv) &&
+                dcv.VariantType == Variant.Type.Array)
+            {
+                var list = new List<Vector2I>();
+                foreach (var e in dcv.AsGodotArray())
+                {
+                    if (e.VariantType != Variant.Type.Dictionary) continue;
+                    var dd = e.AsGodotDictionary<string, Variant>();
+                    list.Add(new Vector2I(
+                        dd.TryGetValue("col", out var cv2) ? cv2.AsInt32() : 0,
+                        dd.TryGetValue("row", out var rv2) ? rv2.AsInt32() : 0));
+                }
+                _bldDoors![t] = list;
+            }
+            // where the type watches from — a table in the exe, not a guess
+            if (d.TryGetValue("sight_col", out var scv) && d.TryGetValue("sight_row", out var srv)
+                && (scv.AsInt32() > 0 || srv.AsInt32() > 0))
+                _bldSight![t] = new Vector2I(scv.AsInt32(), srv.AsInt32());
         }
+        if (root.TryGetValue("sight_radius", out var rv3) && rv3.AsInt32() > 0)
+            BuildingSightRadius = rv3.AsInt32();
+    }
+
+    private static Dictionary<int, int>? _bldHp = new();
+    private static Dictionary<int, List<Vector2I>>? _bldDoors = new();
+    private static Dictionary<int, Vector2I>? _bldSight = new();
+
+    /// <summary>
+    /// How far a building sees, in cells.
+    ///
+    /// <para><b>Measured 08.08.2026</b>, where it used to be our 6: the fog
+    /// update @0x4206AB pushes a literal <c>0xa</c> in front of the stamper, the
+    /// same for every type. Overwritten from <c>building_types.json</c> when the
+    /// catalogue carries the value, so an older export still runs.</para>
+    /// </summary>
+    public static int BuildingSightRadius { get; private set; } = Import.ExeTables.BuildingSightRadius;
+
+    /// <summary>The doors a new building of this type gets, as offsets from its
+    /// origin. Empty when the catalogue predates the stat table.</summary>
+    public static List<Vector2I> BuildingDoors(int type)
+    {
+        LoadBuildingNames();
+        return _bldDoors != null && _bldDoors.TryGetValue(type, out var d)
+               ? d : new List<Vector2I>();
     }
 
     private static string BuildingTypeName(int type)
@@ -1852,11 +2816,18 @@ public partial class MapEntityLayer : Node2D
     private static float RangeOf(Entity e)
         => e.Range > 0 ? e.Range : WeaponOf(e.Weapon).RangeTiles;
 
+    /// <summary>Stats of a unit's mounted weapon.
+    ///
+    /// ⚠ CORRECTED 2026-08-06: this used to fall back to component 24 for
+    /// anything the table did not name, and since the table only held six of
+    /// the game's 50 components, 890 of the 1446 armed units on the maps (61 %)
+    /// were labelled "2x Maschinengewehr". The table is read whole now, which
+    /// leaves exactly one component unnamed — 61, on two units — and that one
+    /// is SHOWN as a gap rather than borrowed from somebody else.</summary>
     private static (string Name, int Damage, float RangeTiles) WeaponOf(int comp)
     {
         if (_weapons != null && _weapons.TryGetValue(comp, out var w)) return w;
-        if (_weapons != null && _weapons.TryGetValue(DefaultWeaponComp, out var d)) return d;
-        return ("?", 10, 5f);
+        return ($"BAUTEIL {comp}", 10, 5f);
     }
 
     // Entities with hp_max 0 (unit_types 148/149, the "Leichter"/"Schwerer" size
@@ -1892,10 +2863,134 @@ public partial class MapEntityLayer : Node2D
     private static bool[,] _allied = new bool[8, 8];
     private static bool _haveAllies;
 
-    private static bool IsHostile(Entity a, Entity b)
+    /// <summary>
+    /// Sides that are only standing there. Nobody shoots at them and they shoot
+    /// at nobody, until the player gives an explicit order.
+    ///
+    /// <para>⚠ <b>ZURÜCKGEZOGEN am 06.08.2026, und zwar der Grund, nicht die
+    /// Wirkung.</b> Was hier unten steht — "die Missionsskripte sind erst halb
+    /// gelesen", "die Regel ist unsere" — stimmt nicht mehr: `mission_init`
+    /// @0x487c40 setzt die ganze Bündnismatrix und macht Spieler 7 neutral, in
+    /// allen 33 Missionen (siehe <see cref="LoadCampaignDiplomacy"/>). Das Feld
+    /// bleibt, weil es die gelesene Diplomatie ausführt und weil es der Rückfall
+    /// für Karten ohne `campaign_diplomacy.json` ist; die Begründung darunter
+    /// ist Geschichte.</para>
+    ///
+    /// ⚠ OURS, and a stand-in for something not yet read. The original's own
+    /// alliance matrix is no help here: the default is written at @0x419529 —
+    /// eight passes of stride 41 setting `neutok[p][p] = 1` — so out of the box
+    /// every side is hostile to every other, and a campaign level carries no
+    /// sec53 to change it. The mission SCRIPT changes it, and the scripts are
+    /// only half read (see StartCampaign for where they live).
+    ///
+    /// What IS read, and what made this necessary: mission 1's script block
+    /// @0x49844d contains exactly ONE write to the player table,
+    /// `hrac[1].aktiv = 1` — so mission 1 puts two sides into play, 0 and 1,
+    /// while its players 2 and 7 are never touched. The player reported it from
+    /// the other end: "man muss die neutralen Einheiten erst anfahren, damit sie
+    /// meine eigenen werden", and our AI was shooting them instead.
+    ///
+    /// ⚠ `aktiv` is NOT the general switch, and the numbers say so: of the 33
+    /// script blocks only nine write it at all (missions 1, 11, 12, 13, 18, 20,
+    /// 22, 24, 27, 28, 31). So it is not exported as a rule. The rule used here
+    /// is ours: <b>a side that owns a base is playing, a side with nothing but
+    /// field units is standing by</b>. Measured over the campaign levels it
+    /// gives map_01 P1 as the opponent with P2 and P7 neutral — which is what
+    /// the player describes — but on map_07 it leaves P2's twenty units idle,
+    /// so it is a stand-in and not the answer.
+    /// </summary>
+    private readonly bool[] _standby = new bool[8];
+
+    public bool IsStandby(int owner) => owner is >= 0 and <= 7 && _standby[owner];
+
+    /// <summary>
+    /// The campaign's own diplomacy, from <c>campaign_diplomacy.json</c> —
+    /// which is not a table but the code of <c>mission_init</c> @0x487c40, read
+    /// out by <see cref="Import.ExeTables.CampaignDiplomacy"/>.
+    ///
+    /// ⚠ This RETIRES the stand-in above. <see cref="_standby"/> said "a side
+    /// that owns a base is playing, a side with nothing but field units is
+    /// standing by", and its own note admitted the mission scripts were only
+    /// half read and that the rule left map_07's player 2 idle for no reason.
+    /// The scripts are read now: every mission sets the whole 8x8 matrix and
+    /// makes <b>player 7 neutral</b>, all 33 of them. The old rule survives
+    /// only for maps that have neither this file nor a sec53 — a .DM opened as
+    /// a skirmish, say.
+    /// </summary>
+    private static readonly bool[] _neutralPlayers = new bool[8];
+    private static bool _haveNeutral;
+    private static int _diploMission = -1;
+
+    /// <summary>Slots the mission puts out of play. Their units do not fight,
+    /// nobody fights them — and they are the ones that can be driven up to and
+    /// taken over (Simulation/Takeover.cs).</summary>
+    public static bool IsNeutralPlayer(int p) => p is >= 0 and <= 7 && _neutralPlayers[p];
+    public static bool HaveNeutralPlayers => _haveNeutral;
+
+    /// <summary>A skirmish has no mission_init: nobody is neutral there. The
+    /// list is static, so it has to be cleared when one game follows another.</summary>
+    public static void ClearNeutralPlayers()
+    {
+        for (int p = 0; p < 8; p++) _neutralPlayers[p] = false;
+        _haveNeutral = false;
+        _diploMission = -1;
+    }
+
+    /// <summary>Fill <see cref="_allied"/> and the neutral list from the
+    /// campaign's own diplomacy. Returns false when the file is not there, in
+    /// which case nothing is touched and the old rule still applies.</summary>
+    private static bool LoadCampaignDiplomacy(int mission)
+    {
+        if (mission < 1) return false;
+        string path = Core.Content.Path("Maps/campaign_diplomacy.json");
+        if (!FileAccess.FileExists(path)) return false;
+        using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
+        if (f == null) return false;
+        var json = new Json();
+        if (json.Parse(f.GetAsText()) != Error.Ok ||
+            json.Data.VariantType != Variant.Type.Dictionary) return false;
+        var root = json.Data.AsGodotDictionary<string, Variant>();
+        if (!root.TryGetValue("missions", out var mv) ||
+            mv.VariantType != Variant.Type.Array) return false;
+
+        foreach (var item in mv.AsGodotArray())
+        {
+            if (item.VariantType != Variant.Type.Dictionary) continue;
+            var d = item.AsGodotDictionary<string, Variant>();
+            if (GetI(d, "mission", -1) != mission) continue;
+            if (!d.TryGetValue("allied", out var av) ||
+                av.VariantType != Variant.Type.Array) return false;
+
+            var rows = av.AsGodotArray();
+            if (rows.Count < 8) return false;
+            var mat = new bool[8, 8];
+            for (int a = 0; a < 8; a++)
+            {
+                var row = rows[a].AsGodotArray();
+                for (int b = 0; b < 8 && b < row.Count; b++) mat[a, b] = row[b].AsInt32() != 0;
+            }
+            _allied = mat;
+            _haveAllies = true;
+
+            for (int p = 0; p < 8; p++) _neutralPlayers[p] = false;
+            if (d.TryGetValue("neutral", out var nv) && nv.VariantType == Variant.Type.Array)
+                foreach (var p in nv.AsGodotArray())
+                {
+                    int q = p.AsInt32();
+                    if (q is >= 0 and <= 7) _neutralPlayers[q] = true;
+                }
+            _haveNeutral = true;
+            _diploMission = mission;
+            return true;
+        }
+        return false;
+    }
+
+    private bool IsHostile(Entity a, Entity b)
     {
         if (b.IsProp || b.Dead || b.HpMax <= 0) return false;
         if (a.Owner is < 0 or > 7 || b.Owner is < 0 or > 7) return false;
+        if (_standby[a.Owner] || _standby[b.Owner]) return false;
         return _haveAllies ? !_allied[a.Owner, b.Owner] : b.Owner != a.Owner;
     }
 
@@ -2047,9 +3142,9 @@ public partial class MapEntityLayer : Node2D
         // out of range: walk towards the target, re-pathing when it moves away
         if (e.Path == null && _nav != null)
         {
-            var goal = _nav.NearestFree(new Vector2I(t.Col, t.Row), e.Domain, i);
+            var goal = _nav.NearestFree(new Vector2I(t.Col, t.Row), e.Move, i);
             if (goal == null) { e.Target = -1; return; }
-            var path = _nav.FindPath(new Vector2I(e.Col, e.Row), goal.Value, e.Domain, i);
+            var path = _nav.FindPath(new Vector2I(e.Col, e.Row), goal.Value, e.Move, i);
             if (path == null || path.Count == 0) { e.Target = -1; return; }
             e.Path = path;
             e.PathIdx = 0;
@@ -2158,6 +3253,13 @@ public partial class MapEntityLayer : Node2D
             return;
         }
 
+        Kill(vi, victim);
+    }
+
+    /// <summary>Take an entity off the board: clear its cells, drop it out of
+    /// every selection and target, and leave the right remains behind.</summary>
+    private void Kill(int vi, Entity victim)
+    {
         victim.Hp = 0;
         victim.Dead = true;
         victim.DeadTime = 0;
@@ -2175,10 +3277,18 @@ public partial class MapEntityLayer : Node2D
         victim.Reserved = null;
         if (victim.Infantry >= 0)
         {
-            // a foot soldier has its own falling-over frames and leaves a body,
-            // not a burning hull — just a small blast where it was hit
-            _effects.Add(new Effect { Pos = victim.Pos - new Vector2(0, 8),
-                                      Kind = "blast", FrameTime = 0.05f });
+            // A foot soldier has its own falling-over frames (blocks 12..14 of
+            // its set) and leaves a body. NOTHING else is drawn on top.
+            //
+            // ⚠ CORRECTED 07.08.2026. This used to add a "blast" effect here,
+            // described in the comment as "just a small blast where it was hit".
+            // It is nothing of the kind: `blast` is ANIM.CWA sequence 550 at
+            // **60x79 pixels** — a tall FLAME, the same fire that burns on
+            // trees, and nearly three times the size of the 29x29 explosion.
+            // Every dying soldier briefly went up in a bonfire, which together
+            // with the hit report read as "a building is under attack".
+            // The falling-over frames were already running underneath it.
+            //
             // the original's own sound for this: @0x40d37c, in the hit routine
             // right after it prints "Hit to exploding infantry!!!"
             Audio.GameSounds.Play(Audio.GameSounds.InfantryDies);
@@ -2186,8 +3296,11 @@ public partial class MapEntityLayer : Node2D
         }
         _effects.Add(new Effect { Pos = victim.Pos - new Vector2(0, 6),
                                   Kind = "explosion", FrameTime = 0.06f });
+        // the rubble variant is picked from where it fell, so two wrecks side by
+        // side do not look stamped from the same mould — see DrawWreck
         _effects.Add(new Effect { Pos = victim.Pos, Kind = "wreck",
-                                  FrameTime = 0.25f, Hold = true });
+                                  FrameTime = 0.25f, Hold = true,
+                                  Variant = victim.Col * 3 + victim.Row });
     }
 
     // ---- ANIM.CWA effect sprites ----
@@ -2310,9 +3423,45 @@ public partial class MapEntityLayer : Node2D
             if (fx.Hold != ground) continue;
             var frames = EffectFrames(fx.Kind);
             if (frames.Count == 0) continue;
+            if (fx.Kind == "wreck") { DrawWreck(fx, frames); continue; }
             int f = Mathf.Min((int)(fx.Time / fx.FrameTime), frames.Count - 1);
             DrawTexture(frames[f], fx.Pos - _fxAnchor[fx.Kind]);
         }
+    }
+
+    /// <summary>
+    /// What a destroyed vehicle leaves behind.
+    ///
+    /// <para>⚠ CORRECTED 07.08.2026 — this was the reported "black patch on the
+    /// ground". ANIM.CWA sequence 0 was treated as a four-frame animation held on
+    /// its LAST frame forever, and that last picture is 451 pixels drawn in three
+    /// near-black colours — (0,0,0), (19,19,15), (31,27,27) — pasted opaque onto
+    /// the grass. Measured, not guessed: frames 0..2 are rubble at mean RGB
+    /// (89,81,76), (81,74,68), (92,77,73), frame 3 has mean RGB (0,0,0).</para>
+    ///
+    /// <para>It is not an animation frame at all. The four pictures are three
+    /// scattered-rubble variants plus one ground mark, and the rubble does not
+    /// decay into it — the visible pixel counts run 273, 234, 52, 451. A picture
+    /// built from three near-black shades is a DARKENING sprite: it belongs under
+    /// the rubble, blended, the way a scorch mark darkens the ground it lies on.
+    /// No other exported sequence has a black picture (explosion and blast are 0%
+    /// near-black), so this is specific to the wreck bank, not a shadow plane the
+    /// exporter should strip everywhere.</para>
+    ///
+    /// <para><b>OURS:</b> that the ground mark is drawn at 45% and that each wreck
+    /// keeps one rubble variant for good. The original's own wreck records carry a
+    /// non-zero byte at +0 (@0x77cae8, tested only for "slot in use" in the tick
+    /// @0x4396c0) which would be the natural place for the variant, but nothing
+    /// proves it selects a picture — so the choice here is by position, and it is
+    /// ours. The pixels are all the original's.</para>
+    /// </summary>
+    private void DrawWreck(Effect fx, List<Texture2D> frames)
+    {
+        var anchor = _fxAnchor["wreck"];
+        if (frames.Count > 1)
+            DrawTexture(frames[^1], fx.Pos - anchor, new Color(1, 1, 1, 0.45f));
+        var rubble = frames[Mathf.PosMod(fx.Variant, Mathf.Max(1, frames.Count - 1))];
+        DrawTexture(rubble, fx.Pos - anchor);
     }
 
     /// <summary>
@@ -3145,6 +4294,175 @@ public partial class MapEntityLayer : Node2D
         if (n > 0) { UpdatePanel(); QueueRedraw(); }
     }
 
+    // ---- what the production panel shows (see UI/BuildPanel.cs) -------------
+
+    /// <summary>The selected building, if it is one the view player can build
+    /// from. Only the player's own — a list over somebody else's factory would
+    /// be an offer that cannot be taken.</summary>
+    private Entity? Producer()
+    {
+        if (_selected < 0 || _selected >= _entities.Count) return null;
+        var e = _entities[_selected];
+        if (!e.IsBuilding || e.IsProp || e.Dead || e.Owner != ViewPlayer) return null;
+        return IsFactory(e) || IsDock(e) || e.BType == 9 ? e : null;
+    }
+
+    /// <summary>The panel's heading: the game's own word for the tab
+    /// ("Produktion", 0x501934) and what the building has to spend.</summary>
+    public string BuildPanelTitle()
+    {
+        var e = Producer();
+        if (e == null) return "";
+        if (IsFactory(e))
+            return $"PRODUKTION  W{e.StockW} F{e.StockF} S{e.StockS}";
+        int owner = e.Owner is >= 0 and <= 7 ? e.Owner : 0;
+        return $"PRODUKTION  ${_money[owner]}";
+    }
+
+    public bool BuildPanelWanted => Producer() != null;
+
+    /// <summary>Harness only: the factory <c>--demo-buildpanel</c> is waiting on.
+    /// The click happens through the panel the moment a line can be paid for, so
+    /// what the run proves is the panel and not a shortcut past it.</summary>
+    private int _panelPending = -1;
+
+    private void PollBuildPanelDemo()
+    {
+        if (_panelPending < 0 || _panelPending != _selected) return;
+        var rows = BuildPanelRows();
+        int pick = rows.FindIndex(r => r.Affordable);
+        if (pick < 0) return;
+        var b = _entities[_panelPending];
+        _panelPending = -1;
+        BuildPanelPick(pick);
+        GD.Print($"demo-buildpanel: nach {DebugClock:0.0}s bezahlbar — Zeile {pick + 1} " +
+                 $"\"{rows[pick].Name}\" ({rows[pick].Cost}) geklickt: {_order}; " +
+                 $"Lager jetzt W{b.StockW} F{b.StockF} S{b.StockS} T{b.StockT}, " +
+                 $"Bauzeit {b.BuildTime:0.0}s");
+    }
+
+    /// <summary>One row per thing this building can make, in the same order the
+    /// N key steps through, so the two ways of choosing cannot disagree.</summary>
+    public List<UI.BuildPanel.Row> BuildPanelRows()
+    {
+        var rows = new List<UI.BuildPanel.Row>();
+        var e = Producer();
+        if (e == null) return rows;
+
+        if (IsFactory(e) && _designs != null)
+        {
+            var menu = BuildableBy(e.BType);
+            for (int i = 0; i < menu.Count; i++)
+            {
+                var d = _designs[menu[i]];
+                rows.Add(new UI.BuildPanel.Row(
+                    d.Name, $"{d.CostW}/{d.CostF}/{d.CostS}",
+                    CanAfford(e, d), i == e.MenuIndex % Mathf.Max(1, menu.Count)));
+            }
+            return rows;
+        }
+        if (e.BType == 9)
+        {
+            var menu = AirMenu(e);
+            int owner = e.Owner is >= 0 and <= 7 ? e.Owner : 0;
+            for (int i = 0; i < menu.Count; i++)
+                rows.Add(new UI.BuildPanel.Row(
+                    menu[i].Name, $"${HeliPrice}", _money[owner] >= HeliPrice,
+                    i == e.MenuIndex % Mathf.Max(1, menu.Count)));
+            return rows;
+        }
+        if (IsDock(e))
+        {
+            // a dock spends the linked Schiffswerft's parts, not its own and not
+            // money — @0x44b253 / @0x4b2b20, and BuildShip does the same
+            var menu = ShipMenu(e);
+            int yi = ShipyardOf(e);
+            var yard = yi >= 0 ? _entities[yi] : null;
+            for (int i = 0; i < menu.Count; i++)
+            {
+                var d = menu[i];
+                bool pay = yard != null && yard.StockW >= d.CostW &&
+                           yard.StockF >= d.CostF && yard.StockS >= d.CostS;
+                rows.Add(new UI.BuildPanel.Row(
+                    d.Name, $"{d.CostW}/{d.CostF}/{d.CostS}", pay,
+                    i == e.MenuIndex % Mathf.Max(1, menu.Count)));
+            }
+        }
+        return rows;
+    }
+
+    /// <summary>A click on row <paramref name="i"/>: make it the pick, then
+    /// order it through the same path the B key uses, so nothing about paying,
+    /// queueing or refusing is duplicated here.</summary>
+    public void BuildPanelPick(int i)
+    {
+        var e = Producer();
+        if (e == null || i < 0) return;
+        e.MenuIndex = i;
+        _sel.Clear();
+        _sel.Add(_selected);
+        ProduceFromSelection();
+        UpdatePanel();
+        QueueRedraw();
+    }
+
+    /// <summary>
+    /// <c>--demo-buildpanel</c>: select one of the view player's factories so the
+    /// production list has something to show, and order the first affordable
+    /// line through the panel's own click path — so what is tested is the
+    /// panel, not a shortcut past it.
+    /// </summary>
+    public Vector2? DebugDemoBuildPanel()
+    {
+        int idx = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (!e.IsBuilding || e.IsProp || e.Dead) continue;
+            if (!IsFactory(e) && !IsDock(e) && e.BType != 9) continue;
+            if (e.Owner is < 0 or > 7) continue;
+            // the viewed player first; anybody's factory rather than none
+            if (e.Owner == ViewPlayer) { idx = i; break; }
+            if (idx < 0) idx = i;
+        }
+        if (idx < 0) { GD.Print("demo-buildpanel: keine Fabrik auf dieser Karte"); return null; }
+
+        var b = _entities[idx];
+        if (b.Owner != ViewPlayer)
+        {
+            GD.Print($"demo-buildpanel: keine eigene Fabrik — die Liste zeigt nur eigene, " +
+                     $"also wird P{b.Owner}s {BuildingTypeName(b.BType)} uebernommen");
+            ViewPlayer = b.Owner;
+        }
+        _selected = idx;
+        _sel.Clear(); _sel.Add(idx); SetPrimary();
+        UpdatePanel();
+
+        var rows = BuildPanelRows();
+        GD.Print($"demo-buildpanel: {b.Name} ({BuildingTypeName(b.BType)}) P{b.Owner}, " +
+                 $"Lager W{b.StockW} F{b.StockF} S{b.StockS} T{b.StockT}; " +
+                 $"{rows.Count} Zeilen: " +
+                 string.Join(", ", rows.ConvertAll(r =>
+                     $"{r.Name} {r.Cost}{(r.Affordable ? "" : " (zu teuer)")}")));
+
+        int pick = rows.FindIndex(r => r.Affordable);
+        if (pick < 0)
+        {
+            // a factory starts with Terranium and NO parts — that is the
+            // original's own fill (Simulation/Resources.cs), so nothing is
+            // affordable at t=0 and the click has to wait for the first parts
+            _panelPending = idx;
+            GD.Print("demo-buildpanel: noch nichts bezahlbar — die Fabrik hat " +
+                     "Terranium, aber keine Teile; es wird gewartet");
+            return b.Pos;
+        }
+        BuildPanelPick(pick);
+        GD.Print($"demo-buildpanel: Zeile {pick + 1} \"{rows[pick].Name}\" geklickt — " +
+                 $"{_order}; Lager jetzt W{b.StockW} F{b.StockF} S{b.StockS}, " +
+                 $"Bauzeit {b.BuildTime:0.0}s");
+        return b.Pos;
+    }
+
     /// <summary>Name of what the selected factory would build next.</summary>
     private string MenuPick(Entity e)
     {
@@ -3515,7 +4833,7 @@ public partial class MapEntityLayer : Node2D
         d ??= menu[0];
 
         var want = new Vector2I(dock.Col, dock.Row + 1);
-        var cell = _nav.NearestFree(want, Simulation.NavGrid.Domain.Naval);
+        var cell = _nav.NearestFree(want, Simulation.NavGrid.MoveClass.Ship);
         if (cell == null) { dock.BuildTime = 1f; return; }   // no water free yet
         int el = ElevOf(cell.Value.X, cell.Value.Y);
         var u = new Entity
@@ -3532,7 +4850,7 @@ public partial class MapEntityLayer : Node2D
             Attack = d.Attack, Defence = d.Defence,
             Weapon = d.WeaponComp,
             Facing = DefaultFacing, Mobile = true,
-            Domain = Simulation.NavGrid.Domain.Naval,
+            Move = Simulation.NavGrid.MoveClass.Ship,
             Footprint = CellRect(_ox, _oy, cell.Value.X, cell.Value.Y, el),
         };
         u.Pos = CellCenter(u.Col, u.Row);
@@ -3701,13 +5019,19 @@ public partial class MapEntityLayer : Node2D
     /// <summary>How often a Nachschub-Posten serviced somebody (harness).</summary>
     public int SupplyPostRuns;
 
-    private void UpdateEconomy(Entity e, float dt)
+    private void UpdateEconomy(int index, Entity e, float dt)
     {
         if (e.Dead) return;
         e.EconTimer -= dt;
         if (e.EconTimer > 0f) return;
         e.EconTimer = EconTick;
         e.Ticks += TickScale;      // Ticks counts ORIGINAL game ticks
+
+        // being taken: the original does this on the building's own tick too,
+        // and its duration is counted in the same original ticks (see
+        // Simulation/Capture.cs)
+        CaptureTick(index, e, TickScale);
+        if (e.Dead) return;
 
         RearmNeighbours(e);
         SupplyPostService(e);
@@ -4145,7 +5469,7 @@ public partial class MapEntityLayer : Node2D
 
     private void UpdateProduction(int i, Entity e, float dt)
     {
-        UpdateEconomy(e, dt);
+        UpdateEconomy(i, e, dt);
         if (IsDock(e))                       // a Hafen launches, it does not build
         {
             if (e.BuildTime <= 0f || e.Dead) return;
@@ -4158,7 +5482,7 @@ public partial class MapEntityLayer : Node2D
         if (e.BuildTime > 0f) return;
 
         var d = _designs[e.BuildIndex % _designs.Count];
-        var cell = _nav.NearestFree(new Vector2I(e.Col, e.Row), Simulation.NavGrid.Domain.Land);
+        var cell = _nav.NearestFree(new Vector2I(e.Col, e.Row), Simulation.NavGrid.MoveClass.Vehicle);
         if (cell == null) { e.BuildTime = 1f; return; }   // blocked: try again shortly
         NoteEvent(e, $"{d.Name} fertig");
 
@@ -4190,7 +5514,17 @@ public partial class MapEntityLayer : Node2D
             AmmoMax = ammo, Ammo = ammo,
             Range = d.Range, Sight = d.Sight, Reload = d.Reload, Speed = d.Speed,
             Facing = DefaultFacing, Mobile = true,
-            Domain = Simulation.NavGrid.Domain.Land,
+            // ⚠ CORRECTED 07.08.2026 — this was hard-wired to Vehicle, so a
+            // unit off the line walked over the same ground as a wheeled one no
+            // matter what it stood on. A LEGGED chassis (0x11) and a HOVER (7)
+            // have their own class, and the map path has always asked for it
+            // via ClassOf; only the production path did not.
+            //
+            // This is a PASSABILITY fix, not a speed fix: TerrainCost only
+            // singles out Ship, so the class barely touches how fast a unit
+            // moves. The report "the AI's spiders move far too fast" is NOT
+            // explained by it — see the handoff.
+            Move = Simulation.NavGrid.ClassOf(-1, d.Derived.ChassisComponent),
             Footprint = CellRect(_ox, _oy, cell.Value.X, cell.Value.Y, ElevOf(cell.Value.X, cell.Value.Y)),
         };
         u.Pos = CellCenter(u.Col, u.Row);
@@ -4219,6 +5553,80 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     /// <param name="minDist">smallest acceptable distance in tiles — pick a
     /// distant pair to watch a unit drive in while its turret already tracks.</param>
+    /// <summary>
+    /// Harness for the infantry rule: find a vehicle and the nearest foot
+    /// soldier that is NOT its friend, and drive the vehicle straight at him.
+    /// The route must go THROUGH his cell — a soldier does not block one — and
+    /// he must be dead when it arrives (`prejet` @0x412980 / @0x412a50). The
+    /// friendly case is reported alongside: those are driven through and live.
+    /// </summary>
+    public Vector2? DebugDemoCrush()
+    {
+        if (_nav == null) return null;
+        int bestV = -1, bestF = -1;
+        float best = float.MaxValue;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var v = _entities[i];
+            if (!v.Mobile || v.Dead || v.Infantry >= 0 ||
+                v.Move != Simulation.NavGrid.MoveClass.Vehicle) continue;
+            for (int j = 0; j < _entities.Count; j++)
+            {
+                var f = _entities[j];
+                if (f.Infantry < 0 || f.Dead || !IsHostile(v, f)) continue;
+                float d = CellDistance(v, f);
+                if (d < best) { best = d; bestV = i; bestF = j; }
+            }
+        }
+        if (bestV < 0) { GD.Print("demo-crush: kein Fahrzeug mit feindlicher Infanterie in Sicht"); return null; }
+
+        var veh = _entities[bestV];
+        var foot = _entities[bestF];
+        int friends = 0, foes = 0;
+        foreach (var e in _entities)
+            if (e.Infantry >= 0 && !e.Dead) { if (IsHostile(veh, e)) foes++; else friends++; }
+
+        var cell = new Vector2I(foot.Col, foot.Row);
+        bool free = _nav.IsFree(cell.X, cell.Y, veh.Move, bestV);
+        var path = _nav.FindPath(new Vector2I(veh.Col, veh.Row), cell, veh.Move, bestV);
+        bool onto = path != null && path.Count > 0 && path[^1] == cell;
+
+        // The harness takes the gun off the vehicle. Otherwise it shoots the man
+        // on the way in and the run proves nothing about driving over him — the
+        // first attempt did exactly that and reported him dead with the crush
+        // counter still at zero.
+        veh.Weapon = 0;
+        veh.Target = -1;
+
+        _sel.Clear(); _sel.Add(bestV); SetPrimary();
+        if (path != null) { veh.Path = path; veh.PathIdx = 0; veh.Goal = cell; veh.Ordered = true; }
+        _crushWatch = bestF;
+        _crushDriver = bestV;
+        _order = $"crush demo: slot {veh.Slot} -> Infanterie slot {foot.Slot}";
+        GD.Print($"demo-crush: Fahrzeug slot {veh.Slot} (P{veh.Owner}) bei ({veh.Col},{veh.Row}) " +
+                 $"auf Infanterie slot {foot.Slot} (P{foot.Owner}) bei ({foot.Col},{foot.Row}); " +
+                 $"Zelle frei fuer das Fahrzeug: {(free ? "ja" : "NEIN")}; " +
+                 $"Weg endet auf der Zelle: {(onto ? "ja" : "NEIN")} " +
+                 $"({(path == null ? "kein Weg" : path.Count + " Schritte")}); " +
+                 $"auf der Karte {foes} feindliche und {friends} eigene Fussoldaten");
+        return veh.Pos;
+    }
+
+    /// <summary>The foot soldier the crush demo is driving at, and the driver.</summary>
+    private int _crushWatch = -1, _crushDriver = -1;
+
+    /// <summary>Closing line of the crush demo, printed when the run ends.</summary>
+    public string CrushReport()
+    {
+        if (_crushWatch < 0 || _crushWatch >= _entities.Count) return "";
+        var f = _entities[_crushWatch];
+        string where = _crushDriver >= 0 && _crushDriver < _entities.Count
+            ? $"Fahrzeug steht auf ({_entities[_crushDriver].Col},{_entities[_crushDriver].Row}), " +
+              $"Ziel war ({f.Col},{f.Row}); " : "";
+        return $"crush: {where}Infanterie slot {f.Slot} " +
+               $"{(f.Dead ? "liegt" : "steht noch")}; {_crushed} ueberfahren";
+    }
+
     public Vector2? DebugDemoFight(float minDist = 0f)
     {
         int bestA = -1, bestB = -1;
@@ -4804,7 +6212,7 @@ public partial class MapEntityLayer : Node2D
     {
         if (_nav == null) return null;
         int seed = _entities.FindIndex(e => e.Mobile && !e.Dead && e.Owner == ViewPlayer &&
-                                            _nav.IsWalkable(e.Col, e.Row, e.Domain));
+                                            _nav.IsWalkable(e.Col, e.Row, e.Move));
         if (seed < 0) seed = _entities.FindIndex(e => e.Mobile && !e.Dead);
         if (seed < 0) { GD.Print("demo-queue: keine bewegliche Einheit"); return null; }
         var s = _entities[seed];
@@ -4825,8 +6233,8 @@ public partial class MapEntityLayer : Node2D
             {
                 if (goals.Count >= 3) break;
                 var c = new Vector2I(s.Col + d.X, s.Row + d.Y);
-                if (goals.Contains(c) || !_nav.IsWalkable(c.X, c.Y, s.Domain)) continue;
-                var probe = _nav.FindPath(from, c, s.Domain, seed);
+                if (goals.Contains(c) || !_nav.IsWalkable(c.X, c.Y, s.Move)) continue;
+                var probe = _nav.FindPath(from, c, s.Move, seed);
                 if (probe == null || probe.Count == 0) continue;
                 goals.Add(c);
             }
@@ -4914,6 +6322,67 @@ public partial class MapEntityLayer : Node2D
         return sb.ToString();
     }
 
+    /// <summary>What the info panel would say about every unit on this map —
+    /// the same reason as <see cref="VoiceWatchLine"/>: a scripted run cannot
+    /// click, so the panel is exercised instead of eyeballed.
+    ///
+    /// It counts the three things that were wrong on 0.4.0: units whose weapon
+    /// has no name (the panel handed out component 24's name to all of them),
+    /// units with a magazine, and units with a fuel tank (which the panel never
+    /// printed at all).</summary>
+    public string PanelWatchLine()
+    {
+        LoadWeapons();
+        int units = 0, unnamed = 0, withAmmo = 0, withFuel = 0;
+        var names = new HashSet<string>();
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Weapon == 0 && e.FuelMax == 0) continue;
+            units++;
+            if (e.Weapon != 0)
+            {
+                string n = WeaponOf(e.Weapon).Name;
+                names.Add(n);
+                if (n.StartsWith("BAUTEIL ")) unnamed++;
+            }
+            if (e.AmmoMax > 0) withAmmo++;
+            if (e.FuelMax > 0) withFuel++;
+        }
+        return $"panel: {units} Einheiten, {names.Count} verschiedene Waffennamen, " +
+               $"{unnamed} ohne Namen, {withAmmo} mit Munition, {withFuel} mit Sprit";
+    }
+
+    /// <summary>Which pose group every unit is drawn from, and whether the
+    /// export carries it. Exists because the answer used to be "group 0, all of
+    /// them" without anything saying so — the 59 Läufer on the maps are spread
+    /// over all eight of theirs.</summary>
+    public string PoseWatchLine()
+    {
+        var used = new SortedDictionary<int, int>();
+        int walkers = 0, missing = 0, drawn = 0, outOfRange = 0;
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Chassis < 0) continue;
+            drawn++;
+            int pose = PoseOf(e);
+            if (pose > 0) used[pose] = used.GetValueOrDefault(pose) + 1;
+            if (e.Chassis == Import.UnitsExporter.WalkerChassis) walkers++;
+            // a record that names a group its chassis does not own — counted,
+            // not hidden: it is the maps' own inconsistency, and it falls back
+            // to group 0 rather than reaching into the next part's frames
+            if (e.Pose > 0 && pose == 0) outOfRange++;
+            else if (pose > 0 && LoadUnitPart("hull", $"{e.UnitType}/g{pose}", e.Facing) == null
+                              && LoadUnitPart("hull", $"{e.UnitType}/g{pose}", 0) == null)
+                missing++;
+        }
+        var parts = new List<string>();
+        foreach (var kv in used) parts.Add($"g{kv.Key}:{kv.Value}");
+        return $"poses: {drawn} Einheiten, {used.Count} Gruppen ausser 0 " +
+               $"({(parts.Count > 0 ? string.Join(" ", parts) : "keine")}), " +
+               $"{missing} ohne Bild, {outOfRange} ausserhalb der Gruppen ihres Fahrwerks; " +
+               $"{walkers} Laeufer (Turm +{Import.UnitsExporter.WalkerLift} px)";
+    }
+
     /// <summary>Runs the voice rule over every unit on this map and reports how
     /// many of them can speak and whether any of the numbers it produces is
     /// missing from the bank. A scripted run cannot click a unit, so this is how
@@ -4949,10 +6418,10 @@ public partial class MapEntityLayer : Node2D
     public Vector2? DebugDemoOrder(bool naval = false)
     {
         if (_nav == null) return null;
-        var want = naval ? Simulation.NavGrid.Domain.Naval : Simulation.NavGrid.Domain.Land;
+        var want = naval ? Simulation.NavGrid.MoveClass.Ship : Simulation.NavGrid.MoveClass.Vehicle;
         // skip units that are stranded on terrain of the wrong domain (a few land
         // vehicles are placed out at sea — presumably loaded onto transports)
-        int seed = _entities.FindIndex(e => e.Mobile && e.Domain == want &&
+        int seed = _entities.FindIndex(e => e.Mobile && e.Move == want &&
                                             _nav.IsWalkable(e.Col, e.Row, want));
         if (seed < 0) return null;
         var s = _entities[seed];
@@ -4961,7 +6430,7 @@ public partial class MapEntityLayer : Node2D
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
-            if (e.Mobile && e.Domain == want &&
+            if (e.Mobile && e.Move == want &&
                 Mathf.Abs(e.Col - s.Col) <= 8 && Mathf.Abs(e.Row - s.Row) <= 8)
                 _sel.Add(i);
         }
@@ -4977,8 +6446,8 @@ public partial class MapEntityLayer : Node2D
         foreach (var d in offsets)
         {
             var c = new Vector2I(start.X + d.X, start.Y + d.Y);
-            if (!_nav.IsFree(c.X, c.Y, s.Domain)) continue;
-            if (_nav.FindPath(start, c, s.Domain) == null) continue;
+            if (!_nav.IsFree(c.X, c.Y, s.Move)) continue;
+            if (_nav.FindPath(start, c, s.Move) == null) continue;
             IssueMove(CellCenter(c.X, c.Y));
             GD.Print($"demo: {_sel.Count} units, {start} -> {c}  [{_order}]");
             return (CellCenter(start.X, start.Y) + CellCenter(c.X, c.Y)) / 2f;
@@ -5071,6 +6540,7 @@ public partial class MapEntityLayer : Node2D
                 sb.Append($" | mine dep={mine.Deposit} T={mine.StockT}");
             sb.Append(" || ");
         }
+        sb.Append(PanelWatchLine()).Append(" || ");
         sb.Append($"shots={DebugShots} effects={_effects.Count} tracers={_tracers.Count} " +
                   $"rockets={_shots.Count}");
         if (_shots.Count > 0)
@@ -5096,6 +6566,10 @@ public partial class MapEntityLayer : Node2D
         float dt = (float)delta;
         _clock += dt;
 
+        // ours: when a piece has run out, put the next one on
+        _musicTick += dt;
+        if (_musicTick >= 2f) { _musicTick = 0; Audio.MidiMusic.Poll(); }
+
         // the original's "unexplored" step, on its own slower beat
         _fogTick += dt;
         if (_fogTick >= FogEverySec)
@@ -5112,6 +6586,12 @@ public partial class MapEntityLayer : Node2D
 
         _acquireTimer -= dt;
         if (_acquireTimer <= 0f) { _acquireTimer = 0.4f; AutoAcquire(); }
+
+        // neutral units join whoever drives up to them — see Simulation/Takeover.cs
+        _takeoverTimer -= dt;
+        if (_takeoverTimer <= 0f) { _takeoverTimer = TakeoverEverySec; TakeoverTick(); }
+
+        PollBuildPanelDemo();
 
         // preview harness: start the scripted build as soon as the factory has
         // manufactured enough parts
@@ -5136,20 +6616,27 @@ public partial class MapEntityLayer : Node2D
             if (e.Reserved == null)
             {
                 var next = e.Path[e.PathIdx];
-                if (!_nav.IsFree(next.X, next.Y, e.Domain, i))
+                if (!_nav.IsFree(next.X, next.Y, e.Move, i))
                 {
                     // someone is in the way: wait briefly, then look for a new route
                     e.WaitTime += dt;
                     if (e.WaitTime > 0.7f)
                     {
                         e.WaitTime = 0;
-                        var repath = _nav.FindPath(new Vector2I(e.Col, e.Row), e.Goal, e.Domain, i);
+                        var repath = _nav.FindPath(new Vector2I(e.Col, e.Row), e.Goal, e.Move, i);
                         if (repath == null || repath.Count == 0) e.Path = null;
                         else { e.Path = repath; e.PathIdx = 0; }
                     }
                     continue;
                 }
-                _nav.SetOccupant(next.X, next.Y, i);
+                // a foot soldier in the target cell does not stop the move; the
+                // original either drives through him (`pratelska_infa`
+                // @0x433fe0, all friendly) or over him (`prejet` @0x412980,
+                // none friendly, and @0x412a50 clears the cell afterwards)
+                int foot = _nav.CrushableAt(next.X, next.Y, i);
+                if (foot >= 0) RunOverFoot(i, e, foot);
+
+                _nav.SetOccupant(next.X, next.Y, i, e.Infantry >= 0);
                 e.Reserved = next;
                 e.WaitTime = 0;
             }
@@ -5159,7 +6646,7 @@ public partial class MapEntityLayer : Node2D
             Vector2 d = dest - e.Pos;
             float dist = d.Length();
             // same factor the path cost uses, so sand really is slower on screen
-            float step = SpeedOf(e) * dt / _nav.TerrainCost(target.X, target.Y, e.Domain);
+            float step = SpeedOf(e) * dt / _nav.TerrainCost(target.X, target.Y, e.Move);
             moved = true;
 
             if (dist > 0.01f) e.Facing = DirToFacing(d);
@@ -5262,13 +6749,13 @@ public partial class MapEntityLayer : Node2D
         return "?";
     }
 
-    /// <summary>Human-readable sec2 terrain class.</summary>
-    private static string TerrainName(int cls) => cls switch
+    /// <summary>Human-readable imap ground class (Can_go @0x4055D0).</summary>
+    private static string TerrainName(Simulation.NavGrid.Ground g) => g switch
     {
-        Simulation.NavGrid.ClassWater => "water/impassable",
-        Simulation.NavGrid.ClassShore => "shore/sand (slow)",
-        Simulation.NavGrid.ClassSpecial => "special land",
-        _ => "open land",
+        Simulation.NavGrid.Ground.Water => "Wasser (Schiff/Hover)",
+        Simulation.NavGrid.Ground.Rough => "grob (Fuss/Hover)",
+        Simulation.NavGrid.Ground.Blocked => "gesperrt",
+        _ => "frei",
     };
 
     private static Color OwnerColor(int owner)
@@ -5321,6 +6808,134 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Which animation block a foot soldier is showing right now.</summary>
     private const float InfDeathFps = 5f;
 
+    /// <summary>
+    /// `--inf-anim-check` — does a walking foot soldier actually cycle through
+    /// its eight blocks?
+    ///
+    /// <para>The reading of the infantry blocks (0..7 walk cycle, 9..10 fire, 11
+    /// stand, 12..14 fall/die/corpse) has been settled since 07.08. and
+    /// <see cref="InfBlock"/> looks right on paper. What was never checked is
+    /// whether it does anything <b>in a running game</b>: the walk branch hangs
+    /// on <c>e.Path != null</c>, and if the path is cleared earlier than assumed
+    /// the soldier stands still while it moves. That is the open half of
+    /// Fehlerliste Punkt 2, and looking at it was not enough — a foot soldier is
+    /// twenty pixels tall.</para>
+    ///
+    /// <para>So this samples instead: every call, for every foot soldier, it
+    /// records the block and whether a path was set. Over a run one then reads
+    /// off how many <b>distinct</b> blocks each soldier showed while walking.
+    /// Eight means the cycle runs; one means it is frozen.</para>
+    /// </summary>
+    public void InfAnimSample()
+    {
+        // The check has to make them WALK itself. `--demo-inf` sends the
+        // soldiers into a firefight, which is a different branch of InfBlock,
+        // and the first run of this measured 27 soldiers with zero paths.
+        if (!_infWalkOrdered)
+        {
+            _infWalkOrdered = true;
+            _sel.Clear();
+            for (int i = 0; i < _entities.Count; i++)
+            {
+                var e = _entities[i];
+                if (e.Infantry < 0 || e.Dead || e.Owner != ViewPlayer) continue;
+                e.Target = -1;                       // drop any fire order
+                _sel.Add(i);
+            }
+            _infOrdered = _sel.Count;
+            if (_sel.Count > 0 && _nav != null)
+            {
+                int fi = -1;
+                foreach (int k in _sel) { fi = k; break; }
+                var f = _entities[fi];
+                // ⚠ Do not just pick a cell twelve away and hope: on map_05 that
+                // lands in the water and every soldier reports "no route", which
+                // looks exactly like a broken walk cycle. Ask the grid first and
+                // take the first goal that really has a path.
+                var dirs = new[] { (12, 0), (-12, 0), (0, 12), (0, -12),
+                                   (8, 8), (-8, -8), (8, -8), (-8, 8) };
+                foreach (var (dc, dr) in dirs)
+                {
+                    var goal = new Vector2I(Mathf.Clamp(f.Col + dc, 0, _nav.Width - 1),
+                                            Mathf.Clamp(f.Row + dr, 0, _nav.Height - 1));
+                    if (_nav.FindPath(new Vector2I(f.Col, f.Row), goal, f.Move, fi) == null) continue;
+                    IssueMove(new Vector2(goal.X * Import.MapBaker.TileW,
+                                          goal.Y * Import.MapBaker.TileH));
+                    _infOrderNote = $"Ziel ({goal.X},{goal.Y}) — {_order}";
+                    break;
+                }
+                if (_infOrderNote.Length == 0)
+                    _infOrderNote = "kein erreichbares Ziel in acht Richtungen gefunden";
+            }
+            else
+            {
+                // say WHY nobody was ordered instead of reporting a silent zero
+                var owners = new SortedDictionary<int, int>();
+                foreach (var e in _entities)
+                    if (e.Infantry >= 0 && !e.Dead)
+                        owners[e.Owner] = owners.GetValueOrDefault(e.Owner) + 1;
+                _infOrderNote = $"niemand ausgewaehlt — betrachteter Spieler {ViewPlayer}, " +
+                    "Infanterie gehoert " +
+                    string.Join(", ", System.Linq.Enumerable.Select(owners,
+                        kv => $"{kv.Value}x Spieler {kv.Key}"));
+            }
+        }
+
+        foreach (var e in _entities)
+        {
+            if (e.Infantry < 0 || e.Dead) continue;
+            if (!_infSeen.TryGetValue(e.Slot, out var s))
+                s = _infSeen[e.Slot] = new InfAnimTally();
+            s.Samples++;
+            if (e.Path != null)
+            {
+                s.Walking++;
+                s.WalkBlocks.Add(InfBlock(e));
+            }
+            else s.Standing++;
+        }
+    }
+
+    private sealed class InfAnimTally
+    {
+        public int Samples, Walking, Standing;
+        public readonly SortedSet<int> WalkBlocks = new();
+    }
+
+    private readonly Dictionary<int, InfAnimTally> _infSeen = new();
+    private bool _infWalkOrdered;
+    private int _infOrdered;
+    private string _infOrderNote = "";
+
+    public string InfAnimReport()
+    {
+        if (_infSeen.Count == 0) return "inf-anim-check: keine Infanterie abgetastet";
+        var sb = new System.Text.StringBuilder();
+        int moved = 0, cycled = 0, frozen = 0;
+        foreach (var kv in _infSeen)
+        {
+            var s = kv.Value;
+            if (s.Walking == 0) continue;
+            moved++;
+            if (s.WalkBlocks.Count >= 8) cycled++;
+            else if (s.WalkBlocks.Count <= 1) frozen++;
+        }
+        sb.Append($"inf-anim-check: {_infSeen.Count} Infanteristen abgetastet, ");
+        sb.Append($"{_infOrdered} in Marsch gesetzt, ");
+        sb.Append($"{moved} davon mit Pfad — {cycled} zeigen alle 8 Laufbilder, ");
+        sb.Append($"{frozen} stehen auf einem einzigen fest");
+        if (_infOrderNote.Length > 0) sb.Append($"\n   Marschbefehl: {_infOrderNote}");
+        int shown = 0;
+        foreach (var kv in _infSeen)
+        {
+            var s = kv.Value;
+            if (s.Walking == 0 || shown++ >= 6) continue;
+            sb.Append($"\n   slot {kv.Key}: {s.Walking} Proben mit Pfad, {s.Standing} ohne, " +
+                      $"Bloecke [{string.Join(",", s.WalkBlocks)}]");
+        }
+        return sb.ToString();
+    }
+
     private int InfBlock(Entity e)
     {
         if (e.Dead)   // fall over once, then lie there
@@ -5334,6 +6949,7 @@ public partial class MapEntityLayer : Node2D
     }
 
     private float _clock;
+    private float _musicTick;
 
     /// <summary>One of the 24 infantry sets from ROBO.CWR's aux table.</summary>
     private Texture2D? GetInfantryTexture(int set, int facing, int block = InfIdleBlock)
@@ -5395,9 +7011,19 @@ public partial class MapEntityLayer : Node2D
     /// directionless chassis would vanish the moment it faced anything but 0.
     /// Falling back to facing 0 draws what the bank has, which is what the
     /// original draws too — it never turns these at all.</summary>
-    private Texture2D? GetHullTexture(int unitType, int facing)
-        => LoadUnitPart("hull", unitType.ToString(), facing)
-           ?? (facing != 0 ? LoadUnitPart("hull", unitType.ToString(), 0) : null);
+    /// <para>`pose` is the chassis' frame group out of entity +0x11 — see
+    /// <see cref="Entity.Pose"/>. Group 0 keeps the old file name, the rest sit
+    /// in g&lt;n&gt;/ beside it; a chassis that owns one group ignores it.</para>
+    private Texture2D? GetHullTexture(int unitType, int facing, int pose = 0)
+    {
+        string ut = unitType.ToString();
+        string dir = pose > 0 ? $"{ut}/g{pose}" : ut;
+        return LoadUnitPart("hull", dir, facing)
+               ?? (facing != 0 ? LoadUnitPart("hull", dir, 0) : null)
+               // a pose the export does not carry falls back to group 0 rather
+               // than making the unit disappear
+               ?? (pose > 0 ? GetHullTexture(unitType, facing) : null);
+    }
 
     /// <summary>Equipment rows 65..88 of the stats table, read out of a .DM's
     /// own copy (sec46). Only the ones that occur on placed units are listed;
@@ -5424,6 +7050,22 @@ public partial class MapEntityLayer : Node2D
     /// from the player's own GAME.EXE — see
     /// <see cref="Import.ExeTables.TurretMountTable"/>.</summary>
     private static Dictionary<int, Vector2I[]>? _mount;
+
+    /// <summary>unit_type -> how many pose groups its chassis owns, out of the
+    /// same file. A record can name a group its chassis does not have — the
+    /// maps put 1..7 in +0x11 on wheeled units whose part owns a single group —
+    /// and the game's own mask would run into the NEXT part's frames. Bounded
+    /// here instead, which is OUR safeguard and says so.</summary>
+    private static readonly Dictionary<int, int> _poseGroups = new();
+
+    /// <summary>The pose a unit is actually drawn from — its +0x11 bounded by
+    /// what its chassis owns.</summary>
+    private static int PoseOf(Entity e)
+    {
+        LoadMounts();
+        int g = _poseGroups.TryGetValue(e.UnitType, out int n) ? n : 1;
+        return e.Pose > 0 && e.Pose < g ? e.Pose : 0;
+    }
 
     /// <summary>The game's own rule, @0x429CCB..0x429D1B: the turret is drawn
     /// at the hull's place plus <c>(mount[0] + mount[k]) / 2</c>, where k is the
@@ -5455,6 +7097,8 @@ public partial class MapEntityLayer : Node2D
             foreach (var item in group.EnumerateObject())
             {
                 if (!int.TryParse(item.Name, out int ut)) continue;
+                if (item.Value.TryGetProperty("groups", out var gv))
+                    _poseGroups[ut] = System.Math.Max(1, gv.GetInt32());
                 if (!item.Value.TryGetProperty("mount", out var arr)) continue;
                 var row = new List<Vector2I>();
                 foreach (var p in arr.EnumerateArray())
@@ -5490,11 +7134,22 @@ public partial class MapEntityLayer : Node2D
     public void ToggleSprites() { _drawSprites = !_drawSprites; QueueRedraw(); }
 
     // ---- hit-testing ----
+    /// <summary>
+    /// The entity under a point, frontmost first.
+    ///
+    /// <para>⚠ CORRECTED 07.08.2026 — the dead used to be picked too. They could
+    /// not be COMMANDED (<see cref="Commandable"/> excludes them), but
+    /// <see cref="SelectAt"/> still put them in the panel as "ZERSTOERT", they
+    /// still drew a hover frame, and worst of all a corpse lying on the same tile
+    /// as a live unit won the pick and swallowed the click. A body is scenery: it
+    /// is drawn, and that is all.</para>
+    /// </summary>
     private int Pick(Vector2 p)
     {
         int best = -1, bestRow = int.MinValue;
         for (int i = 0; i < _entities.Count; i++)
-            if (BodyRect(_entities[i]).HasPoint(p) && _entities[i].Row > bestRow)
+            if (!_entities[i].Dead &&
+                BodyRect(_entities[i]).HasPoint(p) && _entities[i].Row > bestRow)
             { best = i; bestRow = _entities[i].Row; }
         return best;
     }
@@ -5937,13 +7592,13 @@ public partial class MapEntityLayer : Node2D
         if (_selected < 0)
         {
             // idle panel: mission + selection summary, so the frame is never empty
-            _panel.Visible = true;
+            _panel.Visible = _panelTextOn;
             _panel.Text = $"{_mission}\n{_entities.Count} EINHEITEN\n" +
                           (_order.Length > 0 ? _order.ToUpper() : "KEINE AUSWAHL");
             return;
         }
         var e = _entities[_selected];
-        _panel.Visible = true;
+        _panel.Visible = _panelTextOn;
         if (e.IsProp)
         {
             _panel.Text = $"PROP {e.UnitType}\nZELLE {e.Col},{e.Row}\nHOEHE {e.Elev}";
@@ -5953,8 +7608,12 @@ public partial class MapEntityLayer : Node2D
             _panel.Text =
                 $"{e.Name.ToUpper()}\n" +
                 $"{BuildingTypeName(e.BType).ToUpper()}\n" +
-                $"{(e.Owner == 11 ? "NEUTRAL" : e.Owner < 0 ? "-" : "SPIELER " + e.Owner)}\n" +
-                $"HP {e.Hp}/{e.HpMax}\n" +
+                // while it is being taken the panel shows the flickering owner
+                // (+0x3d), the way the original's does
+                $"{OwnerWord(e.CaptureProgress > 0 && e.ShownOwner >= 0 ? e.ShownOwner : e.Owner)}\n" +
+                (e.CaptureProgress > 0 && e.CaptureTotal > 0
+                    ? $"BESETZT {e.CaptureProgress * 100 / e.CaptureTotal}% P{e.Intruder}\n"
+                    : $"HP {e.Hp}/{e.HpMax}\n") +
                 // a deposit (sec28) beats the part stock, which beats the cell
                 (e.Deposit >= 0 ? $"{GradeWords[GradeOf(e)].ToUpper()} {e.Deposit}\n"
                  // a Flughafen reports its hangar: how many aircraft of what
@@ -5995,26 +7654,42 @@ public partial class MapEntityLayer : Node2D
         }
         else if (_compactPanel)
         {
-            // six short lines is what the original panel display box fits
+            // Six short lines is what the original panel display box fits, and
+            // the words are the game's own: ENERGIE (0x5019b0), MUNITION
+            // (0x5019ec) and SPRIT (0x5019f8), which the fullest of the
+            // original's panel routines (0x46a837..0x46b078) prints in that
+            // order together with Stärke, Nachladen, Verteidigung and Reichw.
+            //
+            // ⚠ SPRIT was missing until 2026-08-06. The value was read all
+            // along (entity +0x2e against the tank at +0x30) but only the dead
+            // debug branch below ever printed it, and PlacePanel forces this
+            // branch — so the player never saw the fuel gauge the original has.
             string st = OrderOf(e);
             if (e.Target >= 0 && !e.DugIn)
                 st += $" {CellDistance(e, _entities[e.Target]):0.0}";
             else if (e.Path != null) st += $" {e.Path.Count - e.PathIdx}";
             if (e.Orders.Count > 0) st += $" +{e.Orders.Count}";   // queued behind it
             var wp2 = WeaponOf(e.Weapon);
+            string levels = (e.AmmoMax > 0 ? $"MUNITION {e.Ammo}/{e.AmmoMax}" : "")
+                          + (e.AmmoMax > 0 && e.FuelMax > 0 ? "  " : "")
+                          + (e.FuelMax > 0 ? $"SPRIT {e.Fuel}/{e.FuelMax}" : "");
+            // The game stops a unit at an empty tank and says "no fuel"
+            // (@0x407ab8); an empty magazine is the other thing worth shouting.
+            string warn = e.AmmoMax > 0 && e.Ammo <= 0 ? "KEINE MUNITION"
+                        : e.FuelMax > 0 && e.Fuel <= 0 ? "KEIN SPRIT"
+                        : st;
             _panel.Text =
                 $"{LabelOf(e.UnitType).ToUpper()}\n" +
                 $"SPIELER {(e.Owner < 0 ? "?" : e.Owner.ToString())}  TEAM {e.Team}\n" +
-                $"HP {e.Hp}/{e.HpMax}\n" +
-                $"{(e.Weapon == 0 ? "UNBEWAFFNET" : wp2.Name.ToUpper())}" +
-                (e.AmmoMax > 0 ? $"  {e.Ammo}/{e.AmmoMax}" : "") + "\n" +
-                $"ZELLE {e.Col},{e.Row}  T{SpeedOf(e) / PxPerSpeedUnit:0}\n" +
-                (e.AmmoMax > 0 && e.Ammo <= 0 ? "KEINE MUNITION" : st);
+                $"ENERGIE {e.Hp}/{e.HpMax}\n" +
+                $"{(e.Weapon == 0 ? "UNBEWAFFNET" : wp2.Name.ToUpper())}\n" +
+                (levels.Length > 0 ? levels : $"ZELLE {e.Col},{e.Row}") + "\n" +
+                warn;
         }
         else
         {
             string owner = e.Owner < 0 ? "?" : $"P{e.Owner}";
-            bool stranded = e.Mobile && _nav != null && !_nav.IsWalkable(e.Col, e.Row, e.Domain);
+            bool stranded = e.Mobile && _nav != null && !_nav.IsWalkable(e.Col, e.Row, e.Move);
             string move = e.Dead ? "DESTROYED"
                 : e.Target >= 0
                     ? $"engaging slot {_entities[e.Target].Slot} " +
@@ -6026,8 +7701,14 @@ public partial class MapEntityLayer : Node2D
             var wp = WeaponOf(e.Weapon);
             string weapon = e.Weapon == 0 ? "unarmed"
                 : $"{wp.Name} (comp {e.Weapon}, dmg {wp.Damage}, range {wp.RangeTiles:0.#})";
-            string terrain = _nav == null ? "?" : TerrainName(_nav.ClassAt(e.Col, e.Row));
-            string domain = e.Domain == Simulation.NavGrid.Domain.Naval ? "naval" : "land";
+            string terrain = _nav == null ? "?" : TerrainName(_nav.GroundAt(e.Col, e.Row));
+            string domain = e.Move switch
+            {
+                Simulation.NavGrid.MoveClass.Ship => "Schiff",
+                Simulation.NavGrid.MoveClass.Hover => "Hover",
+                Simulation.NavGrid.MoveClass.Walker => "Fuss",
+                _ => "Fahrzeug",
+            };
             _panel.Text =
                 $"◈ ENTITY slot {e.Slot}   cell ({e.Col},{e.Row})  elev {e.Elev}\n" +
                 $"   unit_type {e.UnitType} ({LabelOf(e.UnitType)})   facing {e.Facing}\n" +
@@ -6051,6 +7732,9 @@ public partial class MapEntityLayer : Node2D
         // walkability debug overlay (blue = water, red = props) — key P
         if (_showNav && _navTex != null)
             DrawTextureRect(_navTex, _navRect, false);
+
+        // the build-site preview, under the sprites so units stay readable
+        DrawBuildPreview();
 
         // planned routes of the selected units, drawn under the sprites
         foreach (int i in _sel)
@@ -6094,6 +7778,14 @@ public partial class MapEntityLayer : Node2D
             }
         }
 
+        // Buildings first, in their own pass and back to front. They used to be
+        // baked into the map picture and therefore behind everything; drawing
+        // them here keeps exactly that order, so nothing about the look changes
+        // except that a destroyed one can now show its ruin.
+        if (_drawSprites && Patterns != null)
+            foreach (var b in BuildingsBackToFront())
+                DrawBuildingBody(b);
+
         // burnt-out wrecks stay on the ground, under everything alive
         DrawEffects(ground: true);
         DrawRangeRings();
@@ -6131,6 +7823,7 @@ public partial class MapEntityLayer : Node2D
             // flag (key T), a health bar once damaged, and the selection box
             if (e.IsBuilding)
             {
+                DrawBuildingDoors(e);
                 if (_sel.Contains(i)) DrawSelectionBrackets(e.Pos, i == _selected, 15f, 10f);
                 continue;
             }
@@ -6160,7 +7853,7 @@ public partial class MapEntityLayer : Node2D
                     if (foot != null) { DrawTexture(foot, baseC - ComposedAnchor); continue; }
                 }
                 // hull + separately aimed turret (preferred)
-                var hull = GetHullTexture(e.UnitType, e.Facing);
+                var hull = GetHullTexture(e.UnitType, e.Facing, PoseOf(e));
                 if (hull != null)
                 {
                     DrawTexture(hull, baseC - ComposedAnchor);
@@ -6325,6 +8018,7 @@ public partial class MapEntityLayer : Node2D
         // muzzle flashes, explosions and tracers (ANIM.CWA)
         DrawEffects(ground: false);
         DrawOrderMarks();
+        DrawCaptureBars();
 
         // the fog goes over the battlefield and under the selection marks: what
         // is not watched is dimmed, what was never seen is black

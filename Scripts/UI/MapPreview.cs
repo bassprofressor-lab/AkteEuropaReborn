@@ -82,10 +82,14 @@ public static class MapPreview
     /// <summary>What the start slots of this map are worth, said before the
     /// player starts rather than found out afterwards.
     ///
-    /// Measured across the eight NET maps: only three of them give any slot a
-    /// building — NET01 (four slots, one each), NET06 (one slot, four) and
-    /// NET07 (three slots holding 1, 6 and 9). The rest hand out no structure
-    /// at all, so there a skirmish keeps the armies the map was drawn with.
+    /// ⚠ CORRECTED (0.4.0): the line used to count BUILDINGS, and a building is
+    /// not what lets a player build. A factory is — the Waffen-, Fahrwerk- or
+    /// Spezial-Fabrik, building types 2, 3 and 4. Measured across all 44 maps:
+    /// <b>none of the eight NET maps gives any slot a factory</b>, while the
+    /// campaign levels hold between 1 and 23. So NET07's "three built slots"
+    /// never meant a build-up was possible there, and saying so cost the player
+    /// a game in which he could do nothing at all.
+    ///
     /// The counts come from the same entities.json the game plays from, so this
     /// line cannot drift away from what actually happens.</summary>
     public static string Slots(string name)
@@ -100,7 +104,8 @@ public static class MapPreview
         // finalizable objects behind. A headless run that quits straight after
         // then died with an access violation in godotsharp_variant_destroy,
         // long after the work was done. Nothing here needs a Variant.
-        var per = new int[8];
+        var per = new int[8];      // buildings per slot
+        var fab = new int[8];      // of those, factories (types 2/3/4)
         try
         {
             using var doc = System.Text.Json.JsonDocument.Parse(f.GetAsText());
@@ -110,20 +115,33 @@ public static class MapPreview
             // only slots 0..7 are counted, anything else (11 = neutral, 255 =
             // none) is left alone rather than guessed at
             foreach (var b in arr.EnumerateArray())
-                if (b.TryGetProperty("owner", out var ov) &&
-                    ov.TryGetInt32(out int o) && o is >= 0 and < 8) per[o]++;
+            {
+                if (!b.TryGetProperty("owner", out var ov) ||
+                    !ov.TryGetInt32(out int o) || o is < 0 or >= 8) continue;
+                per[o]++;
+                if (b.TryGetProperty("type", out var tv) && tv.TryGetInt32(out int t) &&
+                    t is 2 or 3 or 4) fab[o]++;
+            }
         }
         catch (System.Exception e) { GD.PrintErr("Startplaetze: " + e.Message); return ""; }
+
+        var makers = new List<int>();
+        for (int i = 0; i < 8; i++) if (fab[i] > 0) makers.Add(i);
         var built = new List<int>();
         for (int i = 0; i < 8; i++) if (per[i] > 0) built.Add(i);
-        if (built.Count == 0)
-            return "Kein Startplatz hat ein Gebaeude — wird mit den Truppen der Karte gespielt";
+
+        if (makers.Count == 0)
+            return built.Count == 0
+                ? "Kein Startplatz hat ein Gebaeude — wird mit den Truppen der Karte gespielt"
+                : $"{built.Count} bebaute Startplaetze, aber KEINE Fabrik — " +
+                  "hier wird nicht gebaut, die Karte wird mit ihren Truppen gespielt";
 
         int lo = int.MaxValue, hi = 0;
-        foreach (int i in built) { lo = Mathf.Min(lo, per[i]); hi = Mathf.Max(hi, per[i]); }
-        string counts = string.Join("/", built.ConvertAll(i => per[i].ToString()));
+        foreach (int i in makers) { lo = Mathf.Min(lo, fab[i]); hi = Mathf.Max(hi, fab[i]); }
+        string counts = string.Join("/", makers.ConvertAll(i => fab[i].ToString()));
         float spread = (float)hi / lo;
-        return $"{built.Count} bebaute Startplaetze ({counts} Gebaeude)" +
-               (built.Count > 1 && spread >= 2f ? $" — unausgeglichen, {spread:0.0}:1" : "");
+        return $"{makers.Count} Startplaetze mit Fabrik ({counts}) — " +
+               $"je Platz bleiben {Rendering.MapEntityLayer.StarterTroop} Einheiten stehen" +
+               (makers.Count > 1 && spread >= 2f ? $"; unausgeglichen, {spread:0.0}:1" : "");
     }
 }

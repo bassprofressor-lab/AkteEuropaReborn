@@ -6,103 +6,171 @@ using Godot;
 using GDict = Godot.Collections.Dictionary<string, Godot.Variant>;
 
 /// <summary>
-/// Walkability grid + A* over a legacy CWM map, built from the baked map JSON.
+/// Walkability grid + A* over a legacy CWM map.
 ///
-/// TERRAIN CLASS — the CWM sec2 grid, read COLUMN-major (index = col*257 + row,
-/// same convention as sec6). That was the missing piece: read row-major it looks
-/// like noise, read correctly it is the game's own terrain map, proven against
-/// the baked pixels of all 23 maps:
-///   0 = water / impassable  (every water tile — ground code 0..7 — is class 0,
-///       with zero counter-examples; class 0 additionally covers the partly-wet
-///       shore transition tiles)
-///   1 = shore / sand        2 = open land        3 = special land
+/// THE TERRAIN IS THE GAME'S OWN. It comes out of <c>Can_go</c> @0x4055D0 — the
+/// routine every movement question goes through, named by its own debug line
+/// "can go, number:" @0x4f6754. It takes a unit slot and a direction (the 8-way
+/// table @0x4f5af0), and returns <b>0 no, 1 yes but someone has to give way,
+/// 2 free</b>.
 ///
-/// Further sources of impassability:
-///   * PROPS — cells flagged `object` (CWM code >= 10000: trees, walls, rocks,
-///     buildings). These are baked into the map picture and physically block.
-///   * CLIFFS — a step of >= <see cref="MaxClimb"/> elevation levels between two
-///     neighbouring cells; smaller steps just cost more.
-///   * ENTITIES — live units/buildings occupy their cell (dynamic layer).
+/// It asks exactly one map, the <b>imap</b> at 0xbdea80 (the game's own name,
+/// `imap[rx+px][ry+py]:` @0x4f66b4) = sec6 of the map file, 256x256 u16 column
+/// major. Three of its values are ground:
 ///
-/// DOMAIN — land units may not enter class 0, naval units may not leave it.
-/// Which units are naval was taken from the original placements, not from names:
-/// unit_types 150..153 stand on water on every map they appear on (45/45), while
-/// every other type is placed on land — see <c>MapEntityLayer.NavalTypes</c>.
+///   0xFFFE  free      — everyone
+///   0xFFFD  rough     — foot yes, hover only where the tile's flag byte is 0,
+///                       vehicles never
+///   0xFFFC  water     — ships and hover only
+///   0xFFFF, >= 14000  — the static object handles; they walk into the routine's
+///                       own `nothing` path @0x405586 and block everyone
+///
+/// It branches on entity <b>+0x0a</b> (jump table @0x40678c, six cases): case 0
+/// is the ordinary unit and splits again on the chassis <b>+0x0b</b> — 7 hover
+/// (@0x4056b9), 0x11 walker (@0x405973), anything else "normal chassis"
+/// (@0x405bd7) — and <b>case 4 is the ship</b> (@0x406669), whose only terrain
+/// test is 0xFFFC.
+///
+/// ⚠ TWO EARLIER READINGS WITHDRAWN.
+/// (1) "sec2 is the passability". It is not: Can_go never touches sec2. The
+///     zones stay zones (the Z overlay), the passability comes from the imap.
+///     On NET07 sec2 class 0 covers 7115 cells where the real water is 6452 —
+///     that difference is why land units used to drive into the sea.
+/// (2) "a cell with a prop on it blocks". It does not. Most object cells are
+///     0xFFFE, that is free (map_02: 498, map_14: 512, NET07: 312) — bridges
+///     and roads among them. That is why bridges used to be impassable.
+///
+/// OURS, and marked as such where it shows: <see cref="TerrainCost"/> (the
+/// original has no per-cell movement cost in this routine), the climb limit
+/// <see cref="MaxClimb"/>, and the ground under an occupied cell, which the imap
+/// cannot say — see CwmData.Terrain.
 /// </summary>
 public sealed class NavGrid
 {
-    /// <summary>Movement domain of a unit.</summary>
-    public enum Domain { Land = 0, Naval = 1 }
+    /// <summary>How a unit moves. The numbers are ours; what selects them is
+    /// the game's: entity +0x0a == 4 or 5 is a ship, otherwise the chassis at
+    /// +0x0b picks hover (7), walker (0x11) or the ordinary vehicle.</summary>
+    public enum MoveClass { Vehicle = 0, Walker = 1, Hover = 2, Ship = 3 }
 
-    /// <summary>Ground tile codes 0..7 are the animated water cycle (fallback
-    /// terrain source when a map has no sec2 grid).</summary>
+    /// <summary>The four ground classes Can_go distinguishes.</summary>
+    public enum Ground : byte { Free = 0, Rough = 1, Water = 2, Blocked = 3 }
+
+    /// <summary>Chassis (+0x0b) that Can_go singles out by name.</summary>
+    public const int ChassisHover = 7;
+    public const int ChassisWalker = 0x11;
+
+    /// <summary>Entity +0x0a values that take the ship branch (@0x406669,
+    /// @0x40671b) — both test the imap for 0xFFFC and nothing else.</summary>
+    public static bool ArtIsShip(int art) => art is 4 or 5;
+
+    /// <summary>The move class of a unit, the way Can_go picks its branch.</summary>
+    public static MoveClass ClassOf(int art, int chassis)
+        => ArtIsShip(art) ? MoveClass.Ship
+         : chassis == ChassisHover ? MoveClass.Hover
+         : chassis == ChassisWalker ? MoveClass.Walker
+         : MoveClass.Vehicle;
+
+    /// <summary>Ground tile codes 0..7 are the animated water cycle. Only used
+    /// when a map was exported before the terrain block existed.</summary>
     public const int WaterCodeMax = 7;
 
-    /// <summary>Elevation step (in levels) that a ground unit can no longer climb.</summary>
+    /// <summary>Elevation step (in levels) a ground unit can no longer climb.
+    /// OURS — the original has no such test in Can_go.</summary>
     public const int MaxClimb = 3;
-
-    // sec2 terrain classes
-    public const byte ClassWater = 0;
-    public const byte ClassShore = 1;
-    public const byte ClassLand = 2;
-    public const byte ClassSpecial = 3;
-
-    private const byte FreeCell = 0;
-    private const byte StaticBlock = 1;
 
     public int Width { get; private set; }
     public int Height { get; private set; }
-    public bool HasZones { get; private set; }
 
-    private byte[] _static = Array.Empty<byte>();   // props (never changes)
-    private byte[] _class = Array.Empty<byte>();    // sec2 terrain class
+    /// <summary>True once the real imap terrain has been laid over the fallback.</summary>
+    public bool HasTerrain { get; private set; }
+
+    /// <summary>Cells whose ground the importer had to infer from their occupant.</summary>
+    public int Inferred { get; private set; }
+
+    private byte[] _ground = Array.Empty<byte>();     // <see cref="Ground"/>
+    private byte[] _flag = Array.Empty<byte>();       // tile flag byte (slope 0..4)
     private byte[] _elev = Array.Empty<byte>();
-    private int[] _occupant = Array.Empty<int>();   // entity index or -1
+    private int[] _occupant = Array.Empty<int>();     // entity index or -1
+    private bool[] _crushable = Array.Empty<bool>();  // occupant is a foot soldier
 
     public bool InBounds(int c, int r) => c >= 0 && r >= 0 && c < Width && r < Height;
 
     private int Idx(int c, int r) => r * Width + c;
 
-    public byte ClassAt(int c, int r) => InBounds(c, r) ? _class[Idx(c, r)] : ClassWater;
+    public Ground GroundAt(int c, int r) => InBounds(c, r) ? (Ground)_ground[Idx(c, r)] : Ground.Blocked;
 
-    public bool IsProp(int c, int r) => !InBounds(c, r) || _static[Idx(c, r)] == StaticBlock;
+    public int FlagAt(int c, int r) => InBounds(c, r) ? _flag[Idx(c, r)] : 0;
 
     public int ElevAt(int c, int r) => InBounds(c, r) ? _elev[Idx(c, r)] : 0;
 
     public int OccupantAt(int c, int r) => InBounds(c, r) ? _occupant[Idx(c, r)] : -1;
 
-    /// <summary>Terrain the given domain can travel on, ignoring occupants.</summary>
-    public bool IsWalkable(int c, int r, Domain domain = Domain.Land)
+    /// <summary>Terrain a move class may stand on, ignoring occupants. This IS
+    /// the table Can_go implements; the hover line's flag test is its own
+    /// (@0x4057b5 calls the tile-flag accessor @0x41d110 and lets it pass only
+    /// when the byte is 0).</summary>
+    public bool CanEnter(int c, int r, MoveClass mc)
     {
         if (!InBounds(c, r)) return false;
-        int i = Idx(c, r);
-        if (_static[i] == StaticBlock) return false;         // props block everyone
-        return domain == Domain.Naval ? _class[i] == ClassWater : _class[i] != ClassWater;
+        return (Ground)_ground[Idx(c, r)] switch
+        {
+            Ground.Free => mc != MoveClass.Ship,
+            Ground.Rough => mc == MoveClass.Walker ||
+                            (mc == MoveClass.Hover && _flag[Idx(c, r)] == 0),
+            Ground.Water => mc is MoveClass.Ship or MoveClass.Hover,
+            _ => false,
+        };
     }
 
-    /// <summary>Free AND unoccupied (except by <paramref name="mover"/> itself).</summary>
-    public bool IsFree(int c, int r, Domain domain = Domain.Land, int mover = -1)
-        => IsWalkable(c, r, domain) &&
-           (_occupant[Idx(c, r)] < 0 || _occupant[Idx(c, r)] == mover);
+    /// <summary>Kept under its old name because half the caller set asks it this
+    /// way; it is <see cref="CanEnter"/>.</summary>
+    public bool IsWalkable(int c, int r, MoveClass mc = MoveClass.Vehicle) => CanEnter(c, r, mc);
 
     /// <summary>
-    /// Relative cost of crossing a cell: sand/shore slows a ground unit down,
-    /// open water is free sailing. Also used as the inverse speed factor so the
-    /// visible movement matches the path cost.
+    /// Free to move into: the terrain allows it and nothing blocks the cell.
+    ///
+    /// A foot soldier does NOT block a cell. The original says so twice over,
+    /// and in both directions: `pratelska_infa` @0x433fe0 lets a unit through an
+    /// infantry cell when all nine of its men are friendly, and `prejet` — the
+    /// game's own word for running over — @0x412980 lets it through when none of
+    /// them is, killing them on the way (@0x412a50 then stamps the cell 0xFFFE).
+    /// Either way the cell is passable, which is why infantry could always be
+    /// driven over and why it must not stop a tank here.
     /// </summary>
-    public float TerrainCost(int c, int r, Domain domain)
+    public bool IsFree(int c, int r, MoveClass mc = MoveClass.Vehicle, int mover = -1)
     {
-        if (domain == Domain.Naval) return 1f;
-        return ClassAt(c, r) switch
-        {
-            ClassShore => 1.45f,     // beach / dunes
-            ClassSpecial => 1.15f,
-            _ => 1f,
-        };
+        if (!CanEnter(c, r, mc)) return false;
+        int i = Idx(c, r);
+        if (_occupant[i] < 0 || _occupant[i] == mover) return true;
+        return _crushable[i];
+    }
+
+    /// <summary>The foot soldier standing in the way, or -1. The caller decides
+    /// what happens to them — driven through if friendly, run over if not.</summary>
+    public int CrushableAt(int c, int r, int mover = -1)
+    {
+        if (!InBounds(c, r)) return -1;
+        int i = Idx(c, r);
+        return _occupant[i] >= 0 && _occupant[i] != mover && _crushable[i] ? _occupant[i] : -1;
+    }
+
+    /// <summary>
+    /// Relative cost of crossing a cell. OURS — Can_go answers yes or no and
+    /// says nothing about speed; rough ground costing more is our reading of
+    /// what it looks like on screen.
+    /// </summary>
+    public float TerrainCost(int c, int r, MoveClass mc)
+    {
+        if (mc == MoveClass.Ship) return 1f;
+        return GroundAt(c, r) == Ground.Rough ? 1.45f : 1f;
     }
 
     // ---- construction -------------------------------------------------------
 
+    /// <summary>Sizes the grid and takes elevation and the tile flag byte off
+    /// the baked map. The ground starts as a fallback read of the tile codes and
+    /// is replaced by <see cref="ApplyTerrain"/> as soon as the map's own
+    /// terrain block is there.</summary>
     public static NavGrid Build(GDict meta)
     {
         var g = new NavGrid
@@ -113,12 +181,12 @@ public sealed class NavGrid
         if (g.Width <= 0 || g.Height <= 0) { g.Width = g.Height = 0; return g; }
 
         int n = g.Width * g.Height;
-        g._static = new byte[n];
-        g._class = new byte[n];
+        g._ground = new byte[n];
+        g._flag = new byte[n];
         g._elev = new byte[n];
         g._occupant = new int[n];
+        g._crushable = new bool[n];
         Array.Fill(g._occupant, -1);
-        Array.Fill(g._class, ClassLand);
 
         if (!meta.TryGetValue("tiles", out var tv) || tv.VariantType != Variant.Type.Array)
             return g;
@@ -131,34 +199,45 @@ public sealed class NavGrid
             if (!g.InBounds(c, r)) continue;
             int i = g.Idx(c, r);
             g._elev[i] = (byte)Mathf.Clamp(GetI(t, "elev"), 0, 255);
+            g._flag[i] = (byte)Mathf.Clamp(GetI(t, "flag"), 0, 255);
 
+            // fallback only, for content imported before the terrain block: the
+            // tile code says water, an object cell is assumed to block. Both
+            // are superseded the moment ApplyTerrain runs — and the second of
+            // them is exactly the assumption that made bridges impassable.
             bool isObject = t.TryGetValue("object", out var ob) && ob.AsBool();
-            if (isObject) g._static[i] = StaticBlock;
-            else if (GetI(t, "code", 9999) <= WaterCodeMax) g._class[i] = ClassWater;
+            g._ground[i] = isObject ? (byte)Ground.Blocked
+                         : GetI(t, "code", 9999) <= WaterCodeMax ? (byte)Ground.Water
+                         : (byte)Ground.Free;
         }
         return g;
     }
 
-    /// <summary>
-    /// Overlay the real terrain classes from the map's sec2 grid (entities.json
-    /// `zones`), which is authoritative — it also marks the half-wet shore tiles
-    /// and rock faces that the tile-code rule alone misses.
-    /// </summary>
-    public void ApplyZones(GDict zones)
+    /// <summary>Lay the map's own passability (entities.json `terrain`, run
+    /// length encoded row major) over the fallback. This is the authority.</summary>
+    public void ApplyTerrain(GDict terrain)
     {
-        int w = GetI(zones, "width"), h = GetI(zones, "height");
+        int w = GetI(terrain, "width"), h = GetI(terrain, "height");
         if (w <= 0 || h <= 0 ||
-            !zones.TryGetValue("grid", out var gv) || gv.VariantType != Variant.Type.Array)
+            !terrain.TryGetValue("rle", out var rv) || rv.VariantType != Variant.Type.Array)
             return;
-        var rows = gv.AsGodotArray();
-        for (int r = 0; r < Height && r < rows.Count; r++)
+
+        int at = 0, total = w * h;
+        foreach (var pair in rv.AsGodotArray())
         {
-            if (rows[r].VariantType != Variant.Type.Array) continue;
-            var cells = rows[r].AsGodotArray();
-            for (int c = 0; c < Width && c < cells.Count; c++)
-                _class[Idx(c, r)] = (byte)Mathf.Clamp(cells[c].AsInt32(), 0, 3);
+            if (pair.VariantType != Variant.Type.Array) continue;
+            var p = pair.AsGodotArray();
+            if (p.Count < 2) continue;
+            byte v = (byte)Mathf.Clamp(p[0].AsInt32(), 0, 3);
+            int run = p[1].AsInt32();
+            for (int k = 0; k < run && at < total; k++, at++)
+            {
+                int col = at % w, row = at / w;
+                if (InBounds(col, row)) _ground[Idx(col, row)] = v;
+            }
         }
-        HasZones = true;
+        Inferred = GetI(terrain, "inferred");
+        HasTerrain = at >= total;
     }
 
     private static int GetI(GDict d, string k, int def = 0)
@@ -166,62 +245,71 @@ public sealed class NavGrid
 
     // ---- dynamic occupancy --------------------------------------------------
 
-    public void ClearOccupants() { if (_occupant.Length > 0) Array.Fill(_occupant, -1); }
-
-    /// <summary>Take the static block off one cell. Used for the Nachschub-Posten:
-    /// its tick handler @0x43e872 services the unit standing ON the post, so the
-    /// structure baked into the map picture must not block that cell.</summary>
-    public void ClearStatic(int c, int r)
+    public void ClearOccupants()
     {
-        if (InBounds(c, r)) _static[Idx(c, r)] = FreeCell;
+        if (_occupant.Length > 0) Array.Fill(_occupant, -1);
+        if (_crushable.Length > 0) Array.Fill(_crushable, false);
     }
 
-    public void SetOccupant(int c, int r, int entity)
+    /// <summary>Take one cell out of the blocked class. Used for the
+    /// Nachschub-Posten: its tick handler @0x43e872 services the unit standing
+    /// ON the post, so that cell must not block.</summary>
+    public void ClearStatic(int c, int r)
     {
-        if (InBounds(c, r)) _occupant[Idx(c, r)] = entity;
+        if (InBounds(c, r) && (Ground)_ground[Idx(c, r)] == Ground.Blocked)
+            _ground[Idx(c, r)] = (byte)Ground.Free;
+    }
+
+    /// <summary><paramref name="crushable"/> marks a foot soldier: they are
+    /// driven through or run over, never blocked against (see
+    /// <see cref="IsFree"/>).</summary>
+    public void SetOccupant(int c, int r, int entity, bool crushable = false)
+    {
+        if (!InBounds(c, r)) return;
+        int i = Idx(c, r);
+        _occupant[i] = entity;
+        _crushable[i] = crushable;
     }
 
     public void ClearOccupant(int c, int r, int entity)
     {
-        if (InBounds(c, r) && _occupant[Idx(c, r)] == entity) _occupant[Idx(c, r)] = -1;
-    }
-
-    /// <summary>Cell counts per terrain class + props, for the HUD / debug overlay.</summary>
-    public (int Water, int Shore, int Land, int Props) Census()
-    {
-        int w = 0, s = 0, l = 0, p = 0;
-        for (int i = 0; i < _static.Length; i++)
+        if (InBounds(c, r) && _occupant[Idx(c, r)] == entity)
         {
-            if (_static[i] == StaticBlock) { p++; continue; }
-            switch (_class[i])
-            {
-                case ClassWater: w++; break;
-                case ClassShore: s++; break;
-                default: l++; break;
-            }
+            _occupant[Idx(c, r)] = -1;
+            _crushable[Idx(c, r)] = false;
         }
-        return (w, s, l, p);
     }
 
-    /// <summary>Coarse debug texture: terrain classes tinted, props red.</summary>
+    /// <summary>Cell counts per ground class, for the HUD / debug overlay.</summary>
+    public (int Free, int Rough, int Water, int Blocked) Census()
+    {
+        int f = 0, ro = 0, wa = 0, bl = 0;
+        foreach (byte v in _ground)
+            switch ((Ground)v)
+            {
+                case Ground.Free: f++; break;
+                case Ground.Rough: ro++; break;
+                case Ground.Water: wa++; break;
+                default: bl++; break;
+            }
+        return (f, ro, wa, bl);
+    }
+
+    /// <summary>Coarse debug texture: the four ground classes tinted.</summary>
     public ImageTexture? BuildDebugTexture()
     {
         if (Width <= 0 || Height <= 0) return null;
         var img = Image.CreateEmpty(Width, Height, false, Image.Format.Rgba8);
-        var prop = new Color(1f, 0.25f, 0.2f, 0.40f);
-        var byClass = new[]
+        var byGround = new[]
         {
-            new Color(0.15f, 0.45f, 1f, 0.45f),   // 0 water
-            new Color(1f, 0.85f, 0.25f, 0.35f),   // 1 shore / sand
-            new Color(0.25f, 0.9f, 0.4f, 0.22f),  // 2 open land
-            new Color(0.7f, 0.5f, 1f, 0.30f),     // 3 special land
+            new Color(0.25f, 0.9f, 0.4f, 0.20f),   // 0 free
+            new Color(1f, 0.85f, 0.25f, 0.35f),    // 1 rough
+            new Color(0.15f, 0.45f, 1f, 0.45f),    // 2 water
+            new Color(1f, 0.25f, 0.2f, 0.40f),     // 3 blocked
         };
         for (int r = 0; r < Height; r++)
             for (int c = 0; c < Width; c++)
-            {
-                int i = Idx(c, r);
-                img.SetPixel(c, r, _static[i] == StaticBlock ? prop : byClass[_class[i]]);
-            }
+                img.SetPixel(c, r, byGround[_ground[Idx(c, r)] & 3]);
         return ImageTexture.CreateFromImage(img);
     }
 
@@ -234,14 +322,14 @@ public sealed class NavGrid
     };
 
     /// <summary>Can <paramref name="mover"/> step from a to b (adjacent cells)?</summary>
-    private bool CanStep(Vector2I a, Vector2I b, Domain domain, int mover)
+    private bool CanStep(Vector2I a, Vector2I b, MoveClass mc, int mover)
     {
-        if (!IsFree(b.X, b.Y, domain, mover)) return false;
-        if (domain == Domain.Land &&
+        if (!IsFree(b.X, b.Y, mc, mover)) return false;
+        if (mc != MoveClass.Ship &&
             Math.Abs(ElevAt(b.X, b.Y) - ElevAt(a.X, a.Y)) >= MaxClimb) return false;
         // no cutting a corner between two blocked cells
         if (a.X != b.X && a.Y != b.Y &&
-            !(IsWalkable(b.X, a.Y, domain) && IsWalkable(a.X, b.Y, domain))) return false;
+            !(CanEnter(b.X, a.Y, mc) && CanEnter(a.X, b.Y, mc))) return false;
         return true;
     }
 
@@ -250,13 +338,13 @@ public sealed class NavGrid
     /// Returns the waypoint cells WITHOUT the start cell, or null if unreachable.
     /// If the goal itself is blocked/occupied, the nearest free cell is used.
     /// </summary>
-    public List<Vector2I>? FindPath(Vector2I start, Vector2I goal, Domain domain = Domain.Land,
+    public List<Vector2I>? FindPath(Vector2I start, Vector2I goal, MoveClass mc = MoveClass.Vehicle,
                                     int mover = -1, int maxNodes = 60000)
     {
         if (!InBounds(start.X, start.Y) || !InBounds(goal.X, goal.Y)) return null;
-        if (!IsFree(goal.X, goal.Y, domain, mover))
+        if (!IsFree(goal.X, goal.Y, mc, mover))
         {
-            var alt = NearestFree(goal, domain, mover);
+            var alt = NearestFree(goal, mc, mover);
             if (alt == null) return null;
             goal = alt.Value;
         }
@@ -279,10 +367,10 @@ public sealed class NavGrid
             foreach (var d in Dirs)
             {
                 var nb = new Vector2I(cur.X + d.X, cur.Y + d.Y);
-                if (closed.Contains(nb) || !CanStep(cur, nb, domain, mover)) continue;
+                if (closed.Contains(nb) || !CanStep(cur, nb, mc, mover)) continue;
 
                 float step = (d.X != 0 && d.Y != 0) ? 1.4142f : 1f;
-                step *= TerrainCost(nb.X, nb.Y, domain);                            // sand is slow
+                step *= TerrainCost(nb.X, nb.Y, mc);                                // rough is slow
                 step += Math.Abs(ElevAt(nb.X, nb.Y) - ElevAt(cur.X, cur.Y)) * 0.5f; // climbing costs
                 float tentative = gScore[cur] + step;
                 if (gScore.TryGetValue(nb, out float known) && tentative >= known) continue;
@@ -310,17 +398,17 @@ public sealed class NavGrid
     }
 
     /// <summary>Closest free cell to <paramref name="around"/> (spiral search).</summary>
-    public Vector2I? NearestFree(Vector2I around, Domain domain = Domain.Land,
+    public Vector2I? NearestFree(Vector2I around, MoveClass mc = MoveClass.Vehicle,
                                  int mover = -1, int maxRadius = 12)
     {
-        if (IsFree(around.X, around.Y, domain, mover)) return around;
+        if (IsFree(around.X, around.Y, mc, mover)) return around;
         for (int rad = 1; rad <= maxRadius; rad++)
             for (int dy = -rad; dy <= rad; dy++)
                 for (int dx = -rad; dx <= rad; dx++)
                 {
                     if (Math.Max(Math.Abs(dx), Math.Abs(dy)) != rad) continue;
                     int c = around.X + dx, r = around.Y + dy;
-                    if (IsFree(c, r, domain, mover)) return new Vector2I(c, r);
+                    if (IsFree(c, r, mc, mover)) return new Vector2I(c, r);
                 }
         return null;
     }

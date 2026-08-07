@@ -12,6 +12,7 @@ config_version=5
 
 config/name="AkteEuropaReborn"
 config/description="Clean-room RTS remake of Akte Europa (1997)"
+config/version="0.4.0"
 run/main_scene="res://Scenes/Main/MainMenu.tscn"
 config/features=PackedStringArray("4.7", "C#")
 config/icon="res://Assets/Textures/Icon.svg"

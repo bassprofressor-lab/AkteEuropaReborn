@@ -1,0 +1,705 @@
+using System.Collections.Generic;
+using Godot;
+
+namespace AkteEuropaReborn.Rendering;
+
+/// <summary>
+/// BESETZEN — taking a building by standing at its door.
+///
+/// This is the mechanic the NET maps are built around, and the reason the
+/// 0.4.0 play test found the shipped troops useless: those maps carry 12 to 42
+/// factories and 4 to 8 bases, <b>all of them neutral (owner 11)</b>, and the
+/// units they hand you are the tool for taking them. The remake did not know
+/// the mechanic, so there was nothing to do with either.
+///
+/// <para><b>All of the following is the original's, read off the building tick
+/// @0x43CA50.</b> The record base is 0xc06910, which is the sec3 record's own
+/// +0x00, so the addresses below translate to file offsets one for one.</para>
+///
+/// <list type="bullet">
+/// <item><b>Two gates</b> (@0x43CB29..0x43CB3F): <c>byte[+0x18]</c> — "this
+/// entry is a real building", 1 on all 684 entries of type 1..16 and 0 on every
+/// type from 17 up, no counterexample over the 893 entries of the 23 levels —
+/// and <c>byte[+0x34]</c>, the door count. 519 buildings can be taken; types 8,
+/// 11 (Hafen), 13 and 14 cannot.</item>
+///
+/// <item><b>The duration is the building's hit points.</b> @0x43CB45 reads
+/// <c>dx = word[+0x06]</c> (hp) against <c>di = word[+0x38]</c> (the stored
+/// total); where they differ the progress at +0x3a is rescaled
+/// <c>progress * hp / oldTotal</c> and the total is set to hp. So a damaged
+/// building falls faster, and nothing here is a rate of ours — which retires
+/// the open question the handoff carried ("the duration is set by a routine
+/// that has not been read").</item>
+///
+/// <item><b>The door</b> (@0x43CB4C..0x43CB67): <c>col + byte[+0x35]</c>,
+/// <c>row + byte[+0x36]</c>. Constant per type over all 798 doors — Basis
+/// (4,2) 73 of 73, the three factories two each at (2,3) and (5,3), Kaserne
+/// (2,3) 12 of 12, Flughafen (5,4) 39 of 39, Mine (5,3) 49 of 49, type 12
+/// (1,3) 36 of 36, type 15 (2,4) 10 of 10, Werft (2,3) 13 of 13. Doors are
+/// <b>three bytes each</b> from +0x35 and the capture uses door 0 only.</item>
+///
+/// <item><b>And the door is a door.</b> Its third byte is a state, 0 on all 798
+/// records because it is a runtime field, and @0x43D2EC runs it: at 0 (shut)
+/// the door starts opening the moment its imap cell holds anything below 14000
+/// — a unit standing in it — and from 0x84 (open) it starts shutting again once
+/// the cell is empty. The building draw @0x42B20D..0x42B28A picks the frame
+/// from it, and a building with a capture running is blitted through a
+/// different call (0x4012f8 instead of 0x401348). That is why a unit belongs ON
+/// the door tile: production puts a new unit exactly there
+/// (@0x410441..@0x41047C writes the spawned entity's cell as
+/// <c>col + door_col</c>, <c>row + door_row</c>), and @0x409B50 tests that same
+/// tile when a unit is sent to a building. ⚠ The note that used to stand here —
+/// "the remake bakes its buildings into the map picture and has no door frames,
+/// so the animation is not reproduced" — is out of date on both counts: the door
+/// frames come out of ANIM.CWA and the buildings are no longer baked, they are
+/// drawn from their pattern (MapEntityLayer.DrawBuildingBody).</item>
+///
+/// <item><b>The intruder</b> (@0x43CBEF..0x43CC23): the imap cell holds a slot
+/// below 8000, and the player is <c>slot / 1000</c>. Same owner as the
+/// building, or nobody: the routine leaves through @0x43D265, and <b>that
+/// branch is not empty</b> — it forgets the intruder (+0x3c back to 0xFF),
+/// opens the door again (imap back to 0xFFFE), puts the shown owner back to the
+/// real one, and <b>counts the progress DOWN by one</b> (@0x43D29E). Filling is
+/// +1 per tick and draining is −1 per tick, so a besieger who walks away loses
+/// his ground at exactly the rate he won it.
+/// <para>⚠ This corrects the first reading of the same day, which said "the
+/// progress is not cleared — the routine simply leaves". That was read off a
+/// jump into code I had not disassembled, and it was wrong. It was found by
+/// <c>shipre.py xref</c>, the raw dword scan: <c>disx2.py xref</c> reported one
+/// single reference to +0x3a and the raw scan found twelve. Rule 7, again.</para></item>
+///
+/// <item><b>While it runs:</b> sound 132 and "Ihre Basis wird besetzt" (the
+/// string family 0x4faef8 + n·0x64, picked by type through 0x43ebec/0x43ebd0 —
+/// only types 1, 2, 3, 4, 9 and 16 say anything), and only to the owner
+/// (@0x43CC32, @0x43CC68) and only on the first tick or when the intruder
+/// changes (@0x43CC3E). The displayed owner at +0x3d flickers between old and
+/// new: <c>(progress*10)/total</c> against <c>clock % 11</c>
+/// (@0x43CD12..0x43CD51).</item>
+///
+/// <item><b>Done</b> when the progress reaches the total (@0x43CD57): sound 134
+/// to the old owner (@0x43CED6), <c>byte[+0x01] := intruder</c> (@0x43CF83),
+/// sound 133 to the new one (@0x43D068). A Werft-Station (type 16) drags its
+/// Hafen along — the routine looks up the type-11 dock whose sec29 +0x02 names
+/// this Werft and changes its owner too, printing "Error in shipyard" when
+/// there is none (@0x43CEEC..0x43CF99).</item>
+/// </list>
+///
+/// <para><b>What is OURS, and it is three things.</b></para>
+///
+/// <para>(1) <b>Both cells of every door count.</b> The original reads the imap
+/// one element PAST door 0 — <c>[ecx+0xbdea82]</c> @0x43CBEF, which in the
+/// column-major imap is (col, row+1) — while it stamps the door itself
+/// (<c>[ecx+0xbdea80]</c> @0x43CC29). Everything else about the door says the
+/// unit belongs IN it, so the +1 reads like an off-by-one in the original; but
+/// I cannot prove that, so both cells count here. And a factory has two doors
+/// while the capture block only ever looks at the first, which a player driving
+/// to the nearer one would experience as a dead end — so both doors count as
+/// well. Door 0's front cell is tested first, so wherever the original would
+/// fire, this fires on the same cell.
+/// <see cref="CaptureWatchLine"/> counts the ticks per cell kind, which is how
+/// the question can be settled from a real game rather than argued about.</para>
+///
+/// <para>(2) <b>The door tile is not stamped.</b> The original writes 0xFFFF
+/// into it while the capture runs and frees it again from a second counter
+/// (<c>byte[+0x0a]</c> counts to 250 @0x43CAC5 and then writes 0xFFFE back).
+/// That counter is not modelled here, and stamping without the release would
+/// block the doorway for good — so the cell is left alone. An honest gap.</para>
+///
+/// <para>(3) <b>The parts bonus is not paid.</b> @0x43CFF5 gives every Basis of
+/// the capturing player +100 at +0x2e and +0x30 (the Fahrwerk and Spezial
+/// stores), gated on <c>dword[0x539234]</c> and on the player table's +0x00 —
+/// neither of which is identified. Documented, not implemented.</para>
+/// </summary>
+public partial class MapEntityLayer : Node2D
+{
+    /// <summary>Building types that announce being taken. The index table
+    /// @0x43ebec sends every other type to the no-message case @0x43CD02.</summary>
+    private static string? CaptureMessage(int bType) => bType switch
+    {
+        1 => "Ihre Basis wird besetzt",            // 0x4faef8
+        2 => "Ihre Waffenfabrik wird besetzt",     // 0x4faf5c
+        3 => "Ihre Fahrwerkfabrik wird besetzt",   // 0x4fafc0
+        4 => "Ihre Spezialfabrik wird besetzt",    // 0x4fb024
+        9 => "Ihr Flughafen wird besetzt",         // 0x4fb088
+        16 => "Ihre Schiffswerft",                 // 0x4fb0ec, and that IS the
+                                                   // whole string in the file
+        _ => null,
+    };
+
+    /// <summary>Taken while it was being taken — sound 134 @0x43CED6 goes to the
+    /// old owner, 133 @0x43D068 to the new one.</summary>
+    private const int SoundTakenFrom = 134, SoundTakenBy = 133;
+
+    // counters for the watch line, so the reading above can be checked against
+    // a running game rather than argued about
+    private int _capDoors, _capOnDoor, _capBelowDoor, _capDone;
+    /// <summary>Ticks in which a progress counted DOWN again — the drain at
+    /// @0x43D29E, which the first reading of it had missed.</summary>
+    private int _capDrain;
+
+    /// <summary>What the panel calls an owner. 11 is the neutral slot the map
+    /// files use for the civilian structures.</summary>
+    private static string OwnerWord(int owner)
+        => owner == 11 ? "NEUTRAL" : owner < 0 ? "-" : "SPIELER " + owner;
+
+    /// <summary>Can this building be taken at all — the original's two gates.</summary>
+    private static bool Capturable(Entity b)
+        => b.IsBuilding && !b.IsProp && !b.Dead && b.Built != 0 && b.Doors != 0;
+
+    /// <summary>Door 0 — the one the capture block uses — and the tile the
+    /// original actually looks at, one row further south.</summary>
+    private static (Vector2I Door, Vector2I Front) CaptureCells(Entity b)
+    {
+        var door = new Vector2I(b.Col + b.DoorCol, b.Row + b.DoorRow);
+        return (door, new Vector2I(door.X, door.Y + 1));
+    }
+
+    /// <summary>Every cell that counts as "at a door" here: for each of the
+    /// building's doors its own tile and the tile in front of it.
+    ///
+    /// OURS in two ways, both deliberate and both counted in
+    /// <see cref="CaptureWatchLine"/>. The original looks at exactly ONE cell —
+    /// door 0's, plus one row (see the class note) — but a factory has two
+    /// doors and a player will drive to whichever is nearer, so ignoring the
+    /// second one would be a dead end he could not see. Door 0 stays first in
+    /// the list, so where the original would fire, we fire on the same cell.</summary>
+    private static IEnumerable<Vector2I> CaptureWatchCells(Entity b)
+    {
+        var cells = b.DoorCells;
+        if (cells.Count == 0)
+        {
+            var (d, f) = CaptureCells(b);
+            yield return f; yield return d;
+            yield break;
+        }
+        foreach (var (dc, dr) in cells)
+        {
+            yield return new Vector2I(b.Col + dc, b.Row + dr + 1);   // the game's cell
+            yield return new Vector2I(b.Col + dc, b.Row + dr);       // the doorway
+        }
+    }
+
+    /// <summary>The player of the unit standing on a cell, or -1. Buildings and
+    /// props do not count, and neither does a dead one.</summary>
+    private int StanderAt(Vector2I cell)
+    {
+        if (_nav == null) return -1;
+        int i = _nav.OccupantAt(cell.X, cell.Y);
+        if (i < 0 || i >= _entities.Count) return -1;
+        var e = _entities[i];
+        if (e.IsBuilding || e.IsProp || e.Dead) return -1;
+        return e.Owner is >= 0 and <= 7 ? e.Owner : -1;
+    }
+
+    /// <summary>
+    /// One tick of the capture, called from the building tick in
+    /// <c>UpdateEconomy</c>. <paramref name="ticks"/> is how many of the
+    /// original's ticks this one stands for (<c>TickScale</c>), which is what
+    /// keeps the duration in the game's own units: a 440 hp base takes 440
+    /// original ticks.
+    /// </summary>
+    private void CaptureTick(int index, Entity b, int ticks)
+    {
+        if (!Capturable(b)) return;
+
+        // the total is the building's hit points, and a change to them rescales
+        // what has been achieved so far (@0x43CB70..0x43CBA1)
+        if (b.CaptureTotal != b.Hp)
+        {
+            b.CaptureProgress = b.CaptureTotal <= 0
+                ? 0 : b.CaptureProgress * b.Hp / b.CaptureTotal;
+            b.CaptureTotal = b.Hp;
+        }
+        if (b.CaptureTotal <= 0) return;
+
+        int who = -1;
+        bool onFront = false;
+        int n = 0;
+        foreach (var cell in CaptureWatchCells(b))
+        {
+            int p = StanderAt(cell);
+            if (p >= 0 && p != b.Owner) { who = p; onFront = (n % 2) == 0; break; }
+            n++;
+        }
+        if (who < 0)
+        {
+            // Nobody, or only the owner's own units. @0x43D265: the intruder is
+            // forgotten, the door is opened again, the shown owner goes back to
+            // the real one — and the progress COUNTS DOWN, one per tick.
+            // ⚠ This corrects what shipped a few hours ago: "the routine leaves
+            // without clearing the progress" was read off a jump into unread
+            // code. It is unread no longer — a besieger who walks away loses
+            // his ground again at the same rate he won it.
+            if (b.Intruder >= 0) { b.Intruder = -1; b.ShownOwner = b.Owner; }
+            if (b.CaptureProgress > 0)
+            {
+                b.CaptureProgress = Mathf.Max(0, b.CaptureProgress - ticks);
+                _capDrain++;
+            }
+            return;
+        }
+        if (onFront) _capBelowDoor++; else _capOnDoor++;
+
+        // the announcement: to the owner, on the first tick or when a different
+        // player takes over the doorway (@0x43CC3E..0x43CC78)
+        if (b.CaptureProgress == 0 || b.Intruder != who)
+        {
+            if (b.Owner == ViewPlayer)
+            {
+                Audio.GameSounds.Play(Audio.GameSounds.BuildingCaptured);
+                string? msg = CaptureMessage(b.BType);
+                if (msg != null) { _order = msg; NoteEvent(b, msg); }
+            }
+            b.Intruder = who;
+        }
+
+        b.CaptureProgress += ticks;
+        if (b.CaptureProgress < b.CaptureTotal)
+        {
+            // the displayed owner flickers between the two while it runs
+            // @0x43CD3F: at or above the beat it shows the intruder (+0x3c),
+            // below it the owner (+0x01). The beat is the original's frame
+            // counter word[0x4fa248] % 11; ours is the simulation clock, which
+            // is the one substitution here and only changes how fast it blinks.
+            int tenths = b.CaptureProgress * 10 / b.CaptureTotal;
+            int beat = (int)(DebugClock * 10) % 11;
+            b.ShownOwner = tenths >= beat ? who : b.Owner;
+            QueueRedraw();
+            return;
+        }
+
+        CaptureDone(index, b, who);
+    }
+
+    /// <summary>The building changes hands.</summary>
+    private void CaptureDone(int index, Entity b, int who)
+    {
+        int old = b.Owner;
+        if (old == ViewPlayer) Audio.GameSounds.Play(SoundTakenFrom);
+
+        Hand(b, who);
+        // a Werft-Station takes its Hafen with it: the dock whose sec29 +0x02
+        // names this Werft (@0x43CEEC..0x43CF99, "Error in shipyard" when there
+        // is none). Our dock keeps that link in Shipyard, as a building slot.
+        if (b.BType == 16)
+        {
+            var dock = _entities.Find(x => x.IsBuilding && !x.Dead &&
+                                           x.BType == 11 && x.Shipyard == b.Slot);
+            if (dock != null) Hand(dock, who);
+        }
+
+        if (who == ViewPlayer) Audio.GameSounds.Play(SoundTakenBy);
+        _capDone++;
+
+        string what = BuildingTypeName(b.BType);
+        string line = b.Name.Length > 0 ? $"{b.Name}: {what} besetzt" : $"{what} besetzt";
+        _order = line;
+        NoteEvent(b, line);
+        // the loser hears about it too, and NoteEvent only files the viewer's own
+        if (old == ViewPlayer) _order = $"{what} verloren";
+        QueueRedraw();
+        if (_selected == index) UpdatePanel();
+    }
+
+    private static void Hand(Entity b, int who)
+    {
+        b.Owner = who;
+        b.Team = who;
+        b.ShownOwner = who;
+        b.CaptureProgress = 0;
+        b.Intruder = -1;
+    }
+
+    /// <summary>A bar over every building that is being taken, in the colour of
+    /// the player taking it, plus a mark on the door tile. Called at the end of
+    /// <c>_Draw</c>.</summary>
+    private void DrawCaptureBars()
+    {
+        foreach (var b in _entities)
+        {
+            if (!Capturable(b) || b.CaptureProgress <= 0 || b.CaptureTotal <= 0) continue;
+            float fr = Mathf.Clamp((float)b.CaptureProgress / b.CaptureTotal, 0, 1);
+            var at = b.Pos + new Vector2(-TileW / 2f, -TileH / 2f - 16);
+            DrawRect(new Rect2(at - new Vector2(1, 1), new Vector2(TileW + 2, 6)),
+                     new Color(0, 0, 0, 0.8f));
+            var c = OwnerColor(b.Intruder);
+            DrawRect(new Rect2(at, new Vector2(TileW * fr, 4)), c);
+
+            var (door, front) = CaptureCells(b);
+            DrawRect(new Rect2(CellCenter(door.X, door.Y) - new Vector2(3, 2),
+                               new Vector2(6, 4)), new Color(c.R, c.G, c.B, 0.55f));
+            DrawRect(new Rect2(CellCenter(front.X, front.Y) - new Vector2(3, 2),
+                               new Vector2(6, 4)), new Color(c.R, c.G, c.B, 0.35f));
+        }
+    }
+
+    /// <summary>Where the doors are, for the harness and the overlay.</summary>
+    public List<(Entity B, Vector2I Door, Vector2I Front)> CaptureDoors()
+    {
+        var list = new List<(Entity, Vector2I, Vector2I)>();
+        foreach (var e in _entities)
+        {
+            if (!Capturable(e)) continue;
+            var (d, f) = CaptureCells(e);
+            list.Add((e, d, f));
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// <c>--demo-capture</c>: send the nearest own unit to the door of the
+    /// nearest building it does not own, and look at it.
+    /// </summary>
+    public Vector2? DebugDemoCapture()
+    {
+        if (_nav == null) return null;
+        var doors = CaptureDoors();
+        _capDoors = doors.Count;
+        if (doors.Count == 0) { GD.Print("demo-capture: keine Tuer auf dieser Karte"); return null; }
+
+        int best = -1, bestDoor = -1;
+        float bestD = float.MaxValue;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var u = _entities[i];
+            if (u.IsBuilding || u.IsProp || u.Dead || !u.Mobile) continue;
+            if (u.Owner != ViewPlayer) continue;
+            for (int k = 0; k < doors.Count; k++)
+            {
+                var (b, _, front) = doors[k];
+                if (b.Owner == u.Owner) continue;
+                float d = new Vector2(front.X - u.Col, front.Y - u.Row).Length();
+                if (d >= bestD) continue;
+                bestD = d; best = i; bestDoor = k;
+            }
+        }
+        if (best < 0) { GD.Print("demo-capture: keine eigene Einheit, die fahren kann"); return null; }
+
+        var (bld, door, cell) = doors[bestDoor];
+        _demoUnit = best;
+        _demoBuilding = _entities.IndexOf(bld);
+        _demoFrom = new Vector2I(_entities[best].Col, _entities[best].Row);
+        _sel.Clear();
+        _sel.Add(best);
+        SetPrimary();
+        IssueMove(CellCenter(cell.X, cell.Y));
+        var unit = _entities[best];
+        GD.Print($"demo-capture: {_capDoors} Tueren; Platz {unit.Slot} (Spieler {unit.Owner}) " +
+                 $"faehrt {bestD:0.0} Felder zu {BuildingTypeName(bld.BType)} " +
+                 $"\"{bld.Name}\" (Besitzer {bld.Owner}, {bld.Hp} Takte) " +
+                 $"— Tuer {door.X},{door.Y}, davor {cell.X},{cell.Y}");
+        return CellCenter(cell.X, cell.Y);
+    }
+
+    /// <summary>Where <c>--demo-capture</c> sent its unit from, so
+    /// <c>--demo-leave</c> can send it back.</summary>
+    private int _demoUnit = -1, _demoBuilding = -1;
+    private Vector2I _demoFrom;
+
+    /// <summary>
+    /// <c>--demo-leave=&lt;s&gt;</c>: order the demo's unit back where it started.
+    ///
+    /// This exists for one reason. The drain at @0x43D29E — the branch that
+    /// counts a capture DOWN when the besieger leaves — is the correction this
+    /// session's predecessor made after reading a jump it had not disassembled,
+    /// and in a running game nothing ever exercises it: a unit sent to a door
+    /// stays at the door. So the harness has to walk away on purpose.
+    /// </summary>
+    public string DebugDemoLeave()
+    {
+        if (_demoUnit < 0 || _demoUnit >= _entities.Count) return "keine Demo-Einheit";
+        var u = _entities[_demoUnit];
+        if (u.Dead) return $"Platz {u.Slot} ist gefallen";
+        int before = _demoBuilding >= 0 ? _entities[_demoBuilding].CaptureProgress : -1;
+        _sel.Clear();
+        _sel.Add(_demoUnit);
+        SetPrimary();
+        IssueMove(CellCenter(_demoFrom.X, _demoFrom.Y));
+        return $"Platz {u.Slot} faehrt von ({u.Col},{u.Row}) zurueck nach " +
+               $"({_demoFrom.X},{_demoFrom.Y}); Fortschritt am Demo-Gebaeude {before}";
+    }
+
+    /// <summary>The report line: how many doors, who is standing at one, and on
+    /// which of the two cells — the number that settles reading (1).</summary>
+    public string CaptureWatchLine()
+    {
+        var doors = CaptureDoors();
+        int running = 0, neutral = 0;
+        string first = "";
+        foreach (var (b, _, _) in doors)
+        {
+            if (b.Owner == 11) neutral++;
+            if (b.CaptureProgress <= 0) continue;
+            running++;
+            if (first.Length == 0)
+                first = $" {BuildingTypeName(b.BType)} \"{b.Name}\" " +
+                        $"{b.CaptureProgress}/{b.CaptureTotal} durch Spieler {b.Intruder}";
+        }
+        // content exported before the door fields existed has built == 0 on
+        // every record; that is a gap in the DATA, not in the map, and it is
+        // counted rather than hidden
+        int stale = 0;
+        foreach (var e in _entities)
+            if (e.IsBuilding && !e.IsProp && e.BType is >= 1 and <= 16 && e.Built == 0) stale++;
+
+        return $"capture: {doors.Count} Tueren ({neutral} neutral), {running} laufend, " +
+               $"{_capDone} besetzt; Takte auf der Tuer {_capOnDoor}, davor {_capBelowDoor}, " +
+               $"{_capDrain} zurueckgelaufen" +
+               (_demoBuilding >= 0
+                   ? $"; Demo-Gebaeude {BuildingTypeName(_entities[_demoBuilding].BType)} " +
+                     $"\"{_entities[_demoBuilding].Name}\" {_entities[_demoBuilding].CaptureProgress}/" +
+                     $"{_entities[_demoBuilding].CaptureTotal}, Besitzer {_entities[_demoBuilding].Owner}"
+                   : "") +
+               (stale > 0 ? $"; {stale} Gebaeude OHNE Tuerfeld — Karte neu einspielen" : "") +
+               first;
+    }
+
+    /// <summary>
+    /// `--capture-check` — drive the reported scenario and print every stage.
+    ///
+    /// <para>The report: an enemy starts taking a building, you stop him, and
+    /// afterwards you cannot take or use it yourself. This puts an enemy on the
+    /// doorway, removes him, then puts one of ours there, and prints progress,
+    /// intruder and owner at each stage — so the answer is a table and not an
+    /// impression.</para>
+    /// </summary>
+    public string CaptureCheck()
+    {
+        if (_nav == null) return "capture-check: kein Gitter";
+
+        // The scenario needs a building that belongs to NEITHER of the two: a
+        // player cannot take his own, so picking one of ours would only prove
+        // that. Prefer a neutral one, fall back to any that is not ours.
+        int bi = -1;
+        for (int pass = 0; pass < 2 && bi < 0; pass++)
+            for (int i = 0; i < _entities.Count; i++)
+            {
+                var c = _entities[i];
+                if (!c.IsBuilding || c.Dead || c.Doors <= 0 || c.Built == 0) continue;
+                if (c.Owner == ViewPlayer) continue;
+                if (pass == 0 && !IsNeutralPlayer(c.Owner)) continue;
+                bi = i; break;
+            }
+        if (bi < 0) return "capture-check: kein fremdes Gebaeude mit Tuer";
+
+        var b = _entities[bi];
+        var cells = new List<Vector2I>(CaptureWatchCells(b));
+        if (cells.Count == 0) return "capture-check: keine Tuerzellen";
+        var door = cells[0];
+
+        var sb = new System.Text.StringBuilder();
+        void Stage(string what) => sb.AppendLine(
+            $"   {what,-30} Fortschritt {b.CaptureProgress,4}/{b.CaptureTotal,-5}" +
+            $" Eindringling {b.Intruder,2}  Besitzer {b.Owner}  gezeigt {b.ShownOwner}");
+
+        sb.AppendLine($"capture-check: Gebaeude slot {b.Slot} typ {b.BType} bei " +
+                      $"({b.Col},{b.Row}), Tuerzelle ({door.X},{door.Y}), Besitzer {b.Owner}");
+        Stage("Ausgangslage");
+
+        // an attacker who is neither the owner nor us
+        int foe = -1;
+        for (int p = 0; p <= 7; p++)
+            if (p != b.Owner && p != ViewPlayer) { foe = p; break; }
+        if (foe < 0) return "capture-check: kein dritter Spieler moeglich";
+        int ai = Park(door, foe, 9001);
+        for (int t = 0; t < 8; t++) CaptureTick(bi, b, 1);
+        Stage($"Gegner {foe} steht 8 Takte");
+
+        _nav.ClearOccupant(door.X, door.Y, ai);
+        _entities[ai].Dead = true;
+        for (int t = 0; t < 3; t++) CaptureTick(bi, b, 1);
+        Stage("Gegner vertrieben, 3 Takte");
+
+        int mi = Park(door, ViewPlayer, 9002);
+        int ownerBefore = b.Owner;
+        int progBefore = b.CaptureProgress;
+        for (int t = 0; t < 8; t++) CaptureTick(bi, b, 1);
+        Stage($"eigene Einheit ({ViewPlayer}) 8 Takte");
+
+        sb.Append($"   -> Besitzer {(b.Owner != ownerBefore ? "GEWECHSELT" : "unveraendert")}, " +
+                  $"eigener Fortschritt {(b.CaptureProgress > progBefore ? "steigt" : "STEIGT NICHT")}");
+        _nav.ClearOccupant(door.X, door.Y, mi);
+        return sb.ToString();
+    }
+
+    /// <summary>Puts a throwaway unit on a cell for the check above.</summary>
+    private int Park(Vector2I cell, int owner, int slot)
+    {
+        var u = new Entity
+        {
+            Slot = slot, Col = cell.X, Row = cell.Y, Owner = owner, Team = owner,
+            UnitType = 160, Hp = 10, HpMax = 10, Mobile = true,
+            Footprint = CellRect(_ox, _oy, cell.X, cell.Y, 0),
+        };
+        u.Pos = CellCenter(cell.X, cell.Y);
+        _entities.Add(u);
+        int i = _entities.Count - 1;
+        _nav!.SetOccupant(cell.X, cell.Y, i);
+        return i;
+    }
+
+    /// <summary>`--pick-check` — how big the click area of each building is,
+    /// and whether a click in its middle actually finds it.</summary>
+    public string PickCheck()
+    {
+        var sb = new System.Text.StringBuilder();
+        int n = 0, hit = 0, oneByOne = 0;
+        var seen = new Dictionary<int, Vector2I>();
+        foreach (var e in _entities)
+        {
+            if (!e.IsBuilding || e.IsProp) continue;
+            n++;
+            if (e.FootW <= 1 && e.FootH <= 1) oneByOne++;
+            seen[e.BType] = new Vector2I(e.FootW, e.FootH);
+            // click the middle of the body and see whether Pick finds this one
+            var r = BodyRect(e);
+            if (_entities.IndexOf(e) == Pick(r.Position + r.Size / 2f)) hit++;
+        }
+        sb.AppendLine($"pick-check: {n} Gebaeude, {hit} finden sich beim Klick in ihre Mitte, " +
+                      $"{oneByOne} haben noch 1x1");
+        foreach (var kv in seen)
+            sb.AppendLine($"   typ {kv.Key,2}: Trefferflaeche {kv.Value.X} x {kv.Value.Y} Zellen " +
+                          $"= {kv.Value.X * TileW} x {kv.Value.Y * TileH} px");
+        return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>
+    /// `--ruin-check` — destroys every building and reports what is now drawn.
+    ///
+    /// <para>Answers the reported "destroyed buildings are graphically still
+    /// there and can still be selected" with numbers: how many types have a ruin
+    /// picture at all, how many tiles the ruin draws against the standing one,
+    /// and whether the wreck can still be clicked.</para>
+    /// </summary>
+    public string RuinCheck()
+    {
+        if (Patterns == null) return "ruin-check: keine Muster geladen";
+        var sb = new System.Text.StringBuilder();
+        var seen = new Dictionary<int, (int Stand, int Ruin)>();
+        int n = 0, withRuin = 0;
+
+        foreach (var e in _entities)
+        {
+            if (!e.IsBuilding || e.IsProp) continue;
+            n++;
+            int stand = Patterns.GetBuildingType(e.BType).FirstPattern;
+            int ruin = Import.BuildingPatterns.RuinPattern(Patterns, e.BType);
+            if (ruin >= 0) withRuin++;
+            if (!seen.ContainsKey(e.BType))
+                seen[e.BType] = (stand, ruin);
+        }
+
+        var victims = new List<int>();
+        for (int i = 0; i < _entities.Count; i++)
+            if (_entities[i].IsBuilding && !_entities[i].IsProp) victims.Add(i);
+        foreach (int i in victims) Kill(i, _entities[i]);
+
+        int stillPicked = 0;
+        foreach (int i in victims)
+        {
+            var r = BodyRect(_entities[i]);
+            if (Pick(r.Position + r.Size / 2f) == i) stillPicked++;
+        }
+
+        sb.AppendLine($"ruin-check: {n} Gebaeude, {withRuin} haben ein Ruinenbild, " +
+                      $"{n - withRuin} nicht (Typ mit nur einem Muster)");
+        sb.AppendLine($"   nach der Zerstoerung noch anklickbar: {stillPicked} von {n}");
+        foreach (var kv in seen)
+            sb.AppendLine($"   typ {kv.Key,2}: Anzahl {Patterns.GetBuildingType(kv.Key).PatternCount,2}, " +
+                          $"stehend Muster {kv.Value.Stand,3} ({TilesOf(kv.Value.Stand),2} Kacheln)" +
+                          $" -> Ruine Muster {kv.Value.Ruin,3} " +
+                          $"({(kv.Value.Ruin >= 0 ? TilesOf(kv.Value.Ruin) : 0),2} Kacheln)");
+        sb.Append(stillPicked == 0 && withRuin == n
+                  ? "   ALLE ZEIGEN IHRE RUINE UND SIND NICHT MEHR ANKLICKBAR"
+                  : "   siehe oben");
+        return sb.ToString();
+    }
+
+    private int TilesOf(int pattern)
+    {
+        int k = 0;
+        for (int x = 0; x < Import.CwpFile.PatternWidth; x++)
+            for (int y = 0; y < Import.CwpFile.PatternHeight; y++)
+                if (Patterns!.PatternTile(pattern, x, y) != 0) k++;
+        return k;
+    }
+
+    /// <summary>`--ruin-demo` — destroy every building so a screenshot shows the
+    /// ruins instead of an argument about them.</summary>
+    public void RuinDemo()
+    {
+        for (int i = 0; i < _entities.Count; i++)
+            if (_entities[i].IsBuilding && !_entities[i].IsProp) Kill(i, _entities[i]);
+        QueueRedraw();
+    }
+
+    /// <summary>
+    /// `--corpse-check` — the two halves of the "dead units are black patches and
+    /// still selectable" report, measured instead of eyeballed.
+    ///
+    /// <para>Kills a sample of units and then asks, for each: does a click on the
+    /// body still find it, and does a live unit standing on the same spot win the
+    /// click? The second question is the one that matters — a corpse used to be
+    /// picked ahead of the living and swallow the order.</para>
+    /// </summary>
+    public string CorpseCheck()
+    {
+        var sb = new System.Text.StringBuilder();
+        var victims = new List<int>();
+        for (int i = 0; i < _entities.Count && victims.Count < 12; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || e.HpMax <= 0) continue;
+            victims.Add(i);
+        }
+        if (victims.Count == 0) return "corpse-check: keine Einheiten auf dieser Karte";
+
+        int foot = 0;
+        foreach (int i in victims) if (_entities[i].Infantry >= 0) foot++;
+        foreach (int i in victims) Kill(i, _entities[i]);
+
+        int stillPicked = 0, takenByDead = 0, takenByOther = 0, tested = 0;
+        foreach (int i in victims)
+        {
+            var dead = _entities[i];
+            var mid = BodyRect(dead).Position + BodyRect(dead).Size / 2f;
+            if (Pick(mid) == i) stillPicked++;
+
+            // put a live stand-in on the very same spot and see who wins
+            var live = new Entity
+            {
+                Col = dead.Col, Row = dead.Row, Elev = dead.Elev, Pos = dead.Pos,
+                Owner = dead.Owner, HpMax = 100, Hp = 100, Mobile = true,
+                UnitType = dead.UnitType, Infantry = dead.Infantry,
+                FootW = dead.FootW, FootH = dead.FootH,
+            };
+            _entities.Add(live);
+            tested++;
+            int won = Pick(mid);
+            // Losing to ANOTHER LIVING unit standing on the same spot is normal
+            // and not what was reported — only a corpse winning the click is the
+            // defect. The first version of this check counted both and called a
+            // healthy map broken.
+            if (won != _entities.Count - 1)
+            {
+                if (won >= 0 && _entities[won].Dead) takenByDead++;
+                else takenByOther++;
+            }
+            _entities.RemoveAt(_entities.Count - 1);
+        }
+
+        int wreckFx = 0;
+        foreach (var fx in _effects) if (fx.Kind == "wreck") wreckFx++;
+
+        sb.AppendLine($"corpse-check: {victims.Count} Einheiten gefallen " +
+                      $"({foot} zu Fuss, {victims.Count - foot} Fahrzeuge)");
+        sb.AppendLine($"   noch anklickbar             : {stillPicked} von {victims.Count}");
+        sb.AppendLine($"   Leiche schnappt den Klick   : {takenByDead} von {tested}");
+        sb.AppendLine($"   (Lebender davor, normal)    : {takenByOther} von {tested}");
+        sb.AppendLine($"   Wrackreste auf dem Boden    : {wreckFx} " +
+                      $"(erwartet {victims.Count - foot}, Infanterie hinterlaesst keine)");
+        sb.Append(stillPicked == 0 && takenByDead == 0
+                  ? "   BEIDES BEHOBEN" : "   NOCH FEHLERHAFT");
+        return sb.ToString();
+    }
+}

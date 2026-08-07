@@ -6,12 +6,15 @@
 ; Rechner des Spielers aus dessen eigenen CDs (siehe Core/ContentSources.cs).
 ;
 ; Bauen:
-;   "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" packaging\AkteEuropaReborn.iss
+;   "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" packaging\AkteEuropaReborn.iss
+; (Inno Setup 6 installiert sich ohne Adminrechte NICHT nach Program Files —
+;  dort steht es auf diesem Rechner nicht, und die alte Zeile hat einen Lauf
+;  gekostet.)
 ; Voraussetzung: build\windows\ ist frisch exportiert
 ;   Godot --path . --headless --export-release "Windows Desktop"
 
 #define AppName        "Akte Europa Reborn"
-#define AppVersion     "0.3.3"
+#define AppVersion     "0.4.0"
 #define AppPublisher   "chr1zZo"
 #define AppExeName     "AkteEuropaReborn.exe"
 #define BuildDir       "..\build\windows"

@@ -22,6 +22,20 @@ public static class SkirmishSetup
     /// a skirmish has nothing to record.</summary>
     public static int CampaignMission;
 
+    /// <summary>"Rohstoffe": 0 keine · 1 wenige · 2 normal · 3 viele — the
+    /// original's own option and its own order (see
+    /// <see cref="Import.ExeTables.ResourceLevels"/>). It fills the buildings'
+    /// stores at the start of a SKIRMISH; the routine behind it has one caller
+    /// and that caller is the game-start message, so a campaign mission keeps
+    /// what its level file gives it. Default 2, which is what the numbers call
+    /// normal.</summary>
+    public static int Resources = 2;
+
     public const string MenuScene = "res://Scenes/Main/MainMenu.tscn";
+
+    /// <summary>A save the main menu picked, applied by the game screen once
+    /// the map is up. Empty means "start fresh". Cleared by whoever uses it, so
+    /// a later restart does not silently reload the same game.</summary>
+    public static string PendingSave = "";
     public const string GameScene = "res://Scenes/Gameplay/MapViewer.tscn";
 }

@@ -396,6 +396,159 @@ public sealed class ExeTables
                                                         MissionNameStride, MissionNameCount - 1));
             if (v != 0) { MissionNameBase = v; Relocated = true; }
         }
+        // NOT Scan(): that one stops 0x4000 short of each section's raw end,
+        // and this table lives inside exactly that tail — 0x538E20 in one build
+        // and 0x539DB8 in the other, while .data's scanned range ends at
+        // 0x537000. It cost a run to notice.
+        BuildingStatBase = ScanToEnd(BuildingStatsLookRight, 20 * BuildingStatStride);
+
+        // same tail, same reason — 0x539d90 in one build, 0x538df8 in the other
+        uint sc = ScanToEnd(SightCentreLooksRight, 20 * 2);
+        SightCentreFound = sc != 0;
+        if (sc != 0) { if (sc != SightCentreBase) Relocated = true; SightCentreBase = sc; }
+    }
+
+    /// <summary>Like <see cref="Scan"/>, but searching right up to the last
+    /// address a table of <paramref name="size"/> bytes could still start
+    /// at.</summary>
+    private uint ScanToEnd(Func<uint, bool> ok, int size)
+    {
+        foreach (var s in _sections)
+            for (uint va = s.Va; va + size <= s.Va + s.RawSize; va++)
+                if (ok(va)) return va;
+        return 0;
+    }
+
+    // ---- the building type table -------------------------------------------
+    //
+    // add_building @0x4C8D60 fills a new record from a 10-byte row indexed by
+    // the type: hit points into +0x06 and +0x16, the door count into +0x34 and
+    // the door offsets into +0x35.. — the same fields Capture.cs reads back out
+    // of sec3, which is the cross-check that this is the right table.
+    //
+    // Found BY SHAPE, never by address (rule 8): the two builds on this machine
+    // have it at 0x538E20 and 0x539DB8, and the scan below finds exactly one
+    // candidate in each — with the same sixteen door counts,
+    // 1,2,2,2,1,1,0,0,1,1,0,1,0,0,1,1.
+
+    /// <summary>Where the 10-byte building stat rows start, 0 if not found.</summary>
+    public uint BuildingStatBase { get; private set; }
+
+    public const int BuildingStatStride = 10;
+
+    /// <summary>Hit points a freshly built building of this type starts with,
+    /// and what a type with no row of its own gets — <c>add_building</c> writes
+    /// <b>700</b> for every type from 17 up (@0x4C8F1B).</summary>
+    public const int BuildingHpDefault = 700;
+
+    /// <summary>One row of the table: what a new building is made of.</summary>
+    public readonly struct BuildingStat
+    {
+        public readonly int Hp, DoorCount;
+        /// <summary>Door offsets from the building's origin, <see
+        /// cref="DoorCount"/> of them.</summary>
+        public readonly (int Col, int Row)[] Doors;
+        public BuildingStat(int hp, int doors, (int, int)[] d)
+        { Hp = hp; DoorCount = doors; Doors = d; }
+    }
+
+    public BuildingStat BuildingStats(int typ)
+    {
+        if (BuildingStatBase == 0 || typ < 1 || typ > 16)
+            return new BuildingStat(BuildingHpDefault, 0, Array.Empty<(int, int)>());
+        var r = Read((uint)(BuildingStatBase + typ * BuildingStatStride), BuildingStatStride);
+        if (r.Length < BuildingStatStride)
+            return new BuildingStat(BuildingHpDefault, 0, Array.Empty<(int, int)>());
+        int n = r[4];
+        var doors = new (int, int)[n];
+        for (int i = 0; i < n && i < 2; i++) doors[i] = (r[5 + i * 2], r[6 + i * 2]);
+        return new BuildingStat(BitConverter.ToUInt16(r, 0), n, doors);
+    }
+
+    // ---- where a building watches from, and how far ------------------------
+    //
+    // Read 08.08.2026 out of the fog update @0x4205B0. Its building half runs
+    // over all 255 records and, for each one that stands, belongs to somebody
+    // below 8, is ALLIED with the viewing player (the diplomacy matrix at
+    // 0x87b155, stride 40) and has byte[+0x18] set, calls the stamper with:
+    //
+    //     push 0xa                                   ; the radius, a CONSTANT
+    //     al = byte[typ*2 + 0x539d91]; ax += y       ; row offset
+    //     al = byte[typ*2 + 0x539d90]; ax += x       ; col offset
+    //     call stamp(x, y, radius)
+    //
+    // So a building watches from a point the game looks up PER TYPE, and every
+    // building — radar post included — sees exactly ten cells. Both numbers were
+    // ours before: the offset was "half the footprint, the obvious reading, not
+    // a measured one" and the radius was 6.
+
+    /// <summary>Where a building watches from, as an offset from the corner cell
+    /// its record names — one byte column, one byte row, per type.</summary>
+    public const uint SightCentreTable = 0x539d90;
+
+    /// <summary>How far a building sees. A constant in the original: <c>push
+    /// 0xa</c> @0x4206AB, the same for every type.</summary>
+    public const int BuildingSightRadius = 10;
+
+    public uint SightCentreBase { get; private set; } = SightCentreTable;
+    public bool SightCentreFound { get; private set; } = true;
+
+    /// <summary>The watch point of a type, or (0,0) when the table is missing.</summary>
+    public (int Col, int Row) SightCentre(int typ)
+    {
+        if (SightCentreBase == 0 || typ < 0 || typ > 16) return (0, 0);
+        var r = Read((uint)(SightCentreBase + typ * 2), 2);
+        return r.Length < 2 ? (0, 0) : (r[0], r[1]);
+    }
+
+    /// <summary>The shape, and it is sharp enough to hit exactly once in BOTH
+    /// executables on this machine: the Basis sits at (3,3), the three factories
+    /// all at (3,2), the Flughafen at (4,2), the Mine at (4,3), every value in
+    /// 1..4, and from type 17 on the table is zero.
+    ///
+    /// <para>⚠ Rule 8, and this time it was earned: the table is at 0x539d90 in
+    /// the build under study and at <b>0x538df8</b> in the one installed on F:.
+    /// A reader with a fixed address would have handed the installation
+    /// somebody else's bytes. Verified: both tables are byte-identical over
+    /// their 40 bytes.</para></summary>
+    private bool SightCentreLooksRight(uint va)
+    {
+        var r = Read(va, 20 * 2);
+        if (r.Length < 20 * 2) return false;
+        (int At, int Want)[] fp =
+        {
+            (1 * 2, 3), (1 * 2 + 1, 3),          // Basis
+            (2 * 2, 3), (2 * 2 + 1, 2),          // the three factories, all alike
+            (3 * 2, 3), (3 * 2 + 1, 2),
+            (4 * 2, 3), (4 * 2 + 1, 2),
+            (9 * 2, 4), (9 * 2 + 1, 2),          // Flughafen
+            (10 * 2, 4), (10 * 2 + 1, 3),        // Mine
+        };
+        foreach (var (at, want) in fp) if (r[at] != want) return false;
+        for (int t = 1; t <= 16; t++)
+            if (r[t * 2] is < 1 or > 4 || r[t * 2 + 1] is < 1 or > 4) return false;
+        for (int i = 17 * 2; i < 20 * 2; i++) if (r[i] != 0) return false;
+        return true;
+    }
+
+    /// <summary>The shape: entry 0 all zero, entries 1..16 carrying one of the
+    /// three hit-point values with a 1 at +0x03 and at most two doors, and
+    /// nothing at all from 17 on.</summary>
+    private bool BuildingStatsLookRight(uint va)
+    {
+        var r = Read(va, 20 * BuildingStatStride);
+        if (r.Length < 20 * BuildingStatStride) return false;
+        for (int i = 0; i < BuildingStatStride; i++) if (r[i] != 0) return false;
+        for (int t = 1; t <= 16; t++)
+        {
+            int o = t * BuildingStatStride;
+            int hp = BitConverter.ToUInt16(r, o);
+            if (hp is not (800 or 1000 or 1200)) return false;
+            if (r[o + 3] != 1 || r[o + 4] > 2) return false;
+        }
+        for (int i = 17 * BuildingStatStride; i < 20 * BuildingStatStride; i++)
+            if (r[i] != 0) return false;
+        return true;
     }
 
     /// <summary>A fixed-stride table of names, every slot zero-terminated AND
@@ -707,6 +860,601 @@ public sealed class ExeTables
                 Sight = r[0x27],
                 Ammo = r[0x28],
                 Fuel = BitConverter.ToUInt16(r, 0x2b),
+            });
+        }
+        return list;
+    }
+
+    // ---- the campaign's diplomacy ------------------------------------------
+
+    /// <summary>
+    /// Who is allied with whom, and who is neutral, in each of the 33 campaign
+    /// missions — <b>and it lives in the code, not in a table</b>.
+    ///
+    /// <para>This answers the question the handoff ended on: the campaign and
+    /// NET levels stop at section 38 and carry no sec106, so where does mission
+    /// 1 get its neutral player from? From the executable. The map loader calls
+    /// <c>mission_init</c> @0x487c40 (@0x41F1E6, thunk 0x401C2B) on every start,
+    /// and that routine sets the whole thing up:</para>
+    ///
+    /// <code>
+    ///   0x487C53  for a in 0..7: for b in 0..7:  set_relation(a, b, a==b)
+    ///   0x487C75  movsx eax, word [0x539934]     ; the mission number, 1..0x78
+    ///             jmp  dword [ecx*4 + 0x49417c]  ; ecx = byte [eax-1 + 0x4941fc]
+    ///   &lt;branch&gt;  set_relation(a, b, 1) …        ; THIS mission's alliances
+    ///   0x48827B  for p in 0..6:  set_relation(p, 7, 1)
+    ///   0x4883E7  for p in 0..7:  set_neutral(p, 0)
+    ///   0x4883F8                  set_neutral(7, 1)
+    /// </code>
+    ///
+    /// <para><c>set_relation</c> @0x4cf6d0 writes SYMMETRICALLY —
+    /// <c>byte[0x87b155 + a*40 + b]</c> and the mirror @0x4cf6ee — which is the
+    /// player record's +0x15, the same alliance row <see cref="CwmExtra"/> reads
+    /// out of sec53. <c>set_neutral</c> @0x4d09f0 writes
+    /// <c>byte[0xb38d38 + player]</c>, the field the loader fills from sec106 in
+    /// the .DM files (@0x41EC0A) and the takeover scan tests (@0x407275). That
+    /// address sits past the written part of .data (raw ends at VA 0x53c000), so
+    /// it starts at zero without anybody's help.</para>
+    ///
+    /// <para><b>Player 7 is the neutral one, in every mission</b> — and here it
+    /// is measured rather than assumed (see <see cref="LocateDiplomacy"/>): he
+    /// is the only slot allied with everybody in all 33 matrices. A raw byte
+    /// scan for every call of <c>set_neutral</c> in .text finds fourteen sites
+    /// and confirms it from the other side: <b>thirteen push player 7</b>, the
+    /// fourteenth is the loop that clears all eight. No other player is ever
+    /// made neutral, and there is no pointer to the routine anywhere in the
+    /// image, so the fourteen are all of them.</para>
+    ///
+    /// <para>The branches are straight-line code — nothing but
+    /// <c>push imm8</c>, <c>call</c>, <c>jmp</c> and <c>add esp, imm8</c> — so
+    /// this reads them by byte pattern rather than by disassembling. Two of the
+    /// branches use a short <c>EB</c> jump, and the compiler tail-merges: a
+    /// branch may jump INTO the argument list of the shared tail's call, which
+    /// is why the pending pushes have to survive a jump. Checked against
+    /// <c>aekernel/campaign_diplomacy.py</c>, which decodes the same code with
+    /// Capstone: <b>33 of 33 missions identical</b>.</para>
+    /// </summary>
+    public sealed class Diplomacy
+    {
+        public int Mission;
+        /// <summary>Symmetric, and every player is allied with himself.</summary>
+        public bool[,] Allied = new bool[8, 8];
+        /// <summary>Slots the mission puts out of play — always just 7.</summary>
+        public bool[] Neutral = new bool[8];
+
+        public bool IsAllied(int a, int b)
+            => a is >= 0 and < 8 && b is >= 0 and < 8 && Allied[a, b];
+        public bool IsNeutral(int p) => p is >= 0 and < 8 && Neutral[p];
+    }
+
+    // The addresses of the build the reading was done on. They are kept as
+    // DOCUMENTATION only — nothing below indexes by them, because this machine
+    // holds two different builds (see LocateDiplomacy).
+    public const uint MissionInit = 0x487c40;         // the routine
+    public const uint MissionInitDispatch = 0x487c86; // xor ecx,ecx; mov cl,…
+    public const uint MissionCaseIndex = 0x4941fc;    // one byte per mission
+    public const uint MissionCaseTable = 0x49417c;    // 32 branch targets
+    public const uint SetRelation = 0x4cf6d0;
+    public const uint SetNeutral = 0x4d09f0;          // -> byte[0xb38d38 + p]
+
+    public const int MissionCaseCount = 32;
+    /// <summary>The campaign has 33 missions; the jump table is sized 0x78.</summary>
+    public const int CampaignMissions = 33;
+
+    /// <summary>Where the jump table and its index bytes were found in THIS
+    /// executable, and which slot the missions leave out of play. All three are
+    /// searched for, not assumed — see <see cref="LocateDiplomacy"/>.</summary>
+    public uint DiplomacyDispatch { get; private set; }
+    public uint DiplomacyIndex { get; private set; }
+    public uint DiplomacyTable { get; private set; }
+    public int NeutralPlayer { get; private set; } = -1;
+    /// <summary>The confirming evidence: where <c>set_neutral</c> was found,
+    /// what it writes, and how many of its call sites push
+    /// <see cref="NeutralPlayer"/>.</summary>
+    public uint SetNeutralAt { get; private set; }
+    public uint NeutralField { get; private set; }
+    public int NeutralSites { get; private set; }
+    public int NeutralSitesConst { get; private set; }
+
+    private bool _diploTried;
+
+    public bool HasCampaignDiplomacy
+    {
+        get { LocateDiplomacy(); return DiplomacyTable != 0 && NeutralPlayer >= 0; }
+    }
+
+    /// <summary>
+    /// Find <c>mission_init</c> in whatever build this is.
+    ///
+    /// <para>⚠ This is not caution for its own sake. There are <b>two different
+    /// builds of GAME.EXE on this machine</b> — 1.421.824 bytes in the working
+    /// folder and under Program Files, and 1.420.800 bytes in the installation
+    /// on F: — and in the second one everything has moved: the dispatch sits at
+    /// 0x486346 instead of 0x487c86, and <c>set_relation</c> was compiled with
+    /// different registers (<c>88 94 c3</c> for <c>88 8c c3</c>). Reading by
+    /// address gave the F: install no diplomacy at all.</para>
+    ///
+    /// <para>So everything here is found by shape:</para>
+    /// <list type="number">
+    /// <item>a dispatch <c>33 C9 8A 88 idx FF 24 8D tab</c> whose table holds
+    /// exactly 32 targets (<c>idx - tab == 0x80</c>);</item>
+    /// <item>all 33 branches must walk cleanly to their end;</item>
+    /// <item>and the 33 matrices must leave <b>exactly one</b> player allied
+    /// with everybody in every single mission. That player is the neutral one —
+    /// <b>measured, not assumed</b>. The shared tail @0x48827B is what puts him
+    /// there and no mission takes it back.</item>
+    /// </list>
+    ///
+    /// <para>The result is then confirmed from the other side: the function
+    /// whose body is <c>33 C9 8A 44 24 04 8A 4C 24 08 88 81 imm32 C3</c> —
+    /// <c>set_neutral</c> — has its call sites counted, and in both builds
+    /// <b>13 of 14 push exactly that player</b>, the fourteenth being the loop
+    /// that clears all eight. (There is a second function of the same shape
+    /// with 119 sites spread over all eight players; the three-quarter majority
+    /// is what tells them apart.)</para>
+    ///
+    /// <para>Checked against <c>aekernel/diplo_relocate.py</c>, which does the
+    /// same search with Capstone: the two builds agree on <b>33 of 33
+    /// missions</b>, and <c>campaign_diplomacy.py</c> agrees field for field.
+    /// The diplomacy is a property of the game, not of one binary.</para>
+    /// </summary>
+    private void LocateDiplomacy()
+    {
+        if (_diploTried) return;
+        _diploTried = true;
+        var (tva, text) = TextSection();
+        if (text.Length == 0) return;
+
+        uint bestIdx = 0, bestTab = 0, bestAt = 0;
+        int neutral = -1, found = 0;
+        for (int i = 0; i + 16 < text.Length; i++)
+        {
+            if (text[i] != 0x33 || text[i + 1] != 0xC9 ||
+                text[i + 2] != 0x8A || text[i + 3] != 0x88) continue;
+            if (text[i + 8] != 0xFF || text[i + 9] != 0x24 || text[i + 10] != 0x8D) continue;
+            uint idx = BitConverter.ToUInt32(text, i + 4);
+            uint tab = BitConverter.ToUInt32(text, i + 11);
+            if (idx - tab != 4 * MissionCaseCount) continue;
+
+            var mats = AllMatrices(idx, tab);
+            if (mats == null) continue;
+            int only = -1;
+            for (int q = 0; q < 8; q++)
+            {
+                bool all = true;
+                foreach (var m in mats)
+                    for (int p = 0; p < 8 && all; p++) if (!m[p, q]) all = false;
+                if (!all) continue;
+                if (only >= 0) { only = -1; break; }   // more than one: no verdict
+                only = q;
+            }
+            if (only < 0) continue;
+            found++;
+            bestIdx = idx; bestTab = tab; bestAt = (uint)(tva + i); neutral = only;
+        }
+        if (found != 1) return;                        // ambiguous is not found
+
+        DiplomacyDispatch = bestAt;
+        DiplomacyIndex = bestIdx;
+        DiplomacyTable = bestTab;
+        NeutralPlayer = neutral;
+        ConfirmNeutral(neutral);
+    }
+
+    /// <summary>The <c>set_neutral</c> whose sites push <paramref name="who"/>,
+    /// as the second, independent witness. Nothing depends on it — it only
+    /// supplies the numbers the note above quotes.</summary>
+    private void ConfirmNeutral(int who)
+    {
+        var (tva, text) = TextSection();
+        for (int i = 0; i + 17 < text.Length; i++)
+        {
+            if (text[i] != 0x33 || text[i + 1] != 0xC9 || text[i + 2] != 0x8A ||
+                text[i + 3] != 0x44 || text[i + 4] != 0x24 || text[i + 5] != 0x04 ||
+                text[i + 6] != 0x8A || text[i + 7] != 0x4C || text[i + 8] != 0x24 ||
+                text[i + 9] != 0x08 || text[i + 10] != 0x88 || text[i + 11] != 0x81 ||
+                text[i + 16] != 0xC3) continue;
+
+            uint va = (uint)(tva + i);
+            var sites = CallSites(va);
+            int hit = 0;
+            foreach (uint s in sites)
+            {
+                var p = PushesBefore(s, 12);
+                if (p.Count >= 2 && p[^2] == who) hit++;
+            }
+            if (sites.Count == 0 || hit * 4 < sites.Count * 3) continue;
+            if (hit <= NeutralSitesConst) continue;
+            SetNeutralAt = va;
+            NeutralField = BitConverter.ToUInt32(text, i + 12);
+            NeutralSites = sites.Count;
+            NeutralSitesConst = hit;
+        }
+    }
+
+    private uint _textVa;
+    private byte[]? _text;
+
+    /// <summary>The code section — the first one in both builds, at RVA 0x1000.
+    /// Cached, because the searches above sweep it several times.</summary>
+    private (uint Va, byte[] Data) TextSection()
+    {
+        if (_text != null) return (_textVa, _text);
+        if (_sections.Count == 0) return (0, Array.Empty<byte>());
+        var s = _sections[0];
+        int o = (int)s.Raw, n = (int)s.RawSize;
+        if (o < 0 || n < 0 || o + n > _d.Length) return (0, Array.Empty<byte>());
+        _text = new byte[n];
+        Array.Copy(_d, o, _text, 0, n);
+        _textVa = s.Va;
+        return (_textVa, _text);
+    }
+
+    /// <summary>Follow one <c>jmp rel32</c> thunk, which is how every call in
+    /// these branches reaches its function.</summary>
+    private uint Resolve(uint va)
+    {
+        var b = Read(va, 5);
+        return b.Length == 5 && b[0] == 0xE9 ? (uint)(va + 5 + BitConverter.ToInt32(b, 1)) : va;
+    }
+
+    /// <summary>Two <c>mov [reg + reg*8 + imm32], reg8</c> on the SAME imm32 —
+    /// the symmetric write that makes this <c>set_relation</c> (@0x4cf6d0 in one
+    /// build, @0x4cf270 in the other, with different registers in each).</summary>
+    private bool LooksLikeSetRelation(uint va)
+    {
+        var b = Read(va, 48);
+        uint first = 0;
+        bool have = false;
+        for (int i = 0; i + 7 <= b.Length; i++)
+        {
+            if (b[i] != 0x88) continue;
+            if ((b[i + 1] & 0xC7) != 0x84) continue;      // mod=10, rm=100 (SIB)
+            if ((b[i + 2] & 0xC0) != 0xC0) continue;      // SIB scale = 8
+            uint a = BitConverter.ToUInt32(b, i + 3);
+            if (have && a == first) return true;
+            if (!have) { first = a; have = true; }
+        }
+        return false;
+    }
+
+    private List<uint> CallSites(uint target)
+    {
+        var (tva, text) = TextSection();
+        var wanted = new HashSet<uint> { target };
+        for (int i = 0; i + 5 <= text.Length; i++)
+            if (text[i] == 0xE9 &&
+                (uint)(tva + i + 5 + BitConverter.ToInt32(text, i + 1)) == target)
+                wanted.Add((uint)(tva + i));
+        var outp = new List<uint>();
+        for (int i = 0; i + 5 <= text.Length; i++)
+            if (text[i] == 0xE8 &&
+                wanted.Contains((uint)(tva + i + 5 + BitConverter.ToInt32(text, i + 1))))
+                outp.Add((uint)(tva + i));
+        return outp;
+    }
+
+    /// <summary>The push arguments immediately before a call. Register pushes
+    /// come back as -1, which is how the clearing loop is told from the rest.</summary>
+    private List<int> PushesBefore(uint va, int span)
+    {
+        var b = Read(va - (uint)span, span);
+        var outp = new List<int>();
+        for (int i = 0; i < b.Length;)
+        {
+            if (b[i] == 0x6A && i + 1 < b.Length) { outp.Add(b[i + 1]); i += 2; }
+            else if (b[i] >= 0x50 && b[i] <= 0x57) { outp.Add(-1); i++; }
+            else i++;
+        }
+        return outp;
+    }
+
+    /// <summary>Walk one mission's branch. It ends where the code stops being
+    /// pushes and calls — in the 1997 build that is the <c>push 0x5029a8</c> at
+    /// 0x4882DD, which no longer belongs to the diplomacy.</summary>
+    private bool[,]? Matrix(uint start)
+    {
+        var m = new bool[8, 8];
+        for (int p = 0; p < 8; p++) m[p, p] = true;        // the 8x8 init loop
+        uint at = start;
+        var pend = new List<int>();
+        for (int guard = 0; guard < 4000; guard++)
+        {
+            var b = Read(at, 8);
+            if (b.Length < 8) return null;
+            if (b[0] == 0x6A) { pend.Add(b[1]); at += 2; }              // push imm8
+            else if (b[0] == 0xE8)                                      // call rel32
+            {
+                uint t = Resolve((uint)(at + 5 + BitConverter.ToInt32(b, 1)));
+                if (LooksLikeSetRelation(t))
+                {
+                    if (pend.Count < 3) return null;
+                    // cdecl: the last push is the first argument
+                    int v = pend[^3], q = pend[^2], p = pend[^1];
+                    if (p is < 0 or > 7 || q is < 0 or > 7) return null;
+                    m[p, q] = v != 0;
+                    m[q, p] = v != 0;                                   // @0x4cf6ee
+                }
+                pend.Clear();
+                at += 5;
+            }
+            else if (b[0] == 0xE9) at = (uint)(at + 5 + BitConverter.ToInt32(b, 1));
+            else if (b[0] == 0xEB) at = (uint)(at + 2 + (sbyte)b[1]);
+            else if (b[0] == 0x83 && b[1] == 0xC4) at += 3;             // add esp, imm8
+            else return m;                                              // the end
+        }
+        return null;                                                    // runaway
+    }
+
+    private List<bool[,]>? AllMatrices(uint idx, uint tab)
+    {
+        var list = new List<bool[,]>();
+        for (int mission = 1; mission <= CampaignMissions; mission++)
+        {
+            var c = Read((uint)(idx + mission - 1), 1);
+            if (c.Length < 1 || c[0] >= MissionCaseCount) return null;
+            var t = Read((uint)(tab + 4 * c[0]), 4);
+            if (t.Length < 4) return null;
+            var m = Matrix(BitConverter.ToUInt32(t, 0));
+            if (m == null) return null;
+            list.Add(m);
+        }
+        return list;
+    }
+
+    /// <summary>The diplomacy of one campaign mission, 1-based, or null when
+    /// this executable does not carry a mission_init this can find.</summary>
+    public Diplomacy? CampaignDiplomacy(int mission)
+    {
+        if (mission < 1 || mission > CampaignMissions) return null;
+        if (!HasCampaignDiplomacy) return null;
+
+        var c = Read((uint)(DiplomacyIndex + mission - 1), 1);
+        if (c.Length < 1 || c[0] >= MissionCaseCount) return null;
+        var t = Read((uint)(DiplomacyTable + 4 * c[0]), 4);
+        if (t.Length < 4) return null;
+        var m = Matrix(BitConverter.ToUInt32(t, 0));
+        if (m == null) return null;
+
+        var d = new Diplomacy { Mission = mission, Allied = m };
+        d.Neutral[NeutralPlayer] = true;
+        return d;
+    }
+
+    /// <summary>All 33, for the self-test.</summary>
+    public List<Diplomacy> CampaignDiplomacyAll()
+    {
+        var list = new List<Diplomacy>();
+        for (int m = 1; m <= CampaignMissions; m++)
+        {
+            var d = CampaignDiplomacy(m);
+            if (d != null) list.Add(d);
+        }
+        return list;
+    }
+
+    // ---- "Rohstoffe: keine / wenige / normal / viele" -----------------------
+
+    /// <summary>What one setting of the skirmish's resource option puts into the
+    /// buildings. The game's own word for it is in <see cref="Name"/>.</summary>
+    public sealed class ResourceLevel
+    {
+        public int Level;
+        public string Name = "";
+        /// <summary>Basis, Flughafen and Werft-Station: the three parts stores
+        /// Waffen / Fahrwerk / Spezial.</summary>
+        public int Weapons, Chassis, Special;
+        /// <summary>The three factories: parts stores emptied, this much
+        /// Terranium.</summary>
+        public int Terranium;
+        /// <summary>Mine and Feld-Rohstoffmine: what is left in the ground.</summary>
+        public int Deposit;
+    }
+
+    /// <summary>How a building type is filled. Read off the routine's own jump
+    /// table, not assigned by hand.</summary>
+    public enum ResourceFill { None = 0, Stores = 1, Factory = 2, Mine = 3, Clear = 4 }
+
+    /// <summary>The four settings, level 0..3.</summary>
+    public uint ResourceStoreTable { get; private set; }
+    public uint ResourceFactoryTable { get; private set; }
+    public uint ResourceMineTable { get; private set; }
+    public uint ResourceCaseIndex { get; private set; }
+    public uint ResourceCaseTable { get; private set; }
+    public uint ResourceLabelTable { get; private set; }
+    /// <summary>Where the option itself lives — 0x54079c in the 1997 build.</summary>
+    public uint ResourceOptionVar { get; private set; }
+    public uint ResourceDispatch { get; private set; }
+
+    private bool _resTried;
+    public const int ResourceLevelCount = 4;
+    /// <summary>The routine walks 255 building slots, not the full 300
+    /// (@0x41A0C0: <c>inc cl</c> against 0xFF).</summary>
+    public const int ResourceSlotsScanned = 255;
+
+    public bool HasResourceTables
+    {
+        get { LocateResources(); return ResourceStoreTable != 0 && ResourceLabelTable != 0; }
+    }
+
+    /// <summary>
+    /// Find <c>fill_resources</c> and read its three tables out of its own
+    /// instructions.
+    ///
+    /// <para>The routine is @0x419fe0 in the 1997 build and is called from
+    /// exactly ONE place — @0x41ACA0, inside the game-start message handler
+    /// @0x4c2280, right after <c>byte[0x54079c]</c> has been set from the
+    /// options packet (@0x4C40F8). So the option belongs to a NETWORK or
+    /// SKIRMISH game and never runs in a campaign mission, which keeps its
+    /// stores from the level file. One caller is a fact, not an impression.</para>
+    ///
+    /// <para>It walks the building records (base 0xc06910, stride 76, type at
+    /// +0x04) and switches on the type through an index byte and a jump table:
+    /// <list type="bullet">
+    /// <item><b>Basis (1), Flughafen (9), Werft-Station (16)</b> get three u16
+    /// from the first table into +0x2c/+0x2e/+0x30 — Waffen, Fahrwerk,
+    /// Spezial;</item>
+    /// <item><b>the three factories (2, 3, 4)</b> get those three set to ZERO
+    /// and Terranium at +0x32 from the second table;</item>
+    /// <item><b>Mine (10) and Feld-Rohstoffmine (15)</b> get the deposit table's
+    /// value written into the deposit array (0x878adc, stride 18, index from
+    /// record +0x19);</item>
+    /// <item>everything else from 1 to 16 is emptied, and type 0 is skipped.
+    /// </item>
+    /// </list>
+    /// None of that is assigned here — the mapping is read back out of the jump
+    /// table, and a branch is identified by which of the three table reads falls
+    /// inside it.</para>
+    ///
+    /// <para>The numbers are a clean doubling ladder, which is what makes the
+    /// reading safe: <b>0/0/0 · 150/200/100 · 300/400/200 · 600/800/400</b>,
+    /// Terranium <b>0 · 500 · 1000 · 2000</b>, deposits <b>0 · 1000 · 3000 ·
+    /// 9000</b>. The four names are the game's own — <c>keine</c>,
+    /// <c>wenige</c>, <c>normal</c>, <c>viele</c> — taken from the menu code
+    /// @0x480B5D, which switches the same variable over four string pointers, so
+    /// the order of the names comes from the game and not from the ladder.</para>
+    ///
+    /// <para>Found by shape in both builds on this machine: tables at 0x4f7f70 /
+    /// 0x4f7f88 / 0x4f7f90 in one and 0x4f6f50 / 0x4f6f68 / 0x4f6f70 in the
+    /// other, and the same twelve numbers in each.</para>
+    /// </summary>
+    private void LocateResources()
+    {
+        if (_resTried) return;
+        _resTried = true;
+        var (tva, text) = TextSection();
+        if (text.Length == 0) return;
+
+        // the dispatch: cmp eax,0x10 / ja / xor ebx,ebx / mov bl,[eax+idx] /
+        //               jmp dword [ebx*4 + tab]
+        for (int i = 0; i + 20 < text.Length; i++)
+        {
+            if (text[i] != 0x83 || text[i + 1] != 0xF8 || text[i + 2] != 0x10 ||
+                text[i + 3] != 0x77) continue;
+            if (text[i + 5] != 0x33 || text[i + 6] != 0xDB ||
+                text[i + 7] != 0x8A || text[i + 8] != 0x98) continue;
+            if (text[i + 13] != 0xFF || text[i + 14] != 0x24 || text[i + 15] != 0x9D) continue;
+
+            uint idx = BitConverter.ToUInt32(text, i + 9);
+            uint tab = BitConverter.ToUInt32(text, i + 16);
+
+            // the three table reads, inside the branches that follow
+            uint store = 0, fact = 0, mine = 0;
+            uint storeAt = 0, factAt = 0, mineAt = 0;
+            for (int k = i; k < i + 0x100 && k + 8 < text.Length; k++)
+            {
+                if (text[k] != 0x66 || text[k + 1] != 0x8B) continue;
+                uint at = (uint)(tva + k);
+                // mov ax, [ebx*2 + imm32] / mov ax, [eax*2 + imm32] /
+                // mov di, [eax*2 + imm32]
+                if (text[k + 2] == 0x04 && text[k + 3] == 0x5D && store == 0)
+                { store = BitConverter.ToUInt32(text, k + 4); storeAt = at; }
+                else if (text[k + 2] == 0x04 && text[k + 3] == 0x45 && fact == 0)
+                { fact = BitConverter.ToUInt32(text, k + 4); factAt = at; }
+                else if (text[k + 2] == 0x3C && text[k + 3] == 0x45 && mine == 0)
+                { mine = BitConverter.ToUInt32(text, k + 4); mineAt = at; }
+            }
+            if (store == 0 || fact == 0 || mine == 0) continue;
+            if (Offset(store) < 0 || Offset(fact) < 0 || Offset(mine) < 0) continue;
+
+            ResourceDispatch = (uint)(tva + i);
+            ResourceCaseIndex = idx;
+            ResourceCaseTable = tab;
+            ResourceStoreTable = store;
+            ResourceFactoryTable = fact;
+            ResourceMineTable = mine;
+            _resStoreAt = storeAt; _resFactAt = factAt; _resMineAt = mineAt;
+            break;
+        }
+        if (ResourceStoreTable == 0) return;
+
+        // the menu: mov al,[var] / cmp eax,3 / ja / jmp [eax*4 + tab], then four
+        // `mov edi, <string>` — that is where the four names come from, in the
+        // order the option counts them
+        for (int i = 0; i + 32 < text.Length; i++)
+        {
+            if (text[i] != 0xA0 || text[i + 5] != 0x83 || text[i + 6] != 0xF8 ||
+                text[i + 7] != 0x03 || text[i + 8] != 0x77) continue;
+            if (text[i + 10] != 0xFF || text[i + 11] != 0x24 || text[i + 12] != 0x85) continue;
+            ResourceOptionVar = BitConverter.ToUInt32(text, i + 1);
+            ResourceLabelTable = BitConverter.ToUInt32(text, i + 13);
+            break;
+        }
+    }
+
+    private uint _resStoreAt, _resFactAt, _resMineAt;
+
+    /// <summary>Which fill a building type gets. The branch a type jumps to is
+    /// identified by which table read falls inside it — the branches lie one
+    /// after another, so a branch runs to the start of the next one.</summary>
+    public ResourceFill ResourceFillOf(int buildingType)
+    {
+        if (!HasResourceTables) return ResourceFill.None;
+        if (buildingType is < 0 or > 16) return ResourceFill.Clear;   // @0x41A016
+        var c = Read((uint)(ResourceCaseIndex + buildingType), 1);
+        if (c.Length < 1) return ResourceFill.None;
+
+        // every distinct branch start, sorted, so each one's extent is known
+        var starts = new List<uint>();
+        for (int t = 0; t <= 16; t++)
+        {
+            var b = Read((uint)(ResourceCaseIndex + t), 1);
+            if (b.Length < 1) continue;
+            var tg = Read((uint)(ResourceCaseTable + 4 * b[0]), 4);
+            if (tg.Length < 4) continue;
+            uint v = BitConverter.ToUInt32(tg, 0);
+            if (!starts.Contains(v)) starts.Add(v);
+        }
+        starts.Sort();
+
+        var mine2 = Read((uint)(ResourceCaseTable + 4 * c[0]), 4);
+        if (mine2.Length < 4) return ResourceFill.None;
+        uint start = BitConverter.ToUInt32(mine2, 0);
+        uint end = uint.MaxValue;
+        foreach (uint s in starts) if (s > start && s < end) end = s;
+
+        if (_resStoreAt >= start && _resStoreAt < end) return ResourceFill.Stores;
+        if (_resFactAt >= start && _resFactAt < end) return ResourceFill.Factory;
+        if (_resMineAt >= start && _resMineAt < end) return ResourceFill.Mine;
+        // the highest branch is the loop's own end — type 0 falls straight there
+        return start >= end || starts.Count == 0 || start == starts[^1]
+            ? ResourceFill.None : ResourceFill.Clear;
+    }
+
+    /// <summary>The four settings with the game's own names.</summary>
+    public List<ResourceLevel> ResourceLevels()
+    {
+        var list = new List<ResourceLevel>();
+        if (!HasResourceTables) return list;
+        for (int l = 0; l < ResourceLevelCount; l++)
+        {
+            var s = Read((uint)(ResourceStoreTable + l * 6), 6);
+            var f = Read((uint)(ResourceFactoryTable + l * 2), 2);
+            var m = Read((uint)(ResourceMineTable + l * 2), 2);
+            if (s.Length < 6 || f.Length < 2 || m.Length < 2) break;
+            string name = "";
+            var p = Read((uint)(ResourceLabelTable + l * 4), 4);
+            if (p.Length == 4)
+            {
+                // the jump table holds CODE addresses; the string pointer is the
+                // `mov edi, imm32` at the start of that little branch
+                var br = Read(BitConverter.ToUInt32(p, 0), 5);
+                if (br.Length == 5 && br[0] == 0xBF)
+                {
+                    var txt = Read(BitConverter.ToUInt32(br, 1), 16);
+                    int n = Array.IndexOf(txt, (byte)0);
+                    if (n > 0) name = Str(txt, 0, n);
+                }
+            }
+            list.Add(new ResourceLevel
+            {
+                Level = l,
+                Name = name,
+                Weapons = BitConverter.ToUInt16(s, 0),
+                Chassis = BitConverter.ToUInt16(s, 2),
+                Special = BitConverter.ToUInt16(s, 4),
+                Terranium = BitConverter.ToUInt16(f, 0),
+                Deposit = BitConverter.ToUInt16(m, 0),
             });
         }
         return list;

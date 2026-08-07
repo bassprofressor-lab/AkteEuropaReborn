@@ -4,6 +4,235 @@ All notable changes to Akte Europa Reborn. The build ships **only the engine** �
 terrain, units, maps, tables and now sound are derived on your own machine from
 your own copy of the 1997 game.
 
+## 0.4.0 — 2026-08-08
+
+The release that came out of playing 0.3.3. Two dozen reports were worked
+through one at a time, and most of the answers were already in the 1997
+program — the passability, the alliances, the doors, the ruins, the speed of a
+unit. Where the game could be asked, it was asked; where it could not, the entry
+says so.
+
+### Graphics
+
+- **A destroyed building shows its ruin.** It used to stand there untouched and
+  could still be clicked. The game has a picture for it — the last pattern of
+  every type — and to use it the buildings had to stop being **baked into the
+  map picture**. They are drawn live now, which is what lets them fall.
+
+- **A wrecked unit leaves a wreck, not a black blob.** The scorch mark under the
+  debris is a shading layer, not a picture, and was being drawn as solid black.
+  It is blended at 45 % under one of three debris variants now. Dead units also
+  stopped swallowing clicks: a corpse on the same cell as a living unit used to
+  win the click and eat the order.
+
+- **Buildings have doors.** Sequence 301 of ANIM.CWA, 76 frames = 19 doors x 4
+  phases, placed the way the original places them and opened by the original's
+  own rule: something in the door cell opens it, an empty cell shuts it.
+
+- **A building can be clicked on its body.** Its hit area was a small square
+  beside it; it is the whole footprint now, cell by cell out of the occupancy
+  mask.
+
+- **Ships are no longer cut off at the bow.** Every unit picture was drawn onto
+  a fixed 64x56 canvas and anything past it was thrown away — 192 of the bank's
+  3,439 frames lost visible pixels. The canvas is a minimum now and grows for
+  the frames that need it.
+
+- **Every unit was drawn two and a half rows too far north.** Inland nobody
+  could see it; at the water's edge it is a ship standing on the beach, which is
+  how it was found. Checked by asking, for every water cell on a map, whether
+  the pixel a unit is placed on is really blue: 20,340 cells over five maps,
+  20,324 of them right, the 16 exceptions being piers.
+
+- **The ships of mission 1 float.** A ship covers four cells and the level file
+  names only its corner, so it was drawn half a tile inland.
+
+- **The overview map shows what you can see.** It used to draw the whole
+  battlefield whether you had been there or not. It now carries the same fog the
+  main map does: never seen is black, remembered is dimmed, watched right now is
+  bright.
+
+- **The pause screen sits in the middle.** It hung half off the top-left corner
+  — a Control under a CanvasLayer is laid out at size zero, and the panel
+  centred itself on that.
+
+- **The settings screen sits where it belongs** and survives a 720p window.
+
+- **The version is in the main menu**, bottom right, out of `project.godot` so
+  code and installer cannot drift apart.
+
+### Animation
+
+- **The factories run their conveyor belts, the mines turn their wheels, the
+  airfield runs a light along its runway.** Every tileset carries a table of
+  cell animations that nothing had ever read — the game calls it "animations of
+  the buildings" itself. 207 rows over 23 tilesets, every one of them on a cell
+  that really belongs to its building.
+
+- **Doors open and close** in four phases as something enters or leaves the door
+  cell.
+
+- **Infantry falls over when it dies** instead of vanishing, and the walk cycle
+  was measured rather than assumed: eleven of eleven marching soldiers show all
+  eight walk pictures.
+
+- Not yet: **vehicles still glide.** Mechs and spiders show one fixed picture
+  while they drive. The field the picture comes from is not an animation counter
+  — where the original takes the walk phase from is still unknown. See 0.5.0.
+
+### Gameplay
+
+- **You can take a building.** Drive a unit up to the door of a neutral or enemy
+  structure and it changes hands, with everything in it. How long it takes is
+  the building's own hit points, so a battered factory falls faster than a fresh
+  one — the original's rule, not a number of ours.
+
+- **A rescued building can be taken again.** Stopping an enemy mid-capture used
+  to lock the building for good, for everybody. The original resets the whole
+  capture state when it is broken off, and now so does this.
+
+- **Neutral units join you when you drive up to them.** The neutral unit looks
+  at the ring around itself — three by three, four by four for the wider chassis
+  — and only the human player collects them, which is the original's rule.
+
+- **You can build.** Depot, generator and Feld-Rohstoffmine can be raised, with
+  the build site tested the way the original tests it.
+
+- **Saving and loading**, for campaign and skirmish, with a round-trip check
+  that reloads what it just wrote and compares it.
+
+- **ESC pauses and offers a menu** — continue, restart, save, quit to the main
+  menu. Ours from end to end: the 1997 game leaves to the menu straight away.
+
+- **"Rohstoffe: keine · wenige · normal · viele"** — the original's own skirmish
+  option, with its own words and its own numbers.
+
+- **A production list in the panel.** Select a factory, a dock or an airfield
+  and the display box shows what it can build, what each costs and what it can
+  pay for right now; click a line to order it. `I` puts the info text back.
+
+- **The network maps are conquest maps, and the skirmish says so.** They carry
+  12 to 42 factories and 4 to 8 bases standing neutral, waiting to be taken.
+
+- **The computer goes for buildings too.** One unit per side at a time, sent to
+  the nearest door it does not own.
+
+### Movement and the map
+
+- **Units can cross bridges.** A bridge is drawn as a map object and this remake
+  blocked every cell an object stands on. The original asks its own map — the
+  **imap** — where a bridge cell is free. Over 23 levels, **13,660 cells that
+  used to block are free**.
+
+- **Land units stay out of the water.** The water they drove into came from
+  reading the wrong section — a zone map the movement code never touches.
+
+- **Rough ground is only for those who can cross it.** Foot soldiers walk it,
+  hovercraft cross it where the ground is level, vehicles go round.
+
+- **Infantry can be driven through and driven over** — friendly infantry is
+  driven through, hostile infantry is run over, both the original's rules.
+
+- **The view stops at the edge of the map**, and the minimap's white viewport
+  can no longer be dragged out of it — that jump was the only path in the game
+  that skipped the camera clamp.
+
+- **A building no longer seems to block the reveal.** It watched from the corner
+  cell of its footprint, so the far side of a 7x6 base fell outside its own
+  sight circle.
+
+### Rules read out of the original
+
+- **A built unit is no longer a thousand times too fast.** The speed field was
+  read as a word where it is a byte: over 601 designs that gave values up to
+  48,643 instead of 0..17 — and 0..17 is exactly what the units placed on the
+  maps carry. This was the "super speed mode" reported for spiders.
+
+- **A built unit gets the movement class of its chassis.** Production pinned
+  every unit to "vehicle", walkers and hovercraft included.
+
+- **The campaign knows who its friends are.** The alliances of all 33 missions
+  and the neutral slot are read out of the game's own start-up routine instead
+  of being guessed from who owns a base. Player 7 is neutral in every mission —
+  measured, not assumed: the only slot allied with everybody in all 33 tables.
+
+- **A building sees ten cells, from a point the game looks up per type.** Both
+  numbers used to be ours (six cells, half the footprint). They are the
+  original's now, and the table was found by shape rather than by address —
+  it sits at different addresses in the two 1997 executables that exist.
+
+- **Only your own units can be selected.** Click and rubber band took anything
+  on the map, so the enemy could be picked up and given orders.
+
+- **The campaign stops shooting at bystanders.** Mission 1 has sides that only
+  stand there. Sides that own a base are played; the rest are left alone.
+
+### Sound and music
+
+- **The music plays.** It was fully built and simply never started — the six
+  MIDI tracks were exported, the volume worked, and nothing ever called play.
+
+  ⚠ Which piece belongs to which mission is **ours**: the original picks by a
+  file name assembled at run time, and that assembly has not been read.
+
+- **The menu is quiet again.** Every click played sound 600, which is not an
+  interface sound at all but a 1.8-second spoken line the campaign uses to
+  announce a finished objective.
+
+- **A dying foot soldier no longer sets off a fire.** The death effect was the
+  tall flame that burns on trees, three times the size of the explosion it was
+  meant to be. The hit announcement that came with it is not a fault: the
+  original announces hits on infantry too.
+
+### Under the hood
+
+- **The .CWP building tables are read completely.** The fourth of them — the
+  cell animations — was the last unread block, and both its fields of the type
+  record now have a meaning.
+
+- **Every reading is held against the Python reference, byte for byte.** The
+  self-test compares 410 type rows, 255,660 pattern cells and 207 animation rows
+  between the original files, this engine and the exported content, and the
+  shipped binary is tested, not just the development tree.
+
+- **The map baker's test knows what the baker deliberately leaves out.** Since
+  buildings are drawn live, the baked picture differs from the 1997 reference
+  exactly where a building stands; the test now exempts those pixels and prints
+  how many, so the exemption cannot hide anything.
+
+- New harness switches for measuring instead of looking: `--anim-check`,
+  `--inf-anim-check`, `--door-check`, `--ruin-check`, `--corpse-check`,
+  `--group-check`, `--save-check`, `--selftest-bake=`, and
+  `--reexport-buildings=`, which rewrites the tileset files without re-baking a
+  single map.
+
+### Notes
+
+- Content imported before this version has no passability block and no door
+  field. The game says so when it loads such a map, and the count is printed
+  rather than hidden. Re-import, or run `--reexport-states=<source>`, which
+  rewrites only the game state and leaves the pictures alone. Campaign levels 16
+  to 33 live on the second disc, so that run needs both discs.
+
+- The installer ships **only the engine**. Terrain, units, maps and tables are
+  derived on your own machine from your own two CDs on first start.
+
+### Coming in 0.5.0
+
+- **The campaign mission scripts.** This is the big one: alliances that change
+  during a mission, reinforcements that arrive, objectives that trigger. The
+  command bus the game runs all its orders through has been located — roughly
+  295 opcodes — which is the groundwork.
+- **Walking vehicles.** Mechs and spiders glide; the source of the walk phase is
+  still open.
+- **The computer opponent.** It does not move its infantry, and it builds
+  transports where it should build an army.
+- **The last factory doors.** Two of the door pictures come from a table that is
+  filled at run time and was empty in every memory image taken so far.
+- **"Radar setzen".** A unit carries a stock of radars and can drop one; it
+  reveals ten cells for everybody allied with its owner. Read completely out of
+  the original, not built yet.
+
 ## 0.3.3 — 2026-08-03
 
 0.3.2 put the turret on the deck with a number of our own, measured from the

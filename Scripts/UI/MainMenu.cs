@@ -43,6 +43,7 @@ public partial class MainMenu : Control
     private TextureRect _preview = null!;
     private Label _previewText = null!;
     private OptionButton _level = null!;
+    private OptionButton? _res;
     private SpinBox _ai = null!;
     private Label _hint = null!;
 
@@ -63,7 +64,7 @@ public partial class MainMenu : Control
         var original = new System.Collections.Generic.List<StartMenuPanel.Row>(
             StartMenuPanel.Original(
                 newGame: missions.Count > 0 ? StartCampaign : null,
-                load: null,
+                load: () => AddChild(new LoadGameScreen()),
                 net: null,
                 settings: () => AddChild(new SettingsScreen()),
                 encyclopedia: null,
@@ -252,6 +253,18 @@ public partial class MainMenu : Control
         _level.AddItem("Schwer");
         _level.Selected = 1;
 
+        // "Rohstoffe" is the original's own option, down to the four words and
+        // their order — they come out of the menu code that switches the same
+        // setting (Import/ExeTables.ResourceLevels). Where the table cannot be
+        // read the row is left out rather than filled with invented names.
+        var resNames = MapEntityLayer.ResourceLevelNames();
+        if (resNames.Count > 0)
+        {
+            box.AddChild(Row("Rohstoffe", _res = new OptionButton()));
+            foreach (string n in resNames) _res.AddItem(n);
+            _res.Selected = Mathf.Clamp(SkirmishSetup.Resources, 0, resNames.Count - 1);
+        }
+
         box.AddChild(new HSeparator());
 
         var start = new Button { Text = "GEMETZEL STARTEN", CustomMinimumSize = new Vector2(0, 44) };
@@ -324,6 +337,46 @@ public partial class MainMenu : Control
                 GetTree().Quit(ok ? 0 : 1);
                 return;
             }
+            else if (a.StartsWith("--reexport-states="))
+            {
+                // only the game-state files, the pictures stay as they are
+                string[] dirs = a["--reexport-states=".Length..]
+                    .Split(';', System.StringSplitOptions.RemoveEmptyEntries);
+                var src = Core.ContentSources.FromFolders(dirs);
+                if (src == null) { GD.PrintErr("reexport: keiner der Ordner existiert"); GetTree().Quit(2); return; }
+                GetTree().Quit(new Import.ContentBuilder(src).ReexportStates() ? 0 : 1);
+                return;
+            }
+            else if (a.StartsWith("--reexport-tables="))
+            {
+                // only the tables read out of GAME.EXE — costs a second
+                string[] dirs = a["--reexport-tables=".Length..]
+                    .Split(';', System.StringSplitOptions.RemoveEmptyEntries);
+                var src = Core.ContentSources.FromFolders(dirs);
+                if (src == null) { GD.PrintErr("reexport: keiner der Ordner existiert"); GetTree().Quit(2); return; }
+                GetTree().Quit(new Import.ContentBuilder(src).ReexportTables() ? 0 : 1);
+                return;
+            }
+            // the tileset building files on their own — patterns, cell
+            // animations and the tile atlas. No map is baked.
+            else if (a.StartsWith("--reexport-buildings="))
+            {
+                string[] dirs = a["--reexport-buildings=".Length..]
+                    .Split(';', System.StringSplitOptions.RemoveEmptyEntries);
+                var src = Core.ContentSources.FromFolders(dirs);
+                if (src == null) { GD.PrintErr("reexport: keiner der Ordner existiert"); GetTree().Quit(2); return; }
+                GetTree().Quit(new Import.ContentBuilder(src).ReexportBuildings() ? 0 : 1);
+                return;
+            }
+            else if (a.StartsWith("--reexport-units="))
+            {
+                string[] dirs = a["--reexport-units=".Length..]
+                    .Split(';', System.StringSplitOptions.RemoveEmptyEntries);
+                var src = Core.ContentSources.FromFolders(dirs);
+                if (src == null) { GD.PrintErr("reexport: keiner der Ordner existiert"); GetTree().Quit(2); return; }
+                GetTree().Quit(new Import.ContentBuilder(src).ReexportUnits() ? 0 : 1);
+                return;
+            }
             else if (a == "--import-cd")
             {
                 var discs = Core.ContentSources.Discs();
@@ -337,8 +390,10 @@ public partial class MainMenu : Control
                 string dir = a["--selftest-cwp=".Length..];
                 int rc = Import.ImportSelfTest.RunCwp(dir);
                 rc |= Import.ImportSelfTest.RunCwpSweep(dir);
+                rc |= Import.ImportSelfTest.RunBuildPatterns(dir);
                 rc |= Import.ImportSelfTest.RunCwm(dir);
                 rc |= Import.ImportSelfTest.RunEntities(dir);
+                rc |= Import.ImportSelfTest.RunTerrain(dir);
                 foreach (string cab in Core.ContentSources.Cabinets())
                     rc |= Import.ImportSelfTest.RunIsc(dir, cab);
                 rc |= Import.ImportSelfTest.RunUnits();
@@ -351,9 +406,42 @@ public partial class MainMenu : Control
                 GetTree().Quit(rc);
                 return;
             }
+            // the baker on its own — it is the slowest single test and the one
+            // that changes whenever a picture-side reading moves
+            else if (a.StartsWith("--selftest-bake="))
+            {
+                GetTree().Quit(Import.ImportSelfTest.RunBake(
+                    a["--selftest-bake=".Length..], new[] { "01", "05", "10", "NET02" }));
+                return;
+            }
+            else if (a.StartsWith("--selftest-terrain="))
+            {
+                GetTree().Quit(Import.ImportSelfTest.RunTerrain(a["--selftest-terrain=".Length..]));
+                return;
+            }
+            // the entity/building comparison on its own — the whole battery
+            // behind --selftest-cwp takes minutes, and a change to one record
+            // field only needs this one
+            else if (a.StartsWith("--selftest-ent="))
+            {
+                GetTree().Quit(Import.ImportSelfTest.RunEntities(a["--selftest-ent=".Length..]));
+                return;
+            }
+            // the same for the GAME.EXE tables, which now include the campaign's
+            // diplomacy — that one is read out of CODE, so it earns a quick lane
+            else if (a.StartsWith("--selftest-exe="))
+            {
+                GetTree().Quit(Import.ImportSelfTest.RunExe(a["--selftest-exe=".Length..]));
+                return;
+            }
             else if (a == "--selftest-designs")
             {
                 GetTree().Quit(Import.ImportSelfTest.RunDesigns());
+                return;
+            }
+            else if (a == "--selftest-weapons")
+            {
+                GetTree().Quit(Import.ImportSelfTest.RunWeapons());
                 return;
             }
             else if (a == "--selftest-briefings")
@@ -660,6 +748,21 @@ public partial class MainMenu : Control
             // fourth field: the start slot, 1..8, for the harness
             if (parts.Length > 3 && int.TryParse(parts[3], out int sl))
                 _slot.Selected = Mathf.Clamp(sl, 0, 8);
+            // fifth: "Rohstoffe", by the game's own word or by its number
+            if (parts.Length > 4)
+            {
+                string w = parts[4].Trim().ToLower();
+                var names = MapEntityLayer.ResourceLevelNames();
+                int r = names.FindIndex(x => x.ToLower() == w);
+                if (r < 0 && int.TryParse(w, out int rn)) r = rn;
+                if (r >= 0)
+                {
+                    SkirmishSetup.Resources = r;
+                    if (_res != null) _res.Selected = Mathf.Clamp(r, 0, _res.ItemCount - 1);
+                }
+                else GD.PrintErr($"skirmish: \"{parts[4]}\" ist keine Rohstoffstufe " +
+                                 $"({string.Join("/", names)})");
+            }
             CallDeferred(nameof(OnStart));
             return;
         }
@@ -697,6 +800,7 @@ public partial class MainMenu : Control
             2 => MapEntityLayer.AiLevel.Hard,
             _ => MapEntityLayer.AiLevel.Normal,
         };
+        if (_res != null) SkirmishSetup.Resources = _res.Selected;
         SkirmishSetup.CampaignMission = 0;      // a skirmish records nothing
         SkirmishSetup.Active = true;
         GetTree().ChangeSceneToFile(SkirmishSetup.GameScene);

@@ -41,6 +41,8 @@ public static class EntitiesJson
         public List<CwmExtra.Wagon> Trains = new();
         public CwmData.ZoneGrid Zones = new();
         public CwmData.SpatialGrid Spatial = new();
+        public CwmData.TerrainGrid Terrain = new();
+        public List<CwmData.InfantryCell> InfantryCells = new();
     }
 
     /// <summary>Decode every section this file carries. The order follows
@@ -66,7 +68,9 @@ public static class EntitiesJson
             Trains = CwmExtra.Trains(m),
             Zones = CwmData.Zones(m),
             Spatial = CwmData.Spatial(m),
+            InfantryCells = CwmData.InfantryCells(m),
         };
+        d.Terrain = CwmData.Terrain(m, d.Entities);
         d.Links = CwmExtra.Links(m, d.Buildings);
 
         var bySlot = new Dictionary<int, CwmData.Building>();
@@ -108,6 +112,7 @@ public static class EntitiesJson
             w.Num("kind", e.Kind).Num("subclass", e.Subclass);
             w.Num("unit_type", e.UnitType).Num("category", e.Category);
             w.Num("code_base", e.CodeBase).Num("hp", e.Hp).Num("hp_max", e.HpMax);
+            if (e.FootW > 0) w.Num("foot_w", e.FootW).Num("foot_h", e.FootH);
             w.Str("raw", Hex(e.Raw));
             w.End();
         }
@@ -133,6 +138,17 @@ public static class EntitiesJson
             w.Num("slot", b.Slot).Num("type", b.Type).Num("owner", b.Owner);
             w.Str("name", b.Name).Num("cis_typ", b.CisTyp).Num("rail", b.Rail);
             w.Num("doors", b.Doors).Num("ident", b.Ident);
+            // where it is entered — Doors cells of three bytes each from +0x35,
+            // door 0 first (that is the one the capture block uses) — and the
+            // "is a real building" flag +0x18, the capture block's other gate
+            w.Num("door_col", b.DoorCol).Num("door_row", b.DoorRow);
+            w.Num("built", b.IsBuilt);
+            if (b.DoorCells.Count > 0)
+            {
+                w.Key("door_cells").Arr();
+                foreach (var (dc, dr) in b.DoorCells) { w.Obj(); w.Num("col", dc).Num("row", dr); w.End(); }
+                w.End();
+            }
             w.Num("w", b.StockW).Num("ch", b.StockF).Num("sp", b.StockS);
             w.Num("terranium", b.Terranium);
             w.Num("hp", b.Hp).Num("hp_max", b.HpMax);
@@ -322,6 +338,49 @@ public static class EntitiesJson
             w.End();
         }
         w.End();
+        w.End();
+
+        // The passability the game itself uses — Can_go @0x4055D0 over the imap
+        // (sec6). Written run length encoded, row major: pairs of [class, run].
+        // 0 free, 1 rough (foot and hover only), 2 water (ships and hover),
+        // 3 blocked. See CwmData.Terrain for what is read and what is inferred.
+        w.Key("terrain").Obj();
+        w.Num("width", d.Terrain.Width).Num("height", d.Terrain.Height);
+        w.Str("legend", "0=free 1=rough 2=water 3=blocked");
+        w.Str("source", "imap sec6 (0xbdea80) via Can_go @0x4055D0");
+        w.Num("inferred", d.Terrain.Inferred);
+        w.Key("hist").Arr();
+        foreach (int c in d.Terrain.Histogram) w.Num(c);
+        w.End();
+        w.Key("unknown").Arr();
+        foreach (int v in d.Terrain.Unknown) w.Num(v);
+        w.End();
+        w.Key("rle").Arr();
+        {
+            var cells = d.Terrain.Cells;
+            int i = 0;
+            while (i < cells.Length)
+            {
+                byte v = cells[i];
+                int run = 1;
+                while (i + run < cells.Length && cells[i + run] == v) run++;
+                w.Arr(); w.Num(v); w.Num(run); w.End();
+                i += run;
+            }
+        }
+        w.End();
+        w.End();
+
+        w.Key("infantry_cells").Arr();
+        foreach (var c in d.InfantryCells)
+        {
+            w.Obj();
+            w.Num("index", c.Index).Num("col", c.Col).Num("row", c.Row);
+            w.Key("slots").Arr();
+            foreach (int s in c.Slots) w.Num(s);
+            w.End();
+            w.End();
+        }
         w.End();
 
         w.Key("spatial").Obj();

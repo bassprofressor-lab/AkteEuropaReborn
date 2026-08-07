@@ -119,6 +119,27 @@ public sealed class CwrFile
         return 48;
     }
 
+    /// <summary>How many 48-frame POSE GROUPS a part owns.
+    ///
+    /// The draw code (@0x429b10..0x429b40) builds the hull's frame as
+    ///     base_frame[chassis] + facing + slope_block + (entity[+0x11] &amp; 7) * 0x30
+    /// — `imul ax, ax, 0x30`, so a group is 48 frames, six blocks of eight
+    /// facings. The count is in the part table's FIRST u16, which every
+    /// populated part carries as <c>256 * groups</c>: 48 frames → 256,
+    /// 96 → 512, 144 → 768, 384 → 2048. Checked against the frame counts of
+    /// all sixteen land chassis, no exception.
+    ///
+    /// This is what makes a Läufer look like a Läufer: its part owns EIGHT
+    /// groups and the maps spread its 59 units over all of them, while the
+    /// exporter used to write group 0 for everybody.</summary>
+    public int PartGroups(int comp)
+    {
+        if (comp < 0 || comp >= PartCount) return 1;
+        int a = BitConverter.ToUInt16(_partTbl, comp * 4);
+        int g = a / 256;
+        return g < 1 ? 1 : g;
+    }
+
     public readonly record struct Part(int Component, int BaseFrame, int Frames, int Blocks);
 
     public List<Part> PopulatedParts()
@@ -149,14 +170,52 @@ public sealed class CwrFile
         return f;
     }
 
-    /// <summary>The canvas every unit part is drawn on: 64x56 with a four-pixel
-    /// left margin, the frame's own y offset placing it vertically. Keeping one
-    /// shared canvas is what lets a hull, a turret and a weapon line up.</summary>
+    /// <summary>
+    /// The canvas a unit part is drawn on: a four-pixel left margin and the
+    /// frame's own y offset placing it vertically. <b>64x56 is the minimum</b>,
+    /// not the size — a frame wider or taller than that gets a canvas of its
+    /// own, grown to the right and downwards only.
+    ///
+    /// ⚠ It used to be a hard 64x56 and everything past it was dropped on the
+    /// floor. Measured over the 3,439 frames of the 81 populated parts: 192
+    /// lose visible pixels off the right edge, up to 140 of them. The player
+    /// found it — "die Schiffe scheinen wie vorne leicht abgeschnitten" — and
+    /// the landing craft (component 73) is exactly that: 84 px wide against a
+    /// 64 px canvas, so bow and stern were cut away. The two big warships are
+    /// worse: component 100 (unit_type 157) needs <b>204 x 126</b> and 101
+    /// (158) 178 x 114, and twenty of them stand on the maps.
+    ///
+    /// Growing right and down leaves the anchor where it is — a pixel that sat
+    /// at (30, 55) still sits there — so nothing has to move with this, and the
+    /// 94 % of frames that fit come out byte for byte as before.
+    /// </summary>
     public const int CanvasW = 64, CanvasH = 56, CanvasXPad = 4;
+
+    /// <summary>The canvas one frame needs: never smaller than the shared
+    /// minimum, never larger than the frame demands.</summary>
+    public (int W, int H) CanvasFor(int frameIndex)
+    {
+        var f = DecodeFrame(frameIndex);
+        if (f == null) return (CanvasW, CanvasH);
+        return (Math.Max(CanvasW, f.Width + CanvasXPad),
+                Math.Max(CanvasH, f.YOffset + f.Height));
+    }
 
     public Image FacingImage(int frameIndex, PalFile pal)
     {
-        var img = Image.CreateEmpty(CanvasW, CanvasH, false, Image.Format.Rgba8);
+        var f = DecodeFrame(frameIndex);
+        var (cw, ch) = f == null
+            ? (CanvasW, CanvasH)
+            : (Math.Max(CanvasW, f.Width + CanvasXPad),
+               Math.Max(CanvasH, f.YOffset + f.Height));
+        return FacingImage(frameIndex, pal, cw, ch);
+    }
+
+    /// <summary>Same frame on a canvas of a given size — used when a hull and a
+    /// turret have to share one, so the layers still line up.</summary>
+    public Image FacingImage(int frameIndex, PalFile pal, int canvasW, int canvasH)
+    {
+        var img = Image.CreateEmpty(canvasW, canvasH, false, Image.Format.Rgba8);
         img.Fill(new Color(0, 0, 0, 0));
         var f = DecodeFrame(frameIndex);
         if (f == null) return img;
@@ -166,19 +225,37 @@ public sealed class CwrFile
                 int o = y * f.Width + x;
                 if (!f.Opaque[o]) continue;
                 int cx = x + CanvasXPad, cy = f.YOffset + y;
-                if (cx < 0 || cx >= CanvasW || cy < 0 || cy >= CanvasH) continue;
+                if (cx < 0 || cx >= canvasW || cy < 0 || cy >= canvasH) continue;
                 byte i = f.Pixels[o];
                 img.SetPixel(cx, cy, Color.Color8(pal.R[i], pal.G[i], pal.B[i], 255));
             }
         return img;
     }
 
-    /// <summary>`frame = base[component] + block*8 + facing`, the draw code's
-    /// own formula.</summary>
-    public Image PartImage(int comp, int facing, PalFile pal, int block = 0)
+    /// <summary>`frame = base[component] + group*48 + block*8 + facing`, the
+    /// draw code's own formula (@0x429fa6..0x429fc3). `group` is the unit's
+    /// pose out of entity +0x11; `block` is the slope block, which the walker
+    /// is explicitly denied (@0x429af4 forces it to 0 for chassis 0x11).</summary>
+    public Image PartImage(int comp, int facing, PalFile pal, int block = 0, int group = 0)
+    {
+        int i = PartFrame(comp, facing, block, group);
+        return i < 0
+            ? Image.CreateEmpty(CanvasW, CanvasH, false, Image.Format.Rgba8)
+            : FacingImage(i, pal);
+    }
+
+    /// <summary>The frame index behind a part, facing, block and pose group —
+    /// so a caller can ask <see cref="CanvasFor"/> before it draws.</summary>
+    public int PartFrame(int comp, int facing, int block = 0, int group = 0)
     {
         int b = PartBase(comp);
-        if (b < 0) return Image.CreateEmpty(CanvasW, CanvasH, false, Image.Format.Rgba8);
-        return FacingImage(b + block * Facings + facing, pal);
+        if (b < 0) return -1;
+        // A part that owns one group has no pose to choose; asking for one
+        // would run into the NEXT part's frames.
+        int g = PartGroups(comp);
+        if (group < 0 || group >= g) group = 0;
+        return b + group * (g > 1 ? GroupFrames : 0) + block * Facings + facing;
     }
+
+    public const int GroupFrames = 48;
 }

@@ -32,6 +32,7 @@ public sealed class CatalogueExporter
     private readonly string _dst;
 
     public int Designs, Weapons, WeaponTypes, Technologies, Units, BuildingTypes, InfantryDesigns;
+    public int InfantryArms;
 
     public CatalogueExporter(ExeTables? exe, string mapsDir)
     {
@@ -134,12 +135,164 @@ public sealed class CatalogueExporter
     {
         Directory.CreateDirectory(_dst);
         WriteDesigns(maps, tally, say);
-        WriteOrders(say);
         WriteBuildingTypes(tally, say);
+        WriteCatalogue(tally, say);
+        RunExeOnly(say);
+    }
+
+    /// <summary>
+    /// The tables that come out of GAME.EXE alone — no map is read for these,
+    /// so they can be rewritten without a level in reach.
+    ///
+    /// ⚠ Kept apart from <see cref="Run"/> on purpose. The design list, the
+    /// building types and the unit catalogue are counted OFF THE MAPS, and
+    /// writing them from an empty tally replaces good files with empty ones.
+    /// That happened once, on 2026-08-06, the first time the tables were
+    /// re-exported on their own.
+    /// </summary>
+    public void RunExeOnly(Action<string>? say = null)
+    {
+        Directory.CreateDirectory(_dst);
+        WriteOrders(say);
         WriteWeapons(say);
         WriteResearch(say);
-        WriteCatalogue(tally, say);
         WriteComponentStats(say);
+        WriteDiplomacy(say);
+        WriteResources(say);
+    }
+
+    public int ResourceLevelsWritten;
+
+    /// <summary>
+    /// The skirmish option "Rohstoffe: keine / wenige / normal / viele" — what
+    /// each setting puts into which building.
+    ///
+    /// See <see cref="ExeTables.ResourceLevels"/> for the reading. The one thing
+    /// worth repeating here: the routine has exactly ONE caller, in the
+    /// game-start message handler, so this belongs to a skirmish and must not
+    /// touch a campaign mission — those keep the stores their level file gives
+    /// them.
+    /// </summary>
+    private void WriteResources(Action<string>? say)
+    {
+        if (_exe == null || !_exe.HasResourceTables)
+        {
+            say?.Invoke("Rohstoffe: in dieser GAME.EXE kein fill_resources gefunden — uebersprungen");
+            return;
+        }
+        var exe = _exe;
+        var levels = exe.ResourceLevels();
+        var sb = new StringBuilder();
+        sb.Append("{\"_note\":\"the skirmish option 'Rohstoffe', read out of GAME.EXE ");
+        sb.Append("fill_resources — which building type gets what at each of the four ");
+        sb.Append("settings. The type mapping is read BACK from the routine's own jump ");
+        sb.Append("table, not assigned here; the four names come from the menu code that ");
+        sb.Append("switches the same option variable.\",");
+        sb.Append("\"_scope\":\"skirmish and network only — the routine has exactly one ");
+        sb.Append("caller, in the game-start message handler, so a campaign mission keeps ");
+        sb.Append("the stores its level file gives it\",");
+        sb.Append($"\"_found_in_this_exe\":{{\"dispatch\":\"0x{exe.ResourceDispatch:x}\",");
+        sb.Append($"\"option\":\"0x{exe.ResourceOptionVar:x}\",");
+        sb.Append($"\"stores\":\"0x{exe.ResourceStoreTable:x}\",");
+        sb.Append($"\"factory\":\"0x{exe.ResourceFactoryTable:x}\",");
+        sb.Append($"\"mine\":\"0x{exe.ResourceMineTable:x}\"}},");
+        sb.Append($"\"slots_scanned\":{ExeTables.ResourceSlotsScanned},\"fill\":{{");
+        bool f1 = true;
+        for (int t = 0; t <= ExeTables.BuildingTypeCount; t++)
+        {
+            if (!f1) sb.Append(',');
+            f1 = false;
+            sb.Append($"\"{t}\":\"{exe.ResourceFillOf(t).ToString().ToLowerInvariant()}\"");
+        }
+        sb.Append("},\"levels\":[");
+        bool f2 = true;
+        foreach (var l in levels)
+        {
+            if (!f2) sb.Append(',');
+            f2 = false;
+            sb.Append($"{{\"level\":{l.Level},\"name\":\"{Esc(l.Name)}\",");
+            sb.Append($"\"weapons\":{l.Weapons},\"chassis\":{l.Chassis},");
+            sb.Append($"\"special\":{l.Special},\"terranium\":{l.Terranium},");
+            sb.Append($"\"deposit\":{l.Deposit}}}");
+            ResourceLevelsWritten++;
+        }
+        sb.Append("]}");
+        File.WriteAllText(_dst + "/resources.json", sb.ToString(), new UTF8Encoding(false));
+        say?.Invoke($"Rohstoffe: {ResourceLevelsWritten} Stufen (" +
+                    string.Join("/", levels.ConvertAll(l => l.Name)) + ")");
+    }
+
+    public int DiplomacyMissions;
+
+    /// <summary>
+    /// Who fights whom in the campaign, and which slot stands aside.
+    ///
+    /// The only table here that is not a table: it is the code of
+    /// <c>mission_init</c> @0x487c40, which the map loader runs on every start.
+    /// See <see cref="ExeTables.CampaignDiplomacy"/> for the whole reading and
+    /// for why player 7 is the neutral one in all 33 missions.
+    ///
+    /// This retires a guess. Until now the remake decided who was playing by
+    /// asking which slot owned a headquarters — written down as ours, and known
+    /// to be wrong on map_07. The alliances were in the executable the whole
+    /// time; nobody had read the mission scripts.
+    /// </summary>
+    private void WriteDiplomacy(Action<string>? say)
+    {
+        if (_exe == null || !_exe.HasCampaignDiplomacy)
+        {
+            say?.Invoke("Diplomatie: in dieser GAME.EXE kein mission_init gefunden — uebersprungen");
+            return;
+        }
+        var exe = _exe;
+        var sb = new StringBuilder();
+        sb.Append("{\"_note\":\"the campaign's alliances and neutral slots, read out of ");
+        sb.Append("GAME.EXE mission_init, which the map loader runs on every start. ");
+        sb.Append("set_relation writes the player record's +0x15 BOTH WAYS, set_neutral ");
+        sb.Append("writes byte[0xb38d38+player] — the field the .DM files fill from ");
+        sb.Append("sec106 and the takeover scan tests.\",");
+        sb.Append($"\"_found_in_this_exe\":{{\"dispatch\":\"0x{exe.DiplomacyDispatch:x}\",");
+        sb.Append($"\"index\":\"0x{exe.DiplomacyIndex:x}\",\"table\":\"0x{exe.DiplomacyTable:x}\",");
+        sb.Append($"\"set_neutral\":\"0x{exe.SetNeutralAt:x}\",");
+        sb.Append($"\"field\":\"0x{exe.NeutralField:x}\"}},");
+        sb.Append($"\"_evidence\":\"the neutral slot is MEASURED: player {exe.NeutralPlayer} is ");
+        sb.Append("the only one allied with everybody in all 33 matrices, and ");
+        sb.Append($"{exe.NeutralSitesConst} of the {exe.NeutralSites} call sites of ");
+        sb.Append("set_neutral push exactly him (the odd one out is the loop that clears ");
+        sb.Append("all eight). Checked against aekernel/campaign_diplomacy.py and ");
+        sb.Append("diplo_relocate.py: 33 of 33 missions identical, and identical across ");
+        sb.Append("the two different builds of GAME.EXE on this machine.\",");
+        sb.Append("\"missions\":[");
+        bool first = true;
+        for (int m = 1; m <= ExeTables.CampaignMissions; m++)
+        {
+            var d = _exe.CampaignDiplomacy(m);
+            if (d == null) continue;
+            if (!first) sb.Append(',');
+            first = false;
+            sb.Append($"{{\"mission\":{m},\"allied\":[");
+            for (int a = 0; a < 8; a++)
+            {
+                if (a > 0) sb.Append(',');
+                sb.Append('[');
+                for (int b = 0; b < 8; b++)
+                {
+                    if (b > 0) sb.Append(',');
+                    sb.Append(d.Allied[a, b] ? '1' : '0');
+                }
+                sb.Append(']');
+            }
+            sb.Append("],\"neutral\":[");
+            bool f2 = true;
+            for (int p = 0; p < 8; p++)
+                if (d.Neutral[p]) { if (!f2) sb.Append(','); f2 = false; sb.Append(p); }
+            sb.Append("]}");
+            DiplomacyMissions++;
+        }
+        sb.Append("]}");
+        File.WriteAllText(_dst + "/campaign_diplomacy.json", sb.ToString(), new UTF8Encoding(false));
+        say?.Invoke($"Diplomatie: {DiplomacyMissions} Missionen, neutraler Spieler {exe.NeutralPlayer} " +
+                    $"(mission_init @0x{exe.DiplomacyDispatch:x}, {exe.NeutralSitesConst}/{exe.NeutralSites} Aufrufstellen)");
     }
 
     public int ComponentRows;
@@ -269,6 +422,11 @@ public sealed class CatalogueExporter
     private void WriteBuildingTypes(Tally tally, Action<string>? say)
     {
         if (_exe == null) return;
+        // ⚠ An empty tally means no level was read, not that the game has no
+        // buildings. Writing the table anyway replaces a good file with an
+        // empty one — which is exactly what happened on 2026-08-06.
+        if (tally.BuildingCount.Count == 0)
+        { say?.Invoke("Gebaeudetypen: keine Karte gezaehlt — Datei bleibt, wie sie ist"); return; }
         var names = _exe.BuildingNames();
         var sb = new StringBuilder();
         sb.Append("{\"_note\":\"building type names from GAME.EXE, 16 entries of 20 bytes; ");
@@ -280,6 +438,11 @@ public sealed class CatalogueExporter
         sb.Append($"\"_source\":\"GAME.EXE 0x{_exe.BuildingNameBase:x} + CWM sec3\",\"types\":{{");
         bool first = true;
         var seen = new SortedSet<int>(tally.BuildingCount.Keys);
+        // The three buildable types must be in the file even when no map of
+        // this install happens to carry one: a Depot, a Generator or a
+        // Feld-Rohstoffmine can be RAISED, and then its hit points and doors
+        // have to come from somewhere.
+        seen.Add(5); seen.Add(7); seen.Add(15);
         foreach (int t in seen)
         {
             if (t > ExeTables.BuildingTypeCount) continue;
@@ -288,19 +451,63 @@ public sealed class CatalogueExporter
             first = false;
             sb.Append($"\"{t}\":{{\"name\":\"{Esc(nm)}\",");
             sb.Append($"\"doors\":{tally.DoorsOf(t)},");
-            sb.Append($"\"count\":{tally.BuildingCount[t]}}}");
+            sb.Append($"\"count\":{(tally.BuildingCount.TryGetValue(t, out int bc) ? bc : 0)}");
+            // from the exe's own 10-byte stat row — what a NEW building of this
+            // type is made of (add_building @0x4C8D60)
+            var st = _exe.BuildingStats(t);
+            sb.Append($",\"hp\":{st.Hp},\"door_count\":{st.DoorCount},\"door_cells\":[");
+            for (int i = 0; i < st.Doors.Length; i++)
+            {
+                if (i > 0) sb.Append(',');
+                sb.Append($"{{\"col\":{st.Doors[i].Col},\"row\":{st.Doors[i].Row}}}");
+            }
+            sb.Append("]");
+            // and where the type watches from — the fog update @0x4205B0 looks
+            // this up per type instead of computing it, and then stamps a circle
+            // of a FIXED ten cells for every building there is
+            var (sc, sr) = _exe.SightCentre(t);
+            sb.Append($",\"sight_col\":{sc},\"sight_row\":{sr}");
+            sb.Append('}');
             BuildingTypes++;
         }
-        sb.Append("}}");
+        sb.Append("},");
+        sb.Append($"\"sight_radius\":{ExeTables.BuildingSightRadius},");
+        sb.Append("\"_sight\":\"sight_col/sight_row are the offset from the ");
+        sb.Append("building's corner cell to the point it watches from, read per ");
+        sb.Append("type at 0x4206AB..0x4206D6; sight_radius is the `push 0xa` in ");
+        sb.Append("front of the stamper — the same for every type, radar post ");
+        sb.Append("included\"}");
         File.WriteAllText(_dst + "/building_types.json", sb.ToString(), new UTF8Encoding(false));
         say?.Invoke($"Gebaeudetypen: {BuildingTypes}");
     }
 
     // ---- the stats rows -----------------------------------------------------
 
-    /// <summary>A weapon is a component row that deals damage: +0x04 is the
-    /// damage and +0x06 the raw range. The range in tiles is `range_raw / 10`,
-    /// which is OUR scaling and not recovered data.</summary>
+    /// <summary>The component name table, read whole.
+    ///
+    /// ⚠ CORRECTED 2026-08-06. This used to scan rows 100..199 and keep only
+    /// rows that deal damage, which yielded SIX components (21, 24, 26, 27, 28,
+    /// 38) out of the 56 the table names. Everything else fell back to the
+    /// default and every unit in the game showed "2x Maschinengewehr".
+    ///
+    /// The named rows and what they carry:
+    ///     1..19    the weapons          -> components 21..39
+    ///     65..79   the equipment        -> components 40..54
+    ///     81..88   the abilities        (no component, no sprite)
+    ///     140..145 an ABBREVIATED SECOND LIST of six weapons — the only thing
+    ///              the old scan ever saw
+    ///     160..175 the propulsions      -> components 1..18
+    ///     190..199 the infantry arms    (component 0, keyed by row)
+    ///
+    /// ⚠ The two weapon lists CONTRADICT each other: row 5 calls component 25
+    /// "2x Maschinengewehr" and component 24 "Maschinengewehr", while row 140
+    /// calls component 24 "2x Maschinengewehr". The maps decide — over the 29
+    /// imported entities.json BOTH 24 (190 units) and 25 (131) occur at +0x0c,
+    /// so they are two different weapons and the 1..19 block is the real list.
+    /// The 140 block is carried as `alt_rows` for the record, never as a name.
+    ///
+    /// Fields: +0x04 damage, +0x06 raw range. The range in tiles is
+    /// `range_raw / 10`, which is OUR scaling and not recovered data.</summary>
     private void WriteWeapons(Action<string>? say)
     {
         if (_exe == null) return;
@@ -328,25 +535,63 @@ public sealed class CatalogueExporter
             WeaponTypes++;
         }
         sb.Append("},");
-        sb.Append("\"default_comp\":24,\"weapons\":{");
+        // No default any more: a component this table does not name is shown as
+        // a gap, not as somebody else's weapon.
+        sb.Append("\"_no_default\":\"an unnamed component is a gap, not the MG\",");
+        sb.Append("\"weapons\":{");
         bool first = true;
-        for (int ut = 100; ut < 200; ut++)
+        foreach (var (from, to, kind) in new[]
+                 { (1, 19, "weapon"), (65, 79, "equipment"), (160, 175, "propulsion") })
+            for (int row = from; row <= to; row++)
+            {
+                var s = _exe.StatsFor(row);
+                if (s == null || s.Raw.Length < 58) continue;
+                if (s.Name.Length == 0 || s.Name == "(nichts)" || s.ComponentId == 0) continue;
+                int dmg = s.Raw[4], rng = s.Raw[6];
+                if (!first) sb.Append(',');
+                first = false;
+                sb.Append($"\"{s.ComponentId}\":{{\"name\":\"{Esc(s.Name)}\",\"row\":{row},");
+                sb.Append($"\"kind\":\"{kind}\",\"damage\":{dmg},\"range_raw\":{rng},");
+                sb.Append($"\"range_tiles\":{Tiles(rng)}}}");
+                Weapons++;
+            }
+        sb.Append("},");
+        // The infantry arms carry no component id — they are keyed by row, the
+        // way the infantry draw branch reaches them.
+        sb.Append("\"infantry_arms\":{");
+        first = true;
+        for (int row = 190; row <= 199; row++)
         {
-            var s = _exe.StatsFor(ut);
-            if (s == null || s.Raw.Length < 58) continue;
-            int dmg = s.Raw[4], rng = s.Raw[6];
-            if (s.Name.Length == 0 || s.ComponentId == 0 || dmg == 0) continue;
+            var s = _exe.StatsFor(row);
+            if (s == null || s.Raw.Length < 58 || s.Name.Length == 0) continue;
             if (!first) sb.Append(',');
             first = false;
-            sb.Append($"\"{s.ComponentId}\":{{\"name\":\"{Esc(s.Name)}\",\"unit_type\":{ut},");
-            sb.Append($"\"damage\":{dmg},\"range_raw\":{rng},");
-            sb.Append($"\"range_tiles\":{(rng / 10.0).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}}}");
-            Weapons++;
+            sb.Append($"\"{row}\":{{\"name\":\"{Esc(s.Name)}\",\"damage\":{s.Raw[4]},");
+            sb.Append($"\"range_raw\":{s.Raw[6]},\"range_tiles\":{Tiles(s.Raw[6])}}}");
+            InfantryArms++;
+        }
+        sb.Append("},");
+        // Kept for the record, deliberately NOT a name source — see the summary.
+        sb.Append("\"_alt_rows\":\"rows 140..145, the abbreviated second weapon ");
+        sb.Append("list; contradicts rows 1..19 on component 24 and is not used\",");
+        sb.Append("\"alt_rows\":{");
+        first = true;
+        for (int row = 140; row <= 145; row++)
+        {
+            var s = _exe.StatsFor(row);
+            if (s == null || s.Raw.Length < 58 || s.Name.Length == 0) continue;
+            if (!first) sb.Append(',');
+            first = false;
+            sb.Append($"\"{row}\":{{\"name\":\"{Esc(s.Name)}\",\"component\":{s.ComponentId}}}");
         }
         sb.Append("}}");
         File.WriteAllText(_dst + "/weapons.json", sb.ToString(), new UTF8Encoding(false));
-        say?.Invoke($"Waffen: {Weapons} Komponenten, {WeaponTypes} Bauarten");
+        say?.Invoke($"Waffen: {Weapons} Komponenten, {WeaponTypes} Bauarten, "
+                    + $"{InfantryArms} Infanteriewaffen");
     }
+
+    private static string Tiles(int raw)
+        => (raw / 10.0).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>The technologies are stats rows 65..88; a design's equipment
     /// value IS that row number. Rows up to 79 are mountable on a design, the
@@ -387,6 +632,10 @@ public sealed class CatalogueExporter
     private void WriteCatalogue(Tally tally, Action<string>? say)
     {
         if (_exe == null) return;
+        // See WriteBuildingTypes: an empty tally is a missing level, not a
+        // missing game. Leave the file alone rather than emptying it.
+        if (tally.UnitCount.Count == 0)
+        { say?.Invoke("Einheitenkatalog: keine Karte gezaehlt — Datei bleibt, wie sie ist"); return; }
         var sb = new StringBuilder();
         sb.Append("{\"_note\":\"unit catalogue from the maps' entities plus the GAME.EXE ");
         sb.Append("component stats\",");

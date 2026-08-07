@@ -15,7 +15,8 @@ using GDict = Godot.Collections.Dictionary<string, Godot.Variant>;
 ///   Middle drag, WASD/arrows  – pan
 ///   Mouse wheel               – zoom toward cursor
 ///   [ ]                       – previous / next map
-///   F                         – fit map to window
+///   F                         – fill the window with the map (the furthest out
+///                               the view goes; beyond it only black would show)
 ///   U / R / P / Z / T / G     – sprites / ranges / walkability / zones / buildings / dots
 ///   Ctrl+1..9 / 1..9          – store / recall a control group (twice = centre on it)
 ///   Space / Tab               – centre on the selection / on the last event
@@ -96,9 +97,84 @@ public partial class MapViewer : Node2D
     /// importer reads the CDs, `user://data` has the levels 16 to 33 that the
     /// tree never had.</summary>
     private static string MapFile(string rel) => Core.Content.Path("Maps/" + rel);
-    private const float MinZoom = 0.05f;
+    /// <summary>Absolute floor, only a guard against a degenerate map size. The
+    /// zoom that actually stops the wheel is <see cref="FitZoom"/>: the point at
+    /// which the map fills the window. Below it the black outside the map comes
+    /// into view, which is what was reported.</summary>
+    private const float MinZoomFloor = 0.02f;
     private const float MaxZoom = 8.0f;
     private const float ZoomStep = 1.15f;
+
+    /// <summary>The zoom at which the map exactly covers the window — the
+    /// smaller the number the further out, so this is the lower bound.</summary>
+    private float FitZoom()
+    {
+        if (_sprite?.Texture == null) return MinZoomFloor;
+        Vector2 tex = _sprite.Texture.GetSize();
+        Vector2 view = GetViewportRect().Size;
+        if (tex.X <= 0 || tex.Y <= 0) return MinZoomFloor;
+        return Mathf.Max(MinZoomFloor, Mathf.Max(view.X / tex.X, view.Y / tex.Y));
+    }
+
+    /// <summary>Hold the camera inside the map, so neither the wheel nor a drag
+    /// can put the black border on screen.</summary>
+    /// <summary>ESC opens the pause screen and stops the game behind it;
+    /// picking "Weiter" or ESC again lets it run on. OURS — the 1997 game has
+    /// no pause screen, it leaves to the menu straight away. See UI/PauseMenu.
+    /// </summary>
+    private UI.PauseMenu? _pause;
+
+    private void TogglePause()
+    {
+        if (_pause != null) { ClosePause(); return; }
+
+        _pause = new UI.PauseMenu { CanSave = true };
+        _pause.Resumed += ClosePause;
+        _pause.SaveRequested += () =>
+        {
+            string name = Core.SaveGame.NewName();
+            string label = $"{MapNames[_mapIndex]} — {System.DateTime.Now:dd.MM.yyyy HH:mm}";
+            string json = _entities.SaveStateJson(MapNames[_mapIndex], label);
+            GD.Print(Core.SaveGame.Write(name, json, out string err)
+                ? $"gespeichert: {label}"
+                : $"Speichern fehlgeschlagen: {err}");
+            ClosePause();
+        };
+        _pause.Restarted += () =>
+        {
+            ClosePause();
+            GetTree().ReloadCurrentScene();
+        };
+        _pause.Quit += () =>
+        {
+            ClosePause();
+            UI.SkirmishSetup.Active = false;
+            Audio.MidiMusic.Stop();
+            GetTree().ChangeSceneToFile(UI.SkirmishSetup.MenuScene);
+        };
+        (_panelLayer ?? (CanvasLayer)GetTree().Root.GetChild(0)).AddChild(_pause);
+        GetTree().Paused = true;
+    }
+
+    private void ClosePause()
+    {
+        GetTree().Paused = false;
+        _pause?.QueueFree();
+        _pause = null;
+    }
+
+    private void ClampCamera()
+    {
+        if (_sprite?.Texture == null) return;
+        Vector2 tex = _sprite.Texture.GetSize();
+        Vector2 half = GetViewportRect().Size / (2f * _camera.Zoom.X);
+        // a map narrower than the window on one axis is centred on that axis
+        float x = half.X * 2f >= tex.X ? tex.X / 2f
+                : Mathf.Clamp(_camera.Position.X, half.X, tex.X - half.X);
+        float y = half.Y * 2f >= tex.Y ? tex.Y / 2f
+                : Mathf.Clamp(_camera.Position.Y, half.Y, tex.Y - half.Y);
+        _camera.Position = new Vector2(x, y);
+    }
 
     private Sprite2D _sprite = null!;
     private Camera2D _camera = null!;
@@ -162,23 +238,170 @@ public partial class MapViewer : Node2D
             if (mi >= 0) _mapIndex = mi;
         }
         LoadMap(_mapIndex);
+
+        // a game picked in the main menu: the map is up, now put the state on it
+        if (UI.SkirmishSetup.PendingSave.Length > 0)
+        {
+            string want = UI.SkirmishSetup.PendingSave;
+            UI.SkirmishSetup.PendingSave = "";
+            var root = Core.SaveGame.Read(want, out string err);
+            if (root == null) GD.PrintErr($"Spielstand: {err}");
+            else { _entities.ApplySaveState(root); GD.Print($"Spielstand {want} geladen"); }
+        }
         if (UI.SkirmishSetup.Active)
         {
-            int me = _entities.StartSkirmish(UI.SkirmishSetup.Human,
+            // A campaign mission is not a skirmish: it keeps the army the level
+            // brings and every other side is played, rather than standing about.
+            int me = UI.SkirmishSetup.CampaignMission > 0
+                ? _entities.StartCampaign(UI.SkirmishSetup.Human, UI.SkirmishSetup.Level)
+                : _entities.StartSkirmish(UI.SkirmishSetup.Human,
                          UI.SkirmishSetup.AiCount, UI.SkirmishSetup.Level);
             // start looking at one's own base, not at the whole map
             if (_entities.PlayerHome(me) is { } home)
             {
-                _camera.Zoom = new Vector2(1.6f, 1.6f);
+                float z = Mathf.Max(1.6f, FitZoom());
+                _camera.Zoom = new Vector2(z, z);
                 _camera.Position = home;
+                ClampCamera();
             }
             BuildEndBanner();
         }
+        // --select=<n> before anything is photographed, so the panel is filled
+        // by the time --shot fires
+        if (_selectForShot >= 0) GD.Print(_entities.SelectForShot(_selectForShot));
         if (_navOverlay) _entities.ToggleNav();
         if (_buildingOverlay) _entities.ToggleBuildings();
         if (_railOverlay) _entities.ToggleRail();
+        if (_navProbe.Length > 0) { _entities.NavProbe(_navProbe); GetTree().Quit(0); return; }
+        if (_groundCheck)
+        {
+            GD.Print(_entities.GroundCheck(_sprite.Texture?.GetImage()));
+            GetTree().Quit(0);
+            return;
+        }
+        if (_infDeathCheck)
+        {
+            GD.Print(_entities.InfantryDeathCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_groupCheck)
+        {
+            GD.Print(_entities.GroupMoveCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_doorCheck)
+        {
+            GD.Print(_entities.DoorCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_animCheck)
+        {
+            GD.Print(_entities.AnimCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_saveCheck)
+        {
+            GD.Print(_entities.SaveRoundTripCheck(MapNames[_mapIndex]));
+            GetTree().Quit(0);
+            return;
+        }
+        if (_captureCheck)
+        {
+            GD.Print(_entities.CaptureCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_pickCheck)
+        {
+            GD.Print(_entities.PickCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_ruinDemo) _entities.RuinDemo();
+        if (_ruinCheck)
+        {
+            GD.Print(_entities.RuinCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_corpseCheck)
+        {
+            GD.Print(_entities.CorpseCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_crushCheck)
+        {
+            GD.Print(_entities.CrushCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_buildCheck)
+        {
+            // The raised buildings are stamped into a copy of the baked map,
+            // so the run leaves a picture one can actually look at.
+            var img = _sprite.Texture?.GetImage();
+            GD.Print(_entities.BuildCheck(img));
+            if (img != null && _shotPath.Length > 0)
+            {
+                img.SavePng(_shotPath);
+                GD.Print($"build-check: Bild nach {_shotPath}");
+            }
+            GetTree().Quit(0);
+            return;
+        }
+        // put the site preview somewhere it can be photographed: the first
+        // place that takes the building, and one that refuses it
+        if (_buildPreview > 0)
+        {
+            _entities.DemoBuildPreview(_buildPreview);
+            var at = _entities.BuildPreviewCentre;
+            if (at.HasValue) { _camera.Position = at.Value; _camera.Zoom = new Vector2(2, 2); }
+        }
+        // harness: park the camera on a cell, for a screenshot
+        if (_look.Length > 0)
+        {
+            var lp = _look.Split(',');
+            if (lp.Length >= 2)
+            {
+                _camera.Position = new Vector2(lp[0].ToInt() * 40,
+                                               lp[1].ToInt() * 20);
+                _camera.Zoom = new Vector2(3, 3);
+                ClampCamera();
+            }
+        }
+        HookShotTrigger();
+        if (_openPause) TogglePause();
         if (_demo) StartDemo();
     }
+
+    /// <summary>`--nav-probe=c0,r0,c1,r1[,klasse]` — ask the grid for a route and
+    /// print it. A script cannot drive a tank over a bridge by hand, so the
+    /// route is quoted instead of looked at.</summary>
+    private string _navProbe = "";
+
+    /// <summary>`--ground-check` — hold the walk grid against the baked picture.</summary>
+    private bool _groundCheck;
+    private bool _buildCheck;
+    private bool _crushCheck;
+    private bool _pickCheck;
+    private bool _corpseCheck;
+    private bool _ruinCheck;
+    private bool _ruinDemo;
+    private bool _captureCheck;
+    private bool _saveCheck;
+    private bool _openPause;
+    private bool _doorCheck;
+    private bool _animCheck;
+    private bool _infAnimCheck;
+    private string _look = "";
+    private bool _groupCheck;
+    private bool _infDeathCheck;
+    private int _buildPreview;
 
     // ---- preview helper -----------------------------------------------------
     // Run with:  Godot --path <proj> res://Scenes/Gameplay/MapViewer.tscn --
@@ -191,13 +414,18 @@ public partial class MapViewer : Node2D
     private bool _demo;
     private bool _demoNaval;
     private bool _demoFight;
+    private int _selectForShot = -1;   // --select=<n>, for photographing the panel
     private bool _demoBuild;
     private bool _demoMine;
     private bool _demoResearch;
     private bool _demoState;
     private bool _demoAir;
     private bool _demoInf;
+    private bool _demoCrush;
     private bool _demoSupply;
+    private bool _demoCapture;
+    private bool _demoTakeover;
+    private bool _demoBuildPanel;
     private bool _demoBuy;
     private bool _demoShip;
     private bool _demoTrain;
@@ -221,16 +449,20 @@ public partial class MapViewer : Node2D
             // arrives and nothing ever calls Quit. This ends the run on the clock
             // instead, which is what a scripted check needs.
             else if (a.StartsWith("--quit-after=")) _quitAfter = a[13..].ToFloat();
+            else if (a.StartsWith("--demo-leave=")) _demoLeave = a["--demo-leave=".Length..].ToFloat();
             else if (a == "--demo") _demo = true;
             else if (a == "--demo-naval") { _demo = true; _demoNaval = true; }
             else if (a == "--demo-fight") { _demo = true; _demoFight = true; }
-            else if (a == "--demo-build") { _demo = true; _demoBuild = true; }
             else if (a == "--demo-mine") { _demo = true; _demoMine = true; }
             else if (a == "--demo-research") { _demo = true; _demoResearch = true; }
             else if (a == "--demo-state") { _demo = true; _demoState = true; }
             else if (a == "--demo-air") { _demo = true; _demoAir = true; }
             else if (a == "--demo-inf") { _demo = true; _demoInf = true; }
+            else if (a == "--demo-crush") { _demo = true; _demoCrush = true; }
             else if (a == "--demo-supply") { _demo = true; _demoSupply = true; }
+            else if (a == "--demo-capture") { _demo = true; _demoCapture = true; }
+            else if (a == "--demo-takeover") { _demo = true; _demoTakeover = true; }
+            else if (a == "--demo-buildpanel") { _demo = true; _demoBuildPanel = true; }
             else if (a == "--demo-buy") { _demo = true; _demoBuy = true; }
             else if (a == "--demo-ship") { _demo = true; _demoShip = true; }
             else if (a == "--demo-train") { _demo = true; _demoTrain = true; }
@@ -242,6 +474,25 @@ public partial class MapViewer : Node2D
             else if (a == "--demo-lose") { _demo = true; _demoEnd = 2; }
             else if (a.StartsWith("--fight-dist=")) { _demo = true; _demoFight = true; _fightDist = a[13..].ToFloat(); }
             else if (a == "--nav") _navOverlay = true;
+            else if (a.StartsWith("--nav-probe=")) _navProbe = a["--nav-probe=".Length..];
+            else if (a == "--ground-check") _groundCheck = true;
+            else if (a == "--build-check") _buildCheck = true;
+            else if (a == "--crush-check") _crushCheck = true;
+            else if (a == "--pick-check") _pickCheck = true;
+            else if (a == "--corpse-check") _corpseCheck = true;
+            else if (a == "--ruin-check") _ruinCheck = true;
+            else if (a == "--ruin-demo") _ruinDemo = true;
+            else if (a == "--capture-check") _captureCheck = true;
+            else if (a == "--save-check") _saveCheck = true;
+            else if (a == "--pause") _openPause = true;
+            else if (a == "--door-check") _doorCheck = true;
+            else if (a == "--anim-check") _animCheck = true;
+            else if (a == "--inf-anim-check") { _infAnimCheck = true; _demo = true; _demoInf = true; }
+            else if (a.StartsWith("--look=")) _look = a["--look=".Length..];
+            else if (a == "--group-check") _groupCheck = true;
+            else if (a == "--infdeath-check") _infDeathCheck = true;
+            else if (a.StartsWith("--build-preview=")) _buildPreview = a["--build-preview=".Length..].ToInt();
+            else if (a == "--fog") MapEntityLayer.ForceFog = true;
             else if (a == "--buildings") _buildingOverlay = true;
             else if (a == "--rail") _railOverlay = true;
             else if (a == "--fps60") Engine.MaxFps = 60;   // deterministic captures
@@ -250,6 +501,9 @@ public partial class MapViewer : Node2D
                 int idx = System.Array.IndexOf(MapNames, a[6..]);
                 if (idx >= 0) _mapIndex = idx;
             }
+            // --select=<n> picks the n-th unit that has a weapon or a tank, so
+            // a headless run can photograph the info panel
+            else if (a.StartsWith("--select=")) _selectForShot = a["--select=".Length..].ToInt();
         }
     }
 
@@ -263,13 +517,16 @@ public partial class MapViewer : Node2D
                   : _demoQueue ? _entities.DebugDemoQueue()
                   : _demoTrain ? _entities.DebugDemoTrain()
                   : _demoAi ? _entities.DebugDemoAi()
+                  : _demoCapture ? _entities.DebugDemoCapture()
+                  : _demoTakeover ? _entities.DebugDemoTakeover()
+                  : _demoBuildPanel ? _entities.DebugDemoBuildPanel()
                   : _demoSupply ? _entities.DebugDemoSupply()
+                  : _demoCrush ? _entities.DebugDemoCrush()
                   : _demoInf ? _entities.DebugDemoInfantry()
                   : _demoAir ? _entities.DebugDemoAir()
                   : _demoState ? _entities.DebugDemoState()
                   : _demoResearch ? _entities.DebugDemoResearch()
                   : _demoMine ? _entities.DebugDemoMine()
-                  : _demoBuild ? _entities.DebugDemoBuild()
                   : _demoFight ? _entities.DebugDemoFight(_fightDist)
                                : _entities.DebugDemoOrder(_demoNaval);
         if (focus != null)
@@ -284,10 +541,26 @@ public partial class MapViewer : Node2D
     private float _quitAfter;
     private float _upTime;
 
+    /// <summary>`--demo-leave=<n>` sends the demo's unit back where it came from
+    /// after n seconds. Without it the drain at @0x43D29E is never exercised:
+    /// a besieger that never walks away never loses ground, so the branch that
+    /// counts the progress DOWN would go untested in a running game.</summary>
+    private float _demoLeave;
+    private bool _demoLeft;
+
+    private void DemoLeaveIfDue()
+    {
+        if (_demoLeave <= 0f || _demoLeft || _upTime < _demoLeave) return;
+        _demoLeft = true;
+        GD.Print($"demo-leave: nach {_upTime:0.0}s zurueck — " + _entities.DebugDemoLeave());
+    }
+
     private void QuitIfDue(double delta)
     {
-        if (_quitAfter <= 0f) return;
+        if (_infAnimCheck) _entities.InfAnimSample();
+        if (_quitAfter <= 0f) { _upTime += (float)delta; DemoLeaveIfDue(); return; }
         _upTime += (float)delta;
+        DemoLeaveIfDue();
         if (_upTime >= _quitAfter)
         {
             GD.Print($"MapViewer: --quit-after {_quitAfter:0.0}s erreicht");
@@ -299,12 +572,42 @@ public partial class MapViewer : Node2D
             if (ai.Length > 0) GD.Print(ai);
             string sw = _entities.ShipWatchLine();
             if (sw.Length > 0) GD.Print(sw);
+            string cr = _entities.CrushReport();
+            if (cr.Length > 0) GD.Print(cr);
+            GD.Print(_entities.CaptureWatchLine());
+            GD.Print(_entities.TakeoverWatchLine());
+            GD.Print(_entities.MinimapWatchLine(_minimap));
+            GD.Print(_build?.WatchLine() ?? "bau-panel: nicht gebaut");
             GD.Print(_entities.EventWatchLine());
             GD.Print(_entities.VoiceWatchLine());
+            GD.Print(_entities.PanelWatchLine());
+            GD.Print(_entities.PoseWatchLine());
+            if (_infAnimCheck) GD.Print(_entities.InfAnimReport());
             GD.Print(_entities.FogWatchLine());
             GetTree().Quit();
         }
     }
+
+    /// <summary>
+    /// The screenshot trigger hangs on <see cref="SceneTree.ProcessFrame"/>, not
+    /// on this node's <c>_Process</c>.
+    ///
+    /// <para>Why: <c>GetTree().Paused = true</c> stops <c>_Process</c> here, so
+    /// <c>--shot</c> together with <c>--pause</c> produced <b>no picture at
+    /// all</b> — which is exactly the combination one needs to look at the pause
+    /// screen. The tree's own frame signal keeps firing while the tree is
+    /// paused, so the harness can photograph a paused game without putting the
+    /// whole viewer on <c>ProcessMode.Always</c> and letting the battle run on
+    /// behind the screen.</para>
+    /// </summary>
+    private void HookShotTrigger()
+    {
+        if (_shotHooked || _shotPath.Length == 0) return;
+        _shotHooked = true;
+        GetTree().ProcessFrame += TakeShotIfDue;
+    }
+
+    private bool _shotHooked;
 
     private void TakeShotIfDue()
     {
@@ -375,7 +678,12 @@ public partial class MapViewer : Node2D
             () => _camera.GetViewportRect().Size / _camera.Zoom is var s
                 ? new Rect2(_camera.Position - s * 0.5f, s) : default,
             _entities.MinimapAlarms,
-            world => _camera.Position = world);
+            // ⚠ ClampCamera() gehört dazu. Ohne sie schob ein Zug am weissen
+            // Sichtfenster der Minimap die Kamera aus der Karte heraus — jeder
+            // andere Weg (Tasten, rechte Maustaste ziehen, Sprung nach Hause)
+            // ruft sie, nur dieser eine tat es nicht.
+            world => { _camera.Position = world; ClampCamera(); },
+            _entities.FogTexture);
         PlaceMinimap();
         GetViewport().SizeChanged += PlaceMinimap;
     }
@@ -412,9 +720,54 @@ public partial class MapViewer : Node2D
         Vector2 view = GetViewportRect().Size;
         var origin = new Vector2(view.X - size.X, view.Y - size.Y);
         _panelSprite.Position = origin;
-        _entities.SetPanelBox(new Rect2(origin + PanelBox.Position * PanelScale,
-                                        PanelBox.Size * PanelScale));
+        var box = new Rect2(origin + PanelBox.Position * PanelScale,
+                            PanelBox.Size * PanelScale);
+        _entities.SetPanelBox(box);
+        if (_build != null)
+        {
+            _build.Position = box.Position + new Vector2(2, 2);
+            _build.Size = box.Size - new Vector2(4, 4);
+            _build.QueueRedraw();
+        }
     }
+
+    /// <summary>The production list, in the same recessed box as the info text —
+    /// they take turns, because both belong to the selection. See
+    /// UI/BuildPanel.cs for what the original does instead (a building screen of
+    /// its own) and what is therefore ours here.</summary>
+    private UI.BuildPanel? _build;
+
+    private void BuildProductionPanel()
+    {
+        if (_panelLayer == null) return;
+        _build = new UI.BuildPanel
+        {
+            MouseFilter = Control.MouseFilterEnum.Stop,
+            Visible = false,
+        };
+        _panelLayer.AddChild(_build);
+        _build.Setup(_entities.BuildPanelRows, _entities.BuildPanelTitle,
+                     _entities.BuildPanelPick);
+        PlacePanel();
+    }
+
+    /// <summary>Show the list whenever the selection is something of the
+    /// player's that builds, and give the box back to the info text otherwise.
+    /// </summary>
+    private void UpdateProductionPanel()
+    {
+        if (_build == null) return;
+        bool want = _entities.BuildPanelWanted && !_hidePanelList;
+        if (want != _build.Visible)
+        {
+            _build.Visible = want;
+            _entities.SetPanelTextVisible(!want);
+        }
+        if (want) _build.QueueRedraw();
+    }
+
+    /// <summary>`P` hides the list, for a look at the info text underneath.</summary>
+    private bool _hidePanelList;
 
     /// <summary>
     /// Put the game's own typeface (FONT.CWD, exported as a BMFont) on the HUD.
@@ -444,8 +797,12 @@ public partial class MapViewer : Node2D
         _hud.AddThemeConstantOverride("outline_size", 0);
         _hud.AddThemeConstantOverride("line_spacing", 2 * LegacyFontScale);
         _entities.SetUiFont(font, size);
+        _build?.SetFont(font, size, PanelScale);
+        _legacyFont = font;
         GD.Print($"MapViewer: legacy FONT.CWD applied at {size}px");
     }
+
+    private Font? _legacyFont;
 
     private const int LegacyFontCell = 13;   // the original glyph cell height
     private const int LegacyFontScale = 2;   // integer upscale for modern screens
@@ -558,6 +915,12 @@ public partial class MapViewer : Node2D
         UpdateHud(name, tex.GetSize(), meta);
         _entities.Load(name, meta);
         BuildMinimap();          // needs both the picture and the loaded entities
+        if (_build == null)
+        {
+            BuildProductionPanel();
+            if (_legacyFont != null)
+                _build?.SetFont(_legacyFont, LegacyFontCell * LegacyFontScale, PanelScale);
+        }
         GD.Print($"MapViewer: loaded {name} ({tex.GetWidth()}x{tex.GetHeight()})");
     }
 
@@ -634,15 +997,17 @@ public partial class MapViewer : Node2D
         if (tex.X <= 0 || tex.Y <= 0)
             return;
 
-        float scale = Mathf.Min(view.X / tex.X, view.Y / tex.Y) * 0.95f;
+        // never below the fit: further out only shows the black around the map
+        float scale = Mathf.Max(Mathf.Min(view.X / tex.X, view.Y / tex.Y), FitZoom());
         _camera.Zoom = new Vector2(scale, scale);
         _camera.Position = tex * 0.5f; // sprite is top-left anchored, so center = half size
+        ClampCamera();
     }
 
     public override void _Process(double delta)
     {
-        TakeShotIfDue();
         QuitIfDue(delta);
+        UpdateProductionPanel();
 
         _objTimer -= (float)delta;
         if (_objTimer <= 0f) { _objTimer = 0.5f; RefreshObjectives(); CheckEnd(); }
@@ -654,7 +1019,10 @@ public partial class MapViewer : Node2D
         if (Input.IsKeyPressed(Key.Up) || Input.IsKeyPressed(Key.W)) dir.Y -= 1;
         if (Input.IsKeyPressed(Key.Down) || Input.IsKeyPressed(Key.S)) dir.Y += 1;
         if (dir != Vector2.Zero)
+        {
             _camera.Position += dir.Normalized() * (float)delta * _keyPanSpeed / _camera.Zoom.X;
+            ClampCamera();
+        }
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -734,6 +1102,7 @@ public partial class MapViewer : Node2D
             if (_panDrag || _rightDrag)
             {
                 _camera.Position -= (motion.Position - _dragLast) / _camera.Zoom;
+                ClampCamera();
                 _dragLast = motion.Position;
             }
             else if (_boxSelect)
@@ -780,6 +1149,9 @@ public partial class MapViewer : Node2D
                 case Key.M: _entities.ToggleDesigner(); break;
                 case Key.B: _entities.ProduceFromSelection(); break;
                 case Key.N: _entities.CycleBuildMenu(); break;
+                // the production list shares the display box with the info
+                // text; I hides it for a look at what is underneath
+                case Key.I: _hidePanelList = !_hidePanelList; UpdateProductionPanel(); break;
                 case Key.O: _entities.StartResearch(); break;
                 case Key.K: _entities.StartRepair(); break;
                 case Key.L: _entities.ToggleRail(); break;
@@ -787,13 +1159,7 @@ public partial class MapViewer : Node2D
                 case Key.V: _entities.StartUpgrade(true); break;   // Lagerausbau
                 case Key.C: _entities.StartUpgrade(false); break;  // Produktionserw.
                 case Key.Escape:
-                    // started from the menu? go back to it instead of quitting
-                    if (UI.SkirmishSetup.Active)
-                    {
-                        UI.SkirmishSetup.Active = false;
-                        GetTree().ChangeSceneToFile(UI.SkirmishSetup.MenuScene);
-                    }
-                    else GetTree().Quit();
+                    TogglePause();
                     break;
                 // Space centres on what is selected — the map is up to
                 // 10000 px wide, so losing the selection is easy
@@ -881,9 +1247,10 @@ public partial class MapViewer : Node2D
     private void ZoomAt(Vector2 screenPos, float factor)
     {
         Vector2 before = _camera.GetGlobalMousePosition();
-        float z = Mathf.Clamp(_camera.Zoom.X * factor, MinZoom, MaxZoom);
+        float z = Mathf.Clamp(_camera.Zoom.X * factor, FitZoom(), MaxZoom);
         _camera.Zoom = new Vector2(z, z);
         Vector2 after = _camera.GetGlobalMousePosition();
         _camera.Position += before - after; // keep point under cursor fixed
+        ClampCamera();
     }
 }

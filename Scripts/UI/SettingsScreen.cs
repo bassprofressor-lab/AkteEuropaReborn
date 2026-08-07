@@ -15,22 +15,35 @@ public partial class SettingsScreen : Control
 
     public override void _Ready()
     {
-        SetAnchorsPreset(LayoutPreset.FullRect);
+        SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         MouseFilter = MouseFilterEnum.Stop;
-        AddChild(new ColorRect
-        {
-            Color = new Color(0.04f, 0.05f, 0.07f, 0.96f),
-            AnchorRight = 1, AnchorBottom = 1,
-        });
+        var backdrop = new ColorRect { Color = new Color(0.04f, 0.05f, 0.07f, 0.96f) };
+        backdrop.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        AddChild(backdrop);
 
-        var box = new VBoxContainer
+        // The box used to hang off anchors at 0.5 under a plain Control. Nothing
+        // measures a container there, so it kept a zero-size rect and the whole
+        // screen was drawn from that point outwards — up and to the left of the
+        // menu, which is where it was reported. Same frame the setup screen uses
+        // (MainMenu._Ready): a full-rect scroller, a CenterContainer inside it,
+        // the column inside that. It also survives a 720p window.
+        var scroll = new ScrollContainer
         {
-            AnchorLeft = 0.5f, AnchorRight = 0.5f, AnchorTop = 0.5f, AnchorBottom = 0.5f,
-            GrowHorizontal = GrowDirection.Both, GrowVertical = GrowDirection.Both,
-            CustomMinimumSize = new Vector2(520, 0),
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
         };
+        scroll.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        AddChild(scroll);
+
+        var middle = new CenterContainer
+        {
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        scroll.AddChild(middle);
+
+        var box = new VBoxContainer { CustomMinimumSize = new Vector2(520, 0) };
         box.AddThemeConstantOverride("separation", 10);
-        AddChild(box);
+        middle.AddChild(box);
 
         var title = new Label
         {
@@ -94,7 +107,9 @@ public partial class SettingsScreen : Control
         {
             Settings.SfxVolume = (int)v;
             volVal.Text = $"{(int)v}";
-            Audio.GameSounds.Play(Audio.GameSounds.Click);   // hear what you set
+            // hear what you set — a 0.29 s shot, not the 1.8 s spoken line the
+            // old "Click" constant pointed at
+            Audio.GameSounds.Play(Audio.GameSounds.VolumeProbe);
         };
         var volRow = new HBoxContainer();
         volRow.AddChild(new Label { Text = "Lautstaerke", CustomMinimumSize = new Vector2(260, 0) });

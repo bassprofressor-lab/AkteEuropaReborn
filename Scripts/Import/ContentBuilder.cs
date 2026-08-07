@@ -319,6 +319,213 @@ public sealed class ContentBuilder
         return list;
     }
 
+    /// <summary>
+    /// Rewrite only the `.entities.json` of every level the sources hold and
+    /// leave the baked pictures where they are.
+    ///
+    /// The pictures are 400 MB and take minutes; the game state is small and
+    /// changes whenever a section is newly understood — the passability out of
+    /// the imap was the case that made this worth having. A map the sources do
+    /// not carry keeps the file it has, and the runtime says so when it loads a
+    /// state that predates a block it wants.
+    /// </summary>
+    public bool ReexportStates(Action<string>? progress = null)
+    {
+        void Say(string s) { GD.Print("reexport: " + s); progress?.Invoke(s); }
+        Directory.CreateDirectory($"{_dst}/Maps");
+
+        int done = 0, failed = 0;
+        void One(string path, string outName)
+        {
+            try
+            {
+                var m = CwmFile.Load(path);
+                var doc = EntitiesJson.Decode(m);
+                File.WriteAllText($"{_dst}/Maps/{outName}.entities.json",
+                                  EntitiesJson.Write(doc, outName["map_".Length..]),
+                                  new UTF8Encoding(false));
+                done++;
+                var t = doc.Terrain;
+                Say($"{outName}: frei {t.Histogram[0]} / grob {t.Histogram[1]} / " +
+                    $"wasser {t.Histogram[2]} / gesperrt {t.Histogram[3]}, " +
+                    $"{t.Inferred} abgeleitet, {doc.InfantryCells.Count} Infanteriezellen");
+            }
+            catch (Exception e) { failed++; Say($"{outName}: {e.Message}"); }
+        }
+
+        foreach (var (stem, path) in Levels("*.CWM")) One(path, "map_" + stem);
+        foreach (var (stem, name) in DmStems)
+        {
+            string? p = Find($"LEVELS/{stem}.DM");
+            if (p != null) One(p, "map_" + name);
+        }
+
+        Say($"fertig: {done} Spielstaende neu geschrieben, {failed} fehlgeschlagen");
+        return done > 0 && failed == 0;
+    }
+
+    /// <summary>
+    /// Rewrite only the catalogue tables out of GAME.EXE — weapons, research,
+    /// designs, units, building types. Nothing is decoded from a level and no
+    /// picture is touched, so it costs a second instead of minutes.
+    ///
+    /// Worth having for the same reason as <see cref="ReexportStates"/>: a table
+    /// changes whenever a row of the stats block is newly understood, and the
+    /// weapon names were read from six of fifty components until 2026-08-06.
+    /// </summary>
+    public bool ReexportTables(Action<string>? progress = null)
+    {
+        void Say(string s) { GD.Print("reexport-tables: " + s); progress?.Invoke(s); }
+        try
+        {
+            byte[]? exe = _src.Exe != null ? File.ReadAllBytes(_src.Exe) : Asset("GAME.EXE");
+            if (exe == null) { Say("GAME.EXE nicht gefunden"); return false; }
+            _exe = ExeTables.FromBytes(exe);
+        }
+        catch (Exception e) { Say("GAME.EXE: " + e.Message); return false; }
+
+        Directory.CreateDirectory($"{_dst}/Maps");
+
+        // The building types and the unit catalogue are counted off the LEVELS,
+        // so they are only rewritten when levels are in reach — and the counter
+        // below decides it, not a hope. Point this at the discs for the full
+        // set; an installation carries fewer levels and says so.
+        int levels = 0;
+        foreach (var (stem, path) in Levels("*.CWM"))
+        {
+            try { _tally.Add(EntitiesJson.Decode(CwmFile.Load(path))); levels++; }
+            catch (Exception e) { Say($"{stem}: {e.Message}"); }
+        }
+        foreach (var (stem, _name) in DmStems)
+        {
+            string? p = Find($"LEVELS/{stem}.DM");
+            if (p == null) continue;
+            try { _tally.Add(EntitiesJson.Decode(CwmFile.Load(p))); levels++; }
+            catch (Exception e) { Say($"{stem}: {e.Message}"); }
+        }
+        Say($"{levels} Karten gezaehlt");
+
+        try
+        {
+            var cat = new CatalogueExporter(_exe, _dst + "/Maps");
+            if (levels > 0) cat.Run(_tally, _designSources, Say);
+            else
+            {
+                // ⚠ RunExeOnly, not Run: without a level the tally is empty and
+                // Run would replace good tables with empty ones. That happened
+                // once, on 2026-08-06, the first time these were re-exported on
+                // their own — building_types.json and unit_catalog.json went to
+                // zero entries without a word of complaint.
+                Say("keine Karten in den Quellen — nur die Tabellen aus GAME.EXE");
+                cat.RunExeOnly(Say);
+            }
+            Say($"fertig: {cat.Weapons} Bauteile benannt, {cat.WeaponTypes} Bauarten, "
+                + $"{cat.InfantryArms} Infanteriewaffen");
+            return cat.Weapons > 0;
+        }
+        catch (Exception e) { Say("Katalogtabellen: " + e.Message); return false; }
+    }
+
+    /// <summary>
+    /// Rewrite only <c>Buildings/tileset_nn.*</c> — the patterns, the cell
+    /// animations and the tile atlas — straight from the .CWP of every tileset
+    /// in reach.
+    ///
+    /// <para>Why this exists: those files are normally written as a side effect
+    /// of baking a map, and baking all 26 takes minutes. Nothing here touches a
+    /// baked picture, so a change that only adds tiles to the atlas (as the cell
+    /// animations did on 08.08.2026) does not need a full import.</para>
+    ///
+    /// <para>⚠ It is NOT a substitute for one when the BAKER changes — a cell
+    /// the baker decides to leave to the renderer is burnt into the map picture,
+    /// and only a re-bake moves that line.</para>
+    /// </summary>
+    public bool ReexportBuildings(Action<string>? progress = null)
+    {
+        void Say(string s) { GD.Print("reexport-buildings: " + s); progress?.Invoke(s); }
+        int ok = 0, missing = 0;
+        for (int tileset = 0; tileset < 100; tileset++)
+        {
+            string? cwp = Find($"DATA/{tileset:00}.CWP");
+            string? pal = Find($"DATA/{tileset:00}.PAL");
+            if (cwp == null || pal == null) { if (cwp != null) missing++; continue; }
+            try
+            {
+                WriteBuildingPatterns(CwpFile.Load(cwp), PalFile.Load(pal), tileset);
+                ok++;
+            }
+            catch (Exception e) { Say($"{tileset:00}: {e.Message}"); missing++; }
+        }
+        Say($"{ok} Tilesets geschrieben, {missing} uebersprungen");
+        return ok > 0 && missing == 0;
+    }
+
+    /// <summary>
+    /// Rewrite only the unit pictures. Needs the (unit_type, weapon) pairs the
+    /// maps actually use, so the levels are decoded for their entities — but
+    /// nothing is baked and no picture of a map is touched.
+    /// </summary>
+    public bool ReexportUnits(Action<string>? progress = null)
+    {
+        void Say(string s) { GD.Print("reexport-units: " + s); progress?.Invoke(s); }
+        try
+        {
+            byte[]? exe = _src.Exe != null ? File.ReadAllBytes(_src.Exe) : Asset("GAME.EXE");
+            if (exe != null)
+            {
+                var t = ExeTables.FromBytes(exe);
+                _exe = t;
+                // a Werft can build designs that stand on no map, so their
+                // chassis and weapon belong in the sprite set too — leaving them
+                // out shrank hull/154..156 back to the old canvas
+                foreach (var d in t.Ships())
+                    _combos.Add((d.Chassis, d.Weapon != 0
+                        ? t.StatsFor(d.Weapon)?.ComponentId ?? 0 : 0));
+            }
+        }
+        catch (Exception e) { Say("GAME.EXE: " + e.Message); }
+
+        // ⚠ The combos come from the IMPORTED game states, not from the LEVELS
+        // folder. The first version read the levels and quietly shrank the set:
+        // the folder here holds 23 of the 44 maps, so the pairs that only exist
+        // on discs 2's missions vanished and the index files were rewritten
+        // without them. What has already been imported is the complete list, and
+        // it needs no disc in the drive.
+        int maps = 0;
+        foreach (string p in Directory.GetFiles(_dst + "/Maps", "*.entities.json"))
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(p));
+                if (!doc.RootElement.TryGetProperty("entities", out var arr) ||
+                    arr.ValueKind != System.Text.Json.JsonValueKind.Array) continue;
+                foreach (var e in arr.EnumerateArray())
+                {
+                    if (!e.TryGetProperty("raw", out var rv)) continue;
+                    string hex = rv.GetString() ?? "";
+                    if (hex.Length < 0x0d * 2) continue;
+                    int ut = Convert.ToInt32(hex.Substring(0x0f * 2, 2), 16);
+                    int weap = Convert.ToInt32(hex.Substring(0x0c * 2, 2), 16);
+                    _combos.Add((ut, weap));
+                }
+                maps++;
+            }
+            catch (Exception e) { Say($"{Path.GetFileName(p)}: {e.Message}"); }
+        }
+        Say($"{maps} eingespielte Karten gelesen, {_combos.Count} Kombinationen");
+
+        byte[]? robo = Asset("ROBO.CWR");
+        string? pal = Find("DATA/01.PAL");
+        if (robo == null || pal == null) { Say("ROBO.CWR oder 01.PAL nicht gefunden"); return false; }
+
+        Directory.CreateDirectory(_dst + "/Units");
+        var ex = new UnitsExporter(CwrFile.FromBytes(robo), PalFile.Load(pal), _exe, _dst + "/Units");
+        ex.Run(_combos, Say);
+        SpriteFrames = ex.Frames;
+        Say($"fertig: {ex.Frames} Bilder, {ex.Hulls} Fahrwerke, {ex.Turrets} Waffen, {ex.Combos} Kombinationen");
+        return ex.Frames > 0;
+    }
+
     private void BakeOne(string path, string outName, Action<string> say)
     {
         if (!File.Exists(path)) return;
@@ -332,7 +539,13 @@ public sealed class ContentBuilder
                 say($"{outName}: Tileset {m.Tileset:00} fehlt");
                 return;
             }
-            var baker = new MapBaker(m, CwpFile.Load(cwp), PalFile.Load(pal));
+            var cwpFile = CwpFile.Load(cwp);
+            var palFile = PalFile.Load(pal);
+            // The building patterns belong to the TILESET, not the map, so they
+            // are written once per tileset — several maps share one. Without
+            // them nothing can be built: the engine never opens a .CWP.
+            WriteBuildingPatterns(cwpFile, palFile, m.Tileset);
+            var baker = new MapBaker(m, cwpFile, palFile);
             var img = baker.Bake();
             img.SavePng($"{_dst}/Maps/{outName}.png");
             File.WriteAllText($"{_dst}/Maps/{outName}.json", MapMeta(m, baker), new UTF8Encoding(false));
@@ -358,10 +571,39 @@ public sealed class ContentBuilder
             MapsBaked++;
             EntitiesWritten++;
             say($"{outName}: {img.GetWidth()}x{img.GetHeight()} gebacken, " +
-                $"{doc.Entities.Count} Einheiten, {doc.Buildings.Count} Gebaeude");
+                $"{doc.Entities.Count} Einheiten, {doc.Buildings.Count} Gebaeude, " +
+                $"{baker.BuildingCellsSkipped} Gebaeudekacheln dem Renderer " +
+                $"ueberlassen ({baker.MissedBuildingCells} nicht erkannt)");
         }
         catch (Exception e) { say($"{outName}: {e.Message}"); }
     }
+
+    /// <summary>Tilesets already written this run — several maps share one.</summary>
+    private readonly HashSet<int> _tilesetsWritten = new();
+
+    /// <summary>The buildable types and their patterns, once per tileset. A
+    /// file without the building tail is skipped in silence: every shipped
+    /// .CWP has it, and a missing one simply means nothing can be built
+    /// there.</summary>
+    private void WriteBuildingPatterns(CwpFile cwp, PalFile pal, int tileset)
+    {
+        if (!cwp.HasBuildings || !_tilesetsWritten.Add(tileset)) return;
+        Directory.CreateDirectory($"{_dst}/Buildings");
+        File.WriteAllText($"{_dst}/Buildings/tileset_{tileset:00}.json",
+                          BuildingPatterns.Write(cwp, tileset), new UTF8Encoding(false));
+        // and the pictures, so a raised building can actually be seen
+        var (png, meta) = BuildingPatterns.WriteAtlas(cwp, pal, tileset);
+        if (png != null && meta.Length > 0)
+        {
+            png.SavePng($"{_dst}/Buildings/tileset_{tileset:00}_tiles.png");
+            File.WriteAllText($"{_dst}/Buildings/tileset_{tileset:00}_tiles.json",
+                              meta, new UTF8Encoding(false));
+        }
+        BuildingTilesets++;
+    }
+
+    /// <summary>How many tileset pattern files this run wrote.</summary>
+    public int BuildingTilesets;
 
     /// <summary>The map's own description: size, tileset, and the per-cell grid
     /// the game needs for elevation and walkability.</summary>

@@ -49,15 +49,31 @@ public static class GameSounds
 {
     // ---- interface ---------------------------------------------------------
 
-    /// <summary>The interface click. Two tiny wrappers do nothing but play a
-    /// sound — @0x487c00 plays this one and is called from <b>89</b> places,
-    /// all in the window code (0x498000..0x49e000).</summary>
-    public const int Click = 600;
+    // ⚠ WITHDRAWN: "600 and 601 are the interface click".
+    //
+    // They are not, and the game said so twice over. Both are played by one
+    // four-line wrapper each — @0x487c00 and @0x487c20 — and BOTH wrappers are
+    // reached only through a thunk (0x4017d0, 0x401d8e) whose callers all sit in
+    // ONE contiguous stretch, 0x498932..0x4a55d1: 89 calls of the first and 62
+    // of the second. That stretch is not the window code. It is the campaign's
+    // MISSION SCRIPTS — 138 int3-separated blocks whose other calls are named by
+    // the game itself ("Cannot add new 'vyroba'", g_robot_class_count,
+    // g_buildings_count, "Too many units in 'Space in'", "Cannot add new
+    // target", "Can't add built bridge", "SUB:"). And the length settles it:
+    // sound 600 is 39,933 bytes at 22050/8/mono = 1.81 seconds. That is a spoken
+    // line, not a click — the player heard a woman announcing a completed
+    // sub-mission every time he touched a menu row.
+    //
+    // The original's start menu has NO click at all: its handler @0x447940, its
+    // hit test @0x461101 and its draw @0x480430 contain not one call to the
+    // sound routine (0x40162c / 0x4047e0), while all 111 call sites in the
+    // program were counted. So the menu is silent here as well.
 
-    /// <summary>The second interface sound, @0x487c20, called from <b>62</b>
-    /// places in the same code. What separates the two sets has not been read,
-    /// so this is not used yet.</summary>
-    public const int Click2 = 601;
+    /// <summary>The first weapon-class shot, 0.29 s — the shortest thing in the
+    /// bank that is unambiguously an effect. Used only where a switch has to be
+    /// audible while it is being dragged (the volume slider). OURS: the original
+    /// plays nothing there.</summary>
+    public const int VolumeProbe = 0;
 
     /// <summary>Refused: "Sie besitzen nicht genuegend Einzelteile." @0x44b6e9,
     /// and the same number again @0x448961 among the hangar and parts
@@ -376,32 +392,12 @@ public static class GameSounds
     /// <summary>Shorthand for the events above.</summary>
     public static void Play(int slot) => SoundBankPlayer.Play(slot);
 
-    // ---- the click, on every button there is --------------------------------
-
-    private static bool _hooked;
-
-    /// <summary>Gives every button in the game the original's click.
-    ///
-    /// The original does not attach a sound per control either — two wrappers
-    /// that do nothing but play one are called from 89 and 62 places in the
-    /// window code. Hooking the tree once has the same reach and leaves the
-    /// screens alone: a new button sounds without anybody remembering to say so.
-    /// </summary>
-    public static void HookButtons(SceneTree tree)
-    {
-        if (_hooked) return;
-        _hooked = true;
-        tree.NodeAdded += n =>
-        {
-            if (n is BaseButton b) b.Pressed += () => Play(Click);
-        };
-        // buttons that were already there when this ran
-        Walk(tree.Root);
-    }
-
-    private static void Walk(Node n)
-    {
-        if (n is BaseButton b) b.Pressed += () => Play(Click);
-        foreach (var c in n.GetChildren()) Walk(c);
-    }
+    // ---- no click on every button -------------------------------------------
+    //
+    // There used to be a HookButtons(SceneTree) here that gave every BaseButton
+    // in the game sound 600 on press. It rested on the reading withdrawn at the
+    // top of this file, and what it actually did was announce a finished
+    // sub-mission whenever the player clicked anything. It is gone rather than
+    // repointed: the original's menu makes no sound, and inventing one would be
+    // ours without saying so.
 }

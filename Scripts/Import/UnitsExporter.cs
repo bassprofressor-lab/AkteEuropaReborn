@@ -23,10 +23,12 @@ using Godot;
 ///   <c>infantry/{set}/fN_bB.png</c>  fifteen blocks per foot soldier
 ///   <c>aircraft/{kind}/fN.png</c>, <c>train/{part}/fN.png</c>
 ///
-/// Everything on the canvas is 64x56 (<see cref="CwrFile.CanvasW"/>): one shared
-/// anchor is what lets the layers line up. The per-unit_type set is the odd one
-/// out and deliberately so — it is cropped, and units_index.json carries the
-/// offsets the renderer needs to place it.
+/// The canvas starts at 64x56 (<see cref="CwrFile.CanvasW"/>) and grows to the
+/// right and downwards for the frames that need more — the ships do. The ANCHOR
+/// does not move with it, which is what still lets the layers line up.
+///
+/// The per-unit_type set is the odd one out and deliberately so — it is cropped,
+/// and units_index.json carries the offsets the renderer needs to place it.
 ///
 /// Ported from compose_units.py, copy_units.py, infantry_export.py,
 /// aircraft_export.py and train_export.py; every address in the comments is
@@ -103,6 +105,13 @@ public sealed class UnitsExporter
                 if (newHull) Save($"hull/{ut}/f{f}.png", hull);
                 if (newTurret && turret != null) Save($"turret/{weap}/f{f}.png", turret);
             }
+            // The other pose groups of the chassis, where it owns any. Group 0
+            // keeps its old file name so nothing that already reads these has
+            // to change; 1..n-1 go into g<n>/ beside it.
+            if (newHull)
+                for (int g = 1; g < _cwr.PartGroups(prop); g++)
+                    for (int f = 0; f < CwrFile.Facings; f++)
+                        Save($"hull/{ut}/g{g}/f{f}.png", StackPose(f, g, prop));
             composed.Add((key, ut, weap, name));
             Combos++;
 
@@ -289,11 +298,24 @@ public sealed class UnitsExporter
         sb.Append("{\"_note\":\"hull (the propulsion alone) and turret (weapon) drawn separately ");
         sb.Append("so the weapon can aim independently; same 64x56 anchor\",");
         sb.Append("\"_mount\":\"a hull carries the five turret offsets of its chassis, read out ");
-        sb.Append("of the executable (GAME.EXE table at 0x4fa320, used @0x429CCB): the turret is ");
-        sb.Append("drawn at hull + (mount[0] + mount[k]) / 2, k = the tile's flag byte, 0 above 4. ");
-        sb.Append("mount[0] is flat ground. `slope_blocks` is the frame block a tilted turret is ");
-        sb.Append("drawn from (@0x429B05) - the exporter writes block 0 only, so a unit on a slope ");
-        sb.Append("shows the flat turret at the right place\",");
+        sb.Append("of the executable (GAME.EXE table at 0x4fa320): on flat ground the draw code ");
+        sb.Append("takes mount[k] outright (@0x42a099), on the tilted path the average ");
+        sb.Append("(mount[0]+mount[k])/2 (@0x429CCB); k = the tile's flag byte, 0 above 4. ");
+        sb.Append("`slope_blocks` is the frame block a tilted turret is drawn from (@0x429B05) - ");
+        sb.Append("the exporter writes block 0 only, so a unit on a slope shows the flat turret ");
+        sb.Append("at the right place\",");
+        // ⚠ The walker is not in that table's world at all — see WALKER_LIFT.
+        sb.Append("\"_walker\":\"chassis 0x11 (Laeufer) does NOT use the mount table: @0x42a027 ");
+        sb.Append("jumps past it to @0x42a0e8, whose first instruction is `sub bp, 0x1b` - a flat ");
+        sb.Append("27 px lift and no x offset. Its hull is 40 px tall against 20..28 for every ");
+        sb.Append("other land chassis, which is why the table's -8 put the turret at its feet\",");
+        sb.Append($"\"walker_chassis\":{WalkerChassis},\"walker_lift\":{WalkerLift},");
+        sb.Append("\"_groups\":\"pose groups of 48 frames; frame = base + group*48 + block*8 + ");
+        sb.Append("facing (@0x429fa6), the group out of entity +0x11 masked to 3 bits ");
+        sb.Append("(`imul ax,ax,0x30` @0x429b3b). Group 0 is hull/<ut>/f<n>.png, the rest ");
+        sb.Append("hull/<ut>/g<g>/f<n>.png\",");
+        // the minimum, not the size: a frame wider or taller gets its own
+        sb.Append($"\"canvas_min\":[{CwrFile.CanvasW},{CwrFile.CanvasH}],");
         sb.Append($"\"canvas\":[{CwrFile.CanvasW},{CwrFile.CanvasH}],\"slope_blocks\":[");
         for (int k = 0; k < _slopeBlocks.Length; k++)
             sb.Append(k > 0 ? "," : "").Append(_slopeBlocks[k]);
@@ -304,7 +326,8 @@ public sealed class UnitsExporter
             if (!first) sb.Append(',');
             first = false;
             sb.Append($"\"{kv.Key}\":{{\"unit_type\":{kv.Key},\"name\":\"{Esc(kv.Value)}\"");
-            sb.Append($",\"component\":{ComponentOf(kv.Key)}");
+            int hc = ComponentOf(kv.Key);
+            sb.Append($",\"component\":{hc},\"groups\":{_cwr.PartGroups(hc)}");
             var m = Mount(kv.Key);
             if (m != null)
             {
@@ -352,15 +375,41 @@ public sealed class UnitsExporter
     /// them. A component of 0 or one the bank has no frames for is simply not
     /// there, which is a normal case, not an error.</summary>
     private Image Stack(int facing, params int[] components)
+        => StackPose(facing, 0, components);
+
+    /// <summary>As above, for one pose group — see <see cref="CwrFile.PartGroups"/>.
+    /// A part that owns a single group ignores the number.
+    ///
+    /// ⚠ Deliberately NOT an overload of <c>Stack</c>. It was one for an hour,
+    /// and `Stack(f, prop)` then bound to it with `prop` as the GROUP and an
+    /// empty component list, so every composed and turret picture came out
+    /// blank and was silently skipped. Two int parameters and a params array
+    /// are a trap; the name keeps them apart.</summary>
+    private Image StackPose(int facing, int group, params int[] components)
     {
-        var canvas = Image.CreateEmpty(CwrFile.CanvasW, CwrFile.CanvasH, false, Image.Format.Rgba8);
+        // the canvas has to hold the WIDEST layer, or a ship's hull loses its
+        // bow to a turret-sized picture — see CwrFile.CanvasFor
+        int cw = CwrFile.CanvasW, ch = CwrFile.CanvasH;
+        foreach (int c in components)
+        {
+            if (c <= 0 || c >= CwrFile.PartCount || _cwr.PartBase(c) < 0) continue;
+            int fr = _cwr.PartFrame(c, facing, 0, group);
+            if (fr < 0) continue;
+            var (w, h) = _cwr.CanvasFor(fr);
+            cw = System.Math.Max(cw, w);
+            ch = System.Math.Max(ch, h);
+        }
+
+        var canvas = Image.CreateEmpty(cw, ch, false, Image.Format.Rgba8);
         canvas.Fill(new Color(0, 0, 0, 0));
         foreach (int c in components)
         {
             if (c <= 0 || c >= CwrFile.PartCount) continue;
             if (_cwr.PartBase(c) < 0) continue;
-            var layer = _cwr.PartImage(c, facing, _pal);
-            canvas.BlendRect(layer, new Rect2I(0, 0, CwrFile.CanvasW, CwrFile.CanvasH), Vector2I.Zero);
+            int fr = _cwr.PartFrame(c, facing, 0, group);
+            if (fr < 0) continue;
+            var layer = _cwr.FacingImage(fr, _pal, cw, ch);
+            canvas.BlendRect(layer, new Rect2I(0, 0, cw, ch), Vector2I.Zero);
         }
         return canvas;
     }
@@ -442,12 +491,33 @@ public sealed class UnitsExporter
     /// on the stack — so there is no number to copy and they get none.</summary>
     private static readonly Dictionary<int, int> ShipMount = new() { { 70, 15 }, { 71, 2 }, { 72, 12 } };
 
+    /// <summary>The Läufer's chassis component, and the lift it gets instead of
+    /// the mount table.
+    ///
+    /// ⚠ FOUND 2026-08-06, and it explains a complaint that survived three
+    /// releases. The draw code tests the chassis against 0x11 twice: @0x429af4
+    /// denies the walker a slope block, and @0x42a025 jumps clean past the
+    /// mount-table block at @0x42a08e to @0x42a0e8, whose first instruction is
+    ///     sub bp, 0x1b
+    /// — a flat 27 px lift with no x offset at all. The table row the remake
+    /// used instead says (0,-8), and the walker's hull is 40 px tall where
+    /// every other land chassis is 20..28, so the turret sat at its feet.</summary>
+    public const int WalkerChassis = 0x11;
+    public const int WalkerLift = 0x1b;
+
     private (int X, int Y)[]? Mount(int unitType)
     {
         if (_mount.TryGetValue(unitType, out var m)) return m;
         var t = _exe;
         if (t == null || !t.TurretMountFound) return null;
         int comp = ComponentOf(unitType);
+        if (comp == WalkerChassis)
+        {
+            var walk = new (int X, int Y)[ExeTables.MountSlopes];
+            for (int k = 0; k < walk.Length; k++) walk[k] = (0, -WalkerLift);
+            _mount[unitType] = walk;
+            return walk;
+        }
         if (ShipMount.TryGetValue(comp, out int sm))
         {
             var ship = new (int X, int Y)[ExeTables.MountSlopes];
@@ -476,12 +546,39 @@ public sealed class UnitsExporter
     /// separately, so the composed picture and the live unit agree.</summary>
     private static Image Compose(Image hull, Image? turret, Vector2I offset)
     {
-        var canvas = Image.CreateEmpty(CwrFile.CanvasW, CwrFile.CanvasH, false, Image.Format.Rgba8);
-        canvas.Fill(new Color(0, 0, 0, 0));
-        canvas.BlendRect(hull, new Rect2I(0, 0, CwrFile.CanvasW, CwrFile.CanvasH), Vector2I.Zero);
+        // as wide and as tall as the hull, the turret and the turret's offset
+        // together need — a 64x56 box would clip a ship back off again
+        int cw = System.Math.Max(CwrFile.CanvasW, hull.GetWidth());
+        int ch = System.Math.Max(CwrFile.CanvasH, hull.GetHeight());
         if (turret != null)
-            canvas.BlendRect(turret, new Rect2I(0, 0, CwrFile.CanvasW, CwrFile.CanvasH), offset);
+        {
+            cw = System.Math.Max(cw, turret.GetWidth() + System.Math.Max(0, offset.X));
+            ch = System.Math.Max(ch, turret.GetHeight() + System.Math.Max(0, offset.Y));
+        }
+
+        var canvas = Image.CreateEmpty(cw, ch, false, Image.Format.Rgba8);
+        canvas.Fill(new Color(0, 0, 0, 0));
+        canvas.BlendRect(hull, new Rect2I(0, 0, hull.GetWidth(), hull.GetHeight()), Vector2I.Zero);
+        if (turret != null) BlendAt(canvas, turret, offset);
         return canvas;
+    }
+
+    /// <summary>Blend a layer at an offset that may be NEGATIVE, clipping the
+    /// SOURCE rather than the destination.
+    ///
+    /// ⚠ Found 2026-08-06 while the walker's 27 px lift went in. Handing
+    /// <c>BlendRect</c> a negative destination does not clip the way the Python
+    /// reference's <c>Image.paste</c> does: at (0,-8) the two agree to the
+    /// pixel, at (0,-27) the C# side lost 186 of the turret's 257 pixels. The
+    /// small offsets of the mount table hid it for as long as they were all the
+    /// remake used.</summary>
+    private static void BlendAt(Image canvas, Image layer, Vector2I at)
+    {
+        int sx = System.Math.Max(0, -at.X), sy = System.Math.Max(0, -at.Y);
+        int w = layer.GetWidth() - sx, h = layer.GetHeight() - sy;
+        if (w <= 0 || h <= 0) return;
+        canvas.BlendRect(layer, new Rect2I(sx, sy, w, h),
+                         new Vector2I(System.Math.Max(0, at.X), System.Math.Max(0, at.Y)));
     }
 
     private static bool IsBlank(Image img)

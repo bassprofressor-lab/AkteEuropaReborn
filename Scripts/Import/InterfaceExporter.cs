@@ -187,6 +187,18 @@ public sealed class InterfaceExporter
     private static readonly (string Name, int Seq)[] Picked =
     {
         ("muzzle", 232), ("explosion", 48), ("blast", 550), ("wreck", 0),
+        // The BUILDING DOORS, and this one is not our choice — the game says so.
+        // The draw code @0x42B338 computes `tile*4 + word[0x7a44fe] + phase`,
+        // and 0x7a44fe is the `first frame` field of ANIM.CWA sequence 301
+        // (the loader @0x435710 reads the 4000-byte sequence table to 0x7a4048,
+        // and 0x7a44fe - 0x7a4048 = 1206 = 301*4 + 2).
+        //
+        // The arithmetic closes: sequence 301 holds **76 frames = 19 doors x 4
+        // phases**, and the highest door tile the jump table @0x42bdd8 hands
+        // out is 18 — 18*4 + 3 = 75, exactly the last frame. Rendered and
+        // looked at: they are doors, and phase 0 against phase 3 is shut
+        // against open.
+        ("door", 301),
     };
 
     /// <summary>Sequences 64 and 65 are rockets drawn as 8 facings x 3 phases

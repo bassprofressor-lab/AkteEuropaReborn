@@ -17,7 +17,8 @@ public partial class GameManager : Node
     public override void _Ready()
     {
         GD.Print("GameManager ready");
-        // one hook for the whole game: every button gets the original's click
-        Audio.GameSounds.HookButtons(GetTree());
+        // There used to be a HookButtons(GetTree()) here. It gave every button
+        // sound 600, which is a spoken sub-mission line, not a click — see the
+        // note at the top of GameSounds. The original's menu is silent.
     }
 }
