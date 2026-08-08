@@ -159,6 +159,58 @@ public sealed class CatalogueExporter
         WriteComponentStats(say);
         WriteDiplomacy(say);
         WriteResources(say);
+        WriteMissionPlans(say);
+    }
+
+    /// <summary>
+    /// What each computer player of a campaign mission produces.
+    ///
+    /// ⚠ This does NOT come out of a map: a campaign level stops at section 38
+    /// and carries no build programme at all. The game builds one at mission
+    /// start by running straight-line code picked by the mission number
+    /// (<see cref="ExeTables.MissionPlans"/>), so the only way to have it is to
+    /// read that code — which is what this writes out.
+    ///
+    /// A line's <c>what</c> is the design row WITHIN THE PLAYER, exactly as the
+    /// original computes it (<c>design + 200*player</c> @0x4BB258): to look it
+    /// up in unit_designs.json, add <c>200*player</c>.
+    /// </summary>
+    private void WriteMissionPlans(Action<string>? say)
+    {
+        if (_exe == null || !_exe.HasMissionPlans) return;
+        var all = _exe.MissionPlans;
+        var sb = new StringBuilder();
+        sb.Append("{\"_note\":\"AI build programmes, read out of GAME.EXE's mission setup ");
+        sb.Append($"(dispatch @0x{_exe.VyrobaCaseTable:x}, add_vyroba @0x{_exe.AddVyroba:x}). ");
+        sb.Append("A line is [kind,what,third]; kind 0 = unit design (add 200*player to index ");
+        sb.Append("unit_designs), 1 = aircraft, 2 = unused by ai_production.\",\"missions\":{");
+        bool firstM = true;
+        int lines = 0;
+        foreach (var m in all.Keys)
+        {
+            if (!firstM) sb.Append(',');
+            firstM = false;
+            sb.Append($"\"{m}\":{{");
+            bool firstP = true;
+            foreach (var p in all[m].Keys)
+            {
+                if (!firstP) sb.Append(',');
+                firstP = false;
+                sb.Append($"\"{p}\":[");
+                var rows = all[m][p];
+                for (int i = 0; i < rows.Count; i++)
+                {
+                    if (i > 0) sb.Append(',');
+                    sb.Append($"[{rows[i].Kind},{rows[i].What},{rows[i].Third}]");
+                    lines++;
+                }
+                sb.Append(']');
+            }
+            sb.Append('}');
+        }
+        sb.Append("}}");
+        File.WriteAllText(_dst + "/mission_plans.json", sb.ToString(), new UTF8Encoding(false));
+        say?.Invoke($"Bauplaene: {all.Count} Missionen, {lines} Zeilen");
     }
 
     public int ResourceLevelsWritten;

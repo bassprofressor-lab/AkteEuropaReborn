@@ -1210,7 +1210,62 @@ public static class ImportSelfTest
         }
         GD.Print($"selftest-exe: Rohstoffe {rOk} Werte gleich, {rBad} abweichend");
 
-        return bad == 0 && sBad == 0 && aBad == 0 && dBad == 0 && rBad == 0 &&
+        // the computer players' build programmes, which live as code in the exe
+        // and not in any map — held line by line against mission_setup.py
+        int pOk = 0, pBad = 0;
+        string plansPath = aekernel + "/mission_plans.json";
+        if (!File.Exists(plansPath))
+        {
+            GD.Print("selftest-exe: mission_plans.json fehlt — " +
+                     "mit `mission_setup.py <GAME.EXE> --json <datei>` erzeugen");
+        }
+        else
+        {
+            var root = ReadJson(plansPath);
+            if (root != null)
+                foreach (var key in root.Keys)
+                {
+                    if (!int.TryParse(key, out int mission)) continue;
+                    var want = root[key].AsGodotDictionary<string, Variant>();
+                    var got = t.MissionPlan(mission);
+                    if (got == null)
+                    {
+                        pBad++;
+                        GD.PrintErr($"   Bauplan Mission {mission}: gar keiner gelesen");
+                        continue;
+                    }
+                    foreach (var pk in want.Keys)
+                    {
+                        if (!int.TryParse(pk, out int player)) continue;
+                        var wrows = want[pk].AsGodotArray();
+                        if (!got.TryGetValue(player, out var grows))
+                        {
+                            pBad++;
+                            GD.PrintErr($"   Bauplan Mission {mission} Spieler {player}: fehlt");
+                            continue;
+                        }
+                        bool same = wrows.Count == grows.Count;
+                        for (int i = 0; same && i < wrows.Count; i++)
+                        {
+                            var w = wrows[i].AsGodotArray();
+                            same = w.Count == 3 && w[0].AsInt32() == grows[i].Kind &&
+                                   w[1].AsInt32() == grows[i].What &&
+                                   w[2].AsInt32() == grows[i].Third;
+                        }
+                        if (same) pOk++;
+                        else
+                        {
+                            pBad++;
+                            GD.PrintErr($"   Bauplan Mission {mission} Spieler {player}: " +
+                                        $"{grows.Count} Zeilen statt {wrows.Count}");
+                        }
+                    }
+                }
+            GD.Print($"selftest-exe: Bauplaene {pOk} Programme gleich, {pBad} abweichend " +
+                     $"(Verteiler 0x{t.VyrobaCaseTable:X}, add_vyroba 0x{t.AddVyroba:X})");
+        }
+
+        return bad == 0 && sBad == 0 && aBad == 0 && dBad == 0 && rBad == 0 && pBad == 0 &&
                ok > 0 && sOk > 0 ? 0 : 1;
     }
 

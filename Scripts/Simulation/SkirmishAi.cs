@@ -35,6 +35,79 @@ public partial class MapEntityLayer : Node2D
         public int Grabber = -1;        // the unit sent to take a building
         public int GrabTarget = -1;     // the building it is going for
         public int Taken;               // buildings this side has taken
+
+        /// <summary>The mission's own build programme, when there is one, and
+        /// where in it this player stands. RECOVERED, unlike the rest of this
+        /// file: see <see cref="AiLoadPlan"/>.</summary>
+        public List<(int Kind, int What)>? Plan;
+        public int Pc;
+        public int FromPlan;                       // builds the programme drove
+        public int PlanMissed;                     // lines no factory could serve
+        public readonly List<string> PlanNames = new();
+        public readonly HashSet<int> PlanUnmatched = new();
+    }
+
+    /// <summary>
+    /// The build programme the original gives this player in this mission.
+    ///
+    /// The computer player of "Akte Europa" does not choose what to build. It
+    /// runs a programme of up to 50 lines, one line every 50 ticks, and starts
+    /// over when it runs off the end (`ai_production` @0x4BB9A0). The programme
+    /// is not in the map — a campaign level stops at section 38 — but in the
+    /// exe, as straight-line code picked by the mission number; the importer
+    /// writes it out as <c>Maps/mission_plans.json</c>.
+    ///
+    /// So for a campaign mission the computer now builds what the original
+    /// built, in the original's order. A skirmish has no mission number and
+    /// keeps <see cref="AiPickDesign"/>, which is ours.
+    /// </summary>
+    private static Godot.Collections.Dictionary<string, Variant>? _missionPlans;
+    private static int _missionPlansFor = -1;
+
+    private static void AiLoadPlan(AiPlayer a)
+    {
+        int mission = UI.SkirmishSetup.CampaignMission;
+        if (_missionPlansFor != mission)
+        {
+            _missionPlansFor = mission;
+            _missionPlans = null;
+            string path = Core.Content.Path("Maps/mission_plans.json");
+            if (mission > 0 && FileAccess.FileExists(path))
+            {
+                using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
+                var json = new Json();
+                if (f != null && json.Parse(f.GetAsText()) == Error.Ok &&
+                    json.Data.VariantType == Variant.Type.Dictionary)
+                {
+                    var root = json.Data.AsGodotDictionary<string, Variant>();
+                    if (root.TryGetValue("missions", out var mv) &&
+                        mv.VariantType == Variant.Type.Dictionary)
+                    {
+                        var all = mv.AsGodotDictionary<string, Variant>();
+                        if (all.TryGetValue(mission.ToString(), out var pv) &&
+                            pv.VariantType == Variant.Type.Dictionary)
+                            _missionPlans = pv.AsGodotDictionary<string, Variant>();
+                    }
+                }
+            }
+        }
+        if (_missionPlans == null) return;
+        if (!_missionPlans.TryGetValue(a.Player.ToString(), out var rv) ||
+            rv.VariantType != Variant.Type.Array) return;
+
+        var rows = rv.AsGodotArray();
+        var plan = new List<(int, int)>();
+        foreach (var r in rows)
+        {
+            var line = r.AsGodotArray();
+            if (line.Count >= 2) plan.Add((line[0].AsInt32(), line[1].AsInt32()));
+        }
+        if (plan.Count > 0)
+        {
+            a.Plan = plan;
+            GD.Print($"KI Spieler {a.Player}: Bauprogramm aus Mission " +
+                     $"{UI.SkirmishSetup.CampaignMission}, {plan.Count} Schritte");
+        }
     }
 
     private readonly List<AiPlayer> _ai = new();
@@ -56,7 +129,9 @@ public partial class MapEntityLayer : Node2D
         foreach (int p in players)
         {
             if (p is < 0 or > 7) continue;
-            _ai.Add(new AiPlayer { Player = p, Level = level, Think = 0.5f + p * 0.13f });
+            var a = new AiPlayer { Player = p, Level = level, Think = 0.5f + p * 0.13f };
+            AiLoadPlan(a);
+            _ai.Add(a);
         }
         _aiOn = _ai.Count > 0;
         GD.Print($"KI aktiv fuer Spieler {string.Join(", ", _ai.Select(a => a.Player))} " +
@@ -424,10 +499,30 @@ public partial class MapEntityLayer : Node2D
     {
         if (!_aiOn) return "";
         // E units · W in the wave · b built · a attacks · g on its way to a door
-        // · t taken
+        // · t taken · p builds that came out of the mission's own programme
         return "KI " + string.Join(" ", _ai.Select(a =>
             $"P{a.Player}:{ArmyOf(a.Player).Count}E/{a.Wave.Count}W/{a.Built}b/{a.Waves}a" +
-            $"/{(a.Grabber >= 0 ? 1 : 0)}g/{a.Taken}t"));
+            $"/{(a.Grabber >= 0 ? 1 : 0)}g/{a.Taken}t" +
+            (a.Plan != null ? $"/{a.FromPlan}p" : "")));
+    }
+
+    /// <summary>What the computer players took out of their programme, by name
+    /// — the check that the recovered lines really reach a factory.</summary>
+    public string AiPlanLine()
+    {
+        if (!_aiOn) return "";
+        var parts = new List<string>();
+        foreach (var a in _ai)
+        {
+            if (a.Plan == null) continue;
+            parts.Add($"P{a.Player} {a.FromPlan}x aus dem Programm " +
+                      $"[{string.Join(", ", a.PlanNames)}]" +
+                      (a.PlanUnmatched.Count > 0
+                          ? $"; {a.PlanMissed}x uebersprungen, Entwuerfe ohne Menueeintrag: " +
+                            string.Join(",", a.PlanUnmatched)
+                          : ""));
+        }
+        return parts.Count == 0 ? "" : "KI-Bauprogramm gebaut: " + string.Join("  ", parts);
     }
 
     // ---- the loop ---------------------------------------------------------
@@ -501,6 +596,14 @@ public partial class MapEntityLayer : Node2D
 
     private void AiProduce(AiPlayer a)
     {
+        // A campaign mission's own programme is stepped ONCE per decision, for
+        // the player — not once per factory. That is the shape of the original:
+        // `ai_production` runs a single line every 50 ticks and looks for a
+        // place to put it, so a line meant for the Fahrwerk-Fabrik is not
+        // quietly handed to the Waffen-Fabrik and dropped.
+        bool planned = a.Plan is { Count: > 0 };
+        if (planned) AiProducePlanStep(a);
+
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
@@ -509,6 +612,8 @@ public partial class MapEntityLayer : Node2D
             // a factory that is idle and has parts starts the next unit
             if (IsFactory(e) && e.BuildTime <= 0f && _designs != null && _designs.Count > 0)
             {
+                // with a programme the factories do not choose at all
+                if (planned) continue;
                 var menu = BuildableBy(e.BType);
                 if (menu.Count > 0)
                 {
@@ -545,6 +650,56 @@ public partial class MapEntityLayer : Node2D
         }
     }
 
+    /// <summary>
+    /// One line of the mission's build programme.
+    ///
+    /// Faithful to `ai_production` @0x4BB9A0 in the two things that matter: the
+    /// counter moves on whether or not the line could be built, and a line is
+    /// offered to a place that can actually make it. Where a line names a design
+    /// none of this player's idle factories has on its menu, nothing is built
+    /// this time — the original behaves the same way, it simply finds no base
+    /// (»AI: production base:«) and returns.
+    ///
+    /// ⚠ Our pace is still ours: the original takes one step every 50 ticks,
+    /// this takes one per think-timer decision.
+    /// </summary>
+    private void AiProducePlanStep(AiPlayer a)
+    {
+        if (_designs == null || a.Plan == null || a.Plan.Count == 0) return;
+
+        var (kind, what) = a.Plan[a.Pc % a.Plan.Count];
+        a.Pc = (a.Pc + 1) % a.Plan.Count;
+        if (kind != 0) return;              // 1 = aircraft, 2 = ignored by the original too
+
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (!e.IsBuilding || e.Dead || e.Owner != a.Player) continue;
+            if (!IsFactory(e) || e.BuildTime > 0f) continue;
+
+            var menu = BuildableBy(e.BType);
+            for (int k = 0; k < menu.Count; k++)
+            {
+                var d = _designs[menu[k]];
+                // ⚠ `Slot % 200`, not `200*player + what` as the original does
+                // (@0x4BB258): LoadDesigns keeps one entry per distinct name, so
+                // only one of the eight player blocks survives in our table.
+                if (d.Slot < 0 || d.Slot % DesignsPerPlayer != what) continue;
+                if (!CanAfford(e, d)) return;      // the line stands; wait for parts
+                PayFor(e, d);
+                e.MenuIndex = k;
+                e.BuildIndex = menu[k];
+                e.BuildTime = BuildSeconds;
+                a.Built++;
+                a.FromPlan++;
+                if (a.PlanNames.Count < 12) a.PlanNames.Add(d.Name);
+                return;
+            }
+        }
+        a.PlanMissed++;
+        a.PlanUnmatched.Add(what);
+    }
+
     /// <summary>Pick what to build. OURS: prefer something that can actually
     /// shoot — a vehicle turret (weapon 1..19) or an infantry arm (185..199) —
     /// and take an unarmed design only when nothing else is on offer. Every
@@ -557,6 +712,7 @@ public partial class MapEntityLayer : Node2D
     private int AiPickDesign(AiPlayer a, List<int> menu)
     {
         if (_designs == null || menu.Count == 0) return 0;
+
         var armed = new List<int>();
         for (int k = 0; k < menu.Count; k++)
         {

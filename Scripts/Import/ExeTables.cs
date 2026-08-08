@@ -1090,6 +1090,243 @@ public sealed class ExeTables
         return (_textVa, _text);
     }
 
+    // ---- the computer players' build programmes ("vyroba") -----------------
+
+    /// <summary>One line of a build programme: three bytes, as the game stores
+    /// them. <c>Kind</c> 0 builds a unit design in a base, 1 buys an aircraft at
+    /// an airport; a 2 also occurs and <c>ai_production</c> ignores it, so it is
+    /// carried through rather than dropped. <c>Third</c> is never read by the
+    /// interpreter and is kept only so a comparison can be byte-exact.</summary>
+    public readonly record struct BuildStep(int Kind, int What, int Third);
+
+    /// <summary>Where the campaign's build programmes come from.
+    ///
+    /// The computer player produces by walking a table of up to 50 lines per
+    /// player and executing one line every 50 ticks (`ai_production` @0x4BB9A0,
+    /// buffer 0xbc51d0). ⚠ That table is section 63 of a full-state file, and a
+    /// campaign level carries **no such section**: the loader only reads
+    /// sections 39..131 when the header byte at +3 is 2, and every .CWM has 1
+    /// there while every .DM has 2. For a level the buffer is set to 0xFF —
+    /// empty — and then filled **by code**.
+    ///
+    /// That code is dispatched on the mission number:
+    /// <code>
+    ///   eax = word[0x539934]              ; the mission
+    ///   if eax > 99: nothing
+    ///   cl  = byte[eax + caseIndex]       ; 100 entries
+    ///   jmp [ecx*4 + caseTable]           ; one straight-line block per mission
+    /// </code>
+    /// and each block is a run of <c>add_vyroba(player, kind, what, third)</c>
+    /// calls with all four arguments pushed as constants.
+    ///
+    /// Found by shape, not by address (rule 8): the adder names itself with
+    /// »Cannot add new 'vyroba'«, and among the several <c>cmp eax,0x63</c> in
+    /// the binary the mission one is the only whose blocks call it.
+    ///
+    /// Checked against the game's own saved states: 26 of the 27 programmes
+    /// stored in the 13 .DM appear verbatim in their mission's block. The one
+    /// that does not is 1.DM's player 1 — its sequence occurs nowhere in the
+    /// binary, and the open lead for it is the block of 140 adder calls at
+    /// 0x41A2xx whose arguments come out of registers instead of constants.
+    /// </summary>
+    public uint VyrobaMissionVar, VyrobaCaseIndex, VyrobaCaseTable, AddVyroba;
+
+    public const int MissionSlots = 100;
+
+    private bool _missionTried;
+
+    /// <summary>mission -> player -> its lines, in order.</summary>
+    private readonly Dictionary<int, Dictionary<int, List<BuildStep>>> _missionPlans = new();
+
+    public bool HasMissionPlans { get { LocateMissionPlans(); return _missionPlans.Count > 0; } }
+
+    /// <summary>The programmes of one mission, or null if it sets none up.</summary>
+    public IReadOnlyDictionary<int, List<BuildStep>>? MissionPlan(int mission)
+    {
+        LocateMissionPlans();
+        return _missionPlans.TryGetValue(mission, out var p) ? p : null;
+    }
+
+    public IReadOnlyDictionary<int, Dictionary<int, List<BuildStep>>> MissionPlans
+    {
+        get { LocateMissionPlans(); return _missionPlans; }
+    }
+
+    /// <summary>Raw file offset to virtual address, or 0 outside every
+    /// section — the inverse of <see cref="Offset"/>, needed to turn the
+    /// position of a string into something the code can point at.</summary>
+    private uint VaOf(int raw)
+    {
+        foreach (var s in _sections)
+            if (raw >= s.Raw && raw < s.Raw + s.RawSize)
+                return (uint)(s.Va + (raw - s.Raw));
+        return 0;
+    }
+
+    private void LocateMissionPlans()
+    {
+        if (_missionTried) return;
+        _missionTried = true;
+        var (tva, text) = TextSection();
+        if (text.Length == 0) return;
+
+        // 1. the adder, by the message only it prints
+        uint adder = FindAddVyroba(tva, text);
+        if (adder == 0) return;
+        AddVyroba = adder;
+
+        // 2. every thunk that jumps to it — this build is linked incrementally,
+        //    so most calls go through one
+        var targets = new HashSet<uint> { adder };
+        for (int i = 0; i + 5 <= text.Length; i++)
+            if (text[i] == 0xE9 &&
+                (uint)(tva + i + 5 + BitConverter.ToInt32(text, i + 1)) == adder)
+                targets.Add((uint)(tva + i));
+
+        // 3. every call to it whose four arguments are constants, with the
+        //    pushes read backwards: the one nearest the call is the player
+        var sites = new List<(uint At, int Player, int Kind, int What, int Third)>();
+        for (int i = 0; i + 5 <= text.Length; i++)
+        {
+            if (text[i] != 0xE8) continue;
+            if (!targets.Contains((uint)(tva + i + 5 + BitConverter.ToInt32(text, i + 1)))) continue;
+            int k = i;
+            var c = new int[4];
+            bool ok = true;
+            for (int n = 0; n < 4; n++)
+            {
+                if (k >= 2 && text[k - 2] == 0x6A) { c[n] = text[k - 1]; k -= 2; }
+                else if (k >= 5 && text[k - 5] == 0x68)
+                { c[n] = BitConverter.ToInt32(text, k - 4); k -= 5; }
+                else { ok = false; break; }
+            }
+            if (ok) sites.Add(((uint)(tva + i), c[0], c[1], c[2], c[3]));
+        }
+        if (sites.Count == 0) return;
+        sites.Sort((a, b) => a.At.CompareTo(b.At));
+
+        // 4. the dispatch, identified by what its blocks do
+        if (!FindMissionDispatch(tva, text, sites)) return;
+
+        // 5. every mission's block, cut at the next block start. The blocks lie
+        //    one after another, so an address range is enough — checked to give
+        //    the same 26 of 27 as walking the code with a disassembler does.
+        var idx = Read(VyrobaCaseIndex, MissionSlots);
+        if (idx.Length < MissionSlots) return;
+        int cases = 0;
+        foreach (var b in idx) cases = Math.Max(cases, b + 1);
+        var tab = Read(VyrobaCaseTable, cases * 4);
+        if (tab.Length < cases * 4) return;
+
+        var blocks = new uint[cases];
+        for (int i = 0; i < cases; i++) blocks[i] = BitConverter.ToUInt32(tab, i * 4);
+        var starts = new List<uint>(new HashSet<uint>(blocks));
+        starts.Sort();
+
+        for (int m = 0; m < MissionSlots; m++)
+        {
+            uint start = blocks[idx[m]];
+            uint end = uint.MaxValue;
+            foreach (var s in starts) if (s > start) { end = s; break; }
+
+            var per = new Dictionary<int, List<BuildStep>>();
+            foreach (var (at, player, kind, what, third) in sites)
+            {
+                if (at < start) continue;
+                if (at >= end) break;
+                if (!per.TryGetValue(player, out var list))
+                    per[player] = list = new List<BuildStep>();
+                list.Add(new BuildStep(kind, what, third));
+            }
+            if (per.Count > 0) _missionPlans[m] = per;
+        }
+    }
+
+    private static readonly byte[] VyrobaMessage =
+        Encoding.ASCII.GetBytes("Cannot add new 'vyroba'");
+
+    /// <summary>The adder is the only function that pushes »Cannot add new
+    /// 'vyroba'«; from that one reference, walk back to the int3 padding in
+    /// front of the function.</summary>
+    private uint FindAddVyroba(uint tva, byte[] text)
+    {
+        int at = IndexOf(_d, VyrobaMessage);
+        if (at < 0) return 0;
+        uint sva = VaOf(at);
+        if (sva == 0) return 0;
+
+        var needle = BitConverter.GetBytes(sva);
+        int j = IndexOf(text, needle);
+        if (j < 0) return 0;
+        while (j > 2 && !(text[j - 1] == 0xCC && text[j - 2] == 0xCC)) j--;
+        return (uint)(tva + j);
+    }
+
+    /// <summary>The mission dispatch: <c>cmp eax,0x63</c> followed by
+    /// <c>mov cl,[eax+idx]</c> and <c>jmp [ecx*4+tab]</c>.
+    ///
+    /// ⚠ The compare alone is not enough — the binary holds several, and the
+    /// first one found belongs to something else entirely. The mission one is
+    /// the one at least one of whose blocks contains a call to the adder, and
+    /// that test is what makes this work on both builds.</summary>
+    private bool FindMissionDispatch(uint tva, byte[] text,
+                                     List<(uint At, int Player, int Kind, int What, int Third)> sites)
+    {
+        for (int i = 0; i + 0x20 < text.Length; i++)
+        {
+            if (text[i] != 0x83 || text[i + 1] != 0xF8 || text[i + 2] != 0x63) continue;
+
+            uint idxTab = 0, jmpTab = 0, missionVar = 0;
+            for (int k = Math.Max(0, i - 0x10); k < i + 0x20 && k + 7 < text.Length; k++)
+            {
+                // movsx eax, word ptr [imm32]
+                if (missionVar == 0 && text[k] == 0x0F && text[k + 1] == 0xBF && text[k + 2] == 0x05)
+                    missionVar = BitConverter.ToUInt32(text, k + 3);
+                // mov cl, byte ptr [eax + imm32]
+                if (idxTab == 0 && text[k] == 0x8A && text[k + 1] == 0x88)
+                    idxTab = BitConverter.ToUInt32(text, k + 2);
+                // jmp dword ptr [ecx*4 + imm32]
+                if (text[k] == 0xFF && text[k + 1] == 0x24 && text[k + 2] == 0x8D)
+                { jmpTab = BitConverter.ToUInt32(text, k + 3); break; }
+            }
+            if (idxTab == 0 || jmpTab == 0) continue;
+
+            var idx = Read(idxTab, MissionSlots);
+            if (idx.Length < MissionSlots) continue;
+            int cases = 0;
+            foreach (var b in idx) cases = Math.Max(cases, b + 1);
+            var tab = Read(jmpTab, cases * 4);
+            if (tab.Length < cases * 4) continue;
+
+            // the deciding test: does any block hold one of the adder's callers?
+            bool builds = false;
+            for (int c = 0; c < cases && !builds; c++)
+            {
+                uint start = BitConverter.ToUInt32(tab, c * 4);
+                foreach (var s in sites)
+                    if (s.At >= start && s.At < start + 0x400) { builds = true; break; }
+            }
+            if (!builds) continue;
+
+            VyrobaMissionVar = missionVar;
+            VyrobaCaseIndex = idxTab;
+            VyrobaCaseTable = jmpTab;
+            return true;
+        }
+        return false;
+    }
+
+    private static int IndexOf(byte[] hay, byte[] needle, int from = 0)
+    {
+        for (int i = from; i + needle.Length <= hay.Length; i++)
+        {
+            int k = 0;
+            while (k < needle.Length && hay[i + k] == needle[k]) k++;
+            if (k == needle.Length) return i;
+        }
+        return -1;
+    }
+
     /// <summary>Follow one <c>jmp rel32</c> thunk, which is how every call in
     /// these branches reaches its function.</summary>
     private uint Resolve(uint va)
