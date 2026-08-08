@@ -3690,13 +3690,38 @@ public partial class MapEntityLayer : Node2D
     {
         if (_mscript == null) return "script-check: kein Skript fuer diese Mission";
         var slots = _mscript.WatchedSlots();
-        if (slots.Count == 0) return "script-check: das Skript beobachtet keine Objekte";
+        var counts = _mscript.EndCounts();
+        // ⚠ nicht hier aussteigen, wenn nur keine obj_owner-Plaetze dabei sind —
+        // die meisten Missionen enden ueber eine ZAEHLbedingung, und ein
+        // vorzeitiges return hat die glatt uebersprungen
+        if (slots.Count == 0 && counts.Count == 0)
+            return "script-check: das Skript prueft weder Objekte noch Zaehlungen";
         int hit = 0;
         foreach (int slot in slots)
             foreach (var e in _entities)
                 if (e.IsBuilding && e.Slot == slot && !e.Dead) { e.Dead = true; hit++; }
+
+        // die Zaehl-Bedingungen ebenfalls wahr machen: alles ausschlagen, was
+        // eine end-Regel auf null herunterzaehlen will
+        int counted = 0;
+        foreach (var (kind, a, b, c) in counts)
+        {
+            if (c != 0) continue;                       // nur "auf null" laesst sich erzwingen
+            foreach (var e in _entities)
+            {
+                if (e.Dead) continue;
+                bool match = kind switch
+                {
+                    "objects" => e.IsBuilding && e.BType == a && e.Owner == b,
+                    "units" => !e.IsBuilding && e.Owner == b,
+                    "buildings" => e.IsBuilding && e.Owner == b,
+                    _ => false,
+                };
+                if (match) { e.Dead = true; counted++; }
+            }
+        }
         return $"script-check: {hit} von {slots.Count} beobachteten Objekten zerstoert " +
-               $"({string.Join(",", slots)})";
+               $"({string.Join(",", slots)}), {counted} weitere fuer Zaehlbedingungen";
     }
 
     public string Verdict()

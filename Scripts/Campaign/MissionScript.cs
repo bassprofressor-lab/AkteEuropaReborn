@@ -269,6 +269,23 @@ public sealed class MissionScript
         return list;
     }
 
+    /// <summary>Every counting condition the script's end rules ask about, so
+    /// the harness can make them true and check the whole chain.</summary>
+    public List<(string Kind, int A, int B, int C)> EndCounts()
+    {
+        var list = new List<(string, int, int, int)>();
+        foreach (var r in _script.Rules)
+        {
+            bool ends = false;
+            foreach (var a in r.Then) if (a.Kind == "end") ends = true;
+            if (!ends) continue;
+            foreach (var c in r.When)
+                if (c.Kind is "objects" or "units" or "buildings")
+                    list.Add((c.Kind, c.A, c.B, c.C));
+        }
+        return list;
+    }
+
     /// <summary>For the harness: what the script is doing right now.</summary>
     public string Line() =>
         $"Skript M{_script.Mission} ({_script.Block}): {RulesFired} Regeln, " +
