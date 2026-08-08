@@ -55,8 +55,8 @@ recovered, the code says so — every assumption of our own is marked as such.
 
 ## Coming Soon
 
-- Full Original Campain
-- Reborn Campain
+- Full Original Campaign
+- Reborn Campaign
 - Multiplayer
 - Better Skirmish Mode
 - Ger/Eng Language Support
