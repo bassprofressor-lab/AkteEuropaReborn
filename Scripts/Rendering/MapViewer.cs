@@ -572,6 +572,8 @@ public partial class MapViewer : Node2D
             if (ai.Length > 0) GD.Print(ai);
             string plan = _entities.AiPlanLine();
             if (plan.Length > 0) GD.Print(plan);
+            string ms = _entities.MissionScriptLine();
+            if (ms.Length > 0) GD.Print(ms);
             string sw = _entities.ShipWatchLine();
             if (sw.Length > 0) GD.Print(sw);
             string cr = _entities.CrushReport();

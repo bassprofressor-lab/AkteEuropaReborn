@@ -3611,8 +3611,69 @@ public partial class MapEntityLayer : Node2D
     /// sec53 player table it is allied with everybody.</summary>
     public const int NeutralSlot = 7;
 
+    /// <summary>
+    /// The mission's own script, when the campaign carries one for this
+    /// mission. It replaces <see cref="Verdict"/>'s guess with the condition
+    /// the original actually checks — see Campaign/MissionScript.cs.
+    /// </summary>
+    private Campaign.MissionScript? _mscript;
+    private bool _mscriptTried;
+
+    private void MissionScriptTick(float dt)
+    {
+        if (!_mscriptTried)
+        {
+            _mscriptTried = true;
+            int m = UI.SkirmishSetup.CampaignMission;
+            if (m > 0) _mscript = Campaign.MissionScript.For(m);
+            if (_mscript != null)
+            {
+                // the four questions a rule may ask, answered from the entities
+                _mscript.ObjOwner = slot =>
+                {
+                    foreach (var e in _entities)
+                        if (e.IsBuilding && e.Slot == slot)
+                            return e.Dead ? 12 : e.Owner;      // 12 = leer, wie im Original
+                    return 12;
+                };
+                _mscript.UnitCount = (cls, player) =>
+                {
+                    // ⚠ nur Klasse 0 ist zugeordnet: die Summe aller Einheiten
+                    // dieses Spielers (@0x4CF9AC). 1..4 sind Einzelzaehler und
+                    // noch nicht gelesen — sie zaehlen hier wie 0, und das ist
+                    // im Skript bei jeder Regel vermerkt, die sie braucht.
+                    int n = 0;
+                    foreach (var e in _entities)
+                        if (!e.IsBuilding && !e.Dead && e.Owner == player) n++;
+                    return n;
+                };
+                _mscript.BuildingCount = (cls, player) =>
+                {
+                    int n = 0;
+                    foreach (var e in _entities)
+                        if (e.IsBuilding && !e.Dead && e.Owner == player) n++;
+                    return n;
+                };
+                _mscript.ShowText = id => GD.Print($"Missionstext {id}");
+                GD.Print(_mscript.Line());
+            }
+        }
+        _mscript?.Tick(dt);
+    }
+
+    /// <summary>What the script says, for the harness.</summary>
+    public string MissionScriptLine() => _mscript?.Line() ?? "";
+
     public string Verdict()
     {
+        // A mission that carries its own script is judged by it and by nothing
+        // else — that script is the original's condition, the fallback below is
+        // ours.
+        if (_mscript != null && _mscript.Decides)
+            return _mscript.Ended
+                ? (_mscript.Success ? "MISSION ERFUELLT" : "MISSION GESCHEITERT")
+                : "";
+
         // A skirmish does not need the map's own player table — the NET maps
         // carry none at all. Judge it by what is left standing instead.
         if (_aiOn)
@@ -6700,6 +6761,7 @@ public partial class MapEntityLayer : Node2D
         UpdateEffects(dt);
         UpdateTrains(dt);
         UpdateAi(dt);
+        MissionScriptTick(dt);
 
         if (moved || _effects.Count > 0 || _tracers.Count > 0 || _shots.Count > 0)
         {
