@@ -53,6 +53,18 @@ and defence, range, reload time, speed, fuel and ammunition all come from the
 game's records rather than from guessed constants. Where something could not be
 recovered, the code says so — every assumption of our own is marked as such.
 
+## Coming Soon
+
+- Full Original Campain
+- Reborn Campain
+- Multiplayer
+- Better Skirmish Mode
+- Ger/Eng Language Support
+- UI/UX Improvements
+- Reborn Graphics/Sprites Mode (You can switch between original and reborn)
+- Website + WIKI
+- Discord
+
 ## Requirements
 
 * The two original *Akte Europa* CDs (in the drive or as folders)
