@@ -160,6 +160,75 @@ public sealed class CatalogueExporter
         WriteDiplomacy(say);
         WriteResources(say);
         WriteMissionPlans(say);
+        WriteSchedule(say);
+    }
+
+    /// <summary>
+    /// The per-mission unlock schedule, in the shape
+    /// <see cref="Campaign.CampaignManager"/> already reads.
+    ///
+    /// A file of this name has shipped since July, written by an earlier Python
+    /// tool. ⚠ It is INCOMPLETE, and measurably so: it hands design 52 to the
+    /// player from mission 8 where the game gives it from mission 6, and design
+    /// 51 from mission 15 where the game gives it from 12. The end state after
+    /// mission 33 is the same, which is why it went unnoticed — only the
+    /// missions in between were poorer than the original's.
+    ///
+    /// Written from <see cref="ExeTables.MissionUnlocks"/>, so it now comes out
+    /// of the player's own GAME.EXE like every other table.
+    /// </summary>
+    private void WriteSchedule(Action<string>? say)
+    {
+        if (_exe == null || !_exe.HasMissionPlans) return;
+        var all = _exe.MissionUnlocks;
+        if (all.Count == 0) return;
+
+        var sb = new StringBuilder();
+        sb.Append("{\"_note\":\"Freischalt-Fahrplan der Kampagne, aus dem Missionsaufbau ");
+        sb.Append($"der GAME.EXE gelesen (Verteiler @0x{_exe.VyrobaCaseTable:x}). Abgeleitete ");
+        sb.Append("Metadaten, kein Originalinhalt.\",");
+        sb.Append("\"_mapping\":\"Zustand N == Mission N == Leveldatei NN.CWM; die Nummer steht ");
+        sb.Append("im Kopf jeder Karte und ist durch 13 von 13 Spielstaenden bestaetigt.\",");
+        sb.Append("\"states\":[");
+        bool first = true;
+        int rows = 0;
+        foreach (var m in all.Keys)
+        {
+            // ⚠ Mission 0 is left out on purpose. Its block switches on designs
+            // 50..99, ships 0..9 and aircraft 0..9 — everything — but NO map
+            // carries mission number 0: the number sits in the file header and
+            // runs 1..15 for the campaign and 51..58 for the NET maps, over 23
+            // of 23 files. That block never executes, and letting it into a
+            // schedule that accumulates `state <= mission` hands the player the
+            // whole roster in mission 1.
+            if (m == 0) continue;
+            var ranges = all[m];
+            var veh = new SortedSet<int>();
+            var shp = new SortedSet<int>();
+            var air = new SortedSet<int>();
+            foreach (var r in ranges)
+            {
+                var into = r.Kind switch
+                {
+                    "design" => veh,
+                    "ship" => shp,
+                    "aircraft" => air,
+                    _ => null,
+                };
+                if (into == null) continue;
+                for (int x = r.From; x <= r.To; x++)
+                { if (r.Value != 0) into.Add(x); else into.Remove(x); rows++; }
+            }
+            if (veh.Count == 0 && shp.Count == 0 && air.Count == 0) continue;
+            if (!first) sb.Append(',');
+            first = false;
+            sb.Append($"{{\"state\":{m},\"vehicles\":[{string.Join(",", veh)}],");
+            sb.Append($"\"ships\":[{string.Join(",", shp)}],\"ships_off\":[],");
+            sb.Append($"\"aircraft\":[{string.Join(",", air)}]}}");
+        }
+        sb.Append("]}");
+        File.WriteAllText(_dst + "/campaign_schedule.json", sb.ToString(), new UTF8Encoding(false));
+        say?.Invoke($"Fahrplan: {all.Count} Missionen, {rows} Freischaltungen");
     }
 
     /// <summary>

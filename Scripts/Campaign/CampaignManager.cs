@@ -154,8 +154,16 @@ public static class CampaignManager
 
     private static Godot.Collections.Array? LoadStates()
     {
-        if (!FileAccess.FileExists(SchedulePath)) return null;
-        using var f = FileAccess.Open(SchedulePath, FileAccess.ModeFlags.Read);
+        // ⚠ The imported schedule wins over the one shipped in Data/. That file
+        // was written by an earlier tool and is incomplete: it hands design 52
+        // to the player from mission 8 where the game gives it from mission 6,
+        // and design 51 from 15 where the game gives it from 12. The end state
+        // after mission 33 matches, which is why nobody noticed — the missions
+        // in between were simply poorer than the original's.
+        string path = Core.Content.Path("Maps/campaign_schedule.json");
+        if (!FileAccess.FileExists(path)) path = SchedulePath;
+        if (!FileAccess.FileExists(path)) return null;
+        using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
         if (f == null) return null;
         var json = new Json();
         if (json.Parse(f.GetAsText()) != Error.Ok ||
