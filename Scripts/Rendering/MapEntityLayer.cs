@@ -3654,7 +3654,23 @@ public partial class MapEntityLayer : Node2D
                         if (e.IsBuilding && !e.Dead && e.Owner == player) n++;
                     return n;
                 };
+                _mscript.ObjectCount = (type, owner) =>
+                {
+                    int n = 0;
+                    foreach (var e in _entities)
+                        if (e.IsBuilding && !e.Dead && e.BType == type && e.Owner == owner) n++;
+                    return n;
+                };
                 _mscript.ShowText = id => GD.Print($"Missionstext {id}");
+                var watched = _mscript.WatchedSlots();
+                if (watched.Count > 0)
+                {
+                    var parts = new List<string>();
+                    foreach (int slot in watched)
+                        parts.Add($"{slot}:{_mscript.ObjOwner!(slot)}");
+                    GD.Print("Skript beobachtet Objekte " + string.Join(" ", parts) +
+                             "   (12 = zerstoert/leer)");
+                }
                 GD.Print(_mscript.Line());
             }
         }
@@ -3663,6 +3679,25 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>What the script says, for the harness.</summary>
     public string MissionScriptLine() => _mscript?.Line() ?? "";
+
+    /// <summary>
+    /// Harness: knock out every building the mission script watches, so the
+    /// whole chain can be checked without playing the mission — the condition
+    /// reads the world, the rule latches, `end` fires, and Verdict() carries it
+    /// into the campaign. Reports what it destroyed.
+    /// </summary>
+    public string MissionScriptForceCheck()
+    {
+        if (_mscript == null) return "script-check: kein Skript fuer diese Mission";
+        var slots = _mscript.WatchedSlots();
+        if (slots.Count == 0) return "script-check: das Skript beobachtet keine Objekte";
+        int hit = 0;
+        foreach (int slot in slots)
+            foreach (var e in _entities)
+                if (e.IsBuilding && e.Slot == slot && !e.Dead) { e.Dead = true; hit++; }
+        return $"script-check: {hit} von {slots.Count} beobachteten Objekten zerstoert " +
+               $"({string.Join(",", slots)})";
+    }
 
     public string Verdict()
     {

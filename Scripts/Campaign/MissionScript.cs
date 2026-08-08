@@ -172,6 +172,11 @@ public sealed class MissionScript
     public Func<int, int>? ObjOwner;                 // building slot -> owner
     public Func<int, int, int>? UnitCount;           // class, player -> count
     public Func<int, int, int>? BuildingCount;       // class, player -> count
+    /// <summary>`count_objects(typ, besitzer)` @0x4CFA70 — laeuft ueber 255
+    /// Saetze der Objekttabelle 0xc06910 und zaehlt die mit passendem Typ in
+    /// `+4` und Besitzer in `+5`. Die haeufigste Endbedingung der Kampagne.
+    /// </summary>
+    public Func<int, int, int>? ObjectCount;         // type, owner -> count
     public Action<int>? ShowText;                    // helpg.txt id
 
     /// <summary>Minutes since the mission started — the original's clock
@@ -223,6 +228,8 @@ public sealed class MissionScript
         "units" => UnitCount != null && Cmp(UnitCount(c.A, c.B), c.Op, c.C),
         // g_buildings_count(a, b) <op> c
         "buildings" => BuildingCount != null && Cmp(BuildingCount(c.A, c.B), c.Op, c.C),
+        // count_objects(a, b) <op> c
+        "objects" => ObjectCount != null && Cmp(ObjectCount(c.A, c.B), c.Op, c.C),
         _ => false,
     };
 
@@ -247,6 +254,19 @@ public sealed class MissionScript
                          $" nach {Minutes} Minuten, {RulesFired + 1} Regeln");
                 break;
         }
+    }
+
+    /// <summary>Every building slot the script watches, so the harness can show
+    /// what those look like right now — the quickest way to see whether a
+    /// translated condition is even asking about the right things.</summary>
+    public List<int> WatchedSlots()
+    {
+        var list = new List<int>();
+        foreach (var r in _script.Rules)
+            foreach (var c in r.When)
+                if (c.Kind == "obj_owner" && !list.Contains(c.A)) list.Add(c.A);
+        list.Sort();
+        return list;
     }
 
     /// <summary>For the harness: what the script is doing right now.</summary>

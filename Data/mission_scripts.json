@@ -1,49 +1,196 @@
 {
-"_note": "Missionsskripte der Kampagne. Im Original sind das keine Daten, sondern Code: die Missionsnummer aus dem Kartenkopf indiziert eine Sprungtabelle (@0x4A5B0C, 35 Eintraege), und jede Mission bekommt ihren eigenen Block, der jeden Takt laeuft. Diese Datei ist die Uebersetzung dieser Bloecke, von Hand, mit `aekernel-tools/mission_logic.py --decode` als Vorlage. Jede Mission nennt die Adresse ihres Blocks, damit sich die Uebersetzung gegenpruefen laesst.",
-"_vokabular": "Bedingungen: var(a,op,b) = v[a] op b | time_gt(a) = game_time() > a Minuten | time_after(a,b) = game_time() > v[a]+b | obj_owner(a,op,b) = Besitzer des Gebaeudeplatzes a | units(klasse,spieler,op,c) = g_robot_class_count | buildings(klasse,spieler,op,c) = g_buildings_count. Wirkungen: inc(a) | set(a,b) | text(a) | end(a) mit a=1 gewonnen, a=0 verloren.",
-"_klassen": "Einheitenklasse 0 ist die Summe der Klassen 1..4 (@0x4CF9AC), Gebaeudeklasse 0 sind alle Gebaeude (@0x4CFB3C). Die Klassen 1..4 bzw. 1..3 sind Einzelzaehler und noch nicht zugeordnet — Regeln, die sie brauchen, fehlen hier absichtlich.",
-"_offen": "Nicht uebersetzt sind Regeln, die Ereignisflaggen (take_flag/0x539930), Toene, Busbefehle, das Setzen von Einheiten oder Buendniswechsel brauchen — dafuer fehlt der Unterbau. Eine fehlende Regel zeigt sich als Mission, die nicht von selbst endet; eine erfundene wuerde still falsch spielen.",
-"missions": {
-
- "8": {
-  "block": "0x49B275",
-  "_uebersetzt": "Der Block ist eine Zustandsmaschine ueber v[0], v[1], v[2] und drei Ereignisfaenger. Uebernommen sind die Zeit- und Zaehlregeln; die drei Ereignisfaenger (Ereignis 7, 29, 8) fehlen, weil das Ereignisbyte 0x539930 in der Engine noch nichts setzt.",
-  "rules": [
-   { "once": 0, "when": [], "then": [ { "kind": "set", "a": 0, "b": 0 }, { "kind": "text", "a": 180 } ] },
-   { "once": 1,
-     "when": [ { "kind": "var", "a": 2, "op": ">", "b": 14 } ],
-     "then": [ { "kind": "set", "a": 101, "b": 10 }, { "kind": "text", "a": 100 } ] },
-   { "once": 3,
-     "when": [ { "kind": "time_after", "a": 0, "b": 29 } ],
-     "then": [ { "kind": "text", "a": 101 } ] }
-  ]
- },
-
- "12": {
-  "block": "0x49C7E7",
-  "_uebersetzt": "Aus dem Block uebernommen: die Zeitregel und die Abfrage obj_owner(12). Der Buendniswechsel (0x87b190 / 0x87b1e0) fehlt, weil die Engine keine Laufzeit-Diplomatie hat.",
-  "rules": [
-   { "once": 0,
-     "when": [ { "kind": "obj_owner", "a": 12, "op": "==", "b": 4 } ],
-     "then": [ { "kind": "text", "a": 220 } ] },
-   { "once": 1,
-     "when": [ { "kind": "time_gt", "a": 1 } ],
-     "then": [ { "kind": "text", "a": 221 } ] }
-  ]
- },
-
- "10": {
-  "block": "0x49BB65",
-  "_uebersetzt": "Der Block merkt sich mit v[0] einen Zeitpunkt und zuendet 40 Minuten spaeter die naechste Stufe; die Abschlussbedingung ist g_robot_class_count(3, 1) == 0. ⚠ Klasse 3 ist ein Einzelzaehler, dessen Zuordnung noch fehlt — hier steht darum Klasse 0 (alle Einheiten des Spielers 1), was STRENGER ist als das Original und ausdruecklich UNSERE Ersetzung.",
-  "rules": [
-   { "once": 2,
-     "when": [ { "kind": "time_after", "a": 0, "b": 40 } ],
-     "then": [ { "kind": "text", "a": 380 } ] },
-   { "once": 4,
-     "when": [ { "kind": "units", "a": 0, "b": 1, "op": "==", "c": 0 } ],
-     "then": [ { "kind": "text", "a": 381 }, { "kind": "end", "a": 1 } ] }
-  ]
+ "_note": "Missionsskripte der Kampagne. Im Original sind das keine Daten, sondern Code: die Missionsnummer aus dem Kartenkopf indiziert eine Sprungtabelle (@0x4A5B0C, 35 Eintraege), und jede Mission bekommt ihren eigenen Block, der jeden Takt laeuft. Diese Datei ist die Uebersetzung dieser Bloecke, von Hand, mit `aekernel-tools/mission_logic.py --decode` als Vorlage. Jede Mission nennt die Adresse ihres Blocks, damit sich die Uebersetzung gegenpruefen laesst.",
+ "_vokabular": "Bedingungen: var(a,op,b) = v[a] op b | time_gt(a) = game_time() > a Minuten | time_after(a,b) = game_time() > v[a]+b | obj_owner(a,op,b) = Besitzer des Gebaeudeplatzes a | units(klasse,spieler,op,c) = g_robot_class_count | buildings(klasse,spieler,op,c) = g_buildings_count. Wirkungen: inc(a) | set(a,b) | text(a) | end(a) mit a=1 gewonnen, a=0 verloren.",
+ "_klassen": "Einheitenklasse 0 ist die Summe der Klassen 1..4 (@0x4CF9AC), Gebaeudeklasse 0 sind alle Gebaeude (@0x4CFB3C). Die Klassen 1..4 bzw. 1..3 sind Einzelzaehler und noch nicht zugeordnet — Regeln, die sie brauchen, fehlen hier absichtlich.",
+ "_offen": "Nicht uebersetzt sind Regeln, die Ereignisflaggen (take_flag/0x539930), Toene, Busbefehle, das Setzen von Einheiten oder Buendniswechsel brauchen — dafuer fehlt der Unterbau. Eine fehlende Regel zeigt sich als Mission, die nicht von selbst endet; eine erfundene wuerde still falsch spielen.",
+ "missions": {
+  "8": {
+   "block": "0x49B275",
+   "_uebersetzt": "Der Block ist eine Zustandsmaschine ueber v[0], v[1], v[2] und drei Ereignisfaenger. Uebernommen sind die Zeit- und Zaehlregeln; die drei Ereignisfaenger (Ereignis 7, 29, 8) fehlen, weil das Ereignisbyte 0x539930 in der Engine noch nichts setzt.",
+   "rules": [
+    {
+     "once": 0,
+     "when": [],
+     "then": [
+      {
+       "kind": "set",
+       "a": 0,
+       "b": 0
+      },
+      {
+       "kind": "text",
+       "a": 180
+      }
+     ]
+    },
+    {
+     "once": 1,
+     "when": [
+      {
+       "kind": "var",
+       "a": 2,
+       "op": ">",
+       "b": 14
+      }
+     ],
+     "then": [
+      {
+       "kind": "set",
+       "a": 101,
+       "b": 10
+      },
+      {
+       "kind": "text",
+       "a": 100
+      }
+     ]
+    },
+    {
+     "once": 3,
+     "when": [
+      {
+       "kind": "time_after",
+       "a": 0,
+       "b": 29
+      }
+     ],
+     "then": [
+      {
+       "kind": "text",
+       "a": 101
+      }
+     ]
+    }
+   ]
+  },
+  "12": {
+   "block": "0x49C7E7",
+   "_uebersetzt": "Aus dem Block uebernommen: die Zeitregel und die Abfrage obj_owner(12). Der Buendniswechsel (0x87b190 / 0x87b1e0) fehlt, weil die Engine keine Laufzeit-Diplomatie hat.",
+   "rules": [
+    {
+     "once": 0,
+     "when": [
+      {
+       "kind": "obj_owner",
+       "a": 12,
+       "op": "==",
+       "b": 4
+      }
+     ],
+     "then": [
+      {
+       "kind": "text",
+       "a": 220
+      }
+     ]
+    },
+    {
+     "once": 1,
+     "when": [
+      {
+       "kind": "time_gt",
+       "a": 1
+      }
+     ],
+     "then": [
+      {
+       "kind": "text",
+       "a": 221
+      }
+     ]
+    }
+   ]
+  },
+  "10": {
+   "block": "0x49BB65",
+   "_uebersetzt": "Der Block merkt sich mit v[0] einen Zeitpunkt und zuendet 40 Minuten spaeter die naechste Stufe; die Abschlussbedingung ist g_robot_class_count(3, 1) == 0. ⚠ Klasse 3 ist ein Einzelzaehler, dessen Zuordnung noch fehlt — hier steht darum Klasse 0 (alle Einheiten des Spielers 1), was STRENGER ist als das Original und ausdruecklich UNSERE Ersetzung.",
+   "rules": [
+    {
+     "once": 2,
+     "when": [
+      {
+       "kind": "time_after",
+       "a": 0,
+       "b": 40
+      }
+     ],
+     "then": [
+      {
+       "kind": "text",
+       "a": 380
+      }
+     ]
+    },
+    {
+     "once": 4,
+     "when": [
+      {
+       "kind": "units",
+       "a": 0,
+       "b": 1,
+       "op": "==",
+       "c": 0
+      }
+     ],
+     "then": [
+      {
+       "kind": "text",
+       "a": 381
+      },
+      {
+       "kind": "end",
+       "a": 1
+      }
+     ]
+    }
+   ]
+  },
+  "4": {
+   "block": "0x499C7F",
+   "_uebersetzt": "Die Siegbedingung steht bei 0x499F8C als Kette: obj_owner(0..4) alle == 12 (zerstoert), dann mission_end. Wortwoertlich uebernommen — das ist die ganze Bedingung, nichts ergaenzt.",
+   "rules": [
+    {
+     "once": 200,
+     "when": [
+      {
+       "kind": "obj_owner",
+       "a": 0,
+       "op": "==",
+       "b": 12
+      },
+      {
+       "kind": "obj_owner",
+       "a": 1,
+       "op": "==",
+       "b": 12
+      },
+      {
+       "kind": "obj_owner",
+       "a": 2,
+       "op": "==",
+       "b": 12
+      },
+      {
+       "kind": "obj_owner",
+       "a": 3,
+       "op": "==",
+       "b": 12
+      },
+      {
+       "kind": "obj_owner",
+       "a": 4,
+       "op": "==",
+       "b": 12
+      }
+     ],
+     "then": [
+      {
+       "kind": "end",
+       "a": 1
+      }
+     ]
+    }
+   ]
+  }
  }
-
-}
 }

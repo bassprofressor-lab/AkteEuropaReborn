@@ -469,6 +469,7 @@ public partial class MapViewer : Node2D
             else if (a == "--demo-design") { _demo = true; _demoDesign = true; }
             else if (a == "--demo-queue") { _demo = true; _demoQueue = true; }
             else if (a == "--demo-ai") { _demo = true; _demoAi = true; }
+            else if (a.StartsWith("--script-check")) _scriptCheck = 15f;
             else if (a == "--demo-groups") { _demo = true; _demoGroups = true; }
             else if (a == "--demo-win") { _demo = true; _demoEnd = 1; }
             else if (a == "--demo-lose") { _demo = true; _demoEnd = 2; }
@@ -539,6 +540,7 @@ public partial class MapViewer : Node2D
 
     /// <summary>Seconds after which a scripted run gives up and quits; 0 = never.</summary>
     private float _quitAfter;
+    private float _scriptCheck;
     private float _upTime;
 
     /// <summary>`--demo-leave=<n>` sends the demo's unit back where it came from
@@ -558,6 +560,15 @@ public partial class MapViewer : Node2D
     private void QuitIfDue(double delta)
     {
         if (_infAnimCheck) _entities.InfAnimSample();
+        if (_scriptCheck > 0f)
+        {
+            _scriptCheck -= (float)delta;
+            if (_scriptCheck <= 0f)
+            {
+                _scriptCheck = -1f;
+                GD.Print(_entities.MissionScriptForceCheck());
+            }
+        }
         if (_quitAfter <= 0f) { _upTime += (float)delta; DemoLeaveIfDue(); return; }
         _upTime += (float)delta;
         DemoLeaveIfDue();
