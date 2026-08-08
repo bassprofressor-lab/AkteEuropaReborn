@@ -77,16 +77,65 @@ public sealed class MissionScript
     /// NOT take the decision away from the fallback: a mission whose script has
     /// no `end` rule would otherwise be unwinnable. So the script is
     /// authoritative only once it can actually finish.
+    ///
+    /// ⚠ And an `end` rule alone is not enough. Several of the original's end
+    /// conditions are chains over the block's OWN variables — mission 7 wants
+    /// `v[102] == 2 and v[12] == 2` on top of its two destroyed objects, and
+    /// v[102] is a stage counter that only the untranslated part of the block
+    /// ever raises. Such a rule is read correctly and can still never fire, so
+    /// letting it decide would make the mission unwinnable — the exact opposite
+    /// of the truncated-chain bug it fixes. So an end rule counts only when
+    /// every variable it tests is one that some translated rule writes.
     /// </summary>
     public bool Decides
     {
         get
         {
             foreach (var r in _script.Rules)
-                foreach (var a in r.Then)
-                    if (a.Kind == "end") return true;
+            {
+                if (!Ends(r)) continue;
+                bool reachable = true;
+                foreach (var c in r.When)
+                    if (c.Kind == "var" && !Writes(c.A)) { reachable = false; break; }
+                if (reachable) return true;
+            }
             return false;
         }
+    }
+
+    private static bool Ends(Rule r)
+    {
+        foreach (var a in r.Then) if (a.Kind == "end") return true;
+        return false;
+    }
+
+    /// <summary>Does any translated rule ever write v[n]? A rule's `once` latch
+    /// counts — that is how the original raises most of them.</summary>
+    private bool Writes(int n)
+    {
+        foreach (var r in _script.Rules)
+        {
+            if (r.Once == n) return true;
+            foreach (var a in r.Then)
+                if ((a.Kind == "inc" || a.Kind == "set") && a.A == n) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Which end rules cannot fire because a variable they test is
+    /// never written — for the harness, so the gap is visible instead of just
+    /// showing up as a mission that runs forever.</summary>
+    public List<int> UnreachableVars()
+    {
+        var list = new List<int>();
+        foreach (var r in _script.Rules)
+        {
+            if (!Ends(r)) continue;
+            foreach (var c in r.When)
+                if (c.Kind == "var" && !Writes(c.A) && !list.Contains(c.A)) list.Add(c.A);
+        }
+        list.Sort();
+        return list;
     }
     public bool Success { get; private set; }
     public int Mission => _script.Mission;
@@ -269,22 +318,41 @@ public sealed class MissionScript
         return list;
     }
 
-    /// <summary>Every counting condition the script's end rules ask about, so
-    /// the harness can make them true and check the whole chain.</summary>
-    public List<(string Kind, int A, int B, int C)> EndCounts()
+    /// <summary>Every condition the script's end rules ask about, so the
+    /// harness can try to make them true and check the whole chain. The
+    /// operator comes along: since the conditions are read out of the EXE with
+    /// their real comparison, "gone" is no longer the only thing an end rule
+    /// can want — mission 18 stops the advance at FEWER THAN THREE units left,
+    /// and mission 3 wants a research complex that is still THERE.</summary>
+    public List<Cond> EndConds()
     {
-        var list = new List<(string, int, int, int)>();
+        var list = new List<Cond>();
         foreach (var r in _script.Rules)
         {
-            bool ends = false;
-            foreach (var a in r.Then) if (a.Kind == "end") ends = true;
-            if (!ends) continue;
-            foreach (var c in r.When)
-                if (c.Kind is "objects" or "units" or "buildings")
-                    list.Add((c.Kind, c.A, c.B, c.C));
+            if (!Ends(r)) continue;
+            foreach (var c in r.When) list.Add(c);
         }
         return list;
     }
+
+    /// <summary>How many matching things the harness has to leave standing to
+    /// make this condition true, or -1 when it cannot be arranged at all.
+    ///
+    /// Destroying is not the only lever, and treating it as the only one is how
+    /// three inverted conditions stayed hidden: mission 3 wants a research
+    /// complex that is still THERE, mission 23 exactly five raw-material mines,
+    /// mission 2 exactly two objects. So the harness aims at a TARGET COUNT and
+    /// destroys or hands over until it is met.</summary>
+    public static int TargetCount(Cond c) => c.Op switch
+    {
+        "==" => c.C,
+        "!=" => c.C == 0 ? 1 : -1,          // "nicht null" -> eines genuegt
+        "<" => Math.Max(0, c.C - 1),
+        "<=" => Math.Max(0, c.C),
+        ">" => c.C + 1,
+        ">=" => c.C,
+        _ => -1,
+    };
 
     /// <summary>For the harness: what the script is doing right now.</summary>
     public string Line() =>

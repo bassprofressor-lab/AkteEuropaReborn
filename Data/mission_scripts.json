@@ -1,9 +1,244 @@
 {
- "_note": "Missionsskripte der Kampagne. Im Original sind das keine Daten, sondern Code: die Missionsnummer aus dem Kartenkopf indiziert eine Sprungtabelle (@0x4A5B0C, 35 Eintraege), und jede Mission bekommt ihren eigenen Block, der jeden Takt laeuft. Diese Datei ist die Uebersetzung dieser Bloecke, von Hand, mit `aekernel-tools/mission_logic.py --decode` als Vorlage. Jede Mission nennt die Adresse ihres Blocks, damit sich die Uebersetzung gegenpruefen laesst.",
+ "_note": "Missionsskripte der Kampagne. Im Original sind das keine Daten, sondern Code: die Missionsnummer aus dem Kartenkopf indiziert eine Sprungtabelle (@0x4A5B0C, 35 Eintraege), und jede Mission bekommt ihren eigenen Block, der jeden Takt laeuft. Die ZWISCHENSCHRITTE sind von Hand uebersetzt, mit `aekernel-tools/mission_logic.py --decode` als Vorlage; die SIEGBEDINGUNGEN sind es nicht, die sind eine Abschrift aus der EXE (siehe _endregeln). Jede Mission nennt die Adresse, aus der sie stammt, damit sich beides gegenpruefen laesst.",
  "_vokabular": "Bedingungen: var(a,op,b) = v[a] op b | time_gt(a) = game_time() > a Minuten | time_after(a,b) = game_time() > v[a]+b | obj_owner(a,op,b) = Besitzer des Gebaeudeplatzes a | units(klasse,spieler,op,c) = g_robot_class_count | buildings(klasse,spieler,op,c) = g_buildings_count. Wirkungen: inc(a) | set(a,b) | text(a) | end(a) mit a=1 gewonnen, a=0 verloren.",
+ "_endregeln": "Die Siegbedingungen sind NICHT von Hand uebersetzt, sondern gelesen: vor jedem mission_end steht die Kette `push args; call <abfrage>; cmp; jcc`, und alle Glieder mit demselben Sprungziel bilden ein UND. `aekernel-tools/mission_endrules.py apply` traegt sie ein, `... check` prueft sie nach — und beides laeuft gegen BEIDE GAME.EXE dieses Rechners, deren Adressen sich unterscheiden, deren Ergebnis aber gleich sein muss. Stand: 31 Endstellen, beide Fassungen identisch. ⚠ Zwei Dinge, die der erste Leser vom 08.08. still falsch machte und die am 09.08. berichtigt wurden: (1) er schrieb bei jedem Glied `==`, statt den Sprung auszuwerten — drei Bedingungen waren dadurch VERKEHRT HERUM (Mission 3 `objects(4,0) != 0`, Mission 17 `objects(15,0) != 0`, Mission 24 `obj_owner(0) != 2`), und zwei davon sind beim Missionsstart wahr, die Mission war in derselben Sekunde gewonnen, in der sie begann. (2) er hielt den Sprung der Meldung VOR dem Ende faelschlich fuer den Ausstieg und gab darum bei acht Missionen gar nichts zurueck. Welcher Sprung ein Glied ist, entscheidet sein ZIEL: nur was HINTER mission_end landet, ist eine Bedingung. Nicht jede Bedingung will Vernichtung — Mission 18 verlangt `units(0,1) < 3 und units(0,2) < 3` (»Stoppen Sie den feindlichen Vormarsch«, nicht vernichten), Mission 23 genau fuenf Rohstoffminen, Mission 2 genau zwei Objekte.",
  "_klassen": "Einheitenklasse 0 ist die Summe der Klassen 1..4 (@0x4CF9AC), Gebaeudeklasse 0 sind alle Gebaeude (@0x4CFB3C). Die Klassen 1..4 bzw. 1..3 sind Einzelzaehler und noch nicht zugeordnet — Regeln, die sie brauchen, fehlen hier absichtlich.",
- "_offen": "Nicht uebersetzt sind Regeln, die Ereignisflaggen (take_flag/0x539930), Toene, Busbefehle, das Setzen von Einheiten oder Buendniswechsel brauchen — dafuer fehlt der Unterbau. Eine fehlende Regel zeigt sich als Mission, die nicht von selbst endet; eine erfundene wuerde still falsch spielen.",
+ "_offen": "Nicht uebersetzt sind Regeln, die Ereignisflaggen (take_flag/0x539930), Toene, Busbefehle, das Setzen von Einheiten oder Buendniswechsel brauchen — dafuer fehlt der Unterbau. Eine fehlende Regel zeigt sich als Mission, die nicht von selbst endet; eine erfundene wuerde still falsch spielen. ⚠ Mehrere Endregeln pruefen zusaetzlich eigene Wortvariablen des Blocks (Missionen 5, 7, 13, 14). Die Bedingung ist richtig gelesen, aber die Regeln, die jene Variablen HOCHZAEHLEN, sind nicht uebersetzt — die Regel kann also nie feuern. MissionScript.Decides erkennt genau das und laesst in dem Fall die Notregel entscheiden, statt die Mission unloesbar zu machen; --script-check meldet solche Variablen als »ohne Erzeuger«.",
+ "_gelesen_ungebaut": {
+  "_note": "Zwei Siegbedingungen sind gelesen, aber nicht eintragbar: das Vokabular dieser Datei kann sie nicht ausdruecken. Sie stehen hier, damit sie nicht noch einmal gesucht werden muessen. Beide sind gegen OBJECTG.TXT geprueft, die Missionsziele des Spiels im Klartext.",
+  "14": {
+   "_endregel_aus": "0x49D72C",
+   "gelesen": "v[20] == 20, und v[20] wird an genau einer Stelle gesetzt (0x49D65E): v[1] == 52 und die Einheit v[2] steht auf Zelle (0xAF, 0x64) = (175, 100). Zellkoordinaten sind Byte +0x00 und +0x01 des Eintrags im Entity-Array (8000 x 78 @0x6e26c8), belegt durch den spieleigenen Debug-Dump `nr typ faze ukol ... x y`.",
+   "objectg": "#014 »Transportieren Sie Colonel Hullmann zur verbuendeten Basis«",
+   "fehlt": "Die Engine kann eine Einheit nicht ueber eine Missionsvariable ansprechen, und welche Einheit v[2] ist, setzt der unuebersetzte Teil des Blocks."
+  },
+  "21": {
+   "_endregel_aus": "0x4A02C0",
+   "gelesen": "Eine Schleife ueber neun feste SPOJ-Verbindungen {4,7,9,12,14,17,15,16,18}: jede muss Zustand (+0xd5) != 3 haben, und beide Endgebaeude — ueber den Knoten (sec33, 120 x 8 @0xa8d508) auf die Gebaeudetabelle @0xc06914, Schrittweite 76 — muessen existieren (typ != 0) und Spieler 0 gehoeren. SPOJ-Satz 214 Byte @0xa89220.",
+   "objectg": "#021 »Besetzen Sie die Minen im Sueden / Reparieren Sie die Bahnverbindung zu unserer Basis«",
+   "fehlt": "Die Engine kennt die Bahnverbindungen (SPOJ) noch nicht als Spielobjekt."
+  },
+  "28": {
+   "_endregel_aus": "0x4A3786",
+   "gelesen": "unit_alive(v[56], 0xC1) und die Einheit v[56] steht auf Zelle (0x0B, 0xF3) = (11, 243). Dasselbe Muster wie Mission 14.",
+   "objectg": "#028 »Finden Sie das Flugzeugwrack ... Bringen Sie die Wissenschaftler mit den Informationen zurueck«",
+   "fehlt": "wie Mission 14."
+  }
+ },
  "missions": {
+  "1": {
+   "block": "",
+   "_endregel_aus": "0x4989C7",
+   "rules": [
+    {
+     "once": 300,
+     "when": [
+      {
+       "kind": "units",
+       "a": 1,
+       "b": 1,
+       "op": "==",
+       "c": 0
+      }
+     ],
+     "then": [
+      {
+       "kind": "end",
+       "a": 1
+      }
+     ]
+    }
+   ]
+  },
+  "2": {
+   "block": "",
+   "_endregel_aus": "0x4993E8",
+   "rules": [
+    {
+     "once": 300,
+     "when": [
+      {
+       "kind": "objects",
+       "a": 1,
+       "b": 0,
+       "op": "==",
+       "c": 2
+      }
+     ],
+     "then": [
+      {
+       "kind": "end",
+       "a": 1
+      }
+     ]
+    }
+   ]
+  },
+  "3": {
+   "block": "",
+   "_endregel_aus": "0x499C5C",
+   "rules": [
+    {
+     "once": 300,
+     "when": [
+      {
+       "a": 4,
+       "b": 0,
+       "c": 0,
+       "kind": "objects",
+       "op": "!="
+      }
+     ],
+     "then": [
+      {
+       "kind": "end",
+       "a": 1
+      }
+     ]
+    }
+   ]
+  },
+  "4": {
+   "block": "0x499C7F",
+   "_uebersetzt": "Die Siegbedingung steht bei 0x499F8C als Kette: obj_owner(0..4) alle == 12 (zerstoert), dann mission_end. Wortwoertlich uebernommen — das ist die ganze Bedingung, nichts ergaenzt.",
+   "rules": [
+    {
+     "once": 300,
+     "when": [
+      {
+       "kind": "obj_owner",
+       "a": 0,
+       "op": "==",
+       "b": 12
+      },
+      {
+       "kind": "obj_owner",
+       "a": 1,
+       "op": "==",
+       "b": 12
+      },
+      {
+       "kind": "obj_owner",
+       "a": 2,
+       "op": "==",
+       "b": 12
+      },
+      {
+       "kind": "obj_owner",
+       "a": 3,
+       "op": "==",
+       "b": 12
+      },
+      {
+       "kind": "obj_owner",
+       "a": 4,
+       "op": "==",
+       "b": 12
+      }
+     ],
+     "then": [
+      {
+       "kind": "end",
+       "a": 1
+      }
+     ]
+    }
+   ],
+   "_endregel_aus": "0x499FD2"
+  },
+  "5": {
+   "block": "",
+   "_endregel_aus": "0X49A534",
+   "rules": [
+    {
+     "once": 300,
+     "when": [
+      {
+       "a": 33,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 34,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      }
+     ],
+     "then": [
+      {
+       "kind": "end",
+       "a": 1
+      }
+     ]
+    }
+   ]
+  },
+  "6": {
+   "block": "",
+   "_endregel_aus": "0x49AB0E",
+   "rules": [
+    {
+     "once": 300,
+     "when": [
+      {
+       "kind": "obj_owner",
+       "a": 0,
+       "op": "==",
+       "b": 12
+      }
+     ],
+     "then": [
+      {
+       "kind": "end",
+       "a": 1
+      }
+     ]
+    }
+   ]
+  },
+  "7": {
+   "block": "",
+   "_endregel_aus": "0x49B16B",
+   "rules": [
+    {
+     "once": 300,
+     "when": [
+      {
+       "a": 102,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 12,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 5,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ],
+     "then": [
+      {
+       "kind": "end",
+       "a": 1
+      }
+     ]
+    }
+   ]
+  },
   "8": {
    "block": "0x49B275",
    "_uebersetzt": "Der Block ist eine Zustandsmaschine ueber v[0], v[1], v[2] und drei Ereignisfaenger. Uebernommen sind die Zeit- und Zaehlregeln; die drei Ereignisfaenger (Ereignis 7, 29, 8) fehlen, weil das Ereignisbyte 0x539930 in der Engine noch nichts setzt.",
@@ -81,6 +316,102 @@
     }
    ],
    "_endregel_aus": "0x49B4AF"
+  },
+  "9": {
+   "block": "",
+   "_endregel_aus": "0X49BB42",
+   "rules": [
+    {
+     "once": 300,
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      }
+     ],
+     "then": [
+      {
+       "kind": "end",
+       "a": 1
+      }
+     ]
+    }
+   ]
+  },
+  "10": {
+   "block": "0x49BB65",
+   "_uebersetzt": "Der Block merkt sich mit v[0] einen Zeitpunkt und zuendet 40 Minuten spaeter die naechste Stufe; die Abschlussbedingung ist g_robot_class_count(3, 1) == 0. ⚠ Klasse 3 ist ein Einzelzaehler, dessen Zuordnung noch fehlt — hier steht darum Klasse 0 (alle Einheiten des Spielers 1), was STRENGER ist als das Original und ausdruecklich UNSERE Ersetzung.",
+   "rules": [
+    {
+     "once": 2,
+     "when": [
+      {
+       "kind": "time_after",
+       "a": 0,
+       "b": 40
+      }
+     ],
+     "then": [
+      {
+       "kind": "text",
+       "a": 380
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "when": [
+      {
+       "kind": "objects",
+       "a": 1,
+       "b": 1,
+       "op": "==",
+       "c": 0
+      }
+     ],
+     "then": [
+      {
+       "kind": "end",
+       "a": 1
+      }
+     ]
+    }
+   ],
+   "_endregel_aus": "0x49BD39"
+  },
+  "11": {
+   "block": "",
+   "_endregel_aus": "0x49C796",
+   "rules": [
+    {
+     "once": 300,
+     "when": [
+      {
+       "kind": "buildings",
+       "a": 0,
+       "b": 1,
+       "op": "==",
+       "c": 0
+      }
+     ],
+     "then": [
+      {
+       "kind": "end",
+       "a": 1
+      }
+     ]
+    }
+   ]
   },
   "12": {
    "block": "0x49C7E7",
@@ -160,243 +491,6 @@
    ],
    "_endregel_aus": "0x49CA42"
   },
-  "10": {
-   "block": "0x49BB65",
-   "_uebersetzt": "Der Block merkt sich mit v[0] einen Zeitpunkt und zuendet 40 Minuten spaeter die naechste Stufe; die Abschlussbedingung ist g_robot_class_count(3, 1) == 0. ⚠ Klasse 3 ist ein Einzelzaehler, dessen Zuordnung noch fehlt — hier steht darum Klasse 0 (alle Einheiten des Spielers 1), was STRENGER ist als das Original und ausdruecklich UNSERE Ersetzung.",
-   "rules": [
-    {
-     "once": 2,
-     "when": [
-      {
-       "kind": "time_after",
-       "a": 0,
-       "b": 40
-      }
-     ],
-     "then": [
-      {
-       "kind": "text",
-       "a": 380
-      }
-     ]
-    },
-    {
-     "once": 300,
-     "when": [
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 1,
-       "op": "==",
-       "c": 0
-      }
-     ],
-     "then": [
-      {
-       "kind": "end",
-       "a": 1
-      }
-     ]
-    }
-   ],
-   "_endregel_aus": "0x49BD39"
-  },
-  "4": {
-   "block": "0x499C7F",
-   "_uebersetzt": "Die Siegbedingung steht bei 0x499F8C als Kette: obj_owner(0..4) alle == 12 (zerstoert), dann mission_end. Wortwoertlich uebernommen — das ist die ganze Bedingung, nichts ergaenzt.",
-   "rules": [
-    {
-     "once": 300,
-     "when": [
-      {
-       "kind": "obj_owner",
-       "a": 0,
-       "op": "==",
-       "b": 12
-      },
-      {
-       "kind": "obj_owner",
-       "a": 1,
-       "op": "==",
-       "b": 12
-      },
-      {
-       "kind": "obj_owner",
-       "a": 2,
-       "op": "==",
-       "b": 12
-      },
-      {
-       "kind": "obj_owner",
-       "a": 3,
-       "op": "==",
-       "b": 12
-      },
-      {
-       "kind": "obj_owner",
-       "a": 4,
-       "op": "==",
-       "b": 12
-      }
-     ],
-     "then": [
-      {
-       "kind": "end",
-       "a": 1
-      }
-     ]
-    }
-   ],
-   "_endregel_aus": "0x499FD2"
-  },
-  "1": {
-   "block": "",
-   "_endregel_aus": "0x4989C7",
-   "rules": [
-    {
-     "once": 300,
-     "when": [
-      {
-       "kind": "units",
-       "a": 1,
-       "b": 1,
-       "op": "==",
-       "c": 0
-      }
-     ],
-     "then": [
-      {
-       "kind": "end",
-       "a": 1
-      }
-     ]
-    }
-   ]
-  },
-  "2": {
-   "block": "",
-   "_endregel_aus": "0x4993E8",
-   "rules": [
-    {
-     "once": 300,
-     "when": [
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 0,
-       "op": "==",
-       "c": 2
-      }
-     ],
-     "then": [
-      {
-       "kind": "end",
-       "a": 1
-      }
-     ]
-    }
-   ]
-  },
-  "3": {
-   "block": "",
-   "_endregel_aus": "0x499C5C",
-   "rules": [
-    {
-     "once": 300,
-     "when": [
-      {
-       "kind": "objects",
-       "a": 4,
-       "b": 0,
-       "op": "==",
-       "c": 0
-      }
-     ],
-     "then": [
-      {
-       "kind": "end",
-       "a": 1
-      }
-     ]
-    }
-   ]
-  },
-  "6": {
-   "block": "",
-   "_endregel_aus": "0x49AB0E",
-   "rules": [
-    {
-     "once": 300,
-     "when": [
-      {
-       "kind": "obj_owner",
-       "a": 0,
-       "op": "==",
-       "b": 12
-      }
-     ],
-     "then": [
-      {
-       "kind": "end",
-       "a": 1
-      }
-     ]
-    }
-   ]
-  },
-  "7": {
-   "block": "",
-   "_endregel_aus": "0x49B16B",
-   "rules": [
-    {
-     "once": 300,
-     "when": [
-      {
-       "kind": "obj_owner",
-       "a": 3,
-       "op": "==",
-       "b": 12
-      },
-      {
-       "kind": "obj_owner",
-       "a": 5,
-       "op": "==",
-       "b": 12
-      }
-     ],
-     "then": [
-      {
-       "kind": "end",
-       "a": 1
-      }
-     ]
-    }
-   ]
-  },
-  "11": {
-   "block": "",
-   "_endregel_aus": "0x49C796",
-   "rules": [
-    {
-     "once": 300,
-     "when": [
-      {
-       "kind": "buildings",
-       "a": 0,
-       "b": 1,
-       "op": "==",
-       "c": 0
-      }
-     ],
-     "then": [
-      {
-       "kind": "end",
-       "a": 1
-      }
-     ]
-    }
-   ]
-  },
   "13": {
    "block": "",
    "_endregel_aus": "0x49D186",
@@ -405,32 +499,99 @@
      "once": 300,
      "when": [
       {
-       "kind": "objects",
+       "a": 22,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
        "a": 1,
        "b": 2,
-       "op": "==",
-       "c": 0
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
       },
       {
-       "kind": "units",
        "a": 0,
        "b": 2,
-       "op": "==",
-       "c": 0
+       "c": 0,
+       "kind": "units",
+       "op": "=="
       },
       {
-       "kind": "objects",
        "a": 1,
        "b": 4,
-       "op": "==",
-       "c": 0
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
       },
       {
-       "kind": "units",
        "a": 0,
        "b": 4,
-       "op": "==",
-       "c": 0
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      }
+     ],
+     "then": [
+      {
+       "kind": "end",
+       "a": 1
+      }
+     ]
+    }
+   ]
+  },
+  "14": {
+   "block": "",
+   "_endregel_aus": "0X49D72C",
+   "rules": [
+    {
+     "once": 300,
+     "when": [
+      {
+       "a": 20,
+       "b": 20,
+       "kind": "var",
+       "op": "=="
+      }
+     ],
+     "then": [
+      {
+       "kind": "end",
+       "a": 1
+      }
+     ]
+    }
+   ]
+  },
+  "15": {
+   "block": "",
+   "_endregel_aus": "0X49DA30",
+   "rules": [
+    {
+     "once": 300,
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 4,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
       }
      ],
      "then": [
@@ -473,32 +634,63 @@
      "once": 300,
      "when": [
       {
-       "kind": "objects",
        "a": 1,
        "b": 1,
-       "op": "==",
-       "c": 0
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
       },
       {
-       "kind": "objects",
        "a": 1,
        "b": 2,
-       "op": "==",
-       "c": 0
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
       },
       {
-       "kind": "objects",
        "a": 1,
        "b": 3,
-       "op": "==",
-       "c": 0
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
       },
       {
-       "kind": "objects",
        "a": 15,
        "b": 0,
-       "op": "==",
-       "c": 0
+       "c": 0,
+       "kind": "objects",
+       "op": "!="
+      }
+     ],
+     "then": [
+      {
+       "kind": "end",
+       "a": 1
+      }
+     ]
+    }
+   ]
+  },
+  "18": {
+   "block": "",
+   "_endregel_aus": "0X49EA86",
+   "rules": [
+    {
+     "once": 300,
+     "when": [
+      {
+       "a": 0,
+       "b": 1,
+       "c": 3,
+       "kind": "units",
+       "op": "<"
+      },
+      {
+       "a": 0,
+       "b": 2,
+       "c": 3,
+       "kind": "units",
+       "op": "<"
       }
      ],
      "then": [
@@ -579,6 +771,30 @@
     }
    ]
   },
+  "22": {
+   "block": "",
+   "_endregel_aus": "0X4A0C4B",
+   "rules": [
+    {
+     "once": 300,
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      }
+     ],
+     "then": [
+      {
+       "kind": "end",
+       "a": 1
+      }
+     ]
+    }
+   ]
+  },
   "23": {
    "block": "",
    "_endregel_aus": "0x4A0DBA",
@@ -611,10 +827,10 @@
      "once": 300,
      "when": [
       {
-       "kind": "obj_owner",
        "a": 0,
-       "op": "==",
-       "b": 2
+       "b": 2,
+       "kind": "obj_owner",
+       "op": "!="
       }
      ],
      "then": [
@@ -985,6 +1201,5 @@
     }
    ]
   }
- },
- "_endregeln": "Die Siegbedingungen sind NICHT von Hand uebersetzt, sondern mit `mission_logic.py` aus den Bloecken gelesen: die Kette `push args; call <abfrage>; cmp; jcc` vor jedem mission_end, alle Glieder mit demselben Sprungziel bilden ein UND. Jede Mission nennt unter 'at' die Adresse ihres mission_end, damit sich die Regel gegen --decode pruefen laesst. 25 der 33 lesen sich so; die uebrigen 8 (5, 9, 14, 15, 18, 21, 22, 28) haben eine Bedingung, die dieses Muster nicht trifft, und fehlen absichtlich, statt geraten zu werden."
+ }
 }

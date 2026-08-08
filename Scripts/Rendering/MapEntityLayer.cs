@@ -3689,40 +3689,88 @@ public partial class MapEntityLayer : Node2D
     public string MissionScriptForceCheck()
     {
         if (_mscript == null) return "script-check: kein Skript fuer diese Mission";
-        var slots = _mscript.WatchedSlots();
-        var counts = _mscript.EndCounts();
+        var conds = _mscript.EndConds();
         // ⚠ nicht hier aussteigen, wenn nur keine obj_owner-Plaetze dabei sind —
         // die meisten Missionen enden ueber eine ZAEHLbedingung, und ein
         // vorzeitiges return hat die glatt uebersprungen
-        if (slots.Count == 0 && counts.Count == 0)
-            return "script-check: das Skript prueft weder Objekte noch Zaehlungen";
-        int hit = 0;
-        foreach (int slot in slots)
-            foreach (var e in _entities)
-                if (e.IsBuilding && e.Slot == slot && !e.Dead) { e.Dead = true; hit++; }
+        if (conds.Count == 0)
+            return "script-check: das Skript prueft nichts, was sich erzwingen liesse";
 
-        // die Zaehl-Bedingungen ebenfalls wahr machen: alles ausschlagen, was
-        // eine end-Regel auf null herunterzaehlen will
-        int counted = 0;
-        foreach (var (kind, a, b, c) in counts)
+        int killed = 0, given = 0, left = 0;
+        var untouched = new List<string>();
+        foreach (var c in conds)
         {
-            if (c != 0) continue;                       // nur "auf null" laesst sich erzwingen
+            if (c.Kind == "obj_owner")
+            {
+                // Ein Platz bekommt schlicht den verlangten Besitzer. 12 heisst
+                // im Original leer, also zerstoert; alles andere heisst besetzt.
+                int want = c.Op == "==" ? c.B : (c.B == 12 ? 0 : 12);
+                if (c.Op != "==" && c.Op != "!=") { left++; untouched.Add(Show(c)); continue; }
+                bool done = false;
+                foreach (var e in _entities)
+                    if (e.IsBuilding && e.Slot == c.A)
+                    {
+                        if (want == 12) { e.Dead = true; killed++; }
+                        else { e.Dead = false; e.Owner = want; given++; }
+                        done = true;
+                    }
+                if (!done) { left++; untouched.Add(Show(c)); }
+                continue;
+            }
+
+            int target = Campaign.MissionScript.TargetCount(c);
+            if (target < 0) { left++; untouched.Add(Show(c)); continue; }
+
+            // ⚠ Nicht jede Endbedingung will Vernichtung. Mission 3 will einen
+            // Forschungskomplex, der noch STEHT, Mission 23 genau fuenf Minen.
+            // Der Prueflauf zaehlt darum auf die Zielzahl HIN — herunter, indem
+            // er ausschlaegt, hinauf, indem er uebergibt.
+            var mine = new List<Entity>();
+            var spare = new List<Entity>();
             foreach (var e in _entities)
             {
-                if (e.Dead) continue;
-                bool match = kind switch
+                bool isKind = c.Kind switch
                 {
-                    "objects" => e.IsBuilding && e.BType == a && e.Owner == b,
-                    "units" => !e.IsBuilding && e.Owner == b,
-                    "buildings" => e.IsBuilding && e.Owner == b,
+                    "objects" => e.IsBuilding && e.BType == c.A,
+                    "units" => !e.IsBuilding,
+                    "buildings" => e.IsBuilding,
                     _ => false,
                 };
-                if (match) { e.Dead = true; counted++; }
+                if (!isKind) continue;
+                if (!e.Dead && e.Owner == c.B) mine.Add(e);
+                else if (e.Owner != c.B) spare.Add(e);
             }
+            while (mine.Count > target)
+            {
+                var e = mine[^1];
+                mine.RemoveAt(mine.Count - 1);
+                e.Dead = true;
+                killed++;
+            }
+            while (mine.Count < target && spare.Count > 0)
+            {
+                var e = spare[^1];
+                spare.RemoveAt(spare.Count - 1);
+                e.Dead = false;
+                e.Owner = c.B;
+                mine.Add(e);
+                given++;
+            }
+            if (mine.Count != target) { left++; untouched.Add($"{Show(c)} [nur {mine.Count}]"); }
         }
-        return $"script-check: {hit} von {slots.Count} beobachteten Objekten zerstoert " +
-               $"({string.Join(",", slots)}), {counted} weitere fuer Zaehlbedingungen";
+        var unreachable = _mscript.UnreachableVars();
+        return $"script-check: {conds.Count - left} von {conds.Count} Endbedingungen erzwungen " +
+               $"({killed} ausgeschlagen, {given} uebergeben)" +
+               (left > 0 ? $"; nicht erzwingbar: {string.Join(" ", untouched)}" : "") +
+               (unreachable.Count > 0
+                   ? $"; ⚠ Variablen ohne Erzeuger: v[{string.Join("] v[", unreachable)}]"
+                   : "");
     }
+
+    private static string Show(Campaign.MissionScript.Cond c) =>
+        c.Kind == "obj_owner"
+            ? $"obj_owner({c.A}){c.Op}{c.B}"
+            : $"{c.Kind}({c.A},{c.B}){c.Op}{c.C}";
 
     public string Verdict()
     {
