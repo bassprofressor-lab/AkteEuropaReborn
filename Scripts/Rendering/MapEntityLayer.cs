@@ -3827,8 +3827,19 @@ public partial class MapEntityLayer : Node2D
             var d = kv.Value.AsGodotDictionary<string, Variant>();
             string nm = d.TryGetValue("name", out var nv) ? nv.AsString() : "";
             int prop = GetI(d, "propulsion", 0);
-            // only designs whose chassis we can actually draw, one per name
-            if (nm.Length == 0 || prop < 160 || prop > 175) continue;
+            // Only designs whose chassis we can actually draw, one per name.
+            //
+            // ⚠ 148 and 149 are the INFANTRY chassis and they belong here.
+            // Dropping them is what "the AI only builds Transporters" (point 15
+            // of the player's list) really was: the campaign's own schedule
+            // unlocks Chaingunner, Laser Trooper, Radar Scout, Pioneer and
+            // Lander (rows 50..54, chassis 148/149) long before it unlocks any
+            // vehicle, and with those five thrown away the only buildable
+            // designs left in the early missions were row 57 "Transporter" and
+            // row 84 "Chaingun Tank". Measured against the recovered schedule,
+            // not guessed.
+            bool drawable = (prop >= 160 && prop <= 175) || prop == 148 || prop == 149;
+            if (nm.Length == 0 || !drawable) continue;
             if (!seen.Add(nm)) continue;
             bool avail = false;
             if (d.TryGetValue("flags", out var fv) && fv.VariantType == Variant.Type.Array)
