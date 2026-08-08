@@ -1265,8 +1265,61 @@ public static class ImportSelfTest
                      $"(Verteiler 0x{t.VyrobaCaseTable:X}, add_vyroba 0x{t.AddVyroba:X})");
         }
 
+        // the per-mission unlock schedule, held against mission_unlocks.py.
+        // Compared by EFFECT, not by the ranges themselves: the two readers may
+        // cut a run differently and still switch exactly the same rows on.
+        int uOk = 0, uBad = 0;
+        string unlockPath = aekernel + "/mission_unlocks.json";
+        if (!File.Exists(unlockPath))
+        {
+            GD.Print("selftest-exe: mission_unlocks.json fehlt — " +
+                     "mit `mission_unlocks.py <GAME.EXE>` erzeugen");
+        }
+        else
+        {
+            var kindOf = new System.Collections.Generic.Dictionary<string, string>
+            { { "vehicles", "design" }, { "ships", "ship" }, { "aircraft", "aircraft" } };
+            var root = ReadJson(unlockPath);
+            var got = t.MissionUnlocks;
+            if (root != null)
+                foreach (var key in root.Keys)
+                {
+                    if (!int.TryParse(key, out int mission)) continue;
+                    var want = root[key].AsGodotDictionary<string, Variant>();
+                    foreach (var kk in want.Keys)
+                    {
+                        if (!kindOf.TryGetValue(kk, out string? kind)) continue;
+                        var wEff = new System.Collections.Generic.SortedDictionary<int, int>();
+                        foreach (var r in want[kk].AsGodotArray())
+                        {
+                            var a = r.AsGodotArray();
+                            for (int x = a[0].AsInt32(); x <= a[1].AsInt32(); x++)
+                                wEff[x] = a[2].AsInt32();
+                        }
+                        var gEff = new System.Collections.Generic.SortedDictionary<int, int>();
+                        if (got.TryGetValue(mission, out var rows))
+                            foreach (var r in rows)
+                                if (r.Kind == kind)
+                                    for (int x = r.From; x <= r.To; x++) gEff[x] = r.Value;
+                        bool same = wEff.Count == gEff.Count;
+                        if (same)
+                            foreach (var kv in wEff)
+                                if (!gEff.TryGetValue(kv.Key, out int v) || v != kv.Value)
+                                { same = false; break; }
+                        if (same) uOk++;
+                        else
+                        {
+                            uBad++;
+                            GD.PrintErr($"   Fahrplan Mission {mission} {kk}: " +
+                                        $"{gEff.Count} Zeilen statt {wEff.Count}");
+                        }
+                    }
+                }
+            GD.Print($"selftest-exe: Fahrplan {uOk} Listen gleich, {uBad} abweichend");
+        }
+
         return bad == 0 && sBad == 0 && aBad == 0 && dBad == 0 && rBad == 0 && pBad == 0 &&
-               ok > 0 && sOk > 0 ? 0 : 1;
+               uBad == 0 && ok > 0 && sOk > 0 ? 0 : 1;
     }
 
     /// <summary>Bake maps with the ported baker and hold the result against the

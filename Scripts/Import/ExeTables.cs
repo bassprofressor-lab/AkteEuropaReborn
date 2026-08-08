@@ -1223,6 +1223,21 @@ public sealed class ExeTables
         var starts = new List<uint>(new HashSet<uint>(blocks));
         starts.Sort();
 
+        // ⚠ The value register is not always set inside the block. The
+        // dispatcher's own prologue loads it before the indexed jump, and it
+        // holds for every mission — mission 19 reads its `push ebx` from there
+        // and nowhere else. Collect it once and hand it to each block.
+        var prologue = new Dictionary<int, int>();
+        for (int i = 0; i + 7 < text.Length; i++)
+        {
+            if (text[i] != 0xFF || text[i + 1] != 0x24 || text[i + 2] != 0x8D) continue;
+            if (BitConverter.ToUInt32(text, i + 3) != VyrobaCaseTable) continue;
+            var pre = PrevPushes(text, i + 7, 0x400);
+            if (pre != null)
+                foreach (var kv in pre.Value.Consts) prologue.TryAdd(kv.Key, kv.Value);
+            break;
+        }
+
         for (int m = 0; m < MissionSlots; m++)
         {
             uint start = blocks[idx[m]];
@@ -1240,6 +1255,386 @@ public sealed class ExeTables
             }
             if (per.Count > 0) _missionPlans[m] = per;
         }
+    }
+
+    // ---- what a mission SWITCHES ON ----------------------------------------
+
+    /// <summary>A run of rows a mission turns on or off. The schedule is written
+    /// as loops, so a single call site usually covers a whole range.</summary>
+    public readonly record struct UnlockRange(string Kind, int From, int To, int Value);
+
+    private bool _unlockTried;
+    private readonly Dictionary<int, List<UnlockRange>> _missionUnlocks = new();
+
+    /// <summary>
+    /// The per-mission unlock schedule — the thing campaign.json has carried an
+    /// `_open` note about: "not derived here, it is a run of call sites in the
+    /// exe, not a table".
+    ///
+    /// The same mission blocks that hold the build programmes also call four
+    /// tiny setters, each of which writes byte +0 of a record:
+    ///
+    ///     design   into the 46-byte design table, for all eight players
+    ///     ship     into the 42-byte ship table
+    ///     aircraft into the aircraft templates
+    ///     stat     into a 58-byte stats record of ONE player
+    ///
+    /// They are recognised by what they write into — three of the four
+    /// destinations are tables this class already knows by name, and the fourth
+    /// is the design table.
+    ///
+    /// ⚠ The arguments are usually NOT constants. The schedule is written as
+    /// loops, and the value is often held in a register across a long run of
+    /// calls. Both forms are matched here on raw bytes:
+    ///
+    ///     6A vv  5x  FE Cx  E8 rel32  83 C4 08  80 Fx ee   -> a loop, rows
+    ///            |   |                          |             vv..ee-1 := value
+    ///            |   the running index          its end
+    ///            the value
+    ///
+    ///     6A vv  6A ii  E8 rel32                          -> one row
+    ///     5x     6A ii  E8 rel32                          -> one row, value in
+    ///                                                        a register
+    ///
+    /// Checked against `aekernel-tools/mission_unlocks.py`, which reads the same
+    /// thing with a real disassembler.
+    /// </summary>
+    public IReadOnlyDictionary<int, List<UnlockRange>> MissionUnlocks
+    {
+        get { LocateMissionUnlocks(); return _missionUnlocks; }
+    }
+
+    /// <summary>`push r32` opcode to the register number its 8-bit low half
+    /// uses in `inc r8`, `mov r8,imm8` and `cmp r8,imm8`.</summary>
+    private static int PushReg(byte op) => op is >= 0x50 and <= 0x57 ? op - 0x50 : -1;
+
+    /// <summary>One pushed argument: either an immediate, or a register whose
+    /// constant has to be looked up.</summary>
+    private readonly record struct Arg(int Imm, int Reg);
+
+    /// <summary>
+    /// The last two arguments pushed in front of a call, walking BACKWARDS.
+    ///
+    /// ⚠ The two pushes are not always adjacent — a block happily puts
+    /// `xor ebx,ebx` or `inc bl` between them — so matching a fixed byte
+    /// sequence in front of the call misses them. Reading backwards needs
+    /// instruction lengths, and rather than a full decoder this steps over the
+    /// small set of forms these blocks actually contain. Anything else stops
+    /// the walk, which is the safe direction: a missed row shows up in
+    /// `--selftest-exe`, a wrongly guessed one might not.
+    /// </summary>
+    private static (Arg Index, Arg Value, Dictionary<int, int> Consts)?
+        PrevPushes(byte[] text, int call, int back = 0x200)
+    {
+        var found = new List<Arg>();
+        var consts = new Dictionary<int, int>();
+        // ⚠ `xor ebx,ebx / inc ebx` is how a 1 gets into a register here.
+        // Walking backwards we meet the `inc` FIRST, so the steps are counted
+        // and added when the setter finally turns up. Missing `inc r32` (0x40+r)
+        // entirely was what made mission 19 read the wrong value: the walk
+        // stopped on it and the raw fallback then found a byte inside an
+        // address and called it `mov ebx, 2214590308`.
+        // ⚠ Only steps that stand BEFORE the pushes in program order count —
+        // walking backwards, that means only after both pushes have been seen.
+        // The `inc bl` inside a loop body sits between the push and the call and
+        // must NOT be counted: the loop pushes the value it had before it.
+        var adj = new Dictionary<int, int>();
+        void Bump(int r, int by) { if (found.Count >= 2) adj[r] = (adj.TryGetValue(r, out int a) ? a : 0) + by; }
+        void Set(int r, int v) { consts.TryAdd(r, v + (adj.TryGetValue(r, out int a) ? a : 0)); }
+        int p = call;                                  // p = end of the previous instruction
+        int limit = Math.Max(1, call - back);
+        while (p > limit)
+        {
+            if (p >= 2 && text[p - 2] == 0x6A)                       // push imm8
+            { if (found.Count < 2) found.Add(new Arg(text[p - 1], -1)); p -= 2; continue; }
+            if (p >= 5 && text[p - 5] == 0x68)                       // push imm32
+            { if (found.Count < 2) found.Add(new Arg(BitConverter.ToInt32(text, p - 4), -1)); p -= 5; continue; }
+            if (p >= 1 && PushReg(text[p - 1]) >= 0)                 // push r32
+            { if (found.Count < 2) found.Add(new Arg(0, PushReg(text[p - 1]))); p -= 1; continue; }
+            if (p >= 2 && (text[p - 2] == 0x32 || text[p - 2] == 0x33) &&
+                (text[p - 1] & 0xC0) == 0xC0 && ((text[p - 1] >> 3) & 7) == (text[p - 1] & 7))
+            { Set(text[p - 1] & 7, 0); p -= 2; continue; }                          // xor r,r
+            if (p >= 2 && text[p - 2] is >= 0xB0 and <= 0xB7)                      // mov r8,imm8
+            { Set(text[p - 2] - 0xB0, text[p - 1]); p -= 2; continue; }
+            if (p >= 5 && text[p - 5] is >= 0xB8 and <= 0xBF)                      // mov r32,imm32
+            { Set(text[p - 5] - 0xB8, BitConverter.ToInt32(text, p - 4)); p -= 5; continue; }
+            if (p >= 2 && text[p - 2] == 0xFE && (text[p - 1] & 0xF8) == 0xC0)       // inc r8
+            { Bump(text[p - 1] & 7, 1); p -= 2; continue; }
+            if (p >= 2 && text[p - 2] == 0xFE) { p -= 2; continue; }                 // dec r8 etc.
+            if (p >= 1 && text[p - 1] is >= 0x40 and <= 0x47)                        // inc r32
+            { Bump(text[p - 1] - 0x40, 1); p -= 1; continue; }
+            if (p >= 1 && text[p - 1] is >= 0x48 and <= 0x4F)                        // dec r32
+            { Bump(text[p - 1] - 0x48, -1); p -= 1; continue; }
+            // 83 /r imm8 — add/sub/cmp on a register with a small immediate;
+            // `add esp,8` and `cmp eax,0x63` are both of this shape
+            if (p >= 3 && text[p - 3] == 0x83 && (text[p - 2] & 0xC0) == 0xC0) { p -= 3; continue; }
+            if (p >= 7 && text[p - 7] == 0x0F && text[p - 6] == 0xBF &&
+                text[p - 5] == 0x05) { p -= 7; continue; }                        // movsx r32,[imm32]
+            if (p >= 6 && text[p - 6] == 0x0F && (text[p - 5] & 0xF0) == 0x80) { p -= 6; continue; } // jcc rel32
+            if (p >= 6 && text[p - 6] == 0x8A && (text[p - 5] & 0xC7) == 0x80) { p -= 6; continue; } // mov r8,[r32+imm32]
+            if (p >= 5 && text[p - 5] == 0xE8) { p -= 5; continue; }                 // call rel32
+            // the blocks set their own flags between the pushes
+            if (p >= 6 && text[p - 6] == 0x88 && (text[p - 5] & 0xC7) == 0x05) { p -= 6; continue; }
+            if (p >= 5 && text[p - 5] == 0xA2) { p -= 5; continue; }
+            if (p >= 7 && text[p - 7] == 0xC6 && text[p - 6] == 0x05) { p -= 7; continue; }
+            break;
+        }
+        return found.Count == 2 ? (found[0], found[1], consts) : null;
+    }
+
+    /// <summary>
+    /// The constant a register was last loaded with, scanning back over a
+    /// bounded window.
+    ///
+    /// Three forms, and all three are needed:
+    ///   B0+r imm8    `mov r8, imm8`   — the loop counters, bl and cl
+    ///   B8+r imm32   `mov r32, imm32` — ⚠ how esi and edi get theirs. In 32-bit
+    ///                encoding index 6 and 7 have no own low byte (B6 is `mov
+    ///                dh`), so the value register the blocks hold across a run
+    ///                of calls is ALWAYS set in the 32-bit form. Leaving this
+    ///                out made every mission that uses esi come back empty.
+    ///   3x C0+r*9    `xor r,r`
+    ///
+    /// ⚠ The scan runs back to the START OF THE BLOCK, not over a fixed window.
+    /// A block sets its value register once at the top and then holds it across
+    /// every call it makes; a 0x120-byte window found it in some missions and
+    /// not in others, which read as "this mission unlocks nothing".
+    /// </summary>
+    private static int? RegConst(byte[] text, int at, int reg, int floor = 0)
+    {
+        for (int i = at - 1; i >= Math.Max(0, floor); i--)
+        {
+            if (text[i] == 0xB0 + reg && i + 1 < text.Length) return text[i + 1];
+            if (text[i] == 0xB8 + reg && i + 4 < text.Length) return BitConverter.ToInt32(text, i + 1);
+            if ((text[i] == 0x32 || text[i] == 0x33) &&
+                i + 1 < text.Length && text[i + 1] == 0xC0 + reg * 9) return 0;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// The constant a register holds at a call.
+    ///
+    /// First choice is what the backward instruction walk carried in — that one
+    /// cannot mistake a byte inside another instruction for a setter. Only when
+    /// the walk stopped early (an opcode it does not know) does this fall back
+    /// to the raw byte search, which is why the fallback is still here: without
+    /// it three missions read nothing at all, with it they read correctly.
+    /// </summary>
+    /// <summary>
+    /// The value a schedule row carries.
+    ///
+    /// ⚠ MEASURED, not assumed: every one of the 551 rows in this binary
+    /// carries 1 — the campaign schedule only ever switches things ON, no row
+    /// takes anything away. So where the value register cannot be resolved (it
+    /// is loaded in the dispatcher's prologue, behind instruction forms the
+    /// backward walk does not know), 1 is the norm rather than a guess, and
+    /// anything outside 0..1 is a false positive of the raw byte search.
+    ///
+    /// If a disc ever turns up with an "off" row, this is where it goes wrong,
+    /// and `--selftest-exe` is what will say so.
+    /// </summary>
+    private static int Flag(int? v) => v is 0 or 1 ? v.Value : 1;
+
+    private static int? Held(byte[] text, int at, int reg, int floor,
+                             Dictionary<int, int> held)
+    {
+        if (held.TryGetValue(reg, out int known)) return known;
+        int? v = RegConst(text, at, reg, floor);
+        if (v != null) held[reg] = v.Value;
+        return v;
+    }
+
+    private void LocateMissionUnlocks()
+    {
+        if (_unlockTried) return;
+        _unlockTried = true;
+        LocateMissionPlans();
+        if (VyrobaCaseTable == 0) return;
+        var (tva, text) = TextSection();
+        if (text.Length == 0) return;
+
+        var idx = Read(VyrobaCaseIndex, MissionSlots);
+        if (idx.Length < MissionSlots) return;
+        int cases = 0;
+        foreach (var b in idx) cases = Math.Max(cases, b + 1);
+        var tab = Read(VyrobaCaseTable, cases * 4);
+        if (tab.Length < cases * 4) return;
+        var blocks = new uint[cases];
+        for (int i = 0; i < cases; i++) blocks[i] = BitConverter.ToUInt32(tab, i * 4);
+        var starts = new List<uint>(new HashSet<uint>(blocks));
+        starts.Sort();
+
+        // which functions the blocks call, and what each writes into
+        uint lo = starts[0], hi = starts[^1] + 0x1000;
+        var kindOf = new Dictionary<uint, string>();
+        for (int i = (int)(lo - tva); i < Math.Min(hi - tva, text.Length - 5); i++)
+        {
+            if (text[i] != 0xE8) continue;
+            uint t = Resolve((uint)(tva + i + 5 + BitConverter.ToInt32(text, i + 1)));
+            if (kindOf.ContainsKey(t)) continue;
+            if (SetterDest(tva, text, t) != 0) kindOf[t] = "";      // a setter, role later
+        }
+        if (kindOf.Count == 0) return;
+
+        // Which of the four is which.
+        //
+        // First choice is the destination: three of the four tables this class
+        // already knows by name. ⚠ Those names are addresses of ONE build, so on
+        // the other GAME.EXE of this machine they identify nothing and every
+        // setter would read as "design" — measured, and it turned ships and
+        // aircraft into zero rows there.
+        //
+        // The fallback is their ORDER. The four sit next to each other in the
+        // same sequence in both builds (0x4D04D0/0520/0560/05A0 here,
+        // 0x4D0080/00D0/0110/0150 on the other), so sorting the setters found in
+        // the mission blocks by address and handing out the roles in that order
+        // gives the same answer without an address.
+        var byAddr = new List<uint>(kindOf.Keys);
+        byAddr.Sort();
+        string[] roles = { "design", "stat", "ship", "aircraft" };
+        bool named = false;
+        foreach (var fn in byAddr)
+        {
+            uint dest = SetterDest(tva, text, fn);
+            if (dest == StatsArrayBase) { kindOf[fn] = "stat"; named = true; }
+            else if (dest == ShipDesigns) { kindOf[fn] = "ship"; named = true; }
+            else if (dest == AircraftTemplates - 1) { kindOf[fn] = "aircraft"; named = true; }
+        }
+        if (named)
+        {
+            foreach (var fn in byAddr) if (kindOf[fn].Length == 0) kindOf[fn] = "design";
+        }
+        else
+        {
+            for (int r = 0; r < byAddr.Count; r++)
+                kindOf[byAddr[r]] = r < roles.Length ? roles[r] : "design";
+        }
+
+        // ⚠ The value register is not always set inside the block. The
+        // dispatcher's own prologue loads it before the indexed jump, and it
+        // holds for every mission — mission 19 reads its `push ebx` from there
+        // and nowhere else. Collect it once and hand it to each block.
+        var prologue = new Dictionary<int, int>();
+        for (int i = 0; i + 7 < text.Length; i++)
+        {
+            if (text[i] != 0xFF || text[i + 1] != 0x24 || text[i + 2] != 0x8D) continue;
+            if (BitConverter.ToUInt32(text, i + 3) != VyrobaCaseTable) continue;
+            var pre = PrevPushes(text, i + 7, 0x400);
+            if (pre != null)
+                foreach (var kv in pre.Value.Consts) prologue.TryAdd(kv.Key, kv.Value);
+            break;
+        }
+
+        for (int m = 0; m < MissionSlots; m++)
+        {
+            uint start = blocks[idx[m]];
+            uint end = uint.MaxValue;
+            foreach (var s in starts) if (s > start) { end = s; break; }
+
+            var rows = new List<UnlockRange>();
+            // ⚠ A register is resolved only over the stretch SINCE THE LAST
+            // setter call, and otherwise carried forward. Searching back to the
+            // block start instead hits a byte inside some address or offset
+            // that looks like `mov ebx, imm` and returns a wrong value — the
+            // last six lists that would not line up were all of that kind.
+            var held = new Dictionary<int, int>(prologue);
+            int floor = (int)(start - tva);
+
+            // ⚠ Two passes. A block sets its value register once and holds it
+            // over every call, but the backward walk from the FIRST call often
+            // stops at an opcode it does not know and never reaches the setter.
+            // Walking every call first and pooling what those walks did see
+            // fills the register in from a later call — which is sound, because
+            // it is the same held value. Without this pass mission 19 fell back
+            // to the raw byte search and read the wrong number.
+            for (int q = (int)(start - tva);
+                 q < Math.Min(end == uint.MaxValue ? text.Length : end - tva, text.Length - 12); q++)
+            {
+                if (text[q] != 0xE8) continue;
+                uint tq = Resolve((uint)(tva + q + 5 + BitConverter.ToInt32(text, q + 1)));
+                if (!kindOf.ContainsKey(tq)) continue;
+                var pre = PrevPushes(text, q);
+                if (pre == null) continue;
+                foreach (var kv in pre.Value.Consts) held.TryAdd(kv.Key, kv.Value);
+            }
+
+            for (int i = (int)(start - tva);
+                 i < Math.Min(end == uint.MaxValue ? text.Length : end - tva, text.Length - 12); i++)
+            {
+                if (text[i] != 0xE8) continue;
+                uint t = Resolve((uint)(tva + i + 5 + BitConverter.ToInt32(text, i + 1)));
+                if (!kindOf.TryGetValue(t, out string? kind)) continue;
+
+                // the two arguments, whatever stands between them
+                var args = PrevPushes(text, i);
+                if (args == null) continue;
+                var (index, value, consts) = args.Value;
+                foreach (var kv in consts) held[kv.Key] = kv.Value;   // fresher wins
+
+                // a loop pushes the running index, and its end is the `cmp`
+                // that follows the call:  ... | FE Cx | E8 | 83 C4 08 | 80 Fx ee
+                if (index.Reg >= 0 && i >= 2 && text[i - 2] == 0xFE &&
+                    text[i - 1] == 0xC0 + index.Reg &&
+                    i + 11 < text.Length && text[i + 8] == 0x80 &&
+                    text[i + 9] == 0xF8 + index.Reg)
+                {
+                    int? from = Held(text, i, index.Reg, floor, held);
+                    int v = Flag(value.Reg >= 0 ? Held(text, i, value.Reg, floor, held) : value.Imm);
+                    if (from != null)
+                        rows.Add(new UnlockRange(kind, from.Value, text[i + 10] - 1, v));
+                    floor = i + 5;
+                    continue;
+                }
+
+                // a single row
+                int? one = index.Reg >= 0 ? Held(text, i, index.Reg, floor, held) : index.Imm;
+                int val = Flag(value.Reg >= 0 ? Held(text, i, value.Reg, floor, held) : value.Imm);
+                if (one != null)
+                    rows.Add(new UnlockRange(kind, one.Value, one.Value, val));
+                floor = i + 5;                       // next search starts after this call
+            }
+            if (rows.Count > 0) _missionUnlocks[m] = rows;
+        }
+    }
+
+    /// <summary>
+    /// Is this one of the four setters, and which?
+    ///
+    /// A setter ends in `mov byte ptr [&lt;scaled index&gt; + imm32], r8`, and the
+    /// imm32 names the table. The scaling is what makes this reliable: a setter
+    /// steps through records of 46, 42, 58 or 3 bytes, so its write always
+    /// carries a **SIB byte**. The mission blocks also call byte setters that
+    /// write one flag per player — `mov byte ptr [ecx + imm32], al`, no SIB —
+    /// and two of those (the AI level at 0x538bd8 and its neighbour) land in the
+    /// same address range.
+    ///
+    /// ⚠ That is exactly the bug this replaced: without the SIB test they were
+    /// read as design unlocks, and every mission came out with one vehicle row
+    /// too many. `--selftest-exe` caught it; nothing else would have.
+    ///
+    /// ⚠ Remaining limit: three of the four are told apart by an address this
+    /// class hard-codes, so a differently built exe falls back to "design" for
+    /// all of them. The build-independent discriminator is the record stride out
+    /// of the lea chain, and reading that needs a decoder this class has not got.
+    /// </summary>
+    private uint SetterDest(uint tva, byte[] text, uint fn)
+    {
+        int o = (int)(fn - tva);
+        if (o < 0 || o + 0x60 > text.Length) return 0;
+        for (int i = o; i < o + 0x60 && i + 8 < text.Length; i++)
+        {
+            if (text[i] == 0xC3) break;                       // ret
+            if (text[i] != 0x88) continue;                    // mov r/m8, r8
+            byte modrm = text[i + 1];
+            if ((modrm & 0x07) != 0x04) continue;             // needs a SIB byte
+            int mod = modrm >> 6;
+            if (mod != 0 && mod != 2) continue;               // disp32 forms only
+            uint dest = BitConverter.ToUInt32(text, i + 3);
+            if (dest < 0x500000 || dest > 0x560000) continue;
+            return dest;
+        }
+        return 0;
     }
 
     private static readonly byte[] VyrobaMessage =
