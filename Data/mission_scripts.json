@@ -1,502 +1,514 @@
 {
- "_note": "Missionsskripte der Kampagne. Im Original sind das keine Daten, sondern Code: die Missionsnummer aus dem Kartenkopf indiziert eine Sprungtabelle (@0x4A5B0C, 35 Eintraege), und jede Mission bekommt ihren eigenen Block, der jeden Takt laeuft. Die ZWISCHENSCHRITTE sind von Hand uebersetzt, mit `aekernel-tools/mission_logic.py --decode` als Vorlage; die SIEGBEDINGUNGEN sind es nicht, die sind eine Abschrift aus der EXE (siehe _endregeln). Jede Mission nennt die Adresse, aus der sie stammt, damit sich beides gegenpruefen laesst.",
- "_vokabular": "Bedingungen: var(a,op,b) = v[a] op b | time_gt(a) = game_time() > a Minuten | time_after(a,b) = game_time() > v[a]+b | obj_owner(a,op,b) = Besitzer des Gebaeudeplatzes a | units(klasse,spieler,op,c) = g_robot_class_count | buildings(klasse,spieler,op,c) = g_buildings_count. Wirkungen: inc(a) | set(a,b) | text(a) | end(a) mit a=1 gewonnen, a=0 verloren.",
  "_endregeln": "Die Siegbedingungen sind NICHT von Hand uebersetzt, sondern gelesen: vor jedem mission_end steht die Kette `push args; call <abfrage>; cmp; jcc`, und alle Glieder mit demselben Sprungziel bilden ein UND. `aekernel-tools/mission_endrules.py apply` traegt sie ein, `... check` prueft sie nach — und beides laeuft gegen BEIDE GAME.EXE dieses Rechners, deren Adressen sich unterscheiden, deren Ergebnis aber gleich sein muss. Stand: 31 Endstellen, beide Fassungen identisch. ⚠ Zwei Dinge, die der erste Leser vom 08.08. still falsch machte und die am 09.08. berichtigt wurden: (1) er schrieb bei jedem Glied `==`, statt den Sprung auszuwerten — drei Bedingungen waren dadurch VERKEHRT HERUM (Mission 3 `objects(4,0) != 0`, Mission 17 `objects(15,0) != 0`, Mission 24 `obj_owner(0) != 2`), und zwei davon sind beim Missionsstart wahr, die Mission war in derselben Sekunde gewonnen, in der sie begann. (2) er hielt den Sprung der Meldung VOR dem Ende faelschlich fuer den Ausstieg und gab darum bei acht Missionen gar nichts zurueck. Welcher Sprung ein Glied ist, entscheidet sein ZIEL: nur was HINTER mission_end landet, ist eine Bedingung. Nicht jede Bedingung will Vernichtung — Mission 18 verlangt `units(0,1) < 3 und units(0,2) < 3` (»Stoppen Sie den feindlichen Vormarsch«, nicht vernichten), Mission 23 genau fuenf Rohstoffminen, Mission 2 genau zwei Objekte.",
- "_klassen": "Einheitenklasse 0 ist die Summe der Klassen 1..4 (@0x4CF9AC), Gebaeudeklasse 0 sind alle Gebaeude (@0x4CFB3C). Die Klassen 1..4 bzw. 1..3 sind Einzelzaehler und noch nicht zugeordnet — Regeln, die sie brauchen, fehlen hier absichtlich.",
- "_offen": "Nicht uebersetzt sind Regeln, die Ereignisflaggen (take_flag/0x539930), Toene, Busbefehle, das Setzen von Einheiten oder Buendniswechsel brauchen — dafuer fehlt der Unterbau. Eine fehlende Regel zeigt sich als Mission, die nicht von selbst endet; eine erfundene wuerde still falsch spielen. ⚠ Mehrere Endregeln pruefen zusaetzlich eigene Wortvariablen des Blocks (Missionen 5, 7, 13, 14). Die Bedingung ist richtig gelesen, aber die Regeln, die jene Variablen HOCHZAEHLEN, sind nicht uebersetzt — die Regel kann also nie feuern. MissionScript.Decides erkennt genau das und laesst in dem Fall die Notregel entscheiden, statt die Mission unloesbar zu machen; --script-check meldet solche Variablen als »ohne Erzeuger«.",
  "_gelesen_ungebaut": {
-  "_note": "Zwei Siegbedingungen sind gelesen, aber nicht eintragbar: das Vokabular dieser Datei kann sie nicht ausdruecken. Sie stehen hier, damit sie nicht noch einmal gesucht werden muessen. Beide sind gegen OBJECTG.TXT geprueft, die Missionsziele des Spiels im Klartext.",
   "14": {
    "_endregel_aus": "0x49D72C",
+   "fehlt": "Die Engine kann eine Einheit nicht ueber eine Missionsvariable ansprechen, und welche Einheit v[2] ist, setzt der unuebersetzte Teil des Blocks.",
    "gelesen": "v[20] == 20, und v[20] wird an genau einer Stelle gesetzt (0x49D65E): v[1] == 52 und die Einheit v[2] steht auf Zelle (0xAF, 0x64) = (175, 100). Zellkoordinaten sind Byte +0x00 und +0x01 des Eintrags im Entity-Array (8000 x 78 @0x6e26c8), belegt durch den spieleigenen Debug-Dump `nr typ faze ukol ... x y`.",
-   "objectg": "#014 »Transportieren Sie Colonel Hullmann zur verbuendeten Basis«",
-   "fehlt": "Die Engine kann eine Einheit nicht ueber eine Missionsvariable ansprechen, und welche Einheit v[2] ist, setzt der unuebersetzte Teil des Blocks."
+   "objectg": "#014 »Transportieren Sie Colonel Hullmann zur verbuendeten Basis«"
   },
   "21": {
    "_endregel_aus": "0x4A02C0",
+   "fehlt": "Die Engine kennt die Bahnverbindungen (SPOJ) noch nicht als Spielobjekt.",
    "gelesen": "Eine Schleife ueber neun feste SPOJ-Verbindungen {4,7,9,12,14,17,15,16,18}: jede muss Zustand (+0xd5) != 3 haben, und beide Endgebaeude — ueber den Knoten (sec33, 120 x 8 @0xa8d508) auf die Gebaeudetabelle @0xc06914, Schrittweite 76 — muessen existieren (typ != 0) und Spieler 0 gehoeren. SPOJ-Satz 214 Byte @0xa89220.",
-   "objectg": "#021 »Besetzen Sie die Minen im Sueden / Reparieren Sie die Bahnverbindung zu unserer Basis«",
-   "fehlt": "Die Engine kennt die Bahnverbindungen (SPOJ) noch nicht als Spielobjekt."
+   "objectg": "#021 »Besetzen Sie die Minen im Sueden / Reparieren Sie die Bahnverbindung zu unserer Basis«"
   },
   "28": {
    "_endregel_aus": "0x4A3786",
+   "fehlt": "wie Mission 14.",
    "gelesen": "unit_alive(v[56], 0xC1) und die Einheit v[56] steht auf Zelle (0x0B, 0xF3) = (11, 243). Dasselbe Muster wie Mission 14.",
-   "objectg": "#028 »Finden Sie das Flugzeugwrack ... Bringen Sie die Wissenschaftler mit den Informationen zurueck«",
-   "fehlt": "wie Mission 14."
-  }
+   "objectg": "#028 »Finden Sie das Flugzeugwrack ... Bringen Sie die Wissenschaftler mit den Informationen zurueck«"
+  },
+  "_note": "Zwei Siegbedingungen sind gelesen, aber nicht eintragbar: das Vokabular dieser Datei kann sie nicht ausdruecken. Sie stehen hier, damit sie nicht noch einmal gesucht werden muessen. Beide sind gegen OBJECTG.TXT geprueft, die Missionsziele des Spiels im Klartext."
  },
+ "_klassen": "Einheitenklasse 0 ist die Summe der Klassen 1..4 (@0x4CF9AC), Gebaeudeklasse 0 sind alle Gebaeude (@0x4CFB3C). Die Klassen 1..4 bzw. 1..3 sind Einzelzaehler und noch nicht zugeordnet — Regeln, die sie brauchen, fehlen hier absichtlich.",
+ "_note": "Missionsskripte der Kampagne. Im Original sind das keine Daten, sondern Code: die Missionsnummer aus dem Kartenkopf indiziert eine Sprungtabelle (@0x4A5B0C, 35 Eintraege), und jede Mission bekommt ihren eigenen Block, der jeden Takt laeuft. Die ZWISCHENSCHRITTE sind von Hand uebersetzt, mit `aekernel-tools/mission_logic.py --decode` als Vorlage; die SIEGBEDINGUNGEN sind es nicht, die sind eine Abschrift aus der EXE (siehe _endregeln). Jede Mission nennt die Adresse, aus der sie stammt, damit sich beides gegenpruefen laesst.",
+ "_offen": "Nicht uebersetzt sind Regeln, die Ereignisflaggen (take_flag/0x539930), Toene, Busbefehle, das Setzen von Einheiten oder Buendniswechsel brauchen — dafuer fehlt der Unterbau. Eine fehlende Regel zeigt sich als Mission, die nicht von selbst endet; eine erfundene wuerde still falsch spielen. ⚠ Mehrere Endregeln pruefen zusaetzlich eigene Wortvariablen des Blocks (Missionen 5, 7, 13, 14). Die Bedingung ist richtig gelesen, aber die Regeln, die jene Variablen HOCHZAEHLEN, sind nicht uebersetzt — die Regel kann also nie feuern. MissionScript.Decides erkennt genau das und laesst in dem Fall die Notregel entscheiden, statt die Mission unloesbar zu machen; --script-check meldet solche Variablen als »ohne Erzeuger«.",
+ "_vokabular": "Bedingungen: var(a,op,b) = v[a] op b | time_gt(a) = game_time() > a Minuten | time_after(a,b) = game_time() > v[a]+b | obj_owner(a,op,b) = Besitzer des Gebaeudeplatzes a | units(klasse,spieler,op,c) = g_robot_class_count | buildings(klasse,spieler,op,c) = g_buildings_count. Wirkungen: inc(a) | set(a,b) | text(a) | end(a) mit a=1 gewonnen, a=0 verloren.  Anfangswerte: init = {v: wert} aus dem Setup-Block; v[101+k] ist der Zustand des k-ten Missionsziels (1 offen, 10 erfuellt), v[131+k] seine Textnummer.",
  "missions": {
   "1": {
-   "block": "",
    "_endregel_aus": "0x4989C7",
-   "rules": [
-    {
-     "once": 300,
-     "when": [
-      {
-       "kind": "units",
-       "a": 1,
-       "b": 1,
-       "op": "==",
-       "c": 0
-      }
-     ],
-     "then": [
-      {
-       "kind": "end",
-       "a": 1
-      }
-     ]
-    }
-   ]
-  },
-  "2": {
    "block": "",
-   "_endregel_aus": "0x4993E8",
+   "init": {
+    "101": 1,
+    "131": 110
+   },
    "rules": [
     {
-     "once": 300,
-     "when": [
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 0,
-       "op": "==",
-       "c": 2
-      }
-     ],
+     "_at": "0x4985A2",
+     "_tut_ausserdem": "close_message_windows show_text2 0x4D0990 0x4D0990 0x4D0990 0x4D0990",
      "then": [
       {
-       "kind": "end",
-       "a": 1
-      }
-     ]
-    }
-   ]
-  },
-  "3": {
-   "block": "",
-   "_endregel_aus": "0x499C5C",
-   "rules": [
-    {
-     "once": 300,
-     "when": [
-      {
-       "a": 4,
-       "b": 0,
-       "c": 0,
-       "kind": "objects",
-       "op": "!="
-      }
-     ],
-     "then": [
-      {
-       "kind": "end",
-       "a": 1
-      }
-     ]
-    }
-   ]
-  },
-  "4": {
-   "block": "0x499C7F",
-   "_uebersetzt": "Die Siegbedingung steht bei 0x499F8C als Kette: obj_owner(0..4) alle == 12 (zerstoert), dann mission_end. Wortwoertlich uebernommen — das ist die ganze Bedingung, nichts ergaenzt.",
-   "rules": [
-    {
-     "once": 300,
-     "when": [
-      {
-       "kind": "obj_owner",
-       "a": 0,
-       "op": "==",
-       "b": 12
-      },
-      {
-       "kind": "obj_owner",
-       "a": 1,
-       "op": "==",
-       "b": 12
-      },
-      {
-       "kind": "obj_owner",
        "a": 2,
-       "op": "==",
-       "b": 12
-      },
-      {
-       "kind": "obj_owner",
-       "a": 3,
-       "op": "==",
-       "b": 12
-      },
-      {
-       "kind": "obj_owner",
-       "a": 4,
-       "op": "==",
-       "b": 12
+       "kind": "inc"
       }
      ],
-     "then": [
-      {
-       "kind": "end",
-       "a": 1
-      }
-     ]
-    }
-   ],
-   "_endregel_aus": "0x499FD2"
-  },
-  "5": {
-   "block": "",
-   "_endregel_aus": "0X49A534",
-   "rules": [
-    {
-     "once": 300,
      "when": [
       {
-       "a": 33,
-       "b": 0,
+       "a": 2,
+       "b": 30,
        "kind": "var",
-       "op": "!="
+       "op": "<"
       },
       {
-       "a": 34,
-       "b": 0,
-       "kind": "var",
-       "op": "!="
-      }
-     ],
-     "then": [
-      {
-       "kind": "end",
-       "a": 1
-      }
-     ]
-    }
-   ]
-  },
-  "6": {
-   "block": "",
-   "_endregel_aus": "0x49AB0E",
-   "rules": [
-    {
-     "once": 300,
-     "when": [
-      {
-       "kind": "obj_owner",
-       "a": 0,
-       "op": "==",
-       "b": 12
-      }
-     ],
-     "then": [
-      {
-       "kind": "end",
-       "a": 1
-      }
-     ]
-    }
-   ]
-  },
-  "7": {
-   "block": "",
-   "_endregel_aus": "0x49B16B",
-   "rules": [
-    {
-     "once": 300,
-     "when": [
-      {
-       "a": 102,
-       "b": 2,
+       "a": 2,
+       "b": 29,
        "kind": "var",
        "op": "=="
-      },
-      {
-       "a": 12,
-       "b": 2,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 3,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 5,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      }
-     ],
-     "then": [
-      {
-       "kind": "end",
-       "a": 1
-      }
-     ]
-    }
-   ]
-  },
-  "8": {
-   "block": "0x49B275",
-   "_uebersetzt": "Der Block ist eine Zustandsmaschine ueber v[0], v[1], v[2] und drei Ereignisfaenger. Uebernommen sind die Zeit- und Zaehlregeln; die drei Ereignisfaenger (Ereignis 7, 29, 8) fehlen, weil das Ereignisbyte 0x539930 in der Engine noch nichts setzt.",
-   "rules": [
-    {
-     "once": 0,
-     "when": [],
-     "then": [
-      {
-       "kind": "set",
-       "a": 0,
-       "b": 0
-      },
-      {
-       "kind": "text",
-       "a": 180
       }
      ]
     },
     {
-     "once": 1,
-     "when": [
-      {
-       "kind": "var",
-       "a": 2,
-       "op": ">",
-       "b": 14
-      }
-     ],
+     "_at": "0x4988A8",
+     "_tut_ausserdem": "bus_cmd",
      "then": [
       {
-       "kind": "set",
+       "a": 15,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 15,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 1,
+       "c": 2,
+       "kind": "units",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4988D7",
+     "_tut_ausserdem": "bus_cmd",
+     "then": [
+      {
+       "a": 15,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 15,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 1,
+       "c": 1,
+       "kind": "units",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x498905",
+     "_tut_ausserdem": "bus_cmd",
+     "then": [
+      {
+       "a": 15,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 15,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 1,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x498922",
+     "_tut_ausserdem": "sound",
+     "then": [
+      {
        "a": 101,
-       "b": 10
+       "b": 10,
+       "kind": "set"
       },
       {
-       "kind": "text",
-       "a": 100
-      }
-     ]
-    },
-    {
-     "once": 3,
-     "when": [
-      {
-       "kind": "time_after",
-       "a": 0,
-       "b": 29
+       "a": 15,
+       "kind": "inc"
       }
      ],
-     "then": [
+     "when": [
       {
-       "kind": "text",
-       "a": 101
+       "a": 15,
+       "b": 4,
+       "kind": "var",
+       "op": "=="
       }
      ]
     },
     {
      "once": 300,
-     "when": [
-      {
-       "kind": "units",
-       "a": 0,
-       "b": 2,
-       "op": "==",
-       "c": 0
-      }
-     ],
      "then": [
       {
-       "kind": "end",
-       "a": 1
+       "a": 1,
+       "kind": "end"
       }
-     ]
-    }
-   ],
-   "_endregel_aus": "0x49B4AF"
-  },
-  "9": {
-   "block": "",
-   "_endregel_aus": "0X49BB42",
-   "rules": [
-    {
-     "once": 300,
+     ],
      "when": [
       {
        "a": 1,
        "b": 1,
        "c": 0,
-       "kind": "objects",
+       "kind": "units",
        "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 2,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      }
-     ],
-     "then": [
-      {
-       "kind": "end",
-       "a": 1
       }
      ]
     }
    ]
   },
   "10": {
-   "block": "0x49BB65",
+   "_endregel_aus": "0x49BD39",
    "_uebersetzt": "Der Block merkt sich mit v[0] einen Zeitpunkt und zuendet 40 Minuten spaeter die naechste Stufe; die Abschlussbedingung ist g_robot_class_count(3, 1) == 0. ⚠ Klasse 3 ist ein Einzelzaehler, dessen Zuordnung noch fehlt — hier steht darum Klasse 0 (alle Einheiten des Spielers 1), was STRENGER ist als das Original und ausdruecklich UNSERE Ersetzung.",
+   "block": "0x49BB65",
+   "init": {
+    "101": 1,
+    "103": 1,
+    "131": 200,
+    "133": 202
+   },
    "rules": [
     {
-     "once": 2,
-     "when": [
-      {
-       "kind": "time_after",
-       "a": 0,
-       "b": 40
-      }
-     ],
+     "_at": "0x49BC4E",
+     "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
       {
-       "kind": "text",
-       "a": 380
+       "a": 5,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 5,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 17,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
       }
      ]
     },
     {
      "once": 300,
-     "when": [
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 1,
-       "op": "==",
-       "c": 0
-      }
-     ],
      "then": [
       {
-       "kind": "end",
-       "a": 1
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
       }
      ]
     }
-   ],
-   "_endregel_aus": "0x49BD39"
+   ]
   },
   "11": {
-   "block": "",
    "_endregel_aus": "0x49C796",
+   "block": "",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "131": 211,
+    "132": 214,
+    "99": 0
+   },
    "rules": [
     {
-     "once": 300,
+     "_at": "0x49BE16",
+     "_tut_ausserdem": "close_message_windows show_text",
+     "once": 0,
+     "then": [],
      "when": [
       {
-       "kind": "buildings",
-       "a": 0,
-       "b": 1,
-       "op": "==",
-       "c": 0
+       "a": 99,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
       }
-     ],
+     ]
+    },
+    {
+     "_at": "0x49C62C",
+     "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
       {
-       "kind": "end",
-       "a": 1
+       "a": 102,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "a": 16,
+       "kind": "inc"
+      },
+      {
+       "a": 15,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 16,
+       "b": 10,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 15,
+       "b": 10,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49C72F",
+     "_tut_ausserdem": "sound",
+     "then": [
+      {
+       "a": 102,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "a": 15,
+       "kind": "inc"
+      },
+      {
+       "a": 16,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 16,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 15,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 1,
+       "c": 0,
+       "kind": "buildings",
+       "op": "=="
       }
      ]
     }
    ]
   },
   "12": {
-   "block": "0x49C7E7",
+   "_endregel_aus": "0x49CA42",
    "_uebersetzt": "Aus dem Block uebernommen: die Zeitregel und die Abfrage obj_owner(12). Der Buendniswechsel (0x87b190 / 0x87b1e0) fehlt, weil die Engine keine Laufzeit-Diplomatie hat.",
+   "block": "0x49C7E7",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "131": 221,
+    "132": 222
+   },
    "rules": [
     {
-     "once": 0,
-     "when": [
-      {
-       "kind": "obj_owner",
-       "a": 12,
-       "op": "==",
-       "b": 4
-      }
-     ],
-     "then": [
-      {
-       "kind": "text",
-       "a": 220
-      }
-     ]
+     "_at": "0x49C7FB",
+     "once": 231,
+     "then": [],
+     "when": []
     },
     {
-     "once": 1,
-     "when": [
-      {
-       "kind": "time_gt",
-       "a": 1
-      }
-     ],
+     "_at": "0x49C9C4",
+     "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
       {
-       "kind": "text",
-       "a": 221
+       "a": 2,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 2,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 230,
+       "b": 1,
+       "kind": "var",
+       "op": ">"
       }
      ]
     },
     {
      "once": 300,
-     "when": [
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 1,
-       "op": "==",
-       "c": 0
-      },
-      {
-       "kind": "units",
-       "a": 0,
-       "b": 1,
-       "op": "==",
-       "c": 0
-      },
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 4,
-       "op": "==",
-       "c": 0
-      },
-      {
-       "kind": "units",
-       "a": 0,
-       "b": 4,
-       "op": "==",
-       "c": 0
-      }
-     ],
      "then": [
       {
-       "kind": "end",
-       "a": 1
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 1,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 4,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 4,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
       }
      ]
     }
-   ],
-   "_endregel_aus": "0x49CA42"
+   ]
   },
   "13": {
-   "block": "",
    "_endregel_aus": "0x49D186",
+   "block": "",
+   "init": {
+    "101": 1,
+    "103": 1,
+    "104": 1,
+    "106": 1,
+    "131": 231,
+    "133": 233,
+    "134": 234,
+    "136": 236
+   },
    "rules": [
     {
+     "_at": "0x49CACA",
+     "_tut_ausserdem": "show_text set_stat",
+     "once": 0,
+     "then": [],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49CDCC",
+     "_tut_ausserdem": "remove_unit add_target add_target add_target add_target add_target add_vyroba add_vyroba",
+     "then": [
+      {
+       "a": 8,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 8,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 4,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49D0BE",
+     "once": 22,
+     "then": [],
+     "when": [
+      {
+       "a": 7,
+       "b": 0,
+       "c": 0,
+       "kind": "objects",
+       "op": "!="
+      }
+     ]
+    },
+    {
      "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
      "when": [
       {
        "a": 22,
@@ -532,22 +544,99 @@
        "kind": "units",
        "op": "=="
       }
-     ],
-     "then": [
-      {
-       "kind": "end",
-       "a": 1
-      }
      ]
     }
    ]
   },
   "14": {
-   "block": "",
    "_endregel_aus": "0X49D72C",
+   "block": "",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "131": 241,
+    "132": 245
+   },
    "rules": [
     {
+     "_at": "0x49D1C4",
+     "_tut_ausserdem": "0x4D0810 0x4D0810 0x4D0810",
+     "once": 0,
+     "then": [],
+     "when": []
+    },
+    {
+     "_at": "0x49D205",
+     "then": [
+      {
+       "a": 1,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 50,
+       "kind": "var",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49D216",
+     "_tut_ausserdem": "space_in",
+     "then": [
+      {
+       "a": 1,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 50,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49D39D",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 16,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
      "when": [
       {
        "a": 20,
@@ -555,22 +644,123 @@
        "kind": "var",
        "op": "=="
       }
-     ],
-     "then": [
-      {
-       "kind": "end",
-       "a": 1
-      }
      ]
     }
    ]
   },
   "15": {
-   "block": "",
    "_endregel_aus": "0X49DA30",
+   "block": "",
+   "init": {
+    "102": 1,
+    "103": 1,
+    "132": 251,
+    "133": 252
+   },
    "rules": [
     {
+     "_at": "0x49D7CC",
+     "_tut_ausserdem": "show_text add_target add_target add_target add_target add_target add_target 0x4D1050 0x4D1050",
+     "once": 30,
+     "then": [
+      {
+       "a": 103,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 99,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49D94E",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 7,
+       "b": 0,
+       "c": 0,
+       "kind": "objects",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49DA18",
+     "_tut_ausserdem": "bus_cmd",
+     "then": [
+      {
+       "a": 103,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 4,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 30,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 103,
+       "b": 10,
+       "kind": "var",
+       "op": "!="
+      }
+     ]
+    },
+    {
      "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
      "when": [
       {
        "a": 1,
@@ -593,45 +783,184 @@
        "kind": "objects",
        "op": "=="
       }
-     ],
-     "then": [
-      {
-       "kind": "end",
-       "a": 1
-      }
      ]
     }
    ]
   },
   "16": {
-   "block": "",
    "_endregel_aus": "0x49DFB9",
+   "block": "",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "103": 1,
+    "131": 260,
+    "132": 261,
+    "133": 262
+   },
    "rules": [
     {
-     "once": 300,
-     "when": [
-      {
-       "kind": "obj_owner",
-       "a": 22,
-       "op": "==",
-       "b": 12
-      }
-     ],
+     "_at": "0x49DE29",
+     "_tut_ausserdem": "sound",
      "then": [
       {
-       "kind": "end",
-       "a": 1
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "a": 10,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 18,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49DE67",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 18,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "!="
+      },
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49DF77",
+     "_tut_ausserdem": "show_text sound",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 29,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 22,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
       }
      ]
     }
    ]
   },
   "17": {
-   "block": "",
    "_endregel_aus": "0x49E5F5",
+   "block": "",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "131": 274,
+    "132": 275
+   },
    "rules": [
     {
+     "_at": "0x49E4F3",
+     "_tut_ausserdem": "show_text",
+     "then": [
+      {
+       "a": 12,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 12,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 2,
+       "b": 6,
+       "c": 0,
+       "kind": "units",
+       "op": "!="
+      }
+     ]
+    },
+    {
      "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
      "when": [
       {
        "a": 1,
@@ -661,22 +990,93 @@
        "kind": "objects",
        "op": "!="
       }
-     ],
-     "then": [
-      {
-       "kind": "end",
-       "a": 1
-      }
      ]
     }
    ]
   },
   "18": {
-   "block": "",
    "_endregel_aus": "0X49EA86",
+   "block": "",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "131": 280,
+    "132": 281
+   },
    "rules": [
     {
+     "_at": "0x49E633",
+     "_tut_ausserdem": "0x4D0810 0x4D0810 0x4D0810",
+     "once": 0,
+     "then": [],
+     "when": []
+    },
+    {
+     "_at": "0x49E6BD",
+     "_tut_ausserdem": "sound",
+     "then": [
+      {
+       "a": 101,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "a": 10,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 8,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49E9A2",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 24,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
      "when": [
       {
        "a": 0,
@@ -691,92 +1091,638 @@
        "c": 3,
        "kind": "units",
        "op": "<"
-      }
-     ],
-     "then": [
-      {
-       "kind": "end",
-       "a": 1
       }
      ]
     }
    ]
   },
   "19": {
-   "block": "",
    "_endregel_aus": "0x49EFA0",
+   "block": "",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "103": 1,
+    "104": 1,
+    "131": 290,
+    "132": 291,
+    "133": 292,
+    "134": 293
+   },
    "rules": [
     {
-     "once": 300,
-     "when": [
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 1,
-       "op": "==",
-       "c": 0
-      },
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 2,
-       "op": "==",
-       "c": 0
-      },
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 3,
-       "op": "==",
-       "c": 0
-      }
-     ],
+     "_at": "0x49EBF2",
+     "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
       {
-       "kind": "end",
-       "a": 1
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 34,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 3,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      }
+     ]
+    }
+   ]
+  },
+  "2": {
+   "_endregel_aus": "0x4993E8",
+   "block": "",
+   "init": {
+    "101": 1,
+    "131": 120
+   },
+   "rules": [
+    {
+     "_at": "0x4989FB",
+     "then": [
+      {
+       "a": 88,
+       "b": 0,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 88,
+       "b": 19,
+       "kind": "var",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x498AE9",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "then": [
+      {
+       "a": 3,
+       "kind": "inc"
+      },
+      {
+       "a": 5,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 3,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 4,
+       "b": 0,
+       "c": 0,
+       "kind": "units",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x498BF2",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "then": [
+      {
+       "a": 22,
+       "kind": "inc"
+      },
+      {
+       "a": 20,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 0,
+       "kind": "objects",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49901F",
+     "then": [
+      {
+       "a": 70,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 70,
+       "b": 100,
+       "kind": "var",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49912B",
+     "_tut_ausserdem": "show_text",
+     "then": [
+      {
+       "a": 70,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 70,
+       "b": 100,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499165",
+     "then": [
+      {
+       "a": 40,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 40,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 40,
+       "b": 50,
+       "kind": "var",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x499176",
+     "_tut_ausserdem": "space_in",
+     "then": [
+      {
+       "a": 40,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 40,
+       "b": 50,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4991FF",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 71,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 4,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 255,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499263",
+     "_tut_ausserdem": "0x4D0EC0 0x4D0EC0 0x4D0EC0 0x4D0EC0 0x4D0EC0 0x4D0EC0 0x4D0EC0 sound",
+     "once": 71,
+     "then": [],
+     "when": [
+      {
+       "a": 0,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 4,
+       "c": 0,
+       "kind": "units",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 0,
+       "c": 2,
+       "kind": "objects",
+       "op": "=="
       }
      ]
     }
    ]
   },
   "20": {
-   "block": "",
    "_endregel_aus": "0x49F591",
+   "block": "",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "103": 1,
+    "105": 1,
+    "131": 301,
+    "132": 302,
+    "133": 303,
+    "135": 305
+   },
    "rules": [
     {
-     "once": 300,
+     "_at": "0x49EFEF",
+     "_tut_ausserdem": "show_text",
+     "once": 0,
+     "then": [],
      "when": [
       {
+       "a": 15,
+       "b": 0,
+       "c": 0,
        "kind": "objects",
-       "a": 1,
-       "b": 1,
-       "op": "==",
-       "c": 0
-      },
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 2,
-       "op": "==",
-       "c": 0
+       "op": "!="
       }
-     ],
+     ]
+    },
+    {
+     "_at": "0x49F185",
+     "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
       {
-       "kind": "end",
-       "a": 1
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 23,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49F535",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 50,
+       "kind": "inc"
+      },
+      {
+       "a": 105,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 50,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 6,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
       }
      ]
     }
    ]
   },
   "22": {
-   "block": "",
    "_endregel_aus": "0X4A0C4B",
+   "block": "",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "103": 1,
+    "104": 1,
+    "105": 1,
+    "106": 1,
+    "131": 320,
+    "132": 321,
+    "133": 322,
+    "134": 323,
+    "135": 324,
+    "136": 326,
+    "137": 327,
+    "138": 328
+   },
    "rules": [
     {
+     "_at": "0x4A0380",
+     "then": [
+      {
+       "a": 88,
+       "b": 0,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 88,
+       "b": 5,
+       "kind": "var",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A03DF",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 15,
+       "b": 0,
+       "c": 0,
+       "kind": "objects",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A04C3",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 5,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A05A7",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 30,
+       "kind": "inc"
+      },
+      {
+       "a": 103,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 20,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A0667",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 40,
+       "kind": "inc"
+      },
+      {
+       "a": 104,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 40,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 6,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A072B",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 50,
+       "kind": "inc"
+      },
+      {
+       "a": 105,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 50,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 1,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
      "when": [
       {
        "a": 1,
@@ -785,46 +1731,197 @@
        "kind": "objects",
        "op": "=="
       }
-     ],
-     "then": [
-      {
-       "kind": "end",
-       "a": 1
-      }
      ]
     }
    ]
   },
   "23": {
-   "block": "",
    "_endregel_aus": "0x4A0DBA",
+   "block": "",
+   "init": {
+    "101": 1,
+    "131": 330
+   },
    "rules": [
     {
-     "once": 300,
-     "when": [
-      {
-       "kind": "buildings",
-       "a": 2,
-       "b": 0,
-       "op": "==",
-       "c": 5
-      }
-     ],
+     "_at": "0x4A0C89",
+     "_tut_ausserdem": "space_in space_in",
+     "once": 0,
+     "then": [],
+     "when": []
+    },
+    {
+     "_at": "0x4A0D47",
+     "_tut_ausserdem": "bus_cmd",
      "then": [
       {
-       "kind": "end",
-       "a": 1
+       "a": 11,
+       "kind": "inc"
+      },
+      {
+       "a": 100,
+       "b": 0,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 100,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 2,
+       "b": 0,
+       "c": 5,
+       "kind": "buildings",
+       "op": "=="
       }
      ]
     }
    ]
   },
   "24": {
-   "block": "",
    "_endregel_aus": "0x4A1A7F",
+   "block": "",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "103": 1,
+    "104": 1,
+    "131": 340,
+    "132": 341,
+    "133": 342,
+    "134": 343,
+    "135": 344,
+    "136": 346,
+    "303": 1
+   },
    "rules": [
     {
+     "_at": "0x4A0E46",
+     "_tut_ausserdem": "bus_cmd",
+     "then": [
+      {
+       "a": 11,
+       "kind": "inc"
+      },
+      {
+       "a": 93,
+       "b": 0,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 93,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A0F10",
+     "_tut_ausserdem": "0x4D1050 add_target",
+     "then": [
+      {
+       "a": 30,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 4,
+       "c": 0,
+       "kind": "units",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A1383",
+     "_tut_ausserdem": "0x4D1050",
+     "once": 281,
+     "then": [],
+     "when": [
+      {
+       "a": 1,
+       "b": 4,
+       "c": 0,
+       "kind": "units",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A1A46",
+     "_tut_ausserdem": "show_text sound",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 21,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
      "when": [
       {
        "a": 0,
@@ -832,370 +1929,2477 @@
        "kind": "obj_owner",
        "op": "!="
       }
-     ],
-     "then": [
-      {
-       "kind": "end",
-       "a": 1
-      }
      ]
     }
    ]
   },
   "25": {
-   "block": "",
    "_endregel_aus": "0x4A2123",
+   "block": "",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "103": 1,
+    "104": 1,
+    "105": 1,
+    "106": 1,
+    "131": 350,
+    "132": 352,
+    "133": 353,
+    "134": 353,
+    "135": 354,
+    "136": 355
+   },
    "rules": [
     {
-     "once": 300,
-     "when": [
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 1,
-       "op": "==",
-       "c": 0
-      },
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 2,
-       "op": "==",
-       "c": 0
-      },
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 4,
-       "op": "==",
-       "c": 0
-      }
-     ],
+     "_at": "0x4A1AC4",
      "then": [
       {
-       "kind": "end",
-       "a": 1
+       "a": 88,
+       "b": 0,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 88,
+       "b": 19,
+       "kind": "var",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A1AE1",
+     "_tut_ausserdem": "show_text space_in",
+     "once": 220,
+     "then": [],
+     "when": [
+      {
+       "a": 301,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A1C04",
+     "_tut_ausserdem": "0x4D1050 sound",
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "a": 70,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 5,
+       "b": 1,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A1E02",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 30,
+       "kind": "inc"
+      },
+      {
+       "a": 103,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 10,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 0,
+       "c": 1,
+       "kind": "units",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A1EB9",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 40,
+       "kind": "inc"
+      },
+      {
+       "a": 104,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 40,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 19,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 20,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 4,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
       }
      ]
     }
    ]
   },
   "26": {
-   "block": "",
    "_endregel_aus": "0x4A2483",
+   "block": "",
+   "init": {
+    "101": 1,
+    "131": 360
+   },
    "rules": [
     {
-     "once": 300,
-     "when": [
-      {
-       "kind": "obj_owner",
-       "a": 13,
-       "op": "==",
-       "b": 3
-      }
-     ],
+     "_at": "0x4A221D",
+     "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
       {
-       "kind": "end",
-       "a": 1
+       "a": 10,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 8,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 10,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 11,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A22BA",
+     "once": 2,
+     "then": [],
+     "when": [
+      {
+       "a": 0,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A2330",
+     "then": [
+      {
+       "a": 0,
+       "kind": "inc"
+      },
+      {
+       "a": 1,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A2348",
+     "then": [
+      {
+       "a": 1,
+       "b": 5,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 5,
+       "kind": "var",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 13,
+       "b": 3,
+       "kind": "obj_owner",
+       "op": "=="
       }
      ]
     }
    ]
   },
   "27": {
-   "block": "",
    "_endregel_aus": "0x4A296C",
+   "block": "",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "103": 1,
+    "131": 370,
+    "132": 371,
+    "133": 372
+   },
    "rules": [
     {
-     "once": 300,
-     "when": [
-      {
-       "kind": "units",
-       "a": 1,
-       "b": 1,
-       "op": "==",
-       "c": 0
-      },
-      {
-       "kind": "units",
-       "a": 1,
-       "b": 2,
-       "op": "==",
-       "c": 0
-      },
-      {
-       "kind": "units",
-       "a": 0,
-       "b": 4,
-       "op": "==",
-       "c": 0
-      }
-     ],
+     "_at": "0x4A2524",
      "then": [
       {
-       "kind": "end",
-       "a": 1
+       "a": 80,
+       "b": 1,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 80,
+       "b": 8,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A2545",
+     "_tut_ausserdem": "0x4D1050",
+     "once": 0,
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 38,
+       "b": 1,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A257E",
+     "_tut_ausserdem": "0x4D1050",
+     "once": 1,
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 36,
+       "b": 2,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A25B7",
+     "_tut_ausserdem": "0x4D1050",
+     "once": 2,
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 31,
+       "b": 4,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A28AD",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 30,
+       "kind": "inc"
+      },
+      {
+       "a": 103,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 11,
+       "b": 2,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 4,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
       }
      ]
     }
    ]
   },
   "29": {
-   "block": "",
    "_endregel_aus": "0x4A41A8",
+   "block": "",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "103": 1,
+    "104": 1,
+    "105": 1,
+    "106": 1,
+    "131": 390,
+    "132": 391,
+    "133": 392,
+    "134": 393,
+    "135": 394,
+    "136": 395
+   },
    "rules": [
     {
-     "once": 300,
-     "when": [
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 1,
-       "op": "==",
-       "c": 0
-      },
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 2,
-       "op": "==",
-       "c": 0
-      },
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 5,
-       "op": "==",
-       "c": 0
-      }
-     ],
+     "_at": "0x4A385E",
+     "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
       {
-       "kind": "end",
-       "a": 1
+       "a": 10,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 2,
+       "kind": "buildings",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A3B63",
+     "_tut_ausserdem": "remove_unit bus_cmd sound",
+     "then": [
+      {
+       "a": 103,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 103,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A3F68",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 50,
+       "kind": "inc"
+      },
+      {
+       "a": 105,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 50,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 21,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 22,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A412E",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 60,
+       "kind": "inc"
+      },
+      {
+       "a": 106,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 60,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 32,
+       "b": 5,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 5,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      }
+     ]
+    }
+   ]
+  },
+  "3": {
+   "_endregel_aus": "0x499C5C",
+   "block": "",
+   "init": {
+    "101": 1,
+    "131": 130
+   },
+   "rules": [
+    {
+     "_at": "0x49941C",
+     "then": [
+      {
+       "a": 88,
+       "b": 0,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 88,
+       "b": 19,
+       "kind": "var",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4995AE",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "then": [
+      {
+       "a": 0,
+       "kind": "inc"
+      },
+      {
+       "a": 2,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 0,
+       "kind": "objects",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x499763",
+     "then": [
+      {
+       "a": 40,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 40,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 40,
+       "b": 50,
+       "kind": "var",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x499901",
+     "then": [
+      {
+       "a": 17,
+       "b": 0,
+       "kind": "set"
+      },
+      {
+       "a": 18,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 17,
+       "b": 100,
+       "kind": "var",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49991B",
+     "then": [
+      {
+       "a": 17,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499BD0",
+     "_tut_ausserdem": "0x4D0EC0 sound",
+     "then": [
+      {
+       "a": 16,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 1,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 18,
+       "b": 200,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 4,
+       "b": 0,
+       "c": 0,
+       "kind": "objects",
+       "op": "!="
       }
      ]
     }
    ]
   },
   "30": {
-   "block": "",
    "_endregel_aus": "0x4A44F9",
+   "block": "",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "103": 1,
+    "131": 400,
+    "132": 401,
+    "133": 402
+   },
    "rules": [
     {
-     "once": 300,
-     "when": [
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 1,
-       "op": "==",
-       "c": 0
-      },
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 2,
-       "op": "==",
-       "c": 0
-      },
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 5,
-       "op": "==",
-       "c": 0
-      }
-     ],
+     "_at": "0x4A435C",
+     "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
       {
-       "kind": "end",
-       "a": 1
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 5,
+       "b": 2,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A444D",
+     "_tut_ausserdem": "sound",
+     "then": [
+      {
+       "a": 30,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 37,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A447F",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 30,
+       "kind": "inc"
+      },
+      {
+       "a": 103,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 4,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 20,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 5,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
       }
      ]
     }
    ]
   },
   "31": {
-   "block": "",
    "_endregel_aus": "0x4A4CD2",
+   "block": "",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "103": 1,
+    "104": 1,
+    "105": 1,
+    "131": 411,
+    "132": 412,
+    "133": 413,
+    "134": 414,
+    "135": 415
+   },
    "rules": [
     {
-     "once": 300,
-     "when": [
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 4,
-       "op": "==",
-       "c": 0
-      },
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 5,
-       "op": "==",
-       "c": 0
-      },
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 6,
-       "op": "==",
-       "c": 0
-      }
-     ],
+     "_at": "0x4A4906",
+     "_tut_ausserdem": "bus_cmd",
      "then": [
       {
-       "kind": "end",
-       "a": 1
+       "a": 32,
+       "kind": "inc"
+      },
+      {
+       "a": 93,
+       "b": 0,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 93,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A4A2E",
+     "_tut_ausserdem": "show_text bus_cmd obj_owner",
+     "then": [
+      {
+       "a": 40,
+       "kind": "inc"
+      },
+      {
+       "a": 104,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 40,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 1,
+       "kind": "objects",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A4A71",
+     "then": [
+      {
+       "a": 42,
+       "b": 6,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A4A88",
+     "then": [
+      {
+       "a": 42,
+       "b": 4,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 14,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A4A9F",
+     "then": [
+      {
+       "a": 42,
+       "b": 5,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 5,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A4B8C",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 50,
+       "kind": "inc"
+      },
+      {
+       "a": 105,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 50,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 1,
+       "kind": "objects",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A4C65",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 4,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 6,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 4,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 5,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 6,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
       }
      ]
     }
    ]
   },
   "32": {
-   "block": "",
    "_endregel_aus": "0x4A510D",
+   "block": "",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "103": 1,
+    "104": 1,
+    "105": 1,
+    "131": 420,
+    "132": 421,
+    "133": 422,
+    "134": 423,
+    "135": 424
+   },
    "rules": [
     {
-     "once": 300,
-     "when": [
-      {
-       "kind": "obj_owner",
-       "a": 112,
-       "op": "==",
-       "b": 12
-      },
-      {
-       "kind": "obj_owner",
-       "a": 113,
-       "op": "==",
-       "b": 12
-      },
-      {
-       "kind": "obj_owner",
-       "a": 114,
-       "op": "==",
-       "b": 12
-      },
-      {
-       "kind": "obj_owner",
-       "a": 115,
-       "op": "==",
-       "b": 12
-      },
-      {
-       "kind": "obj_owner",
-       "a": 116,
-       "op": "==",
-       "b": 12
-      },
-      {
-       "kind": "obj_owner",
-       "a": 117,
-       "op": "==",
-       "b": 12
-      }
-     ],
+     "_at": "0x4A4FD5",
+     "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
       {
-       "kind": "end",
-       "a": 1
+       "a": 30,
+       "kind": "inc"
+      },
+      {
+       "a": 103,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 4,
+       "c": 0,
+       "kind": "buildings",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A502A",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 40,
+       "kind": "inc"
+      },
+      {
+       "a": 104,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 40,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 5,
+       "c": 0,
+       "kind": "buildings",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A507F",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 50,
+       "kind": "inc"
+      },
+      {
+       "a": 105,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 50,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 2,
+       "c": 0,
+       "kind": "buildings",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 112,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 113,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 114,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 115,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 116,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 117,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
       }
      ]
     }
    ]
   },
   "33": {
-   "block": "",
    "_endregel_aus": "0x4A5A65",
+   "block": "",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "103": 1,
+    "104": 1,
+    "131": 430,
+    "132": 431,
+    "133": 432,
+    "134": 433
+   },
    "rules": [
     {
-     "once": 300,
-     "when": [
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 1,
-       "op": "==",
-       "c": 0
-      },
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 2,
-       "op": "==",
-       "c": 0
-      },
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 4,
-       "op": "==",
-       "c": 0
-      },
-      {
-       "kind": "objects",
-       "a": 1,
-       "b": 6,
-       "op": "==",
-       "c": 0
-      },
-      {
-       "kind": "obj_owner",
-       "a": 91,
-       "op": "==",
-       "b": 12
-      },
-      {
-       "kind": "obj_owner",
-       "a": 92,
-       "op": "==",
-       "b": 12
-      },
-      {
-       "kind": "obj_owner",
-       "a": 93,
-       "op": "==",
-       "b": 12
-      },
-      {
-       "kind": "obj_owner",
-       "a": 94,
-       "op": "==",
-       "b": 12
-      },
-      {
-       "kind": "obj_owner",
-       "a": 95,
-       "op": "==",
-       "b": 12
-      },
-      {
-       "kind": "obj_owner",
-       "a": 96,
-       "op": "==",
-       "b": 12
-      },
-      {
-       "kind": "obj_owner",
-       "a": 97,
-       "op": "==",
-       "b": 12
-      },
-      {
-       "kind": "obj_owner",
-       "a": 98,
-       "op": "==",
-       "b": 12
-      }
-     ],
+     "_at": "0x4A5152",
      "then": [
       {
-       "kind": "end",
-       "a": 1
+       "a": 88,
+       "b": 1,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 88,
+       "b": 19,
+       "kind": "var",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A5300",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 4,
+       "kind": "objects",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A53F2",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 30,
+       "kind": "inc"
+      },
+      {
+       "a": 103,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 17,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 18,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A552C",
+     "_tut_ausserdem": "bus_cmd",
+     "once": 47,
+     "then": [
+      {
+       "a": 46,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 40,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 64,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A55AB",
+     "_tut_ausserdem": "show_text sound",
+     "then": [
+      {
+       "a": 40,
+       "kind": "inc"
+      },
+      {
+       "a": 104,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 40,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 46,
+       "b": 8,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A55EE",
+     "once": 61,
+     "then": [],
+     "when": [
+      {
+       "a": 1,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A5649",
+     "once": 62,
+     "then": [],
+     "when": [
+      {
+       "a": 2,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A56A4",
+     "once": 63,
+     "then": [],
+     "when": [
+      {
+       "a": 3,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A56FF",
+     "once": 64,
+     "then": [],
+     "when": [
+      {
+       "a": 13,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A575A",
+     "once": 65,
+     "then": [],
+     "when": [
+      {
+       "a": 14,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A57B5",
+     "then": [
+      {
+       "a": 65,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 66,
+       "b": 0,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 17,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 4,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 6,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 91,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 92,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 93,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 94,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 95,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 96,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 97,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 98,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    }
+   ]
+  },
+  "4": {
+   "_endregel_aus": "0x499FD2",
+   "_uebersetzt": "Die Siegbedingung steht bei 0x499F8C als Kette: obj_owner(0..4) alle == 12 (zerstoert), dann mission_end. Wortwoertlich uebernommen — das ist die ganze Bedingung, nichts ergaenzt.",
+   "block": "0x499C7F",
+   "init": {
+    "101": 1,
+    "131": 141
+   },
+   "rules": [
+    {
+     "_at": "0x499C89",
+     "then": [
+      {
+       "a": 0,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 100,
+       "kind": "var",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x499C9A",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "then": [
+      {
+       "a": 0,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 100,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499CC6",
+     "then": [
+      {
+       "a": 1,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 100,
+       "kind": "var",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x499CD8",
+     "_tut_ausserdem": "0x4D0860",
+     "then": [
+      {
+       "a": 1,
+       "b": 0,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 200,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499D24",
+     "then": [
+      {
+       "a": 5,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 5,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 5,
+       "b": 700,
+       "kind": "var",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x499F59",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 6,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 7,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 8,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 2,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 4,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    }
+   ]
+  },
+  "5": {
+   "_endregel_aus": "0X49A534",
+   "block": "",
+   "init": {
+    "101": 150
+   },
+   "rules": [
+    {
+     "_at": "0x49A071",
+     "_tut_ausserdem": "show_text2",
+     "once": 20,
+     "then": [],
+     "when": []
+    },
+    {
+     "_at": "0x49A2F0",
+     "once": 10,
+     "then": [],
+     "when": [
+      {
+       "a": 0,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A30C",
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 300,
+       "kind": "var",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49A32F",
+     "_tut_ausserdem": "show_text",
+     "then": [
+      {
+       "a": 10,
+       "b": 320,
+       "kind": "set"
+      },
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 300,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 1,
+       "c": 0,
+       "kind": "units",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A364",
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 300,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A4F9",
+     "_tut_ausserdem": "0x4D0810 0x4D0810",
+     "once": 40,
+     "then": [],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "units",
+       "op": "<"
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 3,
+       "kind": "units",
+       "op": ">"
+      },
+      {
+       "a": 2,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 33,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 34,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      }
+     ]
+    }
+   ]
+  },
+  "6": {
+   "_endregel_aus": "0x49AB0E",
+   "block": "",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "103": 1,
+    "131": 160,
+    "132": 161,
+    "133": 162
+   },
+   "rules": [
+    {
+     "_at": "0x49A568",
+     "then": [
+      {
+       "a": 88,
+       "b": 0,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 88,
+       "b": 19,
+       "kind": "var",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49A77F",
+     "then": [
+      {
+       "a": 9,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 9,
+       "b": 10,
+       "kind": "var",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49A790",
+     "_tut_ausserdem": "show_text",
+     "then": [
+      {
+       "a": 9,
+       "kind": "inc"
+      },
+      {
+       "a": 103,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 9,
+       "b": 10,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49AA33",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 103,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 103,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 4,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    }
+   ]
+  },
+  "7": {
+   "_endregel_aus": "0x49B16B",
+   "block": "",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "131": 172,
+    "132": 170
+   },
+   "rules": [
+    {
+     "_at": "0x49AD20",
+     "then": [
+      {
+       "a": 1,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 40,
+       "kind": "var",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49AD31",
+     "_tut_ausserdem": "show_text",
+     "then": [
+      {
+       "a": 1,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 40,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49B104",
+     "_tut_ausserdem": "show_text sound",
+     "then": [
+      {
+       "a": 9,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 9,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 102,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 12,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 5,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49B192",
+     "_tut_ausserdem": "bus_cmd",
+     "once": 13,
+     "then": [
+      {
+       "a": 12,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 102,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49B1D1",
+     "_tut_ausserdem": "bus_cmd",
+     "once": 17,
+     "then": [
+      {
+       "a": 12,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 102,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 5,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49B206",
+     "_tut_ausserdem": "show_text",
+     "once": 15,
+     "then": [],
+     "when": [
+      {
+       "a": 4,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    }
+   ]
+  },
+  "8": {
+   "_endregel_aus": "0x49B4AF",
+   "_uebersetzt": "Der Block ist eine Zustandsmaschine ueber v[0], v[1], v[2] und drei Ereignisfaenger. Uebernommen sind die Zeit- und Zaehlregeln; die drei Ereignisfaenger (Ereignis 7, 29, 8) fehlen, weil das Ereignisbyte 0x539930 in der Engine noch nichts setzt.",
+   "block": "0x49B275",
+   "init": {
+    "101": 1,
+    "131": 180
+   },
+   "rules": [
+    {
+     "_at": "0x49B27F",
+     "_tut_ausserdem": "show_text2",
+     "once": 20,
+     "then": [],
+     "when": []
+    },
+    {
+     "_at": "0x49B3C6",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "once": 1,
+     "then": [
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 2,
+       "b": 14,
+       "kind": "var",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 2,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      }
+     ]
+    }
+   ]
+  },
+  "9": {
+   "_endregel_aus": "0X49BB42",
+   "block": "",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "103": 1,
+    "104": 1,
+    "131": 190,
+    "132": 191,
+    "133": 192,
+    "134": 193
+   },
+   "rules": [
+    {
+     "_at": "0x49B640",
+     "_tut_ausserdem": "show_text bus_cmd",
+     "then": [
+      {
+       "a": 1,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 230,
+       "b": 3,
+       "kind": "var",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49BA67",
+     "then": [
+      {
+       "a": 6,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 12,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "!="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 3,
+       "kind": "units",
+       "op": "<"
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 3,
+       "kind": "units",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49BACF",
+     "_tut_ausserdem": "add_target",
+     "once": 8,
+     "then": [],
+     "when": [
+      {
+       "a": 103,
+       "b": 10,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49BB28",
+     "_tut_ausserdem": "bus_cmd",
+     "then": [
+      {
+       "a": 104,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 3,
+       "b": 4,
+       "kind": "var",
+       "op": "<"
+      },
+      {
+       "a": 104,
+       "b": 10,
+       "kind": "var",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
       }
      ]
     }

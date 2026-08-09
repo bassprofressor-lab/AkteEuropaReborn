@@ -3689,14 +3689,30 @@ public partial class MapEntityLayer : Node2D
     public string MissionScriptForceCheck()
     {
         if (_mscript == null) return "script-check: kein Skript fuer diese Mission";
-        var conds = _mscript.EndConds();
+
+        // ⚠ ZUERST die Frage, die am 09.08. einen Tag gekostet hat: gewinnt das
+        // Skript die Mission schon im Anfangszustand? Drei invertierte
+        // Bedingungen taten genau das, und weil der Prueflauf erst erzwungen und
+        // dann geschaut hat, sah es jedes Mal wie ein Erfolg aus. Ein Durchlauf
+        // ohne dt wertet alle Regeln einmal aus, ohne die Uhr zu bewegen.
+        _mscript.Tick(0.0);
+        if (_mscript.Ended)
+            return "script-check: ⚠ das Skript entscheidet die Mission SOFORT (" +
+                   (_mscript.Success ? "gewonnen" : "verloren") +
+                   "), bevor irgendetwas erzwungen wurde — eine Bedingung steht " +
+                   "verkehrt herum oder ein Anfangswert fehlt";
+
+        // Nicht `EndConds()`: seit die Setzer-Regeln mitlaufen, steht hinter
+        // einer Endbedingung ueber eine Blockvariable eine WELTbedingung, und
+        // die ist das, was sich erzwingen laesst.
+        var conds = _mscript.ChainConds();
         // ⚠ nicht hier aussteigen, wenn nur keine obj_owner-Plaetze dabei sind —
         // die meisten Missionen enden ueber eine ZAEHLbedingung, und ein
         // vorzeitiges return hat die glatt uebersprungen
         if (conds.Count == 0)
             return "script-check: das Skript prueft nichts, was sich erzwingen liesse";
 
-        int killed = 0, given = 0, left = 0;
+        int killed = 0, given = 0, left = 0, zoned = 0;
         var untouched = new List<string>();
         foreach (var c in conds)
         {
@@ -3756,11 +3772,30 @@ public partial class MapEntityLayer : Node2D
                 mine.Add(e);
                 given++;
             }
+            // Verlangt die Bedingung etwas, das es auf der Karte GAR NICHT gibt,
+            // dann meist deshalb, weil der Spieler es erst bauen soll — Mission
+            // 13 will Stromgeneratoren, Mission 17 Rohstoffminen. Der Prueflauf
+            // kann nicht bauen, also widmet er ein Gebaeude um: derselbe
+            // Weltzustand ohne die Bauzeit. Zuerst zerstoerte, dann fremde, damit
+            // moeglichst wenig von dem verschwindet, was andere Glieder zaehlen.
+            if (c.Kind == "objects" && mine.Count < target)
+                for (int pass = 0; pass < 2 && mine.Count < target; pass++)
+                    foreach (var e in _entities)
+                    {
+                        if (mine.Count >= target) break;
+                        if (!e.IsBuilding || mine.Contains(e)) continue;
+                        if (pass == 0 && !e.Dead) continue;
+                        e.Dead = false;
+                        e.BType = c.A;
+                        e.Owner = c.B;
+                        mine.Add(e);
+                        zoned++;
+                    }
             if (mine.Count != target) { left++; untouched.Add($"{Show(c)} [nur {mine.Count}]"); }
         }
         var unreachable = _mscript.UnreachableVars();
         return $"script-check: {conds.Count - left} von {conds.Count} Endbedingungen erzwungen " +
-               $"({killed} ausgeschlagen, {given} uebergeben)" +
+               $"({killed} ausgeschlagen, {given} uebergeben, {zoned} umgewidmet)" +
                (left > 0 ? $"; nicht erzwingbar: {string.Join(" ", untouched)}" : "") +
                (unreachable.Count > 0
                    ? $"; ⚠ Variablen ohne Erzeuger: v[{string.Join("] v[", unreachable)}]"

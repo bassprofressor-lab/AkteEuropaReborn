@@ -59,6 +59,13 @@ public sealed class MissionScript
         public int Mission;
         public string Block = "";     // where it was translated from
         public readonly List<Rule> Rules = new();
+        /// <summary>The state the mission STARTS in, out of the setup block
+        /// (`aekernel-tools/mission_initvars.py`). Without it half of every
+        /// chain over a block variable is missing: mission 7 wants
+        /// `v[102] == 2` and its block raises v[102] exactly once — because the
+        /// setup starts it at 1. v[101+k] is the k-th objective's state
+        /// (1 = open, 10 = done), v[131+k] its text number.</summary>
+        public readonly Dictionary<int, int> Init = new();
     }
 
     // ---- state ------------------------------------------------------------
@@ -141,7 +148,12 @@ public sealed class MissionScript
     public int Mission => _script.Mission;
     public int RulesFired { get; private set; }
 
-    private MissionScript(Script s) { _script = s; }
+    private MissionScript(Script s)
+    {
+        _script = s;
+        foreach (var kv in s.Init)
+            if (kv.Key >= 0 && kv.Key < _var.Length) _var[kv.Key] = kv.Value;
+    }
 
     /// <summary>The script of a mission, or null when none is carried for it.
     /// A missing script is not an error — most of the 33 are not translated
@@ -174,6 +186,10 @@ public sealed class MissionScript
             var body = kv.Value.AsGodotDictionary<string, Variant>();
             var s = new Script { Mission = m };
             if (body.TryGetValue("block", out var bv)) s.Block = bv.AsString();
+            if (body.TryGetValue("init", out var iv) &&
+                iv.VariantType == Variant.Type.Dictionary)
+                foreach (var e in iv.AsGodotDictionary<string, Variant>())
+                    if (int.TryParse(e.Key, out int n)) s.Init[n] = e.Value.AsInt32();
             if (!body.TryGetValue("rules", out var rv) ||
                 rv.VariantType != Variant.Type.Array) continue;
             foreach (var r in rv.AsGodotArray())
@@ -331,6 +347,46 @@ public sealed class MissionScript
         {
             if (!Ends(r)) continue;
             foreach (var c in r.When) list.Add(c);
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// Everything the harness must arrange for an end rule to fire — the end
+    /// conditions with their variable links RESOLVED.
+    ///
+    /// Since the setter rules are carried too, an end condition over a block
+    /// variable is no longer a dead end: v[22] in mission 13 is raised by
+    /// `objects(7, 0) != 0` ("build power generators"), so what the harness has
+    /// to arrange is that, not the variable. Walking only `EndConds()` left the
+    /// chain untested — the run reported "not forcible: var(22)!=0" and nothing
+    /// ever fired.
+    ///
+    /// Variables whose writers are themselves conditioned on variables are
+    /// followed too; each one only once, so a counter that raises itself
+    /// (`v[1] < 40 -> inc v[1]`) cannot loop. Those resolve by time, not by the
+    /// harness, and simply drop out.
+    /// </summary>
+    public List<Cond> ChainConds()
+    {
+        var list = new List<Cond>();
+        var seen = new HashSet<int>();
+        var queue = new Queue<Cond>();
+        foreach (var c in EndConds()) queue.Enqueue(c);
+        while (queue.Count > 0)
+        {
+            var c = queue.Dequeue();
+            if (c.Kind != "var") { list.Add(c); continue; }
+            if (!seen.Add(c.A)) continue;
+            foreach (var r in _script.Rules)
+            {
+                bool writes = r.Once == c.A;
+                if (!writes)
+                    foreach (var a in r.Then)
+                        if ((a.Kind == "inc" || a.Kind == "set") && a.A == c.A) { writes = true; break; }
+                if (!writes) continue;
+                foreach (var w in r.When) queue.Enqueue(w);
+            }
         }
         return list;
     }
