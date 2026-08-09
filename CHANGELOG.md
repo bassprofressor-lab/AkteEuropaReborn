@@ -4,6 +4,45 @@ All notable changes to Akte Europa Reborn. The build ships **only the engine** �
 terrain, units, maps, tables and now sound are derived on your own machine from
 your own copy of the 1997 game.
 
+## 0.5.0 — 2026-08-09
+
+The release in which the campaign starts deciding itself. Almost nothing here
+was invented: the computer players' build programmes, the schedule that unlocks
+designs, and the missions' own victory conditions were all read out of the 1997
+program and checked against **both** copies of GAME.EXE on the machine — what
+only one of them yields is a reader's error, not a finding.
+
+### The campaign
+
+- **Every one of the 15 installed missions now ends by its own condition**,
+  read from the original rather than approximated. Previously a mission ran
+  until nothing of one side was left, which is a rule of ours.
+- **The computer players build to the original's plans.** Each campaign mission
+  carries its opponents' production programme as code; it is now extracted and
+  followed.
+- **Designs unlock on the original's schedule** instead of all at once.
+- **The missions carry their own state machine** — 187 rules over the block
+  variables the original counts with, plus the state each mission *starts* in,
+  which turned out to be half the story: mission 7 wants a counter to reach 2
+  and raises it exactly once, because the setup starts it at 1.
+
+### Fixed
+
+- **Infantry was missing from the build list**, which is why the computer
+  players never fielded any.
+- **Three victory conditions were inverted** and two missions were won in the
+  second they began. The test rig could only destroy things, so it had never
+  been able to notice.
+
+### Known limits
+
+- Mission 14 (transport Colonel Hullmann) and mission 5 (resume production)
+  are complete on the script side but not yet winnable in play: the first needs
+  reinforcements to be dropped in, the second a running production. Both are
+  read and documented, neither is built.
+- Unit classes 1..4 are not yet told apart — every class counts all units,
+  which is stricter than the original.
+
 ## 0.4.0 — 2026-08-08
 
 The release that came out of playing 0.3.3. Two dozen reports were worked
