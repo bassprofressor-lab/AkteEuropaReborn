@@ -30,6 +30,7 @@ public partial class MapEntityLayer : Node2D
     public sealed class Entity
     {
         public int Slot, Col, Row, Owner, Team, UnitType, Category, Hp, HpMax, Elev;
+        public int Mark = -1;      // record +0x43 — the campaign's handle on one unit
         public int Facing;         // 0-7, from the entity heading byte (+0x08)
         public int Weapon;         // weapon component id (record +0x0c); 0 = none
 
@@ -981,6 +982,13 @@ public partial class MapEntityLayer : Node2D
                 {
                     Slot = GetI(e, "slot", -1), Col = col, Row = row,
                     Owner = GetI(e, "owner", -1), Team = GetI(e, "team", -1),
+                    // +0x43 ist die MISSIONSMARKE: damit zeigt die Kampagne auf
+                    // EINE bestimmte Einheit (`find_unit` @0x4D0F20). Gegenprobe
+                    // an den Karten: map_03 traegt genau eine 193 und Mission 3
+                    // sucht 193, map_06 eine 194 und Mission 6 sucht 194 — quer
+                    // durch fuenfzehn Missionen. Liegt hinter dem Fenster, das
+                    // `haveRaw` prueft, darum die eigene Laengenpruefung.
+                    Mark = raw.Length >= 0x44 * 2 ? HexByte(raw, 0x43) : -1,
                     UnitType = GetI(e, "unit_type", -1), Category = GetI(e, "category", -1),
                     // CORRECTED 2026-07-26 — a unit's LIFE is `energie`
                     // (+0x08, max +0x29): the hit routine @0x40c9a0 subtracts
@@ -3661,6 +3669,45 @@ public partial class MapEntityLayer : Node2D
                         if (e.IsBuilding && !e.Dead && e.BType == type && e.Owner == owner) n++;
                     return n;
                 };
+                // find_unit(spieler, marke) @0x4D0F20 — die erste lebende
+                // Einheit dieses Spielers mit der Marke in +0x43, sonst 0xFFFF.
+                // Der Index ist der Satz-Index des Originals, und der ist unser
+                // `Slot`: die Sätze liegen als spieler*1000 + k, weshalb das
+                // Spiel den Besitzer aus `slot/1000` ableitet.
+                _mscript.FindUnit = (player, mark) =>
+                {
+                    foreach (var e in _entities)
+                        if (!e.IsBuilding && !e.Dead && e.Owner == player && e.Mark == mark)
+                            return e.Slot;
+                    return 0xFFFF;
+                };
+                // ⚠ Nur +0x00 und +0x01 werden beantwortet — Spalte und Zeile,
+                // die beiden Felder, nach denen die Kampagne fragt. Alles andere
+                // gibt -1, damit eine Bedingung, die wir nicht beantworten
+                // können, FALSCH ist und nicht versehentlich wahr.
+                _mscript.UnitField = (index, off) =>
+                {
+                    foreach (var e in _entities)
+                        if (e.Slot == index && !e.Dead)
+                            return off == 0 ? e.Col : off == 1 ? e.Row : -1;
+                    return -1;
+                };
+                // Ein Wort aus einem Gebaeudesatz. Die Karte fuehrt dieselben
+                // vier Lager vier Byte weiter vorn als der Laufzeitsatz
+                // (sec3 +0x2c/+0x2e/+0x30/+0x32 = Laufzeit +0x28/+0x2a/+0x2c/
+                // +0x2e), darum die Zuordnung hier und nicht im Importer.
+                _mscript.StoreField = (slot, off) =>
+                {
+                    foreach (var e in _entities)
+                        if (e.IsBuilding && e.Slot == slot)
+                            return off switch
+                            {
+                                0x28 => e.StockW, 0x2a => e.StockF,
+                                0x2c => e.StockS, 0x2e => e.StockT,
+                                _ => -1,
+                            };
+                    return -1;
+                };
                 _mscript.ShowText = id => GD.Print($"Missionstext {id}");
                 var watched = _mscript.WatchedSlots();
                 if (watched.Count > 0)
@@ -3714,8 +3761,50 @@ public partial class MapEntityLayer : Node2D
 
         int killed = 0, given = 0, left = 0, zoned = 0;
         var untouched = new List<string>();
+
+        // ⚠ ZUERST die markierte Einheit, denn `unit_field` fragt nach IHRER
+        // Zelle und steht in der Kette VOR der Bedingung, die sie überhaupt
+        // benennt. Mission 14 erwartet Colonel Hullmann (Marke 191), und die
+        // Karte bringt ihn gar nicht mit — im Original setzt ihn `space_in` als
+        // Verstärkung ein, was die Engine noch nicht kann. Der Prüflauf gibt
+        // darum einer vorhandenen Einheit die Marke: derselbe Weltzustand ohne
+        // die Verstärkung.
+        var stores = new List<Campaign.MissionScript.Cond>();
+        Entity? marked = null;
         foreach (var c in conds)
         {
+            if (c.Kind != "unit_index") continue;
+            foreach (var e in _entities)
+                if (!e.IsBuilding && !e.Dead && e.Owner == c.A && e.Mark == c.B) { marked = e; break; }
+            if (marked != null) continue;
+            foreach (var e in _entities)
+                if (!e.IsBuilding && !e.Dead)
+                {
+                    e.Owner = c.A;
+                    e.Mark = c.B;
+                    marked = e;
+                    zoned++;
+                    break;
+                }
+            if (marked == null) { left++; untouched.Add(Show(c)); }
+        }
+
+        foreach (var c in conds)
+        {
+            if (c.Kind == "unit_index") continue;          // oben schon erledigt
+            // »v[a] < Lager« heisst: das Lager muss WACHSEN — und zwar NACHDEM
+            // die Mission es sich gemerkt hat. Darum erst zurueckstellen; siehe
+            // unten.
+            if (c.Kind == "var_vs_store") { stores.Add(c); continue; }
+            if (c.Kind == "unit_field")
+            {
+                if (marked == null) { left++; untouched.Add(Show(c)); continue; }
+                if (c.B == 0) marked.Col = c.C;
+                else if (c.B == 1) marked.Row = c.C;
+                else { left++; untouched.Add(Show(c)); continue; }
+                given++;
+                continue;
+            }
             if (c.Kind == "obj_owner")
             {
                 // Ein Platz bekommt schlicht den verlangten Besitzer. 12 heisst
@@ -3793,7 +3882,40 @@ public partial class MapEntityLayer : Node2D
                     }
             if (mine.Count != target) { left++; untouched.Add($"{Show(c)} [nur {mine.Count}]"); }
         }
+        // ⚠ Die Lager zuletzt, und erst nach einem Durchlauf. Mission 5 merkt
+        // sich beim ersten eigenen Gebaeude der Klasse 1 die beiden Teilelager
+        // und gewinnt, wenn BEIDE gewachsen sind. Wer das Lager vorher hebt,
+        // hebt die Marke gleich mit — die Bedingung ist dann per Konstruktion
+        // falsch, und der Lauf schweigt darueber. Also: erst markieren lassen,
+        // dann heben.
+        if (stores.Count > 0)
+        {
+            _mscript.Tick(0.0);
+            foreach (var c in stores)
+            {
+                bool hit = false;
+                foreach (var e in _entities)
+                    if (e.IsBuilding && e.Slot == c.B)
+                    {
+                        int add = c.Op is "<" or "<=" ? 1000 : 0;
+                        if (c.C == 0x28) e.StockW += add;
+                        else if (c.C == 0x2a) e.StockF += add;
+                        else if (c.C == 0x2c) e.StockS += add;
+                        else if (c.C == 0x2e) e.StockT += add;
+                        else break;
+                        hit = true;
+                        given++;
+                        break;
+                    }
+                if (!hit) { left++; untouched.Add(Show(c)); }
+            }
+        }
         var unreachable = _mscript.UnreachableVars();
+        // Noch ein Durchlauf, DANN erst die Glieder melden: die Setzer-Regeln
+        // wirken erst im Takt nach dem Erzwingen, und eine Diagnose, die davor
+        // gedruckt wird, meldet lauter »NEIN« obwohl die Kette gleich schliesst.
+        _mscript.Tick(0.0);
+        GD.Print("script-check Glieder: " + _mscript.WhyNot());
         return $"script-check: {conds.Count - left} von {conds.Count} Endbedingungen erzwungen " +
                $"({killed} ausgeschlagen, {given} uebergeben, {zoned} umgewidmet)" +
                (left > 0 ? $"; nicht erzwingbar: {string.Join(" ", untouched)}" : "") +

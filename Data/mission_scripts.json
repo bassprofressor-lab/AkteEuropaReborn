@@ -24,7 +24,7 @@
  "_klassen": "Einheitenklasse 0 ist die Summe der Klassen 1..4 (@0x4CF9AC), Gebaeudeklasse 0 sind alle Gebaeude (@0x4CFB3C). Die Klassen 1..4 bzw. 1..3 sind Einzelzaehler und noch nicht zugeordnet — Regeln, die sie brauchen, fehlen hier absichtlich.",
  "_note": "Missionsskripte der Kampagne. Im Original sind das keine Daten, sondern Code: die Missionsnummer aus dem Kartenkopf indiziert eine Sprungtabelle (@0x4A5B0C, 35 Eintraege), und jede Mission bekommt ihren eigenen Block, der jeden Takt laeuft. Die ZWISCHENSCHRITTE sind von Hand uebersetzt, mit `aekernel-tools/mission_logic.py --decode` als Vorlage; die SIEGBEDINGUNGEN sind es nicht, die sind eine Abschrift aus der EXE (siehe _endregeln). Jede Mission nennt die Adresse, aus der sie stammt, damit sich beides gegenpruefen laesst.",
  "_offen": "Nicht uebersetzt sind Regeln, die Ereignisflaggen (take_flag/0x539930), Toene, Busbefehle, das Setzen von Einheiten oder Buendniswechsel brauchen — dafuer fehlt der Unterbau. Eine fehlende Regel zeigt sich als Mission, die nicht von selbst endet; eine erfundene wuerde still falsch spielen. ⚠ Mehrere Endregeln pruefen zusaetzlich eigene Wortvariablen des Blocks (Missionen 5, 7, 13, 14). Die Bedingung ist richtig gelesen, aber die Regeln, die jene Variablen HOCHZAEHLEN, sind nicht uebersetzt — die Regel kann also nie feuern. MissionScript.Decides erkennt genau das und laesst in dem Fall die Notregel entscheiden, statt die Mission unloesbar zu machen; --script-check meldet solche Variablen als »ohne Erzeuger«.",
- "_vokabular": "Bedingungen: var(a,op,b) = v[a] op b | time_gt(a) = game_time() > a Minuten | time_after(a,b) = game_time() > v[a]+b | obj_owner(a,op,b) = Besitzer des Gebaeudeplatzes a | units(klasse,spieler,op,c) = g_robot_class_count | buildings(klasse,spieler,op,c) = g_buildings_count. Wirkungen: inc(a) | set(a,b) | text(a) | end(a) mit a=1 gewonnen, a=0 verloren.  Anfangswerte: init = {v: wert} aus dem Setup-Block; v[101+k] ist der Zustand des k-ten Missionsziels (1 offen, 10 erfuellt), v[131+k] seine Textnummer.",
+ "_vokabular": "Bedingungen: var(a,op,b) = v[a] op b | time_gt(a) = game_time() > a Minuten | time_after(a,b) = game_time() > v[a]+b | obj_owner(a,op,b) = Besitzer des Gebaeudeplatzes a | units(klasse,spieler,op,c) = g_robot_class_count | buildings(klasse,spieler,op,c) = g_buildings_count. Wirkungen: inc(a) | set(a,b) | text(a) | end(a) mit a=1 gewonnen, a=0 verloren.  Anfangswerte: init = {v: wert} aus dem Setup-Block; v[101+k] ist der Zustand des k-ten Missionsziels (1 offen, 10 erfuellt), v[131+k] seine Textnummer.  Anfangswerte: init = {v: wert} aus dem Setup-Block; v[101+k] ist der Zustand des k-ten Missionsziels (1 offen, 10 erfuellt), v[131+k] seine Textnummer.  Anfangswerte: init = {v: wert} aus dem Setup-Block; v[101+k] ist der Zustand des k-ten Missionsziels (1 offen, 10 erfuellt), v[131+k] seine Textnummer.",
  "missions": {
   "1": {
    "_endregel_aus": "0x4989C7",
@@ -188,6 +188,29 @@
    },
    "rules": [
     {
+     "_at": "0x49BBB6",
+     "_tut_ausserdem": "game_time show_text",
+     "once": 3,
+     "then": [
+      {
+       "a": 4,
+       "kind": "set_time"
+      },
+      {
+       "a": 103,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 14,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49BC4E",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
@@ -262,6 +285,59 @@
      ]
     },
     {
+     "_at": "0x49C4DA",
+     "_tut_ausserdem": "remove_unit obj_owner",
+     "then": [
+      {
+       "a": 7,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 7,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 8,
+       "b": 20,
+       "c": 50,
+       "kind": "unit_field",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49C4FE",
+     "_tut_ausserdem": "show_text",
+     "then": [
+      {
+       "a": 102,
+       "kind": "inc"
+      },
+      {
+       "a": 9,
+       "b": 12,
+       "c": 2,
+       "kind": "set_store"
+      },
+      {
+       "a": 7,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 12,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
      "_at": "0x49C62C",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
@@ -291,6 +367,62 @@
        "b": 10,
        "kind": "var",
        "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49C6B0",
+     "_tut_ausserdem": "remove_unit",
+     "once": 16,
+     "then": [],
+     "when": [
+      {
+       "a": 7,
+       "b": 4,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 17,
+       "b": 0,
+       "c": 57,
+       "kind": "unit_field",
+       "op": "=="
+      },
+      {
+       "a": 17,
+       "b": 1,
+       "c": 62,
+       "kind": "unit_field",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49C705",
+     "_tut_ausserdem": "remove_unit",
+     "once": 15,
+     "then": [],
+     "when": [
+      {
+       "a": 7,
+       "b": 4,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 18,
+       "b": 0,
+       "c": 98,
+       "kind": "unit_field",
+       "op": "=="
+      },
+      {
+       "a": 18,
+       "b": 1,
+       "c": 47,
+       "kind": "unit_field",
+       "op": ">"
       }
      ]
     },
@@ -464,6 +596,73 @@
      ]
     },
     {
+     "_at": "0x49CBCC",
+     "_tut_ausserdem": "remove_unit show_text bus_cmd game_time sound",
+     "then": [
+      {
+       "a": 1,
+       "kind": "inc"
+      },
+      {
+       "a": 103,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "a": 2,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 2,
+       "b": 20,
+       "c": 50,
+       "kind": "unit_field",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49CC83",
+     "_tut_ausserdem": "show_text bus_cmd game_time sound",
+     "then": [
+      {
+       "a": 1,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "a": 7,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 23,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49CDCC",
      "_tut_ausserdem": "remove_unit add_target add_target add_target add_target add_target add_vyroba add_vyroba",
      "then": [
@@ -482,6 +681,89 @@
       {
        "a": 0,
        "b": 4,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49CF13",
+     "_tut_ausserdem": "0x4D0F20 show_text",
+     "then": [
+      {
+       "a": 240,
+       "b": 0,
+       "c": 194,
+       "kind": "find_unit"
+      },
+      {
+       "a": 106,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 194,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49CF92",
+     "_tut_ausserdem": "remove_unit",
+     "then": [
+      {
+       "a": 19,
+       "b": 3,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 16,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 19,
+       "b": 0,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 17,
+       "b": 0,
+       "c": 34,
+       "kind": "unit_field",
+       "op": "=="
+      },
+      {
+       "a": 17,
+       "b": 1,
+       "c": 2,
+       "kind": "unit_field",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49D054",
+     "_tut_ausserdem": "game_time",
+     "once": 21,
+     "then": [
+      {
+       "a": 241,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 7,
+       "b": 0,
        "kind": "obj_owner",
        "op": "=="
       }
@@ -601,6 +883,60 @@
      ]
     },
     {
+     "_at": "0x49D256",
+     "_tut_ausserdem": "0x4D0F20",
+     "then": [
+      {
+       "a": 1,
+       "kind": "inc"
+      },
+      {
+       "a": 291,
+       "kind": "inc"
+      },
+      {
+       "a": 2,
+       "b": 0,
+       "c": 191,
+       "kind": "find_unit"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 51,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 191,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49D2D8",
+     "_tut_ausserdem": "game_time",
+     "once": 10,
+     "then": [
+      {
+       "a": 11,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 22,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49D39D",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
@@ -625,6 +961,76 @@
        "a": 16,
        "b": 0,
        "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49D472",
+     "_tut_ausserdem": "game_time",
+     "once": 7,
+     "then": [
+      {
+       "a": 8,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 16,
+       "b": 2,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49D574",
+     "_tut_ausserdem": "game_time space_in",
+     "once": 9,
+     "then": [
+      {
+       "a": 19,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 5,
+       "b": 1,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49D65E",
+     "then": [
+      {
+       "a": 20,
+       "b": 20,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 52,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 2,
+       "b": 0,
+       "c": 175,
+       "kind": "unit_field",
+       "op": "=="
+      },
+      {
+       "a": 2,
+       "b": 1,
+       "c": 100,
+       "kind": "unit_field",
        "op": "=="
       }
      ]
@@ -800,6 +1206,29 @@
    },
    "rules": [
     {
+     "_at": "0x49DC9B",
+     "_tut_ausserdem": "show_text game_time space_in",
+     "once": 30,
+     "then": [
+      {
+       "a": 103,
+       "kind": "inc"
+      },
+      {
+       "a": 31,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49DE29",
      "_tut_ausserdem": "sound",
      "then": [
@@ -865,6 +1294,71 @@
      ]
     },
     {
+     "_at": "0x49DEC4",
+     "_tut_ausserdem": "0x4D0F20",
+     "then": [
+      {
+       "a": 28,
+       "b": 0,
+       "c": 193,
+       "kind": "find_unit"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 193,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49DF4C",
+     "_tut_ausserdem": "sound",
+     "then": [
+      {
+       "a": 20,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "a": 102,
+       "b": 1,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 193,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "=="
+      },
+      {
+       "a": 7,
+       "b": 193,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49DF77",
      "_tut_ausserdem": "show_text sound",
      "then": [
@@ -922,6 +1416,136 @@
     "132": 275
    },
    "rules": [
+    {
+     "_at": "0x49E05A",
+     "_tut_ausserdem": "set_relation game_time show_text",
+     "then": [
+      {
+       "a": 0,
+       "kind": "inc"
+      },
+      {
+       "a": 3,
+       "kind": "set_time"
+      },
+      {
+       "a": 4,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49E0B2",
+     "_tut_ausserdem": "game_time",
+     "once": 251,
+     "then": [
+      {
+       "a": 0,
+       "b": 2,
+       "kind": "set"
+      },
+      {
+       "a": 3,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 4,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49E250",
+     "_tut_ausserdem": "game_time",
+     "once": 10,
+     "then": [
+      {
+       "a": 11,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 4,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49E305",
+     "_tut_ausserdem": "0x4D0F20",
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      },
+      {
+       "a": 11,
+       "b": 0,
+       "c": 194,
+       "kind": "find_unit"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 194,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49E386",
+     "_tut_ausserdem": "show_text remove_unit bus_cmd sound",
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 11,
+       "b": 20,
+       "c": 50,
+       "kind": "unit_field",
+       "op": "=="
+      }
+     ]
+    },
     {
      "_at": "0x49E4F3",
      "_tut_ausserdem": "show_text",
@@ -1135,6 +1759,79 @@
        "a": 34,
        "b": 0,
        "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49EC48",
+     "_tut_ausserdem": "show_text 0x4D0F20",
+     "once": 30,
+     "then": [
+      {
+       "a": 103,
+       "kind": "inc"
+      },
+      {
+       "a": 31,
+       "b": 0,
+       "c": 194,
+       "kind": "find_unit"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 194,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49ECEE",
+     "_tut_ausserdem": "show_text bus_cmd",
+     "then": [
+      {
+       "a": 30,
+       "kind": "inc"
+      },
+      {
+       "a": 103,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 31,
+       "b": 20,
+       "c": 50,
+       "kind": "unit_field",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49ED3E",
+     "then": [
+      {
+       "a": 260,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 31,
+       "b": 21,
+       "c": 21,
+       "kind": "unit_field",
        "op": "=="
       }
      ]
@@ -1445,6 +2142,25 @@
      ]
     },
     {
+     "_at": "0x49F0D0",
+     "_tut_ausserdem": "game_time",
+     "once": 20,
+     "then": [
+      {
+       "a": 21,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 8,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49F185",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
@@ -1469,6 +2185,75 @@
        "a": 23,
        "b": 0,
        "kind": "var",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49F44F",
+     "_tut_ausserdem": "game_time",
+     "once": 50,
+     "then": [
+      {
+       "a": 51,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 0,
+       "c": 30,
+       "kind": "units",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49F484",
+     "_tut_ausserdem": "0x4D1050 add_target add_target add_target add_target",
+     "then": [
+      {
+       "a": 50,
+       "kind": "inc"
+      },
+      {
+       "a": 52,
+       "b": 0,
+       "c": 2,
+       "kind": "set_store"
+      },
+      {
+       "a": 53,
+       "b": 1,
+       "c": 2,
+       "kind": "set_store"
+      },
+      {
+       "a": 54,
+       "b": 2,
+       "c": 2,
+       "kind": "set_store"
+      },
+      {
+       "a": 55,
+       "b": 3,
+       "c": 2,
+       "kind": "set_store"
+      }
+     ],
+     "when": [
+      {
+       "a": 50,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 6,
+       "c": 0,
+       "kind": "units",
        "op": "!="
       }
      ]
@@ -1657,6 +2442,25 @@
      ]
     },
     {
+     "_at": "0x4A05F9",
+     "_tut_ausserdem": "game_time",
+     "once": 40,
+     "then": [
+      {
+       "a": 41,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A0667",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
@@ -1686,6 +2490,26 @@
      ]
     },
     {
+     "_at": "0x4A06BC",
+     "_tut_ausserdem": "game_time",
+     "once": 50,
+     "then": [
+      {
+       "a": 51,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 3,
+       "b": 0,
+       "c": 0,
+       "kind": "units",
+       "op": "!="
+      }
+     ]
+    },
+    {
      "_at": "0x4A072B",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
@@ -1711,6 +2535,44 @@
        "b": 1,
        "c": 0,
        "kind": "units",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A077D",
+     "_tut_ausserdem": "game_time",
+     "once": 63,
+     "then": [
+      {
+       "a": 62,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 5,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A07A7",
+     "_tut_ausserdem": "game_time",
+     "once": 63,
+     "then": [
+      {
+       "a": 62,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 0,
+       "kind": "obj_owner",
        "op": "=="
       }
      ]
@@ -1871,6 +2733,39 @@
      ]
     },
     {
+     "_at": "0x4A11C5",
+     "_tut_ausserdem": "0x4D0F20 show_text bus_cmd sound",
+     "once": 280,
+     "then": [
+      {
+       "a": 104,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "a": 35,
+       "b": 0,
+       "c": 190,
+       "kind": "find_unit"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 2,
+       "kind": "var",
+       "op": ">"
+      },
+      {
+       "a": 0,
+       "b": 190,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "!="
+      }
+     ]
+    },
+    {
      "_at": "0x4A1383",
      "_tut_ausserdem": "0x4D1050",
      "once": 281,
@@ -1882,6 +2777,100 @@
        "c": 0,
        "kind": "units",
        "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A1927",
+     "_tut_ausserdem": "show_text",
+     "once": 20,
+     "then": [
+      {
+       "a": 102,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 194,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A1963",
+     "then": [
+      {
+       "a": 102,
+       "b": 2,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 194,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A198F",
+     "then": [
+      {
+       "a": 102,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "a": 20,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 194,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A19B7",
+     "_tut_ausserdem": "0x4D0F20 0x4BFFB0",
+     "then": [
+      {
+       "a": 22,
+       "b": 0,
+       "c": 194,
+       "kind": "find_unit"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 21,
+       "b": 3,
+       "kind": "var",
+       "op": "<"
       }
      ]
     },
@@ -2013,6 +3002,44 @@
        "b": 1,
        "kind": "obj_owner",
        "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A1D3A",
+     "_tut_ausserdem": "show_text bus_cmd game_time sound",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "a": 30,
+       "kind": "inc"
+      },
+      {
+       "a": 31,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 6,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
       }
      ]
     },
@@ -2223,6 +3250,35 @@
      ]
     },
     {
+     "_at": "0x4A2412",
+     "_tut_ausserdem": "game_time",
+     "then": [
+      {
+       "a": 0,
+       "kind": "inc"
+      },
+      {
+       "a": 270,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 5,
+       "c": 5,
+       "kind": "units",
+       "op": "<"
+      }
+     ]
+    },
+    {
      "once": 300,
      "then": [
       {
@@ -2324,6 +3380,32 @@
        "a": 31,
        "b": 4,
        "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A25E2",
+     "_tut_ausserdem": "show_text game_time",
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "kind": "inc"
+      },
+      {
+       "a": 11,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 3,
+       "kind": "var",
        "op": "=="
       }
      ]
@@ -2440,6 +3522,35 @@
      ]
     },
     {
+     "_at": "0x4A3A59",
+     "_tut_ausserdem": "0x4D0860 game_time",
+     "then": [
+      {
+       "a": 25,
+       "b": 0,
+       "kind": "set"
+      },
+      {
+       "a": 23,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 19,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 25,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      }
+     ]
+    },
+    {
      "_at": "0x4A3B63",
      "_tut_ausserdem": "remove_unit bus_cmd sound",
      "then": [
@@ -2455,6 +3566,86 @@
        "b": 2,
        "kind": "var",
        "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A3BE5",
+     "_tut_ausserdem": "game_time",
+     "then": [
+      {
+       "a": 31,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 0,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 7,
+       "b": 1,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A3CAB",
+     "_tut_ausserdem": "game_time",
+     "once": 40,
+     "then": [
+      {
+       "a": 41,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "obj_owner",
+       "op": "!="
+      },
+      {
+       "a": 15,
+       "b": 2,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A3E95",
+     "_tut_ausserdem": "game_time",
+     "once": 50,
+     "then": [
+      {
+       "a": 51,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 6,
+       "b": 1,
+       "kind": "obj_owner",
+       "op": "!="
+      },
+      {
+       "a": 33,
+       "b": 1,
+       "kind": "obj_owner",
+       "op": "!="
+      },
+      {
+       "a": 8,
+       "b": 1,
+       "kind": "obj_owner",
+       "op": "!="
       }
      ]
     },
@@ -2680,6 +3871,34 @@
      ]
     },
     {
+     "_at": "0x499B4E",
+     "_tut_ausserdem": "show_text game_time",
+     "once": 16,
+     "then": [
+      {
+       "a": 220,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "set"
+      },
+      {
+       "a": 221,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x499BD0",
      "_tut_ausserdem": "0x4D0EC0 sound",
      "then": [
@@ -2704,6 +3923,36 @@
        "a": 18,
        "b": 200,
        "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499C11",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 16,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 16,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 7,
+       "b": 193,
+       "c": 65535,
+       "kind": "unit_index",
        "op": "=="
       }
      ]
@@ -2764,6 +4013,25 @@
       {
        "a": 5,
        "b": 2,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A43AE",
+     "_tut_ausserdem": "game_time",
+     "once": 30,
+     "then": [
+      {
+       "a": 31,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 37,
+       "b": 11,
        "kind": "obj_owner",
        "op": "!="
       }
@@ -2879,6 +4147,26 @@
    },
    "rules": [
     {
+     "_at": "0x4A46E4",
+     "_tut_ausserdem": "game_time",
+     "once": 10,
+     "then": [
+      {
+       "a": 11,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 3,
+       "b": 0,
+       "c": 0,
+       "kind": "units",
+       "op": "!="
+      }
+     ]
+    },
+    {
      "_at": "0x4A4906",
      "_tut_ausserdem": "bus_cmd",
      "then": [
@@ -2898,6 +4186,32 @@
        "b": 0,
        "kind": "var",
        "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A494B",
+     "_tut_ausserdem": "game_time",
+     "once": 40,
+     "then": [
+      {
+       "a": 41,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 32,
+       "b": 3,
+       "kind": "var",
+       "op": ">"
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 2,
+       "kind": "objects",
+       "op": "<"
       }
      ]
     },
@@ -3103,6 +4417,73 @@
    },
    "rules": [
     {
+     "_at": "0x4A4DED",
+     "_tut_ausserdem": "game_time",
+     "once": 50,
+     "then": [
+      {
+       "a": 51,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 40,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A4ECD",
+     "_tut_ausserdem": "show_text bus_cmd game_time sound",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "a": 30,
+       "kind": "inc"
+      },
+      {
+       "a": 40,
+       "kind": "inc"
+      },
+      {
+       "a": 280,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 6,
+       "c": 0,
+       "kind": "buildings",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A4FD5",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
@@ -3270,6 +4651,49 @@
        "b": 19,
        "kind": "var",
        "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A5221",
+     "_tut_ausserdem": "show_text bus_cmd game_time sound",
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 21,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 4,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 5,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
       }
      ]
     },
@@ -3845,6 +5269,73 @@
      ]
     },
     {
+     "_at": "0x49A3E7",
+     "once": 33,
+     "then": [],
+     "when": [
+      {
+       "a": 30,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 32,
+       "b": 0,
+       "c": 42,
+       "kind": "var_vs_store",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49A416",
+     "once": 34,
+     "then": [],
+     "when": [
+      {
+       "a": 30,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 31,
+       "b": 0,
+       "c": 40,
+       "kind": "var_vs_store",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49A49D",
+     "once": 30,
+     "then": [
+      {
+       "a": 31,
+       "b": 0,
+       "c": 40,
+       "kind": "set_store"
+      },
+      {
+       "a": 32,
+       "b": 0,
+       "c": 42,
+       "kind": "set_store"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 0,
+       "c": 0,
+       "kind": "buildings",
+       "op": ">"
+      }
+     ]
+    },
+    {
      "_at": "0x49A4F9",
      "_tut_ausserdem": "0x4D0810 0x4D0810",
      "once": 40,
@@ -3967,6 +5458,39 @@
      ]
     },
     {
+     "_at": "0x49A9BD",
+     "_tut_ausserdem": "0x4D0F20",
+     "then": [
+      {
+       "a": 11,
+       "b": 0,
+       "c": 193,
+       "kind": "find_unit"
+      }
+     ],
+     "when": [
+      {
+       "a": 11,
+       "b": 0,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 102,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 193,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "!="
+      }
+     ]
+    },
+    {
      "_at": "0x49AA33",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
@@ -4062,6 +5586,33 @@
        "b": 40,
        "kind": "var",
        "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49B0A0",
+     "_tut_ausserdem": "0x4D0F20",
+     "then": [
+      {
+       "a": 10,
+       "b": 0,
+       "c": 193,
+       "kind": "find_unit"
+      }
+     ],
+     "when": [
+      {
+       "a": 8,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 0,
+       "b": 193,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "!="
       }
      ]
     },

@@ -43,8 +43,8 @@ public sealed class MissionScript
 
     public sealed class Act
     {
-        public string Kind = "";      // inc | set | text | end
-        public int A, B;
+        public string Kind = "";      // inc | set | text | end | find_unit | set_time
+        public int A, B, C;
     }
 
     public sealed class Rule
@@ -124,7 +124,9 @@ public sealed class MissionScript
         {
             if (r.Once == n) return true;
             foreach (var a in r.Then)
-                if ((a.Kind == "inc" || a.Kind == "set") && a.A == n) return true;
+                if ((a.Kind == "inc" || a.Kind == "set" ||
+                     a.Kind == "find_unit" || a.Kind == "set_time" ||
+                     a.Kind == "set_store") && a.A == n) return true;
         }
         return false;
     }
@@ -219,6 +221,7 @@ public sealed class MissionScript
                             Kind = ad.TryGetValue("kind", out var k) ? k.AsString() : "",
                             A = ad.TryGetValue("a", out var x) ? x.AsInt32() : 0,
                             B = ad.TryGetValue("b", out var y) ? y.AsInt32() : 0,
+                            C = ad.TryGetValue("c", out var z) ? z.AsInt32() : 0,
                         });
                     }
                 s.Rules.Add(rule);
@@ -243,6 +246,28 @@ public sealed class MissionScript
     /// </summary>
     public Func<int, int, int>? ObjectCount;         // type, owner -> count
     public Action<int>? ShowText;                    // helpg.txt id
+
+    /// <summary>`find_unit(spieler, marke)` @0x4D0F20 — the index of that
+    /// player's first unit carrying <b>marke</b> in record byte +0x43, or
+    /// 0xFFFF. That byte is how the campaign points at ONE named unit: map_03
+    /// carries exactly one with 193 and mission 3 asks for 193, map_06 one with
+    /// 194 and mission 6 asks for 194, and so on through fifteen missions.
+    /// Empty records (+0x09 == 0xFF) and busy ones (ukol +0x14 >= 100) are
+    /// skipped.</summary>
+    public Func<int, int, int>? FindUnit;            // player, mark -> index
+
+    /// <summary>A byte of one unit's record, by the index `find_unit` returned.
+    /// Only +0x00 (column) and +0x01 (row) are answered — those are the two the
+    /// campaign asks about, and they are the ones the engine holds. Anything
+    /// else comes back -1 rather than a guess.</summary>
+    public Func<int, int, int>? UnitField;           // index, offset -> byte
+
+    /// <summary>A word out of one building record (255 x 76 @0xc06914). Only
+    /// the four stores are answered: +0x28 Waffen, +0x2a Fahrwerk, +0x2c
+    /// Spezial parts and +0x2e raw Terranium (GAMESTATE_RE 3.82). Mission 5
+    /// marks two of them at its start and wins when BOTH have grown — which is
+    /// objective #005 word for word, "Wiederaufnahme der Produktion".</summary>
+    public Func<int, int, int>? StoreField;          // building slot, offset -> value
 
     /// <summary>Minutes since the mission started — the original's clock
     /// (`game_time()` counts 60·(hour + 24·day) + minute).</summary>
@@ -295,6 +320,18 @@ public sealed class MissionScript
         "buildings" => BuildingCount != null && Cmp(BuildingCount(c.A, c.B), c.Op, c.C),
         // count_objects(a, b) <op> c
         "objects" => ObjectCount != null && Cmp(ObjectCount(c.A, c.B), c.Op, c.C),
+        // find_unit(a, b) <op> c   — c = 65535 heisst "es gibt sie nicht"
+        "unit_index" => FindUnit != null && Cmp(FindUnit(c.A, c.B), c.Op, c.C),
+        // Feld +b der Einheit, deren Index in v[a] steht, <op> c.
+        // ⚠ Ein unbekanntes Feld (-1) macht die Bedingung FALSCH, nicht wahr:
+        // eine Kette, die nicht beantwortet werden kann, darf nicht gewinnen.
+        // v[a] <op> Feld +c des Gebaeudesatzes b
+        "var_vs_store" => StoreField != null && c.A >= 0 && c.A < _var.Length &&
+                          StoreField(c.B, c.C) >= 0 &&
+                          Cmp(_var[c.A], c.Op, StoreField(c.B, c.C)),
+        "unit_field" => UnitField != null && c.A >= 0 && c.A < _var.Length &&
+                        UnitField(_var[c.A], c.B) >= 0 &&
+                        Cmp(UnitField(_var[c.A], c.B), c.Op, c.C),
         _ => false,
     };
 
@@ -310,6 +347,21 @@ public sealed class MissionScript
                 break;
             case "text":
                 ShowText?.Invoke(a.A);
+                break;
+            // v[a] = find_unit(b, c) — die Mission merkt sich ihre Einheit
+            case "find_unit":
+                if (a.A >= 0 && a.A < _var.Length)
+                    _var[a.A] = FindUnit != null ? FindUnit(a.B, a.C) : 0xFFFF;
+                break;
+            // v[a] = Feld c des Gebaeudesatzes b — die Marke, gegen die spaeter
+            // auf Wachstum geprueft wird
+            case "set_store":
+                if (a.A >= 0 && a.A < _var.Length && StoreField != null)
+                    _var[a.A] = StoreField(a.B, a.C);
+                break;
+            // v[a] = game_time() — der Zeitstempel, auf den `time_after` zeigt
+            case "set_time":
+                if (a.A >= 0 && a.A < _var.Length) _var[a.A] = Minutes;
                 break;
             case "end":
                 _ended = true;
@@ -376,6 +428,11 @@ public sealed class MissionScript
         while (queue.Count > 0)
         {
             var c = queue.Dequeue();
+            // `unit_field` fragt die Welt, hängt aber an der Variablen, in der
+            // der Einheitenindex steht — also beides: die Bedingung sammeln UND
+            // dem Erzeuger dieser Variablen nachgehen.
+            if (c.Kind == "unit_field" || c.Kind == "var_vs_store")
+                queue.Enqueue(new Cond { Kind = "var", A = c.A, Op = "!=", B = 0 });
             if (c.Kind != "var") { list.Add(c); continue; }
             if (!seen.Add(c.A)) continue;
             foreach (var r in _script.Rules)
@@ -383,7 +440,10 @@ public sealed class MissionScript
                 bool writes = r.Once == c.A;
                 if (!writes)
                     foreach (var a in r.Then)
-                        if ((a.Kind == "inc" || a.Kind == "set") && a.A == c.A) { writes = true; break; }
+                        if ((a.Kind == "inc" || a.Kind == "set" ||
+                             a.Kind == "find_unit" || a.Kind == "set_time" ||
+                             a.Kind == "set_store") && a.A == c.A)
+                        { writes = true; break; }
                 if (!writes) continue;
                 foreach (var w in r.When) queue.Enqueue(w);
             }
@@ -409,6 +469,28 @@ public sealed class MissionScript
         ">=" => c.C,
         _ => -1,
     };
+
+    /// <summary>For the harness: every end rule's links with the value they
+    /// have RIGHT NOW. Without this a chain that does not fire is a silence —
+    /// mission 5 forced all five of its conditions and still did not end, and
+    /// nothing said which link was false (it was the marking rule: the harness
+    /// had raised the store BEFORE the mission noted it down, so "has grown"
+    /// was false by construction).</summary>
+    public string WhyNot()
+    {
+        var parts = new List<string>();
+        foreach (var r in _script.Rules)
+        {
+            if (!Ends(r)) continue;
+            foreach (var c in r.When)
+                parts.Add($"{c.Kind}({c.A},{c.B}){c.Op}{c.C}=" + (Test(c) ? "ja" : "NEIN"));
+        }
+        return string.Join(" ", parts);
+    }
+
+    /// <summary>For the harness: the value of one of the block's variables.
+    /// </summary>
+    public int Var(int n) => n >= 0 && n < _var.Length ? _var[n] : -1;
 
     /// <summary>For the harness: what the script is doing right now.</summary>
     public string Line() =>
