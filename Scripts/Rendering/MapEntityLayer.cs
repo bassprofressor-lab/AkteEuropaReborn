@@ -31,6 +31,10 @@ public partial class MapEntityLayer : Node2D
     {
         public int Slot, Col, Row, Owner, Team, UnitType, Category, Hp, HpMax, Elev;
         public int Mark = -1;      // record +0x43 — the campaign's handle on one unit
+        /// <summary>Bis wann die Schusspose gezeigt wird — von Fire() gesetzt.
+        /// UNSERE Zutat: das Original hat dafuer einen eigenen Zaehler, den wir
+        /// nicht gelesen haben.</summary>
+        public float FireUntil;
         public int Facing;         // 0-7, from the entity heading byte (+0x08)
         public int Weapon;         // weapon component id (record +0x0c); 0 = none
 
@@ -3757,6 +3761,10 @@ public partial class MapEntityLayer : Node2D
     private void Fire(int si, Entity shooter, int vi, Entity victim,
                       (string Name, int Damage, float RangeTiles) w)
     {
+        // Solange diese Frist laeuft, zeigt ein Fusssoldat seine Schusspose —
+        // siehe InfBlock. Etwas laenger als eine Nachladezeit, damit die Pose
+        // waehrend eines Feuerstosses nicht flackert.
+        shooter.FireUntil = _clock + FirePoseSeconds;
         Vector2 dir = (victim.Pos - shooter.Pos).Normalized();
         _effects.Add(new Effect { Pos = shooter.Pos + dir * 12f - new Vector2(0, 8),
                                   Kind = "muzzle", FrameTime = 0.035f });
@@ -4242,21 +4250,25 @@ public partial class MapEntityLayer : Node2D
             return;
         }
         var me = _entities[idx];
+        // ⚠ Zielwahl: das Original gibt (x, y) mit, wir suchen einen Gegner —
+        // und »der naechste« nahm auch NEUTRALE und einander. Gemeldet: »1x
+        // Infanterie und das MG greifen einen anderen Infanteristen an«.
+        // Gemeint ist der Spieler: die vier kommen dem Spieler entgegen.
+        // Darum erst unter SEINEN Einheiten suchen, und nur wenn er keine mehr
+        // hat, unter den uebrigen Feinden.
         int best = -1;
         float bestD = float.MaxValue;
+        for (int pass = 0; pass < 2 && best < 0; pass++)
         for (int i = 0; i < _entities.Count; i++)
         {
             var o = _entities[i];
-            // ⚠ Kulissenobjekte (Typ >= 17) gehoeren NIEMANDEM und sahen darum
-            // wie Feinde aus: im Lauf griff Einheit 1002 »Init0« an, ein Stueck
-            // Landschaft. Sie haben kein +0x18, koennen nicht eingenommen und
-            // nicht sinnvoll beschossen werden.
             if (o.IsProp || o.Dead || i == idx) continue;
             if (o.IsBuilding && o.BType >= 17) continue;
-            if (o.Owner is < 0 or > 7) continue;          // herrenlos ist kein Feind
+            if (o.Owner is < 0 or > 7) continue;
             if (Allied(o.Owner, me.Owner)) continue;
-            float d = me.Pos.DistanceSquaredTo(o.Pos);
-            if (d < bestD) { bestD = d; best = i; }
+            if (pass == 0 && o.Owner != ViewPlayer) continue;
+            float d0 = me.Pos.DistanceSquaredTo(o.Pos);
+            if (d0 < bestD) { bestD = d0; best = i; }
         }
         if (best < 0) { GD.Print($"Missionsbefehl: Platz {slot} findet kein Ziel"); return; }
         me.Target = best;
@@ -9315,12 +9327,21 @@ public partial class MapEntityLayer : Node2D
         if (e.Dead)   // fall over once, then lie there
             return InfDeathBlocks[Mathf.Min((int)(e.DeadTime * InfDeathFps),
                                             InfDeathBlocks.Length - 1)];
-        if (e.Target >= 0 && e.Weapon != 0)
+        // ⚠ 11.08.2026 — hier stand nur `e.Target >= 0`, und damit zeigte ein
+        // Fusssoldat die SCHUSSPOSE schon auf dem ganzen Anmarsch: gemeldet als
+        // »dauerhaftes Feuer-Sprite vor der Waffe, obwohl sie noch gar nicht
+        // schiessen«. Ein Ziel zu HABEN heisst nicht, darauf zu feuern -- das
+        // tut sie erst in Reichweite. `Fire()` setzt darum jetzt eine kurze
+        // Frist, und nur solange die laeuft, wird die Pose gezeigt.
+        if (e.Weapon != 0 && _clock < e.FireUntil)
             return InfFireBlocks[(int)(_clock * InfFireFps) % InfFireBlocks.Length];
         if (e.Path != null)                       // walking: the eight-step cycle
             return (int)(_clock * InfWalkFps + e.Slot) % 8;
         return InfIdleBlock;
     }
+
+    /// <summary>Wie lange ein Schuss die Pose haelt. UNSERE Setzung.</summary>
+    private const float FirePoseSeconds = 0.5f;
 
     private float _clock;
     private float _musicTick;
