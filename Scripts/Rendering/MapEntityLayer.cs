@@ -7368,7 +7368,24 @@ public partial class MapEntityLayer : Node2D
         if (moved) QueueRedraw();
     }
 
-    /// <summary>Der Gleiskörper, Teil 64 (flach), acht Richtungen.</summary>
+    /// <summary>Der Gleiskörper, Teil 65: die Strecke MIT STÜTZEN.
+    ///
+    /// <para>⚠ 11.08.2026, nach einem Bildschirmfoto des Originals: die Bahn in
+    /// Akte Europa ist eine HOCHBAHN. Die Böcke stehen überall in der
+    /// Landschaft, die Schiene läuft oben darüber, und der Zug fährt auf ihr.
+    /// Wir hatten zuerst Teil 64 genommen — das ist nur der blanke Träger ohne
+    /// Stützen, und damit lag die Strecke flach auf dem Boden.</para>
+    ///
+    /// <para>Beide Teile tragen dieselben acht Richtungen und dieselbe
+    /// Leinwandlage: gemessen liegt die Schiene bei 65 auf denselben Zeilen wie
+    /// bei 64 (Bild 0 bei 28 gegen 29, Bild 1 bei 20 gegen 20, Bild 6 bei 14
+    /// gegen 14), nur reichen die Stützen nach unten weiter (bis Zeile 86
+    /// statt 41). Der Anker bleibt deshalb unverändert.</para>
+    ///
+    /// <para>OFFEN: ob das Original je den flachen Träger 64 benutzt — etwa wo
+    /// die Strecke ein Gebäude erreicht oder über festem Boden läuft. Solange
+    /// das nicht gelesen ist, bekommt jeder Schritt die Stützenfassung, weil
+    /// das dem Foto entspricht.</para></summary>
     private readonly Dictionary<int, Texture2D?> _railTex = new();
 
     /// <summary>Stück → Bild von Teil 64. Die beiden Reihenfolgen sind NICHT
@@ -7397,7 +7414,7 @@ public partial class MapEntityLayer : Node2D
     {
         int k = RailFrameOf[piece & 7];
         if (_railTex.TryGetValue(k, out var t)) return t;
-        string path = Core.Content.Path($"Units/train/rail64/f{k}.png");
+        string path = Core.Content.Path($"Units/train/rail65/f{k}.png");
         t = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
         if (t == null && FileAccess.FileExists(path))
         {
