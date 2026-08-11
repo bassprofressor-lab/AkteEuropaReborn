@@ -4848,14 +4848,21 @@ public partial class MapEntityLayer : Node2D
                              $"Spieler {e.Owner} nicht freigegeben").ToString();
 
         // ohne Geld muss es abgelehnt werden, mit Geld gehen — beide Richtungen
+        // ⚠ Ueber den KLICKWEG, nicht ueber BuyAircraft direkt: genau daran
+        // ist es im Spiel gescheitert, und dieser Pruefstand hat es zweimal
+        // nicht gesehen, weil er die Abkuerzung nahm.
+        _selected = own;
         int keep = _money[who];
         _money[who] = HeliPrice - 1;
-        bool poor = BuyAircraft(e);
+        int hadPoor = _special.Count;
+        BuildPanelPick(0);
+        bool poor = _special.Count > hadPoor;
         sb.Append($"\n   mit ${HeliPrice - 1}: {(poor ? "GEKAUFT — falsch!" : "abgelehnt")}  ({_order})");
 
         _money[who] = keep < HeliPrice ? HeliPrice * 2 : keep;
         int before = _money[who], hadAir = _special.Count;
-        bool ok = BuyAircraft(e);
+        BuildPanelPick(0);
+        bool ok = _special.Count > hadAir;
         sb.Append($"\n   mit ${before}: {(ok ? "gekauft" : "ABGELEHNT — falsch!")}  " +
                   $"Kontostand ${_money[who]} (-{before - _money[who]}), " +
                   $"Flugzeuge {hadAir} -> {_special.Count}");
@@ -6826,7 +6833,13 @@ public partial class MapEntityLayer : Node2D
         _order = "";
         int bought = 0;
         foreach (int i in _sel)
-            if (_entities[i].IsBuilding && _entities[i].BType == 9 && !_entities[i].Dead
+            // ⚠ 11.08.2026 — hier stand nur `BType == 9`. Das Baupanel des
+            // Nachschub-Postens zeigte seine zwei Helis, und ein Klick darauf
+            // lief hier vorbei ins Leere: nichts gebaut, kein Geld abgezogen.
+            // Der Pruefstand --depot-check hat es nicht gesehen, weil er
+            // BuyAircraft DIREKT aufruft statt ueber den Klickweg.
+            if (_entities[i].IsBuilding && !_entities[i].Dead
+                && (_entities[i].BType == 9 || IsSupplyDepot(_entities[i]))
                 && BuyAircraft(_entities[i])) bought++;
         if (bought > 0) { UpdatePanel(); QueueRedraw(); return; }
 
