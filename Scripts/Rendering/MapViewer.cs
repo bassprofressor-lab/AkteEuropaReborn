@@ -1191,7 +1191,10 @@ public partial class MapViewer : Node2D
         string obj = _entities.MoneyLine();
         // the per-player objective lists win over the flat one when the map
         // actually carries a player table
-        string goals = _entities.MissionLine();
+        // Die Ziele des MISSIONSSKRIPTS zuerst: eine Kampagnenkarte traegt
+        // keine sec69, also lieferten die beiden Zeilen darunter dort nichts.
+        string goals = _entities.MissionObjectiveLine();
+        if (goals.Length == 0) goals = _entities.MissionLine();
         if (goals.Length == 0) goals = _entities.ObjectiveSummary();
         if (goals.Length > 0) obj += "   " + goals;
         // the design screen takes the HUD over while it is up — it needs the

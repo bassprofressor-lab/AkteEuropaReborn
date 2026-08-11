@@ -4768,6 +4768,52 @@ public partial class MapEntityLayer : Node2D
     /// <summary>What the script says, for the harness.</summary>
     public string MissionScriptLine() => _mscript?.Line() ?? "";
 
+    /// <summary>Die Missionsziele fuer die Statuszeile: Nummer, Zustand und
+    /// die erste Zeile des zugehoerigen Hilfetexts. Ohne sie sieht der Spieler
+    /// nicht, dass eine Untermission laeuft — und schon gar nicht, dass er sie
+    /// erfuellt hat.</summary>
+    public string MissionObjectiveLine()
+    {
+        if (_mscript == null) return "";
+        var objs = _mscript.Objectives();
+        if (objs.Count == 0) return "";
+        var parts = new List<string>();
+        foreach (var (text, state) in objs)
+        {
+            // ⚠ Nicht einfach der erste Absatz: #110 faengt mit dem blossen
+            // Kopf »@Untermission« an, und der ergab nach dem Entfernen der
+            // Auszeichnung eine LEERE Zeile. Genommen wird der erste Absatz,
+            // der nach dem Abstreifen noch etwas sagt.
+            // Die Texte sind nach demselben Muster gebaut: Kopf
+            // (»@Untermission«), Vorrede, dann »@Ziel der Untermission« und
+            // DANACH die eigentliche Aufgabe. Genau die wollen wir — der Kopf
+            // allein sagt nichts (der erste Versuch zeigte »Untermission«).
+            var paras = UI.HelpWindow.TextOf(text);
+            string name = $"Ziel {text}";
+            if (paras != null)
+            {
+                int after = -1;
+                for (int q = 0; q < paras.Count; q++)
+                    if (paras[q].Contains("Ziel") || paras[q].Contains("ziel"))
+                    { after = q + 1; break; }
+                if (after >= 0 && after < paras.Count)
+                    name = paras[after].Replace("@", "").Trim();
+                else
+                    foreach (string q in paras)
+                    {
+                        string t = q.Replace("@", "").Trim();
+                        if (t.Length < 16) continue;
+                        name = t; break;
+                    }
+            }
+            // ... statt … : die Originalschrift hat kein Auslassungszeichen
+            if (name.Length > 46) name = name[..46].TrimEnd() + "...";
+            // Die Originalschrift hat keine eckigen Klammern — Woerter statt Zeichen.
+            parts.Add((state >= 10 ? "ERFUELLT: " : "OFFEN: ") + name.Trim());
+        }
+        return "ZIELE   " + string.Join("   ", parts);
+    }
+
     /// <summary>
     /// `--depot-check` — das Versorgungsdepot von Anfang bis Ende.
     ///

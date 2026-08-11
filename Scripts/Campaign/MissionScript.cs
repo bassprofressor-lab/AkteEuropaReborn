@@ -791,6 +791,27 @@ public sealed class MissionScript
     public int Var(int n) => n >= 0 && n < _var.Length ? _var[n] : -1;
 
     /// <summary>For the harness: what the script is doing right now.</summary>
+    /// <summary>Die Missionsziele, wie der Block sie fuehrt.
+    ///
+    /// <para><c>v[101+k]</c> ist der Zustand des k-ten Ziels — <b>1 offen,
+    /// 10 erfuellt</b> —, <c>v[131+k]</c> seine Textnummer aus HELPG.TXT. Das
+    /// stand seit dem 09.08. im Vokabular und wurde nie angezeigt: Mission 1
+    /// startet mit <c>v[101]=1, v[131]=110</c>, und #110 ist genau die
+    /// Untermission mit den Schiffen. Wer sie erfuellte, bekam Geld und einen
+    /// Klang, aber nirgends eine Bestaetigung — gemeldet als »die Nebenmission
+    /// laesst sich nicht sauber abschliessen«.</para></summary>
+    public List<(int Text, int State)> Objectives()
+    {
+        var list = new List<(int, int)>();
+        for (int k = 0; k < 30; k++)
+        {
+            int st = 101 + k, tx = 131 + k;
+            if (tx >= _var.Length || _var[st] == 0 || _var[tx] == 0) continue;
+            list.Add((_var[tx], _var[st]));
+        }
+        return list;
+    }
+
     public string Line() =>
         $"Skript M{_script.Mission} ({_script.Block}): {RulesFired} Regeln, " +
         $"{Minutes} min" + (_ended ? (Success ? ", GEWONNEN" : ", VERLOREN") : "");
