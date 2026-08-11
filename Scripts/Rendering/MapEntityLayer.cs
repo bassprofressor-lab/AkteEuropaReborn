@@ -4247,7 +4247,14 @@ public partial class MapEntityLayer : Node2D
         for (int i = 0; i < _entities.Count; i++)
         {
             var o = _entities[i];
-            if (o.IsProp || o.Dead || i == idx || Allied(o.Owner, me.Owner)) continue;
+            // ⚠ Kulissenobjekte (Typ >= 17) gehoeren NIEMANDEM und sahen darum
+            // wie Feinde aus: im Lauf griff Einheit 1002 »Init0« an, ein Stueck
+            // Landschaft. Sie haben kein +0x18, koennen nicht eingenommen und
+            // nicht sinnvoll beschossen werden.
+            if (o.IsProp || o.Dead || i == idx) continue;
+            if (o.IsBuilding && o.BType >= 17) continue;
+            if (o.Owner is < 0 or > 7) continue;          // herrenlos ist kein Feind
+            if (Allied(o.Owner, me.Owner)) continue;
             float d = me.Pos.DistanceSquaredTo(o.Pos);
             if (d < bestD) { bestD = d; best = i; }
         }
