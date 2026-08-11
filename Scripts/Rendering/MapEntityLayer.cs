@@ -7368,8 +7368,62 @@ public partial class MapEntityLayer : Node2D
         if (moved) QueueRedraw();
     }
 
+    /// <summary>Der Gleiskörper, Teil 64 (flach), acht Richtungen.</summary>
+    private readonly Dictionary<int, Texture2D?> _railTex = new();
+
+    private Texture2D? GetRailTexture(int piece)
+    {
+        int k = piece & 7;
+        if (_railTex.TryGetValue(k, out var t)) return t;
+        string path = Core.Content.Path($"Units/train/rail64/f{k}.png");
+        t = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+        if (t == null && FileAccess.FileExists(path))
+        {
+            var img = Image.LoadFromFile(path);
+            if (img != null) t = ImageTexture.CreateFromImage(img);
+        }
+        _railTex[k] = t;
+        return t;
+    }
+
+    /// <summary>Die STRECKE — jeder Schritt jeder Linie, unabhaengig davon, ob
+    /// gerade ein Zug darauf faehrt.
+    ///
+    /// <para>⚠ 11.08.2026. Bis heute zeichneten wir gar keine: sichtbar war nur
+    /// der Zug, weil das Bild eines Waggons sein eigenes Schienenstueck
+    /// mitbringt. Gemeldet wurde das mehrfach als »keine Strecke sichtbar«.
+    /// Die blanke Schiene ist Teil 64 in ROBO.CWR, acht Richtungen; gefunden,
+    /// indem die belegten Teile 50..65 ausgegeben und angesehen wurden.</para>
+    ///
+    /// <para>Das Stueck je Schritt ist dasselbe, das ein Waggon dort zeigen
+    /// wuerde (<c>_linePiece</c>) — damit liegen Gleis und Zug zwangslaeufig
+    /// aufeinander statt nebeneinander.</para></summary>
+    /// <summary>Wie viele Gleisstuecke der letzte Durchgang gelegt hat — der
+    /// Pruefstand liest es, sonst waere „die Strecke ist da" wieder nur eine
+    /// Behauptung.</summary>
+    public int RailTilesDrawn;
+
+    private void DrawRailTrack()
+    {
+        RailTilesDrawn = 0;
+        foreach (var kv in _lineRoute)
+        {
+            if (!_linePiece.TryGetValue(kv.Key, out var pcs)) continue;
+            var route = kv.Value;
+            int n = Mathf.Min(route.Count, pcs.Count);
+            for (int i = 0; i < n; i++)
+            {
+                var tex = GetRailTexture(pcs[i]);
+                if (tex == null) return;          // ohne Bilder gar nichts
+                DrawTexture(tex, RailPoint(route[i]) - ComposedAnchor);
+                RailTilesDrawn++;
+            }
+        }
+    }
+
     private void DrawTrains()
     {
+        DrawRailTrack();
         foreach (var w in _wagons)
         {
             int part = WagonPart.TryGetValue(w.Index, out var pp) ? pp : 58;

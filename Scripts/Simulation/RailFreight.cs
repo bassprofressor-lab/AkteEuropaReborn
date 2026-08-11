@@ -573,7 +573,8 @@ public partial class MapEntityLayer : Node2D
         foreach (var w in _wagons) if (w.Freight) fw++;
         sb.Append($") | {fw} von {_wagons.Count} Waggons am Fahrplan");
 
-        if (first) return sb.ToString();
+        if (first) sb.Append($" | Gleis: {RailTilesDrawn} Stuecke gezeichnet");
+        return sb.ToString();
 
         // Die Frage des Spielers war »wie laufen die Teile zusammen«, also wird
         // sie hier beantwortet: die drei Bauteile nach Gebaeudeart, Anfang ->

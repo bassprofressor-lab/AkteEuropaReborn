@@ -41,7 +41,7 @@ public sealed class UnitsExporter
     private readonly ExeTables? _exe;
     private readonly string _dst;
 
-    public int Frames, Hulls, Turrets, Combos, InfantrySets, Aircraft, Wagons, Chassis;
+    public int Frames, Hulls, Turrets, Combos, InfantrySets, Aircraft, Wagons, Rails, Chassis;
 
     public UnitsExporter(CwrFile cwr, PalFile pal, ExeTables? exe, string unitsDir)
     {
@@ -65,6 +65,21 @@ public sealed class UnitsExporter
     /// <summary>The rail cars: the wagon draw path @0x42b4c0 picks part 57 for
     /// the one that leads and 58 for the rest.</summary>
     public static readonly int[] TrainParts = { 57, 58 };
+
+    /// <summary>Der GLEISKÖRPER selbst — Teil 64 flach, Teil 65 auf Stützen.
+    ///
+    /// <para>Gefunden, nachdem eine erste Lesung danebenlag: die Zeichenroutine
+    /// rechnet für eine Kartenzelle zwar mit Bildern 40..47 von Teil 57, aber
+    /// das sind Wagenkörper. Also wurden die belegten Teile 50..65 der Reihe
+    /// nach ausgegeben und angesehen — und 64 ist genau das Gesuchte: acht
+    /// dünne Schienenstücke in den acht Richtungen, ohne Fahrzeug darauf. 65
+    /// ist dieselbe Strecke auf Stützen.</para>
+    ///
+    /// <para>Warum das so lange fehlte: das Bild eines WAGGONS trägt sein
+    /// eigenes Schienenstück mit, also sah man Gleis nur unter dem Zug — und
+    /// deshalb wurde nie danach gesucht, ob es die Schiene auch für sich
+    /// gibt.</para></summary>
+    public static readonly int[] RailParts = { 64, 65 };
 
     /// <summary>Read off the rendered blocks of infantry set 0: 0..7 walk,
     /// 9..10 fire, 11 standing, 12..14 falling. Said as observed, because it
@@ -284,10 +299,27 @@ public sealed class UnitsExporter
                 Save($"train/{part}/f{f}.png", _cwr.PartImage(part, f, _pal));
             Wagons++;
         }
-        sb.Append("}}");
+        sb.Append("},\"rail_part\":{");
+        // der blanke Gleiskoerper: 64 flach, 65 auf Stuetzen
+        bool f2 = true;
+        foreach (int part in RailParts)
+        {
+            int b = _cwr.PartBase(part);
+            if (!f2) sb.Append(',');
+            f2 = false;
+            sb.Append($"\"{part}\":{(b < 0 ? "null" : b.ToString())}");
+            if (b < 0) continue;
+            for (int f = 0; f < CwrFile.Facings; f++)
+                Save($"train/rail{part}/f{f}.png", _cwr.PartImage(part, f, _pal));
+            Rails++;
+        }
+        sb.Append("},\"_rail\":\"train/rail64 ist das flache Gleis, train/rail65 ");
+        sb.Append("dasselbe auf Stuetzen -- acht Richtungen wie beim Waggon. Der ");
+        sb.Append("Bildindex eines WAGGONS traegt sein Schienenstueck mit, deshalb ");
+        sb.Append("sah man Gleis lange nur unter dem Zug\"}");
         Directory.CreateDirectory(_dst + "/train");
         File.WriteAllText(_dst + "/train/train.json", sb.ToString(), new UTF8Encoding(false));
-        say?.Invoke($"Zuege: {Wagons} Wagentypen");
+        say?.Invoke($"Zuege: {Wagons} Wagentypen, {Rails} Gleisarten");
     }
 
     // ---- the two indices ----------------------------------------------------
