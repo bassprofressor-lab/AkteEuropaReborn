@@ -5,15 +5,26 @@ using Godot;
 namespace AkteEuropaReborn.Rendering;
 
 /// <summary>
-/// The skirmish opponent — OURS, from the ground up.
+/// The skirmish opponent.
 ///
-/// Nothing in this file is reconstructed from GAME.EXE. The original's AI was
-/// never reversed (its debug strings "AI end", "AI: production base:",
-/// "More mer_ships needed" are all that is known of it), so this is a plain,
-/// readable opponent written for the remake: it keeps its factories busy, buys
-/// what its buildings can buy, gathers an army and throws it at the nearest
-/// enemy. Everything it commands goes through the same simulation rules the
-/// human player is bound by — it does not cheat on resources, sight or speed.
+/// ⚠ Die Kopfzeile "Nichts in dieser Datei stammt aus GAME.EXE" ist seit dem
+/// 10.08.2026 ueberholt. ZWEI Stuecke sind jetzt aus der EXE gelesen und als
+/// solche gekennzeichnet (Werkzeug `aekernel-tools/ai_units.py`, auf BEIDEN
+/// GAME.EXE per Fingerabdruck gegengeprueft):
+///
+///   * <see cref="AiFindBase"/> + <see cref="AiProducePlanStep"/> —
+///     `find_base` @0x4BB0C0 / `build_in_base` @0x4BB1E0 / `ai_production`
+///     @0x4BB9A0. Der Computerspieler baut in einer ZUFAELLIG gewaehlten
+///     eigenen BASIS (Gebaeudetyp 1), nicht in einer Fabrik, und fragt dabei
+///     KEIN Baumenue ab. Hat er keine Basis, baut er nichts.
+///   * <see cref="AiSweep"/> + <see cref="AiRingTarget"/> — `ai_units`
+///     @0x4BF4E0. Jede untaetige Einheit sucht sich selbst ein Ziel; es gibt
+///     im Original keine Welle.
+///
+/// Alles andere — Wellen, Wachen, Denk-Takt, das Besetzen, die Entwurfswahl im
+/// Gemetzel — ist weiterhin OURS: ein schlichter, lesbarer Gegner. Er ist an
+/// dieselben Regeln gebunden wie der Mensch und schummelt nicht bei Rohstoffen,
+/// Sicht oder Tempo.
 ///
 /// The three difficulties differ only in how fast it thinks, how big a group
 /// it gathers before attacking, and whether it keeps a home guard.
@@ -42,9 +53,46 @@ public partial class MapEntityLayer : Node2D
         public List<(int Kind, int What)>? Plan;
         public int Pc;
         public int FromPlan;                       // builds the programme drove
-        public int PlanMissed;                     // lines no factory could serve
+        public int PlanMissed;                     // lines whose design we do not have
         public readonly List<string> PlanNames = new();
         public readonly HashSet<int> PlanUnmatched = new();
+
+        // die einzelnen Ausgaenge von build_in_base @0x4BB1E0, getrennt gezaehlt
+        public int PlanNoBase;                     // »AI: production base: 255«
+        public int PlanBroke;                      // »Sources check« nicht bestanden
+        public int PlanBusy;                       // die Basis baut schon (unsere Setzung)
+        public int PlanOther;                      // Zeilenart 2 — auch im Original nichts
+
+        // und die von build_in_airport @0x4BB3D0, genauso getrennt (11.08.2026)
+        public int PlanAir;                        // »Airp build« — ein Flugzeug entstand
+        public int PlanNoAirport;                  // find_airport gab 0xFF, kein Flughafen
+        public int PlanAirBroke;                   // »Sources check« am Flughafen
+        public int PlanHangar;                     // »Hangar check« nicht bestanden
+        public int PlanAirMissed;                  // den Flugzeugentwurf gibt es nicht
+        public readonly List<string> PlanAirNames = new();
+        public readonly HashSet<int> PlanAirUnmatched = new();
+        public string AirBroke = "";               // woran der Flughafen scheitert
+
+        /// <summary>Der Wuerfel dieses Spielers. `find_base` und der
+        /// Einheitendurchlauf greifen beide auf `rand()` zurueck; ein eigener,
+        /// fest gesaeter Wuerfel je Spieler haelt den Harnisch reproduzierbar.
+        /// Der Startwert ist UNSERE Setzung, das Wuerfeln selbst nicht.</summary>
+        public readonly System.Random Rnd;
+
+        /// <summary>Der Einheitendurchlauf: Sekunden bis zum naechsten Block und
+        /// welcher der acht Bloecke als naechstes drankommt (ai_units).</summary>
+        public float Sweep;
+        public int Block;
+        public int Looked, Sent;                   // fuer die Statuszeile
+        public int SawAny, SawFoe, SawClass;       // Belegung im Ring / feindlich / Klasse passt
+        public readonly HashSet<string> ClassSeen = new();
+
+        /// <summary>Welche INFANTERIE (typ +0x0a == 1) je einen Befehl bekommen
+        /// hat — die Zahl, an der Punkt 4 der Fehlerliste haengt.</summary>
+        public readonly HashSet<int> MovedInf = new();
+        public string Broke = "";                  // woran »Sources check« scheitert
+
+        public AiPlayer(int player) { Player = player; Rnd = new System.Random(0x4BF4E0 + player); }
     }
 
     /// <summary>
@@ -129,7 +177,7 @@ public partial class MapEntityLayer : Node2D
         foreach (int p in players)
         {
             if (p is < 0 or > 7) continue;
-            var a = new AiPlayer { Player = p, Level = level, Think = 0.5f + p * 0.13f };
+            var a = new AiPlayer(p) { Level = level, Think = 0.5f + p * 0.13f };
             AiLoadPlan(a);
             _ai.Add(a);
         }
@@ -309,6 +357,7 @@ public partial class MapEntityLayer : Node2D
         var live = LivePlayers();
         if (live.Count == 0) return -1;
         ViewPlayer = human;
+        InCampaign = true;
 
         // Who fights whom is the mission's own business, and it is no longer a
         // guess: mission_init @0x487c40 sets the full 8x8 matrix on every start
@@ -353,7 +402,8 @@ public partial class MapEntityLayer : Node2D
         GD.Print($"Kampagne: Spieler {human}; Gegner {(foes.Count == 0 ? "keine" : string.Join(",", foes))}" +
                  (mates.Count > 0 ? $"; verbuendet {string.Join(",", mates)}" : "") +
                  (standby.Count > 0 ? $"; unbeteiligt {string.Join(",", standby)}" : "") +
-                 $" ({level}); Armeen bleiben stehen — " +
+                 $" ({level}); keine Angriffswellen, kein Gebaeudegreifer " +
+                 "(das Original marschiert auf einer Kampagnenkarte nicht) — " +
                  string.Join(" ", System.Array.ConvertAll(live.ToArray(),
                      p => $"P{p}:{ArmyOf(p).Count}E")) +
                  (read
@@ -506,23 +556,64 @@ public partial class MapEntityLayer : Node2D
             (a.Plan != null ? $"/{a.FromPlan}p" : "")));
     }
 
-    /// <summary>What the computer players took out of their programme, by name
-    /// — the check that the recovered lines really reach a factory.</summary>
+    /// <summary>Was die Computerspieler aus ihrem Programm gezogen haben, mit
+    /// Namen — und was sie daran gehindert hat. Die Ausgaenge sind die von
+    /// `build_in_base` @0x4BB1E0, jeder einzeln gezaehlt, damit ein Ausfall
+    /// nicht wieder als "uebersprungen" verschwindet.</summary>
     public string AiPlanLine()
     {
         if (!_aiOn) return "";
         var parts = new List<string>();
         foreach (var a in _ai)
         {
-            if (a.Plan == null) continue;
+            if (a.Plan == null)
+            {
+                parts.Add($"P{a.Player} ohne Programm ({AiBaseCount(a.Player)} Basen)");
+                continue;
+            }
+            int air = a.Plan.Count(l => l.Kind == 1);
             parts.Add($"P{a.Player} {a.FromPlan}x aus dem Programm " +
                       $"[{string.Join(", ", a.PlanNames)}]" +
+                      $"; {AiBaseCount(a.Player)} Basen" +
+                      $"; ohne Basis {a.PlanNoBase}x, Lager leer {a.PlanBroke}x, " +
+                      $"Basis baut schon {a.PlanBusy}x, leere Zeilenart {a.PlanOther}x" +
                       (a.PlanUnmatched.Count > 0
-                          ? $"; {a.PlanMissed}x uebersprungen, Entwuerfe ohne Menueeintrag: " +
+                          ? $", Entwurf unbekannt {a.PlanMissed}x: " +
                             string.Join(",", a.PlanUnmatched)
-                          : ""));
+                          : "") +
+                      (a.Broke.Length > 0 ? $" [zuletzt: {a.Broke}]" : "") +
+                      // Zeilenart 1 — steht nur da, wo das Programm sie hat
+                      $"  |  Flugzeuge: {air} Zeilenart-1-Zeilen, {a.PlanAir}x gebaut " +
+                      $"[{string.Join(", ", a.PlanAirNames)}]" +
+                      $"; {AiAirportLine(a.Player)}" +
+                      $"; ohne Flughafen {a.PlanNoAirport}x, Lager leer " +
+                      $"{a.PlanAirBroke}x, Hangar voll {a.PlanHangar}x" +
+                      (a.PlanAirUnmatched.Count > 0
+                          ? $", Entwurf unbekannt {a.PlanAirMissed}x: " +
+                            string.Join(",", a.PlanAirUnmatched)
+                          : "") +
+                      (a.AirBroke.Length > 0 ? $" [zuletzt: {a.AirBroke}]" : ""));
         }
-        return parts.Count == 0 ? "" : "KI-Bauprogramm gebaut: " + string.Join("  ", parts);
+        // Der Harnisch (MapViewer) druckt genau diese eine Zeile; die Streife
+        // haengt darum hier mit dran, statt einen neuen Aufruf dort zu brauchen.
+        string sweep = AiUnitLine();
+        string plan = parts.Count == 0 ? "" : "KI-Bauprogramm gebaut: " + string.Join("  ", parts);
+        return plan.Length > 0 && sweep.Length > 0 ? plan + "\n" + sweep
+             : plan.Length > 0 ? plan : sweep;
+    }
+
+    /// <summary>Was der Einheitendurchlauf (ai_units @0x4BF4E0) getan hat —
+    /// wie viele untaetige Einheiten angesehen und wie viele losgeschickt
+    /// wurden. Das ist die Zahl, an der Punkt 4 haengt.</summary>
+    public string AiUnitLine()
+    {
+        if (!_aiOn) return "";
+        return "KI-Streife: " + string.Join("  ", _ai.Select(a =>
+            $"P{a.Player} {a.Sent} losgeschickt, {a.Looked} untaetige angesehen " +
+            $"(Armee {ArmyOf(a.Player).Count}), im Ring {a.SawAny} Einheiten, " +
+            $"{a.SawFoe} feindlich, {a.SawClass} in der eigenen Klasse " +
+            $"[{string.Join(" ", a.ClassSeen)}]; Infanterie bewegt " +
+            $"{a.MovedInf.Count}/{InfantryOf(a.Player)}"));
     }
 
     // ---- the loop ---------------------------------------------------------
@@ -532,17 +623,194 @@ public partial class MapEntityLayer : Node2D
         if (!_aiOn) return;
         foreach (var a in _ai)
         {
+            if (!AliveAsPlayer(a.Player)) continue;
+
+            // Der Einheitendurchlauf haengt NICHT am Denk-Takt. Im Original ist
+            // er ein eigener Eintrag der KI-Runde (Takte 16,20,…,44) und laeuft
+            // damit auch dann, wenn gerade nichts entschieden wird.
+            AiSweep(a, dt);
+
             a.Think -= dt;
             a.AttackTimer -= dt;
             if (a.Think > 0f) continue;
             var (think, waveSize, guard) = AiTuning(a.Level);
             a.Think += think;
 
-            if (!AliveAsPlayer(a.Player)) continue;
             AiProduce(a);
-            AiGrab(a);
-            AiFight(a, waveSize, guard);
+
+            // ⚠ AUF EINER KAMPAGNENKARTE MARSCHIERT NIEMAND (11.08.2026).
+            //
+            // Der Spieler meldete, in Mission 1 fahre alles irgendwohin, obwohl
+            // sie im Original wie ein Tutorial anfängt. Gemessen nach 90 s:
+            // 19 von 21 Einheiten des Gegners in einer Welle, 10 Fusssoldaten
+            // unterwegs — und `shots=0`. Es marschierte nur.
+            //
+            // Und das Original tut das NICHT. `ai_units(spieler, block)`
+            // @0x4BF4E0 (aekernel-tools/ai_units.py) nimmt nur Einheiten mit
+            // `faze == 0` UND `ukol == 0` und geht dann **den eigenen Sichtring**
+            // durch (Versatztabelle, begrenzt durch +0x2c, die grosse
+            // Reichweite). Findet es dort ein feindliches Fahrzeug, ruft es
+            // `order` @0x410220 und setzt `ukol = 4`. Findet es keines,
+            // geschieht GAR NICHTS. Es gibt im ganzen Durchlauf keinen Schritt,
+            // der eine Einheit auf ein Ziel ausserhalb ihrer Reichweite
+            // zubewegt — die Angriffswelle und der Gebäudegreifer sind
+            // vollständig UNSER Zusatz, und ihr Kopfkommentar sagt das bei
+            // `AiGrab` sogar selbst (»OURS from end to end«).
+            //
+            // Im Gefecht bleiben beide: dort ersetzen sie das Missionsskript,
+            // das es nicht gibt, und ohne sie stünde die Karte still. Auf einer
+            // Kampagnenkarte richtet die Mission aus, was geschieht — bis deren
+            // Block (0x498000..0x4A5600) gelesen ist, ist Stillhalten näher am
+            // Original als Herumfahren.
+            if (!InCampaign)
+            {
+                AiGrab(a);
+                AiFight(a, waveSize, guard);
+            }
+            else
+            {
+                // ⚠ NACHTRAG desselben Tages, und er nimmt die Aussage oben
+                // nicht zurueck, sondern vervollstaendigt sie: das Original
+                // marschiert auf einer Kampagnenkarte nicht VON SELBST — aber
+                // die MISSION kann ihre Computerspieler losschicken.
+                // `add_target(spieler, art, vorrang, wort, c)` @0x4CF700 traegt
+                // ein Ziel in die Liste 0xBC5A78 ein (100 je Spieler, 6 Byte),
+                // und alle Leser dieser Liste liegen im KI-Bereich. Genau so
+                // bekommt Mission 9, 13, 15, 20 und 24 ihre Angriffe.
+                AiMissionAttack(a, waveSize, guard);
+            }
         }
+    }
+
+    /// <summary>Läuft gerade eine Kampagnenmission? Gesetzt von
+    /// <see cref="StartCampaign"/>, und der einzige Schalter, der die beiden
+    /// Verhaltensweisen abschaltet, die im Original keine Entsprechung haben.</summary>
+    public bool InCampaign { get; private set; }
+
+    // ---- die Zielliste, die eine Mission ihren Computerspielern gibt --------
+    //
+    // `add_target(spieler, art, vorrang, wort, c)` @0x4CF700, Tabelle 0xBC5A78:
+    // **100 Ziele je Spieler à 6 Byte**, der erste freie Platz gewinnt, sonst
+    // meldet das Spiel »Cannot add new target«. Der Eintrag:
+    //
+    //     +0x00  art      1..4, Sprungtabelle @0x4BE184
+    //     +0x01  vorrang  die auswaehlende Routine nimmt nur Ziele darueber
+    //     +0x02  wort     das Ziel selbst
+    //     +0x04  c        zweites Byte des Ziels (bei art 3 die Spalte)
+    //
+    // Die auswaehlende Routine @0x4BDCC0 laeuft die 100 Plaetze ab und **loescht
+    // einen Eintrag, sobald sein Ziel erledigt ist** — das ist die Abbruch-
+    // bedingung, und sie steht je Art woanders:
+    //
+    //     art 1  Gebaeudeplatz `wort`   (76*wort + 0xC06914), weg wenn typ == 0
+    //     art 2  Einheitenplatz `wort`  (78*wort + 0x6E26D1), weg wenn +0x09 == 0xFF
+    //     art 3  Kartenzelle `(wort<<8) + c` — die gepackte Zellnummer
+    //            row*256+col — in der Belegungskarte 0xBDEA80; weg, sobald der
+    //            Belegende dem Spieler SELBST gehoert (`/1000 == spieler`)
+    //
+    // ⚠ **Art 4 ist ungelesen** und wird darum nur vermerkt, nicht ausgefuehrt.
+    private sealed class MissionTarget
+    {
+        public int Kind, Priority, Word, Second;
+    }
+
+    private readonly List<MissionTarget>[] _missionTargets =
+        { new(), new(), new(), new(), new(), new(), new(), new() };
+
+    /// <summary>Ein Ziel eintragen — <c>add_target</c>.</summary>
+    public void AddMissionTarget(int player, int kind, int prio, int word, int second)
+    {
+        if (player is < 0 or > 7) return;
+        var list = _missionTargets[player];
+        if (list.Count >= 100)          // »Cannot add new target«
+        {
+            GD.PrintErr($"add_target: Spieler {player} hat schon 100 Ziele");
+            return;
+        }
+        list.Add(new MissionTarget { Kind = kind, Priority = prio, Word = word, Second = second });
+        GD.Print($"Missionsziel fuer Spieler {player}: Art {kind}, Vorrang {prio}, " +
+                 $"Ziel {word}" + (kind == 3 ? $" (Zelle {second},{word})" : "") +
+                 (kind is < 1 or > 3 ? "  ⚠ Art ungelesen — wird nicht ausgefuehrt" : ""));
+    }
+
+    /// <summary>Wieviele Ziele ein Spieler noch offen hat — für den Prüfstand.</summary>
+    public int MissionTargetsOf(int player)
+        => player is >= 0 and <= 7 ? _missionTargets[player].Count : 0;
+
+    /// <summary>Den Eintrag auflösen: der Index der Entität, die gemeint ist,
+    /// oder -1. Erledigte Ziele werden dabei gestrichen, genau wie @0x4BDCC0
+    /// es tut.</summary>
+    private int ResolveTarget(int player, MissionTarget t)
+    {
+        switch (t.Kind)
+        {
+            case 1:                                   // Gebaeudeplatz
+                for (int i = 0; i < _entities.Count; i++)
+                    if (_entities[i].IsBuilding && !_entities[i].Dead &&
+                        _entities[i].Slot == t.Word) return i;
+                return -1;
+            case 2:                                   // Einheitenplatz
+                for (int i = 0; i < _entities.Count; i++)
+                    if (!_entities[i].IsBuilding && !_entities[i].Dead &&
+                        _entities[i].Slot == t.Word) return i;
+                return -1;
+            case 3:                                   // Kartenzelle
+            {
+                int col = t.Second, row = t.Word;
+                for (int i = 0; i < _entities.Count; i++)
+                {
+                    var e = _entities[i];
+                    if (e.IsProp || e.Dead || e.Col != col || e.Row != row) continue;
+                    // erledigt, sobald die Zelle dem Spieler selbst gehoert
+                    return e.Owner == player ? -1 : i;
+                }
+                return -1;
+            }
+            default:
+                return -1;                            // Art 4: ungelesen
+        }
+    }
+
+    /// <summary>
+    /// Die Armee eines Computerspielers auf das Ziel schicken, das ihm die
+    /// Mission gegeben hat — mit dem höchsten Vorrang zuerst, wie @0x4BDCC0.
+    /// Kein Ziel heisst: es geschieht nichts, und das ist der Normalfall.
+    /// </summary>
+    private void AiMissionAttack(AiPlayer a, int waveSize, int guard)
+    {
+        var list = _missionTargets[a.Player];
+        if (list.Count == 0) return;
+
+        int best = -1, bestPrio = int.MinValue;
+        for (int k = list.Count - 1; k >= 0; k--)
+        {
+            int idx = ResolveTarget(a.Player, list[k]);
+            if (idx < 0) { list.RemoveAt(k); continue; }   // erledigt — streichen
+            if (list[k].Priority > bestPrio) { bestPrio = list[k].Priority; best = idx; }
+        }
+        if (best < 0) return;
+
+        // ⚠ UNSERE Setzung ist die Zahl der Einheiten, die losgehen: das
+        // Original waehlt sie in @0x4BECF0, das hier nicht gelesen ist. Genommen
+        // wird dieselbe Wellengroesse wie im Gefecht, damit wenigstens EINE
+        // Zahl im Spiel steht und nicht zwei verschiedene.
+        var army = ArmyOf(a.Player);
+        a.Wave.RemoveAll(i => i >= _entities.Count || _entities[i].Dead ||
+                              _entities[i].Owner != a.Player);
+        if (a.Wave.Count > 0 && a.TargetIdx == best) return;   // schon unterwegs
+        if (army.Count <= guard) return;
+
+        a.Wave.Clear();
+        int take = Mathf.Min(waveSize, army.Count - guard);
+        for (int k = 0; k < take && k < army.Count; k++)
+        {
+            a.Wave.Add(army[k]);
+            AiSend(army[k], best);
+        }
+        a.TargetIdx = best;
+        a.Waves++;
+        GD.Print($"KI P{a.Player}: {take} Einheiten auf das Missionsziel " +
+                 $"{_entities[best].Name} bei ({_entities[best].Col},{_entities[best].Row})");
     }
 
     private bool AliveAsPlayer(int p)
@@ -567,6 +835,17 @@ public partial class MapEntityLayer : Node2D
             sum += CellCenter(e.Col, e.Row); n++;
         }
         return n > 0 ? sum / n : null;
+    }
+
+    /// <summary>Wie viele Fusssoldaten dieser Spieler noch hat — Einheitensatz
+    /// +0x0a == 1 (siehe <see cref="AiInfantryClass"/>).</summary>
+    private int InfantryOf(int p)
+    {
+        int n = 0;
+        foreach (var e in _entities)
+            if (!e.IsBuilding && !e.IsProp && !e.Dead && e.Owner == p &&
+                e.Subclass == AiInfantryClass) n++;
+        return n;
     }
 
     /// <summary>Everything of this player that can move and shoot.</summary>
@@ -596,11 +875,12 @@ public partial class MapEntityLayer : Node2D
 
     private void AiProduce(AiPlayer a)
     {
-        // A campaign mission's own programme is stepped ONCE per decision, for
-        // the player — not once per factory. That is the shape of the original:
-        // `ai_production` runs a single line every 50 ticks and looks for a
-        // place to put it, so a line meant for the Fahrwerk-Fabrik is not
-        // quietly handed to the Waffen-Fabrik and dropped.
+        // Das Bauprogramm der Mission macht EINEN Schritt je Entscheidung, fuer
+        // den SPIELER — nicht einen je Fabrik. So ist das Original gebaut:
+        // `ai_production` @0x4BB9A0 fuehrt eine einzige Zeile je 50 Takte aus
+        // und legt sie in eine ausgewuerfelte BASIS (siehe AiProducePlanStep).
+        // Die Fabriken kommen dabei gar nicht vor; sie waehlen nur im Gemetzel,
+        // wo es kein Programm gibt, und das ist unsere Zutat.
         bool planned = a.Plan is { Count: > 0 };
         if (planned) AiProducePlanStep(a);
 
@@ -650,54 +930,384 @@ public partial class MapEntityLayer : Node2D
         }
     }
 
+    /// <summary>Der Gebaeudetyp, in dem der Computerspieler produziert, und wie
+    /// viele Gebaeudeplaetze <c>find_base</c> absucht — beides GELESEN:
+    /// `cmp byte[76*i + 0xC06914], 1` ist Gebaeudesatz +0x04 = typ, und die
+    /// Schleife laeuft <c>for (dx = 0; dx &lt; 0xFF; dx++)</c>.
+    /// Auf der F:-Fassung steht dasselbe bei 0xC05974 — <c>ai_units.py</c>
+    /// liest die Adresse in beiden Faellen aus dem Rumpf.</summary>
+    private const int AiBaseType = 1;
+    private const int AiBaseSlots = 255;
+
     /// <summary>
-    /// One line of the mission's build programme.
+    /// <b>`find_base` @0x4BB0C0 — GELESEN, nicht erfunden.</b>
     ///
-    /// Faithful to `ai_production` @0x4BB9A0 in the two things that matter: the
-    /// counter moves on whether or not the line could be built, and a line is
-    /// offered to a place that can actually make it. Where a line names a design
-    /// none of this player's idle factories has on its menu, nothing is built
-    /// this time — the original behaves the same way, it simply finds no base
-    /// (»AI: production base:«) and returns.
+    /// <code>
+    /// find_base(spieler):
+    ///     n = 0
+    ///     for i = 0 .. 254:
+    ///         if typ[i] == 1 and eigner[i] == spieler: kand[n++] = i
+    ///     if n == 0: return 0xFF
+    ///     return kand[rand() % n]
+    /// </code>
     ///
-    /// ⚠ Our pace is still ours: the original takes one step every 50 ticks,
-    /// this takes one per think-timer decision.
+    /// Zwei Dinge daran sind der ganze Punkt 15 der Fehlerliste:
+    /// <list type="number">
+    /// <item>gebaut wird in einer <b>BASIS</b> (Gebaeudetyp 1), nicht in einer
+    /// der drei Fabriken — deshalb fragt das Original auch kein Baumenue ab;</item>
+    /// <item>die Basis wird <b>ausgewuerfelt</b>, es ist nicht "die erste freie".</item>
+    /// </list>
+    /// Wer keine Basis hat, baut nichts: `build_in_base` gibt bei 0xFF sofort 0
+    /// zurueck, und die Zeile ist trotzdem verbraucht.
+    /// </summary>
+    private int AiFindBase(AiPlayer a)
+    {
+        var cand = new List<int>();
+        for (int i = 0; i < _entities.Count && cand.Count < AiBaseSlots; i++)
+        {
+            var e = _entities[i];
+            if (!e.IsBuilding || e.IsProp || e.Dead) continue;
+            if (e.BType != AiBaseType || e.Owner != a.Player) continue;
+            cand.Add(i);
+        }
+        return cand.Count == 0 ? -1 : cand[a.Rnd.Next(cand.Count)];
+    }
+
+    /// <summary>Wie viele Basen ein Spieler hat — nur fuer die Statuszeile.</summary>
+    private int AiBaseCount(int p)
+    {
+        int n = 0;
+        foreach (var e in _entities)
+            if (e.IsBuilding && !e.IsProp && !e.Dead && e.BType == AiBaseType && e.Owner == p) n++;
+        return n;
+    }
+
+    /// <summary>
+    /// Eine Zeile des Bauprogramms — jetzt in der Form des Originals.
+    ///
+    /// <code>
+    /// ai_production(spieler):                          @0x4BB9A0, Takt 5 der Runde
+    ///     if !enabled[spieler]:   »AI: no production - no transport«;  return
+    ///     pc = programmzaehler[spieler]
+    ///     if pc == 0xFF:          »AI: no production - nothing to do«; return
+    ///     zeile = programm[50*spieler + pc]            ; 3 Byte
+    ///     switch zeile[0]: 0 -> build_in_base(zeile[1], spieler)      @0x4BB1E0
+    ///                      1 -> build_in_airport(zeile[1], spieler)   @0x4BB3D0
+    ///                      sonst: nichts
+    ///     pc++;  if pc > 49 or naechste[0] == 0xFF: pc = 0            ; laeuft um
+    ///
+    /// build_in_base(entwurf, spieler):
+    ///     »AI: production in base %d«
+    ///     b = find_base(spieler);  »AI: production base: %d«
+    ///     if b == 0xFF: return 0
+    ///     »Sources check«   n = 200*spieler + entwurf
+    ///     if kosten_w > lager_w(b) || kosten_f > lager_f(b) || kosten_s > lager_s(b): return 0
+    ///     »Depo check«      if depotplatz(b) belegt: return 0
+    ///     »Depo check ok«   spawn;  »Robot build«
+    /// </code>
+    ///
+    /// <b>Was sich dadurch aendert und warum Punkt 15 genau das war:</b> bisher
+    /// wurde die Zeile jeder untaetigen FABRIK angeboten und nur gebaut, wenn
+    /// der Entwurf auf deren <c>BuildableBy</c>-Menue stand. Die Zeilen 84/85/86
+    /// ("Chaingun Tank", "Light Tank", "Medium Tank") tragen in
+    /// <c>unit_designs.json</c> aber <c>flags[0] == 0</c>, stehen also auf gar
+    /// keinem Menue, und Zeile 53 ("Pioneer") landet ueber
+    /// <c>FitsFactory</c> nur in der Fahrwerk-Fabrik. Das ist der gemeldete
+    /// Befund <c>Entwuerfe ohne Menueeintrag: 85,86,84,53</c> — und warum am
+    /// Ende fast nur der freigeschaltete "Transporter" gebaut wurde.
+    /// Das Original kennt diese Huerde nicht: es liest die drei Kostenbytes des
+    /// Entwurfs und vergleicht sie mit den drei Lagern der Basis, fertig.
+    ///
+    /// <b>UNSERE SETZUNGEN hier, ausdruecklich:</b>
+    /// <list type="bullet">
+    /// <item>der "Depo check" ist bei uns "die Basis baut gerade nichts" —
+    /// das Original prueft einen Platz in einer 16-Byte-Tabelle
+    /// (<c>word[16*cis_typ + 0x878E66] == 0xFFFF</c>), die wir nicht abbilden;</item>
+    /// <item>der Entwurf wird ueber <c>Slot % 200</c> gesucht statt ueber
+    /// <c>200*spieler + zeile</c> (@0x4BB258): <c>LoadDesigns</c> haelt je Name
+    /// nur EINEN Eintrag, es ueberlebt also nur einer der acht Spielerbloecke;</item>
+    /// <item>das Tempo — eine Zeile je Denk-Entscheidung statt je 50 Takte.</item>
+    /// </list>
     /// </summary>
     private void AiProducePlanStep(AiPlayer a)
     {
         if (_designs == null || a.Plan == null || a.Plan.Count == 0) return;
 
         var (kind, what) = a.Plan[a.Pc % a.Plan.Count];
-        a.Pc = (a.Pc + 1) % a.Plan.Count;
-        if (kind != 0) return;              // 1 = aircraft, 2 = ignored by the original too
+        a.Pc = (a.Pc + 1) % a.Plan.Count;   // der Zaehler laeuft weiter, egal was folgt
+        // Der Verteiler von `ai_production` @0x4BBA27: `test eax,eax` -> 0,
+        // `cmp eax,1` -> 1, alles andere faellt durch und tut NICHTS.
+        if (kind == 1) { AiProduceAirStep(a, what); return; }
+        if (kind != 0) { a.PlanOther++; return; }
 
-        for (int i = 0; i < _entities.Count; i++)
+        int bi = AiFindBase(a);
+        if (bi < 0) { a.PlanNoBase++; return; }     // »AI: production base: 255«
+        var b = _entities[bi];
+        if (b.BuildTime > 0f) { a.PlanBusy++; return; }
+
+        int pick = -1;
+        for (int k = 0; k < _designs.Count; k++)
+        {
+            int s = _designs[k].Slot;
+            if (s >= 0 && s % DesignsPerPlayer == what) { pick = k; break; }
+        }
+        if (pick < 0) { a.PlanMissed++; a.PlanUnmatched.Add(what); return; }
+
+        var d = _designs[pick];
+        if (!CanAfford(b, d))
+        {
+            a.PlanBroke++;                                 // »Sources check«
+            a.Broke = $"{d.Name} kostet {d.CostW}/{d.CostF}/{d.CostS}, " +
+                      $"Basis hat {b.StockW}/{b.StockF}/{b.StockS}";
+            return;
+        }
+        PayFor(b, d);
+        b.BuildIndex = pick;
+        b.BuildTime = BuildSeconds;
+        a.Built++;
+        a.FromPlan++;
+        if (a.PlanNames.Count < 12) a.PlanNames.Add(d.Name);
+    }
+
+    // ================= Zeilenart 1: die Flugzeuge ============================
+    //
+    // GELESEN am 11.08.2026, Werkzeug `aekernel-tools/ai_air.py`, auf BEIDEN
+    // GAME.EXE per Fingerabdruck wiedergefunden (7 von 7 Funktionen eindeutig)
+    // und dort Zahl fuer Zahl neu ausgelesen; die Instruktionsfolgen sind bis
+    // auf EINEN Befehl gleich, und der unterscheidet sich nur in der
+    // Operandenreihenfolge desselben Vergleichs.
+    //
+    // ⚠ Die im Handoff notierte Spawn-Adresse **0x4B1840 ist die falsche**,
+    // und zwar nicht als Tippfehler, sondern als andere Funktion:
+    //   * 0x4B1380 ist die FLUGZEUG-Spawn-Routine — `build_in_airport` ruft sie
+    //     ueber den Thunk 0x401D93 (`jmp 0x4B1380`). Die frueher notierte
+    //     0x4B1580 ist dieselbe Funktion, 0x200 Byte tiefer.
+    //   * 0x4B1840 ist die BODEN-Spawn-Routine der Zeilenart 0: sie sucht im
+    //     Einheitenfeld 0x6E26C8 (Schrittweite 78) einen freien Satz und wird
+    //     unter anderem von 0x4BB31B gerufen — mitten aus `build_in_base`.
+
+    /// <summary>Der Gebaeudetyp, in dem der Computerspieler FLUGZEUGE baut.
+    /// GELESEN: `find_airport` @0x4BB150 ist Byte fuer Byte dieselbe Funktion
+    /// wie `find_base` @0x4BB0C0 — dieselben 255 Plaetze, dasselbe typ@+0x14,
+    /// eigner@+0x15, dasselbe Kandidatenfeld, dieselbe Zufallswahl. Der EINZIGE
+    /// Unterschied ist die Typzahl: <c>cmp byte[76*i + 0xC06914], 9</c> statt
+    /// <c>, 1</c>. Auf der F:-Fassung steht dasselbe bei 0xC05974.</summary>
+    private const int AiAirportType = 9;
+
+    /// <summary>
+    /// Die drei Kostenbytes der acht Flugzeugvorlagen — GELESEN, aber ueber
+    /// eine Kruecke im Umlauf.
+    ///
+    /// `build_in_airport` vergleicht <c>byte[0x51B03F + 48*(20*spieler +
+    /// entwurf)]</c> und die beiden Folgebytes mit den drei Lagern des
+    /// Flughafens. Das sind die Felder <b>+0x1F/+0x20/+0x21</b> des
+    /// sec120-Satzes (48 Byte, 20 je Spieler) — und genau die drei liest
+    /// <c>CwmExtra.AirDesigns</c> heute NICHT aus, weshalb
+    /// <see cref="AirDesign"/> keine Kosten hat und <c>aircraft.json</c> auch
+    /// keine enthaelt.
+    ///
+    /// Bis das nachgezogen ist, stehen hier die Werte der acht Standardvorlagen
+    /// aus GAME.EXE, in beiden Fassungen identisch gelesen:
+    /// <code>
+    ///   0 Jagdflieger        50/ 50/  0    4 Kampfhubschrauber  60/ 40/  0
+    ///   1 Bomber             80/ 70/ 10    5 Treibstoffheli      0/ 30/ 40
+    ///   2 Spionageflieger     0/ 40/ 30    6 Munitionheli        0/ 30/ 40
+    ///   3 Transport Heli      0/ 30/ 50    7 Mechanikerheli      0/ 30/150
+    /// </code>
+    /// <b>Was daran UNSERE Setzung ist:</b> dass fuer alle acht Spieler
+    /// dieselben Kosten gelten. Im Original hat jeder Spieler seinen eigenen
+    /// 20er-Block, und eine .DM-Karte kann darin andere Zahlen tragen. Sobald
+    /// der Import die drei Bytes mitfuehrt, faellt diese Tabelle ersatzlos weg.
+    /// </summary>
+    private static readonly int[,] AiAirCost =
+    {
+        { 50, 50, 0 }, { 80, 70, 10 }, { 0, 40, 30 }, { 0, 30, 50 },
+        { 60, 40, 0 }, { 0, 30, 40 }, { 0, 30, 40 }, { 0, 30, 150 },
+    };
+
+    /// <summary>
+    /// <b>`find_airport` @0x4BB150 — GELESEN.</b>
+    /// <code>
+    /// find_airport(spieler):
+    ///     n = 0
+    ///     for i = 0 .. 254:
+    ///         if typ[i] == 9 and eigner[i] == spieler: kand[n++] = i
+    ///     if n == 0: return 0xFF
+    ///     return kand[rand() % n]
+    /// </code>
+    /// Kein naechstgelegener Flughafen, kein Baumenue, keine Pruefung des
+    /// ENABLE-Bytes des Entwurfs (sec120 +0x00) — der Computerspieler baut
+    /// auch Flugzeuge, die dem Menschen noch gesperrt sind.
+    /// </summary>
+    private int AiFindAirport(AiPlayer a)
+    {
+        var cand = new List<int>();
+        for (int i = 0; i < _entities.Count && cand.Count < AiBaseSlots; i++)
         {
             var e = _entities[i];
-            if (!e.IsBuilding || e.Dead || e.Owner != a.Player) continue;
-            if (!IsFactory(e) || e.BuildTime > 0f) continue;
-
-            var menu = BuildableBy(e.BType);
-            for (int k = 0; k < menu.Count; k++)
-            {
-                var d = _designs[menu[k]];
-                // ⚠ `Slot % 200`, not `200*player + what` as the original does
-                // (@0x4BB258): LoadDesigns keeps one entry per distinct name, so
-                // only one of the eight player blocks survives in our table.
-                if (d.Slot < 0 || d.Slot % DesignsPerPlayer != what) continue;
-                if (!CanAfford(e, d)) return;      // the line stands; wait for parts
-                PayFor(e, d);
-                e.MenuIndex = k;
-                e.BuildIndex = menu[k];
-                e.BuildTime = BuildSeconds;
-                a.Built++;
-                a.FromPlan++;
-                if (a.PlanNames.Count < 12) a.PlanNames.Add(d.Name);
-                return;
-            }
+            if (!e.IsBuilding || e.IsProp || e.Dead) continue;
+            if (e.BType != AiAirportType || e.Owner != a.Player) continue;
+            cand.Add(i);
         }
-        a.PlanMissed++;
-        a.PlanUnmatched.Add(what);
+        return cand.Count == 0 ? -1 : cand[a.Rnd.Next(cand.Count)];
+    }
+
+    /// <summary>Wie viele Flughaefen ein Spieler hat und wie voll deren Hangars
+    /// sind — nur fuer die Statuszeile, aber es ist die Zahl, an der man sieht,
+    /// dass ein gebautes Flugzeug wirklich irgendwo steht.</summary>
+    private string AiAirportLine(int p)
+    {
+        int n = 0, belegt = 0, platz = 0;
+        foreach (var e in _entities)
+        {
+            if (!e.IsBuilding || e.IsProp || e.Dead) continue;
+            if (e.BType != AiAirportType || e.Owner != p) continue;
+            n++;
+            belegt += e.Hangar?.Count ?? 0;
+            platz += Mathf.Max(1, e.HangarSize);
+        }
+        return $"{n} Flughaefen, Hangar {belegt}/{platz}";
+    }
+
+    /// <summary>
+    /// Der Flugzeugentwurf, den eine Zeilenart-1-Zeile meint.
+    ///
+    /// Das Original rechnet <c>48*(20*spieler + entwurf)</c>: jeder Spieler hat
+    /// seine eigenen ZWANZIG Flugzeugzeilen (sec120). Unsere
+    /// <see cref="_airDesigns"/> traegt je nach Herkunft acht (aus der
+    /// EXE-Vorlagentabelle ueber den Fahrplan) oder zwanzig (aus sec120) Saetze
+    /// je Spieler; darum wird der <c>entwurf</c>-te Satz IM BLOCK DES SPIELERS
+    /// genommen statt an einer festen Schrittweite. Das ist dieselbe Rechnung,
+    /// nur ohne die Blockgroesse fest zu verdrahten.
+    /// </summary>
+    private AirDesign? AiAirDesign(int player, int what)
+    {
+        if (_airDesigns == null || what < 0) return null;
+        int seen = 0;
+        foreach (var d in _airDesigns)
+        {
+            if (d.Player != player) continue;
+            if (seen++ == what) return d;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Eine Zeile der Zeilenart 1 — »Build in airp«.
+    ///
+    /// <code>
+    /// build_in_airport(entwurf, spieler):              @0x4BB3D0
+    ///     »Build in airp«
+    ///     f = find_airport(spieler)                    @0x4BB150
+    ///     if f == 0xFF: return 0                       ; kein Flughafen
+    ///     »Sources check«
+    ///     k = entwurf[20*spieler + entwurf]            ; 48 Byte, 0x51B020
+    ///     if k+0x1F > lager_w(f) || k+0x20 > lager_f(f) || k+0x21 > lager_s(f):
+    ///         return 0
+    ///     »Hangar check«
+    ///     c = gebaeude[f]+0x29                         ; die sec27-Nummer
+    ///     if sec27[c]+0x03 &lt;= sec27[c]+0x04: return 0   ; Plaetze &lt;= belegt
+    ///     »Hangar check ok«
+    ///     spawn_aircraft(entwurf, spieler, c)          @0x4B1380
+    ///     »Airp build«
+    ///
+    /// spawn_aircraft(entwurf, spieler, cis):           @0x4B1380
+    ///     slot = erster sec19-Satz mit +0x08 == 0      ; 200 Saetze zu 68 Byte
+    ///     die Hangar- UND die Lagerpruefung NOCH EINMAL
+    ///     lager -= kosten ; belegt++ ; sec19[slot] aus dem Entwurf fuellen
+    ///     +0x09 = spieler, +0x28 = cis, +0x32 = entwurf, +0x08 = vorlage+0x2E
+    ///     entwurf 0/1/4 -> +0x2C = 0x31/0x2F/0x30 und +0x2A = 3/6/10
+    ///     entwurf 5/6   -> +0x31 = 0xFF, sofort aussenden und belegt--
+    /// </code>
+    ///
+    /// <b>Der Punkt, an dem sich das von unserem <c>BuyAircraft</c> trennt:</b>
+    /// der Computerspieler zahlt ein Flugzeug NICHT mit Geld, sondern mit den
+    /// drei Lagern des Flughafens — genau wie die Basis eine Bodeneinheit
+    /// bezahlt. Der Preis von $150 gilt nur fuer den Menschen, der am Flughafen
+    /// "Kaufen" drueckt (0x52FAC0/0x52FAC4).
+    ///
+    /// <b>UNSERE SETZUNGEN hier, ausdruecklich:</b>
+    /// <list type="bullet">
+    /// <item>die Kosten kommen aus <see cref="AiAirCost"/> statt aus dem
+    /// Entwurf, weil der Import die drei Bytes noch nicht mitfuehrt;</item>
+    /// <item>»Hangar check« wird an <c>Hangar.Count &lt; HangarSize</c>
+    /// gemessen; das Original zaehlt einen eigenen Belegtzaehler (sec27 +0x04),
+    /// den es beim Aussenden NICHT herunterzaehlt — nur die beiden
+    /// Nachschubhelikopter geben ihren Platz sofort wieder frei;</item>
+    /// <item>ein Nachschubhelikopter (Entwurf 5/6) wird bei uns geparkt statt
+    /// sofort ausgesandt; das Aussenden haengt am Kundenlauf und gehoert nicht
+    /// in diese Datei;</item>
+    /// <item>das Tempo — eine Zeile je Denk-Entscheidung statt je 50 Takte.</item>
+    /// </list>
+    /// </summary>
+    private void AiProduceAirStep(AiPlayer a, int what)
+    {
+        int ai = AiFindAirport(a);
+        if (ai < 0) { a.PlanNoAirport++; return; }       // find_airport == 0xFF
+        var ap = _entities[ai];
+
+        var d = AiAirDesign(a.Player, what);
+        if (d == null || what >= AiAirCost.GetLength(0))
+        {
+            a.PlanAirMissed++;
+            a.PlanAirUnmatched.Add(what);
+            return;
+        }
+
+        // ⚠ BERICHTIGT 10.08.2026 — der Preis kommt jetzt aus dem ENTWURF
+        // (sec120 +0x1F/+0x20/+0x21), also von dort, wo `build_in_airport`
+        // @0x4BB3D0 ihn holt (`0x51B03F/40/41` gegen die Basis 0x51B020). Die
+        // Tabelle darunter war eine Setzung: sie gab allen acht Spielern
+        // dieselben Kosten, obwohl jeder seinen eigenen 20er-Block hat. Sie
+        // bleibt als Rückfall für Karten, deren Export die drei Bytes noch
+        // nicht mitführt — ein Entwurf ohne Preis wäre sonst umsonst.
+        int cw = d.CostW, cf = d.CostF, cs = d.CostS;
+        if (cw + cf + cs == 0 && what >= 0 && what < AiAirCost.GetLength(0))
+        {
+            cw = AiAirCost[what, 0];
+            cf = AiAirCost[what, 1];
+            cs = AiAirCost[what, 2];
+        }
+        if (cw > ap.StockW || cf > ap.StockF || cs > ap.StockS)   // »Sources check«
+        {
+            a.PlanAirBroke++;
+            a.AirBroke = $"{d.Name} kostet {cw}/{cf}/{cs}, " +
+                         $"Flughafen hat {ap.StockW}/{ap.StockF}/{ap.StockS}";
+            return;
+        }
+
+        int platz = Mathf.Max(1, ap.HangarSize);
+        if ((ap.Hangar?.Count ?? 0) >= platz)                     // »Hangar check«
+        {
+            a.PlanHangar++;
+            a.AirBroke = $"Hangar von {ap.Name} voll ({ap.Hangar?.Count ?? 0}/{platz})";
+            return;
+        }
+
+        // »Hangar check ok« — ab hier ist es spawn_aircraft @0x4B1380
+        ap.StockW = Mathf.Max(0, ap.StockW - cw);
+        ap.StockF = Mathf.Max(0, ap.StockF - cf);
+        ap.StockS = Mathf.Max(0, ap.StockS - cs);
+
+        int slot = 0;
+        foreach (var s in _special) slot = Mathf.Max(slot, s.Slot + 1);
+        _special.Add(new Special
+        {
+            Slot = slot, Kind = d.Kind, Name = d.Name, TypeName = d.Name,
+            Col = ap.Col, Row = ap.Row, Stored = true,
+            Owner = a.Player, HomeSlot = ap.Slot, Pos = ap.Pos,
+            Footprint = ap.Footprint,
+            Speed = d.Speed, Hp = d.Hp, HpMax = d.Hp,
+            Ammo = d.Ammo, AmmoMax = d.Ammo, Fuel = d.Fuel, FuelMax = d.Fuel,
+            Payload = d.Payload, Airframe = d.Airframe,
+            Attack = d.Attack, Defence = d.Defence, Sight = d.Sight,
+            Cargo = SupplyCargoFull,
+        });
+        (ap.Hangar ??= new List<int>()).Add(slot);
+
+        a.PlanAir++;
+        a.Built++;
+        if (a.PlanAirNames.Count < 12) a.PlanAirNames.Add(d.Name);
     }
 
     /// <summary>Pick what to build. OURS: prefer something that can actually
@@ -728,6 +1338,158 @@ public partial class MapEntityLayer : Node2D
         return pool[idx];
     }
 
+    // ---- der Einheitendurchlauf (ai_units @0x4BF4E0) -----------------------
+
+    /// <summary>Wie lange ein voller Durchlauf durch die eigenen Einheiten
+    /// dauert. Das Original braucht dafuer 50 Takte — acht Aufrufe in den
+    /// Takten 16, 20, 24, … 44 einer 50-Takt-Runde. Die UMRECHNUNG in Sekunden
+    /// ist UNSERE Setzung; die Aufteilung in acht Bloecke ist gelesen.</summary>
+    private const float AiSweepSeconds = 2f;
+
+    /// <summary>Die Klassenschwelle aus `ai_units`: <c>cmp byte[u+0x0a], 3</c>
+    /// mit <c>seta</c> auf beiden Seiten — eine Einheit sucht sich nur ein Ziel
+    /// derselben Seite der Schwelle. +0x0a ist das Feld, das der Debugausdruck
+    /// des Spiels <c>typ</c> nennt (GAMESTATE_RE 3.9), bei uns
+    /// <c>Entity.Subclass</c>. GELESEN, auf beiden EXE gleich.</summary>
+    private const int AiClassSplit = 3;
+
+    /// <summary>Womit die Sicht ersetzt wird, wenn eine Einheit keine mitbringt
+    /// (+0x2c == 0). UNSERE Setzung.</summary>
+    private const int AiSightPad = 4;
+
+    /// <summary>Was +0x0a bei INFANTERIE steht. Aus den Karten ausgezaehlt, nicht
+    /// gesetzt: ueber alle 30 map_*.entities.json tragen die 2112 Fahrzeuge
+    /// (Fahrwerk 160..175) durchweg 0, die <b>601 Infanteristen (Fahrwerk 148 und
+    /// 149) durchweg 1</b>, die 122 + 22 Schiffe (150..158) 4 bzw. 5, und sechs
+    /// Einheiten des Typs 138 tragen 3 — kein Gegenbeispiel. Die Schwelle
+    /// <see cref="AiClassSplit"/> = 3 trennt damit <b>Land von See</b>: eine
+    /// Landeinheit sucht sich nie ein Schiff und umgekehrt.</summary>
+    private const int AiInfantryClass = 1;
+
+    /// <summary>
+    /// <b>`ai_units(spieler, block)` @0x4BF4E0 — GELESEN.</b>
+    ///
+    /// <code>
+    /// for i = 1000*spieler + block;  i &lt; 1000*spieler + 1000;  i += 8
+    ///     u = einheit[i]
+    ///     if faze(u+0x09) != 0: weiter          ; nur lebende
+    ///     if ukol(u+0x14) != 0: weiter          ; nur UNTAETIGE
+    ///     c = u[+0x2c] (Sicht) ; b = u[+0x2b] (Reichweite)
+    ///     lim = T[c+1] ;  k = (rand()%3 != 0) ? c : b
+    ///     for s = T[k] .. lim-1:                ; T = Praefixzaehler ueber eine
+    ///         x = u.x + OFF[s].dx               ;     entfernungssortierte
+    ///         y = u.y + OFF[s].dy               ;     Versatzliste
+    ///         v = belegung[(x&lt;&lt;8)|y] ; if v &gt;= 8000: weiter   ; kein Fahrzeug
+    ///         if diplomatie[40*spieler + v/1000] != 0: weiter    ; verbuendet
+    ///         if (v[+0x0a] &gt; 3) != (u[+0x0a] &gt; 3): weiter        ; andere Klasse
+    ///         order(i, x, y, v, 0) ; break
+    /// </code>
+    ///
+    /// <b>Das ist Punkt 4 der Fehlerliste.</b> Das Original kennt keine Welle:
+    /// JEDE untaetige Einheit sieht selbst nach, ob in ihrem Ring ein Feind
+    /// steht, und geht hin. Unser <see cref="AiFight"/> dagegen ruehrt sich erst,
+    /// wenn <c>free.Count &gt;= waveSize + guard</c> beisammen ist, nimmt dann
+    /// hoechstens die Haelfte und sortiert nach Entfernung zum Ziel — Infanterie
+    /// ist langsam, steht darum weit hinten und kam nie an die Reihe. Sie blieb
+    /// stehen. Der Durchlauf hier ersetzt die Welle nicht, er ergaenzt sie: er
+    /// fasst nur an, was gerade nichts tut.
+    ///
+    /// <b>Was das Original NICHT ueber den Befehlsbus schickt:</b> `order`
+    /// @0x410220 schreibt <c>ukol = 4</c>, das Zielfeld (+0x18/+0x19) und die
+    /// Zieleinheit (+0x36) direkt in den Einheitensatz. Das deckt sich mit der
+    /// Messung „0 von 140 Setzstellen des Busses liegen im KI-Bereich" — die KI
+    /// benutzt den Bus nicht. Unser <see cref="AiSend"/> tut genau dasselbe:
+    /// Pfad setzen, Ziel setzen, <c>Ordered</c> setzen.
+    ///
+    /// <b>UNSERE SETZUNGEN:</b> die Blockeinteilung laeuft ueber die Stelle in
+    /// <see cref="ArmyOf"/> statt ueber den Einheitenplatz (wir haben keine
+    /// 1000er-Bloecke je Spieler); der Sekundentakt oben; und die Drosselung
+    /// <c>if (mission == 14) nur jeder 5. Aufruf</c>, die im Rumpf steht
+    /// (<c>word[0x539934] == 14</c>), ist bewusst NICHT uebernommen — sie gilt
+    /// nur einer einzigen Mission und wir kennen ihren Grund nicht.
+    /// </summary>
+    private void AiSweep(AiPlayer a, float dt)
+    {
+        a.Sweep -= dt;
+        if (a.Sweep > 0f) return;
+        a.Sweep += AiSweepSeconds / 8f;
+        int block = a.Block;
+        a.Block = (a.Block + 1) & 7;
+        if (_nav == null) return;
+
+        var army = ArmyOf(a.Player);
+        for (int k = block; k < army.Count; k += 8)
+        {
+            int ui = army[k];
+            if (ui == a.Grabber) continue;              // der geht zu einer Tuer
+            var e = _entities[ui];
+            if (e.DugIn) continue;
+            // `ukol == 0`: nichts vor, nichts unterwegs, kein Ziel
+            if (e.Path != null || e.Target >= 0 || e.Orders.Count > 0) continue;
+            if (e.FuelMax > 0 && e.Fuel <= 0) continue;
+            a.Looked++;
+            int t = AiRingTarget(a, ui, e);
+            if (t < 0) continue;
+            AiSend(ui, t);
+            a.Sent++;
+            if (e.Subclass == AiInfantryClass) a.MovedInf.Add(ui);
+        }
+    }
+
+    /// <summary>
+    /// Der Ring, in dem eine untaetige Einheit nach einem Gegner sieht.
+    ///
+    /// Die Versatzliste selbst (0x79A008) und ihre Praefixtabelle (0x834A80)
+    /// stehen in .bss, werden also zur Laufzeit gebaut — GELESEN ist, WIE sie
+    /// benutzt werden: der normale Einheitentakt @0x40DDB0 scannt
+    /// <c>OFF[0 .. T[+0x2b]-1]</c>, also alles innerhalb der WAFFENREICHWEITE;
+    /// dieser KI-Durchlauf scannt <c>OFF[T[k] .. T[+0x2c+1]-1]</c> und faengt
+    /// damit erst an, wo der normale Takt aufhoert. Zu zwei Dritteln ist
+    /// <c>k = +0x2c</c> (nur der aeusserste Ring), zu einem Drittel
+    /// <c>k = +0x2b</c> (das ganze Band von der Reichweite bis zur Sicht).
+    /// Die Arbeitsteilung ist damit klar: der Takt schiesst auf alles in
+    /// Reichweite, die KI holt heran, was zwischen Reichweite und Sicht steht.
+    ///
+    /// <b>UNSERE SETZUNG:</b> die Metrik. Wonach die Versatzliste sortiert ist,
+    /// steht in keiner Datei — wir nehmen den euklidischen Abstand. Und weil das
+    /// Original den ERSTEN Treffer der entfernungssortierten Liste nimmt, nehmen
+    /// wir den naechstgelegenen.
+    /// </summary>
+    private int AiRingTarget(AiPlayer a, int ui, Entity e)
+    {
+        int near = e.Range > 0 ? e.Range : Mathf.RoundToInt(RangeOf(e));
+        int far = e.Sight > near ? e.Sight : near + AiSightPad;
+        bool wide = a.Rnd.Next(3) == 0;                 // rand() % 3 == 0
+        float lo = wide ? near : far;
+        float hi = far + 1;
+        bool high = e.Subclass > AiClassSplit;
+
+        int best = -1;
+        float bestD = float.MaxValue;
+        int r = Mathf.CeilToInt(hi);
+        for (int dy = -r; dy <= r; dy++)
+        for (int dx = -r; dx <= r; dx++)
+        {
+            float d = Mathf.Sqrt(dx * dx + dy * dy);
+            if (d <= lo || d > hi || d >= bestD) continue;
+            int c = e.Col + dx, w = e.Row + dy;
+            if (!_nav!.InBounds(c, w)) continue;
+            int oi = _nav.OccupantAt(c, w);
+            if (oi < 0 || oi == ui || oi >= _entities.Count) continue;
+            var o = _entities[oi];
+            // `v >= 8000` heisst im Original "kein Eintrag der Einheitentabelle"
+            if (o.Dead || o.IsProp || o.IsBuilding) continue;
+            a.SawAny++;
+            if (!AiHostile(a.Player, o.Owner)) continue;
+            a.SawFoe++;
+            if (a.ClassSeen.Count < 8) a.ClassSeen.Add($"{e.Subclass}->{o.Subclass}");
+            if ((o.Subclass > AiClassSplit) != high) continue;
+            a.SawClass++;
+            bestD = d; best = oi;
+        }
+        return best;
+    }
+
     // ---- fighting ---------------------------------------------------------
 
     /// <summary>
@@ -742,6 +1504,11 @@ public partial class MapEntityLayer : Node2D
     /// The unit is sent to the cell in FRONT of the door, which is the cell the
     /// original's capture block looks at (Simulation/Capture.cs).
     /// </summary>
+    /// <summary>Herrenlos: die Kampagne setzt Spieler 7 in allen 33
+    /// Matrizen neutral; die NET-Karten führen ihre neutralen Gebäude unter
+    /// Eigner 11. Beide sind »herrenlos« und keine Verbündeten.</summary>
+    private static bool Herrenlos(int owner) => owner == NeutralSlot || owner == NeutralOwner;
+
     private void AiGrab(AiPlayer a)
     {
         if (_nav == null) return;
@@ -750,7 +1517,10 @@ public partial class MapEntityLayer : Node2D
         if (a.GrabTarget >= 0 && a.GrabTarget < _entities.Count)
         {
             var b = _entities[a.GrabTarget];
-            bool mine = b.Owner == a.Player;
+            // ebenso hier: fällt das Ziel an einen Verbündeten, ist der
+            // Auftrag erledigt — sonst hängt die Einheit an einer Tür, die
+            // sie nach der Regel oben gar nicht mehr ansteuern dürfte
+            bool mine = Allied(b.Owner, a.Player);
             if (mine) a.Taken++;
             if (mine || b.Dead || b.Doors == 0) { a.Grabber = -1; a.GrabTarget = -1; }
         }
@@ -784,7 +1554,30 @@ public partial class MapEntityLayer : Node2D
         {
             var b = _entities[bi];
             if (!b.IsBuilding || b.IsProp || b.Dead) continue;
+            // ⚠ UNSERE SETZUNG (10.08.2026), und sie widerspricht nichts
+            // Gelesenem: das EINNEHMEN selbst fragt im Original keine
+            // Diplomatie — die Bündnismatrix wird EXE-weit 207 mal gelesen
+            // (F: 205), davon 0 mal in der Einnahme-Routine, und der
+            // Eignertest dort ist blanke Gleichheit @0x43CC21. Ein
+            // Verbündeter NIMMT also ein, und das bleibt so.
+            //
+            // Aber `AiGrab` bildet nichts nach: die KI-Runde des Originals
+            // hat 21 Teilaufgaben und **keine** heisst nach dem Besetzen; von
+            // 26 Lesestellen der Türfelder +0x35/+0x36 liegen 2 im KI-Bereich
+            // (0x4BD2ED, 0x4BDF18), und der einzige Matrixzugriff dort
+            // (@0x4BD1B2) ist ein TON-Tor für den lokalen Spieler (Klang 122,
+            // Spielerplatte 40 Byte) — keine Zielwahl. Wohin diese Routine
+            // eine Einheit schickt, ist darum unsere Entscheidung, und sie
+            // lautet: **einem Verbündeten nimmt man nichts weg.** Ohne das
+            // fuhr der Computerspieler im Prüflauf zur Tür des Verbündeten
+            // und holte sich dessen Fabrik zurück.
             if (b.Doors == 0 || b.Built == 0 || b.Owner == a.Player) continue;
+            // ⚠ ABER NICHT den Neutralen: er ist in allen 33 Matrizen mit
+            // JEDEM verbündet, und die neutralen Fabriken sind auf einer
+            // Eroberungskarte der ganze Zweck dieser Routine. Ohne diese
+            // Ausnahme hätte die Zeile darüber die KI stillgelegt, statt sie
+            // höflich zu machen.
+            if (Allied(b.Owner, a.Player) && !Herrenlos(b.Owner)) continue;
             foreach (int ui in army)
             {
                 var u = _entities[ui];
@@ -861,11 +1654,19 @@ public partial class MapEntityLayer : Node2D
         // the units closest to the enemy go first
         free.Sort((x, y) => CellDistance(_entities[x], _entities[target])
                      .CompareTo(CellDistance(_entities[y], _entities[target])));
-        int take = Mathf.Min(free.Count - guard, Mathf.Max(waveSize, free.Count / 2));
+        // ⚠ OURS, und die zweite Haelfte von Punkt 4 der Fehlerliste. Hier stand
+        // `Mathf.Max(waveSize, free.Count / 2)`: die Welle nahm hoechstens die
+        // HAELFTE der freien Einheiten, und weil eine Zeile darueber nach
+        // Entfernung zum Ziel sortiert wird, war es immer dieselbe Haelfte —
+        // die hintere. Infanterie ist langsam, bleibt darum zurueck, steht beim
+        // naechsten Aufruf wieder hinten und wurde nie mitgenommen. Sie blieb
+        // buchstaeblich stehen. Es geht jetzt alles mit, was nicht Wache ist.
+        int take = free.Count - guard;
         for (int k = 0; k < take; k++)
         {
             a.Wave.Add(free[k]);
             AiSend(free[k], target);
+            if (_entities[free[k]].Subclass == AiInfantryClass) a.MovedInf.Add(free[k]);
         }
         a.TargetIdx = target;
         a.AttackTimer = 20f;                            // ours: pause between waves
@@ -946,6 +1747,59 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Preview harness: let the computer play both sides for a while
     /// and report what it did.</summary>
+    /// <summary>
+    /// <b>Der Pruefstand fuer die Zeilenart 1 — und wofuer er blind ist.</b>
+    ///
+    /// Auf KEINER installierten Karte laeuft dieser Zweig von selbst, und zwar
+    /// aus zwei voneinander unabhaengigen Gruenden, beide gezaehlt:
+    /// <list type="number">
+    /// <item>von den 572 Zeilen aller Baupläne in <c>mission_plans.json</c>
+    /// sind 46 von der Zeilenart 1 — und alle 46 gehoeren den Missionen
+    /// 17, 19, 22, 23, 24, 25, 27 und 34. Die installierten Missionen 1..15
+    /// haben davon <b>null</b>;</item>
+    /// <item>keine der Karten map_01..map_15 traegt ueberhaupt ein Gebaeude vom
+    /// Typ 9. Flughaefen gibt es nur auf den beiden Gefechtskarten (1.DM: je
+    /// einer fuer P0 und P1; 3.DM: P0, P2, P4) und auf den NET-Karten, dort
+    /// samt und sonders neutral (Eigner 11).</item>
+    /// </list>
+    ///
+    /// Darum bekommt <c>--demo-ai</c> auf einer Karte OHNE Bauprogramm hier ein
+    /// Pruefprogramm gesetzt: je eine Zeilenart-1-Zeile mit genau den drei
+    /// Entwuerfen, die in allen 46 echten Zeilen vorkommen (0 Jagdflieger,
+    /// 1 Bomber, 4 Kampfhubschrauber). <b>Das Programm ist UNSERES</b>, die
+    /// Zeilenform und die drei Zahlen sind es nicht.
+    ///
+    /// ⚠ <b>Was dieser Pruefstand sehen kann und was nicht.</b> Er sieht: den
+    /// Verteiler nach Zeilenart, die Flughafensuche samt Zufallswahl, den
+    /// Sources check gegen die drei Lager, den Hangar check, das Entstehen des
+    /// sec19-Satzes und alle vier Ausgangszaehler. Er sieht NICHT: ob die
+    /// Kosten je Spieler stimmen (sie kommen aus <see cref="AiAirCost"/>, nicht
+    /// aus sec120), ob die Reihenfolge im echten Bauprogramm dieselbe Wirkung
+    /// hat (kein installiertes Programm hat Zeilenart 1) und ob ein
+    /// Nachschubhelikopter richtig sofort ausgesandt wuerde.
+    /// </summary>
+    private void AiAirHarness()
+    {
+        if (!_aiOn) return;
+        bool arg = false;
+        foreach (string s in OS.GetCmdlineUserArgs())
+            if (s == "--demo-ai") arg = true;
+        if (!arg) return;
+
+        int n = 0;
+        foreach (var a in _ai)
+        {
+            if (a.Plan is { Count: > 0 }) continue;      // ein echtes Programm bleibt
+            a.Plan = new List<(int, int)> { (1, 0), (1, 1), (1, 4) };
+            a.Pc = 0;
+            n++;
+        }
+        if (n > 0)
+            GD.Print($"demo-ai: PRUEFPROGRAMM (unseres) fuer {n} Spieler — " +
+                     "je 3 Zeilen der Zeilenart 1 mit Entwurf 0/1/4, weil keine " +
+                     "installierte Mission eine solche Zeile hat");
+    }
+
     public Vector2? DebugDemoAi()
     {
         var players = new List<int>();
@@ -953,6 +1807,7 @@ public partial class MapEntityLayer : Node2D
             if (AliveAsPlayer(p)) players.Add(p);
         if (players.Count < 2) { GD.Print("demo-ai: weniger als zwei Spieler auf der Karte"); return null; }
         EnableSkirmishAi(players, AiLevel.Hard);
+        AiAirHarness();
         GD.Print($"demo-ai: {players.Count} Spieler, Armeen " +
                  string.Join(" ", players.Select(p => $"P{p}:{ArmyOf(p).Count}")));
         foreach (int p in players)
