@@ -409,7 +409,21 @@ public partial class MapEntityLayer : Node2D
         _linePiece.TryGetValue(l.Slot, out var pcs);
         foreach (var w in list)
         {
-            int step = Mathf.Clamp(lead - (l.Dir == 0 ? 1 : -1) * 2 * w.Index, 0, last);
+            // ⚠ 11.08.2026 — hier stand der Faktor 2, und das war der Grund
+            // fuer beide Beobachtungen des Spielers auf einmal: »die Bahn war
+            // weder sauber zusammengebaut, noch war dort eine Bahnstrecke«.
+            //
+            // Ein Streckenschritt ist eine Zelle, und ein Waggon ist eine Zelle
+            // breit. Mit Abstand 2 klaffte zwischen jedem Waggon eine Luecke —
+            // der Zug sah aus wie vier einzelne Wagen. Und weil der BILDINDEX
+            // eines Waggons SEIN SCHIENENSTUECK ist (Zeichenpfad @0x42B4C0,
+            // Tabelle SpojPiece @0x5393F0), riss damit auch das Gleis auf:
+            // sichtbares Gleis gibt es nur dort, wo ein Waggon steht, und mit
+            // Luecken dazwischen ist keine durchgehende Strecke zu sehen.
+            //
+            // Abstand 1: die vier Waggons haengen aneinander und ihre vier
+            // Schienenstuecke ergeben ein durchgehendes Stueck Gleis.
+            int step = Mathf.Clamp(lead - (l.Dir == 0 ? 1 : -1) * w.Index, 0, last);
             w.Step = step;
             w.Dir = l.Dir == 0 ? 1 : -1;
             var pt = route[step];
