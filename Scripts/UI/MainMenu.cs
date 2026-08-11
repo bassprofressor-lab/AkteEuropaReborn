@@ -70,7 +70,7 @@ public partial class MainMenu : Control
 
         var original = new System.Collections.Generic.List<StartMenuPanel.Row>(
             StartMenuPanel.Original(
-                newGame: missions.Count > 0 ? StartCampaign : null,
+                newGame: missions.Count > 0 ? ShowCampaign : null,
                 load: () => AddChild(new LoadGameScreen()),
                 net: null,
                 settings: () => AddChild(new SettingsScreen()),
@@ -80,12 +80,26 @@ public partial class MainMenu : Control
                 demo: demos ? NextDemo : null,
                 quit: () => GetTree().Quit()));
 
+        // ⚠ UNSERE SETZUNG, 11.08.2026: die erste Zeile heisst nicht mehr
+        // »Neues Spiel«, sondern »Kampagne«, und sie startet nicht mehr wortlos
+        // die naechste Mission, sondern oeffnet die Uebersicht ueber ALLE
+        // Missionen (CampaignScreen). Gewuenscht wortwoertlich: »Anstatt Neues
+        // Spiel nennen wir es Kampagne. Dort sieht man alle Missionen …«.
+        //
+        // ORIGINAL ist die Zeile selbst samt Platz und Hilfeindex 104 — sie
+        // steht an erster Stelle und heisst dort »Neues Spiel« (gelesen
+        // @0x480454ff). UNSER ist der neue Name und alles, was dahinter liegt:
+        // das Original kennt keine Missionsauswahl, sein »Neues Spiel« beginnt
+        // beim Stand des Kampagnenzaehlers word[0x539934].
+        var renamed = StartMenuPanel.Recaption(original, "Neues Spiel", "Kampagne",
+            "Alle Missionen zeigen — Uebersicht ist unsere Zutat");
+
         // OURS, and the only row that is: the original had no skirmish against
         // a computer opponent, only "Netzwerkspiel" against people. It sits
         // right under that entry — the first version put it at the very end,
         // below "Beenden", and the skirmish was reported as missing from 0.3.0
         // because nobody looks there.
-        var rows = StartMenuPanel.InsertAfter(original, "Netzwerkspiel",
+        var rows = StartMenuPanel.InsertAfter(renamed, "Netzwerkspiel",
             new StartMenuPanel.Row(0, "Gefecht", -1,
                 "Gefecht gegen den Rechner — im Original gibt es das nicht", ShowSetup));
 
@@ -153,12 +167,13 @@ public partial class MainMenu : Control
         b.QueueFree();
     }
 
-    private void StartCampaign()
-    {
-        var m = Campaign.CampaignManager.Next();
-        if (m == null) { Campaign.CampaignManager.Reset(); m = Campaign.CampaignManager.Next(); }
-        if (m != null) StartMission(m);
-    }
+    /// <summary>Die Menuezeile »Kampagne«: die Missionsuebersicht aufschlagen.
+    ///
+    /// <para>⚠ Sie ersetzt seit dem 11.08.2026 das fruehere StartCampaign(),
+    /// das die naechste Mission ohne Rueckfrage startete. Wer nur weiterspielen
+    /// will, klickt auf der Uebersicht die eine hell umrahmte Kachel — das ist
+    /// ein Klick mehr, dafuer sieht man vorher, wo man steht.</para></summary>
+    private void ShowCampaign() => AddChild(new CampaignScreen(StartMission));
 
     private void ShowSetup()
     {

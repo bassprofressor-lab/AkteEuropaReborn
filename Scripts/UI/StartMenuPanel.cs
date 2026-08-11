@@ -149,6 +149,30 @@ public partial class StartMenuPanel : Control
         return list;
     }
 
+    /// <summary>Eine Zeile umbeschriften, ohne ihren Platz, ihre Reihenfolge
+    /// oder ihren Hilfeindex anzutasten.
+    ///
+    /// <para>⚠ <b>Jede Verwendung ist eine UNSERE SETZUNG</b>, denn die neun
+    /// Beschriftungen in <see cref="Original"/> sind aus den Zeichenaufrufen
+    /// 0x480454..0x4805a8 gelesen. Deshalb bleibt der Hilfeindex stehen: er
+    /// zeigt weiter auf den Eintrag des Originals, aus dem diese Zeile
+    /// stammt, und die Herkunft geht nicht verloren.</para>
+    ///
+    /// <para>Gebraucht wird das genau einmal, fuer <i>Neues Spiel</i> →
+    /// <i>Kampagne</i>: die Zeile startet nicht mehr wortlos die naechste
+    /// Mission, sondern oeffnet die Missionsuebersicht
+    /// (<see cref="CampaignScreen"/>), und »Neues Spiel« waere fuer einen
+    /// Bildschirm, auf dem man auch eine alte Mission wiederholt, der falsche
+    /// Name.</para></summary>
+    public static List<Row> Recaption(IEnumerable<Row> rows, string caption,
+                                      string to, string help)
+    {
+        var list = new List<Row>(rows);
+        int at = list.FindIndex(r => r.Caption == caption);
+        if (at >= 0) list[at] = list[at] with { Caption = to, Help = help };
+        return list;
+    }
+
     /// <summary>Shown under the list — ours, because the original's help line
     /// lives in its side panel, which this screen has not got.</summary>
     public string Footer = "";
