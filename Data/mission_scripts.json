@@ -76,6 +76,20 @@
      ]
     },
     {
+     "_at": "0x498575",
+     "once": 2,
+     "then": [],
+     "when": [
+      {
+       "a": 39,
+       "b": 65534,
+       "c": 4,
+       "kind": "imap",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4985A2",
      "_tut_ausserdem": "close_message_windows show_text2 0x4D0990 0x4D0990 0x4D0990 0x4D0990",
      "then": [
@@ -258,6 +272,34 @@
        "b": 10000,
        "kind": "selected",
        "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4987EA",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 12,
+     "then": [
+      {
+       "_at": "0x4987EA",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x4987FE",
+       "a": 13,
+       "b": 2,
+       "c": 60,
+       "d": 40,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 53,
+       "b": 1000,
+       "c": 36,
+       "kind": "imap",
+       "op": "<"
       }
      ]
     },
@@ -719,6 +761,54 @@
      ]
     },
     {
+     "_at": "0x49BFEC",
+     "_tut_ausserdem": "show_text 0x4D0810 0x4D0860 game_time",
+     "then": [
+      {
+       "a": 2,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49BFFE",
+       "a": 211,
+       "b": 1,
+       "c": 120,
+       "d": 50,
+       "kind": "text"
+      },
+      {
+       "a": 101,
+       "kind": "inc"
+      },
+      {
+       "a": 3,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 2,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 8,
+       "b": 5999,
+       "c": 55,
+       "kind": "imap",
+       "op": ">"
+      },
+      {
+       "a": 8,
+       "b": 7000,
+       "c": 55,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
      "_at": "0x49C434",
      "_tut_ausserdem": "show_text 0x4D0F20 add_target",
      "once": 7,
@@ -741,12 +831,6 @@
        "b": 0,
        "c": 194,
        "kind": "find_unit"
-      },
-      {
-       "_at": "0x49C47B",
-       "a": 1,
-       "b": 2,
-       "kind": "add_target"
       }
      ],
      "when": [
@@ -1275,6 +1359,41 @@
      ]
     },
     {
+     "_at": "0x49CD9E",
+     "then": [
+      {
+       "a": 8,
+       "kind": "inc"
+      },
+      {
+       "a": 9,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 8,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 115,
+       "b": 3999,
+       "c": 19,
+       "kind": "imap",
+       "op": ">"
+      },
+      {
+       "a": 115,
+       "b": 5000,
+       "c": 19,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
      "_at": "0x49CDCC",
      "_tut_ausserdem": "remove_unit add_target add_target add_target add_target add_target add_vyroba add_vyroba",
      "then": [
@@ -1291,30 +1410,45 @@
        "_at": "0x49CE11",
        "a": 4,
        "b": 1,
+       "c": 9,
+       "d": 0,
+       "e": 0,
        "kind": "add_target"
       },
       {
        "_at": "0x49CE23",
        "a": 4,
        "b": 1,
+       "c": 8,
+       "d": 1,
+       "e": 0,
        "kind": "add_target"
       },
       {
        "_at": "0x49CE35",
        "a": 4,
        "b": 1,
+       "c": 8,
+       "d": 3,
+       "e": 0,
        "kind": "add_target"
       },
       {
        "_at": "0x49CE47",
        "a": 4,
        "b": 1,
+       "c": 6,
+       "d": 2,
+       "e": 0,
        "kind": "add_target"
       },
       {
        "_at": "0x49CE59",
        "a": 4,
        "b": 1,
+       "c": 6,
+       "d": 4,
+       "e": 0,
        "kind": "add_target"
       }
      ],
@@ -1810,36 +1944,54 @@
        "_at": "0x49D7FD",
        "a": 1,
        "b": 1,
+       "c": 9,
+       "d": 12,
+       "e": 1,
        "kind": "add_target"
       },
       {
        "_at": "0x49D80F",
        "a": 1,
        "b": 1,
+       "c": 9,
+       "d": 12,
+       "e": 1,
        "kind": "add_target"
       },
       {
        "_at": "0x49D821",
        "a": 1,
        "b": 1,
+       "c": 9,
+       "d": 12,
+       "e": 1,
        "kind": "add_target"
       },
       {
        "_at": "0x49D833",
        "a": 4,
        "b": 1,
+       "c": 9,
+       "d": 12,
+       "e": 1,
        "kind": "add_target"
       },
       {
        "_at": "0x49D845",
        "a": 4,
        "b": 1,
+       "c": 9,
+       "d": 12,
+       "e": 1,
        "kind": "add_target"
       },
       {
        "_at": "0x49D857",
        "a": 4,
        "b": 1,
+       "c": 9,
+       "d": 12,
+       "e": 1,
        "kind": "add_target"
       }
      ],
@@ -2434,6 +2586,32 @@
      ]
     },
     {
+     "_at": "0x49E3EE",
+     "_tut_ausserdem": "game_time",
+     "once": 12,
+     "then": [
+      {
+       "a": 13,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 111,
+       "b": 1000,
+       "c": 50,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
      "_at": "0x49E4F3",
      "_tut_ausserdem": "show_text",
      "then": [
@@ -2961,6 +3139,34 @@
      ]
     },
     {
+     "_at": "0x498A7C",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 3,
+     "then": [
+      {
+       "_at": "0x498A7C",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498A89",
+       "a": 15,
+       "b": 2,
+       "c": 70,
+       "d": 70,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 21,
+       "b": 8000,
+       "c": 15,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
      "_at": "0x498AAB",
      "_tut_ausserdem": "close_message_windows show_text2",
      "then": [
@@ -3037,6 +3243,48 @@
      ]
     },
     {
+     "_at": "0x498B64",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "then": [
+      {
+       "_at": "0x498B64",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498B77",
+       "a": 22,
+       "b": 2,
+       "c": 340,
+       "d": 280,
+       "kind": "text"
+      },
+      {
+       "a": 3,
+       "kind": "inc"
+      },
+      {
+       "a": 20,
+       "b": 3,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 0,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 7,
+       "b": 1000,
+       "c": 63,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
      "_at": "0x498BF2",
      "_tut_ausserdem": "close_message_windows show_text2",
      "then": [
@@ -3109,6 +3357,34 @@
        "b": 6,
        "kind": "event",
        "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x498CD9",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 34,
+     "then": [
+      {
+       "_at": "0x498CD9",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498CE6",
+       "a": 7,
+       "b": 2,
+       "c": 30,
+       "d": 60,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 55,
+       "b": 8000,
+       "c": 3,
+       "kind": "imap",
+       "op": "<"
       }
      ]
     },
@@ -3239,6 +3515,26 @@
        "b": 29,
        "kind": "event",
        "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x498E88",
+     "once": 61,
+     "then": [],
+     "when": [
+      {
+       "a": 2,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 57,
+       "b": 1000,
+       "c": 63,
+       "kind": "imap",
+       "op": "<"
       }
      ]
     },
@@ -3613,24 +3909,36 @@
        "_at": "0x49F4A8",
        "a": 6,
        "b": 1,
+       "c": 9,
+       "d": 0,
+       "e": 1,
        "kind": "add_target"
       },
       {
        "_at": "0x49F4BA",
        "a": 6,
        "b": 1,
+       "c": 9,
+       "d": 1,
+       "e": 1,
        "kind": "add_target"
       },
       {
        "_at": "0x49F4CC",
        "a": 6,
        "b": 1,
+       "c": 9,
+       "d": 2,
+       "e": 1,
        "kind": "add_target"
       },
       {
        "_at": "0x49F4DE",
        "a": 6,
        "b": 1,
+       "c": 9,
+       "d": 3,
+       "e": 1,
        "kind": "add_target"
       },
       {
@@ -4287,6 +4595,9 @@
        "_at": "0x4A0F34",
        "a": 4,
        "b": 1,
+       "c": 5,
+       "d": 14,
+       "e": 1,
        "kind": "add_target"
       }
      ],
@@ -4682,6 +4993,59 @@
        "b": 1,
        "kind": "var",
        "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A1B50",
+     "once": 71,
+     "then": [],
+     "when": [
+      {
+       "a": 5,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 198,
+       "b": 1000,
+       "c": 58,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A1BC8",
+     "_tut_ausserdem": "show_text",
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A1BE0",
+       "a": 351,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 198,
+       "b": 1000,
+       "c": 58,
+       "kind": "imap",
+       "op": "<"
       }
      ]
     },
@@ -5663,6 +6027,112 @@
      ]
     },
     {
+     "_at": "0x4994BD",
+     "_tut_ausserdem": "show_text2 0x4D0990",
+     "once": 0,
+     "then": [
+      {
+       "_at": "0x4994C5",
+       "a": 20,
+       "b": 2,
+       "c": 70,
+       "d": 70,
+       "kind": "text"
+      },
+      {
+       "_at": "0x4994DF",
+       "a": 1014,
+       "b": 37,
+       "c": 38,
+       "d": 0,
+       "kind": "order"
+      }
+     ],
+     "when": [
+      {
+       "a": 38,
+       "b": 65534,
+       "c": 37,
+       "kind": "imap",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4994FC",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "then": [
+      {
+       "_at": "0x4994FC",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x499509",
+       "a": 21,
+       "b": 2,
+       "c": 100,
+       "d": 30,
+       "kind": "text"
+      },
+      {
+       "a": 0,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 38,
+       "b": 1000,
+       "c": 13,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49952D",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "then": [
+      {
+       "_at": "0x49952D",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x499540",
+       "a": 22,
+       "b": 2,
+       "c": 340,
+       "d": 280,
+       "kind": "text"
+      },
+      {
+       "a": 0,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 12,
+       "b": 1000,
+       "c": 9,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
      "_at": "0x4995AE",
      "_tut_ausserdem": "close_message_windows show_text2",
      "then": [
@@ -5835,6 +6305,75 @@
        "a": 40,
        "b": 50,
        "kind": "var",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x4997FD",
+     "once": 10,
+     "then": [],
+     "when": [
+      {
+       "a": 0,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 36,
+       "b": 1000,
+       "c": 7,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x499847",
+     "once": 11,
+     "then": [],
+     "when": [
+      {
+       "a": 1,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 29,
+       "b": 1000,
+       "c": 80,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x499883",
+     "_tut_ausserdem": "0x4D0810 0x4D0810 0x4D0810 0x4D0810",
+     "once": 12,
+     "then": [],
+     "when": [
+      {
+       "a": 38,
+       "b": 1000,
+       "c": 59,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x4998DF",
+     "once": 13,
+     "then": [],
+     "when": [
+      {
+       "a": 74,
+       "b": 1000,
+       "c": 85,
+       "kind": "imap",
        "op": "<"
       }
      ]
@@ -7535,6 +8074,78 @@
      "when": []
     },
     {
+     "_at": "0x49A0A3",
+     "_tut_ausserdem": "show_text2",
+     "once": 0,
+     "then": [
+      {
+       "_at": "0x49A0B1",
+       "a": 32,
+       "b": 2,
+       "c": 320,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 29,
+       "b": 1000,
+       "c": 35,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49A0D5",
+     "_tut_ausserdem": "show_text2",
+     "once": 1,
+     "then": [
+      {
+       "_at": "0x49A0E3",
+       "a": 33,
+       "b": 2,
+       "c": 400,
+       "d": 320,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1000,
+       "c": 22,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49A107",
+     "_tut_ausserdem": "show_text2",
+     "once": 2,
+     "then": [
+      {
+       "_at": "0x49A115",
+       "a": 34,
+       "b": 2,
+       "c": 250,
+       "d": 250,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 11,
+       "b": 1000,
+       "c": 38,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
      "_at": "0x49A150",
      "_tut_ausserdem": "show_text2",
      "once": 3,
@@ -8096,6 +8707,54 @@
      ]
     },
     {
+     "_at": "0x49A63B",
+     "_tut_ausserdem": "show_text",
+     "once": 220,
+     "then": [
+      {
+       "a": 102,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49A657",
+       "a": 161,
+       "b": 1,
+       "c": 120,
+       "d": 450,
+       "kind": "text"
+      },
+      {
+       "a": 0,
+       "b": 10,
+       "c": 5,
+       "kind": "space_in",
+       "typen": [
+        193,
+        50,
+        50,
+        50,
+        50,
+        50
+       ]
+      }
+     ],
+     "when": [
+      {
+       "a": 102,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 8,
+       "b": 1000,
+       "c": 54,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
      "_at": "0x49A77F",
      "then": [
       {
@@ -8139,6 +8798,46 @@
        "b": 10,
        "kind": "var",
        "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A883",
+     "once": 12,
+     "then": [],
+     "when": [
+      {
+       "a": 1,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 29,
+       "b": 1000,
+       "c": 53,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49A8CD",
+     "once": 13,
+     "then": [],
+     "when": [
+      {
+       "a": 2,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 55,
+       "b": 1000,
+       "c": 52,
+       "kind": "imap",
+       "op": "<"
       }
      ]
     },
@@ -8344,6 +9043,31 @@
        "b": 8,
        "kind": "event",
        "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49ACAC",
+     "_tut_ausserdem": "0x4222C0 0x4D0EC0",
+     "once": 0,
+     "then": [
+      {
+       "_at": "0x49ACC4",
+       "a": 3000,
+       "kind": "sell_unit"
+      },
+      {
+       "a": 221,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 22,
+       "b": 1000,
+       "c": 14,
+       "kind": "imap",
+       "op": "<"
       }
      ]
     },
@@ -8742,6 +9466,44 @@
      ]
     },
     {
+     "_at": "0x49B35C",
+     "_tut_ausserdem": "game_time show_text",
+     "then": [
+      {
+       "a": 0,
+       "kind": "set_time"
+      },
+      {
+       "_at": "0x49B378",
+       "a": 180,
+       "b": 1,
+       "c": 360,
+       "d": 240,
+       "kind": "text"
+      },
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 0,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 24,
+       "b": 1000,
+       "c": 16,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
      "_at": "0x49B3C6",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "once": 1,
@@ -8894,6 +9656,26 @@
      ]
     },
     {
+     "_at": "0x49B85F",
+     "_tut_ausserdem": "game_time",
+     "once": 3,
+     "then": [
+      {
+       "a": 4,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 45,
+       "b": 1000,
+       "c": 93,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
      "_at": "0x49BA67",
      "then": [
       {
@@ -8933,6 +9715,9 @@
        "_at": "0x49BAB3",
        "a": 1,
        "b": 2,
+       "c": 9,
+       "d": 6000,
+       "e": 0,
        "kind": "add_target"
       }
      ],
@@ -8955,6 +9740,9 @@
        "_at": "0x49BAE0",
        "a": 1,
        "b": 1,
+       "c": 9,
+       "d": 8,
+       "e": 1,
        "kind": "add_target"
       }
      ],

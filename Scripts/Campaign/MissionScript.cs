@@ -309,6 +309,7 @@ public sealed class MissionScript
     public Func<int, int, bool>? UnitHasMark;        // einheit, marke
     public Func<int, int>? MoneyOf;                  // spieler -> Kontostand
     public Func<int, int, int>? TerrainAt;           // x, y -> Geländebyte
+    public Func<int, int, int>? ImapAt;              // spalte, zeile -> Belegung
     public Action<int, int>? AddMoney;               // betrag, spieler
     public Action<int>? PlaySound;                   // 600 / 601
     public Action? CloseTexts;                       // close_message_windows()
@@ -497,6 +498,11 @@ public sealed class MissionScript
         // terrain_at(a, b) — Mission 1 prüft damit, ob der Panzer auf der
         // Brücke steht (> 4)
         "terrain" => TerrainAt != null && Cmp(TerrainAt(c.A, c.B), c.Op, c.C),
+        // Eine Zelle der BELEGUNGSKARTE (Spalte a, Zeile c). Das Original hält
+        // dort je Zelle ein Wort: den Einheitenplatz, ab 8000 ein Gebäude, und
+        // 0xFFFE für »frei«. Mission 1 startet daran ihren Zähler für die vier
+        // Angreifer vor der Brücke — `imap(39,4) == 0xFFFE`.
+        "imap" => ImapAt != null && Cmp(ImapAt(c.A, c.C), c.Op, c.B),
         _ => false,
     };
 
@@ -841,6 +847,7 @@ public sealed class MissionScript
         "unit_is" => UnitHasMark != null,
         "money_of" => MoneyOf != null,
         "terrain" => TerrainAt != null,
+        "imap" => ImapAt != null,
         _ => false,
     };
 
@@ -869,6 +876,20 @@ public sealed class MissionScript
     /// <summary>Was dieses Skript nicht ausführen kann: je fehlender Art, wie
     /// oft sie vorkommt und in wievielen Regeln. Leer heisst: alles hängt.
     /// </summary>
+    /// <summary>Was die Belegungskarte an den Stellen sagt, die dieses Skript
+    /// abfragt — fuer den Pruefstand, damit eine Bedingung, die nicht wahr
+    /// wird, ihren Wert nennt statt nur zu schweigen.</summary>
+    public string ImapProbe()
+    {
+        if (ImapAt == null) return "imap: kein Haken";
+        var seen = new List<string>();
+        foreach (var r in _script.Rules)
+            foreach (var c in r.When)
+                if (c.Kind == "imap")
+                    seen.Add($"({c.A},{c.C}) ist {ImapAt(c.A, c.C)}, verlangt {c.Op} {c.B}");
+        return seen.Count == 0 ? "" : "imap: " + string.Join(" | ", seen);
+    }
+
     public string Coverage(out int rules, out int blocked)
     {
         var missing = new SortedDictionary<string, int>();

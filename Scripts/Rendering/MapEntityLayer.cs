@@ -4458,6 +4458,16 @@ public partial class MapEntityLayer : Node2D
                         }
                 };
                 _mscript.SetRelation = SetRelationRuntime;
+                // Die Belegungskarte: Einheitenplatz, ab 8000 ein Gebaeude,
+                // 0xFFFE = frei. Unser Gitter fuehrt -1 fuer frei.
+                _mscript.ImapAt = (col, row) =>
+                {
+                    if (_nav == null || !_nav.InBounds(col, row)) return 0xFFFE;
+                    int occ = _nav.OccupantAt(col, row);
+                    if (occ < 0 || occ >= _entities.Count) return 0xFFFE;
+                    var e = _entities[occ];
+                    return e.IsBuilding ? 8000 + e.Slot : e.Slot;
+                };
                 // ⚠ add_target ist die ZIELLISTE DES COMPUTERSPIELERS, kein
                 // Eintrag im Missionspanel — siehe SkirmishAi.AddMissionTarget.
                 _mscript.AddTarget = AddMissionTarget;
@@ -4930,6 +4940,8 @@ public partial class MapEntityLayer : Node2D
         if (_mscript == null) MissionScriptTick(0.001f);
         if (_mscript == null) return "script-coverage: kein Skript fuer diese Mission";
         string fehlt = _mscript.Coverage(out int rules, out int blocked);
+        string probe = _mscript.ImapProbe();
+        if (probe.Length > 0) GD.Print("   " + probe);
         return $"script-coverage: M{_mscript.Mission} {rules} Regeln, " +
                $"{rules - blocked} ausfuehrbar, {blocked} blockiert" +
                (fehlt.Length > 0 ? "   FEHLT: " + fehlt : "   (alles verdrahtet)");
