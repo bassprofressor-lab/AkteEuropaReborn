@@ -423,6 +423,24 @@ public partial class MapEntityLayer : Node2D
             //
             // Abstand 1: die vier Waggons haengen aneinander und ihre vier
             // Schienenstuecke ergeben ein durchgehendes Stueck Gleis.
+            //
+            // ⚠ OFFEN, Stand 11.08.2026: eine Strecke OHNE Zug zeichnen wir
+            // gar nicht. Gesucht wurde am zweiten Zweig desselben Zeichenpfads
+            // -- ab @0x42b550 arbeitet er nicht am Waggon, sondern an der
+            // Kartenzelle (Satz 0xb95f50, Schrittweite 24, +0x03 ist ein
+            // Streckencode 0..6), und @0x42b624 rechnet
+            //     bx = word[code*2 + 0x4fa218] + Grundbild(Teil 57)
+            // Die acht Eintraege dieser Tabelle sind 46, 47, 44, 45, 42, 43,
+            // 40, 41 -- also Bild 40..47 von Teil 57, was nach
+            // CwrFile.PartFrame Block 5 waere, und die Zuordnung ist glatt
+            // `Richtung = Stueck XOR 6`.
+            //
+            // Das sah nach dem gesuchten blanken Gleiskoerper aus. Ist es
+            // NICHT: Block 5 von Teil 57 wurde exportiert und angesehen -- acht
+            // WAGENKOERPER, kein Gleis. Die Rechnung stimmt also, aber unser
+            // PartBase(57) ist nicht das, was das Spiel unter 0x77c956 fuehrt,
+            // oder der Zweig zeichnet etwas anderes als eine Strecke. Solange
+            // das nicht geklaert ist, wird hier nichts behauptet.
             int step = Mathf.Clamp(lead - (l.Dir == 0 ? 1 : -1) * w.Index, 0, last);
             w.Step = step;
             w.Dir = l.Dir == 0 ? 1 : -1;
