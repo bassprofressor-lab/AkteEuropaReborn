@@ -9817,10 +9817,25 @@ public partial class MapEntityLayer : Node2D
     }
 
     // OURS: how the record's speed byte turns into pixels per second, and how
-    // fast fuel burns.  The data has speeds (Jagdflieger 25, helicopters 8..10)
-    // and a fuel tank (800..2000) but nothing that says what either is per
-    // second.  The ratios between the types stay the game's.
-    private const float AirPxPerSpeed = 7f;
+    // fast fuel burns.  The data has speeds (Jagdflieger 25, Spion 20, Bomber
+    // und Kampfhubschrauber 10, die uebrigen Helis 8) und einen Tank
+    // (800..2000), aber nichts, was sagt, was davon je Sekunde gilt.  Die
+    // Verhaeltnisse untereinander bleiben die des Spiels.
+    //
+    // ⚠ 11.08.2026 — bis heute stand die Geschwindigkeit zwar in diesem
+    // Kommentar, aber in KEINER Datei: ExeTables.Aircraft las das Feld +0x21
+    // gar nicht, aircraft.json trug kein "speed", und die Fluglogik rechnete
+    // mit Max(1, 0). Jedes Flugzeug flog also mit 7 px/s -- langsamer als jedes
+    // Fahrzeug faehrt. Gemeldet als »helikopter fliegt langsamer als unsere
+    // fahrzeuge«.
+    //
+    // Der Faktor ist so gewaehlt, dass der LANGSAMSTE Helikopter (8) das
+    // SCHNELLSTE Fahrzeug (roh 14 x PxPerSpeedUnit 6 = 84 px/s) gerade
+    // einholt: 8 * 11 = 88. Ueber die beiden Tabellen hinweg gibt es dafuer
+    // keine Vorlage im Original -- sie stehen in verschiedenen Saetzen mit
+    // verschiedenen Massstaeben --, also ist genau dieser Faktor unsere Wahl
+    // und sonst nichts.
+    private const float AirPxPerSpeed = 11f;
     private const float AirFuelBurn = 12f;      // fuel per second in the air
     private const float AirReloadSec = 12f;     // seconds a full rearm takes
     private const float AirFireGap = 1.4f;      // seconds between attacks

@@ -531,7 +531,14 @@ public sealed class ContentBuilder
             // wenn eine Zeile des Satzes neu gelesen wird (11.08.: +0x02 ist
             // das Muendungsfeuer).
             if (_exe != null)
+            {
                 new SoundExporter(_dst + "/Sound").WriteWeaponSounds(_exe, Say);
+                // Schiffe und Flugzeuge stehen ebenfalls nur in GAME.EXE, und
+                // am 11.08.2026 kam der Flugzeugtabelle ein Feld dazu.
+                WriteShips(_exe);
+                WriteAircraft(_exe);
+                Say("Schiffe und Flugzeuge neu geschrieben");
+            }
             Say($"fertig: {cat.Weapons} Bauteile benannt, {cat.WeaponTypes} Bauarten, "
                 + $"{cat.InfantryArms} Infanteriewaffen");
             return cat.Weapons > 0;
@@ -830,7 +837,7 @@ public sealed class ContentBuilder
             var a = list[i];
             if (i > 0) sb.Append(',');
             sb.Append($"{{\"index\":{a.Index},\"name\":\"{Esc(a.Name)}\",\"short\":\"{Esc(a.Short)}\",");
-            sb.Append($"\"hp\":{a.Hp},\"payload\":{a.Payload},\"airframe\":{a.Airframe},");
+            sb.Append($"\"speed\":{a.Speed},\"hp\":{a.Hp},\"payload\":{a.Payload},\"airframe\":{a.Airframe},");
             sb.Append($"\"attack\":{a.Attack},\"defence\":{a.Defence},\"sight\":{a.Sight},");
             sb.Append($"\"ammo\":{a.Ammo},\"fuel\":{a.Fuel}}}");
         }

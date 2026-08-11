@@ -865,7 +865,7 @@ public sealed class ExeTables
 
     public sealed class AircraftTemplate
     {
-        public int Index, Hp, Payload, Airframe, Attack, Defence, Sight, Ammo, Fuel;
+        public int Index, Speed, Hp, Payload, Airframe, Attack, Defence, Sight, Ammo, Fuel;
         public string Name = "", Short = "";
     }
 
@@ -883,6 +883,17 @@ public sealed class ExeTables
                 Index = i,
                 Name = Str(r, 0x00, 0x15),
                 Short = Str(r, 0x15, 0x0c),
+                // ⚠ 11.08.2026 nachgetragen: +0x21 ist die GESCHWINDIGKEIT, und
+                // sie fehlte hier. aircraft.json trug deshalb gar kein "speed",
+                // die Fluglogik las eine 0 und flog mit Max(1,0) -- jedes
+                // Flugzeug war langsamer als ein Fahrzeug.
+                //
+                // Belegt von der anderen Seite: sec120 einer Karte traegt
+                // dieselben Saetze mit einem fuehrenden Freigabe-Byte, und
+                // CwmExtra.AirDesigns liest Speed dort an +0x22, Hp an +0x23 --
+                // also genau um eins versetzt zu hier. Die Werte passen zum
+                // Spiel: Jagdflieger 25, Spion 20, Bomber 10, Helis 8..10.
+                Speed = r[0x21],
                 Hp = r[0x22],
                 Payload = r[0x23],
                 Airframe = r[0x24],
