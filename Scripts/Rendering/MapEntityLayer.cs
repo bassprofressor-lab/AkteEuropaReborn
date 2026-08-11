@@ -3702,7 +3702,13 @@ public partial class MapEntityLayer : Node2D
     public sealed class EndReport
     {
         public string Mission = "";
-        public double Seconds;
+        /// <summary>Die Missionszeit in SPIELMINUTEN — dieselbe Zahl, die das
+        /// Bedienfeld unten links zeigt (siehe <see cref="MissionMinutes"/>).
+        /// Das Original druckt daraus Stunden und Minuten, nicht Minuten und
+        /// Sekunden: die Statistikseite liest Stundenbyte 0x8154E4 (@0x485410),
+        /// haengt ":" (Zeichenkette 0x501d48) an und dann Minutenbyte 0x81AA2C
+        /// (@0x4854c4), beide mit fuehrender Null aus 0x4f8004.</summary>
+        public int Minutes;
         public EndColumn[] Columns = System.Array.Empty<EndColumn>();
         public int Built, Kills, Losses, Pay, Balance;
         public int SubDone = -1, SubTotal = -1;
@@ -3718,7 +3724,7 @@ public partial class MapEntityLayer : Node2D
         var r = new EndReport
         {
             Mission = _mission,
-            Seconds = DebugClock,
+            Minutes = MissionMinutes,
             Built = _builtCount[me],
             Kills = _killCount[me],
             Losses = _lossCount[me],
@@ -9098,6 +9104,39 @@ public partial class MapEntityLayer : Node2D
     }
 
     // ---- per-frame movement ----
+
+    /// <summary>
+    /// Die MISSIONSUHR in Spielminuten — die EINE Quelle fuer beide Anzeigen:
+    /// das Feld unten links im Bedienfeld und die Zeile »Missionszeit« im
+    /// Abschlussfenster. Vorher hatte das Abschlussfenster eine eigene
+    /// Rechnung (reale Minuten:Sekunden aus <see cref="DebugClock"/>), das
+    /// Bedienfeld gar keine.
+    ///
+    /// <para><b>Belegt:</b> Der Taktzaehler 0x81AA28 laeuft mit 50 Hz
+    /// (SetTimer 0x14 @0x415BC5); bei 250 Takten (<c>cmp al,0xFA</c> @0x4160B3)
+    /// steigt das MINUTENBYTE 0x81AA2C, bei 60 Minuten (@0x416135) das
+    /// STUNDENBYTE 0x8154E4. Eine Spielminute sind also fuenf reale Sekunden.
+    /// Beim Missionsstart setzt 0x437EFD alle drei Bytes auf 0
+    /// (<c>mov [0x81AA28],bl</c> / <c>[0x81AA2C],bl</c> / <c>[0x8154E4],bl</c>),
+    /// die Uhr faengt je Mission bei 00:00 an.</para>
+    ///
+    /// <para>Laeuft ein Missionsskript, kommt die Zahl aus dessen Taktzaehler
+    /// (<c>MissionScript.Minutes</c>), damit Anzeige und Regelwerk nie
+    /// auseinanderlaufen — auch nicht, wenn der Pruefstand die Uhr vorspult.
+    /// Ohne Skript (Gemetzel) bleibt die reale Spielzeit geteilt durch
+    /// <see cref="Campaign.MissionScript.RealSecondsPerGameMinute"/>.</para>
+    /// </summary>
+    public int MissionMinutes =>
+        _mscript?.Minutes
+        ?? (int)(DebugClock / Campaign.MissionScript.RealSecondsPerGameMinute);
+
+    /// <summary>Die Missionsuhr, so wie das Original sie druckt: Stunden und
+    /// Minuten, je zweistellig mit fuehrender Null, getrennt durch ":".
+    /// Siehe <see cref="MissionMinutes"/> fuer die Fundstellen.</summary>
+    public string MissionClockText
+    {
+        get { int m = MissionMinutes; return $"{m / 60:00}:{m % 60:00}"; }
+    }
 
     /// <summary>Accumulated simulation time and tick count (preview harness).</summary>
     public double DebugClock { get; private set; }

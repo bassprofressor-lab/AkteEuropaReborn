@@ -152,6 +152,12 @@ public sealed class MissionScript
     /// bewegt sie in die richtige Richtung.</para></summary>
     public const int TicksPerGameMinute = 250;
 
+    /// <summary>Fuenf reale Sekunden auf eine Spielminute — dieselbe Zahl wie
+    /// oben, nur in der Einheit, die eine Anzeige ohne Skript braucht
+    /// (<c>250 / 50</c>).</summary>
+    public const double RealSecondsPerGameMinute =
+        TicksPerGameMinute / (double)TicksPerSecond;
+
     /// <summary>Takte seit Missionsbeginn. Der Taktzaehler des Originals
     /// (0x4FA240) wird beim Missionsstart auf 0 gestellt (@0x442728).</summary>
     private long _ticks;

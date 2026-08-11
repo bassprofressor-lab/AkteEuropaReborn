@@ -883,8 +883,73 @@ public partial class MapViewer : Node2D
             Scale = new Vector2(PanelScale, PanelScale),
         };
         _panelLayer.AddChild(_panelSprite);
+        BuildPanelClock();
         PlacePanel();
         GetViewport().SizeChanged += PlacePanel;
+    }
+
+    // ---- die Missionsuhr im Bedienfeld -------------------------------------
+
+    /// <summary>
+    /// Das Zeitfeld unten links im Bedienblock — im Original der kleine
+    /// eingelassene Kasten links neben der Ampel, im Bildschirmfoto
+    /// <c>akte-europa_8.png</c> mit »00:23«. Bei uns fehlte er ganz.
+    ///
+    /// <para><b>Belegt, nicht geschaetzt:</b> die Zeichenroutine des Blocks
+    /// baut die Zeichenkette aus Stundenbyte 0x8154E4 (@0x46FF57) + ":"
+    /// (0x501d48) + Minutenbyte 0x81AA2C (@0x47000F/0x47001D), beide mit
+    /// fuehrender Null aus 0x4f8004, und uebergibt sie an den Textzeichner
+    /// 0x40102E mit den Ecken <c>push 0x94; push 0x17</c> (@0x470097) —
+    /// also x=23, y=148 im 204×170 grossen PANEL.DTA. Auf dem Foto beginnt
+    /// die erste Ziffer bei x=23 des Blocks, das passt aufs Pixel.</para>
+    ///
+    /// <para><b>Gegengeprueft an der zweiten Fassung</b> (F:, 1.420.800 B):
+    /// dieselbe Form bei Dateiversatz 0x6DD9A — <c>push 0x94; push 0x17</c>,
+    /// davor Stundenbyte 0x814544 und Minutenbyte 0x819A8C. Die Adressen
+    /// unterscheiden sich, die Ecken nicht.</para>
+    ///
+    /// <para>⚠ UNSERE SETZUNG bleibt die FARBE (das Original nimmt seine
+    /// Palettenfarbe aus 01.PAL, wir das helle Grau der uebrigen HUD-Schrift)
+    /// und dass die Zeile bei uns links ausgerichtet an x=23 sitzt statt im
+    /// Kasten zentriert — die 23 ist gemessen, die Ausrichtung dahinter
+    /// nicht.</para>
+    /// </summary>
+    private Label? _panelClock;
+
+    /// <summary>Ecke des Zeitfeldes im PANEL.DTA, aus <c>push 0x94; push 0x17</c>
+    /// @0x470097.</summary>
+    private static readonly Vector2I PanelClockAt = new(23, 148);
+
+    private void BuildPanelClock()
+    {
+        if (_panelLayer == null) return;
+        _panelClock = new Label
+        {
+            Text = "00:00",
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            // ⚠ Always, aus demselben Grund wie beim Abschlussfenster: bei
+            // angehaltenem Baum soll die Uhr STEHEN, aber sichtbar bleiben —
+            // ohne diesen Modus verschwindet sie nicht, sie friert nur ein.
+            // Das ist erwuenscht; die Zahl kommt ohnehin aus der Simulation.
+        };
+        _panelClock.AddThemeColorOverride("font_color", new Color(0.85f, 0.85f, 0.80f));
+        _panelClock.AddThemeConstantOverride("outline_size", 0);
+        if (_legacyFont != null)
+        {
+            _panelClock.AddThemeFontOverride("font", _legacyFont);
+            _panelClock.AddThemeFontSizeOverride("font_size", LegacyFontCell * LegacyFontScale);
+        }
+        _panelLayer.AddChild(_panelClock);
+    }
+
+    /// <summary>Die Uhr nachfuehren. Sie fragt <see cref="MapEntityLayer.
+    /// MissionClockText"/> — dieselbe Quelle, aus der das Abschlussfenster
+    /// seine »Missionszeit« nimmt, damit beide nie auseinanderlaufen.</summary>
+    private void UpdatePanelClock()
+    {
+        if (_panelClock == null) return;
+        string t = _entities.MissionClockText;
+        if (t != _panelClock.Text) _panelClock.Text = t;
     }
 
     /// <summary>The overview map, sitting on top of the side panel.
@@ -963,6 +1028,8 @@ public partial class MapViewer : Node2D
         var box = new Rect2(origin + PanelBox.Position * PanelScale,
                             PanelBox.Size * PanelScale);
         _entities.SetPanelBox(box);
+        if (_panelClock != null)
+            _panelClock.Position = origin + (Vector2)PanelClockAt * PanelScale;
         if (_build != null)
         {
             _build.Position = box.Position + new Vector2(2, 2);
@@ -1038,6 +1105,14 @@ public partial class MapViewer : Node2D
         _hud.AddThemeConstantOverride("line_spacing", 2 * LegacyFontScale);
         _entities.SetUiFont(font, size);
         _build?.SetFont(font, size, PanelScale);
+        // ⚠ Reihenfolge: BuildLegacyPanel() laeuft VOR ApplyLegacyFont() (siehe
+        // _Ready), die Uhr entsteht also noch ohne Schrift — dieselbe Falle wie
+        // bei der Tabelle im Abschlussfenster. Sie bekommt sie hier.
+        if (_panelClock != null)
+        {
+            _panelClock.AddThemeFontOverride("font", font);
+            _panelClock.AddThemeFontSizeOverride("font_size", size);
+        }
         _legacyFont = font;
         GD.Print($"MapViewer: legacy FONT.CWD applied at {size}px");
     }
@@ -1155,7 +1230,7 @@ public partial class MapViewer : Node2D
         // erst im naechsten Bild steht die Mindestgroesse fest
         CallDeferred(nameof(CenterEndWindow));
         GD.Print($"{(mission > 0 ? "Mission" : "Gemetzel")} entschieden: {v} — " +
-                 $"Zeit {(int)report.Seconds / 60:00}:{(int)report.Seconds % 60:00}, " +
+                 $"Zeit {report.Minutes / 60:00}:{report.Minutes % 60:00}, " +
                  $"gebaut {report.Built}, ausgeschaltet {report.Kills}, " +
                  $"Verluste {report.Losses}, Untermissionen {report.SubDone}/{report.SubTotal}, " +
                  $"Bezahlung ${report.Pay}, Kontostand ${report.Balance}");
@@ -1322,6 +1397,7 @@ public partial class MapViewer : Node2D
     {
         QuitIfDue(delta);
         UpdateProductionPanel();
+        UpdatePanelClock();
 
         // Das Ohr steht in der Mitte des Bildes. Das Original rechnet jeden
         // Klang gegen genau diesen Punkt (`play_sound` @0x4047E0 zieht

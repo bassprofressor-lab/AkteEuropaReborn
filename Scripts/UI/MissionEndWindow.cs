@@ -259,8 +259,14 @@ public sealed partial class MissionEndWindow : PanelContainer
                     : Cell("--/--", EmptyFg));
         }
 
-        int secs = Mathf.Max(0, (int)r.Seconds);
-        _timeL.Text = $"Missionszeit : {secs / 60:00}:{secs % 60:00}";
+        // Missionszeit = Stunden : Minuten der SPIELUHR, nicht Minuten :
+        // Sekunden der Echtzeit. Die Statistikseite des Originals setzt die
+        // Zeile aus Stundenbyte 0x8154E4 (@0x485410), ":" (0x501d48) und
+        // Minutenbyte 0x81AA2C (@0x4854c4) zusammen, fuehrende Null aus
+        // 0x4f8004. Die Zahl selbst kommt aus MapEntityLayer.MissionMinutes —
+        // derselben Quelle wie das Feld unten links im Bedienfeld.
+        int mins = Mathf.Max(0, r.Minutes);
+        _timeL.Text = $"Missionszeit : {mins / 60:00}:{mins % 60:00}";
         _builtL.Text = $"Gebaute Einheiten {r.Built}";
         _scoreL.Text = $"Ausgeschaltete {r.Kills} / Verluste {r.Losses}";
         // Ohne Missionsskript gibt es keine Untermissionen — dann faellt die
