@@ -138,13 +138,29 @@ public partial class MapEntityLayer : Node2D
         /// remake drew group 0 for every one of them. So the walkers were not
         /// only stiff, they were mostly the wrong picture.
         ///
-        /// ⚠ AND: this is NOT a gait the game plays. The only routine that
-        /// advances +0x11 is @0x406e75, and @0x406e29 gates it on subclass
-        /// (+0x0a) == 1, which is the INFANTRY; all 59 Läufer carry subclass 0.
-        /// Both the absolute scan and the register-base scan (rule 7 — only
-        /// @0x406ce3 holds the entity base in a register) find no other writer.
-        /// So a standing Läufer keeps the pose its map gave it, and inventing a
-        /// walk cycle here would be our fiction, not the game's.</summary>
+        /// ⚠ CORRECTED 10.08.2026 — the field is the GAIT, and the game says so
+        /// itself. Its debug dump @0x41763f prints it as <b>`ANIM_SPODEK:`</b>
+        /// (string @0x4f77a8 / F: @0x4f6784) — "animation of the chassis". The
+        /// pictures agree: rendered out, the eight groups of the Läufer are one
+        /// stride (leg forward → planted → trailing), the three of the Spinne a
+        /// leg shuffle, the two of the Schweren Ketten a tread cycle. And the
+        /// creation code sets the field from the PART TABLE'S GROUP COUNT —
+        /// @0x4c3584 / @0x4b1c63 / @0x4b37dc all read `byte[chassis*4 +
+        /// 0x77c871]`, the high byte of the part's first u16, and write 0xFF
+        /// when it is &lt;= 1 and 0 otherwise. Measured against the maps: all
+        /// 907 placed units of a one-group chassis carry 0xFF, all 453 of a
+        /// multi-group chassis a group its chassis really owns — 1360 of 1360,
+        /// no counter-example. (That also retracts the 08.06. note "Reifen carry
+        /// +0x11 = 1..7"; they carry 0xFF.)
+        ///
+        /// ⚠ What stays true: <b>nothing advances it while a vehicle drives.</b>
+        /// The steppers all sit in "move units" @0x406cd0 behind subclass
+        /// (+0x0a) == 1 — the infantry — or behind the Abwehrstellung's
+        /// deploy task (@0x409855/@0x4098a4, `[+0x11] = [+0x15]` counting 0..7
+        /// with the facing pinned to 7). 34 absolute and 20 register-base
+        /// accesses on EACH of the two GAME.EXE, same set, no other writer. So
+        /// the frames are the game's, the cadence is OURS — see
+        /// <see cref="HullGaitFps"/>.</summary>
         public int Pose;
 
         /// <summary>Record +0x28, and it is NOT the fuel tank — that is +0x2e.
@@ -488,6 +504,11 @@ public partial class MapEntityLayer : Node2D
     private const float PxPerSpeedUnit = 6f;
     private const float MoveSpeed = 55f;  // fallback when a type has no entry
     private string _order = "";           // last order feedback for the HUD
+
+    /// <summary>Eine Meldung in die Statuszeile stellen. Bisher schrieb nur
+    /// diese Klasse selbst hinein; der Cheat-Mode sitzt aber im MapViewer
+    /// und muss sich melden koennen, damit ein Schummel nie still laeuft.</summary>
+    public void Say(string text) => _order = text;
 
     // ---- Step B: combat ----
     // Weapon stats recovered from the GAME.EXE component table (weapons.json):
@@ -1201,6 +1222,10 @@ public partial class MapEntityLayer : Node2D
         _railRoutes.Clear();
         _lineRoute.Clear();
         _linePiece.Clear();
+        _railLines.Clear();
+        _freightWagons.Clear();
+        _bldBySlot.Clear();
+        _railStart.Clear();
         _hasRail = false;
         var node2bld = new Dictionary<int, int>();
         if (root.TryGetValue("rail_nodes", out var rnv) && rnv.VariantType == Variant.Type.Array)
@@ -1255,6 +1280,12 @@ public partial class MapEntityLayer : Node2D
                     }
                 }
                 if (a < 0 || b2 < 0 || a == b2) continue;
+                // die Linie selbst, für das Bahnsystem (Simulation/RailFreight.cs).
+                // ⚠ Die vier Warenschalter des Satzes (+0x08..+0x0b) werden hier
+                // BEWUSST nicht gelesen: der Kartenlader überschreibt sie beim
+                // Laden aus der Typmatrix @0x504128 (@0x41F2A2), die Datei-Werte
+                // sind also tot. RailFreight rechnet sie nach.
+                AddRailLine(GetI(lk, "slot", -1), a, b2, GetI(lk, "delka", 1));
                 if (!_rail.TryGetValue(a, out var la)) _rail[a] = la = new List<int>();
                 if (!_rail.TryGetValue(b2, out var lb)) _rail[b2] = lb = new List<int>();
                 if (!la.Contains(b2)) la.Add(b2);
@@ -1282,6 +1313,8 @@ public partial class MapEntityLayer : Node2D
                     Attack = GetI(ad, "attack"), Defence = GetI(ad, "defence"),
                     Sight = GetI(ad, "sight"), Ammo = GetI(ad, "ammo"),
                     Fuel = GetI(ad, "fuel"),
+                    CostW = GetI(ad, "cost_w"), CostF = GetI(ad, "cost_f"),
+                    CostS = GetI(ad, "cost_s"),
                 });
             }
             _airSource = "sec120";
@@ -1790,6 +1823,23 @@ public partial class MapEntityLayer : Node2D
         }
     }
 
+    /// <summary>Wo das Ohr steht: der Mittelpunkt des Bildes, in Zellen. Wird
+    /// jede Runde nachgezogen, weil das Original seine Klangdämpfung ebenfalls
+    /// gegen die aktuelle Kameramitte rechnet (@0x404926). Ausserhalb der Karte
+    /// wird nicht abgeschnitten, sondern weitergerechnet — sonst spränge die
+    /// Lautstärke, sobald der Rand im Bild ist.</summary>
+    public void SetListener(Vector2 mapPos)
+    {
+        if (_nav == null || _nav.Width == 0)
+        {
+            Audio.SoundBankPlayer.ListenerCell = new Vector2(float.NaN, float.NaN);
+            return;
+        }
+        Audio.SoundBankPlayer.ListenerCell = CellAt(mapPos) is { } c
+            ? new Vector2(c.X, c.Y)
+            : new Vector2((mapPos.X - _ox) / TileW, (mapPos.Y - _oy) / TileH);
+    }
+
     /// <summary>Map pixel -> cell, honouring the elevation lift of the tiles.</summary>
     public Vector2I? CellAt(Vector2 mapPos)
     {
@@ -1959,7 +2009,7 @@ public partial class MapEntityLayer : Node2D
 
         for (int k = 0; k < cells.Count && k < e.Doors; k++)
         {
-            int pic = Import.BuildingPatterns.DoorPicture(e.BType, 0, k);
+            int pic = Import.BuildingPatterns.DoorPicture(e.BType, 0, k, e.ProdSpeed);
             if (pic < 0) { _doorsNoPic++; continue; }    // no constant tile for this type
             int c = e.Col + cells[k].X, r = e.Row + cells[k].Y;
             if (_nav != null && !_nav.InBounds(c, r)) continue;
@@ -1972,7 +2022,7 @@ public partial class MapEntityLayer : Node2D
             have = Mathf.MoveToward(have, want, DoorOpenSpeed * (float)GetProcessDeltaTime());
             _doorPhase[key] = have;
 
-            var tex = DoorTexture(Import.BuildingPatterns.DoorPicture(e.BType, Mathf.RoundToInt(have), k));
+            var tex = DoorTexture(Import.BuildingPatterns.DoorPicture(e.BType, Mathf.RoundToInt(have), k, e.ProdSpeed));
             if (tex == null) { _doorsNoTex++; continue; }
             _doorsDrawn++;
             if (count) continue;
@@ -2018,8 +2068,54 @@ public partial class MapEntityLayer : Node2D
     {
         if (_patternTex != null) return _patternTex;
         if (Patterns?.AtlasImage == null) return null;
-        _patternTex = ImageTexture.CreateFromImage(Patterns.AtlasImage);
+        var img = Patterns.AtlasImage;
+
+        // ⚠ 11.08.2026 — hier ging ein Fehler ZWEIMAL still durch, und das war
+        // das eigentliche Problem. `CreateFromImage` gibt für ein Bild über der
+        // Höchstgröße kein null zurück, sondern eine Textur mit einer toten RID;
+        // gezeichnet wird die als WEISSE FLÄCHE. Die Engine meldete zwar
+        // »Texture dimensions exceed device maximum«, aber mitten in einem Strom
+        // von »Attempting to use an uninitialized RID«, einmal pro Kachel und
+        // pro Bild — im Spiel sah man nur weisse Gebäude und im Log nichts, was
+        // auf den Kachelsatz gezeigt hätte. Also lieber gar nicht zeichnen und
+        // EINMAL sagen, welches Glied falsch ist und was dagegen hilft.
+        int max = MaxTextureSize();
+        if (img.GetWidth() > max || img.GetHeight() > max)
+        {
+            if (!_atlasTooBig)
+            {
+                _atlasTooBig = true;
+                GD.PrintErr($"Bau-Atlas {img.GetWidth()}x{img.GetHeight()} ueberschreitet die " +
+                            $"Hoechstgroesse einer Textur ({max}) — die Gebaeude bleiben " +
+                            "ungezeichnet. Der Kachelsatz stammt aus einem Import vor dem " +
+                            "Spaltenumbruch (BuildingPatterns.AtlasColumnHeight); " +
+                            "--reexport-buildings=<Quelle> schreibt ihn neu.");
+            }
+            return null;
+        }
+        _patternTex = ImageTexture.CreateFromImage(img);
         return _patternTex;
+    }
+
+    /// <summary>Einmal gemeldet, nicht einmal je Bild.</summary>
+    private bool _atlasTooBig;
+
+    /// <summary>Was die Karte an Kantenlänge zulässt. Kopflos gibt es kein
+    /// Rendergerät — dann gilt die 16.384, die Vulkan mindestens zusichert und
+    /// die die hier gemessene Karte auch tatsächlich hat.</summary>
+    private static int MaxTextureSize()
+    {
+        try
+        {
+            var rd = RenderingServer.GetRenderingDevice();
+            if (rd != null)
+            {
+                ulong v = rd.LimitGet(RenderingDevice.Limit.MaxTextureSize2D);
+                if (v > 0 && v < int.MaxValue) return (int)v;
+            }
+        }
+        catch (System.Exception) { }
+        return 16384;
     }
 
     /// <summary>
@@ -2044,10 +2140,17 @@ public partial class MapEntityLayer : Node2D
         var tex = PatternTexture();
         if (tex == null) return;
 
-        int pattern = e.Dead
-            ? Import.BuildingPatterns.RuinPattern(Patterns, e.BType)
-            : Patterns.GetBuildingType(e.BType).FirstPattern;
-        if (pattern < 0) return;
+        var bt = Patterns.GetBuildingType(e.BType);
+        int first = bt.FirstPattern;
+        int stack = e.Dead ? 0 : DamageFrame(e);      // wie viele Muster übereinander
+        if (e.Dead)
+        {
+            int ruin = Import.BuildingPatterns.RuinPattern(Patterns, e.BType);
+            if (ruin < 0) return;
+            first = ruin;
+            stack = 1;
+        }
+        if (first < 0 || stack < 1) return;
 
         // the cells the type animates, and the tile each shows right now
         var anim = BuildingAnimCells(e);
@@ -2056,69 +2159,205 @@ public partial class MapEntityLayer : Node2D
         // The draw space and the baked picture share their origin (_oy is the
         // map's own origin_y), so the same arithmetic has to hold here — if it
         // did not, every building would jump the moment it stopped being baked.
-        for (int dx = 0; dx < Import.CwpFile.PatternWidth; dx++)
-            for (int dy = 0; dy < Import.CwpFile.PatternHeight; dy++)
-            {
-                int code = Patterns.PatternTile(pattern, dx, dy);
-                if (anim != null && anim.TryGetValue((dx, dy), out int swap) && swap != 0)
-                    code = swap;
-                if (code == 0 || !Patterns.TryGetTile(code, out var t)) continue;
-                int c = e.Col + dx, r = e.Row + dy;
-                float sx = _ox + c * Import.MapBaker.TileW;
-                float sy = _oy + r * Import.MapBaker.TileH
-                         - ElevOf(c, r) * Import.MapBaker.ElevStep
-                         + Import.MapBaker.BlitAnchor + t.YOff;
-                DrawTextureRectRegion(tex, new Rect2(sx, sy, t.W, t.H),
-                                      new Rect2(t.X, t.Y, t.W, t.H));
-            }
+        //
+        // ⚠ Das Original stempelt `bild` Muster ÜBEREINANDER (@0x4C97B4, `add
+        // eax, 0xb4` je Runde gegen `edx = bild`) — Muster 0 ist das ganze
+        // Gebäude, 1..n-2 sind Einzelkachel-Auflagen, n-1 ist die Ruine. Genau
+        // deshalb sind die mittleren Muster so klein: in 06.CWP hat Muster 0
+        // 37 Kacheln, die Muster 1..19 haben 1 bis 7. Sie sind SCHADENSFLECKEN.
+        for (int k = 0; k < stack; k++)
+            for (int dx = 0; dx < Import.CwpFile.PatternWidth; dx++)
+                for (int dy = 0; dy < Import.CwpFile.PatternHeight; dy++)
+                {
+                    int code = BuildingCellTile(first, k, dx, dy, anim);
+                    if (code == 0 || !Patterns.TryGetTile(code, out var t)) continue;
+                    int c = e.Col + dx, r = e.Row + dy;
+                    float sx = _ox + c * Import.MapBaker.TileW;
+                    float sy = _oy + r * Import.MapBaker.TileH
+                             - ElevOf(c, r) * Import.MapBaker.ElevStep
+                             + Import.MapBaker.BlitAnchor + t.YOff;
+                    DrawTextureRectRegion(tex, new Rect2(sx, sy, t.W, t.H),
+                                          new Rect2(t.X, t.Y, t.W, t.H));
+                }
     }
 
     /// <summary>
-    /// How many phases a building animation steps through per second.
+    /// Die EINE Entscheidung, welche Kachel Lage <paramref name="k"/> in
+    /// Musterzelle (<paramref name="dx"/>,<paramref name="dy"/>) legt — oder 0
+    /// für »nichts«. <see cref="DrawBuildingBody"/> und der Prüfstand
+    /// <see cref="BuildingCellsOurs"/> teilen sie sich, damit der Prüfstand
+    /// nicht eine Kopie prüft.
     ///
-    /// <para>⚠ <b>OURS.</b> The original steps every row exactly one phase per
-    /// pass of the main loop — the profiler section is called "animations of the
-    /// buildings" (@0x4f763c) and sits directly before "Flip pages", so the rate
-    /// is whatever the machine managed. There is no timer and no divisor in
-    /// <c>@0x4D5830</c> or its driver <c>@0x4D5D10</c> to read a number off.
-    /// Six is the rate the doors already use, so the two look related.</para>
+    /// <para>⚠ <b>KORRIGIERT 10.08.2026.</b> Hier stand »die Zellanimation gilt
+    /// nur dem Grundbild, eine Auflage hat ihre eigene Kachel und darf nicht
+    /// ersetzt werden«. Das war GERATEN, und es ist falsch herum.</para>
+    ///
+    /// <para>Das Original hält keinen Stapel: es schreibt in die KARTENZELLE,
+    /// und wer zuletzt schreibt, gewinnt. Die Schadensauflage wird EINMAL
+    /// gestempelt (@0x4C97B4), die Zellanimation schreibt JEDES BILD
+    /// (A 0x4D5A3D / 0x4D5A96). Also gewinnt die Animation — sofern ihr
+    /// Wächter A 0x4D58B4 sie durchlässt, der die Kachel der Karte gegen
+    /// <c>Tiles[1]</c> der ersten Zeile des Typs hält.</para>
+    ///
+    /// <para>An den Daten nachgerechnet (<c>aekernel-tools/banim_re.py
+    /// data</c>): über alle 23 .CWP liegen <b>151</b> Zeilen unter einer
+    /// Schadensauflage, und in <b>151 von 151</b> Fällen lässt der Wächter die
+    /// Animation weiterlaufen — kein Gegenbeispiel. Ein beschädigtes Fließband
+    /// läuft im Original also weiter, und der Fleck darüber ist im nächsten
+    /// Bild wieder weg.</para>
+    ///
+    /// <para>Darum gehört eine Animationszelle der Animation allein. Phase 0
+    /// zeigt dort die Kachel des GRUNDMUSTERS, nicht die der Auflage — das ist
+    /// der Rücksetzzweig A 0x4D5A6D, der ausdrücklich
+    /// <c>word[(90*first + 6*dx + dy)*2 + 0xb97b38]</c> zurückschreibt, also
+    /// Muster <c>first</c>.</para>
+    /// </summary>
+    private int BuildingCellTile(int first, int k, int dx, int dy,
+                                 Dictionary<(int, int), int>? anim)
+    {
+        if (Patterns == null) return 0;
+        if (anim != null && anim.TryGetValue((dx, dy), out int swap))
+        {
+            if (k > 0) return 0;              // die Auflage kommt hier nicht zum Zug
+            if (swap != 0) return swap;       // 0 = Phase 0 = Grundkachel
+        }
+        return Patterns.PatternTile(first + k, dx, dy);
+    }
+
+    /// <summary>
+    /// Wie viele Muster ein Gebäude gerade übereinander zeigt — seine
+    /// SCHADENSSTUFE.
+    ///
+    /// Die Formel steht @0x4CBBF0 (F: 0x4CB7C0, Rumpf identisch):
+    /// <code>bild = (hp_max − hp) / (hp_max / musterzahl)</code>
+    /// mit `hp` = Satzbyte +0x06 und `hp_max` = +0x16. Beide werden beim Anlegen
+    /// aus derselben Typtabelle 0x539DB8 gesetzt (Typ 1 → 1200, 2/3 → 1000,
+    /// 4 → 800, ab Typ 17 → 700), und **`hp_max` wird danach nie wieder
+    /// geschrieben** — 2 Schreibstellen in der ganzen EXE, beide im Anlegen. Das
+    /// ist der Beleg, dass es keine Bauzeit ist: eine Konstante je Typ.
+    ///
+    /// Gegenprobe an 36 Karten / 1451 Gebäudesätzen: `hp &lt;= hp_max` gilt
+    /// 1451 mal, kein Gegenbeispiel; `hp_max` ist je Typ konstant und gleich der
+    /// EXE-Tabelle; und wo die errechnete Stufe ≥ 1 ist, stimmt sie mit dem
+    /// gespeicherten Bildbyte in **14 von 14** Fällen exakt überein.
+    ///
+    /// ⚠ Die Routine liefert bei voller Gesundheit 0, die gelieferten Karten
+    /// tragen dort aber 1 (alle 915 Sätze der 23 .CWM), die Spielstände 0 (alle
+    /// 526). **0 und 1 heissen beide »heil«** — darum die Untergrenze 1.
+    ///
+    /// ⚠ NICHT gebaut: der Bauzustand. Dasselbe Bildbyte trägt ab **100** den
+    /// Baufortschritt (Anlegen setzt 100, der Ticker @0x43CA50 erhöht jeden
+    /// zweiten Takt bis 250, also 300 Takte, dann auf 1), und die Anzeige wählt
+    /// daraus `(bild−100)/50` ∈ {0,1,2} auf drei eigene Vollbilder. Die haben
+    /// aber nur die Typen 5, 7 und 15 — die Gebäude, die der Spieler im Feld
+    /// baut (383 von 410 Typzeilen führen dort 0). Solange die Engine keinen
+    /// Bauzustand kennt, fehlt auch die Sperre @0x40D2A0, die ein Gebäude im Bau
+    /// unverwundbar macht.
+    /// </summary>
+    private int DamageFrame(Entity e)
+    {
+        if (Patterns == null || e.HpMax <= 0 || e.Hp >= e.HpMax) return 1;
+        int count = Patterns.GetBuildingType(e.BType).PatternCount;
+        if (count < 2) return 1;
+        int step = e.HpMax / count;
+        if (step < 1) return 1;
+        int frame = (e.HpMax - Mathf.Max(0, e.Hp)) / step;
+        return Mathf.Clamp(frame, 1, count - 1);
+    }
+
+    /// <summary>
+    /// Wie viele Phasen eine Gebäudeanimation je Sekunde weiterschaltet.
+    ///
+    /// <para>⚠ <b>UNSERE SETZUNG</b>, und sie bleibt es — aber jetzt aus einem
+    /// gelesenen Grund und nicht aus Ratlosigkeit. Nachgeprüft am 10.08.2026 auf
+    /// BEIDEN GAME.EXE (aekernel-tools/banim_re.py rate):</para>
+    /// <list type="bullet">
+    /// <item>Der Treiber (A 0x4D5D10 / F 0x4D58A0) hat in der ganzen .text
+    /// <b>genau EINE</b> Aufrufstelle — A 0x417EC3 / F 0x417CFF, über den Sprung
+    /// A 0x4022B1 / F 0x4022A7 — und die steht in der Hauptschleife
+    /// (A 0x415CF0 / F 0x415B30), 0x29 Byte hinter dem Profilerabschnitt
+    /// »animations of the buildings«.</item>
+    /// <item>Kein Timer, kein Teiler, keine Bedingung: jede Zeile schaltet
+    /// <b>eine Phase je gezeichnetem Bild</b>.</item>
+    /// <item>Die Bildrate selbst ist <c>IDirectDrawSurface::Flip</c>
+    /// (A 0x415CB0, erkennbar an DDERR_SURFACEBUSY 0x887601C2 und
+    /// DDERR_WASSTILLDRAWING 0x8876021C) — also der Vertikalrücklauf bzw. das,
+    /// was die Maschine von 1997 schaffte.</item>
+    /// </list>
+    /// <para>Eine Zahl steht dort somit <b>nicht</b>, und es kann auch keine
+    /// geben. Sechs ist die Rate, die die Türen schon benutzen.</para>
     /// </summary>
     public const float BuildingAnimFps = 6f;
 
     /// <summary>
-    /// Which pattern cells of a building show an animation tile right now, or
-    /// null when the type has none.
+    /// Welche Musterzellen eines Gebäudes gerade eine Animationskachel zeigen —
+    /// <c>null</c>, wenn der Typ keine hat.
     ///
-    /// <para>The table is the third block of the .CWP tail; see
-    /// <see cref="Import.CwpFile.CellAnim"/> for how it was read. A row cycles
-    /// <c>LastPhase+1</c> pictures — phase 0 is the pattern's own tile, phases
-    /// 1..LastPhase are the row's. Each row rolls over at its own length, which
-    /// is what the original does too (every row carries its own counter in
-    /// <c>byte[bld + 0x0b + row]</c>), so the three belts of a factory drift
-    /// apart on purpose.</para>
+    /// <para>Die Tabelle ist der dritte Block des .CWP-Endes; siehe
+    /// <see cref="Import.CwpFile.CellAnim"/>. Der Lauf des Originals
+    /// (A 0x4D5830 / F 0x4D53C0) zählt <c>byte[bld + 0x0b + zeile]</c> hoch,
+    /// zeigt <c>Tiles[ph]</c> solange <c>ph &lt;= LastPhase</c>, und setzt beim
+    /// Überlauf die Kachel des GRUNDMUSTERS zurück (ph = 0). Ein Umlauf ist
+    /// also <c>LastPhase+1</c> Bilder lang, und Phase 0 ist das Grundbild.</para>
     ///
-    /// <para>A ruin does not animate: the picture is a different pattern and the
-    /// original's own guard @0x4D58B4 drops any cell whose map tile no longer
-    /// belongs to the building.</para>
+    /// <para>⚠ <b>KORRIGIERT 10.08.2026.</b> Hier stand, die drei Bänder einer
+    /// Fabrik liefen »absichtlich auseinander«, weil jede Zeile ihren eigenen
+    /// Zähler habe. Der eigene Zähler stimmt, der Schluss nicht: das Anlegen
+    /// eines Gebäudes nullt die zehn Zählerbytes in einem Zug
+    /// (A 0x4C94A8 <c>lea eax,[ebp+0xc0691b]</c> und drei Schreibbefehle über
+    /// 4+4+2 Byte — daher auch die Obergrenze von <b>zehn</b> Zeilen je Typ),
+    /// und der Treiber schaltet alle Zeilen im selben Durchlauf weiter.
+    /// Zeilen gleicher Länge laufen im Original also im Gleichschritt, und
+    /// verschieden lange Zeilen laufen nur deshalb auseinander, weil sie
+    /// verschieden lang sind. Genau das tut die Formel unten. Nichts zu
+    /// entkoppeln.</para>
+    ///
+    /// <para>Der Wert einer Zelle ist die Kachel oder <b>0 für »Phase 0, also
+    /// die Kachel des Grundmusters«</b>. Die Zelle steht auch dann in der Liste
+    /// — <see cref="DrawBuildingBody"/> braucht sie, um die Schadensauflage
+    /// dort zurückzuhalten.</para>
+    ///
+    /// <para>Eine Ruine animiert nicht: das Bild ist ein anderes Muster, und der
+    /// Wächter des Originals (A 0x4D58B4) verwirft jede Zelle, deren
+    /// Kartenkachel nicht mehr zum Gebäude gehört.</para>
     /// </summary>
     private Dictionary<(int, int), int>? BuildingAnimCells(Entity e)
+        => BuildingAnimCells(e, (int)(_clock * BuildingAnimFps));
+
+    /// <summary>Dasselbe für einen vorgegebenen Takt — der Prüfstand fährt damit
+    /// jede Phase ab, statt auf sie zu warten.</summary>
+    private Dictionary<(int, int), int>? BuildingAnimCells(Entity e, int tick)
     {
         if (Patterns == null || e.Dead) return null;
         var bt = Patterns.GetBuildingType(e.BType);
         if (bt.AnimCount <= 0) return null;
 
         Dictionary<(int, int), int>? cells = null;
-        for (int k = 0; k < bt.AnimCount; k++)
+        for (int k = 0; k < bt.AnimCount && k < AnimRowsPerBuilding; k++)
         {
             var a = Patterns.GetAnimRow(bt.AnimFirst + k);
             if (a.LastPhase <= 0) continue;
-            int phase = (int)(_clock * BuildingAnimFps) % (a.LastPhase + 1);
-            int tile = a.TileAt(phase);
-            if (tile == 0) continue;                 // phase 0 — the plain tile
-            (cells ??= new Dictionary<(int, int), int>())[(a.Dx, a.Dy)] = tile;
+            // ⚠ Modus (Zeilenbyte +2). Gelesen, nicht gesetzt: 1 = Dauerlauf,
+            // 2 = rückwärts laufender Einmalablauf, alles andere = einmal
+            // vorwärts und dann für immer aus (0xff). Umgeschaltet wird der
+            // Modus von A 0x4D5BA0 — einer Funktion, die in BEIDEN GAME.EXE
+            // ausser ihrem Sprung KEINE Aufrufstelle hat, also toter Code ist.
+            // In allen 23 ausgelieferten .CWP tragen **207 von 207** Zeilen den
+            // Modus 1 (banim_re.py data). Wir laufen deshalb nur Modus 1; eine
+            // andere Zeile bliebe stehen, so wie sie es im Original täte,
+            // solange niemand sie startet.
+            if (a.Mode != 1) continue;
+            int phase = tick % (a.LastPhase + 1);
+            (cells ??= new Dictionary<(int, int), int>())[(a.Dx, a.Dy)] = a.TileAt(phase);
         }
         return cells;
     }
+
+    /// <summary>Wie viele Animationszeilen ein Gebäudesatz überhaupt tragen
+    /// kann: das Anlegen nullt <c>bld+0x0b</c> bis <c>bld+0x14</c>, also zehn
+    /// Zählerbytes (A 0x4C94A8..0x4C94C1). Über alle 23 .CWP kommt kein Typ auf
+    /// mehr als drei Zeilen, die Grenze wird also nie erreicht.</summary>
+    public const int AnimRowsPerBuilding = 10;
 
     /// <summary>
     /// `--anim-check` — count the building cell animations on this map and say
@@ -2165,6 +2404,303 @@ public partial class MapEntityLayer : Node2D
         sb.Append($"Zelle ausserhalb des Musters {offPattern}, Kachel nicht im Atlas {noTile}");
         foreach (var kv in perType) sb.Append($"\n   typ {kv.Key}: {kv.Value} Stueck");
         return sb.ToString();
+    }
+
+    // ================= --banim-check =========================================
+    //
+    /// <summary>
+    /// Was eine Musterzelle bei uns WIRKLICH zeigt: die oberste Kachel, die
+    /// <see cref="DrawBuildingBody"/> für sie legt. Die Zeichenschleife stapelt
+    /// die Muster, also gewinnt die zuletzt gelegte Kachel — genau das bildet
+    /// diese Tabelle ab.
+    /// </summary>
+    private Dictionary<(int, int), int> BuildingCellsOurs(Entity e, int first, int stack, int tick)
+    {
+        var map = new Dictionary<(int, int), int>();
+        if (Patterns == null) return map;
+        var anim = BuildingAnimCells(e, tick);
+        for (int k = 0; k < stack; k++)
+            for (int dx = 0; dx < Import.CwpFile.PatternWidth; dx++)
+                for (int dy = 0; dy < Import.CwpFile.PatternHeight; dy++)
+                {
+                    int code = BuildingCellTile(first, k, dx, dy, anim);
+                    if (code == 0) continue;
+                    map[(dx, dy)] = code;
+                }
+        return map;
+    }
+
+    /// <summary>
+    /// Was dieselbe Zelle im ORIGINAL zeigt — die Vergleichsseite des
+    /// Prüfstands, aus dem Maschinencode abgeschrieben und nicht aus unserem
+    /// Zeichenweg.
+    ///
+    /// <para>Das Original hält je Kartenzelle EINE Kachel. Gestempelt wird in
+    /// dieser Reihenfolge: das Grundmuster, darüber die Schadensauflagen
+    /// (@0x4C97B4, ein Muster je Schadensstufe), und danach schreibt der
+    /// Animationslauf (A 0x4D5830) bei JEDEM Bild seine Zelle — er kommt also
+    /// zuletzt. Beim Überlauf schreibt er die Kachel des GRUNDMUSTERS zurück
+    /// (Rücksetzzweig A 0x4D5A6D), nicht die der Auflage.</para>
+    ///
+    /// <para>Der Wächter A 0x4D58B4 könnte ihn davon abhalten — er verlangt,
+    /// dass die Kartenkachel entweder die Musterkachel ist oder mindestens
+    /// <c>Tiles[1]</c> der ERSTEN Zeile des Typs. An den Daten nachgerechnet
+    /// (banim_re.py data): von den 151 Stellen, an denen eine Schadensauflage
+    /// auf einer Animationszelle liegt, lässt der Wächter <b>151</b> durch.
+    /// Kein Gegenbeispiel, deshalb steht er hier nicht im Weg.</para>
+    /// </summary>
+    private Dictionary<(int, int), int> BuildingCellsOriginal(Entity e, int first, int stack, int tick)
+    {
+        var map = new Dictionary<(int, int), int>();
+        if (Patterns == null) return map;
+        for (int k = 0; k < stack; k++)
+            for (int dx = 0; dx < Import.CwpFile.PatternWidth; dx++)
+                for (int dy = 0; dy < Import.CwpFile.PatternHeight; dy++)
+                {
+                    int code = Patterns.PatternTile(first + k, dx, dy);
+                    if (code != 0) map[(dx, dy)] = code;
+                }
+        var bt = Patterns.GetBuildingType(e.BType);
+        for (int k = 0; k < bt.AnimCount && k < AnimRowsPerBuilding; k++)
+        {
+            var a = Patterns.GetAnimRow(bt.AnimFirst + k);
+            if (a.LastPhase <= 0 || a.Mode != 1) continue;
+            int ph = tick % (a.LastPhase + 1);
+            int code = ph == 0 ? Patterns.PatternTile(first, a.Dx, a.Dy) : a.TileAt(ph);
+            if (code != 0) map[(a.Dx, a.Dy)] = code;
+        }
+        return map;
+    }
+
+    private sealed class BAnimRow
+    {
+        public int Slot, BType, Row, Dx, Dy, LastPhase, Mode;
+        public readonly HashSet<int> Tiles = new();
+        public int Changes;
+        public int Last = int.MinValue;
+    }
+
+    private readonly Dictionary<(int, int), BAnimRow> _bAnimSeen = new();
+    private float _bAnimTime;
+    private int _bAnimSamples;
+
+    /// <summary>Eine Probe je Bild: was zeigt jede Animationszelle GERADE, im
+    /// laufenden Spiel. Ein Standbild kann man behaupten, eine Zählung nicht.
+    /// </summary>
+    public void BAnimSample()
+    {
+        if (Patterns == null) return;
+        _bAnimSamples++;
+        _bAnimTime = _clock;
+        int tick = (int)(_clock * BuildingAnimFps);
+        foreach (var e in _entities)
+        {
+            if (!e.IsBuilding || e.IsProp || e.Dead) continue;
+            var bt = Patterns.GetBuildingType(e.BType);
+            if (bt.AnimCount <= 0 || bt.FirstPattern < 0) continue;
+            int stack = DamageFrame(e);
+            var ours = BuildingCellsOurs(e, bt.FirstPattern, stack, tick);
+            for (int k = 0; k < bt.AnimCount && k < AnimRowsPerBuilding; k++)
+            {
+                var a = Patterns.GetAnimRow(bt.AnimFirst + k);
+                if (!_bAnimSeen.TryGetValue((e.Slot, k), out var s))
+                    _bAnimSeen[(e.Slot, k)] = s = new BAnimRow
+                    {
+                        Slot = e.Slot, BType = e.BType, Row = k,
+                        Dx = a.Dx, Dy = a.Dy, LastPhase = a.LastPhase, Mode = a.Mode,
+                    };
+                int code = ours.TryGetValue((a.Dx, a.Dy), out int c) ? c : 0;
+                s.Tiles.Add(code);
+                if (s.Last != int.MinValue && s.Last != code) s.Changes++;
+                s.Last = code;
+            }
+        }
+    }
+
+    /// <summary>`--banim-demo` — jedes animierte Gebäude auf ein Viertel seiner
+    /// Trefferpunkte setzen und so STEHEN LASSEN, damit ein Bildschirmfoto die
+    /// Schadensstufe UND das laufende Band zeigt. Ohne das ist der Streitfall
+    /// dieser Sitzung — Auflage gegen Animation — auf keiner ausgelieferten
+    /// Karte zu sehen: dort steht jedes Gebäude auf voller Gesundheit.
+    /// Der Prüfstand <see cref="BAnimCheck"/> fährt die Stufen selbst durch;
+    /// dies hier ist nur für das Auge.</summary>
+    public void BAnimDemo()
+    {
+        if (Patterns == null) return;
+        foreach (var e in _entities)
+        {
+            if (!e.IsBuilding || e.IsProp || e.Dead || e.HpMax <= 0) continue;
+            if (Patterns.GetBuildingType(e.BType).AnimCount <= 0) continue;
+            e.Hp = Mathf.Max(1, e.HpMax / 4);
+        }
+        QueueRedraw();
+    }
+
+    /// <summary>
+    /// `--banim-check` — der Prüfstand für die Zellanimation der Gebäude.
+    ///
+    /// <para>Er beantwortet drei Fragen mit Zahlen statt mit einem Screenshot:
+    /// </para>
+    /// <list type="number">
+    /// <item><b>Zeigen wir, was das Original zeigen würde?</b> Jede
+    /// Animationszelle jedes animierten Gebäudes wird über ALLE Phasen und über
+    /// fünf Schadensstufen (100/75/50/25/1 %) gegen
+    /// <see cref="BuildingCellsOriginal"/> gehalten — Kachelcode gegen
+    /// Kachelcode, Zelle für Zelle, auch die nicht animierten.</item>
+    /// <item><b>Läuft sie im laufenden Spiel wirklich?</b> Aus den Proben von
+    /// <see cref="BAnimSample"/>: wie viele verschiedene Kacheln jede Zeile
+    /// gezeigt hat (Soll: <c>LastPhase+1</c>) und wie oft sie gewechselt hat.
+    /// </item>
+    /// <item><b>Wie schnell?</b> Wechsel je Sekunde gegen
+    /// <see cref="BuildingAnimFps"/>.</item>
+    /// </list>
+    /// </summary>
+    public string BAnimCheck()
+    {
+        if (Patterns == null) return "banim-check: keine Muster geladen";
+        var sb = new System.Text.StringBuilder();
+
+        int animated = 0, rows = 0, cmp = 0, bad = 0, clash = 0, clashBad = 0;
+        // ⚠ Nebenbefund, hier gezählt statt behauptet: der Kachel-Atlas trägt
+        // für einen NICHT baubaren Typ nur Grundbild und Ruine
+        // (BuildingPatterns.WriteAtlas sammelt alle Muster nur für die drei
+        // baubaren Typen). Eine Fabrik ist nicht baubar — ihre Schadensauflagen
+        // fehlen also und werden STILL nicht gezeichnet.
+        int ovHave = 0, ovMiss = 0;
+        var ovSeen = new HashSet<int>();
+        var lens = new SortedDictionary<int, int>();
+        var modes = new SortedDictionary<int, int>();
+        var badEx = new List<string>();
+        int[] stages = { 100, 75, 50, 25, 1 };
+
+        foreach (var e in _entities)
+        {
+            if (!e.IsBuilding || e.IsProp || e.Dead) continue;
+            var bt = Patterns.GetBuildingType(e.BType);
+            if (bt.AnimCount <= 0 || bt.FirstPattern < 0) continue;
+            animated++;
+            if (ovSeen.Add(e.BType))
+                for (int q = 1; q < bt.PatternCount - 1; q++)
+                    for (int dx = 0; dx < Import.CwpFile.PatternWidth; dx++)
+                        for (int dy = 0; dy < Import.CwpFile.PatternHeight; dy++)
+                        {
+                            int t = Patterns.PatternTile(bt.FirstPattern + q, dx, dy);
+                            if (t == 0) continue;
+                            if (Patterns.TryGetTile(t, out _)) ovHave++; else ovMiss++;
+                        }
+            int cyc = 1;
+            for (int k = 0; k < bt.AnimCount && k < AnimRowsPerBuilding; k++)
+            {
+                var a = Patterns.GetAnimRow(bt.AnimFirst + k);
+                rows++;
+                lens[a.LastPhase + 1] = lens.GetValueOrDefault(a.LastPhase + 1) + 1;
+                modes[a.Mode] = modes.GetValueOrDefault(a.Mode) + 1;
+                cyc = Lcm(cyc, a.LastPhase + 1);
+            }
+
+            int save = e.Hp;
+            foreach (int pct in stages)
+            {
+                e.Hp = Mathf.Max(1, e.HpMax * pct / 100);
+                int stack = DamageFrame(e);
+                // Wie oft trifft eine Schadensauflage eine Animationszelle? Das
+                // ist die Stelle, an der die heutige Stapelei und das Original
+                // auseinanderlaufen konnten.
+                for (int k = 0; k < bt.AnimCount && k < AnimRowsPerBuilding; k++)
+                {
+                    var a = Patterns.GetAnimRow(bt.AnimFirst + k);
+                    for (int q = 1; q < stack; q++)
+                        if (Patterns.PatternTile(bt.FirstPattern + q, a.Dx, a.Dy) != 0) clash++;
+                }
+                for (int tick = 0; tick < cyc; tick++)
+                {
+                    var ours = BuildingCellsOurs(e, bt.FirstPattern, stack, tick);
+                    var orig = BuildingCellsOriginal(e, bt.FirstPattern, stack, tick);
+                    foreach (var kv in orig)
+                    {
+                        cmp++;
+                        int got = ours.TryGetValue(kv.Key, out int g) ? g : 0;
+                        if (got == kv.Value) continue;
+                        bad++;
+                        bool onAnim = false;
+                        for (int k = 0; k < bt.AnimCount && k < AnimRowsPerBuilding; k++)
+                        {
+                            var a = Patterns.GetAnimRow(bt.AnimFirst + k);
+                            if (a.Dx == kv.Key.Item1 && a.Dy == kv.Key.Item2) onAnim = true;
+                        }
+                        if (onAnim) clashBad++;
+                        if (badEx.Count < 6)
+                            badEx.Add($"slot {e.Slot} typ {e.BType} hp {pct}% Stufe {stack} " +
+                                      $"Takt {tick} Zelle ({kv.Key.Item1},{kv.Key.Item2}): " +
+                                      $"Original {kv.Value}, wir {got}" +
+                                      (onAnim ? " [Animationszelle]" : ""));
+                    }
+                    foreach (var kv in ours)
+                        if (!orig.ContainsKey(kv.Key))
+                        {
+                            cmp++; bad++;
+                            if (badEx.Count < 6)
+                                badEx.Add($"slot {e.Slot} typ {e.BType} Takt {tick} " +
+                                          $"Zelle ({kv.Key.Item1},{kv.Key.Item2}) hat bei uns " +
+                                          $"Kachel {kv.Value}, im Original keine");
+                        }
+                }
+            }
+            e.Hp = save;
+        }
+
+        sb.Append($"banim-check: {animated} Gebaeude mit Animation, {rows} Zeilen ");
+        sb.Append($"(Umlauflaenge {string.Join(", ", Fmt(lens))}; Modus {string.Join(", ", Fmt(modes))})");
+        sb.Append($"\n   Abgleich gegen das Original ueber alle Takte x 5 Schadensstufen: ");
+        sb.Append($"{cmp} Zellvergleiche, {bad} Abweichungen");
+        sb.Append($"\n   Schadensauflagen animierter Typen im Kachel-Atlas: {ovHave} von {ovHave + ovMiss}");
+        if (ovMiss > 0)
+            sb.Append(" — ! die fehlenden werden STILL nicht gezeichnet "
+                      + "(WriteAtlas sammelt alle Muster nur fuer die baubaren Typen)");
+        sb.Append($"\n   Abweichungen auf Animationszellen: {clashBad} — ");
+        sb.Append($"{clash} mal liegt eine Schadensauflage auf einer Animationszelle ");
+        sb.Append("(dort gewinnt im Original die Animation, 151 von 151 an den .CWP nachgerechnet)");
+        foreach (string x in badEx) sb.Append($"\n      ! {x}");
+
+        if (_bAnimSamples == 0)
+        {
+            sb.Append("\n   live: nicht abgetastet (--banim-check braucht Laufzeit)");
+            return sb.ToString();
+        }
+        int full = 0, frozen = 0, part = 0, changes = 0;
+        foreach (var s in _bAnimSeen.Values)
+        {
+            changes += s.Changes;
+            if (s.Tiles.Count >= s.LastPhase + 1) full++;
+            else if (s.Tiles.Count <= 1) frozen++;
+            else part++;
+        }
+        float secs = Mathf.Max(0.001f, _bAnimTime);
+        sb.Append($"\n   live: {_bAnimSamples} Proben in {secs:0.0}s ueber {_bAnimSeen.Count} Zeilen — ");
+        sb.Append($"{full} zeigen JEDE Phase, {part} nur einen Teil, {frozen} stehen fest");
+        sb.Append($"\n   Takt: {changes} Wechsel = {changes / secs / Mathf.Max(1, _bAnimSeen.Count):0.00} ");
+        sb.Append($"Phasen/s je Zeile (unsere Setzung: {BuildingAnimFps:0.#})");
+        int shown = 0;
+        foreach (var s in _bAnimSeen.Values)
+        {
+            if (shown++ >= 6) break;
+            sb.Append($"\n      slot {s.Slot} typ {s.BType} Zeile {s.Row} Zelle ({s.Dx},{s.Dy}) " +
+                      $"Modus {s.Mode}, {s.LastPhase + 1} Phasen: {s.Tiles.Count} verschiedene " +
+                      $"Kacheln [{string.Join(",", s.Tiles)}], {s.Changes} Wechsel");
+        }
+        return sb.ToString();
+    }
+
+    private static int Lcm(int a, int b)
+    {
+        int x = a, y = b;
+        while (y != 0) { int t = x % y; x = y; y = t; }
+        return x == 0 ? b : a / x * b;
+    }
+
+    private static IEnumerable<string> Fmt(SortedDictionary<int, int> d)
+    {
+        foreach (var kv in d) yield return $"{kv.Key}x{kv.Value}";
     }
 
     private readonly Dictionary<int, Texture2D?> _doorTex = new();
@@ -2246,6 +2782,48 @@ public partial class MapEntityLayer : Node2D
         foreach (int i in _sel) if (_entities[i].Path != null) withPath++;
         sb.Append($"   nach dem Befehl: {withPath}/{_sel.Count} haben einen Pfad — " +
                   $"Meldung: {_order}");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// `--sound-check` — was ein Klang an seiner Stelle noch wiegt.
+    ///
+    /// Fragt nicht die Formel ab (die stünde nur zweimal da), sondern geht die
+    /// Einheiten der geladenen Karte durch und meldet für jede, wie weit sie vom
+    /// Bildmittelpunkt weg ist und um wieviel Dezibel ihr Schuss darum leiser
+    /// wird. Die Probe ist die SPANNE: solange die weiteste Einheit genauso laut
+    /// ist wie die nächste, ist die Dämpfung nicht angeschlossen.
+    /// </summary>
+    public string SoundDistanceCheck()
+    {
+        var listener = Audio.SoundBankPlayer.ListenerCell;
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"sound-check: Ohr auf Zelle ({listener.X:0.0},{listener.Y:0.0}), " +
+                  $"{Audio.SoundBankPlayer.DistanceFactor / 100f:0.00} dB je Zelle " +
+                  $"(still ab {10000 / Audio.SoundBankPlayer.DistanceFactor:0} Zellen)\n");
+        if (float.IsNaN(listener.X)) { sb.Append("   kein Ohr gesetzt — nichts wird gedaempft"); return sb.ToString(); }
+
+        float near = float.MaxValue, far = -1f, nearDb = 0, farDb = 0;
+        int n = 0, silent = 0;
+        foreach (var e in _entities)
+        {
+            if (e.IsProp || e.Dead) continue;
+            n++;
+            float dx = e.Col - listener.X, dy = e.Row - listener.Y;
+            float d = Mathf.Sqrt(dx * dx + dy * dy);
+            float db = Audio.SoundBankPlayer.DistanceDb(e.Col, e.Row);
+            if (db <= -100f) silent++;
+            if (d < near) { near = d; nearDb = db; }
+            if (d > far) { far = d; farDb = db; }
+        }
+        if (n == 0) return sb.Append("   keine Einheit auf der Karte").ToString();
+        sb.Append($"   {n} Objekte: naechstes {near:0.0} Zellen -> {nearDb:0.0} dB, " +
+                  $"weitestes {far:0.0} Zellen -> {farDb:0.0} dB, " +
+                  $"{silent} davon still (>= 100 Zellen)\n");
+        sb.Append($"   Spanne {(nearDb - farDb):0.0} dB — " +
+                  (Mathf.Abs(nearDb - farDb) < 0.05f
+                      ? "NICHT ANGESCHLOSSEN (alles gleich laut)"
+                      : "Daempfung wirkt"));
         return sb.ToString();
     }
 
@@ -3136,7 +3714,8 @@ public partial class MapEntityLayer : Node2D
             if (e.Cooldown <= 0 && HasAmmo(e))
             {
                 e.Cooldown = ReloadOf(e);
-                if (e.AmmoMax > 0) e.Ammo--;     // one round per shot (@0x40c587)
+                if (e.AmmoMax > 0 && !(CheatAmmo && Cheated(e)))
+                    e.Ammo--;                    // one round per shot (@0x40c587)
                 DebugShots++;
                 Fire(i, e, e.Target, t, w);
             }
@@ -3183,7 +3762,7 @@ public partial class MapEntityLayer : Node2D
         // names a sound class at stats +0x1c, the class picks a row of the
         // fire-sound table @0x4f98f2, and the original plays that number or the
         // next at random (@0x40c4c0). See Audio/GameSounds.Fire.
-        Audio.GameSounds.Fire(WeaponRowOf(shooter.Weapon));
+        Audio.GameSounds.Fire(WeaponRowOf(shooter.Weapon), null, shooter.Col, shooter.Row);
 
         string? rocket = RocketKind(shooter.Weapon);
         if (rocket != null)
@@ -3242,7 +3821,10 @@ public partial class MapEntityLayer : Node2D
         damage = ShotDamage(shooter, victim, damage);
         // the original destroys the unit outright once a hit is at least what
         // is left of its energie (@0x40cf8d), instead of letting it reach zero
-        bool lethal = !victim.IsBuilding && damage >= victim.Hp;
+        // Unverwundbar: der Treffer wird gezählt und gemeldet wie immer, nur
+        // der Schaden bleibt aus — so bleiben Klang, Meldung und Zielwahl heil.
+        if (CheatGodMode && Cheated(victim)) damage = 0;
+        bool lethal = !victim.IsBuilding && damage >= victim.Hp && damage > 0;
         victim.Hp -= victim.DugIn ? Mathf.RoundToInt(damage * DugInDamageFactor) : damage;
         if (lethal) victim.Hp = 0;
 
@@ -3299,7 +3881,7 @@ public partial class MapEntityLayer : Node2D
             //
             // the original's own sound for this: @0x40d37c, in the hit routine
             // right after it prints "Hit to exploding infantry!!!"
-            Audio.GameSounds.Play(Audio.GameSounds.InfantryDies);
+            Audio.GameSounds.PlayAt(Audio.GameSounds.InfantryDies, victim.Col, victim.Row);
             return;
         }
         _effects.Add(new Effect { Pos = victim.Pos - new Vector2(0, 6),
@@ -3364,7 +3946,8 @@ public partial class MapEntityLayer : Node2D
             // impact
             _shots.RemoveAt(i);
             _effects.Add(new Effect { Pos = p.Aim, Kind = "explosion", FrameTime = 0.06f });
-            Audio.GameSounds.Explosion();
+            if (CellAt(p.Aim) is { } ic) Audio.GameSounds.Explosion(ic.X, ic.Y);
+            else Audio.GameSounds.Explosion();
             if (p.Target >= 0 && p.Target < _entities.Count)
             {
                 var t = _entities[p.Target];
@@ -3603,6 +4186,104 @@ public partial class MapEntityLayer : Node2D
     private bool Allied(int a, int b)
         => a == b || (_haveAllies && a is >= 0 and <= 7 && b is >= 0 and <= 7 && _allied[a, b]);
 
+    // ---- was ein Missionsskript mit der Welt tun darf   (11.08.2026) --------
+    //
+    // Diese vier sind die Wirkungen, die der Missionsblock ueber den Befehlsbus
+    // absetzt. Sie stehen hier und nicht in `MissionScript`, weil dort keine
+    // Entitaeten liegen — das Skript kennt nur Zahlen.
+
+    /// <summary>Kontostand eines Spielers. `get_money(spieler)` @0x4CF5E0 liest
+    /// `dword[0xA9C600 + 4*spieler]`; hier ist es <c>_money</c>.</summary>
+    private int Money(int player) => player is >= 0 and <= 7 ? _money[player] : 0;
+
+    private void Money(int player, int value)
+    {
+        if (player is >= 0 and <= 7) _money[player] = value;
+    }
+
+    /// <summary>
+    /// `bus_cmd(11, einheit, ukol, x, y)` — der Befehl, mit dem eine Mission
+    /// ihre eigenen Einheiten losschickt.
+    ///
+    /// <para>Der Einheitenplatz ist <c>1000*spieler + k</c>: Mission 1 schickt
+    /// 1000..1003 los, also die ersten vier Einheiten von Spieler 1 — die drei
+    /// Infanteristen und das MG-Fahrzeug, die dem Spieler auf dem Weg zur
+    /// Brücke entgegenkommen.</para>
+    ///
+    /// <para><b>ukol 4 ist Angriff</b>, gelesen aus `order` @0x410220, das genau
+    /// dieses Feld direkt schreibt (aekernel-tools/ai_units.py). ⚠ Was der
+    /// Befehl bei ANDEREN ukol-Werten tut, ist ungelesen — ein unbekannter Wert
+    /// wird darum gemeldet und nicht geraten.</para>
+    ///
+    /// <para>⚠ <b>UNSERE Setzung ist das Ziel:</b> das Original gibt (x, y)
+    /// mit, wir schicken die Einheit auf den nächsten Feind zu. Mission 1 setzt
+    /// dort 39/0, und 39 ist keine sinnvolle Zelle dieser 42×72-Karte für einen
+    /// Angriff auf den Spieler — bis das Feld gelesen ist, ist der nächste Feind
+    /// die ehrlichere Näherung als eine Zelle, die wir nicht verstehen.</para>
+    /// </summary>
+    private void MissionOrder(int slot, int ukol, int x, int y)
+    {
+        int idx = -1;
+        for (int i = 0; i < _entities.Count; i++)
+            if (!_entities[i].IsBuilding && !_entities[i].Dead && _entities[i].Slot == slot)
+            { idx = i; break; }
+        if (idx < 0)
+        {
+            GD.PrintErr($"Missionsbefehl: Einheitenplatz {slot} ist leer");
+            return;
+        }
+        if (ukol != 4)
+        {
+            GD.PrintErr($"Missionsbefehl ukol={ukol} auf Platz {slot} — ungelesen, " +
+                        "es geschieht nichts");
+            return;
+        }
+        var me = _entities[idx];
+        int best = -1;
+        float bestD = float.MaxValue;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var o = _entities[i];
+            if (o.IsProp || o.Dead || i == idx || Allied(o.Owner, me.Owner)) continue;
+            float d = me.Pos.DistanceSquaredTo(o.Pos);
+            if (d < bestD) { bestD = d; best = i; }
+        }
+        if (best < 0) { GD.Print($"Missionsbefehl: Platz {slot} findet kein Ziel"); return; }
+        me.Target = best;
+        me.Ordered = true;
+        GD.Print($"Missionsbefehl: Einheit {slot} (Spieler {me.Owner}) greift " +
+                 $"{_entities[best].Name} an  [Original: ukol 4 nach ({x},{y})]");
+    }
+
+    /// <summary>`remove_unit` @0x4D0B00 und »Robot already sold.« @0x4D0EC0.
+    /// Beide nehmen eine Einheit vom Feld — verkauft wird sie mit Erlös, und
+    /// ⚠ <b>wieviel das ist, ist ungelesen</b>, darum gibt es hier keinen.
+    /// Verschwinden lassen ist gelesen, der Preis nicht.</summary>
+    private void MissionRemove(int slot, bool sold)
+    {
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.Dead || e.Slot != slot) continue;
+            GD.Print($"Missionsskript: Einheit {slot} " +
+                     (sold ? "verkauft (Erloes ungelesen)" : "verschwindet"));
+            Kill(i, e);
+            return;
+        }
+    }
+
+    /// <summary>`set_relation(a, b, wert)` @0x4CF6D0 — die Bündnismatrix zur
+    /// Laufzeit ändern. Sie ist <c>byte[BASE + a*40 + b]</c>, und genau so
+    /// liegt sie hier.</summary>
+    private void SetRelationRuntime(int a, int b, int wert)
+    {
+        if (a is < 0 or > 7 || b is < 0 or > 7) return;
+        _allied[a, b] = wert != 0;
+        _haveAllies = true;
+        GD.Print($"Missionsskript: Spieler {a} und {b} sind jetzt " +
+                 (wert != 0 ? "verbuendet" : "verfeindet"));
+    }
+
     /// <summary>Units and buildings still standing for a player.</summary>
     private int AssetsOf(int player)
     {
@@ -3644,24 +4325,8 @@ public partial class MapEntityLayer : Node2D
                             return e.Dead ? 12 : e.Owner;      // 12 = leer, wie im Original
                     return 12;
                 };
-                _mscript.UnitCount = (cls, player) =>
-                {
-                    // ⚠ nur Klasse 0 ist zugeordnet: die Summe aller Einheiten
-                    // dieses Spielers (@0x4CF9AC). 1..4 sind Einzelzaehler und
-                    // noch nicht gelesen — sie zaehlen hier wie 0, und das ist
-                    // im Skript bei jeder Regel vermerkt, die sie braucht.
-                    int n = 0;
-                    foreach (var e in _entities)
-                        if (!e.IsBuilding && !e.Dead && e.Owner == player) n++;
-                    return n;
-                };
-                _mscript.BuildingCount = (cls, player) =>
-                {
-                    int n = 0;
-                    foreach (var e in _entities)
-                        if (e.IsBuilding && !e.Dead && e.Owner == player) n++;
-                    return n;
-                };
+                _mscript.UnitCount = UnitClassCount;
+                _mscript.BuildingCount = BuildingClassCount;
                 _mscript.ObjectCount = (type, owner) =>
                 {
                     int n = 0;
@@ -3685,10 +4350,17 @@ public partial class MapEntityLayer : Node2D
                 // die beiden Felder, nach denen die Kampagne fragt. Alles andere
                 // gibt -1, damit eine Bedingung, die wir nicht beantworten
                 // können, FALSCH ist und nicht versehentlich wahr.
+                // ⚠ NUR Einheiten. Im Original sind Einheiten- und
+                // Gebaeudesaetze zwei verschiedene Tabellen, und dieselbe Zahl
+                // heisst in beiden etwas anderes; hier tragen beide ein `Slot`.
+                // Solange die markierte Einheit von der Karte kam, fiel das
+                // nicht auf — sobald `space_in` Hullman den freien Satz 0 gibt,
+                // antwortete Gebaeudeplatz 0 an seiner Stelle und Mission 14
+                // schloss ihre Kette nie.
                 _mscript.UnitField = (index, off) =>
                 {
                     foreach (var e in _entities)
-                        if (e.Slot == index && !e.Dead)
+                        if (!e.IsBuilding && e.Slot == index && !e.Dead)
                             return off == 0 ? e.Col : off == 1 ? e.Row : -1;
                     return -1;
                 };
@@ -3708,7 +4380,74 @@ public partial class MapEntityLayer : Node2D
                             };
                     return -1;
                 };
-                _mscript.ShowText = id => GD.Print($"Missionstext {id}");
+                // ---- 11.08.2026: der tutorialartige Ablauf ------------------
+                // Das Hilfefenster an seiner Stelle im 640x480-Raster des
+                // Originals. Siehe UI/HelpWindow.cs.
+                _mscript.ShowText = (id, art, x, y) =>
+                {
+                    GD.Print($"Missionstext {id} (Art {art}) bei {x},{y}");
+                    UI.HelpWindow.Show(GetTree().Root, id, x, y);
+                };
+                _mscript.CloseTexts = UI.HelpWindow.CloseAll;
+                _mscript.PlaySound = slot => Audio.GameSounds.Play(slot);
+                // geld(spieler) += betrag — Busbefehl 528. Der Betrag ist ein
+                // WORT und darf negativ sein.
+                _mscript.AddMoney = (betrag, spieler) =>
+                {
+                    Money(spieler, Money(spieler) + betrag);
+                    GD.Print($"Missionsgeld: Spieler {spieler} {(betrag >= 0 ? "+" : "")}" +
+                             $"{betrag} $ -> {Money(spieler)} $");
+                };
+                // Was ist angewaehlt? Das Original haelt es in einem Wort:
+                // < 8000 eine Einheit, ab 10000 eine Gruppe, sonst nichts.
+                _mscript.Selection = () =>
+                    _sel.Count > 1 ? 10000 : _selected >= 0 ? _selected : 0xFFFF;
+                // count_units_with_mark(marke, spieler): das Original zaehlt
+                // Saetze mit `+0x43 == marke` und `ukol < 100`. Unsere Marke ist
+                // die Entwurfsnummer, mit der eine Einheit angelegt wurde.
+                _mscript.MarkCount = (marke, spieler) =>
+                {
+                    int n = 0;
+                    foreach (var e in _entities)
+                        if (!e.IsBuilding && !e.IsProp && !e.Dead &&
+                            e.Owner == spieler && e.Mark == marke) n++;
+                    return n;
+                };
+                _mscript.UnitHasMark = (index, marke) =>
+                {
+                    foreach (var e in _entities)
+                        if (!e.IsBuilding && !e.Dead && e.Slot == index)
+                            return e.Mark == marke;
+                    return false;
+                };
+                _mscript.MoneyOf = Money;
+                // terrain_at(x, y) — das Gelaendebyte der Zelle. Unser Gitter
+                // fuehrt es als `Ground`; die Zahlen sind dieselbe Ordnung
+                // (frei/grob/wasser/gesperrt), aber ⚠ ob 4 im Original genau
+                // unsere 4 ist, ist UNGEPRUEFT — Mission 1 fragt `> 4`.
+                _mscript.TerrainAt = (x, y) =>
+                    _nav != null && _nav.InBounds(x, y) ? (int)_nav.GroundAt(x, y) : -1;
+                // bus_cmd(11, einheit, ukol, x, y) — ukol 4 ist Angriff.
+                _mscript.OrderUnit = MissionOrder;
+                _mscript.RemoveUnit = slot => MissionRemove(slot, false);
+                _mscript.SellUnit = slot => MissionRemove(slot, true);
+                _mscript.ChangeOwner = (slot, spieler) =>
+                {
+                    foreach (var e in _entities)
+                        if (!e.IsBuilding && !e.Dead && e.Slot == slot)
+                        {
+                            GD.Print($"Missionsskript: Einheit {slot} geht an " +
+                                     $"Spieler {spieler} (vorher {e.Owner})");
+                            e.Owner = spieler;
+                            return;
+                        }
+                };
+                _mscript.SetRelation = SetRelationRuntime;
+                // ⚠ add_target ist die ZIELLISTE DES COMPUTERSPIELERS, kein
+                // Eintrag im Missionspanel — siehe SkirmishAi.AddMissionTarget.
+                _mscript.AddTarget = AddMissionTarget;
+                // Verstaerkung — die Mechanik, an der Mission 14 haengt
+                _mscript.SpaceInSpawn = SpawnReinforcement;
                 var watched = _mscript.WatchedSlots();
                 if (watched.Count > 0)
                 {
@@ -3724,8 +4463,521 @@ public partial class MapEntityLayer : Node2D
         _mscript?.Tick(dt);
     }
 
+    /// <summary>
+    /// `g_robot_class_count(klasse, spieler)` @0x4CF980 — die häufigste
+    /// Siegbedingung der Kampagne (115 Aufrufstellen).
+    ///
+    /// ⚠ CORRECTED 10.08.2026 — bis heute zählte JEDE Klasse alle Einheiten des
+    /// Spielers, weil nur Klasse 0 zugeordnet war. Der Verteiler 0x4CFA28 führt
+    /// aber auf **vier eigene Zähler**, und die sind gelesen (auf beiden
+    /// GAME.EXE mit `fingerprint` eindeutig wiedergefunden, je ein Treffer):
+    ///
+    ///   Klasse 1 @0x4CF7A0  typ (+0x0a) ∈ {0, 3}   Bodenfahrzeuge
+    ///   Klasse 2 @0x4CF820  typ == 1 UND ukol (+0x14) &lt; 100   lebende Personen
+    ///   Klasse 3 @0x4CF8A0  typ ∈ {4, 5}           Schiffe (leicht / schwer)
+    ///   Klasse 4 @0x4CF920  sec19 (200 × 68 @0x6DDF70), kind ∉ {0, 13, 14}
+    ///                       — Flugzeuge OHNE Treibstoff- und Munitionskisten
+    ///   Klasse 0 @0x4CF9AC  die Summe der vier — also MIT Flugzeugen
+    ///
+    /// Gegenprobe an 29 Kartenexporten (1971 Sätze): typ 0 sind 1360 Sätze mit
+    /// Fahrwerk 161..168, typ 1 sind 512 mit Fahrwerk 148/149 (Chaingunner,
+    /// Laser Trooper, Col.Hullman, Scientist …), typ 4/5 sind 97 Schiffe. Und
+    /// an den Missionszielen: Mission 1 „Neutralisieren Sie feindliche
+    /// Einheiten" zählt `units(3,1)` von 3 herunter — map_01 gibt Spieler 1
+    /// genau **drei** Klasse-3-Sätze.
+    ///
+    /// ⚠ `ukol >= 100` heisst im Original „tot, Satz noch belegt" (@0x40B5A0
+    /// schreibt 0x64 ohne freizugeben). Hier steht `Dead` dafür.
+    /// </summary>
+    private int UnitClassCount(int cls, int player)
+    {
+        if (cls == 0)
+            return UnitClassCount(1, player) + UnitClassCount(2, player)
+                 + UnitClassCount(3, player) + UnitClassCount(4, player);
+        if (cls == 4) return AircraftCount(player);
+        int n = 0;
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != player) continue;
+            bool hit = cls switch
+            {
+                1 => e.Subclass is 0 or 3,
+                2 => e.Subclass == 1,
+                3 => e.Subclass is 4 or 5,
+                _ => false,
+            };
+            if (hit) n++;
+        }
+        return n;
+    }
+
+    /// <summary>
+    /// Klasse 4: die Flugzeuge eines Spielers.
+    ///
+    /// ⚠ **Eine Lücke, und sie ist benannt.** Das Original zählt sec19, ein
+    /// eigenes Feld von 200 Sätzen zu 68 Byte, unabhängig von den Gebäuden. Die
+    /// Engine führt Flugzeuge nur als Hangar-Einträge der Flughäfen. Solange
+    /// sie nirgends sonst existieren, ist das dieselbe Zahl; sobald eines
+    /// fliegt, wäre es zu wenig. Keine erfundene Zahl, aber auch nicht das
+    /// Original.
+    /// </summary>
+    private int AircraftCount(int player)
+    {
+        int n = 0;
+        foreach (var e in _entities)
+            if (e.IsBuilding && !e.Dead && e.Owner == player && e.Hangar != null)
+                n += e.Hangar.Count;
+        return n;
+    }
+
+    /// <summary>
+    /// `g_buildings_count(klasse, spieler)` @0x4CFB10, Verteiler 0x4CFBCC.
+    /// Ebenfalls gelesen und auf beiden GAME.EXE mit denselben Sofortwerten:
+    ///
+    ///   0 @0x4CFAC0  jedes Gebäude des Spielers (typ != 0)
+    ///   1            count_objects(2) + (3) + (4)   die drei FABRIKEN
+    ///   2            count_objects(10) + (15)       Rohstoffminen
+    ///   3            count_objects(6) + (12)        Bahnhöfe
+    ///
+    /// Die Gegenprobe steht in OBJECTG.TXT: Missionsziel #023 heisst „Bauen Sie
+    /// fünf Rohstoffminen" und die Bedingung ist `buildings(2,0) == 5` —
+    /// wörtlich. Und #005 „Wiederaufnahme der Produktion" prüft
+    /// `buildings(1,0) > 0`, also **eine eigene Fabrik**; map_05 gibt Spieler 0
+    /// keine, er muss sie erobern.
+    /// </summary>
+    private int BuildingClassCount(int cls, int player)
+    {
+        int n = 0;
+        foreach (var e in _entities)
+        {
+            if (!e.IsBuilding || e.Dead || e.Owner != player) continue;
+            bool hit = cls switch
+            {
+                0 => e.BType != 0,
+                1 => e.BType is 2 or 3 or 4,
+                2 => e.BType is 10 or 15,
+                3 => e.BType is 6 or 12,
+                _ => false,
+            };
+            if (hit) n++;
+        }
+        return n;
+    }
+
+    /// <summary>
+    /// Satzbyte +0x0a (das spieleigene `typ`) für eine Einheit, die NICHT von
+    /// der Karte kommt, sondern gebaut oder als Verstärkung eingesetzt wurde.
+    ///
+    /// ⚠ CORRECTED 10.08.2026 — hier stand fest `Subclass = 1`. Das ist der
+    /// Wert für eine PERSON, und seit die Klassen gelesen sind, zählte damit
+    /// jeder gebaute Panzer als Infanterist.
+    ///
+    /// Gemessen an 29 Kartenexporten: Fahrwerk 148/149 → typ 1, 161..168 →
+    /// typ 0, die Schiffsrümpfe 150..153 → typ 4 und 157/158 → typ 5.
+    /// ⚠ UNSERE SETZUNG sind 154..156: sie sind ebenfalls Schiffsrümpfe, kamen
+    /// in keiner Karte vor, und werden hier wie die leichten geführt.
+    /// </summary>
+    private static int TypeOfChassis(int propulsion) => propulsion switch
+    {
+        148 or 149 => 1,
+        >= 150 and <= 156 => 4,
+        157 or 158 => 5,
+        _ => 0,
+    };
+
+    /// <summary>
+    /// `--damage-check`: die Schadensstufen eines Gebäudes durchfahren und
+    /// zählen, was dabei wirklich gezeichnet würde.
+    ///
+    /// Ohne das wäre »Gebäudeschaden ist gebaut« eine Behauptung: die Formel
+    /// könnte stimmen und die mittleren Muster trotzdem leer sein. Gezählt wird
+    /// darum, wie viele Kacheln der Stapel bei jeder Stufe legt.
+    /// </summary>
+    public string DamageCheckLine()
+    {
+        if (Patterns == null) return "damage-check: keine Muster geladen";
+        var seen = new HashSet<int>();
+        var lines = new List<string>();
+        foreach (var e in _entities)
+        {
+            if (!e.IsBuilding || e.HpMax <= 0 || !seen.Add(e.BType)) continue;
+            var bt = Patterns.GetBuildingType(e.BType);
+            if (bt.IsEmpty) continue;
+            int save = e.Hp;
+            var parts = new List<string>();
+            foreach (int pct in new[] { 100, 75, 50, 25, 1 })
+            {
+                e.Hp = Mathf.Max(0, e.HpMax * pct / 100);
+                int f = DamageFrame(e);
+                int tiles = 0;
+                for (int k = 0; k < f; k++)
+                    for (int dx = 0; dx < Import.CwpFile.PatternWidth; dx++)
+                        for (int dy = 0; dy < Import.CwpFile.PatternHeight; dy++)
+                            if (Patterns.PatternTile(bt.FirstPattern + k, dx, dy) != 0) tiles++;
+                parts.Add($"{pct}%:Stufe{f}/{tiles}K");
+            }
+            e.Hp = save;
+            lines.Add($"Typ{e.BType}(hp_max {e.HpMax}, {bt.PatternCount} Muster) " +
+                      string.Join(" ", parts));
+        }
+        return lines.Count == 0
+            ? "damage-check: keine Gebaeude mit hp_max auf dieser Karte"
+            : "damage-check:\n   " + string.Join("\n   ", lines);
+    }
+
+    // ================= Cheat-Mode ============================================
+    //
+    /// <summary>
+    /// Die drei Schummelschalter. ⚠ **UNSERE ZUTAT von A bis Z** — das Original
+    /// von 1997 hat keinen Cheat-Mode; es gibt in beiden GAME.EXE keine
+    /// Tastenfolge und keinen Debugstring, der einen anbietet. Sie stehen
+    /// darum ausdrücklich neben dem Spiel und nicht darin.
+    ///
+    /// Sie wirken nur auf den <see cref="ViewPlayer"/> und seine Verbündeten —
+    /// ein Schalter, der auch dem Gegner hilft, wäre keiner.
+    /// </summary>
+    public static bool CheatGodMode, CheatAmmo, CheatFuel;
+
+    /// <summary>Gilt der Schummel für diese Einheit? Nur eigene und verbündete
+    /// — <see cref="Allied"/> zieht die Grenze, die auch der Beschuss zieht.
+    /// </summary>
+    private bool Cheated(Entity e)
+        => ViewPlayer >= 0 && e.Owner >= 0 && Allied(e.Owner, ViewPlayer);
+
+    /// <summary>Dasselbe für ein Flugzeug. `Special.Owner` ist der Spieler des
+    /// Flughafens, dem es gehört — und er ist erst gesetzt, wenn der bekannt
+    /// ist; solange bleibt das Flugzeug ungeschummelt statt versehentlich für
+    /// alle.</summary>
+    private bool Cheated(Special a)
+        => ViewPlayer >= 0 && a.Owner >= 0 && Allied(a.Owner, ViewPlayer);
+
+    /// <summary>Was der Cheat-Mode gerade tut — für die Statuszeile und den
+    /// Prüfstand, damit ein eingeschalteter Schummel nie unbemerkt läuft.</summary>
+    public static string CheatLine()
+    {
+        var on = new List<string>();
+        if (CheatGodMode) on.Add("Unverwundbar");
+        if (CheatAmmo) on.Add("Munition");
+        if (CheatFuel) on.Add("Sprit");
+        return on.Count == 0 ? "" : "CHEAT: " + string.Join(" + ", on);
+    }
+
+    /// <summary>
+    /// `--cheat-check`: die drei Schalter wirklich ausüben statt sie zu
+    /// behaupten — eine eigene Einheit beschiessen, eine schiessen lassen, eine
+    /// fahren lassen, und jedes Mal vorher/nachher melden.
+    ///
+    /// ⚠ Gemessen wird an einer EIGENEN und einer FREMDEN Einheit. Ein
+    /// God-Mode, der auch den Gegner unverwundbar macht, wäre keiner — und das
+    /// sähe man einer Zeile »hp unverändert« nicht an.
+    /// </summary>
+    public string CheatCheckLine()
+    {
+        Entity? mine = null, foe = null;
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Dead || e.HpMax <= 0) continue;
+            if (mine == null && Allied(e.Owner, ViewPlayer)) mine = e;
+            else if (foe == null && e.Owner >= 0 && !Allied(e.Owner, ViewPlayer)) foe = e;
+            if (mine != null && foe != null) break;
+        }
+        if (mine == null) return "cheat-check: keine eigene Einheit auf dieser Karte";
+
+        var log = new List<string> { MapEntityLayer.CheatLine() is { Length: > 0 } c ? c : "CHEAT: alle aus" };
+
+        int hp0 = mine.Hp;
+        ApplyHit(-1, _entities.IndexOf(mine), mine, 50);
+        log.Add($"eigene Einheit: 50 Schaden, hp {hp0} -> {mine.Hp}");
+        if (foe != null)
+        {
+            int fhp = foe.Hp;
+            ApplyHit(-1, _entities.IndexOf(foe), foe, 50);
+            log.Add($"fremde Einheit: 50 Schaden, hp {fhp} -> {foe.Hp}");
+        }
+        else log.Add("fremde Einheit: keine auf der Karte");
+
+        // Munition und Sprit an derselben Einheit, ueber die echten Zaehler
+        mine.Ammo = mine.AmmoMax = 10;
+        int a0 = mine.Ammo;
+        if (!(CheatAmmo && Cheated(mine))) mine.Ammo--;
+        log.Add($"ein Schuss: Munition {a0} -> {mine.Ammo}");
+
+        mine.Fuel = mine.FuelMax = 10;
+        int f0 = mine.Fuel;
+        if (!(CheatFuel && Cheated(mine))) mine.Fuel--;
+        log.Add($"ein Schritt: Sprit {f0} -> {mine.Fuel}");
+        return "cheat-check: " + string.Join(" | ", log);
+    }
+
+    /// <summary>
+    /// `--air-buy-check`: am Flughafen des eigenen Spielers so lange kaufen, bis
+    /// es nicht mehr geht — und dabei melden, WORAN es scheitert.
+    ///
+    /// ⚠ Ein Prüfstand, der nur »gekauft« meldet, sieht nicht, ob die richtige
+    /// Schranke greift. Das Original hat genau zwei, in dieser Reihenfolge
+    /// (Hangar, dann Teile), und beide müssen vorkommen können.
+    /// </summary>
+    public string AirBuyCheckLine()
+    {
+        Entity? ap = null;
+        foreach (var e in _entities)
+            if (e.IsBuilding && !e.Dead && e.BType == 9 && Allied(e.Owner, ViewPlayer))
+            { ap = e; break; }
+        if (ap == null) return "air-buy-check: kein eigener Flughafen auf dieser Karte";
+
+        var menu = AirMenu(ap);
+        var names = new List<string>();
+        foreach (var d in menu) names.Add($"{d.Name} {d.CostW}/{d.CostF}/{d.CostS}");
+        int hang0 = ap.Hangar?.Count ?? 0;
+        var log = new List<string>
+        {
+            $"Flughafen slot {ap.Slot}, Lager {ap.StockW}/{ap.StockF}/{ap.StockS}, " +
+            $"Hangar {hang0}/{ap.HangarSize}, Menue {menu.Count}: {string.Join(", ", names)}",
+        };
+        int bought = 0;
+        for (int i = 0; i < 40; i++)
+        {
+            ap.MenuIndex = i % Mathf.Max(1, menu.Count);
+            if (!BuyAircraft(ap)) { log.Add($"Abbruch nach {bought}: {_order}"); break; }
+            bought++;
+        }
+        log.Add($"gekauft {bought}, Lager {ap.StockW}/{ap.StockF}/{ap.StockS}, " +
+                $"Hangar {ap.Hangar?.Count ?? 0}/{ap.HangarSize}, " +
+                $"Flugzeuge im Feld {_special.Count}");
+        return "air-buy-check: " + string.Join(" | ", log);
+    }
+
     /// <summary>What the script says, for the harness.</summary>
     public string MissionScriptLine() => _mscript?.Line() ?? "";
+
+    /// <summary>`--script-coverage` — was die Runtime von diesem Missionsskript
+    /// ausführen kann, und was ihr dafür fehlt. Ein fehlender Haken macht eine
+    /// Bedingung falsch und eine Wirkung still; beides sieht im Spiel aus wie
+    /// »die Mission tut nichts«. Siehe MissionScript.Coverage.</summary>
+    public string ScriptCoverage()
+    {
+        if (_mscript == null) MissionScriptTick(0.001f);
+        if (_mscript == null) return "script-coverage: kein Skript fuer diese Mission";
+        string fehlt = _mscript.Coverage(out int rules, out int blocked);
+        return $"script-coverage: M{_mscript.Mission} {rules} Regeln, " +
+               $"{rules - blocked} ausfuehrbar, {blocked} blockiert" +
+               (fehlt.Length > 0 ? "   FEHLT: " + fehlt : "   (alles verdrahtet)");
+    }
+
+    /// <summary>
+    /// `--tutorial-check` — den tutorialartigen Ablauf einer Mission durchgehen,
+    /// Schritt für Schritt, und sagen, welches Fenster woran hängt.
+    ///
+    /// <para>⚠ Ohne diesen Prüfstand ist der Ablauf gar nicht prüfbar: die
+    /// erste Regel von Mission 1 wartet darauf, dass der Spieler eine Einheit
+    /// ANKLICKT (<c>selected &lt; 8000</c>), und ein Lauf ohne Hand klickt nie.
+    /// Ein leeres Ergebnis sähe darum genauso aus wie ein kaputter Ablauf —
+    /// dieselbe Falle wie am 09.08. beim `--script-check`, der nur zerstören
+    /// konnte.</para>
+    ///
+    /// <para>Er stellt der Reihe nach her, was die Bedingungen verlangen:
+    /// eine angewählte Einheit, eine angewählte Gruppe, ein Ereignis, und die
+    /// Position des eigenen Panzers. Nach jedem Schritt wird gefragt, welche
+    /// Fenster aufgegangen sind.</para>
+    /// </summary>
+    public string TutorialCheck()
+    {
+        var sb = new System.Text.StringBuilder();
+        // Das Skript entsteht erst im ersten Takt (samt seiner Haken) — ohne
+        // diesen einen Takt meldete der Pruefstand »kein Skript« und sah damit
+        // genau wie ein fehlendes aus.
+        if (_mscript == null) MissionScriptTick(0.001f);
+        if (_mscript == null) return "tutorial-check: kein Skript fuer diese Mission";
+        var seen = new List<string>();
+        _mscript.ShowText = (id, art, x, y) =>
+        {
+            seen.Add($"#{id}@{x},{y}");
+            UI.HelpWindow.Show(GetTree().Root, id, x, y);
+        };
+
+        int own = -1;
+        for (int i = 0; i < _entities.Count; i++)
+            if (!_entities[i].IsBuilding && !_entities[i].IsProp && !_entities[i].Dead
+                && _entities[i].Owner == ViewPlayer) { own = i; break; }
+        sb.Append($"tutorial-check: Mission {_mscript.Mission}, eigene Einheit " +
+                  $"{(own >= 0 ? $"Platz {_entities[own].Slot} auf ({_entities[own].Col},{_entities[own].Row})" : "KEINE")}\n");
+
+        void Step(string was)
+        {
+            int before = seen.Count;
+            for (int t = 0; t < 30; t++) _mscript!.Tick(0.2f);
+            var neu = seen.GetRange(before, seen.Count - before);
+            sb.Append($"   {was,-34} -> {(neu.Count == 0 ? "kein Fenster" : string.Join(" ", neu))}\n");
+        }
+
+        Step("nichts angewaehlt");
+        if (own >= 0) { _sel.Clear(); _sel.Add(own); _selected = own; }
+        Step("eine Einheit angewaehlt");
+        _sel.Clear();
+        for (int i = 0; i < _entities.Count && _sel.Count < 2; i++)
+            if (!_entities[i].IsBuilding && !_entities[i].IsProp && !_entities[i].Dead
+                && _entities[i].Owner == ViewPlayer) _sel.Add(i);
+        Step($"Gruppe angewaehlt ({_sel.Count})");
+        _mscript.LastEvent = 1;
+        Step("Ereignis 1");
+        // den eigenen Panzer nach Norden setzen — die Ortsabfragen des Blocks
+        // haengen an seiner ZEILE (byte[0x6E26C9] gegen 30 und 20)
+        if (own >= 0)
+        {
+            _entities[own].Row = 25;
+            Step("Panzer auf Zeile 25 (< 30)");
+            _entities[own].Row = 15;
+            Step("Panzer auf Zeile 15 (< 20)");
+        }
+        // Und die Untermission zu Ende spielen: die Schiffe des Gegners
+        // versenken. Erst daran laesst sich sehen, ob die Auszahlung ankommt —
+        // ein Prüfstand, der die Zahl nur setzt, prüft die Zahl und nicht die
+        // Mechanik (Regel 11).
+        var ships = new List<int>();
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (!e.IsBuilding && !e.IsProp && !e.Dead && e.Owner != ViewPlayer &&
+                e.Subclass is 4 or 5) ships.Add(i);   // Klasse 3 = Schiffe
+        }
+        sb.Append($"   Schiffe des Gegners: {ships.Count}, Kontostand {Money(ViewPlayer)} $\n");
+        foreach (int i in ships)
+        {
+            int before = Money(ViewPlayer);
+            Kill(i, _entities[i]);
+            for (int t = 0; t < 30; t++) _mscript.Tick(0.2f);
+            sb.Append($"   Schiff {_entities[i].Name} versenkt -> {Money(ViewPlayer)} $ " +
+                      $"({(Money(ViewPlayer) - before >= 0 ? "+" : "")}{Money(ViewPlayer) - before})\n");
+        }
+        sb.Append($"   zusammen {seen.Count} Fenster, {UI.HelpWindow.OpenCount} offen, " +
+                  $"{_mscript.RulesFired} Regeln gefeuert, Kontostand {Money(ViewPlayer)} $");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// `--produce-check`: die Produktionskette der Mission an Spieler 0 übergeben
+    /// und dann LAUFEN LASSEN.
+    ///
+    /// ⚠ Warum es das gibt: `--script-check` hebt ein beobachtetes Lager um
+    /// 1000 und meldet »erzwungen«. Damit ist Mission 5s Bedingung zwar wahr,
+    /// aber über die Frage, um die es geht — kann die Engine überhaupt wieder
+    /// produzieren? — sagt das GAR NICHTS. Genau die Fehlerklasse aus Regel 9:
+    /// ein Prüfstand, der nur eine Richtung kann, prüft nur eine Richtung.
+    ///
+    /// map_05 erklärt die Mission: **alle zwölf Gebäude gehören Spieler 1**,
+    /// darunter Basis 0 »Canarian« und die beiden Fabriken 1 und 2 mit je 1000
+    /// Terranium. Missionsziel #005 heisst »Wiederaufnahme der Produktion«, und
+    /// der Weg dahin ist Einnehmen. Der Prüfstand nimmt darum den Griff ab, den
+    /// der Spieler von Hand täte, und lässt alles andere echt laufen: die
+    /// Fabriken machen aus Terranium Teile, `Haul` fährt sie zur Basis, und die
+    /// Mission entscheidet selbst.
+    ///
+    /// ⚠ UNSERE SETZUNG ist der Umfang der Übergabe: das beobachtete Gebäude
+    /// und alles, was es beliefert (Fabriken und Vorkommen desselben früheren
+    /// Besitzers). Das Original verlangt, sie einzeln einzunehmen.
+    /// </summary>
+    public string ProduceCheckLine()
+    {
+        if (_mscript == null) return "produce-check: kein Skript fuer diese Mission";
+        var want = _mscript.WatchedStores();
+        if (want.Count == 0) return "produce-check: das Skript liest kein Lager";
+
+        var owners = new HashSet<int>();
+        var slots = new HashSet<int>();
+        foreach (var (slot, _) in want) slots.Add(slot);
+        foreach (var e in _entities)
+            if (e.IsBuilding && slots.Contains(e.Slot) && e.Owner >= 0) owners.Add(e.Owner);
+
+        int given = 0;
+        foreach (var e in _entities)
+        {
+            if (!e.IsBuilding || e.Dead) continue;
+            bool watched = slots.Contains(e.Slot);
+            bool feeder = owners.Contains(e.Owner) && (IsFactory(e) || e.Deposit > 0);
+            if (!watched && !feeder) continue;
+            if (e.Owner == 0) continue;
+            e.Owner = 0;
+            e.Team = 0;
+            given++;
+        }
+        // ⚠ UNSERE SETZUNG, und sie ist der Zweck des Prüfstands: der frühere
+        // Besitzer wird mit Spieler 0 verbündet. Ohne das nahm er die Fabrik
+        // nach 35 Sekunden zurück und schoss sie danach zusammen — gemessen
+        // wurde dann die Schlacht statt der Wirtschaft.
+        //
+        // ⚠ Der erste Anlauf setzte dafür `_standby`, und das tat NICHTS: das
+        // Feld ist seit der Kampagnen-Diplomatie ein stillgelegter Notbehelf
+        // und wird auf Karten mit Bündnismatrix gar nicht mehr gefragt. Der
+        // Lauf sah aus wie ein Ergebnis und war keins.
+        int idle = 0;
+        foreach (int p in owners)
+        {
+            if (p is < 0 or > 7) continue;
+            _allied[0, p] = _allied[p, 0] = true;
+            _haveAllies = true;
+            idle++;
+        }
+
+        QueueRedraw();
+        return $"produce-check: {given} Gebaeude an Spieler 0 uebergeben " +
+               $"(beobachtet: {string.Join(",", slots)}; Zulieferer von Spieler " +
+               $"{string.Join(",", owners)}), {idle} Spieler verbuendet " +
+               "— ab jetzt laeuft die Wirtschaft echt";
+    }
+
+    /// <summary>
+    /// `--store-check`: the part stores the mission watches, next to the value
+    /// it marked them at. Mission 5 ("Wiederaufnahme der Produktion") wins when
+    /// both of building 0's stores have GROWN over the mark, and without this
+    /// line there is no way to tell a mission that CANNOT be won from one that
+    /// has not been won yet.
+    /// </summary>
+    public string StoreCheckLine()
+    {
+        if (_mscript == null) return "store-check: kein Skript fuer diese Mission";
+        var want = _mscript.WatchedStores();
+        if (want.Count == 0) return "store-check: das Skript liest kein Lager";
+        var marks = new Dictionary<(int, int), int>();
+        foreach (var m in _mscript.StoreMarks()) marks[(m.Slot, m.Off)] = m.Value;
+
+        var parts = new List<string>();
+        foreach (var (slot, off) in want)
+        {
+            Entity? b = null;
+            foreach (var e in _entities) if (e.IsBuilding && e.Slot == slot) { b = e; break; }
+            if (b == null) { parts.Add($"{slot}+{off:x}:kein Gebaeude"); continue; }
+            int now = off switch
+            {
+                0x28 => b.StockW, 0x2a => b.StockF,
+                0x2c => b.StockS, 0x2e => b.StockT, _ => -1,
+            };
+            string mark = marks.TryGetValue((slot, off), out int mv) ? mv.ToString() : "-";
+            parts.Add($"{slot}+{off:x}(Typ{b.BType} P{b.Owner} St{b.State}) {mark}->{now}" +
+                      (now > 0 && mark != "-" && now > mv ? " GEWACHSEN" : ""));
+        }
+        // Woher es kommen muesste: wer produziert ueberhaupt, und hat er Rohstoff
+        int fac = 0, facT = 0, mines = 0, deposit = 0;
+        foreach (var e in _entities)
+        {
+            if (e.Dead || e.Owner != 0) continue;
+            if (IsFactory(e)) { fac++; facT += e.StockT; }
+            if (e.Deposit > 0) { mines++; deposit += e.Deposit; }
+        }
+        // Wer produziert, und was ist aus ihm geworden — ohne das war beim
+        // Messen nicht zu unterscheiden, ob eine Fabrik zerstoert,
+        // zurueckerobert oder nur leer ist
+        var facs = new List<string>();
+        foreach (var e in _entities)
+            if (e.IsBuilding && IsFactory(e))
+                facs.Add($"{e.Slot}:Typ{e.BType} P{e.Owner}" +
+                         (e.Dead ? " TOT" : "") + $" T{e.StockT} St{e.State}" +
+                         $" W{e.StockW}/F{e.StockF}/S{e.StockS}");
+
+        return "store-check: " + string.Join("   ", parts) +
+               $"   | Spieler 0: {fac} Fabriken mit {facT} Terranium, " +
+               $"{mines} Vorkommen mit {deposit}" +
+               (facs.Count > 0 ? "   | Fabriken " + string.Join(" ", facs) : "");
+    }
 
     /// <summary>
     /// Harness: knock out every building the mission script watches, so the
@@ -3764,11 +5016,16 @@ public partial class MapEntityLayer : Node2D
 
         // ⚠ ZUERST die markierte Einheit, denn `unit_field` fragt nach IHRER
         // Zelle und steht in der Kette VOR der Bedingung, die sie überhaupt
-        // benennt. Mission 14 erwartet Colonel Hullmann (Marke 191), und die
-        // Karte bringt ihn gar nicht mit — im Original setzt ihn `space_in` als
-        // Verstärkung ein, was die Engine noch nicht kann. Der Prüflauf gibt
-        // darum einer vorhandenen Einheit die Marke: derselbe Weltzustand ohne
-        // die Verstärkung.
+        // benennt. Mission 14 erwartet Colonel Hullmann (Entwurf 191), und die
+        // Karte bringt ihn nicht mit — `space_in` setzt ihn ein.
+        //
+        // Der Anflug dauert im Original 37 Takte, und ein Prüflauf, der nach
+        // einem Takt fragt »ist Hullman da?«, bekäme NEIN aus einem Grund, der
+        // mit der geprüften Bedingung nichts zu tun hat. Also erst alles landen
+        // lassen, was schon unterwegs ist, und die echte Einheit nehmen; die
+        // Umwidmung unten bleibt nur der Notnagel, wenn gar nichts kam.
+        int landed = _mscript.FlushIncoming();
+        if (landed > 0) GD.Print($"script-check: {landed} Verstaerkung(en) vorgezogen");
         var stores = new List<Campaign.MissionScript.Cond>();
         Entity? marked = null;
         foreach (var c in conds)
@@ -4125,6 +5382,10 @@ public partial class MapEntityLayer : Node2D
 
     private static List<Design>? _designs;
 
+    /// <summary>Every sec47 row by its RAW index 0..1599, unfiltered — what
+    /// `space_in` needs. See the note in <see cref="LoadDesigns"/>.</summary>
+    private static readonly Dictionary<int, Design> _designBySlot = new();
+
     /// <summary>Which mission the list was last built for. The list is static
     /// and survives a scene change, so without this a second mission in the
     /// same session would keep the first one's unlocks.</summary>
@@ -4183,6 +5444,29 @@ public partial class MapEntityLayer : Node2D
                 ? Simulation.DesignMath.FromRecordHex(raw)
                 : Simulation.DesignMath.Compute(weapon, prop, equip);
             _designs.Add(new Design(nm, prop, equip, weapon, avail, slot, derived));
+        }
+        // ⚠ Dieselbe Runde noch einmal, aber OHNE die beiden Filter oben.
+        // `_designs` ist eine BAULISTE: ein Name kommt nur einmal vor. sec47 ist
+        // aber pro Spieler abgelegt (200 Zeilen je Spieler, 1600 im ganzen), und
+        // `space_in` nennt seine Einheiten als `typ + 200*spieler` — Spieler 1
+        // schickt Zeile 257 »Transporter«, und die faellt der Namensprobe zum
+        // Opfer, weil Zeile 57 denselben Namen traegt. Verstaerkung muss darum
+        // ueber den ROHEN Index nachschlagen, nicht ueber die Bauliste.
+        _designBySlot.Clear();
+        foreach (var kv in dv.AsGodotDictionary<string, Variant>())
+        {
+            if (kv.Value.VariantType != Variant.Type.Dictionary) continue;
+            if (!int.TryParse(kv.Key, out int raw)) continue;
+            var d = kv.Value.AsGodotDictionary<string, Variant>();
+            string nm = d.TryGetValue("name", out var nv) ? nv.AsString() : "";
+            if (nm.Length == 0) continue;
+            int prop = GetI(d, "propulsion", 0);
+            int weapon = GetI(d, "weapon", 0), equip = GetI(d, "body", 0);
+            string rawHex = d.TryGetValue("raw", out var rw) ? rw.AsString() : "";
+            var der = rawHex.Length >= 0x2e * 2
+                ? Simulation.DesignMath.FromRecordHex(rawHex)
+                : Simulation.DesignMath.Compute(weapon, prop, equip);
+            _designBySlot[raw] = new Design(nm, prop, equip, weapon, false, raw, der);
         }
         ApplyCampaignDesigns();
         LoadOwnDesigns();
@@ -4401,6 +5685,40 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     private static int TurretOf(int designWeapon)
         => designWeapon >= 1 && designWeapon <= 19 ? designWeapon + 20 : 0;
+
+    /// <summary>
+    /// Der Sprite-Satz und die Waffe eines FUSSSOLDATEN, den nicht die Karte
+    /// mitbringt, sondern eine Fabrik oder eine Verstärkung.
+    ///
+    /// ⚠ CORRECTED 10.08.2026 — hier lief bisher gar nichts. Die Produktion
+    /// setzte `Weapon = TurretOf(d.Weapon)`, und `TurretOf` bildet nur 1..19 ab;
+    /// Infanteriewaffen sind aber die Zeilen 185..199. Jeder gebaute Soldat
+    /// bekam damit `Weapon = 0`, fiel durch `CanFight`, stand nicht in `ArmyOf`
+    /// — und wurde weder von der Welle noch von der Streife je angefasst.
+    /// Gemessen auf Mission 10: die KI baute fünf Chaingunner, `Armee 2`,
+    /// »Infanterie bewegt 0/4«. Gefunden hat es die Arbeit an den KI-Punkten.
+    ///
+    /// Der Kartenpfad macht es längst richtig (`e.Weapon = InfCompBase +
+    /// des.WeaponRow` über `e.Infantry`); hier wird derselbe Satz über die
+    /// WAFFENZEILE des Entwurfs gefunden, denn die ist es, die beide Tabellen
+    /// gemeinsam haben — sec47 +weapon und `infantry.json` `weapon_row`.
+    /// </summary>
+    private static bool InfantryFor(int designWeapon, out int set, out int weapon)
+    {
+        set = -1;
+        weapon = 0;
+        LoadInfantryDesigns();
+        if (_infDesigns == null) return false;
+        foreach (var kv in _infDesigns)
+            if (kv.Value.WeaponRow == designWeapon)
+            {
+                // der niedrigste der beiden Sätze — die Karte führt Paare
+                // (0,1), (2,3), … und der erste ist der stehende
+                if (set < 0 || kv.Key < set) set = kv.Key;
+                weapon = InfCompBase + kv.Value.WeaponRow;
+            }
+        return set >= 0;
+    }
 
     /// <summary>The other way round: from the component a unit carries back to
     /// the stats row, which is what the fire-sound class is stored in. Exactly
@@ -4823,6 +6141,9 @@ public partial class MapEntityLayer : Node2D
     private sealed class AirDesign
     {
         public int Player, Speed, Hp, Payload, Airframe, Attack, Defence, Sight, Ammo, Fuel;
+        /// <summary>Preis in Waffen-/Fahrwerk-/Spezialteilen (sec120
+        /// +0x1F/+0x20/+0x21) — was `build_in_airport` @0x4BB3D0 prueft.</summary>
+        public int CostW, CostF, CostS;
         public bool Enable;
         public string Name = "";
 
@@ -4868,7 +6189,16 @@ public partial class MapEntityLayer : Node2D
         _airSource = $"Fahrplan M{mission}";
         int on = 0;
         foreach (int i in u.Aircraft) if (i < types.Count) on++;
-        GD.Print($"aircraft: {types.Count} Vorlagen aus {_airSource}, {on} freigegeben");
+        // ⚠ Die Preise mitmelden: ein Entwurf ohne sie faellt in der KI still auf
+        // die alte Tabelle zurueck, und dann sieht ein Lauf genauso aus wie
+        // einer, der sie gelesen hat.
+        int priced = 0;
+        foreach (var t in types) if (t.CostW + t.CostF + t.CostS > 0) priced++;
+        GD.Print($"aircraft: {types.Count} Vorlagen aus {_airSource}, {on} freigegeben, " +
+                 $"{priced} mit gelesenem Preis" +
+                 (types.Count > 0
+                     ? $" (erster: {types[0].CostW}/{types[0].CostF}/{types[0].CostS})"
+                     : ""));
     }
 
     /// <summary>The eight aircraft templates out of the exe, as designs.</summary>
@@ -4897,6 +6227,8 @@ public partial class MapEntityLayer : Node2D
                 Attack = GetI(t, "attack"), Defence = GetI(t, "defence"),
                 Sight = GetI(t, "sight"), Ammo = GetI(t, "ammo"),
                 Fuel = GetI(t, "fuel"),
+                CostW = GetI(t, "cost_w"), CostF = GetI(t, "cost_f"),
+                CostS = GetI(t, "cost_s"),
             });
         }
         return list;
@@ -4907,8 +6239,17 @@ public partial class MapEntityLayer : Node2D
     {
         var list = new List<AirDesign>();
         if (_airDesigns == null) return list;
+        // ⚠ CORRECTED 10.08.2026 — hier stand zusätzlich `&& d.Kind is 13 or 14`,
+        // also nur die beiden Nachschubhelis. Das Original filtert die Liste am
+        // Flughafen NUR über das Freigabe-Byte, über alle 20 Entwürfe des
+        // Spielers: der Zeichner @0x46670A überspringt eine Zeile genau dann,
+        // wenn `Entwurf +0x00 == 0`, und die markierte Zeile schreibt ihren
+        // Index nach `fenster +0x1C` — das Feld, das die Kauftaste liest.
+        // Damit ist auch die Sperre erklärt: ein gesperrter Entwurf lässt sich
+        // gar nicht erst markieren, während `build_in_airport` der KI das
+        // Freigabe-Byte überhaupt nicht prüft.
         foreach (var d in _airDesigns)
-            if (d.Player == e.Owner && d.Enable && d.Kind is 13 or 14)
+            if (d.Player == e.Owner && d.Enable)
                 list.Add(d);
         return list;
     }
@@ -4927,13 +6268,33 @@ public partial class MapEntityLayer : Node2D
     {
         var menu = AirMenu(e);
         if (menu.Count == 0) { _order = "nichts kaufbar"; return false; }
-        int owner = Mathf.Clamp(e.Owner, 0, 7);
-        if (_money[owner] < HeliPrice) { _order = "Sie haben nicht genug Geld"; return false; }
-        if (e.Hangar != null && e.Hangar.Count >= Mathf.Max(1, e.HangarSize))
-        { _order = "Hangar voll"; return false; }
 
+        // ⚠ CORRECTED 10.08.2026 — die Taste »Produzieren« am Flughafen
+        // (@0x449D14, Fensterart 5, Taste 13) prüft **kein Geld**: im ganzen
+        // Pfad steht kein einziger Zugriff auf den Kontostand 0xA9C600. Sie
+        // prüft ZWEI Dinge, und zwar in DIESER Reihenfolge — erst den Hangar
+        // (sec27 `+0x04 belegt == +0x03 Plätze` → »Leider kein Platz im Hangar
+        // vorhanden!«), dann die drei Teilelager DES FLUGHAFENGEBÄUDES
+        // (`+0x3C/+0x3E/+0x40` gegen Entwurf `+0x1F/+0x20/+0x21` →
+        // »Sie besitzen nicht genügend Einzelteile!«) — und setzt dann Befehl
+        // 501, der in `spawn_aircraft` @0x4B1380 mündet: buchstäblich dieselbe
+        // Routine, die auch die KI benutzt. Kein Bauzähler, keine Warteschlange.
+        //
+        // ⚠ Der $150-Preis ist NICHT falsch, er gehört nur woanders hin: in den
+        // eigenen Zwei-Tasten-Dialog »Sprithelikopter kaufen« (Fensterart 31,
+        // @0x44C2B9), der den Kontostand prüft. Am Flughafen kostet auch der
+        // Sprit-Heli 0/30/40 Teile. Beides zu verlangen hiesse doppelt zahlen.
         var d = menu[e.MenuIndex % menu.Count];
-        _money[owner] -= HeliPrice;
+        if (e.Hangar != null && e.Hangar.Count >= Mathf.Max(1, e.HangarSize))
+        { _order = "Leider kein Platz im Hangar vorhanden!"; return false; }
+        if (d.CostW > e.StockW || d.CostF > e.StockF || d.CostS > e.StockS)
+        {
+            _order = $"Sie besitzen nicht genuegend Einzelteile! ({d.Name} kostet " +
+                     $"{d.CostW}/{d.CostF}/{d.CostS}, Flughafen hat " +
+                     $"{e.StockW}/{e.StockF}/{e.StockS})";
+            return false;
+        }
+        e.StockW -= d.CostW; e.StockF -= d.CostF; e.StockS -= d.CostS;
         int slot = 0;
         foreach (var s in _special) slot = Mathf.Max(slot, s.Slot + 1);
         var a = new Special
@@ -4948,8 +6309,17 @@ public partial class MapEntityLayer : Node2D
             Cargo = SupplyCargoFull,
         };
         _special.Add(a);
-        (e.Hangar ??= new List<int>()).Add(slot);
-        _order = $"{d.Name} gekauft (${HeliPrice})";
+        // ⚠ Entwurf 5 und 6 (Kind 13/14, Sprit- und Munitionsheli) PARKEN NICHT:
+        // `spawn_aircraft` setzt ihnen `+0x31 = 0xFF`, sendet sie sofort aus und
+        // gibt den Hangarplatz gleich wieder frei. Alle anderen bleiben stehen.
+        if (d.Kind is 13 or 14)
+        {
+            a.Stored = false;
+            a.Col = e.Col + 5;
+            a.Row = e.Row + 2;
+        }
+        else (e.Hangar ??= new List<int>()).Add(slot);
+        _order = $"{d.Name} fertig ({d.CostW}/{d.CostF}/{d.CostS} Teile)";
         return true;
     }
 
@@ -5190,6 +6560,9 @@ public partial class MapEntityLayer : Node2D
             Move = Simulation.NavGrid.MoveClass.Ship,
             Footprint = CellRect(_ox, _oy, cell.Value.X, cell.Value.Y, el),
         };
+        // Ein Fussoldat traegt seine Waffe aus infantry.json, nicht aus
+        // TurretOf — siehe InfantryFor. Ohne das kann er nicht kaempfen.
+        if (InfantryFor(d.Weapon, out int inf, out int iw)) { u.Infantry = inf; u.Weapon = iw; }
         u.Pos = CellCenter(u.Col, u.Row);
         _entities.Add(u);
         _nav.SetOccupant(u.Col, u.Row, _entities.Count - 1);
@@ -5459,6 +6832,12 @@ public partial class MapEntityLayer : Node2D
     // So a delivery now walks the rail graph.  Campaign .CWM levels ship with
     // NO lines (the players lay them during the mission), and there we fall
     // back to the old rule — nearest own building within reach, OURS.
+    //
+    // ⚠ 10.08.2026: das ECHTE Bahnsystem steht jetzt in
+    // Simulation/RailFreight.cs — Züge, die von allein fahren, laden und
+    // entladen, mit den Warenschaltern aus der Typmatrix des Programms. Alles
+    // unter dieser Zeile ist der ERSATZ für Karten OHNE Linien und tritt
+    // zurück, sobald eine Linie die Ware fährt (RailCarriesFrom in Haul).
     private const int HaulAmount = 4;      // goods moved per economy tick
     private const int HaulRange = 40;      // tiles a fallback delivery may cover
     private const int HaulReserve = 30;    // Terranium a mine keeps for itself
@@ -5495,6 +6874,13 @@ public partial class MapEntityLayer : Node2D
         public float Col, Row;          // Row may be a half tile
         public float Move;              // seconds until the next step — ours
         public int Dir = 1;             // +1 = along the route, -1 = against it
+
+        /// <summary>true = dieser Waggon gehört einer Fahrt des Bahnsystems und
+        /// wird von <c>RailPlaceWagons</c> gesetzt, nicht von
+        /// <see cref="UpdateTrains"/>. Karten ohne Zugsätze (alle NET-Karten:
+        /// 0 Züge, jede Linie faze 0) bekommen so trotzdem einen sichtbaren Zug
+        /// — der Automat legt ihn beim Abfahren an.</summary>
+        public bool Freight;
     }
 
     private readonly List<Wagon> _wagons = new();
@@ -5575,6 +6961,7 @@ public partial class MapEntityLayer : Node2D
         var flip = new HashSet<int>();
         foreach (var w in _wagons)
         {
+            if (w.Freight) continue;      // fährt am Fahrplan, siehe RailFreight.cs
             if (!_lineRoute.TryGetValue(w.Line, out var route) || route.Count < 2) continue;
             w.Move -= dt;
             if (w.Move > 0f) continue;
@@ -5647,7 +7034,28 @@ public partial class MapEntityLayer : Node2D
     {
         foreach (var x in RailReach(from))
             if (!x.Dead && x.Owner == from.Owner && pick(x)) return x;
-        return _hasRail ? null : NearestOwned(from, pick);
+        // ⚠ ZWEIMAL BERICHTIGT.
+        //
+        // (1) 10.08. früh stand hier `_hasRail ? null : …`, und das hat im
+        //     Gefecht die ganze Wirtschaft stillgelegt: die Teile blieben in der
+        //     Fabrik liegen, der Spieler hat es genau so gemeldet.
+        //
+        // (2) ⚠ Die Begründung von damals war ZU KURZ GEGRIFFEN und wird hiermit
+        //     zurückgezogen. Sie lautete: »NET05 hat 35 Linien, davon Fabrik ↔
+        //     Basis: 0, also gibt es keinen vorgelegten Weg«. Die Zahl stimmt,
+        //     die Frage war falsch. **Das Netz läuft über BAHNSTATIONEN.** Die
+        //     Typmatrix @0x504128 sagt es wörtlich: Fabrik → Bahnstation (6) /
+        //     Feldbahnhof (12) ihr eigenes Bauteil, und von dort → Basis alle
+        //     drei. Auf NET05 sind acht Feldbahnhöfe der Umschlagplatz, und
+        //     **32 der 35 Linien tragen Ware**. Es fehlte nicht die eine Linie,
+        //     es fehlte das ganze Bahnsystem — gebaut in Simulation/RailFreight.cs.
+        //
+        // Der Nahweg bleibt trotzdem stehen, denn es gibt Karten OHNE jede Linie
+        // (NET01/06/07: 0 Linien; map_05: 9 Knoten, 0 Linien). Dort trägt er
+        // allein. Wo die Bahn fährt, tritt er zurück — das entscheidet
+        // RailCarriesFrom() in Haul(), nicht diese Stelle: das Netz wird weiter
+        // ZUERST gefragt und behält seinen Vorrang.
+        return NearestOwned(from, pick);
     }
 
     private void Haul(Entity e)
@@ -5657,6 +7065,8 @@ public partial class MapEntityLayer : Node2D
         // mine -> factory (raw Terranium)
         if (e.Deposit >= 0 && e.StockT > HaulReserve)
         {
+            // Fährt die Bahn dieses Terranium schon fort? Dann nicht doppelt.
+            if (RailCarriesFrom(e.Slot, GoodT)) return;
             var f = Consignee(e, x => IsFactory(x) && x.StockT < 2000);
             if (f != null)
             {
@@ -5668,11 +7078,15 @@ public partial class MapEntityLayer : Node2D
         }
 
         // factory -> Basis (finished parts)
-        if (IsFactory(e) && OwnParts(e) > PartReserve)
+        if (IsFactory(e) && OwnParts(e) > OwnReserve(e))
         {
+            // Dasselbe für das eigene Bauteil: liegt die Fabrik an einer Linie,
+            // die es fortfährt (Fabrik → Bahnhof → Basis), macht der Zug es.
+            int own = e.BType == 2 ? GoodW : e.BType == 3 ? GoodF : GoodS;
+            if (RailCarriesFrom(e.Slot, own)) return;
             var hq = Consignee(e, x => x.BType == 1);
             if (hq == null) return;
-            int n = Mathf.Min(HaulAmount, OwnParts(e) - PartReserve);
+            int n = Mathf.Min(HaulAmount, OwnParts(e) - OwnReserve(e));
             SpendParts(e, n);
             switch (e.BType)
             {
@@ -5765,6 +7179,39 @@ public partial class MapEntityLayer : Node2D
         _ => e.StockS,
     };
 
+    /// <summary>
+    /// Was eine Fabrik von ihrer EIGENEN Teileart zurückhält, bevor sie
+    /// abliefert: genau das, was ihr nächster Bau kostet.
+    ///
+    /// ⚠ CORRECTED 10.08.2026 — hier stand eine pauschale 40, frei erfunden.
+    /// Gemessen an Mission 5 (»Wiederaufnahme der Produktion«) war das der
+    /// Grund, warum die Mission nicht gewinnbar war: eine Fabrik macht rund ein
+    /// Teil je fünf Sekunden, brauchte also über drei Minuten, bevor sie
+    /// überhaupt das erste Stück abgab — und bis dahin hatte der Rückweg
+    /// (`SupplyFactory`) das Lager der Basis längst unter die Marke gezogen,
+    /// die sich die Mission bei der Einnahme gemerkt hatte. Gemessen: Waffen
+    /// blieben über 85 Sekunden auf 0.
+    ///
+    /// Die neue Zahl ist **nicht** erfunden: sie kommt aus dem Entwurfssatz
+    /// (+0x1a/+0x1b/+0x1c), also aus derselben Quelle, die auch die
+    /// Produktionsschaltfläche des Originals prüft (@0x44A6EB).
+    ///
+    /// ⚠ Was daran unsere Setzung BLEIBT: dass überhaupt jemand Teile fährt.
+    /// Das Original bewegt Güter über **Bahnverbindungen, die der Spieler
+    /// legt** — der Produktionsschritt @0x43DFEE erhöht nur das eigene Lager
+    /// der Fabrik, sonst nichts. Kampagnenkarten starten ohne Linien (map_05:
+    /// 9 Knoten, 0 Verbindungen), und Linien legen kann die Engine nicht. Bis
+    /// dahin steht dieser Weg dafür ein.
+    /// </summary>
+    private int OwnReserve(Entity f)
+    {
+        if (_designs == null) return PartReserve;
+        var menu = BuildableBy(f.BType);
+        if (menu.Count == 0) return PartReserve;
+        var d = _designs[menu[f.MenuIndex % menu.Count]];
+        return f.BType switch { 2 => d.CostW, 3 => d.CostF, _ => d.CostS };
+    }
+
     private static void SpendParts(Entity e, int n)
     {
         switch (e.BType)
@@ -5845,7 +7292,7 @@ public partial class MapEntityLayer : Node2D
             // which is the field the voice routine switches on — so a unit off
             // the line answers like the same chassis on the map does. Kind 1 is
             // what a built vehicle is; a map unit brings its own +0x0a.
-            Chassis = d.Derived.ChassisComponent, Subclass = 1,
+            Chassis = d.Derived.ChassisComponent, Subclass = TypeOfChassis(d.Propulsion),
             Attack = d.Attack, Defence = d.Defence,
             Fuel = d.Fuel, FuelMax = d.Fuel,
             AmmoMax = ammo, Ammo = ammo,
@@ -5864,11 +7311,92 @@ public partial class MapEntityLayer : Node2D
             Move = Simulation.NavGrid.ClassOf(-1, d.Derived.ChassisComponent),
             Footprint = CellRect(_ox, _oy, cell.Value.X, cell.Value.Y, ElevOf(cell.Value.X, cell.Value.Y)),
         };
+        // Ein Fussoldat traegt seine Waffe aus infantry.json, nicht aus
+        // TurretOf — siehe InfantryFor. Ohne das kann er nicht kaempfen.
+        if (InfantryFor(d.Weapon, out int inf, out int iw)) { u.Infantry = inf; u.Weapon = iw; }
         u.Pos = CellCenter(u.Col, u.Row);
         _entities.Add(u);
         _nav.SetOccupant(u.Col, u.Row, _entities.Count - 1);
         _order = $"{d.Name} fertig";
         QueueRedraw();
+    }
+
+    /// <summary>
+    /// One unit of a reinforcement flight, put on the map — the engine's side of
+    /// `space_in`.
+    ///
+    /// The original's chain is @0x4C0260 (the queue) -> @0x4C1600 (find a free
+    /// place beside the cell, roll the two random bytes +0x02/+0x03, play effect
+    /// 0x60) -> @0x4D0810 -> @0x4B34E0 `create_unit(typ, player, x, y)`. That
+    /// last one is where the campaign's handle comes from: it takes the first
+    /// free record in <c>player*1000 .. +999</c> and writes <b>typ into +0x43</b>
+    /// (@0x4B366E). So the byte `find_unit` searches for is not a separate mark
+    /// at all — it IS the design number the unit was created with, which is why
+    /// mission 14 drops design 191 and then looks for 191, and why sec47 row 191
+    /// is called "Col.Hullman".
+    /// </summary>
+    private void SpawnReinforcement(int typ, int col, int row, int player)
+    {
+        LoadDesigns();
+        if (_nav == null) { GD.PrintErr("space_in: keine Navigationskarte"); return; }
+        int raw = typ + 200 * player;
+        if (!_designBySlot.TryGetValue(raw, out var d))
+        {
+            GD.PrintErr($"space_in: Entwurf {typ} von Spieler {player} " +
+                        $"(sec47 {raw}) steht nicht in unit_designs.json");
+            return;
+        }
+        var move = Simulation.NavGrid.ClassOf(-1, d.Derived.ChassisComponent);
+        var cell = _nav.NearestFree(new Vector2I(col, row), move);
+        if (cell == null)
+        {
+            // »Incredible error ...no free place for new robot« @0x4C1624
+            GD.PrintErr($"space_in: kein freier Platz neben ({col}, {row}) fuer {d.Name}");
+            return;
+        }
+        int hp = d.Hp > 0 ? d.Hp : HpOfType(d.Propulsion);
+        int ammo = d.Ammo > 0
+            ? d.Ammo
+            : _ammoCap.TryGetValue(TurretOf(d.Weapon), out var cap) ? cap : 0;
+        int el = ElevOf(cell.Value.X, cell.Value.Y);
+        var u = new Entity
+        {
+            Slot = FreeRecord(player), Col = cell.Value.X, Row = cell.Value.Y,
+            Owner = player, Team = player, UnitType = d.Propulsion,
+            Category = -1, Hp = hp, HpMax = hp, Elev = el,
+            Name = d.Name, Equipment = d.Equip, Weapon = TurretOf(d.Weapon),
+            Chassis = d.Derived.ChassisComponent, Subclass = TypeOfChassis(d.Propulsion),
+            Mark = typ,                       // record +0x43, written by create_unit
+            Attack = d.Attack, Defence = d.Defence,
+            Fuel = d.Fuel, FuelMax = d.Fuel,
+            AmmoMax = ammo, Ammo = ammo,
+            Range = d.Range, Sight = d.Sight, Reload = d.Reload, Speed = d.Speed,
+            Facing = DefaultFacing, Mobile = true, Move = move,
+            Footprint = CellRect(_ox, _oy, cell.Value.X, cell.Value.Y, el),
+        };
+        // Ein Fussoldat traegt seine Waffe aus infantry.json, nicht aus
+        // TurretOf — siehe InfantryFor. Ohne das kann er nicht kaempfen.
+        if (InfantryFor(d.Weapon, out int inf, out int iw)) { u.Infantry = inf; u.Weapon = iw; }
+        u.Pos = CellCenter(u.Col, u.Row);
+        _entities.Add(u);
+        _nav.SetOccupant(u.Col, u.Row, _entities.Count - 1);
+        GD.Print($"space_in: {d.Name} (Entwurf {typ}) fuer Spieler {player} " +
+                 $"auf ({u.Col}, {u.Row}), Satz {u.Slot}");
+        QueueRedraw();
+    }
+
+    /// <summary>The lowest free record index of a player. The original's tables
+    /// are <c>player*1000 + k</c> — that is why it derives the owner from
+    /// <c>slot/1000</c> — and @0x4B34E0 scans exactly that range for the first
+    /// record whose +0x09 is 0xFF.</summary>
+    private int FreeRecord(int player)
+    {
+        int lo = player * 1000, hi = lo + 1000;
+        var used = new HashSet<int>();
+        foreach (var e in _entities)
+            if (!e.IsBuilding && e.Slot >= lo && e.Slot < hi) used.Add(e.Slot);
+        for (int k = lo; k < hi; k++) if (!used.Contains(k)) return k;
+        return -1;
     }
 
     /// <summary>hp_max of a propulsion type from the recovered stats table.</summary>
@@ -7009,7 +8537,8 @@ public partial class MapEntityLayer : Node2D
                 // unit where it stands. The three equipment types that branch
                 // off first (0x44 Mine Remover, 0x45 Trap Remover, 0xc1) rejoin
                 // the same path, so they pay too.
-                if (e.FuelMax > 0 && e.Fuel > 0 && --e.Fuel == 0)
+                if (CheatFuel && Cheated(e)) { }   // Tank bleibt voll
+                else if (e.FuelMax > 0 && e.Fuel > 0 && --e.Fuel == 0)
                 {
                     e.Path = null;
                     e.Target = -1;
@@ -7024,6 +8553,8 @@ public partial class MapEntityLayer : Node2D
 
         UpdateProjectiles(dt);
         UpdateEffects(dt);
+        UpdateFreight(dt);          // das Bahnsystem — Simulation/RailFreight.cs
+        RailMoveWagons();
         UpdateTrains(dt);
         UpdateAi(dt);
         MissionScriptTick(dt);
@@ -7274,6 +8805,188 @@ public partial class MapEntityLayer : Node2D
         return sb.ToString();
     }
 
+    // ---- `--veh-anim-check`: the vehicle counterpart -------------------------
+
+    /// <summary>Does a driving Mech / Spinne really step through its groups —
+    /// and does a different PICTURE come out of it?
+    ///
+    /// <para>Modelled on <see cref="InfAnimSample"/>, which settled the
+    /// infantry half of Fehlerliste Punkt 2. Two things it must catch that a
+    /// pose-only count would miss, and both are named in the report:</para>
+    /// <list type="bullet">
+    /// <item>the pose changes but the group's file is missing, so
+    /// <see cref="GetHullTexture"/> falls back to group 0 and the unit still
+    /// stands still — counted as <c>Rückfall</c>;</item>
+    /// <item>the picture changes only because the unit TURNED. Distinct
+    /// textures are therefore counted per facing, never across facings.</item>
+    /// </list>
+    /// <para>What it cannot see: whether the stride matches the ground speed.
+    /// That is a matter of taste and the cadence is ours anyway.</para>
+    /// </summary>
+    public void VehAnimSample()
+    {
+        if (!_vehWalkOrdered)
+        {
+            _vehWalkOrdered = true;
+            _sel.Clear();
+            for (int i = 0; i < _entities.Count; i++)
+            {
+                var e = _entities[i];
+                if (e.IsBuilding || e.IsProp || e.Dead || e.Infantry >= 0) continue;
+                if (!e.Mobile || e.Owner != ViewPlayer) continue;
+                if (GaitPhases(e.UnitType) <= 1) continue;   // no gait, nothing to see
+                e.Target = -1;                               // drop any fire order
+                _sel.Add(i);
+            }
+            _vehOrdered = _sel.Count;
+            if (_sel.Count > 0 && _nav != null)
+            {
+                // same trap as with the soldiers: a goal "twelve cells on" can
+                // sit in the water, every unit reports "no route", and a frozen
+                // pose looks exactly like a broken cycle. Ask the grid first —
+                // and ⚠ ask it for EVERY selected unit, not only the first: on
+                // map_DM_4 the first one is boxed in and the whole run came back
+                // "37 in Fahrt gesetzt, 0 davon mit Pfad".
+                var dirs = new[] { (12, 0), (-12, 0), (0, 12), (0, -12),
+                                   (8, 8), (-8, -8), (8, -8), (-8, 8),
+                                   (5, 0), (-5, 0), (0, 5), (0, -5),
+                                   (3, 3), (-3, -3), (3, -3), (-3, 3) };
+                int tried = 0;
+                foreach (int fi in _sel)
+                {
+                    var f = _entities[fi];
+                    tried++;
+                    foreach (var (dc, dr) in dirs)
+                    {
+                        var goal = new Vector2I(Mathf.Clamp(f.Col + dc, 0, _nav.Width - 1),
+                                                Mathf.Clamp(f.Row + dr, 0, _nav.Height - 1));
+                        if (_nav.FindPath(new Vector2I(f.Col, f.Row), goal, f.Move, fi) == null) continue;
+                        // ⚠ CellCenter, not col*TileW: the map is isometric, and
+                        // the naive product lands on a different cell — the
+                        // first run said "Ziel gefunden" and "no route" in the
+                        // same line because of it.
+                        IssueMove(CellCenter(goal.X, goal.Y));
+                        _vehOrderNote = $"Ziel ({goal.X},{goal.Y}) ab Einheit {tried} von " +
+                                        $"{_sel.Count} — {_order}";
+                        break;
+                    }
+                    if (_vehOrderNote.Length > 0) break;
+                }
+                if (_vehOrderNote.Length == 0)
+                    _vehOrderNote = $"kein erreichbares Ziel — {_sel.Count} Einheiten " +
+                                    "x 16 Richtungen ohne Weg";
+            }
+            else
+            {
+                var owners = new SortedDictionary<int, int>();
+                foreach (var e in _entities)
+                    if (!e.IsBuilding && !e.IsProp && !e.Dead && e.Infantry < 0
+                        && GaitPhases(e.UnitType) > 1)
+                        owners[e.Owner] = owners.GetValueOrDefault(e.Owner) + 1;
+                _vehOrderNote = owners.Count == 0
+                    ? "diese Karte traegt ueberhaupt kein Fahrwerk mit Gangart"
+                    : $"niemand ausgewaehlt — betrachteter Spieler {ViewPlayer}, Gangart-Fahrwerke " +
+                      string.Join(", ", System.Linq.Enumerable.Select(owners,
+                          kv => $"{kv.Value}x Spieler {kv.Key}"));
+            }
+        }
+
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Dead || e.Infantry >= 0) continue;
+            if (GaitPhases(e.UnitType) <= 1) continue;
+            if (!_vehSeen.TryGetValue(e.Slot, out var s))
+            {
+                s = _vehSeen[e.Slot] = new VehAnimTally();
+                s.UnitType = e.UnitType;
+                s.Gait = GaitPhases(e.UnitType);
+            }
+            s.Samples++;
+            if (e.Path == null) { s.Standing++; continue; }
+            s.Walking++;
+            int pose = PoseOf(e);
+            s.Poses.Add(pose);
+            // the picture the draw would really put down — and whether it is the
+            // group's own or the group-0 fallback
+            string dir = pose > 0 ? $"{e.UnitType}/g{pose}" : e.UnitType.ToString();
+            var own = LoadUnitPart("hull", dir, e.Facing) ?? LoadUnitPart("hull", dir, 0);
+            if (own == null) s.Fallback++;
+            else s.TexPerFacing.Add((e.Facing, own.GetInstanceId()));
+            s.Facings.Add(e.Facing);
+        }
+    }
+
+    private sealed class VehAnimTally
+    {
+        public int Samples, Walking, Standing, Fallback, UnitType, Gait;
+        public readonly SortedSet<int> Poses = new();
+        public readonly SortedSet<int> Facings = new();
+        public readonly HashSet<(int, ulong)> TexPerFacing = new();
+        /// <summary>Distinct pictures at the busiest single facing — the number
+        /// that cannot be faked by turning.</summary>
+        public int PicturesAtOneFacing()
+        {
+            int best = 0;
+            foreach (int f in Facings)
+            {
+                int n = 0;
+                foreach (var (ff, _) in TexPerFacing) if (ff == f) n++;
+                if (n > best) best = n;
+            }
+            return best;
+        }
+    }
+
+    private readonly Dictionary<int, VehAnimTally> _vehSeen = new();
+    private bool _vehWalkOrdered;
+    private int _vehOrdered;
+    private string _vehOrderNote = "";
+
+    public string VehAnimReport()
+    {
+        var sb = new System.Text.StringBuilder();
+        // say what the map even offers, so a green zero cannot be mistaken for a pass
+        var onMap = new SortedDictionary<int, int>();
+        foreach (var e in _entities)
+            if (!e.IsBuilding && !e.IsProp && e.Infantry < 0 && GaitPhases(e.UnitType) > 1)
+                onMap[e.UnitType] = onMap.GetValueOrDefault(e.UnitType) + 1;
+        var kinds = new List<string>();
+        foreach (var kv in onMap) kinds.Add($"{kv.Key}x{kv.Value} ({GaitPhases(kv.Key)} Phasen)");
+        if (_vehSeen.Count == 0)
+            return "veh-anim-check: kein Fahrzeug mit Gangart abgetastet — auf der Karte: " +
+                   (kinds.Count > 0 ? string.Join(", ", kinds) : "keins") +
+                   (_vehOrderNote.Length > 0 ? $"\n   Fahrbefehl: {_vehOrderNote}" : "");
+
+        int moved = 0, cycled = 0, frozen = 0, fellBack = 0;
+        foreach (var kv in _vehSeen)
+        {
+            var s = kv.Value;
+            if (s.Walking == 0) continue;
+            moved++;
+            if (s.Poses.Count >= s.Gait && s.PicturesAtOneFacing() >= 2) cycled++;
+            else if (s.Poses.Count <= 1) frozen++;
+            if (s.Fallback > 0) fellBack++;
+        }
+        sb.Append($"veh-anim-check: {_vehSeen.Count} Fahrzeuge mit Gangart abgetastet, ");
+        sb.Append($"{_vehOrdered} in Fahrt gesetzt, ");
+        sb.Append($"{moved} davon mit Pfad — {cycled} zeigen alle Laufbilder ihres Fahrwerks, ");
+        sb.Append($"{frozen} stehen auf einem einzigen fest, {fellBack} mit Rueckfall auf Gruppe 0");
+        sb.Append($"\n   auf der Karte: {(kinds.Count > 0 ? string.Join(", ", kinds) : "keins")}");
+        if (_vehOrderNote.Length > 0) sb.Append($"\n   Fahrbefehl: {_vehOrderNote}");
+        int shown = 0;
+        foreach (var kv in _vehSeen)
+        {
+            var s = kv.Value;
+            if (s.Walking == 0 || shown++ >= 8) continue;
+            sb.Append($"\n   slot {kv.Key}: Fahrwerk {s.UnitType}, {s.Gait} Phasen, " +
+                      $"{s.Walking} Proben mit Pfad, {s.Standing} ohne, " +
+                      $"Gruppen [{string.Join(",", s.Poses)}], " +
+                      $"{s.PicturesAtOneFacing()} verschiedene Bilder bei EINER Richtung, " +
+                      $"{s.Fallback} Rueckfaelle");
+        }
+        return sb.ToString();
+    }
+
     private int InfBlock(Entity e)
     {
         if (e.Dead)   // fall over once, then lie there
@@ -7396,13 +9109,118 @@ public partial class MapEntityLayer : Node2D
     /// here instead, which is OUR safeguard and says so.</summary>
     private static readonly Dictionary<int, int> _poseGroups = new();
 
-    /// <summary>The pose a unit is actually drawn from — its +0x11 bounded by
-    /// what its chassis owns.</summary>
-    private static int PoseOf(Entity e)
+    /// <summary>How fast a walking chassis steps through its groups.
+    ///
+    /// <para><b>OURS.</b> The frames are the game's and the field is the game's
+    /// (<see cref="Entity.Pose"/>), but no routine in either GAME.EXE advances
+    /// +0x11 while a vehicle drives, so the original never plays them. The
+    /// number is picked to match the foot soldiers, whose eight walk blocks run
+    /// at <see cref="InfWalkFps"/> = 9 — a Läufer with eight groups therefore
+    /// takes 0.89 s per stride, a Spinne with three 0.33 s, a tread cycle
+    /// 0.22 s.</para></summary>
+    private const float HullGaitFps = InfWalkFps;
+
+    /// <summary>unit_type -> how many groups of its chassis form a GAIT, 1 = it
+    /// has none and keeps its map pose.
+    ///
+    /// <para>Not every multi-group chassis walks. Counted out of the sprite
+    /// bank, the occupancy of the 48 frames of a group is decisive:</para>
+    /// <code>
+    /// comp  1 Spinne          3 groups   8 facings in every one   -> gait
+    /// comp  6 Schwere Ketten  2 groups   8 facings in every one   -> gait
+    /// comp  9 Kugelroller     3 groups   1 facing  in every one   -> gait
+    /// comp 17 Läufer          8 groups   8 facings in every one   -> gait
+    /// comp 14 Abwehrstellung  8 groups   8 in group 0, 2 in 1..7  -> NOT a gait
+    /// </code>
+    /// <para>The Abwehrstellung's groups exist only for facings 3 and 7: they
+    /// are the emplacement unfolding, which is why the game drives them with a
+    /// counter of their own (@0x409855 pins the facing to 7 and steps +0x11
+    /// from +0x15) and why all 150 placed ones carry facing 7 AND pose 7. So
+    /// the rule is read off the data, not chosen: a chassis walks when every
+    /// group covers the same directions as group 0.</para>
+    ///
+    /// <para>⚠ Measured on the EXPORT, not on the bank, and that needed one
+    /// step more. <c>copy_units.py</c> fills the empty facings of a sparse
+    /// group, so every group on disk has eight files and counting FILES sees
+    /// [8,8,8,…] everywhere — the first cut of this let the Abwehrstellung
+    /// unfold itself while driving. Counting DISTINCT pictures brings the
+    /// bank's shape back exactly:</para>
+    /// <code>
+    /// 160 Spinne         [8,8,8]                   uniform -> 3 phases
+    /// 165 Schwere Ketten [8,8]                     uniform -> 2 phases
+    /// 168 Kugelroller    [2,2,2]                   uniform -> 3 phases
+    /// 174 Läufer         [8,8,8,8,8,8,8,8]         uniform -> 8 phases
+    /// 171 Abwehrstellung [8,2,2,2,2,2,2,2]         NOT uniform -> no gait
+    /// </code>
+    /// <para>Wanted from the import side (not touched here): parts_index.json
+    /// could carry the per-group facing coverage straight out of ROBO.CWR's
+    /// offset table, and this would read a number instead of hashing
+    /// pictures.</para></summary>
+    private readonly Dictionary<int, int> _gaitPhases = new();
+
+    /// <summary>The land chassis, unit_type 160..175. ⚠ The gait must not leave
+    /// them: the group arithmetic <c>base + facing + slope + group*48</c> lives
+    /// in case 0 of the draw dispatch @0x429946, and the SHIPS are case 4 with
+    /// an arithmetic of their own ("Wrong chassis of ship" @0x4fa86c). Their
+    /// part-table rows are spaced <b>16</b> frames apart (4040, 4056, 4072,
+    /// 4088 …), not 48, so <c>parts_index.json</c> reading "groups: 3" for
+    /// unit_type 153 out of the same first-u16 rule is a misreading — g1/g2 of
+    /// that hull hold the NEXT SHIPS' pictures. Measured before this bound was
+    /// put in: on map_01 the check drove a 153 and it changed into two other
+    /// boats. All 97 placed ships carry +0x11 = 0xFF ("no group"), which is the
+    /// game saying the same thing from the other side.</summary>
+    private static bool IsLandChassis(int unitType) => unitType >= 160 && unitType <= 175;
+
+    private int GaitPhases(int unitType)
+    {
+        if (_gaitPhases.TryGetValue(unitType, out int cached)) return cached;
+        LoadMounts();
+        int groups = _poseGroups.TryGetValue(unitType, out int n) ? n : 1;
+        int gait = 1;
+        if (groups > 1 && IsLandChassis(unitType))
+        {
+            int cov0 = PicturesOfGroup(unitType, 0);
+            gait = groups;
+            for (int g = 1; g < groups && gait > 1; g++)
+                if (PicturesOfGroup(unitType, g) != cov0 || cov0 == 0) gait = 1;
+        }
+        return _gaitPhases[unitType] = gait;
+    }
+
+    /// <summary>How many DIFFERENT pictures the eight facings of one group hold.
+    /// </summary>
+    private int PicturesOfGroup(int unitType, int group)
+    {
+        string dir = group > 0 ? $"{unitType}/g{group}" : unitType.ToString();
+        var seen = new HashSet<string>();
+        for (int f = 0; f < 8; f++)
+        {
+            var tex = LoadUnitPart("hull", dir, f);
+            var img = tex?.GetImage();
+            if (img == null) continue;
+            seen.Add(System.Convert.ToBase64String(
+                System.Security.Cryptography.MD5.HashData(img.GetData())));
+        }
+        return seen.Count;
+    }
+
+    /// <summary>The pose a unit is actually drawn from.
+    ///
+    /// <para>Standing, it is the map's +0x11 bounded by what its chassis owns —
+    /// the game's own value. Driving, and only for a chassis whose groups are a
+    /// gait, it steps on from there at <see cref="HullGaitFps"/>, which is
+    /// OURS. The map pose stays the starting phase, so the placed variety
+    /// survives, and <c>e.Slot</c> is added so a column of walkers does not
+    /// march in lockstep.</para></summary>
+    private int PoseOf(Entity e)
     {
         LoadMounts();
         int g = _poseGroups.TryGetValue(e.UnitType, out int n) ? n : 1;
-        return e.Pose > 0 && e.Pose < g ? e.Pose : 0;
+        int start = e.Pose > 0 && e.Pose < g ? e.Pose : 0;
+        if (e.Dead || e.Path == null) return start;
+        int gait = GaitPhases(e.UnitType);
+        if (gait <= 1) return start;
+        return (start + (int)(_clock * HullGaitFps) + e.Slot) % gait;
     }
 
     /// <summary>The game's own rule, @0x429CCB..0x429D1B: the turret is drawn
@@ -7815,7 +9633,7 @@ public partial class MapEntityLayer : Node2D
                     if (a.Pos.DistanceTo(t.Pos) < TileW * 1.5f && a.Cooldown <= 0f && a.Ammo > 0)
                     {
                         a.Cooldown = AirFireGap;
-                        a.Ammo--;
+                        if (!(CheatAmmo && Cheated(a))) a.Ammo--;
                         _effects.Add(new Effect { Pos = t.Pos - new Vector2(0, 8),
                                                   Kind = "explosion", FrameTime = 0.05f });
                         ApplyHit(-1, a.Target, t, a.Attack);
@@ -7837,7 +9655,8 @@ public partial class MapEntityLayer : Node2D
                 // what a tank of 800..2000 is measured in.
                 a.FuelFrac += step / TileW;
                 int burn = (int)a.FuelFrac;
-                if (burn > 0) { a.FuelFrac -= burn; a.Fuel = Mathf.Max(0, a.Fuel - burn); }
+                if (burn > 0 && !(CheatFuel && Cheated(a)))
+                { a.FuelFrac -= burn; a.Fuel = Mathf.Max(0, a.Fuel - burn); }
                 // kinds above 12 top their own tank up on every step (@0x42512c) —
                 // the supply helicopters never run dry
                 if (a.Kind > 12) a.Fuel = a.FuelMax;

@@ -156,8 +156,22 @@ public partial class MapViewer : Node2D
         GetTree().Paused = true;
     }
 
+    /// <summary>Sagt an, was der Cheat-Mode gerade tut. ⚠ Ein Schummel, der
+    /// still laeuft, verfaelscht jeden spaeteren Pruefstand — darum meldet
+    /// sich jeder Wechsel, und der Zustand steht in der Statuszeile.</summary>
+    private void SayCheat()
+    {
+        string t = MapEntityLayer.CheatLine();
+        GD.Print(t.Length > 0 ? t : "CHEAT: alle aus");
+        _entities.Say(t.Length > 0 ? t : "Cheat-Mode aus");
+    }
+
     private void ClosePause()
     {
+        // Der Kartenlauf wird in `_Ready` EINMAL gelesen; ohne diese Zeile wirkt
+        // der Regler im Pausenmenü erst beim nächsten Missionsstart. Änderbar
+        // ist er nur hier, darum genügt das Nachziehen beim Schliessen.
+        _keyPanSpeed = UI.Settings.PanSpeed;
         GetTree().Paused = false;
         _pause?.QueueFree();
         _pause = null;
@@ -291,6 +305,26 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_coverageCheck)
+        {
+            GD.Print(_entities.ScriptCoverage());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_tutorialCheck)
+        {
+            GD.Print(_entities.TutorialCheck());
+            // Mit `--shot` bleibt der Lauf stehen, damit das letzte Fenster auch
+            // im Bild landet; ohne ist der Pruefstand fertig.
+            if (_shotPath.Length == 0) { GetTree().Quit(0); return; }
+        }
+        if (_soundCheck)
+        {
+            _entities.SetListener(_camera.Position);
+            GD.Print(_entities.SoundDistanceCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_doorCheck)
         {
             GD.Print(_entities.DoorCheck());
@@ -322,6 +356,7 @@ public partial class MapViewer : Node2D
             return;
         }
         if (_ruinDemo) _entities.RuinDemo();
+        if (_bAnimDemo) _entities.BAnimDemo();
         if (_ruinCheck)
         {
             GD.Print(_entities.RuinCheck());
@@ -397,9 +432,22 @@ public partial class MapViewer : Node2D
     private bool _openPause;
     private bool _doorCheck;
     private bool _animCheck;
+    /// <summary>`--banim-check` — die Zellanimation der Gebäude gegen das
+    /// Original halten und im Lauf abtasten. Siehe
+    /// <see cref="MapEntityLayer.BAnimCheck"/>.</summary>
+    private bool _bAnimCheck;
+    /// <summary>`--banim-demo` — die animierten Gebäude beschädigt stehen
+    /// lassen, damit ein Bildschirmfoto Auflage und Band zugleich zeigt.</summary>
+    private bool _bAnimDemo;
     private bool _infAnimCheck;
+    /// <summary>`--veh-anim-check` — the vehicle half of Fehlerliste Punkt 2:
+    /// do Mechs and Spinnen step through their gait while driving?</summary>
+    private bool _vehAnimCheck;
     private string _look = "";
     private bool _groupCheck;
+    private bool _soundCheck;
+    private bool _tutorialCheck;
+    private bool _coverageCheck;
     private bool _infDeathCheck;
     private int _buildPreview;
 
@@ -470,6 +518,25 @@ public partial class MapViewer : Node2D
             else if (a == "--demo-queue") { _demo = true; _demoQueue = true; }
             else if (a == "--demo-ai") { _demo = true; _demoAi = true; }
             else if (a.StartsWith("--script-check")) _scriptCheck = 15f;
+            else if (a == "--store-check") _storeCheck = 0.001f;
+            else if (a == "--rail-check") { _railCheck = 1f; _railHead = true; }
+            // --cheats schaltet alle drei, --cheat=god,ammo,fuel einzelne.
+            // Fuer den Pruefstand, und damit ein Lauf reproduzierbar bleibt.
+            else if (a == "--cheats")
+                MapEntityLayer.CheatGodMode = MapEntityLayer.CheatAmmo =
+                    MapEntityLayer.CheatFuel = true;
+            else if (a.StartsWith("--cheat="))
+                foreach (string w in a["--cheat=".Length..].Split(','))
+                    switch (w.Trim().ToLowerInvariant())
+                    {
+                        case "god": case "gott": MapEntityLayer.CheatGodMode = true; break;
+                        case "ammo": case "munition": MapEntityLayer.CheatAmmo = true; break;
+                        case "fuel": case "sprit": MapEntityLayer.CheatFuel = true; break;
+                    }
+            else if (a == "--damage-check") _damageCheck = 2f;
+            else if (a == "--cheat-check") _cheatCheck = 2f;
+            else if (a == "--air-buy-check") _airBuyCheck = 3f;
+            else if (a == "--produce-check") _produceCheck = 2f;
             else if (a == "--demo-groups") { _demo = true; _demoGroups = true; }
             else if (a == "--demo-win") { _demo = true; _demoEnd = 1; }
             else if (a == "--demo-lose") { _demo = true; _demoEnd = 2; }
@@ -488,9 +555,21 @@ public partial class MapViewer : Node2D
             else if (a == "--pause") _openPause = true;
             else if (a == "--door-check") _doorCheck = true;
             else if (a == "--anim-check") _animCheck = true;
+            // ⚠ --banim-check braucht LAUFZEIT: die halbe Prüfung tastet das
+            // laufende Bild ab. Ohne --quit-after meldet sie nur den statischen
+            // Teil. Ein Fenster braucht sie NICHT — sie zählt Kachelcodes,
+            // keine Pixel.
+            else if (a == "--banim-check") _bAnimCheck = true;
+            else if (a == "--banim-demo") _bAnimDemo = true;
             else if (a == "--inf-anim-check") { _infAnimCheck = true; _demo = true; _demoInf = true; }
+            // ⚠ NOT --demo-inf here: that one hands the selection to the foot
+            // soldiers. The vehicle check issues its own drive order.
+            else if (a == "--veh-anim-check") { _vehAnimCheck = true; _demo = true; }
             else if (a.StartsWith("--look=")) _look = a["--look=".Length..];
             else if (a == "--group-check") _groupCheck = true;
+            else if (a == "--sound-check") _soundCheck = true;
+            else if (a == "--tutorial-check") _tutorialCheck = true;
+            else if (a == "--script-coverage") _coverageCheck = true;
             else if (a == "--infdeath-check") _infDeathCheck = true;
             else if (a.StartsWith("--build-preview=")) _buildPreview = a["--build-preview=".Length..].ToInt();
             else if (a == "--fog") MapEntityLayer.ForceFog = true;
@@ -557,9 +636,94 @@ public partial class MapViewer : Node2D
         GD.Print($"demo-leave: nach {_upTime:0.0}s zurueck — " + _entities.DebugDemoLeave());
     }
 
+    /// <summary>`--store-check`: alle fuenf Sekunden die Teilelager melden, die
+    /// die Mission beobachtet. Ein einzelner Blick am Ende wuerde nicht sagen,
+    /// ob sie WACHSEN — und genau das ist Mission 5s Bedingung.</summary>
+    private float _storeCheck;
+
+    /// <summary>`--produce-check`: nach zwei Sekunden die Produktionskette der
+    /// Mission an Spieler 0 übergeben und dann echt laufen lassen. Zwei Sekunden,
+    /// damit das Skript vorher einen Takt hatte — es merkt sich das Lager erst,
+    /// wenn ihm ein Gebäude der Klasse 1 gehört.</summary>
+    private float _produceCheck;
+
+    /// <summary>`--damage-check`: die Schadensstufen durchfahren.</summary>
+    private float _damageCheck;
+
+    /// <summary>`--rail-check`: das Bahnsystem beobachten. Einmal der Kopf (was
+    /// die Karte an Linien hat und was die Typmatrix daraus macht), dann alle
+    /// zehn Sekunden der Fahrplan und — das eigentliche Beweisstück — <b>wie
+    /// sich die Lager der Zielgebäude ÜBER DIE ZEIT ändern</b>. Eine einzelne
+    /// Momentaufnahme koennte nicht zeigen, ob etwas ankommt.</summary>
+    private float _railCheck;
+    private bool _railHead;
+
+    /// <summary>`--cheat-check`: die drei Schummelschalter ausüben.</summary>
+    private float _cheatCheck;
+
+    /// <summary>`--air-buy-check`: Flugzeugkauf am Flughafen ausüben.</summary>
+    private float _airBuyCheck;
+
     private void QuitIfDue(double delta)
     {
         if (_infAnimCheck) _entities.InfAnimSample();
+        if (_vehAnimCheck) _entities.VehAnimSample();
+        if (_bAnimCheck) _entities.BAnimSample();
+        if (_airBuyCheck > 0f)
+        {
+            _airBuyCheck -= (float)delta;
+            if (_airBuyCheck <= 0f)
+            {
+                _airBuyCheck = -1f;
+                GD.Print(_entities.AirBuyCheckLine());
+            }
+        }
+        if (_cheatCheck > 0f)
+        {
+            _cheatCheck -= (float)delta;
+            if (_cheatCheck <= 0f)
+            {
+                _cheatCheck = -1f;
+                GD.Print(_entities.CheatCheckLine());
+            }
+        }
+        if (_damageCheck > 0f)
+        {
+            _damageCheck -= (float)delta;
+            if (_damageCheck <= 0f)
+            {
+                _damageCheck = -1f;
+                GD.Print(_entities.DamageCheckLine());
+            }
+        }
+        if (_produceCheck > 0f)
+        {
+            _produceCheck -= (float)delta;
+            if (_produceCheck <= 0f)
+            {
+                _produceCheck = -1f;
+                GD.Print(_entities.ProduceCheckLine());
+            }
+        }
+        if (_railCheck > 0f)
+        {
+            _railCheck -= (float)delta;
+            if (_railCheck <= 0f)
+            {
+                _railCheck = 10f;
+                if (_railHead) { _railHead = false; GD.Print(_entities.RailCheckHead()); }
+                GD.Print($"[{_upTime:0}s] " + _entities.RailCheckLine());
+            }
+        }
+        if (_storeCheck > 0f)
+        {
+            _storeCheck -= (float)delta;
+            if (_storeCheck <= 0f)
+            {
+                _storeCheck = 5f;
+                GD.Print($"[{_upTime:0}s] " + _entities.StoreCheckLine());
+            }
+        }
         if (_scriptCheck > 0f)
         {
             _scriptCheck -= (float)delta;
@@ -598,6 +762,8 @@ public partial class MapViewer : Node2D
             GD.Print(_entities.PanelWatchLine());
             GD.Print(_entities.PoseWatchLine());
             if (_infAnimCheck) GD.Print(_entities.InfAnimReport());
+            if (_vehAnimCheck) GD.Print(_entities.VehAnimReport());
+            if (_bAnimCheck) GD.Print(_entities.BAnimCheck());
             GD.Print(_entities.FogWatchLine());
             GetTree().Quit();
         }
@@ -1024,6 +1190,12 @@ public partial class MapViewer : Node2D
         QuitIfDue(delta);
         UpdateProductionPanel();
 
+        // Das Ohr steht in der Mitte des Bildes. Das Original rechnet jeden
+        // Klang gegen genau diesen Punkt (`play_sound` @0x4047E0 zieht
+        // halbe Bildbreite und Kameraecke ab) — siehe
+        // Audio.SoundBankPlayer.ListenerCell.
+        _entities?.SetListener(_camera.Position);
+
         _objTimer -= (float)delta;
         if (_objTimer <= 0f) { _objTimer = 0.5f; RefreshObjectives(); CheckEnd(); }
 
@@ -1149,6 +1321,18 @@ public partial class MapViewer : Node2D
             }
             switch (key.Keycode)
             {
+                // Cheat-Mode: Strg+Umschalt+G / M / S (Gott, Munition, Sprit).
+                // Absichtlich sperrig, damit ihn niemand versehentlich trifft,
+                // und jeder Wechsel meldet sich in der Statuszeile.
+                case Key.G when key.CtrlPressed && key.ShiftPressed:
+                    MapEntityLayer.CheatGodMode = !MapEntityLayer.CheatGodMode;
+                    SayCheat(); break;
+                case Key.M when key.CtrlPressed && key.ShiftPressed:
+                    MapEntityLayer.CheatAmmo = !MapEntityLayer.CheatAmmo;
+                    SayCheat(); break;
+                case Key.S when key.CtrlPressed && key.ShiftPressed:
+                    MapEntityLayer.CheatFuel = !MapEntityLayer.CheatFuel;
+                    SayCheat(); break;
                 case Key.Bracketright: LoadMap(_mapIndex + 1); break;
                 case Key.Bracketleft: LoadMap(_mapIndex - 1); break;
                 case Key.F: FitToWindow(); break;
