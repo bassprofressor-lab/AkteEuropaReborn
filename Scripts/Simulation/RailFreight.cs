@@ -379,7 +379,7 @@ public partial class MapEntityLayer : Node2D
 
     private void RailSpawnWagons(RailLine l)
     {
-        if (!_lineRoute.TryGetValue(l.Slot, out var route) || route.Count < 2) return;
+        if (!_lineCell.TryGetValue(l.Slot, out var route) || route.Count < 2) return;
         if (!_freightWagons.TryGetValue(l.Slot, out var list))
         {
             _freightWagons[l.Slot] = list = new List<Wagon>();
@@ -409,6 +409,14 @@ public partial class MapEntityLayer : Node2D
         _freightWagons.Remove(l.Slot);
     }
 
+    /// <summary><paramref name="route"/> ist seit dem 12.08.2026 die
+    /// ZELLENKETTE der Linie (<c>_lineCell</c>), nicht mehr die Route auf
+    /// halben Zeilen. Der Zug faehrt damit auf genau den Zellen, auf denen
+    /// auch das Gleis liegt — vorher lag jeder Punkt auf halber Zeile 10 px
+    /// neben der Schiene, und der Waggonabstand musste ueber
+    /// <c>StepBackColumns</c> geschaetzt werden, weil ein Routenschritt mal
+    /// eine ganze und mal eine halbe Zelle war. Eine Zelle ist jetzt eine
+    /// Zelle: Waggon <c>i</c> steht <c>i</c> Zellen zurueck, fertig.</summary>
     private void RailPlaceWagons(RailLine l, List<Vector2> route)
     {
         if (!_freightWagons.TryGetValue(l.Slot, out var list) || list.Count == 0) return;
@@ -426,7 +434,7 @@ public partial class MapEntityLayer : Node2D
         if (l.Dir == 1) leadF = last - leadF;
         int lead = Mathf.FloorToInt(leadF);
         float frac = leadF - lead;
-        _linePiece.TryGetValue(l.Slot, out var pcs);
+        _lineCellPiece.TryGetValue(l.Slot, out var pcs);
         foreach (var w in list)
         {
             // ⚠ 11.08.2026 — hier stand der Faktor 2, und das war der Grund
@@ -470,8 +478,12 @@ public partial class MapEntityLayer : Node2D
             // derselben Spalte, auf der Geraden dagegen einer je Spalte -- der
             // Zug riss also genau auf den Diagonalen auseinander. Gemeldet als
             // »der zug hat immer noch luecken zwischen seinen wagons/locks«.
+            // ⚠ 12.08.2026 — der Abstand ist wieder EIN SCHRITT, weil ein
+            // Schritt jetzt eine ZELLE ist. StepBackColumns hat Spalten
+            // gezaehlt, um die Treppe einer Diagonale auszugleichen; die
+            // Treppe gibt es in der Zellenkette nicht mehr.
             int dir = l.Dir == 0 ? 1 : -1;
-            int step = StepBackColumns(route, lead, dir, w.Index, last);
+            int step = Mathf.Clamp(lead - dir * w.Index, 0, last);
             w.Step = step;
             w.Dir = dir;
             // Zwischen diesem Schritt und dem naechsten in Fahrtrichtung
@@ -483,31 +495,13 @@ public partial class MapEntityLayer : Node2D
         }
     }
 
-    /// <summary>Von <paramref name="from"/> aus so weit zurueck, bis die
-    /// ZELLENSPALTE <paramref name="count"/>-mal gewechselt hat. Das ist der
-    /// Abstand, in dem die Waggons aneinanderhaengen — siehe die Begruendung an
-    /// der Aufrufstelle.</summary>
-    private static int StepBackColumns(List<Vector2> route, int from, int dir,
-                                       int count, int last)
-    {
-        int i = Mathf.Clamp(from, 0, last);
-        for (int done = 0; done < count; )
-        {
-            int j = i - dir;
-            if (j < 0 || j > last) break;
-            if (Mathf.RoundToInt(route[j].X) != Mathf.RoundToInt(route[i].X)) done++;
-            i = j;
-        }
-        return Mathf.Clamp(i, 0, last);
-    }
-
     private void RailMoveWagons()
     {
         foreach (var l in _railLines)
         {
             if (!_freightWagons.TryGetValue(l.Slot, out var list) || list.Count == 0) continue;
-            if (_lineRoute.TryGetValue(l.Slot, out var route) && route.Count >= 2)
-                RailPlaceWagons(l, route);
+            if (_lineCell.TryGetValue(l.Slot, out var cells) && cells.Count >= 2)
+                RailPlaceWagons(l, cells);
         }
     }
 
@@ -624,7 +618,8 @@ public partial class MapEntityLayer : Node2D
         foreach (var w in _wagons) if (w.Freight) fw++;
         sb.Append($") | {fw} von {_wagons.Count} Waggons am Fahrplan");
 
-        sb.Append($" | Gleis: {RailTilesDrawn} Stuecke gezeichnet");
+        sb.Append($" | Gleis: {RailTilesDrawn} Stuecke gezeichnet, " +
+                  $"{RailTilesLoose} davon NICHT Kante an Kante");
         // Der Beweis fuer »faehrt gleitend statt zu huepfen«: die Stelle des
         // ersten fahrenden Waggons auf ein Hundertstel genau. Steht dort eine
         // ganze Zahl, springt er von Schritt zu Schritt.
