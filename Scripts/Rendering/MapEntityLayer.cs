@@ -7410,11 +7410,26 @@ public partial class MapEntityLayer : Node2D
     /// Achsen, aber acht Fahrtrichtungen.</para></summary>
     private static readonly int[] RailFrameOf = { 1, 2, 0, 3, 1, 7, 0, 4 };
 
-    private Texture2D? GetRailTexture(int piece)
+    /// <summary>Wie oft ein Stück eine STÜTZE bekommt. Teil 65 trägt Träger und
+    /// Bock in einem Bild, also stünde bei jedem Schritt ein Bock — auf gerader
+    /// Strecke alle 40 px. Gemeldet als »du nutzt viele stützen, vielleicht zu
+    /// viele«, und das Foto des Originals zeigt sie deutlich weiter
+    /// auseinander.
+    ///
+    /// <para>⚠ UNSERE SETZUNG. Was den Abstand im Original bestimmt, ist nicht
+    /// gelesen — dort steckt er vermutlich im Streckencode der Zelle
+    /// (Satz 0xb95f50 +0x03), den wir noch nicht auflösen. Bis dahin: jeder
+    /// dritte Schritt bekommt den Bock, die anderen den blanken Träger 64.
+    /// Beide Teile haben dieselbe Leinwandlage, die Schiene läuft also
+    /// durch.</para></summary>
+    private const int RailPylonEvery = 3;
+
+    private Texture2D? GetRailTexture(int piece, bool pylon)
     {
-        int k = RailFrameOf[piece & 7];
+        int k = RailFrameOf[piece & 7] + (pylon ? 8 : 0);
         if (_railTex.TryGetValue(k, out var t)) return t;
-        string path = Core.Content.Path($"Units/train/rail65/f{k}.png");
+        string path = Core.Content.Path(
+            $"Units/train/rail{(pylon ? 65 : 64)}/f{k & 7}.png");
         t = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
         if (t == null && FileAccess.FileExists(path))
         {
@@ -7450,9 +7465,19 @@ public partial class MapEntityLayer : Node2D
             if (!_linePiece.TryGetValue(kv.Key, out var pcs)) continue;
             var route = kv.Value;
             int n = Mathf.Min(route.Count, pcs.Count);
+            int laid = 0;
             for (int i = 0; i < n; i++)
             {
-                var tex = GetRailTexture(pcs[i]);
+                // ⚠ 11.08.2026 — EIN Stueck je ZELLENSPALTE, nicht je Schritt.
+                // Gemessen: ein Gleisbild belegt x 10..49, also genau 40 px =
+                // eine Zelle. Eine isometrische Diagonale legt die Route aber
+                // als Treppe aus (1,0) und (0,0.5) -- dort ruecken zwei
+                // Schritte nur eine Spalte weiter, und wir haben zwei Stuecke
+                // uebereinandergelegt. Gemeldet als »die bahnstrecke ist noch
+                // nicht sauber zusammengebaut«.
+                if (i > 0 && Mathf.RoundToInt(route[i].X) == Mathf.RoundToInt(route[i - 1].X))
+                    continue;
+                var tex = GetRailTexture(pcs[i], laid++ % RailPylonEvery == 0);
                 if (tex == null) return;          // ohne Bilder gar nichts
                 DrawTexture(tex, RailPoint(route[i]) - ComposedAnchor);
                 RailTilesDrawn++;
