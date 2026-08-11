@@ -33,9 +33,11 @@ public partial class MainMenu : Control
         ("map_DM_4", "The Dam — Spielstand zu Level 21"),
         ("map_DM_3", "Chanel Tunnel — Spielstand zu Level 25"),
         ("map_DM_1", "Scandinavia — Spielstand zu Level 26"),
-        ("map_05", "Kampagne 05"),
-        ("map_10", "Kampagne 10"),
-        ("map_14", "Kampagne 14"),
+        // ⚠ 11.08.2026 — hier standen map_05, map_10 und map_14 als
+        // "Kampagne 05/10/14". Sie gehoeren nicht ins Gefecht: eine
+        // Kampagnenkarte bringt ihr Missionsskript, ihre Diplomatie und ihren
+        // Freischalt-Fahrplan mit, und im Gefecht laeuft nichts davon. Sie
+        // standen aus der Zeit drin, als es die Kampagne noch nicht gab.
     };
 
     private OptionButton _map = null!;
