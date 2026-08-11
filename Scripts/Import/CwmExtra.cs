@@ -362,6 +362,20 @@ public static class CwmExtra
         /// footprints, so this is a plain lookup.</summary>
         int BuildingAt(int x, int y) => at.TryGetValue((x, y), out int v) ? v : -1;
 
+        /// <summary>Wie weit dieser Punkt vom naechsten Gebaeudegrund entfernt
+        /// ist — der Entscheider fuer das zurueckgeholte y. 0 heisst: er steht
+        /// auf einem Gebaeude, und genau dort enden Bahnlinien.</summary>
+        static int EndCost(Dictionary<(int, int), int> ground, int x, int y)
+        {
+            for (int r = 0; r <= 4; r++)
+                for (int dx = -r; dx <= r; dx++)
+                    for (int dy = -r; dy <= r; dy++)
+                        if (System.Math.Max(System.Math.Abs(dx), System.Math.Abs(dy)) == r
+                            && ground.ContainsKey((x + dx, y + dy)))
+                            return r;
+            return 99;
+        }
+
         for (int i = 0; i + SpojStride <= s34.Length; i += SpojStride)
         {
             if (s34[i] == 0xFF || AllZero(s34, i, SpojStride)) continue;
@@ -434,14 +448,23 @@ public static class CwmExtra
                     if (run > hi) hi = run;
                 }
                 int limit = m.Height * 2;
-                int fits = 0, chosen = by;
+                // ⚠ NACHGEBESSERT am selben Tag: »passt in die Karte« allein
+                // reicht nicht. Auf einer 254 Zeilen hohen Karte passen b UND
+                // b+256, und dann blieb es beim Byte — gemessen an 1218
+                // Endpunkt/Gebaeude-Paaren lagen 411 um rund 126 Zeilen daneben,
+                // also genau um die Sprungmarke. Der bessere Entscheider ist das
+                // ENDGEBAEUDE: die Strecke faengt an einem an und hoert am
+                // anderen auf. Genommen wird der Kandidat, dessen beide Enden
+                // ihren Gebaeuden am naechsten liegen.
+                int best = by, bestCost = int.MaxValue;
                 for (int add = 0; add <= 512; add += 256)
                 {
                     int cand = by + add;
                     if (cand + lo < 0 || cand + hi > limit) continue;
-                    if (fits++ == 0) chosen = cand;
+                    int cost = EndCost(at, d.X1, cand / 2) + EndCost(at, d.X2, (cand + sum) / 2);
+                    if (cost < bestCost) { bestCost = cost; best = cand; }
                 }
-                d.Y1 = fits == 1 ? chosen : by;
+                d.Y1 = best;
                 d.Y2 = d.Y1 + sum;
                 d.Rebuilt = true;
             }
