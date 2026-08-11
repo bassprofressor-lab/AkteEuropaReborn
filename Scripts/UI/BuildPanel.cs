@@ -5,6 +5,19 @@ using System.Collections.Generic;
 using Godot;
 
 /// <summary>
+/// <para><b>⚠ SEIT DEM 11.08.2026 NICHT MEHR AUF DEM SCHIRM.</b> Der Spieler
+/// hat gemeldet: »das Bau Menu im Gefecht, das ist nicht das Originale« — und
+/// das war es auch nicht: eine nackte Textliste im Kasten des Bedienfelds, wo
+/// das Original ein frei schwebendes FENSTER mit Reitern, Preisen, Knöpfen und
+/// Werteliste hat. Das steht jetzt in <see cref="BaseWindow"/>, und
+/// <c>MapViewer</c> zeigt dieses hier nicht mehr an.</para>
+///
+/// <para>Die Datei bleibt, weil <c>MapEntityLayer.BuildPanelRows()</c> den Satz
+/// <see cref="Row"/> als Schnittstelle benutzt — das neue Fenster liest
+/// dieselben Zeilen. Was darunter steht, beschreibt die alte Zeichnung im
+/// Bedienfeld und die Fundstellen, aus denen sie kam; die Fundstellen gelten
+/// weiter.</para>
+///
 /// The production list, drawn inside the recessed display box of the original
 /// PANEL.DTA frame: what the selected factory, dock or airfield can build, what
 /// it costs, and whether it can be paid for. Click a line to build it.

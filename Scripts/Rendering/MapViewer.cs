@@ -861,7 +861,7 @@ public partial class MapViewer : Node2D
             GD.Print(_entities.CaptureWatchLine());
             GD.Print(_entities.TakeoverWatchLine());
             GD.Print(_entities.MinimapWatchLine(_minimap));
-            GD.Print(_build?.WatchLine() ?? "bau-panel: nicht gebaut");
+            GD.Print(_baseWindow?.WatchLine() ?? "basis-fenster: nicht gebaut");
             GD.Print(_entities.EventWatchLine());
             GD.Print(_entities.VoiceWatchLine());
             GD.Print(_entities.PanelWatchLine());
@@ -1103,50 +1103,59 @@ public partial class MapViewer : Node2D
         _entities.SetPanelBox(box);
         if (_panelClock != null)
             _panelClock.Position = origin + (Vector2)PanelClockAt * PanelScale;
-        if (_build != null)
-        {
-            _build.Position = box.Position + new Vector2(2, 2);
-            _build.Size = box.Size - new Vector2(4, 4);
-            _build.QueueRedraw();
-        }
     }
 
-    /// <summary>The production list, in the same recessed box as the info text —
-    /// they take turns, because both belong to the selection. See
-    /// UI/BuildPanel.cs for what the original does instead (a building screen of
-    /// its own) and what is therefore ours here.</summary>
-    private UI.BuildPanel? _build;
+    /// <summary>Das Baumenü: seit dem 11.08.2026 ein frei schwebendes FENSTER,
+    /// so wie im Original — siehe UI/BaseWindow.cs. Vorher stand die Bauliste
+    /// als nackter Text im eingelassenen Kasten des Bedienfelds; genau das hat
+    /// der Spieler als »das Bau Menu, das ist nicht das Originale« gemeldet.
+    ///
+    /// <para>Die alte Liste (UI/BuildPanel.cs) wird nicht mehr gezeigt. Die
+    /// Datei bleibt, weil <c>MapEntityLayer.BuildPanelRows()</c> ihren
+    /// <c>Row</c>-Satz als Schnittstelle benutzt.</para></summary>
+    private UI.BaseWindow? _baseWindow;
 
-    private void BuildProductionPanel()
+    /// <summary>Die Ebene des Fensters: ÜBER dem Bedienfeld (2), aber UNTER den
+    /// Hilfefenstern der Mission (90) und der Abrechnung (95) — dieselbe Regel,
+    /// die BuildEndBanner sich schon einmal einhandeln musste.</summary>
+    private const int BaseWindowLayer = 80;
+
+    private void BuildBaseWindow()
     {
-        if (_panelLayer == null) return;
-        _build = new UI.BuildPanel
+        var layer = new CanvasLayer { Layer = BaseWindowLayer };
+        AddChild(layer);
+        _baseWindow = new UI.BaseWindow { Visible = false };
+        layer.AddChild(_baseWindow);
+        _baseWindow.Rows = _entities.BuildPanelRows;
+        _baseWindow.TitleLine = _entities.BuildPanelTitle;
+        _baseWindow.Produce = _entities.BuildPanelPick;
+        _baseWindow.OnClose = () => { _hidePanelList = true; UpdateProductionPanel(); };
+        _baseWindow.OnDesign = () =>
         {
-            MouseFilter = Control.MouseFilterEnum.Stop,
-            Visible = false,
+            // Das Erstellungsfenster gibt es noch nicht; bis dahin führt der
+            // Knopf auf denselben Entwurfsschirm, den `M` schon aufmacht.
+            _entities.ToggleDesigner();
         };
-        _panelLayer.AddChild(_build);
-        _build.Setup(_entities.BuildPanelRows, _entities.BuildPanelTitle,
-                     _entities.BuildPanelPick);
-        PlacePanel();
     }
 
-    /// <summary>Show the list whenever the selection is something of the
-    /// player's that builds, and give the box back to the info text otherwise.
-    /// </summary>
+    /// <summary>Das Fenster geht auf, sobald etwas Bauendes gewählt ist, und
+    /// wieder zu, wenn die Auswahl weg ist. Der Infotext im Bedienfeld bleibt
+    /// dabei stehen — im Original stehen beide nebeneinander.</summary>
     private void UpdateProductionPanel()
     {
-        if (_build == null) return;
+        if (_baseWindow == null) return;
         bool want = _entities.BuildPanelWanted && !_hidePanelList;
-        if (want != _build.Visible)
+        if (want != _baseWindow.Visible)
         {
-            _build.Visible = want;
-            _entities.SetPanelTextVisible(!want);
+            _baseWindow.Visible = want;
+            if (want) _baseWindow.PlaceTopRight();
         }
-        if (want) _build.QueueRedraw();
+        // Ein geschlossenes Fenster geht beim nächsten Anklicken wieder auf.
+        if (!_entities.BuildPanelWanted) _hidePanelList = false;
+        if (want) _baseWindow.Refresh();
     }
 
-    /// <summary>`P` hides the list, for a look at the info text underneath.</summary>
+    /// <summary>`I` legt das Baufenster weg, für einen freien Blick.</summary>
     private bool _hidePanelList;
 
     /// <summary>
@@ -1177,7 +1186,7 @@ public partial class MapViewer : Node2D
         _hud.AddThemeConstantOverride("outline_size", 0);
         _hud.AddThemeConstantOverride("line_spacing", 2 * LegacyFontScale);
         _entities.SetUiFont(font, size);
-        _build?.SetFont(font, size, PanelScale);
+        _baseWindow?.SetFont(font, size);
         // ⚠ Reihenfolge: BuildLegacyPanel() laeuft VOR ApplyLegacyFont() (siehe
         // _Ready), die Uhr entsteht also noch ohne Schrift — dieselbe Falle wie
         // bei der Tabelle im Abschlussfenster. Sie bekommt sie hier.
@@ -1379,11 +1388,11 @@ public partial class MapViewer : Node2D
         UpdateHud(name, tex.GetSize(), meta);
         _entities.Load(name, meta);
         BuildMinimap();          // needs both the picture and the loaded entities
-        if (_build == null)
+        if (_baseWindow == null)
         {
-            BuildProductionPanel();
+            BuildBaseWindow();
             if (_legacyFont != null)
-                _build?.SetFont(_legacyFont, LegacyFontCell * LegacyFontScale, PanelScale);
+                _baseWindow?.SetFont(_legacyFont, LegacyFontCell * LegacyFontScale);
         }
         GD.Print($"MapViewer: loaded {name} ({tex.GetWidth()}x{tex.GetHeight()})");
     }
