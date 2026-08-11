@@ -7424,6 +7424,23 @@ public partial class MapEntityLayer : Node2D
     /// durch.</para></summary>
     private const int RailPylonEvery = 3;
 
+    /// <summary>Wie weit ein Gleisstück unter dem Waggonanker liegt, je Stück.
+    ///
+    /// <para>Beide Bilder kommen aus derselben Leinwand, sitzen darin aber
+    /// verschieden: bei Stück 6 belegt die Schiene die Zeilen 14..33, der
+    /// Waggonkörper dagegen 33..54 — mit demselben Anker gezeichnet hängt der
+    /// Wagen also UNTER dem Träger statt darauf zu stehen. Bei einer Hochbahn
+    /// ist das ungefähr eine Bockhöhe, und es ist der Grund, warum der Zug an
+    /// Gebäuden davor statt hinein zu fahren schien: die Route endet
+    /// nachweislich in der Gebäudemitte (über alle 1218 Enden gemessen ist der
+    /// Versatz dy = +2 = foot_h/2), nur lag das Gleis zu hoch.</para>
+    ///
+    /// <para>Gemessen je Stück als Differenz der UNTERKANTEN von Waggonbild und
+    /// zugehörigem Gleisbild. Sie ist nicht konstant, weil jede Richtung ihre
+    /// eigene Geometrie hat: 16 für die vier flachen Lagen, 21 für die
+    /// waagerechten, 26 für die beiden steilen.</para></summary>
+    private static readonly int[] RailYOffsetOf = { 16, 16, 21, 26, 16, 26, 21, 16 };
+
     private Texture2D? GetRailTexture(int piece, bool pylon)
     {
         int k = RailFrameOf[piece & 7] + (pylon ? 8 : 0);
@@ -7479,7 +7496,8 @@ public partial class MapEntityLayer : Node2D
                     continue;
                 var tex = GetRailTexture(pcs[i], laid++ % RailPylonEvery == 0);
                 if (tex == null) return;          // ohne Bilder gar nichts
-                DrawTexture(tex, RailPoint(route[i]) - ComposedAnchor);
+                DrawTexture(tex, RailPoint(route[i]) - ComposedAnchor
+                                 + new Vector2(0, RailYOffsetOf[pcs[i] & 7]));
                 RailTilesDrawn++;
             }
         }

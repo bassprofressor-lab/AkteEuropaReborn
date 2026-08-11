@@ -441,13 +441,40 @@ public partial class MapEntityLayer : Node2D
             // PartBase(57) ist nicht das, was das Spiel unter 0x77c956 fuehrt,
             // oder der Zweig zeichnet etwas anderes als eine Strecke. Solange
             // das nicht geklaert ist, wird hier nichts behauptet.
-            int step = Mathf.Clamp(lead - (l.Dir == 0 ? 1 : -1) * w.Index, 0, last);
+            // ⚠ 11.08.2026 — der Abstand zaehlt SPALTEN, nicht Schritte.
+            //
+            // Ein Waggonbild ist wie ein Gleisbild genau eine Zelle breit
+            // (gemessen x 10..49 = 40 px). Eine isometrische Diagonale legt die
+            // Route aber als Treppe aus (1,0) und (0,0.5): zwei Schritte, eine
+            // Spalte. Mit einem Schritt Abstand standen dort zwei Waggons in
+            // derselben Spalte, auf der Geraden dagegen einer je Spalte -- der
+            // Zug riss also genau auf den Diagonalen auseinander. Gemeldet als
+            // »der zug hat immer noch luecken zwischen seinen wagons/locks«.
+            int step = StepBackColumns(route, lead, l.Dir == 0 ? 1 : -1, w.Index, last);
             w.Step = step;
             w.Dir = l.Dir == 0 ? 1 : -1;
             var pt = route[step];
             w.Col = pt.X; w.Row = pt.Y;
             if (pcs != null && step < pcs.Count) w.Piece = pcs[step];
         }
+    }
+
+    /// <summary>Von <paramref name="from"/> aus so weit zurueck, bis die
+    /// ZELLENSPALTE <paramref name="count"/>-mal gewechselt hat. Das ist der
+    /// Abstand, in dem die Waggons aneinanderhaengen — siehe die Begruendung an
+    /// der Aufrufstelle.</summary>
+    private static int StepBackColumns(List<Vector2> route, int from, int dir,
+                                       int count, int last)
+    {
+        int i = Mathf.Clamp(from, 0, last);
+        for (int done = 0; done < count; )
+        {
+            int j = i - dir;
+            if (j < 0 || j > last) break;
+            if (Mathf.RoundToInt(route[j].X) != Mathf.RoundToInt(route[i].X)) done++;
+            i = j;
+        }
+        return Mathf.Clamp(i, 0, last);
     }
 
     private void RailMoveWagons()
