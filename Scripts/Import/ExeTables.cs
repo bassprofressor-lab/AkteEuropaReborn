@@ -106,6 +106,37 @@ public sealed class ExeTables
     /// <summary>Where a component's sound class sits in its stats record.</summary>
     public const int StatsSoundClass = 0x1c;
 
+    /// <summary>Das ZWEITE Wort jeder Zeile des Klangsatzes (+0x02).
+    ///
+    /// <para>Es ist ebenfalls eine Klang-Nummer, keine Bildfolge. Belegt
+    /// @0x4048cf: das ist <b>Modus 3</b> der Klangroutine
+    /// (0x4047e0, Sprungtabelle 0x404a18): <c>mov cl,[eax+0x884736]</c> holt die
+    /// Klangklasse aus dem GESCHOSS-Satz (Array 0x884730, Schrittweite 32), <c>ecx = cl*11</c>, dann <c>mov si,[ecx*2+0x4f98f4]</c> —
+    /// also genau dieses Feld. Danach folgt die Klangroutine: <c>cmp si,0x18f</c>
+    /// und bei Gleichheit <c>rand()%6 + 0x190</c>, anschliessend Abstand zur
+    /// Kamera (0x5387c0/0x5387c4), <c>fsqrt</c>, Panning und die Bereiche
+    /// <c>0x78 / 0x12c / 0x1f4 / 0x7d0</c>.</para>
+    ///
+    /// <para>⚠ Am 11.08.2026 stand hier kurz „ANIM.CWA-Folge des
+    /// Muendungsfeuers". Das war falsch. Die Werte (232, 102, 143, 0) sahen wie
+    /// Folgen aus, aber <b>143 ist in ANIM.CWA leer</b> — daran fiel es auf,
+    /// bevor die Fehldeutung in einer Auslieferung landete. Was im Original ein
+    /// Muendungsfeuer bekommt, ist damit weiterhin ungelesen.</para>
+    ///
+    /// <para>Noch nicht verdrahtet: welcher Satz bei 0x884730 steht (Geschoss?
+    /// Einheit?) ist offen, und ohne das waere jedes Abspielen geraten.</para>
+    /// </summary>
+    public int[] SecondSounds()
+    {
+        var list = new int[FireSoundRows];
+        for (int r = 0; r < FireSoundRows; r++)
+        {
+            var b = Read((uint)(FireSoundBase + r * FireSoundStride + 2), 2);
+            list[r] = b.Length < 2 ? 0 : b[0] | (b[1] << 8);
+        }
+        return list;
+    }
+
     /// <summary>The base sound number of every class, by row.</summary>
     public int[] FireSounds()
     {

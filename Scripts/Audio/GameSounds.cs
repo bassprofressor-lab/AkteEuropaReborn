@@ -357,6 +357,31 @@ public static class GameSounds
     private static int[]? _fire;
     private static bool _tried;
 
+    /// <summary>Liest <c>Sound/weapon_sounds.json</c> einmal.</summary>
+    private static void LoadWeaponSounds()
+    {
+        if (_tried) return;
+        _tried = true;
+        string path = Core.Content.Path("Sound/weapon_sounds.json");
+        if (!FileAccess.FileExists(path)) return;
+        try
+        {
+            using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
+            using var doc = JsonDocument.Parse(f.GetAsText());
+            _fire = Column(doc, "base");
+        }
+        catch (System.Exception e) { GD.PrintErr("Ton: weapon_sounds.json — " + e.Message); }
+
+        static int[]? Column(JsonDocument doc, string name)
+        {
+            if (!doc.RootElement.TryGetProperty(name, out var arr)) return null;
+            var list = new List<int>();
+            foreach (var e in arr.EnumerateArray()) list.Add(e.GetInt32());
+            return list.ToArray();
+        }
+    }
+
+
     /// <summary>The base sound for a weapon's sound class, or -1.
     ///
     /// The class is the component's stats byte at +0x1c, the base comes from the
@@ -365,22 +390,7 @@ public static class GameSounds
     /// <see cref="Import.ExeTables.FireSoundTable"/> for the disassembly.</summary>
     public static int FireBase(int soundClass)
     {
-        if (!_tried)
-        {
-            _tried = true;
-            string path = Core.Content.Path("Sound/weapon_sounds.json");
-            if (FileAccess.FileExists(path))
-                try
-                {
-                    using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
-                    using var doc = JsonDocument.Parse(f.GetAsText());
-                    var list = new List<int>();
-                    foreach (var e in doc.RootElement.GetProperty("base").EnumerateArray())
-                        list.Add(e.GetInt32());
-                    _fire = list.ToArray();
-                }
-                catch (System.Exception e) { GD.PrintErr("Ton: weapon_sounds.json — " + e.Message); }
-        }
+        LoadWeaponSounds();
         if (_fire == null || soundClass < 0 || soundClass >= _fire.Length) return -1;
         return _fire[soundClass];
     }

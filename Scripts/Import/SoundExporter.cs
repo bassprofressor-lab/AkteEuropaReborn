@@ -107,8 +107,16 @@ public sealed class SoundExporter
         sb.Append("(@0x40c4c0: mov cl,[edx*2+0x5045bc]; 11*cl; mov di,[ecx*2+0x4f98f2]; rand&1)\",");
         sb.Append($"\"_check\":\"{good} of {v.Length} rows are even and below 40, which is the size ");
         sb.Append("of the bank's first block (40 sounds = 20 classes of two)\",");
+        sb.Append("\"_second\":\"+0x02 desselben Satzes ist eine ZWEITE Klang-Nummer, ");
+        sb.Append("gelesen @0x4048cf in MODUS 3 der Klangroutine (Geschoss-Array 0x884730, Schrittweite 32, +6 = Klangklasse) und direkt an sie ");
+        sb.Append("gegeben: 399 bedeutet rand()%6+400. Sie wird noch nicht abgespielt, weil ");
+        sb.Append("offen ist, welcher Satz bei 0x884730 steht. Sie ist KEINE Bildfolge -- ");
+        sb.Append("143 waere in ANIM.CWA leer\",");
         sb.Append($"\"stats_field\":{ExeTables.StatsSoundClass},\"base\":[");
         for (int i = 0; i < v.Length; i++) { if (i > 0) sb.Append(','); sb.Append(v[i]); }
+        sb.Append("],\"second\":[");
+        var mz = t.SecondSounds();
+        for (int i = 0; i < mz.Length; i++) { if (i > 0) sb.Append(','); sb.Append(mz[i]); }
         sb.Append("]}");
         File.WriteAllText(_dst + "/weapon_sounds.json", sb.ToString(), new UTF8Encoding(false));
         say?.Invoke($"Waffenklaenge: {v.Length} Klassen, {good} davon plausibel (gerade und unter 40)");

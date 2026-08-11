@@ -392,6 +392,16 @@ public partial class MainMenu : Control
                 GetTree().Quit(new Import.ContentBuilder(src).ReexportBuildings() ? 0 : 1);
                 return;
             }
+            // nur die Effektbilder aus ANIM.CWA
+            else if (a.StartsWith("--reexport-effects="))
+            {
+                string[] dirs = a["--reexport-effects=".Length..]
+                    .Split(';', System.StringSplitOptions.RemoveEmptyEntries);
+                var src = Core.ContentSources.FromFolders(dirs);
+                if (src == null) { GD.PrintErr("reexport: keiner der Ordner existiert"); GetTree().Quit(2); return; }
+                GetTree().Quit(new Import.ContentBuilder(src).ReexportEffects() ? 0 : 1);
+                return;
+            }
             else if (a.StartsWith("--reexport-units="))
             {
                 string[] dirs = a["--reexport-units=".Length..]

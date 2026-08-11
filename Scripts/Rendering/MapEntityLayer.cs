@@ -3771,12 +3771,18 @@ public partial class MapEntityLayer : Node2D
         // richtigen Kanone stimmt, kommt auch bei Infanterie und beim
         // MG-Fahrzeug«. Ein Gewehr macht keinen Feuerball.
         //
-        // ⚠ UNSERE SETZUNG, und sie ist ausdruecklich eine: WELCHE Waffe im
-        // Original einen bekommt, ist NICHT gelesen. Genommen wird die
-        // Infanteriewaffe als Grenze -- die Zeilen 185..199 sind die
-        // Handwaffen (siehe TurretOf), alles darunter sind Fahrzeugwaffen.
-        // Das MG-Fahrzeug faellt damit noch auf die falsche Seite; die saubere
-        // Antwort steht in der Waffentabelle und ist nachzulesen.
+        // ⚠ UNSERE SETZUNG, und sie bleibt eine: WELCHE Waffe im Original einen
+        // bekommt, ist weiterhin NICHT gelesen. Genommen wird die Grenze zur
+        // Infanteriewaffe -- 185..199 sind die Handwaffen (siehe TurretOf),
+        // alles darunter sind Fahrzeugwaffen. Das MG-Fahrzeug faellt damit noch
+        // auf die falsche Seite.
+        //
+        // Am 11.08.2026 sah es kurz so aus, als stuende die Antwort in Feld
+        // +0x02 des Klangsatzes 0x4f98f2 (Werte 232, 102, 143, 0). Das ist sie
+        // NICHT: 0x4048cf liest genau dieses Feld und uebergibt es der
+        // Klangroutine (Entfernung zur Kamera, Panning, 399 -> rand()%6+400).
+        // Es ist eine zweite KLANG-Nummer, keine ANIM.CWA-Folge -- und 143 ist
+        // in ANIM.CWA leer, was die Fehldeutung auch auffliegen liess.
         if (shooter.Weapon < InfantryWeaponFirst)
             _effects.Add(new Effect { Pos = shooter.Pos + dir * 12f - new Vector2(0, 8),
                                       Kind = "muzzle", FrameTime = 0.035f });

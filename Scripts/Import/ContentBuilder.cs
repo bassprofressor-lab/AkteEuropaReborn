@@ -526,6 +526,12 @@ public sealed class ContentBuilder
                 Say("keine Karten in den Quellen — nur die Tabellen aus GAME.EXE");
                 cat.RunExeOnly(Say);
             }
+            // Die Waffenklaenge kommen ebenfalls allein aus GAME.EXE und hingen
+            // bisher am vollen Import — dabei aendert sich gerade dort etwas,
+            // wenn eine Zeile des Satzes neu gelesen wird (11.08.: +0x02 ist
+            // das Muendungsfeuer).
+            if (_exe != null)
+                new SoundExporter(_dst + "/Sound").WriteWeaponSounds(_exe, Say);
             Say($"fertig: {cat.Weapons} Bauteile benannt, {cat.WeaponTypes} Bauarten, "
                 + $"{cat.InfantryArms} Infanteriewaffen");
             return cat.Weapons > 0;
@@ -565,6 +571,30 @@ public sealed class ContentBuilder
         }
         Say($"{ok} Tilesets geschrieben, {missing} uebersprungen");
         return ok > 0 && missing == 0;
+    }
+
+    /// <summary>Nur die Effektbilder aus ANIM.CWA neu schreiben. Nötig, sobald
+    /// eine Folge dazukommt — am 11.08.2026 die beiden anderen Mündungsfeuer
+    /// (102 und 143), die vorher fehlten und deshalb bei jeder Waffe durch die
+    /// 232 ersetzt waren.</summary>
+    public bool ReexportEffects(Action<string>? progress = null)
+    {
+        void Say(string s) { GD.Print("reexport-effects: " + s); progress?.Invoke(s); }
+        try
+        {
+            string? palPath = Find("DATA/01.PAL");
+            byte[]? anim = Asset("ANIM.CWA");
+            if (palPath == null || anim == null)
+            {
+                Say("ANIM.CWA oder 01.PAL nicht gefunden");
+                return false;
+            }
+            var ui = new InterfaceExporter(PalFile.Load(palPath), _dst + "/UI", _dst + "/Effects");
+            ui.WriteEffects(AnimFile.FromBytes(anim));
+            Say($"{ui.Effects} Effekte mit {ui.EffectFrames} Bildern");
+            return ui.Effects > 0;
+        }
+        catch (Exception e) { Say(e.Message); return false; }
     }
 
     /// <summary>
