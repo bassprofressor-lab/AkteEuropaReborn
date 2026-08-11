@@ -1401,6 +1401,10 @@ public partial class MapEntityLayer : Node2D
                 _hasRail = true;
             }
 
+        // Die Enden auf die Anschlusszeile der Gebaeude fuehren. Muss NACH der
+        // Schleife stehen: erst dort sind alle Linien samt ihren Endgebaeuden da.
+        RailSnapToDock();
+
         // sec120: what each player may build in the air, with the game's own
         // English names (Shark Fighter, Whale Bomber, Duck Spy, Fuel Heli …)
         _airDesigns = null;
@@ -8177,6 +8181,16 @@ public partial class MapEntityLayer : Node2D
             cellOf[i] = cells.Count - 1;
         }
 
+        _lineCell[line] = cells;
+        _lineCellFrame[line] = RailFramesOf(cells);
+        _lineCellPiece[line] = cellPiece;
+    }
+
+    /// <summary>Das Bild je Zelle aus den NACHBARZELLEN. Steht seit dem
+    /// 12.08.2026 für sich, weil <see cref="RailSnapToDock"/> die Kette
+    /// nachträglich ändert und die Bilder dann neu gerechnet werden müssen.</summary>
+    private static List<int> RailFramesOf(List<Vector2> cells)
+    {
         var frames = new List<int>(cells.Count);
         for (int i = 0; i < cells.Count; i++)
         {
@@ -8187,9 +8201,218 @@ public partial class MapEntityLayer : Node2D
             if (b < 0) b = RailOppositePort(a);
             frames.Add(RailFrameOfPorts(a, b));
         }
-        _lineCell[line] = cells;
-        _lineCellFrame[line] = frames;
-        _lineCellPiece[line] = cellPiece;
+        return frames;
+    }
+
+    /// <summary>
+    /// <b>Die ANSCHLUSSZEILE eines Gebäudes</b> — die Musterzeile, in der seine
+    /// Grafik ihr eigenes Gleisstück trägt, gerechnet von der Ecke des
+    /// Gebäudes (<c>Entity.Row</c>) aus.
+    ///
+    /// <para><b>So gemessen</b> (die Zahlen stehen bei
+    /// <see cref="RailSnapToDock"/>): das Muster des Gebäudes wurde mit
+    /// <see cref="Import.MapBaker"/>s eigener Rechnung
+    /// <c>y = zeile·20 + BlitAnchor + Kachel.YOff</c> zusammengesetzt und
+    /// daneben unser Gleisbild (Teil 64, f0) mit genau der Ablage aus
+    /// <see cref="DrawRailTrack"/> gelegt — <c>Anker − ComposedAnchor +
+    /// RailDeckOffset</c>. Dann wurde nachgesehen, in WELCHER Zeile die
+    /// Schiene des Gleisbildes auf den Träger der Gebäudegrafik trifft.
+    /// Beides steht auf demselben Gitter, der Vergleich ist also ein
+    /// Pixelvergleich und keine Schätzung.</para>
+    ///
+    /// <list type="bullet">
+    /// <item><b>Feldbahnhof (12), Zeile 0.</b> Sein Stummel sitzt LINKS UND
+    /// RECHTS in Musterzeile 0; darunter, in Zeile 1, stehen die
+    /// Gitterträger mit dem Andreaskreuz. Der Grundriss ist 3×4, der Stummel
+    /// stößt also an (Spalte−1, Zeile+0) und (Spalte+3, Zeile+0).</item>
+    /// <item><b>Bahnstation (6), Zeile 1.</b> Ihr Träger läuft LINKS durch
+    /// Musterzeile 1, das Andreaskreuz sitzt in Zeile 2. Im Bild aus dem
+    /// laufenden Spiel (map_NET02, Bahnhof auf 191,55, Höhe 1) liegt der
+    /// Träger auf Bildschirmzeile 400 bei Zoom 2 — genau die Deckhöhe von
+    /// Zellzeile 56 = Zeile+1.</item>
+    /// <item><b>Basis (1), Zeile 0.</b> Anbau RECHTS, Grundriss 6×4.</item>
+    /// </list>
+    ///
+    /// <para><see cref="int.MinValue"/> heißt »nicht gemessen« — an so einem
+    /// Gebäude bleibt die Strecke unangetastet. Das gilt für Fabrik (2,3,4),
+    /// Flughafen (9), Mine (10) und Werft (16): dort ist im Muster kein
+    /// Träger auszumachen, der sich mit unserem Gleisbild deckt, und geraten
+    /// wird hier nicht.</para>
+    /// </summary>
+    private static int RailDockRow(int bType) => bType switch
+    {
+        1 => 0,          // Basis
+        6 => 1,          // Bahnstation
+        12 => 0,         // Feldbahnhof
+        _ => int.MinValue,
+    };
+
+    /// <summary>Wieviele Linienenden NICHT auf der Anschlusszeile ihres
+    /// Gebäudes lagen, und wieviele überhaupt geprüft werden konnten — der
+    /// Prüfstand liest beides, sonst wäre »bündig« wieder nur behauptet.</summary>
+    public int RailDockOff, RailDockChecked, RailDockMoved;
+
+    /// <summary>Ausschalter für die Gegenprobe (<c>--rail-lay=nodock</c>):
+    /// mit <c>true</c> bleibt die Strecke, wo sie war. <c>--rail-check</c>
+    /// meldet dann dieselbe Zahl unbündiger Enden, aber 0 nachgeführte — und
+    /// das Bild zeigt den Fehler wieder. Die Fahne wird hier selbst gelesen,
+    /// weil sie zu dieser Korrektur gehört und nicht zum Betrachter.</summary>
+    public static bool RailProbeSkipDock
+    {
+        get
+        {
+            if (_probeSkipDock.HasValue) return _probeSkipDock.Value;
+            bool hit = false;
+            foreach (string a in OS.GetCmdlineUserArgs())
+                if (a.StartsWith("--rail-lay=") && a["--rail-lay=".Length..].Contains("nodock"))
+                    hit = true;
+            _probeSkipDock = hit;
+            return hit;
+        }
+    }
+
+    private static bool? _probeSkipDock;
+
+    /// <summary>
+    /// <b>Führt das Ende jeder Linie auf die Anschlusszeile ihres
+    /// Endgebäudes.</b>
+    ///
+    /// <para>Der Befund, der das nötig macht (gemessen über alle 30 Karten,
+    /// 1152 Enden mit bekanntem Endgebäude): das Ende einer Linie liegt
+    /// <b>immer</b> auf einer HALBEN Zeile (1152 von 1152) und trifft, in
+    /// Zellen gerechnet, je Gebäudeart einen festen Klumpen —
+    /// Feldbahnhof (512 Enden) auf Zeile+1 und Zeile+2, Bahnstation
+    /// (174) auf Zeile+1 und Zeile+2, Basis (76) auf Zeile+1,
+    /// Fabrik (284) auf Zeile+2, Mine (67) auf Zeile+2,
+    /// Flughafen (37) auf Zeile+2. Die SPALTE stimmt dabei bis aufs Feld;
+    /// nur die ZEILE geht auseinander.</para>
+    ///
+    /// <para>Gegen die Grafik gehalten passt die Bahnstation damit schon
+    /// (Träger in Zeile 1), der <b>Feldbahnhof aber nicht</b>: sein Stummel
+    /// sitzt in Zeile 0, die Strecke endet ein bis zwei Zellen darunter. Genau
+    /// das ist im Bild zu sehen (map_NET02, Feldbahnhof auf 168,45, Höhe 3):
+    /// der Stummel liegt auf der Deckhöhe von Zellzeile 45, unsere Schiene auf
+    /// der von Zeile 47 und 48 — <b>zwei Felder tiefer</b>.</para>
+    ///
+    /// <para>Verschoben wird nur der LETZTE GERADE LAUF der Kette: alle Zellen
+    /// am Ende, die dieselbe Zeile teilen, rücken zusammen auf die
+    /// Anschlusszeile, und an der Naht wird senkrecht überbrückt. Damit bleibt
+    /// die Bedingung erhalten, an der die ganze Legeart hängt — jedes Paar
+    /// liegt Kante an Kante (<c>--rail-check</c> zählt es weiter mit).</para>
+    ///
+    /// <para>⚠ <b>UNSERE SETZUNG ist, DASS überhaupt gerückt wird.</b> Wie das
+    /// Original die letzten Zellen an den Bahnsteig führt, ist nicht gelesen —
+    /// naheliegend ist, dass es dort die Rampen f6..f9 legt, die wir nicht
+    /// legen. Die Anschlusszeile selbst ist dagegen aus der Grafik gemessen
+    /// (siehe <see cref="RailDockRow"/>).</para>
+    /// </summary>
+    private void RailSnapToDock()
+    {
+        RailDockOff = RailDockChecked = RailDockMoved = 0;
+        if (_railLines.Count == 0) return;
+        var bySlot = new Dictionary<int, Entity>();
+        foreach (var e in _entities)
+            if (e.IsBuilding && !bySlot.ContainsKey(e.Slot)) bySlot[e.Slot] = e;
+
+        foreach (var l in _railLines)
+        {
+            if (!_lineCell.TryGetValue(l.Slot, out var cells) || cells.Count < 2) continue;
+            if (!_lineCellPiece.TryGetValue(l.Slot, out var pcs)) continue;
+            // Rueckfahrkarte: geht beim Ruecken die Bedingung »Kante an Kante«
+            // verloren, bleibt die Linie, wie sie war. Lieber ein unbuendiges
+            // Ende als eine aufgerissene Strecke — und der Pruefstand meldet
+            // das unbuendige Ende ohnehin weiter.
+            var keepC = new List<Vector2>(cells);
+            var keepP = new List<int>(pcs);
+            int moved = 0;
+            // erst das Ende (haengt am Listenende), dann der Anfang — sonst
+            // verschieben sich die Indizes unter der zweiten Runde weg
+            moved += RailSnapEnd(cells, pcs, bySlot, l.Bud2, true) ? 1 : 0;
+            moved += RailSnapEnd(cells, pcs, bySlot, l.Bud1, false) ? 1 : 0;
+            if (moved > 0 && !RailChainSound(cells))
+            {
+                cells.Clear(); cells.AddRange(keepC);
+                pcs.Clear(); pcs.AddRange(keepP);
+                moved = 0;
+            }
+            RailDockMoved += moved;
+            _lineCellFrame[l.Slot] = RailFramesOf(cells);
+        }
+    }
+
+    /// <summary>Liegt in dieser Kette jedes Paar Kante an Kante? Genau die
+    /// Bedingung, an der die ganze Legeart haengt.</summary>
+    private static bool RailChainSound(List<Vector2> cells)
+    {
+        for (int i = 1; i < cells.Count; i++)
+            if (RailPortTo(cells[i - 1], cells[i]) < 0) return false;
+        return true;
+    }
+
+    /// <summary>Ein Ende. <paramref name="tail"/> = das Listenende. Gibt
+    /// zurueck, ob wirklich gerueckt wurde.</summary>
+    private bool RailSnapEnd(List<Vector2> cells, List<int> pcs,
+                             Dictionary<int, Entity> bySlot, int slot, bool tail)
+    {
+        if (!bySlot.TryGetValue(slot, out var b)) return false;
+        int dock = RailDockRow(b.BType);
+        if (dock == int.MinValue) return false;
+
+        int last = tail ? cells.Count - 1 : 0;
+        int col0 = Mathf.RoundToInt(cells[last].X);
+        // nur ein Ende, das wirklich am Gebaeude steht — die Knotenangabe der
+        // Karte trifft in ein paar Faellen ein Gebaeude am anderen Kartenende
+        if (col0 < b.Col - 1 || col0 > b.Col + Mathf.Max(1, b.FootW)) return false;
+
+        RailDockChecked++;
+        int target = b.Row + dock;
+        int r0 = Mathf.RoundToInt(cells[last].Y);
+        if (r0 != target) RailDockOff++;
+        if (r0 == target || RailProbeSkipDock) return false;
+        int d = target - r0;
+
+        // der letzte gerade Lauf: alle Zellen am Ende auf derselben Zeile
+        int k = last, step = tail ? -1 : 1;
+        while (true)
+        {
+            int nx = k + step;
+            if (nx < 0 || nx >= cells.Count) break;
+            if (Mathf.RoundToInt(cells[nx].Y) != r0) break;
+            k = nx;
+        }
+        int from = Mathf.Min(k, last), to = Mathf.Max(k, last);
+        for (int i = from; i <= to; i++) cells[i] = new Vector2(cells[i].X, cells[i].Y + d);
+
+        // die Naht: die Zelle vor dem Lauf teilt mit ihm die SPALTE — sie hat
+        // eine andere Zeile (sonst gehoerte sie zum Lauf), und Kante an Kante
+        // mit anderer Zeile heisst gleiche Spalte. Die Luecke wird senkrecht
+        // gefuellt; steht sie danach auf derselben Zelle, faellt sie weg.
+        int seam = tail ? from : to;              // erste Zelle des Laufs
+        int prev = tail ? from - 1 : to + 1;
+        if (prev < 0 || prev >= cells.Count) return true;   // die ganze Linie war der Lauf
+        int col = Mathf.RoundToInt(cells[seam].X);
+        int rp = Mathf.RoundToInt(cells[prev].Y);
+        if (Mathf.RoundToInt(cells[prev].X) == col && rp == target)
+        {
+            // Doppelzelle: die Vorgaengerin ist jetzt die Zelle selbst
+            cells.RemoveAt(prev);
+            if (prev < pcs.Count) pcs.RemoveAt(prev);
+            return true;
+        }
+        if (Mathf.RoundToInt(cells[prev].X) != col) return true;  // faengt RailChainSound ab
+        int dir = target > rp ? 1 : -1;
+        var bridge = new List<Vector2>();
+        for (int r = rp + dir; r != target; r += dir) bridge.Add(new Vector2(col, r));
+        if (bridge.Count == 0) return true;
+        if (!tail) bridge.Reverse();
+        int at = tail ? from : to + 1;
+        int piece = pcs.Count > seam ? pcs[seam] : 0;
+        for (int i = bridge.Count - 1; i >= 0; i--)
+        {
+            cells.Insert(at, bridge[i]);
+            if (at <= pcs.Count) pcs.Insert(at, piece);
+        }
+        return true;
     }
 
     /// <summary>Wie oft ein Stück eine STÜTZE bekommt. Teil 65 trägt Träger und

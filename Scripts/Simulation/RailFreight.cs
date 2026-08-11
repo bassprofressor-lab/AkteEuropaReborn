@@ -620,6 +620,12 @@ public partial class MapEntityLayer : Node2D
 
         sb.Append($" | Gleis: {RailTilesDrawn} Stuecke gezeichnet, " +
                   $"{RailTilesLoose} davon NICHT Kante an Kante");
+        // Die Zahl fuer »buendig«: wieviele Linienenden lagen NICHT auf der
+        // Anschlusszeile ihres Endgebaeudes. Gezaehlt wird VOR dem Ruecken,
+        // damit --rail-lay=nodock (Gegenprobe) dieselbe Zahl zeigt und sich
+        // nur das Bild aendert; RailDockMoved sagt, wieviele geholt wurden.
+        sb.Append($" | Anschluss: {RailDockOff} von {RailDockChecked} Enden lagen " +
+                  $"NICHT auf der Anschlusszeile, {RailDockMoved} nachgefuehrt");
         // Der Beweis fuer »faehrt gleitend statt zu huepfen«: die Stelle des
         // ersten fahrenden Waggons auf ein Hundertstel genau. Steht dort eine
         // ganze Zahl, springt er von Schritt zu Schritt.
