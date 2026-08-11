@@ -98,12 +98,47 @@ public static class CampaignManager
     /// entries read "Mission 1" … "Mission 33". State N is mission N.
     ///
     /// A state's lists are what it unlocks, so the set for a mission is
-    /// everything states 1..N have unlocked, minus what a state took away.</summary>
+    /// everything states 1..N have unlocked, minus what a state took away.
+    ///
+    /// <para>⚠ <b>Components are the fourth list, and the biggest one</b> (since
+    /// 10.08.2026). `set_part(player, part, value)` @0x4D0520 has 1037 of the
+    /// 1533 setter call sites in the mission blocks — four times as many as the
+    /// design setter — and writes »this player OWNS this part« into sec46 +0x00.
+    /// Unlike the other three it is per player, so the set is keyed by
+    /// (player, part); <see cref="Unlocks.Components"/> is player 0, the human.
+    /// </para>
+    ///
+    /// <para>⚠ <b>It is data, not a barrier</b>, and that was measured before it
+    /// was written down: the ownership byte has thirteen readers in the
+    /// original and every one of them is a menu — the construction screen's
+    /// three pickers @0x46C490, the chassis list @0x455870,
+    /// `research_offer_refresh` @0x4AA950 and the market module
+    /// @0x4C0860..0x4C0E60, which uses it to pick WHICH design is offered for
+    /// sale. `build_in_base`, `build_in_airport` and the production button do
+    /// not look at it. Anything that turns this list into a refusal is stricter
+    /// than the original — the same trap the release byte sec47 already
+    /// set.</para></summary>
     public sealed class Unlocks
     {
         public readonly SortedSet<int> Ships = new();
         public readonly SortedSet<int> Aircraft = new();
         public readonly SortedSet<int> Vehicles = new();
+
+        /// <summary>Every (player, part) the schedule has switched on.</summary>
+        public readonly SortedSet<(int Player, int Part)> Parts = new();
+
+        /// <summary>The human player's parts — the ones the construction screen
+        /// of the original would offer.</summary>
+        public SortedSet<int> Components
+        {
+            get
+            {
+                var s = new SortedSet<int>();
+                foreach (var (p, x) in Parts) if (p == 0) s.Add(x);
+                return s;
+            }
+        }
+
         public bool Known;
     }
 
@@ -130,9 +165,23 @@ public static class CampaignManager
                 Apply(st, "ships_off", u.Ships, false);
                 Apply(st, "aircraft", u.Aircraft, true);
                 Apply(st, "vehicles", u.Vehicles, true);
+                ApplyParts(st, "components", u.Parts, true);
+                ApplyParts(st, "components_off", u.Parts, false);
             }
         }
         _unlockCache[mission] = u;
+        if (u.Known)
+        {
+            // What the schedule hands the HUMAN by this mission. Printed
+            // because it is new and because the number is the whole point: the
+            // components are four times the rest of the schedule put together,
+            // and until 10.08.2026 the file carried none of them.
+            var mine = u.Components;
+            int others = u.Parts.Count - mine.Count;
+            GD.Print($"campaign: Fahrplan M{mission} — {mine.Count} Bauteile beim Menschen" +
+                     (others > 0 ? $", {others} bei den Computerspielern" : "") +
+                     (mine.Count > 0 ? $" ({string.Join(",", mine)})" : ""));
+        }
         return u;
     }
 
@@ -149,6 +198,37 @@ public static class CampaignManager
                 : e.AsInt32();
             if (n < 0) continue;
             if (add) into.Add(n); else into.Remove(n);
+        }
+    }
+
+    /// <summary>A component entry is a pair <c>[Spieler, Bauteil]</c>. Written
+    /// that way rather than as a bare number because the original writes this
+    /// one table per player — the same mission hands the human parts 1, 4, 5, …
+    /// and one of its computer opponents part 67.
+    ///
+    /// <para>⚠ A triple <c>[Spieler, Bauteil, Wert]</c> is accepted too, and
+    /// entries with a <c>null</c> in them are skipped. That is not politeness:
+    /// the file shipped in <c>res://Data/</c> — the fallback when nothing has
+    /// been imported — was written by an older Python tool in exactly that
+    /// shape, and it leaves a null wherever it could not resolve a register.
+    /// Read as pairs those nulls turn into »player 0 owns part 0«.</para>
+    /// </summary>
+    private static void ApplyParts(Godot.Collections.Dictionary<string, Variant> st,
+                                   string key, SortedSet<(int, int)> into, bool add)
+    {
+        if (!st.TryGetValue(key, out var v) || v.VariantType != Variant.Type.Array) return;
+        foreach (var e in v.AsGodotArray())
+        {
+            if (e.VariantType != Variant.Type.Array) continue;
+            var a = e.AsGodotArray();
+            if (a.Count < 2) continue;
+            if (a[0].VariantType == Variant.Type.Nil || a[1].VariantType == Variant.Type.Nil)
+                continue;
+            bool on = add;
+            if (a.Count >= 3 && a[2].VariantType != Variant.Type.Nil)
+                on = add && a[2].AsInt32() != 0;
+            var pair = (a[0].AsInt32(), a[1].AsInt32());
+            if (on) into.Add(pair); else into.Remove(pair);
         }
     }
 

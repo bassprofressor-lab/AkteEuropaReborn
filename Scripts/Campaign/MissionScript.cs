@@ -43,8 +43,20 @@ public sealed class MissionScript
 
     public sealed class Act
     {
-        public string Kind = "";      // inc | set | text | end | find_unit | set_time
-        public int A, B, C;
+        public string Kind = "";      // inc | set | text | end | find_unit | set_time | space_in
+        //                               | money | sound | close_texts | order | add_target
+        //                               | remove_unit | sell_unit | change_owner
+        //                               | set_relation | stop_transport
+        /// <summary>D gibt es nur fuer `order` — der Befehlsbus fuehrt dort
+        /// vier Felder (Einheit, ukol, x, y).</summary>
+        public int A, B, C, D, E;
+
+        /// <summary>`space_in` only: the design numbers to drop, in order. They
+        /// index sec47 as <c>typ + 200*player</c> — the same table the design
+        /// screen and the factories use, which is why mission 14's single byte
+        /// 191 resolves to a design the game itself names "Col.Hullman".
+        /// </summary>
+        public int[] Types = Array.Empty<int>();
     }
 
     public sealed class Rule
@@ -126,6 +138,7 @@ public sealed class MissionScript
             foreach (var a in r.Then)
                 if ((a.Kind == "inc" || a.Kind == "set" ||
                      a.Kind == "find_unit" || a.Kind == "set_time" ||
+                     a.Kind == "take_var" || a.Kind == "set_units" ||
                      a.Kind == "set_store") && a.A == n) return true;
         }
         return false;
@@ -216,13 +229,24 @@ public sealed class MissionScript
                     foreach (var a in tv.AsGodotArray())
                     {
                         var ad = a.AsGodotDictionary<string, Variant>();
-                        rule.Then.Add(new Act
+                        var act = new Act
                         {
                             Kind = ad.TryGetValue("kind", out var k) ? k.AsString() : "",
                             A = ad.TryGetValue("a", out var x) ? x.AsInt32() : 0,
                             B = ad.TryGetValue("b", out var y) ? y.AsInt32() : 0,
                             C = ad.TryGetValue("c", out var z) ? z.AsInt32() : 0,
-                        });
+                            D = ad.TryGetValue("d", out var w) ? w.AsInt32() : 0,
+                            E = ad.TryGetValue("e", out var e5) ? e5.AsInt32() : 0,
+                        };
+                        if (ad.TryGetValue("typen", out var ty) &&
+                            ty.VariantType == Variant.Type.Array)
+                        {
+                            var arr = ty.AsGodotArray();
+                            var list = new int[arr.Count];
+                            for (int n = 0; n < arr.Count; n++) list[n] = arr[n].AsInt32();
+                            act.Types = list;
+                        }
+                        rule.Then.Add(act);
                     }
                 s.Rules.Add(rule);
             }
@@ -245,7 +269,7 @@ public sealed class MissionScript
     /// `+4` und Besitzer in `+5`. Die haeufigste Endbedingung der Kampagne.
     /// </summary>
     public Func<int, int, int>? ObjectCount;         // type, owner -> count
-    public Action<int>? ShowText;                    // helpg.txt id
+    public Action<int, int, int, int>? ShowText;     // id, art, x, y (640x480)
 
     /// <summary>`find_unit(spieler, marke)` @0x4D0F20 — the index of that
     /// player's first unit carrying <b>marke</b> in record byte +0x43, or
@@ -269,14 +293,124 @@ public sealed class MissionScript
     /// objective #005 word for word, "Wiederaufnahme der Produktion".</summary>
     public Func<int, int, int>? StoreField;          // building slot, offset -> value
 
+    /// <summary>`space_in` puts one unit of design <b>typ</b> on the map for
+    /// <b>player</b>, at or next to (col, row) — @0x4C1600 asks @0x4012AD for a
+    /// free place beside the cell and gives up with "Incredible error ...no free
+    /// place for new robot" when there is none. The design number is the sec47
+    /// row <c>typ + 200*player</c>.</summary>
+    public Action<int, int, int, int>? SpaceInSpawn;   // typ, col, row, player
+
+    // ---- 11.08.2026: was der tutorialartige Ablauf zusätzlich braucht -------
+    // Jeder Haken darf fehlen; dann ist die Bedingung falsch bzw. die Wirkung
+    // bleibt aus, und `Line()` sagt es. Lieber eine sichtbare Lücke als eine
+    // Regel, die etwas anderes tut als das Original.
+    public Func<int>? Selection;                     // -> angewähltes Objekt
+    public Func<int, int, int>? MarkCount;           // marke, spieler -> Anzahl
+    public Func<int, int, bool>? UnitHasMark;        // einheit, marke
+    public Func<int, int>? MoneyOf;                  // spieler -> Kontostand
+    public Func<int, int, int>? TerrainAt;           // x, y -> Geländebyte
+    public Action<int, int>? AddMoney;               // betrag, spieler
+    public Action<int>? PlaySound;                   // 600 / 601
+    public Action? CloseTexts;                       // close_message_windows()
+    public Action<int, int, int, int>? OrderUnit;    // einheit, ukol, x, y
+    public Action<int, int, int, int, int>? AddTarget;  // spieler, art, vorrang, wort, c
+    public Action<int>? RemoveUnit;                  // einheit
+    public Action<int>? SellUnit;                    // einheit
+    public Action<int, int>? ChangeOwner;            // einheit, spieler
+    public Action<int, int, int>? SetRelation;       // a, b, wert
+    public Action<int>? StopTransport;               // einheit
+
     /// <summary>Minutes since the mission started — the original's clock
     /// (`game_time()` counts 60·(hour + 24·day) + minute).</summary>
     public int Minutes => (int)(_seconds / 60.0);
+
+    // ---- reinforcements ----------------------------------------------------
+
+    /// <summary>
+    /// One flight of reinforcements on its way in.
+    ///
+    /// `space_in(player, x, y, &amp;types[], count)` @0x4C17C0 does NOT put units
+    /// on the map. It takes one of <b>twenty</b> slots of a queue of 32-byte
+    /// records at 0xB49E50 (@0x4C01D0, "More mer_ships needed" when full) and
+    /// fills it with x = <b>-10</b> — off the map — y, the target x, the type
+    /// bytes and the player. The queue is stepped once per game tick by
+    /// @0x4C0260, and only when x has crawled all the way to the target does
+    /// kind 3 hand each type to @0x4C1600.
+    ///
+    /// So a reinforcement ARRIVES LATE, and how late depends on how far into
+    /// the map it is going. That is the whole reason mission 14 has a stage
+    /// counter between "order Hullman" and "look for Hullman".
+    /// </summary>
+    private sealed class Incoming
+    {
+        public int X = -10, Y, Target, Rest, Player;
+        public int[] Types = Array.Empty<int>();
+    }
+
+    private readonly List<Incoming> _incoming = new();
+
+    /// <summary>The queue @0xB49E50 has twenty slots and the original refuses
+    /// the twenty-first out loud.</summary>
+    public const int SpaceInSlots = 20;
+
+    /// <summary>How many flights are still on their way — for the harness.</summary>
+    public int Incomings => _incoming.Count;
+
+    /// <summary>
+    /// One tick of the queue, in the original's own integer arithmetic
+    /// (@0x4C04EF..0x4C0580):
+    ///
+    ///     d = target - x
+    ///     d &gt; 10          ->  x++                       (full speed)
+    ///     otherwise       ->  rest += max(1, 4*d) as a byte
+    ///                         x += rest/40, rest %= 40   (braking)
+    ///     x == target     ->  drop, slot freed
+    ///
+    /// ⚠ The TICK RATE is ours, not the original's — this runs per frame, the
+    /// original per game tick, and that has never been measured (handoff
+    /// 09.08.). It changes WHEN reinforcements land, not WHETHER.
+    /// </summary>
+    private void TickIncoming()
+    {
+        for (int i = _incoming.Count - 1; i >= 0; i--)
+        {
+            var r = _incoming[i];
+            int d = r.Target - r.X;
+            if (d > 10) { r.X++; continue; }
+            int step = d * 4;
+            if (step < 1) step = 1;
+            r.Rest = (r.Rest + step) & 0xFF;
+            if (r.Rest > 0x27) { r.X += r.Rest / 0x28; r.Rest %= 0x28; }
+            if (r.X != r.Target) continue;
+            Drop(r);
+            _incoming.RemoveAt(i);
+        }
+    }
+
+    private void Drop(Incoming r)
+    {
+        foreach (int t in r.Types) SpaceInSpawn?.Invoke(t, r.X, r.Y, r.Player);
+        GD.Print($"Verstaerkung eingetroffen: {r.Types.Length} Einheiten " +
+                 $"fuer Spieler {r.Player} auf ({r.X}, {r.Y})");
+    }
+
+    /// <summary>Land everything still in the air at once. For the harness only:
+    /// the flight takes tens of ticks, and a check that asks "is Hullman there"
+    /// after one tick would answer no for a reason that has nothing to do with
+    /// the condition it is testing.</summary>
+    public int FlushIncoming()
+    {
+        int n = _incoming.Count;
+        foreach (var r in _incoming) { r.X = r.Target; Drop(r); }
+        _incoming.Clear();
+        return n;
+    }
 
     public void Tick(double dt)
     {
         if (_ended) return;
         _seconds += dt;
+        TickIncoming();
 
         foreach (var r in _script.Rules)
         {
@@ -332,8 +466,45 @@ public sealed class MissionScript
         "unit_field" => UnitField != null && c.A >= 0 && c.A < _var.Length &&
                         UnitField(_var[c.A], c.B) >= 0 &&
                         Cmp(UnitField(_var[c.A], c.B), c.Op, c.C),
+
+        // ---- 11.08.2026: die Glieder des tutorialartigen Ablaufs -----------
+        //
+        // ⚠ Alle fünf antworten mit FALSCH, wenn ihr Haken nicht hängt. Eine
+        // Bedingung, die nicht beantwortet werden kann, darf nicht gewinnen —
+        // dieselbe Regel wie oben bei `unit_field`.
+
+        // Was ist angewählt? 0x1F40 (8000) ist die Zahl der Einheitenplätze,
+        // »kleiner« heisst also »eine Einheit ist angewählt«; ab 0x2710
+        // (10000) ist es eine GRUPPE. Mission 1 hängt daran ihre Fenster
+        // #002..#004 und #011.
+        "selected" => Selection != null && Cmp(Selection(), c.Op, c.B),
+        // Feld +c des Einheitensatzes a. Mission 1 fragt so nach der ZEILE
+        // (+0x01) ihres Startpanzers (Satz 0): < 30 heisst »auf dem Weg zur
+        // Brücke«, < 20 »am Hafen«.
+        "unit_pos" => UnitField != null && UnitField(c.A, c.C) >= 0 &&
+                      Cmp(UnitField(c.A, c.C), c.Op, c.B),
+        // Die Art des letzten Ereignisses. Der Block, der es liest, verbraucht
+        // es — genau das tut `Do` unten auch.
+        "event" => Cmp(LastEvent, c.Op, c.B),
+        // count_units_with_mark(a, b): wieviele Einheiten des Spielers b tragen
+        // die Entwurfsnummer a? Mission 1 zählt so die EINGENOMMENEN neutralen.
+        "units_mark" => MarkCount != null && Cmp(MarkCount(c.A, c.B), c.Op, c.C),
+        // unit_has_mark(a, b) -> 1/0
+        "unit_is" => UnitHasMark != null &&
+                     Cmp(UnitHasMark(c.A, c.B) ? 1 : 0, c.Op, c.C),
+        // get_money(a)
+        "money_of" => MoneyOf != null && Cmp(MoneyOf(c.A), c.Op, c.B),
+        // terrain_at(a, b) — Mission 1 prüft damit, ob der Panzer auf der
+        // Brücke steht (> 4)
+        "terrain" => TerrainAt != null && Cmp(TerrainAt(c.A, c.B), c.Op, c.C),
         _ => false,
     };
+
+    /// <summary>Die Art des letzten Ereignisses (0x539930). Wird gesetzt, wo
+    /// das Ereignis entsteht, und von der Regel, die es liest, wieder auf 0
+    /// gestellt — das Original tut genau dasselbe (`mov byte [0x539930], 0`
+    /// direkt hinter dem Fenster, das es auslöst).</summary>
+    public int LastEvent;
 
     private void Do(Act a)
     {
@@ -346,7 +517,55 @@ public sealed class MissionScript
                 if (a.A >= 0 && a.A < _var.Length) _var[a.A] = a.B;
                 break;
             case "text":
-                ShowText?.Invoke(a.A);
+                ShowText?.Invoke(a.A, a.B, a.C, a.D);
+                // Der Block, der ein Ereignis in ein Fenster verwandelt, nullt
+                // es danach (`mov byte [0x539930], 0` @0x49867D). Ohne das
+                // feuerte dieselbe Regel in jeder Runde neu.
+                LastEvent = 0;
+                break;
+
+            // ---- 11.08.2026 ------------------------------------------------
+            // geld(b) += a. Der Betrag ist ein WORT und darf negativ sein.
+            // Mission 1 zahlt so dreimal 50 $ für die versenkten Schiffe.
+            case "money":
+                AddMoney?.Invoke(a.A, a.B);
+                break;
+            case "sound":
+                PlaySound?.Invoke(a.A);
+                break;
+            case "close_texts":
+                CloseTexts?.Invoke();
+                break;
+            // bus_cmd(11, einheit, ukol, x, y) — der Befehl, mit dem eine
+            // Mission ihre eigenen Einheiten losschickt. ukol 4 ist Angriff.
+            // In Mission 1 sind das die Plätze 1000..1003, also die ersten vier
+            // Einheiten von Spieler 1: drei Infanteristen und ein MG-Fahrzeug.
+            case "order":
+                OrderUnit?.Invoke(a.A, a.B, a.C, a.D);
+                break;
+            // add_target(spieler, art, vorrang, wort, c) @0x4CF700 — ⚠ das ist
+            // KEIN Missionsziel im Panel, sondern die ZIELLISTE DES
+            // COMPUTERSPIELERS. Alle Leser der Tabelle 0xBC5A78 liegen im
+            // KI-Bereich (0x4BCF30, 0x4BDCC0, 0x4BECF0), keiner in der
+            // Oberflaeche; der alte Name kam aus dem String »Cannot add new
+            // target« und war geraten. Siehe CAMPAIGN_RE.md.
+            case "add_target":
+                AddTarget?.Invoke(a.A, a.B, a.C, a.D, a.E);
+                break;
+            case "remove_unit":
+                RemoveUnit?.Invoke(a.A);
+                break;
+            case "sell_unit":
+                SellUnit?.Invoke(a.A);
+                break;
+            case "change_owner":
+                ChangeOwner?.Invoke(a.A, a.B);
+                break;
+            case "set_relation":
+                SetRelation?.Invoke(a.A, a.B, a.C);
+                break;
+            case "stop_transport":
+                StopTransport?.Invoke(a.A);
                 break;
             // v[a] = find_unit(b, c) — die Mission merkt sich ihre Einheit
             case "find_unit":
@@ -358,6 +577,52 @@ public sealed class MissionScript
             case "set_store":
                 if (a.A >= 0 && a.A < _var.Length && StoreField != null)
                     _var[a.A] = StoreField(a.B, a.C);
+                break;
+            // space_in(a=spieler, b=x, c=y, typen) — die Verstaerkung startet
+            // ausserhalb der Karte und braucht ihre Anflugzeit, wie im Original
+            case "space_in":
+                if (a.Types.Length == 0) break;
+                if (_incoming.Count >= SpaceInSlots)
+                {
+                    GD.PrintErr("space_in: alle 20 Plaetze belegt " +
+                                "(»More mer_ships needed«) — Verstaerkung faellt aus");
+                    break;
+                }
+                _incoming.Add(new Incoming
+                {
+                    Y = a.C, Target = a.B, Player = a.A, Types = a.Types,
+                });
+                GD.Print($"Verstaerkung angefordert: {a.Types.Length} Einheiten " +
+                         $"fuer Spieler {a.A} nach ({a.B}, {a.C})");
+                break;
+            // v[a] = g_robot_class_count(b, c) — die Mission MERKT sich einen
+            // Bestand, statt ihn nur zu vergleichen. Mission 15 tut das im
+            // ersten Takt mit `units(1, 7)`: den Bodenfahrzeugen des neutralen
+            // Spielers, gegen die sie später zählt.
+            case "set_units":
+                if (a.A >= 0 && a.A < _var.Length)
+                    _var[a.A] = UnitCount != null ? UnitCount(a.B, a.C) : 0;
+                break;
+            // v[a] += v[b]; v[b] = 0 — die VERBRAUCHSKORREKTUR.
+            //
+            // Mission 5 gewinnt, wenn zwei Teilelager über ihre Marke wachsen.
+            // Damit eine GUTSCHRIFT dabei nicht als Produktion durchgeht, hebt
+            // sie die Marke um genau den gutgeschriebenen Betrag: v[190..192]
+            // halten die Waffen-, Fahrwerk- und Spezialteile, die @0x4B28E0
+            // gerade einem Gebäude zurückgeschrieben hat — dieselbe Routine
+            // erhöht dort +0x28/+0x2a/+0x2c um genau diese drei Zahlen. Auf
+            // beiden GAME.EXE dieselben sechs Schreibstellen, Abstand 0xFA0.
+            //
+            // ⚠ Die Engine verrechnet noch keine Einheiten gegen Teile, also
+            // bleiben v[190..192] hier auf 0 und die Regel feuert nie. Das ist
+            // eine Lücke, keine Falle: ohne Gutschrift gibt es nichts zu
+            // korrigieren.
+            case "take_var":
+                if (a.A >= 0 && a.A < _var.Length && a.B >= 0 && a.B < _var.Length)
+                {
+                    _var[a.A] += _var[a.B];
+                    _var[a.B] = 0;
+                }
                 break;
             // v[a] = game_time() — der Zeitstempel, auf den `time_after` zeigt
             case "set_time":
@@ -383,6 +648,39 @@ public sealed class MissionScript
             foreach (var c in r.When)
                 if (c.Kind == "obj_owner" && !list.Contains(c.A)) list.Add(c.A);
         list.Sort();
+        return list;
+    }
+
+    /// <summary>Every building record the script reads a STORE out of, as
+    /// (slot, offset). Mission 5 is the whole reason this exists: it marks the
+    /// two part stores of building 0 and wins when both have GROWN, so the only
+    /// way to tell "the engine cannot do it" from "the engine did not do it
+    /// yet" is to watch those two numbers while the mission runs.</summary>
+    public List<(int Slot, int Off)> WatchedStores()
+    {
+        var list = new List<(int, int)>();
+        void Add(int slot, int off)
+        {
+            if (!list.Contains((slot, off))) list.Add((slot, off));
+        }
+        foreach (var r in _script.Rules)
+        {
+            foreach (var c in r.When) if (c.Kind == "var_vs_store") Add(c.B, c.C);
+            foreach (var a in r.Then) if (a.Kind == "set_store") Add(a.B, a.C);
+        }
+        return list;
+    }
+
+    /// <summary>What the script currently holds in the variables it filled from
+    /// a store — the other half of the comparison <see cref="WatchedStores"/>
+    /// shows.</summary>
+    public List<(int Var, int Slot, int Off, int Value)> StoreMarks()
+    {
+        var list = new List<(int, int, int, int)>();
+        foreach (var r in _script.Rules)
+            foreach (var a in r.Then)
+                if (a.Kind == "set_store" && a.A >= 0 && a.A < _var.Length)
+                    list.Add((a.A, a.B, a.C, _var[a.A]));
         return list;
     }
 
@@ -496,4 +794,76 @@ public sealed class MissionScript
     public string Line() =>
         $"Skript M{_script.Mission} ({_script.Block}): {RulesFired} Regeln, " +
         $"{Minutes} min" + (_ended ? (Success ? ", GEWONNEN" : ", VERLOREN") : "");
+
+    // ---- Was die Runtime von diesem Skript ueberhaupt ausfuehren kann -------
+    //
+    // ⚠ 11.08.2026, und der Grund dafuer ist eine alte Lehre in neuer Gestalt:
+    // ein fehlender Haken macht eine Bedingung FALSCH und eine Wirkung STILL.
+    // Beides sieht im Spiel aus wie »die Mission tut nichts« — nicht wie ein
+    // Fehler. Nach 270 gelesenen Regeln ist die Frage »welche davon koennen
+    // hier ueberhaupt feuern« darum wichtiger als jede einzelne Mission, und
+    // sie muss die Engine selbst beantworten, nicht das Auge.
+
+    /// <summary>Bedingungsarten, für die ein Haken hängt.</summary>
+    private bool Hooked(Cond c) => c.Kind switch
+    {
+        "var" or "time_gt" or "time_after" or "event" => true,
+        "obj_owner" => ObjOwner != null,
+        "units" => UnitCount != null,
+        "buildings" => BuildingCount != null,
+        "objects" => ObjectCount != null,
+        "unit_index" => FindUnit != null,
+        "unit_field" or "unit_pos" => UnitField != null,
+        "var_vs_store" => StoreField != null,
+        "selected" => Selection != null,
+        "units_mark" => MarkCount != null,
+        "unit_is" => UnitHasMark != null,
+        "money_of" => MoneyOf != null,
+        "terrain" => TerrainAt != null,
+        _ => false,
+    };
+
+    /// <summary>Wirkungsarten, für die ein Haken hängt.</summary>
+    private bool Hooked(Act a) => a.Kind switch
+    {
+        "inc" or "set" or "set_time" or "take_var" or "end" => true,
+        "text" => ShowText != null,
+        "find_unit" => FindUnit != null,
+        "set_store" => StoreField != null,
+        "set_units" => UnitCount != null,
+        "space_in" => SpaceInSpawn != null,
+        "money" => AddMoney != null,
+        "sound" => PlaySound != null,
+        "close_texts" => CloseTexts != null,
+        "order" => OrderUnit != null,
+        "add_target" => AddTarget != null,
+        "remove_unit" => RemoveUnit != null,
+        "sell_unit" => SellUnit != null,
+        "change_owner" => ChangeOwner != null,
+        "set_relation" => SetRelation != null,
+        "stop_transport" => StopTransport != null,
+        _ => false,
+    };
+
+    /// <summary>Was dieses Skript nicht ausführen kann: je fehlender Art, wie
+    /// oft sie vorkommt und in wievielen Regeln. Leer heisst: alles hängt.
+    /// </summary>
+    public string Coverage(out int rules, out int blocked)
+    {
+        var missing = new SortedDictionary<string, int>();
+        rules = _script.Rules.Count;
+        blocked = 0;
+        foreach (var r in _script.Rules)
+        {
+            bool bad = false;
+            foreach (var c in r.When)
+                if (!Hooked(c)) { missing[c.Kind + "?"] = missing.GetValueOrDefault(c.Kind + "?") + 1; bad = true; }
+            foreach (var a in r.Then)
+                if (!Hooked(a)) { missing[a.Kind + "!"] = missing.GetValueOrDefault(a.Kind + "!") + 1; bad = true; }
+            if (bad) blocked++;
+        }
+        var parts = new List<string>();
+        foreach (var kv in missing) parts.Add($"{kv.Key}x{kv.Value}");
+        return string.Join(" ", parts);
+    }
 }
