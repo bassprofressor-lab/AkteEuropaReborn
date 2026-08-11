@@ -4321,11 +4321,23 @@ public partial class MapEntityLayer : Node2D
             if (_mscript != null)
             {
                 // the four questions a rule may ask, answered from the entities
+                // ⚠ 11.08.2026 — hier stand `e.Owner`, und das war der Grund,
+                // warum es in Kampagne 2 kein Geld gab.
+                //
+                // Das Original fuehrt den Besitzer als BYTE, und herrenlos ist
+                // dort 0xFF = 255. Bei uns ist es -1. Mission 2 zahlt ihre
+                // 400 $ aber nur, wenn `obj_owner(0) == 255` -- und
+                // Gebaeudeplatz 0 ist genau der herrenlose Nachschub-Posten.
+                // Mit -1 konnte die Bedingung nie wahr werden, die Kette
+                // v[70] -> v[101] -> Geld brach an der letzten Stelle ab, und
+                // im Spiel sah man zwei Helis, die man nie bezahlen konnte.
                 _mscript.ObjOwner = slot =>
                 {
                     foreach (var e in _entities)
                         if (e.IsBuilding && e.Slot == slot)
-                            return e.Dead ? 12 : e.Owner;      // 12 = leer, wie im Original
+                            return e.Dead ? 12                 // 12 = leer, wie im Original
+                                 : e.Owner is >= 0 and <= 7 ? e.Owner
+                                 : 255;                        // herrenlos, als Byte
                     return 12;
                 };
                 _mscript.UnitCount = UnitClassCount;
