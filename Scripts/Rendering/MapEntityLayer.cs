@@ -3951,6 +3951,14 @@ public partial class MapEntityLayer : Node2D
     // is ours — like the rate of fire.
     private const float RocketSpeed = 190f;
 
+    /// <summary>⚠ UNSERE SETZUNG: wie weit die Muendung vor dem Turmdrehpunkt
+    /// liegt. Der DREHPUNKT ist gelesen (TurretOffset, Tabelle 0x4FA320), die
+    /// Rohrlaenge nicht — die stuende in SHOOT.CWT, siehe Fire(). 14 px sind
+    /// etwas mehr als ein Drittel einer Zelle und decken sich mit den
+    /// Turmbildern, deren Rohr rund 12 bis 16 px ueber den Turmkoerper
+    /// hinausragt.</summary>
+    private const float MuzzleReach = 14f;
+
     private void Fire(int si, Entity shooter, int vi, Entity victim,
                       (string Name, int Damage, float RangeTiles) w)
     {
@@ -3982,9 +3990,40 @@ public partial class MapEntityLayer : Node2D
         // Klangroutine (Entfernung zur Kamera, Panning, 399 -> rand()%6+400).
         // Es ist eine zweite KLANG-Nummer, keine ANIM.CWA-Folge -- und 143 ist
         // in ANIM.CWA leer, was die Fehldeutung auch auffliegen liess.
+        // WO das Muendungsfeuer sitzt. Gemeldet: »wenn ein Panzer schiesst,
+        // erscheint das Muzzle bei ihm am Rumpf und nicht an der Rohrmuendung«.
+        //
+        // ⚠ 11.08.2026 — hier stand `shooter.Pos + dir*12 - (0,8)`. Die 8 nach
+        // oben war frei erfunden und traf den RUMPF. Der Turm sitzt aber nicht
+        // ueber der Fahrzeugmitte: das Original zeichnet ihn an
+        // `(mount[0] + mount[k]) / 2` ueber dem Fahrwerk (@0x429CCB..0x429D1B,
+        // Tabelle 0x4FA320, k = Flagbyte der Zelle) — dieselbe Rechnung, die
+        // TurretOffset schon fuer das BILD macht. Das Feuer geht jetzt von
+        // genau diesem Punkt aus, nicht mehr von der Fahrzeugmitte.
+        //
+        // ⚠ WAS UNSERE SETZUNG BLEIBT: die Rohrlaenge (MuzzleReach). Die
+        // richtige Zahl steht in SHOOT.CWT und ist gelesen, aber noch nicht
+        // eingefuehrt — die Datei traegt 2400 Saetze zu vier Punkten
+        // (u8 x, u8 y, u8 flag), Satzindex `(waffe*48 + bild)*4 + punkt`,
+        // Lader @0x4544F0 nach 0x87D6B0, benutzt @0x42A188 mit `x-0x19`,
+        // `y-0x44` vom Zeichenpunkt des Waffenbildes. Gezaehlt: 16 der 18
+        // Waffenbauteile tragen aktive Punkte, und zwar nur fuer die Bilder
+        // 0,1,2,6,7 je Neigungsblock — die nach NORDEN zeigenden Richtungen
+        // 3,4,5 haben keinen, dort liegt die Muendung hinter dem Turm.
+        // Solange dieser Satz nicht durch den Import laeuft, steht hier eine
+        // Laenge und keine Tabelle, und das ist so gekennzeichnet.
+        //
+        // ACHTUNG, unveraendert und belegt: INFANTERIE bekommt KEIN
+        // zusaetzliches Muendungsfeuer — ihre Schusspose (Bilder 9 und 10)
+        // traegt den roten Blitz schon im Sprite. Die Grenze ist
+        // InfantryWeaponFirst.
         if (shooter.Weapon < InfantryWeaponFirst)
-            _effects.Add(new Effect { Pos = shooter.Pos + dir * 12f - new Vector2(0, 8),
-                                      Kind = "muzzle", FrameTime = 0.035f });
+            _effects.Add(new Effect
+            {
+                Pos = shooter.Pos + TurretOffset(shooter.UnitType, shooter.Col, shooter.Row)
+                      + dir * MuzzleReach,
+                Kind = "muzzle", FrameTime = 0.035f,
+            });
 
         // the weapon's own report, out of the game's own table: a component
         // names a sound class at stats +0x1c, the class picks a row of the
@@ -3998,7 +4037,9 @@ public partial class MapEntityLayer : Node2D
             // rockets travel — the hit is resolved in UpdateProjectiles
             _shots.Add(new Projectile
             {
-                Pos = shooter.Pos + dir * 12f - new Vector2(0, 8),
+                // dieselbe Muendung wie das Feuer darueber
+                Pos = shooter.Pos + TurretOffset(shooter.UnitType, shooter.Col, shooter.Row)
+                      + dir * MuzzleReach,
                 Aim = victim.Pos - new Vector2(0, 6),
                 Target = vi, Shooter = si, Damage = w.Damage,
                 Facing = DirToFacing(dir), Kind = rocket, Speed = RocketSpeed,
@@ -4006,7 +4047,19 @@ public partial class MapEntityLayer : Node2D
             return;
         }
 
-        _tracers.Add((shooter.Pos - new Vector2(0, 8), victim.Pos - new Vector2(0, 6), 0.10f));
+        // Die Leuchtspur beginnt an der Muendung, nicht am Rumpf.
+        _tracers.Add((shooter.Pos + TurretOffset(shooter.UnitType, shooter.Col, shooter.Row)
+                      + dir * MuzzleReach,
+                      victim.Pos - new Vector2(0, 6), 0.10f));
+        // ⚠ OFFEN, ausdruecklich: ob das Original bei DIREKTEM Beschuss einen
+        // EINSCHLAG zeigt, ist nicht gelesen. Der Geschossweg fuegt bei
+        // Ankunft eine "explosion" hinzu, dieser Weg nicht. Gesucht wurde die
+        // Stelle, die im Original einen Effekt anlegt: der Zeichner @0x42A188
+        // haengt die Punkte an das WAFFENBILD (SHOOT.CWT, siehe oben) und
+        // gehoert damit zum Schuetzen, nicht zum Ziel; ein Aufrufer der
+        // Trefferroutine (Zasah @0x40C9A0, GAMESTATE_RE.md 1085) liess sich
+        // ueber die Rel32-Aufrufsuche nicht finden — sie wird nicht direkt
+        // gerufen. Solange das nicht geklaert ist, wird hier nichts erfunden.
         ApplyHit(si, vi, victim, w.Damage);
     }
 
