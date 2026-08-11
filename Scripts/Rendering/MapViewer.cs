@@ -1172,7 +1172,8 @@ public partial class MapViewer : Node2D
         _hud.Text =
             $"{MapLabel(name)}   \"{mission}\"\n" +
             $"grid {dims}   tileset {tileset}   image {(int)size.X}x{(int)size.Y}px\n" +
-            $"[{_mapIndex + 1}/{MapNames.Length}]   click/drag=select  RIGHT-click=move  X=stop  E=eingraben  M=konstruieren  B=bauen  N=auswahl  O=forschen  K=reparieren  V=lagerausbau  C=prod.erw.  L=schienen  Y=flugzeuge  " +
+            (UI.SkirmishSetup.Active ? "" : $"[{_mapIndex + 1}/{MapNames.Length}]   ") +
+            $"click/drag=select  RIGHT-click=move  X=stop  E=eingraben  M=konstruieren  B=bauen  N=auswahl  O=forschen  K=reparieren  V=lagerausbau  C=prod.erw.  L=schienen  Y=flugzeuge  " +
             $"WASD+middle-drag=pan  wheel=zoom\n" +
             $"[ ]=map  F=fit  U=sprites  R=ranges  P=walkable  Z=zones  J=nebel  T=buildings  G=dots  H=karte  Tab=ereignis  Shift+rechts=anreihen  Esc=quit";
 
@@ -1372,8 +1373,19 @@ public partial class MapViewer : Node2D
                 case Key.S when key.CtrlPressed && key.ShiftPressed:
                     MapEntityLayer.CheatFuel = !MapEntityLayer.CheatFuel;
                     SayCheat(); break;
-                case Key.Bracketright: LoadMap(_mapIndex + 1); break;
-                case Key.Bracketleft: LoadMap(_mapIndex - 1); break;
+                // ⚠ 11.08.2026 — das Durchblaettern ist ein WERKZEUG des
+                // Kartenbetrachters, kein Spielweg. In einer laufenden Partie
+                // hat es nichts verloren: im Gefecht bot es alle 107
+                // Kartendateien an, also auch die 33 Kampagnenkarten ("im
+                // Gefecht sehe ich immer noch die Kampagnenauswahl"), und
+                // mitten in einer Mission auf eine andere Karte zu springen
+                // ergibt ohnehin keinen Sinn.
+                case Key.Bracketright:
+                    if (!UI.SkirmishSetup.Active) LoadMap(_mapIndex + 1);
+                    break;
+                case Key.Bracketleft:
+                    if (!UI.SkirmishSetup.Active) LoadMap(_mapIndex - 1);
+                    break;
                 case Key.F: FitToWindow(); break;
                 case Key.G: _entities.ToggleDots(); break;
                 case Key.Z: _entities.ToggleZones(); break;
