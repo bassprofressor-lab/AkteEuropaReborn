@@ -2869,6 +2869,17 @@ public partial class MapEntityLayer : Node2D
             e.DeadTime += 0.15f;
         }
 
+        // Der Fall, der den Fehler gemacht hat: ein Treffer auf die Leiche.
+        // Vor dem 11.08.2026 lief er bis Kill() durch und setzte DeadTime auf
+        // 0 -- der Tote stand auf und kippte erneut. Hier wird genau das
+        // geprueft, und zwar ueber beide Wege, die den Schutz nicht hatten:
+        // direkter Beschuss (ApplyHit) und Luftangriff (derselbe Aufruf).
+        float was = e.DeadTime;
+        ApplyHit(-1, fi, e, 50);
+        sb.Append($"   Treffer auf die Leiche: DeadTime {was:0.00} -> {e.DeadTime:0.00} " +
+                  $"({(Mathf.IsEqualApprox(was, e.DeadTime) ? "unveraendert, richtig" : "ZURUECKGESETZT — der Tote steht wieder auf")}), " +
+                  $"HP {e.Hp}\n");
+
         // and the two gates the draw loop puts in front of it
         bool fogGate = FogActive && e.Owner != ViewPlayer && !e.IsBuilding && !Watched(e.Col, e.Row);
         sb.Append($"   Zeichen-Tore: _drawSprites={_drawSprites}, " +
@@ -3771,11 +3782,17 @@ public partial class MapEntityLayer : Node2D
         // richtigen Kanone stimmt, kommt auch bei Infanterie und beim
         // MG-Fahrzeug«. Ein Gewehr macht keinen Feuerball.
         //
-        // ⚠ UNSERE SETZUNG, und sie bleibt eine: WELCHE Waffe im Original einen
-        // bekommt, ist weiterhin NICHT gelesen. Genommen wird die Grenze zur
-        // Infanteriewaffe -- 185..199 sind die Handwaffen (siehe TurretOf),
-        // alles darunter sind Fahrzeugwaffen. Das MG-Fahrzeug faellt damit noch
-        // auf die falsche Seite.
+        // Fuer die INFANTERIE ist das inzwischen belegt, und zwar an ihren
+        // eigenen Bildern: ein Fusssoldatensatz hat 15 Bloecke, und die
+        // Bloecke 9 und 10 -- die Schusspose -- tragen den Muendungsblitz
+        // BEREITS IM SPRITE (roter Blitz vor dem Gewehr, nachgesehen an Satz 0,
+        // Richtung 2). Ein zusaetzlicher Effekt war dort also doppelt gemalt.
+        // Die Tuerme dagegen haben nur 8 Richtungen und ueberhaupt keine
+        // Schussbilder, brauchen den Effekt also.
+        //
+        // ⚠ Was UNSERE SETZUNG bleibt: welcher Effekt einem Fahrzeug zusteht.
+        // Das MG-Fahrzeug bekommt hier denselben Feuerball wie die Kanone, und
+        // dass das im Original so ist, ist NICHT gelesen.
         //
         // Am 11.08.2026 sah es kurz so aus, als stuende die Antwort in Feld
         // +0x02 des Klangsatzes 0x4f98f2 (Werte 232, 102, 143, 0). Das ist sie
@@ -3846,6 +3863,21 @@ public partial class MapEntityLayer : Node2D
 
     private void ApplyHit(int si, int vi, Entity victim, int damage)
     {
+        // ⚠ 11.08.2026 — WER SCHON TOT IST, WIRD NICHT NOCHMAL GETROFFEN.
+        //
+        // Gemeldet als »die Infanterie stirbt, kippt kurz um und steht dann
+        // wieder, aber macht nix mehr«. Genau das war es: ohne diese Zeile lief
+        // ein Treffer auf eine Leiche durch bis Kill(), und Kill() setzt
+        // DeadTime auf 0. Die Umfall-Bilder (Bloecke 12..14) fingen also von
+        // vorn an -- der Tote richtete sich auf und kippte erneut, endlos, und
+        // der Sterbeklang 131 spielte jedes Mal mit.
+        //
+        // Die Geschossbahn hatte den Schutz schon (`if (!t.Dead)` weiter
+        // unten), der direkte Beschuss und der Luftangriff nicht. Beim
+        // Luftangriff faellt es zwangslaeufig an: Kill() raeumt `Target` nur
+        // bei den Eintraegen in _entities auf, ein Flugzeug haelt sein Ziel in
+        // seinem eigenen Satz und haette ewig weitergeschossen.
+        if (victim.Dead) return;
         var shooter = si >= 0 && si < _entities.Count ? _entities[si] : null;
         damage = ShotDamage(shooter, victim, damage);
         // the original destroys the unit outright once a hit is at least what
@@ -9996,7 +10028,8 @@ public partial class MapEntityLayer : Node2D
                 {
                     a.Goal = t.Pos;
                     a.Cooldown -= dt;
-                    if (a.Pos.DistanceTo(t.Pos) < TileW * 1.5f && a.Cooldown <= 0f && a.Ammo > 0)
+                    if (t.Dead) { a.Target = -1; }
+                    else if (a.Pos.DistanceTo(t.Pos) < TileW * 1.5f && a.Cooldown <= 0f && a.Ammo > 0)
                     {
                         a.Cooldown = AirFireGap;
                         if (!(CheatAmmo && Cheated(a))) a.Ammo--;
