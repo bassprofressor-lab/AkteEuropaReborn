@@ -350,36 +350,20 @@ public partial class MainMenu : Control
         start.Pressed += OnStart;
         box.AddChild(start);
 
-        // ---- the campaign ----------------------------------------------------
-        var missions = Campaign.CampaignManager.Missions;
-        var next = Campaign.CampaignManager.Next();
-        var camp = new Button
-        {
-            Text = missions.Count == 0 ? "Kampagne — keine Missionen importiert"
-                 : next == null ? "Kampagne — durchgespielt (neu beginnen)"
-                 : $"KAMPAGNE — {next.Label}",
-            CustomMinimumSize = new Vector2(0, 44),
-            Disabled = missions.Count == 0,
-        };
-        camp.Pressed += () =>
-        {
-            var m = Campaign.CampaignManager.Next();
-            if (m == null) { Campaign.CampaignManager.Reset(); m = Campaign.CampaignManager.Next(); }
-            if (m == null) return;
-            StartMission(m);
-        };
-        box.AddChild(camp);
-        if (missions.Count > 0)
-        {
-            var pick = new OptionButton();
-            foreach (var m in missions) pick.AddItem(m.Label);
-            pick.Selected = System.Math.Max(0, next != null
-                ? System.Array.IndexOf(Indices(missions), next.Index) : 0);
-            pick.ItemSelected += i => StartMission(missions[(int)i]);
-            box.AddChild(Row("Mission waehlen", pick));
-            box.AddChild(Hint($"{missions.Count} Missionen · " +
-                              $"{Campaign.CampaignManager.Completed} geschafft"));
-        }
+        // ⚠ 11.08.2026 — HIER STAND DIE KAMPAGNE, und sie ist raus. Gemeldet
+        // als »unter Gefecht sieht man immer noch Kampagne unten drunter, das
+        // muss raus«. Es waren drei Sachen: der Knopf »KAMPAGNE — 02 — Hidden
+        // Bases«, die Auswahl »Mission waehlen« mit allen 33 Missionen und die
+        // Zeile »33 Missionen · N geschafft«.
+        //
+        // Es war ein Rest, genau wie die Kampagnenkarten map_05/10/14 in der
+        // Liste oben (am selben Tag entfernt): dieser Schirm WAR einmal das
+        // ganze Hauptmenue, und damals musste die Kampagne irgendwo stehen.
+        // Seit das Startmenue von 1997 da ist, gehoert sie in dessen Zeile
+        // »Kampagne« — und seit heute in die Missionsuebersicht dahinter
+        // (CampaignScreen). Ein Gefechtsschirm, der nebenbei die Kampagne
+        // startet, hat zwei Wege in dieselbe Sache und keinen davon dort, wo
+        // man ihn sucht.
         var back = new Button { Text = "Zurueck zum Menue" };
         back.Pressed += ShowStartMenu;
         box.AddChild(back);
@@ -709,13 +693,6 @@ public partial class MainMenu : Control
                     break;
             }
         };
-    }
-
-    private static int[] Indices(System.Collections.Generic.IReadOnlyList<Campaign.CampaignManager.Mission> ms)
-    {
-        var a = new int[ms.Count];
-        for (int i = 0; i < ms.Count; i++) a[i] = ms[i].Index;
-        return a;
     }
 
     /// <summary>`--campaign` starts the next mission, `--campaign=7` a given
