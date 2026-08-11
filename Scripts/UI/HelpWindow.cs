@@ -85,17 +85,48 @@ public sealed partial class HelpWindow : PanelContainer
     /// (0x4D0600, »ist Fenster n noch offen?«).</summary>
     public static int OpenCount => Open.Count;
 
-    /// <summary><c>close_message_windows()</c> @0x447560.</summary>
+    /// <summary><c>close_message_windows()</c> @0x447560 — aber AUFGESCHOBEN.
+    ///
+    /// <para>⚠ 11.08.2026, gemeldet als »die Popups lassen sich nicht
+    /// wegklicken«. Es lag nicht am Wegklicken: die Missionsregeln rufen fast
+    /// immer erst <c>close_message_windows</c> und dann <c>show_text</c>, und
+    /// eine Regel ohne Riegel feuert JEDEN TAKT. Das Fenster wurde also
+    /// geschlossen und im selben Atemzug neu geöffnet — wer es wegklickte, sah
+    /// es sofort wieder.</para>
+    ///
+    /// <para>Der Riegel steht im Original vor der Regel (<c>v[n] == 0</c>) und
+    /// ist unserem Leser bei einigen Regeln durchgerutscht. Bis der nachgezogen
+    /// ist, wird hier dasselbe erreicht wie mit der Frage, die die Blöcke
+    /// selbst stellen — »ist Fenster n noch offen?« (0x4D0600): das Schliessen
+    /// wird VORGEMERKT, und ein <c>Show</c> mit derselben Nummer nimmt die
+    /// Vormerkung zurück, statt das Fenster neu zu bauen. Erst
+    /// <see cref="CommitClose"/> am Ende des Takts räumt wirklich weg.</para>
+    ///
+    /// <para>Ein vom Spieler weggeklicktes Fenster ist aus <c>Open</c>
+    /// verschwunden und kommt so auch nicht zurück.</para>
+    /// </summary>
     public static void CloseAll()
     {
-        foreach (var w in Open.ToArray()) w.QueueFree();
-        Open.Clear();
+        foreach (var w in Open) w._pendingClose = true;
     }
+
+    /// <summary>Was noch vorgemerkt ist, jetzt wirklich schliessen.</summary>
+    public static void CommitClose()
+    {
+        for (int i = Open.Count - 1; i >= 0; i--)
+            if (Open[i]._pendingClose) { Open[i].QueueFree(); Open.RemoveAt(i); }
+    }
+
+    private bool _pendingClose;
 
     /// <summary>Ein Fenster aufmachen. <paramref name="ox"/>/<paramref name="oy"/>
     /// sind die Stelle im 640×480-Raster des Originals.</summary>
     public static HelpWindow? Show(Node host, int id, int ox, int oy)
     {
+        // Schon offen (auch nur vorgemerkt)? Dann bleibt es einfach stehen.
+        foreach (var open in Open)
+            if (open.Id == id) { open._pendingClose = false; return open; }
+
         var paras = TextOf(id);
         if (paras == null || paras.Count == 0)
         {

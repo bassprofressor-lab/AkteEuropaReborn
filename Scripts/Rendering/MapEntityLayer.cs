@@ -4461,6 +4461,9 @@ public partial class MapEntityLayer : Node2D
             }
         }
         _mscript?.Tick(dt);
+        // Was der Takt vorgemerkt hat, jetzt wegraeumen: ein Fenster, das
+        // dieselbe Regel gleich wieder oeffnet, bleibt dabei stehen.
+        UI.HelpWindow.CommitClose();
     }
 
     /// <summary>
