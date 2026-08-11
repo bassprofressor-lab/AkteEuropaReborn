@@ -79,6 +79,110 @@ public static class MapPreview
         return slots.Length > 0 ? head + "\n" + slots : head;
     }
 
+    // ---- die Spielform einer Gefechtskarte ----------------------------------
+
+    /// <summary>
+    /// Die drei Formen, in denen ein Gefecht tatsaechlich ablaeuft.
+    ///
+    /// <para>⚠ <b>Das ist keine erfundene Modusliste.</b> Es sind genau die drei
+    /// Faelle, die <c>Simulation/SkirmishAi.StartSkirmish</c> unterscheidet —
+    /// nachgelesen dort, nicht ausgedacht:</para>
+    /// <code>
+    ///   var prize    = NeutralPrizes();                       // owner 11, doors > 0
+    ///   bool conquest = prize.All > 0;
+    ///   bool buildUp  = PlayersWithFactory().Count > 0 &amp;&amp; !conquest;
+    /// </code>
+    /// <para>Die Form haengt also an der KARTE und nicht an einem Schalter.
+    /// Deshalb waehlt der Spieler oben die Form und bekommt darunter die Karten,
+    /// die die Maschine wirklich so spielt — eine Modusliste, die nichts
+    /// verspricht, was der Aufbau nicht einloest.</para>
+    ///
+    /// <para>Gerechnet wird ueber dieselbe <c>buildings</c>-Liste, aus der auch
+    /// <see cref="Slots"/> zaehlt und aus der der Kartenlader seine Gebaeude
+    /// nimmt. ⚠ Ein Vorbehalt: die Maschine laesst zusaetzlich Kulissenteile und
+    /// Zerstoertes aus (<c>IsProp</c>, <c>Dead</c>) — beides ist beim Laden aus
+    /// dieser Liste noch nicht gesetzt, die Rechnung hier ist also die
+    /// Anfangslage und damit dieselbe, die StartSkirmish sieht.</para>
+    /// </summary>
+    public enum Shape
+    {
+        /// <summary>Neutrale Fabriken und Basen stehen zum Besetzen da. Die
+        /// Truppen der Karte bleiben stehen — sie sind das Werkzeug.</summary>
+        Conquest,
+        /// <summary>Ein Startplatz besitzt eine Fabrik und es gibt nichts
+        /// Neutrales: aufgebaut wird aus der Fabrik, die Armeen der Karte werden
+        /// auf sechs Einheiten je Platz geduennt.</summary>
+        BuildUp,
+        /// <summary>Weder noch — die Karte wird gespielt, wie sie gezeichnet
+        /// ist, mit den Truppen, die darauf stehen.</summary>
+        AsDrawn,
+    }
+
+    /// <summary>Der Name der Form, wie er im Gefechtsaufbau ueber der
+    /// Kartenliste steht. ⚠ Die WORTE sind unsere; das Original hat kein
+    /// Gefecht gegen den Rechner und also auch keine Namen dafuer.</summary>
+    public static string ShapeName(Shape s) => s switch
+    {
+        Shape.Conquest => "Eroberung",
+        Shape.BuildUp => "Aufbau",
+        _ => "Wie gezeichnet",
+    };
+
+    /// <summary>Ein Satz dazu, was die Form fuer den Spieler bedeutet. Die
+    /// Aussagen stammen aus StartSkirmish, nicht aus dem Gefuehl.</summary>
+    public static string ShapeHint(Shape s) => s switch
+    {
+        Shape.Conquest =>
+            "Neutrale Fabriken und Basen stehen herum und wollen besetzt werden. " +
+            "Die Truppen, die die Karte hinstellt, bleiben stehen — sie sind das Werkzeug.",
+        Shape.BuildUp =>
+            "Ein Startplatz besitzt eine Fabrik: hier wird produziert. Die Armeen der " +
+            "Karte werden dafuer auf sechs Einheiten je Platz geduennt (unsere Zutat).",
+        _ =>
+            "Kein Platz hat eine Fabrik und es gibt nichts Neutrales zu besetzen. " +
+            "Gekaempft wird mit dem, was auf der Karte steht — nachgebaut wird nichts.",
+    };
+
+    private static readonly Dictionary<string, Shape> _shapes = new();
+
+    /// <summary>Welche Form die Karte spielt. Unbekannte oder nicht eingelesene
+    /// Karten gelten als <see cref="Shape.AsDrawn"/> — das ist der Zweig, in den
+    /// StartSkirmish sie ebenfalls fallen laesst.</summary>
+    public static Shape ShapeOf(string name)
+    {
+        if (_shapes.TryGetValue(name, out var hit)) return hit;
+        var s = ReadShape(name);
+        _shapes[name] = s;
+        return s;
+    }
+
+    private static Shape ReadShape(string name)
+    {
+        string p = Core.Content.Path("Maps/" + name + ".entities.json");
+        if (!FileAccess.FileExists(p)) return Shape.AsDrawn;
+        using var f = FileAccess.Open(p, FileAccess.ModeFlags.Read);
+        if (f == null) return Shape.AsDrawn;
+        try
+        {
+            // System.Text.Json aus demselben Grund wie in Slots() — siehe dort.
+            using var doc = System.Text.Json.JsonDocument.Parse(f.GetAsText());
+            if (!doc.RootElement.TryGetProperty("buildings", out var arr) ||
+                arr.ValueKind != System.Text.Json.JsonValueKind.Array) return Shape.AsDrawn;
+            bool prize = false, factory = false;
+            foreach (var b in arr.EnumerateArray())
+            {
+                int owner = b.TryGetProperty("owner", out var ov) && ov.TryGetInt32(out int o) ? o : -1;
+                int type = b.TryGetProperty("type", out var tv) && tv.TryGetInt32(out int t) ? t : -1;
+                int doors = b.TryGetProperty("doors", out var dv) && dv.TryGetInt32(out int d) ? d : 0;
+                // NeutralOwner = 11, und ohne Tuer laesst sich nichts besetzen
+                if (owner == 11 && doors > 0) { prize = true; break; }
+                if (owner is >= 0 and <= 7 && type is 2 or 3 or 4) factory = true;
+            }
+            return prize ? Shape.Conquest : factory ? Shape.BuildUp : Shape.AsDrawn;
+        }
+        catch (System.Exception e) { GD.PrintErr("Spielform: " + e.Message); return Shape.AsDrawn; }
+    }
+
     /// <summary>What the start slots of this map are worth, said before the
     /// player starts rather than found out afterwards.
     ///

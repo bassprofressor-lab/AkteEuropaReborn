@@ -40,7 +40,22 @@ public partial class MainMenu : Control
         // standen aus der Zeit drin, als es die Kampagne noch nicht gab.
     };
 
-    private OptionButton _map = null!;
+    /// <summary>Die gewaehlte Karte, als Platz in <see cref="Maps"/>.
+    ///
+    /// <para>⚠ Das war bis zum 11.08.2026 <c>_map.Selected</c> eines
+    /// Auswahlfelds. Seit die Karten nach Spielmodus getrennt in einer Liste
+    /// stehen, ist die Zeilennummer der Liste NICHT mehr die Kartennummer —
+    /// deshalb wird sie hier gefuehrt und nirgends sonst abgelesen.</para>
+    /// </summary>
+    private int _mapIndex;
+    private ItemList _mapList = null!;
+    private Label _modeHint = null!;
+    private MapPreview.Shape _mode;
+    private readonly List<(MapPreview.Shape S, Button B)> _modes = new();
+
+    /// <summary>Welche Karte hinter welcher Zeile der Kartenliste steht.</summary>
+    private readonly List<int> _listed = new();
+
     private OptionButton _slot = null!;
     private TextureRect _preview = null!;
     private Label _previewText = null!;
@@ -274,59 +289,144 @@ public partial class MainMenu : Control
         };
         scroll.AddChild(middle);
 
-        var box = new VBoxContainer { CustomMinimumSize = new Vector2(460, 0) };
+        var box = new VBoxContainer { CustomMinimumSize = new Vector2(880, 0) };
         box.AddThemeConstantOverride("separation", 10);
         middle.AddChild(box);
 
         var title = new Label
         {
-            Text = "AKTE EUROPA — REBORN",
+            Text = "GEFECHT",
             HorizontalAlignment = HorizontalAlignment.Center,
         };
         title.AddThemeFontSizeOverride("font_size", 34);
         box.AddChild(title);
         var sub = new Label
         {
-            Text = "Rekonstruktion des RTS von 1997",
+            // ⚠ Die Untertitelzeile sagt jetzt, was diese Seite ist. Vorher
+            // stand hier »AKTE EUROPA — REBORN / Rekonstruktion des RTS von
+            // 1997«, was aus der Zeit stammt, als DIESER Schirm das ganze
+            // Hauptmenue war. Seit es das Startmenue von 1997 gibt, ist das
+            // hier nur noch einer von dessen Eintraegen — und ein Eintrag, den
+            // das Original nicht kennt.
+            Text = "Gegen den Rechner — im Original gibt es das nicht",
             HorizontalAlignment = HorizontalAlignment.Center,
             Modulate = new Color(0.7f, 0.75f, 0.8f),
         };
         box.AddChild(sub);
         box.AddChild(new HSeparator());
 
-        box.AddChild(Row("Karte", _map = new OptionButton()));
-        foreach (var (_, t) in Maps) _map.AddItem(t);
-        _map.Selected = 0;
-        _map.ItemSelected += _ => ShowPreview();
+        // ---- oben: der Spielmodus ---------------------------------------------
+        //
+        // ⚠ UNSERE ZUTAT, aber KEINE erfundene Liste. Die drei Formen sind die,
+        // die Simulation/SkirmishAi.StartSkirmish tatsaechlich unterscheidet —
+        // Eroberung (neutrale Gebaeude zum Besetzen), Aufbau (ein Platz hat eine
+        // Fabrik) und »wie gezeichnet« (weder noch). Welche davon greift, haengt
+        // an der KARTE und nicht an einem Schalter; siehe MapPreview.Shape.
+        // Deshalb waehlt der Modus hier keine Regel aus, sondern zeigt darunter
+        // die Karten, die die Maschine wirklich so spielt. Formen, zu denen
+        // keine eingelesene Karte gehoert, erscheinen gar nicht erst.
+        var modeBox = new VBoxContainer();
+        modeBox.AddThemeConstantOverride("separation", 4);
+        box.AddChild(Group("Spielmodus", modeBox));
+
+        var modeRow = new HBoxContainer();
+        modeRow.AddThemeConstantOverride("separation", 8);
+        modeBox.AddChild(modeRow);
+        foreach (var s in new[] { MapPreview.Shape.Conquest, MapPreview.Shape.BuildUp,
+                                  MapPreview.Shape.AsDrawn })
+        {
+            int n = 0;
+            foreach (var (file, _) in Maps) if (MapPreview.ShapeOf(file) == s) n++;
+            if (n == 0) continue;
+            var b = new Button
+            {
+                Text = $"{MapPreview.ShapeName(s)}  ({n} {(n == 1 ? "Karte" : "Karten")})",
+                ToggleMode = true,
+                CustomMinimumSize = new Vector2(0, 40),
+                SizeFlagsHorizontal = SizeFlags.ExpandFill,
+                TooltipText = MapPreview.ShapeHint(s),
+                FocusMode = FocusModeEnum.None,
+            };
+            // Godots dunkles Standardaussehen unterscheidet »gedrueckt« kaum von
+            // »nicht gedrueckt« — im ersten Bild sah der NICHT gewaehlte Modus
+            // wie blosser Text aus. Der gewaehlte bekommt deshalb einen eigenen
+            // Grund und einen hellen Rahmen.
+            foreach (var (state, bg, edge, w) in new (string, Color, Color, int)[]
+            {
+                ("normal",        new(0.14f, 0.15f, 0.18f), new(0.28f, 0.31f, 0.36f), 1),
+                ("hover",         new(0.19f, 0.21f, 0.25f), new(0.40f, 0.45f, 0.52f), 1),
+                ("pressed",       new(0.17f, 0.27f, 0.39f), new(0.55f, 0.72f, 0.90f), 2),
+                ("hover_pressed", new(0.21f, 0.32f, 0.45f), new(0.65f, 0.82f, 1.00f), 2),
+            })
+            {
+                var sb = new StyleBoxFlat { BgColor = bg, BorderColor = edge };
+                sb.SetBorderWidthAll(w);
+                b.AddThemeStyleboxOverride(state, sb);
+            }
+            var pick = s;
+            b.Pressed += () => SelectMode(pick);
+            _modes.Add((s, b));
+            modeRow.AddChild(b);
+        }
+        _modeHint = Hint("");
+        _modeHint.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        modeBox.AddChild(_modeHint);
+
+        // ---- darunter: links die Karten dieses Modus, rechts die Einstellungen -
+        var lower = new HBoxContainer();
+        lower.AddThemeConstantOverride("separation", 12);
+        box.AddChild(lower);
+
+        _mapList = new ItemList
+        {
+            CustomMinimumSize = new Vector2(400, 250),
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+            AllowReselect = true,
+        };
+        // Die Titel samt ihrer Hinweise sind die der Kartenliste oben und
+        // bleiben Wort fuer Wort stehen — vor allem der Zusatz »Spielstand zu
+        // Level 21/25/26« bei den drei .DM, der sagt, dass das keine eigenen
+        // Karten sind.
+        _mapList.ItemSelected += i => PickFromList((int)i);
+        var left = Group("Karten", _mapList);
+        left.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        lower.AddChild(left);
+
+        var right = new VBoxContainer { CustomMinimumSize = new Vector2(440, 0) };
+        right.AddThemeConstantOverride("separation", 6);
+        lower.AddChild(Group("Einstellungen", right));
 
         // the picture of the chosen map, with its original name underneath
         _preview = new TextureRect
         {
-            CustomMinimumSize = new Vector2(0, 150),
+            CustomMinimumSize = new Vector2(0, 120),
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
             StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
             TextureFilter = TextureFilterEnum.Nearest,
         };
-        box.AddChild(_preview);
+        right.AddChild(_preview);
         _previewText = new Label
         {
             HorizontalAlignment = HorizontalAlignment.Center,
             Modulate = new Color(0.7f, 0.75f, 0.8f),
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
-        box.AddChild(_previewText);
+        right.AddChild(_previewText);
+        right.AddChild(new HSeparator());
 
-        box.AddChild(Row("Gegner", _ai = new SpinBox { MinValue = 1, MaxValue = 7, Value = 3 }));
+        right.AddChild(Row("Gegner", _ai = new SpinBox { MinValue = 1, MaxValue = 7, Value = 3 }));
 
         // Which of the map's eight slots the human takes. The slots are the
         // original's own — a NET map fills some and leaves others empty — so
         // "Automatisch" means the first one this map actually uses, and a
         // chosen slot that the map leaves empty falls back to the same.
-        box.AddChild(Row("Startplatz", _slot = new OptionButton()));
+        right.AddChild(Row("Startplatz", _slot = new OptionButton()));
         _slot.AddItem("Automatisch");
         for (int p = 0; p < 8; p++) _slot.AddItem($"Spieler {p + 1}");
         _slot.Selected = 0;
 
-        box.AddChild(Row("Schwierigkeit", _level = new OptionButton()));
+        right.AddChild(Row("Schwierigkeit", _level = new OptionButton()));
         _level.AddItem("Leicht");
         _level.AddItem("Normal");
         _level.AddItem("Schwer");
@@ -339,7 +439,7 @@ public partial class MainMenu : Control
         var resNames = MapEntityLayer.ResourceLevelNames();
         if (resNames.Count > 0)
         {
-            box.AddChild(Row("Rohstoffe", _res = new OptionButton()));
+            right.AddChild(Row("Rohstoffe", _res = new OptionButton()));
             foreach (string n in resNames) _res.AddItem(n);
             _res.Selected = Mathf.Clamp(SkirmishSetup.Resources, 0, resNames.Count - 1);
         }
@@ -379,7 +479,14 @@ public partial class MainMenu : Control
         BuildStartMenu();
 
         Settings.Apply();
-        ShowPreview();
+        // ⚠ UNSERE SETZUNG, und sie aendert eine Voreinstellung: der Schirm geht
+        // in dem Modus auf, zu dem die MEISTEN Karten gehoeren, und waehlt
+        // dessen erste. Bis zum 11.08.2026 war die Voreinstellung starr
+        // map_NET07 — und ausgerechnet NET07 ist die einzige Karte in der Form
+        // »Wie gezeichnet«. Der Gefechtsschirm waere also mit einer Liste von
+        // genau einem Eintrag aufgegangen, was das Gegenteil von
+        // uebersichtlich ist. NET07 bleibt einen Klick entfernt.
+        SelectMode(BusiestMode());
         ReadShotArgs();
         // --setup opens the skirmish panel straight away, so it can be
         // photographed without a click
@@ -827,7 +934,6 @@ public partial class MainMenu : Control
                 if (mi < 0 && FileAccess.FileExists(Core.Content.Path($"Maps/{want}.entities.json")))
                 {
                     Maps.Add((want, want));
-                    _map.AddItem(want);
                     mi = Maps.Count - 1;
                     GD.Print($"skirmish: {want} steht nicht in der Auswahl, aber die Daten sind da — aufgenommen");
                 }
@@ -837,7 +943,10 @@ public partial class MainMenu : Control
                     GetTree().Quit(2);
                     return true;
                 }
-                _map.Selected = mi;
+                // schaltet noetigenfalls den Modus um — eine per Befehlszeile
+                // genannte Karte darf nicht daran scheitern, dass gerade eine
+                // andere Spielform angezeigt wird
+                SelectMap(mi);
             }
             if (parts.Length > 1 && int.TryParse(parts[1], out int n)) _ai.Value = n;
             if (parts.Length > 2)
@@ -874,9 +983,103 @@ public partial class MainMenu : Control
     /// 10160-pixel-wide picture around.</summary>
     private void ShowPreview()
     {
-        string file = Maps[Mathf.Clamp(_map.Selected, 0, Maps.Count - 1)].File;
+        string file = Maps[Mathf.Clamp(_mapIndex, 0, Maps.Count - 1)].File;
         _preview.Texture = MapPreview.Of(file);
         _previewText.Text = MapPreview.Caption(file);
+    }
+
+    // ---- Modus und Kartenliste ----------------------------------------------
+
+    /// <summary>Den Spielmodus umschalten: die Knoepfe nachziehen, die
+    /// Erklaerung darunter setzen und die Kartenliste neu fuellen. Steht in der
+    /// Liste die bisher gewaehlte Karte nicht mehr, wird die erste dieses Modus
+    /// genommen — es soll nie eine Karte gestartet werden, die man nicht mehr
+    /// sieht.</summary>
+    private void SelectMode(MapPreview.Shape mode)
+    {
+        _mode = mode;
+        foreach (var (s, b) in _modes) b.ButtonPressed = s == mode;
+        _modeHint.Text = MapPreview.ShapeHint(mode);
+        FillMapList();
+    }
+
+    /// <summary>Die Spielform, zu der die meisten eingelesenen Karten gehoeren.
+    /// Bei Gleichstand gewinnt die erste in der Knopfreihe.</summary>
+    private MapPreview.Shape BusiestMode()
+    {
+        var best = _modes.Count > 0 ? _modes[0].S : MapPreview.Shape.AsDrawn;
+        int bestN = -1;
+        foreach (var (s, _) in _modes)
+        {
+            int n = 0;
+            foreach (var (file, _) in Maps) if (MapPreview.ShapeOf(file) == s) n++;
+            if (n > bestN) { bestN = n; best = s; }
+        }
+        return best;
+    }
+
+    private void FillMapList()
+    {
+        _mapList.Clear();
+        _listed.Clear();
+        for (int i = 0; i < Maps.Count; i++)
+        {
+            if (MapPreview.ShapeOf(Maps[i].File) != _mode) continue;
+            _mapList.AddItem(Maps[i].Title);
+            _mapList.SetItemTooltip(_mapList.ItemCount - 1, MapPreview.Caption(Maps[i].File));
+            _listed.Add(i);
+        }
+        if (_listed.Count == 0) return;
+        int at = _listed.IndexOf(_mapIndex);
+        if (at < 0) { at = 0; _mapIndex = _listed[0]; }
+        _mapList.Select(at);
+        ShowPreview();
+    }
+
+    private void PickFromList(int row)
+    {
+        if (row < 0 || row >= _listed.Count) return;
+        _mapIndex = _listed[row];
+        ShowPreview();
+    }
+
+    /// <summary>Eine Karte ueber ihren Platz in <see cref="Maps"/> waehlen, auch
+    /// wenn gerade ein anderer Modus zu sehen ist — der Modus springt dann mit.
+    /// Das braucht der Harnisch: <c>--skirmish=map_NET07</c> nennt eine Karte
+    /// und keinen Modus.</summary>
+    private void SelectMap(int index)
+    {
+        _mapIndex = Mathf.Clamp(index, 0, Maps.Count - 1);
+        SelectMode(MapPreview.ShapeOf(Maps[_mapIndex].File));
+    }
+
+    /// <summary>Ein umrandeter Abschnitt mit Ueberschrift. ⚠ Unsere Zutat wie
+    /// der ganze Gefechtsschirm; sie ist der Grund, warum die Seite jetzt aus
+    /// drei Bloecken besteht statt aus einer Reihe gleich aussehender
+    /// Auswahlfelder.</summary>
+    private static PanelContainer Group(string title, Control content)
+    {
+        var p = new PanelContainer();
+        var style = new StyleBoxFlat
+        {
+            BgColor = new Color(0.09f, 0.10f, 0.12f),
+            BorderColor = new Color(0.24f, 0.27f, 0.31f),
+            ContentMarginLeft = 12, ContentMarginRight = 12,
+            ContentMarginTop = 8, ContentMarginBottom = 10,
+        };
+        style.SetBorderWidthAll(1);
+        p.AddThemeStyleboxOverride("panel", style);
+
+        var v = new VBoxContainer();
+        v.AddThemeConstantOverride("separation", 6);
+        p.AddChild(v);
+
+        var h = new Label { Text = title, Modulate = new Color(0.62f, 0.72f, 0.85f) };
+        h.AddThemeFontSizeOverride("font_size", 20);
+        v.AddChild(h);
+        content.SizeFlagsVertical = SizeFlags.ExpandFill;
+        v.AddChild(content);
+        return p;
     }
 
     private static HBoxContainer Row(string label, Control field)
@@ -892,7 +1095,7 @@ public partial class MainMenu : Control
 
     private void OnStart()
     {
-        SkirmishSetup.Map = Maps[Mathf.Clamp(_map.Selected, 0, Maps.Count - 1)].File;
+        SkirmishSetup.Map = Maps[Mathf.Clamp(_mapIndex, 0, Maps.Count - 1)].File;
         SkirmishSetup.Human = _slot.Selected - 1;   // -1 = automatisch
         SkirmishSetup.AiCount = (int)_ai.Value;
         SkirmishSetup.Level = _level.Selected switch
