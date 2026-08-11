@@ -12,10 +12,10 @@ using Godot;
 /// file numbering — which is the game's own numbering, not a guess: the saved
 /// game `1.DM` is called "Mission 26" and its elevation grid is level 26's.
 ///
-/// Progress is one number in <c>user://campaign.cfg</c>: the highest mission
-/// the player has finished. Nothing else is kept between missions, because
-/// nothing else carries over — every level file brings its own starting
-/// position.
+/// In <c>user://campaign.cfg</c> stehen ZWEI Zahlen: die hoechste geschaffte
+/// Mission und der KONTOSTAND. Der Kontostand geht von einer Mission in die
+/// naechste mit — das ist gelesen, siehe <see cref="Balance"/>. Alles andere
+/// bringt der Levelsatz selbst mit.
 /// </summary>
 public static class CampaignManager
 {
@@ -81,7 +81,64 @@ public static class CampaignManager
         if (index > Completed) Completed = index;
     }
 
-    public static void Reset() => Completed = 0;
+    /// <summary>
+    /// Der KONTOSTAND, der von einer Mission in die naechste mitgeht.
+    ///
+    /// <para>⚠ 11.08.2026 — bis heute stand im Kopf dieser Datei »nothing else
+    /// carries over«. Das ist widerlegt. Gefragt hatte der Spieler: »In
+    /// Kampagne 2 habe ich kein Geld. Liegt das daran, dass ich die 3 Schiffe
+    /// in Kampagne 1 nicht zerstoert habe?«</para>
+    ///
+    /// <para><b>Was gelesen wurde.</b> Der Kontostand liegt bei 0xA9C600
+    /// (acht i32, <c>get_money(spieler)</c> @0x4CF5E0 liest
+    /// <c>dword[0xA9C600 + 4*spieler]</c>). Alle 49 Verweise darauf wurden
+    /// durchgesehen. Er wird an genau drei Stellen VERAENDERT, und alle drei
+    /// ADDIEREN:</para>
+    /// <list type="bullet">
+    /// <item>@0x4169E3: <c>mov ecx,[0xA9C600]; add ecx,[0xA9A1D8]; mov
+    /// [0xA9C600],ecx</c> — am Missionsende wird die MISSIONSBEZAHLUNG
+    /// (0xA9A1D8) auf den Kontostand aufgeschlagen, nicht eingesetzt.</item>
+    /// <item>@0x4139B8: <c>add ecx, 0xD05</c> — eine Zugabe.</item>
+    /// <item>@0x416AF7: <c>add dword [0xA9C600], eax</c>.</item>
+    /// </list>
+    ///
+    /// <para>Es gibt <b>keinen</b> <c>mov dword [0xA9C600], &lt;wert&gt;</c> und
+    /// kein Loeschen des Bereichs im ganzen Programm — gesucht wurde nach der
+    /// Bytefolge <c>C7 05 00 C6 A9 00</c> (0 Treffer) und nach jedem
+    /// <c>push 0xA9C600</c> (2 Treffer). Diese zwei sind
+    /// <c>fwrite(0xA9C600, 1, 0x20, f)</c> @0x41D8DF und
+    /// <c>fread(0xA9C600, 1, 0x20, f)</c> @0x41E95A — <b>Spielstand</b>, nicht
+    /// Missionsstart. Und die Kampagnen-Levelsaetze bringen ihn auch nicht mit:
+    /// von 43 eingelesenen Karten tragen nur die drei .DM-SPIELSTAENDE einen
+    /// sec73 (map_DM_4: Spieler 0 = 44850$), keine einzige .CWM-Mission.</para>
+    ///
+    /// <para><b>Also laeuft der Kontostand durch.</b> Das deckt sich mit dem
+    /// Foto akte-europa_5.jpg: dort steht »Missionsbezahlung $320« und
+    /// »Kontostand $470« — die Differenz 150 ist mitgebracht, nicht in dieser
+    /// Mission verdient. Und 150 ist genau dreimal 50, die Zahlung fuer die
+    /// drei Schiffe aus Mission 1.</para>
+    ///
+    /// <para>⚠ UNSERE SETZUNG bleibt der ANFANGSSTAND einer neuen Kampagne:
+    /// er ist 0, weil im Programm kein Anfangswert gefunden wurde.</para>
+    /// </summary>
+    public static int Balance
+    {
+        get
+        {
+            var c = new ConfigFile();
+            return c.Load(SavePath) == Error.Ok
+                ? (int)c.GetValue("campaign", "balance", 0) : 0;
+        }
+        set
+        {
+            var c = new ConfigFile();
+            c.Load(SavePath);
+            c.SetValue("campaign", "balance", value);
+            c.Save(SavePath);
+        }
+    }
+
+    public static void Reset() { Completed = 0; Balance = 0; }
 
     // ---- the unlock schedule ------------------------------------------------
 

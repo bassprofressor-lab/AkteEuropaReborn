@@ -4500,6 +4500,11 @@ public partial class MapEntityLayer : Node2D
         if (player is >= 0 and <= 7) _money[player] = value;
     }
 
+    /// <summary>Den mitgebrachten Kontostand einsetzen. Von aussen, weil nur
+    /// der Kampagnenweg ihn hat — siehe Campaign.CampaignManager.Balance fuer
+    /// den Beleg, dass er ueberhaupt mitgeht.</summary>
+    public void SetStartMoney(int player, int value) => Money(player, value);
+
     /// <summary>
     /// `bus_cmd(11, einheit, ukol, x, y)` — der Befehl, mit dem eine Mission
     /// ihre eigenen Einheiten losschickt.

@@ -280,6 +280,17 @@ public partial class MapViewer : Node2D
                 ? _entities.StartCampaign(UI.SkirmishSetup.Human, UI.SkirmishSetup.Level)
                 : _entities.StartSkirmish(UI.SkirmishSetup.Human,
                          UI.SkirmishSetup.AiCount, UI.SkirmishSetup.Level);
+            // Der Kontostand geht von einer Mission in die naechste mit — das
+            // ist gelesen, siehe Campaign.CampaignManager.Balance. Vorher fing
+            // JEDE Kampagnenmission bei $0 an; genau das hat der Spieler als
+            // »in Kampagne 2 habe ich kein Geld« gemeldet.
+            if (UI.SkirmishSetup.CampaignMission > 0)
+            {
+                int mit = Campaign.CampaignManager.Balance;
+                _entities.SetStartMoney(me, mit);
+                GD.Print($"Kampagne: Mission {UI.SkirmishSetup.CampaignMission} " +
+                         $"beginnt mit Kontostand ${mit}");
+            }
             // start looking at one's own base, not at the whole map
             if (_entities.PlayerHome(me) is { } home)
             {
@@ -1286,6 +1297,12 @@ public partial class MapViewer : Node2D
         if (_nextMission <= 0 && hint.Length == 0) hint = "Zurueck zum Hauptmenue";
 
         var report = _entities.BuildEndReport();
+        // Der Kontostand wandert in die naechste Mission mit. Das Original
+        // addiert die Missionsbezahlung auf den laufenden Stand (@0x4169E3:
+        // `mov ecx,[0xA9C600]; add ecx,[0xA9A1D8]; mov [0xA9C600],ecx`) und
+        // setzt ihn nirgends zurueck — `report.Balance` IST dieser laufende
+        // Stand. Siehe Campaign.CampaignManager.Balance fuer den vollen Beleg.
+        if (record && mission > 0) Campaign.CampaignManager.Balance = report.Balance;
         _endWindow.Fill(report, won, name, label, hint);
         _endBanner.Visible = true;
         CenterEndWindow();
