@@ -70,8 +70,18 @@ public sealed class ContentBuilder
     /// campaign levels 1, 3 and 4.</summary>
     private static readonly (string Stem, string Name)[] DmStems =
     {
-        ("1", "DM_1"), ("3", "DM_3"), ("4", "DM_4"),
+        ("1", "DM_1"), ("2", "DM_2"), ("3", "DM_3"), ("4", "DM_4"),
+        ("5", "DM_5"), ("6", "DM_6"), ("7", "DM_7"), ("8", "DM_8"),
+        ("9", "DM_9"), ("10", "DM_10"), ("11", "DM_11"), ("12", "DM_12"),
+        ("13", "DM_13"),
     };
+
+    // ⚠ 11.08.2026 — hier standen nur 1, 3 und 4. Das war zu wenig, seit
+    // gelesen ist, WAS diese Dateien sind: die DREIZEHN DEMOS des Startmenues.
+    // Das Original laedt sie mit derselben Routine wie einen Spielstand
+    // (@0x4150e9 mit "1.dm"), zaehlt hoch und faengt nach der dreizehnten
+    // wieder von vorn an (@0x415db9: cmp dl,0xd / jbe / mov dl,1). Wer nur drei
+    // baeckt, bekommt im Menue auch nur drei zu sehen.
 
     /// <summary>A program file: lying loose in an installation, inside the
     /// cabinet on a disc. The cabinet is opened once and kept, because it is
