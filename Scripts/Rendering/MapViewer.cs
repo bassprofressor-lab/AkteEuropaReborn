@@ -1135,6 +1135,10 @@ public partial class MapViewer : Node2D
         layer.AddChild(_baseWindow);
         _baseWindow.Rows = _entities.BuildPanelRows;
         _baseWindow.TitleLine = _entities.BuildPanelTitle;
+        // Name, Energie und Zustand des gewaehlten Gebaeudes — damit in der
+        // Titelleiste »Basis 2« steht statt des ersten Wortes der Zeile
+        // darunter, und Energiebalken und Statuszeile ueberhaupt etwas haben.
+        _baseWindow.Head = _entities.BuildPanelHead;
         _baseWindow.Produce = _entities.BuildPanelPick;
         _baseWindow.OnClose = () => { _hidePanelList = true; UpdateProductionPanel(); };
         // »Erstellen« macht dasselbe wie die Taste M — und weil das Fenster
