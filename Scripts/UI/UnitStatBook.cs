@@ -154,6 +154,25 @@ public static class UnitStatBook
         return $"{n} ({r[0x01]})";
     }
 
+    /// <summary>Was ein einzelnes Bauteil kostet — die drei Bytes, aus denen
+    /// die Preisformel @0x4b1fb0 den Preis eines Entwurfs zusammensetzt:
+    /// <c>+0x1a = stats[Waffe][0x20]</c>, <c>+0x1b = stats[Fahrwerk][0x21]</c>,
+    /// <c>+0x1c = stats[Ausrüstung][0x22] + stats[Waffe][0x22]</c> (siehe
+    /// <see cref="Simulation.DesignMath"/>). Genau diese Zahlen stehen im
+    /// Original rechts neben den Einträgen der drei Bauteillisten: »Leichte
+    /// Bordkanone (0) ]15« ist Zeile 1 mit +0x20 = 15, »Reifen (0) [10« ist
+    /// Zeile 161 mit +0x21 = 10.</summary>
+    public static int WeaponPrice(int row) => Stat(row, 0x20);
+    public static int ChassisPrice(int row) => Stat(row, 0x21);
+    public static int EquipPrice(int row) => Stat(row, 0x22);
+
+    private static int Stat(int row, int at)
+    {
+        Load();
+        if (_comp == null || row <= 0 || !_comp.TryGetValue(row, out var r)) return 0;
+        return at < r.Length ? r[at] : 0;
+    }
+
     /// <summary>Nur der kurze Name, ohne die Klammer.</summary>
     public static string ComponentName(int row)
     {

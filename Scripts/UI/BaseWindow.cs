@@ -483,7 +483,9 @@ public sealed partial class BaseWindow : PanelContainer
     /// wird.</para></summary>
     public void PlaceTopRight()
     {
-        if (_placed) return;
+        // ⚠ GetViewportRect() braucht einen Knoten IM Baum — der Aufbau im
+        // Konstruktor kommt vorher (dieselbe Falle wie im HelpWindow).
+        if (_placed || !IsInsideTree()) return;
         var vp = GetViewportRect().Size;
         Size = GetCombinedMinimumSize();
         Position = new Vector2(Mathf.Max(0f, vp.X - Size.X - 12f),

@@ -304,6 +304,7 @@ public partial class MapViewer : Node2D
         // --select=<n> before anything is photographed, so the panel is filled
         // by the time --shot fires
         if (_selectForShot >= 0) GD.Print(_entities.SelectForShot(_selectForShot));
+        if (_designWindowDemo && !_entities.Designer.Active) _entities.ToggleDesigner();
         if (_navOverlay) _entities.ToggleNav();
         if (_buildingOverlay) _entities.ToggleBuildings();
         if (_railOverlay) _entities.ToggleRail();
@@ -519,6 +520,7 @@ public partial class MapViewer : Node2D
     private bool _demoGroups;
     private int _demoEnd;
     private float _endWindowDemo;    // > 0: Abschlussfenster nach n Sekunden zeigen
+    private bool _designWindowDemo;  // --design-window: Erstellung offen lassen
     private float _fightDist;
     private bool _navOverlay;
     private bool _buildingOverlay;
@@ -616,6 +618,10 @@ public partial class MapViewer : Node2D
             // Prüfstand für das Abschlussfenster: es geht nach n Sekunden auf,
             // damit man es photographieren kann, ohne eine ganze Mission
             // durchzuspielen. --end-window=<sek>, ohne Zahl 2 Sekunden.
+            // --design-window: den Entwurfsdialog aufmachen und OFFEN lassen.
+            // --demo-design schliesst ihn am Ende wieder, taugt also nicht zum
+            // Fotografieren.
+            else if (a == "--design-window") _designWindowDemo = true;
             else if (a == "--end-window") _endWindowDemo = 2f;
             else if (a.StartsWith("--end-window=")) _endWindowDemo = a["--end-window=".Length..].ToFloat();
             else if (a == "--demo-win") { _demo = true; _demoEnd = 1; }
@@ -862,6 +868,7 @@ public partial class MapViewer : Node2D
             GD.Print(_entities.TakeoverWatchLine());
             GD.Print(_entities.MinimapWatchLine(_minimap));
             GD.Print(_baseWindow?.WatchLine() ?? "basis-fenster: nicht gebaut");
+            GD.Print(_designWindow?.WatchLine() ?? "erstellung: nicht gebaut");
             GD.Print(_entities.EventWatchLine());
             GD.Print(_entities.VoiceWatchLine());
             GD.Print(_entities.PanelWatchLine());
@@ -1130,12 +1137,33 @@ public partial class MapViewer : Node2D
         _baseWindow.TitleLine = _entities.BuildPanelTitle;
         _baseWindow.Produce = _entities.BuildPanelPick;
         _baseWindow.OnClose = () => { _hidePanelList = true; UpdateProductionPanel(); };
-        _baseWindow.OnDesign = () =>
+        // »Erstellen« macht dasselbe wie die Taste M — und weil das Fenster
+        // »Erstellung« nur die Entwurfsstelle anzeigt, laufen Knopf und Taste
+        // nie auseinander.
+        _baseWindow.OnDesign = () => _entities.ToggleDesigner();
+
+        _designWindow = new UI.DesignWindow
         {
-            // Das Erstellungsfenster gibt es noch nicht; bis dahin führt der
-            // Knopf auf denselben Entwurfsschirm, den `M` schon aufmacht.
-            _entities.ToggleDesigner();
+            Visible = false,
+            Screen = _entities.Designer,
+            Input = _entities.DesignerInput,
+            OnClose = () => { if (_entities.Designer.Active) _entities.ToggleDesigner(); },
         };
+        layer.AddChild(_designWindow);
+    }
+
+    /// <summary>Der Entwurfsdialog — siehe UI/DesignWindow.cs. Er hat keinen
+    /// eigenen Zustand: er zeigt <c>MapEntityLayer.Designer</c> an und ist
+    /// genau dann offen, wenn die auf ist. So bedienen Tastatur (M, Pfeile,
+    /// Enter) und Fenster dieselbe Stelle.</summary>
+    private UI.DesignWindow? _designWindow;
+
+    private void UpdateDesignWindow()
+    {
+        if (_designWindow == null) return;
+        bool want = _entities.Designer.Active;
+        if (want != _designWindow.Visible) _designWindow.Visible = want;
+        if (want) _designWindow.Refresh();
     }
 
     /// <summary>Das Fenster geht auf, sobald etwas Bauendes gewählt ist, und
@@ -1187,6 +1215,7 @@ public partial class MapViewer : Node2D
         _hud.AddThemeConstantOverride("line_spacing", 2 * LegacyFontScale);
         _entities.SetUiFont(font, size);
         _baseWindow?.SetFont(font, size);
+        _designWindow?.SetFont(font, size);
         // ⚠ Reihenfolge: BuildLegacyPanel() laeuft VOR ApplyLegacyFont() (siehe
         // _Ready), die Uhr entsteht also noch ohne Schrift — dieselbe Falle wie
         // bei der Tabelle im Abschlussfenster. Sie bekommt sie hier.
@@ -1392,7 +1421,10 @@ public partial class MapViewer : Node2D
         {
             BuildBaseWindow();
             if (_legacyFont != null)
+            {
                 _baseWindow?.SetFont(_legacyFont, LegacyFontCell * LegacyFontScale);
+                _designWindow?.SetFont(_legacyFont, LegacyFontCell * LegacyFontScale);
+            }
         }
         GD.Print($"MapViewer: loaded {name} ({tex.GetWidth()}x{tex.GetHeight()})");
     }
@@ -1451,8 +1483,10 @@ public partial class MapViewer : Node2D
         if (goals.Length == 0) goals = _entities.ObjectiveSummary();
         if (goals.Length > 0) obj += "   " + goals;
         // the design screen takes the HUD over while it is up — it needs the
-        // room, and nothing else is being ordered meanwhile
-        if (_entities.Designer.Active)
+        // room, and nothing else is being ordered meanwhile.
+        // ⚠ Seit dem 11.08.2026 nur noch als Rückfall: das Fenster
+        // »Erstellung« zeigt dasselbe an, und beides gleichzeitig wäre doppelt.
+        if (_entities.Designer.Active && _designWindow is not { Visible: true })
         {
             _hud.Text = _entities.Designer.Text();
             return;
@@ -1485,6 +1519,7 @@ public partial class MapViewer : Node2D
     {
         QuitIfDue(delta);
         UpdateProductionPanel();
+        UpdateDesignWindow();
         UpdatePanelClock();
 
         // Das Ohr steht in der Mitte des Bildes. Das Original rechnet jeden
