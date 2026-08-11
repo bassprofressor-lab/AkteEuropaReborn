@@ -7371,9 +7371,31 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Der Gleiskörper, Teil 64 (flach), acht Richtungen.</summary>
     private readonly Dictionary<int, Texture2D?> _railTex = new();
 
+    /// <summary>Stück → Bild von Teil 64. Die beiden Reihenfolgen sind NICHT
+    /// dieselbe: Waggonbild 0 steht senkrecht, Schienenbild 0 liegt waagerecht.
+    /// Ohne diese Tabelle lagen die Gleise kreuz und quer.
+    ///
+    /// <para>Gemessen statt geraten, und von zwei Seiten:</para>
+    /// <list type="bullet">
+    /// <item>Stück → Richtung aus ALLEN Routen aller Karten. Nicht je Schritt —
+    /// eine isometrische Diagonale wird als Treppe aus (1,0) und (0,0.5)
+    /// gelegt, das Stück bleibt dabei konstant. Also über den ganzen Lauf
+    /// gleicher Stücke, umgerechnet in Bildschirmpixel (x·40, y·20). Je Stück
+    /// 51 bis 762 Läufe.</item>
+    /// <item>Bild → Richtung aus den Pixeln der acht Schienenbilder selbst,
+    /// über die Hauptträgheitsachse der undurchsichtigen Punkte.</item>
+    /// </list>
+    ///
+    /// <para>Die Paare treffen sich auf ein Grad genau: Stück 1 bei 154,9° auf
+    /// f2 bei 154,4°, Stück 5 bei 158,2° auf f7 bei 158,6°, Stück 3 bei 26,4°
+    /// auf f3 bei 26,5°, Stück 6 bei 1,0° auf f0 bei 0,0°. Dass 0 und 4 sowie
+    /// 2 und 6 auf dasselbe Bild fallen, ist richtig: eine Schiene hat vier
+    /// Achsen, aber acht Fahrtrichtungen.</para></summary>
+    private static readonly int[] RailFrameOf = { 1, 2, 0, 3, 1, 7, 0, 4 };
+
     private Texture2D? GetRailTexture(int piece)
     {
-        int k = piece & 7;
+        int k = RailFrameOf[piece & 7];
         if (_railTex.TryGetValue(k, out var t)) return t;
         string path = Core.Content.Path($"Units/train/rail64/f{k}.png");
         t = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
