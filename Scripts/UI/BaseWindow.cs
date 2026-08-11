@@ -125,7 +125,7 @@ public sealed partial class BaseWindow : PanelContainer
     /// Klassenkopf. Der Bauplatz dafür ist Absicht: sobald
     /// <c>MapEntityLayer</c> die Auskunft herausgibt, ist das Fenster mit einer
     /// Zeile fertig angeschlossen.</summary>
-    public Func<(string Name, int Hp, int HpMax, string Status)>? Head;
+    public Func<(string Name, int Hp, int HpMax, string Status)?>? Head;
 
     // ---- Bauteile des Fensters ----------------------------------------------
     private readonly Label _title = new();
