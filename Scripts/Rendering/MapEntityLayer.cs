@@ -3766,8 +3766,20 @@ public partial class MapEntityLayer : Node2D
         // waehrend eines Feuerstosses nicht flackert.
         shooter.FireUntil = _clock + FirePoseSeconds;
         Vector2 dir = (victim.Pos - shooter.Pos).Normalized();
-        _effects.Add(new Effect { Pos = shooter.Pos + dir * 12f - new Vector2(0, 8),
-                                  Kind = "muzzle", FrameTime = 0.035f });
+        // ⚠ 11.08.2026 — der Muendungsfeuerball (ANIM.CWA-Folge 232) wurde fuer
+        // JEDE Waffe gleich gesetzt: gemeldet als »der Feuerball, der bei einer
+        // richtigen Kanone stimmt, kommt auch bei Infanterie und beim
+        // MG-Fahrzeug«. Ein Gewehr macht keinen Feuerball.
+        //
+        // ⚠ UNSERE SETZUNG, und sie ist ausdruecklich eine: WELCHE Waffe im
+        // Original einen bekommt, ist NICHT gelesen. Genommen wird die
+        // Infanteriewaffe als Grenze -- die Zeilen 185..199 sind die
+        // Handwaffen (siehe TurretOf), alles darunter sind Fahrzeugwaffen.
+        // Das MG-Fahrzeug faellt damit noch auf die falsche Seite; die saubere
+        // Antwort steht in der Waffentabelle und ist nachzulesen.
+        if (shooter.Weapon < InfantryWeaponFirst)
+            _effects.Add(new Effect { Pos = shooter.Pos + dir * 12f - new Vector2(0, 8),
+                                      Kind = "muzzle", FrameTime = 0.035f });
 
         // the weapon's own report, out of the game's own table: a component
         // names a sound class at stats +0x1c, the class picks a row of the
@@ -9342,6 +9354,10 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Wie lange ein Schuss die Pose haelt. UNSERE Setzung.</summary>
     private const float FirePoseSeconds = 0.5f;
+
+    /// <summary>Ab dieser Waffenzeile sind es Handwaffen (siehe TurretOf, das
+    /// nur 1..19 abbildet und 185..199 als Infanteriewaffen kennt).</summary>
+    private const int InfantryWeaponFirst = 185;
 
     private float _clock;
     private float _musicTick;
