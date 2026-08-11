@@ -4750,6 +4750,101 @@ public partial class MapEntityLayer : Node2D
     /// <summary>What the script says, for the harness.</summary>
     public string MissionScriptLine() => _mscript?.Line() ?? "";
 
+    /// <summary>
+    /// `--depot-check` — das Versorgungsdepot von Anfang bis Ende.
+    ///
+    /// <para>Die Spielermeldung war: in Kampagne 2 lassen sich die
+    /// Versorgungshelis nicht bauen, und ohne sie ist die Mission nicht
+    /// durchspielbar. Der Prüfstand geht darum den ganzen Weg ab, statt eine
+    /// Zahl zu setzen: Depot finden → Menü ansehen → kaufen → prüfen, dass das
+    /// Geld abgezogen ist und der Heli fliegt.</para>
+    ///
+    /// <para>⚠ Was er NICHT beweisen kann: dass Typ 14 im Original dieses
+    /// Fenster öffnet. Das ist unsere Setzung (siehe
+    /// <see cref="SupplyDepotType"/>), und ein grünes Ergebnis hier heißt nur,
+    /// dass unser Weg in sich stimmt.</para>
+    /// </summary>
+    public string DepotCheck()
+    {
+        var sb = new System.Text.StringBuilder();
+        // ⚠ Die Flugzeugvorlagen entstehen erst im Missionsstart. Ohne diesen
+        // Anstoss meldete der Pruefstand »nichts kaufbar« und sah damit genau
+        // wie ein kaputter Kaufweg aus — dieselbe Falle wie beim Skript.
+        if (_airDesigns == null || _airDesigns.Count == 0) FillCampaignAirDesigns();
+        sb.Append($"depot-check: Flugzeugvorlagen {_airDesigns?.Count ?? 0} ({_airSource})\n");
+
+        if (_airDesigns != null)
+            for (int k = 0; k < 8 && k < _airDesigns.Count; k++)
+                sb.Append($"   [{k}] {_airDesigns[k].Name} Spieler {_airDesigns[k].Player} " +
+                          $"Payload {_airDesigns[k].Payload} Art {_airDesigns[k].Kind}\n");
+        var depots = new List<int>();
+        for (int i = 0; i < _entities.Count; i++)
+            if (IsSupplyDepot(_entities[i]) && !_entities[i].Dead) depots.Add(i);
+        sb.Append($"depot-check: {depots.Count} Nachschub-Posten auf der Karte");
+        if (depots.Count == 0) return sb.Append(" — nichts zu pruefen").ToString();
+
+        // ⚠ HIER STAND `depots.Find(...)`, und das war ein Fehler DES
+        // PRUEFSTANDS, nicht der Engine: `List<int>.Find` liefert ohne Treffer
+        // `default(int)` = 0 — also die Entitaet 0, die mit dem Depot nichts zu
+        // tun hat. Der Lauf meldete daraufhin »Depot 0 auf (2,12), Spieler 0«
+        // und »nichts kaufbar«, obwohl er nie ein Depot in der Hand hatte, und
+        // meine eigene Fehlerzeile behauptete eine Begruendung (»Entwuerfe
+        // nicht freigegeben«), die der Code gar nicht geprueft hatte. Die
+        // Kruecke des Pruefstands ist selbst eine Annahme.
+        int own = -1;
+        foreach (int i in depots)
+            if (_entities[i].Owner == ViewPlayer) { own = i; break; }
+        sb.Append("\n   Besitzer der Posten:");
+        foreach (int i in depots)
+            sb.Append($" Platz {_entities[i].Slot}->Spieler {_entities[i].Owner}");
+        // ⭐ Und DAS ist der eigentliche Ablauf von Kampagne 2: der Posten ist
+        // HERRENLOS (Spieler -1). Der Spieler hat es so beschrieben — man
+        // startet mit wenig Sprit und Munition, nur ein Fahrzeug schafft es bis
+        // zum Depot, nimmt es EIN, und kann dann die Helis kaufen, die den Rest
+        // der Truppe auffuellen. Der Pruefstand stellt die Einnahme nach, statt
+        // sie vorauszusetzen: ohne sie prueft er den Kaufweg gar nicht.
+        if (own < 0)
+        {
+            own = depots[0];
+            sb.Append($"\n   herrenlos — Pruefstand nimmt Platz {_entities[own].Slot} " +
+                      $"fuer Spieler {ViewPlayer} ein (im Spiel: hinfahren)");
+            _entities[own].Owner = ViewPlayer;
+        }
+
+        var e = _entities[own];
+        _selected = own;
+        int who = e.Owner is >= 0 and <= 7 ? e.Owner : 0;
+        var menu = AirMenu(e);
+        sb.Append($"\n   Depot {e.Slot} auf ({e.Col},{e.Row}), Spieler {e.Owner}, " +
+                  $"Kontostand ${_money[who]}");
+        sb.Append($"\n   Menue: {menu.Count} Eintraege");
+        foreach (var d in menu) sb.Append($" [{d.Name} Art {d.Kind} ${HeliPrice}]");
+        sb.Append($"\n   Bau-Panel: {BuildPanelTitle()} / {BuildPanelRows().Count} Zeilen");
+        if (menu.Count == 0)
+            return sb.Append("\n   NICHTS KAUFBAR — die Entwuerfe 13/14 sind fuer " +
+                             $"Spieler {e.Owner} nicht freigegeben").ToString();
+
+        // ohne Geld muss es abgelehnt werden, mit Geld gehen — beide Richtungen
+        int keep = _money[who];
+        _money[who] = HeliPrice - 1;
+        bool poor = BuyAircraft(e);
+        sb.Append($"\n   mit ${HeliPrice - 1}: {(poor ? "GEKAUFT — falsch!" : "abgelehnt")}  ({_order})");
+
+        _money[who] = keep < HeliPrice ? HeliPrice * 2 : keep;
+        int before = _money[who], hadAir = _special.Count;
+        bool ok = BuyAircraft(e);
+        sb.Append($"\n   mit ${before}: {(ok ? "gekauft" : "ABGELEHNT — falsch!")}  " +
+                  $"Kontostand ${_money[who]} (-{before - _money[who]}), " +
+                  $"Flugzeuge {hadAir} -> {_special.Count}");
+        if (_special.Count > hadAir)
+        {
+            var a = _special[^1];
+            sb.Append($"\n   neuer Heli: {a.Name}, Art {a.Kind}, Ladung {a.Cargo}, " +
+                      $"geparkt {a.Stored} (soll false sein — Art 13/14 fliegen sofort)");
+        }
+        return sb.ToString();
+    }
+
     /// <summary>`--script-coverage` — was die Runtime von diesem Missionsskript
     /// ausführen kann, und was ihr dafür fehlt. Ein fehlender Haken macht eine
     /// Bedingung falsch und eine Wirkung still; beides sieht im Spiel aus wie
@@ -5959,7 +6054,7 @@ public partial class MapEntityLayer : Node2D
         if (_selected < 0 || _selected >= _entities.Count) return null;
         var e = _entities[_selected];
         if (!e.IsBuilding || e.IsProp || e.Dead || e.Owner != ViewPlayer) return null;
-        return IsFactory(e) || IsDock(e) || e.BType == 9 ? e : null;
+        return IsFactory(e) || IsDock(e) || e.BType == 9 || IsSupplyDepot(e) ? e : null;
     }
 
     /// <summary>The panel's heading: the game's own word for the tab
@@ -5970,6 +6065,8 @@ public partial class MapEntityLayer : Node2D
         if (e == null) return "";
         if (IsFactory(e))
             return $"PRODUKTION  W{e.StockW} F{e.StockF} S{e.StockS}";
+        if (IsSupplyDepot(e))
+            return $"VERSORGUNGSDEPOT  ${_money[e.Owner is >= 0 and <= 7 ? e.Owner : 0]}";
         int owner = e.Owner is >= 0 and <= 7 ? e.Owner : 0;
         return $"PRODUKTION  ${_money[owner]}";
     }
@@ -6016,13 +6113,23 @@ public partial class MapEntityLayer : Node2D
             }
             return rows;
         }
-        if (e.BType == 9)
+        // ⚠ Typ 14 (der Nachschub-Posten, das »Versorgungsdepot«) steht hier
+        // seit dem 11.08. NEBEN dem Flughafen: der Kauf hing vorher allein an
+        // Typ 9, und den gibt es auf keiner Kampagnenkarte 1..15. Siehe
+        // SupplyDepotType. Am Depot kostet der Heli GELD, am Flughafen Teile.
+        if (e.BType == 9 || IsSupplyDepot(e))
         {
             var menu = AirMenu(e);
             int owner = e.Owner is >= 0 and <= 7 ? e.Owner : 0;
+            bool money = IsSupplyDepot(e);
             for (int i = 0; i < menu.Count; i++)
                 rows.Add(new UI.BuildPanel.Row(
-                    menu[i].Name, $"${HeliPrice}", _money[owner] >= HeliPrice,
+                    menu[i].Name,
+                    money ? $"${HeliPrice}"
+                          : $"{menu[i].CostW}/{menu[i].CostF}/{menu[i].CostS}",
+                    money ? _money[owner] >= HeliPrice
+                          : menu[i].CostW <= e.StockW && menu[i].CostF <= e.StockF
+                            && menu[i].CostS <= e.StockS,
                     i == e.MenuIndex % Mathf.Max(1, menu.Count)));
             return rows;
         }
@@ -6234,11 +6341,63 @@ public partial class MapEntityLayer : Node2D
         return list;
     }
 
+    /// <summary>Der Nachschub-Posten (Typ 14) — das »Versorgungsdepot«.
+    ///
+    /// <para>⚠ <b>Warum das hier steht, und was daran UNSERE Setzung ist</b>
+    /// (11.08.2026). Der Kauf der Versorgungshelis hing bei uns am Flughafen
+    /// (<c>BType == 9</c>) — und <b>keine Kampagnenkarte 1..15 trägt ein
+    /// Gebäude vom Typ 9</b> (über alle 15 gezählt). In Kampagne 2 war der Kauf
+    /// damit unerreichbar, und die Mission ohne ihn nicht durchspielbar: man
+    /// startet mit wenig Sprit und Munition, und nur ein Fahrzeug schafft es
+    /// bis zum Depot.</para>
+    ///
+    /// <para><b>Aus der EXE gelesen ist der KAUFWEG:</b> der Zwei-Tasten-Dialog
+    /// @0x44C2B9 verzweigt auf Taste 1 → @0x44C2CF und Taste 2 → @0x44C37C, und
+    /// <b>beide Zweige</b> prüfen <c>cmp dword [ecx*4 + 0xA9C600], eax</c> mit
+    /// <c>jge</c> — den Kontostand gegen einen Preis. Die beiden Tasten tragen
+    /// die Beschriftungen »Sprithelikopter kaufen« (0x4F19F0) und
+    /// »Munitionshelikopter kaufen« (0x4F1A3B). Es wird also mit <b>Geld</b>
+    /// gekauft, anders als am Flughafen, wo Flugzeuge Teile kosten.</para>
+    ///
+    /// <para>⚠ <b>NICHT gelesen ist, welcher Gebäudetyp dieses Fenster
+    /// öffnet.</b> Drei Anläufe sind daran gescheitert: die Zuordnung steht in
+    /// keiner Typ→Fensterart-Tabelle, und der Fensteröffner lädt die Feldbasis
+    /// 0x8B9038 nicht über eine feste Adresse (alle 19 solchen Stellen sind
+    /// Sucher oder Schließer). Dass es der <b>Typ 14</b> ist, ruht auf der
+    /// Schilderung des Spielers und auf der Datenlage — map_02 trägt eine 14,
+    /// und in 1..15 gibt es nirgends eine 9. <b>Das ist unsere Setzung, und sie
+    /// steht hier, damit sie beim nächsten Fund sofort zu finden ist.</b></para>
+    /// </summary>
+    public const int SupplyDepotType = 14;
+
+    /// <summary>Kauft dieses Gebäude Helikopter gegen Geld? Der Flughafen tut
+    /// es nicht — dort kosten Flugzeuge Teile.</summary>
+    private static bool IsSupplyDepot(Entity e) => e.IsBuilding && e.BType == SupplyDepotType;
+
     /// <summary>The supply helicopters this airfield's owner may buy.</summary>
     private List<AirDesign> AirMenu(Entity e)
     {
         var list = new List<AirDesign>();
         if (_airDesigns == null) return list;
+        // Am Depot gibt es genau die zwei Nachschubhelis, die der Dialog des
+        // Originals als seine beiden Tasten führt — Sprit (Art 13) und
+        // Munition (Art 14). Das Freigabe-Byte gilt hier wie überall.
+        if (IsSupplyDepot(e))
+        {
+            // ⚠ HIER WIRD NICHT auf das Freigabe-Byte gefiltert, und das ist
+            // kein Versehen: der Zwei-Tasten-Dialog ist KEINE Entwurfsliste.
+            // Er hat zwei feste Tasten (»Sprithelikopter kaufen« /
+            // »Munitionshelikopter kaufen«) und prüft in beiden Zweigen nur
+            // den Kontostand — kein Enable, keine Auswahl. Der Flughafen
+            // dagegen filtert seine LISTE über das Byte, und genau daran wäre
+            // das Depot sonst gescheitert: auf Kampagne 2 ist für Spieler 0
+            // kein einziger Flugzeugentwurf freigegeben (»0 freigegeben«), und
+            // das Menü blieb leer.
+            foreach (var d in _airDesigns)
+                if (d.Player == e.Owner && d.Kind is 13 or 14)
+                    list.Add(d);
+            return list;
+        }
         // ⚠ CORRECTED 10.08.2026 — hier stand zusätzlich `&& d.Kind is 13 or 14`,
         // also nur die beiden Nachschubhelis. Das Original filtert die Liste am
         // Flughafen NUR über das Freigabe-Byte, über alle 20 Entwürfe des
@@ -6264,6 +6423,32 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Buy the picked helicopter: it is paid for from the owner's
     /// Kontostand (sec73) and parked in the airfield's hangar.</summary>
+    /// <summary>Setzt einen Versorgungsheli neben sein Depot und schickt ihn
+    /// sofort los. Dieselben Felder wie der Flughafenweg unten — ein Heli, der
+    /// hier anders entsteht als dort, wäre ein zweiter Satz Wahrheiten.
+    ///
+    /// <para>Art 13 und 14 parken nie: <c>spawn_aircraft</c> setzt ihnen
+    /// <c>+0x31 = 0xFF</c> und sendet sie unmittelbar aus.</para></summary>
+    private void SpawnSupplyHeli(Entity depot, AirDesign d)
+    {
+        int slot = 0;
+        foreach (var s in _special) slot = Mathf.Max(slot, s.Slot + 1);
+        var a = new Special
+        {
+            Slot = slot, Kind = d.Kind, Name = d.Name, TypeName = d.Name,
+            Col = depot.Col, Row = depot.Row, Stored = false, Owner = depot.Owner,
+            HomeSlot = depot.Slot, Pos = depot.Pos, Footprint = depot.Footprint,
+            Speed = d.Speed, Hp = d.Hp, HpMax = d.Hp,
+            Ammo = d.Ammo, AmmoMax = d.Ammo, Fuel = d.Fuel, FuelMax = d.Fuel,
+            Payload = d.Payload, Airframe = d.Airframe,
+            Attack = d.Attack, Defence = d.Defence, Sight = d.Sight,
+            Cargo = SupplyCargoFull,
+        };
+        _special.Add(a);
+        GD.Print($"Versorgungsdepot {depot.Slot}: {d.Name} (Art {d.Kind}) gekauft, " +
+                 $"fliegt sofort los");
+    }
+
     private bool BuyAircraft(Entity e)
     {
         var menu = AirMenu(e);
@@ -6285,6 +6470,28 @@ public partial class MapEntityLayer : Node2D
         // @0x44C2B9), der den Kontostand prüft. Am Flughafen kostet auch der
         // Sprit-Heli 0/30/40 Teile. Beides zu verlangen hiesse doppelt zahlen.
         var d = menu[e.MenuIndex % menu.Count];
+
+        // ---- der Nachschub-Posten kauft mit GELD --------------------------
+        // Der Zwei-Tasten-Dialog @0x44C2B9 prüft in BEIDEN Zweigen
+        // `cmp dword [ecx*4 + 0xA9C600], eax` mit `jge` — den Kontostand gegen
+        // einen Preis, und sonst nichts: kein Hangar, keine Teile. Der Heli
+        // fliegt sofort los, wie am Flughafen auch (Art 13/14 parken nie).
+        // Siehe SupplyDepotType für das, was hier UNSERE Setzung ist.
+        if (IsSupplyDepot(e))
+        {
+            int who = e.Owner is >= 0 and <= 7 ? e.Owner : 0;
+            if (_money[who] < HeliPrice)
+            {
+                _order = $"Sie besitzen nicht genuegend Geld! ({d.Name} kostet " +
+                         $"${HeliPrice}, Kontostand ${_money[who]})";
+                return false;
+            }
+            _money[who] -= HeliPrice;
+            SpawnSupplyHeli(e, d);
+            _order = $"{d.Name} gekauft fuer ${HeliPrice} — Kontostand ${_money[who]}";
+            return true;
+        }
+
         if (e.Hangar != null && e.Hangar.Count >= Mathf.Max(1, e.HangarSize))
         { _order = "Leider kein Platz im Hangar vorhanden!"; return false; }
         if (d.CostW > e.StockW || d.CostF > e.StockF || d.CostS > e.StockS)

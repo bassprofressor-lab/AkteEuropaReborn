@@ -305,6 +305,12 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_depotCheck)
+        {
+            GD.Print(_entities.DepotCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_coverageCheck)
         {
             GD.Print(_entities.ScriptCoverage());
@@ -448,6 +454,7 @@ public partial class MapViewer : Node2D
     private bool _soundCheck;
     private bool _tutorialCheck;
     private bool _coverageCheck;
+    private bool _depotCheck;
     private bool _infDeathCheck;
     private int _buildPreview;
 
@@ -570,6 +577,7 @@ public partial class MapViewer : Node2D
             else if (a == "--sound-check") _soundCheck = true;
             else if (a == "--tutorial-check") _tutorialCheck = true;
             else if (a == "--script-coverage") _coverageCheck = true;
+            else if (a == "--depot-check") _depotCheck = true;
             else if (a == "--infdeath-check") _infDeathCheck = true;
             else if (a.StartsWith("--build-preview=")) _buildPreview = a["--build-preview=".Length..].ToInt();
             else if (a == "--fog") MapEntityLayer.ForceFog = true;
