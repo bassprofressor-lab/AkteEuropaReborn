@@ -619,6 +619,98 @@ public static class CwmExtra
         return list;
     }
 
+    // ---- sec22: DAS GLEIS ----------------------------------------------------
+
+    /// <summary>
+    /// <b>Ein Stück Gleis, wie die Karte es selbst führt.</b>
+    ///
+    /// <para>⚠ <b>13.08.2026 — und es war die ganze Zeit da.</b> Bis heute haben
+    /// wir die Strecke aus den Streckencodes der Linie (sec34 ab +0x0D)
+    /// NACHGEBAUT und ihre Form aus den Nachbarzellen erschlossen. Das war eine
+    /// Konstruktion. Die Karte nennt jede Gleiszelle einzeln, mit ihrem Bild:
+    /// <b>sec22, 15000 B = 3000 Sätze zu 5 Byte, Ziel 0xc2c220</b>
+    /// (Zieltabelle des Laders, Eintrag 21).</para>
+    ///
+    /// <code>
+    ///   +0x00  Spalte                     (byte)
+    ///   +0x01  Zeile                      (byte)
+    ///   +0x02  BILD                       0..9 heil, +20·k Stützenart,
+    ///                                     &gt;=100 zerstört, 255 = leerer Platz
+    ///   +0x03  Trefferpunkte              rail_add @0x4AFA90 setzt 0x96 = 150
+    ///   +0x04  Liniennummer               (der SPOJ-Satz, zu dem das Stück gehört)
+    /// </code>
+    ///
+    /// <para><b>Gelesen, nicht gedeutet:</b> <c>rail_add</c> @0x4AFA90 sucht den
+    /// ersten Platz mit Bild 0xFF und schreibt genau diese fünf Byte;
+    /// <c>rail_at</c> @0x4B0E70 nennt eine Zelle Gleis, wenn ihr Bild &lt; 20
+    /// ist; <c>rail_broken</c> @0x4B0A00 gibt <c>bild &gt;= 100</c> zurück;
+    /// <c>rail_find_broken</c> @0x4B0DF0 sucht das erste Stück mit
+    /// <c>100 &lt;= bild &lt; 255</c> und passendem +0x04; alle vier laufen über
+    /// <b>3000</b> Plätze (<c>cmp si, 0xbb8</c>).</para>
+    ///
+    /// <para><b>Was das Bild bedeutet</b> — an 9846 Gleiszellen aller Karten
+    /// gegen die Nachbarzellen und gegen das Geländebyte +3 gehalten:</para>
+    /// <code>
+    ///   0  L–R  (1752 von 2069 haben genau links und rechts Gleis)
+    ///   1  T–B  (2213 von 2477)
+    ///   2  R–B  (850 von 1055)      3  R–T  (843 von 958)
+    ///   4  L–B  (919 von 1161)      5  L–T  (824 von 1089)
+    ///   6  L–R  auf Geländebyte 3   147 von 147   RAMPE, links höher
+    ///   7  L–R  auf Geländebyte 1   170 von 170   RAMPE, rechts höher
+    ///   8  T–B  auf Geländebyte 4   180 von 180   RAMPE, oben höher
+    ///   9  T–B  auf Geländebyte 2   118 von 118   RAMPE, unten höher
+    /// </code>
+    /// <para>Die vier Rampenbilder sitzen also <b>ausnahmslos</b> auf einer
+    /// Zelle, deren Geländebyte +3 die passende Stufe nennt — das ist die
+    /// Antwort auf »wo werden Höhe und Winkel gesetzt«: im Gelände, und die
+    /// Karte hat das Gleis danach ausgesucht.</para>
+    ///
+    /// <para><b>Zerstörbar: ja.</b> <c>rail_hit</c> @0x4B0460 lässt Rauch und
+    /// Splitter los und rechnet <c>bild += (10 + zufall&amp;1)·10</c>, also +100
+    /// oder +110 — genau die Werte, die <c>4.DM</c> gespeichert hat (Bilder
+    /// 100..117 an 45 Zellen) neben Trefferpunkten von 1 bis 135. Ein
+    /// Spielstand hält den Schaden also fest.</para>
+    /// </summary>
+    public sealed class RailCell
+    {
+        /// <summary>Platznummer im Feld — sie entscheidet über die Stütze:
+        /// der Zeichner nimmt Teil 65 (mit Bock) genau dann, wenn
+        /// <c>platz % 6 == 0</c> ist (@0x42D4B1..0x42D4C2), sonst Teil 64.</summary>
+        public int Index;
+        public int Col, Row, Frame, Hp, Line;
+
+        /// <summary>Das Grundbild 0..9 ohne die Stützenart (<c>bild % 10</c>) —
+        /// so rechnet auch das Original, wenn es die Stütze neu wählt
+        /// (@0x4B037A: <c>div 10</c>, der REST ist das Grundbild).</summary>
+        public int Base => Frame >= 100 ? -1 : Frame % 10;
+
+        /// <summary>true = dieses Stück ist zerschossen (Bild &gt;= 100,
+        /// <c>rail_broken</c> @0x4B0A3B).</summary>
+        public bool Broken => Frame >= 100;
+    }
+
+    public const int RailStride = 5, RailSlots = 3000;
+
+    /// <summary>sec22 auspacken. Ein Platz mit Bild 255 ist leer.</summary>
+    public static List<RailCell> RailCells(CwmFile m)
+    {
+        var list = new List<RailCell>();
+        var s = m.Sec(22);
+        if (s == null) return list;
+        int n = Math.Min(RailSlots, s.Length / RailStride);
+        for (int i = 0; i < n; i++)
+        {
+            int o = i * RailStride;
+            if (s[o + 2] == 0xFF) continue;
+            list.Add(new RailCell
+            {
+                Index = i, Col = s[o], Row = s[o + 1],
+                Frame = s[o + 2], Hp = s[o + 3], Line = s[o + 4],
+            });
+        }
+        return list;
+    }
+
     // ---- sec119 / sec120: what a player may build ---------------------------
 
     /// <summary>sec120 — the buildable aircraft per player (dest 0x51b020),

@@ -35,6 +35,7 @@ public static class EntitiesJson
         public List<CwmExtra.Special> Special = new();
         public List<CwmExtra.RailNode> RailNodes = new();
         public List<CwmExtra.Link> Links = new();
+        public List<CwmExtra.RailCell> RailCells = new();
         public List<CwmExtra.Player> Players = new();
         public List<CwmExtra.AirDesign> AirDesigns = new();
         public List<CwmExtra.ShipDesign> ShipDesigns = new();
@@ -62,6 +63,7 @@ public static class EntitiesJson
             Progress = CwmExtra.Progresses(m),
             Special = CwmExtra.Specials(m),
             RailNodes = CwmExtra.RailNodes(m),
+            RailCells = CwmExtra.RailCells(m),
             Players = CwmExtra.Players(m),
             AirDesigns = CwmExtra.AirDesigns(m),
             ShipDesigns = CwmExtra.ShipDesigns(m),
@@ -264,6 +266,21 @@ public static class EntitiesJson
                 foreach (int v in l.Pieces!) w.Num(v);
                 w.End();
             }
+            w.End();
+        }
+        w.End();
+
+        // sec22 — DAS GLEIS selbst, Zelle fuer Zelle mit seinem Bild. Kurz
+        // geschrieben (fuenf Zahlen je Zelle statt fuenf Schluessel), weil eine
+        // NET-Karte davon 1341 hat: Platz, Spalte, Zeile, Bild, Linie.
+        // Die Trefferpunkte kommen mit, damit ein Spielstand seinen Schaden
+        // behaelt (4.DM traegt 45 zerschossene Stuecke).
+        w.Key("rail_cells").Arr();
+        foreach (var c in d.RailCells)
+        {
+            w.Arr();
+            w.Num(c.Index); w.Num(c.Col); w.Num(c.Row);
+            w.Num(c.Frame); w.Num(c.Line); w.Num(c.Hp);
             w.End();
         }
         w.End();

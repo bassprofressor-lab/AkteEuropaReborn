@@ -1332,6 +1332,24 @@ public partial class MapEntityLayer : Node2D
         _bldBySlot.Clear();
         _railStart.Clear();
         _hasRail = false;
+        _railCells.Clear();
+        _railTiles = null;
+        // sec22 — DIE STRECKE, wie die Karte sie selbst fuehrt. Muss VOR den
+        // Linien gelesen werden: RailAdoptCells() setzt daraus die Zellenketten,
+        // und die Schleife darunter baut sie nur noch dort, wo sec22 nichts hat.
+        if (root.TryGetValue("rail_cells", out var rcv) && rcv.VariantType == Variant.Type.Array)
+            foreach (var item in rcv.AsGodotArray())
+            {
+                if (item.VariantType != Variant.Type.Array) continue;
+                var q = item.AsGodotArray();
+                if (q.Count < 5) continue;
+                _railCells.Add(new RailCell
+                {
+                    Index = q[0].AsInt32(), Col = q[1].AsInt32(), Row = q[2].AsInt32(),
+                    Frame = q[3].AsInt32(), Line = q[4].AsInt32(),
+                    Hp = q.Count > 5 ? q[5].AsInt32() : 150,
+                });
+            }
         var node2bld = new Dictionary<int, int>();
         if (root.TryGetValue("rail_nodes", out var rnv) && rnv.VariantType == Variant.Type.Array)
             foreach (var item in rnv.AsGodotArray())
@@ -1401,8 +1419,18 @@ public partial class MapEntityLayer : Node2D
                 _hasRail = true;
             }
 
+        // ⚠ 13.08.2026 — die STRECKE kommt jetzt aus sec22, nicht mehr aus
+        // unserer Ableitung. RailAdoptCells() misst zuerst, wie weit die beiden
+        // auseinanderliegen (die Zahl steht in --rail-check), und ersetzt dann
+        // die abgeleiteten Ketten durch die der Karte. Was sec22 nicht kennt,
+        // bleibt bei der Ableitung — auf den 30 Karten ist das nichts.
+        RailAdoptCells();
+
         // Die Enden auf die Anschlusszeile der Gebaeude fuehren. Muss NACH der
         // Schleife stehen: erst dort sind alle Linien samt ihren Endgebaeuden da.
+        // ⚠ Mit sec22 ist das RUECKEN gegenstandslos — die Karte legt das Ende
+        // selbst dorthin, wo es hingehoert. RailSnapToDock ruehrt eine Kette aus
+        // sec22 darum nicht mehr an und MISST nur noch (siehe dort).
         RailSnapToDock();
 
         // sec120: what each player may build in the air, with the game's own
@@ -7867,11 +7895,148 @@ public partial class MapEntityLayer : Node2D
     /// Bildindex das Streckenstück ist (@0x4c6de9).</summary>
     private readonly Dictionary<int, List<int>> _lineCellPiece = new();
 
-    /// <summary>Seconds a wagon takes for one route step. OURS: the tick
-    /// counts a per-wagon distance down by the record's +0x0c (8 everywhere in
-    /// the shipped maps) and steps when it runs out, but nothing in the data
-    /// says how long a tick is.</summary>
-    private const float TrainStepSeconds = 0.35f;
+    /// <summary>
+    /// <b>Eine Gleiszelle, wie sie in der KARTE steht</b> — sec22, siehe
+    /// <see cref="Import.CwmExtra.RailCell"/> für den Satz und die Fundstellen.
+    /// </summary>
+    private sealed class RailCell
+    {
+        public int Index, Col, Row, Frame, Line, Hp;
+
+        /// <summary>Grundbild 0..9. Das Original rechnet genauso
+        /// (@0x4B037A: <c>div 10</c>, der Rest ist das Grundbild) — die Zehner
+        /// tragen die Stützenart, die Hunderter den Schaden.</summary>
+        public int Base => Frame % 10;
+
+        /// <summary>Bild ≥ 100 heißt zerschossen (<c>rail_broken</c>
+        /// @0x4B0A3B: <c>cmp …, 0x64 / setae</c>).</summary>
+        public bool Broken => Frame >= 100;
+
+        /// <summary><b>Die Stütze ist keine Setzung mehr.</b> Der Zeichner nimmt
+        /// Teil 65 (Träger MIT Bock) genau dann, wenn der PLATZ des Stücks im
+        /// Feld durch sechs teilbar ist, sonst den blanken Träger 64 —
+        /// @0x42D4B1: <c>bx=6; idiv bx; cmp dx,1; mov dl,0x41; adc dl,0xff</c>,
+        /// also 65 bei Rest 0 und 64 sonst. Dieselbe Zahl steht in
+        /// <c>rail_pylon_pass</c> @0x4B0350, das NUR die Plätze mit
+        /// <c>platz % 6 == 0</c> anfasst.</summary>
+        public bool Pylon => Index % 6 == 0;
+
+        /// <summary>Welche STÜTZENFASSUNG (Teil 65+<c>k</c>), 0..3. Wird von
+        /// <see cref="RailPylonKind"/> gesetzt; siehe dort.</summary>
+        public int PylonKind;
+    }
+
+    /// <summary>
+    /// <b>Die Stützenfassung — vier Teile, und die Wahl ist gelesen.</b>
+    ///
+    /// <para><c>rail_pylon_pass</c> @0x4B0350 läuft über alle 3000 Plätze, fasst
+    /// aber nur die mit <c>platz % 6 == 0</c> an und rechnet dort
+    /// <c>bild := grundbild + 20·k</c>. Der Zeichner @0x42D4FE nimmt dafür
+    /// <c>partBase(65) + bild</c>; da Teil 64 und 65 je genau 20 Bilder führen
+    /// (nachgezählt), sind das die Teile <b>65, 66, 67 und 68</b> — und die vier
+    /// sind verschieden (Bildvergleich: kein Paar gleich).</para>
+    ///
+    /// <para><c>k</c> kommt aus ZWEI Nachbarproben (@0x4B03A3..0x4B03ED):
+    /// <c>bit 0</c> gesetzt, wenn die erste Nachbarzelle KEIN heiles Gleis
+    /// trägt, <c>bit 1</c>, wenn die zweite keines trägt. Die beiden Richtungen
+    /// stehen in der Tabelle @0x5043D8, acht Byte je Grundbild, und sind genau
+    /// die zwei ANGESCHLOSSENEN Seiten des Stücks:</para>
+    /// <code>
+    ///   f0/f6/f7  rechts + links      f1/f8/f9  unten + oben
+    ///   f2  rechts + unten            f3  rechts + oben
+    ///   f4  unten  + links            f5  oben   + links
+    /// </code>
+    /// <para>Die Probe selbst (<c>rail_neighbour_ok</c> @0x4B0300) verlangt
+    /// zweierlei: die Zelle steht im Liniengitter 0x542e18 mit einem Wert
+    /// 1..60 (der Linie, zu der sie gehört — 60 ist die Zahl der SPOJ-Sätze),
+    /// und ihr Gleis ist nicht zerschossen (<c>rail_broken</c> @0x4B0A00).
+    /// <b>Die Fassung sagt also, ob die Strecke über der Stütze weiterläuft
+    /// oder dort aufhört</b> — deshalb sieht Teil 68 (beide Seiten frei) wie
+    /// ein abgeschlossener Kopf aus und Teil 65 wie ein Durchlauf.</para>
+    /// </summary>
+    private static readonly (int C1, int R1, int C2, int R2)[] RailPylonProbe =
+    {
+        (1, 0, -1, 0), (0, 1, 0, -1), (1, 0, 0, 1), (1, 0, 0, -1), (0, 1, -1, 0),
+        (0, -1, -1, 0), (1, 0, -1, 0), (1, 0, -1, 0), (0, 1, 0, -1), (0, 1, 0, -1),
+    };
+
+    private static int RailPylonKind(RailCell c, HashSet<(int, int)> live)
+    {
+        int b = c.Base;
+        if (b is < 0 or > 9) return 0;
+        var p = RailPylonProbe[b];
+        int k = 0;
+        if (!live.Contains((c.Col + p.C1, c.Row + p.R1))) k |= 1;
+        if (!live.Contains((c.Col + p.C2, c.Row + p.R2))) k |= 2;
+        return k;
+    }
+
+    private readonly List<RailCell> _railCells = new();
+
+    /// <summary>Nur für den Prüfstand: Bild und Stützenfassung je Gleiszelle.</summary>
+    private IEnumerable<(int F, bool P, int K)> RailCellFrames()
+    {
+        foreach (var c in _railCells) if (!c.Broken) yield return (c.Base, c.Pylon, c.PylonKind);
+    }
+
+    /// <summary>Wieviele Gleiszellen die Karte selbst nennt, und wieviele davon
+    /// zerschossen sind — für <c>--rail-check</c>.</summary>
+    public int RailCellsFromMap, RailCellsBroken;
+
+    /// <summary>Wie weit unsere ALTE Ableitung von der Karte abweicht:
+    /// Zellen, die nur wir legten, Zellen, die nur die Karte kennt, und Zellen,
+    /// an denen wir ein anderes Bild gewählt hätten. <b>Die Gegenprobe zu
+    /// »wir lesen etwas falsch«</b> — vor dem 13.08.2026 war die Ableitung das
+    /// Einzige, was gezeichnet wurde.</summary>
+    public int RailDiffOnlyOurs, RailDiffOnlyMap, RailDiffFrame, RailDiffChecked;
+
+    /// <summary>
+    /// <b>Der Takt des Originals: 50 je Sekunde.</b> <c>SetTimer(fenster, 1,
+    /// 0x14, NULL)</c> @0x415BC5 — 0x14 = 20 ms, und die Zeitgebernachricht
+    /// treibt <c>game_tick</c> @0x415CF0, in dem sowohl der Zug-Tick
+    /// (@0x416256, JEDEN Takt) als auch der SPOJ-Automat (@0x41638D, jeden
+    /// FÜNFTEN) hängen.
+    /// </summary>
+    public const float OriginalTicksPerSecond = 50f;
+
+    /// <summary>
+    /// <b>Wieviele Takte ein Streckenschritt kostet — gerechnet, nicht
+    /// gesetzt.</b>
+    ///
+    /// <para>Der Waggonsatz führt bei +0x08 einen Zähler und bei +0x0c den
+    /// Abzug je Takt. <c>train_tick</c> @0x4C6A5A prüft <c>zähler &lt;=
+    /// abzug</c> — dann rückt der Waggon eine Stelle weiter, sonst
+    /// <c>zähler -= abzug</c> (@0x4C6A62). Beim Weiterrücken wird der Zähler
+    /// neu gesetzt, und zwar <b>auf 28 für ein ungerades und auf 40 für ein
+    /// gerades Streckenstück</b> (@0x4C6E53: <c>mov byte …, 0x1c ; test al,1 ;
+    /// jne ; mov byte …, 0x28</c>). Dieselben zwei Zahlen sind die Nenner der
+    /// Zwischenrechnung, mit der das Original den Waggon innerhalb eines
+    /// Schrittes bewegt (@0x4C6B42 und @0x4C6BAA).</para>
+    ///
+    /// <para>Der Abzug steht in der Karte: sec44 +0x0c. <b>Über alle 30 Karten
+    /// und alle 1439 Waggons ist er 8</b> — nachgezählt, kein Ausreißer.</para>
+    ///
+    /// <para>Damit: 40 → 32 → 24 → 16 → 8, und beim fünften Takt rückt er
+    /// (8 ≤ 8): <b>5 Takte je gerader Schritt</b>. 28 → 20 → 12 → 4, beim
+    /// vierten Takt rückt er: <b>4 Takte je Halbschritt einer Diagonale</b>.
+    /// Ein gerader Schritt ist eine ganze Zelle, ein ungerader eine halbe in
+    /// beiden Richtungen (Bildtabelle @0x539400).</para>
+    ///
+    /// <para><b>⚠ Was hier NOCH Setzung ist, ist nicht mehr die des Zuges,
+    /// sondern eine globale:</b> <see cref="TickScale"/>. Unsere Simulation
+    /// lässt die Takte des Originals mit 16 je Sekunde laufen statt mit 50 —
+    /// dieselbe Zahl, mit der auch Produktion, Reparatur und Übernahme
+    /// rechnen. Am Original gemessen wäre ein gerader Schritt
+    /// <b>5/50 = 0,10 s</b>; bei uns sind es 5/16 = 0,3125 s. Wer die Bahn auf
+    /// Originalgeschwindigkeit will, dreht an TickScale, nicht am Zug.</para>
+    /// </summary>
+    private const int TrainStepTicksStraight = 5, TrainStepTicksDiagonal = 4;
+
+    /// <summary>Sekunden je GERADEM Streckenschritt in unserer Zeitrechnung.</summary>
+    private const float TrainStepSeconds = TrainStepTicksStraight / (float)TickScale;
+
+    /// <summary>Sekunden je Halbschritt einer Diagonale.</summary>
+    private const float TrainStepSecondsDiagonal = TrainStepTicksDiagonal / (float)TickScale;
 
     private static readonly Dictionary<int, int> WagonPart =
         new() { { 0, 57 }, { 1, 58 }, { 2, 58 }, { 3, 58 } };
@@ -8186,6 +8351,138 @@ public partial class MapEntityLayer : Node2D
         _lineCellPiece[line] = cellPiece;
     }
 
+    /// <summary>
+    /// <b>Die Karte legt die Strecke, nicht wir.</b>
+    ///
+    /// <para>⚠ <b>13.08.2026 — der Befund, auf den »deine bahnstrecken sehen
+    /// teils crazy aus, du liest irgendwas falsch« zutraf.</b> Bis heute wurde
+    /// die Strecke aus den Streckencodes der Linie NACHGEBAUT und ihre Form aus
+    /// den Nachbarzellen ERSCHLOSSEN. Beides war unsere Konstruktion. Die Karte
+    /// führt jede Gleiszelle einzeln mit ihrem Bild — <b>sec22</b>, 3000 Sätze
+    /// zu 5 Byte nach 0xc2c220 (siehe <see cref="Import.CwmExtra.RailCell"/>).
+    /// Auf NET02 sind das <b>1193</b> Zellen; unsere Ableitung legte
+    /// <b>1341</b> Stücke.</para>
+    ///
+    /// <para>Die Karte ist dabei in sich vollständig: über NET02/03/04/05/08
+    /// gemessen liegen die Zellen einer Linie im Feld <b>fortlaufend</b>
+    /// (0 von 4263 Paaren nicht) und <b>Kante an Kante</b> (0 von 4263 nicht).
+    /// Die Kette entsteht also durch schlichtes Sortieren nach dem Platz.</para>
+    ///
+    /// <para>Was diese Zeile mitbringt und die Ableitung nie konnte: die vier
+    /// RAMPEN. Bild 6..9 stehen ausnahmslos auf einer Zelle, deren Geländebyte
+    /// +3 die passende Stufe nennt (147/147, 170/170, 180/180, 118/118) — und
+    /// NET02 hat davon 128 Stück, die wir bisher flach gelegt haben.</para>
+    ///
+    /// <para>Vor dem Übernehmen wird gemessen, wie weit die alte Ableitung
+    /// danebenlag; die vier Zahlen gehen in <c>--rail-check</c>.</para>
+    /// </summary>
+    private void RailAdoptCells()
+    {
+        RailCellsFromMap = _railCells.Count;
+        RailCellsBroken = 0;
+        RailDiffOnlyOurs = RailDiffOnlyMap = RailDiffFrame = RailDiffChecked = 0;
+        if (_railCells.Count == 0) return;
+
+        // 1) messen: unsere alte Ableitung gegen die Karte, Zelle fuer Zelle
+        var mapCell = new Dictionary<(int, int), RailCell>();
+        foreach (var c in _railCells)
+        {
+            if (c.Broken) RailCellsBroken++;
+            mapCell[(c.Col, c.Row)] = c;
+        }
+        // rail_pylon_pass @0x4B0350 — die Fassung jeder Stuetze aus ihren beiden
+        // angeschlossenen Nachbarn. Nur die Plaetze mit platz%6==0 brauchen sie.
+        var live = new HashSet<(int, int)>();
+        foreach (var c in _railCells) if (!c.Broken) live.Add((c.Col, c.Row));
+        foreach (var c in _railCells) if (c.Pylon) c.PylonKind = RailPylonKind(c, live);
+
+        var ourCell = new Dictionary<(int, int), int>();
+        foreach (var kv in _lineCell)
+        {
+            if (!_lineCellFrame.TryGetValue(kv.Key, out var fr)) continue;
+            for (int i = 0; i < kv.Value.Count && i < fr.Count; i++)
+                ourCell[(Mathf.RoundToInt(kv.Value[i].X), Mathf.RoundToInt(kv.Value[i].Y))] = fr[i];
+        }
+        foreach (var kv in ourCell)
+        {
+            if (!mapCell.TryGetValue(kv.Key, out var c)) { RailDiffOnlyOurs++; continue; }
+            RailDiffChecked++;
+            if (c.Base != kv.Value) RailDiffFrame++;
+        }
+        foreach (var kv in mapCell) if (!ourCell.ContainsKey(kv.Key)) RailDiffOnlyMap++;
+
+        // 2) uebernehmen: je Linie die Zellen der Karte in der Reihenfolge ihres
+        //    Platzes. Das ist die Fahrtrichtung — der Kartenbauer legt sie vom
+        //    einen Ende zum anderen, und die Enden stimmen mit den Knoten.
+        var byLine = new Dictionary<int, List<RailCell>>();
+        foreach (var c in _railCells)
+        {
+            if (!byLine.TryGetValue(c.Line, out var l)) byLine[c.Line] = l = new List<RailCell>();
+            l.Add(c);
+        }
+        foreach (var kv in byLine)
+        {
+            var l = kv.Value;
+            l.Sort((x, y) => x.Index - y.Index);
+            var cells = new List<Vector2>(l.Count);
+            var frames = new List<int>(l.Count);
+            foreach (var c in l) { cells.Add(new Vector2(c.Col, c.Row)); frames.Add(c.Base); }
+            // Die Kette so drehen, dass sie an Knoten1 anfaengt: der Zug faehrt
+            // Bud1 -> Bud2, und die Fahrtrichtung haengt an der Reihenfolge.
+            if (RailChainFlipped(kv.Key, cells)) { cells.Reverse(); frames.Reverse(); }
+            _lineCell[kv.Key] = cells;
+            _lineCellFrame[kv.Key] = frames;
+            // Das Waggonbild braucht weiter ein STUECK je Zelle. Es kommt jetzt
+            // aus der Kette selbst (Richtung zur naechsten Zelle), nicht mehr aus
+            // den Streckencodes: die Zellenzahl der Karte und die Codezahl der
+            // Linie sind nicht dieselbe, ein Index waere also verschoben.
+            _lineCellPiece[kv.Key] = RailPiecesOfChain(cells);
+        }
+        _railTiles = null;
+    }
+
+    /// <summary>Liegt der ANFANG dieser Kette naeher an Knoten2 als an Knoten1?
+    /// Dann gehoert sie gedreht. Ohne Endgebaeude bleibt sie, wie sie ist.</summary>
+    private bool RailChainFlipped(int line, List<Vector2> cells)
+    {
+        if (cells.Count < 2) return false;
+        RailLine? l = null;
+        foreach (var x in _railLines) if (x.Slot == line) { l = x; break; }
+        if (l == null) return false;
+        Entity? a = null, b = null;
+        foreach (var e in _entities)
+        {
+            if (!e.IsBuilding) continue;
+            if (a == null && e.Slot == l.Bud1) a = e;
+            if (b == null && e.Slot == l.Bud2) b = e;
+        }
+        if (a == null || b == null) return false;
+        float d0 = Mathf.Abs(cells[0].X - a.Col) + Mathf.Abs(cells[0].Y - a.Row)
+                 + Mathf.Abs(cells[^1].X - b.Col) + Mathf.Abs(cells[^1].Y - b.Row);
+        float d1 = Mathf.Abs(cells[^1].X - a.Col) + Mathf.Abs(cells[^1].Y - a.Row)
+                 + Mathf.Abs(cells[0].X - b.Col) + Mathf.Abs(cells[0].Y - b.Row);
+        return d1 < d0;
+    }
+
+    /// <summary>Das Fahrtrichtungs-STUECK je Zelle einer Kette, in der
+    /// Zaehlweise des Originals (Bildtabelle @0x539400: 0 = nach unten,
+    /// 2 = nach links, 4 = nach oben, 6 = nach rechts; die ungeraden sind die
+    /// Halbschritte einer Diagonale, die es auf einer Zellenkette nicht gibt).
+    /// Der Waggon dreht damit an derselben Stelle wie das Gleis.</summary>
+    private static List<int> RailPiecesOfChain(List<Vector2> cells)
+    {
+        var pcs = new List<int>(cells.Count);
+        for (int i = 0; i < cells.Count; i++)
+        {
+            var from = cells[i];
+            var to = i + 1 < cells.Count ? cells[i + 1] : cells[i];
+            if (i + 1 >= cells.Count && i > 0) { from = cells[i - 1]; to = cells[i]; }
+            int dx = Mathf.RoundToInt(to.X - from.X), dy = Mathf.RoundToInt(to.Y - from.Y);
+            pcs.Add(dy > 0 ? 0 : dy < 0 ? 4 : dx < 0 ? 2 : 6);
+        }
+        return pcs;
+    }
+
     /// <summary>Das Bild je Zelle aus den NACHBARZELLEN. Steht seit dem
     /// 12.08.2026 für sich, weil <see cref="RailSnapToDock"/> die Kette
     /// nachträglich ändert und die Bilder dann neu gerechnet werden müssen.</summary>
@@ -8419,6 +8716,16 @@ public partial class MapEntityLayer : Node2D
             var keepC = new List<Vector2>(cells);
             var keepP = new List<int>(pcs);
             int moved = 0;
+            // ⚠ 13.08.2026 — eine Kette aus sec22 wird NICHT gerueckt. Das
+            // Ruecken war der Ersatz dafuer, dass unsere Ableitung das Ende der
+            // Strecke nicht traf; die Karte trifft es selbst. Gemessen wird
+            // weiter (RailMeasureDeck unten), damit die Zahl den Beweis fuehrt.
+            if (_railCells.Count > 0)
+            {
+                RailMeasureDeck(cells, bySlot, l.Bud2, true);
+                RailMeasureDeck(cells, bySlot, l.Bud1, false);
+                continue;
+            }
             // erst das Ende (haengt am Listenende), dann der Anfang — sonst
             // verschieben sich die Indizes unter der zweiten Runde weg
             moved += RailSnapEnd(cells, pcs, bySlot, l.Bud2, true) ? 1 : 0;
@@ -8646,12 +8953,16 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Ein Gleisbild, <paramref name="frame"/> ist der BILDINDEX
     /// (0..5, siehe <see cref="RailFrameOfPorts"/>), nicht mehr das Stück.</summary>
-    private Texture2D? GetRailTexture(int frame, bool pylon)
+    private Texture2D? GetRailTexture(int frame, int part)
     {
-        int k = (frame & 7) + (pylon ? 8 : 0);
+        // ⚠ 13.08.2026 — hier stand `frame & 7`, und damit fielen die vier
+        // RAMPEN (Bild 6..9) auf 6,7,0,1 zurueck: die beiden senkrechten Rampen
+        // wurden als waagerechtes und senkrechtes Flachstueck gezeichnet.
+        int f = frame is >= 0 and <= 9 ? frame : 0;
+        int p = part is >= 64 and <= 68 ? part : 64;
+        int k = f + p * 16;
         if (_railTex.TryGetValue(k, out var t)) return t;
-        string path = Core.Content.Path(
-            $"Units/train/rail{(pylon ? 65 : 64)}/f{k & 7}.png");
+        string path = Core.Content.Path($"Units/train/rail{p}/f{f}.png");
         t = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
         if (t == null && FileAccess.FileExists(path))
         {
@@ -8698,9 +9009,12 @@ public partial class MapEntityLayer : Node2D
     {
         public readonly Vector2 At;
         public readonly int Frame, YOff, Row;
-        public readonly bool Pylon;
-        public RailTile(Vector2 at, int frame, int yoff, int row, bool pylon)
-        { At = at; Frame = frame; YOff = yoff; Row = row; Pylon = pylon; }
+
+        /// <summary>Welcher TEIL: 64 der blanke Traeger, 65..68 die vier
+        /// Stuetzenfassungen (siehe <see cref="RailPylonKind"/>).</summary>
+        public readonly int Part;
+        public RailTile(Vector2 at, int frame, int yoff, int row, int part)
+        { At = at; Frame = frame; YOff = yoff; Row = row; Part = part; }
     }
 
     private List<RailTile>? _railTiles;
@@ -8714,6 +9028,32 @@ public partial class MapEntityLayer : Node2D
         var tiles = new List<RailTile>();
         RailTilesLoose = 0;
         if (RailProbeSkipCols) RailTilesOld(tiles);
+        else if (_railCells.Count > 0)
+        {
+            // ⚠ 13.08.2026 — DIE KARTE legt die Strecke. Bild UND Stuetze stehen
+            // im Satz: Bild = frame % 10 (0..5 Kanten, 6..9 Rampen), Stuetze =
+            // Platz % 6 == 0 (@0x42D4B1). Beides gelesen, nichts erschlossen.
+            var seen = new HashSet<(int, int)>();
+            foreach (var c in _railCells)
+            {
+                // Ein zerschossenes Stueck wird NICHT gezeichnet: die Luecke ist
+                // genau das, was ein zerstoertes Gleis im Bild ausmacht.
+                // ⚠ UNSERE WAHL — das Original hat dafuer ein eigenes Bild
+                // (Bildindex partBase(64)+100..119 im gemeinsamen Bilderband,
+                // Zeichenzweig @0x42D4D5), das wir noch nicht ausgepackt haben.
+                if (c.Broken) continue;
+                if (!seen.Add((c.Col, c.Row))) continue;
+                var at = RailPoint(new Vector2(c.Col, c.Row));
+                tiles.Add(new RailTile(at, c.Base, RailDeckOffset, c.Row,
+                                       c.Pylon ? 65 + c.PylonKind : 64));
+            }
+            // Die Zahl »nicht Kante an Kante« bleibt der Pruefstand der KETTEN,
+            // nicht der gezeichneten Stuecke: eine Karte legt ihre Zellen
+            // linienweise, und zwei Linien duerfen sich beruehren oder nicht.
+            foreach (var kv in _lineCell)
+                for (int i = 1; i < kv.Value.Count; i++)
+                    if (RailPortTo(kv.Value[i - 1], kv.Value[i]) < 0) RailTilesLoose++;
+        }
         else
             foreach (var kv in _lineCell)
             {
@@ -8732,7 +9072,7 @@ public partial class MapEntityLayer : Node2D
                     bool pylon = !hasPylon || (at - lastPylon).Length() >= RailPylonEveryPx;
                     if (pylon) { lastPylon = at; hasPylon = true; }
                     tiles.Add(new RailTile(at, frames[i], RailDeckOffset,
-                                           Mathf.RoundToInt(cells[i].Y), pylon));
+                                           Mathf.RoundToInt(cells[i].Y), pylon ? 65 : 64));
                 }
             }
         tiles.Sort((a, b) => a.Row != b.Row ? a.Row - b.Row : a.At.X.CompareTo(b.At.X));
@@ -8763,7 +9103,7 @@ public partial class MapEntityLayer : Node2D
                 laid++;
                 tiles.Add(new RailTile(at, RailFrameOf[pcs[i] & 7],
                                        RailYOffsetOf[pcs[i] & 7],
-                                       Mathf.RoundToInt(route[i].Y), pylon));
+                                       Mathf.RoundToInt(route[i].Y), pylon ? 65 : 64));
             }
         }
     }
@@ -8800,7 +9140,7 @@ public partial class MapEntityLayer : Node2D
         {
             var t = tiles[at];
             if (t.Row > throughRow) return;
-            var tex = GetRailTexture(t.Frame, t.Pylon);
+            var tex = GetRailTexture(t.Frame, t.Part);
             if (tex == null) { at = tiles.Count; return; }   // ohne Bilder gar nichts
             DrawTexture(tex, t.At - ComposedAnchor + new Vector2(0, t.YOff));
             RailTilesDrawn++;

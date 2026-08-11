@@ -150,14 +150,37 @@ public partial class MapEntityLayer : Node2D
     /// jedem Ende 20 Runden = 6,25 s — gerechnet, nicht gesetzt.</summary>
     private const float RailTickSeconds = 5f / TickScale;
 
-    /// <summary>⚠ <b>UNSERE SETZUNG</b> — und die einzige hier. Sekunden je
-    /// Streckenschritt einer Fahrt. Der Automat zählt Takte, und wie lang ein
-    /// Takt in Sekunden ist, steht nirgends in den Daten. Wir nehmen dieselbe
-    /// Zahl, mit der die gezeichneten Waggons schon laufen
-    /// (<see cref="TrainStepSeconds"/>), damit Bild und Ware zusammenpassen:
-    /// eine NET05-Linie ist im Mittel 33 Schritte lang, also rund 11 s je
-    /// Richtung und mit den beiden Standzeiten rund 35 s je Umlauf.</summary>
+    /// <summary>
+    /// <b>⚠ 13.08.2026 — KEINE SETZUNG MEHR.</b> Die Fahrzeit einer Linie ist
+    /// die Summe der Takte ihrer Streckenschritte: <b>5 Takte je gerader, 4 je
+    /// diagonaler Schritt</b>, gerechnet aus dem Schrittpreis (40 bzw. 28,
+    /// @0x4C6E53) und dem Abzug je Takt (sec44 +0x0c = 8 auf allen 1439
+    /// Waggons aller 30 Karten) — die ganze Ableitung steht bei
+    /// <see cref="TrainStepTicksStraight"/>. <see cref="RailTravelSeconds"/>
+    /// rechnet sie je Linie aus deren eigenen Streckencodes aus, statt eine
+    /// Zahl mit der Schrittzahl zu multiplizieren. Diese Konstante ist nur noch
+    /// der Rückfall für eine Linie ohne Codes.</summary>
     private const float RailStepSeconds = TrainStepSeconds;
+
+    /// <summary>Die Fahrzeit dieser Linie in Sekunden, aus ihren eigenen
+    /// Streckencodes. Ein UNGERADES Stück ist der Halbschritt einer Diagonale
+    /// und kostet 4 Takte, ein gerades eine ganze Zelle und kostet 5.
+    ///
+    /// <para><c>_linePiece</c> trägt <c>delka + 1</c> Einträge, und der erste
+    /// ist eine Wiederholung des zweiten (so legt <c>CwmExtra.Links</c> ihn
+    /// an). Gezählt wird deshalb ab 1 — das sind genau die <c>delka</c>
+    /// Schritte der Linie.</para></summary>
+    private float RailTravelSeconds(RailLine l)
+    {
+        if (_linePiece.TryGetValue(l.Slot, out var pcs) && pcs.Count > 1)
+        {
+            float t = 0f;
+            for (int i = 1; i < pcs.Count; i++)
+                t += (pcs[i] & 1) != 0 ? TrainStepSecondsDiagonal : TrainStepSeconds;
+            return t;
+        }
+        return l.Steps * RailStepSeconds;
+    }
 
     /// <summary>Ladebudget je Fahrt — <c>mov al, 0xc8</c> @0x4C6652.</summary>
     private const int RailLoadBudget = 200;
@@ -329,7 +352,7 @@ public partial class MapEntityLayer : Node2D
 
         for (int k = 0; k < 4; k++) if (l.Cargo[k] > 0) RailAdd(src, k, -l.Cargo[k]);
 
-        l.TravelFull = l.Steps * RailStepSeconds;   // ⚠ unsere Setzung
+        l.TravelFull = RailTravelSeconds(l);        // aus den Streckencodes, gerechnet
         l.Travel = l.TravelFull;
         RailSpawnWagons(l);
     }
@@ -495,13 +518,49 @@ public partial class MapEntityLayer : Node2D
         }
     }
 
+    /// <summary>
+    /// <b>Die Zahl gegen »ruckelt es?«</b> — nicht beurteilt, gemessen: die
+    /// größte Ortsänderung eines Waggons von einem Bild zum nächsten, in
+    /// Kartenpixeln, und die daraus folgende Geschwindigkeit in Zellen je
+    /// Sekunde.
+    ///
+    /// <para>Zum Vergleich: das ORIGINAL bewegt einen Waggon in Stufen von
+    /// <c>abzug · Δ / preis</c> = 8·40/40 = <b>8 px je Takt</b> auf gerader
+    /// Strecke (@0x4C6BA1), also fünf Sprünge je Zelle. Bleibt unsere Zahl je
+    /// Bild darunter, läuft der Zug feiner als das Original.</para>
+    ///
+    /// <para>Ein Sprung über 100 px ist keine Bewegung, sondern ein Wechsel der
+    /// Fahrt (Abfahrt, Umkehr) und zählt nicht mit.</para>
+    /// </summary>
+    public float RailWagonMaxPxPerFrame, RailWagonCellsPerSec;
+
+    private Vector2 _railProbePos;
+    private int _railProbeLine = -1, _railProbeIdx = -1;
+
     private void RailMoveWagons()
     {
         foreach (var l in _railLines)
         {
             if (!_freightWagons.TryGetValue(l.Slot, out var list) || list.Count == 0) continue;
             if (_lineCell.TryGetValue(l.Slot, out var cells) && cells.Count >= 2)
+            {
                 RailPlaceWagons(l, cells);
+                if (_railProbeLine < 0 && l.Faze is >= 1 and <= 9)
+                {
+                    _railProbeLine = l.Slot; _railProbeIdx = list[0].Index;
+                    RailWagonCellsPerSec = l.TravelFull > 0f ? (cells.Count - 1) / l.TravelFull : 0f;
+                }
+            }
+        }
+        foreach (var w in _wagons)
+        {
+            if (w.Line != _railProbeLine || w.Index != _railProbeIdx) continue;
+            var now = new Vector2(w.Col * TileW, w.Row * TileH);
+            float d = (now - _railProbePos).Length();
+            if (_railProbePos != Vector2.Zero && d < 100f && d > RailWagonMaxPxPerFrame)
+                RailWagonMaxPxPerFrame = d;
+            _railProbePos = now;
+            break;
         }
     }
 
@@ -549,8 +608,14 @@ public partial class MapEntityLayer : Node2D
         sb.Append($"rail-check: {_railLines.Count} SPOJ-Linien, {live} tragen Ware, {dead} nicht");
         sb.Append("   je Ware:");
         for (int k = 0; k < 4; k++) sb.Append($" {GoodName[k]} {perGood[k]}");
-        sb.Append($"\n  Fahrzeit UNSERE SETZUNG: {RailStepSeconds:0.00}s je Streckenschritt; " +
-                  $"Automat {1f / RailTickSeconds:0.0}x/s (Bild%5 @0x41638D bei TickScale {TickScale}), " +
+        sb.Append($"\n  Fahrzeit GERECHNET: {TrainStepTicksStraight} Takte je gerader / " +
+                  $"{TrainStepTicksDiagonal} je diagonaler Schritt (Schrittpreis 40/28 @0x4C6E53, " +
+                  $"Abzug 8/Takt aus sec44+0x0c, 1439 von 1439 Waggons) = " +
+                  $"{TrainStepSeconds:0.000}s / {TrainStepSecondsDiagonal:0.000}s bei TickScale {TickScale}; " +
+                  $"im ORIGINAL bei {OriginalTicksPerSecond:0} Hz (SetTimer 20ms @0x415BC5) " +
+                  $"{TrainStepTicksStraight / OriginalTicksPerSecond:0.000}s / " +
+                  $"{TrainStepTicksDiagonal / OriginalTicksPerSecond:0.000}s" +
+                  $"\n  Automat {1f / RailTickSeconds:0.0}x/s (Bild%5 @0x41638D bei TickScale {TickScale}), " +
                   $"Standzeit {RailDwellTicks} Runden = {RailDwellTicks * RailTickSeconds:0.0}s je Ende, " +
                   $"Ladebudget {RailLoadBudget}/Fahrt (0x4C6652)");
 
@@ -609,6 +674,48 @@ public partial class MapEntityLayer : Node2D
         return sb.ToString();
     }
 
+    /// <summary>
+    /// <b>Woher die Strecke kommt — und wie weit unsere alte Ableitung
+    /// danebenlag.</b> Die Zahl, mit der sich »du liest irgendwas falsch«
+    /// beantworten lässt: nur die Karte (sec22) weiß, welche Zelle ein Gleis
+    /// trägt und welches Bild sie zeigt.
+    ///
+    /// <para>»nur wir« = Zellen, auf die wir ein Stück gelegt haben, die die
+    /// Karte gar nicht als Gleis führt. »nur Karte« = Gleiszellen, die wir
+    /// übersehen haben. »anderes Bild« = Zellen, die beide kennen, an denen
+    /// unsere Ableitung aus den Nachbarn aber eine andere Form gewählt hätte —
+    /// dort stand im Bild eine Kurve, wo eine Gerade hingehört, oder umgekehrt.
+    /// Alle drei müssen nicht 0 sein: sie SIND der Fehler, und sie stehen hier,
+    /// damit die Behebung eine Zahl hat.</para>
+    /// </summary>
+    private string RailSourceReport()
+    {
+        if (RailCellsFromMap == 0)
+            return " | Quelle: sec22 fehlt, Strecke ABGELEITET (unsere Konstruktion)";
+        var sb = new System.Text.StringBuilder();
+        sb.Append($" | Quelle: sec22 der Karte, {RailCellsFromMap} Gleiszellen");
+        if (RailCellsBroken > 0) sb.Append($" ({RailCellsBroken} zerschossen, nicht gezeichnet)");
+        sb.Append($" | alte Ableitung wich ab: {RailDiffOnlyOurs} Zellen nur wir, " +
+                  $"{RailDiffOnlyMap} nur Karte, {RailDiffFrame} von {RailDiffChecked} " +
+                  "gemeinsamen mit anderem Bild");
+        var per = new int[10];
+        var kind = new int[4];
+        int pylon = 0;
+        foreach (var c in RailCellFrames())
+        {
+            if (c.F is >= 0 and <= 9) per[c.F]++;
+            if (!c.P) continue;
+            pylon++;
+            if (c.K is >= 0 and <= 3) kind[c.K]++;
+        }
+        sb.Append("  Bilder:");
+        for (int i = 0; i < 10; i++) if (per[i] > 0) sb.Append($" f{i} {per[i]}");
+        sb.Append($"  (f6..f9 = RAMPEN, {per[6] + per[7] + per[8] + per[9]} Stueck)");
+        sb.Append($"  Stuetzen {pylon} (Platz%6==0, @0x42D4B1), Fassung " +
+                  $"65:{kind[0]} 66:{kind[1]} 67:{kind[2]} 68:{kind[3]} (@0x4B0350)");
+        return sb.ToString();
+    }
+
     private readonly Dictionary<int, int[]> _railStart = new();
 
     /// <summary>`--rail-check`, laufende Meldung: der Automat, die Fahrten und
@@ -651,6 +758,7 @@ public partial class MapEntityLayer : Node2D
 
         sb.Append($" | Gleis: {RailTilesDrawn} Stuecke gezeichnet, " +
                   $"{RailTilesLoose} davon NICHT Kante an Kante");
+        sb.Append(RailSourceReport());
         // Die Zahl fuer »buendig«: wieviele Linienenden lagen NICHT auf der
         // Anschlusszeile ihres Endgebaeudes. Gezaehlt wird VOR dem Ruecken,
         // damit --rail-lay=nodock (Gegenprobe) dieselbe Zahl zeigt und sich
@@ -666,6 +774,8 @@ public partial class MapEntityLayer : Node2D
             {
                 sb.Append($" | Waggon {w.Index} auf Linie {w.Line} bei " +
                           $"({w.Col:0.00},{w.Row:0.00}) Schritt {w.Step}");
+                sb.Append($" | Lauf: {RailWagonCellsPerSec:0.00} Zellen/s, groesste Aenderung " +
+                          $"{RailWagonMaxPxPerFrame:0.00} px je Bild (Original: 8 px je Takt, @0x4C6BA1)");
                 break;
             }
         return sb.ToString();

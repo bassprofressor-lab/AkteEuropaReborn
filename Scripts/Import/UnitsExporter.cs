@@ -41,7 +41,7 @@ public sealed class UnitsExporter
     private readonly ExeTables? _exe;
     private readonly string _dst;
 
-    public int Frames, Hulls, Turrets, Combos, InfantrySets, Aircraft, Wagons, Rails, Chassis;
+    public int Frames, Hulls, Turrets, Combos, InfantrySets, Aircraft, Wagons, Rails, RailFrames, Chassis;
 
     public UnitsExporter(CwrFile cwr, PalFile pal, ExeTables? exe, string unitsDir)
     {
@@ -79,7 +79,14 @@ public sealed class UnitsExporter
     /// eigenes Schienenstück mit, also sah man Gleis nur unter dem Zug — und
     /// deshalb wurde nie danach gesucht, ob es die Schiene auch für sich
     /// gibt.</para></summary>
-    public static readonly int[] RailParts = { 64, 65 };
+    /// <para>⚠ 13.08.2026 — es sind FÜNF, nicht zwei. <c>rail_pylon_pass</c>
+    /// @0x4B0350 rechnet für jedes Stück mit <c>platz % 6 == 0</c> ein Bild
+    /// <c>grundbild + 20·k</c> mit k = 0..3, und der Zeichner @0x42D4FE nimmt
+    /// dafür <c>partBase(65) + bild</c>. Da Teil 64 und 65 je genau 20 Bilder
+    /// führen (gemessen), zeigt <c>partBase(65) + 20·k</c> auf die Teile
+    /// <b>65, 66, 67, 68</b> — vier STÜTZENLÄNGEN, ausgewählt aus dem Gelände
+    /// neben dem Stück.</para></summary>
+    public static readonly int[] RailParts = { 64, 65, 66, 67, 68 };
 
     /// <summary>Read off the rendered blocks of infantry set 0: 0..7 walk,
     /// 9..10 fire, 11 standing, 12..14 falling. Said as observed, because it
@@ -309,8 +316,18 @@ public sealed class UnitsExporter
             f2 = false;
             sb.Append($"\"{part}\":{(b < 0 ? "null" : b.ToString())}");
             if (b < 0) continue;
-            for (int f = 0; f < CwrFile.Facings; f++)
-                Save($"train/rail{part}/f{f}.png", _cwr.PartImage(part, f, _pal));
+            // ⚠ 13.08.2026 — es waren nur ACHT Bilder exportiert, und damit
+            // fehlten genau die RAMPEN. Teil 64 und 65 fuehren je 20 Bilder:
+            // 0..5 die sechs Kantenformen, 6..9 die vier Rampen (Bild 6 und 7
+            // waagerecht, 8 und 9 senkrecht), 10..19 die Schatten dazu. Teil 65
+            // traegt darueber hinaus weitere Bloecke zu 20 — die Stuetzenarten,
+            // die das Original in @0x4B0350 als `grundbild + 20*k` waehlt.
+            // Exportiert wird jetzt, was der Teil wirklich hat.
+            int cnt = System.Math.Min(_cwr.PartFrameCount(part), 80);
+            for (int f = 0; f < cnt; f++)
+                Save($"train/rail{part}/f{f}.png",
+                     _cwr.PartImage(part, f % CwrFile.Facings, _pal, f / CwrFile.Facings));
+            RailFrames += cnt;
             Rails++;
         }
         sb.Append("},\"_rail\":\"train/rail64 ist das flache Gleis, train/rail65 ");
@@ -319,7 +336,7 @@ public sealed class UnitsExporter
         sb.Append("sah man Gleis lange nur unter dem Zug\"}");
         Directory.CreateDirectory(_dst + "/train");
         File.WriteAllText(_dst + "/train/train.json", sb.ToString(), new UTF8Encoding(false));
-        say?.Invoke($"Zuege: {Wagons} Wagentypen, {Rails} Gleisarten");
+        say?.Invoke($"Zuege: {Wagons} Wagentypen, {Rails} Gleisarten mit {RailFrames} Bildern");
     }
 
     // ---- the two indices ----------------------------------------------------
