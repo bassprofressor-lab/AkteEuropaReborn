@@ -100,10 +100,16 @@ public static class CampaignManager
     /// (0xA9A1D8) auf den Kontostand aufgeschlagen, nicht eingesetzt.</item>
     /// <item>@0x4139B8: <c>add ecx, 0xD05</c> — eine Zugabe.</item>
     /// <item>@0x416AF7: <c>add dword [0xA9C600], eax</c>.</item>
+    /// <item>⚠ NACHGETRAGEN 11.08.2026: eine VIERTE Stelle wurde uebersehen.
+    /// @0x41ABC3 <c>mov [eax*4+0xA9C600], edx</c> SETZT das Konto, statt zu
+    /// addieren — in einer Schleife ueber alle acht Spieler, mit
+    /// <c>word[0x5407A0]</c>. Das ist der GEFECHTSaufbau, nicht der
+    /// Kampagnenaufbau; die Begruendung steht unten beim Anfangsstand. Fuer den
+    /// Kampagnenweg bleibt es also dabei: dort wird nur addiert.</item>
     /// </list>
     ///
-    /// <para>Es gibt <b>keinen</b> <c>mov dword [0xA9C600], &lt;wert&gt;</c> und
-    /// kein Loeschen des Bereichs im ganzen Programm — gesucht wurde nach der
+    /// <para>Es gibt keinen <c>mov dword [0xA9C600], &lt;zahl&gt;</c> mit einer
+    /// KONSTANTEN und kein Loeschen des Bereichs — gesucht wurde nach der
     /// Bytefolge <c>C7 05 00 C6 A9 00</c> (0 Treffer) und nach jedem
     /// <c>push 0xA9C600</c> (2 Treffer). Diese zwei sind
     /// <c>fwrite(0xA9C600, 1, 0x20, f)</c> @0x41D8DF und
@@ -112,14 +118,29 @@ public static class CampaignManager
     /// von 43 eingelesenen Karten tragen nur die drei .DM-SPIELSTAENDE einen
     /// sec73 (map_DM_4: Spieler 0 = 44850$), keine einzige .CWM-Mission.</para>
     ///
-    /// <para><b>Also laeuft der Kontostand durch.</b> Das deckt sich mit dem
-    /// Foto akte-europa_5.jpg: dort steht »Missionsbezahlung $320« und
-    /// »Kontostand $470« — die Differenz 150 ist mitgebracht, nicht in dieser
-    /// Mission verdient. Und 150 ist genau dreimal 50, die Zahlung fuer die
-    /// drei Schiffe aus Mission 1.</para>
+    /// <para><b>Also laeuft der Kontostand durch.</b></para>
     ///
-    /// <para>⚠ UNSERE SETZUNG bleibt der ANFANGSSTAND einer neuen Kampagne:
-    /// er ist 0, weil im Programm kein Anfangswert gefunden wurde.</para>
+    /// <para>⚠ 11.08.2026, ZWEITE Lesung — die Deutung des Fotos oben war
+    /// FALSCH herum. Dort steht »Missionsbezahlung $320« und »Kontostand $470«,
+    /// und der Text schloss daraus, die 150 seien MITGEBRACHT. Sie sind es
+    /// nicht: die 150 sind dreimal 50 fuer die drei Schiffe und werden IN
+    /// Mission 1 verdient (mission_scripts.json, Regeln 11/12/13). Die 320 sind
+    /// die feste Missionsbezahlung, die am Ende obendrauf kommt — siehe
+    /// <see cref="PayFor"/>. Die Rechnung ist 0 + 320 + 150 = 470, nicht
+    /// 150 + 320.</para>
+    ///
+    /// <para><b>Damit ist der ANFANGSSTAND einer neuen Kampagne belegt und
+    /// keine Setzung mehr: er ist 0.</b> Zwei unabhaengige Gruende. Erstens die
+    /// Rechnung aus dem Foto. Zweitens: der einzige Befehl im Programm, der ein
+    /// Spielerkonto SETZT statt addiert, ist <c>mov [eax*4+0xA9C600], edx</c>
+    /// @0x41ABC3, und sein <c>edx</c> ist <c>word[0x5407A0]</c>. Das ist die
+    /// GEFECHTS-Einstellung »Startgeld«: @0x44D412 haengt ein Menuepunkt daran,
+    /// der sie um 0x3E8 (1000) erhoeht und bei 0x2710 (10000) auf 0 umlaufen
+    /// laesst, @0x4426CC setzt sie zusammen mit den uebrigen Gefechtsschaltern
+    /// (0x54079C, 0x540798, 0x540B94) zurueck. Dieselbe Routine setzt drei
+    /// Befehle vorher <c>mov [0xA9A1D8], 0x186A0</c> — 100000 Missionsbezahlung,
+    /// eine Zahl, die in keiner Kampagnenmission vorkommt. Das ist der
+    /// Gefechtsaufbau, nicht der Kampagnenaufbau.</para>
     /// </summary>
     public static int Balance
     {
@@ -139,6 +160,79 @@ public static class CampaignManager
     }
 
     public static void Reset() { Completed = 0; Balance = 0; }
+
+    // ---- die Missionsbezahlung ---------------------------------------------
+
+    /// <summary>
+    /// Die MISSIONSBEZAHLUNG einer Mission — ein FESTER Betrag, der am Ende
+    /// aufs Konto kommt, gleichgueltig wie die Mission gelaufen ist.
+    ///
+    /// <para><b>Woher die Zahlen sind.</b> Der Bezahlungszaehler 0xA9A1D8 wird
+    /// im ganzen Abbild nur so beschrieben:</para>
+    /// <list type="bullet">
+    /// <item><b>36 x <c>mov dword [0xA9A1D8], &lt;konstante&gt;</c></b> — die
+    /// Bytefolge <c>C7 05 D8 A1 A9 00</c>. Fuenfunddreissig davon liegen in
+    /// einem geschlossenen Block 0x488794..0x494130, je eine je Mission.</item>
+    /// <item>1 x <c>mov dword [0xA9A1D8], edx</c> @0x41F07F, zwischen zwei
+    /// <c>rep stosd</c>-Nullungen — der globale Anlauf.</item>
+    /// <item>1 x <c>add dword [0xA9A1D8], ecx</c> @0x4D07F1. Die schon bekannte
+    /// Funktion ohne Aufrufer; ihr einziger Thunk @0x402271 wird genau einmal
+    /// gerufen, @0x41AC9D, mit 0.</item>
+    /// <item><c>fwrite</c>/<c>fread</c> @0x41D8F1 / @0x41E96C — Spielstand.</item>
+    /// </list>
+    ///
+    /// <para><b>Damit ist die Vermutung »je Abschuss verdient« widerlegt.</b> Es
+    /// gibt keinen einzigen Schreibzugriff auf 0xA9A1D8 in der Trefferroutine
+    /// oder sonst irgendwo im Kampfteil. Dass im Abschlussfenster
+    /// »Ausgeschaltete 21« und »Missionsbezahlung $320« untereinander stehen,
+    /// ist Anordnung, nicht Ursache.</para>
+    ///
+    /// <para><b>Welche Konstante zu welcher Mission gehoert.</b> Ueber den
+    /// Verteiler @0x488493:</para>
+    /// <code>
+    ///   movsx eax, word [0x539934]        ; der Kampagnenzaehler
+    ///   cmp   eax, 0x63                   ; &gt; 99 -&gt; Standardzweig
+    ///   ja    ...
+    ///   mov   cl, byte [eax + 0x494308]   ; 100 Bytes Missionsnr. -&gt; Fallnr.
+    ///   jmp   dword [ecx*4 + 0x494274]    ; 37 Faelle
+    /// </code>
+    /// <para>Die Bytetabelle @0x494308 schliesst luecken- und versatzlos an die
+    /// 37 x 4 Byte Sprungtabelle @0x494274 an, und sie bildet 1..33 auf die
+    /// Faelle 1..33 ab — Fall N ist Mission N. Jeder dieser Faelle enthaelt
+    /// genau eine der Konstanten. Daraus die Liste unten.</para>
+    ///
+    /// <para><b>Auf beiden Fassungen geprueft.</b> In F:\ (1.420.800 B) liegt
+    /// der Zaehler bei 0x00A99238 statt 0xA9A1D8; dort stehen dieselben Werte in
+    /// derselben Reihenfolge. Einziger Unterschied: F:\ hat 37 statt 36 Stellen,
+    /// die zusaetzliche ist eine 2000 an der Stelle von Fall 34 — jenseits der
+    /// 33 Missionen, die die Namenstabelle kennt, also ohne Belang.</para>
+    ///
+    /// <para><b>Die Gegenprobe.</b> Mission 1 zahlt 320. Das Foto
+    /// akte-europa_5.jpg zeigt »Missionsbezahlung $320«, und mit den drei
+    /// Schiffen zu je 50 kommt »Kontostand $470« heraus: 0 + 320 + 150.</para>
+    ///
+    /// <para><b>Und die Antwort auf die Frage danach:</b> die drei Schiffe sind
+    /// eine ZUGABE, keine Voraussetzung. Wer sie stehen laesst, geht mit 320 aus
+    /// Mission 1 — genug fuer zwei Hubschrauber zu je 150 (0x52FAC0/0x52FAC4).
+    /// </para>
+    ///
+    /// <para>Missionen ausserhalb 1..33 fallen in den Standardzweig und zahlen
+    /// nichts; die Ausnahme ist Mission 99 mit 100 (Fall 35). Wir geben
+    /// dafuer 0 zurueck, denn unsere Kampagne hat 33 Missionen.</para>
+    /// </summary>
+    /// <param name="mission">Die Missionsnummer, 1-basiert wie im Original.</param>
+    public static int PayFor(int mission)
+        => mission >= 1 && mission <= Pay.Length ? Pay[mission - 1] : 0;
+
+    /// <summary>Mission 1..33, in dieser Reihenfolge. Nicht abgetippt, sondern
+    /// aus GAME.EXE gelesen — siehe <see cref="PayFor"/>.</summary>
+    private static readonly int[] Pay =
+    {
+          320,   350,   375,   400,   500,   650,  2000,   800,  1000,  1200,
+         2000,  2000,  2500,  3000,  3400,  4000,  4500,  4000,  5000,  5000,
+         5500,  6000,  2000,  8000,  2000, 10000, 12000,  8000, 15000, 16000,
+        18000, 20000, 30000,
+    };
 
     // ---- the unlock schedule ------------------------------------------------
 
