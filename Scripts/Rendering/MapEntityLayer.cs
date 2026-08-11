@@ -8561,13 +8561,34 @@ public partial class MapEntityLayer : Node2D
     /// <para>Damit ist auch beantwortet, warum der Spieler »teilweise stimmt
     /// es« sagte: die Bahnstation stand mit 0 auf ihrem Deck, der Feldbahnhof
     /// mit −1 eine ganze Zellzeile = 20 px darueber.</para>
+    /// <para><b>⚠ 13.08.2026 — die drei Zahlen sind ÜBERHOLT, und zwar durch
+    /// die Karte selbst.</b> sec22 nennt jede Gleiszelle; wo eine Linie endet,
+    /// ist damit nicht mehr zu erschließen, sondern abzulesen. Über
+    /// NET02/03/04/05/08 gemessen, Linienende gegen Gebäudeecke:</para>
+    /// <code>
+    ///   Basis (1)        Spalte +6, Zeile +1                    25 von 25
+    ///   Bahnstation (6)  Spalte −1/+4, Zeile +1 (24) / +2 (11)
+    ///   Feldbahnhof (12) Spalte −1/+3, Zeile +1 (65) / +2 (67)
+    /// </code>
+    /// <para>Das Deck liegt also auf <b>Zeile +1 und Zeile +2</b>, nicht auf
+    /// −1 und 0. Die beiden Bahnhöfe sind weiter ZWEIGLEISIG (zwei Decks, genau
+    /// eine Zellzeile auseinander) — die Pixelsuche im Muster hatte nur ihre
+    /// Grundlinie zwei Zeilen zu hoch. Die Basis hat <b>ein</b> Deck, 25 von 25
+    /// Enden auf Zeile +1; damit ist auch der alte offene Punkt »Basis 11 px,
+    /// über alle Karten konstant« erledigt: es war kein halber Zeilenversatz
+    /// einer Verladebühne, sondern dieselbe Verschiebung um zwei Zeilen.</para>
     private static int RailDockRow(int bType) => bType switch
     {
-        1 => -1,         // Basis        ⚠ SETZUNG, siehe RailDockDeckPixel
-        6 => 0,          // Bahnstation  gemessen: Deck auf +7 in dieser Zeile
-        12 => 0,         // Feldbahnhof  gemessen: Deck auf +7 in dieser Zeile
+        1 => 1,          // Basis        gemessen an sec22, 25 von 25 Enden
+        6 => 1,          // Bahnstation  oberes von zwei Decks
+        12 => 1,         // Feldbahnhof  oberes von zwei Decks
         _ => int.MinValue,
     };
+
+    /// <summary>Wieviele Decks das Gebäude übereinander hat und wie weit sie
+    /// auseinanderliegen: die beiden Bahnhöfe zwei, die Basis eines. Gemessen
+    /// an sec22 — siehe <see cref="RailDockRow"/>.</summary>
+    private static int RailDockDecks(int bType) => bType is 6 or 12 ? 2 : 1;
 
     /// <summary>
     /// Wo das Schienendeck des GEBAEUDES liegt, in Pixeln unter der Oberkante
@@ -8589,13 +8610,16 @@ public partial class MapEntityLayer : Node2D
     /// in die andere Richtung. Es bleibt bei −1 — und der Pruefstand meldet
     /// die 10 px, damit die Zahl nicht in einem Kommentar versauert.</para>
     /// </summary>
-    private static int RailDockDeckPixel(int bType) => bType switch
-    {
-        1 => -2,         // ⚠ SETZUNG (Verladebuehne, halbe Zeile daneben)
-        6 => 7,
-        12 => 7,
-        _ => int.MinValue,
-    };
+    /// <para><b>⚠ 13.08.2026 nachgezogen.</b> Das Deck sitzt auf der Zeile, die
+    /// <see cref="RailDockRow"/> nennt, und darin auf derselben Höhe wie unsere
+    /// Schienenoberkante (<see cref="RailDeckPixel"/> = 7). Gerechnet von der
+    /// Oberkante der ANKERZEILE sind das <c>20·RailDockRow + 7</c> = <b>27</b>
+    /// für alle drei Arten, und das zweite Deck der Bahnhöfe liegt eine
+    /// Zellzeile tiefer (47).</para>
+    private static int RailDockDeckPixel(int bType)
+        => RailDockRow(bType) == int.MinValue
+            ? int.MinValue
+            : RailDockRow(bType) * TileH + RailDeckPixel;
 
     /// <summary>Wieviele Linienenden NICHT auf der Anschlusszeile ihres
     /// Gebäudes lagen, und wieviele überhaupt geprüft werden konnten — der
@@ -8759,8 +8783,12 @@ public partial class MapEntityLayer : Node2D
         // in RailSnapEnd, sonst zaehlt eine Linie mit, die ganz woanders endet
         if (col < b.Col - 1 || col > b.Col + Mathf.Max(1, b.FootW)) return;
 
-        int d = Mathf.RoundToInt(RailDeckY(col, row) - RailDockDeckY(b));
-        int a = Mathf.Abs(d);
+        // Ein Bahnhof hat ZWEI Decks, eine Zellzeile auseinander (sec22: beide
+        // kommen etwa gleich oft vor). Gemessen wird gegen das naehere.
+        int a = int.MaxValue;
+        for (int k = 0; k < RailDockDecks(b.BType); k++)
+            a = Mathf.Min(a, Mathf.Abs(Mathf.RoundToInt(
+                RailDeckY(col, row) - RailDockDeckY(b) - k * TileH)));
         RailDeckOffCount++;
         RailDeckOffSum += a;
         if (a > RailDeckOffMax) RailDeckOffMax = a;
