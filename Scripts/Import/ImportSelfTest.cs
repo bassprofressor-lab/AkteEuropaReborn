@@ -433,6 +433,51 @@ public static class ImportSelfTest
             GD.Print($"   {stem}.DM: {n} Linien — sec34 +0x03 == y1: {same3}, " +
                      $"+0x05 == y2: {same5}");
         }
+        // ⚠ Und die Frage, die der Spieler stellt: wo ist das GLEIS?
+        // Der Waggon bringt sein Schienenstueck selbst mit, aber die Strecke
+        // dazwischen muss irgendwo herkommen. Hier stehen die Kachelcodes der
+        // Karte auf der Route gegen die sechs Zellen daneben.
+        foreach (string lv in new[] { "NET05", "NET02" })
+        {
+            string p3 = dir.TrimEnd('/', '\\') + "/LEVELS/" + lv + ".CWM";
+            if (!System.IO.File.Exists(p3)) continue;
+            var m3 = CwmFile.Load(p3);
+            var ls3 = CwmExtra.Links(m3, CwmData.Buildings(m3));
+            var rec = m3.Records;
+            int w3 = m3.Width, h3 = m3.Height;
+            var onRoute = new Dictionary<int, int>();
+            var beside = new Dictionary<int, int>();
+            int n3 = 0;
+            foreach (var l in ls3)
+            {
+                if (l.Route == null) continue;
+                foreach (var (cx, cy) in l.Route)
+                {
+                    int r0 = (int)cy;
+                    void Tally(int c, int r, Dictionary<int, int> into)
+                    {
+                        if (c < 0 || c >= w3 || r < 0 || r >= h3) return;
+                        int v = System.BitConverter.ToUInt16(rec, (r * w3 + c) * 4);
+                        into[v] = into.GetValueOrDefault(v) + 1;
+                    }
+                    Tally(cx, r0, onRoute);
+                    Tally(cx + 6, r0, beside);
+                    n3++;
+                }
+            }
+            string Top(Dictionary<int, int> t)
+            {
+                var l2 = new List<KeyValuePair<int, int>>(t);
+                l2.Sort((a, b) => b.Value.CompareTo(a.Value));
+                var sb2 = new System.Text.StringBuilder();
+                for (int k = 0; k < 6 && k < l2.Count; k++)
+                    sb2.Append($"{l2[k].Key}x{l2[k].Value} ");
+                return sb2.ToString();
+            }
+            GD.Print($"   {lv}: {n3} Routenpunkte, {onRoute.Count} verschiedene Codes AUF der Strecke");
+            GD.Print($"      auf  der Strecke: {Top(onRoute)}");
+            GD.Print($"      6 Zellen daneben: {Top(beside)}");
+        }
         if (files == 0) { GD.Print("selftest-rail: keine .DM in " + dir); return 0; }
         GD.Print($"selftest-rail: {files} Spielstaende, {total} Linien mit gespeichertem y; " +
                  $"{solved} eindeutig zurueckgerechnet, davon {right} RICHTIG, {wrong} falsch; " +
