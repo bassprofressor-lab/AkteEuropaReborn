@@ -5215,7 +5215,9 @@ public partial class MapEntityLayer : Node2D
         void Step(string was)
         {
             int before = seen.Count;
-            for (int t = 0; t < 30; t++) _mscript!.Tick(0.2f);
+            // 6 s Spielzeit in FESTEN Takten: 30 x 0.2 s war eine Rechnung ueber die
+            // Bildrate, und mit festem Takt (50 Hz) sind es 300 Takte.
+            _mscript!.Advance(6 * Campaign.MissionScript.TicksPerSecond);
             var neu = seen.GetRange(before, seen.Count - before);
             sb.Append($"   {was,-34} -> {(neu.Count == 0 ? "kein Fenster" : string.Join(" ", neu))}\n");
         }
@@ -5255,7 +5257,7 @@ public partial class MapEntityLayer : Node2D
         {
             int before = Money(ViewPlayer);
             Kill(i, _entities[i]);
-            for (int t = 0; t < 30; t++) _mscript.Tick(0.2f);
+            _mscript.Advance(6 * Campaign.MissionScript.TicksPerSecond);
             sb.Append($"   Schiff {_entities[i].Name} versenkt -> {Money(ViewPlayer)} $ " +
                       $"({(Money(ViewPlayer) - before >= 0 ? "+" : "")}{Money(ViewPlayer) - before})\n");
         }
@@ -5390,6 +5392,74 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <summary>
+    /// `--tick-check` — DER TAKT des Missionsskripts, und was er in den ersten
+    /// Sekunden auslöst.
+    ///
+    /// <para>Die Spielermeldung vom 11.08.2026 war: Kampagne 2 meldet nach
+    /// knapp zwei Sekunden eine erledigte Nebenmission, ohne dass der Spieler
+    /// etwas getan hat. Zwei Dinge müssen dafür stimmen, und dieser Prüfstand
+    /// misst beide statt sie zu behaupten:</para>
+    ///
+    /// <para>(1) DER TAKT. 50 Takte je Sekunde, der langsame Teil des Blocks
+    /// jeden 100., das Tor aus der JSON — alles gemessen, siehe
+    /// <c>aekernel-tools/mission_tick.py</c>. Weicht eine der drei Zahlen ab,
+    /// steht ein ⚠ dahinter. Zusätzlich wird die Umrechnung Sekunden→Takte an
+    /// einer FRISCHEN Uhr nachgerechnet, damit ein Rückfall auf »einmal je
+    /// Bild« nicht unbemerkt bleibt.</para>
+    ///
+    /// <para>(2) WAS VON SELBST FEUERT. Der Lauf rührt nichts an — keine
+    /// Auswahl, kein Befehl, kein Schuss — und zählt, was das Skript trotzdem
+    /// tut. Ein <c>sound</c> oder <c>money</c> in diesem Zustand ist genau der
+    /// gemeldete Fehler und wird als ⚠ ausgewiesen; Texte und Zähler sind
+    /// erlaubt, denn die Missionen sprechen den Spieler von sich aus an.</para>
+    /// </summary>
+    public string TickCheck(double seconds = 10.0)
+    {
+        // Das Skript entsteht erst im ersten Takt samt seinen Haken — ohne
+        // diesen Anstoss meldete der Pruefstand »kein Skript« und saehe damit
+        // genau wie eine fehlende Datei aus.
+        if (_mscript == null) MissionScriptTick(0.001f);
+        if (_mscript == null) return "tick-check: kein Skript fuer diese Mission";
+
+        var sb = new System.Text.StringBuilder();
+
+        // (1a) die Umrechnung selbst, an einer zweiten Uhr: 60 Bilder zu 1/60 s
+        // muessen 50 Takte ergeben, nicht 60.
+        var uhr = Campaign.MissionScript.For(_mscript.Mission);
+        if (uhr != null)
+        {
+            for (int f = 0; f < 60; f++) uhr.Tick(1.0 / 60.0);
+            sb.Append($"tick-check: 60 Bilder zu 1/60 s -> {uhr.Ticks} Takte " +
+                      $"(erwartet {Campaign.MissionScript.TicksPerSecond})" +
+                      (uhr.Ticks == Campaign.MissionScript.TicksPerSecond ? "" : " ⚠") + "\n");
+        }
+
+        // (2) die Mission laufen lassen, ohne irgendetwas zu tun
+        int sounds = 0, money = 0, texts = 0;
+        var vorher = _mscript.PlaySound;
+        _mscript.PlaySound = k => { sounds++; vorher?.Invoke(k); };
+        var vorherGeld = _mscript.AddMoney;
+        _mscript.AddMoney = (b, p) => { money++; vorherGeld?.Invoke(b, p); };
+        var vorherText = _mscript.ShowText;
+        _mscript.ShowText = (id, art, x, y) => { texts++; vorherText?.Invoke(id, art, x, y); };
+
+        long vorTakt = _mscript.Ticks;
+        _mscript.Advance((int)(seconds * Campaign.MissionScript.TicksPerSecond) -
+                         (int)vorTakt);
+
+        sb.Append($"tick-check: Mission {_mscript.Mission} nach {seconds:0.0} s ohne " +
+                  $"Zutun — {_mscript.TickLine(seconds)}\n");
+        sb.Append($"   ausgeloest: {texts} Texte, {money} Geldbuchungen, {sounds} Klaenge");
+        if (sounds > 0 || money > 0)
+            sb.Append("   ⚠ das Skript meldet einen Erfolg, den niemand erspielt hat");
+        sb.Append('\n');
+        foreach (var (t, r, was) in _mscript.Fired)
+            sb.Append($"   Takt {t,5} ({t / (double)Campaign.MissionScript.TicksPerSecond,6:0.00} s) " +
+                      $"Regel {r,2}: {was}\n");
+        return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>
     /// Harness: knock out every building the mission script watches, so the
     /// whole chain can be checked without playing the mission — the condition
     /// reads the world, the rule latches, `end` fires, and Verdict() carries it
@@ -5404,7 +5474,7 @@ public partial class MapEntityLayer : Node2D
         // Bedingungen taten genau das, und weil der Prueflauf erst erzwungen und
         // dann geschaut hat, sah es jedes Mal wie ein Erfolg aus. Ein Durchlauf
         // ohne dt wertet alle Regeln einmal aus, ohne die Uhr zu bewegen.
-        _mscript.Tick(0.0);
+        _mscript.Evaluate();
         if (_mscript.Ended)
             return "script-check: ⚠ das Skript entscheidet die Mission SOFORT (" +
                    (_mscript.Success ? "gewonnen" : "verloren") +
@@ -5469,6 +5539,31 @@ public partial class MapEntityLayer : Node2D
                 if (c.B == 0) marked.Col = c.C;
                 else if (c.B == 1) marked.Row = c.C;
                 else { left++; untouched.Add(Show(c)); continue; }
+                given++;
+                continue;
+            }
+            // ⚠ 11.08.2026 — die BELEGUNGSKARTE ist erzwingbar, und bis heute
+            // war sie es nicht. Mission 7 hängt ihre ganze Kette daran:
+            // `imap(22,14) < 1000` heisst »auf dieser Zelle steht eine Einheit
+            // von Spieler 0« (die Plätze laufen als 1000·spieler + k), und
+            // genau das stösst v[1] an. Solange der Prüfstand das nicht stellen
+            // konnte, meldete er »nicht erzwingbar« und die Mission fiel durch —
+            // aus einem Grund, der mit der geprüften Kette nichts zu tun hat.
+            // Im Spiel fährt man einfach hin.
+            if (c.Kind == "imap")
+            {
+                if (_nav == null || !_nav.InBounds(c.A, c.C) ||
+                    c.Op is not ("<" or "<=") || c.B > 8000)
+                { left++; untouched.Add(Show(c)); continue; }
+                Entity? mover = null;
+                foreach (var e in _entities)
+                    if (!e.IsBuilding && !e.IsProp && !e.Dead && e != marked &&
+                        e.Owner == ViewPlayer) { mover = e; break; }
+                if (mover == null) { left++; untouched.Add(Show(c)); continue; }
+                _nav.ClearOccupant(mover.Col, mover.Row, _entities.IndexOf(mover));
+                mover.Col = c.A;
+                mover.Row = c.C;
+                _nav.SetOccupant(c.A, c.C, _entities.IndexOf(mover), mover.Infantry >= 0);
                 given++;
                 continue;
             }
@@ -5557,7 +5652,7 @@ public partial class MapEntityLayer : Node2D
         // dann heben.
         if (stores.Count > 0)
         {
-            _mscript.Tick(0.0);
+            _mscript.Evaluate();
             foreach (var c in stores)
             {
                 bool hit = false;
@@ -5581,7 +5676,7 @@ public partial class MapEntityLayer : Node2D
         // Noch ein Durchlauf, DANN erst die Glieder melden: die Setzer-Regeln
         // wirken erst im Takt nach dem Erzwingen, und eine Diagnose, die davor
         // gedruckt wird, meldet lauter »NEIN« obwohl die Kette gleich schliesst.
-        _mscript.Tick(0.0);
+        _mscript.Evaluate();
         GD.Print("script-check Glieder: " + _mscript.WhyNot());
         return $"script-check: {conds.Count - left} von {conds.Count} Endbedingungen erzwungen " +
                $"({killed} ausgeschlagen, {given} uebergeben, {zoned} umgewidmet)" +

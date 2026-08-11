@@ -64,12 +64,42 @@ public sealed class MissionScript
         public int Once = -1;         // the variable that latches this rule, -1 = every tick
         public readonly List<Cond> When = new();
         public readonly List<Act> Then = new();
+
+        /// <summary>Die Adresse, aus der die Regel uebersetzt wurde (`_at`) —
+        /// und damit ihr TAKT: alles vor dem Tor des Blocks laeuft jeden Takt,
+        /// alles dahinter jeden hundertsten. Siehe <see cref="Script.Gate"/>.
+        /// </summary>
+        public int At;
+
+        /// <summary>Steht diese Regel VOR dem Tor? Wird beim Laden aus
+        /// <see cref="At"/> und <see cref="Script.Gate"/> bestimmt.</summary>
+        public bool EveryTick;
     }
 
     public sealed class Script
     {
         public int Mission;
         public string Block = "";     // where it was translated from
+
+        /// <summary>
+        /// Das TOR des Missionsblocks (`gate`), gemessen mit
+        /// <c>aekernel-tools/mission_tick.py</c> auf beiden GAME.EXE:
+        /// 33 von 33 Bloecken tragen genau eines, an derselben Stelle im Rumpf.
+        ///
+        /// <para>Jeder Block hat die Form</para>
+        /// <code>
+        ///     &lt;Teil A&gt;                       // jeden Takt, 50 Hz
+        ///     mov eax, [Takt mod 100]        // das Tor
+        ///     test eax, eax
+        ///     jne  &lt;Blockende&gt;
+        ///     &lt;Teil B&gt;                       // jeden 100. Takt, alle 2 s
+        /// </code>
+        /// <para>0 heisst: kein Tor bekannt — dann laeuft die ganze Regelliste
+        /// im langsamen Takt, denn das ist die Haelfte, in der die Endregeln
+        /// stehen.</para>
+        /// </summary>
+        public int Gate;
+
         public readonly List<Rule> Rules = new();
         /// <summary>The state the mission STARTS in, out of the setup block
         /// (`aekernel-tools/mission_initvars.py`). Without it half of every
@@ -84,8 +114,57 @@ public sealed class MissionScript
 
     private readonly Script _script;
     private readonly int[] _var = new int[512];      // v[n], the block's own words
-    private double _seconds;
     private bool _ended;
+
+    // ---- der Takt des Originals --------------------------------------------
+    //
+    // ⚠ 11.08.2026 — bis heute lief die Regelliste einmal je BILD. Wie oft das
+    // Original sie laufen laesst, ist jetzt gemessen; die vollstaendige Kette
+    // mit allen Adressen steht im Kopf von `aekernel-tools/mission_tick.py`,
+    // hier nur die vier Zahlen und woher sie kommen.
+
+    /// <summary>50 Takte je Sekunde. Der Taktgeber ist eine Fensteruhr:
+    /// <c>SetTimer(fenster, 1, 0x14, NULL)</c> — 0x14 = <b>20 ms</b> —, in der
+    /// C:-Fassung bei 0x415BC5 (Datei 0x14FC0), in der F:-Fassung Datei
+    /// 0x14E00, in beiden genau einmal. Die Fensterprozedur (0x412E30) traegt
+    /// WM_TIMER (<c>cmp eax,0x113</c> @0x412ED6) als OFFENEN TAKT ein
+    /// (<c>inc byte [0x53920C]</c> @0x414010), die Hauptschleife arbeitet je
+    /// Durchlauf genau einen ab (<c>dec</c> @0x415F0E) und deckelt den Vorrat
+    /// bei vier (@0x415EFC) — sie kann also aufholen, aber nicht davonlaufen.
+    /// </summary>
+    public const int TicksPerSecond = 50;
+
+    /// <summary>Alle 100 Takte laeuft der zweite Teil des Missionsblocks: die
+    /// Kampagnenfunktion rechnet <c>[0x502988] = Taktzaehler mod 100</c>
+    /// (@0x497636), und jeder der 33 Bloecke prueft das genau einmal.
+    /// 100 Takte sind bei 50 Hz <b>zwei Sekunden</b>.</summary>
+    public const int BlockPeriod = 100;
+
+    /// <summary>250 Takte sind eine Spielminute — also fuenf reale Sekunden,
+    /// eine Spielstunde in fuenf realen Minuten. Die Uhrenkette steht direkt
+    /// hinter dem Taktzaehler: <c>inc byte [0x81AA28]; cmp al,0xFA</c>
+    /// (@0x4160B3) → <c>inc byte [0x81AA2C]; cmp 0x3C</c> (@0x416135) →
+    /// <c>inc byte [0x8154E4]; cmp 0x18</c> → <c>inc dword [0x833868]</c>.
+    /// Und <c>game_time()</c> @0x4CF570 liest genau diese 0x81AA2C.
+    /// <para>⚠ Vorher rechnete diese Datei eine Spielminute als eine REALE
+    /// Minute, also zwoelfmal zu langsam. Keine uebersetzte Regel fragt bisher
+    /// nach der Zeit, die Aenderung bewegt darum nur die Anzeige — aber sie
+    /// bewegt sie in die richtige Richtung.</para></summary>
+    public const int TicksPerGameMinute = 250;
+
+    /// <summary>Takte seit Missionsbeginn. Der Taktzaehler des Originals
+    /// (0x4FA240) wird beim Missionsstart auf 0 gestellt (@0x442728).</summary>
+    private long _ticks;
+
+    /// <summary>Der angebrochene Takt. Ohne ihn verschluckt eine Bildrate ueber
+    /// 50 Hz Takte und eine darunter macht sie nicht auf.</summary>
+    private double _rest;
+
+    /// <summary>Fuer den Pruefstand: wieviele Takte gelaufen sind und wieviele
+    /// Durchlaeufe der langsame Teil hatte.</summary>
+    public long Ticks => _ticks;
+    public long BlockRuns { get; private set; }
+    public double Seconds => _ticks / (double)TicksPerSecond;
 
     public bool Ended => _ended;
 
@@ -115,7 +194,8 @@ public sealed class MissionScript
                 if (!Ends(r)) continue;
                 bool reachable = true;
                 foreach (var c in r.When)
-                    if (c.Kind == "var" && !Writes(c.A)) { reachable = false; break; }
+                    if (c.Kind == "var" && !Cmp(Start(c.A), c.Op, c.B) && !Writes(c.A))
+                    { reachable = false; break; }
                 if (reachable) return true;
             }
             return false;
@@ -128,21 +208,70 @@ public sealed class MissionScript
         return false;
     }
 
-    /// <summary>Does any translated rule ever write v[n]? A rule's `once` latch
-    /// counts — that is how the original raises most of them.</summary>
-    private bool Writes(int n)
+    /// <summary>
+    /// Kann v[n] jemals von seinem Anfangswert abweichen?
+    ///
+    /// <para>⚠ 11.08.2026 — das hiess bis heute nur »schreibt irgendeine Regel
+    /// v[n]?«, und das war zu wenig. Mission 7 zeigt warum: v[102] wird von
+    /// genau einer Regel gehoben, und die verlangt <c>v[1] == 40</c>; v[1]
+    /// wiederum wird nur von einem Zaehler gehoben, der selbst
+    /// <c>v[1] != 0</c> verlangt — er kann sich also nicht selbst anstossen
+    /// (der Anstoss steht im Original in einer Regel, die wir nicht uebersetzen
+    /// koennen, siehe CAMPAIGN_RE.md). Flach gelesen sah die Kette bewohnt aus,
+    /// und <see cref="Decides"/> nahm der Notregel die Entscheidung ab — genau
+    /// die Falle, vor der der Kommentar dort warnt: die Mission wurde
+    /// unloesbar.</para>
+    ///
+    /// <para>Darum jetzt DURCHGEHEND: eine Regel zaehlt nur als Erzeuger, wenn
+    /// sie selbst feuern kann. Ihre Weltbedingungen zaehlen als erfuellbar (der
+    /// Spieler kann sie herstellen), ihre Variablenbedingungen nur, wenn sie
+    /// schon im Anfangszustand wahr sind oder die Variable ihrerseits erreichbar
+    /// ist. Ein Kreis — eine Variable, die nur sich selbst treibt — ist damit
+    /// unerreichbar, und genau das soll er sein.</para>
+    /// </summary>
+    private bool Writes(int n) => Writes(n, new HashSet<int>());
+
+    private bool Writes(int n, HashSet<int> onPath)
     {
-        foreach (var r in _script.Rules)
+        if (!onPath.Add(n)) return false;         // Kreis
+        try
         {
-            if (r.Once == n) return true;
-            foreach (var a in r.Then)
-                if ((a.Kind == "inc" || a.Kind == "set" ||
-                     a.Kind == "find_unit" || a.Kind == "set_time" ||
-                     a.Kind == "take_var" || a.Kind == "set_units" ||
-                     a.Kind == "set_store") && a.A == n) return true;
+            foreach (var r in _script.Rules)
+            {
+                if (!SetsVar(r, n)) continue;
+                bool can = true;
+                foreach (var c in r.When)
+                {
+                    if (c.Kind != "var") continue;              // Weltbedingung: herstellbar
+                    if (Cmp(Start(c.A), c.Op, c.B)) continue;   // schon zu Beginn wahr
+                    if (!Writes(c.A, onPath)) { can = false; break; }
+                }
+                // Der `once`-Riegel verlangt v[once] == 0; das ist eine
+                // Bedingung wie jede andere.
+                if (can && r.Once >= 0 && Start(r.Once) != 0) can = false;
+                if (can) return true;
+            }
+            return false;
         }
+        finally { onPath.Remove(n); }
+    }
+
+    /// <summary>Schreibt diese eine Regel v[n]? Der `once`-Riegel zaehlt mit —
+    /// so hebt das Original die meisten seiner Merker.</summary>
+    private static bool SetsVar(Rule r, int n)
+    {
+        if (r.Once == n) return true;
+        foreach (var a in r.Then)
+            if ((a.Kind == "inc" || a.Kind == "set" ||
+                 a.Kind == "find_unit" || a.Kind == "set_time" ||
+                 a.Kind == "take_var" || a.Kind == "set_units" ||
+                 a.Kind == "set_store") && a.A == n) return true;
         return false;
     }
+
+    /// <summary>Der Wert, mit dem v[n] in die Mission geht.</summary>
+    private int Start(int n) =>
+        n >= 0 && _script.Init.TryGetValue(n, out int v) ? v : 0;
 
     /// <summary>Which end rules cannot fire because a variable they test is
     /// never written — for the harness, so the gap is visible instead of just
@@ -154,7 +283,8 @@ public sealed class MissionScript
         {
             if (!Ends(r)) continue;
             foreach (var c in r.When)
-                if (c.Kind == "var" && !Writes(c.A) && !list.Contains(c.A)) list.Add(c.A);
+                if (c.Kind == "var" && !Cmp(Start(c.A), c.Op, c.B) && !Writes(c.A) &&
+                    !list.Contains(c.A)) list.Add(c.A);
         }
         list.Sort();
         return list;
@@ -201,6 +331,7 @@ public sealed class MissionScript
             var body = kv.Value.AsGodotDictionary<string, Variant>();
             var s = new Script { Mission = m };
             if (body.TryGetValue("block", out var bv)) s.Block = bv.AsString();
+            if (body.TryGetValue("gate", out var gv)) s.Gate = Hex(gv.AsString());
             if (body.TryGetValue("init", out var iv) &&
                 iv.VariantType == Variant.Type.Dictionary)
                 foreach (var e in iv.AsGodotDictionary<string, Variant>())
@@ -212,6 +343,12 @@ public sealed class MissionScript
                 var rd = r.AsGodotDictionary<string, Variant>();
                 var rule = new Rule();
                 if (rd.TryGetValue("once", out var ov)) rule.Once = ov.AsInt32();
+                if (rd.TryGetValue("_at", out var av)) rule.At = Hex(av.AsString());
+                // Vor dem Tor: jeden Takt. Dahinter — und ebenso jede Regel
+                // ohne Adresse — im langsamen Takt. Ohne Adresse sind genau die
+                // 31 ENDregeln, und die stehen im Original am Blockende, also
+                // hinter dem Tor.
+                rule.EveryTick = s.Gate > 0 && rule.At > 0 && rule.At < s.Gate;
                 if (rd.TryGetValue("when", out var wv) && wv.VariantType == Variant.Type.Array)
                     foreach (var c in wv.AsGodotArray())
                     {
@@ -254,6 +391,19 @@ public sealed class MissionScript
         }
         GD.Print($"Missionsskripte: {_cache.Count} geladen");
         return _cache;
+    }
+
+    /// <summary>"0x499197" -> 0x499197. Was sich nicht lesen laesst, wird 0 —
+    /// und 0 heisst ueberall in dieser Datei »unbekannt«, nicht »Adresse 0«.
+    /// </summary>
+    private static int Hex(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return 0;
+        s = s.Trim();
+        if (s.StartsWith("0x") || s.StartsWith("0X")) s = s[2..];
+        return int.TryParse(s, System.Globalization.NumberStyles.HexNumber,
+                            System.Globalization.CultureInfo.InvariantCulture, out int v)
+            ? v : 0;
     }
 
     // ---- what the world has to answer -------------------------------------
@@ -322,8 +472,10 @@ public sealed class MissionScript
     public Action<int>? StopTransport;               // einheit
 
     /// <summary>Minutes since the mission started — the original's clock
-    /// (`game_time()` counts 60·(hour + 24·day) + minute).</summary>
-    public int Minutes => (int)(_seconds / 60.0);
+    /// (`game_time()` counts 60·(hour + 24·day) + minute), und eine Spielminute
+    /// sind <see cref="TicksPerGameMinute"/> Takte, nicht sechzig Sekunden.
+    /// </summary>
+    public int Minutes => (int)(_ticks / TicksPerGameMinute);
 
     // ---- reinforcements ----------------------------------------------------
 
@@ -407,15 +559,65 @@ public sealed class MissionScript
         return n;
     }
 
+    /// <summary>
+    /// Soviel Spielzeit, wie <paramref name="dt"/> Sekunden hergeben — in
+    /// FESTEN Takten, nicht je Bild.
+    ///
+    /// <para>⚠ Bis zum 11.08.2026 wertete diese Schleife die ganze Regelliste
+    /// einmal je Bild aus. Damit hing das Spiel an der Bildrate: derselbe
+    /// Zaehler war auf einem schnellen Rechner frueher voll als auf einem
+    /// langsamen. Jetzt zaehlt sie Takte zu 20 ms und laesst den langsamen Teil
+    /// des Blocks alle 100 davon laufen — beides gemessen, siehe
+    /// <see cref="TicksPerSecond"/> und <see cref="BlockPeriod"/>.</para>
+    ///
+    /// <para>Der DECKEL ist auch gemessen: das Original haelt hoechstens vier
+    /// offene Takte vor (<c>cmp al,4; jbe</c> @0x415EFC, danach
+    /// <c>mov byte [0x53920C],1</c>) und laesst alles darueber verfallen. Auf
+    /// einem zu langsamen Rechner geht die Spieluhr im Original also NACH; das
+    /// tut sie hier genauso. Bei 60 Bildern je Sekunde kommen 0,83 Takte auf
+    /// ein Bild, der Deckel greift erst unter etwa 13 Bildern.</para>
+    /// </summary>
     public void Tick(double dt)
     {
-        if (_ended) return;
-        _seconds += dt;
-        TickIncoming();
+        if (_ended || dt <= 0) return;
+        _rest += dt * TicksPerSecond;
+        int n = (int)_rest;
+        _rest -= n;
+        if (n > MaxPending) { n = MaxPending; _rest = 0; }
+        Advance(n);
+    }
 
+    /// <summary>Der Vorrat offener Takte im Original: vier (@0x415EFC).</summary>
+    public const int MaxPending = 4;
+
+    /// <summary>
+    /// Genau <paramref name="n"/> Takte, ohne Deckel — fuer den Pruefstand,
+    /// der Spielzeit vergehen lassen will, ohne von der Bildrate abzuhaengen.
+    /// </summary>
+    public void Advance(int n)
+    {
+        for (int i = 0; i < n && !_ended; i++)
+        {
+            // Reihenfolge wie im Original: die Verstaerkungswarteschlange
+            // (@0x4C0260, gerufen bei 0x4163E7) laeuft VOR dem Missionsblock
+            // (0x497540, gerufen bei 0x416884).
+            TickIncoming();
+            Step(_ticks % BlockPeriod == 0);
+            _ticks++;
+        }
+    }
+
+    /// <summary>
+    /// Ein Durchlauf der Regelliste. <paramref name="full"/> heisst: auch der
+    /// Teil hinter dem Tor kommt dran.
+    /// </summary>
+    private void Step(bool full)
+    {
+        if (full) BlockRuns++;
         for (int ri = 0; ri < _script.Rules.Count; ri++)
         {
             var r = _script.Rules[ri];
+            if (!full && !r.EveryTick) continue;
             if (r.Once >= 0 && r.Once < _var.Length && _var[r.Once] != 0) continue;
             bool all = true;
             foreach (var c in r.When)
@@ -423,11 +625,40 @@ public sealed class MissionScript
             if (!all) continue;
 
             _ruleNo = ri;
+            if (Fired.Count < FiredMax)
+            {
+                var what = new List<string>();
+                foreach (var a in r.Then) what.Add(a.Kind);
+                Fired.Add((_ticks, ri, string.Join("+", what)));
+            }
             foreach (var a in r.Then) Do(a);
             if (r.Once >= 0 && r.Once < _var.Length) _var[r.Once]++;
             RulesFired++;
             if (_ended) return;
         }
+    }
+
+    /// <summary>Fuer den Pruefstand: welche Regel bei welchem Takt gefeuert hat
+    /// und womit. Gedeckelt, damit ein Zaehler, der jede Sekunde feuert, den
+    /// Speicher nicht vollschreibt — die ersten <see cref="FiredMax"/> reichen,
+    /// denn gesucht wird, was ZU FRUEH kommt.</summary>
+    public readonly List<(long Tick, int Rule, string What)> Fired = new();
+
+    private const int FiredMax = 64;
+
+    /// <summary>
+    /// Ein voller Durchlauf der Regelliste, OHNE die Uhr zu bewegen — fuer den
+    /// Pruefstand.
+    ///
+    /// <para>⚠ Das war vorher <c>Tick(0.0)</c>, und mit festem Takt tut das
+    /// nichts mehr: null Sekunden sind null Takte. Ein Prueflauf, der so fragt
+    /// »gewinnt das Skript sofort?«, bekaeme immer nein — und zwar aus einem
+    /// Grund, der mit der gepruefen Frage nichts zu tun hat.</para>
+    /// </summary>
+    public void Evaluate()
+    {
+        if (_ended) return;
+        Step(true);
     }
 
     /// <summary>Welche Regel gerade laeuft — nur fuer die Protokollzeile beim
@@ -547,7 +778,11 @@ public sealed class MissionScript
                 // am 11.08.2026 beim START von Kampagne 2 »Nebenmission
                 // beendet«, und ohne diese Zeile ist nicht zu sehen, welche der
                 // 21 Regeln das war.
-                GD.Print($"mission: Klang {a.A} aus Regel {_ruleNo}");
+                // Mit dem TAKT dazu: der Spieler hoerte am 11.08.2026 beim
+                // START von Kampagne 2 »Nebenmission beendet«, und ohne die
+                // Zahl ist »zu frueh« nicht von »richtig« zu unterscheiden.
+                GD.Print($"mission: Klang {a.A} aus Regel {_ruleNo} " +
+                         $"bei Takt {_ticks} ({Seconds:0.00} s)");
                 PlaySound?.Invoke(a.A);
                 break;
             case "close_texts":
@@ -829,9 +1064,16 @@ public sealed class MissionScript
         return list;
     }
 
-    public string Line() =>
-        $"Skript M{_script.Mission} ({_script.Block}): {RulesFired} Regeln, " +
-        $"{Minutes} min" + (_ended ? (Success ? ", GEWONNEN" : ", VERLOREN") : "");
+    public string Line()
+    {
+        int fast = 0;
+        foreach (var r in _script.Rules) if (r.EveryTick) fast++;
+        return $"Skript M{_script.Mission} ({_script.Block}): {RulesFired} Regeln, " +
+               $"Takt {_ticks} ({Seconds:0.00} s, {Minutes} Spielmin), " +
+               $"{BlockRuns} Blockdurchlaeufe; Tor 0x{_script.Gate:X} — " +
+               $"{fast} von {_script.Rules.Count} Regeln jeden Takt" +
+               (_ended ? (Success ? ", GEWONNEN" : ", VERLOREN") : "");
+    }
 
     // ---- Was die Runtime von diesem Skript ueberhaupt ausfuehren kann -------
     //
@@ -899,6 +1141,30 @@ public sealed class MissionScript
                 if (c.Kind == "imap")
                     seen.Add($"({c.A},{c.C}) ist {ImapAt(c.A, c.C)}, verlangt {c.Op} {c.B}");
         return seen.Count == 0 ? "" : "imap: " + string.Join(" | ", seen);
+    }
+
+    /// <summary>
+    /// Der TAKT dieses Skripts in Zahlen — fuer <c>--tick-check</c>.
+    ///
+    /// <para>Drei Groessen, die alle nachrechenbar sind: die Zahl der Takte,
+    /// die <paramref name="seconds"/> Sekunden ergeben (50 je Sekunde), die
+    /// Zahl der Durchlaeufe des langsamen Blockteils (jeder 100.) und die
+    /// Aufteilung der Regeln am Tor. Weicht eine davon ab, ist der Takt nicht
+    /// der gemessene.</para>
+    /// </summary>
+    public string TickLine(double seconds)
+    {
+        int fast = 0;
+        foreach (var r in _script.Rules) if (r.EveryTick) fast++;
+        long wantTicks = (long)Math.Round(seconds * TicksPerSecond);
+        // Gelaufen sind die Takte 0 .. wantTicks-1, und der Block kommt bei
+        // jedem Vielfachen von 100 dran — Takt 0 zaehlt also mit.
+        long wantRuns = (wantTicks + BlockPeriod - 1) / BlockPeriod;
+        return $"Takt {_ticks}/{wantTicks}" + (_ticks == wantTicks ? "" : " ⚠") +
+               $", Blockdurchlaeufe {BlockRuns}/{wantRuns}" +
+               (BlockRuns == wantRuns ? "" : " ⚠") +
+               $", Tor 0x{_script.Gate:X}" + (_script.Gate == 0 ? " ⚠ FEHLT" : "") +
+               $", {fast}/{_script.Rules.Count} Regeln jeden Takt";
     }
 
     public string Coverage(out int rules, out int blocked)
