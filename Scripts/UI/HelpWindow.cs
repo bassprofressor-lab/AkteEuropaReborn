@@ -77,9 +77,31 @@ public sealed partial class HelpWindow : PanelContainer
         return list;
     }
 
-    /// <summary>Alles vergessen — für einen Prüfstand, der nach einem Import
-    /// neu laden will.</summary>
-    public static void Forget() { _texts = null; _tried = false; }
+    /// <summary>Was der Spieler in dieser Mission schon weggeklickt hat.
+    ///
+    /// <para>⚠ 11.08.2026, zweiter Anlauf. Der erste Fix verhinderte nur das
+    /// Flackern: eine Regel ohne Riegel ruft jeden Takt
+    /// <c>close_message_windows</c> + <c>show_text</c>, und ein WEGGEKLICKTES
+    /// Fenster war aus <c>Open</c> verschwunden — also fand <c>Show</c> keines
+    /// mit dieser Nummer und baute es neu. Das Popup kam sofort zurück, und für
+    /// den Spieler sah es aus, als liesse es sich gar nicht schliessen.</para>
+    ///
+    /// <para>Wer eine Meldung weggeklickt hat, bekommt sie in dieser Mission
+    /// nicht wieder. Das ist genau das, was der Riegel des Originals bewirkt
+    /// (<c>v[n] == 0</c> vor der Regel) — nur an der Stelle, an der wir ihn
+    /// sicher setzen können, solange der Regelleser ihn bei dieser Form noch
+    /// nicht erkennt.</para></summary>
+    private static readonly HashSet<int> Dismissed = new();
+
+    /// <summary>Alles vergessen — beim Missionsstart und für einen Prüfstand,
+    /// der nach einem Import neu laden will.</summary>
+    public static void Forget()
+    {
+        _texts = null; _tried = false;
+        Dismissed.Clear();
+        foreach (var w in Open.ToArray()) w.QueueFree();
+        Open.Clear();
+    }
 
     /// <summary>Wieviele Fenster gerade offen sind. Der Block fragt das selbst
     /// (0x4D0600, »ist Fenster n noch offen?«).</summary>
@@ -123,6 +145,9 @@ public sealed partial class HelpWindow : PanelContainer
     /// sind die Stelle im 640×480-Raster des Originals.</summary>
     public static HelpWindow? Show(Node host, int id, int ox, int oy)
     {
+        // Vom Spieler weggeklickt? Dann kommt es nicht wieder.
+        if (Dismissed.Contains(id)) return null;
+
         // Schon offen (auch nur vorgemerkt)? Dann bleibt es einfach stehen.
         foreach (var open in Open)
             if (open.Id == id) { open._pendingClose = false; return open; }
@@ -193,7 +218,25 @@ public sealed partial class HelpWindow : PanelContainer
         };
         label.AddThemeColorOverride("default_color", new Color(0.86f, 0.86f, 0.80f));
         label.Text = Markup(paras);
-        AddChild(label);
+
+        // ⚠ Ein sichtbares X. Das Original sagt in Text #001 zwar selbst, dass
+        // man mit der rechten Maustaste oder ESC schliesst — aber der Spieler
+        // hat das Fenster fuer »starr« gehalten, weil nichts danach aussah.
+        // Der Knopf ist UNSERE Zutat und aendert am Weg nichts: er ruft
+        // dasselbe Dismiss wie die beiden Tasten.
+        var row = new HBoxContainer();
+        row.AddChild(label);
+        var close = new Button
+        {
+            Text = "X", Flat = true, FocusMode = FocusModeEnum.None,
+            CustomMinimumSize = new Vector2(28, 28),
+            SizeFlagsVertical = SizeFlags.ShrinkBegin,
+            TooltipText = "Schliessen (rechte Maustaste oder ESC)",
+        };
+        close.AddThemeColorOverride("font_color", new Color(0.85f, 0.78f, 0.45f));
+        close.Pressed += Dismiss;
+        row.AddChild(close);
+        AddChild(row);
 
         _ox = ox;
         _oy = oy;
@@ -273,6 +316,7 @@ public sealed partial class HelpWindow : PanelContainer
 
     private void Dismiss()
     {
+        Dismissed.Add(Id);
         Open.Remove(this);
         QueueFree();
     }

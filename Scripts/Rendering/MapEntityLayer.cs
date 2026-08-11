@@ -825,6 +825,9 @@ public partial class MapEntityLayer : Node2D
 
     public void Load(string name, GDict meta)
     {
+        // Eine neue Karte, ein neuer Satz Meldungen: was der Spieler in der
+        // VORIGEN Mission weggeklickt hat, darf die naechste nicht stummschalten.
+        UI.HelpWindow.Forget();
         _entities.Clear();
         _ammoCap.Clear();
         LoadPatterns(meta);
