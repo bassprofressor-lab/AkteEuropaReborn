@@ -29,6 +29,58 @@ using Godot;
 /// "seen" cannot dim what a unit has walked away from. And the cadence is kept
 /// (every fifth tick) because recomputing a 250 x 250 grid every frame would be
 /// waste, not fidelity.</para>
+///
+/// <para><b>Does high ground see further? YES — and it is a bigger radius, not
+/// a line of sight.</b> Answered 11.08.2026 by reading all eleven call sites of
+/// the stamp. Ten of them hand it a fixed or table radius; exactly one — the
+/// <b>ground-unit</b> block of the fog round, @0x4206fa..0x4207e1 — computes it
+/// from the terrain:</para>
+/// <code>
+///   0x4207AF  call 0x401aaf -> 0x41d0e0   ; elev(col,row), see below
+///   0x4207BC  mov  cl, byte [ebp+0x6e26f4] ; entity +0x2c = "Sicht"
+///   0x4207C8  add  ax, cx
+///   0x4207CF  dec  ax
+///   0x4207D4  call 0x401258 -> 0x4200c0   ; stamp(col, row, ax)
+///
+///   radius = elevation(col, row) + sight - 1
+/// </code>
+/// <para>The <b>same shape in the second executable</b> (F:, 1.420.800 B), where
+/// the whole block sits 0xdc1 lower: @0x41F96F <c>call 0x401aaa -> 0x41c2a0</c>,
+/// @0x41F97C <c>mov cl, byte [ebp+0x6e1754]</c> (the same entity +0x2c off the
+/// base 0x6e1728), @0x41F988 <c>add ax, cx</c>, @0x41F98F <c>dec ax</c>,
+/// @0x41F994 the stamp. The byte pattern
+/// <c>81 e1 ff 00 ff ff 66 03 c1 8b 4c 24 18 66 48 50 51 53</c> occurs once in
+/// each file and only there, so this is the form, not an address.</para>
+///
+/// <para><b>0x41d0e0 really is the elevation</b> and not some other tile byte:
+/// it returns <c>byte[dword[0x677e20] + (row*width + col)*4 + 2]</c>, and byte 2
+/// of the four-byte tile record is what our own importer reads as the height
+/// (<c>MapBaker.cs</c>, <c>elev[i] = rec[o + 2]</c>). It is the same reader the
+/// damage formula uses (GAMESTATE_RE.md §3.94,
+/// <c>defence = (30 + def/5) * (attack + 2*elevation) / 50</c> @0x40cdc4).
+/// CAMPAIGN_RE.md still calls it <c>terrain_at</c>; that name is wrong.</para>
+///
+/// <para><b>Entity +0x2c really is the sight value:</b> the design record's
+/// <c>+0x24 sight</c> ("Sicht ") is copied into it (aekernel-tools/cwm_extra.py
+/// §sec19), and over all 23 levels / 1115 placed units it is near-constant per
+/// unit_type — 276 units of type 148 all carry 3, 153 of type 161 all carry 4 —
+/// which no facing byte would be. Our <c>Entity.Sight</c> is already that byte
+/// (<c>MapEntityLayer.cs</c>, <c>HexByte(raw, 0x2c)</c>).</para>
+///
+/// <para><b>There is no line of sight.</b> The other plausible build for a 2.5D
+/// engine — high cells seeing over low ones — is not what happens. The stamp
+/// @0x4200c0..0x420303 reads no elevation, no slope and no terrain at all: it
+/// walks the circle and sets every cell it touches. Height only ever grows the
+/// radius.</para>
+///
+/// <para><b>And only for ground units.</b> Buildings take a literal
+/// <c>push 0xa</c> (@0x4206AB), ships their record's own <c>+0x24 - 1</c>
+/// (@0x420856), and the remaining call sites 0x42060E, 0x4208D1, 0x420934,
+/// 0x420998, 0x4209FE, 0x420A4B, 0x420BC0, 0x420C46 fixed radii of 1, 2, 0, 0,
+/// 10, a record byte, 0 and 3. Not one of them touches 0x41d0e0.</para>
+///
+/// <para>See <see cref="UnitRadius"/> and the four-value
+/// <see cref="Update(IEnumerable{ValueTuple{int, int, int, int}})"/>.</para>
 /// </summary>
 public sealed class FogGrid
 {
@@ -98,13 +150,53 @@ public sealed class FogGrid
         Version++;
     }
 
+    /// <summary>The ground-unit call site's own arithmetic, @0x4207C8/@0x4207CF
+    /// (F: @0x41F988/@0x41F98F): <c>elevation + sight - 1</c>. A unit two levels
+    /// up therefore opens two more rings than the same unit in the valley, and
+    /// on flat ground it opens one LESS than its bare sight value — the
+    /// <c>dec ax</c> is not optional, the game has always subtracted it.
+    ///
+    /// <para>Buildings do not go through here: they are a literal 10
+    /// (@0x4206AB), height and all.</para></summary>
+    public static int UnitRadius(int sight, int elev) => sight + elev - 1;
+
+    /// <summary>The same round as
+    /// <see cref="Update(IEnumerable{ValueTuple{int, int, int}})"/>, but for
+    /// watchers that know the height of the cell they stand on — which is what
+    /// the original's ground units are. Each one is stamped with
+    /// <see cref="UnitRadius"/>.
+    ///
+    /// <para>⚠ Nothing calls this yet. <c>MapEntityLayer.Watchers()</c> yields
+    /// three values and its <c>ElevOf(col, row)</c> is private, so the height
+    /// cannot reach the fog without a change in a file this pass does not own.
+    /// The overload is here so that change is a one-line one, and so the reading
+    /// above does not have to be found again. Until then the fog keeps using the
+    /// bare sight value: one ring too many at sea level, and no reward for the
+    /// hill.</para></summary>
+    public void Update(IEnumerable<(int Col, int Row, int Sight, int Elev)> watchers)
+    {
+        for (int i = 0; i < _cells.Length; i++)
+            if (_cells[i] == Watched) _cells[i] = Seen;
+
+        foreach (var (col, row, sight, elev) in watchers)
+            Stamp(col, row, UnitRadius(sight, elev));
+        Version++;
+    }
+
     /// <summary>@0x4200c0: clamp the radius, then open each row by the span the
     /// table gives. `d` counts in from the rim, which is how the table is
     /// indexed — the centre row is the widest.</summary>
     private void Stamp(int col, int row, int sight)
     {
         int max = _radii > 0 ? _radii - 1 : MaxRadius;
-        int r = Mathf.Clamp(sight, 0, max);
+        // The original clamps on the HIGH side only (@0x4200c8, `cmp si,0x13`).
+        // A negative radius is not clamped to zero there — it falls out at
+        // @0x420138, where the first row bound is already past the last, and
+        // stamps nothing at all. Reachable now that UnitRadius subtracts one:
+        // a sight of 0 at elevation 0 gives -1, and that unit sees nothing,
+        // not one cell.
+        if (sight < 0) return;
+        int r = Mathf.Min(sight, max);
 
         for (int dy = -r; dy <= r; dy++)
         {
