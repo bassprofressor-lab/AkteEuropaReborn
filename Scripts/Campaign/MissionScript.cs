@@ -312,8 +312,14 @@ public sealed class MissionScript
     public static MissionScript? For(int mission)
     {
         var all = Load();
-        return all.TryGetValue(mission, out var s) ? new MissionScript(s) : null;
+        Current = all.TryGetValue(mission, out var s) ? new MissionScript(s) : null;
+        return Current;
     }
+
+    /// <summary>Das Skript der laufenden Mission — nur fuer den PRÜFSTAND, der
+    /// sonst keinen Weg an die Instanz haette (sie haengt privat in
+    /// Rendering/MapEntityLayer). Im Spiel benutzt das niemand.</summary>
+    public static MissionScript? Current { get; private set; }
 
     private static Dictionary<int, Script>? _cache;
 
@@ -624,6 +630,12 @@ public sealed class MissionScript
         {
             var r = _script.Rules[ri];
             if (!full && !r.EveryTick) continue;
+            // ⚠ nur der Pruefstand: was --pay-check schon von Hand ausgeloest
+            // hat, darf nicht ein zweites Mal von selbst feuern. Ohne diese
+            // Sperre zahlte Mission 1 im Prüflauf VIER mal 50 statt drei mal:
+            // das Erzwingen zaehlt die Kettenvariable 15 auf 3 hoch, und Regel
+            // 13 (var15==3 und Spieler 1 ohne Schiffe) griff danach erneut.
+            if (_forced != null && _forced.Contains(ri)) continue;
             if (r.Once >= 0 && r.Once < _var.Length && _var[r.Once] != 0) continue;
             bool all = true;
             foreach (var c in r.When)
@@ -754,6 +766,52 @@ public sealed class MissionScript
     /// gestellt — das Original tut genau dasselbe (`mov byte [0x539930], 0`
     /// direkt hinter dem Fenster, das es auslöst).</summary>
     public int LastEvent;
+
+    /// <summary>
+    /// PRÜFSTAND (`--pay-check`): jede Regel, deren Wirkung eine Geldbuchung
+    /// enthaelt, einmal ausloesen — ohne ihre Bedingungen zu pruefen.
+    ///
+    /// <para>Gebraucht wird das fuer die Frage »reicht das Geld fuer die
+    /// naechste Mission, wenn ich die Nebenmission nicht mache?«. Der Fall OHNE
+    /// laesst sich einfach fahren (nichts tun), der Fall MIT nicht: in
+    /// Mission 1 haengen die drei Buchungen an einer Kette aus Zaehlvariable 15
+    /// und der Zahl der noch schwimmenden Schiffe von Spieler 1, die im
+    /// Prüfstand nicht von selbst zustande kommt.</para>
+    ///
+    /// <para>⚠ Das erfindet keinen Betrag. Es fuehrt die WIRKUNGEN aus, die in
+    /// Data/mission_scripts.json stehen, durch denselben <see cref="Do"/>-Weg
+    /// wie im Spiel — nur der Anlass wird vorgegeben. Die Regeln laufen in
+    /// Dateireihenfolge, damit eine Kette wie 11/12/13 (die sich ueber
+    /// Variable 15 selbst weiterschaltet) in ihrer Reihenfolge durchlaeuft.
+    /// </para>
+    /// </summary>
+    /// <returns>Was ausgeloest wurde, als Zeile fuer das Protokoll.</returns>
+    public string ForceMoneyRules()
+    {
+        int n = 0, summe = 0;
+        _forced ??= new HashSet<int>();
+        for (int ri = 0; ri < _script.Rules.Count; ri++)
+        {
+            var r = _script.Rules[ri];
+            bool zahlt = false;
+            foreach (var a in r.Then) if (a.Kind == "money") { zahlt = true; break; }
+            if (!zahlt) continue;
+            foreach (var a in r.Then)
+            {
+                if (a.Kind == "money") summe += a.A;
+                Do(a);
+            }
+            _forced.Add(ri);
+            n++;
+        }
+        return $"pay-check: {n} Geldregeln von Mission {Mission} ausgeloest, " +
+               $"Summe {(summe >= 0 ? "+" : "")}{summe} $";
+    }
+
+    /// <summary>Die von <see cref="ForceMoneyRules"/> erzwungenen Regeln. Bleibt
+    /// null, solange niemand den Pruefstand benutzt — im Spiel kostet das
+    /// nichts.</summary>
+    private HashSet<int>? _forced;
 
     private void Do(Act a)
     {
