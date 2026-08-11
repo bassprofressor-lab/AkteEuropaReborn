@@ -42,15 +42,28 @@ public partial class StartMenuPanel : Control
     /// 0x28 (127,115,115), 0x2a (91,83,83), 0x2c (55,47,47), 0x2f (19,19,15).
     /// Hard-coded rather than read at runtime: four numbers do not justify
     /// loading a palette, and they are written down here so the next reader can
-    /// check them against the file.</summary>
+    /// check them against the file.
+    ///
+    /// <para>Nachgerechnet am 11.08.2026: die Datei ist 776 statt 768 Bytes
+    /// lang, hat also einen <b>8 Byte langen Kopf</b> (<c>08 03 00 00 23 b1 00
+    /// 00</c>) — Farbe i steht auf 8 + 3·i. Erst damit kommen die vier Werte
+    /// oben heraus; ohne den Kopf gerechnet ergibt 0x28 (163,163,163). Die
+    /// Zahlen hier stimmten also, die Rechnung dahinter steht jetzt auch
+    /// da.</para></summary>
     internal static Color Pal(int i) => i switch
     {
+        0x08 => Color.Color8(43, 143, 11),
         0x24 => Color.Color8(187, 179, 179),
         0x28 => Color.Color8(127, 115, 115),
         0x29 => Color.Color8(111, 99, 99),
         0x2a => Color.Color8(91, 83, 83),
         0x2c => Color.Color8(55, 47, 47),
         0x2f => Color.Color8(19, 19, 15),
+        // die beiden Farben der Titelleiste, aus demselben 01.PAL — der
+        // Zeichenaufruf @0x480430 schiebt sie als 0x96 und 0xa9 mit
+        0x96 => Color.Color8(244, 184, 28),
+        0xa9 => Color.Color8(171, 135, 31),
+        0xfe => Color.Color8(235, 231, 231),
         _ => Color.Color8(91, 83, 83),
     };
 
@@ -140,6 +153,187 @@ public partial class StartMenuPanel : Control
     /// lives in its side panel, which this screen has not got.</summary>
     public string Footer = "";
 
+    /// <summary>Was der X-Knopf tun soll. ⚠ UNSERE SETZUNG, siehe
+    /// <see cref="BuildTitleBar"/> — im Original ist nicht gelesen, wohin er
+    /// führt. Bleibt er ungesetzt, wird kein X gezeichnet.</summary>
+    public Action? Close;
+
+    /// <summary>Die Titelleiste des Menüfensters — <b>gelesen</b>.
+    ///
+    /// <para>Dieselbe Zeichenroutine, aus der <see cref="Original"/> seine neun
+    /// Zeilen hat, schreibt vor ihnen den Fenstertitel: @0x4803e4 lädt
+    /// <c>0x4f7538</c> = <b>"Akte Europa"</b> in einen Puffer, und der Aufruf
+    /// @0x480430 setzt ihn mit den Argumenten <c>(0xa, 2, text, fenster, 0x96,
+    /// 0xa9)</c> ab — also auf <b>x = 10, y = 2</b> in Fensterkoordinaten, in
+    /// den Palettenfarben 0x96 (244,184,28) und 0xa9 (171,135,31). Zum
+    /// Vergleich die Zeile darunter @0x480454: <c>(0x14, 0x19, 8, …)</c> —
+    /// x = 20, y = 25, das ist <see cref="EntryX"/> und die erste Zeile. Beide
+    /// Zahlenpaare kommen aus demselben Aufrufmuster, das Fenster ist also
+    /// wirklich so gebaut.</para>
+    ///
+    /// <para><b>⚠ UNSERE SETZUNGEN hier:</b> die Höhe der Leiste (22 — gelesen
+    /// ist nur, dass der Titel auf y=2 sitzt und die erste Zeile auf y=25),
+    /// ihr dunklerer Grund (0x2c derselben Fensterrampe), und der X-Knopf:
+    /// dass er da ist, steht auf dem Bildschirmfoto des Originals; was er tut,
+    /// ist nicht gelesen. Er ist hier auf »Beenden« gelegt, weil das die
+    /// einzige Deutung ist, die niemanden in eine Sackgasse führt.</para>
+    ///
+    /// <para><b>Und das Wort REBORN ist UNSERES</b> — 1997 stand da nur »Akte
+    /// Europa«. Es steht deshalb hinter dem Originaltitel, in einer anderen
+    /// Farbe, durch einen Punkt abgesetzt: was das Original sagte, sagt es
+    /// weiter, und was wir hinzufügen, ist als Zusatz zu erkennen. Gezeichnet
+    /// ist nichts — es ist dieselbe FONT.CWD, die auch die Zeilen setzt.</para>
+    /// </summary>
+    private void BuildTitleBar(Panel panel, int w)
+    {
+        const int BarH = 22;                       // ⚠ unsere Setzung
+
+        var bar = new ColorRect
+        {
+            Color = Pal(0x2c),
+            Position = new Vector2(0, 0),
+            Size = new Vector2(w, BarH * Scale),
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        panel.AddChild(bar);
+        // eine Kante nach unten, damit die Leiste vom Fenster abgesetzt ist
+        panel.AddChild(new ColorRect
+        {
+            Color = Pal(0x28),
+            Position = new Vector2(0, BarH * Scale),
+            Size = new Vector2(w, Scale),
+            MouseFilter = MouseFilterEnum.Ignore,
+        });
+
+        var title = new Label
+        {
+            Text = "Akte Europa",
+            Position = new Vector2(10 * Scale, 2 * Scale),     // gelesen: (0xa, 2)
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        title.AddThemeColorOverride("font_color", Pal(0x96));   // gelesen: 0x96
+        StyleLegacy(title);
+        panel.AddChild(title);
+
+        // UNSERE Zutat, und sie sagt es durch ihre Stellung und ihre Farbe.
+        // Der Platz dahinter wird GEMESSEN und nicht geschätzt — beim ersten
+        // Versuch stand hier eine feste Zahl, und "REBORN" lag quer über dem
+        // "Europa".
+        float after = 10 * Scale + (_font != null
+            ? _font.GetStringSize(title.Text, HorizontalAlignment.Left, -1, 13 * Scale).X
+            : 68 * Scale);
+        var reborn = new Label
+        {
+            Text = "· REBORN",
+            Position = new Vector2(after + 8 * Scale, 2 * Scale),
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        reborn.AddThemeColorOverride("font_color", Color.Color8(150, 205, 235));
+        StyleLegacy(reborn);
+        panel.AddChild(reborn);
+
+        if (Close == null) return;
+        // Der X-Knopf. Rot wie auf dem Foto, aus derselben Palette: 0x08 ist
+        // dort (43,143,11) und damit grün — das Rot des Fotos steht in keiner
+        // gelesenen Farbstelle, also ist dieser Ton UNSERER.
+        var x = new Panel
+        {
+            Position = new Vector2((PanelW - 17) * Scale, 4 * Scale),
+            Size = new Vector2(13 * Scale, 13 * Scale),
+            MouseFilter = MouseFilterEnum.Stop,
+            TooltipText = "Beenden — ⚠ unsere Deutung des X, das Original ist dazu ungelesen",
+        };
+        x.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        {
+            BgColor = Color.Color8(168, 44, 36),
+            BorderColor = Pal(0x2f),
+            BorderWidthTop = 1, BorderWidthBottom = 1, BorderWidthLeft = 1, BorderWidthRight = 1,
+        });
+        var xl = new Label
+        {
+            Text = "x",
+            Size = new Vector2(13 * Scale, 13 * Scale),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        xl.AddThemeColorOverride("font_color", Pal(0x2f));
+        StyleLegacy(xl);
+        x.AddChild(xl);
+        var close = Close;
+        x.GuiInput += e =>
+        {
+            if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left }) close();
+        };
+        panel.AddChild(x);
+    }
+
+    /// <summary>Der Kopf über dem Fenster. <b>UNSERER, ganz und gar</b> — das
+    /// Startbild von 1997 hat ihn nicht, dort steht das Fenster allein auf dem
+    /// laufenden Demo. Er ist hier, weil der Spieler auf einen Blick sehen
+    /// soll, dass dies die Neufassung ist und nicht das Original.
+    ///
+    /// <para>Gezeichnet wird trotzdem nichts Fremdes: die Buchstaben kommen aus
+    /// FONT2.CWD, der zweiten Schrift des Spiels, die schon die Briefings
+    /// setzt, und die Linien sind zwei Rechtecke aus Godot. Kein
+    /// Originalbild wird angefasst, unsere Auslieferung trägt weiter keine
+    /// Originalinhalte.</para></summary>
+    private void BuildRebornHead(int h)
+    {
+        var font2 = BriefingScreen.LegacyFont(second: true);
+
+        var wordmark = new Label
+        {
+            Text = "AKTE EUROPA",
+            HorizontalAlignment = HorizontalAlignment.Center,
+            AnchorLeft = 0, AnchorRight = 1, AnchorTop = 0.5f, AnchorBottom = 0.5f,
+            OffsetTop = -h / 2 - 78, OffsetBottom = -h / 2 - 40,
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        wordmark.AddThemeColorOverride("font_color", Pal(0x24));
+        if (font2 != null) wordmark.AddThemeFontOverride("font", font2);
+        wordmark.AddThemeFontSizeOverride("font_size", 13 * (Scale + 1));
+        AddChild(wordmark);
+
+        var sub = new Label
+        {
+            Text = "R E B O R N",
+            HorizontalAlignment = HorizontalAlignment.Center,
+            AnchorLeft = 0, AnchorRight = 1, AnchorTop = 0.5f, AnchorBottom = 0.5f,
+            OffsetTop = -h / 2 - 38, OffsetBottom = -h / 2 - 12,
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        sub.AddThemeColorOverride("font_color", Pal(0x96));
+        if (font2 != null) sub.AddThemeFontOverride("font", font2);
+        sub.AddThemeFontSizeOverride("font_size", 13 * Scale);
+        AddChild(sub);
+
+        // zwei Goldstriche links und rechts von REBORN, damit die Zeile als
+        // Zusatz und nicht als zweiter Titel liest
+        foreach (int side in new[] { -1, 1 })
+            AddChild(new ColorRect
+            {
+                Color = Pal(0xa9),
+                AnchorLeft = 0.5f, AnchorRight = 0.5f, AnchorTop = 0.5f, AnchorBottom = 0.5f,
+                OffsetLeft = side < 0 ? -150 : 76, OffsetRight = side < 0 ? -76 : 150,
+                OffsetTop = -h / 2 - 26, OffsetBottom = -h / 2 - 24,
+                MouseFilter = MouseFilterEnum.Ignore,
+            });
+    }
+
+    /// <summary>Die Spielschrift auf ein Etikett legen, in derselben Größe wie
+    /// die Menüzeilen. Ohne die Schrift bleibt Godots eigene stehen, nur
+    /// kleiner gesetzt — ein fehlender Import soll das Menü nicht kosten.</summary>
+    private void StyleLegacy(Label l)
+    {
+        if (_font != null)
+        {
+            l.AddThemeFontOverride("font", _font);
+            l.AddThemeFontSizeOverride("font_size", 13 * Scale);
+        }
+        else l.AddThemeFontSizeOverride("font_size", 9 * Scale);
+    }
+
     public override void _Ready()
     {
         // anchors AND offsets: the preset alone leaves the control at size zero,
@@ -175,6 +369,9 @@ public partial class StartMenuPanel : Control
         };
         panel.AddThemeStyleboxOverride("panel", style);
         AddChild(panel);
+
+        BuildTitleBar(panel, w);
+        BuildRebornHead(h);
 
         foreach (var r in Rows)
         {
