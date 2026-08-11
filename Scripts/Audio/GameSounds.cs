@@ -133,6 +133,14 @@ public static class GameSounds
         Play(ExplosionHigh);
     }
 
+    /// <summary>Dieselbe Explosion, aber an ihrer Stelle auf der Karte — siehe
+    /// <see cref="SoundBankPlayer.DistanceDb"/>.</summary>
+    public static void Explosion(float col, float row)
+    {
+        PlayAt(ExplosionLow, col, row);
+        PlayAt(ExplosionHigh, col, row);
+    }
+
     // ---- buildings and base ------------------------------------------------
 
     /// <summary>Your building is being taken — @0x43cc73, in the routine that
@@ -379,18 +387,34 @@ public static class GameSounds
 
     /// <summary>Plays the shot of a weapon component. The original picks the
     /// base or the base plus one at random, so two shots never sound the same;
-    /// that is its behaviour, not our garnish.</summary>
-    public static void Fire(int weaponRow, System.Random? rng = null)
+    /// that is its behaviour, not our garnish.
+    ///
+    /// <para><paramref name="col"/>/<paramref name="row"/> sind die Zelle, in der
+    /// geschossen wird — das Original übergibt seiner Klangroutine immer eine
+    /// Stelle auf der Karte und dämpft danach, siehe
+    /// <see cref="SoundBankPlayer.DistanceDb"/>. Ohne Zelle bleibt es beim alten
+    /// Verhalten (volle Lautstärke), damit ein Prüfstand ohne Karte weiter
+    /// klingt.</para></summary>
+    public static void Fire(int weaponRow, System.Random? rng = null,
+                            float col = float.NaN, float row = float.NaN)
     {
         int cls = Simulation.DesignMath.SoundClass(weaponRow);
         int b = FireBase(cls);
         if (b < 0) return;
         int pick = b + ((rng?.Next(2) ?? (int)(GD.Randi() & 1)));
-        SoundBankPlayer.Play(pick);
+        PlayAt(pick, col, row);
     }
 
     /// <summary>Shorthand for the events above.</summary>
     public static void Play(int slot) => SoundBankPlayer.Play(slot);
+
+    /// <summary>Ein Klang, der auf der Karte entsteht — mit Zelle gedämpft, ohne
+    /// Zelle wie bisher.</summary>
+    public static void PlayAt(int slot, float col, float row)
+    {
+        if (float.IsNaN(col) || float.IsNaN(row)) SoundBankPlayer.Play(slot);
+        else SoundBankPlayer.PlayAt(slot, col, row);
+    }
 
     // ---- no click on every button -------------------------------------------
     //

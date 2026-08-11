@@ -31,6 +31,11 @@ public static class MidiMusic
     [DllImport("winmm.dll", CharSet = CharSet.Unicode, EntryPoint = "mciGetErrorStringW")]
     private static extern bool MciGetErrorString(int error, StringBuilder text, int len);
 
+    /// <summary>Der zweite Weg zur Lautstärke, siehe <see cref="Volume"/>.
+    /// <c>hmo</c> darf laut Doku auch eine Gerätenummer sein.</summary>
+    [DllImport("winmm.dll", EntryPoint = "midiOutSetVolume")]
+    private static extern int MidiOutSetVolume(IntPtr hmo, uint volume);
+
     private const string Alias = "aer_music";
 
     /// <summary>Windows, and the content folder holds at least one .mid.</summary>
@@ -103,17 +108,78 @@ public static class MidiMusic
         Volume(UI.Settings.MusicVolume);
         if (!Send($"play {Alias} from 0")) { Stop(); return false; }
         Track = track;
+        _lastTrack = track;
         return true;
     }
 
-    /// <summary>MCI takes 0..1000. Not every sequencer honours it — the return
-    /// code is kept but a refusal is not treated as a failure of the playback.
+    /// <summary>Welches Stück zuletzt lief. <see cref="Track"/> wird beim Stoppen
+    /// auf -1 gesetzt, das hier bleibt stehen.</summary>
+    private static int _lastTrack = -1;
+
+    /// <summary>
+    /// "MIDI-Musik an/aus" wieder auf AN: dasselbe Stück noch einmal auflegen.
+    ///
+    /// <para>UNSERE SETZUNG, und sie schließt eine Lücke. <see cref="Stop"/>
+    /// schließt den Sequenzer; aufgemacht wird er sonst nur von
+    /// <see cref="StartForMission"/>, also beim Missionsstart. Wer die Musik im
+    /// laufenden Spiel ausschaltete und es sich anders überlegte, bekam bis zur
+    /// nächsten Mission nichts mehr zu hören. Wo nichts lief, bevor gestoppt
+    /// wurde, nehmen wir Stück 0 — das ist das Stück, das im Menü liegt.</para>
+    /// </summary>
+    public static bool Resume()
+    {
+        if (!Available || !UI.Settings.MusicOn) return false;
+        return Play(_lastTrack >= 0 ? _lastTrack : 0);
+    }
+
+    /// <summary>Was <c>midiOutSetVolume</c> zuletzt zurückgab. 0 = angenommen.
+    /// -1 heißt: gar nicht erst versucht (nicht Windows).</summary>
+    public static int VolumeCode { get; private set; } = -1;
+
+    /// <summary>Was <c>setaudio</c> zuletzt zurückgab, siehe unten.</summary>
+    public static int MciVolumeCode { get; private set; } = -1;
+
+    /// <summary>
+    /// Die Musiklautstärke, 0..100.
+    ///
+    /// <para>⚠ <b>Gemessen am 10.08.2026, und der bisherige Weg wirkt nicht.</b>
+    /// Die Zeile hier schickte nur <c>setaudio aer_music volume to N</c> (MCI
+    /// nimmt 0..1000). Der Rückgabewert wurde still verworfen — und er lautet
+    /// <b>261, "Unbekannter Befehl."</b>: der MCI-<i>sequencer</i> kennt
+    /// <c>setaudio</c> nicht. Der Regler im Einstellungsschirm hat also nie
+    /// etwas getan, und weil der Fehler mit <c>quiet: true</c> unterdrückt war,
+    /// hat es auch nie jemand gesehen.</para>
+    ///
+    /// <para>Der zweite Weg ist der, den Windows für MIDI vorsieht:
+    /// <c>midiOutSetVolume</c> mit der Gerätenummer 0 und links/rechts im
+    /// unteren/oberen Wort. UNSERE SETZUNG — das Original von 1997 regelt die
+    /// Musik über den Mixer der Soundkarte, den es so nicht mehr gibt. Der
+    /// <c>setaudio</c>-Befehl bleibt trotzdem stehen: ein anderer Sequenzer
+    /// (etwa ein installierter Software-Synthesizer) kann ihn beherrschen, und
+    /// dann greift er zuerst.</para>
+    ///
+    /// <para>Beide Rückgabewerte werden jetzt behalten statt weggeworfen, damit
+    /// ein Prüflauf sie zitieren kann.</para>
+    ///
+    /// <para>⚠ Was noch offen ist: <c>midiOutSetVolume</c> stellt bei manchen
+    /// Treibern die Lautstärke des MIDI-Geräts geräteweit und über das Programm
+    /// hinaus. Der Wert wird beim Beenden nicht zurückgesetzt. Gemessen ist hier
+    /// nur, dass der Aufruf angenommen wird (Rückgabe 0) — dass die Musik danach
+    /// tatsächlich leiser klingt, ist nicht gemessen und wird nicht behauptet.
+    /// </para>
     /// </summary>
     public static void Volume(int percent)
     {
-        if (!_open) return;
-        int v = Math.Clamp(percent, 0, 100) * 10;
-        Send($"setaudio {Alias} volume to {v}", quiet: true);
+        int p = Math.Clamp(percent, 0, 100);
+        if (_open)
+        {
+            Send($"setaudio {Alias} volume to {p * 10}", quiet: true);
+            MciVolumeCode = LastCode;
+        }
+        if (!OperatingSystem.IsWindows()) { VolumeCode = -1; return; }
+        // 0..100 -> 0..0xFFFF, gleiche Lautstärke links wie rechts
+        uint v = (uint)(p * 0xFFFF / 100);
+        VolumeCode = MidiOutSetVolume(IntPtr.Zero, v | (v << 16));
     }
 
     public static void Stop()
