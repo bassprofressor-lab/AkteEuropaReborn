@@ -63,6 +63,11 @@ public partial class MainMenu : Control
     {
         var missions = Campaign.CampaignManager.Missions;
 
+        // "Naechstes Demo" ist nur dann eine anwählbare Zeile, wenn es
+        // überhaupt Demos gibt. Die Prüfung kostet nichts — sie sieht nur nach,
+        // welche der dreizehn .DM der Import gebacken hat.
+        bool demos = !_noBackdrop && MenuBackdrop.Available().Count > 0;
+
         var original = new System.Collections.Generic.List<StartMenuPanel.Row>(
             StartMenuPanel.Original(
                 newGame: missions.Count > 0 ? StartCampaign : null,
@@ -72,7 +77,7 @@ public partial class MainMenu : Control
                 encyclopedia: null,
                 intro: null,
                 credits: null,
-                demo: null,
+                demo: demos ? NextDemo : null,
                 quit: () => GetTree().Quit()));
 
         // OURS, and the only row that is: the original had no skirmish against
@@ -89,9 +94,57 @@ public partial class MainMenu : Control
             Footer = missions.Count > 0
                 ? $"{missions.Count} Missionen · {Campaign.CampaignManager.Completed} geschafft"
                 : "Keine Kampagne importiert",
+            Close = () => GetTree().Quit(),
         };
         _start.Rows.AddRange(rows);
         AddChild(_start);
+    }
+
+    // ---- das laufende Spiel hinter dem Menü ---------------------------------
+    //
+    // Was dort läuft und warum es die dreizehn .DM sind, steht vollständig in
+    // MenuBackdrop — mit den Fundstellen in GAME.EXE. Hier steht nur, wann es
+    // anfängt und wann es aufhört.
+
+    private MenuBackdrop? _backdrop;
+    private ColorRect? _empty;      // der schwarze Grund, wenn kein Demo läuft
+    private bool _noBackdrop;       // --no-backdrop, für Prüfläufe
+
+    /// <summary>Den Hintergrund anwerfen. Erst hier, ganz am Ende von
+    /// <c>_Ready</c>: das Menü steht damit sofort, und die 20 bis 33 Megapixel
+    /// der Karte werden nebenher von einem eigenen Faden gelesen (siehe
+    /// MenuBackdrop.Next). Ein Lauf, der gleich in ein Gefecht startet, kommt
+    /// hier gar nicht an und lädt deshalb auch nichts.</summary>
+    private void StartBackdrop()
+    {
+        if (_noBackdrop || _backdrop != null) return;
+        if (MenuBackdrop.Available().Count == 0) return;
+        _backdrop = new MenuBackdrop();
+        AddChild(_backdrop);
+        // der schwarze Grund liegt im Standardlayer und würde die Ebene
+        // darunter zudecken
+        if (_empty != null) _empty.Visible = false;
+    }
+
+    /// <summary>Die Menüzeile »Naechstes Demo«: eins weiter, hinter dem letzten
+    /// wieder von vorn — wie <c>dword[0x540740] = 2</c> im Original.</summary>
+    private void NextDemo()
+    {
+        StartBackdrop();            // falls die Zeile vor dem ersten Bild kommt
+        _backdrop?.Next();
+    }
+
+    /// <summary>Vor jedem Szenenwechsel: die Karte des Demos aus dem Speicher
+    /// nehmen, bevor der MapViewer seine eigene lädt. QueueFree allein täte es
+    /// erst nach dem Bild, und dann lägen zwei 30-MB-Texturen gleichzeitig da.
+    /// </summary>
+    private void StopBackdrop()
+    {
+        if (_backdrop == null) return;
+        var b = _backdrop;
+        _backdrop = null;
+        b.Stop();
+        b.QueueFree();
     }
 
     private void StartCampaign()
@@ -171,11 +224,14 @@ public partial class MainMenu : Control
     public override void _Ready()
     {
         SetAnchorsPreset(LayoutPreset.FullRect);
-        AddChild(new ColorRect
+        foreach (string a in OS.GetCmdlineUserArgs())
+            if (a == "--no-backdrop") _noBackdrop = true;
+        _empty = new ColorRect
         {
             Color = new Color(0.05f, 0.06f, 0.08f),
             AnchorRight = 1, AnchorBottom = 1,
-        });
+        };
+        AddChild(_empty);
 
         // The setup is taller than a 720p window, and anchored to the middle it
         // simply lost its title at the top and its hint line at the bottom. It
@@ -503,7 +559,8 @@ public partial class MainMenu : Control
             }
 
         if (!Core.Content.Ready) { ShowImportScreen(); return; }
-        AutoStart();
+        if (AutoStart()) return;      // ein Lauf, der gleich losspielt, braucht keine Kulisse
+        StartBackdrop();
     }
 
     // ---- first start: where the content comes from --------------------------
@@ -659,6 +716,9 @@ public partial class MainMenu : Control
         SkirmishSetup.CampaignMission = m.Index;
         SkirmishSetup.Active = true;
         GD.Print($"Kampagne: starte {m.Label} ({m.Map})");
+        // die Kulisse geht VOR dem Briefing weg: sonst rechnet sie hinter dem
+        // Text weiter und hält ihre 30-MB-Textur fest, bis der Spieler klickt
+        StopBackdrop();
 
         // The briefing goes here rather than in the map scene, because this is
         // the one place all three ways in meet: the menu button, the mission
@@ -723,8 +783,11 @@ public partial class MainMenu : Control
     };
 
     /// <summary>`--skirmish=map_NET07,3,hard` skips the menu. Handy for testing
-    /// and for a shortcut that drops straight into a game.</summary>
-    private void AutoStart()
+    /// and for a shortcut that drops straight into a game.
+    ///
+    /// <para>Gibt true zurück, wenn dieser Lauf das Menü verlässt — dann wird
+    /// die Kulisse hinter dem Menü gar nicht erst geladen.</para></summary>
+    private bool AutoStart()
     {
         foreach (string a in OS.GetCmdlineUserArgs())
             if (a == "--no-briefing") _skipBriefing = true;
@@ -735,20 +798,20 @@ public partial class MainMenu : Control
             {
                 int no = a["--briefing=".Length..].ToInt();
                 var b = BriefingScreen.For(no);
-                if (b == null) { GD.PrintErr($"briefing: kein Text fuer Mission {no}"); GetTree().Quit(2); return; }
+                if (b == null) { GD.PrintErr($"briefing: kein Text fuer Mission {no}"); GetTree().Quit(2); return true; }
                 GD.Print($"briefing {no}: \"{b.Value.Title}\", {b.Value.Paragraphs.Count} Absaetze");
                 foreach (string p in b.Value.Paragraphs) GD.Print("  " + p);
                 GetTree().Quit();
-                return;
+                return true;
             }
             if (a.StartsWith("--campaign"))
             {
                 string arg = a.Contains('=') ? a[(a.IndexOf('=') + 1)..] : "";
                 var m = int.TryParse(arg, out int no)
                     ? Campaign.CampaignManager.ByIndex(no) : Campaign.CampaignManager.Next();
-                if (m == null) { GD.PrintErr("campaign: keine solche Mission"); GetTree().Quit(2); return; }
+                if (m == null) { GD.PrintErr("campaign: keine solche Mission"); GetTree().Quit(2); return true; }
                 CallDeferred(nameof(StartMissionByIndex), m.Index);
-                return;
+                return true;
             }
             if (!a.StartsWith("--skirmish")) continue;
             string rest = a.Contains('=') ? a[(a.IndexOf('=') + 1)..] : "";
@@ -774,7 +837,7 @@ public partial class MainMenu : Control
                 {
                     GD.PrintErr($"skirmish: die Karte {want} gibt es nicht");
                     GetTree().Quit(2);
-                    return;
+                    return true;
                 }
                 _map.Selected = mi;
             }
@@ -803,8 +866,9 @@ public partial class MainMenu : Control
                                  $"({string.Join("/", names)})");
             }
             CallDeferred(nameof(OnStart));
-            return;
+            return true;
         }
+        return false;
     }
 
     /// <summary>Puts the chosen map's thumbnail on screen. The first call for
@@ -842,6 +906,7 @@ public partial class MainMenu : Control
         if (_res != null) SkirmishSetup.Resources = _res.Selected;
         SkirmishSetup.CampaignMission = 0;      // a skirmish records nothing
         SkirmishSetup.Active = true;
+        StopBackdrop();
         GetTree().ChangeSceneToFile(SkirmishSetup.GameScene);
     }
 }

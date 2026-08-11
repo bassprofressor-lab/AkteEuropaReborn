@@ -43,7 +43,19 @@ public static class Settings
     /// exploration step @0x4205b0 checks <c>byte[0x4f8a3c]</c> and, when that is
     /// clear, marks everything seen instead of stamping. Default on, as the
     /// game ships it.</summary>
-    public static bool FogOfWar { get => B("fog", true); set => Set("fog", value); }
+    public static bool FogOfWar { get => !FogSuppressed && B("fog", true); set => Set("fog", value); }
+
+    /// <summary>Der GESPEICHERTE Wert, ungeachtet der Unterdrückung — für den
+    /// Einstellungsschirm, der zeigen muss, was der Spieler eingestellt hat,
+    /// und nicht, was gerade auf dem Bildschirm passiert.</summary>
+    public static bool FogOfWarSetting => B("fog", true);
+
+    /// <summary>Solange gesetzt, liefert <see cref="FogOfWar"/> false, ohne die
+    /// Einstellung zu ändern. Gebraucht von <see cref="MenuBackdrop"/>: das
+    /// Demo im Menü ist ein geladener Spielstand ohne Erkundungsstand, und mit
+    /// Nebel wäre die Kulisse schwarz. Ausserhalb des Menüs steht das Feld auf
+    /// false, also entscheidet dort weiter allein die Einstellung.</summary>
+    public static bool FogSuppressed;
 
     // ---- sound --------------------------------------------------------------
 

@@ -140,8 +140,11 @@ public partial class SettingsScreen : Control
                 Modulate = new Color(0.6f, 0.64f, 0.7f),
             });
 
+        // FogOfWarSetting und nicht FogOfWar: solange das Demo hinter dem
+        // Startmenü läuft, ist der Nebel unterdrückt (Settings.FogSuppressed),
+        // und der Haken soll trotzdem zeigen, was eingestellt ist.
         box.AddChild(Check("Nebel des Krieges (im Spiel: Taste J)",
-            Settings.FogOfWar, v => Settings.FogOfWar = v));
+            Settings.FogOfWarSetting, v => Settings.FogOfWar = v));
 
         box.AddChild(new HSeparator());
         box.AddChild(Head("Ton"));
