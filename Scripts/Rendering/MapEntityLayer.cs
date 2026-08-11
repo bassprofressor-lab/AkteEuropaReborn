@@ -4814,7 +4814,12 @@ public partial class MapEntityLayer : Node2D
             own = depots[0];
             sb.Append($"\n   herrenlos — Pruefstand nimmt Platz {_entities[own].Slot} " +
                       $"fuer Spieler {ViewPlayer} ein (im Spiel: hinfahren)");
-            _entities[own].Owner = ViewPlayer;
+            // ⚠ NICHT MEHR EINNEHMEN. Der Posten ist auf map_02 herrenlos und
+            // bleibt es — man faehrt auf ihn drauf, man nimmt ihn nicht ein.
+            // Der Pruefstand hat die Einnahme vorher stillschweigend
+            // nachgestellt und damit die eigentliche Frage uebersprungen: kann
+            // man am HERRENLOSEN Posten kaufen? Genau daran ist es im Spiel
+            // gescheitert, und der Pruefstand hat es nicht gesehen.
         }
 
         var e = _entities[own];
@@ -6059,8 +6064,19 @@ public partial class MapEntityLayer : Node2D
     {
         if (_selected < 0 || _selected >= _entities.Count) return null;
         var e = _entities[_selected];
-        if (!e.IsBuilding || e.IsProp || e.Dead || e.Owner != ViewPlayer) return null;
-        return IsFactory(e) || IsDock(e) || e.BType == 9 || IsSupplyDepot(e) ? e : null;
+        if (!e.IsBuilding || e.IsProp || e.Dead) return null;
+        if (e.Owner != ViewPlayer && !IsSupplyDepot(e)) return null;
+        // ⚠ 11.08.2026, zweiter Anlauf: der Nachschub-Posten gehoert auf
+        // map_02 NIEMANDEM (Besitzer -1), und er wird auch nicht eingenommen —
+        // man faehrt auf ihn drauf (darum raeumt Load() seine Sperre weg). Mit
+        // der Besitzerpruefung war das Baupanel dort nie zu sehen, und der
+        // Spieler kam an die Helis nicht heran.
+        //
+        // Der Dialog des Originals prueft an dieser Stelle ohnehin KEINEN
+        // Besitzer: beide Zweige @0x44C2CF und @0x44C37C pruefen nur
+        // `cmp dword [ecx*4 + 0xA9C600], eax` — den Kontostand.
+        if (IsSupplyDepot(e)) return e;
+        return IsFactory(e) || IsDock(e) || e.BType == 9 ? e : null;
     }
 
     /// <summary>The panel's heading: the game's own word for the tab
@@ -6072,7 +6088,7 @@ public partial class MapEntityLayer : Node2D
         if (IsFactory(e))
             return $"PRODUKTION  W{e.StockW} F{e.StockF} S{e.StockS}";
         if (IsSupplyDepot(e))
-            return $"VERSORGUNGSDEPOT  ${_money[e.Owner is >= 0 and <= 7 ? e.Owner : 0]}";
+            return $"VERSORGUNGSDEPOT  ${_money[ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0]}";
         int owner = e.Owner is >= 0 and <= 7 ? e.Owner : 0;
         return $"PRODUKTION  ${_money[owner]}";
     }
@@ -6126,8 +6142,9 @@ public partial class MapEntityLayer : Node2D
         if (e.BType == 9 || IsSupplyDepot(e))
         {
             var menu = AirMenu(e);
-            int owner = e.Owner is >= 0 and <= 7 ? e.Owner : 0;
             bool money = IsSupplyDepot(e);
+            int owner = money ? (ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0)
+                              : (e.Owner is >= 0 and <= 7 ? e.Owner : 0);
             for (int i = 0; i < menu.Count; i++)
                 rows.Add(new UI.BuildPanel.Row(
                     menu[i].Name,
@@ -6399,8 +6416,10 @@ public partial class MapEntityLayer : Node2D
             // das Depot sonst gescheitert: auf Kampagne 2 ist für Spieler 0
             // kein einziger Flugzeugentwurf freigegeben (»0 freigegeben«), und
             // das Menü blieb leer.
+            // Die Vorlagen sind je Spieler abgelegt; am herrenlosen Posten
+            // kauft der Spieler, der davorsteht.
             foreach (var d in _airDesigns)
-                if (d.Player == e.Owner && d.Kind is 13 or 14)
+                if (d.Player == ViewPlayer && d.Kind is 13 or 14)
                     list.Add(d);
             return list;
         }
@@ -6435,7 +6454,7 @@ public partial class MapEntityLayer : Node2D
     ///
     /// <para>Art 13 und 14 parken nie: <c>spawn_aircraft</c> setzt ihnen
     /// <c>+0x31 = 0xFF</c> und sendet sie unmittelbar aus.</para></summary>
-    private void SpawnSupplyHeli(Entity depot, AirDesign d)
+    private void SpawnSupplyHeli(Entity depot, AirDesign d, int owner)
     {
         int slot = 0;
         foreach (var s in _special) slot = Mathf.Max(slot, s.Slot + 1);
@@ -6450,6 +6469,7 @@ public partial class MapEntityLayer : Node2D
             Attack = d.Attack, Defence = d.Defence, Sight = d.Sight,
             Cargo = SupplyCargoFull,
         };
+        a.Owner = owner;
         _special.Add(a);
         GD.Print($"Versorgungsdepot {depot.Slot}: {d.Name} (Art {d.Kind}) gekauft, " +
                  $"fliegt sofort los");
@@ -6485,7 +6505,7 @@ public partial class MapEntityLayer : Node2D
         // Siehe SupplyDepotType für das, was hier UNSERE Setzung ist.
         if (IsSupplyDepot(e))
         {
-            int who = e.Owner is >= 0 and <= 7 ? e.Owner : 0;
+            int who = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
             if (_money[who] < HeliPrice)
             {
                 _order = $"Sie besitzen nicht genuegend Geld! ({d.Name} kostet " +
@@ -6493,7 +6513,7 @@ public partial class MapEntityLayer : Node2D
                 return false;
             }
             _money[who] -= HeliPrice;
-            SpawnSupplyHeli(e, d);
+            SpawnSupplyHeli(e, d, who);
             _order = $"{d.Name} gekauft fuer ${HeliPrice} — Kontostand ${_money[who]}";
             return true;
         }
