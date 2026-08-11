@@ -413,20 +413,26 @@ public sealed class MissionScript
         _seconds += dt;
         TickIncoming();
 
-        foreach (var r in _script.Rules)
+        for (int ri = 0; ri < _script.Rules.Count; ri++)
         {
+            var r = _script.Rules[ri];
             if (r.Once >= 0 && r.Once < _var.Length && _var[r.Once] != 0) continue;
             bool all = true;
             foreach (var c in r.When)
                 if (!Test(c)) { all = false; break; }
             if (!all) continue;
 
+            _ruleNo = ri;
             foreach (var a in r.Then) Do(a);
             if (r.Once >= 0 && r.Once < _var.Length) _var[r.Once]++;
             RulesFired++;
             if (_ended) return;
         }
     }
+
+    /// <summary>Welche Regel gerade laeuft — nur fuer die Protokollzeile beim
+    /// Klang, damit ein gemeldetes Geraeusch eine Adresse bekommt.</summary>
+    private int _ruleNo = -1;
 
     private bool Cmp(int lhs, string op, int rhs) => op switch
     {
@@ -537,6 +543,11 @@ public sealed class MissionScript
                 AddMoney?.Invoke(a.A, a.B);
                 break;
             case "sound":
+                // Welche Regel spricht, gehoert ins Protokoll: der Spieler hoerte
+                // am 11.08.2026 beim START von Kampagne 2 »Nebenmission
+                // beendet«, und ohne diese Zeile ist nicht zu sehen, welche der
+                // 21 Regeln das war.
+                GD.Print($"mission: Klang {a.A} aus Regel {_ruleNo}");
                 PlaySound?.Invoke(a.A);
                 break;
             case "close_texts":

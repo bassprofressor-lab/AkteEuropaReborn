@@ -9974,10 +9974,16 @@ public partial class MapEntityLayer : Node2D
         int cost = max > 0 ? SupplyFullCost * missing / max : 0;
         a.Cargo = Mathf.Max(0, a.Cargo - cost);
         SupplyRuns++;
-        // a small flash marks the hand-over; the game has no supply effect of
-        // its own, so the sprite choice is ours (a blast would read as a hit)
-        _effects.Add(new Effect { Pos = c.Pos - new Vector2(0, 10),
-                                  Kind = "muzzle", FrameTime = 0.05f });
+        // ⚠ 11.08.2026 — hier stand ein "muzzle"-Aufblitzen als Quittung fuer
+        // die Uebergabe. Gemeldet als »es erscheint wieder so ein treffer
+        // sprite (wie bei einem kanonentreffer) wenn die versorgungshelis an
+        // den panzern munition oder treibstoff abliefern«.
+        //
+        // Der Kommentar von damals sagte es schon selbst -- »a blast would read
+        // as a hit« -- und griff dann zum Feuerball, der genauso gelesen wird.
+        // Das Spiel hat fuer die Versorgung GAR KEINEN Effekt, also hat sie
+        // hier auch keinen. Sichtbar ist die Uebergabe an dem, was sie
+        // bewirkt: die Balken fuer Munition und Treibstoff springen hoch.
         a.Customer = -1;
         a.Goal = null;
     }
