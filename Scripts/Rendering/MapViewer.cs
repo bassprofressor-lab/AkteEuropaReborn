@@ -427,7 +427,9 @@ public partial class MapViewer : Node2D
             {
                 _camera.Position = new Vector2(lp[0].ToInt() * 40,
                                                lp[1].ToInt() * 20);
-                _camera.Zoom = new Vector2(3, 3);
+                // --look=<spalte>,<zeile>[,<zoom>] — ohne Zoomwert wie bisher 3.
+                float z = lp.Length >= 3 ? Mathf.Max(0.2f, lp[2].ToFloat()) : 3f;
+                _camera.Zoom = new Vector2(z, z);
                 ClampCamera();
             }
         }
@@ -579,6 +581,9 @@ public partial class MapViewer : Node2D
                 if (a.Contains('=')) _skirmishMap = a[(a.IndexOf('=') + 1)..];
             }
             else if (a == "--rail-check") { _railCheck = 1f; _railHead = true; }
+            else if (a.StartsWith("--rail-check="))
+            { _railCheck = 0.001f; _railHead = true;
+              _railPeriod = Mathf.Max(0.05f, a["--rail-check=".Length..].ToFloat()); }
             // --cheats schaltet alle drei, --cheat=god,ammo,fuel einzelne.
             // Fuer den Pruefstand, und damit ein Lauf reproduzierbar bleibt.
             else if (a == "--cheats")
@@ -640,6 +645,12 @@ public partial class MapViewer : Node2D
             else if (a == "--fog") MapEntityLayer.ForceFog = true;
             else if (a == "--buildings") _buildingOverlay = true;
             else if (a == "--rail") _railOverlay = true;
+            // Prueflauf fuer die Legeart der Strecke, siehe DrawRailTrack.
+            else if (a.StartsWith("--rail-lay="))
+            {
+                var q = a["--rail-lay=".Length..].Split(',');
+                MapEntityLayer.RailProbeSkipCols = q[0] == "cols";
+            }
             else if (a == "--fps60") Engine.MaxFps = 60;   // deterministic captures
             else if (a.StartsWith("--map="))
             {
@@ -730,6 +741,7 @@ public partial class MapViewer : Node2D
     /// Momentaufnahme koennte nicht zeigen, ob etwas ankommt.</summary>
     private float _railCheck;
     private bool _railHead;
+    private float _railPeriod = 10f;
 
     /// <summary>`--cheat-check`: die drei Schummelschalter ausüben.</summary>
     private float _cheatCheck;
@@ -783,7 +795,7 @@ public partial class MapViewer : Node2D
             _railCheck -= (float)delta;
             if (_railCheck <= 0f)
             {
-                _railCheck = 10f;
+                _railCheck = _railPeriod;
                 if (_railHead) { _railHead = false; GD.Print(_entities.RailCheckHead()); }
                 GD.Print($"[{_upTime:0}s] " + _entities.RailCheckLine());
             }

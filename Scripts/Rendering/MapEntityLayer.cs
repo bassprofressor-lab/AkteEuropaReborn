@@ -7806,6 +7806,47 @@ public partial class MapEntityLayer : Node2D
     /// waagerechten, 26 für die beiden steilen.</para></summary>
     private static readonly int[] RailYOffsetOf = { 16, 16, 21, 26, 16, 26, 21, 16 };
 
+    /// <summary>
+    /// Wie weit die STRECKE unter dem Waggonanker liegt — <b>eine</b> Zahl fuer
+    /// alle acht Richtungen, und das ist keine Vereinfachung, sondern die
+    /// Auskunft der Bilder selbst.
+    ///
+    /// <para>Gemessen an Teil 64 (blanker Traeger, 64×56): fuer jedes Bild die
+    /// Hoehe der Schiene am LINKEN und am RECHTEN Rand ihres Bildes,
+    /// Schienenmitte in Leinwandzeilen —</para>
+    /// <code>
+    ///   f0  x 10..49   links 31   rechts 31      waagerecht
+    ///   f1  x 27..32   oben  22   unten  41      senkrecht
+    ///   f2  x 27..49   links 40   rechts 31      halbes Stueck
+    ///   f3  x 27..49   links 22   rechts 31      halbes Stueck
+    ///   f4  x 10..32   links 31   rechts 40      halbes Stueck
+    ///   f5  x 10..32   links 31   rechts 22      halbes Stueck
+    ///   f6  x 10..49   links 16   rechts 31      ganze Diagonale
+    ///   f7  x 10..49   links 31   rechts 16      ganze Diagonale
+    /// </code>
+    /// <para><b>Jedes Bild hat ein Ende auf Zeile 31</b>, und das senkrechte
+    /// liegt mit 22..41 mittig darum. Zeile 31 ist also die Bauhoehe des
+    /// ganzen Satzes: die Stuecke sind so gezeichnet, dass sie sich dort
+    /// treffen. Ein Versatz JE STUECK kann sie darum nur auseinanderziehen —
+    /// die alte Tabelle <see cref="RailYOffsetOf"/> hat genau das getan und
+    /// jede Richtungsaenderung um 5 bis 10 px aufgerissen.</para>
+    ///
+    /// <para>Der Wert 21 ist der, den das waagerechte Stueck schon hatte: mit
+    /// ihm steht der Waggon (Teil 58, Unterkante Leinwandzeile 54) auf der
+    /// Schiene. Er bleibt damit an der Stelle, an der er im Bild vom 11.08.
+    /// richtig sass, und alle anderen Richtungen ruecken auf dieselbe
+    /// Hoehe.</para>
+    /// </summary>
+    private const int RailDeckOffset = 21;
+
+    /// <summary>Abstand zweier Stuetzen, in Bildschirmpixeln gemessen statt in
+    /// Stuecken gezaehlt. ⚠ UNSERE SETZUNG bleibt die Zahl; was den Abstand im
+    /// Original bestimmt, ist weiter nicht gelesen. Drei Zellen sind 120 px,
+    /// also derselbe Abstand, den <see cref="RailPylonEvery"/> auf gerader
+    /// Strecke ergab — nur zaehlt er jetzt auch auf einer senkrechten Strecke
+    /// richtig, wo die Spalte stehenbleibt.</summary>
+    private const float RailPylonEveryPx = 120f;
+
     private Texture2D? GetRailTexture(int piece, bool pylon)
     {
         int k = RailFrameOf[piece & 7] + (pylon ? 8 : 0);
@@ -7839,6 +7880,10 @@ public partial class MapEntityLayer : Node2D
     /// Behauptung.</summary>
     public int RailTilesDrawn;
 
+    /// <summary>Nur fuer den Prueflauf: alte Legeart (ein Stueck je Spalte,
+    /// Tabelle RailYOffsetOf) gegen die neue vergleichen.</summary>
+    public static bool RailProbeSkipCols;
+
     private void DrawRailTrack()
     {
         RailTilesDrawn = 0;
@@ -7848,6 +7893,9 @@ public partial class MapEntityLayer : Node2D
             var route = kv.Value;
             int n = Mathf.Min(route.Count, pcs.Count);
             int laid = 0;
+            var prev = Vector2.Zero;
+            var lastPylon = Vector2.Zero;
+            bool hasPylon = false;
             for (int i = 0; i < n; i++)
             {
                 // ⚠ 11.08.2026 — EIN Stueck je ZELLENSPALTE, nicht je Schritt.
@@ -7857,12 +7905,36 @@ public partial class MapEntityLayer : Node2D
                 // Schritte nur eine Spalte weiter, und wir haben zwei Stuecke
                 // uebereinandergelegt. Gemeldet als »die bahnstrecke ist noch
                 // nicht sauber zusammengebaut«.
-                if (i > 0 && Mathf.RoundToInt(route[i].X) == Mathf.RoundToInt(route[i - 1].X))
-                    continue;
-                var tex = GetRailTexture(pcs[i], laid++ % RailPylonEvery == 0);
+                // ⚠ 11.08.2026, ZWEITER ANLAUF — die alte Regel »ein Stueck je
+                // ZELLENSPALTE« hat die SENKRECHTEN Streckenteile restlos
+                // verschluckt. Gemessen an map_NET02, Linie 1: ihre Schritte
+                // 10..17 lauten (166,55) (166,54) (166,53) (166,52) (166,51)
+                // (166,50) (166,49) (166,48) — acht Schritte in DERSELBEN
+                // Spalte, alle acht uebersprungen. Genau das hat der Spieler
+                // als »er ist immer noch nicht sauber verbunden« gesehen.
+                // Uebersprungen wird jetzt nur noch, was auf DENSELBEN Punkt
+                // faellt.
+                var at = RailPoint(route[i]);
+                if (RailProbeSkipCols && i > 0 &&
+                    Mathf.RoundToInt(route[i].X) == Mathf.RoundToInt(route[i - 1].X))
+                    continue;                     // --rail-lay=cols: die alte Regel
+                if (!RailProbeSkipCols && laid > 0 && at.IsEqualApprox(prev)) continue;
+                prev = at;
+                // Die STUETZE nach dem Abstand auf dem Schirm, nicht nach der
+                // Zahl der Stuecke: sonst stehen auf einem senkrechten Stueck
+                // sechs Boecke uebereinander und auf der Geraden einer alle
+                // drei Zellen. ⚠ UNSERE SETZUNG bleibt der Abstand selbst.
+                bool pylon = RailProbeSkipCols
+                    ? laid % RailPylonEvery == 0
+                    : !hasPylon || (at - lastPylon).Length() >= RailPylonEveryPx;
+                if (pylon) { lastPylon = at; hasPylon = true; }
+                laid++;
+                var tex = GetRailTexture(pcs[i], pylon);
                 if (tex == null) return;          // ohne Bilder gar nichts
-                DrawTexture(tex, RailPoint(route[i]) - ComposedAnchor
-                                 + new Vector2(0, RailYOffsetOf[pcs[i] & 7]));
+                DrawTexture(tex, at - ComposedAnchor
+                                 + new Vector2(0, RailProbeSkipCols
+                                                  ? RailYOffsetOf[pcs[i] & 7]
+                                                  : RailDeckOffset));
                 RailTilesDrawn++;
             }
         }

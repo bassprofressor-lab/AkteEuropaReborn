@@ -235,6 +235,15 @@ public partial class MapEntityLayer : Node2D
     {
         if (_railLines.Count == 0) return;
         if (_bldBySlot.Count == 0) RebuildRailIndex();
+        // ⚠ 11.08.2026 — die FAHRT laeuft je Bild, der AUTOMAT weiter im Takt.
+        //
+        // Vorher zog RailStep die Fahrzeit in Stufen von RailTickSeconds
+        // (0,3125 s) ab, und ein Streckenschritt dauert 0,35 s: die Zugspitze
+        // ruckte also einmal je Automatenrunde um fast eine ganze Zelle. Die
+        // Summe bleibt dieselbe — es wird nur nicht mehr in Brocken abgezogen.
+        foreach (var l in _railLines)
+            if (l.Faze is >= 1 and <= 9 && l.Travel > 0f) l.Travel -= dt;
+
         _railAcc += dt;
         int guard = 0;
         while (_railAcc >= RailTickSeconds && guard++ < 8)
@@ -283,8 +292,9 @@ public partial class MapEntityLayer : Node2D
             }
             else if (l.Faze <= 9)
             {
-                // unterwegs — der Zug-Tick bewegt ihn und meldet die Ankunft
-                l.Travel -= dt;
+                // unterwegs — die Fahrzeit laeuft schon in UpdateFreight je
+                // Bild herunter (siehe dort); hier wird nur die Ankunft
+                // gemeldet, damit sie im Takt des Automaten faellt.
                 if (l.Travel <= 0f) RailArrive(l, a, b);
             }
             else
@@ -404,8 +414,18 @@ public partial class MapEntityLayer : Node2D
         if (!_freightWagons.TryGetValue(l.Slot, out var list) || list.Count == 0) return;
         float p = l.TravelFull <= 0f ? 1f : 1f - Mathf.Clamp(l.Travel / l.TravelFull, 0f, 1f);
         int last = route.Count - 1;
-        int lead = Mathf.RoundToInt(p * last);
-        if (l.Dir == 1) lead = last - lead;
+        // ⚠ 11.08.2026 — GLEITEND statt springend. Hier stand
+        // `Mathf.RoundToInt(p * last)`, und damit sass jeder Waggon immer auf
+        // einem ganzen Routenschritt: der Zug HUEPFTE je Schritt um eine ganze
+        // Zelle (40 px) weiter, gemeldet als »fährt auch etwas ruckelig«.
+        // Der Bruchteil bleibt jetzt erhalten und wird zwischen zwei Schritten
+        // ausgemittelt. Das BILD (w.Piece) haengt weiter am ganzen Schritt —
+        // ein Schienenstueck gibt es nur in acht Richtungen, ein halbes gibt es
+        // nicht.
+        float leadF = Mathf.Clamp(p, 0f, 1f) * last;
+        if (l.Dir == 1) leadF = last - leadF;
+        int lead = Mathf.FloorToInt(leadF);
+        float frac = leadF - lead;
         _linePiece.TryGetValue(l.Slot, out var pcs);
         foreach (var w in list)
         {
@@ -450,10 +470,14 @@ public partial class MapEntityLayer : Node2D
             // derselben Spalte, auf der Geraden dagegen einer je Spalte -- der
             // Zug riss also genau auf den Diagonalen auseinander. Gemeldet als
             // »der zug hat immer noch luecken zwischen seinen wagons/locks«.
-            int step = StepBackColumns(route, lead, l.Dir == 0 ? 1 : -1, w.Index, last);
+            int dir = l.Dir == 0 ? 1 : -1;
+            int step = StepBackColumns(route, lead, dir, w.Index, last);
             w.Step = step;
-            w.Dir = l.Dir == 0 ? 1 : -1;
-            var pt = route[step];
+            w.Dir = dir;
+            // Zwischen diesem Schritt und dem naechsten in Fahrtrichtung
+            // ausmitteln — derselbe Bruchteil, den die Spitze schon hat.
+            int nxt = Mathf.Clamp(step + dir, 0, last);
+            var pt = route[step].Lerp(route[nxt], frac);
             w.Col = pt.X; w.Row = pt.Y;
             if (pcs != null && step < pcs.Count) w.Piece = pcs[step];
         }
@@ -600,7 +624,17 @@ public partial class MapEntityLayer : Node2D
         foreach (var w in _wagons) if (w.Freight) fw++;
         sb.Append($") | {fw} von {_wagons.Count} Waggons am Fahrplan");
 
-        if (first) sb.Append($" | Gleis: {RailTilesDrawn} Stuecke gezeichnet");
+        sb.Append($" | Gleis: {RailTilesDrawn} Stuecke gezeichnet");
+        // Der Beweis fuer »faehrt gleitend statt zu huepfen«: die Stelle des
+        // ersten fahrenden Waggons auf ein Hundertstel genau. Steht dort eine
+        // ganze Zahl, springt er von Schritt zu Schritt.
+        foreach (var w in _wagons)
+            if (w.Freight)
+            {
+                sb.Append($" | Waggon {w.Index} auf Linie {w.Line} bei " +
+                          $"({w.Col:0.00},{w.Row:0.00}) Schritt {w.Step}");
+                break;
+            }
         return sb.ToString();
 
         // Die Frage des Spielers war »wie laufen die Teile zusammen«, also wird
