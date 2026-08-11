@@ -94,7 +94,13 @@ public partial class MainMenu : Control
             Footer = missions.Count > 0
                 ? $"{missions.Count} Missionen · {Campaign.CampaignManager.Completed} geschafft"
                 : "Keine Kampagne importiert",
-            Close = () => GetTree().Quit(),
+            // ⚠ 11.08.2026 — KEIN X-Knopf mehr. Er war ohnehin unsere Deutung
+            // (was das Kreuz im Original tut, ist ungelesen), und sein Rot
+            // stand in keiner gelesenen Farbstelle. Gemeldet als »neben dem
+            // schriftzug ist noch so ein rotes schließ kreuz, das brauchen wir
+            // nicht«. Beenden steht als eigene Zeile in der Liste, der Knopf
+            // war also auch doppelt. Close = null laesst ihn weg.
+            Close = null,
         };
         _start.Rows.AddRange(rows);
         AddChild(_start);
