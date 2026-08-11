@@ -6795,6 +6795,17 @@ public partial class MapEntityLayer : Node2D
         return $"PRODUKTION  ${_money[owner]}";
     }
 
+    /// <summary>Name, Energie und Zustand des gewaehlten Gebaeudes — was
+    /// Titelleiste, Energiebalken und Statuszeile des Basisfensters brauchen
+    /// (UI/BaseWindow.cs). null, wenn nichts Bauendes gewaehlt ist.</summary>
+    public (string Name, int Hp, int HpMax, string Status)? BuildPanelHead()
+    {
+        var e = Producer();
+        if (e == null) return null;
+        return (e.Name.Length > 0 ? e.Name : BuildingTypeName(e.BType),
+                e.Hp, e.HpMax, e.Dead ? "zerstoert" : StateName(e));
+    }
+
     public bool BuildPanelWanted => Producer() != null;
 
     /// <summary>Harness only: the factory <c>--demo-buildpanel</c> is waiting on.
