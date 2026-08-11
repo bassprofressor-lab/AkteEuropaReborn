@@ -317,6 +317,12 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_tickCheck > 0f)
+        {
+            GD.Print(_entities.TickCheck(_tickCheck));
+            GetTree().Quit(0);
+            return;
+        }
         if (_tutorialCheck)
         {
             GD.Print(_entities.TutorialCheck());
@@ -497,7 +503,10 @@ public partial class MapViewer : Node2D
 
     private void ParseCmdline()
     {
-        foreach (string a in OS.GetCmdlineUserArgs())
+        // Core.CommandLine statt OS.GetCmdlineUserArgs(): ohne den Trenner »--«
+        // gibt Godot einer ausgelieferten Fassung gar keinen Schalter weiter,
+        // und dann greift hier keine einzige Prueffahne. Siehe Core/CommandLine.cs.
+        foreach (string a in Core.CommandLine.Args)
         {
             if (a.StartsWith("--shot=")) _shotPath = a[7..];
             else if (a.StartsWith("--shot-delay=")) _shotDelay = a[13..].ToInt();
@@ -526,6 +535,11 @@ public partial class MapViewer : Node2D
             else if (a == "--demo-queue") { _demo = true; _demoQueue = true; }
             else if (a == "--demo-ai") { _demo = true; _demoAi = true; }
             else if (a.StartsWith("--script-check")) _scriptCheck = 15f;
+            // --tick-check[=<sekunden>]: der Takt des Missionsskripts und was er
+            // in den ersten Sekunden von selbst ausloest. Siehe
+            // MapEntityLayer.TickCheck.
+            else if (a.StartsWith("--tick-check"))
+                _tickCheck = a.Contains('=') ? a[(a.IndexOf('=') + 1)..].ToFloat() : 10f;
             else if (a == "--store-check") _storeCheck = 0.001f;
             else if (a == "--rail-check") { _railCheck = 1f; _railHead = true; }
             // --cheats schaltet alle drei, --cheat=god,ammo,fuel einzelne.
@@ -634,6 +648,10 @@ public partial class MapViewer : Node2D
     /// <summary>Seconds after which a scripted run gives up and quits; 0 = never.</summary>
     private float _quitAfter;
     private float _scriptCheck;
+
+    /// <summary>`--tick-check[=<sekunden>]` — wieviele Sekunden Missionsskript
+    /// der Prueflauf ohne jedes Zutun laufen laesst. 0 = aus.</summary>
+    private float _tickCheck;
     private float _upTime;
 
     /// <summary>`--demo-leave=<n>` sends the demo's unit back where it came from

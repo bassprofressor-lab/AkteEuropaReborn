@@ -1782,7 +1782,8 @@ public partial class MapEntityLayer : Node2D
     {
         if (!_aiOn) return;
         bool arg = false;
-        foreach (string s in OS.GetCmdlineUserArgs())
+        // siehe Core/CommandLine.cs — ohne »--« kommt sonst nichts an
+        foreach (string s in Core.CommandLine.Args)
             if (s == "--demo-ai") arg = true;
         if (!arg) return;
 
