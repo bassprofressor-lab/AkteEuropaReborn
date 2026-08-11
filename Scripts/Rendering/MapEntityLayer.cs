@@ -38,6 +38,34 @@ public partial class MapEntityLayer : Node2D
         public int Facing;         // 0-7, from the entity heading byte (+0x08)
         public int Weapon;         // weapon component id (record +0x0c); 0 = none
 
+        /// <summary>
+        /// Traegt diese Einheit ueberhaupt eine WAFFE? Satzfeld <b>+0x0d</b>.
+        ///
+        /// <para><see cref="Weapon"/> ist der AUFSATZ (+0x0c) und bei einem
+        /// Techniker 47 oder 48 — also ungleich 0, obwohl er nichts schiessen
+        /// kann. Das Spiel fuehrt "bewaffnet" darum in einem eigenen Feld:</para>
+        /// <list type="bullet">
+        /// <item>Aufstell-Weiche C @0x4B1B6E / F @0x4B14AA: <c>cmp cl,0x32</c>
+        /// auf die Waffenzeile des Entwurfs (+0x17). Zeile &gt;= 50 -&gt;
+        /// +0x0d = 0 und die Zeile wandert nach +0x0e; Zeile &lt; 50 -&gt; die
+        /// Waffe steht in +0x0d. Geschuetze sind die Zeilen 1..19,
+        /// AUSRUESTUNG 65..79, Handwaffen 185..199.</item>
+        /// <item>Einheitentakt C @0x40DDF0..0x40DE20 / F @0x40DC20..0x40DC4A:
+        /// <c>mov al,[u+0x0d]; test al,al; jne &lt;Kampfblock&gt;</c> — eine
+        /// Null in +0x0d heisst: kommt gar nicht erst in den Kampf.</item>
+        /// </list>
+        /// <para>Gegenprobe ueber alle 586 Entwuerfe und alle 30 Karten, ohne
+        /// Gegenbeispiel: 1226 Einheiten mit Aufsatz 21..39 tragen
+        /// +0x0d = Waffenzeile; 218 Einheiten mit Aufsatz 40..54 tragen
+        /// +0x0d = 0 und durchweg Angriff 0, Reichweite 0, Munition 0.</para>
+        ///
+        /// <para>⚠ Gemeldet am 11.08.2026 als »in der Kampagne 1 gibt es 3
+        /// Fahrzeuge, sieht aus als haetten die einen Bauturm drauf. die fahren
+        /// dann auch aggressiv auf einen zu«. Genau das taten sie: sie kamen
+        /// durch <c>CanFight</c>, bekamen ein Ziel — und WeaponOf erfand ihnen
+        /// dazu noch eine Waffe mit 10 Schaden.</para></summary>
+        public bool Armed;
+
         /// <summary>Equipment row (record +0x10). The spawn routine @0x4b1b5c
         /// copies the design's third component (sec47 +0x19) into this byte, and
         /// the stats table names rows 65..88: Teleporter, Repair Device,
@@ -1119,6 +1147,8 @@ public partial class MapEntityLayer : Node2D
                     Ammo = haveRaw ? HexByte(raw, 0x39) : 0,
                     AmmoMax = haveRaw ? HexByte(raw, 0x3a) : 0,
                     Weapon = haveRaw ? HexByte(raw, 0x0c) : 0,
+                    // +0x0d ist die Waffenfahne des Spiels — siehe Entity.Armed
+                    Armed = haveRaw && HexByte(raw, 0x0d) != 0,
                     // +0x0b is the record's `spodek` (the game's own dump name).
                     // For the size classes 148/149 it is the INFANTRY set: the
                     // maps hold 921 of them and every value is even, 0..22,
@@ -3495,6 +3525,13 @@ public partial class MapEntityLayer : Node2D
     /// is SHOWN as a gap rather than borrowed from somebody else.</summary>
     private static (string Name, int Damage, float RangeTiles) WeaponOf(int comp)
     {
+        // ⚠ 11.08.2026 — DER EIGENTLICHE FEHLER hinter »die Baufahrzeuge
+        // fahren aggressiv auf einen zu«: der Rueckfall hat fuer JEDES
+        // unbekannte Bauteil eine Waffe mit 10 Schaden und 5 Feldern
+        // Reichweite ERFUNDEN, also auch fuer die Ausruestung 40..54. Ueber
+        // alle Karten sind das 218 Einheiten, die damit tatsaechlich
+        // geschossen haben. Ausruestung bekommt jetzt 0/0.
+        if (IsEquipmentMount(comp)) return ($"BAUTEIL {comp}", 0, 0f);
         if (_weapons != null && _weapons.TryGetValue(comp, out var w)) return w;
         return ($"BAUTEIL {comp}", 10, 5f);
     }
@@ -3503,7 +3540,18 @@ public partial class MapEntityLayer : Node2D
     // classes) are scenery markers, not combatants — they neither shoot nor can
     // be shot at.
     private static bool CanFight(Entity e)
-        => !e.IsProp && !e.Dead && e.Weapon != 0 && e.HpMax > 0;
+        // ⚠ 11.08.2026 — hier stand nur `e.Weapon != 0`, und e.Weapon ist der
+        // AUFSATZ. Ein Baufahrzeug traegt Aufsatz 47 oder 48 und kam damit
+        // durch. Massgeblich ist die Waffenfahne +0x0d (siehe Entity.Armed).
+        // Wo die Rohbytes fehlen (gebaute Einheiten, aeltere Ausfuhren), bleibt
+        // die abgeleitete Spanne: die Aufsaetze 40..54 sind die Ausruestung.
+        => !e.IsProp && !e.Dead && e.Weapon != 0 && e.HpMax > 0 &&
+           (e.Armed || !IsEquipmentMount(e.Weapon));
+
+    /// <summary>Aufsaetze 40..54 sind AUSRUESTUNG, keine Waffen — die Abbildung
+    /// Entwurfswaffe 65..79 -&gt; Aufsatz 40..54 ist gelesen, siehe
+    /// <see cref="TurretOf"/>.</summary>
+    private static bool IsEquipmentMount(int comp) => comp is >= 40 and <= 54;
 
     /// <summary>Rounds left. A unit whose maximum is 0 carries no ammunition at
     /// all — infantry and the unarmed rows read 0/0 in every map file — and
@@ -6382,7 +6430,24 @@ public partial class MapEntityLayer : Node2D
     /// 185..199 infantry arms — neither maps this way, so they get no turret.
     /// </summary>
     private static int TurretOf(int designWeapon)
-        => designWeapon >= 1 && designWeapon <= 19 ? designWeapon + 20 : 0;
+    {
+        if (designWeapon is >= 1 and <= 19) return designWeapon + 20;
+        // ⚠ 11.08.2026 — die AUSRUESTUNG hat auch einen Aufsatz, und der ist
+        // gelesen: Entwurfswaffe 65..79 bildet auf Bauteil 40..54 ab, aber
+        // NICHT der Reihe nach. Die Reihenfolge steht unten; die Turmbilder
+        // dazu liegen bereits unter Units/turret/. Vorher gab TurretOf hier 0
+        // zurueck — ein gebauter Ausruestungstraeger fiel dadurch zwar richtig
+        // durch CanFight, trug aber KEINEN AUFSATZ IM BILD.
+        int i = System.Array.IndexOf(EquipMountOrder, designWeapon);
+        return i >= 0 ? 40 + i : 0;
+    }
+
+    /// <summary>Entwurfswaffe -&gt; Aufsatz 40..54, in dieser Reihenfolge:
+    /// 66-&gt;40, 67-&gt;41, 68-&gt;42, 70-&gt;43, 65-&gt;44, 69-&gt;45,
+    /// 71-&gt;46, 72-&gt;47, 73-&gt;48, 74-&gt;49, 75-&gt;50, 76-&gt;51,
+    /// 77-&gt;52, 78-&gt;53, 79-&gt;54.</summary>
+    private static readonly int[] EquipMountOrder =
+        { 66, 67, 68, 70, 65, 69, 71, 72, 73, 74, 75, 76, 77, 78, 79 };
 
     /// <summary>
     /// Der Sprite-Satz und die Waffe eines FUSSSOLDATEN, den nicht die Karte
