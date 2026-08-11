@@ -889,10 +889,16 @@ public partial class MapEntityLayer : Node2D
             var e = _entities[i];
             if (!e.IsBuilding || e.Dead || e.Owner != a.Player) continue;
 
-            // a factory that is idle and has parts starts the next unit
-            if (IsFactory(e) && e.BuildTime <= 0f && _designs != null && _designs.Count > 0)
+            // eine BASIS, die frei ist und Teile hat, faengt die naechste
+            // Einheit an — ⚠ 11.08.2026: hier stand IsFactory, und damit baute
+            // der Computer dort, wo das Original nur Teile herstellt. Der
+            // Kommentar ueber dieser Schleife sagte es selbst: `ai_production`
+            // @0x4BB9A0 legt seine Zeile in eine ausgewuerfelte BASIS, »die
+            // Fabriken kommen dabei gar nicht vor«. Siehe
+            // MapEntityLayer.IsUnitPlant fuer die Belege.
+            if (IsUnitPlant(e) && e.BuildTime <= 0f && _designs != null && _designs.Count > 0)
             {
-                // with a programme the factories do not choose at all
+                // with a programme the bases do not choose at all
                 if (planned) continue;
                 var menu = BuildableBy(e.BType);
                 if (menu.Count > 0)
@@ -900,7 +906,7 @@ public partial class MapEntityLayer : Node2D
                     e.MenuIndex = AiPickDesign(a, menu);
                     int pick = menu[e.MenuIndex % menu.Count];
                     var chosen = _designs[pick];
-                    // the same three-store test the player's factory passes
+                    // the same three-store test the player's base passes
                     if (CanAfford(e, chosen))
                     {
                         PayFor(e, chosen);

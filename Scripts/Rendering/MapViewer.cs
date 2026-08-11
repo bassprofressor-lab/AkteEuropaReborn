@@ -245,6 +245,16 @@ public partial class MapViewer : Node2D
         _keyPanSpeed = UI.Settings.PanSpeed;
 
         ParseCmdline();
+        // --skirmish: den Gefechtsmodus von der Kommandozeile aus anwerfen,
+        // damit ein Prueflauf ihn ueberhaupt erreichen kann. Steht hier und
+        // nicht in ParseCmdline(), weil --map= und --skirmish= in beliebiger
+        // Reihenfolge kommen duerfen.
+        if (_skirmish)
+        {
+            UI.SkirmishSetup.Active = true;
+            UI.SkirmishSetup.CampaignMission = 0;
+            UI.SkirmishSetup.Map = _skirmishMap.Length > 0 ? _skirmishMap : MapNames[_mapIndex];
+        }
         // a game started from the menu overrides the command line
         if (UI.SkirmishSetup.Active)
         {
@@ -541,6 +551,33 @@ public partial class MapViewer : Node2D
             else if (a.StartsWith("--tick-check"))
                 _tickCheck = a.Contains('=') ? a[(a.IndexOf('=') + 1)..].ToFloat() : 10f;
             else if (a == "--store-check") _storeCheck = 0.001f;
+            // --econ-check[=<sek>]: der Vorrat, den das Bedienfeld einer Fabrik
+            // zeigt, im gewaehlten Takt. Siehe MapEntityLayer.EconCheckLine.
+            else if (a == "--econ-check" || a.StartsWith("--econ-check="))
+            {
+                _econPeriod = a.Contains('=')
+                    ? Mathf.Max(0.05f, a[(a.IndexOf('=') + 1)..].ToFloat()) : 1f;
+                _econCheck = 0.001f;
+            }
+            // --store-check=<sek>: derselbe Bericht, aber in einem Takt, den man
+            // waehlen kann. Ein Vorrat, der zwischen zwei Werten PENDELT, ist
+            // mit fuenf Sekunden Abstand nicht von einem stehenden zu
+            // unterscheiden — genau das war am 11.08.2026 die Meldung.
+            else if (a.StartsWith("--store-check="))
+            {
+                _storePeriod = Mathf.Max(0.05f, a["--store-check=".Length..].ToFloat());
+                _storeCheck = 0.001f;
+            }
+            // --skirmish[=<karte>]: ein GEFECHT ohne den Weg ueber das Menue.
+            // Ohne ihn liesse sich der Gefechtsmodus gar nicht mit einem
+            // Prueflauf messen — --map= laedt nur die Karte, setzt aber
+            // SkirmishSetup.Active NICHT und startet also keine Wirtschaft mit
+            // Startvorrat, keine KI und keinen Spieler.
+            else if (a == "--skirmish" || a.StartsWith("--skirmish="))
+            {
+                _skirmish = true;
+                if (a.Contains('=')) _skirmishMap = a[(a.IndexOf('=') + 1)..];
+            }
             else if (a == "--rail-check") { _railCheck = 1f; _railHead = true; }
             // --cheats schaltet alle drei, --cheat=god,ammo,fuel einzelne.
             // Fuer den Pruefstand, und damit ein Lauf reproduzierbar bleibt.
@@ -672,6 +709,10 @@ public partial class MapViewer : Node2D
     /// die Mission beobachtet. Ein einzelner Blick am Ende wuerde nicht sagen,
     /// ob sie WACHSEN — und genau das ist Mission 5s Bedingung.</summary>
     private float _storeCheck;
+    private float _storePeriod = 5f;
+    private float _econCheck, _econPeriod = 1f;
+    private bool _skirmish;
+    private string _skirmishMap = "";
 
     /// <summary>`--produce-check`: nach zwei Sekunden die Produktionskette der
     /// Mission an Spieler 0 übergeben und dann echt laufen lassen. Zwei Sekunden,
@@ -752,8 +793,17 @@ public partial class MapViewer : Node2D
             _storeCheck -= (float)delta;
             if (_storeCheck <= 0f)
             {
-                _storeCheck = 5f;
+                _storeCheck = _storePeriod;
                 GD.Print($"[{_upTime:0}s] " + _entities.StoreCheckLine());
+            }
+        }
+        if (_econCheck > 0f)
+        {
+            _econCheck -= (float)delta;
+            if (_econCheck <= 0f)
+            {
+                _econCheck = _econPeriod;
+                GD.Print($"[{_upTime:0}s] " + _entities.EconCheckLine());
             }
         }
         if (_scriptCheck > 0f)

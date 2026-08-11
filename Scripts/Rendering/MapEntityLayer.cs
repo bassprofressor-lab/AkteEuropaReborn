@@ -5350,6 +5350,57 @@ public partial class MapEntityLayer : Node2D
     /// line there is no way to tell a mission that CANNOT be won from one that
     /// has not been won yet.
     /// </summary>
+    /// <summary>
+    /// `--econ-check[=<sek>]`: der Vorrat, den der SPIELER im Bedienfeld
+    /// liest, Zeile fuer Zeile — und daneben alles, was ihn bewegt.
+    ///
+    /// <para>Gebaut fuer die Meldung vom 11.08.2026: »der Ressourcen Wert W
+    /// steigt immer auf 10 und faellt dann wieder auf 0«. Mit
+    /// <c>--store-check</c> war das nicht zu messen: der liest die Lager, die
+    /// ein MISSIONSSKRIPT beobachtet, und im Gefecht gibt es keins. Hier steht
+    /// darum genau das, was das Bedienfeld einer Fabrik zeigt
+    /// (<c>T… W…/Lagerplatz V…</c>, siehe die Panel-Zeile fuer IsFactory) plus
+    /// die beiden Zahlen, die den Ausschlag geben: was die Fabrik
+    /// ZURUECKHAELT (<c>OwnReserve</c>) und wohin sie abliefert.</para>
+    /// </summary>
+    public string EconCheckLine()
+    {
+        int me = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
+        var facs = new List<string>();
+        var hqs = new List<string>();
+        foreach (var e in _entities)
+        {
+            if (!e.IsBuilding || e.Dead || e.Owner != me) continue;
+            if (IsFactory(e))
+                facs.Add($"[{e.Slot} Typ{e.BType} T{e.StockT} " +
+                         $"W{e.StockW} F{e.StockF} S{e.StockS} /Lager{e.Capacity} " +
+                         $"V{e.ProdSpeed} St{e.State} haelt{OwnReserve(e)}]");
+            else if (e.BType == 1)
+                hqs.Add($"[{e.Slot} Basis W{e.StockW} F{e.StockF} S{e.StockS} " +
+                        $"T{e.StockT} bezahlbar {Affordable(e)}/{BuildableBy(1).Count}]");
+        }
+        return $"econ-check: P{me} " +
+               (facs.Count > 0 ? "Fabriken " + string.Join(" ", facs) : "keine Fabrik") +
+               (hqs.Count > 0 ? "  " + string.Join(" ", hqs) : "  keine Basis") +
+               $"  | gefahren W{_econMovedW} F{_econMovedF} S{_econMovedS} T{_econMovedT}";
+    }
+
+    /// <summary>Wieviele Entwuerfe dieses Gebaeude aus seinen eigenen drei
+    /// Lagern bezahlen koennte — die Zahl, an der sich »ich kann nichts bauen«
+    /// messen laesst.</summary>
+    private int Affordable(Entity e)
+    {
+        if (_designs == null) return 0;
+        int n = 0;
+        foreach (int i in BuildableBy(e.BType)) if (CanAfford(e, _designs[i])) n++;
+        return n;
+    }
+
+    /// <summary>Was der Nahweg seit Missionsbeginn fortgefahren hat, je Sorte —
+    /// nur fuer <c>--econ-check</c>, damit sich ein PENDELNDER Vorrat von einem
+    /// stehenden unterscheiden laesst.</summary>
+    private int _econMovedW, _econMovedF, _econMovedS, _econMovedT;
+
     public string StoreCheckLine()
     {
         if (_mscript == null) return "store-check: kein Skript fuer diese Mission";
@@ -5868,6 +5919,13 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     private static bool FitsFactory(Design d, int bType) => bType switch
     {
+        // ⚠ 11.08.2026 — die BASIS (Typ 1) baut ALLES. Das ist keine Setzung
+        // mehr, sondern die Auskunft des Spiels selbst (HELPG.TXT 24: »Auf der
+        // Produktionsliste finden Sie eine Reihe von Vordefinierten Einheiten«,
+        // ohne jede Einschraenkung nach Bauteil) — siehe IsUnitPlant. Die
+        // Aufteilung darunter gilt nur noch fuer die Bauprogramme der KI und
+        // fuer Anzeigen, die nach der Fabrik fragen.
+        1 => true,
         2 => d.Weapon >= 1 && d.Weapon <= 19,
         4 => d.Weapon >= 65 && d.Weapon <= 79,
         _ => !(d.Weapon >= 1 && d.Weapon <= 19) && !(d.Weapon >= 65 && d.Weapon <= 79),
@@ -6238,8 +6296,53 @@ public partial class MapEntityLayer : Node2D
     private static int WeaponRowOf(int comp)
         => comp >= 21 && comp <= 39 ? comp - 20 : -1;
 
-    /// <summary>Factory building types: Waffen-, Fahrwerk- and Spezial-Fabrik.</summary>
+    /// <summary>Factory building types: Waffen-, Fahrwerk- and Spezial-Fabrik.
+    /// Eine Fabrik macht TEILE. Einheiten baut sie NICHT — siehe
+    /// <see cref="IsUnitPlant"/>.</summary>
     private static bool IsFactory(Entity e) => e.IsBuilding && (e.BType is 2 or 3 or 4);
+
+    /// <summary>
+    /// Wo EINHEITEN entstehen: in der BASIS (Gebäudetyp 1), und nirgends sonst.
+    ///
+    /// <para>⚠ 11.08.2026 — bis heute baute bei uns die FABRIK die Einheiten,
+    /// und das war der gemeldete Fehler »ich kann im Gefecht nicht wirklich
+    /// Einheiten bauen, weil der Ressourcen-Wert W immer auf 10 steigt und dann
+    /// wieder auf 0 fällt«. Gemessen auf map_DM_1 (--skirmish=map_DM_1
+    /// --econ-check=1): der Waffenvorrat der Fabrik auf Platz 3 lief
+    /// 0,1,2,3,4,5 und stand bei Sekunde 29 wieder auf 0, während die Basis
+    /// unverändert W298 F360 S200 hielt. Der Zug holt die Teile ab — und das
+    /// ist RICHTIG so.</para>
+    ///
+    /// <para><b>Das Spiel sagt es in eigenen Worten</b> (HELPG.TXT, exportiert
+    /// nach <c>user://data/UI/help.json</c>):</para>
+    /// <list type="bullet">
+    /// <item>Nr. 24: »Im @Basis @Fenster haben Sie die Möglichkeit, neue
+    /// Einheiten zu produzieren. … Der @Produktionspreis der Einheiten ist
+    /// bestimmt durch @Waffen-, @Chassis- oder @Spezialteile, die <b>in jeder
+    /// Basis</b> bereitgehalten werden.«</item>
+    /// <item>Nr. 32: »Die @Teile, aus denen die Einheiten hergestellt werden,
+    /// werden in entsprechenden @Fabriken produziert. Gibt es nicht genügend
+    /// Teile <b>in der Basis</b>, sollten Sie @Transporte organisieren, die die
+    /// Teile aus den Fabriken holen.«</item>
+    /// <item>Nr. 34: »Eine @Waffen @Fabrik wird übernommen. Hier werden die
+    /// Teile produziert, die zur Herstellung von Waffen <b>in der Basis</b>
+    /// gebraucht werden.«</item>
+    /// </list>
+    ///
+    /// <para><b>Und das Programm bestätigt es:</b> die Produktionsschaltfläche
+    /// prüft die drei Lager des Gebäudes, dessen Fenster offen ist —
+    /// <c>[esi+0xC0693C]</c>, <c>[esi+0xC0693E]</c>, <c>[esi+0xC06940]</c>
+    /// (@0x44A6D8, @0x44A6ED, @0x44A708), also +0x28/+0x2A/+0x2C am Satz
+    /// 0xC06914 — und schickt erst danach Befehl 0x1F7 (@0x44A713). Das Fenster
+    /// im Originalfoto akte-europa_8.png heisst <b>»Basis 2«</b>, trägt die
+    /// Reiter Depot/Produktion/Forschung/Reparatur und den Knopf »Produzieren«,
+    /// und unter seiner Liste stehen die drei Lagerzahlen der Basis
+    /// (315/228/0).</para>
+    ///
+    /// <para>Damit fällt auch die alte Setzung »welche Fabrik welchen Entwurf
+    /// baut« (<c>FitsFactory</c>) weg: die Basis baut alles.</para>
+    /// </summary>
+    private static bool IsUnitPlant(Entity e) => e.IsBuilding && e.BType == 1;
 
     private const float BuildSeconds = 6f;
 
@@ -6451,7 +6554,7 @@ public partial class MapEntityLayer : Node2D
                 n++;
                 continue;
             }
-            if (!IsFactory(e)) continue;
+            if (!IsUnitPlant(e)) continue;
             var menu = BuildableBy(e.BType);
             if (menu.Count == 0) continue;
             e.MenuIndex = (e.MenuIndex + 1) % menu.Count;
@@ -6481,7 +6584,7 @@ public partial class MapEntityLayer : Node2D
         // Besitzer: beide Zweige @0x44C2CF und @0x44C37C pruefen nur
         // `cmp dword [ecx*4 + 0xA9C600], eax` — den Kontostand.
         if (IsSupplyDepot(e)) return e;
-        return IsFactory(e) || IsDock(e) || e.BType == 9 ? e : null;
+        return IsUnitPlant(e) || IsDock(e) || e.BType == 9 ? e : null;
     }
 
     /// <summary>The panel's heading: the game's own word for the tab
@@ -6490,7 +6593,7 @@ public partial class MapEntityLayer : Node2D
     {
         var e = Producer();
         if (e == null) return "";
-        if (IsFactory(e))
+        if (IsUnitPlant(e))
             return $"PRODUKTION  W{e.StockW} F{e.StockF} S{e.StockS}";
         if (IsSupplyDepot(e))
             return $"VERSORGUNGSDEPOT  ${_money[ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0]}";
@@ -6528,7 +6631,7 @@ public partial class MapEntityLayer : Node2D
         var e = Producer();
         if (e == null) return rows;
 
-        if (IsFactory(e) && _designs != null)
+        if (IsUnitPlant(e) && _designs != null)
         {
             var menu = BuildableBy(e.BType);
             for (int i = 0; i < menu.Count; i++)
@@ -6609,7 +6712,7 @@ public partial class MapEntityLayer : Node2D
         {
             var e = _entities[i];
             if (!e.IsBuilding || e.IsProp || e.Dead) continue;
-            if (!IsFactory(e) && !IsDock(e) && e.BType != 9) continue;
+            if (!IsUnitPlant(e) && !IsDock(e) && e.BType != 9) continue;
             if (e.Owner is < 0 or > 7) continue;
             // the viewed player first; anybody's factory rather than none
             if (e.Owner == ViewPlayer) { idx = i; break; }
@@ -7243,7 +7346,7 @@ public partial class MapEntityLayer : Node2D
         foreach (int i in _sel)
         {
             var e = _entities[i];
-            if (!IsFactory(e) || e.Dead) continue;
+            if (!IsUnitPlant(e) || e.Dead) continue;
             var menu = BuildableBy(e.BType);
             if (menu.Count == 0) { _order = "nichts baubar"; continue; }
             int pick = menu[e.MenuIndex % menu.Count];
@@ -7259,7 +7362,7 @@ public partial class MapEntityLayer : Node2D
             e.BuildTime = BuildSeconds;
             n++;
         }
-        if (n > 0) _order = $"Produktion: {n} Fabrik(en)";
+        if (n > 0) _order = $"Produktion: {n} Basis(en)";
         else if (_order.Length == 0) _order = "keine Fabrik gewaehlt";
         UpdatePanel();
         QueueRedraw();
@@ -7487,7 +7590,8 @@ public partial class MapEntityLayer : Node2D
     private const int HaulAmount = 4;      // goods moved per economy tick
     private const int HaulRange = 40;      // tiles a fallback delivery may cover
     private const int HaulReserve = 30;    // Terranium a mine keeps for itself
-    private const int PartReserve = 40;    // parts a factory keeps so it can build
+    // ⚠ PartReserve (40) ist am 11.08.2026 entfallen: eine Fabrik baut keine
+    // Einheiten mehr und haelt darum nichts zurueck — siehe OwnReserve.
     private const int HaulHops = 3;        // lines a delivery may travel
 
     /// <summary>building slot -> the slots it is joined to by SPOJ lines.</summary>
@@ -7855,6 +7959,7 @@ public partial class MapEntityLayer : Node2D
                 int n = Mathf.Min(HaulAmount, e.StockT - HaulReserve);
                 e.StockT -= n;
                 f.StockT += n;
+                _econMovedT += n;
             }
             return;
         }
@@ -7872,48 +7977,32 @@ public partial class MapEntityLayer : Node2D
             SpendParts(e, n);
             switch (e.BType)
             {
-                case 2: hq.StockW += n; break;
-                case 3: hq.StockF += n; break;
-                default: hq.StockS += n; break;
+                case 2: hq.StockW += n; _econMovedW += n; break;
+                case 3: hq.StockF += n; _econMovedF += n; break;
+                default: hq.StockS += n; _econMovedS += n; break;
             }
             return;
         }
 
-        // Basis -> factory (the part types a factory does not make itself)
+        // ⚠ 11.08.2026 — HIER STAND EIN RUECKWEG Basis -> Fabrik, und er ist
+        // ersatzlos gestrichen.
         //
-        // The return leg, added 2026-08-01 with the real prices. A design costs
-        // all three part types — that is what the original's production button
-        // checks, +0x1a/+0x1b/+0x1c against three stores — but a factory only
-        // ever manufactures its own type, so without this leg a Waffen-Fabrik
-        // sits on 38/0/0 and can never pay for anything. Measured exactly that
-        // way before it existed.
+        // Er war am 01.08. eingebaut worden, weil eine Waffen-Fabrik nur Waffen
+        // macht und die Entwuerfe alle drei Teilearten kosten: eine Fabrik, die
+        // Einheiten baut, muesste sich die fremden Teile holen. Genau diese
+        // Voraussetzung ist jetzt widerlegt — Einheiten entstehen in der BASIS
+        // (siehe IsUnitPlant, HELPG.TXT 24/32/34 und die Produktionsschaltflaeche
+        // @0x44A6D8). Eine Fabrik braucht keine fremden Teile, und der Rueckweg
+        // hat nur die Basis leergezogen, aus der der Spieler bauen soll:
+        // gemessen auf map_DM_1 lief das Fahrwerklager der Basis in den ersten
+        // zehn Sekunden von 400 auf 360 herunter, ohne dass irgendetwas
+        // entstanden waere.
         //
-        // Only foreign types travel back, and only up to what the next build
-        // actually needs, so nothing loops against the outbound leg above.
-        if (IsFactory(e)) SupplyFactory(e);
-    }
-
-    private void SupplyFactory(Entity f)
-    {
-        if (_designs == null) return;
-        var menu = BuildableBy(f.BType);
-        if (menu.Count == 0) return;
-        var d = _designs[menu[f.MenuIndex % menu.Count]];
-
-        int needW = f.BType == 2 ? 0 : Mathf.Max(0, d.CostW - f.StockW);
-        int needF = f.BType == 3 ? 0 : Mathf.Max(0, d.CostF - f.StockF);
-        int needS = f.BType is 2 or 3 ? Mathf.Max(0, d.CostS - f.StockS) : 0;
-        if (needW + needF + needS == 0) return;
-
-        var hq = Consignee(f, x => x.BType == 1);
-        if (hq == null) return;
-
-        int take = Mathf.Min(Mathf.Min(needW, hq.StockW), HaulAmount);
-        hq.StockW -= take; f.StockW += take;
-        take = Mathf.Min(Mathf.Min(needF, hq.StockF), HaulAmount);
-        hq.StockF -= take; f.StockF += take;
-        take = Mathf.Min(Mathf.Min(needS, hq.StockS), HaulAmount);
-        hq.StockS -= take; f.StockS += take;
+        // Das Original kennt diesen Weg ohnehin nicht. Es bewegt Waren ALLEIN
+        // ueber die Bahn (spoj_launch @0x4C6410 / Zug-Tick @0x4C69C0 — »nichts
+        // anderes im ganzen Programm bewegt die vier Lagerfelder«, siehe
+        // Simulation/RailFreight.cs), und die Typmatrix @0x504128 kennt in der
+        // Zeile »1 Basis« nur Werte 0 und 2: aus der Basis faehrt nichts hinaus.
     }
 
     private Entity? NearestOwned(Entity from, System.Func<Entity, bool> pick)
@@ -7963,36 +8052,30 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>
     /// Was eine Fabrik von ihrer EIGENEN Teileart zurückhält, bevor sie
-    /// abliefert: genau das, was ihr nächster Bau kostet.
+    /// abliefert: <b>nichts</b>.
     ///
-    /// ⚠ CORRECTED 10.08.2026 — hier stand eine pauschale 40, frei erfunden.
-    /// Gemessen an Mission 5 (»Wiederaufnahme der Produktion«) war das der
-    /// Grund, warum die Mission nicht gewinnbar war: eine Fabrik macht rund ein
-    /// Teil je fünf Sekunden, brauchte also über drei Minuten, bevor sie
-    /// überhaupt das erste Stück abgab — und bis dahin hatte der Rückweg
-    /// (`SupplyFactory`) das Lager der Basis längst unter die Marke gezogen,
-    /// die sich die Mission bei der Einnahme gemerkt hatte. Gemessen: Waffen
-    /// blieben über 85 Sekunden auf 0.
+    /// <para>⚠ 11.08.2026 — hier stand vorher »genau das, was ihr nächster Bau
+    /// kostet«, und davor eine pauschale 40. Beide Zahlen hingen an der
+    /// Annahme, dass die FABRIK Einheiten baut. Sie tut es nicht: Einheiten
+    /// entstehen in der Basis (siehe <see cref="IsUnitPlant"/>). Eine Fabrik
+    /// baut nichts, also braucht sie nichts zurückzuhalten.</para>
     ///
-    /// Die neue Zahl ist **nicht** erfunden: sie kommt aus dem Entwurfssatz
-    /// (+0x1a/+0x1b/+0x1c), also aus derselben Quelle, die auch die
-    /// Produktionsschaltfläche des Originals prüft (@0x44A6EB).
+    /// <para>Das ist auch das Verhalten des Originals: <c>spoj_launch</c>
+    /// @0x4C6410 lädt reihum eine Einheit je Ware, Budget 200 je Fahrt
+    /// (<c>mov al,0xC8</c> @0x4C6652), begrenzt <b>allein</b> durch den Bestand
+    /// des Abfahrtsgebäudes — es kennt keine Rücklage. Der Zug räumt eine
+    /// Fabrik leer, und genau so hat der Spieler es am 11.08. gesehen
+    /// (»W steigt auf 10 und fällt wieder auf 0«). Richtig daran war alles
+    /// ausser der Stelle, an der er bauen sollte.</para>
     ///
-    /// ⚠ Was daran unsere Setzung BLEIBT: dass überhaupt jemand Teile fährt.
-    /// Das Original bewegt Güter über **Bahnverbindungen, die der Spieler
-    /// legt** — der Produktionsschritt @0x43DFEE erhöht nur das eigene Lager
-    /// der Fabrik, sonst nichts. Kampagnenkarten starten ohne Linien (map_05:
-    /// 9 Knoten, 0 Verbindungen), und Linien legen kann die Engine nicht. Bis
-    /// dahin steht dieser Weg dafür ein.
+    /// <para>⚠ Was UNSERE SETZUNG bleibt: dass der Nahweg überhaupt fährt.
+    /// Das Original bewegt Waren nur über Bahnverbindungen, die der Spieler
+    /// legt; Kampagnenkarten starten ohne Linien (map_05: 9 Knoten, 0
+    /// Verbindungen) und Linien legen kann die Engine noch nicht. Bis dahin
+    /// steht dieser Weg dafür ein — er fährt jetzt aber dasselbe wie die Bahn:
+    /// alles.</para>
     /// </summary>
-    private int OwnReserve(Entity f)
-    {
-        if (_designs == null) return PartReserve;
-        var menu = BuildableBy(f.BType);
-        if (menu.Count == 0) return PartReserve;
-        var d = _designs[menu[f.MenuIndex % menu.Count]];
-        return f.BType switch { 2 => d.CostW, 3 => d.CostF, _ => d.CostS };
-    }
+    private int OwnReserve(Entity f) => 0;
 
     private static void SpendParts(Entity e, int n)
     {
@@ -10650,7 +10733,7 @@ public partial class MapEntityLayer : Node2D
                      ? $"BAUT {_designs[e.BuildIndex % _designs.Count].Name} {e.BuildTime:0}s"
                  : e.State != StAktiv ? $"STATUS : {StateName(e).ToUpper()}"
                  : e.IsTarget ? "MISSIONSZIEL"
-                 : IsFactory(e) ? MenuPick(e).ToUpper()
+                 : IsUnitPlant(e) ? MenuPick(e).ToUpper()
                  // the airfield sells helicopters: show what B would buy
                  : e.BType == 9 && AirMenu(e).Count > 0 ? "KAUFEN " + AirMenuPick(e).ToUpper()
                  // the dock orders ships and the Schiffswerft pays for them
