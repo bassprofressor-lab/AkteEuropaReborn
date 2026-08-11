@@ -1031,6 +1031,14 @@ public partial class MapViewer : Node2D
         _endText.AddThemeFontSizeOverride("font_size", 40);
         box.AddChild(_endText);
 
+        // ⚠ 11.08.2026, gemeldet: nach einer gewonnenen Mission fuehrte kein
+        // Weg weiter — man musste ins Hauptmenue und dort "Neues Spiel"
+        // druecken. Der Knopf steht ganz oben, weil er nach einem Sieg das ist,
+        // was man will; bei Niederlage und im Gefecht bleibt er unsichtbar.
+        _endNext = new Button { Visible = false, CustomMinimumSize = new Vector2(0, 42) };
+        _endNext.Pressed += StartNextMission;
+        box.AddChild(_endNext);
+
         var back = new Button { Text = "Zurueck zum Menue", CustomMinimumSize = new Vector2(0, 42) };
         back.Pressed += ToMenu;
         box.AddChild(back);
@@ -1071,6 +1079,29 @@ public partial class MapViewer : Node2D
                      $"{(next != null ? next.Label : "— nichts mehr")}");
         }
         GD.Print($"{(mission > 0 ? "Mission" : "Gemetzel")} entschieden: {v}");
+    }
+
+    private Button? _endNext;
+    private int _nextMission = -1;
+
+    /// <summary>Die naechste Kampagnenmission unmittelbar starten.
+    ///
+    /// ⚠ Das Briefing wird dabei UEBERSPRUNGEN: es haengt im Hauptmenue
+    /// (MainMenu.StartMission), und der Weg dorthin und zurueck waere ein
+    /// Szenenwechsel mehr. Wer es sehen will, geht ueber das Menue -- das steht
+    /// so auch auf dem Knopf daneben.</summary>
+    private void StartNextMission()
+    {
+        var m = Campaign.CampaignManager.ByIndex(_nextMission);
+        if (m == null) { ToMenu(); return; }
+        UI.SkirmishSetup.Map = m.Map;
+        UI.SkirmishSetup.Human = 0;
+        UI.SkirmishSetup.AiCount = 0;
+        UI.SkirmishSetup.CampaignMission = m.Index;
+        UI.SkirmishSetup.Active = true;
+        GD.Print($"Kampagne: weiter mit {m.Label} ({m.Map})");
+        GetTree().Paused = false;
+        GetTree().ReloadCurrentScene();
     }
 
     private void LoadMap(int index)
