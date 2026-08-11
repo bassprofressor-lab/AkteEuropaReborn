@@ -578,6 +578,37 @@ public partial class MapEntityLayer : Node2D
         return sb.ToString();
     }
 
+    /// <summary>
+    /// <b>Die Zahl gegen »die Schiene schwebt«</b>: der Höhenunterschied in
+    /// Pixeln zwischen der letzten Gleiszelle und dem Schienendeck des
+    /// Gebäudes, je Linienende und je Gebäudeart.
+    ///
+    /// <para>Gerechnet in <see cref="MapEntityLayer.RailDeckOffSum"/>; sie muss
+    /// 0 sein. Ein Vielfaches von 20 heißt falsche Anschlusszeile, ein
+    /// Vielfaches von 15 eine Geländestufe zwischen Gebäude und Gleis (dafür
+    /// hat das Original die Rampen f6..f9, die wir nicht legen), ein bis zwei
+    /// Pixel heißen falscher Deckversatz.</para>
+    ///
+    /// <para>Gegenprobe: <c>--rail-lay=nodock</c> nimmt das Nachführen heraus,
+    /// dann steigt die Zahl.</para>
+    /// </summary>
+    private string RailDeckReport()
+    {
+        if (RailDeckOffCount == 0) return " | Deckhoehe: kein Ende mit gemessenem Anbau";
+        var sb = new System.Text.StringBuilder();
+        sb.Append($" | Deckhoehe: {RailDeckFlush} von {RailDeckOffCount} Enden buendig " +
+                  $"(0 px), schlimmste Abweichung {RailDeckOffMax} px, " +
+                  $"im Mittel {(float)RailDeckOffSum / RailDeckOffCount:0.0} px");
+        var per = new List<string>();
+        foreach (var kv in RailDeckByType)
+            per.Add($"{TypeShort(new Entity { BType = kv.Key })} " +
+                    $"{kv.Value.Flush}/{kv.Value.Flush + kv.Value.Off} buendig" +
+                    (kv.Value.Off > 0 ? $" (bis {kv.Value.Worst} px)" : ""));
+        per.Sort();
+        sb.Append("  je Art: " + string.Join(", ", per));
+        return sb.ToString();
+    }
+
     private readonly Dictionary<int, int[]> _railStart = new();
 
     /// <summary>`--rail-check`, laufende Meldung: der Automat, die Fahrten und
@@ -626,6 +657,7 @@ public partial class MapEntityLayer : Node2D
         // nur das Bild aendert; RailDockMoved sagt, wieviele geholt wurden.
         sb.Append($" | Anschluss: {RailDockOff} von {RailDockChecked} Enden lagen " +
                   $"NICHT auf der Anschlusszeile, {RailDockMoved} nachgefuehrt");
+        sb.Append(RailDeckReport());
         // Der Beweis fuer »faehrt gleitend statt zu huepfen«: die Stelle des
         // ersten fahrenden Waggons auf ein Hundertstel genau. Steht dort eine
         // ganze Zahl, springt er von Schritt zu Schritt.

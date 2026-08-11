@@ -8239,11 +8239,64 @@ public partial class MapEntityLayer : Node2D
     /// Träger auszumachen, der sich mit unserem Gleisbild deckt, und geraten
     /// wird hier nicht.</para>
     /// </summary>
+    /// <para>⚠ <b>13.08.2026 nachgemessen, und zwar an der FARBE statt am
+    /// Augenmaß.</b> Die drei Zeilen standen seit dem 11.08. auf −1 / 0 / −1,
+    /// »am Bild entschieden«. Jetzt ist der Anbau gezählt, nicht geschätzt:
+    /// das Gleisbild Teil 64/f0 traegt seine Schiene auf fuenf Leinwandzeilen
+    /// mit der Farbfolge 111,91,63 / 191,151,151 / 115,67,67 / 115,67,67 /
+    /// 63,55,43, und dieselbe Folge steckt im Gebaeudemuster. Gesucht wurde
+    /// sie im zusammengesetzten Muster (Kachelsatz 47) mit MapBakers eigener
+    /// Rechnung <c>y = zeile·20 − 50 + Kachel.YOff</c>; gefunden wurde
+    /// (y gerechnet von der Oberkante der Ankerzeile):</para>
+    /// <code>
+    ///   Bahnstation (86)  Musterspalte 0        y = −13 und +7   (x 5..27 / 4..34)
+    ///   Feldbahnhof (156) Musterspalte 0 und 2  y = −13 und +7   (x 0..18 / 104..119)
+    ///   Basis (1)         Musterspalte 5..6     die Folge fehlt ganz
+    /// </code>
+    /// <para><b>Beide Bahnhoefe sind also ZWEIGLEISIG</b> — zwei Decks, genau
+    /// eine Zellzeile (20 px) auseinander, auf den Zeilen −1 und 0. Unsere
+    /// Schienenoberkante liegt bei <see cref="RailDeckPixel"/> = 7 px unter
+    /// der Oberkante ihrer Zelle; Zeile 0 trifft damit das untere Deck auf den
+    /// Pixel, Zeile −1 das obere. Genommen wird <b>0</b>, das untere: es ist
+    /// das Deck in der Zeile, die der Gebaeudesatz selbst nennt, und es reicht
+    /// im Bild ueber die volle Breite des Stummels (x 0..18 statt 0..10).</para>
+    ///
+    /// <para>Damit ist auch beantwortet, warum der Spieler »teilweise stimmt
+    /// es« sagte: die Bahnstation stand mit 0 auf ihrem Deck, der Feldbahnhof
+    /// mit −1 eine ganze Zellzeile = 20 px darueber.</para>
     private static int RailDockRow(int bType) => bType switch
     {
-        1 => 0,          // Basis
-        6 => 1,          // Bahnstation
-        12 => 0,         // Feldbahnhof
+        1 => -1,         // Basis        ⚠ SETZUNG, siehe RailDockDeckPixel
+        6 => 0,          // Bahnstation  gemessen: Deck auf +7 in dieser Zeile
+        12 => 0,         // Feldbahnhof  gemessen: Deck auf +7 in dieser Zeile
+        _ => int.MinValue,
+    };
+
+    /// <summary>
+    /// Wo das Schienendeck des GEBAEUDES liegt, in Pixeln unter der Oberkante
+    /// seiner Ankerzeile (<c>Entity.Row</c>) — die Zahl, gegen die der
+    /// Pruefstand unsere <see cref="RailDeckPixel"/> haelt.
+    ///
+    /// <para>Bahnstation und Feldbahnhof: <b>+7</b>, gemessen an der Farbfolge
+    /// des Gleisbildes im Muster (siehe <see cref="RailDockRow"/>). Zusammen
+    /// mit <c>RailDockRow = 0</c> und <c>RailDeckPixel = 7</c> geht die
+    /// Rechnung auf null auf.</para>
+    ///
+    /// <para>⚠ <b>Basis (1) ist UNSERE SETZUNG.</b> In ihrem Muster steht die
+    /// Farbfolge des Gleisbildes nirgends — das Original zeichnet an der Basis
+    /// keinen Schienenstummel, sondern eine Verladebuehne. Am rechten Rand
+    /// (Musterspalte 5/6, x ≈ 215..245) liegt ein Deckband mit der Folge
+    /// 207,171,171 / 115,67,67 / 115,71,71 / 115,71,71 / 59,47,43 auf
+    /// y = −2..+2. Seine Oberkante liegt damit auf <b>−2</b>, also auf einer
+    /// HALBEN Zellzeile: Zeile −1 laesst 10 px uebrig, Zeile 0 ebenfalls 10 px
+    /// in die andere Richtung. Es bleibt bei −1 — und der Pruefstand meldet
+    /// die 10 px, damit die Zahl nicht in einem Kommentar versauert.</para>
+    /// </summary>
+    private static int RailDockDeckPixel(int bType) => bType switch
+    {
+        1 => -2,         // ⚠ SETZUNG (Verladebuehne, halbe Zeile daneben)
+        6 => 7,
+        12 => 7,
         _ => int.MinValue,
     };
 
@@ -8251,6 +8304,44 @@ public partial class MapEntityLayer : Node2D
     /// Gebäudes lagen, und wieviele überhaupt geprüft werden konnten — der
     /// Prüfstand liest beides, sonst wäre »bündig« wieder nur behauptet.</summary>
     public int RailDockOff, RailDockChecked, RailDockMoved;
+
+    /// <summary>
+    /// <b>Die Zahl für »schwebt«</b> — der HÖHENunterschied in Bildschirmpixeln
+    /// zwischen unserer letzten Gleiszelle und dem Schienendeck des Gebäudes,
+    /// je Linienende, NACH dem Nachführen.
+    ///
+    /// <para>Gerechnet wird in derselben Rechnung, in der beide gezeichnet
+    /// werden, Geländehöhe eingeschlossen:</para>
+    /// <code>
+    ///   Gleis:    zeile·20 − ElevOf(spalte,zeile)·15 + RailDeckPixel
+    ///   Gebäude:  Ankerzeile·20 − ElevOf(Ankerspalte,Ankerzeile)·15 + RailDockDeckPixel(typ)
+    /// </code>
+    /// <para>Die Differenz muss 0 sein. Sie fängt drei verschiedene Fehler auf
+    /// einmal: eine falsche Anschlusszeile (Vielfaches von 20), eine
+    /// Geländestufe zwischen Gebäude und letzter Gleiszelle (Vielfaches von
+    /// 15) und einen falschen Deckversatz (ein bis zwei Pixel). Der zweite
+    /// Fall ist der, für den das Original die Rampen f6..f9 hat, die wir nicht
+    /// legen — er wird hier nur GEMESSEN, nicht behoben.</para>
+    ///
+    /// <para><c>--rail-lay=nodock</c> nimmt die Korrektur heraus, dann steigt
+    /// die Zahl: das ist die Gegenprobe.</para>
+    /// </summary>
+    public int RailDeckOffSum, RailDeckOffMax, RailDeckOffCount, RailDeckFlush;
+
+    /// <summary>Je Gebäudeart: wieviele Enden bündig sind und wieviele nicht,
+    /// samt der schlimmsten Abweichung. Damit steht im Prüfstand, an WELCHER
+    /// Gebäudeart es sitzt und an welcher nicht.</summary>
+    public readonly Dictionary<int, (int Flush, int Off, int Worst)> RailDeckByType = new();
+
+    /// <summary>Die Höhe, auf der die Schienenoberkante einer Gleiszelle liegt
+    /// — Kartenpixel, Gelände eingerechnet.</summary>
+    private float RailDeckY(int col, int row)
+        => _oy + row * TileH - ElevOf(col, row) * 15 + RailDeckPixel;
+
+    /// <summary>Die Höhe, auf der das Schienendeck eines Gebäudes liegt —
+    /// dieselbe Rechnung, aber mit der Kachelgrafik statt dem Gleisbild.</summary>
+    private float RailDockDeckY(Entity b)
+        => _oy + b.Row * TileH - ElevOf(b.Col, b.Row) * 15 + RailDockDeckPixel(b.BType);
 
     /// <summary>Ausschalter für die Gegenprobe (<c>--rail-lay=nodock</c>):
     /// mit <c>true</c> bleibt die Strecke, wo sie war. <c>--rail-check</c>
@@ -8309,6 +8400,9 @@ public partial class MapEntityLayer : Node2D
     private void RailSnapToDock()
     {
         RailDockOff = RailDockChecked = RailDockMoved = 0;
+        RailDeckOffSum = RailDeckOffMax = RailDeckOffCount = RailDeckFlush = 0;
+        RailDeckByType.Clear();
+        _railTiles = null;              // die gelegten Stuecke neu bauen lassen
         if (_railLines.Count == 0) return;
         var bySlot = new Dictionary<int, Entity>();
         foreach (var e in _entities)
@@ -8337,7 +8431,37 @@ public partial class MapEntityLayer : Node2D
             }
             RailDockMoved += moved;
             _lineCellFrame[l.Slot] = RailFramesOf(cells);
+            // erst JETZT messen: nach dem Ruecken und nach einer etwaigen
+            // Rueckfahrkarte steht die Kette so da, wie sie gezeichnet wird
+            RailMeasureDeck(cells, bySlot, l.Bud2, true);
+            RailMeasureDeck(cells, bySlot, l.Bud1, false);
         }
+    }
+
+    /// <summary>Miss die Höhendifferenz an EINEM Linienende und schreib sie in
+    /// die Zähler, die <c>--rail-check</c> ausgibt. Siehe
+    /// <see cref="RailDeckOffSum"/> für die Rechnung.</summary>
+    private void RailMeasureDeck(List<Vector2> cells, Dictionary<int, Entity> bySlot,
+                                 int slot, bool tail)
+    {
+        if (cells.Count == 0 || !bySlot.TryGetValue(slot, out var b)) return;
+        if (RailDockDeckPixel(b.BType) == int.MinValue) return;
+        var cell = cells[tail ? ^1 : 0];
+        int col = Mathf.RoundToInt(cell.X), row = Mathf.RoundToInt(cell.Y);
+        // nur ein Ende, das wirklich am Gebaeude steht — dieselbe Schranke wie
+        // in RailSnapEnd, sonst zaehlt eine Linie mit, die ganz woanders endet
+        if (col < b.Col - 1 || col > b.Col + Mathf.Max(1, b.FootW)) return;
+
+        int d = Mathf.RoundToInt(RailDeckY(col, row) - RailDockDeckY(b));
+        int a = Mathf.Abs(d);
+        RailDeckOffCount++;
+        RailDeckOffSum += a;
+        if (a > RailDeckOffMax) RailDeckOffMax = a;
+        if (a == 0) RailDeckFlush++;
+        RailDeckByType.TryGetValue(b.BType, out var t);
+        RailDeckByType[b.BType] = (t.Flush + (a == 0 ? 1 : 0),
+                                   t.Off + (a == 0 ? 0 : 1),
+                                   Mathf.Max(t.Worst, a));
     }
 
     /// <summary>Liegt in dieser Kette jedes Paar Kante an Kante? Genau die
@@ -8486,8 +8610,31 @@ public partial class MapEntityLayer : Node2D
     /// (0,0) — also 10 px in Zellzeile 1 hinein, deren Mitte. Erst mit dieser
     /// Zahl steht das Gleis auf demselben Gitter wie die Zellen, aus denen es
     /// gebaut ist.</para>
+    ///
+    /// <para><b>13.08.2026 auf 23 nachgemessen — ein Pixel, und diesmal
+    /// gezaehlt statt hergeleitet.</b> Teil 64/f0 traegt seine Schiene auf den
+    /// Leinwandzeilen 29..33, und diese fuenf Zeilen haben eine
+    /// unverwechselbare Farbfolge: 111,91,63 oben, dann 191/163,151,151, dann
+    /// zweimal 115,67,67, unten 63,55,43. <b>Genau diese Folge steht auch im
+    /// Gebaeudemuster</b> — sie wurde im zusammengesetzten Muster (Kachelsatz
+    /// 47, MapBakers eigene Rechnung <c>y = zeile·20 − 50 + Kachel.YOff</c>)
+    /// gesucht und gefunden: Bahnstation (86) in Musterspalte 0 auf
+    /// y−Ankerzeile = <b>−13 und +7</b>, Feldbahnhof (156) in Musterspalte 0
+    /// und 2 auf <b>−13 und +7</b>. Beide Bahnhoefe tragen also ein
+    /// ZWEIGLEISIGES Deck, die zwei Gleise genau eine Zellzeile auseinander.
+    /// Mit Versatz 24 landet unsere Oberkante auf <c>zeile·20 + 8</c>, also
+    /// einen Pixel zu tief; mit 23 auf <c>zeile·20 + 7</c> und damit
+    /// pixelgenau auf dem Deck des Gebaeudes. Im laufenden Bild
+    /// (map_NET02, Bahnstation 191,55, Zoom 4) war derselbe Pixel zu sehen:
+    /// die Deckfarbe des Gebaeudes lag auf Schirmzeile 338..340, unsere auf
+    /// 341..343 — vier Schirmzeilen sind bei Zoom 4 genau ein Kartenpixel.</para>
     /// </summary>
-    private const int RailDeckOffset = 24;
+    private const int RailDeckOffset = 23;
+
+    /// <summary>Wo die Schienenoberkante eines Gleisbildes INNERHALB ihrer
+    /// Zelle liegt: <c>TileH/2 − ComposedAnchor.y + RailDeckOffset + 29</c>.
+    /// Eine Zahl, damit der Pruefstand dieselbe rechnet wie der Zeichner.</summary>
+    private const int RailDeckPixel = TileH / 2 - 55 + RailDeckOffset + 29;
 
     /// <summary>Abstand zweier Stuetzen, in Bildschirmpixeln gemessen statt in
     /// Stuecken gezaehlt. ⚠ UNSERE SETZUNG bleibt die Zahl; was den Abstand im
@@ -8544,40 +8691,60 @@ public partial class MapEntityLayer : Node2D
     /// Fehler zeigen.</summary>
     public static bool RailProbeSkipCols;
 
-    private void DrawRailTrack()
+    /// <summary>Ein fertig gelegtes Gleisstück: wohin, welches Bild, wie tief
+    /// unter dem Waggonanker — und in welcher ZEILE es liegt, denn danach
+    /// entscheidet sich, ob ein Gebäude davor oder dahinter gehört.</summary>
+    private readonly struct RailTile
     {
-        RailTilesDrawn = 0;
+        public readonly Vector2 At;
+        public readonly int Frame, YOff, Row;
+        public readonly bool Pylon;
+        public RailTile(Vector2 at, int frame, int yoff, int row, bool pylon)
+        { At = at; Frame = frame; YOff = yoff; Row = row; Pylon = pylon; }
+    }
+
+    private List<RailTile>? _railTiles;
+
+    /// <summary>Die ganze Strecke als eine nach ZEILE sortierte Liste. Einmal
+    /// gebaut und behalten: Zellen, Bilder und Geländehöhe stehen für die
+    /// Karte fest, es ändert sich nichts von Bild zu Bild.</summary>
+    private List<RailTile> RailTiles()
+    {
+        if (_railTiles != null) return _railTiles;
+        var tiles = new List<RailTile>();
         RailTilesLoose = 0;
-        if (RailProbeSkipCols) { DrawRailTrackOld(); return; }
-        foreach (var kv in _lineCell)
-        {
-            if (!_lineCellFrame.TryGetValue(kv.Key, out var frames)) continue;
-            var cells = kv.Value;
-            var lastPylon = Vector2.Zero;
-            bool hasPylon = false;
-            for (int i = 0; i < cells.Count && i < frames.Count; i++)
+        if (RailProbeSkipCols) RailTilesOld(tiles);
+        else
+            foreach (var kv in _lineCell)
             {
-                if (i > 0 && RailPortTo(cells[i - 1], cells[i]) < 0) RailTilesLoose++;
-                var at = RailPoint(cells[i]);
-                // Die STUETZE nach dem Abstand auf dem Schirm, nicht nach der
-                // Zahl der Stuecke: sonst stehen auf einem senkrechten Stueck
-                // sechs Boecke uebereinander und auf der Geraden einer alle
-                // drei Zellen. ⚠ UNSERE SETZUNG bleibt der Abstand selbst.
-                bool pylon = !hasPylon || (at - lastPylon).Length() >= RailPylonEveryPx;
-                if (pylon) { lastPylon = at; hasPylon = true; }
-                var tex = GetRailTexture(frames[i], pylon);
-                if (tex == null) return;          // ohne Bilder gar nichts
-                DrawTexture(tex, at - ComposedAnchor + new Vector2(0, RailDeckOffset));
-                RailTilesDrawn++;
+                if (!_lineCellFrame.TryGetValue(kv.Key, out var frames)) continue;
+                var cells = kv.Value;
+                var lastPylon = Vector2.Zero;
+                bool hasPylon = false;
+                for (int i = 0; i < cells.Count && i < frames.Count; i++)
+                {
+                    if (i > 0 && RailPortTo(cells[i - 1], cells[i]) < 0) RailTilesLoose++;
+                    var at = RailPoint(cells[i]);
+                    // Die STUETZE nach dem Abstand auf dem Schirm, nicht nach der
+                    // Zahl der Stuecke: sonst stehen auf einem senkrechten Stueck
+                    // sechs Boecke uebereinander und auf der Geraden einer alle
+                    // drei Zellen. ⚠ UNSERE SETZUNG bleibt der Abstand selbst.
+                    bool pylon = !hasPylon || (at - lastPylon).Length() >= RailPylonEveryPx;
+                    if (pylon) { lastPylon = at; hasPylon = true; }
+                    tiles.Add(new RailTile(at, frames[i], RailDeckOffset,
+                                           Mathf.RoundToInt(cells[i].Y), pylon));
+                }
             }
-        }
+        tiles.Sort((a, b) => a.Row != b.Row ? a.Row - b.Row : a.At.X.CompareTo(b.At.X));
+        _railTiles = tiles;
+        return tiles;
     }
 
     /// <summary>Die Legeart bis zum 12.08.2026, nur noch als Gegenprobe
     /// (<c>--rail-lay=cols</c>): ein Bild je Routenschritt an RailPoint, Form
     /// aus der Tabelle Stueck→Bild, Hoehe je Stueck. Der Prueflauf soll sehen,
     /// dass sie die Strecke aufreisst — sonst beweist die neue nichts.</summary>
-    private void DrawRailTrackOld()
+    private void RailTilesOld(List<RailTile> tiles)
     {
         foreach (var kv in _lineRoute)
         {
@@ -8594,13 +8761,69 @@ public partial class MapEntityLayer : Node2D
                 prev = at;
                 bool pylon = laid % RailPylonEvery == 0;
                 laid++;
-                var tex = GetRailTexture(RailFrameOf[pcs[i] & 7], pylon);
-                if (tex == null) return;
-                DrawTexture(tex, at - ComposedAnchor
-                                 + new Vector2(0, RailYOffsetOf[pcs[i] & 7]));
-                RailTilesDrawn++;
+                tiles.Add(new RailTile(at, RailFrameOf[pcs[i] & 7],
+                                       RailYOffsetOf[pcs[i] & 7],
+                                       Mathf.RoundToInt(route[i].Y), pylon));
             }
         }
+    }
+
+    /// <summary>
+    /// <b>Die STRECKE, verzahnt mit den Gebäuden.</b> Zeichnet alle Gleisstücke
+    /// bis einschließlich Zeile <paramref name="throughRow"/>; der Rest bleibt
+    /// für den nächsten Aufruf liegen.
+    ///
+    /// <para>⚠ <b>13.08.2026 — der Fehler, den der Spieler »die schiene liegt
+    /// über dem gebäude« nannte.</b> Bis heute lief <c>DrawTrains()</c> ganz am
+    /// Ende des Zeichendurchgangs, LANGE nach den Gebäuden. Die Strecke lag
+    /// damit als Band quer über der Fassade der Bahnstation, statt hinter ihr
+    /// zu verschwinden und aus ihrem eigenen Deck wieder herauszukommen. Im
+    /// Bild (map_NET02, 191,55, Zoom 4) schnitt sie das ganze Gebäude von links
+    /// nach rechts durch.</para>
+    ///
+    /// <para>Das Original hat diese Frage gar nicht: es STEMPELT Gleis und
+    /// Gebäudekachel in dieselbe Kartenzelle, und wer zuletzt schreibt, gewinnt
+    /// — das Gebäude, weil es später gesetzt wird (siehe
+    /// <c>BuildingCellTile</c>). Ein Gleis unter einem Gebäude gibt es dort
+    /// nicht; sichtbar ist der Anbau der Gebäudegrafik, und der ist auf
+    /// dieselbe Deckhöhe gezeichnet (<see cref="RailDockDeckPixel"/>).</para>
+    ///
+    /// <para>Nachgebaut wird das mit der Zeichenreihenfolge: Gleisstücke einer
+    /// Zeile kommen VOR den Gebäuden, deren Grundriss bis in diese Zeile
+    /// reicht. Ein Gleis, das vor einem Gebäude (weiter südlich) vorbeiläuft,
+    /// bleibt damit sichtbar, eines im Grundriss verschwindet darunter.</para>
+    /// </summary>
+    private void DrawRailUpTo(int throughRow, ref int at)
+    {
+        var tiles = RailTiles();
+        for (; at < tiles.Count; at++)
+        {
+            var t = tiles[at];
+            if (t.Row > throughRow) return;
+            var tex = GetRailTexture(t.Frame, t.Pylon);
+            if (tex == null) { at = tiles.Count; return; }   // ohne Bilder gar nichts
+            DrawTexture(tex, t.At - ComposedAnchor + new Vector2(0, t.YOff));
+            RailTilesDrawn++;
+        }
+    }
+
+    /// <summary>Die Strecke und die Gebäude in EINEM Durchgang, hintere Zeile
+    /// zuerst. Ersetzt die alte Reihenfolge »erst alle Gebäude, viel später die
+    /// Strecke«; siehe <see cref="DrawRailUpTo"/> für den Grund.</summary>
+    private void DrawRailAndBuildings()
+    {
+        RailTilesDrawn = 0;
+        int at = 0;
+        if (_drawSprites && Patterns != null)
+            foreach (var b in BuildingsBackToFront())
+            {
+                // Ein Gebäude verdeckt alles bis zu seiner VORDERSTEN Zeile —
+                // sein Grundriss reicht so weit nach unten, und jede Kachel
+                // darin wird in ihrer eigenen Zeile gestempelt.
+                DrawRailUpTo(b.Row + Mathf.Max(1, b.FootH) - 1, ref at);
+                DrawBuildingBody(b);
+            }
+        DrawRailUpTo(int.MaxValue, ref at);
     }
 
     /// <summary>Liegen zwei gezeichnete Stuecke Kante an Kante? Auf dem Schirm
@@ -8612,9 +8835,10 @@ public partial class MapEntityLayer : Node2D
             || (dy < 0.5f && Mathf.Abs(dx - TileW) < 0.5f);
     }
 
+    /// <summary>Nur noch die WAGGONS — die Strecke unter ihnen liegt jetzt bei
+    /// den Gebäuden, siehe <see cref="DrawRailAndBuildings"/>.</summary>
     private void DrawTrains()
     {
-        DrawRailTrack();
         foreach (var w in _wagons)
         {
             int part = WagonPart.TryGetValue(w.Index, out var pp) ? pp : 58;
@@ -11618,9 +11842,10 @@ public partial class MapEntityLayer : Node2D
         // baked into the map picture and therefore behind everything; drawing
         // them here keeps exactly that order, so nothing about the look changes
         // except that a destroyed one can now show its ruin.
-        if (_drawSprites && Patterns != null)
-            foreach (var b in BuildingsBackToFront())
-                DrawBuildingBody(b);
+        //
+        // Die STRECKE laeuft in demselben Durchgang mit, Zeile fuer Zeile: sie
+        // gehoert unter die Gebaeude, nicht darueber (siehe DrawRailUpTo).
+        DrawRailAndBuildings();
 
         // burnt-out wrecks stay on the ground, under everything alive
         DrawEffects(ground: true);
