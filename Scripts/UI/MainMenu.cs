@@ -347,6 +347,28 @@ public partial class MainMenu : Control
                 GetTree().Quit(new Import.ContentBuilder(src).ReexportStates() ? 0 : 1);
                 return;
             }
+            // the mission list on its own. Reads the maps ALREADY imported, so
+            // the source folder is only good for the slot names out of GAME.EXE
+            // — `--reexport-campaign=` with no folder is a fair way to ask for it.
+            else if (a.StartsWith("--reexport-campaign"))
+            {
+                string rest = a["--reexport-campaign".Length..].TrimStart('=');
+                string[] dirs = rest.Split(';', System.StringSplitOptions.RemoveEmptyEntries);
+                var src = (dirs.Length > 0 ? Core.ContentSources.FromFolders(dirs) : null)
+                          ?? Core.ContentSources.Discs()
+                          ?? new Core.ContentSources.Source { Label = "(ohne Quelle)" };
+                GetTree().Quit(new Import.ContentBuilder(src).ReexportCampaign() ? 0 : 1);
+                return;
+            }
+            else if (a.StartsWith("--reexport-help="))
+            {
+                string[] dirs = a["--reexport-help=".Length..]
+                    .Split(';', System.StringSplitOptions.RemoveEmptyEntries);
+                var src = Core.ContentSources.FromFolders(dirs);
+                if (src == null) { GD.PrintErr("reexport: keiner der Ordner existiert"); GetTree().Quit(2); return; }
+                GetTree().Quit(new Import.ContentBuilder(src).ReexportHelp() ? 0 : 1);
+                return;
+            }
             else if (a.StartsWith("--reexport-tables="))
             {
                 // only the tables read out of GAME.EXE — costs a second
@@ -383,6 +405,11 @@ public partial class MainMenu : Control
                 if (discs == null) { GD.PrintErr("import: keine Spiel-CD im Laufwerk"); GetTree().Quit(2); return; }
                 bool ok = new Import.ContentBuilder(discs).Run();
                 GetTree().Quit(ok ? 0 : 1);
+                return;
+            }
+            else if (a.StartsWith("--selftest-rail="))
+            {
+                GetTree().Quit(Import.ImportSelfTest.RunRail(a["--selftest-rail=".Length..]));
                 return;
             }
             else if (a.StartsWith("--selftest-cwp="))

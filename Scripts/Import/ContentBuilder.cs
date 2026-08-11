@@ -250,6 +250,23 @@ public sealed class ContentBuilder
         }
         catch (Exception e) { Say("Briefings: " + e.Message); }
 
+        // ---- die Hilfe- und Untermissionstexte ---------------------------------
+        // Aus derselben Quelle wie BRIEFG.TXT, und das Stück, das der Kampagne
+        // ihren tutorialartigen Anfang gibt: Mission 1 ruft daraus siebzehn
+        // Fenster auf. Siehe HelpExporter.
+        try
+        {
+            var help = Asset("HELPG.TXT");
+            if (help == null) Say("HELPG.TXT fehlt — keine Hilfetexte");
+            else
+            {
+                var hx = new HelpExporter(_dst + "/UI");
+                hx.Write(help, Say);
+                TablesWritten++;
+            }
+        }
+        catch (Exception e) { Say("Hilfetexte: " + e.Message); }
+
         // ---- the sound bank ---------------------------------------------------
         // SOUNDS.CWN is 79 MB and lies loose beside the exe, so it is opened as
         // a stream and never goes through Asset(), which reads a whole file into
@@ -362,6 +379,96 @@ public sealed class ContentBuilder
 
         Say($"fertig: {done} Spielstaende neu geschrieben, {failed} fehlgeschlagen");
         return done > 0 && failed == 0;
+    }
+
+    /// <summary>
+    /// Rewrite only `campaign.json` — the list of missions and the maps they run
+    /// on. Nothing is baked and no level is decoded.
+    ///
+    /// <para>⚠ It reads the maps ALREADY IMPORTED, not the sources. That is the
+    /// whole point: the list was written once, on 2026-08-07, when only disc 1's
+    /// fifteen levels were in — and the second disc's import on 08-10 brought
+    /// map_16..map_33 in but LEFT THE LIST ALONE, because only the full
+    /// <see cref="Run"/> calls <c>WriteCampaign</c>. Eighteen missions sat on
+    /// disk unreachable. Rebuilding from the imported maps also means a player
+    /// needs no disc in the drive to repair it.</para>
+    ///
+    /// <para>Everything the list carries is in the baker's own `map_NN.json`:
+    /// `mission` (the title), `tileset`, `width`, `height`. Only the slot names
+    /// ("Mission 7" and the like) come out of GAME.EXE, and they are optional —
+    /// without an exe the list is written without them rather than not at
+    /// all.</para>
+    ///
+    /// <para>A numeric stem is a campaign level; `map_DM_1` and friends are
+    /// saved games and stay out, exactly as in <see cref="BakeOne"/>.</para>
+    /// </summary>
+    public bool ReexportCampaign(Action<string>? progress = null)
+    {
+        void Say(string s) { GD.Print("reexport-campaign: " + s); progress?.Invoke(s); }
+
+        // the slot names only — a missing exe costs the "slot_name" field and
+        // nothing else, so it is not a reason to give up
+        try
+        {
+            byte[]? exe = _src.Exe != null ? File.ReadAllBytes(_src.Exe) : Asset("GAME.EXE");
+            if (exe != null) _exe = ExeTables.FromBytes(exe);
+            else Say("GAME.EXE nicht gefunden — Liste ohne die Namen der Missionsplaetze");
+        }
+        catch (Exception e) { Say("GAME.EXE: " + e.Message); }
+
+        string dir = _dst + "/Maps";
+        if (!Directory.Exists(dir)) { Say($"{dir} gibt es nicht — nichts importiert"); return false; }
+
+        var rows = new List<CatalogueExporter.Row>();
+        int skipped = 0;
+        foreach (string p in Directory.GetFiles(dir, "map_*.json"))
+        {
+            string name = Path.GetFileNameWithoutExtension(p);
+            // map_NN.entities.json also matches the pattern — its stem still
+            // ends in ".entities", and it is not the meta file
+            if (name.EndsWith(".entities", StringComparison.Ordinal)) continue;
+            string stem = name["map_".Length..];
+            if (!int.TryParse(stem, out int no) || no <= 0) { skipped++; continue; }
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(p));
+                var r = doc.RootElement;
+                rows.Add(new CatalogueExporter.Row(
+                    no, name,
+                    r.TryGetProperty("mission", out var t) ? t.GetString() ?? "" : "",
+                    Int(r, "width"), Int(r, "height"), Int(r, "tileset")));
+            }
+            catch (Exception e) { Say($"{name}: {e.Message}"); }
+        }
+
+        if (rows.Count == 0) { Say("keine eingespielte Kampagnenkarte gefunden"); return false; }
+
+        var cat = new CatalogueExporter(_exe, dir);
+        cat.WriteCampaign(rows, Say);
+        rows.Sort((a, b) => a.Number.CompareTo(b.Number));
+        Say($"fertig: {cat.Missions} Missionen ({rows[0].Number}..{rows[^1].Number}), "
+            + $"{skipped} Spielstaende uebergangen");
+        return cat.Missions > 0;
+
+        static int Int(System.Text.Json.JsonElement e, string k)
+            => e.TryGetProperty(k, out var v) && v.TryGetInt32(out int i) ? i : 0;
+    }
+
+    /// <summary>Nur die Hilfetexte neu schreiben. HELPG.TXT ist 101 KB und
+    /// steht in jeder Installation und in jedem Kabinett; ein voller Import
+    /// dafür wäre Minuten für eine Sekunde Arbeit.</summary>
+    public bool ReexportHelp(Action<string>? progress = null)
+    {
+        void Say(string s) { GD.Print("reexport-help: " + s); progress?.Invoke(s); }
+        try
+        {
+            var raw = Asset("HELPG.TXT");
+            if (raw == null) { Say("HELPG.TXT nicht gefunden"); return false; }
+            var hx = new HelpExporter(_dst + "/UI");
+            hx.Write(raw, Say);
+            return hx.Texts > 0;
+        }
+        catch (Exception e) { Say(e.Message); return false; }
     }
 
     /// <summary>

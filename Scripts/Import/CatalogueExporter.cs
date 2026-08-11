@@ -99,9 +99,26 @@ public sealed class CatalogueExporter
     /// derived metadata.</summary>
     public void WriteCampaign(IEnumerable<(int Number, string Map, CwmFile File)> missions,
                               Action<string>? say = null)
+        => WriteCampaign(Rows(missions), say);
+
+    private static IEnumerable<Row> Rows(IEnumerable<(int Number, string Map, CwmFile File)> ms)
     {
-        var list = new SortedDictionary<int, (string Map, CwmFile File)>();
-        foreach (var (n, map, f) in missions) list[n] = (map, f);
+        foreach (var (n, map, f) in ms)
+            yield return new Row(n, map, f.Mission, f.Width, f.Height, f.Tileset);
+    }
+
+    /// <summary>One line of the campaign list, whatever it was read from.</summary>
+    public readonly record struct Row(int Number, string Map, string Title,
+                                      int Width, int Height, int Tileset);
+
+    /// <summary>The same list, but from rows rather than from open .CWM files —
+    /// so it can be rewritten from the maps ALREADY imported, without a disc in
+    /// the drive. Everything the list carries (title, size, tileset) is in the
+    /// per-map <c>map_NN.json</c> the baker wrote.</summary>
+    public void WriteCampaign(IEnumerable<Row> missions, Action<string>? say = null)
+    {
+        var list = new SortedDictionary<int, Row>();
+        foreach (var r in missions) list[r.Number] = r;
         var names = _exe?.MissionNameList() ?? new List<string>();
         var sb = new StringBuilder();
         sb.Append("{\"_note\":\"the campaign in file order — the level file number IS the ");
@@ -116,12 +133,12 @@ public sealed class CatalogueExporter
             if (!first) sb.Append(',');
             first = false;
             sb.Append($"{{\"index\":{kv.Key},\"map\":\"{Esc(kv.Value.Map)}\",");
-            sb.Append($"\"title\":\"{Esc(kv.Value.File.Mission)}\",");
+            sb.Append($"\"title\":\"{Esc(kv.Value.Title)}\",");
             // the campaign's own name for this slot — "Mission 7" and the like,
             // straight out of the table the counter indexes
             if (kv.Key < names.Count) sb.Append($"\"slot_name\":\"{Esc(names[kv.Key])}\",");
-            sb.Append($"\"width\":{kv.Value.File.Width},\"height\":{kv.Value.File.Height},");
-            sb.Append($"\"tileset\":{kv.Value.File.Tileset}}}");
+            sb.Append($"\"width\":{kv.Value.Width},\"height\":{kv.Value.Height},");
+            sb.Append($"\"tileset\":{kv.Value.Tileset}}}");
             Missions++;
         }
         sb.Append("]}");
@@ -176,6 +193,25 @@ public sealed class CatalogueExporter
     ///
     /// Written from <see cref="ExeTables.MissionUnlocks"/>, so it now comes out
     /// of the player's own GAME.EXE like every other table.
+    ///
+    /// <para>⚠ 10.08.2026 — until today this wrote a QUARTER of the schedule.
+    /// The busiest of the four setters, `set_part(player, part, value)` with
+    /// 1037 of 1533 call sites in the mission blocks, was read as a
+    /// two-argument call and then dropped on the floor here. It now comes out
+    /// as <c>components</c> / <c>components_off</c>, a list of
+    /// <c>[Spieler, Bauteil]</c> pairs per state — and unlike the other three
+    /// it is PER PLAYER, because the original writes it per player
+    /// (`[0x5045a0 + 58*(part + 200*player)]`) while design, ship and aircraft
+    /// each loop over all eight inside the setter.</para>
+    ///
+    /// <para>⚠ It is DATA, not a barrier. Who reads the ownership byte in the
+    /// original was measured before this was written: thirteen readers, and
+    /// every one of them is a menu — the construction screen's three pickers
+    /// (»Fahrwerk«/»Verbesserung«/»Aufbauteil« @0x46C490), the chassis list
+    /// @0x455870, `research_offer_refresh` @0x4AA950, and the market module
+    /// @0x4C0860..0x4C0E60, which uses it to choose WHICH design turns up for
+    /// sale, not to forbid anything. Neither `build_in_base` nor the production
+    /// button looks at it. Same finding as for the sec47 release byte.</para>
     /// </summary>
     private void WriteSchedule(Action<string>? say)
     {
@@ -206,8 +242,24 @@ public sealed class CatalogueExporter
             var veh = new SortedSet<int>();
             var shp = new SortedSet<int>();
             var air = new SortedSet<int>();
+            // the component rows of this state, in the order the block writes
+            // them — a state may switch one on and another off, so both lists
+            // are kept and applied in that order
+            var comp = new SortedSet<(int Player, int Part)>();
+            var compOff = new SortedSet<(int Player, int Part)>();
             foreach (var r in ranges)
             {
+                if (r.Kind == "part")
+                {
+                    for (int x = r.From; x <= r.To; x++)
+                    {
+                        var key = (r.Player, x);
+                        if (r.Value != 0) { comp.Add(key); compOff.Remove(key); }
+                        else { compOff.Add(key); comp.Remove(key); }
+                        rows++;
+                    }
+                    continue;
+                }
                 var into = r.Kind switch
                 {
                     "design" => veh,
@@ -219,16 +271,31 @@ public sealed class CatalogueExporter
                 for (int x = r.From; x <= r.To; x++)
                 { if (r.Value != 0) into.Add(x); else into.Remove(x); rows++; }
             }
-            if (veh.Count == 0 && shp.Count == 0 && air.Count == 0) continue;
+            if (veh.Count == 0 && shp.Count == 0 && air.Count == 0 &&
+                comp.Count == 0 && compOff.Count == 0) continue;
             if (!first) sb.Append(',');
             first = false;
             sb.Append($"{{\"state\":{m},\"vehicles\":[{string.Join(",", veh)}],");
             sb.Append($"\"ships\":[{string.Join(",", shp)}],\"ships_off\":[],");
-            sb.Append($"\"aircraft\":[{string.Join(",", air)}]}}");
+            sb.Append($"\"aircraft\":[{string.Join(",", air)}],");
+            sb.Append($"\"components\":[{Pairs(comp)}],");
+            sb.Append($"\"components_off\":[{Pairs(compOff)}]}}");
         }
         sb.Append("]}");
         File.WriteAllText(_dst + "/campaign_schedule.json", sb.ToString(), new UTF8Encoding(false));
         say?.Invoke($"Fahrplan: {all.Count} Missionen, {rows} Freischaltungen");
+    }
+
+    /// <summary>`[Spieler, Bauteil]` pairs as JSON.</summary>
+    private static string Pairs(SortedSet<(int Player, int Part)> set)
+    {
+        var sb = new StringBuilder();
+        foreach (var (p, x) in set)
+        {
+            if (sb.Length > 0) sb.Append(',');
+            sb.Append('[').Append(p).Append(',').Append(x).Append(']');
+        }
+        return sb.ToString();
     }
 
     /// <summary>
