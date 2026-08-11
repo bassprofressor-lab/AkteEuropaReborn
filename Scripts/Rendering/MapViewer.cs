@@ -560,6 +560,11 @@ public partial class MapViewer : Node2D
             else if (a == "--demo-queue") { _demo = true; _demoQueue = true; }
             else if (a == "--demo-ai") { _demo = true; _demoAi = true; }
             else if (a.StartsWith("--script-check")) _scriptCheck = 15f;
+            // --pay-check[=sek]: die Geldregeln der Mission einmal ausloesen,
+            // damit sich der Fall »Nebenmission GEMACHT« fahren laesst. Siehe
+            // Campaign.MissionScript.ForceMoneyRules.
+            else if (a == "--pay-check") _payCheck = 3f;
+            else if (a.StartsWith("--pay-check=")) _payCheck = a["--pay-check=".Length..].ToFloat();
             // --tick-check[=<sekunden>]: der Takt des Missionsskripts und was er
             // in den ersten Sekunden von selbst ausloest. Siehe
             // MapEntityLayer.TickCheck.
@@ -713,6 +718,7 @@ public partial class MapViewer : Node2D
     /// <summary>Seconds after which a scripted run gives up and quits; 0 = never.</summary>
     private float _quitAfter;
     private float _scriptCheck;
+    private float _payCheck;
 
     /// <summary>`--tick-check[=<sekunden>]` — wieviele Sekunden Missionsskript
     /// der Prueflauf ohne jedes Zutun laufen laesst. 0 = aus.</summary>
@@ -842,6 +848,16 @@ public partial class MapViewer : Node2D
             {
                 _scriptCheck = -1f;
                 GD.Print(_entities.MissionScriptForceCheck());
+            }
+        }
+        if (_payCheck > 0f)
+        {
+            _payCheck -= (float)delta;
+            if (_payCheck <= 0f)
+            {
+                _payCheck = -1f;
+                GD.Print(Campaign.MissionScript.Current?.ForceMoneyRules()
+                         ?? "pay-check: diese Mission hat kein Skript");
             }
         }
         if (_quitAfter <= 0f) { _upTime += (float)delta; DemoLeaveIfDue(); return; }
@@ -1344,6 +1360,22 @@ public partial class MapViewer : Node2D
         // `mov ecx,[0xA9C600]; add ecx,[0xA9A1D8]; mov [0xA9C600],ecx`) und
         // setzt ihn nirgends zurueck — `report.Balance` IST dieser laufende
         // Stand. Siehe Campaign.CampaignManager.Balance fuer den vollen Beleg.
+        //
+        // ⚠ 11.08.2026 — DIE MISSIONSBEZAHLUNG FEHLTE. `report.Pay` war die
+        // Summe der Geldbuchungen aus dem Missionsskript (Busbefehl 528), und
+        // das war eine Setzung: »was ausgezahlt wird, ist die Bezahlung«. Sie
+        // ist falsch. Die Bezahlung ist ein FESTER Betrag je Mission, den der
+        // Missionsblock beim START in 0xA9A1D8 einsetzt und der am ENDE
+        // obendrauf kommt — 36 Konstanten, Mission 1 = 320. Beleg und Herleitung
+        // in Campaign.CampaignManager.PayFor. Die Skriptbuchungen sind schon
+        // waehrend der Mission aufs Konto gegangen (MapEntityLayer.AddMoney) und
+        // stecken bereits in `report.Balance`; hier kommt nur noch die
+        // Bezahlung dazu, sonst stuenden sie doppelt drin.
+        if (mission > 0)
+        {
+            report.Pay = Campaign.CampaignManager.PayFor(mission);
+            report.Balance += report.Pay;
+        }
         if (record && mission > 0) Campaign.CampaignManager.Balance = report.Balance;
         _endWindow.Fill(report, won, name, label, hint);
         _endBanner.Visible = true;
