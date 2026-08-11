@@ -405,8 +405,44 @@ public static class CwmExtra
                 // gar nicht auf einem Gebaeude (nur 164 von 542 Paaren). Ohne
                 // ihn waere ein falsches Gleis eingebaut worden, das auf einer
                 // Kampagnenkarte mit nichts vergleichbar gewesen waere.
-                d.Y1 = s34[i + 3];
-                d.Y2 = s34[i + 5];
+                // ⚠ 11.08.2026, NACHGEBESSERT. +0x03 und +0x05 sind BYTES, das
+                // y zaehlt aber HALBE Zeilen — auf einer Karte ueber 128 Zeilen
+                // laeuft es ueber. Gemessen an den 609 Linien: der x-Lauf
+                // landet 609 mal exakt auf dem gespeicherten x2, das y aber nur
+                // 580 mal; 20 Linien liegen um +256 daneben und 9 um -256.
+                //
+                // (Mein eigener Pruefstand hatte das verdeckt, weil er mit
+                // `& 0xFF` verglich — er konnte eine Abschneidung gar nicht
+                // sehen. Die »115 von 115« waren in Wahrheit 115 modulo 256.)
+                //
+                // Zwei Schluesse daraus:
+                //   * y2 wird NICHT mehr gelesen, sondern gelaufen: es ist
+                //     y1 + Summe der Hoehenschritte, und der Lauf ist auf der
+                //     x-Seite 609 von 609 exakt.
+                //   * y1 wird aus dem Byte ZURUECKGEHOLT: der wahre Wert ist
+                //     b, b+256 oder b+512, und genommen wird der, bei dem die
+                //     GANZE Route innerhalb der Karte bleibt. Bleibt mehr als
+                //     einer moeglich, gilt das Byte — lieber die alte Zahl als
+                //     eine geratene.
+                int by = s34[i + 3];
+                int sum = SumDy(s34, i, d.Delka);
+                int lo = 0, hi = 0, run = 0;
+                for (int k = 0; k < d.Delka && i + 0x0d + k < i + SpojStride; k++)
+                {
+                    run += SpojStep[s34[i + 0x0d + k] & 15].Dy;
+                    if (run < lo) lo = run;
+                    if (run > hi) hi = run;
+                }
+                int limit = m.Height * 2;
+                int fits = 0, chosen = by;
+                for (int add = 0; add <= 512; add += 256)
+                {
+                    int cand = by + add;
+                    if (cand + lo < 0 || cand + hi > limit) continue;
+                    if (fits++ == 0) chosen = cand;
+                }
+                d.Y1 = fits == 1 ? chosen : by;
+                d.Y2 = d.Y1 + sum;
                 d.Rebuilt = true;
             }
             if (d.Y1.HasValue && at.Count > 0)
