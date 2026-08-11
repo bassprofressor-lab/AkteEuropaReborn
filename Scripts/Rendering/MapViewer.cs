@@ -596,7 +596,19 @@ public partial class MapViewer : Node2D
             else if (a == "--skirmish" || a.StartsWith("--skirmish="))
             {
                 _skirmish = true;
-                if (a.Contains('=')) _skirmishMap = a[(a.IndexOf('=') + 1)..];
+                // ⚠ 11.08.2026 — hier wurde NICHT am Komma getrennt. Bei
+                // `--skirmish=map_NET07,2,hard` landete die ganze Zeichenkette
+                // im Kartennamen, die Suche in MapNames ergab -1, der Index
+                // blieb 0 — gespielt wurde map_01, und dabei ueberschrieb der
+                // Rueckfall auch noch die richtige Karte, die das Menue schon
+                // gesetzt hatte. Still, ohne Fehlerzeile.
+                //
+                // Das entwertet jeden Prueflauf, der ueber `--skirmish=<karte>`
+                // eine BESTIMMTE Karte meint: er misst dann auf map_01. Genau
+                // diese Sorte stiller Kartenvertauschung hat am 02.08.2026
+                // schon einmal Messungen wertlos gemacht.
+                if (a.Contains('='))
+                    _skirmishMap = a[(a.IndexOf('=') + 1)..].Split(',')[0];
             }
             else if (a == "--rail-check") { _railCheck = 1f; _railHead = true; }
             else if (a.StartsWith("--rail-check="))
