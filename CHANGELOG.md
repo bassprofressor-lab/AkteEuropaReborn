@@ -4,13 +4,55 @@ All notable changes to Akte Europa Reborn. The build ships **only the engine** �
 terrain, units, maps, tables and now sound are derived on your own machine from
 your own copy of the 1997 game.
 
-## 0.5.0 — 2026-08-09
+## 0.5.0 — 2026-08-11
 
 The release in which the campaign starts deciding itself. Almost nothing here
 was invented: the computer players' build programmes, the schedule that unlocks
 designs, and the missions' own victory conditions were all read out of the 1997
 program and checked against **both** copies of GAME.EXE on the machine — what
 only one of them yields is a reader's error, not a finding.
+
+### Die Kampagne ist doppelt so groß
+
+- **33 Missionen statt 15.** Alle Karten waren längst eingespielt — es fehlte
+  nur die Liste, die die Engine liest. Neuer Schalter
+  `--reexport-campaign`, der sie aus den bereits importierten Karten neu
+  schreibt, ohne CD und ohne Neubacken. 18 von 18 neuen Missionen laden,
+  15 davon enden durch ihre eigene Bedingung.
+- **Mission 1 ist wieder das Tutorial, das sie im Original ist.** Ihr Block
+  öffnet siebzehn Hilfefenster aus HELPG.TXT — »Sie können eine Einheit
+  @ANWÄHLEN«, »Zum Übernehmen @neutraler @Einheiten führen Sie eine ihrer
+  eigenen in deren unmittelbare Nähe« —, schickt vier Gegner los und führt
+  eine **Untermission**: »Versenken Sie die Transportschiffe. @Bezahlung —
+  50$ für jeden versenkten«, dreimal 50 $ aus dem Original.
+- **Die Missionsskripte können dreizehn Wirkungen mehr** (Text, Geld, Klang,
+  Befehl an eine Einheit, Missionsziel, Besitzerwechsel, …) und sieben
+  Bedingungen mehr. 270 Regeln über 31 Missionen, auf beiden GAME.EXE
+  geprüft: 33 gleich, 0 abweichend.
+- **Auf einer Kampagnenkarte marschiert nichts mehr von selbst.** Das Original
+  schickt eine Einheit nirgendwohin — es greift an, was ihr in Reichweite
+  läuft. Wer marschiert, tut es, weil die **Mission** ihm ein Ziel gegeben
+  hat.
+- **Die Versorgungshelis kauft man am Nachschub-Posten**, nicht am Flughafen
+  — den gibt es auf keiner Kampagnenkarte. Damit ist Kampagne 2 wieder
+  durchspielbar.
+
+### Behoben
+
+- **Gebäude waren weiß.** Der Kachel-Atlas wurde als eine einzige Spalte
+  geschrieben und überschritt bei 30 von 35 Kachelsätzen die Höchstgröße
+  einer Textur; die Grafikkarte lehnte sie ab. Er bricht jetzt in Spalten um.
+- **Die Bahnstrecken fehlten auf allen Karten außer drei Spielständen.** Das
+  y der Linienenden steht in sec34 neben den x, nicht nur in der
+  Laufzeitkopie. **609 von 609 Linien** haben jetzt eine Strecke, und die
+  Züge fahren in Kampagne wie Gefecht.
+- **Klänge haben einen Ort.** Ein Schuss am anderen Ende der Karte war
+  genauso laut wie einer daneben; jetzt wird nach Abstand vom Bildmittelpunkt
+  gedämpft, mit der Konstante des Originals.
+
+⚠ **Nach dem Aktualisieren einmal neu einspielen.** Hilfetexte,
+Bahnstrecken und der reparierte Kachel-Atlas entstehen beim Import — wer
+seinen alten Datenordner behält, sieht die drei nicht.
 
 ### The campaign
 
