@@ -670,6 +670,48 @@ public static class CwmExtra
     /// oder +110 — genau die Werte, die <c>4.DM</c> gespeichert hat (Bilder
     /// 100..117 an 45 Zellen) neben Trefferpunkten von 1 bis 135. Ein
     /// Spielstand hält den Schaden also fest.</para>
+    ///
+    /// <para><b>IST DIE STRECKE ZERSTÖRBAR? JA, und zwar durch Beschuss.</b>
+    /// Die Einschlagsroutine @0x40D799 läuft über alle 3000 Plätze, vergleicht
+    /// Spalte und Zeile des Stücks mit dem Einschlagsort
+    /// (<c>[0x53C930]</c>/<c>[0x53C934]</c>) und hält dann die
+    /// <b>Trefferpunkte +0x03</b> gegen den Schaden: reichen sie nicht,
+    /// <c>rail_hit(platz, 1)</c> @0x40D7E2 — sonst <c>tp -= schaden</c>
+    /// (@0x40D7EC). Ein Gleisstück startet mit <b>150</b> Trefferpunkten
+    /// (<c>mov byte …, 0x96</c> in <c>rail_add</c> @0x4AFADA). <b>Eine ganze
+    /// Linie fällt damit nicht aus</b> — beschädigt wird immer nur die eine
+    /// getroffene ZELLE; der Zug prüft sie beim Darüberfahren
+    /// (<c>rail_broken</c> @0x4C6A12).</para>
+    ///
+    /// <para><b>KANN MAN SIE REPARIEREN? JA.</b> Ein Fahrzeug tut es, und der
+    /// Weg steht ganz im Spezialteil-Verteiler: @0x4099B6 zählt seinen
+    /// Arbeitszähler <c>byte[fahrzeug+0x38]</c> herunter und bleibt oberhalb
+    /// von 10 unfertig (<c>cmp al,0xa / ja</c>). Unter 10 ist das Stück
+    /// wiederhergestellt: <c>bild := bild % 10</c> (@0x4099E7, <c>div 10</c> —
+    /// die Hunderter des Schadens fallen weg, das Grundbild bleibt), dazu ein
+    /// Effekt 0x2d an der Stelle (@0x409A04) und ein Durchlauf von
+    /// <c>rail_pylon_pass</c> @0x409A0C, damit die Stützen der Nachbarn wieder
+    /// stimmen. Danach sucht das Fahrzeug SELBST weiter: erst das nächste
+    /// kaputte Stück derselben Linie (@0x409A2D), sonst über
+    /// <c>rail_find_broken</c> @0x409A5E irgendeines mit derselben
+    /// Liniennummer (+0x04). <b>Die Trefferpunkte setzt diese Stelle NICHT
+    /// zurück</b> — gelesen, nicht vermutet.</para>
+    ///
+    /// <para><b>NEU GEBAUT WERDEN KANN SIE NICHT.</b> <c>rail_add</c> @0x4AFA90
+    /// hat im ganzen Programm <b>eine</b> Aufrufstelle (@0x4AF8F2), und die
+    /// steht in einem Durchlauf über die ganze Karte (@0x4AF4C0, Schleife über
+    /// <c>[0x542DF8]</c>×<c>[0x542DC4]</c> = Höhe×Breite), der seinerseits nur
+    /// einmal gerufen wird. Es gibt keinen Befehl und keine Zeigerlogik, die
+    /// ein einzelnes Stück Gleis setzt. <b>Die Strecke liegt fest; man kann sie
+    /// kaputtschießen und wieder flicken, aber nicht verlängern.</b>
+    /// (Die Meldung »Can't add built bridge« @0x539AF0 gehört nicht hierher:
+    /// sie hängt an @0x4D1070 und an der Tabelle 0xB36B20, nicht am
+    /// Gleisfeld 0xC2C220.)</para>
+    ///
+    /// <para>⚠ Was davon in unserem Spiel steht: <b>nichts.</b> Wir zeichnen
+    /// den Schaden, den ein Spielstand mitbringt (indem wir das Stück
+    /// weglassen), aber wir beschädigen und reparieren nicht. Das ist eine
+    /// LÜCKE von uns, keine des Originals.</para>
     /// </summary>
     public sealed class RailCell
     {
