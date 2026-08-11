@@ -489,6 +489,7 @@ public partial class MapViewer : Node2D
     private bool _demoAi;
     private bool _demoGroups;
     private int _demoEnd;
+    private float _endWindowDemo;    // > 0: Abschlussfenster nach n Sekunden zeigen
     private float _fightDist;
     private bool _navOverlay;
     private bool _buildingOverlay;
@@ -545,6 +546,11 @@ public partial class MapViewer : Node2D
             else if (a == "--air-buy-check") _airBuyCheck = 3f;
             else if (a == "--produce-check") _produceCheck = 2f;
             else if (a == "--demo-groups") { _demo = true; _demoGroups = true; }
+            // Prüfstand für das Abschlussfenster: es geht nach n Sekunden auf,
+            // damit man es photographieren kann, ohne eine ganze Mission
+            // durchzuspielen. --end-window=<sek>, ohne Zahl 2 Sekunden.
+            else if (a == "--end-window") _endWindowDemo = 2f;
+            else if (a.StartsWith("--end-window=")) _endWindowDemo = a["--end-window=".Length..].ToFloat();
             else if (a == "--demo-win") { _demo = true; _demoEnd = 1; }
             else if (a == "--demo-lose") { _demo = true; _demoEnd = 2; }
             else if (a.StartsWith("--fight-dist=")) { _demo = true; _demoFight = true; _fightDist = a[13..].ToFloat(); }
@@ -815,10 +821,28 @@ public partial class MapViewer : Node2D
     }
 
     /// <summary>
-    /// Build the original side panel (PANEL.DTA) as the HUD frame and hand its
-    /// recessed display box to the entity layer for the info text.
-    /// The panel is a 204x170 indexed bitmap; it is drawn at an integer scale
-    /// with nearest filtering and pinned to the bottom-right corner.
+    /// Der Bedienblock des Originals (PANEL.DTA) als Rahmen der Statusanzeige;
+    /// sein eingelassener Kasten geht an die Entity-Ebene fuer den Infotext.
+    /// Das Bild ist ein 204x170-Bitmap mit Palette, gezeichnet in ganzzahliger
+    /// Vergroesserung mit Nearest-Filter.
+    ///
+    /// <para>⚠ <b>KORRIGIERT 11.08.2026: er gehoert nach unten LINKS.</b> Er
+    /// hing hier an der unteren RECHTEN Ecke und las sich damit wie ein
+    /// Seitenpanel. Das Original hat gar keines — im Bildschirmfoto
+    /// (akte-europa_8.png, 1280×1024) fuellt die Karte das ganze Fenster, und
+    /// unten links sitzt genau dieser Block: drei Gruppenknoepfe mit
+    /// Miniaturbildern nebeneinander, darunter der Kasten »Gruppe / Einheiten
+    /// 6 / Geschw. 8/10 / Zustand 66% …«, ganz unten eine schmale Leiste mit
+    /// der Missionszeit (00:23) und den Rohstoffanzeigen. Das ist Zug um Zug
+    /// der Inhalt von PANEL.DTA — es war nur die falsche Ecke. Alles andere im
+    /// Original sind frei schwebende Fenster mit Titelleiste und X (»Basis 2«,
+    /// »Erstellung«, das Tutorialfenster, das Pausefenster).</para>
+    ///
+    /// <para>⚠ <b>OFFEN und ausdruecklich unseres:</b> die Vergroesserung.
+    /// Das Original zeichnet den Block 1:1 auf einem 1280×1024-Schirm, also auf
+    /// 16 % der Breite; wir zeichnen ihn doppelt so gross, damit die 13-px-
+    /// Schrift auf heutigen Bildschirmen lesbar bleibt. Er nimmt dadurch mehr
+    /// Platz weg als im Original.</para>
     /// </summary>
     private void BuildLegacyPanel()
     {
@@ -877,9 +901,17 @@ public partial class MapViewer : Node2D
         GetViewport().SizeChanged += PlaceMinimap;
     }
 
-    /// <summary>Sits on top of the panel, as wide as the panel and never taller
-    /// than MinimapMaxH. A tall map keeps its proportions by getting narrower —
-    /// squeezing it to fit would put the dots in the wrong places.</summary>
+    /// <summary>So breit wie der Bedienblock und nie hoeher als MinimapMaxH.
+    /// Eine hohe Karte behaelt ihr Seitenverhaeltnis, indem sie schmaler wird —
+    /// sie passend zu quetschen saetze die Punkte an die falschen Stellen.
+    ///
+    /// <para>⚠ Sie sitzt seit dem 11.08.2026 in der unteren RECHTEN Ecke, weil
+    /// der Bedienblock nach links gewandert ist (siehe BuildLegacyPanel). Beides
+    /// uebereinander haette die linke Bildhaelfte zugebaut. Die Uebersichtskarte
+    /// ist ohnehin UNSERE Zutat — das Original hat keine staendige, es bietet in
+    /// der Befehlsleiste »Karte des Einsatzgebietes zeigen« (@0x4ef50c) an.
+    /// Rechts unten verdraengt sie nichts, was das Original dort haette.</para>
+    /// </summary>
     private const float MinimapMaxH = 200;
 
     private void PlaceMinimap()
@@ -890,7 +922,7 @@ public partial class MapViewer : Node2D
         float h = _minimap.HeightFor(w);
         if (h > MinimapMaxH) { w *= MinimapMaxH / h; h = MinimapMaxH; }
         var view = GetViewportRect().Size;
-        _minimap.Position = new Vector2(view.X - w, view.Y - panel.Y - h - 4);
+        _minimap.Position = new Vector2(view.X - w - 4, view.Y - h - 4);
         _minimap.Size = new Vector2(w, h);
         _minimap.Visible = _showMinimap;
         _minimap.QueueRedraw();
@@ -907,7 +939,8 @@ public partial class MapViewer : Node2D
         if (_panelSprite?.Texture == null) return;
         Vector2 size = _panelSprite.Texture.GetSize() * PanelScale;
         Vector2 view = GetViewportRect().Size;
-        var origin = new Vector2(view.X - size.X, view.Y - size.Y);
+        // untere LINKE Ecke — siehe BuildLegacyPanel fuer den Befund
+        var origin = new Vector2(0, view.Y - size.Y);
         _panelSprite.Position = origin;
         var box = new Rect2(origin + PanelBox.Position * PanelScale,
                             PanelBox.Size * PanelScale);
@@ -999,53 +1032,35 @@ public partial class MapViewer : Node2D
     // ---- end of a skirmish -------------------------------------------------
 
     private Control? _endBanner;
-    private Label? _endText;
+    private UI.MissionEndWindow? _endWindow;
     private bool _ended;
 
-    /// <summary>A plate that drops in when the skirmish is decided. The verdict
-    /// itself is the original's rule (out with nothing left, won once no
-    /// unallied player has anything) — only the screen is ours.</summary>
+    /// <summary>Das Fenster, das eine entschiedene Mission abrechnet. Der
+    /// SPRUCH ist die Regel des Originals (raus, wenn nichts mehr steht;
+    /// gewonnen, sobald kein unverbuendeter Spieler mehr etwas hat) — der
+    /// AUFBAU des Fensters ist vom Bildschirmfoto abgeschrieben, siehe
+    /// UI/MissionEndWindow.cs.</summary>
     private void BuildEndBanner()
     {
-        var layer = new CanvasLayer { Layer = 10 };
+        // ⚠ Ebene 95, nicht 10: die Hilfefenster der Mission liegen auf 90
+        // (UI/HelpWindow.LayerName). Im ersten Bild stand die Abrechnung HINTER
+        // dem Tutorialfenster von Mission 2 und war halb verdeckt.
+        var layer = new CanvasLayer { Layer = 95 };
         AddChild(layer);
-        _endBanner = new Control { Visible = false };
+        // Der Deckel faengt die Maus ab (Control faengt sie von Haus aus), aber
+        // er DUNKELT NICHT AB: im Bildschirmfoto des Originals liegt die Karte
+        // hinter dem Fenster in voller Helligkeit. Die alte Fassung legte ein
+        // 55-%-Schwarz darueber — das war unsere Zutat.
+        _endBanner = new Control { Visible = false, ProcessMode = ProcessModeEnum.Always };
         _endBanner.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         layer.AddChild(_endBanner);
 
-        var dim = new ColorRect { Color = new Color(0, 0, 0, 0.55f) };
-        dim.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        _endBanner.AddChild(dim);
-
-        var box = new VBoxContainer
-        {
-            AnchorLeft = 0.5f, AnchorRight = 0.5f, AnchorTop = 0.5f, AnchorBottom = 0.5f,
-            GrowHorizontal = Control.GrowDirection.Both,
-            GrowVertical = Control.GrowDirection.Both,
-            CustomMinimumSize = new Vector2(420, 0),
-        };
-        box.AddThemeConstantOverride("separation", 14);
-        _endBanner.AddChild(box);
-
-        _endText = new Label { HorizontalAlignment = HorizontalAlignment.Center };
-        _endText.AddThemeFontSizeOverride("font_size", 40);
-        box.AddChild(_endText);
-
-        // ⚠ 11.08.2026, gemeldet: nach einer gewonnenen Mission fuehrte kein
-        // Weg weiter — man musste ins Hauptmenue und dort "Neues Spiel"
-        // druecken. Der Knopf steht ganz oben, weil er nach einem Sieg das ist,
-        // was man will; bei Niederlage und im Gefecht bleibt er unsichtbar.
-        _endNext = new Button { Visible = false, CustomMinimumSize = new Vector2(0, 42) };
-        _endNext.Pressed += StartNextMission;
-        box.AddChild(_endNext);
-
-        var back = new Button { Text = "Zurueck zum Menue", CustomMinimumSize = new Vector2(0, 42) };
-        back.Pressed += ToMenu;
-        box.AddChild(back);
-
-        var watch = new Button { Text = "Weiter zusehen" };
-        watch.Pressed += () => { if (_endBanner != null) _endBanner.Visible = false; };
-        box.AddChild(watch);
+        _endWindow = new UI.MissionEndWindow();
+        _endBanner.AddChild(_endWindow);
+        _endWindow.OnClose = () => { if (_endBanner != null) _endBanner.Visible = false; };
+        _endWindow.OnContinue = ContinueAfterMission;
+        if (_legacyFont != null)
+            _endWindow.SetFont(_legacyFont, LegacyFontCell * LegacyFontScale);
     }
 
     private void ToMenu()
@@ -1054,34 +1069,91 @@ public partial class MapViewer : Node2D
         GetTree().ChangeSceneToFile(UI.SkirmishSetup.MenuScene);
     }
 
+    /// <summary>Was der Knopf »Weiter« tut. Gibt es eine Folgemission, dann
+    /// startet sie; sonst geht es ins Menue (⚠ unsere Setzung — wohin das
+    /// Original am Kampagnenende fuehrt, ist ungelesen).</summary>
+    private void ContinueAfterMission()
+    {
+        if (_nextMission > 0) StartNextMission(); else ToMenu();
+    }
+
     private void CheckEnd()
     {
-        if (_ended || _endBanner == null || !UI.SkirmishSetup.Active) return;
+        if (_ended || _endBanner == null || _endWindow == null || !UI.SkirmishSetup.Active) return;
         string v = _entities.Verdict();
         if (v.Length == 0) return;
+        ShowEnd(v.Contains("ERFUELLT"), v);
+    }
+
+    /// <summary>Das Abschlussfenster aufmachen. Getrennt von
+    /// <see cref="CheckEnd"/>, damit der Pruefstand (--end-window) es
+    /// hochziehen kann, ohne dass eine Mission wirklich entschieden ist.
+    /// </summary>
+    /// <param name="record">false fuer den Pruefstand: dann wird der
+    /// Kampagnenfortschritt NICHT geschrieben. ⚠ Der erste Lauf tat es doch und
+    /// hat user://campaign.cfg auf »Mission 2 geschafft« gesetzt, ohne dass
+    /// jemand Mission 2 gespielt hatte.</param>
+    private void ShowEnd(bool won, string v, bool record = true)
+    {
+        if (_ended || _endBanner == null || _endWindow == null) return;
         _ended = true;
-        bool won = v.Contains("ERFUELLT");
-        if (_endText != null)
-        {
-            _endText.Text = won ? "SIEG" : "NIEDERLAGE";
-            _endText.Modulate = won ? new Color(0.6f, 1f, 0.6f) : new Color(1f, 0.55f, 0.5f);
-        }
-        _endBanner.Visible = true;
+        // `close_message_windows()` @0x447560 — was noch offen ist, raeumt das
+        // Original vor einem neuen Fenster weg, und die Abrechnung ist das
+        // letzte Fenster der Mission.
+        UI.HelpWindow.CloseAll();
+        UI.HelpWindow.CommitClose();
         int mission = UI.SkirmishSetup.CampaignMission;
+
+        // Der Missionsname in Rot ist im Original schlicht »Mission N«: der
+        // Kartenlader indiziert die Namenstabelle mit dem Kampagnenzaehler
+        // selbst (@0x41e25e, `21*counter + 0x4f81c0`), und die Eintraege lauten
+        // "Mission 1" … "Mission 33" (siehe Campaign/CampaignManager).
+        string name = mission > 0 ? $"Mission {mission}" : "Gefecht";
+        string label = "Weiter";
+        string hint = "";
         if (won && mission > 0)
         {
-            Campaign.CampaignManager.Finished(mission);
+            if (record) Campaign.CampaignManager.Finished(mission);
             var next = Campaign.CampaignManager.Next();
-            if (_endText != null)
-                _endText.Text = next != null
-                    ? $"SIEG\nWeiter: {next.Label}" : "SIEG\nKampagne beendet";
+            // ⚠ HIER lag der gemeldete Fehler: `_nextMission` wurde nie
+            // gesetzt und blieb -1, also fand StartNextMission() ueber
+            // ByIndex(-1) nie eine Mission und fiel ins Menue zurueck. Der
+            // Knopf war ausserdem unsichtbar. Ohne diese eine Zeile gab es
+            // keinen Weg von einer beendeten Mission zur naechsten.
+            _nextMission = next?.Index ?? -1;
+            hint = next != null ? $"Naechste Mission: {next.Label}" : "Die Kampagne ist zu Ende";
             GD.Print($"Kampagne: Mission {mission} geschafft, weiter mit " +
                      $"{(next != null ? next.Label : "— nichts mehr")}");
         }
-        GD.Print($"{(mission > 0 ? "Mission" : "Gemetzel")} entschieden: {v}");
+        // Der Knopf heisst im Original schlicht »Weiter«, auch am Ende der
+        // Kampagne — wohin er dort fuehrt, ist ungelesen. Wohin er bei UNS
+        // fuehrt, steht deshalb nur im Zeigefaehnchen und nicht auf dem Knopf.
+        if (_nextMission <= 0 && hint.Length == 0) hint = "Zurueck zum Hauptmenue";
+
+        var report = _entities.BuildEndReport();
+        _endWindow.Fill(report, won, name, label, hint);
+        _endBanner.Visible = true;
+        CenterEndWindow();
+        // erst im naechsten Bild steht die Mindestgroesse fest
+        CallDeferred(nameof(CenterEndWindow));
+        GD.Print($"{(mission > 0 ? "Mission" : "Gemetzel")} entschieden: {v} — " +
+                 $"Zeit {(int)report.Seconds / 60:00}:{(int)report.Seconds % 60:00}, " +
+                 $"gebaut {report.Built}, ausgeschaltet {report.Kills}, " +
+                 $"Verluste {report.Losses}, Untermissionen {report.SubDone}/{report.SubTotal}, " +
+                 $"Bezahlung ${report.Pay}, Kontostand ${report.Balance}");
     }
 
-    private Button? _endNext;
+    private void CenterEndWindow()
+    {
+        if (_endWindow == null) return;
+        // ⚠ Ein Control an einem blossen Control bekommt keine Layoutgroesse —
+        // dieselbe Falle wie im HelpWindow: es bliebe 0x0 und klemmte seinen
+        // Inhalt weg.
+        _endWindow.Size = _endWindow.GetCombinedMinimumSize();
+        var vp = GetViewportRect().Size;
+        _endWindow.Position = ((vp - _endWindow.Size) * 0.5f).Floor();
+    }
+
     private int _nextMission = -1;
 
     /// <summary>Die naechste Kampagnenmission unmittelbar starten.
@@ -1241,6 +1313,14 @@ public partial class MapViewer : Node2D
 
         _objTimer -= (float)delta;
         if (_objTimer <= 0f) { _objTimer = 0.5f; RefreshObjectives(); CheckEnd(); }
+
+        // Prüfstand: das Abschlussfenster ohne durchgespielte Mission zeigen
+        if (_endWindowDemo > 0f)
+        {
+            _endWindowDemo -= (float)delta;
+            if (_endWindowDemo <= 0f)
+                ShowEnd(true, "MISSION ERFUELLT (--end-window)", record: false);
+        }
 
         // keyboard camera panning (left mouse is the selection box now)
         var dir = Vector2.Zero;

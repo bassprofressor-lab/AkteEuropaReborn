@@ -3637,6 +3637,153 @@ public partial class MapEntityLayer : Node2D
         return string.Join("  ", parts);
     }
 
+    // ================= die Zahlen des Abschlussfensters ======================
+    //
+    // Das Original fuehrt sie IM SPIELERSATZ mit: Abschuesse +0x20, Verluste
+    // +0x24 (siehe Player.Kills/Losses oben — Zaehlstellen @0x40cfbc, @0x428144
+    // und @0x40b4d7, gedruckt @0x48571b hinter " / Verluste "). Bei uns kamen
+    // die beiden Felder BISHER NUR AUS EINEM SPIELSTAND (sec53, gelesen in
+    // Load()); eine frisch gestartete Kampagnenmission hat gar keinen
+    // Spielersatz, also blieben sie 0. Darum hier ein Satz Laufzeitzaehler, der
+    // dieselben Ereignisse mitschreibt.
+    //
+    // ⚠ UNSERE SETZUNG ist die AUFTEILUNG nach Klassen. Das Original zeigt vier
+    // Zeilen (Bewaffnete / Unbewaffnete / Schiffe / Flugzeuge); WELCHES Feld es
+    // dafuer liest, ist nicht gelesen. Wir teilen so:
+    //   Schiffe    -> NavGrid.ArtIsShip(+0x0a), also Art 4/5 (@0x406669)
+    //   Flugzeuge  -> die sec27-Saetze, bei uns `Special`
+    //   Bewaffnete -> Waffenbauteil +0x0c != 0, sonst Unbewaffnete
+    // Gebaeude zaehlen NICHT mit — im Bildschirmfoto des Originals hat Virgil
+    // 15 Bewaffnete und 6 Unbewaffnete, das ist eine Armee, keine Basis.
+    private const int EndClasses = 4;
+    private readonly int[,] _lostClass = new int[8, EndClasses];
+    private readonly int[] _killCount = new int[8];
+    private readonly int[] _lossCount = new int[8];
+    private readonly int[] _builtCount = new int[8];
+    private readonly int[] _missionPay = new int[8];
+
+    /// <summary>Welche der vier Zeilen eine Einheit fuellt. Flugzeuge kommen
+    /// nicht hier durch — die sind <see cref="Special"/>, kein
+    /// <see cref="Entity"/>.</summary>
+    private static int EndClassOf(Entity e)
+        => Simulation.NavGrid.ArtIsShip(e.Subclass) ? 2 : e.Weapon != 0 ? 0 : 1;
+
+    /// <summary>Einen Todesfall in die Statistik schreiben: eine Verlust-Kerbe
+    /// beim Besitzer, eine Abschuss-Kerbe beim Schuetzen. Gebaeude bleiben
+    /// draussen (siehe oben), Requisiten sowieso.</summary>
+    private void NoteKill(Entity victim, int by)
+    {
+        if (victim.Dead || victim.IsProp || victim.IsBuilding || victim.HpMax <= 0) return;
+        if (victim.Owner is >= 0 and <= 7)
+        {
+            _lossCount[victim.Owner]++;
+            _lostClass[victim.Owner, EndClassOf(victim)]++;
+        }
+        // Der Schuetze zaehlt nur, wenn er nicht auf die eigenen Leute
+        // geschossen hat — sonst stuende ein Eigenbeschuss zweimal drin.
+        if (by is >= 0 and <= 7 && by != victim.Owner) _killCount[by]++;
+    }
+
+    /// <summary>Eine Spalte der Tabelle im Abschlussfenster.</summary>
+    public sealed class EndColumn
+    {
+        public string Name = "";
+        public bool Human;
+        /// <summary>false = die Spalte bleibt "--/--" (das Original hat acht
+        /// Spalten, aber nur so viele Spieler, wie die Karte hergibt).</summary>
+        public bool Used;
+        public readonly int[] Alive = new int[EndClasses];
+        public readonly int[] Lost = new int[EndClasses];
+    }
+
+    /// <summary>Alles, was das Fenster »Mission erfolgreich beendet« anzeigt.
+    /// Was wir nicht sicher wissen, kommt als -1 heraus und wird dort leer
+    /// gelassen statt erfunden.</summary>
+    public sealed class EndReport
+    {
+        public string Mission = "";
+        public double Seconds;
+        public EndColumn[] Columns = System.Array.Empty<EndColumn>();
+        public int Built, Kills, Losses, Pay, Balance;
+        public int SubDone = -1, SubTotal = -1;
+    }
+
+    /// <summary>Das Original hat acht Spalten in der Tabelle (Bildschirmfoto:
+    /// zwei gefuellt, sechs "--/--").</summary>
+    public const int EndColumnCount = 8;
+
+    public EndReport BuildEndReport()
+    {
+        int me = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
+        var r = new EndReport
+        {
+            Mission = _mission,
+            Seconds = DebugClock,
+            Built = _builtCount[me],
+            Kills = _killCount[me],
+            Losses = _lossCount[me],
+            Pay = _missionPay[me],
+            Balance = _money[me],
+        };
+
+        // Untermissionen: v[101+k] ist der Zustand des k-ten Ziels — 1 offen,
+        // 10 erfuellt (siehe Campaign/MissionScript.Objectives). Ohne Skript
+        // gibt es die Zeile nicht, dann bleibt sie leer.
+        if (_mscript != null)
+        {
+            var objs = _mscript.Objectives();
+            if (objs.Count > 0)
+            {
+                r.SubTotal = objs.Count;
+                r.SubDone = 0;
+                foreach (var (_, state) in objs) if (state >= 10) r.SubDone++;
+            }
+        }
+
+        var cols = new EndColumn[EndColumnCount];
+        for (int p = 0; p < EndColumnCount; p++) cols[p] = new EndColumn();
+
+        // lebende Einheiten je Spieler und Klasse
+        foreach (var e in _entities)
+        {
+            if (e.IsProp || e.IsBuilding || e.Dead || e.HpMax <= 0) continue;
+            if (e.Owner is < 0 or > 7) continue;
+            cols[e.Owner].Alive[EndClassOf(e)]++;
+        }
+        // ⚠ Flugzeuge: die lebenden zaehlen wir, VERLORENE nicht — ein
+        // `Special` stirbt bei uns noch gar nicht (kein einziges
+        // `Dead = true` auf der Klasse). Die Zeile steht also mit b=0 da, und
+        // das ist eine Luecke von UNS, nicht die des Originals.
+        foreach (var a in _special)
+        {
+            if (a.Dead || a.Owner is < 0 or > 7) continue;
+            cols[a.Owner].Alive[3]++;
+        }
+        for (int p = 0; p < EndColumnCount; p++)
+            for (int k = 0; k < EndClasses; k++)
+                cols[p].Lost[k] = _lostClass[p, k];
+
+        // Wer ueberhaupt eine Spalte bekommt: der Mensch immer, sonst jeder
+        // Platz, von dem etwas lebt oder etwas gefallen ist. Der Rest bleibt
+        // "--/--" — das Original zeigt sechs solche Spalten.
+        for (int p = 0; p < EndColumnCount; p++)
+        {
+            int sum = 0;
+            for (int k = 0; k < EndClasses; k++) sum += cols[p].Alive[k] + cols[p].Lost[k];
+            cols[p].Used = p == me || sum > 0;
+            cols[p].Human = p == me;
+            // ⚠ Der Name des Menschen ist UNSER Platzhalter. Das Original zeigt
+            // dort den Profilnamen ("Virgil" im Bildschirmfoto); ein Profil
+            // haben wir nicht. Die Namen der uebrigen kommen aus sec53, wenn es
+            // die Tabelle gibt — eine Kampagnenkarte hat sie nicht.
+            var rec = _players.Find(x => x.Index == p);
+            cols[p].Name = rec != null && rec.Name.Length > 0
+                ? rec.Name : p == me ? "SPIELER" : "CPU";
+        }
+        r.Columns = cols;
+        return r;
+    }
+
     /// <summary>Cell distance (Chebyshev-ish, in tiles) between two entities.</summary>
     private static float CellDistance(Entity a, Entity b)
         => new Vector2(a.Col - b.Col, a.Row - b.Row).Length();
@@ -3904,13 +4051,16 @@ public partial class MapEntityLayer : Node2D
             return;
         }
 
-        Kill(vi, victim);
+        Kill(vi, victim, shooter?.Owner ?? -1);
     }
 
     /// <summary>Take an entity off the board: clear its cells, drop it out of
     /// every selection and target, and leave the right remains behind.</summary>
-    private void Kill(int vi, Entity victim)
+    /// <param name="by">Wer den Todesstoss gefuehrt hat, oder -1. Nur fuer die
+    /// Statistik — siehe <see cref="NoteKill"/>.</param>
+    private void Kill(int vi, Entity victim, int by = -1)
     {
+        NoteKill(victim, by);
         victim.Hp = 0;
         victim.Dead = true;
         victim.DeadTime = 0;
@@ -4479,6 +4629,14 @@ public partial class MapEntityLayer : Node2D
                 _mscript.AddMoney = (betrag, spieler) =>
                 {
                     Money(spieler, Money(spieler) + betrag);
+                    // ⚠ UNSERE SETZUNG: was hier AUSGEZAHLT wird, ist das, was
+                    // das Abschlussfenster "Missionsbezahlung" nennt. Der
+                    // Betrag stammt aus dem Missionsblock (Busbefehl 528), die
+                    // GLEICHSETZUNG mit dem Feld im Fenster ist unsere — ein
+                    // eigenes Bezahlfeld haben wir in GAME.EXE nicht gefunden.
+                    // Abzuege zaehlen nicht mit, sonst frisst ein Strafgeld die
+                    // Belohnung wieder auf.
+                    if (betrag > 0 && spieler is >= 0 and <= 7) _missionPay[spieler] += betrag;
                     GD.Print($"Missionsgeld: Spieler {spieler} {(betrag >= 0 ? "+" : "")}" +
                              $"{betrag} $ -> {Money(spieler)} $");
                 };
@@ -6617,6 +6775,7 @@ public partial class MapEntityLayer : Node2D
         };
         a.Owner = owner;
         _special.Add(a);
+        if (owner is >= 0 and <= 7) _builtCount[owner]++;   // "Gebaute Einheiten"
         GD.Print($"Versorgungsdepot {depot.Slot}: {d.Name} (Art {d.Kind}) gekauft, " +
                  $"fliegt sofort los");
     }
@@ -6688,6 +6847,7 @@ public partial class MapEntityLayer : Node2D
             Cargo = SupplyCargoFull,
         };
         _special.Add(a);
+        if (e.Owner is >= 0 and <= 7) _builtCount[e.Owner]++;   // "Gebaute Einheiten"
         // ⚠ Entwurf 5 und 6 (Kind 13/14, Sprit- und Munitionsheli) PARKEN NICHT:
         // `spawn_aircraft` setzt ihnen `+0x31 = 0xFF`, sendet sie sofort aus und
         // gibt den Hangarplatz gleich wieder frei. Alle anderen bleiben stehen.
