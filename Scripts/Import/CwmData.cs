@@ -207,8 +207,29 @@ public static class CwmData
                 int st = inst[0x02];
                 b.State = st;
                 bool fact = b.Type is 2 or 3 or 4;
+                bool mine = b.Type is 10 or 15;
                 var words = fact ? StatusFactory : StatusBase;
                 b.StateName = st < words.Length ? words[st] : st.ToString();
+                if (mine)
+                {
+                    // sec28, 18 Byte je Mine, im Spiel die Platte 0x878AD0.
+                    // Dieselbe Kopfform wie sec24: +0x03/+0x04 Zaehler und
+                    // Nenner der Foerderchance (@0x43E57F), +0x05 die
+                    // AUSBAUSTUFE — Index in die Periodentabelle 0x4FACB8
+                    // (@0x43E5D4) und zugleich die TORKACHEL (@0x42B31F),
+                    // +0x06 der 0..100-Fortschritt einer Erweiterung,
+                    // +0x08 der Lagerplatz.
+                    b.EffNum = inst[0x03];
+                    b.EffDen = inst[0x04];
+                    b.ProdSpeed = inst[0x05];
+                    b.UpgradeStep = inst[0x06];
+                    b.Capacity = BitConverter.ToUInt16(inst, 0x08);
+                    // spiegelbildlich zur Fabrik, nur zwei Felder weiter: der
+                    // Missionsvorlauf @0x440887 setzt bei der Fabrik +0x0a/+0x0c
+                    // und bei der Mine +0x0e/+0x10 mit denselben zwei Zahlen.
+                    b.CostStore = BitConverter.ToInt16(inst, 0x0e);
+                    b.CostProd = BitConverter.ToInt16(inst, 0x10);
+                }
                 if (fact)
                 {
                     // sec24: +0x03/+0x04 production chance numerator and

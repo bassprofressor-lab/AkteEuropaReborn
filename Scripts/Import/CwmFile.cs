@@ -27,6 +27,11 @@ public sealed class CwmFile
     public string Stem = "";
     public string Mission = "";
     public string Comment = "";
+
+    /// <summary>Die Missionsnummer aus dem Dateikopf — <c>word[0x539934]</c>.
+    /// Kampagne 1..15, Netzkarten 51..58; keine Karte traegt 0.</summary>
+    public int MissionNumber;
+
     public int Tileset, Width, Height;
     public bool Compressed;
     public int TrailingBytes;
@@ -119,7 +124,11 @@ public sealed class CwmFile
         m.Tileset = r.U8();
         m.Compressed = comp == 1;
         m.Comment = CStr(r.Take(21));
-        r.U16();                      // always 1
+        // ⚠ NICHT "immer 1". Es ist die MISSIONSNUMMER — der Lader liest genau
+        // diese zwei Byte nach `word[0x539934]` (@0x41E242), dem Kampagnen-
+        // zaehler, an dem Diplomatie, KI-Datei, Bauplaene und Missionslogik
+        // haengen. Gemessen: 01..15.CWM tragen 1..15, NET01..08 tragen 51..58.
+        m.MissionNumber = r.U16();
         m.Mission = CStr(r.Take(21));
         m.Width = r.U16();
         m.Height = r.U16();

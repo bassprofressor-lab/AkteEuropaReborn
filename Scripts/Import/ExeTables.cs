@@ -1260,8 +1260,13 @@ public sealed class ExeTables
     // ---- what a mission SWITCHES ON ----------------------------------------
 
     /// <summary>A run of rows a mission turns on or off. The schedule is written
-    /// as loops, so a single call site usually covers a whole range.</summary>
-    public readonly record struct UnlockRange(string Kind, int From, int To, int Value);
+    /// as loops, so a single call site usually covers a whole range.
+    ///
+    /// <para><c>Player</c> is -1 for the three setters that write the row for
+    /// ALL EIGHT players at once (they loop `xor cl,cl … cmp cl,8; jb` inside
+    /// the setter). Only <c>part</c> names a player, and it is the busiest of
+    /// the four by a factor of four.</para></summary>
+    public readonly record struct UnlockRange(string Kind, int Player, int From, int To, int Value);
 
     private bool _unlockTried;
     private readonly Dictionary<int, List<UnlockRange>> _missionUnlocks = new();
@@ -1313,18 +1318,26 @@ public sealed class ExeTables
     private readonly record struct Arg(int Imm, int Reg);
 
     /// <summary>
-    /// The last two arguments pushed in front of a call, walking BACKWARDS.
+    /// The last <paramref name="want"/> arguments pushed in front of a call,
+    /// walking BACKWARDS. <c>found[0]</c> is the argument NEAREST the call —
+    /// with cdecl that is the FIRST parameter, so for `set_part(player, part,
+    /// value)` it is the player, `found[1]` the part and `found[2]` the value.
     ///
-    /// ⚠ The two pushes are not always adjacent — a block happily puts
+    /// ⚠ The pushes are not always adjacent — a block happily puts
     /// `xor ebx,ebx` or `inc bl` between them — so matching a fixed byte
     /// sequence in front of the call misses them. Reading backwards needs
     /// instruction lengths, and rather than a full decoder this steps over the
     /// small set of forms these blocks actually contain. Anything else stops
     /// the walk, which is the safe direction: a missed row shows up in
     /// `--selftest-exe`, a wrongly guessed one might not.
+    ///
+    /// ⚠ 10.08.2026: `want` used to be hard-wired to two, and `set_part` — 1037
+    /// of the 1533 setter calls in the mission blocks — takes THREE. Read with
+    /// the two-argument rule it came out as (index = the player, value = the
+    /// part number), which is not a near miss but noise.
     /// </summary>
-    private static (Arg Index, Arg Value, Dictionary<int, int> Consts)?
-        PrevPushes(byte[] text, int call, int back = 0x200)
+    private static (List<Arg> Args, Dictionary<int, int> Consts)?
+        PrevPushes(byte[] text, int call, int back = 0x200, int want = 2)
     {
         var found = new List<Arg>();
         var consts = new Dictionary<int, int>();
@@ -1339,18 +1352,29 @@ public sealed class ExeTables
         // The `inc bl` inside a loop body sits between the push and the call and
         // must NOT be counted: the loop pushes the value it had before it.
         var adj = new Dictionary<int, int>();
-        void Bump(int r, int by) { if (found.Count >= 2) adj[r] = (adj.TryGetValue(r, out int a) ? a : 0) + by; }
-        void Set(int r, int v) { consts.TryAdd(r, v + (adj.TryGetValue(r, out int a) ? a : 0)); }
+        void Bump(int r, int by) { if (found.Count >= want) adj[r] = (adj.TryGetValue(r, out int a) ? a : 0) + by; }
+        // ⚠ A constant out of 0..255 is not one. Every argument in this
+        // schedule is a byte — a player, a row, a 0/1 flag — so a `mov r32,
+        // imm32` carrying 0x84022BE4 is the backward walk having stepped onto a
+        // byte inside an address, not a value. Mission 19 shipped exactly that
+        // as component number -2080376988 the first time `set_part` was read:
+        // the same `push ebx` that had always been the harmless VALUE (which
+        // Flag() rounded back to 1) is its INDEX as well.
+        void Set(int r, int v)
+        {
+            v += adj.TryGetValue(r, out int a) ? a : 0;
+            if (v is >= 0 and <= 255) consts.TryAdd(r, v);
+        }
         int p = call;                                  // p = end of the previous instruction
         int limit = Math.Max(1, call - back);
         while (p > limit)
         {
             if (p >= 2 && text[p - 2] == 0x6A)                       // push imm8
-            { if (found.Count < 2) found.Add(new Arg(text[p - 1], -1)); p -= 2; continue; }
+            { if (found.Count < want) found.Add(new Arg(text[p - 1], -1)); p -= 2; continue; }
             if (p >= 5 && text[p - 5] == 0x68)                       // push imm32
-            { if (found.Count < 2) found.Add(new Arg(BitConverter.ToInt32(text, p - 4), -1)); p -= 5; continue; }
+            { if (found.Count < want) found.Add(new Arg(BitConverter.ToInt32(text, p - 4), -1)); p -= 5; continue; }
             if (p >= 1 && PushReg(text[p - 1]) >= 0)                 // push r32
-            { if (found.Count < 2) found.Add(new Arg(0, PushReg(text[p - 1]))); p -= 1; continue; }
+            { if (found.Count < want) found.Add(new Arg(0, PushReg(text[p - 1]))); p -= 1; continue; }
             if (p >= 2 && (text[p - 2] == 0x32 || text[p - 2] == 0x33) &&
                 (text[p - 1] & 0xC0) == 0xC0 && ((text[p - 1] >> 3) & 7) == (text[p - 1] & 7))
             { Set(text[p - 1] & 7, 0); p -= 2; continue; }                          // xor r,r
@@ -1377,9 +1401,19 @@ public sealed class ExeTables
             if (p >= 6 && text[p - 6] == 0x88 && (text[p - 5] & 0xC7) == 0x05) { p -= 6; continue; }
             if (p >= 5 && text[p - 5] == 0xA2) { p -= 5; continue; }
             if (p >= 7 && text[p - 7] == 0xC6 && text[p - 6] == 0x05) { p -= 7; continue; }
+            // ⚠ …and their own WORDS. Without these three the walk stopped
+            // dead in mission 8 at `mov word ptr [0xc06bec], 0x5f` and never
+            // reached the `xor ebx,ebx` that sets the player register at the
+            // top of the block — the whole mission came back with no component
+            // rows at all, and nothing else would have said so.
+            if (p >= 10 && text[p - 10] == 0xC7 && text[p - 9] == 0x05) { p -= 10; continue; }
+            if (p >= 9 && text[p - 9] == 0x66 && text[p - 8] == 0xC7 &&
+                text[p - 7] == 0x05) { p -= 9; continue; }
+            if (p >= 6 && text[p - 6] == 0x66 &&
+                (text[p - 5] == 0xA3 || text[p - 5] == 0xA1)) { p -= 6; continue; }
             break;
         }
-        return found.Count == 2 ? (found[0], found[1], consts) : null;
+        return found.Count == want ? (found, consts) : null;
     }
 
     /// <summary>
@@ -1400,16 +1434,66 @@ public sealed class ExeTables
     /// every call it makes; a 0x120-byte window found it in some missions and
     /// not in others, which read as "this mission unlocks nothing".
     /// </summary>
-    private static int? RegConst(byte[] text, int at, int reg, int floor = 0)
+    /// <remarks>
+    /// ⚠ A hit whose value is outside 0..255 is SKIPPED, not returned. Every
+    /// argument in this schedule is a byte, so `mov ebx, 0x83FFF764` is the raw
+    /// scan having landed on a byte inside a call offset — and returning at the
+    /// first hit meant mission 19 cached that number for the rest of its block.
+    /// It stayed invisible for as long as ebx was only ever the VALUE, because
+    /// <see cref="Flag"/> rounded anything outside 0..1 back to 1; the moment
+    /// `set_part` made the same register the INDEX, out came component
+    /// -2080376988. Carrying on down the block finds the real `mov ebx, 1`
+    /// 0x3DE bytes further back.
+    /// </remarks>
+    private static int? RegConst(byte[] text, int at, int reg, int floor = 0,
+                                 bool[]? inside = null, int origin = 0)
     {
         for (int i = at - 1; i >= Math.Max(0, floor); i--)
         {
+            // ⚠ …and a hit INSIDE a call offset is not one either. `call rel32`
+            // is `E8 b3 95 f7 ff`, and its second byte reads as `mov bl, 0x95`.
+            // That is where the other GAME.EXE handed mission 13 component 149
+            // instead of component 1: the false `mov` stands 0x2C3 bytes closer
+            // to the call site than the real one at the top of the block.
+            if (inside != null)
+            {
+                int k = i - origin;
+                if (k >= 0 && k < inside.Length && inside[k]) continue;
+            }
             if (text[i] == 0xB0 + reg && i + 1 < text.Length) return text[i + 1];
-            if (text[i] == 0xB8 + reg && i + 4 < text.Length) return BitConverter.ToInt32(text, i + 1);
+            if (text[i] == 0xB8 + reg && i + 4 < text.Length)
+            {
+                int v = BitConverter.ToInt32(text, i + 1);
+                if (v is >= 0 and <= 255) return v;
+                continue;
+            }
             if ((text[i] == 0x32 || text[i] == 0x33) &&
                 i + 1 < text.Length && text[i + 1] == 0xC0 + reg * 9) return 0;
         }
         return null;
+    }
+
+    /// <summary>
+    /// The bytes of a block that sit INSIDE the 4-byte displacement of a
+    /// `call`/`jmp rel32` — the ones the raw register search must not read an
+    /// instruction out of.
+    ///
+    /// <para>A stray 0xE8 in data almost never has a displacement that lands
+    /// back inside .text (four random bytes reach ±2 GB), so »the target is a
+    /// text address« is a sharp test for a real call.</para>
+    /// </summary>
+    private static bool[] InsideCallOffsets(byte[] text, uint tva, int from, int to)
+    {
+        var inside = new bool[Math.Max(0, to - from)];
+        for (int q = from; q + 4 < to && q + 4 < text.Length; q++)
+        {
+            if (text[q] != 0xE8 && text[q] != 0xE9) continue;
+            long target = (long)tva + q + 5 + BitConverter.ToInt32(text, q + 1);
+            if (target < tva || target >= tva + text.Length) continue;
+            for (int k = 1; k <= 4 && q + k - from < inside.Length; k++)
+                inside[q + k - from] = true;
+        }
+        return inside;
     }
 
     /// <summary>
@@ -1437,10 +1521,11 @@ public sealed class ExeTables
     private static int Flag(int? v) => v is 0 or 1 ? v.Value : 1;
 
     private static int? Held(byte[] text, int at, int reg, int floor,
-                             Dictionary<int, int> held)
+                             Dictionary<int, int> held,
+                             bool[]? inside = null, int origin = 0)
     {
         if (held.TryGetValue(reg, out int known)) return known;
-        int? v = RegConst(text, at, reg, floor);
+        int? v = RegConst(text, at, reg, floor, inside, origin);
         if (v != null) held[reg] = v.Value;
         return v;
     }
@@ -1479,36 +1564,56 @@ public sealed class ExeTables
 
         // Which of the four is which.
         //
-        // First choice is the destination: three of the four tables this class
-        // already knows by name. ⚠ Those names are addresses of ONE build, so on
-        // the other GAME.EXE of this machine they identify nothing and every
-        // setter would read as "design" — measured, and it turned ships and
-        // aircraft into zero rows there.
+        // The strongest discriminator is build-independent and needs no table
+        // name at all: `set_part` is the ONLY one of the four that takes three
+        // arguments, and a cdecl call site says so out loud — `add esp, 0xc`
+        // behind the call instead of `add esp, 8`. Measured over every call
+        // site: 1035 of 1037 say three on this build, 1091 of 1093 on the other
+        // (the two stragglers each fold two cleanups into one `add esp`).
         //
-        // The fallback is their ORDER. The four sit next to each other in the
-        // same sequence in both builds (0x4D04D0/0520/0560/05A0 here,
-        // 0x4D0080/00D0/0110/0150 on the other), so sorting the setters found in
-        // the mission blocks by address and handing out the roles in that order
-        // gives the same answer without an address.
+        // The remaining three then follow from their ORDER. The four sit next
+        // to each other in the same sequence in both builds (0x4D04D0/0520/
+        // 0560/05A0 here, 0x4D0080/00D0/0110/0150 on the other), and thanks to
+        // the SIB test and the address window in <see cref="SetterDest"/> they
+        // are the only setters in this list.
+        //
+        // ⚠ The old first choice — recognising three of the four by the table
+        // addresses this class knows by name — is kept as the fallback. Those
+        // names are addresses of ONE build, so on the other GAME.EXE they
+        // identify nothing and every setter reads as "design".
         var byAddr = new List<uint>(kindOf.Keys);
         byAddr.Sort();
-        string[] roles = { "design", "stat", "ship", "aircraft" };
-        bool named = false;
-        foreach (var fn in byAddr)
+        string[] roles = { "design", "part", "ship", "aircraft" };
+        var arity = new Dictionary<uint, int>();
+        foreach (var fn in byAddr) arity[fn] = ArityOf(tva, text, lo, hi, fn);
+
+        int threes = 0;
+        foreach (var fn in byAddr) if (arity[fn] == 3) threes++;
+        if (byAddr.Count == roles.Length && threes == 1 && arity[byAddr[1]] == 3)
         {
-            uint dest = SetterDest(tva, text, fn);
-            if (dest == StatsArrayBase) { kindOf[fn] = "stat"; named = true; }
-            else if (dest == ShipDesigns) { kindOf[fn] = "ship"; named = true; }
-            else if (dest == AircraftTemplates - 1) { kindOf[fn] = "aircraft"; named = true; }
-        }
-        if (named)
-        {
-            foreach (var fn in byAddr) if (kindOf[fn].Length == 0) kindOf[fn] = "design";
+            for (int r = 0; r < byAddr.Count; r++) kindOf[byAddr[r]] = roles[r];
         }
         else
         {
-            for (int r = 0; r < byAddr.Count; r++)
-                kindOf[byAddr[r]] = r < roles.Length ? roles[r] : "design";
+            bool named = false;
+            foreach (var fn in byAddr)
+            {
+                uint dest = SetterDest(tva, text, fn);
+                if (dest == StatsArrayBase) { kindOf[fn] = "part"; named = true; }
+                else if (dest == ShipDesigns) { kindOf[fn] = "ship"; named = true; }
+                else if (dest == AircraftTemplates - 1) { kindOf[fn] = "aircraft"; named = true; }
+            }
+            if (named)
+            {
+                foreach (var fn in byAddr) if (kindOf[fn].Length == 0) kindOf[fn] = "design";
+            }
+            else
+            {
+                for (int r = 0; r < byAddr.Count; r++)
+                    kindOf[byAddr[r]] = r < roles.Length ? roles[r] : "design";
+            }
+            // whatever the names said, three arguments means `set_part`
+            foreach (var fn in byAddr) if (arity[fn] == 3) kindOf[fn] = "part";
         }
 
         // ⚠ The value register is not always set inside the block. The
@@ -1532,6 +1637,25 @@ public sealed class ExeTables
             uint end = uint.MaxValue;
             foreach (var s in starts) if (s > start) { end = s; break; }
 
+            int from0 = (int)(start - tva);
+            int to0 = Math.Min(end == uint.MaxValue ? text.Length : (int)(end - tva),
+                               text.Length - 12);
+
+            // ⚠ Stop the LAST block at its `add esp,imm8; ret`. Every mission
+            // block ends in a `jmp` to the shared tail and is bounded by the
+            // next block, so this touches none of them — but the tail itself is
+            // the last block, its end is the end of .text, and the padding
+            // behind its `ret` decodes into plausible-looking calls. That was
+            // the only place the two GAME.EXE disagreed: the other build read
+            // two more component rows out of the rubbish, in 64 of 99 mission
+            // slots, and every one of them was a phantom.
+            if (end == uint.MaxValue)
+                for (int q = from0; q + 3 < to0; q++)
+                    if (text[q] == 0x83 && text[q + 1] == 0xC4 && text[q + 3] == 0xC3)
+                    { to0 = q + 4; break; }
+
+            var inside = InsideCallOffsets(text, tva, from0, to0);
+
             var rows = new List<UnlockRange>();
             // ⚠ A register is resolved only over the stretch SINCE THE LAST
             // setter call, and otherwise carried forward. Searching back to the
@@ -1539,7 +1663,30 @@ public sealed class ExeTables
             // that looks like `mov ebx, imm` and returns a wrong value — the
             // last six lists that would not line up were all of that kind.
             var held = new Dictionary<int, int>(prologue);
-            int floor = (int)(start - tva);
+            int floor = from0;
+
+            // The counting loops of this block: `cmp r8, imm8` closed by a SHORT
+            // conditional jump BACKWARDS. Everything between the jump target and
+            // the jump runs once per round.
+            //
+            // ⚠ This replaces the old rule »the index register is `inc`ed right
+            // in front of the call«, which is not the shape of a three-argument
+            // call — the player is pushed in between — and which misses the
+            // first of two calls sharing one loop body. Mission 0 is exactly
+            // that: `L: set_part(0,bl,1); set_part(1,bl,1); inc bl; cmp bl,0xc8;
+            // jb L`. The old rule read player 1 as parts 0..199 and player 0 as
+            // part 0 alone.
+            var loops = new List<(int From, int To, int Reg, int Limit)>();
+            for (int q = from0; q + 4 < to0; q++)
+            {
+                if (text[q] != 0x80 || (text[q + 1] & 0xF8) != 0xF8) continue;   // cmp r8,imm8
+                if (text[q + 3] is < 0x70 or > 0x7F) continue;                   // jcc rel8
+                int rel = (sbyte)text[q + 4];
+                if (rel >= 0) continue;
+                int target = q + 5 + rel;
+                if (target < from0) continue;
+                loops.Add((target, q, text[q + 1] & 7, text[q + 2]));
+            }
 
             // ⚠ Two passes. A block sets its value register once and holds it
             // over every call, but the backward walk from the FIRST call often
@@ -1548,50 +1695,55 @@ public sealed class ExeTables
             // fills the register in from a later call — which is sound, because
             // it is the same held value. Without this pass mission 19 fell back
             // to the raw byte search and read the wrong number.
-            for (int q = (int)(start - tva);
-                 q < Math.Min(end == uint.MaxValue ? text.Length : end - tva, text.Length - 12); q++)
+            for (int q = from0; q < to0; q++)
             {
                 if (text[q] != 0xE8) continue;
                 uint tq = Resolve((uint)(tva + q + 5 + BitConverter.ToInt32(text, q + 1)));
                 if (!kindOf.ContainsKey(tq)) continue;
-                var pre = PrevPushes(text, q);
+                var pre = PrevPushes(text, q, 0x200, arity.TryGetValue(tq, out int aq) ? aq : 2);
                 if (pre == null) continue;
                 foreach (var kv in pre.Value.Consts) held.TryAdd(kv.Key, kv.Value);
             }
 
-            for (int i = (int)(start - tva);
-                 i < Math.Min(end == uint.MaxValue ? text.Length : end - tva, text.Length - 12); i++)
+            for (int i = from0; i < to0; i++)
             {
                 if (text[i] != 0xE8) continue;
                 uint t = Resolve((uint)(tva + i + 5 + BitConverter.ToInt32(text, i + 1)));
                 if (!kindOf.TryGetValue(t, out string? kind)) continue;
+                int want = arity.TryGetValue(t, out int a3) && a3 == 3 ? 3 : 2;
 
-                // the two arguments, whatever stands between them
-                var args = PrevPushes(text, i);
+                // the arguments, whatever stands between them; args[0] is the
+                // one nearest the call, which with cdecl is the FIRST parameter
+                var args = PrevPushes(text, i, 0x200, want);
                 if (args == null) continue;
-                var (index, value, consts) = args.Value;
-                foreach (var kv in consts) held[kv.Key] = kv.Value;   // fresher wins
+                var list = args.Value.Args;
+                foreach (var kv in args.Value.Consts) held[kv.Key] = kv.Value;   // fresher wins
 
-                // a loop pushes the running index, and its end is the `cmp`
-                // that follows the call:  ... | FE Cx | E8 | 83 C4 08 | 80 Fx ee
-                if (index.Reg >= 0 && i >= 2 && text[i - 2] == 0xFE &&
-                    text[i - 1] == 0xC0 + index.Reg &&
-                    i + 11 < text.Length && text[i + 8] == 0x80 &&
-                    text[i + 9] == 0xF8 + index.Reg)
+                Arg index = list[want == 3 ? 1 : 0];
+                Arg value = list[want == 3 ? 2 : 1];
+                int player = -1;
+                if (want == 3)
                 {
-                    int? from = Held(text, i, index.Reg, floor, held);
-                    int v = Flag(value.Reg >= 0 ? Held(text, i, value.Reg, floor, held) : value.Imm);
-                    if (from != null)
-                        rows.Add(new UnlockRange(kind, from.Value, text[i + 10] - 1, v));
-                    floor = i + 5;
-                    continue;
+                    int? p = list[0].Reg >= 0
+                        ? Held(text, i, list[0].Reg, floor, held, inside, from0)
+                        : list[0].Imm;
+                    if (p is null or < 0 or > 7) { floor = i + 5; continue; }
+                    player = p.Value;
                 }
 
-                // a single row
-                int? one = index.Reg >= 0 ? Held(text, i, index.Reg, floor, held) : index.Imm;
-                int val = Flag(value.Reg >= 0 ? Held(text, i, value.Reg, floor, held) : value.Imm);
-                if (one != null)
-                    rows.Add(new UnlockRange(kind, one.Value, one.Value, val));
+                int? one = index.Reg >= 0
+                    ? Held(text, i, index.Reg, floor, held, inside, from0) : index.Imm;
+                int val = Flag(value.Reg >= 0
+                    ? Held(text, i, value.Reg, floor, held, inside, from0) : value.Imm);
+                if (one == null) { floor = i + 5; continue; }
+
+                int last = one.Value;
+                if (index.Reg >= 0)
+                    foreach (var lp in loops)
+                        if (lp.Reg == index.Reg && lp.From <= i && i <= lp.To)
+                        { last = lp.Limit - 1; break; }
+                if (last >= one.Value)
+                    rows.Add(new UnlockRange(kind, player, one.Value, last, val));
                 floor = i + 5;                       // next search starts after this call
             }
             if (rows.Count > 0) _missionUnlocks[m] = rows;
@@ -1618,6 +1770,32 @@ public sealed class ExeTables
     /// all of them. The build-independent discriminator is the record stride out
     /// of the lea chain, and reading that needs a decoder this class has not got.
     /// </summary>
+    /// <summary>
+    /// How many arguments a cdecl function takes, counted at its call sites:
+    /// `add esp, N` right behind the call means N/4 arguments. The vote is
+    /// taken over every site in the mission blocks, so the handful that fold
+    /// two cleanups into one `add esp` cannot change the answer (2 of 1037 on
+    /// this build, 2 of 1093 on the other).
+    ///
+    /// <para>This is what tells `set_part(player, part, value)` from the three
+    /// two-argument setters without knowing a single address.</para>
+    /// </summary>
+    private int ArityOf(uint tva, byte[] text, uint lo, uint hi, uint fn)
+    {
+        var votes = new int[8];
+        for (int i = (int)(lo - tva); i < Math.Min(hi - tva, text.Length - 9); i++)
+        {
+            if (text[i] != 0xE8) continue;
+            if (Resolve((uint)(tva + i + 5 + BitConverter.ToInt32(text, i + 1))) != fn) continue;
+            if (text[i + 5] != 0x83 || text[i + 6] != 0xC4) continue;
+            int n = text[i + 7] / 4;
+            if (n is > 0 and < 8) votes[n]++;
+        }
+        int best = 0;
+        for (int n = 1; n < votes.Length; n++) if (votes[n] > votes[best]) best = n;
+        return best;
+    }
+
     private uint SetterDest(uint tva, byte[] text, uint fn)
     {
         int o = (int)(fn - tva);
@@ -2015,6 +2193,118 @@ public sealed class ExeTables
     }
 
     private uint _resStoreAt, _resFactAt, _resMineAt;
+
+    // ---- die Ausbaustufe, mit der eine Mission anfaengt --------------------
+
+    private bool _startLevelTried;
+
+    /// <summary>Wo die Tabelle steht, mit der eine Mission ihre Fabriken und
+    /// Minen einstellt — 0, wenn nicht gefunden.</summary>
+    public uint MissionSetupTable { get; private set; }
+
+    /// <summary>Der Vorlauf, der die Tabelle liest.</summary>
+    public uint MissionSetupRoutine { get; private set; }
+
+    /// <summary>Wie viele Missionen die Tabelle fuehrt.</summary>
+    public const int MissionSetupCount = 35;
+
+    /// <summary>
+    /// Der Missionsvorlauf @0x4407C0 (F: 0x43F8xx), den der Kartenlader am Ende
+    /// unbedingt ruft (@0x41F1FD, Thunk 0x401F41 → <c>jmp 0x4407C0</c>; kein
+    /// Sprung im ganzen .text landet zwischen 0x41F1FA und 0x41F212, die Stelle
+    /// wird also nur durchfallend erreicht).
+    ///
+    /// <para>Er laeuft ueber alle 255 Gebaeudesaetze und setzt bei jeder Fabrik
+    /// und jeder Mine dieselben vier Dinge neu — <b>nachdem</b> die Abschnitte
+    /// 24 und 28 geladen sind, der Kartenwert wird also ueberschrieben:</para>
+    /// <list type="bullet">
+    ///   <item><b>Ausbaustufe</b> <c>+0x05 = einstellung &gt;&gt; 1</c>
+    ///     (@0x4407FB <c>shr dl, 1</c>) — und das ist die TORKACHEL,</item>
+    ///   <item>Lagerplatz <c>= (einstellung + 4) * 10</c>,</item>
+    ///   <item>Lagerausbaukosten 20, Produktionserweiterungskosten 50.</item>
+    /// </list>
+    ///
+    /// <para>Die <c>einstellung</c> kommt aus zwei Quellen: im Gefecht aus
+    /// <c>byte[0x540eb8]</c>, dem Aufbaustand einer frischen Partie (1), in der
+    /// Kampagne aus dieser Tabelle, mit der Missionsnummer indiziert. Sie hat
+    /// 35 Eintraege zu 2 Byte, 1..9, und steigt in Dreierstufen — also genau
+    /// die 35 Kampagnenzustaende. Netzkarten tragen 51..58 und laegen ausserhalb;
+    /// sie nehmen darum den anderen Zweig.</para>
+    ///
+    /// <para>⚠ Was hier NICHT gemacht wird: der Vorlauf wird nicht ausgefuehrt.
+    /// Er ruehrt auch Lagerplatz und Ausbaukosten an, das ist Wirtschaft und
+    /// nicht Import. Gelesen und angeboten, angewandt wird er anderswo.</para>
+    /// </summary>
+    private void LocateMissionStartLevel()
+    {
+        if (_startLevelTried) return;
+        _startLevelTried = true;
+        var (tva, text) = TextSection();
+        if (text.Length == 0) return;
+
+        // movsx eax, word ptr [imm32]   0f bf 05 ....
+        // mov   al,  byte ptr [eax*2 + imm32]   8a 04 45 ....
+        for (int i = 0; i + 14 < text.Length; i++)
+        {
+            if (text[i] != 0x0F || text[i + 1] != 0xBF || text[i + 2] != 0x05) continue;
+            if (text[i + 7] != 0x8A || text[i + 8] != 0x04 || text[i + 9] != 0x45) continue;
+            uint tab = BitConverter.ToUInt32(text, i + 10);
+            if (Offset(tab) < 0) continue;
+
+            // die Tabelle selbst beweist sich: 35 Woerter, jedes 1..9, nie
+            // fallend, und dahinter eine 0. Das trifft keine andere Stelle.
+            var raw = Read(tab, MissionSetupCount * 2 + 2);
+            if (raw.Length < MissionSetupCount * 2 + 2) continue;
+            bool ok = true;
+            int prev = 0;
+            for (int k = 0; k < MissionSetupCount && ok; k++)
+            {
+                int v = BitConverter.ToUInt16(raw, k * 2);
+                if (v < 1 || v > 9 || v < prev) ok = false;
+                prev = v;
+            }
+            if (!ok || BitConverter.ToUInt16(raw, MissionSetupCount * 2) != 0) continue;
+
+            // und die Routine muss die Zahl auch halbieren
+            bool shr = false;
+            for (int k = i; k < i + 0x40 && k + 1 < text.Length; k++)
+                if (text[k] == 0xD0 && text[k + 1] == 0xEA) { shr = true; break; }
+            if (!shr) continue;
+
+            MissionSetupTable = tab;
+            MissionSetupRoutine = (uint)(tva + i);
+            break;
+        }
+    }
+
+    public bool HasMissionStartLevel
+    {
+        get { LocateMissionStartLevel(); return MissionSetupTable != 0; }
+    }
+
+    /// <summary>Die Einstellung dieser Mission, oder −1 ausserhalb der Tabelle
+    /// (Netzkarten). Das ist die Rohzahl 1..9, nicht die Stufe.</summary>
+    public int MissionSetupValue(int mission)
+    {
+        if (!HasMissionStartLevel) return -1;
+        if (mission < 0 || mission >= MissionSetupCount) return -1;
+        var r = Read((uint)(MissionSetupTable + 2 * mission), 2);
+        return r.Length < 2 ? -1 : BitConverter.ToUInt16(r, 0);
+    }
+
+    /// <summary>Die Ausbaustufe, mit der die Fabriken und Minen dieser Mission
+    /// anfangen — <c>einstellung &gt;&gt; 1</c>, und damit zugleich die
+    /// Torkachel, die ihre Tuer 0 am Anfang zeigt. −1, wo die Tabelle nichts
+    /// sagt.</summary>
+    public int MissionStartLevel(int mission)
+    {
+        int v = MissionSetupValue(mission);
+        return v < 0 ? -1 : v >> 1;
+    }
+
+    /// <summary>Welche Ausbaustufe eine frische Gefechtspartie setzt: der
+    /// Aufbaustand <c>byte[0x540eb8]</c> ist dort 1, also Stufe 0.</summary>
+    public const int SkirmishStartLevel = 0;
 
     /// <summary>Which fill a building type gets. The branch a type jumps to is
     /// identified by which table read falls inside it — the branches lie one

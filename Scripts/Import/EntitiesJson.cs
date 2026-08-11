@@ -292,6 +292,11 @@ public static class EntitiesJson
             w.Num("speed", a.Speed).Num("hp", a.Hp).Num("payload", a.Payload);
             w.Num("airframe", a.Airframe).Num("attack", a.Attack).Num("defence", a.Defence);
             w.Num("sight", a.Sight).Num("ammo", a.Ammo).Num("fuel", a.Fuel);
+            // Preis in Waffen-/Fahrwerk-/Spezialteilen (+0x1F/+0x20/+0x21) — die
+            // drei Bytes, die `build_in_airport` @0x4BB3D0 gegen die Lager des
+            // Flughafens haelt. Ohne sie musste die KI die Kosten fest im Code
+            // fuehren, also fuer alle acht Spieler dieselben.
+            w.Num("cost_w", a.CostW).Num("cost_f", a.CostF).Num("cost_s", a.CostS);
             w.End();
         }
         w.End();
