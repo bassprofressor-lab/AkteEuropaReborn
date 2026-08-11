@@ -411,8 +411,192 @@ public partial class MapEntityLayer : Node2D
                        string.Join(",", NeutralPlayerList())
                      : "; OHNE campaign_diplomacy.json — es gilt die zurueckgezogene " +
                        "Basis-Regel"));
+        UnarmedProbeSetup(human);
         return human;
     }
+
+    // ---- Pruefstand »--unarmed-check« ---------------------------------------
+    //
+    // ⚠ WAS DIESER PRUEFSTAND SEHEN KANN UND WAS NICHT.
+    //
+    // Er kann sehen: ob ein Ausruestungstraeger in der Armee des Computers
+    // steht, ob ihm der Einheitendurchlauf ein ZIEL gibt und ob er sich darauf
+    // ZUBEWEGT. Genau das war die Meldung.
+    //
+    // Er kann NICHT von selbst zuschauen: auf map_01 stehen die drei
+    // Baufahrzeuge des Spielers 1 bei (16,6), (13,8) und (15,9), der Mensch
+    // hat eine einzige Einheit bei (4,39) — dreissig Felder weit weg. Ein
+    // Leerlauf meldet darum »0 feindlich im Ring«, und zwar auch mit dem
+    // Fehler drin. Der Pruefstand stellt deshalb EINE feindliche Einheit in
+    // den Suchring des ersten Baufahrzeugs; das ist genau die Lage, die der
+    // Spieler herstellt, wenn er nach Norden faehrt. Das Umsetzen ist eine
+    // Handlung DES HARNISCHS und steht nur unter diesem Schalter.
+    //
+    // Der Ring ist der von <see cref="AiRingTarget"/>: getroffen wird, was
+    // weiter weg steht als `far` und hoechstens `far + 1` — bei den drei
+    // Wagen (Reichweite +0x2b = 0, Sicht +0x2c = 6) also das Band (6, 7].
+    // Naeher heranstellen hilft nicht: der Durchlauf faengt erst da an, wo der
+    // normale Takt aufhoert.
+    private bool _unarmedCheck;
+    private string _unarmedProbe = "";
+    private readonly List<UnarmedWatch> _unarmedWatch = new();
+
+    private sealed class UnarmedWatch
+    {
+        public int Idx;
+        public int Slot, Part;
+        public Vector2I Start;
+        public bool GotTarget, GotPath, EverInArmy, Died;
+        public float MaxDist;
+    }
+
+    /// <summary>Den Schalter lesen — <see cref="Core.CommandLine"/>, damit der
+    /// Harnisch (MapViewer) dafuer nichts zu tun hat.</summary>
+    private static bool WantUnarmedCheck()
+    {
+        foreach (string a in Core.CommandLine.Args)
+            if (a == "--unarmed-check") return true;
+        return false;
+    }
+
+    private void UnarmedProbeSetup(int human)
+    {
+        _unarmedCheck = WantUnarmedCheck();
+        _unarmedWatch.Clear();
+        _unarmedProbe = "";
+        if (!_unarmedCheck || _nav == null) return;
+
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || !e.Mobile) continue;
+            if (e.Owner is < 0 or > 7 || e.Owner == human) continue;
+            if (!AiUnarmed(e)) continue;
+            _unarmedWatch.Add(new UnarmedWatch
+            {
+                Idx = i, Slot = e.Slot, Part = e.Weapon, Start = new Vector2I(e.Col, e.Row),
+            });
+        }
+        if (_unarmedWatch.Count == 0) { _unarmedProbe = "keine unbewaffnete Einheit auf der Karte"; return; }
+
+        // eine bewegliche Einheit des Menschen als Koeder
+        int probe = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || !e.Mobile || e.Owner != human) continue;
+            probe = i; break;
+        }
+        if (probe < 0) { _unarmedProbe = $"kein beweglicher Koeder bei Spieler {human}"; return; }
+
+        var w = _unarmedWatch[0];
+        var t = _entities[w.Idx];
+        int near = t.Range > 0 ? t.Range : Mathf.RoundToInt(RangeOf(t));
+        int far = t.Sight > near ? t.Sight : near + AiSightPad;
+        var p = _entities[probe];
+        var from = new Vector2I(p.Col, p.Row);
+
+        int bestC = -1, bestR = -1;
+        int r = far + 1;
+        for (int dy = -r; dy <= r && bestC < 0; dy++)
+        for (int dx = -r; dx <= r && bestC < 0; dx++)
+        {
+            float d = Mathf.Sqrt(dx * dx + dy * dy);
+            if (d <= far || d > far + 1) continue;      // genau das Band von AiRingTarget
+            int c = t.Col + dx, ro = t.Row + dy;
+            if (!_nav.InBounds(c, ro) || !_nav.IsFree(c, ro, p.Move, probe)) continue;
+            // ⚠ Und das Feld muss vom Baufahrzeug aus ERREICHBAR sein. Ohne
+            // diese Bedingung stellte der Harnisch den Koeder zwar in den
+            // Suchring, aber hinter unwegsames Gelaende: `AiSend` fand dann
+            // keinen Pfad, gab still auf, und der Pruefstand meldete »kein
+            // Ziel« AUCH MIT DEM FEHLER DRIN. Er haette den Fehler nicht
+            // sehen koennen. Gemessen am 11.08.2026: Koeder auf (20,1),
+            // 22 Aufrufe von `AiSend`, kein einziger Pfad.
+            var probePath = _nav.FindPath(new Vector2I(t.Col, t.Row), new Vector2I(c, ro),
+                                          t.Move, w.Idx);
+            if (probePath == null || probePath.Count == 0) continue;
+            bestC = c; bestR = ro;
+        }
+        if (bestC < 0) { _unarmedProbe = "kein erreichbares freies Feld im Suchring"; return; }
+
+        _nav.ClearOccupant(p.Col, p.Row, probe);
+        if (p.Reserved is { } rc) _nav.ClearOccupant(rc.X, rc.Y, probe);
+        p.Reserved = null;
+        p.Path = null;
+        p.Target = -1;
+        p.Orders.Clear();
+        p.Col = bestC; p.Row = bestR;
+        p.Elev = ElevOf(p.Col, p.Row);
+        p.Pos = CellCenter(p.Col, p.Row);
+        p.Footprint = CellRect(_ox, _oy, p.Col, p.Row, p.Elev);
+        _nav.SetOccupant(p.Col, p.Row, probe, p.Infantry >= 0);
+
+        _unarmedProbe = $"Koeder: Spieler {human}, Platz {p.Slot} von ({from.X},{from.Y}) " +
+                        $"nach ({bestC},{bestR}) gestellt — Ring des Platzes {w.Slot} " +
+                        $"bei ({t.Col},{t.Row}), Band ({far},{far + 1}]";
+        GD.Print("unarmed-check: " + _unarmedProbe);
+    }
+
+    /// <summary>Jeden Takt nachsehen, was aus den beobachteten Wagen geworden
+    /// ist. Absichtlich nicht nur »hat gerade ein Ziel«, sondern »hat je eines
+    /// bekommen« — ein Ziel kann in derselben Sekunde wieder verfallen.</summary>
+    private void UnarmedWatchTick()
+    {
+        if (!_unarmedCheck) return;
+        foreach (var w in _unarmedWatch)
+        {
+            if (w.Idx < 0 || w.Idx >= _entities.Count) continue;
+            var e = _entities[w.Idx];
+            if (e.Target >= 0) w.GotTarget = true;
+            if (e.Path != null) w.GotPath = true;
+            if (e.Dead) { w.Died = true; continue; }
+            // »war je in der Armee« statt »ist es am Ende«: mit dem Fehler drin
+            // faehrt der Wagen los und wird erschossen, und ein Toter steht in
+            // keiner Armee mehr — der Befund waere hinterher verschwunden.
+            if (!w.EverInArmy && ArmyOf(e.Owner).Contains(w.Idx)) w.EverInArmy = true;
+            float d = new Vector2(e.Col - w.Start.X, e.Row - w.Start.Y).Length();
+            if (d > w.MaxDist) w.MaxDist = d;
+        }
+    }
+
+    /// <summary>Der Befund. Steht in der Zeile, die der Harnisch bei
+    /// <c>--quit-after</c> ohnehin druckt.</summary>
+    public string AiUnarmedLine()
+    {
+        if (!_unarmedCheck) return "";
+        if (_unarmedWatch.Count == 0) return "unarmed-check: " + _unarmedProbe;
+        var parts = new List<string>();
+        int bad = 0;
+        foreach (var w in _unarmedWatch)
+        {
+            bool moved = w.MaxDist > 0.01f;
+            if (w.GotTarget || moved || w.EverInArmy) bad++;
+            parts.Add($"Platz {w.Slot} (Aufsatz {w.Part}, {AiPartName(w.Part)}) " +
+                      $"von ({w.Start.X},{w.Start.Y}): " +
+                      (w.GotTarget ? "ZIEL BEKOMMEN" : "kein Ziel") + ", " +
+                      (w.GotPath ? "PFAD BEKOMMEN" : "kein Pfad") + ", " +
+                      $"{(moved ? "GEFAHREN" : "steht")} {w.MaxDist:0.0} Felder; " +
+                      $"in der Armee: {(w.EverInArmy ? "JA" : "nein")}" +
+                      (w.Died ? "; unterwegs VERLOREN" : ""));
+        }
+        return $"unarmed-check: {_unarmedProbe}\nunarmed-check: {_unarmedWatch.Count} " +
+               $"unbewaffnete Einheiten, {bad} davon in der Armee, mit Ziel oder in Bewegung " +
+               (bad == 0 ? "— in Ordnung" : "— FEHLER") + "\n  " +
+               string.Join("\n  ", parts);
+    }
+
+    /// <summary>Der Name des Ausruestungsaufsatzes. Die Umrechnung ist die aus
+    /// sec47 (Entwurf +0x17 -> +0x2d), oben belegt; die Namen selbst stehen in
+    /// <c>component_stats.json</c>, Zeilen 65..79.</summary>
+    private static string AiPartName(int part) => part switch
+    {
+        40 => "Luftsauger",      41 => "Radar",             42 => "Minenraeumer",
+        43 => "Mechaniker",      44 => "Teleporter",        45 => "Fallenraeumer",
+        46 => "Transporter",     47 => "Gebaeude-Techniker", 48 => "Boden-Techniker",
+        49 => "Generatorenbauer", 50 => "Radarstab-Ausleger", 51 => "Antimagnetiker",
+        52 => "Antiradar",       53 => "Terranium-Finder",  54 => "Zielfokus",
+        _ => $"Aufsatz {part}",
+    };
 
     /// <summary>The slots this mission put out of play, for the status line.</summary>
     public static List<int> NeutralPlayerList()
@@ -598,8 +782,14 @@ public partial class MapEntityLayer : Node2D
         // haengt darum hier mit dran, statt einen neuen Aufruf dort zu brauchen.
         string sweep = AiUnitLine();
         string plan = parts.Count == 0 ? "" : "KI-Bauprogramm gebaut: " + string.Join("  ", parts);
-        return plan.Length > 0 && sweep.Length > 0 ? plan + "\n" + sweep
-             : plan.Length > 0 ? plan : sweep;
+        // und aus demselben Grund haengt der Pruefstand fuer die unbewaffneten
+        // Einheiten hier mit dran
+        string un = AiUnarmedLine();
+        var all = new List<string>();
+        if (plan.Length > 0) all.Add(plan);
+        if (sweep.Length > 0) all.Add(sweep);
+        if (un.Length > 0) all.Add(un);
+        return string.Join("\n", all);
     }
 
     /// <summary>Was der Einheitendurchlauf (ai_units @0x4BF4E0) getan hat —
@@ -620,6 +810,7 @@ public partial class MapEntityLayer : Node2D
 
     private void UpdateAi(float dt)
     {
+        UnarmedWatchTick();
         if (!_aiOn) return;
         foreach (var a in _ai)
         {
@@ -866,6 +1057,16 @@ public partial class MapEntityLayer : Node2D
             // the Civilian — correctly does not. Do not "fix" this by letting
             // every soldier through; that drags the civilians into the army.
             if (!CanFight(e)) continue;
+            // ⚠ 11.08.2026 — und hier fielen die BAUFAHRZEUGE durch. `CanFight`
+            // prueft `e.Weapon != 0`, und `e.Weapon` ist der AUFSATZ (+0x0c),
+            // nicht die Waffe: ein Gebaeude-Techniker traegt dort die 47, ein
+            // Boden-Techniker die 48 — beide ungleich 0, beide also »kampf-
+            // faehig«. Damit standen sie in der Armee, der Einheitendurchlauf
+            // hat sie angefasst und `AiSend` ist mit ihnen losgefahren. Das
+            // Original haette sie nie angefasst: ihr +0x0d ist 0 (siehe
+            // <see cref="AiUnarmed"/>), und ohne Waffe koennen sie ohnehin
+            // nichts ausrichten.
+            if (AiUnarmed(e)) continue;
             l.Add(i);
         }
         return l;
@@ -1372,6 +1573,62 @@ public partial class MapEntityLayer : Node2D
     /// Landeinheit sucht sich nie ein Schiff und umgekehrt.</summary>
     private const int AiInfantryClass = 1;
 
+    // ---- »hat Waffe / hat keine« --------------------------------------------
+    //
+    // ⚠ 11.08.2026, gemeldet als »in der Kampagne 1 gibt es 3 Fahrzeuge, sieht
+    // aus als haetten die einen Bauturm drauf. Die fahren dann auch aggressiv
+    // auf einen zu als wuerden sie einen angreifen«. Es sind auf map_01 die
+    // Plaetze 1019/1021 (Aufsatz 47) und 1020 (Aufsatz 48) des Spielers 1.
+    //
+    // <b>Das Spiel unterscheidet »bewaffnet« selbst, und zwar an +0x0d.</b>
+    // Zwei Fundstellen, auf BEIDEN Fassungen nach der Form wiedergefunden
+    // (Werkzeug: `aekernel-tools/ai_unarmed.py`, das alles hier Behauptete
+    // noch einmal aus den EXE und den Karten nachrechnet):
+    //
+    //   * die WEICHE beim Aufstellen, @0x4B1B6E (C:) / @0x4B14AA (F:):
+    //         cmp cl, 0x32          ; cl = Entwurf +0x17, die WAFFENZEILE
+    //         jb  <unten>
+    //         mov byte [u+0x0d], 0  ; Zeile >= 50  -> KEINE Waffe,
+    //         mov byte [u+0x0e], cl ;                die Zeile geht nach +0x0e
+    //       <unten>
+    //         mov byte [u+0x0d], al ; Zeile <  50  -> die Waffe steht in +0x0d
+    //         mov byte [u+0x0e], 0
+    //     Die Waffenzeilen 1..19 sind die Geschuetze, 65..79 die AUSRUESTUNG
+    //     (Teleporter, Transport, Radar, Mechaniker, G-/B-Techniker …) und
+    //     185..199 die Handwaffen — nur die erste Gruppe liegt unter 50.
+    //
+    //   * der EINHEITENTAKT @0x40DDF0..0x40DE20 (C:) / @0x40DC20..0x40DC4A (F:):
+    //         mov al, [u+0x0d]  ;  cmp al, 8 ; je …
+    //         mov cl, [u+0x0c]  ;  cmp cl, 0x26 ; jne …   (Flak-Sonderfall)
+    //         mov [esp+0x12], al ; test al, al ; jne <KAMPFBLOCK>
+    //     Wer in +0x0d eine Null stehen hat, kommt gar nicht erst in den
+    //     Kampfblock. +0x0d IST die Fahne »bewaffnet«.
+    //
+    // <b>Warum wir sie am AUFSATZ +0x0c ablesen und nicht an +0x0d:</b> unser
+    // <c>Entity</c> traegt +0x0d nicht (der Kartenleser in MapEntityLayer liest
+    // die Zeile nicht mit). Die Umrechnung ist aber vollstaendig und belegt —
+    // sec47, Entwurf +0x2d ist der Aufsatz, den das Aufstellen nach +0x0c
+    // schreibt (@0x4B1B38/@0x4B1B50), und ueber alle 586 Entwuerfe gilt ohne
+    // Ausnahme:
+    //         Waffenzeile   1..19  ->  Aufsatz 21..39   (Zeile + 20)
+    //         Ausruestung  65..79  ->  Aufsatz 40..54
+    //         Handwaffe   185..199 ->  Aufsatz  0
+    // Gegenprobe an den Karten selbst, alle 30 map_*.entities.json, kein
+    // Gegenbeispiel: jede Einheit mit Aufsatz 21..39 traegt +0x0d = Waffenzeile
+    // und +0x0e = 0; jede mit Aufsatz 40..52 traegt <b>+0x0d = 0</b> und
+    // +0x0e = 66..77. Dieselben 218 Einheiten haben Angriff (+0x26) = 0,
+    // Reichweite (+0x2b) = 0 und Munition 0/0 — auch daran ist keine bewaffnet.
+    // Aufsatz 61 (2 Einheiten, +0x0d = 139) liegt bewusst AUSSERHALB des
+    // Bandes: der ist bewaffnet (Angriff 30, Reichweite 15).
+    private const int AiEquipPartFirst = 40;   // Ausruestung 65 -> Aufsatz 44 … Band 40..54
+    private const int AiEquipPartLast = 54;
+
+    /// <summary>Eine Einheit, die einen AUSRUESTUNGSAUFSATZ traegt statt einer
+    /// Waffe — im Original die mit <c>+0x0d == 0</c>. Siehe den Block ueber
+    /// <see cref="AiEquipPartFirst"/> fuer die beiden Fundstellen.</summary>
+    private static bool AiUnarmed(Entity e)
+        => e.Weapon >= AiEquipPartFirst && e.Weapon <= AiEquipPartLast;
+
     /// <summary>
     /// <b>`ai_units(spieler, block)` @0x4BF4E0 — GELESEN.</b>
     ///
@@ -1729,6 +1986,12 @@ public partial class MapEntityLayer : Node2D
         var t = _entities[target];
         if (e.Dead || !e.Mobile || e.DugIn) return;
         if (e.FuelMax > 0 && e.Fuel <= 0) return;       // dry, same as for the player
+        // Zweiter Riegel, unabhaengig von <see cref="ArmyOf"/>: ein
+        // Ausruestungstraeger bekommt ueberhaupt kein Angriffsziel. `AiSend`
+        // wird auch aus <see cref="AiMissionAttack"/> und <see cref="AiFight"/>
+        // heraus gerufen; steht die Regel nur in `ArmyOf`, faellt sie beim
+        // naechsten neuen Aufrufer wieder auf.
+        if (AiUnarmed(e)) return;
 
         if (CanFight(e) && CellDistance(e, t) <= WeaponOf(e.Weapon).RangeTiles)
         {
