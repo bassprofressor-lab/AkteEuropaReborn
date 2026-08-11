@@ -70,6 +70,37 @@ public partial class MapEntityLayer : Node2D
         public Rect2 Footprint;
         public bool IsProp;        // true = generic grid prop (no owner/hp)
         public bool IsBuilding;    // true = a sec3 building (drawn into the map)
+
+        /// <summary>
+        /// Der Satz steht in der Gebaeudetabelle, aber es steht KEIN BAUWERK
+        /// darauf: sein Typ liegt ausserhalb 1..16.
+        ///
+        /// <para>⚠ 11.08.2026 — gemeldet als »in Kampagne 2 ist INIT7 Typ 0
+        /// immer noch ein Basisgebaeude in der Stadt«. Auf map_02 tragen sieben
+        /// der elf Saetze Typen ausserhalb der Namentabelle (0x4FDCC4, 16
+        /// Eintraege zu 20 Byte): dreimal 51 mit Terranium 10, je einmal 22, 25
+        /// und 26 mit Terranium 100 — das sind VORKOMMEN — und Platz 7 mit
+        /// Typ 0.
+        ///
+        /// <b>Typ 0 heisst im Original woertlich »kein Gebaeude«.</b>
+        /// <c>obj_owner(platz)</c> @0x4D076D:</para>
+        /// <code>
+        ///   ecx = platz * 19
+        ///   bl  = byte[ecx*4 + 0xC06914]     ; Satz +0x00
+        ///   if (bl == 0) return 0x0C         ; 12 = kein Gebaeude
+        ///   return byte[ecx*4 + 0xC06915]    ; +0x01 = Besitzer
+        /// </code>
+        /// <para>Satz +0x00 ist der TYP — dieselbe Stelle prueft
+        /// <c>find_base</c> mit <c>cmp byte[76*i + 0xC06914], 1</c> auf »ist
+        /// das eine Basis«. Ein Satz mit Typ 0 existiert also nicht.
+        ///
+        /// Die Saetze bleiben trotzdem in der Liste, denn die Missionsskripte
+        /// fragen sie ab: <c>obj_owner</c> muss fuer Platz 4 weiterhin 255
+        /// antworten (Typ 51, ungleich 0) und fuer Platz 7 die 12. Sie werden
+        /// nur nicht mehr GEZEICHNET, nicht mehr ANGEWAEHLT und nicht mehr
+        /// mitgezaehlt.</para>
+        /// </summary>
+        public bool NoStructure;
         public string Name = "";   // base name for buildings ("Bolougne")
         public int BType;          // building type (1-based into building_types.json)
         public int StockW, StockF, StockS;  // stored Waffen / Fahrwerk / Spezial parts
@@ -955,7 +986,8 @@ public partial class MapEntityLayer : Node2D
         UpdatePanel();
         var census = _nav.Census();
         GD.Print($"MapEntityLayer: {_entities.Count} entities, {_markers.Count} markers, " +
-                 $"{_entities.FindAll(x => x.IsBuilding).Count} buildings ({_source}); " +
+                 $"{_entities.FindAll(x => x.IsBuilding && !x.NoStructure).Count} Gebaeude " +
+                 $"(+{_entities.FindAll(x => x.NoStructure).Count} Skriptplaetze ohne Bauwerk) ({_source}); " +
                  $"nav {_nav.Width}x{_nav.Height} " +
                  $"frei {census.Free} / grob {census.Rough} / wasser {census.Water} / " +
                  $"gesperrt {census.Blocked}" +
@@ -1201,6 +1233,10 @@ public partial class MapEntityLayer : Node2D
                 // ist immer links von den Gebaeuden ein kleines Feld". The size
                 // comes from the tileset patterns, the same place the fog and
                 // the doors read it from.
+                // Gueltige Gebaeudetypen sind 1..16 — soviele Eintraege hat
+                // die Namentabelle 0x4FDCC4 (16 zu 20 Byte). Alles andere ist
+                // ein Skriptplatz oder ein Vorkommen und kein Bauwerk.
+                bld.NoStructure = bld.BType is < 1 or > 16;
                 var foot = BuildingFootprint(bld.BType);
                 bld.FootW = foot.X;
                 bld.FootH = foot.Y;
@@ -2086,7 +2122,7 @@ public partial class MapEntityLayer : Node2D
         {
             _buildingOrder = new List<Entity>();
             foreach (var e in _entities)
-                if (e.IsBuilding && !e.IsProp) _buildingOrder.Add(e);
+                if (e.IsBuilding && !e.IsProp && !e.NoStructure) _buildingOrder.Add(e);
             _buildingOrder.Sort((a, b) => a.Row != b.Row ? a.Row - b.Row : a.Col - b.Col);
             _buildingOrderStamp = _entities.Count;
         }
@@ -4647,7 +4683,13 @@ public partial class MapEntityLayer : Node2D
                 {
                     foreach (var e in _entities)
                         if (e.IsBuilding && e.Slot == slot)
-                            return e.Dead ? 12                 // 12 = leer, wie im Original
+                            // obj_owner @0x4D076D, woertlich: TYP null (Satz
+                            // +0x00) -> 12, sonst der Besitzer (+0x01). Ein
+                            // Satz ohne Bauwerk (NoStructure) antwortet also
+                            // NICHT pauschal 12 — Platz 4 auf map_02 hat Typ 51
+                            // und muss weiter 255 melden, nur Platz 7 mit Typ 0
+                            // meldet 12.
+                            return e.BType == 0 || e.Dead ? 12
                                  : e.Owner is >= 0 and <= 7 ? e.Owner
                                  : 255;                        // herrenlos, als Byte
                     return 12;
@@ -10374,7 +10416,9 @@ public partial class MapEntityLayer : Node2D
     {
         int best = -1, bestRow = int.MinValue;
         for (int i = 0; i < _entities.Count; i++)
-            if (!_entities[i].Dead &&
+            // NoStructure: der Satz existiert fuer die Skripte, aber nicht auf
+            // dem Bildschirm — er darf sich auch nicht anwaehlen lassen.
+            if (!_entities[i].Dead && !_entities[i].NoStructure &&
                 BodyRect(_entities[i]).HasPoint(p) && _entities[i].Row > bestRow)
             { best = i; bestRow = _entities[i].Row; }
         return best;
