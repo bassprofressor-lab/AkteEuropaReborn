@@ -174,11 +174,58 @@ public sealed class BuildingPatterns : IBuildingPatterns
     // types that jump into the empty branch are exactly the five the stat table
     // gives 0 doors — two tables read apart, no contradiction.
 
-    /// <summary>Door tile number per building type, or 0 for a type with no
-    /// door of its own. The three factories (2..4) pick per door index and take
-    /// door 0 from a table via <c>byte[+0x19]</c>; Mine and Feld-Rohstoffmine
-    /// read theirs from the table at 0x878ad5. Those four are left at 0 here
-    /// because their number is not a constant.</summary>
+    // ---- DIE TORKACHEL EINES INDUSTRIEBAUS IST SEINE AUSBAUSTUFE ----------
+    //
+    // ⭐ Gelesen 10.08.2026, `aekernel-tools/gate_re.py`, auf BEIDEN GAME.EXE
+    // ueber die Form gefunden (aekernel 0x42B298 / F: 0x42A485, Sprungtabelle
+    // 0x42BDD8 / 0x42AFC4, Gebaeudesatz 0xC06910 / 0xC05970).
+    //
+    // Die fuenf Typen, die keine Konstante nehmen, lesen ein einziges Byte:
+    //
+    //     Fabrik (2,3,4), Tuer 0:  bl = byte[0x87A2C0 + cis_typ*14 + 0x05]
+    //     Mine (10) und Feld-Rohstoffmine (15):
+    //                              bl = byte[0x878AD0 + cis_typ*18 + 0x05]
+    //
+    // und diese beiden Platten SIND die Kartenabschnitte 24 und 28 — der Lader
+    // legt sec24 (0x2bc = 50x14) nach 0x87A2C0 und sec28 (0x384 = 50x18) nach
+    // 0x878AD0, dieselben Grenzen, die der Platzsucher @0x43BA91 bzw. @0x43BC26
+    // ablaeuft.
+    //
+    // ⚠ Damit ist die Notiz vom 07./08.08. ("die Tabelle 0x87a2c5 ist im
+    // Speicherabbild leer, das Tor muss warten") ZURUECKGEZOGEN: die Adresse
+    // stimmte, die Deutung fehlte. Und die Gegenkorrektur ("0x87a2c5 ist die
+    // Produktionsgeschwindigkeit, also keine Kachel") ist ebenfalls zu eng —
+    // es ist BEIDES, weil das Feld die AUSBAUSTUFE ist:
+    //
+    //   * der Produktionsschritt @0x43DF67 nimmt es als Index in eine
+    //     Periodentabelle mit ZEHN Eintraegen (Fabrik 0x4FACA0 =
+    //     256,170,114,76,50,33,22,15,10,8 · Mine 0x4FACB8 =
+    //     85,58,38,25,16,11,7,5,3,2 — je Stufe rund ein Drittel schneller),
+    //   * die Produktionserweiterung zaehlt es mit `inc byte[+0x05]` hoch
+    //     (@0x43E172 / @0x43E846) und multipliziert die Kosten mit 3/2,
+    //   * sie deckelt bei NEUN (@0x44AE42 `cmp cl, 9` → "Sie haben bereits den
+    //     Maximalwert erreicht.", 0x4FC280),
+    //   * das Panel druckt es als Zahl ("mine speed:", 0x4FAE20, @0x43E5BB).
+    //
+    // ⭐ Und die Bilder sagen es selbst: die Tore 0..9 der Folge 301 tragen
+    // ihre Nummer AUFGEMALT — 00, 01, ... 09 (siehe Effects/door/f00..f39).
+    // Die Rechnung schliesst damit vollstaendig: 10 veraenderliche Tore
+    // (Stufe 0..9) + 9 feste (10..18) = 19, mal 4 Phasen = 76 Rahmen, genau
+    // die Laenge der Folge.
+    //
+    // Gegenprobe ueber alle 23 .CWM (gate_re.py --maps): 258 belegte
+    // sec24-Saetze tragen samt und sonders 5, 59 belegte sec28-Saetze samt und
+    // sonders 4 — genau die Vorgaben, die der Platzsucher setzt (Fabrik 5,
+    // Mine 4). Kein einziger Wert liegt ausserhalb 0..9, es gibt also nie eine
+    // Kollision mit den festen Kacheln 10..18.
+
+    /// <summary>Die feste Torkachel eines Typs, oder −1 fuer einen Typ, der
+    /// seine Kachel aus der Ausbaustufe zieht, bzw. 0 fuer einen ohne Tor.
+    ///
+    /// <para>Alle neun Konstanten stehen im Sprungziel des Typs und sind auf
+    /// beiden GAME.EXE Zeichen fuer Zeichen gleich. Die fuenf Typen 7, 8, 11,
+    /// 13 und 14 springen auf den Sammelpunkt und setzen gar nichts — es sind
+    /// genau die fuenf, denen die Statistik 0 Tueren gibt.</para></summary>
     public static int DoorTile(int typ, int door = 0) => typ switch
     {
         1 => 10,      // Basis
@@ -188,17 +235,26 @@ public sealed class BuildingPatterns : IBuildingPatterns
         12 => 18,     // Feldbahnhof
         16 => 16,     // Werft-Station (then `shl bl,2` and a special case)
 
-        // The three factories carry TWO doors and branch on the door index
-        // (@0x42B2B0, @0x42B2D1, @0x42B2F2 — all three built the same way):
-        // door 1 is a constant, door 0 comes from the table at 0x87a2c5,
-        // indexed `byte[+0x19] * 14`. That table is filled at run time, so
-        // door 0 has to wait; door 1 we can draw today.
-        2 => door == 1 ? 14 : 0,      // Waffen-Fabrik
-        3 => door == 1 ? 15 : 0,      // Fahrwerk-Fabrik
-        4 => door == 1 ? 11 : 0,      // Spezial-Fabrik
+        // Die drei Fabriken tragen ZWEI Tore und verzweigen ueber den
+        // Tuerindex (@0x42B2B0, @0x42B2D1, @0x42B2F2, alle drei gleich gebaut):
+        // Tuer 1 ist eine Konstante, Tuer 0 ist die Ausbaustufe.
+        2 => door == 1 ? 14 : -1,     // Waffen-Fabrik
+        3 => door == 1 ? 15 : -1,     // Fahrwerk-Fabrik
+        4 => door == 1 ? 11 : -1,     // Spezial-Fabrik
 
-        _ => 0,       // 7,8,11,13,14 have none; 10 and 15 read table 0x878ad5
+        10 or 15 => -1,               // Mine und Feld-Rohstoffmine: Ausbaustufe
+
+        _ => 0,       // 7, 8, 11, 13, 14 haben kein Tor
     };
+
+    /// <summary>Ob die Torkachel dieses Tores die Ausbaustufe ist.</summary>
+    public static bool DoorTileIsLevel(int typ, int door = 0)
+        => DoorTile(typ, door) < 0;
+
+    /// <summary>Die hoechste Ausbaustufe — der Deckel der Erweiterung
+    /// (@0x44AE42 <c>cmp cl, 9</c>), und zugleich die hoechste veraenderliche
+    /// Torkachel.</summary>
+    public const int MaxLevel = 9;
 
     /// <summary>A door has four animation phases — 0 shut, 3 open.</summary>
     public const int DoorPhases = 4;
@@ -222,8 +278,9 @@ public sealed class BuildingPatterns : IBuildingPatterns
     // DoorTile) and own no animation row at all — which the earlier note would
     // have had to explain and did not.
     //
-    // The door of a factory therefore still hangs on the run-time table at
-    // 0x87a2c5, indexed byte[+0x19], exactly where it hung before.
+    // ⚠ Der Schlusssatz dieser Notiz ("das Tor einer Fabrik haengt weiterhin an
+    // der Laufzeittabelle 0x87a2c5") ist am 10.08.2026 aufgeloest: 0x87a2c5 ist
+    // sec24 +0x05, die AUSBAUSTUFE, und sie IST die Torkachel. Siehe oben.
 
     /// <summary>
     /// Which of the exported door pictures a type shows in a given phase.
@@ -240,13 +297,28 @@ public sealed class BuildingPatterns : IBuildingPatterns
     /// 19 doors × 4 phases</b>, and the highest tile the jump table hands out
     /// is 18 — 18*4+3 = 75, exactly the last frame.</para>
     ///
-    /// <para>Returns -1 for a type with no door, and for the four types whose
-    /// tile is not a constant (the three factories and the two mines).</para>
+    /// <para><paramref name="level"/> ist die Ausbaustufe des Gebaeudes
+    /// (sec24 bzw. sec28 <c>+0x05</c>) und wird nur von den fuenf Typen
+    /// gebraucht, deren Kachel keine Konstante ist — Fabrik 2/3/4 an Tuer 0
+    /// sowie Mine 10 und Feld-Rohstoffmine 15. Fuer alle anderen ist der Wert
+    /// gleichgueltig.</para>
+    ///
+    /// <para>Gibt −1 zurueck fuer einen Typ ohne Tor. Ein Typ, dessen Kachel
+    /// die Ausbaustufe ist, liefert nur dann −1, wenn <paramref name="level"/>
+    /// negativ ist — also wenn der Aufrufer die Stufe gar nicht kennt.</para>
     /// </summary>
-    public static int DoorPicture(int typ, int phase, int door = 0)
+    public static int DoorPicture(int typ, int phase, int door = 0, int level = -1)
     {
         int tile = DoorTile(typ, door);
-        if (tile == 0) return -1;
+        if (tile < 0)
+        {
+            if (level < 0) return -1;              // Stufe unbekannt
+            tile = Mathf.Clamp(level, 0, MaxLevel);
+        }
+        else if (tile == 0)
+        {
+            return -1;                             // dieser Typ hat kein Tor
+        }
         return tile * DoorPhases + Mathf.Clamp(phase, 0, DoorPhases - 1);
     }
 
@@ -263,6 +335,18 @@ public sealed class BuildingPatterns : IBuildingPatterns
     /// <c>"try to draw nonexisting frame of building"</c> @0x539630. So a type's
     /// <c>PatternCount</c> patterns are its FRAMES, and the drawn pattern is
     /// <c>FirstPattern + frame</c>.</para>
+    ///
+    /// <para>⚠ BERICHTIGT 10.08.2026 — die Formel darunter stand mit gemischten
+    /// Satzanfängen da (<c>+0x26</c> / <c>+0x16</c> gegen einen gedachten Anfang
+    /// 0xC06900, das Bildbyte aber gegen 0xC06910). Der Satz beginnt bei
+    /// <b>0xC06910</b>, der spieleigene Debug-Auszug läuft nur ab +4. Richtig
+    /// heisst sie <c>(word[+0x16] − word[+0x06]) / (word[+0x16] / count)</c>,
+    /// und die beiden Wörter sind <b>hp_max</b> und <b>hp</b>: beide werden beim
+    /// Anlegen aus der Typtabelle 0x539DB8 gesetzt, und hp_max hat in der ganzen
+    /// EXE genau <b>zwei</b> Schreibstellen, beide dort. Es ist also keine
+    /// Bauzeit, sondern eine Konstante je Typ — das Bild ist die
+    /// <b>Schadensstufe</b>. Gezeichnet wird in <c>MapEntityLayer.DamageFrame</c>.
+    /// </para>
     ///
     /// <para>The frame is set @0x4CBBF0:
     /// <c>frame = (word[+0x26] − word[+0x16]) · count / word[+0x26]</c> — a
@@ -330,7 +414,23 @@ public sealed class BuildingPatterns : IBuildingPatterns
         {
             var bt = cwp.GetBuildingType(typ);
             if (bt.IsEmpty) continue;
-            foreach (int pat in new[] { bt.FirstPattern, RuinPattern(cwp, typ) })
+            // ⚠ CORRECTED 10.08.2026 — hier standen nur `FirstPattern` und die
+            // Ruine. Seit die Engine die SCHADENSSTUFEN zeichnet (die mittleren
+            // Muster, übereinandergestempelt — siehe MapEntityLayer.DamageFrame)
+            // reicht das nicht mehr: die Auflagen eines NICHT baubaren Typs
+            // fehlten im Atlas und wurden **still nicht gezeichnet**. Gemessen:
+            // 1295 von 1465 Auflagen animierter Typen fehlten, auf map_11 alle
+            // 55 und auf map_14 alle 67 — eine beschädigte Fabrik zeigte nur
+            // ihren Lebensbalken. `--damage-check` sah es nicht, weil es aus der
+            // JSON zählt und nicht aus dem Atlas.
+            //
+            // Die Auflagen sind Einzelkacheln (1 bis 7 je Muster), der Atlas
+            // wächst dadurch wenig: es sind grossenteils dieselben Kacheln, die
+            // das Grundbild schon mitbringt.
+            var wanted = new List<int>();
+            for (int k = 0; k < bt.PatternCount; k++) wanted.Add(bt.FirstPattern + k);
+            wanted.Add(RuinPattern(cwp, typ));
+            foreach (int pat in wanted)
             {
                 if (pat < 0) continue;
                 for (int x = 0; x < CwpFile.PatternWidth; x++)
@@ -365,17 +465,50 @@ public sealed class BuildingPatterns : IBuildingPatterns
         }
         if (frames.Count == 0) return (null, "");
 
-        int aw = 0, ah = 0;
-        foreach (var (_, f) in frames) { aw = Math.Max(aw, f.Width); ah += f.Height; }
+        // ⚠ SPALTEN, nicht EINE Spalte (11.08.2026). Bis hierher wurde jede
+        // Kachel unter die vorige gelegt, der Atlas war 40 px breit und beliebig
+        // hoch. Das ging, solange nur Grundbild und Ruine drin waren. Seit der
+        // Korrektur von gestern (ALLE Muster, siehe oben) wuchs die Spalte auf
+        // bis zu 84.775 px — und eine 2D-Textur darf auf dieser Karte 16.384
+        // hoch sein. Godot lehnte sie ab:
+        //   ERROR: Texture dimensions exceed device maximum. (texture_create)
+        //   ERROR: Condition "texture.rd_texture.is_null()" is true.
+        // Danach zeichnete MapEntityLayer.PatternTexture() mit einer toten RID,
+        // und ein Gebäude war WEISS. Gemessen: 30 von 35 Atlanten lagen über der
+        // Grenze; heil blieben nur die Kachelsätze 1, 3, 5, 6 und 28 — weshalb
+        // ausgerechnet Mission 1 in Ordnung aussah und alles ab Mission 2 nicht.
+        //
+        // Die Kachelzahl bleibt dieselbe, sie liegt nur anders: eine Spalte wird
+        // bei <see cref="AtlasColumnHeight"/> umgebrochen und die nächste rechts
+        // daneben begonnen. Der Leser kannte die x-Spalte längst
+        // (<see cref="LoadAtlas"/> liest a[0]) — sie war nur immer 0.
+        int colW = 0;
+        foreach (var (_, f) in frames) colW = Math.Max(colW, f.Width);
+
+        var placed = new List<(int Code, CwpFile.Frame F, int X, int Y)>(frames.Count);
+        int cx = 0, cy = 0, aw = 0, ah = 0;
+        foreach (var (code, f) in frames)
+        {
+            // eine Kachel wird nie zerschnitten: passt sie nicht mehr, fängt die
+            // nächste Spalte an. Eine einzelne Kachel höher als die Spalte gibt
+            // es nicht (die höchste ist 32 px), aber cy > 0 hält auch den Fall
+            // sauber, statt eine leere Spalte zu erzeugen
+            if (cy > 0 && cy + f.Height > AtlasColumnHeight) { cx += colW; cy = 0; }
+            placed.Add((code, f, cx, cy));
+            cy += f.Height;
+            aw = Math.Max(aw, cx + f.Width);
+            ah = Math.Max(ah, cy);
+        }
         var img = Image.CreateEmpty(aw, ah, false, Image.Format.Rgba8);
 
         var sb = new StringBuilder();
         sb.Append("{\"_note\":\"object tiles of the buildable types, so a raised ");
         sb.Append("building can be stamped into the baked map picture the way the ");
         sb.Append("original stamps its tiles into the map\",\"tileset\":").Append(tileset);
+        sb.Append(",\"columns\":").Append(AtlasColumnHeight);
         sb.Append(",\"tiles\":{");
-        int at = 0; bool first = true;
-        foreach (var (code, f) in frames)
+        bool first = true;
+        foreach (var (code, f, px, py) in placed)
         {
             for (int y = 0; y < f.Height; y++)
                 for (int x = 0; x < f.Width; x++)
@@ -383,16 +516,22 @@ public sealed class BuildingPatterns : IBuildingPatterns
                     int i = y * f.Width + x;
                     if (!f.Opaque[i]) continue;
                     byte p = f.Pixels[i];
-                    img.SetPixel(x, at + y, Color.Color8(pal.R[p], pal.G[p], pal.B[p]));
+                    img.SetPixel(px + x, py + y, Color.Color8(pal.R[p], pal.G[p], pal.B[p]));
                 }
             if (!first) sb.Append(',');
             first = false;
-            sb.Append($"\"{code}\":[0,{at},{f.Width},{f.Height},{f.YOffset}]");
-            at += f.Height;
+            sb.Append($"\"{code}\":[{px},{py},{f.Width},{f.Height},{f.YOffset}]");
         }
         sb.Append("}}");
         return (img, sb.ToString());
     }
+
+    /// <summary>Wo eine Atlasspalte umbricht. Reichlich unter der Höchstgröße
+    /// einer 2D-Textur (16.384 auf der hier gemessenen Karte, und das ist die
+    /// übliche Untergrenze), damit auch der größte Kachelsatz in beide
+    /// Richtungen Luft hat: 84.775 px Kacheln ergeben so 21 Spalten à 4.096,
+    /// also 840 × 4.096 statt 40 × 84.775.</summary>
+    public const int AtlasColumnHeight = 4096;
 
     /// <summary>Reads the atlas written by <see cref="WriteAtlas"/>.</summary>
     public void LoadAtlas(GDict d, Image? png)
