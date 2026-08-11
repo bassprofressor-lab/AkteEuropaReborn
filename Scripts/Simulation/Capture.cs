@@ -68,6 +68,48 @@ namespace AkteEuropaReborn.Rendering;
 /// <c>shipre.py xref</c>, the raw dword scan: <c>disx2.py xref</c> reported one
 /// single reference to +0x3a and the raw scan found twelve. Rule 7, again.</para></item>
 ///
+/// <item><b>An ALLY takes too — and that is the original.</b> Read
+/// 10.08.2026, after the engine was seen letting player 1 take back and then
+/// destroy the factories player 0 had just handed him while the two were
+/// allied. The suspicion was that the test above is too narrow. It is not.
+/// <para>The alliance matrix is <c>byte[BASE + a*40 + b]</c> — the alliance ROW
+/// sits at +0x15 of the 40-byte player plate, so the stride is 40, not 8; the
+/// writer <c>set_relation</c> shows it in one breath: <c>lea eax,[edx+edx*4]</c>
+/// then <c>mov byte [ebx+eax*8+BASE], cl</c> and the mirrored pair. BASE is
+/// 0x87b155 in the aekernel EXE and 0x87a1b5 in the F: one, and neither address
+/// is assumed here: <c>capture_re.py</c> finds them by that FORM (opcode 0x88,
+/// modrm mod=10/rm=100, SIB scale *8) and exactly one displacement in the data
+/// range carries it in each file.</para>
+/// <para><b>The building tick never reads that matrix.</b> A raw dword scan
+/// over the whole 8×40 plate range finds <b>207</b> occurrences in .text of the
+/// aekernel EXE and <b>205</b> in the F: one — and <b>0 of them, in either
+/// file, lie inside the capture routine</b> (0x43CA50..0x43ED34 there,
+/// 0x43BAF0..0x43DD4C here; the F: address comes from the fingerprint, not from
+/// arithmetic). The only two touches of a player plate anywhere in the routine
+/// are <c>byte[plate+0x00]</c> at @0x43CFF8 / @0x43DB7F, which is the parts
+/// bonus gate below, not a relation.</para>
+/// <para>And the test itself is plain equality, the same instructions in both
+/// files: aekernel @0x43CC15 <c>mov al, byte[esi+0xc06915]</c> (the owner) /
+/// @0x43CC21 <c>cmp eax, edi</c> / @0x43CC23 <c>je 0x43d265</c>; F:
+/// @0x43BCB5 / @0x43BCC1 / @0x43BCC3 <c>je 0x43c28c</c>. The gate before it
+/// (<c>cmp ax, 0x1f40</c>) only asks that the imap cell hold a UNIT slot, and
+/// all 8 players' slots are below 8000. So there is no step before that sorts
+/// allied units out either — nobody issues a "capture" order at all; a unit
+/// simply stands on a tile and the building's own tick notices.</para>
+/// <para><b>So the observation is withdrawn, and the narrow test stays.</b>
+/// Widening it to <c>Allied(u.Owner, b.Owner)</c> would be OUR rule, not the
+/// game's. <c>--capture-check</c> now drives the allied case on purpose and
+/// prints what happened, so this does not have to be argued again.</para>
+/// <para>⚠ What this does NOT settle, and it is where the reported game went
+/// wrong: whether the computer player should <i>choose</i> an ally's building.
+/// <c>SkirmishAi.AiGrab</c> picks its prize with the same equality test
+/// (<c>b.Owner == a.Player</c>), so it walks to an ally's door of its own
+/// accord. The original's AI round has 21 sub-tasks and none of them names
+/// itself for taking buildings; its unit scan <c>ai_units</c> does skip allies
+/// explicitly (<c>byte[BASE + 40*player + slot/1000] != 0 -> next</c>), which
+/// shows the AI asks the matrix where the tick does not. Deciding that is
+/// SkirmishAi.cs's business, not this file's.</item>
+///
 /// <item><b>While it runs:</b> sound 132 and "Ihre Basis wird besetzt" (the
 /// string family 0x4faef8 + n·0x64, picked by type through 0x43ebec/0x43ebd0 —
 /// only types 1, 2, 3, 4, 9 and 16 say anything), and only to the owner
@@ -218,6 +260,12 @@ public partial class MapEntityLayer : Node2D
         foreach (var cell in CaptureWatchCells(b))
         {
             int p = StanderAt(cell);
+            // "meins" — NICHT "befreundet". Das ist das Original und keine
+            // Nachlaessigkeit: die Einnahme-Routine fragt die Buendnismatrix
+            // ueberhaupt nicht (0 von 207 bzw. 0 von 205 Vorkommen liegen in
+            // ihr, siehe Klassenkopf), und ihr einziger Eignertest ist derselbe
+            // Gleichheitsvergleich @0x43CC21 / F: @0x43BCC1. Ein Verbuendeter
+            // nimmt also auch ein. `--capture-check` faehrt den Fall vor.
             if (p >= 0 && p != b.Owner) { who = p; onFront = (n % 2) == 0; break; }
             n++;
         }
@@ -519,7 +567,85 @@ public partial class MapEntityLayer : Node2D
         sb.Append($"   -> Besitzer {(b.Owner != ownerBefore ? "GEWECHSELT" : "unveraendert")}, " +
                   $"eigener Fortschritt {(b.CaptureProgress > progBefore ? "steigt" : "STEIGT NICHT")}");
         _nav.ClearOccupant(door.X, door.Y, mi);
+        _entities[mi].Dead = true;
+
+        sb.AppendLine();
+        sb.Append(AlliedStage(bi));
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// The second half of <c>--capture-check</c>: <b>does an ALLY take?</b>
+    ///
+    /// <para>Reported on 10.08.2026 as a defect — player 1 took back and then
+    /// destroyed the factories player 0 had handed him while the two were
+    /// allied. It is not a defect: the original's building tick never asks the
+    /// alliance matrix (0 of 207 raw occurrences in the aekernel EXE, 0 of 205
+    /// in the F: one, see the class note), and its only owner test is the same
+    /// equality compare. This stage makes that visible from a running game
+    /// instead of from a disassembly: it allies two players ON PURPOSE, puts one
+    /// player's unit on the other's doorway, and prints whether the progress
+    /// moves. "Fortschritt STEIGT" is the CORRECT outcome here.</para>
+    ///
+    /// <para>The alliance is set directly on <c>_allied</c>/<c>_haveAllies</c>
+    /// and put back afterwards, because the point is to test the capture rule
+    /// under an alliance, not to test how the alliance got there. ⚠ Lesson of
+    /// the same day: <c>_standby</c> in MapEntityLayer looks like a switch and
+    /// is a retired stopgap that maps with an alliance matrix never consult —
+    /// so this touches the matrix itself and nothing that stands next to it.</para>
+    /// </summary>
+    private string AlliedStage(int skip)
+    {
+        if (_nav == null) return "   Buendnis-Stufe: kein Gitter";
+
+        // a building that belongs to a real player (0..7), so an alliance
+        // between its owner and the intruder is a meaningful thing at all
+        int bi = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            if (i == skip) continue;
+            var c = _entities[i];
+            if (!c.IsBuilding || c.IsProp || c.Dead || c.Doors <= 0 || c.Built == 0) continue;
+            if (c.Owner is < 0 or > 7 || IsNeutralPlayer(c.Owner)) continue;
+            bi = i; break;
+        }
+        if (bi < 0) return "   Buendnis-Stufe: kein Gebaeude mit Tuer und echtem Besitzer";
+
+        var b = _entities[bi];
+        int mate = -1;
+        for (int p = 0; p <= 7; p++)
+            if (p != b.Owner && !IsNeutralPlayer(p)) { mate = p; break; }
+        if (mate < 0) return "   Buendnis-Stufe: kein zweiter echter Spieler";
+
+        var cells = new List<Vector2I>(CaptureWatchCells(b));
+        if (cells.Count == 0) return "   Buendnis-Stufe: keine Tuerzellen";
+        var door = cells[0];
+
+        bool hadAllies = _haveAllies;
+        bool ab = _allied[mate, b.Owner], ba = _allied[b.Owner, mate];
+        _allied[mate, b.Owner] = _allied[b.Owner, mate] = true;
+        _haveAllies = true;
+
+        int progBefore = b.CaptureProgress, ownerBefore = b.Owner;
+        int ui = Park(door, mate, 9003);
+        for (int t = 0; t < 8; t++) CaptureTick(bi, b, 1);
+        int progAfter = b.CaptureProgress;
+        bool allied = Allied(mate, b.Owner);
+        _nav.ClearOccupant(door.X, door.Y, ui);
+        _entities[ui].Dead = true;
+
+        _allied[mate, b.Owner] = ab;
+        _allied[b.Owner, mate] = ba;
+        _haveAllies = hadAllies;
+
+        return $"   Buendnis-Stufe: Gebaeude slot {b.Slot} typ {b.BType} von Spieler " +
+               $"{ownerBefore}, Tuerzelle ({door.X},{door.Y}); Spieler {mate} verbuendet " +
+               $"= {allied}\n" +
+               $"   {"verbuendete Einheit 8 Takte",-30} Fortschritt {progAfter,4}/{b.CaptureTotal,-5}" +
+               $" Eindringling {b.Intruder,2}  Besitzer {b.Owner}  gezeigt {b.ShownOwner}\n" +
+               $"   -> {(progAfter > progBefore ? "Fortschritt STEIGT" : "Fortschritt steht")} " +
+               $"— das Original fragt hier keine Diplomatie, ein Verbuendeter nimmt ein " +
+               $"(erwartet: STEIGT)";
     }
 
     /// <summary>Puts a throwaway unit on a cell for the check above.</summary>
