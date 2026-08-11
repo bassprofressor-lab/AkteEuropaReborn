@@ -646,7 +646,33 @@ public partial class MapEntityLayer : Node2D
 
     private readonly Dictionary<int, Vector2I> _footprint = new();
 
-    private IEnumerable<(int Col, int Row, int Sight)> Watchers()
+    /// <summary>
+    /// Wer den Nebel aufdeckt, und mit welchem Radius.
+    ///
+    /// <para>⚠ 11.08.2026 — der vierte Wert, die HOEHE, ist neu. Die Nebelrunde
+    /// des Originals (@0x4205B0) rechnet fuer eine LANDEINHEIT
+    /// <c>radius = elev(zelle) + sicht - 1</c>; der Block dazu steht bei
+    /// 0x4206FA..0x4207E1:</para>
+    /// <code>
+    ///   0x4207AF  call 0x41D0E0            ; Hoehe der Zelle, byte[Kachel+2]
+    ///   0x4207BC  mov cl, byte [satz+0x2c] ; der Sichtwert der Einheit
+    ///   0x4207C8  add ax, cx
+    ///   0x4207CF  dec ax
+    ///   0x4207D4  call 0x4200C0            ; stamp(spalte, zeile, ax)
+    /// </code>
+    /// <para>Auf beiden Fassungen nach der FORM gefunden (Bytefolge
+    /// <c>81 e1 ff 00 ff ff 66 03 c1 8b 4c 24 18 66 48 50 51 53</c>, je genau
+    /// einmal: C @0x4207C2, F @0x41F982). Gelesen und belegt hat das der
+    /// Nebel-Durchgang vom 11.08.2026 (FogGrid.UnitRadius, Commit 38e04ba);
+    /// hier haengt nur der Anschluss.</para>
+    ///
+    /// <para><b>GEBAEUDE rechnen die Hoehe NICHT mit</b> und bekommen auch das
+    /// <c>dec</c> nicht: ihr Radius ist ein woertliches <c>push 0xa</c>
+    /// @0x4206AB. Sie kommen darum mit <c>Elev = 1</c> herein, denn
+    /// <c>UnitRadius(10, 1) = 10 + 1 - 1 = 10</c> — dieselbe Zahl, ohne einen
+    /// zweiten Weg durch die Nebelrunde.</para>
+    /// </summary>
+    private IEnumerable<(int Col, int Row, int Sight, int Elev)> Watchers()
     {
         foreach (var e in _entities)
         {
@@ -654,7 +680,8 @@ public partial class MapEntityLayer : Node2D
             if (e.Owner != ViewPlayer) continue;
             if (!e.IsBuilding)
             {
-                yield return (e.Col, e.Row, e.Sight > 0 ? e.Sight : 4);
+                yield return (e.Col, e.Row, e.Sight > 0 ? e.Sight : 4,
+                              ElevOf(e.Col, e.Row));
                 continue;
             }
 
@@ -670,7 +697,9 @@ public partial class MapEntityLayer : Node2D
             // FogGrid.Stamp only ever opens a circle.
             var half = BuildingHalfSpan(e.BType);
             int s = BuildingSightRadius;
-            yield return (e.Col + half.X, e.Row + half.Y, s);
+            // Elev = 1 haelt UnitRadius bei genau BuildingSightRadius — siehe
+            // den Kopf dieser Methode.
+            yield return (e.Col + half.X, e.Row + half.Y, s, 1);
         }
     }
 
