@@ -1324,6 +1324,9 @@ public partial class MapEntityLayer : Node2D
         _railRoutes.Clear();
         _lineRoute.Clear();
         _linePiece.Clear();
+        _lineCell.Clear();
+        _lineCellFrame.Clear();
+        _lineCellPiece.Clear();
         _railLines.Clear();
         _freightWagons.Clear();
         _bldBySlot.Clear();
@@ -1379,6 +1382,9 @@ public partial class MapEntityLayer : Node2D
                             pcv.VariantType == Variant.Type.Array)
                             foreach (var q in pcv.AsGodotArray()) pcs.Add(q.AsInt32());
                         _linePiece[lineNo] = pcs;
+                        // Die Route auf halben Zeilen ist NICHT die Strecke —
+                        // ein Gleisbild ist eine ganze Zelle. Siehe RailBuildCells.
+                        RailBuildCells(lineNo, pts, pcs);
                     }
                 }
                 if (a < 0 || b2 < 0 || a == b2) continue;
@@ -7843,6 +7849,20 @@ public partial class MapEntityLayer : Node2D
     private readonly Dictionary<int, List<int>> _linePiece = new();
     private readonly Dictionary<int, Texture2D?> _trainTex = new();
 
+    /// <summary>Die Strecke einer Linie als KARTENZELLEN — Mittelpunkt jeder
+    /// Zelle, die ein Gleisstück trägt, in (Spalte, Zeile) mit GANZER Zeile.
+    /// Gebaut von <see cref="RailBuildCells"/>, siehe dort für die Begründung.
+    /// Gleis UND Zug laufen hierauf, deshalb liegen sie zwangsläufig
+    /// aufeinander.</summary>
+    private readonly Dictionary<int, List<Vector2>> _lineCell = new();
+
+    /// <summary>Das Gleisbild (0..5) je Zelle aus <see cref="_lineCell"/>.</summary>
+    private readonly Dictionary<int, List<int>> _lineCellFrame = new();
+
+    /// <summary>Das Stück (Wagenrichtung) je Zelle — für das WAGGONbild, dessen
+    /// Bildindex das Streckenstück ist (@0x4c6de9).</summary>
+    private readonly Dictionary<int, List<int>> _lineCellPiece = new();
+
     /// <summary>Seconds a wagon takes for one route step. OURS: the tick
     /// counts a per-wagon distance down by the record's +0x0c (8 everywhere in
     /// the shipped maps) and steps when it runs out, but nothing in the data
@@ -7903,6 +7923,26 @@ public partial class MapEntityLayer : Node2D
         foreach (var w in _wagons)
             if (lead.TryGetValue(w.Line, out var a) && tail.TryGetValue(w.Line, out var b) && a != b)
                 w.Dir = a > b ? 1 : -1;
+        // ⚠ 12.08.2026 — `step` der Kartendatei zaehlt ROUTENSCHRITTE, gefahren
+        // wird aber auf ZELLEN, und davon gibt es weniger (auf einer Diagonale
+        // fallen zwei Schritte auf eine Zelle). Der Waggon wird deshalb auf die
+        // naechstgelegene Zelle seiner Linie gesetzt — sonst stuende er beim
+        // ersten Bild irgendwo hinter dem Streckenende.
+        foreach (var w in _wagons)
+        {
+            if (!_lineCell.TryGetValue(w.Line, out var cells) || cells.Count == 0) continue;
+            int best = 0;
+            float bestD = float.MaxValue;
+            for (int i = 0; i < cells.Count; i++)
+            {
+                float d = (cells[i] - new Vector2(w.Col, w.Row)).LengthSquared();
+                if (d < bestD) { bestD = d; best = i; }
+            }
+            w.Step = best;
+            w.Col = cells[best].X; w.Row = cells[best].Y;
+            if (_lineCellPiece.TryGetValue(w.Line, out var cp) && best < cp.Count)
+                w.Piece = cp[best];
+        }
     }
 
     /// <summary>Walk every wagon one route step at a time. When it reaches the
@@ -7917,7 +7957,11 @@ public partial class MapEntityLayer : Node2D
         foreach (var w in _wagons)
         {
             if (w.Freight) continue;      // fährt am Fahrplan, siehe RailFreight.cs
-            if (!_lineRoute.TryGetValue(w.Line, out var route) || route.Count < 2) continue;
+            // ⚠ 12.08.2026 — der Zug laeuft auf den ZELLEN, nicht auf den
+            // Routenpunkten. Ein Routenpunkt auf halber Zeile liegt 10 px
+            // neben der Schiene, die dort liegt (siehe RailBuildCells); mit
+            // ihm fuhr der Zug auf jeder Diagonale halb neben dem Gleis.
+            if (!_lineCell.TryGetValue(w.Line, out var cells) || cells.Count < 2) continue;
             w.Move -= dt;
             if (w.Move > 0f) continue;
             w.Move += TrainStepSeconds;
@@ -7925,11 +7969,11 @@ public partial class MapEntityLayer : Node2D
             // OURS: what the original does at the end of a line was not
             // reconstructed, so the whole train turns round rather than
             // freezing — a wagon that would run off the end marks the line
-            if (next >= route.Count || next < 0) { flip.Add(w.Line); continue; }
+            if (next >= cells.Count || next < 0) { flip.Add(w.Line); continue; }
             w.Step = next;
-            var p = route[w.Step];
+            var p = cells[w.Step];
             w.Col = p.X; w.Row = p.Y;
-            if (_linePiece.TryGetValue(w.Line, out var pcs) && w.Step < pcs.Count)
+            if (_lineCellPiece.TryGetValue(w.Line, out var pcs) && w.Step < pcs.Count)
                 w.Piece = pcs[w.Step];
             moved = true;
         }
@@ -7977,8 +8021,176 @@ public partial class MapEntityLayer : Node2D
     /// f2 bei 154,4°, Stück 5 bei 158,2° auf f7 bei 158,6°, Stück 3 bei 26,4°
     /// auf f3 bei 26,5°, Stück 6 bei 1,0° auf f0 bei 0,0°. Dass 0 und 4 sowie
     /// 2 und 6 auf dasselbe Bild fallen, ist richtig: eine Schiene hat vier
-    /// Achsen, aber acht Fahrtrichtungen.</para></summary>
+    /// Achsen, aber acht Fahrtrichtungen.</para>
+    ///
+    /// <para>⚠ <b>ÜBERHOLT am 12.08.2026</b> und nur noch der Gegenprobe
+    /// <c>--rail-lay=cols</c> vorbehalten. Die Tabelle war in einem Punkt
+    /// nachweislich falsch (Stück 5 → f7; f7 ist gar kein Diagonalstück,
+    /// sondern eine RAMPE, siehe <see cref="RailFrameOfPorts"/>), und sie kann
+    /// im Grundsatz nicht stimmen: die vier Diagonalstücke brauchen JE ZWEI
+    /// Bilder im Wechsel, ein Stück kann also nicht EIN Bild haben.</para>
+    /// </summary>
     private static readonly int[] RailFrameOf = { 1, 2, 0, 3, 1, 7, 0, 4 };
+
+    /// <summary>
+    /// <b>Was ein Gleisbild ist</b> — gemessen an Teil 64, alle zehn Bilder,
+    /// Spalte für Spalte (Ober- und Unterkante der undurchsichtigen Punkte).
+    ///
+    /// <para>Die Leinwand 64×56 trägt EINE Kartenzelle: x 10..49 sind die
+    /// 40 px der Zelle, y 21..40 ihre 20 px. Jedes Bild verbindet genau zwei
+    /// der vier RANDMITTEN dieser Zelle —
+    /// <c>L</c>(10,31) <c>R</c>(50,31) <c>T</c>(30,21) <c>B</c>(30,41):</para>
+    /// <code>
+    ///   f0  x 10..49  y 29..33 durchgehend flach     L–R   waagerecht
+    ///   f1  x 27..32  y 20..41                       T–B   senkrecht
+    ///   f2  x 27..49  links y40  rechts y29          B–R
+    ///   f3  x 27..49  links y20  rechts y29          T–R
+    ///   f4  x 10..32  links y29  rechts y40          L–B
+    ///   f5  x 10..32  links y29  rechts y20          L–T
+    /// </code>
+    /// <b>Sechs Bilder, sechs Paare</b> — das ist der vollständige Satz, und es
+    /// ist der Beweis, dass ein Gleisstück eine ZELLE ist und keine Fahrtrichtung.
+    /// f2 ist übrigens Punkt für Punkt f5, um (+20,+10) in der Leinwand
+    /// verschoben (f2(47,30) = f5(27,20)), ebenso f3 zu f4: dieselbe Form in
+    /// der linken und in der rechten Zellhälfte.
+    ///
+    /// <para><b>Und was die restlichen vier sind</b> (Teil 64 und 65 haben je
+    /// 20 Bilder; 10..19 sind nur die Schatten von 0..9):</para>
+    /// <code>
+    ///   f6  x 10..49  links y14  rechts y29    waagerecht, links 15 px höher
+    ///   f7  x 10..49  links y29  rechts y14    waagerecht, rechts 15 px höher
+    ///   f8  x 27..32  y  5..41                 senkrecht, 15 px länger
+    ///   f9  x 27..32  y 19..26                 senkrecht, 15 px kürzer
+    /// </code>
+    /// <b>15 px ist <see cref="Import.MapBaker.ElevStep"/></b> — die Höhe einer
+    /// Geländestufe. f6..f9 sind also die RAMPEN über einen Höhensprung, nicht
+    /// Diagonalen. Genau deshalb war <c>RailFrameOf[5] = 7</c> falsch: dort
+    /// stand ein 40 px breites Rampenbild an einer Stelle, an der ein 20 px
+    /// breites Halbstück hingehört — der vom Spieler gemeldete Knick. Dazu
+    /// passt die Fehlermeldung des Originals »Wrong index of <b>slope</b> for
+    /// train«. ⚠ WANN das Original eine Rampe legt, ist NICHT gelesen; wir
+    /// legen keine.
+    /// </summary>
+    private const int PortL = 0, PortR = 1, PortT = 2, PortB = 3;
+
+    /// <summary>Bild zu einem Paar Randmitten. Siehe die Tabelle oben.</summary>
+    private static int RailFrameOfPorts(int a, int b)
+    {
+        int lo = Mathf.Min(a, b), hi = Mathf.Max(a, b);
+        return (lo, hi) switch
+        {
+            (PortL, PortR) => 0,
+            (PortT, PortB) => 1,
+            (PortR, PortB) => 2,
+            (PortR, PortT) => 3,
+            (PortL, PortB) => 4,
+            (PortL, PortT) => 5,
+            _ => 0,
+        };
+    }
+
+    private static int RailOppositePort(int p)
+        => p switch { PortL => PortR, PortR => PortL, PortT => PortB, _ => PortT };
+
+    /// <summary>Über welche Randmitte Zelle <paramref name="a"/> zur
+    /// Nachbarzelle <paramref name="b"/> geht, oder -1 wenn sie nicht
+    /// benachbart sind.</summary>
+    private static int RailPortTo(Vector2 a, Vector2 b)
+    {
+        int dx = Mathf.RoundToInt(b.X - a.X), dy = Mathf.RoundToInt(b.Y - a.Y);
+        if (dy == 0 && dx == 1) return PortR;
+        if (dy == 0 && dx == -1) return PortL;
+        if (dx == 0 && dy == 1) return PortB;
+        if (dx == 0 && dy == -1) return PortT;
+        return -1;
+    }
+
+    /// <summary>
+    /// <b>Die Strecke als Kette von KARTENZELLEN</b> — das, was der Route
+    /// fehlte, und die Antwort auf »die Bahnstrecke ist nicht sauber
+    /// zusammengebaut«.
+    ///
+    /// <para>Die Route steht auf einem Gitter aus ganzen Spalten und HALBEN
+    /// Zeilen (<c>SPOJ_STEP</c>, cwm_extra.py): ein Schritt ist (±1,0), (0,±1),
+    /// (0,±0,5) oder (±1,±0,5). Ein Gleisbild ist dagegen eine ganze Zelle.
+    /// Ein Routenpunkt auf GANZER Zeile ist deshalb selbst eine Zelle; ein
+    /// Punkt auf HALBER Zeile liegt auf der Grenze und gehört zur Zelle
+    /// darüber oder darunter. Welche von beiden, sagen die Nachbarn: ein
+    /// Schritt, der die SPALTE wechselt, darf die Zellzeile nicht wechseln —
+    /// sonst wären die beiden Zellen nur über eine Ecke verbunden, und dafür
+    /// gibt es kein Bild.</para>
+    ///
+    /// <para><b>Belegt über alle 30 Karten:</b> 576 Linien, 19015 Zellen —
+    /// <b>0</b> Zellenpaare, die nicht Kante an Kante liegen, und <b>0</b>
+    /// Formen ausserhalb der sechs vorhandenen Bilder. Die alte Legeart (ein
+    /// Bild je Routenschritt an <c>RailPoint</c>) reisst dagegen an jeder
+    /// Diagonale und an jeder Ecke auf; <c>--rail-lay=cols</c> zeigt sie.</para>
+    ///
+    /// <para>Nebenbei fällt damit die Frage weg, welches Bild ein Stück
+    /// bekommt: die FORM steht in den Nachbarzellen, nicht in einer Tabelle.
+    /// Zur Gegenprobe: über alle Karten liefert Stück 6 in 4130 von 4130
+    /// Fällen f0, und die Diagonalstücke liefern sauber je zwei Bilder im
+    /// Wechsel (Stück 7 → f4 1672× / f3 1530×, Stück 1 → f5 1313× / f2
+    /// 1036×) — genau die Abwechslung, die eine Diagonale aus Halbstücken
+    /// braucht und die eine Tabelle Stück→Bild nicht abbilden kann.</para>
+    /// </summary>
+    private void RailBuildCells(int line, List<Vector2> route, List<int> pieces)
+    {
+        int n = route.Count;
+        if (n < 1) return;
+        var row = new int[n];
+        var fixedRow = new bool[n];
+        for (int i = 0; i < n; i++)
+        {
+            float r = route[i].Y;
+            int fl = Mathf.FloorToInt(r + 0.001f);
+            bool whole = Mathf.Abs(r - Mathf.Round(r)) < 0.001f;
+            row[i] = whole ? Mathf.RoundToInt(r) : fl;
+            fixedRow[i] = whole;
+        }
+        // Ein Schritt, der die Spalte wechselt, erzwingt dieselbe Zellzeile.
+        // Solange weitergeben, bis nichts mehr dazukommt (die Ketten sind kurz).
+        for (int pass = 0; pass < n; pass++)
+        {
+            bool grew = false;
+            for (int i = 0; i + 1 < n; i++)
+            {
+                if (Mathf.RoundToInt(route[i].X) == Mathf.RoundToInt(route[i + 1].X)) continue;
+                if (!fixedRow[i] && fixedRow[i + 1]) { row[i] = row[i + 1]; fixedRow[i] = true; grew = true; }
+                else if (!fixedRow[i + 1] && fixedRow[i]) { row[i + 1] = row[i]; fixedRow[i + 1] = true; grew = true; }
+            }
+            if (!grew) break;
+        }
+
+        var cells = new List<Vector2>();
+        var cellPiece = new List<int>();
+        var cellOf = new int[n];
+        for (int i = 0; i < n; i++)
+        {
+            var cell = new Vector2(Mathf.RoundToInt(route[i].X), row[i]);
+            if (cells.Count == 0 || cells[^1] != cell)
+            {
+                cells.Add(cell);
+                cellPiece.Add(i < pieces.Count ? pieces[i] : 0);
+            }
+            else if (i < pieces.Count) cellPiece[^1] = pieces[i];
+            cellOf[i] = cells.Count - 1;
+        }
+
+        var frames = new List<int>(cells.Count);
+        for (int i = 0; i < cells.Count; i++)
+        {
+            int a = i > 0 ? RailPortTo(cells[i], cells[i - 1]) : -1;
+            int b = i + 1 < cells.Count ? RailPortTo(cells[i], cells[i + 1]) : -1;
+            if (a < 0 && b < 0) { frames.Add(0); continue; }
+            if (a < 0) a = RailOppositePort(b);
+            if (b < 0) b = RailOppositePort(a);
+            frames.Add(RailFrameOfPorts(a, b));
+        }
+        _lineCell[line] = cells;
+        _lineCellFrame[line] = frames;
+        _lineCellPiece[line] = cellPiece;
+    }
 
     /// <summary>Wie oft ein Stück eine STÜTZE bekommt. Teil 65 trägt Träger und
     /// Bock in einem Bild, also stünde bei jedem Schritt ein Bock — auf gerader
@@ -8041,8 +8253,18 @@ public partial class MapEntityLayer : Node2D
     /// Schiene. Er bleibt damit an der Stelle, an der er im Bild vom 11.08.
     /// richtig sass, und alle anderen Richtungen ruecken auf dieselbe
     /// Hoehe.</para>
+    ///
+    /// <para>⚠ 12.08.2026 auf <b>24</b> gerueckt, und zwar nicht nach Gefuehl:
+    /// mit 24 liegt die Schiene (Leinwandzeile 31, Anker
+    /// <see cref="ComposedAnchor"/> = (30,55)) genau auf dem MITTELPUNKT ihrer
+    /// Zelle — 55 − 31 = 24. Das ist die Hoehe, auf der auch der Schienenanbau
+    /// der Gebaeude sitzt: am Bahnhof (Muster 86, Kachelsatz 47) laeuft der
+    /// Gitterträger auf y ≈ 30 unter der Oberkante von Musterzelle
+    /// (0,0) — also 10 px in Zellzeile 1 hinein, deren Mitte. Erst mit dieser
+    /// Zahl steht das Gleis auf demselben Gitter wie die Zellen, aus denen es
+    /// gebaut ist.</para>
     /// </summary>
-    private const int RailDeckOffset = 21;
+    private const int RailDeckOffset = 24;
 
     /// <summary>Abstand zweier Stuetzen, in Bildschirmpixeln gemessen statt in
     /// Stuecken gezaehlt. ⚠ UNSERE SETZUNG bleibt die Zahl; was den Abstand im
@@ -8052,9 +8274,11 @@ public partial class MapEntityLayer : Node2D
     /// richtig, wo die Spalte stehenbleibt.</summary>
     private const float RailPylonEveryPx = 120f;
 
-    private Texture2D? GetRailTexture(int piece, bool pylon)
+    /// <summary>Ein Gleisbild, <paramref name="frame"/> ist der BILDINDEX
+    /// (0..5, siehe <see cref="RailFrameOfPorts"/>), nicht mehr das Stück.</summary>
+    private Texture2D? GetRailTexture(int frame, bool pylon)
     {
-        int k = RailFrameOf[piece & 7] + (pylon ? 8 : 0);
+        int k = (frame & 7) + (pylon ? 8 : 0);
         if (_railTex.TryGetValue(k, out var t)) return t;
         string path = Core.Content.Path(
             $"Units/train/rail{(pylon ? 65 : 64)}/f{k & 7}.png");
@@ -8085,13 +8309,53 @@ public partial class MapEntityLayer : Node2D
     /// Behauptung.</summary>
     public int RailTilesDrawn;
 
-    /// <summary>Nur fuer den Prueflauf: alte Legeart (ein Stueck je Spalte,
-    /// Tabelle RailYOffsetOf) gegen die neue vergleichen.</summary>
+    /// <summary>Wie viele NACHBARN unter den gelegten Stuecken nicht Kante an
+    /// Kante liegen — die Zahl, an der »sauber zusammengebaut« zu messen ist.
+    /// Muss 0 sein; <c>--rail-lay=cols</c> treibt sie in die Hunderte.</summary>
+    public int RailTilesLoose;
+
+    /// <summary>Nur fuer den Prueflauf: die ALTE Legeart (ein Stueck je
+    /// Routenschritt an RailPoint, Bild aus <see cref="RailFrameOf"/>, Hoehe
+    /// aus RailYOffsetOf) gegen die neue vergleichen. Der Name bleibt, damit
+    /// die Fahne <c>--rail-lay=cols</c> weiter das tut, was sie soll: den
+    /// Fehler zeigen.</summary>
     public static bool RailProbeSkipCols;
 
     private void DrawRailTrack()
     {
         RailTilesDrawn = 0;
+        RailTilesLoose = 0;
+        if (RailProbeSkipCols) { DrawRailTrackOld(); return; }
+        foreach (var kv in _lineCell)
+        {
+            if (!_lineCellFrame.TryGetValue(kv.Key, out var frames)) continue;
+            var cells = kv.Value;
+            var lastPylon = Vector2.Zero;
+            bool hasPylon = false;
+            for (int i = 0; i < cells.Count && i < frames.Count; i++)
+            {
+                if (i > 0 && RailPortTo(cells[i - 1], cells[i]) < 0) RailTilesLoose++;
+                var at = RailPoint(cells[i]);
+                // Die STUETZE nach dem Abstand auf dem Schirm, nicht nach der
+                // Zahl der Stuecke: sonst stehen auf einem senkrechten Stueck
+                // sechs Boecke uebereinander und auf der Geraden einer alle
+                // drei Zellen. ⚠ UNSERE SETZUNG bleibt der Abstand selbst.
+                bool pylon = !hasPylon || (at - lastPylon).Length() >= RailPylonEveryPx;
+                if (pylon) { lastPylon = at; hasPylon = true; }
+                var tex = GetRailTexture(frames[i], pylon);
+                if (tex == null) return;          // ohne Bilder gar nichts
+                DrawTexture(tex, at - ComposedAnchor + new Vector2(0, RailDeckOffset));
+                RailTilesDrawn++;
+            }
+        }
+    }
+
+    /// <summary>Die Legeart bis zum 12.08.2026, nur noch als Gegenprobe
+    /// (<c>--rail-lay=cols</c>): ein Bild je Routenschritt an RailPoint, Form
+    /// aus der Tabelle Stueck→Bild, Hoehe je Stueck. Der Prueflauf soll sehen,
+    /// dass sie die Strecke aufreisst — sonst beweist die neue nichts.</summary>
+    private void DrawRailTrackOld()
+    {
         foreach (var kv in _lineRoute)
         {
             if (!_linePiece.TryGetValue(kv.Key, out var pcs)) continue;
@@ -8099,50 +8363,30 @@ public partial class MapEntityLayer : Node2D
             int n = Mathf.Min(route.Count, pcs.Count);
             int laid = 0;
             var prev = Vector2.Zero;
-            var lastPylon = Vector2.Zero;
-            bool hasPylon = false;
             for (int i = 0; i < n; i++)
             {
-                // ⚠ 11.08.2026 — EIN Stueck je ZELLENSPALTE, nicht je Schritt.
-                // Gemessen: ein Gleisbild belegt x 10..49, also genau 40 px =
-                // eine Zelle. Eine isometrische Diagonale legt die Route aber
-                // als Treppe aus (1,0) und (0,0.5) -- dort ruecken zwei
-                // Schritte nur eine Spalte weiter, und wir haben zwei Stuecke
-                // uebereinandergelegt. Gemeldet als »die bahnstrecke ist noch
-                // nicht sauber zusammengebaut«.
-                // ⚠ 11.08.2026, ZWEITER ANLAUF — die alte Regel »ein Stueck je
-                // ZELLENSPALTE« hat die SENKRECHTEN Streckenteile restlos
-                // verschluckt. Gemessen an map_NET02, Linie 1: ihre Schritte
-                // 10..17 lauten (166,55) (166,54) (166,53) (166,52) (166,51)
-                // (166,50) (166,49) (166,48) — acht Schritte in DERSELBEN
-                // Spalte, alle acht uebersprungen. Genau das hat der Spieler
-                // als »er ist immer noch nicht sauber verbunden« gesehen.
-                // Uebersprungen wird jetzt nur noch, was auf DENSELBEN Punkt
-                // faellt.
                 var at = RailPoint(route[i]);
-                if (RailProbeSkipCols && i > 0 &&
-                    Mathf.RoundToInt(route[i].X) == Mathf.RoundToInt(route[i - 1].X))
-                    continue;                     // --rail-lay=cols: die alte Regel
-                if (!RailProbeSkipCols && laid > 0 && at.IsEqualApprox(prev)) continue;
+                if (laid > 0 && at.IsEqualApprox(prev)) continue;
+                if (laid > 0 && !RailNeighbourCells(prev, at)) RailTilesLoose++;
                 prev = at;
-                // Die STUETZE nach dem Abstand auf dem Schirm, nicht nach der
-                // Zahl der Stuecke: sonst stehen auf einem senkrechten Stueck
-                // sechs Boecke uebereinander und auf der Geraden einer alle
-                // drei Zellen. ⚠ UNSERE SETZUNG bleibt der Abstand selbst.
-                bool pylon = RailProbeSkipCols
-                    ? laid % RailPylonEvery == 0
-                    : !hasPylon || (at - lastPylon).Length() >= RailPylonEveryPx;
-                if (pylon) { lastPylon = at; hasPylon = true; }
+                bool pylon = laid % RailPylonEvery == 0;
                 laid++;
-                var tex = GetRailTexture(pcs[i], pylon);
-                if (tex == null) return;          // ohne Bilder gar nichts
+                var tex = GetRailTexture(RailFrameOf[pcs[i] & 7], pylon);
+                if (tex == null) return;
                 DrawTexture(tex, at - ComposedAnchor
-                                 + new Vector2(0, RailProbeSkipCols
-                                                  ? RailYOffsetOf[pcs[i] & 7]
-                                                  : RailDeckOffset));
+                                 + new Vector2(0, RailYOffsetOf[pcs[i] & 7]));
                 RailTilesDrawn++;
             }
         }
+    }
+
+    /// <summary>Liegen zwei gezeichnete Stuecke Kante an Kante? Auf dem Schirm
+    /// heisst das genau 40 px in x ODER 20 px in y, nichts sonst.</summary>
+    private static bool RailNeighbourCells(Vector2 a, Vector2 b)
+    {
+        float dx = Mathf.Abs(a.X - b.X), dy = Mathf.Abs(a.Y - b.Y);
+        return (dx < 0.5f && Mathf.Abs(dy - TileH) < 0.5f)
+            || (dy < 0.5f && Mathf.Abs(dx - TileW) < 0.5f);
     }
 
     private void DrawTrains()
