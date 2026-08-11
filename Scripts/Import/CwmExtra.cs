@@ -305,14 +305,24 @@ public static class CwmExtra
         public int? Y1, Y2, End1, End2;
         public List<(int X, double Y)>? Route;
         public List<int>? Pieces;
+
+        /// <summary>true = das Start-y stand NICHT in der Datei, sondern wurde
+        /// aus den beiden Endgebäuden zurückgerechnet (siehe SolveStartY). Auf
+        /// den drei Spielständen ist die Rechnung gegen den gespeicherten Wert
+        /// geprüft; auf einer Leveldatei ist sie die einzige Quelle.</summary>
+        public bool Rebuilt;
     }
 
-    public static List<Link> Links(CwmFile m, List<CwmData.Building>? blds = null)
+    /// <param name="ignoreStoredY">Nur fuer den Pruefstand: tut so, als gaebe es
+    /// sec122 nicht, damit die Rueckrechnung dort gemessen werden kann, wo die
+    /// Antwort bekannt ist.</param>
+    public static List<Link> Links(CwmFile m, List<CwmData.Building>? blds = null,
+                                   bool ignoreStoredY = false)
     {
         var list = new List<Link>();
         var s33 = m.Sec(33);
         var s34 = m.Sec(34);
-        var s122 = m.Sec(122);
+        var s122 = ignoreStoredY ? null : m.Sec(122);
         if (s33 == null || s34 == null) return list;
 
         // Every cell a building covers, pointing back at it. The footprint comes
@@ -368,6 +378,37 @@ public static class CwmExtra
                 d.Y1 = BitConverter.ToUInt16(s122, rec * 4);
                 d.Y2 = BitConverter.ToUInt16(s122, rec * 4 + 2);
             }
+            else
+            {
+                // ⭐ 11.08.2026 — DAS y STAND DIE GANZE ZEIT IN sec34.
+                //
+                // Der Kommentar oben sagte, die y kaemen aus sec122. Das stimmt
+                // fuer einen SPIELSTAND — aber kein einziges der 49 Levelfiles
+                // traegt sec122 (gezaehlt), und darum war auf jeder Kampagnen-
+                // und NET-Karte weder Gleis noch Zug zu sehen.
+                //
+                // Gefunden ueber die Routine @0x4B0FE0, die sec34 fuellt: sie
+                // liest `+0x03` und haelt `wert >> 1` gegen ein Feld des
+                // Endgebaeudes — also ein y in HALBEN Zeilen, genau wie in
+                // sec122. Die x liegen auf +0x02 und +0x04, die y schlicht
+                // daneben auf +0x03 und +0x05.
+                //
+                // ⚠ BELEGT, nicht angenommen: `--selftest-rail` haelt beide
+                // Quellen auf den drei Spielstaenden gegeneinander, wo es sec122
+                // WIRKLICH gibt — **25 + 49 + 41 = 115 von 115 Linien stimmen
+                // ueberein, in y1 wie in y2**. sec122 ist nur die Laufzeitkopie.
+                //
+                // ⚠ Und eine eigene Sackgasse davor, die der Pruefstand
+                // abgeraeumt hat: ich hatte das y aus den beiden Endgebaeuden
+                // zurueckrechnen wollen. Der Pruefstand meldete **0 von 115
+                // eindeutig** — zu Recht, denn der Streckenendpunkt liegt meist
+                // gar nicht auf einem Gebaeude (nur 164 von 542 Paaren). Ohne
+                // ihn waere ein falsches Gleis eingebaut worden, das auf einer
+                // Kampagnenkarte mit nichts vergleichbar gewesen waere.
+                d.Y1 = s34[i + 3];
+                d.Y2 = s34[i + 5];
+                d.Rebuilt = true;
+            }
             if (d.Y1.HasValue && at.Count > 0)
             {
                 d.End1 = BuildingAt(d.X1, d.Y1.Value / 2);
@@ -396,6 +437,64 @@ public static class CwmExtra
 
     private static int NodeBuilding(byte[] s33, int node)
         => node * 8 + 2 <= s33.Length ? BitConverter.ToUInt16(s33, node * 8) : 0;
+
+    /// <summary>Die Summe der Höhenschritte einer Route, in HALBEN Zeilen.</summary>
+    private static int SumDy(byte[] s34, int at, int delka)
+    {
+        int sum = 0;
+        for (int k = 0; k < delka && at + 0x0d + k < at + SpojStride; k++)
+            sum += SpojStep[s34[at + 0x0d + k] & 15].Dy;
+        return sum;
+    }
+
+    /// <summary>Der x-Lauf einer Route — unabhängig von y, darum die Probe.</summary>
+    private static int EndX(byte[] s34, int at, int delka, int x1)
+    {
+        int x = x1;
+        for (int k = 0; k < delka && at + 0x0d + k < at + SpojStride; k++)
+            x += SpojStep[s34[at + 0x0d + k] & 15].Dx;
+        return x;
+    }
+
+    /// <summary>
+    /// Das Start-y einer Bahnlinie, wenn sec122 fehlt — und ob es eindeutig ist.
+    ///
+    /// <para>Gesucht wird ein <c>y1</c> in halben Zeilen, sodass
+    /// <c>(x1, y1/2)</c> auf dem Grund des Gebäudes von node1 steht und
+    /// <c>(x2, (y1+Σdy)/2)</c> auf dem des Gebäudes von node2. Beide Fußabdrücke
+    /// kommen aus dem Belegungsgitter, sind also gemessen und nicht geraten.</para>
+    ///
+    /// <para>⚠ <b>Eindeutig oder gar nicht.</b> Ein Gebäude ist zwei Zeilen hoch,
+    /// also vier halbe — die Startbedingung allein lässt mehrere Werte zu. Erst
+    /// zusammen mit dem starren Abstand zum Ende bleibt meist einer übrig. Bleibt
+    /// mehr als einer, wird die Linie <b>nicht</b> gelegt: lieber eine sichtbare
+    /// Lücke als ein Gleis, das anderswo verläuft als im Original.</para>
+    ///
+    /// <para>Der x-Lauf ist unabhängig von y und dient als Vorprobe: endet er
+    /// nicht auf dem gespeicherten x2, sind die Richtungscodes nicht die, für
+    /// die wir sie halten, und es wird gar nichts gelegt.</para>
+    /// </summary>
+    private static (int Y1, bool Sure) SolveStartY(
+        byte[] s34, int at, Link d,
+        Dictionary<(int, int), int> ground, Func<int, int, int> buildingAt)
+    {
+        if (d.Delka <= 0) return (0, false);
+        if (EndX(s34, at, d.Delka, d.X1) != d.X2) return (0, false);   // Vorprobe
+        int dy = SumDy(s34, at, d.Delka);
+
+        int found = 0, first = 0;
+        // halbe Zeilen; 254 Zeilen ist die größte Karte
+        for (int y = 0; y <= 254 * 2; y++)
+        {
+            if (buildingAt(d.X1, y / 2) != d.Bud1) continue;
+            int y2 = y + dy;
+            if (y2 < 0) continue;
+            if (buildingAt(d.X2, y2 / 2) != d.Bud2) continue;
+            if (found++ == 0) first = y;
+            if (found > 1) return (0, false);
+        }
+        return found == 1 ? (first, true) : (0, false);
+    }
 
     // ---- sec44 + sec121: the trains -----------------------------------------
 
@@ -472,6 +571,13 @@ public static class CwmExtra
         public int Slot, Player, Index, Enable;
         public string Name = "", Short = "";
         public int Speed, Hp, Payload, Airframe, Attack, Defence, Sight, Ammo, Fuel;
+
+        /// <summary>Preis in Waffen- / Fahrwerk- / Spezialteilen, Satz
+        /// +0x1F/+0x20/+0x21. GELESEN: `build_in_airport` @0x4BB3D0 haelt genau
+        /// diese drei Bytes (`0x51B03F/40/41` gegen die Basis 0x51B020) gegen
+        /// die drei Lager des Flughafens (Gebaeudesatz +0x28/+0x2a/+0x2c).
+        /// Vorher standen sie in der KI fest im Code — das war eine Setzung.</summary>
+        public int CostW, CostF, CostS;
     }
 
     public static List<AirDesign> AirDesigns(CwmFile m)
@@ -490,6 +596,7 @@ public static class CwmExtra
                 Speed = s[i + 0x22], Hp = s[i + 0x23], Payload = s[i + 0x24],
                 Airframe = s[i + 0x25], Attack = s[i + 0x26], Defence = s[i + 0x27],
                 Sight = s[i + 0x28], Ammo = s[i + 0x29],
+                CostW = s[i + 0x1f], CostF = s[i + 0x20], CostS = s[i + 0x21],
                 Fuel = BitConverter.ToUInt16(s, i + 0x2c),
             });
         }

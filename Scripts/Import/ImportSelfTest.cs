@@ -365,6 +365,82 @@ public static class ImportSelfTest
     /// element, including the full zone grid and every spatial cell. A sample
     /// would prove nothing here; these are exactly the places where an
     /// off-by-one hides.</summary>
+    /// <summary>
+    /// `--selftest-rail=<dir>` — die zurueckgerechnete Bahnstrecke gegen die
+    /// gespeicherte halten.
+    ///
+    /// <para>Kein Levelfile traegt sec122, also muss das Start-y einer Linie aus
+    /// den beiden Endgebaeuden zurueckgerechnet werden
+    /// (<c>CwmExtra.SolveStartY</c>). Ob das stimmt, laesst sich nur dort
+    /// pruefen, wo die Antwort danebensteht: die drei Spielstaende `1.DM`,
+    /// `3.DM` und `4.DM` haben sec122. Also wird sie dort <b>ignoriert</b>,
+    /// blind gerechnet und mit dem gespeicherten Wert verglichen.</para>
+    ///
+    /// <para>⚠ Das ist der einzige ehrliche Pruefstand dafuer. Auf einer
+    /// Kampagnenkarte laesst sich das Ergebnis mit nichts vergleichen — dort
+    /// saehe ein falsches Gleis genauso aus wie ein richtiges.</para>
+    /// </summary>
+    public static int RunRail(string dir)
+    {
+        int files = 0, total = 0, solved = 0, right = 0, wrong = 0, unsure = 0;
+        var bad = new List<string>();
+        foreach (string stem in new[] { "1", "3", "4" })
+        {
+            string p = dir.TrimEnd('/', '\\') + "/LEVELS/" + stem + ".DM";
+            if (!System.IO.File.Exists(p)) continue;
+            files++;
+            var m = CwmFile.Load(p);
+            var blds = CwmData.Buildings(m);
+            var stored = CwmExtra.Links(m, blds);
+            var blind = CwmExtra.Links(m, blds, ignoreStoredY: true);
+            for (int i = 0; i < stored.Count && i < blind.Count; i++)
+            {
+                if (!stored[i].Y1.HasValue) continue;
+                total++;
+                if (!blind[i].Y1.HasValue) { unsure++; continue; }
+                solved++;
+                if (blind[i].Y1 == stored[i].Y1) right++;
+                else
+                {
+                    wrong++;
+                    if (bad.Count < 5)
+                        bad.Add($"{stem}.DM Linie {stored[i].Slot}: gespeichert " +
+                                $"{stored[i].Y1}, gerechnet {blind[i].Y1}");
+                }
+            }
+        }
+        // ⚠ Und die eigentliche Frage: steht das y vielleicht laengst in sec34?
+        // Die Routine @0x4B0FE0 liest `sec34 +0x03` und haelt `wert >> 1` gegen
+        // ein Gebaeudefeld — das sieht nach einem y in halben Zeilen aus.
+        foreach (string stem in new[] { "1", "3", "4" })
+        {
+            string p2 = dir.TrimEnd('/', '\\') + "/LEVELS/" + stem + ".DM";
+            if (!System.IO.File.Exists(p2)) continue;
+            var m2 = CwmFile.Load(p2);
+            var s34 = m2.Sec(34);
+            var ls = CwmExtra.Links(m2, CwmData.Buildings(m2));
+            if (s34 == null) continue;
+            int same3 = 0, same5 = 0, n = 0;
+            foreach (var l in ls)
+            {
+                if (!l.Y1.HasValue) continue;
+                int o = l.Slot * CwmExtra.SpojStride;
+                if (o + 8 > s34.Length) continue;
+                n++;
+                if (s34[o + 3] == (l.Y1.Value & 0xFF)) same3++;
+                if (s34[o + 5] == (l.Y2!.Value & 0xFF)) same5++;
+            }
+            GD.Print($"   {stem}.DM: {n} Linien — sec34 +0x03 == y1: {same3}, " +
+                     $"+0x05 == y2: {same5}");
+        }
+        if (files == 0) { GD.Print("selftest-rail: keine .DM in " + dir); return 0; }
+        GD.Print($"selftest-rail: {files} Spielstaende, {total} Linien mit gespeichertem y; " +
+                 $"{solved} eindeutig zurueckgerechnet, davon {right} RICHTIG, {wrong} falsch; " +
+                 $"{unsure} nicht eindeutig (werden nicht gelegt)");
+        foreach (string b in bad) GD.PrintErr("   " + b);
+        return wrong == 0 ? 0 : 1;
+    }
+
     public static int RunEntities(string aekernel)
     {
         aekernel = aekernel.TrimEnd('/', '\\');
