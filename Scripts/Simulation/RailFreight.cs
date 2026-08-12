@@ -722,10 +722,15 @@ public partial class MapEntityLayer : Node2D
     public string RailHitCheck()
     {
         var sb = new System.Text.StringBuilder();
+        // ⚠ KEINE MASTZELLE nehmen: ein Platz mit index%6==0 laesst sich gar
+        // nicht brechen, weil der Stuetzendurchgang `bild := 20*k + bild%10`
+        // zurueckschreibt und ihn damit sofort unter 100 drueckt. Der erste
+        // Anlauf hatte genau so eine erwischt (Bild 20) und meldete nach zwanzig
+        // Treffern "zerschossen=False" — richtig, aber blind fuer alles andere.
         RailCell? pick = null;
         foreach (var c in _railCells)
-            if (!c.Broken && c.Frame != 255 && c.Hp > 0) { pick = c; break; }
-        if (pick == null) return "rail-hit-check: keine heile Gleiszelle auf dieser Karte";
+            if (!c.Broken && !c.Pylon && c.Frame != 255 && c.Hp > 0) { pick = c; break; }
+        if (pick == null) return "rail-hit-check: keine heile Gleiszelle ohne Mast auf dieser Karte";
 
         int col = pick.Col, row = pick.Row;
         int tiles0 = RailTiles().Count, deb0 = RailBrokenDrawn;
@@ -758,7 +763,8 @@ public partial class MapEntityLayer : Node2D
                   $"(Variante {pick.BrokenVariant}), zerschossen={pick.Broken}\n");
         sb.Append($"  Zeichenliste: {tiles0} -> {tiles1} Stuecke, " +
                   $"Truemmer {deb0} -> {deb1}" +
-                  (deb1 == deb0 + 1 ? "  richtig" : "  ⚠ kein Truemmerfeld dazu") + "\n");
+                  // mehr als eines ist RICHTIG: der Bruch reisst die Nachbarn mit
+                  (deb1 > deb0 ? "  richtig" : "  ⚠ kein Truemmerfeld dazu") + "\n");
         // Die Stuetzenfassung sagt, ob die Strecke ueber der Stuetze weiterlaeuft
         // — ein Bruch daneben MUSS sie aendern (rail_pylon_pass @0x4B0350 laeuft
         // im Original nach jedem Treffer).
@@ -766,13 +772,50 @@ public partial class MapEntityLayer : Node2D
         sb.Append($"  Stuetzenfassungen: {pyl0} -> {pyl1}" +
                   (pyl0 == pyl1 ? "  ⚠ unveraendert — lief der Stuetzendurchgang?"
                                 : "  neu bestimmt") + "\n");
+        // 2b) die drei Dinge, die der Bruch AUSSER dem eigenen Bild anrichtet
+        // ⚠ Ein Nachbar, der ein MASTPLATZ ist, kann nicht kaputt bleiben — der
+        // Stuetzendurchgang heilt ihn im selben Atemzug. Erwartet werden darum
+        // nur die Nachbarn OHNE Mast; der erste Anlauf zaehlte alle und meldete
+        // "1 von 3", obwohl die Mechanik stimmte.
+        int nb = 0, nbHas = 0, nbMast = 0;
+        foreach (var (dc, dr) in RailBreakSpread)
+            foreach (var c in _railCells)
+            {
+                if (c.Col != col + dc || c.Row != row + dr || c.Frame == 255) continue;
+                if (c.Pylon) nbMast++; else { nbHas++; if (c.Broken) nb++; }
+                break;
+            }
+        sb.Append($"  Nachbarn mitgerissen: {nb} von {nbHas} ohne Mast " +
+                  $"({nbMast} Mastplaetze dabei, die heilen sofort)" +
+                  (nb == nbHas ? "  richtig (@0x504428)" : "  ⚠ nicht alle") + "\n");
+        int faze = -1;
+        foreach (var l in _railLines) if (l.Slot == pick.Line) faze = l.Faze;
+        sb.Append($"  Linie {pick.Line}: faze {faze}" +
+                  (faze == 3 ? "  stillgelegt (@0x4B06F9)" : "  ⚠ nicht stillgelegt") + "\n");
+        int mast = 0, mastBroken = 0;
+        foreach (var c in _railCells)
+            if (c.Pylon) { mast++; if (c.Broken) mastBroken++; }
+        sb.Append($"  Mastplaetze: {mast}, davon zerschossen {mastBroken}" +
+                  (mastBroken == 0 ? "  richtig — der Stuetzendurchgang heilt sie (4.DM: 0 von 49)"
+                                   : "  ⚠ ein Mastplatz bleibt kaputt") + "\n");
+
         // 3) reparieren
+        int brokenBefore = RailBrokenOnLine(pick.Line);
         bool healed = RailRepair(col, row);
         int tiles2 = RailTiles().Count, deb2 = RailBrokenDrawn;
         sb.Append($"  repariert={healed}: Bild {pick.Frame}, Trefferpunkte {pick.Hp} " +
                   "(bleiben absichtlich niedrig, @0x4099B6 setzt sie nicht zurueck)\n");
         sb.Append($"  Zeichenliste: {tiles2} Stuecke, Truemmer {deb2}" +
-                  (tiles2 == tiles0 && deb2 == deb0 ? "  wieder wie vorher" : "  ⚠ nicht wieder wie vorher"));
+                  $"  (auf Linie {pick.Line} noch {RailBrokenOnLine(pick.Line)} von " +
+                  $"{brokenBefore} kaputt)\n");
+        int faze2 = -1;
+        foreach (var l in _railLines) if (l.Slot == pick.Line) faze2 = l.Faze;
+        sb.Append($"  Linie {pick.Line}: faze {faze2}" +
+                  (RailBrokenOnLine(pick.Line) > 0
+                       ? (faze2 == 3 ? "  bleibt still, es ist noch etwas kaputt"
+                                     : "  ⚠ laeuft an, obwohl noch etwas kaputt ist")
+                       : (faze2 == 0 ? "  laeuft wieder an (@0x409AB5)"
+                                     : "  ⚠ bleibt still, obwohl alles heil ist")));
         return sb.ToString();
     }
 
@@ -800,7 +843,14 @@ public partial class MapEntityLayer : Node2D
     /// <para>⚠ UNSERE LÜCKE: das Original wirft bei <c>rail_hit</c> Rauch und
     /// Splitter. Wir zeigen nur die Explosion, die der Einschlag ohnehin
     /// erzeugt — der eigene Effekt ist nicht nachgebaut.</para></summary>
-    public bool RailHit(int col, int row, int damage)
+    public bool RailHit(int col, int row, int damage) => RailHit(col, row, damage, true);
+
+    /// <summary>Die vier orthogonalen Nachbarn, die ein Bruch mitreisst —
+    /// Tabelle @0x504428: (0,−1), (−1,0), (1,0), (0,1).</summary>
+    private static readonly (int C, int R)[] RailBreakSpread =
+        { (0, -1), (-1, 0), (1, 0), (0, 1) };
+
+    private bool RailHit(int col, int row, int damage, bool spread)
     {
         bool broke = false;
         foreach (var c in _railCells)
@@ -816,8 +866,22 @@ public partial class MapEntityLayer : Node2D
             // weicher — und genau das steht in den Spielstaenden.
             c.Frame += (10 + (int)(GD.Randi() & 1)) * 10;
             broke = true;
+            if (!spread) continue;
+            // ⚠ 15.08.2026 — EIN BRUCH REISST DIE VIER NACHBARN MIT.
+            // rail_hit @0x4B0460 geht die Tabelle @0x504428 ab und ruft sich
+            // fuer jede Nachbarzelle mit Gleis selbst auf — aber mit
+            // Zweitargument 0 (@0x4B06B0). Das ist die REKURSIONSBREMSE: der
+            // Bruch springt genau eine Zelle weit, nicht die Strecke entlang,
+            // und der mitgerissene Nachbar loest weder Stuetzendurchgang noch
+            // faze-Wechsel aus.
+            foreach (var (dc, dr) in RailBreakSpread)
+                RailHit(col + dc, row + dr, int.MaxValue, false);
+            // Und die LINIE wird stillgelegt: faze := 3 (@0x4B06F9). spoj_tick
+            // @0x4C7840 faellt bei 3 durch alle Zweige und zaehlt sie nicht
+            // hoch -- es faehrt kein neuer Zug los, bis repariert ist.
+            foreach (var l in _railLines) if (l.Slot == c.Line) l.Faze = 3;
         }
-        if (broke) { RailPylonPass(); _railTiles = null; }
+        if (broke && spread) { RailPylonPass(); _railTiles = null; }
         return broke;
     }
 
@@ -831,14 +895,32 @@ public partial class MapEntityLayer : Node2D
     public bool RailRepair(int col, int row)
     {
         bool healed = false;
+        int line = -1;
         foreach (var c in _railCells)
         {
             if (c.Col != col || c.Row != row || !c.Broken) continue;
             c.Frame %= 10;
+            line = c.Line;
             healed = true;
         }
-        if (healed) { RailPylonPass(); _railTiles = null; }
-        return healed;
+        if (!healed) return false;
+        RailPylonPass();
+        _railTiles = null;
+        // Ist auf dieser Linie NICHTS mehr kaputt, laeuft sie wieder an:
+        // @0x409AB5 setzt faze := 0, und spoj_tick macht daraus im naechsten
+        // Durchgang sofort faze := 1 und startet spoj_launch.
+        foreach (var c in _railCells) if (c.Line == line && c.Broken) return true;
+        foreach (var l in _railLines) if (l.Slot == line && l.Faze == 3) l.Faze = 0;
+        return true;
+    }
+
+    /// <summary>Wieviele Stücke dieser Linie zerschossen sind — für den
+    /// Prüfstand und für die Reparaturfahrt.</summary>
+    public int RailBrokenOnLine(int line)
+    {
+        int n = 0;
+        foreach (var c in _railCells) if (c.Line == line && c.Broken) n++;
+        return n;
     }
 
     /// <summary>

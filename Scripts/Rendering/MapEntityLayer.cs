@@ -7997,7 +7997,22 @@ public partial class MapEntityLayer : Node2D
     {
         var live = new HashSet<(int, int)>();
         foreach (var c in _railCells) if (!c.Broken) live.Add((c.Col, c.Row));
-        foreach (var c in _railCells) if (c.Pylon) c.PylonKind = RailPylonKind(c, live);
+        foreach (var c in _railCells)
+        {
+            if (!c.Pylon) continue;
+            c.PylonKind = RailPylonKind(c, live);
+            // ⚠ 15.08.2026 — DER DURCHGANG SCHREIBT DAS BILD ZURUECK, und das
+            // hat eine Nebenwirkung, die in den Daten steht: `bild := 20*k +
+            // bild%10` (@0x4B03F0) drueckt ein GEBROCHENES Mastfeld sofort
+            // wieder unter 100. Ein Mastplatz kann darum gar nicht zerschossen
+            // bleiben -- in 4.DM liegen 0 von 49 kaputten Zellen auf einem
+            // Platz mit index%6==0, waehrend 11 von 11 Mastplaetzen heil sind.
+            // Ohne diese Zeile blieben bei uns Mastfelder kaputt liegen.
+            // Beobachtet, als der Prüfstand versehentlich eine Mastzelle nahm:
+            // Bild 20, zwanzig Treffer, »zerschossen=False« — sie wehrt sich
+            // wirklich. Das ist die Gegenprobe zu dieser Zeile.
+            c.Frame = 20 * c.PylonKind + c.Frame % 10;
+        }
     }
 
     private static int RailPylonKind(RailCell c, HashSet<(int, int)> live)
