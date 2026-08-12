@@ -67,23 +67,62 @@ public partial class MainMenu
 
     private static void Say(string s) => GD.Print("map-editor: " + s);
 
+    /// <summary>Die Menuezeile »Karteneditor« — der Schirm, der dieselben zwei
+    /// Laeufe ohne Befehlszeile erreichbar macht. Steht hier und nicht in
+    /// <c>MainMenu.cs</c>, aus demselben Grund wie der Rest dieser Datei: dort
+    /// wird gerade gearbeitet, und <c>MainMenu</c> ist eine
+    /// <c>partial class</c>.</summary>
+    private void ShowMapEditor() => AddChild(new MapEditorScreen { OnView = ViewMade });
+
+    /// <summary>Eine eben erzeugte Karte ANSEHEN — kein Gefecht. Warum nicht,
+    /// steht bei <see cref="SkirmishSetup.ViewMap"/>: eine erzeugte Karte hat 0
+    /// Einheiten und 0 Gebaeude, und ein Gefecht darauf gilt im ersten Takt als
+    /// verloren.
+    ///
+    /// <para>Die Kulisse geht VOR dem Szenenwechsel weg — derselbe Grund wie bei
+    /// <c>StartMission</c>: sonst laegen die 20..33 Megapixel des laufenden
+    /// Demos und das Bild der neuen Karte gleichzeitig im Speicher.</para></summary>
+    private void ViewMade(string mapName)
+    {
+        SkirmishSetup.Active = false;
+        SkirmishSetup.CampaignMission = 0;
+        SkirmishSetup.ViewMap = mapName;
+        Say($"ansehen: {mapName} im Kartenbetrachter (kein Gefecht)");
+        StopBackdrop();
+        GetTree().ChangeSceneToFile(SkirmishSetup.GameScene);
+    }
+
     /// <summary>
     /// <c>--map-new=&lt;name&gt;,&lt;breite&gt;,&lt;hoehe&gt;,&lt;kachelsatz&gt;</c> —
     /// erzeugt und schreibt. Rueckgabe ist der Rueckgabewert des Laufs.
     /// </summary>
-    private static int MapNew(string arg)
+    private static int MapNew(string arg) => MapNew(arg, Say);
+
+    /// <summary>
+    /// Derselbe Lauf, aber mit einem eigenen Berichterstatter — so bekommt der
+    /// Schirm (<see cref="MapEditorScreen"/>) jede Zeile in sein Fenster, und
+    /// zwar aus <b>demselben Weg</b>, den die geprueften Schalter nehmen.
+    ///
+    /// <para>⚠ Das ist der ganze Sinn dieser Aufteilung: die Oberflaeche baut
+    /// die Zeichenkette <c>name,breite,hoehe,kachelsatz[,flach][,boden=n]</c>
+    /// zusammen und uebergibt sie hier. Sie hat keinen zweiten, eigenen
+    /// Schreibweg — was am 12.08.2026 mit <c>--map-new=pruef01,64,64,47</c>
+    /// gemessen wurde (Rueckgabe 0, danach <c>--map-check</c> ohne
+    /// Beanstandung), gilt damit auch fuer den Knopf.</para>
+    /// </summary>
+    internal static int MapNew(string arg, Action<string> say)
     {
         var p = arg.Split(',', StringSplitOptions.RemoveEmptyEntries);
         if (p.Length < 4)
         {
-            Say("--map-new=<name>,<breite>,<hoehe>,<kachelsatz>"
+            say("--map-new=<name>,<breite>,<hoehe>,<kachelsatz>"
                 + "[,flach][,boden=<n>][,from=<ordner>][,quelle=<datei.CWM>]");
             return 2;
         }
         string name = p[0];
         if (!int.TryParse(p[1], out int w) || !int.TryParse(p[2], out int h) ||
             !int.TryParse(p[3], out int ts))
-        { Say("Breite, Hoehe und Kachelsatz muessen Zahlen sein"); return 2; }
+        { say("Breite, Hoehe und Kachelsatz muessen Zahlen sein"); return 2; }
 
         bool flat = false;
         string? from = null;
@@ -103,7 +142,7 @@ public partial class MainMenu
         if (source != null)
         {
             try { opened = CwmFile.Load(source); }
-            catch (Exception e) { Say($"{source}: {e.Message}"); return 2; }
+            catch (Exception e) { say($"{source}: {e.Message}"); return 2; }
             ts = opened.Tileset;
             w = opened.Width; h = opened.Height;
         }
@@ -111,7 +150,7 @@ public partial class MainMenu
         var files = MapGenerator.FindTileset(ts, from);
         if (files == null)
         {
-            Say($"Kachelsatz {ts:00} nicht gefunden — weder im Entwicklungsbaum " +
+            say($"Kachelsatz {ts:00} nicht gefunden — weder im Entwicklungsbaum " +
                 "(Assets/Legacy/DATA) noch unter user://data/DATA noch auf einer eingelegten CD. " +
                 "Mit »,from=<ordner>« laesst sich der Ordner nennen.");
             return 2;
@@ -121,7 +160,7 @@ public partial class MainMenu
         {
             var cwp = CwpFile.Load(files.Value.Cwp);
             var pal = PalFile.Load(files.Value.Pal);
-            Say($"Kachelsatz aus {files.Value.Cwp} ({cwp.FrameCount} Bodenkacheln, " +
+            say($"Kachelsatz aus {files.Value.Cwp} ({cwp.FrameCount} Bodenkacheln, " +
                 $"{cwp.ObjectCount} Objekte)");
 
             string outName = name.StartsWith("map_") ? name : "map_" + name;
@@ -136,7 +175,7 @@ public partial class MainMenu
                 // Spaeter ist es ausserdem der Weg, auf dem der Editor eine
                 // vorhandene Karte OEFFNET.
                 m = opened!;
-                Say($"Quelle {source}: {m.Width}x{m.Height}, Kachelsatz {m.Tileset:00}, " +
+                say($"Quelle {source}: {m.Width}x{m.Height}, Kachelsatz {m.Tileset:00}, " +
                     $"{m.Sections.Count} Abschnitte, Mission \"{m.Mission}\"");
             }
             else
@@ -144,19 +183,19 @@ public partial class MainMenu
                 var palette = new TilePalette(cwp, ts, pick);
                 if (!palette.Ok)
                 {
-                    Say(palette.Describe());
-                    Say("kein Bodenblock — ohne ganze Bodenkacheln haette die Karte nur Loecher");
+                    say(palette.Describe());
+                    say("kein Bodenblock — ohne ganze Bodenkacheln haette die Karte nur Loecher");
                     return 1;
                 }
-                m = MapGenerator.Build(outName, w, h, ts, palette, flat, Say);
+                m = MapGenerator.Build(outName, w, h, ts, palette, flat, say);
             }
-            MapGenerator.Write(m, cwp, pal, outName, Say);
-            Say($"fertig: jetzt --map-check={outName} und --map={outName}");
+            MapGenerator.Write(m, cwp, pal, outName, say);
+            say($"fertig: jetzt --map-check={outName} und --map={outName}");
             return 0;
         }
         catch (Exception e)
         {
-            Say("fehlgeschlagen: " + e);
+            say("fehlgeschlagen: " + e);
             return 1;
         }
     }
