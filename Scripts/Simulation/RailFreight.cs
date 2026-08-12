@@ -697,6 +697,20 @@ public partial class MapEntityLayer : Node2D
     /// Bild über 100 geht, dass der Träger VERSCHWINDET und statt dessen ein
     /// Trümmerfeld liegt, und dass die Stützenfassungen daneben neu bestimmt
     /// werden.</para></summary>
+    /// <summary>Ein echtes Geschoss auf eine Zelle setzen und den Einschlag von
+    /// <c>UpdateProjectiles</c> zustellen lassen — <b>der Weg, den das Spiel
+    /// nimmt</b>, nicht der Aufruf der Rechnung dahinter.</summary>
+    private void RailFireProbe(int col, int row, int damage)
+    {
+        var at = RailCellPoint(col, row);
+        _shots.Add(new Projectile
+        {
+            Pos = at, Aim = at, Target = -1, Shooter = -1, Damage = damage,
+            Facing = 0, Kind = "rocket_l", Speed = 190f,
+        });
+        UpdateProjectiles(1f / 60f);
+    }
+
     /// <summary>Die Verteilung der vier Stützenfassungen, als Text.</summary>
     private string RailPylonKindsText()
     {
@@ -718,6 +732,19 @@ public partial class MapEntityLayer : Node2D
         string pyl0 = RailPylonKindsText();
         sb.Append($"rail-hit-check: Zelle ({col},{row}) Bild {pick.Frame} " +
                   $"Trefferpunkte {pick.Hp}\n");
+        // 0) ⚠ ZUERST der WEG DES SPIELS, nicht die Mechanik: ein echtes
+        //    Geschoss auf die Zelle setzen und den Einschlag von
+        //    UpdateProjectiles zustellen lassen. Ein Pruefstand, der nur
+        //    RailHit ruft, prueft die Rechnung und nicht, ob der Einschlag sie
+        //    ueberhaupt erreicht — dieselbe Falle wie am 10.08. bei der
+        //    Produktion.
+        int hpBefore = pick.Hp;
+        RailFireProbe(col, row, 10);
+        sb.Append($"  Weg des Spiels: ein Geschoss (Schaden 10) auf die Zelle -> " +
+                  $"Trefferpunkte {hpBefore} -> {pick.Hp}" +
+                  (pick.Hp == hpBefore - 10 ? "  der Einschlag kommt an"
+                                            : "  ⚠ der Einschlag erreicht das Gleis NICHT") + "\n");
+
         // 1) ein Treffer, der NICHT reicht
         int dmg = Mathf.Max(1, pick.Hp / 3);
         bool broke = RailHit(col, row, dmg);
