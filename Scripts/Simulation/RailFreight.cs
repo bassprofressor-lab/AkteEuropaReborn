@@ -272,8 +272,15 @@ public partial class MapEntityLayer : Node2D
 
     // ---- der Automat --------------------------------------------------------
 
+    /// <summary>Die Dauer des letzten Takts — die Flüssigkeitszahl misst px je
+    /// TAKT, nicht je Sekunde, und ein langer Takt bewegt den Waggon weiter.
+    /// Ohne diese Zahl daneben ist nicht zu unterscheiden, ob das Modell hakt
+    /// oder nur ein Bild lang gebraucht hat.</summary>
+    private float _railLastDt;
+
     private void UpdateFreight(float dt)
     {
+        _railLastDt = dt;
         if (_railLines.Count == 0) return;
         if (_bldBySlot.Count == 0) RebuildRailIndex();
         // ⚠ 11.08.2026 — die FAHRT laeuft je Bild, der AUTOMAT weiter im Takt.
@@ -661,6 +668,26 @@ public partial class MapEntityLayer : Node2D
     /// größte dabei zurückgelegte Weg.</summary>
     public int RailWagonTurnCount;
     public float RailWagonTurnMaxPx;
+
+    /// <summary>
+    /// <b>Das Band, in dem die Fahrgeschwindigkeit wirklich liegt</b> — px je
+    /// SEKUNDE, über alle Fahrbilder.
+    ///
+    /// <para>⚠ 15.08.2026 — <see cref="RailWagonMaxPxPerFrame"/> misst den Weg
+    /// je TAKT, und der hängt an der Bildzeit: auf map_DM_4 meldete er 18,55 px
+    /// gegen 2,21 px auf map_NET02. Instrumentiert war die Antwort eindeutig —
+    /// <b>jeder große Schritt hatte exakt 124 px/s</b>, nur <c>dt</c> schwankte
+    /// zwischen 82 und 104 ms, weil die grosse Karte kopflos mit rund elf
+    /// Bildern je Sekunde läuft. Die Zahl vermischte also Modellgüte mit
+    /// Bildzeit und konnte beides nicht auseinanderhalten.</para>
+    ///
+    /// <para><b>Die Gegenprobe steckt in der Zahl selbst:</b> das Original
+    /// bewegt einen Waggon 8 px je 20-ms-Takt = <b>400 px/s</b>; bei unserem
+    /// <c>TickScale 16</c> gegen dessen 50 sind das <b>128 px/s</b>. Gemessen
+    /// 124 — das Band ist die richtige Antwort auf »ruckelt es?«, denn ein
+    /// enges Band heisst gleichmässig, ganz gleich wie lang ein Bild
+    /// dauert.</para></summary>
+    public float RailWagonPxPerSecMin = float.MaxValue, RailWagonPxPerSecMax;
 
     /// <summary><b>Die Frage, die bisher kein Zählwerk gestellt hat:</b> stehen
     /// die vier Waggons einer Linie auch auf VIER Zellen? Beim Wenden klemmt
@@ -1079,7 +1106,19 @@ public partial class MapEntityLayer : Node2D
             bool fahrt = w.Dir == _railProbeDir && Mathf.Abs(w.Step - _railProbeStep) <= 1;
             if (_railProbeStep >= 0)
             {
-                if (fahrt) { if (d > RailWagonMaxPxPerFrame) RailWagonMaxPxPerFrame = d; }
+                if (fahrt)
+                {
+                    if (d > RailWagonMaxPxPerFrame) RailWagonMaxPxPerFrame = d;
+                    // ⚠ 15.08.2026 — DIE GESCHWINDIGKEIT ist die Zahl, die
+                    // »ruckelt es?« beantwortet, nicht der Weg je Takt. Siehe
+                    // RailWagonPxPerSecMin.
+                    if (_railLastDt > 0.0005f && d > 0.01f)
+                    {
+                        float v = d / _railLastDt;
+                        if (v < RailWagonPxPerSecMin) RailWagonPxPerSecMin = v;
+                        if (v > RailWagonPxPerSecMax) RailWagonPxPerSecMax = v;
+                    }
+                }
                 else { RailWagonTurnCount++; if (d > RailWagonTurnMaxPx) RailWagonTurnMaxPx = d; }
             }
             _railProbePos = now; _railProbeStep = w.Step; _railProbeDir = w.Dir;
@@ -1317,9 +1356,17 @@ public partial class MapEntityLayer : Node2D
             {
                 sb.Append($" | Waggon {w.Index} auf Linie {w.Line} bei " +
                           $"({w.Col:0.00},{w.Row:0.00}) Schritt {w.Step}");
-                sb.Append($" | Lauf: {RailWagonCellsPerSec:0.00} Zellen/s, groesste Aenderung " +
-                          $"{RailWagonMaxPxPerFrame:0.00} px je Bild (Original: 8 px je Takt, @0x4C6BA1)" +
-                          $", davon getrennt {RailWagonTurnCount} Fahrtwechsel " +
+                // ⚠ Die Geschwindigkeit steht VORN, denn sie beantwortet die
+                // Frage; der Weg je Takt haengt an der Bildzeit und ist nur
+                // noch Beiwerk (siehe RailWagonPxPerSecMin).
+                string band = RailWagonPxPerSecMax > 0f
+                    ? $"bis {RailWagonPxPerSecMax:0} px/s (kleinster Wert " +
+                      $"{RailWagonPxPerSecMin:0}, an den Fahrtenden)"
+                    : "noch nichts gefahren";
+                sb.Append($" | Lauf: {RailWagonCellsPerSec:0.00} Zellen/s, Geschwindigkeit " +
+                          $"{band} (Original 400 px/s bei 50 Hz, bei TickScale 16 also 128)" +
+                          $", Weg je Takt hoechstens {RailWagonMaxPxPerFrame:0.00} px" +
+                          $", {RailWagonTurnCount} Fahrtwechsel getrennt gezaehlt " +
                           $"(groesster Sprung {RailWagonTurnMaxPx:0.00} px)");
                 sb.Append($" | Stauchung: {RailSquashFrames} von {RailSquashSeen} Linienbildern mit " +
                           $"zwei Waggons naeher als {RailSquashPx:0} px, schlimmstenfalls " +
