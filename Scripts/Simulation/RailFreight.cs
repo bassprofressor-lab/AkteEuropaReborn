@@ -575,6 +575,84 @@ public partial class MapEntityLayer : Node2D
     public Vector2 RailSquashAt;
     public int RailSquashLine = -1;
 
+    /// <summary>
+    /// <b>Die Stellen, an denen sich die Strecke ansehen lohnt</b> — je eine
+    /// Zelle für Rampe, Kurve, senkrechter Lauf, Stütze, Streckenende,
+    /// Linienanschluss und ein fahrender Zug.
+    ///
+    /// <para>Warum das hier steht statt im Prüfstand: ein Grafikfehler an der
+    /// Bahn ist nur im BILD zu sehen, und jedes Bild kostete bisher einen
+    /// eigenen Lauf von anderthalb Minuten — samt geratener Koordinaten, weil
+    /// von außen niemand weiß, wo auf einer 230×230-Karte eine Rampe liegt.
+    /// <c>--rail-tour</c> fotografiert diese Liste in EINEM Lauf.</para>
+    ///
+    /// <para>Die Auswahl ist bewusst nach FORM getroffen, nicht nach Karte:
+    /// dieselbe Fahne liefert auf jeder Karte die vergleichbaren Stellen.</para>
+    /// </summary>
+    /// <summary>
+    /// <b>Die Kartenstelle einer Zelle, so wie GEZEICHNET wird</b> — für die
+    /// Kamera des Prüfstands.
+    ///
+    /// <para>⚠ 13.08.2026 — das ist NICHT <c>spalte·40, zeile·20</c>, und der
+    /// Unterschied hat schon zweimal Zeit gekostet. <see cref="RailPoint"/>
+    /// rechnet <c>_ox + spalte·40 + 20</c> und
+    /// <c>_oy + zeile·20 − höhe·15 + 10</c>: dazu kommen also der Zeichen-
+    /// ursprung der Karte (auf der ersten Kampagnenkarte 115 px), die halbe
+    /// Zelle und die Geländehöhe. <c>--look</c> hat all das ignoriert und
+    /// deshalb systematisch danebengezielt — auf der Rampenzelle 163,46 um
+    /// zweieinhalb Spalten. Wer eine Zelle fotografieren will, nimmt
+    /// DIESEN Punkt.</para></summary>
+    public Vector2 RailCellPoint(int col, int row) => RailPoint(new Vector2(col, row));
+
+    public List<(string Label, int Col, int Row)> RailTourSpots()
+    {
+        var outp = new List<(string, int, int)>();
+        var seen = new HashSet<string>();
+        void Take(string label, int col, int row)
+        {
+            if (seen.Add(label)) outp.Add((label, col, row));
+        }
+
+        // Zellen nach Zelle greifbar machen, für die Nachbarproben
+        var at = new Dictionary<(int, int), RailCell>();
+        foreach (var c in _railCells) if (!c.Broken) at[(c.Col, c.Row)] = c;
+
+        foreach (var c in _railCells)
+        {
+            if (c.Broken) continue;
+            if (c.Base is >= 6 and <= 9) Take("rampe", c.Col, c.Row);
+            if (c.Base is >= 2 and <= 5) Take("kurve", c.Col, c.Row);
+            if (c.Pylon && c.PylonKind != 0) Take("streckenende", c.Col, c.Row);
+            if (c.Pylon && c.PylonKind == 0 && c.Base == 0) Take("stuetze", c.Col, c.Row);
+            // Ein senkrechter Lauf: Bild 1 mit Bild 1 darüber UND darunter.
+            if (c.Base == 1
+                && at.TryGetValue((c.Col, c.Row - 1), out var up) && up.Base == 1
+                && at.TryGetValue((c.Col, c.Row + 1), out var dn) && dn.Base == 1)
+                Take("senkrecht", c.Col, c.Row);
+        }
+        // Ein zerschossenes Stück, falls die Karte eines mitbringt — dort klafft
+        // bei uns ein Loch, und genau das gehört angesehen.
+        foreach (var c in _railCells)
+            if (c.Broken) { Take("zerschossen", c.Col, c.Row); break; }
+
+        // Der Anschluss: das ERSTE und das LETZTE Feld der längsten Linie.
+        int best = -1, bestN = 0;
+        foreach (var kv in _lineCell)
+            if (kv.Value.Count > bestN) { bestN = kv.Value.Count; best = kv.Key; }
+        if (best >= 0 && bestN >= 2)
+        {
+            var cells = _lineCell[best];
+            Take("anschluss-anfang", Mathf.RoundToInt(cells[0].X), Mathf.RoundToInt(cells[0].Y));
+            Take("anschluss-ende", Mathf.RoundToInt(cells[^1].X), Mathf.RoundToInt(cells[^1].Y));
+        }
+
+        // Ein fahrender Zug, damit Waggon UND Gleis im selben Bild stehen.
+        foreach (var w in _wagons)
+            if (w.Freight) { Take("zug", Mathf.RoundToInt(w.Col), Mathf.RoundToInt(w.Row)); break; }
+
+        return outp;
+    }
+
     /// <summary>Die Zellen aller Waggons der gestauchten Linie, als Text neben
     /// das Bild — ein Foto allein sagt nicht, welche Sprites übereinander
     /// liegen.</summary>

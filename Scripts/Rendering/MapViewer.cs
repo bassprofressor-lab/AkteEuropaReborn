@@ -437,8 +437,15 @@ public partial class MapViewer : Node2D
             var lp = _look.Split(',');
             if (lp.Length >= 2)
             {
-                _camera.Position = new Vector2(lp[0].ToInt() * 40,
-                                               lp[1].ToInt() * 20);
+                // ⚠ 13.08.2026 — hier stand `spalte*40, zeile*20`, und das ist
+                // NICHT die Stelle, an der die Zelle gezeichnet wird: es fehlten
+                // der Zeichenursprung der Karte, die halbe Zelle und die
+                // Gelaendehoehe (siehe MapEntityLayer.RailCellPoint). --look
+                // zielte damit systematisch daneben -- auf Zelle 163,46 der
+                // map_NET02 um zweieinhalb Spalten. Gefunden hat es der
+                // Rundgang --rail-tour, der auf einer Rampe stehen sollte und
+                // Wiese zeigte.
+                _camera.Position = _entities.RailCellPoint(lp[0].ToInt(), lp[1].ToInt());
                 // --look=<spalte>,<zeile>[,<zoom>] — ohne Zoomwert wie bisher 3.
                 float z = lp.Length >= 3 ? Mathf.Max(0.2f, lp[2].ToFloat()) : 3f;
                 _camera.Zoom = new Vector2(z, z);
@@ -535,6 +542,12 @@ public partial class MapViewer : Node2D
         {
             if (a.StartsWith("--shot=")) _shotPath = a[7..];
             else if (a.StartsWith("--shot-delay=")) _shotDelay = a[13..].ToInt();
+            else if (a.StartsWith("--rail-tour="))
+            {
+                var q = a["--rail-tour=".Length..].Split(',');
+                _tourPrefix = q[0];
+                if (q.Length >= 2) _tourZoom = Mathf.Max(0.2f, q[1].ToFloat());
+            }
             else if (a.StartsWith("--shot-when="))
             {
                 var q = a["--shot-when=".Length..].Split(',');
@@ -929,7 +942,7 @@ public partial class MapViewer : Node2D
     /// </summary>
     private void HookShotTrigger()
     {
-        if (_shotHooked || _shotPath.Length == 0) return;
+        if (_shotHooked || (_shotPath.Length == 0 && _tourPrefix.Length == 0)) return;
         _shotHooked = true;
         GetTree().ProcessFrame += TakeShotIfDue;
     }
@@ -949,14 +962,54 @@ public partial class MapViewer : Node2D
     private string _shotWhen = "";
     private int _shotWhenN = 4;
 
+    /// <summary>`--rail-tour=<c>&lt;praefix&gt;[,&lt;zoom&gt;]</c>` — die
+    /// interessanten Stellen der Bahnstrecke in EINEM Lauf fotografieren, ein
+    /// Bild je Bild.
+    ///
+    /// <para>Warum: ein Fehler an der Bahn ist nur im Bild zu sehen, und ein
+    /// Bild kostete bisher einen eigenen Lauf von anderthalb Minuten samt
+    /// geratener Koordinaten — von außen weiß niemand, wo auf einer 230×230
+    /// grossen Karte eine Rampe oder ein Streckenende liegt. Welche Stellen es
+    /// sind, entscheidet <see cref="MapEntityLayer.RailTourSpots"/> nach der
+    /// FORM, nicht nach der Karte.</para></summary>
+    private string _tourPrefix = "";
+    private float _tourZoom = 4f;
+    private System.Collections.Generic.List<(string Label, int Col, int Row)>? _tour;
+
     private void TakeShotIfDue()
     {
+        if (_tourPrefix.Length > 0)
+        {
+            if (_frames++ < _shotDelay) return;
+            _tour ??= _entities.RailTourSpots();
+            if (_tour.Count == 0)
+            {
+                GD.Print("MapViewer: --rail-tour — diese Karte hat keine Bahnstrecke");
+                GetTree().Quit();
+                return;
+            }
+            var s = _tour[0];
+            _tour.RemoveAt(0);
+            _camera.Position = _entities.RailCellPoint(s.Col, s.Row);
+            _camera.Zoom = new Vector2(_tourZoom, _tourZoom);
+            ClampCamera();
+            RenderingServer.ForceDraw();
+            string file = $"{_tourPrefix}_{s.Label}.png";
+            GetViewport().GetTexture().GetImage().SavePng(file);
+            GD.Print($"MapViewer: rail-tour -> {file}   ({s.Label} auf Zelle {s.Col},{s.Row})");
+            if (_tour.Count == 0) GetTree().Quit();
+            return;
+        }
         if (_shotPath.Length == 0 || _frames++ < _shotDelay) return;
         if (_shotWhen == "squash")
         {
             if (_entities.RailSquashNow < _shotWhenN) return;
             var at = _entities.RailSquashAt;
-            _camera.Position = new Vector2(at.X * 40, at.Y * 20);
+            // ⚠ Hier stand `at.X * 40, at.Y * 20` — daneben, siehe
+            // MapEntityLayer.RailCellPoint. Deshalb zeigte die erste Aufnahme
+            // der Stauchung eine ANDERE Linie.
+            _camera.Position = _entities.RailCellPoint(Mathf.RoundToInt(at.X),
+                                                       Mathf.RoundToInt(at.Y));
             ClampCamera();
             GD.Print($"MapViewer: --shot-when=squash ausgeloest — {_entities.RailSquashNow} " +
                      $"Waggons auf Zelle ({at.X:0.00},{at.Y:0.00}), Linie {_entities.RailSquashLine}\n" +
