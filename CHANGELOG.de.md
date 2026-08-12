@@ -165,6 +165,44 @@ Spieler auf den Bildschirm gesehen hat.
   damit die Frage nicht wiederkommt. Eine getroffene Zelle geht kaputt, eine
   ganze Linie fällt nie aus. Ein Fahrzeug repariert und sucht danach von selbst
   das nächste kaputte Stück. Kein Befehl im Original legt ein neues Gleis.
+- ⭐ **Das Gleisdeck lag 40 px zu tief — die Böcke hingen in der Luft.** Beide
+  GAME.EXE setzen Kacheln auf `zeile·20 − höhe·15 − 50` und Gleis auf `− 62`,
+  und unser **x stimmte längst auf den Pixel** — genau das war der Beleg, dass
+  allein y falsch war, und zwar um exakt zwei Zellzeilen. Gegenprobe ohne
+  Bauen: Teil 65 ist 83 Zeilen hoch mit dem Fuß auf Zeile 82, und der landete
+  vorher 40 px *unter* seiner eigenen Zelle. ⚠ Das Werkzeug, das die alte Zahl
+  »belegt« hatte, war selbstbezüglich — es setzte die Schiene mit unserer
+  eigenen Zahl.
+- **Die Waggons sind gekuppelt: 0 sichtbare Lücken statt 338 000.** Erst
+  gemessen, wo es klafft (waagerecht in gut der Hälfte aller Takte, senkrecht
+  fast nie), dann die Ursache gerechnet: der Rückstand 0/4/7/11 Takte ergibt
+  32/24/32 px, die Bilder sind aber 41/22/22/39 px lang. ⚠ **Das Original
+  zeigt diese Fugen selbst.** Hier ist zugunsten des Bildes entschieden, und
+  zwar so knapp wie möglich: verkürzt wird nur, nie verlängert, und nie unter
+  12 px — den kleinsten Abstand, den das Original je erzeugt. Über
+  1 010 014 gemessene Waggonpaare bleibt keine Lücke.
+- **»Ecken und Knicke schließen nicht« ist nicht reproduzierbar** — der Zähler
+  maß die falsche Sache. Seine 4,1 px sind der **gewollte** Versatz, mit dem
+  ein Eckstück seine Zelle verlässt, damit die Treppe als Schräge liest (unten
+  27,1 · 29,5 · 31,9, symmetrisch, und nur auf der Achse oben/unten). Er misst
+  jetzt das **Loch** zwischen den Bildpunkten: 0 von 1119, 0 von 508, 0 von 785
+  auf drei Karten.
+- ⭐ **Der Zug fährt auf der gezeichneten Schiene, nicht auf den Zellmitten.**
+  Eine isometrische Diagonale steht in der Karte als Treppe aus Einzelzellen —
+  der Zug lief die Treppe, während die Grafik darunter eine glatte Schräge
+  zeigt. Gemeldet als »macht Zicke Zacke beim Fahren«. Die Randmitten stehen in
+  der Kunst und sind gemessen; damit ist die alte Sperre **umgangen, ohne sie
+  zu brechen** — die Halbzeilen-Parität des Originals bleibt unlesbar, wird
+  aber nicht mehr gebraucht. Mittlerer Richtungswechsel je Takt **1,6° → 0,7°**.
+  Der Fortschritt läuft dazu über die **Bogenlänge** statt über die Gliedzahl:
+  das Original zieht je Takt einen festen Betrag ab, fährt also überall gleich
+  schnell.
+- **Der Zug sitzt auf der Schiene statt darüber.** Beim Nachziehen der Deckhöhe
+  war das Delta aus dem *Rahmen des Originals* genommen worden statt der an den
+  Bildern gemessenen Zahl — genau der Fehler, vor dem der Kommentar eine Zeile
+  höher warnt.
+- **Jede Kreuzung hatte einen Strang zu wenig**, und auf der Rückfahrt stand
+  der ganze Zug verkehrt herum, die Lok voran am falschen Ende.
 
 ### Grafik und Animation
 
@@ -219,6 +257,28 @@ Spieler auf den Bildschirm gesehen hat.
   eine wörtliche 10, Schiffe ihr eigenes Feld. Die Formel wurde in beiden
   Fassungen an ihrer Form gefunden, und das `− 1` gehört dazu: auf flachem
   Boden sieht eine Einheit einen Ring weniger weit als ihr blanker Sichtwert.
+- ⭐ **Die Strecke wirft Schatten — 1193 Masken, die seit dem ersten Import
+  ungenutzt lagen.** Jedes Gleisstück bringt seine Schattenmaske mit (Bilder
+  10..19), versetzt nach unten rechts, wohin bei Licht von oben links der
+  Schatten fällt. Wie dunkel, ist **gemessen** und nicht gewählt: das Original
+  färbt den Untergrund über eine 256-Byte-Tabelle um, und über die Farben, die
+  im Gelände wirklich vorkommen, ergibt das 0,775/0,831/0,820 je Kanal bei
+  3,1 % Restfehler. Genommen ist der einzelne Faktor 0,809 — 19 % Schwarz.
+- ⭐ **Die Hangposen: 4128 Bilder, die nie exportiert wurden.** Ein Teil führt
+  sechs Blöcke je Gruppe, und der Block ist die **Neigung**, mit der eine
+  Einheit auf schrägem Boden steht. Der Exporter schrieb nur Block 0 — und das
+  Bittere daran: der **Turmsitz** wurde längst nach der Hangklasse gerückt, das
+  Bild nicht. Der Rumpf blieb flach, während der Boden unter ihm kippte und der
+  Turm schon zur Seite rutschte.
+- **Die ganze Bank liegt jetzt auf der Platte**: 81 Teile, 3535 Bilder. Der
+  Exporter schrieb nur, was auf einer Karte steht oder baubar ist — die 601
+  gespeicherten Entwürfe greifen aber auf Bauteile, die auf keiner der 44
+  Karten vorkommen: **Minenleger, Flak-Geschütz, Antiradar** und sieben
+  weitere. Wer so etwas konstruierte, hatte ein unsichtbares Geschütz.
+- **Teil 111 ist der Rotorschatten, kein Rotor.** Der Hubschrauber blinkte mit
+  10 Hz zwischen Rotor und schwarzem Kreuz, weil die Maske als zweite
+  Rotorphase gezeichnet wurde. Und die acht Bilder des Rotors sind **Phasen**,
+  keine Richtungen — er drehte sich gar nicht.
 
 ### Die Oberfläche
 
@@ -269,6 +329,22 @@ Spieler auf den Bildschirm gesehen hat.
   liest den Satz nicht mehr.
 - **Einstellungen im Pausenmenü**, und das Fenster startet mit 1600×900 und
   ist veränderbar.
+- **Der Karteneditor hat eine Zeile im Hauptmenü.** Es gab ihn schon, aber nur
+  hinter zwei Schaltern der Befehlszeile — also hinter etwas, das ein Spieler
+  nicht hat. ⚠ Er ist ein **Gelände-Generator**, kein Editor im Wortsinn:
+  Größe, Kachelsatz, Bodenblock, erzeugen, prüfen, ansehen. Malen, Einheiten
+  setzen und das Öffnen vorhandener Karten fehlen, und eine erzeugte Karte
+  lässt sich nicht spielen — deshalb heißt der Knopf »Karte ansehen« und nicht
+  »Spielen«.
+- **Gefecht: »Alle Einheiten«** — eine Option von uns, und der Anlass ist eine
+  Lücke in den Daten. Die Gefechtskarten tragen **null Flugzeugvorlagen**; der
+  Flughafen hatte nichts anzubieten, gleich wieviel im Lager lag. Mit dem Haken
+  bekommen alle acht Spieler die volle Auswahl — **Boden 601 statt 65 Entwürfe,
+  Luft 8 statt 0, See 10 statt 2** —, die Gegner eingeschlossen, sonst wäre es
+  kein Gefecht, sondern ein Vorteil. ⚠ Dabei fiel auf, dass die
+  Flugzeugvorlagen **keine Preise** tragen: die Flugzeuge wären umsonst
+  gewesen. Geholt sind sie aus den 13 Karten, die sie führen — je Typ ein Preis
+  über 104 Sätze, kein Gegenbeispiel.
 
 ### Spielregeln
 

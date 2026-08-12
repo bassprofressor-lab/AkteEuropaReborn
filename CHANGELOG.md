@@ -154,6 +154,42 @@ at the screen.
   in the code, so the question does not come back. A single hit cell breaks;
   a whole line never fails. A vehicle repairs it and then looks for the next
   broken piece by itself. Nothing in the original lays a new piece of track.
+- ⭐ **The track deck sat 40 px too low — the trestles hung in mid-air.** Both
+  GAME.EXE place tiles at `row·20 − height·15 − 50` and track at `− 62`, and our
+  **x already matched to the pixel** — which is precisely what proved that only
+  y was wrong, and wrong by exactly two cell rows. A counter-proof that needs no
+  build: part 65 is 83 rows tall with its foot on row 82, and that foot used to
+  land 40 px *below* its own cell. ⚠ The tool that had "confirmed" the old
+  number was self-referential — it placed the rail using our own figure.
+- **The wagons are coupled: 0 visible gaps instead of 338,000.** First measure
+  where it gapes (horizontally in a good half of all ticks, vertically almost
+  never), then work out why: a lag of 0/4/7/11 ticks gives 32/24/32 px while the
+  sprites are 41/22/22/39 px long. ⚠ **The original shows these seams itself.**
+  The decision here went to the picture, and as narrowly as possible: the lag is
+  only ever shortened, never lengthened, and never below 12 px — the smallest
+  distance the original ever produces. Across 1,010,014 measured wagon pairs not
+  one gap is left.
+- **"Corners and kinks do not close" is not reproducible** — the counter was
+  measuring the wrong thing. Its 4.1 px is the **intended** offset with which a
+  corner piece leaves its cell so that the staircase reads as a slope (27.1 ·
+  29.5 · 31.9 along the bottom, symmetric, and only on the top/bottom axis). It
+  now measures the **hole** between the pixels: 0 of 1119, 0 of 508, 0 of 785 on
+  three maps.
+- ⭐ **The train runs on the drawn rail, not on cell centres.** An isometric
+  diagonal is stored as a staircase of single cells — the train walked the
+  staircase while the artwork below it showed a smooth slope. Reported as "it
+  still zig-zags". The edge midpoints are in the artwork and are measured, which
+  side-steps the old blocker **without breaking it**: the original's half-row
+  parity stays unreadable, but is no longer needed. Mean direction change per
+  tick **1.6° → 0.7°**. Progress now runs on **arc length** rather than link
+  count: the original deducts a fixed amount per tick, so it travels at the same
+  speed everywhere.
+- **The train sits on the rail instead of above it.** When the deck height was
+  corrected, the delta had been taken from the *original's own frame* instead of
+  the figure measured off the sprites — exactly the mistake the comment one line
+  above warns about.
+- **Every crossing was missing a strand**, and on the return leg the whole train
+  faced backwards, locomotive first at the wrong end.
 
 ### Graphics and animation
 
@@ -205,6 +241,27 @@ at the screen.
   literal 10 and ships their own field. The formula was found by its shape in
   both executables, and the `− 1` matters: on flat ground a unit sees one ring
   less than its bare sight value.
+- ⭐ **The track casts shadows — 1193 masks that had lain unused since the first
+  import.** Every piece of track carries its own shadow mask (frames 10..19),
+  offset down and to the right, where light from the upper left puts it. How
+  dark is **measured**, not chosen: the original recolours the ground through a
+  256-byte table, and over the colours that actually occur in the terrain that
+  works out to 0.775/0.831/0.820 per channel with a 3.1 % residual. Taken is the
+  single factor 0.809 — black at 19 %.
+- ⭐ **The slope poses: 4128 sprites that were never exported.** A part carries
+  six blocks per group, and the block is the **tilt** a unit stands at on sloped
+  ground. The exporter wrote block 0 only — and the galling part: the **turret
+  seat** had long been shifted by the slope class, the sprite had not. The hull
+  stayed flat while the ground under it tilted and the turret already slid
+  aside.
+- **The whole bank is on disk now**: 81 parts, 3535 sprites. The exporter wrote
+  only what stands on a map or can be built — but the 601 stored designs reach
+  for components that appear on none of the 44 maps: **mine layer, flak gun,
+  anti-radar** and seven more. Designing one of those gave you an invisible gun.
+- **Part 111 is the rotor's shadow, not a rotor.** The helicopter flickered
+  between rotor and black cross at 10 Hz because the mask was drawn as a second
+  rotor phase. And the rotor's eight frames are **phases**, not facings — it was
+  not turning at all.
 
 ### The interface
 
@@ -252,6 +309,21 @@ at the screen.
   it, but nobody reads that once they think the window is stuck.
 - **Settings in the pause menu**, and the window starts at 1600×900 and can be
   resized.
+- **The map editor has a row in the main menu.** It existed already, but only
+  behind two command-line switches — that is, behind something a player does not
+  have. ⚠ It is a **terrain generator**, not an editor in the full sense: size,
+  tileset, ground block, generate, check, view. Painting, placing units and
+  opening existing maps are missing, and a generated map cannot be played —
+  which is why the button says "view map" and not "play".
+- **Skirmish: "all units"** — an option of ours, and the reason is a gap in the
+  data. The skirmish maps carry **zero aircraft templates**; the airfield had
+  nothing to offer no matter what was in store. With the box ticked all eight
+  players get the full roster — **ground 601 designs instead of 65, air 8
+  instead of 0, sea 10 instead of 2** — opponents included, or it would be an
+  advantage rather than a match. ⚠ It also surfaced that the aircraft templates
+  carry **no prices**: aircraft would have been free. They were taken from the
+  13 maps that do carry them — one price per type across 104 records, no
+  counterexample.
 
 ### Gameplay and rules
 
