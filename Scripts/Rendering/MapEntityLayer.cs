@@ -9199,7 +9199,38 @@ public partial class MapEntityLayer : Node2D
     /// die Deckfarbe des Gebaeudes lag auf Schirmzeile 338..340, unsere auf
     /// 341..343 — vier Schirmzeilen sind bei Zoom 4 genau ein Kartenpixel.</para>
     /// </summary>
-    private const int RailDeckOffset = 23;
+    /// <summary>
+    /// ⚠ <b>15.08.2026 von 23 auf −17 — das Gleis lag ZWEI ZELLZEILEN zu tief.</b>
+    ///
+    /// <para>Gelesen sind jetzt BEIDE Einreiher des Originals, und sie stehen in
+    /// beiden Fassungen wörtlich gleich:</para>
+    /// <code>
+    ///   Kachel   y = zeile·20 − höhe·15 − 50 + yoff   (sub ebp,0x32  @0x4B42DF)
+    ///   Gleis    y = zeile·20 − höhe·15 − 62 + yoff   (add ax,0x3e   @0x42E015)
+    ///   Gleis    x = spalte·40 − 6                    (sub ax,6      @0x42DFEC)
+    /// </code>
+    /// <para>Unser <see cref="Import.MapBaker.BlitAnchor"/> ist dieselbe −50, die
+    /// Umrechnung steht also. <b>Die Probe darauf ist das x</b>: unser
+    /// <c>spalte·40 + 20 − 30 + CanvasXPad(4) = spalte·40 − 6</c> trifft die des
+    /// Originals auf den Pixel. Nur y war um <b>40 = 2·TileH</b> daneben.</para>
+    ///
+    /// <para><b>Die Gegenprobe braucht kein Gebäude:</b> Teil 65 (Träger mit
+    /// Bock) ist 83 Zeilen hoch, sein Fuß liegt auf Leinwandzeile 82. Mit 23
+    /// landet er auf <c>−55+23+82 = +50</c>, also 40 px UNTER seiner eigenen
+    /// Zelle — in der Luft. Mit −17 auf <c>−55−17+82 = +10</c>, genau der
+    /// Unterkante der Zelle. Ein Bock, der auf dem Boden steht, ist der Beleg.</para>
+    ///
+    /// <para>⚠ <b>Und damit ist meine eigene Messung vom Vormittag widerlegt.</b>
+    /// <c>aekernel-tools/rail_deck_overlay.py</c> setzte die Gebäudekachel
+    /// richtig, das Gleis aber mit unserer eigenen 23 — es hielt also wieder
+    /// unsere Ableitung gegen sich selbst, zum dritten Mal an einem Tag. Die
+    /// „Oberkante des Gitterträgers", die es meldete, gehört zur Anschlusszeile
+    /// +3.</para>
+    ///
+    /// <para>⚠ Die Zahl <c>--rail-check „Anschlusszeile: n von m"</c> ändert sich
+    /// dadurch NICHT — <see cref="RailDeckPixel"/> kürzt sich weiter aus der
+    /// Differenz heraus. <b>Die Probe ist das Bild.</b></para></summary>
+    private const int RailDeckOffset = -17;
 
     /// <summary>
     /// Wohin der Waggon gegen sein eigenes Gleisbild rückt — <b>nirgendwohin</b>.
@@ -9226,7 +9257,7 @@ public partial class MapEntityLayer : Node2D
     /// 5,5 px links der Schienenmitte. Ob das die Kunst so will oder eine
     /// Ablage fehlt, ist NICHT entschieden — es wird hier nichts geschoben,
     /// bevor es gemessen ist.</para></summary>
-    private static readonly Vector2 WagonOverRail = Vector2.Zero;
+    private static readonly Vector2 WagonOverRail = new(6, -28 + RailDeckOffset);
 
     /// <summary>Wo die Schienenoberkante eines Gleisbildes INNERHALB ihrer
     /// Zelle liegt: <c>TileH/2 − ComposedAnchor.y + RailDeckOffset + 29</c>.
