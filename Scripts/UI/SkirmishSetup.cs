@@ -31,6 +31,47 @@ public static class SkirmishSetup
     /// normal.</summary>
     public static int Resources = 2;
 
+    /// <summary>
+    /// <b>»Alle Einheiten« — und damit auch LUFTEINHEITEN.</b>
+    ///
+    /// <para>⚠ <b>UNSERE OPTION</b>, und sie steht hier, weil das Original für
+    /// ein Gefecht keine hat, die wir gelesen hätten. Der Anlass ist eine
+    /// Lücke in den Daten: die Gefechtskarten tragen in <b>sec120 NULL
+    /// Flugzeugvorlagen</b> (nachgezählt auf NET02, NET05 und NET07) — der
+    /// Flughafen hat dort schlicht nichts anzubieten, egal wieviel Geld man
+    /// hat. Eine Kampagnenmission bekommt ihre Vorlagen aus dem Fahrplan
+    /// (<c>CampaignManager.UnlocksFor</c>); ein Gefecht bekam gar nichts.</para>
+    ///
+    /// <para>Mit dieser Option werden die acht Vorlagen aus
+    /// <c>aircraft.json</c> für <b>alle acht Spieler</b> angelegt und
+    /// freigegeben — die KI eingeschlossen, sonst wäre es kein Gefecht, sondern
+    /// ein Vorteil. Zugleich entfällt am Boden die Freigabe-Prüfung, so dass
+    /// die ganze Entwurfsliste baubar ist.</para>
+    ///
+    /// <para>Aus bleibt sie in der Vorgabe: dann verhält sich ein Gefecht wie
+    /// bisher, und niemand bekommt ungefragt eine Luftwaffe.</para></summary>
+    public static bool AllUnits;
+
+    /// <summary>Eine Karte, die nur ANGESEHEN und nicht gespielt werden soll —
+    /// der Rueckweg des Karteneditors in den Kartenbetrachter.
+    ///
+    /// <para>⚠ Warum das nicht ueber <see cref="Map"/> und <see cref="Active"/>
+    /// geht, und das ist gemessen: eine erzeugte Karte traegt <b>0 Einheiten und
+    /// 0 Gebaeude</b> (MapGenerator setzt Gelaende und zwei Startmarken, sonst
+    /// nichts). <c>SkirmishAi.StartSkirmish</c> findet dann keinen besetzten
+    /// Platz und gibt -1 zurueck, und <c>MapEntityLayer.Verdict</c> meldet wegen
+    /// <c>AssetsOf(me) == 0</c> sofort »MISSION GESCHEITERT« — nachgelaufen am
+    /// 12.08.2026 mit <c>--skirmish=map_pruef01</c>: die Zeile »Gemetzel
+    /// entschieden: MISSION GESCHEITERT« steht schon im ersten Takt da. Ein
+    /// »Spielen«-Knopf haette dem Spieler also die Abrechnung ins Bild gelegt,
+    /// bevor er die Karte gesehen hat. <c>CheckEnd</c> haengt an
+    /// <see cref="Active"/>, darum bleibt der hier aus.</para>
+    ///
+    /// <para>Wird von <c>MapViewer._Ready</c> gelesen und dort sofort geleert,
+    /// damit ein spaeterer Neustart der Szene nicht dieselbe Karte wieder
+    /// aufzieht.</para></summary>
+    public static string ViewMap = "";
+
     public const string MenuScene = "res://Scenes/Main/MainMenu.tscn";
 
     /// <summary>A save the main menu picked, applied by the game screen once

@@ -261,6 +261,27 @@ public partial class MapViewer : Node2D
             int mi = System.Array.IndexOf(MapNames, UI.SkirmishSetup.Map);
             if (mi >= 0) _mapIndex = mi;
         }
+        // Der Karteneditor schickt eine Karte NUR ZUM ANSEHEN her: kein
+        // Gefecht, keine KI, keine Abrechnung — siehe UI/SkirmishSetup.ViewMap,
+        // wo auch steht, warum ein Gefecht darauf nicht ginge.
+        //
+        // ⚠ Die Kartenliste wird dafuer VERWORFEN und neu eingelesen. Sie ist
+        // ein statisches Feld (_mapNames) und ueberlebt den Szenenwechsel; eine
+        // Karte, die der Spieler eben erst erzeugt hat, steht also nicht darin,
+        // wenn in derselben Sitzung schon einmal eine Partie lief. IndexOf
+        // ergaebe dann -1, _mapIndex bliebe stehen und gezeigt wuerde
+        // klammheimlich map_01 — genau die stille Kartenvertauschung, die
+        // --skirmish= sich am 11.08.2026 schon einmal eingehandelt hat.
+        else if (UI.SkirmishSetup.ViewMap.Length > 0)
+        {
+            string want = UI.SkirmishSetup.ViewMap;
+            UI.SkirmishSetup.ViewMap = "";
+            _mapNames = null;
+            int mi = System.Array.IndexOf(MapNames, want);
+            if (mi >= 0) _mapIndex = mi;
+            else GD.PrintErr($"Karteneditor: {want} liegt nicht in {Core.Content.UserRoot}Maps/ " +
+                             "— es wird die zuletzt gewaehlte Karte gezeigt");
+        }
         LoadMap(_mapIndex);
 
         // a game picked in the main menu: the map is up, now put the state on it
@@ -634,6 +655,11 @@ public partial class MapViewer : Node2D
                 if (a.Contains('='))
                     _skirmishMap = a[(a.IndexOf('=') + 1)..].Split(',')[0];
             }
+            // »Alle Einheiten« von der Befehlszeile, damit die Option nicht nur
+            // ueber den Menuehaken zu erreichen ist und ein Prueflauf sie
+            // ein- UND ausschalten kann. Siehe UI.SkirmishSetup.AllUnits.
+            else if (a == "--all-units") UI.SkirmishSetup.AllUnits = true;
+            else if (a == "--all-units=0") UI.SkirmishSetup.AllUnits = false;
             else if (a == "--rail-hit-check") _railHitCheck = true;
             else if (a == "--rail-check") { _railCheck = 1f; _railHead = true; }
             else if (a.StartsWith("--rail-check="))

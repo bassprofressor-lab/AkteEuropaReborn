@@ -61,6 +61,11 @@ public partial class MainMenu : Control
     private Label _previewText = null!;
     private OptionButton _level = null!;
     private OptionButton? _res;
+
+    /// <summary>»Alle Einheiten« — siehe <see cref="SkirmishSetup.AllUnits"/>.
+    /// Optional, weil der Gefechtsschirm auch ohne die Zeile gebaut werden
+    /// kann.</summary>
+    private CheckBox? _allUnits;
     private SpinBox _ai = null!;
     private Label _hint = null!;
 
@@ -117,6 +122,23 @@ public partial class MainMenu : Control
         var rows = StartMenuPanel.InsertAfter(renamed, "Netzwerkspiel",
             new StartMenuPanel.Row(0, "Gefecht", -1,
                 "Gefecht gegen den Rechner — im Original gibt es das nicht", ShowSetup));
+
+        // OURS, die zweite Zeile dieser Art, und aus demselben Grund an dieser
+        // Stelle: der KARTENEDITOR. Es gab ihn seit dem 12.08.2026, aber nur
+        // hinter zwei Schaltern der Befehlszeile (--map-new=, --map-check=) —
+        // also hinter etwas, das ein Spieler nicht hat. Die Zeile sitzt direkt
+        // unter »Gefecht«, weil beide UNSERE Zutaten sind und so beieinander
+        // stehen; das Original verliert dadurch keine seiner neun Zeilen, es
+        // rutscht nur alles ab »Einstellungen« um eine Zeilenhoehe nach unten
+        // (StartMenuPanel.InsertAfter), und das Fenster waechst mit.
+        //
+        // Der Schirm dahinter liegt in Scripts/Editor/MapEditorScreen.cs,
+        // ShowMapEditor() in Scripts/Editor/MainMenuMapEditor.cs — dort, wo
+        // schon die beiden Laeufe des Editors stehen.
+        rows = StartMenuPanel.InsertAfter(rows, "Gefecht",
+            new StartMenuPanel.Row(0, "Karteneditor", -1,
+                "Eine neue Karte erzeugen und pruefen — im Original gibt es das nicht",
+                ShowMapEditor));
 
         _start = new StartMenuPanel
         {
@@ -443,6 +465,22 @@ public partial class MainMenu : Control
             foreach (string n in resNames) _res.AddItem(n);
             _res.Selected = Mathf.Clamp(SkirmishSetup.Resources, 0, resNames.Count - 1);
         }
+
+        // ⚠ UNSERE OPTION, siehe SkirmishSetup.AllUnits. Der Anlass ist eine
+        // Luecke in den Daten: die Gefechtskarten tragen in sec120 NULL
+        // Flugzeugvorlagen (nachgezaehlt auf NET02, NET05, NET07), der Flughafen
+        // hat dort also nichts anzubieten. Mit dem Haken bekommen alle acht
+        // Spieler die acht Vorlagen aus aircraft.json, und am Boden entfaellt
+        // die Freigabe-Pruefung.
+        _allUnits = new CheckBox
+        {
+            Text = "auch Lufteinheiten, ganze Entwurfsliste",
+            ButtonPressed = SkirmishSetup.AllUnits,
+            TooltipText = "Gefechtskarten bringen keine Flugzeugvorlagen mit. " +
+                          "Mit dieser Option bekommt jeder Spieler alle acht — " +
+                          "die Gegner ebenso.",
+        };
+        right.AddChild(Row("Alle Einheiten", _allUnits));
 
         box.AddChild(new HSeparator());
 
@@ -1134,6 +1172,7 @@ public partial class MainMenu : Control
             _ => MapEntityLayer.AiLevel.Normal,
         };
         if (_res != null) SkirmishSetup.Resources = _res.Selected;
+        if (_allUnits != null) SkirmishSetup.AllUnits = _allUnits.ButtonPressed;
         SkirmishSetup.CampaignMission = 0;      // a skirmish records nothing
         SkirmishSetup.Active = true;
         StopBackdrop();

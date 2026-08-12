@@ -1461,6 +1461,7 @@ public partial class MapEntityLayer : Node2D
             _airSource = "sec120";
         }
         FillCampaignAirDesigns();
+        FillSkirmishAirDesigns();
 
         // sec44 + sec121: the trains, 60 x 4 wagons on the SPOJ lines
         LoadWagons(root);
@@ -5207,7 +5208,29 @@ public partial class MapEntityLayer : Node2D
         foreach (var e in _entities)
             if (e.IsBuilding && !e.Dead && e.BType == 9 && Allied(e.Owner, ViewPlayer))
             { ap = e; break; }
-        if (ap == null) return "air-buy-check: kein eigener Flughafen auf dieser Karte";
+        string captured = "";
+        if (ap == null)
+        {
+            // ⚠ 15.08.2026 — AUF DEN GEFECHTSKARTEN GEHOEREN DIE FLUGHAEFEN
+            // NIEMANDEM. Nachgezaehlt: NET02 sieben, NET04 acht, NET05 sieben —
+            // alle mit Besitzer 11, also neutral; erobert werden sie im Spiel.
+            // Der Pruefstand hat deshalb bisher auf JEDER Gefechtskarte nur
+            // »kein eigener Flughafen« gemeldet und nichts geprueft — ein
+            // Pruefstand, der immer dasselbe sagt, prueft nichts.
+            //
+            // Also nimmt er sich einen neutralen und schreibt ihn sich zu, so
+            // wie eine Eroberung es taete, und sagt dazu, dass er es getan hat.
+            foreach (var e in _entities)
+                if (e.IsBuilding && !e.Dead && e.BType == 9)
+                {
+                    ap = e;
+                    ap.Owner = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
+                    captured = $"(neutraler Flughafen fuer die Probe auf Spieler {ap.Owner} " +
+                               "gesetzt — im Spiel muss er erobert werden) ";
+                    break;
+                }
+        }
+        if (ap == null) return "air-buy-check: kein Flughafen auf dieser Karte";
 
         var menu = AirMenu(ap);
         var names = new List<string>();
@@ -5228,7 +5251,7 @@ public partial class MapEntityLayer : Node2D
         log.Add($"gekauft {bought}, Lager {ap.StockW}/{ap.StockF}/{ap.StockS}, " +
                 $"Hangar {ap.Hangar?.Count ?? 0}/{ap.HangarSize}, " +
                 $"Flugzeuge im Feld {_special.Count}");
-        return "air-buy-check: " + string.Join(" | ", log);
+        return "air-buy-check: " + captured + string.Join(" | ", log);
     }
 
     /// <summary>What the script says, for the harness.</summary>
@@ -6162,7 +6185,11 @@ public partial class MapEntityLayer : Node2D
         for (int i = 0; i < _designs.Count; i++)
         {
             var d = _designs[i];
-            bool unlocked = d.Available ||
+            // ⚠ »Alle Einheiten« (UNSERE Option, siehe FillSkirmishAirDesigns):
+            // die Freigabe-Pruefung entfaellt, die Zuordnung zur Fabrik NICHT —
+            // sonst baute die Waffen-Fabrik Ausruestungstraeger und der Reiter
+            // haette keine Bedeutung mehr.
+            bool unlocked = UI.SkirmishSetup.AllUnits || d.Available ||
                             (d.Weapon >= 65 && d.Weapon <= 88 && _researchedStatic.Contains(d.Weapon));
             if (unlocked && FitsFactory(d, bType)) list.Add(i);
         }
@@ -7057,6 +7084,53 @@ public partial class MapEntityLayer : Node2D
     /// The schedule is the campaign player's progress; applying it to every
     /// player is OUR setting. In the original the enables sit per player block
     /// in sec120, and a campaign level simply has no such block to read.</summary>
+    /// <summary>
+    /// <b>»Alle Einheiten« im Gefecht — auch in der Luft.</b>
+    ///
+    /// <para>⚠ <b>Der Anlass ist eine Lücke in den DATEN, nicht im Code.</b> Die
+    /// Gefechtskarten tragen in <b>sec120 null Flugzeugvorlagen</b> — nachgezählt
+    /// auf map_NET02, map_NET05 und map_NET07, jeweils <c>0</c>. Der Flughafen
+    /// (Typ 9) hat dort also nichts anzubieten, gleich wieviel Geld und Teile
+    /// dastehen; und Flughäfen gibt es auf diesen Karten reichlich (NET02 sieben,
+    /// NET04 acht). Eine Kampagnenmission bekommt ihre Vorlagen aus dem Fahrplan
+    /// (<see cref="Campaign.CampaignManager.UnlocksFor"/>), ein Gefecht bekam
+    /// gar nichts.</para>
+    ///
+    /// <para><b>⚠ UNSERE SETZUNG</b>, und sie ist eine Option, kein neuer
+    /// Normalfall: mit <see cref="UI.SkirmishSetup.AllUnits"/> bekommen <b>alle
+    /// acht Spieler</b> die acht Vorlagen aus <c>aircraft.json</c>, freigegeben.
+    /// Die KI eingeschlossen — sonst wäre es kein Gefecht, sondern ein Vorteil;
+    /// <c>SkirmishAi</c> baut am Flughafen über dieselbe Liste
+    /// (<c>AirMenu(e).Count &gt; 0</c>).</para>
+    ///
+    /// <para>Ohne die Option bleibt alles wie bisher — dann verhält sich ein
+    /// Gefecht wie vorher, und niemand bekommt ungefragt eine Luftwaffe.</para>
+    /// </summary>
+    private void FillSkirmishAirDesigns()
+    {
+        if (!UI.SkirmishSetup.AllUnits || UI.SkirmishSetup.CampaignMission > 0) return;
+        if (_airDesigns != null && _airDesigns.Count > 0) return;
+        var types = LoadAircraftTemplates();
+        if (types.Count == 0)
+        {
+            GD.Print("aircraft: »Alle Einheiten« an, aber aircraft.json hat keine Vorlagen");
+            return;
+        }
+        _airDesigns = new List<AirDesign>();
+        for (int p = 0; p < 8; p++)
+            foreach (var t in types)
+            {
+                t.Player = p;
+                t.Enable = true;
+                _airDesigns.Add(t.Clone());
+            }
+        _airSource = "»Alle Einheiten« (unsere Option)";
+        int priced = 0;
+        foreach (var t in types) if (t.CostW + t.CostF + t.CostS > 0) priced++;
+        GD.Print($"aircraft: {types.Count} Vorlagen fuer 8 Spieler aus {_airSource}, " +
+                 $"alle freigegeben, {priced} mit gelesenem Preis");
+    }
+
     private void FillCampaignAirDesigns()
     {
         int mission = UI.SkirmishSetup.CampaignMission;
@@ -7120,8 +7194,48 @@ public partial class MapEntityLayer : Node2D
                 CostS = GetI(t, "cost_s"),
             });
         }
+        // ⚠ Die Vorlagentabelle der EXE (@0x51b021, 48 Bytes je Satz) trägt
+        // KEINEN Preis — jedenfalls nicht an einer Stelle, die gelesen ist.
+        // Ohne Preis wäre ein Flugzeug UMSONST: `BuyAircraft` zieht
+        // `d.CostW/F/S` vom Teilelager des Flughafens ab, und das wären dann
+        // Nullen. Deshalb der Nachtrag, siehe AirPriceByPayload.
+        foreach (var d in list)
+            if (d.CostW + d.CostF + d.CostS == 0 &&
+                AirPriceByPayload.TryGetValue(d.Payload, out var p))
+            { d.CostW = p.W; d.CostF = p.F; d.CostS = p.S; }
         return list;
     }
+
+    /// <summary>
+    /// <b>Was ein Flugzeug an Teilen kostet</b> — gemessen, nicht gesetzt.
+    ///
+    /// <para>Die Preise stehen je Karte in <b>sec120</b> (Entwurf +0x1F/+0x20/
+    /// +0x21, was <c>build_in_airport</c> @0x4BB3D0 prüft). Die
+    /// GEFECHTSkarten tragen sec120 aber gar nicht, und die Vorlagentabelle der
+    /// EXE trägt keinen Preis. Also wurde er aus den Karten geholt, die ihn
+    /// haben:</para>
+    /// <code>
+    ///   13 Karten mit sec120, je 104 Sätze (8 Entwürfe × 8 Spieler + Rest)
+    ///   je Nutzlast EIN Preis, über alle 104 gleich, KEIN Gegenbeispiel:
+    ///
+    ///     100 Kampfhubschrauber  60/40/0      104 Mechanikerheli   0/30/150
+    ///     101 Jagdflieger        50/50/0      105 Bomber          80/70/10
+    ///     102 Spionageflieger     0/40/30     106 Treibstoffheli   0/30/40
+    ///     103 Transport Heli      0/30/50     107 Munitionheli     0/30/40
+    /// </code>
+    /// <para>Der Treibstoffheli mit <b>0/30/40</b> bestätigt von der anderen
+    /// Seite, was in <see cref="BuyAircraft"/> schon als gelesen steht (»Am
+    /// Flughafen kostet auch der Sprit-Heli 0/30/40 Teile«) — zwei unabhängige
+    /// Wege auf dieselbe Zahl.</para>
+    ///
+    /// <para>Greift NUR, wenn ein Entwurf gar keinen Preis mitbringt. Eine
+    /// Karte mit sec120 behält ihre eigenen Zahlen.</para></summary>
+    private static readonly Dictionary<int, (int W, int F, int S)> AirPriceByPayload = new()
+    {
+        { 100, (60, 40, 0) }, { 101, (50, 50, 0) }, { 102, (0, 40, 30) },
+        { 103, (0, 30, 50) }, { 104, (0, 30, 150) }, { 105, (80, 70, 10) },
+        { 106, (0, 30, 40) }, { 107, (0, 30, 40) },
+    };
 
     /// <summary>Der Nachschub-Posten (Typ 14) — das »Versorgungsdepot«.
     ///
