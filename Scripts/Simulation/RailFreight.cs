@@ -1160,9 +1160,82 @@ public partial class MapEntityLayer : Node2D
         return at + new Vector2(px, py);
     }
 
+    /// <summary>Die Summe der MITTENVERSÄTZE — nur noch als Beiwerk. Sie war
+    /// bis zum 15.08.2026 die Zahl, die »Ecken schliessen nicht« belegen
+    /// sollte; sie belegt es nicht (siehe <see cref="RailMeasureJoints"/>). Als
+    /// Mittelwert sagt sie, wie schräg die Kunst ihre Eckstücke anlegt.</summary>
+    public float RailPortOffSum;
+
+    /// <summary>Die undurchsichtigen Punkte eines Gleisbildes, einmal gelesen —
+    /// Leinwand 64×56, <c>true</c> heisst sichtbar.</summary>
+    private readonly Dictionary<int, bool[]> _railMask = new();
+    private const int RailMaskW = 64, RailMaskH = 56;
+
+    private bool[] RailMask(int frame)
+    {
+        if (_railMask.TryGetValue(frame, out var m)) return m;
+        m = new bool[RailMaskW * RailMaskH];
+        string p = Core.Content.Path($"Units/train/rail64/f{frame}.png");
+        if (Godot.FileAccess.FileExists(p))
+        {
+            var img = Image.LoadFromFile(p);
+            if (img != null)
+                for (int y = 0; y < Mathf.Min(RailMaskH, img.GetHeight()); y++)
+                    for (int x = 0; x < Mathf.Min(RailMaskW, img.GetWidth()); x++)
+                        m[y * RailMaskW + x] = img.GetPixel(x, y).A > 0f;
+        }
+        _railMask[frame] = m;
+        return m;
+    }
+
+    /// <summary>
+    /// <b>Klafft zwischen zwei benachbarten Gleisstücken ein Loch?</b> Gemessen
+    /// an den Bildpunkten, nicht an einem Modell: der kleinste Abstand zwischen
+    /// einem sichtbaren Punkt des einen und einem des anderen Bildes, in
+    /// Kartenpixeln. <c>0</c> heisst überlappend, <c>1</c> Kante an Kante, alles
+    /// darüber ist ein sichtbares Loch dieser Breite.
+    ///
+    /// <para>Die zweite Leinwand liegt gegen die erste um
+    /// <c>(spaltenversatz·40, zeilenversatz·20 − höhenstufen·15)</c> verschoben
+    /// — dieselbe Rechnung, mit der gezeichnet wird. Das Ergebnis hängt nur an
+    /// (Bild, Seite, Bild, Höhenstufe) und wird deshalb behalten; auf einer
+    /// Karte kommen ein paar Dutzend solcher Fälle vor, nicht tausend.</para>
+    /// </summary>
+    private readonly Dictionary<(int, int, int, int), float> _jointHole = new();
+
+    private float RailJointHole(int fa, int side, int fb, int dElev)
+    {
+        if (fa is < 0 or > 9 || fb is < 0 or > 9) return 0f;
+        var key = (fa, side, fb, dElev);
+        if (_jointHole.TryGetValue(key, out float got)) return got;
+        int dc = side switch { 0 => -1, 1 => 1, _ => 0 };
+        int dr = side switch { 2 => -1, 3 => 1, _ => 0 };
+        int ox = dc * TileW, oy = dr * TileH - dElev * 15;
+        var ma = RailMask(fa); var mb = RailMask(fb);
+        float best = float.MaxValue;
+        for (int ay = 0; ay < RailMaskH && best > 0f; ay++)
+            for (int ax = 0; ax < RailMaskW; ax++)
+            {
+                if (!ma[ay * RailMaskW + ax]) continue;
+                for (int by = 0; by < RailMaskH; by++)
+                    for (int bx = 0; bx < RailMaskW; bx++)
+                    {
+                        if (!mb[by * RailMaskW + bx]) continue;
+                        float ddx = bx + ox - ax, ddy = by + oy - ay;
+                        float d = Mathf.Max(Mathf.Abs(ddx), Mathf.Abs(ddy));
+                        if (d < best) { best = d; if (best <= 0f) break; }
+                    }
+                if (best <= 0f) break;
+            }
+        if (best == float.MaxValue) best = 0f;      // ein Bild ist leer
+        _jointHole[key] = best;
+        return best;
+    }
+
     private void RailMeasureJoints()
     {
-        RailJointWorst = 0f; RailJointPairs = 0; RailJointOpen = 0; RailJointWorstWhere = "";
+        RailJointWorst = 0f; RailJointPairs = 0; RailJointOpen = 0;
+        RailJointWorstWhere = ""; RailPortOffSum = 0f;
         var frameAt = new Dictionary<(int, int), int>();
         foreach (var c in _railCells) if (!c.Broken) frameAt[(c.Col, c.Row)] = c.Base;
 
@@ -1186,8 +1259,30 @@ public partial class MapEntityLayer : Node2D
                 var pb = RailPort(bc, br, bf, sideB);
                 if (pa == null || pb == null) continue;
                 RailJointPairs++;
-                float d = (pa.Value - pb.Value).Length();
-                if (d > 2f) RailJointOpen++;
+                RailPortOffSum += (pa.Value - pb.Value).Length();
+                // ⚠ 15.08.2026 — GEZAEHLT WIRD DAS LOCH, NICHT DER MITTENVERSATZ.
+                //
+                // Hier stand `d = |pa - pb|` gegen eine Schwelle von 2 px, und die
+                // Zahl (204 von 1119, schlimmster 4,1 px) hat als »Ecken und
+                // Knicke schliessen nicht« gelesen. Sie misst das aber nicht.
+                // aekernel-tools/rail_joint_look.py hat die 438 schlimmsten
+                // Stoesse aufgezeichnet und ANGESEHEN: alle 4,1-px-Faelle sind
+                // f2->f5 bzw. f4->f3, und was sie im Bild bilden, ist eine
+                // GLATTE DURCHGEHENDE DIAGONALE. Keine Kerbe, kein Loch.
+                //
+                // Der Versatz ist gewollt: ein Eckstueck verlaesst seine Zelle
+                // nicht in der Mitte, sondern um 2,4 px zur Seite, damit die
+                // Treppe aus Einzelzellen als Schraege liest. Die Zahlen zeigen
+                // das von selbst -- f4 unten 27,1 und f2 unten 31,9 liegen
+                // symmetrisch um f1 unten 29,5, und dasselbe oben mit f5 27,9
+                // und f3 31,1. Es sind ausschliesslich die Seiten OBEN und
+                // UNTEN betroffen, links/rechts nie.
+                //
+                // Die Frage, die zaehlt, ist: klafft zwischen den beiden
+                // Schienen ein LOCH? Das entscheiden die Bildpunkte, und die
+                // stehen fertig da.
+                float d = RailJointHole(af, sideA, bf, ElevOf(bc, br) - ElevOf(ac, ar));
+                if (d > 1f) RailJointOpen++;
                 if (d > RailJointWorst)
                 {
                     RailJointWorst = d;
@@ -1787,9 +1882,12 @@ public partial class MapEntityLayer : Node2D
         sb.Append($" | Kreuzungen: {RailCrossings} Zellen mit zwei Gleissaetzen, " +
                   "beide gezeichnet");
         RailMeasureJoints();
-        sb.Append($" | Ecken: {RailJointOpen} von {RailJointPairs} Anschluessen weiter " +
-                  $"als 2 px auseinander, schlimmster {RailJointWorst:0.0} px");
+        sb.Append($" | Ecken: {RailJointOpen} von {RailJointPairs} Stoessen mit einem LOCH " +
+                  $"zwischen den Schienen, breitester {RailJointWorst:0} px");
         if (RailJointOpen > 0) sb.Append($" bei {RailJointWorstWhere}");
+        if (RailJointPairs > 0)
+            sb.Append($" (Mittenversatz im Mittel {RailPortOffSum / RailJointPairs:0.0} px " +
+                      "— gewollt, siehe RailMeasureJoints)");
         sb.Append($" | Gleis: {RailTilesDrawn} Stuecke gezeichnet, " +
                   $"{RailTilesLoose} davon NICHT Kante an Kante");
         sb.Append(RailSourceReport());
