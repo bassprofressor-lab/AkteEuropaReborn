@@ -680,6 +680,43 @@ public sealed class ContentBuilder
         return ex.Frames > 0;
     }
 
+    /// <summary>
+    /// <b>Der Schreibweg, in einem Aufruf.</b> Aus einer <see cref="CwmFile"/>
+    /// werden die drei Dateien, die die Engine wirklich laedt:
+    /// <c>&lt;outName&gt;.png</c>, <c>&lt;outName&gt;.json</c> und
+    /// <c>&lt;outName&gt;.entities.json</c>.
+    ///
+    /// <para>⚠ Herausgezogen aus <see cref="BakeOne"/> am 12.08.2026, Zeile fuer
+    /// Zeile unveraendert — <b>der Karteneditor braucht genau diesen Weg</b>,
+    /// nur mit einer im Speicher gebauten Karte statt einer geladenen. Wer eine
+    /// <c>CwmFile</c> hat, egal woher, bekommt hier den Exporteur geschenkt.
+    /// <c>BakeOne</c> ruft seither diese Stelle, es gibt also keinen zweiten
+    /// Schreibweg, der auseinanderlaufen koennte.</para>
+    ///
+    /// <para>Was hier NICHT passiert und beim Import daneben stehen bleibt: die
+    /// Gebaeudemuster des Kachelsatzes (<see cref="WriteBuildingPatterns"/>),
+    /// die Sammlung der Fahrwerk/Waffe-Kombinationen und die Missionsliste. Das
+    /// haengt am Import, nicht an der einzelnen Karte.</para>
+    /// </summary>
+    public static Godot.Image ExportMap(CwmFile m, CwpFile cwp, PalFile pal,
+                                        string mapsDir, string outName,
+                                        out MapBaker baker, out EntitiesJson.Doc doc)
+    {
+        Directory.CreateDirectory(mapsDir);
+        baker = new MapBaker(m, cwp, pal);
+        var img = baker.Bake();
+        img.SavePng($"{mapsDir}/{outName}.png");
+        File.WriteAllText($"{mapsDir}/{outName}.json", MapMeta(m, baker), new UTF8Encoding(false));
+        // the game state: units, buildings, markers, rails, zones. Without
+        // it a map draws but nothing stands on it — and Content.Ready looks
+        // for exactly this file to decide whether content exists at all.
+        doc = EntitiesJson.Decode(m);
+        File.WriteAllText($"{mapsDir}/{outName}.entities.json",
+                          EntitiesJson.Write(doc, outName.StartsWith("map_") ? outName["map_".Length..] : outName),
+                          new UTF8Encoding(false));
+        return img;
+    }
+
     private void BakeOne(string path, string outName, Action<string> say)
     {
         if (!File.Exists(path)) return;
@@ -699,17 +736,8 @@ public sealed class ContentBuilder
             // are written once per tileset — several maps share one. Without
             // them nothing can be built: the engine never opens a .CWP.
             WriteBuildingPatterns(cwpFile, palFile, m.Tileset);
-            var baker = new MapBaker(m, cwpFile, palFile);
-            var img = baker.Bake();
-            img.SavePng($"{_dst}/Maps/{outName}.png");
-            File.WriteAllText($"{_dst}/Maps/{outName}.json", MapMeta(m, baker), new UTF8Encoding(false));
-            // the game state: units, buildings, markers, rails, zones. Without
-            // it a map draws but nothing stands on it — and Content.Ready looks
-            // for exactly this file to decide whether content exists at all.
-            var doc = EntitiesJson.Decode(m);
-            File.WriteAllText($"{_dst}/Maps/{outName}.entities.json",
-                              EntitiesJson.Write(doc, outName["map_".Length..]),
-                              new UTF8Encoding(false));
+            var img = ExportMap(m, cwpFile, palFile, $"{_dst}/Maps", outName,
+                                out var baker, out var doc);
             // the weapon is entity +0x0c; the chassis is the unit_type
             foreach (var e in doc.Entities)
                 _combos.Add((e.UnitType, e.Raw.Length > 0x0c ? e.Raw[0x0c] : 0));

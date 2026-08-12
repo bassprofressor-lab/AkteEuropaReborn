@@ -46,6 +46,109 @@ public sealed class CwmFile
 
     public byte[] Records => Sections.Count > 0 ? Sections[0] : Array.Empty<byte>();
 
+    // ---- eine Karte im ARBEITSSPEICHER bauen --------------------------------
+    //
+    // Bis hierher war diese Klasse ein reiner Leser. Der Karteneditor braucht
+    // die Gegenrichtung — aber NICHT bis zur Datei: eine `.CWM` zurueckzu-
+    // schreiben ist weder noetig noch belegbar (der Kartendialog @0x4c8600 /
+    // @0x4c8640 hat null Aufrufer, und 5 der 37 Abschnitte — sec18, sec20,
+    // sec21, sec25, sec32 — sind in allen 23 gelieferten Karten belegt und
+    // ungelesen; was da hineingehoerte, weiss niemand).
+    //
+    // Was reicht, ist eine CwmFile IM SPEICHER: dahinter haengt der ganze
+    // vorhandene Schreibweg — `ContentBuilder.ExportMap` → `MapBaker.Bake` →
+    // `EntitiesJson` — der genau das Format schreibt, das die Engine laedt.
+
+    /// <summary>Wie viele Abschnitte eine <c>.CWM</c> traegt: der Satzraster
+    /// plus 37 weitere. Gemessen an den 23 gelieferten Kampagnenkarten, die
+    /// nach dem 38. abbrechen (eine <c>.DM</c> traegt alle 131).</summary>
+    public const int CwmSectionCount = 38;
+
+    /// <summary>
+    /// Eine leere Karte im Arbeitsspeicher: Kopfangaben gesetzt, alle
+    /// Abschnitte in ihrer gelesenen Groesse angelegt und mit Null gefuellt.
+    ///
+    /// <para>⚠ <b>Null ist nicht ueberall »leer«.</b> Drei Abschnitte kennen
+    /// einen eigenen Leerwert, und wer ihn nicht setzt, bekommt aus einer
+    /// nullgefuellten Karte 8000 Einheiten, 2000 Marken und 3000 Gleisstuecke
+    /// geliefert — siehe <c>Editor.MapFactory.Empty</c>, wo das gesetzt wird.
+    /// Diese Stelle hier legt nur den Speicher an.</para>
+    ///
+    /// <para><paramref name="missionNumber"/> ist der Kampagnenzaehler aus dem
+    /// Dateikopf. <b>UNSERE Setzung:</b> 0 fuer eine selbst erzeugte Karte —
+    /// keine der 23 gelieferten traegt 0 (1..15 Kampagne, 51..58 Netz), also
+    /// ist die Zahl eindeutig als »keine Originalkarte« zu lesen.</para>
+    /// </summary>
+    public static CwmFile Create(int width, int height, int tileset,
+                                 string stem = "neu", string mission = "",
+                                 int sections = CwmSectionCount, int missionNumber = 0)
+    {
+        if (width <= 0 || width > 254 || height <= 0 || height > 254)
+            throw new ArgumentOutOfRangeException(nameof(width),
+                $"Kartengroesse {width}x{height} — die groesste gelieferte Karte ist 254x254");
+        var m = new CwmFile
+        {
+            Stem = stem,
+            Mission = mission.Length > 0 ? mission : stem,
+            Comment = "",
+            MissionNumber = missionNumber,
+            Tileset = tileset,
+            Width = width,
+            Height = height,
+            Compressed = false,
+        };
+        m.Sections.Add(new byte[width * height * 4]);
+        int n = Math.Min(sections - 1, CwmSections.Sizes.Length);
+        for (int i = 0; i < n; i++) m.Sections.Add(new byte[CwmSections.Sizes[i]]);
+        return m;
+    }
+
+    /// <summary>Einen ganzen Abschnitt setzen — die Groesse muss die des
+    /// Laders sein, sonst liest jeder Leser daneben.</summary>
+    public void SetSection(int number, byte[] data)
+    {
+        if (number < 1 || number - 1 >= Sections.Count)
+            throw new ArgumentOutOfRangeException(nameof(number));
+        int want = number == 1 ? Width * Height * 4 : CwmSections.Sizes[number - 2];
+        if (data.Length != want)
+            throw new ArgumentException($"sec{number} ist {want} Byte gross, nicht {data.Length}");
+        Sections[number - 1] = data;
+    }
+
+    /// <summary>Jedes Byte eines Abschnitts auf denselben Wert — fuer die
+    /// Leerwerte 0xFF, die drei Abschnitte brauchen.</summary>
+    public void FillSection(int number, byte value)
+    {
+        var s = Sec(number) ?? throw new ArgumentOutOfRangeException(nameof(number));
+        Array.Fill(s, value);
+    }
+
+    /// <summary>Der Zellensatz aus sec1: Code u16, Hoehe, Flagge — genau die
+    /// vier Byte, die <see cref="MapBaker.Bake"/> und
+    /// <c>ContentBuilder.MapMeta</c> wieder herauslesen.</summary>
+    public void SetCell(int col, int row, int code, int elev, int flag)
+    {
+        if (col < 0 || col >= Width || row < 0 || row >= Height) return;
+        var rec = Records;
+        int o = (row * Width + col) * 4;
+        rec[o] = (byte)(code & 0xFF);
+        rec[o + 1] = (byte)((code >> 8) & 0xFF);
+        rec[o + 2] = (byte)elev;
+        rec[o + 3] = (byte)flag;
+    }
+
+    public int CodeAt(int col, int row)
+        => col < 0 || col >= Width || row < 0 || row >= Height ? 0
+         : BitConverter.ToUInt16(Records, (row * Width + col) * 4);
+
+    public int ElevAt(int col, int row)
+        => col < 0 || col >= Width || row < 0 || row >= Height ? 0
+         : Records[(row * Width + col) * 4 + 2];
+
+    public int FlagAt(int col, int row)
+        => col < 0 || col >= Width || row < 0 || row >= Height ? 0
+         : Records[(row * Width + col) * 4 + 3];
+
     private sealed class Reader
     {
         private readonly byte[] _d;
