@@ -1038,7 +1038,8 @@ public partial class MapViewer : Node2D
         GD.Print($"MapViewer: screenshot -> {_shotPath} " +
                  $"(frame {_frames}, t={Time.GetTicksMsec() / 1000.0:0.00}s, " +
                  $"sim={_entities.DebugClock:0.00}s over {_entities.DebugTicks} ticks)\n" +
-                 $"   combat: {_entities.DebugCombatInfo()}");
+                 $"   combat: {_entities.DebugCombatInfo()}\n" +
+                 $"   sprites: {_entities.DebugSpriteInfo()}");
         _shotPath = "";
         GetTree().Quit();
     }

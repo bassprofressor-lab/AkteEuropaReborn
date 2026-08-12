@@ -9417,7 +9417,14 @@ public partial class MapEntityLayer : Node2D
     /// <para>⚠ <b>Was dafür nötig wäre:</b> ein palettenindiziertes Gelände und
     /// ein Shader, der die echte Tabelle nachschlägt. Dann wäre es exakt. Das
     /// ist notiert, nicht getan.</para></summary>
-    private static Color RailShadowTint => new(0f, 0f, 0f, RailShadowAlpha);
+    /// <summary>Wie schnell der Rotor eines Hubschraubers durch seine acht
+    /// Phasen läuft, in Phasen je Sekunde. <b>⚠ UNSERE SETZUNG</b> — im
+    /// Original ist die Drehzahl nicht gelesen. 24 ist gewählt, weil bei acht
+    /// Phasen drei Umdrehungen je Sekunde als Wischen lesen, nicht als
+    /// Einzelbilder.</summary>
+    private const float RotorFps = 24f;
+
+    private static Color ShadowTint => new(0f, 0f, 0f, ShadowAlpha);
 
     /// <summary>Die Deckung des Schattens, umstellbar über
     /// <c>--rail-shadow=&lt;wert&gt;</c>. Gegenprobe: mit <c>0</c> verschwindet er,
@@ -9426,14 +9433,16 @@ public partial class MapEntityLayer : Node2D
     /// sichtbar, WO er liegt; genau so ist geprüft worden, dass die Masken
     /// stimmen (Band auf dem Boden unter dem Träger, Schrägen von den
     /// Bockfüssen, der Kurve folgend).</summary>
-    private static float RailShadowAlpha
+    private static float ShadowAlpha
     {
         get
         {
             if (_railShadowAlpha.HasValue) return _railShadowAlpha.Value;
             float a = 0.19f;
             foreach (string x in OS.GetCmdlineUserArgs())
-                if (x.StartsWith("--rail-shadow="))
+                if (x.StartsWith("--shadow="))
+                    a = Mathf.Clamp(x["--shadow=".Length..].ToFloat(), 0f, 1f);
+                else if (x.StartsWith("--rail-shadow="))
                     a = Mathf.Clamp(x["--rail-shadow=".Length..].ToFloat(), 0f, 1f);
             _railShadowAlpha = a;
             return a;
@@ -9651,7 +9660,7 @@ public partial class MapEntityLayer : Node2D
             var s = tiles[i];
             var m = GetRailShadow(s.Frame, s.Part);
             if (m == null) continue;
-            DrawTexture(m, s.At - ComposedAnchor + new Vector2(0, s.YOff), RailShadowTint);
+            DrawTexture(m, s.At - ComposedAnchor + new Vector2(0, s.YOff), ShadowTint);
             RailShadowsDrawn++;
         }
         for (; at < tiles.Count; at++)
@@ -9670,7 +9679,7 @@ public partial class MapEntityLayer : Node2D
     /// Strecke«; siehe <see cref="DrawRailUpTo"/> für den Grund.</summary>
     private void DrawRailAndBuildings()
     {
-        RailTilesDrawn = 0; RailShadowsDrawn = 0;
+        RailTilesDrawn = 0; RailShadowsDrawn = 0; SlopeDrawn = 0; SlopeFallback = 0;
         int at = 0;
         if (_drawSprites && Patterns != null)
             foreach (var b in BuildingsBackToFront())
@@ -11827,16 +11836,80 @@ public partial class MapEntityLayer : Node2D
     /// <para>`pose` is the chassis' frame group out of entity +0x11 — see
     /// <see cref="Entity.Pose"/>. Group 0 keeps the old file name, the rest sit
     /// in g&lt;n&gt;/ beside it; a chassis that owns one group ignores it.</para>
-    private Texture2D? GetHullTexture(int unitType, int facing, int pose = 0)
+    /// <summary>
+    /// <b>DIE HANGKLASSE einer Zelle</b> — das Flag-Byte der Kachel, alles über
+    /// 4 zählt als flach.
+    ///
+    /// <para>Das ist die Zahl, mit der das Original @0x429AD5 (über 0x41d110,
+    /// <c>byte[karte + (zeile·breite + spalte)·4 + 3]</c>) sowohl den Turmsitz
+    /// als auch den BILDBLOCK wählt. Den Turmsitz hat
+    /// <see cref="TurretOffset"/> immer schon so gerückt; das Bild nicht — der
+    /// Rumpf blieb flach, während der Boden unter ihm kippte und der Turm schon
+    /// zur Seite rutschte.</para>
+    ///
+    /// <para>Auf map_NET02 tragen 4728 von 52 900 Zellen (9 %) eine Klasse
+    /// 1..4; der Rest ist eben.</para></summary>
+    private int SlopeClassOf(int col, int row)
+        => SlopePoses && _flagLookup != null
+           && _flagLookup.TryGetValue((col, row), out int fl) && fl <= 4
+           ? fl : 0;
+
+    /// <summary>Wieviele Bilder die Hangposen im letzten Durchgang gestellt
+    /// haben, und wie oft auf das flache zurückgefallen wurde.</summary>
+    public int SlopeDrawn, SlopeFallback;
+
+    /// <summary>Ausschalter für die Gegenprobe: <c>--slope=0</c> zeichnet wieder
+    /// jede Einheit flach. Ein Zähler, der nicht scheitern kann, belegt
+    /// nichts.</summary>
+    private static bool SlopePoses
+    {
+        get
+        {
+            if (_slopePoses.HasValue) return _slopePoses.Value;
+            bool on = true;
+            foreach (string a in OS.GetCmdlineUserArgs())
+                if (a.StartsWith("--slope=")) on = a["--slope=".Length..].ToFloat() != 0f;
+            _slopePoses = on;
+            return on;
+        }
+    }
+
+    private static bool? _slopePoses;
+
+    /// <summary>Was der letzte Bilddurchgang an Hangposen und Schatten gestellt
+    /// hat — damit »die Hangposen sind da« nicht wieder nur eine Behauptung
+    /// ist.</summary>
+    public string DebugSpriteInfo()
+        => $"Hangposen {SlopeDrawn} gezeichnet, {SlopeFallback} mangels Bild flach" +
+           $"; Gleisschatten {RailShadowsDrawn}";
+
+    private Texture2D? GetHullTexture(int unitType, int facing, int pose = 0, int slope = 0)
     {
         string ut = unitType.ToString();
         string dir = pose > 0 ? $"{ut}/g{pose}" : ut;
-        return LoadUnitPart("hull", dir, facing)
-               ?? (facing != 0 ? LoadUnitPart("hull", dir, 0) : null)
-               // a pose the export does not carry falls back to group 0 rather
-               // than making the unit disappear
-               ?? (pose > 0 ? GetHullTexture(unitType, facing) : null);
+        if (slope > 0)
+        {
+            var s = LoadUnitPart("hull", $"{dir}/s{slope}", facing);
+            if (s != null) { SlopeDrawn++; return s; }
+            SlopeFallback++;
+        }
+        var t = LoadUnitPart("hull", dir, facing)
+                ?? (facing != 0 ? LoadUnitPart("hull", dir, 0) : null)
+                // a pose the export does not carry falls back to group 0 rather
+                // than making the unit disappear
+                ?? (pose > 0 ? GetHullTexture(unitType, facing, 0, slope) : null);
+        if (t != null) return t;
+        // ... und zuletzt die ganze Bank unter der Bauteilnummer, siehe
+        // GetTurretTexture.
+        LoadMounts();
+        if (!_hullComponent.TryGetValue(unitType, out int comp) || comp <= 0) return null;
+        int blk = SlopeBlock(slope);
+        return (blk > 0 ? LoadUnitPart("part", $"{comp}/b{blk}", facing) : null)
+               ?? LoadUnitPart("part", comp.ToString(), facing);
     }
+
+    /// <summary>unit_type -> Bauteilnummer, aus <c>parts_index.json</c>.</summary>
+    private static readonly Dictionary<int, int> _hullComponent = new();
 
     /// <summary>Equipment rows 65..88 of the stats table, read out of a .DM's
     /// own copy (sec46). Only the ones that occur on placed units are listed;
@@ -11854,8 +11927,43 @@ public partial class MapEntityLayer : Node2D
         _ => "?",
     };
 
-    private Texture2D? GetTurretTexture(int weapon, int facing)
-        => weapon == 0 ? null : LoadUnitPart("turret", weapon.ToString(), facing);
+    /// <summary>
+    /// Das Geschütz. Gesucht wird in dieser Reihenfolge: die Hangpose des
+    /// benannten Satzes, der benannte Satz selbst, dann die <b>ganze Bank</b>
+    /// unter der Bauteilnummer.
+    ///
+    /// <para>⚠ Der Rückfall auf <c>part/</c> ist kein Beiwerk. Der Exporter hat
+    /// bis zum 15.08.2026 nur Waffen geschrieben, die auf einer Karte stehen —
+    /// die 601 gespeicherten Entwürfe greifen aber auch auf Bauteile, die auf
+    /// keiner der 44 Karten vorkommen (15 „Minenleger", 18 „Flak-Geschütz",
+    /// 77 „Antiradar" und sieben weitere). Ein Entwurf damit hatte ein
+    /// unsichtbares Geschütz.</para></summary>
+    private Texture2D? GetTurretTexture(int weapon, int facing, int slope = 0)
+    {
+        if (weapon == 0) return null;
+        if (slope > 0)
+        {
+            var s = LoadUnitPart("turret", $"{weapon}/s{slope}", facing);
+            if (s != null) { SlopeDrawn++; return s; }
+        }
+        var t = LoadUnitPart("turret", weapon.ToString(), facing);
+        if (t != null) return t;
+        int blk = SlopeBlock(slope);
+        return (blk > 0 ? LoadUnitPart("part", $"{weapon}/b{blk}", facing) : null)
+               ?? LoadUnitPart("part", weapon.ToString(), facing);
+    }
+
+    /// <summary>Der Bildblock zu einer Hangklasse, aus <c>parts_index.json</c>
+    /// (<c>slope_blocks</c>, die Tabelle @0x4fa4d8 mit den BILDVERSÄTZEN
+    /// 0/16/32/8/24). Ein Block ist acht Bilder.</summary>
+    private static int SlopeBlock(int k)
+    {
+        LoadMounts();
+        return _slopeBlockTable != null && k > 0 && k < _slopeBlockTable.Length
+               ? _slopeBlockTable[k] / 8 : 0;
+    }
+
+    private static int[]? _slopeBlockTable;
 
     // ---- where the turret sits on the hull ----------------------------------
 
@@ -12011,12 +12119,23 @@ public partial class MapEntityLayer : Node2D
         {
             using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
             using var doc = System.Text.Json.JsonDocument.Parse(f.GetAsText());
+            if (doc.RootElement.TryGetProperty("slope_blocks", out var sb)
+                && sb.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                var l = new List<int>();
+                foreach (var v in sb.EnumerateArray()) l.Add(v.GetInt32());
+                if (l.Count > 0) _slopeBlockTable = l.ToArray();
+            }
             if (!doc.RootElement.TryGetProperty("hulls", out var group)) return;
             foreach (var item in group.EnumerateObject())
             {
                 if (!int.TryParse(item.Name, out int ut)) continue;
                 if (item.Value.TryGetProperty("groups", out var gv))
                     _poseGroups[ut] = System.Math.Max(1, gv.GetInt32());
+                // Die Bauteilnummer, damit ein Rumpf ohne eigenen Satz auf die
+                // ganze Bank unter part/ zurueckfallen kann.
+                if (item.Value.TryGetProperty("component", out var cv))
+                    _hullComponent[ut] = cv.GetInt32();
                 if (!item.Value.TryGetProperty("mount", out var arr)) continue;
                 var row = new List<Vector2I>();
                 foreach (var p in arr.EnumerateArray())
@@ -12797,11 +12916,15 @@ public partial class MapEntityLayer : Node2D
                     if (foot != null) { DrawTexture(foot, baseC - ComposedAnchor); continue; }
                 }
                 // hull + separately aimed turret (preferred)
-                var hull = GetHullTexture(e.UnitType, e.Facing, PoseOf(e));
+                // ⚠ Die Hangklasse gilt fuer BEIDE. Der Turmsitz wurde schon
+                // immer danach gerueckt, das Bild aber nicht — der Rumpf blieb
+                // flach auf kippendem Boden.
+                int slope = SlopeClassOf(e.Col, e.Row);
+                var hull = GetHullTexture(e.UnitType, e.Facing, PoseOf(e), slope);
                 if (hull != null)
                 {
                     DrawTexture(hull, baseC - ComposedAnchor);
-                    var turret = GetTurretTexture(e.Weapon, aim);
+                    var turret = GetTurretTexture(e.Weapon, aim, slope);
                     if (turret != null)
                         DrawTexture(turret, baseC - ComposedAnchor
                                             + TurretOffset(e.UnitType, e.Col, e.Row));
@@ -12867,7 +12990,27 @@ public partial class MapEntityLayer : Node2D
             else DrawDiamond(air, 8f, new Color(0.1f, 0.9f, 0.95f));
             if (s.Airframe == 120)                     // helicopters get a rotor
             {
-                var rot = GetAirframeTexture(_clock * 20f % 2f < 1f ? 110 : 111, s.Facing);
+                // ⚠ 15.08.2026 — HIER WURDE EIN SCHATTEN ALS ROTOR GEZEICHNET.
+                //
+                // Es stand `GetAirframeTexture(_clock*20 % 2 < 1 ? 110 : 111,
+                // s.Facing)`, also ein Wechsel zwischen Teil 110 und 111 als
+                // zwei Rotorphasen. Teil 111 ist aber KEINE Rotorphase: seine
+                // acht Bilder sind zu 100 % ein einziger Palettenindex —
+                // schwarze Rotorblätter, die SCHATTENMASKE des Rotors. Der
+                // Hubschrauber hat also mit 10 Hz zwischen Rotor und schwarzem
+                // Kreuz geblinkt.
+                //
+                // Und die acht Bilder von Teil 110 sind PHASEN, keine
+                // Richtungen — angesehen: die Blätter drehen sich durch die
+                // Reihe. Mit `s.Facing` stand der Rotor je Kurs auf einer
+                // festen Phase und drehte sich gar nicht.
+                //
+                // ⚠ UNSERE SETZUNG bleibt die Drehzahl; im Original ist sie
+                // nicht gelesen.
+                int phase = Mathf.PosMod((int)(_clock * RotorFps), 8);
+                var rsh = GetAirframeTexture(111, phase);
+                if (rsh != null) DrawTexture(rsh, c - ComposedAnchor, ShadowTint);
+                var rot = GetAirframeTexture(110, phase);
                 if (rot != null) DrawTexture(rot, air - ComposedAnchor);
             }
             // ammo left, so an emptied aircraft is visible at a glance

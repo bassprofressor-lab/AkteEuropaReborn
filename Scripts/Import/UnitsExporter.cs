@@ -43,6 +43,10 @@ public sealed class UnitsExporter
 
     public int Frames, Hulls, Turrets, Combos, InfantrySets, Aircraft, Wagons, Rails, RailFrames, Chassis;
 
+    /// <summary>Wieviele Hangpose-Bilder geschrieben wurden — bis zum
+    /// 15.08.2026 waren es null, siehe <see cref="StackAt"/>.</summary>
+    public int SlopePoses;
+
     public UnitsExporter(CwrFile cwr, PalFile pal, ExeTables? exe, string unitsDir)
     {
         _cwr = cwr; _pal = pal; _exe = exe;
@@ -114,6 +118,10 @@ public sealed class UnitsExporter
     public void Run(IEnumerable<(int UnitType, int Weapon)> combos, Action<string>? say = null)
     {
         Directory.CreateDirectory(_dst);
+        // ⚠ Die Hangtabelle MUSS vor der Schleife stehen. Sie wurde bisher erst
+        // in Mount() nachgeladen, und Mount() läuft erst beim Index ganz am
+        // Ende — die Hangposen hätten dann alle den Rückfallwert benutzt.
+        if (_exe != null && _exe.TurretMountFound) _slopeBlocks = _exe.SlopeBlocks();
         var seen = new SortedSet<(int, int)>();
         var unitTypes = new SortedSet<int>();
         foreach (var c in combos) { seen.Add(c); unitTypes.Add(c.UnitType); }
@@ -148,13 +156,44 @@ public sealed class UnitsExporter
                 for (int g = 1; g < _cwr.PartGroups(prop); g++)
                     for (int f = 0; f < CwrFile.Facings; f++)
                         Save($"hull/{ut}/g{g}/f{f}.png", StackPose(f, g, prop));
+
+            // ⚠ 15.08.2026 — DIE HANGPOSEN, bis heute nicht exportiert.
+            //
+            // Klasse 0 ist das flache Bild und steht schon oben; 1..4 kommen in
+            // s<k>/ daneben, unter der jeweiligen Gruppe. Der Name ist so
+            // gewählt, dass nichts, was die alten Dateien liest, sich ändern
+            // muss — eine Einheit ohne Hangbild fällt einfach auf das flache
+            // zurück.
+            if (newHull)
+                for (int k = 1; k < SlopeClasses; k++)
+                {
+                    int blk = SlopeBlockOf(k);
+                    if (blk == 0) continue;               // dieselbe Pose wie flach
+                    for (int g = 0; g < _cwr.PartGroups(prop); g++)
+                        for (int f = 0; f < CwrFile.Facings; f++)
+                            Save(g == 0 ? $"hull/{ut}/s{k}/f{f}.png"
+                                        : $"hull/{ut}/g{g}/s{k}/f{f}.png",
+                                 StackAt(f, blk, g, prop));
+                    SlopePoses += CwrFile.Facings * _cwr.PartGroups(prop);
+                }
+            if (newTurret && weap > 0)
+                for (int k = 1; k < SlopeClasses; k++)
+                {
+                    int blk = SlopeBlockOf(k);
+                    if (blk == 0) continue;
+                    for (int f = 0; f < CwrFile.Facings; f++)
+                        Save($"turret/{weap}/s{k}/f{f}.png", StackAt(f, blk, 0, weap));
+                    SlopePoses += CwrFile.Facings;
+                }
             composed.Add((key, ut, weap, name));
             Combos++;
 
             if (newHull) { hulls[ut] = name; Hulls++; }
             if (newTurret) { turrets.Add(weap); Turrets++; }
         }
-        say?.Invoke($"Rumpf/Turm: {Hulls} Fahrwerke, {Turrets} Waffen, {Combos} Kombinationen");
+        say?.Invoke($"Rumpf/Turm: {Hulls} Fahrwerke, {Turrets} Waffen, {Combos} Kombinationen" +
+                    $", {SlopePoses} Hangpose-Bilder (Bloecke " +
+                    string.Join("/", _slopeBlocks) + " aus @0x4fa4d8)");
 
         // The chassis set covers every unit type that appears, not only those
         // that came with a weapon — a scenery piece has a sprite too.
@@ -165,15 +204,56 @@ public sealed class UnitsExporter
         // invisible. The stats table is walked upward while a row still has a
         // name and a component of its own, which is where the chassis run ends
         // — row 176 has neither.
-        int top = 0;
-        foreach (int ut in unitTypes) top = Math.Max(top, ut);
-        for (int ut = top + 1; ut < 256; ut++)
+        // ⚠ 15.08.2026 — DIE GANZE TABELLE, nicht nur was oberhalb liegt.
+        //
+        // Hier stand ein Lauf von `top + 1` aufwärts, der beim ersten leeren
+        // Eintrag ABBRACH. Damit fehlten alle Typen UNTERHALB des höchsten
+        // platzierten, die auf keiner Karte stehen: die 601 gespeicherten
+        // Entwürfe benutzen unter anderem die Fahrwerke 148 und 149, und die
+        // hatten überhaupt keine Bilder — weder unter hull/ noch sonstwo.
+        //
+        // Die Schranke bleibt streng (ein Name UND ein Bauteil, das Bilder
+        // besitzt), nur der Abbruch wird zum Überspringen. Ein leerer Eintrag
+        // mitten in der Tabelle ist ein Loch, kein Ende.
+        for (int ut = 0; ut < 256; ut++)
         {
             var st = _exe?.StatsFor(ut);
-            if (st == null || st.Name.Length == 0 || st.ComponentId <= 0) break;
-            if (_cwr.PartBase(st.ComponentId) < 0) break;
+            if (st == null || st.Name.Length == 0 || st.ComponentId <= 0) continue;
+            if (_cwr.PartBase(st.ComponentId) < 0) continue;
             unitTypes.Add(ut);
         }
+        // Jeder Fahrwerkstyp bekommt seinen hull/-Satz samt Hangposen und einen
+        // Eintrag im Index — auch die, die mit keiner Waffe zusammen auf einer
+        // Karte stehen. Sonst findet der Zeichner den Turmsitz und die
+        // Posengruppen nicht, und die Einheit fiele auf den nackten
+        // Fahrgestellsatz zurueck.
+        foreach (int ut in unitTypes)
+        {
+            if (hulls.ContainsKey(ut)) continue;
+            int prop = ComponentOf(ut);
+            if (prop <= 0 || _cwr.PartBase(prop) < 0) continue;
+            for (int g = 0; g < _cwr.PartGroups(prop); g++)
+                for (int f = 0; f < CwrFile.Facings; f++)
+                    Save(g == 0 ? $"hull/{ut}/f{f}.png" : $"hull/{ut}/g{g}/f{f}.png",
+                         StackPose(f, g, prop));
+            for (int k = 1; k < SlopeClasses; k++)
+            {
+                int blk = SlopeBlockOf(k);
+                if (blk == 0) continue;
+                for (int g = 0; g < _cwr.PartGroups(prop); g++)
+                    for (int f = 0; f < CwrFile.Facings; f++)
+                        Save(g == 0 ? $"hull/{ut}/s{k}/f{f}.png"
+                                    : $"hull/{ut}/g{g}/s{k}/f{f}.png",
+                             StackAt(f, blk, g, prop));
+                SlopePoses += CwrFile.Facings * _cwr.PartGroups(prop);
+            }
+            hulls[ut] = NameOf(ut);
+            Hulls++;
+        }
+        say?.Invoke($"Fahrwerke gesamt: {Hulls} (auch die, die auf keiner Karte stehen), " +
+                    $"{SlopePoses} Hangpose-Bilder");
+
+        WriteAllParts(say);
         WriteChassis(unitTypes, say);
         WriteInfantry(say);
         WriteAircraft(say);
@@ -181,6 +261,53 @@ public sealed class UnitsExporter
         WritePartsIndex(hulls, turrets);
         WriteComposedIndex(composed);
     }
+
+    /// <summary>
+    /// <b>DIE GANZE BANK, unter der Bauteilnummer.</b>
+    ///
+    /// <para>⚠ Bis zum 15.08.2026 hat der Exporter nur geschrieben, was auf
+    /// einer Karte STEHT oder gebaut werden kann. Das reicht nicht: die
+    /// gespeicherten Entwürfe (601 Stück in <c>unit_designs.json</c>) greifen auf
+    /// die Waffen 0..19 und 65..79, und dazu gehören Bauteile, die auf keiner
+    /// der 44 Karten vorkommen — <b>15 „Minenleger", 18 „Flak-Geschütz", 77
+    /// „Antiradar"</b> und sieben weitere. Wer so etwas konstruiert, bekam ein
+    /// unsichtbares Geschütz.</para>
+    ///
+    /// <para>Geschrieben wird deshalb JEDES belegte Teil unter seiner eigenen
+    /// Nummer, mit allen Blöcken und Gruppen, die es besitzt. Das sind zehn
+    /// Teile mehr als bisher und kostet ein paar hundert Bilder; dafür fehlt
+    /// nichts mehr. Die benannten Sätze (hull/, turret/, aircraft/, train/)
+    /// bleiben unverändert daneben stehen — sie sind der Weg, den der Zeichner
+    /// zuerst geht, <c>part/</c> ist der Rückfall.</para></summary>
+    private void WriteAllParts(Action<string>? say)
+    {
+        int parts = 0, frames = 0;
+        foreach (var p in _cwr.PopulatedParts())
+        {
+            int groups = _cwr.PartGroups(p.Component);
+            int blocks = System.Math.Max(1, System.Math.Min(p.Frames, CwrFile.GroupFrames)
+                                            / CwrFile.Facings);
+            for (int g = 0; g < groups; g++)
+                for (int blk = 0; blk < blocks; blk++)
+                    for (int f = 0; f < CwrFile.Facings; f++)
+                    {
+                        int fr = _cwr.PartFrame(p.Component, f, blk, g);
+                        if (fr < 0 || _cwr.DecodeFrame(fr) == null) continue;
+                        string dir = $"part/{p.Component}";
+                        if (g > 0) dir += $"/g{g}";
+                        if (blk > 0) dir += $"/b{blk}";
+                        Save($"{dir}/f{f}.png", _cwr.PartImage(p.Component, f, _pal, blk, g));
+                        frames++;
+                    }
+            parts++;
+        }
+        AllParts = parts; AllPartFrames = frames;
+        say?.Invoke($"Bank: {parts} Teile vollstaendig unter part/, {frames} Bilder");
+    }
+
+    /// <summary>Wieviele Teile und Bilder <see cref="WriteAllParts"/> gelegt
+    /// hat.</summary>
+    public int AllParts, AllPartFrames;
 
     // ---- the cropped per-unit_type set + units_index.json -------------------
 
@@ -364,9 +491,10 @@ public sealed class UnitsExporter
         sb.Append("of the executable (GAME.EXE table at 0x4fa320): on flat ground the draw code ");
         sb.Append("takes mount[k] outright (@0x42a099), on the tilted path the average ");
         sb.Append("(mount[0]+mount[k])/2 (@0x429CCB); k = the tile's flag byte, 0 above 4. ");
-        sb.Append("`slope_blocks` is the frame block a tilted turret is drawn from (@0x429B05) - ");
-        sb.Append("the exporter writes block 0 only, so a unit on a slope shows the flat turret ");
-        sb.Append("at the right place\",");
+        sb.Append("`slope_blocks` is the frame block a tilted unit is drawn from (@0x429B05). ");
+        sb.Append("Since 15.08.2026 the exporter writes them: class 0 is the flat picture and ");
+        sb.Append("keeps its old name, classes 1..4 sit in s<k>/ beside it (and under g<n>/ for ");
+        sb.Append("the other pose groups). The class is the tile's FLAG byte, >4 counts as 0\",");
         // ⚠ The walker is not in that table's world at all — see WALKER_LIFT.
         sb.Append("\"_walker\":\"chassis 0x11 (Laeufer) does NOT use the mount table: @0x42a027 ");
         sb.Append("jumps past it to @0x42a0e8, whose first instruction is `sub bp, 0x1b` - a flat ");
@@ -449,6 +577,27 @@ public sealed class UnitsExporter
     /// blank and was silently skipped. Two int parameters and a params array
     /// are a trap; the name keeps them apart.</summary>
     private Image StackPose(int facing, int group, params int[] components)
+        => StackAt(facing, 0, group, components);
+
+    /// <summary>
+    /// Wie <see cref="StackPose"/>, aber mit dem <b>BLOCK</b> — der fünften
+    /// Grösse in der Formel des Zeichenpfads
+    /// <c>bild = basis + gruppe·48 + block·8 + richtung</c> (@0x429fa6).
+    ///
+    /// <para>Der Block ist die <b>Hangpose</b>: die Neigung, mit der eine
+    /// Einheit auf schrägem Gelände steht. Welcher Block zu welcher Hangklasse
+    /// gehört, sagt die Tabelle @0x4fa4d8 (<c>0, 16, 32, 8, 24</c> als
+    /// Bildversätze, also die Blöcke 0, 2, 4, 1, 3), und die Klasse selbst ist
+    /// das <b>Flag-Byte</b> der Kachel, auf der die Einheit steht
+    /// (@0x429AD5 → 0x41d110, alles über 4 zählt als 0).</para>
+    ///
+    /// <para>⚠ Bis zum 15.08.2026 hat der Exporter <b>nur Block 0</b>
+    /// geschrieben. Eine Einheit am Hang zeigte damit den flachen Rumpf,
+    /// während der Boden unter ihr kippte — und der Turmsitz wurde bereits nach
+    /// der Hangklasse verschoben, das Bild aber nicht. Der Hinweis stand seit
+    /// Monaten im eigenen Index (»the exporter writes block 0 only«).</para>
+    /// </summary>
+    private Image StackAt(int facing, int block, int group, params int[] components)
     {
         // the canvas has to hold the WIDEST layer, or a ship's hull loses its
         // bow to a turret-sized picture — see CwrFile.CanvasFor
@@ -456,7 +605,7 @@ public sealed class UnitsExporter
         foreach (int c in components)
         {
             if (c <= 0 || c >= CwrFile.PartCount || _cwr.PartBase(c) < 0) continue;
-            int fr = _cwr.PartFrame(c, facing, 0, group);
+            int fr = _cwr.PartFrame(c, facing, block, group);
             if (fr < 0) continue;
             var (w, h) = _cwr.CanvasFor(fr);
             cw = System.Math.Max(cw, w);
@@ -469,12 +618,27 @@ public sealed class UnitsExporter
         {
             if (c <= 0 || c >= CwrFile.PartCount) continue;
             if (_cwr.PartBase(c) < 0) continue;
-            int fr = _cwr.PartFrame(c, facing, 0, group);
+            int fr = _cwr.PartFrame(c, facing, block, group);
             if (fr < 0) continue;
             var layer = _cwr.FacingImage(fr, _pal, cw, ch);
             canvas.BlendRect(layer, new Rect2I(0, 0, cw, ch), Vector2I.Zero);
         }
         return canvas;
+    }
+
+    /// <summary>Wieviele Hangklassen es gibt — fünf, die Länge der Tabelle
+    /// @0x4fa4d8. Klasse 0 ist flacher Boden.</summary>
+    public const int SlopeClasses = ExeTables.MountSlopes;
+
+    /// <summary>Der Bild-BLOCK zu einer Hangklasse. Die Tabelle führt
+    /// BILDVERSÄTZE (0, 16, 32, 8, 24); ein Block ist acht Bilder, also
+    /// Block = Versatz/8 — die Klassen 0..4 greifen damit auf die Blöcke
+    /// 0, 2, 4, 1, 3. Block 5 kommt in der Tabelle nicht vor und wird nicht
+    /// geschrieben; wofür er da ist, ist offen.</summary>
+    private int SlopeBlockOf(int k)
+    {
+        if (k <= 0 || k >= _slopeBlocks.Length) return 0;
+        return _slopeBlocks[k] / CwrFile.Facings;
     }
 
     private static IEnumerable<int> PartsOf((int Kind, int Part)[] t)
