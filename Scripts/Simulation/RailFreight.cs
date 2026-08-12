@@ -1644,7 +1644,10 @@ public partial class MapEntityLayer : Node2D
             // andere Zweig). Zusammen damit, dass auch die Reparatur sie nicht
             // zuruecksetzt, bleibt ein einmal beschaedigtes Gleis dauerhaft
             // weicher — und genau das steht in den Spielstaenden.
-            c.Frame += (10 + (int)(GD.Randi() & 1)) * 10;
+            // ⚠ Der Wuerfel der Simulation, nicht der von Godot — sonst haette
+            // jede Maschine ein anderes Truemmerbild, und das steht im
+            // Zustand (Bildwert der Zelle), nicht nur im Bild.
+            c.Frame += (10 + Simulation.Determinism.Roll(2)) * 10;
             broke = true;
             if (!spread) continue;
             // ⚠ 15.08.2026 — EIN BRUCH REISST DIE VIER NACHBARN MIT.

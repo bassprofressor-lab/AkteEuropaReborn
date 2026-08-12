@@ -73,11 +73,32 @@ public partial class MapEntityLayer : Node2D
         public readonly HashSet<int> PlanAirUnmatched = new();
         public string AirBroke = "";               // woran der Flughafen scheitert
 
-        /// <summary>Der Wuerfel dieses Spielers. `find_base` und der
-        /// Einheitendurchlauf greifen beide auf `rand()` zurueck; ein eigener,
-        /// fest gesaeter Wuerfel je Spieler haelt den Harnisch reproduzierbar.
-        /// Der Startwert ist UNSERE Setzung, das Wuerfeln selbst nicht.</summary>
-        public readonly System.Random Rnd;
+        /// <summary>
+        /// Der Wuerfel dieses Spielers. `find_base` und der Einheitendurchlauf
+        /// greifen beide auf `rand()` zurueck; das Wuerfeln selbst ist also
+        /// original, der Startwert ist UNSERE Setzung.
+        ///
+        /// <para>⚠ <b>Umgestellt am 12.08.2026 von <c>System.Random</c> auf den
+        /// Kartenkeim</b> (Simulation/Determinism.cs). Zwei Gruende, beide aus
+        /// dem Netzspiel:</para>
+        /// <list type="number">
+        /// <item><c>System.Random</c> gibt KEINE Zusage ueber seine Zahlenfolge
+        /// zwischen .NET-Fassungen; zwei Spieler mit verschieden gepatchtem
+        /// .NET wuerfeln verschieden, und das ist im Lockstep ein
+        /// auseinandergelaufenes Spiel.</item>
+        /// <item>Der Startwert war die feste Zahl <c>0x4BF4E0 + spieler</c> —
+        /// jede Partie auf jeder Karte hatte damit DIESELBEN KI-Wuerfe. Aus dem
+        /// Kartenkeim gespeist, ist die Folge weiterhin auf allen Maschinen
+        /// gleich, aber nicht mehr in jeder Partie dieselbe.</item>
+        /// </list>
+        /// <para>Der Weg geht ueber <see cref="Determinism.Roll"/>, also ueber
+        /// den EINEN Strom des Spiels. Getrennte Stroeme je Spieler waeren
+        /// robuster (ein Spieler, der aussteigt, verschoebe den Strom der
+        /// anderen nicht) — solange es keine Netzschicht gibt, waere das aber
+        /// eine Vorkehrung gegen ein Problem, das noch niemand gemessen
+        /// hat.</para>
+        /// </summary>
+        public int Roll(int n) => Simulation.Determinism.Roll(n);
 
         /// <summary>Der Einheitendurchlauf: Sekunden bis zum naechsten Block und
         /// welcher der acht Bloecke als naechstes drankommt (ai_units).</summary>
@@ -92,7 +113,7 @@ public partial class MapEntityLayer : Node2D
         public readonly HashSet<int> MovedInf = new();
         public string Broke = "";                  // woran »Sources check« scheitert
 
-        public AiPlayer(int player) { Player = player; Rnd = new System.Random(0x4BF4E0 + player); }
+        public AiPlayer(int player) { Player = player; }
     }
 
     /// <summary>
@@ -810,6 +831,20 @@ public partial class MapEntityLayer : Node2D
 
     private void UpdateAi(float dt)
     {
+        UpdateAiInner(dt);
+
+        // ⚠ DER EINHÄNGER DES PRÜFSTANDS (Simulation/DeterminismHarness.cs).
+        //
+        // Er steht hier und nicht in MapEntityLayer._Process, weil an dieser
+        // Datei gerade jemand anderes arbeitet. UpdateAi ist der vorletzte
+        // Aufruf des Takts (@MapEntityLayer.cs:11119, danach kommt nur noch
+        // MissionScriptTick) — also der späteste Punkt, an den diese Sitzung
+        // herankommt. Kostet ausserhalb eines Prüflaufs ein einziges bool.
+        DeterminismTick(dt);
+    }
+
+    private void UpdateAiInner(float dt)
+    {
         UnarmedWatchTick();
         if (!_aiOn) return;
         foreach (var a in _ai)
@@ -1177,7 +1212,7 @@ public partial class MapEntityLayer : Node2D
             if (e.BType != AiBaseType || e.Owner != a.Player) continue;
             cand.Add(i);
         }
-        return cand.Count == 0 ? -1 : cand[a.Rnd.Next(cand.Count)];
+        return cand.Count == 0 ? -1 : cand[a.Roll(cand.Count)];
     }
 
     /// <summary>Wie viele Basen ein Spieler hat — nur fuer die Statuszeile.</summary>
@@ -1356,7 +1391,7 @@ public partial class MapEntityLayer : Node2D
             if (e.BType != AiAirportType || e.Owner != a.Player) continue;
             cand.Add(i);
         }
-        return cand.Count == 0 ? -1 : cand[a.Rnd.Next(cand.Count)];
+        return cand.Count == 0 ? -1 : cand[a.Roll(cand.Count)];
     }
 
     /// <summary>Wie viele Flughaefen ein Spieler hat und wie voll deren Hangars
@@ -1722,7 +1757,7 @@ public partial class MapEntityLayer : Node2D
     {
         int near = e.Range > 0 ? e.Range : Mathf.RoundToInt(RangeOf(e));
         int far = e.Sight > near ? e.Sight : near + AiSightPad;
-        bool wide = a.Rnd.Next(3) == 0;                 // rand() % 3 == 0
+        bool wide = a.Roll(3) == 0;                 // rand() % 3 == 0
         float lo = wide ? near : far;
         float hi = far + 1;
         bool high = e.Subclass > AiClassSplit;

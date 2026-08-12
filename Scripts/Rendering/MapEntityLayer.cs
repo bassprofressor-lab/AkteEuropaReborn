@@ -4214,9 +4214,16 @@ public partial class MapEntityLayer : Node2D
         int elev = ElevOf(victim.Col, victim.Row);
         int offence = (shooter.Defence + 30) * shooter.Attack / 40;
         int defence = (30 + victim.Defence / 5) * (victim.Attack + 2 * elev) / 50;
-        int dmg = offence - defence + (int)(GD.Randi() % 5) - (int)(GD.Randi() % 5);
+        // ⚠ 15.08.2026 — DER WUERFEL DER SIMULATION, nicht der von Godot.
+        // `GD.Randi()` haengt am globalen Zustand des Motors: er wird von
+        // allem mitbewegt, was sonst noch wuerfelt (Klaenge!), und laesst sich
+        // von aussen nicht keimen. Zwei Maschinen bekommen damit
+        // zwangslaeufig verschiedene Zahlen. Determinism.Roll ist ein eigener
+        // Strom mit gesetztem Keim und einem Zaehler, den der Pruefstand liest.
+        int dmg = offence - defence + Simulation.Determinism.Roll(5)
+                                    - Simulation.Determinism.Roll(5);
         if (dmg <= -2) return 0;
-        if (dmg < 1) return (int)(GD.Randi() % 10) / 3;
+        if (dmg < 1) return Simulation.Determinism.Roll(10) / 3;
         return dmg;
     }
 
@@ -7810,7 +7817,12 @@ public partial class MapEntityLayer : Node2D
     private const int UpgradeSteps = 100, UpgradeTick = 5;
     private const int CapacityGain = 10, RepairTick = 4;
 
-    private readonly RandomNumberGenerator _rng = new();
+    // ⚠ 15.08.2026 — HIER STAND `private readonly RandomNumberGenerator _rng = new();`
+    // und ist WEG. Godot keimt einen frisch angelegten RandomNumberGenerator
+    // ZUFAELLIG; sein einziger Benutzer war die Produktionschance, und die
+    // wuerfelte damit auf jeder Maschine anders. Der Zwillings-Pruefstand hat
+    // es auf map_NET02 bei Takt 123 gefunden — 14 Zahlen, alle Lagerbestaende.
+    // Wer hier wieder einen Wuerfel braucht, nimmt Simulation.Determinism.
 
     /// <summary>A building tops up the ammunition of its owner's units standing
     /// next to it — one round per tick, exactly what the original does
@@ -7927,7 +7939,15 @@ public partial class MapEntityLayer : Node2D
             if (e.StockT <= 0) continue;
             int made = e.BType switch { 2 => e.StockW, 3 => e.StockF, _ => e.StockS };
             if (e.Capacity > 0 && made >= e.Capacity) continue;
-            if (_rng.RandiRange(0, 99) >= e.EffNum * 100 / Mathf.Max(1, e.EffDen)) continue;
+            // ⚠ 15.08.2026 — HIER STAND `_rng.RandiRange`, und `_rng` ist ein
+            // frisch angelegter Godot-RandomNumberGenerator: DEN KEIMT GODOT
+            // ZUFAELLIG. Die Produktionschance wuerfelte damit auf jeder
+            // Maschine anders — gefunden hat es der Zwillings-Pruefstand, der
+            // auf map_NET02 bei Takt 123 (2,05 s) auseinanderlief, und zwar in
+            // genau 14 Zahlen, alle Lagerbestaende. Auf map_NET07 faellt es
+            // nicht auf, weil die Karte keine Fabriken hat.
+            if (Simulation.Determinism.Roll(100) >= e.EffNum * 100 / Mathf.Max(1, e.EffDen))
+                continue;
             e.StockT--;
             switch (e.BType)
             {
@@ -11308,15 +11328,85 @@ public partial class MapEntityLayer : Node2D
         return sb.ToString();
     }
 
+    /// <summary>
+    /// <b>DER FESTE TAKT.</b> Die Simulation läuft nicht mehr auf der Bildzeit.
+    ///
+    /// <para>⚠ <b>Der Befund, der das erzwungen hat</b> (15.08.2026, gemessen
+    /// mit <c>--determinism-twin</c>): gleicher Keim, gleiche Karte, gleiche
+    /// SIMULIERTE Zeit von 10 s — und je nach Bildrate drei verschiedene
+    /// Zustände:</para>
+    /// <code>
+    ///   30 Bilder/s   300 Takte   Prüfsumme 5071A756A80B2634   HP 36911
+    ///   60 Bilder/s   600 Takte             8C5F21CD5F8AF503      36965
+    ///  144 Bilder/s  1440 Takte             F45A1091E165730F      36911
+    /// </code>
+    /// <para>Ursache war diese Stelle: <c>_Process(double delta)</c> reichte die
+    /// echte verstrichene Bildzeit als <c>dt</c> in die Spielwelt, an 74
+    /// Stellen allein in dieser Datei. Wer schneller zeichnet, würfelt öfter,
+    /// schießt öfter und fährt anders. Im Zwillingslauf mit A=1/60 und B=1/30
+    /// liefen die beiden nach <b>18 Takten = 0,30 s</b> auseinander.</para>
+    ///
+    /// <para><b>Ohne festen Takt ist Lockstep über Netz unmöglich</b>, gleich
+    /// welcher Transport — und darum ist es die erste Stufe des
+    /// Mehrspieler-Plans.</para>
+    ///
+    /// <para>⚠ <b>UNSERE SETZUNG ist die Taktrate</b>, nicht das Verfahren.
+    /// 60/s ist genommen, weil die Simulation faktisch schon damit lief (das
+    /// Spiel zeichnet mit 60 Bildern/s, und jedes Bild war ein Schritt) — jede
+    /// andere Zahl hätte die Balance verschoben. Das Original taktet mit 50 Hz;
+    /// wer darauf umstellen will, ändert <see cref="SimHz"/> und muss
+    /// TickScale und die Fahrzeiten mit prüfen.</para>
+    ///
+    /// <para>Der Nachlauf ist gedeckelt: bleibt der Rechner mehr als
+    /// <see cref="SimMaxCatchUp"/> Takte zurück, wird der Rückstand verworfen
+    /// statt aufgeholt. Sonst holt ein Ruckler die verlorene Zeit in einem
+    /// Schwall nach und reisst die Bildrate weiter ein — die »Todesspirale«.
+    /// Im Netzspiel gehört an diese Stelle später das Warten auf den
+    /// Server.</para></summary>
+    private const int SimHz = 60;
+    private const float SimDt = 1f / SimHz;
+    private const int SimMaxCatchUp = 5;
+    private float _simAcc;
+
+    /// <summary>Wieviele Simulationstakte der letzte Bildlauf gefahren hat, und
+    /// wie oft der Deckel gegriffen hat — ohne diese zwei Zahlen ist ein
+    /// Ruckler nicht von einem Rechenfehler zu unterscheiden.</summary>
+    public int SimStepsLastFrame, SimCatchUpDropped;
+
     public override void _Process(double delta)
     {
         if (_nav == null) return;
         float dt = (float)delta;
-        _clock += dt;
 
-        // ours: when a piece has run out, put the next one on
+        // Der Klang laeuft nach der Uhr des RECHNERS, nicht nach der
+        // Simulation: er gehoert nicht in den Zustand und darf nicht mitzaehlen.
         _musicTick += dt;
         if (_musicTick >= 2f) { _musicTick = 0; Audio.MidiMusic.Poll(); }
+
+        _simAcc += dt;
+        int steps = 0;
+        bool moved = false;
+        while (_simAcc >= SimDt && steps < SimMaxCatchUp)
+        {
+            moved |= SimTick(SimDt);
+            _simAcc -= SimDt;
+            steps++;
+        }
+        if (steps >= SimMaxCatchUp && _simAcc >= SimDt) { _simAcc = 0f; SimCatchUpDropped++; }
+        SimStepsLastFrame = steps;
+
+        if (moved || _effects.Count > 0 || _tracers.Count > 0 || _shots.Count > 0)
+        {
+            QueueRedraw();
+            if (_selected >= 0) UpdatePanel();
+        }
+    }
+
+    /// <summary>Ein Simulationstakt — alles, was den Zustand anfasst. Gibt
+    /// zurück, ob sich etwas bewegt hat (nur fürs Neuzeichnen).</summary>
+    private bool SimTick(float dt)
+    {
+        _clock += dt;
 
         // the original's "unexplored" step, on its own slower beat
         _fogTick += dt;
@@ -11328,7 +11418,10 @@ public partial class MapEntityLayer : Node2D
         }
         UpdateAircraft(dt);
         if (_orderMarks.Count > 0) { UpdateOrderMarks(dt); QueueRedraw(); }
-        DebugClock += delta;
+        // ⚠ Die Messuhr zaehlt SIMULATIONStakte, nicht Bilder — seit dem festen
+        // Takt ist das derselbe Wert fuer jeden Lauf, und genau das macht die
+        // Zahlen der Pruefstaende vergleichbar.
+        DebugClock += dt;
         DebugTicks++;
         bool moved = false;
 
@@ -11441,12 +11534,7 @@ public partial class MapEntityLayer : Node2D
         UpdateTrains(dt);
         UpdateAi(dt);
         MissionScriptTick(dt);
-
-        if (moved || _effects.Count > 0 || _tracers.Count > 0 || _shots.Count > 0)
-        {
-            QueueRedraw();
-            if (_selected >= 0) UpdatePanel();
-        }
+        return moved;
     }
 
     private static int GetI(GDict d, string k, int def = 0)

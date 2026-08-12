@@ -117,6 +117,36 @@ public readonly struct FixedVector2 : IEquatable<FixedVector2>
     public override string ToString() => $"({X}, {Y})";
 }
 
+/// <summary>
+/// Der gekeimte Würfel des Spiels — xoroshiro64**, 32 Bit Ausgabe,
+/// 64 Bit Zustand. Zwei Maschinen mit demselben Keim werfen dieselbe Folge,
+/// unabhängig von Betriebssystem, .NET-Fassung und Fliesskomma-Einstellung:
+/// es sind ausschliesslich ganzzahlige Verschiebungen und Multiplikationen.
+///
+/// <para>⚠ <b>Der Vorgänger hatte eine Periode von 718 535 — GEMESSEN am
+/// 12.08.2026</b> mit <c>--determinism-rng-check</c> (Brents Zyklussuche über
+/// den 64-Bit-Zustand, Keim 12345). Nach 718 535 Zügen wiederholte er sich
+/// Zahl für Zahl. Das ist keine theoretische Grenze: eine lange Partie mit
+/// Kampf würfelt zwei- bis dreimal je Takt, also ist die Marke in der
+/// Grössenordnung von hunderttausend Takten erreichbar — und ein
+/// Netzspiel, in dem der Würfel umläuft, ist ein Netzspiel mit einem
+/// Muster.</para>
+///
+/// <para><b>Woran es lag.</b> Es war <b>xoroshiro falsch abgeschrieben</b>.
+/// Der Schritt lautete
+/// <c>_s0 = (s0 &lt;&lt; 13) | (s0 &gt;&gt; 19) ^ s1 ^ (s1 &lt;&lt; 5)</c>, und
+/// weil <c>^</c> in C# STÄRKER bindet als <c>|</c>, rechnete der Übersetzer
+/// <c>(s0&lt;&lt;13) | (((s0&gt;&gt;19) ^ s1) ^ (s1&lt;&lt;5))</c> — ein
+/// <b>ODER</b> statt der gemeinten Rotation-und-XOR. Ein ODER kann Bits nur
+/// setzen, nie löschen, und genau das zeigt die zweite Messung: der Zustand
+/// trug im Mittel <b>37,51 von 64</b> gesetzten Bits statt der erwarteten 32.
+/// Die neue Fassung misst 32,18.</para>
+///
+/// <para>Auffällig war er dabei NICHT: über 4 Millionen Züge verteilte er 16
+/// Fächer auf 247 376..251 964 (erwartet je 250 000), also unauffällig gleich.
+/// Ein Würfel, der gut aussieht und nach 700 000 Zügen von vorn anfängt, ist
+/// genau die Sorte Fehler, die man nicht durch Hinsehen findet.</para>
+/// </summary>
 public struct DeterministicRng
 {
     private uint _s0, _s1;
@@ -125,6 +155,10 @@ public struct DeterministicRng
     {
         _s0 = SplitMix32(seed);
         _s1 = SplitMix32(_s0);
+        // Der Nullzustand ist der einzige Fixpunkt von xoroshiro; SplitMix32
+        // trifft ihn praktisch nie, aber "praktisch nie" ist bei einem
+        // Netzspiel kein Argument.
+        if ((_s0 | _s1) == 0) { _s0 = 0x9E3779B9; _s1 = 0x85EBCA6B; }
     }
 
     private static uint SplitMix32(uint x)
@@ -136,15 +170,18 @@ public struct DeterministicRng
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint Rotl(uint x, int k) => (x << k) | (x >> (32 - k));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public uint NextUInt()
     {
         uint s0 = _s0;
         uint s1 = _s1;
-        uint result = s0 + s1;
+        uint result = Rotl(s0 * 0x9E3779BBu, 5) * 5u;
 
         s1 ^= s0;
-        _s0 = (s0 << 13) | (s0 >> 19) ^ s1 ^ (s1 << 5);
-        _s1 = (s1 << 7) | (s1 >> 25);
+        _s0 = Rotl(s0, 26) ^ s1 ^ (s1 << 9);
+        _s1 = Rotl(s1, 13);
 
         return result;
     }
@@ -152,14 +189,23 @@ public struct DeterministicRng
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int NextInt(int min, int max) => min + (int)(NextUInt() % (uint)(max - min));
 
+    /// <summary>⚠ NICHT für die Spielwelt. Fliesskomma gehört nicht in einen
+    /// Zustand, über den eine Prüfsumme läuft — für die Welt sind
+    /// <see cref="NextInt"/> und <see cref="NextFixed"/> da.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public float NextFloat() => NextUInt() * (1f / uint.MaxValue);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Fixed NextFixed() => new Fixed((int)(NextUInt() >> 16));
 
+    /// <summary>⚠ NICHT für die Spielwelt — siehe <see cref="NextFloat"/>.</summary>
     public bool NextBool(float probability = 0.5f) => NextFloat() < probability;
 
+    /// <summary>Trifft mit <paramref name="num"/>/<paramref name="den"/>
+    /// Wahrscheinlichkeit, ganzzahlig. DAS ist die Form für die Spielwelt.</summary>
+    public bool NextChance(int num, int den) => den > 0 && (int)(NextUInt() % (uint)den) < num;
+
+    /// <summary>⚠ NICHT für die Spielwelt — siehe <see cref="NextFloat"/>.</summary>
     public System.Numerics.Vector2 NextVector2(float maxLength = 1f)
     {
         var angle = NextFloat() * MathF.PI * 2;

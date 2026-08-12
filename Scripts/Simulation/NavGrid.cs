@@ -159,10 +159,28 @@ public sealed class NavGrid
     /// says nothing about speed; rough ground costing more is our reading of
     /// what it looks like on screen.
     /// </summary>
-    public float TerrainCost(int c, int r, MoveClass mc)
+    public float TerrainCost(int c, int r, MoveClass mc) => TerrainCostMilli(c, r, mc) / 1000f;
+
+    /// <summary>
+    /// Dasselbe in TAUSENDSTELN, ganzzahlig — 1000 = Faktor 1,0.
+    ///
+    /// <para>⚠ Diese Fassung gibt es, weil das Netzspiel Lockstep ist: jede
+    /// Maschine rechnet dieselben Befehle nach, und ein Weg, der auf einem
+    /// Rechner eine Zelle anders läuft, ist ein auseinandergelaufenes Spiel.
+    /// Die Wegsuche rechnete bis zum 12.08.2026 mit <c>float</c>-Kosten
+    /// (1,4142 für die Diagonale, ×1,45 für Geröll, +0,5 je Höhenstufe). Das
+    /// ist auf EINER Maschine reproduzierbar, aber es hängt an der
+    /// Fliesskomma-Einstellung des Übersetzers (FMA-Zusammenziehung, x87
+    /// gegen SSE) — genau die Klasse Unterschied, die zwischen zwei Rechnern
+    /// auftritt. Ganze Zahlen tun das nicht.</para>
+    ///
+    /// <para>Die Zahlen selbst sind unverändert UNSERE (das Original kennt in
+    /// <c>Can_go</c> keine Wegkosten), nur eben in Tausendsteln.</para>
+    /// </summary>
+    public int TerrainCostMilli(int c, int r, MoveClass mc)
     {
-        if (mc == MoveClass.Ship) return 1f;
-        return GroundAt(c, r) == Ground.Rough ? 1.45f : 1f;
+        if (mc == MoveClass.Ship) return 1000;
+        return GroundAt(c, r) == Ground.Rough ? 1450 : 1000;
     }
 
     // ---- construction -------------------------------------------------------
@@ -173,6 +191,23 @@ public sealed class NavGrid
     /// terrain block is there.</summary>
     public static NavGrid Build(GDict meta)
     {
+        // ⚠ DER FRÜHESTE PUNKT, AN DEN DIESE SITZUNG HERANKOMMT.
+        //
+        // Der Zufall muss GEKEIMT sein, bevor der erste Takt läuft — sonst
+        // würfelt Takt 1 aus der Uhrzeit und der ganze Lauf ist nicht mehr
+        // wiederholbar. Build() wird beim Kartenladen genau einmal gerufen
+        // (MapEntityLayer.cs:1001) und liegt vor jedem _Process dieser Karte.
+        // Die Ebene selbst dürfte diese Sitzung nicht anfassen, deshalb steht
+        // es hier; siehe Simulation/Determinism.cs.
+        //
+        // Es steht VOR der Kachelschleife und rührt bewusst keine Godot-
+        // Sammlung an: die Schleife unten legt zehntausende
+        // Godot.Collections.Dictionary an, und dieser Godot-Bau stürzt beim
+        // Aufräumen davon gelegentlich ab (»Internal CLR error« in
+        // DisposablesTracker.RegisterDisposable). Wer hier zusätzlich
+        // alloziert, verschiebt nur den Zeitpunkt der Speicherbereinigung.
+        Determinism.NewMap(GetS(meta, "mission", $"{GetI(meta, "width")}x{GetI(meta, "height")}"));
+
         var g = new NavGrid
         {
             Width = GetI(meta, "width"),
@@ -191,15 +226,34 @@ public sealed class NavGrid
         if (!meta.TryGetValue("tiles", out var tv) || tv.VariantType != Variant.Type.Array)
             return g;
 
+        // ⚠ `using` — GEMESSEN am 12.08.2026, und es ist kein Schoenheitsfehler.
+        //
+        // Jede dieser Kacheln legt ein Godot.Collections.Dictionary an, und
+        // jedes davon traegt sich in Godots DisposablesTracker ein. Auf
+        // map_NET07 sind das rund 32 000 Eintraege, die alle bis zur naechsten
+        // Speicherbereinigung liegenbleiben — und dann raeumt der
+        // Finalisierer-Faden sie ab, waehrend die Schleife noch neue eintraegt.
+        // Der Tracker haelt das nicht aus: der Lauf endete mit »Fatal error.
+        // Internal CLR error. (0x80131506) at
+        // Godot.DisposablesTracker.RegisterDisposable«, mitten im Kartenladen.
+        //
+        // Das Tueckische daran war, dass es an der BEFEHLSZEILE haengt: mit
+        // einem zusaetzlichen, voellig wirkungslosen Schalter (--zz) stuerzte
+        // derselbe Lauf jedes Mal ab, ohne ihn nie — ein zusaetzliches Wort
+        // verschiebt die Speicherbereinigung um genau so viel, dass das Rennen
+        // anders ausgeht. `using` gibt jede Kachel sofort wieder frei; der
+        // Tracker bleibt klein und das Rennen faellt aus.
         foreach (var item in tv.AsGodotArray())
         {
             if (item.VariantType != Variant.Type.Dictionary) continue;
-            var t = item.AsGodotDictionary<string, Variant>();
-            int c = GetI(t, "col"), r = GetI(t, "row");
+            // Die UNGETYPTE Sammlung, weil nur die IDisposable ist —
+            // Dictionary<string,Variant> laesst sich nicht freigeben.
+            using var t = item.AsGodotDictionary();
+            int c = GetV(t, "col"), r = GetV(t, "row");
             if (!g.InBounds(c, r)) continue;
             int i = g.Idx(c, r);
-            g._elev[i] = (byte)Mathf.Clamp(GetI(t, "elev"), 0, 255);
-            g._flag[i] = (byte)Mathf.Clamp(GetI(t, "flag"), 0, 255);
+            g._elev[i] = (byte)Mathf.Clamp(GetV(t, "elev"), 0, 255);
+            g._flag[i] = (byte)Mathf.Clamp(GetV(t, "flag"), 0, 255);
 
             // fallback only, for content imported before the terrain block: the
             // tile code says water, an object cell is assumed to block. Both
@@ -207,7 +261,7 @@ public sealed class NavGrid
             // them is exactly the assumption that made bridges impassable.
             bool isObject = t.TryGetValue("object", out var ob) && ob.AsBool();
             g._ground[i] = isObject ? (byte)Ground.Blocked
-                         : GetI(t, "code", 9999) <= WaterCodeMax ? (byte)Ground.Water
+                         : GetV(t, "code", 9999) <= WaterCodeMax ? (byte)Ground.Water
                          : (byte)Ground.Free;
         }
         return g;
@@ -242,6 +296,14 @@ public sealed class NavGrid
 
     private static int GetI(GDict d, string k, int def = 0)
         => d.TryGetValue(k, out var v) && v.VariantType != Variant.Type.Nil ? v.AsInt32() : def;
+
+    /// <summary>Wie <see cref="GetI"/>, aber auf der ungetypten Sammlung —
+    /// siehe das <c>using</c> in <see cref="Build"/>.</summary>
+    private static int GetV(Godot.Collections.Dictionary d, string k, int def = 0)
+        => d.TryGetValue(k, out var v) && v.VariantType != Variant.Type.Nil ? v.AsInt32() : def;
+
+    private static string GetS(GDict d, string k, string def = "")
+        => d.TryGetValue(k, out var v) && v.VariantType != Variant.Type.Nil ? v.AsString() : def;
 
     // ---- dynamic occupancy --------------------------------------------------
 
@@ -350,9 +412,14 @@ public sealed class NavGrid
         }
         if (start == goal) return new List<Vector2I>();
 
+        // ⚠ GANZZAHLIG, in Tausendsteln einer Zelle. Siehe TerrainCostMilli:
+        // die Wegsuche ist Teil des Lockstep-Zustands und darf nicht an der
+        // Fliesskomma-Einstellung der Maschine hängen. Die Kosten sind
+        // dieselben wie vorher, nur ×1000: Diagonale 1414 statt 1,4142,
+        // Geröll ×1450/1000 statt ×1,45, eine Höhenstufe 500 statt 0,5.
         var came = new Dictionary<Vector2I, Vector2I>();
-        var gScore = new Dictionary<Vector2I, float> { [start] = 0f };
-        var open = new PriorityQueue<Vector2I, float>();
+        var gScore = new Dictionary<Vector2I, int> { [start] = 0 };
+        var open = new PriorityQueue<Vector2I, int>();
         open.Enqueue(start, Heuristic(start, goal));
         var closed = new HashSet<Vector2I>();
         int expanded = 0;
@@ -369,11 +436,11 @@ public sealed class NavGrid
                 var nb = new Vector2I(cur.X + d.X, cur.Y + d.Y);
                 if (closed.Contains(nb) || !CanStep(cur, nb, mc, mover)) continue;
 
-                float step = (d.X != 0 && d.Y != 0) ? 1.4142f : 1f;
-                step *= TerrainCost(nb.X, nb.Y, mc);                                // rough is slow
-                step += Math.Abs(ElevAt(nb.X, nb.Y) - ElevAt(cur.X, cur.Y)) * 0.5f; // climbing costs
-                float tentative = gScore[cur] + step;
-                if (gScore.TryGetValue(nb, out float known) && tentative >= known) continue;
+                int step = (d.X != 0 && d.Y != 0) ? 1414 : 1000;
+                step = step * TerrainCostMilli(nb.X, nb.Y, mc) / 1000;              // rough is slow
+                step += Math.Abs(ElevAt(nb.X, nb.Y) - ElevAt(cur.X, cur.Y)) * 500;  // climbing costs
+                int tentative = gScore[cur] + step;
+                if (gScore.TryGetValue(nb, out int known) && tentative >= known) continue;
                 gScore[nb] = tentative;
                 came[nb] = cur;
                 open.Enqueue(nb, tentative + Heuristic(nb, goal));
@@ -382,10 +449,12 @@ public sealed class NavGrid
         return null;
     }
 
-    private static float Heuristic(Vector2I a, Vector2I b)
+    /// <summary>Octile-Schätzung, in Tausendsteln — dieselbe Formel wie vorher,
+    /// nur ganzzahlig: (dx+dy)·1000 + (1414−2000)·min(dx,dy).</summary>
+    private static int Heuristic(Vector2I a, Vector2I b)
     {
         int dx = Math.Abs(a.X - b.X), dy = Math.Abs(a.Y - b.Y);
-        return (dx + dy) + (1.4142f - 2f) * Math.Min(dx, dy); // octile
+        return (dx + dy) * 1000 - 586 * Math.Min(dx, dy);
     }
 
     private static List<Vector2I> Reconstruct(Dictionary<Vector2I, Vector2I> came, Vector2I cur)

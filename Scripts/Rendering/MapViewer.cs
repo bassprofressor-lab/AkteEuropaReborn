@@ -737,6 +737,11 @@ public partial class MapViewer : Node2D
                 MapEntityLayer.RailProbeSkipCols = q[0] == "cols";
             }
             else if (a == "--fps60") Engine.MaxFps = 60;   // deterministic captures
+            // ⚠ Die Bildrate frei setzen — das ist die Gegenprobe zum FESTEN
+            // TAKT: dieselbe simulierte Zeit muss bei 30, 60 und 144 Bildern/s
+            // denselben Zustand ergeben. Vor dem 15.08.2026 ergab sie drei
+            // verschiedene (siehe MapEntityLayer.SimHz).
+            else if (a.StartsWith("--fps=")) Engine.MaxFps = a["--fps=".Length..].ToInt();
             else if (a.StartsWith("--map="))
             {
                 int idx = System.Array.IndexOf(MapNames, a[6..]);
