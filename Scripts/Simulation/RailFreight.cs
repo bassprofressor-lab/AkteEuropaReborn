@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Godot;
 
 namespace AkteEuropaReborn.Rendering;
@@ -444,7 +444,8 @@ public partial class MapEntityLayer : Node2D
                     _wagons.Add(w);
                 }
         }
-        RailPlaceWagons(l, route);
+        var pd = RailPathOf(l.Slot);
+        RailPlaceWagons(l, pd?.Pts ?? route, pd?.Cum);
     }
 
     /// <summary>Am Ziel angekommen: selbst angelegte Waggons verschwinden wieder,
@@ -465,7 +466,7 @@ public partial class MapEntityLayer : Node2D
     /// <c>StepBackColumns</c> geschaetzt werden, weil ein Routenschritt mal
     /// eine ganze und mal eine halbe Zelle war. Eine Zelle ist jetzt eine
     /// Zelle: Waggon <c>i</c> steht <c>i</c> Zellen zurueck, fertig.</summary>
-    private void RailPlaceWagons(RailLine l, List<Vector2> route)
+    private void RailPlaceWagons(RailLine l, List<Vector2> route, float[] cum = null)
     {
         if (!_freightWagons.TryGetValue(l.Slot, out var list) || list.Count == 0) return;
         float p = l.TravelFull <= 0f ? 1f : 1f - Mathf.Clamp(l.Travel / l.TravelFull, 0f, 1f);
@@ -552,8 +553,15 @@ public partial class MapEntityLayer : Node2D
             float pw = p - RailWagonLagTicks[k] * lagCells;
             w.Hidden = pw < 0f || pw > 1f;
 
-            float leadF = Mathf.Clamp(pw, 0f, 1f) * last;
-            if (l.Dir == 1) leadF = last - leadF;
+            // ⚠ Der Fortschritt läuft über die BOGENLÄNGE, nicht über die
+            // Gliedzahl — sonst fährt der Zug auf kurzen Gliedern langsam und
+            // auf langen schnell, und die Waggons stauchen sich an jeder Ecke.
+            // Warum das bei RailPathData steht.
+            float q = Mathf.Clamp(pw, 0f, 1f);
+            if (l.Dir == 1) q = 1f - q;
+            float leadF = cum != null && cum.Length == route.Count
+                        ? RailArcToIndex(cum, q * cum[^1])
+                        : q * last;
             w.RawLeadF = leadF;
             // Verkürzt wird immer gegen den ROHWERT, nie gegen das Ergebnis des
             // letzten Takts — sonst zöge sich der Zug über die Fahrt hinweg
@@ -626,8 +634,7 @@ public partial class MapEntityLayer : Node2D
             // `step + 1`. Die Fahrtrichtung steckt schon in `step` selbst
             // (`lead - dir*Index` legt Waggon i hinter die Spitze) und in
             // `w.Dir`, das das Bild waehlt.
-            int nxt = Mathf.Clamp(step + 1, 0, last);
-            var pt = route[step].Lerp(route[nxt], frac);
+            var pt = RailPathPoint(route, leadF);
             w.Col = pt.X; w.Row = pt.Y;
             // ⚠ 15.08.2026 — DAS BILD MUSS DIE FAHRTRICHTUNG ZEIGEN, nicht die
             // Kettenrichtung. `pcs[step]` ist die Richtung von Zelle step zur
@@ -700,6 +707,7 @@ public partial class MapEntityLayer : Node2D
     /// wirklich geschah — siehe <see cref="RailWagonTurnCount"/>.</para>
     /// </summary>
     public float RailWagonMaxPxPerFrame, RailWagonCellsPerSec;
+    public string RailWagonJumpWhere = "";
 
     /// <summary>Die Fahrtwechsel des gemessenen Waggons (Richtungswechsel oder
     /// Sprung über mehr als einen Schritt), getrennt gezählt statt an einer
@@ -958,8 +966,7 @@ public partial class MapEntityLayer : Node2D
     {
         int last = route.Count - 1;
         int step = Mathf.Clamp(Mathf.FloorToInt(leadF), 0, last);
-        int nxt = Mathf.Clamp(step + 1, 0, last);
-        var pt = route[step].Lerp(route[nxt], leadF - step);
+        var pt = RailPathPoint(route, leadF);
         int piece = pcs != null && step < pcs.Count
             ? (dir > 0 ? pcs[step] : (pcs[step] + 4) & 7) : 0;
         return WagonRectOf(index, piece, pt);
@@ -1147,6 +1154,198 @@ public partial class MapEntityLayer : Node2D
         { float.NaN, 0f, float.NaN, 0f, 29.5f, 5f, 29.5f, 41f },         // f8 Rampe, oben hoeher
         { float.NaN, 0f, float.NaN, 0f, 29.5f, 20f, 29.5f, 26f },        // f9 Rampe, unten hoeher
     };
+
+    /// <summary>
+    /// <b>DER WEG DER WAGGONS — die Randmitten der GEZEICHNETEN Schiene statt
+    /// der Zellmitten.</b>
+    ///
+    /// <para>Gemeldet: »wenn eine Bahnlinie diagonal geradlinig verläuft, macht
+    /// die Bahn trotzdem Zicke Zacke beim Fahren«. Das ist genau richtig
+    /// beobachtet, und es liegt nicht am Zug, sondern am WEG.</para>
+    ///
+    /// <para>Eine isometrische Diagonale steht in sec22 als <b>Treppe aus
+    /// Einzelzellen</b>: …(32,59) (31,59) (31,60) (30,60)… Die Gleisgrafik macht
+    /// daraus eine glatte Schräge — nachgesehen mit
+    /// <c>aekernel-tools/rail_joint_look.py</c>, die Eckstücke f2/f5 bilden eine
+    /// durchgehende Linie. Der Zug fuhr aber auf den ZELLMITTEN, und die sind
+    /// die Treppe selbst: 40 px nach links, 20 px nach unten, 40 nach links,
+    /// 20 nach unten. Also Zickzack mit rund 20 px Ausschlag, obwohl die
+    /// Schiene darunter schnurgerade liegt.</para>
+    ///
+    /// <para><b>Die Randmitten stehen in der Kunst, nicht in einer Annahme.</b>
+    /// <see cref="RailPortAt"/> ist an den Bildern gemessen: das Stück f2
+    /// verlässt seine Zelle unten auf Spalte 31,9, f4 auf 27,1, das gerade
+    /// Stück f1 auf 29,5 — symmetrisch um die Mitte. Genau dieser seitliche
+    /// Versatz macht aus der Treppe eine Schräge, und er ist es, den der Zug
+    /// mitnehmen muss.</para>
+    ///
+    /// <para>Der Knoten für Zelle <c>i</c> ist deshalb die Stelle, an der die
+    /// Schiene in sie HEREINkommt: auf der Seite links/rechts die halbe Zelle
+    /// zur Seite, auf oben/unten die halbe Zelle hoch oder tief PLUS den
+    /// gemessenen seitlichen Versatz.</para>
+    ///
+    /// <para>⚠ <b>Vom Anschlusspunkt zählt nur das x.</b> Sein y trägt bei den
+    /// RAMPEN die Deckhöhe mit (f6 links 16,3 statt 30,3 — das sind die 14 px
+    /// einer Geländestufe, f8 oben sogar 5 statt 20). Die Höhe rechnet
+    /// <see cref="RailPoint"/> aber selbst über <c>ElevOf</c>; sie hier ein
+    /// zweites Mal einzurechnen würde den Zug an jeder Rampe um eine
+    /// Dreiviertelzelle nach oben werfen. Die Zeile ist deshalb glatt ±0,5.</para>
+    /// </summary>
+    private List<Vector2> RailDrawnPath(List<Vector2> cells, List<int> frames)
+    {
+        var path = new List<Vector2>(cells.Count);
+        for (int i = 0; i < cells.Count; i++)
+        {
+            int f = i < frames?.Count ? frames[i] % 10 : -1;
+            // Die Seite, auf der die Schiene in diese Zelle hereinkommt. Bei der
+            // ersten Zelle gibt es keinen Vorgaenger — dort die Gegenseite des
+            // Ausgangs, also das freie Ende der Linie.
+            int side;
+            if (i > 0) side = RailPortTo(cells[i], cells[i - 1]);
+            else
+            {
+                // Erste Zelle: die Gegenseite des Ausgangs, also das freie Ende.
+                // ⚠ Nur wenn es einen Ausgang GIBT — RailOppositePort(-1) liefert
+                // sonst stillschweigend „oben" und legt den Startknoten auf eine
+                // Kante, die es nicht gibt.
+                int outp = cells.Count > 1 ? RailPortTo(cells[0], cells[1]) : -1;
+                side = outp < 0 ? -1 : RailOppositePort(outp);
+            }
+            path.Add(RailEdgePoint(cells[i], f, side));
+        }
+        return path;
+    }
+
+    /// <summary>Die Randmitte einer Zellseite als Bruchzahl IN ZELLEN, mit dem
+    /// seitlichen Versatz, den das Gleisbild dort wirklich hat.</summary>
+    /// <summary>Wie oft ein Knoten auf die ZELLMITTE zurückfallen musste, weil
+    /// es gar keine Nachbarzelle gibt — dort liegt die Kette nicht Kante an
+    /// Kante, sie springt. Das ist kein Fehler des Weges, sondern der bekannte
+    /// Punkt »Liniennummer 0 sammelt Fremdzellen« (25 von 1193 auf map_NET02),
+    /// und er ist es, der die letzten Ausreisser im Weg je Takt erzeugt.</summary>
+    public int RailPathNodes, RailPathFallback;
+
+    private Vector2 RailEdgePoint(Vector2 cell, int frame, int side)
+    {
+        RailPathNodes++;
+        // Ohne Nachbarzelle gibt es keine Seite — nur dann bleibt die Zellmitte.
+        // Das passiert an einer Kette, die nicht Kante an Kante liegt.
+        if (side < 0) { RailPathFallback++; return cell; }
+        float px = frame is >= 0 and <= 9 ? RailPortAt[frame, side * 2] : float.NaN;
+        // ⚠ Bedient das Bild diese Seite nicht, bleibt der Knoten trotzdem auf
+        // der KANTENMITTE — nur ohne den gemessenen seitlichen Versatz. Der
+        // erste Anlauf hat hier die ZELLMITTE genommen, und das ist eine halbe
+        // Zelle daneben: gemessen 25 von 1193 Knoten, jeder ein Knick von bis zu
+        // 20 px, den die Schiene nicht hat (schlimmster Sprung 12,65 px in einem
+        // Takt). Vorkommen tut es an Kreuzungszellen, wo die Karte zwei
+        // Gleissaetze trägt und wir einen davon in die Kette nehmen, und an
+        // Linienenden, deren Bild die freie Seite nicht kennt.
+        float lat = float.IsNaN(px) ? 0f : (px - 29.5f) / TileW;
+        if (float.IsNaN(px)) RailPathFallback++;
+        // ⚠ 0,49 und nicht 0,5. Auf genau der halben Zelle liegt die
+        // Rundungsgrenze von RailPoint, das die Geländehöhe über
+        // `ElevOf(round(spalte), round(zeile))` liest — ein Knoten dort erwischt
+        // die Höhe der NACHBARzelle, und an jeder Geländestufe sprang der Zug
+        // deshalb um 15 px (gemessen 12,09 px in einem Takt bei 2 px Soll,
+        // Richtungswechsel bis 180°). Ein Hundertstel Zelle nach innen ist
+        // 0,4 px im Bild und macht die Rundung eindeutig.
+        const float H = 0.49f;
+        return side switch
+        {
+            PortL => new Vector2(cell.X - H, cell.Y),
+            PortR => new Vector2(cell.X + H, cell.Y),
+            PortT => new Vector2(cell.X + lat, cell.Y - H),
+            _     => new Vector2(cell.X + lat, cell.Y + H),
+        };
+    }
+
+    /// <summary>
+    /// Der Weg einer Linie samt <b>aufsummierter Länge in Kartenpixeln</b>.
+    ///
+    /// <para>⚠ Die Längen sind der Grund, warum das hier zusammen liegt. Der
+    /// Fortschritt einer Fahrt lief bis zum 15.08.2026 in SCHRITTEN: <c>p</c>
+    /// mal Anzahl der Kettenglieder. Das ging, solange ein Glied entweder 40 px
+    /// (waagerecht) oder 20 px (senkrecht) lang war — schon da fuhr der Zug auf
+    /// senkrechten Schenkeln halb so schnell, gemessen 122 gegen 31 px/s. Mit
+    /// den Randmitten sind die Glieder 20..45 px lang, und dann rutscht es
+    /// sichtbar: gemessen 14,27 px in einem Takt gegen 3,66 vorher, und drei
+    /// Waggons stauchten sich an den kurzen Gliedern zusammen.</para>
+    ///
+    /// <para>Deshalb läuft der Fortschritt jetzt über die BOGENLÄNGE. Das ist
+    /// zugleich das treue Modell: das Original zieht je Takt einen festen Betrag
+    /// ab (8 px, sec44 +0x0c), also fährt es mit gleicher Geschwindigkeit,
+    /// gleich in welche Richtung.</para></summary>
+    private sealed class RailPathData
+    {
+        public List<Vector2> Pts;
+        public float[] Cum;                 // Cum[i] = Länge bis Knoten i
+        public float Len => Cum.Length > 0 ? Cum[^1] : 0f;
+    }
+
+    private readonly Dictionary<int, RailPathData> _linePath = new();
+
+    private RailPathData RailPathOf(int line)
+    {
+        if (_linePath.TryGetValue(line, out var got)) return got;
+        if (!_lineCell.TryGetValue(line, out var cells) || cells.Count == 0) return null;
+        _lineCellFrame.TryGetValue(line, out var frames);
+        // --rail-lay=mitten: die Gegenprobe faehrt wieder auf den Zellmitten.
+        var pts = RailProbeCellCentres ? new List<Vector2>(cells)
+                                       : RailDrawnPath(cells, frames);
+        var cum = new float[pts.Count];
+        for (int i = 1; i < pts.Count; i++)
+            cum[i] = cum[i - 1] + RailPoint(pts[i - 1]).DistanceTo(RailPoint(pts[i]));
+        got = new RailPathData { Pts = pts, Cum = cum };
+        _linePath[line] = got;
+        return got;
+    }
+
+    /// <summary>Die Stelle <paramref name="leadF"/> auf dem Weg, als
+    /// Zellkoordinate.
+    ///
+    /// <para>⚠ HIER STAND EINE HÖHENGLÄTTUNG, und sie war falsch begründet: sie
+    /// nahm die Höhe der beiden KNOTEN, und die liegen auf Zellgrenzen — dort
+    /// trifft die Rundung mal die eigene, mal die Nachbarzelle. Gemessen wurde
+    /// es dadurch schlechter (904 px/s Spitze statt 103, mittlerer
+    /// Richtungswechsel 2,5° statt 0,7°). Gelöst ist es statt dessen an der
+    /// Wurzel: die Knoten sitzen auf <c>±0,49</c> statt <c>±0,5</c> und rundon
+    /// damit eindeutig auf ihre eigene Zelle (siehe
+    /// <see cref="RailEdgePoint"/>).</para></summary>
+    private Vector2 RailPathPoint(List<Vector2> route, float leadF)
+    {
+        int last = route.Count - 1;
+        int step = Mathf.Clamp(Mathf.FloorToInt(leadF), 0, last);
+        int nxt = Mathf.Clamp(step + 1, 0, last);
+        float frac = leadF - step;
+        return route[step].Lerp(route[nxt], frac);
+    }
+
+    /// <summary>Bogenlänge → Kettenstelle als Bruchzahl. Binäre Suche, damit es
+    /// je Waggon und Takt nicht über den ganzen Weg läuft.</summary>
+    private static float RailArcToIndex(float[] cum, float s)
+    {
+        int last = cum.Length - 1;
+        if (last <= 0) return 0f;
+        s = Mathf.Clamp(s, 0f, cum[last]);
+        int lo = 0, hi = last;
+        while (hi - lo > 1)
+        {
+            int mid = (lo + hi) / 2;
+            if (cum[mid] <= s) lo = mid; else hi = mid;
+        }
+        float seg = cum[hi] - cum[lo];
+        return seg <= 0.0001f ? lo : lo + (s - cum[lo]) / seg;
+    }
+
+    /// <summary>Kettenstelle → Bogenlänge, die Umkehrung.</summary>
+    private static float RailIndexToArc(float[] cum, float leadF)
+    {
+        int last = cum.Length - 1;
+        if (last <= 0) return 0f;
+        leadF = Mathf.Clamp(leadF, 0f, last);
+        int i = Mathf.Min(Mathf.FloorToInt(leadF), last - 1);
+        return cum[i] + (leadF - i) * (cum[i + 1] - cum[i]);
+    }
 
     /// <summary>Der Anschlusspunkt eines Stücks in Kartenpixeln, oder
     /// <c>null</c>, wenn das Bild diese Seite gar nicht bedient. Seite: 0 links,
@@ -1582,6 +1781,37 @@ public partial class MapEntityLayer : Node2D
         return outp;
     }
 
+    /// <summary>
+    /// <c>--shot-when=diagonal</c> — steht gerade ein gezeichneter Waggon auf
+    /// einem ECKSTÜCK (Bild f2..f5)? Dann liegt er auf einer Treppe, also auf
+    /// einer isometrischen Diagonale, und genau dort war »macht Zicke Zacke beim
+    /// Fahren« gemeldet.
+    ///
+    /// <para>Warum es das braucht: eine Treppe ist ein kleiner Teil der Strecke,
+    /// und ein Bild auf gut Glück trifft sie selten — zwei Versuche von Hand
+    /// zeigten leeres Gleis. Ein Fehler, den nur das Bild zeigt, ist ohne Bild
+    /// nicht zu beurteilen.</para></summary>
+    public bool RailWagonOnCorner(out Vector2 at, out int line)
+    {
+        at = Vector2.Zero; line = -1;
+        foreach (var kv in _freightWagons)
+        {
+            if (!_lineCellFrame.TryGetValue(kv.Key, out var fr)) continue;
+            if (!_lineCell.TryGetValue(kv.Key, out var cells)) continue;
+            foreach (var w in kv.Value)
+            {
+                if (w.Hidden || !w.Freight) continue;
+                int i = Mathf.Clamp(w.Step, 0, Mathf.Min(cells.Count, fr.Count) - 1);
+                if (i < 0) continue;
+                int f = fr[i] % 10;
+                if (f is < 2 or > 5) continue;
+                at = cells[i]; line = kv.Key;
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// <summary>Die Zellen aller Waggons der gestauchten Linie, als Text neben
     /// das Bild — ein Foto allein sagt nicht, welche Sprites übereinander
     /// liegen.</summary>
@@ -1596,6 +1826,13 @@ public partial class MapEntityLayer : Node2D
     }
 
     private Vector2 _railProbePos;
+    /// <summary>Die letzte Bewegung des Probewaggons und die Statistik über den
+    /// Winkel zwischen zwei Bewegungen — der einzige Zähler, der „Zicke Zacke"
+    /// sehen kann. 0° heisst geradeaus, 90° heisst Treppe.</summary>
+    private Vector2 _railProbeLast;
+    public float RailZigSum, RailZigWorst;
+    public int RailZigCount;
+
     private int _railProbeLine = -1, _railProbeIdx = -1;
     private int _railProbeStep = -1, _railProbeDir;
 
@@ -1607,7 +1844,11 @@ public partial class MapEntityLayer : Node2D
             if (!_freightWagons.TryGetValue(l.Slot, out var list) || list.Count == 0) continue;
             if (_lineCell.TryGetValue(l.Slot, out var cells) && cells.Count >= 2)
             {
-                RailPlaceWagons(l, cells);
+                // ⚠ Nicht die Zellmitten, sondern die Randmitten der
+                // gezeichneten Schiene — sonst faehrt der Zug die Treppe, die
+                // die Grafik als Schraege zeigt (siehe RailDrawnPath).
+                var pd = RailPathOf(l.Slot);
+                RailPlaceWagons(l, pd?.Pts ?? cells, pd?.Cum);
                 if (_railProbeLine < 0 && l.Faze is >= 1 and <= 9)
                 {
                     _railProbeLine = l.Slot; _railProbeIdx = list[0].Index;
@@ -1663,7 +1904,12 @@ public partial class MapEntityLayer : Node2D
             {
                 if (fahrt)
                 {
-                    if (d > RailWagonMaxPxPerFrame) RailWagonMaxPxPerFrame = d;
+                    if (d > RailWagonMaxPxPerFrame)
+                    {
+                        RailWagonMaxPxPerFrame = d;
+                        RailWagonJumpWhere = $"Linie {w.Line} Schritt {_railProbeStep}->{w.Step} " +
+                            $"bei ({w.Col:0.00},{w.Row:0.00})";
+                    }
                     // ⚠ 15.08.2026 — DIE GESCHWINDIGKEIT ist die Zahl, die
                     // »ruckelt es?« beantwortet, nicht der Weg je Takt. Siehe
                     // RailWagonPxPerSecMin.
@@ -1675,6 +1921,28 @@ public partial class MapEntityLayer : Node2D
                     }
                 }
                 else { RailWagonTurnCount++; if (d > RailWagonTurnMaxPx) RailWagonTurnMaxPx = d; }
+                // ⚠ 15.08.2026 — DER ZAEHLER FUER »ZICKE ZACKE«. Gemeldet:
+                // »wenn eine Bahnlinie diagonal geradlinig verlaeuft, macht die
+                // Bahn trotzdem Zicke Zacke beim Fahren«. Keine der bisherigen
+                // Zahlen konnte das sehen: Geschwindigkeit, Weg je Takt und
+                // Fahrtwechsel messen alle nur den BETRAG. Zickzack ist aber
+                // eine Sache der RICHTUNG — der Winkel zwischen zwei
+                // aufeinanderfolgenden Bewegungen. Auf einer glatten Schraege
+                // liegt er bei 0, auf einer Treppe wechselt er zwischen 0 und
+                // 90 Grad. Gezaehlt werden Mittelwert und Groesstwert, und nur
+                // waehrend echter Fahrt.
+                if (fahrt && d > 0.01f)
+                {
+                    var step = now - _railProbePos;
+                    if (_railProbeLast != Vector2.Zero)
+                    {
+                        float cos = step.Normalized().Dot(_railProbeLast.Normalized());
+                        float ang = Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(cos, -1f, 1f)));
+                        RailZigSum += ang; RailZigCount++;
+                        if (ang > RailZigWorst) RailZigWorst = ang;
+                    }
+                    _railProbeLast = step;
+                }
             }
             _railProbePos = now; _railProbeStep = w.Step; _railProbeDir = w.Dir;
             break;
@@ -1930,6 +2198,14 @@ public partial class MapEntityLayer : Node2D
                 sb.Append($" | Lauf: {RailWagonCellsPerSec:0.00} Zellen/s, Geschwindigkeit " +
                           $"{band} (Original 400 px/s bei 50 Hz, bei TickScale 16 also 128)" +
                           $", Weg je Takt hoechstens {RailWagonMaxPxPerFrame:0.00} px" +
+                          (RailWagonMaxPxPerFrame > 4f ? $" ({RailWagonJumpWhere})" : "") +
+                          $", Weg: {RailPathFallback} von {RailPathNodes} Knoten ohne " +
+                          "Nachbarzelle (dort liegt die Kette nicht Kante an Kante)" +
+                          (RailZigCount > 0
+                               ? $", Richtungswechsel je Takt im Mittel " +
+                                 $"{RailZigSum / RailZigCount:0.0}°, schlimmstenfalls " +
+                                 $"{RailZigWorst:0}° ({RailZigCount} Messungen)"
+                               : "") +
                           $", {RailWagonTurnCount} Fahrtwechsel getrennt gezaehlt " +
                           $"(groesster Sprung {RailWagonTurnMaxPx:0.00} px)");
                 sb.Append($" | Stauchung: {RailSquashFrames} von {RailSquashSeen} Linienbildern mit " +

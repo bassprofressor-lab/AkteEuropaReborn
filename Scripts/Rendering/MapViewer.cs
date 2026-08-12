@@ -1007,6 +1007,15 @@ public partial class MapViewer : Node2D
             return;
         }
         if (_shotPath.Length == 0 || _frames++ < _shotDelay) return;
+        if (_shotWhen == "diagonal")
+        {
+            if (!_entities.RailWagonOnCorner(out var dat, out int dline)) return;
+            _camera.Position = _entities.RailCellPoint(Mathf.RoundToInt(dat.X),
+                                                       Mathf.RoundToInt(dat.Y));
+            ClampCamera();
+            GD.Print($"MapViewer: --shot-when=diagonal ausgeloest — Waggon auf Eckstueck " +
+                     $"({dat.X:0},{dat.Y:0}), Linie {dline}");
+        }
         if (_shotWhen == "squash")
         {
             if (_entities.RailSquashNow < _shotWhenN) return;

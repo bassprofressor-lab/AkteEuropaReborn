@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Rendering;
+﻿namespace AkteEuropaReborn.Rendering;
 
 using System.Collections.Generic;
 using System.Linq;
@@ -1326,6 +1326,7 @@ public partial class MapEntityLayer : Node2D
         _linePiece.Clear();
         _lineCell.Clear();
         _lineCellFrame.Clear();
+        _linePath.Clear();
         _lineCellPiece.Clear();
         _railLines.Clear();
         _freightWagons.Clear();
@@ -8428,6 +8429,7 @@ public partial class MapEntityLayer : Node2D
 
         _lineCell[line] = cells;
         _lineCellFrame[line] = RailFramesOf(cells);
+        _linePath.Remove(line);
         _lineCellPiece[line] = cellPiece;
     }
 
@@ -8515,6 +8517,7 @@ public partial class MapEntityLayer : Node2D
             if (RailChainFlipped(kv.Key, cells)) { cells.Reverse(); frames.Reverse(); }
             _lineCell[kv.Key] = cells;
             _lineCellFrame[kv.Key] = frames;
+            _linePath.Remove(kv.Key);
             // Das Waggonbild braucht weiter ein STUECK je Zelle. Es kommt jetzt
             // aus der Kette selbst (Richtung zur naechsten Zelle), nicht mehr aus
             // den Streckencodes: die Zellenzahl der Karte und die Codezahl der
@@ -8875,6 +8878,27 @@ public partial class MapEntityLayer : Node2D
 
     private static bool? _probeSkipDock;
 
+    /// <summary>Gegenprobe zum Weg der Waggons (<c>--rail-lay=mitten</c>): mit
+    /// <c>true</c> fahren sie wieder auf den ZELLMITTEN statt auf den Randmitten
+    /// der gezeichneten Schiene. Damit lässt sich zeigen, was die Umstellung
+    /// bewirkt — der Richtungswechsel je Takt springt von 0,7° auf das
+    /// Treppenmass. Siehe <c>RailDrawnPath</c>.</summary>
+    public static bool RailProbeCellCentres
+    {
+        get
+        {
+            if (_probeCellCentres.HasValue) return _probeCellCentres.Value;
+            bool hit = false;
+            foreach (string a in OS.GetCmdlineUserArgs())
+                if (a.StartsWith("--rail-lay=") && a["--rail-lay=".Length..].Contains("mitten"))
+                    hit = true;
+            _probeCellCentres = hit;
+            return hit;
+        }
+    }
+
+    private static bool? _probeCellCentres;
+
     /// <summary>
     /// <b>Führt das Ende jeder Linie auf die Anschlusszeile ihres
     /// Endgebäudes.</b>
@@ -8955,6 +8979,7 @@ public partial class MapEntityLayer : Node2D
             }
             RailDockMoved += moved;
             _lineCellFrame[l.Slot] = RailFramesOf(cells);
+            _linePath.Remove(l.Slot);
             // erst JETZT messen: nach dem Ruecken und nach einer etwaigen
             // Rueckfahrkarte steht die Kette so da, wie sie gezeichnet wird
             RailMeasureDeck(cells, bySlot, l.Bud2, true);
@@ -9269,12 +9294,29 @@ public partial class MapEntityLayer : Node2D
     /// <c>(6,−5)</c> schwebte er 5 px darüber, und genau das war im Bild zu
     /// sehen.</para>
     ///
+    /// <para>⚠ 15.08.2026, ZWEITER ANLAUF AN DERSELBEN ZAHL. Als
+    /// <see cref="RailDeckOffset"/> von 23 auf −17 ging, habe ich den Versatz
+    /// mit <c>−28 + RailDeckOffset</c> nachgezogen — und die <b>28 ist genau
+    /// das Delta aus dem Rahmen des Originals</b>, vor dessen Übertragung der
+    /// Absatz darüber warnt. Gemeldet als »es wirkt noch so, als würde die Bahn
+    /// über den Gleisen fahren, anstatt darauf«, und im übereinandergelegten
+    /// Bild eindeutig: unter den Waggons klaffte ein Spalt.</para>
+    ///
+    /// <para>Richtig ist die gemessene Zahl, und sie ist ein Verhältnis zwischen
+    /// den beiden LEINWÄNDEN, kein Absolutwert: der Waggon liegt
+    /// <b>23 px über der Gleisleinwand</b>, ganz gleich wo die steckt. Vier
+    /// Varianten wurden nebeneinandergelegt und angesehen:</para>
+    /// <code>
+    ///   −28  Spalt zwischen Waggon und Traeger   (das war der Fehler)
+    ///   −25  Unterkante beruehrt die Oberkante
+    ///   −23  Unterkante in der Mitte des Traegers, Traeger bleibt sichtbar  ✔
+    ///   −21  Raeder versinken, der Traeger verschwindet fast
+    /// </code>
+    ///
     /// <para>⚠ Offen bleibt das x: der Waggonkörper füllt die Spalten 13..35
     /// (Mitte 24), das Gleisbild 10..49 (Mitte 29,5). Der Waggon steht also
-    /// 5,5 px links der Schienenmitte. Ob das die Kunst so will oder eine
-    /// Ablage fehlt, ist NICHT entschieden — es wird hier nichts geschoben,
-    /// bevor es gemessen ist.</para></summary>
-    private static readonly Vector2 WagonOverRail = new(6, -28 + RailDeckOffset);
+    /// 5,5 px links der Schienenmitte, und die 6 hier hebt das auf.</para></summary>
+    private static readonly Vector2 WagonOverRail = new(6, -23 + RailDeckOffset);
 
     /// <summary>Wo die Schienenoberkante eines Gleisbildes INNERHALB ihrer
     /// Zelle liegt: <c>TileH/2 − ComposedAnchor.y + RailDeckOffset + 29</c>.
