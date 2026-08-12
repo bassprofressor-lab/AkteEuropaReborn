@@ -967,6 +967,10 @@ public partial class MapEntityLayer : Node2D
         sb.Append($"  (f6..f9 = RAMPEN, {per[6] + per[7] + per[8] + per[9]} Stueck)");
         sb.Append($"  Stuetzen {pylon} (Platz%6==0, @0x42D4B1), Fassung " +
                   $"65:{kind[0]} 66:{kind[1]} 67:{kind[2]} 68:{kind[3]} (@0x4B0350)");
+        if (RailChainSplit > 0)
+            sb.Append($"  ⚠ {RailChainSplit} Linien lagen in mehreren Stuecken, " +
+                      $"{RailChainDropped} Fremdzellen aus der Kette genommen " +
+                      "(betrifft nur den Fahrweg, gezeichnet werden sie weiter)");
         return sb.ToString();
     }
 
@@ -1027,7 +1031,8 @@ public partial class MapEntityLayer : Node2D
             sb.Append($" | Anschluss: {RailDockOff} von {RailDockChecked} Enden lagen " +
                       $"NICHT auf der Anschlusszeile, {RailDockMoved} nachgefuehrt");
         sb.Append($" | Linienenden: {RailEndFar} von {RailEndChecked} weiter als 2 Zellen " +
-                  $"vom Endgebaeude (schlimmstes {RailEndWorst})");
+                  $"vom Endgebaeude (schlimmstes {RailEndWorst}");
+        sb.Append(RailEndWorst > 2 ? $": {RailEndWorstWhere})" : ")");
         // ⚠ Der Kopf dieser Zeile hiess "Deckhoehe" und misst die Hoehe NICHT:
         // RailDeckPixel steht auf beiden Seiten der Differenz und kuerzt sich
         // heraus (siehe RailDeckOffSum). Sie misst die ZEILE. Die Hoehe misst

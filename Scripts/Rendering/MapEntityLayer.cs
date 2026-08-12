@@ -8405,6 +8405,7 @@ public partial class MapEntityLayer : Node2D
     private void RailAdoptCells()
     {
         RailCellsFromMap = _railCells.Count;
+        RailChainDropped = RailChainSplit = 0;
         RailCellsBroken = 0;
         RailDiffOnlyOurs = RailDiffOnlyMap = RailDiffFrame = RailDiffChecked = 0;
         if (_railCells.Count == 0) return;
@@ -8450,9 +8451,13 @@ public partial class MapEntityLayer : Node2D
         {
             var l = kv.Value;
             l.Sort((x, y) => x.Index - y.Index);
-            var cells = new List<Vector2>(l.Count);
-            var frames = new List<int>(l.Count);
-            foreach (var c in l) { cells.Add(new Vector2(c.Col, c.Row)); frames.Add(c.Base); }
+            // Nur den Lauf behalten, der zu dieser Linie gehoert — siehe
+            // RailOwnRun: Liniennummer 0 sammelt auf sieben Karten Fremdzellen.
+            var run = RailOwnRun(kv.Key, l);
+            var cells = new List<Vector2>(run.Len);
+            var frames = new List<int>(run.Len);
+            for (int i = run.Start; i < run.Start + run.Len; i++)
+            { cells.Add(new Vector2(l[i].Col, l[i].Row)); frames.Add(l[i].Base); }
             // Die Kette so drehen, dass sie an Knoten1 anfaengt: der Zug faehrt
             // Bud1 -> Bud2, und die Fahrtrichtung haengt an der Reihenfolge.
             if (RailChainFlipped(kv.Key, cells)) { cells.Reverse(); frames.Reverse(); }
@@ -8469,6 +8474,95 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Liegt der ANFANG dieser Kette naeher an Knoten2 als an Knoten1?
     /// Dann gehoert sie gedreht. Ohne Endgebaeude bleibt sie, wie sie ist.</summary>
+    /// <summary>
+    /// <b>Nur die Zellen behalten, die wirklich zu dieser Linie gehören.</b>
+    ///
+    /// <para>⚠ 14.08.2026 — <b>Liniennummer 0 sammelt Fremdzellen ein.</b>
+    /// Gemessen über alle 30 Karten: die Zuordnung »sec22-Linie n gehört zu
+    /// links-Platz n« passt in <b>369 von 371</b> Fällen (die 1-basierte
+    /// Lesart nur in 183 von 359, also auf Zufallsniveau). Auffällig ist
+    /// ausschliesslich <b>Linie 0</b>, und zwar auf sieben Karten — auf fünf
+    /// davon gibt es den links-Platz 0 gar nicht. Über alle Karten tragen
+    /// <b>499 von 9648</b> Gleiszellen (5,2 %) die Nummer 0.</para>
+    ///
+    /// <para>Sichtbar wird das an <c>map_DM_4</c>: Linie 0 bekommt dort
+    /// <b>118 Zellen bei delka 45</b>, mit genau ZWEI Bruchstellen — also ihre
+    /// eigene Strecke plus zwei fremde Läufe, quer über die Karte. Die Waggons
+    /// dieser Linie fuhren damit auf einer Route, die nicht ihre ist, und das
+    /// Linienende lag 122 Zellen von seinem Gebäude.</para>
+    ///
+    /// <para><b>Die Regel hier ist keine Erfindung:</b> eine SPOJ-Linie läuft
+    /// von einem Endgebäude zum anderen und ist Kante an Kante durchgehend —
+    /// das ist über NET02/03/04/05/08 gemessen (0 von 4263 Paaren nicht). Ein
+    /// Lauf, der kein Endgebäude berührt, kann darum nicht dazugehören.
+    /// Behalten wird der zusammenhängende Lauf, dessen Enden den Endgebäuden am
+    /// nächsten liegen; ohne auflösbare Gebäude der längste.</para>
+    ///
+    /// <para>⚠ <b>Was NICHT gelesen ist:</b> warum die Karte diese Zellen
+    /// überhaupt auf 0 legt. <c>rail_add</c> @0x4AFA90 schreibt +0x04, aber was
+    /// es dort für eine abgeräumte oder nie angelegte Linie hinterlässt, ist
+    /// ungeprüft. Solange gilt: wir werfen nur weg, was nachweislich nicht
+    /// zusammenhängt — gezeichnet wird die Zelle weiterhin, denn das Gleis
+    /// kommt aus <c>_railCells</c> und nicht aus der Kette.</para></summary>
+    public int RailChainDropped, RailChainSplit;
+
+    private (int Start, int Len) RailOwnRun(int line, List<RailCell> l)
+    {
+        if (l.Count < 2) return (0, l.Count);
+        var runs = new List<(int Start, int Len)>();
+        int s = 0;
+        for (int i = 1; i <= l.Count; i++)
+        {
+            bool cut = i == l.Count
+                    || RailPortTo(new Vector2(l[i - 1].Col, l[i - 1].Row),
+                                  new Vector2(l[i].Col, l[i].Row)) < 0;
+            if (cut) { runs.Add((s, i - s)); s = i; }
+        }
+        if (runs.Count <= 1) return (0, l.Count);
+        RailChainSplit++;
+
+        Entity? a = null, b = null;
+        foreach (var x in _railLines)
+        {
+            if (x.Slot != line) continue;
+            foreach (var e in _entities)
+            {
+                if (!e.IsBuilding) continue;
+                if (a == null && e.Slot == x.Bud1) a = e;
+                if (b == null && e.Slot == x.Bud2) b = e;
+            }
+            break;
+        }
+
+        static int Near(RailCell c, Entity e)
+        {
+            int dc = Mathf.Max(Mathf.Max(e.Col - c.Col, 0), c.Col - (e.Col + Mathf.Max(1, e.FootW) - 1));
+            int dr = Mathf.Max(Mathf.Max(e.Row - c.Row, 0), c.Row - (e.Row + Mathf.Max(1, e.FootH) - 1));
+            return Mathf.Max(dc, dr);
+        }
+
+        var best = runs[0];
+        int bestScore = int.MaxValue;
+        foreach (var r in runs)
+        {
+            int score;
+            if (a != null || b != null)
+            {
+                int d = int.MaxValue;
+                foreach (var c in new[] { l[r.Start], l[r.Start + r.Len - 1] })
+                {
+                    if (a != null) d = Mathf.Min(d, Near(c, a));
+                    if (b != null) d = Mathf.Min(d, Near(c, b));
+                }
+                score = d * 1000 - r.Len;          // erst am Gebaeude, dann laenger
+            }
+            else score = -r.Len;                    // ohne Gebaeude: der laengste
+            if (score < bestScore) { bestScore = score; best = r; }
+        }
+        RailChainDropped += l.Count - best.Len;
+        return best;
+    }
+
     private bool RailChainFlipped(int line, List<Vector2> cells)
     {
         if (cells.Count < 2) return false;
@@ -8836,6 +8930,12 @@ public partial class MapEntityLayer : Node2D
     /// die sich wie ein bestandener Prüflauf liest.</para></summary>
     public int RailEndChecked, RailEndFar, RailEndWorst;
 
+    /// <summary>Welches Ende das schlimmste war — damit die Zahl nachschlagbar
+    /// ist, statt eine zweite Nachbildung zu brauchen. (Die Nachrechnung in
+    /// Python kam auf eine andere Linie; ohne diese Zeile war nicht zu
+    /// entscheiden, welche von beiden recht hat.)</summary>
+    public string RailEndWorstWhere = "";
+
     /// <summary>Wieviele Trümmerfelder (Teil 69) gelegt wurden — die Zahl, an
     /// der sich sehen lässt, ob eine Karte überhaupt zerschossenes Gleis hat.
     /// map_NET02 hat keines; <c>4.DM</c> hat 49 Zellen, <c>7.DM</c> fünf.</summary>
@@ -8855,7 +8955,12 @@ public partial class MapEntityLayer : Node2D
         // +1 oder +2, und der Stummel steht bei manchen Arten eine Spalte
         // neben dem Grundriss (siehe RailDockRow).
         if (d > 2) RailEndFar++;
-        if (d > RailEndWorst) RailEndWorst = d;
+        if (d > RailEndWorst)
+        {
+            RailEndWorst = d;
+            RailEndWorstWhere = $"Zelle ({col},{decimal.ToInt32(row)}) gegen Platz {slot} " +
+                                $"Typ {b.BType} auf ({b.Col},{b.Row}) {b.FootW}x{b.FootH}";
+        }
     }
 
     /// <summary>Miss die Höhendifferenz an EINEM Linienende und schreib sie in
