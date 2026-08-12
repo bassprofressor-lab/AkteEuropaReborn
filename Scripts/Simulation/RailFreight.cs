@@ -509,9 +509,21 @@ public partial class MapEntityLayer : Node2D
             int step = Mathf.Clamp(lead - dir * w.Index, 0, last);
             w.Step = step;
             w.Dir = dir;
-            // Zwischen diesem Schritt und dem naechsten in Fahrtrichtung
-            // ausmitteln — derselbe Bruchteil, den die Spitze schon hat.
-            int nxt = Mathf.Clamp(step + dir, 0, last);
+            // ⚠ 12.08.2026 — hier stand `step + dir`, und das hat die halbe
+            // Fahrt zum Zittern gebracht: auf der RUECKFAHRT lief der Waggon
+            // innerhalb einer Zelle rueckwaerts und sprang am Uebergang zwei
+            // vor (gemessen: -37 px / +78 px im Wechsel, netto die richtige
+            // eine Zelle). Auf der Hinfahrt stimmte es, deshalb hat es keine
+            // Messung gesehen -- die 2,0..4,5 px vom 11.08. sind vor der
+            // ersten Umkehr entstanden.
+            //
+            // `lead = floor(leadF)` und `frac = leadF - lead` heissen IMMER
+            // »zwischen route[lead] und route[lead+1]«, auch wenn leadF faellt.
+            // Der Nachbar in Bruchteilsrichtung ist damit richtungsunabhaengig
+            // `step + 1`. Die Fahrtrichtung steckt schon in `step` selbst
+            // (`lead - dir*Index` legt Waggon i hinter die Spitze) und in
+            // `w.Dir`, das das Bild waehlt.
+            int nxt = Mathf.Clamp(step + 1, 0, last);
             var pt = route[step].Lerp(route[nxt], frac);
             w.Col = pt.X; w.Row = pt.Y;
             if (pcs != null && step < pcs.Count) w.Piece = pcs[step];
@@ -529,13 +541,34 @@ public partial class MapEntityLayer : Node2D
     /// Strecke (@0x4C6BA1), also fünf Sprünge je Zelle. Bleibt unsere Zahl je
     /// Bild darunter, läuft der Zug feiner als das Original.</para>
     ///
-    /// <para>Ein Sprung über 100 px ist keine Bewegung, sondern ein Wechsel der
-    /// Fahrt (Abfahrt, Umkehr) und zählt nicht mit.</para>
+    /// <para>⚠ 12.08.2026 — hier stand »ein Sprung über 100 px ist keine
+    /// Bewegung, sondern ein Wechsel der Fahrt und zählt nicht mit«. Das war
+    /// eine SETZUNG, kein Kriterium, und sie hat danebengelegen: die Umkehr des
+    /// gemessenen Waggons springt um zwei Zellen = 78 px, also UNTER die
+    /// Grenze. Damit stieg die Zahl über einen langen Lauf von 4,5 auf 78 px
+    /// und sah aus wie ein Ruckeln, das es nicht gibt. Jetzt entscheidet, was
+    /// wirklich geschah — siehe <see cref="RailWagonTurnCount"/>.</para>
     /// </summary>
     public float RailWagonMaxPxPerFrame, RailWagonCellsPerSec;
 
+    /// <summary>Die Fahrtwechsel des gemessenen Waggons (Richtungswechsel oder
+    /// Sprung über mehr als einen Schritt), getrennt gezählt statt an einer
+    /// Pixelgrenze weggeworfen. <see cref="RailWagonTurnMaxPx"/> ist der
+    /// größte dabei zurückgelegte Weg.</summary>
+    public int RailWagonTurnCount;
+    public float RailWagonTurnMaxPx;
+
+    /// <summary><b>Die Frage, die bisher kein Zählwerk gestellt hat:</b> stehen
+    /// die vier Waggons einer Linie auch auf VIER Zellen? Beim Wenden klemmt
+    /// <c>step</c> in <see cref="RailPlaceWagons"/> auf <c>last</c>, also sitzen
+    /// sie eine Weile übereinander. Gezählt wird das Schlimmste und wie oft es
+    /// vorkommt; <b>ob es im Bild stört, sagt ein Bild und nicht diese Zahl.</b>
+    /// </summary>
+    public int RailSquashWorst, RailSquashFrames, RailSquashSeen;
+
     private Vector2 _railProbePos;
     private int _railProbeLine = -1, _railProbeIdx = -1;
+    private int _railProbeStep = -1, _railProbeDir;
 
     private void RailMoveWagons()
     {
@@ -550,6 +583,22 @@ public partial class MapEntityLayer : Node2D
                     _railProbeLine = l.Slot; _railProbeIdx = list[0].Index;
                     RailWagonCellsPerSec = l.TravelFull > 0f ? (cells.Count - 1) / l.TravelFull : 0f;
                 }
+                // Stauchung: wieviele Waggons DIESER Linie teilen sich in
+                // DIESEM Bild eine Zelle? Nur bei fahrenden Linien gefragt —
+                // am Bahnsteig darf der Zug stehen, wie er will.
+                if (list.Count > 1 && l.Faze is >= 1 and <= 9)
+                {
+                    RailSquashSeen++;
+                    int worst = 1;
+                    foreach (var a in list)
+                    {
+                        int n = 0;
+                        foreach (var b in list) if (b.Step == a.Step) n++;
+                        if (n > worst) worst = n;
+                    }
+                    if (worst > 1) RailSquashFrames++;
+                    if (worst > RailSquashWorst) RailSquashWorst = worst;
+                }
             }
         }
         foreach (var w in _wagons)
@@ -557,9 +606,16 @@ public partial class MapEntityLayer : Node2D
             if (w.Line != _railProbeLine || w.Index != _railProbeIdx) continue;
             var now = new Vector2(w.Col * TileW, w.Row * TileH);
             float d = (now - _railProbePos).Length();
-            if (_railProbePos != Vector2.Zero && d < 100f && d > RailWagonMaxPxPerFrame)
-                RailWagonMaxPxPerFrame = d;
-            _railProbePos = now;
+            // Fahrt oder Fahrtwechsel — entschieden am SCHRITT, nicht an einer
+            // Pixelgrenze: einen Schritt weiter in derselben Richtung ist
+            // Fahrt, alles andere ist Abfahrt, Umkehr oder Klemmen.
+            bool fahrt = w.Dir == _railProbeDir && Mathf.Abs(w.Step - _railProbeStep) <= 1;
+            if (_railProbeStep >= 0)
+            {
+                if (fahrt) { if (d > RailWagonMaxPxPerFrame) RailWagonMaxPxPerFrame = d; }
+                else { RailWagonTurnCount++; if (d > RailWagonTurnMaxPx) RailWagonTurnMaxPx = d; }
+            }
+            _railProbePos = now; _railProbeStep = w.Step; _railProbeDir = w.Dir;
             break;
         }
     }
@@ -775,7 +831,11 @@ public partial class MapEntityLayer : Node2D
                 sb.Append($" | Waggon {w.Index} auf Linie {w.Line} bei " +
                           $"({w.Col:0.00},{w.Row:0.00}) Schritt {w.Step}");
                 sb.Append($" | Lauf: {RailWagonCellsPerSec:0.00} Zellen/s, groesste Aenderung " +
-                          $"{RailWagonMaxPxPerFrame:0.00} px je Bild (Original: 8 px je Takt, @0x4C6BA1)");
+                          $"{RailWagonMaxPxPerFrame:0.00} px je Bild (Original: 8 px je Takt, @0x4C6BA1)" +
+                          $", davon getrennt {RailWagonTurnCount} Fahrtwechsel " +
+                          $"(groesster Sprung {RailWagonTurnMaxPx:0.00} px)");
+                sb.Append($" | Stauchung: {RailSquashFrames} von {RailSquashSeen} Linienbildern mit " +
+                          $"mehr als einem Waggon auf EINER Zelle, schlimmstenfalls {RailSquashWorst}");
                 break;
             }
         return sb.ToString();
