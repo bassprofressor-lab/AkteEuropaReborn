@@ -452,6 +452,8 @@ public partial class MapViewer : Node2D
                 ClampCamera();
             }
         }
+        // `--rail-hit-check` — Gleisschaden und Reparatur ausueben, nicht setzen
+        if (_railHitCheck) { GD.Print(_entities.RailHitCheck()); GetTree().Quit(); return; }
         HookShotTrigger();
         if (_openPause) TogglePause();
         if (_demo) StartDemo();
@@ -486,6 +488,9 @@ public partial class MapViewer : Node2D
     /// <summary>`--veh-anim-check` — the vehicle half of Fehlerliste Punkt 2:
     /// do Mechs and Spinnen step through their gait while driving?</summary>
     private bool _vehAnimCheck;
+    /// <summary>`--rail-hit-check` — Gleisschaden und Reparatur ausüben.</summary>
+    private bool _railHitCheck;
+
     private string _look = "";
     private bool _groupCheck;
     private bool _soundCheck;
@@ -629,6 +634,7 @@ public partial class MapViewer : Node2D
                 if (a.Contains('='))
                     _skirmishMap = a[(a.IndexOf('=') + 1)..].Split(',')[0];
             }
+            else if (a == "--rail-hit-check") _railHitCheck = true;
             else if (a == "--rail-check") { _railCheck = 1f; _railHead = true; }
             else if (a.StartsWith("--rail-check="))
             { _railCheck = 0.001f; _railHead = true;

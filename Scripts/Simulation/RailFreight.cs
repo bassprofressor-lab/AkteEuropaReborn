@@ -687,6 +687,134 @@ public partial class MapEntityLayer : Node2D
     public int RailSquashLine = -1;
 
     /// <summary>
+    /// <c>--rail-hit-check</c> — beschiesst eine heile Gleiszelle so lange, bis
+    /// sie bricht, und repariert sie danach wieder.
+    ///
+    /// <para>Er ÜBT den Weg aus, statt eine Zahl zu setzen: er ruft
+    /// <see cref="RailHit"/> mit einem Schaden und liest danach ab, was die
+    /// Zeichenliste hergibt. Was er sehen können muss: dass die Trefferpunkte
+    /// wirklich fallen (und nicht in einem Schritt auf null springen), dass das
+    /// Bild über 100 geht, dass der Träger VERSCHWINDET und statt dessen ein
+    /// Trümmerfeld liegt, und dass die Stützenfassungen daneben neu bestimmt
+    /// werden.</para></summary>
+    /// <summary>Die Verteilung der vier Stützenfassungen, als Text.</summary>
+    private string RailPylonKindsText()
+    {
+        var k = new int[4];
+        foreach (var c in RailCellFrames()) if (c.P && c.K is >= 0 and <= 3) k[c.K]++;
+        return $"65:{k[0]} 66:{k[1]} 67:{k[2]} 68:{k[3]}";
+    }
+
+    public string RailHitCheck()
+    {
+        var sb = new System.Text.StringBuilder();
+        RailCell? pick = null;
+        foreach (var c in _railCells)
+            if (!c.Broken && c.Frame != 255 && c.Hp > 0) { pick = c; break; }
+        if (pick == null) return "rail-hit-check: keine heile Gleiszelle auf dieser Karte";
+
+        int col = pick.Col, row = pick.Row;
+        int tiles0 = RailTiles().Count, deb0 = RailBrokenDrawn;
+        string pyl0 = RailPylonKindsText();
+        sb.Append($"rail-hit-check: Zelle ({col},{row}) Bild {pick.Frame} " +
+                  $"Trefferpunkte {pick.Hp}\n");
+        // 1) ein Treffer, der NICHT reicht
+        int dmg = Mathf.Max(1, pick.Hp / 3);
+        bool broke = RailHit(col, row, dmg);
+        sb.Append($"  Schaden {dmg}: gebrochen={broke}, Trefferpunkte jetzt {pick.Hp}" +
+                  (broke ? "  ⚠ zu frueh gebrochen" : "  richtig") + "\n");
+        // 2) so lange weiter, bis sie bricht
+        int shots = 1;
+        while (!pick.Broken && shots < 20) { RailHit(col, row, dmg); shots++; }
+        int tiles1 = RailTiles().Count, deb1 = RailBrokenDrawn;
+        sb.Append($"  nach {shots} Treffern: Bild {pick.Frame} " +
+                  $"(Variante {pick.BrokenVariant}), zerschossen={pick.Broken}\n");
+        sb.Append($"  Zeichenliste: {tiles0} -> {tiles1} Stuecke, " +
+                  $"Truemmer {deb0} -> {deb1}" +
+                  (deb1 == deb0 + 1 ? "  richtig" : "  ⚠ kein Truemmerfeld dazu") + "\n");
+        // Die Stuetzenfassung sagt, ob die Strecke ueber der Stuetze weiterlaeuft
+        // — ein Bruch daneben MUSS sie aendern (rail_pylon_pass @0x4B0350 laeuft
+        // im Original nach jedem Treffer).
+        string pyl1 = RailPylonKindsText();
+        sb.Append($"  Stuetzenfassungen: {pyl0} -> {pyl1}" +
+                  (pyl0 == pyl1 ? "  ⚠ unveraendert — lief der Stuetzendurchgang?"
+                                : "  neu bestimmt") + "\n");
+        // 3) reparieren
+        bool healed = RailRepair(col, row);
+        int tiles2 = RailTiles().Count, deb2 = RailBrokenDrawn;
+        sb.Append($"  repariert={healed}: Bild {pick.Frame}, Trefferpunkte {pick.Hp} " +
+                  "(bleiben absichtlich niedrig, @0x4099B6 setzt sie nicht zurueck)\n");
+        sb.Append($"  Zeichenliste: {tiles2} Stuecke, Truemmer {deb2}" +
+                  (tiles2 == tiles0 && deb2 == deb0 ? "  wieder wie vorher" : "  ⚠ nicht wieder wie vorher"));
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// <b>Ein Einschlag auf eine Gleiszelle.</b> Gibt zurück, ob dabei ein
+    /// Stück zerbrochen ist.
+    ///
+    /// <para>Die Einschlagsroutine des Originals @0x40D799 läuft über alle 3000
+    /// Plätze, vergleicht Spalte und Zeile mit <c>[0x53C930]</c>/<c>[0x53C934]</c>
+    /// — also mit GENAU der getroffenen Zelle, kein Umkreis — und hält die
+    /// Trefferpunkte gegen den Schaden: reichen sie nicht, ruft sie
+    /// <c>rail_hit(platz, 1)</c> @0x40D7E2, sonst <c>tp -= schaden</c>
+    /// @0x40D7EC.</para>
+    ///
+    /// <para><c>rail_hit</c> @0x4B0460 rechnet dann <c>bild += (10 + zufall&amp;1)·10</c>
+    /// — daher die beiden Trümmervarianten — und lässt anschliessend
+    /// <see cref="RailPylonPass"/> laufen, weil sich damit ändert, ob die
+    /// Strecke über einer Stütze weitergeht.</para>
+    ///
+    /// <para>⚠ <b>Eine ganze Linie fällt nie aus</b>, nur die getroffene Zelle.
+    /// Und die Trefferpunkte werden beim Reparieren NICHT zurückgesetzt
+    /// (@0x4099B6 fasst nur das Bild an) — ein einmal beschädigtes Gleis bleibt
+    /// also weicher. Das ist gelesen, nicht gedeutet.</para>
+    ///
+    /// <para>⚠ UNSERE LÜCKE: das Original wirft bei <c>rail_hit</c> Rauch und
+    /// Splitter. Wir zeigen nur die Explosion, die der Einschlag ohnehin
+    /// erzeugt — der eigene Effekt ist nicht nachgebaut.</para></summary>
+    public bool RailHit(int col, int row, int damage)
+    {
+        bool broke = false;
+        foreach (var c in _railCells)
+        {
+            if (c.Col != col || c.Row != row || c.Frame == 255 || c.Broken) continue;
+            if (c.Hp > damage) { c.Hp -= damage; continue; }
+            // ⚠ Die Trefferpunkte werden hier NICHT auf null gesetzt. Der erste
+            // Anlauf tat das und war erfunden: in 4.DM tragen die zerschossenen
+            // Zellen Trefferpunkte 1..135, das Original laesst +0x03 beim Bruch
+            // also stehen (@0x40D7E2 ruft nur rail_hit, @0x40D7EC ist der
+            // andere Zweig). Zusammen damit, dass auch die Reparatur sie nicht
+            // zuruecksetzt, bleibt ein einmal beschaedigtes Gleis dauerhaft
+            // weicher — und genau das steht in den Spielstaenden.
+            c.Frame += (10 + (int)(GD.Randi() & 1)) * 10;
+            broke = true;
+        }
+        if (broke) { RailPylonPass(); _railTiles = null; }
+        return broke;
+    }
+
+    /// <summary>
+    /// <b>Ein Stück Gleis wieder heil machen.</b> @0x4099E7 rechnet
+    /// <c>bild := bild % 10</c> (<c>div 10</c>), spielt Effekt <c>0x2d</c> und
+    /// lässt <see cref="RailPylonPass"/> laufen (@0x409A04, @0x409A0C).
+    ///
+    /// <para>⚠ Die TREFFERPUNKTE bleiben, wie sie sind — das Original setzt sie
+    /// hier nicht zurück. Wer das ändert, erfindet.</para></summary>
+    public bool RailRepair(int col, int row)
+    {
+        bool healed = false;
+        foreach (var c in _railCells)
+        {
+            if (c.Col != col || c.Row != row || !c.Broken) continue;
+            c.Frame %= 10;
+            healed = true;
+        }
+        if (healed) { RailPylonPass(); _railTiles = null; }
+        return healed;
+    }
+
+    /// <summary>
     /// <b>Die Stellen, an denen sich die Strecke ansehen lohnt</b> — je eine
     /// Zelle für Rampe, Kurve, senkrechter Lauf, Stütze, Streckenende,
     /// Linienanschluss und ein fahrender Zug.

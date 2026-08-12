@@ -4367,7 +4367,14 @@ public partial class MapEntityLayer : Node2D
             // impact
             _shots.RemoveAt(i);
             _effects.Add(new Effect { Pos = p.Aim, Kind = "explosion", FrameTime = 0.06f });
-            if (CellAt(p.Aim) is { } ic) Audio.GameSounds.Explosion(ic.X, ic.Y);
+            if (CellAt(p.Aim) is { } ic)
+            {
+                Audio.GameSounds.Explosion(ic.X, ic.Y);
+                // Ein Einschlag trifft auch das GLEIS auf dieser Zelle — die
+                // Einschlagsroutine des Originals @0x40D799 laeuft ueber alle
+                // 3000 Gleisplaetze und vergleicht genau diese Zelle.
+                RailHit(Mathf.RoundToInt(ic.X), Mathf.RoundToInt(ic.Y), p.Damage);
+            }
             else Audio.GameSounds.Explosion();
             if (p.Target >= 0 && p.Target < _entities.Count)
             {
@@ -7978,6 +7985,21 @@ public partial class MapEntityLayer : Node2D
         (0, -1, -1, 0), (1, 0, -1, 0), (1, 0, -1, 0), (0, 1, 0, -1), (0, 1, 0, -1),
     };
 
+    /// <summary>
+    /// <c>rail_pylon_pass</c> @0x4B0350 (F: 0x4AFC80) — die Fassung JEDER Stütze
+    /// aus ihren beiden Nachbarn neu bestimmen.
+    ///
+    /// <para>Im Original läuft dieser Durchgang nach jedem Treffer und nach
+    /// jeder Reparatur, denn beide ändern, ob die Strecke über einer Stütze
+    /// weiterläuft. Bei uns lief er bisher nur einmal beim Laden — richtig,
+    /// solange sich nichts ändern konnte.</para></summary>
+    private void RailPylonPass()
+    {
+        var live = new HashSet<(int, int)>();
+        foreach (var c in _railCells) if (!c.Broken) live.Add((c.Col, c.Row));
+        foreach (var c in _railCells) if (c.Pylon) c.PylonKind = RailPylonKind(c, live);
+    }
+
     private static int RailPylonKind(RailCell c, HashSet<(int, int)> live)
     {
         int b = c.Base;
@@ -8419,9 +8441,7 @@ public partial class MapEntityLayer : Node2D
         }
         // rail_pylon_pass @0x4B0350 — die Fassung jeder Stuetze aus ihren beiden
         // angeschlossenen Nachbarn. Nur die Plaetze mit platz%6==0 brauchen sie.
-        var live = new HashSet<(int, int)>();
-        foreach (var c in _railCells) if (!c.Broken) live.Add((c.Col, c.Row));
-        foreach (var c in _railCells) if (c.Pylon) c.PylonKind = RailPylonKind(c, live);
+        RailPylonPass();
 
         var ourCell = new Dictionary<(int, int), int>();
         foreach (var kv in _lineCell)
