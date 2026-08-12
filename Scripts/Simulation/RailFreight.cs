@@ -2157,7 +2157,9 @@ public partial class MapEntityLayer : Node2D
             sb.Append($" (Mittenversatz im Mittel {RailPortOffSum / RailJointPairs:0.0} px " +
                       "— gewollt, siehe RailMeasureJoints)");
         sb.Append($" | Gleis: {RailTilesDrawn} Stuecke gezeichnet, " +
-                  $"{RailTilesLoose} davon NICHT Kante an Kante");
+                  $"{RailTilesLoose} davon NICHT Kante an Kante" +
+                  $", {RailShadowsDrawn} Schattenmasken (Bild 10..19, 19 % Schwarz " +
+                  "— gemessen aus 47.CWS)");
         sb.Append(RailSourceReport());
         // Die Zahl fuer »buendig«: wieviele Linienenden lagen NICHT auf der
         // Anschlusszeile ihres Endgebaeudes. Gezaehlt wird VOR dem Ruecken,

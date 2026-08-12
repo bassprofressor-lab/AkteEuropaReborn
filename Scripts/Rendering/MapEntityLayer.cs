@@ -9345,7 +9345,35 @@ public partial class MapEntityLayer : Node2D
         // 4030 dagegen 15). Die Schranke haengt darum am Teil.
         int max = part == 69 ? 19 : 9;
         int f = frame >= 0 && frame <= max ? frame : 0;
-        int p = part is >= 64 and <= 69 ? part : 64;
+        return LoadRailTex(part is >= 64 and <= 69 ? part : 64, f);
+    }
+
+    /// <summary>
+    /// <b>DIE SCHATTENMASKE eines Gleisstücks</b> — Bild <c>form + 10</c>.
+    ///
+    /// <para>Sie liegt seit dem ersten Import mit auf der Platte und wurde nie
+    /// gezeichnet. Gemeldet als »du hattest ja noch haufen Grafiken gefunden,
+    /// die wir noch garnicht nutzen«.</para>
+    ///
+    /// <para>Nachgesehen: die Bilder 10..19 der Teile 64 bis 68 sind
+    /// Silhouetten des Trägers und der Böcke, um <b>(+19,+22) px</b> nach unten
+    /// rechts versetzt — dorthin, wo bei Licht von oben links der Schatten
+    /// fällt. Ihre Leinwand ist gleich hoch wie die des Farbbildes (56 bzw. 83)
+    /// und teilt dessen Ursprung; nur die Breite ist gelegentlich 69 statt 64,
+    /// weil der Schatten weiter nach rechts reicht. Sie wird deshalb an
+    /// derselben Stelle gezeichnet.</para>
+    ///
+    /// <para>⚠ Mein erster Prüftest (»einfarbig?«) hat die Masken der Teile 65
+    /// bis 68 NICHT erkannt, weil sie ein paar Streupixel tragen. Nur das Bild
+    /// hat sie gezeigt.</para></summary>
+    private Texture2D? GetRailShadow(int frame, int part)
+    {
+        if (part is < 64 or > 68) return null;      // 69: Trümmermasken ungeklärt
+        return LoadRailTex(part, Mathf.Abs(frame) % 10 + 10);
+    }
+
+    private Texture2D? LoadRailTex(int p, int f)
+    {
         int k = f + p * 32;
         if (_railTex.TryGetValue(k, out var t)) return t;
         string path = Core.Content.Path($"Units/train/rail{p}/f{f}.png");
@@ -9358,6 +9386,65 @@ public partial class MapEntityLayer : Node2D
         _railTex[k] = t;
         return t;
     }
+
+    /// <summary>
+    /// <b>Wie dunkel ein Schatten ist — gemessen, nicht gewählt.</b>
+    ///
+    /// <para>Das Original zeichnet Schatten nicht als schwarzes Sprite. Sein
+    /// zweiter Blitter @0x4AC6D0 kopiert keine Bildpunkte, sondern schickt den
+    /// Palettenindex des Punktes, der schon dasteht, durch eine 256-Byte-Tabelle
+    /// <c>NN.CWS</c> (geladen nach 0xB135B0, <c>fread</c> @0x4b57e5). Die Maske
+    /// ist nur die Schablone.</para>
+    ///
+    /// <para><b>Eins zu eins können wir das nicht:</b> unser Gelände ist als RGB
+    /// gebacken und hat keine Palettenindizes mehr. Gemessen wurde deshalb, wie
+    /// gut ein multiplikativer Faktor die Tabelle ersetzt — und zwar nur über
+    /// die Farben, die im Gelände wirklich vorkommen (155 Farben, 43 260 Punkte
+    /// Stichprobe; die UI-Farben am oberen Ende der Palette würden den Wert
+    /// sonst verziehen). <c>aekernel-tools/re_gfx_shadow_fit.py</c>:</para>
+    /// <code>
+    ///   bester Faktor je Kanal   R 0,775   G 0,831   B 0,820
+    ///   Restfehler (RMS)         7,8 von 255 = 3,1 %
+    ///   ein einziger Faktor      0,809
+    /// </code>
+    /// <para>Ein CanvasItem kann in EINEM Durchgang nur einen Faktor für alle
+    /// drei Kanäle anwenden (Mischblende: <c>ziel·(1−a) + farbe·a</c>, und für
+    /// verschiedene Kanäle bräuchte man verschiedene <c>a</c>). Genommen wird
+    /// deshalb der einzelne Faktor 0,809, also <b>Schwarz mit 19 % Deckung</b>.
+    /// Der Unterschied zur kanalweisen Fassung liegt unter dem Restfehler, den
+    /// die Näherung ohnehin hat.</para>
+    ///
+    /// <para>⚠ <b>Was dafür nötig wäre:</b> ein palettenindiziertes Gelände und
+    /// ein Shader, der die echte Tabelle nachschlägt. Dann wäre es exakt. Das
+    /// ist notiert, nicht getan.</para></summary>
+    private static Color RailShadowTint => new(0f, 0f, 0f, RailShadowAlpha);
+
+    /// <summary>Die Deckung des Schattens, umstellbar über
+    /// <c>--rail-shadow=&lt;wert&gt;</c>. Gegenprobe: mit <c>0</c> verschwindet er,
+    /// und der Prüfstand muss dann eine andere Helligkeit messen — ein Zähler,
+    /// der nicht scheitern kann, belegt nichts. Mit einem hohen Wert wird
+    /// sichtbar, WO er liegt; genau so ist geprüft worden, dass die Masken
+    /// stimmen (Band auf dem Boden unter dem Träger, Schrägen von den
+    /// Bockfüssen, der Kurve folgend).</summary>
+    private static float RailShadowAlpha
+    {
+        get
+        {
+            if (_railShadowAlpha.HasValue) return _railShadowAlpha.Value;
+            float a = 0.19f;
+            foreach (string x in OS.GetCmdlineUserArgs())
+                if (x.StartsWith("--rail-shadow="))
+                    a = Mathf.Clamp(x["--rail-shadow=".Length..].ToFloat(), 0f, 1f);
+            _railShadowAlpha = a;
+            return a;
+        }
+    }
+
+    private static float? _railShadowAlpha;
+
+    /// <summary>Wieviele Schattenmasken der letzte Durchgang gelegt hat — sonst
+    /// wäre »die Schatten sind da« wieder nur eine Behauptung.</summary>
+    public int RailShadowsDrawn;
 
     /// <summary>Die STRECKE — jeder Schritt jeder Linie, unabhaengig davon, ob
     /// gerade ein Zug darauf faehrt.
@@ -9555,6 +9642,18 @@ public partial class MapEntityLayer : Node2D
     private void DrawRailUpTo(int throughRow, ref int at)
     {
         var tiles = RailTiles();
+        // ⚠ ZWEI DURCHGÄNGE, Schatten zuerst. Ein Schatten liegt (+19,+22) px
+        // unten rechts von seinem Stück, also im Bereich des NACHBARSTÜCKS —
+        // gemischt gezeichnet würde er dessen Träger verdunkeln, und die Strecke
+        // bekäme einen dunklen Streifen auf jedem zweiten Stück.
+        for (int i = at; i < tiles.Count && tiles[i].Row <= throughRow; i++)
+        {
+            var s = tiles[i];
+            var m = GetRailShadow(s.Frame, s.Part);
+            if (m == null) continue;
+            DrawTexture(m, s.At - ComposedAnchor + new Vector2(0, s.YOff), RailShadowTint);
+            RailShadowsDrawn++;
+        }
         for (; at < tiles.Count; at++)
         {
             var t = tiles[at];
@@ -9571,7 +9670,7 @@ public partial class MapEntityLayer : Node2D
     /// Strecke«; siehe <see cref="DrawRailUpTo"/> für den Grund.</summary>
     private void DrawRailAndBuildings()
     {
-        RailTilesDrawn = 0;
+        RailTilesDrawn = 0; RailShadowsDrawn = 0;
         int at = 0;
         if (_drawSprites && Patterns != null)
             foreach (var b in BuildingsBackToFront())
