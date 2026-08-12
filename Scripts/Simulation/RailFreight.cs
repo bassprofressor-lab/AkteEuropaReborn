@@ -603,7 +603,20 @@ public partial class MapEntityLayer : Node2D
             int nxt = Mathf.Clamp(step + 1, 0, last);
             var pt = route[step].Lerp(route[nxt], frac);
             w.Col = pt.X; w.Row = pt.Y;
-            if (pcs != null && step < pcs.Count) w.Piece = pcs[step];
+            // ⚠ 15.08.2026 — DAS BILD MUSS DIE FAHRTRICHTUNG ZEIGEN, nicht die
+            // Kettenrichtung. `pcs[step]` ist die Richtung von Zelle step zur
+            // NAECHSTEN in Kettenreihenfolge. Der Zug faehrt aber nur auf der
+            // Hinfahrt in dieser Reihenfolge; auf der Rueckfahrt laeuft er
+            // dagegen — und zeigte trotzdem weiter kettenvorwaerts. Damit stand
+            // auf jeder rueckfahrenden Linie der ganze Zug verkehrt herum, Lok
+            // voran am falschen Ende. Genau das ist als »es gibt sogar Loks die
+            // vertauscht sind, aber nicht alle« gemeldet worden — nicht alle,
+            // weil es immer nur die Linien trifft, die gerade zurueckfahren.
+            //
+            // Die Gegenrichtung eines Stuecks ist `(stueck + 4) & 7`; dieselbe
+            // Rechnung benutzt das Original fuer die Schublok (@0x42B542).
+            if (pcs != null && step < pcs.Count)
+                w.Piece = dir > 0 ? pcs[step] : (pcs[step] + 4) & 7;
         }
     }
 
@@ -813,6 +826,103 @@ public partial class MapEntityLayer : Node2D
                              $"bei ({a.Col:0.0},{a.Row:0.0}) Breite {ra.Size.X:0}x{ra.Size.Y:0}  ->  " +
                              $"W{b.Index}(Teil {(b.Index is 0 or 3 ? 57 : 58)} Bild {b.Piece}) " +
                              $"bei ({b.Col:0.0},{b.Row:0.0}) Breite {rb.Size.X:0}x{rb.Size.Y:0}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// <b>Schliessen die Ecken?</b> — der Abstand zwischen den beiden
+    /// Anschlusspunkten zweier benachbarter Gleisstücke, in Kartenpixeln.
+    ///
+    /// <para>An den Bildern gemessen (Teil 64, Leinwand 64×56): jedes Stück
+    /// trägt seine Anschlüsse an festen Stellen — links auf Spalte 10, rechts
+    /// auf 49, oben auf Zeile 20, unten auf 41. Die HÖHE dort ist je Bild
+    /// verschieden:</para>
+    /// <code>
+    ///   f0  links 31,0  rechts 31,0      f4  links 31,7  unten 27,1
+    ///   f1  oben  29,5  unten  29,5      f5  links 30,3  oben  27,9
+    ///   f2  rechts 31,7 unten  31,9      f6  links 16,3  rechts 30,3  RAMPE
+    ///   f3  rechts 30,3 oben   31,1      f7  links 30,7  rechts 16,3  RAMPE
+    /// </code>
+    /// <para>Die Rampen tragen also <b>14 px</b> Höhenunterschied im Bild — und
+    /// unser <see cref="RailPoint"/> zieht zusätzlich <c>Höhe·15</c> ab. Ob
+    /// beides zusammengeht, entscheidet, ob die Strecke an einer Geländestufe
+    /// schliesst; genau das misst dieser Zähler. Er ist der erste, der die
+    /// gemeldeten »Ecken und Knicke schliessen nicht« überhaupt sehen
+    /// kann.</para></summary>
+    public float RailJointWorst;
+    public int RailJointPairs, RailJointOpen;
+    public string RailJointWorstWhere = "";
+
+    /// <summary>Je Bild: Höhe des linken und des rechten Anschlusses, Spalte des
+    /// oberen und des unteren. <c>NaN</c> heisst: diese Seite ist nicht
+    /// angeschlossen.</summary>
+    /// <remarks>⚠ Der Anschluss braucht <b>x UND y</b>. Der erste Anlauf hielt
+    /// die Zeile für fest (20 oben, 41 unten) und speicherte nur die Spalte —
+    /// das stimmt für f1, aber nicht für die senkrechten Rampen: <b>f8 reicht
+    /// von Zeile 5 bis 41</b> (oben 15 px höher), <b>f9 nur von 19 bis 26</b>
+    /// (unten 15 px höher). Mit der falschen Tabelle meldete der Zähler an
+    /// jeder senkrechten Rampe eine Kerbe, die es nicht gibt.</remarks>
+    private static readonly float[,] RailPortAt =
+    {
+        // links x,y   rechts x,y   oben x,y     unten x,y      (NaN = keine Seite)
+        { 10f, 31.0f, 49f, 31.0f, float.NaN, 0f, float.NaN, 0f },        // f0 L-R
+        { float.NaN, 0f, float.NaN, 0f, 29.5f, 20f, 29.5f, 41f },        // f1 T-B
+        { float.NaN, 0f, 49f, 31.7f, float.NaN, 0f, 31.9f, 41f },        // f2 R-B
+        { float.NaN, 0f, 49f, 30.3f, 31.1f, 20f, float.NaN, 0f },        // f3 R-T
+        { 10f, 31.7f, float.NaN, 0f, float.NaN, 0f, 27.1f, 41f },        // f4 L-B
+        { 10f, 30.3f, float.NaN, 0f, 27.9f, 20f, float.NaN, 0f },        // f5 L-T
+        { 10f, 16.3f, 49f, 30.3f, float.NaN, 0f, float.NaN, 0f },        // f6 Rampe, links hoeher
+        { 10f, 30.7f, 49f, 16.3f, float.NaN, 0f, float.NaN, 0f },        // f7 Rampe, rechts hoeher
+        { float.NaN, 0f, float.NaN, 0f, 29.5f, 5f, 29.5f, 41f },         // f8 Rampe, oben hoeher
+        { float.NaN, 0f, float.NaN, 0f, 29.5f, 20f, 29.5f, 26f },        // f9 Rampe, unten hoeher
+    };
+
+    /// <summary>Der Anschlusspunkt eines Stücks in Kartenpixeln, oder
+    /// <c>null</c>, wenn das Bild diese Seite gar nicht bedient. Seite: 0 links,
+    /// 1 rechts, 2 oben, 3 unten.</summary>
+    private Vector2? RailPort(int col, int row, int frame, int side)
+    {
+        if (frame is < 0 or > 9) return null;
+        float px = RailPortAt[frame, side * 2], py = RailPortAt[frame, side * 2 + 1];
+        if (float.IsNaN(px)) return null;
+        var at = RailPoint(new Vector2(col, row)) - ComposedAnchor + new Vector2(0, RailDeckOffset);
+        return at + new Vector2(px, py);
+    }
+
+    private void RailMeasureJoints()
+    {
+        RailJointWorst = 0f; RailJointPairs = 0; RailJointOpen = 0; RailJointWorstWhere = "";
+        var frameAt = new Dictionary<(int, int), int>();
+        foreach (var c in _railCells) if (!c.Broken) frameAt[(c.Col, c.Row)] = c.Base;
+
+        foreach (var kv in _lineCell)
+        {
+            var cells = kv.Value;
+            for (int i = 1; i < cells.Count; i++)
+            {
+                int ac = Mathf.RoundToInt(cells[i - 1].X), ar = Mathf.RoundToInt(cells[i - 1].Y);
+                int bc = Mathf.RoundToInt(cells[i].X), br = Mathf.RoundToInt(cells[i].Y);
+                if (!frameAt.TryGetValue((ac, ar), out int af) ||
+                    !frameAt.TryGetValue((bc, br), out int bf)) continue;
+                int dc = bc - ac, dr = br - ar;
+                int sideA, sideB;
+                if (dc == 1 && dr == 0) { sideA = 1; sideB = 0; }
+                else if (dc == -1 && dr == 0) { sideA = 0; sideB = 1; }
+                else if (dc == 0 && dr == 1) { sideA = 3; sideB = 2; }
+                else if (dc == 0 && dr == -1) { sideA = 2; sideB = 3; }
+                else continue;
+                var pa = RailPort(ac, ar, af, sideA);
+                var pb = RailPort(bc, br, bf, sideB);
+                if (pa == null || pb == null) continue;
+                RailJointPairs++;
+                float d = (pa.Value - pb.Value).Length();
+                if (d > 2f) RailJointOpen++;
+                if (d > RailJointWorst)
+                {
+                    RailJointWorst = d;
+                    RailJointWorstWhere = $"({ac},{ar}) f{af} -> ({bc},{br}) f{bf}";
+                }
             }
         }
     }
@@ -1403,6 +1513,12 @@ public partial class MapEntityLayer : Node2D
         foreach (var w in _wagons) if (w.Freight) fw++;
         sb.Append($") | {fw} von {_wagons.Count} Waggons am Fahrplan");
 
+        sb.Append($" | Kreuzungen: {RailCrossings} Zellen mit zwei Gleissaetzen, " +
+                  "beide gezeichnet");
+        RailMeasureJoints();
+        sb.Append($" | Ecken: {RailJointOpen} von {RailJointPairs} Anschluessen weiter " +
+                  $"als 2 px auseinander, schlimmster {RailJointWorst:0.0} px");
+        if (RailJointOpen > 0) sb.Append($" bei {RailJointWorstWhere}");
         sb.Append($" | Gleis: {RailTilesDrawn} Stuecke gezeichnet, " +
                   $"{RailTilesLoose} davon NICHT Kante an Kante");
         sb.Append(RailSourceReport());

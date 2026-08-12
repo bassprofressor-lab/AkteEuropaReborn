@@ -8976,6 +8976,12 @@ public partial class MapEntityLayer : Node2D
     /// map_NET02 hat keines; <c>4.DM</c> hat 49 Zellen, <c>7.DM</c> fünf.</summary>
     public int RailBrokenDrawn;
 
+    /// <summary>Zellen, auf denen mehr als ein Gleissatz liegt — die
+    /// KREUZUNGEN. Sie tragen zwei Bilder, und beide gehören gezeichnet;
+    /// solange wir eines davon wegfilterten, fehlte an jeder Kreuzung ein
+    /// Strang.</summary>
+    public int RailCrossings;
+
     private void RailMeasureEnd(List<Vector2> cells, Dictionary<int, Entity> bySlot,
                                 int slot, bool tail)
     {
@@ -9318,6 +9324,7 @@ public partial class MapEntityLayer : Node2D
         var tiles = new List<RailTile>();
         RailTilesLoose = 0;
         RailBrokenDrawn = 0;
+        RailCrossings = 0;
         if (RailProbeSkipCols) RailTilesOld(tiles);
         else if (_railCells.Count > 0)
         {
@@ -9327,13 +9334,22 @@ public partial class MapEntityLayer : Node2D
             var seen = new HashSet<(int, int)>();
             foreach (var c in _railCells)
             {
-                // ⚠ Die Doppelfilterung gilt nur fuer HEILE Stuecke. Wo zwei
-                // Linien dieselbe Zelle belegen, sind zwei gleiche Traeger
-                // uebereinander unsichtbar -- ein Truemmerfeld dagegen ginge
-                // verloren (auf map_DM_4 genau eines von 49). Das Original
-                // filtert gar nicht: es laeuft ueber alle 3000 Saetze und
-                // zeichnet jeden (@0x42DF40).
-                if (!c.Broken && !seen.Add((c.Col, c.Row))) continue;
+                // ⚠ 15.08.2026 — DIE DOPPELFILTERUNG IST GANZ WEG, und das war
+                // der gemeldete Fehler »es fehlen Gleisstuecke« und »Ecken und
+                // Knicke schliessen nicht«.
+                //
+                // Wo zwei Linien dieselbe Zelle benutzen, traegt die Karte dort
+                // ZWEI Saetze mit VERSCHIEDENEM Bild -- die beiden Richtungen
+                // der Kreuzung. Wir haben davon nur das erste gezeichnet, also
+                // fehlte an jeder solchen Stelle der zweite Strang. Gezaehlt
+                // ueber alle 30 Karten: 176 Zellen, auf map_NET02 allein 24,
+                // und in JEDEM dieser Faelle unterscheiden sich die Bilder.
+                //
+                // Das Original filtert gar nicht: die Zeichenschleife @0x42DF40
+                // laeuft ueber alle 3000 Plaetze und stellt jeden ein. Zwei
+                // gleiche Traeger uebereinander sind unsichtbar, zwei
+                // verschiedene ergeben die Kreuzung.
+                RailCrossings += seen.Add((c.Col, c.Row)) ? 0 : 1;
                 var at = RailPoint(new Vector2(c.Col, c.Row));
                 if (c.Broken)
                 {
