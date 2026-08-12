@@ -493,6 +493,25 @@ public partial class MapEntityLayer : Node2D
         // dort waere der Rueckstand also etwas kleiner. Unsere Kette kennt den
         // Unterschied nicht mehr, seit eine Diagonale EINE Zelle ist.
         float lagCells = last > 0 ? 1f / 5f / last : 0f;
+        // ⚠ Die Reihenfolge ist jetzt Vorschrift, nicht Zufall: die Kupplung
+        // hängt Waggon i an die BEREITS GESETZTE Stelle von i-1. Eigene Züge
+        // legt RailSpawnWagons der Reihe nach an, von der Karte übernommene
+        // nicht zwingend — deshalb hier einmal sortieren.
+        list.Sort((a, b) => a.Index.CompareTo(b.Index));
+        // ⚠ 15.08.2026 — ZWEI DURCHGÄNGE, und der Grund ist ein Ei-und-Henne:
+        // die Kupplung braucht die POSE beider Waggons (ein waagerechtes Bild
+        // ist 41 px lang, ein senkrechtes 23), die Pose steht aber erst fest,
+        // wenn der Waggon PLATZIERT ist. Der erste Anlauf hat deshalb `w.Piece`
+        // aus dem VORIGEN Takt gelesen — und lag genau in dem einen Takt falsch,
+        // in dem ein Waggon um die Ecke geht: auf Linie 31 forderte die Rechnung
+        // 32 px (waagerechte Lok) für ein Bild, das dann senkrecht mit 23 px
+        // gezeichnet wurde. 10,0 px Lücke, und der Zähler meldete »Abstand
+        // eingehalten«.
+        //
+        // Durchgang 0 setzt alle vier auf ihre getaktete Stelle und damit ihre
+        // Pose; Durchgang 1 kuppelt mit den nun feststehenden Posen. Beides ist
+        // dieselbe Schleife — die Platzierung darf nicht zweimal dastehen.
+        for (int pass = 0; pass < 2; pass++)
         foreach (var w in list)
         {
             // ⚠ 13.08.2026 — DER RUECKSTAND IST EINE ZEIT, KEINE ZELLENZAHL.
@@ -535,6 +554,13 @@ public partial class MapEntityLayer : Node2D
 
             float leadF = Mathf.Clamp(pw, 0f, 1f) * last;
             if (l.Dir == 1) leadF = last - leadF;
+            w.RawLeadF = leadF;
+            // Verkürzt wird immer gegen den ROHWERT, nie gegen das Ergebnis des
+            // letzten Takts — sonst zöge sich der Zug über die Fahrt hinweg
+            // immer weiter zusammen.
+            if (pass == 1)
+                leadF = RailCouple(route, list, w, pcs, leadF, l.Dir == 0 ? 1 : -1);
+            w.LeadF = leadF;
             int lead = Mathf.FloorToInt(leadF);
             float frac = leadF - lead;
             // ⚠ 11.08.2026 — hier stand der Faktor 2, und das war der Grund
@@ -717,6 +743,12 @@ public partial class MapEntityLayer : Node2D
     /// Zellbreite) — wer darunter liegt, deckt einen Waggon zu.</summary>
     private const float RailSquashPx = 10f;
 
+    /// <summary>Der kleinste Abstand, den das Original zwischen zwei Waggons je
+    /// erzeugt — <b>12 px</b>, nachgefahren über 709 Linien und 216 606 Bilder.
+    /// Die Kupplung darf nicht darunter ziehen; siehe
+    /// <see cref="RailCouple"/>.</summary>
+    private const float RailWagonMinPx = 12f;
+
     /// <summary>Dasselbe für DIESES Bild statt über den ganzen Lauf, samt der
     /// Zelle, auf der es passiert. Damit kann <c>--shot-when=squash</c> auf den
     /// Augenblick warten und die Kamera hinstellen — die Stauchung dauert nur
@@ -791,12 +823,250 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Der Kasten eines Waggons in KARTENPIXELN, so wie gezeichnet.</summary>
     private Rect2 WagonRect(Wagon w)
+        => WagonRectOf(w.Index, w.Piece, new Vector2(w.Col, w.Row));
+
+    /// <summary>Dasselbe für eine Stelle, an der noch gar kein Waggon steht —
+    /// die Kupplung probiert damit Plätze durch, ohne etwas zu setzen. ⚠ Diese
+    /// Rechnung muss die des Zeichenpfads bleiben; sie ist die einzige Stelle,
+    /// an der beide zusammenkommen.</summary>
+    private Rect2 WagonRectOf(int index, int piece, Vector2 cell)
     {
-        int part = w.Index == 0 || w.Index == 3 ? 57 : 58;
-        int piece = w.Index == 3 ? (w.Piece + 4) & 7 : w.Piece;
-        var box = TrainBox(part, piece);
-        var at = RailPoint(new Vector2(w.Col, w.Row)) - ComposedAnchor + WagonOverRail;
+        int part = index == 0 || index == 3 ? 57 : 58;
+        int pc = (index == 3 ? (piece + 4) : piece) & 7;
+        var box = TrainBox(part, pc);
+        var at = RailPoint(cell) - ComposedAnchor + WagonOverRail;
         return new Rect2(at.X + box.Position.X, at.Y + box.Position.Y, box.Size.X, box.Size.Y);
+    }
+
+    /// <summary>
+    /// <b>DIE KUPPLUNG</b> — der Rückstand darf einen Waggon nicht weiter
+    /// hinten absetzen, als sein Bild lang ist.
+    ///
+    /// <para><b>Der Befund, der dazu geführt hat.</b> Gemessen über einen Lauf
+    /// auf map_NET02 (1&nbsp;010&nbsp;650 Waggonpaare in Takten):</para>
+    /// <code>
+    ///   je Paar    W0-W1  92747/346027   W1-W2 158428/337749   W2-W3 86774/326874
+    ///   je Stueck  f0  18576/225972   f2 145119/273690
+    ///              f4  17092/225280   f6 157162/285708
+    /// </code>
+    /// <para>Das Muster ist eindeutig: <b>f2 und f6 sind die WAAGERECHTEN
+    /// Posen</b> (Lok 41×22 bzw. 39×22 px), dort klafft es in gut der Hälfte
+    /// aller Takte; f0/f4 sind die senkrechten (23×35, 23×29) und dort fast
+    /// nie. Es ist also keine Ecke und kein Bildfehler, sondern schlichte
+    /// Arithmetik:</para>
+    /// <code>
+    ///   Rueckstand 0/4/7/11 Takte = 0/0,8/1,4/2,2 Zellen
+    ///   waagerecht:  eine Zelle = 40 px  ->  Abstand 32 / 24 / 32 px
+    ///   Bildbreiten: Lok 41, Waggon 22, Waggon 22, Schublok 39
+    ///   noetig:      30,5 / 21 / 29,5     vorhanden: 32 / 24 / 32
+    ///                                     ---------------------------
+    ///                                     Fehlbetrag 1,5 / 3 / 2,5 px
+    ///   senkrecht:   eine Zelle = 20 px  ->  Abstand 16 / 12 / 16 px
+    ///                bei 24..35 px Bildhoehe ueberlappen sie ohnehin
+    /// </code>
+    /// <para>Der schlimmste Einzelfall ist eine <b>Treppe</b>: auf Linie 10 der
+    /// map_NET02 läuft die Kette (112,212)→(112,211)→(111,211)→(111,210), also
+    /// eine isometrische Diagonale als Einzelzellen. Der vordere Waggon steht
+    /// dort schon auf dem senkrechten Schenkel (schmale Pose, 23 px) und der
+    /// folgende noch 32 px daneben auf dem waagerechten — <b>10,0 px Lücke</b>,
+    /// die grösste des ganzen Laufs.</para>
+    ///
+    /// <para><b>⚠ DAS IST EINE BEWUSSTE ABWEICHUNG VOM ORIGINAL, und sie wird
+    /// hier so benannt.</b> Die Rückstände 0/4/7/11 Takte sind gemessen (21632
+    /// Messungen je Paar, kein Gegenbeispiel) — sie sind nicht falsch. Rechnet
+    /// man sie gegen die Bildbreiten, ergibt sich, dass <b>das Original selbst
+    /// diese Fugen zeigt</b>. Der Spieler hat sie zweimal gemeldet
+    /// (»der zug ist immer noch nicht sauber zusammenhängend«) und die Aufgabe
+    /// des Tages lautet »damit die beiden Grafiken sauber sind und hübsch
+    /// aussehen«. Also wird hier zugunsten des Bildes entschieden.</para>
+    ///
+    /// <para><b>Der Eingriff ist der kleinstmögliche:</b> der Rückstand wird
+    /// nur <b>VERKÜRZT</b>, nie verlängert. Wo die getaktete Stelle schon
+    /// Berührung ergibt — auf jedem senkrechten Schenkel, an jedem Halt —
+    /// bleibt sie unangetastet, dort ändert sich also gar nichts. Gezogen wird
+    /// entlang der ECHTEN Kette in Kartenpixeln (<see cref="RailWalk"/>), nicht
+    /// in Zellen: damit folgt der Nachläufer um Ecken herum und die Treppe
+    /// reisst nicht mehr auf. Fahrt, Geschwindigkeit und Fahrzeit von Waggon 0
+    /// rührt das nicht an — der Zug ist nur kürzer, nicht schneller.</para>
+    /// </summary>
+    private float RailCouple(List<Vector2> route, List<Wagon> list, Wagon w,
+                             List<int> pcs, float leadF, int dir)
+    {
+        if (w.Index <= 0 || w.Hidden) return leadF;
+        Wagon front = null;
+        foreach (var q in list)
+            if (q.Index == w.Index - 1) { front = q; break; }
+        if (front == null || front.Hidden) return leadF;
+        // ⚠ HIER WIRD NICHTS MEHR AUSGERECHNET, SONDERN GEMESSEN — und das ist
+        // die Lehre aus DREI gescheiterten Anläufen an derselben Stelle:
+        //
+        //   1. halbe Bildmasse    unterstellt, der Kasten sitze mittig über dem
+        //      Anker. Tut er nicht: Teil 57 Bild 0 steht auf Spalte 12..35 einer
+        //      64er Leinwand, sein Mittelpunkt liegt 6,5 px links vom Anker.
+        //      Blieb 8,5 px Lücke, während die Rechnung »passt« meldete.
+        //   2. echte Kanten, Achse aus dem PIXELvektor. Auf einer Rampe zieht
+        //      der Höhenabzug (15 px je Stufe) einen waagerechten Schritt so
+        //      weit nach oben, dass er als senkrecht gilt.
+        //   3. echte Kanten, Achse aus der ZELLrichtung. Scheitert an der ECKE,
+        //      und die ist der eigentliche Fall: auf Linie 21 steht Waggon 0 auf
+        //      (58,87) und dreht dort nach UNTEN, Waggon 1 steht 32 px RECHTS
+        //      davon auf dem waagerechten Schenkel. Die beiden haben gar keine
+        //      gemeinsame Achse — welche Kante zählt, ist nicht entscheidbar.
+        //
+        // Was in allen drei Fällen dieselbe Frage beantwortet hätte: berühren
+        // sich die beiden KÄSTEN? Die stehen fertig da (WagonRect), also wird
+        // genau das gefragt. Der Nachläufer wird von seinem getakteten Platz aus
+        // in höchstens zehn Halbierungsschritten an die Stelle geholt, an der
+        // die Berührung gerade eintritt — nie weiter als bis zum vorderen. Das
+        // gilt für Gerade, Ecke, Treppe und Rampe gleichermassen, weil es über
+        // keine davon eine Annahme macht.
+        var rf = WagonRect(front);
+        if (WagonRectAt(w.Index, route, pcs, leadF, dir).Intersects(rf, true))
+            return leadF;                                  // beruehren sich schon
+        // ⚠ DIE GRENZE, BIS ZU DER GEZOGEN WERDEN DARF, ist gemessen und nicht
+        // gesetzt: das Original bringt zwei Waggons nie näher als 12 px
+        // zusammen (709 Linien, 216606 Bilder, kleinster Abstand 12,0 px bei
+        // 40 px Zellbreite). Ohne diese Grenze holt die Halbierung an einer Ecke
+        // den Nachläufer beliebig weit heran — die Kästen berühren sich dann
+        // zwar, aber ein Waggon deckt den anderen zu.
+        float bound = RailWalk(route, front.LeadF, -dir * RailWagonMinPx);
+        if (!WagonRectAt(w.Index, route, pcs, bound, dir).Intersects(rf, true))
+        {
+            // Selbst am Anschlag klafft es. Dann ist die Ecke schuld und nicht
+            // der Rückstand; näher als 12 px wird trotzdem nicht gezogen.
+            w.Need = Mathf.Abs(bound - leadF); w.Coupled = bound;
+            return bound;
+        }
+        float lo = leadF, hi = bound;         // lo klafft, hi liegt auf
+        for (int it = 0; it < 10; it++)
+        {
+            float mid = (lo + hi) * 0.5f;
+            if (WagonRectAt(w.Index, route, pcs, mid, dir).Intersects(rf, true))
+                hi = mid;
+            else lo = mid;
+        }
+        w.Need = Mathf.Abs(hi - leadF); w.Coupled = hi;
+        return hi;
+    }
+
+    /// <summary>Der Bildkasten, den Waggon <paramref name="index"/> HÄTTE, wenn
+    /// er an der Kettenstelle <paramref name="leadF"/> stünde — mit der Pose,
+    /// die dort gilt. Dieselbe Rechnung wie in
+    /// <see cref="RailPlaceWagons"/>, nur ohne den Waggon anzufassen.</summary>
+    private Rect2 WagonRectAt(int index, List<Vector2> route, List<int> pcs,
+                              float leadF, int dir)
+    {
+        int last = route.Count - 1;
+        int step = Mathf.Clamp(Mathf.FloorToInt(leadF), 0, last);
+        int nxt = Mathf.Clamp(step + 1, 0, last);
+        var pt = route[step].Lerp(route[nxt], leadF - step);
+        int piece = pcs != null && step < pcs.Count
+            ? (dir > 0 ? pcs[step] : (pcs[step] + 4) & 7) : 0;
+        return WagonRectOf(index, piece, pt);
+    }
+
+    /// <summary>Von der Kettenstelle <paramref name="from"/> aus
+    /// <paramref name="distSigned"/> KARTENPIXEL weit an der Kette
+    /// entlanggehen und die erreichte Kettenstelle zurückgeben.
+    ///
+    /// <para>Der Weg wird über <see cref="RailPoint"/> gemessen, also mit
+    /// Zellbreite 40, Zellhöhe 20 und dem Höhenabzug — ein Schritt nach rechts
+    /// ist doppelt so weit wie einer nach unten, und genau daran ist die
+    /// Rechnung in Zellen bisher gescheitert. Am Kettenende wird angehalten,
+    /// nicht umgeschlagen.</para></summary>
+    private float RailWalk(List<Vector2> route, float from, float distSigned)
+    {
+        int last = route.Count - 1;
+        if (last <= 0) return 0f;
+        float posF = Mathf.Clamp(from, 0f, last);
+        float rest = Mathf.Abs(distSigned);
+        int step = distSigned >= 0f ? 1 : -1;
+        for (int guard = 0; guard < route.Count + 4 && rest > 0.001f; guard++)
+        {
+            int i = step > 0 ? Mathf.FloorToInt(posF) : Mathf.CeilToInt(posF) - 1;
+            if (i < 0 || i >= last) break;
+            float segLen = RailPoint(route[i]).DistanceTo(RailPoint(route[i + 1]));
+            if (segLen <= 0.001f) { posF = step > 0 ? i + 1 : i; continue; }
+            float t = posF - i;
+            float avail = (step > 0 ? 1f - t : t) * segLen;
+            if (avail >= rest) { posF += step * rest / segLen; break; }
+            rest -= avail;
+            posF = step > 0 ? i + 1 : i;
+        }
+        return Mathf.Clamp(posF, 0f, last);
+    }
+
+    /// <summary>
+    /// <b>Die Lücke über den ganzen Lauf statt in einem Bild</b> — und vor allem:
+    /// <b>WO</b> sie herkommt.
+    ///
+    /// <para><see cref="RailMeasureGaps"/> sieht nur den Augenblick, in dem die
+    /// Meldung geschrieben wird. „16 von 67 Paaren, größte 8,9 px" sagt damit
+    /// nicht, ob die Lücke an einem bestimmten Waggonpaar hängt, an einer
+    /// bestimmten Fahrtrichtung oder überall gleichmässig auftritt — und ohne
+    /// das lässt sich die Ursache nicht ansprechen.</para>
+    ///
+    /// <para>Deshalb wird hier <b>in jedem Takt</b> gezählt, aufgeschlüsselt nach
+    /// Waggonpaar (0-1, 1-2, 2-3) und nach dem <b>Gleisstück</b>, auf dem der
+    /// vordere der beiden steht. Ein Stück ist eine Richtung: 0/6/7 waagerecht,
+    /// 1/8/9 senkrecht, 2..5 die Ecken. Verteilt sich die Lücke gleichmässig,
+    /// ist der Rückstand zu gross; hängt sie an einzelnen Stücken, ist es die
+    /// Form der Bilder.</para></summary>
+    public float RailGapEverWorst;
+    public string RailGapEverWhere = "";
+    public readonly int[] RailGapByPair = new int[3];
+    public readonly int[] RailGapSeenByPair = new int[3];
+    public readonly int[] RailGapByPiece = new int[10];
+    public readonly int[] RailGapSeenByPiece = new int[10];
+
+    private void RailCensusGaps(List<Wagon> list)
+    {
+        for (int i = 1; i < list.Count && i <= 3; i++)
+        {
+            var a = list[i - 1]; var b = list[i];
+            if (a.Hidden || b.Hidden) continue;
+            int pc = a.Piece & 7;
+            RailGapSeenByPair[i - 1]++;
+            RailGapSeenByPiece[pc]++;
+            var ra = WagonRect(a); var rb = WagonRect(b);
+            if (ra.Intersects(rb)) continue;
+            float dx = Mathf.Max(0f, Mathf.Max(rb.Position.X - (ra.Position.X + ra.Size.X),
+                                               ra.Position.X - (rb.Position.X + rb.Size.X)));
+            float dy = Mathf.Max(0f, Mathf.Max(rb.Position.Y - (ra.Position.Y + ra.Size.Y),
+                                               ra.Position.Y - (rb.Position.Y + rb.Size.Y)));
+            float gap = Mathf.Sqrt(dx * dx + dy * dy);
+            if (gap <= 0.5f) continue;
+            RailGapByPair[i - 1]++;
+            RailGapByPiece[pc]++;
+            if (gap > RailGapEverWorst)
+            {
+                RailGapEverWorst = gap;
+                RailGapEverWhere =
+                    $"Linie {a.Line} W{a.Index}(Teil {(a.Index is 0 or 3 ? 57 : 58)} " +
+                    $"Bild {a.Piece}, {ra.Size.X:0}x{ra.Size.Y:0}) bei ({a.Col:0.0},{a.Row:0.0}) " +
+                    $"-> W{b.Index}(Teil {(b.Index is 0 or 3 ? 57 : 58)} Bild {b.Piece}, " +
+                    $"{rb.Size.X:0}x{rb.Size.Y:0}) bei ({b.Col:0.0},{b.Row:0.0})" +
+                    $" [Kette {a.LeadF:0.000} -> {b.LeadF:0.000}, noetig {b.Need:0.0} px, " +
+                    $"gekuppelt {b.Coupled:0.000}]";
+            }
+        }
+    }
+
+    /// <summary>Die Aufschlüsselung als Text — je Waggonpaar und je Gleisstück,
+    /// jeweils „mit Lücke von gesehen".</summary>
+    public string RailGapReport()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append(" | Luecke je Paar:");
+        for (int i = 0; i < 3; i++)
+            sb.Append($" W{i}-W{i + 1} {RailGapByPair[i]}/{RailGapSeenByPair[i]}");
+        sb.Append("  je Stueck:");
+        for (int p = 0; p < 8; p++)
+            if (RailGapSeenByPiece[p] > 0)
+                sb.Append($" f{p} {RailGapByPiece[p]}/{RailGapSeenByPiece[p]}");
+        if (RailGapEverWorst > 0f)
+            sb.Append($"  schlimmste ueberhaupt {RailGapEverWorst:0.0} px: {RailGapEverWhere}");
+        return sb.ToString();
     }
 
     private void RailMeasureGaps()
@@ -1281,6 +1551,7 @@ public partial class MapEntityLayer : Node2D
                         RailSquashAt = new Vector2(wo.Col, wo.Row);
                         RailSquashLine = l.Slot;
                     }
+                    RailCensusGaps(list);
                 }
             }
         }
@@ -1569,6 +1840,7 @@ public partial class MapEntityLayer : Node2D
                 RailMeasureGaps();
                 sb.Append($" | Zusammenhang: {RailGapOpen} von {RailGapPairs} Waggonpaaren mit " +
                           $"sichtbarer Luecke, groesste {RailGapWorst:0.0} px");
+                sb.Append(RailGapReport());
                 break;
             }
         return sb.ToString();

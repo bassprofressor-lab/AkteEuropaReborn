@@ -7891,6 +7891,23 @@ public partial class MapEntityLayer : Node2D
         /// ist dasselbe, und es ersetzt das alte Klemmen, das die vier Waggons
         /// an der Endstation aufeinanderstapelte.</summary>
         public bool Hidden;
+
+        /// <summary>Die Stelle dieses Waggons auf der Kette als Bruchzahl
+        /// (<c>0..letzter Schritt</c>), so wie sie zuletzt WIRKLICH gesetzt
+        /// wurde — also nach der Kupplung, nicht der getaktete Rohwert. Der
+        /// nachfolgende Waggon hängt sich daran; ohne diese Zahl müsste er den
+        /// Rückstand des vorderen nachrechnen und würde bei jeder Verkürzung
+        /// wieder aufreissen.</summary>
+        public float LeadF;
+
+        /// <summary>Dieselbe Stelle, aber VOR der Kupplung — der reine
+        /// getaktete Rückstand. Der zweite Durchgang setzt darauf wieder auf,
+        /// damit sich die Verkürzung nicht von Takt zu Takt aufsummiert.</summary>
+        public float RawLeadF;
+
+        /// <summary>Nur für die Fehlersuche an der Kupplung: der geforderte
+        /// Abstand in Kartenpixeln und die Kettenstelle, die daraus wurde.</summary>
+        public float Need, Coupled;
     }
 
     private readonly List<Wagon> _wagons = new();
