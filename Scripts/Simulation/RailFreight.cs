@@ -601,6 +601,40 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <summary>
+    /// <b>DIE RANDMITTEN — gemessen, und der Einbau ist damit BLOCKIERT.</b>
+    ///
+    /// <para>Das Original setzt einen Waggon nicht in die Zellmitte, sondern
+    /// auf eine <b>Randmitte</b>, und was von beidem gilt, entscheidet die
+    /// <b>Parität der HALBZEILE</b> (Wortsatz 0xB95D60, je Waggonplatz):
+    /// Feinlage <c>(20,0)</c> bei gerader, <c>(0,10)</c> bei ungerader
+    /// Halbzeile (@0x4C6A87 / @0x4C6E23). Das ist belegt: die zwölf
+    /// Routencodes @0x5043C0 gehen gegen <c>Stück→Pixel</c> @0x539400 nur mit
+    /// genau dieser Setzung auf — zwölf unabhängige Gleichungen, alle
+    /// erfüllt.</para>
+    ///
+    /// <para><b>Wir können es nicht einbauen, und das ist gemessen, nicht
+    /// gemutmaßt.</b> Unsere Kette kommt seit dem 12.08. aus sec22 und kennt
+    /// nur GANZE Zellen — die Parität steckt allein in den Streckencodes. Über
+    /// fünf NET-Karten gegeneinander gehalten:</para>
+    /// <code>
+    ///   sec22-Zellen                  3079
+    ///   Routenzellen                  3338
+    ///   davon in sec22                2816   (84 %)
+    ///   sec22-Zellen ohne Routenpunkt  263
+    ///   Zellen mit BEIDEN Paritäten    311
+    /// </code>
+    /// <para>Für rund <b>eine von sechs</b> Zellen wäre die Parität also
+    /// unbekannt oder mehrdeutig. Sie zu setzen hieße raten.</para>
+    ///
+    /// <para>⭐ <b>Und darin steckt der eigentliche Befund:</b> Gleis und Zug
+    /// laufen im Original auf ZWEI VERSCHIEDENEN Strukturen — die Strecke in
+    /// sec22, der Zug über die Streckencodes (<c>+0x0a</c> ist ein Zeiger in
+    /// die Route). Die beiden decken sich nur zu 84 %, und das ist kein
+    /// Lesefehler, sondern die Bauart. Unsere Umstellung vom 12.08., den Zug
+    /// auf die sec22-Kette zu setzen, war eine Vereinfachung; die treue Fassung
+    /// führt beide nebeneinander und lässt die Feinlage die Waggons auf die
+    /// Schiene setzen. Das ist ein eigener Durchgang, kein Zusatz hier.</para>
+    ///
     /// <b>Die Zahl gegen »ruckelt es?«</b> — nicht beurteilt, gemessen: die
     /// größte Ortsänderung eines Waggons von einem Bild zum nächsten, in
     /// Kartenpixeln, und die daraus folgende Geschwindigkeit in Zellen je
