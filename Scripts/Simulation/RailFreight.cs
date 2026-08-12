@@ -162,6 +162,24 @@ public partial class MapEntityLayer : Node2D
     /// der Rückfall für eine Linie ohne Codes.</summary>
     private const float RailStepSeconds = TrainStepSeconds;
 
+    /// <summary>
+    /// <b>Wieviele TAKTE jeder Waggon hinter Waggon 0 herfährt</b> — gemessen,
+    /// nicht gesetzt.
+    ///
+    /// <para><c>spoj_launch</c> legt bei der Abfahrt nur Waggon 0 an
+    /// (Startzähler 20), und Waggon <c>w+1</c> entsteht erst, wenn <c>w</c>
+    /// seinen Streckenzeiger auf 1 schaltet — mit den Startzählern
+    /// <b>20 / 40 / 25 / 40</b> aus den Sprungtabellen @0x4C687C und @0x4C688C
+    /// (F: 0x4C6428 / 0x4C6438, beide Fassungen gleich) und dem Abzug 8 je Takt
+    /// (sec44 +0x0c). Über 709 Linien aus 54 Karten nachgefahren: die Abstände
+    /// sind 4, 3 und 4 Takte, 21632 Messungen je Paar, kein Gegenbeispiel.</para>
+    ///
+    /// <para>Zum Vergleich kostet ein Streckenstück 5 Takte (gerade) oder 4
+    /// (diagonal) — der Rückstand ist also KLEINER als ein Schritt. Deshalb
+    /// stehen zwei Waggons im Original ständig auf derselben Zelle und trotzdem
+    /// nie auf demselben Punkt.</para></summary>
+    private static readonly int[] RailWagonLagTicks = { 0, 4, 7, 11 };
+
     /// <summary>Die Fahrzeit dieser Linie in Sekunden, aus ihren eigenen
     /// Streckencodes. Ein UNGERADES Stück ist der Halbschritt einer Diagonale
     /// und kostet 4 Takte, ein gerades eine ganze Zelle und kostet 5.
@@ -453,13 +471,65 @@ public partial class MapEntityLayer : Node2D
         // ausgemittelt. Das BILD (w.Piece) haengt weiter am ganzen Schritt —
         // ein Schienenstueck gibt es nur in acht Richtungen, ein halbes gibt es
         // nicht.
-        float leadF = Mathf.Clamp(p, 0f, 1f) * last;
-        if (l.Dir == 1) leadF = last - leadF;
-        int lead = Mathf.FloorToInt(leadF);
-        float frac = leadF - lead;
         _lineCellPiece.TryGetValue(l.Slot, out var pcs);
+        // Der Rueckstand in ZELLEN unserer Kette. ⚠ Er darf NICHT ueber die
+        // Fahrzeit gerechnet werden: die zaehlt STRECKENSCHRITTE, und eine
+        // Diagonale sind zwei davon auf einer Zelle. Auf Linie 4 der map_NET02
+        // stehen 9 Schritte gegen 5 Zellen -- der erste Anlauf hat den Abstand
+        // dadurch auf 7,6 px zusammenschrumpfen lassen statt der rund 32 px,
+        // die das Original haelt.
+        //
+        // Ein gerader Schritt kostet 5 Takte und ist genau eine Zelle
+        // (Schrittpreis 40, Abzug 8 -- @0x4C6E53 / sec44 +0x0c). Ein Takt ist
+        // damit ein Fuenftel Zelle. ⚠ UNSERE NAEHERUNG: auf einer Diagonale
+        // kostet eine Zelle im Original acht Takte (zwei Halbschritte zu 4),
+        // dort waere der Rueckstand also etwas kleiner. Unsere Kette kennt den
+        // Unterschied nicht mehr, seit eine Diagonale EINE Zelle ist.
+        float lagCells = last > 0 ? 1f / 5f / last : 0f;
         foreach (var w in list)
         {
+            // ⚠ 13.08.2026 — DER RUECKSTAND IST EINE ZEIT, KEINE ZELLENZAHL.
+            //
+            // Hier stand `step = clamp(lead - dir*Index, 0, last)`: alle vier
+            // Waggons hingen an EINER Zugspitze mit Indexversatz, und an der
+            // Endstation lief jeder in dieselbe Klammer. Gemessen standen
+            // dadurch in ~10 % der Linienbilder mehrere Waggons auf derselben
+            // Zelle -- im schlimmsten Fall alle vier auf derselben
+            // Fliesskommastelle, also vier Sprites Pixel auf Pixel.
+            //
+            // Das Original kennt gar keine Zugspitze. Jeder Waggon ist ein
+            // eigener Satz (Platz = Linie + 60*Waggonnummer, Feld 0xB95F48 mit
+            // 240 Saetzen; die Umrechnung steht in spoj_launch @0x4C6713,
+            // F: 0x4C62BE) mit eigenem Zaehler +0x08 und eigenem
+            // Streckenzeiger +0x0a. spoj_launch legt bei der Abfahrt NUR
+            // Waggon 0 an; Waggon w+1 entsteht erst in dem Takt, in dem w
+            // seinen Zeiger auf 1 schaltet (@0x4C6D6B, rueckwaerts @0x4C7204).
+            // Die vier Startzaehler sind fest 20/40/25/40 (Sprungtabellen
+            // @0x4C687C/0x4C688C, F: 0x4C6428/0x4C6438), der Abzug ist 8 je
+            // Takt -- daraus die gemessenen Rueckstaende 0/4/7/11 Takte
+            // (21632 Messungen je Paar, kein Gegenbeispiel).
+            //
+            // Weil ein Streckenstueck 4 oder 5 Takte dauert, der Rueckstand
+            // aber nur 3..4, stehen zwei Waggons im Original in 54,76 % aller
+            // Bilder auf DERSELBEN ZELLE -- und trotzdem in 0 von 216606
+            // Bildern auf demselben Punkt (kleinster Abstand 12 px). Es trennt
+            // sie die Feinlage, nicht die Zelle. Genau das bilden wir hier ab:
+            // der Rueckstand geht als ZEIT in den Fahrtfortschritt, und
+            // gerundet wird erst ganz am Ende.
+            //
+            // An der Endstation wird nicht geklemmt. Das Original loescht
+            // jeden Waggon einzeln (`+0x00 := 0`); bei uns faellt er aus dem
+            // Fortschrittsband und wird schlicht nicht gezeichnet -- deshalb
+            // erscheinen die vier bei der Abfahrt nacheinander und
+            // verschwinden bei der Ankunft nacheinander, wie im Original.
+            int k = Mathf.Clamp(w.Index, 0, RailWagonLagTicks.Length - 1);
+            float pw = p - RailWagonLagTicks[k] * lagCells;
+            w.Hidden = pw < 0f || pw > 1f;
+
+            float leadF = Mathf.Clamp(pw, 0f, 1f) * last;
+            if (l.Dir == 1) leadF = last - leadF;
+            int lead = Mathf.FloorToInt(leadF);
+            float frac = leadF - lead;
             // ⚠ 11.08.2026 — hier stand der Faktor 2, und das war der Grund
             // fuer beide Beobachtungen des Spielers auf einmal: »die Bahn war
             // weder sauber zusammengebaut, noch war dort eine Bahnstrecke«.
@@ -506,7 +576,7 @@ public partial class MapEntityLayer : Node2D
             // gezaehlt, um die Treppe einer Diagonale auszugleichen; die
             // Treppe gibt es in der Zellenkette nicht mehr.
             int dir = l.Dir == 0 ? 1 : -1;
-            int step = Mathf.Clamp(lead - dir * w.Index, 0, last);
+            int step = Mathf.Clamp(lead, 0, last);
             w.Step = step;
             w.Dir = dir;
             // ⚠ 12.08.2026 — hier stand `step + dir`, und das hat die halbe
@@ -565,6 +635,13 @@ public partial class MapEntityLayer : Node2D
     /// vorkommt; <b>ob es im Bild stört, sagt ein Bild und nicht diese Zahl.</b>
     /// </summary>
     public int RailSquashWorst, RailSquashFrames, RailSquashSeen;
+
+    /// <summary>Ab welchem Abstand zwei Waggons als „aufeinander" gelten, in
+    /// Kartenpixeln. Der kleinste Abstand, den das Original je erzeugt, ist
+    /// <b>12 px</b> (nachgefahren über 709 Linien, 118 612 Bilder mit zwei
+    /// Waggons auf derselben Zelle, kleinster Bildabstand 12,0 px bei 40 px
+    /// Zellbreite) — wer darunter liegt, deckt einen Waggon zu.</summary>
+    private const float RailSquashPx = 10f;
 
     /// <summary>Dasselbe für DIESES Bild statt über den ganzen Lauf, samt der
     /// Zelle, auf der es passiert. Damit kann <c>--shot-when=squash</c> auf den
@@ -690,11 +767,23 @@ public partial class MapEntityLayer : Node2D
                 if (list.Count > 1 && l.Faze is >= 1 and <= 9)
                 {
                     RailSquashSeen++;
+                    // ⚠ 13.08.2026 — gezaehlt wird jetzt der PUNKT, nicht die
+                    // Zelle. Zwei Waggons auf derselben Zelle sind im Original
+                    // der Normalfall (54,76 % aller Bilder, nachgefahren ueber
+                    // 709 Linien); sie duerfen nur nicht auf DEMSELBEN Punkt
+                    // liegen, denn dann sieht man einen statt zweier. Der
+                    // kleinste Abstand des Originals ist 12 px bei 40 px
+                    // Zellbreite -- alles darunter ist unser Fehler.
+                    // Nicht gezeichnete Waggons zaehlen nicht mit.
                     int worst = 1; var wo = list[0];
                     foreach (var a in list)
                     {
+                        if (a.Hidden) continue;
                         int n = 0;
-                        foreach (var b in list) if (b.Step == a.Step) n++;
+                        foreach (var b in list)
+                            if (!b.Hidden
+                                && Mathf.Abs(b.Col - a.Col) * TileW < RailSquashPx
+                                && Mathf.Abs(b.Row - a.Row) * TileH < RailSquashPx) n++;
                         if (n > worst) { worst = n; wo = a; }
                     }
                     if (worst > 1) RailSquashFrames++;
@@ -926,8 +1015,17 @@ public partial class MapEntityLayer : Node2D
         // Anschlusszeile ihres Endgebaeudes. Gezaehlt wird VOR dem Ruecken,
         // damit --rail-lay=nodock (Gegenprobe) dieselbe Zahl zeigt und sich
         // nur das Bild aendert; RailDockMoved sagt, wieviele geholt wurden.
-        sb.Append($" | Anschluss: {RailDockOff} von {RailDockChecked} Enden lagen " +
-                  $"NICHT auf der Anschlusszeile, {RailDockMoved} nachgefuehrt");
+        // ⚠ 13.08.2026 — hier stand »Anschluss: 0 von 0 Enden lagen NICHT auf
+        // der Anschlusszeile, 0 nachgefuehrt«. Die Zeile berichtete ueber das
+        // RUECKEN, und das laeuft seit sec22 gar nicht mehr — eine Null von
+        // Null, die sich wie ein bestandener Prueflauf liest. Sie steht nur
+        // noch da, wo wirklich gerueckt wird; sonst zaehlt die Frage, die
+        // vorher niemand stellte: erreicht das Ende sein Gebaeude ueberhaupt?
+        if (RailDockChecked > 0)
+            sb.Append($" | Anschluss: {RailDockOff} von {RailDockChecked} Enden lagen " +
+                      $"NICHT auf der Anschlusszeile, {RailDockMoved} nachgefuehrt");
+        sb.Append($" | Linienenden: {RailEndFar} von {RailEndChecked} weiter als 2 Zellen " +
+                  $"vom Endgebaeude (schlimmstes {RailEndWorst})");
         sb.Append(RailDeckReport());
         // Der Beweis fuer »faehrt gleitend statt zu huepfen«: die Stelle des
         // ersten fahrenden Waggons auf ein Hundertstel genau. Steht dort eine
@@ -942,7 +1040,8 @@ public partial class MapEntityLayer : Node2D
                           $", davon getrennt {RailWagonTurnCount} Fahrtwechsel " +
                           $"(groesster Sprung {RailWagonTurnMaxPx:0.00} px)");
                 sb.Append($" | Stauchung: {RailSquashFrames} von {RailSquashSeen} Linienbildern mit " +
-                          $"mehr als einem Waggon auf EINER Zelle, schlimmstenfalls {RailSquashWorst}");
+                          $"zwei Waggons naeher als {RailSquashPx:0} px, schlimmstenfalls " +
+                          $"{RailSquashWorst} (Original: kleinster Abstand 12 px)");
                 break;
             }
         return sb.ToString();

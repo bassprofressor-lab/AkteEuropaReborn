@@ -7874,6 +7874,16 @@ public partial class MapEntityLayer : Node2D
         /// 0 Züge, jede Linie faze 0) bekommen so trotzdem einen sichtbaren Zug
         /// — der Automat legt ihn beim Abfahren an.</summary>
         public bool Freight;
+
+        /// <summary><b>Es gibt diesen Waggon gerade nicht.</b> Im Original ist
+        /// ein Waggon ein eigener Satz, der bei der Abfahrt ERZEUGT und am
+        /// Streckenende einzeln GELÖSCHT wird (<c>+0x00 := 0</c>, danach
+        /// überspringt ihn <c>train_tick_all</c>); Waggon <c>w+1</c> entsteht
+        /// erst, wenn <c>w</c> auf Streckenzeiger 1 weiterschaltet. Bei uns
+        /// bleibt der Satz liegen und wird nur nicht gezeichnet — das Ergebnis
+        /// ist dasselbe, und es ersetzt das alte Klemmen, das die vier Waggons
+        /// an der Endstation aufeinanderstapelte.</summary>
+        public bool Hidden;
     }
 
     private readonly List<Wagon> _wagons = new();
@@ -8038,8 +8048,16 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Sekunden je Halbschritt einer Diagonale.</summary>
     private const float TrainStepSecondsDiagonal = TrainStepTicksDiagonal / (float)TickScale;
 
+    /// <summary>Welches Bilderband ein Waggon zeigt. ⚠ 13.08.2026 — Waggon 3
+    /// stand hier auf 58 (Güterwagen) und ist in Wahrheit eine <b>zweite
+    /// LOK</b>: der Zeichenverteiler @0x42B4BF (F: 0x42A6AC) schickt Waggon 0
+    /// und Waggon 3 auf denselben Sprite-Grundwert <c>[0x77C956]</c>, die
+    /// Waggons 1 und 2 dagegen auf <c>[0x77C95A]</c>. Waggon 3 wird nur um vier
+    /// von acht Richtungen gedreht (@0x42B542: <c>add bx,4; cmp bx,7; jle;
+    /// sub bx,8</c>) — Zuglok vorn, Schublok hinten, zwei Güterwagen
+    /// dazwischen.</summary>
     private static readonly Dictionary<int, int> WagonPart =
-        new() { { 0, 57 }, { 1, 58 }, { 2, 58 }, { 3, 58 } };
+        new() { { 0, 57 }, { 1, 58 }, { 2, 58 }, { 3, 57 } };
 
     private Texture2D? GetTrainTexture(int part, int piece)
     {
@@ -8721,6 +8739,7 @@ public partial class MapEntityLayer : Node2D
     private void RailSnapToDock()
     {
         RailDockOff = RailDockChecked = RailDockMoved = 0;
+        RailEndChecked = RailEndFar = RailEndWorst = 0;
         RailDeckOffSum = RailDeckOffMax = RailDeckOffCount = RailDeckFlush = 0;
         RailDeckByType.Clear();
         _railTiles = null;              // die gelegten Stuecke neu bauen lassen
@@ -8746,6 +8765,8 @@ public partial class MapEntityLayer : Node2D
             // weiter (RailMeasureDeck unten), damit die Zahl den Beweis fuehrt.
             if (_railCells.Count > 0)
             {
+                RailMeasureEnd(cells, bySlot, l.Bud2, true);
+                RailMeasureEnd(cells, bySlot, l.Bud1, false);
                 RailMeasureDeck(cells, bySlot, l.Bud2, true);
                 RailMeasureDeck(cells, bySlot, l.Bud1, false);
                 continue;
@@ -8767,6 +8788,43 @@ public partial class MapEntityLayer : Node2D
             RailMeasureDeck(cells, bySlot, l.Bud2, true);
             RailMeasureDeck(cells, bySlot, l.Bud1, false);
         }
+    }
+
+    /// <summary>
+    /// <b>Erreicht dieses Linienende sein Gebäude überhaupt?</b> — der Abstand
+    /// der letzten Gleiszelle zur Grundfläche des Endgebäudes, in Zellen
+    /// (Tschebyschew, also 0 = die Zelle liegt auf dem Grundriss).
+    ///
+    /// <para>⚠ 13.08.2026 — <b>diese Frage stellte bisher niemand.</b>
+    /// <see cref="RailMeasureDeck"/> steigt bei einem Ende, das weiter als eine
+    /// Spalte neben dem Gebäude liegt, wortlos aus (dieselbe Schranke wie in
+    /// <see cref="RailSnapEnd"/>) — die schöne Zahl »42 von 42 Enden bündig«
+    /// zählt also nur die Enden, die den Vorfilter schon bestanden haben. Ein
+    /// Ende, das ganz woanders aufhört, fällt dort heraus und taucht in keiner
+    /// Meldung auf. Genau die Fehlerklasse zählt jetzt hier mit.</para>
+    ///
+    /// <para>Und die Zeile, die dafür weichen konnte, war noch schlimmer:
+    /// »Anschluss: 0 von 0 Enden lagen NICHT auf der Anschlusszeile« berichtete
+    /// über das RÜCKEN — und das läuft seit sec22 gar nicht mehr
+    /// (<see cref="RailSnapToDock"/> steigt vorher aus). Eine Null von Null,
+    /// die sich wie ein bestandener Prüflauf liest.</para></summary>
+    public int RailEndChecked, RailEndFar, RailEndWorst;
+
+    private void RailMeasureEnd(List<Vector2> cells, Dictionary<int, Entity> bySlot,
+                                int slot, bool tail)
+    {
+        if (cells.Count == 0 || !bySlot.TryGetValue(slot, out var b)) return;
+        var cell = cells[tail ? ^1 : 0];
+        int col = Mathf.RoundToInt(cell.X), row = Mathf.RoundToInt(cell.Y);
+        int dc = Mathf.Max(Mathf.Max(b.Col - col, 0), col - (b.Col + Mathf.Max(1, b.FootW) - 1));
+        int dr = Mathf.Max(Mathf.Max(b.Row - row, 0), row - (b.Row + Mathf.Max(1, b.FootH) - 1));
+        int d = Mathf.Max(dc, dr);
+        RailEndChecked++;
+        // 2 Zellen Spielraum: die Anschlusszeile liegt je nach Gebäudeart auf
+        // +1 oder +2, und der Stummel steht bei manchen Arten eine Spalte
+        // neben dem Grundriss (siehe RailDockRow).
+        if (d > 2) RailEndFar++;
+        if (d > RailEndWorst) RailEndWorst = d;
     }
 
     /// <summary>Miss die Höhendifferenz an EINEM Linienende und schreib sie in
@@ -8965,6 +9023,11 @@ public partial class MapEntityLayer : Node2D
     /// 341..343 — vier Schirmzeilen sind bei Zoom 4 genau ein Kartenpixel.</para>
     /// </summary>
     private const int RailDeckOffset = 23;
+
+    /// <summary>Wohin der Waggon gegen sein eigenes Gleisbild rückt. Gelesen:
+    /// Original <c>Waggon − Gleis = (+6, −28)</c> in der Zellmitte, wir hatten
+    /// <c>(0, −23)</c>. Siehe den Kommentar in <c>DrawTrains</c>.</summary>
+    private static readonly Vector2 WagonOverRail = new(6, -5);
 
     /// <summary>Wo die Schienenoberkante eines Gleisbildes INNERHALB ihrer
     /// Zelle liegt: <c>TileH/2 − ComposedAnchor.y + RailDeckOffset + 29</c>.
@@ -9209,6 +9272,9 @@ public partial class MapEntityLayer : Node2D
     {
         foreach (var w in _wagons)
         {
+            // Am Streckenende loescht das Original jeden Waggon einzeln; bei
+            // uns bleibt der Satz liegen und wird hier uebersprungen.
+            if (w.Hidden) continue;
             int part = WagonPart.TryGetValue(w.Index, out var pp) ? pp : 58;
             int piece = w.Index == 3 ? (w.Piece + 4) & 7 : w.Piece;   // @0x42b52a
             var tex = GetTrainTexture(part, piece);
@@ -9218,9 +9284,31 @@ public partial class MapEntityLayer : Node2D
                 DrawCircle(at, 3f, new Color(0.9f, 0.6f, 0.2f));
                 continue;
             }
-            // the wagon frames come off the same 64x56 canvas as the unit
-            // parts, so they use the same anchor
-            DrawTexture(tex, at - ComposedAnchor);
+            // ⚠ 13.08.2026 — der Waggon sitzt gegen SEIN GLEISBILD versetzt,
+            // und der Versatz ist gelesen: das Original reiht das Gleis bei
+            // `G + (-26, -82)` ein und den Waggon bei `G + (feinX-40,
+            // feinY-110)` (Einreiher @0x42DF40 bzw. @0x42E100, F: 0x42D130 /
+            // 0x42D2E0; die Konstanten 6/62 bzw. 20/90 stehen dort woertlich
+            // und in beiden Fassungen gleich). Mit der Feinlage (20,0) einer
+            // Zellmitte macht das
+            //     Waggon - Gleis = (+6, -28).
+            // Wir hatten (0, -23) -- der Waggon stand also 6 px zu weit links
+            // und 5 px zu tief auf der Schiene.
+            //
+            // ⚠ NICHT uebernommen ist die zweite Haelfte desselben Berichts:
+            // dass unser Deck 50 px zu tief liege. Diese Zahl ist gegen eine
+            // Bodenlinie gerechnet, die aus Sprite-Unterkanten hergeleitet
+            // wurde -- ihr Verhaeltnis zu unserem MapBaker (BlitAnchor = -50,
+            // dieselbe Zahl) ist ausdruecklich ungelesen. Unser Deck sitzt
+            // gemessen BUENDIG auf den Gleisstummeln der Originalgrafik
+            // (42 von 42 Enden, 0 px, --rail-check), und das ist die einzige
+            // Messung gegen echte Originalpixel, die wir haben.
+            //
+            // ⚠ UNSERE NAEHERUNG: die Feinlage haengt im Original an der
+            // PARITAET DER HALBZEILE -- (20,0) in der Zellmitte, (0,10) auf
+            // der Randmitte. Unsere Kette kennt nur ganze Zellen, also gilt
+            // hier immer der gerade Fall. Die Randmitten bleiben offen.
+            DrawTexture(tex, at - ComposedAnchor + WagonOverRail);
         }
     }
 
