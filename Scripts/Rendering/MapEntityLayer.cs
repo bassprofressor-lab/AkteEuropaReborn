@@ -7922,6 +7922,14 @@ public partial class MapEntityLayer : Node2D
         /// @0x4B0A3B: <c>cmp …, 0x64 / setae</c>).</summary>
         public bool Broken => Frame >= 100;
 
+        /// <summary>Welche der beiden Trümmervarianten. <c>rail_hit</c>
+        /// @0x4B0460 rechnet <c>bild += (10 + zufall&amp;1)·10</c>, legt also
+        /// 100 oder 110 auf das Grundbild — die Zehnerstelle trägt den Wurf,
+        /// und er steht dauerhaft in der Karte. <b>Gelesen, nicht neu
+        /// gewürfelt</b>, sonst tanzt der Schutt bei jedem Laden.
+        /// Aus 4.DM: Bilder 100..117, also beide Varianten belegt.</summary>
+        public int BrokenVariant => Frame / 10 % 10;
+
         /// <summary><b>Die Stütze ist keine Setzung mehr.</b> Der Zeichner nimmt
         /// Teil 65 (Träger MIT Bock) genau dann, wenn der PLATZ des Stücks im
         /// Feld durch sechs teilbar ist, sonst den blanken Träger 64 —
@@ -8828,6 +8836,11 @@ public partial class MapEntityLayer : Node2D
     /// die sich wie ein bestandener Prüflauf liest.</para></summary>
     public int RailEndChecked, RailEndFar, RailEndWorst;
 
+    /// <summary>Wieviele Trümmerfelder (Teil 69) gelegt wurden — die Zahl, an
+    /// der sich sehen lässt, ob eine Karte überhaupt zerschossenes Gleis hat.
+    /// map_NET02 hat keines; <c>4.DM</c> hat 49 Zellen, <c>7.DM</c> fünf.</summary>
+    public int RailBrokenDrawn;
+
     private void RailMeasureEnd(List<Vector2> cells, Dictionary<int, Entity> bySlot,
                                 int slot, bool tail)
     {
@@ -9067,9 +9080,15 @@ public partial class MapEntityLayer : Node2D
         // ⚠ 13.08.2026 — hier stand `frame & 7`, und damit fielen die vier
         // RAMPEN (Bild 6..9) auf 6,7,0,1 zurueck: die beiden senkrechten Rampen
         // wurden als waagerechtes und senkrechtes Flachstueck gezeichnet.
-        int f = frame is >= 0 and <= 9 ? frame : 0;
-        int p = part is >= 64 and <= 68 ? part : 64;
-        int k = f + p * 16;
+        // ⚠ 14.08.2026 — Teil 69 (das zerschossene Gleis) fuehrt ZWANZIG echte
+        // Bilder: zehn Formen mal zwei Zufallsvarianten. Bei 64..68 sind die
+        // Bilder 10..19 dagegen einfarbige SCHATTENMASKEN und werden nie
+        // gezeichnet (belegt: Bild 3930 hat genau EINEN Palettenindex, Bild
+        // 4030 dagegen 15). Die Schranke haengt darum am Teil.
+        int max = part == 69 ? 19 : 9;
+        int f = frame >= 0 && frame <= max ? frame : 0;
+        int p = part is >= 64 and <= 69 ? part : 64;
+        int k = f + p * 32;
         if (_railTex.TryGetValue(k, out var t)) return t;
         string path = Core.Content.Path($"Units/train/rail{p}/f{f}.png");
         t = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
@@ -9136,6 +9155,7 @@ public partial class MapEntityLayer : Node2D
         if (_railTiles != null) return _railTiles;
         var tiles = new List<RailTile>();
         RailTilesLoose = 0;
+        RailBrokenDrawn = 0;
         if (RailProbeSkipCols) RailTilesOld(tiles);
         else if (_railCells.Count > 0)
         {
@@ -9145,14 +9165,36 @@ public partial class MapEntityLayer : Node2D
             var seen = new HashSet<(int, int)>();
             foreach (var c in _railCells)
             {
-                // Ein zerschossenes Stueck wird NICHT gezeichnet: die Luecke ist
-                // genau das, was ein zerstoertes Gleis im Bild ausmacht.
-                // ⚠ UNSERE WAHL — das Original hat dafuer ein eigenes Bild
-                // (Bildindex partBase(64)+100..119 im gemeinsamen Bilderband,
-                // Zeichenzweig @0x42D4D5), das wir noch nicht ausgepackt haben.
-                if (c.Broken) continue;
-                if (!seen.Add((c.Col, c.Row))) continue;
+                // ⚠ Die Doppelfilterung gilt nur fuer HEILE Stuecke. Wo zwei
+                // Linien dieselbe Zelle belegen, sind zwei gleiche Traeger
+                // uebereinander unsichtbar -- ein Truemmerfeld dagegen ginge
+                // verloren (auf map_DM_4 genau eines von 49). Das Original
+                // filtert gar nicht: es laeuft ueber alle 3000 Saetze und
+                // zeichnet jeden (@0x42DF40).
+                if (!c.Broken && !seen.Add((c.Col, c.Row))) continue;
                 var at = RailPoint(new Vector2(c.Col, c.Row));
+                if (c.Broken)
+                {
+                    // ⚠ 14.08.2026 — hier stand `continue`: ein zerschossenes
+                    // Stueck liessen wir schlicht weg, und das war UNSERE WAHL.
+                    // Die LUECKE im Deck ist richtig -- der Farb-Durchgang des
+                    // Originals steigt bei `bild >= 100` aus, BEVOR er Teil 64
+                    // oder 65 waehlt (@0x42B743, F: @0x42A930), es gibt dort
+                    // also weder Traeger noch Bock. Was fehlte, ist der SCHUTT
+                    // darunter: `partBase(64) + bild` mit bild in [100,119]
+                    // sind die Bilder 4020..4039, und die Teiltabelle @0x77C870
+                    // gibt 69 -> 4020. Also Teil 69, Bild `form + 10*variante`.
+                    //
+                    // Angesehen: verstreute Splitter, rostrot mit hellgrauen
+                    // Bruchstellen, 6..13 % Deckung -- kein Gleisrest, keine
+                    // Stuempfe. Sie liegen auf dem BODEN (yoff ~63 gegen 29 des
+                    // Traegers); dieser Versatz steckt schon in der Leinwand
+                    // des exportierten Bildes, deshalb dieselbe Ablage.
+                    tiles.Add(new RailTile(at, c.Base + 10 * c.BrokenVariant,
+                                           RailDeckOffset, c.Row, 69));
+                    RailBrokenDrawn++;
+                    continue;
+                }
                 tiles.Add(new RailTile(at, c.Base, RailDeckOffset, c.Row,
                                        c.Pylon ? 65 + c.PylonKind : 64));
             }

@@ -86,7 +86,21 @@ public sealed class UnitsExporter
     /// führen (gemessen), zeigt <c>partBase(65) + 20·k</c> auf die Teile
     /// <b>65, 66, 67, 68</b> — vier STÜTZENLÄNGEN, ausgewählt aus dem Gelände
     /// neben dem Stück.</para></summary>
-    public static readonly int[] RailParts = { 64, 65, 66, 67, 68 };
+    /// <para>⚠ 14.08.2026 — <b>Teil 69 dazu: das ZERSCHOSSENE Gleis.</b> Der
+    /// Farb-Durchgang steigt bei <c>bild >= 100</c> aus, bevor er 64 oder 65
+    /// wählt (<c>cmp bl,0x64 / jae</c> @0x42B743, F: @0x42A930) — er zeichnet
+    /// dort also weder Träger noch Bock, sondern <c>partBase(64) + bild</c>,
+    /// und mit <c>bild ∈ [100,119]</c> sind das die Bilder 4020..4039. Die
+    /// Teiltabelle @0x77C870 gibt 64→3920, 65→3940, 66→3960, 67→3980,
+    /// 68→4000, <b>69→4020</b> — also exakt und vollständig Teil 69.</para>
+    ///
+    /// <para>Anders als bei 64..68 sind dessen Bilder 10..19 <b>keine
+    /// Schattenmasken</b>, sondern die zweite Zufallsvariante: gemessen hat
+    /// Bild 3930 (Teil 64 +10) genau EINEN Palettenindex, Bild 4030 dagegen
+    /// fünfzehn. <c>rail_hit</c> @0x4B0460 würfelt sie einmal beim Treffer
+    /// (<c>bild += (10 + zufall&amp;1)·10</c>) und sie bleibt im Bildwert
+    /// stehen — beim Laden also LESEN, nicht neu würfeln.</para></summary>
+    public static readonly int[] RailParts = { 64, 65, 66, 67, 68, 69 };
 
     /// <summary>Read off the rendered blocks of infantry set 0: 0..7 walk,
     /// 9..10 fire, 11 standing, 12..14 falling. Said as observed, because it

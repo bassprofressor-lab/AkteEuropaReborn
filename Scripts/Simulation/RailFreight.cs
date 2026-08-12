@@ -946,7 +946,9 @@ public partial class MapEntityLayer : Node2D
             return " | Quelle: sec22 fehlt, Strecke ABGELEITET (unsere Konstruktion)";
         var sb = new System.Text.StringBuilder();
         sb.Append($" | Quelle: sec22 der Karte, {RailCellsFromMap} Gleiszellen");
-        if (RailCellsBroken > 0) sb.Append($" ({RailCellsBroken} zerschossen, nicht gezeichnet)");
+        if (RailCellsBroken > 0)
+            sb.Append($" ({RailCellsBroken} zerschossen, davon {RailBrokenDrawn} als " +
+                      "Truemmer gelegt — Teil 69, Bild 4020..4039)");
         sb.Append($" | alte Ableitung wich ab: {RailDiffOnlyOurs} Zellen nur wir, " +
                   $"{RailDiffOnlyMap} nur Karte, {RailDiffFrame} von {RailDiffChecked} " +
                   "gemeinsamen mit anderem Bild");
