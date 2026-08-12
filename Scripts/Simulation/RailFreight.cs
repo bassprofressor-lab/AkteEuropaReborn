@@ -911,9 +911,9 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     private string RailDeckReport()
     {
-        if (RailDeckOffCount == 0) return " | Deckhoehe: kein Ende mit gemessenem Anbau";
+        if (RailDeckOffCount == 0) return " | Anschlusszeile: kein Ende mit gemessenem Anbau";
         var sb = new System.Text.StringBuilder();
-        sb.Append($" | Deckhoehe: {RailDeckFlush} von {RailDeckOffCount} Enden buendig " +
+        sb.Append($" | Anschlusszeile: {RailDeckFlush} von {RailDeckOffCount} Enden treffen sie " +
                   $"(0 px), schlimmste Abweichung {RailDeckOffMax} px, " +
                   $"im Mittel {(float)RailDeckOffSum / RailDeckOffCount:0.0} px");
         var per = new List<string>();
@@ -1026,6 +1026,10 @@ public partial class MapEntityLayer : Node2D
                       $"NICHT auf der Anschlusszeile, {RailDockMoved} nachgefuehrt");
         sb.Append($" | Linienenden: {RailEndFar} von {RailEndChecked} weiter als 2 Zellen " +
                   $"vom Endgebaeude (schlimmstes {RailEndWorst})");
+        // ⚠ Der Kopf dieser Zeile hiess "Deckhoehe" und misst die Hoehe NICHT:
+        // RailDeckPixel steht auf beiden Seiten der Differenz und kuerzt sich
+        // heraus (siehe RailDeckOffSum). Sie misst die ZEILE. Die Hoehe misst
+        // aekernel-tools/rail_deck_overlay.py gegen die Gebaeudegrafik.
         sb.Append(RailDeckReport());
         // Der Beweis fuer »faehrt gleitend statt zu huepfen«: die Stelle des
         // ersten fahrenden Waggons auf ein Hundertstel genau. Steht dort eine

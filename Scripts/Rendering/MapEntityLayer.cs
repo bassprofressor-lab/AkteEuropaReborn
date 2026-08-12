@@ -8655,12 +8655,30 @@ public partial class MapEntityLayer : Node2D
     ///   Gleis:    zeile·20 − ElevOf(spalte,zeile)·15 + RailDeckPixel
     ///   Gebäude:  Ankerzeile·20 − ElevOf(Ankerspalte,Ankerzeile)·15 + RailDockDeckPixel(typ)
     /// </code>
-    /// <para>Die Differenz muss 0 sein. Sie fängt drei verschiedene Fehler auf
-    /// einmal: eine falsche Anschlusszeile (Vielfaches von 20), eine
-    /// Geländestufe zwischen Gebäude und letzter Gleiszelle (Vielfaches von
-    /// 15) und einen falschen Deckversatz (ein bis zwei Pixel). Der zweite
-    /// Fall ist der, für den das Original die Rampen f6..f9 hat, die wir nicht
-    /// legen — er wird hier nur GEMESSEN, nicht behoben.</para>
+    /// <para>Die Differenz muss 0 sein. Sie fängt eine falsche Anschlusszeile
+    /// (Vielfaches von 20) und eine Geländestufe zwischen Gebäude und letzter
+    /// Gleiszelle (Vielfaches von 15). Der zweite Fall ist der, für den das
+    /// Original die Rampen f6..f9 hat, die wir nicht legen — er wird hier nur
+    /// GEMESSEN, nicht behoben.</para>
+    ///
+    /// <para>⚠ <b>13.08.2026 — WAS SIE NICHT FÄNGT: den Deckversatz selbst.</b>
+    /// Hier stand, sie fange „einen falschen Deckversatz (ein bis zwei Pixel)"
+    /// mit. Das ist falsch, und zwar per Konstruktion:
+    /// <see cref="RailDeckPixel"/> steckt in <see cref="RailDeckY"/> UND über
+    /// <see cref="RailDockDeckPixel"/> in <see cref="RailDockDeckY"/> — es
+    /// kürzt sich aus der Differenz heraus. Wer <c>RailDeckOffset</c> um 50
+    /// verstellt, bekommt weiterhin „42 von 42 bündig, 0 px". Dieselbe Falle
+    /// wie am 11.08. bei der Streckenform: ein Prüfstand, der unsere Ableitung
+    /// gegen sich selbst hält.</para>
+    ///
+    /// <para>Die HÖHE misst darum <c>aekernel-tools/rail_deck_overlay.py</c>:
+    /// es setzt das Gebäudemuster aus den exportierten Kacheln mit MapBakers
+    /// eigener Rechnung zusammen und legt unser Gleisbild an die Stelle, an die
+    /// die Engine es zeichnet — ein Pixelvergleich gegen ORIGINALGRAFIK.
+    /// Ergebnis 13.08.: die Schienenoberkante bei Anschlusszeile +1 liegt genau
+    /// auf der Oberkante des Gitterträgers des Bahnhofs (Kachelsatz 47, Muster
+    /// 86), die Stücke laufen bündig hinein. <b>RailDeckOffset = 23 ist damit
+    /// gegen Originalpixel belegt.</b></para>
     ///
     /// <para><c>--rail-lay=nodock</c> nimmt die Korrektur heraus, dann steigt
     /// die Zahl: das ist die Gegenprobe.</para>
