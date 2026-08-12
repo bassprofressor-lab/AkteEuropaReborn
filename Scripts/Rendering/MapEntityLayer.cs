@@ -9195,10 +9195,32 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     private const int RailDeckOffset = 23;
 
-    /// <summary>Wohin der Waggon gegen sein eigenes Gleisbild rückt. Gelesen:
-    /// Original <c>Waggon − Gleis = (+6, −28)</c> in der Zellmitte, wir hatten
-    /// <c>(0, −23)</c>. Siehe den Kommentar in <c>DrawTrains</c>.</summary>
-    private static readonly Vector2 WagonOverRail = new(6, -5);
+    /// <summary>
+    /// Wohin der Waggon gegen sein eigenes Gleisbild rückt — <b>nirgendwohin</b>.
+    ///
+    /// <para>⚠ 15.08.2026 ZURÜCKGENOMMEN. Hier stand <c>(6, −5)</c>, hergeleitet
+    /// aus der gelesenen Beziehung <c>Waggon − Gleis = (+6, −28)</c> der beiden
+    /// Einreiher (@0x42DF40 / @0x42E100). Die Zahl ist richtig GELESEN, gilt
+    /// aber im Bezugsrahmen des Originals, wo das Gleis bei <c>G−82</c> sitzt —
+    /// bei uns sitzt es bei <c>Anker+23</c>. Ein Delta aus dem einen Rahmen im
+    /// anderen anzuwenden ist derselbe Fehler, vor dem der 50-px-Punkt am
+    /// 13.08. ausdrücklich gewarnt hat; ich bin bei der kleinen Zahl trotzdem
+    /// hineingelaufen.</para>
+    ///
+    /// <para><b>Nachgemessen an den Bildern selbst:</b> Gleis 64/f0 trägt seine
+    /// Schiene auf den Leinwandzeilen 29..33, der Waggon 58/f0 reicht bis
+    /// Zeile 52. Mit der Ablage <c>+23</c> für das Gleis liegt die
+    /// Schienenoberkante auf 52 — <b>genau dort, wo die Unterkante des Waggons
+    /// endet</b>. Ohne Versatz sitzt der Zug also auf der Schiene; mit
+    /// <c>(6,−5)</c> schwebte er 5 px darüber, und genau das war im Bild zu
+    /// sehen.</para>
+    ///
+    /// <para>⚠ Offen bleibt das x: der Waggonkörper füllt die Spalten 13..35
+    /// (Mitte 24), das Gleisbild 10..49 (Mitte 29,5). Der Waggon steht also
+    /// 5,5 px links der Schienenmitte. Ob das die Kunst so will oder eine
+    /// Ablage fehlt, ist NICHT entschieden — es wird hier nichts geschoben,
+    /// bevor es gemessen ist.</para></summary>
+    private static readonly Vector2 WagonOverRail = Vector2.Zero;
 
     /// <summary>Wo die Schienenoberkante eines Gleisbildes INNERHALB ihrer
     /// Zelle liegt: <c>TileH/2 − ComposedAnchor.y + RailDeckOffset + 29</c>.

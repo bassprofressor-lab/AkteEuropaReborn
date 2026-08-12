@@ -738,6 +738,85 @@ public partial class MapEntityLayer : Node2D
         UpdateProjectiles(1f / 60f);
     }
 
+    /// <summary>
+    /// <b>Hängt der Zug zusammen?</b> — der Abstand zwischen den GEZEICHNETEN
+    /// Bildern zweier aufeinanderfolgender Waggons, in Kartenpixeln.
+    ///
+    /// <para>Die Frage lässt sich weder am Rückstand allein noch an der
+    /// Zellenzahl beantworten: <b>Lok und Waggon sind verschieden breit</b>
+    /// (Teil 57 je nach Richtung 23..41 px, Teil 58 nur 22..28), und der
+    /// Rückstand ist mit 0/4/7/11 Takten ungleichmässig. Erst beides zusammen
+    /// ergibt die Lücke, die man sieht — gemessen wird deshalb das, was
+    /// wirklich auf dem Schirm steht.</para>
+    ///
+    /// <para>0 heisst: die Bilder berühren sich oder überlappen. Alles darüber
+    /// ist eine sichtbare Lücke.</para></summary>
+    /// <summary>Nur fuer die Fehlersuche: jede Luecke einzeln ausgeben.</summary>
+    private static bool RailGapTrace;
+
+    public float RailGapWorst;
+    public int RailGapPairs, RailGapOpen;
+
+    private readonly Dictionary<int, Rect2I> _trainBox = new();
+
+    /// <summary>Der undurchsichtige Kasten eines Zugbildes auf seiner Leinwand —
+    /// einmal aus dem Bild gelesen und behalten.</summary>
+    private Rect2I TrainBox(int part, int facing)
+    {
+        int key = part * 8 + (facing & 7);
+        if (_trainBox.TryGetValue(key, out var r)) return r;
+        r = new Rect2I(0, 0, 0, 0);
+        string p = Core.Content.Path($"Units/train/{part}/f{facing & 7}.png");
+        if (Godot.FileAccess.FileExists(p))
+        {
+            var img = Image.LoadFromFile(p);
+            if (img != null) r = img.GetUsedRect();
+        }
+        _trainBox[key] = r;
+        return r;
+    }
+
+    /// <summary>Der Kasten eines Waggons in KARTENPIXELN, so wie gezeichnet.</summary>
+    private Rect2 WagonRect(Wagon w)
+    {
+        int part = w.Index == 0 || w.Index == 3 ? 57 : 58;
+        int piece = w.Index == 3 ? (w.Piece + 4) & 7 : w.Piece;
+        var box = TrainBox(part, piece);
+        var at = RailPoint(new Vector2(w.Col, w.Row)) - ComposedAnchor + WagonOverRail;
+        return new Rect2(at.X + box.Position.X, at.Y + box.Position.Y, box.Size.X, box.Size.Y);
+    }
+
+    private void RailMeasureGaps()
+    {
+        RailGapWorst = 0f; RailGapPairs = 0; RailGapOpen = 0;
+        foreach (var kv in _freightWagons)
+        {
+            var list = kv.Value;
+            if (list.Count < 2) continue;
+            for (int i = 1; i < list.Count; i++)
+            {
+                var a = list[i - 1]; var b = list[i];
+                if (a.Hidden || b.Hidden) continue;
+                var ra = WagonRect(a); var rb = WagonRect(b);
+                RailGapPairs++;
+                if (ra.Intersects(rb)) continue;               // beruehren sich
+                float dx = Mathf.Max(0f, Mathf.Max(rb.Position.X - (ra.Position.X + ra.Size.X),
+                                                   ra.Position.X - (rb.Position.X + rb.Size.X)));
+                float dy = Mathf.Max(0f, Mathf.Max(rb.Position.Y - (ra.Position.Y + ra.Size.Y),
+                                                   ra.Position.Y - (rb.Position.Y + rb.Size.Y)));
+                float gap = Mathf.Sqrt(dx * dx + dy * dy);
+                if (gap > 0.5f) RailGapOpen++;
+                if (gap > RailGapWorst) RailGapWorst = gap;
+                if (RailGapTrace && gap > 0.5f)
+                    GD.Print($"[luecke] {gap:0.0} px | Linie {a.Line} " +
+                             $"W{a.Index}(Teil {(a.Index is 0 or 3 ? 57 : 58)} Bild {a.Piece}) " +
+                             $"bei ({a.Col:0.0},{a.Row:0.0}) Breite {ra.Size.X:0}x{ra.Size.Y:0}  ->  " +
+                             $"W{b.Index}(Teil {(b.Index is 0 or 3 ? 57 : 58)} Bild {b.Piece}) " +
+                             $"bei ({b.Col:0.0},{b.Row:0.0}) Breite {rb.Size.X:0}x{rb.Size.Y:0}");
+            }
+        }
+    }
+
     /// <summary>Die Verteilung der vier Stützenfassungen, als Text.</summary>
     private string RailPylonKindsText()
     {
@@ -1371,6 +1450,9 @@ public partial class MapEntityLayer : Node2D
                 sb.Append($" | Stauchung: {RailSquashFrames} von {RailSquashSeen} Linienbildern mit " +
                           $"zwei Waggons naeher als {RailSquashPx:0} px, schlimmstenfalls " +
                           $"{RailSquashWorst} (Original: kleinster Abstand 12 px)");
+                RailMeasureGaps();
+                sb.Append($" | Zusammenhang: {RailGapOpen} von {RailGapPairs} Waggonpaaren mit " +
+                          $"sichtbarer Luecke, groesste {RailGapWorst:0.0} px");
                 break;
             }
         return sb.ToString();
