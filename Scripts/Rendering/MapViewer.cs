@@ -535,6 +535,12 @@ public partial class MapViewer : Node2D
         {
             if (a.StartsWith("--shot=")) _shotPath = a[7..];
             else if (a.StartsWith("--shot-delay=")) _shotDelay = a[13..].ToInt();
+            else if (a.StartsWith("--shot-when="))
+            {
+                var q = a["--shot-when=".Length..].Split(',');
+                _shotWhen = q[0];
+                if (q.Length >= 2) _shotWhenN = Mathf.Max(2, q[1].ToInt());
+            }
             // A headless run has no window to draw into, so the screenshot never
             // arrives and nothing ever calls Quit. This ends the run on the clock
             // instead, which is what a scripted check needs.
@@ -930,9 +936,32 @@ public partial class MapViewer : Node2D
 
     private bool _shotHooked;
 
+    /// <summary>`--shot-when=squash[,n]` — nicht nach n Bildern auslösen,
+    /// sondern <b>sobald n Waggons einer Linie auf EINER Zelle stehen</b>, und
+    /// die Kamera dorthin stellen.
+    ///
+    /// <para>Warum es das braucht: die Stauchung beim Wenden dauert etwa eine
+    /// Sekunde je Abfahrt und macht rund ein Zehntel der Fahrzeit aus — ein
+    /// Bild auf gut Glück trifft sie in einem von zehn Fällen, und ein Fehler,
+    /// den nur das Bild zeigt, ist ohne Bild nicht zu beurteilen.
+    /// <c>--shot-delay</c> bleibt die Aufwärmzeit, ab der überhaupt gesucht
+    /// wird.</para></summary>
+    private string _shotWhen = "";
+    private int _shotWhenN = 4;
+
     private void TakeShotIfDue()
     {
         if (_shotPath.Length == 0 || _frames++ < _shotDelay) return;
+        if (_shotWhen == "squash")
+        {
+            if (_entities.RailSquashNow < _shotWhenN) return;
+            var at = _entities.RailSquashAt;
+            _camera.Position = new Vector2(at.X * 40, at.Y * 20);
+            ClampCamera();
+            GD.Print($"MapViewer: --shot-when=squash ausgeloest — {_entities.RailSquashNow} " +
+                     $"Waggons auf Zelle ({at.X:0.00},{at.Y:0.00}), Linie {_entities.RailSquashLine}\n" +
+                     $"   Waggons: {_entities.RailSquashWagons()}");
+        }
         // The window may be occluded, in which case the compositor stops drawing
         // and the viewport texture still holds a stale frame — force one draw.
         RenderingServer.ForceDraw();

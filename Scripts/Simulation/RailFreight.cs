@@ -566,12 +566,35 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     public int RailSquashWorst, RailSquashFrames, RailSquashSeen;
 
+    /// <summary>Dasselbe für DIESES Bild statt über den ganzen Lauf, samt der
+    /// Zelle, auf der es passiert. Damit kann <c>--shot-when=squash</c> auf den
+    /// Augenblick warten und die Kamera hinstellen — die Stauchung dauert nur
+    /// etwa eine Sekunde je Abfahrt, ein Bild auf gut Glück trifft sie in
+    /// einem von zehn Fällen.</summary>
+    public int RailSquashNow;
+    public Vector2 RailSquashAt;
+    public int RailSquashLine = -1;
+
+    /// <summary>Die Zellen aller Waggons der gestauchten Linie, als Text neben
+    /// das Bild — ein Foto allein sagt nicht, welche Sprites übereinander
+    /// liegen.</summary>
+    public string RailSquashWagons()
+    {
+        if (RailSquashLine < 0 || !_freightWagons.TryGetValue(RailSquashLine, out var list))
+            return "(keine)";
+        var sb = new System.Text.StringBuilder();
+        foreach (var w in list)
+            sb.Append($"[{w.Index}] Schritt {w.Step} bei ({w.Col:0.00},{w.Row:0.00})  ");
+        return sb.ToString().TrimEnd();
+    }
+
     private Vector2 _railProbePos;
     private int _railProbeLine = -1, _railProbeIdx = -1;
     private int _railProbeStep = -1, _railProbeDir;
 
     private void RailMoveWagons()
     {
+        RailSquashNow = 0;
         foreach (var l in _railLines)
         {
             if (!_freightWagons.TryGetValue(l.Slot, out var list) || list.Count == 0) continue;
@@ -589,15 +612,21 @@ public partial class MapEntityLayer : Node2D
                 if (list.Count > 1 && l.Faze is >= 1 and <= 9)
                 {
                     RailSquashSeen++;
-                    int worst = 1;
+                    int worst = 1; var wo = list[0];
                     foreach (var a in list)
                     {
                         int n = 0;
                         foreach (var b in list) if (b.Step == a.Step) n++;
-                        if (n > worst) worst = n;
+                        if (n > worst) { worst = n; wo = a; }
                     }
                     if (worst > 1) RailSquashFrames++;
                     if (worst > RailSquashWorst) RailSquashWorst = worst;
+                    if (worst > RailSquashNow)
+                    {
+                        RailSquashNow = worst;
+                        RailSquashAt = new Vector2(wo.Col, wo.Row);
+                        RailSquashLine = l.Slot;
+                    }
                 }
             }
         }
