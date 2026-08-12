@@ -132,6 +132,17 @@ public static class UnitStatBook
         return false;
     }
 
+    /// <summary>Alle Entwürfe, für den Wiki-Export. Die Werte kommen damit aus
+    /// DERSELBEN Rechnung, die auch das Erstellungsfenster zeigt — eine zweite
+    /// Nachbildung in einem Ausgabewerkzeug würde früher oder später
+    /// abweichen.</summary>
+    public static IEnumerable<Entry> All()
+    {
+        Load();
+        if (_byName == null) yield break;
+        foreach (var e in _byName.Values) yield return e;
+    }
+
     /// <summary>Der kurze Bauteilname (Satz +0x02) mit dem »(n)« des Originals
     /// dahinter — siehe Klassenkopf. Leer, wenn es die Zeile nicht gibt.</summary>
     public static string ComponentLabel(int row)

@@ -570,6 +570,15 @@ public partial class MainMenu : Control
                 GetTree().Quit(new Import.ContentBuilder(src).ReexportEffects() ? 0 : 1);
                 return;
             }
+            else if (a.StartsWith("--wiki-export="))
+            {
+                // Das Wiki fuer die Webseite — Frontmatter und Fliesstext je
+                // Einheit, Gebaeude und Mission, samt Bildern. Laeuft auf dem
+                // EINGESPIELTEN Inhalt, braucht also keine CD.
+                Export.WikiExporter.Run(a["--wiki-export=".Length..], GD.Print);
+                GetTree().Quit(0);
+                return;
+            }
             else if (a.StartsWith("--reexport-units="))
             {
                 string[] dirs = a["--reexport-units=".Length..]
