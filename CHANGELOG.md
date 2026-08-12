@@ -4,86 +4,331 @@ All notable changes to Akte Europa Reborn. The build ships **only the engine** �
 terrain, units, maps, tables and now sound are derived on your own machine from
 your own copy of the 1997 game.
 
-## 0.5.0 — 2026-08-11
+*Auf Deutsch: [CHANGELOG.de.md](CHANGELOG.de.md).*
 
-The release in which the campaign starts deciding itself. Almost nothing here
-was invented: the computer players' build programmes, the schedule that unlocks
-designs, and the missions' own victory conditions were all read out of the 1997
-program and checked against **both** copies of GAME.EXE on the machine — what
-only one of them yields is a reader's error, not a finding.
+## 0.5.0 — 2026-08-12
 
-### Die Kampagne ist doppelt so groß
+The release in which the campaign starts deciding itself and the railway starts
+running. Almost nothing here was invented: the computer players' build
+programmes, the schedule that unlocks designs, the missions' own victory
+conditions, the rate the mission logic runs at, the shape of every piece of
+track — all of it was read out of the 1997 program and checked against **both**
+copies of GAME.EXE on the machine. What only one of them yields is a reader's
+error, not a finding.
 
-- **33 Missionen statt 15.** Alle Karten waren längst eingespielt — es fehlte
-  nur die Liste, die die Engine liest. Neuer Schalter
-  `--reexport-campaign`, der sie aus den bereits importierten Karten neu
-  schreibt, ohne CD und ohne Neubacken. 18 von 18 neuen Missionen laden,
-  15 davon enden durch ihre eigene Bedingung.
-- **Mission 1 ist wieder das Tutorial, das sie im Original ist.** Ihr Block
-  öffnet siebzehn Hilfefenster aus HELPG.TXT — »Sie können eine Einheit
-  @ANWÄHLEN«, »Zum Übernehmen @neutraler @Einheiten führen Sie eine ihrer
-  eigenen in deren unmittelbare Nähe« —, schickt vier Gegner los und führt
-  eine **Untermission**: »Versenken Sie die Transportschiffe. @Bezahlung —
-  50$ für jeden versenkten«, dreimal 50 $ aus dem Original.
-- **Die Missionsskripte können dreizehn Wirkungen mehr** (Text, Geld, Klang,
-  Befehl an eine Einheit, Missionsziel, Besitzerwechsel, …) und sieben
-  Bedingungen mehr. 270 Regeln über 31 Missionen, auf beiden GAME.EXE
-  geprüft: 33 gleich, 0 abweichend.
-- **Auf einer Kampagnenkarte marschiert nichts mehr von selbst.** Das Original
-  schickt eine Einheit nirgendwohin — es greift an, was ihr in Reichweite
-  läuft. Wer marschiert, tut es, weil die **Mission** ihm ein Ziel gegeben
-  hat.
-- **Die Versorgungshelis kauft man am Nachschub-Posten**, nicht am Flughafen
-  — den gibt es auf keiner Kampagnenkarte. Damit ist Kampagne 2 wieder
-  durchspielbar.
+Two habits earned their keep and are worth stating, because they are why the
+entries below carry numbers. A test rig that can only push in one direction
+only tests one direction — the one that could only *destroy* things had been
+confirming three inverted victory conditions for a day. And a test rig that
+compares our own derivation against itself tests nothing: `--rail-check`
+reported a flawless track while roughly half of it was in the wrong place,
+because it was measuring our reconstruction against our reconstruction. The
+answer was in the map file all along.
 
-### Behoben
+### The campaign decides itself
 
-- **Gebäude waren weiß.** Der Kachel-Atlas wurde als eine einzige Spalte
-  geschrieben und überschritt bei 30 von 35 Kachelsätzen die Höchstgröße
-  einer Textur; die Grafikkarte lehnte sie ab. Er bricht jetzt in Spalten um.
-- **Die Bahnstrecken fehlten auf allen Karten außer drei Spielständen.** Das
-  y der Linienenden steht in sec34 neben den x, nicht nur in der
-  Laufzeitkopie. **609 von 609 Linien** haben jetzt eine Strecke, und die
-  Züge fahren in Kampagne wie Gefecht.
-- **Klänge haben einen Ort.** Ein Schuss am anderen Ende der Karte war
-  genauso laut wie einer daneben; jetzt wird nach Abstand vom Bildmittelpunkt
-  gedämpft, mit der Konstante des Originals.
+- **33 missions instead of 15.** Every map had long been imported — only the
+  list the engine reads was missing. New switch `--reexport-campaign` writes it
+  from the already-imported maps, without the CDs and without re-baking.
+- **The missions carry their own logic**, read out of the code rather than
+  approximated: **270 rules over 31 missions** — 119 text windows, 61 sounds,
+  59 payments, 19 objectives, 8 sales, 4 attack orders. Thirteen effects and
+  seven conditions were added in this release, among them `text`, `money`,
+  `sound`, `order`, `change_owner`, `set_relation` and `stop_transport`. Read
+  on both GAME.EXE: 33 missions identical, 0 differing.
+- **The mission logic runs at the original's rate, and that rate is measured.**
+  `SetTimer(window, 1, 0x14, NULL)` gives **50 ticks a second**, and the clock
+  counts **250 ticks to one game minute** — so a game minute is five real
+  seconds. We had been evaluating the rules once per *frame* and treating a
+  game minute as a real one, twelve times too slow. Each of the 33 mission
+  blocks also turned out to be **in two halves**: a gate on `tick mod 100`
+  splits what runs every tick from what runs every second one.
+- **Counters have guards.** Three of five counters had lost theirs in
+  translation, which is why campaign 2 announced a completed sub-mission 1.7
+  seconds after it began, without the player doing anything. It now reports
+  0 texts, 0 payments, 0 sounds over the first ten seconds.
+- **Mission 1 is the tutorial it is in the original.** Its block opens
+  seventeen help windows from HELPG.TXT, sends four attackers, and runs a
+  **sub-mission** — "sink the transport ships, 50 $ for each" — with the
+  original's own three payments.
+- **The missions read the occupancy map.** `imap(column, row)` was the missing
+  trigger: campaign 1 starts its attack when a unit stands on cell (39, 4).
+  That brought 28 rules in 12 missions with it.
+- **Jump targets are readable, so counters are visible.** The original writes a
+  counter as the fall-through partner of a jump; a reader that discarded any
+  block someone jumps into never saw them, and campaign 1's four attackers
+  therefore never started.
+- **Three victory conditions were inverted and six were missing.** Two of the
+  three were true at mission start — the mission was won in the second it
+  began, and the test rig reported that as a success. `OBJECTG.TXT`, which
+  states all 33 objectives in plain German, says the opposite.
+- **Block variables have producers, and a starting value.** Mission 7 wants a
+  counter to reach 2 and raises it exactly once, because the setup starts it at
+  1. Without that second half the mission was a riddle.
+- **The computer players build to the original's plans** — a programme of up to
+  50 lines, one line every 50 ticks, which the game itself calls *vyroba*. It
+  is not in any map: it sits as straight code in GAME.EXE, selected by mission
+  number. 106 programmes identical on both executables.
+- **Designs unlock on the original's schedule.** The file that shipped before
+  was measurably incomplete — design 52 from mission 6 in the game against 8 in
+  the file — and only agreed again after mission 33, which is why nobody had
+  noticed.
+- **Infantry was missing from the build list.** The design filter let chassis
+  160..175 through and infantry sits on 148 and 149. Since the early campaign
+  unlocks almost nothing *but* infantry, that left the computer player exactly
+  two buildable designs — a transporter and a chaingun tank. That was the
+  reported "the AI only builds transports".
+- **On a campaign map nothing marches of its own accord.** The original sends
+  no unit anywhere; it attacks what walks into its own sight ring. Anything
+  that marches does so because the **mission** gave it a target
+  (`add_target`, read from the AI's own target list). Attack waves and building
+  grabbers are ours and now run in skirmish only.
+- **The balance carries into the next mission.** Every campaign mission used to
+  start at $0. The money is never overwritten anywhere in the original — all
+  three writes to it *add* — so it runs through, which also matches the
+  original's own screenshot ("Missionsbezahlung $320", "Kontostand $470").
+- **Mission pay is a fixed amount per mission**, 36 constants read out of
+  GAME.EXE, added to the balance when the mission ends. The earlier reading —
+  "pay is the sum of the script's own payments" — was marked as ours and was
+  wrong.
+- **A campaign overview**, 33 tiles: finished missions selectable, the next one
+  too, the rest shaded.
 
-⚠ **Nach dem Aktualisieren einmal neu einspielen.** Hilfetexte,
-Bahnstrecken und der reparierte Kachel-Atlas entstehen beim Import — wer
-seinen alten Datenordner behält, sieht die drei nicht.
+### The railway
 
-### The campaign
+The transport network went from "lines exist on paper" to a running elevated
+railway, over about a dozen steps, most of them prompted by the player looking
+at the screen.
 
-- **Every one of the 15 installed missions now ends by its own condition**,
-  read from the original rather than approximated. Previously a mission ran
-  until nothing of one side was left, which is a rule of ours.
-- **The computer players build to the original's plans.** Each campaign mission
-  carries its opponents' production programme as code; it is now extracted and
-  followed.
-- **Designs unlock on the original's schedule** instead of all at once.
-- **The missions carry their own state machine** — 187 rules over the block
-  variables the original counts with, plus the state each mission *starts* in,
-  which turned out to be half the story: mission 7 wants a counter to reach 2
-  and raises it exactly once, because the setup starts it at 1.
+- **The lines had no geometry.** The y of a line's ends was being read from
+  sec122, which **no** `.CWM` file has — only the three saved games did. It sits
+  in sec34 right next to the x. **609 of 609 lines** have a route now.
+- **The y overflowed a byte.** It counts half-rows, so on a map over 128 rows
+  it wraps: 29 lines lay 128 rows off. Which candidate is right is decided by
+  the **end buildings** — a line starts at one and stops at another. 1144 of
+  1218 ends now sit on their building, up from 530.
+- **There is a track, and it is part 64/65 of ROBO.CWR.** Nobody had looked for
+  it, because a wagon's frame index *is* its piece of rail, so track was only
+  ever visible where a wagon stood.
+- **It is an elevated railway on trestles**, established from a screenshot of
+  the original: the piers stand in the landscape and the rail runs above them.
+  We had been laying it flat on the ground.
+- ⭐ **The route is in the map — we had been inventing it.** This is the biggest
+  finding of the release. Section 22 holds the finished list of cells, 3000
+  records of 5 bytes: column, row, **frame**, hit points, line number. Measured
+  against what our derivation produced on one map: **472 pieces of track that
+  are not there, 359 that are and were missed, and 235 of 810 shared cells with
+  the wrong frame** — roughly half the network. The player saw it on screen and
+  had to report it four times before the right question was asked, which was
+  not "is our shape correct?" but *"does the map already carry this?"*.
+- **Ramps are part of the vocabulary.** Frames 6..9 are ramps, and every single
+  one of them sits on a cell whose terrain byte matches — 147 of 147, 170 of
+  170, 180 of 180, 118 of 118. That same byte turned out not to be a flag at
+  all but the **slope shape**, which is also what the original's train reads
+  when it lifts a wagon by 15 px on a gradient.
+- **Trestles stand every sixth cell**, and in one of four variants depending on
+  whether the track continues past them — both read, neither a setting of ours
+  any more.
+- **The line meets the building on its connection row**, +1 or +2 depending on
+  the type. 232 of 234 ends are now flush to the pixel, where before **none**
+  of the 42 ends on one map were. The old open question "the base is 11 px
+  off, constant across all maps" was this same two-row shift.
+- **The travel speed is calculated, not chosen** — from the 50 Hz tick, a step
+  price of 40 or 28, and a per-tick decrement of 8 that is the same on all
+  1439 wagons across all 30 maps. Five ticks per straight step, four per
+  diagonal.
+- **The wagons hang together.** They were being spaced two route steps apart,
+  which not only made the train look like four separate cars but tore the
+  track open with it.
+- **Half of every journey juddered.** On the return leg the wagon ran
+  *backwards* within a cell and jumped two forward at the boundary — net one
+  cell, so neither travel time nor route noticed. The largest movement between
+  two frames dropped from **77.96 px to 2.21 px** over the same run. It had
+  never been measured because the outbound leg is correct, and the earlier
+  measurement was taken before the first turnaround.
+- **The freight actually moves.** The train unloads at the arrival building and
+  loads at the departure building; which goods go which way comes from a 12×12
+  matrix in the executable that is byte-identical on both copies. Nothing else
+  in the entire program touches those four stock fields.
+- **Destructible yes, repairable yes, buildable no** — each with its location
+  in the code, so the question does not come back. A single hit cell breaks;
+  a whole line never fails. A vehicle repairs it and then looks for the next
+  broken piece by itself. Nothing in the original lays a new piece of track.
 
-### Fixed
+### Graphics and animation
 
-- **Infantry was missing from the build list**, which is why the computer
-  players never fielded any.
-- **Three victory conditions were inverted** and two missions were won in the
-  second they began. The test rig could only destroy things, so it had never
-  been able to notice.
+- **Mechs and spiders walk.** Field +0x11 is the chassis's walk phase; checked
+  against 1360 vehicles across 29 maps with no counter-example. ⚠ The *timing*
+  is ours — the original does not play the gait frames back.
+- **Buildings were white.** The tile atlas was written as a single column and
+  exceeded the maximum texture height on 30 of 35 tilesets; the GPU rejected it
+  and returned a texture with a dead handle, which draws as a white rectangle.
+  That is why mission 1 looked fine and everything from mission 2 did not. The
+  atlas breaks into columns now.
+- **The middle building frames are damage stages, not construction steps** —
+  `frame = (hp_max − hp) / (hp_max / patterns)`, stamped on top of one another,
+  checked over 36 maps and 1451 records.
+- **Infantry no longer fires continuously.** It showed the firing pose the
+  moment it *had* a target; having one is not the same as shooting at one. The
+  pose now lasts a short beat after an actual shot. ⚠ That beat is ours — the
+  original counts it in a field we have not read.
+- **Hand weapons get no muzzle fireball.** The same ANIM.CWA sequence was being
+  played for every weapon, cannon and rifle alike. Infantry needs none at all:
+  its firing pose carries the red flash **in the sprite**, verified frame by
+  frame.
+- **The muzzle flash sits at the barrel, not on the hull.** It was being placed
+  with an invented 8-pixel lift that landed on the body. It now starts from the
+  same point the original mounts the turret on, which the code already
+  computed for the turret's own picture.
+- **Supply helicopters no longer produce a hit sprite** when they deliver fuel
+  or ammunition. That effect was ours, and the comment that introduced it even
+  said "a blast would read as a hit" before reaching for the fireball.
+- **The dead no longer stand up.** A hit on a corpse ran all the way through to
+  the kill routine, which resets the death timer — so the falling animation
+  started over, sound and all. Two of the four paths in had no guard; an
+  aircraft holds its target in its own record and kept firing at the same
+  corpse indefinitely.
+- **Unarmed vehicles carry their equipment and stop shooting.** The weapon
+  lookup fell back to a made-up weapon for any unknown component, so
+  construction vehicles genuinely fired. The game distinguishes armed from
+  unarmed at field +0x0d, established on both executables and checked against
+  1226 armed and 218 unarmed units without a counter-example. Equipment
+  carriers also had no turret drawn at all; they do now.
+- **Type 0 means "no building".** Seven records on one campaign map carry types
+  outside 1..16 — mineral deposits and one placeholder — and the placeholder
+  was standing in the middle of a town as if it were a base. They stay in the
+  list, because the mission scripts query them, but they are no longer drawn,
+  selected or counted.
+- **Higher ground sees further.** For a land unit the original computes
+  `radius = elevation + sight − 1`; it is a larger *circle*, not a line of
+  sight — the stamping routine reads no terrain at all. Buildings take a
+  literal 10 and ships their own field. The formula was found by its shape in
+  both executables, and the `− 1` matters: on flat ground a unit sees one ring
+  less than its bare sight value.
+
+### The interface
+
+- **The start menu has its title bar and its demo again.** The original does
+  not play a film behind the menu — it loads a finished saved game and lets it
+  run, cycling through **thirteen** of them (`1.DM`…`13.DM`), which is what the
+  "Naechstes Demo" entry switches. Both the caption "Akte Europa" and its
+  position are read; "REBORN" underneath is ours.
+- **"Neues Spiel" is now "Kampagne"** and shows all 33 missions.
+- **The skirmish screen is ordered by mode and by map**, and the three campaign
+  maps are gone from it — a campaign map brings its script, its diplomacy and
+  its unlock schedule, and none of that runs in a skirmish. Paging through maps
+  with `[` and `]` is also disabled while a game is running.
+- **The control panel belongs bottom left**, not bottom right. The original has
+  no side panel at all: the map fills the window and the panel sits in the
+  corner. Everything else in the original is a floating window with a title bar
+  and an X.
+- **The mission clock is in the panel**, at the corner the original draws it at
+  (x = 23, y = 148 of PANEL.DTA), and it shows **hours:minutes of game time** —
+  the same two bytes the statistics page prints. We had been printing real time
+  and running twelve times too fast.
+- **The objectives are in the status line.** The block had been carrying them
+  all along — `v[101+k]` is the state of the k-th objective, `v[131+k]` its
+  text number — and nothing ever displayed them. That is why the sub-mission in
+  campaign 1 could not be seen, let alone seen to be finished.
+- **The base window is a window again**: title bar, energy, status, the four
+  tabs (Depot / Produktion / Forschung / Reparatur), the list at the original's
+  row height, the three stock figures, four buttons, and a stat block on the
+  right. The three resource glyphs are not an invention — the original writes
+  them as the plain characters `]`, `[` and `{`, which in its own font *are*
+  the three part symbols.
+- **The "Erstellung" window** — chassis, superstructure, upgrade, and the
+  prices, which match the original screenshot figure for figure. It holds no
+  state of its own: every click goes through the same steps the keyboard path
+  already used, so the two cannot drift apart.
+- **The mission end window** — "MISSION ERFOLGREICH BEENDET": the score table
+  over eight columns, mission time, kills and losses, sub-missions, the mission
+  pay in orange, the balance, and a **Weiter** button that starts the next
+  mission. Kills and losses used to come only from a saved game, so a freshly
+  started campaign mission reported 0 and 0.
+- **Help windows can be closed and stay closed.** A rule without a guard calls
+  "close all windows" and "show text" on the same tick, so a dismissed window
+  was rebuilt in the same breath and looked immovable. There is a visible X as
+  well — the original says in its own text #001 that right-click or ESC closes
+  it, but nobody reads that once they think the window is stuck.
+- **Settings in the pause menu**, and the window starts at 1600×900 and can be
+  resized.
+
+### Gameplay and rules
+
+- **Units are built in the BASE, not in the factory.** The reported symptom was
+  a factory's parts counter climbing to 10 and dropping to 0 over and over —
+  which is correct behaviour, the train is collecting them. What was wrong was
+  where we let the player build. The game says so itself in its own help texts,
+  the production button reads the three stock fields of the building whose
+  window is open, and the computer player's own routine puts its line into a
+  base. The return path base → factory is gone; the original has none, and it
+  was draining the base.
+- **Supply helicopters are bought at the supply post**, with money, from a
+  two-button dialogue — and **no campaign map 1..15 has an airfield at all**,
+  which is why campaign 2 was not completable. The post on that map belongs to
+  nobody and stays that way; the original's dialogue checks the balance and no
+  owner, so neither do we.
+- **The panel click actually builds.** It reached the aircraft purchase only
+  for the airfield type, so the supply post showed its two rows and the click
+  went nowhere. ⚠ The test rig had missed it twice by calling the purchase
+  directly instead of clicking.
+- **Aircraft have their speed.** The reader took the template from one field
+  too far along, so `aircraft.json` carried no speed at all and every aircraft
+  flew at 7 px/s while a vehicle drives 24..84. Confirmed from a second,
+  independent place in the map files.
+- **Sound has a place.** A shot at the far end of the map was as loud as one
+  next to you. The original attenuates by distance with a constant of 40 —
+  0.4 dB per cell — found by its shape in both executables. ⚠ The panning is
+  read and **not** built.
+
+### Under the hood
+
+- **In the shipped executable not a single switch arrived.** `--campaign=3`
+  started nothing, silently, with return code 0: Godot only passes on what
+  stands **after** `--`. It never showed up in development because `--path .`
+  forces the separator anyway. There is now a bridge that finds the switches
+  either way.
+- **New test rigs**, each built to see a specific class of error rather than to
+  confirm a green light: `--rail-check`, `--rail-lay` (the counter-proof),
+  `--tick-check`, `--produce-check`, `--econ-check`, `--pay-check`,
+  `--unarmed-check`, `--depot-check`, `--sound-check`, `--infdeath-check`,
+  `--tutorial-check`, `--script-coverage`, `--skirmish`, `--end-window`,
+  `--shot-when=squash`. Several of them were verified by taking the fix back
+  out and checking that the rig complains.
+- **Partial re-exports**, so a change does not cost a full import:
+  `--reexport-campaign`, `--reexport-help`, `--reexport-tables`,
+  `--reexport-buildings`, `--reexport-units`, `--reexport-effects`,
+  `--reexport-states`.
 
 ### Known limits
 
-- Mission 14 (transport Colonel Hullmann) and mission 5 (resume production)
-  are complete on the script side but not yet winnable in play: the first needs
-  reinforcements to be dropped in, the second a running production. Both are
-  read and documented, neither is built.
-- Unit classes 1..4 are not yet told apart — every class counts all units,
-  which is stricter than the original.
+- **The wagons of a line can stand on one cell.** Measured: in about 10 % of
+  frames of a travelling line, and in the worst case all four sit on the same
+  floating-point position, so you see one wagon instead of four. The cause is
+  understood — the wagons share one lead position with an offset, and at a
+  terminus they all clamp into the same limit. It is **deliberately not fixed**:
+  the original gives each wagon its own counter and its own route pointer, and
+  the routine that staggers their departure has not been read yet. Any repair
+  before that would be an invention.
+- **The trigger rule of campaign 2's sub-mission is not entered.** It needs an
+  OR and the rule vocabulary only has AND. The sub-mission therefore does not
+  start at all — a visible gap instead of a silent, wrong reward.
+- **Mission 5 is complete on the script side but not yet winnable in play.**
+  It needs a running production; the test rig supplies one.
+- **Missions 21 and 28 have no script** — the only two of the 33.
+- **Unit classes 1..4 are not told apart** in every place; where a rule needs
+  them, the data file says so.
+- **The sound panning is read and not built**, and the impact effect for direct
+  fire is not read at all. An invented impact on every rifle shot would be
+  worse than none.
+- **The muzzle reach (14 px) is ours.** The right number is read — it sits in
+  SHOOT.CWT, 2400 records of four points — but that file does not run through
+  the import yet.
+
+⚠ **Re-import once after updating.** Help texts, the railway cells, the ramp
+frames and the repaired tile atlas are all produced at import time; keeping an
+old data folder means not getting them. `--reexport-states` and
+`--reexport-units` together are enough for the railway.
 
 ## 0.4.0 — 2026-08-08
 
