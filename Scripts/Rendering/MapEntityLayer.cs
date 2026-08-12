@@ -7568,6 +7568,17 @@ public partial class MapEntityLayer : Node2D
                     d.Enable = d.Tech <= CampaignTechLevel;
             }
         }
+        // ⚠ »Alle Einheiten« gilt auch zur See. Ohne die Option bleiben im
+        // Gefecht nur die Entwürfe bis zur Anfangs-Technikstufe frei — gemessen
+        // 2 von 10. Das ist richtig für einen Kampagnenanfang, aber in einem
+        // Gefecht gibt es keine Kampagne, die den Rest je freischaltet: die
+        // acht anderen Schiffe wären auf Dauer unerreichbar. Siehe
+        // UI.SkirmishSetup.AllUnits.
+        if (UI.SkirmishSetup.AllUnits && UI.SkirmishSetup.CampaignMission <= 0)
+        {
+            foreach (var d in _shipDesigns) d.Enable = true;
+            _shipSource += " + »Alle Einheiten«";
+        }
         int on = 0;
         foreach (var d in _shipDesigns) if (d.Enable) on++;
         GD.Print($"ships: {_shipDesigns.Count} Entwuerfe aus {_shipSource}, {on} freigegeben");
