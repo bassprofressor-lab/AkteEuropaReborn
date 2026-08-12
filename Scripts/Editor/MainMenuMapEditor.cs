@@ -22,7 +22,12 @@ using AkteEuropaReborn.Import;
 ///   … --headless --path . -- "--map-new=probe01,0,0,0,quelle=Assets/Legacy/LEVELS/01.CWM"
 /// </code>
 ///
-/// <para><b>Warum das hier steht und nicht in MainMenu.cs.</b> Genau aus dem
+/// <para><b>Der EINSTIEG liegt nicht hier, sondern in
+/// <c>MainMenu._Ready</c></b> — bei den anderen kopflosen Schaltern, wo er vor
+/// dem Start der Menuekulisse aussteigt. Hier liegen nur noch die beiden
+/// Laeufe. Zur Vorgeschichte siehe den Vermerk unten in dieser Datei.</para>
+///
+/// <para><s>Warum das hier steht und nicht in MainMenu.cs.</s> Genau aus dem
 /// Grund, den <c>Core/MainMenuCommandLine.cs</c> schon beschreibt: an
 /// <c>MainMenu._Ready</c> — wo die Schalterschleife von <c>--import=</c> bis
 /// <c>--selftest-sounds=</c> steht — arbeitet gerade jemand anderes, und ein
@@ -42,71 +47,23 @@ using AkteEuropaReborn.Import;
 /// </summary>
 public partial class MainMenu
 {
-    public override void _Notification(int what)
-    {
-        if (what == NotificationEnterTree) MapEditorCommandLine();
-    }
-
-    private void MapEditorCommandLine()
-    {
-        foreach (string a in Core.CommandLine.Args)
-        {
-            if (a.StartsWith("--map-new=")) { Leave(MapNew(a["--map-new=".Length..])); return; }
-            if (a.StartsWith("--map-check=")) { Leave(MapCheck.Run(a["--map-check=".Length..], Say)); return; }
-        }
-    }
-
-    private int _mapEditorRc;
-
-    /// <summary>
-    /// ⚠ <b>Warum der Lauf nicht einfach aufhoert.</b> Gemessen am 12.08.2026,
-    /// drei Wege, drei Ergebnisse:
-    /// <list type="bullet">
-    ///   <item><c>GetTree().Quit(rc)</c> aus <c>_EnterTree</c> heraus:
-    ///     <c>MainMenu._Ready</c> laeuft trotzdem noch ganz durch und startet
-    ///     die Menuekulisse, die ihr 20..33 Megapixel grosses Bild auf einem
-    ///     Nebenlaeufer laedt (<c>MenuBackdrop.Next</c>). Waehrend die Engine
-    ///     schon herunterfaehrt, greift der ins Leere: Zugriffsfehler
-    ///     0xC0000005 in <c>Image.LoadFromFile</c>, <b>Rueckgabewert 139</b>.</item>
-    ///   <item><c>System.Environment.Exit(rc)</c>: die .NET-Laufzeit wird unter
-    ///     Godots Fuessen weggezogen — <c>"Attempt to execute managed code after
-    ///     the .NET runtime thread state has been destroyed"</c>,
-    ///     <b>Rueckgabewert 127</b>.</item>
-    ///   <item>Was hier steht: den Kulissenlader ERST FERTIG WERDEN LASSEN. Der
-    ///     Ausstieg wird nachgestellt, die Kulisse angehalten und dann gequittet
-    ///     — <b>Rueckgabewert 0 bzw. 1</b>.</item>
-    /// </list>
-    /// <para>Ein Pruefstand, dessen Rueckgabewert nichts bedeutet, ist keiner —
-    /// darum die Umstaende. <b>Der saubere Ort waere ein Ausstieg VOR
-    /// <c>StartBackdrop()</c>, also die Schalterschleife in
-    /// <c>MainMenu._Ready</c> selbst</b>, wo jeder andere kopflose Schalter
-    /// (<c>--import=</c>, <c>--selftest-…</c>) sitzt und wo genau deshalb keiner
-    /// dieses Problem hat. Steht der Schalter dort, kann diese Umleitung weg;
-    /// siehe den Bericht vom 12.08.2026.</para>
-    /// </summary>
-    private const double BackdropGrace = 4.0;
-
-    private void Leave(int rc)
-    {
-        _mapEditorRc = rc;
-        CallDeferred(nameof(MapEditorQuit));
-    }
-
-    private void MapEditorQuit()
-    {
-        var t = GetTree().CreateTimer(BackdropGrace, false);
-        t.Timeout += () =>
-        {
-            StopBackdrops(GetTree().Root);
-            GetTree().Quit(_mapEditorRc);
-        };
-    }
-
-    private static void StopBackdrops(Node n)
-    {
-        if (n is MenuBackdrop b) b.Stop();
-        foreach (Node c in n.GetChildren()) StopBackdrops(c);
-    }
+    // ⚠ 15.08.2026 — HIER STAND EINE UMLEITUNG, UND SIE IST WEG.
+    //
+    // Die zwei Schalter hingen an `_Notification(NotificationEnterTree)`, weil
+    // an der Schalterschleife in MainMenu._Ready gerade jemand anderes
+    // arbeitete. Das war der falsche Zeitpunkt: `_Ready` lief danach trotzdem
+    // ganz durch und startete die Menuekulisse, die ihr 20..33 Megapixel
+    // grosses Bild auf einem Nebenlaeufer laedt. Waehrend die Engine schon
+    // herunterfuhr, griff der ins Leere -- Zugriffsfehler 0xC0000005 in
+    // Image.LoadFromFile, Rueckgabewert 139. Der Ausweg war eine Wartezeit von
+    // vier Sekunden vor dem Quit (Leave/MapEditorQuit/StopBackdrops/
+    // BackdropGrace, alles hier).
+    //
+    // Die Schalter stehen jetzt in MainMenu._Ready selbst, wo jeder andere
+    // kopflose Schalter sitzt und wo der Ausstieg VOR StartBackdrop() liegt.
+    // Damit braucht es weder Wartezeit noch Kulissenbremse noch einen zweiten
+    // Eingang in den Lebenslauf des Knotens. Was hier bleibt, sind die zwei
+    // Laeufe selbst.
 
     private static void Say(string s) => GD.Print("map-editor: " + s);
 

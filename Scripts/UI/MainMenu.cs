@@ -596,6 +596,26 @@ public partial class MainMenu : Control
                 GetTree().Quit(ok ? 0 : 1);
                 return;
             }
+            // Die zwei Schalter des Karteneditors. ⚠ Sie MUESSEN hier stehen und
+            // nicht in Scripts/Editor/MainMenuMapEditor.cs, wo sie zuerst lagen:
+            // dort hingen sie an `_Notification(NotificationEnterTree)`, also VOR
+            // `_Ready` — und `_Ready` lief danach trotzdem ganz durch und startete
+            // die Menuekulisse, die ihr 20..33 Megapixel grosses Bild auf einem
+            // Nebenlaeufer laedt. Waehrend die Engine schon herunterfuhr, griff
+            // der ins Leere: Zugriffsfehler in Image.LoadFromFile, Rueckgabewert
+            // 139. Der Ausweg dort war eine Wartezeit von vier Sekunden vor dem
+            // Quit. Hier braucht es sie nicht, weil dieser Zweig VOR
+            // StartBackdrop() aussteigt — wie jeder andere kopflose Schalter.
+            else if (a.StartsWith("--map-new="))
+            {
+                GetTree().Quit(MapNew(a["--map-new=".Length..]));
+                return;
+            }
+            else if (a.StartsWith("--map-check="))
+            {
+                GetTree().Quit(Editor.MapCheck.Run(a["--map-check=".Length..], Say));
+                return;
+            }
             else if (a.StartsWith("--selftest-rail="))
             {
                 GetTree().Quit(Import.ImportSelfTest.RunRail(a["--selftest-rail=".Length..]));
