@@ -85,6 +85,14 @@ public static class PortraitBank
     private static bool _read;
     private static readonly Dictionary<int, Texture2D?> _cache = new();
 
+    /// <summary>Wo jede der vier Folgen in der Bank ANFÄNGT — aus dem Feld
+    /// <c>ranges</c> des Index, das <see cref="Import.InterfaceExporter"/> beim
+    /// Auspacken aus den <c>start_frame</c>-Feldern von ANIM.CWA rechnet
+    /// (400 → 0, 401 → 57, 402 → 67, 403 → 74). GELESEN, nicht gesetzt: wer
+    /// eine andere ANIM.CWA auspackt, bekommt hier andere Zahlen und die
+    /// Rechnungen unten stimmen weiter.</summary>
+    private static readonly Dictionary<int, int> _first = new();
+
     /// <summary>Ist die Bank da? Nach dem ersten Aufruf ist
     /// <see cref="Trouble"/> gesetzt, falls nicht.</summary>
     public static bool Ready
@@ -122,7 +130,24 @@ public static class PortraitBank
                 Fill = Color.Color8((byte)a[0].AsInt32(), (byte)a[1].AsInt32(),
                                     (byte)a[2].AsInt32(), 255);
         }
+        if (root.TryGetValue("ranges", out var rv) &&
+            rv.VariantType == Variant.Type.Dictionary)
+            foreach (var kv in rv.AsGodotDictionary<string, Variant>())
+            {
+                if (kv.Value.VariantType != Variant.Type.Dictionary) continue;
+                var d = kv.Value.AsGodotDictionary<string, Variant>();
+                if (d.TryGetValue("first_picture", out var fp))
+                    _first[kv.Key.ToInt()] = fp.AsInt32();
+            }
         if (Count <= 0) Trouble = "portraits_index.json nennt 0 Bilder";
+    }
+
+    /// <summary>Die Bildnummer, mit der eine ANIM-Folge in der Bank beginnt,
+    /// oder −1, wenn der Index sie nicht nennt.</summary>
+    public static int FirstPictureOf(int sequence)
+    {
+        Load();
+        return _first.TryGetValue(sequence, out int v) ? v : -1;
     }
 
     /// <summary>Ein Bild der Bank, oder null. ⚠ Die vom Import geschriebenen
@@ -162,6 +187,75 @@ public static class PortraitBank
     {
         int icon = UnitStatBook.IconOf(component);
         return icon == UnknownFrom ? Unknown : icon;
+    }
+
+    // ---- die sieben Flugzeugbilder (Folge 402) ------------------------------
+    //
+    // Fall 3 des Zeichners 0x4508A0 — »Flugzeugplatz«, aufgerufen aus dem
+    // Bedienblock bei 0x470C41 mit (3, id − 0x4E20, surf, 11, 61), also für ein
+    // Objekt der Nummer 20000+. Die Kette, Schritt für Schritt:
+    //
+    //     typ = byte[0x6DDF78 + 68*platz]       ; 1..14
+    //     i   = typ − 1
+    //     a   = byte[0x450DC8 + i]              ; die 14er-Tafel
+    //     if (a == 7) -> "Wrong airplane type" @0x4FE93C, KEIN Bild
+    //     bild = byte[0x450DA8 + a]             ; die 7er-Sprungtafel
+    //     Bild = word[0x7A4692] + bild          ; 0x7A4692 = Folge 402, start_frame
+    //
+    // ⚠ 0x6DDF78 ist NICHT eine neue Adresse, die man raten müsste: sec19 wird
+    // vom Kartenlader nach **0x6DDF70** gelegt, Schrittweite **68** (siehe
+    // Import.CwmExtra.Specials) — 0x6DDF78 − 0x6DDF70 = **8**, und +0x08 ist
+    // dort das KIND-Byte, das wir schon lesen und schon in
+    // Rendering.MapEntityLayer.Special.Kind tragen. Das Typbyte 1..14 IST also
+    // unser `Kind`, an der Adresse abgezählt und nicht ausgelegt.
+
+    /// <summary>Die ANIM-Folge der Flugzeugbilder — 7 Stück.</summary>
+    public const int AirSequence = 402;
+
+    /// <summary>Der Eintrag der 14er-Tafel, der »kein Bild« heisst: das Original
+    /// springt damit in den Fehlerzweig <c>"Wrong airplane type"</c>.</summary>
+    public const int AirNoPicture = 7;
+
+    /// <summary>Die Bytetafel <c>@0x450DC8</c>, 14 Einträge, Index
+    /// <c>Kind − 1</c>. Sieben ihrer vierzehn Einträge sind die 7 =
+    /// »kein Bild« — die Kinds 4…9 (die das Spiel nicht besetzt) und die
+    /// <b>12</b>.</summary>
+    private static readonly int[] AirTable =
+        { 0, 1, 2, 7, 7, 7, 7, 7, 7, 3, 4, 7, 5, 6 };
+
+    /// <summary>Die Sprungtafel <c>@0x450DA8</c>, 7 Einträge: aus dem Eintrag
+    /// der Tafel oben wird die laufende Nummer INNERHALB der Folge 402.</summary>
+    private static readonly int[] AirJump = { 0, 1, 6, 2, 3, 4, 5 };
+
+    /// <summary>
+    /// Das Bild eines Flugzeugs, als Bildnummer der Bank; <b>0 heisst KEIN
+    /// Bild</b> — und das ist bei sieben der vierzehn Kinds der Fall, im
+    /// Original genau so.
+    /// </summary>
+    /// <param name="kind">Das Typbyte 1…14 aus sec19 <c>+0x08</c>.</param>
+    public static int PictureOfAircraft(int kind)
+    {
+        if (kind < 1 || kind > AirTable.Length) return 0;
+        int a = AirTable[kind - 1];
+        if (a == AirNoPicture) return 0;
+        int first = FirstPictureOf(AirSequence);
+        if (first < 0) return 0;                     // Index ohne »ranges«
+        return first + AirJump[a];
+    }
+
+    /// <summary>Warum ein Flugzeug kein Bild bekommt — für Prüfstand und
+    /// Bedienblock EINE Formulierung, damit die Zahl und der Text nicht
+    /// auseinanderlaufen können.</summary>
+    public static string AirTrouble(int kind)
+    {
+        if (kind < 1 || kind > AirTable.Length)
+            return $"Art {kind} liegt ausserhalb 1..14 (leerer sec19-Satz)";
+        if (AirTable[kind - 1] == AirNoPicture)
+            return $"Art {kind}: die Tafel @0x450DC8 sagt 7 — »Wrong airplane " +
+                   "type«, das Original zeigt hier KEIN Bild";
+        return FirstPictureOf(AirSequence) < 0
+            ? "portraits_index.json nennt keine »ranges« — Folge 402 unbekannt"
+            : "";
     }
 
     /// <summary>

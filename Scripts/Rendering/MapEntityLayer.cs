@@ -381,13 +381,7 @@ public partial class MapEntityLayer : Node2D
         public bool IsSupply => Kind is 13 or 14;
 
         /// <summary>The template's own name for this kind.</summary>
-        public string KindName => Kind switch
-        {
-            1 => "Jagdflieger", 2 => "Bomber", 3 => "Spionageflieger",
-            10 => "Kampfhubschrauber", 11 => "Mechanikerheli", 12 => "Transport Heli",
-            13 => "Treibstoffheli", 14 => "Munitionheli",
-            _ => $"Art {Kind}",
-        };
+        public string KindName => AirKindName(Kind);
 
         // live flight state (ours)
         public Vector2 Pos;
@@ -403,6 +397,28 @@ public partial class MapEntityLayer : Node2D
         public bool Flying => !Stored && !Dead;
         public bool Armed => Attack > 0 && AmmoMax > 0;
     }
+
+    /// <summary>Der Name eines Flugzeug-Kinds — aus der Vorlagentabelle
+    /// 0x51b021, Spalte <c>+0x2d</c>, siehe <see cref="Special.IsSupply"/>.
+    ///
+    /// <para>⚠ <b>Zu 11 und 12 gibt es in diesem Baum ZWEI Lesungen, und sie
+    /// widersprechen sich:</b> hier (und damit im Spiel) ist 11 der
+    /// Mechanikerheli und 12 der Transport, in
+    /// <c>Assets/Legacy/Maps/aircraft.json</c> (geschrieben von
+    /// <c>aircraft_export.py</c>) ist es umgekehrt. Der Streit ist ALT und wird
+    /// hier nicht entschieden. Fuer das BILD ist er auch ohne Belang: die Tafel
+    /// @0x450DC8 haengt am Byte, nicht am Namen — Kind 11 bekommt ein Bild,
+    /// Kind 12 keines, wie auch immer die zwei heissen. Wer den Streit beenden
+    /// will, hat damit sogar die billigste Gegenprobe der Welt: im Original
+    /// EINEN von beiden anwaehlen und sehen, ob im Bedienblock ein Bild
+    /// steht.</para></summary>
+    public static string AirKindName(int kind) => kind switch
+    {
+        1 => "Jagdflieger", 2 => "Bomber", 3 => "Spionageflieger",
+        10 => "Kampfhubschrauber", 11 => "Mechanikerheli", 12 => "Transport Heli",
+        13 => "Treibstoffheli", 14 => "Munitionheli",
+        _ => $"Art {kind}",
+    };
 
     /// <summary>One playing ANIM.CWA effect (muzzle flash, explosion, wreck).</summary>
     private struct Effect
@@ -545,6 +561,15 @@ public partial class MapEntityLayer : Node2D
     }
     private int _selected = -1;
     private int _hovered = -1;
+
+    /// <summary>Der angewählte FLUGZEUGPLATZ — die Zeile in <see cref="_special"/>,
+    /// oder −1. Flugzeuge sind bei uns keine <see cref="Entity"/>, deshalb
+    /// braucht die Auswahl ihren eigenen Zeiger; im Original ist es dieselbe
+    /// Auswahl, nur mit einer Objektnummer ab 0x4E20 (20000) statt darunter,
+    /// und der Bedienblock zieht daran seinen Fall 3 (0x470C09/0x470C41).
+    /// Er schliesst <see cref="_sel"/> aus: entweder Einheiten oder ein
+    /// Flugzeug.</summary>
+    private int _selAir = -1;
     private bool _showDots;
     private bool _showZones;
     private bool _showBuildings;
@@ -927,6 +952,7 @@ public partial class MapEntityLayer : Node2D
         _targetSlots.Clear();
         _selected = -1;
         _hovered = -1;
+        _selAir = -1;
         _zoneTex = null;
         _sel.Clear();
         _groups.Clear();
@@ -2046,6 +2072,9 @@ public partial class MapEntityLayer : Node2D
     {
         _selected = -1;
         foreach (int i in _sel) { _selected = i; break; }
+        // Einheiten und Flugzeug schliessen sich aus — an EINER Stelle, damit
+        // keiner der zwanzig Aufrufer daran denken muss.
+        if (_sel.Count > 0) _selAir = -1;
         UpdatePanel();
     }
 
@@ -2063,6 +2092,21 @@ public partial class MapEntityLayer : Node2D
     public void SelectAt(Vector2 mapPos, bool additive = false)
     {
         int hit = Pick(mapPos);
+        // Ein FLUGZEUG gewinnt nur, wo keine Einheit und kein Gebäude liegt: es
+        // fliegt über allem, und wer auf einen Panzer klickt, meint den Panzer.
+        if (hit < 0 && !additive)
+        {
+            int air = PickAir(mapPos);
+            if (air >= 0)
+            {
+                _sel.Clear();
+                _selAir = air;
+                SetPrimary();
+                QueueRedraw();
+                return;
+            }
+        }
+        _selAir = -1;
         bool mine = Commandable(hit);
         if (!additive) _sel.Clear();
         if (mine)
@@ -3201,7 +3245,7 @@ public partial class MapEntityLayer : Node2D
 
     public void SetBand(Rect2? mapRect) { _band = mapRect; QueueRedraw(); }
 
-    public void ClearSelection() { _sel.Clear(); SetPrimary(); QueueRedraw(); }
+    public void ClearSelection() { _sel.Clear(); _selAir = -1; SetPrimary(); QueueRedraw(); }
 
     // ---- move orders ----
 
@@ -3429,8 +3473,17 @@ public partial class MapEntityLayer : Node2D
     /// x = 90. Dass hier bei mehreren gewaehlten Einheiten (0,0) herauskommt,
     /// ist Treue.</para>
     ///
-    /// <para>⚠ <b>UNSERE EINSCHRAENKUNG, und sie ist Absicht:</b> wir zeichnen
-    /// nur Fall 0 und nur fuer ein LANDFAHRWERK (unit_type 160..175). Was die
+    /// <para><b>Fall 3 — der FLUGZEUGPLATZ — ist seit dem 13.08.2026 dabei.</b>
+    /// Der Bedienblock ruft ihn bei <c>0x470C41</c> fuer jedes Objekt mit einer
+    /// Nummer ab <c>0x4E20</c> (20000) auf, also fuer die sec19-Plaetze; die
+    /// Kette vom Typbyte zum Bild steht bei
+    /// <see cref="UI.PortraitBank.PictureOfAircraft"/>. <b>Sieben der vierzehn
+    /// Kinds bekommen dort KEIN Bild</b>, und das ist kein Mangel, sondern die
+    /// Tafel <c>@0x450DC8</c>.</para>
+    ///
+    /// <para>⚠ <b>UNSERE EINSCHRAENKUNG, und sie ist Absicht:</b> von den
+    /// Landeinheiten zeichnen wir nur Fall 0 und nur fuer ein LANDFAHRWERK
+    /// (unit_type 160..175). Was die
     /// fuenf Klassen des Klassenbytes bedeuten, ist UNGELESEN; und fuer Schiffe
     /// ist <c>+0x0D</c> ein TOTES Feld — Fall 1 nimmt statt dessen
     /// <c>byte[0x52EDB7 + 42*(Platz + 10*Spieler)] - 0x96</c> durch eine
@@ -3471,6 +3524,17 @@ public partial class MapEntityLayer : Node2D
     public (int ChassisPic, int TurretPic, int Selected, string Why) PanelPortrait()
     {
         int n = _sel.Count;
+        // ---- Fall 3: der FLUGZEUGPLATZ (0x470C41) ---------------------------
+        // Ein Bild, kein zweites: die Folge 402 hat pro Flugzeug genau eines,
+        // hier wird nichts uebereinandergelegt.
+        if (_selAir >= 0 && _selAir < _special.Count)
+        {
+            var a = _special[_selAir];
+            int pic = UI.PortraitBank.PictureOfAircraft(a.Kind);
+            return pic > 0
+                ? (pic, 0, 1, "")
+                : (0, 0, 1, UI.PortraitBank.AirTrouble(a.Kind));
+        }
         if (_selected < 0 || _selected >= _entities.Count) return (0, 0, n, "nichts gewaehlt");
         if (n > 1) return (0, 0, n, "Gruppe — das Original zeigt hier kein Bild");
         var e = _entities[_selected];
@@ -3588,10 +3652,31 @@ public partial class MapEntityLayer : Node2D
           .Append(unknownPic > 0 ? " (" + string.Join(", ", unknownNames) + ")" : "")
           .Append('\n');
 
+        // ---- die FLUGZEUGE: alle 14 Kinds, dann die dieser Karte ------------
+        //
+        // Die Zahl, um die es geht: 14 Kinds, 7 Bilder. Sieben Kinds gehen leer
+        // aus, und das ist die Tafel @0x450DC8, nicht unsere Lücke.
+        var airWith = new List<string>();
+        var airWithout = new List<string>();
+        for (int k = 1; k <= 14; k++)
+        {
+            int pic = UI.PortraitBank.PictureOfAircraft(k);
+            (pic > 0 ? airWith : airWithout).Add($"{k} {AirKindName(k)}" +
+                (pic > 0 ? $" -> p{pic:00}" : ""));
+        }
+        sb.Append($"   Flugzeuge: {airWith.Count} der 14 Arten bekommen ein Bild ")
+          .Append($"(Folge {UI.PortraitBank.AirSequence} ab p")
+          .Append($"{UI.PortraitBank.FirstPictureOf(UI.PortraitBank.AirSequence):00}), ")
+          .Append($"{airWithout.Count} keines\n");
+        sb.Append("      mit Bild: ").Append(string.Join(", ", airWith)).Append('\n');
+        sb.Append("      ohne Bild (Tafel @0x450DC8 sagt 7): ")
+          .Append(string.Join(", ", airWithout)).Append('\n');
+
         // ---- die Einheiten dieser Karte, nach dem Grund gruppiert -----------
         var byReason = new SortedDictionary<string, int>();
         int shown = 0;
         int keep = _selected;
+        int keepAir = _selAir;
         var keepSel = new List<int>(_sel);
         for (int i = 0; i < _entities.Count; i++)
         {
@@ -3611,14 +3696,38 @@ public partial class MapEntityLayer : Node2D
                 byReason[why] = c + 1;
             }
         }
+        // dieselbe Übung für die Flugzeugplätze dieser Karte — auch hier über
+        // die echte Auswahl, nicht über eine nachgebaute Regel
+        var airReason = new SortedDictionary<string, int>();
+        int airShown = 0;
+        for (int i = 0; i < _special.Count; i++)
+        {
+            if (_special[i].Dead) continue;
+            _sel.Clear();
+            _selAir = i;
+            var p = PanelPortrait();
+            if (p.ChassisPic > 0) airShown++;
+            else
+            {
+                string why = p.Why.Length > 0 ? p.Why : "kein Grund gemeldet";
+                airReason.TryGetValue(why, out int c);
+                airReason[why] = c + 1;
+            }
+        }
+
         _sel.Clear();
         foreach (int i in keepSel) _sel.Add(i);
         _selected = keep;
+        _selAir = keepAir;
         UpdatePanel();
         QueueRedraw();
 
         sb.Append($"   Einheiten dieser Karte: {shown} bekommen ein Bild");
         foreach (var kv in byReason) sb.Append($", {kv.Value}x \"{kv.Key}\"");
+        sb.Append('\n');
+        sb.Append($"   Flugzeugplaetze dieser Karte: {airShown} von ")
+          .Append($"{_special.Count} bekommen ein Bild");
+        foreach (var kv in airReason) sb.Append($", {kv.Value}x \"{kv.Key}\"");
         sb.Append('\n');
 
         // ---- die Gegenprobe zweier getrennter Quellen -----------------------
@@ -7738,7 +7847,28 @@ public partial class MapEntityLayer : Node2D
         public AirDesign Clone() => (AirDesign)MemberwiseClone();
 
         /// <summary>sec19 kind. The payload component identifies the type, and
-        /// these five are the ones that occur on the maps.</summary>
+        /// these five are the ones that occur on the maps.
+        ///
+        /// <para>⚠ <b>Drei der acht Vorlagen fehlen hier, und seit dem
+        /// 13.08.2026 kostet das ein BILD:</b> die Nutzlasten 102 (Radar,
+        /// Spionageflieger), 103 (Robot Transporter) und 104 (Mechaniker) fallen
+        /// auf 0 durch, und ein am Flughafen GEKAUFTES Flugzeug dieser drei
+        /// Arten bekommt deshalb im Bedienblock kein Bild (Kind 0 liegt
+        /// ausserhalb 1..14). Ein auf der Karte STEHENDES Flugzeug ist davon
+        /// nicht betroffen — dessen Kind kommt aus sec19 <c>+0x08</c>.</para>
+        ///
+        /// <para><b>Warum es hier nicht nachgetragen ist:</b> die Vorlagen
+        /// tragen ihr Kind selbst, an <c>+0x2d</c> der Tabelle 0x51b021 —
+        /// aber <c>ExeTables.Aircraft</c> liest die Spalte nicht, und
+        /// <c>aircraft.json</c> unter <c>user://data/Maps</c> hat sie deshalb
+        /// nicht (nachgesehen 13.08.2026: 12 Felder, kein »kind«). Nach dem
+        /// NAMEN zuzuordnen wäre Raten: für 103/104 sagt
+        /// <c>Assets/Legacy/Maps/aircraft.json</c> 11/12 und
+        /// <see cref="AirKindName"/> 12/11, und ein vertauschtes Flugzeugbild
+        /// ist schlimmer als keines. Zu tun ist: <c>CostW</c>-artig ein
+        /// <c>Kind = r[0x2d]</c> in <c>ExeTables.AircraftTemplate</c>, ein
+        /// <c>"kind"</c> in <c>ContentBuilder.WriteAircraft</c>, dann hier
+        /// dieses Byte statt der Nutzlast-Tafel.</para></summary>
         public int Kind => Payload switch
         {
             101 => 1, 105 => 2, 100 => 10, 106 => 13, 107 => 14, _ => 0,
@@ -11944,6 +12074,55 @@ public partial class MapEntityLayer : Node2D
         return e2.Pos;
     }
 
+    /// <summary>Prüfstand für das FLUGZEUGBILD: ein einzelnes Flugzeug anwählen
+    /// — dasselbe, was ein Mausklick tut — und melden, welches Bild der
+    /// Bedienblock dafür zieht. Bevorzugt eines, das ein Bild hat und fliegt,
+    /// damit auf dem Bildschirmfoto beides zu sehen ist: der Rumpf auf der Karte
+    /// und sein Bild unten links.</summary>
+    public Vector2? DebugDemoAirPortrait()
+    {
+        if (_special.Count == 0)
+        { GD.Print("demo-airpic: diese Karte hat keine sec19-Flugzeuge"); return null; }
+
+        // Erst starten lassen, was im Hangar steht: ein geparktes Flugzeug ist
+        // nicht auf dem Bildschirm und kann nicht angeklickt werden.
+        int owner = _special.Find(s => !s.Dead)?.Owner ?? -1;
+        if (owner >= 0) LaunchAircraft(owner);
+
+        // ⭐ Angewaehlt wird mit einem KLICK, nicht mit einer Zuweisung: so
+        // prueft dieser Prüfstand auch PickAir mit — an der Stelle, an der auch
+        // die Maus landet. Ein Flugzeug ueber einem Gebaeude verliert den Klick
+        // (das Gebaeude gewinnt), deshalb wird durchprobiert.
+        int pick = -1;
+        int tried = 0;
+        for (int pass = 0; pass < 2 && pick < 0; pass++)
+            for (int i = 0; i < _special.Count; i++)
+            {
+                var s = _special[i];
+                if (s.Dead || s.Stored) continue;
+                if (pass < 1 && UI.PortraitBank.PictureOfAircraft(s.Kind) <= 0) continue;
+                tried++;
+                SelectAt(s.Pos - new Vector2(0, AirShadowDrop));
+                if (_selAir != i) continue;              // etwas anderes lag davor
+                pick = i;
+                break;
+            }
+        if (pick < 0)
+        {
+            GD.Print($"demo-airpic: {tried} Flugzeuge angeklickt, keines angewaehlt " +
+                     "— entweder liegt ueberall etwas davor oder PickAir trifft nicht");
+            return null;
+        }
+
+        var a = _special[pick];
+        var p = PanelPortrait();
+        GD.Print($"demo-airpic: Klick {tried} traf Platz {a.Slot} \"{a.Name}\" Art {a.Kind} " +
+                 $"({a.KindName}) P{a.Owner} {(a.Stored ? "im Hangar" : "fliegt")} " +
+                 $"-> Bild {(p.ChassisPic > 0 ? "p" + p.ChassisPic.ToString("00") : "keines")}" +
+                 (p.Why.Length > 0 ? $" ({p.Why})" : ""));
+        return a.Pos - new Vector2(0, AirShadowDrop);
+    }
+
     /// <summary>Preview harness: pick the owner with the most supply helicopters,
     /// bleed a handful of his units (hit points for the Treibstoffheli, rounds
     /// for the Munitionheli) and watch the helicopters work through them.</summary>
@@ -13741,6 +13920,37 @@ public partial class MapEntityLayer : Node2D
         return best;
     }
 
+    /// <summary>Das Flugzeug unter einem Punkt, oder −1. Ein Flugzeug im Hangar
+    /// ist nicht auf dem Bildschirm und lässt sich deshalb auch nicht anklicken
+    /// — wie eine <c>NoStructure</c> bei <see cref="Pick"/>.
+    ///
+    /// <para>⚠ UNSERE SETZUNG ist allein die GRÖSSE des Klickfelds: eine Zelle
+    /// (40×20) um den Punkt, an dem der Rumpf gezeichnet wird
+    /// (<see cref="AirShadowDrop"/> über dem Bodenschatten). Das Original hat
+    /// für seine Trefferprüfung eine eigene Rechnung, die nicht gelesen ist;
+    /// gelesen ist nur, DASS ein Flugzeug angewählt werden kann (Objektnummer
+    /// 0x4E20 + Platz, 0x470C09).</para></summary>
+    private int PickAir(Vector2 p)
+    {
+        int best = -1; float bd = float.MaxValue;
+        for (int i = 0; i < _special.Count; i++)
+        {
+            var s = _special[i];
+            if (s.Dead || s.Stored) continue;
+            if (!AirRect(s).HasPoint(p)) continue;
+            float d = p.DistanceTo(s.Pos - new Vector2(0, AirShadowDrop));
+            if (d < bd) { bd = d; best = i; }
+        }
+        return best;
+    }
+
+    private static Rect2 AirRect(Special s)
+    {
+        var at = s.Pos - new Vector2(0, AirShadowDrop);
+        return new Rect2(at - new Vector2(TileW / 2f, TileH / 2f),
+                         new Vector2(TileW, TileH));
+    }
+
     public void HoverAt(Vector2 mapPos)
     {
         int h = Pick(mapPos);
@@ -14199,6 +14409,22 @@ public partial class MapEntityLayer : Node2D
 
     private void UpdatePanel()
     {
+        // Ein angewaehltes FLUGZEUG: Name, Art, Huelle, Munition und Sprit —
+        // dieselben Groessen, die der Block auch fuer eine Einheit zeigt. Ohne
+        // diesen Zweig stuende neben dem Bild "KEINE AUSWAHL".
+        if (_selAir >= 0 && _selAir < _special.Count)
+        {
+            var a = _special[_selAir];
+            _panel.Visible = _panelTextOn;
+            _panel.Text =
+                $"{(a.Name.Length > 0 ? a.Name : a.TypeName).ToUpper()}\n" +
+                $"{a.KindName.ToUpper()}\n" +
+                $"{OwnerWord(a.Owner)}\n" +
+                $"HP {a.Hp}/{a.HpMax}\n" +
+                (a.IsSupply ? $"NUTZLAST {a.Cargo}/{SupplyCargoFull}"
+                            : $"MUN {a.Ammo}/{a.AmmoMax} SPRIT {a.Fuel}");
+            return;
+        }
         if (_selected < 0)
         {
             // idle panel: mission + selection summary, so the frame is never empty
@@ -14640,6 +14866,11 @@ public partial class MapEntityLayer : Node2D
 
         if (_hovered >= 0 && _hovered != _selected)
             DrawRect(BodyRect(_entities[_hovered]), new Color(1, 1, 1, 0.9f), false, 2f);
+
+        // das angewaehlte Flugzeug bekommt seinen Rahmen wie eine Einheit
+        if (_selAir >= 0 && _selAir < _special.Count && !_special[_selAir].Stored)
+            DrawRect(AirRect(_special[_selAir]), new Color(0.3f, 1f, 0.3f, 0.9f),
+                     false, 2f);
 
         if (_selected >= 0)
         {
