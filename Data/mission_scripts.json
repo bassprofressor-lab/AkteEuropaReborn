@@ -24,7 +24,7 @@
  "_imap": "Die BELEGUNGSKARTE (das Spiel nennt sie selbst imap, Debugzeile »imap[rx+px][ry+py]:« @0x4f66b4) ist SPALTENWEISE: Index = Spalte*256 + Zeile, ein Wort je Zelle ab 0xBDEA80 (C:) bzw. 0xBDDAE0 (F:). Gelesen aus dem Rumpf, der sie stempelt: mov cl,[edi+1] (Zeile) / mov dl,[edi] (Spalte) / shl edx,8 / add ecx,edx / add ecx,ecx / mov word[ecx+imap],si. Die Form 8a 4f 01 8a 17 c1 e2 08 03 ca 03 c9 66 89 b1 steht in BEIDEN GAME.EXE genau einmal (C: 0x41F33B, F: 0x41E4FA), und die zweite Basis fiel dabei mit heraus. ⚠ 13.08.2026 BERICHTIGT: mission_logic.py las a = Zelle%256 und c = Zelle//256, also Spalte und Zeile VERTAUSCHT, und alle 29 imap-Bedingungen dieser Datei trugen den Fehler. Gegenprobe an den Karten: bei der alten Deutung lagen 5 der 29 Zellen AUSSERHALB ihrer Karte, 1 im Wasser und 2 auf gesperrtem Grund — 8 Bedingungen, die nie wahr werden konnten; bei dieser Deutung liegen 29 von 29 innerhalb, 27 auf freiem und 2 auf rauem Grund. a ist die SPALTE, c ist die ZEILE.",
  "_klassen": "Einheitenklasse 0 ist die Summe der Klassen 1..4 (@0x4CF9AC), Gebaeudeklasse 0 sind alle Gebaeude (@0x4CFB3C). Die Klassen 1..4 bzw. 1..3 sind Einzelzaehler und noch nicht zugeordnet — Regeln, die sie brauchen, fehlen hier absichtlich.",
  "_note": "Missionsskripte der Kampagne. Im Original sind das keine Daten, sondern Code: die Missionsnummer aus dem Kartenkopf indiziert eine Sprungtabelle (@0x4A5B0C, 35 Eintraege), und jede Mission bekommt ihren eigenen Block, der jeden Takt laeuft. Die ZWISCHENSCHRITTE sind von Hand uebersetzt, mit `aekernel-tools/mission_logic.py --decode` als Vorlage; die SIEGBEDINGUNGEN sind es nicht, die sind eine Abschrift aus der EXE (siehe _endregeln). Jede Mission nennt die Adresse, aus der sie stammt, damit sich beides gegenpruefen laesst.",
- "_offen": "Nicht uebersetzt sind Regeln, die Ereignisflaggen (take_flag/0x539930), Toene, Busbefehle, das Setzen von Einheiten oder Buendniswechsel brauchen — dafuer fehlt der Unterbau. Eine fehlende Regel zeigt sich als Mission, die nicht von selbst endet; eine erfundene wuerde still falsch spielen. ⚠ Mehrere Endregeln pruefen zusaetzlich eigene Wortvariablen des Blocks (Missionen 5, 7, 13, 14). Die Bedingung ist richtig gelesen, aber die Regeln, die jene Variablen HOCHZAEHLEN, sind nicht uebersetzt — die Regel kann also nie feuern. MissionScript.Decides erkennt genau das und laesst in dem Fall die Notregel entscheiden, statt die Mission unloesbar zu machen; --script-check meldet solche Variablen als »ohne Erzeuger«.",
+ "_offen": "Nicht uebersetzt sind Regeln, die Ereignisflaggen (take_flag/0x539930), Toene, Busbefehle, das Setzen von Einheiten oder Buendniswechsel brauchen — dafuer fehlt der Unterbau. Eine fehlende Regel zeigt sich als Mission, die nicht von selbst endet; eine erfundene wuerde still falsch spielen. ⚠ Mehrere Endregeln pruefen zusaetzlich eigene Wortvariablen des Blocks (Missionen 5, 7, 13, 14). Die Bedingung ist richtig gelesen, aber die Regeln, die jene Variablen HOCHZAEHLEN, sind nicht uebersetzt — die Regel kann also nie feuern. MissionScript.Decides erkennt genau das und laesst in dem Fall die Notregel entscheiden, statt die Mission unloesbar zu machen; --script-check meldet solche Variablen als »ohne Erzeuger«.  ⚠ 13.08.2026 NACHGEMESSEN: der Satz oben (»Missionen 5, 7, 13, 14 — die Regel kann nie feuern«) ist ueberholt. Alle 31 Endregeln sind jetzt ERREICHBAR: zu jeder Variablen, die eine Endregel prueft, gibt es einen Erzeuger, der selbst feuern kann (gerechnet wie MissionScript.Decides/Writes, transitiv, mit Kreiserkennung — 31 von 31). Gehoben hat das die Uhr als Bedingung: `game_time() <op> N` und `game_time() > v[a] + b` waren im Regelleser ungelesen und haben 116 Regeln zurueckgehalten. Was jetzt noch fehlt, sind WIRKUNGEN (0x4D0860, 0x4D0600, 0x4D0FB0, 0x4D0AD0, 0x4222C0, 0x40C9A0, 0x40FC90, 0x4D1050, 0x4D0EE0) und einzelne Abfragen, deren Argumente in einem frueheren Basisblock stehen (unit_has_mark 31 Stellen). Die vollstaendige Zaehlung liefert aekernel-tools/mission_drops.py.",
  "_takt": "Der Takt, gemessen (aekernel-tools/mission_tick.py, beide GAME.EXE). Der Taktgeber ist eine Fensteruhr: SetTimer(fenster, 1, 0x14, NULL) @0x415BC5, 0x14 = 20 ms, also 50 TAKTE JE SEKUNDE; WM_TIMER (cmp eax,0x113 @0x412ED6) traegt einen offenen Takt ein (inc byte [0x53920C] @0x414010), die Hauptschleife verbraucht je Durchlauf genau einen (dec @0x415F0E) und haelt hoechstens vier vor (@0x415EFC). Die Uhr zaehlt 250 Takte je Spielminute (inc byte [0x81AA28]; cmp 0xFA @0x4160B3), eine Spielminute sind also FUENF REALE SEKUNDEN; game_time() @0x4CF570 liest dieselbe Stelle. Der Missionsblock ist ZWEITEILIG: die Kampagnenfunktion @0x497540 rechnet [0x502988] = Takt mod 100 (@0x497636) und faellt am Ende in den Verteiler @0x49814D; jeder der 33 Bloecke traegt darin GENAU EIN Tor `mov eax,[Takt mod 100]; test eax,eax; jne <Blockende>` mitten im Rumpf. Was davor steht laeuft JEDEN Takt (50 Hz), was dahinter jeden 100. (alle 2 s). `gate` je Mission ist die Adresse dieses Tors; jede Regel ordnet sich ueber ihr `_at` selbst ein, Regeln ohne `_at` (die 31 Endregeln) gelten als hinter dem Tor. `_waechter` markiert Zaehler, denen der Leser das vorgeschaltete `cmp v,0 / je` verloren hatte — ohne das laufen sie ab dem ersten Takt statt erst auf Anstoss.",
  "_vokabular": "Bedingungen: var(a,op,b) = v[a] op b | time_gt(a) = game_time() > a Minuten | time_after(a,b) = game_time() > v[a]+b | obj_owner(a,op,b) = Besitzer des Gebaeudeplatzes a | units(klasse,spieler,op,c) = g_robot_class_count | buildings(klasse,spieler,op,c) = g_buildings_count. Wirkungen: inc(a) | set(a,b) | text(a) | end(a) mit a=1 gewonnen, a=0 verloren.  Anfangswerte: init = {v: wert} aus dem Setup-Block; v[101+k] ist der Zustand des k-ten Missionsziels (1 offen, 10 erfuellt), v[131+k] seine Textnummer.  Anfangswerte: init = {v: wert} aus dem Setup-Block; v[101+k] ist der Zustand des k-ten Missionsziels (1 offen, 10 erfuellt), v[131+k] seine Textnummer.  Anfangswerte: init = {v: wert} aus dem Setup-Block; v[101+k] ist der Zustand des k-ten Missionsziels (1 offen, 10 erfuellt), v[131+k] seine Textnummer.  space_in(a=spieler, b=x, c=y, typen=[...]) setzt die Typen als Verstaerkung bei (x, y) ab, nachdem sie von ausserhalb der Karte angeflogen sind; +0x43 einer so erzeugten Einheit ist ihr Typ, und genau daran findet sie unit_index/find_unit.  ODER:  neben  — mindestens EIN Glied aus  muss zutreffen, zusätzlich zu allem in . Das Original schreibt sein ODER als zwei Abfragen, von denen die erste in den Rumpf SPRINGT und die zweite nur bei Misserfolg hinausspringt (Kampagne 2 @0x498EAF:  / ). mission_logic.set_rules liest die Form; sie steht in beiden GAME.EXE dreimal (M2 @0x498EEC, M3 @0x4996B7, M15 @0x49D89D) mit denselben Gliedern. ⚠ Eine Regel mit leerem  und gefülltem  ist NICHT bedingungslos — M3s Regel ist genau so gebaut.  ODER: any neben when — mindestens EIN Glied aus any muss zutreffen, zusätzlich zu allem in when. Das Original schreibt sein ODER als zwei Abfragen, von denen die erste in den Rumpf SPRINGT und die zweite nur bei Misserfolg hinausspringt (Kampagne 2 @0x498EAF: obj_owner(1) + je KOERPER, dann obj_owner(2) + jne RAUS). mission_logic.set_rules liest die Form; sie steht in beiden GAME.EXE dreimal (M2 @0x498EEC, M3 @0x4996B7, M15 @0x49D89D) mit denselben Gliedern. ⚠ Eine Regel mit leerem when und gefülltem any ist NICHT bedingungslos — M3s Regel ist genau so gebaut.  terra = [[spalte, zeile, menge], ...] aus add_terra_place (C: 0x4D0A10, F: 0x4D05C0) im SETUP-Block: wo im Boden Rohstoff liegt. Die Feld-Rohstoffmine (Gebaeudetyp 15) darf nur auf einem Vorkommen stehen (3x3-Fenster, @0x4205C0) — ohne diese Liste hat sie auf jeder Karte 0 Bauplaetze.",
  "missions": {
@@ -1093,6 +1093,31 @@
      ]
     },
     {
+     "_at": "0x49C4AA",
+     "then": [
+      {
+       "a": 7,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 7,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 8,
+       "b": 194,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49C4DA",
      "_tut_ausserdem": "remove_unit obj_owner",
      "then": [
@@ -1150,6 +1175,68 @@
        "b": 12,
        "kind": "obj_owner",
        "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49C5D9",
+     "then": [
+      {
+       "a": 16,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 7,
+       "b": 4,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 16,
+       "b": 0,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 17,
+       "b": 194,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49C60F",
+     "then": [
+      {
+       "a": 15,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 7,
+       "b": 4,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 15,
+       "b": 0,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 18,
+       "b": 194,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
       }
      ]
     },
@@ -1613,6 +1700,42 @@
      ]
     },
     {
+     "_at": "0x49CB8E",
+     "_tut_ausserdem": "sound",
+     "then": [
+      {
+       "a": 1,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "a": 103,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49CBA0",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 2,
+       "b": 194,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49CBCC",
      "_tut_ausserdem": "remove_unit show_text bus_cmd game_time sound",
      "then": [
@@ -1919,6 +2042,21 @@
      ]
     },
     {
+     "_at": "0x49CEF7",
+     "_tut_ausserdem": "0x4D0F20",
+     "once": 19,
+     "then": [],
+     "when": [
+      {
+       "a": 17,
+       "b": 194,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49CF13",
      "_tut_ausserdem": "0x4D0F20 show_text",
      "then": [
@@ -1948,6 +2086,38 @@
        "c": 65535,
        "kind": "unit_index",
        "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49CF4A",
+     "then": [
+      {
+       "a": 19,
+       "b": 3,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 19,
+       "b": 0,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 17,
+       "b": 194,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 194,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "=="
       }
      ]
     },
@@ -2987,6 +3157,99 @@
    },
    "rules": [
     {
+     "_at": "0x49DB42",
+     "then": [
+      {
+       "a": 21,
+       "b": 0,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 21,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 21,
+       "b": 193,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49DB78",
+     "then": [
+      {
+       "a": 22,
+       "b": 0,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 22,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 22,
+       "b": 193,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49DBAE",
+     "then": [
+      {
+       "a": 23,
+       "b": 0,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 23,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 23,
+       "b": 193,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49DC9B",
      "_tut_ausserdem": "show_text game_time",
      "once": 30,
@@ -3060,6 +3323,53 @@
        "c": 0,
        "kind": "unit_index",
        "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49DD76",
+     "_tut_ausserdem": "0x4D0860 place_unit 0x4D0AD0",
+     "then": [
+      {
+       "_at": "0x49DD93",
+       "a": 73,
+       "b": 73,
+       "c": 102,
+       "d": 0,
+       "kind": "place_unit"
+      },
+      {
+       "a": 30,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 32,
+       "b": 55,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "!="
+      },
+      {
+       "a": 32,
+       "b": 0,
+       "c": 11,
+       "kind": "unit_field",
+       "op": "<"
+      },
+      {
+       "a": 32,
+       "b": 1,
+       "c": 11,
+       "kind": "unit_field",
+       "op": "<"
       }
      ]
     },
@@ -3551,6 +3861,42 @@
      ]
     },
     {
+     "_at": "0x49E348",
+     "_tut_ausserdem": "sound",
+     "then": [
+      {
+       "a": 10,
+       "b": 9,
+       "kind": "set"
+      },
+      {
+       "a": 101,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49E35A",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 11,
+       "b": 194,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49E386",
      "_tut_ausserdem": "show_text remove_unit bus_cmd sound",
      "then": [
@@ -3899,6 +4245,99 @@
      ]
     },
     {
+     "_at": "0x49E7E5",
+     "then": [
+      {
+       "a": 21,
+       "b": 1000,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 21,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 21,
+       "b": 193,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49E81B",
+     "then": [
+      {
+       "a": 22,
+       "b": 1000,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 22,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 22,
+       "b": 193,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49E855",
+     "then": [
+      {
+       "a": 23,
+       "b": 1000,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 23,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 23,
+       "b": 193,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49E9A2",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
@@ -4171,6 +4610,41 @@
        "c": 65535,
        "kind": "unit_index",
        "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49ECAB",
+     "_tut_ausserdem": "sound",
+     "then": [
+      {
+       "a": 103,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "a": 30,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49ECBB",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 31,
+       "b": 194,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
       }
      ]
     },
@@ -7135,6 +7609,41 @@
      ]
     },
     {
+     "_at": "0x4A113F",
+     "_tut_ausserdem": "sound",
+     "then": [
+      {
+       "a": 304,
+       "b": 2,
+       "kind": "set"
+      },
+      {
+       "a": 30,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A114F",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 5,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 35,
+       "b": 190,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A1186",
      "_tut_ausserdem": "0x4D0D30",
      "then": [
@@ -7287,6 +7796,116 @@
      ]
     },
     {
+     "_at": "0x4A15B6",
+     "_tut_ausserdem": "show_text sound",
+     "then": [
+      {
+       "a": 106,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "a": 305,
+       "b": 2,
+       "kind": "set"
+      },
+      {
+       "_at": "0x4A15D9",
+       "a": 348,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x4A15E1",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 50,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 52,
+       "b": 192,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A16E7",
+     "_tut_ausserdem": "show_text",
+     "then": [
+      {
+       "a": 50,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A16FF",
+       "a": 348,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 50,
+       "b": 10,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 52,
+       "b": 192,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A172A",
+     "_tut_ausserdem": "show_text",
+     "then": [
+      {
+       "a": 50,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A1742",
+       "a": 348,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 50,
+       "b": 11,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 52,
+       "b": 192,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A1765",
      "_tut_ausserdem": "0x4D0EC0 game_time",
      "then": [
@@ -7321,6 +7940,47 @@
      ]
     },
     {
+     "_at": "0x4A17BE",
+     "_tut_ausserdem": "sound",
+     "then": [
+      {
+       "a": 305,
+       "b": 3,
+       "kind": "set"
+      },
+      {
+       "a": 50,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A17CE",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 50,
+       "b": 15,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 98,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 52,
+       "b": 192,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A1810",
      "_tut_ausserdem": "0x4D0EC0",
      "any": [
@@ -7351,6 +8011,66 @@
       }
      ],
      "when": []
+    },
+    {
+     "_at": "0x4A185C",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 106,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "a": 50,
+       "kind": "inc"
+      },
+      {
+       "a": 305,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "_at": "0x4A1883",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x4A1892",
+       "a": 2500,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "_at": "0x4A189A",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 50,
+       "b": 4,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 98,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 52,
+       "b": 192,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
     },
     {
      "_at": "0x4A1927",
@@ -9123,6 +9843,41 @@
      ]
     },
     {
+     "_at": "0x4A3D89",
+     "_tut_ausserdem": "sound",
+     "then": [
+      {
+       "a": 104,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "a": 40,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A3D99",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 40,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 42,
+       "b": 194,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A3DDB",
      "_tut_ausserdem": "0x4D0EC0",
      "any": [
@@ -9153,6 +9908,61 @@
       }
      ],
      "when": []
+    },
+    {
+     "_at": "0x4A3E27",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 40,
+       "kind": "inc"
+      },
+      {
+       "a": 104,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x4A3E45",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x4A3E54",
+       "a": 5000,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "_at": "0x4A3E5C",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 40,
+       "b": 4,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 42,
+       "b": 194,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      },
+      {
+       "a": 98,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      }
+     ]
     },
     {
      "_at": "0x4A3E95",
@@ -13510,6 +14320,71 @@
      ]
     },
     {
+     "_at": "0x49A6F2",
+     "_tut_ausserdem": "remove_unit show_text bus_cmd sound",
+     "then": [
+      {
+       "_at": "0x49A70C",
+       "a": 100,
+       "b": 1,
+       "c": 120,
+       "d": 450,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49A71B",
+       "a": 200,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "a": 102,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49A72C",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 102,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 11,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 11,
+       "b": 193,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "!="
+      },
+      {
+       "a": 11,
+       "b": 0,
+       "c": 54,
+       "kind": "unit_field",
+       "op": "=="
+      },
+      {
+       "a": 11,
+       "b": 1,
+       "c": 8,
+       "kind": "unit_field",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49A77F",
      "_waechter": "mission_tick.py: cmp v[9],0 / je vor dem inc @0x49A77F",
      "then": [
@@ -13604,6 +14479,37 @@
      ]
     },
     {
+     "_at": "0x49A986",
+     "_tut_ausserdem": "sound",
+     "then": [
+      {
+       "a": 101,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49A98F",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 10,
+       "b": 194,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49A9BD",
      "_tut_ausserdem": "0x4D0F20",
      "then": [
@@ -13632,6 +14538,37 @@
        "b": 193,
        "c": 65535,
        "kind": "unit_index",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A9FF",
+     "_tut_ausserdem": "sound",
+     "then": [
+      {
+       "a": 102,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49AA08",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 102,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 11,
+       "b": 193,
+       "c": 0,
+       "kind": "unit_is_var",
        "op": "!="
       }
      ]

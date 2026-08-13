@@ -1087,6 +1087,20 @@ public sealed class MissionScript
         // die Entwurfsnummer a? Mission 1 zählt so die EINGENOMMENEN neutralen.
         "units_mark" => MarkCount != null && Cmp(MarkCount(c.A, c.B), c.Op, c.C),
         // unit_has_mark(a, b) -> 1/0
+        // unit_has_mark(v[a], b) — DER INDEX KOMMT AUS EINER VARIABLEN.
+        //
+        // ⚠ 13.08.2026. Das Original uebergibt den Einheitenindex fast immer so:
+        //     mov ax, word ptr [v[11]]  /  push 0xc1  /  push eax  /  call
+        // Der Regelleser hielt `push eax` fuer ein unbekanntes Argument und warf
+        // das ganze Glied weg — gezaehlt 31 Stellen in 10 Missionen, und daran
+        // hingen 29 Regeln. `unit_is` mit einer festen Zahl kann das nicht: es
+        // braucht die INDIREKTION.
+        //
+        // v[a] fuellt `find_unit`, und 0xFFFF heisst dort »gibt es nicht«.
+        // UnitHasMark antwortet darauf FALSCH — eine Bedingung, die nicht
+        // beantwortet werden kann, darf nicht gewinnen.
+        "unit_is_var" => UnitHasMark != null && c.A >= 0 && c.A < _var.Length &&
+                         Cmp(UnitHasMark(_var[c.A], c.B) ? 1 : 0, c.Op, c.C),
         "unit_is" => UnitHasMark != null &&
                      Cmp(UnitHasMark(c.A, c.B) ? 1 : 0, c.Op, c.C),
         // get_money(a)
@@ -1417,7 +1431,7 @@ public sealed class MissionScript
             // `unit_field` fragt die Welt, hängt aber an der Variablen, in der
             // der Einheitenindex steht — also beides: die Bedingung sammeln UND
             // dem Erzeuger dieser Variablen nachgehen.
-            if (c.Kind == "unit_field" || c.Kind == "var_vs_store")
+            if (c.Kind is "unit_field" or "var_vs_store" or "unit_is_var")
                 queue.Enqueue(new Cond { Kind = "var", A = c.A, Op = "!=", B = 0 });
             if (c.Kind != "var") { list.Add(c); continue; }
             if (!seen.Add(c.A)) continue;
@@ -1523,7 +1537,7 @@ public sealed class MissionScript
             // Bedingung an einer Variablen hängt, die selbst erst gefüllt werden
             // muss — `var_vs_store` vergleicht v[a] mit einem Lager, und ob
             // v[a] überhaupt gesetzt wurde, ist die eigentliche Frage.
-            if (c.Kind is "var_vs_store" or "unit_field") todo.Enqueue(c.A);
+            if (c.Kind is "var_vs_store" or "unit_field" or "unit_is_var") todo.Enqueue(c.A);
             else if (!ok && c.Kind == "var") todo.Enqueue(c.A);
         }
         foreach (var c in r.When) Take(c, "");
@@ -1547,6 +1561,7 @@ public sealed class MissionScript
                           (StoreField != null ? StoreField(c.B, c.C) : -1),
         "unit_field" => $"Einheit v[{c.A}]={Var(c.A)} Feld+{c.B}{c.Op}{c.C}",
         "unit_index" => $"find_unit(P{c.A},Marke{c.B}){c.Op}{c.C}",
+        "unit_is_var" => $"Einheit v[{c.A}]={Var(c.A)} hat Marke {c.B}{c.Op}{c.C}",
         "units_mark" => $"Marke({c.A},P{c.B}){c.Op}{c.C}",
         "time_gt" => $"Spielminute>{c.A}",
         "event" => $"Ereignis{c.Op}{c.B}",
@@ -1613,7 +1628,7 @@ public sealed class MissionScript
         "var_vs_store" => StoreField != null,
         "selected" => Selection != null,
         "units_mark" => MarkCount != null,
-        "unit_is" => UnitHasMark != null,
+        "unit_is" or "unit_is_var" => UnitHasMark != null,
         "money_of" => MoneyOf != null,
         "terrain" => TerrainAt != null,
         "imap" => ImapAt != null,
