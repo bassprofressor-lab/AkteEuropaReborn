@@ -1794,20 +1794,35 @@ public partial class MapEntityLayer : Node2D
     /// diesen Filter waere nicht zu sagen, welches <paramref name="which"/> auf
     /// einem Rumpf landet. Ein Bildschirmfoto vom Schiffsbild braucht aber genau
     /// das — dieselbe Luecke, die beim Flugzeugplatz zu schliessen war.</param>
-    public string SelectForShot(int which, int unitType = -1)
+    /// <param name="buildings">⚠ Dazugekommen fuer die GEBÄUDE: ein
+    /// Bildschirmfoto soll belegen, dass der Bedienblock fuer ein Gebaeude KEIN
+    /// Bild zeigt — und das laesst sich nur photographieren, wenn eines
+    /// angewaehlt werden kann. Mit <c>true</c> waehlt dieselbe Stelle das
+    /// n-te Gebaeude statt der n-ten bewaffneten Einheit.</param>
+    public string SelectForShot(int which, int unitType = -1, bool buildings = false)
     {
         var pick = new List<int>();
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
-            if (e.IsBuilding || e.IsProp || e.Dead) continue;
+            if (e.IsProp || e.Dead) continue;
+            if (buildings)
+            {
+                // NoStructure steht fuer die Skripte, nicht auf dem Schirm —
+                // dieselbe Regel wie bei Pick.
+                if (e.IsBuilding && !e.NoStructure) pick.Add(i);
+                continue;
+            }
+            if (e.IsBuilding) continue;
             if (unitType >= 0 && e.UnitType != unitType) continue;
             if (e.Weapon != 0 || e.FuelMax > 0) pick.Add(i);
         }
         if (pick.Count == 0)
-            return unitType >= 0
-                ? $"select: keine Einheit mit unit_type {unitType} (und Waffe oder Tank)"
-                : "select: keine Einheit mit Waffe oder Tank";
+            return buildings
+                ? "select: kein Gebaeude auf dieser Karte"
+                : unitType >= 0
+                    ? $"select: keine Einheit mit unit_type {unitType} (und Waffe oder Tank)"
+                    : "select: keine Einheit mit Waffe oder Tank";
         int idx = pick[Mathf.PosMod(which, pick.Count)];
         _sel.Clear();
         _sel.Add(idx);
@@ -1815,6 +1830,11 @@ public partial class MapEntityLayer : Node2D
         UpdatePanel();
         QueueRedraw();
         var s = _entities[idx];
+        if (buildings)
+            return $"select: GEBAEUDE Platz {s.Slot}, Art {s.BType}, Feld " +
+                   $"{s.Col},{s.Row}, Besitzer {s.Owner}  |  Bild: " +
+                   $"{PanelPortrait().Why}  |  Panel: " +
+                   _panel.Text.Replace("\n", " / ");
         return $"select: Platz {s.Slot} {LabelOf(s.UnitType)}, Waffe {s.Weapon} " +
                $"\"{WeaponOf(s.Weapon).Name}\", Munition {s.Ammo}/{s.AmmoMax}, " +
                $"Sprit {s.Fuel}/{s.FuelMax}  |  Panel: " +
@@ -3585,7 +3605,14 @@ public partial class MapEntityLayer : Node2D
         if (n > 1) return (0, 0, n, "Gruppe — das Original zeigt hier kein Bild");
         var e = _entities[_selected];
         if (e.IsProp) return (0, 0, n, "Kulisse");
-        if (e.IsBuilding) return (0, 0, n, "Gebaeude — Klassenbyte ungelesen");
+        // ---- GEBÄUDE: kein Bild, und zwar ORIGINALTREU ----------------------
+        // Nicht »ungelesen« (so stand es hier bis zum 13.08.2026) und auch nicht
+        // das Klassenbyte 0x6E26D2: das gehört dem EINHEITENSATZ und ein Gebäude
+        // hat gar keinen. Die drei Messungen, die das tragen, stehen bei
+        // PortraitBank.BuildingTrouble — kurz: der Zeichner 0x4508A0 hat sechs
+        // Fälle und keiner nimmt ein Gebäude, und der Anwählgriff word[0x4FA0C8]
+        // kennt Gebäude überhaupt nicht.
+        if (e.IsBuilding) return (0, 0, n, UI.PortraitBank.BuildingTrouble());
         if (e.UnitType is 148 or 149)
         {
             // ---- der Infanteriezweig (Fall 0 ab 0x45099B) --------------------
@@ -3861,6 +3888,60 @@ public partial class MapEntityLayer : Node2D
               .Append("beim doppelten Rumpf Var 6/sonst): ")
               .Append(string.Join(" ", cs2)).Append('\n');
         }
+
+        // ---- die GEBÄUDE: die Zahl, die »kein Bild« belegt ------------------
+        //
+        // ⚠ Hier wird eine ABWESENHEIT gezählt, und das ist der Grund, warum
+        // dieser Abschnitt nicht nur eine Zahl nennt, sondern auch die sechs
+        // Fälle des Zeichners aufzählt. Eine 0 allein wäre nicht zu
+        // unterscheiden von einer Lücke unseres Codes.
+        // Gezählt wird über die ECHTE Auswahl, nicht über eine nachgebaute Regel
+        // — dieselbe Stelle, die auch ein Mausklick benutzt. _selected/_sel
+        // werden weiter unten ohnehin gesichert und wiederhergestellt.
+        int bldg = 0, bldgWith = 0;
+        var bldgTypes = new SortedSet<int>();
+        int keepSelBldg = _selected;
+        var keepListBldg = new List<int>(_sel);
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var b = _entities[i];
+            if (!b.IsBuilding || b.IsProp || b.Dead) continue;
+            bldg++;
+            bldgTypes.Add(b.BType);
+            _sel.Clear();
+            _sel.Add(i);
+            SetPrimary();
+            if (PanelPortrait().ChassisPic > 0) bldgWith++;
+        }
+        _sel.Clear();
+        foreach (int k in keepListBldg) _sel.Add(k);
+        _selected = keepSelBldg;
+        sb.Append($"   Gebaeude: {bldgWith} von {bldg} bekommen ein Bild — ")
+          .Append("das Original hat KEINES fuer ein Gebaeude\n");
+        sb.Append($"      Arten auf dieser Karte: {bldgTypes.Count} verschiedene (")
+          .Append(string.Join(", ", bldgTypes)).Append(")\n");
+        sb.Append("      Faelle des Zeichners 0x4508A0 (Sprungtafel @0x450C80, ")
+          .Append($"»cmp eax,5; ja« davor, also genau {UI.PortraitBank.DrawerCases.Length}): ")
+          .Append(string.Join(" · ", UI.PortraitBank.DrawerCases)).Append('\n');
+        sb.Append("      kein Fall nimmt ein Gebaeude — roher Dword-Abtast ueber ")
+          .Append("0x4508A0..0x450D00 findet 0 Treffer im Bereich der Gebaeudesaetze ")
+          .Append("0xC06000..0xC08000 (Tafel 0xC06914, 76 Byte, 255 Saetze)\n");
+        sb.Append("      und der Anwaehlgriff word[0x4FA0C8] kennt Gebaeude nicht: ")
+          .Append("roher Abtast findet 18 Schreibstellen — 0xFFFF, 0x2710, und die ")
+          .Append("Anwaehlroutine 0x4331E0, die nur Landeinheit (<0x1F40) und ")
+          .Append("Flugzeugplatz (>=0x4E20) schreibt\n");
+        sb.Append("      Aufrufstellen des Zeichners: 14 im ganzen .text (roher ")
+          .Append("E8-Abtast ueber den einzigen Stummel 0x4023E2), in 5 der 48 ")
+          .Append("Fensterarten; im Bedienblock (Art 9) genau ZWEI, 0x4701A9 ")
+          .Append("Einheit und 0x470C41 Flugzeugplatz\n");
+        sb.Append("      und die Gegenprobe: 11 der 48 Fensterarten LESEN die ")
+          .Append("Gebaeudetafel (2, 5, 6, 8, 11, 18, 20, 21, 23, 27, 46) — der ")
+          .Append("Bedienblock (Art 9) ist nicht darunter, 0 Treffer in seinen ")
+          .Append("5048 Byte\n");
+        sb.Append("      was der Bedienblock statt eines Bildes zeigt: Zweig ")
+          .Append("0x470E76 druckt »Kontostand « (0x501CF0) an (11,45) und ")
+          .Append("»Sprit gesamt « (0x501CE0) an (11,61) — das Bildfeld traegt ")
+          .Append("dort TEXT\n");
 
         // ---- die Einheiten dieser Karte, nach dem Grund gruppiert -----------
         var byReason = new SortedDictionary<string, int>();

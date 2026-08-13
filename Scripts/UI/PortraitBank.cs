@@ -584,6 +584,110 @@ public static class PortraitBank
         for (int i = 0; i <= ShipLastCase; i++) yield return ShipFirstChassis + i;
     }
 
+    // ---- GEBÄUDE: es gibt kein Bild, und das ist der Befund ----------------
+    //
+    // ⚠ Diese Stelle behauptet eine ABWESENHEIT, und darum steht hier, WIE sie
+    // gemessen ist — mit rohen Abtasten über GAME.EXE (1.421.824 B,
+    // »C:\Program Files (x86)\Akte Europa«), nicht mit einem leeren xref.
+    //
+    // 1. DER ZEICHNER HAT SECHS FÄLLE, UND KEINER IST EIN GEBÄUDE.
+    //    0x4508A0 springt über die Tafel @0x450C80; davor steht
+    //    »cmp eax, 5 ; ja 0x4509C4«, die Tafel ist also genau sechs Dwords lang
+    //    (0x4508D3, 0x450A3E, 0x450B07, 0x450B85, 0x450C1C, 0x450C44 —
+    //    nachgelesen; ab 0x450C98 fängt schon die 13er-Tafel der Infanterie an).
+    //    Die sechs sind in DrawerCases beim Namen genannt.
+    //
+    // 2. DER ZEICHNER BERÜHRT DIE GEBÄUDETAFEL NIE.
+    //    Roher Dword-Abtast über 0x4508A0…0x450D00: die Tafeln, in die er
+    //    greift, sind 0x51CE37/38 (Entwürfe sec47), 0x52EDB7/B8 (Schiffsbau),
+    //    0x6DDF78 (Flugzeugplätze sec19), 0x7A468A/8E/92/96 (die Folgen
+    //    400…403) und 0x815580 (die Rahmenzeiger). Treffer im Bereich der
+    //    Gebäudesätze 0xC06000…0xC08000: NULL. Die Gebäudetafel ist
+    //    0xC06914, 76 Byte je Satz, 255 Sätze (GAMESTATE_RE.md §3.86) — sie
+    //    kommt im Zeichner nicht vor.
+    //
+    // 3. EIN GEBÄUDE KANN GAR NICHT »DAS ANGEWÄHLTE OBJEKT« SEIN.
+    //    Der Bedienblock liest das angewählte Objekt aus word[0x4FA0C8]. Roher
+    //    Abtast nach allen SCHREIBSTELLEN dieses Wortes über den ganzen .text
+    //    (18 Stück): 0xFFFF (nichts), 0x2710 = 10000 (Gruppe) und zwei
+    //    Registerschreibungen in der Anwählroutine 0x4331E0. Die teilt bei
+    //    0x43322C/0x433309 in genau zwei Objektarten: Griff < 0x1F40 =
+    //    Landeinheit (Satz 78 Byte @0x6E26C8), Griff >= 0x4E20 = Flugzeugplatz
+    //    (Satz 68 Byte @0x591EFF ff., Griff − 0x4E20). Alles dazwischen
+    //    schreibt den Griff NICHT (0x43332F holt die Register aus einem
+    //    Stapelplatz und 0x43333D speichert den ALTEN Wert zurück) — der
+    //    Zahlenraum zwischen 8000 und 20000 trägt nur die Sonderwerte.
+    //    Zwei weitere Routinen zählen denselben Raum unabhängig ab:
+    //    das Abwählen @0x436030 (<0x1F40 · 0x4E20…0x4F4B · 0x2710 · sonst
+    //    nichts) und der Bedienblock selbst @0x46FE10
+    //    (0x470107 »cmp cx,0x1F40«, 0x4705F4 »cmp cx,0x2710«,
+    //    0x470C10/0x470C1B »0x4E20 <= cx < 0x4F4C«, sonst 0x470E76).
+    //    Gebäude werden über ihren PLATZ angesprochen (76·Platz + 0xC06914),
+    //    nicht über diesen Griff — sie kommen in ihm nicht vor.
+    //
+    // 4. UND WAS DER BEDIENBLOCK STATTDESSEN ZEIGT, ist gelesen: der Zweig
+    //    0x470E76 druckt »Kontostand « (0x501CF0) an (11,45) und
+    //    »Sprit gesamt « (0x501CE0) an (11,61) — die Übersicht. Das Bildfeld
+    //    (11,61) trägt dort also TEXT, kein Bild.
+    //
+    // 5. GEGENPROBE ÜBER ALLE FENSTER: roher E8-Abtast über den ganzen .text
+    //    nach dem einzigen Stummel des Zeichners (0x4023E2 → 0x4508A0) findet
+    //    14 Aufrufstellen. Über die Zeichnertafel @0x487888 (48 Einträge,
+    //    Index = Fensterart − 1) liegen sie in fünf Fensterarten: 5 Flughafen
+    //    (0x465BBC kind 3, 0x466999 kind 2), 6 Basis (0x46840A/0x4691D5 kind 0,
+    //    0x46A50B kind 5), 7 Erstellung (0x46D5DF/0x46D63A kind 5),
+    //    9 Bedienblock (0x4701A9 Einheit, 0x470C41 kind 3 Flugzeugplatz),
+    //    11 Hafen (0x471C41 kind 1) sowie 23/33/38 (0x47966B, 0x47E2F2,
+    //    0x482A8D, 0x4836F7, alle kind 0 = Entwurf). Kein einziger Aufruf
+    //    bekommt ein Gebäude gereicht.
+    //
+    // 6. GEGENPROBE VON DER ANDEREN SEITE: welche Fenster lesen die
+    //    Gebäudetafel überhaupt? Roher Dword-Abtast über den ganzen .text nach
+    //    0xC06900…0xC069FF, jede Fundstelle über die Zeichnertafel @0x487888
+    //    ihrer Fensterart zugeordnet: 11 der 48 Arten greifen hinein — 2, 5
+    //    (Flughafen), 6 (Basis), 8, 11 (Hafen), 18, 20, 21, 23, 27 und 46 (371
+    //    Stellen, der Verwalter). Die Art 9, der BEDIENBLOCK, ist NICHT darunter:
+    //    in seinen 5048 Byte kommt keine einzige Adresse der Gebäudetafel vor.
+    //    Der Bedienblock kennt Gebäude also überhaupt nicht — er kann ihnen
+    //    darum auch kein Bild geben. Die Fenster, die Gebäudedaten zeigen UND
+    //    ein Bild malen (5, 6, 11, 23), malen darin den ENTWURF bzw. den
+    //    Schiffsrumpf bzw. das Flugzeug, das im Gebäude steht — nie das Gebäude.
+    //
+    // ⚠ Ein falsches Bild wäre schlimmer als keines: der Spieler sieht es
+    // unmittelbar. Also bleibt das Feld für ein Gebäude leer — wie im Original.
+
+    /// <summary>Die SECHS Fälle des Bildzeichners <c>0x4508A0</c>, in der
+    /// Reihenfolge der Sprungtafel <c>@0x450C80</c> — für den Prüfstand, damit er
+    /// sie abschreiten kann, ohne sie selbst zu wissen. Die Namen sind nicht
+    /// gesetzt, sondern aus den Fehlermeldungen des Spiels selbst genommen
+    /// (»Wrong index of infantry« @0x4FE96C, »Wrong ship chassis« @0x4FE954,
+    /// »Wrong airplane type« @0x4FE93C).</summary>
+    public static readonly string[] DrawerCases =
+    {
+        "0 Entwurf (Landeinheit/Fusssoldat, sec47)",
+        "1 Schiffsrumpf (Folge 401)",
+        "2 Flugzeugart (Folge 402)",
+        "3 Flugzeugplatz (Folge 402)",
+        "4 festes Bild " + FixedPicture + " der Folge 400",
+        "5 rohe Bildnummer (Bauteil, " + UnknownFrom + " -> »?«)",
+    };
+
+    /// <summary>Das feste Bild, das Fall 4 malt (<c>0x450C1C</c>:
+    /// <c>seq400.start + 55</c>) — das grosse Fahrzeug. Kein Gebäude.</summary>
+    public const int FixedPicture = 55;
+
+    /// <summary>Warum ein GEBÄUDE kein Bild bekommt — EINE Formulierung für
+    /// Bedienblock und Prüfstand, wie <see cref="ShipTrouble"/> für die Schiffe.
+    /// Der Grund ist keine Lücke unseres Codes, sondern der Bau des Originals;
+    /// die Messung dazu steht im Kommentarblock über
+    /// <see cref="DrawerCases"/>.</summary>
+    public static string BuildingTrouble()
+        => "Gebaeude — das Original hat kein Bild dafuer: der Zeichner 0x4508A0 " +
+           "hat sechs Faelle (Tafel @0x450C80) und keiner nimmt ein Gebaeude, " +
+           "und der Griff word[0x4FA0C8] kennt nur Landeinheit (<0x1F40), " +
+           "Flugzeugplatz (0x4E20..0x4F4B), Gruppe (0x2710) und nichts (0xFFFF) " +
+           "— Gebaeude stehen in 76·Platz + 0xC06914 und kommen darin nicht vor";
+
     /// <summary>
     /// Die fertige Einheit in einen Kasten malen: Mulde füllen, Fahrwerk, dann
     /// Aufbauteil darüber — gleicher Ursprung, wie <c>0x46D5DF</c>/<c>0x46D63A</c>
