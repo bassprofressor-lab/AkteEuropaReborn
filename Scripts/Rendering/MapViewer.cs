@@ -1924,8 +1924,26 @@ public partial class MapViewer : Node2D
                     {
                         if (_rightDown && !_rightDrag)
                         {
-                            if (!_entities.IssueAttack(GetGlobalMousePosition(), mb.ShiftPressed))
-                                _entities.IssueMove(GetGlobalMousePosition(), mb.ShiftPressed);
+                            // ⚠ EINGABEN WERDEN DATEN. Der Klick setzt einen
+                            // Befehl ab; gewirkt wird am nächsten Taktanfang
+                            // (MapEntityLayer.SimTick → CommandTick). Vorher
+                            // schrieb ein Mausklick mitten im Bildlauf direkt in
+                            // die Einheiten — für ein Netzspiel nicht
+                            // reparierbar, weil der zweite Rechner den Klick
+                            // nicht hat und der Zeitpunkt an der Leitung hängt.
+                            //
+                            // Das Original macht es genauso: post() @0x4C1C50
+                            // schickt auch den EIGENEN Befehl über DirectPlay und
+                            // führt ihn erst aus, wenn er über Receive im Ring
+                            // (0xB4FA38, 1000 Plätze) zurückkommt. Satzlänge
+                            // 236 Byte, dreifach belegt. Siehe
+                            // Simulation/Commands/CommandBridge.cs.
+                            //
+                            // PostAttack gibt wie IssueAttack false zurück, wenn
+                            // der Klick kein Ziel getroffen hat — die Weiche
+                            // bleibt dieselbe.
+                            if (!_entities.PostAttack(GetGlobalMousePosition(), mb.ShiftPressed))
+                                _entities.PostMove(GetGlobalMousePosition(), mb.ShiftPressed);
                         }
                         _rightDown = false;
                         _rightDrag = false;

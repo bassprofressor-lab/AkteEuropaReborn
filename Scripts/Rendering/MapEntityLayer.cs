@@ -11767,6 +11767,23 @@ public partial class MapEntityLayer : Node2D
     /// zurück, ob sich etwas bewegt hat (nur fürs Neuzeichnen).</summary>
     private bool SimTick(float dt)
     {
+        // DER TAKTANFANG: alles, was für diesen Takt fällig ist, wirkt hier —
+        // und nur hier. Siehe Simulation/Commands/CommandBridge.cs.
+        //
+        // ⚠ VOR _clock und vor allem anderen. Ein Befehl, der nach der Bewegung
+        // wirkt, verschiebt die Einheit um einen Takt gegenüber der anderen
+        // Maschine, wenn dort die Reihenfolge anders herum steht — und genau
+        // solche Unterschiede sind es, die einen Lockstep-Lauf auseinander
+        // laufen lassen.
+        //
+        // ⚠ NEBENWIRKUNG, beabsichtigt und der Kern des Umbaus: ein Klick wirkt
+        // jetzt einen Takt später (16,7 ms bei SimHz = 60). Das Original kennt
+        // keinen kürzeren Weg — post() @0x4C1C50 schickt selbst den EIGENEN
+        // Befehl über die Leitung und führt ihn erst aus, wenn er über Receive
+        // im Ring zurückkommt. Unser bisheriger Direktzugriff war also nicht
+        // bloss netzuntauglich, er war nie das Original.
+        CommandTick();
+
         _clock += dt;
 
         // the original's "unexplored" step, on its own slower beat
