@@ -145,8 +145,6 @@ public sealed class NavGrid
         return _crushable[i];
     }
 
-    /// <summary>The foot soldier standing in the way, or -1. The caller decides
-    /// what happens to them — driven through if friendly, run over if not.</summary>
     /// <summary>Die Rohstoffvorkommen, die DIE KARTE mitbringt —
     /// <c>(spalte, zeile, menge)</c>. Bei jeder gelieferten Karte LEER (dort legt
     /// sie das Missionsskript an); gefüllt nur bei einer vom Karteneditor
@@ -156,6 +154,8 @@ public sealed class NavGrid
     /// fragt.</summary>
     public readonly List<(int Col, int Row, int Amount)> Deposits = new();
 
+    /// <summary>The foot soldier standing in the way, or -1. The caller decides
+    /// what happens to them — driven through if friendly, run over if not.</summary>
     public int CrushableAt(int c, int r, int mover = -1)
     {
         if (!InBounds(c, r)) return -1;

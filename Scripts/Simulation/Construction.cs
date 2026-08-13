@@ -130,10 +130,10 @@ public partial class MapEntityLayer
     /// </summary>
     public const int TypeFieldMineUsesDepositTest = TypeFieldMine;
 
-    /// <summary>The deposits a Feld-Rohstoffmine may stand on. ⚠ Die Liste selbst
-    /// steht seit dem 13.08.2026 in <c>Simulation/Deposits.cs</c> — sie hat jetzt
-    /// ZWEI Quellen (Missionsskript und, bei einer erzeugten Karte, die Karte
-    /// selbst) und zieht beim ersten Zugriff nach. Siehe dort.</summary>
+    // Die Vorkommen, auf denen eine Feld-Rohstoffmine stehen darf: ⚠ die Liste
+    // `_deposits` selbst steht seit dem 13.08.2026 in `Simulation/Deposits.cs` —
+    // sie hat jetzt ZWEI Quellen (Missionsskript und, bei einer erzeugten Karte,
+    // die Karte selbst) und zieht beim ersten Zugriff nach. Siehe dort.
 
     /// <summary>Whether we know where the deposits are at all.</summary>
     public bool HasDeposits => _deposits.Count > 0;
