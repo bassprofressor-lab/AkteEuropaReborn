@@ -21,11 +21,12 @@
   },
   "_note": "Zwei Siegbedingungen sind gelesen, aber nicht eintragbar: das Vokabular dieser Datei kann sie nicht ausdruecken. Sie stehen hier, damit sie nicht noch einmal gesucht werden muessen. Beide sind gegen OBJECTG.TXT geprueft, die Missionsziele des Spiels im Klartext."
  },
+ "_imap": "Die BELEGUNGSKARTE (das Spiel nennt sie selbst imap, Debugzeile »imap[rx+px][ry+py]:« @0x4f66b4) ist SPALTENWEISE: Index = Spalte*256 + Zeile, ein Wort je Zelle ab 0xBDEA80 (C:) bzw. 0xBDDAE0 (F:). Gelesen aus dem Rumpf, der sie stempelt: mov cl,[edi+1] (Zeile) / mov dl,[edi] (Spalte) / shl edx,8 / add ecx,edx / add ecx,ecx / mov word[ecx+imap],si. Die Form 8a 4f 01 8a 17 c1 e2 08 03 ca 03 c9 66 89 b1 steht in BEIDEN GAME.EXE genau einmal (C: 0x41F33B, F: 0x41E4FA), und die zweite Basis fiel dabei mit heraus. ⚠ 13.08.2026 BERICHTIGT: mission_logic.py las a = Zelle%256 und c = Zelle//256, also Spalte und Zeile VERTAUSCHT, und alle 29 imap-Bedingungen dieser Datei trugen den Fehler. Gegenprobe an den Karten: bei der alten Deutung lagen 5 der 29 Zellen AUSSERHALB ihrer Karte, 1 im Wasser und 2 auf gesperrtem Grund — 8 Bedingungen, die nie wahr werden konnten; bei dieser Deutung liegen 29 von 29 innerhalb, 27 auf freiem und 2 auf rauem Grund. a ist die SPALTE, c ist die ZEILE.",
  "_klassen": "Einheitenklasse 0 ist die Summe der Klassen 1..4 (@0x4CF9AC), Gebaeudeklasse 0 sind alle Gebaeude (@0x4CFB3C). Die Klassen 1..4 bzw. 1..3 sind Einzelzaehler und noch nicht zugeordnet — Regeln, die sie brauchen, fehlen hier absichtlich.",
  "_note": "Missionsskripte der Kampagne. Im Original sind das keine Daten, sondern Code: die Missionsnummer aus dem Kartenkopf indiziert eine Sprungtabelle (@0x4A5B0C, 35 Eintraege), und jede Mission bekommt ihren eigenen Block, der jeden Takt laeuft. Die ZWISCHENSCHRITTE sind von Hand uebersetzt, mit `aekernel-tools/mission_logic.py --decode` als Vorlage; die SIEGBEDINGUNGEN sind es nicht, die sind eine Abschrift aus der EXE (siehe _endregeln). Jede Mission nennt die Adresse, aus der sie stammt, damit sich beides gegenpruefen laesst.",
  "_offen": "Nicht uebersetzt sind Regeln, die Ereignisflaggen (take_flag/0x539930), Toene, Busbefehle, das Setzen von Einheiten oder Buendniswechsel brauchen — dafuer fehlt der Unterbau. Eine fehlende Regel zeigt sich als Mission, die nicht von selbst endet; eine erfundene wuerde still falsch spielen. ⚠ Mehrere Endregeln pruefen zusaetzlich eigene Wortvariablen des Blocks (Missionen 5, 7, 13, 14). Die Bedingung ist richtig gelesen, aber die Regeln, die jene Variablen HOCHZAEHLEN, sind nicht uebersetzt — die Regel kann also nie feuern. MissionScript.Decides erkennt genau das und laesst in dem Fall die Notregel entscheiden, statt die Mission unloesbar zu machen; --script-check meldet solche Variablen als »ohne Erzeuger«.",
  "_takt": "Der Takt, gemessen (aekernel-tools/mission_tick.py, beide GAME.EXE). Der Taktgeber ist eine Fensteruhr: SetTimer(fenster, 1, 0x14, NULL) @0x415BC5, 0x14 = 20 ms, also 50 TAKTE JE SEKUNDE; WM_TIMER (cmp eax,0x113 @0x412ED6) traegt einen offenen Takt ein (inc byte [0x53920C] @0x414010), die Hauptschleife verbraucht je Durchlauf genau einen (dec @0x415F0E) und haelt hoechstens vier vor (@0x415EFC). Die Uhr zaehlt 250 Takte je Spielminute (inc byte [0x81AA28]; cmp 0xFA @0x4160B3), eine Spielminute sind also FUENF REALE SEKUNDEN; game_time() @0x4CF570 liest dieselbe Stelle. Der Missionsblock ist ZWEITEILIG: die Kampagnenfunktion @0x497540 rechnet [0x502988] = Takt mod 100 (@0x497636) und faellt am Ende in den Verteiler @0x49814D; jeder der 33 Bloecke traegt darin GENAU EIN Tor `mov eax,[Takt mod 100]; test eax,eax; jne <Blockende>` mitten im Rumpf. Was davor steht laeuft JEDEN Takt (50 Hz), was dahinter jeden 100. (alle 2 s). `gate` je Mission ist die Adresse dieses Tors; jede Regel ordnet sich ueber ihr `_at` selbst ein, Regeln ohne `_at` (die 31 Endregeln) gelten als hinter dem Tor. `_waechter` markiert Zaehler, denen der Leser das vorgeschaltete `cmp v,0 / je` verloren hatte — ohne das laufen sie ab dem ersten Takt statt erst auf Anstoss.",
- "_vokabular": "Bedingungen: var(a,op,b) = v[a] op b | time_gt(a) = game_time() > a Minuten | time_after(a,b) = game_time() > v[a]+b | obj_owner(a,op,b) = Besitzer des Gebaeudeplatzes a | units(klasse,spieler,op,c) = g_robot_class_count | buildings(klasse,spieler,op,c) = g_buildings_count. Wirkungen: inc(a) | set(a,b) | text(a) | end(a) mit a=1 gewonnen, a=0 verloren.  Anfangswerte: init = {v: wert} aus dem Setup-Block; v[101+k] ist der Zustand des k-ten Missionsziels (1 offen, 10 erfuellt), v[131+k] seine Textnummer.  Anfangswerte: init = {v: wert} aus dem Setup-Block; v[101+k] ist der Zustand des k-ten Missionsziels (1 offen, 10 erfuellt), v[131+k] seine Textnummer.  Anfangswerte: init = {v: wert} aus dem Setup-Block; v[101+k] ist der Zustand des k-ten Missionsziels (1 offen, 10 erfuellt), v[131+k] seine Textnummer.  space_in(a=spieler, b=x, c=y, typen=[...]) setzt die Typen als Verstaerkung bei (x, y) ab, nachdem sie von ausserhalb der Karte angeflogen sind; +0x43 einer so erzeugten Einheit ist ihr Typ, und genau daran findet sie unit_index/find_unit.",
+ "_vokabular": "Bedingungen: var(a,op,b) = v[a] op b | time_gt(a) = game_time() > a Minuten | time_after(a,b) = game_time() > v[a]+b | obj_owner(a,op,b) = Besitzer des Gebaeudeplatzes a | units(klasse,spieler,op,c) = g_robot_class_count | buildings(klasse,spieler,op,c) = g_buildings_count. Wirkungen: inc(a) | set(a,b) | text(a) | end(a) mit a=1 gewonnen, a=0 verloren.  Anfangswerte: init = {v: wert} aus dem Setup-Block; v[101+k] ist der Zustand des k-ten Missionsziels (1 offen, 10 erfuellt), v[131+k] seine Textnummer.  Anfangswerte: init = {v: wert} aus dem Setup-Block; v[101+k] ist der Zustand des k-ten Missionsziels (1 offen, 10 erfuellt), v[131+k] seine Textnummer.  Anfangswerte: init = {v: wert} aus dem Setup-Block; v[101+k] ist der Zustand des k-ten Missionsziels (1 offen, 10 erfuellt), v[131+k] seine Textnummer.  space_in(a=spieler, b=x, c=y, typen=[...]) setzt die Typen als Verstaerkung bei (x, y) ab, nachdem sie von ausserhalb der Karte angeflogen sind; +0x43 einer so erzeugten Einheit ist ihr Typ, und genau daran findet sie unit_index/find_unit.  ODER:  neben  — mindestens EIN Glied aus  muss zutreffen, zusätzlich zu allem in . Das Original schreibt sein ODER als zwei Abfragen, von denen die erste in den Rumpf SPRINGT und die zweite nur bei Misserfolg hinausspringt (Kampagne 2 @0x498EAF:  / ). mission_logic.set_rules liest die Form; sie steht in beiden GAME.EXE dreimal (M2 @0x498EEC, M3 @0x4996B7, M15 @0x49D89D) mit denselben Gliedern. ⚠ Eine Regel mit leerem  und gefülltem  ist NICHT bedingungslos — M3s Regel ist genau so gebaut.  ODER: any neben when — mindestens EIN Glied aus any muss zutreffen, zusätzlich zu allem in when. Das Original schreibt sein ODER als zwei Abfragen, von denen die erste in den Rumpf SPRINGT und die zweite nur bei Misserfolg hinausspringt (Kampagne 2 @0x498EAF: obj_owner(1) + je KOERPER, dann obj_owner(2) + jne RAUS). mission_logic.set_rules liest die Form; sie steht in beiden GAME.EXE dreimal (M2 @0x498EEC, M3 @0x4996B7, M15 @0x49D89D) mit denselben Gliedern. ⚠ Eine Regel mit leerem when und gefülltem any ist NICHT bedingungslos — M3s Regel ist genau so gebaut.",
  "missions": {
   "1": {
    "_endregel_aus": "0x4989C7",
@@ -83,9 +84,9 @@
      "then": [],
      "when": [
       {
-       "a": 39,
+       "a": 4,
        "b": 65534,
-       "c": 4,
+       "c": 39,
        "kind": "imap",
        "op": "=="
       }
@@ -320,9 +321,9 @@
      ],
      "when": [
       {
-       "a": 53,
+       "a": 36,
        "b": 1000,
-       "c": 36,
+       "c": 53,
        "kind": "imap",
        "op": "<"
       }
@@ -820,16 +821,16 @@
        "op": "=="
       },
       {
-       "a": 8,
+       "a": 55,
        "b": 5999,
-       "c": 55,
+       "c": 8,
        "kind": "imap",
        "op": ">"
       },
       {
-       "a": 8,
+       "a": 55,
        "b": 7000,
-       "c": 55,
+       "c": 8,
        "kind": "imap",
        "op": "<"
       }
@@ -1407,16 +1408,16 @@
        "op": "=="
       },
       {
-       "a": 115,
+       "a": 19,
        "b": 3999,
-       "c": 19,
+       "c": 115,
        "kind": "imap",
        "op": ">"
       },
       {
-       "a": 115,
+       "a": 19,
        "b": 5000,
-       "c": 19,
+       "c": 115,
        "kind": "imap",
        "op": "<"
       }
@@ -2036,6 +2037,48 @@
      ]
     },
     {
+     "_at": "0x49D89D",
+     "_tut_ausserdem": "0x4D1050 0x4D1050 sound",
+     "any": [
+      {
+       "a": 12,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 13,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ],
+     "then": [
+      {
+       "a": 30,
+       "kind": "inc"
+      },
+      {
+       "a": 103,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49D8C5",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49D94E",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
@@ -2636,9 +2679,9 @@
        "op": "=="
       },
       {
-       "a": 111,
+       "a": 50,
        "b": 1000,
-       "c": 50,
+       "c": 111,
        "kind": "imap",
        "op": "<"
       }
@@ -3235,9 +3278,9 @@
      ],
      "when": [
       {
-       "a": 21,
+       "a": 15,
        "b": 8000,
-       "c": 15,
+       "c": 21,
        "kind": "imap",
        "op": "<"
       }
@@ -3353,9 +3396,9 @@
        "op": "=="
       },
       {
-       "a": 7,
+       "a": 63,
        "b": 1000,
-       "c": 63,
+       "c": 7,
        "kind": "imap",
        "op": "<"
       }
@@ -3457,9 +3500,9 @@
      ],
      "when": [
       {
-       "a": 55,
+       "a": 3,
        "b": 8000,
-       "c": 3,
+       "c": 55,
        "kind": "imap",
        "op": "<"
       }
@@ -3607,9 +3650,38 @@
        "op": "=="
       },
       {
-       "a": 57,
+       "a": 63,
        "b": 1000,
-       "c": 63,
+       "c": 57,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x498EEC",
+     "_tut_ausserdem": "0x4D0810 0x4D0810 0x4D0810 0x4D0810 0x4D0810 0x4D0810 0x4D0810 0x410220 0x410220 0x410220 0x410220 0x410220 0x410220 0x410220",
+     "any": [
+      {
+       "a": 1,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 2,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ],
+     "once": 70,
+     "then": [],
+     "when": [
+      {
+       "a": 3,
+       "b": 1000,
+       "c": 60,
        "kind": "imap",
        "op": "<"
       }
@@ -5097,9 +5169,9 @@
        "op": "=="
       },
       {
-       "a": 198,
+       "a": 58,
        "b": 1000,
-       "c": 58,
+       "c": 198,
        "kind": "imap",
        "op": "<"
       }
@@ -5130,9 +5202,9 @@
        "op": "=="
       },
       {
-       "a": 198,
+       "a": 58,
        "b": 1000,
-       "c": 58,
+       "c": 198,
        "kind": "imap",
        "op": "<"
       }
@@ -6143,9 +6215,9 @@
      ],
      "when": [
       {
-       "a": 38,
+       "a": 37,
        "b": 65534,
-       "c": 37,
+       "c": 38,
        "kind": "imap",
        "op": "=="
       }
@@ -6180,9 +6252,9 @@
        "op": "=="
       },
       {
-       "a": 38,
+       "a": 13,
        "b": 1000,
-       "c": 13,
+       "c": 38,
        "kind": "imap",
        "op": "<"
       }
@@ -6217,9 +6289,9 @@
        "op": "=="
       },
       {
-       "a": 12,
+       "a": 9,
        "b": 1000,
-       "c": 9,
+       "c": 12,
        "kind": "imap",
        "op": "<"
       }
@@ -6328,6 +6400,38 @@
      ]
     },
     {
+     "_at": "0x4996B7",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "any": [
+      {
+       "b": 25,
+       "kind": "event",
+       "op": "=="
+      },
+      {
+       "b": 10000,
+       "kind": "selected",
+       "op": "=="
+      }
+     ],
+     "once": 51,
+     "then": [
+      {
+       "_at": "0x4996B7",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x4996C7",
+       "a": 40,
+       "b": 2,
+       "c": 70,
+       "d": 150,
+       "kind": "text"
+      }
+     ],
+     "when": []
+    },
+    {
      "_at": "0x4996F0",
      "_tut_ausserdem": "close_message_windows show_text2",
      "once": 52,
@@ -6414,9 +6518,9 @@
        "op": "=="
       },
       {
-       "a": 36,
+       "a": 7,
        "b": 1000,
-       "c": 7,
+       "c": 36,
        "kind": "imap",
        "op": "<"
       }
@@ -6434,9 +6538,9 @@
        "op": "=="
       },
       {
-       "a": 29,
+       "a": 80,
        "b": 1000,
-       "c": 80,
+       "c": 29,
        "kind": "imap",
        "op": "<"
       }
@@ -6449,9 +6553,9 @@
      "then": [],
      "when": [
       {
-       "a": 38,
+       "a": 59,
        "b": 1000,
-       "c": 59,
+       "c": 38,
        "kind": "imap",
        "op": "<"
       }
@@ -6463,9 +6567,9 @@
      "then": [],
      "when": [
       {
-       "a": 74,
+       "a": 85,
        "b": 1000,
-       "c": 85,
+       "c": 74,
        "kind": "imap",
        "op": "<"
       }
@@ -8188,9 +8292,9 @@
      ],
      "when": [
       {
-       "a": 29,
+       "a": 35,
        "b": 1000,
-       "c": 35,
+       "c": 29,
        "kind": "imap",
        "op": "<"
       }
@@ -8212,9 +8316,9 @@
      ],
      "when": [
       {
-       "a": 20,
+       "a": 22,
        "b": 1000,
-       "c": 22,
+       "c": 20,
        "kind": "imap",
        "op": "<"
       }
@@ -8236,9 +8340,9 @@
      ],
      "when": [
       {
-       "a": 11,
+       "a": 38,
        "b": 1000,
-       "c": 38,
+       "c": 11,
        "kind": "imap",
        "op": "<"
       }
@@ -8846,9 +8950,9 @@
        "op": "=="
       },
       {
-       "a": 8,
+       "a": 54,
        "b": 1000,
-       "c": 54,
+       "c": 8,
        "kind": "imap",
        "op": "<"
       }
@@ -8920,9 +9024,9 @@
        "op": "=="
       },
       {
-       "a": 29,
+       "a": 53,
        "b": 1000,
-       "c": 53,
+       "c": 29,
        "kind": "imap",
        "op": "<"
       }
@@ -8940,9 +9044,9 @@
        "op": "=="
       },
       {
-       "a": 55,
+       "a": 52,
        "b": 1000,
-       "c": 52,
+       "c": 55,
        "kind": "imap",
        "op": "<"
       }
@@ -9171,9 +9275,9 @@
      ],
      "when": [
       {
-       "a": 22,
+       "a": 14,
        "b": 1000,
-       "c": 14,
+       "c": 22,
        "kind": "imap",
        "op": "<"
       }
@@ -9611,9 +9715,9 @@
        "op": "=="
       },
       {
-       "a": 24,
+       "a": 16,
        "b": 1000,
-       "c": 16,
+       "c": 24,
        "kind": "imap",
        "op": "<"
       }
@@ -9784,9 +9888,9 @@
      ],
      "when": [
       {
-       "a": 45,
+       "a": 93,
        "b": 1000,
-       "c": 93,
+       "c": 45,
        "kind": "imap",
        "op": "<"
       }

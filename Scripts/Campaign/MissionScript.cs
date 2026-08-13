@@ -63,6 +63,29 @@ public sealed class MissionScript
     {
         public int Once = -1;         // the variable that latches this rule, -1 = every tick
         public readonly List<Cond> When = new();
+
+        /// <summary>
+        /// Die ODER-Glieder (`any`): mindestens EINES muss zutreffen, zusätzlich
+        /// zu allem in <see cref="When"/>. Leer heisst: kein ODER.
+        ///
+        /// <para>⚠ 13.08.2026 — bis heute kannte diese Datei nur UND, und
+        /// deshalb fehlten drei Regeln ganz. Das Original schreibt sein ODER als
+        /// zwei Abfragen, von denen die erste in den Rumpf SPRINGT und die
+        /// zweite nur bei Misserfolg hinausspringt (Kampagne 2 @0x498EAF):</para>
+        /// <code>
+        ///     obj_owner(1); test al,al; je  0x498EEC   ; trifft zu -> tu es
+        ///     obj_owner(2); test al,al; jne 0x49900B   ; trifft nicht zu -> weg
+        ///     0x498EEC: &lt;Wirkung&gt; ... inc v[70]
+        /// </code>
+        /// <para>Gelesen wird die Form von <c>mission_logic.set_rules</c>; sie
+        /// steht in beiden GAME.EXE dieses Rechners dreimal (M2 @0x498EEC,
+        /// M3 @0x4996B7, M15 @0x49D89D) und liefert dort dieselben Glieder.
+        /// </para>
+        /// <para>⚠ Eine Regel mit leerem <see cref="When"/> und gefülltem
+        /// <c>Any</c> ist NICHT bedingungslos — M3s Regel ist genau so gebaut.
+        /// Wer das ODER übersieht, hat wieder eine zu schwache Bedingung.</para>
+        /// </summary>
+        public readonly List<Cond> Any = new();
         public readonly List<Act> Then = new();
 
         /// <summary>Die Adresse, aus der die Regel uebersetzt wurde (`_at`) —
@@ -202,6 +225,9 @@ public sealed class MissionScript
                 foreach (var c in r.When)
                     if (c.Kind == "var" && !Cmp(Start(c.A), c.Op, c.B) && !Writes(c.A))
                     { reachable = false; break; }
+                // Ein ODER lebt, solange EIN Glied lebt.
+                if (reachable && r.Any.Count > 0 && !AnyReachable(r, new HashSet<int>()))
+                    reachable = false;
                 if (reachable) return true;
             }
             return false;
@@ -212,6 +238,124 @@ public sealed class MissionScript
     {
         foreach (var a in r.Then) if (a.Kind == "end") return true;
         return false;
+    }
+
+    /// <summary>Trifft mindestens ein ODER-Glied zu? Nur zu rufen, wenn es
+    /// welche gibt — eine leere Liste heisst »kein ODER«, nicht »wahr«.
+    /// </summary>
+    private bool AnyTrue(Rule r)
+    {
+        foreach (var c in r.Any) if (Test(c)) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// PRÜFSTAND `--oder-check`: das ODER an seiner MECHANIK, nicht an seinem
+    /// Ergebnis.
+    ///
+    /// <para>⚠ Regel 8 — ein Prüfstand, der nur das Ergebnis hinschreibt, prüft
+    /// nichts. Also wird das Gatter jeder ODER-Regel durch seine <b>ganze
+    /// Wahrheitstafel</b> gefahren: bei k Armen 2^k Belegungen, und gefeuert
+    /// werden darf genau dann, wenn mindestens ein Arm wahr ist. Die Antworten
+    /// werden dem Glied vorgegeben (<see cref="_vorgabe"/>), die Welt bleibt
+    /// unberührt — sonst hinge das Ergebnis an der Karte statt am Gatter.</para>
+    ///
+    /// <para>Was das NICHT prüft: ob die Glieder richtig GELESEN sind. Das
+    /// entscheidet <c>mission_logic.set_rules</c> gegen beide GAME.EXE.</para>
+    /// </summary>
+    public string OrCheck()
+    {
+        var sb = new System.Text.StringBuilder();
+        int regeln = 0, zeilen = 0, falsch = 0;
+        for (int ri = 0; ri < _script.Rules.Count; ri++)
+        {
+            var r = _script.Rules[ri];
+            if (r.Any.Count == 0) continue;
+            regeln++;
+            int k = r.Any.Count;
+            var tafel = new List<string>();
+            for (int maske = 0; maske < (1 << k); maske++)
+            {
+                _vorgabe = new Dictionary<Cond, bool>();
+                for (int b = 0; b < k; b++) _vorgabe[r.Any[b]] = (maske & (1 << b)) != 0;
+                bool ist = AnyTrue(r);
+                bool soll = maske != 0;
+                _vorgabe = null;
+                zeilen++;
+                if (ist != soll) falsch++;
+                var arme = new List<string>();
+                for (int b = 0; b < k; b++) arme.Add((maske & (1 << b)) != 0 ? "wahr" : "falsch");
+                tafel.Add($"{string.Join("/", arme)}->{(ist ? "feuert" : "still")}" +
+                          (ist == soll ? "" : " FALSCH"));
+            }
+            var namen = new List<string>();
+            foreach (var c in r.Any) namen.Add(Show(c));
+            sb.Append($"   Regel {ri} @0x{r.At:X}: ODER({string.Join(" | ", namen)})\n" +
+                      $"      {string.Join("  ", tafel)}\n");
+        }
+        return $"oder-check: M{Mission} {regeln} ODER-Regeln, {zeilen} Belegungen, " +
+               $"{falsch} falsch\n" + sb.ToString().TrimEnd();
+    }
+
+    /// <summary>
+    /// PRÜFSTAND `--rule-check`: jede Regel des laufenden Skripts mit ihren
+    /// Gliedern und deren WERTEN — nicht nur die Endregel.
+    ///
+    /// <para>Warum es das braucht: eine Regel, die nicht feuert, ist im Spiel
+    /// von einer, die es gleich täte, nicht zu unterscheiden. <c>WhyNot</c>
+    /// verfolgt nur die Kette zur Endregel; die halbe Kampagne besteht aber aus
+    /// Regeln, die einen Text zeigen oder einen Zähler anstossen, und die
+    /// tauchen dort gar nicht auf.</para>
+    /// </summary>
+    public string RuleCheck()
+    {
+        var sb = new System.Text.StringBuilder();
+        int offen = 0;
+        for (int ri = 0; ri < _script.Rules.Count; ri++)
+        {
+            var r = _script.Rules[ri];
+            bool zu = r.Once >= 0 && r.Once < _var.Length && _var[r.Once] != 0;
+            bool alle = true;
+            var teile = new List<string>();
+            foreach (var c in r.When)
+            {
+                bool ok = Test(c);
+                if (!ok) alle = false;
+                teile.Add(Show(c) + (ok ? "=ja" : "=NEIN"));
+            }
+            bool oder = r.Any.Count == 0 || AnyTrue(r);
+            foreach (var c in r.Any)
+                teile.Add("ODER " + Show(c) + (Test(c) ? "=ja" : "=NEIN"));
+            bool feuert = !zu && alle && oder;
+            if (!feuert && !zu) offen++;
+            var wirkt = new List<string>();
+            foreach (var a in r.Then) wirkt.Add(a.Kind);
+            sb.Append($"   {ri,2} @0x{r.At:X} {(zu ? "RIEGEL" : feuert ? "FEUERT" : "wartet")}" +
+                      $" once={r.Once,3} -> {(wirkt.Count == 0 ? "(nichts uebersetzt)" : string.Join("+", wirkt))}\n" +
+                      $"        {(teile.Count == 0 ? "(ohne Bedingung)" : string.Join("  ", teile))}\n");
+        }
+        return $"rule-check: M{Mission} {_script.Rules.Count} Regeln, {offen} warten\n" +
+               sb.ToString().TrimEnd();
+    }
+
+    /// <summary>Die Prüfstände, die sich selbst aus der Befehlszeile lesen —
+    /// die zentrale Schalterschleife gehört einer anderen Datei, und das Muster
+    /// ist schon da (MapEntityLayer liest seine eigenen ebenso). Läuft genau
+    /// einmal, beim ersten Takt: da hängen die Haken, vorher nicht.</summary>
+    private bool _bankGelaufen;
+
+    private void BankVielleicht()
+    {
+        if (_bankGelaufen) return;
+        _bankGelaufen = true;
+        bool oder = false, regeln = false;
+        foreach (string a in Core.CommandLine.Args)
+        {
+            if (a == "--oder-check") oder = true;
+            else if (a == "--rule-check") regeln = true;
+        }
+        if (oder) GD.Print(OrCheck());
+        if (regeln) GD.Print(RuleCheck());
     }
 
     /// <summary>
@@ -252,6 +396,9 @@ public sealed class MissionScript
                     if (Cmp(Start(c.A), c.Op, c.B)) continue;   // schon zu Beginn wahr
                     if (!Writes(c.A, onPath)) { can = false; break; }
                 }
+                // Ein ODER lebt, solange EIN Glied lebt — sonst kann die Regel
+                // nie feuern und ist als Erzeuger nichts wert.
+                if (can && r.Any.Count > 0 && !AnyReachable(r, onPath)) can = false;
                 // Der `once`-Riegel verlangt v[once] == 0; das ist eine
                 // Bedingung wie jede andere.
                 if (can && r.Once >= 0 && Start(r.Once) != 0) can = false;
@@ -260,6 +407,22 @@ public sealed class MissionScript
             return false;
         }
         finally { onPath.Remove(n); }
+    }
+
+    /// <summary>Kann mindestens ein ODER-Glied dieser Regel je zutreffen?
+    /// Weltbedingungen gelten als herstellbar, Variablenbedingungen nur, wenn
+    /// sie schon im Anfangszustand wahr sind oder die Variable einen Erzeuger
+    /// hat. Dieselbe Rechnung wie in <see cref="Writes(int, HashSet{int})"/>,
+    /// nur mit ODER statt UND.</summary>
+    private bool AnyReachable(Rule r, HashSet<int> onPath)
+    {
+        foreach (var c in r.Any)
+        {
+            if (c.Kind != "var") return true;                 // Weltbedingung
+            if (Cmp(Start(c.A), c.Op, c.B)) return true;       // schon wahr
+            if (Writes(c.A, onPath)) return true;
+        }
+        return false;
     }
 
     /// <summary>Schreibt diese eine Regel v[n]? Der `once`-Riegel zaehlt mit —
@@ -366,6 +529,21 @@ public sealed class MissionScript
                     {
                         var cd = c.AsGodotDictionary<string, Variant>();
                         rule.When.Add(new Cond
+                        {
+                            Kind = cd.TryGetValue("kind", out var k) ? k.AsString() : "",
+                            A = cd.TryGetValue("a", out var a) ? a.AsInt32() : 0,
+                            B = cd.TryGetValue("b", out var b) ? b.AsInt32() : 0,
+                            C = cd.TryGetValue("c", out var c2) ? c2.AsInt32() : 0,
+                            Op = cd.TryGetValue("op", out var o) ? o.AsString() : "==",
+                        });
+                    }
+                // Die ODER-Glieder. Siehe Rule.Any — ohne sie fehlten drei
+                // Regeln ganz, und M3s Regel sähe bedingungslos aus.
+                if (rd.TryGetValue("any", out var yv) && yv.VariantType == Variant.Type.Array)
+                    foreach (var c in yv.AsGodotArray())
+                    {
+                        var cd = c.AsGodotDictionary<string, Variant>();
+                        rule.Any.Add(new Cond
                         {
                             Kind = cd.TryGetValue("kind", out var k) ? k.AsString() : "",
                             A = cd.TryGetValue("a", out var a) ? a.AsInt32() : 0,
@@ -625,6 +803,7 @@ public sealed class MissionScript
     /// </summary>
     private void Step(bool full)
     {
+        BankVielleicht();
         if (full) BlockRuns++;
         for (int ri = 0; ri < _script.Rules.Count; ri++)
         {
@@ -641,6 +820,9 @@ public sealed class MissionScript
             foreach (var c in r.When)
                 if (!Test(c)) { all = false; break; }
             if (!all) continue;
+            // Und das ODER: mindestens ein Glied aus `any`. Leer heisst »kein
+            // ODER«, NICHT »immer wahr« — siehe Rule.Any.
+            if (r.Any.Count > 0 && !AnyTrue(r)) continue;
 
             _ruleNo = ri;
             if (Fired.Count < FiredMax)
@@ -694,7 +876,20 @@ public sealed class MissionScript
         _ => false,
     };
 
-    private bool Test(Cond c) => c.Kind switch
+    /// <summary>NUR fuer den Pruefstand: eine vorgegebene Antwort auf ein
+    /// einzelnes Glied. Bleibt null im Spiel und kostet dort einen Nullvergleich.
+    /// Gebraucht wird es, um das ODER an seiner Mechanik zu pruefen und nicht an
+    /// seinem Ergebnis (Regel 8): das Gatter wird durch seine ganze
+    /// Wahrheitstafel gefahren, ohne die Welt anzufassen.</summary>
+    private Dictionary<Cond, bool>? _vorgabe;
+
+    private bool Test(Cond c)
+    {
+        if (_vorgabe != null && _vorgabe.TryGetValue(c, out bool vor)) return vor;
+        return TestReal(c);
+    }
+
+    private bool TestReal(Cond c) => c.Kind switch
     {
         // v[a] <op> b
         "var" => c.A >= 0 && c.A < _var.Length && Cmp(_var[c.A], c.Op, c.B),
@@ -1013,6 +1208,10 @@ public sealed class MissionScript
         {
             if (!Ends(r)) continue;
             foreach (var c in r.When) list.Add(c);
+            // ⚠ Die ODER-Glieder kommen MIT. Keine der 31 Endregeln hat heute
+            // welche, aber ein Prüfstand, der sie stillschweigend fallen liesse,
+            // hätte wieder eine zu schwache Bedingung vor sich.
+            foreach (var c in r.Any) list.Add(c);
         }
         return list;
     }
@@ -1051,15 +1250,18 @@ public sealed class MissionScript
             if (!seen.Add(c.A)) continue;
             foreach (var r in _script.Rules)
             {
-                bool writes = r.Once == c.A;
-                if (!writes)
-                    foreach (var a in r.Then)
-                        if ((a.Kind == "inc" || a.Kind == "set" ||
-                             a.Kind == "find_unit" || a.Kind == "set_time" ||
-                             a.Kind == "set_store") && a.A == c.A)
-                        { writes = true; break; }
-                if (!writes) continue;
+                // ⚠ 13.08.2026 — hier stand eine ZWEITE, kürzere Liste der
+                // schreibenden Wirkungen als in <see cref="SetsVar"/>: `take_var`
+                // und `set_units` fehlten. Mission 5 hängt v[31]/v[32] an
+                // `take_var`, dessen Erzeuger damit unsichtbar war. Eine Liste,
+                // zwei Stellen — jetzt nur noch eine.
+                if (!SetsVar(r, c.A)) continue;
                 foreach (var w in r.When) queue.Enqueue(w);
+                // ⚠ Beim ODER wird ALLES eingereiht. Jedes einzelne Glied wahr
+                // zu machen kann das ODER nur wahr machen; und was der Prüfstand
+                // nicht stellen kann, meldet er — eine Zeile zuviel ist besser
+                // als ein Glied, das keiner nennt (Regel 10).
+                foreach (var w in r.Any) queue.Enqueue(w);
             }
         }
         return list;
@@ -1084,23 +1286,100 @@ public sealed class MissionScript
         _ => -1,
     };
 
-    /// <summary>For the harness: every end rule's links with the value they
-    /// have RIGHT NOW. Without this a chain that does not fire is a silence —
-    /// mission 5 forced all five of its conditions and still did not end, and
-    /// nothing said which link was false (it was the marking rule: the harness
-    /// had raised the store BEFORE the mission noted it down, so "has grown"
-    /// was false by construction).</summary>
+    /// <summary>
+    /// PRÜFSTAND: warum die Mission nicht endet — die GANZE KETTE, Glied für
+    /// Glied, mit dem Wert, den es gerade hat.
+    ///
+    /// <para>⚠ 13.08.2026 erweitert, und der Anlass ist Regel 10: »wenn er
+    /// schweigt, muss er sagen, WELCHES GLIED falsch ist«. Bis heute standen
+    /// hier nur die Bedingungen der ENDregel selbst. Für Mission 5 hiess das
+    /// genau zwei Zeilen — <c>var(33)!=0=NEIN var(34)!=0=NEIN</c> —, und damit
+    /// war eine Kette, die nicht schliesst, nicht von einer zu unterscheiden,
+    /// die es fast tut: dass v[33] an <c>buildings(1,0)&gt;0</c> hängt und der
+    /// Prüfstand dem Spieler eine Baracke statt einer FABRIK übergeben hatte,
+    /// stand nirgends.</para>
+    ///
+    /// <para>Jetzt wird von jeder Endbedingung aus rückwärts gegangen: zu jeder
+    /// falschen Variablenbedingung werden die Regeln genannt, die diese Variable
+    /// schreiben, mit ihren eigenen Gliedern. Eine Variable, die keine Regel
+    /// schreibt, wird ausdrücklich so gemeldet — das ist die Lücke, keine
+    /// Fehlmessung.</para>
+    /// </summary>
     public string WhyNot()
     {
-        var parts = new List<string>();
+        var lines = new List<string>();
+        var todo = new Queue<int>();
+        var seen = new HashSet<int>();
+
         foreach (var r in _script.Rules)
         {
             if (!Ends(r)) continue;
-            foreach (var c in r.When)
-                parts.Add($"{c.Kind}({c.A},{c.B}){c.Op}{c.C}=" + (Test(c) ? "ja" : "NEIN"));
+            lines.Add("Endregel: " + Links(r, todo));
         }
+        while (todo.Count > 0)
+        {
+            int n = todo.Dequeue();
+            if (!seen.Add(n)) continue;
+            bool wer = false;
+            for (int ri = 0; ri < _script.Rules.Count; ri++)
+            {
+                var r = _script.Rules[ri];
+                if (!SetsVar(r, n)) continue;
+                wer = true;
+                string riegel = r.Once >= 0 && Var(r.Once) != 0
+                    ? $" [Riegel v{r.Once}={Var(r.Once)} ZU]" : "";
+                lines.Add($"   v[{n}]={Var(n)} <- Regel {ri} @0x{r.At:X}{riegel}: " +
+                          Links(r, todo));
+            }
+            if (!wer) lines.Add($"   v[{n}]={Var(n)} <- KEINE Regel schreibt sie");
+        }
+        return string.Join("\n", lines);
+    }
+
+    /// <summary>Die Glieder einer Regel als Text, mit ihrem Wahrheitswert; jede
+    /// FALSCHE Variablenbedingung wird für die Rückwärtssuche eingereiht.
+    /// </summary>
+    private string Links(Rule r, Queue<int> todo)
+    {
+        var parts = new List<string>();
+        void Take(Cond c, string vor)
+        {
+            bool ok = Test(c);
+            parts.Add(vor + Show(c) + "=" + (ok ? "ja" : "NEIN"));
+            // Der Erzeuger wird auch bei WAHREM Glied gesucht, wenn die
+            // Bedingung an einer Variablen hängt, die selbst erst gefüllt werden
+            // muss — `var_vs_store` vergleicht v[a] mit einem Lager, und ob
+            // v[a] überhaupt gesetzt wurde, ist die eigentliche Frage.
+            if (c.Kind is "var_vs_store" or "unit_field") todo.Enqueue(c.A);
+            else if (!ok && c.Kind == "var") todo.Enqueue(c.A);
+        }
+        foreach (var c in r.When) Take(c, "");
+        foreach (var c in r.Any) Take(c, "ODER ");
+        if (parts.Count == 0) return "(ohne Bedingung)";
         return string.Join(" ", parts);
     }
+
+    /// <summary>Ein Glied als Text. Die Felder heissen je Art anders, darum
+    /// nicht »a,b,c« für alle: eine Zeile, die man ohne die Quelle nicht lesen
+    /// kann, hilft im Protokoll nicht.</summary>
+    private string Show(Cond c) => c.Kind switch
+    {
+        "var" => $"v[{c.A}]{c.Op}{c.B}",
+        "obj_owner" => $"obj_owner({c.A}){c.Op}{c.B}",
+        "units" => $"units(Kl{c.A},P{c.B}){c.Op}{c.C}",
+        "buildings" => $"buildings(Kl{c.A},P{c.B}){c.Op}{c.C}",
+        "objects" => $"objects(Typ{c.A},P{c.B}){c.Op}{c.C}",
+        "imap" => $"imap({c.A},{c.C})={(ImapAt != null ? ImapAt(c.A, c.C) : -1)}{c.Op}{c.B}",
+        "var_vs_store" => $"v[{c.A}]={Var(c.A)}{c.Op}Lager({c.B},+0x{c.C:X})=" +
+                          (StoreField != null ? StoreField(c.B, c.C) : -1),
+        "unit_field" => $"Einheit v[{c.A}]={Var(c.A)} Feld+{c.B}{c.Op}{c.C}",
+        "unit_index" => $"find_unit(P{c.A},Marke{c.B}){c.Op}{c.C}",
+        "units_mark" => $"Marke({c.A},P{c.B}){c.Op}{c.C}",
+        "time_gt" => $"Spielminute>{c.A}",
+        "event" => $"Ereignis{c.Op}{c.B}",
+        "selected" => $"Auswahl{c.Op}{c.B}",
+        _ => $"{c.Kind}({c.A},{c.B},{c.C}){c.Op}",
+    };
 
     /// <summary>For the harness: the value of one of the block's variables.
     /// </summary>
@@ -1201,9 +1480,14 @@ public sealed class MissionScript
         if (ImapAt == null) return "imap: kein Haken";
         var seen = new List<string>();
         foreach (var r in _script.Rules)
+        {
             foreach (var c in r.When)
                 if (c.Kind == "imap")
-                    seen.Add($"({c.A},{c.C}) ist {ImapAt(c.A, c.C)}, verlangt {c.Op} {c.B}");
+                    seen.Add($"(Sp{c.A},Z{c.C}) ist {ImapAt(c.A, c.C)}, verlangt {c.Op} {c.B}");
+            foreach (var c in r.Any)
+                if (c.Kind == "imap")
+                    seen.Add($"ODER (Sp{c.A},Z{c.C}) ist {ImapAt(c.A, c.C)}, verlangt {c.Op} {c.B}");
+        }
         return seen.Count == 0 ? "" : "imap: " + string.Join(" | ", seen);
     }
 
@@ -1240,6 +1524,8 @@ public sealed class MissionScript
         {
             bool bad = false;
             foreach (var c in r.When)
+                if (!Hooked(c)) { missing[c.Kind + "?"] = missing.GetValueOrDefault(c.Kind + "?") + 1; bad = true; }
+            foreach (var c in r.Any)
                 if (!Hooked(c)) { missing[c.Kind + "?"] = missing.GetValueOrDefault(c.Kind + "?") + 1; bad = true; }
             foreach (var a in r.Then)
                 if (!Hooked(a)) { missing[a.Kind + "!"] = missing.GetValueOrDefault(a.Kind + "!") + 1; bad = true; }
