@@ -285,10 +285,53 @@ public static class ImportSelfTest
                 GD.PrintErr($"   {m.Stem}: {m.TrailingBytes} Bytes nach der letzten Sektion uebrig");
             }
 
-            string refPath = $"{mapOut}/map_{m.Stem}.entities.json";
+            // ⚠ 13.08.2026 — DER NAME, NICHT DER STAMM. `10.CWM` und `10.DM`
+            // haben denselben Stamm, und wer beide nach `map_10.entities.json`
+            // exportiert, ueberschreibt die Kampagnenkarte still mit einem
+            // SPIELSTAND. Genau das war der Befund »Gebaeude 22 gleich /
+            // 4 abweichend auf den Karten 10..13«: die Gebaeude wichen nicht ab,
+            // die Vergleichsdatei gehoerte zu einer anderen Karte. Gemessen, mit
+            // beiden Vergleichssaetzen:
+            //   * map_out nur aus *.CWM  ->  26 gleich / 0 abweichend
+            //   * map_out mit 10..13.DM  ->  22 gleich / 4 abweichend, und die
+            //     Zahlen sagen es: 10 hat 22 statt 70 Gebaeude, 11 20 statt 6,
+            //     12 18 statt 11, 13 45 statt 12.
+            // Das PRUEFKRITERIUM war falsch, nicht der Leser (Regel 15).
+            // Der Name folgt jetzt dem, den die Engine selbst benutzt
+            // (ContentBuilder.DmStems: DM_1..DM_13).
+            bool isDm = path.EndsWith(".DM", StringComparison.OrdinalIgnoreCase);
+            string refName = isDm ? "DM_" + m.Stem : m.Stem;
+            string refPath = $"{mapOut}/map_{refName}.entities.json";
+            // Ein Vergleichssatz vom alten Exporter kennt DM_n noch nicht. Dann
+            // gilt der Stammname weiter, aber nur ueber die AUSMASSE geprueft —
+            // der Name kann dort nicht stimmen.
+            bool alterName = false;
+            if (!File.Exists(refPath) && isDm)
+            {
+                refPath = $"{mapOut}/map_{m.Stem}.entities.json";
+                alterName = true;
+            }
             if (!File.Exists(refPath)) { noRef++; continue; }
             var root = ReadJson(refPath);
             if (root == null) { noRef++; continue; }
+            // Und die Vergleichsdatei muss sich AUSWEISEN. Sonst ist ein
+            // vertauschter Vergleichssatz von einem kaputten Leser nicht zu
+            // unterscheiden — genau die Verwechslung von oben. Die AUSMASSE sind
+            // dabei das scharfe Kriterium: 10.CWM ist 168x96, der Spielstand
+            // 10.DM 180x220, und daran ist die Vertauschung sofort zu sehen.
+            string says = root.TryGetValue("map", out var mv0) ? mv0.AsString() : "";
+            int rw = GetI(root, "width"), rh = GetI(root, "height");
+            bool passt = rw == 0 || (rw == m.Width && rh == m.Height);
+            if (!alterName && says.Length > 0 && says != refName) passt = false;
+            if (!passt)
+            {
+                bad++;
+                GD.PrintErr($"   {Path.GetFileName(path)}: die Vergleichsdatei " +
+                            $"{Path.GetFileName(refPath)} nennt sich »{says}« " +
+                            $"({rw}x{rh}), diese Karte ist »{refName}« " +
+                            $"({m.Width}x{m.Height}) — VERTAUSCHT, nicht verglichen");
+                continue;
+            }
 
             // entities, byte for byte
             var mine = CwmData.Entities(m);
@@ -322,27 +365,43 @@ public static class ImportSelfTest
             {
                 var want = bv.AsGodotArray();
                 int diff = 0;
+                // ⚠ Regel 10: die STELLE, nicht die Summe. »4 abweichend« sagte
+                // nicht, welches Gebaeude und welches Feld — und weil die Zeile
+                // nach MAPS zaehlt, las sie sich auch noch wie vier Gebaeude.
+                var wo = new List<string>();
                 if (want.Count != mineB.Count) diff = 9999;
                 else
                     for (int i = 0; i < want.Count; i++)
                     {
                         var w = want[i].AsGodotDictionary<string, Variant>();
                         var g = mineB[i];
-                        if (GetI(w, "slot") != g.Slot || GetI(w, "type") != g.Type ||
-                            GetI(w, "owner") != g.Owner || GetI(w, "col") != g.Col ||
-                            GetI(w, "row") != g.Row || GetI(w, "cis_typ") != g.CisTyp ||
-                            GetI(w, "hp") != g.Hp || GetI(w, "hp_max") != g.HpMax ||
-                            // the capture fields: the door and the two gates
-                            GetI(w, "doors") != g.Doors || GetI(w, "built") != g.IsBuilt ||
-                            GetI(w, "door_col") != g.DoorCol || GetI(w, "door_row") != g.DoorRow ||
-                            (w.TryGetValue("name", out var nv) ? nv.AsString() : "") != g.Name)
-                            diff++;
+                        var felder = new List<string>();
+                        void P(string k, int mein)
+                        {
+                            int soll = GetI(w, k);
+                            if (soll != mein) felder.Add($"{k} {soll}->{mein}");
+                        }
+                        P("slot", g.Slot); P("type", g.Type); P("owner", g.Owner);
+                        P("col", g.Col); P("row", g.Row); P("cis_typ", g.CisTyp);
+                        P("hp", g.Hp); P("hp_max", g.HpMax);
+                        // the capture fields: the door and the two gates
+                        P("doors", g.Doors); P("built", g.IsBuilt);
+                        P("door_col", g.DoorCol); P("door_row", g.DoorRow);
+                        string nm = w.TryGetValue("name", out var nv) ? nv.AsString() : "";
+                        if (nm != g.Name) felder.Add($"name »{nm}«->»{g.Name}«");
+                        if (felder.Count == 0) continue;
+                        diff++;
+                        if (wo.Count < 5) wo.Add($"#{i}({string.Join(", ", felder)})");
                     }
                 if (diff == 0) bldOk++;
                 else
                 {
                     bldBad++;
-                    GD.PrintErr($"   {m.Stem}: Gebaeude weichen ab ({(diff == 9999 ? $"{mineB.Count} statt {want.Count}" : diff + " Stueck")})");
+                    GD.PrintErr($"   {m.Stem}: Gebaeude weichen ab " +
+                                (diff == 9999
+                                    ? $"({mineB.Count} statt {want.Count} Saetze — " +
+                                      "zwei verschiedene Spielzustaende, kein Lesefehler)"
+                                    : $"({diff} von {want.Count}): {string.Join(" ", wo)}"));
                 }
             }
         }
@@ -351,9 +410,14 @@ public static class ImportSelfTest
         foreach (var kv in secCount) shape.Add($"{kv.Value}x{kv.Key}");
         shape.Sort();
         GD.Print($"selftest-cwm: Sektionszahlen {string.Join(" ", shape)}");
-        GD.Print($"selftest-cwm: {files} Kartendateien gelesen, {bad} mit Restbytes; " +
-                 $"Entities {entOk} gleich / {entBad} abweichend; " +
-                 $"Gebaeude {bldOk} gleich / {bldBad} abweichend; {noRef} ohne Vergleichsdatei");
+        // ⚠ Die Zahlen zaehlen KARTEN, nicht Saetze. »Gebaeude 22 gleich /
+        // 4 abweichend« wurde am 13.08.2026 als »vier abweichende Gebaeude«
+        // gelesen und waren vier abweichende KARTEN — und auch die nur, weil
+        // die Vergleichsdatei vertauscht war. Also steht die Einheit jetzt dabei.
+        GD.Print($"selftest-cwm: {files} Kartendateien gelesen, {bad} beanstandet; " +
+                 $"Entities {entOk} Karten gleich / {entBad} abweichend; " +
+                 $"Gebaeude {bldOk} Karten gleich / {bldBad} abweichend; " +
+                 $"{noRef} ohne Vergleichsdatei");
         return bad == 0 && entBad == 0 && bldBad == 0 && entOk > 0 ? 0 : 1;
     }
 
