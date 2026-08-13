@@ -280,7 +280,7 @@ public sealed partial class DeterminismTwinRunner : Node
 
     // ---- Vergleich und Bericht ----------------------------------------------
 
-    private static int FirstDiff(List<long> a, List<long> b)
+    internal static int FirstDiff(List<long> a, List<long> b)
     {
         int n = Math.Min(a.Count, b.Count);
         for (int i = 0; i < n; i++) if (a[i] != b[i]) return i;
@@ -295,7 +295,7 @@ public sealed partial class DeterminismTwinRunner : Node
     /// <see cref="MapEntityLayer.DeterminismSnapshot"/>: erst ein Kopf mit drei
     /// Zahlen, dann die Einheiten, dann die Flugzeuge, dann das Geld.
     /// </summary>
-    private static string Describe(int i, List<long> a, List<long> b)
+    internal static string Describe(int i, List<long> a, List<long> b)
     {
         long va = i < a.Count ? a[i] : long.MinValue;
         long vb = i < b.Count ? b[i] : long.MinValue;

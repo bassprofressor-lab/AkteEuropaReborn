@@ -84,6 +84,12 @@ public partial class MapEntityLayer
         if (!_twinTried)
         {
             _twinTried = true;
+            // Der BEFEHLSPRÜFSTAND (Simulation/Commands/CommandCheck.cs) steht
+            // an derselben Stelle und aus demselben Grund: es ist der früheste
+            // Zeitpunkt, an dem eine geladene Karte greifbar ist. Er kommt VOR
+            // dem Zwilling dran, weil er drei Simulationen aufsetzt und der
+            // Zwilling zwei — beide gleichzeitig ergäbe fünf.
+            if (CommandCheckRunner.TryStart(this)) { _detOff = true; return; }
             if (DeterminismTwinRunner.TryStart(this)) { _detOff = true; return; }
         }
 

@@ -29,7 +29,11 @@ NetworkManager="*res://Scripts/Network/NetworkManager.cs"
 AudioManager="*res://Scripts/Audio/AudioManager.cs"
 InputManager="*res://Scripts/Core/InputManager.cs"
 SelectionManager="*res://Scripts/UI/SelectionManager.cs"
-CommandManager="*res://Scripts/Simulation/CommandManager.cs"
+; CommandManager is a static class, not a Node — the command ring belongs to the
+; SIMULATION (MapEntityLayer.Commands) and is ticked from SimTick, because the
+; twin harness runs two simulations in one process and the command harness three;
+; a single autoload node would make them share one ring. Same reason as
+; CampaignManager above: it is asked, not ticked.
 ReplayManager="*res://Scripts/Simulation/ReplayManager.cs"
 DebugOverlay="*res://Scripts/Debug/DebugOverlay.cs"
 

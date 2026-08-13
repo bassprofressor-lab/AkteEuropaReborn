@@ -1,0 +1,175 @@
+namespace AkteEuropaReborn.Simulation.Commands;
+
+/// <summary>
+/// DIE OPCODES DES BEFEHLSBUSSES — Bereiche, Schranken und die Nummern, für die
+/// eine Bedeutung belegt ist.
+///
+/// <para><b>Der Verteiler kennt genau drei Bereiche und zwei Sonderfälle.</b>
+/// Aus dem Kopf @0x4C2262 (F:\…) bzw. @0x4C26E0 (C:\…), Befehl für Befehl:</para>
+/// <code>
+///   cmp eax,0x1F4   jg  →  nächster Bereich      ; 500
+///   je              →  ein Sonderfall @0x4C3278
+///   dec eax; cmp eax,0x1D; ja → Fehler           ; 30 Einträge
+///   jmp [eax*4+0x4C48DC]                         ; Bereich A: 1..30
+///   cmp eax,0x2BC   jg  →  nächster Bereich      ; 700
+///   je              →  ein Sonderfall @0x4C3928
+///   sub eax,0x1F5; cmp eax,0x24; ja → Fehler     ; 37 Einträge
+///   jmp [eax*4+0x4C4954]                         ; Bereich B: 501..537
+///   sub eax,0x3CD; cmp eax,0xE4; ja → Fehler     ; 229 Einträge
+///   mov cl,[eax+0x4C4A74]; jmp [ecx*4+0x4C49E8]  ; Bereich C: 973..1201
+/// </code>
+///
+/// <para><b>Zwei Schranken, die für Lockstep und Wiederholung entscheidend
+/// sind</b> — und die zeigen, dass das Original seine Befehle selbst in
+/// »zustandsrelevant« und »örtlich« einteilt:</para>
+/// <list type="bullet">
+///   <item><b>&lt; 800</b> wird in die Wiederholung geschrieben. @0x4C20A4 und
+///   @0x4C215E: <c>cmp dx,0x320; jge »überspringen«</c>. Alles darunter geht
+///   als 236 Byte in <c>c:\replay.mes</c> (@0x4C21A6, <c>fwrite(…,1,0xEC,f)</c>)
+///   und als <c>»%d %d %d«</c> in <c>c:\replay.txt</c>.</item>
+///   <item><b>&lt;= 1000</b> wird über das Netz weitergeleitet. @0x4C1FE2:
+///   <c>cmp word[rec],0x3E8; jg »überspringen«</c>.</item>
+/// </list>
+/// <para>Damit sind die Bereiche A (1..30) und B (501..537) das, was eine
+/// Partie ausmacht; 973..1000 gehen über die Leitung, aber nicht ins Protokoll;
+/// 1001..1201 sind rein örtlich (Anzeige, Fehlerausgaben, Sitzungsverwaltung).
+/// <b>Das ist die Einteilung, die eine Befehlsschicht braucht</b>, und sie ist
+/// gelesen, nicht gesetzt.</para>
+///
+/// <para><b>Der Ring hat 1000 Plätze.</b> Der Weiterschalter @0x4C1B30 ist drei
+/// Befehle lang: <c>inc cx; mov [eax],cx; cmp cx,0x3E8; jne; mov [eax],0</c> —
+/// er wird mit der Adresse des Lese-, des Schreib- und des Sendezeigers
+/// aufgerufen, alle drei laufen also modulo 1000.</para>
+///
+/// <para>⚠ <b>Wo das Verständnis endet.</b> 1000 × 236 = 236 000 Byte; die
+/// Kladde liegt aber nur 235 520 Byte hinter der Ringbasis (in BEIDEN EXE genau
+/// derselbe Abstand), und 32 Byte davor liegt ein Achtbytefeld je Spieler
+/// (0xB89418, @0x4C1F15). Der Ring, den der Zeiger beschreiben KANN, ist also
+/// zwei Sätze länger als der, der offenbar belegt ist. Welche der beiden Zahlen
+/// die Länge des Feldes im Original war, ist NICHT gelesen — wir nehmen 1000,
+/// weil das der bewiesene Zahlenraum des Zeigers ist, und schreiben die
+/// Ungereimtheit hier hin statt sie glattzubügeln.</para>
+/// </summary>
+public static class CommandOp
+{
+    /// <summary>Bereich A: die Einheitenbefehle. 30 Einträge, in beiden EXE
+    /// dieselben 30 mit demselben Parameter- und Feldprofil
+    /// (<c>cmd_opcodes.py</c>: 30 von 30 gleich).</summary>
+    public const short UnitFirst = 1, UnitLast = 30;
+
+    /// <summary>Bereich B: Bau-, Kauf- und Entwurfsbefehle.</summary>
+    public const short BuildFirst = 501, BuildLast = 537;
+
+    /// <summary>Bereich C: Anzeige, Sitzung, Fehlerausgabe.</summary>
+    public const short SystemFirst = 973, SystemLast = 1201;
+
+    /// <summary>Die beiden Sonderfälle, die der Verteiler mit <c>je</c>
+    /// abfängt, ohne Sprungtabelle.</summary>
+    public const short Special500 = 500, Special700 = 700;
+
+    /// <summary>Alles darunter geht in die Wiederholung (@0x4C20A4).</summary>
+    public const short ReplayBelow = 800;
+
+    /// <summary>Bis hierher wird weitergeleitet (@0x4C1FE2).</summary>
+    public const short RelayUpTo = 1000;
+
+    /// <summary>So viele Plätze hat der Ring (@0x4C1B3C).</summary>
+    public const int RingSlots = 1000;
+
+    // ---- die Nummern, für die eine Bedeutung BELEGT ist ---------------------
+
+    /// <summary>
+    /// <b>3 = BEWEGEN.</b> P1 = Einheitsnummer, P2/P3 = Zielzelle.
+    ///
+    /// <para>Von zwei Seiten belegt. <b>Der Absender</b> @0x4342E9..0x43433E
+    /// baut den Satz so: <c>P1 = word[0x8320F8]</c> (die Auswahlliste, je
+    /// Eintrag ein Wort) nur wenn <c>&lt; 0x1F40 = 8000</c> — das ist genau die
+    /// Länge der Einheitentafel (8000 Sätze von 78 Byte @0x6E1728);
+    /// <c>P2 = ent[P1].x - Mittel + Klick.x</c>, <c>P3 = ent[P1].y - Mittel +
+    /// Klick.y</c>, wobei »Mittel« aus einer <c>idiv</c>-Summe der Auswahl
+    /// stammt. Ist die Nummer &gt;= 8000, wird stattdessen Opcode 6
+    /// geschrieben (@0x434346).</para>
+    /// <para><b>Der Behandler</b> @0x4C2324 klemmt genau P2 und P3 auf die
+    /// Karte: <c>if (P2 == 0 || P2 &gt; 60000) P2 = 1; if (P2 &gt;=
+    /// [0x541E24]-1) P2 = [0x541E24]-2</c>, dasselbe für P3 gegen
+    /// [0x541E58]. Zwei unabhängige Seiten, dieselbe Deutung.</para>
+    /// <para>⚠ Bemerkenswert und für uns verbindlich: <b>geprüft wird im
+    /// Behandler</b>, nicht beim Absenden. Ein Befehl darf also unsinnige Werte
+    /// tragen; die Simulation muss ihn auf jeder Maschine gleich zurechtbiegen.
+    /// Genau so ist es hier gebaut.</para>
+    /// </summary>
+    public const short Move = 3;
+
+    /// <summary>
+    /// <b>508 = SCHIFF BAUEN.</b> P1 = Spieler, P2 = Entwurfsnummer, P3 =
+    /// <c>cis_typ</c> des Hafens. Der Knopf @0x44A35C schreibt den Satz, der
+    /// Behandler @0x4B2B20 sucht einen freien Platz und füllt die Einheit
+    /// (GAMESTATE_RE.md 3.86). Steht hier als <b>Gegenprobe unserer
+    /// Parameterzählung</b>: der Vorbefund nennt (Spieler, Entwurf, Dock) —
+    /// unser Profil sagt für 508 »P1, P2, P3«. Es passt.</summary>
+    public const short BuildShip = 508;
+
+    /// <summary>⚠ <b>1001 trägt den ZUFALLSKEIM.</b> @0x419512..0x419525:
+    /// <c>call rand; mov word[0xB4FA20],ax; mov word[Kladde+0x08],ax; mov
+    /// word[Kladde+0x00],0x3E9</c> — der Keim der Partie wird als P1 eines
+    /// Befehls verteilt. Nicht heute gebaut (Keimverteilung ist nicht
+    /// Gegenstand dieses Auftrags), aber hier festgehalten, weil es die Stelle
+    /// ist, an die er gehört.</summary>
+    public const short Seed = 1001;
+
+    // ---- unsere eigenen Nummern --------------------------------------------
+
+    /// <summary>
+    /// ⚠ <b>UNSERE SETZUNG.</b> Ab hier stehen Befehle, für die wir im Original
+    /// KEINE Nummer belegt haben. Sie liegen mit Absicht über
+    /// <see cref="SystemLast"/> = 1201, damit sie mit keiner gelesenen Nummer
+    /// kollidieren; sollte später eine echte Zuordnung gefunden werden, wird
+    /// hier umgenummert und nichts anderes.
+    ///
+    /// <para>Warum überhaupt eigene Nummern: unser Angriffsbefehl trägt eine
+    /// Einheitennummer als ZIEL (unser <c>Entity</c>-Index), und für einen
+    /// solchen Befehl haben wir im Original keinen Behandler nachgewiesen.
+    /// Opcode 1 sieht danach aus (P1 = Einheit, P2 = Richtung aus der Tafel
+    /// 0x4F4AF0), ist aber ein RICHTUNGSBEFEHL — das wäre eine Deutung ohne
+    /// Zahl, und die wird nicht eingebaut (Regel 6).</para>
+    /// </summary>
+    public const short OursFirst = 2000;
+
+    /// <summary>⚠ UNSERE SETZUNG: P1 = Einheit, P2 = Zielnummer, P3 = 1 wenn
+    /// angereiht, P4/P5 = Zelle des Ziels beim Anreihen.</summary>
+    public const short OursAttack = 2001;
+
+    /// <summary>⚠ UNSERE SETZUNG: P1 = Einheit. »Anhalten« für eine Einheit.
+    /// Das Original hat »Anhalten« in seiner Befehlsliste (0x4FC698 Eintrag 27,
+    /// stride 30) — welcher Opcode ihn ausführt, ist NICHT gelesen.</summary>
+    public const short OursStop = 2002;
+
+    /// <summary>Geht dieser Befehl in die Wiederholung? (Schranke des
+    /// Originals, @0x4C20A4.) Unsere eigenen Nummern liegen darüber und werden
+    /// deshalb wie örtliche behandelt — ⚠ das ist eine Folge unserer
+    /// Nummernwahl, keine Aussage über das Original.</summary>
+    public static bool GoesToReplay(short op) => op > 0 && op < ReplayBelow;
+
+    /// <summary>Geht dieser Befehl über die Leitung? (@0x4C1FE2.)</summary>
+    public static bool IsRelayed(short op) => op > 0 && op <= RelayUpTo;
+
+    /// <summary>Kennt der Verteiler diese Nummer überhaupt? Genau die drei
+    /// Bereiche und die zwei Sonderfälle.</summary>
+    public static bool IsOriginal(short op)
+        => (op >= UnitFirst && op <= UnitLast)
+        || op == Special500 || (op >= BuildFirst && op <= BuildLast)
+        || op == Special700 || (op >= SystemFirst && op <= SystemLast);
+
+    public static string NameOf(short op) => op switch
+    {
+        Move => "Bewegen",
+        BuildShip => "Schiff bauen",
+        Seed => "Zufallskeim",
+        OursAttack => "Angreifen (unsere Setzung)",
+        OursStop => "Anhalten (unsere Setzung)",
+        _ when op >= UnitFirst && op <= UnitLast => "Einheitenbefehl (Bereich A, unbenannt)",
+        _ when op >= BuildFirst && op <= BuildLast => "Bau/Kauf (Bereich B, unbenannt)",
+        _ when op >= SystemFirst && op <= SystemLast => "System (Bereich C, unbenannt)",
+        _ => "unbekannt",
+    };
+}

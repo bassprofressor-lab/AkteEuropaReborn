@@ -80,11 +80,19 @@ public static class Determinism
     // wertlos wie einer, der einen echten übersieht. Darum: je Simulation ein
     // eigener Strom, und der Prüfstand schaltet vor jedem Takt um.
     //
-    // ⚠ UNSERE SETZUNG: zwei Ströme reichen, weil der Prüfstand zwei
-    // Simulationen fährt. Strom 0 ist der des normalen Spiels — wer nie
-    // umschaltet, merkt von der ganzen Einrichtung nichts.
-    private static DeterministicRng[] _streams = { new DeterministicRng(1), new DeterministicRng(1) };
-    private static long[] _streamDraws = new long[2];
+    // ⚠ UNSERE SETZUNG: DREI Ströme. Zwei waren es, solange nur der Zwillings-
+    // Prüfstand zwei Simulationen fuhr. Der Befehlsprüfstand
+    // (Simulation/Commands/CommandCheck.cs) braucht einen dritten, weil er drei
+    // Läufe vergleicht: Befehl über den Puffer, Befehl auf dem Direktweg, und
+    // KEIN Befehl. Ohne den dritten könnte er nicht belegen, dass der Befehl
+    // überhaupt etwas bewirkt hat — und ein Vergleich zweier gleicher Läufe,
+    // die beide nichts tun, ist grün und wertlos (Regel 7).
+    //
+    // Strom 0 ist der des normalen Spiels — wer nie umschaltet, merkt von der
+    // ganzen Einrichtung nichts.
+    private static DeterministicRng[] _streams =
+        { new DeterministicRng(1), new DeterministicRng(1), new DeterministicRng(1) };
+    private static long[] _streamDraws = new long[3];
     private static int _cur;
 
     /// <summary>
