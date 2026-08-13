@@ -10443,17 +10443,101 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Ein fertig gelegtes Gleisstück: wohin, welches Bild, wie tief
     /// unter dem Waggonanker — und in welcher ZEILE es liegt, denn danach
     /// entscheidet sich, ob ein Gebäude davor oder dahinter gehört.</summary>
+    /// <summary>
+    /// <b>Um wieviele Zellzeilen SPÄTER als seine eigene Zelle wird ein
+    /// Gleisstück gezeichnet? — <c>+2</c>, und das ist GELESEN.</b>
+    ///
+    /// <para>⭐ 13.08.2026. Gemeldet war »oft fehlt die letzte Strecke zur
+    /// Anbindung an ein Gebäude«. Der Grund ist die Reihenfolge, nicht ein
+    /// fehlendes Stück: <see cref="DrawRailUpTo"/> zeichnet alle Stücke einer
+    /// Zeile VOR den Gebäuden, deren Grundriss bis in diese Zeile reicht — und
+    /// die letzte Gleiszelle einer Linie liegt gemessen auf <b>Zeile +1 oder
+    /// +2</b> der Gebäudeecke, also MITTEN im vier Zeilen tiefen Grundriss.
+    /// Damit wurde ausgerechnet das Anschlussstück jedes Mal zuerst gezeichnet
+    /// und danach vom Gebäudemuster überdeckt.</para>
+    ///
+    /// <para><b>Wie das Original einsortiert</b> (Zeichenlisten-Aufbau
+    /// @0x42DF40, der einzige Erzeuger von Gleiseinträgen — er läuft über die
+    /// 3000 Gleisplätze ab 0xC2C220 mit Schrittweite 5, <c>+0x00</c> Spalte,
+    /// <c>+0x01</c> Zeile, <c>+0x02</c> Bild, <c>0xFF</c> beendet):</para>
+    /// <code>
+    ///   0x42DFCE  sub bx, [0x5387B0]      ; bx = zeile - kamerazeile
+    ///   0x42DFE9  lea ecx, [ebx + 2]      ; ZEILENFACH = bx + 2   <-- die 2
+    ///   0x42DFF0  mov [esp+0x19], cl
+    ///   0x42E01E  mov al, [esp+0x11]      ; dasselbe Byte, nach add esp,8
+    ///   0x42E039  ax = [fach*stride + 0xAB93F0]   ; Zähler des Fachs
+    ///   0x42E068  byte [eintrag + 0xAB8068] = 0x14 ; Art 20 = Gleis
+    ///   0x42E06F  word [eintrag + 0xAB806A] = platz
+    /// </code>
+    /// <para>Die Zeichenliste ist also nach SCHIRMZEILE gefächert (höchstens 70
+    /// Fächer, je bis 499 Einträge), und ein Gleisstück landet im Fach
+    /// <c>zeile + 2</c> — nicht in seinem eigenen. Genau diese 2 fehlte uns.</para>
+    ///
+    /// <para><b>Warum die 2 und nicht 1 oder 3:</b> sie steht als <c>lea</c>
+    /// unmittelbar an der Fachnummer und an keiner anderen Stelle des Aufbaus;
+    /// der Schirm-y desselben Eintrags wird getrennt gerechnet (<c>imul bx,
+    /// bx, 0x14</c> danach), die 2 wirkt also NUR auf die Reihenfolge und nicht
+    /// auf die Lage. Das ist der Grund, warum die Höhe schon vorher stimmte.</para>
+    ///
+    /// <para>⚠ Was daran NICHT gelesen ist: in welches Fach das Original ein
+    /// GEBÄUDE legt. Gebäude sind dort keine Einträge dieser Liste, sondern
+    /// werden im Kachel-/Zeilendurchgang @0x42C8C0 gestempelt; die Fachnummer
+    /// eines Gebäudes ist damit nicht dieselbe Größe. Belegt ist nur die
+    /// Verschiebung des GLEISES gegen seine eigene Zelle, und die reicht für
+    /// diese Änderung: sie verschiebt Gleis gegen Gebäude um zwei Zeilen in die
+    /// Richtung, in der das Anschlussstück sichtbar wird.</para>
+    ///
+    /// <para>Gegenprobe: <c>--rail-lay=bucket0</c> setzt die Verschiebung auf 0
+    /// zurück, dann verschwindet das Anschlussstück wieder.</para></summary>
+    private const int RailDrawRowBias = 2;
+
     private readonly struct RailTile
     {
         public readonly Vector2 At;
         public readonly int Frame, YOff, Row;
 
+        /// <summary>Die Zeile, nach der SORTIERT und gegen die Gebäude
+        /// abgewogen wird: <c>Row + RailDrawRowBias</c>. <see cref="Row"/>
+        /// bleibt die Zeile der ZELLE — sie wird an anderer Stelle noch als
+        /// solche gebraucht, und zwei Bedeutungen in einem Feld waren hier schon
+        /// einmal teuer.</summary>
+        public readonly int DrawRow;
+
         /// <summary>Welcher TEIL: 64 der blanke Traeger, 65..68 die vier
         /// Stuetzenfassungen (siehe <see cref="RailPylonKind"/>).</summary>
         public readonly int Part;
         public RailTile(Vector2 at, int frame, int yoff, int row, int part)
-        { At = at; Frame = frame; YOff = yoff; Row = row; Part = part; }
+        {
+            At = at; Frame = frame; YOff = yoff; Row = row; Part = part;
+            DrawRow = row + (RailProbeBucket0 ? 0 : RailDrawRowBias);
+        }
     }
+
+    /// <summary>
+    /// Gegenprobe zur Zeichenreihenfolge (<c>--rail-lay=bucket0</c>): mit
+    /// <c>true</c> wird ein Gleisstück wieder in der Zeile seiner eigenen Zelle
+    /// gezeichnet statt zwei später — siehe <see cref="RailDrawRowBias"/>.
+    ///
+    /// <para>⚠ Der Schalter ist der Beleg, dass die Änderung überhaupt etwas
+    /// tut: er MUSS das Anschlussstück wieder verschwinden lassen, und der
+    /// Zähler <see cref="RailTilesUnderBuilding"/> muss dabei steigen. Ohne ihn
+    /// wäre »sieht jetzt richtig aus« nicht von »war vorher schon so« zu
+    /// unterscheiden.</para></summary>
+    public static bool RailProbeBucket0
+    {
+        get
+        {
+            if (_probeBucket0.HasValue) return _probeBucket0.Value;
+            bool hit = false;
+            foreach (string a in OS.GetCmdlineUserArgs())
+                if (a.StartsWith("--rail-lay=") && a["--rail-lay=".Length..].Contains("bucket0"))
+                    hit = true;
+            _probeBucket0 = hit;
+            return hit;
+        }
+    }
+
+    private static bool? _probeBucket0;
 
     private List<RailTile>? _railTiles;
 
@@ -10546,9 +10630,103 @@ public partial class MapEntityLayer : Node2D
                                            Mathf.RoundToInt(cells[i].Y), pylon ? 65 : 64));
                 }
             }
-        tiles.Sort((a, b) => a.Row != b.Row ? a.Row - b.Row : a.At.X.CompareTo(b.At.X));
+        // Sortiert wird nach DrawRow, nicht nach Row — siehe RailDrawRowBias.
+        tiles.Sort((a, b) => a.DrawRow != b.DrawRow
+                                 ? a.DrawRow - b.DrawRow
+                                 : a.At.X.CompareTo(b.At.X));
         _railTiles = tiles;
+        RailCountTilesUnderBuildings(tiles);
         return tiles;
+    }
+
+    /// <summary>
+    /// <b>Wieviele Gleisstücke werden vor einem Gebäude gezeichnet, dessen
+    /// Muster ihre eigene Zelle bedeckt?</b> — die Zahl zu
+    /// <see cref="RailDrawRowBias"/>.
+    ///
+    /// <para>Das ist die Fehlerklasse, die »die letzte Strecke fehlt« erzeugt,
+    /// und keine bisherige Zahl konnte sie sehen: <c>RailEndFar</c> misst
+    /// Abstände in ZELLEN mit zwei Zellen Spielraum, <c>RailDeckOffSum</c> misst
+    /// Höhen und steigt bei Gebäudearten ohne gemessene Anschlusszeile wortlos
+    /// aus (also bei Fabrik, Mine, Flughafen — 255 der 742 Enden). Verdeckung
+    /// ist aber keine Frage des Abstands, sondern der REIHENFOLGE.</para>
+    ///
+    /// <para>Gezählt wird, was <see cref="DrawRailUpTo"/> tatsächlich tut: ein
+    /// Stück ist verdeckungsgefährdet, wenn seine <c>DrawRow</c> kleiner oder
+    /// gleich der vordersten Grundrisszeile eines Gebäudes ist, dessen
+    /// MUSTERFLÄCHE seine Zelle enthält. Die Musterfläche, nicht der Grundriss —
+    /// das Muster ist zehn Spalten breit und reicht über den Grundriss hinaus,
+    /// und genau dort liegen die Linienenden (Spalte −1 bis +7).</para>
+    ///
+    /// <para>⚠ »Gefährdet« ist nicht »unsichtbar«: ob an der Stelle im Muster
+    /// wirklich ein Bildpunkt steht, sagt erst das Bild. Die Zahl ist die
+    /// obere Schranke und der Hebel, an dem sich die Änderung messen lässt —
+    /// mit <c>--rail-lay=bucket0</c> muss sie steigen.</para></summary>
+    public int RailTilesUnderBuilding, RailTilesUnderChecked;
+    public string RailUnderWorstWhere = "";
+
+    /// <summary>Die Kartenzellen, die das MUSTER eines Gebäudes belegt — dieselbe
+    /// Entscheidung wie in <see cref="DrawBuildingBody"/> (über
+    /// <see cref="BuildingCellTile"/>), damit der Zähler nicht eine Nachbildung
+    /// prüft. Die Fläche ist zehn Spalten breit und sechs Zeilen hoch und reicht
+    /// damit über den Grundriss hinaus; genau dort liegen die Linienenden.</summary>
+    private List<(int Col, int Row)>? BuildingPatternCells(Entity e)
+    {
+        if (Patterns == null || e.IsProp) return null;
+        var bt = Patterns.GetBuildingType(e.BType);
+        int first = bt.FirstPattern;
+        int stack = e.Dead ? 1 : DamageFrame(e);
+        if (e.Dead)
+        {
+            int ruin = Import.BuildingPatterns.RuinPattern(Patterns, e.BType);
+            if (ruin < 0) return null;
+            first = ruin;
+        }
+        if (first < 0 || stack < 1) return null;
+        var anim = BuildingAnimCells(e);
+        var list = new List<(int, int)>();
+        for (int dx = 0; dx < Import.CwpFile.PatternWidth; dx++)
+            for (int dy = 0; dy < Import.CwpFile.PatternHeight; dy++)
+                for (int k = 0; k < stack; k++)
+                {
+                    int code = BuildingCellTile(first, k, dx, dy, anim);
+                    if (code == 0 || !Patterns.TryGetTile(code, out _)) continue;
+                    list.Add((e.Col + dx, e.Row + dy));
+                    break;
+                }
+        return list;
+    }
+
+    private void RailCountTilesUnderBuildings(List<RailTile> tiles)
+    {
+        RailTilesUnderBuilding = 0;
+        RailTilesUnderChecked = 0;
+        RailUnderWorstWhere = "";
+        if (Patterns == null) return;
+        // Musterzelle -> vorderste Grundrisszeile des Gebaeudes, das sie bedeckt
+        var cover = new Dictionary<(int, int), (int Front, int Slot, int Type)>();
+        foreach (var e in _entities)
+        {
+            if (!e.IsBuilding || e.Dead) continue;
+            var cells = BuildingPatternCells(e);
+            if (cells == null) continue;
+            int front = e.Row + Mathf.Max(1, e.FootH) - 1;
+            foreach (var (c, r) in cells)
+                if (!cover.ContainsKey((c, r)) || cover[(c, r)].Front < front)
+                    cover[(c, r)] = (front, e.Slot, e.BType);
+        }
+        if (cover.Count == 0) return;
+        foreach (var t in tiles)
+        {
+            int col = Mathf.RoundToInt((t.At.X - _ox - TileW / 2f) / TileW);
+            if (!cover.TryGetValue((col, t.Row), out var cv)) continue;
+            RailTilesUnderChecked++;
+            if (t.DrawRow > cv.Front) continue;         // wird NACH dem Gebaeude gezeichnet
+            RailTilesUnderBuilding++;
+            if (RailUnderWorstWhere.Length == 0)
+                RailUnderWorstWhere = $"Zelle ({col},{t.Row}) Zeichenzeile {t.DrawRow} " +
+                                      $"gegen Platz {cv.Slot} Typ {cv.Type} bis Zeile {cv.Front}";
+        }
     }
 
     /// <summary>Die Legeart bis zum 12.08.2026, nur noch als Gegenprobe
@@ -10611,7 +10789,7 @@ public partial class MapEntityLayer : Node2D
         // unten rechts von seinem Stück, also im Bereich des NACHBARSTÜCKS —
         // gemischt gezeichnet würde er dessen Träger verdunkeln, und die Strecke
         // bekäme einen dunklen Streifen auf jedem zweiten Stück.
-        for (int i = at; i < tiles.Count && tiles[i].Row <= throughRow; i++)
+        for (int i = at; i < tiles.Count && tiles[i].DrawRow <= throughRow; i++)
         {
             var s = tiles[i];
             var m = GetRailShadow(s.Frame, s.Part);
@@ -10622,7 +10800,7 @@ public partial class MapEntityLayer : Node2D
         for (; at < tiles.Count; at++)
         {
             var t = tiles[at];
-            if (t.Row > throughRow) return;
+            if (t.DrawRow > throughRow) return;
             var tex = GetRailTexture(t.Frame, t.Part);
             if (tex == null) { at = tiles.Count; return; }   // ohne Bilder gar nichts
             DrawTexture(tex, t.At - ComposedAnchor + new Vector2(0, t.YOff));

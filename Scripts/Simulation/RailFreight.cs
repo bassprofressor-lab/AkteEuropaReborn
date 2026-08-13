@@ -2279,6 +2279,15 @@ public partial class MapEntityLayer : Node2D
                   $", {RailShadowsDrawn} Schattenmasken (Bild 10..19, 19 % Schwarz " +
                   "— gemessen aus 47.CWS)");
         sb.Append(RailSourceReport());
+        // Die Zahl gegen »die letzte Strecke zur Anbindung fehlt« — Verdeckung
+        // ist eine Frage der REIHENFOLGE, nicht des Abstands. Siehe
+        // MapEntityLayer.RailDrawRowBias und RailCountTilesUnderBuildings.
+        sb.Append($" | Anbindung: {RailTilesUnderBuilding} von {RailTilesUnderChecked} " +
+                  "Gleisstuecken auf Musterflaeche werden VOR ihrem Gebaeude " +
+                  $"gezeichnet (Verschiebung {(MapEntityLayer.RailProbeBucket0 ? 0 : 2)} " +
+                  "Zeilen, @0x42DFE9)");
+        if (RailTilesUnderBuilding > 0)
+            sb.Append($", erstes: {RailUnderWorstWhere}");
         sb.Append(RailBrokenReport());
         // Die Zahl fuer »buendig«: wieviele Linienenden lagen NICHT auf der
         // Anschlusszeile ihres Endgebaeudes. Gezaehlt wird VOR dem Ruecken,
