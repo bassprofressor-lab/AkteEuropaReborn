@@ -1424,8 +1424,76 @@ public partial class MapViewer : Node2D
 
         // Mit `--shot` bleibt der Lauf stehen, damit das Bild auch photographiert
         // werden kann — dieselbe Regel wie beim --tutorial-check.
+        //
+        // ⚠⚠ HIER endet ein `--portrait-check`-Lauf, und zwar nach 90 BILDERN.
+        // `--quit-after=12` in derselben Zeile wird NIE erreicht: der Block bei
+        // »--quit-after … erreicht« kommt nicht mehr dran, und keine seiner
+        // Meldungen steht im Log. Das ist am 13.08.2026 eine halbe Leckjagd wert
+        // gewesen — vier Messungen liefen ins Leere, weil die Sonde vor
+        // `GetTree().Quit()` IM QUIT-AFTER-BLOCK sass und ihre eigene Zeile nie
+        // druckte. Wer an einem `--portrait-check`-Lauf etwas messen will, muss es
+        // HIER tun, und wer die Sekundenzahl braucht, darf `--portrait-check`
+        // nicht mitgeben. Die Regel dahinter ist die alte: erst nachsehen, ob die
+        // eigene Meldung im Log steht, dann die Zahl deuten.
         if (_shotPath.Length == 0) GetTree().Quit(0);
     }
+
+    // =====================================================================
+    // DER BEFUND »97 LECKZEILEN UND RUECKGABEWERT 139 AUF GROSSEN KARTEN«
+    // — was daran gemessen ist und was NICHT (13.08.2026, Leckjagd).
+    //
+    // Gemeldet war: `--skirmish=map_NET02 --portrait-check` endet mit 139 (bzw.
+    // 132) und meldet vorher 97 Zeilen
+    //    ERROR: Leaked unsafe reference to object: ():<Image#…>   bzw. <JSON#…>
+    // (87…89 Image, 8…9 JSON), waehrend map_DM_1 sauber durchlaeuft. Die
+    // naheliegende Deutung war »ein Image oder Json ohne `using`«.
+    //
+    // ⚠ DIESE DEUTUNG IST WIDERLEGT, mit einer Sonde an genau dieser Stelle.
+    // Alle drei Formen, in denen ein nicht freigegebenes Bild ueberhaupt
+    // vorkommen kann, wurden hier kurz vor dem Quit kuenstlich hergestellt — 97
+    // Stueck, so viele wie der Befund nennt — und jede meldete 0 Leckzeilen bei
+    // Rueckgabewert 0, je zweimal auf map_NET02:
+    //   * 97 Image.CreateEmpty, weggeworfen und nicht freigegeben            -> 0
+    //   * 97 Image, in einer statischen Liste FESTGEHALTEN                   -> 0
+    //   * 97 ImageTexture.CreateFromImage(bild), Bild nicht freigegeben, nur
+    //     die Textur gehalten — die Form ALLER echten Ladestellen            -> 0
+    // Jede Sonde hat ihre eigene Zeile ins Log gedruckt, sie ist also wirklich
+    // gelaufen (die vier Messungen davor nicht, siehe den Vermerk oben). Ein
+    // nicht freigegebenes Image beim Herunterfahren erzeugt diese Meldung
+    // schlicht nicht.
+    //
+    // WAS AUSSERDEM AUSGESCHLOSSEN IST, alles auf map_NET02 / map_DM_3 /
+    // map_DM_1 gemessen und alles 0 Leckzeilen bei Rueckgabe 0: der Nebel
+    // (`--fog` baut das Nebelbild alle 0,2 s neu — der einzige Kandidat, der
+    // »je Kartenflaeche« skaliert); 24-fache Rechenlast auf der Maschine; ein
+    // Gen0-Etat von 537 MB (DOTNET_GCgen0size), damit gar keine Muellabfuhr
+    // laeuft; erst Debug und dann Release gebaut, also genau das Verfahren der
+    // 97er-Messung. Und die Muellabfuhr ist ohnehin nicht die Erklaerung: bis
+    // zu dieser Stelle sind 4 bis 6 volle Abfuhren gelaufen (Speicherstand am
+    // Ausstieg map_NET02 298,4 MB, map_DM_3 228,8 MB, map_DM_1 160,1 MB,
+    // jeweils auf 0,1 MB wiederholbar).
+    //
+    // UND DER BEFUND SELBST IST NICHT MEHR HERZUSTELLEN. Derselbe Befehl,
+    // dieselben Karten, ueber 40 Laeufe: 0 Leckzeilen, Rueckgabe 0, dreimal
+    // hintereinander auf map_NET02. Der Code kann es nicht sein — seit der
+    // 97er-Messung um 18:45 sind nur EINFUEGUNGEN dazugekommen (badc6c5: 121
+    // Zeilen, 0 Loeschungen), keine geaenderte Zeile in einem Pfad, den diese
+    // Laeufe nehmen. Und das Log eines gescheiterten Laufs ist Zeile fuer Zeile
+    // gleich dem eines gelungenen, bis zur letzten Meldung vor dem Absturz:
+    // derselbe Lauf, dieselbe Arbeit, nur das Herunterfahren unterscheidet sich.
+    //
+    // WAS DARAUS FOLGT, fuer den naechsten Anlauf. Der Absturz steckt in
+    // System.GC.RunFinalizers() -> GodotObject.Finalize() ->
+    // godotsharp_internal_object_get_associated_gchandle, also in
+    // Endbehandlern, die NACH dem Herunterfahren der Engine in die Engine
+    // zurueckrufen. Das ist ein Wettlauf beim Beenden, keine fehlende Freigabe
+    // an einer Ladestelle; »ein `using` mehr« hat die Zahl jetzt dreimal nicht
+    // bewegt (Settings, CampaignManager, PortraitBank) und wird sie beim
+    // vierten Mal auch nicht bewegen. Wer den Absturz wieder sieht, sollte
+    // zuerst aufschreiben, WAS SONST auf der Maschine lief, und den Lauf sofort
+    // mit `--verbose` wiederholen: nur dort nennt die Engine die undichten
+    // ObjectDB-Objekte einzeln.
+    // =====================================================================
 
     /// <summary>Wann der Waffensitz-Prüfstand meldet, in Bildern; −1 = nie.
     /// <c>--waffensitz-check[=n]</c>.</summary>
@@ -2026,7 +2094,18 @@ public partial class MapViewer : Node2D
 
         if (tex == null)
         {
-            var img = Image.LoadFromFile(pngPath);
+            // ⚠ `using`, und ausdruecklich als HYGIENE, nicht als Kur: das ist das
+            // GROESSTE Godot-Objekt des ganzen Laufs (map_NET02.png ist 9200x4805,
+            // also 44 Megapunkte = 177 MB im Speicher), und `ImageTexture
+            // .CreateFromImage` nimmt sich seine eigene Kopie — nach der Zeile
+            // darunter ist das Bild tot. Es deterministisch freizugeben ist
+            // richtig; die Leckjagd vom 13.08.2026 hat aber gemessen, dass es an
+            // dem gesuchten Fehler NICHTS aendert: der Speicherstand am Ausstieg
+            // von `--portrait-check` ist auf map_NET02 mit und ohne `using` genau
+            // gleich (statisch 298,4 MB, verwaltet 96,3 MB), weil bis dahin
+            // ohnehin 4 volle Muellabfuhren gelaufen sind. Siehe den Vermerk bei
+            // <see cref="PortraitCheckTick"/>.
+            using var img = Image.LoadFromFile(pngPath);
             if (img == null)
             {
                 GD.PrintErr($"MapViewer: failed to load {pngPath}");

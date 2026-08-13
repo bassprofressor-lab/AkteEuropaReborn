@@ -120,13 +120,16 @@ public static class PortraitBank
         }
         using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
         if (f == null) { Trouble = "portraits_index.json nicht lesbar"; return; }
-        // ⚠ `using`, und der Grund ist gemessen: `Json` ist ein RefCounted wie
-        // `ConfigFile`, und ein nicht freigegebenes stirbt beim Herunterfahren im
-        // Finalizer. Ein Prüflauf auf map_NET02 endete deshalb mit
-        // Rückgabewert 139 (0xC0000005 in GC.RunFinalizers) und 97 Leckzeilen —
-        // ausschliesslich `JSON` und `Image`, kein einziges `ConfigFile`. Die
-        // Objekte hier waren der Rest desselben Fehlers, der am 13.08.2026 schon
-        // in `Settings` und `CampaignManager` steckte.
+        // ⚠ `using` ist RICHTIG, aber es ist NICHT die Ursache von irgendetwas —
+        // und die vorige Fassung dieses Kommentars behauptete das Gegenteil.
+        // `Json` ist ein RefCounted, und es hier freizugeben ist Hygiene; der
+        // Befund »97 Leckzeilen JSON/Image und Rückgabewert 139 auf map_NET02«
+        // hat damit nichts zu tun. Am 13.08.2026 ist mit einer Sonde gemessen
+        // worden, dass 97 kunstvoll NICHT freigegebene Objekte kurz vor dem Quit
+        // 0 Leckzeilen und Rückgabewert 0 ergeben — die ganze Herleitung
+        // »RefCounted nicht freigegeben ⇒ Leckzeile ⇒ 139« ist falsch. Die
+        // Messungen und was daraus folgt stehen bei
+        // `Rendering.MapViewer.PortraitCheckTick`.
         // `root` unten ist nach `AsGodotDictionary` eine eigene Referenz, das
         // Json-Objekt wird danach nicht mehr gebraucht.
         using var json = new Json();
@@ -190,9 +193,12 @@ public static class PortraitBank
         if (tex == null && FileAccess.FileExists(path))
         {
             // ⚠ `using`: `ImageTexture.CreateFromImage` nimmt sich seine eigene
-            // Kopie, das Image wird danach nicht mehr gebraucht. Ohne die
-            // Freigabe leckte je geladenes Bild eines — auf map_NET02 zusammen
-            // mit den JSON-Objekten 97 Stück, und der Lauf endete mit 139.
+            // Kopie, das Image wird danach nicht mehr gebraucht — die Freigabe ist
+            // richtig. Sie hat den Befund »97 Leckzeilen, Rückgabewert 139« aber
+            // NICHT bewegt (97 vorher, 97 nachher), und am 13.08.2026 ist mit
+            // einer Sonde gemessen, dass genau diese Form — Bild laden, Textur
+            // daraus, Bild nicht freigeben — 97 mal wiederholt 0 Leckzeilen
+            // ergibt. Siehe `Rendering.MapViewer.PortraitCheckTick`.
             using var img = Image.LoadFromFile(path);
             if (img != null) tex = ImageTexture.CreateFromImage(img);
         }
