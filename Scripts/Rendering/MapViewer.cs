@@ -1255,71 +1255,43 @@ public partial class MapViewer : Node2D
     /// <para>⚠ <b>NOTWEG, und er ist als solcher gemeint.</b> Die Bestände
     /// liegen in <c>MapEntityLayer</c> (Entity.StockT/W/F/S), und diese Datei
     /// gehört einem anderen Agenten; sie gibt keine Summe und keine Gebäudeliste
-    /// heraus. Was sie herausgibt, ist <c>EconCheckLine()</c> — dieselben Zahlen
-    /// als Zeile, in einem Format, das die Methode selbst festlegt:
-    /// <c>[3 Typ2 T120 W15 F0 S0 /Lager300 V3 St0 haelt10]</c> je Fabrik und
-    /// <c>[0 Basis W315 F228 S0 T0 bezahlbar 3/65]</c> je Basis. Hier werden
-    /// daraus die vier Summen gelesen: aus jeder Klammer jedes Wort der Form
-    /// <c>&lt;Buchstabe&gt;&lt;Ziffern&gt;</c> mit Buchstabe T/W/F/S. »Typ2«,
-    /// »St0«, »/Lager300« und »haelt10« fallen dabei durch, weil hinter dem
-    /// ersten Buchstaben keine reine Ziffernfolge steht.</para>
+    /// heraus. Die Zahlen liefert <c>MapEntityLayer.PlayerStocks(spieler)</c>.</para>
     ///
-    /// <para>Sobald <c>MapEntityLayer</c> einen richtigen Zugriff hat (im
-    /// Bericht als <c>PlayerStocks(int spieler)</c> beschrieben), ist dieser
-    /// Rumpf eine Zeile lang und die Zerlegung fliegt raus.</para>
+    /// <para>⚠ <s>Hier stand beschrieben, wie die vier Summen aus der ZEILE von
+    /// <c>EconCheckLine()</c> zerlegt werden — Klammer für Klammer, Wort für
+    /// Wort.</s> Erledigt am 13.08.2026: der Zugriff ist gebaut, die Zerlegung
+    /// ist raus. Beide benutzen dieselbe Gebäudeauswahl
+    /// (<c>MapEntityLayer.CountsForStocks</c>), damit Anzeige und Prüfstand nicht
+    /// auseinanderlaufen können.</para>
     ///
-    /// <para>⚠ Was die Leiste damit NICHT zeigt: Terranium, das noch in einer
-    /// MINE liegt oder auf dem Nahweg unterwegs ist. <c>EconCheckLine()</c>
-    /// zählt die Fabriken und die Basis, also genau das, woraus BEZAHLT wird
-    /// (@0x44A6D8/ED/08 prüfen die Lager des Gebäudes, dessen Fenster offen
-    /// ist). Das ist die ehrliche Lesart der Zahl — »was ich ausgeben kann« —
-    /// und nicht »was ich besitze«.</para>
+    /// <para>⚠ Was die Leiste NICHT zeigt: Terranium, das noch in einer MINE
+    /// liegt oder auf dem Nahweg unterwegs ist. Gezählt werden Fabriken und
+    /// Basis, also genau das, woraus BEZAHLT wird (@0x44A6D8/ED/08 prüfen die
+    /// Lager des Gebäudes, dessen Fenster offen ist). Das ist die ehrliche
+    /// Lesart der Zahl — »was ich ausgeben kann« — und nicht »was ich
+    /// besitze«.</para>
     /// </summary>
     private UI.GameHud.Stocks ReadStocks()
     {
-        string line = _entities.EconCheckLine();
-        int t = 0, w = 0, f = 0, s = 0;
-        bool any = false;
-        int i = 0;
-        while (true)
-        {
-            int a = line.IndexOf('[', i);
-            if (a < 0) break;
-            int b = line.IndexOf(']', a + 1);
-            if (b < 0) break;
-            any = true;
-            foreach (string word in line[(a + 1)..b].Split(' '))
-            {
-                if (word.Length < 2) continue;
-                char c = word[0];
-                if (c is not ('T' or 'W' or 'F' or 'S')) continue;
-                bool digits = true;
-                for (int k = 1; k < word.Length; k++)
-                    if (!char.IsAsciiDigit(word[k])) { digits = false; break; }
-                if (!digits) continue;
-                int v = int.Parse(word[1..]);
-                switch (c)
-                {
-                    case 'T': t += v; break;
-                    case 'W': w += v; break;
-                    case 'F': f += v; break;
-                    case 'S': s += v; break;
-                }
-            }
-            i = b + 1;
-        }
-        // Der Kontostand: MoneyLine() liefert »Kontostand : $ 44850«.
-        // ⚠ ERLEDIGT 13.08.2026 — hier stand, dass MoneyLine() fest _money[0]
-        // liest, auch wenn der Sichtspieler ein anderer ist (auf map_05 ist er
-        // 1). Das war richtig und ist behoben: die Zeile klemmt jetzt auf
-        // ViewPlayer, wie der Rest der Datei. Der Hinweis bleibt als Spur
-        // stehen, weil er zeigt, wie der Fehler gefunden wurde — beim Bau der
-        // Leiste, nicht beim Ansehen der Kontozeile.
-        int money = 0;
-        string ml = _entities.MoneyLine();
-        int d = ml.LastIndexOf('$');
-        if (d >= 0) int.TryParse(ml[(d + 1)..].Trim(), out money);
-        return new UI.GameHud.Stocks(t, w, f, s, money, any);
+        // ⚠ 13.08.2026 — HIER STAND EIN NOTWEG: die vier Summen wurden aus der
+        // ZEICHENKETTE von EconCheckLine() zerlegt, Klammer für Klammer, Wort
+        // für Wort, und der Kontostand aus »Kontostand : $ 44850«. Das hat
+        // funktioniert und wäre bei der nächsten Änderung an einem
+        // Prüfstands-WORTLAUT still falsch geworden — eine Anzeige darf nicht
+        // vom Text eines Prüfstands abhängen.
+        //
+        // PlayerStocks() liefert die Zahlen jetzt direkt, und es benutzt
+        // dieselbe Gebäudeauswahl wie EconCheckLine() (CountsForStocks), damit
+        // Anzeige und Prüfstand nicht auseinanderlaufen können. Der Kontostand
+        // kommt aus demselben Aufruf; MoneyLine() ist nur noch die Textzeile.
+        //
+        // Die Lesart der Zahl bleibt die alte und bleibt die ehrliche: gezählt
+        // werden Fabriken und Basis, also das, woraus BEZAHLT wird
+        // (@0x44A6D8/ED/08 prüfen die Lager des Gebäudes, dessen Fenster offen
+        // ist) — »was ich ausgeben kann«, nicht »was ich besitze«.
+        var p = _entities.PlayerStocks(_entities.ViewPlayer is >= 0 and <= 7
+            ? _entities.ViewPlayer : 0);
+        return new UI.GameHud.Stocks(p.T, p.W, p.F, p.S, p.Money, p.Buildings > 0);
     }
 
     /// <summary>Die Leiste eine Probe nehmen lassen und sie an ihre Stelle

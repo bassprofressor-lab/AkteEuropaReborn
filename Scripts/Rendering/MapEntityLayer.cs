@@ -5633,6 +5633,42 @@ public partial class MapEntityLayer : Node2D
     /// die beiden Zahlen, die den Ausschlag geben: was die Fabrik
     /// ZURUECKHAELT (<c>OwnReserve</c>) und wohin sie abliefert.</para>
     /// </summary>
+    /// <summary>Zählt dieses Gebäude in die Bestände des Spielers? Fabriken und
+    /// die Basis.
+    ///
+    /// <para>⚠ Diese Auswahl steht seit dem 13.08.2026 EINMAL, und zwar hier.
+    /// Sie wird von <see cref="EconCheckLine"/> und
+    /// <see cref="PlayerStocks"/> gemeinsam benutzt — der Prüfstand und die
+    /// Anzeige im Bild müssen dieselben Gebäude zählen, sonst widersprechen sie
+    /// sich und man weiss nicht, welcher lügt. Genau dieselbe Überlegung wie bei
+    /// <see cref="IsBuildingClass"/>.</para></summary>
+    private bool CountsForStocks(Entity e, int player) =>
+        e.IsBuilding && !e.Dead && e.Owner == player && (IsFactory(e) || e.BType == 1);
+
+    /// <summary>Was der Spieler an Lagern hat, addiert über seine Gebäude — für
+    /// die stehende Rohstoffleiste (<c>UI/GameHud.cs</c>).
+    ///
+    /// <para>⚠ <b>Die SUMME ist unsere Zutat.</b> Das Original führt keinen
+    /// Spielervorrat; bezahlt wird aus dem Lager DES Gebäudes
+    /// (@0x44A6D8/ED/08). Eine Leiste, die einen Gesamtvorrat zeigt, ist eine
+    /// Wettkampf-Bequemlichkeit und keine gelesene Mechanik.</para>
+    ///
+    /// <para>Ersetzt seit dem 13.08.2026 einen Notweg: <c>MapViewer.ReadStocks</c>
+    /// hat die vier Summen aus der ZEICHENKETTE von
+    /// <see cref="EconCheckLine"/> zerlegt. Eine Anzeige, die eine
+    /// Prüfstandszeile parst, bricht bei jeder Änderung an deren Wortlaut.</para></summary>
+    public (int T, int W, int F, int S, int Money, int Buildings) PlayerStocks(int player)
+    {
+        int t = 0, w = 0, f = 0, s = 0, n = 0;
+        foreach (var e in _entities)
+        {
+            if (!CountsForStocks(e, player)) continue;
+            t += e.StockT; w += e.StockW; f += e.StockF; s += e.StockS;
+            n++;
+        }
+        return (t, w, f, s, _money[Mathf.Clamp(player, 0, 7)], n);
+    }
+
     public string EconCheckLine()
     {
         int me = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
@@ -5640,12 +5676,12 @@ public partial class MapEntityLayer : Node2D
         var hqs = new List<string>();
         foreach (var e in _entities)
         {
-            if (!e.IsBuilding || e.Dead || e.Owner != me) continue;
+            if (!CountsForStocks(e, me)) continue;
             if (IsFactory(e))
                 facs.Add($"[{e.Slot} Typ{e.BType} T{e.StockT} " +
                          $"W{e.StockW} F{e.StockF} S{e.StockS} /Lager{e.Capacity} " +
                          $"V{e.ProdSpeed} St{e.State} haelt{OwnReserve(e)}]");
-            else if (e.BType == 1)
+            else
                 hqs.Add($"[{e.Slot} Basis W{e.StockW} F{e.StockF} S{e.StockS} " +
                         $"T{e.StockT} bezahlbar {Affordable(e)}/{BuildableBy(1).Count}]");
         }
