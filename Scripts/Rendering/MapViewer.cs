@@ -842,6 +842,16 @@ public partial class MapViewer : Node2D
             else if (a == "--waffensitz-check" || a.StartsWith("--waffensitz-check="))
                 _turretSeatCheckAt = a.Length > 19
                     ? Mathf.Max(1, a["--waffensitz-check=".Length..].ToInt()) : 20;
+            // Beruehren sich Rahmen und Bild? — dieselbe Bauart wie der
+            // Waffensitz-Pruefstand, aus demselben Grund: die Bildpaare sind
+            // erst nach ein paar Bildern geladen. `--stempel-check[=platz]`
+            // nennt dazu EINE Einheit mit allen vier Punkten.
+            else if (a == "--stempel-check" || a.StartsWith("--stempel-check="))
+            {
+                _stempelCheckAt = 20;
+                if (a.Length > 16) _stempelSlot = a["--stempel-check=".Length..].ToInt();
+            }
+            else if (a == "--stempel-alt") MapEntityLayer.StempelAlt = true;
             else if (a == "--sound-check") _soundCheck = true;
             else if (a == "--tutorial-check") _tutorialCheck = true;
             else if (a == "--script-coverage") _coverageCheck = true;
@@ -1510,6 +1520,23 @@ public partial class MapViewer : Node2D
         if (_turretSeatFrames++ < _turretSeatCheckAt) return;
         _turretSeatCheckAt = -1;
         GD.Print(_entities.TurretSeatCheck());
+        if (_shotPath.Length == 0) GetTree().Quit(0);
+    }
+
+    /// <summary>Wann der Stempel-Prüfstand meldet, in Bildern; −1 = nie.
+    /// <c>--stempel-check[=&lt;platz&gt;]</c>.</summary>
+    private int _stempelCheckAt = -1;
+    private int _stempelSlot = -1;
+    private int _stempelFrames;
+
+    /// <summary>Meldet EINMAL, ob sich Rahmen und Bild berühren — siehe
+    /// <see cref="MapEntityLayer.StempelCheck"/>.</summary>
+    private void StempelCheckTick()
+    {
+        if (_stempelCheckAt < 0) return;
+        if (_stempelFrames++ < _stempelCheckAt) return;
+        _stempelCheckAt = -1;
+        GD.Print(_entities.StempelCheck(_stempelSlot));
         if (_shotPath.Length == 0) GetTree().Quit(0);
     }
 
@@ -2234,6 +2261,7 @@ public partial class MapViewer : Node2D
         UpdatePanelPortrait();
         PortraitCheckTick();
         TurretSeatCheckTick();
+        StempelCheckTick();
 
         // Das Ohr steht in der Mitte des Bildes. Das Original rechnet jeden
         // Klang gegen genau diesen Punkt (`play_sound` @0x4047E0 zieht

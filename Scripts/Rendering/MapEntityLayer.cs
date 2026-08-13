@@ -1185,6 +1185,48 @@ public partial class MapEntityLayer : Node2D
     /// verschiedener Höhe liegen. Das Bild rückt dort auf den Boden SEINER
     /// eigenen Zelle. Die 56 Schiffe, das 138er und die 947 einzelligen sind
     /// Bildpunkt für Bildpunkt unverändert.</para>
+    ///
+    /// <para>⚠ <b>DIE FRAGE, DIE DAS ENTSCHEIDET, IST NICHT »sitzt der Rahmen auf
+    /// seinem Grund«, SONDERN »berühren sich Rahmen und BILD«</b> — sonst rückt
+    /// der Rahmen weg vom Bild statt hin. Sie wird von
+    /// <see cref="StempelCheck"/> beantwortet, <c>--stempel-check</c>, und die
+    /// alte Lesung ist mit <c>--stempel-alt</c> im selben Programm nachstellbar.
+    /// Für map_DM_3 Platz 1020, den gemeldeten Fall, Zelle (57,186):
+    /// <code>
+    ///                        --stempel-alt        neu
+    ///   CellCenter(Col,Row)  (2300, 3835)   (2300, 3835)
+    ///   PictureAnchor        (2300, 3835)   (2300, 3835)   ← rührt sich nicht
+    ///   Pos                  (2320, 3845)   (2300, 3835)   ← eine halbe Zelle
+    ///   BodyRect             (2280,3825) 80x40   (2280,3825) 40x20
+    ///   Bild sichtbar        (2274,3810) 43x28   (2274,3810) 43x28
+    ///   Pos auf dem Bild?    NEIN           JA
+    /// </code>
+    /// Der Rahmen WANDERT nicht, er wird auf seine Größe zurückgenommen: dieselbe
+    /// linke obere Ecke, halbe Breite und Höhe. Damit fällt seine Mitte — und mit
+    /// ihr Ring, Klammer und Balken, die alle an <c>Pos</c> hängen — vom Gras auf
+    /// das Fahrzeug. Gegenprobe am unberührten Nachbarn: Platz 1014, derselbe
+    /// Rumpf, immer einzellig, hat Mitte(Bild)−Mitte(Rahmen) = (−4,5; −11,5);
+    /// Platz 1020 hat nach der Änderung (−4,5; −11). Die berührte Einheit sitzt
+    /// jetzt genau so zu ihrem Bild wie die 947, die nie betroffen waren.</para>
+    ///
+    /// <para><b>Über alle 64, gezählt im Lauf</b> — liegt <c>Pos</c> auf der
+    /// sichtbaren Fläche des Fahrzeugbildes?
+    /// <code>
+    ///   Karte     Schritte   --stempel-alt    neu
+    ///   map_DM_3        11        0 von 11    8 von 11
+    ///   map_DM_1        30        1 von 30   22 von 30
+    ///   map_DM_4        23        1 von 23   22 von 23
+    ///   zusammen        64        2 von 64   52 von 64
+    /// </code>
+    /// Die Vergleichsgruppe der immer einzelligen ist in beiden Läufen Zeile für
+    /// Zeile dieselbe (DM_3 59/77, DM_1 47/95, DM_4 97/169) — die Änderung rührt
+    /// sie nicht an. Dass auch dort nur gut die Hälfte »auf dem Bild« liegt, ist
+    /// eine Eigenschaft der Bilder, nicht dieses Fehlers: der Zeichenpunkt ist der
+    /// BODENPUNKT (<see cref="ComposedAnchor"/> = (30,55) auf 64x56), die
+    /// sichtbare Fläche steigt darüber auf, und bei hohen Rümpfen deckt sie den
+    /// Boden nicht mehr mit ab. Die 12 der 64, die auch jetzt nicht treffen,
+    /// treffen aus genau diesem Grund nicht und nicht mehr wegen des
+    /// Grundrisses.</para>
     /// </summary>
     private void DropSteppingFootprints(GDict root)
     {
@@ -1210,6 +1252,11 @@ public partial class MapEntityLayer : Node2D
         }
 
         int steps = 0;
+        _steppedSlots.Clear();
+        // ⚠ `--stempel-alt` haelt die ALTE Lesung fest, damit das Vorher aus
+        // einem LAUF kommt und nicht aus einer Nebenrechnung — dieselbe Bauart
+        // wie RailProbeFootH.
+        if (StempelAlt) { GD.Print("imap: --stempel-alt — jeder Stempel gilt als Grundriss"); return; }
         foreach (var e in _entities)
         {
             if (e.IsBuilding || e.Slot < 0) continue;
@@ -1219,11 +1266,154 @@ public partial class MapEntityLayer : Node2D
             if (!l.Contains((e.Col, e.Row))) continue;
             e.FootW = 1;
             e.FootH = 1;
+            _steppedSlots.Add(e.Slot);
             steps++;
         }
         if (steps > 0)
             GD.Print($"imap: {steps} Einheiten stehen im Schritt " +
                      "(Stempel genau zweizellig) — Grundriss 1x1, nicht 2x1/1x2/2x2");
+    }
+
+    /// <summary><c>--stempel-alt</c> — die Lesung von vor dem 13.08.2026: jeder
+    /// mehrzellige Stempel gilt als Grundriss. Nur für die Gegenprobe da; wer sie
+    /// setzt, bekommt die 64 halb daneben sitzenden Rahmen zurück.</summary>
+    public static bool StempelAlt;
+
+    /// <summary>Die Steckplätze, denen <see cref="DropSteppingFootprints"/> den
+    /// Grundriss auf 1x1 zurückgenommen hat — gebraucht von
+    /// <see cref="StempelCheck"/>, damit die Gegenprobe die berührte von der
+    /// unberührten Gruppe trennen kann.</summary>
+    private readonly HashSet<int> _steppedSlots = new();
+
+    /// <summary>
+    /// <c>--stempel-check</c> — <b>berühren sich Rahmen und Bild?</b> Die Frage,
+    /// die die Bilder aus dem Prüflauf nicht beantworten konnten, weil die
+    /// halbdurchsichtige Tönung des Auswahlrahmens die grüne Klammer darunter
+    /// verschluckt. Hier stehen die Punkte selbst.
+    ///
+    /// <para>Gemessen wird je Einheit die SICHTBARE Fläche ihres Bildes — der
+    /// Kasten der Bildpunkte mit Alpha &gt; 0 in der Textur, die der Zeichner
+    /// nimmt — gegen <see cref="BodyRect"/>, den Rahmen. Alle Marken des Spielers
+    /// hängen an <see cref="Entity.Pos"/>: Rahmen (DrawRect(BodyRect) im
+    /// Auswahlblock), Besitzerring (DrawArc(baseC)), Klammer
+    /// (DrawSelectionBrackets(baseC)) und Lebensbalken
+    /// (<c>Pos + (−TileW/2, −TileH/2 − 8)</c>). Das BILD hängt allein an
+    /// <see cref="PictureAnchor"/>, und für alles Einzellige sind beide
+    /// derselbe Punkt.</para>
+    /// </summary>
+    public string StempelCheck(int wantSlot = -1)
+    {
+        var sb = new System.Text.StringBuilder();
+        var bbox = new Dictionary<ulong, Rect2>();
+
+        Rect2? Visible(Entity e, out string what)
+        {
+            what = "";
+            var picC = PictureAnchor(e);
+            Texture2D? tex = null;
+            var at = Vector2.Zero;
+            if (e.Infantry >= 0)
+            {
+                tex = GetInfantryTexture(e.Infantry, e.Facing, InfBlock(e));
+                if (tex != null) { what = "Fusssoldat"; at = picC - ComposedAnchor; }
+            }
+            if (tex == null)
+            {
+                tex = GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e.Col, e.Row));
+                if (tex != null) { what = "Rumpf"; at = picC - ComposedAnchor; }
+            }
+            if (tex == null)
+            {
+                tex = GetComposedTexture(e.Combo, e.Facing);
+                if (tex != null) { what = "zusammengesetzt"; at = picC - ComposedAnchor; }
+            }
+            if (tex == null)
+            {
+                tex = GetUnitTexture(e.UnitType, e.Facing);
+                if (tex != null)
+                {
+                    what = "nackt";
+                    at = new Vector2(picC.X - tex.GetWidth() / 2f, picC.Y - tex.GetHeight());
+                }
+            }
+            if (tex == null) return null;
+            ulong id = tex.GetRid().Id;
+            if (!bbox.TryGetValue(id, out var bb))
+            {
+                var img = tex.GetImage();
+                int x0 = int.MaxValue, y0 = int.MaxValue, x1 = int.MinValue, y1 = int.MinValue;
+                if (img != null)
+                    for (int y = 0; y < img.GetHeight(); y++)
+                        for (int x = 0; x < img.GetWidth(); x++)
+                            if (img.GetPixel(x, y).A > 0.02f)
+                            {
+                                if (x < x0) x0 = x;
+                                if (x > x1) x1 = x;
+                                if (y < y0) y0 = y;
+                                if (y > y1) y1 = y;
+                            }
+                bb = x1 < x0 ? new Rect2()
+                             : new Rect2(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+                bbox[id] = bb;
+            }
+            if (bb.Size == Vector2.Zero) return null;
+            return new Rect2(at + bb.Position, bb.Size);
+        }
+
+        // je Gruppe: wie oft berührt die sichtbare Fläche den Rahmen überhaupt,
+        // und wie weit liegt ihre Mitte von der Rahmenmitte weg
+        // ⚠ »Bildmitte im Rahmen« taugt bei 1x1 NICHT als Maß: die sichtbare
+        // Fläche (43x28 beim Rumpf 161) ist größer als die Zelle (40x20), ihre
+        // Mitte liegt also normal über dem Rahmen. Die Frage, um die es geht,
+        // ist die umgekehrte: liegt der PUNKT, an dem Rahmen, Ring, Klammer und
+        // Balken hängen, auf dem Fahrzeug?
+        var grp = new Dictionary<string, (int N, int Beruehrt, int MitteDrin,
+                                          float SumX, float SumY, float MaxX, float MaxY,
+                                          int PosAufBild)>();
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Dead || e.UnitType < 0) continue;
+            var vis = Visible(e, out string what);
+            if (vis == null) continue;
+            var v = vis.Value;
+            var rect = BodyRect(e);
+            string key = _steppedSlots.Contains(e.Slot) ? "Schritt (war 2 Zellen)"
+                       : e.FootW > 1 || e.FootH > 1 ? "echter Koerper (>=3 Zellen)"
+                       : "einzellig";
+            var d = v.GetCenter() - rect.GetCenter();
+            var g = grp.TryGetValue(key, out var old) ? old : default;
+            grp[key] = (g.N + 1,
+                        g.Beruehrt + (v.Intersects(rect) ? 1 : 0),
+                        g.MitteDrin + (rect.HasPoint(v.GetCenter()) ? 1 : 0),
+                        g.SumX + Mathf.Abs(d.X), g.SumY + Mathf.Abs(d.Y),
+                        Mathf.Max(g.MaxX, Mathf.Abs(d.X)), Mathf.Max(g.MaxY, Mathf.Abs(d.Y)),
+                        g.PosAufBild + (v.HasPoint(e.Pos) ? 1 : 0));
+
+            if (e.Slot != wantSlot) continue;
+            sb.Append($"\nstempel: Platz {e.Slot} Rumpf {e.UnitType} Blick {e.Facing} " +
+                      $"Zelle ({e.Col},{e.Row}) Grundriss {e.FootW}x{e.FootH} [{what}]\n");
+            sb.Append($"  CellCenter(Col,Row) = {CellCenter(e.Col, e.Row)}\n");
+            sb.Append($"  Pos                 = {e.Pos}\n");
+            sb.Append($"  PictureAnchor       = {PictureAnchor(e)}\n");
+            sb.Append($"  BodyRect (Rahmen)   = {rect}\n");
+            sb.Append($"  Bild sichtbar       = {v}\n");
+            sb.Append($"  Ring/Klammer/Balken = {e.Pos} / {e.Pos} / " +
+                      $"{e.Pos + new Vector2(-TileW / 2f, -TileH / 2f - 8)}\n");
+            sb.Append($"  Mitte Bild − Mitte Rahmen = {v.GetCenter() - rect.GetCenter()}, " +
+                      $"Rahmen und Bild schneiden sich: {v.Intersects(rect)}, " +
+                      $"POS AUF DEM BILD: {v.HasPoint(e.Pos)}\n");
+        }
+
+        sb.Append("\nstempel: sichtbare Bildflaeche gegen den Rahmen, je Gruppe\n");
+        sb.Append("  Gruppe                        n  schneidet  Pos auf Bild  " +
+                  "|dx| Mittel/Max  |dy| Mittel/Max\n");
+        foreach (var kv in grp)
+        {
+            var g = kv.Value;
+            sb.Append($"  {kv.Key,-28} {g.N,3}  {g.Beruehrt,9}  {g.PosAufBild,12}  " +
+                      $"{g.SumX / g.N,6:0.0}/{g.MaxX,-6:0.0}  {g.SumY / g.N,6:0.0}/{g.MaxY:0.0}\n");
+        }
+        return sb.ToString();
     }
 
     private bool LoadEntitiesJson(string name, int ox, int oy, Dictionary<(int, int), int> elev)
