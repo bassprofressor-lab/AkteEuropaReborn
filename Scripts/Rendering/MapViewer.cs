@@ -309,10 +309,30 @@ public partial class MapViewer : Node2D
             // »in Kampagne 2 habe ich kein Geld« gemeldet.
             if (UI.SkirmishSetup.CampaignMission > 0)
             {
+                // ⚠ 13.08.2026 — DER SPIELSTAND EINES FRUEHEREN LAUFS. Ein
+                // Prueflauf, der ihn stillschweigend mitschleppt, meldet die
+                // Zahlen der VORIGEN Laeufe: gemessen wurden $47465 in
+                // Mission 23 und $970 statt $470 in Mission 5, beides Erloese
+                // eigener Prueffahrten. Dieselbe Fehlerklasse wie »ein Leser,
+                // der Zustand ueber eine Grenze mittraegt«. Also entweder
+                // wegraeumen (--fresh-campaign) oder ausdruecklich sagen, dass
+                // er vorgefunden wurde — schweigen darf er nicht.
+                if (_freshCampaign)
+                {
+                    Campaign.CampaignManager.Reset();
+                    GD.Print("Kampagne: --fresh-campaign — Spielstand " +
+                             "(geschaffte Missionen und Kontostand) auf 0 gesetzt");
+                }
+                int geschafft = Campaign.CampaignManager.Completed;
                 int mit = Campaign.CampaignManager.Balance;
                 _entities.SetStartMoney(me, mit);
                 GD.Print($"Kampagne: Mission {UI.SkirmishSetup.CampaignMission} " +
-                         $"beginnt mit Kontostand ${mit}");
+                         $"beginnt mit Kontostand ${mit}" +
+                         (mit != 0 || geschafft != 0
+                             ? $"   ⚠ AUS DEM SPIELSTAND {Campaign.CampaignManager.SavePath} " +
+                               $"({geschafft} Missionen geschafft) — fuer eine Geldmessung " +
+                               "--fresh-campaign nehmen"
+                             : ""));
             }
             // start looking at one's own base, not at the whole map
             if (_entities.PlayerHome(me) is { } home)
@@ -432,8 +452,20 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_terraCheck)
+        {
+            GD.Print(_entities.TerraCheckLine());
+            GetTree().Quit(0);
+            return;
+        }
         if (_buildCheck)
         {
+            // ⚠ Erst das Missionsskript, dann die Bauplaetze. Die
+            // ROHSTOFFVORKOMMEN kommen aus dem Missionsaufbau, nicht von der
+            // Karte, und sie stehen erst da, wenn das Skript steht. Ohne diese
+            // Zeile meldete der Prueflauf auf map_23 »Feld-Rohstoffmine:
+            // 0 Bauplaetze« — richtig gemessen, nur zu frueh.
+            _entities.EnsureMissionScript();
             // The raised buildings are stamped into a copy of the baked map,
             // so the run leaves a picture one can actually look at.
             var img = _sprite.Texture?.GetImage();
@@ -694,6 +726,25 @@ public partial class MapViewer : Node2D
             else if (a == "--cheat-check") _cheatCheck = 2f;
             else if (a == "--air-buy-check") _airBuyCheck = 3f;
             else if (a == "--produce-check") _produceCheck = 2f;
+            // --fresh-campaign: den Kampagnenspielstand (user://campaign.cfg)
+            // VOR dem Missionsstart auf 0 setzen. Ohne ihn traegt jeder
+            // Prueflauf den Kontostand der vorigen mit, und eine Geldmessung
+            // misst dann die vorigen Laeufe.
+            else if (a == "--fresh-campaign") _freshCampaign = true;
+            // --terra-check: die Rohstoffvorkommen der Mission und ob auf ihnen
+            // eine Feld-Rohstoffmine stehen kann. Siehe
+            // MapEntityLayer.TerraCheckLine.
+            else if (a == "--terra-check") _terraCheck = true;
+            // --place-check[=<sek>]: die Einsetzungen (place_unit @0x4D0810)
+            // einer Mission an ihrer Messlatte. Siehe
+            // MapEntityLayer.PlaceCheckLine. Ohne Zahl 15 Sekunden — lange
+            // genug, dass ein Zaehler, der die Einsetzung anstoesst, durch ist.
+            else if (a == "--place-check") _placeCheck = 15f;
+            // --place-force: die Bedingungen der einsetzenden Regeln herstellen
+            // und dann laufen lassen. Siehe MapEntityLayer.PlaceForceLine.
+            else if (a == "--place-force") _placeForce = 3f;
+            else if (a.StartsWith("--place-check="))
+                _placeCheck = Mathf.Max(0.05f, a["--place-check=".Length..].ToFloat());
             else if (a == "--demo-groups") { _demo = true; _demoGroups = true; }
             // Prüfstand für das Abschlussfenster: es geht nach n Sekunden auf,
             // damit man es photographieren kann, ohne eine ganze Mission
@@ -838,6 +889,10 @@ public partial class MapViewer : Node2D
     /// damit das Skript vorher einen Takt hatte — es merkt sich das Lager erst,
     /// wenn ihm ein Gebäude der Klasse 1 gehört.</summary>
     private float _produceCheck;
+    private float _placeCheck;
+    private bool _freshCampaign;
+    private bool _terraCheck;
+    private float _placeForce;
 
     /// <summary>`--damage-check`: die Schadensstufen durchfahren.</summary>
     private float _damageCheck;
@@ -896,6 +951,24 @@ public partial class MapViewer : Node2D
             {
                 _produceCheck = -1f;
                 GD.Print(_entities.ProduceCheckLine());
+            }
+        }
+        if (_placeForce > 0f)
+        {
+            _placeForce -= (float)delta;
+            if (_placeForce <= 0f)
+            {
+                _placeForce = -1f;
+                GD.Print(_entities.PlaceForceLine());
+            }
+        }
+        if (_placeCheck > 0f)
+        {
+            _placeCheck -= (float)delta;
+            if (_placeCheck <= 0f)
+            {
+                _placeCheck = -1f;
+                GD.Print(_entities.PlaceCheckLine());
             }
         }
         if (_railCheck > 0f)

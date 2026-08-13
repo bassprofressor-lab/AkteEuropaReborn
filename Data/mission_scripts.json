@@ -26,7 +26,7 @@
  "_note": "Missionsskripte der Kampagne. Im Original sind das keine Daten, sondern Code: die Missionsnummer aus dem Kartenkopf indiziert eine Sprungtabelle (@0x4A5B0C, 35 Eintraege), und jede Mission bekommt ihren eigenen Block, der jeden Takt laeuft. Die ZWISCHENSCHRITTE sind von Hand uebersetzt, mit `aekernel-tools/mission_logic.py --decode` als Vorlage; die SIEGBEDINGUNGEN sind es nicht, die sind eine Abschrift aus der EXE (siehe _endregeln). Jede Mission nennt die Adresse, aus der sie stammt, damit sich beides gegenpruefen laesst.",
  "_offen": "Nicht uebersetzt sind Regeln, die Ereignisflaggen (take_flag/0x539930), Toene, Busbefehle, das Setzen von Einheiten oder Buendniswechsel brauchen — dafuer fehlt der Unterbau. Eine fehlende Regel zeigt sich als Mission, die nicht von selbst endet; eine erfundene wuerde still falsch spielen. ⚠ Mehrere Endregeln pruefen zusaetzlich eigene Wortvariablen des Blocks (Missionen 5, 7, 13, 14). Die Bedingung ist richtig gelesen, aber die Regeln, die jene Variablen HOCHZAEHLEN, sind nicht uebersetzt — die Regel kann also nie feuern. MissionScript.Decides erkennt genau das und laesst in dem Fall die Notregel entscheiden, statt die Mission unloesbar zu machen; --script-check meldet solche Variablen als »ohne Erzeuger«.",
  "_takt": "Der Takt, gemessen (aekernel-tools/mission_tick.py, beide GAME.EXE). Der Taktgeber ist eine Fensteruhr: SetTimer(fenster, 1, 0x14, NULL) @0x415BC5, 0x14 = 20 ms, also 50 TAKTE JE SEKUNDE; WM_TIMER (cmp eax,0x113 @0x412ED6) traegt einen offenen Takt ein (inc byte [0x53920C] @0x414010), die Hauptschleife verbraucht je Durchlauf genau einen (dec @0x415F0E) und haelt hoechstens vier vor (@0x415EFC). Die Uhr zaehlt 250 Takte je Spielminute (inc byte [0x81AA28]; cmp 0xFA @0x4160B3), eine Spielminute sind also FUENF REALE SEKUNDEN; game_time() @0x4CF570 liest dieselbe Stelle. Der Missionsblock ist ZWEITEILIG: die Kampagnenfunktion @0x497540 rechnet [0x502988] = Takt mod 100 (@0x497636) und faellt am Ende in den Verteiler @0x49814D; jeder der 33 Bloecke traegt darin GENAU EIN Tor `mov eax,[Takt mod 100]; test eax,eax; jne <Blockende>` mitten im Rumpf. Was davor steht laeuft JEDEN Takt (50 Hz), was dahinter jeden 100. (alle 2 s). `gate` je Mission ist die Adresse dieses Tors; jede Regel ordnet sich ueber ihr `_at` selbst ein, Regeln ohne `_at` (die 31 Endregeln) gelten als hinter dem Tor. `_waechter` markiert Zaehler, denen der Leser das vorgeschaltete `cmp v,0 / je` verloren hatte — ohne das laufen sie ab dem ersten Takt statt erst auf Anstoss.",
- "_vokabular": "Bedingungen: var(a,op,b) = v[a] op b | time_gt(a) = game_time() > a Minuten | time_after(a,b) = game_time() > v[a]+b | obj_owner(a,op,b) = Besitzer des Gebaeudeplatzes a | units(klasse,spieler,op,c) = g_robot_class_count | buildings(klasse,spieler,op,c) = g_buildings_count. Wirkungen: inc(a) | set(a,b) | text(a) | end(a) mit a=1 gewonnen, a=0 verloren.  Anfangswerte: init = {v: wert} aus dem Setup-Block; v[101+k] ist der Zustand des k-ten Missionsziels (1 offen, 10 erfuellt), v[131+k] seine Textnummer.  Anfangswerte: init = {v: wert} aus dem Setup-Block; v[101+k] ist der Zustand des k-ten Missionsziels (1 offen, 10 erfuellt), v[131+k] seine Textnummer.  Anfangswerte: init = {v: wert} aus dem Setup-Block; v[101+k] ist der Zustand des k-ten Missionsziels (1 offen, 10 erfuellt), v[131+k] seine Textnummer.  space_in(a=spieler, b=x, c=y, typen=[...]) setzt die Typen als Verstaerkung bei (x, y) ab, nachdem sie von ausserhalb der Karte angeflogen sind; +0x43 einer so erzeugten Einheit ist ihr Typ, und genau daran findet sie unit_index/find_unit.  ODER:  neben  — mindestens EIN Glied aus  muss zutreffen, zusätzlich zu allem in . Das Original schreibt sein ODER als zwei Abfragen, von denen die erste in den Rumpf SPRINGT und die zweite nur bei Misserfolg hinausspringt (Kampagne 2 @0x498EAF:  / ). mission_logic.set_rules liest die Form; sie steht in beiden GAME.EXE dreimal (M2 @0x498EEC, M3 @0x4996B7, M15 @0x49D89D) mit denselben Gliedern. ⚠ Eine Regel mit leerem  und gefülltem  ist NICHT bedingungslos — M3s Regel ist genau so gebaut.  ODER: any neben when — mindestens EIN Glied aus any muss zutreffen, zusätzlich zu allem in when. Das Original schreibt sein ODER als zwei Abfragen, von denen die erste in den Rumpf SPRINGT und die zweite nur bei Misserfolg hinausspringt (Kampagne 2 @0x498EAF: obj_owner(1) + je KOERPER, dann obj_owner(2) + jne RAUS). mission_logic.set_rules liest die Form; sie steht in beiden GAME.EXE dreimal (M2 @0x498EEC, M3 @0x4996B7, M15 @0x49D89D) mit denselben Gliedern. ⚠ Eine Regel mit leerem when und gefülltem any ist NICHT bedingungslos — M3s Regel ist genau so gebaut.",
+ "_vokabular": "Bedingungen: var(a,op,b) = v[a] op b | time_gt(a) = game_time() > a Minuten | time_after(a,b) = game_time() > v[a]+b | obj_owner(a,op,b) = Besitzer des Gebaeudeplatzes a | units(klasse,spieler,op,c) = g_robot_class_count | buildings(klasse,spieler,op,c) = g_buildings_count. Wirkungen: inc(a) | set(a,b) | text(a) | end(a) mit a=1 gewonnen, a=0 verloren.  Anfangswerte: init = {v: wert} aus dem Setup-Block; v[101+k] ist der Zustand des k-ten Missionsziels (1 offen, 10 erfuellt), v[131+k] seine Textnummer.  Anfangswerte: init = {v: wert} aus dem Setup-Block; v[101+k] ist der Zustand des k-ten Missionsziels (1 offen, 10 erfuellt), v[131+k] seine Textnummer.  Anfangswerte: init = {v: wert} aus dem Setup-Block; v[101+k] ist der Zustand des k-ten Missionsziels (1 offen, 10 erfuellt), v[131+k] seine Textnummer.  space_in(a=spieler, b=x, c=y, typen=[...]) setzt die Typen als Verstaerkung bei (x, y) ab, nachdem sie von ausserhalb der Karte angeflogen sind; +0x43 einer so erzeugten Einheit ist ihr Typ, und genau daran findet sie unit_index/find_unit.  ODER:  neben  — mindestens EIN Glied aus  muss zutreffen, zusätzlich zu allem in . Das Original schreibt sein ODER als zwei Abfragen, von denen die erste in den Rumpf SPRINGT und die zweite nur bei Misserfolg hinausspringt (Kampagne 2 @0x498EAF:  / ). mission_logic.set_rules liest die Form; sie steht in beiden GAME.EXE dreimal (M2 @0x498EEC, M3 @0x4996B7, M15 @0x49D89D) mit denselben Gliedern. ⚠ Eine Regel mit leerem  und gefülltem  ist NICHT bedingungslos — M3s Regel ist genau so gebaut.  ODER: any neben when — mindestens EIN Glied aus any muss zutreffen, zusätzlich zu allem in when. Das Original schreibt sein ODER als zwei Abfragen, von denen die erste in den Rumpf SPRINGT und die zweite nur bei Misserfolg hinausspringt (Kampagne 2 @0x498EAF: obj_owner(1) + je KOERPER, dann obj_owner(2) + jne RAUS). mission_logic.set_rules liest die Form; sie steht in beiden GAME.EXE dreimal (M2 @0x498EEC, M3 @0x4996B7, M15 @0x49D89D) mit denselben Gliedern. ⚠ Eine Regel mit leerem when und gefülltem any ist NICHT bedingungslos — M3s Regel ist genau so gebaut.  terra = [[spalte, zeile, menge], ...] aus add_terra_place (C: 0x4D0A10, F: 0x4D05C0) im SETUP-Block: wo im Boden Rohstoff liegt. Die Feld-Rohstoffmine (Gebaeudetyp 15) darf nur auf einem Vorkommen stehen (3x3-Fenster, @0x4205C0) — ohne diese Liste hat sie auf jeder Karte 0 Bauplaetze.",
  "missions": {
   "1": {
    "_endregel_aus": "0x4989C7",
@@ -789,8 +789,63 @@
      ]
     },
     {
+     "_at": "0x49BF41",
+     "_tut_ausserdem": "place_unit place_unit place_unit place_unit 0x4D0860 0x4D0860 0x4D0860 0x4D0860",
+     "then": [
+      {
+       "_at": "0x49BF49",
+       "a": 86,
+       "b": 90,
+       "c": 24,
+       "d": 6,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x49BF59",
+       "a": 86,
+       "b": 91,
+       "c": 24,
+       "d": 6,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x49BF69",
+       "a": 86,
+       "b": 92,
+       "c": 24,
+       "d": 6,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x49BF79",
+       "a": 86,
+       "b": 93,
+       "c": 24,
+       "d": 6,
+       "kind": "place_unit"
+      },
+      {
+       "a": 2,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 2,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 10,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
+    {
      "_at": "0x49BFEC",
-     "_tut_ausserdem": "show_text 0x4D0810 0x4D0860 game_time",
+     "_tut_ausserdem": "show_text place_unit 0x4D0860 game_time",
      "then": [
       {
        "a": 2,
@@ -807,6 +862,14 @@
       {
        "a": 101,
        "kind": "inc"
+      },
+      {
+       "_at": "0x49C015",
+       "a": 57,
+       "b": 57,
+       "c": 0,
+       "d": 5,
+       "kind": "place_unit"
       },
       {
        "a": 3,
@@ -1130,6 +1193,87 @@
      "when": []
     },
     {
+     "_at": "0x49C829",
+     "_tut_ausserdem": "0x4D0970 0x4D1050",
+     "any": [
+      {
+       "a": 12,
+       "b": 4,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 10,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ],
+     "once": 0,
+     "then": [],
+     "when": []
+    },
+    {
+     "_at": "0x49C863",
+     "_tut_ausserdem": "show_text",
+     "once": 1,
+     "then": [
+      {
+       "_at": "0x49C874",
+       "a": 220,
+       "b": 1,
+       "c": 380,
+       "d": 400,
+       "kind": "text"
+      },
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49C92C",
+     "_tut_ausserdem": "show_text",
+     "once": 2,
+     "then": [
+      {
+       "_at": "0x49C93D",
+       "a": 221,
+       "b": 1,
+       "c": 380,
+       "d": 400,
+       "kind": "text"
+      },
+      {
+       "a": 102,
+       "b": 2,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "kind": "time_gt",
+       "op": ">"
+      },
+      {
+       "a": 4,
+       "b": 0,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49C9C4",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
@@ -1280,6 +1424,46 @@
        "c": 0,
        "kind": "objects",
        "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49CB0C",
+     "_tut_ausserdem": "show_text place_unit 0x4D0F20 0x4D08B0",
+     "once": 1,
+     "then": [
+      {
+       "_at": "0x49CB24",
+       "a": 233,
+       "b": 1,
+       "c": 380,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 103,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49CB3E",
+       "a": 194,
+       "b": 5,
+       "c": 6,
+       "d": 0,
+       "kind": "place_unit"
+      },
+      {
+       "a": 2,
+       "b": 0,
+       "c": 194,
+       "kind": "find_unit"
+      }
+     ],
+     "when": [
+      {
+       "a": 50,
+       "kind": "time_gt",
+       "op": ">"
       }
      ]
     },
@@ -1662,9 +1846,34 @@
    "rules": [
     {
      "_at": "0x49D1C4",
-     "_tut_ausserdem": "0x4D0810 0x4D0810 0x4D0810",
+     "_tut_ausserdem": "place_unit place_unit place_unit",
      "once": 0,
-     "then": [],
+     "then": [
+      {
+       "_at": "0x49D1CC",
+       "a": 57,
+       "b": 5,
+       "c": 69,
+       "d": 0,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x49D1DC",
+       "a": 57,
+       "b": 8,
+       "c": 71,
+       "d": 0,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x49D1EC",
+       "a": 57,
+       "b": 2,
+       "c": 73,
+       "d": 0,
+       "kind": "place_unit"
+      }
+     ],
      "when": []
     },
     {
@@ -1935,6 +2144,28 @@
     "133": 252
    },
    "rules": [
+    {
+     "_at": "0x49D774",
+     "_tut_ausserdem": "show_text",
+     "once": 0,
+     "then": [
+      {
+       "_at": "0x49D785",
+       "a": 254,
+       "b": 1,
+       "c": 350,
+       "d": 250,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
     {
      "_at": "0x49D79E",
      "_tut_ausserdem": "g_robot_class_count",
@@ -2780,10 +3011,61 @@
    "rules": [
     {
      "_at": "0x49E633",
-     "_tut_ausserdem": "0x4D0810 0x4D0810 0x4D0810",
+     "_tut_ausserdem": "place_unit place_unit place_unit",
      "once": 0,
-     "then": [],
+     "then": [
+      {
+       "_at": "0x49E63B",
+       "a": 57,
+       "b": 100,
+       "c": 100,
+       "d": 0,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x49E64B",
+       "a": 57,
+       "b": 104,
+       "c": 102,
+       "d": 0,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x49E65B",
+       "a": 57,
+       "b": 99,
+       "c": 104,
+       "d": 0,
+       "kind": "place_unit"
+      }
+     ],
      "when": []
+    },
+    {
+     "_at": "0x49E67E",
+     "_tut_ausserdem": "show_text",
+     "once": 10,
+     "then": [
+      {
+       "a": 101,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49E69D",
+       "a": 280,
+       "b": 1,
+       "c": 350,
+       "d": 250,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
     },
     {
      "_at": "0x49E6BD",
@@ -2909,6 +3191,68 @@
     "134": 293
    },
    "rules": [
+    {
+     "_at": "0x49EABD",
+     "_tut_ausserdem": "show_text game_time",
+     "once": 10,
+     "then": [
+      {
+       "a": 101,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49EADC",
+       "a": 290,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 11,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 2,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49EBB3",
+     "_tut_ausserdem": "show_text",
+     "once": 20,
+     "then": [
+      {
+       "a": 102,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49EBD2",
+       "a": 291,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 15,
+       "kind": "time_gt",
+       "op": ">"
+      },
+      {
+       "a": 34,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
     {
      "_at": "0x49EBF2",
      "_tut_ausserdem": "show_text bus_cmd sound",
@@ -3660,7 +4004,7 @@
     },
     {
      "_at": "0x498EEC",
-     "_tut_ausserdem": "0x4D0810 0x4D0810 0x4D0810 0x4D0810 0x4D0810 0x4D0810 0x4D0810 0x410220 0x410220 0x410220 0x410220 0x410220 0x410220 0x410220",
+     "_tut_ausserdem": "place_unit place_unit place_unit place_unit place_unit place_unit place_unit order order order order order order order",
      "any": [
       {
        "a": 1,
@@ -3676,7 +4020,127 @@
       }
      ],
      "once": 70,
-     "then": [],
+     "then": [
+      {
+       "_at": "0x498EF4",
+       "a": 85,
+       "b": 32,
+       "c": 8,
+       "d": 4,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x498F04",
+       "a": 85,
+       "b": 33,
+       "c": 0,
+       "d": 4,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x498F14",
+       "a": 85,
+       "b": 34,
+       "c": 0,
+       "d": 4,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x498F24",
+       "a": 86,
+       "b": 35,
+       "c": 8,
+       "d": 4,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x498F34",
+       "a": 86,
+       "b": 30,
+       "c": 2,
+       "d": 4,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x498F44",
+       "a": 86,
+       "b": 35,
+       "c": 3,
+       "d": 4,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x498F54",
+       "a": 60,
+       "b": 32,
+       "c": 7,
+       "d": 4,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x498F73",
+       "a": 4000,
+       "b": 16,
+       "c": 20,
+       "d": 60000,
+       "e": 0,
+       "kind": "order_at"
+      },
+      {
+       "_at": "0x498F8B",
+       "a": 4001,
+       "b": 14,
+       "c": 22,
+       "d": 60000,
+       "e": 0,
+       "kind": "order_at"
+      },
+      {
+       "_at": "0x498FA3",
+       "a": 4002,
+       "b": 12,
+       "c": 21,
+       "d": 60000,
+       "e": 0,
+       "kind": "order_at"
+      },
+      {
+       "_at": "0x498FBB",
+       "a": 4003,
+       "b": 16,
+       "c": 18,
+       "d": 60000,
+       "e": 0,
+       "kind": "order_at"
+      },
+      {
+       "_at": "0x498FD3",
+       "a": 4004,
+       "b": 17,
+       "c": 23,
+       "d": 60000,
+       "e": 0,
+       "kind": "order_at"
+      },
+      {
+       "_at": "0x498FEB",
+       "a": 4005,
+       "b": 14,
+       "c": 23,
+       "d": 60000,
+       "e": 0,
+       "kind": "order_at"
+      },
+      {
+       "_at": "0x499003",
+       "a": 4006,
+       "b": 11,
+       "c": 22,
+       "d": 60000,
+       "e": 0,
+       "kind": "order_at"
+      }
+     ],
      "when": [
       {
        "a": 3,
@@ -4035,6 +4499,32 @@
      ]
     },
     {
+     "_at": "0x49F1D3",
+     "_tut_ausserdem": "show_text",
+     "once": 30,
+     "then": [
+      {
+       "a": 103,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49F1F2",
+       "a": 303,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
+    {
      "_at": "0x49F44F",
      "_tut_ausserdem": "game_time",
      "once": 50,
@@ -4255,6 +4745,32 @@
      ]
     },
     {
+     "_at": "0x4A039D",
+     "_tut_ausserdem": "show_text",
+     "once": 10,
+     "then": [
+      {
+       "a": 101,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A03BC",
+       "a": 320,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
+    {
      "_at": "0x4A03DF",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
@@ -4304,6 +4820,36 @@
      ]
     },
     {
+     "_at": "0x4A042D",
+     "_tut_ausserdem": "show_text game_time",
+     "once": 20,
+     "then": [
+      {
+       "a": 102,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A044C",
+       "a": 321,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 21,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
+    {
      "_at": "0x4A04C3",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
@@ -4348,6 +4894,36 @@
        "b": 0,
        "kind": "obj_owner",
        "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A0511",
+     "_tut_ausserdem": "show_text game_time",
+     "once": 30,
+     "then": [
+      {
+       "a": 103,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A0530",
+       "a": 322,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 31,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 17,
+       "kind": "time_gt",
+       "op": ">"
       }
      ]
     },
@@ -4636,6 +5212,32 @@
      "when": []
     },
     {
+     "_at": "0x4A0D0C",
+     "_tut_ausserdem": "show_text",
+     "once": 10,
+     "then": [
+      {
+       "a": 101,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A0D2B",
+       "a": 330,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
+    {
      "_at": "0x4A0D47",
      "_tut_ausserdem": "bus_cmd",
      "then": [
@@ -4688,6 +5290,63 @@
       }
      ]
     }
+   ],
+   "terra": [
+    [
+     201,
+     140,
+     5000
+    ],
+    [
+     160,
+     113,
+     5000
+    ],
+    [
+     72,
+     120,
+     5000
+    ],
+    [
+     200,
+     64,
+     5000
+    ],
+    [
+     123,
+     58,
+     5000
+    ],
+    [
+     242,
+     37,
+     5000
+    ],
+    [
+     50,
+     176,
+     5000
+    ],
+    [
+     45,
+     210,
+     5000
+    ],
+    [
+     32,
+     73,
+     5000
+    ],
+    [
+     142,
+     30,
+     5000
+    ],
+    [
+     231,
+     173,
+     5000
+    ]
    ]
   },
   "24": {
@@ -4708,6 +5367,32 @@
     "303": 1
    },
    "rules": [
+    {
+     "_at": "0x4A0E0B",
+     "_tut_ausserdem": "show_text",
+     "once": 10,
+     "then": [
+      {
+       "a": 101,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A0E2A",
+       "a": 340,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
     {
      "_at": "0x4A0E46",
      "_tut_ausserdem": "bus_cmd",
@@ -4740,6 +5425,56 @@
        "b": 0,
        "kind": "var",
        "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A0E87",
+     "_tut_ausserdem": "show_text",
+     "once": 30,
+     "then": [
+      {
+       "a": 103,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A0EA6",
+       "a": 342,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 4,
+       "b": 98,
+       "c": 45,
+       "kind": "space_in",
+       "typen": [
+        87,
+        87,
+        87,
+        87,
+        87,
+        92,
+        92,
+        92,
+        92,
+        92
+       ]
+      }
+     ],
+     "when": [
+      {
+       "a": 303,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 15,
+       "kind": "time_gt",
+       "op": ">"
       }
      ]
     },
@@ -4905,6 +5640,53 @@
        "c": 65535,
        "kind": "unit_index",
        "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A1301",
+     "_tut_ausserdem": "show_text",
+     "once": 50,
+     "then": [
+      {
+       "a": 105,
+       "b": 2,
+       "kind": "set"
+      },
+      {
+       "_at": "0x4A1322",
+       "a": 344,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 4,
+       "b": 98,
+       "c": 45,
+       "kind": "space_in",
+       "typen": [
+        87,
+        87,
+        87,
+        92,
+        92,
+        92
+       ]
+      }
+     ],
+     "when": [
+      {
+       "a": 303,
+       "b": 0,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 15,
+       "kind": "time_gt",
+       "op": ">"
       }
      ]
     },
@@ -5178,6 +5960,32 @@
      ]
     },
     {
+     "_at": "0x4A1B8C",
+     "_tut_ausserdem": "show_text",
+     "once": 10,
+     "then": [
+      {
+       "a": 101,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A1BAB",
+       "a": 350,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 5,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
+    {
      "_at": "0x4A1BC8",
      "_tut_ausserdem": "show_text",
      "then": [
@@ -5361,6 +6169,44 @@
      ]
     },
     {
+     "_at": "0x4A1E6C",
+     "_tut_ausserdem": "show_text",
+     "once": 40,
+     "then": [
+      {
+       "a": 104,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A1E8B",
+       "a": 354,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "kind": "time_gt",
+       "op": ">"
+      },
+      {
+       "a": 19,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "!="
+      },
+      {
+       "a": 20,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
      "_at": "0x4A1EB9",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
@@ -5446,6 +6292,28 @@
       }
      ]
     }
+   ],
+   "terra": [
+    [
+     124,
+     141,
+     5000
+    ],
+    [
+     150,
+     134,
+     5000
+    ],
+    [
+     69,
+     104,
+     5000
+    ],
+    [
+     90,
+     50,
+     5000
+    ]
    ]
   },
   "26": {
@@ -5457,6 +6325,36 @@
     "131": 360
    },
    "rules": [
+    {
+     "_at": "0x4A216B",
+     "_tut_ausserdem": "show_text game_time",
+     "once": 10,
+     "then": [
+      {
+       "a": 101,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A218A",
+       "a": 360,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 11,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
     {
      "_at": "0x4A221D",
      "_tut_ausserdem": "show_text bus_cmd sound",
@@ -5615,6 +6513,18 @@
       }
      ]
     }
+   ],
+   "terra": [
+    [
+     231,
+     13,
+     5000
+    ],
+    [
+     168,
+     37,
+     5000
+    ]
    ]
   },
   "27": {
@@ -5840,6 +6750,36 @@
     "136": 395
    },
    "rules": [
+    {
+     "_at": "0x4A37C4",
+     "_tut_ausserdem": "show_text game_time",
+     "once": 10,
+     "then": [
+      {
+       "a": 101,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A37E3",
+       "a": 390,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 11,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 2,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
     {
      "_at": "0x4A385E",
      "_tut_ausserdem": "show_text bus_cmd sound",
@@ -6162,6 +7102,33 @@
       }
      ]
     }
+   ],
+   "terra": [
+    [
+     64,
+     65,
+     5000
+    ],
+    [
+     53,
+     35,
+     5000
+    ],
+    [
+     77,
+     86,
+     5000
+    ],
+    [
+     93,
+     62,
+     5000
+    ],
+    [
+     114,
+     177,
+     5000
+    ]
    ]
   },
   "3": {
@@ -6548,9 +7515,42 @@
     },
     {
      "_at": "0x499883",
-     "_tut_ausserdem": "0x4D0810 0x4D0810 0x4D0810 0x4D0810",
+     "_tut_ausserdem": "place_unit place_unit place_unit place_unit",
      "once": 12,
-     "then": [],
+     "then": [
+      {
+       "_at": "0x499892",
+       "a": 84,
+       "b": 62,
+       "c": 76,
+       "d": 1,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x4998A2",
+       "a": 85,
+       "b": 62,
+       "c": 77,
+       "d": 1,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x4998B2",
+       "a": 86,
+       "b": 63,
+       "c": 77,
+       "d": 1,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x4998C2",
+       "a": 84,
+       "b": 64,
+       "c": 75,
+       "d": 1,
+       "kind": "place_unit"
+      }
+     ],
      "when": [
       {
        "a": 59,
@@ -6778,6 +7778,36 @@
    },
    "rules": [
     {
+     "_at": "0x4A42C6",
+     "_tut_ausserdem": "show_text game_time",
+     "once": 20,
+     "then": [
+      {
+       "a": 102,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A42E5",
+       "a": 401,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 21,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 13,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
+    {
      "_at": "0x4A435C",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
@@ -6959,6 +7989,43 @@
       }
      ]
     }
+   ],
+   "terra": [
+    [
+     228,
+     7,
+     5000
+    ],
+    [
+     235,
+     25,
+     5000
+    ],
+    [
+     248,
+     8,
+     5000
+    ],
+    [
+     174,
+     33,
+     5000
+    ],
+    [
+     180,
+     20,
+     5000
+    ],
+    [
+     35,
+     124,
+     5000
+    ],
+    [
+     21,
+     113,
+     5000
+    ]
    ]
   },
   "31": {
@@ -6978,6 +8045,166 @@
     "135": 415
    },
    "rules": [
+    {
+     "_at": "0x4A4541",
+     "_tut_ausserdem": "show_text",
+     "once": 0,
+     "then": [
+      {
+       "_at": "0x4A4559",
+       "a": 410,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 2,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A4575",
+     "_tut_ausserdem": "space_in",
+     "then": [
+      {
+       "a": 0,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A45C3",
+     "then": [
+      {
+       "a": 0,
+       "kind": "inc"
+      },
+      {
+       "a": 2,
+       "b": 163,
+       "c": 199,
+       "kind": "space_in",
+       "typen": [
+        86,
+        94,
+        86,
+        94,
+        86,
+        67,
+        114,
+        115,
+        66
+       ]
+      },
+      {
+       "a": 2,
+       "b": 145,
+       "c": 236,
+       "kind": "space_in",
+       "typen": [
+        86,
+        94,
+        86,
+        94,
+        86,
+        67,
+        114,
+        115,
+        66
+       ]
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 4,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A464A",
+     "_tut_ausserdem": "0x4D1050 0x4D0F20 add_target add_target add_target add_target add_target",
+     "then": [
+      {
+       "a": 0,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A468B",
+       "a": 2,
+       "b": 1,
+       "c": 8,
+       "d": 30,
+       "e": 1,
+       "kind": "add_target"
+      },
+      {
+       "_at": "0x4A469D",
+       "a": 2,
+       "b": 1,
+       "c": 7,
+       "d": 31,
+       "e": 1,
+       "kind": "add_target"
+      },
+      {
+       "_at": "0x4A46AF",
+       "a": 2,
+       "b": 1,
+       "c": 6,
+       "d": 32,
+       "e": 1,
+       "kind": "add_target"
+      },
+      {
+       "_at": "0x4A46C1",
+       "a": 2,
+       "b": 1,
+       "c": 5,
+       "d": 33,
+       "e": 1,
+       "kind": "add_target"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 6,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
     {
      "_at": "0x4A46E4",
      "_tut_ausserdem": "game_time",
@@ -7288,6 +8515,33 @@
       }
      ]
     }
+   ],
+   "terra": [
+    [
+     72,
+     5,
+     5000
+    ],
+    [
+     81,
+     75,
+     5000
+    ],
+    [
+     164,
+     162,
+     5000
+    ],
+    [
+     19,
+     171,
+     5000
+    ],
+    [
+     162,
+     225,
+     5000
+    ]
    ]
   },
   "32": {
@@ -7307,6 +8561,62 @@
     "135": 424
    },
    "rules": [
+    {
+     "_at": "0x4A4D1A",
+     "_tut_ausserdem": "show_text game_time",
+     "once": 10,
+     "then": [
+      {
+       "a": 101,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A4D39",
+       "a": 420,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 11,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 2,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A4DA8",
+     "_tut_ausserdem": "show_text",
+     "once": 20,
+     "then": [
+      {
+       "a": 102,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A4DC7",
+       "a": 421,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
     {
      "_at": "0x4A4DED",
      "_tut_ausserdem": "game_time",
@@ -7587,6 +8897,43 @@
       }
      ]
     }
+   ],
+   "terra": [
+    [
+     32,
+     135,
+     5000
+    ],
+    [
+     98,
+     182,
+     5000
+    ],
+    [
+     155,
+     13,
+     5000
+    ],
+    [
+     17,
+     50,
+     5000
+    ],
+    [
+     31,
+     239,
+     5000
+    ],
+    [
+     197,
+     211,
+     5000
+    ],
+    [
+     232,
+     143,
+     5000
+    ]
    ]
   },
   "33": {
@@ -7734,6 +9081,36 @@
      ]
     },
     {
+     "_at": "0x4A534E",
+     "_tut_ausserdem": "show_text game_time",
+     "once": 30,
+     "then": [
+      {
+       "a": 103,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A536D",
+       "a": 432,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 31,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
+    {
      "_at": "0x4A53F2",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
@@ -7784,6 +9161,37 @@
        "b": 0,
        "kind": "obj_owner",
        "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A5440",
+     "_tut_ausserdem": "show_text game_time",
+     "once": 40,
+     "then": [
+      {
+       "a": 104,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x4A5461",
+       "a": 433,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 41,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 70,
+       "kind": "time_gt",
+       "op": ">"
       }
      ]
     },
@@ -8035,6 +9443,53 @@
       }
      ]
     }
+   ],
+   "terra": [
+    [
+     38,
+     208,
+     5000
+    ],
+    [
+     24,
+     209,
+     5000
+    ],
+    [
+     15,
+     216,
+     5000
+    ],
+    [
+     30,
+     230,
+     5000
+    ],
+    [
+     55,
+     203,
+     5000
+    ],
+    [
+     127,
+     163,
+     5000
+    ],
+    [
+     139,
+     171,
+     5000
+    ],
+    [
+     164,
+     55,
+     5000
+    ],
+    [
+     129,
+     70,
+     5000
+    ]
    ]
   },
   "4": {
@@ -8750,9 +10205,26 @@
     },
     {
      "_at": "0x49A4F9",
-     "_tut_ausserdem": "0x4D0810 0x4D0810",
+     "_tut_ausserdem": "place_unit place_unit",
      "once": 40,
-     "then": [],
+     "then": [
+      {
+       "_at": "0x49A508",
+       "a": 85,
+       "b": 37,
+       "c": 6,
+       "d": 1,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x49A518",
+       "a": 86,
+       "b": 38,
+       "c": 6,
+       "d": 1,
+       "kind": "place_unit"
+      }
+     ],
      "when": [
       {
        "a": 1,
@@ -9797,6 +11269,101 @@
     "134": 193
    },
    "rules": [
+    {
+     "_at": "0x49B50D",
+     "_tut_ausserdem": "show_text",
+     "once": 0,
+     "then": [
+      {
+       "_at": "0x49B51E",
+       "a": 190,
+       "b": 1,
+       "c": 380,
+       "d": 400,
+       "kind": "text"
+      },
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 5,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49B5C4",
+     "_tut_ausserdem": "show_text",
+     "once": 1,
+     "then": [
+      {
+       "_at": "0x49B5D5",
+       "a": 191,
+       "b": 1,
+       "c": 380,
+       "d": 400,
+       "kind": "text"
+      },
+      {
+       "a": 102,
+       "b": 2,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 15,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49B601",
+     "_tut_ausserdem": "show_text sound",
+     "then": [
+      {
+       "a": 1,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49B61F",
+       "a": 101,
+       "b": 1,
+       "c": 380,
+       "d": 400,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49B627",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 35,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
     {
      "_at": "0x49B640",
      "_tut_ausserdem": "show_text bus_cmd",

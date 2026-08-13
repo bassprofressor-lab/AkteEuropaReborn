@@ -47,6 +47,7 @@ public sealed class MissionScript
         //                               | money | sound | close_texts | order | add_target
         //                               | remove_unit | sell_unit | change_owner
         //                               | set_relation | stop_transport
+        //                               | place_unit | order_at
         /// <summary>D gibt es nur fuer `order` — der Befehlsbus fuehrt dort
         /// vier Felder (Einheit, ukol, x, y).</summary>
         public int A, B, C, D, E;
@@ -131,6 +132,24 @@ public sealed class MissionScript
         /// setup starts it at 1. v[101+k] is the k-th objective's state
         /// (1 = open, 10 = done), v[131+k] its text number.</summary>
         public readonly Dictionary<int, int> Init = new();
+
+        /// <summary>
+        /// Die ROHSTOFFVORKOMMEN dieser Mission — `[spalte, zeile, menge]` je
+        /// Eintrag, aus <c>add_terra_place(spalte, zeile, menge)</c> im
+        /// SETUP-Block (C: 0x4D0A10, F: 0x4D05C0).
+        ///
+        /// <para>Warum das hier steht und nicht auf der Karte: die Vorkommen
+        /// gehören zum MISSIONSAUFBAU, nicht zum Gelände — 50 Aufrufe in acht
+        /// Missionen, alle mit festen Zahlen, auf beiden GAME.EXE dieselben.</para>
+        ///
+        /// <para>Woran es hängt: die <b>Feld-Rohstoffmine</b> (Gebäudetyp 15)
+        /// darf nur auf einem Vorkommen stehen (3x3-Fenster, @0x4205C0). Ohne
+        /// diese Liste hat sie auf jeder Karte <b>0 Bauplätze</b> — gemessen auf
+        /// map_23, deren Ziel »Bauen Sie fünf Rohstoffminen« lautet: Depot 329
+        /// Bauplätze, Generator 1411, Feld-Rohstoffmine 0. Mission 23 war damit
+        /// unlösbar, und zwar nicht wegen der Mission.</para>
+        /// </summary>
+        public readonly List<(int Col, int Row, int Amount)> Terra = new();
     }
 
     // ---- state ------------------------------------------------------------
@@ -462,6 +481,74 @@ public sealed class MissionScript
     public int Mission => _script.Mission;
     public int RulesFired { get; private set; }
 
+    /// <summary>Wieviele Einsetzungen (<c>place_unit</c>) dieses Skript
+    /// AUSGELÖST hat, und wieviele Befehle (<c>order_at</c>). Die MESSLATTE ist
+    /// die gelesene Zahl je Mission — kommt Kampagne 2 auf sieben, ist das ein
+    /// Beleg; kommt sie auf neunzehn, feuert etwas zu oft.</summary>
+    public int Placements { get; private set; }
+    public int OrdersGiven { get; private set; }
+
+    /// <summary>Wieviele Einsetzungen und Befehle dieses Skript überhaupt
+    /// TRÄGT — die statische Zahl, gegen die die ausgelöste gehalten wird.
+    /// </summary>
+    public (int Place, int Order) Carried()
+    {
+        int p = 0, o = 0;
+        foreach (var r in _script.Rules)
+            foreach (var a in r.Then)
+            {
+                if (a.Kind == "place_unit") p++;
+                else if (a.Kind == "order_at") o++;
+            }
+        return (p, o);
+    }
+
+    /// <summary>
+    /// Die Bedingungen der Regeln, die eine EINSETZUNG oder einen BEFEHL tragen
+    /// — damit der Prüfstand sie herstellen kann.
+    ///
+    /// <para>⚠ Warum das nötig ist: <see cref="ChainConds"/> geht von der
+    /// ENDregel aus, und die Einsetzungen hängen nicht an ihr. Kampagne 2s
+    /// sieben Einheiten kommen aus einer Regel, die v[70] anstösst; die Endregel
+    /// zählt Objekte. Ohne diesen zweiten Einstieg liesse sich die Einsetzung
+    /// nur durch Spielen auslösen — und ein Prüflauf, der sie nie auslöst, sieht
+    /// genauso aus wie einer, in dem sie kaputt ist.</para>
+    ///
+    /// <para>Die ODER-Glieder kommen mit. Alle wahr zu machen kann das ODER nur
+    /// wahr machen; was der Prüfstand nicht stellen kann, meldet er.</para>
+    /// </summary>
+    /// <summary>Die Rohstoffvorkommen dieser Mission — siehe
+    /// <see cref="Script.Terra"/>. Ohne sie hat die Feld-Rohstoffmine nirgends
+    /// einen Bauplatz.</summary>
+    public IReadOnlyList<(int Col, int Row, int Amount)> Terra => _script.Terra;
+
+    public List<Cond> PlaceConds()
+    {
+        var list = new List<Cond>();
+        foreach (var r in _script.Rules)
+        {
+            bool setzt = false;
+            foreach (var a in r.Then)
+                if (a.Kind is "place_unit" or "order_at") { setzt = true; break; }
+            if (!setzt) continue;
+            foreach (var c in r.When) list.Add(c);
+            foreach (var c in r.Any) list.Add(c);
+        }
+        return list;
+    }
+
+    /// <summary>Jede Einsetzung, die dieses Skript trägt, als Zahlenreihe —
+    /// für den Prüfstand, der sie gegen den Kartenrahmen hält. Reihenfolge wie
+    /// in der Datei, also wie im Block.</summary>
+    public List<(int Design, int Col, int Row, int Player, int At)> PlaceSites()
+    {
+        var list = new List<(int, int, int, int, int)>();
+        foreach (var r in _script.Rules)
+            foreach (var a in r.Then)
+                if (a.Kind == "place_unit") list.Add((a.A, a.B, a.C, a.D, r.At));
+        return list;
+    }
+
     private MissionScript(Script s)
     {
         _script = s;
@@ -511,6 +598,17 @@ public sealed class MissionScript
                 iv.VariantType == Variant.Type.Dictionary)
                 foreach (var e in iv.AsGodotDictionary<string, Variant>())
                     if (int.TryParse(e.Key, out int n)) s.Init[n] = e.Value.AsInt32();
+            // Die Rohstoffvorkommen. Siehe Script.Terra — sie kommen aus dem
+            // Setup-Block, nicht aus der Karte.
+            if (body.TryGetValue("terra", out var tev) &&
+                tev.VariantType == Variant.Type.Array)
+                foreach (var e in tev.AsGodotArray())
+                {
+                    if (e.VariantType != Variant.Type.Array) continue;
+                    var q = e.AsGodotArray();
+                    if (q.Count < 3) continue;
+                    s.Terra.Add((q[0].AsInt32(), q[1].AsInt32(), q[2].AsInt32()));
+                }
             if (!body.TryGetValue("rules", out var rv) ||
                 rv.VariantType != Variant.Type.Array) continue;
             foreach (var r in rv.AsGodotArray())
@@ -654,6 +752,54 @@ public sealed class MissionScript
     public Action<int>? PlaySound;                   // 600 / 601
     public Action? CloseTexts;                       // close_message_windows()
     public Action<int, int, int, int>? OrderUnit;    // einheit, ukol, x, y
+
+    /// <summary>
+    /// `place_unit(entwurf, spalte, zeile, spieler)` @0x4D0810 — <b>60 Aufrufe
+    /// in 14 Missionen</b>, die grösste Lücke im Vokabular der Kampagne, bis
+    /// zum 13.08.2026 ungebaut.
+    ///
+    /// <para>Der Rumpf ruft genau zwei Unterprogramme: 0x4C13E0 sucht eine freie
+    /// Zelle neben (spalte, zeile), 0x4B34E0 legt den Satz an. Letzteres ist
+    /// dasselbe `create_unit`, in das auch `space_in` am Ende seines Anflugs
+    /// mündet (@0x4C0260 → @0x4C1600 → @0x4D0810 → @0x4B34E0) — der Unterschied
+    /// ist allein die Warteschlange: <b>place_unit setzt SOFORT</b>.</para>
+    ///
+    /// <para>Die Argumentreihenfolge ist gemessen, nicht geraten: alle 60
+    /// Aufrufstellen tragen vier Konstanten, auf beiden GAME.EXE dieselben.
+    /// Argument 3 liegt bei allen 60 zwischen 0 und 7 (Spieler), Argument 0
+    /// zwischen 50 und 194 (Entwurf), und von 40 nachgerechneten Zellen liegen
+    /// 40 im Kartenrahmen, wenn Argument 1 die SPALTE ist — gegen 34, wenn es
+    /// die Zeile wäre.</para>
+    /// </summary>
+    public Action<int, int, int, int>? PlaceUnit;    // entwurf, spalte, zeile, spieler
+
+    /// <summary>
+    /// `order(einheit, cx, cy, utok_na, extra)` @0x410220 — <b>7 Aufrufe in
+    /// EINER Mission</b> (Kampagne 2), und etwas anderes als
+    /// <see cref="OrderUnit"/>: es geht nicht über den Befehlsbus, sondern
+    /// schreibt den Einheitensatz direkt.
+    ///
+    /// <para>⚠ <b>Die Feldnamen sind die des SPIELS.</b> Der Debug-Dump @0x416F00
+    /// druckt jedes Feld mit seiner Beschriftung, und daran hängt die ganze
+    /// Deutung: <c>UKOL:</c> +0x14, <c>AKCE:</c> +0x15, <c>CX:</c> +0x18,
+    /// <c>CY:</c> +0x19, <c>DALSI_SMER:</c> +0x1A, <c>STRILI_NA:</c> +0x34,
+    /// <c>UTOK_NA:</c> +0x36, <c>RX:</c>/<c>RY:</c> +0x00/+0x01. »x, y« ist damit
+    /// kein geratener Name mehr, sondern die <b>ZIELZELLE</b> — und die alte
+    /// Notiz, 39/0 sei »keine sinnvolle Zelle«, war eine Vermutung über ein
+    /// Feld, das das Spiel selbst benennt.</para>
+    ///
+    /// <para>Geschrieben wird: <c>UKOL = 4</c> (Angriff), <c>CX = cx</c>,
+    /// <c>CY = cy</c>, <c>DALSI_SMER = 0xFF</c>, <c>AKCE = 0</c>,
+    /// <c>UTOK_NA = utok_na</c>; <c>STRILI_NA</c> wird auf 0xFFFF geräumt, wenn
+    /// es über 8000 stand.</para>
+    ///
+    /// <para>⚠ <b>Ungelesen bleibt UTOK_NA.</b> Kampagne 2 gibt allen sieben
+    /// Aufrufen dieselbe Zahl (0xEA60 = 60000), es gibt also kein Gegenbeispiel,
+    /// an dem sich eine Deutung prüfen liesse. Die Griffräume sind < 8000
+    /// Einheit, 10000..13999 Infanteriezelle, ab 50000 Kulissenobjekt. Der Wert
+    /// wird mitgeführt und nicht ausgewertet.</para>
+    /// </summary>
+    public Action<int, int, int, int>? OrderUnitAt;  // einheit, cx, cy, utok_na
     public Action<int, int, int, int, int>? AddTarget;  // spieler, art, vorrang, wort, c
     public Action<int>? RemoveUnit;                  // einheit
     public Action<int>? SellUnit;                    // einheit
@@ -999,8 +1145,18 @@ public sealed class MissionScript
             _forced.Add(ri);
             n++;
         }
+        // ⚠ 13.08.2026 — der VORGEFUNDENE Spielstand gehoert in die Zeile. Ohne
+        // ihn misst diese Zahl die Erloese der vorigen Prueflaeufe mit: gemessen
+        // wurden $47465 Startkontostand in Mission 23 und $970 statt $470 in
+        // Mission 5. Wer eine reine Zahl will, nimmt --fresh-campaign.
+        int stand = CampaignManager.Balance, fertig = CampaignManager.Completed;
         return $"pay-check: {n} Geldregeln von Mission {Mission} ausgeloest, " +
-               $"Summe {(summe >= 0 ? "+" : "")}{summe} $";
+               $"Summe {(summe >= 0 ? "+" : "")}{summe} $" +
+               (stand != 0 || fertig != 0
+                   ? $"   ⚠ VORGEFUNDENER SPIELSTAND: {fertig} Missionen geschafft, " +
+                     $"${stand} mitgebracht ({CampaignManager.SavePath}) — " +
+                     "fuer eine reine Messung --fresh-campaign nehmen"
+                   : "   (Spielstand leer)");
     }
 
     /// <summary>Die von <see cref="ForceMoneyRules"/> erzwungenen Regeln. Bleibt
@@ -1053,6 +1209,23 @@ public sealed class MissionScript
             // Einheiten von Spieler 1: drei Infanteristen und ein MG-Fahrzeug.
             case "order":
                 OrderUnit?.Invoke(a.A, a.B, a.C, a.D);
+                break;
+            // place_unit(entwurf, spalte, zeile, spieler) @0x4D0810 — siehe
+            // PlaceUnit. Gezaehlt wird, WIEVIELE eine Mission auslöst: die
+            // gelesene Zahl je Mission ist die Messlatte (M2 7, M3 4, M5 2,
+            // M11 1, M14 3, M18 3 — 20 von 60 Aufrufstellen sind heute in
+            // Regeln eintragbar).
+            case "place_unit":
+                Placements++;
+                PlaceUnit?.Invoke(a.A, a.B, a.C, a.D);
+                break;
+            // order(einheit, cx, cy, utok_na, extra) @0x410220 — siehe
+            // OrderUnitAt. e (extra) wird NICHT weitergegeben: das Original
+            // benutzt es nur, wenn utok_na in [30000, 30256) liegt, und
+            // Kampagne 2 gibt dort 60000.
+            case "order_at":
+                OrdersGiven++;
+                OrderUnitAt?.Invoke(a.A, a.B, a.C, a.D);
                 break;
             // add_target(spieler, art, vorrang, wort, c) @0x4CF700 — ⚠ das ist
             // KEIN Missionsziel im Panel, sondern die ZIELLISTE DES
@@ -1456,6 +1629,8 @@ public sealed class MissionScript
         "set_store" => StoreField != null,
         "set_units" => UnitCount != null,
         "space_in" => SpaceInSpawn != null,
+        "place_unit" => PlaceUnit != null,
+        "order_at" => OrderUnitAt != null,
         "money" => AddMoney != null,
         "sound" => PlaySound != null,
         "close_texts" => CloseTexts != null,

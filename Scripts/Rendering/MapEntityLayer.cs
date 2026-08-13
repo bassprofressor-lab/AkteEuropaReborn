@@ -4709,6 +4709,151 @@ public partial class MapEntityLayer : Node2D
                  $"{_entities[best].Name} an  [Original: ukol 4 nach ({x},{y})]");
     }
 
+    /// <summary>
+    /// `--terra-check` — die Rohstoffvorkommen dieser Mission und die Frage,
+    /// ob auf ihnen eine Feld-Rohstoffmine STEHEN KANN.
+    ///
+    /// <para>Warum es das braucht: mit den Vorkommen aus dem Missionsaufbau
+    /// meldet <c>--build-check</c> auf map_23 weiter <b>0 Bauplätze</b> für den
+    /// Typ 15 — die Liste ist also nicht alles. Der Anker eines Gebäudes muss im
+    /// 3x3-Fenster eines Vorkommens liegen (<c>CellOnDeposit</c>), also gibt es
+    /// je Vorkommen genau NEUN Kandidaten; dieser Prüfstand geht sie ab und sagt
+    /// bei jedem, WELCHE Zelle welchen der vier Tests nicht besteht (Regel 10).
+    /// </para>
+    ///
+    /// <para>⚠ Was er NICHT sagt: wie das Original den Anker zum Vorkommen legt.
+    /// Ob die 3x3-Prüfung im Original überhaupt den Anker meint (und nicht die
+    /// Mitte des Bauwerks oder die Zelle des Bautechnikers), ist <b>ungelesen</b>
+    /// — hier endet das Verständnis, und der Prüfstand behauptet nichts darüber.
+    /// </para>
+    /// </summary>
+    public string TerraCheckLine()
+    {
+        EnsureMissionScript();
+        if (_nav == null) return "terra-check: kein Gitter";
+        if (_deposits.Count == 0)
+            return "terra-check: diese Mission legt keine Rohstoffvorkommen an";
+        if (Patterns == null || !Patterns.HasBuildings)
+            return "terra-check: keine Muster fuer dieses Tileset";
+
+        var sb = new System.Text.StringBuilder();
+        int gut = 0, kandidaten = 0;
+        var grund = new SortedDictionary<string, int>();
+        var cells = new List<SiteCell>();
+        foreach (var (dc, dr, amount) in _deposits)
+        {
+            int hier = 0;
+            string erste = "";
+            for (int dy = 0; dy < 3; dy++)
+                for (int dx = 0; dx < 3; dx++)
+                {
+                    int c = dc + dx, r = dr + dy;
+                    kandidaten++;
+                    if (CanBuild(Patterns, TypeFieldMine, c, r, -1, cells)) { hier++; gut++; continue; }
+                    // die erste Zelle, die durchfaellt, samt Grund
+                    foreach (var s in cells)
+                    {
+                        if (s.Ok) continue;
+                        string w = !_nav.InBounds(s.Col, s.Row) ? "ausserhalb"
+                            : _nav.GroundAt(s.Col, s.Row) != Simulation.NavGrid.Ground.Free
+                                ? "Grund " + _nav.GroundAt(s.Col, s.Row)
+                            : _nav.OccupantAt(s.Col, s.Row) != -1 ? "belegt"
+                            : _nav.FlagAt(s.Col, s.Row) != 0 ? "Hangbyte " + _nav.FlagAt(s.Col, s.Row)
+                            : "Ecken zu flach";
+                        grund[w] = grund.GetValueOrDefault(w) + 1;
+                        if (erste.Length == 0) erste = $"({s.Col},{s.Row}) {w}";
+                        break;
+                    }
+                }
+            sb.Append($"   Vorkommen ({dc},{dr}) {amount} Einheiten: {hier} von 9 Ankern " +
+                      $"tragen eine Mine{(hier == 0 ? "   erster Grund: " + erste : "")}\n");
+        }
+        var teile = new List<string>();
+        foreach (var kv in grund) teile.Add($"{kv.Key} x{kv.Value}");
+        return $"terra-check: M{_mscript?.Mission ?? 0} — {_deposits.Count} Vorkommen, " +
+               $"{kandidaten} Anker geprueft, {gut} tragen eine Feld-Rohstoffmine\n" +
+               sb.ToString() +
+               (teile.Count > 0 ? "   Gruende: " + string.Join(", ", teile) : "");
+    }
+
+    /// <summary>Das Missionsskript samt seinen Haken JETZT anlegen, falls es
+    /// noch nicht steht. Es entsteht sonst erst im ersten Takt, und ein
+    /// Prüfstand, der davor läuft, sieht eine Welt ohne Mission — genau daran
+    /// meldete <c>--build-check</c> auf map_23 »0 Bauplaetze« für die
+    /// Feld-Rohstoffmine, obwohl die Vorkommen eingetragen waren: sie kommen mit
+    /// dem Skript, und das gab es noch nicht.</summary>
+    public void EnsureMissionScript()
+    {
+        if (_mscript == null) MissionScriptTick(0.001f);
+    }
+
+    /// <summary>
+    /// Die Rohstoffvorkommen der laufenden Mission in die Bauplatzprüfung
+    /// setzen. Siehe <see cref="Campaign.MissionScript.Script.Terra"/> und
+    /// <c>Simulation/Construction.cs</c>, wo <c>CellOnDeposit</c> sie liest.
+    /// </summary>
+    private void SetTerraPlaces(System.Collections.Generic.IReadOnlyList<(int Col, int Row, int Amount)> list)
+    {
+        _deposits.Clear();
+        foreach (var (col, row, amount) in list) _deposits.Add((col, row, amount));
+        if (_deposits.Count > 0)
+            GD.Print($"Vorkommen: {_deposits.Count} Rohstoffstellen aus dem " +
+                     "Missionsaufbau — die Feld-Rohstoffmine hat jetzt Bauplaetze");
+    }
+
+    /// <summary>
+    /// `order(einheit, cx, cy, utok_na, extra)` @0x410220 — der Befehl, mit dem
+    /// Kampagne 2 ihre sieben eben gesetzten Einheiten losschickt.
+    ///
+    /// <para><b>Gelesen, mit den Namen des Spiels.</b> Der Debug-Dump @0x416F00
+    /// beschriftet jedes Feld des Einheitensatzes selbst, und daran hängt die
+    /// ganze Deutung: <c>CX:</c> ist +0x18, <c>CY:</c> +0x19, <c>UKOL:</c> +0x14,
+    /// <c>AKCE:</c> +0x15, <c>UTOK_NA:</c> +0x36, <c>STRILI_NA:</c> +0x34. Die
+    /// Routine schreibt <c>UKOL = 4</c> (Angriff), <c>CX/CY</c> = die
+    /// mitgegebene Zelle, <c>DALSI_SMER = 0xFF</c>, <c>AKCE = 0</c> und
+    /// <c>UTOK_NA</c> = das vierte Argument.</para>
+    ///
+    /// <para>⚠ <b>UNSERE SETZUNG ist die Umsetzung von UKOL 4, nicht die
+    /// Zelle.</b> Das Original lässt die Einheit angreifen UND nennt ihr eine
+    /// Zielzelle; welches Ziel <c>UTOK_NA = 60000</c> benennt, ist ungelesen
+    /// (alle sieben Aufrufe geben dieselbe Zahl, es gibt kein Gegenbeispiel).
+    /// Wir fahren die Einheit darum auf CX/CY und lassen sie dort auf das
+    /// treffen, was in Reichweite kommt — <c>AutoAcquire</c> greift, sobald der
+    /// Weg abgelaufen ist. Damit steht keine gesetzte Einheit untätig herum,
+    /// und nichts wird über UTOK_NA erfunden.</para>
+    ///
+    /// <para>⚠ <b>Über die BEFEHLSSCHICHT, nicht in den Zustand.</b> Der Befehl
+    /// wird als Satz abgesetzt und wirkt am nächsten Taktanfang
+    /// (<c>ApplyMove</c>) — dort wird er auch auf die Karte geklemmt, wie das
+    /// Original es im Behandler tut (@0x4C2324). Ein Skript, das mitten im Takt
+    /// schreibt, wäre genau die Naht, an der der Determinismus reisst.</para>
+    /// </summary>
+    private void MissionOrderAt(int slot, int cx, int cy, int utokNa)
+    {
+        int idx = -1;
+        for (int i = 0; i < _entities.Count; i++)
+            if (!_entities[i].IsBuilding && !_entities[i].Dead && _entities[i].Slot == slot)
+            { idx = i; break; }
+        if (idx < 0)
+        {
+            GD.PrintErr($"Missionsbefehl (order_at): Einheitenplatz {slot} ist leer");
+            return;
+        }
+        var e = _entities[idx];
+        if (!e.Mobile || e.DugIn)
+        {
+            GD.Print($"Missionsbefehl (order_at): Platz {slot} kann nicht fahren");
+            return;
+        }
+        bool ok = PostRaw(AkteEuropaReborn.Simulation.Commands.CommandRecord.Make(
+            AkteEuropaReborn.Simulation.Commands.CommandOp.Move,
+            (byte)Mathf.Clamp(e.Owner, 0, 7),
+            (short)idx, (short)cx, (short)cy, (short)0));
+        GD.Print($"Missionsbefehl (order_at): Einheit {slot} (Spieler {e.Owner}) " +
+                 $"nach ({cx},{cy}){(ok ? "" : " — Ring VOLL, Befehl fiel aus")}" +
+                 $"  [Original: UKOL 4, UTOK_NA {utokNa} ungelesen]");
+    }
+
     /// <summary>`remove_unit` @0x4D0B00 und »Robot already sold.« @0x4D0EC0.
     /// Beide nehmen eine Einheit vom Feld — verkauft wird sie mit Erlös, und
     /// ⚠ <b>wieviel das ist, ist ungelesen</b>, darum gibt es hier keinen.
@@ -4938,6 +5083,23 @@ public partial class MapEntityLayer : Node2D
                 _mscript.AddTarget = AddMissionTarget;
                 // Verstaerkung — die Mechanik, an der Mission 14 haengt
                 _mscript.SpaceInSpawn = SpawnReinforcement;
+                // place_unit @0x4D0810 — DASSELBE create_unit, nur ohne die
+                // Warteschlange: das Original geht bei space_in
+                // @0x4C0260 -> @0x4C1600 -> @0x4D0810 -> @0x4B34E0, hier faellt
+                // nur der Anflug weg. Darum derselbe Rumpf, eigener Haken.
+                _mscript.PlaceUnit = (entwurf, spalte, zeile, spieler) =>
+                    SpawnReinforcement(entwurf, spalte, zeile, spieler);
+                _mscript.OrderUnitAt = MissionOrderAt;
+                // ⚠ 13.08.2026 — DIE ROHSTOFFVORKOMMEN. Sie stehen nicht auf
+                // der Karte, sondern im SETUP-Block der Mission
+                // (`add_terra_place(spalte, zeile, menge)`, C: 0x4D0A10,
+                // F: 0x4D05C0; 50 Aufrufe in acht Missionen, beide Fassungen
+                // gleich). Die Feld-Rohstoffmine darf nur auf einem Vorkommen
+                // stehen, und ohne diese Liste hatte sie auf JEDER Karte
+                // 0 Bauplaetze — auf map_23, deren Ziel »Bauen Sie fuenf
+                // Rohstoffminen« lautet, gegen 329 fuer das Depot und 1411 fuer
+                // den Generator. Die Mission war damit unloesbar.
+                SetTerraPlaces(_mscript.Terra);
                 var watched = _mscript.WatchedSlots();
                 if (watched.Count > 0)
                 {
@@ -5434,6 +5596,74 @@ public partial class MapEntityLayer : Node2D
         return sb.ToString();
     }
 
+    /// <summary>
+    /// `--place-check[=<sek>]` — die EINSETZUNGEN einer Mission an ihrer
+    /// Messlatte.
+    ///
+    /// <para>Die gelesene Zahl je Mission ist die Latte: über alle 33 Blöcke
+    /// zählt <c>0x4D0810</c> <b>60 Aufrufe in 14 Missionen</b> (M2 7, M3 8, M5 2,
+    /// M9 8, M11 8, M13 2, M14 3, M16 4, M17 1, M18 6, M19 1, M24 3, M28 4,
+    /// M29 3), und davon sind heute <b>20 in Regeln eintragbar</b> (M2 7, M3 4,
+    /// M5 2, M11 1, M14 3, M18 3). Was diese Zeile prüft, ist die
+    /// AUSGELÖSTE Zahl gegen die getragene: kommt Kampagne 2 auf sieben, ist das
+    /// ein Beleg; kommt sie auf neunzehn, feuert etwas zu oft.</para>
+    ///
+    /// <para>Dazu die vier Dinge, die ohne das Original prüfbar sind, und nur
+    /// die: Zelle im Kartenrahmen, Besitzer 0..7, Entwurf 50..194, und ob die
+    /// Einsetzung überhaupt gelungen ist (das Original verweigert mit
+    /// »WRONG ROB_PROD in PLACE!!!!«, wenn die sec47-Zeile
+    /// <c>entwurf + 200*spieler</c> leer ist — bei uns fehlt der Entwurf dann in
+    /// unit_designs.json).</para>
+    ///
+    /// <para>⚠ <b>Was er NICHT sehen kann:</b> ob eine Einsetzung zum RICHTIGEN
+    /// ZEITPUNKT kommt. Ein zu früh gesetzter Panzer steht auf einer erlaubten
+    /// Zelle, gehört einem erlaubten Spieler und trägt einen erlaubten Entwurf —
+    /// er sieht aus wie ein richtiger. Dafür gibt es in diesem Baum keinen
+    /// Prüfstand, und diese Zeile behauptet nicht, einer zu sein.</para>
+    /// </summary>
+    public string PlaceCheckLine()
+    {
+        if (_mscript == null) MissionScriptTick(0.001f);
+        if (_mscript == null) return "place-check: kein Skript fuer diese Mission";
+        var (tragen, befehle) = _mscript.Carried();
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"place-check: M{_mscript.Mission} traegt {tragen} Einsetzungen " +
+                  $"und {befehle} Befehle; ausgeloest {_mscript.Placements} / " +
+                  $"{_mscript.OrdersGiven}");
+
+        // Die getragenen Stellen gegen den Kartenrahmen und die beiden Bereiche.
+        int drin = 0, raus = 0, sp = 0, ent = 0;
+        var schlecht = new List<string>();
+        foreach (var (design, col, row, player, at) in _mscript.PlaceSites())
+        {
+            bool inMap = _nav != null && _nav.InBounds(col, row);
+            bool okP = player is >= 0 and <= 7;
+            bool okD = design is >= 50 and <= 194;
+            if (inMap) drin++; else { raus++; schlecht.Add($"@0x{at:X} Zelle ({col},{row})"); }
+            if (!okP) { sp++; schlecht.Add($"@0x{at:X} Spieler {player}"); }
+            if (!okD) { ent++; schlecht.Add($"@0x{at:X} Entwurf {design}"); }
+        }
+        sb.Append($"\n   getragene Stellen: {drin} im Kartenrahmen, {raus} ausserhalb, " +
+                  $"{sp} mit Spieler ausser 0..7, {ent} mit Entwurf ausser 50..194");
+        if (schlecht.Count > 0) sb.Append("\n   ⚠ " + string.Join("  ", schlecht));
+
+        // Und was tatsaechlich auf der Karte steht: eine gesetzte Einheit traegt
+        // ihre Entwurfsnummer in Mark (Satz +0x43), daran ist sie zu erkennen.
+        var marken = new Dictionary<int, int>();
+        foreach (var (design, _, _, _, _) in _mscript.PlaceSites())
+            marken[design] = marken.GetValueOrDefault(design);
+        foreach (var e in _entities)
+            if (!e.IsBuilding && !e.IsProp && !e.Dead && marken.ContainsKey(e.Mark))
+                marken[e.Mark]++;
+        var teile = new List<string>();
+        foreach (var kv in marken) teile.Add($"Entwurf {kv.Key}: {kv.Value}");
+        if (teile.Count > 0)
+            sb.Append("\n   auf der Karte mit dieser Entwurfsnummer: " +
+                      string.Join(", ", teile) +
+                      "   (⚠ die Karte kann eigene mitbringen — das ist eine OBERgrenze)");
+        return sb.ToString();
+    }
+
     /// <summary>`--script-coverage` — was die Runtime von diesem Missionsskript
     /// ausführen kann, und was ihr dafür fehlt. Ein fehlender Haken macht eine
     /// Bedingung falsch und eine Wirkung still; beides sieht im Spiel aus wie
@@ -5823,12 +6053,44 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <summary>
+    /// `--place-force` — dieselbe Erzwingungsmaschine, aber auf die Bedingungen
+    /// der Regeln angesetzt, die eine EINSETZUNG oder einen BEFEHL tragen.
+    ///
+    /// <para>⚠ Es ist absichtlich dieselbe Maschine und keine zweite: eine
+    /// Abschrift laeuft auseinander. Nur die Bedingungsliste ist eine andere —
+    /// <see cref="Campaign.MissionScript.PlaceConds"/> statt
+    /// <c>ChainConds()</c>. Gebraucht wird das fuer Kampagne 2, deren sieben
+    /// Einsetzungen an einer Regel haengen, die mit der Endregel nichts zu tun
+    /// hat: ohne diesen Einstieg loest ein Prueflauf sie nie aus, und das sieht
+    /// genauso aus wie eine kaputte Einsetzung.</para>
+    /// </summary>
+    public string PlaceForceLine()
+    {
+        if (_mscript == null) MissionScriptTick(0.001f);
+        if (_mscript == null) return "place-force: kein Skript fuer diese Mission";
+        var conds = _mscript.PlaceConds();
+        if (conds.Count == 0)
+            return $"place-force: M{_mscript.Mission} — keine Regel mit Einsetzung " +
+                   "oder Befehl hat eine Bedingung, die sich erzwingen liesse";
+        string zeile = MissionScriptForceCheck(conds).Replace("script-check", "place-force");
+        // Und jetzt laufen lassen: die Einsetzung steht hinter dem Tor, also
+        // braucht sie einen Blockdurchlauf, und der Befehl wirkt erst am
+        // naechsten Taktanfang (ApplyMove). Zwei Sekunden reichen fuer beides.
+        _mscript.Advance(2 * Campaign.MissionScript.TicksPerSecond);
+        return zeile;
+    }
+
+    /// <summary>
     /// Harness: knock out every building the mission script watches, so the
     /// whole chain can be checked without playing the mission — the condition
     /// reads the world, the rule latches, `end` fires, and Verdict() carries it
     /// into the campaign. Reports what it destroyed.
+    ///
+    /// <para><paramref name="only"/> setzt eine andere Bedingungsliste an die
+    /// Stelle von <c>ChainConds()</c> — dafuer gibt es genau einen Anlass, siehe
+    /// <see cref="PlaceForceLine"/>. Null heisst: die Endkette, wie bisher.</para>
     /// </summary>
-    public string MissionScriptForceCheck()
+    public string MissionScriptForceCheck(List<Campaign.MissionScript.Cond>? only = null)
     {
         if (_mscript == null) return "script-check: kein Skript fuer diese Mission";
 
@@ -5847,7 +6109,7 @@ public partial class MapEntityLayer : Node2D
         // Nicht `EndConds()`: seit die Setzer-Regeln mitlaufen, steht hinter
         // einer Endbedingung ueber eine Blockvariable eine WELTbedingung, und
         // die ist das, was sich erzwingen laesst.
-        var conds = _mscript.ChainConds();
+        var conds = only ?? _mscript.ChainConds();
         // ⚠ nicht hier aussteigen, wenn nur keine obj_owner-Plaetze dabei sind —
         // die meisten Missionen enden ueber eine ZAEHLbedingung, und ein
         // vorzeitiges return hat die glatt uebersprungen
@@ -5915,14 +6177,42 @@ public partial class MapEntityLayer : Node2D
             // Im Spiel fährt man einfach hin.
             if (c.Kind == "imap")
             {
-                if (_nav == null || !_nav.InBounds(c.A, c.C) ||
-                    c.Op is not ("<" or "<=") || c.B > 8000)
+                if (_nav == null || !_nav.InBounds(c.A, c.C))
                 { left++; untouched.Add(Show(c)); continue; }
+                // ⚠ 13.08.2026 — EIN FENSTER, NICHT EINE SCHRANKE. Bis heute
+                // sah der Prueflauf nur `< n` und stellte immer eine Einheit des
+                // SICHTSPIELERS hin. Mission 11 fragt aber ein PAAR ab:
+                //     imap(55,8) > 5999  UND  imap(55,8) < 7000
+                // und das heisst nach der Griffrechnung `1000*spieler + k`
+                // schlicht »auf dieser Zelle steht eine Einheit von SPIELER 6«.
+                // Mit nur der oberen Schranke stellte der Prueflauf eine Einheit
+                // von Spieler 0 hin, machte damit das zweite Glied wahr und das
+                // erste falsch — und meldete »nicht erzwingbar« fuer das erste.
+                // Also: alle imap-Glieder DERSELBEN ZELLE zusammennehmen, das
+                // Fenster ausrechnen und den Spieler daraus ableiten.
+                int lo = 0, hi = 8000;
+                foreach (var q in conds)
+                {
+                    if (q.Kind != "imap" || q.A != c.A || q.C != c.C) continue;
+                    switch (q.Op)
+                    {
+                        case "<": hi = Mathf.Min(hi, q.B); break;
+                        case "<=": hi = Mathf.Min(hi, q.B + 1); break;
+                        case ">": lo = Mathf.Max(lo, q.B + 1); break;
+                        case ">=": lo = Mathf.Max(lo, q.B); break;
+                        default: hi = -1; break;               // ==/!= : ungelesen
+                    }
+                }
+                if (hi <= lo || hi > 8000) { left++; untouched.Add(Show(c)); continue; }
+                // Der Spieler, dessen Plaetze in dieses Fenster fallen. Deckt es
+                // mehrere ab, bleibt es beim Sichtspieler — dann sagt die
+                // Bedingung nichts ueber den Besitzer.
+                int wantOwner = lo / 1000 == (hi - 1) / 1000 ? lo / 1000 : ViewPlayer;
                 Entity? mover = null;
                 foreach (var e in _entities)
                     if (!e.IsBuilding && !e.IsProp && !e.Dead && e != marked &&
-                        e.Owner == ViewPlayer) { mover = e; break; }
-                if (mover == null) { left++; untouched.Add(Show(c)); continue; }
+                        e.Owner == wantOwner) { mover = e; break; }
+                if (mover == null) { left++; untouched.Add(Show(c) + $" [kein Fahrzeug von Spieler {wantOwner}]"); continue; }
                 _nav.ClearOccupant(mover.Col, mover.Row, _entities.IndexOf(mover));
                 mover.Col = c.A;
                 mover.Row = c.C;
