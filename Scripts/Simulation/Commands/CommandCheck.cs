@@ -330,9 +330,18 @@ public sealed partial class CommandCheckRunner : Node
         _ticks++;
 
         // --- A: der Befehl geht als SATZ durch den Puffer --------------------
+        //
+        // ⚠ HIER STAND `_a.CommandTick();` — der Prüfstand rief den Taktanfang
+        // selbst, weil er älter ist als die Zeile in `SimTick`. Seit Commit
+        // 185e98f ruft `SimTick` ihn als erste Zeile, und damit lief er ZWEIMAL
+        // je Takt: die Befehlsuhr dieser Simulation zählte 2 statt 1, und die
+        // Fälligkeit wurde gegen eine doppelt so schnelle Uhr geprüft. Das war
+        // unschädlich (die Fälligkeit wird bei Post aus derselben Uhr gebildet),
+        // aber es ist genau die Sorte stillgelegter Schalter, die Regel 11
+        // meint — und ein Prüfstand mit einer eigenen Uhr neben der der
+        // Simulation prüft nicht mehr denselben Gegenstand.
         Sync();
         Determinism.UseStream(0);
-        _a.CommandTick();                       // ⚠ das ist der Taktanfang
         _a._Process(_dt);
         if (_ticks == _at - 1)
         {
