@@ -91,6 +91,18 @@ public partial class MapEntityLayer
             // Zwilling zwei — beide gleichzeitig ergäbe fünf.
             if (CommandCheckRunner.TryStart(this)) { _detOff = true; return; }
             if (DeterminismTwinRunner.TryStart(this)) { _detOff = true; return; }
+            // ⚠ DER NETZTAKTGEBER (Network/NetGame.cs) steht zuletzt, und zwar
+            // nicht aus Höflichkeit: er übernimmt die GELADENE Partie, während
+            // die beiden über ihm sich eigene aufsetzen. Wer beides angibt, will
+            // zwei Dinge gleichzeitig — dann gewinnt der örtliche Prüfstand, denn
+            // er ist der billigere Irrtum (er merkt es sofort und ohne Gegenüber).
+            //
+            // ⚠ Und er steht HIER und nicht in MapEntityLayer._Process, weil das
+            // die früheste Stelle ist, an die diese Sitzung ohne fremde Dateien
+            // herankommt: hinter dem ersten vollen Takt einer geladenen Karte.
+            // Dass die Simulation dann schon Takte hinter sich hat, ist bekannt
+            // und wird ausgeglichen — siehe NetGameRunner, Abschnitt Vorlauf.
+            if (NetGameRunner.TryStart(this)) { _detOff = true; return; }
         }
 
         if (!_detArmed && !DeterminismArm()) { _detOff = true; return; }

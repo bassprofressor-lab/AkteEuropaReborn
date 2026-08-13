@@ -657,9 +657,27 @@ public partial class MapEntityLayer : Node2D
         var live = buildUp ? producers : LivePlayers();
         if (live.Count == 0) return -1;
         if (!live.Contains(human)) human = live[0];
+        // ⚠ IM NETZSPIEL SIND ALLE MENSCHENPLÄTZE TABU, nicht nur der eigene —
+        // und das ist keine Feinheit, sondern die Bedingung dafür, dass ein
+        // Netzspiel mit KI-Gegnern überhaupt laufen kann.
+        //
+        // Ohne diese Zeile rechnet jede Maschine `live minus MEIN Platz`. Auf
+        // dem Gastgeber (Platz 0) wäre Platz 1 dann ein Computerspieler, auf dem
+        // Mitspieler (Platz 1) wäre es Platz 0 — beide Simulationen würden also
+        // eine ANDERE Armee vom Rechner steuern lassen, und sie liefen im
+        // ersten Denk-Takt auseinander. Der Fehler sähe aus wie ein
+        // Rechenfehler; er ist eine verschiedene Aufstellung.
+        //
+        // Die Plätze kommen aus der Partie des Vermittlers (NetSession.Slot),
+        // sind also auf allen Maschinen dieselbe Liste. Ohne Netzspiel ist sie
+        // leer und es ändert sich nichts.
+        var humans = Network.NetworkManager.HumanSlots();
         var foes = new List<int>();
         foreach (int p in live)
-            if (p != human && foes.Count < aiCount) foes.Add(p);
+            if (p != human && !humans.Contains(p) && foes.Count < aiCount) foes.Add(p);
+        if (humans.Length > 0)
+            GD.Print($"Netzspiel: Menschenplätze {string.Join(",", humans)} — " +
+                     $"die KI bekommt davon keinen; Computerspieler {string.Join(",", foes)}");
         if (foes.Count < aiCount)
             GD.Print($"Gemetzel: die Karte hat nur {live.Count} " +
                      $"{(buildUp ? "Plaetze mit Fabrik" : "besetzte Plaetze")}, " +

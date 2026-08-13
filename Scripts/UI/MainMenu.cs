@@ -572,7 +572,9 @@ public partial class MainMenu : Control
         UpdateAllUnitsHint();
 
         var start = new Button { Text = "GEMETZEL STARTEN", CustomMinimumSize = new Vector2(0, 44) };
-        start.Pressed += OnStart;
+        // ⚠ StartWhenNetIsReady statt OnStart — ohne Netzschalter derselbe
+        // Aufruf, mit Netzschalter das Warten auf die Partie (UI/MainMenuNet.cs).
+        start.Pressed += StartWhenNetIsReady;
         box.AddChild(start);
 
         // ⚠ 11.08.2026 — HIER STAND DIE KAMPAGNE, und sie ist raus. Gemeldet
@@ -1126,7 +1128,11 @@ public partial class MainMenu : Control
                 else GD.PrintErr($"skirmish: \"{parts[4]}\" ist keine Rohstoffstufe " +
                                  $"({string.Join("/", names)})");
             }
-            CallDeferred(nameof(OnStart));
+            // ⚠ NICHT mehr OnStart, sondern StartWhenNetIsReady (UI/MainMenuNet.cs).
+            // Ohne Netzschalter ist das dasselbe, nur einen Bildlauf später; mit
+            // Netzschalter wartet es auf die Partie, denn der Keim des
+            // Vermittlers muss vor dem Kartenladen stehen.
+            CallDeferred(nameof(StartWhenNetIsReady));
             return true;
         }
         return false;
@@ -1320,7 +1326,12 @@ public partial class MainMenu : Control
         return h;
     }
 
-    private void OnStart()
+    /// <summary>Die Auswahlfelder in <see cref="SkirmishSetup"/> tragen — und
+    /// nichts weiter. ⚠ Herausgezogen aus <see cref="OnStart"/>, weil der
+    /// Vermittler eines Netzspiels diese Werte SCHON BRAUCHT, um die Partie
+    /// anbieten zu können: was er verteilt, ist genau das, was hier steht
+    /// (UI/MainMenuNet.cs).</summary>
+    private void ApplySetupFields()
     {
         SkirmishSetup.Map = Maps[Mathf.Clamp(_mapIndex, 0, Maps.Count - 1)].File;
         SkirmishSetup.Human = _slot.Selected - 1;   // -1 = automatisch
@@ -1347,6 +1358,18 @@ public partial class MainMenu : Control
             Settings.SkirmishTechstandard = SkirmishSetup.Techstandard;
         }
         SkirmishSetup.CampaignMission = 0;      // a skirmish records nothing
+    }
+
+    private void OnStart()
+    {
+        ApplySetupFields();
+
+        // ⚠ IM NETZSPIEL GEWINNT DIE PARTIE, NICHT DAS AUSWAHLFELD. Karte, Platz,
+        // Techstandard, Rohstoffe und »alle Einheiten« kommen dann vom
+        // Vermittler — sonst spielte jeder die Karte und den Platz, die BEI IHM
+        // im Menü standen, und das ist kein Auseinanderlaufen, sondern zwei
+        // verschiedene Partien. Ohne Netzschalter tut die Zeile nichts.
+        Network.NetworkManager.OverrideSetup();
         SkirmishSetup.Active = true;
         StopBackdrop();
         GetTree().ChangeSceneToFile(SkirmishSetup.GameScene);

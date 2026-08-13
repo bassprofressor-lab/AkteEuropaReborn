@@ -39,6 +39,49 @@ public partial class MapEntityLayer
     private CommandRecord _cmdLast;
     private int _cmdLastTick = -1;
 
+    /// <summary>
+    /// WOHIN EIN FRISCH ABGESETZTER SATZ GEHT. <c>null</c> = geradewegs in den
+    /// eigenen Ring; das ist der Einzelspieler.
+    ///
+    /// <para>Im Netzspiel hängt hier der Ausgangskorb des Taktgebers
+    /// (<c>Network/NetGame.cs</c>): der Satz geht dann <b>erst über die
+    /// Leitung</b> und kommt über <see cref="PostRaw"/> in den Ring zurück — auch
+    /// der eigene. Genau das tut <c>post()</c> @0x4C1C50: bei
+    /// <c>[0x538270] == 0</c> (Mitspieler) geht der Satz <b>nur</b> in
+    /// <c>IDirectPlay::Send</c> und wird erst ausgeführt, wenn er über
+    /// <c>Receive</c> im Ring wieder auftaucht.</para>
+    ///
+    /// <para>⚠ <b>Warum eine Weiche und nicht zwei Absender.</b> Ein zweiter
+    /// Absender für den Netzfall wäre ein zweiter Ort, an dem entschieden wird,
+    /// welche Einheit welche Zelle bekommt — und damit ein zweiter Ort, an dem
+    /// sich Einzel- und Mehrspieler unterscheiden können, ohne dass ein Prüfstand
+    /// es sieht. So ist es EIN Absender, und nur das Rohr dahinter wechselt.</para>
+    ///
+    /// <para>⚠ Je Instanz, nicht statisch — aus demselben Grund wie der Ring
+    /// selbst (siehe <see cref="Commands"/>).</para>
+    /// </summary>
+    public System.Func<CommandRecord, bool>? CommandSink;
+
+    /// <summary>Den Satz auf den Weg bringen: in den Ring, oder ins Netz, je
+    /// nachdem, ob <see cref="CommandSink"/> gesetzt ist.</summary>
+    private bool Emit(in CommandRecord c)
+    {
+        var sink = CommandSink;
+        return sink != null ? sink(c) : Commands.Post(c);
+    }
+
+    /// <summary>Die Mitte einer Zelle in Weltkoordinaten — <c>CellCenter</c> ist
+    /// privat und liegt in einer fremden Datei; diese Zeile macht sie für den
+    /// Netztaktgeber und die Prüfstände erreichbar, ohne dort etwas zu
+    /// ändern.</summary>
+    public Vector2 CellCenterFor(Vector2I cell) => CellCenter(cell.X, cell.Y);
+
+    /// <summary>Der Takt, in dem die Befehlsschicht dieser Simulation steht —
+    /// die Zahl, gegen die die Fälligkeit geprüft wird. Der Netztaktgeber
+    /// braucht sie, um seine Taktnummern an die der Simulation zu binden statt
+    /// eine zweite Zählung daneben zu führen.</summary>
+    public int CommandClock => _cmdTick;
+
     /// <summary>Der Ring dieser Simulation, beim ersten Zugriff angelegt.
     /// ⚠ Je Simulation einer — der Zwillings-Prüfstand hat zwei
     /// <c>MapEntityLayer</c> im selben Prozess, und ein gemeinsamer Ring wäre
@@ -128,7 +171,7 @@ public partial class MapEntityLayer
             var c = CommandRecord.Make(CommandOp.Move, (byte)ViewPlayer,
                                  (short)i, (short)goal.X, (short)goal.Y,
                                  (short)(queue ? 1 : 0));
-            if (Commands.Post(c)) n++;
+            if (Emit(c)) n++;
         }
 
         // Die Rückmeldung an den Spieler ist ANZEIGE und darf sofort kommen —
@@ -187,7 +230,7 @@ public partial class MapEntityLayer
             var c = CommandRecord.Make(CommandOp.OursAttack, (byte)ViewPlayer,
                                  (short)i, (short)hit, (short)(queue ? 1 : 0),
                                  (short)victim.Col, (short)victim.Row);
-            if (Commands.Post(c)) n++;
+            if (Emit(c)) n++;
         }
         if (n == 0) return false;
         AddOrderMark(victim.Pos, attack: true);
@@ -204,7 +247,7 @@ public partial class MapEntityLayer
     {
         int n = 0;
         foreach (int i in _sel)
-            if (Commands.Post(CommandRecord.Make(CommandOp.OursStop, (byte)ViewPlayer, (short)i))) n++;
+            if (Emit(CommandRecord.Make(CommandOp.OursStop, (byte)ViewPlayer, (short)i))) n++;
         return n;
     }
 
@@ -226,11 +269,42 @@ public partial class MapEntityLayer
     /// </summary>
     public bool ApplyCommand(in CommandRecord c) => c.Op switch
     {
+        _ when !Owns(c) => false,
         CommandOp.Move => ApplyMove(c),
         CommandOp.OursAttack => ApplyAttack(c),
         CommandOp.OursStop => ApplyStop(c),
         _ => false,
     };
+
+    /// <summary>
+    /// GEHÖRT DIE EINHEIT DEM, DER DEN BEFEHL GEGEBEN HAT?
+    ///
+    /// <para>⚠ Die Prüfung steht im <b>Behandler</b>, nicht beim Absenden — das
+    /// ist die Regel, die das Original vorgibt (Opcode 3 klemmt P2/P3 erst
+    /// @0x4C2324, also im Behandler). Der Grund ist im Netzspiel handfest: der
+    /// Absender läuft auf der Maschine des Klickenden, und was von dort kommt,
+    /// ist keine Aussage über die Wahrheit. Ohne diese Zeile könnte ein
+    /// Teilnehmer die Einheiten seines Gegners fahren, und zwar völlig
+    /// synchron — beide Maschinen würden es gehorsam gleich rechnen.</para>
+    ///
+    /// <para>Für den Einzelspieler ändert sich nichts: <c>_sel</c> nimmt nur
+    /// eigene Einheiten auf (<c>Commandable</c> prüft <c>Owner == ViewPlayer</c>),
+    /// also war <c>Owner == Player</c> dort ohnehin immer erfüllt. Genau
+    /// deshalb bleibt <c>--befehl-check</c> (A gegen den Direktweg B) grün — und
+    /// wäre es das nicht, hätte die Zeile eine Lücke aufgedeckt statt eine
+    /// geschlossen.</para>
+    ///
+    /// <para>⚠ <b>UNSERE SETZUNG</b> insofern, als das Original für den Absender
+    /// gar kein Satzfeld hat (es nimmt ihn aus dem Transport, <c>Receive</c> gibt
+    /// <c>idFrom</c> @0x404490). Wir führen ihn auf +0x03 mit; ob das Original
+    /// die Eigentümerfrage im Behandler stellt, ist NICHT gelesen.</para>
+    /// </summary>
+    private bool Owns(in CommandRecord c)
+    {
+        int i = c.P1;
+        if (i < 0 || i >= _entities.Count) return false;
+        return _entities[i].Owner == c.Player;
+    }
 
     /// <summary>
     /// Opcode 3, Bewegen. P1 = Einheit, P2/P3 = Zielzelle, P4 = angereiht.
