@@ -5220,8 +5220,13 @@ public partial class MapEntityLayer : Node2D
         if (ap == null)
         {
             // ⚠ 15.08.2026 — AUF DEN GEFECHTSKARTEN GEHOEREN DIE FLUGHAEFEN
-            // NIEMANDEM. Nachgezaehlt: NET02 sieben, NET04 acht, NET05 sieben —
-            // alle mit Besitzer 11, also neutral; erobert werden sie im Spiel.
+            // NIEMANDEM. Nachgezaehlt ueber alle acht NET-Karten: NET01 zwei,
+            // NET02 sieben, NET03 vier, NET04 acht, NET05 sieben, NET06 acht,
+            // NET07 KEINEN EINZIGEN, NET08 drei — zusammen 39, alle mit
+            // Besitzer 11, also neutral; erobert werden sie im Spiel.
+            // ⚠ NET07 ist keine Pruefkarte fuer den Flughafen: dort ist von 300
+            // Gebaeudeplaetzen keiner vom Typ 9. Hier stand »NET07 sieben«, und
+            // das war falsch — wer dort prueft, prueft nichts.
             // Der Pruefstand hat deshalb bisher auf JEDER Gefechtskarte nur
             // »kein eigener Flughafen« gemeldet und nichts geprueft — ein
             // Pruefstand, der immer dasselbe sagt, prueft nichts.
@@ -7093,50 +7098,197 @@ public partial class MapEntityLayer : Node2D
     /// player is OUR setting. In the original the enables sit per player block
     /// in sec120, and a campaign level simply has no such block to read.</summary>
     /// <summary>
-    /// <b>»Alle Einheiten« im Gefecht — auch in der Luft.</b>
+    /// <b>Die Flugzeugliste eines GEFECHTS — jetzt gelesen statt gesetzt.</b>
     ///
-    /// <para>⚠ <b>Der Anlass ist eine Lücke in den DATEN, nicht im Code.</b> Die
-    /// Gefechtskarten tragen in <b>sec120 null Flugzeugvorlagen</b> — nachgezählt
-    /// auf map_NET02, map_NET05 und map_NET07, jeweils <c>0</c>. Der Flughafen
-    /// (Typ 9) hat dort also nichts anzubieten, gleich wieviel Geld und Teile
-    /// dastehen; und Flughäfen gibt es auf diesen Karten reichlich (NET02 sieben,
-    /// NET04 acht). Eine Kampagnenmission bekommt ihre Vorlagen aus dem Fahrplan
-    /// (<see cref="Campaign.CampaignManager.UnlocksFor"/>), ein Gefecht bekam
-    /// gar nichts.</para>
+    /// <para>⭐ 13.08.2026, <b>UMGESTELLT, und die alte Begründung wird
+    /// ausdrücklich zurückgezogen.</b> Hier stand: »Der Anlass ist eine Lücke in
+    /// den DATEN — die Gefechtskarten tragen in sec120 null Flugzeugvorlagen«,
+    /// und daraus folgte eine Option von uns (<c>AllUnits</c>), die alle acht
+    /// Vorlagen freigab. <b>Beide Hälften waren falsch:</b></para>
+    /// <list type="bullet">
+    /// <item>Die Gefechtskarten tragen sec120 nicht mit NULL Sätzen, sondern
+    /// <b>gar nicht</b>: alle 23 <c>.CWM</c> enden bei sec39, ihr Kopfbyte 3 ist
+    /// 1 statt 2 (Prüfung <c>cmp cl,2</c> @0x41E6A9, 23 von 23 gegen 13 von 13
+    /// bei den <c>.DM</c>, kein Gegenbeispiel). Eine FEHLENDE Sektion
+    /// überschreibt nichts — deshalb bleibt im Original die Tabelle der EXE
+    /// stehen, und aus »die Karte bringt nichts mit« folgt gerade NICHT »es gibt
+    /// nichts«.</item>
+    /// <item>Es gibt also eine gelesene Regel, und sie geht <b>auf keiner Stufe
+    /// leer aus</b>. Damit löste die Option ein Problem, das es nicht gab — und
+    /// erzeugte ein neues, siehe unten.</item>
+    /// </list>
     ///
-    /// <para><b>⚠ UNSERE SETZUNG</b>, und sie ist eine Option, kein neuer
-    /// Normalfall: mit <see cref="UI.SkirmishSetup.AllUnits"/> bekommen <b>alle
-    /// acht Spieler</b> die acht Vorlagen aus <c>aircraft.json</c>, freigegeben.
-    /// Die KI eingeschlossen — sonst wäre es kein Gefecht, sondern ein Vorteil;
-    /// <c>SkirmishAi</c> baut am Flughafen über dieselbe Liste
-    /// (<c>AirMenu(e).Count &gt; 0</c>).</para>
+    /// <para><b>Die Regel, ganz aus GAME.EXE</b> (Torroutine @0x419F30, beide
+    /// Fassungen; Tabelle 0x51B020 = 8 Blöcke × 20 Sätze × 48 B, Freigabe an
+    /// +0x00, Nutzlast an +0x24, Rumpf an +0x25):</para>
+    /// <code>
+    ///   Freigabe = stats[Nutzlast].+0x24 &lt;= Techstandard
+    ///           &amp;&amp; stats[Rumpf].+0x24    &lt;= Techstandard
+    ///           &amp;&amp; Satz != 3 &amp;&amp; Satz != 7
+    /// </code>
+    /// <para>Die beiden Ausnahmen sind kein Schwellenwert, sondern zwei
+    /// ausdrückliche Nullungen am Ende des Tors: <b>Satz 3 (Transport Heli)</b>
+    /// @0x419F98 und <b>Satz 7..19 (Mechanikerheli und die zwölf leeren
+    /// Plätze)</b> @0x419F9E. Danach kopiert @0x4B2380 den Block von Spieler 0 in
+    /// die anderen sieben — das Gegenstück zu @0x4B2330 bei den Schiffen; das tut
+    /// die Schleife <c>for p in 0..7</c> hier unten schon.</para>
     ///
-    /// <para>Ohne die Option bleibt alles wie bisher — dann verhält sich ein
-    /// Gefecht wie vorher, und niemand bekommt ungefragt eine Luftwaffe.</para>
+    /// <para>⚠ <b>Warum Satz 3 und 7 hier gesperrt bleiben, ist NICHT »das
+    /// Original macht es so«.</b> Das Gefecht ist seit dem 13.08.2026
+    /// ausdrücklich kein Treuemodus mehr, dort wäre eine Freigabe erlaubt. Sie
+    /// bleiben gesperrt, weil <b>ungeprüft</b> ist, ob sie überhaupt tragen: das
+    /// Original gibt sie auf keiner der 8 Stufen frei, und ob sie je erreichbar
+    /// waren, ist offen (in 36 Kartendateien kommen sie 0 Mal vor). Was nie
+    /// erreichbar war, kann unfertig sein — Grafik, Verhalten, Preis ungeprüft.
+    /// <b>Sobald jemand nachweist, dass sie tragen, gehören sie im Gefecht
+    /// freigegeben</b>, und dann fällt diese Zeile.</para>
+    ///
+    /// <para><b>Die Schwellen liegen im Repository</b>, kein neuer Export:
+    /// <c>component_stats.json</c> +0x24 — Nutzlast 100 = 4, 101 = 6, 102 = 5,
+    /// 103 = 0, 104 = 0, 105 = 6, 106 = 1, 107 = 1; Rümpfe 120..123 alle 0
+    /// (nachgesehen, 12 von 12). Daraus ergibt sich:</para>
+    /// <list type="table">
+    /// <item><term>1–3</term><description>Treibstoffheli, Munitionheli</description></item>
+    /// <item><term>4</term><description>+ Kampfhubschrauber</description></item>
+    /// <item><term>5</term><description>+ Spionageflieger</description></item>
+    /// <item><term>6–8</term><description>+ Jagdflieger, Bomber</description></item>
+    /// </list>
+    /// <para><b>Die Vorgabe ist 1.</b> Gelesen ist daran nur, dass ein frisches
+    /// Original auf 1 startet (@0x4426F4). <b>Dass 1 auch für UNSER Gefecht die
+    /// richtige Vorgabe ist, ist damit nicht belegt</b> — das Gefecht ist seit dem
+    /// 13.08.2026 ein Wettkampfmodus und kein Treuemodus, die Wahl der Vorgabe
+    /// gehört dem Spieler. Sie steht auf 1, weil noch niemand etwas anderes
+    /// entschieden hat, nicht weil die Zahl beweiskräftig wäre. Wichtig ist
+    /// ohnehin die andere Hälfte: auf jeder Stufe stehen mindestens zwei
+    /// Versorgungshelis da, der gemeldete Fehler (»keine Flugeinheit zur
+    /// Auswahl«) ist also unabhängig von der Vorgabe behoben.</para>
+    ///
+    /// <para><b>Warum <see cref="UI.SkirmishSetup.AllUnits"/> die Luft nicht mehr
+    /// anfasst.</b> Nicht aus Treue — im Gefecht wäre eine breitere Liste
+    /// erlaubt. Sondern weil die Option ein Problem löste, das es nicht gab: es
+    /// gibt eine gelesene Stellschraube, die auf keiner Stufe leer ausgeht, und
+    /// die ist feiner als ein Alles-oder-nichts-Schalter. Nebenbei gab die Option
+    /// Satz 3 und Satz 7 frei, deren Tragfähigkeit ungeprüft ist (siehe oben). Am
+    /// Boden (601 Entwürfe gegen 65) und zur See (10 gegen 2) bleibt sie
+    /// unverändert, was sie war.</para>
+    ///
+    /// <para>⚠ Die Kampagne geht einen ANDEREN Weg (@0x4D03E0 → @0x4B23C0, das
+    /// alles nullt, danach Einzelfreigaben per Skript) und wird hier nicht
+    /// angefasst: die Bedingung bleibt <c>CampaignMission &lt;= 0</c>, und
+    /// <see cref="FillCampaignAirDesigns"/> bleibt, wie es war.</para>
     /// </summary>
     private void FillSkirmishAirDesigns()
     {
-        if (!UI.SkirmishSetup.AllUnits || UI.SkirmishSetup.CampaignMission > 0) return;
+        if (UI.SkirmishSetup.CampaignMission > 0) return;
         if (_airDesigns != null && _airDesigns.Count > 0) return;
         var types = LoadAircraftTemplates();
         if (types.Count == 0)
         {
-            GD.Print("aircraft: »Alle Einheiten« an, aber aircraft.json hat keine Vorlagen");
+            GD.Print("aircraft: aircraft.json hat keine Vorlagen — der Flughafen bleibt leer");
             return;
         }
+        int tech = AirProbeTechstandard;
         _airDesigns = new List<AirDesign>();
+        var on = new List<string>();
         for (int p = 0; p < 8; p++)
-            foreach (var t in types)
+            for (int i = 0; i < types.Count; i++)
             {
+                var t = types[i];
                 t.Player = p;
-                t.Enable = true;
+                t.Enable = AirEnabledAt(i, t, tech);
+                if (p == 0 && t.Enable) on.Add(t.Name);
                 _airDesigns.Add(t.Clone());
             }
-        _airSource = "»Alle Einheiten« (unsere Option)";
+        _airSource = $"Tor @0x419F30, Techstandard {tech}";
         int priced = 0;
         foreach (var t in types) if (t.CostW + t.CostF + t.CostS > 0) priced++;
         GD.Print($"aircraft: {types.Count} Vorlagen fuer 8 Spieler aus {_airSource}, " +
-                 $"alle freigegeben, {priced} mit gelesenem Preis");
+                 $"{on.Count} freigegeben ({string.Join(", ", on)}), " +
+                 $"{priced} mit gelesenem Preis");
+    }
+
+    /// <summary>
+    /// Der Techstandard, mit dem gerechnet wird — normalerweise der des
+    /// Gefechtsschirms (<see cref="UI.SkirmishSetup.Techstandard"/>), für einen
+    /// Prüflauf überschreibbar mit <c>--techstandard=1..8</c>.
+    ///
+    /// <para>Warum der Schalter sein muss: die gelesene Regel gibt je Stufe eine
+    /// ANDERE Liste, und ein Prüfstand, der nur die Vorgabe 1 sehen kann, kann
+    /// nicht zeigen, dass die Stufe überhaupt wirkt — er würde auf jeder Stufe
+    /// dasselbe sagen. Mit dem Schalter ist »Stufe 4 bringt den
+    /// Kampfhubschrauber dazu« eine Messung und keine Behauptung.</para>
+    ///
+    /// <para>Ohne den Schalter ändert sich nichts: dann gilt das Feld des
+    /// Gefechtsschirms, und dessen Vorgabe 1 ist die des Originals
+    /// (@0x4426F4).</para></summary>
+    public static int AirProbeTechstandard
+    {
+        get
+        {
+            if (_probeTech.HasValue) return _probeTech.Value;
+            int v = UI.SkirmishSetup.Techstandard;
+            foreach (string a in OS.GetCmdlineUserArgs())
+                if (a.StartsWith("--techstandard="))
+                    v = Mathf.Clamp(a["--techstandard=".Length..].ToInt(), 1, 8);
+            _probeTech = v;
+            return v;
+        }
+    }
+
+    private static int? _probeTech;
+
+    /// <summary>Das Tor @0x419F30 für EINEN Satz — siehe
+    /// <see cref="FillSkirmishAirDesigns"/> für die Herleitung. Die zwei
+    /// Satznummern sind aus dem Code, keine Auswahl von uns.</summary>
+    private static bool AirEnabledAt(int index, AirDesign t, int tech)
+    {
+        if (index == 3 || index == 7) return false;      // @0x419F98 / @0x419F9E
+        return StatsTechLevel(t.Payload) <= tech && StatsTechLevel(t.Airframe) <= tech;
+    }
+
+    /// <summary>Die Techschwelle einer Bauteilzeile — <c>component_stats.json</c>
+    /// <b>+0x24</b>, dieselbe Stelle, die das Tor mit
+    /// <c>byte[58·zeile + 0x5045C4]</c> liest (58 = Satzlänge, 0x5045A0 + 0x24).
+    ///
+    /// <para>Eine unbekannte Zeile gibt <b>0</b> zurück, also »immer frei«. Das
+    /// ist die vorsichtige Seite: fehlt die Tabelle, steht am Flughafen zuviel
+    /// statt gar nichts — und ein leerer Flughafen war der gemeldete Fehler. Die
+    /// Zeile <c>--air-buy-check</c> sagt die Stufe mit, damit ein solcher
+    /// Rückfall in der Ausgabe zu sehen ist und nicht wie ein Ergebnis
+    /// aussieht.</para></summary>
+    private static int StatsTechLevel(int row)
+    {
+        LoadStatsTech();
+        return _statsTech != null && _statsTech.TryGetValue(row, out int v) ? v : 0;
+    }
+
+    private static Dictionary<int, int>? _statsTech;
+
+    private static void LoadStatsTech()
+    {
+        if (_statsTech != null) return;
+        _statsTech = new Dictionary<int, int>();
+        string path = Core.Content.Path("Maps/component_stats.json");
+        if (!FileAccess.FileExists(path)) return;
+        using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
+        if (f == null) return;
+        var json = new Json();
+        if (json.Parse(f.GetAsText()) != Error.Ok ||
+            json.Data.VariantType != Variant.Type.Dictionary) return;
+        var root = json.Data.AsGodotDictionary<string, Variant>();
+        if (!root.TryGetValue("rows", out var rv) ||
+            rv.VariantType != Variant.Type.Dictionary) return;
+        foreach (var kv in rv.AsGodotDictionary<string, Variant>())
+        {
+            if (!int.TryParse(kv.Key, out int row)) continue;
+            string h = kv.Value.AsString();
+            // +0x24 als Hexpaar; kürzere Zeilen gibt es nicht (alle 58 Bytes)
+            if (h.Length < 0x24 * 2 + 2) continue;
+            if (int.TryParse(h.Substring(0x24 * 2, 2),
+                             System.Globalization.NumberStyles.HexNumber,
+                             System.Globalization.CultureInfo.InvariantCulture, out int b))
+                _statsTech[row] = b;
+        }
     }
 
     private void FillCampaignAirDesigns()
@@ -7202,11 +7354,34 @@ public partial class MapEntityLayer : Node2D
                 CostS = GetI(t, "cost_s"),
             });
         }
-        // ⚠ Die Vorlagentabelle der EXE (@0x51b021, 48 Bytes je Satz) trägt
-        // KEINEN Preis — jedenfalls nicht an einer Stelle, die gelesen ist.
-        // Ohne Preis wäre ein Flugzeug UMSONST: `BuyAircraft` zieht
-        // `d.CostW/F/S` vom Teilelager des Flughafens ab, und das wären dann
-        // Nullen. Deshalb der Nachtrag, siehe AirPriceByPayload.
+        // ⭐ 13.08.2026 — DIE ALTE BEGRUENDUNG WAR FALSCH, DER RUECKFALL BLEIBT.
+        // Hier stand: »Die Vorlagentabelle der EXE (@0x51b021) traegt KEINEN
+        // Preis«. Das ist widerlegt — der Preis steht im EXE-Satz an
+        // +0x1F/+0x20/+0x21 (Waffen-, Fahrwerk-, Spezialteile), die Kaufpruefung
+        // liest genau diese Bytes (@0x449DD2 / @0x449DF7 / @0x449E18 auf
+        // 0x51B03F/40/41), und gegen sec120 gehalten stimmen sie in 832 von 832
+        // Saetzen byteweise.
+        //
+        // ⚠ ABER: der Rueckfall wird trotzdem gebraucht, aus einem ANDEREN
+        // Grund, und ich habe ihn beim Herausnehmen gemessen statt vermutet.
+        // Es gibt ZWEI aircraft.json, und die Engine liest die falsche:
+        //
+        //   Assets/Legacy/Maps/aircraft.json  (Python, aircraft_export.py)
+        //       traegt cost_w/cost_f/cost_s — alle 8 Vorlagen ungleich 0/0/0
+        //   user://data/Maps/aircraft.json    (C#, ContentBuilder.WriteAircraft)
+        //       traegt sie NICHT, und Core.Content.Path nimmt diese
+        //
+        // Ohne den Rueckfall gemessen (--air-buy-check auf map_NET02): Menue
+        // »Treibstoffheli 0/0/0«, »0 mit gelesenem Preis«, und nach 40 gekauften
+        // Flugzeugen stand das Teilelager unveraendert auf 300/400/200 — die
+        // Flugzeuge waren UMSONST. Der Rueckfall ist also keine zweite Wahrheit,
+        // sondern das einzige, was den Preis derzeit ueberhaupt in die Engine
+        // bringt.
+        //
+        // Was ihn abschafft, liegt nicht in dieser Datei: ContentBuilder.cs
+        // Zeile 868 (WriteAircraft) muesste die drei Bytes mitschreiben. Bis
+        // dahin greift der Rueckfall, und die Zeile unten sagt es an der Zahl
+        // »n mit gelesenem Preis« — steht dort 0, ist es der Rueckfall.
         foreach (var d in list)
             if (d.CostW + d.CostF + d.CostS == 0 &&
                 AirPriceByPayload.TryGetValue(d.Payload, out var p))
@@ -7215,29 +7390,42 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <summary>
-    /// <b>Was ein Flugzeug an Teilen kostet</b> — gemessen, nicht gesetzt.
+    /// <b>Was ein Flugzeug an Teilen kostet.</b>
     ///
-    /// <para>Die Preise stehen je Karte in <b>sec120</b> (Entwurf +0x1F/+0x20/
-    /// +0x21, was <c>build_in_airport</c> @0x4BB3D0 prüft). Die
-    /// GEFECHTSkarten tragen sec120 aber gar nicht, und die Vorlagentabelle der
-    /// EXE trägt keinen Preis. Also wurde er aus den Karten geholt, die ihn
-    /// haben:</para>
+    /// <para>Je Nutzlast EIN Preis, über die 13 Karten mit sec120 und deren je
+    /// 104 Sätze gleich, <b>kein Gegenbeispiel</b>:</para>
     /// <code>
-    ///   13 Karten mit sec120, je 104 Sätze (8 Entwürfe × 8 Spieler + Rest)
-    ///   je Nutzlast EIN Preis, über alle 104 gleich, KEIN Gegenbeispiel:
-    ///
     ///     100 Kampfhubschrauber  60/40/0      104 Mechanikerheli   0/30/150
     ///     101 Jagdflieger        50/50/0      105 Bomber          80/70/10
     ///     102 Spionageflieger     0/40/30     106 Treibstoffheli   0/30/40
     ///     103 Transport Heli      0/30/50     107 Munitionheli     0/30/40
     /// </code>
-    /// <para>Der Treibstoffheli mit <b>0/30/40</b> bestätigt von der anderen
-    /// Seite, was in <see cref="BuyAircraft"/> schon als gelesen steht (»Am
-    /// Flughafen kostet auch der Sprit-Heli 0/30/40 Teile«) — zwei unabhängige
-    /// Wege auf dieselbe Zahl.</para>
     ///
-    /// <para>Greift NUR, wenn ein Entwurf gar keinen Preis mitbringt. Eine
-    /// Karte mit sec120 behält ihre eigenen Zahlen.</para></summary>
+    /// <para>⭐ 13.08.2026 — <b>die BEGRÜNDUNG dieser Tabelle wird
+    /// zurückgezogen, die Tabelle selbst bleibt.</b> Hier stand, die
+    /// Vorlagentabelle der EXE trage keinen Preis, weshalb er aus den
+    /// Spielständen zurückgerechnet werden müsse. Das ist widerlegt: der Preis
+    /// steht im EXE-Satz an <b>+0x1F/+0x20/+0x21</b>, die Kaufprüfung
+    /// @0x449DD2/@0x449DF7/@0x449E18 liest ihn dort, und gegen sec120 gehalten
+    /// stimmt er in <b>832 von 832</b> Sätzen byteweise. Die Zahlen oben sind
+    /// also richtig — sie stammen nur aus der zweitbesten Quelle.</para>
+    ///
+    /// <para>⚠ <b>Gebraucht wird sie trotzdem, und zwar aus einem ganz anderen
+    /// Grund:</b> unser eigener Importeur schreibt die drei Bytes nicht mit.
+    /// <c>ContentBuilder.WriteAircraft</c> (Zeile 868) gibt nur speed, hp,
+    /// payload, airframe, attack, defence, sight, ammo und fuel aus — und genau
+    /// diese Datei liest die Engine über <c>Core.Content.Path</c>. Die reichere
+    /// Fassung im Baum (<c>Assets/Legacy/Maps/aircraft.json</c>, aus
+    /// <c>aircraft_export.py</c>) trägt die Preise, wird aber von der Kopie unter
+    /// <c>user://data</c> verdeckt.</para>
+    ///
+    /// <para><b>Gemessen, nicht vermutet:</b> ohne diesen Rückfall meldete
+    /// <c>--air-buy-check</c> auf map_NET02 »Treibstoffheli 0/0/0«, »0 mit
+    /// gelesenem Preis«, und das Teilelager stand nach 40 gekauften Flugzeugen
+    /// unverändert auf 300/400/200. Die Flugzeuge waren umsonst.</para>
+    ///
+    /// <para>Greift NUR, wenn ein Entwurf gar keinen Preis mitbringt — eine Karte
+    /// oder ein Export mit Preisen behält seine eigenen Zahlen.</para></summary>
     private static readonly Dictionary<int, (int W, int F, int S)> AirPriceByPayload = new()
     {
         { 100, (60, 40, 0) }, { 101, (50, 50, 0) }, { 102, (0, 40, 30) },
@@ -7488,8 +7676,16 @@ public partial class MapEntityLayer : Node2D
     /// threshold produces: on Chanel Tunnel the AA Ship and the Sea Cruiser
     /// both need level 6, yet one is enabled and the other is not.  A map that
     /// brings its own list therefore wins; only maps without one fall back to
-    /// this gate, at the value the binary itself starts from.</summary>
-    private const int CampaignTechLevel = 1;
+    /// this gate, at the value the binary itself starts from.
+    ///
+    /// <para>⭐ 13.08.2026 — <b>keine Konstante mehr.</b> Der Wert ist derselbe,
+    /// den das Gefecht für die LUFT braucht (Tor @0x419E90 für Schiffe,
+    /// @0x419F30 für Flugzeuge, beide mit demselben Argument), und er steht jetzt
+    /// als <see cref="UI.SkirmishSetup.Techstandard"/> an einer Stelle. Die
+    /// Vorgabe bleibt 1 — das ist der Wert eines frischen Spiels (@0x4426F4), die
+    /// Zahl ändert sich also nicht, nur ihre Herkunft. Zwei Listen aus einer
+    /// Quelle statt einer Konstante neben einem Feld.</para></summary>
+    private static int CampaignTechLevel => AirProbeTechstandard;
 
     private List<ShipDesign>? _shipDesigns;   // this map's own sec119 table
     private string _shipSource = "";          // where the list came from
