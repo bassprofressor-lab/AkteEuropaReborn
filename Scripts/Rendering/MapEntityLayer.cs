@@ -3492,10 +3492,15 @@ public partial class MapEntityLayer : Node2D
     /// Bildnummern 70..76 und 100..102, und das sind in Fall-5-Zaehlung
     /// Flugzeug- und Personenbilder. Lieber kein Bild als ein falsches.</para>
     ///
-    /// <para>Ebenso ungezeichnet bleibt die INFANTERIE (unit_type 148/149): das
-    /// Original nimmt dafuer Folge 403 ueber die Bytetafel @0x450CCC mit
-    /// <c>entwurf - 0x32</c>, und welche Entwurfsnummern das Spiel dort traegt,
-    /// ist nicht nachgesehen.</para>
+    /// <para><b>Die INFANTERIE (unit_type 148/149) ist seit dem 13.08.2026
+    /// dabei.</b> Das Original nimmt Folge 403 ueber die Bytetafel @0x450CCC mit
+    /// <c>entwurf − 0x32</c> und die Schaltertafel @0x450C98; die Kette steht bei
+    /// <see cref="UI.PortraitBank.PictureOfInfantry"/>, der Weg vom Einheitensatz
+    /// zur Entwurfsnummer bei <see cref="InfantryDesignOf"/>. <b>Alle ZWOELF
+    /// Entwuerfe bekommen ein Bild</b> — die Tafel trägt fuer sie die Werte 0…11
+    /// und fuer alle 133 anderen Indizes die 12, den Fehlerzweig »Wrong index of
+    /// infantry«. Ein zweites Bild gibt es hier nicht: 0x450A2F blittet
+    /// einmal.</para>
     /// </summary>
     /// <para><b>Und die Bildnummern stehen im Einheitensatz selbst.</b> Das ist
     /// der Fund dieses Bauabschnitts: <c>+0x0b</c> (das <c>spodek</c> des
@@ -3541,7 +3546,20 @@ public partial class MapEntityLayer : Node2D
         if (e.IsProp) return (0, 0, n, "Kulisse");
         if (e.IsBuilding) return (0, 0, n, "Gebaeude — Klassenbyte ungelesen");
         if (e.UnitType is 148 or 149)
-            return (0, 0, n, "Infanterie — Folge 403 ueber @0x450CCC ungelesen");
+        {
+            // ---- der Infanteriezweig (Fall 0 ab 0x45099B) --------------------
+            // EIN Bild, kein zweites: 0x450A2F blittet einmal. Die Kette vom
+            // Entwurf zum Bild steht bei PortraitBank.PictureOfInfantry, der Weg
+            // vom Satz zum Entwurf bei InfantryDesignOf.
+            int design = InfantryDesignOf(e.Infantry);
+            if (design < 0)
+                return (0, 0, n, $"Fusssoldat mit Satz {e.Infantry}: kein Entwurf " +
+                                 "dazu (Maps/infantry.json oder unit_designs.json fehlt)");
+            int inf = UI.PortraitBank.PictureOfInfantry(design);
+            return inf > 0
+                ? (inf, 0, n, "")
+                : (0, 0, n, UI.PortraitBank.InfTrouble(design));
+        }
         if (e.UnitType is < 160 or > 175)
             return (0, 0, n, $"unit_type {e.UnitType} ist kein Landfahrwerk (160..175)");
         // erst das eigene Byte, dann der Rueckfall über die Bauteiltabelle
@@ -3625,7 +3643,7 @@ public partial class MapEntityLayer : Node2D
           .Append(" — im Original ungefangen, betrifft nur Schiffsruempfe\n");
 
         // ---- die Entwürfe ---------------------------------------------------
-        int two = 0, one = 0, none = 0, unknownPic = 0;
+        int two = 0, one = 0, none = 0, unknownPic = 0, infOwn = 0;
         var noneNames = new List<string>();
         var unknownNames = new List<string>();
         foreach (var d in UI.UnitStatBook.All())
@@ -3636,6 +3654,14 @@ public partial class MapEntityLayer : Node2D
                   + (iw > 0 && iw < UI.PortraitBank.Count ? 1 : 0);
             if (n == 2) two++;
             else if (n == 1) one++;
+            // ⚠ Die zwölf Infanterieentwürfe stehen hier NICHT als Lücke: sie
+            // haben kein Bauteilbild, weil das Original sie über Fall 0 gar
+            // nicht malt, sondern über den Infanteriezweig und Folge 403 (siehe
+            // den Abschnitt »Infanterie« weiter unten). Bis zum 13.08.2026 hat
+            // dieser Zähler sie mitgezählt und deshalb »13 ohne Bild« gemeldet;
+            // 13 = die 12 Fußsoldaten PLUS »Mighty Mama«, ein Satz mit Waffe 0
+            // UND Fahrwerk 0, der auch im Original nichts zu malen hat.
+            else if (d.Propulsion is 148 or 149) infOwn++;
             else { none++; if (noneNames.Count < 12) noneNames.Add(d.Name); }
             if (ic == UI.PortraitBank.Unknown || iw == UI.PortraitBank.Unknown)
             {
@@ -3644,7 +3670,8 @@ public partial class MapEntityLayer : Node2D
             }
         }
         sb.Append($"   Entwuerfe: {two} mit zwei Bildern (Fahrwerk + Aufbauteil), ")
-          .Append($"{one} mit einem, {none} ohne\n");
+          .Append($"{one} mit einem, {infOwn} Fusssoldaten (eigener Zweig, Folge 403), ")
+          .Append($"{none} ohne\n");
         if (none > 0)
             sb.Append("   ohne Bild: ").Append(string.Join(", ", noneNames))
               .Append(none > noneNames.Count ? ", …" : "").Append('\n');
@@ -3671,6 +3698,47 @@ public partial class MapEntityLayer : Node2D
         sb.Append("      mit Bild: ").Append(string.Join(", ", airWith)).Append('\n');
         sb.Append("      ohne Bild (Tafel @0x450DC8 sagt 7): ")
           .Append(string.Join(", ", airWithout)).Append('\n');
+
+        // ---- die INFANTERIE: alle zwölf Entwürfe namentlich ----------------
+        //
+        // Die Zahl, um die es ging: der Prüfstand meldete »13 Entwuerfe ohne
+        // Bild« gegen 12 Bilder in Folge 403. Die 13 ist die Länge der
+        // SCHALTERTAFEL @0x450C98 — 12 Fälle plus der Fehlerzweig 0x4509B5. Hier
+        // wird nachgezählt: zwölf Entwürfe, zwölf verschiedene Bilder.
+        var infWith = new List<string>();
+        var infWithout = new List<string>();
+        var infPics = new SortedSet<int>();
+        var infDesigns = new List<int>(UI.PortraitBank.InfantryDesigns());
+        infDesigns.Sort();
+        foreach (int nr in infDesigns)
+        {
+            int pic = UI.PortraitBank.PictureOfInfantry(nr);
+            string nm = _designBySlot.TryGetValue(nr, out var dd) ? dd.Name : "?";
+            if (pic > 0)
+            {
+                infPics.Add(pic);
+                infWith.Add($"{nr} {nm} -> p{pic:00}");
+            }
+            else infWithout.Add($"{nr} {nm}: {UI.PortraitBank.InfTrouble(nr)}");
+        }
+        sb.Append($"   Infanterie: {infWith.Count} Entwuerfe mit Bild auf ")
+          .Append($"{infPics.Count} verschiedene Bilder (Folge ")
+          .Append($"{UI.PortraitBank.InfSequence} ab p")
+          .Append($"{UI.PortraitBank.FirstPictureOf(UI.PortraitBank.InfSequence):00}), ")
+          .Append($"{infWithout.Count} ohne\n");
+        sb.Append("      ").Append(string.Join(", ", infWith)).Append('\n');
+        if (infWithout.Count > 0)
+            sb.Append("      ohne Bild: ").Append(string.Join(", ", infWithout)).Append('\n');
+        // Und die Gegenrechnung: wieviele der 145 Tafelplätze der Fehlerzweig
+        // hält. 145 − 12 = 133, und 12 + 1 Fehlerfall = die 13 der Schaltertafel.
+        int infError = 0;
+        for (int nr = UI.PortraitBank.InfFirstDesign;
+             nr <= UI.PortraitBank.InfFirstDesign + UI.PortraitBank.InfLastIndex; nr++)
+            if (UI.PortraitBank.PictureOfInfantry(nr) == 0) infError++;
+        sb.Append($"      Tafel @0x450CCC: {UI.PortraitBank.InfLastIndex + 1} Plaetze, ")
+          .Append($"{infWith.Count} Infanterie, {infError} mal der Fehlerzweig ")
+          .Append($"»Wrong index of infantry« — {infWith.Count} + 1 Fehlerfall = die ")
+          .Append("13 Eintraege der Schaltertafel @0x450C98\n");
 
         // ---- die Einheiten dieser Karte, nach dem Grund gruppiert -----------
         var byReason = new SortedDictionary<string, int>();
@@ -7328,6 +7396,43 @@ public partial class MapEntityLayer : Node2D
                 weapon = InfCompBase + kv.Value.WeaponRow;
             }
         return set >= 0;
+    }
+
+    /// <summary>
+    /// Die ENTWURFSNUMMER eines Fußsoldaten, 0…199 innerhalb des Spielerblocks
+    /// — das, was der Bildzeichner <c>0x4508A0</c> für sein Bild braucht
+    /// (<see cref="UI.PortraitBank.PictureOfInfantry"/>) und was der
+    /// Einheitensatz selbst nicht trägt.
+    ///
+    /// <para><b>Der Weg, und jedes Glied ist schon belegt.</b> Der Satz trägt
+    /// das <c>spodek</c> <c>+0x0b</c>, bei uns <see cref="Entity.Infantry"/>,
+    /// und die Erzeugung <c>@0x4b1abe</c> rechnet es aus der WAFFENZEILE des
+    /// Entwurfs (<c>spodek = (weapon*2 − 124) &amp; 0xFF</c>, mit 185 -> 22 und
+    /// 186 -> 20; siehe <c>aekernel-tools/infantry_designs.py</c>). Die Zeile
+    /// zurück gibt <c>infantry.json</c> als <c>weapon_row</c>, und in
+    /// <c>unit_designs.json</c> gehört jede dieser zwölf Zeilen zu GENAU EINEM
+    /// Entwurf mit Fahrwerk 148/149 — deshalb ist die Nummer eindeutig und muss
+    /// hier nicht geraten werden.</para>
+    ///
+    /// <para>Von den acht Spielerblöcken nehmen wir den niedrigsten Treffer:
+    /// sec47 wiederholt die zwölf Entwürfe in jedem Block Byte für Byte, und
+    /// <c>0x4508A0</c> bekommt die Nummer INNERHALB des Blocks.</para>
+    /// </summary>
+    /// <returns>die Entwurfsnummer, oder −1, wenn der Satz unbekannt ist</returns>
+    private static int InfantryDesignOf(int set)
+    {
+        LoadInfantryDesigns();
+        if (_infDesigns == null || !_infDesigns.TryGetValue(set, out var des)) return -1;
+        LoadDesigns();
+        int best = -1;
+        foreach (var kv in _designBySlot)
+        {
+            var d = kv.Value;
+            if (d.Weapon != des.WeaponRow || d.Propulsion is not (148 or 149)) continue;
+            int nr = kv.Key % DesignsPerPlayer;
+            if (best < 0 || nr < best) best = nr;
+        }
+        return best;
     }
 
     /// <summary>The other way round: from the component a unit carries back to
@@ -12121,6 +12226,51 @@ public partial class MapEntityLayer : Node2D
                  $"-> Bild {(p.ChassisPic > 0 ? "p" + p.ChassisPic.ToString("00") : "keines")}" +
                  (p.Why.Length > 0 ? $" ({p.Why})" : ""));
         return a.Pos - new Vector2(0, AirShadowDrop);
+    }
+
+    /// <summary>
+    /// Derselbe Prüfstand wie <see cref="DebugDemoAirPortrait"/>, nur für einen
+    /// FUSSSOLDATEN: einen anklicken und melden, welches der zwölf Bilder der
+    /// Folge 403 dabei herauskommt. ⭐ Angewählt wird mit einem KLICK, damit die
+    /// Stelle mitgeprüft wird, an der auch die Maus landet.
+    /// </summary>
+    public Vector2? DebugDemoInfPortrait()
+    {
+        int pick = -1, tried = 0;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.Dead || e.Infantry < 0) continue;
+            tried++;
+            SelectAt(e.Pos);
+            // Nicht auf DIESEN Platz bestehen: der Klick trifft, was oben liegt,
+            // und Fußsoldaten stehen dicht. Es reicht, dass EIN Soldat einzeln
+            // angewählt ist — das ist der Fall, den der Bedienblock zeichnet.
+            //
+            // ⚠ <c>_sel.Count</c> ist bei einem FREMDEN Soldaten 0, nicht 1:
+            // SelectAt lässt die Auswahlmenge leer und setzt nur
+            // <c>_selected</c> (»look, do not touch«, 0x2118). Auch dieser Fall
+            // zeichnet ein Bild, denn PanelPortrait wehrt nur <c>n > 1</c> ab.
+            if (_sel.Count > 1 || _selected < 0 ||
+                _entities[_selected].Infantry < 0) continue;
+            pick = _selected;
+            break;
+        }
+        if (pick < 0)
+        {
+            GD.Print($"demo-infpic: {tried} Fusssoldaten angeklickt, keiner einzeln " +
+                     "angewaehlt — diese Karte hat keine oder es liegt etwas davor");
+            return null;
+        }
+        var f = _entities[pick];
+        int design = InfantryDesignOf(f.Infantry);
+        var p = PanelPortrait();
+        GD.Print($"demo-infpic: Klick {tried} traf Platz {f.Slot} Satz {f.Infantry} " +
+                 $"unit_type {f.UnitType} P{f.Owner}, Entwurf {design} " +
+                 $"\"{(design >= 0 && _designBySlot.TryGetValue(design, out var dq) ? dq.Name : "?")}\"" +
+                 $" -> Bild {(p.ChassisPic > 0 ? "p" + p.ChassisPic.ToString("00") : "keines")}" +
+                 (p.Why.Length > 0 ? $" ({p.Why})" : ""));
+        return f.Pos;
     }
 
     /// <summary>Preview harness: pick the owner with the most supply helicopters,

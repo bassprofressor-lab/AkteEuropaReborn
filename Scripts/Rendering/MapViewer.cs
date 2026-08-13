@@ -587,6 +587,10 @@ public partial class MapViewer : Node2D
     private bool _demoState;
     private bool _demoAir;
     private bool _demoAirPic;
+
+    /// <summary>`--demo-infpic` — einen Fusssoldaten anklicken und das Bild der
+    /// Folge 403 unten links zeigen. Das Gegenstück zu `--demo-airpic`.</summary>
+    private bool _demoInfPic;
     private bool _demoInf;
     private bool _demoCrush;
     private bool _demoSupply;
@@ -643,6 +647,7 @@ public partial class MapViewer : Node2D
             else if (a == "--demo-air") { _demo = true; _demoAir = true; }
             // das Flugzeugbild im Bedienblock: ein Flugzeug angewaehlt
             else if (a == "--demo-airpic") { _demo = true; _demoAirPic = true; }
+            else if (a == "--demo-infpic") { _demo = true; _demoInfPic = true; }
             else if (a == "--demo-inf") { _demo = true; _demoInf = true; }
             else if (a == "--demo-crush") { _demo = true; _demoCrush = true; }
             else if (a == "--demo-supply") { _demo = true; _demoSupply = true; }
@@ -872,6 +877,7 @@ public partial class MapViewer : Node2D
                   : _demoSupply ? _entities.DebugDemoSupply()
                   : _demoCrush ? _entities.DebugDemoCrush()
                   : _demoInf ? _entities.DebugDemoInfantry()
+                  : _demoInfPic ? _entities.DebugDemoInfPortrait()
                   : _demoAirPic ? _entities.DebugDemoAirPortrait()
                   : _demoAir ? _entities.DebugDemoAir()
                   : _demoState ? _entities.DebugDemoState()

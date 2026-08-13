@@ -258,6 +258,143 @@ public static class PortraitBank
             : "";
     }
 
+    // ---- die zwölf Infanteriebilder (Folge 403) -----------------------------
+    //
+    // Fall 0 des Zeichners 0x4508A0 verzweigt bei WAFFE >= 0xB9 in den
+    // Infanteriezweig @0x45099B. Der ist kurz und ganz gelesen:
+    //
+    //     0045099B  sub  esi, 0x32                ; esi = Entwurfsnummer
+    //     0045099E  cmp  esi, 0x90                ; 0x90 = 144
+    //     004509A4  ja   0x4509b5                 ; darüber -> Fehlerzweig
+    //     004509A6  xor  eax, eax
+    //     004509A8  mov  al, byte [esi + 0x450ccc] ; die 145er-Bytetafel
+    //     004509AE  jmp  dword [eax*4 + 0x450c98]  ; die SCHALTERTAFEL
+    //     ...
+    //     00450A1C  movsx ecx, word [0x7a4696]     ; Folge 403, start_frame
+    //     00450A24  add  eax, ecx                  ; Bild = first + Fall
+    //
+    // ⚠ **0x450C98 ist KEINE Bytetafel, sondern die Sprungtafel eines
+    // Schalters** — 13 CODEADRESSEN à 4 Byte (0x4509CC, 0x4509D1, … 0x450A0D
+    // und als 13. die 0x4509B5). Jeder der zwölf Zweige besteht aus genau einem
+    // `mov ax, <n>` und einem Sprung auf den gemeinsamen Zeichenschluss
+    // 0x450A11; die zwölf n sind, in dieser Reihenfolge,
+    // **0,1,2,6,4,3,5,7,8,9,11,10**.
+    //
+    // **Damit geht die Eins auf, um die es in diesem Auftrag ging.** Der
+    // Prüfstand meldete 13 Entwürfe ohne Bild gegen 12 Bilder — und die 13
+    // Sprungeinträge sind 12 Fälle PLUS der Fehlerzweig 0x4509B5, der
+    // `"Wrong index of infantry"` (@0x4FE96C) ausgibt. Der Eintrag 12 der
+    // Bytetafel IST dieser Fehlerfall, und die Bytetafel trägt ihn 133 mal:
+    //
+    //     idx   0…  6 -> 0,1,2,3,4,5,6      (Entwurf  50…56)
+    //     idx   7…139 -> 12  (133 Stück)    = "Wrong index of infantry"
+    //     idx 140…144 -> 7,8,9,10,11        (Entwurf 190…194)
+    //
+    // Zwölf Werte 0…11 für zwölf Entwürfe, kein Wert doppelt, keiner fehlt.
+    // Und die Entwurfsliste stimmt dagegen: `unit_designs.json` trägt pro
+    // Spielerblock genau zwölf Entwürfe mit Fahrwerk 148/149, nämlich **50…56**
+    // (Chaingunner, Laser Trooper, Radar Scout, Pioneer, Lander, Target,
+    // Android) und **190…194** (Cpt.Cossarro, Col.Hullman, Com.Wiffer,
+    // Scientist, Civilian). `194 − 0x32 = 144` ist der LETZTE Eintrag der Tafel,
+    // und 144 ist die Zahl, gegen die 0x45099E prüft — die Tafel ist genau so
+    // lang, wie die Entwurfsnummern reichen.
+    //
+    // **Gegenprobe am Bild** (die zwölf Tafeln p74…p85 angesehen). Es sind
+    // gerade die VERTAUSCHUNGEN der Permutation, die sie belegen:
+    //   Pioneer  53 -> Fall 3 -> Bild 6 = p80: Schweißflamme und Schürze
+    //   Target   55 -> Fall 5 -> Bild 3 = p77: Markierstab mit hellem Funken
+    //   Android  56 -> Fall 6 -> Bild 5 = p79: Kapuze, kein Gesicht
+    //   Scientist 193 -> Fall 10 -> Bild 11 = p85: weisser KITTEL und Brille
+    //   Civilian  194 -> Fall 11 -> Bild 10 = p84: Sonnenbrille, Hemd, kein Kittel
+    // Ohne die Sprungtafel (also 1:1 durchgezählt) bekäme der Pionier den
+    // Markierstab und der Zivilist den Laborkittel. Weiter passen
+    // Chaingunner->p74 (Maschinengewehr in den Händen), Laser Trooper->p75
+    // (Strahlwaffe), Radar Scout->p76 (Tornister voller Antennen und Kabel) und
+    // Com.Wiffer->p83 (Gurt-MG, seine Waffenzeile 199 heisst »Schw.M-Gewehr«).
+
+    /// <summary>Die ANIM-Folge der Infanteriebilder — 12 Stück.</summary>
+    public const int InfSequence = 403;
+
+    /// <summary>Die 0x32, die <c>0x45099B</c> von der Entwurfsnummer abzieht:
+    /// Entwurf 50 ist der erste Infanterist.</summary>
+    public const int InfFirstDesign = 0x32;
+
+    /// <summary>Der Eintrag der Bytetafel <c>@0x450CCC</c>, der »kein Bild«
+    /// heisst — der 13. Sprungeintrag, der Fehlerzweig
+    /// <c>"Wrong index of infantry"</c>.</summary>
+    public const int InfNoPicture = 12;
+
+    /// <summary>Die Bytetafel <c>@0x450CCC</c>, Index <c>Entwurf − 0x32</c>:
+    /// nur diese zwölf Indizes tragen etwas anderes als die
+    /// <see cref="InfNoPicture"/>, alle 133 übrigen den Fehlerfall. So
+    /// geschrieben statt als 145er-Feld, weil die zwölf Einträge die Aussage
+    /// sind und die 133 Zwölfen nur Füllung.</summary>
+    private static readonly Dictionary<int, int> InfTable = new()
+    {
+        { 0, 0 }, { 1, 1 }, { 2, 2 }, { 3, 3 }, { 4, 4 }, { 5, 5 }, { 6, 6 },
+        { 140, 7 }, { 141, 8 }, { 142, 9 }, { 143, 10 }, { 144, 11 },
+    };
+
+    /// <summary>Der letzte gültige Index der Tafel oben — die 0x90 aus
+    /// <c>cmp esi, 0x90</c> @0x45099E.</summary>
+    public const int InfLastIndex = 0x90;
+
+    /// <summary>Die zwölf <c>mov ax, n</c> der Schaltertafel <c>@0x450C98</c>,
+    /// in der Reihenfolge ihrer Fälle: aus dem Eintrag der Bytetafel wird die
+    /// laufende Nummer INNERHALB der Folge 403.</summary>
+    private static readonly int[] InfJump = { 0, 1, 2, 6, 4, 3, 5, 7, 8, 9, 11, 10 };
+
+    /// <summary>
+    /// Das Bild eines Fußsoldaten, als Bildnummer der Bank; <b>0 heisst KEIN
+    /// Bild</b>.
+    ///
+    /// <para>⚠ Der Fehlerzweig des Originals gibt <c>"Wrong index of infantry"</c>
+    /// aus und zeichnet danach trotzdem weiter — mit <c>ax = 0</c>, also mit dem
+    /// ERSTEN Bild der Folge (<c>xor ax,ax; jmp 0x450a11</c> @0x4509C4). Wir
+    /// zeichnen dort NICHTS. Der Unterschied ist nicht zu sehen: in den
+    /// Infanteriezweig kommt nur, wessen Waffenzeile ≥ 0xB9 ist, und das sind
+    /// über alle 586 Sätze von <c>unit_designs.json</c> genau die zwölf
+    /// Entwürfe, die die Tafel kennt. Der Zweig ist unerreichbar; ein falsches
+    /// erstes Bild wäre schlimmer als keines.</para>
+    /// </summary>
+    /// <param name="design">Die Entwurfsnummer 0…199 innerhalb des
+    /// Spielerblocks von sec47 (Schrittweite 200).</param>
+    public static int PictureOfInfantry(int design)
+    {
+        int i = design - InfFirstDesign;
+        if (i < 0 || i > InfLastIndex) return 0;             // ja 0x4509b5
+        if (!InfTable.TryGetValue(i, out int a) || a == InfNoPicture) return 0;
+        int first = FirstPictureOf(InfSequence);
+        if (first < 0) return 0;                             // Index ohne »ranges«
+        return first + InfJump[a];
+    }
+
+    /// <summary>Warum ein Fußsoldat kein Bild bekommt — wie
+    /// <see cref="AirTrouble"/> EINE Formulierung für Prüfstand und
+    /// Bedienblock.</summary>
+    public static string InfTrouble(int design)
+    {
+        int i = design - InfFirstDesign;
+        if (i < 0 || i > InfLastIndex)
+            return $"Entwurf {design} liegt ausserhalb 0x32..0xC2 — " +
+                   "0x45099E verwirft ihn (»Wrong index of infantry«)";
+        if (!InfTable.TryGetValue(i, out int a) || a == InfNoPicture)
+            return $"Entwurf {design}: die Tafel @0x450CCC sagt {InfNoPicture} — " +
+                   "»Wrong index of infantry«, kein Infanterieentwurf";
+        return FirstPictureOf(InfSequence) < 0
+            ? "portraits_index.json nennt keine »ranges« — Folge 403 unbekannt"
+            : "";
+    }
+
+    /// <summary>Alle Entwurfsnummern, die die Tafel <c>@0x450CCC</c> als
+    /// Infanterie führt — für den Prüfstand, damit er die ZWÖLF nachzählen kann,
+    /// ohne sie selbst zu wissen.</summary>
+    public static IEnumerable<int> InfantryDesigns()
+    {
+        foreach (var kv in InfTable)
+            if (kv.Value != InfNoPicture) yield return kv.Key + InfFirstDesign;
+    }
+
     /// <summary>
     /// Die fertige Einheit in einen Kasten malen: Mulde füllen, Fahrwerk, dann
     /// Aufbauteil darüber — gleicher Ursprung, wie <c>0x46D5DF</c>/<c>0x46D63A</c>
