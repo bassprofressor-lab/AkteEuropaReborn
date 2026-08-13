@@ -2031,10 +2031,17 @@ public partial class MapEntityLayer : Node2D
                _oy + row * TileH - ElevOf(col, row) * 15 + TileH / 2f);
 
     /// <summary>
-    /// Where a unit's picture belongs: the middle of its BODY, not of its anchor
-    /// cell. The record names one cell, but the imap stamps a unit into every
-    /// cell it covers, and the importer measures that (CwmData.UnitFootprints).
-    /// For the 1x1 that everything else is, this is CellCenter unchanged.
+    /// Where a unit STANDS: the middle of its BODY, not of its anchor cell. The
+    /// record names one cell, but the imap stamps a unit into every cell it
+    /// covers, and the importer measures that (CwmData.UnitFootprints). For the
+    /// 1x1 that everything else is, this is CellCenter unchanged.
+    ///
+    /// <para>⚠ 13.08.2026 — hier stand »where a unit's PICTURE belongs«, und das
+    /// BILD hing tatsächlich daran. Das war der Fehler hinter »der Rahmen liegt
+    /// eine halbe Schiffslänge neben dem Schiff«: das Original zeichnet auf die
+    /// SATZZELLE, die Ausdehnung über den Grundriss steckt im Bild selbst. Diese
+    /// Mitte hier ist die Trefferfläche und der Standort — das Bild hängt an
+    /// <see cref="PictureAnchor"/>.</para>
     /// </summary>
     private Vector2 BodyCenter(Entity e)
     {
@@ -2053,6 +2060,60 @@ public partial class MapEntityLayer : Node2D
         var size = new Vector2(TileW * Mathf.Max(1, e.FootW), TileH * Mathf.Max(1, e.FootH));
         return new Rect2(e.Pos - size / 2f, size);
     }
+
+    /// <summary>
+    /// <b>DER ANKER DES BILDES</b> — die Zelle AUS DEM SATZ, nicht die Mitte des
+    /// Grundrisses. Für alles, was 1x1 ist (also fast alles), ist das
+    /// <see cref="Entity.Pos"/> unverändert.
+    ///
+    /// <para>⚠ Gemeldet am 13.08.2026: beim Schlachtschiff (Rumpf 157) und beim
+    /// Kreuzer (158) liegen Auswahlrahmen, Lebensbalken und Besitzerring »eine
+    /// halbe Schiffslänge« neben dem sichtbaren Schiff. NICHT DER RAHMEN LAG
+    /// FALSCH, SONDERN DAS BILD, und zwar um genau den halben Grundriss:
+    /// <see cref="BodyCenter"/> schiebt <c>Pos</c> auf die Mitte der
+    /// Grundrissfläche (beim 4x4-Schlachtschiff 60 px nach rechts und 30 px nach
+    /// unten), und das Bild hing daran mit.</para>
+    ///
+    /// <para><b>Das Original zeichnet auf die SATZZELLE.</b> Der Zeichner holt
+    /// seinen Punkt aus <c>word[einheit+0xab806e/+0xab8070]</c>, und geschrieben
+    /// wird der @0x4300C0: Spalte und Zeile kommen als <c>byte[+0x6e26c8]</c> /
+    /// <c>byte[+0x6e26c9]</c> — die Felder DES SATZES — und daraus wird
+    /// <c>x = spalte·0x28 − bildlauf + korrektur − 0x14</c> (@0x430643..0x4306FD,
+    /// Fall 4 = Schiffe; die Fälle 0/1/3/5 rechnen bis auf +4 px dasselbe).
+    /// <b>Kein Fall trägt einen Term über die Größe der Einheit.</b> Der
+    /// Zeichner selbst (Schiffe ab 0x42AC50) setzt den Rumpf mit
+    /// <c>push y; push x</c> unverändert ab — die Ausdehnung nach rechts und
+    /// unten steckt im BILD, im <c>leftoff</c> jeder Bildzeile
+    /// (UNIT_SPRITES_RE.md §2). Darum ist der Grundriss aus der imap genau so
+    /// groß wie das Bild: Bauteil 100 reicht bis 200 px nach rechts, das
+    /// Schlachtschiff belegt 4 Zellen = 160 px, und mit diesem Anker liegt die
+    /// KIELLINIE von Blick 0 (Bildunterkante 126) auf 81 px unter der
+    /// Grundrissoberkante — der Grundriss ist 80 hoch.</para>
+    ///
+    /// <para><b>Gemessen</b> über alle Schiffe der 11 Karten, die Schiffe
+    /// tragen, sichtbare Fläche des Rumpfbildes gegen den Grundriss aus der imap
+    /// (Abstand der Mitten in x, und wieviele ganz im Grundriss liegen):
+    /// <code>
+    /// Rumpf  Grundriss  n | vorher: |dx|  drin | nachher: |dx|  drin
+    ///   150        2x2 23 |        12,5 23/23 |          7,5 23/23
+    ///   151        2x2 13 |        13,3 11/13 |          6,7 11/13
+    ///   152        2x2  8 |         9,5   8/8 |         10,5   8/8
+    ///   153        2x2  8 |        19,5   0/8 |          0,5   8/8
+    ///   157        4x4  4 |        79,0   0/4 |         19,0   4/4
+    /// </code>
+    /// Die kleinen Rümpfe rücken um eine halbe Zelle und bleiben drin, der
+    /// Frachter (153) und das Schlachtschiff kommen überhaupt erst herein.
+    /// Beim Schlachtschiff ragte das Bild bis zu 59 px aus seinem eigenen
+    /// Grundriss heraus; jetzt 0.</para>
+    ///
+    /// <para>⚠ <see cref="Entity.Pos"/> selbst bleibt die Mitte des
+    /// Grundrisses: daran hängen Trefferfläche, Auswahl, Ring und Balken, und
+    /// die Fläche AUS DER IMAP ist die Aussage der Karte darüber, wo das Schiff
+    /// steht. Verschoben wird nur, was gezeichnet wird.</para>
+    /// </summary>
+    private static Vector2 PictureAnchor(Entity e)
+        => e.Pos - new Vector2((Mathf.Max(1, e.FootW) - 1) * TileW / 2f,
+                               (Mathf.Max(1, e.FootH) - 1) * TileH / 2f);
 
     /// <summary>Place every entity on its cell and claim that cell on the grid.</summary>
     private void InitEntityMovement()
@@ -14231,7 +14292,18 @@ public partial class MapEntityLayer : Node2D
     /// <para>⚠ Betroffen ist nur das SPRITE. Mündungsfeuer und Leuchtspur gehen
     /// weiter über <see cref="TurretOffset"/>, das für diese zwei Rümpfe
     /// <c>Zero</c> liefert — sie erscheinen also am Rumpfmittelpunkt. Ob das
-    /// bleiben soll, ist nicht entschieden und steht im Handoff.</para></summary>
+    /// bleiben soll, ist nicht entschieden und steht im Handoff.</para>
+    ///
+    /// <para><b>NACHTRAG 13.08.2026, und damit ist dieser offene Punkt erledigt:</b>
+    /// »am Rumpfmittelpunkt« heißt <c>Pos</c>, und das ist die Mitte des
+    /// Grundrisses aus der imap. Seit <see cref="PictureAnchor"/> das BILD auf die
+    /// Satzzelle zurückholt, liegt diese Mitte AUF dem Schiff: die sichtbare
+    /// Fläche des Rumpfbildes deckt beim Schlachtschiff die Grundrisspunkte
+    /// 67..127 von 0..160 in x und −41..81 von 0..80 in y ab, und zwar in allen
+    /// acht Blickrichtungen — die Mitte (80; 40) liegt in jedem Fall darin.
+    /// Vorher lag sie 60 px links des Schiffes im leeren Wasser. Mündungsfeuer
+    /// und Leuchtspur sitzen damit auf dem Schiff, ohne dass an ihnen eine Zeile
+    /// geändert wurde.</para></summary>
     private static bool HullCarriesItsOwnGun(int unitType) =>
         unitType is 157 or 158;
 
@@ -15158,7 +15230,7 @@ public partial class MapEntityLayer : Node2D
             if (e.Dead && _drawSprites)
             {
                 var body = GetInfantryTexture(e.Infantry, e.Facing, InfBlock(e));
-                if (body != null) DrawTexture(body, e.Pos - ComposedAnchor);
+                if (body != null) DrawTexture(body, PictureAnchor(e) - ComposedAnchor);
                 continue;
             }
             if (e.Dead) continue;
@@ -15173,6 +15245,10 @@ public partial class MapEntityLayer : Node2D
 
             var oc = OwnerColor(e.Owner);
             var baseC = e.Pos;
+            // ⚠ Der Punkt, an dem das BILD haengt, ist NICHT baseC: er liegt auf
+            // der Zelle des Satzes, nicht auf der Mitte des Grundrisses — siehe
+            // PictureAnchor. Fuer alles, was 1x1 ist, sind beide gleich.
+            var picC = PictureAnchor(e);
             // owner ring on the ground under the unit
             DrawArc(baseC, 7f, 0, Mathf.Tau, 20, new Color(oc.R, oc.G, oc.B, 0.9f), 2f);
 
@@ -15193,7 +15269,7 @@ public partial class MapEntityLayer : Node2D
                 if (e.Infantry >= 0)
                 {
                     var foot = GetInfantryTexture(e.Infantry, e.Facing, InfBlock(e));
-                    if (foot != null) { DrawTexture(foot, baseC - ComposedAnchor); continue; }
+                    if (foot != null) { DrawTexture(foot, picC - ComposedAnchor); continue; }
                 }
                 // hull + separately aimed turret (preferred)
                 // ⚠ Die Hangklasse gilt fuer BEIDE. Der Turmsitz wurde schon
@@ -15203,10 +15279,10 @@ public partial class MapEntityLayer : Node2D
                 var hull = GetHullTexture(e.UnitType, e.Facing, PoseOf(e), slope);
                 if (hull != null)
                 {
-                    DrawTexture(hull, baseC - ComposedAnchor);
+                    DrawTexture(hull, picC - ComposedAnchor);
                     var turret = GetTurretTexture(e.Weapon, aim, slope);
                     if (turret != null && !HullCarriesItsOwnGun(e.UnitType))
-                        DrawTexture(turret, baseC - ComposedAnchor
+                        DrawTexture(turret, picC - ComposedAnchor
                                             + TurretOffset(e.UnitType, e.Col, e.Row));
                     continue;
                 }
@@ -15214,7 +15290,7 @@ public partial class MapEntityLayer : Node2D
                 if (composed != null)
                 {
                     // fixed 64x56 canvas, anchored at the unit's ground-center
-                    DrawTexture(composed, baseC - ComposedAnchor);
+                    DrawTexture(composed, picC - ComposedAnchor);
                     continue;
                 }
                 // bare chassis (e.g. a freshly produced design) — the turret is
@@ -15222,10 +15298,10 @@ public partial class MapEntityLayer : Node2D
                 var bare = GetUnitTexture(e.UnitType, e.Facing);
                 if (bare != null)
                 {
-                    DrawTexture(bare, new Vector2(baseC.X - bare.GetWidth() / 2f,
-                                                  baseC.Y - bare.GetHeight()));
+                    DrawTexture(bare, new Vector2(picC.X - bare.GetWidth() / 2f,
+                                                  picC.Y - bare.GetHeight()));
                     var turret2 = GetTurretTexture(e.Weapon, aim);
-                    if (turret2 != null) DrawTexture(turret2, baseC - ComposedAnchor);
+                    if (turret2 != null) DrawTexture(turret2, picC - ComposedAnchor);
                     continue;
                 }
             }
