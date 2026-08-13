@@ -10653,12 +10653,22 @@ public partial class MapEntityLayer : Node2D
     ///
     /// <para>Gezählt wird, was <see cref="DrawRailUpTo"/> tatsächlich tut: ein
     /// Stück ist verdeckungsgefährdet, wenn seine <c>DrawRow</c> kleiner oder
-    /// gleich der vordersten Grundrisszeile eines Gebäudes ist, dessen
-    /// MUSTERFLÄCHE seine Zelle enthält. Die Musterfläche, nicht der Grundriss —
-    /// das Muster ist zehn Spalten breit und reicht über den Grundriss hinaus,
-    /// und genau dort liegen die Linienenden (Spalte −1 bis +7).</para>
+    /// gleich der vordersten Grundrisszeile seines Endgebäudes ist.</para>
     ///
-    /// <para>⚠ »Gefährdet« ist nicht »unsichtbar«: ob an der Stelle im Muster
+    /// <para>⚠ <b>ERSTER ANLAUF ZÄHLTE DAS FALSCHE.</b> Er nahm JEDES Gleisstück,
+    /// dessen Zelle auf der Musterfläche eines Gebäudes liegt — und meldete auf
+    /// map_NET02 »83 von 86 vor ihrem Gebäude«, mit der Verschiebung 2 genauso wie
+    /// ohne. Die Musterfläche ist zehn Spalten breit und sechs Zeilen hoch; die
+    /// 86 waren fast alle Stücke, die weit ÜBER dem Gebäudekörper vorbeilaufen
+    /// und dort nie verdeckt werden. Die Zahl bewegte sich nicht, weil sie nicht
+    /// am Gegenstand der Meldung gemessen hat.</para>
+    ///
+    /// <para>Gezählt werden jetzt die <b>LINIENENDEN</b> — das letzte Stück einer
+    /// Kette gegen das Gebäude, an dem diese Kette endet. Das ist genau, was der
+    /// Spieler beschreibt (»die letzte Strecke zur Anbindung«), und die Zahl
+    /// bewegt sich mit der Verschiebung.</para>
+    ///
+    /// <para>⚠ »Verdeckt« ist nicht »unsichtbar«: ob an der Stelle im Muster
     /// wirklich ein Bildpunkt steht, sagt erst das Bild. Die Zahl ist die
     /// obere Schranke und der Hebel, an dem sich die Änderung messen lässt —
     /// mit <c>--rail-lay=bucket0</c> muss sie steigen.</para></summary>
@@ -10702,30 +10712,32 @@ public partial class MapEntityLayer : Node2D
         RailTilesUnderBuilding = 0;
         RailTilesUnderChecked = 0;
         RailUnderWorstWhere = "";
-        if (Patterns == null) return;
-        // Musterzelle -> vorderste Grundrisszeile des Gebaeudes, das sie bedeckt
-        var cover = new Dictionary<(int, int), (int Front, int Slot, int Type)>();
+        int bias = RailProbeBucket0 ? 0 : RailDrawRowBias;
+        var bySlot = new Dictionary<int, Entity>();
         foreach (var e in _entities)
+            if (e.IsBuilding && !e.Dead) bySlot[e.Slot] = e;
+        if (bySlot.Count == 0) return;
+
+        foreach (var l in _railLines)
         {
-            if (!e.IsBuilding || e.Dead) continue;
-            var cells = BuildingPatternCells(e);
-            if (cells == null) continue;
-            int front = e.Row + Mathf.Max(1, e.FootH) - 1;
-            foreach (var (c, r) in cells)
-                if (!cover.ContainsKey((c, r)) || cover[(c, r)].Front < front)
-                    cover[(c, r)] = (front, e.Slot, e.BType);
-        }
-        if (cover.Count == 0) return;
-        foreach (var t in tiles)
-        {
-            int col = Mathf.RoundToInt((t.At.X - _ox - TileW / 2f) / TileW);
-            if (!cover.TryGetValue((col, t.Row), out var cv)) continue;
-            RailTilesUnderChecked++;
-            if (t.DrawRow > cv.Front) continue;         // wird NACH dem Gebaeude gezeichnet
-            RailTilesUnderBuilding++;
-            if (RailUnderWorstWhere.Length == 0)
-                RailUnderWorstWhere = $"Zelle ({col},{t.Row}) Zeichenzeile {t.DrawRow} " +
-                                      $"gegen Platz {cv.Slot} Typ {cv.Type} bis Zeile {cv.Front}";
+            if (!_lineCell.TryGetValue(l.Slot, out var cells) || cells.Count < 2) continue;
+            // Die Kette laeuft Bud1 -> Bud2 (RailChainFlipped hat sie gedreht),
+            // also gehoert das erste Glied zu Bud1 und das letzte zu Bud2.
+            foreach (var (cell, slot) in new[]
+                     { (cells[0], l.Bud1), (cells[^1], l.Bud2) })
+            {
+                if (!bySlot.TryGetValue(slot, out var b)) continue;
+                RailTilesUnderChecked++;
+                int row = Mathf.RoundToInt(cell.Y);
+                int front = RailThroughRowFor(b);
+                if (row + bias > front) continue;   // wird NACH dem Gebaeude gezeichnet
+                RailTilesUnderBuilding++;
+                if (RailUnderWorstWhere.Length == 0)
+                    RailUnderWorstWhere =
+                        $"Linie {l.Slot}, Zelle ({cell.X:0},{row}) Zeichenzeile {row + bias} " +
+                        $"gegen Platz {slot} Typ {b.BType} auf ({b.Col},{b.Row}) " +
+                        $"{b.FootW}x{b.FootH}, vorderste Zeile {front}";
+            }
         }
     }
 
@@ -10782,6 +10794,87 @@ public partial class MapEntityLayer : Node2D
     /// reicht. Ein Gleis, das vor einem Gebäude (weiter südlich) vorbeiläuft,
     /// bleibt damit sichtbar, eines im Grundriss verschwindet darunter.</para>
     /// </summary>
+    /// <summary>
+    /// <b>Bis zu welcher Zeichenzeile darf die Strecke VOR diesem Gebäude
+    /// gezeichnet werden?</b> — <c>Zeile + 4</c>, und beide Summanden sind
+    /// gelesen.
+    ///
+    /// <para>⭐ 13.08.2026. Hier stand <c>b.Row + Mathf.Max(1, b.FootH) − 1</c>,
+    /// also die Tiefe des GRUNDRISSES. Das war UNSERE Konstruktion, und sie ist
+    /// eine andere Größe als die des Originals: der Grundriss ist je Gebäude
+    /// 4, 5 oder 6 Zeilen tief, das Original rechnet mit einer FESTEN Zahl.</para>
+    ///
+    /// <para><b>Die beiden Fächer, gelesen.</b> Zeichenliste und Fächerung sind
+    /// dieselben für Gleis und Gebäude (bis 70 Fächer, je bis 499 Einträge,
+    /// Zähler ab 0xAB93F0, Einträge ab 0xAB8068). Beide Aufbauroutinen hängen
+    /// nebeneinander am Sammler @0x430DC0 — Gebäude @0x430E03, Gleis
+    /// @0x430E08:</para>
+    /// <code>
+    ///   Gleis   @0x42DF40, Feld 0xC2C222:
+    ///     0x42DFCE  sub bx, [0x5387B0]     ; bx = zeile - kamerazeile
+    ///     0x42DFE9  lea ecx, [ebx + 2]     ; FACH = zeile + 2
+    ///
+    ///   Gebaeude @0x42FCD0, Feld 0xC06944:
+    ///     0x42FD4D  add bx, 3              ; zeile + 3   (wenn +0x34 == 0)
+    ///     0x42FD53  sonst: add bx, [+0x36]
+    ///     0x42FDA6  sub bx, [0x5387B0]
+    ///     0x42FDB8  lea eax, [ebx + 2]     ; FACH = zeile + 3 + 2 = zeile + 5
+    /// </code>
+    ///
+    /// <para><b>Dass die 3 wirklich nur die REIHENFOLGE meint, steht daneben:</b>
+    /// dieselbe <c>bx</c> geht danach in den Schirm-y (<c>imul bx, bx, 0x14</c>
+    /// @0x42FDC4), und der zieht <c>0x3C = 60</c> ab (@0x42FDC8) — genau
+    /// <c>3 · 20</c>. Die 3 hebt sich in der LAGE exakt heraus und wirkt nur im
+    /// Fach. Für den Fall <c>+0x34 != 0</c> rechnet @0x42FDD5..@0x42FDE8 die
+    /// Differenz <c>(3 − [+0x36]) · 20</c> wieder auf y auf — dieselbe
+    /// Verrechnung, anderer Wert.</para>
+    ///
+    /// <para><b>Daraus die Regel:</b> ein Gleisstück in Zellzeile <c>R</c> liegt
+    /// vor einem Gebäude in Zeile <c>B</c>, solange
+    /// <c>R + 2 &lt; B + 5</c>, also <c>R ≤ B + 2</c>. Da
+    /// <see cref="RailTile.DrawRow"/> schon <c>R + 2</c> ist, ist die Schranke
+    /// <c>B + 4</c>. Das Original verdeckt also die Zeilen <c>B</c>, <c>B+1</c>
+    /// und <c>B+2</c> und zeigt die Strecke ab <c>B+3</c> — unabhängig davon, wie
+    /// tief der Grundriss ist.</para>
+    ///
+    /// <para>⚠ <b>Was sich dadurch ÄNDERT, und was nicht.</b> Bei Grundriss 5
+    /// war die alte Rechnung zufällig richtig (<c>B+4</c> in beiden). Bei 4 haben
+    /// wir eine Zeile zu wenig verdeckt, bei 6 eine zu viel. Der gemeldete Fall —
+    /// Linienende auf <c>B+2</c> an Fabrik, Mine und Flughafen — bleibt
+    /// verdeckt, in beiden Rechnungen; <b>das ist die Lage des Originals und
+    /// nicht unser Fehler</b>, siehe den Bericht. Diese Änderung macht die
+    /// Reihenfolge treu, sie macht das Anschlussstück nicht sichtbar.</para>
+    ///
+    /// <para>Gegenprobe: <c>--rail-lay=footh</c> nimmt die alte Rechnung nach
+    /// dem Grundriss zurück.</para></summary>
+    private static int RailThroughRowFor(Entity b)
+        => RailProbeFootH
+               ? b.Row + Mathf.Max(1, b.FootH) - 1
+               : b.Row + BuildingDrawRowBias + RailDrawRowBias - 1;
+
+    /// <summary>Um wieviele Zeilen SPÄTER als seine eigene Zeile wird ein Gebäude
+    /// einsortiert — <c>3</c>, gelesen an @0x42FD4D. Siehe
+    /// <see cref="RailThroughRowFor"/>.</summary>
+    private const int BuildingDrawRowBias = 3;
+
+    /// <summary>Gegenprobe (<c>--rail-lay=footh</c>): wieder nach der Tiefe des
+    /// Grundrisses statt nach der festen 3 des Originals.</summary>
+    public static bool RailProbeFootH
+    {
+        get
+        {
+            if (_probeFootH.HasValue) return _probeFootH.Value;
+            bool hit = false;
+            foreach (string a in OS.GetCmdlineUserArgs())
+                if (a.StartsWith("--rail-lay=") && a["--rail-lay=".Length..].Contains("footh"))
+                    hit = true;
+            _probeFootH = hit;
+            return hit;
+        }
+    }
+
+    private static bool? _probeFootH;
+
     private void DrawRailUpTo(int throughRow, ref int at)
     {
         var tiles = RailTiles();
@@ -10821,7 +10914,7 @@ public partial class MapEntityLayer : Node2D
                 // Ein Gebäude verdeckt alles bis zu seiner VORDERSTEN Zeile —
                 // sein Grundriss reicht so weit nach unten, und jede Kachel
                 // darin wird in ihrer eigenen Zeile gestempelt.
-                DrawRailUpTo(b.Row + Mathf.Max(1, b.FootH) - 1, ref at);
+                DrawRailUpTo(RailThroughRowFor(b), ref at);
                 DrawBuildingBody(b);
             }
         DrawRailUpTo(int.MaxValue, ref at);

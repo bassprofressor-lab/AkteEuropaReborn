@@ -2283,8 +2283,8 @@ public partial class MapEntityLayer : Node2D
         // ist eine Frage der REIHENFOLGE, nicht des Abstands. Siehe
         // MapEntityLayer.RailDrawRowBias und RailCountTilesUnderBuildings.
         sb.Append($" | Anbindung: {RailTilesUnderBuilding} von {RailTilesUnderChecked} " +
-                  "Gleisstuecken auf Musterflaeche werden VOR ihrem Gebaeude " +
-                  $"gezeichnet (Verschiebung {(MapEntityLayer.RailProbeBucket0 ? 0 : 2)} " +
+                  "LINIENENDEN werden VOR ihrem Endgebaeude gezeichnet, liegen also " +
+                  $"darunter (Verschiebung {(MapEntityLayer.RailProbeBucket0 ? 0 : 2)} " +
                   "Zeilen, @0x42DFE9)");
         if (RailTilesUnderBuilding > 0)
             sb.Append($", erstes: {RailUnderWorstWhere}");
