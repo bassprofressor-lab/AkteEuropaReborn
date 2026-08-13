@@ -1111,6 +1111,121 @@ public partial class MapEntityLayer : Node2D
         return map;
     }
 
+    /// <summary>
+    /// <b>NICHT JEDER MEHRZELLIGE STEMPEL IST EIN GRUNDRISS.</b> Ein Stempel von
+    /// GENAU ZWEI Zellen, unter denen die Satzzelle ist, ist ein SCHRITT: die
+    /// Zelle, auf der die Einheit steht, und die Nachbarzelle, die sie sich für
+    /// den nächsten Schritt sichert. Solche Einheiten sind 1x1.
+    ///
+    /// <para>⚠ 13.08.2026. Gemeldet war »bei zehn Landeinheiten sitzt der
+    /// Auswahlrahmen eine halbe Zelle daneben« mit dem Verdacht,
+    /// <see cref="BodyCenter"/> nehme den Kasten in der falschen Richtung. Beim
+    /// Nachzählen über alle 26 Karten ist es anders gekommen — und zwar in beide
+    /// Richtungen anders:</para>
+    ///
+    /// <para><b>1. Es sind nicht zehn, es sind 64.</b> Von 1543 gesetzten
+    /// Einheiten tragen 1068 einen Stempel, davon 121 mehr als eine Zelle. 50
+    /// davon haben die Satzzelle NICHT in der linken oberen Ecke ihres Kastens
+    /// (161 (57,186) → (56,186)..(57,187) war der gemeldete Fall, DM_3
+    /// Steckplatz 1020).</para>
+    ///
+    /// <para><b>2. Der Kasten ist bei diesen 64 überhaupt kein Körper.</b> Die
+    /// Formen je Rumpf sagen es: die SCHIFFE stempeln volle Rechtecke — 150/151/
+    /// 152/153 immer 2x2 mit vier Zellen, 157 4x4 mit sechzehn, kein
+    /// Gegenbeispiel, Satzzelle immer links oben. Die LANDEINHEITEN sind
+    /// erdrückend einzellig (Rumpf 161: 191 x 1x1, 163: 226 x 1x1) und tragen im
+    /// Ausnahmefall <b>genau zwei</b> Zellen — nie drei, nie vier. Ein Körper von
+    /// zwei Zellen gibt es in diesem Spiel nicht; Körper sind quadratisch.</para>
+    ///
+    /// <para><b>3. Die zweite Zelle liegt in der BLICKRICHTUNG.</b> Das ist der
+    /// Beweis. Über alle 64 Fälle, die Richtung der zweiten Zelle gegen
+    /// <c>facing</c> (+0x02):
+    /// <code>
+    ///   Blick 0 → (0,+1)   1 → (−1,+1)   2 → (−1,0)   3 → (−1,−1)
+    ///         4 → (0,−1)   5 → (+1,−1)   6 → (+1,0)   7 → (+1,+1)
+    /// </code>
+    /// Eine geschlossene Windrose, 60 von 64 treffen sie aufs Feld; die vier
+    /// Ausreißer sind alle Blick 0 (drei zeigen nach (0,−1), einer nach (+1,+1)).
+    /// Die Blicke 1..7 stimmen zu 55 von 55. Ein Grundriss weiß nichts von der
+    /// Blickrichtung — ein Schritt schon. Dazu passt, dass das Bewegungswerk des
+    /// Originals seine Fehlersuchtexte »move D«..»move L«, »move kolik:« und
+    /// »on square« genau um diese Reservierung herum ausgibt
+    /// (GAMESTATE_RE.md 3.93).</para>
+    ///
+    /// <para><b>Was das ändert.</b> <see cref="BodyCenter"/> bleibt, wie es ist:
+    /// <c>Col..Col+FootW−1</c> ist für JEDEN echten Körper der 26 Karten richtig
+    /// — kein Stempel mit drei oder mehr Zellen hat die Satzzelle woanders als
+    /// links oben. Der Kasten musste also nicht anders GERECHNET, er musste
+    /// anders GELESEN werden. Hier fällt der Schritt heraus, und damit rückt
+    /// <c>Pos</c> dieser 64 Einheiten von der Kastenmitte auf ihre Satzzelle —
+    /// eine halbe Zelle, genau die gemeldete Verschiebung von Rahmen, Ring und
+    /// Balken.</para>
+    ///
+    /// <para><b>Gemessen</b>, alle 1068 gestempelten Einheiten der 26 Karten:
+    /// liegt der Rahmen (<see cref="BodyRect"/>) vollständig auf Zellen, die die
+    /// imap DIESER Einheit zuschreibt?
+    /// <code>
+    ///                                 vorher    nachher
+    ///   Rahmen ganz auf eigenem Grund   1010       1061   von 1068
+    ///   Rahmenzellen fremd oder leer     118          7
+    /// </code>
+    /// Die 7 Reste sind zwei Frachter (153) auf map_08, deren 2x2-Stempel eine
+    /// Zelle durch einen späteren Stempel verloren hat, und fünf Frachter auf
+    /// map_05/08, deren Stempel überhaupt nur eine Zelle hat, und zwar NEBEN der
+    /// Satzzelle. Beide Sorten sind von dieser Änderung nicht berührt.</para>
+    ///
+    /// <para>⚠ <b>Die 121 Bilder, die 50b732a gerade richtig gestellt hat, können
+    /// hier nicht kaputtgehen</b> — und das ist keine Hoffnung, sondern Rechnung:
+    /// <see cref="PictureAnchor"/> nimmt von <c>Pos</c> genau den halben
+    /// Grundriss wieder ab, den <see cref="BodyCenter"/> aufgeschlagen hat, also
+    /// ist der Zeichenpunkt <c>CellCenter(Col,Row)</c> — unabhängig von FootW und
+    /// FootH. Nachgerechnet über alle 1543 Einheiten: 64 Mal bewegt sich
+    /// <c>Pos</c>, 6 Mal der Zeichenpunkt, und zwar um 7,5 px = eine halbe
+    /// Höhenstufe, weil bei diesen sechs die beiden Zellen des Schritts auf
+    /// verschiedener Höhe liegen. Das Bild rückt dort auf den Boden SEINER
+    /// eigenen Zelle. Die 56 Schiffe, das 138er und die 947 einzelligen sind
+    /// Bildpunkt für Bildpunkt unverändert.</para>
+    /// </summary>
+    private void DropSteppingFootprints(GDict root)
+    {
+        if (!root.TryGetValue("spatial", out var sv) ||
+            sv.VariantType != Variant.Type.Dictionary) return;
+        var sp = sv.AsGodotDictionary<string, Variant>();
+        if (!sp.TryGetValue("nonempty", out var nv) ||
+            nv.VariantType != Variant.Type.Array) return;
+
+        // Die Zellen je Steckplatz, AUS der Belegungskarte gelesen statt aus
+        // FootW/FootH zurückgerechnet. ⚠ Die imap selbst ist SPALTENWEISE
+        // (Spalte*256 + Zeile) — hier stehen Spalte und Zeile schon getrennt,
+        // der Export hat das Umrechnen erledigt (CwmData.Spatial).
+        var cells = new Dictionary<int, List<(int Col, int Row)>>();
+        foreach (var item in nv.AsGodotArray())
+        {
+            if (item.VariantType != Variant.Type.Dictionary) continue;
+            var c = item.AsGodotDictionary<string, Variant>();
+            int v = GetI(c, "value", -1);
+            if (v is < 0 or >= 8000) continue;         // kein Einheitensteckplatz
+            if (!cells.TryGetValue(v, out var l)) cells[v] = l = new List<(int, int)>();
+            l.Add((GetI(c, "col"), GetI(c, "row")));
+        }
+
+        int steps = 0;
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.Slot < 0) continue;
+            if (!cells.TryGetValue(e.Slot, out var l) || l.Count != 2) continue;
+            // die Satzzelle MUSS eine der beiden sein — sonst ist der Stempel
+            // nicht der Schritt dieser Einheit, sondern ein Rest
+            if (!l.Contains((e.Col, e.Row))) continue;
+            e.FootW = 1;
+            e.FootH = 1;
+            steps++;
+        }
+        if (steps > 0)
+            GD.Print($"imap: {steps} Einheiten stehen im Schritt " +
+                     "(Stempel genau zweizellig) — Grundriss 1x1, nicht 2x1/1x2/2x2");
+    }
+
     private bool LoadEntitiesJson(string name, int ox, int oy, Dictionary<(int, int), int> elev)
     {
         string path = Core.Content.Path($"Maps/{name}.entities.json");
@@ -1221,6 +1336,9 @@ public partial class MapEntityLayer : Node2D
                 if (last.Weapon > 0 && last.AmmoMax > 0)
                     _ammoCap[last.Weapon] = last.AmmoMax;   // capacity per weapon
             }
+            // ⚠ und jetzt die Gegenprobe an der imap selbst: nicht jeder
+            // mehrzellige Stempel ist ein Grundriss — siehe StampIsAStep.
+            DropSteppingFootprints(root);
         }
 
         if (root.TryGetValue("markers", out var mv) && mv.VariantType == Variant.Type.Array)
@@ -2042,6 +2160,15 @@ public partial class MapEntityLayer : Node2D
     /// SATZZELLE, die Ausdehnung über den Grundriss steckt im Bild selbst. Diese
     /// Mitte hier ist die Trefferfläche und der Standort — das Bild hängt an
     /// <see cref="PictureAnchor"/>.</para>
+    ///
+    /// <para>⚠ 13.08.2026, zweiter Nachtrag: <c>Col..Col+FootW−1</c> ist RICHTIG
+    /// und darf nicht »in die andere Richtung« gedreht werden. Der Verdacht war,
+    /// der Kasten liege bei manchen Einheiten links/oberhalb der Satzzelle. Er
+    /// tut es — aber nur bei Stempeln von GENAU ZWEI Zellen, und die sind kein
+    /// Körper, sondern ein Schritt. Nachgezählt über alle 26 Karten: kein Stempel
+    /// mit drei oder mehr Zellen hat die Satzzelle woanders als in seiner linken
+    /// oberen Ecke. Gelesen wird das in
+    /// <see cref="DropSteppingFootprints"/>, dort steht die Zählung.</para>
     /// </summary>
     private Vector2 BodyCenter(Entity e)
     {
