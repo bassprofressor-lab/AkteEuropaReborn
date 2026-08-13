@@ -596,11 +596,15 @@ at the screen.
   the original gives each wagon its own counter and its own route pointer, and
   the routine that staggers their departure has not been read yet. Any repair
   before that would be an invention.
-- **The trigger rule of campaign 2's sub-mission is not entered.** It needs an
-  OR and the rule vocabulary only has AND. The sub-mission therefore does not
-  start at all — a visible gap instead of a silent, wrong reward.
-- **Mission 5 is complete on the script side but not yet winnable in play.**
-  It needs a running production; the test rig supplies one.
+- ~~**The trigger rule of campaign 2's sub-mission is not entered.**~~
+  **Closed within this release.** The vocabulary knows **OR** now — the original
+  writes it as two queries in a row, and three rules that had never made it into
+  the file came with it (campaign 2 at `0x498EEC`, campaign 3 at `0x4996B7`,
+  mission 15 at `0x49D89D`). Campaign 2's sub-mission starts at all now.
+- ~~**Mission 5 is not yet winnable in play.**~~ **Withdrawn** — the defect was
+  in the test rig, which handed over an arbitrary building. `--produce-check`
+  shows independently that mission 5 wins in six seconds once it has its
+  factories.
 - **Missions 21 and 28 have no script** — the only two of the 33.
 - **Unit classes 1..4 are not told apart** in every place; where a rule needs
   them, the data file says so.

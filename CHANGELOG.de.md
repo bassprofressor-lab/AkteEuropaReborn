@@ -623,13 +623,16 @@ Spieler auf den Bildschirm gesehen hat.
   nicht behoben**: das Original gibt jedem Waggon einen eigenen Zähler und
   einen eigenen Streckenzeiger, und die Routine, die ihre Abfahrt zeitversetzt,
   ist ungelesen. Jede Abhilfe davor wäre eine Erfindung.
-- **Die Anstoßregel der Nebenmission von Kampagne 2 ist nicht eingetragen.**
-  Sie braucht ein ODER, und das Regelvokabular kennt nur UND. Die Nebenmission
-  läuft deshalb gar nicht erst an — eine sichtbare Lücke statt einer stillen,
-  falschen Belohnung.
-- **Mission 5 ist auf der Skriptseite vollständig, im Spiel aber noch nicht
-  gewinnbar.** Sie braucht eine laufende Produktion; der Prüfstand stellt sie
-  her.
+- ~~**Die Anstoßregel der Nebenmission von Kampagne 2 ist nicht eingetragen.**~~
+  **Noch in dieser Fassung geschlossen.** Das Vokabular kennt jetzt **ODER** — das
+  Original schreibt es als zwei Abfragen hintereinander —, und drei Regeln, die es
+  gar nicht in die Datei geschafft hatten, kamen damit mit (Kampagne 2 bei
+  `0x498EEC`, Kampagne 3 bei `0x4996B7`, Mission 15 bei `0x49D89D`). Kampagne 2s
+  Nebenmission läuft damit überhaupt erst an.
+- ~~**Mission 5 ist im Spiel noch nicht gewinnbar.**~~ **Zurückgezogen** — der
+  Defekt lag im Prüfstand, der ein beliebiges Bauwerk übergab. `--produce-check`
+  zeigt unabhängig, dass Mission 5 in sechs Sekunden gewinnt, sobald sie ihre
+  Fabriken hat.
 - **Die Missionen 21 und 28 haben kein Skript** — als einzige der 33.
 - **Die Einheitenklassen 1..4 werden nicht überall auseinandergehalten**; wo
   eine Regel sie braucht, steht das in der Datendatei.
