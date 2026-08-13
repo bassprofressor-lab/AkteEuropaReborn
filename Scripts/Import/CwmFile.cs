@@ -46,6 +46,26 @@ public sealed class CwmFile
 
     public byte[] Records => Sections.Count > 0 ? Sections[0] : Array.Empty<byte>();
 
+    /// <summary>
+    /// Die ROHSTOFFVORKOMMEN dieser Karte — <c>(spalte, zeile, menge)</c>.
+    ///
+    /// <para>⚠ <b>Das steht in KEINEM Abschnitt einer <c>.CWM</c>, und das ist
+    /// kein Versehen.</b> Im Original füllt das MISSIONSSKRIPT die Liste, über
+    /// <c>add_terra_place(spalte, zeile, menge)</c> (C: 0x4D0A10, F: 0x4D05C0) im
+    /// SETUP-Block — gemessen 50 Aufrufe in 8 Missionen, in beiden Fassungen
+    /// gleich, alle mit drei Konstanten (<c>aekernel-tools/mission_terra.py</c>).
+    /// Eine gelieferte Karte trägt sie also nicht, und dieses Feld bleibt beim
+    /// Laden LEER.</para>
+    ///
+    /// <para>Gefüllt wird es nur von <see cref="Editor.MapDeposits"/> für eine
+    /// <b>erzeugte</b> Karte, die kein Missionsskript hat und darum sonst gar
+    /// keine Vorkommen hätte (gemessen: Feld-Rohstoffmine 0 Bauplätze). Von hier
+    /// geht es über <c>ContentBuilder.MapMeta</c> in die Karten-<c>.json</c>, wo
+    /// <see cref="Simulation.NavGrid"/> es beim Laden wieder herausliest — also
+    /// in dieselbe Liste, aus der <c>CellOnDeposit</c> @0x4205C0 fragt.</para>
+    /// </summary>
+    public readonly List<(int Col, int Row, int Amount)> Terra = new();
+
     // ---- eine Karte im ARBEITSSPEICHER bauen --------------------------------
     //
     // Bis hierher war diese Klasse ein reiner Leser. Der Karteneditor braucht

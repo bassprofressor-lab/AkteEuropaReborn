@@ -907,6 +907,26 @@ public sealed class ContentBuilder
         sb.Append($"\"tile_w\":{MapBaker.TileW},\"tile_h\":{MapBaker.TileH},");
         sb.Append($"\"elev_step\":{MapBaker.ElevStep},");
         sb.Append($"\"pixel_w\":{b.PixelW},\"pixel_h\":{b.PixelH},\"origin_y\":{b.OriginY},");
+        // Die ROHSTOFFVORKOMMEN. ⚠ Bei einer GELIEFERTEN Karte ist die Liste
+        // leer und der Block fehlt: dort legt das Missionsskript sie an
+        // (add_terra_place, C: 0x4D0A10 / F: 0x4D05C0), nicht die Kartendatei —
+        // siehe CwmFile.Terra. Gefuellt ist sie nur bei einer vom Editor
+        // ERZEUGTEN Karte, die kein Missionsskript hat; Simulation.NavGrid liest
+        // sie hier wieder heraus, damit CellOnDeposit @0x4205C0 etwas zu fragen
+        // hat.
+        if (m.Terra.Count > 0)
+        {
+            sb.Append("\"terra_source\":\"Editor/MapDeposits — UNSERE ZUTAT; im Original ");
+            sb.Append("add_terra_place(spalte,zeile,menge) im SETUP-Block, C:0x4D0A10 F:0x4D05C0\",");
+            sb.Append("\"terra\":[");
+            for (int i = 0; i < m.Terra.Count; i++)
+            {
+                var (c, r, a) = m.Terra[i];
+                if (i > 0) sb.Append(',');
+                sb.Append($"[{c},{r},{a}]");
+            }
+            sb.Append("],");
+        }
         sb.Append("\"tiles\":[");
         var rec = m.Records;
         bool first = true;

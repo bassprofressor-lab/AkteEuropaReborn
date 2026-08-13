@@ -3,6 +3,7 @@ namespace AkteEuropaReborn.Editor;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using Godot;
@@ -229,6 +230,14 @@ public static class MapCheck
         // Messlatte, sonst beanstandet der Pruefstand die gelieferten Karten.
         if (sites == 0) { say("  ^ FEHLER: auf dieser Karte kann niemand bauen"); bad++; }
 
+        // ---- die Rohstoffvorkommen ------------------------------------------
+        // ⚠ Ein Zaehler, der auf jeder Karte dasselbe sagt, prueft nichts. Dieser
+        // sagt auf einer GELIEFERTEN Karte »0, das Missionsskript legt sie an«
+        // (add_terra_place, C:0x4D0A10 — 50 Aufrufe in 8 Missionen, keine Karte
+        // traegt sie) und auf einer ERZEUGTEN die Zahl, die MapDeposits gelegt
+        // hat. Beides ist richtig, und der Unterschied ist der Befund.
+        bad += Deposits(root, w, h, ground, flag, zone, hasZones, say);
+
         // ---- Einheiten und Gebaeude: ist die Karte spielbar? ---------------
         bad += Assets(ent.RootElement, say);
 
@@ -280,6 +289,109 @@ public static class MapCheck
 
         say(bad == 0 ? "map-check: OK" : $"map-check: {bad} Beanstandungen");
         return bad == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// Die Rohstoffvorkommen der Karte gegen die MESSLATTE der 50
+    /// Originalvorkommen (<c>aekernel-tools/terra_stats.py</c>):
+    /// <code>
+    ///   Vorkommen je Karte        2 .. 11        je 1000 begehbar 0,23 (0,16..0,37)
+    ///   Menge                     5000, 50 von 50
+    ///   sec2-Klasse               2 (68 %) / 3 (32 %) — nie 0, nie 1
+    ///   tragende Anker von 9      Mittel 8,78, min 5; ohne Anker 0 von 50
+    ///   Abstand zum Kartenrand    min 5      naechster Nachbar min 11,4
+    /// </code>
+    /// <para>Der Block fehlt bei jeder gelieferten Karte — siehe
+    /// <see cref="Import.CwmFile.Terra"/>. Das ist KEINE Beanstandung.</para>
+    /// </summary>
+    private static int Deposits(JsonElement root, int w, int h, byte[] ground,
+                               int[] flag, int[] zone, bool hasZones, Action<string> say)
+    {
+        if (!root.TryGetProperty("terra", out var terra) ||
+            terra.ValueKind != JsonValueKind.Array || terra.GetArrayLength() == 0)
+        {
+            say("  Rohstoffvorkommen: keine in der Karte — bei einer GELIEFERTEN Karte " +
+                "der Normalfall (das Missionsskript legt sie an, add_terra_place " +
+                "C:0x4D0A10, 50 Aufrufe in 8 Missionen); bei einer ERZEUGTEN Karte hat " +
+                "die Feld-Rohstoffmine damit 0 Bauplaetze");
+            return 0;
+        }
+
+        int Zone(int c, int r) => c >= 0 && c < w && r >= 0 && r < h ? zone[r * w + c] : -1;
+        bool Corners(int c, int r) => !hasZones
+            || (Zone(c, r) >= MinCornerClass && Zone(c + 1, r) >= MinCornerClass
+                && Zone(c, r + 1) >= MinCornerClass && Zone(c + 1, r + 1) >= MinCornerClass);
+        // ⚠ Das ist die PUNKTprüfung — imap frei, Hangbyte 0, vier Ecken ≥ 2 —
+        // OHNE die 30 Zellen der Minengrundfläche. Sie kennt nur der Kachelsatz,
+        // und den hat dieser Prüfstand nicht (er liest Dateien). Die Zahl unten
+        // ist darum eine OBERGRENZE; was wirklich trägt, sagt --terra-check
+        // (map_23: 57 von 99 gegen 97 nach dieser Punktprüfung).
+        bool Free(int c, int r) => c >= 0 && c < w && r >= 0 && r < h
+                               && ground[r * w + c] == 0 && flag[r * w + c] == 0;
+
+        var list = new List<(int C, int R, int A)>();
+        foreach (var e in terra.EnumerateArray())
+        {
+            var it = e.EnumerateArray();
+            it.MoveNext(); int c = it.Current.GetInt32();
+            it.MoveNext(); int r = it.Current.GetInt32();
+            it.MoveNext(); int a = it.Current.GetInt32();
+            list.Add((c, r, a));
+        }
+
+        int walkable = 0;
+        foreach (byte g in ground) if (g == 0) walkable++;
+
+        int bad = 0, anchorSum = 0, anchorMin = 9, noAnchor = 0;
+        int edgeMin = int.MaxValue, offClass = 0, wrongAmount = 0;
+        double nnMin = double.MaxValue;
+        var zoneHist = new SortedDictionary<int, int>();
+        foreach (var (c, r, a) in list)
+        {
+            int anchors = 0;
+            for (int dy = 0; dy < 3; dy++)
+                for (int dx = 0; dx < 3; dx++)
+                    if (Free(c + dx, r + dy) && Corners(c + dx, r + dy)) anchors++;
+            anchorSum += anchors;
+            anchorMin = Math.Min(anchorMin, anchors);
+            if (anchors == 0) noAnchor++;
+            edgeMin = Math.Min(edgeMin, Math.Min(Math.Min(c, r), Math.Min(w - 1 - c, h - 1 - r)));
+            int z = Zone(c, r);
+            zoneHist[z] = zoneHist.GetValueOrDefault(z) + 1;
+            if (z < MinCornerClass) offClass++;
+            if (a != MapDeposits.Amount) wrongAmount++;
+            foreach (var (c2, r2, _) in list)
+            {
+                if (c2 == c && r2 == r) continue;
+                double d = Math.Sqrt((c - c2) * (double)(c - c2) + (r - r2) * (double)(r - r2));
+                nnMin = Math.Min(nnMin, d);
+            }
+        }
+        int n = list.Count;
+        say($"  Rohstoffvorkommen: {n} (Original je Karte 2..11), " +
+            $"{1000.0 * n / Math.Max(1, walkable):0.00} je 1000 begehbare Zellen " +
+            "[Messlatte 0,23; Original 0,16..0,37]");
+        say($"    Menge {(wrongAmount == 0 ? MapDeposits.Amount + " ueberall" : wrongAmount + " weichen ab")} " +
+            $"[Messlatte {MapDeposits.Amount}, 50 von 50]");
+        say($"    sec2-Klasse: {string.Join(" ", zoneHist.Select(kv => $"{kv.Key} x{kv.Value}"))} " +
+            "[Original 2 x34 (68 %), 3 x16 (32 %); der Generator legt kein besonderes " +
+            "Land an, darum hier alles Klasse 2]");
+        say($"    tragende Anker: Mittel {anchorSum / (double)n:0.00} von 9, min {anchorMin}, " +
+            $"ohne jeden Anker {noAnchor} [Messlatte Mittel 8,78, min 5, ohne Anker 0 von 50]");
+        say($"    Abstand zum Rand min {edgeMin} [Messlatte 5]; naechster Nachbar min " +
+            $"{(n > 1 ? nnMin.ToString("0.0") : "—")} [Messlatte 11,4]");
+        if (noAnchor > 0)
+        {
+            say($"  ^ FEHLER: {noAnchor} Vorkommen tragen keine einzige Mine — im Original 0 von 50");
+            bad++;
+        }
+        if (offClass > 0)
+        {
+            say($"  ^ FEHLER: {offClass} Vorkommen liegen auf sec2 < {MinCornerClass} — " +
+                "dort kann keine Mine stehen");
+            bad++;
+        }
+        return bad;
     }
 
     private static string Pc(long a, long b) => b == 0 ? "—" : $"{100.0 * a / b:0.00} %";

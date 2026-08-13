@@ -90,7 +90,7 @@ public static class MapGenerator
                                 int players = PlayersDefault, int troop = TroopDefault,
                                 double waterShare = MapTerrain.WaterShareDefault,
                                 uint seed = 1, TileModel? model = null,
-                                TileSeams? seams = null)
+                                TileSeams? seams = null, CwpFile? cwp = null)
     {
         var m = MapFactory.Empty(width, height, tileset, stem);
         m.Mission = $"Editor {stem} {width}x{height}";
@@ -210,6 +210,18 @@ public static class MapGenerator
 
         // ---- 4. Basen, Truppen, Marken -----------------------------------------
         if (starts.Count > 0) Populate(m, t, starts, troop, say);
+
+        // ---- 5. die Rohstoffvorkommen ------------------------------------------
+        // ⚠ NACH den Basen, und das ist der Grund: MapDeposits fragt die FERTIGE
+        // imap, nicht das Hoehenfeld. Was unter einer Basis liegt, ist kein
+        // Bauplatz, und ein Vorkommen darunter waere verschenkt.
+        //
+        // ⚠ UNSERE ZUTAT: im Original legt das MISSIONSSKRIPT die Vorkommen
+        // (add_terra_place, C: 0x4D0A10 / F: 0x4D05C0 — 50 Aufrufe in 8
+        // Missionen), eine erzeugte Karte hat keins. Ohne diesen Schritt meldete
+        // --build-check fuer die Feld-Rohstoffmine 0 Bauplaetze und der
+        // Kontostand blieb 0. Die Messlatte steht bei MapDeposits.
+        MapDeposits.Place(m, seed, cwp, say);
 
         return m;
     }

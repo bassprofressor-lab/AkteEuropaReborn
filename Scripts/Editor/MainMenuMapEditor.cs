@@ -251,8 +251,12 @@ public partial class MainMenu
                 say(useSeams
                     ? $"Nahtwahl EIN: bester aus {seamTries} gewichteten Wuerfen je Zelle"
                     : "Nahtwahl AUS (Gegenprobe): ein Wurf je Zelle, wie bis zum 13.08.2026");
+                // ⚠ Der Kachelsatz geht MIT: MapDeposits braucht die Grundflaeche
+                // der Feld-Rohstoffmine (Typ 15, 30 Zellen in 10x6), sonst legt es
+                // Vorkommen, auf denen keine Mine steht — gemessen 0 Bauplaetze
+                // trotz gelegter Vorkommen.
                 m = MapGenerator.Build(outName, w, h, ts, palette, flat, say,
-                                       players, troop, waterShare, seed, model, seams);
+                                       players, troop, waterShare, seed, model, seams, cwp);
             }
             MapGenerator.Write(m, cwp, pal, outName, say);
             say($"fertig: jetzt --map-check={outName} und --map={outName}");

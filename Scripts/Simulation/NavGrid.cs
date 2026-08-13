@@ -147,6 +147,15 @@ public sealed class NavGrid
 
     /// <summary>The foot soldier standing in the way, or -1. The caller decides
     /// what happens to them — driven through if friendly, run over if not.</summary>
+    /// <summary>Die Rohstoffvorkommen, die DIE KARTE mitbringt —
+    /// <c>(spalte, zeile, menge)</c>. Bei jeder gelieferten Karte LEER (dort legt
+    /// sie das Missionsskript an); gefüllt nur bei einer vom Karteneditor
+    /// erzeugten Karte. Gelesen wird sie von
+    /// <c>Rendering.MapEntityLayer._deposits</c> (siehe
+    /// <c>Simulation/Deposits.cs</c>), aus der <c>CellOnDeposit</c> @0x4205C0
+    /// fragt.</summary>
+    public readonly List<(int Col, int Row, int Amount)> Deposits = new();
+
     public int CrushableAt(int c, int r, int mover = -1)
     {
         if (!InBounds(c, r)) return -1;
@@ -213,6 +222,26 @@ public sealed class NavGrid
             Width = GetI(meta, "width"),
             Height = GetI(meta, "height"),
         };
+
+        // Die ROHSTOFFVORKOMMEN, wenn die Karte selbst welche mitbringt.
+        //
+        // ⚠ Eine GELIEFERTE Karte bringt keine mit, und das ist richtig so: im
+        // Original füllt das MISSIONSSKRIPT die Liste, über
+        // `add_terra_place(spalte, zeile, menge)` (C: 0x4D0A10, F: 0x4D05C0) im
+        // SETUP-Block — 50 Aufrufe in 8 Missionen. Der Block hier ist nur für
+        // eine vom Editor ERZEUGTE Karte da, die kein Missionsskript hat und
+        // deren Feld-Rohstoffmine sonst 0 Bauplätze hätte. Geschrieben von
+        // Import.ContentBuilder.MapMeta aus Import.CwmFile.Terra, gelegt von
+        // Editor.MapDeposits — und dort steht auch die Messlatte.
+        if (meta.TryGetValue("terra", out var terra) && terra.VariantType == Variant.Type.Array)
+            foreach (var e in terra.AsGodotArray())
+            {
+                if (e.VariantType != Variant.Type.Array) continue;
+                var q = e.AsGodotArray();
+                if (q.Count < 3) continue;
+                g.Deposits.Add((q[0].AsInt32(), q[1].AsInt32(), q[2].AsInt32()));
+            }
+
         if (g.Width <= 0 || g.Height <= 0) { g.Width = g.Height = 0; return g; }
 
         int n = g.Width * g.Height;

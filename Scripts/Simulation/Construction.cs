@@ -130,9 +130,10 @@ public partial class MapEntityLayer
     /// </summary>
     public const int TypeFieldMineUsesDepositTest = TypeFieldMine;
 
-    /// <summary>The deposits a Feld-Rohstoffmine may stand on. Empty until the
-    /// mission scripts are read — see <see cref="HasDeposits"/>.</summary>
-    private readonly List<(int Col, int Row, int Amount)> _deposits = new();
+    /// <summary>The deposits a Feld-Rohstoffmine may stand on. ⚠ Die Liste selbst
+    /// steht seit dem 13.08.2026 in <c>Simulation/Deposits.cs</c> — sie hat jetzt
+    /// ZWEI Quellen (Missionsskript und, bei einer erzeugten Karte, die Karte
+    /// selbst) und zieht beim ersten Zugriff nach. Siehe dort.</summary>
 
     /// <summary>Whether we know where the deposits are at all.</summary>
     public bool HasDeposits => _deposits.Count > 0;
@@ -355,6 +356,17 @@ public partial class MapEntityLayer
             Name = $"Built{slot}",
             Footprint = CellRect(_ox, _oy, col, row, _nav.ElevAt(col, row)),
         };
+
+        // Eine neu gebaute Feld-Rohstoffmine bekommt, was IM BODEN liegt — die
+        // `menge` aus `add_terra_place(spalte, zeile, menge)`. Sie stand bisher
+        // nur in der Bauplatzprüfung; der Förderschritt (`e.Deposit > 0`) lief
+        // damit auf einer gebauten Mine nie an (Anfangswert −1), und der
+        // Kontostand blieb 0. Gemessen: alle 50 Originalvorkommen tragen 5000.
+        if (typ == TypeFieldMine)
+        {
+            int menge = DepositAmountAt(col, row);
+            if (menge > 0) { bld.Deposit = menge; bld.DepositStart = menge; }
+        }
 
         var doors = BuildingDoors(typ);
         bld.Doors = doors.Count;
@@ -627,6 +639,30 @@ public partial class MapEntityLayer
                 // and the site must be refused now
                 if (bld != null && CanBuild(Patterns, typ, first.X, first.Y))
                     sb.Append("; ⚠ Platz ist danach IMMER NOCH frei");
+
+                // ⚠ UND DIE MINE MUSS FÖRDERN, nicht nur stehen. Ein Bauplatz,
+                // auf dem nichts im Boden liegt, ist der Grund, aus dem der
+                // Kontostand einer erzeugten Karte 0 blieb: `Entity.Deposit`
+                // fing bei −1 an, der Förderschritt (`e.Deposit > 0`,
+                // UpdateEconomy) lief nie an. Hier werden darum zehn
+                // Wirtschaftstakte GEFAHREN und das Ergebnis gezählt — die
+                // Messlatte ist MineRate*10 = 50, und die kommt aus dem
+                // Vorkommen, nicht aus dem Nichts.
+                if (bld != null && typ == TypeFieldMine)
+                {
+                    int imBoden = bld.Deposit;
+                    int idx2 = _entities.IndexOf(bld);
+                    for (int t = 0; t < 10 && idx2 >= 0; t++)
+                    {
+                        bld.EconTimer = 0f;
+                        UpdateEconomy(idx2, bld, EconTick);
+                    }
+                    sb.Append($"; im Boden {imBoden} (add_terra_place-Menge), nach zehn " +
+                              $"Wirtschaftstakten noch {bld.Deposit}, gefoerdert " +
+                              $"{imBoden - bld.Deposit}, im Lager der Mine {bld.StockT}");
+                    if (imBoden <= 0)
+                        sb.Append("  ⚠ NICHTS IM BODEN — diese Mine bringt nichts ein");
+                }
             }
             sb.Append('\n');
         }
