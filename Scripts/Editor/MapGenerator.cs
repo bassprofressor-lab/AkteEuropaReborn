@@ -72,7 +72,8 @@ public static class MapGenerator
                                 TilePalette pal, bool flat, Action<string> say,
                                 int players = PlayersDefault, int troop = TroopDefault,
                                 double waterShare = MapTerrain.WaterShareDefault,
-                                uint seed = 1, TileModel? model = null)
+                                uint seed = 1, TileModel? model = null,
+                                TileSeams? seams = null)
     {
         var m = MapFactory.Empty(width, height, tileset, stem);
         m.Mission = $"Editor {stem} {width}x{height}";
@@ -111,6 +112,23 @@ public static class MapGenerator
                 : "(erster ganzer Bodenlauf aus TilePalette)"));
         int fromModel = 0, fromBlock = 0;
         var wdist = TileModel.WaterDistance(width, height, t.Class);
+
+        // ⚠ Der ZAEHLER zur haertesten gemessenen Zahl, und zwar an der STELLE,
+        // an der sie brechen kann. Der Rueckfall auf den Bodenblock (code < 0)
+        // ist der einzige Weg, auf dem eine UFERZELLE noch einen Innenland-Code
+        // bekommt: die Kette in TileModel.Pick haelt den Wasserabstand fest,
+        // dieser Zweig hier kennt ihn nicht. Ein still verworfener Abstand
+        // liefert kein Loch, sondern ein plausibel aussehendes falsches Bild —
+        // darum wird gezaehlt UND die STELLE genannt, nicht nur summiert.
+        var innerSet = new HashSet<int>(ground);
+        int shoreBlock = 0, shoreRescued = 0, shoreLeft = 0, shoreClassDropped = 0;
+        int firstBadCol = -1, firstBadRow = -1;
+
+        // Die gesetzten Codes, damit die Nahtwahl den Westen und den Norden
+        // kennt. Die Schleife laeuft zeilenweise, also sind beide schon gesetzt.
+        var placed = new int[width * height];
+        Func<int, int, bool, double>? seamCost = seams == null ? null : seams.Cost;
+
         for (int r = 0; r < height; r++)
             for (int c = 0; c < width; c++)
             {
@@ -118,20 +136,43 @@ public static class MapGenerator
                 int cls = t.Class[i];
                 int wm = TileModel.WaterMask(width, height, t.Class, c, r);
                 uint roll = MapTerrain.Hash(c, r, seed ^ 0xC0DEu);
+                int west = c > 0 ? placed[i - 1] : -1;
+                int north = r > 0 ? placed[i - width] : -1;
 
-                int code = model?.Pick(cls, t.Flag[i], wm, wdist[i], roll) ?? -1;
+                int code = model?.Pick(cls, t.Flag[i], wm, wdist[i], roll,
+                                       seamCost, seams?.Tries ?? 1,
+                                       west, north) ?? -1;
                 if (code >= 0) fromModel++;
                 else
                 {
                     // Rueckfall ohne gemessene Tabelle: der Bodenblock aus
-                    // TilePalette. Der malt kein Ufer — darum zaehlt der
-                    // Pruefstand die Uferzellen mit Innenland-Code, und darum
-                    // ist diese Zahl im Bericht wichtig.
+                    // TilePalette. Der malt kein Ufer.
                     code = cls == 2 ? water[roll % (uint)water.Length]
                                     : ground[roll % (uint)ground.Length];
                     fromBlock++;
                 }
 
+                // Die Nachbedingung, und sie ist NICHT leer: geprueft wird das
+                // ERGEBNIS gegen den Innenland-Block, der aus einem anderen Fach
+                // stammt (frei, eben, kein Wassernachbar, Abstand ≥ 3). Traegt
+                // eine Uferzelle einen dieser Codes, wird er ersetzt — und wenn
+                // auch das nicht geht, steht es in der Meldung.
+                if (cls != 2 && wdist[i] <= 1 && innerSet.Contains(code))
+                {
+                    shoreBlock++;
+                    if (firstBadCol < 0) { firstBadCol = c; firstBadRow = r; }
+                    if (model != null && model.TakeMerged(cls, 1, roll, out int rescue)
+                        && !innerSet.Contains(rescue))
+                    { code = rescue; shoreRescued++; }
+                    // zweite Stufe: der ABSTAND wird gehalten, die KLASSE
+                    // aufgegeben — siehe TileModel.TakeAnyAt
+                    else if (model != null && model.TakeAnyAt(1, roll, out int any)
+                             && !innerSet.Contains(any))
+                    { code = any; shoreRescued++; shoreClassDropped++; }
+                    else shoreLeft++;
+                }
+
+                placed[i] = code;
                 MapFactory.Paint(m, c, r, code, t.Elev[i], (MapFactory.Ground)cls);
                 // ⚠ Paint setzt die Flagge auf 0 — das Hangbyte gehoert aber zur
                 // Zelle und ist die gemessene Regel aus MapTerrain.
@@ -141,7 +182,13 @@ public static class MapGenerator
             $"Bodenblock ({pal.Describe()})" +
             (model != null ? $"; Rueckfaelle im Schluessel {model.Fallbacks}, Faecher unter " +
                              $"{TileModel.MinSupport} Beobachtungen uebergangen {model.ThinKeys}, " +
-                             $"ohne Eintrag {model.Missing}" : ""));
+                             $"ohne Eintrag {model.Missing}, davon Uferzellen {model.ShoreMissing}, " +
+                             $"Kettenglieder ohne Wasserabstand {model.DistDropped} (muss 0 sein)" : ""));
+        say($"Ufer-Nachbedingung: {shoreBlock} Uferzellen bekamen einen Innenland-Code " +
+            $"(im Original 0 von 27.114), {shoreRescued} davon ersetzt ({shoreClassDropped} " +
+            $"davon unter Aufgabe der Gelaendeklasse), {shoreLeft} bleiben" +
+            (firstBadCol >= 0 ? $"; erste Stelle Zelle ({firstBadCol},{firstBadRow})" : ""));
+        if (seams != null) say(seams.Describe());
         say("Gelaende: " + t.Describe());
 
         // ---- 4. Basen, Truppen, Marken -----------------------------------------

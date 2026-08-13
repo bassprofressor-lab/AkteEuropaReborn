@@ -116,7 +116,7 @@ public partial class MainMenu
         if (p.Length < 4)
         {
             say("--map-new=<name>,<breite>,<hoehe>,<kachelsatz>"
-                + "[,flach][,leer][,ohnetabelle][,boden=<n>][,from=<ordner>]"
+                + "[,flach][,leer][,ohnetabelle][,ohnenaht][,boden=<n>][,from=<ordner>]"
                 + "[,quelle=<datei.CWM>][,spieler=<n>][,truppe=<n>]"
                 + "[,wasser=<prozent>][,samen=<n>]");
             return 2;
@@ -133,12 +133,19 @@ public partial class MainMenu
         int players = MapGenerator.PlayersDefault, troop = MapGenerator.TroopDefault;
         double waterShare = MapTerrain.WaterShareDefault;
         uint seed = 1;
-        bool useModel = true;
+        bool useModel = true, useSeams = true;
+        int seamTries = TileSeams.TriesDefault;
         for (int i = 4; i < p.Length; i++)
         {
             if (p[i] == "flach" || p[i] == "flat") flat = true;
             else if (p[i] == "leer") players = 0;
             else if (p[i] == "ohnetabelle") useModel = false;
+            else if (p[i] == "ohnenaht") useSeams = false;
+            else if (p[i].StartsWith("naht="))
+            {
+                int.TryParse(p[i]["naht=".Length..], out seamTries);
+                if (seamTries <= 1) { useSeams = false; seamTries = 1; }
+            }
             else if (p[i].StartsWith("from=")) from = p[i]["from=".Length..];
             else if (p[i].StartsWith("boden=")) int.TryParse(p[i]["boden=".Length..], out pick);
             else if (p[i].StartsWith("quelle=")) source = p[i]["quelle=".Length..];
@@ -213,8 +220,16 @@ public partial class MainMenu
                 // am Wasser mit Innenland-Code« von 0 auf ~100 % springen.
                 var model = useModel ? TileModel.Learn(ts, say) : null;
                 if (model != null) say(model.Describe());
+                // ⚠ ,ohnenaht ist die GEGENPROBE zur Nahtwahl: sie schaltet sie
+                // ab, und dann muss der Anteil harter Naehte von ~1 % auf ~8,6 %
+                // zurueckspringen (map_seams.py). Ohne diese Gegenprobe waere
+                // nicht zu sehen, ob die Nahtwahl ueberhaupt etwas tut.
+                var seams = useSeams ? new TileSeams(cwp, pal) { Tries = seamTries } : null;
+                say(useSeams
+                    ? $"Nahtwahl EIN: bester aus {seamTries} gewichteten Wuerfen je Zelle"
+                    : "Nahtwahl AUS (Gegenprobe): ein Wurf je Zelle, wie bis zum 13.08.2026");
                 m = MapGenerator.Build(outName, w, h, ts, palette, flat, say,
-                                       players, troop, waterShare, seed, model);
+                                       players, troop, waterShare, seed, model, seams);
             }
             MapGenerator.Write(m, cwp, pal, outName, say);
             say($"fertig: jetzt --map-check={outName} und --map={outName}");

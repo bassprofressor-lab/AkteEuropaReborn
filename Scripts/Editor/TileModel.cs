@@ -311,29 +311,109 @@ public sealed class TileModel
     /// festen Wuerfel des Generators — kein <c>Random</c>, damit zwei Laeufe
     /// dieselbe Karte ergeben und ein Pruefstand eine Aenderung sehen kann.
     ///
-    /// <para>Rueckfall in drei Stufen, jede gezaehlt (<see cref="Fallbacks"/>):
-    /// erst der genaue Schluessel, dann derselbe ohne Hangbyte, dann derselbe
-    /// ohne Wassermaske. Findet auch das nichts, gibt es −1 und der Aufrufer
-    /// nimmt seinen Bodenblock.</para>
+    /// <para>Rueckfall in vier Stufen, jede gezaehlt (<see cref="Fallbacks"/>):
+    /// der genaue Schluessel, derselbe ohne Hangbyte, derselbe ohne Wassermaske,
+    /// derselbe ohne beides, und zuletzt das zusammengefasste Fach. <b>In jeder
+    /// Stufe bleiben Klasse UND Wasserabstand stehen</b> — der Abstand ist
+    /// Vorbedingung und kein Glied der Kette, und <see cref="DistDropped"/>
+    /// bewacht das. Findet auch das nichts, gibt es −1, der Aufrufer nimmt
+    /// seinen Bodenblock, und fuer eine Uferzelle zaehlt das
+    /// <see cref="ShoreMissing"/>.</para>
+    ///
+    /// <para><paramref name="seam"/>, <paramref name="tries"/>,
+    /// <paramref name="west"/> und <paramref name="north"/> sind die Nahtwahl,
+    /// siehe <see cref="TileSeams"/> und <see cref="TakeFrom"/>. Ohne sie
+    /// verhaelt sich <c>Pick</c> wie vorher.</para>
     /// </summary>
-    public int Pick(int cls, int flag, int wmask, int dist, uint roll)
+    public int Pick(int cls, int flag, int wmask, int dist, uint roll,
+                    Func<int, int, bool, double>? seam = null, int tries = 1,
+                    int west = -1, int north = -1)
     {
-        if (Take(Key(cls, flag, wmask, dist), roll, out int code)) return code;
+        // ---- VORBEDINGUNG, nicht letztes Glied ------------------------------
+        // ⚠ Der letzte Gedanke des Vorgaengers, woertlich: »the fallback chain
+        // could drop the water distance and hand a grass code to a beach cell.
+        // Let me make the distance inviolable.« Der Abstand wird darum EINMAL
+        // festgelegt und dann in JEDES Glied der Kette eingesetzt — die Kette
+        // steht als Tabelle da, damit sich nicht spaeter ein Glied ohne Abstand
+        // dazwischenschiebt. Was aufgegeben werden darf, ist Hangbyte und
+        // Wassermaske; Klasse und Abstand nie.
+        int d = Math.Clamp(dist, 0, DistCap);
+        Span<int> chain = stackalloc int[4];
+        int nc = 0;
+        chain[nc++] = Key(cls, flag, wmask, d);
+        if (flag != 0) chain[nc++] = Key(cls, 0, wmask, d);
+        if (wmask != 0) chain[nc++] = Key(cls, flag, 0, d);
+        if (flag != 0 || wmask != 0) chain[nc++] = Key(cls, 0, 0, d);
+
+        for (int k = 0; k < nc; k++)
+        {
+            // ⚠ Der ZAEHLER dazu. Heute kann er nicht anschlagen — jedes Glied
+            // oben setzt d ein —, und genau darum steht er hier: er ist die
+            // Wache gegen die NAECHSTE Aenderung an dieser Kette. Ein still
+            // verworfener Abstand liefert kein Loch, sondern ein plausibel
+            // aussehendes falsches Bild, und das faellt niemandem auf.
+            if ((chain[k] & 3) != d) { DistDropped++; continue; }
+            if (k > 0) Fallbacks++;
+            if (Take(chain[k], roll, seam, tries, west, north, out int code)) return code;
+        }
+        // das zusammengefasste Fach DESSELBEN Abstands — breit genug, dass
+        // MinSupport es nicht mehr aussortiert, und trotzdem nach Ufer und
+        // Binnenland getrennt
         Fallbacks++;
-        // ⚠ Der Wasserabstand faellt NIE weg. Am 13.08.2026 durfte er, als
-        // letzte Stufe, und das kostete den Befund: fuer eine Uferzelle mit
-        // duennem Fach griff der Rueckfall auf das BINNENLAND-Fach und legte
-        // Wiese direkt an Wasser — 25 von 295 Uferzellen (8,47 %), gegen 0 von
-        // 27.114 in den 26 gelieferten Karten. Klasse und Abstand bleiben
-        // stehen; aufgegeben werden nur Hangbyte und Wassermaske, und danach
-        // greift das zusammengefasste Fach DESSELBEN Abstands.
-        if (flag != 0 && Take(Key(cls, 0, wmask, dist), roll, out code)) return code;
-        if (wmask != 0 && Take(Key(cls, flag, 0, dist), roll, out code)) return code;
-        if (Take(Key(cls, 0, 0, dist), roll, out code)) return code;
-        if (TakeFrom(Merged(cls, dist), roll, out code)) return code;
+        if (TakeFrom(Merged(cls, d), roll, seam, tries, west, north, out int last)) return last;
         Missing++;
+        if (d <= 1) ShoreMissing++;
         return -1;
     }
+
+    /// <summary>Wie oft ein Glied der Rueckfallkette den Wasserabstand fallen
+    /// liess. MUSS 0 sein — siehe die Wache in <see cref="Pick"/>.</summary>
+    public int DistDropped { get; private set; }
+
+    /// <summary>Wie oft fuer eine UFERZELLE (Wasserabstand ≤ 1) gar kein Eintrag
+    /// zu finden war. Dann nimmt der Aufrufer seinen Bodenblock, und der kennt
+    /// kein Ufer — die Zahl gehoert in den Bericht, nicht ins Verborgene.
+    /// </summary>
+    public int ShoreMissing { get; private set; }
+
+    /// <summary>Die Codes, die das Original fuer diese Klasse in diesem
+    /// Wasserabstand ueberhaupt benutzt — ueber Hangbyte und Wassermaske hinweg.
+    /// Das ist die Rettungsleine fuer eine Uferzelle, deren Fach leer ist.
+    /// </summary>
+    public bool TakeMerged(int cls, int dist, uint roll, out int code)
+        => TakeFrom(Merged(cls, Math.Clamp(dist, 0, DistCap)), roll, null, 1, -1, -1, out code);
+
+    /// <summary>
+    /// Alles, was das Original in DIESEM Wasserabstand benutzt, ueber die
+    /// Gelaendeklassen hinweg — die letzte Rettungsleine fuer eine Uferzelle.
+    ///
+    /// <para>⚠ Hier wird die KLASSE aufgegeben und der ABSTAND gehalten, und das
+    /// ist die Rangfolge mit Absicht: der Abstand ist die Zahl mit 0
+    /// Gegenbeispielen (0 von 27.114 Uferzellen mit Innenland-Code), die Klasse
+    /// nicht. Gebraucht wurde es gemessen genau einmal: auf Kachelsatz 47
+    /// (160x120) blieb ohne diese Stufe 1 Uferzelle bei (10,102) mit einem
+    /// Innenland-Code stehen, weil das Fach ihrer Klasse in diesem Abstand in den
+    /// zwei gelieferten Karten gar nicht vorkommt.</para>
+    /// </summary>
+    public bool TakeAnyAt(int dist, uint roll, out int code)
+    {
+        int d = Math.Clamp(dist, 0, DistCap);
+        if (!_anyDist.TryGetValue(d, out var b))
+        {
+            b = new Bucket();
+            foreach (var kv in _t)
+            {
+                if ((kv.Key & 3) != d) continue;
+                if ((kv.Key >> 14) == 2) continue;          // Wasser gehoert nicht aufs Land
+                for (int i = 0; i < kv.Value.Codes.Count; i++)
+                    b.Add(kv.Value.Codes[i], kv.Value.Weight[i]);
+            }
+            _anyDist[d] = b;
+        }
+        return TakeFrom(b, roll, null, 1, -1, -1, out code);
+    }
+
+    private readonly Dictionary<int, Bucket> _anyDist = new();
 
     /// <summary>Alle Beobachtungen einer Klasse in einem Wasserabstand, ueber
     /// Hangbyte und Wassermaske hinweg — das letzte Fach des Rueckfalls. Es ist
@@ -380,15 +460,75 @@ public sealed class TileModel
     /// <summary>Wie oft ein Fach wegen zu duenner Stichprobe uebergangen wurde.</summary>
     public int ThinKeys { get; private set; }
 
-    private bool Take(int key, uint roll, out int code)
+    private bool Take(int key, uint roll, Func<int, int, bool, double>? seam, int tries,
+                      int west, int north, out int code)
     {
         code = -1;
         if (!_t.TryGetValue(key, out var b) || b.Total == 0) return false;
         if (b.Total < MinSupport) { ThinKeys++; return false; }
-        return TakeFrom(b, roll, out code);
+        return TakeFrom(b, roll, seam, tries, west, north, out code);
     }
 
-    private static bool TakeFrom(Bucket b, uint roll, out int code)
+    /// <summary>
+    /// Ein Code aus dem Fach, gewichtet nach den gemessenen Haeufigkeiten.
+    ///
+    /// <para><b>UNSERE SETZUNG, und sie ist neu am 13.08.2026:</b> mit
+    /// <paramref name="seam"/> wird nicht EIN Wurf genommen, sondern der beste aus
+    /// <paramref name="tries"/> gewichteten Wuerfen — bewertet an der NAHT zu den
+    /// beiden schon gesetzten Nachbarn im Westen und Norden
+    /// (<see cref="TileSeams"/>). Der Grund steht dort: die erzeugte Karte hatte
+    /// 8,65 % harte Naehte gegen 0,00..3,23 % in den 26 gelieferten, und das war
+    /// im Bild als Schachbrett zu sehen, obwohl jeder Zaehler gruen meldete.</para>
+    ///
+    /// <para>⚠ Der Preis ist gemessen und gehoert in den Bericht: »bester aus
+    /// acht« verschiebt die Haeufigkeiten gegenueber der gemessenen Verteilung.
+    /// Was das kostet, sagt der Zaehler »verschiedene Bodencodes« im Pruefstand
+    /// (26 Karten: Median 622, Spanne 183..1217) — sackt der ab, ist die
+    /// Vielfalt der Naht geopfert worden.</para>
+    /// </summary>
+    private static bool TakeFrom(Bucket b, uint roll, Func<int, int, bool, double>? seam,
+                                 int tries, int west, int north, out int code)
+    {
+        code = -1;
+        if (b.Total == 0) return false;
+        if (seam == null || tries <= 1 || b.Codes.Count == 1 || (west < 0 && north < 0))
+            return Draw(b, roll, out code);
+
+        // ⚠ Der ERSTE Wurf ist die Vorgabe und bleibt es, bis ein anderer
+        // Versuch eine MESSBAR bessere Naht hat.
+        //
+        // Am 13.08.2026 stand hier »n == 0: dieser Versuch gilt«, und das war ein
+        // stiller Vorzug fuer die Objektcodes: an einem Baum ist keine Naht
+        // messbar, also gewann der erste Baum in der Liste sofort. Gemessen: der
+        // Anteil der Objektkacheln stieg von 12,13 auf 16,75 %, die Flecken
+        // zerfielen von 183 auf 533 (mittlere Groesse 7,1 auf 3,4, Einzelzellen
+        // 109 auf 394) — gegen 26 Karten mit mittlerer Fleckengroesse Median
+        // 11,1 und Median 99 Einzelzellen. Ein nicht messbarer Versuch darf also
+        // nicht gewinnen, sondern nur nicht verlieren.
+        if (!Draw(b, roll, out code)) return false;
+        double best = CostOf(code);
+        if (best < 0) return true;              // der erste Wurf ist gar nicht messbar
+        for (int k = 1; k < tries; k++)
+        {
+            // eigene Wuerfelzahl je Versuch, aber aus demselben Samen: zwei
+            // Laeufe muessen dieselbe Karte ergeben, sonst kann kein Pruefstand
+            // eine Aenderung von einem Wurf unterscheiden
+            if (!Draw(b, Mix(roll, (uint)k), out int cand)) continue;
+            double c = CostOf(cand);
+            if (c >= 0 && c < best) { best = c; code = cand; }
+        }
+        return true;
+
+        double CostOf(int cand)
+        {
+            double sum = 0; int n = 0;
+            if (west >= 0) { double v = seam(west, cand, true); if (v >= 0) { sum += v; n++; } }
+            if (north >= 0) { double v = seam(north, cand, false); if (v >= 0) { sum += v; n++; } }
+            return n == 0 ? -1 : sum / n;
+        }
+    }
+
+    private static bool Draw(Bucket b, uint roll, out int code)
     {
         code = -1;
         if (b.Total == 0) return false;
@@ -400,6 +540,17 @@ public sealed class TileModel
         }
         code = b.Codes[^1];
         return true;
+    }
+
+    private static uint Mix(uint roll, uint k)
+    {
+        unchecked
+        {
+            uint n = roll + k * 2654435761u;
+            n = (n ^ (n >> 15)) * 2246822519u;
+            n = (n ^ (n >> 13)) * 3266489917u;
+            return n ^ (n >> 16);
+        }
     }
 
     /// <summary>Alle Codes, die das Original in dieser Lage benutzt — fuer die

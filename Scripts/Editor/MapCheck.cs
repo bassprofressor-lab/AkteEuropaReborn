@@ -156,6 +156,7 @@ public static class MapCheck
         bad += Elevations(w, h, elev, flag, say);
         bad += Water(w, h, elev, ground, say);
         bad += Coast(w, h, code, flag, ground, say);
+        bad += Seams(w, h, tileset, code, ground, say);
         Objects(w, h, code, say);
 
         // ---- Bauplaetze -----------------------------------------------------
@@ -435,6 +436,96 @@ public static class MapCheck
         distinct = all.Count;
         say($"  verschiedene Bodencodes: {distinct}  [26 Karten: Median 622, Spanne 183..1217]");
         return bad;
+    }
+
+    // ========================================================================
+    //  Die NAHT — »beruehren sich die Bildpunkte«
+    // ========================================================================
+
+    /// <summary>
+    /// Der Anteil HARTER Naehte zwischen zwei Bodenkacheln, an den Pixeln
+    /// gerechnet (<see cref="TileSeams"/>).
+    ///
+    /// <para>⚠ Der einzige Zaehler dieses Pruefstands, der die <c>.CWP</c>
+    /// braucht — er ist auch der einzige, der etwas ueber das BILD sagt und nicht
+    /// ueber das Raster. Der Anlass: am 13.08.2026 meldete jeder andere Zaehler
+    /// gruen und die Karte sah im Bild gescheckt aus.</para>
+    ///
+    /// <para><b>Die Schranke ist gemessen und hat eine Toleranz</b>, weil ein
+    /// Ja/Nein auf echten Daten sonst Befunde erfindet: 26 gelieferte Karten
+    /// liegen bei Median 0,58 %, Spanne 0,00..3,23 % — beanstandet wird erst ab
+    /// <see cref="SeamBad"/>, also gut ueber der schlechtesten gelieferten.</para>
+    ///
+    /// <para>Fehlt der Kachelsatz, wird der Zaehler UEBERSPRUNGEN und das
+    /// gesagt — eine fehlende Messung darf nicht wie eine bestandene aussehen.
+    /// </para>
+    /// </summary>
+    public const double SeamBad = 5.0;
+
+    private static int Seams(int w, int h, int tileset, int[] code, byte[] ground,
+                             Action<string> say)
+    {
+        var files = MapGenerator.FindTileset(tileset, null);
+        if (files == null)
+        {
+            say($"  Naehte: Kachelsatz {tileset:00} nicht gefunden — Nahtpruefung " +
+                "UEBERSPRUNGEN (nicht bestanden)");
+            return 0;
+        }
+        Import.CwpFile cwp;
+        Import.PalFile pal;
+        try
+        {
+            cwp = Import.CwpFile.Load(files.Value.Cwp);
+            pal = Import.PalFile.Load(files.Value.Pal);
+        }
+        catch (Exception e)
+        {
+            say($"  Naehte: {files.Value.Cwp} unlesbar ({e.Message}) — UEBERSPRUNGEN");
+            return 0;
+        }
+
+        var seams = new TileSeams(cwp, pal);
+        long n = 0, hard = 0;
+        double sum = 0;
+        int badCol = -1, badRow = -1, badA = 0, badB = 0;
+        double worst = -1;
+        for (int r = 0; r < h; r++)
+            for (int c = 0; c < w; c++)
+            {
+                int i = r * w + c;
+                if (ground[i] == 2 || !TileSeams.IsGround(code[i])) continue;
+                if (c + 1 < w) One(i, i + 1, true, c, r);
+                if (r + 1 < h) One(i, i + w, false, c, r);
+            }
+        void One(int i, int j, bool hz, int c, int r)
+        {
+            if (ground[j] == 2 || !TileSeams.IsGround(code[j])) return;
+            double v = seams.Cost(code[i], code[j], hz);
+            if (v < 0) return;
+            n++; sum += v;
+            if (v > TileSeams.Hard) hard++;
+            if (v > worst) { worst = v; badCol = c; badRow = r; badA = code[i]; badB = code[j]; }
+        }
+        if (n == 0)
+        {
+            say("  Naehte: keine zwei Bodenkacheln nebeneinander — nichts zu messen");
+            return 0;
+        }
+        double share = 100.0 * hard / n;
+        say($"  Naehte zwischen Bodenkacheln: {n}, mittlerer Farbabstand {sum / n:0.0}, " +
+            $"harte Naehte (>{TileSeams.Hard:0}): {hard} = {share:0.00} %");
+        say("    [26 Karten: harte Naehte Median 0,58 % (0,00..3,23), Farbabstand Median 55,3 " +
+            "(19,7..85,0) — es traegt der ANTEIL, nicht der Mittelwert]");
+        if (badCol >= 0)
+            say($"    haerteste Naht {worst:0} bei Zelle ({badCol},{badRow}): Code {badA} an {badB}");
+        if (share > SeamBad)
+        {
+            say($"  ^ FEHLER: ueber {SeamBad:0} % harte Naehte — die Kacheln passen nicht zu " +
+                "ihren Nachbarn, im Bild ein Schachbrett");
+            return 1;
+        }
+        return 0;
     }
 
     private static bool TouchesWater(int w, int h, byte[] ground, int c, int r)
