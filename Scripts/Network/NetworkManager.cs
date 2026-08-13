@@ -133,6 +133,7 @@ public partial class NetworkManager : Node
         }
         i._t0 = Time.GetTicksMsec();
         i._timedOut = false;
+        FromMenu = true;               // ⚠ ab hier wird NICHT mehr beendet, siehe Frist
         i.SetProcess(true);
         return true;
     }
@@ -148,9 +149,39 @@ public partial class NetworkManager : Node
                    $"von {s.Players} Menschen";
         if (Fault.Length > 0) return "FEHLER: " + Fault;
         return Link.IsHost
-            ? $"Gastgeber: {Link.ClientCount + 1} von {Instance?._players ?? 2} da, " +
-              $"warte auf Mitspieler"
-            : $"Beitreten: {Link.Status}, warte auf die Partie des Gastgebers";
+            ? $"Gastgeber: {Link.ClientCount + 1} von {Instance?._players ?? 2} da. " +
+              HostHint()
+            : $"Beitreten bei {Instance?._address}:{Instance?._port} " +
+              $"({Link.Status}) — warte auf die Partie des Gastgebers";
+    }
+
+    /// <summary>
+    /// WAS DIE MITSPIELER EINTIPPEN MÜSSEN — die eigene Adresse im lokalen Netz.
+    ///
+    /// <para>⚠ Der Grund ist kein Schmuck: der Gastgeber wartet, und der einzige
+    /// Weg zu ihm ist eine Adresse, die er nicht kennt. Ohne diese Zeile muss er
+    /// aus dem Spiel heraus <c>ipconfig</c> aufrufen, um überhaupt sagen zu
+    /// können, wohin der andere sich verbinden soll. Der Spieler hat genau danach
+    /// gefragt (»geht das derzeit nur via Host IP und damit Join?«).</para>
+    ///
+    /// <para><c>127.0.0.1</c> wird mitgenannt, aber als letztes und mit dem
+    /// Zusatz »nur derselbe Rechner« — es ist die Adresse, die für zwei Fenster
+    /// auf einer Maschine funktioniert und für nichts anderes.</para>
+    /// </summary>
+    public static string HostHint()
+    {
+        int port = Instance?._port ?? 27015;
+        var mine = new System.Collections.Generic.List<string>();
+        foreach (string a in IP.GetLocalAddresses())
+        {
+            if (a.Contains(':')) continue;              // IPv6 überspringen
+            if (a.StartsWith("127.")) continue;         // Loopback kommt zuletzt
+            if (a.StartsWith("169.254.")) continue;     // ohne DHCP zugelost, nutzlos
+            if (!mine.Contains(a)) mine.Add(a);
+        }
+        if (mine.Count == 0) return $"Mitspieler geben ein: 127.0.0.1:{port} (nur derselbe Rechner)";
+        return "Mitspieler geben ein: " +
+               string.Join(" oder ", mine.ConvertAll(a => $"{a}:{port}"));
     }
 
     private void ReadSwitches()
@@ -201,19 +232,85 @@ public partial class NetworkManager : Node
         if (_wantHost && _announced && !_offered && Link.ClientCount + 1 >= _players)
             OfferSession();
 
-        if (!_timedOut && Time.GetTicksMsec() - _t0 > (ulong)_waitMs)
+        int frist = Frist;
+        if (frist > 0 && !_timedOut && Time.GetTicksMsec() - _t0 > (ulong)frist)
         {
             _timedOut = true;
             Fault = _wantHost
-                ? $"nach {_waitMs} ms sind nur {Link.ClientCount + 1} von {_players} " +
+                ? $"nach {frist} ms sind nur {Link.ClientCount + 1} von {_players} " +
                   "Mitspielern da — die Partie kommt nicht zustande"
-                : $"nach {_waitMs} ms keine Partie vom Gastgeber ({_address}:{_port}), " +
+                : $"nach {frist} ms keine Partie vom Gastgeber ({_address}:{_port}), " +
                   $"Verbindungszustand {Link.Status}";
             GD.PrintErr("netz: " + Fault);
         }
     }
 
+    /// <summary>
+    /// ⚠ <b>WIE LANGE GEWARTET WIRD, HÄNGT AM WEG — und das ist ein
+    /// Spielerbefund vom 15.08.2026, wörtlich: »drücke ich bei multiplayer auf
+    /// partie starten, schließt sich das spiel.«</b>
+    ///
+    /// <para>Die Ursache war nicht die Frist, sondern dass ein PRÜFSTANDSVERHALTEN
+    /// auf dem Spielerweg lag: nach 20 000 ms setzte diese Klasse
+    /// <see cref="TimedOut"/>, und das Menü beendete daraufhin das Programm mit
+    /// Rückgabewert 5. Für einen kopflosen Lauf ist genau das richtig — ein
+    /// Prüfstand, der ewig auf ein Gegenüber wartet, hält die Bausperre für alle.
+    /// Für einen Menschen ist es ein Absturz ohne Erklärung.</para>
+    ///
+    /// <list type="bullet">
+    ///   <item><b>Menü + Gastgeber → 0 = UNBEGRENZT.</b> Er wartet auf einen
+    ///   MENSCHEN, der an einem zweiten Rechner das Programm startet, das Menü
+    ///   findet und die Adresse eintippt. 20 Sekunden sind dafür nicht knapp,
+    ///   sondern falsch. Ausweg ist der Knopf »ABBRECHEN«, nicht die Uhr.</item>
+    ///   <item><b>Menü + Beitreten → 30 000 ms</b>, und dann NICHT beenden,
+    ///   sondern zurück in die Lobby mit dem Grund. Hier ist eine Frist
+    ///   nützlich: eine falsch getippte Adresse muss sich melden, sonst wartet
+    ///   man auf etwas, das nie kommt.</item>
+    ///   <item><b>Befehlszeile → <c>--net-warte=</c>, Vorgabe 20 000 ms</b>, und
+    ///   danach Rückgabewert 5. Unverändert, denn das ist der Prüflauf.</item>
+    /// </list>
+    /// </summary>
+    private int Frist => FromMenu ? (_wantHost ? 0 : 30000) : _waitMs;
+
     public static bool TimedOut => Instance is { _timedOut: true };
+
+    /// <summary>
+    /// Hat das MENÜ die Leitung geöffnet (und nicht die Befehlszeile)?
+    ///
+    /// <para>⚠ Die Unterscheidung ist der Kern der Reparatur des
+    /// Spielerbefunds: <b>aus dem Menü heraus wird nie beendet.</b> Eine
+    /// Zeitüberschreitung führt dort zurück in die Lobby, und der Spieler kann
+    /// weiterklicken. Vom Prüfstand aus ist Beenden das gewünschte Verhalten —
+    /// und genau deshalb konnte ein kopfloser Lauf diesen Fehler nicht
+    /// zeigen.</para>
+    /// </summary>
+    public static bool FromMenu { get; private set; }
+
+    /// <summary>
+    /// DIE LEITUNG WIEDER ZUMACHEN — und zwar so, dass die Lobby danach
+    /// benutzbar ist.
+    ///
+    /// <para>Gerufen vom Knopf »ABBRECHEN« und von der Zeitüberschreitung auf dem
+    /// Menüweg. Alles, was eine halb aufgebaute Partie hinterlässt, muss hier
+    /// weg: die Steckdose, der Angebotsmerker, der Anmeldemerker und der
+    /// erzwungene Keim. ⚠ <b>Besonders der Keim</b> — bliebe
+    /// <c>Determinism.Forced</c> stehen, spielte das nächste Einzelgefecht mit
+    /// dem Keim einer Partie, die nie zustande kam. Das wäre kein Fehler, den man
+    /// bemerkt, sondern einer, der eine Karte still anders auslost.</para>
+    /// </summary>
+    public static void Cancel(string reason)
+    {
+        if (Instance == null) return;
+        Link?.Close();
+        Link = null;
+        Fault = reason;
+        FromMenu = false;
+        var i = Instance;
+        i._offered = i._announced = i._applied = i._timedOut = false;
+        i._wantHost = i._wantJoin = false;
+        Determinism.Forced = null;
+        GD.Print($"netz: abgebrochen — {reason}");
+    }
 
     private bool _announced;
 

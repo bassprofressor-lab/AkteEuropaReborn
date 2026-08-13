@@ -35,6 +35,34 @@ public partial class MainMenu
     private Label? _netStatus;
     private VBoxContainer? _netDetails;
 
+    /// <summary>
+    /// »ABBRECHEN« — und dieser Knopf ist die Hälfte der Reparatur des
+    /// Spielerbefunds vom 15.08.2026 (»drücke ich bei multiplayer auf partie
+    /// starten, schließt sich das spiel«).
+    ///
+    /// <para>Die andere Hälfte ist, dass aus dem Menü heraus nicht mehr beendet
+    /// wird (<see cref="NetworkManager.Frist"/>). Beides gehört zusammen: ein
+    /// Gastgeber muss <b>unbegrenzt</b> warten dürfen, weil er auf einen MENSCHEN
+    /// wartet — und wer unbegrenzt wartet, braucht einen Ausweg, sonst ist das
+    /// Warten selbst der Absturz. Die Uhr war der falsche Ausweg.</para>
+    ///
+    /// <para>⚠ Er ist nur sichtbar, WÄHREND gewartet wird. Ein Abbrechen-Knopf,
+    /// der immer dasteht, sagt nichts darüber, dass gerade etwas läuft.</para>
+    /// </summary>
+    private Button? _netCancel;
+
+    /// <summary>Vom Knopf gesetzt, von der Warteschleife gelesen. ⚠ Kein
+    /// direkter Abbruch im Signalhandler: der läuft mitten im Bildlauf, die
+    /// Schleife wartet auf <c>ProcessFrame</c>, und ein Aufräumen an zwei
+    /// Stellen gleichzeitig ist genau die Sorte Fehler, die man erst im dritten
+    /// Anlauf findet.</summary>
+    private bool _netCancelWanted;
+
+    /// <summary>Läuft gerade eine Warteschleife? Solange sie läuft, ist der
+    /// Startknopf gesperrt — sonst legt ein zweiter Druck eine zweite
+    /// Warteschleife auf dieselbe Leitung.</summary>
+    private bool _netWaiting;
+
     /// <summary>Der Rahmen um den Netzkasten (<c>Accent("Netzwerk", …)</c>). Er
     /// wird IMMER gebaut und im Gefecht nur versteckt — siehe
     /// <see cref="ApplyNetEntry"/>. ⚠ Versteckt wird der RAHMEN, nicht sein
@@ -166,6 +194,11 @@ public partial class MainMenu
             Modulate = new Color(0.7f, 0.75f, 0.8f),
         };
         _netDetails.AddChild(_netStatus);
+
+        _netCancel = new Button { Text = "ABBRECHEN", Visible = false };
+        _netCancel.Pressed += () => _netCancelWanted = true;
+        _netDetails.AddChild(_netCancel);
+
         box.AddChild(_netDetails);
 
         _netMode.ItemSelected += _ =>
@@ -186,10 +219,96 @@ public partial class MainMenu
             _netAddr.Editable = false;
             _netStatus.Text = "von der Befehlszeile geöffnet — " + NetworkManager.StatusLine();
         }
+        // Der Prüfschalter für den Spielerweg (--net-probe=), verzögert, damit er
+        // hinter ApplyNetEntry liegt.
+        CallDeferred(nameof(NetProbeArm));
+
         // ⚠ Der Kasten selbst bleibt sichtbar — ein- und ausgeblendet wird sein
         // RAHMEN (_netFrame, gesetzt beim Aufbau des Schirms), damit im Gefecht
         // nicht ein leerer Kasten mit der Überschrift »Netzwerk« stehenbleibt.
         return box;
+    }
+
+    /// <summary>
+    /// ZURÜCK IN DIE LOBBY — der Weg, den es vor dem 15.08.2026 nicht gab.
+    ///
+    /// <para>Statt das Programm zu beenden: die Leitung schliessen, den Grund in
+    /// die Statuszeile schreiben, den Abbrechen-Knopf wegnehmen und den
+    /// Startknopf wieder freigeben. <b>Der Spieler steht danach genau da, wo er
+    /// vor dem Druck stand</b>, und kann es noch einmal versuchen oder etwas
+    /// anderes einstellen.</para>
+    ///
+    /// <para>⚠ Die Leitung MUSS dabei zu — ein liegengebliebener Lauscher auf
+    /// Port 27015 lässt den nächsten Versuch mit »CreateServer(27015) -&gt;
+    /// ERR_CANT_CREATE« scheitern, und dann sähe die Reparatur schlechter aus als
+    /// der Fehler. Deshalb <see cref="NetworkManager.Cancel"/> und nicht bloss
+    /// eine Meldung.</para>
+    /// </summary>
+    private void BackToLobby(string why)
+    {
+        NetworkManager.Cancel(why);
+        _netWaiting = false;
+        _netCancelWanted = false;
+        if (_netCancel != null) _netCancel.Visible = false;
+        if (_startButton != null) _startButton.Disabled = false;
+        if (_netMode != null)
+        {
+            // Die Felder waren gesperrt, solange die Befehlszeile die Leitung
+            // hielt; jetzt hält sie niemand mehr.
+            _netMode.Disabled = false;
+            if (_netAddr != null) _netAddr.Editable = true;
+        }
+        if (_netStatus != null) _netStatus.Text = why;
+        GD.Print("netz: zurück in der Lobby — " + why);
+    }
+
+    /// <summary>
+    /// DER PRÜFSCHALTER FÜR DEN SPIELERWEG: <c>--net-probe=host</c> oder
+    /// <c>--net-probe=join:&lt;adresse&gt;[:&lt;port&gt;]</c>.
+    ///
+    /// <para>Er stellt den Netzkasten ein und drückt den Startknopf — über
+    /// dieselbe Methode, die der Knopf ruft, also nicht daneben herum. Zusammen
+    /// mit <c>--setup=net</c> und <c>--shot=</c> ist damit der Spielerweg
+    /// messbar.</para>
+    ///
+    /// <para>⚠ <b>Warum es diesen Schalter überhaupt braucht.</b> Der Fehler, den
+    /// er prüft, ist genau der, den kein kopfloser Lauf zeigen kann: dort ist
+    /// Beenden das gewünschte Verhalten. Ein Prüfstand, der nur den kopflosen Weg
+    /// kennt, hätte »Programm beendet sich nach 20 s« als Erfolg gemeldet — und
+    /// er hat es getan, bis der Spieler es am echten Weg fand. Also muss der
+    /// Prüfstand an den Weg mit Fenster heran, und dafür muss er auf einen Knopf
+    /// drücken können.</para>
+    ///
+    /// <para>⚠ Wartet 30 Bilder ab, damit er HINTER <see cref="ApplyNetEntry"/>
+    /// liegt — das setzt den Modus, und wer davor stellt, stellt umsonst.</para>
+    /// </summary>
+    private async void NetProbeArm()
+    {
+        string want = "";
+        foreach (string a in Core.CommandLine.Args)
+            if (a.StartsWith("--net-probe=")) want = a["--net-probe=".Length..];
+        if (want.Length == 0) return;
+
+        for (int i = 0; i < 30; i++)
+        {
+            if (!IsInsideTree()) return;
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+        if (!IsInsideTree() || _netMode == null) return;
+
+        if (want.StartsWith("join"))
+        {
+            _netMode.Selected = 2;
+            int c = want.IndexOf(':');
+            if (c > 0 && _netAddr != null) _netAddr.Text = want[(c + 1)..];
+        }
+        else _netMode.Selected = 1;
+        if (_netDetails != null) _netDetails.Visible = true;
+        if (_netStatus != null) _netStatus.Text = NetStatusText(_netMode.Selected);
+        GD.Print($"netz-probe: Modus {_netMode.Selected} " +
+                 $"({(_netMode.Selected == 1 ? "Gastgeber" : "Beitreten")}), " +
+                 $"Adresse {_netAddr?.Text}, druecke den Startknopf");
+        StartWhenNetIsReady();
     }
 
     /// <summary>Adresse und Port aus einem Feld — <c>127.0.0.1:27015</c> oder nur
@@ -215,6 +334,13 @@ public partial class MainMenu
     /// </summary>
     private async void StartWhenNetIsReady()
     {
+        // ⚠ Ein zweiter Druck während des Wartens legte eine ZWEITE
+        // Warteschleife auf dieselbe Leitung — zwei Schleifen, die beide
+        // aufräumen wollen. Der Startknopf ist währenddessen gesperrt; dieser
+        // Riegel ist der zweite, weil ein gesperrter Knopf immer noch über
+        // `CallDeferred` aus AutoStart erreicht werden kann.
+        if (_netWaiting) return;
+
         // Der Schirm darf die Steckdose öffnen — bis heute ging das nur über die
         // Befehlszeile, und einen Schalter, den ein Spieler nicht hat, hat er
         // nicht (dieselbe Lehre wie beim Karteneditor).
@@ -249,31 +375,80 @@ public partial class MainMenu
 
         ulong t0 = Time.GetTicksMsec();
         ulong said = 0;
+        _netWaiting = true;
+        _netCancelWanted = false;
+        if (_netCancel != null) _netCancel.Visible = true;
+        if (_startButton != null) _startButton.Disabled = true;
+
         while (!NetworkManager.SessionReady)
         {
             if (!IsInsideTree()) return;
+
+            // ⚠ DER AUSWEG. Spielerbefund vom 15.08.2026: »drücke ich bei
+            // multiplayer auf partie starten, schließt sich das spiel.«
+            if (_netCancelWanted)
+            {
+                BackToLobby("abgebrochen — die Leitung ist wieder zu.");
+                return;
+            }
             if (NetworkManager.TimedOut)
             {
+                // ⚠ HIER STAND `GetTree().Quit(5)`, und das war der Absturz.
+                //
+                // Der Rückgabewert 5 ist für einen kopflosen Prüflauf genau
+                // richtig — ein Prüfstand, der ewig auf ein Gegenüber wartet,
+                // hält die Bausperre für alle drei Agenten. Auf dem Spielerweg
+                // ist dieselbe Zeile ein Programmende ohne Erklärung, nach
+                // zwanzig Sekunden, in denen nichts weiter passiert ist als
+                // dass niemand beigetreten ist.
+                //
+                // ⚠ Und deshalb konnte kein kopfloser Lauf ihn zeigen: dort IST
+                // Beenden das gewünschte Verhalten. Belegt ist die Reparatur nur
+                // mit FENSTER (scratchpad/mp-frist-*.png).
+                if (NetworkManager.FromMenu)
+                {
+                    BackToLobby(NetworkManager.Fault + " — nichts verloren, " +
+                                "einfach noch einmal versuchen.");
+                    return;
+                }
                 GD.PrintErr("netz: die Partie kommt nicht zustande — " + NetworkManager.Fault);
                 GetTree().Quit(5);
                 return;
             }
             ulong waited = Time.GetTicksMsec() - t0;
+
+            // ⚠ »Warte auf Server« gilt nur für den BEITRETENDEN — im Bild UND im
+            // Protokoll. Beim Gastgeber wäre es falsch: er IST der Server, und
+            // dass noch niemand da ist, ist kein Fehlerzustand, sondern der
+            // Normalfall der ersten Minute. Das Original meint mit der Zeile
+            // (0x4FA570) auch genau den Mitspieler — sie hängt an
+            // [0x4F6F28] == 0xFF, dem Warten auf die Freigabe 978.
+            bool joining = NetworkManager.Link is { IsHost: false };
+
             // Die Fristen des Originals, damit im Protokoll dieselben Zahlen
             // stehen: 2000 ms je Spielerplatz (@0x4C5B78), 5000 ms bis
             // »Warte auf Server« (0x1388 @0x41504E).
-            if (waited >= 2000 && said < 2000) { said = 2000; GD.Print($"netz: warte {waited} ms auf die Partie"); }
-            if (waited >= 5000 && said < 5000) { said = 5000; GD.Print($"netz: »Warte auf Server« ({waited} ms)"); }
+            if (waited >= 2000 && said < 2000)
+            { said = 2000; GD.Print($"netz: warte {waited} ms auf die Partie"); }
+            if (waited >= 5000 && said < 5000)
+            {
+                said = 5000;
+                GD.Print(joining
+                    ? $"netz: »Warte auf Server« ({waited} ms)"
+                    : $"netz: der Gastgeber wartet weiter ({waited} ms) — {NetworkManager.HostHint()}");
+            }
             // ⚠ Auch INS BILD, nicht nur ins Protokoll: ein Wartezustand, den man
             // nicht sieht, ist von einem Absturz nicht zu unterscheiden. Das
             // Original schreibt dafür »Warte auf Server« (0x4FA570) auf den
             // Schirm, und es tut das nach 5000 ms.
             if (_netStatus != null)
                 _netStatus.Text = $"{NetworkManager.StatusLine()}  ({waited / 1000} s)" +
-                                  (waited >= 5000 ? "  —  »Warte auf Server«" : "");
+                                  (joining && waited >= 5000 ? "  —  »Warte auf Server«" : "");
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         }
         if (!IsInsideTree()) return;
+        _netWaiting = false;
+        if (_netCancel != null) _netCancel.Visible = false;
 
         // ⚠ Die Karte kommt jetzt aus der Partie, nicht aus dem Auswahlfeld.
         // Sonst spielte der Mitspieler die Karte, die BEI IHM im Menü stand.
