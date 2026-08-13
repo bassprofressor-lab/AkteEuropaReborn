@@ -133,10 +133,24 @@ public partial class MapEntityLayer
 
     /// <summary>@0x4205C0 — the cell must lie in the 3x3 window of a deposit.
     /// The deposit list itself is filled by the MISSION SCRIPT, not by the map:
-    /// <c>add_terra_place(col, row, amount)</c> @0x4D05C0 has 56 call sites,
-    /// every one of them in the script region 0x487000..0x492000 and every one
-    /// with constant arguments — (4, 55, 5000), (11, 38, 1000), (20, …, 20000)
-    /// and so on. So this cannot be right before the scripts are read.</summary>
+    /// <c>add_terra_place(col, row, amount)</c> has its call sites in the script
+    /// region 0x487000..0x492000, every one with constant arguments —
+    /// (4, 55, 5000), (11, 38, 1000), (20, …, 20000) and so on. So this cannot
+    /// be right before the scripts are read.
+    ///
+    /// <para>⚠ Korrektur 13.08.2026, zur Adresse: <b>@0x4D05C0 ist die
+    /// F:-Fassung</b> (der Entwicklungsbau); in der untersuchten Fassung auf
+    /// <c>C:\Program Files (x86)</c> liegt dieselbe Funktion an
+    /// <b>@0x4D0A10</b>. Hier stand nur die eine Zahl ohne die Fassung dazu —
+    /// und wer nach ihr in der falschen EXE sucht, findet nichts. Nach der FORM
+    /// suchen, nicht nach der Adresse.</para>
+    ///
+    /// <para>⚠ Und ein offener Widerspruch, ausdrücklich nicht glattgebügelt:
+    /// hier stand <b>56</b> Aufrufstellen, eine Messung vom 13.08. über das
+    /// Profil (drei Konstanten je Aufruf) kam auf <b>50</b> Vorkommen in 8
+    /// Missionen, in beiden Fassungen gleich. Welche Zählung mitzählt, was die
+    /// andere weglässt, ist ungeklärt — beide Zahlen bleiben stehen, bis es
+    /// jemand nachzählt.</para></summary>
     private bool CellOnDeposit(int col, int row)
     {
         foreach (var d in _deposits)
