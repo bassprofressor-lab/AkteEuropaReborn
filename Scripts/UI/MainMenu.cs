@@ -66,6 +66,21 @@ public partial class MainMenu : Control
     /// Optional, weil der Gefechtsschirm auch ohne die Zeile gebaut werden
     /// kann.</summary>
     private CheckBox? _allUnits;
+
+    /// <summary>Die Zeile unter dem Haken, die seinen Zustand ausspricht: ohne
+    /// ihn bleiben die Flughaefen der Karte ohne Angebot, und das soll dastehen,
+    /// bevor der Spieler startet — nicht erst auffallen, wenn er drin ist.
+    /// Siehe die Begruendung am Aufbau des Kastens.</summary>
+    private Label? _allUnitsHint;
+
+    /// <summary>Der Kasten um den Haken. Sein RAND traegt den Zustand — amber
+    /// wenn aus, blau wenn an. Grund: das Haekchen-Symbol selbst ist auf dem
+    /// dunklen Grund nur ein Fleck von wenigen Bildpunkten (am Bildschirmfoto
+    /// vom 13.08. nachgesehen), der Rand dagegen ist ueber die ganze Breite zu
+    /// sehen. Die Information darf nicht am kleinsten Element des Kastens
+    /// haengen.</summary>
+    private PanelContainer? _allUnitsPanel;
+
     private SpinBox _ai = null!;
     private Label _hint = null!;
 
@@ -472,17 +487,55 @@ public partial class MainMenu : Control
         // hat dort also nichts anzubieten. Mit dem Haken bekommen alle acht
         // Spieler die acht Vorlagen aus aircraft.json, und am Boden entfaellt
         // die Freigabe-Pruefung.
+        //
+        // ⚠ 13.08.2026 — HERAUSGEHOBEN UND GESPEICHERT, nach einem Spielerbefund
+        // am echten Spielweg: »ich hatte im Gefecht am Flughafen keine
+        // Flugeinheiten zur Auswahl«, das Gebaeude war eingenommen und der
+        // Installer war der neue. Der Haken war die Ursache, und der Spieler
+        // sagt dazu: »der ist aber schwer wahrzunehmen an der Stelle«. Er stand
+        // als vierte Row() unter Gegner/Startplatz/Schwierigkeit/Rohstoffe, in
+        // der 440 px schmalen Einstellungsspalte — und sah damit aus wie eine
+        // Einstellung unter vielen, waehrend er in Wahrheit entscheidet, ob die
+        // Flughaefen der Karte ueberhaupt etwas tun (NET02 sieben, NET04 acht).
+        // Deshalb: eigener Kasten mit Akzentrand ueber die ganze Breite, direkt
+        // ueber dem Startknopf, und eine Zeile darunter, die den Zustand
+        // AUSSPRICHT statt ihn nur zu setzen.
+        //
+        // ⚠ Die Vorgabe bleibt AUS. Sie zu drehen waere eine stille Setzung,
+        // solange ungelesen ist, woher das Original im Netzwerkspiel seine
+        // Flugzeugvorlagen nimmt — bei den Schiffen kopiert @0x4b2330 den Block
+        // von Spieler 0 in die anderen sieben, fuer die Flugzeuge ist das
+        // Gegenstueck noch nicht gefunden. Gespeichert wird sie trotzdem
+        // (Settings.SkirmishAllUnits): sie war ein fluechtiges static bool, ein
+        // gesetzter Haken war beim naechsten Start wieder weg.
+        SkirmishSetup.AllUnits = Settings.SkirmishAllUnits;
         _allUnits = new CheckBox
         {
-            Text = "auch Lufteinheiten, ganze Entwurfsliste",
+            Text = "Luftwaffe und ganze Entwurfsliste kaufbar",
             ButtonPressed = SkirmishSetup.AllUnits,
             TooltipText = "Gefechtskarten bringen keine Flugzeugvorlagen mit. " +
                           "Mit dieser Option bekommt jeder Spieler alle acht — " +
                           "die Gegner ebenso.",
         };
-        right.AddChild(Row("Alle Einheiten", _allUnits));
+        _allUnits.AddThemeFontSizeOverride("font_size", 20);
+        _allUnitsHint = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        _allUnitsHint.AddThemeFontSizeOverride("font_size", 14);
+        _allUnits.Toggled += _ => UpdateAllUnitsHint();
 
         box.AddChild(new HSeparator());
+
+        var allUnitsBox = new VBoxContainer();
+        allUnitsBox.AddThemeConstantOverride("separation", 2);
+        allUnitsBox.AddChild(_allUnits);
+        allUnitsBox.AddChild(_allUnitsHint);
+        // ⚠ OHNE Titelzeile, und das ist am Bild entschieden, nicht geschaetzt.
+        // Der erste Anlauf hatte eine (»Luftwaffe und ganze Entwurfsliste«) —
+        // im Bildschirmfoto vom 13.08. doppelte sie den Text des Hakens direkt
+        // darunter UND machte den Schirm eine Zeile zu hoch: »Zurueck zum
+        // Menue« stand halb ausserhalb des Fensters. Der Haken IST die Zeile.
+        _allUnitsPanel = Accent("", allUnitsBox);
+        box.AddChild(_allUnitsPanel);
+        UpdateAllUnitsHint();
 
         var start = new Button { Text = "GEMETZEL STARTEN", CustomMinimumSize = new Vector2(0, 44) };
         start.Pressed += OnStart;
@@ -1124,6 +1177,74 @@ public partial class MainMenu : Control
     /// der ganze Gefechtsschirm; sie ist der Grund, warum die Seite jetzt aus
     /// drei Bloecken besteht statt aus einer Reihe gleich aussehender
     /// Auswahlfelder.</summary>
+    /// <summary>Sagt aus, was der Haken »Alle Einheiten« gerade bedeutet.
+    ///
+    /// <para>⚠ Der Sinn dieser Zeile ist ein Spielerbefund vom 13.08.2026: der
+    /// Haken war aus, am eingenommenen Flughafen stand keine Flugeinheit zur
+    /// Auswahl, und das war von aussen nicht von einem Fehler zu unterscheiden.
+    /// Ein Schalter, dessen Folge man erst im Spiel merkt, gehoert beschriftet.
+    /// Die Zahlen sind die gemessenen (Boden 601 gegen 65 Entwuerfe, Luft 8
+    /// gegen 0, See 10 gegen 2) — siehe SkirmishSetup.AllUnits.</para></summary>
+    private void UpdateAllUnitsHint()
+    {
+        if (_allUnitsHint == null) return;
+        bool on = _allUnits?.ButtonPressed ?? false;
+        // Einzeilig halten: die zweizeilige Fassung hat den Schirm zu hoch
+        // gemacht. Die Zahlen sind gemessen, keine Schaetzung.
+        _allUnitsHint.Text = on
+            ? "AN — acht Flugzeugvorlagen je Spieler, 601 Entwuerfe am Boden, "
+              + "10 Schiffe. Die Gegner ebenso."
+            : "AUS — Flughaefen bleiben ohne Angebot, auch eingenommen. "
+              + "Am Boden 65 von 601 Entwuerfen, zur See 2 von 10.";
+        var akzent = on
+            ? new Color(0.45f, 0.60f, 0.78f)
+            : new Color(0.92f, 0.72f, 0.42f);
+        _allUnitsHint.Modulate = akzent;
+
+        // ⚠ Der Rand traegt den Zustand mit, siehe _allUnitsPanel: das
+        // Haekchen-Symbol allein ist zu klein, um die Frage zu beantworten.
+        if (_allUnitsPanel?.GetThemeStylebox("panel") is StyleBoxFlat sb)
+        {
+            sb.BorderColor = akzent;
+            _allUnitsPanel.AddThemeStyleboxOverride("panel", sb);
+        }
+    }
+
+    /// <summary>Wie <see cref="Group"/>, aber mit Akzentrand — fuer die eine
+    /// Einstellung, die man nicht uebersehen darf. Bewusst dieselbe Bauform, damit
+    /// der Schirm nicht auseinanderfaellt; es unterscheidet sie nur der Rand.
+    ///
+    /// <para>Ein LEERER Titel laesst die Titelzeile weg. Das ist kein Sonderfall
+    /// aus Bequemlichkeit: wo der Inhalt selbst schon eine Beschriftung traegt,
+    /// doppelt ein Titel sie nur und kostet eine Zeile Hoehe, die der Schirm
+    /// nicht hat.</para></summary>
+    private static PanelContainer Accent(string title, Control content)
+    {
+        var p = new PanelContainer();
+        var style = new StyleBoxFlat
+        {
+            BgColor = new Color(0.11f, 0.13f, 0.17f),
+            BorderColor = new Color(0.45f, 0.60f, 0.78f),
+            ContentMarginLeft = 12, ContentMarginRight = 12,
+            ContentMarginTop = 8, ContentMarginBottom = 10,
+        };
+        style.SetBorderWidthAll(2);
+        p.AddThemeStyleboxOverride("panel", style);
+
+        var v = new VBoxContainer();
+        v.AddThemeConstantOverride("separation", 4);
+        p.AddChild(v);
+
+        if (title.Length > 0)
+        {
+            var h = new Label { Text = title, Modulate = new Color(0.72f, 0.84f, 1.00f) };
+            h.AddThemeFontSizeOverride("font_size", 18);
+            v.AddChild(h);
+        }
+        v.AddChild(content);
+        return p;
+    }
+
     private static PanelContainer Group(string title, Control content)
     {
         var p = new PanelContainer();
@@ -1172,7 +1293,15 @@ public partial class MainMenu : Control
             _ => MapEntityLayer.AiLevel.Normal,
         };
         if (_res != null) SkirmishSetup.Resources = _res.Selected;
-        if (_allUnits != null) SkirmishSetup.AllUnits = _allUnits.ButtonPressed;
+        // ⚠ Beides, und in dieser Reihenfolge: der Lauf bekommt den Wert, und
+        // die Einstellung merkt ihn sich fuer den naechsten Programmstart. Ohne
+        // die zweite Zeile war der Haken ein fluechtiges static bool — siehe
+        // Settings.SkirmishAllUnits.
+        if (_allUnits != null)
+        {
+            SkirmishSetup.AllUnits = _allUnits.ButtonPressed;
+            Settings.SkirmishAllUnits = _allUnits.ButtonPressed;
+        }
         SkirmishSetup.CampaignMission = 0;      // a skirmish records nothing
         SkirmishSetup.Active = true;
         StopBackdrop();

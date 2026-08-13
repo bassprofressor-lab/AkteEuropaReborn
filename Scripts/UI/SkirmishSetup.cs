@@ -32,6 +32,36 @@ public static class SkirmishSetup
     public static int Resources = 2;
 
     /// <summary>
+    /// <b>»Techstandard« — die Technikstufe, mit der ein Gefecht anfängt.</b>
+    ///
+    /// <para>⚠ <b>NICHTS DAVON IST UNSERE SETZUNG</b>, gelesen am 13.08.2026 in
+    /// beiden GAME.EXE: Bereich <b>1..8</b> ist der Bereich des Knopfs
+    /// @0x44D3BC, <b>1</b> ist der Wert eines frischen Spiels (@0x4426F4), und
+    /// die Beschriftung ist die des Originals — <c>Techstandard </c> (0x502630),
+    /// aus derselben Reihe wie <c>Rohstoffe: </c> und <c>Konto </c>, die wir
+    /// schon haben. Der Gastgeber stellt sie im Aufbaubild ein; Kommando 979
+    /// trägt sie ein, Kommando 981 startet.</para>
+    ///
+    /// <para><b>Was daran hängt.</b> Die Torroutine @0x419F30 setzt aus diesem
+    /// Wert die Freigaben der Flugzeugtabelle (0x51B020, 8 Blöcke × 20 Sätze ×
+    /// 48 B) und lässt @0x4B2380 den Block von Spieler 0 in die anderen sieben
+    /// kopieren — das Gegenstück zu @0x4B2330 bei den Schiffen. Gemessen ergibt
+    /// das: Stufe <b>1–3</b> Treibstoff- und Munitionheli · <b>4</b> dazu den
+    /// Kampfhubschrauber · <b>5</b> den Spionageflieger · <b>6–8</b> Jagdflieger
+    /// und Bomber. <b>Die Liste ist auf keiner Stufe leer</b>, und genau darum
+    /// braucht das Gefecht für die Luft keine Option von uns.</para>
+    ///
+    /// <para>⚠ Die Kampagne geht einen ANDEREN Weg (@0x4D03E0 →
+    /// Rücksetzroutine @0x4B23C0, die alle Freigaben nullt) und schaltet einzeln
+    /// per Skript frei. Zwei getrennte Quellen, keine Überschneidung — deshalb
+    /// gilt dieser Wert nur, wo <see cref="CampaignMission"/> 0 ist.</para>
+    ///
+    /// <para>Derselbe Wert gehört unter den <b>Schiffs</b>-Rückfall, wo heute
+    /// die Konstante <c>CampaignTechLevel = 1</c> steht: dann kommen beide
+    /// Listen aus einer Quelle.</para></summary>
+    public static int Techstandard = 1;
+
+    /// <summary>
     /// <b>»Alle Einheiten« — und damit auch LUFTEINHEITEN.</b>
     ///
     /// <para>⚠ <b>UNSERE OPTION</b>, und sie steht hier, weil das Original für
