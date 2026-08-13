@@ -5044,18 +5044,29 @@ public partial class MapEntityLayer : Node2D
         foreach (var e in _entities)
         {
             if (!e.IsBuilding || e.Dead || e.Owner != player) continue;
-            bool hit = cls switch
-            {
-                0 => e.BType != 0,
-                1 => e.BType is 2 or 3 or 4,
-                2 => e.BType is 10 or 15,
-                3 => e.BType is 6 or 12,
-                _ => false,
-            };
-            if (hit) n++;
+            if (IsBuildingClass(e.BType, cls)) n++;
         }
         return n;
     }
+
+    /// <summary>Gehört ein Bauwerk dieses <c>BType</c> zur Gebäudeklasse
+    /// <paramref name="cls"/>, nach der die Kampagne fragt?
+    ///
+    /// <para>⚠ Diese Zuordnung stand am 13.08.2026 an ZWEI Stellen — hier und in
+    /// der Erzwingungsschleife von <c>MissionScriptForceCheck</c>, wo sie
+    /// zunächst ganz fehlte und dadurch Mission 5 und 23 durchfallen liess. Sie
+    /// steht jetzt einmal, weil zwei Kopieen derselben Liste in einer Datei
+    /// dieser Grösse zuverlässig auseinanderlaufen: der Prüfstand muss dieselbe
+    /// Klasse meinen wie der Zähler, sonst prüft er etwas anderes als die
+    /// Bedingung.</para></summary>
+    private static bool IsBuildingClass(int bType, int cls) => cls switch
+    {
+        0 => bType != 0,
+        1 => bType is 2 or 3 or 4,      // Fabriken
+        2 => bType is 10 or 15,         // Minen
+        3 => bType is 6 or 12,          // Bahnhöfe
+        _ => false,
+    };
 
     /// <summary>
     /// Satzbyte +0x0a (das spieleigene `typ`) für eine Einheit, die NICHT von
@@ -5916,7 +5927,20 @@ public partial class MapEntityLayer : Node2D
                 {
                     "objects" => e.IsBuilding && e.BType == c.A,
                     "units" => !e.IsBuilding,
-                    "buildings" => e.IsBuilding,
+                    // ⚠ 13.08.2026 — DIE KLASSE ZAEHLT MIT. Hier stand nur
+                    // `e.IsBuilding`, und damit uebergab der Pruefstand ein
+                    // BELIEBIGES Bauwerk — auf map_05 einen Skriptplatz mit
+                    // BType 0, also gar keins. `BuildingClassCount(1, 0)` blieb
+                    // dadurch 0, und Mission 5 wie Mission 23 fielen durch, aus
+                    // einem Grund, der mit der geprueften Kette nichts zu tun
+                    // hat. `--produce-check` beweist unabhaengig, dass Mission 5
+                    // in 6 s gewinnt, sobald sie ihre Fabriken hat: der Defekt
+                    // war ausschliesslich im Pruefstand.
+                    //
+                    // Wieder ein Fall von »ein Pruefstand, der eine Zahl SETZT,
+                    // prueft die Zahl und nicht die Mechanik« — er hat hier
+                    // sogar die falsche Zahl gesetzt.
+                    "buildings" => e.IsBuilding && IsBuildingClass(e.BType, c.A),
                     _ => false,
                 };
                 if (!isKind) continue;
@@ -6443,7 +6467,13 @@ public partial class MapEntityLayer : Node2D
     private static void SaveOwnDesigns()
     {
         if (_designs == null) return;
-        var c = new ConfigFile();
+        // ⚠ `using`: ConfigFile ist ein RefCounted, und ein nicht freigegebenes
+        // stirbt beim Herunterfahren im Finalizer. Dasselbe Muster hat am
+        // 13.08.2026 in Settings.cs »Leaked unsafe reference to object:
+        // <ConfigFile#…>« in Serie und danach 0xC0000005 in GC.RunFinalizers
+        // erzeugt (Rueckgabewerte 139/132 statt 0, Commit 615c1c5). Hier ist es
+        // je Aufruf eines statt je Bild, also genuegt `using`.
+        using var c = new ConfigFile();
         int n = 0;
         foreach (var d in _designs)
         {
@@ -6462,7 +6492,10 @@ public partial class MapEntityLayer : Node2D
     private static void LoadOwnDesigns()
     {
         if (_designs == null) return;
-        var c = new ConfigFile();
+        // ⚠ `using`, und hier besonders: die Zeile darunter springt mitten aus
+        // der Methode zurueck, das Objekt wurde auf dem haeufigen Weg also gerade
+        // NICHT freigegeben. Siehe SaveOwnDesigns und Commit 615c1c5.
+        using var c = new ConfigFile();
         if (c.Load(OwnDesignsPath) != Error.Ok) return;
         int n = (int)c.GetValue("designs", "count", 0);
         var seen = new HashSet<string>();
@@ -6694,7 +6727,14 @@ public partial class MapEntityLayer : Node2D
         return -1;
     }
 
-    public string MoneyLine() => $"Kontostand : $ {_money[0]}";
+    /// <summary>⚠ 13.08.2026 — hier stand fest <c>_money[0]</c>, und das ist der
+    /// Kontostand von SPIELER 0, nicht der des Spielers, dem man zusieht. Auf
+    /// <c>map_05</c> ist der Sichtspieler 1, die Zeile zeigte dort also ein
+    /// fremdes Konto. Gefunden beim Bau der stehenden Rohstoffleiste, nicht beim
+    /// Ansehen dieser Zeile — ein Fehler in Datei A fällt bei der Arbeit an
+    /// Datei B auf. Dieselbe Klemmung wie überall sonst in dieser Datei.</summary>
+    public string MoneyLine() =>
+        $"Kontostand : $ {_money[ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0]}";
 
     /// <summary>Start a research project on the selected Basis (key O).</summary>
     public void StartResearch()

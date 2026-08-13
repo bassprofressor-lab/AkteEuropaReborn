@@ -1309,8 +1309,12 @@ public partial class MapViewer : Node2D
             i = b + 1;
         }
         // Der Kontostand: MoneyLine() liefert »Kontostand : $ 44850«.
-        // ⚠ Sie liest _money[0] — auch dann, wenn der Sichtspieler ein anderer
-        // ist. Das ist eine Stelle in einer fremden Datei; sie steht im Bericht.
+        // ⚠ ERLEDIGT 13.08.2026 — hier stand, dass MoneyLine() fest _money[0]
+        // liest, auch wenn der Sichtspieler ein anderer ist (auf map_05 ist er
+        // 1). Das war richtig und ist behoben: die Zeile klemmt jetzt auf
+        // ViewPlayer, wie der Rest der Datei. Der Hinweis bleibt als Spur
+        // stehen, weil er zeigt, wie der Fehler gefunden wurde — beim Bau der
+        // Leiste, nicht beim Ansehen der Kontozeile.
         int money = 0;
         string ml = _entities.MoneyLine();
         int d = ml.LastIndexOf('$');
