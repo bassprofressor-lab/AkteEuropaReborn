@@ -7,7 +7,29 @@ dem eigenen Rechner aus der eigenen Fassung des Spiels von 1997.
 *In English: [CHANGELOG.md](CHANGELOG.md). Ältere Fassungen als 0.5.0 sind
 bisher nur dort beschrieben.*
 
-## 0.5.0 — 12.08.2026
+## 0.6.0 — unveröffentlicht
+
+Hierher geht alles, was nach 0.5.0 entsteht. Vier Bereiche, in der Reihenfolge,
+in der sie gewählt wurden:
+
+- **Multiplayer online.** Über das LAN hinaus: ein Server als Vermittler,
+  Keimverteilung durch den Server, Verzögerungsausgleich, Prüfsummen und
+  Wiederverbindung — und davor die zwei Fragen, die der LAN-Beleg nicht beantworten
+  konnte, nämlich Fließkomma-Determinismus zwischen zwei *verschiedenen* Maschinen
+  und die Befehle der Computerspieler durch den Befehlsring.
+- **Der Karteneditor.** Einzelne Zellen malen, Einheiten, Gebäude und Gleise
+  setzen, die Spielerzahl wählen, vorhandene Karten öffnen — und eine erzeugte
+  Karte vollwertig spielbar machen, nicht bloß begehbar.
+- **Gefecht.** Der Wettkampfmodus, der es werden soll: die Entscheidung Depot oder
+  Warteschlange, die Wirtschaft in der Oberfläche, die Ausgewogenheit dazu.
+- **Zug und Strecke.** Die Waggon-Feinlage in Sektion 44, die Reparaturkette
+  (vollständig gelesen, sie hat nur auf die Befehlsschicht gewartet) und die 25
+  Kettenstellen ohne Nachbarzelle.
+
+Die Kampagne bleibt originaltreu; Gefecht und Mehrspieler dürfen bewusst
+abweichen, und jede Abweichung wird als unsere gekennzeichnet.
+
+## 0.5.0 — 13.08.2026
 
 Die Fassung, in der die Kampagne anfängt, sich selbst zu entscheiden, und die
 Bahn anfängt zu fahren. Erfunden ist daran fast nichts: die Baupläne der
@@ -393,6 +415,204 @@ Spieler auf den Bildschirm gesehen hat.
   `--reexport-buildings`, `--reexport-units`, `--reexport-effects`,
   `--reexport-states`.
 
+### Mehrspieler, und der Determinismus, den er zuerst brauchte
+
+- ⚠ **Die Simulation lief auf BILDZEIT.** Gleicher Keim, gleiche Karte, gleiche
+  *simulierte* zehn Sekunden — und je nach Bildrate drei verschiedene Zustände:
+
+  | Bilder/s | Takte | Prüfsumme | Energie | Schüsse |
+  |---|---|---|---|---|
+  | 30 | 300 | `5071A756A80B2634` | 36911 | 58 |
+  | 60 | 600 | `8C5F21CD5F8AF503` | 36965 | 55 |
+  | 144 | 1440 | `F45A1091E165730F` | 36911 | 58 |
+
+  `_Process(double delta)` reichte die echte verstrichene Bildzeit in die
+  Spielwelt, allein in einer Datei an 74 Stellen: wer schneller zeichnet,
+  würfelt öfter und schießt öfter. Zwei Zwillinge mit 1/60 und 1/30 liefen nach
+  **18 Takten** auseinander. Alles, was den Zustand anfasst, steht jetzt in einem
+  Takt mit fester Länge, und es gibt **einen** Würfel statt eines je Fabrik frisch
+  und *zufällig* gekeimten.
+- **Eingaben sind Befehle geworden — erst gelesen, dann gebaut.** Das Original
+  hat genau einen Weg von der Eingabe in den Zustand, und das ist eine
+  Lockstep-Befehlsschlange: 236-Byte-Sätze in einem Ring mit 1000 Plätzen.
+  Gefunden in **beiden** GAME.EXE an ihrer FORM, nicht an ihrer Adresse
+  (Verteiler `0x4C2262` / `0x4C26E0`, Ring `0xB4FA38` / `0xB509D8`). Ein Klick ist
+  jetzt ein Satz und wirkt am **Anfang** des nächsten Takts, nie mitten im Bild.
+- **Zwei echte Prozesse spielen dieselbe Partie über ENet.** Sie verbinden sich,
+  verteilen Karte und Keim, schicken 600 Takte lang Befehle über die Leitung und
+  melden an **jedem** Prüftakt dieselbe Prüfsumme. Die Gegenprobe — auf einer
+  Seite wird ein Satz verschluckt — schlägt an und nennt Takt, Einheit und Feld.
+  Zuvor wurde das Lockstep-Protokoll des Originals vollständig gelesen: Opcode
+  1003 »Spieler ist bereit«, 978 die Rundenfreigabe, `+0x22` die Rundennummer.
+- **Eine LAN-Lobby, damit niemand eine IP tippt.** Absichtlich Frage-und-Antwort
+  statt Leuchtfeuer: der Suchende weiß, wann seine Suche anfing, und kann darum
+  ehrlich »nach 1200 ms nichts gefunden« sagen — bei einem Leuchtfeuer sind »ich
+  habe nichts gehört« und »ich habe nicht lange genug gehorcht« derselbe Zustand.
+- **»Partie starten« hat das Programm beendet.** Kein Netzfehler: eine
+  Zwanzig-Sekunden-Grenze, die für einen kopflosen Prüfstand *richtig* ist (ein
+  ewiges Warten hält die Bausperre) und auf dem Spielerweg schlicht falsch. Die
+  zwei Wege sind jetzt getrennt.
+- **Der Mehrspieler lebt in seiner eigenen Zeile im Hauptmenü.** »Netzwerkspiel«
+  war die ganze Zeit da (Platz 65, Hilfeindex 106) und tat nichts; sie heißt jetzt
+  Multiplayer und führt hin. Im Gefecht ist von Netz nichts mehr zu sehen, und
+  »Intro ansehen« ist aus dem Hauptmenü heraus.
+
+### Gefecht
+
+- **Die Luftliste hängt am Techstandard 1..8, nicht an einer Option von uns** —
+  Tor `0x419F30`, gemessen auf drei Karten (Stufe 1 → 2, 4 → 3, 5 → 4, 6 → 6
+  Vorlagen; keine Stufe ergibt ein leeres Menü). Zwei eigene Begründungen fallen
+  damit: die Gefechtskarten tragen Sektion 120 **gar nicht** (alle 23 `.CWM`
+  enden bei Sektion 39, Kopfbyte 1 statt 2 — 23 von 23 gegen 13 von 13), und die
+  Vorlagen der EXE **haben** Preise. Eine *fehlende* Sektion überschreibt nichts,
+  also bleibt im Original die Tabelle der EXE stehen.
+- **Die Zeile »Techstandard« kommt erst jetzt, da sie wirkt** — ein Schalter ohne
+  Wirkung ist genau das, woran der Spieler vorher hängengeblieben ist. Nichts
+  daran ist unsere Setzung: der Bereich ist der des Knopfs, die Vorgabe die eines
+  frischen Spiels, die Beschriftung die des Originals.
+- **Eine stehende Rohstoffleiste mit dem Zuwachs je Sekunde** (Taste `Q`). Die
+  ist unsere Zutat und ist so gekennzeichnet. Der Befund dahinter: das Original
+  führt für Fabriken **keine Bauzeit** — alle drei Herstellungswege setzen die
+  Einheit im selben Takt in die Welt, in dem der Befehl abgearbeitet wird. Es hat
+  stattdessen ein Depot mit sechs Plätzen.
+- Der Haken für die Luftwaffe war an seiner Stelle nicht wahrzunehmen und ist
+  durch die gelesene Regel oben ersetzt.
+
+### Die Kampagne
+
+- ⚠ **Die Uhr war eine Bedingung, und der Regelleser hat sie still verworfen.**
+  Ein Leser, der für ein ungelesenes Glied nichts zurückgibt, lässt `set_rules`
+  die **ganze Regel** wegwerfen, und niemand erfährt davon. Jetzt wird jedes
+  verworfene Glied benannt und gezählt: 207 Regeln ohne gelesene Bedingung, 118
+  unlesbare Vergleichswerte, 91 Vergleiche ohne Aufruf. Uhr und Einheitenindex
+  nachgetragen ergaben **+83 Regeln in 25 Missionen**.
+- **Die Kampagne setzt ihre Einheiten und schickt sie los**: `place_unit` an
+  `0x4D0810` — 60 Aufrufe in 14 Missionen, die größte Lücke im Vokabular — samt
+  der Befehle, die dazugehören.
+- **Mission 23 ist spielbar.** Die »vier Eckhöhen« eines Bauplatzes sind gar
+  keine Höhen: es sind **Klassen** aus Sektion 2 (0 unpassierbar, 1 Ufer/Sand, 2
+  offenes Land, 3 besonders), und `corners_carry` verlangt offenes Land auf allen
+  vier Ecken. Die Feld-Rohstoffmine ging dort von **0 auf 57** Bauplätze.
+- ⚠ **Die Belegungskarte ist SPALTENWEISE** (`Spalte*256 + Zeile`), belegt aus dem
+  Rumpf, der sie stempelt. Unser Leser hatte sie vertauscht, was 29 Bedingungen
+  in 12 Missionen betraf; **8 davon konnten nie wahr werden**, und Mission 7 war
+  unspielbar. Das Regelwerk kennt jetzt außerdem **ODER**.
+- **Zurückgezogen: »Mission 5 gewinnt nicht.«** Der Defekt lag im Prüfstand, der
+  ein *beliebiges* Bauwerk übergab — auf einer Karte einen Skriptplatz ohne
+  Gebäudeart.
+- **Die »22 gleich / 4 abweichend« von `--selftest-cwm` waren vier vertauschte
+  Vergleichsdateien.** `10.CWM` und `10.DM` haben denselben Dateistamm, wer beide
+  exportiert, überschreibt die Kampagnenkarte still mit einem **Spielstand**. Mit
+  zwei sauberen Sätzen: 26 Karten gleich, 0 abweichend.
+
+### Der Karteneditor
+
+- **Die Messlatte des Geländegenerators sind die 26 gelieferten Karten.** Jeder
+  Zähler war grün, während das Bild ein Schachbrett war — Wasseranteil,
+  Hangbytes, Höhensprünge alle im Rahmen, und die Kacheln setzten sich im
+  Nachbarn trotzdem nicht fort. **Die Naht entscheidet, nicht der Schlüssel**:
+  ein Schlüssel sagt, welche Codes das Original in einer *Lage* benutzt, nie
+  welchen davon es *neben* welchen setzt. Harte Nähte von **8,65 %** auf
+  0,22–3,11 % (Median der gelieferten Karten: 0,58 %).
+- ⚠ Eine Kernzahl dieser Messung war falsch und hat sich selbst verraten: die
+  Teile summierten sich auf 607.090 Zellen, während die 26 Karten 605.090 haben.
+  Es sind **29.990** Zellen mit zwei angrenzenden höheren Nachbarn, nicht 31.990
+  — und die drei *gegenüberliegenden* Fälle stehen jetzt mit ihrer Stelle da.
+- **Erzeugte Karten haben Rohstoffvorkommen.** Im Original legt sie das
+  **Missionsskript** (`add_terra_place`, 50 Aufrufe in 8 Missionen) — eine
+  erzeugte Karte hat keins, ihr Boden war also leer. Die Feld-Rohstoffmine findet
+  jetzt **8, 8 und 48** Bauplätze, wo sie keinen fand, mit der Dichte am Original
+  geeicht (0,23 gegen 0,24 Vorkommen je 1000 begehbare Zellen). ⚠ Jede Verteilung
+  dort ist **unsere Zutat** und sagt das an fünf Stellen.
+- **Und ein echter Wirtschaftsfehler, der auch die Kampagne traf:**
+  `Entity.Deposit` fing bei −1 an, eine **gebaute** Mine förderte also nie.
+  Gemessen über zehn Wirtschaftstakte: 5000 → 4950 im Boden, 50 gefördert, 50 im
+  Lager der Mine.
+
+### Die Einheitenbilder
+
+- **86 Bilder, aus den ANIM.CWA-Folgen 400..403** (Rahmen 1176..1261, lückenlos,
+  am Dateikopf nachgerechnet). Die Aufteilung ist restlos vergeben: 0..56
+  Bauteile, 57..66 Schiffsrümpfe, 67..73 Flugzeuge, 74..85 Personen. Byte **+0x0D**
+  des 58-Byte-Bauteilsatzes *ist* die Bildnummer. Sie erscheinen jetzt an allen
+  drei Stellen, die der Spieler genannt hat: im Bedienblock unten links, im
+  modularen Bausystem und in der Basis.
+- ⚠ **Für Gebäude gibt es keines — und das Original hat auch keines.** Der
+  Zeichner hat genau sechs Fälle, und keiner nimmt ein Gebäude; er berührt die
+  Gebäudetafel nie; und ein Gebäude kann gar nicht das angewählte Objekt *sein*
+  (die Anwählroutine kennt nur Landeinheiten und Flugzeugplätze, der Zahlenraum
+  dazwischen wird nie geschrieben). Vier unabhängige Messungen, alle mit rohen
+  Abtasten.
+- ⚠ **Zwei »Bytetafeln« waren Sprungtafeln.** Bei `0x450C98` stehen 13
+  Codeadressen — 12 Fälle plus **Fehlerzweig**, keine 13. Einheit. Bei `0x450D60`
+  stehen zehn, und die zweite trägt die eigentliche Permutation, weil Rumpf 151
+  unter den zehn Entwürfen **zweimal** vorkommt; »Rumpf − 150« hätte der
+  Flak-Barkasse die Raketen des L.Kreuzers und dem Schlachtschiff den kleinen
+  Flak-Kahn gegeben.
+- ⚠ **Das `yoff`-Byte gehört zum Bild.** Ohne es kommt Rahmen 1177 als 51x38
+  heraus, wo er auf der Blit-Leinwand 51x60 ist — und genau dieses Byte setzt Turm
+  und Fahrwerk zueinander.
+
+### Schiffe und Fahrzeuge stehen auf ihrer eigenen Zelle
+
+- **Schlachtschiff und Kreuzer: das BILD lag falsch, nicht der Rahmen.**
+  Auswahlrahmen, Lebensbalken und Besitzerring standen eine halbe Schiffslänge
+  neben dem Schiff. Der Rahmen ist die Grundrissfläche aus der Belegungskarte und
+  stimmt aufs Byte (4x4 beim Schlachtschiff, die Satzzelle ist die linke obere,
+  kein Gegenbeispiel bei 56 gestempelten Schiffen). Das Original zeichnet auf die
+  **Satzzelle** — kein Zeichenfall trägt einen Term über die Größe der Einheit,
+  die Ausdehnung steckt im Bild selbst. 121 Einheiten berichtigt.
+- **Die Waffe der Rümpfe 157 und 158 wird nicht mehr gezeichnet.** Sie haben
+  keinen Montagepunkt — und das Original hat auch keinen Wert: sein Schiffszeichner
+  hat eine Weiche mit drei Fällen, alles andere fällt in
+  `"Wrong chassis of ship"` und liest danach eine Stack-Zelle, die **nie
+  geschrieben** wird. Originaltreu ist hier nicht herstellbar, darum die
+  Entscheidung des Spielers: keine Waffe. Die Rumpfbilder tragen ihre Geschütze
+  ohnehin selbst.
+- **64 Landeinheiten: ein zweizelliger Stempel ist kein Grundriss, sondern ein
+  Schritt.** Schiffe stempeln volle Rechtecke; Landeinheiten sind erdrückend
+  einzellig und tragen im Ausnahmefall **genau zwei** Zellen, nie drei. Die zweite
+  liegt in der **Blickrichtung** — eine geschlossene Windrose gegen `facing`, 60
+  von 64, und 55 von 55 für die Blicke 1..7. Das ist die für den nächsten Schritt
+  reservierte Zelle, kein Körper. Standpunkt auf dem sichtbaren Bild: **vorher 2
+  von 64, nachher 52 von 64**.
+
+### Die Bahn, Fortsetzung
+
+- **`delka` ist die Länge der Streckencodes, nicht die Zellenzahl.** Über alle 30
+  Karten gezählt: `delka` minus Zellenzahl ist **4 in 369 von 371** Linien, und
+  die 4 ist hergeleitet und nicht geraten — richtet man die Kette aus Sektion 22
+  auf die `delka+1` Routenpunkte aus, fallen immer genau fünf Punkte weg, zwei an
+  einem Ende und drei am anderen. Die zwei Ausnahmen sind genau die zwei Karten
+  mit Fremdzellen unter der Nummer 0, also der Fehler, den die Regel sichtbar
+  macht, und kein Gegenbeispiel.
+- **Das fehlende letzte Gleisstück fehlt nicht — es liegt unter dem Gebäude.**
+  Gemessen an 476 Linienenden: 224 (47 %) sind überdeckt, 128 davon vollständig,
+  und bei Fabrik, Mine und Flughafen sind es 166 von 166, weil ihre Enden zwei
+  Reihen weiter innen liegen. ⚠ **Das Original verdeckt sie genauso**, belegt aus
+  seiner gefächerten Zeichenliste (Gleis in Fach Zeile+2, Gebäude bei Zeile+5).
+  Der Spieler hat originaltreu entschieden, und diese Entscheidung steht im Code,
+  damit sie später niemand für einen Fehler hält.
+
+### Behoben, und eine Diagnose zurückgezogen
+
+- ⚠ **Ein `ConfigFile` je Lesezugriff hat das Programm beim Beenden abstürzen
+  lassen.** »Leaked unsafe reference to object« in Serie, danach `0xC0000005` im
+  Finalizer, Rückgabewert 139 oder 132. Die zweite Hälfte dieses Fehlers wäre ohne
+  den Absturz nie aufgefallen: jeder Zugriff war ein **Plattenzugriff**, und vier
+  der Einstellungen werden im Bildlauf gefragt — die Einstellungsdatei wurde also
+  bis zu 60 mal je Sekunde gelesen. Die Einstellungen halten jetzt eines, das
+  Einheitenbuch und die Kampagne geben ihres frei. ⚠ Die Kampagne darf **keines
+  halten**: `--fresh-campaign` räumt ihren Stand von *außen* weg, und ein
+  gehaltenes Abbild würde den alten Fortschritt weiter behaupten. Beides belegt.
+- ⚠ **Die 97 Leckzeilen zu `JSON`/`Image` sind KEINE fehlende Freigabe.** Sonden
+  an der echten Ausstiegsstelle haben 97 nicht freigegebene Bilder auf drei Wegen
+  hergestellt — weggeworfen, in einer statischen Liste festgehalten, und in der
+  Form *aller* echten Ladestellen — und jeder Lauf meldete **null** Leckzeilen und
+  Rückgabewert 0. Es ist ein Wettlauf beim Herunterfahren. Die ganze
+  Kandidatenliste ist damit vom Tisch, und die Fehldiagnose steht aufgeschrieben,
+  damit sie niemand wiederholt.
+
 ### Bekannte Grenzen
 
 - **Die Waggons einer Linie können auf einer Zelle stehen.** Gemessen: in rund
@@ -419,6 +639,22 @@ Spieler auf den Bildschirm gesehen hat.
 - **Die Rohrlänge (14 px) ist unsere.** Die richtige Zahl ist gelesen — sie
   steht in SHOOT.CWT, 2400 Sätze zu vier Punkten —, aber diese Datei läuft noch
   nicht durch den Import.
+- **Der Mehrspieler ist zwischen zwei Prozessen auf EINER Maschine belegt.** Das
+  ist blind für genau eine Fehlerklasse: `Entity.Pos` ist `float`, und zwei
+  verschiedene Rechner müssen sich darüber nicht einig sein. Ungeprüft. Außerdem
+  wird **die Spielernummer im Paket geglaubt**, und die KI schreibt weiter direkt
+  in den Zustand statt durch den Befehlsring — auf einer Maschine rechnen beide
+  Seiten sie gleich, die gleichen Prüfsummen sagen über eine KI-Partie also
+  weniger, als sie aussehen.
+- **Große erzeugte Karten stürzen beim Laden ab.** Eine 254×254-Karte kam einmal
+  durch und danach sechsmal nicht, mit demselben Wettlauf beim Herunterfahren wie
+  bei den Leckzeilen oben (`Godot.DisposablesTracker`, Rückgabewert 139). Große
+  Karten sind damit derzeit nicht verlässlich prüfbar.
+- **Der Inhaltsbauer schreibt keine Flugzeugpreise**, deshalb muss der Rückfall
+  bleiben, der sie aus der Nutzlast herleitet — ohne ihn wären Flugzeuge umsonst,
+  und das ist gemessen, nicht befürchtet.
+- **Der Geländegenerator kann die Klasse 3 der Sektion 2 nicht**, in der 32 % der
+  Vorkommen des Originals liegen.
 
 ⚠ **Nach dem Aktualisieren einmal neu einspielen.** Hilfetexte, die
 Bahn-Zellen, die Rampenbilder und der reparierte Kachel-Atlas entstehen beim

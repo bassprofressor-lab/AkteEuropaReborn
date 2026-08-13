@@ -3,7 +3,9 @@
 A reimplementation of the 1997 real-time strategy game **Akte Europa** in
 Godot 4 and C#, by **chr1zZo**.
 
-*[Deutsche Fassung](README.de.md)*
+**Website: [openreborn.com](https://openreborn.com/de/)**
+
+*[Deutsche Fassung](README.de.md)* · *[Changelog](CHANGELOG.md)*
 
 The project ships **no data from the original game whatsoever**. It reads the two
 original CDs — which you need to own — and derives everything the game needs on

@@ -6,7 +6,29 @@ your own copy of the 1997 game.
 
 *Auf Deutsch: [CHANGELOG.de.md](CHANGELOG.de.md).*
 
-## 0.5.0 — 2026-08-12
+## 0.6.0 — unreleased
+
+Everything committed after 0.5.0 goes here. Four areas, in the order they were
+chosen:
+
+- **Multiplayer online.** Beyond the LAN: a server as broker, seed distribution
+  from the server, lag compensation, checksums and reconnect — and before any of
+  that, the two questions the LAN proof could not answer, namely float
+  determinism between two *different* machines and routing the computer players'
+  orders through the command ring.
+- **The map editor.** Painting single cells, placing units, buildings and track,
+  choosing the number of players, opening existing maps — and making a generated
+  map fully playable, not just walkable.
+- **Skirmish.** The competitive mode it is meant to become: the depot-or-queue
+  decision, the economy in the interface, the balance that goes with it.
+- **Train and track.** The wagon fine placement in section 44, the repair chain
+  (read in full, it was only waiting for the command layer), and the 25 chain
+  cells without a neighbour.
+
+Campaign stays faithful to the original; skirmish and multiplayer are allowed to
+deviate on purpose, and every deviation is marked as ours.
+
+## 0.5.0 — 2026-08-13
 
 The release in which the campaign starts deciding itself and the railway starts
 running. Almost nothing here was invented: the computer players' build
@@ -372,6 +394,198 @@ at the screen.
   `--reexport-buildings`, `--reexport-units`, `--reexport-effects`,
   `--reexport-states`.
 
+### Multiplayer, and the determinism it needed first
+
+- ⚠ **The simulation ran on frame time.** Same seed, same map, same *simulated*
+  ten seconds — and three different states depending on the frame rate:
+
+  | frames/s | ticks | checksum | hp | shots |
+  |---|---|---|---|---|
+  | 30 | 300 | `5071A756A80B2634` | 36911 | 58 |
+  | 60 | 600 | `8C5F21CD5F8AF503` | 36965 | 55 |
+  | 144 | 1440 | `F45A1091E165730F` | 36911 | 58 |
+
+  `_Process(double delta)` passed the real elapsed frame time into the world at
+  74 places in one file alone: whoever draws faster rolls dice more often and
+  shoots more often. Two twins at 1/60 and 1/30 diverged after **18 ticks**.
+  Everything that touches state now sits in a fixed tick, and there is a single
+  die instead of a freshly, *randomly* seeded generator per factory.
+- **Inputs became commands — read first, then built.** The original has exactly
+  one path from input to state, and it is a lockstep command queue: 236-byte
+  records in a ring of 1000 slots. Found in **both** GAME.EXE by its shape, not
+  by its address (dispatcher `0x4C2262` / `0x4C26E0`, ring `0xB4FA38` /
+  `0xB509D8`). A click is now a record and takes effect at the **start** of the
+  next tick, never in the middle of a frame.
+- **Two real processes play the same game over ENet.** They connect, distribute
+  map and seed, exchange commands over the wire for 600 ticks and report the
+  same checksum at **every** check tick. The counter-proof — swallow one record
+  on one side — trips and names tick, unit and field. The original's lockstep
+  protocol was read in full first: opcode 1003 "player is ready", 978 the round
+  release, `+0x22` the round number.
+- **A LAN lobby, so nobody types an IP.** Deliberately query-and-answer rather
+  than a beacon: the searcher knows when its search began, so it can honestly
+  say "nothing found after 1200 ms" — with a beacon, "I heard nothing" and "I
+  did not listen long enough" are the same state.
+- **"Start game" used to quit the program.** Not a network fault: a 20-second
+  host timeout that is *right* for a headless test rig (an unbounded wait holds
+  the build lock) and simply wrong on the player's path. The two paths are
+  separated now.
+- **Multiplayer lives in its own main-menu line.** The line "Netzwerkspiel" had
+  been there all along (slot 65, help index 106) and did nothing; it is now
+  called Multiplayer and leads there. Skirmish shows nothing of the network any
+  more, and "watch intro" is gone from the main menu.
+
+### Skirmish
+
+- **The air list hangs on the Techstandard 1..8, not on an option of ours** —
+  gate `0x419F30`, measured on three maps (level 1 → 2, 4 → 3, 5 → 4, 6 → 6
+  templates; no level yields an empty menu). Two of our own justifications fall
+  with it: the skirmish maps do not carry section 120 **at all** (all 23 `.CWM`
+  end at section 39, header byte 1 instead of 2 — 23 of 23 against 13 of 13),
+  and the EXE templates **do** have prices. A *missing* section overwrites
+  nothing, so the original simply keeps the table in the executable.
+- **The Techstandard row appears in the screen only now that it works** — a
+  switch without an effect is exactly what the player had already stumbled over.
+  Nothing about it is ours: the range is the button's, the default is a fresh
+  game's, the caption is the original's.
+- **A standing resource bar with the growth per second** (key `Q`). This one *is*
+  ours, and it is marked as such. The reading behind it: the original has **no
+  build time** for factories — all three production paths put the unit into the
+  world in the same tick the order is handled. What it has instead is a depot
+  with six slots.
+- The skirmish air checkbox was imperceptible where it stood and has been
+  replaced by the read rule above.
+
+### The campaign
+
+- ⚠ **The clock was a condition, and the rule reader dropped it silently.** A
+  reader that returns nothing for a limb it cannot read makes `set_rules` throw
+  the **whole rule** away, and nobody hears about it. It now names and counts
+  every dropped limb: 207 rules without a readable condition, 118 unreadable
+  comparison values, 91 comparisons without a call. Adding the clock and the
+  unit index brought **+83 rules across 25 missions**.
+- **The campaign places its units and sends them off**: `place_unit` at
+  `0x4D0810` — 60 calls in 14 missions, the largest hole in the vocabulary —
+  plus the orders that belong to it.
+- **Mission 23 is playable.** The "four corner heights" of a build site are not
+  heights at all: they are section 2 **classes** (0 impassable, 1 shore/sand, 2
+  open land, 3 special), and `corners_carry` demands open land on all four
+  corners. The field mine went from **0 to 57** build sites on that map.
+- ⚠ **The occupancy map is column-wise** (`column*256 + row`), proven from the
+  routine that stamps it. Our reader had it transposed, which affected 29
+  conditions in 12 missions; **8 of them could never come true** and mission 7
+  was unplayable. The rule vocabulary now also knows **OR**.
+- **Withdrawn: "mission 5 does not win."** The defect was in the test rig, which
+  handed over an *arbitrary* building — on one map a script slot with no
+  building type at all.
+- **`--selftest-cwm`'s "22 equal / 4 differing" were four swapped comparison
+  files.** `10.CWM` and `10.DM` share a file stem, so exporting both silently
+  overwrites the campaign map with a **savegame**. With two clean sets: 26 maps
+  equal, 0 differing.
+
+### The map editor
+
+- **The terrain generator's yardstick is the 26 shipped maps.** Every counter had
+  been green while the picture was a chequerboard — water share, slope bytes,
+  height jumps all in range, and the tiles still did not continue into their
+  neighbours. **The seam decides, not the key**: a key says which codes the
+  original uses in a *place*, never which of them it puts *next to* which. Hard
+  seams went from **8.65 %** to 0.22–3.11 % (median of the shipped maps: 0.58 %).
+- ⚠ One core number of that measurement was wrong and gave itself away: the
+  parts summed to 607,090 cells where the 26 maps have 605,090. It is **29,990**
+  cells with two adjacent higher neighbours, not 31,990 — and the three
+  *opposite* cases now come with their location.
+- **Generated maps have resource deposits.** In the original the **mission
+  script** places them (`add_terra_place`, 50 calls in 8 missions) — a generated
+  map has no script, so its ground was empty. The field mine now finds **8, 8
+  and 48** build sites where it found none, with the density calibrated against
+  the original (0.23 against 0.24 deposits per 1000 walkable cells). ⚠ Any
+  distribution there is **our addition** and says so in five places.
+- **And a real economy bug that hit the campaign too:** `Entity.Deposit` started
+  at −1, so a **built** mine never produced anything. Measured over ten economy
+  ticks: 5000 → 4950 in the ground, 50 mined, 50 in the mine's store.
+
+### The unit portraits
+
+- **86 images, from ANIM.CWA sequences 400..403** (frames 1176..1261, gapless,
+  recounted at the file header). The allocation is fully accounted for: 0..56
+  parts, 57..66 ship hulls, 67..73 aircraft, 74..85 people. Byte **+0x0D** of the
+  58-byte part record *is* the image number. They now show in all three places
+  the player named: the panel at the bottom left, the modular build screen and
+  the base.
+- ⚠ **For buildings there is none — and the original has none either.** The
+  drawer has exactly six cases and not one of them takes a building; it never
+  touches the building table; and a building cannot even *be* the selected
+  object (the selection routine knows only land units and airfield slots, and
+  the range between them is never written). Four independent measurements, all
+  with raw scans.
+- ⚠ **Two "byte tables" were jump tables.** At `0x450C98` there are 13 code
+  addresses — 12 cases plus the **error branch**, not a 13th unit. At `0x450D60`
+  there are ten, and the second one carries the actual permutation, because hull
+  151 appears **twice** among the ten designs; "hull − 150" would have given the
+  flak launch the light cruiser's rockets and the battleship the little flak
+  boat.
+- ⚠ **The `yoff` byte is part of the image.** Without it frame 1177 comes out
+  51x38 where it is 51x60 on the blit canvas — and that byte is what sets turret
+  and chassis against each other.
+
+### Ships and vehicles stand on their own cell
+
+- **Battleship and cruiser: the picture was wrong, not the frame.** Selection
+  frame, health bar and owner ring stood half a ship length beside the ship. The
+  frame is the footprint out of the occupancy map and is right to the byte (4x4
+  for the battleship, top-left cell is the record's cell, no counter-example in
+  56 stamped ships). The original draws on the **record's cell** — no drawing
+  case carries a term for the size of the unit, the extent sits in the image
+  itself. 121 units corrected.
+- **The weapon of hulls 157 and 158 is no longer drawn.** They have no mount
+  point — and the original has no value either: its ship drawer has a three-case
+  switch and everything else falls into `"Wrong chassis of ship"` and then reads
+  a stack cell that is **never written**. Faithful is not reproducible here, so
+  the player decided: no weapon. The hull images carry their guns anyway.
+- **64 land units: a two-cell stamp is not a footprint, it is a step.** Ships
+  stamp full rectangles; land units are overwhelmingly single-celled and in the
+  exceptional case carry **exactly two** cells, never three. The second cell lies
+  in the **facing direction** — a closed compass rose against `facing`, 60 of 64,
+  and 55 of 55 for facings 1..7. That is the cell reserved for the next step, not
+  a body. Standing point on the visible sprite: **2 of 64 before, 52 of 64
+  after**.
+
+### The railway, continued
+
+- **`delka` is the length of the route codes, not the number of cells.**
+  Counted over all 30 maps: `delka` minus cell count is **4 in 369 of 371**
+  lines, and the 4 is derived rather than guessed — aligning the section-22 chain
+  onto the `delka+1` route points always drops exactly five points, two at one
+  end and three at the other. The two exceptions are precisely the two maps with
+  foreign cells under line number 0, so they are the error the rule makes
+  visible, not a counter-example.
+- **The missing last piece of track is not missing — it lies under the
+  building.** Measured on 476 line ends: 224 (47 %) are covered, 128 of them
+  completely, and for factory, mine and airfield it is 166 of 166 because their
+  ends sit two rows in. ⚠ **The original covers them the same way**, proven from
+  its layered drawing list (track in slot row+2, buildings at row+5). The player
+  decided to keep it faithful, and that decision is written into the code so
+  nobody later mistakes it for a bug.
+
+### Fixed, and one diagnosis withdrawn
+
+- ⚠ **A `ConfigFile` per read access crashed the program on shutdown.**
+  "Leaked unsafe reference to object" in series, then `0xC0000005` in the
+  finalizer, return code 139 or 132. The second half of that fault would never
+  have surfaced without the crash: every access was a **disk** access, and four
+  of the settings are asked during the frame — so the settings file was being
+  read up to 60 times a second. Settings holds one instance now; the unit book
+  and the campaign release theirs. ⚠ The campaign must **not** hold one:
+  `--fresh-campaign` clears that state from *outside*, and a held copy would go
+  on claiming the old progress. Proven both ways.
+- ⚠ **The 97 leak lines for `JSON`/`Image` are not a missing release.** Probes at
+  the real exit point produced 97 unreleased images three different ways —
+  thrown away, held in a static list, and the shape of every real load site —
+  and every run reported **zero** leak lines and return code 0. It is a race at
+  shutdown. The whole candidate list is off the table, and the diagnosis is
+  written down so nobody repeats it.
+
 ### Known limits
 
 - **The wagons of a line can stand on one cell.** Measured: in about 10 % of
@@ -396,6 +610,21 @@ at the screen.
 - **The muzzle reach (14 px) is ours.** The right number is read — it sits in
   SHOOT.CWT, 2400 records of four points — but that file does not run through
   the import yet.
+- **The multiplayer is proven between two processes on one machine.** That is
+  blind to exactly one class of fault: `Entity.Pos` is `float`, and two different
+  machines may not agree on it. Untested. Also, **the player number in the packet
+  is trusted**, and the AI still writes to the state directly instead of going
+  through the command ring — on one machine both sides compute it identically, so
+  the equal checksums say less about an AI game than they look like they do.
+- **Large generated maps crash on load.** A 254×254 map got through once and
+  then failed six times in a row with the same shutdown race as the leak lines
+  above (`Godot.DisposablesTracker`, return code 139). Big maps are therefore not
+  reliably testable right now.
+- **The content builder writes no aircraft prices**, so the fallback that derives
+  them from the payload has to stay — without it aircraft would be free, and that
+  is measured, not feared.
+- **The terrain generator cannot produce section-2 class 3**, where 32 % of the
+  original's deposits sit.
 
 ⚠ **Re-import once after updating.** Help texts, the railway cells, the ramp
 frames and the repaired tile atlas are all produced at import time; keeping an
