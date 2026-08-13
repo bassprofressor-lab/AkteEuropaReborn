@@ -81,6 +81,20 @@ public static class Settings
         set => Set("skirmish_all_units", value);
     }
 
+    /// <summary>»Techstandard« des Gefechtsschirms, 1..8 — siehe
+    /// <see cref="SkirmishSetup.Techstandard"/> für das, was er tut, und woher
+    /// Bereich und Vorgabe gelesen sind.
+    ///
+    /// <para>Gespeichert aus demselben Grund wie
+    /// <see cref="SkirmishAllUnits"/>: eine Gefechtseinstellung, die der Spieler
+    /// einmal trifft, soll den Programmstart überleben. <c>Resources</c> tut das
+    /// noch nicht — dort wäre es genauso richtig.</para></summary>
+    public static int SkirmishTechstandard
+    {
+        get => Mathf.Clamp(I("skirmish_techstandard", 1), 1, 8);
+        set => Set("skirmish_techstandard", Mathf.Clamp(value, 1, 8));
+    }
+
     // ---- sound --------------------------------------------------------------
 
     /// <summary>Effects at all. Kept apart from the volume so silence is a

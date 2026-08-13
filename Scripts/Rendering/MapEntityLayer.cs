@@ -7818,6 +7818,18 @@ public partial class MapEntityLayer : Node2D
         // Gefecht gibt es keine Kampagne, die den Rest je freischaltet: die
         // acht anderen Schiffe wären auf Dauer unerreichbar. Siehe
         // UI.SkirmishSetup.AllUnits.
+        //
+        // ⚠ DIESE BEGRUENDUNG IST SEIT DEM 13.08.2026 HALB UEBERHOLT und wird
+        // hier zurueckgezogen statt ueberschrieben: die »Anfangs-Technikstufe«
+        // ist jetzt der Techstandard des Gefechtsschirms (1..8, gelesen —
+        // CampaignTechLevel => AirProbeTechstandard). Die acht anderen Schiffe
+        // sind damit ueber die Stufe erreichbar, und die »2 von 10« gelten nur
+        // fuer Stufe 1. Die Option ist zur See also nicht mehr NOETIG, sondern
+        // eine Abkuerzung.
+        // Ob sie zur See bleibt, ist eine WETTKAMPFENTSCHEIDUNG des Spielers
+        // (Gefecht darf vom Original abweichen, die Kampagne nicht) und keine
+        // Frage der Treue — deshalb bleibt sie unangetastet stehen, bis er sie
+        // trifft.
         if (UI.SkirmishSetup.AllUnits && UI.SkirmishSetup.CampaignMission <= 0)
         {
             foreach (var d in _shipDesigns) d.Enable = true;

@@ -82,6 +82,11 @@ public partial class MainMenu : Control
     private PanelContainer? _allUnitsPanel;
 
     private SpinBox _ai = null!;
+
+    /// <summary>»Techstandard« 1..8 — siehe <see cref="SkirmishSetup.Techstandard"/>.
+    /// Optional wie <see cref="_allUnits"/>, weil der Schirm auch ohne die Zeile
+    /// gebaut werden kann.</summary>
+    private SpinBox? _tech;
     private Label _hint = null!;
 
     /// <summary>The skirmish setup, which used to BE the menu and is now what
@@ -437,7 +442,12 @@ public partial class MainMenu : Control
         // the picture of the chosen map, with its original name underneath
         _preview = new TextureRect
         {
-            CustomMinimumSize = new Vector2(0, 120),
+            // ⚠ 96 statt 120 seit dem 13.08.2026: die Zeile »Techstandard« hat
+            // die Einstellungsspalte hoeher gemacht als die Kartenliste, und
+            // damit rutschte die Bedienhilfe unten aus dem Fenster — am Bild
+            // gesehen, nicht gerechnet. Die Vorschau vertraegt die 24 px, eine
+            // fehlende Zeile am unteren Rand nicht.
+            CustomMinimumSize = new Vector2(0, 96),
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
             StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
             TextureFilter = TextureFilterEnum.Nearest,
@@ -480,6 +490,30 @@ public partial class MainMenu : Control
             foreach (string n in resNames) _res.AddItem(n);
             _res.Selected = Mathf.Clamp(SkirmishSetup.Resources, 0, resNames.Count - 1);
         }
+
+        // »Techstandard« ist die Einstellung des ORIGINALS, nicht unsere: der
+        // Bereich 1..8 ist der des Knopfs @0x44D3BC, die Beschriftung steht als
+        // `Techstandard ` bei 0x502630, und der Gastgeber traegt sie mit Kommando
+        // 979 ein. Sie entscheidet ueber die Freigaben der Flugzeug- UND
+        // Schiffsliste (Tor @0x419F30, dann @0x4B2380) — siehe
+        // SkirmishSetup.Techstandard und MapEntityLayer.AirProbeTechstandard.
+        //
+        // ⚠ SIE STEHT ERST HIER, SEIT SIE WIRKT. Vor der Engine-Seite waere es
+        // ein Schalter ohne Wirkung gewesen, und genau daran ist der Spieler
+        // heute morgen schon einmal haengengeblieben.
+        SkirmishSetup.Techstandard = Settings.SkirmishTechstandard;
+        right.AddChild(Row("Techstandard", _tech = new SpinBox
+        {
+            MinValue = 1, MaxValue = 8, Value = SkirmishSetup.Techstandard,
+            TooltipText = "Technikstufe, mit der das Gefecht anfaengt — die "
+                        + "Einstellung des Originals (1..8).\n"
+                        + "Gemessen gibt sie am Flughafen frei:\n"
+                        + "1-3  Treibstoffheli, Munitionheli\n"
+                        + "4    dazu Kampfhubschrauber\n"
+                        + "5    dazu Spionageflieger\n"
+                        + "6-8  dazu Jagdflieger und Bomber\n"
+                        + "Gilt ebenso fuer die Schiffsliste.",
+        }));
 
         // ⚠ UNSERE OPTION, siehe SkirmishSetup.AllUnits. Der Anlass ist eine
         // Luecke in den Daten: die Gefechtskarten tragen in sec120 NULL
@@ -1191,11 +1225,16 @@ public partial class MainMenu : Control
         bool on = _allUnits?.ButtonPressed ?? false;
         // Einzeilig halten: die zweizeilige Fassung hat den Schirm zu hoch
         // gemacht. Die Zahlen sind gemessen, keine Schaetzung.
+        // ⚠ 13.08.2026, zweite Fassung: der erste Text sagte »Flughaefen bleiben
+        // ohne Angebot« und »zur See 2 von 10«. Beides gilt nicht mehr, seit die
+        // Luft am Techstandard haengt (Tor @0x419F30) und die Schiffsliste am
+        // selben Wert — die Zahlen richten sich jetzt nach der Stufe. Ein
+        // Hinweistext, der eine ueberholte Zahl nennt, ist schlimmer als keiner.
         _allUnitsHint.Text = on
-            ? "AN — acht Flugzeugvorlagen je Spieler, 601 Entwuerfe am Boden, "
-              + "10 Schiffe. Die Gegner ebenso."
-            : "AUS — Flughaefen bleiben ohne Angebot, auch eingenommen. "
-              + "Am Boden 65 von 601 Entwuerfen, zur See 2 von 10.";
+            ? "AN — die ganze Entwurfsliste am Boden (601) und alle 10 Schiffe. "
+              + "Die Luft richtet sich nach dem Techstandard. Die Gegner ebenso."
+            : "AUS — am Boden 65 von 601 Entwuerfen. Luft und See richten sich "
+              + "nach dem Techstandard darueber.";
         var akzent = on
             ? new Color(0.45f, 0.60f, 0.78f)
             : new Color(0.92f, 0.72f, 0.42f);
@@ -1301,6 +1340,11 @@ public partial class MainMenu : Control
         {
             SkirmishSetup.AllUnits = _allUnits.ButtonPressed;
             Settings.SkirmishAllUnits = _allUnits.ButtonPressed;
+        }
+        if (_tech != null)
+        {
+            SkirmishSetup.Techstandard = Mathf.Clamp((int)_tech.Value, 1, 8);
+            Settings.SkirmishTechstandard = SkirmishSetup.Techstandard;
         }
         SkirmishSetup.CampaignMission = 0;      // a skirmish records nothing
         SkirmishSetup.Active = true;
