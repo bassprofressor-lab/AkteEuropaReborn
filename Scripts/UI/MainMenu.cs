@@ -515,6 +515,16 @@ public partial class MainMenu : Control
                         + "Gilt ebenso fuer die Schiffsliste.",
         }));
 
+        // ⚠ DIE LOBBY steht IN der Einstellungsspalte und nicht in voller Breite
+        // darunter (UI/MainMenuNet.cs), und das ist am BILD entschieden: als
+        // eigener Kasten unter dem Haken schob sie »GEMETZEL STARTEN« aus dem
+        // Sichtfeld — der Schirm scrollt, aber ein Startknopf, den man erst
+        // suchen muss, ist schlechter als einer, den man sieht. Hier kostet sie
+        // gar keine Hoehe, solange sie eingeklappt ist: die Spalte ist kuerzer
+        // als die Kartenliste daneben.
+        right.AddChild(new HSeparator());
+        right.AddChild(BuildNetRow());
+
         // ⚠ UNSERE OPTION, siehe SkirmishSetup.AllUnits. Der Anlass ist eine
         // Luecke in den Daten: die Gefechtskarten tragen in sec120 NULL
         // Flugzeugvorlagen (nachgezaehlt auf NET02, NET05, NET07), der Flughafen

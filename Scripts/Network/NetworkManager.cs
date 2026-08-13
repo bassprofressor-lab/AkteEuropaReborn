@@ -102,6 +102,57 @@ public partial class NetworkManager : Node
         _t0 = Time.GetTicksMsec();
     }
 
+    /// <summary>
+    /// Die Steckdose aus dem MENÜ öffnen, nicht von der Befehlszeile.
+    ///
+    /// <para>⚠ Ruft der Gefechtsschirm, wenn dort »Gastgeber« oder »Beitreten«
+    /// steht (UI/MainMenuNet.cs). Steht schon eine Verbindung — weil die
+    /// Befehlszeile sie aufgebaut hat —, bleibt sie: eine zweite Steckdose je
+    /// Prozess gibt es nicht, und das ist der ganze Grund, warum diese Klasse
+    /// ein Autoload ist.</para>
+    /// </summary>
+    public static bool StartFromMenu(bool asHost, string address, int port, int players)
+    {
+        if (Instance == null) return false;
+        if (Link != null) return true;
+        var i = Instance;
+        i._wantHost = asHost;
+        i._wantJoin = !asHost;
+        i._port = port > 0 ? port : 27015;
+        i._players = players < 1 ? 1 : players;
+        if (address.Length > 0) i._address = address;
+
+        Link = new NetLink();
+        bool ok = asHost ? Link.HostOn(i._port, 7) : Link.JoinTo(i._address, i._port);
+        if (!ok)
+        {
+            Fault = Link.Fault;
+            GD.PrintErr($"netz: Anschluss gescheitert — {Fault}");
+            Link = null;
+            return false;
+        }
+        i._t0 = Time.GetTicksMsec();
+        i._timedOut = false;
+        i.SetProcess(true);
+        return true;
+    }
+
+    /// <summary>Was gerade zwischen den Rechnern los ist — eine Zeile für das
+    /// Menü. ⚠ Ein Wartezustand, den man nicht sieht, ist von einem Absturz
+    /// nicht zu unterscheiden.</summary>
+    public static string StatusLine()
+    {
+        if (Link == null) return "Netzwerk aus";
+        if (Link.Session is { } s)
+            return $"Partie steht: {s.Map}, Keim {s.Seed}, mein Platz {s.MySlot} " +
+                   $"von {s.Players} Menschen";
+        if (Fault.Length > 0) return "FEHLER: " + Fault;
+        return Link.IsHost
+            ? $"Gastgeber: {Link.ClientCount + 1} von {Instance?._players ?? 2} da, " +
+              $"warte auf Mitspieler"
+            : $"Beitreten: {Link.Status}, warte auf die Partie des Gastgebers";
+    }
+
     private void ReadSwitches()
     {
         foreach (string a in Core.CommandLine.Args)
