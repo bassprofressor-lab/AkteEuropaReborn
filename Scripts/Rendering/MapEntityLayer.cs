@@ -1617,6 +1617,13 @@ public partial class MapEntityLayer : Node2D
             return;
         var rows = gv.AsGodotArray();
         var img = Image.CreateEmpty(w, h, false, Image.Format.Rgba8);
+        // ⚠ 13.08.2026 — DIE WERTE WERDEN JETZT BEHALTEN, nicht nur eingefaerbt.
+        // sec2 ist die Tafel, an der `corners_carry` @0x4211A0 den BAUPLATZ
+        // entscheidet; solange sie nur eine Textur war, konnte die Bauplatzpruefung
+        // sie nicht lesen. Siehe ZoneAt.
+        _zone = new byte[h, w];
+        _zoneW = w;
+        _zoneH = h;
         for (int r = 0; r < h && r < rows.Count; r++)
         {
             if (rows[r].VariantType != Variant.Type.Array) continue;
@@ -1624,12 +1631,42 @@ public partial class MapEntityLayer : Node2D
             for (int c = 0; c < w && c < cells.Count; c++)
             {
                 int z = cells[c].AsInt32();
+                _zone[r, c] = (byte)Mathf.Clamp(z, 0, 255);
                 img.SetPixel(c, r, z >= 0 && z < ZoneColors.Length ? ZoneColors[z] : ZoneColors[0]);
             }
         }
         _zoneTex = ImageTexture.CreateFromImage(img);
         _zoneRect = new Rect2(ox, oy, w * TileW, h * TileH);
     }
+
+    /// <summary>
+    /// Die sec2-Tafel (0xA3AEB0 in der untersuchten Fassung, 0xA39F10 auf F:),
+    /// 257x257 Byte, Index <c>Spalte*257 + Zeile</c>.
+    ///
+    /// <para>Das Original nennt sie nicht »Hoehe«: Klasse 0 ist unpassierbar
+    /// (in allen 23 Karten jede Wasserkachel, 0 Gegenbeispiele), 1 Ufer/Sand,
+    /// 2 offenes Land, 3 besonderes Land (CwmData.Zones). Genau daran entscheidet
+    /// <c>corners_carry</c> den Bauplatz.</para>
+    ///
+    /// <para>⚠ Ausserhalb der eingespielten Breite/Hoehe gibt es <b>-1</b>. Die
+    /// Datei fuehrt 257x257 Punkte, unser Ausschnitt nur Breite x Hoehe; am
+    /// letzten Rand fehlt uns der vierte Eckpunkt. Ein Bauplatz dort wird darum
+    /// ABGELEHNT — lieber ein Platz zu wenig als einer, der auf einem Wert
+    /// steht, den wir nicht haben.</para>
+    /// </summary>
+    public int ZoneAt(int col, int row)
+    {
+        if (_zone == null || col < 0 || row < 0 || col >= _zoneW || row >= _zoneH) return -1;
+        return _zone[row, col];
+    }
+
+    /// <summary>Hat diese Karte ueberhaupt eine sec2-Tafel? Ohne sie kann die
+    /// Bauplatzpruefung ihre vierte Frage nicht stellen, und das muss sie sagen
+    /// statt stillschweigend alles zu erlauben.</summary>
+    public bool HasZones => _zone != null;
+
+    private byte[,]? _zone;
+    private int _zoneW, _zoneH;
 
     private void LoadPropsFallback(GDict meta, int ox, int oy)
     {
@@ -4770,10 +4807,45 @@ public partial class MapEntityLayer : Node2D
         }
         var teile = new List<string>();
         foreach (var kv in grund) teile.Add($"{kv.Key} x{kv.Value}");
+
+        // ⚠ UND JETZT DIE MECHANIK, nicht die Zahl: auf jedem Vorkommen, das
+        // einen Anker traegt, wird eine Mine ueber den ECHTEN Bauweg gesetzt
+        // (PlaceBuilding — derselbe, den der Bautechniker geht), und danach wird
+        // das Skript gefragt. Mission 23 will fuenf: »buildings(Klasse 2,
+        // Spieler 0) == 5«, und Klasse 2 sind die Gebaeudetypen 10 und 15.
+        // Eine Umwidmung waere hier genau der Fehler — sie pruefte die Zahl und
+        // nicht, ob der Spieler bauen KANN.
+        int gebaut = 0;
+        if (gut > 0 && Patterns != null)
+            foreach (var (dc, dr, _) in _deposits)
+            {
+                if (gebaut >= 5) break;
+                bool fertig = false;
+                for (int dy = 0; dy < 3 && !fertig; dy++)
+                    for (int dx = 0; dx < 3 && !fertig; dx++)
+                    {
+                        int c = dc + dx, r = dr + dy;
+                        if (!CanBuild(Patterns, TypeFieldMine, c, r)) continue;
+                        if (PlaceBuilding(Patterns, TypeFieldMine, c, r, 0) == null) continue;
+                        gebaut++;
+                        fertig = true;          // je Vorkommen nur eine
+                    }
+            }
+        int klasse2 = BuildingClassCount(2, 0);
+        string ende = "";
+        if (_mscript != null)
+        {
+            _mscript.Evaluate();
+            ende = _mscript.Ended
+                ? (_mscript.Success ? "   -> Skript: MISSION ERFUELLT" : "   -> Skript: VERLOREN")
+                : "   -> Skript: noch nicht entschieden   " + _mscript.WhyNot();
+        }
         return $"terra-check: M{_mscript?.Mission ?? 0} — {_deposits.Count} Vorkommen, " +
                $"{kandidaten} Anker geprueft, {gut} tragen eine Feld-Rohstoffmine\n" +
                sb.ToString() +
-               (teile.Count > 0 ? "   Gruende: " + string.Join(", ", teile) : "");
+               (teile.Count > 0 ? "   Gruende: " + string.Join(", ", teile) + "\n" : "") +
+               $"   ueber den echten Bauweg gesetzt: {gebaut} Feld-Rohstoffminen; " +
+               $"buildings(Klasse 2, Spieler 0) = {klasse2}\n" + ende;
     }
 
     /// <summary>Das Missionsskript samt seinen Haken JETZT anlegen, falls es

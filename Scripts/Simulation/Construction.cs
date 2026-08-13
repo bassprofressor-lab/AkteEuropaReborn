@@ -41,14 +41,14 @@ namespace AkteEuropaReborn.Rendering;
 /// <c>x−1, y−1</c>, so the unit stands in the building's corner, not on its
 /// origin.</para>
 ///
-/// <para><b>OURS, and it has to be said:</b> the fourth test below wants the
-/// four corner heights of a cell. The original keeps them in a grid of its own
-/// at 0xa39f10 with a 257-step, i.e. one entry per grid POINT for a 256-cell
-/// map; we only keep one height per CELL. We read the four corners as the
-/// heights of (x,y), (x,y+1), (x+1,y) and (x+1,y+1), which is what a 257-wide
-/// point grid amounts to if the cell's height sits on its upper-left corner.
-/// That is a reading, not a measurement — everything else in this file is the
-/// original's.</para>
+/// <para><b>⚠ BERICHTIGT 13.08.2026.</b> Hier stand, die vierte Prüfung wolle
+/// die vier <b>Eckhöhen</b> einer Zelle, und das sei »a reading, not a
+/// measurement«. Der Verdacht war richtig und die Lesung falsch: die Tafel
+/// (0xA3AEB0 in der untersuchten Fassung, 0xA39F10 auf F:) ist <b>sec2</b>, und
+/// ihre Werte sind KLASSEN — 0 unpassierbar, 1 Ufer/Sand, 2 offenes Land,
+/// 3 besonderes Land. <c>corners_carry</c> verlangt also »offenes Land auf allen
+/// vier Ecken«. Siehe <see cref="MapEntityLayer.CornersCarry"/> für den Rumpf
+/// und die Zahl, die es gekostet hat (map_23: 0 statt 329/1411 Bauplätze).</para>
 /// </summary>
 public partial class MapEntityLayer
 {
@@ -61,9 +61,15 @@ public partial class MapEntityLayer
     /// <summary>The order byte <c>[ent+0x38]</c> for the Gebäude-Techniker.</summary>
     public const int OrderDepot = 5, OrderFieldMine = 6;
 
-    /// <summary>The minimum corner height a build site needs — the original
-    /// tests all four against 2 (@0x420360, four <c>cmp … 2 / jae</c>).</summary>
-    public const int MinCornerHeight = 2;
+    /// <summary>Die Mindestklasse, die alle vier Ecken eines Bauplatzes tragen
+    /// müssen: <b>2</b> — »offenes Land«. Das Original prüft alle vier gegen 2
+    /// (@0x4211A0 in der untersuchten Fassung, @0x420360 auf F:, vier
+    /// <c>cmp … 2 / jae</c>).
+    ///
+    /// <para>⚠ Der alte Name <c>MinCornerHeight</c> war Teil der falschen
+    /// Lesung: es ist keine Höhe. Siehe <see cref="CornersCarry"/>.</para>
+    /// </summary>
+    public const int MinCornerClass = 2;
 
     /// <summary>One checked cell, as the original collects them.</summary>
     public readonly struct SiteCell
@@ -217,16 +223,58 @@ public partial class MapEntityLayer
         return CornersCarry(c, r);
     }
 
-    /// <summary>All four corners of the cell at or above <see
-    /// cref="MinCornerHeight"/>. See the class remark — the corner grid is
-    /// OURS, read off the per-cell heights.</summary>
+    /// <summary>
+    /// Die vierte Frage der Bauplatzprüfung, jetzt <b>gelesen</b>:
+    /// <c>corners_carry(spalte, zeile)</c> @0x4211A0 (F: 0x420360).
+    ///
+    /// <para><b>Der Rumpf, wörtlich:</b></para>
+    /// <code>
+    ///     mov cl, [esp+4]                  ; arg0
+    ///     mov eax, ecx / shl ecx,8 / add ecx,eax   ; arg0 * 257
+    ///     mov al, [esp+8]                  ; arg1
+    ///     add eax, ecx                     ; Index = arg0*257 + arg1
+    ///     cmp byte [eax + 0xa3aeb0], 2 ; jae ...   ; +0
+    ///     cmp byte [eax + 0xa3afb1], 2 ; jae ...   ; +257
+    ///     cmp byte [eax + 0xa3aeb1], 2 ; jae ...   ; +1
+    ///     cmp byte [eax + 0xa3afb2], 2 ; setae al  ; +258
+    /// </code>
+    ///
+    /// <para><b>⚠ ZURÜCKGEZOGEN: das sind keine HÖHEN.</b> Der Kommentar im Kopf
+    /// dieser Datei nannte den Verdächtigen richtig (»the corner grid is OURS, a
+    /// reading, not a measurement«) — und die Lesung war falsch. Die Tafel bei
+    /// 0xA3AEB0 ist <b>sec2</b>, 257x257 Byte, und das Original füllt sie aus der
+    /// Karte (Datei-E/A über 0x10201 = 257·257 Einträge @0x41D352). Ihre Werte
+    /// sind KLASSEN, nicht Höhen: <b>0 unpassierbar</b> (in allen 23 Karten jede
+    /// Wasserkachel, 0 Gegenbeispiele), <b>1 Ufer/Sand</b>, <b>2 offenes Land</b>,
+    /// <b>3 besonderes Land</b> — siehe <see cref="Import.CwmData.Zones"/>, die
+    /// dieselbe Tafel schon seit dem Import liest und ausdrücklich auf diesen
+    /// Zugriff verweist. <c>&gt;= 2</c> heisst also »<b>offenes Land auf allen
+    /// vier Ecken</b>«, nicht »hoch genug«.</para>
+    ///
+    /// <para><b>Was das gekostet hat, mit Zahl:</b> mit der Höhenlesung meldete
+    /// <c>--build-check</c> auf map_23 für die Feld-Rohstoffmine <b>0
+    /// Bauplätze</b> (Depot 329, Generator 1411), und <c>--terra-check</c> 99
+    /// geprüfte Anker, 0 tragbar, <b>97 an »Ecken zu flach«</b>. Mission 23
+    /// (»Bauen Sie fünf Rohstoffminen«) war damit unspielbar — und zwar nicht
+    /// wegen des Originals.</para>
+    ///
+    /// <para>Die vier Punkte sind (c,r), (c+1,r), (c,r+1), (c+1,r+1) — bei einem
+    /// 257er-Schritt über die SPALTE genau die vier Ecken der Zelle. Der
+    /// Punktraster fällt bei uns mit dem Zellraster zusammen: <c>set_corner</c>
+    /// @0x4ACDA0 schreibt alle vier Ecken einer Zelle auf DENSELBEN Wert, die
+    /// Tafel ist also zellweise belegt.</para>
+    ///
+    /// <para>⚠ Fehlt die Tafel (eine Karte ohne sec2 im Spielstand), wird der
+    /// Platz ABGELEHNT und nicht durchgewinkt: eine Frage, die wir nicht
+    /// beantworten können, darf keinen Bauplatz erzeugen.</para>
+    /// </summary>
     private bool CornersCarry(int c, int r)
     {
-        if (_nav == null) return false;
-        return _nav.ElevAt(c, r) >= MinCornerHeight
-            && _nav.ElevAt(c, r + 1) >= MinCornerHeight
-            && _nav.ElevAt(c + 1, r) >= MinCornerHeight
-            && _nav.ElevAt(c + 1, r + 1) >= MinCornerHeight;
+        if (!HasZones) return false;
+        return ZoneAt(c, r) >= MinCornerClass
+            && ZoneAt(c + 1, r) >= MinCornerClass
+            && ZoneAt(c, r + 1) >= MinCornerClass
+            && ZoneAt(c + 1, r + 1) >= MinCornerClass;
     }
 
     /// <summary>The first free building slot, or −1 when all are taken.
