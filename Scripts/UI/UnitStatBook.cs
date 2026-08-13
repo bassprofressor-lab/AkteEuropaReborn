@@ -234,7 +234,16 @@ public static class UnitStatBook
     /// wie <c>MapEntityLayer.LoadOwnDesigns</c> es tut.</summary>
     private static void ReadOwnDesigns()
     {
-        var c = new ConfigFile();
+        // ⚠ `using`, nicht bloss `new` — ConfigFile ist ein RefCounted, und ein
+        // nicht freigegebenes stirbt beim Herunterfahren im Finalizer. In
+        // Settings.cs hat genau dieses Muster am 13.08.2026 zu
+        // »Leaked unsafe reference to object: <ConfigFile#…>« in Serie und
+        // danach zu 0xC0000005 in GC.RunFinalizers geführt (Rückgabewerte
+        // 139/132 statt 0). Hier ist es je Aufruf eines statt je Bild, also
+        // harmlos genug für `using` statt eines gehaltenen Abbilds — aber es
+        // gehört freigegeben, zumal die Zeile darunter mitten heraus
+        // zurückspringt. Dieselbe Datei macht es bei FileAccess schon so.
+        using var c = new ConfigFile();
         if (c.Load(Rendering.MapEntityLayer.OwnDesignsPath) != Error.Ok) return;
         int n = (int)c.GetValue("designs", "count", 0);
         for (int i = 0; i < n; i++)
