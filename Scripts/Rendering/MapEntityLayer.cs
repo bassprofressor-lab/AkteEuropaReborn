@@ -14245,6 +14245,102 @@ public partial class MapEntityLayer : Node2D
         catch (System.Exception e) { GD.PrintErr("Turmsitz: parts_index.json — " + e.Message); }
     }
 
+    /// <summary>Die sichtbare Fläche eines Bildes — für den Prüfstand, damit
+    /// »die Waffe sitzt daneben« eine ZAHL bekommt statt einer Schätzung am
+    /// Bildschirm.</summary>
+    private static Rect2I? UsedRect(Texture2D? tex)
+    {
+        var img = tex?.GetImage();
+        if (img == null) return null;
+        var r = img.GetUsedRect();
+        return r.Size.X <= 0 || r.Size.Y <= 0 ? null : r;
+    }
+
+    /// <summary>
+    /// <b>PRÜFSTAND für den WAFFENSITZ auf dem SCHIFF.</b> Gemeldet am
+    /// 13.08.2026 als »beim größten schiff scheint die waffe nicht korrekt
+    /// drauf zu sitzen sondern einige felder daneben«.
+    ///
+    /// <para>Er schreibt für jedes Schiff dieser Karte EINE Zeile mit: Rumpf und
+    /// Rumpfbauteil, Variante (+0x0d), Flag-Byte der Kachel, den Montagepunkt
+    /// aus <c>parts_index.json</c>, den daraus gerechneten Versatz — und
+    /// daneben, GEMESSEN aus den beiden Bildern, die Mitte der sichtbaren
+    /// Rumpffläche gegen die Mitte der sichtbaren Waffenfläche. Das Klaffen
+    /// steht in Bildpunkten UND in Zellen (<c>{TileW}×{TileH}</c>), weil nur
+    /// die Zellenzahl die Meldung des Spielers prüft: ein fehlender
+    /// Montagepunkt verschiebt um weniger als eine Zelle, »einige Felder« ist
+    /// etwas anderes.</para>
+    ///
+    /// <para>⚠ Die Mitte der sichtbaren Fläche ist NICHT der Drehpunkt der
+    /// Waffe — sie ist nur ein Maß, das für beide Bilder gleich gebildet wird.
+    /// Was sie belegt, ist der ABSTAND, nicht der Sollwert.</para></summary>
+    public string TurretSeatCheck()
+    {
+        LoadMounts();
+        var sb = new System.Text.StringBuilder();
+        sb.Append("waffensitz-check: ");
+
+        // ---- die Montagetabelle, Rumpf fuer Rumpf ---------------------------
+        var ohne = new List<string>();
+        for (int ut = 150; ut <= 158; ut++)
+        {
+            bool has = _mount != null && _mount.ContainsKey(ut);
+            _hullComponent.TryGetValue(ut, out int comp);
+            if (!has) ohne.Add($"{ut}(Bauteil {comp})");
+        }
+        sb.Append($"Schiffsruempfe 150..158, ohne Montagepunkt: ")
+          .Append(ohne.Count == 0 ? "keiner" : string.Join(", ", ohne)).Append('\n');
+
+        // ---- jedes Schiff dieser Karte, eine Zeile --------------------------
+        int lines = 0, ships = 0;
+        var seen = new HashSet<(int, int, int)>();
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsProp || e.IsBuilding || e.UnitType < 150 || e.UnitType > 158) continue;
+            ships++;
+            // eine Zeile je Rumpf/Waffe/Blickrichtung reicht — 26 gleiche
+            // Zeilen belegen nichts, was die erste nicht schon belegt
+            if (!seen.Add((e.UnitType, e.Weapon, e.Facing))) continue;
+            lines++;
+            _hullComponent.TryGetValue(e.UnitType, out int comp);
+            int flag = _flagLookup != null
+                       && _flagLookup.TryGetValue((e.Col, e.Row), out int fl) && fl <= 4 ? fl : 0;
+            string mnt = _mount != null && _mount.TryGetValue(e.UnitType, out var m)
+                         ? $"({m[0].X},{m[0].Y})" : "KEINER";
+            var off = TurretOffset(e.UnitType, e.Col, e.Row);
+            var hull = GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e.Col, e.Row));
+            var turr = GetTurretTexture(e.Weapon, e.Facing, SlopeClassOf(e.Col, e.Row));
+            var hr = UsedRect(hull);
+            var tr = UsedRect(turr);
+            sb.Append($"   {e.UnitType}/Bauteil {comp} Var {e.ShipVariant} Waffe {e.Weapon}")
+              .Append($" Blick {e.Facing} Zelle ({e.Col},{e.Row}) Flag {flag}")
+              .Append($" Montage {mnt} Versatz ({off.X},{off.Y})px");
+            if (hr.HasValue && tr.HasValue)
+            {
+                var h = hr.Value; var t = tr.Value;
+                float hx = h.Position.X + h.Size.X / 2f, hy = h.Position.Y + h.Size.Y / 2f;
+                float tx = t.Position.X + t.Size.X / 2f + off.X;
+                float ty = t.Position.Y + t.Size.Y / 2f + off.Y;
+                // ⚠ Semikolon als Trenner, nicht Komma: die Zahlen tragen im
+                // deutschen Gebietsschema selbst ein Komma.
+                sb.Append($" | Rumpfbild {hull!.GetWidth()}x{hull.GetHeight()}")
+                  .Append($" sichtbar x{h.Position.X}..{h.Position.X + h.Size.X}")
+                  .Append($" Mitte ({hx:0.0}; {hy:0.0})")
+                  .Append($" Waffenmitte ({tx:0.0}; {ty:0.0})")
+                  .Append($" KLAFFEN ({hx - tx:0.0}; {hy - ty:0.0})px")
+                  .Append($" = ({(hx - tx) / TileW:0.00}; {(hy - ty) / TileH:0.00}) Zellen");
+                // beruehren sich die Flaechen ueberhaupt?
+                var tShift = new Rect2I(t.Position + new Vector2I((int)off.X, (int)off.Y), t.Size);
+                sb.Append(h.Intersects(tShift) ? " ueberlappt" : " KEINE UEBERLAPPUNG");
+            }
+            else sb.Append(" | kein Bildpaar");
+            sb.Append('\n');
+        }
+        sb.Append($"   {ships} Schiffe auf dieser Karte, {lines} verschiedene Faelle gemeldet");
+        return sb.ToString();
+    }
+
     private Texture2D? LoadUnitPart(string set, string key, int facing)
     {
         var k = (set + "/" + key, facing);

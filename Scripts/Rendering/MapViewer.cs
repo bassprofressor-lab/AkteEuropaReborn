@@ -836,6 +836,12 @@ public partial class MapViewer : Node2D
                 if (_selectForShot < 0) _selectForShot = 0;
                 _designWindowDemo = true;
             }
+            // Der Waffensitz auf dem Schiff — gemeldet am 13.08.2026 als »die
+            // Waffe sitzt einige Felder daneben«. Er braucht ein paar Bilder,
+            // bis die Bildpaare geladen sind.
+            else if (a == "--waffensitz-check" || a.StartsWith("--waffensitz-check="))
+                _turretSeatCheckAt = a.Length > 19
+                    ? Mathf.Max(1, a["--waffensitz-check=".Length..].ToInt()) : 20;
             else if (a == "--sound-check") _soundCheck = true;
             else if (a == "--tutorial-check") _tutorialCheck = true;
             else if (a == "--script-coverage") _coverageCheck = true;
@@ -1418,6 +1424,24 @@ public partial class MapViewer : Node2D
 
         // Mit `--shot` bleibt der Lauf stehen, damit das Bild auch photographiert
         // werden kann — dieselbe Regel wie beim --tutorial-check.
+        if (_shotPath.Length == 0) GetTree().Quit(0);
+    }
+
+    /// <summary>Wann der Waffensitz-Prüfstand meldet, in Bildern; −1 = nie.
+    /// <c>--waffensitz-check[=n]</c>.</summary>
+    private int _turretSeatCheckAt = -1;
+    private int _turretSeatFrames;
+
+    /// <summary>Meldet EINMAL, wo die Waffe auf dem Schiff sitzt — siehe
+    /// <see cref="MapEntityLayer.TurretSeatCheck"/>. Der Lauf bleibt stehen,
+    /// wenn ein <c>--shot</c> gewünscht ist, damit dasselbe Bild auch
+    /// photographiert werden kann.</summary>
+    private void TurretSeatCheckTick()
+    {
+        if (_turretSeatCheckAt < 0) return;
+        if (_turretSeatFrames++ < _turretSeatCheckAt) return;
+        _turretSeatCheckAt = -1;
+        GD.Print(_entities.TurretSeatCheck());
         if (_shotPath.Length == 0) GetTree().Quit(0);
     }
 
@@ -2130,6 +2154,7 @@ public partial class MapViewer : Node2D
         UpdatePanelClock();
         UpdatePanelPortrait();
         PortraitCheckTick();
+        TurretSeatCheckTick();
 
         // Das Ohr steht in der Mitte des Bildes. Das Original rechnet jeden
         // Klang gegen genau diesen Punkt (`play_sound` @0x4047E0 zieht
