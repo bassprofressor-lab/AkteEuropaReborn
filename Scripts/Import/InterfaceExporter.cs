@@ -12,6 +12,7 @@ using Godot;
 ///
 ///   UI/akte_font.png + .fnt   FONT.CWD as a BMFont Godot loads as a real Font
 ///   UI/panel.png              PANEL.DTA, 204 x 170
+///   UI/portraits/pNN.png      ANIM.CWA 400..403 — die 86 Bauteilbilder
 ///   Effects/&lt;name&gt;/fNN.png    hand-picked ANIM.CWA sequences
 ///
 /// Ported from font_export.py, ui_export.py and export_effects.py.
@@ -22,6 +23,10 @@ public sealed class InterfaceExporter
     private readonly string _ui, _fx;
 
     public int Glyphs, PanelPixels, Effects, EffectFrames;
+
+    /// <summary>Wieviele der 86 Bauteilbilder geschrieben wurden, und wieviele
+    /// davon leer sind (Bild 0 ist es).</summary>
+    public int Portraits, PortraitsEmpty;
 
     public InterfaceExporter(PalFile pal, string uiDir, string effectsDir)
     {
@@ -247,6 +252,144 @@ public sealed class InterfaceExporter
 
         sb.Append("}}");
         File.WriteAllText($"{_fx}/effects_index.json", sb.ToString(), new UTF8Encoding(false));
+
+        // ⚠ Die Bauteilbilder hängen HIER dran, obwohl sie nach UI/ gehören: sie
+        // kommen aus derselben ANIM.CWA, und damit schreibt sie sowohl der
+        // vollständige Import als auch `--reexport-effects=<Quelle>`, ohne dass
+        // ein zweiter Schalter in einer fremden Datei nötig wäre.
+        WritePortraits(anim);
+    }
+
+    // ---- die 86 Bauteilbilder aus ANIM.CWA ----------------------------------
+
+    /// <summary>Die vier Folgen, in denen die Bank liegt. Sie sind
+    /// LÜCKENLOS — 1176 + 57 = 1233, + 10 = 1243, + 7 = 1250, + 12 = 1262 —
+    /// darum ist »Bildnummer« schlicht <c>Rahmen − seq400.start</c>.</summary>
+    public const int PortraitSeq0 = 400, PortraitSeqN = 4;
+
+    /// <summary>Die Kantenlänge der Leinwand. Gemessen, nicht gewählt: über
+    /// alle 86 Bilder ist <c>max(Breite, yoff + Zeilen)</c> genau
+    /// <b>60</b> — und der Vorschaukasten des Originals ist
+    /// <c>0x456A50(520, 40, 3, 3)</c>, also 3 Zellen von 20 px = ebenfalls
+    /// 60×60. Die zwei Zahlen treffen sich, und das ist der Grund, warum jedes
+    /// Bild auf DIESELBE Leinwand gelegt werden darf.</summary>
+    public const int PortraitBox = 60;
+
+    /// <summary>Mit diesem Palettenindex füllt <c>0x456A50</c> das Innere der
+    /// Mulde, damit das Bild randlos darin sitzt (in DATA/01.PAL 19,19,15).
+    /// </summary>
+    public const byte PortraitFillIndex = 0x2F;
+
+    /// <summary>
+    /// Die Bank der Bauteil- und Einheitenbilder: <b>ANIM.CWA Folgen 400…403 =
+    /// Rahmen 1176…1261 = 86 Bilder</b>, jedes auf eine 60×60-Leinwand mit
+    /// seinem <c>yoff</c> an der Blit-Stelle.
+    ///
+    /// <para><b>Was das für Bilder sind.</b> Pro Fahrwerk, pro Aufbauteil, pro
+    /// Verbesserung, pro Schiffsrumpf, pro Flugzeugtyp und pro Infanterist genau
+    /// eines, 3D-gerendert, von schräg oben. Folge 400 hat 57 (1…18 Fahrwerke,
+    /// 21…39 Aufbauteile, 40…54 Verbesserungen, 56 die dunkle »?«-Tafel), 401
+    /// zehn Schiffsrümpfe, 402 sieben Flugzeuge, 403 drei Fußsoldaten und neun
+    /// Gesichter.</para>
+    ///
+    /// <para><b>Gewählt wird ein Bild über <c>PARTS.CWD +0x0D</c></b> — dasselbe
+    /// 58-Byte-Feld, das bei uns als <c>Maps/component_stats.json</c> liegt.
+    /// Zeichner ist <c>0x4508A0</c>; sein Fall 5 rechnet
+    /// <c>Bild = word[0x7A468A] + icon</c> (0x7A468A ist Folge 400, Feld
+    /// <c>start_frame</c>) und holt den Rahmenzeiger aus
+    /// <c>dword[0x815580 + 4·Bild]</c>.</para>
+    ///
+    /// <para>⚠ <b>Das <c>yoff</c>-Byte ist der ganze Punkt dieses Exports.</b>
+    /// Ein älterer Kratzexport (Temp/opencode/…/ANIM/frames/) hat dieselben
+    /// Rahmen, wirft aber <c>yoff</c> weg: Bild 1177 kommt dort als 51×38
+    /// heraus, richtig ist 51×60 auf der Blit-Leinwand. Und genau dieses Byte
+    /// setzt Turm und Fahrwerk zueinander — ohne es lassen sich die beiden nicht
+    /// stapeln, und man sieht es erst am fertigen Bild. Der gemeinsame Dekoder
+    /// <see cref="CwpFile.DecodeFrameAt"/> trägt es als
+    /// <c>Frame.YOffset</c> mit, <see cref="Canvas"/> setzt es ein.</para>
+    ///
+    /// <para><b>Deckkraft:</b> der Blitter <c>0x4AC1B0</c> prüft <c>0xFF</c> nur
+    /// im Zweig <c>mode == 1</c> (0x4AC281 <c>cmp al,0xFF; je</c>), sonst kopiert
+    /// er blank (0x4AC275) — <b>Index 0 ist NICHT durchsichtig</b>. Genau das
+    /// tut der Dekoder über <c>Frame.Opaque</c>; was von keiner Zeile bedeckt
+    /// ist, bleibt auf der Leinwand durchsichtig, damit die Muldenfüllung
+    /// (Index 0x2F) durchscheint.</para>
+    /// </summary>
+    public void WritePortraits(AnimFile anim)
+    {
+        var (c0, start) = anim.Sequence(PortraitSeq0);
+        if (c0 == 0) return;
+
+        // die Folgen der Reihe nach; lückenlos ist eine BEHAUPTUNG, also wird
+        // sie geprüft und im Index festgehalten
+        var seqs = new List<(int Seq, int Count, int Start)>();
+        int total = 0, next = start;
+        bool contiguous = true;
+        for (int s = PortraitSeq0; s < PortraitSeq0 + PortraitSeqN; s++)
+        {
+            var (c, st) = anim.Sequence(s);
+            if (c == 0) continue;
+            if (st != next) contiguous = false;
+            seqs.Add((s, c, st));
+            total += c;
+            next = st + c;
+        }
+
+        string dir = _ui + "/portraits";
+        Directory.CreateDirectory(dir);
+
+        var meta = new StringBuilder();
+        int written = 0, empty = 0, maxW = 0, maxH = 0;
+        for (int k = 0; k < total; k++)
+        {
+            var f = anim.Frame(start + k);
+            if (f == null) { empty++; continue; }
+            maxW = Math.Max(maxW, f.Width);
+            maxH = Math.Max(maxH, f.YOffset + f.Height);
+            var img = Canvas(f, PortraitBox, PortraitBox);
+            img.SavePng($"{dir}/p{k:00}.png");
+            written++;
+            Portraits++;
+            if (written > 1) meta.Append(',');
+            meta.Append($"{{\"picture\":{k},\"frame\":{start + k},\"rows\":{f.Height},");
+            meta.Append($"\"yoff\":{f.YOffset},\"w\":{f.Width}}}");
+        }
+        PortraitsEmpty = empty;
+
+        var sb = new StringBuilder();
+        sb.Append("{\"source\":\"ANIM.CWA\",\"palette\":\"DATA/01.PAL\",");
+        sb.Append($"\"sequences\":[{PortraitSeq0}..{PortraitSeq0 + PortraitSeqN - 1}],");
+        sb.Append($"\"first_frame\":{start},\"pictures\":{total},");
+        sb.Append($"\"contiguous\":{(contiguous ? "true" : "false")},");
+        sb.Append($"\"box\":[{PortraitBox},{PortraitBox}],");
+        sb.Append($"\"measured_max\":[{maxW},{maxH}],");
+        sb.Append($"\"fill_index\":{PortraitFillIndex},");
+        sb.Append($"\"fill_rgb\":[{_pal.R[PortraitFillIndex]},{_pal.G[PortraitFillIndex]},");
+        sb.Append($"{_pal.B[PortraitFillIndex]}],");
+        sb.Append("\"ranges\":{");
+        for (int i = 0; i < seqs.Count; i++)
+        {
+            if (i > 0) sb.Append(',');
+            sb.Append($"\"{seqs[i].Seq}\":{{\"first_picture\":{seqs[i].Start - start},");
+            sb.Append($"\"count\":{seqs[i].Count}}}");
+        }
+        sb.Append("},");
+        sb.Append("\"selector\":\"component_stats row +0x0D (PARTS.CWD +0x0D, Satz 58 B); ");
+        sb.Append("Zeichner 0x4508A0 Fall 5: Bild = word[0x7A468A] + icon\",");
+        sb.Append("\"compose\":\"kind 0 (Entwurf): erst sec47 +0x18 = FAHRWERK, ");
+        sb.Append("darueber sec47 +0x17 = WAFFE, gleicher Ursprung. Die ");
+        sb.Append("Verbesserung (+0x19) hat ein Bild, wird aber NICHT gezeichnet.\",");
+        sb.Append($"\"list\":[{meta}]}}");
+        File.WriteAllText($"{_ui}/portraits_index.json", sb.ToString(), new UTF8Encoding(false));
+
+        // ⚠ Der Aufrufer (ContentBuilder) meldet nur Schriften, Panel und
+        // Effekte — diese Zeile MUSS also hier stehen, sonst steht im Protokoll
+        // eines Imports nichts über die Bank, und dann weiss niemand, ob sie
+        // geschrieben wurde. Sie nennt die Zahlen, an denen man es sieht.
+        GD.Print($"Bauteilbilder: {written} von {total} aus ANIM.CWA {PortraitSeq0}.." +
+                 $"{PortraitSeq0 + PortraitSeqN - 1} (Rahmen {start}..{start + total - 1}), " +
+                 $"{empty} leer, groesstes {maxW}x{maxH} auf {PortraitBox}x{PortraitBox}, " +
+                 $"lueckenlos={(contiguous ? "ja" : "NEIN")} -> {dir}");
     }
 
     private static List<CwpFile.Frame> Decode(AnimFile a, int seq, int limit)

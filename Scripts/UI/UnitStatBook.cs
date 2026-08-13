@@ -177,6 +177,22 @@ public static class UnitStatBook
     public static int ChassisPrice(int row) => Stat(row, 0x21);
     public static int EquipPrice(int row) => Stat(row, 0x22);
 
+    /// <summary>Die BILDNUMMER des Bauteils in der Bank aus ANIM.CWA 400…403 —
+    /// das Byte <c>+0x0D</c> desselben 58-Byte-Satzes. Es IST die Bildnummer:
+    /// der Zeichner <c>0x4508A0</c> rechnet in seinem Fall 5
+    /// <c>Bild = word[0x7A468A] + icon</c>, und <c>0x7A468A</c> ist das Feld
+    /// <c>start_frame</c> von ANIM-Folge 400. 0 heisst »kein Bild« — so führt
+    /// das Original die Verbesserungen 80…88. Siehe
+    /// <see cref="PortraitBank"/>.
+    ///
+    /// <para>Gemessen an dieser Tabelle: Fahrwerk 160 (Spinne) → 1, 161
+    /// (Reifen) → 2, 175 (Schweber) → 18; Aufbauteil 1 (Leichte Bordkanone)
+    /// → 21, 4 (Maschinengewehr) → 24; Verbesserung 65 (Teleporter) → 44.
+    /// ⚠ Die Spalte 1…18 der Fahrwerke ist Zeichen für Zeichen die
+    /// <c>comp_id</c>-Spalte aus UNIT_SPRITES_RE.md §4 — Bildnummer und
+    /// ROBO-Bauteilnummer sind dasselbe Byte.</para></summary>
+    public static int IconOf(int row) => Stat(row, 0x0D);
+
     private static int Stat(int row, int at)
     {
         Load();
