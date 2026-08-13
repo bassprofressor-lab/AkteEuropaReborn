@@ -238,6 +238,8 @@ public partial class MapViewer : Node2D
         _hud.AddThemeConstantOverride("outline_size", 6);
         hudLayer.AddChild(_hud);
 
+        BuildResourceBar(hudLayer);
+
         BuildLegacyPanel();
         ApplyLegacyFont();
 
@@ -615,6 +617,16 @@ public partial class MapViewer : Node2D
             // MapEntityLayer.TickCheck.
             else if (a.StartsWith("--tick-check"))
                 _tickCheck = a.Contains('=') ? a[(a.IndexOf('=') + 1)..].ToFloat() : 10f;
+            // --hud-check[=<sek>]: was die STEHENDE Rohstoffleiste anzeigt, im
+            // selben Takt wie --econ-check. Beide zusammen sind die Gegenprobe:
+            // oben die Summe und der Zuwachs, darunter die einzelnen Lager, aus
+            // denen die Summe kommt. Siehe UI/GameHud.WatchLine.
+            else if (a == "--hud-check" || a.StartsWith("--hud-check="))
+            {
+                _hudPeriod = a.Contains('=')
+                    ? Mathf.Max(0.05f, a[(a.IndexOf('=') + 1)..].ToFloat()) : 1f;
+                _hudCheck = 0.001f;
+            }
             else if (a == "--store-check") _storeCheck = 0.001f;
             // --econ-check[=<sek>]: der Vorrat, den das Bedienfeld einer Fabrik
             // zeigt, im gewaehlten Takt. Siehe MapEntityLayer.EconCheckLine.
@@ -813,6 +825,11 @@ public partial class MapViewer : Node2D
     private float _storeCheck;
     private float _storePeriod = 5f;
     private float _econCheck, _econPeriod = 1f;
+
+    /// <summary>`--hud-check[=<sek>]`: die Zahlen der stehenden Rohstoffleiste
+    /// mitschreiben, damit sich der ANGEZEIGTE Zuwachs gegen die Lager aus
+    /// <c>--econ-check</c> halten lässt.</summary>
+    private float _hudCheck, _hudPeriod = 1f;
     private bool _skirmish;
     private string _skirmishMap = "";
 
@@ -907,6 +924,19 @@ public partial class MapViewer : Node2D
             {
                 _econCheck = _econPeriod;
                 GD.Print($"[{_upTime:0}s] " + _entities.EconCheckLine());
+            }
+        }
+        if (_hudCheck > 0f)
+        {
+            _hudCheck -= (float)delta;
+            if (_hudCheck <= 0f)
+            {
+                _hudCheck = _hudPeriod;
+                // ⚠ Die SIMULATIONSSEKUNDE dazu, nicht nur die Uhrzeit des
+                // Rechners: die Rate wird über die Simulationszeit gemittelt,
+                // und ohne sie liesse sich die Zahl nicht nachrechnen.
+                GD.Print($"[{_upTime:0}s sim={_entities.DebugClock:0.0}s] " +
+                         (_resourceBar?.WatchLine() ?? "hud: nicht gebaut"));
             }
         }
         if (_scriptCheck > 0f)
@@ -1189,6 +1219,120 @@ public partial class MapViewer : Node2D
         if (t != _panelClock.Text) _panelClock.Text = t;
     }
 
+    // ======================= die stehende Rohstoffleiste =====================
+
+    /// <summary>Die Leiste selbst liegt in <see cref="UI.GameHud"/>; dort steht
+    /// auch, was an ihr belegt und was unsere Zutat ist.</summary>
+    private UI.GameHud? _resourceBar;
+
+    /// <summary>`Q` legt die Leiste weg — sie liegt über der Karte, und wer ein
+    /// freies Bild will, muss sie loswerden können (dieselbe Überlegung wie bei
+    /// `I` fürs Baufenster).</summary>
+    private bool _hideResourceBar;
+
+    private void BuildResourceBar(CanvasLayer layer)
+    {
+        _resourceBar = new UI.GameHud();
+        layer.AddChild(_resourceBar);
+        _resourceBar.Read = ReadStocks;
+        // ⚠ DebugClock ist die SIMULATIONSUHR (sie zählt in SimTick, nicht im
+        // Bildlauf). Genau darum steht sie hier und nicht `_upTime`: der Zuwachs
+        // je Sekunde muss aus dem festen Takt kommen.
+        _resourceBar.SimClock = () => _entities.DebugClock;
+        // ⚠ Die Bauzeile bleibt LEER. MapEntityLayer gibt nach aussen nirgends
+        // heraus, welches Gebäude gerade woran baut (Entity.BuildTime ist
+        // privat erreichbar, BuildWatchLine() nur für die EINE Fabrik des
+        // Prüfstands). Was dafür nötig wäre, steht im Bericht — und weil das
+        // Original für eine Einheit ohnehin KEINE Bauzeit führt (siehe
+        // UI/GameHud.cs), wird hier lieber nichts gezeigt als eine erfundene
+        // Zahl gross gemacht.
+    }
+
+    /// <summary>
+    /// Was die Leiste anzeigt: die Summe der Lager aller Gebäude des
+    /// Sichtspielers, plus der Kontostand.
+    ///
+    /// <para>⚠ <b>NOTWEG, und er ist als solcher gemeint.</b> Die Bestände
+    /// liegen in <c>MapEntityLayer</c> (Entity.StockT/W/F/S), und diese Datei
+    /// gehört einem anderen Agenten; sie gibt keine Summe und keine Gebäudeliste
+    /// heraus. Was sie herausgibt, ist <c>EconCheckLine()</c> — dieselben Zahlen
+    /// als Zeile, in einem Format, das die Methode selbst festlegt:
+    /// <c>[3 Typ2 T120 W15 F0 S0 /Lager300 V3 St0 haelt10]</c> je Fabrik und
+    /// <c>[0 Basis W315 F228 S0 T0 bezahlbar 3/65]</c> je Basis. Hier werden
+    /// daraus die vier Summen gelesen: aus jeder Klammer jedes Wort der Form
+    /// <c>&lt;Buchstabe&gt;&lt;Ziffern&gt;</c> mit Buchstabe T/W/F/S. »Typ2«,
+    /// »St0«, »/Lager300« und »haelt10« fallen dabei durch, weil hinter dem
+    /// ersten Buchstaben keine reine Ziffernfolge steht.</para>
+    ///
+    /// <para>Sobald <c>MapEntityLayer</c> einen richtigen Zugriff hat (im
+    /// Bericht als <c>PlayerStocks(int spieler)</c> beschrieben), ist dieser
+    /// Rumpf eine Zeile lang und die Zerlegung fliegt raus.</para>
+    ///
+    /// <para>⚠ Was die Leiste damit NICHT zeigt: Terranium, das noch in einer
+    /// MINE liegt oder auf dem Nahweg unterwegs ist. <c>EconCheckLine()</c>
+    /// zählt die Fabriken und die Basis, also genau das, woraus BEZAHLT wird
+    /// (@0x44A6D8/ED/08 prüfen die Lager des Gebäudes, dessen Fenster offen
+    /// ist). Das ist die ehrliche Lesart der Zahl — »was ich ausgeben kann« —
+    /// und nicht »was ich besitze«.</para>
+    /// </summary>
+    private UI.GameHud.Stocks ReadStocks()
+    {
+        string line = _entities.EconCheckLine();
+        int t = 0, w = 0, f = 0, s = 0;
+        bool any = false;
+        int i = 0;
+        while (true)
+        {
+            int a = line.IndexOf('[', i);
+            if (a < 0) break;
+            int b = line.IndexOf(']', a + 1);
+            if (b < 0) break;
+            any = true;
+            foreach (string word in line[(a + 1)..b].Split(' '))
+            {
+                if (word.Length < 2) continue;
+                char c = word[0];
+                if (c is not ('T' or 'W' or 'F' or 'S')) continue;
+                bool digits = true;
+                for (int k = 1; k < word.Length; k++)
+                    if (!char.IsAsciiDigit(word[k])) { digits = false; break; }
+                if (!digits) continue;
+                int v = int.Parse(word[1..]);
+                switch (c)
+                {
+                    case 'T': t += v; break;
+                    case 'W': w += v; break;
+                    case 'F': f += v; break;
+                    case 'S': s += v; break;
+                }
+            }
+            i = b + 1;
+        }
+        // Der Kontostand: MoneyLine() liefert »Kontostand : $ 44850«.
+        // ⚠ Sie liest _money[0] — auch dann, wenn der Sichtspieler ein anderer
+        // ist. Das ist eine Stelle in einer fremden Datei; sie steht im Bericht.
+        int money = 0;
+        string ml = _entities.MoneyLine();
+        int d = ml.LastIndexOf('$');
+        if (d >= 0) int.TryParse(ml[(d + 1)..].Trim(), out money);
+        return new UI.GameHud.Stocks(t, w, f, s, money, any);
+    }
+
+    /// <summary>Die Leiste eine Probe nehmen lassen und sie an ihre Stelle
+    /// setzen. Sie entscheidet selbst, ob eine neue SIMULATIONSSEKUNDE begonnen
+    /// hat — hier wird nur angeklopft.</summary>
+    private void UpdateResourceBar()
+    {
+        if (_resourceBar == null) return;
+        bool want = !_hideResourceBar && !_entities.Designer.Active;
+        if (_resourceBar.Visible != want) _resourceBar.Visible = want;
+        if (!want) return;
+        _resourceBar.Sample();
+        // Unter der Statusplatte durch: die ist links oben und so hoch, wie ihr
+        // Text sie macht — darum wird ihre Höhe gefragt und nicht geraten.
+        _resourceBar.Place(GetViewportRect().Size, 4f);
+    }
+
     /// <summary>The overview map, sitting on top of the side panel.
     ///
     /// It goes ABOVE the panel rather than inside its recessed box, because that
@@ -1377,6 +1521,10 @@ public partial class MapViewer : Node2D
         _entities.SetUiFont(font, size);
         _baseWindow?.SetFont(font, size);
         _designWindow?.SetFont(font, size);
+        // Die Rohstoffleiste MUSS diese Schrift haben: ihre drei Sinnbilder sind
+        // die Zeichen ] [ { aus FONT.CWD — mit einer anderen Schrift stünden
+        // dort Klammern (siehe UI/GameHud.cs).
+        _resourceBar?.SetFont(font, size);
         // ⚠ Reihenfolge: BuildLegacyPanel() laeuft VOR ApplyLegacyFont() (siehe
         // _Ready), die Uhr entsteht also noch ohne Schrift — dieselbe Falle wie
         // bei der Tabelle im Abschlussfenster. Sie bekommt sie hier.
@@ -1637,7 +1785,7 @@ public partial class MapViewer : Node2D
             (UI.SkirmishSetup.Active ? "" : $"[{_mapIndex + 1}/{MapNames.Length}]   ") +
             $"click/drag=select  RIGHT-click=move  X=stop  E=eingraben  M=konstruieren  B=bauen  N=auswahl  O=forschen  K=reparieren  V=lagerausbau  C=prod.erw.  L=schienen  Y=flugzeuge  " +
             $"WASD+middle-drag=pan  wheel=zoom\n" +
-            $"[ ]=map  F=fit  U=sprites  R=ranges  P=walkable  Z=zones  J=nebel  T=buildings  G=dots  H=karte  Tab=ereignis  Shift+rechts=anreihen  Esc=quit";
+            $"[ ]=map  F=fit  U=sprites  R=ranges  P=walkable  Z=zones  J=nebel  T=buildings  G=dots  H=karte  Q=rohstoffleiste  Tab=ereignis  Shift+rechts=anreihen  Esc=quit";
 
         _hudBase = _hud.Text;
         RefreshObjectives();
@@ -1694,6 +1842,11 @@ public partial class MapViewer : Node2D
 
     public override void _Process(double delta)
     {
+        // ⚠ Die Leiste ZUERST: QuitIfDue() schreibt die Prüfzeilen, und
+        // `--hud-check` fragt die Leiste. Stand der Aufruf danach, meldete die
+        // erste Zeile jedes Laufs »nichts zu zeigen«, obwohl es etwas zu zeigen
+        // gab — der Prüfstand las die Leiste, bevor sie ihre erste Probe hatte.
+        UpdateResourceBar();
         QuitIfDue(delta);
         UpdateProductionPanel();
         UpdateDesignWindow();
@@ -1879,6 +2032,8 @@ public partial class MapViewer : Node2D
                 // the production list shares the display box with the info
                 // text; I hides it for a look at what is underneath
                 case Key.I: _hidePanelList = !_hidePanelList; UpdateProductionPanel(); break;
+                // Q legt die Rohstoffleiste weg — siehe BuildResourceBar.
+                case Key.Q: _hideResourceBar = !_hideResourceBar; UpdateResourceBar(); break;
                 case Key.O: _entities.StartResearch(); break;
                 case Key.K: _entities.StartRepair(); break;
                 case Key.L: _entities.ToggleRail(); break;
