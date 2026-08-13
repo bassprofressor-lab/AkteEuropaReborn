@@ -66,6 +66,25 @@ public partial class MapEntityLayer : Node2D
         /// dazu noch eine Waffe mit 10 Schaden.</para></summary>
         public bool Armed;
 
+        /// <summary>
+        /// Die VARIANTE eines Schiffes — dasselbe Satzfeld <b>+0x0d</b>, das bei
+        /// einem Landfahrzeug nur <see cref="Armed"/> ist. Bei einem Schiff steht
+        /// dort eine Zahl, und sie wird gebraucht: der Bilderzweig des Originals
+        /// (0x450A97) sieht sie an, um die zwei Entwürfe zu trennen, die sich den
+        /// Rumpf 151 TEILEN — siehe <see cref="UI.PortraitBank.PictureOfShip"/>.
+        /// −1 heisst »kein Schiff« oder »kein Rohsatz«.
+        ///
+        /// <para><b>Gemessen, nicht gesetzt.</b> Der Erzeuger @0x4B2B20 schreibt
+        /// das Byte <c>+0x18</c> des SHIP_PROD-Satzes nach <c>+0x0d</c>
+        /// (GAMESTATE_RE.md, »The SHIP_PROD record«), und über alle 30 Karten
+        /// stimmt es bei <b>97 von 97</b> gesetzten Schiffen mit der Variante des
+        /// Entwurfs desselben Rumpfes zusammen, ohne ein Gegenbeispiel:
+        /// Rumpf 150 → 4 (23 Stück), 151 → 6 (33), 152 → 1 (8), 153 → 0 (13),
+        /// 157 → 7 (8), 158 → 8 (12) — und genau diese sechs Zahlen trägt
+        /// <c>ships.json</c> in den Feldern »variant« der Entwürfe 0,1,2,3,8,9.
+        /// </para></summary>
+        public int ShipVariant = -1;
+
         /// <summary>Equipment row (record +0x10). The spawn routine @0x4b1b5c
         /// copies the design's third component (sec47 +0x19) into this byte, and
         /// the stats table names rows 65..88: Teleporter, Repair Device,
@@ -1175,6 +1194,10 @@ public partial class MapEntityLayer : Node2D
                     Weapon = haveRaw ? HexByte(raw, 0x0c) : 0,
                     // +0x0d ist die Waffenfahne des Spiels — siehe Entity.Armed
                     Armed = haveRaw && HexByte(raw, 0x0d) != 0,
+                    // ... und bei einem SCHIFF dasselbe Byte als Zahl: die
+                    // Variante, die das Bild entscheidet — siehe Entity.ShipVariant
+                    ShipVariant = haveRaw && NavalTypes.Contains(GetI(e, "unit_type", -1))
+                        ? HexByte(raw, 0x0d) : -1,
                     // +0x0b is the record's `spodek` (the game's own dump name).
                     // For the size classes 148/149 it is the INFANTRY set: the
                     // maps hold 921 of them and every value is even, 0..22,
@@ -1765,16 +1788,26 @@ public partial class MapEntityLayer : Node2D
     /// `which` is an index into the units that carry a weapon or a tank, so a
     /// caller does not have to know slot numbers to land on something with
     /// something to show.</summary>
-    public string SelectForShot(int which)
+    /// <param name="unitType">Wenn &gt;= 0, kommen nur Einheiten dieses
+    /// <c>unit_type</c> in die Auswahl. ⚠ Dazugekommen fuer die SCHIFFE: die 14
+    /// Schiffe von map_DM_3 stehen unter 101 bewaffneten Einheiten, und ohne
+    /// diesen Filter waere nicht zu sagen, welches <paramref name="which"/> auf
+    /// einem Rumpf landet. Ein Bildschirmfoto vom Schiffsbild braucht aber genau
+    /// das — dieselbe Luecke, die beim Flugzeugplatz zu schliessen war.</param>
+    public string SelectForShot(int which, int unitType = -1)
     {
         var pick = new List<int>();
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
             if (e.IsBuilding || e.IsProp || e.Dead) continue;
+            if (unitType >= 0 && e.UnitType != unitType) continue;
             if (e.Weapon != 0 || e.FuelMax > 0) pick.Add(i);
         }
-        if (pick.Count == 0) return "select: keine Einheit mit Waffe oder Tank";
+        if (pick.Count == 0)
+            return unitType >= 0
+                ? $"select: keine Einheit mit unit_type {unitType} (und Waffe oder Tank)"
+                : "select: keine Einheit mit Waffe oder Tank";
         int idx = pick[Mathf.PosMod(which, pick.Count)];
         _sel.Clear();
         _sel.Add(idx);
@@ -3483,14 +3516,22 @@ public partial class MapEntityLayer : Node2D
     ///
     /// <para>⚠ <b>UNSERE EINSCHRAENKUNG, und sie ist Absicht:</b> von den
     /// Landeinheiten zeichnen wir nur Fall 0 und nur fuer ein LANDFAHRWERK
-    /// (unit_type 160..175). Was die
-    /// fuenf Klassen des Klassenbytes bedeuten, ist UNGELESEN; und fuer Schiffe
-    /// ist <c>+0x0D</c> ein TOTES Feld — Fall 1 nimmt statt dessen
-    /// <c>byte[0x52EDB7 + 42*(Platz + 10*Spieler)] - 0x96</c> durch eine
-    /// 10er-Permutation @0x450D60 in Folge 401, und diese Permutation ist nicht
-    /// gelesen. Wer hier <c>+0x0D</c> eines Rumpfes durchschickt, bekommt die
-    /// Bildnummern 70..76 und 100..102, und das sind in Fall-5-Zaehlung
-    /// Flugzeug- und Personenbilder. Lieber kein Bild als ein falsches.</para>
+    /// (unit_type 160..175). Was die fuenf Klassen des Klassenbytes bedeuten, ist
+    /// UNGELESEN. ⚠ Und <c>+0x0D</c> darf hier NICHT als Bildnummer durchgehen:
+    /// wer das tut, bekommt die Nummern 70..76 und 100..102, und das sind in
+    /// Fall-5-Zaehlung Flugzeug- und Personenbilder.</para>
+    ///
+    /// <para><b>Die SCHIFFE (unit_type 150..158) sind seit dem 13.08.2026
+    /// dabei.</b> Fall 1 nimmt Folge 401 ueber
+    /// <c>byte[0x52EDB7 + 42*(Entwurf + 10*Spieler)] − 0x96</c> und die
+    /// SCHALTERTAFEL @0x450D60 — die »10er-Permutation«, die hier bis heute als
+    /// ungelesen stand, ist gelesen und steht bei
+    /// <see cref="UI.PortraitBank.PictureOfShip"/>. Sie ist keine Bytetafel,
+    /// sondern zehn Codeadressen, und ihr zweiter Fall (der Rumpf <b>151</b>, den
+    /// sich L.Kreuzer und Flak-Barkasse TEILEN) sieht noch auf die Variante.
+    /// <b>Alle ZEHN Rumpffaelle bekommen ein Bild</b>, jedes genau einmal; nur
+    /// der Rumpf 159 zeigt ueber das Ende der Folge hinaus und wird von keinem
+    /// Entwurf benutzt.</para>
     ///
     /// <para><b>Die INFANTERIE (unit_type 148/149) ist seit dem 13.08.2026
     /// dabei.</b> Das Original nimmt Folge 403 ueber die Bytetafel @0x450CCC mit
@@ -3559,6 +3600,29 @@ public partial class MapEntityLayer : Node2D
             return inf > 0
                 ? (inf, 0, n, "")
                 : (0, 0, n, UI.PortraitBank.InfTrouble(design));
+        }
+        if (NavalTypes.Contains(e.UnitType))
+        {
+            // ---- Fall 1: der SCHIFFSPLATZ (0x470188/0x4701A9) ----------------
+            // EIN Bild, kein zweites: 0x450AF8 blittet einmal. Die Kette vom
+            // Rumpf zum Bild steht bei PortraitBank.PictureOfShip.
+            //
+            // ⚠ UNSERE Setzung, und sie ist Absicht: das Original holt Rumpf und
+            // Variante nicht aus der Einheit, sondern aus dem SHIP_PROD-Satz, den
+            // das Feld +0x3e der Einheit nennt. Bei einem vom Stapel gelaufenen
+            // Schiff kommt dasselbe heraus — @0x4B2B20 schreibt +0x17 nach +0x0f
+            // und +0x18 nach +0x0d, die beiden Bytes SIND dieselben. Bei den
+            // GESETZTEN Schiffen der Karten laufen die zwei Wege aber
+            // auseinander: dort ist +0x3e durchweg `Rumpf − 150` und nicht der
+            // Entwurfsplatz, nachgezaehlt an den 8 Schlachtschiffen (Rumpf 157,
+            // +0x3e = 7) und den 12 Kreuzern (158, +0x3e = 8) auf den 30 Karten.
+            // Wer denen ueber +0x3e ein Bild gibt, gibt dem Schlachtschiff das
+            // der Flak-Barkasse. Wir nehmen darum die zwei Bytes der EINHEIT —
+            // das Bild passt dann zu dem Rumpf, den der Spieler vor sich sieht.
+            int ship = UI.PortraitBank.PictureOfShip(e.UnitType, e.ShipVariant);
+            return ship > 0
+                ? (ship, 0, n, "")
+                : (0, 0, n, UI.PortraitBank.ShipTrouble(e.UnitType, e.ShipVariant));
         }
         if (e.UnitType is < 160 or > 175)
             return (0, 0, n, $"unit_type {e.UnitType} ist kein Landfahrwerk (160..175)");
@@ -3739,6 +3803,64 @@ public partial class MapEntityLayer : Node2D
           .Append($"{infWith.Count} Infanterie, {infError} mal der Fehlerzweig ")
           .Append($"»Wrong index of infantry« — {infWith.Count} + 1 Fehlerfall = die ")
           .Append("13 Eintraege der Schaltertafel @0x450C98\n");
+
+        // ---- die SCHIFFE: die zehn Entwuerfe namentlich ---------------------
+        //
+        // Die Zahl, um die es hier geht: zehn Entwuerfe, zehn Bilder — und ob
+        // wirklich jedes Bild GENAU EINMAL vergeben wird. Doppelt vergeben waere
+        // das Warnzeichen: es hiesse, dass der doppelte Rumpf 151 nicht getrennt
+        // wird und zwei Entwuerfe dasselbe Bild tragen.
+        var shipWith = new List<string>();
+        var shipWithout = new List<string>();
+        var shipPics = new SortedDictionary<int, List<string>>();
+        if (_shipDesigns == null)
+            sb.Append("   Schiffe: keine Schiffsliste geladen (Maps/ships.json)\n");
+        else
+        {
+            foreach (var d in _shipDesigns)
+            {
+                if (d.Player != 0) continue;          // acht gleiche Bloecke, einer reicht
+                int pic = UI.PortraitBank.PictureOfShip(d.Chassis, d.Variant);
+                string nm = $"{d.Index} {d.Name} (Rumpf {d.Chassis}, Var {d.Variant})";
+                if (pic > 0)
+                {
+                    shipWith.Add($"{nm} -> p{pic:00}");
+                    if (!shipPics.TryGetValue(pic, out var who))
+                        shipPics[pic] = who = new List<string>();
+                    who.Add(d.Name);
+                }
+                else shipWithout.Add($"{nm}: {UI.PortraitBank.ShipTrouble(d.Chassis, d.Variant)}");
+            }
+            sb.Append($"   Schiffe: {shipWith.Count} Entwuerfe mit Bild auf ")
+              .Append($"{shipPics.Count} verschiedene Bilder (Folge ")
+              .Append($"{UI.PortraitBank.ShipSequence} ab p")
+              .Append($"{UI.PortraitBank.FirstPictureOf(UI.PortraitBank.ShipSequence):00}, ")
+              .Append($"{UI.PortraitBank.PicturesIn(UI.PortraitBank.ShipSequence)} Stueck), ")
+              .Append($"{shipWithout.Count} ohne  [{_shipSource}]\n");
+            sb.Append("      ").Append(string.Join(", ", shipWith)).Append('\n');
+            if (shipWithout.Count > 0)
+                sb.Append("      ohne Bild: ").Append(string.Join(", ", shipWithout)).Append('\n');
+            // das Warnzeichen: ein Bild an zwei Entwuerfe
+            var twice = new List<string>();
+            foreach (var kv in shipPics)
+                if (kv.Value.Count > 1)
+                    twice.Add($"p{kv.Key:00} an {string.Join(" UND ", kv.Value)}");
+            sb.Append("      doppelt vergeben: ")
+              .Append(twice.Count == 0 ? "keines" : string.Join("; ", twice)).Append('\n');
+            // und die Tafel selbst: zehn Faelle, welcher zeigt wohin
+            var cs2 = new List<string>();
+            foreach (int ch in UI.PortraitBank.ShipChassis())
+            {
+                int p6 = UI.PortraitBank.PictureOfShip(ch, UI.PortraitBank.ShipDoubleVariant);
+                int p0 = UI.PortraitBank.PictureOfShip(ch, 0);
+                cs2.Add(p6 == p0
+                    ? (p6 > 0 ? $"{ch}->p{p6:00}" : $"{ch}->KEIN")
+                    : $"{ch}->p{p6:00}/p{p0:00}");
+            }
+            sb.Append("      Schaltertafel @0x450D60 (Rumpf->Bild, ")
+              .Append("beim doppelten Rumpf Var 6/sonst): ")
+              .Append(string.Join(" ", cs2)).Append('\n');
+        }
 
         // ---- die Einheiten dieser Karte, nach dem Grund gruppiert -----------
         var byReason = new SortedDictionary<string, int>();
@@ -8549,6 +8671,13 @@ public partial class MapEntityLayer : Node2D
     private sealed class ShipDesign
     {
         public int Player, Index, Chassis, Weapon, WeaponComp;
+
+        /// <summary>Satzfeld <c>+0x18</c> — die Variante. Sie geht nach
+        /// <c>+0x0d</c> des Einheitensatzes und entscheidet beim doppelten Rumpf
+        /// 151 das BILD, siehe <see cref="UI.PortraitBank.PictureOfShip"/>.
+        /// </summary>
+        public int Variant;
+
         public int CostW, CostF, CostS;
         public int Speed, Energie, Attack, Defence, Sight, Ammo, Fuel, Reload;
         public int Tech;                 // campaign level this design needs
@@ -8631,6 +8760,7 @@ public partial class MapEntityLayer : Node2D
                 Enable = GetI(d, "enable") != 0,
                 Name = d.TryGetValue("name", out var nv) ? nv.AsString() : "",
                 Chassis = GetI(d, "chassis"), Weapon = GetI(d, "weapon"),
+                Variant = GetI(d, "variant"),
                 WeaponComp = GetI(d, "weapon_comp"),
                 CostW = GetI(d, "cost_w"), CostF = GetI(d, "cost_ch"),
                 CostS = GetI(d, "cost_sp"),
@@ -8776,6 +8906,10 @@ public partial class MapEntityLayer : Node2D
         {
             Slot = -1, Col = cell.Value.X, Row = cell.Value.Y,
             Owner = dock.Owner, Team = dock.Team, UnitType = d.Chassis,
+            // @0x4B2B20 schreibt +0x18 des Entwurfs nach +0x0d der Einheit —
+            // ohne das hat ein vom Stapel gelaufenes Schiff kein Bild, und die
+            // Flak-Barkasse bekaeme das des L.Kreuzers.
+            ShipVariant = d.Variant,
             Category = -1, Elev = el, Name = d.Name,
             // energie is the life, the tank and the magazine come straight
             // from the design record (@0x4b2b20 writes +0x08/+0x29, +0x2e/+0x30

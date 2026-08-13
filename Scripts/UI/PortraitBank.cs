@@ -93,6 +93,13 @@ public static class PortraitBank
     /// Rechnungen unten stimmen weiter.</summary>
     private static readonly Dictionary<int, int> _first = new();
 
+    /// <summary>Wieviele Bilder jede Folge HAT — das Feld <c>count</c> desselben
+    /// <c>ranges</c>-Eintrags (400 → 57, 401 → 10, 402 → 7, 403 → 12). Auch das
+    /// GELESEN, und es wird gebraucht: die Schiffskette des Originals kann eine
+    /// Nummer erzeugen, die über das Ende ihrer eigenen Folge hinauszeigt, siehe
+    /// <see cref="PictureOfShip"/>.</summary>
+    private static readonly Dictionary<int, int> _count = new();
+
     /// <summary>Ist die Bank da? Nach dem ersten Aufruf ist
     /// <see cref="Trouble"/> gesetzt, falls nicht.</summary>
     public static bool Ready
@@ -138,6 +145,8 @@ public static class PortraitBank
                 var d = kv.Value.AsGodotDictionary<string, Variant>();
                 if (d.TryGetValue("first_picture", out var fp))
                     _first[kv.Key.ToInt()] = fp.AsInt32();
+                if (d.TryGetValue("count", out var cn))
+                    _count[kv.Key.ToInt()] = cn.AsInt32();
             }
         if (Count <= 0) Trouble = "portraits_index.json nennt 0 Bilder";
     }
@@ -148,6 +157,14 @@ public static class PortraitBank
     {
         Load();
         return _first.TryGetValue(sequence, out int v) ? v : -1;
+    }
+
+    /// <summary>Wieviele Bilder eine ANIM-Folge hat, oder −1, wenn der Index es
+    /// nicht sagt.</summary>
+    public static int PicturesIn(int sequence)
+    {
+        Load();
+        return _count.TryGetValue(sequence, out int v) ? v : -1;
     }
 
     /// <summary>Ein Bild der Bank, oder null. ⚠ Die vom Import geschriebenen
@@ -393,6 +410,178 @@ public static class PortraitBank
     {
         foreach (var kv in InfTable)
             if (kv.Value != InfNoPicture) yield return kv.Key + InfFirstDesign;
+    }
+
+    // ---- die zehn Schiffsbilder (Folge 401) ---------------------------------
+    //
+    // Fall 1 des Zeichners 0x4508A0 — »Schiffsplatz«, aufgerufen aus dem
+    // Bedienblock bei 0x470188/0x4701A9 mit (1, entwurf, surf, 11, 61), gezogen
+    // wenn das Klassenbyte +0x0a des Satzes 4 oder 5 ist. Die Kette, ganz
+    // gelesen (GAME.EXE 1.421.824 B, C:\Program Files (x86)\Akte Europa):
+    //
+    //     0045 0A42  mov  dl, byte [0x4fa284]        ; der eigene Spieler
+    //     0045 0A48  movsx eax, word [esp+0x18]      ; das 2. Argument = Entwurf
+    //     0045 0A4D  lea  ebx,[edx+edx*4] / lea edx,[eax+ebx*2]   ; entwurf+10*sp
+    //     0045 0A53  lea  ebx,[edx+edx*4] / lea edx,[edx+ebx*4]   ; *21
+    //     0045 0A59  mov  cl, byte [edx*2 + 0x52edb7]  ; = SHIP_PROD[n] +0x17
+    //     0045 0A60  lea  eax,[edx*2]                  ; = 42*n, der Satzanfang
+    //     0045 0A67  sub  ecx, 0x96                    ; 0x96 = 150
+    //     0045 0A6D  cmp  ecx, 9
+    //     0045 0A70  ja   0x450a79                     ; -> "Wrong ship chassis"
+    //     0045 0A72  jmp  dword [ecx*4 + 0x450d60]     ; die SCHALTERTAFEL
+    //     ...
+    //     0045 0AE5  movsx ecx, word [0x7a468e]        ; Folge 401, start_frame
+    //     0045 0AE8  add  eax, ecx                     ; Bild = first + Fall
+    //
+    // ⚠ **0x450D60 ist KEINE Bytetafel, sondern die Sprungtafel eines
+    // Schalters** — genau wie 0x450C98 bei der Infanterie. Zehn CODEADRESSEN à
+    // 4 Byte: 0x450A92, 0x450A97, 0x450AAC, 0x450AB2, 0x450AB8, 0x450ABE,
+    // 0x450AC4, 0x450ACA, 0x450AD0, 0x450AD6. Neun davon sind ein einzelnes
+    // `mov ax, <n>` samt Sprung auf den gemeinsamen Zeichenschluss 0x450ADA; die
+    // Zahlen sind, in dieser Reihenfolge, **0, ·, 2, 3, 4, 5, 6, 8, 9, 10**.
+    //
+    // ⚠ **Der zweite Fall (Rumpf 151) ist der Sonderfall, und er IST die
+    // Permutation.** Er hat kein `mov ax,n`, sondern rechnet weiter:
+    //
+    //     0045 0A97  mov  al, byte [eax + 0x52edb8]    ; = SHIP_PROD[n] +0x18
+    //     0045 0A9D  sub  al, 6
+    //     0045 0A9F  cmp  al, 1
+    //     0045 0AA1  sbb  eax, eax          ; −1 wenn al==0 (also Byte==6), sonst 0
+    //     0045 0AA3  and  eax, 0xfffffffa   ; −1 -> −6 ; 0 -> 0
+    //     0045 0AA6  add  ax, 7             ; also: Byte==6 -> 1, sonst -> 7
+    //
+    // Das Byte +0x18 des SHIP_PROD-Satzes ist die **Variante**
+    // (Assets/Legacy/Maps/ships.json, Feld »variant«).
+    //
+    // **Warum es diesen Sonderfall gibt — und warum »chassis − 150« FALSCH
+    // wäre.** Die zehn Entwürfe benutzen die Rümpfe
+    // **150,151,152,153,154,155,156,151,157,158**: der Rumpf **151 kommt ZWEIMAL
+    // vor**, beim L.Kreuzer/Rocket Ship (Variante 6) und bei der
+    // Flak-Barkasse/AA Ship (Variante 0). Deshalb reichen die zehn Rümpfe nicht
+    // als Bildschlüssel, deshalb steht in Fall 1 ein zweiter Blick auf die
+    // Variante, und deshalb rutschen 157 und 158 um eins nach hinten (auf 8 und
+    // 9), damit die 7 für die Flak-Barkasse frei bleibt. Naiv gerechnet bekäme
+    // die Flak-Barkasse das Bild des L.Kreuzers, das Schlachtschiff das der
+    // Flak-Barkasse, der Kreuzer das des Schlachtschiffs — und das grösste Bild
+    // der Folge bliebe unbenutzt.
+    //
+    // **Gegenprobe am Bild** (p57…p66 angesehen, aekernel-tools/icon_out/bank):
+    //   p57 Patrol-Boot     kleines schnelles Boot mit SITZENDEM Schützen am
+    //                       Ständer — Waffe »2x Maschinengewehr«
+    //   p58 L.Kreuzer       zwei lange, steil aufgerichtete RAKETENROHRE —
+    //                       Waffe »L.Raketenwerfer«
+    //   p59 Küstenwache     schlanker KATAMARAN mit einem Geschütz vorn — der
+    //                       Entwurf heisst in den .DM-Fassungen »Katamaran«
+    //   p60 Frachter        stumpfer Kasten voller grosser CONTAINER, unbewaffnet
+    //   p61 U-Boot          schlanke Zigarre, flach im Wasser, KEIN Aufbau
+    //   p62 Treibstofftender zwei grosse glatte ZYLINDERTANKS an Deck
+    //   p63 Munitiontender  ein Raster kleiner WÜRFELKISTEN an Deck
+    //   p64 Flak-Barkasse   **derselbe Rumpf wie p58** — gleiche Reling, gleiches
+    //                       Deck, gleiche Farbe — aber ein kurzer, dicker
+    //                       Doppellauf steil nach oben: »Flak-Geschütz«
+    //   p65 Schlachtshiff   schwerer Kriegsschiffsrumpf mit vielarmigem
+    //                       Werfergestell — »Schw.Raketenwerfer«
+    //   p66 Kreuzer         der längste, vollgepackteste Rumpf mit einem grossen
+    //                       Raketenkörper — »Mittelstreckenrakete«
+    //
+    // ⭐ **p58 und p64 sind DERSELBE RUMPF mit zwei verschiedenen Aufbauten.**
+    // Die Bildbank trägt den doppelten Rumpf 151 also selbst, sichtbar, und
+    // belegt damit die Permutation von aussen: ohne den Blick auf die Variante
+    // hätte die Flak-Barkasse Raketen statt Flak, und das Schlachtschiff wäre
+    // derselbe kleine Kahn wie der L.Kreuzer.
+    //
+    // ⚠ **Rumpf 159 (Fall 9) führt ins Leere.** Sein `mov ax,0xa` zeigt auf das
+    // 11. Bild einer Folge, die nur 10 hat — das wäre p67 und damit das erste
+    // FLUGZEUGbild. Kein Entwurf benutzt 159, der Fall ist unerreichbar; wir
+    // fangen ihn trotzdem an der aus dem Index gelesenen Länge der Folge ab.
+
+    /// <summary>Die ANIM-Folge der Schiffsbilder — 10 Stück.</summary>
+    public const int ShipSequence = 401;
+
+    /// <summary>Die 0x96, die <c>0x450A67</c> vom Rumpfbyte abzieht: Rumpf 150
+    /// ist der erste Schiffsrumpf.</summary>
+    public const int ShipFirstChassis = 0x96;
+
+    /// <summary>Der letzte Fall, den <c>cmp ecx,9</c> @0x450A6D durchlässt.
+    /// </summary>
+    public const int ShipLastCase = 9;
+
+    /// <summary>Der Fall mit dem DOPPELTEN Rumpf — 151, der Fall, der nicht
+    /// einfach eine Zahl setzt, sondern noch auf die Variante sieht
+    /// (0x450A97).</summary>
+    public const int ShipDoubleCase = 1;
+
+    /// <summary>Die Variante, die <c>0x450A9D</c> heraussucht (<c>sub al,6</c>):
+    /// sie führt auf <see cref="ShipJump"/>[1], jede andere auf
+    /// <see cref="ShipDoubleOther"/>.</summary>
+    public const int ShipDoubleVariant = 6;
+
+    /// <summary>Der andere Ausgang von Fall 1 — die 7 aus <c>add ax,7</c>
+    /// @0x450AA6, das Bild der Flak-Barkasse.</summary>
+    public const int ShipDoubleOther = 7;
+
+    /// <summary>Die zehn <c>mov ax, n</c> der Schaltertafel <c>@0x450D60</c>, in
+    /// der Reihenfolge ihrer Fälle (= Rumpf − 150). ⚠ Der Eintrag 1 gilt nur für
+    /// <see cref="ShipDoubleVariant"/>; Fall 1 hat zwei Ausgänge, siehe
+    /// <see cref="ShipDoubleOther"/>.</summary>
+    private static readonly int[] ShipJump = { 0, 1, 2, 3, 4, 5, 6, 8, 9, 10 };
+
+    /// <summary>
+    /// Das Bild eines Schiffes, als Bildnummer der Bank; <b>0 heisst KEIN
+    /// Bild</b>.
+    ///
+    /// <para>⚠ Der Fehlerzweig des Originals (@0x450A79) gibt
+    /// <c>"Wrong ship chassis"</c> (@0x4FE954) aus und zeichnet danach TROTZDEM —
+    /// mit <c>ax = word[esp+0x16]</c>, also mit dem Stück Stapel, das noch dort
+    /// lag. Wir zeichnen dort nichts.</para>
+    /// </summary>
+    /// <param name="chassis">Der Rumpf 150…159 — das Byte <c>+0x17</c> des
+    /// SHIP_PROD-Satzes, das der Erzeuger @0x4B2B20 in <c>+0x0f</c> des
+    /// Einheitensatzes schreibt (bei uns <c>Entity.UnitType</c>).</param>
+    /// <param name="variant">Die Variante — das Byte <c>+0x18</c> desselben
+    /// Satzes, das derselbe Erzeuger nach <c>+0x0d</c> schreibt. Sie wird nur im
+    /// Fall des doppelten Rumpfes 151 überhaupt angesehen.</param>
+    public static int PictureOfShip(int chassis, int variant)
+    {
+        int i = chassis - ShipFirstChassis;
+        if (i < 0 || i > ShipLastCase) return 0;         // ja 0x450A79
+        int a = i == ShipDoubleCase
+            ? (variant == ShipDoubleVariant ? ShipJump[ShipDoubleCase] : ShipDoubleOther)
+            : ShipJump[i];
+        int first = FirstPictureOf(ShipSequence);
+        if (first < 0) return 0;                         // Index ohne »ranges«
+        int have = PicturesIn(ShipSequence);
+        if (have >= 0 && a >= have) return 0;            // Rumpf 159, siehe oben
+        return first + a;
+    }
+
+    /// <summary>Warum ein Schiff kein Bild bekommt — wie
+    /// <see cref="AirTrouble"/> und <see cref="InfTrouble"/> EINE Formulierung
+    /// für Prüfstand und Bedienblock.</summary>
+    public static string ShipTrouble(int chassis, int variant)
+    {
+        int i = chassis - ShipFirstChassis;
+        if (i < 0 || i > ShipLastCase)
+            return $"Rumpf {chassis} liegt ausserhalb 150..159 — 0x450A6D " +
+                   "verwirft ihn (»Wrong ship chassis«)";
+        if (FirstPictureOf(ShipSequence) < 0)
+            return "portraits_index.json nennt keine »ranges« — Folge 401 unbekannt";
+        int a = i == ShipDoubleCase
+            ? (variant == ShipDoubleVariant ? ShipJump[ShipDoubleCase] : ShipDoubleOther)
+            : ShipJump[i];
+        int have = PicturesIn(ShipSequence);
+        return have >= 0 && a >= have
+            ? $"Rumpf {chassis} zeigt auf Bild {a} der Folge 401, die nur {have} " +
+              "hat — der unerreichbare Fall 9 des Originals"
+            : "";
+    }
+
+    /// <summary>Alle Rümpfe, die die Schaltertafel <c>@0x450D60</c> führt — für
+    /// den Prüfstand, damit er die ZEHN Fälle abschreiten kann, ohne sie selbst
+    /// zu wissen.</summary>
+    public static IEnumerable<int> ShipChassis()
+    {
+        for (int i = 0; i <= ShipLastCase; i++) yield return ShipFirstChassis + i;
     }
 
     /// <summary>

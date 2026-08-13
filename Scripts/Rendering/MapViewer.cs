@@ -355,7 +355,8 @@ public partial class MapViewer : Node2D
 
         // --select=<n> before anything is photographed, so the panel is filled
         // by the time --shot fires
-        if (_selectForShot >= 0) GD.Print(_entities.SelectForShot(_selectForShot));
+        if (_selectForShot >= 0)
+            GD.Print(_entities.SelectForShot(_selectForShot, _selectTypeForShot));
         if (_designWindowDemo && !_entities.Designer.Active) _entities.ToggleDesigner();
         if (_navOverlay) _entities.ToggleNav();
         if (_buildingOverlay) _entities.ToggleBuildings();
@@ -581,6 +582,7 @@ public partial class MapViewer : Node2D
     private bool _demoNaval;
     private bool _demoFight;
     private int _selectForShot = -1;   // --select=<n>, for photographing the panel
+    private int _selectTypeForShot = -1;  // --select-type=<unit_type>, engt sie ein
     private bool _demoBuild;
     private bool _demoMine;
     private bool _demoResearch;
@@ -858,6 +860,13 @@ public partial class MapViewer : Node2D
             // --select=<n> picks the n-th unit that has a weapon or a tank, so
             // a headless run can photograph the info panel
             else if (a.StartsWith("--select=")) _selectForShot = a["--select=".Length..].ToInt();
+            // --select-type=<unit_type> engt --select= auf einen Fahrwerkstyp ein
+            // — gebraucht fuer das Schiffsbild, siehe MapEntityLayer.SelectForShot
+            else if (a.StartsWith("--select-type="))
+            {
+                _selectTypeForShot = a["--select-type=".Length..].ToInt();
+                if (_selectForShot < 0) _selectForShot = 0;
+            }
         }
     }
 
