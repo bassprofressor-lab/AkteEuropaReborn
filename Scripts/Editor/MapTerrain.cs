@@ -21,9 +21,16 @@ using System.Text;
 ///   (9,25 %) und <b>111 um 2 oder mehr</b> — 0,0092 %. Ein Sprung ueber 1 ist
 ///   also praktisch verboten (<see cref="MaxStep"/>).</item>
 /// <item><b>Keine Zelle hat drei hoehere Nachbarn.</b> Ueber alle 605.090
-///   Zellen: 523.733 ohne hoeheren Nachbarn, 51.364 mit einem, 31.990 mit zwei
+///   Zellen: 523.733 ohne hoeheren Nachbarn, 51.364 mit einem, 29.990 mit zwei
 ///   ANGRENZENDEN Richtungen, <b>3</b> mit zwei gegenueberliegenden und
-///   <b>0</b> mit drei oder vier. Das ist keine Marotte, sondern die Grenze der
+///   <b>0</b> mit drei oder vier.
+///   <para>⚠ 13.08.2026 nachgerechnet: hier stand 31.990 statt 29.990, und die
+///   Zahlen gingen damit nicht auf — 523.733 + 51.364 + 31.990 + 3 sind 607.090
+///   und nicht 605.090. Mit 29.990 stimmt die Summe genau. Die drei
+///   gegenueberliegenden Faelle liegen bei map_02 (1,71), map_02 (1,72) und
+///   NET04 (149,106); der SCHLUSS bleibt unveraendert, es sind nur zwei Ziffern
+///   vertauscht gewesen.</para>
+///   Das ist keine Marotte, sondern die Grenze der
 ///   Darstellung: das Hangbyte kennt nur diese Faelle
 ///   (<see cref="HangByte"/>).</item>
 /// <item><b>Das Hangbyte sagt, welche Nachbarn hoeher sind.</b> 1 Ost, 2 Sued,
