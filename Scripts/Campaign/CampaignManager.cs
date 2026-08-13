@@ -37,19 +37,45 @@ public static class CampaignManager
 
     public const string SavePath = "user://campaign.cfg";
 
+    /// <summary>
+    /// ⚠ <b>Warum hier `using` steht und NICHT ein gehaltenes Abbild wie in
+    /// <see cref="UI.Settings"/></b> — 13.08.2026, und der Unterschied ist
+    /// wichtig genug für einen eigenen Absatz.
+    ///
+    /// <para><c>ConfigFile</c> ist ein <c>RefCounted</c>; ein nicht freigegebenes
+    /// stirbt beim Herunterfahren im Finalizer. Genau das hat heute Prüfläufe mit
+    /// <c>0xC0000005</c> beenden lassen (Rückgabewerte 139 und 132 im Wechsel),
+    /// und in <c>Settings</c> war die Antwort ein einziges, dauerhaft gehaltenes
+    /// Abbild — dort schreibt nur <c>Set()</c>, das Abbild kann also nicht
+    /// veralten.</para>
+    ///
+    /// <para><b>Hier wäre dasselbe ein Fehler.</b> Der Kampagnenstand wird von
+    /// AUSSEN weggeräumt: <c>--fresh-campaign</c> setzt ihn zurück, damit ein
+    /// Prüflauf nicht den Fortschritt des vorigen mitschleppt (der Grund dafür
+    /// ist gemessen — M23 meldete <c>$47465</c> und M5 <c>$970</c> statt
+    /// <c>$470</c>, weil der Stand aus früheren Läufen dastand). Ein gehaltenes
+    /// Abbild würde das nicht mitbekommen und den alten Fortschritt weiter
+    /// behaupten. <c>using</c> gibt das Objekt frei, ohne den Wert zu merken —
+    /// das Leseverhalten bleibt <b>Byte für Byte dasselbe wie vorher</b>, nur
+    /// ohne das Leck.</para>
+    ///
+    /// <para>Wer das hier später zu einem Abbild „verbessert", bricht damit
+    /// <c>--fresh-campaign</c> und jede Messung, die darauf beruht.</para>
+    /// </summary>
+
     /// <summary>The highest mission the player has finished; 0 at the start,
     /// so the next one is the first.</summary>
     public static int Completed
     {
         get
         {
-            var c = new ConfigFile();
+            using var c = new ConfigFile();
             return c.Load(SavePath) == Error.Ok
                 ? (int)c.GetValue("campaign", "completed", 0) : 0;
         }
         set
         {
-            var c = new ConfigFile();
+            using var c = new ConfigFile();
             c.Load(SavePath);
             c.SetValue("campaign", "completed", value);
             c.Save(SavePath);
@@ -146,13 +172,13 @@ public static class CampaignManager
     {
         get
         {
-            var c = new ConfigFile();
+            using var c = new ConfigFile();
             return c.Load(SavePath) == Error.Ok
                 ? (int)c.GetValue("campaign", "balance", 0) : 0;
         }
         set
         {
-            var c = new ConfigFile();
+            using var c = new ConfigFile();
             c.Load(SavePath);
             c.SetValue("campaign", "balance", value);
             c.Save(SavePath);

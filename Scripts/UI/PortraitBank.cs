@@ -120,7 +120,16 @@ public static class PortraitBank
         }
         using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
         if (f == null) { Trouble = "portraits_index.json nicht lesbar"; return; }
-        var json = new Json();
+        // ⚠ `using`, und der Grund ist gemessen: `Json` ist ein RefCounted wie
+        // `ConfigFile`, und ein nicht freigegebenes stirbt beim Herunterfahren im
+        // Finalizer. Ein Prüflauf auf map_NET02 endete deshalb mit
+        // Rückgabewert 139 (0xC0000005 in GC.RunFinalizers) und 97 Leckzeilen —
+        // ausschliesslich `JSON` und `Image`, kein einziges `ConfigFile`. Die
+        // Objekte hier waren der Rest desselben Fehlers, der am 13.08.2026 schon
+        // in `Settings` und `CampaignManager` steckte.
+        // `root` unten ist nach `AsGodotDictionary` eine eigene Referenz, das
+        // Json-Objekt wird danach nicht mehr gebraucht.
+        using var json = new Json();
         if (json.Parse(f.GetAsText()) != Error.Ok ||
             json.Data.VariantType != Variant.Type.Dictionary)
         {
@@ -180,7 +189,11 @@ public static class PortraitBank
         Texture2D? tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
         if (tex == null && FileAccess.FileExists(path))
         {
-            var img = Image.LoadFromFile(path);
+            // ⚠ `using`: `ImageTexture.CreateFromImage` nimmt sich seine eigene
+            // Kopie, das Image wird danach nicht mehr gebraucht. Ohne die
+            // Freigabe leckte je geladenes Bild eines — auf map_NET02 zusammen
+            // mit den JSON-Objekten 97 Stück, und der Lauf endete mit 139.
+            using var img = Image.LoadFromFile(path);
             if (img != null) tex = ImageTexture.CreateFromImage(img);
         }
         _cache[n] = tex;
