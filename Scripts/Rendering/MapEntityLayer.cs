@@ -14190,6 +14190,51 @@ public partial class MapEntityLayer : Node2D
     /// FLAG byte of the tile the unit stands on and anything above 4 counts as
     /// 0. The halving truncates toward zero, as `sar` after `sub eax,edx` does.
     /// </summary>
+    /// <summary>
+    /// Rümpfe, deren BILD sein Geschütz schon selbst trägt — für die zeichnen wir
+    /// kein eigenes Waffensprite.
+    ///
+    /// <para>⚠ <b>UNSERE SETZUNG, und sie ist eine Entscheidung des Spielers vom
+    /// 13.08.2026</b>, nicht eine gelesene Regel. Gemeldet hatte er: »beim
+    /// größten schiff scheint die waffe nicht korrekt drauf zu sitzen sondern
+    /// einige felder daneben«.</para>
+    ///
+    /// <para><b>Gemessen</b> (<c>--waffensitz-check</c>, Commit <c>badc6c5</c>):
+    /// das Schlachtschiff (Rumpf 157, Bauteil 100) hat ein Rumpfbild von bis zu
+    /// <b>204×126</b> Bildpunkten, während jeder andere Schiffsrumpf auf der
+    /// 64×56-Leinwand bleibt. Für 157 und 158 (Kreuzer, Bauteil 101) fehlt in
+    /// <c>Units/parts_index.json</c> der Montagepunkt, <see cref="TurretOffset"/>
+    /// gibt daher <c>Vector2.Zero</c> — die Waffe landet auf dem Anker der
+    /// KLEINEN Leinwand, während der Rumpf 204 px weiterläuft. Abstand
+    /// <b>83,5 px</b> bei 40 px Kachelbreite = <b>gut zwei Zellen</b>, über vier
+    /// Karten gleich, jedes Mal ohne Überlappung. Die Rümpfe MIT Montagepunkt
+    /// sind in Ordnung (151 klafft 0,08 Zellen und überlappt).</para>
+    ///
+    /// <para>⚠⚠ <b>Warum wir keinen Wert einsetzen: das Original hat selbst
+    /// keinen.</b> Sein Schiffszeichner holt den Versatz @<c>0x42ADB7..0x42ADF3</c>
+    /// aus einer Weiche mit genau drei Fällen (Bauteil 0x46→15, 0x47→2,
+    /// 0x48→12). Alles andere fällt @<c>0x42ADCE</c> in
+    /// <c>printf("Wrong chassis of ship")</c> (@0x4fa86c) und liest danach
+    /// <c>word[esp+0x3c]</c> — <b>eine örtliche Stack-Zelle, die in der ganzen
+    /// Funktion nie geschrieben wird</b>. Für Bauteil 100 und 101 gibt es dort
+    /// nichts zu lesen; das Original zeigt an der Stelle selbst Müll, und ein
+    /// uninitialisierter Stack-Wert ist nicht reproduzierbar — »originaltreu«
+    /// ist hier also nicht herstellbar.</para>
+    ///
+    /// <para>Vorgelegt wurden zwei Wege: keine Waffe zeichnen, oder acht
+    /// gemessene Montagepunkte je Blickrichtung von uns. <b>Der Spieler hat
+    /// »keine Waffe zeichnen« gewählt</b> — die Rumpfbilder tragen ihre Geschütze
+    /// ohnehin, nur der ovale Sockel mittschiffs bleibt leer. Damit steht dort
+    /// keine erfundene Zahl, und die Lücke des Originals bleibt als Lücke
+    /// sichtbar.</para>
+    ///
+    /// <para>⚠ Betroffen ist nur das SPRITE. Mündungsfeuer und Leuchtspur gehen
+    /// weiter über <see cref="TurretOffset"/>, das für diese zwei Rümpfe
+    /// <c>Zero</c> liefert — sie erscheinen also am Rumpfmittelpunkt. Ob das
+    /// bleiben soll, ist nicht entschieden und steht im Handoff.</para></summary>
+    private static bool HullCarriesItsOwnGun(int unitType) =>
+        unitType is 157 or 158;
+
     private Vector2 TurretOffset(int unitType, int col, int row)
     {
         LoadMounts();
@@ -15160,7 +15205,7 @@ public partial class MapEntityLayer : Node2D
                 {
                     DrawTexture(hull, baseC - ComposedAnchor);
                     var turret = GetTurretTexture(e.Weapon, aim, slope);
-                    if (turret != null)
+                    if (turret != null && !HullCarriesItsOwnGun(e.UnitType))
                         DrawTexture(turret, baseC - ComposedAnchor
                                             + TurretOffset(e.UnitType, e.Col, e.Row));
                     continue;
