@@ -51,6 +51,18 @@ public partial class MainMenu
     /// </summary>
     private Button? _netCancel;
 
+    /// <summary>»PARTIEN IM LAN SUCHEN« und die Liste darunter. ⚠ Nur beim
+    /// BEITRETEN sichtbar — ein Gastgeber sucht nicht, er wird gesucht.</summary>
+    private Button? _netSearch;
+    private ItemList? _netList;
+
+    /// <summary>Die gefundenen Partien in der Reihenfolge der Liste, damit ein
+    /// Klick auf Zeile N zur richtigen Adresse führt. ⚠ Eigene Liste und nicht
+    /// die von <see cref="NetDiscovery"/>: die wächst während der Suche weiter,
+    /// und ein Index, der auf eine wachsende Liste zeigt, zeigt irgendwann
+    /// daneben.</summary>
+    private readonly System.Collections.Generic.List<NetOffer> _netShown = new();
+
     /// <summary>Vom Knopf gesetzt, von der Warteschleife gelesen. ⚠ Kein
     /// direkter Abbruch im Signalhandler: der läuft mitten im Bildlauf, die
     /// Schleife wartet auf <c>ProcessFrame</c>, und ein Aufräumen an zwei
@@ -124,6 +136,18 @@ public partial class MainMenu
         _netMode.Selected = net ? (_netMode.Selected == 0 ? 1 : _netMode.Selected) : 0;
         if (_netDetails != null) _netDetails.Visible = _netMode.Selected != 0;
         if (_netStatus != null) _netStatus.Text = NetStatusText(_netMode.Selected);
+        ApplyNetSearchVisible();
+    }
+
+    /// <summary>Der Suchknopf und die Liste gehören zum BEITRETEN und zu nichts
+    /// sonst. ⚠ Eigene Methode, weil <c>OptionButton.Selected</c> aus dem CODE zu
+    /// setzen das Signal <c>item_selected</c> nicht auslöst — derselbe Grund, aus
+    /// dem <see cref="NetStatusText"/> herausgezogen ist.</summary>
+    private void ApplyNetSearchVisible()
+    {
+        bool join = _netMode is { Selected: 2 };
+        if (_netSearch != null) _netSearch.Visible = join;
+        if (_netList != null && !join) _netList.Visible = false;
     }
 
     /// <summary>
@@ -193,6 +217,26 @@ public partial class MainMenu
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
             Modulate = new Color(0.7f, 0.75f, 0.8f),
         };
+        // ---- die LAN-Suche ---------------------------------------------------
+        //
+        // ⚠ Nur beim BEITRETEN. Ein Gastgeber sucht nicht, er wird gesucht — und
+        // ein Knopf, der in seinem Fall nichts tut, ist schlimmer als keiner.
+        _netSearch = new Button { Text = "PARTIEN IM LAN SUCHEN", Visible = false };
+        _netSearch.Pressed += SearchLanFromMenu;
+        _netDetails.AddChild(_netSearch);
+
+        // ⚠ Die Liste bleibt unsichtbar, bis eine Suche gelaufen ist. Eine leere
+        // Liste, die immer dasteht, sagt nichts — und kostet 84 px Höhe auf einem
+        // Schirm, der an der Grenze ist.
+        _netList = new ItemList
+        {
+            CustomMinimumSize = new Vector2(0, 84),
+            Visible = false,
+            AllowReselect = true,
+        };
+        _netList.ItemSelected += PickLanOffer;
+        _netDetails.AddChild(_netList);
+
         _netDetails.AddChild(_netStatus);
 
         _netCancel = new Button { Text = "ABBRECHEN", Visible = false };
@@ -207,6 +251,7 @@ public partial class MainMenu
             // Beim Gastgeber ist die Adresse gegenstandslos: er hört zu, er
             // ruft nicht an. Der Port darin gilt trotzdem.
             if (_netStatus != null) _netStatus.Text = NetStatusText(_netMode.Selected);
+            ApplyNetSearchVisible();
         };
 
         // Hat die Befehlszeile die Steckdose schon geöffnet, soll der Schirm das
@@ -263,6 +308,79 @@ public partial class MainMenu
     }
 
     /// <summary>
+    /// DIE LAN-SUCHE AUS DEM MENÜ — »zeig mir, wo was offen ist«.
+    ///
+    /// <para>Ein Rundruf, dann <see cref="NetDiscovery.SearchWindowMs"/>
+    /// zuhören, dann die Liste füllen. Währenddessen ist der Knopf gesperrt und
+    /// sagt, dass gesucht wird: eine Suche, die man nicht sieht, ist von einem
+    /// tauben Knopf nicht zu unterscheiden.</para>
+    ///
+    /// <para>⚠ <b>Eine leere Liste MUSS reden.</b> »Nichts gefunden« und »die
+    /// Firewall hat den Rundruf gefressen« sehen über UDP gleich aus — der Text
+    /// aus <see cref="NetDiscovery.Verdict"/> sagt beides und nennt die Firewall
+    /// als Verdacht, nicht als Befund.</para>
+    /// </summary>
+    private async void SearchLanFromMenu()
+    {
+        if (_netSearch == null || _netList == null) return;
+        _netSearch.Disabled = true;
+        string was = _netSearch.Text;
+        _netSearch.Text = "suche …";
+        if (_netStatus != null) _netStatus.Text = "Rundruf ins LAN abgeschickt, höre zu …";
+
+        bool ok = NetworkManager.SearchLan();
+        ulong t0 = Time.GetTicksMsec();
+        while (Time.GetTicksMsec() - t0 < (ulong)NetDiscovery.SearchWindowMs)
+        {
+            if (!IsInsideTree()) return;
+            NetworkManager.CollectLan();
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+        if (!IsInsideTree()) return;
+        NetworkManager.CollectLan();
+
+        _netSearch.Disabled = false;
+        _netSearch.Text = was;
+
+        var d = NetworkManager.Discovery;
+        _netShown.Clear();
+        _netList.Clear();
+        if (ok && d != null)
+            foreach (var o in d.Found)
+            {
+                _netShown.Add(o);
+                _netList.AddItem(o.ListLine());
+                int row = _netList.ItemCount - 1;
+                // Die lange Form als Tooltip: die Liste ist gekürzt, damit die
+                // freien Plätze ins Bild passen (siehe NetOffer.ListLine), und
+                // hier steht wieder alles.
+                _netList.SetItemTooltip(row, o.Describe() + $"\n(über {o.Via})");
+                // ⚠ Eine Partie ohne freien Platz bleibt SICHTBAR, aber nicht
+                // wählbar. Wer sie ausblendete, liesse den Spieler glauben, es
+                // gäbe nichts — und »voll« ist eine andere Nachricht als »nichts
+                // da«.
+                if (o.Free <= 0) _netList.SetItemDisabled(row, true);
+            }
+        _netList.Visible = _netList.ItemCount > 0;
+        if (_netStatus != null)
+            _netStatus.Text = d?.Verdict(NetDiscovery.SearchWindowMs) ?? "Suche nicht möglich";
+        GD.Print("netz: " + (d?.Verdict(NetDiscovery.SearchWindowMs) ?? "Suche nicht möglich"));
+    }
+
+    /// <summary>Ein Klick in die Liste trägt Adresse und Port ein — damit muss
+    /// niemand mehr eine IP tippen. Das war die Frage des Spielers.</summary>
+    private void PickLanOffer(long row)
+    {
+        int i = (int)row;
+        if (i < 0 || i >= _netShown.Count || _netAddr == null) return;
+        var o = _netShown[i];
+        _netAddr.Text = o.Target;
+        if (_netStatus != null)
+            _netStatus.Text = $"gewählt: {o.Describe()} — »PARTIE STARTEN« tritt bei.";
+        GD.Print($"netz: Partie gewählt — {o.Describe()}");
+    }
+
+    /// <summary>
     /// DER PRÜFSCHALTER FÜR DEN SPIELERWEG: <c>--net-probe=host</c> oder
     /// <c>--net-probe=join:&lt;adresse&gt;[:&lt;port&gt;]</c>.
     ///
@@ -296,7 +414,7 @@ public partial class MainMenu
         }
         if (!IsInsideTree() || _netMode == null) return;
 
-        if (want.StartsWith("join"))
+        if (want.StartsWith("join") || want.StartsWith("suche"))
         {
             _netMode.Selected = 2;
             int c = want.IndexOf(':');
@@ -305,6 +423,18 @@ public partial class MainMenu
         else _netMode.Selected = 1;
         if (_netDetails != null) _netDetails.Visible = true;
         if (_netStatus != null) _netStatus.Text = NetStatusText(_netMode.Selected);
+        ApplyNetSearchVisible();
+
+        // ⚠ `suche` drückt den SUCH-Knopf und nicht den Startknopf. Damit ist die
+        // LAN-Liste im Bild belegbar, ohne dass danach eine Partie anläuft — eine
+        // Messung, die den Gegenstand gleich weiterschiebt, misst ihn nicht.
+        if (want.StartsWith("suche"))
+        {
+            GD.Print("netz-probe: Modus 2 (Beitreten), druecke »PARTIEN IM LAN SUCHEN«");
+            SearchLanFromMenu();
+            return;
+        }
+
         GD.Print($"netz-probe: Modus {_netMode.Selected} " +
                  $"({(_netMode.Selected == 1 ? "Gastgeber" : "Beitreten")}), " +
                  $"Adresse {_netAddr?.Text}, druecke den Startknopf");

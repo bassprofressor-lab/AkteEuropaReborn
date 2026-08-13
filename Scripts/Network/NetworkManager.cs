@@ -87,7 +87,17 @@ public partial class NetworkManager : Node
     {
         Instance = this;
         ReadSwitches();
-        if (!_wantHost && !_wantJoin) { SetProcess(false); return; }
+
+        // ⚠ Der Suchlauf braucht KEINE Steckdose — er ist der Prüfstand der
+        // LAN-Suche und läuft für sich. Deshalb vor der Weiche unten.
+        if (_searchMs > 0)
+        {
+            _searchT0 = Time.GetTicksMsec();
+            if (!SearchLan())
+                GD.PrintErr("NETZ-SUCHE gescheitert: " + (Discovery?.Fault ?? "kein Grund"));
+        }
+
+        if (!_wantHost && !_wantJoin) { if (_searchMs <= 0) SetProcess(false); return; }
 
         Link = new NetLink();
         bool ok = _wantHost ? Link.HostOn(_port, 7) : Link.JoinTo(_address, _port);
@@ -96,10 +106,23 @@ public partial class NetworkManager : Node
             Fault = Link.Fault;
             GD.PrintErr($"netz: Anschluss gescheitert — {Fault}");
             Link = null;
-            SetProcess(false);
+            if (_searchMs <= 0) SetProcess(false);
             return;
         }
+        if (_wantHost) BeginListening();
         _t0 = Time.GetTicksMsec();
+    }
+
+    /// <summary>Als Gastgeber im LAN auffindbar werden. ⚠ Scheitert das Binden
+    /// des Suchports, ist die Partie weiter SPIELBAR (mit eingetippter Adresse) —
+    /// nur nicht auffindbar. Das muss der Unterschied bleiben, und deshalb
+    /// bricht hier nichts ab.</summary>
+    private void BeginListening()
+    {
+        Discovery ??= new NetDiscovery();
+        if (!Discovery.Listen())
+            GD.PrintErr("netz: diese Partie ist im LAN nicht zu FINDEN, aber spielbar — " +
+                        Discovery.Fault);
     }
 
     /// <summary>
@@ -131,6 +154,7 @@ public partial class NetworkManager : Node
             Link = null;
             return false;
         }
+        if (asHost) i.BeginListening();
         i._t0 = Time.GetTicksMsec();
         i._timedOut = false;
         FromMenu = true;               // ⚠ ab hier wird NICHT mehr beendet, siehe Frist
@@ -208,14 +232,119 @@ public partial class NetworkManager : Node
             else if (a.StartsWith("--net-warte=")) int.TryParse(a["--net-warte=".Length..], out _waitMs);
             else if (a.StartsWith("--net-keim=")) uint.TryParse(a["--net-keim=".Length..], out _forcedSeed);
             else if (a.StartsWith("--net-ki=")) int.TryParse(a["--net-ki=".Length..], out _netAi);
+            else if (a.StartsWith("--net-suche=")) int.TryParse(a["--net-suche=".Length..], out _searchMs);
         }
         if (_players < 1) _players = 1;
         if (_lead < 1) _lead = 1;
         if (_waitMs < 1000) _waitMs = 1000;
     }
 
+    // ================= DIE LAN-SUCHE =========================================
+
+    /// <summary>Der Suchsockel dieses Prozesses. ⚠ Einer, wie die Steckdose, und
+    /// aus demselben Grund am Autoload: der feste Suchport
+    /// (<see cref="NetDiscovery.Port"/>) kann je Maschine nur einmal belegt
+    /// werden.</summary>
+    public static NetDiscovery? Discovery { get; private set; }
+
+    /// <summary>
+    /// Das eigene Angebot, wie es einem Suchenden geantwortet wird.
+    ///
+    /// <para>⚠ <b>Die freien Plätze werden HIER gerechnet, aus dem laufenden
+    /// Zustand</b> — <c>Menschen − (Gastgeber + Beigetretene)</c>. Sie sind damit
+    /// die Zahl, die auch die Freigabe des Takts benutzt, und nicht eine zweite
+    /// Buchführung daneben. Sobald die Partie verteilt ist, steht
+    /// <c>Running</c> und die Zahl ist 0: eine Partie, die schon läuft, hat
+    /// keinen freien Platz mehr, auch wenn rechnerisch einer offen wäre.</para>
+    /// </summary>
+    private NetOffer MyOffer() => new()
+    {
+        Port = _port,
+        Map = UI.SkirmishSetup.Map,
+        Host = HostName(),
+        Players = _players,
+        Here = 1 + (Link?.ClientCount ?? 0),
+        Running = Link is { SessionReady: true },
+    };
+
+    private static string HostName()
+    {
+        string n = OS.GetEnvironment("COMPUTERNAME");
+        if (n.Length == 0) n = OS.GetEnvironment("HOSTNAME");
+        return n.Length > 0 ? n : OS.GetName();
+    }
+
+    /// <summary>
+    /// Eine Suche anstossen. Gibt false zurück, wenn schon kein Sockel zu binden
+    /// war — dann steht der Grund in <c>Discovery.Fault</c>.
+    /// </summary>
+    public static bool SearchLan()
+    {
+        Discovery ??= new NetDiscovery();
+        return Discovery.Ask();
+    }
+
+    /// <summary>Antworten einsammeln; ruft die Lobby je Bild, solange ihr
+    /// Suchfenster offen ist.</summary>
+    public static void CollectLan() => Discovery?.Collect();
+
+    // ---- der Prüfstand der Suche: --net-suche=<ms> ---------------------------
+
+    private int _searchMs;
+    private ulong _searchT0;
+    private bool _searchDone;
+
+    /// <summary>
+    /// DER PRÜFSTAND DER LAN-SUCHE — <c>--net-suche=&lt;ms&gt;</c>.
+    ///
+    /// <para>⚠ <b>Er ist in BEIDE Richtungen fahrbar, und das ist der Punkt</b>
+    /// (Regel 7): Rückgabewert <b>0</b>, wenn mindestens eine Partie gefunden
+    /// wurde, <b>1</b>, wenn keine. Damit ist »mit laufendem Gastgeber findet er
+    /// ihn« UND »ohne Gastgeber bleibt die Liste leer« je ein eigener Lauf mit
+    /// eigenem erwarteten Ergebnis. Ein Prüfstand, der nur den Fundfall kennt,
+    /// könnte eine Liste, die IMMER etwas zeigt, nicht von einer richtigen
+    /// unterscheiden.</para>
+    ///
+    /// <para>Gedruckt wird nicht bloss die Anzahl, sondern <b>jede</b> gefundene
+    /// Partie mit Karte, Spielerzahl und freien Plätzen — sonst könnte der Lauf
+    /// nicht gegen die Angaben des Gastgebers gehalten werden, und »ein Eintrag
+    /// da« belegt nicht, dass er das Richtige sagt.</para>
+    /// </summary>
+    private void SearchHarnessTick()
+    {
+        if (_searchDone || Discovery == null) return;
+        Discovery.Collect();
+        ulong waited = Time.GetTicksMsec() - _searchT0;
+        if (waited < (ulong)_searchMs) return;
+
+        _searchDone = true;
+        var f = Discovery.Found;
+        GD.Print($"NETZ-SUCHE: {f.Count} Partie(n) in {waited} ms");
+        for (int i = 0; i < f.Count; i++)
+            GD.Print($"   {i + 1}) {f[i].Describe()}  (über {f[i].Via})");
+        GD.Print("NETZ-SUCHE-URTEIL: " + Discovery.Verdict((int)waited));
+        // ⚠ `Answered` steht hier NICHT: das ist der Zähler der GASTGEBERseite und
+        // im suchenden Prozess immer 0 — im ersten Lauf stand »antworten=0«
+        // neben »gefunden=1«, und das liest sich wie ein Widerspruch, wo keiner
+        // ist. `doppelt` ist dagegen eine Aussage: dieselbe Partie hat über
+        // beide Wege geantwortet und wurde einmal gezeigt.
+        GD.Print($"NETZ-SUCHE-ENDE gefunden={f.Count} wege_ab={Discovery.Asked} " +
+                 $"doppelt_oder_fremd={Discovery.Ignored} " +
+                 $"rundruf={Discovery.SawBroadcast} rueckschleife={Discovery.SawLoopback}");
+        Discovery.Close();
+        GetTree().Quit(f.Count > 0 ? 0 : 1);
+    }
+
     public override void _Process(double delta)
     {
+        // ⚠ Der Suchdienst läuft UNABHÄNGIG von der Steckdose weiter: ein
+        // Gastgeber muss auch dann antworten, wenn er noch auf Mitspieler wartet,
+        // und ein Suchender hat gar keine Steckdose. Deshalb steht das VOR dem
+        // `if (Link == null) return;` — dort hat es beim ersten Anlauf gestanden,
+        // und der Prüflauf fand dann nie etwas.
+        if (Discovery != null && Link != null && Link.IsHost) Discovery.Serve(MyOffer());
+        if (_searchMs > 0) SearchHarnessTick();
+
         if (Link == null) return;
         Link.Pump();
 
@@ -303,6 +432,10 @@ public partial class NetworkManager : Node
         if (Instance == null) return;
         Link?.Close();
         Link = null;
+        // ⚠ Auch den Suchport freigeben. Bliebe er belegt, wäre der nächste
+        // Versuch »Gastgeber« im LAN nicht auffindbar — und der Grund stünde
+        // in einer Meldung, die niemand mit dem Abbruch von vorhin verbindet.
+        Discovery?.StopListening();
         Fault = reason;
         FromMenu = false;
         var i = Instance;

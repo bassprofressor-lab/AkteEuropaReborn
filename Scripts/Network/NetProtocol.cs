@@ -110,6 +110,20 @@ public enum NetPacket : byte
     /// <summary>Jeder → alle: »ich habe ein Auseinanderlaufen festgestellt«, mit
     /// dem Takt und der Stelle als Text.</summary>
     Auseinander = 7,
+
+    // ---- die LAN-Suche (UDP, nicht ENet) — siehe NetDiscovery.cs ------------
+    //
+    // ⚠ Dieselbe Nummernreihe und derselbe Schreiber/Leser, obwohl es ein
+    // anderer Sockel ist. Zwei Paketformate mit zwei Zählungen wären zwei Orte,
+    // an denen eine Nummer doppelt vergeben werden kann — und ein Paket, das auf
+    // dem falschen Sockel landet, wird so als »kenne ich nicht« verworfen statt
+    // als etwas anderes gedeutet.
+
+    /// <summary>Suchender → Rundruf: »wer hat eine offene Partie?«</summary>
+    Frage = 8,
+
+    /// <summary>Gastgeber → Suchender (Einzelsendung): »ich, und zwar so.«</summary>
+    Angebot = 9,
 }
 
 /// <summary>Die Partie, wie der Vermittler sie verteilt. Alles, was auf beiden
