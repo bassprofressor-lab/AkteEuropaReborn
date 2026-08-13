@@ -1328,6 +1328,7 @@ public partial class MapEntityLayer : Node2D
         _lineCellFrame.Clear();
         _linePath.Clear();
         _lineCellPiece.Clear();
+        _lineCellBroken.Clear();
         _railLines.Clear();
         _freightWagons.Clear();
         _bldBySlot.Clear();
@@ -8054,6 +8055,13 @@ public partial class MapEntityLayer : Node2D
         /// <summary>Nur für die Fehlersuche an der Kupplung: der geforderte
         /// Abstand in Kartenpixeln und die Kettenstelle, die daraus wurde.</summary>
         public float Need, Coupled;
+
+        /// <summary>Wo dieser Waggon im VORIGEN Bild stand, und ob es ein voriges
+        /// Bild gab. Nur für die Instrumentierung (<c>RailCensusBroken</c>): der
+        /// Weg je Takt lässt sich sonst nur für EINEN Probewaggon messen, und
+        /// gerade der fährt meist auf einer heilen Linie.</summary>
+        public float PrevCol, PrevRow;
+        public bool PrevSeen;
     }
 
     private readonly List<Wagon> _wagons = new();
@@ -8074,6 +8082,13 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Das Stück (Wagenrichtung) je Zelle — für das WAGGONbild, dessen
     /// Bildindex das Streckenstück ist (@0x4c6de9).</summary>
     private readonly Dictionary<int, List<int>> _lineCellPiece = new();
+
+    /// <summary>Ist DIESES Kettenglied zerschossen (Bild ≥ 100)? Gebraucht wird
+    /// es nicht zum Zeichnen — das macht <c>_railCells</c> — sondern für die
+    /// Instrumentierung »was tut der Waggon an einem Bruch« (siehe
+    /// <c>RailCensusBroken</c> in Simulation/RailFreight.cs). Ohne diese Liste
+    /// müsste der Zähler die Zelle unter dem Waggon in jedem Bild suchen.</summary>
+    private readonly Dictionary<int, List<bool>> _lineCellBroken = new();
 
     /// <summary>
     /// <b>Eine Gleiszelle, wie sie in der KARTE steht</b> — sec22, siehe
@@ -8607,6 +8622,9 @@ public partial class MapEntityLayer : Node2D
     {
         RailCellsFromMap = _railCells.Count;
         RailChainDropped = RailChainSplit = 0;
+        RailChainChecked = RailChainWrongLen = RailChainWorstDelta = 0;
+        RailChainOrphanLines = RailChainOrphanCells = 0;
+        RailChainWorstWhere = "";
         RailCellsBroken = 0;
         RailDiffOnlyOurs = RailDiffOnlyMap = RailDiffFrame = RailDiffChecked = 0;
         if (_railCells.Count == 0) return;
@@ -8655,11 +8673,18 @@ public partial class MapEntityLayer : Node2D
             var run = RailOwnRun(kv.Key, l);
             var cells = new List<Vector2>(run.Len);
             var frames = new List<int>(run.Len);
+            var broken = new List<bool>(run.Len);
             for (int i = run.Start; i < run.Start + run.Len; i++)
-            { cells.Add(new Vector2(l[i].Col, l[i].Row)); frames.Add(l[i].Base); }
+            {
+                cells.Add(new Vector2(l[i].Col, l[i].Row));
+                frames.Add(l[i].Base);
+                broken.Add(l[i].Broken);
+            }
             // Die Kette so drehen, dass sie an Knoten1 anfaengt: der Zug faehrt
             // Bud1 -> Bud2, und die Fahrtrichtung haengt an der Reihenfolge.
-            if (RailChainFlipped(kv.Key, cells)) { cells.Reverse(); frames.Reverse(); }
+            if (RailChainFlipped(kv.Key, cells))
+            { cells.Reverse(); frames.Reverse(); broken.Reverse(); }
+            _lineCellBroken[kv.Key] = broken;
             _lineCell[kv.Key] = cells;
             _lineCellFrame[kv.Key] = frames;
             _linePath.Remove(kv.Key);
@@ -8668,9 +8693,90 @@ public partial class MapEntityLayer : Node2D
             // den Streckencodes: die Zellenzahl der Karte und die Codezahl der
             // Linie sind nicht dieselbe, ein Index waere also verschoben.
             _lineCellPiece[kv.Key] = RailPiecesOfChain(cells);
+            // Die Kette gegen die MESSLATTE der Datei halten — siehe
+            // RailChainMeasureLen. Das ist der einzige Zaehler, der eine falsche
+            // Kettenlaenge ueberhaupt sehen kann.
+            RailChainMeasureLen(kv.Key, l.Count, cells);
         }
         _railTiles = null;
     }
+
+    /// <summary>
+    /// <b>Ist die Kette, auf der der Zug fährt, so lang wie die Datei sagt?</b>
+    ///
+    /// <para>⚠ 13.08.2026 — <b><c>delka</c> ist NICHT die Zellenzahl.</b> Über
+    /// alle 30 Karten gezählt (<c>aekernel-tools/rail_delka_count.py</c>):
+    /// <c>delka − (Zellen mit dieser Liniennummer) = 4</c> in <b>369 von 371</b>
+    /// Fällen. Die beiden Ausnahmen sind genau die zwei Karten, auf denen
+    /// Liniennummer 0 Fremdzellen einsammelt (DM_4: 118 statt 41, DM_6: 64 statt
+    /// 26) — also kein Gegenbeispiel zur Regel, sondern der Fehler, den sie
+    /// sichtbar macht.</para>
+    ///
+    /// <para><b>Woher die 4 kommen — nachgerechnet, nicht geraten</b>
+    /// (<c>aekernel-tools/rail_route_vs_cells.py</c>): richtet man die sec22-Kette
+    /// auf die <c>delka+1</c> Routenpunkte der Streckencodes aus, fallen
+    /// <b>immer genau 5 Punkte</b> weg — zwei an einem Ende und drei am anderen,
+    /// <b>369 von 369, kein Gegenbeispiel</b>. Fünf Punkte weniger sind vier
+    /// Schritte weniger, daher die 4. Das sind die Stücke, die INNERHALB der
+    /// beiden Endgebäude liegen: das Gleisbild dort bringt das Gebäude selbst
+    /// mit, die Karte legt keine eigene Zelle dafür. Beispiel map_DM_6 Linie 14
+    /// (delka 13): Route <c>(42,64)…(52,67)</c>, sec22 <c>(44,64)…(49,67)</c> —
+    /// exakt Routenpunkt 2 bis 10.</para>
+    ///
+    /// <para>⚠ Welches Ende die 2 und welches die 3 bekommt, ist je Linie stabil
+    /// (285 mal Kopf 2, 84 mal Kopf 3; dieselben Linien 24/31/32 auf DM_3, DM_5,
+    /// DM_6, DM_7 und DM_10). <b>Der Grund dafür ist NICHT gelesen</b> — die
+    /// Messlatte braucht ihn nicht, sie zählt nur die Summe 5.</para>
+    ///
+    /// <para><b>Welche Fehlerklasse das hier sieht</b>, die kein anderer Zähler
+    /// sah: eine Kette mit der falschen LÄNGE. <see cref="RailEndFar"/> fragt, ob
+    /// die Enden an ihren Gebäuden liegen — das können sie auch, wenn in der
+    /// Mitte ein fremder Lauf mit drinhängt. <see cref="RailChainSplit"/> zählt
+    /// nur, wie oft überhaupt geschnitten wurde, nicht ob richtig. Diese Zahl
+    /// kommt aus der DATEI (<c>delka</c>) und nicht aus unserer Ableitung, sie
+    /// kann sich also nicht mit sich selbst vergleichen.</para>
+    ///
+    /// <para>Gegenprobe zum Stand vom 13.08.2026: über alle 30 Karten stimmt die
+    /// gewählte Kette in <b>371 von 371</b> Fällen mit <c>delka−4</c> überein
+    /// (<c>aekernel-tools/rail_own_run_check.py</c> rechnet dieselbe Wahl in
+    /// Python nach). Ein Ausschlag hier heißt also: die Wahl des eigenen Laufs
+    /// ist kaputtgegangen.</para>
+    /// </summary>
+    private void RailChainMeasureLen(int line, int rawCells, List<Vector2> cells)
+    {
+        RailLine? l = null;
+        foreach (var x in _railLines) if (x.Slot == line) { l = x; break; }
+        if (l == null || l.Steps <= 0)
+        {
+            // Gleiszellen ohne Linienkopf. Auf DM_3/5/7/10 sind das die 38
+            // Zellen zweier Linien, die der Spielstand nicht mehr fuehrt (siehe
+            // RailOwnRun) — es faehrt nichts darauf, gezeichnet werden sie.
+            RailChainOrphanLines++;
+            RailChainOrphanCells += rawCells;
+            return;
+        }
+        RailChainChecked++;
+        int want = l.Steps - 4;
+        int delta = cells.Count - want;
+        if (delta == 0) return;
+        RailChainWrongLen++;
+        if (Mathf.Abs(delta) <= Mathf.Abs(RailChainWorstDelta)) return;
+        RailChainWorstDelta = delta;
+        RailChainWorstWhere =
+            $"Linie {line}: Kette {cells.Count} Zellen, delka {l.Steps} erwartet {want} " +
+            $"({rawCells} Rohzellen) — von ({cells[0].X:0},{cells[0].Y:0}) " +
+            $"bis ({cells[^1].X:0},{cells[^1].Y:0}), Gebaeude {l.Bud1}/{l.Bud2}";
+    }
+
+    /// <summary>Die Zähler zu <see cref="RailChainMeasureLen"/>. <c>WorstDelta</c>
+    /// ist vorzeichenbehaftet: positiv = die Kette ist zu LANG (Fremdzellen
+    /// hängen mit dran), negativ = zu kurz (ein Stück fehlt).</summary>
+    public int RailChainChecked, RailChainWrongLen, RailChainWorstDelta;
+    public string RailChainWorstWhere = "";
+
+    /// <summary>Gleiszellen, deren Liniennummer in der Datei keinen Linienkopf
+    /// hat — siehe <see cref="RailChainMeasureLen"/>.</summary>
+    public int RailChainOrphanLines, RailChainOrphanCells;
 
     /// <summary>Liegt der ANFANG dieser Kette naeher an Knoten2 als an Knoten1?
     /// Dann gehoert sie gedreht. Ohne Endgebaeude bleibt sie, wie sie ist.</summary>
@@ -8698,16 +8804,47 @@ public partial class MapEntityLayer : Node2D
     /// Behalten wird der zusammenhängende Lauf, dessen Enden den Endgebäuden am
     /// nächsten liegen; ohne auflösbare Gebäude der längste.</para>
     ///
-    /// <para>⚠ <b>Was NICHT gelesen ist:</b> warum die Karte diese Zellen
-    /// überhaupt auf 0 legt. <c>rail_add</c> @0x4AFA90 schreibt +0x04, aber was
-    /// es dort für eine abgeräumte oder nie angelegte Linie hinterlässt, ist
-    /// ungeprüft. Solange gilt: wir werfen nur weg, was nachweislich nicht
-    /// zusammenhängt — gezeichnet wird die Zelle weiterhin, denn das Gleis
-    /// kommt aus <c>_railCells</c> und nicht aus der Kette.</para></summary>
+    /// <para>⭐ 13.08.2026 — <b>WOHER die Zellen mit der 0 kommen, ist jetzt
+    /// belegt.</b> Sie sind die Strecken von Linien, die der SPIELSTAND nicht
+    /// mehr führt, während ihr Gleis auf der Karte liegengeblieben ist. Der
+    /// Beleg ist eine Deckung, keine Vermutung: <c>map_DM_6</c> und die
+    /// Kampagnenkarte <c>map_25</c> sind dieselbe Karte (beide »Chanel Tunnel«,
+    /// beide 180x220). Die 38 Fremdzellen von DM_6 zerfallen in zwei Läufe, und
+    /// beide liegen auf einer Strecke von map_25:</para>
+    /// <list type="bullet">
+    /// <item>13 Zellen <c>(115,53)…(118,44)</c> = map_25 Linie 0, <c>delka 17</c>
+    /// — und <c>17−4 = 13</c>, die Zahl stimmt auf den Punkt; 10 der 13 liegen
+    /// exakt auf deren Routenpunkten (die 3 Abweichler sind der bekannte
+    /// Halbschritt-Versatz zwischen sec22 und den Streckencodes).</item>
+    /// <item>25 Zellen <c>(52,202)…(49,185)</c> auf map_25 Linie 26,
+    /// <c>delka 27</c>, mit denselben beiden Endpunkten.</item>
+    /// </list>
+    /// <para>Genau diese 38 Zellen tragen auf <c>DM_3</c>, <c>DM_5</c>,
+    /// <c>DM_6</c>, <c>DM_7</c> und <c>DM_10</c> die Nummer 0 — auf vier davon
+    /// gibt es den Linienkopf 0 überhaupt nicht mehr, auf DM_6 gehört er einer
+    /// ANDEREN Linie (Gebäude 68/10, <c>delka 30</c>). Die Linien wurden beim
+    /// Umbau zum Gefechtsspielstand also entfernt beziehungsweise umnummeriert,
+    /// und eine Zelle ohne Linienkopf liest sich als 0 zurück.</para>
+    ///
+    /// <para>⚠ Was damit noch NICHT gelesen ist: ob <c>rail_add</c> @0x4AFA90
+    /// die 0 aktiv hinschreibt oder ob sie nur der Nullwert eines abgeräumten
+    /// Feldes ist. Für die Kur ist das gleichgültig — sie wirft nur weg, was
+    /// nachweislich nicht zusammenhängt, und gezeichnet wird die Zelle
+    /// weiterhin, denn das Gleis kommt aus <c>_railCells</c> und nicht aus der
+    /// Kette.</para>
+    ///
+    /// <para>⚠ <b>Und die Kur GREIFT — die Gegenmeldung war am falschen
+    /// Gegenstand gemessen.</b> »DM_6 Linie 0: 64 Zellen bei delka 30,
+    /// zusammenhängend« stimmt in keinem der beiden Punkte. Die 64 sind die
+    /// ROHZELLEN, nicht die Kette; und zusammenhängend sind sie nicht, sondern
+    /// drei Läufe (25 + 13 + 26). Gewählt wird der 26er — und <c>delka−4 = 26</c>
+    /// (siehe <see cref="RailChainMeasureLen"/>). Über alle 30 Karten stimmt die
+    /// gewählte Kette in <b>371 von 371</b> Fällen mit <c>delka−4</c>.</para></summary>
     public int RailChainDropped, RailChainSplit;
 
     private (int Start, int Len) RailOwnRun(int line, List<RailCell> l)
     {
+        if (RailProbeSkipOwnRun) return (0, l.Count);   // Gegenprobe, siehe dort
         if (l.Count < 2) return (0, l.Count);
         var runs = new List<(int Start, int Len)>();
         int s = 0;
@@ -9043,6 +9180,34 @@ public partial class MapEntityLayer : Node2D
     }
 
     private static bool? _probeCellCentres;
+
+    /// <summary>
+    /// Gegenprobe zur Kettenlänge (<c>--rail-lay=noown</c>): mit <c>true</c>
+    /// bleibt <see cref="RailOwnRun"/> aussen vor, die Kette bekommt also ALLE
+    /// Zellen mit ihrer Nummer.
+    ///
+    /// <para>⚠ <b>Der Schalter ist der Beleg, dass der Zähler überhaupt etwas
+    /// sehen kann.</b> Ein Zähler, der auf jeder Karte dasselbe sagt, prüft
+    /// nichts — »24 von 24 treffen delka−4« wäre ohne diese Fahne nicht von
+    /// einer Zeile zu unterscheiden, die immer grün meldet. Mit
+    /// <c>--rail-lay=noown</c> muss <c>map_DM_4</c> auf <b>23 von 24</b> fallen
+    /// und Linie 0 mit <b>+77</b> Zellen nennen (map_DM_3: 32 von 33, +13).</para>
+    /// </summary>
+    public static bool RailProbeSkipOwnRun
+    {
+        get
+        {
+            if (_probeSkipOwn.HasValue) return _probeSkipOwn.Value;
+            bool hit = false;
+            foreach (string a in OS.GetCmdlineUserArgs())
+                if (a.StartsWith("--rail-lay=") && a["--rail-lay=".Length..].Contains("noown"))
+                    hit = true;
+            _probeSkipOwn = hit;
+            return hit;
+        }
+    }
+
+    private static bool? _probeSkipOwn;
 
     /// <summary>
     /// <b>Führt das Ende jeder Linie auf die Anschlusszeile ihres

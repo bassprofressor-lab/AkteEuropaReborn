@@ -1076,6 +1076,106 @@ public partial class MapEntityLayer : Node2D
         return sb.ToString();
     }
 
+    /// <summary>
+    /// <b>Was tut ein Waggon, wenn er über zerschossenes Gleis fährt?</b>
+    ///
+    /// <para>Gemeldet ist »der Zug explodiert an einem Bruch«. Keine der
+    /// bestehenden Zahlen kann das sehen: <see cref="RailWagonMaxPxPerFrame"/>
+    /// misst EINEN Probewaggon, und der ist der erste einer fahrenden Linie —
+    /// auf map_DM_4 liegen die Brüche aber auf den Linien 9, 10 und 21, und der
+    /// Probewaggon trifft sie fast nie. <see cref="RailGapWorst"/> misst
+    /// Abstände, ohne zu wissen, WORAUF gefahren wird.</para>
+    ///
+    /// <para>Deshalb misst diese Zeile jeden gezeichneten Waggon in jedem Bild
+    /// und legt den Weg je Takt in ZWEI Töpfe: Kettenglied zerschossen und
+    /// Kettenglied heil. Damit trägt die Antwort ihre eigene Gegenprobe — der
+    /// heile Topf ist die Messlatte, auf DERSELBEN Karte und im selben Lauf, und
+    /// die Zahl kann nicht auf jeder Karte dasselbe sagen.</para>
+    ///
+    /// <para><b>Instrumentiert, nicht erklärt.</b> Was hier ausdrücklich NICHT
+    /// behauptet wird: dass der Bruch die Ursache ist. Steht in beiden Töpfen
+    /// dasselbe, liegt es nicht am Bruch, und dann ist die Meldung an einem
+    /// anderen Gegenstand zu suchen.</para>
+    ///
+    /// <para>⚠ Die Kettenstelle ist <c>LeadF</c> gerundet — dieselbe Stelle, an
+    /// der <see cref="RailPathPoint"/> zwischen zwei Knoten mischt. Ein Waggon
+    /// zwischen einem heilen und einem zerschossenen Glied landet also im Topf
+    /// des NÄHEREN Glieds; eine schärfere Zuordnung gibt der Weg nicht her.</para>
+    /// </summary>
+    public int RailBrokenFrames, RailWholeFrames;
+    public float RailBrokenStepMax, RailBrokenStepSum;
+    public float RailWholeStepMax, RailWholeStepSum;
+    public string RailBrokenWorstWhere = "";
+
+    /// <summary>Wieviele Kettenglieder aller Linien überhaupt zerschossen sind —
+    /// wenn das 0 ist, sagt <see cref="RailBrokenFrames"/> nichts, weil es
+    /// nichts zu befahren gab.</summary>
+    public int RailBrokenLinks;
+
+    private void RailCensusBroken()
+    {
+        foreach (var l in _railLines)
+        {
+            if (!_freightWagons.TryGetValue(l.Slot, out var list) || list.Count == 0) continue;
+            _lineCellBroken.TryGetValue(l.Slot, out var brk);
+            bool driving = l.Faze is >= 1 and <= 9;
+            foreach (var w in list)
+            {
+                if (w.Hidden) { w.PrevSeen = false; continue; }
+                float pc = w.PrevCol, pr = w.PrevRow;
+                bool had = w.PrevSeen;
+                w.PrevCol = w.Col; w.PrevRow = w.Row; w.PrevSeen = true;
+                if (!had || !driving || brk == null || brk.Count == 0) continue;
+                int at = Mathf.Clamp(Mathf.RoundToInt(w.LeadF), 0, brk.Count - 1);
+                float d = new Vector2((w.Col - pc) * TileW, (w.Row - pr) * TileH).Length();
+                if (d < 0.01f) continue;                 // steht — sagt nichts
+                if (brk[at])
+                {
+                    RailBrokenFrames++;
+                    RailBrokenStepSum += d;
+                    if (d > RailBrokenStepMax)
+                    {
+                        RailBrokenStepMax = d;
+                        RailBrokenWorstWhere =
+                            $"Linie {l.Slot} Waggon {w.Index} Kettenglied {at} " +
+                            $"bei ({w.Col:0.00},{w.Row:0.00}), vorher ({pc:0.00},{pr:0.00})";
+                    }
+                }
+                else
+                {
+                    RailWholeFrames++;
+                    RailWholeStepSum += d;
+                    if (d > RailWholeStepMax) RailWholeStepMax = d;
+                }
+            }
+        }
+    }
+
+    /// <summary>Die Zeile zu <see cref="RailCensusBroken"/>.</summary>
+    private string RailBrokenReport()
+    {
+        RailBrokenLinks = 0;
+        foreach (var kv in _lineCellBroken)
+            foreach (bool b in kv.Value) if (b) RailBrokenLinks++;
+        if (RailBrokenLinks == 0)
+            return " | Bruchstellen: 0 Kettenglieder zerschossen — hier ist nichts zu messen";
+        var sb = new System.Text.StringBuilder();
+        sb.Append($" | Bruchstellen: {RailBrokenLinks} Kettenglieder zerschossen; " +
+                  $"Weg je Takt auf ZERSCHOSSENEM Glied " +
+                  (RailBrokenFrames > 0
+                      ? $"{RailBrokenStepSum / RailBrokenFrames:0.00} px im Mittel, " +
+                        $"hoechstens {RailBrokenStepMax:0.00} px ({RailBrokenFrames} Bilder)"
+                      : "noch kein Bild gefahren") +
+                  ", auf HEILEM Glied " +
+                  (RailWholeFrames > 0
+                      ? $"{RailWholeStepSum / RailWholeFrames:0.00} px im Mittel, " +
+                        $"hoechstens {RailWholeStepMax:0.00} px ({RailWholeFrames} Bilder)"
+                      : "noch kein Bild gefahren"));
+        if (RailBrokenWorstWhere.Length > 0)
+            sb.Append($"  schlimmstes: {RailBrokenWorstWhere}");
+        return sb.ToString();
+    }
+
     private void RailMeasureGaps()
     {
         RailGapWorst = 0f; RailGapPairs = 0; RailGapOpen = 0;
@@ -1842,6 +1942,8 @@ public partial class MapEntityLayer : Node2D
     private void RailMoveWagons()
     {
         RailSquashNow = 0;
+        // ⚠ ERST setzen, DANN messen — RailCensusBroken vergleicht mit dem
+        // vorigen Bild und muss deshalb NACH RailPlaceWagons laufen; siehe unten.
         foreach (var l in _railLines)
         {
             if (!_freightWagons.TryGetValue(l.Slot, out var list) || list.Count == 0) continue;
@@ -1894,6 +1996,8 @@ public partial class MapEntityLayer : Node2D
                 }
             }
         }
+        // Alle Waggons, jedes Bild, getrennt nach »Kettenglied zerschossen«.
+        RailCensusBroken();
         foreach (var w in _wagons)
         {
             if (w.Line != _railProbeLine || w.Index != _railProbeIdx) continue;
@@ -2107,6 +2211,17 @@ public partial class MapEntityLayer : Node2D
             sb.Append($"  ⚠ {RailChainSplit} Linien lagen in mehreren Stuecken, " +
                       $"{RailChainDropped} Fremdzellen aus der Kette genommen " +
                       "(betrifft nur den Fahrweg, gezeichnet werden sie weiter)");
+        // Die MESSLATTE aus der Datei: Kettenlaenge == delka-4. Herleitung und
+        // Zahlen bei MapEntityLayer.RailChainMeasureLen.
+        sb.Append($"  Kettenlaenge: {RailChainChecked - RailChainWrongLen} von " +
+                  $"{RailChainChecked} Linien treffen delka-4");
+        if (RailChainWrongLen > 0)
+            sb.Append($", schlimmste {RailChainWorstDelta:+#;-#;0} Zellen bei " +
+                      RailChainWorstWhere);
+        if (RailChainOrphanLines > 0)
+            sb.Append($"  ({RailChainOrphanCells} Gleiszellen auf " +
+                      $"{RailChainOrphanLines} Nummern ohne Linienkopf — " +
+                      "abgeraeumte Linien, es faehrt nichts darauf)");
         return sb.ToString();
     }
 
@@ -2164,6 +2279,7 @@ public partial class MapEntityLayer : Node2D
                   $", {RailShadowsDrawn} Schattenmasken (Bild 10..19, 19 % Schwarz " +
                   "— gemessen aus 47.CWS)");
         sb.Append(RailSourceReport());
+        sb.Append(RailBrokenReport());
         // Die Zahl fuer »buendig«: wieviele Linienenden lagen NICHT auf der
         // Anschlusszeile ihres Endgebaeudes. Gezaehlt wird VOR dem Ruecken,
         // damit --rail-lay=nodock (Gegenprobe) dieselbe Zahl zeigt und sich
