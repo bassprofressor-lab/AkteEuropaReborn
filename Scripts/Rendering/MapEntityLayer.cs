@@ -10846,7 +10846,22 @@ public partial class MapEntityLayer : Node2D
     /// Reihenfolge treu, sie macht das Anschlussstück nicht sichtbar.</para>
     ///
     /// <para>Gegenprobe: <c>--rail-lay=footh</c> nimmt die alte Rechnung nach
-    /// dem Grundriss zurück.</para></summary>
+    /// dem Grundriss zurück.</para>
+    ///
+    /// <para>⚠⚠ <b>ENTSCHIEDEN, NICHT OFFEN — 13.08.2026.</b> Der Spieler hat den
+    /// Fall gemeldet (»so fehlt oft die letzte strecke zur anbindung an ein
+    /// gebäude sauber«), die Messung stand danach: <b>224 von 476 Enden (47 %)
+    /// sind überdeckt, 128 vollständig</b>, und bei Fabrik, Mine und Flughafen
+    /// <b>166 von 166</b>, weil ihre Enden auf <c>B+2</c> liegen. Vorgelegt wurde
+    /// ihm die Wahl »sichtbar machen (unsere Abweichung)« gegen »originaltreu
+    /// lassen«, und er hat <b>originaltreu</b> gewählt.</para>
+    ///
+    /// <para>Damit ist das <b>kein Fehler und keine offene Aufgabe</b>: was man
+    /// dort sieht, ist das Bild von 1997. Wer die Enden künftig sichtbar machen
+    /// will, ändert damit eine <b>entschiedene</b> Sache — dann gehört die
+    /// Entscheidung neu geholt, so wie die gekuppelten Waggons eine bewusste
+    /// Abweichung sind und als solche markiert bleiben. Nicht »reparieren«.</para>
+    /// </summary>
     private static int RailThroughRowFor(Entity b)
         => RailProbeFootH
                ? b.Row + Mathf.Max(1, b.FootH) - 1
