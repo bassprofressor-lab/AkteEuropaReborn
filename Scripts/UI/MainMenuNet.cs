@@ -35,6 +35,69 @@ public partial class MainMenu
     private Label? _netStatus;
     private VBoxContainer? _netDetails;
 
+    /// <summary>Der Rahmen um den Netzkasten (<c>Accent("Netzwerk", …)</c>). Er
+    /// wird IMMER gebaut und im Gefecht nur versteckt — siehe
+    /// <see cref="ApplyNetEntry"/>. ⚠ Versteckt wird der RAHMEN, nicht sein
+    /// Inhalt: ein sichtbarer Rahmen um einen unsichtbaren Inhalt ist ein leerer
+    /// Kasten mit Titel.</summary>
+    private Control? _netFrame;
+
+    /// <summary>Ist der Aufbauschirm ueber »Multiplayer« aufgerufen worden?
+    /// Gesetzt von <c>ShowSetup(net)</c>.</summary>
+    private bool _netEntry;
+
+    /// <summary>Die Statuszeile zu einem Modus. Steht hier und nicht im
+    /// Signalhandler, weil <c>OptionButton.Selected</c> aus dem CODE zu setzen
+    /// das Signal <c>item_selected</c> NICHT ausloest — der Text waere dann
+    /// stehengeblieben und haette das Gegenteil behauptet.</summary>
+    /// <remarks>⚠ Zweizeilig gehalten, und das ist am Bild gemessen: die dritte
+    /// Zeile hat die Kartenliste daneben um einen Eintrag verkürzt (6 von 7 mit
+    /// Rollbalken). Der Hinweis, dass die Adresse nur mit ihrem Port gilt, steht
+    /// jetzt als Tooltip am Adressfeld — dort, wo man ihn braucht.</remarks>
+    private static string NetStatusText(int sel) => sel switch
+    {
+        1 => "Gastgeber: die Mitspieler rufen dich an. Karte, Keim und " +
+             "Plätze verteilst DU.",
+        2 => "Beitreten: Karte, Keim und Startplatz kommen vom Gastgeber — " +
+             "was hier steht, wird überschrieben.",
+        _ => "Netzwerk aus",
+    };
+
+    /// <summary>
+    /// Den Netzkasten auf den Einstieg einstellen.
+    ///
+    /// <para>⚠ 13.08.2026, gemeldet vom Spieler: »das Netzwerkspiel raus aus
+    /// Gefecht«. Im Gefecht ist der Kasten unsichtbar UND sein Modus steht
+    /// zwingend auf »Aus«. Beides zusammen, nicht nur das Verstecken: ein
+    /// verborgenes Auswahlfeld, das noch »Gastgeber« sagt, wäre ein Netzspiel,
+    /// von dem der Spieler nichts weiß — und <c>StartWhenNetIsReady</c> fragt
+    /// genau dieses Feld.</para>
+    ///
+    /// <para>Im Multiplayer ist umgekehrt »Aus« keine Wahl: die Zeile heißt so,
+    /// weil man gegen Menschen spielen will. Vorgabe ist <b>Gastgeber</b>.</para>
+    ///
+    /// <para>⚠ Hat die Befehlszeile die Steckdose schon geöffnet, wird gar nichts
+    /// angetastet — <see cref="BuildNetRow"/> hat den Modus dann gesetzt und
+    /// gesperrt, und der Kasten muss sichtbar bleiben, damit man den Zustand
+    /// sieht (Regel: nachsehen, ob der Schalter noch angeschlossen ist).</para>
+    /// </summary>
+    private void ApplyNetEntry(bool net)
+    {
+        if (_netMode == null) return;
+
+        if (NetworkManager.Active)
+        {
+            if (_netFrame != null) _netFrame.Visible = true;
+            return;
+        }
+
+        if (_netFrame != null) _netFrame.Visible = net;
+        _netMode.SetItemDisabled(0, net);
+        _netMode.Selected = net ? (_netMode.Selected == 0 ? 1 : _netMode.Selected) : 0;
+        if (_netDetails != null) _netDetails.Visible = _netMode.Selected != 0;
+        if (_netStatus != null) _netStatus.Text = NetStatusText(_netMode.Selected);
+    }
+
     /// <summary>
     /// DIE LOBBY — und sie ist absichtlich klein.
     ///
@@ -47,21 +110,30 @@ public partial class MainMenu
     /// Aufbaubild ist eines, und Kommando 979 trägt die Einstellungen des
     /// Gastgebers ein, 981 startet.</para>
     ///
-    /// <para>⚠ <b>Zwei Entscheidungen, die am BILD getroffen sind</b>
-    /// (<c>scratchpad/mp-lobby-zu.png</c>, <c>mp-lobby-auf.png</c>, 1600x900):</para>
+    /// <para>⚠ <b>Wo der Kasten steht, ist DREIMAL am Bild entschieden worden</b>
+    /// — jeder Anlauf hat den Startknopf verschoben, und keiner davon war am
+    /// Modell zu erkennen:</para>
     /// <list type="number">
-    ///   <item><b>Eingeklappt, solange »Aus« steht.</b> Der Schirm ist an der
-    ///   Grenze — die Zeile »Techstandard« hat am 13.08. schon die Bedienhilfe
-    ///   aus dem Fenster geschoben.</item>
-    ///   <item><b>In der Einstellungsspalte, nicht in voller Breite darunter.</b>
-    ///   Der erste Anlauf setzte diesen Kasten unter den Haken »Luftwaffe …«, und
-    ///   im Bild war »GEMETZEL STARTEN« danach nur noch zur Hälfte zu sehen. Der
-    ///   Schirm sitzt in einem <c>ScrollContainer</c>, es ging also nichts
-    ///   verloren — aber ein Startknopf, den man erst herunterrollen muss, ist
-    ///   schlechter als einer, den man sieht. In der Spalte kostet die
-    ///   eingeklappte Zeile gar keine Höhe: die Spalte ist kürzer als die
-    ///   Kartenliste daneben.</item>
+    ///   <item>in voller Breite unter dem Haken »Luftwaffe …« → »GEMETZEL
+    ///   STARTEN« nur noch zur Hälfte im Bild;</item>
+    ///   <item>in der Einstellungsspalte rechts → im <b>Multiplayer</b>-Schirm
+    ///   war der Startknopf <b>ganz</b> aus dem Fenster geschoben. Aufgeklappt
+    ///   kostet der Kasten rund 180 px, und rechts stehen schon Vorschau,
+    ///   Kartenname, Gegner, Startplatz, Schwierigkeit, Rohstoffe und
+    ///   Techstandard. Solange er eingeklappt war, fiel das nicht auf — und
+    ///   eingeklappt ist er nur im Gefecht, wo er jetzt gar nicht mehr steht;</item>
+    ///   <item><b>links unter der Kartenliste</b>, wo deren sieben Einträge rund
+    ///   200 px Luft lassen. Dort kostet er den Schirm KEINE Höhe.</item>
     /// </list>
+    ///
+    /// <para>Der Schirm sitzt in einem <c>ScrollContainer</c>, es ging also nie
+    /// etwas verloren — aber ein Startknopf, den man erst herunterrollen muss,
+    /// ist schlechter als einer, den man sieht. Der Rollbalken rettet die
+    /// Bedienbarkeit, nicht die Gestaltung.</para>
+    ///
+    /// <para>Eingeklappt bleibt der Kasten, solange »Aus« steht: die Zeile
+    /// »Techstandard« hat am 13.08. schon einmal die Bedienhilfe aus dem Fenster
+    /// geschoben, der Schirm ist bei 1600x900 an der Grenze.</para>
     /// </summary>
     private Control BuildNetRow()
     {
@@ -73,11 +145,17 @@ public partial class MainMenu
         _netMode.AddItem("Gastgeber");
         _netMode.AddItem("Beitreten");
         _netMode.Selected = 0;
-        box.AddChild(Row("Netzwerk", _netMode));
+        box.AddChild(Row("Modus", _netMode));
 
         _netDetails = new VBoxContainer { Visible = false };
         _netDetails.AddThemeConstantOverride("separation", 4);
-        _netAddr = new LineEdit { Text = "127.0.0.1:27015" };
+        _netAddr = new LineEdit
+        {
+            Text = "127.0.0.1:27015",
+            TooltipText = "Adresse und Port, durch Doppelpunkt getrennt. Ohne Port "
+                        + "gilt 27015.\nBeim Gastgeber zählt nur der Port — er hört "
+                        + "zu, er ruft nicht an.",
+        };
         _netDetails.AddChild(Row("Adresse:Port", _netAddr));
         _netPlayers = new SpinBox { MinValue = 2, MaxValue = 8, Value = 2 };
         _netDetails.AddChild(Row("Menschen", _netPlayers));
@@ -95,15 +173,7 @@ public partial class MainMenu
             _netDetails.Visible = _netMode.Selected != 0;
             // Beim Gastgeber ist die Adresse gegenstandslos: er hört zu, er
             // ruft nicht an. Der Port darin gilt trotzdem.
-            if (_netStatus != null)
-                _netStatus.Text = _netMode.Selected switch
-                {
-                    1 => "Gastgeber: die Adresse gilt nur mit ihrem Port; die Mitspieler " +
-                         "rufen dich an. Karte, Keim und Plätze verteilst DU.",
-                    2 => "Beitreten: Karte, Keim, Startplatz und alle Einstellungen kommen " +
-                         "vom Gastgeber — was hier links steht, wird überschrieben.",
-                    _ => "Netzwerk aus",
-                };
+            if (_netStatus != null) _netStatus.Text = NetStatusText(_netMode.Selected);
         };
 
         // Hat die Befehlszeile die Steckdose schon geöffnet, soll der Schirm das
@@ -116,6 +186,9 @@ public partial class MainMenu
             _netAddr.Editable = false;
             _netStatus.Text = "von der Befehlszeile geöffnet — " + NetworkManager.StatusLine();
         }
+        // ⚠ Der Kasten selbst bleibt sichtbar — ein- und ausgeblendet wird sein
+        // RAHMEN (_netFrame, gesetzt beim Aufbau des Schirms), damit im Gefecht
+        // nicht ein leerer Kasten mit der Überschrift »Netzwerk« stehenbleibt.
         return box;
     }
 
@@ -145,7 +218,12 @@ public partial class MainMenu
         // Der Schirm darf die Steckdose öffnen — bis heute ging das nur über die
         // Befehlszeile, und einen Schalter, den ein Spieler nicht hat, hat er
         // nicht (dieselbe Lehre wie beim Karteneditor).
-        if (!NetworkManager.Active && _netMode is { Selected: > 0 })
+        // ⚠ `_netEntry` ist die zweite Sperre, absichtlich doppelt: eine Leitung
+        // wird nur geöffnet, wenn der Spieler über »Multiplayer« hereingekommen
+        // ist. Im Gefecht steht der Modus schon auf »Aus« (ApplyNetEntry) — aber
+        // ein Netzspiel, von dem der Spieler nichts weiß, ist der eine Fehler,
+        // den ich hier nicht einmal über einen zweiten Weg zulassen will.
+        if (!NetworkManager.Active && _netEntry && _netMode is { Selected: > 0 })
         {
             var (addr, port) = NetTarget();
             bool asHost = _netMode.Selected == 1;

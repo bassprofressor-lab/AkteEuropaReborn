@@ -173,6 +173,43 @@ public partial class StartMenuPanel : Control
         return list;
     }
 
+    /// <summary>Eine Zeile ganz herausnehmen und alles darunter um eine
+    /// Zeilenhoehe hochziehen — das Gegenstueck zu <see cref="InsertAfter"/>.
+    ///
+    /// <para>⚠ <b>Jede Verwendung ist UNSERE SETZUNG</b>, und zwar eine
+    /// staerkere als <see cref="Recaption"/>: dort bleibt die Zeile des
+    /// Originals mit ihrem Hilfeindex stehen und heisst nur anders, hier
+    /// verschwindet sie. Was das Original an dieser Stelle hatte, steht dann nur
+    /// noch in <see cref="Original"/> — deshalb wird dort NICHTS gestrichen, und
+    /// deshalb gehoert jeder Aufruf hier begruendet.</para>
+    ///
+    /// <para>⚠ <b>Verschoben wird um den EIGENEN Platz der Zeile, nicht um
+    /// <see cref="EntryH"/></b> — und das ist am Bild korrigiert. Die neun
+    /// Y-Werte des Originals sind NICHT gleichmaessig: vor »Enzyklopaedie«,
+    /// »Intro ansehen« und »Beenden« stehen 25 statt 20, damit gruppiert das
+    /// Original. Der erste Anlauf zog um die feste Zeilenhoehe 20 hoch, und im
+    /// Bildschirmfoto stand danach zwischen »Enzyklopaedie« und »Credits« ein
+    /// Abstand von 25 — eine Gruppengrenze, die das Original an dieser Stelle
+    /// nicht hat. Ich hatte im Kommentar behauptet, das sei nicht zu sehen; es
+    /// war zu sehen. Mit dem Abstand zum VORGAENGER verschwindet der Platz der
+    /// Zeile ganz, samt ihres Vorabstands, und die Gruppierung darunter bleibt
+    /// die des Originals.</para></summary>
+    public static List<Row> Without(IEnumerable<Row> rows, string caption)
+    {
+        var list = new List<Row>(rows);
+        int at = list.FindIndex(r => r.Caption == caption);
+        if (at < 0) return list;
+
+        // Der Platz, den diese Zeile einnimmt: ihr Abstand zum Vorgaenger. Fuer
+        // die erste Zeile gibt es keinen — dann bleibt es bei der Zeilenhoehe.
+        int gone = at > 0 ? list[at].Y - list[at - 1].Y : EntryH;
+
+        list.RemoveAt(at);
+        for (int i = at; i < list.Count; i++)
+            list[i] = list[i] with { Y = list[i].Y - gone };
+        return list;
+    }
+
     /// <summary>Shown under the list — ours, because the original's help line
     /// lives in its side panel, which this screen has not got.</summary>
     public string Footer = "";

@@ -92,6 +92,14 @@ public partial class MainMenu : Control
     /// <summary>The skirmish setup, which used to BE the menu and is now what
     /// the start menu's added "Gefecht" row leads to.</summary>
     private Control? _setup;
+
+    /// <summary>Titel, Untertitel und Startknopf des Aufbauschirms. Sie sind
+    /// Felder, weil derselbe Schirm seit dem 13.08.2026 zwei Zeilen des
+    /// Startmenues bedient — »Gefecht« und »Multiplayer«. Siehe
+    /// <see cref="ShowSetup"/>.</summary>
+    private Label? _setupTitle;
+    private Label? _setupSub;
+    private Button? _startButton;
     private StartMenuPanel? _start;
 
     /// <summary>The start menu of 1997, rebuilt from the code that draws and
@@ -112,7 +120,14 @@ public partial class MainMenu : Control
             StartMenuPanel.Original(
                 newGame: missions.Count > 0 ? ShowCampaign : null,
                 load: () => AddChild(new LoadGameScreen()),
-                net: null,
+                // ⚠ 13.08.2026 — DIE ZEILE DES ORIGINALS FÜHRT JETZT WIRKLICH ZUM
+                // NETZSPIEL. Sie war die ganze Zeit da (Platz 65, Hilfeindex 106,
+                // gelesen @0x480454ff) und tat nichts; der Mehrspieler hing
+                // stattdessen als Auswahlfeld im Gefechtsschirm. Gemeldet vom
+                // Spieler: »du hast das netzwerkspiel unter gefecht gepackt,
+                // wobei wir den Punkt im hauptmenu Netzwerkspiel haben … daher
+                // das Netzwerkspiel raus aus Gefecht«.
+                net: () => ShowSetup(net: true),
                 settings: () => AddChild(new SettingsScreen()),
                 encyclopedia: null,
                 intro: null,
@@ -134,14 +149,37 @@ public partial class MainMenu : Control
         var renamed = StartMenuPanel.Recaption(original, "Neues Spiel", "Kampagne",
             "Alle Missionen zeigen — Uebersicht ist unsere Zutat");
 
+        // ⚠ UNSERE SETZUNG, 13.08.2026, gewuenscht wortwoertlich: »den Punkt im
+        // hauptmenu Netzwerkspiel … was du zu Multiplayer abaendern kannst und
+        // dort der Multiplayer auch lebt«. Der Hilfeindex 106 bleibt stehen und
+        // zeigt weiter auf »Netzwerk-Spiel einrichten« des Originals — die
+        // Herkunft der Zeile geht durch die Umbeschriftung nicht verloren.
+        renamed = StartMenuPanel.Recaption(renamed, "Netzwerkspiel", "Multiplayer",
+            "Gegen Menschen ueber das Netz — Gastgeber oder beitreten");
+
+        // ⚠ UNSERE SETZUNG, und die staerkere Sorte: die Zeile ist WEG, nicht nur
+        // umbenannt. Gewuenscht: »Intro Ansehen kann auch aus dem Hauptmenu
+        // raus.« Sie stand auf Platz 135 mit Hilfeindex 109 (»Intro-Film
+        // ansehen«) und hatte keine Aktion — wir spielen die .RPL-Filme nicht ab,
+        // und eine Zeile, die beim Anklicken nur sagt, dass sie nichts tut, ist
+        // schlechter als keine. In StartMenuPanel.Original() bleibt sie stehen,
+        // damit die neun gelesenen Zeilen dort vollstaendig bleiben.
+        renamed = StartMenuPanel.Without(renamed, "Intro ansehen");
+
         // OURS, and the only row that is: the original had no skirmish against
         // a computer opponent, only "Netzwerkspiel" against people. It sits
         // right under that entry — the first version put it at the very end,
         // below "Beenden", and the skirmish was reported as missing from 0.3.0
         // because nobody looks there.
-        var rows = StartMenuPanel.InsertAfter(renamed, "Netzwerkspiel",
+        // ⚠ »Multiplayer«, nicht mehr »Netzwerkspiel« — die Zeile darueber ist
+        // eine Zeile weiter oben umbeschriftet worden, und InsertAfter sucht nach
+        // der Beschriftung. Steht hier der alte Name, haengt »Gefecht« lautlos
+        // hinten an, unter »Beenden« — genau der Fehler, wegen dem das Gefecht in
+        // 0.3.0 als fehlend gemeldet wurde.
+        var rows = StartMenuPanel.InsertAfter(renamed, "Multiplayer",
             new StartMenuPanel.Row(0, "Gefecht", -1,
-                "Gefecht gegen den Rechner — im Original gibt es das nicht", ShowSetup));
+                "Gefecht gegen den Rechner — im Original gibt es das nicht",
+                () => ShowSetup()));
 
         // OURS, die zweite Zeile dieser Art, und aus demselben Grund an dieser
         // Stelle: der KARTENEDITOR. Es gab ihn seit dem 12.08.2026, aber nur
@@ -232,8 +270,31 @@ public partial class MainMenu : Control
     /// ein Klick mehr, dafuer sieht man vorher, wo man steht.</para></summary>
     private void ShowCampaign() => AddChild(new CampaignScreen(StartMission));
 
-    private void ShowSetup()
+    /// <summary>Den Aufbauschirm zeigen — als GEFECHT gegen den Rechner oder als
+    /// MULTIPLAYER gegen Menschen.
+    ///
+    /// <para>⚠ 13.08.2026, gemeldet vom Spieler: der Mehrspieler hing als
+    /// Auswahlfeld im Gefechtsschirm, waehrend das Startmenue eine eigene Zeile
+    /// dafuer hat (die des Originals, Platz 65). Jetzt fuehrt die Zeile hierher,
+    /// und im Gefecht ist von Netz nichts mehr zu sehen.</para>
+    ///
+    /// <para>⚠ Der Netzkasten wird trotzdem IMMER gebaut und nur versteckt: er
+    /// haelt den Zustand der Verbindung, und ein Kasten, der beim Umschalten neu
+    /// entsteht, verliert ihn. Im Gefecht steht sein Modus zwingend auf »Aus« —
+    /// ein verstecktes Auswahlfeld, das noch »Gastgeber« sagt, waere ein
+    /// Netzspiel, von dem der Spieler nichts weiss.</para></summary>
+    private void ShowSetup(bool net = false)
     {
+        _netEntry = net;
+        if (_setupTitle != null) _setupTitle.Text = net ? "MULTIPLAYER" : "GEFECHT";
+        if (_setupSub != null)
+            _setupSub.Text = net
+                ? "Gegen Menschen ueber das Netz — Gastgeber oder beitreten"
+                : "Gegen den Rechner — im Original gibt es das nicht";
+        if (_startButton != null)
+            _startButton.Text = net ? "PARTIE STARTEN" : "GEMETZEL STARTEN";
+        ApplyNetEntry(net);
+
         if (_start != null) _start.Visible = false;
         if (_setup != null) _setup.Visible = true;
     }
@@ -335,14 +396,23 @@ public partial class MainMenu : Control
         box.AddThemeConstantOverride("separation", 10);
         middle.AddChild(box);
 
-        var title = new Label
+        // ⚠ Titel und Untertitel sind seit dem 13.08.2026 FELDER, weil dieser
+        // eine Schirm jetzt zwei Eintraege des Startmenues bedient: »Gefecht«
+        // (gegen den Rechner) und »Multiplayer« (gegen Menschen). ShowSetup(net)
+        // schreibt sie um. Es ist ausdruecklich EIN Schirm geblieben — Karte,
+        // Startplatz, Techstandard, Rohstoffe und »alle Einheiten« gelten fuer
+        // beides, und ein zweiter Schirm daneben waere ein zweiter Ort fuer
+        // dieselben Einstellungen und damit ein zweiter Ort, an dem sie
+        // auseinanderlaufen. Das Original macht es genauso: sein Aufbaubild ist
+        // eines, Kommando 979 traegt die Einstellungen ein, 981 startet.
+        _setupTitle = new Label
         {
             Text = "GEFECHT",
             HorizontalAlignment = HorizontalAlignment.Center,
         };
-        title.AddThemeFontSizeOverride("font_size", 34);
-        box.AddChild(title);
-        var sub = new Label
+        _setupTitle.AddThemeFontSizeOverride("font_size", 34);
+        box.AddChild(_setupTitle);
+        var sub = _setupSub = new Label
         {
             // ⚠ Die Untertitelzeile sagt jetzt, was diese Seite ist. Vorher
             // stand hier »AKTE EUROPA — REBORN / Rekonstruktion des RTS von
@@ -421,7 +491,16 @@ public partial class MainMenu : Control
 
         _mapList = new ItemList
         {
-            CustomMinimumSize = new Vector2(400, 250),
+            // ⚠ 160 statt 250 seit dem 13.08.2026, und die Zahl ist am Bild
+            // gemessen. Seit der Netzkasten UNTER dieser Liste steht, ist die
+            // linke Spalte »Liste + Kasten« — mit einer Mindesthoehe von 250
+            // wurde sie zum Hoehentreiber des ganzen Schirms und schob im
+            // Multiplayer den Startknopf aus dem Fenster (795 statt 690 px).
+            // Die Liste WAECHST ohnehin mit (SizeFlagsVertical = ExpandFill), sie
+            // braucht die Mindesthoehe also nicht: mit 160 gibt die rechte Spalte
+            // die Hoehe vor, die Liste faellt auf ~255 px und zeigt ihre sieben
+            // Eintraege weiter vollstaendig.
+            CustomMinimumSize = new Vector2(400, 160),
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
             SizeFlagsVertical = SizeFlags.ExpandFill,
             AllowReselect = true,
@@ -433,7 +512,33 @@ public partial class MainMenu : Control
         _mapList.ItemSelected += i => PickFromList((int)i);
         var left = Group("Karten", _mapList);
         left.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        lower.AddChild(left);
+        left.SizeFlagsVertical = SizeFlags.ExpandFill;
+
+        // ⚠ 13.08.2026 — DER NETZKASTEN STEHT LINKS UNTER DER KARTENLISTE, und
+        // das ist der dritte Anlauf und am BILD entschieden:
+        //   1. in voller Breite unter dem Haken »Luftwaffe …« → »GEMETZEL
+        //      STARTEN« war nur noch zur Haelfte zu sehen;
+        //   2. in der Einstellungsspalte rechts → im Multiplayer-Schirm war der
+        //      Startknopf ganz aus dem Fenster geschoben (die drei Netzzeilen und
+        //      ihre Statuszeile kosten rund 180 px, und rechts stehen schon
+        //      Vorschau, Kartenname, Gegner, Startplatz, Schwierigkeit,
+        //      Rohstoffe und Techstandard);
+        //   3. LINKS, wo die Kartenliste mit ihren sieben Eintraegen rund 200 px
+        //      Luft laesst. Dort kostet der Kasten den Schirm KEINE Hoehe.
+        // Ein Startknopf, den man erst herunterrollen muss, ist schlechter als
+        // einer, den man sieht — der ScrollContainer rettet die Bedienbarkeit,
+        // nicht die Gestaltung.
+        // ⚠ KEIN ExpandFill vertikal, und das ist ausprobiert und wieder
+        // zurueckgenommen: der ganze Schirm sitzt in einem ScrollContainer, und
+        // dort bestimmt der INHALT die Hoehe, nicht die Hoehe den Inhalt. Es gibt
+        // also nichts zu verteilen — das Attribut sah nach einer Loesung aus und
+        // hat im Bild nichts geaendert. Ein wirkungsloses Attribut stehenzulassen
+        // waere schlimmer, als es nicht zu setzen: der Naechste glaubt, es tue was.
+        var leftCol = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        leftCol.AddThemeConstantOverride("separation", 10);
+        leftCol.AddChild(left);
+        leftCol.AddChild(_netFrame = Accent("Netzwerk", BuildNetRow()));
+        lower.AddChild(leftCol);
 
         var right = new VBoxContainer { CustomMinimumSize = new Vector2(440, 0) };
         right.AddThemeConstantOverride("separation", 6);
@@ -515,15 +620,10 @@ public partial class MainMenu : Control
                         + "Gilt ebenso fuer die Schiffsliste.",
         }));
 
-        // ⚠ DIE LOBBY steht IN der Einstellungsspalte und nicht in voller Breite
-        // darunter (UI/MainMenuNet.cs), und das ist am BILD entschieden: als
-        // eigener Kasten unter dem Haken schob sie »GEMETZEL STARTEN« aus dem
-        // Sichtfeld — der Schirm scrollt, aber ein Startknopf, den man erst
-        // suchen muss, ist schlechter als einer, den man sieht. Hier kostet sie
-        // gar keine Hoehe, solange sie eingeklappt ist: die Spalte ist kuerzer
-        // als die Kartenliste daneben.
-        right.AddChild(new HSeparator());
-        right.AddChild(BuildNetRow());
+        // ⚠ <s>DIE LOBBY steht IN der Einstellungsspalte.</s> Seit dem 13.08.2026
+        // steht sie LINKS unter der Kartenliste — die Begruendung samt der drei
+        // Anlaeufe steht dort, an `leftCol`. Kurz: in dieser Spalte hier hat sie
+        // im Multiplayer-Schirm den Startknopf ganz aus dem Fenster geschoben.
 
         // ⚠ UNSERE OPTION, siehe SkirmishSetup.AllUnits. Der Anlass ist eine
         // Luecke in den Daten: die Gefechtskarten tragen in sec120 NULL
@@ -581,7 +681,13 @@ public partial class MainMenu : Control
         box.AddChild(_allUnitsPanel);
         UpdateAllUnitsHint();
 
-        var start = new Button { Text = "GEMETZEL STARTEN", CustomMinimumSize = new Vector2(0, 44) };
+        var start = _startButton = new Button
+        {
+            // ⚠ Der Text wechselt mit dem Einstieg (ShowSetup): »GEMETZEL
+            // STARTEN« im Gefecht, »PARTIE STARTEN« im Multiplayer. »Gemetzel«
+            // passt nicht zu einem Knopf, der erst auf Mitspieler wartet.
+            Text = "GEMETZEL STARTEN", CustomMinimumSize = new Vector2(0, 44),
+        };
         // ⚠ StartWhenNetIsReady statt OnStart — ohne Netzschalter derselbe
         // Aufruf, mit Netzschalter das Warten auf die Partie (UI/MainMenuNet.cs).
         start.Pressed += StartWhenNetIsReady;
@@ -628,7 +734,14 @@ public partial class MainMenu : Control
         // --setup opens the skirmish panel straight away, so it can be
         // photographed without a click
         foreach (string a in OS.GetCmdlineUserArgs())
-            if (a == "--setup") { ShowSetup(); break; }
+            // `--setup` zeigt das Gefecht, `--setup=net` den Multiplayer — sonst
+            // liesse sich der zweite Einstieg nicht photographieren, und ein
+            // Schirm, der nur im Kopf richtig aussieht, ist nichts wert.
+            if (a == "--setup" || a.StartsWith("--setup="))
+            {
+                ShowSetup(net: a.EndsWith("=net"));
+                break;
+            }
 
         // the porting harness: decode with the new C# reader and compare
         // against the Python reference before anything else happens
