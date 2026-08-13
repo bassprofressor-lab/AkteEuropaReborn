@@ -57,6 +57,30 @@ public static class Settings
     /// false, also entscheidet dort weiter allein die Einstellung.</summary>
     public static bool FogSuppressed;
 
+    // ---- Gefecht ------------------------------------------------------------
+
+    /// <summary>»Alle Einheiten« im Gefechtsschirm — siehe
+    /// <see cref="SkirmishSetup.AllUnits"/> für das, was die Option tut, und
+    /// warum es sie überhaupt gibt.
+    ///
+    /// <para>⚠ <b>13.08.2026 — hierher gezogen, weil ein gesetzter Haken sonst
+    /// verfiel.</b> <c>SkirmishSetup.AllUnits</c> ist ein flüchtiges
+    /// <c>static bool</c>: es lebt, solange das Programm läuft, und ist beim
+    /// nächsten Start wieder aus. Der Spieler hat heute gemeldet, im Gefecht am
+    /// Flughafen keine Flugeinheiten zur Auswahl zu haben — und die Option war
+    /// die Ursache. Sie steht jetzt neben Vollbild und Nebel, also da, wo der
+    /// Spieler eine Einstellung erwartet, die er einmal trifft.</para>
+    ///
+    /// <para>⚠ Die Vorgabe bleibt <b>aus</b>. Sie zu drehen wäre eine stille
+    /// Setzung, solange ungelesen ist, woher das Original im Netzwerkspiel
+    /// seine Flugzeugvorlagen nimmt — bei den Schiffen tut das @0x4b2330, für
+    /// die Flugzeuge ist das Gegenstück noch nicht gefunden.</para></summary>
+    public static bool SkirmishAllUnits
+    {
+        get => B("skirmish_all_units", false);
+        set => Set("skirmish_all_units", value);
+    }
+
     // ---- sound --------------------------------------------------------------
 
     /// <summary>Effects at all. Kept apart from the volume so silence is a
@@ -113,20 +137,66 @@ public static class Settings
 
     // ---- the file ---------------------------------------------------------
 
-    private static ConfigFile Load()
+    /// <summary>
+    /// ⚠ <b>EIN ConfigFile für das ganze Programm, nicht eines je Zugriff</b>
+    /// (13.08.2026, und es war ein Absturz).
+    ///
+    /// <para><b>Was hier stand:</b> <c>Load()</c> legte bei <i>jedem</i>
+    /// Lesezugriff ein neues <c>ConfigFile</c> an und lud die Datei von Platte —
+    /// <c>B()</c> und <c>I()</c> riefen es je Property. <c>ConfigFile</c> ist
+    /// ein <c>RefCounted</c>; die Objekte wurden nie freigegeben. Ein
+    /// Prüflauf von 10 s auf <c>map_NET02</c> endete deshalb mit
+    /// <c>Leaked unsafe reference to object: &lt;ConfigFile#…&gt;</c> in Serie
+    /// und danach hart:</para>
+    ///
+    /// <code>
+    /// Fatal error. 0xC0000005
+    ///    at Godot.GodotObject.Finalize()
+    ///    at System.GC.RunFinalizers()
+    /// </code>
+    ///
+    /// <para><b>Gemessen, sechs Läufe:</b> ohne »Alle Einheiten« 139/139/139,
+    /// mit 132/132/139 (SIGSEGV bzw. SIGILL) — der Absturz hing NICHT an der
+    /// Option, sondern am Zeitpunkt der Finalisierung. ⚠ Ein einzelner Lauf
+    /// hatte 0 geliefert, und daraus wäre beinahe die falsche Ursache geworden.
+    /// Deshalb steht die Wiederholung hier mit dabei.</para>
+    ///
+    /// <para><b>Die zweite Hälfte des Fehlers:</b> jeder Zugriff war ein
+    /// PLATTENZUGRIFF. <see cref="FogOfWar"/>, <see cref="CursorHints"/>,
+    /// <see cref="RightDragPan"/> und <see cref="PanSpeed"/> werden im Bildlauf
+    /// gefragt — die Einstellung wurde also bis zu 60 mal je Sekunde von der
+    /// Platte gelesen.</para>
+    ///
+    /// <para>Innerhalb des Programms schreibt nur <see cref="Set"/>, und das
+    /// schreibt in dieselbe Instanz; ein gehaltenes Abbild kann also nicht
+    /// veralten. Wer die Datei von aussen ändert, während das Spiel läuft, sieht
+    /// es erst beim nächsten Start — das war vorher anders und ist der einzige
+    /// Unterschied.</para>
+    ///
+    /// <para><b>Gegenprobe, dieselben sechs Läufe:</b> Rückgabewert
+    /// <b>0/0/0 und 0/0/0</b>, <b>0</b> Leckzeilen, <b>0</b> davon
+    /// <c>ConfigFile</c>. Gezählt wurden Rückgabewert UND Leckzeilen, weil der
+    /// Rückgabewert allein vorher in die Irre geführt hatte.</para>
+    ///
+    /// <para>⚠ Offen, und ausdrücklich nur eine BEOBACHTUNG: es bleibt
+    /// <c>WARNING: 1 ObjectDB instance was leaked at exit</c>. Eine einzelne, und
+    /// eine Warnung statt eines Absturzes. Dass es dieses gehaltene Abbild ist,
+    /// liegt nahe und ist NICHT belegt — <c>--verbose</c> würde es sagen.</para></summary>
+    private static readonly ConfigFile Cfg = LoadOnce();
+
+    private static ConfigFile LoadOnce()
     {
         var c = new ConfigFile();
         c.Load(SavePath);
         return c;
     }
 
-    private static bool B(string k, bool d) => (bool)Load().GetValue("options", k, d);
-    private static int I(string k, int d) => (int)Load().GetValue("options", k, d);
+    private static bool B(string k, bool d) => (bool)Cfg.GetValue("options", k, d);
+    private static int I(string k, int d) => (int)Cfg.GetValue("options", k, d);
 
     private static void Set(string k, Variant v)
     {
-        var c = Load();
-        c.SetValue("options", k, v);
-        c.Save(SavePath);
+        Cfg.SetValue("options", k, v);
+        Cfg.Save(SavePath);
     }
 }
