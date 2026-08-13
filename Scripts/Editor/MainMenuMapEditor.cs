@@ -10,6 +10,14 @@ using AkteEuropaReborn.Import;
 /// <code>
 ///   --map-new=&lt;name&gt;,&lt;breite&gt;,&lt;hoehe&gt;,&lt;kachelsatz&gt;
 ///                [,flach]            alles auf Hoehe 0 — die Gegenprobe
+///                [,leer]             keine Startbasen (reine Landschaft)
+///                [,ohnetabelle]      Gegenprobe: ohne die gemessene Kacheltabelle
+///                [,ohnenaht]         Gegenprobe: ohne die Nahtwahl (TileSeams)
+///                [,naht=&lt;n&gt;]         wie viele Wuerfe je Zelle verglichen werden
+///                [,spieler=&lt;n&gt;]      wie viele Startplaetze (1..5)
+///                [,truppe=&lt;n&gt;]       Fahrzeuge je Spieler
+///                [,wasser=&lt;prozent&gt;] Wasseranteil, sonst der Median 18,55 %
+///                [,samen=&lt;n&gt;]        der Wuerfelsamen
 ///                [,boden=&lt;n&gt;]        welcher Bodenblock (siehe TilePalette)
 ///                [,from=&lt;ordner&gt;]    wo NN.CWP/NN.PAL liegen
 ///                [,quelle=&lt;x.CWM&gt;]   statt erzeugen: diese Karte einlesen
@@ -179,6 +187,21 @@ public partial class MainMenu
                 "(Assets/Legacy/DATA) noch unter user://data/DATA noch auf einer eingelegten CD. " +
                 "Mit »,from=<ordner>« laesst sich der Ordner nennen.");
             return 2;
+        }
+
+        // ⚠ Den Kachelsatz NACHZIEHEN, wenn er nur im Entwicklungsbaum liegt.
+        // ContentBuilder.CopyTilesets steht am Ende eines vollen Imports; am
+        // 13.08.2026 existierte user://data/DATA darum gar nicht, und in einer
+        // ausgelieferten Fassung waere der Editor ohne Kachelsatz gewesen. Der
+        // Editor zieht ihn jetzt selbst nach — und uebt damit denselben Weg aus,
+        // den der Import nimmt, ohne dass ein voller Import laufen muss.
+        {
+            string root = ProjectSettings.GlobalizePath(Core.Content.UserRoot).TrimEnd('/', '\\');
+            long n = ContentBuilder.CopyTileset(ts, files.Value.Cwp, files.Value.Pal, root,
+                                                say, out bool copied);
+            if (copied)
+                say($"Kachelsatz {ts:00} nach {root}/DATA nachgezogen ({n / 1024} KiB) — " +
+                    "ohne ihn laeuft der Editor nur im Entwicklungsbaum");
         }
 
         try

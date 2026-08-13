@@ -158,8 +158,22 @@ public sealed class MapTerrain
 
     /// <summary>
     /// Ein Gelaende bauen. <paramref name="flat"/> ist die GEGENPROBE: alles auf
-    /// Hoehe 0, kein Wasser, alles frei — auf so einer Karte muss der Pruefstand
-    /// 0 Bauplaetze melden (<c>can_build_here</c> verlangt vier Eckhoehen ≥ 2).
+    /// Hoehe 0, kein Wasser, alles frei.
+    ///
+    /// <para>⚠ <b>BERICHTIGT 13.08.2026.</b> Hier stand, auf so einer Karte muesse
+    /// der Pruefstand 0 Bauplaetze melden, weil <c>can_build_here</c> vier
+    /// Eckhoehen ≥ 2 verlange. Die Lesung ist widerlegt (siehe
+    /// <see cref="MapCheck.MinCornerClass"/>): geprueft wird die sec2-KLASSE, und
+    /// auf einer flachen, wasserfreien Karte ist jede Zelle »offenes Land«. Die
+    /// flache Karte hat also viele Bauplaetze — gemessen 3843 von 4096 auf
+    /// 64x64, und die fehlenden 253 sind der letzte Rand, dem der vierte Eckpunkt
+    /// fehlt.</para>
+    ///
+    /// <para>Wozu <paramref name="flat"/> weiter taugt: als degenerierte Probe,
+    /// bei der jeder Gelaendezaehler seinen Grenzwert melden MUSS — 0 Wasser,
+    /// 0 Uferzellen, 0 Zellen mit hoeherem Nachbarn, 0 Hangkanten, 100 % ebene
+    /// Zellen und 0,00 % harte Naehte. Ein Zaehler, der dort etwas anderes sagt,
+    /// rechnet falsch.</para>
     /// </summary>
     public static MapTerrain Build(int w, int h, uint seed, double waterShare,
                                    bool flat, Action<string> say)

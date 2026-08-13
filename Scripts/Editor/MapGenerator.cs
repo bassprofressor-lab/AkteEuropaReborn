@@ -48,6 +48,23 @@ public static class MapGenerator
     /// <summary>Wie viele Einheiten je Spieler. UNSERE Setzung.</summary>
     public const int TroopDefault = 6;
 
+    /// <summary>
+    /// Auf welche Hoehenstufe ein Startplatz planiert wird. <b>UNSERE Setzung</b>,
+    /// und seit dem 13.08.2026 auch nur noch das.
+    ///
+    /// <para>⚠ Hier stand <c>MapCheck.MinCornerHeight</c>, also die Zahl aus der
+    /// Bauplatzpruefung — unter der Annahme, ein Bauplatz brauche vier Eckhoehen
+    /// ≥ 2. Diese Lesung ist widerlegt (<see cref="MapCheck.MinCornerClass"/>):
+    /// die Pruefung liest sec2-KLASSEN, nicht Hoehen, und ein Bauplatz haengt
+    /// darum gar nicht an der Hoehe. Die Zahl bleibt 2, aber aus einem anderen
+    /// Grund: Stufe 2 tragen in den 26 gelieferten Karten 10,5 % der Zellen, sie
+    /// liegt zwei Stufen ueber dem Wasserspiegel, und der abgestufte Vorplatz von
+    /// <see cref="MapTerrain.Plateau"/> kommt damit ohne Sprung ueber 1 nach
+    /// unten aus. Eine 0 waere ebenso baubar, wuerde die Basis aber ans
+    /// Wasserniveau setzen.</para>
+    /// </summary>
+    public const int PlateauLevel = 2;
+
     /// <summary>Die Basis: Typ 1, Grundflaeche 6x4 (in 82 von 83 gemessenen
     /// Faellen), eine Tuer auf (4,2) — 73 von 73 —, 1200 Trefferpunkte
     /// (map_02, map_09).</summary>
@@ -243,7 +260,7 @@ public static class MapGenerator
                 continue;
             }
             var (col, row) = found.Value;
-            t.Plateau(col, row, PlotW, PlotH + 1, MapCheck.MinCornerHeight, locked);
+            t.Plateau(col, row, PlotW, PlotH + 1, PlateauLevel, locked);
             made.Add(new Start(p, col, row, PlotW, PlotH));
         }
         return made;

@@ -360,15 +360,58 @@ public sealed class ContentBuilder
             {
                 string? cwp = Find($"DATA/{ts:00}.CWP"), pal = Find($"DATA/{ts:00}.PAL");
                 if (cwp == null || pal == null) continue;
-                File.Copy(cwp, $"{dir}/{ts:00}.CWP", true);
-                File.Copy(pal, $"{dir}/{ts:00}.PAL", true);
-                bytes += new FileInfo(cwp).Length + new FileInfo(pal).Length;
-                TilesetsCopied++;
+                long n = CopyTileset(ts, cwp, pal, _dst, say, out _);
+                if (n > 0) { bytes += n; TilesetsCopied++; }
             }
             say($"Kachelsaetze fuer den Editor: {TilesetsCopied} Paare NN.CWP/NN.PAL " +
                 $"nach {dir} ({bytes / 1024 / 1024} MiB)");
         }
         catch (Exception e) { say("Kachelsaetze: " + e.Message); }
+    }
+
+    /// <summary>
+    /// EIN Kachelsatz nach <c>&lt;dst&gt;/DATA</c>. Herausgezogen und oeffentlich,
+    /// damit der Editor ihn EINZELN nachziehen kann.
+    ///
+    /// <para>⚠ Der Grund ist gemessen: <see cref="CopyTilesets"/> laeuft am ENDE
+    /// eines vollen Imports, hinter 79 MB ausgepacktem Ton. Am 13.08.2026 war
+    /// <c>user://data/DATA</c> darum gar nicht vorhanden — der Ordner existierte
+    /// nicht —, obwohl der Aufruf im Import steht: der letzte Import lief, bevor
+    /// es ihn gab. Der Editor zieht den Kachelsatz jetzt selbst nach, wenn er ihn
+    /// nur im Entwicklungsbaum findet, und damit ist dieser Weg auch OHNE einen
+    /// vollen Import ausgeuebt. Ein Weg, den nichts ausuebt, ist kein Weg.</para>
+    /// </summary>
+    /// <returns>Wie viele Bytes am Ziel liegen, oder 0 bei einem Fehlschlag.
+    /// <paramref name="copied"/> sagt, ob dafuer etwas geschrieben wurde — sonst
+    /// lag es schon richtig da.</returns>
+    public static long CopyTileset(int tileset, string cwp, string pal, string dstRoot,
+                                   Action<string> say, out bool copied)
+    {
+        copied = false;
+        try
+        {
+            string dir = dstRoot.TrimEnd('/', '\\') + "/DATA";
+            Directory.CreateDirectory(dir);
+            string dc = $"{dir}/{tileset:00}.CWP", dp = $"{dir}/{tileset:00}.PAL";
+            if (Path.GetFullPath(cwp) == Path.GetFullPath(dc)) return 0;   // schon dort
+            // schon einmal kopiert und gleich lang: nicht bei jedem Lauf 3,5 MB
+            // schaufeln. Beim IMPORT gilt das auch — dort wird ohnehin aus
+            // derselben Quelle kopiert.
+            if (!(File.Exists(dc) && File.Exists(dp)
+                  && new FileInfo(dc).Length == new FileInfo(cwp).Length
+                  && new FileInfo(dp).Length == new FileInfo(pal).Length))
+            {
+                File.Copy(cwp, dc, true);
+                File.Copy(pal, dp, true);
+                copied = true;
+            }
+            return new FileInfo(dc).Length + new FileInfo(dp).Length;
+        }
+        catch (Exception e)
+        {
+            say($"Kachelsatz {tileset:00} nicht kopiert: {e.Message}");
+            return 0;
+        }
     }
 
     /// <summary>Every level the sources hold, by stem, first root winning.</summary>
@@ -931,6 +974,56 @@ public sealed class ContentBuilder
         File.WriteAllText(_dst + "/Maps/sight_circle.json", sb.ToString(), new UTF8Encoding(false));
     }
 
+    /// <summary>
+    /// <c>aircraft.json</c> — und die drei fehlenden Bytes.
+    ///
+    /// <para>⚠⚠ <b>HIER FEHLT DER PREIS, und die Gegenseite fehlt auch noch.</b>
+    /// Diese Datei schreibt speed, hp, payload, airframe, attack, defence,
+    /// sight, ammo und fuel — aber nicht cost_w/cost_f/cost_s. Die Engine liest
+    /// ueber <c>Core.Content.Path</c> genau diese Kopie unter
+    /// <c>user://data/Maps</c>, und die verdeckt die reichere Fassung im Baum
+    /// (<c>Assets/Legacy/Maps/aircraft.json</c> aus <c>aircraft_export.py</c>,
+    /// die die Preise traegt). Nachgesehen am 13.08.2026: die Kopie unter
+    /// <c>user://data</c> hat genau 12 Felder, keines davon ein Preis. Deshalb
+    /// steht in <c>Rendering.MapEntityLayer.AirPriceByPayload</c> ein Rueckfall,
+    /// und ohne ihn waeren Flugzeuge umsonst (gemessen: nach 40 Kaeufen stand das
+    /// Teilelager unveraendert auf 300/400/200).</para>
+    ///
+    /// <para>⚠ <b>Und die Adresse, die im Umlauf ist, ist um EINS verschoben.</b>
+    /// Notiert war <c>+0x1F/+0x20/+0x21</c> — das sind die Abstaende in
+    /// <b>sec120</b> einer Karte, wo ein fuehrendes Freigabe-Byte alles um eins
+    /// schiebt (<c>CwmExtra.AirDesigns</c> liest dort CostW/CostF/CostS an
+    /// 0x1f/0x20/0x21 und Speed an 0x22). In der VORLAGENTABELLE der EXE
+    /// @0x51b021, aus der <c>ExeTables.Aircraft</c> liest, liegen sie deshalb an
+    /// <b>0x1E / 0x1F / 0x20</b>; 0x21 ist dort die Geschwindigkeit. Wer die
+    /// notierte Adresse uebernimmt, schreibt cost_w = cost_f, cost_f = cost_s und
+    /// cost_s = Geschwindigkeit — und es faellt nicht auf, weil ein Vergleich
+    /// gegen sec120 an denselben verschobenen Abstaenden trotzdem stimmt.</para>
+    ///
+    /// <para><b>Belegt an den Bytes, 8 von 8:</b> die acht Saetze der EXE geben
+    /// an 0x1E/0x1F/0x20 die Werte 50/50/0 (Jagdflieger), 80/70/10 (Bomber),
+    /// 0/40/30 (Spion), 0/30/50 (Transportheli), 60/40/0 (Kampfhubschrauber),
+    /// 0/30/40 (Treibstoffheli), 0/30/40 (Munitionheli) und 0/30/150
+    /// (Mechanikerheli) — Zeichen fuer Zeichen die Tabelle, die
+    /// <c>AirPriceByPayload</c> aus 13 Karten mit sec120 zurueckgerechnet hat.
+    /// </para>
+    ///
+    /// <para><b>Was zu tun ist, und warum es hier NICHT getan wurde:</b>
+    /// <c>ExeTables.AircraftTemplate</c> braucht drei Felder und drei Zeilen
+    /// (<c>CostW = r[0x1e], CostF = r[0x1f], CostS = r[0x20]</c>), und danach
+    /// gehoeren sie in die Zeile unten. <c>Scripts/Import/ExeTables.cs</c> steht
+    /// heute unter fremder Hand. Und die Reihenfolge ist wichtig: solange nur
+    /// EINE der beiden Seiten steht, sind Flugzeuge umsonst — der Rueckfall in
+    /// <c>AirPriceByPayload</c> greift naemlich nur, wenn die Summe der drei
+    /// Preise 0 ist. Schreibt diese Zeile drei Nullen mit, bleibt die Summe 0 und
+    /// nichts aendert sich; schreibt sie falsche Werte, greift der Rueckfall
+    /// nicht mehr und es wird still falsch abgerechnet.</para>
+    ///
+    /// <para>⚠ Die Zeile <c>»n mit gelesenem Preis«</c> im Gefechtsprotokoll ist
+    /// dabei KEIN Beleg: sie meldete »8 mit gelesenem Preis«, obwohl die Datei
+    /// keinen Preis traegt — gezaehlt wird erst, nachdem der Rueckfall die Werte
+    /// eingesetzt hat.</para>
+    /// </summary>
     private void WriteAircraft(ExeTables t)
     {
         var sb = new StringBuilder();

@@ -27,10 +27,15 @@ using Godot;
 /// <para><b>Welche Fehlerklassen er sehen kann</b> — die Frage, die jedes gruene
 /// Ergebnis rechtfertigen muss:</para>
 /// <list type="number">
-///   <item><b>Keine Bauplaetze.</b> Die Falle, an der eine flach erzeugte Karte
-///     stirbt: <c>can_build_here</c> @0x4203C0 will Hangbyte 0 und alle vier
-///     Eckhoehen ≥ 2 (@0x420360). Gegenprobe: <c>--map-new=…,flach</c> erzeugt
-///     dieselbe Karte auf Hoehe 0, und dieser Zaehler muss dann 0 melden.</item>
+///   <item><b>Keine Bauplaetze.</b> <c>can_build_here</c> will die imap frei, das
+///     Hangbyte 0 und alle vier Ecken in <b>sec2</b> auf Klasse ≥ 2, »offenes
+///     Land« (<c>corners_carry</c> @0x4211A0). ⚠ <b>BERICHTIGT 13.08.2026:</b>
+///     hier stand »alle vier EckHOEHEN ≥ 2«, und das war widerlegt — siehe
+///     <see cref="MinCornerClass"/>. Die Gegenprobe <c>,flach</c> gehoerte zu der
+///     falschen Lesung: auf einer Karte auf Hoehe 0 ohne Wasser ist jede Zelle
+///     offenes Land, also SIND dort Bauplaetze, und der Zaehler meldet richtig
+///     viele. Was <c>,flach</c> weiterhin taugt, steht bei
+///     <c>MapTerrain.Build</c>.</item>
 ///   <item><b>Bild und Raster passen nicht zusammen.</b> Das PNG wird geoeffnet
 ///     und seine Groesse gegen <c>pixel_w</c>/<c>pixel_h</c> gehalten.</item>
 ///   <item><b>Die drei Raster laufen auseinander.</b> Der Kachelcode sagt
@@ -62,9 +67,30 @@ using Godot;
 /// </summary>
 public static class MapCheck
 {
-    /// <summary>Die Untergrenze aus <c>can_build_here</c> — dieselbe Zahl wie
-    /// <c>Rendering.MapEntityLayer.MinCornerHeight</c>.</summary>
-    public const int MinCornerHeight = 2;
+    /// <summary>
+    /// Die Untergrenze aus <c>corners_carry</c> — dieselbe Zahl wie
+    /// <c>Rendering.MapEntityLayer.MinCornerClass</c>: <b>2</b>, »offenes Land«.
+    ///
+    /// <para>⚠ <b>BERICHTIGT 13.08.2026, und der alte Name war Teil des
+    /// Fehlers.</b> Hier stand <c>MinCornerHeight</c>, und dieser Pruefstand hielt
+    /// die Zahl gegen die vier ECKHOEHEN einer Zelle. Das ist widerlegt: die
+    /// Tafel, an der das Original entscheidet, ist <b>sec2</b> (257x257 Byte,
+    /// 0xA3AEB0 bzw. 0xA39F10 auf F:, aus der DATEI gelesen — von 18 Zugriffen
+    /// genau einer schreibend), und ihre Werte sind KLASSEN: 0 unpassierbar,
+    /// 1 Ufer/Sand, 2 offenes Land, 3 besonderes Land. <c>corners_carry</c>
+    /// @0x4211A0 verlangt »offenes Land auf allen vier Ecken« und hat mit dem
+    /// Hoehengitter nichts zu tun. Gefunden hat es Agent <i>kampagne</i>
+    /// (Commit a917d20); was die falsche Lesung gekostet hat, steht dort als
+    /// Zahl: auf map_23 gab es fuer die Feld-Rohstoffmine 0 statt 57
+    /// Bauplaetze.</para>
+    ///
+    /// <para>Gelesen wird die Tafel aus dem <c>zones</c>-Block der
+    /// <c>.entities.json</c> — derselbe Block, den <c>MapEntityLayer.ZoneAt</c>
+    /// im Spiel liest. Der Editor SCHREIBT sie schon: <c>MapFactory.Paint</c>
+    /// setzt Kachel, imap und sec2 in einem Zug (Wasser und Gesperrt → 0,
+    /// rau → 1, frei → 2).</para>
+    /// </summary>
+    public const int MinCornerClass = 2;
 
     /// <summary>Steigung, ab der ein Bodenfahrzeug nicht mehr hochkommt —
     /// dieselbe Zahl wie <c>Simulation.NavGrid.MaxClimb</c>. UNSERE Setzung,
@@ -160,26 +186,47 @@ public static class MapCheck
         Objects(w, h, code, say);
 
         // ---- Bauplaetze -----------------------------------------------------
-        // Der Zellentest von can_build_here @0x4203C0, so weit er ohne
-        // Gebaeudemuster geht: die imap muss FREI sein (0xFFFE, also
-        // Gelaendeklasse 0), das Hangbyte 0, und alle vier Eckhoehen ≥ 2.
-        // Ausserhalb der Karte ist die Hoehe 0 (NavGrid.ElevAt), der aeussere
-        // Rand kann also nie ein Bauplatz sein.
-        int Elev(int c, int r) => c >= 0 && c < w && r >= 0 && r < h ? elev[r * w + c] : 0;
+        // Der Zellentest von can_build_here, so weit er ohne Gebaeudemuster
+        // geht: die imap muss FREI sein (0xFFFE, also Gelaendeklasse 0), das
+        // Hangbyte 0, und alle vier Ecken muessen in sec2 die Klasse
+        // MinCornerClass tragen — siehe dort, das ist KEINE Hoehe.
+        //
+        // ⚠ Ausserhalb der eingespielten Breite/Hoehe gibt es −1, genau wie in
+        // MapEntityLayer.ZoneAt: der letzte Rand hat keinen vierten Eckpunkt und
+        // wird darum abgelehnt. Lieber ein Platz zu wenig als einer, der auf
+        // einem Wert steht, den wir nicht haben.
+        var zone = Zones(ent.RootElement, w, h, out bool hasZones);
+        if (!hasZones)
+            say("  sec2 (zones) fehlt in der .entities.json — die vierte Frage von " +
+                "can_build_here ist NICHT gestellt, die Bauplatzzahl unten ist darum " +
+                "eine OBERGRENZE und kein Befund");
+        int Zone(int c, int r) => c >= 0 && c < w && r >= 0 && r < h ? zone[r * w + c] : -1;
         var buildable = new bool[n];
-        int sites = 0;
+        int sites = 0, sitesNoZone = 0;
         for (int r = 0; r < h; r++)
             for (int c = 0; c < w; c++)
             {
                 int i = r * w + c;
-                bool ok = flag[i] == 0 && ground[i] == 0
-                          && Elev(c, r) >= MinCornerHeight && Elev(c, r + 1) >= MinCornerHeight
-                          && Elev(c + 1, r) >= MinCornerHeight && Elev(c + 1, r + 1) >= MinCornerHeight;
+                bool cell = flag[i] == 0 && ground[i] == 0;
+                bool corners = Zone(c, r) >= MinCornerClass && Zone(c + 1, r) >= MinCornerClass
+                            && Zone(c, r + 1) >= MinCornerClass
+                            && Zone(c + 1, r + 1) >= MinCornerClass;
+                if (cell) sitesNoZone++;
+                bool ok = cell && (!hasZones || corners);
                 buildable[i] = ok;
                 if (ok) sites++;
             }
-        say($"  Bauplatzzellen (imap frei, Hangbyte 0, vier Ecken ≥ {MinCornerHeight}): " +
-            $"{sites} von {n} = {Pc(sites, n)}  [26 Karten: Median 12,8 %, Spanne 1,7..34,3 %]");
+        say($"  Bauplatzzellen (imap frei, Hangbyte 0, vier Ecken in sec2 ≥ " +
+            $"{MinCornerClass} = »offenes Land«): {sites} von {n} = {Pc(sites, n)}" +
+            $"  [26 Karten: Median 26,45 %, Spanne 9,85..44,84 %]");
+        say($"    ohne die Eckenfrage waeren es {sitesNoZone} — die Differenz " +
+            $"{sitesNoZone - sites} ist genau das, was sec2 beitraegt");
+        // ⚠ Die Vergleichszahl ist NEU GEMESSEN, weil die alte zu der widerlegten
+        // Hoehenlesung gehoerte: mit »vier Eckhoehen ≥ 2« kamen dieselben 26
+        // Karten auf Median 12,76 % (1,67..34,31) — genau die Spanne, die hier
+        // bis zum 13.08.2026 stand. Mit der sec2-Klasse sind es Median 26,45 %
+        // (9,85..44,84). Eine berichtigte Regel braucht eine berichtigte
+        // Messlatte, sonst beanstandet der Pruefstand die gelieferten Karten.
         if (sites == 0) { say("  ^ FEHLER: auf dieser Karte kann niemand bauen"); bad++; }
 
         // ---- Einheiten und Gebaeude: ist die Karte spielbar? ---------------
@@ -526,6 +573,41 @@ public static class MapCheck
             return 1;
         }
         return 0;
+    }
+
+    /// <summary>
+    /// Die sec2-Tafel aus dem <c>zones</c>-Block, in unser Zeilenraster gebracht.
+    /// Genau der Block, den <c>MapEntityLayer.ZoneAt</c> im Spiel liest — ein
+    /// Pruefstand, der eine andere Quelle nimmt als die Engine, prueft die
+    /// falsche Karte.
+    /// </summary>
+    private static int[] Zones(JsonElement ent, int w, int h, out bool has)
+    {
+        var z = new int[w * h];
+        for (int i = 0; i < z.Length; i++) z[i] = -1;
+        has = false;
+        if (!ent.TryGetProperty("zones", out var zn) || zn.ValueKind != JsonValueKind.Object)
+            return z;
+        if (!zn.TryGetProperty("grid", out var grid) || grid.ValueKind != JsonValueKind.Array)
+            return z;
+        int r = 0;
+        foreach (var row in grid.EnumerateArray())
+        {
+            if (r >= h) break;
+            if (row.ValueKind == JsonValueKind.Array)
+            {
+                int c = 0;
+                foreach (var v in row.EnumerateArray())
+                {
+                    if (c >= w) break;
+                    z[r * w + c] = v.GetInt32();
+                    c++;
+                }
+            }
+            r++;
+        }
+        has = r > 0;
+        return z;
     }
 
     private static bool TouchesWater(int w, int h, byte[] ground, int c, int r)
