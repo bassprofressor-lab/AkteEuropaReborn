@@ -317,14 +317,59 @@ public sealed class ContentBuilder
                 try { File.Delete(unpacked); } catch (Exception) { /* leave it */ }
         }
 
+        // ---- die Kachelsaetze selbst, fuer den Karteneditor ------------------
+        CopyTilesets(Say);
+
         Say($"fertig: {MapsBaked} Karten, {EntitiesWritten} Spielstaende, " +
             $"{TablesWritten} Tabellen, {SpriteFrames} Einheitenbilder, " +
-            $"{SoundsWritten} Klaenge, {MusicWritten} Musikstuecke");
+            $"{SoundsWritten} Klaenge, {MusicWritten} Musikstuecke, " +
+            $"{TilesetsCopied} Kachelsaetze");
         foreach (string m in Missing()) Say("fehlt noch: " + m);
         return MapsBaked > 0;
     }
 
     private ExeTables? _exe;
+
+    /// <summary>Wie viele <c>NN.CWP</c>/<c>NN.PAL</c>-Paare der Import
+    /// mitgenommen hat.</summary>
+    public int TilesetsCopied;
+
+    /// <summary>
+    /// <c>NN.CWP</c> und <c>NN.PAL</c> nach <c>user://data/DATA</c> kopieren.
+    ///
+    /// <para>⚠ <b>Warum das dazugehoert.</b> Im SPIEL oeffnet die Engine nie eine
+    /// <c>.CWP</c> — die Kartenbilder sind vorgebacken. Der KARTENEDITOR muss
+    /// aber backen, und dafuer braucht er den Kachelsatz. Bis heute kopierte der
+    /// Import ihn nicht mit, also fand
+    /// <c>Editor.MapGenerator.FindTileset</c> ihn nur im Entwicklungsbaum
+    /// (<c>Assets/Legacy/DATA</c>) oder auf einer eingelegten CD: in der
+    /// ausgelieferten Fassung lief der Editor gar nicht.</para>
+    ///
+    /// <para>Kopiert werden alle Kachelsaetze 00..99, die die Quellen tragen —
+    /// zusammen wenige Megabyte, und der Editor soll nicht auf die 26
+    /// Kachelsaetze der gelieferten Karten beschraenkt sein.</para>
+    /// </summary>
+    private void CopyTilesets(Action<string> say)
+    {
+        try
+        {
+            string dir = _dst + "/DATA";
+            Directory.CreateDirectory(dir);
+            long bytes = 0;
+            for (int ts = 0; ts < 100; ts++)
+            {
+                string? cwp = Find($"DATA/{ts:00}.CWP"), pal = Find($"DATA/{ts:00}.PAL");
+                if (cwp == null || pal == null) continue;
+                File.Copy(cwp, $"{dir}/{ts:00}.CWP", true);
+                File.Copy(pal, $"{dir}/{ts:00}.PAL", true);
+                bytes += new FileInfo(cwp).Length + new FileInfo(pal).Length;
+                TilesetsCopied++;
+            }
+            say($"Kachelsaetze fuer den Editor: {TilesetsCopied} Paare NN.CWP/NN.PAL " +
+                $"nach {dir} ({bytes / 1024 / 1024} MiB)");
+        }
+        catch (Exception e) { say("Kachelsaetze: " + e.Message); }
+    }
 
     /// <summary>Every level the sources hold, by stem, first root winning.</summary>
     private List<(string Stem, string Path)> Levels(string pattern)
@@ -770,22 +815,43 @@ public sealed class ContentBuilder
     private void WriteBuildingPatterns(CwpFile cwp, PalFile pal, int tileset)
     {
         if (!cwp.HasBuildings || !_tilesetsWritten.Add(tileset)) return;
-        Directory.CreateDirectory($"{_dst}/Buildings");
-        File.WriteAllText($"{_dst}/Buildings/tileset_{tileset:00}.json",
-                          BuildingPatterns.Write(cwp, tileset), new UTF8Encoding(false));
-        // and the pictures, so a raised building can actually be seen
-        var (png, meta) = BuildingPatterns.WriteAtlas(cwp, pal, tileset);
-        if (png != null && meta.Length > 0)
-        {
-            png.SavePng($"{_dst}/Buildings/tileset_{tileset:00}_tiles.png");
-            File.WriteAllText($"{_dst}/Buildings/tileset_{tileset:00}_tiles.json",
-                              meta, new UTF8Encoding(false));
-        }
+        // EIN Schreibweg, damit Import und Editor nicht auseinanderlaufen koennen
+        ExportBuildingPatterns(cwp, pal, tileset, _dst);
         BuildingTilesets++;
     }
 
     /// <summary>How many tileset pattern files this run wrote.</summary>
     public int BuildingTilesets;
+
+    /// <summary>
+    /// Dieselben Dateien, aber OHNE einen laufenden Import — der Karteneditor
+    /// braucht sie.
+    ///
+    /// <para>⚠ Der Anlass ist ein gemessener Ausfall: <see cref="ExportMap"/>
+    /// wurde am 12.08.2026 aus <see cref="BakeOne"/> herausgezogen, damit der
+    /// Editor denselben Schreibweg nimmt — aber der Aufruf von
+    /// <see cref="WriteBuildingPatterns"/> blieb in <c>BakeOne</c> zurueck. Eine
+    /// vom Editor erzeugte Karte auf einem Kachelsatz, den keine gelieferte
+    /// Karte benutzt, hatte darum keine <c>Buildings/tileset_nn.json</c>, und
+    /// ohne die kann nichts gebaut und kein Gebaeude gezeichnet werden: die
+    /// Engine oeffnet im Spiel nie eine <c>.CWP</c>.</para>
+    ///
+    /// <para>Rueckgabe ist die Zahl der geschriebenen Musterbilder, 0 wenn die
+    /// <c>.CWP</c> keinen Gebaeudeteil hat.</para>
+    /// </summary>
+    public static int ExportBuildingPatterns(CwpFile cwp, PalFile pal, int tileset, string dstRoot)
+    {
+        if (!cwp.HasBuildings) return 0;
+        string dir = $"{dstRoot.TrimEnd('/', '\\')}/Buildings";
+        Directory.CreateDirectory(dir);
+        File.WriteAllText($"{dir}/tileset_{tileset:00}.json",
+                          BuildingPatterns.Write(cwp, tileset), new UTF8Encoding(false));
+        var (png, meta) = BuildingPatterns.WriteAtlas(cwp, pal, tileset);
+        if (png == null || meta.Length == 0) return 0;
+        png.SavePng($"{dir}/tileset_{tileset:00}_tiles.png");
+        File.WriteAllText($"{dir}/tileset_{tileset:00}_tiles.json", meta, new UTF8Encoding(false));
+        return png.GetWidth() * png.GetHeight();
+    }
 
     /// <summary>The map's own description: size, tileset, and the per-cell grid
     /// the game needs for elevation and walkability.</summary>

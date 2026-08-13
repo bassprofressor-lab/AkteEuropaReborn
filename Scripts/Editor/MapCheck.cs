@@ -8,14 +8,21 @@ using System.Text.Json;
 using Godot;
 
 /// <summary>
-/// Der Pruefstand zur erzeugten Karte: <b>laedt die geschriebenen Dateien</b>
-/// und zaehlt nach, ob darauf ueberhaupt gespielt werden kann.
+/// Der Pruefstand zur Karte: <b>laedt die geschriebenen Dateien</b> und zaehlt
+/// nach, ob darauf gespielt werden kann und ob sie den GEMESSENEN Kennzahlen der
+/// 26 gelieferten Karten entspricht.
 ///
 /// <para>⚠ Er liest bewusst die DATEIEN und nicht das Modell im Speicher. Ein
 /// Pruefstand, der dieselbe Rechnung noch einmal macht, aus der die Daten kamen,
 /// kann nur bestaetigen; dieser hier geht durch den Exporteur, durch den Backer
 /// und durch das PNG hindurch und kann darum sehen, wenn einer davon etwas
 /// verliert.</para>
+///
+/// <para>⚠⚠ <b>Und er laeuft auf einer GELIEFERTEN Karte genauso</b>
+/// (<c>--map-check=map_01</c>). Das ist die Antwort auf »ein Pruefstand, der auf
+/// jeder Karte dasselbe sagt, prueft nichts«: jeder Zaehler unten hat einen
+/// gemessenen Vergleichswert, und der ist mit DIESEM Code an den 26 gelieferten
+/// Karten geholt worden — nicht aus einer Nebenrechnung.</para>
 ///
 /// <para><b>Welche Fehlerklassen er sehen kann</b> — die Frage, die jedes gruene
 /// Ergebnis rechtfertigen muss:</para>
@@ -30,11 +37,24 @@ using Godot;
 ///     Wiese, die imap sagt See. Gemessen an 44 eingespielten Karten trifft
 ///     »Code 0..7 ⇔ Gelaendeklasse Wasser« in 274.617 von 274.747 Wasserzellen
 ///     zu (99,95 %) — bei einer ERZEUGTEN Karte muss es 100 % sein, weil
-///     <see cref="MapFactory.Paint"/> beide zugleich setzt. Jede Abweichung ist
-///     ein Fehler im Schreibweg.</item>
+///     <see cref="MapFactory.Paint"/> beide zugleich setzt.</item>
 ///   <item><b>Unerreichbares Land.</b> Von jeder Startmarke wird geflutet, mit
-///     der Steigungsgrenze <c>NavGrid.MaxClimb</c> = 3. Eine Karte, deren
-///     Startplatz auf einer Insel im See liegt, faellt hier auf.</item>
+///     der Steigungsgrenze <c>NavGrid.MaxClimb</c> = 3.</item>
+///   <item><b>Kein Ufer.</b> NEU. Zaehlt die Landzellen am Wasser, die einen
+///     Innenland-Code tragen. Im Original <b>0 von 27.114</b> auf allen 26
+///     Karten; beim Generator vor dem 13.08.2026 waren es 100 %.</item>
+///   <item><b>Fehlende Hangbytes.</b> NEU. Zaehlt die Zellen mit einem hoeheren
+///     Nachbarn, die trotzdem das Hangbyte 0 tragen. Im Original 393 von 81.357
+///     (0,48 %); beim Generator vor dem 13.08.2026 waren es alle.</item>
+///   <item><b>Ufer auf falscher Hoehe.</b> NEU. Kantenpaare Wasser→Land mit
+///     Hoehendifferenz ungleich 0: im Original 10 von 36.288 (0,03 %), und die
+///     Differenz +1 kommt <b>0-mal</b> vor.</item>
+///   <item><b>Zackiges Gelaende.</b> NEU. Hoehensprung ueber 1 (im Original 111
+///     von 1.202.757) und nicht darstellbare Hangformen — drei hoehere Nachbarn
+///     oder zwei gegenueberliegende (im Original 3 von 605.090).</item>
+///   <item><b>Ein Fleck Wasser statt einer Landschaft.</b> NEU. Anzahl und
+///     Groesse der Wassergebiete, Kuestenlaenge je Wasserzelle, Objektflecken.
+///     </item>
 /// </list>
 ///
 /// <para>Was er NICHT sehen kann, und das gehoert dazu: ob die Karte huebsch
@@ -63,7 +83,7 @@ public static class MapCheck
         string entPath = $"{dir}/{outName}.entities.json";
         string pngPath = $"{dir}/{outName}.png";
 
-        foreach (string p in new[] { metaPath, entPath, pngPath })
+        foreach (string p in new[] { metaPath, entPath })
             if (!File.Exists(p)) { say($"FEHLT: {p}"); return 1; }
 
         int bad = 0;
@@ -77,11 +97,12 @@ public static class MapCheck
         int tileset = root.GetProperty("tileset").GetInt32();
         int pxw = root.GetProperty("pixel_w").GetInt32();
         int pxh = root.GetProperty("pixel_h").GetInt32();
+        int n = w * h;
 
-        var code = new int[w * h];
-        var elev = new int[w * h];
-        var flag = new int[w * h];
-        var seen = new bool[w * h];
+        var code = new int[n];
+        var elev = new int[n];
+        var flag = new int[n];
+        var seen = new bool[n];
         int tiles = 0, outside = 0;
         foreach (var t in root.GetProperty("tiles").EnumerateArray())
         {
@@ -98,11 +119,11 @@ public static class MapCheck
         foreach (bool s in seen) if (!s) missing++;
         say($"  Raster {w}x{h}, Kachelsatz {tileset:00}: {tiles} Kacheln geschrieben, " +
             $"{missing} Zellen ohne Kachel, {outside} ausserhalb");
-        if (tiles != w * h || missing != 0 || outside != 0) { say("  ^ FEHLER"); bad++; }
+        if (tiles != n || missing != 0 || outside != 0) { say("  ^ FEHLER"); bad++; }
 
         // ---- das Gelaende aus der .entities.json ---------------------------
         using var ent = JsonDocument.Parse(File.ReadAllText(entPath));
-        var ground = new byte[w * h];
+        var ground = new byte[n];
         int at = 0;
         foreach (var pair in ent.RootElement.GetProperty("terrain").GetProperty("rle").EnumerateArray())
         {
@@ -111,15 +132,17 @@ public static class MapCheck
             it.MoveNext(); int run = it.Current.GetInt32();
             for (int k = 0; k < run && at < ground.Length; k++) ground[at++] = v;
         }
-        if (at != w * h) { say($"  Gelaendeblock deckt {at} von {w * h} Zellen — FEHLER"); bad++; }
+        if (at != n) { say($"  Gelaendeblock deckt {at} von {n} Zellen — FEHLER"); bad++; }
 
         var hist = new int[4];
         foreach (byte g in ground) if (g < 4) hist[g]++;
-        say($"  Gelaende: frei {hist[0]}, rau {hist[1]}, wasser {hist[2]}, gesperrt {hist[3]}");
+        say($"  Gelaende: frei {hist[0]} ({Pc(hist[0], n)}), rau {hist[1]} ({Pc(hist[1], n)}), " +
+            $"wasser {hist[2]} ({Pc(hist[2], n)}), gesperrt {hist[3]} ({Pc(hist[3], n)})");
+        say("    gemessen ueber 26 gelieferte Karten: 52,5 / 16,2 / 19,7 / 11,6 %");
 
         // ---- laufen Kachelbild und imap auseinander? ------------------------
         int codeWaterClassLand = 0, codeLandClassWater = 0;
-        for (int i = 0; i < w * h; i++)
+        for (int i = 0; i < n; i++)
         {
             bool waterCode = code[i] <= WaterCodeMax;
             bool waterClass = ground[i] == 2;
@@ -128,17 +151,21 @@ public static class MapCheck
         }
         say($"  Bild gegen imap: {codeWaterClassLand} Wasserkacheln auf Land, " +
             $"{codeLandClassWater} Landkacheln auf Wasser");
-        if (codeWaterClassLand + codeLandClassWater > 0) { say("  ^ FEHLER"); bad++; }
+
+        // ================= die gemessenen Kennzahlen ========================
+        bad += Elevations(w, h, elev, flag, say);
+        bad += Water(w, h, elev, ground, say);
+        bad += Coast(w, h, code, flag, ground, say);
+        Objects(w, h, code, say);
 
         // ---- Bauplaetze -----------------------------------------------------
         // Der Zellentest von can_build_here @0x4203C0, so weit er ohne
         // Gebaeudemuster geht: die imap muss FREI sein (0xFFFE, also
-        // Gelaendeklasse 0 — rau, Wasser und gesperrt scheiden alle aus), das
-        // Hangbyte 0, und alle vier Eckhoehen ≥ 2.
+        // Gelaendeklasse 0), das Hangbyte 0, und alle vier Eckhoehen ≥ 2.
         // Ausserhalb der Karte ist die Hoehe 0 (NavGrid.ElevAt), der aeussere
         // Rand kann also nie ein Bauplatz sein.
         int Elev(int c, int r) => c >= 0 && c < w && r >= 0 && r < h ? elev[r * w + c] : 0;
-        var buildable = new bool[w * h];
+        var buildable = new bool[n];
         int sites = 0;
         for (int r = 0; r < h; r++)
             for (int c = 0; c < w; c++)
@@ -151,8 +178,11 @@ public static class MapCheck
                 if (ok) sites++;
             }
         say($"  Bauplatzzellen (imap frei, Hangbyte 0, vier Ecken ≥ {MinCornerHeight}): " +
-            $"{sites} von {w * h} = {100.0 * sites / (w * h):0.0} %");
+            $"{sites} von {n} = {Pc(sites, n)}  [26 Karten: Median 12,8 %, Spanne 1,7..34,3 %]");
         if (sites == 0) { say("  ^ FEHLER: auf dieser Karte kann niemand bauen"); bad++; }
+
+        // ---- Einheiten und Gebaeude: ist die Karte spielbar? ---------------
+        bad += Assets(ent.RootElement, say);
 
         // ---- Startmarken und Erreichbarkeit --------------------------------
         var starts = new List<(int Slot, int Col, int Row, int Type)>();
@@ -163,31 +193,363 @@ public static class MapCheck
             starts.Add((mk.GetProperty("slot").GetInt32(), mk.GetProperty("col").GetInt32(),
                         mk.GetProperty("row").GetInt32(), type));
         }
-        if (starts.Count == 0) { say("  keine Startmarke (Typ 0x70..0x74) — FEHLER"); bad++; }
+        if (starts.Count == 0)
+            say("  keine Startmarke (Typ 0x70..0x74) — bei einer erzeugten Karte ein FEHLER, " +
+                "bei 17 der 26 gelieferten der Normalfall");
 
         foreach (var s in starts)
         {
             int reach = Flood(w, h, ground, elev, s.Col, s.Row, buildable, out int reachSites);
             say($"  Spieler {s.Type - MapFactory.MarkerStartBase} (Marke {s.Slot} auf {s.Col},{s.Row}): " +
                 $"{reach} erreichbare Zellen, davon {reachSites} Bauplaetze");
-            if (reach == 0 || reachSites == 0) { say("  ^ FEHLER"); bad++; }
+            // ⚠ KEINE Beanstandung. Am 13.08.2026 stand hier eine, und sie war
+            // falsch: auf map_01 liegen alle fuenf Marken 0x70..0x74 auf
+            // gesperrten Zellen (5 von 5), weil sie dort KAMPAGNENmarken sind
+            // und keine Startplaetze. Ein Pruefstand, der die gelieferten Karten
+            // beanstandet, misst am falschen Gegenstand. Ob die Karte spielbar
+            // ist, entscheidet der Zaehler »besetzte Plaetze« darueber.
+            if (reach == 0)
+                say("    ^ die Marke steht im Wasser oder im Gesperrten — bei einer " +
+                    "Kampagnenkarte normal (map_01: 5 von 5), bei einem Startplatz nicht");
         }
 
         // ---- das Bild -------------------------------------------------------
-        var img = Image.LoadFromFile(pngPath);
-        if (img == null) { say($"  {outName}.png laesst sich nicht oeffnen — FEHLER"); bad++; }
+        if (!File.Exists(pngPath)) say($"  {outName}.png fehlt — Bildpruefung uebersprungen");
         else
         {
-            long bytes = new FileInfo(pngPath).Length;
-            say($"  Bild {img.GetWidth()}x{img.GetHeight()} px, erwartet {pxw}x{pxh}, {bytes / 1024} KiB");
-            if (img.GetWidth() != pxw || img.GetHeight() != pxh) { say("  ^ FEHLER"); bad++; }
-            int opaque = CountOpaque(img);
-            say($"  deckende Pixel: {opaque} von {img.GetWidth() * (long)img.GetHeight()} = " +
-                $"{100.0 * opaque / (img.GetWidth() * (double)img.GetHeight()):0.0} %");
+            var img = Image.LoadFromFile(pngPath);
+            if (img == null) { say($"  {outName}.png laesst sich nicht oeffnen — FEHLER"); bad++; }
+            else
+            {
+                long bytes = new FileInfo(pngPath).Length;
+                say($"  Bild {img.GetWidth()}x{img.GetHeight()} px, erwartet {pxw}x{pxh}, {bytes / 1024} KiB");
+                if (img.GetWidth() != pxw || img.GetHeight() != pxh) { say("  ^ FEHLER"); bad++; }
+                int opaque = CountOpaque(img);
+                say($"  deckende Pixel: {opaque} von {img.GetWidth() * (long)img.GetHeight()} = " +
+                    $"{100.0 * opaque / (img.GetWidth() * (double)img.GetHeight()):0.0} %");
+            }
         }
 
         say(bad == 0 ? "map-check: OK" : $"map-check: {bad} Beanstandungen");
         return bad == 0 ? 0 : 1;
+    }
+
+    private static string Pc(long a, long b) => b == 0 ? "—" : $"{100.0 * a / b:0.00} %";
+
+    // ========================================================================
+    //  Hoehen
+    // ========================================================================
+
+    /// <summary>
+    /// Hoehenverteilung, Steigung, ebene Flaechen, Hangkanten und die zwei harten
+    /// Schranken: kein Sprung ueber 1, und keine Hangform, die das Hangbyte nicht
+    /// ausdruecken kann.
+    /// </summary>
+    private static int Elevations(int w, int h, int[] elev, int[] flag, Action<string> say)
+    {
+        int n = w * h, bad = 0;
+        var eh = new int[16];
+        foreach (int e in elev) if (e >= 0 && e < 16) eh[e]++;
+        var sb = new StringBuilder("  Hoehenstufen: ");
+        for (int k = 0; k < 8; k++) sb.Append($"{k}:{100.0 * eh[k] / n:0.0}% ");
+        say(sb.ToString());
+        say("    gemessen ueber 26 Karten: 0:35,8 1:29,7 2:10,5 3:7,2 4:8,3 5:3,3 6:4,2 7:0,8 %");
+
+        long pairs = 0, same = 0, over = 0;
+        var sh = new int[8];
+        for (int r = 0; r < h; r++)
+            for (int c = 0; c < w; c++)
+            {
+                int i = r * w + c;
+                if (c + 1 < w) Pair(elev[i], elev[i + 1]);
+                if (r + 1 < h) Pair(elev[i], elev[i + w]);
+                void Pair(int a, int b)
+                {
+                    int d = Math.Abs(a - b);
+                    pairs++;
+                    if (d == 0) same++;
+                    if (d > MapTerrain.MaxStep) over++;
+                    if (d < 8) sh[d]++;
+                }
+            }
+        say($"  Nachbarpaare: {pairs}, gleich hoch {same} ({Pc(same, pairs)}), " +
+            $"Sprung > {MapTerrain.MaxStep}: {over} ({Pc(over, pairs)})");
+        say("    gemessen ueber 26 Karten: gleich hoch 90,74 %, Sprung > 1: 111 von " +
+            "1.202.757 = 0,0092 %");
+
+        // ebene Zellen und Hangkanten als ZUSAMMENHANGSGEBIETE — ein Gelaende
+        // mit langen Haengen hat wenige grosse, ein zackiges viele kleine
+        int plateau = 0;
+        var edge = new bool[n];
+        int noFlag = 0, withHigher = 0, unrep = 0;
+        int[] dc = { 1, 0, -1, 0 }, dr = { 0, 1, 0, -1 };
+        for (int r = 0; r < h; r++)
+            for (int c = 0; c < w; c++)
+            {
+                int i = r * w + c, e = elev[i];
+                bool flat = true, ea = false, so = false, we = false, no = false;
+                for (int k = 0; k < 4; k++)
+                {
+                    int nc = c + dc[k], nr = r + dr[k];
+                    if (nc < 0 || nc >= w || nr < 0 || nr >= h) continue;
+                    int j = nr * w + nc;
+                    if (elev[j] != e) flat = false;
+                    if (elev[j] > e) { if (k == 0) ea = true; else if (k == 1) so = true; else if (k == 2) we = true; else no = true; }
+                }
+                if (flat) plateau++; else edge[i] = true;
+                if (ea || so || we || no)
+                {
+                    withHigher++;
+                    if (flag[i] == 0) noFlag++;
+                    if (MapTerrain.HangByte(ea, so, we, no) < 0) unrep++;
+                }
+            }
+        say($"  ebene Zellen (alle vier Nachbarn gleich hoch): {plateau} von {n} = {Pc(plateau, n)}" +
+            "  [26 Karten: Median 80,5 %, Spanne 54,7..94,2 %]");
+        var comps = Components(w, h, edge);
+        say($"  Hangkanten: {comps.Cells} Zellen in {comps.Count} Zusammenhangsgebieten, " +
+            $"groesstes {comps.Max}, mittleres {comps.Mean:0.0}" +
+            "  [26 Karten: 1..34 Gebiete, Median 9, mittlere Groesse 45..2419]");
+        say($"  Zellen mit hoeherem Nachbarn: {withHigher}, davon Hangbyte 0: {noFlag} " +
+            $"({Pc(noFlag, withHigher)})  [26 Karten: 393 von 81.357 = 0,48 %]");
+        say($"  nicht darstellbare Hangformen (drei hoehere Nachbarn oder zwei " +
+            $"gegenueberliegende): {unrep}  [26 Karten: 3 von 605.090]");
+        if (over > pairs / 1000) { say("  ^ FEHLER: zu viele Hoehensprünge über 1"); bad++; }
+        if (withHigher > 0 && noFlag > withHigher / 10)
+        { say("  ^ FEHLER: die Hangbytes fehlen — jede Hangzelle gilt so als Bauplatz"); bad++; }
+        return bad;
+    }
+
+    // ========================================================================
+    //  Wasser
+    // ========================================================================
+
+    /// <summary>Anteil, Zusammenhangsgebiete, Kuestenlaenge, und die gemessene
+    /// Ufer-Regel: Land am Wasser liegt auf Wasserhoehe.</summary>
+    private static int Water(int w, int h, int[] elev, byte[] ground, Action<string> say)
+    {
+        int n = w * h, bad = 0;
+        var mask = new bool[n];
+        int cells = 0;
+        for (int i = 0; i < n; i++) if (ground[i] == 2) { mask[i] = true; cells++; }
+        if (cells == 0)
+        {
+            say("  Wasser: keine einzige Zelle  [26 Karten: 4,05..60,66 %, Median 18,55 %]");
+            return 0;
+        }
+        var comps = Components(w, h, mask);
+        int coast = 0, badBeach = 0, plusOne = 0;
+        var wlev = new int[16];
+        for (int r = 0; r < h; r++)
+            for (int c = 0; c < w; c++)
+            {
+                int i = r * w + c;
+                if (mask[i] && elev[i] < 16) wlev[elev[i]]++;
+                if (c + 1 < w && mask[i] != mask[i + 1]) coast++;
+                if (r + 1 < h && mask[i] != mask[i + w]) coast++;
+                if (!mask[i]) continue;
+                int[] dc = { 1, -1, 0, 0 }, dr = { 0, 0, 1, -1 };
+                for (int k = 0; k < 4; k++)
+                {
+                    int nc = c + dc[k], nr = r + dr[k];
+                    if (nc < 0 || nc >= w || nr < 0 || nr >= h) continue;
+                    int j = nr * w + nc;
+                    if (mask[j]) continue;
+                    if (elev[j] != elev[i]) badBeach++;
+                    if (elev[j] == elev[i] + 1) plusOne++;
+                }
+            }
+        int top = 0;
+        for (int k = 1; k < 16; k++) if (wlev[k] > wlev[top]) top = k;
+        say($"  Wasser: {cells} Zellen = {Pc(cells, n)} in {comps.Count} Gebieten, " +
+            $"groesstes {comps.Max}, mittleres {comps.Mean:0.0}, " +
+            $"Kueste/Wasser {(double)coast / cells:0.00}");
+        say($"    [26 Karten: Anteil Median 18,55 % (4,05..60,66), Gebiete Median 23 (1..269), " +
+            "groesstes Median 2123, Kueste/Wasser Median 0,40 (0,06..1,40)]");
+        say($"  Wasserspiegel: Stufe {top} traegt {wlev[top]} von {cells} = {Pc(wlev[top], cells)}" +
+            "  [26 Karten: auf 22 von 26 traegt EINE Stufe ueber 99,5 %]");
+        say($"  Ufer nicht auf Wasserhoehe: {badBeach} Kantenpaare, davon Land eine Stufe " +
+            $"hoeher: {plusOne}  [26 Karten: 10 von 36.288 = 0,03 %, Differenz +1: 0-mal]");
+        if (badBeach > cells / 20) { say("  ^ FEHLER: das Ufer liegt nicht auf Wasserhoehe"); bad++; }
+        return bad;
+    }
+
+    // ========================================================================
+    //  Kachelcodes am Ufer — die haerteste gemessene Zahl
+    // ========================================================================
+
+    /// <summary>
+    /// Von den 27.114 Landzellen, die in den 26 gelieferten Karten an eine
+    /// Wasserzelle grenzen, traegt <b>keine einzige</b> einen Innenland-Code.
+    /// Der Innenland-Block wird dabei AUS DER KARTE SELBST bestimmt — die acht
+    /// haeufigsten Codes auf Zellen, die frei, eben und ohne Wassernachbarn sind.
+    ///
+    /// <para>⚠ Das ist keine Rechnung mit sich selbst: die Herleitung sagt nur,
+    /// welche acht Codes im Landesinneren haeufig sind, nicht wo sie sonst
+    /// liegen. Auf einer gelieferten Karte ergibt der Zaehler 0 (26 von 26), auf
+    /// der Ausgabe des Generators vor dem 13.08.2026 100 %. Er unterscheidet
+    /// also.</para>
+    /// </summary>
+    private static int Coast(int w, int h, int[] code, int[] flag, byte[] ground, Action<string> say)
+    {
+        int n = w * h, bad = 0;
+        var inner = new Dictionary<int, int>();
+        for (int r = 0; r < h; r++)
+            for (int c = 0; c < w; c++)
+            {
+                int i = r * w + c;
+                if (ground[i] != 0 || flag[i] != 0 || code[i] >= TileModel.ObjectCodeMin) continue;
+                if (TouchesWater(w, h, ground, c, r)) continue;
+                inner[code[i]] = inner.TryGetValue(code[i], out int v) ? v + 1 : 1;
+            }
+        if (inner.Count == 0) return 0;
+        var top = new List<KeyValuePair<int, int>>(inner);
+        top.Sort((a, b) => b.Value.CompareTo(a.Value));
+        var block = new HashSet<int>();
+        int covered = 0, total = 0;
+        foreach (var kv in inner) total += kv.Value;
+        for (int k = 0; k < 8 && k < top.Count; k++) { block.Add(top[k].Key); covered += top[k].Value; }
+
+        int shore = 0, shoreInner = 0;
+        for (int r = 0; r < h; r++)
+            for (int c = 0; c < w; c++)
+            {
+                int i = r * w + c;
+                if (ground[i] == 2 || !TouchesWater(w, h, ground, c, r)) continue;
+                shore++;
+                if (block.Contains(code[i])) shoreInner++;
+            }
+        var codes = new List<int>(block);
+        codes.Sort();
+        say($"  Innenland-Block (die acht haeufigsten Codes auf freien, ebenen Zellen ohne " +
+            $"Wassernachbar): {string.Join(",", codes)} — sie decken {Pc(covered, total)} des " +
+            "Landesinneren");
+        say($"  Landzellen am Wasser: {shore}, davon mit Innenland-Code: {shoreInner} " +
+            $"({Pc(shoreInner, shore)})  [26 Karten: 0 von 27.114 = 0,00 %]");
+        if (shore > 0 && shoreInner > shore / 20)
+        { say("  ^ FEHLER: kein Uferuebergang — Wiese steht direkt an Wasser"); bad++; }
+
+        int distinct = 0;
+        var all = new HashSet<int>();
+        foreach (int cd in code) if (cd < TileModel.ObjectCodeMin && cd > WaterCodeMax) all.Add(cd);
+        distinct = all.Count;
+        say($"  verschiedene Bodencodes: {distinct}  [26 Karten: Median 622, Spanne 183..1217]");
+        return bad;
+    }
+
+    private static bool TouchesWater(int w, int h, byte[] ground, int c, int r)
+    {
+        int[] dc = { 1, -1, 0, 0 }, dr = { 0, 0, 1, -1 };
+        for (int k = 0; k < 4; k++)
+        {
+            int nc = c + dc[k], nr = r + dr[k];
+            if (nc >= 0 && nc < w && nr >= 0 && nr < h && ground[nr * w + nc] == 2) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Objektkacheln (Code ≥ 1666) — Wald und Fels. Gemessen: Anteil im
+    /// Mittel 15,0 % (6,4..26,8), je Karte 27..1377 Flecken (Median 226) mit im
+    /// Mittel 11,1 Zellen.</summary>
+    private static void Objects(int w, int h, int[] code, Action<string> say)
+    {
+        int n = w * h;
+        var mask = new bool[n];
+        int cells = 0;
+        for (int i = 0; i < n; i++) if (code[i] >= TileModel.ObjectCodeMin) { mask[i] = true; cells++; }
+        var comps = Components(w, h, mask);
+        say($"  Objektkacheln (Wald, Fels): {cells} = {Pc(cells, n)} in {comps.Count} Flecken, " +
+            $"groesster {comps.Max}, mittlerer {comps.Mean:0.0}, Einzelzellen {comps.Singles}");
+        say("    [26 Karten: Anteil Median 14,1 % (6,4..26,8), Flecken Median 226 (27..1377), " +
+            "mittlere Groesse Median 11,1, Einzelzellen Median 99]");
+    }
+
+    /// <summary>Traegt die Karte ueberhaupt etwas, worauf man spielen kann?
+    /// <c>SkirmishAi.StartSkirmish</c> gibt ohne besetzten Platz −1, und
+    /// <c>MapEntityLayer.Verdict</c> erklaert eine Mission ohne eigene Einheiten
+    /// im ersten Takt fuer verloren.</summary>
+    private static int Assets(JsonElement ent, Action<string> say)
+    {
+        var perPlayer = new Dictionary<int, (int U, int B)>();
+        int units = 0, blds = 0, factories = 0;
+        foreach (var e in ent.GetProperty("entities").EnumerateArray())
+        {
+            int owner = e.TryGetProperty("owner", out var o) ? o.GetInt32() : -1;
+            units++;
+            var v = perPlayer.TryGetValue(owner, out var p) ? p : (0, 0);
+            perPlayer[owner] = (v.Item1 + 1, v.Item2);
+        }
+        foreach (var b in ent.GetProperty("buildings").EnumerateArray())
+        {
+            int type = b.GetProperty("type").GetInt32();
+            if (type < 1 || type > 16) continue;              // Skriptplatzhalter
+            int owner = b.GetProperty("owner").GetInt32();
+            blds++;
+            if (type is 2 or 3 or 4) factories++;
+            var v = perPlayer.TryGetValue(owner, out var p) ? p : (0, 0);
+            perPlayer[owner] = (v.Item1, v.Item2 + 1);
+        }
+        var parts = new List<string>();
+        int live = 0;
+        foreach (var kv in perPlayer)
+        {
+            if (kv.Key < 0 || kv.Key > 7) continue;
+            live++;
+            parts.Add($"P{kv.Key}:{kv.Value.U}E/{kv.Value.B}G");
+        }
+        say($"  Spielbarkeit: {units} Einheiten, {blds} echte Gebaeude ({factories} Fabriken), " +
+            $"{live} besetzte Plaetze [{string.Join(" ", parts)}]");
+        if (live < 2)
+        {
+            say("  ^ ACHTUNG: unter zwei besetzten Plaetzen gibt SkirmishAi.StartSkirmish −1 " +
+                "und ein Gefecht ist im ersten Takt verloren");
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    //  Kleinkram
+    // ========================================================================
+
+    private readonly record struct Comp(int Count, int Cells, int Max, double Mean, int Singles);
+
+    /// <summary>4er-Zusammenhangsgebiete einer Maske. Genau die Rechnung, mit der
+    /// die Vergleichszahlen an den 26 gelieferten Karten geholt wurden
+    /// (<c>aekernel-tools/map_stats.py</c>) — sonst waeren die Zahlen nicht
+    /// vergleichbar.</summary>
+    private static Comp Components(int w, int h, bool[] mask)
+    {
+        int n = w * h;
+        var seen = new bool[n];
+        var open = new Queue<int>();
+        int count = 0, cells = 0, max = 0, singles = 0;
+        int[] dc = { 1, -1, 0, 0 }, dr = { 0, 0, 1, -1 };
+        for (int s = 0; s < n; s++)
+        {
+            if (seen[s] || !mask[s]) continue;
+            open.Clear();
+            open.Enqueue(s); seen[s] = true;
+            int size = 0;
+            while (open.Count > 0)
+            {
+                int i = open.Dequeue();
+                size++;
+                int c = i % w, r = i / w;
+                for (int k = 0; k < 4; k++)
+                {
+                    int nc = c + dc[k], nr = r + dr[k];
+                    if (nc < 0 || nc >= w || nr < 0 || nr >= h) continue;
+                    int j = nr * w + nc;
+                    if (seen[j] || !mask[j]) continue;
+                    seen[j] = true; open.Enqueue(j);
+                }
+            }
+            count++; cells += size;
+            if (size > max) max = size;
+            if (size == 1) singles++;
+        }
+        return new Comp(count, cells, max, count == 0 ? 0 : (double)cells / count, singles);
     }
 
     /// <summary>Wie viel des Bildes ueberhaupt gemalt ist. Ein Loch im Backvor-

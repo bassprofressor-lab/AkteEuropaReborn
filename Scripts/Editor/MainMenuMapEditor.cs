@@ -116,7 +116,9 @@ public partial class MainMenu
         if (p.Length < 4)
         {
             say("--map-new=<name>,<breite>,<hoehe>,<kachelsatz>"
-                + "[,flach][,boden=<n>][,from=<ordner>][,quelle=<datei.CWM>]");
+                + "[,flach][,leer][,ohnetabelle][,boden=<n>][,from=<ordner>]"
+                + "[,quelle=<datei.CWM>][,spieler=<n>][,truppe=<n>]"
+                + "[,wasser=<prozent>][,samen=<n>]");
             return 2;
         }
         string name = p[0];
@@ -128,12 +130,28 @@ public partial class MainMenu
         string? from = null;
         int pick = 0;
         string? source = null;
+        int players = MapGenerator.PlayersDefault, troop = MapGenerator.TroopDefault;
+        double waterShare = MapTerrain.WaterShareDefault;
+        uint seed = 1;
+        bool useModel = true;
         for (int i = 4; i < p.Length; i++)
         {
             if (p[i] == "flach" || p[i] == "flat") flat = true;
+            else if (p[i] == "leer") players = 0;
+            else if (p[i] == "ohnetabelle") useModel = false;
             else if (p[i].StartsWith("from=")) from = p[i]["from=".Length..];
             else if (p[i].StartsWith("boden=")) int.TryParse(p[i]["boden=".Length..], out pick);
             else if (p[i].StartsWith("quelle=")) source = p[i]["quelle=".Length..];
+            else if (p[i].StartsWith("spieler=")) int.TryParse(p[i]["spieler=".Length..], out players);
+            else if (p[i].StartsWith("truppe=")) int.TryParse(p[i]["truppe=".Length..], out troop);
+            else if (p[i].StartsWith("samen=")) { uint.TryParse(p[i]["samen=".Length..], out uint s); seed = s == 0 ? 1 : s; }
+            else if (p[i].StartsWith("wasser="))
+            {
+                if (double.TryParse(p[i]["wasser=".Length..],
+                                    System.Globalization.NumberStyles.Float,
+                                    System.Globalization.CultureInfo.InvariantCulture, out double pc))
+                    waterShare = pc > 1.0 ? pc / 100.0 : pc;
+            }
         }
 
         // Eine Quelldatei sagt selbst, welchen Kachelsatz sie braucht — der
@@ -187,7 +205,16 @@ public partial class MainMenu
                     say("kein Bodenblock — ohne ganze Bodenkacheln haette die Karte nur Loecher");
                     return 1;
                 }
-                m = MapGenerator.Build(outName, w, h, ts, palette, flat, say);
+                // ⚠ Die gemessene Kacheltabelle ist der Unterschied zwischen
+                // »Wiese mit einem Fleck Wasser« und einer Landschaft: sie
+                // liefert die Uferkacheln, die Hangposen und die Baeume, die der
+                // Bodenblock nicht kennt. ,ohnetabelle ist die GEGENPROBE — sie
+                // schaltet sie ab, und dann muss der Pruefstand bei »Landzellen
+                // am Wasser mit Innenland-Code« von 0 auf ~100 % springen.
+                var model = useModel ? TileModel.Learn(ts, say) : null;
+                if (model != null) say(model.Describe());
+                m = MapGenerator.Build(outName, w, h, ts, palette, flat, say,
+                                       players, troop, waterShare, seed, model);
             }
             MapGenerator.Write(m, cwp, pal, outName, say);
             say($"fertig: jetzt --map-check={outName} und --map={outName}");

@@ -144,4 +144,149 @@ public static class MapFactory
         s[o] = (byte)col; s[o + 1] = (byte)row; s[o + 2] = (byte)type;
         s[o + 3] = 0; s[o + 4] = 0; s[o + 5] = 0;
     }
+
+    // ========================================================================
+    //  Gebaeude und Einheiten — was eine Karte SPIELBAR macht
+    // ========================================================================
+    //
+    // ⚠ Bis heute schrieb der Editor NUR Marken, und deshalb hiess der Knopf
+    // »Karte ansehen«: eine Karte mit 0 Einheiten und 0 Gebaeuden hat keinen
+    // besetzten Platz (`SkirmishAi.StartSkirmish` gibt −1) und gilt im ersten
+    // Takt als verloren (`MapEntityLayer.Verdict` ueber `AssetsOf(me) == 0`).
+    //
+    // Alle Feldlagen unten sind die der Leser in CwmData — sec3 fuer Gebaeude
+    // (76 Byte, 300 Saetze), sec5 fuer Einheiten (78 Byte, 8000 Saetze in acht
+    // Bloecken zu 1000, und der BLOCK ist der Besitzer). Die Werte selbst sind
+    // an gelieferten Karten abgelesen; wo das der Fall ist, steht die Karte
+    // dabei.
+
+    /// <summary>Ab hier ist ein imap-Wert ein statischer Gegenstand und keine
+    /// Gelaendeklasse — <see cref="CwmData.Terrain"/> liest alles ab 14000 als
+    /// gesperrt, und Gebaeude tragen Griffe ab 50000
+    /// (<c>CwmData.Building.FootW</c>).</summary>
+    public const int StaticHandleBase = 50000;
+
+    /// <summary>Der Griff, den ein Gebaeude in die imap stempelt. Der Leser
+    /// verlangt nur »ab 50000 und unter 0xFFFC« und nimmt DIE ZELLEN MIT
+    /// DEMSELBEN GRIFF als Grundflaeche; der Zahlenwert selbst wird nirgends
+    /// aufgeloest (die <c>ref</c>-Angabe der <c>.entities.json</c> ist reine
+    /// Auskunft). 51000 + Platz haelt Abstand zu den Griffen der
+    /// Gelaendegegenstaende, die die gelieferten Karten ab 50000 vergeben.</summary>
+    public static int BuildingHandle(int slot) => StaticHandleBase + 1000 + slot;
+
+    /// <summary>
+    /// Ein Gebaeude nach sec3 schreiben und seine Grundflaeche in die imap
+    /// stempeln.
+    ///
+    /// <para><paramref name="doors"/> sind Zellenversaetze vom Anker. Die
+    /// TUERZELLE bleibt in der imap FREI — dort kommen die gebauten Einheiten
+    /// heraus (<c>col + door_col</c>, <c>row + door_row</c>, @0x410441), und in
+    /// den gelieferten Karten ist sie in 511 von 519 Faellen frei.</para>
+    ///
+    /// <para>+0x18 (<c>IsBuilt</c>) MUSS 1 sein: der Gebaeudetakt @0x43CB29 tut
+    /// ohne die Flagge nichts, und in den 23 Kampagnenkarten traegt sie jeder
+    /// der 684 Saetze vom Typ 1..16 (0 Gegenbeispiele).</para>
+    /// </summary>
+    public static bool PutBuilding(CwmFile m, int slot, int type, int owner, int cisTyp,
+                                   int col, int row, int footW, int footH,
+                                   int hp, string name, (int Col, int Row)[] doors,
+                                   int stockW = 0, int stockF = 0, int stockS = 0,
+                                   int terranium = 0)
+    {
+        var s = m.Sec(3);
+        if (s == null) return false;
+        int o = slot * CwmData.BuildingStride;
+        if (o + CwmData.BuildingStride > s.Length) return false;
+
+        void U16(int at, int v) { s[o + at] = (byte)(v & 0xFF); s[o + at + 1] = (byte)((v >> 8) & 0xFF); }
+        U16(0x00, col); U16(0x02, row);
+        s[o + 0x04] = (byte)type;
+        s[o + 0x05] = (byte)owner;
+        U16(0x06, hp); U16(0x16, hp);
+        s[o + 0x18] = 1;                       // IsBuilt — ohne die Flagge tot
+        s[o + 0x19] = (byte)cisTyp;
+        s[o + 0x1a] = (byte)cisTyp;            // rail: laufende Nummer, wie in map_02
+        // der Name, 0x11 Byte, nullterminiert. Cp437 hat nur einen Leser, keinen
+        // Schreiber; die Namen des Editors sind ASCII, alles darueber wird '?'.
+        for (int k = 0; k < 0x11; k++)
+            s[o + 0x1b + k] = k < name.Length && name[k] < 0x80 ? (byte)name[k]
+                            : k < name.Length ? (byte)'?' : (byte)0;
+        U16(0x2c, stockW); U16(0x2e, stockF); U16(0x30, stockS); U16(0x32, terranium);
+        s[o + 0x34] = (byte)doors.Length;
+        for (int d = 0; d < doors.Length && o + 0x35 + 3 * d + 2 < s.Length; d++)
+        {
+            s[o + 0x35 + 3 * d] = (byte)doors[d].Col;
+            s[o + 0x36 + 3 * d] = (byte)doors[d].Row;
+            s[o + 0x37 + 3 * d] = 0;           // Torzustand: 0 auf allen 798
+        }
+        s[o + 0x41] = 0;
+
+        // die Grundflaeche in die imap, die Tuerzellen ausgenommen
+        var imap = m.Sec(6);
+        if (imap != null)
+        {
+            int handle = BuildingHandle(slot);
+            for (int dr = 0; dr < footH; dr++)
+                for (int dc = 0; dc < footW; dc++)
+                {
+                    bool door = false;
+                    foreach (var d in doors) if (d.Col == dc && d.Row == dr) door = true;
+                    if (door) continue;
+                    int c = col + dc, r = row + dr;
+                    if (c < 0 || c >= m.Width || r < 0 || r >= m.Height) continue;
+                    int i = (c * ImapStride + r) * 2;
+                    if (i + 1 >= imap.Length) continue;
+                    imap[i] = (byte)(handle & 0xFF);
+                    imap[i + 1] = (byte)(handle >> 8);
+                }
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Eine Einheit nach sec5 schreiben und ihre Zelle in die imap stempeln.
+    ///
+    /// <para>⚠ <b>Der Besitzer ist kein Feld, sondern der Block:</b> die
+    /// Feindschaftstests @0x409bde und @0x40d058 und der Sprite-Zeichner
+    /// @0x42a825 rechnen alle <c>index / 1000</c>. <paramref name="slot"/> ist
+    /// darum <c>spieler * 1000 + nummer</c>.</para>
+    ///
+    /// <para>+0x09 (<c>Kind</c>) darf nicht 0xFF sein, das ist der Leerwert.
+    /// Die Zahlen kommen von den gelieferten Karten: <c>code_base</c> = 0x2710
+    /// auf allen, <c>kind</c>/<c>subclass</c> = 0 bei Bodenfahrzeugen.</para>
+    /// </summary>
+    public static bool PutEntity(CwmFile m, int slot, int col, int row, int unitType,
+                                 int category, int weapon, int hp, int facing = 0)
+    {
+        var s = m.Sec(5);
+        if (s == null) return false;
+        int o = slot * CwmData.EntityStride;
+        if (o + CwmData.EntityStride > s.Length) return false;
+        Array.Clear(s, o, CwmData.EntityStride);
+
+        s[o + 0x00] = (byte)col; s[o + 0x01] = (byte)row;
+        s[o + 0x02] = (byte)facing; s[o + 0x03] = (byte)facing;
+        s[o + 0x08] = 100;                     // Energie
+        s[o + 0x09] = 0;                       // Kind: 0 = Bodenfahrzeug, NICHT 0xFF
+        s[o + 0x0a] = 0;                       // Subclass
+        s[o + 0x0c] = (byte)weapon;
+        s[o + 0x0f] = (byte)unitType;
+        s[o + 0x24] = 0x10; s[o + 0x25] = 0x27; // code_base 0x2710, auf allen Karten
+        s[o + 0x26] = (byte)category;
+        s[o + 0x29] = 100;                     // EnergieMax
+        s[o + 0x2e] = (byte)(hp & 0xFF); s[o + 0x2f] = (byte)(hp >> 8);
+        s[o + 0x30] = (byte)(hp & 0xFF); s[o + 0x31] = (byte)(hp >> 8);
+
+        var imap = m.Sec(6);
+        if (imap != null && col >= 0 && col < m.Width && row >= 0 && row < m.Height)
+        {
+            int i = (col * ImapStride + row) * 2;
+            if (i + 1 < imap.Length)
+            {
+                imap[i] = (byte)(slot & 0xFF);
+                imap[i + 1] = (byte)((slot >> 8) & 0xFF);
+            }
+        }
+        return true;
+    }
 }
