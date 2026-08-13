@@ -3408,6 +3408,227 @@ public partial class MapEntityLayer : Node2D
         _panel.AddThemeConstantOverride("outline_size", 0);
     }
 
+    /// <summary>
+    /// Was der Bedienblock unten links als BILD zeigen soll — der Wunsch des
+    /// Spielers: »kleine bilder, die man unten links im HUD gesehen hat, wenn
+    /// die Einheit angewaehlt war«.
+    ///
+    /// <para><b>Gelesen.</b> Der Zeichner des Bedienblocks (Fenstertyp-Byte 9,
+    /// 0x46FE10..0x4711C7) ruft den Bildzeichner 0x4508A0 an zwei Stellen:
+    /// <c>0x4701A9</c> mit <c>(kind, entwurf, surf, 0x0B, 0x3D)</c> — also
+    /// <b>(11, 61)</b> im 204x170-Block — und <c>0x470C41</c> mit kind 3 an
+    /// derselben Stelle fuer den Flugzeugplatz. Welcher Fall gezogen wird,
+    /// entscheidet ein Klassenbyte <c>byte[0x6E26D2 + 78*id]</c> (0..5):
+    /// 0/1 -> kind 0, 2 -> KEIN Bild, 3 -> kind 4, 4/5 -> kind 1. Fall 0 nimmt
+    /// den sec47-Satz des Entwurfs und blittet <c>+0x18</c> (Fahrwerk) und
+    /// darueber <c>+0x17</c> (Waffe).</para>
+    ///
+    /// <para>⚠ <b>Bei einer GRUPPE zeigt das Original KEIN Bild.</b> Der
+    /// Gruppen-Zweig 0x47067A..0x470AB1 hat keinen Aufruf von 0x4508A0, sondern
+    /// sechs Textzeilen bei y = 45/58/71/84/97 mit einer zweiten Spalte ab
+    /// x = 90. Dass hier bei mehreren gewaehlten Einheiten (0,0) herauskommt,
+    /// ist Treue.</para>
+    ///
+    /// <para>⚠ <b>UNSERE EINSCHRAENKUNG, und sie ist Absicht:</b> wir zeichnen
+    /// nur Fall 0 und nur fuer ein LANDFAHRWERK (unit_type 160..175). Was die
+    /// fuenf Klassen des Klassenbytes bedeuten, ist UNGELESEN; und fuer Schiffe
+    /// ist <c>+0x0D</c> ein TOTES Feld — Fall 1 nimmt statt dessen
+    /// <c>byte[0x52EDB7 + 42*(Platz + 10*Spieler)] - 0x96</c> durch eine
+    /// 10er-Permutation @0x450D60 in Folge 401, und diese Permutation ist nicht
+    /// gelesen. Wer hier <c>+0x0D</c> eines Rumpfes durchschickt, bekommt die
+    /// Bildnummern 70..76 und 100..102, und das sind in Fall-5-Zaehlung
+    /// Flugzeug- und Personenbilder. Lieber kein Bild als ein falsches.</para>
+    ///
+    /// <para>Ebenso ungezeichnet bleibt die INFANTERIE (unit_type 148/149): das
+    /// Original nimmt dafuer Folge 403 ueber die Bytetafel @0x450CCC mit
+    /// <c>entwurf - 0x32</c>, und welche Entwurfsnummern das Spiel dort traegt,
+    /// ist nicht nachgesehen.</para>
+    /// </summary>
+    /// <para><b>Und die Bildnummern stehen im Einheitensatz selbst.</b> Das ist
+    /// der Fund dieses Bauabschnitts: <c>+0x0b</c> (das <c>spodek</c> des
+    /// Spiels, bei uns <see cref="Entity.Chassis"/>) und <c>+0x0c</c> (der
+    /// AUFSATZ, bei uns <see cref="Entity.Weapon"/>) sind BEREITS Bildnummern,
+    /// nicht Bauteilzeilen. Nachgezaehlt ueber 968 Landeinheiten auf sieben
+    /// Karten: <c>component_stats[unit_type][+0x0D] == raw[+0x0b]</c> in
+    /// <b>956</b> Faellen; die 12 Abweichungen sind alle
+    /// <c>(unit_type 161, Bild 2, raw 0)</c> und stehen samt und sonders auf
+    /// map_neu01, einer selbst gebauten Karte, deren spodek-Byte nie gefuellt
+    /// wurde. Und <c>+0x0c</c> nimmt ueber dieselben Karten genau die Werte
+    /// 0, 21..39 und 40..52 an — das sind Zeichen fuer Zeichen die Bildnummern
+    /// der Aufbauteile (Zeile 1..19 -> Bild 21..39) und der Verbesserungen
+    /// (Zeile 65..79 -> Bild 40..54). Kein einziger Wert liegt daneben.
+    /// Das bestaetigt die Zuordnung des Berichts aus einer dritten Richtung und
+    /// heisst: fuer eine Einheit auf der Karte braucht es den Umweg ueber
+    /// component_stats gar nicht.</para>
+    ///
+    /// <para>Der Umweg bleibt als RUECKFALL, und er wird gebraucht: wo
+    /// <c>+0x0b</c> 0 ist (die zwoelf von map_neu01, und alles, was wir selbst
+    /// in die Welt setzen), liefert <c>UnitStatBook.IconOf(unit_type)</c> die
+    /// Nummer.</para>
+    /// <returns>Die BILDNUMMERN von Fahrwerk und Aufsatz des einzeln gewaehlten
+    /// Landfahrzeugs, wieviel insgesamt gewaehlt ist, und der Grund, wenn kein
+    /// Bild herauskommt.</returns>
+    public (int ChassisPic, int TurretPic, int Selected, string Why) PanelPortrait()
+    {
+        int n = _sel.Count;
+        if (_selected < 0 || _selected >= _entities.Count) return (0, 0, n, "nichts gewaehlt");
+        if (n > 1) return (0, 0, n, "Gruppe — das Original zeigt hier kein Bild");
+        var e = _entities[_selected];
+        if (e.IsProp) return (0, 0, n, "Kulisse");
+        if (e.IsBuilding) return (0, 0, n, "Gebaeude — Klassenbyte ungelesen");
+        if (e.UnitType is 148 or 149)
+            return (0, 0, n, "Infanterie — Folge 403 ueber @0x450CCC ungelesen");
+        if (e.UnitType is < 160 or > 175)
+            return (0, 0, n, $"unit_type {e.UnitType} ist kein Landfahrwerk (160..175)");
+        // erst das eigene Byte, dann der Rueckfall über die Bauteiltabelle
+        int chassis = e.Chassis is >= 1 and <= 18
+            ? e.Chassis : UI.UnitStatBook.IconOf(e.UnitType);
+        if (chassis <= 0) return (0, 0, n, "Fahrwerk ohne Bildnummer");
+        return (chassis, e.Weapon, n, "");
+    }
+
+    /// <summary>Die Gegenprobe zu <see cref="PanelPortrait"/>: stimmt das
+    /// Bildnummern-Byte des Einheitensatzes (<c>+0x0b</c>) mit der Bildnummer
+    /// ueberein, die die Bauteiltabelle fuer denselben <c>unit_type</c> nennt?
+    /// Zwei getrennte Quellen, und wenn sie auseinanderlaufen, ist eine von
+    /// beiden falsch gelesen.</summary>
+    /// <returns>gleich, abweichend, und die ersten Abweichungen als Text</returns>
+    public (int Same, int Differ, string Cases) PortraitIconCrossCheck()
+    {
+        int same = 0, differ = 0;
+        var cases = new SortedDictionary<string, int>();
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsProp || e.IsBuilding || e.UnitType is < 160 or > 175) continue;
+            int fromTable = UI.UnitStatBook.IconOf(e.UnitType);
+            if (e.Chassis == fromTable) { same++; continue; }
+            differ++;
+            string k = $"unit_type {e.UnitType}: Tabelle {fromTable}, Satz +0x0b {e.Chassis}";
+            cases.TryGetValue(k, out int c);
+            cases[k] = c + 1;
+        }
+        var sb = new System.Text.StringBuilder();
+        foreach (var kv in cases) sb.Append($"{kv.Value}x [{kv.Key}] ");
+        return (same, differ, sb.ToString().TrimEnd());
+    }
+
+    /// <summary>
+    /// Prüfstand für die Bauteilbilder: er ZÄHLT, statt zu behaupten.
+    ///
+    /// <para>Drei Abschnitte, und jeder nennt Zahlen, die man nachrechnen kann:
+    /// die BANK (wieviele Bilder, wo sie liegt), die BAUTEILE (wieviele der
+    /// Sätze eine Bildnummer tragen, welche auf die »?«-Tafel 56 umgelenkt
+    /// werden), und die ENTWÜRFE (wieviele zwei Bilder ergeben, wieviele eines,
+    /// wieviele keines — mit Namen). Dazu die EINHEITEN DIESER KARTE, gruppiert
+    /// nach dem Grund, aus dem <see cref="PanelPortrait"/> ihnen ein Bild gibt
+    /// oder verweigert.</para>
+    ///
+    /// <para>⚠ Was dieser Prüfstand NICHT sehen kann: ob das Bild an der
+    /// richtigen STELLE steht und ob es die richtigen Bildpunkte trägt. Die
+    /// Stelle meldet <c>MapViewer</c> dazu (Feldecke und Grösse in
+    /// Bildschirmpunkten), die Bildpunkte entscheidet ein Bildschirmfoto gegen
+    /// den Ausschnitt des Originals — eine Zahl ersetzt das hier nicht.</para>
+    /// </summary>
+    public string PortraitCheck()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append("portrait-check: ").Append(UI.PortraitBank.WatchLine()).Append('\n');
+
+        // ---- die Bauteilsätze (component_stats, Byte +0x0D) ------------------
+        int withIcon = 0, without = 0;
+        var toUnknown = new List<int>();
+        var beyond = new List<int>();
+        for (int row = 1; row < 200; row++)
+        {
+            int raw = UI.UnitStatBook.IconOf(row);
+            if (raw == 0) { without++; continue; }
+            withIcon++;
+            if (raw == UI.PortraitBank.UnknownFrom) toUnknown.Add(row);
+            else if (raw >= UI.PortraitBank.Count) beyond.Add(row);
+        }
+        sb.Append($"   Bauteile: {withIcon} mit Bildnummer, {without} ohne (Byte +0x0D = 0)")
+          .Append('\n');
+        sb.Append($"   auf die »?«-Tafel {UI.PortraitBank.Unknown} umgelenkt (icon == ")
+          .Append(UI.PortraitBank.UnknownFrom).Append("): ")
+          .Append(toUnknown.Count == 0 ? "keines" : string.Join(", ", toUnknown))
+          .Append('\n');
+        // ⚠ Bildnummern jenseits der Bank sind KEIN Fehler dieses Codes: das
+        // Original fängt nur die 100 ab, 101 und 102 laufen dort ins Leere. Sie
+        // gehören den Schiffsrümpfen, für die +0x0D ein totes Feld ist.
+        sb.Append($"   Bildnummer jenseits der Bank (>= {UI.PortraitBank.Count}): ")
+          .Append(beyond.Count == 0 ? "keine" : string.Join(", ", beyond))
+          .Append(" — im Original ungefangen, betrifft nur Schiffsruempfe\n");
+
+        // ---- die Entwürfe ---------------------------------------------------
+        int two = 0, one = 0, none = 0, unknownPic = 0;
+        var noneNames = new List<string>();
+        var unknownNames = new List<string>();
+        foreach (var d in UI.UnitStatBook.All())
+        {
+            int ic = UI.PortraitBank.IconOfComponent(d.Propulsion);
+            int iw = UI.PortraitBank.IconOfComponent(d.Weapon);
+            int n = (ic > 0 && ic < UI.PortraitBank.Count ? 1 : 0)
+                  + (iw > 0 && iw < UI.PortraitBank.Count ? 1 : 0);
+            if (n == 2) two++;
+            else if (n == 1) one++;
+            else { none++; if (noneNames.Count < 12) noneNames.Add(d.Name); }
+            if (ic == UI.PortraitBank.Unknown || iw == UI.PortraitBank.Unknown)
+            {
+                unknownPic++;
+                if (unknownNames.Count < 12) unknownNames.Add(d.Name);
+            }
+        }
+        sb.Append($"   Entwuerfe: {two} mit zwei Bildern (Fahrwerk + Aufbauteil), ")
+          .Append($"{one} mit einem, {none} ohne\n");
+        if (none > 0)
+            sb.Append("   ohne Bild: ").Append(string.Join(", ", noneNames))
+              .Append(none > noneNames.Count ? ", …" : "").Append('\n');
+        sb.Append($"   auf der »?«-Tafel: {unknownPic}")
+          .Append(unknownPic > 0 ? " (" + string.Join(", ", unknownNames) + ")" : "")
+          .Append('\n');
+
+        // ---- die Einheiten dieser Karte, nach dem Grund gruppiert -----------
+        var byReason = new SortedDictionary<string, int>();
+        int shown = 0;
+        int keep = _selected;
+        var keepSel = new List<int>(_sel);
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsProp || e.Dead) continue;
+            // die ECHTE Auswahlmechanik ausüben, nicht ihre Regel nachbauen:
+            // dieselbe Stelle, die auch ein Mausklick benutzt
+            _sel.Clear();
+            _sel.Add(i);
+            SetPrimary();
+            var p = PanelPortrait();
+            if (p.ChassisPic > 0) shown++;
+            else
+            {
+                string why = p.Why.Length > 0 ? p.Why : "kein Grund gemeldet";
+                byReason.TryGetValue(why, out int c);
+                byReason[why] = c + 1;
+            }
+        }
+        _sel.Clear();
+        foreach (int i in keepSel) _sel.Add(i);
+        _selected = keep;
+        UpdatePanel();
+        QueueRedraw();
+
+        sb.Append($"   Einheiten dieser Karte: {shown} bekommen ein Bild");
+        foreach (var kv in byReason) sb.Append($", {kv.Value}x \"{kv.Key}\"");
+        sb.Append('\n');
+
+        // ---- die Gegenprobe zweier getrennter Quellen -----------------------
+        var (cs, cd, cases) = PortraitIconCrossCheck();
+        sb.Append($"   Gegenprobe Bildnummer (Bauteiltabelle +0x0D gegen ")
+          .Append($"Einheitensatz +0x0b): {cs} gleich, {cd} abweichend")
+          .Append(cd > 0 ? "  " + cases : "");
+        return sb.ToString();
+    }
+
     private Font? _uiFont;
     private int _uiFontSize = 13;
     private bool _compactPanel;      // text is inside the original panel frame

@@ -177,11 +177,26 @@ public static class PortraitBank
     /// <param name="weapon">Aufbauteil (sec47 +0x17) — oben. 0 = keines.</param>
     /// <returns>wieviele Bilder wirklich gemalt wurden (0, 1 oder 2)</returns>
     public static int DrawUnit(CanvasItem ci, Rect2 box, int chassis, int weapon)
+        => DrawPictures(ci, box, IconOfComponent(chassis), IconOfComponent(weapon));
+
+    /// <summary>
+    /// Dasselbe, aber mit BILDNUMMERN statt Bauteilzeilen — der Weg für eine
+    /// Einheit auf der Karte.
+    ///
+    /// <para>⚠ Warum es diesen zweiten Weg gibt: der Einheitensatz trägt die
+    /// Bildnummern schon selbst. <c>+0x0b</c> (das <c>spodek</c>) ist die
+    /// Fahrwerksnummer 1…18 und <c>+0x0c</c> (der Aufsatz) die Nummer des
+    /// Turms 21…39 bzw. eines Geräts 40…54 — gemessen über 968 Landeinheiten
+    /// auf sieben Karten, siehe <c>MapEntityLayer.PanelPortrait</c>. Den Umweg
+    /// über <c>component_stats +0x0D</c> braucht nur, wer von einem BAUTEIL
+    /// kommt (die zwei Fenster).</para>
+    /// </summary>
+    public static int DrawPictures(CanvasItem ci, Rect2 box, int chassisPic, int turretPic)
     {
         ci.DrawRect(box, Fill);
         int n = 0;
-        if (Blit(ci, box, OfComponent(chassis))) n++;
-        if (Blit(ci, box, OfComponent(weapon))) n++;
+        if (Blit(ci, box, Picture(chassisPic <= 0 ? -1 : chassisPic))) n++;
+        if (Blit(ci, box, Picture(turretPic <= 0 ? -1 : turretPic))) n++;
         return n;
     }
 

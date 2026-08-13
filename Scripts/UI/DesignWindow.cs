@@ -42,12 +42,27 @@ using AkteEuropaReborn.Rendering;
 /// »Erstellen« ist <c>DesignerInput(0, 0, true)</c>. Damit kann das Fenster
 /// nicht auseinanderlaufen mit dem, was die Tastatur tut.</para>
 ///
+/// <para><b>Das Vorschaufeld zeigt die fertige Einheit</b> — seit dem
+/// 13.08.2026, und es ist der Kern dessen, was der Spieler an diesem Fenster
+/// vermisst hat (»im Modularen Bau System hatte man die Grafiken der einzelteile
+/// gesehen und wie die einheit am ende aussah«). Das Original malt dort ZWEI
+/// Bilder übereinander am gleichen Ursprung: <c>0x46D5DF</c> und
+/// <c>0x46D63A</c> rufen beide <c>0x4508A0(5, …, 520, 40)</c>, unten das
+/// Fahrwerk, darüber das Aufbauteil, in einem Kasten
+/// <c>0x456A50(520, 40, 3, 3)</c> = 60×60. Woher die Bilder kommen und warum
+/// diese Reihenfolge, steht in <see cref="PortraitBank"/>.
+/// ⚠ Die <b>Verbesserung</b> hat ein Bild, wird vom Original aber NICHT in die
+/// Vorschau gezeichnet — wir zeichnen sie dort auch nicht.</para>
+///
 /// <para>⚠ <b>UNSERE Setzungen:</b> Farben und Rahmen wie im
 /// <see cref="BaseWindow"/>. Das Feld <b>»Name : «</b> zeigt den Namen, den
 /// <see cref="DesignScreen.ProposedName"/> vorschlägt — im Original tippt man
 /// ihn selbst; eine Texteingabe gibt es hier noch nicht, und das steht schon
-/// im Kopf von DesignScreen. Das <b>Vorschaufeld</b> bleibt leer, aus demselben
-/// Grund wie im Basisfenster.</para>
+/// im Kopf von DesignScreen. Und die <b>drei kleinen Einzelfelder</b> unter der
+/// Vorschau: das Original zeigt die Bilder der gewählten Teile nirgends
+/// einzeln, es hat nur den einen 60×60-Kasten. Sie stehen da, weil der Spieler
+/// ausdrücklich »die Grafiken der einzelteile« genannt hat, und sie sind als
+/// Zutat gekennzeichnet, nicht als Fund.</para>
 /// </summary>
 public sealed partial class DesignWindow : PanelContainer
 {
@@ -76,6 +91,12 @@ public sealed partial class DesignWindow : PanelContainer
     private readonly PartList _prop = new(), _equip = new(), _weapon = new();
     private readonly Label _cost = new(), _name = new(), _stats = new(), _message = new();
     private readonly Preview _preview = new();
+
+    /// <summary>Die drei Einzelbilder in der Reihenfolge der Listen des
+    /// Originals: Fahrwerk, Aufbauteil, Verbesserung (⚠ unsere Zutat, siehe
+    /// Klassenkopf).</summary>
+    private readonly PartIcon _iconProp = new(), _iconWeapon = new(), _iconEquip = new();
+
     private readonly Button _make = new(), _cancel = new();
 
     public DesignWindow()
@@ -154,6 +175,20 @@ public sealed partial class DesignWindow : PanelContainer
         right.AddThemeConstantOverride("separation", 4);
         mid.AddChild(right);
         right.AddChild(_preview);
+
+        // die drei Einzelbilder darunter, in der Reihenfolge der Listen
+        // (⚠ unsere Zutat — das Original hat nur den einen 60×60-Kasten)
+        var icons = new HBoxContainer();
+        icons.AddThemeConstantOverride("separation", 3);
+        right.AddChild(icons);
+        icons.AddChild(_iconProp);
+        icons.AddChild(_iconWeapon);
+        icons.AddChild(_iconEquip);
+        _iconProp.TooltipText = "Fahrwerk";
+        _iconWeapon.TooltipText = "Aufbauteil";
+        _iconEquip.TooltipText = "Verbesserung (das Original zeichnet sie NICHT " +
+                                 "in die Vorschau)";
+
         _stats.AddThemeColorOverride("font_color", PlainFg);
         _stats.HorizontalAlignment = HorizontalAlignment.Right;
         _stats.SizeFlagsVertical = SizeFlags.ExpandFill;
@@ -275,6 +310,13 @@ public sealed partial class DesignWindow : PanelContainer
         int equip = Screen.CurrentEquipment?.Id ?? 0;
         var d = Simulation.DesignMath.Compute(weapon, prop, equip);
 
+        // Die Vorschau: Fahrwerk unten, Aufbauteil oben, gleicher Ursprung —
+        // die Reihenfolge des Originals, siehe PortraitBank.
+        _preview.Set(prop, weapon);
+        _iconProp.Component = prop;
+        _iconWeapon.Component = weapon;
+        _iconEquip.Component = equip;
+
         _cost.Text = $"Kosten : {BaseWindow.IconW}{d.CostW} " +
                      $"{BaseWindow.IconF}{d.CostF} {BaseWindow.IconS}{d.CostS}";
         _name.Text = "Name : " + Screen.ProposedName();
@@ -322,7 +364,14 @@ public sealed partial class DesignWindow : PanelContainer
         _prop.CustomMinimumSize = new Vector2(size * 13f, _prop.Step * 5f);
         _equip.CustomMinimumSize = new Vector2(size * 13f, _equip.Step * 5f);
         _weapon.CustomMinimumSize = new Vector2(size * 13f, _weapon.Step * 12f);
-        _preview.CustomMinimumSize = new Vector2(size * 4.4f, size * 4.4f);
+        // Der Kasten des Originals ist 60×60 Punkte bei 13 px Schrift; er wird
+        // mit der Schrift mitskaliert und BLEIBT QUADRATISCH, weil die Bilder es
+        // sind (siehe PortraitBank.Box).
+        float side = PortraitBank.Box * (size / 13f);
+        _preview.CustomMinimumSize = new Vector2(side, side);
+        float small = side / 3f;
+        foreach (var ic in new[] { _iconProp, _iconWeapon, _iconEquip })
+            ic.CustomMinimumSize = new Vector2(small, small);
         Refresh();
     }
 
@@ -377,16 +426,70 @@ public sealed partial class DesignWindow : PanelContainer
             : $"erstellung: {(Visible ? "offen" : "zu")}, " +
               $"{Screen.Propulsions.Count} Fahrwerke / {Screen.Weapons.Count} Aufbauteile / " +
               $"{Screen.Equipment.Count} Verbesserungen, Zeile {Screen.Cursor}, " +
-              $"\"{Screen.ProposedName()}\", {_cost.Text}";
+              $"\"{Screen.ProposedName()}\", {_cost.Text}, Vorschau: {_preview.WatchLine()}";
 
     // =========================================================================
 
+    /// <summary>Der Vorschaukasten des Originals, <c>0x456A50(520, 40, 3, 3)</c>
+    /// = 60×60, gefüllt mit Palettenindex 0x2F, darin Fahrwerk und darüber
+    /// Aufbauteil am gleichen Ursprung.</summary>
     private sealed partial class Preview : Control
     {
+        private int _chassis, _weapon;
+
+        /// <summary>Wieviele Bilder der letzte Zeichenlauf wirklich gemalt hat —
+        /// 2 bei einer vollständigen Einheit. ⚠ Ein Prüfstand, der nur »Bank da«
+        /// sagt, prüft nichts; das hier ist die Zahl, die die Mechanik ausübt.
+        /// </summary>
+        public int Drawn { get; private set; } = -1;
+
+        public Preview()
+        {
+            // ⚠ ohne Nearest zerfliesst ein 60×60-Bild beim Hochskalieren
+            TextureFilter = TextureFilterEnum.Nearest;
+        }
+
+        public void Set(int chassis, int weapon)
+        {
+            if (chassis == _chassis && weapon == _weapon) return;
+            _chassis = chassis; _weapon = weapon;
+            QueueRedraw();
+        }
+
         public override void _Draw()
         {
-            DrawRect(new Rect2(Vector2.Zero, Size), BoxBg);
-            DrawRect(new Rect2(Vector2.Zero, Size), new Color(0.16f, 0.16f, 0.15f), false, 1f);
+            var box = new Rect2(Vector2.Zero, Size);
+            if (PortraitBank.Ready) Drawn = PortraitBank.DrawUnit(this, box, _chassis, _weapon);
+            else { DrawRect(box, BoxBg); Drawn = 0; }
+            DrawRect(box, new Color(0.16f, 0.16f, 0.15f), false, 1f);
+        }
+
+        public string WatchLine()
+            => $"Fahrwerk {_chassis} (Bild {PortraitBank.IconOfComponent(_chassis)}) + " +
+               $"Aufbauteil {_weapon} (Bild {PortraitBank.IconOfComponent(_weapon)}) " +
+               $"= {Drawn} Bilder auf {Size.X:0}x{Size.Y:0} an {GlobalPosition.X:0},{GlobalPosition.Y:0}";
+    }
+
+    /// <summary>Ein einzelnes Bauteilbild — Fall 5 des Zeichners. ⚠ Unsere
+    /// Zutat, siehe Klassenkopf.</summary>
+    private sealed partial class PartIcon : Control
+    {
+        private int _component;
+
+        public int Component
+        {
+            get => _component;
+            set { if (value != _component) { _component = value; QueueRedraw(); } }
+        }
+
+        public PartIcon() { TextureFilter = TextureFilterEnum.Nearest; }
+
+        public override void _Draw()
+        {
+            var box = new Rect2(Vector2.Zero, Size);
+            if (PortraitBank.Ready) PortraitBank.DrawComponent(this, box, _component);
+            else DrawRect(box, BoxBg);
+            DrawRect(box, new Color(0.16f, 0.16f, 0.15f), false, 1f);
         }
     }
 

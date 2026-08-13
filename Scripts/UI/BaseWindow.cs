@@ -318,9 +318,11 @@ public sealed partial class BaseWindow : PanelContainer
         }
         _sheet.SetFont(font, size);
         _energy.CustomMinimumSize = new Vector2(size * 8, Mathf.Max(6, size / 3));
-        // Das Vorschaufeld ist im Original rund fünf Zeilenhöhen breit (66 px
-        // bei 13 px Schrift) — hier mitskaliert.
-        _preview.CustomMinimumSize = new Vector2(size * 4.4f, size * 4.4f);
+        // Das Vorschaufeld ist im Original 60×60 Punkte (der Kasten
+        // 0x456A50(…,3,3) = 3 Zellen von 20 px) und damit genau so gross wie
+        // ein Bild der Bank — mit der Schrift mitskaliert, aber quadratisch.
+        float side = PortraitBank.Box * (size / 13f);
+        _preview.CustomMinimumSize = new Vector2(side, side);
         // Der Listenkasten des Originals fasst zwölf Zeilen; die Zeilenhöhe ist
         // seine eigene (15 px), hier mit der Schrift mitskaliert.
         _sheet.CustomMinimumSize = new Vector2(size * 14f, _sheet.Step * 12f);
@@ -394,6 +396,12 @@ public sealed partial class BaseWindow : PanelContainer
         string name = _sheet.Selected >= 0 && _sheet.Selected < rows.Count
             ? rows[_sheet.Selected].Name : "";
         _stats.Text = StatsFor(name);
+        // Das Bild des markierten Entwurfs: Fall 0 des Zeichners, also
+        // sec47 +0x18 unten und +0x17 oben — siehe Preview.
+        if (name.Length > 0 && UnitStatBook.TryGet(name, out var pe))
+            _preview.Set(pe.Propulsion, pe.Weapon);
+        else
+            _preview.Set(0, 0);
         _preview.Visible = _tab == 1;
 
         PlaceTopRight();
@@ -503,7 +511,8 @@ public sealed partial class BaseWindow : PanelContainer
                $"{rows.Count} Zeilen ({aff} bezahlbar), Auswahl " +
                (_sheet.Selected < 0 || _sheet.Selected >= rows.Count
                    ? "-" : $"{_sheet.Selected + 1} \"{rows[_sheet.Selected].Name}\"") +
-               $", Bestand \"{_stock.Text}\", Titel \"{_title.Text}\"";
+               $", Bestand \"{_stock.Text}\", Titel \"{_title.Text}\"" +
+               $", Vorschau: {_preview.WatchLine()}";
     }
 
     // =========================================================================
@@ -524,15 +533,63 @@ public sealed partial class BaseWindow : PanelContainer
         }
     }
 
-    /// <summary>Das Vorschaufeld. ⚠ Noch leer: welches Bild zu einem Entwurf
-    /// gehört, hängt an den Sprites, und die liegen in MapEntityLayer.</summary>
+    /// <summary>
+    /// Das Vorschaufeld: das Bild des markierten Entwurfs, Fahrwerk unten und
+    /// Aufbauteil darüber.
+    ///
+    /// <para>Das Original zeichnet es im Basisfenster (Fenstertyp-Byte 6,
+    /// <c>0x467C60…0x46B61B</c>) an fensterrelativ <b>(280, 80)</b>, und zwar an
+    /// drei Stellen: <c>0x46840A</c> für einen Entwurf aus dem Depot
+    /// (<c>word[0x878E5C + 2·Platz]</c>), <c>0x4691D5</c> für die markierte
+    /// Produktionszeile — das ist diese hier — und <c>0x46A50B</c> mit
+    /// <c>icon = 0x64</c>, also der »?«-Tafel. Alle drei rufen denselben
+    /// Zeichner <c>0x4508A0</c>; sein Fall 0 nimmt <c>sec47 +0x18</c> als
+    /// Fahrwerk und <c>sec47 +0x17</c> als Waffe. Siehe
+    /// <see cref="PortraitBank"/>.</para>
+    ///
+    /// <para>⚠ <b>Hier stand »noch leer: welches Bild zu einem Entwurf gehört,
+    /// hängt an den Sprites, und die liegen in MapEntityLayer«.</b> Das war der
+    /// falsche Weg: die Vorschau kommt NICHT aus ROBO.CWR (den Kartensprites),
+    /// sondern aus ANIM.CWA — ein roher Dword-Abtast nach der ROBO-Rahmentafel
+    /// (0x7A4FF0, 50 Treffer), der Teiletafel (0x77C870/72) und den drei
+    /// Blitter-Sprungbrettern liegt RESTLOS im Kartenzeichner
+    /// 0x429000…0x42E000, keine einzige Fundstelle in der Fensteroberfläche.
+    /// Das war die entscheidende Weggabelung.</para>
+    ///
+    /// <para>⚠ Der Entwurf wird über seinen NAMEN nachgeschlagen — dieselbe
+    /// Auskunft, aus der auch die Werteliste rechts kommt
+    /// (<see cref="UnitStatBook"/>). Steht er dort nicht (Schiffe und
+    /// Hubschrauber stehen nicht in sec47), bleibt der Kasten leer, statt ein
+    /// fremdes Bild zu zeigen.</para>
+    /// </summary>
     private sealed partial class Preview : Control
     {
+        private int _chassis, _weapon;
+
+        /// <summary>Wieviele Bilder der letzte Zeichenlauf gemalt hat.</summary>
+        public int Drawn { get; private set; } = -1;
+
+        public Preview() { TextureFilter = TextureFilterEnum.Nearest; }
+
+        public void Set(int chassis, int weapon)
+        {
+            if (chassis == _chassis && weapon == _weapon) return;
+            _chassis = chassis; _weapon = weapon;
+            QueueRedraw();
+        }
+
         public override void _Draw()
         {
-            DrawRect(new Rect2(Vector2.Zero, Size), BoxBg);
-            DrawRect(new Rect2(Vector2.Zero, Size), new Color(0.16f, 0.16f, 0.15f), false, 1f);
+            var box = new Rect2(Vector2.Zero, Size);
+            if (PortraitBank.Ready) Drawn = PortraitBank.DrawUnit(this, box, _chassis, _weapon);
+            else { DrawRect(box, BoxBg); Drawn = 0; }
+            DrawRect(box, new Color(0.16f, 0.16f, 0.15f), false, 1f);
         }
+
+        public string WatchLine()
+            => $"Fahrwerk {_chassis} (Bild {PortraitBank.IconOfComponent(_chassis)}) + " +
+               $"Aufbauteil {_weapon} (Bild {PortraitBank.IconOfComponent(_weapon)}) " +
+               $"= {Drawn} Bilder auf {Size.X:0}x{Size.Y:0} an {GlobalPosition.X:0},{GlobalPosition.Y:0}";
     }
 
     /// <summary>Der schwarze Listenkasten: Name links, Preis rechts, eine Zeile

@@ -358,7 +358,10 @@ public sealed class InterfaceExporter
 
         var sb = new StringBuilder();
         sb.Append("{\"source\":\"ANIM.CWA\",\"palette\":\"DATA/01.PAL\",");
-        sb.Append($"\"sequences\":[{PortraitSeq0}..{PortraitSeq0 + PortraitSeqN - 1}],");
+        // ⚠ zwei ZAHLEN, keine »400..403«-Schreibweise: das war einen Lauf lang
+        // kein gültiges JSON, und der Lader meldete »kein JSON-Objekt« —
+        // die ganze Bank blieb damit unsichtbar, obwohl alle 86 PNG dalagen.
+        sb.Append($"\"sequences\":[{PortraitSeq0},{PortraitSeq0 + PortraitSeqN - 1}],");
         sb.Append($"\"first_frame\":{start},\"pictures\":{total},");
         sb.Append($"\"contiguous\":{(contiguous ? "true" : "false")},");
         sb.Append($"\"box\":[{PortraitBox},{PortraitBox}],");

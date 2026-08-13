@@ -344,6 +344,15 @@ public partial class MapViewer : Node2D
             }
             BuildEndBanner();
         }
+        // ⚠ Steht der Bildprüfstand mit `--shot` zusammen, meldet er GENAU das
+        // photographierte Bild. Sonst beschreiben seine Zahlen einen anderen
+        // Augenblick als das Bild, das man sich ansieht — und dann ist der
+        // Vergleich wertlos. Hier und nicht in ParseCmdline(), weil
+        // --shot-delay= und --portrait-check= in beliebiger Reihenfolge kommen
+        // dürfen (dieselbe Überlegung wie bei --skirmish= oben).
+        if (_portraitCheckAt >= 0 && _shotPath.Length > 0)
+            _portraitCheckAt = Mathf.Max(_portraitCheckAt, _shotDelay);
+
         // --select=<n> before anything is photographed, so the panel is filled
         // by the time --shot fires
         if (_selectForShot >= 0) GD.Print(_entities.SelectForShot(_selectForShot));
@@ -548,6 +557,11 @@ public partial class MapViewer : Node2D
 
     private string _look = "";
     private bool _groupCheck;
+
+    /// <summary>Bei welchem BILD der Bildprüfstand meldet, −1 = aus. Siehe
+    /// <c>--portrait-check</c>.</summary>
+    private int _portraitCheckAt = -1;
+    private int _portraitFrames;
     private bool _soundCheck;
     private bool _tutorialCheck;
     private bool _coverageCheck;
@@ -784,6 +798,29 @@ public partial class MapViewer : Node2D
             else if (a == "--veh-anim-check") { _vehAnimCheck = true; _demo = true; }
             else if (a.StartsWith("--look=")) _look = a["--look=".Length..];
             else if (a == "--group-check") _groupCheck = true;
+            // Prüfstand für die Bauteilbilder. ⚠ Er braucht LAUFZEIT: die
+            // Feldgrössen und das »wieviele Bilder wurden gemalt« stehen erst
+            // nach dem ersten Zeichenlauf, und die Fenster ordnen sich erst
+            // nach ein paar Bildern ein. Ohne Zahl 90 Bilder.
+            //
+            // ⚠ Gezählt werden BILDER, nicht Sekunden, und mit `--shot` wird
+            // daraus <b>genau das photographierte Bild</b> (siehe _Ready). Der
+            // erste Anlauf zählte Sekunden: mit `--shot-delay=500` fiel die
+            // Meldung dann still aus, und ein Prüfstand, der bei langer
+            // Vorlaufzeit schweigt, ist schlimmer als keiner. Ausserdem MÜSSEN
+            // die Zahlen das Bild beschreiben, das man sich ansieht — sonst
+            // vergleicht man zwei verschiedene Augenblicke.
+            //
+            // Er wählt sich selbst eine Einheit (--select=0), damit der
+            // Bedienblock etwas zu zeigen hat, und macht das Erstellungsfenster
+            // auf — sonst prüft er drei leere Felder.
+            else if (a == "--portrait-check" || a.StartsWith("--portrait-check="))
+            {
+                _portraitCheckAt = a.Length > 17
+                    ? Mathf.Max(1, a["--portrait-check=".Length..].ToInt()) : 90;
+                if (_selectForShot < 0) _selectForShot = 0;
+                _designWindowDemo = true;
+            }
             else if (a == "--sound-check") _soundCheck = true;
             else if (a == "--tutorial-check") _tutorialCheck = true;
             else if (a == "--script-coverage") _coverageCheck = true;
@@ -1224,8 +1261,161 @@ public partial class MapViewer : Node2D
         };
         _panelLayer.AddChild(_panelSprite);
         BuildPanelClock();
+        BuildPanelPortrait();
         PlacePanel();
         GetViewport().SizeChanged += PlacePanel;
+    }
+
+    // ---- das Einheitenbild im Bedienblock -----------------------------------
+
+    /// <summary>
+    /// <b>Das Bild der gewaehlten Einheit unten links</b> — genau das, was der
+    /// Spieler gemeldet hat: »kleine bilder, die man unten links im HUD gesehen
+    /// hat, wenn die Einheit angewaehlt war«.
+    ///
+    /// <para><b>Die Stelle ist gelesen, nicht gesetzt.</b> Der Zeichner des
+    /// Bedienblocks ruft bei <c>0x4701A9</c>
+    /// <c>0x4508A0(kind, entwurf, surf, 0x0B, 0x3D)</c> — <c>0x0B = 11</c>,
+    /// <c>0x3D = 61</c>, also fensterrelativ <b>(11, 61)</b> im 204x170 grossen
+    /// PANEL.DTA, und das Bild ist 60x60. Das Feld (11,61)..(70,120) liegt
+    /// vollstaendig im eingelassenen Anzeigekasten (x 8..160, y 43..136 aus
+    /// panel_index.json), links; die drei Statusbalken des Originals stehen
+    /// RECHTS davon bei (91,66), (91,86) und (91,107), der Name darueber bei
+    /// (11,45).</para>
+    ///
+    /// <para>⚠ <b>Damit ist eine aeltere Aussage dieses Baums widerlegt.</b> In
+    /// <see cref="UI.GameHud"/> steht, <c>0x46FE10</c> sei »bis zur
+    /// int3-Polsterung vollstaendig gelesen« und enthalte »GENAU 37
+    /// Zeichenaufrufe«. Die Laenge stimmt (5048 B), die Zaehlung nicht: ein
+    /// ROHER E8-Abtast findet in demselben Bereich <b>72</b> Aufrufe mit Ziel
+    /// im .text, darunter ZWEI des Bildzeichners (0x4701A9 und 0x470C41) und
+    /// einen WINDOWS.CWW-Element-Blit (0x46FF62, die Nordrose bei (90,147)). Die
+    /// 37 kamen aus einem linearen Capstone-Lauf, und ein linearer Lauf ist eine
+    /// UNTERGRENZE, nie ein Beweis fuer Abwesenheit — dieselbe Ursache
+    /// verschluckte in 0x46C490 vier Aufrufe. Die Aussage »dauerhaft sind dort
+    /// nur Uhr und zwei Strombalken« ist also falsch, und dieses Bild ist der
+    /// Beweis. (Der Satz steht noch in GameHud.cs; die Datei gehoert einem
+    /// anderen Agenten.)</para>
+    ///
+    /// <para>Welche Einheit welches Bild bekommt, entscheidet
+    /// <c>MapEntityLayer.PanelPortrait()</c> — dort steht auch, warum Schiffe,
+    /// Flugzeuge, Infanterie und Gebaeude (noch) keines bekommen und warum eine
+    /// GRUPPE im Original keines hat.</para>
+    /// </summary>
+    private PanelPortrait? _panelPortrait;
+
+    /// <summary>Die Ecke des Bildfeldes im PANEL.DTA, aus
+    /// <c>push 0x3D; push 0x0B</c> @0x4701A9, und seine Groesse aus der Bank
+    /// (<see cref="UI.PortraitBank.Box"/> = 60).</summary>
+    private static readonly Vector2I PanelPortraitAt = new(11, 61);
+
+    /// <summary>Wo der Infotext hin muss, WENN das Bild steht: rechts daneben.
+    /// Das Original schreibt dort seine drei Balken (x = 91) und haette den
+    /// Namen bei (11,45) darueber — ⚠ dass bei uns auch der NAME nach rechts
+    /// wandert, ist unsere Setzung: unser Bedienblock hat EINE Textmarke, das
+    /// Original setzt jede Zeile einzeln.</summary>
+    private static readonly Rect2 PanelBoxRight = new(71, 43, 90, 94);
+
+    private void BuildPanelPortrait()
+    {
+        if (_panelLayer == null) return;
+        _panelPortrait = new PanelPortrait
+        {
+            Visible = false,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            Size = new Vector2(UI.PortraitBank.Box * PanelScale,
+                               UI.PortraitBank.Box * PanelScale),
+            // ⚠ ohne Nearest wird aus einem 60x60-Bild bei doppelter
+            // Vergroesserung Matsch — dieselbe Regel wie beim Panel selbst
+            TextureFilter = CanvasItem.TextureFilterEnum.Nearest,
+        };
+        _panelLayer.AddChild(_panelPortrait);
+    }
+
+    /// <summary>Das Bild nachziehen. Ändert sich seine Sichtbarkeit, wandert der
+    /// Infotext mit — er darf nicht darunter liegen.</summary>
+    private void UpdatePanelPortrait()
+    {
+        if (_panelPortrait == null || _entities == null) return;
+        var p = _entities.PanelPortrait();
+        bool want = p.ChassisPic > 0 && UI.PortraitBank.Ready;
+        _panelPortrait.Set(p.ChassisPic, p.TurretPic);
+        if (want == _panelPortrait.Visible) return;
+        _panelPortrait.Visible = want;
+        PlacePanel();
+    }
+
+    /// <summary>
+    /// Der Prüfstand aus <c>--portrait-check</c>: erst zählen lassen
+    /// (<c>MapEntityLayer.PortraitCheck</c>), dann die STELLEN melden.
+    ///
+    /// <para>⚠ <b>Die Stelle ist die halbe Prüfung.</b> Ein Prüfstand, der nur
+    /// »Bild da« sagt, prüft nichts — er muss sagen, WO. Darum steht hier zu
+    /// jedem der drei Felder die Ecke und die Grösse in Bildschirmpunkten, dazu
+    /// die Ecke des Bedienblocks, sodass sich die fensterrelative Stelle
+    /// (11,61) nachrechnen lässt: <c>(Feldecke − Blockecke) / 2 = (11,61)</c>
+    /// bei <see cref="PanelScale"/> = 2.</para>
+    ///
+    /// <para>Und er sagt, welche DATEI die Engine wirklich liest — das ist die
+    /// Falle, in die am 13.08.2026 zweimal Arbeit gelaufen ist:
+    /// <c>Core.Content.Path</c> bevorzugt <c>user://data/</c>, eine Änderung im
+    /// Baum unter <c>Assets/Legacy/</c> bleibt also unsichtbar.</para>
+    /// </summary>
+    private void PortraitCheckTick()
+    {
+        if (_portraitCheckAt < 0) return;
+        if (_portraitFrames++ < _portraitCheckAt) return;
+        _portraitCheckAt = -1;
+
+        GD.Print(_entities.PortraitCheck());
+        Vector2 corner = _panelSprite?.Position ?? Vector2.Zero;
+        GD.Print($"   Bedienblock: Ecke {corner.X:0},{corner.Y:0}, Vergroesserung {PanelScale}x");
+        GD.Print(_panelPortrait == null
+            ? "   Bedienblock-Bild: kein Feld gebaut (PANEL.DTA nicht exportiert?)"
+            : $"   Bedienblock-Bild: {(_panelPortrait.Visible ? "steht" : "verborgen")}, " +
+              _panelPortrait.WatchLine() +
+              $" -> fensterrelativ {(_panelPortrait.Position.X - corner.X) / PanelScale:0}," +
+              $"{(_panelPortrait.Position.Y - corner.Y) / PanelScale:0} " +
+              $"(gelesen @0x4701A9: {PanelPortraitAt.X},{PanelPortraitAt.Y})");
+        GD.Print("   " + (_designWindow != null
+            ? _designWindow.WatchLine() : "erstellung: kein Fenster"));
+        GD.Print("   " + (_baseWindow != null
+            ? _baseWindow.WatchLine() : "basis-fenster: kein Fenster"));
+
+        // Mit `--shot` bleibt der Lauf stehen, damit das Bild auch photographiert
+        // werden kann — dieselbe Regel wie beim --tutorial-check.
+        if (_shotPath.Length == 0) GetTree().Quit(0);
+    }
+
+    /// <summary>Das 60x60-Feld selbst. Es rechnet nichts — es malt, was
+    /// <see cref="UI.PortraitBank"/> ihm gibt.</summary>
+    private sealed partial class PanelPortrait : Control
+    {
+        /// <summary>⚠ BILDNUMMERN, keine Bauteilzeilen — der Einheitensatz trägt
+        /// sie selbst (+0x0b und +0x0c), siehe
+        /// <c>MapEntityLayer.PanelPortrait</c>.</summary>
+        private int _chassisPic, _turretPic;
+
+        /// <summary>Wieviele Bilder der letzte Lauf gemalt hat: 2 bei einem
+        /// bewaffneten Fahrzeug, 1 bei einem unbewaffneten.</summary>
+        public int Drawn { get; private set; } = -1;
+
+        public void Set(int chassisPic, int turretPic)
+        {
+            if (chassisPic == _chassisPic && turretPic == _turretPic) return;
+            _chassisPic = chassisPic; _turretPic = turretPic;
+            QueueRedraw();
+        }
+
+        public override void _Draw()
+        {
+            Drawn = UI.PortraitBank.DrawPictures(this, new Rect2(Vector2.Zero, Size),
+                                                 _chassisPic, _turretPic);
+        }
+
+        public string WatchLine()
+            => $"Fahrwerksbild {_chassisPic} + Aufsatzbild {_turretPic} " +
+               $"= {Drawn} Bilder, {Size.X:0}x{Size.Y:0} an {Position.X:0},{Position.Y:0}";
     }
 
     // ---- die Missionsuhr im Bedienfeld -------------------------------------
@@ -1455,11 +1645,15 @@ public partial class MapViewer : Node2D
         // untere LINKE Ecke — siehe BuildLegacyPanel fuer den Befund
         var origin = new Vector2(0, view.Y - size.Y);
         _panelSprite.Position = origin;
-        var box = new Rect2(origin + PanelBox.Position * PanelScale,
-                            PanelBox.Size * PanelScale);
+        // Steht das Einheitenbild, geht der Infotext in die rechte Spalte —
+        // sonst laege er darunter. Siehe PanelBoxRight.
+        Rect2 rel = _panelPortrait is { Visible: true } ? PanelBoxRight : PanelBox;
+        var box = new Rect2(origin + rel.Position * PanelScale, rel.Size * PanelScale);
         _entities.SetPanelBox(box);
         if (_panelClock != null)
             _panelClock.Position = origin + (Vector2)PanelClockAt * PanelScale;
+        if (_panelPortrait != null)
+            _panelPortrait.Position = origin + (Vector2)PanelPortraitAt * PanelScale;
     }
 
     /// <summary>Das Baumenü: seit dem 11.08.2026 ein frei schwebendes FENSTER,
@@ -1900,6 +2094,8 @@ public partial class MapViewer : Node2D
         UpdateProductionPanel();
         UpdateDesignWindow();
         UpdatePanelClock();
+        UpdatePanelPortrait();
+        PortraitCheckTick();
 
         // Das Ohr steht in der Mitte des Bildes. Das Original rechnet jeden
         // Klang gegen genau diesen Punkt (`play_sound` @0x4047E0 zieht
