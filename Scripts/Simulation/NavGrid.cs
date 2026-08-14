@@ -105,6 +105,58 @@ public sealed class NavGrid
 
     public int OccupantAt(int c, int r) => InBounds(c, r) ? _occupant[Idx(c, r)] : -1;
 
+    // ========================================================================
+    //  DER RUMPF — ein Schiff ist mehr als eine Zelle
+    // ========================================================================
+
+    /// <summary>
+    /// Wie viele Zellen je Kante der Rumpf dieser Gattung hat — <b>GELESEN</b>.
+    ///
+    /// <para><c>Can_go</c> @0x4055D0 verteilt auf <c>byte[+0x0A]</c> (die Zeile,
+    /// die das Spiel selbst <c>»unit type:«</c> nennt, Formatzeile @0x4F6734)
+    /// ueber die Sprungtafel @0x40678C. Zwei der sechs Faelle sind Schiffe, und
+    /// sie pruefen NICHT eine Zelle:</para>
+    /// <code>
+    ///   Gattung 4  @0x406669   VIER Zellen:     (c,r) (c+1,r) (c,r+1) (c+1,r+1)
+    ///   Gattung 5  @0x40671B   SECHZEHN Zellen: zwei Schleifen zu je vier
+    /// </code>
+    /// <para>Die Karten bestaetigen es unabhaengig: ueber die 29 gelieferten
+    /// Karten tragen <b>163 von 163</b> aufloesbaren Einheiten der Gattung 4
+    /// einen 2x2-Grundriss und <b>32 von 32</b> der Gattung 5 einen 4x4; und
+    /// <b>193 von 210</b> Schiffen liegen mit dem GANZEN Rumpf auf Wasser.
+    /// ⚠ Gattung <b>2</b> zeigt in derselben Tafel auf den Fehlerzweig
+    /// @0x40569D und kommt in keiner Karte vor (0 von 4474).</para>
+    ///
+    /// <para>Alles andere ist 1 — das Original prueft dort genau eine Zelle.</para>
+    /// </summary>
+    public static int HullSide(int art) => art == 5 ? 4 : art == 4 ? 2 : 1;
+
+    /// <summary>
+    /// Die Kantenlaenge je Einheit. <b>Hier und nicht beim Aufrufer</b>, und das
+    /// ist der Kern dieser Aenderung: es gibt elf Stempel- und fuenfzehn
+    /// Loeschstellen. Reichte jede von ihnen den Rumpf selbst herein, waere die
+    /// erste vergessene Stelle ein Schiff, das halb belegt bleibt — und der
+    /// Fehler faende sich nie wieder. So kennt <see cref="SetOccupant"/> und
+    /// <see cref="ClearOccupant"/> ihn von selbst, und beide stempeln
+    /// zwangslaeufig dieselbe Flaeche.
+    /// </summary>
+    private readonly Dictionary<int, int> _hull = new();
+
+    /// <summary>Den Rumpf einer Einheit hinterlegen. 1 loescht den Eintrag.</summary>
+    public void SetHull(int entity, int side)
+    {
+        if (side <= 1) _hull.Remove(entity);
+        else _hull[entity] = side;
+    }
+
+    /// <summary>Die hinterlegte Kantenlaenge, sonst 1.</summary>
+    public int HullOf(int entity)
+        => entity >= 0 && _hull.TryGetValue(entity, out int s) ? s : 1;
+
+    /// <summary>Alle Ruempfe vergessen — gehoert zu <see cref="ClearOccupants"/>,
+    /// sonst traegt ein neu geladenes Spiel die Ruempfe des alten.</summary>
+    public void ClearHulls() => _hull.Clear();
+
     /// <summary>Terrain a move class may stand on, ignoring occupants. This IS
     /// the table Can_go implements; the hover line's flag test is its own
     /// (@0x4057b5 calls the tile-flag accessor @0x41d110 and lets it pass only
@@ -137,12 +189,27 @@ public sealed class NavGrid
     /// Either way the cell is passable, which is why infantry could always be
     /// driven over and why it must not stop a tank here.
     /// </summary>
+    /// <remarks>
+    /// ⚠ <b>Prueft den GANZEN Rumpf des Bewegers</b>, wenn fuer ihn einer
+    /// hinterlegt ist (<see cref="SetHull"/>). Genau das tut das Original:
+    /// <c>Can_go</c> @0x4055D0 laeuft fuer Gattung 4 ueber vier und fuer
+    /// Gattung 5 ueber sechzehn Zellen und laesst den Schritt nur durch, wenn
+    /// ALLE tragen. Ohne diese Schleife passt ein Schlachtschiff durch eine
+    /// Luecke von einer Zelle, und zwei Schiffe stehen ineinander.
+    /// </remarks>
     public bool IsFree(int c, int r, MoveClass mc = MoveClass.Vehicle, int mover = -1)
     {
-        if (!CanEnter(c, r, mc)) return false;
-        int i = Idx(c, r);
-        if (_occupant[i] < 0 || _occupant[i] == mover) return true;
-        return _crushable[i];
+        int side = HullOf(mover);
+        for (int dy = 0; dy < side; dy++)
+            for (int dx = 0; dx < side; dx++)
+            {
+                int cc = c + dx, rr = r + dy;
+                if (!CanEnter(cc, rr, mc)) return false;
+                int i = Idx(cc, rr);
+                if (_occupant[i] < 0 || _occupant[i] == mover) continue;
+                if (!_crushable[i]) return false;
+            }
+        return true;
     }
 
     /// <summary>Die Rohstoffvorkommen, die DIE KARTE mitbringt —
@@ -340,6 +407,10 @@ public sealed class NavGrid
     {
         if (_occupant.Length > 0) Array.Fill(_occupant, -1);
         if (_crushable.Length > 0) Array.Fill(_crushable, false);
+        // ⚠ Die Ruempfe gehen MIT. Wer die Belegung leert und die Ruempfe
+        // stehen laesst, traegt beim naechsten Aufbau die Rumpfgroessen der
+        // vorigen Karte — und die Einheitennummern sind dort andere.
+        ClearHulls();
     }
 
     /// <summary>Take one cell out of the blocked class. Used for the
@@ -354,21 +425,38 @@ public sealed class NavGrid
     /// <summary><paramref name="crushable"/> marks a foot soldier: they are
     /// driven through or run over, never blocked against (see
     /// <see cref="IsFree"/>).</summary>
+    /// <summary>⚠ Stempelt den GANZEN Rumpf ab (<paramref name="c"/>,
+    /// <paramref name="r"/>) — <see cref="HullSide"/>. Fuer alles ausser
+    /// Schiffen ist das genau die eine Zelle wie bisher.</summary>
     public void SetOccupant(int c, int r, int entity, bool crushable = false)
     {
-        if (!InBounds(c, r)) return;
-        int i = Idx(c, r);
-        _occupant[i] = entity;
-        _crushable[i] = crushable;
+        int side = HullOf(entity);
+        for (int dy = 0; dy < side; dy++)
+            for (int dx = 0; dx < side; dx++)
+            {
+                if (!InBounds(c + dx, r + dy)) continue;
+                int i = Idx(c + dx, r + dy);
+                _occupant[i] = entity;
+                _crushable[i] = crushable;
+            }
     }
 
+    /// <summary>Dieselbe Flaeche wieder freigeben. ⚠ Der Anker muss derselbe
+    /// sein, mit dem gestempelt wurde — waehrend eines Schrittes haelt eine
+    /// Einheit zwei Anker (den alten und den vorgemerkten), und beide werden
+    /// einzeln gesetzt und einzeln geloescht.</summary>
     public void ClearOccupant(int c, int r, int entity)
     {
-        if (InBounds(c, r) && _occupant[Idx(c, r)] == entity)
-        {
-            _occupant[Idx(c, r)] = -1;
-            _crushable[Idx(c, r)] = false;
-        }
+        int side = HullOf(entity);
+        for (int dy = 0; dy < side; dy++)
+            for (int dx = 0; dx < side; dx++)
+            {
+                if (!InBounds(c + dx, r + dy)) continue;
+                int i = Idx(c + dx, r + dy);
+                if (_occupant[i] != entity) continue;
+                _occupant[i] = -1;
+                _crushable[i] = false;
+            }
     }
 
     /// <summary>Cell counts per ground class, for the HUD / debug overlay.</summary>

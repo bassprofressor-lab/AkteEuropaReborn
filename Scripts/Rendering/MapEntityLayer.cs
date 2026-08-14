@@ -2517,6 +2517,14 @@ public partial class MapEntityLayer : Node2D
             // its own cell in the spatial grid and services the unit standing
             // there, so neither the post itself nor the structure baked into
             // the map picture may block that cell.
+            // ⚠ DER RUMPF, bevor gestempelt wird. Ein Schiff belegt vier bzw.
+            // sechzehn Zellen (Can_go @0x4055D0, Gattung 4 @0x406669 und 5
+            // @0x40671B); NavGrid.SetOccupant holt sich die Kantenlaenge von
+            // hier. Nur fuer bewegliche Einheiten: ein Gebaeude stempelt seine
+            // Flaeche selbst (Construction), und `Subclass` heisst dort etwas
+            // anderes.
+            if (!e.IsBuilding && !e.IsProp)
+                _nav?.SetHull(i, Simulation.NavGrid.HullSide(e.Subclass));
             if (e.IsBuilding && e.BType == 14) _nav?.ClearStatic(e.Col, e.Row);
             else _nav?.SetOccupant(e.Col, e.Row, i, e.Infantry >= 0);
         }
@@ -9550,6 +9558,10 @@ public partial class MapEntityLayer : Node2D
         if (InfantryFor(d.Weapon, out int inf, out int iw)) { u.Infantry = inf; u.Weapon = iw; }
         u.Pos = CellCenter(u.Col, u.Row);
         _entities.Add(u);
+        // ⚠ Der Rumpf zuerst: SetOccupant stempelt danach die ganze Flaeche.
+        // Eine hier vergessene Zeile waere ein Schiff, das eine Zelle belegt
+        // und in ein anderes hineinfaehrt — siehe NavGrid.SetHull.
+        _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.Subclass));
         _nav.SetOccupant(u.Col, u.Row, _entities.Count - 1);
         _shipsBuilt++;
         NoteEvent(dock, $"{d.Name} fertig");
@@ -12495,6 +12507,10 @@ public partial class MapEntityLayer : Node2D
         if (InfantryFor(d.Weapon, out int inf, out int iw)) { u.Infantry = inf; u.Weapon = iw; }
         u.Pos = CellCenter(u.Col, u.Row);
         _entities.Add(u);
+        // ⚠ Der Rumpf zuerst: SetOccupant stempelt danach die ganze Flaeche.
+        // Eine hier vergessene Zeile waere ein Schiff, das eine Zelle belegt
+        // und in ein anderes hineinfaehrt — siehe NavGrid.SetHull.
+        _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.Subclass));
         _nav.SetOccupant(u.Col, u.Row, _entities.Count - 1);
         _order = $"{d.Name} fertig";
         QueueRedraw();
@@ -12558,6 +12574,10 @@ public partial class MapEntityLayer : Node2D
         if (InfantryFor(d.Weapon, out int inf, out int iw)) { u.Infantry = inf; u.Weapon = iw; }
         u.Pos = CellCenter(u.Col, u.Row);
         _entities.Add(u);
+        // ⚠ Der Rumpf zuerst: SetOccupant stempelt danach die ganze Flaeche.
+        // Eine hier vergessene Zeile waere ein Schiff, das eine Zelle belegt
+        // und in ein anderes hineinfaehrt — siehe NavGrid.SetHull.
+        _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.Subclass));
         _nav.SetOccupant(u.Col, u.Row, _entities.Count - 1);
         GD.Print($"space_in: {d.Name} (Entwurf {typ}) fuer Spieler {player} " +
                  $"auf ({u.Col}, {u.Row}), Satz {u.Slot}");

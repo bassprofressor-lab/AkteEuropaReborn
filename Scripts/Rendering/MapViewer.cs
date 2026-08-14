@@ -782,6 +782,13 @@ public partial class MapViewer : Node2D
             // --ship-check: was ein Schiff belegt und was es belegen muesste.
             // Siehe MapEntityLayer.ShipCheckLine (Simulation/ShipCheck.cs).
             else if (a == "--ship-check") _shipCheck = true;
+            // ⚠ --ship-check=<sek>: MIT Zahl laeuft das Spiel erst so lange und
+            // prueft DANN. Ohne Zahl prueft es beim Laden und beendet — das
+            // sieht die Aufstellung der Karte, aber nie, was nach BEWEGUNG aus
+            // dem Rumpfstempel wird. Und genau dort entscheidet sich, ob
+            // SetOccupant und ClearOccupant dieselbe Flaeche anfassen.
+            else if (a.StartsWith("--ship-check="))
+                _shipCheckAfter = Mathf.Max(0.1f, a["--ship-check=".Length..].ToFloat());
             // --place-check[=<sek>]: die Einsetzungen (place_unit @0x4D0810)
             // einer Mission an ihrer Messlatte. Siehe
             // MapEntityLayer.PlaceCheckLine. Ohne Zahl 15 Sekunden — lange
@@ -998,6 +1005,7 @@ public partial class MapViewer : Node2D
     private bool _freshCampaign;
     private bool _terraCheck;
     private bool _shipCheck;
+    private float _shipCheckAfter;
     private float _placeForce;
 
     /// <summary>`--damage-check`: die Schadensstufen durchfahren.</summary>
@@ -1069,6 +1077,15 @@ public partial class MapViewer : Node2D
             {
                 _hitCheck = -1f;
                 GD.Print(_entities.HitCheckLine());
+            }
+        }
+        if (_shipCheckAfter > 0f)
+        {
+            _shipCheckAfter -= (float)delta;
+            if (_shipCheckAfter <= 0f)
+            {
+                _shipCheckAfter = -1f;
+                GD.Print(_entities.ShipCheckLine());
             }
         }
         if (_produceCheck > 0f)

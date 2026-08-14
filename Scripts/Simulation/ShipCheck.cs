@@ -114,12 +114,25 @@ public partial class MapEntityLayer
                   $" — Messlatte aus den gelieferten Karten: 193 von 210 (91,9 %)\n");
         sb.Append($"   Grundriss der Karte == Rumpf des Originals: {footMatches}, abweichend {footOther}" +
                   " (gemessen 2x2 163/163 fuer subclass 4, 4x4 32/32 fuer subclass 5)\n");
-        sb.Append($"   ⚠ BELEGTE Zellen: {stamped} von {hullCells} Rumpfzellen — " +
-                  "MUSS gleich sein, ist es aber nicht: SetOccupant stempelt nur die\n" +
-                  "     Satzzelle, waehrend Can_go @0x4055D0 den ganzen Rumpf prueft " +
-                  "(4 Zellen bei subclass 4 @0x406669, 16 bei subclass 5 @0x40671B).\n" +
-                  "     Solange das so ist, ueberlappen zwei Schiffe und ein Landfahrzeug\n" +
-                  "     faehrt durch drei Viertel eines Schlachtschiffs.");
+        // ⚠ 14.08.2026 — DIESE ZEILE BEHAUPTETE FRUEHER IMMER DEN FEHLER.
+        // Sie stammt aus dem Lauf, der ihn gefunden hat, und sagte auch dann
+        // "MUSS gleich sein, ist es aber nicht", als es gleich WAR (map_DM_3
+        // 104 von 104). Ein Prueftext, der auf jeder Karte dasselbe sagt,
+        // prueft nichts mehr (Regel 30) — jetzt entscheidet die Zahl.
+        sb.Append(stamped == hullCells
+            ? $"   BELEGTE Zellen: {stamped} von {hullCells} Rumpfzellen — vollstaendig. " +
+              "Der ganze Rumpf ist gestempelt,\n" +
+              "     wie Can_go @0x4055D0 ihn prueft (4 Zellen bei subclass 4 @0x406669, " +
+              "16 bei subclass 5 @0x40671B).\n" +
+              "     Vor der Behebung war es EINE Zelle je Schiff."
+            : $"   ⚠ BELEGTE Zellen: {stamped} von {hullCells} Rumpfzellen — es fehlen " +
+              $"{hullCells - stamped}.\n" +
+              "     Erwartet wird der ganze Rumpf (Can_go @0x4055D0: 4 Zellen bei subclass 4\n" +
+              "     @0x406669, 16 bei subclass 5 @0x40671B). Fehlende Zellen heissen: dort\n" +
+              "     kann ein zweites Schiff oder ein Landfahrzeug hineinfahren.\n" +
+              "     ⚠ Ein Satz, dessen Grundriss in der KARTE 1x1 ist, obwohl seine Gattung\n" +
+              "     einen Rumpf verlangt, faellt hier ebenfalls auf — das ist dann eine\n" +
+              "     Aussage ueber die Karte, nicht ueber den Stempel.");
         foreach (string l in lines) sb.Append("\n   " + l);
         return sb.ToString();
     }
