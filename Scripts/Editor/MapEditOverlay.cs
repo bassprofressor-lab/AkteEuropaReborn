@@ -150,12 +150,82 @@ public partial class MapEditOverlay : Node2D
         GD.Print($"map-edit-check: Gegenstaende -> {props} von 3 stehen im Raster " +
                  $"({_props.Count} Arten zur Wahl)");
 
+        // 3b. eine RAMPE: eine Zelle mit Gelaendebyte 1..4 suchen und sehen, ob
+        // das abgeleitete Bild das gemessene Rampenbild ist. ⚠ Gesucht statt
+        // gesetzt — welche Zelle eine Stufe traegt, entscheidet das Gelaende.
+        _brush = Brush.Gleis;
+        int rampen = 0, rampFalsch = 0;
+        for (int r = 1; r < _map.Height - 1 && rampen < 4; r++)
+            for (int c = 1; c < _map.Width - 1 && rampen < 4; c++)
+            {
+                int fl = _map.FlagAt(c, r);
+                if (fl is < 1 or > 4) continue;
+                if (MapFactory.HasRail(_map, c, r)) continue;
+                // Waagerecht fuer Byte 1/3, senkrecht fuer 2/4 — sonst waere die
+                // Form gar nicht die, fuer die das Bild gemessen ist.
+                bool waag = fl is 1 or 3;
+                var cells = waag
+                    ? new[] { (c - 1, r), (c, r), (c + 1, r) }
+                    : new[] { (c, r - 1), (c, r), (c, r + 1) };
+                foreach (var (cc, rr) in cells) PutRail(new Vector2I(cc, rr));
+                int got = FrameAt(c, r);
+                int soll = fl switch { 3 => 6, 1 => 7, 4 => 8, _ => 9 };
+                if (got == soll) rampen++;
+                else { rampFalsch++; GD.Print($"map-edit-check: ⚠ Rampe ({c},{r}) Byte {fl}: Bild {got}, erwartet {soll}"); }
+            }
+        GD.Print($"map-edit-check: Rampen -> {rampen} richtig, {rampFalsch} falsch " +
+                 "(gemessen: L-R Byte3=6 111/111, Byte1=7 148/150, T-B Byte4=8 136/136, Byte2=9 94/94)");
+
+        // 3c. das eben gesetzte Gebaeude wieder WEGNEHMEN
+        _brush = Brush.Gebaeude;
+        int nachBau = CountBuildings();
+        if (put == 1)
+        {
+            // dieselbe Zelle wie beim Setzen: der Eintrag steht in _mine
+            var b = _mine.Find(x => x.What == Brush.Gebaeude);
+            Take(new Vector2I(b.Col, b.Row));
+            GD.Print($"map-edit-check: Wegnehmen -> {_say}; Gebaeude {nachBau} -> {CountBuildings()} " +
+                     $"(vor dem Setzen {before})");
+            // ⚠ Die zweite Haelfte, und sie ist die wichtigere: ist die
+            // GRUNDFLAECHE wieder frei? Nur den Satz zu leeren waere der
+            // schlimmere Fehler — das Gebaeude waere weg und sein Platz auf
+            // ewig unpassierbar, ohne dass man saehe warum.
+            var imap2 = _map.Sec(6); var zone2 = _map.Sec(2);
+            int frei = 0, ges = 0;
+            foreach (var (dx, dy) in _layer.EditorFootCells(_typ))
+            {
+                ges++;
+                if (imap2 != null && zone2 != null &&
+                    MapDeposits.Free(_map, imap2, b.Col + dx, b.Row + dy) &&
+                    MapDeposits.Corners(zone2, _map.Width, _map.Height, b.Col + dx, b.Row + dy))
+                    frei++;
+            }
+            GD.Print($"map-edit-check: Grundflaeche nach dem Wegnehmen: {frei} von {ges} " +
+                     "Zellen wieder BAUBAR (muss ges sein — sonst bleibt der Platz gesperrt)");
+            // und gleich wieder hinstellen, damit die gespeicherte Karte einen
+            // sichtbaren Zuwachs hat und der naechste Zaehler etwas aussagt
+            PutBuilding(new Vector2I(b.Col, b.Row));
+        }
+
         // 4. speichern und nachzaehlen — was auf der Platte steht, zaehlt
         string? made = MapEditSession.Save(s => GD.Print("map-edit-check:   " + s));
         GD.Print($"map-edit-check: gespeichert als {made ?? "(nichts)"}; " +
                  $"jetzt {CountBuildings()} Gebaeude (vorher {before}), " +
                  $"{CountRail()} Gleiszellen");
         GD.Print("map-edit-check: fertig");
+    }
+
+    /// <summary>Das Bild, das jetzt in sec22 auf dieser Zelle steht, oder −1.</summary>
+    private int FrameAt(int c, int r)
+    {
+        var s = _map.Sec(22);
+        if (s == null) return -1;
+        for (int i = 0; i < MapFactory.RailSlots && i * MapFactory.RailStride + 4 < s.Length; i++)
+        {
+            int o = i * MapFactory.RailStride;
+            if (s[o + 2] != MapFactory.RailEmpty && s[o] == c && s[o + 1] == r) return s[o + 2];
+        }
+        return -1;
     }
 
     private string RailFramesLine(int c0, int r, int n)
@@ -445,10 +515,15 @@ public partial class MapEditOverlay : Node2D
         _say = $"Gleis auf ({cell.X},{cell.Y}), Linie {_line} — sichtbar nach F5";
     }
 
+    /// <summary>Das Bild einer Gleiszelle aus ihren Nachbarn UND ihrem
+    /// Gelaendebyte — letzteres entscheidet ueber die vier Rampenbilder, und
+    /// zwar gemessen in beide Richtungen (siehe
+    /// <see cref="MapFactory.RailFrame"/>).</summary>
     private int RailFrameAt(int c, int r, bool self)
         => MapFactory.RailFrame(
             MapFactory.HasRail(_map, c - 1, r), MapFactory.HasRail(_map, c + 1, r),
-            MapFactory.HasRail(_map, c, r - 1), MapFactory.HasRail(_map, c, r + 1));
+            MapFactory.HasRail(_map, c, r - 1), MapFactory.HasRail(_map, c, r + 1),
+            _map.FlagAt(c, r));
 
     private void RefreshRailAround(Vector2I cell)
     {
@@ -467,8 +542,16 @@ public partial class MapEditOverlay : Node2D
             case Brush.Gebaeude:
                 int i = _layer.EditorBuildingAt(cell);
                 if (i < 0) { _say = "dort steht kein Gebaeude"; break; }
-                _say = "Gebaeude wegnehmen geht erst nach dem naechsten Durchgang " +
-                       "— der Satz bliebe sonst in sec3 stehen";
+                int slot = _layer.EditorSlotOf(i);
+                // Erst die Karte, dann das Bild: schlaegt das Leeren des Satzes
+                // fehl, soll das Gebaeude sichtbar bleiben, statt aus der
+                // Anzeige zu verschwinden und in der Datei stehenzubleiben.
+                if (!MapFactory.ClearBuilding(_map, slot))
+                { _say = $"Platz {slot} traegt keinen gebauten Satz — nichts weggenommen"; break; }
+                _layer.EditorRemoveBuilding(slot);
+                _mine.RemoveAll(x => x.What == Brush.Gebaeude && x.Col == cell.X && x.Row == cell.Y);
+                MapEditSession.Dirty = true;
+                _say = $"Gebaeude auf Platz {slot} weg — Grundflaeche wieder frei";
                 break;
             case Brush.Gleis:
                 if (MapFactory.PutRail(_map, cell.X, cell.Y, -1, _line) < 0)

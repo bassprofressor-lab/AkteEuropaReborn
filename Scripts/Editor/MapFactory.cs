@@ -131,6 +131,76 @@ public static class MapFactory
         }
     }
 
+    /// <summary>
+    /// EIN GEBAEUDE WIEDER WEGNEHMEN — der Ruecknahmeknopf des Editors.
+    ///
+    /// <para>Zwei Dinge muessen zurueck, und beide hat <see cref="PutBuilding"/>
+    /// gesetzt: der Satz in sec3 und die Belegung in der imap. Nur den Satz zu
+    /// leeren waere der schlimmere Fehler von beiden — das Gebaeude verschwaende
+    /// aus dem Bild, seine Grundflaeche bliebe aber fuer immer unpassierbar und
+    /// unbebaubar, und niemand saehe warum.</para>
+    ///
+    /// <para><b>Worauf die imap zurueckgesetzt wird</b>: auf den Wert, den das
+    /// Zonenraster sec2 fuer diese Zelle nennt. <see cref="Paint"/> setzt beide
+    /// in EINEM Zug, also ist die Umkehrung auf einer vom Editor erzeugten Karte
+    /// exakt und nicht geraten — und der Editor bearbeitet nur solche
+    /// (<see cref="MapEditSession"/>). ⚠ Die eine Unschaerfe ist benannt: Zone 0
+    /// steht sowohl fuer Wasser als auch fuer gesperrt, und <c>Paint</c> bildet
+    /// beide darauf ab. Zurueck geht es darum auf <b>gesperrt</b> — der
+    /// vorsichtigere der zwei Werte, denn eine faelschlich begehbare Wasserzelle
+    /// waere ein Weg fuer Fahrzeuge, wo keiner sein darf.</para>
+    ///
+    /// <para>⚠ <b>Der Platz wird NICHT nachgerueckt.</b> Die Saetze dahinter
+    /// behalten ihre Nummer, und der frei gewordene bleibt frei. Das Original
+    /// nummeriert seine Gebaeude nicht um, und der Handgriff in der imap
+    /// (<see cref="BuildingHandle"/>) haengt an der Platznummer: wer
+    /// nachrueckte, muesste jede Zelle jedes dahinterliegenden Gebaeudes
+    /// mitziehen.</para>
+    /// </summary>
+    /// <returns>false, wenn dort gar kein gebautes Gebaeude steht.</returns>
+    public static bool ClearBuilding(CwmFile m, int slot)
+    {
+        var s = m.Sec(3);
+        if (s == null || slot < 0) return false;
+        int o = slot * CwmData.BuildingStride;
+        if (o + CwmData.BuildingStride > s.Length) return false;
+        if (s[o + 0x18] != 1) return false;                  // steht nichts drauf
+
+        int col = s[o] | (s[o + 1] << 8);
+        int row = s[o + 2] | (s[o + 3] << 8);
+
+        // die imap wieder freigeben — nur die Zellen, die WIRKLICH diesem
+        // Gebaeude gehoeren. Der Handgriff sagt es; ein Vergleich der Zellen
+        // waere Raterei, sobald zwei Gebaeude sich beruehren.
+        var imap = m.Sec(6);
+        var zone = m.Sec(2);
+        if (imap != null)
+        {
+            int handle = BuildingHandle(slot);
+            for (int dr = 0; dr < CwpFile.PatternHeight; dr++)
+                for (int dc = 0; dc < CwpFile.PatternWidth; dc++)
+                {
+                    int c = col + dc, r = row + dr;
+                    if (c < 0 || c >= m.Width || r < 0 || r >= m.Height) continue;
+                    int i = (c * ImapStride + r) * 2;
+                    if (i + 1 >= imap.Length) continue;
+                    if ((imap[i] | (imap[i + 1] << 8)) != handle) continue;
+                    int z = zone != null && c * ZoneStride + r < zone.Length
+                          ? zone[c * ZoneStride + r] : ZoneLand;
+                    int v = z switch
+                    {
+                        ZoneLand => ImapFree,
+                        ZoneShore => ImapRough,
+                        _ => ImapBlocked,          // Zone 0: Wasser ODER gesperrt
+                    };
+                    imap[i] = (byte)(v & 0xFF); imap[i + 1] = (byte)(v >> 8);
+                }
+        }
+
+        for (int k = 0; k < CwmData.BuildingStride; k++) s[o + k] = 0;
+        return true;
+    }
+
     // ========================================================================
     //  sec22 — DAS GLEIS
     // ========================================================================
@@ -203,28 +273,51 @@ public static class MapFactory
     ///   4  links–unten      5  links–oben
     /// </code>
     ///
-    /// <para>⚠ <b>Die vier Rampenbilder 6..9 setzt der Editor NICHT.</b> Sie
-    /// sitzen im Original ausnahmslos auf einer Zelle, deren Gelaendebyte +3 die
-    /// passende Stufe nennt (147 von 147, 170 von 170, 180 von 180, 118 von 118)
-    /// — sie gehoeren also zum GELAENDE und nicht zur Streckenfuehrung. Ein
-    /// Editor, der sie nach Gefuehl setzte, wuerde eine Rampe behaupten, wo
-    /// keine Stufe ist. Wer eine Rampe will, malt die Stufe; das Bild dafuer
-    /// abzuleiten ist ein eigener Durchgang.</para>
+    /// <para><b>DIE VIER RAMPENBILDER 6..9 KOMMEN AUS DEM GELAENDEBYTE</b>
+    /// (sec1 +3), und seit dem 14.08.2026 setzt der Editor sie:</para>
+    /// <code>
+    ///   links–rechts, Byte 3 -> 6   (Rampe, links hoeher)
+    ///   links–rechts, Byte 1 -> 7   (Rampe, rechts hoeher)
+    ///   oben–unten,   Byte 4 -> 8   (Rampe, oben hoeher)
+    ///   oben–unten,   Byte 2 -> 9   (Rampe, unten hoeher)
+    /// </code>
+    ///
+    /// <para>⚠ Hier stand »die setzt der Editor NICHT«, weil im Kopf von
+    /// <see cref="CwmExtra.RailCell"/> nur EINE Richtung gemessen war: jede
+    /// Zelle MIT Bild 6 hat Byte 3 (147 von 147). Das ist nicht dasselbe wie
+    /// »jede waagerechte Zelle mit Byte 3 hat Bild 6«. <b>Die Umkehrung ist am
+    /// 14.08.2026 nachgemessen</b>, ueber die acht gelieferten Karten mit
+    /// Gleis:</para>
+    /// <code>
+    ///   L–R, Byte 3 -> Bild 6:  111 von 111
+    ///   L–R, Byte 1 -> Bild 7:  148 von 150   (die zwei anderen sind 107 und
+    ///                                          117, also ZERSTOERTE 7 —
+    ///                                          bild % 10 == 7, siehe rail_hit
+    ///                                          @0x4B0460)
+    ///   T–B, Byte 4 -> Bild 8:  136 von 136
+    ///   T–B, Byte 2 -> Bild 9:   94 von  94
+    /// </code>
+    /// <para>Kein Gegenbeispiel. Die Regel gilt also in beide Richtungen, und
+    /// damit ist das Rampenbild <b>ableitbar</b> statt geraten. Es bleibt eine
+    /// Sache des GELAENDES: wer eine Rampe will, malt die Stufe — der Editor
+    /// erfindet keine.</para>
     ///
     /// <para>Ein Stueck ohne jeden Nachbarn bekommt 0 (links–rechts) — das
     /// Original haelt dafuer keine eigene Form bereit, und eine Zelle muss ein
     /// Bild haben.</para>
     /// </summary>
-    public static int RailFrame(bool left, bool right, bool up, bool down)
+    /// <param name="flag">Das Gelaendebyte sec1 +3 dieser Zelle
+    /// (<see cref="CwmFile.FlagAt"/>). 0 = eben, kein Rampenbild.</param>
+    public static int RailFrame(bool left, bool right, bool up, bool down, int flag = 0)
     {
-        if (left && right) return 0;
-        if (up && down) return 1;
+        if (left && right) return flag == 3 ? 6 : flag == 1 ? 7 : 0;
+        if (up && down) return flag == 4 ? 8 : flag == 2 ? 9 : 1;
         if (right && down) return 2;
         if (right && up) return 3;
         if (left && down) return 4;
         if (left && up) return 5;
-        if (up || down) return 1;
-        return 0;
+        if (up || down) return flag == 4 ? 8 : flag == 2 ? 9 : 1;
+        return flag == 3 ? 6 : flag == 1 ? 7 : 0;
     }
 
     /// <summary>Eine Marke in sec4 setzen. Typ 0x70..0x74 sind die

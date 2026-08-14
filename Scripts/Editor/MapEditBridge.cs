@@ -111,6 +111,13 @@ public partial class MapEntityLayer
         return -1;
     }
 
+    /// <summary>Der Gebaeudeplatz (sec3-Nummer) hinter einem Listenplatz —
+    /// <see cref="EditorBuildingAt"/> liefert den Listenplatz, weggenommen wird
+    /// aber ueber die Satznummer. Die zwei zu verwechseln hiesse, ein anderes
+    /// Gebaeude zu loeschen als das angezeigte.</summary>
+    public int EditorSlotOf(int index)
+        => index >= 0 && index < _entities.Count ? _entities[index].Slot : -1;
+
     /// <summary>Die Namen der Gebaeudearten, die dieser Kachelsatz traegt —
     /// damit die Auswahlliste des Editors nicht raet, was es gibt.</summary>
     public List<int> EditorBuildingTypes()
