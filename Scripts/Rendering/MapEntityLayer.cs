@@ -489,7 +489,32 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     /// <summary>`--air-facing-check`: jeden Takt Flugrichtung gegen
     /// Blickrichtung der Versorgungshelikopter mitschreiben. Gemeldet als »sie
-    /// fliegen seitwaerts bzw. rueckwaerts«.</summary>
+    /// fliegen seitwaerts bzw. rueckwaerts«.
+    ///
+    /// <para>⚠ <b>WOHIN SIEHT EIN HELI OHNE AUFTRAG? DAS ORIGINAL TUT GAR
+    /// NICHTS — gelesen, 14.08.2026.</b> Die Frage stand offen, weil die Sonde
+    /// 11100 von 11100 Messzeilen OHNE ZIEL fand: sie schweben, und wir setzen
+    /// die Blickrichtung nur im Flug. Der Spieler wollte darum erst das Original
+    /// gelesen haben, statt uns eine Drehung ausdenken zu lassen.</para>
+    ///
+    /// <para>Die Luftschleife nennt sich selbst <c>move_airplanes</c> (die
+    /// Meldung »End of move_airplanes« @0x4F92C0 wird @0x425200 abgesetzt).
+    /// Ueber ihren ganzen Bereich <b>0x424000..0x425210</b> stehen <b>zehn</b>
+    /// Zugriffe auf die Einheitentafel 0x6E26C8, und <b>genau einer davon
+    /// schreibt</b>: <c>mov word ptr [ecx + 0x6E26F6], dx</c> @0x424946 — das
+    /// ist <b>+0x2E, der Sprit</b>. Auf das Blickrichtungsbyte <b>+0x08</b>
+    /// (absolut 0x6E26D0) schreibt die Luftschleife <b>nirgends</b>; ein roher
+    /// Scan ueber den ganzen <c>.text</c> findet zehn Stellen fuer +0x08, vier
+    /// davon schreibend (0x40B7FF, 0x40CF9C, 0x40D206, 0x411E93, 0x41209D) —
+    /// alle im allgemeinen Bewegungs- und Kampfwerk, keine in der Luft.</para>
+    ///
+    /// <para><b>Also: ein schwebender Helikopter behaelt die Richtung seines
+    /// letzten Fluges.</b> Genau das tun wir seit <c>addbc60</c> auch, und
+    /// deshalb ist hier nichts zu bauen. ⚠ Der Scan ist eine Untergrenze
+    /// (Regel 7) — er saehe keinen Zugriff ueber eine im Register gehaltene
+    /// Basis; darum wurde der Bereich der Luftschleife zusaetzlich Zeile fuer
+    /// Zeile abgesucht, und dort steht ueberhaupt nur der eine Schreibzugriff
+    /// auf den Sprit.</para></summary>
     public static bool AirFacingTrace;
 
     /// <summary>Die acht Blickrichtungen in Worten — damit in der Sonde nicht
