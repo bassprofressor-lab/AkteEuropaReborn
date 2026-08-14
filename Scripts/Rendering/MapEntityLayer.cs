@@ -15122,8 +15122,34 @@ public partial class MapEntityLayer : Node2D
     /// `part = airframe - 8` rule was wrong for everything except kind 10, so
     /// both supply helicopters and all three fixed-wing types used to be drawn
     /// with the wrong hull. The exporter files the frames under the kind.</summary>
+    /// <summary>
+    /// <c>--air-facing-offset=N</c> — VERSCHIEBT die Bildnummer gegen die
+    /// Blickrichtung, um genau EINE Frage zu entscheiden.
+    ///
+    /// <para>Die Lage am 14.08.2026: der Zustand stimmt (8149 Messzeilen mit
+    /// Ziel, 10 auseinander, alle im Takt 0), die acht Bilder sind ein echter
+    /// Drehring (Nachbarn 77..82 % deckungsgleich, Gegenueber 63..64 %) — und
+    /// im Spiel steht der Rumpf trotzdem quer zum Flugpfeil. Bleibt die
+    /// Zuordnung Nummer -> Bilddatei.</para>
+    ///
+    /// <para>Zwei Versuche, sie am exportierten Bild allein zu messen, sind
+    /// gescheitert, und beide aus einem strukturellen Grund: »hell ist die
+    /// Kanzel« misst die BELEUCHTETE Seite (Licht steht fest, Spanne 330 Grad),
+    /// und »die Hauptachse ist die Laengsachse« misst die Isometrie (jedes
+    /// Objekt ist breiter als hoch, Spanne 338 Grad). Beide Male hat die
+    /// Streuung die Annahme widerlegt, nicht die Zuordnung.</para>
+    ///
+    /// <para>Also der Weg, den dieses Projekt fuer solche Fragen hat: ZWEI
+    /// Faelle im selben Lauf herstellen und den entscheiden lassen, der
+    /// stimmt — wie <c>--stempel-alt</c> es fuer den Rahmen tat. ⚠ Der Schalter
+    /// ist ein MESSGERAET und keine Einstellung: was am Ende gilt, gehoert als
+    /// Zahl in den Code, nicht auf die Befehlszeile.</para>
+    /// </summary>
+    public static int AirFacingOffset;
+
     private Texture2D? GetAirframeTexture(int kind, int facing)
     {
+        if (AirFacingOffset != 0) facing = ((facing + AirFacingOffset) % 8 + 8) % 8;
         var key = (kind, facing);
         if (_airTex.TryGetValue(key, out var cached)) return cached;
         string path = Core.Content.Path($"Units/aircraft/{kind}/f{facing}.png");
@@ -15985,6 +16011,40 @@ public partial class MapEntityLayer : Node2D
             var tex = GetAirframeTexture(s.Kind, s.Facing);
             if (tex != null) DrawTexture(tex, air - ComposedAnchor);
             else DrawDiamond(air, 8f, new Color(0.1f, 0.9f, 0.95f));
+
+            // ⚠ DIE UEBERLAGERUNG ZUR BLICKRICHTUNG (--air-facing-check).
+            //
+            // Zwei Versuche, sie am exportierten Bild allein zu entscheiden,
+            // sind gescheitert, und beide aus einem strukturellen Grund:
+            //   * »hell ist die Kanzel« — die gemessene Richtung zeigte in
+            //     allen acht Bildern nach links (Spanne 330 Grad). Das Helle
+            //     ist die BELEUCHTETE Seite, und das Licht steht fest.
+            //   * »die Hauptachse ist die Laengsachse« — Spanne 338 Grad. In
+            //     einer 2:1-Isometrie ist JEDES Objekt breiter als hoch, die
+            //     Hauptachse liegt also immer waagerecht.
+            // Beide Male hat die Streuung die Annahme widerlegt, nicht die
+            // Zuordnung. Was bleibt, ist die Regel des Hauses: zwei Dinge
+            // NEBENEINANDER im selben Bild (Regel 22).
+            //
+            // GRUEN = wohin das Flugzeug wirklich fliegt (Ziel minus Ort).
+            // ROT   = wohin die gezeichnete Nummer `Facing` zeigen soll,
+            //         also 90 + 45*Facing Grad auf dem Bildschirm.
+            // Decken sich die zwei und die Nase steht quer dazu, liegt es an
+            // der Bildzuordnung; laufen sie auseinander, am Zustand.
+            if (AirFacingTrace)
+            {
+                const float len = 34f;
+                float fa = Mathf.DegToRad(90f + 45f * s.Facing);
+                var soll = air + new Vector2(Mathf.Cos(fa), Mathf.Sin(fa)) * len;
+                DrawLine(air, soll, new Color(1f, 0.35f, 0.35f), 2f);
+                DrawCircle(soll, 3f, new Color(1f, 0.35f, 0.35f));
+                if (s.Goal is { } gv && (gv - s.Pos).LengthSquared() > 1f)
+                {
+                    var fl = air + (gv - s.Pos).Normalized() * len;
+                    DrawLine(air, fl, new Color(0.35f, 1f, 0.45f), 2f);
+                    DrawCircle(fl, 3f, new Color(0.35f, 1f, 0.45f));
+                }
+            }
             if (s.Airframe == 120)                     // helicopters get a rotor
             {
                 // ⚠ 15.08.2026 — HIER WURDE EIN SCHATTEN ALS ROTOR GEZEICHNET.

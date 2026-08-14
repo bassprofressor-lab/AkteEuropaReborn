@@ -767,6 +767,11 @@ public partial class MapViewer : Node2D
             // Prueflauf, der die Rastergroesse oder den Kachelsatz belegen
             // will, setzt ihn.
             else if (a == "--hud-debug") HudDebug = true;
+            // Messgeraet zur Blickrichtung der Flugzeuge, siehe
+            // MapEntityLayer.AirFacingOffset — verschiebt die Bildnummer, damit
+            // zwei Lesarten im selben Lauf nebeneinander stehen koennen.
+            else if (a.StartsWith("--air-facing-offset="))
+                MapEntityLayer.AirFacingOffset = a["--air-facing-offset=".Length..].ToInt();
             else if (a == "--cheat-check") _cheatCheck = 2f;
             else if (a == "--air-buy-check") _airBuyCheck = 3f;
             else if (a == "--produce-check") _produceCheck = 2f;
