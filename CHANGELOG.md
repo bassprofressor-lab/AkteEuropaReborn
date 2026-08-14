@@ -40,6 +40,14 @@ deviate on purpose, and every deviation is marked as ours.
   maps every building tile lies inside a building's frame — 2094 of 2094 on one,
   160 of 160 on the other, and not a single one stands alone. The map check now
   counts both.
+- **The editor has a brush.** You can now place **buildings** by hand (any kind
+  the tileset knows — military or civilian, with a choice of owner down to
+  unowned and scenery), **objects** and **railway track**. A building appears at
+  once; objects and track go into the picture when you save, and until then the
+  screen shows a preview and says that it is one. A building only goes on a real
+  build site — and where it does not, the screen names the cell and the reason.
+  The image of a piece of track is not chosen but derived from its neighbours,
+  following the table the 1997 game keeps itself.
 - **A generated map is now a conquest map.** It gets neutral buildings like the
   shipped skirmish maps: count, kinds, doors, hit points and spacing are measured
   from seven shipped maps; the distribution and placement are ours. Four

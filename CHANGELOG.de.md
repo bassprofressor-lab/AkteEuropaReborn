@@ -42,6 +42,15 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Rahmen eines Gebäudes — 2094 von 2094 auf der einen, 160 von 160 auf der
   anderen, und keine einzige steht allein. Die Kartenprüfung zählt beides jetzt
   mit.
+- **Der Editor hat einen Pinsel.** Auf der Karte lassen sich jetzt **Gebäude**
+  (jede Art, die der Kachelsatz kennt — militärisch wie zivil, mit wählbarem
+  Eigner bis hin zu herrenlos und Kulisse), **Gegenstände** und **Bahngleise**
+  von Hand setzen. Ein Gebäude steht sofort da; Gegenstände und Gleise kommen
+  beim Speichern ins Bild, und bis dahin zeigt der Schirm eine Vorschau und sagt
+  dazu, dass es eine ist. Ein Gebäude kommt nur auf einen echten Bauplatz — und
+  wo nicht, nennt der Schirm die Zelle und den Grund. Das Bild eines Gleisstücks
+  wird nicht gewählt, sondern aus seinen Nachbarn bestimmt, nach der Tafel, die
+  das Spiel von 1997 selbst führt.
 - **Eine erzeugte Karte ist jetzt eine Eroberungskarte.** Sie bekommt neutrale
   Gebäude wie die gelieferten Gefechtskarten: Zahl, Arten, Türen, Trefferpunkte
   und Abstände sind aus sieben gelieferten Karten gemessen; verteilt und gesetzt
