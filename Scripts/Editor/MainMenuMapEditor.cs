@@ -241,7 +241,11 @@ public partial class MainMenu
                 // Bodenblock nicht kennt. ,ohnetabelle ist die GEGENPROBE — sie
                 // schaltet sie ab, und dann muss der Pruefstand bei »Landzellen
                 // am Wasser mit Innenland-Code« von 0 auf ~100 % springen.
-                var model = useModel ? TileModel.Learn(ts, say) : null;
+                // ⚠ Der Kachelsatz geht MIT, und zwar wegen der Gebaeudekacheln:
+                // ohne ihn lernt die Tabelle sie als Gelaende und der Generator
+                // streut einzelne Gebaeudewaende in die Wiese. Begruendung und
+                // Zahlen bei TileModel._buildingTiles.
+                var model = useModel ? TileModel.Learn(ts, say, cwp) : null;
                 if (model != null) say(model.Describe());
                 // ⚠ ,ohnenaht ist die GEGENPROBE zur Nahtwahl: sie schaltet sie
                 // ab, und dann muss der Anteil harter Naehte von ~1 % auf ~8,6 %

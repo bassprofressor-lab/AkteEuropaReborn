@@ -179,6 +179,8 @@ public static class MapCheck
         say($"  Bild gegen imap: {codeWaterClassLand} Wasserkacheln auf Land, " +
             $"{codeLandClassWater} Landkacheln auf Wasser");
 
+        bad += BuildingTileCheck(code, w, h, tileset, ent.RootElement, say);
+
         // ================= die gemessenen Kennzahlen ========================
         bad += Elevations(w, h, elev, flag, say);
         bad += Water(w, h, elev, ground, say);
@@ -395,6 +397,115 @@ public static class MapCheck
     }
 
     private static string Pc(long a, long b) => b == 0 ? "—" : $"{100.0 * a / b:0.00} %";
+
+    /// <summary>
+    /// LIEGT EINE GEBAEUDEKACHEL DA, WO SIE NICHT HINGEHOERT?
+    ///
+    /// <para>⚠ <b>Warum es diesen Zaehler gibt (14.08.2026).</b> Der Spieler
+    /// meldete, auf erzeugten Karten seien »die Gebaeude alle wie
+    /// unvollstaendig, zerstueckelt«. Nachgesehen am Bild waren sie es nicht:
+    /// Basis (Typ 1) und Fabrik (Typ 2) einer erzeugten Karte sind Bild fuer
+    /// Bild dieselben wie auf <c>map_NET02</c> — bis auf die Ziffer am Tor. Was
+    /// zerstueckelt aussah, waren EINZELNE Gebaeudekacheln, die als Bewuchs
+    /// ueber das Gelaende gestreut waren, samt der schwarzen Innenkacheln, die
+    /// nur im Verbund einen Sinn ergeben. Herkunft: das Original schreibt die
+    /// Kacheln eines Gebaeudes als <c>kachel + 0x2710</c> ins Kartenraster
+    /// (@0x4C8E2D), und <see cref="TileModel"/> hat sie darum als Gelaende
+    /// gelernt.</para>
+    ///
+    /// <para><b>Die zwei Messlatten, beide ohne Gegenbeispiel:</b> auf den
+    /// gelieferten Karten des Kachelsatzes 47 liegt jede Gebaeudekachel im
+    /// 10x6-Rahmen eines Gebaeudeeintrags (<b>2094 von 2094</b> auf map_NET02,
+    /// <b>160 von 160</b> auf map_NET07), und <b>keine einzige steht allein</b>
+    /// — 0 % ohne Nachbarn derselben Art. Jede erzeugte Karte lag vor der
+    /// Behebung bei rund <b>64 %</b> einzeln (map_eigen01 80 von 126,
+    /// map_neu47 481 von 753).</para>
+    ///
+    /// <para>⚠ Gezaehlt wird <b>beides</b>, und das ist Absicht: »ausserhalb
+    /// eines Rahmens« allein wuerde eine Kulisse aus zusammenhaengenden
+    /// Gebaeudekacheln zu Unrecht anschlagen lassen, »einzeln stehend« allein
+    /// wuerde einen versehentlich gesetzten Zweierblock durchlassen. Ein
+    /// Ja/Nein-Kriterium auf echten Daten braucht die zweite Frage.</para>
+    ///
+    /// <para>⚠ Ohne die exportierten Muster (<c>Buildings/tileset_nn.json</c>)
+    /// kann der Zaehler gar nichts sagen — dann sagt er DAS, statt zu
+    /// schweigen und wie ein bestandener Test auszusehen.</para>
+    /// </summary>
+    private static int BuildingTileCheck(int[] code, int w, int h, int tileset,
+                                         JsonElement ent, Action<string> say)
+    {
+        string patPath = ProjectSettings.GlobalizePath(Core.Content.UserRoot)
+                             .TrimEnd('/', '\\') + $"/Buildings/tileset_{tileset:00}.json";
+        var pat = Import.BuildingPatterns.Load(patPath);
+        if (pat == null || !pat.HasBuildings)
+        {
+            say($"  Gebaeudekacheln: {patPath} fehlt — NICHT geprueft " +
+                "(der Zaehler kann ohne die Muster nicht unterscheiden)");
+            return 0;
+        }
+
+        var bTiles = new HashSet<int>();
+        for (int typ = 0; typ < Import.CwpFile.BuildingTypeCount; typ++)
+        {
+            var bt = pat.GetBuildingType(typ);
+            if (bt.IsEmpty) continue;
+            for (int k = 0; k < bt.PatternCount; k++)
+                for (int x = 0; x < Import.CwpFile.PatternWidth; x++)
+                    for (int y = 0; y < Import.CwpFile.PatternHeight; y++)
+                    {
+                        int t = pat.PatternTile(bt.FirstPattern + k, x, y);
+                        if (t != 0) bTiles.Add(t);
+                    }
+        }
+
+        // Die Rahmen der eingetragenen Gebaeude — 10x6 ab (col,row), wie
+        // add_building sie stempelt.
+        var box = new HashSet<int>();
+        if (ent.TryGetProperty("buildings", out var bl) &&
+            bl.ValueKind == JsonValueKind.Array)
+            foreach (var b in bl.EnumerateArray())
+            {
+                if (!b.TryGetProperty("col", out var bc) ||
+                    !b.TryGetProperty("row", out var br)) continue;
+                int c0 = bc.GetInt32(), r0 = br.GetInt32();
+                for (int dx = 0; dx < Import.CwpFile.PatternWidth; dx++)
+                    for (int dy = 0; dy < Import.CwpFile.PatternHeight; dy++)
+                    {
+                        int c = c0 + dx, r = r0 + dy;
+                        if (c >= 0 && c < w && r >= 0 && r < h) box.Add(r * w + c);
+                    }
+            }
+
+        var cells = new HashSet<int>();
+        for (int i = 0; i < code.Length; i++)
+            if (code[i] >= TileModel.ObjectCodeMin &&
+                bTiles.Contains(code[i] - Import.CwpFile.ObjectCodeBase))
+                cells.Add(i);
+
+        int outside = 0, alone = 0, firstAlone = -1;
+        foreach (int i in cells)
+        {
+            if (!box.Contains(i)) outside++;
+            int c = i % w, r = i / w;
+            bool near =
+                (c + 1 < w && cells.Contains(i + 1)) ||
+                (c - 1 >= 0 && cells.Contains(i - 1)) ||
+                (r + 1 < h && cells.Contains(i + w)) ||
+                (r - 1 >= 0 && cells.Contains(i - w));
+            if (!near) { alone++; if (firstAlone < 0) firstAlone = i; }
+        }
+
+        say($"  Gebaeudekacheln im Raster: {cells.Count}, davon ausserhalb eines " +
+            $"Gebaeuderahmens {outside}, davon einzeln stehend {alone} " +
+            $"({Pc(alone, cells.Count)})");
+        say("    Messlatte aus den gelieferten Karten: 0 ausserhalb, 0 einzeln " +
+            "(map_NET02 2094 Kacheln, map_NET07 160 — kein Gegenbeispiel)");
+        if (alone == 0 && outside == 0) return 0;
+        say($"  ^ FEHLER: eine Gebaeudekachel ist Teil eines Gebaeudes und kein " +
+            $"Bewuchs. Erste einzeln stehende Zelle " +
+            $"({firstAlone % w},{firstAlone / w}).");
+        return 1;
+    }
 
     // ========================================================================
     //  Hoehen

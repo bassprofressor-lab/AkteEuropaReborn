@@ -50,6 +50,72 @@ public sealed class TileModel
     /// zaehlt wie Wasser, weil das Original seine Raender so behandelt).</summary>
     private readonly Dictionary<int, Bucket> _t = new();
 
+    /// <summary>
+    /// DIE KACHELN, DIE ZU EINEM GEBAEUDE GEHOEREN — und die deshalb NICHT als
+    /// Gelaende gelernt werden duerfen.
+    ///
+    /// <para>⚠ <b>Der Fehler, den das behebt (14.08.2026).</b> Der Spieler
+    /// meldete, auf erzeugten Karten seien »die Gebaeude alle wie unvollstaendig,
+    /// zerstueckelt«. Sie waren es nicht: Basis und Fabrik einer erzeugten Karte
+    /// sind Bild fuer Bild dieselben wie auf <c>map_NET02</c>. Zerstueckelt war
+    /// das GELAENDE — der Generator streute EINZELNE Gebaeudekacheln als
+    /// Bewuchs ueber die Karte, samt der schwarzen Innenkacheln, die nur im
+    /// Verbund einen Sinn ergeben.</para>
+    ///
+    /// <para><b>Woher sie kamen.</b> Das Original schreibt die Kacheln eines
+    /// Gebaeudes als <c>kachel + 0x2710</c> in das KARTENRASTER (@0x4C8E2D) —
+    /// fuer <see cref="Feed"/> sahen sie deshalb aus wie ein Baum oder ein Fels
+    /// und landeten mit ihrem Gelaendeschluessel in der Tabelle. Danach konnte
+    /// jede Wiese mit demselben Schluessel eine Gebaeudewand abbekommen.</para>
+    ///
+    /// <para><b>Die Regel steht in den Daten, ohne Gegenbeispiel:</b> eine
+    /// Gebaeudekachel liegt dort ausschliesslich im 10x6-Rahmen eines
+    /// Gebaeudeeintrags — <b>2094 von 2094</b> auf <c>map_NET02</c>, <b>160 von
+    /// 160</b> auf <c>map_NET07</c>, keine einzige daneben. Und keine von ihnen
+    /// steht allein: <b>0 %</b> ohne Nachbarn derselben Art, waehrend jede
+    /// erzeugte Karte bei <b>rund 64 %</b> lag. Genau diese zwei Zahlen zaehlt
+    /// <see cref="MapCheck"/> jetzt mit.</para>
+    ///
+    /// <para>⚠ Ohne <see cref="Import.IBuildingPatterns"/> bleibt die Menge leer
+    /// und es wird nichts uebergangen — dann sagt <see cref="Describe"/> das
+    /// auch, statt stillschweigend beim alten Verhalten zu bleiben.</para>
+    /// </summary>
+    private readonly HashSet<int> _buildingTiles = new();
+
+    /// <summary>Wie viele Zellen beim Lernen uebergangen wurden, weil dort eine
+    /// Gebaeudekachel liegt. Steht in <see cref="Describe"/> — eine Zahl, die
+    /// niemand sieht, ist keine.</summary>
+    public int BuildingCellsIgnored { get; private set; }
+
+    /// <summary>Ob die Gebaeudekacheln ueberhaupt bekannt sind.</summary>
+    public bool KnowsBuildings => _buildingTiles.Count > 0;
+
+    private void LearnBuildingTiles(Import.IBuildingPatterns? p)
+    {
+        if (p == null || !p.HasBuildings) return;
+        for (int typ = 0; typ < Import.CwpFile.BuildingTypeCount; typ++)
+        {
+            var bt = p.GetBuildingType(typ);
+            if (bt.IsEmpty) continue;
+            // ALLE Muster des Typs, nicht nur das Grundmuster: die
+            // Schadensauflagen und die Ruine tragen eigene Kacheln, und auf
+            // einer gelieferten Karte steht ein beschaedigtes Gebaeude mit
+            // genau denen im Raster.
+            for (int k = 0; k < bt.PatternCount; k++)
+                for (int x = 0; x < Import.CwpFile.PatternWidth; x++)
+                    for (int y = 0; y < Import.CwpFile.PatternHeight; y++)
+                    {
+                        int t = p.PatternTile(bt.FirstPattern + k, x, y);
+                        if (t != 0) _buildingTiles.Add(t);
+                    }
+        }
+    }
+
+    /// <summary>Traegt diese Rasterzelle die Kachel eines Gebaeudes?</summary>
+    private bool IsBuildingTile(int code)
+        => code >= ObjectCodeMin
+           && _buildingTiles.Contains(code - Import.CwpFile.ObjectCodeBase);
+
     private sealed class Bucket
     {
         public readonly List<int> Codes = new();
@@ -125,9 +191,12 @@ public sealed class TileModel
     /// zuerst, dann der Entwicklungsbaum (<c>Core.Content.Path</c>) —, denn eine
     /// Tabelle aus dem Entwicklungsbaum waere nicht die, die zum Bild passt.
     /// </summary>
-    public static TileModel? Learn(int tileset, Action<string> say, string? onlyMap = null)
+    public static TileModel? Learn(int tileset, Action<string> say,
+                                   Import.IBuildingPatterns? patterns = null,
+                                   string? onlyMap = null)
     {
         var mdl = new TileModel { Tileset = tileset };
+        mdl.LearnBuildingTiles(patterns);
         foreach (string dir in new[] { Core.Content.UserRoot + "Maps", Core.Content.DevRoot + "Maps" })
         {
             if (!DirAccess.DirExistsAbsolute(dir)) continue;
@@ -220,6 +289,10 @@ public sealed class TileModel
                 for (int c = 0; c < w; c++)
                 {
                     int i = r * w + c;
+                    // ⚠ Eine Gebaeudekachel ist kein Gelaende — siehe
+                    // <see cref="_buildingTiles"/>. Sie steht im Raster nur,
+                    // weil das Original sie dort hineinschreibt.
+                    if (IsBuildingTile(code[i])) { BuildingCellsIgnored++; continue; }
                     Slot(Key(g[i], flag[i], WaterMask(w, h, g, c, r), dist[i])).Add(code[i], 1);
                 }
             SourceMaps++;
@@ -573,6 +646,11 @@ public sealed class TileModel
         }
         return $"Kachelsatz {Tileset:00}: {Keys} Schluessel, {codes} Codes " +
                $"({obj} davon Objektcodes), {cells} gemessene Zellen aus " +
-               $"{SourceMaps} Karte(n)";
+               $"{SourceMaps} Karte(n); " +
+               (KnowsBuildings
+                   ? $"{BuildingCellsIgnored} Zellen uebergangen, weil dort eine " +
+                     $"GEBAEUDEKACHEL liegt ({_buildingTiles.Count} solche Kacheln bekannt)"
+                   : "⚠ die Gebaeudekacheln sind UNBEKANNT — sie werden als Gelaende " +
+                     "gelernt und einzeln ueber die Karte gestreut");
     }
 }
