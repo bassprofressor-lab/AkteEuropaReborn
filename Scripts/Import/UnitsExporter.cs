@@ -414,7 +414,11 @@ public sealed class UnitsExporter
         {
             int b = _cwr.PartBase(part);
             if (b < 0) continue;
-            for (int f = 0; f < CwrFile.Facings; f++)
+            // ⚠ SECHZEHN, nicht acht — Begruendung bei CwrFile.AirFacings. Bis
+            // zum 14.08.2026 stand hier `CwrFile.Facings`, und damit wurde die
+            // ERSTE HAELFTE des Drehrings exportiert. Ein Flugzeug konnte nicht
+            // nach hinten sehen.
+            for (int f = 0; f < CwrFile.AirFacings; f++)
                 Save($"aircraft/{kind}/f{f}.png", _cwr.PartImage(part, f, _pal));
             Aircraft++;
         }
@@ -422,7 +426,7 @@ public sealed class UnitsExporter
         foreach (int part in Concat(PartsOf(AircraftParts), RotorParts))
         {
             if (_cwr.PartBase(part) < 0) continue;
-            for (int f = 0; f < CwrFile.Facings; f++)
+            for (int f = 0; f < CwrFile.AirFacings; f++)
                 Save($"aircraft/{part}/f{f}.png", _cwr.PartImage(part, f, _pal));
         }
         say?.Invoke($"Flugzeuge: {Aircraft} Arten");

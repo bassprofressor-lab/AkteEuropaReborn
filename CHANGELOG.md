@@ -73,11 +73,21 @@ deviate on purpose, and every deviation is marked as ours.
   player with no building left keeps its helicopters where they are. The 1997
   game sent them to a rolled map cell in that case — a fault that only goes
   unnoticed there because without buildings the match is over anyway.
-- **An aircraft looks where it is flying.** The hull used to stand across the
-  flight arrow. The state had always been right; what was wrong was the mapping
-  from direction to image — the original computes it with a fixed offset of 90
-  degrees. Two paths that know nothing of each other arrive at the same number: a
-  calibration against the tanks, and the arithmetic in the original's draw path.
+- **An aircraft only had half a turn.** The hull stood across the flight arrow,
+  and the cause was neither an offset nor a state error but the **export**: an
+  aircraft in the 1997 game owns **sixteen** images, and we exported eight of
+  them — not every second step but **the first eight**, that is, half a
+  revolution. An aircraft could not look backwards at all. Proven from the part
+  table itself: the eight air parts lie 16 frames apart, and all 16 differ.
+  All sixteen are exported now and the facing is computed in **22.5-degree
+  steps** with the original's own formula. Measured: 11 distinct steps in the sky
+  at once, 8 of them odd — impossible with eight images.
+  ⚠ **A calibration of ours falls with it.** The "offset 2, two independent
+  paths" entered earlier is withdrawn: the calibration against the tanks ran on
+  the half sprite set, and the second path was not one — the offset in the
+  original's formula is the same one our direction computation already had, only
+  in sixteenths. Applying both turns 180 degrees too far. The original's
+  arithmetic now stands alone.
   ⚠ What **remains** is original and not a fault: a turn takes six degrees per
   tick, a full turn 60 ticks. After a change of target a helicopter therefore
   flies sideways for up to 30 ticks before it has come around.

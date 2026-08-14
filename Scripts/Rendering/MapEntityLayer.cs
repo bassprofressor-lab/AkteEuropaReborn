@@ -585,6 +585,43 @@ public partial class MapEntityLayer : Node2D
         return ((f % 8) + 8) % 8;
     }
 
+    /// <summary>
+    /// DIE BLICKRICHTUNG EINES FLUGGERÄTS — sechzehn Stufen, und die Rechnung
+    /// ist die des Originals, Zeichen für Zeichen.
+    ///
+    /// <code>
+    ///   bild = ((richtung + 11) / 22,5 - 4) mod 16
+    /// </code>
+    ///
+    /// <para>Die 11 ist die halbe Stufe (22,5/2 = 11,25, im Original ganzzahlig
+    /// abgeschnitten) und rundet damit zur nächsten Stufe; die 4 sind der feste
+    /// Versatz von 90 Grad. Die Stelle steht zweimal wortgleich im
+    /// Zeichenpfad.</para>
+    ///
+    /// <para>⚠ <b>Und hier fällt eine eigene Eichung.</b> <c>AirFacingOffset</c>
+    /// stand auf 2 (von 8), gestützt auf zwei Wege: die Panzereichung, die 0, 4
+    /// und 6 ausschloss, und dieselbe Formel, deren −4 ich als »Versatz 2 von 8«
+    /// gelesen hatte. Beide Stützen sind weg. Die Formel ist keine <i>zusätzliche</i>
+    /// Verschiebung: ihr −4 IST das −90 aus <see cref="DirToFacing"/>, nur in
+    /// Sechzehnteln — wer beides anwendet, dreht um 180 Grad zuviel. Und die
+    /// Panzereichung lief auf einem Sprite-Satz, der nur die <b>halbe</b> Drehung
+    /// enthielt (siehe <c>CwrFile.AirFacings</c>); was auf einem halben Ring
+    /// ausgeschlossen wurde, ist auf einem ganzen nicht ausgeschlossen.</para>
+    ///
+    /// <para>Darum steht hier die Rechnung des Originals allein, und
+    /// <c>AirFacingOffset</c> ist wieder 0 — ein Messgerät, keine Einstellung.
+    /// ⚠ Wie es am Bildschirm aussieht, ist damit NICHT belegt; das ist ein
+    /// Blick, kein Zähler, und er gehört dem Spieler.</para>
+    /// </summary>
+    public static int AirDirToFacing(Vector2 d)
+    {
+        if (d.LengthSquared() < 0.0001f) return DefaultFacing * 2;
+        float ang = Mathf.RadToDeg(Mathf.Atan2(d.Y, d.X));
+        if (ang < 0f) ang += 360f;
+        int f = Mathf.FloorToInt((ang + 11f) / 22.5f) - 4;
+        return ((f % 16) + 16) % 16;
+    }
+
     /// <summary>Propulsion types that cannot drive (scenery + fixed defenses).</summary>
     // 148/149 used to be in here: they carry no propulsion component, so they
     // looked immobile.  They are the FOOT SOLDIERS — they walk on their own legs.
@@ -15321,6 +15358,20 @@ public partial class MapEntityLayer : Node2D
 
     private readonly Dictionary<(int, int), Texture2D?> _airTex = new();
 
+    /// <summary>Hat dieser Satz die vollen 16 Bilder? Einmal je Satz
+    /// nachgesehen, nicht je Bild.</summary>
+    private bool AirHas16(int kind)
+    {
+        if (_air16.TryGetValue(kind, out bool got)) return got;
+        string p = Core.Content.Path($"Units/aircraft/{kind}/f15.png");
+        got = ResourceLoader.Exists(p) || FileAccess.FileExists(p);
+        _air16[kind] = got;
+        return got;
+    }
+
+    private readonly Dictionary<int, bool> _air16 = new();
+    private readonly HashSet<int> _air8Said = new();
+
     /// <summary>Sprite of an aircraft. The part is chosen by the record's KIND,
     /// not by its airframe value: the draw path @0x42b867 switches on +0x08 and
     /// moves a literal part number in (1 -> 114, 2 -> 115, 3 -> 119, 10 -> 112,
@@ -15375,11 +15426,30 @@ public partial class MapEntityLayer : Node2D
     /// kein Fehler, und es ist die Haelfte der Antwort auf die Meldung
     /// »Versorgungshelikopter fliegen gerne wie seitwaerts«.</para>
     /// </summary>
-    public static int AirFacingOffset = 2;
+    public static int AirFacingOffset;
 
     private Texture2D? GetAirframeTexture(int kind, int facing)
     {
-        if (AirFacingOffset != 0) facing = ((facing + AirFacingOffset) % 8 + 8) % 8;
+        if (AirFacingOffset != 0) facing = ((facing + AirFacingOffset) % 16 + 16) % 16;
+        // ⚠ RUECKFALL AUF ACHT, und zwar messbar statt stillschweigend. Wer
+        // seinen Inhalt vor dem 14.08.2026 importiert hat, besitzt nur f0..f7 —
+        // und das sind nicht »jede zweite Stufe«, sondern die erste HAELFTE des
+        // Rings. Ein Halbieren der Stufennummer waere dort also falsch; richtig
+        // ist, die Drehung auf das zu stauchen, was da ist. Das sieht schlechter
+        // aus als vorher nicht, aber es ist eine ANDERE Zuordnung, und darum
+        // sagt es die Zeile auch: ein stiller Rueckfall waere ein Fehler, den
+        // niemand findet.
+        if (facing >= 8 && !AirHas16(kind))
+        {
+            if (!_air8Said.Contains(kind))
+            {
+                _air8Said.Add(kind);
+                GD.Print($"Luft: Satz {kind} hat nur 8 von 16 Bildern — alter Inhalt. " +
+                         "Die Drehung wird gestaucht; ein Neuimport (--reexport-units=) " +
+                         "holt die fehlenden acht.");
+            }
+            facing /= 2;
+        }
         var key = (kind, facing);
         if (_airTex.TryGetValue(key, out var cached)) return cached;
         string path = Core.Content.Path($"Units/aircraft/{kind}/f{facing}.png");
@@ -15876,14 +15946,14 @@ public partial class MapEntityLayer : Node2D
                 // Wer ein bewegtes Ziel anfliegt, macht am Schluss lauter kurze
                 // Spruenge und lief damit dauernd durch diesen Zweig — er kam
                 // an, ohne je in die Richtung zu sehen, in die er zuletzt flog.
-                if (delta.LengthSquared() > 0.0001f) a.Facing = DirToFacing(delta);
+                if (delta.LengthSquared() > 0.0001f) a.Facing = AirDirToFacing(delta);
                 a.Pos = g;
                 if (a.Target < 0) a.Goal = null;
             }
             else
             {
                 a.Pos += delta.Normalized() * step;
-                a.Facing = DirToFacing(delta);
+                a.Facing = AirDirToFacing(delta);
                 // Fuel is spent per TILE, not per second: the move code takes one
                 // unit off at every cell crossing (@0x4250ab, @0x425100), which is
                 // what a tank of 800..2000 is measured in.
@@ -16034,6 +16104,25 @@ public partial class MapEntityLayer : Node2D
             // gibt — und verdeckte damit den naechsten echten.
             if (home) atHome++; else if (!any) homeless++; else idle++;
         }
+        // ⚠ DER BELEG FUER DIE SECHZEHN STUFEN, und er ist so gebaut, dass er
+        // mit acht gar nicht gruen werden kann: eine UNGERADE Stufennummer gibt
+        // es nur, wenn in 22,5-Grad-Schritten gedreht wird. Bliebe die Zahl 0,
+        // waere die Umstellung eingebaut und wirkungslos — und das saehe man am
+        // Bild nicht, weil ein Flugzeug auch mit acht Stufen »irgendwohin«
+        // schaut.
+        var stufen = new HashSet<int>();
+        int ungerade = 0;
+        foreach (var s in _special)
+        {
+            if (s.Dead || s.Stored) continue;
+            stufen.Add(s.Facing);
+            if ((s.Facing & 1) != 0) ungerade++;
+        }
+        string dreh = stufen.Count > 0
+            ? $" | Drehung: {stufen.Count} verschiedene Stufen gerade sichtbar, " +
+              $"{ungerade} davon ungerade (mit acht Bildern unmoeglich)"
+            : "";
+
         // Der zweite Anlauf: wie viele gerade abdrehen und wie viele Schleifen
         // seit dem Laden geflogen wurden.
         int turning = 0;
@@ -16061,7 +16150,7 @@ public partial class MapEntityLayer : Node2D
             if (s.Customer >= 0 || s.DepotSlot >= 0) break;   // prefer a busy one
         }
         return $"rail {_rail.Count} nodes/{lines / 2} lines, {air} Flugzeuge " +
-               $"({parked} im Hangar, {flying} in der Luft, {armed} bewaffnet){aimLine}{one}{loop}{sup}{supOne}";
+               $"({parked} im Hangar, {flying} in der Luft, {armed} bewaffnet){aimLine}{one}{dreh}{loop}{sup}{supOne}";
     }
 
     private void UpdatePanel()

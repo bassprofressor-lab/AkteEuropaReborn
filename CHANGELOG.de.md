@@ -81,11 +81,23 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Gebäude mehr hat, bleibt bei uns stehen. Das Spiel von 1997 schickte ihn in
   diesem Fall auf eine ausgewürfelte Kartenzelle — einen Fehler, der dort nur
   deshalb nicht auffällt, weil ohne Gebäude die Partie ohnehin vorbei ist.
-- **Ein Fluggerät blickt dorthin, wo es hinfliegt.** Bisher stand der Rumpf quer
-  zum Flugpfeil. Der Zustand hatte immer gestimmt, falsch war die Zuordnung von
-  Richtung zu Bild — das Original rechnet sie mit einem festen Versatz von 90
-  Grad aus. Zwei Wege, die nichts voneinander wissen, kommen auf dieselbe Zahl:
-  eine Eichung an den Panzern und die Rechnung im Zeichenpfad des Originals.
+- **Ein Fluggerät hatte nur die halbe Drehung.** Der Rumpf stand quer zum
+  Flugpfeil, und die Ursache war weder ein Versatz noch ein Zustandsfehler,
+  sondern der **Export**: ein Fluggerät besitzt im Spiel von 1997 **sechzehn**
+  Bilder, wir haben acht davon exportiert — und zwar nicht jede zweite Stufe,
+  sondern **die ersten acht**, also eine halbe Umdrehung. Ein Flugzeug konnte
+  gar nicht nach hinten schauen. Belegt an der Teiletafel selbst: die acht
+  Luftteile liegen 16 Bilder auseinander, und alle 16 sind verschieden.
+  Jetzt werden alle sechzehn exportiert und die Blickrichtung wird in
+  **22,5-Grad-Schritten** gerechnet, mit der Formel des Originals. Gemessen: 11
+  verschiedene Stufen gleichzeitig am Himmel, 8 davon ungerade — die kann es mit
+  acht Bildern nicht geben.
+  ⚠ **Damit fällt eine eigene Eichung.** Der zuvor eingetragene „Versatz 2, zwei
+  unabhängige Wege" ist zurückgezogen: die Eichung an den Panzern lief auf dem
+  halben Sprite-Satz, und der zweite Weg war gar keiner — der Versatz in der
+  Formel des Originals ist derselbe, den unsere Richtungsrechnung schon hatte,
+  nur in Sechzehnteln. Wer beides anwendet, dreht um 180 Grad zuviel. Es gilt
+  jetzt die Rechnung des Originals allein.
   ⚠ Was **bleibt**, ist Original und kein Fehler: eine Drehung geht sechs Grad
   je Takt, eine volle Wendung dauert 60 Takte. Nach einem Zielwechsel fliegt ein
   Heli also bis zu 30 Takte lang seitwärts, bevor er sich ausgerichtet hat.

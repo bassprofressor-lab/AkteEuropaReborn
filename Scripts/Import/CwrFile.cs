@@ -46,6 +46,31 @@ public sealed class CwrFile
     public const int FrameSlots = 10000;
     public const int Facings = 8;
 
+    /// <summary>
+    /// EIN FLUGGERÄT HAT SECHZEHN BLICKRICHTUNGEN, kein Boden-Teil hat das.
+    ///
+    /// <para>Gemessen an der Teiletafel selbst: die acht Luftteile 0x70..0x77
+    /// haben die Sockel <b>4248, 4264, 4280, 4296, 4312, 4328, 4344, 4360</b> —
+    /// Abstand durchgehend <b>16</b>. Jedes Teil besitzt also genau 16 Bilder,
+    /// und sie sind alle verschieden (eine Spiegelprüfung <i>i</i> gegen
+    /// <i>16−i</i> findet kein exaktes Paar). Der Zeichenpfad rechnet
+    /// <c>bild = ((richtung + 11) / 22,5 − 4) mod 16</c>, also 16 Stufen zu
+    /// 22,5 Grad — es faltet nichts auf acht.</para>
+    ///
+    /// <para>⚠ <b>Und daran hing ein Fehler, der zwei Tage lang wie ein
+    /// Versatz aussah.</b> Der Exporteur zog <c>f0..f7</c>, also die ersten acht
+    /// von sechzehn — eine <b>halbe Drehung</b>, nicht jede zweite Stufe. Ein
+    /// Flugzeug konnte damit gar nicht nach hinten schauen. Dass die acht Bilder
+    /// wie ein Drehring aussahen (Nachbarn 77..82 % deckungsgleich, »Gegenüber«
+    /// 63..64 %), stimmte — es war der halbe Ring, und ein halber Ring sieht wie
+    /// ein Ring aus, solange man nicht weiß, wieviele Bilder es gibt.</para>
+    ///
+    /// <para>⚠ Die Zahl gilt NUR für die Luftteile. <see cref="Facings"/> bleibt
+    /// 8: die Zusammensetzung <c>sockel + block·8 + richtung</c> ist an den
+    /// Bodenteilen gemessen, und ein Luftteil hat ohnehin nur einen Block.</para>
+    /// </summary>
+    public const int AirFacings = 16;
+
     private const int PartTblOff = 7, PartTblSize = 0x25c;
     private const int AuxTblOff = 0x263, AuxTblSize = 1020;
     private const int FrameTblOff = 0x65f;
