@@ -2238,9 +2238,24 @@ public partial class MapViewer : Node2D
                   $"grid {dims}   tileset {tileset}   image {(int)size.X}x{(int)size.Y}px\n"
                 : "") +
             (UI.SkirmishSetup.Active || !technik ? "" : $"[{_mapIndex + 1}/{MapNames.Length}]   ") +
-            $"click/drag=select  RIGHT-click=move  X=stop  E=eingraben  M=konstruieren  B=bauen  N=auswahl  O=forschen  K=reparieren  V=lagerausbau  C=prod.erw.  L=schienen  Y=flugzeuge  " +
-            $"WASD+middle-drag=pan  wheel=zoom\n" +
-            $"[ ]=map  F=fit  U=sprites  R=ranges  P=walkable  Z=zones  J=nebel  T=buildings  G=dots  H=karte  Q=rohstoffleiste  Tab=ereignis  Shift+rechts=anreihen  Esc=quit";
+            // ⚠ 14.08.2026, zweiter Schritt — DIE TASTENLEGENDE GEHT MIT.
+            //
+            // Der Spieler auf die Rueckfrage, ob auch sie verschwinden soll:
+            // »Ja, ganz raus«. Sie haengt darum an demselben Schalter wie die
+            // zwei technischen Zeilen: im Spiel weg, mit `--hud-debug` zurueck,
+            // im blossen Kartenbetrachter unveraendert da — dort blaettert man
+            // Karten durch und braucht sie.
+            //
+            // ⚠ Damit ist die Bedienung im Spiel NIRGENDS mehr aufgeschrieben.
+            // Das ist eine bewusste Luecke und keine Loesung: solange es kein
+            // Menue und keine Hilfe dafuer gibt, ist der einzige Weg zu den
+            // Tasten diese Zeile — oder `--hud-debug`. Gehoert vermerkt, bevor
+            // jemand sie sucht und fuer verloren haelt.
+            (technik
+                ? "click/drag=select  RIGHT-click=move  X=stop  E=eingraben  M=konstruieren  B=bauen  N=auswahl  O=forschen  K=reparieren  V=lagerausbau  C=prod.erw.  L=schienen  Y=flugzeuge  " +
+                  "WASD+middle-drag=pan  wheel=zoom\n" +
+                  "[ ]=map  F=fit  U=sprites  R=ranges  P=walkable  Z=zones  J=nebel  T=buildings  G=dots  H=karte  Q=rohstoffleiste  Tab=ereignis  Shift+rechts=anreihen  Esc=quit"
+                : "");
 
         _hudBase = _hud.Text;
         RefreshObjectives();
@@ -2254,6 +2269,22 @@ public partial class MapViewer : Node2D
     private void RefreshObjectives()
     {
         string obj = _entities.MoneyLine();
+        // ⚠ 14.08.2026 — DAS HAUPTZIEL, und es kommt aus dem Original.
+        //
+        // Der Spieler wollte im Kampagnen-HUD »das Ziel der Hauptmission sowie
+        // der Nebenmission« sehen. Die Nebenmissionen zeigen wir schon; das
+        // Hauptziel stand nirgends, weil es die ENDREGEL ist und die keinen Text
+        // hat. Den Text hat OBJECTG.TXT, und die liegt nicht nur lose in einer
+        // Installation, sondern in DATA1.CAB auf CD 1 — siehe
+        // Campaign/MissionObjectives und Import/ObjectivesExporter.
+        //
+        // Es steht VOR den Untermissionen: das ist der Auftrag, der Rest ist
+        // Zuarbeit.
+        if (UI.SkirmishSetup.CampaignMission > 0)
+        {
+            string auftrag = Campaign.MissionObjectives.Line(UI.SkirmishSetup.CampaignMission);
+            if (auftrag.Length > 0) obj = obj.Length > 0 ? auftrag + "   " + obj : auftrag;
+        }
         // the per-player objective lists win over the flat one when the map
         // actually carries a player table
         // Die Ziele des MISSIONSSKRIPTS zuerst: eine Kampagnenkarte traegt

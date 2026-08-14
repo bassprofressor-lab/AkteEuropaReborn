@@ -277,6 +277,27 @@ public sealed class ContentBuilder
         }
         catch (Exception e) { Say("Hilfetexte: " + e.Message); }
 
+        // ---- die Missionsziele im Klartext -------------------------------------
+        // OBJECTG.TXT, aus derselben Quelle wie BRIEFG.TXT und HELPG.TXT — sie
+        // liegt im Namensverzeichnis von DATA1.CAB direkt zwischen HELPG.TXT und
+        // OPTIONS.CFG. ⚠ Das ist der Punkt: auf dieser Maschine ist sie LOSE nur
+        // in einer der beiden Installationen zu finden, weshalb sie zuerst als
+        // »nur dort vorhanden« galt. Ueber Asset() steht sie jeder Installation
+        // zur Verfuegung, und nur deshalb kann das Kampagnen-HUD das Hauptziel
+        // im Originaltext zeigen statt in unserer Formulierung.
+        try
+        {
+            var obj = Asset("OBJECTG.TXT");
+            if (obj == null) Say("OBJECTG.TXT fehlt — keine Missionsziele im Klartext");
+            else
+            {
+                var ox = new ObjectivesExporter(_dst + "/UI");
+                ox.Write(obj, Say);
+                TablesWritten++;
+            }
+        }
+        catch (Exception e) { Say("Missionsziele: " + e.Message); }
+
         // ---- the sound bank ---------------------------------------------------
         // SOUNDS.CWN is 79 MB and lies loose beside the exe, so it is opened as
         // a stream and never goes through Asset(), which reads a whole file into
@@ -564,6 +585,11 @@ public sealed class ContentBuilder
             if (raw == null) { Say("HELPG.TXT nicht gefunden"); return false; }
             var hx = new HelpExporter(_dst + "/UI");
             hx.Write(raw, Say);
+            // Die Missionsziele kommen gleich mit: dieselbe Quelle, dieselben
+            // paar Kilobyte, und wer die Texte neu schreibt, meint sie mit.
+            var obj = Asset("OBJECTG.TXT");
+            if (obj == null) Say("OBJECTG.TXT nicht gefunden — Missionsziele bleiben, wie sie sind");
+            else new ObjectivesExporter(_dst + "/UI").Write(obj, Say);
             return hx.Texts > 0;
         }
         catch (Exception e) { Say(e.Message); return false; }
