@@ -109,11 +109,30 @@ public partial class MapEntityLayer : Node2D
         /// that looked like generous health.</summary>
         public int Fuel, FuelMax;
 
-        /// <summary>Attack (+0x27) and defence (+0x28) of this unit, the two
-        /// values the hit routine @0x40c9a0 works with. Attack runs 1..15
-        /// (infantry 1-2, vehicles 4..12, ships 5..11), defence is 0 on almost
-        /// every placed unit.</summary>
+        /// <summary>Angriff (<b>+0x26</b>) und Verteidigung (<b>+0x27</b>) dieser
+        /// Einheit — die zwei Werte, mit denen die Trefferrechnung arbeitet.
+        /// Angriff laeuft 1..15 (Infanterie 1-2, Fahrzeuge 4..12, Schiffe 5..11).
+        ///
+        /// <para>⚠ <b>BERICHTIGT 14.08.2026.</b> Hier stand »Attack (+0x27) and
+        /// defence (+0x28)«. Das war nur der KOMMENTAR — der Lader liest seit je
+        /// +0x26 und +0x27 (siehe dort und <see cref="Simulation.DesignMath"/>:
+        /// Entwurf +0x1f -> Satz +0x26, Entwurf +0x20 -> Satz +0x27). Der falsche
+        /// Kommentar hat die Trefferrechnung in die Irre gefuehrt, siehe
+        /// <see cref="ShotDamage"/>.</para></summary>
         public int Attack, Defence;
+
+        /// <summary>
+        /// <b>+0x28</b> — der Faktor, den die Trefferrechnung auf BEIDEN Seiten
+        /// benutzt: beim Schuetzen als <c>(+0x28 + 30)</c>, beim Opfer als
+        /// <c>(30 + (+0x28)/5)</c>. Was er BEDEUTET, ist ungelesen; wo er steht
+        /// und wie er eingeht, nicht (@0x40CBA0 bzw. @0x40CDE3).
+        ///
+        /// <para>Gemessen ueber alle 29 gelieferten Karten: <b>1941 von 1971</b>
+        /// Einheiten tragen 0, dreissig tragen 1..5, und zwei Ausreisser auf
+        /// map_07 tragen 150 und 240. Er ist also fast immer wirkungslos — aber
+        /// eben nicht immer, und deshalb wird er gelesen statt als 0 gesetzt.</para>
+        /// </summary>
+        public int Rating28;
         public Rect2 Footprint;
         public bool IsProp;        // true = generic grid prop (no owner/hp)
         public bool IsBuilding;    // true = a sec3 building (drawn into the map)
@@ -1487,6 +1506,7 @@ public partial class MapEntityLayer : Node2D
                     // Mittelstreckenrakete 255 -> 30.
                     Attack = haveRaw ? HexByte(raw, 0x26) : 0,
                     Defence = haveRaw ? HexByte(raw, 0x27) : 0,
+                    Rating28 = haveRaw ? HexByte(raw, 0x28) : 0,
                     Range = haveRaw ? HexByte(raw, 0x2b) : 0,
                     Sight = haveRaw ? HexByte(raw, 0x2c) : 0,
                     Reload = haveRaw ? HexByte(raw, 0x3d) : 0,
@@ -5228,20 +5248,60 @@ public partial class MapEntityLayer : Node2D
     private int ShotDamage(Entity? shooter, Entity victim, int weaponDamage)
     {
         if (shooter == null || victim.IsBuilding || shooter.Attack <= 0) return weaponDamage;
-        int elev = ElevOf(victim.Col, victim.Row);
-        int offence = (shooter.Defence + 30) * shooter.Attack / 40;
-        int defence = (30 + victim.Defence / 5) * (victim.Attack + 2 * elev) / 50;
+        // ⚠ BERICHTIGT 14.08.2026 — drei Abweichungen, alle aus dem Rumpf gelesen.
+        //
+        // Das Original baut beide Seiten SYMMETRISCH, und jede Seite nimmt die
+        // Hoehe IHRER EIGENEN Zelle mit:
+        //
+        //   Schuetze @0x40CB7D:  cl  = byte[S + 0x26]          ; Angriff
+        //             @0x40CB91:  ax  = cl + 2*elev(SCHUETZE)   ; ← seine Hoehe
+        //             @0x40CB9B:  [esp+0x1a] = ax               ; sX
+        //             @0x40CBA0:  al  = byte[S + 0x28]          ; sY
+        //   Opfer    @0x40CDCC:  cl  = byte[V + 0x27]          ; Verteidigung
+        //             @0x40CDE0:  ebp = cl + 2*elev(OPFER)      ; ← seine Hoehe
+        //             @0x40CDE3:  al  = byte[V + 0x28]
+        //   @0x40CE8A..0x40CE98:  (sY + 30) * sX / 40
+        //   @0x40CE5B..0x40CE6F:  (30 + V28/5) * (V27 + 2*elev_V) / 50
+        //
+        // Was hier stand und was daran falsch war:
+        //   (1) der Schuetzenfaktor las `shooter.Defence` (+0x27) statt +0x28;
+        //   (2) die HOEHE DES SCHUETZEN fehlte ganz — gemessen ist das der
+        //       groesste der drei Fehler: auf Hoehe 3 gibt das Original 6
+        //       Schaden, wir gaben 2;
+        //   (3) der Opferterm las `victim.Attack` (+0x26) statt der
+        //       Verteidigung (+0x27) — das Opfer wurde also von seinem
+        //       ANGRIFFSWERT geschuetzt.
+        // Der falsche Kopfkommentar bei `Attack, Defence` war die Quelle: er
+        // behauptete +0x27/+0x28, der Lader nimmt +0x26/+0x27.
+        int core = ShotCore(shooter, victim,
+                            ElevOf(shooter.Col, shooter.Row),
+                            ElevOf(victim.Col, victim.Row));
         // ⚠ 15.08.2026 — DER WUERFEL DER SIMULATION, nicht der von Godot.
         // `GD.Randi()` haengt am globalen Zustand des Motors: er wird von
         // allem mitbewegt, was sonst noch wuerfelt (Klaenge!), und laesst sich
         // von aussen nicht keimen. Zwei Maschinen bekommen damit
         // zwangslaeufig verschiedene Zahlen. Determinism.Roll ist ein eigener
         // Strom mit gesetztem Keim und einem Zaehler, den der Pruefstand liest.
-        int dmg = offence - defence + Simulation.Determinism.Roll(5)
-                                    - Simulation.Determinism.Roll(5);
+        int dmg = core + Simulation.Determinism.Roll(5)
+                       - Simulation.Determinism.Roll(5);
         if (dmg <= -2) return 0;
         if (dmg < 1) return Simulation.Determinism.Roll(10) / 3;
         return dmg;
+    }
+
+    /// <summary>
+    /// Der WUERFELFREIE Kern der Trefferrechnung: Angriff minus Verteidigung,
+    /// beide Hoehen eingerechnet. <see cref="ShotDamage"/> und
+    /// <see cref="HitCheckLine"/> teilen sich ihn, damit der Pruefstand nicht
+    /// eine ZWEITE Fassung derselben Formel prueft (Regel 16) — und damit er
+    /// den Wuerfel der Simulation nicht anfasst, der sonst weiterliefe und
+    /// jeden Zwillingslauf verschoebe.
+    /// </summary>
+    private static int ShotCore(Entity shooter, Entity victim, int elevS, int elevV)
+    {
+        int offence = (shooter.Rating28 + 30) * (shooter.Attack + 2 * elevS) / 40;
+        int defence = (30 + victim.Rating28 / 5) * (victim.Defence + 2 * elevV) / 50;
+        return offence - defence;
     }
 
     private void ApplyHit(int si, int vi, Entity victim, int damage)
@@ -6340,6 +6400,67 @@ public partial class MapEntityLayer : Node2D
         return lines.Count == 0
             ? "damage-check: keine Gebaeude mit hp_max auf dieser Karte"
             : "damage-check:\n   " + string.Join("\n   ", lines);
+    }
+
+    /// <summary>
+    /// <b>`--hit-check`: was ein Schuss auf dieser Karte wirklich anrichtet.</b>
+    ///
+    /// <para>⚠ Warum es das gibt (14.08.2026): der Spieler meldete »Team 2
+    /// Einheiten nehmen irgendwie kaum Schaden«. In KEINEM Zaehler war das zu
+    /// sehen — die Trefferrechnung gab eine Zahl aus, die nirgends ausgegeben
+    /// wurde. Drei Abweichungen steckten darin (siehe <see cref="ShotDamage"/>),
+    /// und die groesste, die fehlende Hoehe des Schuetzen, ist auf ebenem Boden
+    /// unsichtbar: dort liefern alte und neue Fassung beide 2.</para>
+    ///
+    /// <para>Ausgegeben wird der wuerfelfreie Kern (<see cref="ShotCore"/>) je
+    /// Paarung der auf dieser Karte WIRKLICH vorhandenen Werteprofile, dazu die
+    /// Zahl, auf die es dem Spieler ankommt: <b>wie viele Treffer bis zum
+    /// Abschuss</b>. Der Wuerfel wird nicht angefasst.</para>
+    /// </summary>
+    public string HitCheckLine()
+    {
+        // Die Profile, die auf dieser Karte tatsaechlich stehen — nicht
+        // ausgedachte (Regel 30: ein Pruefstand, der ueberall dasselbe sagt,
+        // prueft nichts).
+        var seen = new List<(int Owner, int A, int D, int R, int Hp, int Elev)>();
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Dead) continue;
+            var key = (e.Owner, e.Attack, e.Defence, e.Rating28,
+                       e.HpMax > 0 ? e.HpMax : e.Hp, ElevOf(e.Col, e.Row));
+            if (!seen.Contains(key)) seen.Add(key);
+        }
+        if (seen.Count == 0) return "hit-check: keine lebenden Einheiten auf dieser Karte";
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append("hit-check: ").Append(seen.Count)
+          .Append(" Werteprofile (Eigner/Angriff+0x26/Verteidigung+0x27/+0x28/hp/Hoehe)");
+        foreach (var p in seen)
+            sb.Append($"\n   P{p.Owner} A{p.A} V{p.D} R{p.R} hp{p.Hp} h{p.Elev}");
+
+        // Die Paarungen zwischen VERSCHIEDENEN Eignern — das ist der Fall, den
+        // der Spieler sieht.
+        sb.Append("\n   Paarungen (Kern ohne Wuerfel; Treffer bis Abschuss):");
+        int shown = 0;
+        foreach (var s in seen)
+            foreach (var v in seen)
+            {
+                if (s.Owner == v.Owner || shown >= 12) continue;
+                // ⚠ Gerechnet wird mit DERSELBEN Methode, die im Gefecht laeuft
+                // (Regel 16) — nicht mit einer zweiten Abschrift der Formel.
+                var sh = new Entity { Attack = s.A, Defence = s.D, Rating28 = s.R };
+                var vi = new Entity { Attack = v.A, Defence = v.D, Rating28 = v.R };
+                int core = ShotCore(sh, vi, s.Elev, v.Elev);
+                // Der Erwartungswert des Wuerfelteils ist 0 (zweimal 0..4,
+                // symmetrisch); unter 1 greift die Klemme mit Mittel 1.
+                int typical = core >= 1 ? core : 1;
+                sb.Append($"\n   P{s.Owner}(A{s.A},h{s.Elev}) -> P{v.Owner}(V{v.D},h{v.Elev}): " +
+                          $"Kern {core}, ~{(v.Hp + typical - 1) / typical} Treffer bis Abschuss");
+                shown++;
+            }
+        sb.Append("\n   ⚠ Die Hoehe des SCHUETZEN geht mit ein (@0x40CB91) — auf ebenem " +
+                  "Boden ist der Fehler vom 14.08. unsichtbar, auf Hoehe 3 verdreifacht er sich.");
+        return sb.ToString();
     }
 
     // ================= Cheat-Mode ============================================

@@ -752,6 +752,7 @@ public partial class MapViewer : Node2D
                         case "fuel": case "sprit": MapEntityLayer.CheatFuel = true; break;
                     }
             else if (a == "--damage-check") _damageCheck = 2f;
+            else if (a == "--hit-check") _hitCheck = 2f;
             else if (a == "--cheat-check") _cheatCheck = 2f;
             else if (a == "--air-buy-check") _airBuyCheck = 3f;
             else if (a == "--produce-check") _produceCheck = 2f;
@@ -984,6 +985,13 @@ public partial class MapViewer : Node2D
     /// <summary>`--damage-check`: die Schadensstufen durchfahren.</summary>
     private float _damageCheck;
 
+    /// <summary>`--hit-check`: die TREFFERRECHNUNG mit den Einheiten dieser
+    /// Karte durchrechnen — siehe <see cref="MapEntityLayer.HitCheckLine"/>.
+    /// Gebraucht, weil der Fehler vom 14.08.2026 (fehlende Schuetzenhoehe,
+    /// vertauschte Felder) in keinem Zaehler sichtbar war: er aendert nur eine
+    /// Zahl, die niemand ausgab.</summary>
+    private float _hitCheck;
+
     /// <summary>`--rail-check`: das Bahnsystem beobachten. Einmal der Kopf (was
     /// die Karte an Linien hat und was die Typmatrix daraus macht), dann alle
     /// zehn Sekunden der Fahrplan und — das eigentliche Beweisstück — <b>wie
@@ -1029,6 +1037,15 @@ public partial class MapViewer : Node2D
             {
                 _damageCheck = -1f;
                 GD.Print(_entities.DamageCheckLine());
+            }
+        }
+        if (_hitCheck > 0f)
+        {
+            _hitCheck -= (float)delta;
+            if (_hitCheck <= 0f)
+            {
+                _hitCheck = -1f;
+                GD.Print(_entities.HitCheckLine());
             }
         }
         if (_produceCheck > 0f)
