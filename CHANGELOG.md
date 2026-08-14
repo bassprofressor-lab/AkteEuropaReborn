@@ -29,6 +29,18 @@ chosen:
 Campaign stays faithful to the original; skirmish and multiplayer are allowed to
 deviate on purpose, and every deviation is marked as ours.
 
+### Units
+
+- **A ship now occupies its whole hull.** The 1997 game checks **four** cells for
+  a small ship and **sixteen** for a large one; we checked one. A battleship thus
+  occupied a sixteenth of itself — two ships could stand inside each other, and a
+  land vehicle drove through three quarters of one. The hull size now lives in
+  the navigation grid itself, so claiming and releasing cells cannot drift apart.
+- **Supply helicopters fly home when nobody needs supplies any more** — as in the
+  original. Until now they hovered over the units they had just serviced. And
+  they turn back while the fuel still covers the way home, instead of waiting for
+  an empty tank.
+
 ### Campaign and interface
 
 - **The hit calculation left out the shooter's elevation.** Reported as "team 2

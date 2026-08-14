@@ -30,6 +30,19 @@ in der sie gewählt wurden:
 Die Kampagne bleibt originaltreu; Gefecht und Mehrspieler dürfen bewusst
 abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
+### Einheiten
+
+- **Ein Schiff belegt jetzt seinen ganzen Rumpf.** Das Spiel von 1997 prüft für
+  ein kleines Schiff **vier** Zellen und für ein großes **sechzehn**; wir prüften
+  eine. Ein Schlachtschiff belegte damit ein Sechzehntel seiner selbst — zwei
+  Schiffe konnten ineinander stehen, und ein Landfahrzeug fuhr durch drei Viertel
+  davon. Die Rumpfgröße liegt jetzt in der Wegekarte selbst, damit Belegen und
+  Freigeben nicht auseinanderlaufen können.
+- **Versorgungshelikopter fliegen heim, wenn niemand mehr Nachschub braucht** —
+  so wie im Original. Sie blieben bisher über den versorgten Einheiten stehen.
+  Und sie kehren um, solange der Sprit noch für den Rückweg reicht, statt erst
+  bei leerem Tank.
+
 ### Kampagne und Oberfläche
 
 - **Die Trefferrechnung nahm die Höhe des Schützen nicht mit.** Gemeldet als
