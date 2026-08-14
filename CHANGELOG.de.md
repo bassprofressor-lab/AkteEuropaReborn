@@ -88,6 +88,11 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Rahmen eines Gebäudes — 2094 von 2094 auf der einen, 160 von 160 auf der
   anderen, und keine einzige steht allein. Die Kartenprüfung zählt beides jetzt
   mit.
+- **Einheiten von Hand setzen.** Sechzehn Bauarten, vom Reifen bis zum
+  Schlachtschiff, jede mit den Werten, die sie auf den gelieferten Karten
+  wirklich trägt — Leben, Tank, Angriff und Gattung aus den Rohsätzen gelesen,
+  nicht gewählt. Der Spieler wird mitgewählt, und der Editor weist ab, was nicht
+  stehen könnte: ein Schiff auf der Wiese ist eine Einheit, die sich nie bewegt.
 - **Der Editor hat einen Pinsel.** Auf der Karte lassen sich jetzt **Gebäude**
   (jede Art, die der Kachelsatz kennt — militärisch wie zivil, mit wählbarem
   Eigner bis hin zu herrenlos und Kulisse), **Gegenstände** und **Bahngleise**

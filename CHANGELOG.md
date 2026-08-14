@@ -81,6 +81,11 @@ deviate on purpose, and every deviation is marked as ours.
   maps every building tile lies inside a building's frame — 2094 of 2094 on one,
   160 of 160 on the other, and not a single one stands alone. The map check now
   counts both.
+- **Placing units by hand.** Sixteen kinds, from the wheeled scout to the
+  battleship, each with the values it actually carries on the shipped maps —
+  life, fuel, attack and class read from the raw records rather than chosen. The
+  owner is chosen too, and the editor refuses what could not stand there: a ship
+  on a meadow is a unit that will never move.
 - **The editor has a brush.** You can now place **buildings** by hand (any kind
   the tileset knows — military or civilian, with a choice of owner down to
   unowned and scenery), **objects** and **railway track**. A building appears at
