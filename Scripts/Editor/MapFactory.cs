@@ -131,6 +131,102 @@ public static class MapFactory
         }
     }
 
+    // ========================================================================
+    //  sec22 — DAS GLEIS
+    // ========================================================================
+
+    /// <summary>3000 Plaetze zu 5 Byte, wie <see cref="CwmExtra.RailCells"/> sie
+    /// liest. Bild 0xFF heisst »Platz leer«.</summary>
+    public const int RailSlots = 3000, RailStride = 5, RailEmpty = 0xFF;
+
+    /// <summary>Trefferpunkte eines frisch gelegten Gleisstuecks. GELESEN:
+    /// <c>rail_add</c> @0x4AFADA schreibt <c>0x96</c> = 150.</summary>
+    public const int RailHp = 150;
+
+    /// <summary>
+    /// EIN GLEISSTUECK LEGEN ODER WEGNEHMEN.
+    ///
+    /// <para>Der Weg ist der von <c>rail_add</c> @0x4AFA90: den ersten Platz mit
+    /// Bild 0xFF suchen und die fuenf Byte hineinschreiben. Steht auf der Zelle
+    /// schon eines, wird dessen Platz benutzt statt ein zweites anzulegen —
+    /// zwei Stuecke auf derselben Zelle kennt das Original nicht.</para>
+    ///
+    /// <para><paramref name="frame"/> ist das BILD und wird nicht geraten,
+    /// sondern von <see cref="RailFrame"/> aus den Nachbarn bestimmt.</para>
+    /// </summary>
+    /// <returns>Der benutzte Platz, oder −1 wenn alle 3000 belegt sind.</returns>
+    public static int PutRail(CwmFile m, int col, int row, int frame, int line)
+    {
+        var s = m.Sec(22);
+        if (s == null || col < 0 || col >= m.Width || row < 0 || row >= m.Height) return -1;
+        int n = Math.Min(RailSlots, s.Length / RailStride);
+        int free = -1;
+        for (int i = 0; i < n; i++)
+        {
+            int o = i * RailStride;
+            if (s[o + 2] == RailEmpty) { if (free < 0) free = i; continue; }
+            if (s[o] == col && s[o + 1] == row)                    // schon eines da
+            {
+                if (frame < 0) { s[o + 2] = RailEmpty; return i; }  // wegnehmen
+                s[o + 2] = (byte)frame; s[o + 4] = (byte)line;
+                return i;
+            }
+        }
+        if (frame < 0 || free < 0) return -1;
+        int at = free * RailStride;
+        s[at] = (byte)col; s[at + 1] = (byte)row;
+        s[at + 2] = (byte)frame; s[at + 3] = RailHp; s[at + 4] = (byte)line;
+        return free;
+    }
+
+    /// <summary>Traegt diese Zelle ein Gleisstueck?</summary>
+    public static bool HasRail(CwmFile m, int col, int row)
+    {
+        var s = m.Sec(22);
+        if (s == null) return false;
+        int n = Math.Min(RailSlots, s.Length / RailStride);
+        for (int i = 0; i < n; i++)
+        {
+            int o = i * RailStride;
+            if (s[o + 2] != RailEmpty && s[o] == col && s[o + 1] == row) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// WELCHES BILD EINE GLEISZELLE TRAEGT — aus ihren Nachbarn, nach der an
+    /// <b>9846 Gleiszellen aller Karten</b> gemessenen Tafel (die Zahlen stehen
+    /// bei <see cref="CwmExtra.RailCell"/>):
+    /// <code>
+    ///   0  links–rechts     1  oben–unten
+    ///   2  rechts–unten     3  rechts–oben
+    ///   4  links–unten      5  links–oben
+    /// </code>
+    ///
+    /// <para>⚠ <b>Die vier Rampenbilder 6..9 setzt der Editor NICHT.</b> Sie
+    /// sitzen im Original ausnahmslos auf einer Zelle, deren Gelaendebyte +3 die
+    /// passende Stufe nennt (147 von 147, 170 von 170, 180 von 180, 118 von 118)
+    /// — sie gehoeren also zum GELAENDE und nicht zur Streckenfuehrung. Ein
+    /// Editor, der sie nach Gefuehl setzte, wuerde eine Rampe behaupten, wo
+    /// keine Stufe ist. Wer eine Rampe will, malt die Stufe; das Bild dafuer
+    /// abzuleiten ist ein eigener Durchgang.</para>
+    ///
+    /// <para>Ein Stueck ohne jeden Nachbarn bekommt 0 (links–rechts) — das
+    /// Original haelt dafuer keine eigene Form bereit, und eine Zelle muss ein
+    /// Bild haben.</para>
+    /// </summary>
+    public static int RailFrame(bool left, bool right, bool up, bool down)
+    {
+        if (left && right) return 0;
+        if (up && down) return 1;
+        if (right && down) return 2;
+        if (right && up) return 3;
+        if (left && down) return 4;
+        if (left && up) return 5;
+        if (up || down) return 1;
+        return 0;
+    }
+
     /// <summary>Eine Marke in sec4 setzen. Typ 0x70..0x74 sind die
     /// Startmarken je Spieler (<see cref="CwmData.Markers"/>).</summary>
     public const int MarkerStartBase = 0x70;

@@ -52,6 +52,11 @@ public partial class MapEditorScreen : Control
     /// 20..33-Megapixel-Karte geladen wird.</summary>
     public Action<string>? OnView { get; init; }
 
+    /// <summary>Wohin »Bearbeiten« fuehrt — derselbe Kartenbetrachter, aber mit
+    /// eingeschaltetem <see cref="MapEditSession"/>. Setzt das Hauptmenue, aus
+    /// demselben Grund wie <see cref="OnView"/>.</summary>
+    public Action<string>? OnEdit { get; init; }
+
     // ---- UNSERE Setzungen fuer die Eingabefelder ----------------------------
     //
     // Die Obergrenze ist GELESEN: CwmFile.Create wirft ueber 254 ("die groesste
@@ -70,7 +75,7 @@ public partial class MapEditorScreen : Control
     private OptionButton _tileset = null!;
     private CheckBox _flat = null!;
     private LineEdit _from = null!;
-    private Button _create = null!, _check = null!, _view = null!;
+    private Button _create = null!, _check = null!, _view = null!, _edit = null!;
     private RichTextLabel _log = null!;
     private Label _status = null!;
 
@@ -246,6 +251,19 @@ public partial class MapEditorScreen : Control
         _view.Pressed += OnViewPressed;
         after.AddChild(_view);
 
+        _edit = new Button
+        {
+            Text = "Karte bearbeiten",
+            Disabled = true,
+            CustomMinimumSize = new Vector2(0, 36),
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            TooltipText = "Oeffnet die Karte mit dem Pinsel: 1/2/3 waehlt Gebaeude, Gegenstand "
+                        + "oder Gleis, +/- die Art, LINKS setzt, RECHTS nimmt weg, F5 speichert. "
+                        + "ESC fuehrt zurueck.",
+        };
+        _edit.Pressed += OnEditPressed;
+        after.AddChild(_edit);
+
         _status = new Label
         {
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -391,7 +409,7 @@ public partial class MapEditorScreen : Control
                    + $",boden={(int)_pick.Value}"
                    + (from.Length > 0 ? $",from={from}" : "");
 
-        _create.Disabled = _check.Disabled = _view.Disabled = true;
+        _create.Disabled = _check.Disabled = _view.Disabled = _edit.Disabled = true;
         _status.Text = $"arbeitet … ({(int)_w.Value}x{(int)_h.Value}, Kachelsatz {ts:00})";
         _log.Text = string.Join("\n", lines);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -403,10 +421,11 @@ public partial class MapEditorScreen : Control
         if (rc == 0)
         {
             _made = outName;
-            _check.Disabled = _view.Disabled = false;
+            _check.Disabled = _view.Disabled = _edit.Disabled = false;
             _status.Text = $"{outName} geschrieben. Jetzt pruefen oder ansehen.";
             if (_autoRun == "pruefen") OnCheck();
             else if (_autoRun == "ansehen") OnViewPressed();
+            else if (_autoRun == "bearbeiten") OnEditPressed();
         }
         else
         {
@@ -443,6 +462,12 @@ public partial class MapEditorScreen : Control
     {
         if (_made.Length == 0 || OnView == null) return;
         OnView(_made);
+    }
+
+    private void OnEditPressed()
+    {
+        if (_made.Length == 0 || OnEdit == null) return;
+        OnEdit(_made);
     }
 
     // ---- Kleinteile, gebaut wie im Gefechtsschirm ---------------------------

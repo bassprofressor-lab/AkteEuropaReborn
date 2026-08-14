@@ -121,6 +121,32 @@ public static class MapNeutrals
     };
 
     /// <summary>
+    /// Die Trefferpunkte einer Gebaeudeart, GEMESSEN — je Art konstant, ohne
+    /// Gegenbeispiel (Zahlen im Kopfkommentar). Eine Art, die in den
+    /// gelieferten Karten nie herrenlos vorkommt, bekommt 1000: das ist der
+    /// Wert von zehn der zwoelf gemessenen Arten, und er ist damit die einzige
+    /// Zahl, die hier als Rueckfall etwas belegt.
+    ///
+    /// <para>Sie steht hier und nicht im <see cref="MapEditOverlay"/>, damit es
+    /// die Tafel nur EINMAL gibt. Zwei Fassungen derselben Messung laufen
+    /// auseinander.</para>
+    /// </summary>
+    public static int HpOf(int typ)
+    {
+        foreach (var k in Kinds) if (k.Typ == typ) return k.Hp;
+        return 1000;
+    }
+
+    /// <summary>Die Tuerzellen einer Gebaeudeart, GEMESSEN. Eine unbekannte Art
+    /// bekommt KEINE Tuer — lieber eine ehrliche Luecke als eine erfundene Tuer
+    /// an einer Wand, durch die dann niemand kommt.</summary>
+    public static (int Col, int Row)[] DoorsOf(int typ)
+    {
+        foreach (var k in Kinds) if (k.Typ == typ) return k.Doors;
+        return Array.Empty<(int, int)>();
+    }
+
+    /// <summary>
     /// Die neutralen Gebaeude legen. Gibt zurueck, wie viele es wurden.
     /// </summary>
     /// <param name="firstSlot">Der erste freie Gebaeudeplatz — die Startbasen

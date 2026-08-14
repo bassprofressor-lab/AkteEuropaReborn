@@ -80,7 +80,8 @@ public partial class MainMenu
     /// <c>MainMenu.cs</c>, aus demselben Grund wie der Rest dieser Datei: dort
     /// wird gerade gearbeitet, und <c>MainMenu</c> ist eine
     /// <c>partial class</c>.</summary>
-    private void ShowMapEditor() => AddChild(new MapEditorScreen { OnView = ViewMade });
+    private void ShowMapEditor()
+        => AddChild(new MapEditorScreen { OnView = ViewMade, OnEdit = EditMade });
 
     /// <summary>Eine eben erzeugte Karte ANSEHEN — kein Gefecht. Warum nicht,
     /// steht bei <see cref="SkirmishSetup.ViewMap"/>: eine erzeugte Karte hat 0
@@ -90,6 +91,19 @@ public partial class MainMenu
     /// <para>Die Kulisse geht VOR dem Szenenwechsel weg — derselbe Grund wie bei
     /// <c>StartMission</c>: sonst laegen die 20..33 Megapixel des laufenden
     /// Demos und das Bild der neuen Karte gleichzeitig im Speicher.</para></summary>
+    private void EditMade(string mapName)
+    {
+        if (MapEditSession.Map == null)
+        {
+            Say("bearbeiten: es liegt keine erzeugte Karte im Speicher");
+            return;
+        }
+        MapEditSession.Active = true;
+        MapEditSession.Watch(GetTree());
+        Say($"bearbeiten: {mapName} — 1/2/3 waehlt Gebaeude/Gegenstand/Gleis, F5 speichert");
+        ViewMade(mapName);
+    }
+
     private void ViewMade(string mapName)
     {
         SkirmishSetup.Active = false;
@@ -269,6 +283,11 @@ public partial class MainMenu
                                        neutrals);
             }
             MapGenerator.Write(m, cwp, pal, outName, say);
+            // ⚠ Die Karte im Speicher BLEIBT — nur sie laesst sich bearbeiten
+            // und zurueckschreiben. Der Kartenbetrachter zeigt gleich die
+            // geschriebenen Dateien; ohne diese Zeile waere danach nichts mehr
+            // da, woran ein Klick etwas aendern koennte. Siehe MapEditSession.
+            MapEditSession.Hold(m, cwp, pal, outName);
             say($"fertig: jetzt --map-check={outName} und --map={outName}");
             return 0;
         }
