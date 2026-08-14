@@ -14,9 +14,10 @@ in der sie gewählt wurden:
 
 - **Multiplayer online.** Über das LAN hinaus: ein Server als Vermittler,
   Keimverteilung durch den Server, Verzögerungsausgleich, Prüfsummen und
-  Wiederverbindung — und davor die zwei Fragen, die der LAN-Beleg nicht beantworten
-  konnte, nämlich Fließkomma-Determinismus zwischen zwei *verschiedenen* Maschinen
-  und die Befehle der Computerspieler durch den Befehlsring.
+  Wiederverbindung — und davor die Frage, die der LAN-Beleg nicht beantworten
+  konnte: Fließkomma-Determinismus zwischen zwei *verschiedenen* Maschinen.
+  (Die zweite Frage, die hier stand — die Befehle der Computerspieler durch den
+  Befehlsring —, ist beantwortet, siehe unten.)
 - **Der Karteneditor.** Einzelne Zellen malen, Einheiten, Gebäude und Gleise
   setzen, die Spielerzahl wählen, vorhandene Karten öffnen — und eine erzeugte
   Karte vollwertig spielbar machen, nicht bloß begehbar.
@@ -28,6 +29,25 @@ in der sie gewählt wurden:
 
 Die Kampagne bleibt originaltreu; Gefecht und Mehrspieler dürfen bewusst
 abweichen, und jede Abweichung wird als unsere gekennzeichnet.
+
+### Mehrspieler
+
+- **Die Computerspieler müssen nicht durch den Befehlsring** — und das ist
+  gemessen, nicht angenommen. Im Programm von 1997 erreicht **genau eines von 21
+  Zielen** der Computerspieler-Runde den Befehlsbus (eine Gruppenbewegung);
+  Produktion, Einheitendurchlauf und Transport schreiben ihre Felder direkt. Und
+  weil die Runde jeden Platz überspringt, auf dem ein Mensch sitzt, rechnet im
+  Netzspiel **jede Maschine ihre Computerspieler selbst**. Nachgeprüft wurde, ob
+  unsere das auch aushalten: drei Läufe mit zwei echten Prozessen und
+  *verschiedenen* Spielerplätzen, darunter einer über 6000 Takte, in dem beide
+  Computerspieler ein Gebäude einnehmen und je vier Einheiten bauen — also
+  gerade der Zweig, der würfelt. Beide Maschinen kamen an jedem Prüftakt auf
+  dieselbe Zahl.
+- **Der Netz-Prüfstand meldet jetzt, was die Computerspieler tun.** Er tat es
+  vorher nicht, und deshalb war sein grünes Ergebnis wertlos: ein Lauf, in dem
+  die Computerspieler nur dastehen, sieht genauso aus wie einer, in dem sie
+  spielen. Ihre Zahlen stehen jetzt an jedem Prüftakt und am Ende im Protokoll,
+  auf beiden Seiten.
 
 ## 0.5.0 — 13.08.2026
 

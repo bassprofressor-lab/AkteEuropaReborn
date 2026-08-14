@@ -13,9 +13,10 @@ chosen:
 
 - **Multiplayer online.** Beyond the LAN: a server as broker, seed distribution
   from the server, lag compensation, checksums and reconnect — and before any of
-  that, the two questions the LAN proof could not answer, namely float
-  determinism between two *different* machines and routing the computer players'
-  orders through the command ring.
+  that, the question the LAN proof could not answer: float determinism between
+  two *different* machines. (The second question that stood here — routing the
+  computer players' orders through the command ring — has been answered, see
+  below.)
 - **The map editor.** Painting single cells, placing units, buildings and track,
   choosing the number of players, opening existing maps — and making a generated
   map fully playable, not just walkable.
@@ -27,6 +28,23 @@ chosen:
 
 Campaign stays faithful to the original; skirmish and multiplayer are allowed to
 deviate on purpose, and every deviation is marked as ours.
+
+### Multiplayer
+
+- **The computer players do not need to go through the command ring** — measured,
+  not assumed. In the 1997 program **exactly one of the 21 targets** of the
+  computer-player round reaches the command bus (a group move); production, the
+  unit sweep and transport write their fields directly. And because the round
+  skips any slot a human sits in, in a network game **every machine runs its own
+  computer players**. What was then checked is whether ours survive that: three
+  runs with two real processes on *different* player slots, one of them over 6000
+  ticks in which both computer players capture a building and build four units
+  each — precisely the branch that rolls dice. Both machines arrived at the same
+  number on every check tick.
+- **The network harness now reports what the computer players did.** It did not
+  before, which made its green result worthless: a run in which the computer
+  players merely stand there looks exactly like one in which they play. Their
+  figures now appear on every check tick and at the end, on both sides.
 
 ## 0.5.0 — 2026-08-13
 

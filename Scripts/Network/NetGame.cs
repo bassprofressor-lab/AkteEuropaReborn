@@ -453,6 +453,35 @@ public sealed partial class NetGameRunner : Node
         var rep = _sim.CommandReport();
         Say($"NETZ t={_tick,6} abdruck={h:X16} zahlen={snap.Count} " +
             $"befehle={rep.Applied} befehlsumme={rep.Digest:X16} | {_link.Numbers()}");
+        SayAi();
+    }
+
+    /// <summary>
+    /// WAS DIE COMPUTERSPIELER IN DIESEM LAUF GETAN HABEN — und warum das hier
+    /// stehen muss.
+    ///
+    /// <para>Der erste Zwei-Prozess-Lauf mit <c>KI 2</c> war grün: 600 Takte,
+    /// an jedem Prüftakt dieselbe Zahl, und die beiden Simulationen hatten
+    /// dabei sogar verschiedene Sichtspieler (Platz 0 gegen Platz 1). Das sieht
+    /// nach einem Beleg für »die KI ist im Netz unbedenklich« aus — und war
+    /// keiner, weil im ganzen Protokoll <b>keine einzige Zeile über die KI</b>
+    /// stand. Ob sie in diesen 600 Takten überhaupt etwas entschieden hat, war
+    /// aus dem Lauf nicht zu erkennen; ein Lauf, in dem die KI nur dasteht,
+    /// meldet dieselbe grüne Zahl (Regel 9: erst fragen, welche Fehlerklasse
+    /// der Prüfstand sehen kann, dann das Grün zählen).</para>
+    ///
+    /// <para><see cref="MapEntityLayer.AiLine"/> gibt es längst; sie wurde hier
+    /// nur nie gefragt. Ihre Zahlen (Armee, Welle, Gebaut, Angriffe, Greifer,
+    /// Genommen) stammen aus dem KI-Zustand und sind damit zugleich die
+    /// direkte Aussage, auf die es ankommt: <b>stehen auf beiden Maschinen
+    /// dieselben Zahlen</b>, hat die KI dort dieselben Entscheidungen
+    /// getroffen. Stehen überall Nullen, war der Lauf blind, und das steht dann
+    /// im Protokoll statt in niemandes Kopf.</para>
+    /// </summary>
+    private void SayAi()
+    {
+        string ai = _sim.AiLine();
+        Say(ai.Length > 0 ? "   " + ai : "   KI: kein Computerspieler in dieser Partie");
     }
 
     /// <summary>
@@ -629,6 +658,7 @@ public sealed partial class NetGameRunner : Node
         Say($"NETZ-ENDE takte={ran} (Takt {_start}..{_tick}) abdruck={_sim.DeterminismChecksum():X16}");
         Say($"   {rep}");
         Say($"   {_link.Numbers()}");
+        SayAi();
 
         if (_swallow >= 0)
         {
