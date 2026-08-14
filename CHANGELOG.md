@@ -33,6 +33,20 @@ deviate on purpose, and every deviation is marked as ours.
 
 ### Units
 
+- **Weapons have a minimum range, and we had missed it.** Checking the ranges
+  turned up a field that has always been in the map data and is read exactly
+  **once** in the whole 1997 game — twenty-two bytes next to the range, in the
+  same decision: too far away rejects the shot, **too close does as well**. The
+  maps confirm it without a counter-example: 620 of 4476 units carry such a
+  value, and it is smaller than the range in 620 out of 620 cases (3 at range 8,
+  5 at 14 …) — and only the long-range ones have one at all. An artillery piece
+  now lets go of a target that has come too close instead of keeping it; driving
+  closer would only make it worse. Measured on `map_DM_1`: 18 units with a
+  minimum range, 30 targets dropped because of it, and zero with
+  `--no-min-range`. ⚠ The report also says when a map has no such unit at all —
+  there the zero is not a result.
+
+
 - **A group no longer strands at a bottleneck.** Reported as "selecting a group
   and driving them one behind the other, over a bridge say, stops them dead as
   soon as somebody else is on the bridge". We used to wait 0.7 seconds, look for

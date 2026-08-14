@@ -344,6 +344,34 @@ public partial class MapEntityLayer : Node2D
         /// 0 = not known, fall back to the weapon's own range.</summary>
         public int Range;
 
+        /// <summary>
+        /// DIE MINDESTREICHWEITE — Satzfeld <b>+0x2a</b>, gelesen am 15.08.2026
+        /// aus Anlass von B3 (»Pruefe noch mal genau Waffenreichweiten«).
+        ///
+        /// <para>Das Feld war bekannt und unbenutzt. Es wird im ganzen Programm
+        /// des Originals <b>genau einmal</b> gelesen, und zwar 22 Byte neben der
+        /// Reichweite, in derselben Entscheidung (@0x40bf7f gegen @0x40bf69):</para>
+        /// <code>
+        ///   mov cl, [+0x2b]      lea ecx,[ecx+ecx*4]  shl ecx,3   ; Reichweite * 40
+        ///   cmp ecx, eax   jl  raus                                ; zu WEIT
+        ///   mov cl, [+0x2a]      lea ecx,[ecx+ecx*4]  shl ecx,3   ; Mindestwert * 40
+        ///   cmp ecx, eax   jg  raus                                ; zu NAH
+        /// </code>
+        ///
+        /// <para><b>Die Karten bestaetigen es ohne Gegenbeispiel:</b> 620 der
+        /// 4476 Einheiten tragen einen Wert, und er ist <b>620 von 620</b>
+        /// kleiner als die Reichweite — 3/8, 3/12, 4/10, 5/10, 5/14 und
+        /// 20/250, 20/255. Und er steht nur bei den weit reichenden: wer 2 oder
+        /// 4 Zellen weit schiesst, hat keinen.</para>
+        ///
+        /// <para>⚠ Der Faktor 40 ist die Zellbreite; das Original misst in
+        /// Bildpunkten, wir in Zellen. Solange beide Seiten dasselbe Mass
+        /// nehmen, kuerzt er sich heraus — <b>ungeprueft ist, ob das Original
+        /// euklidisch misst wie wir</b>, denn die isometrische Zelle ist 40
+        /// breit und nur etwa 20 hoch.</para>
+        /// </summary>
+        public int RangeMin;
+
         /// <summary>Sight in tiles — entity +0x2c, the panel's "Sicht". Carried
         /// for the panel; there is no fog of war here to spend it on. It streams
         /// wider than the range does per weapon, which is the radar equipment
@@ -1654,6 +1682,7 @@ public partial class MapEntityLayer : Node2D
                     Defence = haveRaw ? HexByte(raw, 0x27) : 0,
                     Rating28 = haveRaw ? HexByte(raw, 0x28) : 0,
                     Range = haveRaw ? HexByte(raw, 0x2b) : 0,
+                    RangeMin = haveRaw ? HexByte(raw, 0x2a) : 0,
                     Sight = haveRaw ? HexByte(raw, 0x2c) : 0,
                     Reload = haveRaw ? HexByte(raw, 0x3d) : 0,
                     Speed = haveRaw ? Hex16(raw, 0x20) : 0,
@@ -5105,6 +5134,58 @@ public partial class MapEntityLayer : Node2D
     private static float RangeOf(Entity e)
         => e.Range > 0 ? e.Range : WeaponOf(e.Weapon).RangeTiles;
 
+    /// <summary>GEGENPROBE: die Mindestreichweite nicht beachten, also der
+    /// Stand vor dem 15.08.2026. Nur <c>--no-min-range</c> setzt das.</summary>
+    public static bool NoMinRange;
+
+    /// <summary>Wie nah ein Ziel sein darf, ohne dass der Schuss ausfaellt —
+    /// siehe <see cref="Entity.RangeMin"/>. Ohne Wert 0, dann gilt keine
+    /// Untergrenze. ⚠ Die Tabelle springt hier NICHT ein: eine erfundene
+    /// Mindestreichweite waere schlimmer als keine.</summary>
+    private static float RangeMinOf(Entity e) => NoMinRange ? 0f : e.RangeMin;
+
+    /// <summary>Ist das Ziel im Schussfeld — nicht zu weit UND nicht zu nah?
+    /// Beides in EINER Frage, damit die zwei Bedingungen nicht auseinander
+    /// laufen koennen (sie tun es im Original auch nicht: zwei Vergleiche,
+    /// 22 Byte auseinander, gegen dieselbe Entfernung).</summary>
+    private static bool InFiringWindow(Entity e, float dist)
+        => dist <= RangeOf(e) && dist >= RangeMinOf(e);
+
+    /// <summary>Wie oft ein Ziel fallengelassen wurde, weil es zu NAH war.</summary>
+    public int MinRangeBlocked;
+
+    /// <summary>
+    /// Was diese Karte an Reichweiten mitbringt — und ob die Mindestreichweite
+    /// hier ueberhaupt etwas tun KANN.
+    ///
+    /// <para>⚠ Ohne die zweite Haelfte waere die Zeile wertlos: eine Karte ohne
+    /// eine einzige Einheit mit Mindestreichweite meldet »0 verhindert«, und
+    /// das sieht genau so aus wie eine kaputte Regel (Arbeitsweise 30 und 33).
+    /// </para>
+    /// </summary>
+    public string RangeWatchLine()
+    {
+        int armed = 0, noRange = 0, withMin = 0, minSum = 0;
+        var seen = new SortedDictionary<int, int>();
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Dead) continue;
+            if (RangeOf(e) <= 0) continue;
+            armed++;
+            if (e.Range <= 0) noRange++;
+            if (e.RangeMin > 0) { withMin++; minSum += e.RangeMin; seen.TryGetValue(e.RangeMin, out int c); seen[e.RangeMin] = c + 1; }
+        }
+        string sp = seen.Count == 0 ? "keine" :
+            string.Join(", ", System.Linq.Enumerable.Select(seen, kv => $"{kv.Key}x{kv.Value}"));
+        return $"reichweite: {armed} bewaffnete Einheiten, {noRange} davon ohne eigenen Wert " +
+               $"(unsere Tabelle springt ein), {withMin} mit Mindestreichweite [{sp}]" +
+               (NoMinRange ? " — GEGENPROBE --no-min-range: sie wird NICHT beachtet" : "") +
+               $"; Ziele wegen zu geringer Entfernung fallengelassen: {MinRangeBlocked}" +
+               (withMin == 0
+                   ? "   ⚠ auf dieser Karte kann die Mindestreichweite nichts tun — die 0 sagt nichts"
+                   : "");
+    }
+
     /// <summary>Stats of a unit's mounted weapon.
     ///
     /// ⚠ CORRECTED 2026-08-06: this used to fall back to component 24 for
@@ -5559,6 +5640,10 @@ public partial class MapEntityLayer : Node2D
                 var t = _entities[j];
                 if (!IsHostile(e, t)) continue;
                 float d = CellDistance(e, t);
+                // ⚠ Ein Ziel, das UNTER der Mindestreichweite liegt, ist kein
+                // Ziel: die Einheit wuerde es sich merken und dann nie
+                // schiessen. Siehe Entity.RangeMin (@0x40bf7f, `jg`).
+                if (d < RangeMinOf(e)) continue;
                 if (d <= bestDist) { bestDist = d; best = j; }
             }
             if (best >= 0) { e.Target = best; e.Ordered = false; }
@@ -5579,7 +5664,7 @@ public partial class MapEntityLayer : Node2D
 
         e.AimFacing = DirToFacing(t.Pos - e.Pos);   // the turret tracks its target
 
-        if (dist <= RangeOf(e))
+        if (InFiringWindow(e, dist))
         {
             e.Path = null;                      // in range: hold position and fire
             // a turreted unit keeps its hull heading and only swings the weapon;
@@ -5595,6 +5680,14 @@ public partial class MapEntityLayer : Node2D
             }
             return;
         }
+
+        // ⚠ ZU NAH ist nicht dasselbe wie zu weit, und der Unterschied ist der
+        // ganze Sinn der Mindestreichweite: naeher heranzufahren macht es
+        // SCHLIMMER. Die Einheit laesst das Ziel los, statt es zu verfolgen —
+        // das Original springt an derselben Stelle aus der Schussentscheidung
+        // heraus (@0x40bf8d `jg 0x40c5be`, dieselbe Marke wie bei »zu weit«).
+        // Wegzufahren waere unsere Erfindung; das Original tut es nicht.
+        if (dist < RangeMinOf(e)) { e.Target = -1; MinRangeBlocked++; return; }
 
         // only a player-ordered attack chases; a target picked up automatically
         // is simply dropped when it leaves the firing envelope

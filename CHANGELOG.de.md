@@ -35,6 +35,21 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Einheiten
 
+- **Waffen haben eine Mindestreichweite, und wir haben sie uebersehen.** Beim
+  Nachpruefen der Reichweiten kam ein Feld ans Licht, das seit je in den
+  Kartendaten steht und im ganzen Spiel von 1997 genau **einmal** gelesen wird —
+  zweiundzwanzig Byte neben der Reichweite, in derselben Entscheidung: zu weit
+  weg wird der Schuss verworfen, **zu nah ebenso**. Die Karten bestaetigen es
+  ohne Gegenbeispiel: 620 der 4476 Einheiten tragen einen solchen Wert, und er
+  ist 620 von 620 kleiner als die Reichweite (3 bei Reichweite 8, 5 bei 14 …) —
+  und nur die weit reichenden haben ueberhaupt einen. Ein Geschuetz laesst ein
+  Ziel jetzt los, wenn es zu nah herangekommen ist, statt weiter darauf zu
+  halten; naeher heranzufahren macht es schliesslich schlimmer. Auf `map_DM_1`
+  gemessen: 18 Einheiten mit Mindestreichweite, 30 Ziele deswegen
+  fallengelassen, mit `--no-min-range` null. ⚠ Die Meldung sagt ausserdem, wenn
+  eine Karte gar keine solche Einheit hat — dort ist die Null kein Ergebnis.
+
+
 - **Eine Gruppe bleibt an der Engstelle nicht mehr liegen.** Gemeldet als
   »Gruppenauswahl und hintereinander weg fahren wie über brücken lässt einheiten
   nicht mehr fahren, gerade wenn ein Fahrweg durch die brücke blockiert ist,

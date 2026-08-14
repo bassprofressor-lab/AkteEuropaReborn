@@ -900,6 +900,7 @@ public partial class MapViewer : Node2D
             // B8-Gegenprobe: die Startbasen NICHT zuteilen (Stand vor dem
             // 15.08.2026). Muss auf einer Eroberungskarte einen Unterschied
             // machen, sonst hat die Zuteilung nichts getan.
+            else if (a == "--no-min-range") MapEntityLayer.NoMinRange = true;
             else if (a == "--no-start-base") MapEntityLayer.NoStartBase = true;
             else if (a == "--leave-check") _leaveCheck = true;
             else if (a == "--leave-check=alt") { _leaveCheck = true; Core.LeaveToMenu.Skip = true; }
@@ -1312,6 +1313,7 @@ public partial class MapViewer : Node2D
             if (_vehAnimCheck) GD.Print(_entities.VehAnimReport());
             if (_bAnimCheck) GD.Print(_entities.BAnimCheck());
             GD.Print(_entities.FogWatchLine());
+            GD.Print(_entities.RangeWatchLine());
             if (_stuckCheck)
             {
                 GD.Print(_entities.StuckCheckLine());
