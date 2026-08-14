@@ -90,7 +90,8 @@ public static class MapGenerator
                                 int players = PlayersDefault, int troop = TroopDefault,
                                 double waterShare = MapTerrain.WaterShareDefault,
                                 uint seed = 1, TileModel? model = null,
-                                TileSeams? seams = null, CwpFile? cwp = null)
+                                TileSeams? seams = null, CwpFile? cwp = null,
+                                int neutrals = -1)
     {
         var m = MapFactory.Empty(width, height, tileset, stem);
         m.Mission = $"Editor {stem} {width}x{height}";
@@ -209,7 +210,18 @@ public static class MapGenerator
         say("Gelaende: " + t.Describe());
 
         // ---- 4. Basen, Truppen, Marken -----------------------------------------
-        if (starts.Count > 0) Populate(m, t, starts, troop, say);
+        int usedSlots = 0;
+        if (starts.Count > 0) usedSlots = Populate(m, t, starts, troop, say);
+
+        // ---- 4b. die neutralen Gebaeude ----------------------------------------
+        // ⚠ NACH den Startplaetzen (ihre Plaetze sind belegt und werden
+        // freigehalten) und VOR den Vorkommen (die fragen die fertige imap, und
+        // was unter einem neutralen Gebaeude liegt, waere verschenkt).
+        // Erst sie machen aus der Landschaft eine EROBERUNGSKARTE — die
+        // Messlatten stehen bei MapNeutrals.
+        var clear = new List<(int Col, int Row)>();
+        foreach (var s in starts) clear.Add((s.Col, s.Row));
+        MapNeutrals.Place(m, seed, cwp, usedSlots, clear, say, neutrals);
 
         // ---- 5. die Rohstoffvorkommen ------------------------------------------
         // ⚠ NACH den Basen, und das ist der Grund: MapDeposits fragt die FERTIGE
@@ -306,7 +318,11 @@ public static class MapGenerator
     /// <summary>Basis, Fabrik, Truppe und Startmarke auf die planierten Plaetze.
     /// Die Grundflaechen und Tueren sind an gelieferten Karten abgelesen, siehe
     /// die Festwerte oben.</summary>
-    private static void Populate(CwmFile m, MapTerrain t, List<Start> starts, int troop,
+    /// <summary>Gibt zurueck, wie viele Gebaeudeplaetze belegt wurden — der
+    /// naechste freie ist der, ab dem <see cref="MapNeutrals"/> weiterzaehlt.
+    /// Ohne diese Zahl haetten die neutralen Gebaeude die Startbasen
+    /// ueberschrieben, und zwar still.</summary>
+    private static int Populate(CwmFile m, MapTerrain t, List<Start> starts, int troop,
                                  Action<string> say)
     {
         int bldSlot = 0, units = 0, blds = 0;
@@ -357,6 +373,7 @@ public static class MapGenerator
         say($"Startplaetze: {starts.Count} Spieler, {blds} Gebaeude, {units} Einheiten " +
             "(ohne die gaebe SkirmishAi.StartSkirmish −1 und die Karte waere im ersten " +
             "Takt verloren)");
+        return bldSlot;
     }
 
     /// <summary>Die Wunschorte verteilen: gegenueberliegende Ecken bei zwei

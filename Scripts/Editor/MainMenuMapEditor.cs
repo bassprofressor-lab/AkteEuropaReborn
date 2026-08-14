@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.UI;
+﻿namespace AkteEuropaReborn.UI;
 
 using System;
 using Godot;
@@ -126,7 +126,7 @@ public partial class MainMenu
             say("--map-new=<name>,<breite>,<hoehe>,<kachelsatz>"
                 + "[,flach][,leer][,ohnetabelle][,ohnenaht][,boden=<n>][,from=<ordner>]"
                 + "[,quelle=<datei.CWM>][,spieler=<n>][,truppe=<n>]"
-                + "[,wasser=<prozent>][,samen=<n>]");
+                + "[,wasser=<prozent>][,samen=<n>][,neutral=<n>][,ohneneutral]");
             return 2;
         }
         string name = p[0];
@@ -143,6 +143,9 @@ public partial class MainMenu
         uint seed = 1;
         bool useModel = true, useSeams = true;
         int seamTries = TileSeams.TriesDefault;
+        // -1 = aus der gemessenen Dichte rechnen; 0 ist die GEGENPROBE
+        // (keine neutralen Gebaeude, also die Karte von vor dem 14.08.2026).
+        int neutrals = -1;
         for (int i = 4; i < p.Length; i++)
         {
             if (p[i] == "flach" || p[i] == "flat") flat = true;
@@ -159,6 +162,8 @@ public partial class MainMenu
             else if (p[i].StartsWith("quelle=")) source = p[i]["quelle=".Length..];
             else if (p[i].StartsWith("spieler=")) int.TryParse(p[i]["spieler=".Length..], out players);
             else if (p[i].StartsWith("truppe=")) int.TryParse(p[i]["truppe=".Length..], out troop);
+            else if (p[i].StartsWith("neutral=")) int.TryParse(p[i]["neutral=".Length..], out neutrals);
+            else if (p[i] == "ohneneutral") neutrals = 0;
             else if (p[i].StartsWith("samen=")) { uint.TryParse(p[i]["samen=".Length..], out uint s); seed = s == 0 ? 1 : s; }
             else if (p[i].StartsWith("wasser="))
             {
@@ -260,7 +265,8 @@ public partial class MainMenu
                 // Vorkommen, auf denen keine Mine steht — gemessen 0 Bauplaetze
                 // trotz gelegter Vorkommen.
                 m = MapGenerator.Build(outName, w, h, ts, palette, flat, say,
-                                       players, troop, waterShare, seed, model, seams, cwp);
+                                       players, troop, waterShare, seed, model, seams, cwp,
+                                       neutrals);
             }
             MapGenerator.Write(m, cwp, pal, outName, say);
             say($"fertig: jetzt --map-check={outName} und --map={outName}");

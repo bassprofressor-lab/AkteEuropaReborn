@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Editor;
+﻿namespace AkteEuropaReborn.Editor;
 
 using System;
 using System.Collections.Generic;
@@ -237,12 +237,12 @@ public static class MapDeposits
     /// der Generator setzt es auf jeder Hangzelle. Ohne diese Frage lagen
     /// Vorkommen auf Hängen, und die Mine hatte trotz Vorkommen 0
     /// Bauplätze.</para></summary>
-    private static bool Free(CwmFile m, byte[] imap, int c, int r)
+    internal static bool Free(CwmFile m, byte[] imap, int c, int r)
         => ImapFree(m, imap, c, r) && m.FlagAt(c, r) == 0;
 
     /// <summary>Nur die imap-Frage, ohne das Hangbyte — die Grundmenge, gegen die
     /// die Dichte gemessen ist.</summary>
-    private static bool ImapFree(CwmFile m, byte[] imap, int c, int r)
+    internal static bool ImapFree(CwmFile m, byte[] imap, int c, int r)
     {
         if (c < 0 || c >= m.Width || r < 0 || r >= m.Height) return false;
         int i = (c * MapFactory.ImapStride + r) * 2;
@@ -251,7 +251,7 @@ public static class MapDeposits
     }
 
     /// <summary>sec2 einer Zelle, Index <c>col*257 + row</c>.</summary>
-    private static int Zone(byte[] zone, int w, int h, int c, int r)
+    internal static int Zone(byte[] zone, int w, int h, int c, int r)
     {
         if (c < 0 || c >= w || r < 0 || r >= h) return 0;
         int i = c * MapFactory.ZoneStride + r;
@@ -260,7 +260,7 @@ public static class MapDeposits
 
     /// <summary><c>corners_carry</c> @0x4211A0 — alle vier Ecken sec2 &gt;= 2.
     /// </summary>
-    private static bool Corners(byte[] zone, int w, int h, int c, int r)
+    internal static bool Corners(byte[] zone, int w, int h, int c, int r)
         => Zone(zone, w, h, c, r) >= MinCornerClass
         && Zone(zone, w, h, c + 1, r) >= MinCornerClass
         && Zone(zone, w, h, c, r + 1) >= MinCornerClass
