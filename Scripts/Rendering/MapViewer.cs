@@ -381,6 +381,9 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        // ⚠ KEIN Quit hier: dieser Pruefstand braucht die Zeit danach. Der
+        // Befehl geht jetzt raus, gezaehlt wird beim --quit-after.
+        if (_stuckCheck) GD.Print(_entities.StuckCheckStart());
         if (_depotCheck)
         {
             GD.Print(_entities.DepotCheck());
@@ -870,6 +873,14 @@ public partial class MapViewer : Node2D
             // Core.LeaveToMenu.Skip die Fassung vor dem 15.08.2026 im selben
             // Programm nach und MUSS durchfallen — sonst wäre nicht zu sehen,
             // ob der Zähler überhaupt etwas sehen kann. Braucht --quit-after.
+            // B2: bleibt eine Gruppe an der Engstelle liegen? Braucht LAUFZEIT
+            // (--quit-after) — der Schaden entsteht erst Takte nach dem Befehl,
+            // deshalb kann --group-check ihn nicht sehen. `=alt` stellt die
+            // Fassung vor dem 15.08.2026 im selben Programm nach und MUSS
+            // durchfallen.
+            else if (a == "--stuck-check") _stuckCheck = true;
+            else if (a == "--stuck-check=alt")
+            { _stuckCheck = true; MapEntityLayer.BlockOld = true; }
             else if (a == "--leave-check") _leaveCheck = true;
             else if (a == "--leave-check=alt") { _leaveCheck = true; Core.LeaveToMenu.Skip = true; }
             // Prüfstand für die Bauteilbilder. ⚠ Er braucht LAUFZEIT: die
@@ -995,6 +1006,7 @@ public partial class MapViewer : Node2D
     /// <summary>Seconds after which a scripted run gives up and quits; 0 = never.</summary>
     private float _quitAfter;
     private bool _leaveCheck;
+    private bool _stuckCheck;
     private float _scriptCheck;
     private float _payCheck;
 
@@ -1280,6 +1292,12 @@ public partial class MapViewer : Node2D
             if (_vehAnimCheck) GD.Print(_entities.VehAnimReport());
             if (_bAnimCheck) GD.Print(_entities.BAnimCheck());
             GD.Print(_entities.FogWatchLine());
+            if (_stuckCheck)
+            {
+                GD.Print(_entities.StuckCheckLine());
+                GetTree().Quit(_entities.StuckCheckRc());
+                return;
+            }
             if (_leaveCheck) { LeaveCheckGo(); return; }
             GetTree().Quit();
         }

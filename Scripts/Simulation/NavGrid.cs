@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Simulation;
+﻿namespace AkteEuropaReborn.Simulation;
 
 using System;
 using System.Collections.Generic;
@@ -92,6 +92,12 @@ public sealed class NavGrid
     private byte[] _elev = Array.Empty<byte>();
     private int[] _occupant = Array.Empty<int>();     // entity index or -1
     private bool[] _crushable = Array.Empty<bool>();  // occupant is a foot soldier
+    // ⚠ Der Belegende ist ein Gebäude oder ein Gegenstand, also etwas, das nie
+    // weiterfährt. Ohne diese Unterscheidung wäre jede Wand ein »der fährt
+    // gleich weiter« — und eine Einheit wartete davor bis zum Missionsende.
+    // Siehe Ask(): das Original liest denselben Unterschied am imap-Wert
+    // (10000..13999 Einheit, ab 14000 fest).
+    private bool[] _immobile = Array.Empty<bool>();
 
     public bool InBounds(int c, int r) => c >= 0 && r >= 0 && c < Width && r < Height;
 
@@ -198,18 +204,79 @@ public sealed class NavGrid
     /// Luecke von einer Zelle, und zwei Schiffe stehen ineinander.
     /// </remarks>
     public bool IsFree(int c, int r, MoveClass mc = MoveClass.Vehicle, int mover = -1)
+        => Ask(c, r, mc, mover) == Step.Free;
+
+    /// <summary>
+    /// DIE DREI ANTWORTEN DES ORIGINALS. <c>Can_go</c> gibt kein ja/nein zurück,
+    /// sondern <b>0 nein · 1 ja, aber jemand muss ausweichen · 2 frei</b> — und
+    /// der Unterschied zwischen 0 und 1 ist der ganze Fehler B2.
+    /// </summary>
+    public enum Step
+    {
+        /// <summary><c>Can_go</c> = 0. Das Gelände sagt nein, oder es steht
+        /// etwas Unbewegliches darauf. Wartet man hier, wartet man ewig.</summary>
+        Blocked = 0,
+
+        /// <summary><c>Can_go</c> = 1. In der Zelle steht eine ANDERE EINHEIT.
+        /// Sie fährt gleich weiter — das ist der Fall, in dem das Original
+        /// wartet und den Weg behält.</summary>
+        GiveWay = 1,
+
+        /// <summary><c>Can_go</c> = 2. Frei.</summary>
+        Free = 2,
+    }
+
+    /// <summary>
+    /// WIE <c>Can_go</c> @0x4055D0 ANTWORTET — und woher die drei Fälle kommen.
+    ///
+    /// <para>Gelesen am 15.08.2026 aus Anlass von B2 (»Gruppenauswahl und
+    /// hintereinander weg fahren wie über brücken lässt einheiten nicht mehr
+    /// fahren, gerade wenn ein Fahrweg durch die brücke blockiert ist, weil
+    /// gerade jemand anders drüber fährt«).</para>
+    ///
+    /// <para>⚠ <b>Der Aufrufer war über den rohen Byte-Scan zu finden, nicht
+    /// über <c>call</c>:</b> auf <c>Can_go</c> zeigt genau EIN Sprung
+    /// (@0x4018fc, ein Vermittler des Inkrementallinkers), und erst auf DEN
+    /// zeigen fünf echte Aufrufe. <c>disx2.py call 0x4055D0</c> meldete null —
+    /// Regel 7 in Reinform. Werkzeug: <c>aekernel-tools/move_re.py</c>.</para>
+    ///
+    /// <para><b>Wie das Original die 1 herstellt</b> (@0x40624b..@0x406275, in
+    /// allen drei Fahrwerkszweigen wortgleich, @0x40582e und @0x405a8e): es
+    /// liest das imap der Zielzelle. <c>0xFFFD</c>/<c>0xFFFE</c> sind Gelände
+    /// und gehen weiter; alles andere ist ein HANDLE, aus dem
+    /// <c>handle − 10000</c> den Platz der Einheit macht (@0x406264
+    /// <c>sub ax, 0x2710</c>). Erst wenn die Prüfung @0x433df0 dazu nein sagt,
+    /// wird der Merker gesetzt, und am Ende steht
+    /// <c>eax = 2 − (merker != 0 ? 1 : 0)</c> (@0x405926..@0x405938,
+    /// <c>sbb ecx,ecx</c> + <c>inc ecx</c>).</para>
+    ///
+    /// <para>⚠ <b>Was hier UNGELESEN bleibt</b> und darum grob nachgebildet ist:
+    /// die Prüfung @0x433df0 selbst. Sie schlägt in einer eigenen Tafel
+    /// (0x7847e8) nach und kennt einen Sonderfall 0x63. Wir setzen dafür
+    /// schlicht »der Belegende ist eine bewegliche Einheit« — das trifft den
+    /// Fall, um den es geht, aber es ist nicht dieselbe Frage. Wer sie liest,
+    /// gehört hierher.</para>
+    /// </summary>
+    public Step Ask(int c, int r, MoveClass mc = MoveClass.Vehicle, int mover = -1)
     {
         int side = HullOf(mover);
+        bool giveWay = false;
         for (int dy = 0; dy < side; dy++)
             for (int dx = 0; dx < side; dx++)
             {
                 int cc = c + dx, rr = r + dy;
-                if (!CanEnter(cc, rr, mc)) return false;
+                if (!CanEnter(cc, rr, mc)) return Step.Blocked;
                 int i = Idx(cc, rr);
                 if (_occupant[i] < 0 || _occupant[i] == mover) continue;
-                if (!_crushable[i]) return false;
+                if (_crushable[i]) continue;          // Infanterie hält niemanden auf
+                // ⚠ Ein Gebäude weicht nicht aus. Das Original unterscheidet
+                // hier nicht nach dem Satz, sondern am imap-Wert: 10000..13999
+                // ist eine Einheit, ab 14000 steht dort etwas Festes. Bei uns
+                // trägt der Stempel es mit (siehe SetOccupant).
+                if (_immobile[i]) return Step.Blocked;
+                giveWay = true;                        // eine Einheit — die fährt weiter
             }
-        return true;
+        return giveWay ? Step.GiveWay : Step.Free;
     }
 
     /// <summary>Die Rohstoffvorkommen, die DIE KARTE mitbringt —
@@ -317,6 +384,7 @@ public sealed class NavGrid
         g._elev = new byte[n];
         g._occupant = new int[n];
         g._crushable = new bool[n];
+        g._immobile = new bool[n];
         Array.Fill(g._occupant, -1);
 
         if (!meta.TryGetValue("tiles", out var tv) || tv.VariantType != Variant.Type.Array)
@@ -407,6 +475,7 @@ public sealed class NavGrid
     {
         if (_occupant.Length > 0) Array.Fill(_occupant, -1);
         if (_crushable.Length > 0) Array.Fill(_crushable, false);
+        if (_immobile.Length > 0) Array.Fill(_immobile, false);
         // ⚠ Die Ruempfe gehen MIT. Wer die Belegung leert und die Ruempfe
         // stehen laesst, traegt beim naechsten Aufbau die Rumpfgroessen der
         // vorigen Karte — und die Einheitennummern sind dort andere.
@@ -428,7 +497,8 @@ public sealed class NavGrid
     /// <summary>⚠ Stempelt den GANZEN Rumpf ab (<paramref name="c"/>,
     /// <paramref name="r"/>) — <see cref="HullSide"/>. Fuer alles ausser
     /// Schiffen ist das genau die eine Zelle wie bisher.</summary>
-    public void SetOccupant(int c, int r, int entity, bool crushable = false)
+    public void SetOccupant(int c, int r, int entity, bool crushable = false,
+                             bool immobile = false)
     {
         int side = HullOf(entity);
         for (int dy = 0; dy < side; dy++)
@@ -438,6 +508,7 @@ public sealed class NavGrid
                 int i = Idx(c + dx, r + dy);
                 _occupant[i] = entity;
                 _crushable[i] = crushable;
+                _immobile[i] = immobile;
             }
     }
 
@@ -456,6 +527,7 @@ public sealed class NavGrid
                 if (_occupant[i] != entity) continue;
                 _occupant[i] = -1;
                 _crushable[i] = false;
+                _immobile[i] = false;
             }
     }
 

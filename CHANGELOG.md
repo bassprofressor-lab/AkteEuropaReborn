@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to Akte Europa Reborn. The build ships **only the engine** —
 terrain, units, maps, tables and now sound are derived on your own machine from
@@ -32,6 +32,26 @@ Campaign stays faithful to the original; skirmish and multiplayer are allowed to
 deviate on purpose, and every deviation is marked as ours.
 
 ### Units
+
+- **A group no longer strands at a bottleneck.** Reported as "selecting a group
+  and driving them one behind the other, over a bridge say, stops them dead as
+  soon as somebody else is on the bridge". We used to wait 0.7 seconds, look for
+  a new route **once**, and throw the route away if that failed — after which
+  the unit stood there forever, until the player clicked again by hand. On a
+  single-lane bridge the route is occupied at almost every replanning moment, so
+  it hit half the group. The 1997 game does it differently, and at the root: its
+  movement question has **three** answers, not two — no, *yes but somebody has
+  to give way*, free. Waiting in front of a wall is pointless; waiting behind a
+  moving unit is exactly right, and we had thrown both into one pot. Now a unit
+  waits behind another and keeps its route; in front of something immovable a
+  patience counter runs down, and when it expires the route is replanned and the
+  counter **re-armed** instead of given up. The numbers are the original's
+  (15 + roll%15 on entering a cell, 40 + roll%20 after that, and a one-in-60
+  nudge per tick while somebody is in the way). Measured with the new
+  `--stuck-check` across three maps where the question is answerable:
+  **8 stranded units before, 0 after**; `--stuck-check=alt` reproduces the old
+  behaviour inside the same program and fails. The twin stays bit-identical over
+  30 seconds.
 
 - **Bombs land on the middle of the hull.** An air attack used to aim at a
   unit's record cell — on a battleship, that is its top-left corner. The 1997

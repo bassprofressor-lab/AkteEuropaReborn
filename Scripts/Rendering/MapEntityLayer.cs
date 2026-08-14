@@ -310,6 +310,25 @@ public partial class MapEntityLayer : Node2D
         public Vector2I? Reserved;       // cell currently being driven into
         public float WaitTime;           // blocked-by-another-unit timer
 
+        /// <summary>
+        /// DER GEDULDSZAEHLER, Satzfeld <b>+0x1c</b> — gelesen am 15.08.2026.
+        ///
+        /// <para>Das Original zaehlt ihn herunter, solange der Weg versperrt
+        /// ist, und unternimmt erst bei <b>null</b> etwas anderes; danach wird
+        /// er NEU gesetzt statt der Weg weggeworfen. Gesetzt wird er bei jedem
+        /// Betreten einer Zelle auf <b>15 + Wurf%15</b> (@0x407a93..@0x407aa4,
+        /// direkt vor dem Spritabzug bei +0x2e), und beim Ablaufen auf
+        /// <b>40 + Wurf%20</b> (@0x408bc8..@0x408bda).</para>
+        ///
+        /// <para>⚠ Die Zahlen sind TAKTE des Originals. Wie lang dessen Takt
+        /// war, ist ungelesen; wir setzen sie in unsere Takte
+        /// (<c>SimHz = 60</c>, selbst unsere Setzung) — die Groessenordnung
+        /// bleibt damit die alte 0,7-Sekunden-Wartezeit, nur eben gewuerfelt
+        /// wie im Original, was zwei nebeneinander stehende Einheiten
+        /// auseinanderzieht.</para>
+        /// </summary>
+        public int Block;
+
         /// <summary>What this unit still has to do after the current order.
         /// OURS — the original takes one order at a time; see
         /// <see cref="MaxOrders"/>.</summary>
@@ -2619,7 +2638,11 @@ public partial class MapEntityLayer : Node2D
             if (!e.IsBuilding && !e.IsProp)
                 _nav?.SetHull(i, Simulation.NavGrid.HullSide(e.Subclass));
             if (e.IsBuilding && e.BType == 14) _nav?.ClearStatic(e.Col, e.Row);
-            else _nav?.SetOccupant(e.Col, e.Row, i, e.Infantry >= 0);
+            // ⚠ »unbeweglich« geht MIT: ein Gebaeude oder ein Gegenstand faehrt
+            // nie weiter, und wer davor auf »der macht gleich Platz« wartet,
+            // wartet bis zum Missionsende. Siehe NavGrid.Ask.
+            else _nav?.SetOccupant(e.Col, e.Row, i, e.Infantry >= 0,
+                                   immobile: e.IsBuilding || e.IsProp);
         }
     }
 
@@ -2767,6 +2790,93 @@ public partial class MapEntityLayer : Node2D
     /// OURS: the original's cell holds up to nine men and ours holds one entity,
     /// so "all nine" and "none" collapse into a single test.
     /// </summary>
+    private const int BlockEnter = 15, BlockEnterSpread = 15;
+    private const int BlockRearm = 40, BlockRearmSpread = 20;
+    private const int GiveWayOdds = 60;
+
+    /// <summary>
+    /// DER WEG IST VERSPERRT — was das Original dann tut, und was wir bis zum
+    /// 15.08.2026 stattdessen taten.
+    ///
+    /// <para><b>Gemeldet als B2:</b> »Gruppenauswahl und hintereinander weg
+    /// fahren wie über brücken lässt einheiten nicht mehr fahren, gerade wenn
+    /// ein Fahrweg durch die brücke blockiert ist, weil gerade jemand anders
+    /// drüber fährt.« Die Ursache stand genau hier: wir haben 0,7 Sekunden
+    /// gewartet, <b>einmal</b> neu geplant und bei Misserfolg
+    /// <c>e.Path = null</c> gesetzt. Danach überspringt die Schleife die Einheit
+    /// für immer — sie steht, bis der Spieler von Hand neu klickt. Auf einer
+    /// einspurigen Brücke ist der Weg im Augenblick des Neuplanens fast immer
+    /// belegt, also traf es die halbe Gruppe.</para>
+    ///
+    /// <para><b>Das Original gibt nie auf.</b> Gelesen aus den zwei
+    /// Aufrufstellen, die <c>Can_go</c> voll auswerten (@0x408b88 der Fahr-,
+    /// @0x40915d der Angriffsbefehl; beide <c>test eax,eax / cmp eax,1 /
+    /// cmp eax,2</c>):</para>
+    /// <code>
+    ///   2 frei         -> Zelle betreten (@0x4091ba)
+    ///   1 jemand muss  -> WARTEN, Weg behalten. Und einmal je 60 Takte
+    ///     ausweichen      (@0x408d90 Wurf, `mov cx,0x3c`, `test dx,dx / jne
+    ///                     Ende`) den Satz in den Auftragsring legen (@0x4d32c0,
+    ///                     1000 Plaetze) — Kennzahl je Gattung aus der Tafel
+    ///                     @0x40a220 (1/3/5/7/13, Gattung 2 tut nichts).
+    ///   0 nein         -> Geduldszaehler +0x1c herunter. Solange er laeuft:
+    ///                     Takt zu Ende. Bei null: NEU setzen auf 40 + Wurf%20
+    ///                     (@0x408bc8) und etwas anderes versuchen. Der Weg wird
+    ///                     NICHT weggeworfen.
+    /// </code>
+    ///
+    /// <para>⚠ <b>Der Unterschied, der zaehlt</b>, ist nicht die Wartezeit,
+    /// sondern dass 1 und 0 zwei verschiedene Faelle sind: vor einer Wand
+    /// warten ist sinnlos, hinter einer fahrenden Einheit warten ist genau
+    /// richtig. Unser <c>IsFree</c> warf beides in einen Zaehler — dieselbe
+    /// Klasse Fehler wie »zwei Maengel in einem Zaehler« (Arbeitsweise C).</para>
+    ///
+    /// <para>⚠ <b>UNSERE Setzung bleibt die Handlung bei 1/60:</b> das Original
+    /// legt einen Satz mit einer Gattungskennzahl in den Auftragsring; was die
+    /// Kennzahlen bedeuten, ist ungelesen. Wir planen dort stattdessen neu —
+    /// das ist die Handlung, um die es geht, aber es ist nicht belegt
+    /// dieselbe.</para>
+    /// </summary>
+    private void BlockedStep(int i, Entity e, Simulation.NavGrid.Step step, float dt)
+    {
+        if (BlockOld)
+        {
+            // ⚠ WORTGLEICH die Fassung vor dem 15.08.2026 — nicht aufraeumen,
+            // nicht verbessern. Sie ist der Gegenstand der Messung.
+            e.WaitTime += dt;
+            if (e.WaitTime > 0.7f)
+            {
+                e.WaitTime = 0;
+                var old = _nav.FindPath(new Vector2I(e.Col, e.Row), e.Goal, e.Move, i);
+                if (old == null || old.Count == 0) e.Path = null;
+                else { e.Path = old; e.PathIdx = 0; }
+            }
+            return;
+        }
+        if (step == Simulation.NavGrid.Step.GiveWay)
+        {
+            // Der Wurf zieht zwei nebeneinander wartende Einheiten auseinander;
+            // ohne ihn planen beide im selben Takt neu und stossen wieder
+            // zusammen. Das ist der Grund, warum das Original hier wuerfelt.
+            if (Simulation.Determinism.Roll(GiveWayOdds) != 0) return;
+            Repath(i, e);
+            return;
+        }
+        if (--e.Block > 0) return;
+        e.Block = BlockRearm + Simulation.Determinism.Roll(BlockRearmSpread);
+        Repath(i, e);
+    }
+
+    /// <summary>Einen neuen Weg zum selben Ziel suchen. ⚠ Findet er keinen,
+    /// bleibt der alte STEHEN — der Zaehler laeuft weiter, und beim naechsten
+    /// Ablauf wird wieder gesucht. Genau das ist der Unterschied zum alten
+    /// <c>e.Path = null</c>, das die Einheit endgueltig stillegte.</summary>
+    private void Repath(int i, Entity e)
+    {
+        var p = _nav.FindPath(new Vector2I(e.Col, e.Row), e.Goal, e.Move, i);
+        if (p != null && p.Count > 0) { e.Path = p; e.PathIdx = 0; }
+    }
+
     private void RunOverFoot(int driverIdx, Entity driver, int footIdx)
     {
         if (footIdx < 0 || footIdx >= _entities.Count) return;
@@ -3603,6 +3713,167 @@ public partial class MapEntityLayer : Node2D
         return sb.ToString();
     }
 
+    // ========================================================================
+    //  --stuck-check — B2: bleibt eine Gruppe an der Engstelle liegen?
+    // ========================================================================
+
+    /// <summary>GEGENPROBE: die Fassung vor dem 15.08.2026 nachstellen — 0,7 s
+    /// warten, EINMAL neu planen, sonst den Weg wegwerfen. Nur
+    /// <c>--stuck-check=alt</c> setzt das. Ein Schalter, der die alte Fassung im
+    /// selben Programm nachstellt, entscheidet in einem Lauf (Arbeitsweise
+    /// 31).</summary>
+    public static bool BlockOld;
+
+    private readonly List<int> _stuckGroup = new();
+    private readonly List<Vector2I> _stuckFrom = new();
+    private readonly List<Vector2I> _stuckTo = new();
+    private Vector2I _stuckGoal;
+    private bool _stuckOn;
+
+    /// <summary>
+    /// Den Gruppenbefehl absetzen, den B2 beschreibt: ALLE beweglichen
+    /// Einheiten des betrachteten Spielers auf EIN fernes Ziel. Danach laeuft
+    /// die Simulation; gezaehlt wird in <see cref="StuckCheckLine"/>.
+    ///
+    /// <para>⚠ Der Unterschied zu <see cref="GroupMoveCheck"/> ist die ZEIT.
+    /// Der zaehlt den Augenblick des Befehls und haette den Fehler nie sehen
+    /// koennen: dort hat noch fast jeder einen Weg. Der Schaden entsteht erst
+    /// Takte spaeter, wenn einer an der Engstelle steht und sein Weg
+    /// weggeworfen wird (Arbeitsweise 9: welche Fehlerklasse KANN dieser
+    /// Pruefstand sehen?).</para>
+    /// </summary>
+    public string StuckCheckStart()
+    {
+        if (_nav == null) return "stuck-check: kein Gitter";
+        _sel.Clear(); _stuckGroup.Clear(); _stuckFrom.Clear();
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || !e.Mobile) continue;
+            if (e.Owner != ViewPlayer) continue;
+            _sel.Add(i);
+        }
+        if (_sel.Count == 0) return "stuck-check: nichts Bewegliches beim betrachteten Spieler";
+
+        // Dasselbe Ziel wie --group-check, damit die zwei Zahlen vergleichbar
+        // bleiben: zwanzig Zellen schraeg weg vom ersten der Gruppe.
+        foreach (int i in _sel)
+        {
+            _stuckGroup.Add(i);
+            _stuckFrom.Add(new Vector2I(_entities[i].Col, _entities[i].Row));
+        }
+        // ⚠ DAS ZIEL MUSS BELEGT ERREICHBAR SEIN, sonst misst der Pruefstand
+        // seine eigene Zielwahl. Der erste Anlauf nahm blind »zwanzig Zellen
+        // schraeg weg« (so wie --group-check) und meldete auf map_DM_4
+        // »0 von 48 haben einen Weg« — dort liegt diese Stelle schlicht in
+        // keinem begehbaren Gebiet. Das haette wie ein Fehler der Wegfindung
+        // ausgesehen und war einer des Prueflaufs (Arbeitsweise 30).
+        var first = _entities[_stuckGroup[0]];
+        var from = new Vector2I(first.Col, first.Row);
+        _stuckGoal = from;
+        int reach = 0;
+        foreach (int rad in new[] { 30, 24, 18, 12, 8 })
+        {
+            foreach (var d in new[] { (1, 1), (1, -1), (-1, 1), (-1, -1), (1, 0), (0, 1), (-1, 0), (0, -1) })
+            {
+                var cand = new Vector2I(Mathf.Clamp(first.Col + d.Item1 * rad, 0, _nav.Width - 1),
+                                        Mathf.Clamp(first.Row + d.Item2 * rad, 0, _nav.Height - 1));
+                if (cand == from) continue;
+                var probe = _nav.FindPath(from, cand, first.Move, _stuckGroup[0]);
+                if (probe == null || probe.Count == 0) continue;
+                _stuckGoal = cand; reach = probe.Count;
+                break;
+            }
+            if (reach > 0) break;
+        }
+        if (reach == 0)
+            return $"stuck-check: von ({from.X},{from.Y}) aus ist in 8..30 Zellen kein Ziel " +
+                   "erreichbar — auf dieser Karte ist die Frage nicht stellbar, " +
+                   "und ein gruenes Ergebnis waere hier bedeutungslos";
+        IssueMove(CellCenter(_stuckGoal.X, _stuckGoal.Y));
+        // ⚠ JEDE Einheit bekommt ein EIGENES Ziel (IssueMove streut sie im
+        // Umkreis von acht Zellen um den Klick). Gegen den Klickpunkt zu messen
+        // hiesse, die Streuung als Fehler zu zaehlen — der erste Anlauf tat das
+        // und meldete Einheiten als »steht«, die auf ihrem Ziel standen.
+        _stuckTo.Clear();
+        int withPath = 0;
+        foreach (int i in _stuckGroup)
+        {
+            _stuckTo.Add(_entities[i].Goal);
+            if (_entities[i].Path != null) withPath++;
+        }
+        _stuckOn = true;
+        return $"stuck-check{(BlockOld ? " (GEGENPROBE =alt, alte Fassung)" : "")}: " +
+               $"{_stuckGroup.Count} Einheiten von Spieler {ViewPlayer} -> " +
+               $"({_stuckGoal.X},{_stuckGoal.Y}) — belegt erreichbar, " +
+               $"Probeweg ueber {reach} Zellen; nach dem Befehl haben " +
+               $"{withPath}/{_stuckGroup.Count} einen Weg";
+    }
+
+    /// <summary>
+    /// Was aus der Gruppe geworden ist. ⚠ Die Zahlen sind nach der URSACHE
+    /// getrennt (Arbeitsweise A) — »steht« ist kein Zaehler, sondern drei:
+    /// angekommen, faehrt noch, steht mit Weg (wartet gerade), steht OHNE Weg.
+    /// Der letzte ist B2: eine Einheit, deren Weg weggeworfen wurde und die von
+    /// selbst nie wieder losfaehrt.
+    /// </summary>
+    public string StuckCheckLine()
+    {
+        if (!_stuckOn) return "stuck-check: nicht gestartet";
+        int arrived = 0, driving = 0, waiting = 0, dead = 0, dry = 0, stranded = 0, never = 0;
+        var strandedEx = new List<string>();
+        for (int k = 0; k < _stuckGroup.Count; k++)
+        {
+            int i = _stuckGroup[k];
+            var e = _entities[i];
+            if (e.Dead) { dead++; continue; }
+            var mine = _stuckTo[k];
+            int d = Mathf.Max(Mathf.Abs(e.Col - mine.X), Mathf.Abs(e.Row - mine.Y));
+            bool moved = e.Col != _stuckFrom[k].X || e.Row != _stuckFrom[k].Y;
+            if (d <= 1) { arrived++; continue; }
+            if (e.Path != null) { if (moved) driving++; else waiting++; continue; }
+            // ⚠ OHNE SPRIT ist ein eigener Fall und gehoert nicht in denselben
+            // Zaehler: das Original haelt die Einheit dort ebenfalls an
+            // (@0x407aa7, »no fuel«), das ist kein Wegfindungsfehler.
+            if (e.FuelMax > 0 && e.Fuel <= 0) { dry++; continue; }
+            if (moved) stranded++; else never++;
+            if (strandedEx.Count < 6)
+                strandedEx.Add($"slot {e.Slot} auf ({e.Col},{e.Row}), eigenes Ziel " +
+                               $"({mine.X},{mine.Y}) noch {d} Zellen, Geduld {e.Block}, " +
+                               $"Sprit {e.Fuel}/{e.FuelMax}, " +
+                               $"{(moved ? "war unterwegs" : "nie losgefahren")}");
+        }
+        int stuck = stranded + never;
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"stuck-check{(BlockOld ? " (GEGENPROBE =alt)" : "")}: " +
+                  $"{_stuckGroup.Count} befohlen — {arrived} auf dem eigenen Ziel, " +
+                  $"{driving} faehrt, {waiting} wartet (Weg da), {dead} tot, " +
+                  $"{dry} ohne Sprit stehengeblieben, " +
+                  $"{stuck} STEHT OHNE WEG ({stranded} unterwegs liegengeblieben, " +
+                  $"{never} nie losgefahren)");
+        foreach (string x in strandedEx) sb.Append($"\n      ! {x}");
+        sb.Append($"\n   B2 {(stuck > 0 ? "STEHT" : "nicht nachweisbar")} — " +
+                  "eine Einheit ohne Weg faehrt von selbst nie wieder los");
+        return sb.ToString();
+    }
+
+    /// <summary>Rueckgabewert des Laufs: 0, wenn keine Einheit ohne Weg
+    /// dasteht.</summary>
+    public int StuckCheckRc()
+    {
+        if (!_stuckOn) return 2;
+        for (int k = 0; k < _stuckGroup.Count; k++)
+        {
+            var e = _entities[_stuckGroup[k]];
+            if (e.Dead || e.Path != null) continue;
+            if (e.FuelMax > 0 && e.Fuel <= 0) continue;   // kein Wegfindungsfehler
+            var mine = _stuckTo[k];
+            int d = Mathf.Max(Mathf.Abs(e.Col - mine.X), Mathf.Abs(e.Row - mine.Y));
+            if (d > 1) return 1;
+        }
+        return 0;
+    }
+
     /// <summary>
     /// `--sound-check` — was ein Klang an seiner Stelle noch wiegt.
     ///
@@ -3943,6 +4214,9 @@ public partial class MapEntityLayer : Node2D
             e.Goal = goal.Value;
             e.Reserved = null;
             e.WaitTime = 0;
+            // Ein frischer Befehl faengt mit voller Geduld an — sonst laeuft der
+            // Zaehler beim ersten versperrten Takt sofort ab (siehe BlockedStep).
+            e.Block = BlockEnter + Simulation.Determinism.Roll(BlockEnterSpread);
             ordered++;
         }
         if (ordered > 0) AddOrderMark(CellCenter(cell.Value.X, cell.Value.Y), attack: false);
@@ -4033,6 +4307,7 @@ public partial class MapEntityLayer : Node2D
         e.Goal = next.Cell;
         e.Reserved = null;
         e.WaitTime = 0;
+        e.Block = BlockEnter + Simulation.Determinism.Roll(BlockEnterSpread);
     }
 
     /// <summary>How many orders the given unit still has queued — for the
@@ -14139,19 +14414,8 @@ public partial class MapEntityLayer : Node2D
             if (e.Reserved == null)
             {
                 var next = e.Path[e.PathIdx];
-                if (!_nav.IsFree(next.X, next.Y, e.Move, i))
-                {
-                    // someone is in the way: wait briefly, then look for a new route
-                    e.WaitTime += dt;
-                    if (e.WaitTime > 0.7f)
-                    {
-                        e.WaitTime = 0;
-                        var repath = _nav.FindPath(new Vector2I(e.Col, e.Row), e.Goal, e.Move, i);
-                        if (repath == null || repath.Count == 0) e.Path = null;
-                        else { e.Path = repath; e.PathIdx = 0; }
-                    }
-                    continue;
-                }
+                var say = _nav.Ask(next.X, next.Y, e.Move, i);
+                if (say != Simulation.NavGrid.Step.Free) { BlockedStep(i, e, say, dt); continue; }
                 // a foot soldier in the target cell does not stop the move; the
                 // original either drives through him (`pratelska_infa`
                 // @0x433fe0, all friendly) or over him (`prejet` @0x412980,
@@ -14184,6 +14448,13 @@ public partial class MapEntityLayer : Node2D
                 e.Footprint = CellRect(_ox, _oy, e.Col, e.Row, e.Elev);
                 e.Reserved = null;
                 e.PathIdx++;
+                // ⚠ Der Geduldszaehler wird beim BETRETEN einer Zelle gesetzt,
+                // nicht beim Befehl — das Original tut es an genau dieser
+                // Stelle, unmittelbar vor dem Spritabzug (@0x407a93 Wurf,
+                // @0x407a98 `mov cx,0xf`, @0x407aa2 `add dl,cl` -> 15..29,
+                // @0x407aa4 Ablage in +0x1c, @0x407aa7 der Sprit bei +0x2e).
+                // Siehe BlockedStep.
+                e.Block = BlockEnter + Simulation.Determinism.Roll(BlockEnterSpread);
                 if (e.PathIdx >= e.Path.Count)
                 {
                     e.Path = null;

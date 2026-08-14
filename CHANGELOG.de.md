@@ -1,4 +1,4 @@
-# Änderungen
+﻿# Änderungen
 
 Alle nennenswerten Änderungen an Akte Europa Reborn. Ausgeliefert wird **nur
 die Engine** — Gelände, Einheiten, Karten, Tabellen und Klänge entstehen auf
@@ -34,6 +34,28 @@ Die Kampagne bleibt originaltreu; Gefecht und Mehrspieler dürfen bewusst
 abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Einheiten
+
+- **Eine Gruppe bleibt an der Engstelle nicht mehr liegen.** Gemeldet als
+  »Gruppenauswahl und hintereinander weg fahren wie über brücken lässt einheiten
+  nicht mehr fahren, gerade wenn ein Fahrweg durch die brücke blockiert ist,
+  weil gerade jemand anders drüber fährt«. Wir haben bisher 0,7 Sekunden
+  gewartet, **einmal** einen neuen Weg gesucht und bei Misserfolg den Weg
+  weggeworfen — danach stand die Einheit für immer, bis der Spieler von Hand neu
+  klickte. Auf einer einspurigen Brücke ist der Weg im Augenblick des
+  Neuplanens fast immer belegt, also traf es die halbe Gruppe. Das Spiel von
+  1997 macht es anders, und zwar an der Wurzel: seine Bewegungsfrage kennt
+  **drei** Antworten, nicht zwei — nein, *ja aber jemand muss ausweichen*, frei.
+  Vor einer Wand zu warten ist sinnlos, hinter einer fahrenden Einheit zu warten
+  ist genau richtig, und wir hatten beides in einen Topf geworfen. Jetzt wartet
+  eine Einheit hinter einer anderen und behält ihren Weg; vor etwas
+  Unbeweglichem läuft ein Geduldszähler, und wenn er abläuft, wird neu geplant
+  und der Zähler **neu gesetzt** statt aufzugeben. Die Zahlen sind die des
+  Originals (15 + Wurf%15 beim Betreten einer Zelle, 40 + Wurf%20 danach, und
+  einmal je 60 Takte ein Rütteln, wenn jemand im Weg steht). Gemessen mit dem
+  neuen `--stuck-check` über drei Karten, auf denen die Frage stellbar ist:
+  **8 liegengebliebene Einheiten vorher, 0 nachher**; `--stuck-check=alt` stellt
+  die alte Fassung im selben Programm nach und fällt durch. Der Zwilling bleibt
+  über 30 Sekunden bitgleich.
 
 - **Bomben treffen die Mitte des Rumpfes.** Ein Angriff aus der Luft zielte
   bisher auf die Satzzelle einer Einheit — bei einem Schlachtschiff also auf

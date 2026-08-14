@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Godot;
 using AkteEuropaReborn.Import;
 using AkteEuropaReborn.Simulation;
@@ -380,7 +380,7 @@ public partial class MapEntityLayer
                 int c = col + dx, r = row + dy;
                 if (!_nav.InBounds(c, r)) continue;
                 if (patterns.PatternBlocks(bt.FirstPattern, dx, dy))
-                    _nav.SetOccupant(c, r, index);
+                    _nav.SetOccupant(c, r, index, immobile: true);
                 else if (patterns.PatternTile(bt.FirstPattern, dx, dy) != 0)
                     _nav.ClearOccupant(c, r, index);     // drawn, but walkable
             }
@@ -396,7 +396,7 @@ public partial class MapEntityLayer
         foreach (var d in doors)
         {
             int c = col + d.X, r = row + d.Y;
-            if (_nav.InBounds(c, r)) _nav.SetOccupant(c, r, index);
+            if (_nav.InBounds(c, r)) _nav.SetOccupant(c, r, index, immobile: true);
         }
 
         if (into != null) StampBuilding(into, patterns, bt.FirstPattern, col, row);
