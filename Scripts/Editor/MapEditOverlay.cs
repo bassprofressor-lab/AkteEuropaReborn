@@ -8,7 +8,8 @@ using AkteEuropaReborn.Rendering;
 
 /// <summary>
 /// DER BEARBEITUNGSMODUS — mit der Maus auf der Karte setzen: Gebaeude
-/// (militaerisch wie zivil), Gegenstaende und Gleise.
+/// (militaerisch wie zivil), Gegenstaende, Gleise, Einheiten, und das GELAENDE
+/// selbst (Klasse und Hoehe).
 ///
 /// <para><b>Wie es zusammenhaengt.</b> Der Editor haelt die erzeugte Karte als
 /// <see cref="CwmFile"/> im Speicher (<see cref="MapEditSession"/>), der
@@ -34,6 +35,15 @@ using AkteEuropaReborn.Rendering;
 /// nachgebaut. Wo es nicht geht, sagt der Schirm WARUM, statt den Klick still zu
 /// schlucken.</para>
 ///
+/// <para><b>Das Gelaende ist der Sonderfall unter den Pinseln</b>, und zwar
+/// weil eine Zelle nicht fuer sich steht: ihr Kachelcode haengt am Hangbyte,
+/// an der Wassermaske der vier Nachbarn und am Wasserabstand im Umkreis von
+/// drei. Ein Strich zieht darum einen ganzen Umkreis nach — <b>81 Zellen je
+/// Klick</b>, gemessen — und zwar mit derselben Kachelwahl, Nahtwahl und
+/// Ufer-Nachbedingung, die <see cref="MapGenerator"/> benutzt. Was dabei
+/// schiefgeht, wenn man auch nur einen dieser drei Schritte auslaesst, steht
+/// bei <see cref="MapEditTerrain"/>: es ist gemessen, nicht befuerchtet.</para>
+///
 /// <para>⚠ <b>UNSERE ZUTAT von A bis Z.</b> Das Spiel von 1997 hat keinen
 /// Karteneditor — es gibt in beiden GAME.EXE keinen Schalter, keinen Debugstring
 /// und keine Menuezeile dafuer. Gemessen ist hier nur, WAS gesetzt wird (die
@@ -43,13 +53,15 @@ using AkteEuropaReborn.Rendering;
 public partial class MapEditOverlay : Node2D
 {
     /// <summary>Was der Pinsel gerade setzt.</summary>
-    public enum Brush { Gebaeude, Gegenstand, Gleis, Einheit }
+    public enum Brush { Gebaeude, Gegenstand, Gleis, Einheit, Gelaende, Hoehe }
 
     private MapEntityLayer _layer = null!;
     private CwmFile _map = null!;
 
     private Brush _brush = Brush.Gebaeude;
     private int _typ = 1, _owner = 0, _line;
+    /// <summary>Welche Gelaendeklasse der Gelaendepinsel malt.</summary>
+    private MapFactory.Ground _ground = MapFactory.Ground.Free;
     private int _propAt;
     private int _unitAt;
     private readonly List<int> _types = new();
@@ -247,7 +259,190 @@ public partial class MapEditOverlay : Node2D
         GD.Print($"map-edit-check: gespeichert als {made ?? "(nichts)"}; " +
                  $"jetzt {CountBuildings()} Gebaeude (vorher {before}), " +
                  $"{CountRail()} Gleiszellen");
+
+        // 5. DIE MESSLATTE VOR DEM GELAENDEPINSEL. ⚠ Erst jetzt, nach dem
+        // Speichern: map-check liest die geschriebenen Dateien, nicht die Karte
+        // im Speicher.
+        var vorher = RunMapCheck(made, "vorher");
+
+        TerrainHarness();
+
+        made = MapEditSession.Save(s => GD.Print("map-edit-check:   " + s));
+        var nachher = RunMapCheck(made, "nachher");
+
+        // ⚠ DAS EIGENTLICHE URTEIL UEBER DEN PINSEL. Ein Pinsel, der die Karte
+        // verschlechtert, muss HIER auffallen und nicht daran, dass ein Bild
+        // komisch aussieht: dieselben Zahlen, einmal vor und einmal nach dem
+        // Malen, nebeneinander.
+        GD.Print("map-edit-check: --- map-check vorher | nachher -------------");
+        foreach (string k in MapCheckLines)
+        {
+            vorher.TryGetValue(k, out string? a);
+            nachher.TryGetValue(k, out string? b);
+            if (a == null && b == null) continue;
+            string mark = a == b ? "  =" : " ->";
+            GD.Print($"map-edit-check: {k}\n                vorher : {a ?? "(fehlt)"}" +
+                     $"\n               {mark} nachher: {b ?? "(fehlt)"}");
+        }
         GD.Print("map-edit-check: fertig");
+    }
+
+    /// <summary>Die Zeilen von <see cref="MapCheck"/>, auf die es beim
+    /// Gelaendepinsel ankommt — jede misst genau eine Sache, die ein falsch
+    /// nachgezogener Umkreis kaputtmacht.</summary>
+    private static readonly string[] MapCheckLines =
+    {
+        "Gelaende:",                      // die Klassenverteilung
+        "Landzellen am Wasser:",          // der Uferuebergang — die schaerfste
+        "Nachbarpaare:",                  // Hoehenspruenge > 1
+        "nicht darstellbare Hangformen",  // die zweite Schranke
+        "Zellen mit hoeherem Nachbarn:",  // Hangbytes gesetzt?
+        "Naehte zwischen Bodenkacheln:",  // passen die Kacheln zueinander?
+        "verschiedene Bodencodes:",
+        "Bauplatzzellen",
+        "map-check:",                     // das Urteil
+    };
+
+    /// <summary><see cref="MapCheck"/> ueber die gespeicherte Karte laufen
+    /// lassen und die Zeilen einsammeln, auf die es ankommt.</summary>
+    private static Dictionary<string, string> RunMapCheck(string? name, string wann)
+    {
+        var got = new Dictionary<string, string>();
+        if (name == null) { GD.Print($"map-edit-check: {wann}: nichts gespeichert, kein map-check"); return got; }
+        int bad = MapCheck.Run(name, line =>
+        {
+            string t = line.Trim();
+            foreach (string k in MapCheckLines)
+                if (t.StartsWith(k) && !got.ContainsKey(k)) got[k] = t;
+        });
+        // ⚠ MapCheck.Run gibt 0 oder 1 zurueck, NICHT die Zahl der
+        // Beanstandungen — die steht in seiner letzten Zeile, und die steht
+        // unten im Vergleich.
+        GD.Print($"map-edit-check: map-check {wann}: Urteil {bad} (0 = OK)");
+        return got;
+    }
+
+    /// <summary>
+    /// DER GELAENDEPINSEL IM PRUEFSTAND — und er uebt beide Richtungen aus:
+    /// was gehen muss, und was ABGEWIESEN werden muss.
+    ///
+    /// <para>⚠ Die zweite Haelfte ist die wichtigere. Dass ein Pinsel malt,
+    /// sieht man; dass er eine Hoehe ablehnt, die eine Nachbarzelle unmoeglich
+    /// machen wuerde, sieht man nur an einem Zaehler. Beide Gegenproben sind so
+    /// gebaut, dass ihr Ausgang FESTSTEHT: die zweite Anhebung derselben Zelle
+    /// muss am Sprung scheitern, weil die Nachbarn danach zwei Stufen tiefer
+    /// laegen.</para>
+    /// </summary>
+    private void TerrainHarness()
+    {
+        if (MapEditSession.Tiles == null)
+            GD.Print("map-edit-check: ⚠ keine Kacheltabelle in der Sitzung — der Pinsel " +
+                     "faellt auf den Bodenblock zurueck, und die Ufer-Zeile unten sagt es");
+
+        // ---- 5a. rau malen: eine Reihe freier Zellen ------------------------
+        _brush = Brush.Gelaende;
+        _ground = MapFactory.Ground.Rough;
+        int rauSoll = 0, rauIst = 0, rauAbgewiesen = 0;
+        for (int r = 4; r < _map.Height - 4 && rauSoll < 8; r++)
+            for (int c = 4; c < _map.Width - 4 && rauSoll < 8; c++)
+            {
+                if (MapEditTerrain.ClassAt(_map, c, r) != 0) continue;
+                if (MapFactory.HasRail(_map, c, r)) continue;
+                _say = "";
+                PutGround(new Vector2I(c, r), MapFactory.Ground.Rough);
+                rauSoll++;
+                if (MapEditTerrain.ClassAt(_map, c, r) == 1) rauIst++;
+                else { rauAbgewiesen++; GD.Print($"map-edit-check: ⚠ rau ({c},{r}): {_say}"); }
+            }
+        GD.Print($"map-edit-check: Gelaende rau -> {rauIst} von {rauSoll} Zellen sind jetzt rau, " +
+                 $"{rauAbgewiesen} abgewiesen; letzter Strich {MapEditTerrain.LastRetiled} Zellen " +
+                 $"neu gekachelt, {MapEditTerrain.LastMissing} davon aus dem Bodenblock");
+
+        // ---- 5b. GEGENPROBE: Wasser auf falscher Hoehe muss abgewiesen werden
+        int wasserHoehe = -1;
+        for (int r = 0; r < _map.Height && wasserHoehe < 0; r++)
+            for (int c = 0; c < _map.Width && wasserHoehe < 0; c++)
+                if (MapEditTerrain.ClassAt(_map, c, r) == 2) wasserHoehe = _map.ElevAt(c, r);
+
+        if (wasserHoehe < 0)
+            GD.Print("map-edit-check: Wasser -> diese Karte hat keine einzige Wasserzelle, " +
+                     "die Ufer-Gegenprobe entfaellt");
+        else
+        {
+            int hochAbgewiesen = 0, hochDurch = 0;
+            for (int r = 2; r < _map.Height - 2 && hochAbgewiesen + hochDurch < 6; r++)
+                for (int c = 2; c < _map.Width - 2 && hochAbgewiesen + hochDurch < 6; c++)
+                {
+                    if (MapEditTerrain.ClassAt(_map, c, r) is 2 or 3) continue;
+                    if (_map.ElevAt(c, r) == wasserHoehe) continue;      // die duerfen ja
+                    string? why = MapEditTerrain.PaintClass(_map, MapEditSession.Tiles,
+                        MapEditSession.Palette, c, r, MapFactory.Ground.Water, MapEditSession.Seed,
+                        MapEditSession.Seams);
+                    if (why != null) hochAbgewiesen++;
+                    else { hochDurch++; GD.Print($"map-edit-check: ⚠ Wasser auf ({c},{r}) Hoehe " +
+                                                 $"{_map.ElevAt(c, r)} DURCHGELASSEN — Wasserspiegel ist {wasserHoehe}"); }
+                }
+            GD.Print($"map-edit-check: Wasser auf falscher Hoehe -> {hochAbgewiesen} abgewiesen, " +
+                     $"{hochDurch} durchgelassen (durchgelassen muss 0 sein; Wasserspiegel {wasserHoehe})");
+
+            // ---- 5c. Wasser AM Wasser, auf richtiger Hoehe: das muss gehen --
+            int seeSoll = 0, seeIst = 0;
+            for (int r = 2; r < _map.Height - 2 && seeSoll < 4; r++)
+                for (int c = 2; c < _map.Width - 2 && seeSoll < 4; c++)
+                {
+                    if (MapEditTerrain.ClassAt(_map, c, r) != 0) continue;
+                    if (_map.ElevAt(c, r) != wasserHoehe) continue;
+                    bool amWasser = MapEditTerrain.ClassAt(_map, c - 1, r) == 2 ||
+                                    MapEditTerrain.ClassAt(_map, c + 1, r) == 2 ||
+                                    MapEditTerrain.ClassAt(_map, c, r - 1) == 2 ||
+                                    MapEditTerrain.ClassAt(_map, c, r + 1) == 2;
+                    if (!amWasser) continue;
+                    seeSoll++;
+                    _say = "";
+                    PutGround(new Vector2I(c, r), MapFactory.Ground.Water);
+                    if (MapEditTerrain.ClassAt(_map, c, r) == 2) seeIst++;
+                    else GD.Print($"map-edit-check: ⚠ Wasser ({c},{r}): {_say}");
+                }
+            GD.Print($"map-edit-check: Wasser ans Ufer -> {seeIst} von {seeSoll} gesetzt " +
+                     "(die Zeile »Landzellen am Wasser« unten muss danach 0 Innenland-Codes zeigen)");
+        }
+
+        // ---- 6. die Hoehe, mit der Gegenprobe -------------------------------
+        _brush = Brush.Hoehe;
+        int hebenIst = 0, hebenAbgelehnt = 0, zweitAbgelehnt = 0, zweitDurch = 0;
+        for (int r = 3; r < _map.Height - 3 && hebenIst < 3; r++)
+            for (int c = 3; c < _map.Width - 3 && hebenIst < 3; c++)
+            {
+                if (MapEditTerrain.ClassAt(_map, c, r) is 2 or 3) continue;
+                // eine EBENE Stelle: alle acht Nachbarn gleich hoch. Nur dort
+                // steht der Ausgang beider Proben fest.
+                int e = _map.ElevAt(c, r);
+                bool eben = true;
+                for (int dy = -1; dy <= 1 && eben; dy++)
+                    for (int dx = -1; dx <= 1 && eben; dx++)
+                        if (_map.ElevAt(c + dx, r + dy) != e) eben = false;
+                if (!eben || e + 1 > MapEditTerrain.MaxElev) continue;
+
+                _say = "";
+                PutHeight(new Vector2I(c, r), +1);
+                if (_map.ElevAt(c, r) != e + 1)
+                { hebenAbgelehnt++; GD.Print($"map-edit-check: ⚠ anheben ({c},{r}): {_say}"); continue; }
+                hebenIst++;
+
+                // DIE GEGENPROBE: noch einmal anheben. Die Nachbarn liegen jetzt
+                // eine Stufe tiefer, der Sprung waere 2 — das MUSS scheitern.
+                _say = "";
+                PutHeight(new Vector2I(c, r), +1);
+                if (_map.ElevAt(c, r) == e + 1) zweitAbgelehnt++;
+                else { zweitDurch++; GD.Print($"map-edit-check: ⚠ ({c},{r}) liess sich auf " +
+                                              $"{_map.ElevAt(c, r)} anheben — Sprung 2 zu den Nachbarn auf {e}"); }
+            }
+        GD.Print($"map-edit-check: Hoehe -> {hebenIst} von 3 angehoben ({hebenAbgelehnt} abgelehnt); " +
+                 $"zweite Anhebung: {zweitAbgelehnt} abgelehnt, {zweitDurch} durchgelassen " +
+                 $"(durchgelassen muss 0 sein — MaxStep {MapTerrain.MaxStep}, gemessen 111 " +
+                 "Ausnahmen in 1.202.757 Paaren)");
+
+        _brush = Brush.Gebaeude;
     }
 
     /// <summary>Das Bild, das jetzt in sec22 auf dieser Zelle steht, oder −1.</summary>
@@ -374,17 +569,28 @@ public partial class MapEditOverlay : Node2D
                 ? $"Gegenstand {_props[_propAt]} ({_propAt + 1}/{_props.Count})"
                 : "Gegenstand — diese Karte hat keine",
             Brush.Gleis => $"Gleis, Linie {_line}",
+            Brush.Gelaende => $"Gelaende: {GroundName(_ground)}" +
+                              (MapEditSession.Tiles == null ? "  ⚠ ohne Kacheltabelle" : ""),
+            Brush.Hoehe => "Hoehe: LINKS anheben, RECHTS absenken",
             _ => $"Einheit {MapEditUnits.All[_unitAt].Name} " +
                  $"(Typ {MapEditUnits.All[_unitAt].Type}, {OwnerName(_owner)})",
         };
         _head.Text = $"EDITOR {MapEditSession.Name}  —  {what}" +
                      (MapEditSession.Dirty ? "  *" : "");
         _foot.Text =
-            "1/2/3 = Gebaeude / Gegenstand / Gleis   ·   +/- = Art waehlen\n" +
-            "0..7,N,K = Eigner   ·   LINKS setzen, RECHTS wegnehmen\n" +
+            "1..6 = Gebaeude/Gegenstand/Gleis/Einheit/Gelaende/Hoehe · +/- = Art\n" +
+            ",/. = Eigner (N herrenlos, K Kulisse) · LINKS setzen, RECHTS weg\n" +
             "F5 = speichern und neu laden   ·   " + _mine.Count + " gesetzt\n" +
             _say;
     }
+
+    private static string GroundName(MapFactory.Ground g) => g switch
+    {
+        MapFactory.Ground.Free => "frei",
+        MapFactory.Ground.Rough => "rau",
+        MapFactory.Ground.Water => "Wasser",
+        _ => "gesperrt",
+    };
 
     private static string OwnerName(int o) => o switch
     {
@@ -423,17 +629,34 @@ public partial class MapEditOverlay : Node2D
             case Key.Key2: _brush = Brush.Gegenstand; break;
             case Key.Key3: _brush = Brush.Gleis; break;
             case Key.Key4: _brush = Brush.Einheit; break;
+            case Key.Key5: _brush = Brush.Gelaende; break;
+            case Key.Key6: _brush = Brush.Hoehe; break;
             case Key.Equal or Key.Plus or Key.KpAdd: Step(+1); break;
             case Key.Minus or Key.KpSubtract: Step(-1); break;
+            // ⚠ DER EIGNER HAT JETZT EIGENE TASTEN, und das ist eine
+            // FEHLERBEHEBUNG, keine Umgewoehnung: bis hierher stand »0..7 =
+            // Eigner« in der Leiste, aber die Faelle Key1..Key4 stehen VOR dem
+            // Zweig, der die Ziffer als Eigner liest — die Ziffern 1 bis 4 sind
+            // nie dort angekommen. Anwaehlbar waren damit nur die Spieler 1, 6,
+            // 7 und 8; die Spieler 2 bis 5 gar nicht. Mit dem fuenften und
+            // sechsten Pinsel waeren noch zwei weggefallen. »,« und ».«
+            // schalten den Eigner reihum durch die Tafel Owners, und dann sind
+            // alle zehn erreichbar.
+            //
+            // ⚠ <s>Dafuer stand hier »W«, weil der Kartenbetrachter fast jeden
+            // Buchstaben belegt und A, D, W frei aussahen.</s> Sie sind es
+            // nicht: A/D/W sind die KAMERA (MapViewer.cs:2425-2427), und die
+            // wird mit Input.IsKeyPressed GEPOLLT — dagegen hilft
+            // SetInputAsHandled nicht. Jeder Eignerwechsel haette die Karte
+            // mitgescrollt. Komma und Punkt sind im Betrachter nirgends belegt,
+            // weder als Fall noch gepollt.
+            case Key.Period: _owner = Owners[(Array.IndexOf(Owners, _owner) + 1) % Owners.Length]; break;
+            case Key.Comma: _owner = Owners[(Array.IndexOf(Owners, _owner) + Owners.Length - 1) % Owners.Length]; break;
             case Key.N: _owner = 11; break;
             case Key.K: _owner = 255; break;
             case Key.F5: SaveAndReload(); return;
             default:
-                if (k.Keycode >= Key.Key0 && k.Keycode <= Key.Key7 && _brush != Brush.Gebaeude)
-                    used = false;
-                else if (k.Keycode >= Key.Key0 && k.Keycode <= Key.Key7)
-                    _owner = (int)(k.Keycode - Key.Key0);
-                else used = false;
+                used = false;
                 break;
         }
         if (!used) return;
@@ -460,6 +683,11 @@ public partial class MapEditOverlay : Node2D
             case Brush.Einheit:
                 _unitAt = (_unitAt + d + MapEditUnits.All.Length) % MapEditUnits.All.Length;
                 break;
+            case Brush.Gelaende:
+                _ground = (MapFactory.Ground)(((int)_ground + d + 4) % 4);
+                break;
+            case Brush.Hoehe:
+                break;                                  // links hebt, rechts senkt
         }
     }
 
@@ -473,9 +701,55 @@ public partial class MapEditOverlay : Node2D
             case Brush.Gegenstand: PutProp(cell); break;
             case Brush.Gleis: PutRail(cell); break;
             case Brush.Einheit: PutUnit(cell); break;
+            case Brush.Gelaende: PutGround(cell, _ground); break;
+            case Brush.Hoehe: PutHeight(cell, +1); break;
         }
         Refresh();
         QueueRedraw();
+    }
+
+    /// <summary>
+    /// GELAENDE MALEN — und der Grund, warum hier so wenig steht: die Arbeit
+    /// macht <see cref="MapEditTerrain"/>, weil sie zum groessten Teil aus dem
+    /// NACHZIEHEN des Umkreises besteht und nicht aus dem Klick.
+    ///
+    /// <para>⚠ Der Schirm sagt beim Ablehnen den GRUND weiter, statt ihn zu
+    /// schlucken. Ein Pinsel, der bei jedem dritten Klick nichts tut und nichts
+    /// sagt, ist von einem kaputten Pinsel nicht zu unterscheiden.</para>
+    /// </summary>
+    private void PutGround(Vector2I cell, MapFactory.Ground g)
+    {
+        if (MapEditSession.Tiles == null && MapEditSession.Palette == null)
+        { _say = "keine Kacheltabelle und kein Bodenblock — Gelaendemalen ginge nur ins Blaue"; return; }
+
+        string? why = MapEditTerrain.PaintClass(_map, MapEditSession.Tiles, MapEditSession.Palette,
+                                                cell.X, cell.Y, g, MapEditSession.Seed,
+                                                MapEditSession.Seams);
+        if (why != null) { _say = why; return; }
+
+        _mine.Add((cell.X, cell.Y, Brush.Gelaende));
+        MapEditSession.Dirty = true;
+        _say = $"({cell.X},{cell.Y}) ist jetzt {GroundName(g)} — {MapEditTerrain.LastRetiled} Zellen " +
+               $"neu gekachelt, {MapEditTerrain.LastMissing} davon aus dem Bodenblock, " +
+               $"{MapEditTerrain.LastShoreFixed} Uferkacheln nachgezogen" +
+               (MapEditTerrain.LastShoreLeft > 0 ? $" (⚠ {MapEditTerrain.LastShoreLeft} nicht)" : "") +
+               "; sichtbar nach F5";
+    }
+
+    /// <summary>Eine Zelle anheben oder absenken. Die zwei gemessenen Schranken
+    /// prueft <see cref="MapEditTerrain.ChangeHeight"/>; abgelehnt wird mit
+    /// Begruendung, statt Nachbarzellen mitzuveraendern.</summary>
+    private void PutHeight(Vector2I cell, int delta)
+    {
+        string? why = MapEditTerrain.ChangeHeight(_map, MapEditSession.Tiles, MapEditSession.Palette,
+                                                  cell.X, cell.Y, delta, MapEditSession.Seed,
+                                                  MapEditSession.Seams);
+        if (why != null) { _say = why; return; }
+
+        _mine.Add((cell.X, cell.Y, Brush.Hoehe));
+        MapEditSession.Dirty = true;
+        _say = $"({cell.X},{cell.Y}) auf Hoehe {_map.ElevAt(cell.X, cell.Y)} — " +
+               $"{MapEditTerrain.LastRetiled} Zellen neu gekachelt; sichtbar nach F5";
     }
 
     private void PutBuilding(Vector2I cell)
@@ -670,6 +944,16 @@ public partial class MapEditOverlay : Node2D
                 MapEditSession.Dirty = true;
                 _say = $"Gleis von ({cell.X},{cell.Y}) weg";
                 break;
+            // ⚠ Beim Gelaende gibt es kein »wegnehmen« — eine Zelle hat IMMER
+            // eine Klasse. Die rechte Taste malt darum »frei«, den Grundwert
+            // einer begehbaren Zelle; das ist unsere Setzung und steht in der
+            // Leiste, damit niemand ein Rueckgaengig erwartet.
+            case Brush.Gelaende:
+                PutGround(cell, MapFactory.Ground.Free);
+                break;
+            case Brush.Hoehe:
+                PutHeight(cell, -1);
+                break;
             default:
                 _say = "Gegenstand wegnehmen: dafuer den Boden neu malen";
                 break;
@@ -706,6 +990,8 @@ public partial class MapEditOverlay : Node2D
             {
                 Brush.Gebaeude => new Color(0.3f, 1f, 0.4f, 0.9f),
                 Brush.Gegenstand => new Color(1f, 0.85f, 0.2f, 0.9f),
+                Brush.Gelaende => GroundColor(_ground),
+                Brush.Hoehe => new Color(1f, 0.5f, 0.9f, 0.9f),
                 _ => new Color(0.4f, 0.8f, 1f, 0.9f),
             };
             // Zelle fuer Zelle gefuellt statt als ein Rechteck: die Kacheln
@@ -736,10 +1022,24 @@ public partial class MapEditOverlay : Node2D
         {
             if (what == Brush.Gebaeude) continue;          // das steht schon da
             var p = _layer.EditorCellTopLeft(c, r);
-            var col = what == Brush.Gleis
-                ? new Color(0.4f, 0.8f, 1f, 0.85f)
-                : new Color(1f, 0.85f, 0.2f, 0.85f);
+            var col = what switch
+            {
+                Brush.Gleis => new Color(0.4f, 0.8f, 1f, 0.85f),
+                Brush.Gelaende => new Color(0.6f, 1f, 0.6f, 0.85f),
+                Brush.Hoehe => new Color(1f, 0.5f, 0.9f, 0.85f),
+                _ => new Color(1f, 0.85f, 0.2f, 0.85f),
+            };
             DrawRect(new Rect2(p + new Vector2(6, 4), MapBaker.TileW - 12, MapBaker.TileH - 8), col);
         }
     }
+
+    /// <summary>Die Vorschaufarbe der vier Gelaendeklassen — nur eine
+    /// Lesehilfe: gruen frei, braun rau, blau Wasser, rot gesperrt.</summary>
+    private static Color GroundColor(MapFactory.Ground g) => g switch
+    {
+        MapFactory.Ground.Free => new Color(0.4f, 1f, 0.4f, 0.9f),
+        MapFactory.Ground.Rough => new Color(0.8f, 0.6f, 0.3f, 0.9f),
+        MapFactory.Ground.Water => new Color(0.3f, 0.6f, 1f, 0.9f),
+        _ => new Color(1f, 0.3f, 0.3f, 0.9f),
+    };
 }

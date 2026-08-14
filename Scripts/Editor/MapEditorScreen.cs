@@ -304,15 +304,29 @@ public partial class MapEditorScreen : Control
         // — genau die Begruendung, aus der MainMenu schon `--menu-click=` hat.
         // Zusammen ergibt das eine Zeile, die den ganzen Weg durchmisst:
         //   … --menu-click=Karteneditor --map-editor-run=pruefen --shot=<datei> --shot-delay=<bilder>
+        // Der dritte Wert ist `bearbeiten`; zusammen mit `--map-edit-check` ist
+        // das der Prueflauf des Bearbeitungsmodus, und der laeuft kopflos:
+        //   … --headless --path . -- --menu-click=Karteneditor \
+        //       --map-editor-run=bearbeiten --map-editor-name=pinsel01 \
+        //       --map-edit-check --quit-after=8
         // ⚠ Braucht ein FENSTER (kein --headless), sonst gibt es nichts zu
         // photographieren.
+        // ⚠ `--map-editor-name=` gehoert dazu und ist kein Beiwerk: das
+        // Benutzerverzeichnis (%APPDATA%/Godot/app_userdata/…/data) ist EINS,
+        // und mehrere Laeufe nebeneinander schreiben sonst auf dieselbe
+        // map_eigen01.*. Wer seinen Lauf benennt, tritt keinem anderen auf die
+        // Datei. Ohne den Schalter bleibt es bei der Vorgabe des Feldes.
+        bool run = false;
         foreach (string a in OS.GetCmdlineUserArgs())
-            if (a == "--map-editor-run" || a.StartsWith("--map-editor-run="))
+        {
+            if (a.StartsWith("--map-editor-name=")) _name.Text = a["--map-editor-name=".Length..];
+            else if (a == "--map-editor-run" || a.StartsWith("--map-editor-run="))
             {
                 _autoRun = a.Contains('=') ? a[(a.IndexOf('=') + 1)..] : "";
-                CallDeferred(nameof(OnCreate));
-                break;
+                run = true;
             }
+        }
+        if (run) CallDeferred(nameof(OnCreate));
     }
 
     public override void _UnhandledInput(InputEvent e)
