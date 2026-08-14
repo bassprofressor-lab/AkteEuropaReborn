@@ -562,6 +562,8 @@ public partial class MapViewer : Node2D
     private bool _vehAnimCheck;
     /// <summary>`--rail-hit-check` — Gleisschaden und Reparatur ausüben.</summary>
     private bool _railHitCheck;
+    private float _railRepairCheck;
+    private bool _railRepairReady;
 
     private string _look = "";
     private bool _groupCheck;
@@ -743,6 +745,14 @@ public partial class MapViewer : Node2D
             else if (a == "--all-units") UI.SkirmishSetup.AllUnits = true;
             else if (a == "--all-units=0") UI.SkirmishSetup.AllUnits = false;
             else if (a == "--rail-hit-check") _railHitCheck = true;
+            // --rail-repair-check[=<sek>]: die REPARATURKETTE. Stellt die Lage
+            // selbst her (drei Stuecke zerschiessen, ein Fahrzeug mit Aufsatz 73
+            // daraufstellen) und misst nach der Zeit, was in der Karte steht.
+            // Ohne Zahl 30 Sekunden — eine Reparatur dauert 20 Takte, und die
+            // Kette soll mehrere schaffen.
+            else if (a == "--rail-repair-check") _railRepairCheck = 30f;
+            else if (a.StartsWith("--rail-repair-check="))
+                _railRepairCheck = Mathf.Max(1f, a["--rail-repair-check=".Length..].ToFloat());
             else if (a == "--rail-check") { _railCheck = 1f; _railHead = true; }
             else if (a.StartsWith("--rail-check="))
             { _railCheck = 0.001f; _railHead = true;
@@ -1082,6 +1092,25 @@ public partial class MapViewer : Node2D
             {
                 _hitCheck = -1f;
                 GD.Print(_entities.HitCheckLine());
+            }
+        }
+        if (_railRepairCheck > 0f)
+        {
+            if (!_railRepairReady)
+            {
+                _railRepairReady = true;
+                var at = _entities.RailRepairSetup();
+                if (at is { } p2)
+                {
+                    _camera.Zoom = new Vector2(3f, 3f);
+                    _camera.Position = p2;
+                }
+            }
+            _railRepairCheck -= (float)delta;
+            if (_railRepairCheck <= 0f)
+            {
+                _railRepairCheck = -1f;
+                GD.Print(_entities.RailRepairLine());
             }
         }
         if (_shipCheckAfter > 0f)

@@ -102,6 +102,31 @@ public partial class MapEntityLayer : Node2D
         /// blocked at zero (@0x40bb44).</summary>
         public int Ammo, AmmoMax;
 
+        /// <summary>
+        /// DER ARBEITSZÄHLER DES GLEISREPARATEURS — Satzbyte <b>+0x38</b>.
+        ///
+        /// <para>GELESEN: <c>@0x408292</c> setzt ihn beim Ankommen auf
+        /// <c>0x1E</c> = <b>30</b>, und der Arm <c>@0x4099B6</c> zählt ihn jeden
+        /// Takt um eins herunter und tut nichts, solange er <b>über 10</b> steht
+        /// (<c>cmp al,0xa / ja</c>). Das sind <b>20 Takte Arbeit</b>, und die
+        /// Zahl steht so in der EXE — sie ist nicht von uns.</para>
+        /// </summary>
+        public int RailWork;
+
+        /// <summary>
+        /// Die Zelle, an der repariert werden soll — Satzbytes
+        /// <b>+0x48 / +0x49</b>.
+        ///
+        /// <para>⚠ Der Handoff führte »wer setzt +0x48/+0x49« als UNGELESEN.
+        /// Jetzt gelesen: <b>der Reparaturarm selbst</b>. Nach getaner Arbeit
+        /// sucht er das nächste kaputte Stück und schreibt dessen Zelle dorthin
+        /// (@0x409A42 nach der Nahsuche, @0x409A8F nach
+        /// <c>rail_find_broken</c>). Deshalb hört eine Reparaturfahrt nicht nach
+        /// einem Stück auf — das Fahrzeug gibt sich den nächsten Auftrag
+        /// selbst.</para>
+        /// </summary>
+        public Vector2I? RailGoal;
+
         /// <summary>Fuel tank, record +0x2e / +0x30. The move code counts it
         /// down and, at zero, stops the unit and prints "no fuel" (@0x407ab8);
         /// the Treibstoffheli and the Nachschub-Posten refill exactly this.
@@ -13970,6 +13995,7 @@ public partial class MapEntityLayer : Node2D
         UpdateProjectiles(dt);
         UpdateEffects(dt);
         UpdateFreight(dt);          // das Bahnsystem — Simulation/RailFreight.cs
+        RailRepairTick();           // die Reparaturkette — Simulation/RailRepair.cs
         RailMoveWagons();
         UpdateTrains(dt);
         UpdateAi(dt);
