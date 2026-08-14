@@ -558,6 +558,11 @@ public sealed class MissionScript
     /// die gelesene Zahl je Mission — kommt Kampagne 2 auf sieben, ist das ein
     /// Beleg; kommt sie auf neunzehn, feuert etwas zu oft.</summary>
     public int Placements { get; private set; }
+
+    /// <summary>Der Satzindex der zuletzt gesetzten Einheit, −1 wenn keine
+    /// entstanden ist. Siehe <see cref="PlaceUnit"/> — M28 braucht ihn.</summary>
+    public int LastPlaced { get; private set; } = -1;
+
     public int OrdersGiven { get; private set; }
 
     /// <summary>Wieviele Einsetzungen und Befehle dieses Skript überhaupt
@@ -1039,7 +1044,12 @@ public sealed class MissionScript
     /// 40 im Kartenrahmen, wenn Argument 1 die SPALTE ist — gegen 34, wenn es
     /// die Zeile wäre.</para>
     /// </summary>
-    public Action<int, int, int, int>? PlaceUnit;    // entwurf, spalte, zeile, spieler
+    /// <summary>⚠ Gibt den SATZINDEX zurück, −1 wenn nichts entstanden ist.
+    /// Das Original reicht den Rückgabewert von <c>create_unit</c> @0x4B34E0
+    /// durch, und M28 merkt ihn sich (<c>v[54+i] = place_unit(193, 36, 12, 0)</c>
+    /// @0x4A3163) — ohne ihn ist die Mission nicht baubar. Bis zum 14.08.2026
+    /// war das ein <c>Action</c> und warf den Wert weg.</summary>
+    public Func<int, int, int, int, int>? PlaceUnit;    // entwurf, spalte, zeile, spieler
 
     /// <summary>
     /// `order(einheit, cx, cy, utok_na, extra)` @0x410220 — <b>7 Aufrufe in
@@ -1499,7 +1509,10 @@ public sealed class MissionScript
             // Regeln eintragbar).
             case "place_unit":
                 Placements++;
-                PlaceUnit?.Invoke(a.A, a.B, a.C, a.D);
+                // ⚠ Der Rueckgabewert wird gehalten, auch wenn ihn heute noch
+                // keine Regel abholt: sobald `v[a] = place_unit(...)` im
+                // Vokabular steht (M28), ist er genau das, was dort hinein muss.
+                LastPlaced = PlaceUnit?.Invoke(a.A, a.B, a.C, a.D) ?? -1;
                 break;
             // order(einheit, cx, cy, utok_na, extra) @0x410220 — siehe
             // OrderUnitAt. e (extra) wird NICHT weitergegeben: das Original

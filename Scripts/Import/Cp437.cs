@@ -1,5 +1,6 @@
 namespace AkteEuropaReborn.Import;
 
+using System.Collections.Generic;
 using System.Text;
 
 /// <summary>
@@ -40,5 +41,41 @@ public static class Cp437
             sb.Append(x < 0x80 ? (char)x : High[x - 0x80]);
         }
         return sb.ToString().Trim();
+    }
+
+    /// <summary>
+    /// Der RÜCKWEG: ein Zeichen als das Byte, für das es steht — 0 wenn die
+    /// Tafel es nicht kennt.
+    ///
+    /// <para>⚠ Angelegt am 14.08.2026, weil diese Klasse bis dahin nur lesen
+    /// konnte. Der Karteneditor schreibt seit dem Rückweg (<c>MapOpen</c>) auch
+    /// wieder Namen in eine <c>CwmFile</c>, und ohne einen Schreiber hier führte
+    /// er die Umkehrtafel ein zweites Mal. Eine gemessene Tafel zweimal im Baum
+    /// ist eine Falle: berichtigt jemand die eine, läuft die andere still
+    /// daneben. Sie wird hier aus <see cref="High"/> selbst aufgebaut, kann also
+    /// gar nicht davon abweichen.</para>
+    /// </summary>
+    public static byte Byte(char c)
+    {
+        if (c < 0x80) return (byte)c;
+        _back ??= Build();
+        return _back.TryGetValue(c, out byte b) ? b : (byte)0;
+    }
+
+    private static Dictionary<char, byte>? _back;
+
+    private static Dictionary<char, byte> Build()
+    {
+        var d = new Dictionary<char, byte>(High.Length);
+        for (int i = 0; i < High.Length; i++) d[High[i]] = (byte)(0x80 + i);
+        return d;
+    }
+
+    /// <summary>Eine Zeichenkette in ein Feld fester Länge, mit Null aufgefüllt
+    /// — so, wie die Sätze der <c>.CWM</c> ihre Namen tragen.</summary>
+    public static void PutString(string s, byte[] dst, int at, int len)
+    {
+        for (int i = 0; i < len; i++)
+            dst[at + i] = i < s.Length ? Byte(s[i]) : (byte)0;
     }
 }

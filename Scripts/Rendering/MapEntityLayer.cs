@@ -6329,7 +6329,10 @@ public partial class MapEntityLayer : Node2D
                 // Eintrag im Missionspanel — siehe SkirmishAi.AddMissionTarget.
                 _mscript.AddTarget = AddMissionTarget;
                 // Verstaerkung — die Mechanik, an der Mission 14 haengt
-                _mscript.SpaceInSpawn = SpawnReinforcement;
+                // ⚠ space_in wirft den Satzindex weg, place_unit nicht — beide
+                // gehen durch denselben Rumpf, aber nur das Original von
+                // place_unit reicht ihn an das Skript zurueck.
+                _mscript.SpaceInSpawn = (t, c, r, p) => SpawnReinforcement(t, c, r, p);
                 // place_unit @0x4D0810 — DASSELBE create_unit, nur ohne die
                 // Warteschlange: das Original geht bei space_in
                 // @0x4C0260 -> @0x4C1600 -> @0x4D0810 -> @0x4B34E0, hier faellt
@@ -7657,6 +7660,20 @@ public partial class MapEntityLayer : Node2D
                (left > 0 ? $"; nicht erzwingbar: {string.Join(" ", untouched)}" : "") +
                (unreachable.Count > 0
                    ? $"; ⚠ Variablen ohne Erzeuger: v[{string.Join("] v[", unreachable)}]"
+                   : "") +
+               // ⚠ »NICHT ERZWINGBAR« IST NICHT »KAPUTT«, und die Zeile hat das
+               // bisher nicht auseinandergehalten. Mission 23 verlangt fuenf
+               // gebaute Rohstoffminen; dieser Prueflauf kann Einheiten
+               // ausschlagen und Gebaeude uebergeben, aber er kann nicht BAUEN.
+               // Also meldete er auf ewig »0 von 1 erzwungen; nicht erzwingbar:
+               // buildings(2,0)==5«, und das las sich wie ein Fehler der
+               // Mission — obwohl sie gebaut ist und mit --terra-check
+               // nachweislich erfuellt wird (5 Minen ueber den echten Bauweg,
+               // »MISSION ERFUELLT«). Die fertige Zeile dazu liegt in
+               // MissionScript.GoalCheck; sie hier anzuhaengen kostet nichts und
+               // nimmt der Meldung den falschen Zungenschlag.
+               (left > 0 && _mscript != null
+                   ? "\n   " + _mscript.GoalCheck()
                    : "");
     }
 
@@ -12709,16 +12726,24 @@ public partial class MapEntityLayer : Node2D
     /// mission 14 drops design 191 and then looks for 191, and why sec47 row 191
     /// is called "Col.Hullman".
     /// </summary>
-    private void SpawnReinforcement(int typ, int col, int row, int player)
+    /// <returns>Der SATZINDEX der erzeugten Einheit, −1 wenn keine entstand.
+    /// ⚠ Bis zum 14.08.2026 gab das hier nichts zurueck. Das Original reicht
+    /// den Rueckgabewert von <c>create_unit</c> @0x4B34E0 durch bis in
+    /// <c>place_unit</c> @0x4D0810, und Mission 28 merkt ihn sich
+    /// (<c>v[54+i] = place_unit(193, 36, 12, 0)</c> @0x4A3163) — ohne ihn ist
+    /// die Mission nicht baubar. Die drei Abbruchwege geben −1, und zwar jeder
+    /// mit seiner eigenen Meldung: ein Aufrufer, der nur »ging nicht« erfaehrt,
+    /// kann das fehlende Glied nicht benennen.</returns>
+    private int SpawnReinforcement(int typ, int col, int row, int player)
     {
         LoadDesigns();
-        if (_nav == null) { GD.PrintErr("space_in: keine Navigationskarte"); return; }
+        if (_nav == null) { GD.PrintErr("space_in: keine Navigationskarte"); return -1; }
         int raw = typ + 200 * player;
         if (!_designBySlot.TryGetValue(raw, out var d))
         {
             GD.PrintErr($"space_in: Entwurf {typ} von Spieler {player} " +
                         $"(sec47 {raw}) steht nicht in unit_designs.json");
-            return;
+            return -1;
         }
         var move = Simulation.NavGrid.ClassOf(-1, d.Derived.ChassisComponent);
         var cell = _nav.NearestFree(new Vector2I(col, row), move);
@@ -12726,7 +12751,7 @@ public partial class MapEntityLayer : Node2D
         {
             // »Incredible error ...no free place for new robot« @0x4C1624
             GD.PrintErr($"space_in: kein freier Platz neben ({col}, {row}) fuer {d.Name}");
-            return;
+            return -1;
         }
         int hp = d.Hp > 0 ? d.Hp : HpOfType(d.Propulsion);
         int ammo = d.Ammo > 0
@@ -12761,6 +12786,7 @@ public partial class MapEntityLayer : Node2D
         GD.Print($"space_in: {d.Name} (Entwurf {typ}) fuer Spieler {player} " +
                  $"auf ({u.Col}, {u.Row}), Satz {u.Slot}");
         QueueRedraw();
+        return u.Slot;
     }
 
     /// <summary>The lowest free record index of a player. The original's tables

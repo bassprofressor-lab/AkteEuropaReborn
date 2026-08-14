@@ -129,7 +129,12 @@ public static class CwmData
     /// `jmp jmptbl[idx]` (@0x43ecac), and each handler addresses exactly one
     /// section. Common head: +0x00 u16 backlink, +0x02 status — except sec29,
     /// where +0x02 is the Schiffswerft that pays for the dock's ships.</summary>
-    private static readonly Dictionary<int, (int Section, int Stride)> InstanceSection = new()
+    /// <remarks>⚠ Am 14.08.2026 von <c>private</c> auf <c>public</c> gesetzt.
+    /// Der Rückweg des Karteneditors (<c>MapOpen</c>) braucht dieselbe Zuordnung,
+    /// und weil sie verschlossen war, führte er sie ein zweites Mal — zwei
+    /// Abschriften einer gemessenen Tafel, die stillschweigend auseinanderlaufen,
+    /// sobald jemand eine davon berichtigt. Lieber öffentlich als doppelt.</remarks>
+    public static readonly Dictionary<int, (int Section, int Stride)> InstanceSection = new()
     {
         { 1, (23, 16) },  { 2, (24, 14) },  { 3, (24, 14) },  { 4, (24, 14) },
         { 6, (30, 14) },  { 7, (26, 4) },   { 9, (27, 52) },  { 10, (28, 18) },
