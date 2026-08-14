@@ -31,6 +31,15 @@ deviate on purpose, and every deviation is marked as ours.
 
 ### Units
 
+- **Bombs land on the middle of the hull.** An air attack used to aim at a
+  unit's record cell — on a battleship, that is its top-left corner. The 1997
+  game shifts the aiming point according to the target's class, and that shift
+  is nothing other than the middle of the hull: one cell for the small ones, two
+  for the large. It is the same table that decides the hull size.
+- **The railway repairs itself again.** A vehicle with the track attachment
+  works twenty ticks on a shot-up piece, makes it whole — and then finds the
+  next one on the same line **by itself**. That is how the chain reads in the
+  original; it was only waiting for us to have a way of giving it an order.
 - **A ship now occupies its whole hull.** The 1997 game checks **four** cells for
   a small ship and **sixteen** for a large one; we checked one. A battleship thus
   occupied a sixteenth of itself — two ships could stand inside each other, and a

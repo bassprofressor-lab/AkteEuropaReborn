@@ -32,6 +32,17 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Einheiten
 
+- **Bomben treffen die Mitte des Rumpfes.** Ein Angriff aus der Luft zielte
+  bisher auf die Satzzelle einer Einheit — bei einem Schlachtschiff also auf
+  seine linke obere Ecke. Das Spiel von 1997 rückt den Zielpunkt nach der
+  Gattung des Ziels, und dieser Versatz ist nichts anderes als die Mitte des
+  Rumpfes: eine Zelle bei den kleinen, zwei bei den großen. Es ist dieselbe
+  Tafel, die auch über die Rumpfgröße entscheidet.
+- **Die Bahn repariert sich wieder.** Ein Fahrzeug mit dem Gleisaufsatz
+  arbeitet zwanzig Takte an einem zerschossenen Stück, macht es heil — und
+  sucht sich danach **selbst** das nächste auf derselben Linie. Genau so steht
+  die Kette im Original; sie hat nur darauf gewartet, dass es bei uns einen Weg
+  gab, ihr einen Auftrag zu geben.
 - **Ein Schiff belegt jetzt seinen ganzen Rumpf.** Das Spiel von 1997 prüft für
   ein kleines Schiff **vier** Zellen und für ein großes **sechzehn**; wir prüften
   eine. Ein Schlachtschiff belegte damit ein Sechzehntel seiner selbst — zwei
