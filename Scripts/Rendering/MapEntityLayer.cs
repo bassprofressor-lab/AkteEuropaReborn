@@ -15140,6 +15140,27 @@ public partial class MapEntityLayer : Node2D
     private const float AirFuelBurn = 12f;      // fuel per second in the air
     private const float AirReloadSec = 12f;     // seconds a full rearm takes
     private const float AirFireGap = 1.4f;      // seconds between attacks
+
+    /// <summary>
+    /// UNTER SO VIEL SPRIT FLIEGT EIN FLUGZEUG HEIM — <b>GELESEN, 300</b>.
+    ///
+    /// <para><c>move_airplanes</c> @0x422F16: <c>cmp word ptr [0x6DDF8C],
+    /// 0x12C</c> und <c>jge</c> — liegt der Sprit darunter (und ist <c>uk</c>
+    /// weder 3 noch 100), ruft es <c>air_back_to_airport</c> @0x422F38. Geprueft
+    /// wird das nicht jeden Takt, sondern <b>alle 20</b>:
+    /// <c>(Bildzaehler + Nummer) % 20 == 0</c> @0x422EFA — die Flugzeuge teilen
+    /// sich die Arbeit also reihum.</para>
+    ///
+    /// <para>Die Zahl ist direkt vergleichbar: unsere Tankgroessen kommen aus
+    /// derselben Tabelle wie die des Originals (800 Kampfhubschrauber bis 2000
+    /// Nachschubheli), 300 sind also 15..37 % einer Fuellung.</para>
+    ///
+    /// <para>⚠ Vorher stand hier <c>Fuel &lt;= 0</c>, also »fliegt heim, wenn
+    /// der Tank leer ist« — was nie heimfliegen heisst, weil ein leerer Tank
+    /// den Rueckweg nicht mehr traegt. Das Original kehrt um, solange es noch
+    /// reicht.</para>
+    /// </summary>
+    private const int AirFuelHome = 300;
     private const float AirShadowDrop = 26f;    // how high above the ground it flies
 
     /// <summary>The closest airfield still standing that this aircraft may use.</summary>
@@ -15262,7 +15283,19 @@ public partial class MapEntityLayer : Node2D
             a.Customer = best;
         }
 
-        if (a.Customer < 0) { a.Goal = null; return; }
+        // ⚠ 14.08.2026 — NIEMAND BRAUCHT MEHR ETWAS: DANN FLIEGT ER HEIM.
+        //
+        // Gemeldet: »manchmal bleiben die auch ueber den Einheiten stehen wenn
+        // wohl alle betankt/befuellt«. Hier stand genau das: Ziel weg, und der
+        // Heli haengt, wo er zuletzt war.
+        //
+        // Das Original tut es anders, und es ist gelesen. Der Zweig des
+        // Treibstoffhelis (Art 13) @0x42313C sucht ueber 0x427990 eine Einheit,
+        // die Nachschub braucht; kommt 0xFFFF zurueck, steht @0x423269:
+        //     log "air M"  ->  air_back_to_airport(index)
+        // Beim Munitionheli (Art 14) steht dasselbe @0x4233AC ("air Q").
+        // Beide Stellen sind zwei der elf Heimkehr-Aufrufe in move_airplanes.
+        if (a.Customer < 0) { AirHeadHome(a); return; }
 
         var c = _entities[a.Customer];
         a.Goal = c.Pos;
@@ -15292,6 +15325,68 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Deliveries made this session — the harness reports it.</summary>
     public int SupplyRuns;
 
+    /// <summary>
+    /// ZURUECK ZUM FLUGHAFEN — der Nachbau von <c>air_back_to_airport</c>
+    /// @0x426180.
+    ///
+    /// <para>Das Original setzt dort <c>uk := 1</c> und rechnet den Landeplatz
+    /// aus dem Flughafen (0x6DDF98) ueber die Tafeln 0x879438/0xC06910 aus:
+    /// <c>x − 6</c>, <c>y + 2</c>. ⚠ Kein DIREKTER Aufrufer — alle fuenfzehn
+    /// gehen ueber die Marke 0x401FA0, und <b>elf davon liegen in
+    /// <c>move_airplanes</c></b>. Die Heimkehr ist im Original also nicht ein
+    /// Sonderfall, sondern der Normalfall am Ende jeder Aufgabe.</para>
+    ///
+    /// <para>⚠ <b>UNSERE Setzung</b> bleibt, WO gelandet wird: wir nehmen die
+    /// Mitte des Flughafens, das Original einen gerechneten Platz daneben. Und
+    /// dass ein Flugzeug ohne jeden Flughafen einfach stehenbleibt statt
+    /// abzustuerzen — das Original hat dafuer »air B (no fuel)« @0x422F4A, und
+    /// was dieser Zweig tut, ist ungelesen.</para>
+    /// </summary>
+    /// <returns>true, wenn es angekommen und eingelagert ist.</returns>
+    private bool AirHeadHome(Special a)
+    {
+        a.Target = -1;                           // nothing left to shoot at
+        // ⚠ EIN NACHSCHUBHELI KEHRT NICHT ZUM FLUGHAFEN HEIM, SONDERN ZUM
+        // NACHSCHUB-POSTEN — und das ist der Fehler, den der eigene Zaehler
+        // gefunden hat: der erste Einbau schickte alle zum Flughafen, und auf
+        // map_DM_4 gibt es keinen. Ergebnis: 15 von 19 Helis hingen weiter in
+        // der Luft, obwohl die Heimkehr eingebaut war.
+        //
+        // Dass die zwei Arten anders heimkehren, steht im Original:
+        // air_back_to_airport @0x426180 verzweigt nach `typ` — 13/14 gehen nach
+        // 0x42636E, `typ < 10` in den Flughafenzweig, 10..12 nach 0x4262A8.
+        // ⚠ WOHIN 0x42636E fuehrt, ist NICHT gelesen. Dass es der
+        // Nachschub-Posten ist, ist UNSERE Setzung — sie ist die naechstliegende
+        // (dort holt der Heli ohnehin seine Ladung, NearestDepot) und sie wird
+        // hier so benannt, bis der Zweig gelesen ist.
+        Entity? home = null;
+        if (a.IsSupply)
+        {
+            home = a.DepotSlot >= 0
+                ? _entities.Find(x => x.IsBuilding && x.Slot == a.DepotSlot && !x.Dead) : null;
+            home ??= NearestDepot(a);
+        }
+        home ??= a.HomeSlot < 0 ? null
+            : _entities.Find(x => x.IsBuilding && x.Slot == a.HomeSlot && !x.Dead);
+        // the field may have been bombed out — then look for another one
+        home ??= NearestAirfield(a);
+        if (home == null) { a.Goal = null; return false; }   // no field left
+        a.HomeSlot = home.Slot;
+        a.Goal = home.Pos;
+        if (a.Pos.DistanceTo(home.Pos) >= TileW * 0.6f) return false;
+        a.Goal = null; a.Col = home.Col; a.Row = home.Row;
+        // ⚠ EIN NACHSCHUBHELI WIRD NICHT EINGELAGERT. Das steht schon bei
+        // SpawnSupplyHeli und ist gelesen: »Art 13 und 14 parken nie —
+        // spawn_aircraft setzt ihnen +0x31 = 0xFF und sendet sie unmittelbar
+        // aus.« Wer sie hier auf `Stored` setzt, sperrt sie fuer immer weg: der
+        // Parkzweig in UpdateAircraft steigt sofort wieder aus, und kein Kunde
+        // holt sie je zurueck. Der Fehler waere schlimmer als das Schweben, das
+        // er beheben sollte.
+        if (a.IsSupply) return false;
+        a.Stored = true;
+        return true;
+    }
+
     private void UpdateAircraft(float dt)
     {
         foreach (var a in _special)
@@ -15304,29 +15399,18 @@ public partial class MapEntityLayer : Node2D
                 continue;
             }
 
-            if (a.IsSupply) { UpdateSupply(a); goto move; }
+            // ⚠ Der Versorgungszweig sprang bis zum 14.08.2026 mit `goto move`
+            // an der Heimkehr VORBEI — deshalb kam ein Nachschubheli nie nach
+            // Hause, weder ohne Kundschaft noch mit leerem Tank. UpdateSupply
+            // schickt ihn jetzt selbst heim; ist er angekommen, ist er
+            // eingelagert und dieser Takt fuer ihn zu Ende.
+            if (a.IsSupply) { UpdateSupply(a); if (a.Stored) continue; goto move; }
 
-            // out of fuel or ammo: head home
-            bool spent = a.Fuel <= 0 || (a.Armed && a.Ammo <= 0);
-            if (spent)
-            {
-                a.Target = -1;                       // nothing left to shoot with
-                var home = a.HomeSlot < 0 ? null
-                    : _entities.Find(x => x.IsBuilding && x.Slot == a.HomeSlot && !x.Dead);
-                // the field may have been bombed out — then look for another one
-                home ??= NearestAirfield(a);
-                if (home != null)
-                {
-                    a.HomeSlot = home.Slot;
-                    a.Goal = home.Pos;
-                    if (a.Pos.DistanceTo(home.Pos) < TileW * 0.6f)
-                    {
-                        a.Stored = true; a.Goal = null; a.Col = home.Col; a.Row = home.Row;
-                        continue;
-                    }
-                }
-                else a.Goal = null;                  // no field left: it just circles
-            }
+            // Sprit unter der gelesenen Schwelle — oder, UNSERE Zutat, nichts
+            // mehr zu schiessen: heim. Siehe AirFuelHome fuer die 300 und
+            // AirHeadHome fuer den Weg.
+            bool spent = a.Fuel < AirFuelHome || (a.Armed && a.Ammo <= 0);
+            if (spent && AirHeadHome(a)) continue;
 
             // pick a target inside the aircraft's own sight radius
             if (a.Armed && a.Ammo > 0 && a.Target < 0)
@@ -15479,11 +15563,38 @@ public partial class MapEntityLayer : Node2D
                   $"{(s.Stored ? "im Hangar" : "fliegt")} ziel={s.Target} heim={s.HomeSlot}";
             break;
         }
-        string sup = "";
+        // ⚠ DIE ZAHL ZUM GEMELDETEN FEHLER (14.08.2026): wie viele
+        // Nachschubhelis haengen OHNE Kundschaft UND OHNE Ziel in der Luft.
+        // Gemeldet als »manchmal bleiben die auch ueber den Einheiten stehen
+        // wenn wohl alle betankt/befuellt«. Das Original schickt sie in genau
+        // diesem Fall heim (@0x423269 / @0x4233AC), diese Zahl muss also 0
+        // sein. Ohne sie war der Fehler in keinem Prueflauf zu sehen — die
+        // Zeile zaehlte nur Hangar und Luft, und »haengt nutzlos« ist eben
+        // auch »in der Luft«.
+        int idle = 0, supAir = 0, atHome = 0;
+        foreach (var s in _special)
+        {
+            if (s.Dead || !s.IsSupply || s.Stored) continue;
+            supAir++;
+            if (s.Customer >= 0 || s.DepotSlot >= 0 || s.Goal != null) continue;
+            // ⚠ Ohne Ziel ist noch nicht dasselbe wie »haengt nutzlos«: einer,
+            // der heimgeflogen ist, steht ebenfalls ohne Ziel — nur eben AM
+            // POSTEN. Ein Nachschubheli wird nie eingelagert (siehe
+            // AirHeadHome), also ist der Ort das einzige Unterscheidungsmerkmal.
+            var d0 = NearestDepot(s);
+            if (d0 != null && s.Pos.DistanceTo(d0.Pos) < TileW * 1.2f) atHome++;
+            else idle++;
+        }
+        string sup = supAir > 0
+            ? $" | Nachschubhelis {supAir} unterwegs, {atHome} daheim am Posten, " +
+              $"OHNE Auftrag und fern der Heimat {idle} (muss 0 sein — " +
+              "das Original fliegt dann heim)"
+            : "";
+        string supOne = "";
         foreach (var s in _special)
         {
             if (s.Dead || !s.IsSupply) continue;
-            sup = $" | {s.TypeName} P{s.Owner} nutzlast={s.Cargo}/{SupplyCargoFull} " +
+            supOne = $" | {s.TypeName} P{s.Owner} nutzlast={s.Cargo}/{SupplyCargoFull} " +
                   $"kunde={s.Customer}" +
                   (s.Customer >= 0 && s.Customer < _entities.Count
                       ? $" ({SupplyPercent(s, _entities[s.Customer])}%)" : "") +
@@ -15492,7 +15603,7 @@ public partial class MapEntityLayer : Node2D
             if (s.Customer >= 0 || s.DepotSlot >= 0) break;   // prefer a busy one
         }
         return $"rail {_rail.Count} nodes/{lines / 2} lines, {air} Flugzeuge " +
-               $"({parked} im Hangar, {flying} in der Luft, {armed} bewaffnet){one}{sup}";
+               $"({parked} im Hangar, {flying} in der Luft, {armed} bewaffnet){one}{sup}{supOne}";
     }
 
     private void UpdatePanel()
