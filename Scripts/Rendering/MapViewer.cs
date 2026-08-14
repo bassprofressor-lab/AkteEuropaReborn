@@ -881,6 +881,19 @@ public partial class MapViewer : Node2D
             else if (a == "--stuck-check") _stuckCheck = true;
             else if (a == "--stuck-check=alt")
             { _stuckCheck = true; MapEntityLayer.BlockOld = true; }
+            // --stuck-check=<c>,<r>[,alt] — ein AUSDRUECKLICHES Ziel, damit die
+            // Frage von B1 stellbar ist: dorthin fahren, wo der Spieler es
+            // schlecht fand.
+            else if (a.StartsWith("--stuck-check="))
+            {
+                var q = a["--stuck-check=".Length..].Split(',');
+                if (q.Length >= 2 && int.TryParse(q[0], out int qc) && int.TryParse(q[1], out int qr))
+                {
+                    _stuckCheck = true;
+                    MapEntityLayer.StuckGoalWanted = new Vector2I(qc, qr);
+                    if (q.Length > 2 && q[2] == "alt") MapEntityLayer.BlockOld = true;
+                }
+            }
             else if (a == "--leave-check") _leaveCheck = true;
             else if (a == "--leave-check=alt") { _leaveCheck = true; Core.LeaveToMenu.Skip = true; }
             // Prüfstand für die Bauteilbilder. ⚠ Er braucht LAUFZEIT: die

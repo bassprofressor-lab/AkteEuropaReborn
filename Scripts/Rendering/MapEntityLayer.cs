@@ -3727,6 +3727,18 @@ public partial class MapEntityLayer : Node2D
     private readonly List<int> _stuckGroup = new();
     private readonly List<Vector2I> _stuckFrom = new();
     private readonly List<Vector2I> _stuckTo = new();
+    // ⚠ Die Spur der zuletzt betretenen Zellen je Einheit. Arbeitsweise 21: wenn
+    // eine Zahl ueberrascht, erst instrumentieren, dann erklaeren — der
+    // Umwegfaktor 23,6 ist genau so eine Zahl, und jede Erklaerung dafuer waere
+    // ohne diese Spur geraten.
+    private readonly Dictionary<int, List<Vector2I>> _stuckTrail = new();
+    // ⚠ SELBST GEZAEHLT. Der erste Anlauf leitete »gefahrene Zellen« aus dem
+    // Spritverbrauch ab (`FuelMax - Fuel`), weil das Original je betretener
+    // Zelle genau eine Einheit abzieht. Die Ableitung stimmt — die ANNAHME
+    // darunter nicht: die Karten liefern Einheiten mit HALBVOLLEM Tank aus.
+    // Heraus kam ein »Umwegfaktor 23,6«, waehrend die Spur vier Zellen zeigte.
+    // Eine geerbte Zahl ohne eigenes Werkzeug ist keine Zahl (Arbeitsweise 33).
+    private readonly Dictionary<int, int> _stuckCells = new();
     private Vector2I _stuckGoal;
     private bool _stuckOn;
 
@@ -3742,6 +3754,11 @@ public partial class MapEntityLayer : Node2D
     /// weggeworfen wird (Arbeitsweise 9: welche Fehlerklasse KANN dieser
     /// Pruefstand sehen?).</para>
     /// </summary>
+    /// <summary>Ein ausdrueckliches Ziel, aus <c>--stuck-check=&lt;c&gt;,&lt;r&gt;</c>.
+    /// Damit laesst sich die Frage von B1 stellen: »fahr mal DORTHIN, wo der
+    /// Spieler es schlecht fand« statt irgendwohin.</summary>
+    public static Vector2I? StuckGoalWanted;
+
     public string StuckCheckStart()
     {
         if (_nav == null) return "stuck-check: kein Gitter";
@@ -3772,7 +3789,16 @@ public partial class MapEntityLayer : Node2D
         var from = new Vector2I(first.Col, first.Row);
         _stuckGoal = from;
         int reach = 0;
-        foreach (int rad in new[] { 30, 24, 18, 12, 8 })
+        if (StuckGoalWanted is { } want)
+        {
+            var probe0 = _nav.FindPath(from, want, first.Move, _stuckGroup[0]);
+            if (probe0 == null || probe0.Count == 0)
+                return $"stuck-check: ({want.X},{want.Y}) ist von ({from.X},{from.Y}) aus " +
+                       "GAR NICHT erreichbar — das ist selbst der Befund, " +
+                       "und ein Fahrversuch dorthin misst nichts";
+            _stuckGoal = want; reach = probe0.Count;
+        }
+        foreach (int rad in reach > 0 ? System.Array.Empty<int>() : new[] { 30, 24, 18, 12, 8 })
         {
             foreach (var d in new[] { (1, 1), (1, -1), (-1, 1), (-1, -1), (1, 0), (0, 1), (-1, 0), (0, -1) })
             {
@@ -3795,11 +3821,12 @@ public partial class MapEntityLayer : Node2D
         // Umkreis von acht Zellen um den Klick). Gegen den Klickpunkt zu messen
         // hiesse, die Streuung als Fehler zu zaehlen — der erste Anlauf tat das
         // und meldete Einheiten als »steht«, die auf ihrem Ziel standen.
-        _stuckTo.Clear();
+        _stuckTo.Clear(); _stuckTrail.Clear(); _stuckCells.Clear();
         int withPath = 0;
         foreach (int i in _stuckGroup)
         {
             _stuckTo.Add(_entities[i].Goal);
+            _stuckTrail[i] = new List<Vector2I>();
             if (_entities[i].Path != null) withPath++;
         }
         _stuckOn = true;
@@ -3843,6 +3870,24 @@ public partial class MapEntityLayer : Node2D
                                $"Sprit {e.Fuel}/{e.FuelMax}, " +
                                $"{(moved ? "war unterwegs" : "nie losgefahren")}");
         }
+        // ⚠ DER UMWEG, und er ist eine eigene Frage. Der Sprit zaehlt im
+        // Original GENAU EINE Einheit je BETRETENER ZELLE (@0x407aa7), also ist
+        // `FuelMax - Fuel` die Zahl der gefahrenen Zellen — geschenkt, ohne
+        // eigenen Zaehler. Dagegen die Luftlinie vom Start: wer 386 Zellen
+        // faehrt und 5 vorankommt, PENDELT, und keine der anderen Zahlen sieht
+        // das (Arbeitsweise 21: ein Fehler, der netto stimmt, wird von keiner
+        // Summe gefunden).
+        int worst = -1, worstK = -1, drove = 0, netSum = 0;
+        for (int k = 0; k < _stuckGroup.Count; k++)
+        {
+            var e = _entities[_stuckGroup[k]];
+            int cells = _stuckCells.GetValueOrDefault(_stuckGroup[k]);
+            int net = Mathf.Max(Mathf.Abs(e.Col - _stuckFrom[k].X),
+                                Mathf.Abs(e.Row - _stuckFrom[k].Y));
+            drove += cells; netSum += net;
+            int detour = net <= 0 ? cells * 10 : cells * 10 / net;
+            if (cells >= 20 && detour > worst) { worst = detour; worstK = k; }
+        }
         int stuck = stranded + never;
         var sb = new System.Text.StringBuilder();
         sb.Append($"stuck-check{(BlockOld ? " (GEGENPROBE =alt)" : "")}: " +
@@ -3852,6 +3897,26 @@ public partial class MapEntityLayer : Node2D
                   $"{stuck} STEHT OHNE WEG ({stranded} unterwegs liegengeblieben, " +
                   $"{never} nie losgefahren)");
         foreach (string x in strandedEx) sb.Append($"\n      ! {x}");
+        if (drove > 0)
+        {
+            sb.Append($"\n   Umweg: {drove} Zellen gefahren fuer {netSum} Zellen Luftlinie " +
+                      $"= Faktor {drove * 10 / Mathf.Max(1, netSum) / 10.0:0.0}");
+            if (worstK >= 0)
+            {
+                var w = _entities[_stuckGroup[worstK]];
+                sb.Append($"; schlimmster Fall slot {w.Slot}: " +
+                          $"{_stuckCells.GetValueOrDefault(_stuckGroup[worstK])} Zellen " +
+                          $"gefahren, von ({_stuckFrom[worstK].X},{_stuckFrom[worstK].Y}) nach " +
+                          $"({w.Col},{w.Row}) = Faktor {worst / 10.0:0.0}");
+            }
+        }
+        if (worstK >= 0 && _stuckTrail.TryGetValue(_stuckGroup[worstK], out var wt) && wt.Count > 0)
+        {
+            var uniq = new HashSet<Vector2I>(wt);
+            sb.Append($"\n   Spur des schlimmsten Falls, letzte {wt.Count} betretene Zellen " +
+                      $"({uniq.Count} verschiedene): " +
+                      string.Join(" ", wt.ConvertAll(v => $"({v.X},{v.Y})")));
+        }
         sb.Append($"\n   B2 {(stuck > 0 ? "STEHT" : "nicht nachweisbar")} — " +
                   "eine Einheit ohne Weg faehrt von selbst nie wieder los");
         return sb.ToString();
@@ -10130,8 +10195,16 @@ public partial class MapEntityLayer : Node2D
     /// <summary>A Nachschub-Posten services whatever stands ON it.
     ///
     /// Its tick handler @0x43e872 looks the post's own cell up in the spatial
-    /// grid, and if a unit sits there it writes `hp = hp_max` (+0x2e = +0x30)
+    /// grid, and if a unit sits there it writes `tank = tank_max` (+0x2e = +0x30)
     /// and `ammo = ammo_max` (+0x39 = +0x3a) outright — the ground counterpart
+    /// ⚠ 15.08.2026: hier stand »hp = hp_max«, und das ist die ZURUECKGEZOGENE
+    /// Lesart. +0x2e ist der TANK, nicht das Leben (GAMESTATE_RE.md 3.94: der
+    /// Zaehler bei @0x407aa7 druckt beim Nulldurchgang »no fuel«, und das Leben
+    /// steht in +0x08/+0x29 »energie«). Die alte Beschriftung steckt auch noch
+    /// im Export: `map_*.entities.json` schreibt +0x2e/+0x30 als `hp`/`hp_max`.
+    /// Das hat beim Nachgehen von B1 eine halbe Stunde gekostet — wer die
+    /// Schluessel umbenennt, muss den Rueckfall in Load() mitnehmen, der bei
+    /// fehlendem `raw` aus DEMSELBEN `hp` sowohl Leben als auch Sprit zieht.
     /// to the two supply helicopters. The original also requires the unit's
     /// +0x04 to read 0xFF, a state byte we do not model; everything else is
     /// exactly what the handler does. The post has no owner (all 63 of them
@@ -14455,6 +14528,12 @@ public partial class MapEntityLayer : Node2D
                 // @0x407aa4 Ablage in +0x1c, @0x407aa7 der Sprit bei +0x2e).
                 // Siehe BlockedStep.
                 e.Block = BlockEnter + Simulation.Determinism.Roll(BlockEnterSpread);
+                if (_stuckOn && _stuckTrail.TryGetValue(i, out var trail))
+                {
+                    _stuckCells[i] = _stuckCells.GetValueOrDefault(i) + 1;
+                    trail.Add(new Vector2I(e.Col, e.Row));
+                    if (trail.Count > 40) trail.RemoveAt(0);
+                }
                 if (e.PathIdx >= e.Path.Count)
                 {
                     e.Path = null;
