@@ -23,9 +23,12 @@ in der sie gewählt wurden:
   Karte vollwertig spielbar machen, nicht bloß begehbar.
 - **Gefecht.** Der Wettkampfmodus, der es werden soll: die Entscheidung Depot oder
   Warteschlange, die Wirtschaft in der Oberfläche, die Ausgewogenheit dazu.
-- **Zug und Strecke.** Die Waggon-Feinlage in Sektion 44, die Reparaturkette
-  (vollständig gelesen, sie hat nur auf die Befehlsschicht gewartet) und die 25
-  Kettenstellen ohne Nachbarzelle.
+- **Zug und Strecke.** Die Waggon-Feinlage in Sektion 44 und die Reparaturkette —
+  beides erledigt, siehe unten. Offen bleibt der Zug, der an einem Bruch
+  explodiert, und eine Linie auf `map_DM_6`, deren Kette nicht zu ihrer
+  angegebenen Länge passt. (Die „25 Kettenstellen ohne Nachbarzelle", die hier
+  standen, waren ein Lesefehler an unserem eigenen Zähler — auf diesen Karten
+  gibt es keine einzige.)
 
 Die Kampagne bleibt originaltreu; Gefecht und Mehrspieler dürfen bewusst
 abweichen, und jede Abweichung wird als unsere gekennzeichnet.
@@ -52,7 +55,25 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 - **Versorgungshelikopter fliegen heim, wenn niemand mehr Nachschub braucht** —
   so wie im Original. Sie blieben bisher über den versorgten Einheiten stehen.
   Und sie kehren um, solange der Sprit noch für den Rückweg reicht, statt erst
-  bei leerem Tank.
+  bei leerem Tank. **Wohin** sie fliegen, war dabei zunächst falsch geraten: wir
+  schickten sie zum Nachschub-Posten. Das Spiel von 1997 würfelt stattdessen
+  **irgendein eigenes Gebäude** aus und streut das Ziel um bis zu fünf Zellen —
+  ohne jede Prüfung, was für ein Gebäude das ist. Damit erklärt sich auch, warum
+  ein Heli auf einer Karte ohne Flugplatz heimkommt: er sucht keinen.
+  Nachgemessen auf einer Demokarte: von 19 Helis hingen erst 15 ohne Auftrag in
+  der Luft, jetzt **keiner** — und die Zahl derer, die daheim stehen, wächst
+  über die Laufzeit von 4 auf 9. ⚠ **Unsere Abweichung:** wer gar kein eigenes
+  Gebäude mehr hat, bleibt bei uns stehen. Das Spiel von 1997 schickte ihn in
+  diesem Fall auf eine ausgewürfelte Kartenzelle — einen Fehler, der dort nur
+  deshalb nicht auffällt, weil ohne Gebäude die Partie ohnehin vorbei ist.
+- **Ein Fluggerät blickt dorthin, wo es hinfliegt.** Bisher stand der Rumpf quer
+  zum Flugpfeil. Der Zustand hatte immer gestimmt, falsch war die Zuordnung von
+  Richtung zu Bild — das Original rechnet sie mit einem festen Versatz von 90
+  Grad aus. Zwei Wege, die nichts voneinander wissen, kommen auf dieselbe Zahl:
+  eine Eichung an den Panzern und die Rechnung im Zeichenpfad des Originals.
+  ⚠ Was **bleibt**, ist Original und kein Fehler: eine Drehung geht sechs Grad
+  je Takt, eine volle Wendung dauert 60 Takte. Nach einem Zielwechsel fliegt ein
+  Heli also bis zu 30 Takte lang seitwärts, bevor er sich ausgerichtet hat.
 
 ### Kampagne und Oberfläche
 
@@ -78,6 +99,27 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Karteneditor
 
+- **Gelände und Höhe lassen sich malen.** Zwei neue Pinsel: der eine setzt die
+  Geländeart einer Zelle (frei, rau, Wasser, gesperrt), der andere hebt und
+  senkt sie. Ein Strich ändert dabei nie nur die angeklickte Zelle — der
+  Kachelschlüssel hängt an der Neigung, an den vier Nachbarn und am Abstand zum
+  Wasser, also werden bis zu **81 Zellen** nachgezogen. Sie ziehen ihre Kachel
+  aus derselben Rechnung wie der Kartengenerator, samt demselben Wurf; eine nur
+  mitgezogene Zelle bekommt darum genau ihre alte Kachel zurück.
+  ⚠ **Der Pinsel weigert sich, statt zu reparieren.** Der Generator löst
+  Höhenkonflikte, indem er *andere* Zellen absenkt. Ein Pinsel darf das nicht —
+  er täte dann etwas anderes als angeklickt wurde. Er lehnt ab und sagt, warum.
+- **Der Prüfstand hat den ersten Pinsel zweimal verworfen.** Beide Male hatte er
+  die Karte messbar verschlechtert: harte Nähte von 3,4 auf 6,9 Prozent, eine
+  Uferzelle mit Innenland-Kachel, eine Beanstandung in der Kartenprüfung. Der
+  Grund war beide Male derselbe — er zog die Kachel anders als der Generator.
+  `--map-edit-check` stellt jetzt neun Zahlen **vor und nach** dem Malen
+  nebeneinander; ohne sie hätte man den Fehler nur daran gesehen, dass eine
+  gemalte Stelle „irgendwie anders aussieht".
+- **Die Spieler 2 bis 5 waren nie anwählbar.** In der Leiste stand „0..7 =
+  Eigner", aber die Ziffern 1 bis 4 wurden schon vorher als Pinselwahl
+  abgefangen — beim Einheitenpinsel ließ sich damit gar kein anderer Eigner
+  einstellen als der erste. Der Eigner geht jetzt reihum.
 - **Die „zerstückelten Gebäude" waren gar keine Gebäude.** Basis und Fabrik einer
   erzeugten Karte sind Bild für Bild dieselben wie auf einer gelieferten. Was
   zerstückelt aussah, waren **einzelne Gebäudekacheln, die als Bewuchs über das
@@ -107,6 +149,46 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   und Abstände sind aus sieben gelieferten Karten gemessen; verteilt und gesetzt
   wird von uns. Aus vier Gebäuden werden auf einer großen Karte über siebzig,
   darunter Flughäfen, Fabriken und Basen zum Einnehmen.
+
+### Zug und Strecke
+
+- **Die Waggon-Feinlage ist gelesen.** Zwei Felder im Waggonsatz standen seit
+  Beginn ohne Namen da. Sie sind der Versatz des Waggons **innerhalb** seiner
+  Zelle, in Bildpunkten, und das Spiel setzt sie aus einer einzigen Größe: der
+  Parität der Halbzeile, in der der Waggon steht. Ungerade heißt eine halbe
+  Kachel nach unten, gerade eine halbe nach rechts — das sind genau die
+  **Randmitten**, auf denen auch die Schienenbilder ihre Enden haben. An den
+  gelieferten Karten nachgezählt: von 162 Waggons, die auf einem der beiden
+  Ausgangswerte stehen, folgen **161** der Regel. Die übrigen tausend sind
+  Zwischenstände einer Fahrt, im Takt des Fortschritts.
+- **Die Waggons stehen auf den Randmitten — nachgemessen, und zwar gegen die
+  Regel des Originals.** Nachgezählt über drei Karten sitzt **kein einziger**
+  von 1193, 1000 und 1305 Wegknoten auf der Zellmitte; die Zellmitte ist der
+  Mittelpunkt der isometrischen Raute und liegt auf keinem der beiden
+  Eckengitter. Bisher hat unsere Strecke die Ecke aus der Nachbarzelle
+  abgeleitet und aus den an den Bildern gemessenen Anschlüssen — das Spiel von
+  1997 nimmt statt dessen die Parität der Halbzeile. Beide Wege lassen sich
+  jetzt gegeneinander halten, und sie meinen auf **88 bis 93 Prozent** der
+  Zellen dasselbe Gitter. Das ist ungefähr die Größenordnung, mit der im
+  Original auch Gleis und Zug auseinandergehen — die Abweichung ist also die
+  bekannte Lücke zwischen den zwei Strukturen und keine Eigenheit unseres Wegs.
+  ⚠ Die Parität **steuert nichts** und soll es nicht: sie ist die zweite,
+  unabhängige Auskunft, und wer sie zur Regel machte, hätte hinterher keine
+  Gegenprobe mehr.
+- **Der letzte Waggon einer Linie stand neben dem Gleis.** Das freie Ende einer
+  Strecke wurde als „die Gegenseite des Ausgangs" gerechnet. Für ein gerades
+  Stück stimmt das — für ein **Eckstück** nicht: geht die Schiene nach rechts
+  hinaus und unten weiter, ist die Gegenseite *links*, und dort liegt gar keine
+  Schiene. Das freie Ende liegt unten. Der Endknoten saß dadurch eine halbe
+  Zelle in jeder Achse daneben, rund 22 Bildpunkte. Richtig ist nicht „die
+  Gegenseite", sondern „die andere Seite, die dieses Gleisbild wirklich hat".
+  Betroffen waren **25, 28 und 30** Knoten auf den drei Karten — und
+  nachgemessen sind das **ausnahmslos Linienenden**, kein einziger mitten in
+  der Kette. Die Gegenprobe an der Regel des Originals verbessert sich auf allen
+  drei Karten (666:94 → 672:88, 667:73 → 674:66, 853:66 → 865:54); die
+  bekannten Kennzahlen bleiben Zahl für Zahl gleich. Mit `--rail-lay=altport`
+  lässt sich der alte Stand daneben legen — ohne ihn wäre „4,12 px je Takt"
+  eine Behauptung; so ist belegt, dass es die 4,11 vorher schon gab.
 
 ### Mehrspieler
 

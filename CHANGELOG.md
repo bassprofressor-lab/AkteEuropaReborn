@@ -22,9 +22,11 @@ chosen:
   map fully playable, not just walkable.
 - **Skirmish.** The competitive mode it is meant to become: the depot-or-queue
   decision, the economy in the interface, the balance that goes with it.
-- **Train and track.** The wagon fine placement in section 44, the repair chain
-  (read in full, it was only waiting for the command layer), and the 25 chain
-  cells without a neighbour.
+- **Train and track.** The wagon fine placement in section 44 and the repair
+  chain — both done, see below. What remains: the train that explodes at a break,
+  and one line on `map_DM_6` whose chain does not match its stated length.
+  (The "25 chain cells without a neighbour" that stood here turned out to be a
+  misreading of our own counter — there is not one such cell on those maps.)
 
 Campaign stays faithful to the original; skirmish and multiplayer are allowed to
 deviate on purpose, and every deviation is marked as ours.
@@ -48,7 +50,24 @@ deviate on purpose, and every deviation is marked as ours.
 - **Supply helicopters fly home when nobody needs supplies any more** — as in the
   original. Until now they hovered over the units they had just serviced. And
   they turn back while the fuel still covers the way home, instead of waiting for
-  an empty tank.
+  an empty tank. **Where** they fly was guessed wrong at first: we sent them to
+  the supply post. The 1997 game instead rolls **any building of its own** and
+  scatters the destination by up to five cells — with no check whatsoever of what
+  kind of building it is. That also explains how a helicopter gets home on a map
+  with no airfield: it is not looking for one. Measured on a demo map: of 19
+  helicopters, 15 used to hang in the air with no order, now **none** — and the
+  number standing at home grows from 4 to 9 over the run. ⚠ **Our deviation:** a
+  player with no building left keeps its helicopters where they are. The 1997
+  game sent them to a rolled map cell in that case — a fault that only goes
+  unnoticed there because without buildings the match is over anyway.
+- **An aircraft looks where it is flying.** The hull used to stand across the
+  flight arrow. The state had always been right; what was wrong was the mapping
+  from direction to image — the original computes it with a fixed offset of 90
+  degrees. Two paths that know nothing of each other arrive at the same number: a
+  calibration against the tanks, and the arithmetic in the original's draw path.
+  ⚠ What **remains** is original and not a fault: a turn takes six degrees per
+  tick, a full turn 60 ticks. After a change of target a helicopter therefore
+  flies sideways for up to 30 ticks before it has come around.
 
 ### Campaign and interface
 
@@ -72,6 +91,26 @@ deviate on purpose, and every deviation is marked as ours.
 
 ### Map editor
 
+- **Terrain and elevation can be painted.** Two new brushes: one sets a cell's
+  terrain class (open, rough, water, blocked), the other raises and lowers it. A
+  stroke never changes only the cell that was clicked — the tile key depends on
+  the slope, on the four neighbours and on the distance to water, so up to **81
+  cells** are pulled along. They take their tile from the same computation as the
+  map generator, with the same roll; a cell that was merely pulled along
+  therefore gets exactly its old tile back.
+  ⚠ **The brush refuses rather than repairs.** The generator resolves elevation
+  conflicts by lowering *other* cells. A brush must not do that — it would then
+  do something other than what was clicked. It declines and says why.
+- **The prober threw out the first brush twice.** Both times it had made the map
+  measurably worse: hard seams from 3.4 to 6.9 per cent, one shore cell with an
+  inland tile, one complaint in the map check. The cause was the same both times
+  — it drew its tile differently from the generator. `--map-edit-check` now puts
+  nine numbers **before and after** painting side by side; without them the fault
+  would only have shown as a painted patch that "somehow looks different".
+- **Players 2 to 5 were never selectable.** The bar said "0..7 = owner", but the
+  digits 1 to 4 were already caught earlier as the brush selection — with the
+  unit brush no owner other than the first could be set at all. The owner now
+  cycles.
 - **The "fragmented buildings" were not buildings at all.** The base and factory
   of a generated map are pixel for pixel the same as on a shipped one. What
   looked fragmented were **single building tiles scattered over the terrain as
@@ -99,6 +138,44 @@ deviate on purpose, and every deviation is marked as ours.
   from seven shipped maps; the distribution and placement are ours. Four
   buildings become over seventy on a large map, airports, factories and bases
   among them, all there to be captured.
+
+### Train and track
+
+- **The wagon fine placement has been read.** Two fields in the wagon record had
+  stood there without a name since the beginning. They are the wagon's offset
+  **within** its cell, in pixels, and the game sets them from a single quantity:
+  the parity of the half-row the wagon stands on. Odd means half a tile down,
+  even means half a tile to the right — exactly the **edge midpoints** where the
+  rail images have their ends too. Counted on the shipped maps: of 162 wagons
+  standing on one of the two starting values, **161** follow the rule. The other
+  thousand are intermediate states of a journey, in step with the progress
+  counter.
+- **The wagons stand on the edge midpoints — measured, and against the
+  original's own rule.** Counted across three maps, **not one** of 1193, 1000 and
+  1305 path nodes sits on the cell centre; the cell centre is the middle of the
+  isometric diamond and lies on neither vertex lattice. Until now our track
+  derived the vertex from the neighbouring cell and from the connections measured
+  off the images — the 1997 game takes the parity of the half-row instead. The
+  two can now be held against each other, and they mean the same lattice on **88
+  to 93 per cent** of the cells. That is roughly the margin by which track and
+  train drift apart in the original as well, so the disagreement is the known gap
+  between the two structures and not a quirk of our path.
+  ⚠ The parity **steers nothing**, and must not: it is the second, independent
+  account, and making it the rule would leave no cross-check behind.
+- **The last wagon of a line stood beside the track.** The free end of a line was
+  computed as "the opposite side of the exit". For a straight piece that holds —
+  for a **corner piece** it does not: if the rail leaves to the right and
+  continues downwards, the opposite side is *left*, and there is no rail there at
+  all. The free end is at the bottom. The end node therefore sat half a cell off
+  in each axis, about 22 pixels. The right rule is not "the opposite side" but
+  "the other side this rail image actually has". **25, 28 and 30** nodes were
+  affected on the three maps — and measured, those are **line ends without
+  exception**, not one in the middle of a chain. The cross-check against the
+  original's rule improves on all three maps (666:94 → 672:88, 667:73 → 674:66,
+  853:66 → 865:54); the known figures stay the same number for number. With
+  `--rail-lay=altport` the old state can be put alongside — without it "4.12 px
+  per tick" would be an assertion; with it, the 4.11 is shown to have been there
+  before.
 
 ### Multiplayer
 
