@@ -41,6 +41,21 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Gattung des Ziels, und dieser Versatz ist nichts anderes als die Mitte des
   Rumpfes: eine Zelle bei den kleinen, zwei bei den großen. Es ist dieselbe
   Tafel, die auch über die Rumpfgröße entscheidet.
+- **Ein Bomber fliegt einen zweiten Anlauf, statt über dem Ziel zu hängen.** Er
+  wirft ab, dreht auf einen ausgewürfelten Punkt **10 bis 19 Zellen** weit ab
+  (jede Achse mit eigenem Vorzeichen), kommt zurück und greift erneut an — bis
+  die Munition leer ist. Auf dem Rückweg wirft er nicht; das ist keine Bequemlichkeit,
+  sondern die Sperre des Originals, das den Abwurf an einen Auftragszustand
+  bindet, den es beim Abdrehen wegnimmt. Das Spiel von 1997 benennt die Stelle
+  selbst mit „Over target while attack".
+  ⚠ **Und damit ziehe ich eine eigene Zurücknahme zurück.** Ich hatte gemeldet,
+  das Original kenne diese Schleife nicht, und eine frühere Behauptung darüber
+  widerrufen. Der Widerruf war selbst falsch: richtig daran war nur, dass die
+  zwei Zielversätze die Mitte des Rumpfes sind und kein Überflug. Die Schleife
+  steht an einer anderen Stelle — hinter einer Bedingung, die ich damals nicht
+  weiterverfolgt hatte, in einem zweiten Verteiler, den das Spiel erst betritt,
+  wenn das Flugzeug genau auf seiner Zielzelle steht. Gemessen: 71 Schleifen in
+  gut zwei Minuten auf einer Karte mit zehn Bombern.
 - **Die Bahn repariert sich wieder.** Ein Fahrzeug mit dem Gleisaufsatz
   arbeitet zwanzig Takte an einem zerschossenen Stück, macht es heil — und
   sucht sich danach **selbst** das nächste auf derselben Linie. Genau so steht

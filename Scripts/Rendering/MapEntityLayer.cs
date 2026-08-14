@@ -453,6 +453,21 @@ public partial class MapEntityLayer : Node2D
         public int Owner = -1;       // the Flughafen it belongs to, once known
         public int HomeSlot = -1;    // that airport's building slot
 
+        /// <summary>
+        /// DER WENDEPUNKT DES ZWEITEN ANLAUFS — null heisst »fliegt gerade auf
+        /// das Ziel zu«, gesetzt heisst »hat abgeworfen und dreht ab«.
+        ///
+        /// <para>Das Original nennt die Stelle selbst <b>»Over target while
+        /// attack«</b> (Zeichenkette 0x4F944C). Ueber dem Ziel wuerfelt es einen
+        /// Punkt <b>10..19 Zellen</b> weit, je Achse mit eigenem Vorzeichen
+        /// (0x4245BF und 0x424726), und setzt <c>m_uk := 6</c> — <c>uk</c>
+        /// bleibt 7, und weil <c>test_all_bomber</c> auf 7 UND 7 prueft, ist der
+        /// Abwurf auf dem Rueckweg gesperrt. Am Wendepunkt macht
+        /// 0x42452A/0x424531 daraus wieder 7/7, und der naechste Anlauf
+        /// beginnt.</para>
+        /// </summary>
+        public Vector2? TurnPoint;
+
         /// <summary>Der gewuerfelte Heimatpunkt eines Nachschubhelis, EINMAL
         /// gerollt und dann gehalten. Siehe <c>AirHeadHome</c>: das Original
         /// wuerfelt Gebaeude und Streuung bei jedem Aufruf von
@@ -15608,6 +15623,23 @@ public partial class MapEntityLayer : Node2D
     /// Ueberflug und keinen zweiten Anlauf. Wer eine Schleife sucht, muss sie
     /// woanders suchen — hier steht sie nicht.</para>
     /// </summary>
+    /// <summary>Der gewuerfelte Wendepunkt: je Achse 10..19 Zellen, das
+    /// Vorzeichen einzeln gewuerfelt (0x4245BF / 0x424726, je `rand &amp; 1`).
+    /// ⚠ Beide Achsen bekommen einen Betrag — das Original wuerfelt zweimal,
+    /// nicht einmal mit Richtung.</summary>
+    private static Vector2 AirTurnPoint(Vector2 from)
+    {
+        int dx = (int)(10 + GD.Randi() % 10) * ((GD.Randi() & 1) == 0 ? 1 : -1);
+        int dy = (int)(10 + GD.Randi() % 10) * ((GD.Randi() & 1) == 0 ? 1 : -1);
+        return from + new Vector2(dx * TileW, dy * TileH);
+    }
+
+    /// <summary>Wie viele zweite Anlaeufe geflogen wurden — fuer den Prueflauf.
+    /// Ein Zaehler, der 0 bleibt, sagt, dass die Schleife eingebaut ist und
+    /// nicht laeuft; ohne ihn saehe man den Unterschied zum alten Stand
+    /// (Bomber haengt ueber dem Ziel) nur am Bild.</summary>
+    public int AirLoops;
+
     private Vector2 AirAimPoint(Entity t)
     {
         int off = t.Subclass switch { 3 or 4 => 1, 5 => 2, _ => 0 };
@@ -15747,7 +15779,28 @@ public partial class MapEntityLayer : Node2D
             if (a.Target >= 0)
             {
                 var t = _entities[a.Target];
-                if (t.Dead) a.Target = -1;
+                if (t.Dead) { a.Target = -1; a.TurnPoint = null; }
+                // ⚠⚠ DER ZWEITE ANLAUF — und er berichtigt eine Zuruecknahme von
+                // mir. Am 14.08.2026 hatte ich dem Spieler gemeldet, das
+                // Original kenne KEINE Angriffsschleife, und die frueher
+                // behauptete Schleife zurueckgezogen. Die Zuruecknahme war
+                // selbst falsch: richtig daran war nur, dass die Versaetze +1/+1
+                // und +2/+2 die Rumpfmitte sind und kein Ueberflug. Die Schleife
+                // steht woanders, hinter der Bedingung `m_uk != 7` @0x423880,
+                // die damals nicht weiterverfolgt wurde — im zweiten Verteiler
+                // ab 0x423F35, den das Spiel erst betritt, wenn das Flugzeug
+                // GENAU auf seiner Zielzelle steht.
+                //
+                // Solange ein Wendepunkt gesetzt ist, wird nicht geschossen. Das
+                // ist nicht unsere Bequemlichkeit, sondern die Sperre des
+                // Originals: `m_uk` steht auf 6, und `test_all_bomber` @0x426A00
+                // laesst den Abwurf nur bei 7 UND 7 durch.
+                else if (a.TurnPoint is Vector2 tp)
+                {
+                    a.Goal = tp;
+                    a.Cooldown -= dt;
+                    if (a.Pos.DistanceTo(tp) < TileW * 1.5f) { a.TurnPoint = null; AirLoops++; }
+                }
                 else
                 {
                     var aim = AirAimPoint(t);
@@ -15761,6 +15814,7 @@ public partial class MapEntityLayer : Node2D
                         _effects.Add(new Effect { Pos = aim - new Vector2(0, 8),
                                                   Kind = "explosion", FrameTime = 0.05f });
                         ApplyHit(-1, a.Target, t, a.Attack);
+                        a.TurnPoint = AirTurnPoint(a.Pos);
                     }
                 }
             }
@@ -15954,6 +16008,12 @@ public partial class MapEntityLayer : Node2D
             // gibt — und verdeckte damit den naechsten echten.
             if (home) atHome++; else if (!any) homeless++; else idle++;
         }
+        // Der zweite Anlauf: wie viele gerade abdrehen und wie viele Schleifen
+        // seit dem Laden geflogen wurden.
+        int turning = 0;
+        foreach (var s in _special) if (!s.Dead && s.TurnPoint != null) turning++;
+        string loop = $" | zweiter Anlauf: {turning} drehen gerade ab, {AirLoops} Schleifen geflogen" +
+                      (AirLoops == 0 ? " (0 heisst: eingebaut, aber nicht gelaufen)" : "");
         string sup = supAir > 0
             ? $" | Nachschubhelis {supAir} unterwegs, {atHome} daheim, " +
               $"OHNE Auftrag und fern der Heimat {idle} (muss 0 sein — " +
@@ -15975,7 +16035,7 @@ public partial class MapEntityLayer : Node2D
             if (s.Customer >= 0 || s.DepotSlot >= 0) break;   // prefer a busy one
         }
         return $"rail {_rail.Count} nodes/{lines / 2} lines, {air} Flugzeuge " +
-               $"({parked} im Hangar, {flying} in der Luft, {armed} bewaffnet){aimLine}{one}{sup}{supOne}";
+               $"({parked} im Hangar, {flying} in der Luft, {armed} bewaffnet){aimLine}{one}{loop}{sup}{supOne}";
     }
 
     private void UpdatePanel()

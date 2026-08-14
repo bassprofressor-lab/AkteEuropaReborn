@@ -38,6 +38,19 @@ deviate on purpose, and every deviation is marked as ours.
   game shifts the aiming point according to the target's class, and that shift
   is nothing other than the middle of the hull: one cell for the small ones, two
   for the large. It is the same table that decides the hull size.
+- **A bomber flies a second run instead of hanging over its target.** It drops,
+  turns away to a rolled point **10 to 19 cells** off (each axis with its own
+  sign), comes back and attacks again — until the ammunition is gone. On the way
+  out it does not drop; that is not our convenience but the original's own lock,
+  which ties the drop to an order state it clears when turning away. The 1997
+  game names the place itself: "Over target while attack".
+  ⚠ **And with that I withdraw a withdrawal of my own.** I had reported that the
+  original knows no such loop, and revoked an earlier claim about it. The
+  revocation was itself wrong: the only correct part was that the two aiming
+  offsets are the middle of the hull and not an overflight. The loop sits
+  elsewhere — behind a condition I had not followed up at the time, in a second
+  dispatcher the game only enters once the aircraft stands exactly on its target
+  cell. Measured: 71 loops in a good two minutes on a map with ten bombers.
 - **The railway repairs itself again.** A vehicle with the track attachment
   works twenty ticks on a shot-up piece, makes it whole — and then finds the
   next one on the same line **by itself**. That is how the chain reads in the
