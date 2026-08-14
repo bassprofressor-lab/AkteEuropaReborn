@@ -30,6 +30,28 @@ in der sie gewählt wurden:
 Die Kampagne bleibt originaltreu; Gefecht und Mehrspieler dürfen bewusst
 abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
+### Kampagne und Oberfläche
+
+- **Die Trefferrechnung nahm die Höhe des Schützen nicht mit.** Gemeldet als
+  „Team 2 nimmt kaum Schaden" — und zu Recht: das Spiel von 1997 rechnet die
+  Höhe auf **beiden** Seiten ein, bei uns fehlte die eine Hälfte, und zwei
+  Felder waren obendrein vertauscht. Ausgelöst hat das ein falscher Kommentar.
+  Behoben; der Unterschied, der bleibt, ist die Höhenregel des Originals.
+- **Das Kampagnen-HUD zeigt den Auftrag.** Bisher standen dort nur die
+  Nebenmissionen — das Hauptziel ist die Siegbedingung, und die hat gar keinen
+  Text. Den Text hat das Original selbst, in `OBJECTG.TXT`; sie liegt auf CD 1
+  im selben Archiv, aus dem schon die Briefings und die Hilfetexte kommen. 33
+  Missionen, 58 Ziele, im Wortlaut von 1997.
+- **Die technischen Zeilen und die Tastenlegende verlassen das HUD im Spiel.**
+  Kartenname, Rasterweite, Kachelsatz, Bildgröße und die zwei Zeilen mit den
+  Tastenkürzeln sind Angaben über die Datei und über die Bedienung, nicht über
+  das Schlachtfeld. Im Kartenbetrachter bleiben sie stehen, und `--hud-debug`
+  holt sie überall zurück.
+- **Versorgungshelikopter** setzen ihre Blickrichtung jetzt auch auf dem letzten
+  Schritt vor dem Ziel. Wohin einer *ohne* Auftrag sieht, ist im Original
+  nachgelesen: er behält die Richtung seines letzten Fluges — die Luftschleife
+  fasst die Blickrichtung überhaupt nicht an.
+
 ### Karteneditor
 
 - **Die „zerstückelten Gebäude" waren gar keine Gebäude.** Basis und Fabrik einer

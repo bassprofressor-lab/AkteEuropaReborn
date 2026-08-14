@@ -29,6 +29,26 @@ chosen:
 Campaign stays faithful to the original; skirmish and multiplayer are allowed to
 deviate on purpose, and every deviation is marked as ours.
 
+### Campaign and interface
+
+- **The hit calculation left out the shooter's elevation.** Reported as "team 2
+  hardly takes any damage" — and rightly so: the 1997 game counts elevation on
+  **both** sides, we had only one half, and two fields were swapped on top of
+  that. A wrong comment set it off. Fixed; the difference that remains is the
+  original's elevation rule.
+- **The campaign HUD shows the mission's objective.** Until now only the
+  sub-missions were there — the main objective is the victory condition, and
+  that has no text at all. The original does have one, in `OBJECTG.TXT`; it sits
+  on CD 1 in the same archive the briefings and help texts already come from. 33
+  missions, 58 objectives, in the 1997 wording.
+- **The technical lines and the key legend leave the HUD in play.** Map name,
+  grid size, tileset, image size and the two lines of key bindings are facts
+  about the file and about the controls, not about the battlefield. They stay in
+  the plain map viewer, and `--hud-debug` brings them back everywhere.
+- **Supply helicopters** now set their facing on the last step before arrival
+  as well. Where one looks *without* an order was read from the original: it
+  keeps the facing of its last flight — the air loop never touches facing.
+
 ### Map editor
 
 - **The "fragmented buildings" were not buildings at all.** The base and factory
