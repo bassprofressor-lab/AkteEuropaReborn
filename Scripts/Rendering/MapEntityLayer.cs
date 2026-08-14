@@ -487,6 +487,23 @@ public partial class MapEntityLayer : Node2D
     /// f = ((angle - 90 deg) / 45 deg) mod 8. The axis is certain; the 180 deg
     /// front/back sense is read off the sprite art, not disassembly-confirmed.
     /// </summary>
+    /// <summary>`--air-facing-check`: jeden Takt Flugrichtung gegen
+    /// Blickrichtung der Versorgungshelikopter mitschreiben. Gemeldet als »sie
+    /// fliegen seitwaerts bzw. rueckwaerts«.</summary>
+    public static bool AirFacingTrace;
+
+    /// <summary>Die acht Blickrichtungen in Worten — damit in der Sonde nicht
+    /// Zahlen stehen, die man erst wieder uebersetzen muss. Die Zuordnung ist
+    /// an den ausgegebenen Bildern GEPRUEFT (aircraft/13/f0..f7, 14.08.2026):
+    /// f0 zeigt zum unteren Bildrand, f2 nach links, f4 nach oben, f6 nach
+    /// rechts — genau das, was <see cref="DirToFacing"/> rechnet.</summary>
+    private static string FacingWord(int f) => f switch
+    {
+        0 => "unten", 1 => "unten-links", 2 => "links", 3 => "oben-links",
+        4 => "oben", 5 => "oben-rechts", 6 => "rechts", 7 => "unten-rechts",
+        _ => "—",
+    };
+
     public static int DirToFacing(Vector2 d)
     {
         if (d.LengthSquared() < 0.0001f) return DefaultFacing;
@@ -15321,10 +15338,40 @@ public partial class MapEntityLayer : Node2D
             }
 
             move:
+            // ⚠ DIE SONDE ZUM AUSRICHTUNGSFEHLER (14.08.2026), und sie druckt
+            // ihre eigene Zeile AUCH dann, wenn kein Ziel gesetzt ist — genau
+            // dieser Fall ist der Verdaechtige: ohne Ziel wird `Facing` gar
+            // nicht angefasst und der Helikopter schwebt mit der Blickrichtung
+            // von vorhin weiter. Eine Sonde, die nur im Bewegungszweig sitzt,
+            // koennte das nie sehen.
+            if (AirFacingTrace && a.IsSupply)
+            {
+                var dv = a.Goal is { } gg ? gg - a.Pos : Vector2.Zero;
+                float ang = dv.LengthSquared() > 0.0001f
+                    ? Mathf.RadToDeg(Mathf.Atan2(dv.Y, dv.X)) : float.NaN;
+                int would = dv.LengthSquared() > 0.0001f ? DirToFacing(dv) : -1;
+                GD.Print($"air-facing: Takt {DebugTicks} Art {a.Kind} " +
+                         $"Pos({a.Pos.X:0},{a.Pos.Y:0}) " +
+                         (a.Goal is { } g2 ? $"Ziel({g2.X:0},{g2.Y:0}) " : "OHNE ZIEL ") +
+                         $"d({dv.X:0},{dv.Y:0}) |d|={dv.Length():0.0} " +
+                         $"Winkel {(float.IsNaN(ang) ? "—" : ang.ToString("0"))} " +
+                         $"faehrt->{FacingWord(would)} zeigt->{FacingWord(a.Facing)}" +
+                         (would >= 0 && would != a.Facing ? "  ⚠ AUSEINANDER" : ""));
+            }
             if (a.Goal is not { } g) continue;
             var delta = g - a.Pos;
             float step = Mathf.Max(1, a.Speed) * AirPxPerSpeed * dt;
-            if (delta.Length() <= step) { a.Pos = g; if (a.Target < 0) a.Goal = null; }
+            if (delta.Length() <= step)
+            {
+                // ⚠ 14.08.2026 — DIE BLICKRICHTUNG FEHLTE IM LETZTEN SCHRITT.
+                // Sie stand nur im `else`, also ueberall AUSSER beim Ankommen.
+                // Wer ein bewegtes Ziel anfliegt, macht am Schluss lauter kurze
+                // Spruenge und lief damit dauernd durch diesen Zweig — er kam
+                // an, ohne je in die Richtung zu sehen, in die er zuletzt flog.
+                if (delta.LengthSquared() > 0.0001f) a.Facing = DirToFacing(delta);
+                a.Pos = g;
+                if (a.Target < 0) a.Goal = null;
+            }
             else
             {
                 a.Pos += delta.Normalized() * step;

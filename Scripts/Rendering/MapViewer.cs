@@ -658,6 +658,9 @@ public partial class MapViewer : Node2D
             else if (a == "--demo-inf") { _demo = true; _demoInf = true; }
             else if (a == "--demo-crush") { _demo = true; _demoCrush = true; }
             else if (a == "--demo-supply") { _demo = true; _demoSupply = true; }
+            // Schreibt je Takt Flugrichtung gegen Blickrichtung der
+            // Versorgungshelis mit — siehe MapEntityLayer.AirFacingTrace.
+            else if (a == "--air-facing-check") MapEntityLayer.AirFacingTrace = true;
             else if (a == "--demo-capture") { _demo = true; _demoCapture = true; }
             else if (a == "--demo-takeover") { _demo = true; _demoTakeover = true; }
             else if (a == "--demo-buildpanel") { _demo = true; _demoBuildPanel = true; }
