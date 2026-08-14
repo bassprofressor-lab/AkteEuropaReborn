@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Rendering;
+﻿namespace AkteEuropaReborn.Rendering;
 
 using Godot;
 using GDict = Godot.Collections.Dictionary<string, Godot.Variant>;
@@ -469,6 +469,12 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_shipCheck)
+        {
+            GD.Print(_entities.ShipCheckLine());
+            GetTree().Quit(0);
+            return;
+        }
         if (_buildCheck)
         {
             // ⚠ Erst das Missionsskript, dann die Bauplaetze. Die
@@ -773,6 +779,9 @@ public partial class MapViewer : Node2D
             // eine Feld-Rohstoffmine stehen kann. Siehe
             // MapEntityLayer.TerraCheckLine.
             else if (a == "--terra-check") _terraCheck = true;
+            // --ship-check: was ein Schiff belegt und was es belegen muesste.
+            // Siehe MapEntityLayer.ShipCheckLine (Simulation/ShipCheck.cs).
+            else if (a == "--ship-check") _shipCheck = true;
             // --place-check[=<sek>]: die Einsetzungen (place_unit @0x4D0810)
             // einer Mission an ihrer Messlatte. Siehe
             // MapEntityLayer.PlaceCheckLine. Ohne Zahl 15 Sekunden — lange
@@ -988,6 +997,7 @@ public partial class MapViewer : Node2D
     private float _placeCheck;
     private bool _freshCampaign;
     private bool _terraCheck;
+    private bool _shipCheck;
     private float _placeForce;
 
     /// <summary>`--damage-check`: die Schadensstufen durchfahren.</summary>
