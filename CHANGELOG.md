@@ -156,10 +156,16 @@ deviate on purpose, and every deviation is marked as ours.
   isometric diamond and lies on neither vertex lattice. Until now our track
   derived the vertex from the neighbouring cell and from the connections measured
   off the images — the 1997 game takes the parity of the half-row instead. The
-  two can now be held against each other, and they mean the same lattice on **88
-  to 93 per cent** of the cells. That is roughly the margin by which track and
-  train drift apart in the original as well, so the disagreement is the known gap
-  between the two structures and not a quirk of our path.
+  two can now be held against each other, and on the cells the cross-check can
+  say anything about at all they agree **1271 to 0** — completely.
+  ⚠ The first version of this entry said "88 to 93 per cent" and blamed the rest
+  on the known gap between the original's track and train structures. That was
+  wrong, and the fault was ours: split by image type, **every single**
+  disagreement sits on a **corner piece** and none on a straight or a ramp
+  (402:0, 473:0, 396:0 against 192:88, 155:66, 353:54). A corner piece joins a
+  horizontal to a vertical edge, so it has one connection on *each* of the two
+  lattices — a table holding one parity per cell cannot possibly match both. It
+  was the bookkeeping, not the track.
   ⚠ The parity **steers nothing**, and must not: it is the second, independent
   account, and making it the rule would leave no cross-check behind.
 - **The last wagon of a line stood beside the track.** The free end of a line was

@@ -1414,6 +1414,12 @@ public partial class MapEntityLayer : Node2D
     /// nicht stimmt.</summary>
     public int RailPathHalfAgree, RailPathHalfClash;
 
+    /// <summary>Dieselbe Gegenprobe, nach Bildart getrennt — die Begruendung
+    /// steht an der Auswertestelle. Scharf ist nur die Spalte »gerade«.</summary>
+    public int RailHalfAgreeGerade, RailHalfClashGerade,
+               RailHalfAgreeEcke, RailHalfClashEcke,
+               RailHalfAgreeRampe, RailHalfClashRampe;
+
     /// <summary>Zwei Routenpunkte in derselben Zelle mit verschiedener
     /// Paritaet — Ein- und Ausgang derselben Raute.</summary>
     public int RailHalfMixed;
@@ -1504,8 +1510,22 @@ public partial class MapEntityLayer : Node2D
         if (half >= 0)
         {
             bool waagerecht = side is PortL or PortR;
-            if (waagerecht != (half != 0)) RailPathHalfClash++;
-            else RailPathHalfAgree++;
+            bool clash = waagerecht != (half != 0);
+            if (clash) RailPathHalfClash++; else RailPathHalfAgree++;
+            // ⚠ NACH BILDART GETRENNT, und das ist der eigentliche Pruefpunkt.
+            // Ein GERADES Stueck (f0 links–rechts, f1 oben–unten) hat beide
+            // Anschluesse auf DEMSELBEN Eckengitter; seine Zelle hat also genau
+            // eine Paritaet, und die Gegenprobe ist scharf. Ein ECKSTUECK
+            // (f2..f5) verbindet dagegen eine waagerechte mit einer senkrechten
+            // Kante — es hat je einen Anschluss auf JEDEM Gitter. Eine Tafel,
+            // die je Zelle nur EINE Paritaet haelt, kann dort gar nicht beide
+            // treffen. Faende man die Abweichungen ausschliesslich bei den
+            // Ecken, waere das keine Aussage ueber die Strecke, sondern ueber
+            // die Buchfuehrung — und die Zahl »88 bis 93 Prozent« duerfte so
+            // nicht stehen bleiben.
+            if (frame is 0 or 1) { if (clash) RailHalfClashGerade++; else RailHalfAgreeGerade++; }
+            else if (frame is >= 2 and <= 5) { if (clash) RailHalfClashEcke++; else RailHalfAgreeEcke++; }
+            else { if (clash) RailHalfClashRampe++; else RailHalfAgreeRampe++; }
         }
         float px = frame is >= 0 and <= 9 ? RailPortAt[frame, side * 2] : float.NaN;
         // ⚠ Bedient das Bild diese Seite nicht, bleibt der Knoten trotzdem auf
@@ -2527,7 +2547,11 @@ public partial class MapEntityLayer : Node2D
                           (RailPathHalfAgree + RailPathHalfClash > 0
                                ? $" | Randmitten-Gegenprobe: Kette und Halbzeile meinen " +
                                  $"{RailPathHalfAgree} mal dasselbe Gitter, {RailPathHalfClash} mal " +
-                                 $"nicht ({RailHalfMixed} Zellen mit Ein- UND Ausgang)"
+                                 $"nicht ({RailHalfMixed} Zellen mit Ein- UND Ausgang) — " +
+                                 $"GERADE {RailHalfAgreeGerade}:{RailHalfClashGerade} " +
+                                 $"(hier muss es stimmen), Ecke {RailHalfAgreeEcke}:{RailHalfClashEcke} " +
+                                 $"(traegt beide Paritaeten, sagt nichts), Rampe " +
+                                 $"{RailHalfAgreeRampe}:{RailHalfClashRampe}"
                                : "") +
                           (RailZigCount > 0
                                ? $", Richtungswechsel je Takt im Mittel " +

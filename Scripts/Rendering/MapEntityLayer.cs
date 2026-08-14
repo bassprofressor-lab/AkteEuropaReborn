@@ -1785,6 +1785,9 @@ public partial class MapEntityLayer : Node2D
         RailPathByFrame = RailPathNoPort = RailPathPortFixed = 0;
         RailPathPortFixedEnd = RailPathPortFixedMid = 0;
         RailPathHalfAgree = RailPathHalfClash = RailHalfMixed = 0;
+        RailHalfAgreeGerade = RailHalfClashGerade = 0;
+        RailHalfAgreeEcke = RailHalfClashEcke = 0;
+        RailHalfAgreeRampe = RailHalfClashRampe = 0;
         _lineCellBroken.Clear();
         _railLines.Clear();
         _freightWagons.Clear();

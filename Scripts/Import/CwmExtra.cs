@@ -628,8 +628,19 @@ public static class CwmExtra
     /// <b>0 von 1193 / 1000 / 1305</b> Wegknoten auf der Zellmitte. Was diese
     /// Lesart wirklich beigetragen hat, ist die GEGENPROBE: die Regel des
     /// Originals laesst sich jetzt gegen unsere Ableitung aus der Nachbarzelle
-    /// halten, und beide meinen auf 88 bis 93 Prozent der Zellen dasselbe
-    /// Gitter. Siehe <c>MapEntityLayer._railHalfOfCell</c>.</para>
+    /// halten, und auf den Zellen, ueber die sie ueberhaupt etwas sagen kann,
+    /// stimmen sie <b>1271 zu 0</b> ueberein.
+    ///
+    /// <para>⚠ <b>Hier stand »88 bis 93 Prozent« — zurueckgezogen.</b> Ich hatte
+    /// den Rest der bekannten 84-%-Luecke zwischen Gleis- und Zugstruktur
+    /// zugeschrieben. Falsch: nach Bildart getrennt sitzt JEDE Abweichung auf
+    /// einem Eckstueck (gerade 402:0 / 473:0 / 396:0, Rampe 78:0 / 46:0 / 116:0,
+    /// Ecke 192:88 / 155:66 / 353:54). Ein Eckstueck hat je einen Anschluss auf
+    /// beiden Gittern, eine Tafel mit einer Paritaet je Zelle kann dort nicht
+    /// beide treffen — es war die Buchfuehrung. Eine Quote, die man nicht nach
+    /// der Ursache aufgeschluesselt hat, ist keine Messung.</para>
+    ///
+    /// <para>Siehe <c>MapEntityLayer._railHalfOfCell</c>.</para>
     ///
     /// <para><b>Gemessen</b> ueber alle 1199 Waggons mit Rohsatz: 162 stehen auf
     /// einem der zwei Ausgangspaare, und davon folgen <b>161</b> der Regel —

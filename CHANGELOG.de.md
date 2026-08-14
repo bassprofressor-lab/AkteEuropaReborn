@@ -168,10 +168,17 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Eckengitter. Bisher hat unsere Strecke die Ecke aus der Nachbarzelle
   abgeleitet und aus den an den Bildern gemessenen Anschlüssen — das Spiel von
   1997 nimmt statt dessen die Parität der Halbzeile. Beide Wege lassen sich
-  jetzt gegeneinander halten, und sie meinen auf **88 bis 93 Prozent** der
-  Zellen dasselbe Gitter. Das ist ungefähr die Größenordnung, mit der im
-  Original auch Gleis und Zug auseinandergehen — die Abweichung ist also die
-  bekannte Lücke zwischen den zwei Strukturen und keine Eigenheit unseres Wegs.
+  jetzt gegeneinander halten, und auf den Zellen, über die die Gegenprobe
+  überhaupt etwas sagen kann, stimmen sie **1271 zu 0** überein — restlos.
+  ⚠ Die erste Fassung dieses Eintrags stand hier mit „88 bis 93 Prozent" und
+  schob den Rest auf die bekannte Lücke zwischen Gleis- und Zugstruktur des
+  Originals. Das war falsch, und der Fehler lag bei uns: nach Bildart getrennt
+  sitzt **jede einzelne** Abweichung auf einem **Eckstück** und keine auf einer
+  Geraden oder Rampe (402:0, 473:0, 396:0 gegen 192:88, 155:66, 353:54). Ein
+  Eckstück verbindet eine waagerechte mit einer senkrechten Kante, hat also je
+  einen Anschluss auf *jedem* der beiden Gitter — eine Tafel, die je Zelle nur
+  eine Parität hält, kann dort gar nicht beide treffen. Es war die Buchführung,
+  nicht die Strecke.
   ⚠ Die Parität **steuert nichts** und soll es nicht: sie ist die zweite,
   unabhängige Auskunft, und wer sie zur Regel machte, hätte hinterher keine
   Gegenprobe mehr.
