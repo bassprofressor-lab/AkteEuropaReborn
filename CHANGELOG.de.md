@@ -150,6 +150,21 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   wird von uns. Aus vier Gebäuden werden auf einer großen Karte über siebzig,
   darunter Flughäfen, Fabriken und Basen zum Einnehmen.
 
+### Klang
+
+- **Ein Klang kommt jetzt von links oder rechts.** Die Dämpfung nach Entfernung
+  gab es schon, das Panorama war gelesen und ausdrücklich als Lücke
+  stehengelassen. Das Spiel von 1997 rechnet `panorama = 200 · dx` und klammert
+  auf DirectSounds eigene Grenzen — ausgereizt ist der Regler damit bei **50
+  Zellen** seitlichem Abstand. Gebaut wie es gehen muss: ein eigener Klangbus je
+  Kanal mit Schwenkregler, zwölf Stück. Teilten sie sich einen, bekäme ein
+  Schuss am linken Kartenrand den Schwenk des nächsten Schusses.
+  ⚠ **Nur `dx`.** Ein Klang genau über oder unter dem Ohr kommt aus der Mitte,
+  so weit weg er auch sei — das Original fragt `dy` für das Panorama gar nicht
+  ab. Eine Winkelrechnung wäre „richtiger" und damit falsch.
+  Auf einer großen Karte gemessen: 255 Objekte, Werte von −1,00 bis +1,00, 93
+  ganz links, 35 ganz rechts.
+
 ### Zug und Strecke
 
 - **Die Waggon-Feinlage ist gelesen.** Zwei Felder im Waggonsatz standen seit

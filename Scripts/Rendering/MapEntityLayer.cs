@@ -3590,6 +3590,36 @@ public partial class MapEntityLayer : Node2D
                   (Mathf.Abs(nearDb - farDb) < 0.05f
                       ? "NICHT ANGESCHLOSSEN (alles gleich laut)"
                       : "Daempfung wirkt"));
+
+        // ⚠ DAS PANORAMA BRAUCHT ZWEI GETRENNTE BELEGE, und beide fehlten, als
+        // nur die Daempfung gemessen wurde. Erstens muss die ZAHL streuen —
+        // sonst rechnet PanOf, aber alles landet in der Mitte. Zweitens muss
+        // der REGLER wirklich hängen: MakePanBus faellt stillschweigend auf
+        // »Master« zurueck, wenn Godot keinen Bus anlegt (Blindtreiber), und
+        // dann stimmt jede Zahl und man hoert trotzdem nichts wandern. Ein
+        // Prueflauf, der nur die Rechnung prueft, waere in genau dem Fall
+        // gruen, in dem der Einbau nicht wirkt.
+        float pl = 1f, pr = -1f;
+        int hardL = 0, hardR = 0;
+        foreach (var e in _entities)
+        {
+            if (e.IsProp || e.Dead) continue;
+            float p = Audio.SoundBankPlayer.PanOf(e.Col);
+            if (p < pl) pl = p;
+            if (p > pr) pr = p;
+            if (p <= -0.999f) hardL++;
+            if (p >= 0.999f) hardR++;
+        }
+        sb.Append($"\n   Panorama: {Audio.SoundBankPlayer.PanFactor:0} je Zelle " +
+                  $"(ausgereizt ab {10000 / Audio.SoundBankPlayer.PanFactor:0} Zellen seitlich), " +
+                  $"Werte von {pl:0.00} bis {pr:0.00}, {hardL} ganz links, {hardR} ganz rechts — " +
+                  (Mathf.Abs(pr - pl) < 0.01f
+                      ? "KEINE STREUUNG (alles aus der Mitte)"
+                      : "die Rechnung streut"));
+        int busse = Audio.SoundBankPlayer.PanBusCount();
+        sb.Append($"\n   Schwenkregler: {busse} von {Audio.SoundBankPlayer.Voices} Kanaelen " +
+                  "haben einen eigenen Bus mit AudioEffectPanner" +
+                  (busse == 0 ? " — NICHT ANGESCHLOSSEN, es wird gerechnet und nicht geschwenkt" : ""));
         return sb.ToString();
     }
 

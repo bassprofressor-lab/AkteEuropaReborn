@@ -139,6 +139,21 @@ deviate on purpose, and every deviation is marked as ours.
   buildings become over seventy on a large map, airports, factories and bases
   among them, all there to be captured.
 
+### Sound
+
+- **A sound now comes from the left or the right.** Attenuation by distance was
+  already there; the panning had been read and deliberately left as a gap. The
+  1997 game computes `pan = 200 · dx` and clamps it to DirectSound's own limits —
+  the control is therefore at its end at **50 cells** of sideways distance. Built
+  the way it has to be: one audio bus per voice with its own panner, twelve of
+  them. Sharing a bus would give a shot at the left edge of the map the panning
+  of the next shot fired.
+  ⚠ **`dx` only.** A sound directly above or below the ear comes from the middle
+  however far away it is — the original does not consult `dy` for panning at all.
+  An angle computation would be "more correct" and therefore wrong.
+  Measured on a large map: 255 objects, values from −1.00 to +1.00, 93 hard left,
+  35 hard right.
+
 ### Train and track
 
 - **The wagon fine placement has been read.** Two fields in the wagon record had

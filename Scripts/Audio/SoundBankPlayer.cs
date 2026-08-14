@@ -112,7 +112,7 @@ public static class SoundBankPlayer
     /// <summary>Plays a slot. Silently does nothing when the slot is empty, the
     /// content has not been imported, or the volume is at zero — a missing sound
     /// must never be able to stop the game.</summary>
-    public static void Play(int slot, float volumeDb = 0f)
+    public static void Play(int slot, float volumeDb = 0f, float pan = 0f)
     {
         if (!UI.Settings.SoundOn) return;
         var stream = Stream(slot);
@@ -121,6 +121,7 @@ public static class SoundBankPlayer
         if (p == null) return;
         p.Stream = stream;
         p.VolumeDb = volumeDb + UI.Settings.SfxVolumeDb;
+        SetPan(p, pan);
         p.Play();
     }
 
@@ -167,10 +168,12 @@ public static class SoundBankPlayer
     // wo er entstand. Auf map_01 hört der Spieler damit vom ersten Augenblick an
     // ein Gefecht, das am anderen Ende der Karte stattfindet.
     //
-    // ⚠ UNGEBAUT und ausdrücklich als Lücke stehengelassen: das PANORAMA.
+    // ⚠ ~~UNGEBAUT und ausdrücklich als Lücke stehengelassen: das PANORAMA.
     // Godots `AudioStreamPlayer` kann nicht schwenken; dafür bräuchte es einen
     // eigenen Bus je Kanal mit `AudioEffectPanner`. Die Zahl ist gelesen
-    // (200 je Zelle), gebaut ist sie nicht.
+    // (200 je Zelle), gebaut ist sie nicht.~~
+    // GEBAUT am 14.08.2026, und zwar genau so: ein Bus je Kanal mit
+    // `AudioEffectPanner`, angelegt von `MakePanBus`. Siehe `PanOf`.
 
     /// <summary>Wo das Ohr steht: der Mittelpunkt des Bildes in Kartenzellen.
     /// NaN heißt »keine Karte offen« — dann wird nichts gedämpft, sonst wären
@@ -192,12 +195,119 @@ public static class SoundBankPlayer
     /// <summary>Die 40.0 von 0x4F0058 (F: 0x4EF058), in beiden Fassungen gleich.</summary>
     public const float DistanceFactor = 40f;
 
+    /// <summary>
+    /// DAS PANORAMA — <c>panorama = 200 · dx</c> @0x404971, geklammert auf
+    /// [−10000, +10000].
+    ///
+    /// <para>Das sind DirectSounds eigene Grenzen (<c>DSBPAN_LEFT</c> /
+    /// <c>DSBPAN_RIGHT</c>), und sie sind eine Hundertstel-Dezibel-Skala wie die
+    /// Dämpfung daneben. Godot rechnet in −1..+1, also durch 10000 geteilt.
+    /// Ausgereizt ist der Regler damit bei <b>50 Zellen</b> seitlichem Abstand:
+    /// darüber hinaus bleibt er stehen, wie im Original.</para>
+    ///
+    /// <para>⚠ Nur <c>dx</c>. Ein Klang, der genau über oder unter dem Ohr
+    /// entsteht, kommt aus der Mitte, so weit weg er auch sei — das Original
+    /// fragt <c>dy</c> für das Panorama gar nicht ab, <c>dy</c> geht allein in
+    /// die Entfernung. Wer hier eine Winkelrechnung einsetzte, machte es
+    /// »richtiger« und damit falsch.</para>
+    /// </summary>
+    public static float PanOf(float col)
+    {
+        if (float.IsNaN(ListenerCell.X)) return 0f;
+        int hundredths = (int)((col - ListenerCell.X) * PanFactor);
+        if (hundredths > 10000) hundredths = 10000;      // DSBPAN_RIGHT
+        if (hundredths < -10000) hundredths = -10000;    // DSBPAN_LEFT
+        return hundredths / 10000f;
+    }
+
+    /// <summary>Die 200 von @0x404971 — Panoramaeinheiten je Kartenzelle.</summary>
+    public const float PanFactor = 200f;
+
     /// <summary>Ein Klang, der irgendwo auf der Karte entsteht.</summary>
     public static void PlayAt(int slot, float col, float row, float volumeDb = 0f)
     {
         float d = DistanceDb(col, row);
         if (d <= -100f) return;      // -10000 ist die Stille selbst
-        Play(slot, volumeDb + d);
+        Play(slot, volumeDb + d, PanOf(col));
+    }
+
+    /// <summary>
+    /// DEN SCHWENKREGLER DIESES KANALS SETZEN — und warum jeder Kanal seinen
+    /// eigenen Bus braucht.
+    ///
+    /// <para>Ein <c>AudioStreamPlayer</c> kann nicht schwenken; schwenken kann
+    /// nur ein <c>AudioEffectPanner</c>, und der sitzt an einem BUS. Teilten
+    /// sich zwei gleichzeitig spielende Klänge einen Bus, bekäme der ältere den
+    /// Schwenk des jüngeren — ein Schuss am linken Kartenrand wanderte nach
+    /// rechts, weil daneben jemand anderes geschossen hat. Darum ein Bus je
+    /// Kanal, <see cref="Voices"/> Stück, angelegt wenn der Kanal entsteht.</para>
+    ///
+    /// <para>⚠ Fehlt der Bus (Godot legt keinen an, wenn der Klangtreiber der
+    /// Blindtreiber ist), bleibt der Kanal auf »Master« und spielt ohne
+    /// Schwenk. Ein stummer Kanal wäre der schlechtere Tausch.</para>
+    /// </summary>
+    private static void SetPan(AudioStreamPlayer p, float pan)
+    {
+        if (!_panBus.TryGetValue(p, out int bus)) return;
+        if (AudioServer.GetBusEffect(bus, 0) is AudioEffectPanner panner)
+            panner.Pan = Mathf.Clamp(pan, -1f, 1f);
+    }
+
+    private static readonly Dictionary<AudioStreamPlayer, int> _panBus = new();
+
+    /// <summary>
+    /// Wieviele der <see cref="Voices"/> Busse wirklich einen Schwenkregler
+    /// tragen — am <c>AudioServer</c> nachgeschlagen, nicht aus einer eigenen
+    /// Liste geglaubt.
+    ///
+    /// <para>⚠ <b>Gezählt werden BUSSE, nicht Kanäle</b>, und das ist der zweite
+    /// Anlauf. Der erste ließ den Prüfstand die zwölf Kanäle anlegen, um sie
+    /// zählen zu können — und erzeugte damit 40 Fehlerzeilen »Playback can only
+    /// happen when a node is inside the scene tree«, weil ein zum Zählen
+    /// angelegter Kanal noch nicht im Baum hing. Die Gegenprobe war eindeutig:
+    /// derselbe Lauf ohne <c>--sound-check</c> hatte 0 solche Zeilen. Ein
+    /// Prüfstand, der seinen Gegenstand kaputtmacht, um ihn zu messen, taugt
+    /// nicht — die Busse hängen ohnehin nicht am Kanal, also werden sie auch
+    /// ohne einen angelegt.</para>
+    /// </summary>
+    public static int PanBusCount()
+    {
+        EnsurePanBuses();
+        int n = 0;
+        for (int i = 0; i < Voices; i++)
+        {
+            int idx = AudioServer.GetBusIndex($"SndPan{i}");
+            if (idx >= 0 && AudioServer.GetBusEffect(idx, 0) is AudioEffectPanner) n++;
+        }
+        return n;
+    }
+
+    /// <summary>Legt die <see cref="Voices"/> Busse samt Schwenkregler an, ohne
+    /// einen einzigen Kanal zu erzeugen. Mehrfach aufrufbar: vorhandene Busse
+    /// werden am Namen wiedererkannt.</summary>
+    public static void EnsurePanBuses()
+    {
+        for (int i = 0; i < Voices; i++) MakePanBus(null, i);
+    }
+
+    /// <summary>Legt Bus und Schwenkregler für einen neuen Kanal an und gibt den
+    /// Busnamen zurück — oder <c>"Master"</c>, wenn es nicht geht.</summary>
+    private static string MakePanBus(AudioStreamPlayer? p, int nr)
+    {
+        string name = $"SndPan{nr}";
+        int idx = AudioServer.GetBusIndex(name);
+        if (idx < 0)
+        {
+            idx = AudioServer.BusCount;
+            AudioServer.AddBus(idx);
+            AudioServer.SetBusName(idx, name);
+            AudioServer.SetBusSend(idx, "Master");
+            AudioServer.AddBusEffect(idx, new AudioEffectPanner(), 0);
+            idx = AudioServer.GetBusIndex(name);
+        }
+        if (idx < 0) return "Master";
+        if (p != null) _panBus[p] = idx;
+        return name;
     }
 
     /// <summary>
@@ -263,20 +373,34 @@ public static class SoundBankPlayer
 
     private static AudioStreamPlayer? Free()
     {
-        var tree = (SceneTree?)Engine.GetMainLoop();
-        var root = tree?.Root;
-        if (root == null) return null;
+        if (!EnsureHost()) return null;
+        foreach (var p in _pool) if (!p.Playing) return p;
+        return NewVoice();
+    }
 
+    private static bool EnsureHost()
+    {
+        var root = ((SceneTree?)Engine.GetMainLoop())?.Root;
+        if (root == null) return false;
         if (_host == null || !GodotObject.IsInstanceValid(_host))
         {
             _host = new Node { Name = "SoundBank" };
             root.AddChild(_host);
             _pool.Clear();
         }
-        foreach (var p in _pool) if (!p.Playing) return p;
-        if (_pool.Count >= Voices) return null;
-        var np = new AudioStreamPlayer { Bus = "Master" };
-        _host.AddChild(np);
+        return true;
+    }
+
+    /// <summary>Legt EINEN neuen Kanal an, oder null wenn der Pool voll ist.
+    /// Getrennt von <see cref="Free"/>, weil »gib mir einen freien« und »lege
+    /// einen an« zwei verschiedene Fragen sind — sie zu vermengen war der
+    /// Fehler, den der Prüfstand mit »1 von 12« gefunden hat.</summary>
+    private static AudioStreamPlayer? NewVoice()
+    {
+        if (!EnsureHost() || _pool.Count >= Voices) return null;
+        var np = new AudioStreamPlayer();
+        np.Bus = MakePanBus(np, _pool.Count);
+        _host!.AddChild(np);
         _pool.Add(np);
         return np;
     }
@@ -288,6 +412,11 @@ public static class SoundBankPlayer
         _kept.Clear();
         _index.Clear();
         _pool.Clear();
+        // ⚠ Die Busse bleiben STEHEN. Sie heissen SndPan0..N und werden von
+        // MakePanBus an ihrem Namen wiedererkannt; ein Aufraeumen waere hier
+        // eine Falle, weil die Busnummern sich beim Entfernen verschieben und
+        // ein noch spielender Kanal dann auf einen fremden Bus zeigte.
+        _panBus.Clear();
         if (_host != null && GodotObject.IsInstanceValid(_host)) _host.QueueFree();
         _host = null;
         _loaded = false;
