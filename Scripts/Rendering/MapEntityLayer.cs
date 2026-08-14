@@ -15976,6 +15976,45 @@ public partial class MapEntityLayer : Node2D
             DrawArc(baseC, 5.5f, 0, Mathf.Tau, 16, new Color(0, 0, 0, 0.6f), 1.2f);
         }
 
+        // ⚠ DIE EICHUNG, in einem eigenen Durchgang NACH den Sprites
+        // (--air-facing-check zeichnet sie mit).
+        //
+        // Die Frage bei den Helikoptern war nicht zu entscheiden, weil ich nicht
+        // weiss, wie »richtig« in dieser Bildkunst aussieht. Ein PANZER weiss
+        // es: seine Ausrichtung gilt dem Spieler als richtig. Dieselben zwei
+        // Pfeile ueber einer fahrenden Bodeneinheit zeigen also, wie eng Rumpf
+        // und Pfeil beieinanderliegen MUESSEN — und erst daran laesst sich der
+        // Heli messen.
+        //
+        // GRUEN = wohin die Einheit wirklich faehrt (die vorgemerkte Zelle minus
+        //         Ort — genau der Vektor, aus dem der Schrittcode `Facing`
+        //         rechnet), ROT = 90 + 45*Facing Grad.
+        // Steht der Panzerrumpf auf dem Pfeil und der Heli quer, ist die
+        // Bildzuordnung der Luft verdreht. Stehen BEIDE quer, ist die Umrechnung
+        // Richtung -> Nummer schuld und nicht die Bilder.
+        //
+        // ⚠ Der eigene Durchgang ist noetig, nicht Geschmack: in der Schleife
+        // oben wurden die Pfeile VOM SPRITE VERDECKT — sichtbar blieb nur, was
+        // ueber den Rand hinausragte, und der rote (30 px) lag ganz darunter.
+        // Ein Messgeraet, das sein eigenes Ergebnis verdeckt, misst nichts.
+        if (AirFacingTrace)
+            for (int i = 0; i < _entities.Count; i++)
+            {
+                var e = _entities[i];
+                if (e.IsProp || e.Dead || e.IsBuilding || !e.Mobile) continue;
+                const float len = 30f;
+                float fa = Mathf.DegToRad(90f + 45f * e.Facing);
+                var soll = e.Pos + new Vector2(Mathf.Cos(fa), Mathf.Sin(fa)) * len;
+                DrawLine(e.Pos, soll, new Color(1f, 0.35f, 0.35f), 2f);
+                DrawCircle(soll, 3f, new Color(1f, 0.35f, 0.35f));
+                if (e.Reserved is not { } rv) continue;
+                var dv = CellCenter(rv.X, rv.Y) - e.Pos;
+                if (dv.LengthSquared() <= 1f) continue;
+                var fl = e.Pos + dv.Normalized() * len;
+                DrawLine(e.Pos, fl, new Color(0.35f, 1f, 0.45f), 2f);
+                DrawCircle(fl, 3f, new Color(0.35f, 1f, 0.45f));
+            }
+
         // health bars in a second pass — the unit sprites are up to 55 px tall and
         // would otherwise cover the bar of the unit standing behind them
         for (int i = 0; i < _entities.Count; i++)
