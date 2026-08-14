@@ -43,7 +43,7 @@ using AkteEuropaReborn.Rendering;
 public partial class MapEditOverlay : Node2D
 {
     /// <summary>Was der Pinsel gerade setzt.</summary>
-    public enum Brush { Gebaeude, Gegenstand, Gleis }
+    public enum Brush { Gebaeude, Gegenstand, Gleis, Einheit }
 
     private MapEntityLayer _layer = null!;
     private CwmFile _map = null!;
@@ -51,6 +51,7 @@ public partial class MapEditOverlay : Node2D
     private Brush _brush = Brush.Gebaeude;
     private int _typ = 1, _owner = 0, _line;
     private int _propAt;
+    private int _unitAt;
     private readonly List<int> _types = new();
     private readonly List<int> _props = new();
     private Vector2I? _hover;
@@ -149,6 +150,40 @@ public partial class MapEditOverlay : Node2D
         }
         GD.Print($"map-edit-check: Gegenstaende -> {props} von 3 stehen im Raster " +
                  $"({_props.Count} Arten zur Wahl)");
+
+        // 3a. EINHEITEN — je eine Landeinheit für zwei verschiedene Spieler,
+        // und die GEGENPROBE: ein Schiff an Land muss abgewiesen werden.
+        _brush = Brush.Einheit;
+        int unitsPut = 0, unitFail = 0;
+        for (int k = 0; k < 2; k++)
+        {
+            _owner = k;
+            _unitAt = 0;                                  // »Reifen«, Gattung 0
+            for (int r = 3; r < _map.Height - 3; r++)
+            {
+                int c = 4 + k * 3;
+                if (c >= _map.Width - 3) break;
+                _say = "";
+                PutUnit(new Vector2I(c, r));
+                if (_say.Contains("Platz ")) { unitsPut++; break; }
+            }
+        }
+        // dieselbe Stelle, aber ein Schiff: das darf NICHT gehen
+        _owner = 0;
+        for (int i2 = 0; i2 < MapEditUnits.All.Length; i2++)
+            if (MapEditUnits.All[i2].Art == 5) { _unitAt = i2; break; }
+        int shipRefused = 0, shipPut = 0;
+        for (int r = 3; r < _map.Height - 6 && shipRefused + shipPut < 6; r++)
+        {
+            _say = "";
+            PutUnit(new Vector2I(10, r));
+            if (_say.Contains("Platz ")) shipPut++;
+            else if (_say.Contains("kann dort nicht stehen")) shipRefused++;
+        }
+        GD.Print($"map-edit-check: Einheiten -> {unitsPut} von 2 gesetzt (zwei Spieler), " +
+                 $"{unitFail} abgewiesen; Schiff an Land: {shipRefused} abgewiesen, " +
+                 $"{shipPut} durchgelassen (durchgelassen muss 0 sein, wenn kein Wasser da ist)");
+        _owner = 0;
 
         // 3b. eine RAMPE: eine Zelle mit Gelaendebyte 1..4 suchen und sehen, ob
         // das abgeleitete Bild das gemessene Rampenbild ist. ⚠ Gesucht statt
@@ -338,7 +373,9 @@ public partial class MapEditOverlay : Node2D
             Brush.Gegenstand => _props.Count > 0
                 ? $"Gegenstand {_props[_propAt]} ({_propAt + 1}/{_props.Count})"
                 : "Gegenstand — diese Karte hat keine",
-            _ => $"Gleis, Linie {_line}",
+            Brush.Gleis => $"Gleis, Linie {_line}",
+            _ => $"Einheit {MapEditUnits.All[_unitAt].Name} " +
+                 $"(Typ {MapEditUnits.All[_unitAt].Type}, {OwnerName(_owner)})",
         };
         _head.Text = $"EDITOR {MapEditSession.Name}  —  {what}" +
                      (MapEditSession.Dirty ? "  *" : "");
@@ -385,6 +422,7 @@ public partial class MapEditOverlay : Node2D
             case Key.Key1: _brush = Brush.Gebaeude; break;
             case Key.Key2: _brush = Brush.Gegenstand; break;
             case Key.Key3: _brush = Brush.Gleis; break;
+            case Key.Key4: _brush = Brush.Einheit; break;
             case Key.Equal or Key.Plus or Key.KpAdd: Step(+1); break;
             case Key.Minus or Key.KpSubtract: Step(-1); break;
             case Key.N: _owner = 11; break;
@@ -419,6 +457,9 @@ public partial class MapEditOverlay : Node2D
             case Brush.Gleis:
                 _line = Math.Max(0, _line + d);
                 break;
+            case Brush.Einheit:
+                _unitAt = (_unitAt + d + MapEditUnits.All.Length) % MapEditUnits.All.Length;
+                break;
         }
     }
 
@@ -431,6 +472,7 @@ public partial class MapEditOverlay : Node2D
             case Brush.Gebaeude: PutBuilding(cell); break;
             case Brush.Gegenstand: PutProp(cell); break;
             case Brush.Gleis: PutRail(cell); break;
+            case Brush.Einheit: PutUnit(cell); break;
         }
         Refresh();
         QueueRedraw();
@@ -473,6 +515,74 @@ public partial class MapEditOverlay : Node2D
         _nextSlot++;
         MapEditSession.Dirty = true;
         _say = $"Typ {_typ} auf ({cell.X},{cell.Y}), {fw}x{fh}, {OwnerName(_owner)}";
+    }
+
+    /// <summary>
+    /// EINE EINHEIT SETZEN.
+    ///
+    /// <para>Der Platz einer Einheit haengt am EIGNER: sec5 ist in Bloecke zu
+    /// 1000 geteilt, und <c>CwmData.Entity.Owner</c> rechnet den Eigner aus der
+    /// Platznummer zurueck (<c>Slot / 1000</c>). Ein Satz im falschen Block
+    /// gehoerte also dem falschen Spieler, ganz gleich was sonst darin steht.</para>
+    ///
+    /// <para>⚠ <b>Die Gattung entscheidet, wo sie stehen darf</b>, und der
+    /// Editor fragt danach — mit derselben Tafel, die auch den Rumpf bestimmt:
+    /// <c>Can_go</c> @0x4055D0 laesst Gattung 4 und 5 nur auf Wasser und den
+    /// Rest nur an Land. Ein Schiff auf die Wiese zu setzen ergaebe eine
+    /// Einheit, die sich nie bewegen kann; das sagt der Schirm, statt es
+    /// zuzulassen. Geprueft wird der GANZE Rumpf (4 bzw. 16 Zellen), so wie das
+    /// Original ihn prueft.</para>
+    /// </summary>
+    private void PutUnit(Vector2I cell)
+    {
+        var u = MapEditUnits.All[_unitAt];
+        if (_owner is < 0 or > 7)
+        { _say = $"eine Einheit braucht einen Spielerplatz 0..7, nicht {OwnerName(_owner)}"; return; }
+
+        int side = Simulation.NavGrid.HullSide(u.Art);
+        var mc = Simulation.NavGrid.ClassOf(u.Art, -1);
+        for (int dy = 0; dy < side; dy++)
+            for (int dx = 0; dx < side; dx++)
+            {
+                int c = cell.X + dx, r = cell.Y + dy;
+                if (c >= _map.Width || r >= _map.Height)
+                { _say = "die Einheit ragt ueber den Kartenrand"; return; }
+                if (_layer.NavGridOf() is { } nav && !nav.CanEnter(c, r, mc))
+                {
+                    _say = $"({c},{r}) traegt {(mc == Simulation.NavGrid.MoveClass.Ship ? "kein Wasser" : "kein Land")}" +
+                           $" — {u.Name} kann dort nicht stehen";
+                    return;
+                }
+            }
+
+        int slot = NextUnitSlot(_owner);
+        if (slot < 0) { _say = $"Spieler {_owner + 1} hat keinen freien Einheitenplatz mehr (1000)"; return; }
+        if (!MapFactory.PutEntity(_map, slot, cell.X, cell.Y, u.Type, u.Attack, 0,
+                                  u.Fuel, 0, u.Kind_, u.Art, u.Energy))
+        { _say = "der Satz liess sich nicht schreiben"; return; }
+
+        _layer.EditorAddUnit(slot, u.Type, _owner, cell.X, cell.Y, u.Art, u.Energy, u.Fuel);
+        _mine.Add((cell.X, cell.Y, Brush.Einheit));
+        MapEditSession.Dirty = true;
+        _say = $"{u.Name} (Typ {u.Type}) auf ({cell.X},{cell.Y}), Platz {slot}, Spieler {_owner + 1}";
+    }
+
+    /// <summary>Der naechste freie Platz im Block dieses Spielers. Frei ist ein
+    /// Satz, wenn <c>+0x09 == 0xFF</c> ist — derselbe Leerwert, den
+    /// <see cref="CwmData.Entities"/> prueft und den
+    /// <see cref="MapFactory.Empty"/> setzt.</summary>
+    private int NextUnitSlot(int owner)
+    {
+        var s = _map.Sec(5);
+        if (s == null) return -1;
+        int from = owner * CwmData.EntitiesPerPlayer;
+        for (int k = 0; k < CwmData.EntitiesPerPlayer; k++)
+        {
+            int o = (from + k) * CwmData.EntityStride;
+            if (o + CwmData.EntityStride > s.Length) break;
+            if (s[o + 0x09] == 0xFF) return from + k;
+        }
+        return -1;
     }
 
     private void PutProp(Vector2I cell)

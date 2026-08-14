@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Editor;
+﻿namespace AkteEuropaReborn.Editor;
 
 using System;
 using AkteEuropaReborn.Import;
@@ -444,8 +444,36 @@ public static class MapFactory
     /// Die Zahlen kommen von den gelieferten Karten: <c>code_base</c> = 0x2710
     /// auf allen, <c>kind</c>/<c>subclass</c> = 0 bei Bodenfahrzeugen.</para>
     /// </summary>
+    /// <summary>
+    /// ⚠ <b>ZWEI PARAMETER HIESSEN FALSCH, berichtigt am 14.08.2026</b> — und
+    /// zwar bevor der Karteneditor Einheiten darauf setzt:
+    /// <list type="bullet">
+    ///   <item><c>hp</c> schrieb nach <b>+0x2e/+0x30</b>, und das ist der
+    ///   <b>SPRITTANK</b>, nicht das Leben. Das Leben einer Einheit ist
+    ///   <c>energie</c> <b>+0x08</b> (Max +0x29): die Trefferroutine @0x40C9A0
+    ///   zieht den Schaden davon ab, und der Fahrcode zaehlt +0x2e herunter und
+    ///   meldet bei null »no fuel« (@0x407AB8). Der Name <c>TroopHp = 440</c>
+    ///   im Generator meinte also immer eine Tankgroesse.</item>
+    ///   <item><c>category</c> schrieb nach <b>+0x26</b>, und das liest der
+    ///   Zeichner als <b>ANGRIFF</b> — mit zwei unabhaengigen Zeugen: die
+    ///   Einheitenblende @0x474FE0 druckt »A/V « und liest +0x26/+0x27, und der
+    ///   Wert folgt ueber alle Karten dem Waffenschaden (MG 10 → 6,
+    ///   Bordkanone 18 → 7, Flak 20 → 14). <c>CwmData</c> nennt dasselbe Byte
+    ///   noch <c>Category</c>; das ist der aeltere Name.</item>
+    /// </list>
+    /// Die Werte selbst sind unveraendert — nur heissen sie jetzt, was sie sind.
+    /// </summary>
+    /// <param name="kind">+0x09. 0 = Bodenfahrzeug.</param>
+    /// <param name="art">+0x0A — die Zeile, die das Spiel selbst »unit type«
+    /// nennt und auf die <c>Can_go</c> @0x4055D0 verteilt. ⚠ NICHT der Wert aus
+    /// <c>unit_catalog.json</c> (<c>class2_off0a</c>): der ist die Vorgabe der
+    /// Statustafel, der Kartensatz gewinnt. Nachgezaehlt: Gattung 4 tragen nur
+    /// die Ruempfe 150..153, Gattung 5 nur 157/158 — kein einziger Landtyp,
+    /// obwohl der Katalog fuer 171 und 165 etwas anderes sagt.</param>
+    /// <param name="energy">+0x08 und +0x29 — das LEBEN.</param>
     public static bool PutEntity(CwmFile m, int slot, int col, int row, int unitType,
-                                 int category, int weapon, int hp, int facing = 0)
+                                 int attack, int weapon, int fuel, int facing = 0,
+                                 int kind = 0, int art = 0, int energy = 100)
     {
         var s = m.Sec(5);
         if (s == null) return false;
@@ -455,16 +483,16 @@ public static class MapFactory
 
         s[o + 0x00] = (byte)col; s[o + 0x01] = (byte)row;
         s[o + 0x02] = (byte)facing; s[o + 0x03] = (byte)facing;
-        s[o + 0x08] = 100;                     // Energie
-        s[o + 0x09] = 0;                       // Kind: 0 = Bodenfahrzeug, NICHT 0xFF
-        s[o + 0x0a] = 0;                       // Subclass
+        s[o + 0x08] = (byte)energy;            // Energie = das LEBEN
+        s[o + 0x09] = (byte)kind;              // Kind: 0 = Bodenfahrzeug, NICHT 0xFF
+        s[o + 0x0a] = (byte)art;               // die Gattung, auf die Can_go verteilt
         s[o + 0x0c] = (byte)weapon;
         s[o + 0x0f] = (byte)unitType;
         s[o + 0x24] = 0x10; s[o + 0x25] = 0x27; // code_base 0x2710, auf allen Karten
-        s[o + 0x26] = (byte)category;
-        s[o + 0x29] = 100;                     // EnergieMax
-        s[o + 0x2e] = (byte)(hp & 0xFF); s[o + 0x2f] = (byte)(hp >> 8);
-        s[o + 0x30] = (byte)(hp & 0xFF); s[o + 0x31] = (byte)(hp >> 8);
+        s[o + 0x26] = (byte)attack;            // ANGRIFF (@0x474FE0 »A/V «)
+        s[o + 0x29] = (byte)energy;            // EnergieMax
+        s[o + 0x2e] = (byte)(fuel & 0xFF); s[o + 0x2f] = (byte)(fuel >> 8);
+        s[o + 0x30] = (byte)(fuel & 0xFF); s[o + 0x31] = (byte)(fuel >> 8);
 
         var imap = m.Sec(6);
         if (imap != null && col >= 0 && col < m.Width && row >= 0 && row < m.Height)

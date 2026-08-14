@@ -111,6 +111,41 @@ public partial class MapEntityLayer
         return -1;
     }
 
+    /// <summary>Die Wegekarte, damit der Editor dieselbe Gelaendefrage stellen
+    /// kann wie die Simulation — statt eine zweite Fassung davon zu bauen.</summary>
+    public Simulation.NavGrid? NavGridOf() => _nav;
+
+    /// <summary>
+    /// Eine eben gesetzte Einheit in die lebende Liste nachtragen, damit sie
+    /// ohne Neuladen dasteht — dasselbe wie
+    /// <see cref="EditorAddBuilding"/> fuer Gebaeude.
+    ///
+    /// <para>⚠ Der Rumpf wird MITgesetzt (<see cref="Simulation.NavGrid.SetHull"/>):
+    /// ohne ihn belegte ein frisch gesetztes Schiff eine Zelle statt sechzehn,
+    /// und genau dieser Fehler ist heute an anderer Stelle behoben worden.</para>
+    /// </summary>
+    public void EditorAddUnit(int slot, int unitType, int owner, int col, int row,
+                              int art, int energy, int fuel)
+    {
+        int el = ElevOf(col, row);
+        var e = new Entity
+        {
+            Slot = slot, Col = col, Row = row, Owner = owner, Team = owner,
+            UnitType = unitType, Subclass = art, Category = 0,
+            Hp = energy, HpMax = energy, Fuel = fuel, FuelMax = fuel,
+            Elev = el, IsBuilding = false, IsProp = false, Infantry = -1,
+            Footprint = CellRect(_ox, _oy, col, row, el),
+            Move = Simulation.NavGrid.ClassOf(art, -1),
+            Pos = CellCenter(col, row),
+        };
+        e.Mobile = !ImmobileTypes.Contains(unitType);
+        _entities.Add(e);
+        int idx = _entities.Count - 1;
+        _nav?.SetHull(idx, Simulation.NavGrid.HullSide(art));
+        _nav?.SetOccupant(col, row, idx);
+        QueueRedraw();
+    }
+
     /// <summary>Der Gebaeudeplatz (sec3-Nummer) hinter einem Listenplatz —
     /// <see cref="EditorBuildingAt"/> liefert den Listenplatz, weggenommen wird
     /// aber ueber die Satznummer. Die zwei zu verwechseln hiesse, ein anderes
