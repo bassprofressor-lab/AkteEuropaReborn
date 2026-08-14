@@ -30,6 +30,24 @@ in der sie gewählt wurden:
 Die Kampagne bleibt originaltreu; Gefecht und Mehrspieler dürfen bewusst
 abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
+### Karteneditor
+
+- **Die „zerstückelten Gebäude" waren gar keine Gebäude.** Basis und Fabrik einer
+  erzeugten Karte sind Bild für Bild dieselben wie auf einer gelieferten. Was
+  zerstückelt aussah, waren **einzelne Gebäudekacheln, die als Bewuchs über das
+  Gelände gestreut** waren — samt der schwarzen Innenkacheln, die nur im Verbund
+  einen Sinn ergeben. Sie kamen dorthin, weil das Spiel von 1997 die Kacheln
+  eines Gebäudes ins Kartenraster schreibt und die gemessene Kacheltabelle sie
+  darum für Bewuchs hielt. In den gelieferten Karten liegt jede Gebäudekachel im
+  Rahmen eines Gebäudes — 2094 von 2094 auf der einen, 160 von 160 auf der
+  anderen, und keine einzige steht allein. Die Kartenprüfung zählt beides jetzt
+  mit.
+- **Eine erzeugte Karte ist jetzt eine Eroberungskarte.** Sie bekommt neutrale
+  Gebäude wie die gelieferten Gefechtskarten: Zahl, Arten, Türen, Trefferpunkte
+  und Abstände sind aus sieben gelieferten Karten gemessen; verteilt und gesetzt
+  wird von uns. Aus vier Gebäuden werden auf einer großen Karte über siebzig,
+  darunter Flughäfen, Fabriken und Basen zum Einnehmen.
+
 ### Mehrspieler
 
 - **Die Computerspieler müssen nicht durch den Befehlsring** — und das ist

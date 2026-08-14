@@ -29,6 +29,23 @@ chosen:
 Campaign stays faithful to the original; skirmish and multiplayer are allowed to
 deviate on purpose, and every deviation is marked as ours.
 
+### Map editor
+
+- **The "fragmented buildings" were not buildings at all.** The base and factory
+  of a generated map are pixel for pixel the same as on a shipped one. What
+  looked fragmented were **single building tiles scattered over the terrain as
+  vegetation** — including the black interior tiles that only make sense as part
+  of a whole. They got there because the 1997 game writes a building's tiles into
+  the map grid, so the measured tile table took them for scenery. On the shipped
+  maps every building tile lies inside a building's frame — 2094 of 2094 on one,
+  160 of 160 on the other, and not a single one stands alone. The map check now
+  counts both.
+- **A generated map is now a conquest map.** It gets neutral buildings like the
+  shipped skirmish maps: count, kinds, doors, hit points and spacing are measured
+  from seven shipped maps; the distribution and placement are ours. Four
+  buildings become over seventy on a large map, airports, factories and bases
+  among them, all there to be captured.
+
 ### Multiplayer
 
 - **The computer players do not need to go through the command ring** — measured,
