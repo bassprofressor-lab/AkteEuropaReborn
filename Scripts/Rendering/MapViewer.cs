@@ -341,6 +341,9 @@ public partial class MapViewer : Node2D
                 _camera.Zoom = new Vector2(z, z);
                 _camera.Position = home;
                 ClampCamera();
+                // B7: denselben Punkt, auf den die Kamera faehrt, behaelt die
+                // Minimap als Startplatz — er wandert danach nicht mehr mit.
+                _entities.MarkHome(home);
             }
             BuildEndBanner();
         }
@@ -894,6 +897,10 @@ public partial class MapViewer : Node2D
                     if (q.Length > 2 && q[2] == "alt") MapEntityLayer.BlockOld = true;
                 }
             }
+            // B8-Gegenprobe: die Startbasen NICHT zuteilen (Stand vor dem
+            // 15.08.2026). Muss auf einer Eroberungskarte einen Unterschied
+            // machen, sonst hat die Zuteilung nichts getan.
+            else if (a == "--no-start-base") MapEntityLayer.NoStartBase = true;
             else if (a == "--leave-check") _leaveCheck = true;
             else if (a == "--leave-check=alt") { _leaveCheck = true; Core.LeaveToMenu.Skip = true; }
             // Prüfstand für die Bauteilbilder. ⚠ Er braucht LAUFZEIT: die
@@ -1962,7 +1969,8 @@ public partial class MapViewer : Node2D
             // andere Weg (Tasten, rechte Maustaste ziehen, Sprung nach Hause)
             // ruft sie, nur dieser eine tat es nicht.
             world => { _camera.Position = world; ClampCamera(); },
-            _entities.FogTexture);
+            _entities.FogTexture,
+            _entities.MinimapHome);
         PlaceMinimap();
         GetViewport().SizeChanged += PlaceMinimap;
     }

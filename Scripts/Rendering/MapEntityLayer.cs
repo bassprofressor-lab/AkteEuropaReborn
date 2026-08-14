@@ -10225,6 +10225,22 @@ public partial class MapEntityLayer : Node2D
     /// <summary>How often a Nachschub-Posten serviced somebody (harness).</summary>
     public int SupplyPostRuns;
 
+    /// <summary>
+    /// DER EIGENE STARTPLATZ, einmal genommen und dann fest (B7).
+    ///
+    /// <para>⚠ Einmal. <see cref="SkirmishAi.PlayerHome"/> antwortet auf »wo
+    /// sind seine Sachen JETZT« und wandert darum mit — beim ersten verlorenen
+    /// Gebaeude springt der Schwerpunkt. Als Startplatzmerker taugt nur der
+    /// Wert vom Anfang, und der wird hier festgehalten.</para>
+    /// </summary>
+    public Vector2? HomeMark { get; private set; }
+
+    /// <summary>Den Startplatz festhalten — der ERSTE Aufruf gewinnt.</summary>
+    public void MarkHome(Vector2? p) { HomeMark ??= p; }
+
+    /// <summary>Was die Minimap als Startplatz zeichnet.</summary>
+    public Vector2? MinimapHome() => HomeMark;
+
     private void UpdateEconomy(int index, Entity e, float dt)
     {
         if (e.Dead) return;

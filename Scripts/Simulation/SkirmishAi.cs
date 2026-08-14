@@ -694,6 +694,13 @@ public partial class MapEntityLayer : Node2D
         bool res = ApplyResources(UI.SkirmishSetup.Resources);
 
         int cleared = buildUp ? KeepStartingTroop(StarterTroop) : 0;
+        // B8: erst die Basen verteilen, DANN die KI einschalten — sonst plant
+        // sie ihren ersten Zug auf einem Besitzstand, den es einen Takt spaeter
+        // nicht mehr gibt. ⚠ Und danach ist `prize` veraltet, darum wird die
+        // Zahl unten neu geholt.
+        var mine = new List<int>(foes) { human };
+        int gaveBases = conquest ? GrantStartingBases(mine) : 0;
+        if (gaveBases > 0) prize = NeutralPrizes();
         EnableSkirmishAi(foes, level);
         var per = BasesPerSlot();
         float spread = BaseSpread();
@@ -702,7 +709,12 @@ public partial class MapEntityLayer : Node2D
                     ? $"EROBERUNGSKARTE: {prize.All} neutrale Gebaeude zu besetzen " +
                       $"({prize.Factories} Fabriken, {prize.Bases} Basen); " +
                       $"besetzte Plaetze {string.Join(",", live)}; " +
-                      "die Truppen der Karte bleiben stehen — sie sind das Werkzeug"
+                      "die Truppen der Karte bleiben stehen — sie sind das Werkzeug; " +
+                      (NoStartBase
+                          ? "Startbasen NICHT zugeteilt (--no-start-base, alter Stand)"
+                          : $"Startbasen zugeteilt: {gaveBases} von {mine.Count} Mitspielern " +
+                            "(unsere Abweichung, B8 — nur die Basis, die uebrigen " +
+                            "Gebaeude bleiben zu besetzen)")
                   : buildUp
                     ? $"Plaetze mit Fabrik {string.Join(",", live)}; " +
                       $"Gebaeude je Platz {string.Join("/", System.Array.ConvertAll(live.ToArray(), p => per[p]))}; " +
@@ -713,6 +725,107 @@ public partial class MapEntityLayer : Node2D
                       "wird gespielt, wie sie gezeichnet ist, mit ihren Truppen"));
         if (res) GD.Print(ResourceWatchLine());
         return human;
+    }
+
+    // ========================================================================
+    //  B8 — jeder Mitspieler faengt mit einer Basis an
+    // ========================================================================
+
+    /// <summary>GEGENPROBE: nicht zuteilen, also der Stand vor dem 15.08.2026.
+    /// Nur <c>--no-start-base</c> setzt das.</summary>
+    public static bool NoStartBase;
+
+    /// <summary>Wieviele Basen zuletzt zugeteilt wurden — fuer die Meldung und
+    /// den Pruefstand.</summary>
+    public int StartBasesGiven { get; private set; }
+
+    /// <summary>Hat dieser Platz schon eine Basis (Gebaeudeart 1)?</summary>
+    private bool HasBase(int p)
+    {
+        foreach (var e in _entities)
+            if (e.IsBuilding && !e.IsProp && !e.Dead && e.Owner == p && e.BType == 1) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Wo dieser Platz seinen Schwerpunkt hat, IN ZELLEN.
+    ///
+    /// <para>⚠ Ganzzahlig, und das ist kein Geschmack: die Zuteilung unten
+    /// laeuft im Lockstep-Pfad, und <c>Entity.Pos</c> ist <c>float</c>. Die
+    /// Fliesskommafrage zwischen zwei verschiedenen Maschinen ist offen (siehe
+    /// Handoff), also darf hier keine Fliesskommaentscheidung stehen.
+    /// <see cref="PlayerHome"/> ist die Fassung fuer die Kamera, die darf.</para>
+    /// </summary>
+    private (int C, int R)? HomeCell(int p)
+    {
+        foreach (var e in _entities)
+            if (e.IsBuilding && !e.IsProp && !e.Dead && e.Owner == p && e.BType == 1)
+                return (e.Col, e.Row);
+        long sc = 0, sr = 0; int n = 0;
+        foreach (var e in _entities)
+        {
+            if (e.IsProp || e.Dead || e.Owner != p) continue;
+            sc += e.Col; sr += e.Row; n++;
+        }
+        return n > 0 ? ((int)(sc / n), (int)(sr / n)) : null;
+    }
+
+    /// <summary>
+    /// JEDER MITSPIELER BEKOMMT EINE BASIS — <b>UNSERE ABWEICHUNG</b>, und sie
+    /// ist ausdruecklich gewollt.
+    ///
+    /// <para>Gewuenscht als B8: »Bei Gefecht sollte jeder Spieler, auch AI,
+    /// direkt mit einer Basis starten, oder Sie einnehmen zu muessen. Nur die
+    /// anderen Gebaeude muessen eingenommen werden.«</para>
+    ///
+    /// <para><b>Was die Karten mitbringen</b> und warum das noetig ist: die
+    /// Eroberungskarten stellen 4 bis 8 Basen NEUTRAL auf (Eigner 11), und wer
+    /// zuerst eine erreicht, hat sie. Das ist ein Wettlauf, kein Gefecht — und
+    /// die Kampagne bleibt davon unberuehrt, weil dieser Weg nur im Gemetzel
+    /// laeuft (Trennachse <c>CampaignMission &gt; 0</c>).</para>
+    ///
+    /// <para>⚠ <b>Ganzzahlig und in fester Reihenfolge.</b> Die Plaetze werden
+    /// aufsteigend bedient, und jeder nimmt die ihm naechste noch freie Basis;
+    /// gemessen wird in ZELLEN, nicht in Bildpunkten, und bei gleichem Abstand
+    /// gewinnt der kleinere Satzindex. Damit haengt das Ergebnis an keiner
+    /// Fliesskommazahl und an keinem Wurf — es muss auf zwei Maschinen dasselbe
+    /// sein, sonst laeuft das Netzspiel im ersten Takt auseinander.</para>
+    ///
+    /// <para>Die uebrigen neutralen Gebaeude bleiben liegen; nur die Basis wird
+    /// vorweggenommen. <c>--no-start-base</c> stellt den alten Stand her.</para>
+    /// </summary>
+    private int GrantStartingBases(List<int> players)
+    {
+        StartBasesGiven = 0;
+        if (NoStartBase) return 0;
+        var taken = new HashSet<int>();
+        var sorted = new List<int>(players);
+        sorted.Sort();
+        foreach (int p in sorted)
+        {
+            if (p is < 0 or > 7 || HasBase(p)) continue;
+            var home = HomeCell(p);
+            int best = -1; long bd = long.MaxValue;
+            for (int i = 0; i < _entities.Count; i++)
+            {
+                var e = _entities[i];
+                if (!e.IsBuilding || e.IsProp || e.Dead) continue;
+                if (e.Owner != NeutralOwner || e.BType != 1 || e.Doors == 0) continue;
+                if (taken.Contains(i)) continue;
+                long d = 0;
+                if (home is { } h)
+                {
+                    long dc = e.Col - h.C, dr = e.Row - h.R;
+                    d = dc * dc + dr * dr;
+                }
+                if (d < bd) { bd = d; best = i; }
+            }
+            if (best < 0) continue;
+            Hand(_entities[best], p);
+            taken.Add(best);
+            StartBasesGiven++;
+        }
+        return StartBasesGiven;
     }
 
     /// <summary>How many units a slot keeps when the armies are thinned. OURS —

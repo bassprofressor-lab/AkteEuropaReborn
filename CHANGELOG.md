@@ -112,6 +112,22 @@ deviate on purpose, and every deviation is marked as ours.
   tick, a full turn 60 ticks. After a change of target a helicopter therefore
   flies sideways for up to 30 ticks before it has come around.
 
+### Skirmish
+
+- **Your own start position is marked on the minimap.** A white diamond with a
+  dark outline, where the match began. It does not follow you: the point is
+  taken once at the start and never again, so that losing your base does not
+  take away the knowledge of where you came from. Ours, like the minimap itself.
+- **Every participant starts with a base, the computer included.** The conquest
+  maps leave 4 to 8 bases standing neutral, and whoever reaches one first owns
+  it: that is a race, not a battle. Each participant is now handed the nearest
+  one at the start; the remaining buildings still have to be taken. The handout
+  works in **whole cells** and in a fixed order, because it sits in the lockstep
+  path and has to come out the same on two machines. Measured on `map_NET04`:
+  4 of 4 participants get one, neutral buildings drop from 61 to 57 and neutral
+  bases from 8 to 4; `--no-start-base` restores the old behaviour. A deliberate
+  departure from the original; the campaign is untouched.
+
 ### Campaign and interface
 
 - **The editor overlay stood in the skirmish, and the mission pop-ups stood in

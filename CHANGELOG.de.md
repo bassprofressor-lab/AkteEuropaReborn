@@ -124,6 +124,24 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   je Takt, eine volle Wendung dauert 60 Takte. Nach einem Zielwechsel fliegt ein
   Heli also bis zu 30 Takte lang seitwärts, bevor er sich ausgerichtet hat.
 
+### Gefecht
+
+- **Der eigene Startplatz steht auf der Minimap.** Eine weisse Raute mit dunklem
+  Rand, dort, wo die Partie begonnen hat. Sie wandert nicht mit: genommen wird
+  der Punkt einmal beim Start und dann nie wieder: wer seine Basis verliert,
+  soll trotzdem noch sehen, wo er hergekommen ist. Unsere Zutat, wie die
+  Minimap selbst.
+- **Jeder Mitspieler faengt mit einer Basis an, auch der Rechner.** Auf den
+  Eroberungskarten stehen 4 bis 8 Basen neutral herum, und wer zuerst eine
+  erreicht, hat sie: das ist ein Wettlauf und kein Gefecht. Jetzt bekommt jeder
+  Mitspieler beim Start die ihm naechste zugeteilt, die uebrigen Gebaeude
+  bleiben zu besetzen. Die Zuteilung rechnet **ganzzahlig in Zellen** und in
+  fester Reihenfolge, weil sie im Lockstep-Pfad liegt und auf zwei Maschinen
+  dasselbe ergeben muss. Auf `map_NET04` gemessen: 4 von 4 Mitspielern bekommen
+  eine, die neutralen Gebaeude gehen von 61 auf 57 und die neutralen Basen von 8
+  auf 4 zurueck; `--no-start-base` stellt den alten Stand her.
+  Eine bewusste Abweichung vom Original, die Kampagne bleibt unberuehrt.
+
 ### Kampagne und Oberfläche
 
 - **Das Editorfeld stand im Gefecht, und die Missions-Popups standen im

@@ -41,6 +41,25 @@ public partial class Minimap : Control
     /// see <see cref="MapEntityLayer.FogTexture"/>.</summary>
     private Func<Texture2D?>? _fog;
 
+    /// <summary>
+    /// DER EIGENE STARTPLATZ, in Kartenbildpunkten — oder null.
+    ///
+    /// <para>Gewuenscht als B7: »Bei Gefecht Startplatz wuerde ich gerne sehen
+    /// wo dieser ist auf der Minimap.« Der Punkt steht FEST, er wandert nicht
+    /// mit der Basis mit: er wird beim Start einmal genommen und bleibt, auch
+    /// wenn die Basis faellt. Genau das ist der Zweck — man will wissen, wo man
+    /// hergekommen ist.</para>
+    ///
+    /// <para>⚠ UNSERE ZUTAT, wie die Minimap selbst. Das Original hat keine
+    /// stehende Uebersichtskarte (siehe Kopf dieser Datei), also auch keinen
+    /// Startplatzmerker darauf.</para>
+    /// </summary>
+    private Func<Vector2?>? _home;
+
+    /// <summary>Wie oft der Startplatzmerker gezeichnet wurde — fuer den
+    /// Pruefstand, damit »gebaut« und »sichtbar« zwei Zahlen sind.</summary>
+    public int HomeDrawn;
+
     /// <summary>How long a mark keeps glowing. Ours — the data says nothing
     /// about how long an alarm should last.</summary>
     public const float AlarmSeconds = 12f;
@@ -48,8 +67,9 @@ public partial class Minimap : Control
     public void Setup(Texture2D terrain, Vector2 mapPixels,
                       Func<List<(Vector2 Pos, int Owner, bool Building)>> dots,
                       Func<Rect2> view, Func<List<Alarm>> alarms, Action<Vector2> jump,
-                      Func<Texture2D?>? fog = null)
+                      Func<Texture2D?>? fog = null, Func<Vector2?>? home = null)
     {
+        _home = home;
         _terrain = terrain;
         _mapPixels = mapPixels;
         _dots = dots;
@@ -161,6 +181,26 @@ public partial class Minimap : Control
                 var c = a.Lost ? new Color(1f, 0.25f, 0.2f, t) : new Color(1f, 0.85f, 0.3f, t);
                 DrawArc(ToLocal(a.World), r, 0, Mathf.Tau, 16, c, 1.5f);
             }
+
+        // Der eigene Startplatz (B7). Er liegt UNTER dem Sichtfenster und UEBER
+        // den Punkten: ein Merker, den ein Einheitenpunkt verdecken kann, ist
+        // genau dann weg, wenn man ihn sucht — naemlich wenn dort etwas steht.
+        // Form: eine Raute mit dunklem Rand, damit sie auf hellem wie auf
+        // dunklem Gelaende steht, plus ein kurzer Stiel nach unten.
+        if (_home?.Invoke() is { } h)
+        {
+            var p = ToLocal(h);
+            const float R = 5f;
+            var pts = new[]
+            {
+                p + new Vector2(0, -R), p + new Vector2(R, 0),
+                p + new Vector2(0, R), p + new Vector2(-R, 0),
+            };
+            var outline = new[] { pts[0], pts[1], pts[2], pts[3], pts[0] };
+            DrawPolygon(pts, new[] { new Color(1f, 1f, 1f, 0.9f) });
+            DrawPolyline(outline, new Color(0.1f, 0.1f, 0.12f, 0.95f), 1.5f);
+            HomeDrawn++;
+        }
 
         if (_view != null)
         {
