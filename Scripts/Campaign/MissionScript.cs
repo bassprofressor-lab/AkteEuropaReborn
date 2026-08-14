@@ -367,15 +367,87 @@ public sealed class MissionScript
     {
         if (_bankGelaufen) return;
         _bankGelaufen = true;
-        bool oder = false, regeln = false;
+        bool oder = false, regeln = false, ziele = false;
         foreach (string a in Core.CommandLine.Args)
         {
             if (a == "--oder-check") oder = true;
             else if (a == "--rule-check") regeln = true;
+            else if (a == "--ziel-check") ziele = true;
         }
         if (oder) GD.Print(OrCheck());
         if (regeln) GD.Print(RuleCheck());
+        if (ziele) GD.Print(GoalCheck());
     }
+
+    /// <summary>
+    /// PRÜFSTAND `--ziel-check`: WILL die Endregel MEHR oder WENIGER?
+    ///
+    /// <para>⚠ Der Anlass ist Mission 23, und sie stand deswegen Tage auf der
+    /// offenen Liste. Ihre Siegbedingung ist <c>buildings(Klasse 2, Spieler 0)
+    /// == 5</c> (@0x4A0DBA, in beiden GAME.EXE gleich) — »Bauen Sie fünf
+    /// Rohstoffminen«. <c>--script-check</c> kennt genau zwei Hebel,
+    /// AUSSCHLAGEN und ÜBERGEBEN, und beide machen eine Zahl nur kleiner oder
+    /// verschieben sie zwischen Spielern. Eine Zahl, die WACHSEN muss, kann er
+    /// nicht herstellen; er meldet dann »nicht erzwingbar«, und das liest sich
+    /// wie ein Fehler der Mission. Es ist aber ein Fehler der FRAGE.</para>
+    ///
+    /// <para>Diese Zeile trennt die beiden Arten und sagt bei jeder, welcher
+    /// Prüfstand sie herstellen kann. Ein BAUZIEL gehört zu
+    /// <c>--terra-check</c> bzw. <c>--produce-check</c>, die über den echten
+    /// Bauweg gehen; nur ein ZERSTÖRUNGSZIEL gehört zu <c>--script-check</c>.
+    /// </para>
+    ///
+    /// <para>⚠ Was sie NICHT sagt: ob das Ziel erreichbar IST. Das entscheidet
+    /// die Karte, und dafür gibt es <c>--terra-check</c> und
+    /// <c>--build-check</c>.</para>
+    /// </summary>
+    public string GoalCheck()
+    {
+        var sb = new System.Text.StringBuilder();
+        int bau = 0, weg = 0, offen = 0;
+        foreach (var c in EndConds())
+        {
+            int ist = Jetzt(c);
+            int soll = TargetCount(c);
+            if (ist < 0 || soll < 0)
+            {
+                // ⚠ Das heisst NICHT »unerreichbar«. Ein Glied ueber eine
+                // Blockvariable ist ueberhaupt keine Zaehlbedingung: was der
+                // Pruefstand herstellen muss, steht bei ihrem ERZEUGER, und den
+                // loest `ChainConds` auf. Wer hier »kann keiner« schriebe, haette
+                // wieder eine Zeile, die einen Erfolg wie einen Fehler aussehen
+                // laesst — Mission 5 haengt genau so an v[33]/v[34].
+                offen++;
+                sb.Append($"   {Show(c)}: keine Zaehlbedingung — sie haengt an einer " +
+                          "Kette; was dafuer herzustellen ist, sagt WhyNot " +
+                          "(--script-check) bzw. --rule-check\n");
+                continue;
+            }
+            bool baut = soll > ist;
+            if (baut) bau++; else weg++;
+            sb.Append($"   {Show(c)}: ist {ist}, soll {soll} — " +
+                      (baut
+                          ? $"BAUZIEL, es fehlen {soll - ist}. --script-check kann das " +
+                            "NICHT (er kann nur ausschlagen und uebergeben); " +
+                            "--terra-check / --produce-check gehen den echten Bauweg"
+                          : "ZERSTOERUNGSZIEL — das kann --script-check herstellen") +
+                      "\n");
+        }
+        return $"ziel-check: M{Mission} {bau} Bauziel(e), {weg} Zerstoerungsziel(e)" +
+               (offen > 0 ? $", {offen} ueber eine Kette" : "") +
+               "\n" + sb.ToString().TrimEnd();
+    }
+
+    /// <summary>Der Stand, den ein zaehlendes Glied gerade vorfindet, oder -1,
+    /// wenn es nicht zaehlt (oder sein Haken fehlt — dann ist die Zahl
+    /// unbekannt, und unbekannt darf hier nicht 0 heissen).</summary>
+    private int Jetzt(Cond c) => c.Kind switch
+    {
+        "units" => UnitCount != null ? UnitCount(c.A, c.B) : -1,
+        "buildings" => BuildingCount != null ? BuildingCount(c.A, c.B) : -1,
+        "objects" => ObjectCount != null ? ObjectCount(c.A, c.B) : -1,
+        _ => -1,
+    };
 
     /// <summary>
     /// Kann v[n] jemals von seinem Anfangswert abweichen?
@@ -558,13 +630,149 @@ public sealed class MissionScript
 
     /// <summary>The script of a mission, or null when none is carried for it.
     /// A missing script is not an error — most of the 33 are not translated
-    /// yet, and a mission without one simply never ends by itself.</summary>
+    /// yet, and a mission without one simply never ends by itself.
+    ///
+    /// <para>⚠ 14.08.2026 — <b>eine fehlende Mission schweigt nicht mehr.</b>
+    /// Bis heute gab <c>For</c> stillschweigend null zurueck, und im Protokoll
+    /// stand nur »31 geladen«. Damit war »fuer diese Mission ist noch keine
+    /// Regel uebersetzt« von »die Datei ist kaputt« nicht zu unterscheiden —
+    /// genau die Falle, vor der der Kopf dieser Datei warnt. Siehe
+    /// <see cref="WhyNoScript"/>.</para></summary>
     public static MissionScript? For(int mission)
     {
         var all = Load();
-        Current = all.TryGetValue(mission, out var s) ? new MissionScript(s) : null;
+        if (!all.TryGetValue(mission, out var s))
+        {
+            Current = null;
+            Sagen(mission);
+            return null;
+        }
+        Current = new MissionScript(s);
         return Current;
     }
+
+    /// <summary>Wovon schon berichtet wurde — eine Mission ohne Skript sagt
+    /// ihren Grund EINMAL je Sitzung, nicht bei jedem <see cref="For"/>.
+    /// </summary>
+    private static readonly HashSet<int> _gesagt = new();
+
+    /// <summary>
+    /// Die Zeile, mit der eine Mission OHNE Skript sich meldet.
+    ///
+    /// <para>Sie muss zwei Faelle auseinanderhalten, die sonst gleich
+    /// aussehen:</para>
+    /// <list type="bullet">
+    /// <item><b>Gelesen, aber nicht ausdrueckbar.</b> Das Original HAT einen
+    /// Block — die Endregel steht unter <c>_endregel_aus</c> —, und was fehlt,
+    /// ist eine Vokabel dieser Datei. Dann ist die Mission ohne Skript
+    /// RICHTIG, und die Zeile nennt das fehlende Glied.</item>
+    /// <item><b>Gar nichts vermerkt.</b> Dann ist es eine Luecke, und die Zeile
+    /// geht als Fehler heraus.</item>
+    /// </list>
+    /// </summary>
+    private static void Sagen(int mission)
+    {
+        if (!_gesagt.Add(mission)) return;
+        var u = WhyNoScript(mission);
+        if (u == null)
+        {
+            GD.PrintErr($"Missionsskript M{mission}: KEIN SKRIPT und KEIN GRUND vermerkt " +
+                        "— weder in `missions` noch in `_gelesen_ungebaut` von " +
+                        $"{Path}. Die Notregel entscheidet die Mission.");
+            return;
+        }
+        GD.Print($"Missionsskript M{mission}: kein Skript — und das ist RICHTIG, " +
+                 "nicht kaputt. Das Original hat sehr wohl einen Block " +
+                 $"(Endregel @{u.EndAt}); was fehlt, ist eine VOKABEL dieser Datei.\n" +
+                 $"   fehlt:   {u.Fehlt}\n" +
+                 $"   gelesen: {u.Gelesen}\n" +
+                 (u.Objectg.Length > 0 ? $"   Ziel:    {u.Objectg}\n" : "") +
+                 "   Bis dahin entscheidet die Notregel (MapEntityLayer.Verdict).");
+    }
+
+    /// <summary>
+    /// Warum diese Mission kein Skript traegt — aus <c>_gelesen_ungebaut</c>
+    /// der Datei, nicht aus dieser Klasse.
+    ///
+    /// <para>⚠ <b>Warum das nicht hier im Code steht.</b> Der Text ist ein
+    /// LESEERGEBNIS aus GAME.EXE und gehoert neben die Regeln, die aus derselben
+    /// Quelle kommen. Eine zweite Abschrift im Code waere eine zweite Wahrheit,
+    /// und die veraltet still.</para>
+    ///
+    /// <para>⚠ <b>Stand 14.08.2026, gemessen auf BEIDEN GAME.EXE dieses
+    /// Rechners.</b> Es fehlen genau zwei Missionen, <b>21</b> und <b>28</b>,
+    /// und beide haben im Original einen Block — es sind sogar die <b>zwei
+    /// groessten</b> (M28 3600 B / 115 Aufrufe, M21 3447 / 123, je ein
+    /// <c>mission_end</c>). Uebergangen werden sie nicht beim Laden, sondern
+    /// schon beim SCHREIBEN: <c>mission_endrules.agreed()</c> behaelt nur, was
+    /// eine nichtleere Bedingungsliste hergibt, und
+    /// <c>mission_logic._chain</c> gibt fuer beide <c>None</c> zurueck:</para>
+    /// <list type="bullet">
+    /// <item><b>M21</b> (C: 0x4A02C0, F: 0x49FBCC) ist eine SCHLEIFE ueber neun
+    /// feste Bahnverbindungen — die Nummern stehen im Klartext im Rumpf
+    /// (C: 0x4A01F5.., F: 0x49FB01..): 4, 7, 9, 12, 14, 17, 15, 16, 18, in
+    /// beiden Fassungen dieselben. Der Leser bricht bei einem RUECKWAERTSsprung
+    /// ab, statt etwas Falsches zu liefern. Ohne SPOJ als Spielobjekt ist die
+    /// Regel nicht zu bauen.</item>
+    /// <item><b>M28</b> (C: 0x4A3786, F: 0x4A3092) ist KEINE Schleife, sondern
+    /// ein <b>ODER aus DREI UND-Gruppen</b> — der Leser sieht drei verschiedene
+    /// Ausstiegsziele (C: 0x4A36EA / 0x4A3738 / 0x4A378B) und gibt darum auf.
+    /// Siehe <see cref="Rule.Any"/>: unser ODER verbindet einzelne GLIEDER, das
+    /// hier verbindet GRUPPEN.</item>
+    /// </list>
+    ///
+    /// <para>⚠ <b>ZURUECKGEZOGEN — der Eintrag »28« der Datei liest die Regel zu
+    /// kurz.</b> Dort steht <c>unit_alive(v[56], 0xC1)</c> und die Zelle
+    /// (11, 243), und das ist nur der DRITTE der drei Arme. Vollstaendig, auf
+    /// beiden Fassungen Zeichen fuer Zeichen gleich:</para>
+    /// <code>
+    ///   (v[51]==2 &amp;&amp; alive(v[54],193) &amp;&amp; v[54].col==11 &amp;&amp; v[54].row==243)   ; C 0x4A3698
+    /// ODER (v[52]==2 &amp;&amp; alive(v[55],193) &amp;&amp; v[55].col==11 &amp;&amp; v[55].row==243)   ; C 0x4A36EA
+    /// ODER (v[51]==2 &amp;&amp; alive(v[56],193) &amp;&amp; v[56].col==11 &amp;&amp; v[56].row==243)   ; C 0x4A3738
+    /// </code>
+    /// <para>Entwurf 193 ist der »Scientist«, und drei Arme sind DREI
+    /// WISSENSCHAFTLER — genau das, was Ziel #028 verlangt (»Bringen Sie die
+    /// Wissenschaftler mit den Informationen zurueck«). Der Block holt sie sich
+    /// selbst: eine Schleife ueber die Einheiten 0..2 (C: 0x4A30A8..0x4A3130)
+    /// prueft <c>unit_has_mark(i, 193)</c> und ob die Einheit im Fenster
+    /// Spalte 35..38 / Zeile 9..14 steht — dem WRACK —, entfernt sie dort
+    /// (<c>remove_unit</c> @0x4A310F), merkt sich <c>v[61+i] = game_time()</c>,
+    /// und eine Spielminute spaeter setzt sie
+    /// <c>v[54+i] = place_unit(193, 36, 12, 0)</c> (C: 0x4A3163, 0x4A31AF,
+    /// 0x4A31FB). (11, 243) liegt in map_28 (80 x 254) — bei vertauschter
+    /// Lesung laege es ausserhalb, das Kartenmass belegt also »Spalte, Zeile«
+    /// mit 1 von 1.</para>
+    ///
+    /// <para>⚠ Und eine Ungereimtheit des ORIGINALS, wie die <c>jge</c> in
+    /// Mission 5: der dritte Arm prueft wieder <c>v[51]</c> statt <c>v[53]</c>
+    /// (C: 0x4A3738 liest 0xBC56F6, F: 0x4A3044 liest 0xBC4756 — beide Male
+    /// v[51], waehrend Arm 2 v[52] nimmt). v[53] wird nur in der Stufenmaschine
+    /// hochgezaehlt und nirgends als Waechter benutzt. Nachgebaut wird, was
+    /// dasteht.</para>
+    ///
+    /// <para><b>Was M28 also braucht</b>, wenn es einmal gebaut wird — drei
+    /// Dinge, keins davon eine Deutung: (1) ein ODER ueber GRUPPEN neben dem
+    /// heutigen ODER ueber Glieder, (2) <c>v[a] = place_unit(...)</c>, denn das
+    /// Original merkt sich den zurueckgegebenen Satzindex, unser Haken
+    /// <see cref="PlaceUnit"/> gibt nichts zurueck, und (3) drei entrollte
+    /// Fassungen der Einheitenschleife 0..2. <c>unit_is_var</c> und
+    /// <c>unit_field</c> gibt es seit dem 13.08. schon.</para>
+    /// </summary>
+    public static Ungebaut? WhyNoScript(int mission)
+    {
+        Load();
+        return _ungebaut != null && _ungebaut.TryGetValue(mission, out var u) ? u : null;
+    }
+
+    /// <summary>Ein Eintrag aus <c>_gelesen_ungebaut</c>: die Siegbedingung ist
+    /// GELESEN, aber mit dem Vokabular dieser Datei nicht zu schreiben.</summary>
+    public sealed class Ungebaut
+    {
+        public int Mission;
+        public string EndAt = "", Gelesen = "", Fehlt = "", Objectg = "";
+    }
+
+    private static Dictionary<int, Ungebaut>? _ungebaut;
 
     /// <summary>Das Skript der laufenden Mission — nur fuer den PRÜFSTAND, der
     /// sonst keinen Weg an die Instanz haette (sie haengt privat in
@@ -584,6 +792,10 @@ public sealed class MissionScript
         if (json.Parse(f.GetAsText()) != Error.Ok ||
             json.Data.VariantType != Variant.Type.Dictionary) return _cache;
         var root = json.Data.AsGodotDictionary<string, Variant>();
+        // ZUERST die Begruendungen, denn sie muessen auch dann dastehen, wenn
+        // `missions` selbst leer ist — sonst schweigt genau der Fall, der
+        // erklaert werden soll.
+        _ungebaut = LeseUngebaut(root);
         if (!root.TryGetValue("missions", out var mv) ||
             mv.VariantType != Variant.Type.Dictionary) return _cache;
 
@@ -677,9 +889,65 @@ public sealed class MissionScript
             }
             _cache[m] = s;
         }
-        GD.Print($"Missionsskripte: {_cache.Count} geladen");
+        // ⚠ Die Zeile nennt jetzt den NENNER und die Luecken. »31 geladen« sagte
+        // nicht, ob zwei fehlen oder zwei zuviel da sind, und wer die Zahl
+        // nicht auswendig kann, liest daraus gar nichts.
+        var fehlen = new List<int>();
+        for (int m = 1; m <= Import.ExeTables.CampaignMissions; m++)
+            if (!_cache.ContainsKey(m)) fehlen.Add(m);
+        GD.Print($"Missionsskripte: {_cache.Count} von {Import.ExeTables.CampaignMissions} geladen" +
+                 (fehlen.Count == 0
+                     ? ""
+                     : $" — ohne Skript: M{string.Join(", M", fehlen)} " +
+                       $"({Begruendet(fehlen)} davon mit vermerktem Grund, " +
+                       "siehe MissionScript.WhyNoScript)"));
         return _cache;
     }
+
+    /// <summary>Wieviele der fehlenden Missionen einen vermerkten Grund haben.
+    /// Steht in der Ladezeile, damit »kein Skript« und »keine Ahnung warum«
+    /// schon dort auseinanderfallen.</summary>
+    private static int Begruendet(List<int> fehlen)
+    {
+        int n = 0;
+        foreach (int m in fehlen)
+            if (_ungebaut != null && _ungebaut.ContainsKey(m)) n++;
+        return n;
+    }
+
+    /// <summary>
+    /// <c>_gelesen_ungebaut</c> aus der Datei — die Missionen, deren
+    /// Siegbedingung GELESEN ist, aber mit dem Vokabular dieser Datei nicht
+    /// geschrieben werden kann.
+    ///
+    /// <para>Schluessel, die keine Missionsnummer sind (<c>_note</c>), fallen
+    /// heraus; ein Eintrag ohne Zahl ist keine Mission.</para>
+    /// </summary>
+    private static Dictionary<int, Ungebaut> LeseUngebaut(
+        Godot.Collections.Dictionary<string, Variant> root)
+    {
+        var d = new Dictionary<int, Ungebaut>();
+        if (!root.TryGetValue("_gelesen_ungebaut", out var gv) ||
+            gv.VariantType != Variant.Type.Dictionary) return d;
+        foreach (var kv in gv.AsGodotDictionary<string, Variant>())
+        {
+            if (!int.TryParse(kv.Key, out int m)) continue;
+            if (kv.Value.VariantType != Variant.Type.Dictionary) continue;
+            var b = kv.Value.AsGodotDictionary<string, Variant>();
+            d[m] = new Ungebaut
+            {
+                Mission = m,
+                EndAt = Text(b, "_endregel_aus"),
+                Gelesen = Text(b, "gelesen"),
+                Fehlt = Text(b, "fehlt"),
+                Objectg = Text(b, "objectg"),
+            };
+        }
+        return d;
+    }
+
+    private static string Text(Godot.Collections.Dictionary<string, Variant> d, string k)
+        => d.TryGetValue(k, out var v) ? v.AsString() : "";
 
     /// <summary>"0x499197" -> 0x499197. Was sich nicht lesen laesst, wird 0 —
     /// und 0 heisst ueberall in dieser Datei »unbekannt«, nicht »Adresse 0«.
