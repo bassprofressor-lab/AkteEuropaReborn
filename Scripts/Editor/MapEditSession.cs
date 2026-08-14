@@ -47,14 +47,51 @@ public static class MapEditSession
     /// <summary>Seit dem letzten Speichern geaendert.</summary>
     public static bool Dirty { get; set; }
 
-    public static void Hold(CwmFile m, CwpFile? cwp, PalFile? pal, string name)
+    /// <summary>
+    /// DIE GEMESSENE KACHELTABELLE, dieselbe, aus der der Generator seine
+    /// Kacheln zieht.
+    ///
+    /// <para>⚠ Sie gehoert hierher und wird nicht im Pinsel neu gelernt. Der
+    /// Grund steht bei <see cref="TileModel.Learn"/>: eine SELBST ERZEUGTE
+    /// Karte darf nicht in die Tabelle, und der Pinsel arbeitet auf genau so
+    /// einer. Wer beim ersten Strich neu lernte, lernte aus der eben
+    /// geschriebenen Ausgabe — die Bestaetigung einer Ableitung durch sich
+    /// selbst, und der Fehler saehe wie ein Fortschritt aus.</para>
+    /// </summary>
+    public static TileModel? Tiles { get; private set; }
+
+    /// <summary>Der Bodenblock als Rueckfall, wenn die Tabelle fuer einen
+    /// Schluessel nichts hat — derselbe, den <see cref="MapGenerator"/> nimmt.</summary>
+    public static TilePalette? Palette { get; private set; }
+
+    /// <summary>
+    /// DIE NAHTWAHL — und sie gehoert hierher, weil ihr Fehlen GEMESSEN ist.
+    ///
+    /// <para>Der erste Gelaendepinsel zog seinen Umkreis ohne sie nach. Der
+    /// Pruefstand hat es sofort gesehen: harte Naehte <b>3,44 % → 6,86 %</b> auf
+    /// derselben Karte, nur weil rund tausend Zellen neu gekachelt wurden. Eine
+    /// Kachel, die ohne Blick auf ihren westlichen und noerdlichen Nachbarn
+    /// gezogen wird, passt eben in einem von vierzehn Faellen nicht.</para>
+    /// </summary>
+    public static TileSeams? Seams { get; private set; }
+
+    /// <summary>Der Wuerfelsamen der Karte. Damit malt derselbe Strich auf
+    /// derselben Zelle dieselbe Kachel — ein Editor, der bei jedem Klick
+    /// wuerfelt, laesst sich nicht nachvollziehen.</summary>
+    public static uint Seed { get; private set; } = 1;
+
+    public static void Hold(CwmFile m, CwpFile? cwp, PalFile? pal, string name,
+                            TileModel? tiles = null, TilePalette? palette = null,
+                            uint seed = 1, TileSeams? seams = null)
     {
         Map = m; Cwp = cwp; Pal = pal; Name = name; Dirty = false;
+        Tiles = tiles; Palette = palette; Seed = seed; Seams = seams;
     }
 
     public static void Drop()
     {
         Map = null; Cwp = null; Pal = null; Name = ""; Active = false; Dirty = false;
+        Tiles = null; Palette = null; Seed = 1; Seams = null;
     }
 
     /// <summary>

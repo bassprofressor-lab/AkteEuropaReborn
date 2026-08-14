@@ -100,7 +100,8 @@ public partial class MainMenu
         }
         MapEditSession.Active = true;
         MapEditSession.Watch(GetTree());
-        Say($"bearbeiten: {mapName} — 1/2/3 waehlt Gebaeude/Gegenstand/Gleis, F5 speichert");
+        Say($"bearbeiten: {mapName} — 1..6 waehlt Gebaeude/Gegenstand/Gleis/Einheit/" +
+            "Gelaende/Hoehe, +/- die Art, ,/. den Eigner, F5 speichert");
         ViewMade(mapName);
     }
 
@@ -232,6 +233,14 @@ public partial class MainMenu
 
             string outName = name.StartsWith("map_") ? name : "map_" + name;
             CwmFile m;
+            // ⚠ Bodenblock und Kacheltabelle ueberleben die Weiche, weil der
+            // GELAENDEPINSEL sie braucht: er muss beim Malen dieselbe Kachel
+            // ziehen, die der Generator gezogen haette, sonst ist ein gemalter
+            // Fleck an der Kachel zu erkennen. Sie gehen darum unten an
+            // MapEditSession.Hold mit.
+            TilePalette? brushPal = null;
+            TileModel? brushModel = null;
+            TileSeams? brushSeams = null;
             if (source != null)
             {
                 // ⚠ Der GEGENPROBEN-Weg, und der einzige Grund, aus dem er hier
@@ -244,6 +253,14 @@ public partial class MainMenu
                 m = opened!;
                 say($"Quelle {source}: {m.Width}x{m.Height}, Kachelsatz {m.Tileset:00}, " +
                     $"{m.Sections.Count} Abschnitte, Mission \"{m.Mission}\"");
+                // ⚠ STUMM gelernt. Der Pinsel braucht die Tabelle auch auf
+                // diesem Weg, aber dieser Weg ist die GEGENPROBE des
+                // Schreibwegs: kaeme hier eine Zeile mehr heraus, waere nicht
+                // mehr zu unterscheiden, ob ein Unterschied vom Schreiben oder
+                // vom Lernen kommt. Darum lernt es hier ohne Ausgabe.
+                brushPal = new TilePalette(cwp, ts, pick);
+                brushModel = useModel ? TileModel.Learn(ts, _ => { }, cwp) : null;
+                brushSeams = useSeams ? new TileSeams(cwp, pal) { Tries = seamTries } : null;
             }
             else
             {
@@ -281,13 +298,14 @@ public partial class MainMenu
                 m = MapGenerator.Build(outName, w, h, ts, palette, flat, say,
                                        players, troop, waterShare, seed, model, seams, cwp,
                                        neutrals);
+                brushPal = palette; brushModel = model; brushSeams = seams;
             }
             MapGenerator.Write(m, cwp, pal, outName, say);
             // ⚠ Die Karte im Speicher BLEIBT — nur sie laesst sich bearbeiten
             // und zurueckschreiben. Der Kartenbetrachter zeigt gleich die
             // geschriebenen Dateien; ohne diese Zeile waere danach nichts mehr
             // da, woran ein Klick etwas aendern koennte. Siehe MapEditSession.
-            MapEditSession.Hold(m, cwp, pal, outName);
+            MapEditSession.Hold(m, cwp, pal, outName, brushModel, brushPal, seed, brushSeams);
             say($"fertig: jetzt --map-check={outName} und --map={outName}");
             return 0;
         }
