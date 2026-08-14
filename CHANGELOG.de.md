@@ -104,6 +104,22 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Kampagne und Oberfläche
 
+- **Das Editorfeld stand im Gefecht, und die Missions-Popups standen im
+  Hauptmenü.** Zwei Meldungen, eine Ursache. Ein Szenenwechsel ersetzt nur die
+  laufende Szene; wer als Geschwister davon unter der Wurzel hängt, überlebt ihn
+  — und genau dort hängen zwei Helfer mit Absicht: der Wächter des
+  Karteneditors, damit er sich an die *nächste* Karte hängen kann, und die
+  Ebene der Hilfefenster, damit die Kamera sie nicht aus dem Bild trägt. Beide
+  hatten einen Einschalter und keinen Ausschalter. Der Bearbeitungsmodus wurde
+  nie zurückgenommen — die Methode dafür stand da und wurde im ganzen Programm
+  **kein einziges Mal** gerufen —, und die Fenster räumte nur das *Laden* einer
+  Karte weg, ein Weg, den das Hauptmenü nie nimmt. Die Kur sitzt jetzt am
+  **Eingang** des Menüs statt an den neun Ausgängen: wer dort steht, hat die
+  Spielwelt verlassen, egal durch welche Tür. Dazu ein Prüfstand, der den
+  echten Ausstieg geht (`--leave-check`) — und eine Gegenprobe, die die alte
+  Fassung im selben Programm nachstellt (`--leave-check=alt`) und dabei
+  durchfallen **muss**, sonst wäre nicht zu sehen, ob der Zähler überhaupt
+  etwas sehen kann.
 - **Die Trefferrechnung nahm die Höhe des Schützen nicht mit.** Gemeldet als
   „Team 2 nimmt kaum Schaden" — und zu Recht: das Spiel von 1997 rechnet die
   Höhe auf **beiden** Seiten ein, bei uns fehlte die eine Hälfte, und zwei

@@ -94,6 +94,21 @@ deviate on purpose, and every deviation is marked as ours.
 
 ### Campaign and interface
 
+- **The editor overlay stood in the skirmish, and the mission pop-ups stood in
+  the main menu.** Two reports, one cause. A scene change replaces only the
+  running scene; whatever hangs beside it under the root survives — and two
+  helpers hang there on purpose: the map editor's watcher, so it can attach to
+  the *next* map, and the help windows' canvas layer, so the camera cannot carry
+  them out of frame. Both had a switch to turn them on and none to turn them
+  off. The edit mode was never taken back — the method for it existed and was
+  called **not once** in the whole program — and the windows were only cleared
+  when a map was *loaded*, a path the main menu never takes. The fix now sits at
+  the menu's **entrance** instead of its nine exits: whoever stands there has
+  left the game world, whichever door they used. With a harness that walks the
+  real exit (`--leave-check`) — and a counter-probe that reproduces the old
+  behaviour inside the same program (`--leave-check=alt`) and **must** fail,
+  because otherwise there is no way to tell whether the counter can see
+  anything at all.
 - **The hit calculation left out the shooter's elevation.** Reported as "team 2
   hardly takes any damage" — and rightly so: the 1997 game counts elevation on
   **both** sides, we had only one half, and two fields were swapped on top of

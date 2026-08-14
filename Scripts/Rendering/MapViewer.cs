@@ -863,6 +863,15 @@ public partial class MapViewer : Node2D
             else if (a == "--veh-anim-check") { _vehAnimCheck = true; _demo = true; }
             else if (a.StartsWith("--look=")) _look = a["--look=".Length..];
             else if (a == "--group-check") _groupCheck = true;
+            // Der Prüfstand zu B9/B10 — was überlebt den Weg zurück ins Menue?
+            // Er stellt die Fehlerklasse HER (Popup auf, Bearbeitungsmodus an)
+            // und geht dann den ECHTEN Ausstieg über ChangeSceneToFile; gezählt
+            // wird drüben in MainMenu._Ready. `=alt` stellt über
+            // Core.LeaveToMenu.Skip die Fassung vor dem 15.08.2026 im selben
+            // Programm nach und MUSS durchfallen — sonst wäre nicht zu sehen,
+            // ob der Zähler überhaupt etwas sehen kann. Braucht --quit-after.
+            else if (a == "--leave-check") _leaveCheck = true;
+            else if (a == "--leave-check=alt") { _leaveCheck = true; Core.LeaveToMenu.Skip = true; }
             // Prüfstand für die Bauteilbilder. ⚠ Er braucht LAUFZEIT: die
             // Feldgrössen und das »wieviele Bilder wurden gemalt« stehen erst
             // nach dem ersten Zeichenlauf, und die Fenster ordnen sich erst
@@ -985,6 +994,7 @@ public partial class MapViewer : Node2D
 
     /// <summary>Seconds after which a scripted run gives up and quits; 0 = never.</summary>
     private float _quitAfter;
+    private bool _leaveCheck;
     private float _scriptCheck;
     private float _payCheck;
 
@@ -1270,8 +1280,58 @@ public partial class MapViewer : Node2D
             if (_vehAnimCheck) GD.Print(_entities.VehAnimReport());
             if (_bAnimCheck) GD.Print(_entities.BAnimCheck());
             GD.Print(_entities.FogWatchLine());
+            if (_leaveCheck) { LeaveCheckGo(); return; }
             GetTree().Quit();
         }
+    }
+
+    /// <summary>
+    /// `--leave-check` — was ueberlebt den Weg zurueck ins Hauptmenue?
+    ///
+    /// <para>Gemeldet als B9 (»das Editorfeld ist im Gefecht noch da«) und B10
+    /// (»die Popups der Mission stehen im Hauptmenue«). Beide kommen aus
+    /// derselben Ursache; der Befund steht in <c>Core/LeaveToMenu.cs</c>.</para>
+    ///
+    /// <para>⚠ Der Prueflauf STELLT DIE FEHLERKLASSE HER, statt sie zu
+    /// erschliessen (Arbeitsweise 32): er macht ein Hilfefenster auf und
+    /// schaltet den Bearbeitungsmodus ein — also genau den Zustand, den eine
+    /// gespielte Mission und ein Besuch im Editor hinterlassen. Danach geht er
+    /// den ECHTEN Ausstieg, denselben, den der Knopf »Beenden« im Pausenmenue
+    /// nimmt. Gezaehlt wird drueben in <c>MainMenu._Ready</c>, denn nur dort ist
+    /// die Frage ueberhaupt stellbar.</para>
+    ///
+    /// <para>⚠ Und er sagt es, wenn er NICHT messen konnte: ohne
+    /// <c>help.json</c> gibt es kein Fenster, das man aufmachen koennte — dann
+    /// faellt die Popup-Haelfte aus, und ein gruenes Ergebnis waere hier eine
+    /// Luege (Arbeitsweise 33).</para>
+    /// </summary>
+    private void LeaveCheckGo()
+    {
+        int id = -1;
+        for (int i = 1; i <= 200 && id < 0; i++)
+            if (UI.HelpWindow.TextOf(i) is { Count: > 0 }) id = i;
+        if (id < 0)
+        {
+            GD.PrintErr("leave-check: kein Hilfetext vorhanden (help.json fehlt) — die " +
+                        "Popup-Haelfte ist NICHT gemessen. --reexport-help=<Quelle> schreibt sie.");
+            GetTree().Quit(2);
+            return;
+        }
+        UI.HelpWindow.Show(GetTree().Root, id, 120, 120);
+        Editor.MapEditSession.Active = true;
+        Editor.MapEditSession.Watch(GetTree());
+        GD.Print($"leave-check vorher: Popup #{id} offen ({UI.HelpWindow.OpenCount} gesamt), " +
+                 "Bearbeitungsmodus AN, Waechter gesetzt" +
+                 (Core.LeaveToMenu.Skip
+                     ? " — GEGENPROBE =alt: es wird absichtlich NICHT aufgeraeumt"
+                     : ""));
+        Core.LeaveToMenu.Report = true;
+        // Derselbe Ausstieg wie im Pausenmenue (siehe _pause.Quit weiter oben) —
+        // ein Pruefstand, der eine eigene, kuerzere Tuer nimmt, prueft seine
+        // eigene Tuer.
+        UI.SkirmishSetup.Active = false;
+        Audio.MidiMusic.Stop();
+        GetTree().ChangeSceneToFile(UI.SkirmishSetup.MenuScene);
     }
 
     /// <summary>

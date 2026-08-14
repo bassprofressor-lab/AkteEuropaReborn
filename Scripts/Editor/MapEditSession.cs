@@ -138,6 +138,36 @@ public static class MapEditSession
         tree.Root.CallDeferred(Node.MethodName.AddChild, _watcher);
     }
 
+    /// <summary>
+    /// DEN BEARBEITUNGSMODUS AUSSCHALTEN — die Gegenstelle zu
+    /// <see cref="Watch"/>, und sie hat bis zum 15.08.2026 gefehlt.
+    ///
+    /// <para>⚠ Gemeldet als B9: »sobald man im Editor war und dann in den
+    /// Gefechtsmodus geht, ist das Editorfeld immer noch da«. Der Grund steht
+    /// eine Handbreit weiter oben: der Waechter haengt an der WURZEL und
+    /// ueberlebt darum jeden Szenenwechsel — mit voller Absicht. Nur wurde
+    /// <see cref="Active"/> nirgends zurueckgenommen (<see cref="Drop"/> ist im
+    /// ganzen Baum nie gerufen worden), und so hat der Waechter danach
+    /// JEDER auftauchenden <c>MapEntityLayer</c> den Ueberzug angehaengt — auch
+    /// der eines ganz gewoehnlichen Gefechts.</para>
+    ///
+    /// <para><b>Die Karte bleibt liegen.</b> Nur Schalter und Waechter gehen
+    /// weg; <see cref="Map"/> und der Rest ueberleben, damit »bearbeiten« im
+    /// Menue die eben erzeugte Karte noch vorfindet. Wer wirklich alles
+    /// wegraeumen will, nimmt <see cref="Drop"/>.</para>
+    ///
+    /// <para>Gerufen wird das aus <see cref="Core.LeaveToMenu.Tidy"/> — dort
+    /// steht auch, warum die Kur am EINGANG des Menues sitzt und nicht an den
+    /// neun Ausgaengen.</para>
+    /// </summary>
+    public static void Leave()
+    {
+        Active = false;
+        if (_watcher != null && GodotObject.IsInstanceValid(_watcher))
+            _watcher.QueueFree();
+        _watcher = null;
+    }
+
     /// <summary>Zurueckschreiben — derselbe Weg, den der Generator geht, samt
     /// Neubacken des Kartenbildes. Das ist der Grund, warum Gegenstaende und
     /// Gleise beim Speichern richtig im Bild landen, ohne dass der Editor eine

@@ -362,6 +362,25 @@ public partial class MainMenu : Control
 
     public override void _Ready()
     {
+        // ⚠ WER HIER STEHT, HAT DIE SPIELWELT VERLASSEN — egal durch welche
+        // Tuer (Pausenmenue, Abschlussfenster, ToMenu, Editor). Das ist der EINE
+        // Eingang, und darum raeumt er die Helfer ab, die absichtlich an
+        // SceneTree.Root parken und jeden Szenenwechsel ueberleben. Warum die
+        // Kur hier sitzt und nicht an den neun Ausgaengen, steht samt Befund in
+        // Core/LeaveToMenu.cs — B9 (Editorfeld im Gefecht) und B10 (Popups im
+        // Hauptmenue) sind zwei Gesichter derselben fehlenden Gegenstelle.
+        Core.LeaveToMenu.Tidy();
+        if (Core.LeaveToMenu.Report)
+        {
+            Core.LeaveToMenu.Report = false;
+            int rc = Core.LeaveToMenu.Count(GetTree(), out string report);
+            GD.Print(report);
+            // ⚠ VOR StartBackdrop() aussteigen, wie jeder andere kopflose
+            // Schalter — die Kulisse laedt 20..33 Megapixel auf einem
+            // Nebenlaeufer, und der greift beim Herunterfahren ins Leere.
+            GetTree().Quit(rc);
+            return;
+        }
         SetAnchorsPreset(LayoutPreset.FullRect);
         foreach (string a in OS.GetCmdlineUserArgs())
             if (a == "--no-backdrop") _noBackdrop = true;
