@@ -15414,6 +15414,43 @@ public partial class MapEntityLayer : Node2D
     /// abzustuerzen — das Original hat dafuer »air B (no fuel)« @0x422F4A, und
     /// was dieser Zweig tut, ist ungelesen.</para>
     /// </summary>
+    /// <summary>
+    /// WOHIN EIN FLUGZEUG ZIELT — auf die MITTE des getroffenen Rumpfes, nicht
+    /// auf seine Satzzelle.
+    ///
+    /// <para><b>GELESEN</b>, uk 7 @0x4238FA..0x423935. Das Original setzt sein
+    /// Flugziel zuerst auf die Zelle des Ziels und rueckt es dann nach der
+    /// GATTUNG DES ZIELS (<c>byte[+0x0A]</c> — die Zeile, die das Spiel selbst
+    /// »unit type:« nennt):</para>
+    /// <code>
+    ///   Gattung &lt; 3   kein Versatz          (@0x42391D)
+    ///   Gattung 3, 4   Flugziel += (1,1)     (@0x423926 -> 0x423B7D)
+    ///   Gattung 5      Flugziel += (2,2)     (@0x42392F -> 0x423BA5)
+    /// </code>
+    ///
+    /// <para><b>Und das ist dieselbe Tafel wie bei den Schiffen.</b> Gattung 4
+    /// hat einen 2x2-Rumpf, Gattung 5 einen 4x4 (<c>Can_go</c> @0x4055D0, an den
+    /// Karten mit 163/163 und 32/32 bestaetigt). Die Mitte eines 2x2 liegt eine
+    /// Zelle von der Satzzelle entfernt, die eines 4x4 zwei — der Versatz ist
+    /// also nichts anderes als »ziele auf die Mitte«. Zwei voneinander
+    /// unabhaengige Stellen der EXE sagen damit dasselbe ueber dieselben
+    /// Gattungsnummern.</para>
+    ///
+    /// <para>⚠ <b>ZURUECKGEZOGEN, und zwar meine eigene Lesart von vorhin.</b>
+    /// Ich hatte die zwei Verlegungen als ÜBERFLUG gedeutet — »der Bomber legt
+    /// sein Flugziel ueber das Ziel hinaus und fliegt darueber weg« — und das
+    /// dem Spieler als bestaetigte Schleife gemeldet. Das war falsch: die
+    /// Bedingung darueber (@0x423914) fragt nicht die eigene Lage ab, sondern
+    /// die GATTUNG des Ziels. Es gibt in diesen drei Schreibstellen keinen
+    /// Ueberflug und keinen zweiten Anlauf. Wer eine Schleife sucht, muss sie
+    /// woanders suchen — hier steht sie nicht.</para>
+    /// </summary>
+    private Vector2 AirAimPoint(Entity t)
+    {
+        int off = t.Subclass switch { 3 or 4 => 1, 5 => 2, _ => 0 };
+        return off == 0 ? t.Pos : t.Pos + new Vector2(off * TileW, off * TileH);
+    }
+
     /// <returns>true, wenn es angekommen und eingelagert ist.</returns>
     private bool AirHeadHome(Special a)
     {
@@ -15512,14 +15549,15 @@ public partial class MapEntityLayer : Node2D
                 if (t.Dead) a.Target = -1;
                 else
                 {
-                    a.Goal = t.Pos;
+                    var aim = AirAimPoint(t);
+                    a.Goal = aim;
                     a.Cooldown -= dt;
                     if (t.Dead) { a.Target = -1; }
-                    else if (a.Pos.DistanceTo(t.Pos) < TileW * 1.5f && a.Cooldown <= 0f && a.Ammo > 0)
+                    else if (a.Pos.DistanceTo(aim) < TileW * 1.5f && a.Cooldown <= 0f && a.Ammo > 0)
                     {
                         a.Cooldown = AirFireGap;
                         if (!(CheatAmmo && Cheated(a))) a.Ammo--;
-                        _effects.Add(new Effect { Pos = t.Pos - new Vector2(0, 8),
+                        _effects.Add(new Effect { Pos = aim - new Vector2(0, 8),
                                                   Kind = "explosion", FrameTime = 0.05f });
                         ApplyHit(-1, a.Target, t, a.Attack);
                     }
@@ -15625,6 +15663,13 @@ public partial class MapEntityLayer : Node2D
         int lines = 0;
         foreach (var kv in _rail) lines += kv.Value.Count;
         int air = 0, parked = 0, flying = 0, armed = 0;
+        // ⚠ Worauf ein Flugzeug ZIELT — die Zahl zum Befund vom 14.08.: das
+        // Original rueckt sein Flugziel nach der Gattung des Ziels
+        // (@0x423914: <3 kein Versatz, 3/4 -> +1/+1, 5 -> +2/+2), also auf die
+        // MITTE des Rumpfes. Ohne diese Zeile waere nicht zu sehen, ob wir das
+        // tun — ein Bomber ueber einem Schlachtschiff sieht so oder so
+        // "richtig" aus.
+        var aims = new SortedDictionary<int, int>();
         foreach (var s in _special)
         {
             if (s.Dead) continue;
@@ -15632,6 +15677,27 @@ public partial class MapEntityLayer : Node2D
             if (s.Stored) parked++; else flying++;
             if (s.Armed && s.Ammo > 0) armed++;
         }
+        // ⚠ Ueber ALLE Einheiten, nicht nur ueber die gerade beschossenen: ob
+        // ein Flugzeug in diesem Augenblick zufaellig ein Ziel hat, ist keine
+        // Aussage ueber die Regel. So sagt die Zeile auf jeder Karte mit
+        // Schiffen etwas — und auf einer ohne sagt sie nichts und behauptet
+        // auch nichts.
+        int aimWrong = 0;
+        foreach (var tv in _entities)
+        {
+            if (tv.Dead || tv.IsBuilding || tv.IsProp || tv.Subclass < 0) continue;
+            int cells = Mathf.RoundToInt((AirAimPoint(tv) - tv.Pos).X / TileW);
+            int soll = tv.Subclass switch { 3 or 4 => 1, 5 => 2, _ => 0 };
+            if (cells != soll) aimWrong++;
+            int key = tv.Subclass * 10 + cells;
+            aims[key] = aims.TryGetValue(key, out int n1) ? n1 + 1 : 1;
+        }
+        string aimLine = "";
+        foreach (var kv in aims)
+            if (kv.Key % 10 != 0) aimLine += $" Gattung{kv.Key / 10}->Versatz{kv.Key % 10} x{kv.Value}";
+        if (aimLine.Length > 0)
+            aimLine = " | Zielpunkt des Bombenwurfs (@0x423914: Gattung<3 -> 0, " +
+                      $"3/4 -> 1, 5 -> 2):{aimLine}, falsch {aimWrong}";
         string one = "";
         for (int pass = 0; pass < 2 && one.Length == 0; pass++)
         foreach (var s in _special)
@@ -15683,7 +15749,7 @@ public partial class MapEntityLayer : Node2D
             if (s.Customer >= 0 || s.DepotSlot >= 0) break;   // prefer a busy one
         }
         return $"rail {_rail.Count} nodes/{lines / 2} lines, {air} Flugzeuge " +
-               $"({parked} im Hangar, {flying} in der Luft, {armed} bewaffnet){one}{sup}{supOne}";
+               $"({parked} im Hangar, {flying} in der Luft, {armed} bewaffnet){aimLine}{one}{sup}{supOne}";
     }
 
     private void UpdatePanel()
