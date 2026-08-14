@@ -1311,7 +1311,76 @@ public partial class MapEntityLayer : Node2D
                 int outp = cells.Count > 1 ? RailPortTo(cells[0], cells[1]) : -1;
                 side = outp < 0 ? -1 : RailOppositePort(outp);
             }
-            path.Add(RailEdgePoint(cells[i], f, side));
+            // ⚠ OHNE NACHBARN FRAGT MAN DAS BILD. Die Kette liefert die Seite
+            // aus der NACHBARZELLE; an 25 von 1193 Stellen gibt es keine, und
+            // dort stand bisher die Zellmitte — der Rautenmittelpunkt, der auf
+            // keinem Eckengitter liegt und einen Knick von bis zu 20 px macht.
+            //
+            // Die Zelle traegt aber ein Gleisbild, und RailPortAt sagt, WELCHE
+            // Ecken dieses Bild ueberhaupt bedient (f0 links/rechts, f1
+            // oben/unten, die vier Ecken je eine von beiden). Von denen wird
+            // die genommen, die dem vorigen Knoten am naechsten liegt — also
+            // die Seite, auf der die Schiene tatsaechlich hereinkommt.
+            // Gemessene Groesse statt erschlossener.
+            if (side < 0 && f is >= 0 and <= 9)
+            {
+                var toward = i > 0 ? path[i - 1]
+                           : cells.Count > 1 ? cells[1] : cells[i];
+                side = RailPortNearest(f, cells[i], toward);
+                if (side >= 0) RailPathByFrame++;
+            }
+            // ⚠⚠ UND HIER DIE 25: die Seite steht fest, aber das BILD BEDIENT
+            // SIE NICHT. Bisher blieb der Knoten dann auf dieser Kante liegen,
+            // nur ohne den gemessenen Seitenversatz.
+            //
+            // ⚠ Ich hatte das als »rund 2 px daneben« abgetan. Das war zu
+            // milde: WELCHE Knoten es trifft, ist gemessen — auf map_NET02/05/08
+            // sind es 25/28/30, und ALLE sind LINIENENDEN, keiner mitten in der
+            // Kette. Ein Linienende trifft es aber nur, wenn sein Bild ein
+            // ECKSTUECK ist (bei f0 waere die Gegenseite bedient und nichts zu
+            // tun). Bei einem Eckstueck liegen die zwei Kanten senkrecht
+            // zueinander, der Knoten sass also nicht 2 px, sondern eine halbe
+            // Zelle in jeder Achse daneben — rund 22 px. Der letzte Waggon
+            // einer solchen Linie stand neben dem gezeichneten Gleis.
+            //
+            // Es sind zwei Faelle, und beide sind eine Rechnung, die das Bild
+            // nicht gefragt hat:
+            //
+            // 1. DAS LINIENENDE. Die erste Zelle nimmt die GEGENSEITE des
+            //    Ausgangs. Das stimmt fuer ein gerades Stueck (f0 raus nach
+            //    rechts -> rein von links), aber nicht fuer eine ECKE: bei f2
+            //    (rechts–unten) mit Ausgang rechts ist die Gegenseite LINKS,
+            //    und dort ist gar keine Schiene. Das freie Ende liegt UNTEN.
+            //    Richtig ist also nicht »die Gegenseite«, sondern »die andere
+            //    Seite, die dieses Bild bedient«.
+            //
+            // 2. DIE KREUZUNGSZELLE. Traegt eine Zelle zwei Gleissaetze, nimmt
+            //    die Kette einen davon; kommt die Schiene ueber den anderen
+            //    herein, bedient das gewaehlte Bild diese Seite nicht.
+            //
+            // In beiden Faellen gilt dasselbe: gezeichnet ist, was gezeichnet
+            // ist. Der Zug gehoert auf die Schiene, die man SIEHT, also auf
+            // eine Seite, die das Bild wirklich hat.
+            if (!RailProbeOldPort
+                && f is >= 0 and <= 9 && side >= 0 && float.IsNaN(RailPortAt[f, side * 2]))
+            {
+                int alt = i == 0 && cells.Count > 1
+                    ? RailPortServedOther(f, RailPortTo(cells[0], cells[1]))
+                    : RailPortNearest(f, cells[i], i > 0 ? path[i - 1] : cells[i]);
+                if (alt >= 0 && alt != side)
+                {
+                    side = alt;
+                    RailPathPortFixed++;
+                    if (i == 0) RailPathPortFixedEnd++; else RailPathPortFixedMid++;
+                }
+            }
+            // Die zweite Auskunft zur selben Groesse — ueber die ZELLE geholt,
+            // damit sie auch fuer die Kette der Karte gilt. 2 heisst »diese
+            // Zelle traegt Ein- UND Ausgang«, dort sagt sie nichts.
+            int half = _railHalfOfCell.TryGetValue(
+                           (Mathf.RoundToInt(cells[i].X), Mathf.RoundToInt(cells[i].Y)),
+                           out int h) && h < 2 ? h : -1;
+            path.Add(RailEdgePoint(cells[i], f, side, half));
         }
         return path;
     }
@@ -1325,12 +1394,119 @@ public partial class MapEntityLayer : Node2D
     /// und er ist es, der die letzten Ausreisser im Weg je Takt erzeugt.</summary>
     public int RailPathNodes, RailPathFallback;
 
-    private Vector2 RailEdgePoint(Vector2 cell, int frame, int side)
+    /// <summary>Von den Rueckfaellen: wie viele die HALBZEILEN-PARITAET gerettet
+    /// hat (<c>ByParity</c>) und wie viele wirklich auf der Zellmitte landen,
+    /// weil auch die Paritaet fehlt (<c>Centre</c>). Die zweite Zahl ist die,
+    /// die klein werden soll — sie war frueher die ganze Menge.</summary>
+    public int RailPathByParity, RailPathCentre;
+
+    /// <summary>Knoten, deren Gleisbild die Seite gar nicht bedient: sie liegen
+    /// auf der Kantenmitte, aber ohne den gemessenen seitlichen Versatz (rund
+    /// 2 px). Frueher in <c>RailPathFallback</c> mitgezaehlt und dort als
+    /// »ohne Nachbarzelle« ausgewiesen — zwei verschiedene Dinge.</summary>
+    public int RailPathNoPort;
+
+    /// <summary>Die Gegenprobe: wie oft die aus der KETTE abgeleitete Seite und
+    /// die aus der KARTE gelesene Halbzeilen-Paritaet dasselbe Gitter meinen
+    /// (<c>Agree</c>) und wie oft nicht (<c>Clash</c>). Zwei voneinander
+    /// unabhaengige Wege zur selben Groesse — <c>Clash</c> ist keine Panne,
+    /// sondern eine Aussage darueber, dass einer der beiden an dieser Stelle
+    /// nicht stimmt.</summary>
+    public int RailPathHalfAgree, RailPathHalfClash;
+
+    /// <summary>Zwei Routenpunkte in derselben Zelle mit verschiedener
+    /// Paritaet — Ein- und Ausgang derselben Raute.</summary>
+    public int RailHalfMixed;
+
+    /// <summary>Die Ecke, die dieses Gleisbild bedient und dem Punkt
+    /// <paramref name="toward"/> am naechsten liegt — oder −1, wenn das Bild
+    /// gar keine bedient. Die Auskunft, welche Ecken ein Bild hat, steht in
+    /// <see cref="RailPortAt"/> und ist an den Bildern gemessen.</summary>
+    private static int RailPortNearest(int frame, Vector2 cell, Vector2 toward)
+    {
+        int best = -1;
+        float bestD = float.MaxValue;
+        for (int s = 0; s < 4; s++)
+        {
+            if (float.IsNaN(RailPortAt[frame, s * 2])) continue;
+            var v = s switch
+            {
+                PortL => new Vector2(cell.X - 0.5f, cell.Y),
+                PortR => new Vector2(cell.X + 0.5f, cell.Y),
+                PortT => new Vector2(cell.X, cell.Y - 0.5f),
+                _     => new Vector2(cell.X, cell.Y + 0.5f),
+            };
+            float d = v.DistanceSquaredTo(toward);
+            if (d < bestD) { bestD = d; best = s; }
+        }
+        return best;
+    }
+
+    /// <summary>Die ANDERE Seite, die dieses Bild bedient — die, die nicht
+    /// <paramref name="exclude"/> ist. Fuer das freie Ende einer Linie: dort
+    /// gibt es keinen Vorgaenger, an dem man sich ausrichten koennte, wohl aber
+    /// den Ausgang, und ein Gleisbild hat genau zwei Anschluesse. −1, wenn das
+    /// nicht eindeutig ist (kein oder mehr als ein uebriger Anschluss) — dann
+    /// wird nichts geraten.</summary>
+    private static int RailPortServedOther(int frame, int exclude)
+    {
+        int found = -1, n = 0;
+        for (int s = 0; s < 4; s++)
+        {
+            if (s == exclude || float.IsNaN(RailPortAt[frame, s * 2])) continue;
+            found = s; n++;
+        }
+        return n == 1 ? found : -1;
+    }
+
+    /// <summary>Wie viele Knoten ihre Ecke aus dem GLEISBILD bekommen haben,
+    /// weil die Kette keinen Nachbarn hergab.</summary>
+    public int RailPathByFrame;
+
+    /// <summary>Wie viele Knoten auf eine Seite umgelegt wurden, die ihr Bild
+    /// wirklich bedient. Das sind die 25/28/30 von vorher.</summary>
+    public int RailPathPortFixed, RailPathPortFixedEnd, RailPathPortFixedMid;
+
+    private Vector2 RailEdgePoint(Vector2 cell, int frame, int side, int half = -1)
     {
         RailPathNodes++;
-        // Ohne Nachbarzelle gibt es keine Seite — nur dann bleibt die Zellmitte.
-        // Das passiert an einer Kette, die nicht Kante an Kante liegt.
-        if (side < 0) { RailPathFallback++; return cell; }
+        // ⚠⚠ HIER GALT BIS ZUM 14.08.2026 DIE ZELLMITTE, und die ist der einzige
+        // Punkt der Raute, der auf KEINEM der beiden Eckengitter liegt.
+        //
+        // Ohne Nachbarzelle gibt es keine Seite — das sind die bekannten 25 von
+        // 1193 Kettenstellen. Aber es braucht dafuer gar keinen Nachbarn: das
+        // Original bestimmt die Waggonlage ueberhaupt nicht aus der Kette,
+        // sondern aus der HALBZEILEN-PARITAET des Punktes selbst (@0x4C6A64,
+        // `sec121[i] & 1`). Ungerade heisst linke Ecke, gerade heisst obere —
+        // siehe den Kopfkommentar bei _lineCellHalf fuer die Herleitung.
+        //
+        // Damit ist die Sperre »jede sechste Zelle haette unbekannte
+        // Halbzeilenparitaet« gegenstandslos: sie betraf die Paritaet einer
+        // GLEISZELLE, die man aus der Kette ableiten muesste. Der ROUTENPUNKT
+        // bringt seine eigene mit, und die steht in der Karte.
+        if (side < 0)
+        {
+            RailPathFallback++;
+            if (half < 0) { RailPathCentre++; return cell; }
+            RailPathByParity++;
+            // 0,49 statt 0,5 aus demselben Rundungsgrund wie unten.
+            return half != 0 ? new Vector2(cell.X - 0.49f, cell.Y)
+                             : new Vector2(cell.X, cell.Y - 0.49f);
+        }
+        // ⚠ GEGENPROBE, nicht Steuerung: die Seite kommt weiter aus der Kette.
+        // Wenn beide Wege dasselbe Gitter meinen, muss die Seite links/rechts
+        // mit ungerader und oben/unten mit gerader Halbzeile zusammenfallen —
+        // eine waagerechte Schiene (L–R) liegt auf halber Zeilenhoehe, eine
+        // senkrechte (T–B) auf ganzer. Jede Abweichung ist eine echte Aussage
+        // ueber eine der beiden Ableitungen, und sie wird gezaehlt statt
+        // beschwichtigt. Wer sie hier zur Steuerung machte, ersetzte eine
+        // gemessene Groesse durch eine erschlossene.
+        if (half >= 0)
+        {
+            bool waagerecht = side is PortL or PortR;
+            if (waagerecht != (half != 0)) RailPathHalfClash++;
+            else RailPathHalfAgree++;
+        }
         float px = frame is >= 0 and <= 9 ? RailPortAt[frame, side * 2] : float.NaN;
         // ⚠ Bedient das Bild diese Seite nicht, bleibt der Knoten trotzdem auf
         // der KANTENMITTE — nur ohne den gemessenen seitlichen Versatz. Der
@@ -1341,7 +1517,15 @@ public partial class MapEntityLayer : Node2D
         // Gleissaetze trägt und wir einen davon in die Kette nehmen, und an
         // Linienenden, deren Bild die freie Seite nicht kennt.
         float lat = float.IsNaN(px) ? 0f : (px - 29.5f) / TileW;
-        if (float.IsNaN(px)) RailPathFallback++;
+        // ⚠ 14.08.2026 — DAS IST NICHT DERSELBE FALL wie `side < 0`, und beide
+        // liefen bis heute in denselben Zaehler. Die Zeile las sich dadurch als
+        // »25 Knoten ohne Nachbarzelle«, obwohl auf map_NET02 KEIN einziger
+        // Knoten ohne Nachbarn ist (die Kette liegt dort 0 mal nicht Kante an
+        // Kante). Diese 25 liegen sehr wohl auf der Kantenmitte — ihnen fehlt
+        // nur der gemessene seitliche Versatz von rund 2 px, weil ihr Bild
+        // diese Seite nicht bedient. Ein Zaehler, der zwei verschiedene Maengel
+        // zusammenzieht, benennt keinen von beiden.
+        if (float.IsNaN(px)) RailPathNoPort++;
         // ⚠ 0,49 und nicht 0,5. Auf genau der halben Zelle liegt die
         // Rundungsgrenze von RailPoint, das die Geländehöhe über
         // `ElevOf(round(spalte), round(zeile))` liest — ein Knoten dort erwischt
@@ -2329,8 +2513,22 @@ public partial class MapEntityLayer : Node2D
                           $"{band} (Original 400 px/s bei 50 Hz, bei TickScale 16 also 128)" +
                           $", Weg je Takt hoechstens {RailWagonMaxPxPerFrame:0.00} px" +
                           (RailWagonMaxPxPerFrame > 4f ? $" ({RailWagonJumpWhere})" : "") +
-                          $", Weg: {RailPathFallback} von {RailPathNodes} Knoten ohne " +
-                          "Nachbarzelle (dort liegt die Kette nicht Kante an Kante)" +
+                          $", Weg: {RailPathNodes} Knoten, davon {RailPathFallback} ohne " +
+                          "Nachbarzelle (Kette nicht Kante an Kante; " +
+                          $"{RailPathByFrame} aus dem GLEISBILD gerettet, " +
+                          $"{RailPathByParity} aus der Halbzeilen-Paritaet, " +
+                          $"{RailPathCentre} auf der ZELLMITTE — muss 0 sein, die " +
+                          "Zellmitte liegt auf keinem Eckengitter) und " +
+                          $"{RailPathNoPort} auf einer Kante, die ihr Bild GAR NICHT " +
+                          "bedient (muss 0 sein — an einem Eckstueck ist das eine halbe " +
+                          $"Zelle daneben) — {RailPathPortFixed} auf eine Seite umgelegt, " +
+                          $"die ihr Bild bedient ({RailPathPortFixedEnd} Linienenden, " +
+                          $"{RailPathPortFixedMid} mitten in der Kette)" +
+                          (RailPathHalfAgree + RailPathHalfClash > 0
+                               ? $" | Randmitten-Gegenprobe: Kette und Halbzeile meinen " +
+                                 $"{RailPathHalfAgree} mal dasselbe Gitter, {RailPathHalfClash} mal " +
+                                 $"nicht ({RailHalfMixed} Zellen mit Ein- UND Ausgang)"
+                               : "") +
                           (RailZigCount > 0
                                ? $", Richtungswechsel je Takt im Mittel " +
                                  $"{RailZigSum / RailZigCount:0.0}°, schlimmstenfalls " +

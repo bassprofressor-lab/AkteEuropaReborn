@@ -586,9 +586,67 @@ public static class CwmExtra
     /// </list>
     /// <para>So neither group is a reading error, and neither is drawn: a wagon
     /// without a route has nothing to be drawn along.</para></summary>
+    /// <summary>
+    /// <b>DIE FEINLAGE — +0x02 und +0x04, gelesen am 14.08.2026.</b>
+    ///
+    /// <para>Beide sind <b>vorzeichenbehaftete Worte</b> und zusammen der
+    /// Versatz des Waggons INNERHALB seiner Zelle, in Bildpunkten. Sie waren
+    /// die letzte unbenannte Stelle des Satzes.</para>
+    ///
+    /// <para><b>Wie sie gesetzt werden</b> (@0x4C6A64..0x4C6AAD, und wortgleich
+    /// noch einmal @0x4C6E10..0x4C6E4D):</para>
+    /// <code>
+    ///   eax = (short) sec121[i]     ; die Y-Koordinate in HALBZEILEN
+    ///   eax = eax &amp; 1           ; ihre PARITAET  (@0x4C6A71, mit Vorzeichen)
+    ///   ungerade -> +0x02 := 0    +0x04 := 10
+    ///   gerade   -> +0x02 := 20   +0x04 := 0
+    /// </code>
+    /// <para>20 ist die halbe Kachelbreite, 10 die halbe Kachelhoehe. Der Waggon
+    /// sitzt also auf der Mitte einer ZELLKANTE, und welche Kante es ist,
+    /// entscheidet allein die Parität der Halbzeile.</para>
+    ///
+    /// <para>⚠ <b>Was daran neu ist — und was nicht.</b> Die Paritaetsregel war
+    /// schon einmal ERSCHLOSSEN: eine fruehere Sitzung hat sie aus den zwoelf
+    /// Routencodes zurueckgerechnet (»zwoelf unabhaengige Gleichungen, alle
+    /// erfuellt«). Neu ist, dass sie jetzt im Code STEHT statt zu passen, und
+    /// dass beide Zahlen einen Namen haben — der Handoff fuehrte sie bis heute
+    /// als »sec44 +0x02/+0x04 nicht entschluesselt«.</para>
+    ///
+    /// <para>⚠ <b>Und was das fuer die blockierten Randmitten heisst.</b> Die
+    /// Sperre lautete: »Gleis und Zug laufen auf zwei Strukturen, die nur zu
+    /// 84 % uebereinstimmen — jede sechste Zelle haette unbekannte
+    /// Halbzeilenparitaet.« Das gilt fuer die Paritaet einer GLEISZELLE, die man
+    /// aus der Kette ableiten muesste. Fuer den WAGGON gilt es nicht: er traegt
+    /// seine eigene Halbzeile in sec121 bei sich, und genau die fragt der
+    /// Fahrcode ab. Wer die Waggons auf die Randmitten legen will, muss die
+    /// 84 %-Luecke also gar nicht schliessen.</para>
+    ///
+    /// <para>⚠ <b>NACHTRAG vom selben Tag, und er berichtigt mich:</b> hier
+    /// stand »ungebaut, der Einbau ist die Entscheidung des Spielers«. Unsere
+    /// Waggons standen zu diesem Zeitpunkt laengst auf den Randmitten —
+    /// gefehlt hat der Zaehler, der es zeigt. Auf map_NET02/05/08 liegt
+    /// <b>0 von 1193 / 1000 / 1305</b> Wegknoten auf der Zellmitte. Was diese
+    /// Lesart wirklich beigetragen hat, ist die GEGENPROBE: die Regel des
+    /// Originals laesst sich jetzt gegen unsere Ableitung aus der Nachbarzelle
+    /// halten, und beide meinen auf 88 bis 93 Prozent der Zellen dasselbe
+    /// Gitter. Siehe <c>MapEntityLayer._railHalfOfCell</c>.</para>
+    ///
+    /// <para><b>Gemessen</b> ueber alle 1199 Waggons mit Rohsatz: 162 stehen auf
+    /// einem der zwei Ausgangspaare, und davon folgen <b>161</b> der Regel —
+    /// ein Gegenbeispiel. Die uebrigen 1037 sind Zwischenstaende einer Fahrt:
+    /// fast alle tragen <c>dy = 10</c> und ein <c>dx</c> in Achterschritten
+    /// (−32, −24, −8, 0, 8, 32), also im Takt des Abzugs +0x0c = 8. Die zwoelf
+    /// Schreibstellen teilen sich damit in »zuruecksetzen« (die zwei oben) und
+    /// »fortschreiben« (der Rest, je nach Gleisstueck).</para>
+    /// </summary>
     public sealed class Wagon
     {
         public int Slot, Train, WagonNo, Line, Step, Piece, Col, Col2, Row, YHalf, Speed;
+
+        /// <summary>+0x02 / +0x04 — der Versatz in der Zelle, in Bildpunkten,
+        /// vorzeichenbehaftet. Siehe den Kommentar ueber dieser Klasse.</summary>
+        public int FineX, FineY;
+
         public byte[] Raw = Array.Empty<byte>();
     }
 
@@ -613,6 +671,10 @@ public static class CwmExtra
                 Row = s44[o + 0x01],      // == y_half / 2 on 385 of 385
                 YHalf = BitConverter.ToUInt16(s121, i * 2),
                 Speed = s44[o + 0x0c],    // decrement per tick (@0x4c6a62)
+                // Die Feinlage in Bildpunkten, VORZEICHENBEHAFTET — Begruendung
+                // und Messung im Kommentar ueber der Klasse Wagon.
+                FineX = BitConverter.ToInt16(s44, o + 0x02),
+                FineY = BitConverter.ToInt16(s44, o + 0x04),
                 Raw = Slice(s44, o, TrainStride),
             });
         }

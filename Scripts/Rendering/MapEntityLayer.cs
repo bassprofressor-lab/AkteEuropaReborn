@@ -452,6 +452,14 @@ public partial class MapEntityLayer : Node2D
         public int Facing;
         public int Owner = -1;       // the Flughafen it belongs to, once known
         public int HomeSlot = -1;    // that airport's building slot
+
+        /// <summary>Der gewuerfelte Heimatpunkt eines Nachschubhelis, EINMAL
+        /// gerollt und dann gehalten. Siehe <c>AirHeadHome</c>: das Original
+        /// wuerfelt Gebaeude und Streuung bei jedem Aufruf von
+        /// <c>air_back_to_airport</c> neu, aber es ruft die Stelle nur beim
+        /// UEBERGANG auf. Unsere Heimkehr laeuft je Takt — wer hier neu wuerfelt,
+        /// bekommt einen Heli, der zappelt statt zu fliegen.</summary>
+        public Vector2? HomePoint;
         public int Target = -1;      // entity being attacked
         public float Cooldown;
         public bool Dead;
@@ -1772,6 +1780,11 @@ public partial class MapEntityLayer : Node2D
         _lineCellFrame.Clear();
         _linePath.Clear();
         _lineCellPiece.Clear();
+        _railHalfOfCell.Clear();
+        RailPathNodes = RailPathFallback = RailPathByParity = RailPathCentre = 0;
+        RailPathByFrame = RailPathNoPort = RailPathPortFixed = 0;
+        RailPathPortFixedEnd = RailPathPortFixedMid = 0;
+        RailPathHalfAgree = RailPathHalfClash = RailHalfMixed = 0;
         _lineCellBroken.Clear();
         _railLines.Clear();
         _freightWagons.Clear();
@@ -9978,6 +9991,50 @@ public partial class MapEntityLayer : Node2D
     /// Bildindex das Streckenstück ist (@0x4c6de9).</summary>
     private readonly Dictionary<int, List<int>> _lineCellPiece = new();
 
+    /// <summary>
+    /// <b>DIE HALBZEILEN-PARITÄT je Kettenzelle</b> — 1 = der Routenpunkt lag auf
+    /// einer HALBEN Zeile, 0 = auf einer ganzen.
+    ///
+    /// <para>Sie ist die Größe, mit der das Original die Waggonlage bestimmt.
+    /// Der Fahrcode @0x4C6A64 holt die Halbzeile des Waggons aus sec121, nimmt
+    /// <c>y &amp; 1</c> und setzt damit die Feinlage: ungerade → (0,10), gerade →
+    /// (20,0). In Zellen gerechnet ist das <b>die linke</b> bzw. <b>die obere
+    /// Ecke</b> der isometrischen Raute — denn das Bild einer Zelle spannt
+    /// x 10..49 und y 21..40, und ihre vier Randmitten L(10,31) R(50,31)
+    /// T(30,21) B(30,41) sind genau die Rautenecken.</para>
+    ///
+    /// <para><b>Warum das ein GITTER ist und keine Fallunterscheidung.</b> Setzt
+    /// man beides in Bildpunkte um, bleibt eine einzige Rechnung übrig:</para>
+    /// <code>
+    ///   y = y_half * 10            x = spalte * 40 + (y_half ungerade ? 0 : 20)
+    /// </code>
+    /// <para>Auf ungeraden Halbzeilen liegen also die linken und rechten Ecken,
+    /// auf geraden die oberen und unteren — das Eckengitter der Raute, versetzt
+    /// wie die Fünf auf einem Würfel. Eine waagerechte Schiene (Bild f0, L–R)
+    /// liegt damit zwangsläufig auf einer ungeraden Halbzeile, eine senkrechte
+    /// (f1, T–B) auf einer geraden. Beides fügt sich, ohne dass man es
+    /// aussuchen müsste.</para>
+    ///
+    /// <para><b>Wozu sie da ist — und wozu NICHT.</b> Sie steuert nichts. Die
+    /// Ecke unserer Knoten kommt weiter aus der Kette (welche Nachbarzelle
+    /// liegt an?) und aus den an den Bildern gemessenen Anschlüssen. Diese
+    /// Tafel ist die <b>zweite, unabhängige Auskunft</b> zur selben Größe: die
+    /// Karte sagt über ihre Routenpunkte, auf welchem Gitter eine Zelle liegt,
+    /// und der Zähler in <c>--rail-check</c> hält beide gegeneinander. Wer sie
+    /// zur Steuerung machte, ersetzte eine gemessene Größe durch eine
+    /// erschlossene und hätte hinterher keine Gegenprobe mehr.</para>
+    ///
+    /// <para>⚠ <b>Schlüssel ist die ZELLE, nicht der Kettenindex.</b> Der erste
+    /// Anlauf legte sie als Liste je Linie an — und wurde damit sofort falsch:
+    /// die Kette aus <see cref="RailBuildCells"/> wird später durch die der
+    /// KARTE ersetzt (»Die Karte legt die Strecke, nicht wir«), und die hat eine
+    /// andere Zellenzahl. Index 7 hätte dann die Parität einer ganz anderen
+    /// Zelle geliefert — ein Fehler, der nirgends knallt und die Waggons nur um
+    /// eine halbe Zelle verrückt. Über die Zelle geschlüsselt kann das nicht
+    /// passieren.</para>
+    /// </summary>
+    private readonly Dictionary<(int, int), int> _railHalfOfCell = new();
+
     /// <summary>Ist DIESES Kettenglied zerschossen (Bild ≥ 100)? Gebraucht wird
     /// es nicht zum Zeichnen — das macht <c>_railCells</c> — sondern für die
     /// Instrumentierung »was tut der Waggon an einem Bruch« (siehe
@@ -10445,6 +10502,10 @@ public partial class MapEntityLayer : Node2D
         if (n < 1) return;
         var row = new int[n];
         var fixedRow = new bool[n];
+        // ⚠ Die UNVERAENDERTE Auskunft »lag dieser Punkt auf einer ganzen
+        // Zeile«. `fixedRow` wird gleich von der Weitergabe umgeschrieben;
+        // fuer die Halbzeilen-Paritaet ist aber der Rohzustand massgeblich.
+        var fixedRowSrc = new bool[n];
         for (int i = 0; i < n; i++)
         {
             float r = route[i].Y;
@@ -10452,6 +10513,7 @@ public partial class MapEntityLayer : Node2D
             bool whole = Mathf.Abs(r - Mathf.Round(r)) < 0.001f;
             row[i] = whole ? Mathf.RoundToInt(r) : fl;
             fixedRow[i] = whole;
+            fixedRowSrc[i] = whole;
         }
         // Ein Schritt, der die Spalte wechselt, erzwingt dieselbe Zellzeile.
         // Solange weitergeben, bis nichts mehr dazukommt (die Ketten sind kurz).
@@ -10473,6 +10535,24 @@ public partial class MapEntityLayer : Node2D
         for (int i = 0; i < n; i++)
         {
             var cell = new Vector2(Mathf.RoundToInt(route[i].X), row[i]);
+            // ⚠ Die Paritaet kommt aus der ROUTE, nicht aus `row[i]`. `row` ist
+            // schon durch die Weitergabe oben gelaufen (»ein Schritt, der die
+            // Spalte wechselt, erzwingt dieselbe Zellzeile«) und hat dabei
+            // halbe Zeilen auf ganze gezogen. Wer die Paritaet daraus liest,
+            // liest unsere eigene Zurechtlegung zurueck und bekommt ueberall 0.
+            int half = fixedRowSrc[i] ? 0 : 1;
+            var key = (Mathf.RoundToInt(cell.X), row[i]);
+            if (_railHalfOfCell.TryGetValue(key, out int had))
+            {
+                // Zwei Routenpunkte in derselben Zelle mit VERSCHIEDENER
+                // Paritaet: das ist der Ein- und der Ausgang derselben Raute
+                // (etwa eine Ecke L->T). Gezaehlt, nicht stillschweigend
+                // ueberschrieben — die Zahl steht in --rail-check, und sie ist
+                // die Obergrenze dafuer, wie genau eine Gegenprobe je Zelle
+                // ueberhaupt sein kann.
+                if (had != half) { RailHalfMixed++; _railHalfOfCell[key] = 2; }
+            }
+            else _railHalfOfCell[key] = half;
             if (cells.Count == 0 || cells[^1] != cell)
             {
                 cells.Add(cell);
@@ -10583,6 +10663,10 @@ public partial class MapEntityLayer : Node2D
             _lineCell[kv.Key] = cells;
             _lineCellFrame[kv.Key] = frames;
             _linePath.Remove(kv.Key);
+            // ⚠ Die Halbzeilen-Tafel bleibt STEHEN und wird hier nicht geraeumt:
+            // sie ist ueber die ZELLE geschluesselt, nicht ueber den
+            // Kettenindex, und gilt darum auch fuer diese Kette. Genau dafuer
+            // wurde sie umgestellt.
             // Das Waggonbild braucht weiter ein STUECK je Zelle. Es kommt jetzt
             // aus der Kette selbst (Richtung zur naechsten Zelle), nicht mehr aus
             // den Streckencodes: die Zellenzahl der Karte und die Codezahl der
@@ -11075,6 +11159,28 @@ public partial class MapEntityLayer : Node2D
     }
 
     private static bool? _probeCellCentres;
+
+    /// <summary>Gegenprobe zur Umlegung auf eine bediente Seite
+    /// (<c>--rail-lay=altport</c>): mit <c>true</c> bleibt es beim alten Stand,
+    /// die 25/28/30 Knoten liegen also wieder auf der nackten Kantenmitte ohne
+    /// Seitenversatz. ⚠ Ohne diesen Schalter waere die Umstellung eine
+    /// Behauptung: »4,12 px je Takt« sagt nichts, solange man die Zahl VOR der
+    /// Aenderung nicht daneben legen kann.</summary>
+    public static bool RailProbeOldPort
+    {
+        get
+        {
+            if (_probeOldPort.HasValue) return _probeOldPort.Value;
+            bool hit = false;
+            foreach (string a in OS.GetCmdlineUserArgs())
+                if (a.StartsWith("--rail-lay=") && a["--rail-lay=".Length..].Contains("altport"))
+                    hit = true;
+            _probeOldPort = hit;
+            return hit;
+        }
+    }
+
+    private static bool? _probeOldPort;
 
     /// <summary>
     /// Gegenprobe zur Kettenlänge (<c>--rail-lay=noown</c>): mit <c>true</c>
@@ -15170,8 +15276,32 @@ public partial class MapEntityLayer : Node2D
     /// stimmt — wie <c>--stempel-alt</c> es fuer den Rahmen tat. ⚠ Der Schalter
     /// ist ein MESSGERAET und keine Einstellung: was am Ende gilt, gehoert als
     /// Zahl in den Code, nicht auf die Befehlszeile.</para>
+    ///
+    /// <para><b>ENTSCHIEDEN am 14.08.2026: der Versatz ist 2</b>, und darum steht
+    /// er jetzt hier statt auf der Befehlszeile. Zwei Wege, die nichts
+    /// voneinander wissen, kommen auf dasselbe:</para>
+    /// <list type="number">
+    /// <item>Die <b>Panzereichung</b> hatte 0, 4 und 6 ausgeschlossen und 2 als
+    /// einzigen Kandidaten uebrig gelassen.</item>
+    /// <item>Das <b>Original rechnet es aus</b> (zweimal wortgleich im
+    /// Zeichenpfad, siehe <c>AIR_RE.md</c>):
+    /// <code>bild = ((richtung + 11) / 22,5 - 4) mod 16</code>
+    /// Also 16 Bilder zu 22,5 Grad, Rundung zur naechsten Stufe und ein FESTER
+    /// Versatz von <b>4 von 16 = 90 Grad</b> — auf unsere acht Silhouetten
+    /// gefaltet genau 2.</item>
+    /// </list>
+    ///
+    /// <para>⚠ <b>Was damit NICHT entschieden ist:</b> ob die Tafel bei
+    /// 0xAB806E die 16 Schritte des Originals auf die acht gefundenen
+    /// Silhouetten faltet oder ob es sechzehn Bilder gibt und wir acht davon
+    /// haben. Der Versatz stimmt in beiden Faellen; die Feinheit der Drehung
+    /// nicht. Ausserdem dreht das Original <b>6 Grad je Takt</b> mit 6 Grad
+    /// Totband — eine volle Drehung dauert 60 Takte, und deshalb fliegt ein Heli
+    /// nach einem Zielwechsel bis zu 30 Takte seitwaerts. <b>Das ist Original</b>,
+    /// kein Fehler, und es ist die Haelfte der Antwort auf die Meldung
+    /// »Versorgungshelikopter fliegen gerne wie seitwaerts«.</para>
     /// </summary>
-    public static int AirFacingOffset;
+    public static int AirFacingOffset = 2;
 
     private Texture2D? GetAirframeTexture(int kind, int facing)
     {
@@ -15464,16 +15594,54 @@ public partial class MapEntityLayer : Node2D
         // Dass die zwei Arten anders heimkehren, steht im Original:
         // air_back_to_airport @0x426180 verzweigt nach `typ` — 13/14 gehen nach
         // 0x42636E, `typ < 10` in den Flughafenzweig, 10..12 nach 0x4262A8.
-        // ⚠ WOHIN 0x42636E fuehrt, ist NICHT gelesen. Dass es der
-        // Nachschub-Posten ist, ist UNSERE Setzung — sie ist die naechstliegende
-        // (dort holt der Heli ohnehin seine Ladung, NearestDepot) und sie wird
-        // hier so benannt, bis der Zweig gelesen ist.
+        //
+        // ⚠⚠ ZURUECKGEZOGEN: hier stand »der Nachschub-Posten, UNSERE Setzung,
+        // bis der Zweig gelesen ist«. Der Zweig ist am 14.08.2026 gelesen, und
+        // die Setzung war falsch. 0x42636E wuerfelt `rand%50+1` und geht die
+        // Gebaeudetafel 0xC06910 (Schrittweite 76, 256 Plaetze) durch; geprueft
+        // wird NUR »belegt« und »gehoert mir« — KEINE Gebaeudeart. Das Flugziel
+        // ist dann dieses Gebaeude, verstreut um rand(0..5) in beiden Achsen.
+        // Danach uk := 1 und m_uk := typ − 3.
+        //
+        // Ein Nachschubheli hat im Original also gar keinen Heimatort: er fliegt
+        // IRGENDEIN eigenes Gebaeude an. Damit erklaert sich map_DM_4 ohne
+        // Zusatzannahme — der Heli braucht keinen Flugplatz, weil er keinen
+        // sucht. Der Zaehler, der 15 von 19 haengende Helis fand, hatte recht;
+        // meine Erklaerung dafuer war es nicht.
         Entity? home = null;
         if (a.IsSupply)
         {
-            home = a.DepotSlot >= 0
-                ? _entities.Find(x => x.IsBuilding && x.Slot == a.DepotSlot && !x.Dead) : null;
-            home ??= NearestDepot(a);
+            // Einmal gerollt, dann gehalten — Begruendung bei Special.HomePoint.
+            home = a.HomeSlot >= 0
+                ? _entities.Find(x => x.IsBuilding && x.Slot == a.HomeSlot
+                                      && !x.Dead && x.Owner == a.Owner) : null;
+            if (home == null)
+            {
+                var mine = _entities.FindAll(x => x.IsBuilding && !x.Dead && x.Owner == a.Owner);
+                if (mine.Count > 0)
+                {
+                    home = mine[(int)(GD.Randi() % (uint)mine.Count)];
+                    a.HomePoint = home.Pos + new Vector2(
+                        (int)(GD.Randi() % 6) * TileW, (int)(GD.Randi() % 6) * TileH);
+                }
+                // ⚠ UNSERE ABWEICHUNG, und zwar bewusst: hat der Spieler KEIN
+                // eigenes Gebaeude mehr, schickt das Original den Heli auf eine
+                // voellig zufaellige Kartenzelle (die Schleife findet nichts und
+                // laesst die gewuerfelte Stelle stehen). Wir fallen stattdessen
+                // unten auf den Flugplatz durch. Das ist kein Nachbau, sondern
+                // die Weigerung, einen Fehler nachzubauen, der im Original nur
+                // deshalb nicht auffaellt, weil ohne Gebaeude die Partie ohnehin
+                // vorbei ist.
+                else a.HomePoint = null;
+            }
+            if (home != null && a.HomePoint is Vector2 hp)
+            {
+                a.HomeSlot = home.Slot;
+                a.Goal = hp;
+                if (a.Pos.DistanceTo(hp) >= TileW * 0.6f) return false;
+                a.Goal = null; a.Col = home.Col; a.Row = home.Row;
+                return false;   // ⚠ 13/14 werden NIE eingelagert, siehe unten
+            }
         }
         home ??= a.HomeSlot < 0 ? null
             : _entities.Find(x => x.IsBuilding && x.Slot == a.HomeSlot && !x.Dead);
@@ -15717,7 +15885,7 @@ public partial class MapEntityLayer : Node2D
         // sein. Ohne sie war der Fehler in keinem Prueflauf zu sehen — die
         // Zeile zaehlte nur Hangar und Luft, und »haengt nutzlos« ist eben
         // auch »in der Luft«.
-        int idle = 0, supAir = 0, atHome = 0;
+        int idle = 0, supAir = 0, atHome = 0, homeless = 0;
         foreach (var s in _special)
         {
             if (s.Dead || !s.IsSupply || s.Stored) continue;
@@ -15727,14 +15895,39 @@ public partial class MapEntityLayer : Node2D
             // der heimgeflogen ist, steht ebenfalls ohne Ziel — nur eben AM
             // POSTEN. Ein Nachschubheli wird nie eingelagert (siehe
             // AirHeadHome), also ist der Ort das einzige Unterscheidungsmerkmal.
-            var d0 = NearestDepot(s);
-            if (d0 != null && s.Pos.DistanceTo(d0.Pos) < TileW * 1.2f) atHome++;
-            else idle++;
+            //
+            // ⚠ NACHGEZOGEN am 14.08.2026: hier stand NearestDepot, und das war
+            // derselbe falsche Massstab wie in AirHeadHome. Das Original schickt
+            // 13/14 zu IRGENDEINEM eigenen Gebaeude (@0x42636E), verstreut um
+            // bis zu 5 Zellen. Ein Zaehler, der weiter am Depot misst, meldete
+            // jeden richtig heimgekehrten Heli als »haengt nutzlos« — er haette
+            // die Verbesserung als Verschlechterung ausgewiesen.
+            bool home = false, any = false;
+            foreach (var b in _entities)
+            {
+                if (!b.IsBuilding || b.Dead || b.Owner != s.Owner) continue;
+                any = true;
+                // 5 Zellen Streuung plus die 1,2 Zellen Ankunftsschwelle.
+                if (s.Pos.DistanceTo(b.Pos) < TileW * 6.2f) { home = true; break; }
+            }
+            // ⚠ WER KEIN EIGENES GEBAEUDE HAT, KANN NICHT HEIMKEHREN, und das
+            // ist keine Beanstandung. Auf map_DM_4 gehoeren 6 der 19 Helis den
+            // Spielern 5, 6 und 7 — und die besitzen zusammen NULL Gebaeude
+            // (0:10, 1:26, 11:3, neutral:19). Genau diese sechs blieben im
+            // Prueflauf uebrig, nachdem die Heimkehr von 15 auf 5 gefallen war.
+            // Das Original schickte sie auf eine gewuerfelte Kartenzelle; wir
+            // lassen sie stehen (siehe AirHeadHome). Ein Zaehler, der sie unter
+            // »muss 0 sein« fuehrt, meldete auf ewig einen Fehler, den es nicht
+            // gibt — und verdeckte damit den naechsten echten.
+            if (home) atHome++; else if (!any) homeless++; else idle++;
         }
         string sup = supAir > 0
-            ? $" | Nachschubhelis {supAir} unterwegs, {atHome} daheim am Posten, " +
+            ? $" | Nachschubhelis {supAir} unterwegs, {atHome} daheim, " +
               $"OHNE Auftrag und fern der Heimat {idle} (muss 0 sein — " +
-              "das Original fliegt dann heim)"
+              "das Original fliegt dann heim)" +
+              (homeless > 0
+                  ? $", dazu {homeless} ohne EIGENES GEBAEUDE (koennen nicht heimkehren, " +
+                    "keine Beanstandung)" : "")
             : "";
         string supOne = "";
         foreach (var s in _special)

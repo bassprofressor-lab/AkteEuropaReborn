@@ -563,6 +563,11 @@ public partial class MapViewer : Node2D
     /// <summary>`--rail-hit-check` — Gleisschaden und Reparatur ausüben.</summary>
     private bool _railHitCheck;
     private float _railRepairCheck;
+
+    /// <summary><c>--supply-check[=sek]</c> — schreibt die Netzzeile mitsamt dem
+    /// Nachschubheli-Zaehler regelmaessig heraus, damit ein headless-Lauf sie
+    /// lesen kann. Begruendung an der Auswertestelle.</summary>
+    private float _supplyCheck, _supplyPeriod = 10f, _supplyPeriodLeft, _supplyElapsed;
     private bool _railRepairReady;
 
     private string _look = "";
@@ -750,6 +755,11 @@ public partial class MapViewer : Node2D
             // daraufstellen) und misst nach der Zeit, was in der Karte steht.
             // Ohne Zahl 30 Sekunden — eine Reparatur dauert 20 Takte, und die
             // Kette soll mehrere schaffen.
+            else if (a == "--supply-check") _supplyCheck = 60f;
+            else if (a.StartsWith("--supply-check="))
+                _supplyCheck = Mathf.Max(1f, a["--supply-check=".Length..].ToFloat());
+            else if (a.StartsWith("--supply-period="))
+                _supplyPeriod = Mathf.Max(0.5f, a["--supply-period=".Length..].ToFloat());
             else if (a == "--rail-repair-check") _railRepairCheck = 30f;
             else if (a.StartsWith("--rail-repair-check="))
                 _railRepairCheck = Mathf.Max(1f, a["--rail-repair-check=".Length..].ToFloat());
@@ -1111,6 +1121,24 @@ public partial class MapViewer : Node2D
             {
                 _railRepairCheck = -1f;
                 GD.Print(_entities.RailRepairLine());
+            }
+        }
+        // ⚠ WARUM ES DIESEN SCHALTER GEBEN MUSS. Der Zaehler zu den
+        // Nachschubhelis stand nur in der Bildschirmleiste — headless war er
+        // nicht zu lesen, und damit war die Heimkehr, die er beweisen soll,
+        // ohne Beleg. Genau der Fall, den die Arbeitsweise verbietet: eine
+        // Aenderung, die uebersetzt, aber nichts zeigt. Hier wird KEINE zweite
+        // Zaehlung geschrieben, sondern dieselbe Zeile ausgegeben, die auch am
+        // Bildschirm steht — sonst koennten die zwei auseinanderlaufen.
+        if (_supplyCheck > 0f)
+        {
+            _supplyPeriodLeft -= (float)delta;
+            _supplyCheck -= (float)delta;
+            _supplyElapsed += (float)delta;
+            if (_supplyPeriodLeft <= 0f)
+            {
+                _supplyPeriodLeft = _supplyPeriod;
+                GD.Print($"[{Mathf.RoundToInt(_supplyElapsed)}s] supply: {_entities.NetworkLine()}");
             }
         }
         if (_shipCheckAfter > 0f)
