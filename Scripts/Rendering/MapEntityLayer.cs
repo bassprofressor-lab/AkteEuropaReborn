@@ -15481,6 +15481,14 @@ public partial class MapEntityLayer : Node2D
             // Sprit unter der gelesenen Schwelle — oder, UNSERE Zutat, nichts
             // mehr zu schiessen: heim. Siehe AirFuelHome fuer die 300 und
             // AirHeadHome fuer den Weg.
+            // ⚠ »Leere Munition -> heim« ist seit dem 14.08. BELEGT und nicht
+            // mehr unsere Vermutung: der Bomberauftrag uk 7 @0x4236AE prueft
+            // die Munition (0x6DDF86) und geht bei 0 ueber @0x4236D2 (Ziel :=
+            // 0xFFFF) direkt auf air_back_to_airport (@0x4236E3).
+            // ⚠ Was FEHLT, ist der Anflug dazwischen: das Original verlegt sein
+            // Flugziel diagonal UEBER das Ziel hinaus (+1/+1 @0x423B7D, +2/+2
+            // @0x423BA5) und fliegt darueber weg, statt darauf stehenzubleiben.
+            // Wir setzen a.Goal = t.Pos und parken. Siehe aekernel-tools/AIR_RE.md.
             bool spent = a.Fuel < AirFuelHome || (a.Armed && a.Ammo <= 0);
             if (spent && AirHeadHome(a)) continue;
 
