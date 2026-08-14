@@ -76,6 +76,15 @@ public partial class MapEditorScreen : Control
     private CheckBox _flat = null!;
     private LineEdit _from = null!;
     private Button _create = null!, _check = null!, _view = null!, _edit = null!;
+
+    /// <summary>Die Auswahl der VORHANDENEN Karten und der Knopf dazu. Siehe
+    /// <see cref="OnOpen"/>.</summary>
+    private OptionButton _existing = null!;
+    private Button _open = null!;
+
+    /// <summary>Die Kartennamen hinter den Zeilen von <see cref="_existing"/>,
+    /// mit <c>map_</c> davor.</summary>
+    private readonly List<string> _existingNames = new();
     private RichTextLabel _log = null!;
     private Label _status = null!;
 
@@ -90,6 +99,10 @@ public partial class MapEditorScreen : Control
     /// <summary>Was der Harnisch nach dem Erzeugen noch druecken soll —
     /// »pruefen«, »ansehen« oder nichts. Siehe das Ende von <c>_Ready</c>.</summary>
     private string _autoRun = "";
+
+    /// <summary>Welche VORHANDENE Karte der Harnisch aufmachen soll
+    /// (<c>--map-editor-open=</c>) — leer heisst: erzeugen statt oeffnen.</summary>
+    private string _autoOpen = "";
 
     public override void _Ready()
     {
@@ -223,6 +236,24 @@ public partial class MapEditorScreen : Control
         _create.Pressed += OnCreate;
         box.AddChild(_create);
 
+        // ---- die vorhandene Karte -------------------------------------------
+        var openRow = new HBoxContainer();
+        openRow.AddThemeConstantOverride("separation", 8);
+        box.AddChild(openRow);
+        _existing = new OptionButton { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        openRow.AddChild(_existing);
+        _open = new Button
+        {
+            Text = "VORHANDENE OEFFNEN",
+            CustomMinimumSize = new Vector2(0, 44),
+            TooltipText = "Liest map_*.json und map_*.entities.json wieder zu einer Karte im "
+                        + "Arbeitsspeicher zusammen. Gespeichert wird AN ORT UND STELLE — die "
+                        + "gewaehlte Karte wird beim Speichern ueberschrieben.",
+        };
+        _open.Pressed += OnOpen;
+        openRow.AddChild(_open);
+        FillExisting();
+
         var after = new HBoxContainer();
         after.AddThemeConstantOverride("separation", 8);
         box.AddChild(after);
@@ -316,17 +347,34 @@ public partial class MapEditorScreen : Control
         // und mehrere Laeufe nebeneinander schreiben sonst auf dieselbe
         // map_eigen01.*. Wer seinen Lauf benennt, tritt keinem anderen auf die
         // Datei. Ohne den Schalter bleibt es bei der Vorgabe des Feldes.
+        //
+        // ⚠ `--map-editor-open=<karte>` drueckt statt »KARTE ERZEUGEN« den
+        // Knopf »VORHANDENE OEFFNEN«. Ohne ihn liefe der Pruefstand des
+        // Bearbeitungsmodus nur auf einer ERZEUGTEN Karte — und die trug bis
+        // heute keinen einzigen Gegenstand. Ein Lauf, der »Gegenstand
+        // weggenommen: 0 von 0« meldet, prueft nichts:
+        //   … --headless --path . -- --menu-click=Karteneditor \
+        //       --map-editor-open=map_01 --map-editor-run=bearbeiten \
+        //       --map-edit-check --quit-after=20
         bool run = false;
         foreach (string a in OS.GetCmdlineUserArgs())
         {
             if (a.StartsWith("--map-editor-name=")) _name.Text = a["--map-editor-name=".Length..];
+            else if (a.StartsWith("--map-editor-open=")) _autoOpen = a["--map-editor-open=".Length..];
             else if (a == "--map-editor-run" || a.StartsWith("--map-editor-run="))
             {
                 _autoRun = a.Contains('=') ? a[(a.IndexOf('=') + 1)..] : "";
                 run = true;
             }
         }
-        if (run) CallDeferred(nameof(OnCreate));
+        if (run && _autoOpen.Length > 0)
+        {
+            for (int i = 0; i < _existingNames.Count; i++)
+                if (_existingNames[i] == _autoOpen || _existingNames[i] == "map_" + _autoOpen)
+                    _existing.Selected = i;
+            CallDeferred(nameof(OnOpen));
+        }
+        else if (run) CallDeferred(nameof(OnCreate));
     }
 
     public override void _UnhandledInput(InputEvent e)
@@ -445,6 +493,76 @@ public partial class MapEditorScreen : Control
         {
             _made = "";
             _status.Text = $"Fehlgeschlagen (Rueckgabe {rc}) — siehe Bericht.";
+        }
+    }
+
+    // ---- die vorhandene Karte oeffnen ---------------------------------------
+
+    /// <summary>Die Karten, die schon geschrieben sind — beide Dateien muessen
+    /// da sein, denn ohne die <c>.entities.json</c> laesst sich nichts
+    /// zusammensetzen.</summary>
+    private void FillExisting()
+    {
+        _existing.Clear();
+        _existingNames.Clear();
+        string maps = ProjectSettings.GlobalizePath(Core.Content.UserRoot).TrimEnd('/', '\\') + "/Maps";
+        if (!Directory.Exists(maps)) { _existing.AddItem("keine Karten gefunden"); _open.Disabled = true; return; }
+        var found = new List<string>();
+        foreach (string p in Directory.GetFiles(maps, "map_*.json"))
+        {
+            string f = Path.GetFileNameWithoutExtension(p);
+            if (f.EndsWith(".entities")) continue;
+            if (!File.Exists($"{maps}/{f}.entities.json")) continue;
+            found.Add(f);
+        }
+        found.Sort(StringComparer.Ordinal);
+        foreach (string f in found) { _existing.AddItem(f["map_".Length..]); _existingNames.Add(f); }
+        if (found.Count == 0) { _existing.AddItem("keine Karten gefunden"); _open.Disabled = true; }
+    }
+
+    /// <summary>
+    /// Der Knopf »VORHANDENE OEFFNEN«. Er geht denselben Weg wie
+    /// »KARTE ERZEUGEN« — dieselbe Zeichenkette an dieselbe
+    /// <c>MainMenu.MapNew</c>, nur mit <c>oeffne=</c> statt einer Groesse. Es
+    /// gibt also auch hier keinen zweiten Weg, den man getrennt pruefen
+    /// muesste.
+    ///
+    /// <para>⚠ Geoeffnet und gespeichert wird UNTER DEMSELBEN NAMEN: der Spieler
+    /// will seine Karte weiterbearbeiten, nicht eine Kopie anlegen. Dass dabei
+    /// nichts verlorengeht, ist gemessen — <c>--map-check=&lt;name&gt;,rundlauf</c>
+    /// haelt die neu geschriebenen Dateien Feld fuer Feld gegen die alten.</para>
+    /// </summary>
+    private async void OnOpen()
+    {
+        int at = _existing.Selected;
+        if (at < 0 || at >= _existingNames.Count) { _status.Text = "Keine Karte gewaehlt."; return; }
+        string outName = _existingNames[at];
+        string stem = outName["map_".Length..];
+
+        var lines = new List<string>();
+        _create.Disabled = _open.Disabled = _check.Disabled = _view.Disabled = _edit.Disabled = true;
+        _status.Text = $"oeffnet {outName} …";
+        _log.Text = "";
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        int rc = MainMenu.MapNew($"{stem},0,0,0,oeffne={outName}", s => lines.Add(s));
+        _log.Text = string.Join("\n", lines);
+        _create.Disabled = _open.Disabled = false;
+
+        if (rc == 0)
+        {
+            _made = outName;
+            _check.Disabled = _view.Disabled = _edit.Disabled = false;
+            _name.Text = stem;
+            _status.Text = $"{outName} geoeffnet. Speichern schreibt AN ORT UND STELLE zurueck.";
+            if (_autoRun == "pruefen") OnCheck();
+            else if (_autoRun == "ansehen") OnViewPressed();
+            else if (_autoRun == "bearbeiten") OnEditPressed();
+        }
+        else
+        {
+            _made = "";
+            _status.Text = $"Oeffnen fehlgeschlagen (Rueckgabe {rc}) — siehe Bericht.";
         }
     }
 

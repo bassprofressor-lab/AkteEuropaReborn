@@ -102,8 +102,27 @@ public static class MapCheck
     /// <see cref="TilePalette"/>).</summary>
     public const int WaterCodeMax = 7;
 
+    /// <summary>
+    /// ⚠ <b>Der Einstieg in den RUNDLAUF haengt hier mit dran, und zwar aus
+    /// einem Grund der Dateihoheit.</b> Die Schalterschleife der Befehlszeile
+    /// steht in <c>Scripts/UI/MainMenu.cs</c>, an dem gerade jemand anderes
+    /// arbeitet (Regel 19). <c>--map-check=</c> reicht seinen ganzen Rest hier
+    /// herein, also kommt der zweite Lauf ueber ein angehaengtes Wort:
+    /// <code>
+    ///   --map-check=map_01              die vorhandene Pruefung
+    ///   --map-check=map_01,rundlauf     oeffnen → speichern → Feld fuer Feld vergleichen
+    ///   --map-check=alle,rundlauf       derselbe Rundlauf ueber JEDE Karte im Ordner
+    /// </code>
+    /// Wenn <c>MainMenu.cs</c> wieder frei ist, gehoert daraus ein eigener
+    /// Schalter <c>--map-round=</c>; dann kann diese Weiche weg.
+    /// </summary>
     public static int Run(string name, Action<string> say)
     {
+        if (name.EndsWith(",rundlauf"))
+        {
+            string who = name[..^",rundlauf".Length];
+            return who is "alle" or "all" ? MapRound.RunAll(say) : MapRound.Run(who, say);
+        }
         string outName = name.StartsWith("map_") ? name : "map_" + name;
         string dir = ProjectSettings.GlobalizePath(Core.Content.UserRoot).TrimEnd('/', '\\') + "/Maps";
         string metaPath = $"{dir}/{outName}.json";

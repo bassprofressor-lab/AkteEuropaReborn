@@ -215,6 +215,65 @@ public static class MapEditTerrain
     public static int LastShoreFixed { get; private set; }
     public static int LastShoreLeft { get; private set; }
 
+    /// <summary>Wie viele Zellen der letzte Strich UNANGETASTET gelassen hat,
+    /// weil auf ihnen ein Gegenstand steht — siehe <see cref="Refresh"/>.</summary>
+    public static int LastPropsKept { get; private set; }
+
+    // ========================================================================
+    //  Einen Gegenstand wieder wegnehmen
+    // ========================================================================
+
+    /// <summary>
+    /// <b>EINEN GEGENSTAND VON EINER ZELLE NEHMEN.</b>
+    ///
+    /// <para>Gebaeude, Gleise und Einheiten liessen sich schon wegnehmen, ein
+    /// Gegenstand nicht — der Editor sagte dazu »dafuer den Boden neu malen«,
+    /// und das ging nicht einmal: <see cref="PaintClass"/> steigt sofort aus,
+    /// wenn die Zelle die gewuenschte Klasse schon hat, und ein Gegenstand
+    /// aendert die Klasse ja gerade nicht. Der Bewuchs war damit unloeschbar.</para>
+    ///
+    /// <para><b>Wie es geht.</b> Ein Gegenstand IST der Kachelcode der Zelle
+    /// (>= <see cref="CwpFile.ObjectCodeBase"/>) — es gibt keinen zweiten Ort,
+    /// an dem er stuende. Ihn wegzunehmen heisst also: den Code durch einen
+    /// BODENCODE ersetzen, und zwar durch genau den, den der Generator fuer
+    /// diese Zelle gezogen haette. Darum wird nicht irgendein Bodenblock-Eintrag
+    /// gesetzt, sondern der Umkreis mit <see cref="Refresh"/> neu bestimmt — mit
+    /// Nahtwahl, Rueckfall und Ufer-Nachbedingung, wie ueberall sonst. Der
+    /// Vorbelegung mit dem Bodenblock ist nur noetig, damit die Zelle waehrend
+    /// des Zugs nicht mehr als Gegenstand gilt und der Umkreislauf sie anfasst.</para>
+    ///
+    /// <para>⚠ Die Gelaendeklasse bleibt unangetastet, spiegelbildlich zu
+    /// <c>MapEditOverlay.PutProp</c>: das Setzen hat die imap nicht angefasst,
+    /// also darf das Wegnehmen es auch nicht. Sonst haette ein Baum, den man
+    /// setzt und wieder wegnimmt, die Karte begehbarer gemacht als vorher.</para>
+    /// </summary>
+    /// <returns>null wenn es ging, sonst der Grund.</returns>
+    public static string? RemoveProp(CwmFile m, TileModel? model, TilePalette? pal,
+                                     int col, int row, uint seed, TileSeams? seams = null)
+    {
+        if (col < 0 || col >= m.Width || row < 0 || row >= m.Height) return "ausserhalb der Karte";
+        int had = m.CodeAt(col, row);
+        if (had < CwpFile.ObjectCodeBase)
+            return $"auf ({col},{row}) steht kein Gegenstand — Kachelcode {had} ist Boden";
+        if (model == null && pal == null)
+            return "keine Kacheltabelle und kein Bodenblock — dann bliebe ein Loch statt Boden";
+
+        // Vorbelegung, damit Refresh die Zelle als Boden behandelt. Der Wert
+        // wird gleich wieder ersetzt; er zaehlt nur, wenn die Tabelle fuer
+        // diesen Schluessel gar nichts hat und auch der Rueckfall leer ist.
+        int cls = ClassAt(m, col, row);
+        var block = cls == 2 ? TilePalette.Water : pal?.Ground;
+        int seedCode = block is { Length: > 0 } ? block[0] : 0;
+        m.SetCell(col, row, seedCode, m.ElevAt(col, row), m.FlagAt(col, row));
+
+        Refresh(m, model, pal, col, row, seed, seams);
+
+        int now = m.CodeAt(col, row);
+        if (now >= CwpFile.ObjectCodeBase)
+            return $"({col},{row}) traegt immer noch den Code {now} — nicht weggenommen";
+        return null;
+    }
+
     /// <summary>
     /// Hangbyte und Kachelcode im Umkreis neu bestimmen.
     ///
@@ -235,7 +294,7 @@ public static class MapEditTerrain
     private static void Refresh(CwmFile m, TileModel? model, TilePalette? pal,
                                 int col, int row, uint seed, TileSeams? seams)
     {
-        LastRetiled = LastMissing = LastShoreFixed = LastShoreLeft = 0;
+        LastRetiled = LastMissing = LastShoreFixed = LastShoreLeft = LastPropsKept = 0;
         var grid = Grid(m);
         var dist = TileModel.WaterDistance(m.Width, m.Height, grid);
         var inner = pal == null ? new HashSet<int>() : new HashSet<int>(pal.Ground);
@@ -261,6 +320,24 @@ public static class MapEditTerrain
             {
                 int c = col + dx, r = row + dy;
                 if (c < 0 || c >= m.Width || r < 0 || r >= m.Height) continue;
+                // ⚠ EINE ZELLE MIT GEGENSTAND WIRD NICHT NEU GEKACHELT — und
+                // das ist seit dem Oeffnen vorhandener Karten keine Kleinigkeit
+                // mehr. Der Kachelcode IST hier der Gegenstand (Baum, Fels,
+                // Bruecke: >= CwpFile.ObjectCodeBase, gemessen 644 Zellen auf
+                // map_01, 3434 auf map_14, 6805 auf map_NET02 — und in allen
+                // drei Karten liegt KEIN Code zwischen 1666 und 9999, die zwei
+                // Schwellen sind sich also einig). Wer ihn im Umkreis
+                // ueberschreibt, RADIERT den Gegenstand weg, nur weil zwei
+                // Zellen weiter Gelaende gemalt wurde. Auf einer erzeugten Karte
+                // fiel das nicht auf: die trug bis heute gar keine Gegenstaende.
+                //
+                // ⚠ <b>Die Gegenprobe ist GELAUFEN, nicht behauptet.</b> Ohne
+                // dieses <c>continue</c> (das <c>LastPropsKept++</c> blieb
+                // stehen, damit sich sonst nichts aendert) meldete
+                // <c>--map-edit-check</c> auf map_01 nach ACHT Gelaendestrichen
+                // <b>634 von 644</b> alten Gegenstandszellen — zehn Baeume weg.
+                // Mit dem <c>continue</c>: <b>653 von 653</b>.
+                if (m.CodeAt(c, r) >= CwpFile.ObjectCodeBase) { LastPropsKept++; continue; }
                 int i = r * m.Width + c;
                 int cls = grid[i];
                 int wm = TileModel.WaterMask(m.Width, m.Height, grid, c, r);

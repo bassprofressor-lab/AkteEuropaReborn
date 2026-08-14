@@ -20,15 +20,28 @@ using AkteEuropaReborn.Import;
 ///                [,samen=&lt;n&gt;]        der Wuerfelsamen
 ///                [,boden=&lt;n&gt;]        welcher Bodenblock (siehe TilePalette)
 ///                [,from=&lt;ordner&gt;]    wo NN.CWP/NN.PAL liegen
-///                [,quelle=&lt;x.CWM&gt;]   statt erzeugen: diese Karte einlesen
+///                [,quelle=&lt;x.CWM&gt;]   statt erzeugen: diese Originaldatei einlesen
+///                [,oeffne=&lt;karte&gt;]   statt erzeugen: eine VORHANDENE Karte
+///                                     aus map_*.json/map_*.entities.json
 ///   --map-check=&lt;name&gt;
+///   --map-check=&lt;name&gt;,rundlauf     oeffnen → speichern → Feld fuer Feld vergleichen
+///   --map-check=alle,rundlauf       derselbe Rundlauf ueber jede Karte
 /// </code>
 /// <para>Beispiele:</para>
 /// <code>
 ///   … --headless --path . -- --map-new=edit47,80,80,47,boden=1
 ///   … --headless --path . -- --map-check=map_edit47
 ///   … --headless --path . -- "--map-new=probe01,0,0,0,quelle=Assets/Legacy/LEVELS/01.CWM"
+///   … --headless --path . -- "--map-new=oeffnen01,0,0,0,oeffne=map_01"
+///   … --headless --path . -- "--map-check=map_01,rundlauf"
 /// </code>
+///
+/// <para><b>»quelle=« gegen »oeffne=«, und warum es beide gibt.</b>
+/// <c>quelle=</c> liest eine ORIGINALDATEI (<c>.CWM</c>/<c>.DM</c>) und ist die
+/// Gegenprobe des Schreibwegs. <c>oeffne=</c> liest die drei GESCHRIEBENEN
+/// Dateien einer Karte und erreicht damit auch jede selbst erzeugte — die hat
+/// nie eine <c>.CWM</c> gehabt. Erst <c>oeffne=</c> macht »eine vorhandene Karte
+/// bearbeiten« vollstaendig; siehe <see cref="Editor.MapOpen"/>.</para>
 ///
 /// <para><b>Der EINSTIEG liegt nicht hier, sondern in
 /// <c>MainMenu._Ready</c></b> — bei den anderen kopflosen Schaltern, wo er vor
@@ -140,7 +153,7 @@ public partial class MainMenu
         {
             say("--map-new=<name>,<breite>,<hoehe>,<kachelsatz>"
                 + "[,flach][,leer][,ohnetabelle][,ohnenaht][,boden=<n>][,from=<ordner>]"
-                + "[,quelle=<datei.CWM>][,spieler=<n>][,truppe=<n>]"
+                + "[,quelle=<datei.CWM>][,oeffne=<kartenname>][,spieler=<n>][,truppe=<n>]"
                 + "[,wasser=<prozent>][,samen=<n>][,neutral=<n>][,ohneneutral]");
             return 2;
         }
@@ -153,6 +166,12 @@ public partial class MainMenu
         string? from = null;
         int pick = 0;
         string? source = null;
+        // ⚠ »oeffne=« ist der neue Weg und der wichtigste Unterschied zu
+        // »quelle=«: quelle liest eine ORIGINALDATEI (.CWM/.DM), oeffne liest
+        // die drei GESCHRIEBENEN Dateien einer Karte, also auch die einer selbst
+        // erzeugten. Nur damit laesst sich eine eigene Karte wieder aufmachen —
+        // eine .CWM hat sie ja nie gehabt. Siehe MapOpen.
+        string? open = null;
         int players = MapGenerator.PlayersDefault, troop = MapGenerator.TroopDefault;
         double waterShare = MapTerrain.WaterShareDefault;
         uint seed = 1;
@@ -175,6 +194,7 @@ public partial class MainMenu
             else if (p[i].StartsWith("from=")) from = p[i]["from=".Length..];
             else if (p[i].StartsWith("boden=")) int.TryParse(p[i]["boden=".Length..], out pick);
             else if (p[i].StartsWith("quelle=")) source = p[i]["quelle=".Length..];
+            else if (p[i].StartsWith("oeffne=")) open = p[i]["oeffne=".Length..];
             else if (p[i].StartsWith("spieler=")) int.TryParse(p[i]["spieler=".Length..], out players);
             else if (p[i].StartsWith("truppe=")) int.TryParse(p[i]["truppe=".Length..], out troop);
             else if (p[i].StartsWith("neutral=")) int.TryParse(p[i]["neutral=".Length..], out neutrals);
@@ -196,6 +216,14 @@ public partial class MainMenu
         {
             try { opened = CwmFile.Load(source); }
             catch (Exception e) { say($"{source}: {e.Message}"); return 2; }
+            ts = opened.Tileset;
+            w = opened.Width; h = opened.Height;
+        }
+        else if (open != null)
+        {
+            try { opened = MapOpen.Load(open, say); }
+            catch (Exception e) { say($"{open}: {e.Message}"); return 2; }
+            if (opened == null) return 2;
             ts = opened.Tileset;
             w = opened.Width; h = opened.Height;
         }
@@ -241,7 +269,7 @@ public partial class MainMenu
             TilePalette? brushPal = null;
             TileModel? brushModel = null;
             TileSeams? brushSeams = null;
-            if (source != null)
+            if (source != null || open != null)
             {
                 // ⚠ Der GEGENPROBEN-Weg, und der einzige Grund, aus dem er hier
                 // steht: er schickt eine GELIEFERTE Karte durch denselben
@@ -251,8 +279,11 @@ public partial class MainMenu
                 // Spaeter ist es ausserdem der Weg, auf dem der Editor eine
                 // vorhandene Karte OEFFNET.
                 m = opened!;
-                say($"Quelle {source}: {m.Width}x{m.Height}, Kachelsatz {m.Tileset:00}, " +
+                say($"Quelle {source ?? open}: {m.Width}x{m.Height}, Kachelsatz {m.Tileset:00}, " +
                     $"{m.Sections.Count} Abschnitte, Mission \"{m.Mission}\"");
+                if (open != null && MapOpen.FullName(open) == outName)
+                    say($"⚠ AN ORT UND STELLE: {outName} wird beim Speichern UEBERSCHRIEBEN. " +
+                        "Dass dabei nichts verlorengeht, prueft --map-check=" + outName + ",rundlauf");
                 // ⚠ STUMM gelernt. Der Pinsel braucht die Tabelle auch auf
                 // diesem Weg, aber dieser Weg ist die GEGENPROBE des
                 // Schreibwegs: kaeme hier eine Zeile mehr heraus, waere nicht

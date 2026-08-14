@@ -18,13 +18,27 @@ using AkteEuropaReborn.Import;
 /// <para>Darum liegt sie hier, statisch, wie <see cref="UI.SkirmishSetup"/> es
 /// fuer den Gefechtsaufbau tut — und aus demselben Grund.</para>
 ///
-/// <para>⚠ <b>Bewusste Grenze:</b> bearbeitet wird immer die Karte, die dieser
-/// Lauf eben erzeugt hat. Eine schon vorhandene Karte von der Platte
+/// <para><s>⚠ <b>Bewusste Grenze:</b> bearbeitet wird immer die Karte, die
+/// dieser Lauf eben erzeugt hat. Eine schon vorhandene Karte von der Platte
 /// zurueckzulesen waere ein eigener Weg (aus <c>map_*.json</c> und
 /// <c>map_*.entities.json</c> wieder eine <c>CwmFile</c> bauen), und der Spieler
-/// hat ihn ausdruecklich hintangestellt: »vorhandene karten muessen wir nicht
-/// zwingend editieren«. Wenn nichts gehalten wird, sagt der Editor das, statt
-/// einen Knopf anzubieten, der nichts tut.</para>
+/// hat ihn ausdruecklich hintangestellt.</s></para>
+///
+/// <para><b>15.08.2026 — DIE GRENZE IST WEG.</b> Der Rueckweg steht in
+/// <see cref="MapOpen"/>: aus den zwei geschriebenen Dateien wird wieder eine
+/// <c>CwmFile</c>, und die haelt dieselbe Stelle hier. Erreichbar ueber den
+/// Knopf »VORHANDENE OEFFNEN« im <see cref="MapEditorScreen"/> und ueber
+/// <c>--map-new=&lt;name&gt;,0,0,0,oeffne=&lt;karte&gt;</c>.</para>
+///
+/// <para><b>Und der Preis dafuer ist gemessen.</b> <see cref="MapRound"/> oeffnet
+/// eine Karte, speichert sie ohne jede Aenderung und haelt das Ergebnis Feld
+/// fuer Feld gegen das Original — <c>--map-check=&lt;name&gt;,rundlauf</c>. Ueber
+/// alle <b>67</b> Karten des Ordners: <b>0</b> Abweichungen in Gelaende, Hoehen,
+/// Kachelcodes, Gegenstaenden, Gebaeuden, Einheiten, Marken, Gleisen, Linien,
+/// Knoten, Vorkommen, Infanteriezellen, Spielern, Konten, Zielen und Bauplaenen;
+/// die <c>map_*.json</c> kommt Zeichen fuer Zeichen zurueck. Was NICHT
+/// rundlaeuft, steht namentlich bei <see cref="MapRound.IsKnownGap"/> und bei
+/// <see cref="MapOpen"/>.</para>
 /// </summary>
 public static class MapEditSession
 {

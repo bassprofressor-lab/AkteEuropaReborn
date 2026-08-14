@@ -163,6 +163,76 @@ public partial class MapEditOverlay : Node2D
         GD.Print($"map-edit-check: Gegenstaende -> {props} von 3 stehen im Raster " +
                  $"({_props.Count} Arten zur Wahl)");
 
+        // 3b. DIE GEGENPROBE ZUM SETZEN: dieselben Zellen wieder freiraeumen,
+        // und dazu eine Zelle OHNE Gegenstand, die abgewiesen werden muss.
+        // ⚠ Der Zaehler unterscheidet: auf einer ERZEUGTEN Karte gibt es keine
+        // Gegenstaende, dann steht hier »0 von 0« und die Zeile sagt es. Wer den
+        // Griff wirklich pruefen will, macht eine gelieferte Karte auf
+        // (--map-editor-open=map_01, 644 Gegenstandszellen).
+        int gone = 0, wanted = 0, refused = 0;
+        for (int k = 0; k < 3; k++)
+        {
+            int c = _map.Width / 2 + k, r = _map.Height / 2 + 3;
+            if (_map.CodeAt(c, r) < CwpFile.ObjectCodeBase) continue;
+            wanted++;
+            Take(new Vector2I(c, r));
+            if (_map.CodeAt(c, r) < CwpFile.ObjectCodeBase) gone++;
+            else GD.Print($"map-edit-check: ⚠ Gegenstand ({c},{r}) blieb: {_say}");
+        }
+        // die Gegenprobe: eine Zelle ohne Gegenstand darf NICHT angefasst werden
+        for (int r = 1; r < _map.Height - 1 && refused == 0; r++)
+            for (int c = 1; c < _map.Width - 1 && refused == 0; c++)
+            {
+                if (_map.CodeAt(c, r) >= CwpFile.ObjectCodeBase) continue;
+                int had = _map.CodeAt(c, r);
+                Take(new Vector2I(c, r));
+                if (_map.CodeAt(c, r) == had && _say.Contains("kein Gegenstand")) refused = 1;
+                else GD.Print($"map-edit-check: ⚠ Bodenzelle ({c},{r}) wurde angefasst: {_say}");
+            }
+        GD.Print($"map-edit-check: Gegenstand wegnehmen -> {gone} von {wanted} weg, " +
+                 $"Bodenzelle abgewiesen {refused} von 1 (muss 1 sein), " +
+                 $"{MapEditTerrain.LastPropsKept} Nachbarn mit Gegenstand unangetastet");
+
+        // 3c. UND DIE ZWEITE GEGENPROBE, die erst durch das Oeffnen vorhandener
+        // Karten noetig wurde: ein GELAENDESTRICH darf keinen fremden Gegenstand
+        // wegradieren. Gezaehlt wird, wie viele Gegenstandszellen die Karte vor
+        // und nach dem Strich traegt — vor dem 15.08.2026 nahm der Umkreislauf
+        // sie mit.
+        //
+        // ⚠ NICHT die ANZAHL vorher gegen nachher: der Gelaendepinsel zieht
+        // seine Kachel aus derselben gemessenen Tabelle wie der Generator, und
+        // die enthaelt auch Bewuchs — ein Strich PFLANZT also mitunter einen
+        // Baum. Der erste Anlauf dieses Zaehlers meldete »644 vorher / 646
+        // nachher« und haette damit einen Verlust verdeckt, den zwei neue
+        // Baeume aufgewogen haetten. Gezaehlt wird darum, wie viele der ZUVOR
+        // vorhandenen Zellen ihren Gegenstand behalten haben.
+        var propCells = new List<(int C, int R)>();
+        for (int c = 0; c < _map.Width; c++)
+            for (int r = 0; r < _map.Height; r++)
+                if (_map.CodeAt(c, r) >= CwpFile.ObjectCodeBase) propCells.Add((c, r));
+        int propsBefore = propCells.Count;
+        _brush = Brush.Gelaende;
+        int strokes = 0;
+        for (int r = 2; r < _map.Height - 2 && strokes < 8; r++)
+            for (int c = 2; c < _map.Width - 2 && strokes < 8; c++)
+            {
+                if (_map.CodeAt(c, r) >= CwpFile.ObjectCodeBase) continue;
+                if (MapEditTerrain.ClassAt(_map, c, r) != 0) continue;
+                bool nearProp = false;
+                for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++)
+                        if (_map.CodeAt(c + dx, r + dy) >= CwpFile.ObjectCodeBase) nearProp = true;
+                if (!nearProp) continue;
+                PutGround(new Vector2I(c, r), MapFactory.Ground.Rough);
+                strokes++;
+            }
+        int kept = 0;
+        foreach (var (c, r) in propCells) if (_map.CodeAt(c, r) >= CwpFile.ObjectCodeBase) kept++;
+        GD.Print($"map-edit-check: Gelaendestrich neben Gegenstaenden -> {strokes} Striche, " +
+                 $"{kept} von {propsBefore} alten Gegenstandszellen behalten " +
+                 $"(muss gleich sein), Gegenstandszellen jetzt {CountProps()} " +
+                 "(darf STEIGEN — die gemessene Tabelle pflanzt selbst Bewuchs)");
+
         // 3a. EINHEITEN — je eine Landeinheit für zwei verschiedene Spieler,
         // und die GEGENPROBE: ein Schiff an Land muss abgewiesen werden.
         _brush = Brush.Einheit;
@@ -483,6 +553,17 @@ public partial class MapEditOverlay : Node2D
         int n = 0;
         for (int i = 0; i * CwmData.BuildingStride + 0x18 < s.Length && i < 255; i++)
             if (s[i * CwmData.BuildingStride + 0x18] == 1) n++;
+        return n;
+    }
+
+    /// <summary>Wie viele Zellen einen Gegenstand tragen — der Kachelcode IST
+    /// der Gegenstand, es gibt keinen zweiten Ort dafuer.</summary>
+    private int CountProps()
+    {
+        int n = 0;
+        for (int c = 0; c < _map.Width; c++)
+            for (int r = 0; r < _map.Height; r++)
+                if (_map.CodeAt(c, r) >= CwpFile.ObjectCodeBase) n++;
         return n;
     }
 
@@ -954,8 +1035,26 @@ public partial class MapEditOverlay : Node2D
             case Brush.Hoehe:
                 PutHeight(cell, -1);
                 break;
+            // ⚠ HIER STAND »Gegenstand wegnehmen: dafuer den Boden neu malen«,
+            // und der Rat ging ins Leere: MapEditTerrain.PaintClass steigt aus,
+            // sobald die Zelle die gewuenschte Klasse schon hat — ein Gegenstand
+            // aendert die Klasse aber gar nicht, also war er unloeschbar. Der
+            // Weg steht jetzt bei MapEditTerrain.RemoveProp.
+            case Brush.Gegenstand:
+            {
+                string? why = MapEditTerrain.RemoveProp(_map, MapEditSession.Tiles,
+                                                        MapEditSession.Palette, cell.X, cell.Y,
+                                                        MapEditSession.Seed, MapEditSession.Seams);
+                if (why != null) { _say = why; break; }
+                _mine.RemoveAll(x => x.What == Brush.Gegenstand && x.Col == cell.X && x.Row == cell.Y);
+                MapEditSession.Dirty = true;
+                _say = $"Gegenstand von ({cell.X},{cell.Y}) weg — {MapEditTerrain.LastRetiled} Zellen " +
+                       $"neu gekachelt, {MapEditTerrain.LastPropsKept} Nachbarn mit Gegenstand " +
+                       "unangetastet; sichtbar nach F5";
+                break;
+            }
             default:
-                _say = "Gegenstand wegnehmen: dafuer den Boden neu malen";
+                _say = "dieser Pinsel kennt kein Wegnehmen";
                 break;
         }
         Refresh();
