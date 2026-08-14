@@ -753,6 +753,11 @@ public partial class MapViewer : Node2D
                     }
             else if (a == "--damage-check") _damageCheck = 2f;
             else if (a == "--hit-check") _hitCheck = 2f;
+            // ⚠ Holt die zwei technischen Kopfzeilen des HUD zurueck, die im
+            // Spiel seit dem 14.08.2026 wegbleiben (siehe UpdateHud). Ein
+            // Prueflauf, der die Rastergroesse oder den Kachelsatz belegen
+            // will, setzt ihn.
+            else if (a == "--hud-debug") HudDebug = true;
             else if (a == "--cheat-check") _cheatCheck = 2f;
             else if (a == "--air-buy-check") _airBuyCheck = 3f;
             else if (a == "--produce-check") _produceCheck = 2f;
@@ -984,6 +989,11 @@ public partial class MapViewer : Node2D
 
     /// <summary>`--damage-check`: die Schadensstufen durchfahren.</summary>
     private float _damageCheck;
+
+    /// <summary>`--hud-debug`: die zwei technischen Kopfzeilen des HUD
+    /// (Kartenname/Mission, Raster/Kachelsatz/Bildgroesse) auch im Spiel
+    /// zeigen. Im Kartenbetrachter stehen sie ohnehin.</summary>
+    public static bool HudDebug;
 
     /// <summary>`--hit-check`: die TREFFERRECHNUNG mit den Einheiten dieser
     /// Karte durchrechnen — siehe <see cref="MapEntityLayer.HitCheckLine"/>.
@@ -2203,10 +2213,28 @@ public partial class MapViewer : Node2D
             : "?";
         string tileset = meta.TryGetValue("tileset", out var ts) ? ts.AsString() : "?";
 
+        // ⚠ 14.08.2026 — DIE ZWEI TECHNISCHEN ZEILEN SIND IM SPIEL WEG.
+        //
+        // Gemeldet: »Das Fenster allgemein, wo oben steht Map_02 "Hidden Bases"
+        // Grid, Tileset, Image usw. kann raus, aus Kampagne sowie Gefecht.«
+        // Zu Recht — Kartenname, Missionstext, Rasterweite, Kachelsatznummer
+        // und Bildgroesse in Pixeln sind Angaben ueber die DATEI, nicht ueber
+        // die Lage auf dem Schlachtfeld.
+        //
+        // ⚠ Sie werden NICHT geloescht: an ihnen haengen Prueflaeufe und
+        // Belegbilder (»loaded <name>« mitlesen ist eine feste Regel, und die
+        // Rastergroesse steht in mehreren Screenshots als Beleg). `--hud-debug`
+        // holt sie zurueck. Ohne Kampagne und ohne Gefecht — also im blossen
+        // Kartenbetrachter, wo man wirklich Karten durchblaettert — bleiben sie
+        // ebenfalls stehen, samt der Blaetterzahl [n/N].
+        bool imSpiel = UI.SkirmishSetup.Active || UI.SkirmishSetup.CampaignMission > 0;
+        bool technik = HudDebug || !imSpiel;
         _hud.Text =
-            $"{MapLabel(name)}   \"{mission}\"\n" +
-            $"grid {dims}   tileset {tileset}   image {(int)size.X}x{(int)size.Y}px\n" +
-            (UI.SkirmishSetup.Active ? "" : $"[{_mapIndex + 1}/{MapNames.Length}]   ") +
+            (technik
+                ? $"{MapLabel(name)}   \"{mission}\"\n" +
+                  $"grid {dims}   tileset {tileset}   image {(int)size.X}x{(int)size.Y}px\n"
+                : "") +
+            (UI.SkirmishSetup.Active || !technik ? "" : $"[{_mapIndex + 1}/{MapNames.Length}]   ") +
             $"click/drag=select  RIGHT-click=move  X=stop  E=eingraben  M=konstruieren  B=bauen  N=auswahl  O=forschen  K=reparieren  V=lagerausbau  C=prod.erw.  L=schienen  Y=flugzeuge  " +
             $"WASD+middle-drag=pan  wheel=zoom\n" +
             $"[ ]=map  F=fit  U=sprites  R=ranges  P=walkable  Z=zones  J=nebel  T=buildings  G=dots  H=karte  Q=rohstoffleiste  Tab=ereignis  Shift+rechts=anreihen  Esc=quit";
