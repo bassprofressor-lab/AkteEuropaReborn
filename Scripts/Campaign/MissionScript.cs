@@ -52,6 +52,10 @@ public sealed class MissionScript
         /// vier Felder (Einheit, ukol, x, y).</summary>
         public int A, B, C, D, E;
 
+        /// <summary>Nur `stock`: der quadratische Anteil. Siehe
+        /// <see cref="StockWert"/>. 0 heisst »kein Quadratterm«.</summary>
+        public int F;
+
         /// <summary>`space_in` only: the design numbers to drop, in order. They
         /// index sec47 as <c>typ + 200*player</c> — the same table the design
         /// screen and the factories use, which is why mission 14's single byte
@@ -642,7 +646,7 @@ public sealed class MissionScript
     /// Pruefstand gar nicht herstellen kann (Mission 2 haengt an einem
     /// Fortschrittszaehler v[20]), ist eine Grenze des Pruefstands.</para>
     /// </summary>
-    public List<(int Slot, int Off, int Var, int Add, int Mal, int At, bool Bereit)> StockSites()
+    public List<(int Slot, int Off, int Var, int Add, int Soll, int At, bool Bereit)> StockSites()
     {
         var list = new List<(int, int, int, int, int, int, bool)>();
         foreach (var r in _script.Rules)
@@ -656,13 +660,41 @@ public sealed class MissionScript
             }
             foreach (var a in r.Then)
                 if (a.Kind == "stock")
-                    list.Add((a.A, a.B, a.C, a.D, a.E == 0 ? 1 : a.E, r.At, bereit));
+                    list.Add((a.A, a.B, a.C, a.D, StockWert(a), r.At, bereit));
         }
         return list;
     }
 
+    /// <summary>
+    /// Der Betrag einer Bestueckung: <c>d + (e + f·(v[c] / 2))·v[c]</c>.
+    ///
+    /// <para>Drei Formen kommen im Spiel vor, und alle drei passen hier hinein:
+    /// M2/M3/M6 schreiben <c>v + konstante</c> (e = 1, f = 0), M25 rechnet mit
+    /// einem Faktor (<c>3v + 80</c> und <c>194 − 3v</c>), und M33 rechnet
+    /// QUADRATISCH — <c>(19 − v/2)·v + 50</c> fuer die Waffen und
+    /// <c>(v/2)·v + 70</c> fuer das Fahrwerk, ueber sechs Gebaeude
+    /// (@0x4A55EE ff.).</para>
+    ///
+    /// <para>⚠ <c>v / 2</c> und nicht <c>v &gt;&gt; 1</c>: das Original rundet mit
+    /// <c>cdq; sub eax,edx; sar eax,1</c> zur Null hin, und genau das tut die
+    /// ganzzahlige Division in C#. Bei v[88] = 0..19 macht es keinen
+    /// Unterschied, aber die Herleitung soll stimmen und nicht nur das
+    /// Ergebnis.</para>
+    ///
+    /// <para>⚠ M33 stand einen halben Tag lang als <c>v[88] + 70</c> in der
+    /// Datei, weil der Ausleser ein <c>imul</c> uebersah — und der Pruefstand
+    /// merkte es nicht, weil er seinen Sollwert aus derselben Lesung zog. Siehe
+    /// die Zurueckziehung in GAMESTATE_RE 3.87.</para>
+    /// </summary>
+    public int StockWert(Act a)
+    {
+        if (a.C < 0 || a.C >= _var.Length) return a.D;
+        int v = _var[a.C];
+        return a.D + (a.E + a.F * (v / 2)) * v;
+    }
+
     /// <summary>Der Wert einer Missionsvariablen — für den Prüfstand, der den
-    /// Sollwert v[c]+d nachrechnen muss.</summary>
+    /// Sollwert nachrechnen muss.</summary>
     public int VarAt(int n) => n >= 0 && n < _var.Length ? _var[n] : 0;
 
     /// <summary>Jede bestueckende Regel mit ihrem Zustand, Glied fuer Glied.
@@ -954,6 +986,7 @@ public sealed class MissionScript
                             C = ad.TryGetValue("c", out var z) ? z.AsInt32() : 0,
                             D = ad.TryGetValue("d", out var w) ? w.AsInt32() : 0,
                             E = ad.TryGetValue("e", out var e5) ? e5.AsInt32() : 0,
+                            F = ad.TryGetValue("f", out var f5) ? f5.AsInt32() : 0,
                         };
                         if (ad.TryGetValue("typen", out var ty) &&
                             ty.VariantType == Variant.Type.Array)
@@ -1681,11 +1714,7 @@ public sealed class MissionScript
             // (`3*v[88]+80` und `194−3*v[88]`, @0x4A1B50).
             case "stock":
                 if (SetStoreField != null && !StockOld)
-                {
-                    int f = a.E == 0 ? 1 : a.E;
-                    int wert = a.D + (a.C >= 0 && a.C < _var.Length ? f * _var[a.C] : 0);
-                    SetStoreField(a.A, a.B, wert);
-                }
+                    SetStoreField(a.A, a.B, StockWert(a));
                 break;
             // space_in(a=spieler, b=x, c=y, typen) — die Verstaerkung startet
             // ausserhalb der Karte und braucht ihre Anflugzeit, wie im Original

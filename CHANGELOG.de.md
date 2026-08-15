@@ -68,9 +68,9 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Missionsblocks und schwanken um bis zu neunzehn, wie im Original; Kampagne 25
   rechnet mit einem Faktor drei. Gemessen: Kampagne 3 vier von vier, Kampagne 6
   vier von vier, Kampagne 2 zwei von vier.
-  ⚠ Kampagne 33 rechnet **quadratisch** und ist damit noch nicht gebaut — die
-  sechs Bestueckungen sind gelesen und stehen als ehrliche Luecke da, statt eine
-  falsche Zahl zu schreiben.
+  Auch Kampagne 33 ist jetzt gebaut: sie rechnet als einzige **quadratisch**
+  (der Betrag haengt vom Quadrat des Taktzaehlers ab), und alle zwoelf ihrer
+  Bestueckungen treffen ihren Wert.
 - **Das Original zaehlt Zellen, nicht Bildpunkte — und der Boden bremst
   niemanden.** Die zweite Haelfte der gemeldeten Frage nach der Geschwindigkeit
   ist gelesen. Jede Einheit fuehrt einen Schrittzaehler, den das Spiel selbst

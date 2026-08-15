@@ -65,9 +65,9 @@ deviate on purpose, and every deviation is marked as ours.
   vary by up to nineteen, as in the original; campaign 25 applies a factor of
   three. Measured: campaign 3 four of four, campaign 6 four of four, campaign 2
   two of four.
-  ⚠ Campaign 33 computes its amounts **quadratically** and is therefore not
-  built yet — its six stockings are read and left as an honest gap rather than
-  written with a wrong number.
+  Campaign 33 is now built too: it is the only one that computes
+  **quadratically** (the amount depends on the square of the tick counter), and
+  all twelve of its stockings hit their value.
 - **The original counts cells, not pixels — and the ground slows nobody down.**
   The second half of the reported question about speed has been read out. Every
   unit carries a step counter the game itself calls "kolik"; it grows by the

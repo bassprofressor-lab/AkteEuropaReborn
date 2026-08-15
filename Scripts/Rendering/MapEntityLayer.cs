@@ -7067,6 +7067,14 @@ public partial class MapEntityLayer : Node2D
                 // negativ kann der Betrag nicht werden (v[88] ist 0..19).
                 _mscript.SetStoreField = (slot, off, wert) =>
                 {
+                    // ⚠ WAS DIE REGEL GERECHNET HAT, im Augenblick des Feuerns.
+                    // v[88] ist ein umlaufender Taktzaehler (0..19), also ist
+                    // eine spaeter nachgerechnete Formel wertlos: M33 feuerte
+                    // bei v=14 und der Pruefstand rechnete mit v=19 nach —
+                    // 218 gegen 240, und das sah wie ein Fehler der Wirkung aus.
+                    // Verglichen wird darum, ob im Lager ANKOMMT, was die Regel
+                    // ausgerechnet hat.
+                    _stockGeschrieben[(slot, off)] = wert;
                     foreach (var e in _entities)
                     {
                         if (!e.IsBuilding || e.Slot != slot) continue;
@@ -8275,7 +8283,15 @@ public partial class MapEntityLayer : Node2D
                           "kein solches Gebaeude auf dieser Karte");
                 continue;
             }
-            int soll = s.Add + (s.Var >= 0 ? s.Mal * _mscript.VarAt(s.Var) : 0);
+            // ⚠ Der Sollwert kommt aus DERSELBEN Rechnung wie die Wirkung
+            // (MissionScript.StockWert). Das ist hier richtig so: gemessen wird,
+            // ob die Wirkung im Spiel ANKOMMT, nicht ob die Formel stimmt — die
+            // steht in GAMESTATE_RE 3.87 und ist gegen die Disassemblierung
+            // gehalten. Der Unterschied hat am 16.08. einen halben Tag gekostet
+            // (Arbeitsweise N), darum steht er hier ausdruecklich.
+            // Wenn die Regel gefeuert hat, gilt IHR Wert; sonst die Formel zum
+            // jetzigen Stand, rein zur Auskunft.
+            int soll = _stockGeschrieben.TryGetValue((s.Slot, s.Off), out int gs) ? gs : s.Soll;
             bool traf = neu == soll;
             // Nicht getroffen UND die Bedingung steht immer noch nicht: dann hat
             // der Pruefstand sie nicht herstellen koennen — das ist seine
@@ -8284,8 +8300,8 @@ public partial class MapEntityLayer : Node2D
             if (traf) ok++; else if (s.Bereit) fehl++; else unstellbar++;
             sb.Append($"\n      {zeichen} Platz {s.Slot} Lager " +
                       $"{namen.GetValueOrDefault(s.Off, "?"),-9} {alt} -> {neu}, " +
-                      $"soll {(s.Var >= 0 ? $"{(s.Mal == 1 ? "" : s.Mal + "*")}v[{s.Var}]={s.Mal * _mscript.VarAt(s.Var)}+" : "")}" +
-                      $"{s.Add} = {soll}{(traf || s.Bereit ? "" : "  [Bedingung nicht herstellbar]")}");
+                      $"soll {soll} (v[{s.Var}]={(s.Var >= 0 ? _mscript.VarAt(s.Var) : 0)})" +
+                      $"{(traf || s.Bereit ? "" : "  [Bedingung nicht herstellbar]")}");
         }
         sb.Append($"\n   B6 {(fehl > 0 ? "STEHT" : ok > 0 ? "behoben" : "NICHT MESSBAR")}: " +
                   $"{ok} getroffen, {fehl} daneben, {unstellbar} nicht ausloesbar, " +
@@ -8296,6 +8312,8 @@ public partial class MapEntityLayer : Node2D
     }
 
     private int _stockOk = -1, _stockBad;
+    // (Gebaeudeplatz, Feld) -> was die Regel beim Feuern ausgerechnet hat
+    private readonly Dictionary<(int, int), int> _stockGeschrieben = new();
 
     /// <summary>0, wenn jede Bestueckung genau ihren Sollwert getroffen hat und
     /// es ueberhaupt eine gab.</summary>
