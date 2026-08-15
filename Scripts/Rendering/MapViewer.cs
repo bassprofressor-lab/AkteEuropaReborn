@@ -614,6 +614,7 @@ public partial class MapViewer : Node2D
     // --queue-check (Fehler C8): Bestellzeitpunkt, Abrechnungszeitpunkt, Anzahl.
     private float _queueCheckAt, _queueCheckDue;
     private float _supplyReloadAt, _supplyReloadDue;
+    private float _railZigzagAt;
     private int _queueCheckN = 3;
     private bool _demoState;
     private bool _demoAir;
@@ -810,6 +811,12 @@ public partial class MapViewer : Node2D
             // --supply-reload-check (Fehler C5): leeren Heli herstellen und sehen,
             // ob er einen Nachladeplatz findet. Siehe SupplyReloadCheckLine.
             else if (a == "--supply-reload-check") _supplyReloadAt = 3f;
+            // --rail-zigzag (Fehler C17): die gezeichnete Schiene gegen den
+            // gefahrenen Weg, je Knick einzeln. Siehe RailZigzagLine.
+            else if (a == "--rail-zigzag") _railZigzagAt = 3f;
+            // --no-rail-lift: die Gegenprobe zu C17 — der Weg nimmt wieder die
+            // Hoehe der gerundeten Zelle statt die des Gleisbildes.
+            else if (a == "--no-rail-lift") MapEntityLayer.RailNoLift = true;
             // --queue-check[=n]: n Einheiten in EINEM Zug bestellen und danach
             // nachrechnen, ob bezahlt und geliefert zusammenpassen. Siehe
             // MapEntityLayer.QueueCheckOrder — der eigentliche Fehler C8 war
@@ -1274,6 +1281,15 @@ public partial class MapViewer : Node2D
         // --supply-reload-check: erst den leeren Heli herstellen, dann ihm Zeit
         // zum Hinfliegen geben, dann abrechnen. Die Wartezeit ist grosszuegig —
         // ein Flughafen kann am anderen Kartenrand liegen.
+        if (_railZigzagAt > 0f)
+        {
+            _railZigzagAt -= (float)delta;
+            if (_railZigzagAt <= 0f)
+            {
+                _railZigzagAt = -1f;
+                GD.Print(_entities.RailZigzagLine());
+            }
+        }
         if (_supplyReloadAt > 0f)
         {
             _supplyReloadAt -= (float)delta;

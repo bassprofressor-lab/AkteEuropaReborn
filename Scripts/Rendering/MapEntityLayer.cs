@@ -11539,6 +11539,18 @@ public partial class MapEntityLayer : Node2D
     {
         public int Line, Index, Step, Piece;
         public float Col, Row;          // Row may be a half tile
+
+        /// <summary><b>Die Höhe über dem Zellboden in Kartenpixeln</b>, aus der
+        /// GEZEICHNETEN Schiene und nicht aus der Zelle — siehe
+        /// <c>RailLiftOf</c> in Simulation/RailFreight.cs (Fehler C17).
+        ///
+        /// <para>⚠ Sie muss beim Waggon liegen und nicht nur im Weg: gezeichnet
+        /// wird über <c>RailPoint(w.Col, w.Row)</c>, und das zieht die Höhe der
+        /// GERUNDETEN Zelle ab — eine Treppenfunktion. Auf einer Rampe steigt
+        /// die Schiene im Bild dagegen stetig, und der Unterschied ist genau
+        /// eine Höhenstufe (15 px). Ohne dieses Feld springt der Waggon an jeder
+        /// Zellgrenze einer Rampe um 15 px.</para></summary>
+        public float Lift;
         public float Move;              // seconds until the next step — ours
         public int Dir = 1;             // +1 = along the route, -1 = against it
 
@@ -13923,7 +13935,13 @@ public partial class MapEntityLayer : Node2D
             int part = WagonPart.TryGetValue(w.Index, out var pp) ? pp : 58;
             int piece = w.Index == 3 ? (w.Piece + 4) & 7 : w.Piece;   // @0x42b52a
             var tex = GetTrainTexture(part, piece);
-            var at = RailPoint(new Vector2(w.Col, w.Row));
+            // ⚠ 17.08.2026 — MIT DER HÖHE AUS DEM GLEISBILD (Fehler C17). Hier
+            // stand `RailPoint(...)` allein, und das zieht die Höhe der
+            // GERUNDETEN Zelle ab — eine Treppe je Zelle, während die Rampe im
+            // Bild stetig steigt. Gemessen sprang der Waggon dadurch an jeder
+            // Zellgrenze einer Rampe um eine volle Stufe (15 px), und genau das
+            // ist das gemeldete Zickzack. Siehe RailLiftOf.
+            var at = RailLifted(new Vector2(w.Col, w.Row), w.Lift);
             if (tex == null)
             {
                 DrawCircle(at, 3f, new Color(0.9f, 0.6f, 0.2f));

@@ -277,6 +277,26 @@ public sealed class ContentBuilder
         }
         catch (Exception e) { Say("Hilfetexte: " + e.Message); }
 
+        // ---- die Enzyklopädie des Originals ------------------------------------
+        // ⚠ 17.08.2026 — ENCYCLOG.TXT, 106 Seiten, und sie lag die ganze Zeit
+        // neben GAME.EXE. Gefunden nur, weil beim Anschliessen der Menuezeile
+        // »Enzyklopaedie« nachgesehen wurde, was das ORIGINAL dort hat, statt
+        // gleich einen Weblink hinzuschreiben. Siehe EncyclopediaExporter —
+        // dort steht auch, warum diese eine Datei Latin-1 ist und HELPG.TXT
+        // daneben cp437.
+        try
+        {
+            var enc = Asset("ENCYCLOG.TXT");
+            if (enc == null) Say("ENCYCLOG.TXT fehlt — keine Enzyklopaedie");
+            else
+            {
+                var ex = new EncyclopediaExporter(_dst + "/UI");
+                ex.Write(enc, Say);
+                TablesWritten++;
+            }
+        }
+        catch (Exception e) { Say("Enzyklopaedie: " + e.Message); }
+
         // ---- die Missionsziele im Klartext -------------------------------------
         // OBJECTG.TXT, aus derselben Quelle wie BRIEFG.TXT und HELPG.TXT — sie
         // liegt im Namensverzeichnis von DATA1.CAB direkt zwischen HELPG.TXT und
@@ -590,6 +610,11 @@ public sealed class ContentBuilder
             var obj = Asset("OBJECTG.TXT");
             if (obj == null) Say("OBJECTG.TXT nicht gefunden — Missionsziele bleiben, wie sie sind");
             else new ObjectivesExporter(_dst + "/UI").Write(obj, Say);
+            // Und die Enzyklopaedie aus demselben Grund: dieselbe Quelle,
+            // dieselben paar Kilobyte.
+            var enc = Asset("ENCYCLOG.TXT");
+            if (enc == null) Say("ENCYCLOG.TXT nicht gefunden — Enzyklopaedie bleibt, wie sie ist");
+            else new EncyclopediaExporter(_dst + "/UI").Write(enc, Say);
             return hx.Texts > 0;
         }
         catch (Exception e) { Say(e.Message); return false; }

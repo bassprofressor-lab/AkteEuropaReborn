@@ -274,6 +274,24 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Kampagne und Oberfläche
 
+- ⭐ **Die Enzyklopädie des Originals ist im Spiel.** Der Menüpunkt sollte auf
+  unser Wiki verlinken. Beim Nachsehen, was das *Original* hinter der Zeile hat,
+  lag **`ENCYCLOG.TXT` mit 106 Seiten** neben GAME.EXE — Fahrwerke, Waffen,
+  Zubehör, Verbesserungen, Luftwaffe, Marine, Dicke Bertha, Infanterie,
+  Gebäude, im Volltext und mit **149 Querverweisen**, die jetzt anklickbar sind.
+  ⚠ **Die Kodierung ist eine Falle:** `HELPG.TXT` daneben ist cp437,
+  `ENCYCLOG.TXT` ist **Latin-1**. Mit dem falschen Leser wird aus »Räder«
+  »RΣder«. Die Datei entscheidet, nicht der Ordner.
+  ⚠ Ohne Bild: die Seiten tragen eine Bildnummer bis 97, `ENCYCLOG.PIC` fasst
+  aber nur 24 Bilder — die Zuordnung ist ungelesen und wird nicht geraten.
+- **Credits.** Die Zeile des Originals führt jetzt irgendwohin. Sie zeigt, was
+  belegt ist (Virtual X-citement, Eidos Interactive, 1997) und die
+  Reborn-Seite — und sagt dazu, was **nicht** belegt ist: die Namen des Teams
+  von 1997 stehen in keiner Datei, die diese Fassung liest. Der Abspann des
+  Originals ist vermutlich `34.RPL` — der einzige Film ausserhalb der 33
+  Missionsfilme, und der einzige, der auf **beiden** CDs liegt. Ein Indiz, kein
+  Beleg; wir spielen kein .RPL.
+
 - **»Spiel laden« sitzt wieder in der Mitte.** Der Schirm hat seine Anker
   gesetzt, aber nicht seine Raender — damit behielt er ein Rechteck der Groesse
   null in der linken oberen Ecke, und das Fenster darin wurde von dort aus
@@ -389,6 +407,32 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   ganz links, 35 ganz rechts.
 
 ### Zug und Strecke
+
+- ⭐ **Der Zug fährt die Diagonale, die gezeichnet dasteht.** Zum zweiten Mal
+  gemeldet (»wenn eine Bahnstrecke sauber diagonal ist … so fährt aber der Zug
+  nicht, der Zug macht Zicke Zacke, wobei die Strecke sauber ist«) — und die
+  vorhandene Zahl konnte es gar nicht sehen: `--rail-check` meldet den
+  **mittleren** Richtungswechsel je Takt, und ein Zickzack wechselt abwechselnd
+  um +δ und −δ, im Mittel bleibt davon nichts übrig.
+  Der neue Prüfstand **`--rail-zigzag`** hält deshalb die GEZEICHNETE Schiene
+  (Anschlusspunkte aus der an den Bildern gemessenen Tafel) gegen den
+  GEFAHRENEN Weg, **je Knick einzeln**. Damit war es sofort da, und die Quote
+  nach Ursache aufgeschlüsselt war eindeutig: von den Stellen, an denen die
+  Schiene gezeichnet gerade ist, knickte der Weg auf NET05 an 7, auf NET02 an
+  24, auf DM_4 an 23 — und **jede einzelne davon an einer RAMPE**. Auf ebenem
+  Gleis: **0 von rund 2700**.
+  Die Ursache steht in der Zahl: die schlimmste Abweichung war **15,3 px**, und
+  15 px ist genau eine Höhenstufe. Die Höhe des Weges war eine **Treppenfunktion
+  je Zelle** (`ElevOf(round(x),round(y))·15`), während die gezeichnete Rampe
+  **stetig** steigt — an jeder Zellgrenze einer Rampe sprang der Waggon eine
+  volle Stufe. Jetzt kommt die Höhe aus der **Kunst**: die Tafel der
+  Anschlusspunkte sagt je Bild und Seite, wie hoch die Schiene dort liegt
+  (f6/f7 14,7 px, f8/f9 15 px über dem ebenen Wert).
+  Gemessen danach: geknickt **0 / 4 / 12** statt 7 / 24 / 23, schlimmster Knick
+  **7,3°** statt 27,5°, Formabweichung auf Rampen **0,2–0,3 px** statt
+  7,4–9,3 px. Gegenprobe **`--no-rail-lift`** stellt den alten Stand her.
+  ⚠ Ohne Rückschritt: Ecken 0 von 949, Anschlusszeile 45 von 45 bündig,
+  Waggonlücken 0 von 48 — alle unverändert.
 
 - **Die Waggon-Feinlage ist gelesen.** Zwei Felder im Waggonsatz standen seit
   Beginn ohne Namen da. Sie sind der Versatz des Waggons **innerhalb** seiner

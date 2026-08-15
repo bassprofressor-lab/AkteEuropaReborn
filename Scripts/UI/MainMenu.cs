@@ -129,9 +129,20 @@ public partial class MainMenu : Control
                 // das Netzwerkspiel raus aus Gefecht«.
                 net: () => ShowSetup(net: true),
                 settings: () => AddChild(new SettingsScreen()),
-                encyclopedia: null,
+                // ⚠ 17.08.2026 — BEIDE ZEILEN FÜHREN JETZT IRGENDWOHIN.
+                //
+                // »Enzyklopaedie« sollte auf unser Wiki verlinken. Beim
+                // Nachsehen, was das ORIGINAL hinter der Zeile hat, lag
+                // ENCYCLOG.TXT mit 106 Seiten neben GAME.EXE — Fahrwerke,
+                // Waffen, Zubehoer, Luftwaffe, Marine, Infanterie, Gebaeude,
+                // alles im Volltext, mit den Querverweisen des Originals.
+                // Entscheidung des Spielers: »ja dann nimm die originale rein«.
+                //
+                // »Credits« zeigt, was BELEGT ist — und sagt dazu, was nicht
+                // belegt ist, statt Namen zu erfinden. Siehe CreditsScreen.
+                encyclopedia: () => AddChild(new EncyclopediaScreen()),
                 intro: null,
-                credits: null,
+                credits: () => AddChild(new CreditsScreen()),
                 demo: demos ? NextDemo : null,
                 quit: () => GetTree().Quit()));
 
