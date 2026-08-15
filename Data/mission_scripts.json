@@ -2,10 +2,7 @@
  "_endregeln": "Die Siegbedingungen sind NICHT von Hand uebersetzt, sondern gelesen: vor jedem mission_end steht die Kette `push args; call <abfrage>; cmp; jcc`, und alle Glieder mit demselben Sprungziel bilden ein UND. `aekernel-tools/mission_endrules.py apply` traegt sie ein, `... check` prueft sie nach — und beides laeuft gegen BEIDE GAME.EXE dieses Rechners, deren Adressen sich unterscheiden, deren Ergebnis aber gleich sein muss. Stand: 31 Endstellen, beide Fassungen identisch. ⚠ Zwei Dinge, die der erste Leser vom 08.08. still falsch machte und die am 09.08. berichtigt wurden: (1) er schrieb bei jedem Glied `==`, statt den Sprung auszuwerten — drei Bedingungen waren dadurch VERKEHRT HERUM (Mission 3 `objects(4,0) != 0`, Mission 17 `objects(15,0) != 0`, Mission 24 `obj_owner(0) != 2`), und zwei davon sind beim Missionsstart wahr, die Mission war in derselben Sekunde gewonnen, in der sie begann. (2) er hielt den Sprung der Meldung VOR dem Ende faelschlich fuer den Ausstieg und gab darum bei acht Missionen gar nichts zurueck. Welcher Sprung ein Glied ist, entscheidet sein ZIEL: nur was HINTER mission_end landet, ist eine Bedingung. Nicht jede Bedingung will Vernichtung — Mission 18 verlangt `units(0,1) < 3 und units(0,2) < 3` (»Stoppen Sie den feindlichen Vormarsch«, nicht vernichten), Mission 23 genau fuenf Rohstoffminen, Mission 2 genau zwei Objekte.",
  "_gelesen_ungebaut": {
   "14": {
-   "_endregel_aus": "0x49D72C",
-   "fehlt": "Die Engine kann eine Einheit nicht ueber eine Missionsvariable ansprechen, und welche Einheit v[2] ist, setzt der unuebersetzte Teil des Blocks.",
-   "gelesen": "v[20] == 20, und v[20] wird an genau einer Stelle gesetzt (0x49D65E): v[1] == 52 und die Einheit v[2] steht auf Zelle (0xAF, 0x64) = (175, 100). Zellkoordinaten sind Byte +0x00 und +0x01 des Eintrags im Entity-Array (8000 x 78 @0x6e26c8), belegt durch den spieleigenen Debug-Dump `nr typ faze ukol ... x y`.",
-   "objectg": "#014 »Transportieren Sie Colonel Hullmann zur verbuendeten Basis«"
+   "_erledigt": "10.08.2026 — M14 gewinnt durch die eigene Mechanik (space_in + unit_field); der Eintrag hier war seit dem 16.08. nur noch veraltet. --script-check: 4 von 4 erzwungen, GEWONNEN."
   },
   "21": {
    "_endregel_aus": "0x4A02C0",
@@ -15,7 +12,7 @@
   },
   "28": {
    "_endregel_aus": "0x4A3786",
-   "fehlt": "wie Mission 14.",
+   "fehlt": "Nur noch die ENDREGEL. Die Setzer sind seit dem 16.08. vollstaendig gelesen (v[a]=place_unit und v[a]=imap(zelle) kann der Ausleser jetzt). Die Endregel @0x4A3738 ist ebenfalls gelesen und mit dem vorhandenen Vokabular ausdrueckbar: v[51]==2 UND unit_alive(v[56],0xC1) UND unit_field(v[56],0)==11 UND unit_field(v[56],1)==243 — mission_endrules.py kennt die Form noch nicht, und ohne Endregel legt mission_setrules keinen Eintrag an.",
    "gelesen": "unit_alive(v[56], 0xC1) und die Einheit v[56] steht auf Zelle (0x0B, 0xF3) = (11, 243). Dasselbe Muster wie Mission 14.",
    "objectg": "#028 »Finden Sie das Flugzeugwrack ... Bringen Sie die Wissenschaftler mit den Informationen zurueck«"
   },
@@ -2042,6 +2039,30 @@
      ]
     },
     {
+     "_at": "0x49CE99",
+     "_tut_ausserdem": "place_unit 0x4D0860",
+     "once": 16,
+     "then": [
+      {
+       "_at": "0x49CEAB",
+       "a": 194,
+       "b": 16,
+       "c": 5,
+       "d": 7,
+       "kind": "place_unit",
+       "v": 17
+      }
+     ],
+     "when": [
+      {
+       "a": 23,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49CEF7",
      "_tut_ausserdem": "0x4D0F20",
      "once": 19,
@@ -3157,6 +3178,49 @@
    },
    "rules": [
     {
+     "_at": "0x49DA81",
+     "_tut_ausserdem": "place_unit place_unit place_unit",
+     "once": 20,
+     "then": [
+      {
+       "_at": "0x49DA93",
+       "a": 193,
+       "b": 45,
+       "c": 119,
+       "d": 7,
+       "kind": "place_unit",
+       "v": 21
+      },
+      {
+       "_at": "0x49DAAC",
+       "a": 193,
+       "b": 45,
+       "c": 119,
+       "d": 7,
+       "kind": "place_unit",
+       "v": 22
+      },
+      {
+       "_at": "0x49DAC7",
+       "a": 193,
+       "b": 45,
+       "c": 119,
+       "d": 7,
+       "kind": "place_unit",
+       "v": 23
+      }
+     ],
+     "when": [
+      {
+       "a": 48,
+       "b": 1000,
+       "c": 123,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
      "_at": "0x49DB42",
      "then": [
       {
@@ -4241,6 +4305,59 @@
        "b": 12,
        "kind": "obj_owner",
        "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49E6EE",
+     "_tut_ausserdem": "show_text place_unit place_unit place_unit 0x4D1050 add_target add_target add_target",
+     "once": 20,
+     "then": [
+      {
+       "a": 102,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49E70D",
+       "a": 281,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49E720",
+       "a": 193,
+       "b": 55,
+       "c": 43,
+       "d": 0,
+       "kind": "place_unit",
+       "v": 21
+      },
+      {
+       "_at": "0x49E739",
+       "a": 193,
+       "b": 55,
+       "c": 44,
+       "d": 0,
+       "kind": "place_unit",
+       "v": 22
+      },
+      {
+       "_at": "0x49E752",
+       "a": 193,
+       "b": 55,
+       "c": 45,
+       "d": 0,
+       "kind": "place_unit",
+       "v": 23
+      }
+     ],
+     "when": [
+      {
+       "a": 5,
+       "kind": "time_gt",
+       "op": ">"
       }
      ]
     },
@@ -7857,6 +7974,93 @@
      ]
     },
     {
+     "_at": "0x4A13C4",
+     "_tut_ausserdem": "show_text bus_cmd game_time place_unit show_text sound",
+     "then": [
+      {
+       "a": 50,
+       "kind": "inc"
+      },
+      {
+       "a": 105,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x4A13E2",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x4A13F1",
+       "a": 1500,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "a": 51,
+       "kind": "set_time"
+      },
+      {
+       "_at": "0x4A140F",
+       "a": 192,
+       "b": 108,
+       "c": 99,
+       "d": 0,
+       "kind": "place_unit",
+       "v": 52
+      },
+      {
+       "_at": "0x4A142E",
+       "a": 342,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 4,
+       "b": 98,
+       "c": 45,
+       "kind": "space_in",
+       "typen": [
+        87,
+        87,
+        87,
+        87,
+        87,
+        92,
+        92,
+        92,
+        92,
+        92
+       ]
+      },
+      {
+       "_at": "0x4A147D",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 50,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 14,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A15B6",
      "_tut_ausserdem": "show_text sound",
      "then": [
@@ -9753,6 +9957,53 @@
        "b": 0,
        "c": 2,
        "kind": "buildings",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A38AC",
+     "_tut_ausserdem": "0x4222C0 show_text place_unit game_time",
+     "once": 19,
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 25,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A38EC",
+       "a": 391,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x4A38FC",
+       "a": 57,
+       "b": 0,
+       "c": 2,
+       "d": 3,
+       "kind": "place_unit",
+       "v": 24
+      },
+      {
+       "a": 23,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 25,
+       "kind": "time_gt",
        "op": ">"
       }
      ]

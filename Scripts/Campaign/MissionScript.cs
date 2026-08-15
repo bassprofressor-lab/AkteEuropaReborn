@@ -56,6 +56,12 @@ public sealed class MissionScript
         /// <see cref="StockWert"/>. 0 heisst »kein Quadratterm«.</summary>
         public int F;
 
+        /// <summary>Nur `place_unit`: die Missionsvariable, die den Satzindex
+        /// der gesetzten Einheit aufnimmt — <c>v[V] = place_unit(...)</c>.
+        /// −1 heisst »der Rueckgabewert wird weggeworfen«, und das ist der
+        /// Normalfall; nur Mission 28 braucht ihn.</summary>
+        public int V = -1;
+
         /// <summary>`space_in` only: the design numbers to drop, in order. They
         /// index sec47 as <c>typ + 200*player</c> — the same table the design
         /// screen and the factories use, which is why mission 14's single byte
@@ -987,6 +993,7 @@ public sealed class MissionScript
                             D = ad.TryGetValue("d", out var w) ? w.AsInt32() : 0,
                             E = ad.TryGetValue("e", out var e5) ? e5.AsInt32() : 0,
                             F = ad.TryGetValue("f", out var f5) ? f5.AsInt32() : 0,
+                            V = ad.TryGetValue("v", out var v5) ? v5.AsInt32() : -1,
                         };
                         if (ad.TryGetValue("typen", out var ty) &&
                             ty.VariantType == Variant.Type.Array)
@@ -1664,6 +1671,11 @@ public sealed class MissionScript
                 // keine Regel abholt: sobald `v[a] = place_unit(...)` im
                 // Vokabular steht (M28), ist er genau das, was dort hinein muss.
                 LastPlaced = PlaceUnit?.Invoke(a.A, a.B, a.C, a.D) ?? -1;
+                // ⚠ `v[e] = place_unit(...)` — das Original merkt sich den
+                // zurueckgegebenen Satzindex, und Mission 28 spricht die Einheit
+                // spaeter darueber an. `e` ist −1, wo das Skript den Rueckgabe-
+                // wert wegwirft (das ist der Normalfall).
+                if (a.V >= 0 && a.V < _var.Length) _var[a.V] = LastPlaced;
                 break;
             // order(einheit, cx, cy, utok_na, extra) @0x410220 — siehe
             // OrderUnitAt. e (extra) wird NICHT weitergegeben: das Original
@@ -1737,6 +1749,14 @@ public sealed class MissionScript
             // Bestand, statt ihn nur zu vergleichen. Mission 15 tut das im
             // ersten Takt mit `units(1, 7)`: den Bodenfahrzeugen des neutralen
             // Spielers, gegen die sie später zählt.
+            // v[a] = welche Einheit auf (b, c) steht — die Belegungskarte als
+            // GRIFF auf eine Einheit. Mission 28 liest so vier Zellen ab
+            // (@0x4A2F06 ff., je eine entrollte Fassung derselben Schleife) und
+            // spricht die gefundene Einheit danach ueber v[41] an.
+            case "set_imap":
+                if (a.A >= 0 && a.A < _var.Length)
+                    _var[a.A] = ImapAt != null ? ImapAt(a.B, a.C) : 0xFFFE;
+                break;
             case "set_units":
                 if (a.A >= 0 && a.A < _var.Length)
                     _var[a.A] = UnitCount != null ? UnitCount(a.B, a.C) : 0;
@@ -2082,6 +2102,7 @@ public sealed class MissionScript
         "text" => ShowText != null,
         "find_unit" => FindUnit != null,
         "set_store" => StoreField != null,
+        "set_imap" => ImapAt != null,
         "stock" => SetStoreField != null,
         "set_units" => UnitCount != null,
         "space_in" => SpaceInSpawn != null,
