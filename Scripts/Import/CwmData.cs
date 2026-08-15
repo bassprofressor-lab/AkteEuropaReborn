@@ -98,8 +98,8 @@ public static class CwmData
 
     public sealed class Entity
     {
-        public int Slot, PlayerBlock, Col, Row, Facing, Aim, Kind, Subclass;
-        public int UnitType, Category, Energie, EnergieMax;
+        public int Slot, PlayerBlock, Col, Row, Facing, Aim, Kind, GameUnitType;
+        public int UnitType, Attack, Energie, EnergieMax;
         /// <summary>+0x24, the constant 0x2710 = the object-code base of dir2,
         /// and +0x2e/+0x30 — the FUEL TANK.
         ///
@@ -519,10 +519,10 @@ public static class CwmData
         if (s == null || m.Width <= 0 || m.Height <= 0) return g;
         int n = s.Length / 2;
 
-        // which slots are naval — the original asks entity +0x0a (our Subclass),
+        // which slots are naval — the original asks entity +0x0a (our GameUnitType),
         // case 4 of the jump table @0x40678c, whose only terrain test is 0xFFFC
         var naval = new HashSet<int>();
-        foreach (var e in entities) if (e.Subclass is 4 or 5) naval.Add(e.Slot);
+        foreach (var e in entities) if (e.GameUnitType is 4 or 5) naval.Add(e.Slot);
 
         g.Cells = new byte[m.Width * m.Height];
         var unknown = new HashSet<int>();
@@ -616,9 +616,9 @@ public static class CwmData
                 Facing = raw[0x02],
                 Aim = raw[0x03],
                 Kind = raw[0x09],
-                Subclass = raw[0x0a],
+                GameUnitType = raw[0x0a],
                 UnitType = raw[0x0f],
-                Category = raw[0x26],
+                Attack = raw[0x26],
                 Energie = raw[0x08],
                 EnergieMax = raw[0x29],
                 CodeBase = BitConverter.ToUInt16(raw, 0x24),

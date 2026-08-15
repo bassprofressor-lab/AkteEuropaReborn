@@ -71,7 +71,7 @@ public sealed class CatalogueExporter
                 UnitCount[e.UnitType] = UnitCount.GetValueOrDefault(e.UnitType) + 1;
                 if (!UnitCategories.TryGetValue(e.UnitType, out var set))
                     UnitCategories[e.UnitType] = set = new SortedSet<int>();
-                set.Add(e.Category);
+                set.Add(e.Attack);
             }
             foreach (var b in d.Buildings)
             {

@@ -111,8 +111,15 @@ public static class EntitiesJson
             w.Num("col", e.Col).Num("row", e.Row);
             w.Num("owner", e.Owner).Num("facing", e.Facing).Num("aim", e.Aim);
             w.Num("owner_old", e.Facing).Num("team", e.Owner);
-            w.Num("kind", e.Kind).Num("subclass", e.Subclass);
-            w.Num("unit_type", e.UnitType).Num("category", e.Category);
+            // ⚠ 16.08.2026 — auch hier heissen die Schluessel jetzt, was die
+            // Felder sind. `+0x0A` ist das, was `Can_go` selbst als »unit type:«
+            // druckt (Formatzeile @0x4F6734) — unser `unit_type` ist +0x0F, also
+            // braucht es zwei verschiedene Namen. `+0x26` ist der ANGRIFF, den
+            // das Einheitenfenster als »A/V « ausgibt.
+            // Beide wurden aus dieser Datei nie gelesen, sie standen nur falsch
+            // beschriftet darin.
+            w.Num("kind", e.Kind).Num("game_unit_type", e.GameUnitType);
+            w.Num("unit_type", e.UnitType).Num("attack", e.Attack);
             // ⚠ 16.08.2026 — die Schluessel heissen jetzt, was die Felder SIND.
             // +0x2e/+0x30 ist der TANK und +0x08/+0x29 das Leben (Korrektur vom
             // 26.07.2026). Bis heute standen die Tankwerte unter »hp«/»hp_max«,

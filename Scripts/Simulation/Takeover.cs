@@ -110,7 +110,7 @@ public partial class MapEntityLayer : Node2D
     /// column outer, row inner, both starting one before its own.</summary>
     private static IEnumerable<Vector2I> TakeoverCells(Entity e)
     {
-        int span = e.Subclass >= TakeoverWideSubclass ? 4 : 3;
+        int span = e.GameUnitType >= TakeoverWideSubclass ? 4 : 3;
         for (int c = e.Col - 1; c < e.Col - 1 + span; c++)
             for (int r = e.Row - 1; r < e.Row - 1 + span; r++)
                 yield return new Vector2I(c, r);
@@ -248,8 +248,8 @@ public partial class MapEntityLayer : Node2D
         var u2 = _entities[mine];
         GD.Print($"demo-takeover: Platz {u2.Slot} (Spieler {u2.Owner}) faehrt {bestD:0.0} " +
                  $"Felder zu {LabelOf(goal.UnitType)} (Platz {goal.Slot}, Spieler " +
-                 $"{goal.Owner}, Subclass {goal.Subclass} -> " +
-                 $"{(goal.Subclass >= TakeoverWideSubclass ? "4x4" : "3x3")}) " +
+                 $"{goal.Owner}, GameUnitType {goal.GameUnitType} -> " +
+                 $"{(goal.GameUnitType >= TakeoverWideSubclass ? "4x4" : "3x3")}) " +
                  $"bei ({goal.Col},{goal.Row}) — Ziel ({cell.X},{cell.Y})");
         return CellCenter(cell.X, cell.Y);
     }

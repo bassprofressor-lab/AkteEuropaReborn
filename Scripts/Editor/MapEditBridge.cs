@@ -73,7 +73,7 @@ public partial class MapEntityLayer
         {
             Slot = slot, BType = typ, IsBuilding = true, IsProp = false,
             Col = col, Row = row, Owner = owner, Team = owner,
-            Hp = hp, HpMax = hp, Elev = el, UnitType = -1, Category = -1,
+            Hp = hp, HpMax = hp, Elev = el, UnitType = -1, Attack = -1,
             Footprint = new Rect2(_ox + col * MapBaker.TileW,
                                   _oy + row * MapBaker.TileH - el * MapBaker.ElevStep,
                                   footW * MapBaker.TileW, footH * MapBaker.TileH),
@@ -131,7 +131,7 @@ public partial class MapEntityLayer
         var e = new Entity
         {
             Slot = slot, Col = col, Row = row, Owner = owner, Team = owner,
-            UnitType = unitType, Subclass = art, Category = 0,
+            UnitType = unitType, GameUnitType = art, Attack = 0,
             Hp = energy, HpMax = energy, Fuel = fuel, FuelMax = fuel,
             Elev = el, IsBuilding = false, IsProp = false, Infantry = -1,
             Footprint = CellRect(_ox, _oy, col, row, el),

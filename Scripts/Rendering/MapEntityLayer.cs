@@ -29,7 +29,10 @@ public partial class MapEntityLayer : Node2D
 {
     public sealed class Entity
     {
-        public int Slot, Col, Row, Owner, Team, UnitType, Category, Hp, HpMax, Elev;
+        // ⚠ `Attack` stand hier ein zweites Mal (frueher `Category`) und war
+        // tot — siehe die Fundstelle im Lader. Das echte Feld ist weiter unten,
+        // zusammen mit `Defence`.
+        public int Slot, Col, Row, Owner, Team, UnitType, Hp, HpMax, Elev;
         public int Mark = -1;      // record +0x43 — the campaign's handle on one unit
         /// <summary>Bis wann die Schusspose gezeigt wird — von Fire() gesetzt.
         /// UNSERE Zutat: das Original hat dafuer einen eigenen Zaehler, den wir
@@ -248,7 +251,7 @@ public partial class MapEntityLayer : Node2D
 
         /// <summary>Record +0x0a. The same routine switches on it first: 0, 1
         /// and 3 have their own sets, everything else falls to one line.</summary>
-        public int Subclass = -1;
+        public int GameUnitType = -1;
 
         /// <summary>Record +0x11 — the chassis' POSE GROUP.
         ///
@@ -1705,7 +1708,13 @@ public partial class MapEntityLayer : Node2D
                     // durch fuenfzehn Missionen. Liegt hinter dem Fenster, das
                     // `haveRaw` prueft, darum die eigene Laengenpruefung.
                     Mark = raw.Length >= 0x44 * 2 ? HexByte(raw, 0x43) : -1,
-                    UnitType = GetI(e, "unit_type", -1), Category = GetI(e, "category", -1),
+                    UnitType = GetI(e, "unit_type", -1),
+                    // ⚠ 16.08.2026 — hier stand ausserdem `Category = GetI(e,
+                    // "category", -1)`, und das Feld war TOT: zwei Zeilen
+                    // weiter unten liest derselbe Initialisierer `Attack` aus
+                    // raw +0x26 und ueberschreibt es. Dieselbe Zahl unter zwei
+                    // Namen in einer Klasse — aufgefallen erst, als die
+                    // Umbenennung Category -> Attack beide zusammenfuehrte.
                     // CORRECTED 2026-07-26 — a unit's LIFE is `energie`
                     // (+0x08, max +0x29): the hit routine @0x40c9a0 subtracts
                     // the damage from it and destroys the unit when the hit is
@@ -1775,7 +1784,7 @@ public partial class MapEntityLayer : Node2D
                     // 0xFF is the game's "no group" (@0x429b1b), and the draw
                     // code masks the rest to three bits (@0x429b37).
                     Pose = haveRaw && HexByte(raw, 0x11) != 0xFF ? HexByte(raw, 0x11) & 7 : 0,
-                    Subclass = haveRaw ? HexByte(raw, 0x0a) : -1,
+                    GameUnitType = haveRaw ? HexByte(raw, 0x0a) : -1,
                     Field28 = haveRaw ? HexByte(raw, 0x28) : 0,
                     AimFacing = haveRaw ? HexByte(raw, 0x03) & 7 : -1,
                     FootW = System.Math.Max(1, GetI(e, "foot_w", 1)),
@@ -1830,7 +1839,7 @@ public partial class MapEntityLayer : Node2D
                 {
                     Slot = GetI(bd, "slot", -1), Col = col, Row = row,
                     Owner = real ? owner : -1, Team = real ? owner : -1,
-                    UnitType = -1, Category = -1, Elev = el,
+                    UnitType = -1, Attack = -1, Elev = el,
                     Hp = hp, HpMax = hpMax,
                     State = GetI(bd, "state"),
                     ProdSpeed = GetI(bd, "prod_speed"),
@@ -2306,7 +2315,7 @@ public partial class MapEntityLayer : Node2D
             _entities.Add(new Entity
             {
                 Slot = -1, Col = col, Row = row, Owner = -1, Team = -1,
-                UnitType = GetI(t, "code", 0), Category = -1, Hp = -1, HpMax = -1, Elev = el,
+                UnitType = GetI(t, "code", 0), Attack = -1, Hp = -1, HpMax = -1, Elev = el,
                 Footprint = CellRect(ox, oy, col, row, el), IsProp = true,
             });
         }
@@ -2712,8 +2721,8 @@ public partial class MapEntityLayer : Node2D
             // A unit that came off a map carries both; one that was BUILT has no
             // record behind it, so the hull number decides — that is the older
             // NavalTypes reading, kept exactly where it is still the only source.
-            e.Move = e.Subclass >= 0
-                ? Simulation.NavGrid.ClassOf(e.Subclass, e.Chassis)
+            e.Move = e.GameUnitType >= 0
+                ? Simulation.NavGrid.ClassOf(e.GameUnitType, e.Chassis)
                 : NavalTypes.Contains(e.UnitType)
                     ? Simulation.NavGrid.MoveClass.Ship
                     : Simulation.NavGrid.MoveClass.Vehicle;
@@ -2727,10 +2736,10 @@ public partial class MapEntityLayer : Node2D
             // sechzehn Zellen (Can_go @0x4055D0, Gattung 4 @0x406669 und 5
             // @0x40671B); NavGrid.SetOccupant holt sich die Kantenlaenge von
             // hier. Nur fuer bewegliche Einheiten: ein Gebaeude stempelt seine
-            // Flaeche selbst (Construction), und `Subclass` heisst dort etwas
+            // Flaeche selbst (Construction), und `GameUnitType` heisst dort etwas
             // anderes.
             if (!e.IsBuilding && !e.IsProp)
-                _nav?.SetHull(i, Simulation.NavGrid.HullSide(e.Subclass));
+                _nav?.SetHull(i, Simulation.NavGrid.HullSide(e.GameUnitType));
             if (e.IsBuilding && e.BType == 14) _nav?.ClearStatic(e.Col, e.Row);
             // ⚠ »unbeweglich« geht MIT: ein Gebaeude oder ein Gegenstand faehrt
             // nie weiter, und wer davor auf »der macht gleich Platz« wartet,
@@ -2844,7 +2853,7 @@ public partial class MapEntityLayer : Node2D
         var e = _entities[i];
         if (e.IsBuilding || e.IsProp || e.Dead || e.Chassis < 0) return;
         if (e.Owner != ViewPlayer) return;
-        int s = Audio.GameSounds.Voice(e.Subclass, e.Chassis, e.Field28);
+        int s = Audio.GameSounds.Voice(e.GameUnitType, e.Chassis, e.Field28);
         if (s >= 0) Audio.SoundBankPlayer.Play(s);
     }
 
@@ -2866,7 +2875,7 @@ public partial class MapEntityLayer : Node2D
         if (now < _hitVoiceAt) return;
         _hitVoiceAt = now + Audio.GameSounds.HitVoiceGapSec();
         Audio.SoundBankPlayer.Play(
-            Audio.GameSounds.HitVoice(victim.Subclass, victim.Chassis, victim.Field28));
+            Audio.GameSounds.HitVoice(victim.GameUnitType, victim.Chassis, victim.Field28));
     }
 
     /// <summary>
@@ -5783,7 +5792,7 @@ public partial class MapEntityLayer : Node2D
     /// nicht hier durch — die sind <see cref="Special"/>, kein
     /// <see cref="Entity"/>.</summary>
     private static int EndClassOf(Entity e)
-        => Simulation.NavGrid.ArtIsShip(e.Subclass) ? 2 : e.Weapon != 0 ? 0 : 1;
+        => Simulation.NavGrid.ArtIsShip(e.GameUnitType) ? 2 : e.Weapon != 0 ? 0 : 1;
 
     /// <summary>Einen Todesfall in die Statistik schreiben: eine Verlust-Kerbe
     /// beim Besitzer, eine Abschuss-Kerbe beim Schuetzen. Gebaeude bleiben
@@ -7256,9 +7265,9 @@ public partial class MapEntityLayer : Node2D
             if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != player) continue;
             bool hit = cls switch
             {
-                1 => e.Subclass is 0 or 3,
-                2 => e.Subclass == 1,
-                3 => e.Subclass is 4 or 5,
+                1 => e.GameUnitType is 0 or 3,
+                2 => e.GameUnitType == 1,
+                3 => e.GameUnitType is 4 or 5,
                 _ => false,
             };
             if (hit) n++;
@@ -7334,7 +7343,7 @@ public partial class MapEntityLayer : Node2D
     /// Satzbyte +0x0a (das spieleigene `typ`) für eine Einheit, die NICHT von
     /// der Karte kommt, sondern gebaut oder als Verstärkung eingesetzt wurde.
     ///
-    /// ⚠ CORRECTED 10.08.2026 — hier stand fest `Subclass = 1`. Das ist der
+    /// ⚠ CORRECTED 10.08.2026 — hier stand fest `GameUnitType = 1`. Das ist der
     /// Wert für eine PERSON, und seit die Klassen gelesen sind, zählte damit
     /// jeder gebaute Panzer als Infanterist.
     ///
@@ -7917,7 +7926,7 @@ public partial class MapEntityLayer : Node2D
         {
             var e = _entities[i];
             if (!e.IsBuilding && !e.IsProp && !e.Dead && e.Owner != ViewPlayer &&
-                e.Subclass is 4 or 5) ships.Add(i);   // Klasse 3 = Schiffe
+                e.GameUnitType is 4 or 5) ships.Add(i);   // Klasse 3 = Schiffe
         }
         sb.Append($"   Schiffe des Gegners: {ships.Count}, Kontostand {Money(ViewPlayer)} $\n");
         foreach (int i in ships)
@@ -10652,7 +10661,7 @@ public partial class MapEntityLayer : Node2D
             // ohne das hat ein vom Stapel gelaufenes Schiff kein Bild, und die
             // Flak-Barkasse bekaeme das des L.Kreuzers.
             ShipVariant = d.Variant,
-            Category = -1, Elev = el, Name = d.Name,
+            Elev = el, Name = d.Name,
             // energie is the life, the tank and the magazine come straight
             // from the design record (@0x4b2b20 writes +0x08/+0x29, +0x2e/+0x30
             // and +0x39/+0x3a from +0x1d, +0x26 and +0x25)
@@ -10673,7 +10682,7 @@ public partial class MapEntityLayer : Node2D
         // ⚠ Der Rumpf zuerst: SetOccupant stempelt danach die ganze Flaeche.
         // Eine hier vergessene Zeile waere ein Schiff, das eine Zelle belegt
         // und in ein anderes hineinfaehrt — siehe NavGrid.SetHull.
-        _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.Subclass));
+        _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.GameUnitType));
         _nav.SetOccupant(u.Col, u.Row, _entities.Count - 1);
         _shipsBuilt++;
         NoteEvent(dock, $"{d.Name} fertig");
@@ -13706,13 +13715,13 @@ public partial class MapEntityLayer : Node2D
         {
             Slot = -1, Col = cell.Value.X, Row = cell.Value.Y,
             Owner = e.Owner, Team = e.Team, UnitType = d.Propulsion,
-            Category = -1, Hp = hp, HpMax = hp, Elev = ElevOf(cell.Value.X, cell.Value.Y),
+            Hp = hp, HpMax = hp, Elev = ElevOf(cell.Value.X, cell.Value.Y),
             Name = d.Name, Equipment = d.Equip, Weapon = TurretOf(d.Weapon),
             // the spawn routine @0x4b1b9e copies design +0x2c into entity +0x0b,
             // which is the field the voice routine switches on — so a unit off
             // the line answers like the same chassis on the map does. Kind 1 is
             // what a built vehicle is; a map unit brings its own +0x0a.
-            Chassis = d.Derived.ChassisComponent, Subclass = TypeOfChassis(d.Propulsion),
+            Chassis = d.Derived.ChassisComponent, GameUnitType = TypeOfChassis(d.Propulsion),
             Attack = d.Attack, Defence = d.Defence,
             Fuel = d.Fuel, FuelMax = d.Fuel,
             AmmoMax = ammo, Ammo = ammo,
@@ -13739,7 +13748,7 @@ public partial class MapEntityLayer : Node2D
         // ⚠ Der Rumpf zuerst: SetOccupant stempelt danach die ganze Flaeche.
         // Eine hier vergessene Zeile waere ein Schiff, das eine Zelle belegt
         // und in ein anderes hineinfaehrt — siehe NavGrid.SetHull.
-        _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.Subclass));
+        _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.GameUnitType));
         _nav.SetOccupant(u.Col, u.Row, _entities.Count - 1);
         _order = $"{d.Name} fertig";
         QueueRedraw();
@@ -13795,9 +13804,9 @@ public partial class MapEntityLayer : Node2D
         {
             Slot = FreeRecord(player), Col = cell.Value.X, Row = cell.Value.Y,
             Owner = player, Team = player, UnitType = d.Propulsion,
-            Category = -1, Hp = hp, HpMax = hp, Elev = el,
+            Hp = hp, HpMax = hp, Elev = el,
             Name = d.Name, Equipment = d.Equip, Weapon = TurretOf(d.Weapon),
-            Chassis = d.Derived.ChassisComponent, Subclass = TypeOfChassis(d.Propulsion),
+            Chassis = d.Derived.ChassisComponent, GameUnitType = TypeOfChassis(d.Propulsion),
             Mark = typ,                       // record +0x43, written by create_unit
             Attack = d.Attack, Defence = d.Defence,
             Fuel = d.Fuel, FuelMax = d.Fuel,
@@ -13814,7 +13823,7 @@ public partial class MapEntityLayer : Node2D
         // ⚠ Der Rumpf zuerst: SetOccupant stempelt danach die ganze Flaeche.
         // Eine hier vergessene Zeile waere ein Schiff, das eine Zelle belegt
         // und in ein anderes hineinfaehrt — siehe NavGrid.SetHull.
-        _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.Subclass));
+        _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.GameUnitType));
         _nav.SetOccupant(u.Col, u.Row, _entities.Count - 1);
         GD.Print($"space_in: {d.Name} (Entwurf {typ}) fuer Spieler {player} " +
                  $"auf ({u.Col}, {u.Row}), Satz {u.Slot}");
@@ -14798,8 +14807,8 @@ public partial class MapEntityLayer : Node2D
             for (int t = 0; t < 24; t++)
             {
                 int s = t == 0
-                    ? Audio.GameSounds.HitVoice(e.Subclass, e.Chassis, e.Field28)
-                    : Audio.GameSounds.Voice(e.Subclass, e.Chassis, e.Field28);
+                    ? Audio.GameSounds.HitVoice(e.GameUnitType, e.Chassis, e.Field28)
+                    : Audio.GameSounds.Voice(e.GameUnitType, e.Chassis, e.Field28);
                 if (s < 0) continue;
                 if (t == 0) speak++;
                 if (!seen.Add(s)) continue;
@@ -16841,7 +16850,7 @@ public partial class MapEntityLayer : Node2D
 
     private Vector2 AirAimPoint(Entity t)
     {
-        int off = t.Subclass switch { 3 or 4 => 1, 5 => 2, _ => 0 };
+        int off = t.GameUnitType switch { 3 or 4 => 1, 5 => 2, _ => 0 };
         return off == 0 ? t.Pos : t.Pos + new Vector2(off * TileW, off * TileH);
     }
 
@@ -17139,11 +17148,11 @@ public partial class MapEntityLayer : Node2D
         int aimWrong = 0;
         foreach (var tv in _entities)
         {
-            if (tv.Dead || tv.IsBuilding || tv.IsProp || tv.Subclass < 0) continue;
+            if (tv.Dead || tv.IsBuilding || tv.IsProp || tv.GameUnitType < 0) continue;
             int cells = Mathf.RoundToInt((AirAimPoint(tv) - tv.Pos).X / TileW);
-            int soll = tv.Subclass switch { 3 or 4 => 1, 5 => 2, _ => 0 };
+            int soll = tv.GameUnitType switch { 3 or 4 => 1, 5 => 2, _ => 0 };
             if (cells != soll) aimWrong++;
-            int key = tv.Subclass * 10 + cells;
+            int key = tv.GameUnitType * 10 + cells;
             aims[key] = aims.TryGetValue(key, out int n1) ? n1 + 1 : 1;
         }
         string aimLine = "";

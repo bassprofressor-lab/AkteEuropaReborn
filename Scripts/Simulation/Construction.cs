@@ -348,7 +348,7 @@ public partial class MapEntityLayer
         {
             Slot = slot, Col = col, Row = row,
             Owner = realOwner, Team = realOwner, ShownOwner = realOwner,
-            UnitType = -1, Category = -1, Chassis = -1,
+            UnitType = -1, Attack = -1, Chassis = -1,
             Hp = hp, HpMax = hp,
             Condition = FreshCondition,
             IsBuilding = true, BType = typ, Built = 1,

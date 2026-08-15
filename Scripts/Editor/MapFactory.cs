@@ -459,7 +459,7 @@ public static class MapFactory
     ///   Einheitenblende @0x474FE0 druckt »A/V « und liest +0x26/+0x27, und der
     ///   Wert folgt ueber alle Karten dem Waffenschaden (MG 10 → 6,
     ///   Bordkanone 18 → 7, Flak 20 → 14). <c>CwmData</c> nennt dasselbe Byte
-    ///   noch <c>Category</c>; das ist der aeltere Name.</item>
+    ///   noch <c>Attack</c>; das ist der aeltere Name.</item>
     /// </list>
     /// Die Werte selbst sind unveraendert — nur heissen sie jetzt, was sie sind.
     /// </summary>

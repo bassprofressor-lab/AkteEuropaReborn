@@ -288,7 +288,7 @@ public partial class MapEntityLayer : Node2D
         foreach (var e in _entities)
         {
             if (e.Dead || e.IsProp) continue;
-            if (!e.IsBuilding && e.Category != 6) continue;
+            if (!e.IsBuilding && e.Attack != 6) continue;
             if (e.Owner is < 0 or > 7) continue;
             if (!l.Contains(e.Owner)) l.Add(e.Owner);
         }
@@ -1201,7 +1201,7 @@ public partial class MapEntityLayer : Node2D
         int n = 0;
         foreach (var e in _entities)
             if (!e.IsBuilding && !e.IsProp && !e.Dead && e.Owner == p &&
-                e.Subclass == AiInfantryClass) n++;
+                e.GameUnitType == AiInfantryClass) n++;
         return n;
     }
 
@@ -1723,7 +1723,7 @@ public partial class MapEntityLayer : Node2D
     /// mit <c>seta</c> auf beiden Seiten — eine Einheit sucht sich nur ein Ziel
     /// derselben Seite der Schwelle. +0x0a ist das Feld, das der Debugausdruck
     /// des Spiels <c>typ</c> nennt (GAMESTATE_RE 3.9), bei uns
-    /// <c>Entity.Subclass</c>. GELESEN, auf beiden EXE gleich.</summary>
+    /// <c>Entity.GameUnitType</c>. GELESEN, auf beiden EXE gleich.</summary>
     private const int AiClassSplit = 3;
 
     /// <summary>Womit die Sicht ersetzt wird, wenn eine Einheit keine mitbringt
@@ -1861,7 +1861,7 @@ public partial class MapEntityLayer : Node2D
             if (t < 0) continue;
             AiSend(ui, t);
             a.Sent++;
-            if (e.Subclass == AiInfantryClass) a.MovedInf.Add(ui);
+            if (e.GameUnitType == AiInfantryClass) a.MovedInf.Add(ui);
         }
     }
 
@@ -1891,7 +1891,7 @@ public partial class MapEntityLayer : Node2D
         bool wide = a.Roll(3) == 0;                 // rand() % 3 == 0
         float lo = wide ? near : far;
         float hi = far + 1;
-        bool high = e.Subclass > AiClassSplit;
+        bool high = e.GameUnitType > AiClassSplit;
 
         int best = -1;
         float bestD = float.MaxValue;
@@ -1911,8 +1911,8 @@ public partial class MapEntityLayer : Node2D
             a.SawAny++;
             if (!AiHostile(a.Player, o.Owner)) continue;
             a.SawFoe++;
-            if (a.ClassSeen.Count < 8) a.ClassSeen.Add($"{e.Subclass}->{o.Subclass}");
-            if ((o.Subclass > AiClassSplit) != high) continue;
+            if (a.ClassSeen.Count < 8) a.ClassSeen.Add($"{e.GameUnitType}->{o.GameUnitType}");
+            if ((o.GameUnitType > AiClassSplit) != high) continue;
             a.SawClass++;
             bestD = d; best = oi;
         }
@@ -2095,7 +2095,7 @@ public partial class MapEntityLayer : Node2D
         {
             a.Wave.Add(free[k]);
             AiSend(free[k], target);
-            if (_entities[free[k]].Subclass == AiInfantryClass) a.MovedInf.Add(free[k]);
+            if (_entities[free[k]].GameUnitType == AiInfantryClass) a.MovedInf.Add(free[k]);
         }
         a.TargetIdx = target;
         a.AttackTimer = 20f;                            // ours: pause between waves

@@ -77,12 +77,12 @@ public partial class MapEntityLayer
         {
             var e = _entities[i];
             if (e.IsBuilding || e.IsProp || e.Dead) continue;
-            if (!ShipSubclass(e.Subclass)) continue;
+            if (!ShipSubclass(e.GameUnitType)) continue;
             ships++;
 
-            int side = HullSide(e.Subclass);
+            int side = HullSide(e.GameUnitType);
             int fw = Mathf.Max(1, e.FootW), fh = Mathf.Max(1, e.FootH);
-            string key = $"subclass{e.Subclass}:{fw}x{fh}";
+            string key = $"subclass{e.GameUnitType}:{fw}x{fh}";
             sizes[key] = sizes.TryGetValue(key, out int n0) ? n0 + 1 : 1;
             if (fw == side && fh == side) footMatches++; else footOther++;
 
@@ -101,7 +101,7 @@ public partial class MapEntityLayer
             hullCells += cells; waterCells += water; stamped += mine;
             if (water == cells) hullWater++;
             else if (lines.Count < 6)
-                lines.Add($"Schiff {i} (subclass {e.Subclass}) auf ({e.Col},{e.Row}): " +
+                lines.Add($"Schiff {i} (subclass {e.GameUnitType}) auf ({e.Col},{e.Row}): " +
                           $"{water} von {cells} Rumpfzellen befahrbar");
         }
 

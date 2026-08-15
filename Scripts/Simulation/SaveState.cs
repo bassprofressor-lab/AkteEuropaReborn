@@ -61,7 +61,7 @@ public partial class MapEntityLayer
             w.Num("fuel", e.Fuel).Num("fuel_max", e.FuelMax);
             w.Num("speed", e.Speed).Num("range", e.Range).Num("sight", e.Sight);
             w.Num("attack", e.Attack).Num("defence", e.Defence);
-            w.Num("infantry", e.Infantry).Num("chassis", e.Chassis).Num("subclass", e.Subclass);
+            w.Num("infantry", e.Infantry).Num("chassis", e.Chassis).Num("subclass", e.GameUnitType);
             w.Num("pose", e.Pose).Num("condition", e.Condition).Num("state", e.State);
             w.Bool("building", e.IsBuilding).Bool("dead", e.Dead).Bool("dug_in", e.DugIn);
             w.Num("dead_time", e.DeadTime);
@@ -152,7 +152,7 @@ public partial class MapEntityLayer
                     Speed = GetI(d, "speed"), Range = GetI(d, "range"), Sight = GetI(d, "sight"),
                     Attack = GetI(d, "attack"), Defence = GetI(d, "defence"),
                     Infantry = GetI(d, "infantry", -1), Chassis = GetI(d, "chassis", -1),
-                    Subclass = GetI(d, "subclass", -1), Pose = GetI(d, "pose"),
+                    GameUnitType = GetI(d, "subclass", -1), Pose = GetI(d, "pose"),
                     Condition = GetI(d, "condition", 100), State = GetI(d, "state"),
                     IsBuilding = GetB(d, "building"), Dead = GetB(d, "dead"),
                     DugIn = GetB(d, "dug_in"),
