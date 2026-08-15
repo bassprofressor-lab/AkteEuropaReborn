@@ -16514,9 +16514,24 @@ public partial class MapEntityLayer : Node2D
     /// ist ein MESSGERAET und keine Einstellung: was am Ende gilt, gehoert als
     /// Zahl in den Code, nicht auf die Befehlszeile.</para>
     ///
-    /// <para><b>ENTSCHIEDEN am 14.08.2026: der Versatz ist 2</b>, und darum steht
-    /// er jetzt hier statt auf der Befehlszeile. Zwei Wege, die nichts
-    /// voneinander wissen, kommen auf dasselbe:</para>
+    /// <para>⚠⚠ <b>ZURUECKGEZOGEN.</b> Am 14.08.2026 stand hier »der Versatz ist
+    /// 2«, gestuetzt auf zwei Wege. Beide Stuetzen sind weggefallen: die
+    /// Panzereichung lief auf einem Sprite-Satz mit nur der HALBEN Drehung (der
+    /// Exporteur zog f0..f7 von 16), und der zweite »Weg« war keiner — das −4
+    /// der Original-Formel ist dasselbe −90 wie in unserem <c>DirToFacing</c>,
+    /// nur in Sechzehnteln. Es gilt die Formel des Originals allein,
+    /// Zusatzversatz <b>0</b>.</para>
+    ///
+    /// <para><b>AM BILD BESTAETIGT am 16.08.2026</b>, und zwar so, wie es dieses
+    /// Projekt fuer Grafikfragen verlangt: zwei Aufnahmen desselben Helis 0,4 s
+    /// auseinander (map_DM_4, <c>--demo-air</c>). Gemessener Flug:
+    /// <c>dx = +75,7  dy = −7,0</c>, also <b>5 Grad ueber der Waagerechten nach
+    /// rechts</b> — und die Kanzel zeigt nach rechts, das Heck mit dem kleinen
+    /// Rotor nach links. ⚠ Ein KONSTANTER Versatz beliebiger Groesse muesste
+    /// sich genau hier zeigen; eine Probe reicht also, um ihn auszuschliessen.
+    /// Was sie NICHT ausschliesst, ist ein richtungsabhaengiger Fehler.</para>
+    ///
+    /// <para>Die alte Begruendung, zur Nachvollziehbarkeit:</para>
     /// <list type="number">
     /// <item>Die <b>Panzereichung</b> hatte 0, 4 und 6 ausgeschlossen und 2 als
     /// einzigen Kandidaten uebrig gelassen.</item>
