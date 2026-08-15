@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to Akte Europa Reborn. The build ships **only the engine** —
 terrain, units, maps, tables and now sound are derived on your own machine from
@@ -13,20 +13,489 @@ chosen:
 
 - **Multiplayer online.** Beyond the LAN: a server as broker, seed distribution
   from the server, lag compensation, checksums and reconnect — and before any of
-  that, the two questions the LAN proof could not answer, namely float
-  determinism between two *different* machines and routing the computer players'
-  orders through the command ring.
+  that, the question the LAN proof could not answer: float determinism between
+  two *different* machines. (The second question that stood here — routing the
+  computer players' orders through the command ring — has been answered, see
+  below.)
 - **The map editor.** Painting single cells, placing units, buildings and track,
   choosing the number of players, opening existing maps — and making a generated
   map fully playable, not just walkable.
 - **Skirmish.** The competitive mode it is meant to become: the depot-or-queue
   decision, the economy in the interface, the balance that goes with it.
-- **Train and track.** The wagon fine placement in section 44, the repair chain
-  (read in full, it was only waiting for the command layer), and the 25 chain
-  cells without a neighbour.
+- **Train and track.** The wagon fine placement in section 44 and the repair
+  chain — both done, see below. What remains: the train that explodes at a break,
+  and one line on `map_DM_6` whose chain does not match its stated length.
+  (The "25 chain cells without a neighbour" that stood here turned out to be a
+  misreading of our own counter — there is not one such cell on those maps.)
 
 Campaign stays faithful to the original; skirmish and multiplayer are allowed to
 deviate on purpose, and every deviation is marked as ours.
+
+### Units
+
+- ⭐ **Units disappear behind buildings.** Until now every unit was drawn over
+  every building — a tank stood on the roof of the base. What the original does
+  is read: it **occludes**, it does not make anything translucent. It *has* a
+  translucent blitter (a 256×256 blend table at `0xA3AFB1`), but that one has
+  **exactly one** caller against nine for the normal one, and it hangs off a
+  building field, not off whether something stands behind it. Instead the
+  original buckets its display list by screen row (dispatcher `@0x42C8C0`, 30
+  kinds) — painter's order.
+  A unit's body now runs in the same row-by-row pass the track already ran in.
+  Selection brackets and order lines stay on top: those are controls, not world
+  objects. Counter-probe `--no-unit-occlusion`.
+- **A fallen foot soldier no longer vanishes.** Measured across all 24 sets and
+  8 facings: the walk cycle (blocks 0–7) and the standing pose (11) are
+  complete, the death frames are not — block 12 in 21, block 13 in 69 and block
+  14 in 63 of 192 cases each carry at most four pixels. They decode, so the
+  export wrote them as valid files and the renderer drew an empty image. Nearly
+  empty frames are no longer written at all, and the renderer falls back from
+  the time-correct block to the last one that really exists for that facing:
+  **192 of 192** (set, facing) pairs have a corpse frame, 0 without.
+
+- **The ball-roller chassis is visible in all eight facings.** It was invisible
+  in seven of eight. Counted across the whole part bank of ROBO.CWR: **35 of 36**
+  populated components carry their full row of eight at block 0 — **component 9
+  alone carries it at block 5**, in all three groups. Looked at, those eight are
+  eight clean rotations, while the five single frames before them are different
+  *pitches* of one view; that refutes the other old reading. The export now
+  *finds* the block instead of assuming it: 64 of 65 chassis complete before,
+  **65 of 65** now.
+
+- **A unit that stops to fire now carries on afterwards.** Until now the move
+  order was gone the moment a target came into range: the unit stopped, fired —
+  and then stood there forever. On map_NET07 that was exactly the one unit in
+  forty that stalled two cells short of its goal. Likewise, a unit that finds no
+  free path at the moment of the order (because its own comrades are in the way)
+  now keeps its goal and tries again a second later instead of silently dropping
+  the order.
+  ⚠ Whether the original resumes after a firefight is not read — that is our
+  setting, and it is marked as such.
+- **Eighteen map images still had their buildings baked into the ground.** The
+  map baker deliberately leaves a standing building out of the picture — an
+  older fix, because otherwise its pixels stay in the terrain forever and a
+  destroyed building can never show its ruin. The images for campaigns 16 to 33
+  dated from **before** that fix. The round-trip harness found it: it had been
+  stuck at 50 of 68 for days, and all eighteen failed **on the image alone**,
+  with the data round-tripping perfectly. While the building stands nothing is
+  visible — two screenshots of the same spot are pixel-identical, because the
+  engine draws the building exactly over it; the difference showed only on the
+  minimap, and would only have hurt once a building fell. **A fresh install was
+  never affected** — it bakes with current code.
+- **A captured works now gets its starting stock.** The report was that taking
+  Horni in campaign 3 does nothing. In the original it does something: once the
+  slot is yours and one of your units stands on the door cell, the mission script
+  writes 180 weapon parts and 127 chassis parts into the building's store; Dolni
+  gets 330 and 237. On our side the effect of that rule was simply **empty** —
+  the condition was there, correctly read, and did nothing. The same form occurs
+  twenty times across five missions, and it ASSIGNS the store rather than adding
+  to it — which is why in campaign 33 the very same instruction is a penalty
+  instead of a reward. The amounts hang off the mission block's tick counter and
+  vary by up to nineteen, as in the original; campaign 25 applies a factor of
+  three. Measured: campaign 3 four of four, campaign 6 four of four, campaign 2
+  two of four.
+  Campaign 33 is now built too: it is the only one that computes
+  **quadratically** (the amount depends on the square of the tick counter), and
+  all twelve of its stockings hit their value.
+- **The original counts cells, not pixels — and the ground slows nobody down.**
+  The second half of the reported question about speed has been read out. Every
+  unit carries a step counter the game itself calls "kolik"; it grows by the
+  unit's speed once per tick, and the cell is done when it reaches 80 — 120 for
+  a step across a corner. That is all there is. No terrain, no slope: the 1997
+  movement loop never touches the terrain grid, and a unit's speed is changed in
+  exactly one place in the whole program — on a hit, where it is halved.
+  Our 45 % surcharge for rough ground is therefore **withdrawn**; it was a guess
+  and it was wrong. What matters more is what it hid: we drove at a fixed pixel
+  speed towards the next cell centre, and in an isometric view the eight
+  neighbours are not equally far away. Depending on the compass heading the same
+  unit took up to **twice** as long to cross a cell. Now it is the original's one
+  number: 1 straight, 1.503 diagonal. Measured on map_NET07 over 8275 completed
+  cell steps — rough against free ground 0.999 instead of 1.610, diagonal
+  against straight 1.503 instead of 1.386. As a side effect one floating-point
+  computation drops out of the network game: an integer now decides when a unit
+  arrives.
+- **Weapons have a minimum range, and we had missed it.** Checking the ranges
+  turned up a field that has always been in the map data and is read exactly
+  **once** in the whole 1997 game — twenty-two bytes next to the range, in the
+  same decision: too far away rejects the shot, **too close does as well**. The
+  maps confirm it without a counter-example: 620 of 4476 units carry such a
+  value, and it is smaller than the range in 620 out of 620 cases (3 at range 8,
+  5 at 14 …) — and only the long-range ones have one at all. An artillery piece
+  now lets go of a target that has come too close instead of keeping it; driving
+  closer would only make it worse. Measured on `map_DM_1`: 18 units with a
+  minimum range, 30 targets dropped because of it, and zero with
+  `--no-min-range`. ⚠ The report also says when a map has no such unit at all —
+  there the zero is not a result.
+
+
+- **A group no longer strands at a bottleneck.** Reported as "selecting a group
+  and driving them one behind the other, over a bridge say, stops them dead as
+  soon as somebody else is on the bridge". We used to wait 0.7 seconds, look for
+  a new route **once**, and throw the route away if that failed — after which
+  the unit stood there forever, until the player clicked again by hand. On a
+  single-lane bridge the route is occupied at almost every replanning moment, so
+  it hit half the group. The 1997 game does it differently, and at the root: its
+  movement question has **three** answers, not two — no, *yes but somebody has
+  to give way*, free. Waiting in front of a wall is pointless; waiting behind a
+  moving unit is exactly right, and we had thrown both into one pot. Now a unit
+  waits behind another and keeps its route; in front of something immovable a
+  patience counter runs down, and when it expires the route is replanned and the
+  counter **re-armed** instead of given up. The numbers are the original's
+  (15 + roll%15 on entering a cell, 40 + roll%20 after that, and a one-in-60
+  nudge per tick while somebody is in the way). Measured with the new
+  `--stuck-check` across three maps where the question is answerable:
+  **8 stranded units before, 0 after**; `--stuck-check=alt` reproduces the old
+  behaviour inside the same program and fails. The twin stays bit-identical over
+  30 seconds.
+
+- **Bombs land on the middle of the hull.** An air attack used to aim at a
+  unit's record cell — on a battleship, that is its top-left corner. The 1997
+  game shifts the aiming point according to the target's class, and that shift
+  is nothing other than the middle of the hull: one cell for the small ones, two
+  for the large. It is the same table that decides the hull size.
+- **A bomber flies a second run instead of hanging over its target.** It drops,
+  turns away to a rolled point **10 to 19 cells** off (each axis with its own
+  sign), comes back and attacks again — until the ammunition is gone. On the way
+  out it does not drop; that is not our convenience but the original's own lock,
+  which ties the drop to an order state it clears when turning away. The 1997
+  game names the place itself: "Over target while attack".
+  ⚠ **And with that I withdraw a withdrawal of my own.** I had reported that the
+  original knows no such loop, and revoked an earlier claim about it. The
+  revocation was itself wrong: the only correct part was that the two aiming
+  offsets are the middle of the hull and not an overflight. The loop sits
+  elsewhere — behind a condition I had not followed up at the time, in a second
+  dispatcher the game only enters once the aircraft stands exactly on its target
+  cell. Measured: 71 loops in a good two minutes on a map with ten bombers.
+- **The railway repairs itself again.** A vehicle with the track attachment
+  works twenty ticks on a shot-up piece, makes it whole — and then finds the
+  next one on the same line **by itself**. That is how the chain reads in the
+  original; it was only waiting for us to have a way of giving it an order.
+- **A ship now occupies its whole hull.** The 1997 game checks **four** cells for
+  a small ship and **sixteen** for a large one; we checked one. A battleship thus
+  occupied a sixteenth of itself — two ships could stand inside each other, and a
+  land vehicle drove through three quarters of one. The hull size now lives in
+  the navigation grid itself, so claiming and releasing cells cannot drift apart.
+- **Supply helicopters fly home when nobody needs supplies any more** — as in the
+  original. Until now they hovered over the units they had just serviced. And
+  they turn back while the fuel still covers the way home, instead of waiting for
+  an empty tank. **Where** they fly was guessed wrong at first: we sent them to
+  the supply post. The 1997 game instead rolls **any building of its own** and
+  scatters the destination by up to five cells — with no check whatsoever of what
+  kind of building it is. That also explains how a helicopter gets home on a map
+  with no airfield: it is not looking for one. Measured on a demo map: of 19
+  helicopters, 15 used to hang in the air with no order, now **none** — and the
+  number standing at home grows from 4 to 9 over the run. ⚠ **Our deviation:** a
+  player with no building left keeps its helicopters where they are. The 1997
+  game sent them to a rolled map cell in that case — a fault that only goes
+  unnoticed there because without buildings the match is over anyway.
+- **An aircraft only had half a turn.** The hull stood across the flight arrow,
+  and the cause was neither an offset nor a state error but the **export**: an
+  aircraft in the 1997 game owns **sixteen** images, and we exported eight of
+  them — not every second step but **the first eight**, that is, half a
+  revolution. An aircraft could not look backwards at all. Proven from the part
+  table itself: the eight air parts lie 16 frames apart, and all 16 differ.
+  All sixteen are exported now and the facing is computed in **22.5-degree
+  steps** with the original's own formula. Measured: 11 distinct steps in the sky
+  at once, 8 of them odd — impossible with eight images.
+  ⚠ **A calibration of ours falls with it.** The "offset 2, two independent
+  paths" entered earlier is withdrawn: the calibration against the tanks ran on
+  the half sprite set, and the second path was not one — the offset in the
+  original's formula is the same one our direction computation already had, only
+  in sixteenths. Applying both turns 180 degrees too far. The original's
+  arithmetic now stands alone.
+  ⚠ What **remains** is original and not a fault: a turn takes six degrees per
+  tick, a full turn 60 ticks. After a change of target a helicopter therefore
+  flies sideways for up to 30 ticks before it has come around.
+
+### Skirmish
+
+- ⭐ **Enemy buildings can be captured — Ctrl+right-click.** Reported as "the
+  shipyard and the sea dock cannot be captured, all you can do is attack them"
+  and "buildings the AI has captured cannot be captured back, only destroyed".
+  The new `--door-check` first showed what it was *not*: the doors are
+  reachable (shipyard 1/1 and 2/2, base, factories, airfield, mine and stations
+  complete). The cause was the click path — it tries an attack first, and a
+  hostile building *is* a target, so the move order never ran and the unit
+  could never reach the door tile. Nobody attacks a neutral building, which is
+  why it worked there and only there.
+  Measured: an enemy base now changes hands **undamaged** (1200/1200). The
+  counter-probe `--capture-by-attack` leaves it hostile and at **0/1200** —
+  exactly the reported "only destroy".
+  ⚠ Sea dock (0 doors in 39 of 39) and power station (0 in 262) stay
+  uncapturable; that is the original, and the button now says so instead of
+  staying silent. The harbour changes hands with its shipyard.
+- **A new unit drives out of the door.** This had been read for a long time
+  (`@0x410441`: the spawned unit gets `col + door_col` / `row + door_row`) and
+  never built — it appeared at the building's anchor cell, so depending on the
+  footprint on the wrong side. Measured: 4 of 4 out of the door.
+- **The map preview now says how many bases there are.** Prompted by "the enemy
+  AI does something sometimes and nothing at other times — some never start
+  building". The cause is not the AI but the map: only a BASE builds, and many
+  maps have fewer of them than start slots — `map_DM_4` **2 bases for 5
+  slots**, `map_DM_11` 2 for 6, `map_NET07` **none** for 8. Whoever gets none
+  watches. That was written nowhere; it now stands under the preview, with a
+  warning sign when it does not add up.
+
+- **A build queue.** Ordering the same unit several times used to pay every
+  time and merely restart the running build — three clicks, three lots of parts,
+  one unit. Orders now line up: paid on entry, at most six waiting (the
+  original's own depot size, `cmp al,6` @0x467FBF), **Shift+B** takes the last
+  one back and refunds it, and the resource bar shows what is running and what
+  is behind it. Measured with `--queue-check=4`: 4 ordered, 80/160/0 paid
+  (exactly 4x the price), 4 delivered, queue empty. The counter-probe
+  `--no-build-queue` restores the old behaviour and reports 80/160/0 paid
+  against a target of 20/40/0 — the reported loss, reproduced and then measured
+  away. A queue is OURS; the original has no build time at all, it has a depot.
+- **Techstandard now defaults to 8 instead of 1.** At level 1 the airfield only
+  releases the two supply helicopters. What is read is that a fresh original
+  starts at 1 (@0x4426F4) — not that 1 is a good competitive default. A line
+  under the dial now *computes* what the chosen level unlocks. An existing
+  install carries the old 1 in its `settings.cfg`; it is lifted **once** and
+  never touched again.
+- **Research and repair are reachable.** Both have been on keys O and K for a
+  long time, but the base window's tabs said "not connected yet". They now show
+  state, cost and the next project. Repair needs **no unit** — the building
+  repairs itself.
+- **The airfield counts parts, not dollars.** It always paid correctly; only its
+  heading printed `$150`, which is the supply depot's price. Where the parts
+  come from is answered too: **by rail** (type matrix @0x504128).
+- **Supply helicopters no longer stall.** An empty one looked only for a supply
+  post (type 14) — and **map_NET02 has seven airfields and no post at all**.
+  Without one it now reloads at its own player's airfield or base, and says so.
+  Where a post exists the post still wins (NET04: 1 at the post, 0 deviations).
+- **The resource bar says it is a sum**, with the number of buildings counted —
+  and airfields and shipyards now count, since parts are paid out of both.
+
+- **Your own start position is marked on the minimap.** A white diamond with a
+  dark outline, where the match began. It does not follow you: the point is
+  taken once at the start and never again, so that losing your base does not
+  take away the knowledge of where you came from. Ours, like the minimap itself.
+- **Every participant starts with a base, the computer included.** The conquest
+  maps leave 4 to 8 bases standing neutral, and whoever reaches one first owns
+  it: that is a race, not a battle. Each participant is now handed the nearest
+  one at the start; the remaining buildings still have to be taken. The handout
+  works in **whole cells** and in a fixed order, because it sits in the lockstep
+  path and has to come out the same on two machines. Measured on `map_NET04`:
+  4 of 4 participants get one, neutral buildings drop from 61 to 57 and neutral
+  bases from 8 to 4; `--no-start-base` restores the old behaviour. A deliberate
+  departure from the original; the campaign is untouched.
+
+### Campaign and interface
+
+- ⭐ **The original's encyclopedia is in the game.** The menu row was meant to
+  link to our wiki. Looking at what the *original* has behind it turned up
+  **`ENCYCLOG.TXT` with 106 pages** next to GAME.EXE — chassis, weapons,
+  equipment, upgrades, air force, navy, Big Bertha, infantry, buildings, in
+  full text and with **149 cross-references**, which are now clickable.
+  ⚠ **The encoding is a trap:** `HELPG.TXT` beside it is cp437,
+  `ENCYCLOG.TXT` is **Latin-1**. With the wrong reader "Räder" becomes "RΣder".
+  The file decides, not the folder.
+  ⚠ Without pictures: pages carry an image number up to 97, but `ENCYCLOG.PIC`
+  only holds 24 — the mapping is unread and is not guessed at.
+- **Credits.** The original's row now leads somewhere. It shows what is
+  documented (Virtual X-citement, Eidos Interactive, 1997) and the Reborn side —
+  and says what is **not** documented: the names of the 1997 team are in no file
+  this build reads. The original's credit roll is probably `34.RPL` — the only
+  film outside the 33 mission films, and the only one present on **both** CDs.
+  An indication, not proof; we do not play .RPL.
+
+- **"Load game" is centred again.** The screen set its anchors but not its
+  offsets, so it kept a zero-size rect in the top-left corner and drew its window
+  from there. The same call was wrong in four more places, where it left three
+  dimming layers and the end-window's mouse lid doing nothing.
+
+- **The editor overlay stood in the skirmish, and the mission pop-ups stood in
+  the main menu.** Two reports, one cause. A scene change replaces only the
+  running scene; whatever hangs beside it under the root survives — and two
+  helpers hang there on purpose: the map editor's watcher, so it can attach to
+  the *next* map, and the help windows' canvas layer, so the camera cannot carry
+  them out of frame. Both had a switch to turn them on and none to turn them
+  off. The edit mode was never taken back — the method for it existed and was
+  called **not once** in the whole program — and the windows were only cleared
+  when a map was *loaded*, a path the main menu never takes. The fix now sits at
+  the menu's **entrance** instead of its nine exits: whoever stands there has
+  left the game world, whichever door they used. With a harness that walks the
+  real exit (`--leave-check`) — and a counter-probe that reproduces the old
+  behaviour inside the same program (`--leave-check=alt`) and **must** fail,
+  because otherwise there is no way to tell whether the counter can see
+  anything at all.
+- **The hit calculation left out the shooter's elevation.** Reported as "team 2
+  hardly takes any damage" — and rightly so: the 1997 game counts elevation on
+  **both** sides, we had only one half, and two fields were swapped on top of
+  that. A wrong comment set it off. Fixed; the difference that remains is the
+  original's elevation rule.
+- **The campaign HUD shows the mission's objective.** Until now only the
+  sub-missions were there — the main objective is the victory condition, and
+  that has no text at all. The original does have one, in `OBJECTG.TXT`; it sits
+  on CD 1 in the same archive the briefings and help texts already come from. 33
+  missions, 58 objectives, in the 1997 wording.
+- **The technical lines and the key legend leave the HUD in play.** Map name,
+  grid size, tileset, image size and the two lines of key bindings are facts
+  about the file and about the controls, not about the battlefield. They stay in
+  the plain map viewer, and `--hud-debug` brings them back everywhere.
+- **Supply helicopters** now set their facing on the last step before arrival
+  as well. Where one looks *without* an order was read from the original: it
+  keeps the facing of its last flight — the air loop never touches facing.
+
+### Map editor
+
+- **Terrain and elevation can be painted.** Two new brushes: one sets a cell's
+  terrain class (open, rough, water, blocked), the other raises and lowers it. A
+  stroke never changes only the cell that was clicked — the tile key depends on
+  the slope, on the four neighbours and on the distance to water, so up to **81
+  cells** are pulled along. They take their tile from the same computation as the
+  map generator, with the same roll; a cell that was merely pulled along
+  therefore gets exactly its old tile back.
+  ⚠ **The brush refuses rather than repairs.** The generator resolves elevation
+  conflicts by lowering *other* cells. A brush must not do that — it would then
+  do something other than what was clicked. It declines and says why.
+- **The prober threw out the first brush twice.** Both times it had made the map
+  measurably worse: hard seams from 3.4 to 6.9 per cent, one shore cell with an
+  inland tile, one complaint in the map check. The cause was the same both times
+  — it drew its tile differently from the generator. `--map-edit-check` now puts
+  nine numbers **before and after** painting side by side; without them the fault
+  would only have shown as a painted patch that "somehow looks different".
+- **Players 2 to 5 were never selectable.** The bar said "0..7 = owner", but the
+  digits 1 to 4 were already caught earlier as the brush selection — with the
+  unit brush no owner other than the first could be set at all. The owner now
+  cycles.
+- **The "fragmented buildings" were not buildings at all.** The base and factory
+  of a generated map are pixel for pixel the same as on a shipped one. What
+  looked fragmented were **single building tiles scattered over the terrain as
+  vegetation** — including the black interior tiles that only make sense as part
+  of a whole. They got there because the 1997 game writes a building's tiles into
+  the map grid, so the measured tile table took them for scenery. On the shipped
+  maps every building tile lies inside a building's frame — 2094 of 2094 on one,
+  160 of 160 on the other, and not a single one stands alone. The map check now
+  counts both.
+- **Placing units by hand.** Sixteen kinds, from the wheeled scout to the
+  battleship, each with the values it actually carries on the shipped maps —
+  life, fuel, attack and class read from the raw records rather than chosen. The
+  owner is chosen too, and the editor refuses what could not stand there: a ship
+  on a meadow is a unit that will never move.
+- **The editor has a brush.** You can now place **buildings** by hand (any kind
+  the tileset knows — military or civilian, with a choice of owner down to
+  unowned and scenery), **objects** and **railway track**. A building appears at
+  once; objects and track go into the picture when you save, and until then the
+  screen shows a preview and says that it is one. A building only goes on a real
+  build site — and where it does not, the screen names the cell and the reason.
+  The image of a piece of track is not chosen but derived from its neighbours,
+  following the table the 1997 game keeps itself.
+- **A generated map is now a conquest map.** It gets neutral buildings like the
+  shipped skirmish maps: count, kinds, doors, hit points and spacing are measured
+  from seven shipped maps; the distribution and placement are ours. Four
+  buildings become over seventy on a large map, airports, factories and bases
+  among them, all there to be captured.
+
+### Sound
+
+- **A sound now comes from the left or the right.** Attenuation by distance was
+  already there; the panning had been read and deliberately left as a gap. The
+  1997 game computes `pan = 200 · dx` and clamps it to DirectSound's own limits —
+  the control is therefore at its end at **50 cells** of sideways distance. Built
+  the way it has to be: one audio bus per voice with its own panner, twelve of
+  them. Sharing a bus would give a shot at the left edge of the map the panning
+  of the next shot fired.
+  ⚠ **`dx` only.** A sound directly above or below the ear comes from the middle
+  however far away it is — the original does not consult `dy` for panning at all.
+  An angle computation would be "more correct" and therefore wrong.
+  Measured on a large map: 255 objects, values from −1.00 to +1.00, 93 hard left,
+  35 hard right.
+
+### Train and track
+
+- ⭐ **The train drives the diagonal that is drawn.** Reported a second time
+  ("when a rail line is cleanly diagonal … the train zigzags, while the track
+  is clean") — and the existing number could not see it: `--rail-check` reports
+  the **mean** direction change per tick, and a zigzag alternates by +δ and −δ,
+  so the mean cancels it out.
+  The new `--rail-zigzag` therefore holds the DRAWN track (connection points
+  from the table measured off the artwork) against the DRIVEN path, **one bend
+  at a time**. It showed up at once, and split by cause the answer was
+  unambiguous: of the places where the track is drawn straight, the path bent
+  on NET05 at 7, on NET02 at 24, on DM_4 at 23 — and **every single one at a
+  RAMP**. On level track: **0 of about 2700**.
+  The cause is in the number: the worst deviation was **15.3 px**, and 15 px is
+  exactly one elevation step. The path's height was a **step function per cell**
+  (`ElevOf(round(x),round(y))·15`) while the drawn ramp rises **continuously** —
+  at every cell boundary of a ramp the wagon jumped a whole step. The height now
+  comes from the **artwork**: the table of connection points says per frame and
+  side how high the rail sits there (f6/f7 14.7 px, f8/f9 15 px above the level
+  value).
+  Measured afterwards: bends **0 / 4 / 12** instead of 7 / 24 / 23, worst bend
+  **7.3°** instead of 27.5°, shape deviation on ramps **0.2–0.3 px** instead of
+  7.4–9.3 px. Counter-probe `--no-rail-lift` restores the old state.
+  ⚠ No regression: corners 0 of 949, connection row 45 of 45 flush, wagon gaps
+  0 of 48 — all unchanged.
+- **`--rail-gap-check`: how far is the last piece of track from its building?**
+  For "a small piece of the track is often missing". The old number could not
+  see it — it reports "0 of 70 further than **2** cells", and a gap of one cell
+  is 40 px. Measured: 20 of 70 (NET05), 20 of 66 (NET02), 16 of 48 (DM_4) ends
+  with a gap, **always exactly one cell** and **only at stations and field
+  stations**. ⚠ The gap is in the MAP DATA — the first footprint column carries
+  no rail cell at all there, the building's own artwork continues the track,
+  and vertically it sits flush (32/32, 6/6, 7/7, 0 px). Looked at one of the
+  places: no hole. **Not reproduced** — the probe now names map, line, cell and
+  building.
+
+- **The wagon fine placement has been read.** Two fields in the wagon record had
+  stood there without a name since the beginning. They are the wagon's offset
+  **within** its cell, in pixels, and the game sets them from a single quantity:
+  the parity of the half-row the wagon stands on. Odd means half a tile down,
+  even means half a tile to the right — exactly the **edge midpoints** where the
+  rail images have their ends too. Counted on the shipped maps: of 162 wagons
+  standing on one of the two starting values, **161** follow the rule. The other
+  thousand are intermediate states of a journey, in step with the progress
+  counter.
+- **The wagons stand on the edge midpoints — measured, and against the
+  original's own rule.** Counted across three maps, **not one** of 1193, 1000 and
+  1305 path nodes sits on the cell centre; the cell centre is the middle of the
+  isometric diamond and lies on neither vertex lattice. Until now our track
+  derived the vertex from the neighbouring cell and from the connections measured
+  off the images — the 1997 game takes the parity of the half-row instead. The
+  two can now be held against each other, and on the cells the cross-check can
+  say anything about at all they agree **1271 to 0** — completely.
+  ⚠ The first version of this entry said "88 to 93 per cent" and blamed the rest
+  on the known gap between the original's track and train structures. That was
+  wrong, and the fault was ours: split by image type, **every single**
+  disagreement sits on a **corner piece** and none on a straight or a ramp
+  (402:0, 473:0, 396:0 against 192:88, 155:66, 353:54). A corner piece joins a
+  horizontal to a vertical edge, so it has one connection on *each* of the two
+  lattices — a table holding one parity per cell cannot possibly match both. It
+  was the bookkeeping, not the track.
+  ⚠ The parity **steers nothing**, and must not: it is the second, independent
+  account, and making it the rule would leave no cross-check behind.
+- **The last wagon of a line stood beside the track.** The free end of a line was
+  computed as "the opposite side of the exit". For a straight piece that holds —
+  for a **corner piece** it does not: if the rail leaves to the right and
+  continues downwards, the opposite side is *left*, and there is no rail there at
+  all. The free end is at the bottom. The end node therefore sat half a cell off
+  in each axis, about 22 pixels. The right rule is not "the opposite side" but
+  "the other side this rail image actually has". **25, 28 and 30** nodes were
+  affected on the three maps — and measured, those are **line ends without
+  exception**, not one in the middle of a chain. The cross-check against the
+  original's rule improves on all three maps (666:94 → 672:88, 667:73 → 674:66,
+  853:66 → 865:54); the known figures stay the same number for number. With
+  `--rail-lay=altport` the old state can be put alongside — without it "4.12 px
+  per tick" would be an assertion; with it, the 4.11 is shown to have been there
+  before.
+
+### Multiplayer
+
+- **The computer players do not need to go through the command ring** — measured,
+  not assumed. In the 1997 program **exactly one of the 21 targets** of the
+  computer-player round reaches the command bus (a group move); production, the
+  unit sweep and transport write their fields directly. And because the round
+  skips any slot a human sits in, in a network game **every machine runs its own
+  computer players**. What was then checked is whether ours survive that: three
+  runs with two real processes on *different* player slots, one of them over 6000
+  ticks in which both computer players capture a building and build four units
+  each — precisely the branch that rolls dice. Both machines arrived at the same
+  number on every check tick.
+- **The network harness now reports what the computer players did.** It did not
+  before, which made its green result worthless: a run in which the computer
+  players merely stand there looks exactly like one in which they play. Their
+  figures now appear on every check tick and at the end, on both sides.
 
 ## 0.5.0 — 2026-08-13
 

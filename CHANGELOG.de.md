@@ -1,4 +1,4 @@
-# Änderungen
+﻿# Änderungen
 
 Alle nennenswerten Änderungen an Akte Europa Reborn. Ausgeliefert wird **nur
 die Engine** — Gelände, Einheiten, Karten, Tabellen und Klänge entstehen auf
@@ -14,20 +14,553 @@ in der sie gewählt wurden:
 
 - **Multiplayer online.** Über das LAN hinaus: ein Server als Vermittler,
   Keimverteilung durch den Server, Verzögerungsausgleich, Prüfsummen und
-  Wiederverbindung — und davor die zwei Fragen, die der LAN-Beleg nicht beantworten
-  konnte, nämlich Fließkomma-Determinismus zwischen zwei *verschiedenen* Maschinen
-  und die Befehle der Computerspieler durch den Befehlsring.
+  Wiederverbindung — und davor die Frage, die der LAN-Beleg nicht beantworten
+  konnte: Fließkomma-Determinismus zwischen zwei *verschiedenen* Maschinen.
+  (Die zweite Frage, die hier stand — die Befehle der Computerspieler durch den
+  Befehlsring —, ist beantwortet, siehe unten.)
 - **Der Karteneditor.** Einzelne Zellen malen, Einheiten, Gebäude und Gleise
   setzen, die Spielerzahl wählen, vorhandene Karten öffnen — und eine erzeugte
   Karte vollwertig spielbar machen, nicht bloß begehbar.
 - **Gefecht.** Der Wettkampfmodus, der es werden soll: die Entscheidung Depot oder
   Warteschlange, die Wirtschaft in der Oberfläche, die Ausgewogenheit dazu.
-- **Zug und Strecke.** Die Waggon-Feinlage in Sektion 44, die Reparaturkette
-  (vollständig gelesen, sie hat nur auf die Befehlsschicht gewartet) und die 25
-  Kettenstellen ohne Nachbarzelle.
+- **Zug und Strecke.** Die Waggon-Feinlage in Sektion 44 und die Reparaturkette —
+  beides erledigt, siehe unten. Offen bleibt der Zug, der an einem Bruch
+  explodiert, und eine Linie auf `map_DM_6`, deren Kette nicht zu ihrer
+  angegebenen Länge passt. (Die „25 Kettenstellen ohne Nachbarzelle", die hier
+  standen, waren ein Lesefehler an unserem eigenen Zähler — auf diesen Karten
+  gibt es keine einzige.)
 
 Die Kampagne bleibt originaltreu; Gefecht und Mehrspieler dürfen bewusst
 abweichen, und jede Abweichung wird als unsere gekennzeichnet.
+
+### Einheiten
+
+- ⭐ **Einheiten verschwinden hinter Gebäuden.** Bisher lag jede Einheit über
+  jedem Gebäude — ein Panzer stand auf dem Dach der Basis. Wie es das Original
+  macht, ist gelesen: es **verdeckt**, es macht nichts durchscheinend. Es *hat*
+  einen durchscheinenden Zeichner (Mischtafel 256×256 bei `0xA3AFB1`), aber der
+  hat **genau einen** Aufrufer gegen neun für den normalen, und der hängt an
+  einem Gebäudefeld, nicht daran, ob etwas dahintersteht. Stattdessen fächert
+  das Original seine Zeichenliste nach Schirmzeile (Verteiler `@0x42C8C0`, 30
+  Arten) — Malerordnung.
+  Der Rumpf einer Einheit läuft jetzt in demselben zeilenweisen Durchgang mit,
+  in dem schon das Gleis lief. Auswahlklammern und Ziellinien bleiben oben: das
+  sind Bedienhilfen, keine Weltobjekte. Gegenprobe `--no-unit-occlusion`.
+
+- **Ein gefallener Fusssoldat verschwand nicht mehr.** Gemessen über alle 24
+  Sätze und 8 Richtungen: Laufzyklus (Block 0–7) und Stehen (11) sind
+  lückenlos, die Sterbebilder nicht — Block 12 in 21, Block 13 in 69 und Block
+  14 in 63 von je 192 Fällen tragen höchstens vier Bildpunkte. Sie dekodieren,
+  also hat der Export sie als gültige Dateien geschrieben und die Anzeige ein
+  leeres Bild gezeichnet. Jetzt werden fast leere Bilder gar nicht erst
+  geschrieben, und die Anzeige fällt vom zeitrichtigen Block rückwärts auf den
+  letzten zurück, den es für diese Richtung wirklich gibt: **192 von 192**
+  (Satz, Richtung) haben ein Leichenbild, 0 ohne.
+
+- **Das Kugelroller-Fahrgestell ist in allen acht Richtungen sichtbar.** Es war
+  in sieben von acht unsichtbar, und der Grund lag in einer alten, ausdruecklich
+  als ungeklaert vermerkten Stelle des Exporters. Nachgezaehlt ueber den ganzen
+  Teilebestand von ROBO.CWR: **35 von 36** belegten Komponenten tragen ihre
+  volle Achter-Zeile bei Block 0, **Komponente 9 als einzige bei Block 5** — und
+  zwar in allen drei Gruppen. Angesehen sind es dort acht saubere Drehungen
+  desselben Fahrgestells, waehrend die fuenf Einzelbilder davor verschiedene
+  NEIGUNGEN derselben Ansicht sind. Damit ist die zweite alte Lesart (»die
+  belegten Bilder der Reihe nach sind die acht Richtungen«, `copy_units.py`)
+  widerlegt. Der Export sucht den Block jetzt, statt ihn zu setzen: vorher 64
+  von 65 Fahrgestellen vollstaendig, jetzt **65 von 65**.
+  ⚠ Offen bleibt, WARUM dieses eine Teil seine Bloecke andersherum legt — dass
+  Block 5 fuer den Kugelroller »ebener Boden« heisst, ist erschlossen und nicht
+  gelesen, und seine Hangbilder bleiben deshalb unangetastet.
+
+- **Eine Einheit, die zum Schiessen anhaelt, faehrt jetzt danach weiter.** Bisher
+  war der Fahrbefehl weg, sobald ein Ziel in Reichweite kam: die Einheit blieb
+  stehen, feuerte — und stand danach fuer immer. Auf map_NET07 war das genau die
+  eine von vierzig, die zwei Zellen vor ihrem Ziel liegenblieb. Ebenso behaelt
+  jetzt eine Einheit ihr Ziel, wenn im Augenblick des Befehls gar kein Weg frei
+  ist (weil die eigenen Leute im Weg stehen), und versucht es eine Sekunde
+  spaeter noch einmal, statt den Befehl stillschweigend fallenzulassen.
+  ⚠ Ob das Original nach einem Gefecht weiterfaehrt, ist nicht gelesen — das ist
+  unsere Setzung, und sie ist als solche ausgeschildert.
+- **Achtzehn Kartenbilder trugen ihre Gebäude noch im Boden.** Der Kartenbacker
+  lässt ein stehendes Gebäude seit einer älteren Kur **absichtlich** aus dem
+  Bild heraus — sonst blieben seine Bildpunkte für immer im Gelände stehen, und
+  ein zerstörtes Gebäude könnte nie seine Ruine zeigen. Die Bilder der Kampagnen
+  16 bis 33 stammten aus der Zeit **davor**. Aufgefallen ist es dem
+  Rundlauf-Prüfstand, der seit Tagen bei 50 von 68 stand: alle achtzehn
+  scheiterten **allein am Bild**, die Daten liefen sauber rund. Solange das
+  Gebäude steht, sieht man nichts — zwei Aufnahmen derselben Stelle sind
+  punktgleich, weil die Engine das Gebäude deckungsgleich darüber zeichnet;
+  sichtbar war der Unterschied nur auf der Minikarte, und schädlich wäre er erst
+  beim Einsturz geworden. **Eine Neuinstallation war davon nie betroffen** — sie
+  backt mit dem heutigen Stand.
+- **Ein eingenommenes Werk bekommt jetzt seinen Anfangsbestand.** Die Meldung
+  war, dass die Einnahme von Horni in Kampagne 3 nichts bewirkt. Sie bewirkt im
+  Original etwas: sobald der Platz einem gehoert und eine eigene Einheit auf der
+  Tuerzelle steht, schreibt das Missionsskript dem Gebaeude 180 Waffen- und 127
+  Fahrwerkteile ins Lager; Dolni bekommt 330 und 237. Bei uns war die Wirkung
+  dieser Regel schlicht **leer** — die Bedingung stand richtig da und tat nichts.
+  Dieselbe Form steht zwanzigmal im Spiel, in fuenf Missionen, und sie SETZT das
+  Lager statt es zu erhoehen — in Kampagne 33 ist derselbe Befehl deshalb eine
+  Strafe statt einer Belohnung. Die Betraege haengen am Taktzaehler des
+  Missionsblocks und schwanken um bis zu neunzehn, wie im Original; Kampagne 25
+  rechnet mit einem Faktor drei. Gemessen: Kampagne 3 vier von vier, Kampagne 6
+  vier von vier, Kampagne 2 zwei von vier.
+  Auch Kampagne 33 ist jetzt gebaut: sie rechnet als einzige **quadratisch**
+  (der Betrag haengt vom Quadrat des Taktzaehlers ab), und alle zwoelf ihrer
+  Bestueckungen treffen ihren Wert.
+- **Das Original zaehlt Zellen, nicht Bildpunkte — und der Boden bremst
+  niemanden.** Die zweite Haelfte der gemeldeten Frage nach der Geschwindigkeit
+  ist gelesen. Jede Einheit fuehrt einen Schrittzaehler, den das Spiel selbst
+  »kolik« nennt; er waechst je Takt um die Geschwindigkeit der Einheit, und die
+  Zelle ist voll, wenn er 80 erreicht — 120 bei einem Schritt ueber Eck. Mehr
+  steht da nicht. Kein Gelaende, keine Steigung: die Bewegungsschleife des
+  Spiels von 1997 fasst das Gelaenderaster kein einziges Mal an, und die
+  Geschwindigkeit einer Einheit wird im ganzen Programm nur an einer Stelle
+  veraendert — bei einem Treffer, wo sie halbiert wird.
+  Damit ist unser Aufschlag von 45 % fuer Geroell **zurueckgenommen**; er war
+  geraten und falsch. Wichtiger ist aber, was er verdeckt hat: wir sind mit
+  fester Bildpunktgeschwindigkeit auf die naechste Zellmitte zugefahren, und in
+  der schraegen Ansicht sind die acht Nachbarzellen verschieden weit weg. Je
+  nach Himmelsrichtung fuhr dieselbe Einheit deshalb bis zu **doppelt** so lange
+  ueber eine Zelle. Jetzt ist es die eine Zahl des Originals: gerade 1, schraeg
+  1,503. Gemessen auf map_NET07 an 8275 fertigen Zellschritten, Geroell gegen
+  freien Boden 0,999 statt vorher 1,610, schraeg gegen gerade 1,503 statt 1,386.
+  Nebenher faellt eine Fliesskomma-Rechnung aus dem Netzspiel heraus: wann eine
+  Einheit ankommt, entscheidet jetzt eine ganze Zahl.
+- **Waffen haben eine Mindestreichweite, und wir haben sie uebersehen.** Beim
+  Nachpruefen der Reichweiten kam ein Feld ans Licht, das seit je in den
+  Kartendaten steht und im ganzen Spiel von 1997 genau **einmal** gelesen wird —
+  zweiundzwanzig Byte neben der Reichweite, in derselben Entscheidung: zu weit
+  weg wird der Schuss verworfen, **zu nah ebenso**. Die Karten bestaetigen es
+  ohne Gegenbeispiel: 620 der 4476 Einheiten tragen einen solchen Wert, und er
+  ist 620 von 620 kleiner als die Reichweite (3 bei Reichweite 8, 5 bei 14 …) —
+  und nur die weit reichenden haben ueberhaupt einen. Ein Geschuetz laesst ein
+  Ziel jetzt los, wenn es zu nah herangekommen ist, statt weiter darauf zu
+  halten; naeher heranzufahren macht es schliesslich schlimmer. Auf `map_DM_1`
+  gemessen: 18 Einheiten mit Mindestreichweite, 30 Ziele deswegen
+  fallengelassen, mit `--no-min-range` null. ⚠ Die Meldung sagt ausserdem, wenn
+  eine Karte gar keine solche Einheit hat — dort ist die Null kein Ergebnis.
+
+
+- **Eine Gruppe bleibt an der Engstelle nicht mehr liegen.** Gemeldet als
+  »Gruppenauswahl und hintereinander weg fahren wie über brücken lässt einheiten
+  nicht mehr fahren, gerade wenn ein Fahrweg durch die brücke blockiert ist,
+  weil gerade jemand anders drüber fährt«. Wir haben bisher 0,7 Sekunden
+  gewartet, **einmal** einen neuen Weg gesucht und bei Misserfolg den Weg
+  weggeworfen — danach stand die Einheit für immer, bis der Spieler von Hand neu
+  klickte. Auf einer einspurigen Brücke ist der Weg im Augenblick des
+  Neuplanens fast immer belegt, also traf es die halbe Gruppe. Das Spiel von
+  1997 macht es anders, und zwar an der Wurzel: seine Bewegungsfrage kennt
+  **drei** Antworten, nicht zwei — nein, *ja aber jemand muss ausweichen*, frei.
+  Vor einer Wand zu warten ist sinnlos, hinter einer fahrenden Einheit zu warten
+  ist genau richtig, und wir hatten beides in einen Topf geworfen. Jetzt wartet
+  eine Einheit hinter einer anderen und behält ihren Weg; vor etwas
+  Unbeweglichem läuft ein Geduldszähler, und wenn er abläuft, wird neu geplant
+  und der Zähler **neu gesetzt** statt aufzugeben. Die Zahlen sind die des
+  Originals (15 + Wurf%15 beim Betreten einer Zelle, 40 + Wurf%20 danach, und
+  einmal je 60 Takte ein Rütteln, wenn jemand im Weg steht). Gemessen mit dem
+  neuen `--stuck-check` über drei Karten, auf denen die Frage stellbar ist:
+  **8 liegengebliebene Einheiten vorher, 0 nachher**; `--stuck-check=alt` stellt
+  die alte Fassung im selben Programm nach und fällt durch. Der Zwilling bleibt
+  über 30 Sekunden bitgleich.
+
+- **Bomben treffen die Mitte des Rumpfes.** Ein Angriff aus der Luft zielte
+  bisher auf die Satzzelle einer Einheit — bei einem Schlachtschiff also auf
+  seine linke obere Ecke. Das Spiel von 1997 rückt den Zielpunkt nach der
+  Gattung des Ziels, und dieser Versatz ist nichts anderes als die Mitte des
+  Rumpfes: eine Zelle bei den kleinen, zwei bei den großen. Es ist dieselbe
+  Tafel, die auch über die Rumpfgröße entscheidet.
+- **Ein Bomber fliegt einen zweiten Anlauf, statt über dem Ziel zu hängen.** Er
+  wirft ab, dreht auf einen ausgewürfelten Punkt **10 bis 19 Zellen** weit ab
+  (jede Achse mit eigenem Vorzeichen), kommt zurück und greift erneut an — bis
+  die Munition leer ist. Auf dem Rückweg wirft er nicht; das ist keine Bequemlichkeit,
+  sondern die Sperre des Originals, das den Abwurf an einen Auftragszustand
+  bindet, den es beim Abdrehen wegnimmt. Das Spiel von 1997 benennt die Stelle
+  selbst mit „Over target while attack".
+  ⚠ **Und damit ziehe ich eine eigene Zurücknahme zurück.** Ich hatte gemeldet,
+  das Original kenne diese Schleife nicht, und eine frühere Behauptung darüber
+  widerrufen. Der Widerruf war selbst falsch: richtig daran war nur, dass die
+  zwei Zielversätze die Mitte des Rumpfes sind und kein Überflug. Die Schleife
+  steht an einer anderen Stelle — hinter einer Bedingung, die ich damals nicht
+  weiterverfolgt hatte, in einem zweiten Verteiler, den das Spiel erst betritt,
+  wenn das Flugzeug genau auf seiner Zielzelle steht. Gemessen: 71 Schleifen in
+  gut zwei Minuten auf einer Karte mit zehn Bombern.
+- **Die Bahn repariert sich wieder.** Ein Fahrzeug mit dem Gleisaufsatz
+  arbeitet zwanzig Takte an einem zerschossenen Stück, macht es heil — und
+  sucht sich danach **selbst** das nächste auf derselben Linie. Genau so steht
+  die Kette im Original; sie hat nur darauf gewartet, dass es bei uns einen Weg
+  gab, ihr einen Auftrag zu geben.
+- **Ein Schiff belegt jetzt seinen ganzen Rumpf.** Das Spiel von 1997 prüft für
+  ein kleines Schiff **vier** Zellen und für ein großes **sechzehn**; wir prüften
+  eine. Ein Schlachtschiff belegte damit ein Sechzehntel seiner selbst — zwei
+  Schiffe konnten ineinander stehen, und ein Landfahrzeug fuhr durch drei Viertel
+  davon. Die Rumpfgröße liegt jetzt in der Wegekarte selbst, damit Belegen und
+  Freigeben nicht auseinanderlaufen können.
+- **Versorgungshelikopter fliegen heim, wenn niemand mehr Nachschub braucht** —
+  so wie im Original. Sie blieben bisher über den versorgten Einheiten stehen.
+  Und sie kehren um, solange der Sprit noch für den Rückweg reicht, statt erst
+  bei leerem Tank. **Wohin** sie fliegen, war dabei zunächst falsch geraten: wir
+  schickten sie zum Nachschub-Posten. Das Spiel von 1997 würfelt stattdessen
+  **irgendein eigenes Gebäude** aus und streut das Ziel um bis zu fünf Zellen —
+  ohne jede Prüfung, was für ein Gebäude das ist. Damit erklärt sich auch, warum
+  ein Heli auf einer Karte ohne Flugplatz heimkommt: er sucht keinen.
+  Nachgemessen auf einer Demokarte: von 19 Helis hingen erst 15 ohne Auftrag in
+  der Luft, jetzt **keiner** — und die Zahl derer, die daheim stehen, wächst
+  über die Laufzeit von 4 auf 9. ⚠ **Unsere Abweichung:** wer gar kein eigenes
+  Gebäude mehr hat, bleibt bei uns stehen. Das Spiel von 1997 schickte ihn in
+  diesem Fall auf eine ausgewürfelte Kartenzelle — einen Fehler, der dort nur
+  deshalb nicht auffällt, weil ohne Gebäude die Partie ohnehin vorbei ist.
+- **Ein Fluggerät hatte nur die halbe Drehung.** Der Rumpf stand quer zum
+  Flugpfeil, und die Ursache war weder ein Versatz noch ein Zustandsfehler,
+  sondern der **Export**: ein Fluggerät besitzt im Spiel von 1997 **sechzehn**
+  Bilder, wir haben acht davon exportiert — und zwar nicht jede zweite Stufe,
+  sondern **die ersten acht**, also eine halbe Umdrehung. Ein Flugzeug konnte
+  gar nicht nach hinten schauen. Belegt an der Teiletafel selbst: die acht
+  Luftteile liegen 16 Bilder auseinander, und alle 16 sind verschieden.
+  Jetzt werden alle sechzehn exportiert und die Blickrichtung wird in
+  **22,5-Grad-Schritten** gerechnet, mit der Formel des Originals. Gemessen: 11
+  verschiedene Stufen gleichzeitig am Himmel, 8 davon ungerade — die kann es mit
+  acht Bildern nicht geben.
+  ⚠ **Damit fällt eine eigene Eichung.** Der zuvor eingetragene „Versatz 2, zwei
+  unabhängige Wege" ist zurückgezogen: die Eichung an den Panzern lief auf dem
+  halben Sprite-Satz, und der zweite Weg war gar keiner — der Versatz in der
+  Formel des Originals ist derselbe, den unsere Richtungsrechnung schon hatte,
+  nur in Sechzehnteln. Wer beides anwendet, dreht um 180 Grad zuviel. Es gilt
+  jetzt die Rechnung des Originals allein.
+  ⚠ Was **bleibt**, ist Original und kein Fehler: eine Drehung geht sechs Grad
+  je Takt, eine volle Wendung dauert 60 Takte. Nach einem Zielwechsel fliegt ein
+  Heli also bis zu 30 Takte lang seitwärts, bevor er sich ausgerichtet hat.
+
+### Gefecht
+
+- **Die Kartenvorschau sagt jetzt, wieviele Basen es gibt.** Anlass war »die
+  Gegner-KI macht mal was, mal nicht — manche bauen gar nicht erst los«. Die
+  Ursache ist keine der KI, sondern der Karte: gebaut wird nur in einer BASIS,
+  und viele Karten haben weniger davon als Startplätze — `map_DM_4` **2 Basen
+  für 5 Plätze**, `map_DM_11` 2 für 6, `map_NET07` **keine** für 8. Wer keine
+  bekommt, sieht zu. Das stand nirgends; jetzt steht es unter der Vorschau,
+  mit Warnzeichen wenn es nicht reicht.
+  ⚠ Zwei eigene Diagnosen sind dabei gefallen: die KI baut sehr wohl ohne
+  Bauprogramm (10 Einheiten in 60 s gemessen), und sie greift auch an (6 in der
+  Welle, 1 Angriff). Beides hatte ich vorher falsch aus den Zählern gelesen.
+
+- ⭐ **Feindliche Gebäude lassen sich einnehmen — Strg+Rechtsklick.** Gemeldet
+  war »Werft und Seedock lassen sich nicht einnehmen, nur Angreifen kann man
+  sie« und »von KI eingenommene Gebäude kann man nicht einnehmen, nur
+  zerstören«. Der neue Prüfstand `--door-check` hat zuerst gezeigt, dass es
+  NICHT daran liegt: die Türen sind erreichbar (Werft-Station 1/1 bzw. 2/2,
+  Basis, Fabriken, Flughafen, Mine, Bahnhöfe vollständig). Die Ursache war der
+  Klickweg — er versucht zuerst einen Angriff, und ein feindliches Gebäude *ist*
+  ein Ziel, also kam der Bewegungsbefehl nie dran und die Einheit konnte die
+  Türzelle gar nicht erreichen. Bei neutralen Gebäuden greift niemand an, deshalb
+  ging es dort und nur dort.
+  Gemessen: eine feindliche Basis wechselt jetzt den Besitzer, **unbeschädigt**
+  (1200/1200). Gegenprobe `--capture-by-attack`: sie bleibt fremd und steht auf
+  **0/1200** — genau das gemeldete »nur zerstören«.
+  ⚠ Seedock (0 Türen in 39 von 39) und Kraftwerk (0 in 262) bleiben
+  uneinnehmbar; das ist das Original, und der Knopf sagt es jetzt statt zu
+  schweigen. Der Hafen wechselt mit seiner Werft-Station.
+- **Eine neue Einheit kommt aus der Tür.** War seit langem gelesen
+  (`@0x410441`: die erzeugte Einheit bekommt `col + door_col` / `row +
+  door_row`) und nie gebaut — sie erschien an der Ankerzelle des Gebäudes, also
+  je nach Grundriss an der falschen Seite. Gemessen: 4 von 4 aus der Tür.
+- **Die Bauwarteschlange.** Mehrfach dieselbe Einheit zu bestellen hat bisher
+  jedesmal bezahlt und den laufenden Bau nur neu angestossen — drei Klicks,
+  dreimal Teile weg, eine Einheit. Jetzt reihen sich Bestellungen auf: bezahlt
+  wird beim Einreihen, hoechstens sechs warten (die Zahl des Depots im Original,
+  `cmp al,6` @0x467FBF), **Umschalt+B** nimmt die letzte zurueck und erstattet
+  sie, und die Rohstoffleiste zeigt, was laeuft und was dahintersteht.
+  Gemessen mit `--queue-check=4`: 4 bestellt, 80/160/0 bezahlt (genau 4x der
+  Preis), 4 angekommen, Schlange leer. Die Gegenprobe `--no-build-queue` stellt
+  den alten Stand her und meldet dort 80/160/0 bezahlt gegen ein Soll von
+  20/40/0 — der gemeldete Verlust, hergestellt und wieder wegmessbar.
+  ⚠ Eine Warteschlange ist **unsere Zutat**; das Original fuehrt fuer eine
+  Einheit gar keine Bauzeit, sondern ein Depot mit sechs Plaetzen.
+- **Der Techstandard steht in der Vorgabe auf 8 statt auf 1.** Auf Stufe 1 gibt
+  der Flughafen nur die zwei Versorgungshelis frei — gelesen ist daran, dass ein
+  frisches Original auf 1 startet (@0x4426F4), nicht, dass 1 eine gute
+  Wettkampfvorgabe ist. Unter dem Regler steht jetzt eine Zeile, die **ausrechnet**
+  (nicht aufschreibt), was die gewaehlte Stufe freigibt und was die naechste
+  dazubringt. Eine bestehende Installation traegt die alte 1 in ihrer
+  `settings.cfg`; sie wird **einmalig** angehoben und danach nie wieder
+  angefasst.
+- **Forschung und Reparatur sind erreichbar.** Beide Mechaniken gab es seit
+  langem auf den Tasten O und K, aber die Reiter des Basisfensters sagten
+  »noch nicht angeschlossen«, und damit war die Frage »wo kann ich forschen?«
+  unbeantwortbar. Die Reiter zeigen jetzt Stand, Kosten und naechstes Vorhaben,
+  und der Knopf heisst, was er tut. ⚠ Fuers Reparieren braucht es **keine
+  Einheit**: das Gebaeude repariert sich selbst.
+- **Der Flughafen rechnet in Teilen, nicht in Dollar.** Bezahlt hat er die ganze
+  Zeit richtig (Teilelager des Gebaeudes, wie `build_in_airport` @0x4BB3D0), nur
+  seine Kopfzeile und die Zeile im Bedienblock schrieben `$150` hin — der Preis
+  des Versorgungsdepots, das tatsaechlich Geld nimmt. Woher die Teile kommen,
+  ist jetzt auch beantwortet: **ueber die Bahn** (Typmatrix @0x504128), der
+  Nahweg beliefert allein die Basis.
+- **Versorgungshelis bleiben nicht mehr stehen.** Ein leerer Heli suchte
+  ausschliesslich einen Nachschub-Posten (Typ 14) — und **map_NET02 hat sieben
+  Flughaefen und keinen einzigen Posten**, NET08 drei und keinen, DM_11 gar
+  nichts. Dort war ein Heli nach fuenf Lieferungen fuer immer erledigt. Findet
+  er keinen Posten, laedt er jetzt am Flughafen oder der Basis seines eigenen
+  Spielers nach und sagt in der Ausgabe, dass er es getan hat. ⚠ Eine bewusste
+  Abweichung; wo es einen Posten gibt, gewinnt weiter der Posten (auf NET04
+  gemessen: 1 am Posten, 0 Abweichungen).
+- **Die Rohstoffleiste sagt, dass sie eine Summe ist.** Sie zeigt »gesamt (n)«
+  mit der Zahl der gezaehlten Gebaeude — dass sie mit dem Lager einer einzelnen
+  Basis nicht uebereinstimmt, war vorher nicht zu erkennen. Ausserdem zaehlen
+  jetzt **Flughafen und Werft-Station** mit: aus beiden wird bezahlt, und genau
+  das ist die Regel, nach der die Auswahl schon vorher gebildet war.
+- **Der eigene Startplatz steht auf der Minimap.** Eine weisse Raute mit dunklem
+  Rand, dort, wo die Partie begonnen hat. Sie wandert nicht mit: genommen wird
+  der Punkt einmal beim Start und dann nie wieder: wer seine Basis verliert,
+  soll trotzdem noch sehen, wo er hergekommen ist. Unsere Zutat, wie die
+  Minimap selbst.
+- **Jeder Mitspieler faengt mit einer Basis an, auch der Rechner.** Auf den
+  Eroberungskarten stehen 4 bis 8 Basen neutral herum, und wer zuerst eine
+  erreicht, hat sie: das ist ein Wettlauf und kein Gefecht. Jetzt bekommt jeder
+  Mitspieler beim Start die ihm naechste zugeteilt, die uebrigen Gebaeude
+  bleiben zu besetzen. Die Zuteilung rechnet **ganzzahlig in Zellen** und in
+  fester Reihenfolge, weil sie im Lockstep-Pfad liegt und auf zwei Maschinen
+  dasselbe ergeben muss. Auf `map_NET04` gemessen: 4 von 4 Mitspielern bekommen
+  eine, die neutralen Gebaeude gehen von 61 auf 57 und die neutralen Basen von 8
+  auf 4 zurueck; `--no-start-base` stellt den alten Stand her.
+  Eine bewusste Abweichung vom Original, die Kampagne bleibt unberuehrt.
+
+### Kampagne und Oberfläche
+
+- ⭐ **Die Enzyklopädie des Originals ist im Spiel.** Der Menüpunkt sollte auf
+  unser Wiki verlinken. Beim Nachsehen, was das *Original* hinter der Zeile hat,
+  lag **`ENCYCLOG.TXT` mit 106 Seiten** neben GAME.EXE — Fahrwerke, Waffen,
+  Zubehör, Verbesserungen, Luftwaffe, Marine, Dicke Bertha, Infanterie,
+  Gebäude, im Volltext und mit **149 Querverweisen**, die jetzt anklickbar sind.
+  ⚠ **Die Kodierung ist eine Falle:** `HELPG.TXT` daneben ist cp437,
+  `ENCYCLOG.TXT` ist **Latin-1**. Mit dem falschen Leser wird aus »Räder«
+  »RΣder«. Die Datei entscheidet, nicht der Ordner.
+  ⚠ Ohne Bild: die Seiten tragen eine Bildnummer bis 97, `ENCYCLOG.PIC` fasst
+  aber nur 24 Bilder — die Zuordnung ist ungelesen und wird nicht geraten.
+- **Credits.** Die Zeile des Originals führt jetzt irgendwohin. Sie zeigt, was
+  belegt ist (Virtual X-citement, Eidos Interactive, 1997) und die
+  Reborn-Seite — und sagt dazu, was **nicht** belegt ist: die Namen des Teams
+  von 1997 stehen in keiner Datei, die diese Fassung liest. Der Abspann des
+  Originals ist vermutlich `34.RPL` — der einzige Film ausserhalb der 33
+  Missionsfilme, und der einzige, der auf **beiden** CDs liegt. Ein Indiz, kein
+  Beleg; wir spielen kein .RPL.
+
+- **»Spiel laden« sitzt wieder in der Mitte.** Der Schirm hat seine Anker
+  gesetzt, aber nicht seine Raender — damit behielt er ein Rechteck der Groesse
+  null in der linken oberen Ecke, und das Fenster darin wurde von dort aus
+  gezeichnet. Genau derselbe Fehler war im Einstellungsschirm schon einmal
+  gefunden und dort im Kommentar festgehalten worden; er ist wiedergekommen,
+  weil die Kur im Fliesstext stand und nicht am Aufruf. Dieselbe Zeile hat
+  nebenbei drei abdunkelnde Flaechen repariert, die nichts abgedunkelt haben,
+  und den Deckel des Abschlussfensters, der keine Maus abgefangen hat.
+
+
+- **Das Editorfeld stand im Gefecht, und die Missions-Popups standen im
+  Hauptmenü.** Zwei Meldungen, eine Ursache. Ein Szenenwechsel ersetzt nur die
+  laufende Szene; wer als Geschwister davon unter der Wurzel hängt, überlebt ihn
+  — und genau dort hängen zwei Helfer mit Absicht: der Wächter des
+  Karteneditors, damit er sich an die *nächste* Karte hängen kann, und die
+  Ebene der Hilfefenster, damit die Kamera sie nicht aus dem Bild trägt. Beide
+  hatten einen Einschalter und keinen Ausschalter. Der Bearbeitungsmodus wurde
+  nie zurückgenommen — die Methode dafür stand da und wurde im ganzen Programm
+  **kein einziges Mal** gerufen —, und die Fenster räumte nur das *Laden* einer
+  Karte weg, ein Weg, den das Hauptmenü nie nimmt. Die Kur sitzt jetzt am
+  **Eingang** des Menüs statt an den neun Ausgängen: wer dort steht, hat die
+  Spielwelt verlassen, egal durch welche Tür. Dazu ein Prüfstand, der den
+  echten Ausstieg geht (`--leave-check`) — und eine Gegenprobe, die die alte
+  Fassung im selben Programm nachstellt (`--leave-check=alt`) und dabei
+  durchfallen **muss**, sonst wäre nicht zu sehen, ob der Zähler überhaupt
+  etwas sehen kann.
+- **Die Trefferrechnung nahm die Höhe des Schützen nicht mit.** Gemeldet als
+  „Team 2 nimmt kaum Schaden" — und zu Recht: das Spiel von 1997 rechnet die
+  Höhe auf **beiden** Seiten ein, bei uns fehlte die eine Hälfte, und zwei
+  Felder waren obendrein vertauscht. Ausgelöst hat das ein falscher Kommentar.
+  Behoben; der Unterschied, der bleibt, ist die Höhenregel des Originals.
+- **Das Kampagnen-HUD zeigt den Auftrag.** Bisher standen dort nur die
+  Nebenmissionen — das Hauptziel ist die Siegbedingung, und die hat gar keinen
+  Text. Den Text hat das Original selbst, in `OBJECTG.TXT`; sie liegt auf CD 1
+  im selben Archiv, aus dem schon die Briefings und die Hilfetexte kommen. 33
+  Missionen, 58 Ziele, im Wortlaut von 1997.
+- **Die technischen Zeilen und die Tastenlegende verlassen das HUD im Spiel.**
+  Kartenname, Rasterweite, Kachelsatz, Bildgröße und die zwei Zeilen mit den
+  Tastenkürzeln sind Angaben über die Datei und über die Bedienung, nicht über
+  das Schlachtfeld. Im Kartenbetrachter bleiben sie stehen, und `--hud-debug`
+  holt sie überall zurück.
+- **Versorgungshelikopter** setzen ihre Blickrichtung jetzt auch auf dem letzten
+  Schritt vor dem Ziel. Wohin einer *ohne* Auftrag sieht, ist im Original
+  nachgelesen: er behält die Richtung seines letzten Fluges — die Luftschleife
+  fasst die Blickrichtung überhaupt nicht an.
+
+### Karteneditor
+
+- **Gelände und Höhe lassen sich malen.** Zwei neue Pinsel: der eine setzt die
+  Geländeart einer Zelle (frei, rau, Wasser, gesperrt), der andere hebt und
+  senkt sie. Ein Strich ändert dabei nie nur die angeklickte Zelle — der
+  Kachelschlüssel hängt an der Neigung, an den vier Nachbarn und am Abstand zum
+  Wasser, also werden bis zu **81 Zellen** nachgezogen. Sie ziehen ihre Kachel
+  aus derselben Rechnung wie der Kartengenerator, samt demselben Wurf; eine nur
+  mitgezogene Zelle bekommt darum genau ihre alte Kachel zurück.
+  ⚠ **Der Pinsel weigert sich, statt zu reparieren.** Der Generator löst
+  Höhenkonflikte, indem er *andere* Zellen absenkt. Ein Pinsel darf das nicht —
+  er täte dann etwas anderes als angeklickt wurde. Er lehnt ab und sagt, warum.
+- **Der Prüfstand hat den ersten Pinsel zweimal verworfen.** Beide Male hatte er
+  die Karte messbar verschlechtert: harte Nähte von 3,4 auf 6,9 Prozent, eine
+  Uferzelle mit Innenland-Kachel, eine Beanstandung in der Kartenprüfung. Der
+  Grund war beide Male derselbe — er zog die Kachel anders als der Generator.
+  `--map-edit-check` stellt jetzt neun Zahlen **vor und nach** dem Malen
+  nebeneinander; ohne sie hätte man den Fehler nur daran gesehen, dass eine
+  gemalte Stelle „irgendwie anders aussieht".
+- **Die Spieler 2 bis 5 waren nie anwählbar.** In der Leiste stand „0..7 =
+  Eigner", aber die Ziffern 1 bis 4 wurden schon vorher als Pinselwahl
+  abgefangen — beim Einheitenpinsel ließ sich damit gar kein anderer Eigner
+  einstellen als der erste. Der Eigner geht jetzt reihum.
+- **Die „zerstückelten Gebäude" waren gar keine Gebäude.** Basis und Fabrik einer
+  erzeugten Karte sind Bild für Bild dieselben wie auf einer gelieferten. Was
+  zerstückelt aussah, waren **einzelne Gebäudekacheln, die als Bewuchs über das
+  Gelände gestreut** waren — samt der schwarzen Innenkacheln, die nur im Verbund
+  einen Sinn ergeben. Sie kamen dorthin, weil das Spiel von 1997 die Kacheln
+  eines Gebäudes ins Kartenraster schreibt und die gemessene Kacheltabelle sie
+  darum für Bewuchs hielt. In den gelieferten Karten liegt jede Gebäudekachel im
+  Rahmen eines Gebäudes — 2094 von 2094 auf der einen, 160 von 160 auf der
+  anderen, und keine einzige steht allein. Die Kartenprüfung zählt beides jetzt
+  mit.
+- **Einheiten von Hand setzen.** Sechzehn Bauarten, vom Reifen bis zum
+  Schlachtschiff, jede mit den Werten, die sie auf den gelieferten Karten
+  wirklich trägt — Leben, Tank, Angriff und Gattung aus den Rohsätzen gelesen,
+  nicht gewählt. Der Spieler wird mitgewählt, und der Editor weist ab, was nicht
+  stehen könnte: ein Schiff auf der Wiese ist eine Einheit, die sich nie bewegt.
+- **Der Editor hat einen Pinsel.** Auf der Karte lassen sich jetzt **Gebäude**
+  (jede Art, die der Kachelsatz kennt — militärisch wie zivil, mit wählbarem
+  Eigner bis hin zu herrenlos und Kulisse), **Gegenstände** und **Bahngleise**
+  von Hand setzen. Ein Gebäude steht sofort da; Gegenstände und Gleise kommen
+  beim Speichern ins Bild, und bis dahin zeigt der Schirm eine Vorschau und sagt
+  dazu, dass es eine ist. Ein Gebäude kommt nur auf einen echten Bauplatz — und
+  wo nicht, nennt der Schirm die Zelle und den Grund. Das Bild eines Gleisstücks
+  wird nicht gewählt, sondern aus seinen Nachbarn bestimmt, nach der Tafel, die
+  das Spiel von 1997 selbst führt.
+- **Eine erzeugte Karte ist jetzt eine Eroberungskarte.** Sie bekommt neutrale
+  Gebäude wie die gelieferten Gefechtskarten: Zahl, Arten, Türen, Trefferpunkte
+  und Abstände sind aus sieben gelieferten Karten gemessen; verteilt und gesetzt
+  wird von uns. Aus vier Gebäuden werden auf einer großen Karte über siebzig,
+  darunter Flughäfen, Fabriken und Basen zum Einnehmen.
+
+### Klang
+
+- **Ein Klang kommt jetzt von links oder rechts.** Die Dämpfung nach Entfernung
+  gab es schon, das Panorama war gelesen und ausdrücklich als Lücke
+  stehengelassen. Das Spiel von 1997 rechnet `panorama = 200 · dx` und klammert
+  auf DirectSounds eigene Grenzen — ausgereizt ist der Regler damit bei **50
+  Zellen** seitlichem Abstand. Gebaut wie es gehen muss: ein eigener Klangbus je
+  Kanal mit Schwenkregler, zwölf Stück. Teilten sie sich einen, bekäme ein
+  Schuss am linken Kartenrand den Schwenk des nächsten Schusses.
+  ⚠ **Nur `dx`.** Ein Klang genau über oder unter dem Ohr kommt aus der Mitte,
+  so weit weg er auch sei — das Original fragt `dy` für das Panorama gar nicht
+  ab. Eine Winkelrechnung wäre „richtiger" und damit falsch.
+  Auf einer großen Karte gemessen: 255 Objekte, Werte von −1,00 bis +1,00, 93
+  ganz links, 35 ganz rechts.
+
+### Zug und Strecke
+
+- **`--rail-gap-check`: wie weit ist das letzte Gleisstück vom Gebäude?** Zu
+  »oft fehlt noch ein kleines Stück von der Bahnstrecke«. Die alte Zahl konnte
+  es nicht sehen — sie meldet »0 von 70 weiter als **2** Zellen«, und eine
+  Lücke von einer Zelle ist 40 px. Gemessen: 20 von 70 (NET05), 20 von 66
+  (NET02), 16 von 48 (DM_4) Enden mit Lücke, **immer genau eine Zelle** und
+  **nur an Bahnstation und Feldbahnhof**. ⚠ Die Lücke steht in den
+  KARTENDATEN — die erste Grundrissspalte trägt dort gar keine Gleiszelle, das
+  Gebäudebild setzt die Schiene fort, und senkrecht sitzt es bündig (32/32,
+  6/6, 7/7, 0 px). An einer der Fundstellen nachgesehen: kein Loch. **Nicht
+  reproduziert** — der Prüfstand nennt jetzt Karte, Linie, Zelle und Gebäude.
+
+- ⭐ **Der Zug fährt die Diagonale, die gezeichnet dasteht.** Zum zweiten Mal
+  gemeldet (»wenn eine Bahnstrecke sauber diagonal ist … so fährt aber der Zug
+  nicht, der Zug macht Zicke Zacke, wobei die Strecke sauber ist«) — und die
+  vorhandene Zahl konnte es gar nicht sehen: `--rail-check` meldet den
+  **mittleren** Richtungswechsel je Takt, und ein Zickzack wechselt abwechselnd
+  um +δ und −δ, im Mittel bleibt davon nichts übrig.
+  Der neue Prüfstand **`--rail-zigzag`** hält deshalb die GEZEICHNETE Schiene
+  (Anschlusspunkte aus der an den Bildern gemessenen Tafel) gegen den
+  GEFAHRENEN Weg, **je Knick einzeln**. Damit war es sofort da, und die Quote
+  nach Ursache aufgeschlüsselt war eindeutig: von den Stellen, an denen die
+  Schiene gezeichnet gerade ist, knickte der Weg auf NET05 an 7, auf NET02 an
+  24, auf DM_4 an 23 — und **jede einzelne davon an einer RAMPE**. Auf ebenem
+  Gleis: **0 von rund 2700**.
+  Die Ursache steht in der Zahl: die schlimmste Abweichung war **15,3 px**, und
+  15 px ist genau eine Höhenstufe. Die Höhe des Weges war eine **Treppenfunktion
+  je Zelle** (`ElevOf(round(x),round(y))·15`), während die gezeichnete Rampe
+  **stetig** steigt — an jeder Zellgrenze einer Rampe sprang der Waggon eine
+  volle Stufe. Jetzt kommt die Höhe aus der **Kunst**: die Tafel der
+  Anschlusspunkte sagt je Bild und Seite, wie hoch die Schiene dort liegt
+  (f6/f7 14,7 px, f8/f9 15 px über dem ebenen Wert).
+  Gemessen danach: geknickt **0 / 4 / 12** statt 7 / 24 / 23, schlimmster Knick
+  **7,3°** statt 27,5°, Formabweichung auf Rampen **0,2–0,3 px** statt
+  7,4–9,3 px. Gegenprobe **`--no-rail-lift`** stellt den alten Stand her.
+  ⚠ Ohne Rückschritt: Ecken 0 von 949, Anschlusszeile 45 von 45 bündig,
+  Waggonlücken 0 von 48 — alle unverändert.
+
+- **Die Waggon-Feinlage ist gelesen.** Zwei Felder im Waggonsatz standen seit
+  Beginn ohne Namen da. Sie sind der Versatz des Waggons **innerhalb** seiner
+  Zelle, in Bildpunkten, und das Spiel setzt sie aus einer einzigen Größe: der
+  Parität der Halbzeile, in der der Waggon steht. Ungerade heißt eine halbe
+  Kachel nach unten, gerade eine halbe nach rechts — das sind genau die
+  **Randmitten**, auf denen auch die Schienenbilder ihre Enden haben. An den
+  gelieferten Karten nachgezählt: von 162 Waggons, die auf einem der beiden
+  Ausgangswerte stehen, folgen **161** der Regel. Die übrigen tausend sind
+  Zwischenstände einer Fahrt, im Takt des Fortschritts.
+- **Die Waggons stehen auf den Randmitten — nachgemessen, und zwar gegen die
+  Regel des Originals.** Nachgezählt über drei Karten sitzt **kein einziger**
+  von 1193, 1000 und 1305 Wegknoten auf der Zellmitte; die Zellmitte ist der
+  Mittelpunkt der isometrischen Raute und liegt auf keinem der beiden
+  Eckengitter. Bisher hat unsere Strecke die Ecke aus der Nachbarzelle
+  abgeleitet und aus den an den Bildern gemessenen Anschlüssen — das Spiel von
+  1997 nimmt statt dessen die Parität der Halbzeile. Beide Wege lassen sich
+  jetzt gegeneinander halten, und auf den Zellen, über die die Gegenprobe
+  überhaupt etwas sagen kann, stimmen sie **1271 zu 0** überein — restlos.
+  ⚠ Die erste Fassung dieses Eintrags stand hier mit „88 bis 93 Prozent" und
+  schob den Rest auf die bekannte Lücke zwischen Gleis- und Zugstruktur des
+  Originals. Das war falsch, und der Fehler lag bei uns: nach Bildart getrennt
+  sitzt **jede einzelne** Abweichung auf einem **Eckstück** und keine auf einer
+  Geraden oder Rampe (402:0, 473:0, 396:0 gegen 192:88, 155:66, 353:54). Ein
+  Eckstück verbindet eine waagerechte mit einer senkrechten Kante, hat also je
+  einen Anschluss auf *jedem* der beiden Gitter — eine Tafel, die je Zelle nur
+  eine Parität hält, kann dort gar nicht beide treffen. Es war die Buchführung,
+  nicht die Strecke.
+  ⚠ Die Parität **steuert nichts** und soll es nicht: sie ist die zweite,
+  unabhängige Auskunft, und wer sie zur Regel machte, hätte hinterher keine
+  Gegenprobe mehr.
+- **Der letzte Waggon einer Linie stand neben dem Gleis.** Das freie Ende einer
+  Strecke wurde als „die Gegenseite des Ausgangs" gerechnet. Für ein gerades
+  Stück stimmt das — für ein **Eckstück** nicht: geht die Schiene nach rechts
+  hinaus und unten weiter, ist die Gegenseite *links*, und dort liegt gar keine
+  Schiene. Das freie Ende liegt unten. Der Endknoten saß dadurch eine halbe
+  Zelle in jeder Achse daneben, rund 22 Bildpunkte. Richtig ist nicht „die
+  Gegenseite", sondern „die andere Seite, die dieses Gleisbild wirklich hat".
+  Betroffen waren **25, 28 und 30** Knoten auf den drei Karten — und
+  nachgemessen sind das **ausnahmslos Linienenden**, kein einziger mitten in
+  der Kette. Die Gegenprobe an der Regel des Originals verbessert sich auf allen
+  drei Karten (666:94 → 672:88, 667:73 → 674:66, 853:66 → 865:54); die
+  bekannten Kennzahlen bleiben Zahl für Zahl gleich. Mit `--rail-lay=altport`
+  lässt sich der alte Stand daneben legen — ohne ihn wäre „4,12 px je Takt"
+  eine Behauptung; so ist belegt, dass es die 4,11 vorher schon gab.
+
+### Mehrspieler
+
+- **Die Computerspieler müssen nicht durch den Befehlsring** — und das ist
+  gemessen, nicht angenommen. Im Programm von 1997 erreicht **genau eines von 21
+  Zielen** der Computerspieler-Runde den Befehlsbus (eine Gruppenbewegung);
+  Produktion, Einheitendurchlauf und Transport schreiben ihre Felder direkt. Und
+  weil die Runde jeden Platz überspringt, auf dem ein Mensch sitzt, rechnet im
+  Netzspiel **jede Maschine ihre Computerspieler selbst**. Nachgeprüft wurde, ob
+  unsere das auch aushalten: drei Läufe mit zwei echten Prozessen und
+  *verschiedenen* Spielerplätzen, darunter einer über 6000 Takte, in dem beide
+  Computerspieler ein Gebäude einnehmen und je vier Einheiten bauen — also
+  gerade der Zweig, der würfelt. Beide Maschinen kamen an jedem Prüftakt auf
+  dieselbe Zahl.
+- **Der Netz-Prüfstand meldet jetzt, was die Computerspieler tun.** Er tat es
+  vorher nicht, und deshalb war sein grünes Ergebnis wertlos: ein Lauf, in dem
+  die Computerspieler nur dastehen, sieht genauso aus wie einer, in dem sie
+  spielen. Ihre Zahlen stehen jetzt an jedem Prüftakt und am Ende im Protokoll,
+  auf beiden Seiten.
 
 ## 0.5.0 — 13.08.2026
 
