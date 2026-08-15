@@ -307,6 +307,26 @@ public partial class MapEntityLayer : Node2D
         public List<Vector2I>? Path;     // remaining waypoint cells
         public int PathIdx;
         public Vector2I Goal;            // final target cell (for re-pathing)
+
+        /// <summary>Takte bis zum naechsten Versuch, einen Weg zu
+        /// <see cref="Goal"/> zu finden — 0 heisst »kein Versuch offen«.
+        ///
+        /// <para>⚠⚠ DIE SCHWESTER VON B2. `IssueMove` fragt die Wegsuche genau
+        /// einmal; wer keinen Weg bekam, bekam bei uns GAR NICHTS — kein Ziel,
+        /// keinen Merker, keinen zweiten Versuch — und stand bis zum
+        /// Missionsende. Getroffen hat es genau die Einheit, die im Augenblick
+        /// des Befehls von den EIGENEN Leuten eingekeilt war; eine Sekunde
+        /// spaeter waere der Weg da gewesen.</para>
+        ///
+        /// <para>⚠ Der erste Anlauf der Kur war, die Wegsuche durch belegte
+        /// Zellen zu fuehren (`Can_go == 1`). Das ist ZURUECKGEZOGEN: erschlossen
+        /// statt gelesen, und gemessen schlechter — map_NET07 fiel von 32 auf 17
+        /// Angekommene, weil die Wege durch die Pulks liefen. Der zweite Versuch
+        /// hier laesst die Wegwahl in Ruhe und heilt nur das Vergessen.</para>
+        ///
+        /// <para>⚠ In TAKTEN, nicht in Sekunden — der Zaehler liegt im
+        /// Lockstep-Pfad.</para></summary>
+        public int RetryIn;
         public Vector2I? Reserved;       // cell currently being driven into
 
         /// <summary>Der Zaehler <b>»kolik«</b>, Satzfeld <b>+0x06</b> — wie weit
@@ -3940,6 +3960,12 @@ public partial class MapEntityLayer : Node2D
     private readonly Dictionary<int, int> _stuckCells = new();
     private Vector2I _stuckGoal;
     private bool _stuckOn;
+    // ⚠ Der Antrieb des ANKERS. Eine Gruppe des Sichtspielers enthaelt auf
+    // Gefechtskarten auch Schiffe, und ein Schiff, dem man eine Landzelle
+    // befiehlt, bekommt zu Recht keinen Weg. Das ist kein Fehler der
+    // Wegfindung, und es gehoert nicht in denselben Zaehler (Arbeitsweise I) —
+    // auf map_DM_4 waren sechs der neun »steht ohne Weg« genau das.
+    private Simulation.NavGrid.MoveClass _stuckAnkerMove;
 
     /// <summary>
     /// Den Gruppenbefehl absetzen, den B2 beschreibt: ALLE beweglichen
@@ -4064,12 +4090,23 @@ public partial class MapEntityLayer : Node2D
         int reach = 0;
         if (StuckGoalWanted is { } want)
         {
-            var probe0 = _nav.FindPath(from, want, first.Move, _stuckGroup[0]);
-            if (probe0 == null || probe0.Count == 0)
-                return $"stuck-check: ({want.X},{want.Y}) ist von ({from.X},{from.Y}) aus " +
-                       "GAR NICHT erreichbar — das ist selbst der Befund, " +
-                       "und ein Fahrversuch dorthin misst nichts";
-            _stuckGoal = want; reach = probe0.Count;
+            // ⚠ Auch hier nicht blind Einheit 0: die kann eingeparkt sein (auf
+            // map_DM_4 ist sie es), und dann liest sich »gar nicht erreichbar«
+            // wie ein Befund ueber die KARTE. Gesucht wird die erste Einheit der
+            // Gruppe, von der aus das gewuenschte Ziel erreichbar ist.
+            for (int k = 0; k < _stuckGroup.Count && reach == 0; k++)
+            {
+                var wer = _entities[_stuckGroup[k]];
+                var ab = new Vector2I(wer.Col, wer.Row);
+                var probe0 = _nav.FindPath(ab, want, wer.Move, _stuckGroup[k]);
+                if (probe0 == null || probe0.Count == 0) continue;
+                first = wer; from = ab; ankerK = k;
+                _stuckGoal = want; reach = probe0.Count;
+            }
+            if (reach == 0)
+                return $"stuck-check: ({want.X},{want.Y}) ist von KEINER der " +
+                       $"{_stuckGroup.Count} Einheiten aus erreichbar — das ist selbst " +
+                       "der Befund, und ein Fahrversuch dorthin misst nichts";
         }
         for (ankerK = 0; ankerK < _stuckGroup.Count && reach == 0 && StuckGoalWanted == null; ankerK++)
         {
@@ -4092,6 +4129,7 @@ public partial class MapEntityLayer : Node2D
             }
             if (reach == 0) reach = StuckSuche(first, from, ankerK, out geflutet, out imRing);
         }
+        _stuckAnkerMove = first.Move;
         if (ankerK > 1 && reach > 0)
             GD.Print($"stuck-check: Einheit 0 war eingeparkt — Anker ist die {ankerK}. der Gruppe " +
                      $"(slot {first.Slot} auf ({from.X},{from.Y}))");
@@ -4133,6 +4171,7 @@ public partial class MapEntityLayer : Node2D
     {
         if (!_stuckOn) return "stuck-check: nicht gestartet";
         int arrived = 0, driving = 0, waiting = 0, dead = 0, dry = 0, stranded = 0, never = 0;
+        int fremd = 0;   // andere Antriebsklasse als der Anker — siehe _stuckAnkerMove
         var strandedEx = new List<string>();
         for (int k = 0; k < _stuckGroup.Count; k++)
         {
@@ -4148,6 +4187,10 @@ public partial class MapEntityLayer : Node2D
             // Zaehler: das Original haelt die Einheit dort ebenfalls an
             // (@0x407aa7, »no fuel«), das ist kein Wegfindungsfehler.
             if (e.FuelMax > 0 && e.Fuel <= 0) { dry++; continue; }
+            // ⚠ EIN SCHIFF AN LAND IST KEIN WEGFINDUNGSFEHLER. Auf map_DM_4
+            // sind sechs der neun »steht ohne Weg« Schiffe (unit_type 151),
+            // denen der Gruppenbefehl eine Landzelle gab. Eigener Zaehler.
+            if (e.Move != _stuckAnkerMove && !moved) { fremd++; continue; }
             if (moved) stranded++; else never++;
             if (strandedEx.Count < 6)
                 strandedEx.Add($"slot {e.Slot} auf ({e.Col},{e.Row}), eigenes Ziel " +
@@ -4179,6 +4222,8 @@ public partial class MapEntityLayer : Node2D
                   $"{_stuckGroup.Count} befohlen — {arrived} auf dem eigenen Ziel, " +
                   $"{driving} faehrt, {waiting} wartet (Weg da), {dead} tot, " +
                   $"{dry} ohne Sprit stehengeblieben, " +
+                  $"{fremd} anderer Antrieb (Ziel nicht fuer sie), " +
+                  $"[{_retried}x zweiter Versuch geholfen] " +
                   $"{stuck} STEHT OHNE WEG ({stranded} unterwegs liegengeblieben, " +
                   $"{never} nie losgefahren)");
         foreach (string x in strandedEx) sb.Append($"\n      ! {x}");
@@ -4576,12 +4621,24 @@ public partial class MapEntityLayer : Node2D
             // gehen und erst beim FAHREN zu warten; das ist ein Eingriff in den
             // Lockstep-Pfad und gehoert in einen eigenen Durchgang, nicht
             // nebenbei.
-            if (path == null || path.Count == 0) { failed++; continue; }
+            if (path == null || path.Count == 0)
+            {
+                // ⚠⚠ NICHT MEHR VERGESSEN (16.08.2026) — siehe Entity.RetryIn.
+                // Das Ziel bleibt stehen und wird in RetryPath erneut versucht.
+                // Wer eingekeilt steht, faehrt los, sobald die anderen Platz
+                // machen; wer wirklich nirgends hinkann (ein Schiff an Land),
+                // versucht es weiter und kostet eine Wegsuche je Sekunde.
+                e.Goal = goal.Value;
+                e.RetryIn = RetryOff ? 0 : RetryTicks;
+                failed++;
+                continue;
+            }
 
             taken.Add(goal.Value);
             e.Path = path;
             e.PathIdx = 0;
             e.Goal = goal.Value;
+            e.RetryIn = 0;
             e.Reserved = null;
             e.WaitTime = 0;
             // Ein frischer Befehl faengt mit voller Geduld an — sonst laeuft der
@@ -15166,6 +15223,7 @@ public partial class MapEntityLayer : Node2D
             }
         }
 
+        RetryPath();
         UpdateProjectiles(dt);
         UpdateEffects(dt);
         UpdateFreight(dt);          // das Bahnsystem — Simulation/RailFreight.cs
@@ -15176,6 +15234,58 @@ public partial class MapEntityLayer : Node2D
         MissionScriptTick(dt);
         return moved;
     }
+
+    /// <summary>GEGENPROBE <c>--no-path-retry</c>: den zweiten Versuch
+    /// abschalten, also den Stand vor dem 16.08.2026. Muss den Fehler
+    /// zurueckbringen (Arbeitsweise 31).</summary>
+    public static bool RetryOff;
+
+    /// <summary>Wie lange eine Einheit ohne Weg wartet, bis sie es noch einmal
+    /// versucht. ⚠ UNSERE Setzung, in TAKTEN — eine Sekunde bei SimHz 60. Das
+    /// Original hat keinen solchen Zaehler; es braucht ihn nicht, weil seine
+    /// Einheiten ihren Befehl behalten. Wir bilden dasselbe Verhalten mit einem
+    /// Wiederholungsversuch nach, und die Laenge ist so gewaehlt, dass ein
+    /// Pulk sich in ein, zwei Versuchen aufloest, ohne dass 48 Einheiten jeden
+    /// Takt eine Wegsuche starten.</summary>
+    private const int RetryTicks = SimHz;
+
+    /// <summary>
+    /// <b>Der zweite Versuch</b> — die Kur fuer die Schwester von B2, siehe
+    /// <see cref="Entity.RetryIn"/>.
+    ///
+    /// <para>Wer beim Befehl keinen Weg bekam, behaelt sein Ziel und versucht es
+    /// eine Sekunde spaeter wieder. Mehr nicht: die Wegwahl bleibt unangetastet
+    /// (der Versuch, durch belegte Zellen zu planen, ist gemessen schlechter und
+    /// zurueckgezogen).</para>
+    ///
+    /// <para>⚠ Liegt im Lockstep-Pfad, darum ganzzahlige Takte und feste
+    /// Reihenfolge ueber die Einheitenliste.</para>
+    /// </summary>
+    private void RetryPath()
+    {
+        if (_nav == null) return;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.RetryIn <= 0 || e.Dead || e.IsBuilding || e.IsProp) continue;
+            if (e.Path != null) { e.RetryIn = 0; continue; }
+            if (--e.RetryIn > 0) continue;
+            if (e.FuelMax > 0 && e.Fuel <= 0) continue;      // kein Sprit, kein Weg
+            var weg = _nav.FindPath(new Vector2I(e.Col, e.Row), e.Goal, e.Move, i);
+            if (weg == null || weg.Count == 0) { e.RetryIn = RetryTicks; continue; }
+            e.Path = weg;
+            e.PathIdx = 0;
+            e.Reserved = null;
+            e.WaitTime = 0;
+            e.Block = BlockEnter + Simulation.Determinism.Roll(BlockEnterSpread);
+            _retried++;
+        }
+    }
+
+    /// <summary>Wie oft der zweite Versuch geholfen hat — fuer den
+    /// Pruefstand, damit ein gruenes Ergebnis belegt, dass er ueberhaupt
+    /// gehandelt hat (Arbeitsweise 33).</summary>
+    private int _retried;
 
     private static int GetI(GDict d, string k, int def = 0)
         => d.TryGetValue(k, out var v) && v.VariantType != Variant.Type.Nil ? v.AsInt32() : def;

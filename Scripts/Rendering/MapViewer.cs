@@ -896,6 +896,10 @@ public partial class MapViewer : Node2D
             // Gegenprobe zur Steiglimite (UNSERE Setzung, das Original hat
             // keinen solchen Test): schliesst sie Einheiten ein?
             else if (a == "--no-climb-limit") Simulation.NavGrid.ClimbOff = true;
+            // Gegenprobe zur Schwester von B2: den zweiten Versuch abschalten.
+            // Muss den Fehler zurueckbringen (Einheiten ohne Weg stehen fuer
+            // immer). Siehe MapEntityLayer.RetryPath.
+            else if (a == "--no-path-retry") MapEntityLayer.RetryOff = true;
             // B4: Takte je Zelle, nach Bodenart und gerade/schraeg getrennt.
             // Fahrt wie --stuck-check, aber eine ANDERE Frage — und zwei Fragen
             // gehoeren nie in denselben Zaehler (Arbeitsweise I).

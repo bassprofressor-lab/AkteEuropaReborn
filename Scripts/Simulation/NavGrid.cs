@@ -673,6 +673,23 @@ public sealed class NavGrid
 
     private bool CanStep(Vector2I a, Vector2I b, MoveClass mc, int mover)
     {
+        // ⚠⚠ ZURUECKGEZOGEN am 16.08.2026, noch am selben Tag: hier stand kurz
+        // `Ask(...) != Blocked`, die Wegsuche fuehrte also auch durch Zellen mit
+        // anderen Einheiten (`Can_go == 1`, »jemand muss ausweichen«). Die Idee
+        // klang zwingend — das Original faehrt dorthin und wartet — war aber
+        // ERSCHLOSSEN und nicht gelesen: dass `Can_go` drei Antworten hat, ist
+        // gelesen, dass die WEGSUCHE des Originals durch belegte Zellen plant,
+        // nicht.
+        //
+        // Und gemessen war sie schlechter als der Fehler, den sie heilen
+        // sollte. map_NET07, gleicher Anker und gleiches Ziel, 60 s:
+        // **32 angekommen vorher, 17 danach.** Die Wege liefen durch die Pulks,
+        // und die Einheiten standen wartend darin, statt aussen herumzufahren.
+        //
+        // Der echte Fehler dahinter bleibt und ist eng: wer beim Befehl gar
+        // keinen Weg bekommt, bekommt bei uns auch kein Ziel und versucht es nie
+        // wieder. Geheilt wird das dort, wo es entsteht — siehe
+        // `MapEntityLayer.IssueMove` und `RetryPath`.
         if (!IsFree(b.X, b.Y, mc, mover)) return false;
         if (!ClimbOff && mc != MoveClass.Ship &&
             Math.Abs(ElevAt(b.X, b.Y) - ElevAt(a.X, a.Y)) >= MaxClimb) return false;
