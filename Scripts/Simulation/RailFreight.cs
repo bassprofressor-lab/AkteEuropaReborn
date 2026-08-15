@@ -1819,6 +1819,70 @@ public partial class MapEntityLayer : Node2D
     /// <para>Aufgeschlüsselt nach GEBÄUDEART, weil die Meldung eine über
     /// bestimmte Anschlüsse ist und eine Gesamtquote sie verstecken würde.</para>
     /// </summary>
+    /// <summary>
+    /// <c>--demo-railgap</c> — ein Fahrzeug auf das LETZTE Gleisstück einer
+    /// Linie mit Lücke stellen und die Kamera daraufsetzen.
+    ///
+    /// <para>⚠ 17.08.2026, zur zweiten Hälfte von C14. Der Spieler meldet: »das
+    /// ist wie eine Bodengrafik, weil darin auch Fahrzeuge verschwinden, also
+    /// könnte das Schienenstück da sein, aber diese Grafik überdeckt auch die
+    /// Schienengrafik.« Das ist eine BEHAUPTUNG ÜBER DIE ÜBERDECKUNG, und sie
+    /// ist prüfbar: Fahrzeug hinstellen, einmal mit und einmal ohne
+    /// Gebäudekörper (<c>--no-building-body</c>) photographieren.</para>
+    ///
+    /// <para>⚠ Was der erste Bildvergleich an dieser Stelle schon gezeigt hat:
+    /// die Schiene endet OHNE Gebäudekörper an derselben Stelle — das Gebäude
+    /// überdeckt sie also nicht. Bleibt die Frage nach dem Fahrzeug, und die
+    /// beantwortet dieser Schalter.</para></summary>
+    public Vector2? DebugDemoRailGap()
+    {
+        if (_nav == null) return null;
+        var bySlot = new Dictionary<int, Entity>();
+        foreach (var e in _entities)
+            if (e.IsBuilding && !e.IsProp) bySlot[e.Slot] = e;
+
+        foreach (var kv in _lineCell)
+        {
+            var cells = kv.Value;
+            if (cells.Count == 0) continue;
+            RailLine? line = null;
+            foreach (var l in _railLines) if (l.Slot == kv.Key) { line = l; break; }
+            if (line == null) continue;
+            foreach (var (slot, tail) in new[] { (line.Bud1, false), (line.Bud2, true) })
+            {
+                if (!bySlot.TryGetValue(slot, out var b) || b.Dead) continue;
+                var c = cells[tail ? ^1 : 0];
+                int col = Mathf.RoundToInt(c.X), row = Mathf.RoundToInt(c.Y);
+                int fw = Mathf.Max(1, b.FootW), fh = Mathf.Max(1, b.FootH);
+                int dx = Mathf.Max(0, Mathf.Max(b.Col - col, col - (b.Col + fw - 1)));
+                int dy = Mathf.Max(0, Mathf.Max(b.Row - row, row - (b.Row + fh - 1)));
+                if (Mathf.Max(dx, dy) != 1) continue;          // nur die Luecken
+
+                int ui = -1;
+                for (int i = 0; i < _entities.Count; i++)
+                {
+                    var u = _entities[i];
+                    if (u.IsBuilding || u.IsProp || u.Dead || !u.Mobile) continue;
+                    ui = i; break;
+                }
+                if (ui < 0) { GD.Print("demo-railgap: keine fahrende Einheit"); return null; }
+                var v = _entities[ui];
+                _nav.SetOccupant(v.Col, v.Row, -1);
+                v.Col = col; v.Row = row;
+                v.Pos = CellCenter(col, row);
+                v.Path = null; v.Target = -1; v.Owner = v.Team = ViewPlayer;
+                _nav.SetOccupant(col, row, ui);
+                _sel.Clear();
+                GD.Print($"demo-railgap: Linie {kv.Key}, letztes Gleisstueck ({col},{row}), " +
+                         $"{BuildingTypeName(b.BType)} slot {b.Slot} auf ({b.Col},{b.Row}) " +
+                         $"{fw}x{fh} — Fahrzeug slot {v.Slot} dorthin gestellt");
+                return CellCenter(col, row);
+            }
+        }
+        GD.Print("demo-railgap: keine Linie mit Luecke gefunden");
+        return null;
+    }
+
     public string RailGapCheckLine()
     {
         if (_lineCell.Count == 0) return "rail-gap-check: keine Bahnlinie";

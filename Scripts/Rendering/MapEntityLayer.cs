@@ -3194,6 +3194,11 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     private void DrawBuildingBody(Entity e)
     {
+        // ⚠ --no-building-body: die Gegenprobe zu C14. Der Spieler vermutet, dass
+        // das fehlende Schienenstueck DA ist und von einer Grafik ueberdeckt
+        // wird (»darin verschwinden auch Fahrzeuge«). Ohne Gebaeudekoerper
+        // gezeichnet entscheidet EIN Bildvergleich das.
+        if (NoBuildingBody) return;
         if (!_drawSprites || Patterns == null || e.IsProp) return;
         var tex = PatternTexture();
         if (tex == null) return;
@@ -14088,6 +14093,9 @@ public partial class MapEntityLayer : Node2D
     /// <summary><c>--no-unit-occlusion</c> — der Stand von vor dem 17.08.2026:
     /// jede Einheit über jedem Gebäude.</summary>
     public static bool NoUnitOcclusion;
+
+    /// <summary><c>--no-building-body</c> — Gebaeudekoerper gar nicht zeichnen.</summary>
+    public static bool NoBuildingBody;
 
     /// <summary>Wieviele Einheitenrümpfe der zeilenweise Durchgang gezeichnet
     /// hat. Steht in der Sichtzeile, damit »die Verdeckung läuft« nicht nur eine

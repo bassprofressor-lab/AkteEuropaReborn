@@ -610,6 +610,7 @@ public partial class MapViewer : Node2D
     private int _selectTypeForShot = -1;  // --select-type=<unit_type>, engt sie ein
     private bool _demoBuild;
     private bool _demoMine;
+    private bool _demoRailGap;
     private bool _demoInfDeath;
     private bool _demoBehind;
     private bool _demoResearch;
@@ -835,12 +836,14 @@ public partial class MapViewer : Node2D
             else if (a == "--no-step-out") MapEntityLayer.NoStepOutOfDoor = true;
             // --no-clear-idle (C24): Truppen unbeteiligter Plaetze stehen lassen.
             else if (a == "--no-clear-idle") MapEntityLayer.NoClearIdleSlots = true;
+            else if (a == "--no-building-body") MapEntityLayer.NoBuildingBody = true;
             // --demo-behind (C23): eine Einheit MITTEN in einen Gebaeudegrundriss
             // setzen und die Kamera daraufsetzen, damit der Bildvergleich den Fall
             // ueberhaupt enthaelt. Siehe BehindCheckSetup.
             else if (a == "--demo-behind") { _demo = true; _demoBehind = true; }
             // --demo-infdeath (C13): eine Traube Fusssoldaten toeten, jeden zweiten.
             else if (a == "--demo-infdeath") { _demo = true; _demoInfDeath = true; }
+            else if (a == "--demo-railgap") { _demo = true; _demoRailGap = true; }
             // --queue-check[=n]: n Einheiten in EINEM Zug bestellen und danach
             // nachrechnen, ob bezahlt und geliefert zusammenpassen. Siehe
             // MapEntityLayer.QueueCheckOrder — der eigentliche Fehler C8 war
@@ -1078,6 +1081,7 @@ public partial class MapViewer : Node2D
                   : _demoSupply ? _entities.DebugDemoSupply()
                   : _demoBehind ? _entities.BehindCheckSetup()
                   : _demoCrush ? _entities.DebugDemoCrush()
+                  : _demoRailGap ? _entities.DebugDemoRailGap()
                   : _demoInfDeath ? _entities.DebugDemoInfDeath()
                   : _demoInf ? _entities.DebugDemoInfantry()
                   : _demoInfPic ? _entities.DebugDemoInfPortrait()
