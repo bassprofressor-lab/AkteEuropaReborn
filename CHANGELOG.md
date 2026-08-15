@@ -33,6 +33,26 @@ deviate on purpose, and every deviation is marked as ours.
 
 ### Units
 
+- ⭐ **Units disappear behind buildings.** Until now every unit was drawn over
+  every building — a tank stood on the roof of the base. What the original does
+  is read: it **occludes**, it does not make anything translucent. It *has* a
+  translucent blitter (a 256×256 blend table at `0xA3AFB1`), but that one has
+  **exactly one** caller against nine for the normal one, and it hangs off a
+  building field, not off whether something stands behind it. Instead the
+  original buckets its display list by screen row (dispatcher `@0x42C8C0`, 30
+  kinds) — painter's order.
+  A unit's body now runs in the same row-by-row pass the track already ran in.
+  Selection brackets and order lines stay on top: those are controls, not world
+  objects. Counter-probe `--no-unit-occlusion`.
+- **A fallen foot soldier no longer vanishes.** Measured across all 24 sets and
+  8 facings: the walk cycle (blocks 0–7) and the standing pose (11) are
+  complete, the death frames are not — block 12 in 21, block 13 in 69 and block
+  14 in 63 of 192 cases each carry at most four pixels. They decode, so the
+  export wrote them as valid files and the renderer drew an empty image. Nearly
+  empty frames are no longer written at all, and the renderer falls back from
+  the time-correct block to the last one that really exists for that facing:
+  **192 of 192** (set, facing) pairs have a corpse frame, 0 without.
+
 - **The ball-roller chassis is visible in all eight facings.** It was invisible
   in seven of eight. Counted across the whole part bank of ROBO.CWR: **35 of 36**
   populated components carry their full row of eight at block 0 — **component 9
@@ -189,6 +209,33 @@ deviate on purpose, and every deviation is marked as ours.
 
 ### Skirmish
 
+- ⭐ **Enemy buildings can be captured — Ctrl+right-click.** Reported as "the
+  shipyard and the sea dock cannot be captured, all you can do is attack them"
+  and "buildings the AI has captured cannot be captured back, only destroyed".
+  The new `--door-check` first showed what it was *not*: the doors are
+  reachable (shipyard 1/1 and 2/2, base, factories, airfield, mine and stations
+  complete). The cause was the click path — it tries an attack first, and a
+  hostile building *is* a target, so the move order never ran and the unit
+  could never reach the door tile. Nobody attacks a neutral building, which is
+  why it worked there and only there.
+  Measured: an enemy base now changes hands **undamaged** (1200/1200). The
+  counter-probe `--capture-by-attack` leaves it hostile and at **0/1200** —
+  exactly the reported "only destroy".
+  ⚠ Sea dock (0 doors in 39 of 39) and power station (0 in 262) stay
+  uncapturable; that is the original, and the button now says so instead of
+  staying silent. The harbour changes hands with its shipyard.
+- **A new unit drives out of the door.** This had been read for a long time
+  (`@0x410441`: the spawned unit gets `col + door_col` / `row + door_row`) and
+  never built — it appeared at the building's anchor cell, so depending on the
+  footprint on the wrong side. Measured: 4 of 4 out of the door.
+- **The map preview now says how many bases there are.** Prompted by "the enemy
+  AI does something sometimes and nothing at other times — some never start
+  building". The cause is not the AI but the map: only a BASE builds, and many
+  maps have fewer of them than start slots — `map_DM_4` **2 bases for 5
+  slots**, `map_DM_11` 2 for 6, `map_NET07` **none** for 8. Whoever gets none
+  watches. That was written nowhere; it now stands under the preview, with a
+  warning sign when it does not add up.
+
 - **A build queue.** Ordering the same unit several times used to pay every
   time and merely restart the running build — three clicks, three lots of parts,
   one unit. Orders now line up: paid on entry, at most six waiting (the
@@ -234,6 +281,23 @@ deviate on purpose, and every deviation is marked as ours.
   departure from the original; the campaign is untouched.
 
 ### Campaign and interface
+
+- ⭐ **The original's encyclopedia is in the game.** The menu row was meant to
+  link to our wiki. Looking at what the *original* has behind it turned up
+  **`ENCYCLOG.TXT` with 106 pages** next to GAME.EXE — chassis, weapons,
+  equipment, upgrades, air force, navy, Big Bertha, infantry, buildings, in
+  full text and with **149 cross-references**, which are now clickable.
+  ⚠ **The encoding is a trap:** `HELPG.TXT` beside it is cp437,
+  `ENCYCLOG.TXT` is **Latin-1**. With the wrong reader "Räder" becomes "RΣder".
+  The file decides, not the folder.
+  ⚠ Without pictures: pages carry an image number up to 97, but `ENCYCLOG.PIC`
+  only holds 24 — the mapping is unread and is not guessed at.
+- **Credits.** The original's row now leads somewhere. It shows what is
+  documented (Virtual X-citement, Eidos Interactive, 1997) and the Reborn side —
+  and says what is **not** documented: the names of the 1997 team are in no file
+  this build reads. The original's credit roll is probably `34.RPL` — the only
+  film outside the 33 mission films, and the only one present on **both** CDs.
+  An indication, not proof; we do not play .RPL.
 
 - **"Load game" is centred again.** The screen set its anchors but not its
   offsets, so it kept a zero-size rect in the top-left corner and drew its window
@@ -339,6 +403,40 @@ deviate on purpose, and every deviation is marked as ours.
   35 hard right.
 
 ### Train and track
+
+- ⭐ **The train drives the diagonal that is drawn.** Reported a second time
+  ("when a rail line is cleanly diagonal … the train zigzags, while the track
+  is clean") — and the existing number could not see it: `--rail-check` reports
+  the **mean** direction change per tick, and a zigzag alternates by +δ and −δ,
+  so the mean cancels it out.
+  The new `--rail-zigzag` therefore holds the DRAWN track (connection points
+  from the table measured off the artwork) against the DRIVEN path, **one bend
+  at a time**. It showed up at once, and split by cause the answer was
+  unambiguous: of the places where the track is drawn straight, the path bent
+  on NET05 at 7, on NET02 at 24, on DM_4 at 23 — and **every single one at a
+  RAMP**. On level track: **0 of about 2700**.
+  The cause is in the number: the worst deviation was **15.3 px**, and 15 px is
+  exactly one elevation step. The path's height was a **step function per cell**
+  (`ElevOf(round(x),round(y))·15`) while the drawn ramp rises **continuously** —
+  at every cell boundary of a ramp the wagon jumped a whole step. The height now
+  comes from the **artwork**: the table of connection points says per frame and
+  side how high the rail sits there (f6/f7 14.7 px, f8/f9 15 px above the level
+  value).
+  Measured afterwards: bends **0 / 4 / 12** instead of 7 / 24 / 23, worst bend
+  **7.3°** instead of 27.5°, shape deviation on ramps **0.2–0.3 px** instead of
+  7.4–9.3 px. Counter-probe `--no-rail-lift` restores the old state.
+  ⚠ No regression: corners 0 of 949, connection row 45 of 45 flush, wagon gaps
+  0 of 48 — all unchanged.
+- **`--rail-gap-check`: how far is the last piece of track from its building?**
+  For "a small piece of the track is often missing". The old number could not
+  see it — it reports "0 of 70 further than **2** cells", and a gap of one cell
+  is 40 px. Measured: 20 of 70 (NET05), 20 of 66 (NET02), 16 of 48 (DM_4) ends
+  with a gap, **always exactly one cell** and **only at stations and field
+  stations**. ⚠ The gap is in the MAP DATA — the first footprint column carries
+  no rail cell at all there, the building's own artwork continues the track,
+  and vertically it sits flush (32/32, 6/6, 7/7, 0 px). Looked at one of the
+  places: no hole. **Not reproduced** — the probe now names map, line, cell and
+  building.
 
 - **The wagon fine placement has been read.** Two fields in the wagon record had
   stood there without a name since the beginning. They are the wagon's offset

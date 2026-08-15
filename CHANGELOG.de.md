@@ -264,14 +264,6 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   (`@0x410441`: die erzeugte Einheit bekommt `col + door_col` / `row +
   door_row`) und nie gebaut — sie erschien an der Ankerzelle des Gebäudes, also
   je nach Grundriss an der falschen Seite. Gemessen: 4 von 4 aus der Tür.
-- **Die Gegner-KI hat im Gefecht kein Bauprogramm** — das ist der Grund für
-  »manche bauen gar nicht erst los«. Der Bauplan kommt aus der MISSION; ohne
-  Mission gibt es keinen. Gemessen auf drei Karten: 9 von 9 KI-Spielern »ohne
-  Programm«. Was bleibt, ist die Streife, und die schickt nur los, was schon
-  Feinde in Reichweite sieht (NET02/NET05 »0 losgeschickt, 0 feindlich«, DM_4
-  »33 losgeschickt, 68 feindlich«). **Noch nicht behoben** — ein
-  Gefechts-Bauprogramm ist eine Wettkampfsetzung und keine Reparatur.
-
 - **Die Bauwarteschlange.** Mehrfach dieselbe Einheit zu bestellen hat bisher
   jedesmal bezahlt und den laufenden Bau nur neu angestossen — drei Klicks,
   dreimal Teile weg, eine Einheit. Jetzt reihen sich Bestellungen auf: bezahlt
