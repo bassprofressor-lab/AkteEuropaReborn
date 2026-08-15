@@ -76,7 +76,11 @@ public sealed partial class CampaignScreen : Control
         // der laufende Demohintergrund bleibt sichtbar, wird aber abgedunkelt —
         // dieselbe Loesung wie im LoadGameScreen
         var dim = new ColorRect { Color = new Color(0, 0, 0, 0.55f) };
-        dim.SetAnchorsPreset(LayoutPreset.FullRect);
+        // ⚠ 17.08.2026 — `SetAnchorsPreset` setzt nur die Anker, nicht die
+        // Ränder: ein frisches ColorRect blieb damit null Pixel gross und hat
+        // GAR NICHT abgedunkelt. Siehe LoadGameScreen._Ready, wo derselbe Aufruf
+        // das ganze Fenster in die linke obere Ecke gelegt hat (Fehler C20).
+        dim.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         dim.MouseFilter = MouseFilterEnum.Ignore;
         AddChild(dim);
 

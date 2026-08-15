@@ -314,16 +314,42 @@ public sealed class UnitsExporter
     /// <summary>The chassis on its own, cropped, together with the size and y
     /// offset of every facing, which is what the renderer places it by.
     ///
-    /// ⚠ ONE KNOWN DIFFERENCE from the older Python export, stated rather than
-    /// papered over. The frame of a facing is taken by the game's own rule,
-    /// `base + block*8 + facing` (@0x429c80). Component 9 (unit_type 168,
-    /// Kugelroller) has only frame `base+0` populated and seven holes after it,
-    /// so seven facings come out empty here. `copy_units.py` filled them by
-    /// walking the *populated* frames in order — 528, 536, 544 … — which gives
-    /// eight pictures but is a numbering the draw code does not use, and the
-    /// composed set it wrote alongside is blank in exactly those facings.
-    /// Which of the two the original really does is unresolved; the formula the
-    /// disassembly shows is what is followed here.</summary>
+    /// <para>⚠⚠ <b>17.08.2026 — DIE ALTE ANMERKUNG HIER IST ERLEDIGT UND WIRD
+    /// ZURÜCKGEZOGEN.</b> Sie lautete: Komponente 9 (unit_type 168,
+    /// Kugelroller) habe nur <c>base+0</c> belegt und sieben Löcher dahinter,
+    /// <c>copy_units.py</c> habe die Lücken gefüllt, indem es die BELEGTEN Bilder
+    /// der Reihe nach nahm (528, 536, 544 …), und »welche der beiden Lesarten das
+    /// Original wirklich benutzt, ist ungeklärt«.</para>
+    ///
+    /// <para><b>Geklärt, und zwar an den Daten.</b> Anlass war eine Meldung des
+    /// Spielers: »das Roller Chassis ist manchmal unsichtbar je nach
+    /// ausrichtung«. Nachgezählt über den ganzen Teilebestand von ROBO.CWR:</para>
+    /// <list type="bullet">
+    /// <item><b>35 von 36</b> belegten Komponenten haben ihre volle
+    /// Achter-Zeile bei <b>Block 0</b>. <b>Komponente 9 ist die einzige
+    /// Ausnahme</b> — ihre volle Zeile liegt in <b>allen drei Gruppen</b> bei
+    /// Block <b>5</b> (Bilder 568..575, 616..623, 664..671), davor je fünf
+    /// EINZELNE Bilder im Achterschritt.</item>
+    /// <item>Die Basis 528 ist trotzdem richtig: 528 + 3·48 = 672 ist genau die
+    /// Basis der nächsten Komponente. Es ist also keine verschobene Basis,
+    /// sondern eine andere Blockreihenfolge INNERHALB des Teils.</item>
+    /// <item>Angesehen: die acht Bilder bei 568..575 sind acht Drehungen
+    /// desselben Fahrgestells (Plattform auf acht Kugeln, Schatten wandert
+    /// mit). Die fünf Einzelbilder bei 528/536/544/552/560 sind dagegen
+    /// verschiedene NEIGUNGEN derselben Ansicht. Damit ist die Lesart von
+    /// <c>copy_units.py</c> — »die belegten Bilder der Reihe nach sind die acht
+    /// Richtungen« — <b>widerlegt</b>: sie hätte fünf Neigungen als Richtungen
+    /// ausgegeben.</item>
+    /// </list>
+    ///
+    /// <para><b>Was daraus folgt und was NICHT.</b> Der Export nimmt jetzt je
+    /// Teil den Block, der wirklich acht Richtungen trägt, statt Block 0 zu
+    /// setzen — nach der FORM suchen, nicht nach der Adresse (Arbeitsweise 8).
+    /// Für 35 von 36 Teilen ändert das nichts. ⚠ <b>Offen bleibt, WARUM</b>
+    /// dieses eine Teil seine Blöcke andersherum legt; dass Block 5 für den
+    /// Kugelroller »ebener Boden« bedeutet, ist erschlossen und nicht
+    /// gelesen. Die Neigungsbilder dieses Teils bleiben deshalb unangetastet.</para>
+    /// </summary>
     private void WriteChassis(IEnumerable<int> unitTypes, Action<string>? say)
     {
         var sb = new StringBuilder();
@@ -335,11 +361,20 @@ public sealed class UnitsExporter
             int b = comp > 0 ? _cwr.PartBase(comp) : -1;
             if (b < 0) continue;
 
+            // ⚠ Den Block suchen, der acht Richtungen TRÄGT, statt Block 0 zu
+            // setzen — siehe Kopfkommentar. Bei 35 von 36 Teilen ist das Block 0
+            // und die Schleife bricht sofort ab; bei Komponente 9 ist es Block 5,
+            // und genau daran war der Kugelroller in sieben von acht Richtungen
+            // unsichtbar.
+            int blk = FullFacingBlock(b);
+            if (blk != 0) FacingBlockShifted++;
+            int fb = b + blk * CwrFile.Facings;
+
             var facings = new StringBuilder();
             bool ff = true, any = false;
             for (int f = 0; f < CwrFile.Facings; f++)
             {
-                var fr = _cwr.DecodeFrame(b + f);
+                var fr = _cwr.DecodeFrame(fb + f);
                 if (fr == null) continue;
                 Save($"{ut}/f{f}.png", CwpFile.ToImage(fr, _pal));
                 if (!ff) facings.Append(',');
@@ -356,7 +391,41 @@ public sealed class UnitsExporter
         }
         sb.Append("}}");
         File.WriteAllText(_dst + "/units_index.json", sb.ToString(), new UTF8Encoding(false));
-        say?.Invoke($"Fahrgestelle: {Chassis} Typen mit units_index.json");
+        // ⚠ Die Zahl gehört in die Zeile, nicht in einen Kommentar: eine
+        // Verschiebung, die still passiert, ist beim nächsten Datenwechsel nicht
+        // von einem Fehler zu unterscheiden.
+        say?.Invoke($"Fahrgestelle: {Chassis} Typen mit units_index.json" +
+                    (FacingBlockShifted > 0
+                        ? $" ({FacingBlockShifted} davon mit Richtungsblock != 0)"
+                        : ""));
+    }
+
+    /// <summary>Wieviele Teile ihre acht Richtungen NICHT im Block 0 haben.
+    /// Erwartet wird 1 (Komponente 9, Kugelroller) — siehe
+    /// <see cref="WriteChassis"/>.</summary>
+    public int FacingBlockShifted;
+
+    /// <summary>Der erste Block dieses Teils, in dem alle acht Richtungen
+    /// dekodierbar sind — oder 0, wenn es keinen gibt.
+    ///
+    /// <para>Gesucht wird nur innerhalb der ERSTEN Gruppe (sechs Blöcke): eine
+    /// Gruppe ist eine Gangart, und die Richtungen einer Gangart wandern nicht
+    /// zwischen den Gruppen. Über alle drei Gruppen von Komponente 9 nachgesehen
+    /// liegt die volle Zeile jedesmal bei Block 5, was genau das bestätigt.</para>
+    ///
+    /// <para>Der Rückfall auf 0 ist die vorsichtige Seite: ein Teil, das
+    /// nirgends acht volle Richtungen hat, verhält sich wie bisher, statt
+    /// stillschweigend irgendeinen anderen Block zu bekommen.</para></summary>
+    private int FullFacingBlock(int baseFrame)
+    {
+        for (int blk = 0; blk < 6; blk++)
+        {
+            bool all = true;
+            for (int f = 0; f < CwrFile.Facings && all; f++)
+                if (_cwr.DecodeFrame(baseFrame + blk * CwrFile.Facings + f) == null) all = false;
+            if (all) return blk;
+        }
+        return 0;
     }
 
     // ---- infantry -----------------------------------------------------------
@@ -609,7 +678,7 @@ public sealed class UnitsExporter
         foreach (int c in components)
         {
             if (c <= 0 || c >= CwrFile.PartCount || _cwr.PartBase(c) < 0) continue;
-            int fr = _cwr.PartFrame(c, facing, block, group);
+            int fr = _cwr.PartFrame(c, facing, FlatBlockOf(c, block), group);
             if (fr < 0) continue;
             var (w, h) = _cwr.CanvasFor(fr);
             cw = System.Math.Max(cw, w);
@@ -622,13 +691,46 @@ public sealed class UnitsExporter
         {
             if (c <= 0 || c >= CwrFile.PartCount) continue;
             if (_cwr.PartBase(c) < 0) continue;
-            int fr = _cwr.PartFrame(c, facing, block, group);
+            int fr = _cwr.PartFrame(c, facing, FlatBlockOf(c, block), group);
             if (fr < 0) continue;
             var layer = _cwr.FacingImage(fr, _pal, cw, ch);
             canvas.BlendRect(layer, new Rect2I(0, 0, cw, ch), Vector2I.Zero);
         }
         return canvas;
     }
+
+    /// <summary>
+    /// Welcher Block für dieses Teil »flacher Boden« ist — <b>fast immer 0</b>.
+    ///
+    /// <para>⚠ 17.08.2026, Kugelroller (Fehler C21, »das Roller Chassis ist
+    /// manchmal unsichtbar je nach ausrichtung«). Für <b>Komponente 9</b> liegt
+    /// die volle Achter-Zeile bei Block <b>5</b>, für die anderen 35 belegten
+    /// Teile bei Block 0 — nachgezählt, kein Gegenbeispiel. Der flache Block
+    /// wird deshalb je Teil GESUCHT und nicht gesetzt; siehe
+    /// <see cref="WriteChassis"/> für die ganze Herleitung samt dem, was daran
+    /// erschlossen und nicht gelesen ist.</para>
+    ///
+    /// <para>Die HANGBLÖCKE (1..4 der Tabelle @0x4fa4d8) bleiben unberührt:
+    /// dort ist gelesen, welcher Block zu welcher Neigung gehört, und eine
+    /// Verschiebung würde eine gelesene Zuordnung zerstören, um eine
+    /// erschlossene zu retten. Für den Kugelroller heisst das, dass er am Hang
+    /// weiter das flache Bild zeigt — dieselbe Lücke wie vorher, aber jetzt eine
+    /// benannte.</para>
+    ///
+    /// <para>Nebenbei beantwortet das die alte Frage bei
+    /// <see cref="SlopeBlockOf"/>, wofür Block 5 da ist: die Hangtabelle nennt
+    /// ihn nicht, und mindestens ein Teil legt seine Richtungen hinein.</para>
+    /// </summary>
+    private int FlatBlockOf(int comp, int block)
+    {
+        if (block != 0) return block;
+        if (_flatBlock.TryGetValue(comp, out int b)) return b;
+        b = FullFacingBlock(_cwr.PartBase(comp));
+        _flatBlock[comp] = b;
+        return b;
+    }
+
+    private readonly Dictionary<int, int> _flatBlock = new();
 
     /// <summary>Wieviele Hangklassen es gibt — fünf, die Länge der Tabelle
     /// @0x4fa4d8. Klasse 0 ist flacher Boden.</summary>

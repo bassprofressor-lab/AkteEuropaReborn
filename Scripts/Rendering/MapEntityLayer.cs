@@ -440,6 +440,33 @@ public partial class MapEntityLayer : Node2D
         public bool DugIn;               // "Eingraben" — holds position, harder to kill
         public float BuildTime;          // seconds left on the current build
         public int BuildIndex;           // design being built
+
+        /// <summary>
+        /// <b>Die Bauwarteschlange</b> — Entwurfsnummern, schon BEZAHLT, in der
+        /// Reihenfolge der Bestellung.
+        ///
+        /// <para>⚠⚠ <b>UNSERE ZUTAT, und zwar eine doppelte.</b> Das Original
+        /// führt für eine Einheit gar keine Bauzeit (alle drei Herstellungswege
+        /// setzen sie im selben Takt in die Welt, siehe UI/GameHud.cs); was es
+        /// an dieser Stelle hat, ist ein <b>Depot mit sechs Plätzen</b>
+        /// (<c>0x878E5C</c>, Schrittweite 16, Obergrenze <c>cmp al,6</c>
+        /// @0x467FBF, Meldung »Es gibt keinen Platz mehr im Depot.« 0x4FBF60).
+        /// Eine Schlange ist also weder gelesen noch nachgebaut — sie ist eine
+        /// <b>Wettkampfentscheidung des Spielers vom 17.08.2026</b>, getroffen
+        /// gegen die Alternative »Depot des Originals«.</para>
+        ///
+        /// <para><b>Der Anlass war ein echter Verlust</b> (Fehler C8): bis dahin
+        /// hat <see cref="ProduceFromSelection"/> bei jedem Klick bezahlt und
+        /// <see cref="BuildTime"/> bedingungslos überschrieben. Wer dreimal
+        /// klickte, zahlte dreimal und bekam eine Einheit.</para>
+        ///
+        /// <para>Bezahlt wird beim EINREIHEN, nicht beim Anfangen — sonst könnte
+        /// eine Bestellung später am leeren Lager scheitern und der Spieler
+        /// stünde vor einer Schlange, die nicht abläuft. Der Preis ist damit
+        /// verbindlich, und <see cref="CancelBuild"/> gibt ihn zurück.</para>
+        /// </summary>
+        public readonly List<int> BuildQueue = new();
+
         public int MenuIndex;            // pick in this factory's own menu
                                          // (auto-acquired targets are never chased)
         public float Cooldown;           // seconds until the weapon can fire again
@@ -7546,6 +7573,91 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <summary>
+    /// <c>--supply-reload-check</c> — der gemeldete Fehler C5, HERGESTELLT statt
+    /// abgewartet (Arbeitsweise 32: eine Fehlerklasse, die man herstellen kann,
+    /// soll man herstellen).
+    ///
+    /// <para>Gemeldet war: »Versorgungshelikopter scheinen ihren Job nicht
+    /// permanent zu machen. Irgendwann bleiben sie stehen.« Das »irgendwann«
+    /// ist nach fünf Lieferungen (Ladung 255, je leerem Kunden 50), also nach
+    /// vielen Minuten — zu lang für einen Prüflauf und zu lang, um den
+    /// Zusammenhang zu sehen. Hier wird der Zustand direkt gesetzt: Flughafen
+    /// erobern, Heli kaufen, <c>Cargo = 0</c>.</para>
+    ///
+    /// <para>Gemessen wird EINE Sache: findet der leere Heli einen Nachladeplatz?
+    /// Die Zeile sagt dazu, ob die Karte einen Nachschub-Posten hat — ohne diese
+    /// Angabe wäre »er hat nachgeladen« nicht von »die Karte hat halt einen«
+    /// zu unterscheiden.</para>
+    /// </summary>
+    public string SupplyReloadCheckLine()
+    {
+        int posten = 0, flug = 0;
+        foreach (var e in _entities)
+        {
+            if (!e.IsBuilding || e.Dead) continue;
+            if (e.BType == 14) posten++;
+            if (e.BType == 9) flug++;
+        }
+        int me = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
+
+        // einen Flughafen beschaffen — wie --air-buy-check, und ebenso gesagt
+        Entity? ap = null;
+        string captured = "";
+        foreach (var e in _entities)
+            if (e.IsBuilding && !e.Dead && e.BType == 9 && e.Owner == me) { ap = e; break; }
+        if (ap == null)
+            foreach (var e in _entities)
+                if (e.IsBuilding && !e.Dead && e.BType == 9)
+                {
+                    ap = e; ap.Owner = ap.Team = ap.ShownOwner = me;
+                    captured = "(neutraler Flughafen fuer die Probe uebernommen) ";
+                    break;
+                }
+        if (ap == null)
+            return $"supply-reload-check: kein Flughafen auf dieser Karte " +
+                   $"({posten} Nachschub-Posten) — nicht messbar";
+
+        int before = _special.Count;
+        // ⚠ ueber den Kaufweg, nicht mit einem selbstgebauten Satz: ein Heli,
+        // der hier anders entsteht als im Spiel, misst sich selbst.
+        for (int i = 0; i < AirMenu(ap).Count; i++)
+        {
+            ap.MenuIndex = i;
+            var pick = AirMenu(ap);
+            if (pick.Count == 0) break;
+            if (pick[i % pick.Count].Kind is 13 or 14 && BuyAircraft(ap)) break;
+        }
+        if (_special.Count == before)
+            return $"supply-reload-check: {captured}am Flughafen slot {ap.Slot} liess sich " +
+                   $"kein Versorgungsheli kaufen ({_order}) — nicht messbar";
+
+        var heli = _special[^1];
+        heli.Cargo = 0;                     // der Zustand, um den es geht
+        _supplyProbe = heli;
+        _supplyProbeNote = $"{captured}Karte: {flug} Flughaefen, {posten} Nachschub-Posten. " +
+                           $"{heli.TypeName} slot {heli.Slot} gekauft und auf Ladung 0 gesetzt";
+        return $"supply-reload-check: {_supplyProbeNote} — Abrechnung folgt";
+    }
+
+    private Special? _supplyProbe;
+    private string _supplyProbeNote = "";
+
+    /// <summary>Die Abrechnung zu <see cref="SupplyReloadCheckLine"/>.</summary>
+    public string SupplyReloadResult()
+    {
+        if (_supplyProbe == null) return "supply-reload-check: nicht gemessen";
+        var a = _supplyProbe;
+        string ziel = a.DepotSlot >= 0 ? $"faehrt Platz {a.DepotSlot} an"
+                    : a.Goal.HasValue ? "hat ein Ziel" : "steht ohne Ziel";
+        bool ok = a.Cargo > 0;
+        return $"supply-reload-check: {_supplyProbeNote}\n" +
+               $"   Ladung jetzt {a.Cargo}/{SupplyCargoFull}, {ziel} — " +
+               $"{(ok ? "NACHGELADEN" : "STEHT LEER (das ist der Fehler C5)")}\n" +
+               $"   Nachladungen: {SupplyReloads} am Nachschub-Posten (Original), " +
+               $"{SupplyReloadsAway} an Flughafen/Basis (unsere Abweichung)";
+    }
+
+    /// <summary>
     /// `--air-buy-check`: am Flughafen des eigenen Spielers so lange kaufen, bis
     /// es nicht mehr geht — und dabei melden, WORAN es scheitert.
     ///
@@ -8042,8 +8154,27 @@ public partial class MapEntityLayer : Node2D
     /// Anzeige im Bild müssen dieselben Gebäude zählen, sonst widersprechen sie
     /// sich und man weiss nicht, welcher lügt. Genau dieselbe Überlegung wie bei
     /// <see cref="IsBuildingClass"/>.</para></summary>
+    /// <remarks>
+    /// ⚠ 17.08.2026 — <b>FLUGHAFEN (9) UND WERFT-STATION (16) ZÄHLEN JETZT
+    /// MIT</b>, und das folgt aus der Regel, die schon dastand: gezählt wird,
+    /// »woraus BEZAHLT wird«. Beide sind solche Stellen —
+    /// <c>build_in_airport</c> @0x4BB3D0 prüft die drei Teilelager DES
+    /// FLUGHAFENGEBÄUDES gegen den Flugzeugpreis, und ein Hafen zahlt aus den
+    /// Lagern seiner Werft-Station (@0x44b253). Sie standen trotzdem nicht in
+    /// der Liste, und <c>ApplyResources</c> füllt sie beim Start ausdrücklich
+    /// mit (<c>fill_resources</c> @0x419fe0 gibt Basis, Flughafen UND
+    /// Werft-Station die drei Teilelager). Auf map_NET02 sind das <b>7
+    /// Flughäfen und 1 Werft</b>, deren Bestand die Leiste bis heute verschwieg.
+    /// <para>Das ist die halbe Antwort auf Fehler C1 (»Die Ressourcen in der
+    /// Basis stimmen nicht mit denen über ein, die oben in der Ressourcenleiste
+    /// steht«). Die andere Hälfte bleibt und ist kein Fehler: die Leiste ist
+    /// eine SUMME über alle diese Gebäude, das Gebäudefenster zeigt EIN Lager.
+    /// Damit man das sieht statt es zu erraten, schreibt die Leiste jetzt
+    /// »gesamt« und die Zahl der gezählten Gebäude dazu (UI/GameHud.cs).</para>
+    /// </remarks>
     private bool CountsForStocks(Entity e, int player) =>
-        e.IsBuilding && !e.Dead && e.Owner == player && (IsFactory(e) || e.BType == 1);
+        e.IsBuilding && !e.Dead && e.Owner == player &&
+        (IsFactory(e) || e.BType is 1 or 9 or 16);
 
     /// <summary>Was der Spieler an Lagern hat, addiert über seine Gebäude — für
     /// die stehende Rohstoffleiste (<c>UI/GameHud.cs</c>).
@@ -8082,8 +8213,15 @@ public partial class MapEntityLayer : Node2D
                          $"W{e.StockW} F{e.StockF} S{e.StockS} /Lager{e.Capacity} " +
                          $"V{e.ProdSpeed} St{e.State} haelt{OwnReserve(e)}]");
             else
-                hqs.Add($"[{e.Slot} Basis W{e.StockW} F{e.StockF} S{e.StockS} " +
-                        $"T{e.StockT} bezahlbar {Affordable(e)}/{BuildableBy(1).Count}]");
+                // ⚠ Seit dem 17.08. stehen hier auch Flughafen und Werft-Station
+                // (siehe CountsForStocks), also darf das Wort nicht mehr fest
+                // »Basis« sein — sonst meldet der Prüfstand acht Basen, wo eine
+                // ist.
+                hqs.Add($"[{e.Slot} {BuildingTypeName(e.BType)} W{e.StockW} F{e.StockF} " +
+                        $"S{e.StockS} T{e.StockT}" +
+                        (e.BType == 1
+                            ? $" bezahlbar {Affordable(e)}/{BuildableBy(1).Count}]"
+                            : "]"));
         }
         return $"econ-check: P{me} " +
                (facs.Count > 0 ? "Fabriken " + string.Join(" ", facs) : "keine Fabrik") +
@@ -9365,6 +9503,98 @@ public partial class MapEntityLayer : Node2D
 
     private const float BuildSeconds = 6f;
 
+    /// <summary>Wie viele Bestellungen hinter der laufenden warten dürfen.
+    ///
+    /// <para>⚠ <b>UNSERE Zahl, und sie ist bewusst die des Originals:</b> das
+    /// Depot von 1997 hat <b>sechs</b> Plätze (<c>cmp al,6</c> @0x467FBF). Die
+    /// Mechanik ist eine andere — dort stehen fertige Einheiten, hier warten
+    /// bezahlte Bestellungen —, aber wenn schon eine Zahl gewählt werden muss,
+    /// dann die, die das Spiel selbst für »so viel darf sich stauen« hält.
+    /// Eine unbegrenzte Schlange wäre im Wettkampf ein Knopf, mit dem man sein
+    /// ganzes Lager in einem Wimpernschlag verschwinden lässt.</para></summary>
+    public const int BuildQueueMax = 6;
+
+    /// <summary><c>--no-build-queue</c> — die GEGENPROBE zur Warteschlange:
+    /// stellt das Verhalten von vor dem 17.08.2026 wieder her (zahlen und den
+    /// laufenden Bau überschreiben).
+    ///
+    /// <para>⚠ Warum es den Schalter gibt und nicht nur den Prüfstand: ein
+    /// grünes »4 bezahlt, 4 angekommen« sagt nichts darüber, ob
+    /// <c>--queue-check</c> die Fehlerklasse überhaupt SEHEN kann. Mit dem
+    /// Schalter entscheidet ein einziger Lauf das — er muss »4 bezahlt, 1
+    /// angekommen« melden. Dieselbe Bauart wie <c>--old-move-cost</c> und
+    /// <c>--stempel-alt</c>.</para></summary>
+    public static bool NoBuildQueue;
+
+    /// <summary>Was gerade gebaut wird und wieviel dahinter steht — für die
+    /// Bauzeile der Rohstoffleiste und für jeden Prüfstand, der die Schlange
+    /// sehen können muss. Leer, wenn nichts läuft.</summary>
+    public string BuildQueueLine()
+    {
+        var e = Producer();
+        if (e == null || _designs == null || e.BuildTime <= 0f) return "";
+        string now = _designs[e.BuildIndex % _designs.Count].Name;
+        if (e.BuildQueue.Count == 0)
+            return $"{now} — noch {e.BuildTime:0.0}s (Bauzeit ist unsere Zutat)";
+        var rest = new List<string>();
+        foreach (int p in e.BuildQueue) rest.Add(_designs[p % _designs.Count].Name);
+        return $"{now} — noch {e.BuildTime:0.0}s | Warteschlange {e.BuildQueue.Count}/" +
+               $"{BuildQueueMax}: {string.Join(", ", rest)}";
+    }
+
+    /// <summary>Die LETZTE Bestellung der gewählten Fabrik zurücknehmen und ihren
+    /// Preis erstatten (Taste <b>Ctrl+P</b>).
+    ///
+    /// <para>⚠ Auch das ist unsere Zutat, und sie gehört zwingend zur Schlange:
+    /// bezahlt wird beim Einreihen, also muss sich eine Bestellung auch wieder
+    /// auflösen lassen. Zurückgenommen wird von HINTEN — der laufende Bau bleibt
+    /// unangetastet, solange noch etwas dahinter steht; erst wenn die Schlange
+    /// leer ist, wird der laufende Bau selbst abgebrochen.</para>
+    ///
+    /// <para>Erstattet wird der volle Preis. Eine Abschlagsgebühr wäre eine
+    /// zweite erfundene Zahl über einer schon erfundenen Mechanik.</para></summary>
+    public void CancelBuild()
+    {
+        if (_designs == null) return;
+        int n = 0;
+        foreach (int i in _sel)
+        {
+            var e = _entities[i];
+            if (!IsUnitPlant(e) || e.Dead) continue;
+            if (e.BuildQueue.Count > 0)
+            {
+                int pick = e.BuildQueue[^1];
+                e.BuildQueue.RemoveAt(e.BuildQueue.Count - 1);
+                Refund(e, _designs[pick % _designs.Count]);
+                _order = $"{_designs[pick % _designs.Count].Name} aus der Warteschlange " +
+                         $"genommen — Preis erstattet";
+                n++;
+                continue;
+            }
+            if (e.BuildTime > 0f)
+            {
+                var d = _designs[e.BuildIndex % _designs.Count];
+                e.BuildTime = 0f;
+                Refund(e, d);
+                _order = $"{d.Name} abgebrochen — Preis erstattet";
+                n++;
+            }
+        }
+        if (n == 0) _order = "nichts abzubrechen";
+        UpdatePanel();
+        QueueRedraw();
+    }
+
+    /// <summary>Gegenstück zu <see cref="PayFor"/>. ⚠ Ohne Deckel: die Lager
+    /// haben im Original keine gelesene Obergrenze, und ein Deckel hier würde
+    /// eine Erstattung stillschweigend verschlucken.</summary>
+    private static void Refund(Entity e, in Design d)
+    {
+        e.StockW += d.CostW;
+        e.StockF += d.CostF;
+        e.StockS += d.CostS;
+    }
+
     /// <summary>
     /// Start / advance production in the selected factories. The design list is
     /// the game's (sec47); the build TIME is ours — no build-time field has been
@@ -9481,6 +9711,58 @@ public partial class MapEntityLayer : Node2D
         e.ResearchTech = 0;
         e.ResearchDone = 0;
         if (e.State == StResearch) e.State = StAktiv;
+    }
+
+    /// <summary>Was auf dem Reiter »Forschung« des Basisfensters steht — Fehler
+    /// C2 (»Wo kann ich denn Forschen?«).
+    ///
+    /// <para>⚠ Die Antwort war: in der BASIS, über Taste O — und nirgends stand
+    /// das. Die Mechanik selbst ist alt; neu ist allein, dass sie sich zeigt.
+    /// Der Text nennt Kosten, Fortschritt und das nächste Vorhaben, damit der
+    /// Reiter auch dann etwas sagt, wenn gerade nichts läuft.</para></summary>
+    public string ResearchNote()
+    {
+        var e = Producer();
+        if (e == null) return "Forschung — kein Gebäude gewählt.";
+        if (e.BType != 1)
+            return "Forschung — nur in der BASIS. Dieses Gebäude kann nicht forschen.";
+        int owner = Mathf.Clamp(e.Owner, 0, 7);
+        if (e.ResearchTech > 0)
+        {
+            string was = _techs?.GetValueOrDefault(e.ResearchTech) ?? "?";
+            return $"Forschung läuft: {was}\n" +
+                   $"{e.ResearchDone * 100 / Mathf.Max(1, ResearchTotal)} % fertig " +
+                   $"({e.ResearchDone} von {ResearchTotal}).";
+        }
+        int next = NextTech();
+        if (next < 0) return "Forschung — alles erforscht.";
+        return $"Nächstes Vorhaben: {_techs![next]}\n" +
+               $"Kostet ${ResearchCost}, Kontostand ${_money[owner]}.\n" +
+               (_money[owner] >= ResearchCost
+                    ? "»Forschen« drücken (oder Taste O)."
+                    : "Zuwenig Geld.");
+    }
+
+    /// <summary>Was auf dem Reiter »Reparatur« steht — Fehler C6 (»Beschädigte
+    /// Gebäude reparieren wäre gut. Welche Einheit bietet sich da an?«).
+    ///
+    /// <para>⚠ <b>Gar keine, und das ist die eigentliche Auskunft:</b> das
+    /// Gebäude repariert sich selbst, +1 Trefferpunkt je viertem Takt
+    /// (<see cref="StartRepair"/>). Solange das nirgends stand, war die Frage
+    /// nach der richtigen Einheit unvermeidlich.</para></summary>
+    public string RepairNote()
+    {
+        var e = Producer();
+        if (e == null) return "Reparatur — kein Gebäude gewählt.";
+        if (e.State == StRepair || e.State == FaRepair)
+            return $"Reparatur läuft — {e.Hp} von {e.HpMax} Trefferpunkten.\n" +
+                   "Das Gebäude repariert sich SELBST, es braucht keine Einheit.";
+        if (e.Hp >= e.HpMax)
+            return $"Unbeschädigt — {e.Hp} von {e.HpMax} Trefferpunkten.\n" +
+                   "Ein beschädigtes Gebäude repariert sich selbst, sobald man\n" +
+                   "»Reparieren« drückt (oder Taste K). Eine Einheit braucht es dafür nicht.";
+        return $"Beschädigt: {e.Hp} von {e.HpMax} Trefferpunkten.\n" +
+               "»Reparieren« drücken (oder Taste K) — das Gebäude macht es selbst.";
     }
 
     /// <summary>Send the selected buildings into repair (key K).
@@ -9623,6 +9905,24 @@ public partial class MapEntityLayer : Node2D
             return $"PRODUKTION  W{e.StockW} F{e.StockF} S{e.StockS}";
         if (IsSupplyDepot(e))
             return $"VERSORGUNGSDEPOT  ${_money[ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0]}";
+        // ⚠ 17.08.2026 — FEHLER C12, gemeldet als »Flughafen kennt nur $ anstatt
+        // Resourcen«. Hier stand für JEDES übrige bauende Gebäude der
+        // Kontostand, also auch für den Flughafen — und dort wird gar nicht mit
+        // Geld bezahlt: `BuyAircraft` (:10360) prüft die drei TEILELAGER DES
+        // FLUGHAFENGEBÄUDES gegen den Entwurfspreis, genau wie
+        // `build_in_airport` @0x4BB3D0 (Lager +0x3C/+0x3E/+0x40 gegen Entwurf
+        // +0x1F/+0x20/+0x21). Die Zeilenliste darunter (BuildPanelRows) hat die
+        // Teile die ganze Zeit richtig ausgewiesen — nur die Kopfzeile log.
+        //
+        // ⚠ Woher die Teile am Flughafen kommen, ist die zweite Hälfte der
+        // Meldung und steht in Simulation/RailFreight.cs: ÜBER DIE BAHN. Die
+        // Typmatrix @0x504128 gibt Fabrik → Flughafen das eigene Bauteil und
+        // Bahnstation/Feldbahnhof → Flughafen alle drei; der Nahweg in `Haul`
+        // beliefert dagegen NUR die Basis (BType 1). Auf einer Karte ohne Linie
+        // zum Flughafen bleibt es also bei dem, was `ApplyResources` beim Start
+        // hineingelegt hat.
+        if (e.BType == 9)
+            return $"FLUGHAFEN  W{e.StockW} F{e.StockF} S{e.StockS}";
         int owner = e.Owner is >= 0 and <= 7 ? e.Owner : 0;
         return $"PRODUKTION  ${_money[owner]}";
     }
@@ -9721,6 +10021,119 @@ public partial class MapEntityLayer : Node2D
         return rows;
     }
 
+    /// <summary>
+    /// <c>--queue-check[=n]</c> — die Bauwarteschlange, und zwar so, dass genau
+    /// der gemeldete Fehler sichtbar wäre (C8, 17.08.2026: »Wenn ich mehrmals
+    /// eine Einheit baue, zieht es mir zwar die Ressourcen ab, kommt aber nur
+    /// eine Einheit raus«).
+    ///
+    /// <para><b>Was er misst, und warum diese drei Zahlen.</b> Er bestellt
+    /// <paramref name="want"/> mal dasselbe über den KLICKWEG des Baupanels
+    /// (<see cref="BuildPanelPick"/>), nicht über einen Abkürzung — genau daran
+    /// ist <c>--depot-check</c> einmal vorbeigelaufen. Gemerkt werden vorher
+    /// Lagerstand und Einheitenzahl. Erwartet wird danach:</para>
+    /// <list type="number">
+    /// <item><b>bezahlt = bestellt × Preis</b> — der alte Fehler zahlte
+    /// <paramref name="want"/> mal und lieferte einmal; ein Prüfstand, der nur
+    /// »kam eine Einheit heraus?« fragt, hätte ihn nie gesehen.</item>
+    /// <item><b>angekommen = bestellt</b> nach genug Zeit.</item>
+    /// <item><b>Schlange leer</b> am Ende — sonst hat sie nur langsamer
+    /// verloren.</item>
+    /// </list>
+    ///
+    /// <para>⚠ Er sagt AUCH, wenn er gar nichts bestellen konnte (keine Basis,
+    /// zu wenig Teile). Ein Lauf ohne Bestellung würde sonst genauso grün
+    /// aussehen wie einer, der klappt — Arbeitsweise 33.</para>
+    /// </summary>
+    public void QueueCheckOrder(int want)
+    {
+        _queueWant = want;
+        _queueOrdered = 0;
+        _queueNote = "";
+        int idx = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (IsUnitPlant(e) && !e.Dead && e.Owner == ViewPlayer) { idx = i; break; }
+        }
+        if (idx < 0)
+        {
+            // Keine eigene Basis? Dann eine herrenlose oder fremde übernehmen und
+            // DAZUSAGEN, dass es getan wurde — sonst misst der Lauf die
+            // Kartenlage und nicht die Schlange (Arbeitsweise 30).
+            for (int i = 0; i < _entities.Count; i++)
+                if (_entities[i].IsBuilding && !_entities[i].Dead && _entities[i].BType == 1)
+                {
+                    idx = i;
+                    _queueNote = $"(Basis slot {_entities[i].Slot} von Spieler " +
+                                 $"{_entities[i].Owner} fuer die Probe uebernommen) ";
+                    _entities[i].Owner = _entities[i].Team = _entities[i].ShownOwner = ViewPlayer;
+                    break;
+                }
+        }
+        if (idx < 0) { _queueNote = "keine Basis auf dieser Karte"; return; }
+
+        var b = _entities[idx];
+        _sel.Clear(); _sel.Add(idx); _selected = idx;
+        _queueBuilding = idx;
+        _queueW0 = b.StockW; _queueF0 = b.StockF; _queueS0 = b.StockS;
+        _queueUnits0 = CountUnitsOf(ViewPlayer);
+
+        var rows = BuildPanelRows();
+        int pick = rows.FindIndex(r => r.Affordable);
+        if (pick < 0) { _queueNote = "nichts bezahlbar in dieser Basis"; return; }
+        _queuePick = pick;
+        var menu = BuildableBy(b.BType);
+        var d = _designs![menu[pick % menu.Count]];
+        _queueCostW = d.CostW; _queueCostF = d.CostF; _queueCostS = d.CostS;
+        _queueName = d.Name;
+
+        for (int k = 0; k < want; k++)
+        {
+            _sel.Clear(); _sel.Add(idx); _selected = idx;
+            int before = b.BuildQueue.Count;
+            bool running = b.BuildTime > 0f;
+            BuildPanelPick(pick);
+            if (b.BuildQueue.Count > before || (!running && b.BuildTime > 0f)) _queueOrdered++;
+        }
+    }
+
+    private int _queueWant, _queueOrdered, _queueBuilding = -1, _queuePick;
+    private int _queueW0, _queueF0, _queueS0, _queueUnits0;
+    private int _queueCostW, _queueCostF, _queueCostS;
+    private string _queueName = "", _queueNote = "";
+
+    private int CountUnitsOf(int player)
+    {
+        int n = 0;
+        foreach (var e in _entities)
+            if (!e.IsBuilding && !e.IsProp && !e.Dead && e.Owner == player) n++;
+        return n;
+    }
+
+    /// <summary>Die Abrechnung zu <see cref="QueueCheckOrder"/>.</summary>
+    public string QueueCheckLine()
+    {
+        if (_queueBuilding < 0 || _designs == null)
+            return $"queue-check: nicht gemessen — {_queueNote}";
+        var b = _entities[_queueBuilding];
+        int paidW = _queueW0 - b.StockW, paidF = _queueF0 - b.StockF, paidS = _queueS0 - b.StockS;
+        int soll = _queueOrdered;
+        int arrived = CountUnitsOf(ViewPlayer) - _queueUnits0;
+        bool payOk = paidW == soll * _queueCostW && paidF == soll * _queueCostF
+                                                 && paidS == soll * _queueCostS;
+        bool countOk = arrived == soll;
+        bool emptyOk = b.BuildQueue.Count == 0 && b.BuildTime <= 0f;
+        return $"queue-check: {_queueNote}Basis slot {b.Slot}, {_queueWant}x \"{_queueName}\" " +
+               $"bestellt, {_queueOrdered} angenommen (Deckel {BuildQueueMax})\n" +
+               $"   bezahlt {paidW}/{paidF}/{paidS} — Soll {soll * _queueCostW}/" +
+               $"{soll * _queueCostF}/{soll * _queueCostS} ({_queueCostW}/{_queueCostF}/" +
+               $"{_queueCostS} je Stueck): {(payOk ? "STIMMT" : "ABWEICHUNG")}\n" +
+               $"   angekommen {arrived} von {soll}: {(countOk ? "STIMMT" : "ABWEICHUNG")}\n" +
+               $"   Schlange am Ende {b.BuildQueue.Count}, Restbauzeit {b.BuildTime:0.0}s: " +
+               $"{(emptyOk ? "abgearbeitet" : "NICHT LEER")}";
+    }
+
     /// <summary>A click on row <paramref name="i"/>: make it the pick, then
     /// order it through the same path the B key uses, so nothing about paying,
     /// queueing or refusing is duplicated here.</summary>
@@ -9734,6 +10147,23 @@ public partial class MapEntityLayer : Node2D
         ProduceFromSelection();
         UpdatePanel();
         QueueRedraw();
+    }
+
+    /// <summary>Die Knöpfe »Forschen« und »Reparieren« des Basisfensters
+    /// (Fehler C2 und C6, 17.08.2026).
+    ///
+    /// <para>⚠ Sie gehen denselben Weg wie <see cref="BuildPanelPick"/> und aus
+    /// demselben Grund: das Fenster zeigt EIN Gebäude, also darf sein Knopf auch
+    /// nur dieses eine treffen. Die Tasten O und K bleiben, was sie waren — sie
+    /// wirken weiter auf alles Gewählte.</para></summary>
+    public void ResearchFromPanel() { AimAtPanelBuilding(); StartResearch(); }
+    public void RepairFromPanel() { AimAtPanelBuilding(); StartRepair(); }
+
+    private void AimAtPanelBuilding()
+    {
+        if (Producer() == null || _selected < 0) return;
+        _sel.Clear();
+        _sel.Add(_selected);
     }
 
     /// <summary>
@@ -10003,6 +10433,43 @@ public partial class MapEntityLayer : Node2D
     }
 
     private static int? _probeTech;
+
+    /// <summary>
+    /// Was ein Techstandard am Flughafen freigibt, als Klartext — für die Zeile
+    /// unter dem Regler des Gefechtsschirms (Fehler C16, 17.08.2026: »woher
+    /// weiss ich wieviele Techstandards es gibt, und was sie bewirken?«).
+    ///
+    /// <para>⚠ Die Antwort wird <b>gerechnet, nicht aufgeschrieben</b>, und zwar
+    /// mit genau dem Tor, das im Spiel entscheidet
+    /// (<see cref="AirEnabledAt"/> über <c>component_stats.json</c> +0x24). Eine
+    /// von Hand gepflegte Liste im Menü wäre eine zweite Quelle, und die stimmt
+    /// nur bis zum ersten Mal, wo jemand eine Schwelle anfasst — das ist Regel N
+    /// der Arbeitsweise, angewandt auf einen Menütext.</para>
+    ///
+    /// <para>Ohne <c>aircraft.json</c> sagt sie das, statt eine leere Liste als
+    /// Ergebnis auszugeben.</para></summary>
+    public static string TechstandardEffect(int tech)
+    {
+        var types = LoadAircraftTemplates();
+        if (types.Count == 0)
+            return "Stufe " + tech + ": keine Flugzeugtabelle eingespielt — " +
+                   "die Wirkung laesst sich hier nicht ausrechnen.";
+        var on = new List<string>();
+        for (int i = 0; i < types.Count; i++)
+            if (AirEnabledAt(i, types[i], tech)) on.Add(types[i].Name);
+        // Was die NÄCHSTE Stufe zusätzlich brächte — die eigentliche Frage des
+        // Spielers ist ja »was bewirken sie«, und das sieht man an der Differenz.
+        var next = new List<string>();
+        if (tech < 8)
+            for (int i = 0; i < types.Count; i++)
+                if (AirEnabledAt(i, types[i], tech + 1) && !AirEnabledAt(i, types[i], tech))
+                    next.Add(types[i].Name);
+        string line = $"Stufe {tech} von 8 — am Flughafen kaufbar: " +
+                      (on.Count > 0 ? string.Join(", ", on) : "nichts");
+        if (next.Count > 0) line += $"\nStufe {tech + 1} bringt dazu: {string.Join(", ", next)}";
+        else if (tech < 8) line += $"\nStufe {tech + 1} bringt nichts Neues.";
+        return line;
+    }
 
     /// <summary>Das Tor @0x419F30 für EINEN Satz — siehe
     /// <see cref="FillSkirmishAirDesigns"/> für die Herleitung. Die zwei
@@ -10274,12 +10741,22 @@ public partial class MapEntityLayer : Node2D
         return list;
     }
 
+    /// <summary>Die gewählte Zeile mit ihrem Preis — ⚠ und der Preis hängt am
+    /// GEBÄUDE, nicht an der Ware (Fehler C12, 17.08.2026): am Nachschub-Posten
+    /// kostet der Heli $150 (Zwei-Tasten-Dialog @0x44C2B9, prüft den
+    /// Kontostand), am Flughafen kostet dasselbe Fluggerät TEILE (@0x4BB3D0,
+    /// prüft die drei Lager des Gebäudes). Hier stand für beide Fälle
+    /// <c>$150</c>.</summary>
     private string AirMenuPick(Entity e)
     {
         var m = AirMenu(e);
         if (m.Count == 0) return "-";
         var d = m[e.MenuIndex % m.Count];
-        return $"{d.Name} ${HeliPrice} ({e.MenuIndex % m.Count + 1}/{m.Count})";
+        string price = IsSupplyDepot(e)
+            ? $"${HeliPrice}"
+            : $"{d.CostW}{UI.BaseWindow.IconW} {d.CostF}{UI.BaseWindow.IconF} " +
+              $"{d.CostS}{UI.BaseWindow.IconS}";
+        return $"{d.Name} {price} ({e.MenuIndex % m.Count + 1}/{m.Count})";
     }
 
     /// <summary>Buy the picked helicopter: it is paid for from the owner's
@@ -10717,7 +11194,7 @@ public partial class MapEntityLayer : Node2D
 
         if (_designs == null || _designs.Count == 0)
         { if (_order.Length == 0) _order = "keine Designs geladen"; return; }
-        int n = 0;
+        int n = 0, queued = 0;
         foreach (int i in _sel)
         {
             var e = _entities[i];
@@ -10732,12 +11209,40 @@ public partial class MapEntityLayer : Node2D
                          $"{chosen.CostW}/{chosen.CostF}/{chosen.CostS}";
                 continue;
             }
+
+            // ⚠⚠ 17.08.2026 — FEHLER C8. HIER STAND:
+            //     PayFor(e, chosen); e.BuildIndex = pick; e.BuildTime = BuildSeconds;
+            // ohne jede Frage danach, ob schon gebaut wird. Der zweite Klick hat
+            // also GEZAHLT und den laufenden Bau nur neu angestossen — gemeldet
+            // wortwoertlich: »zieht es mir zwar die Ressourcen ab, kommt aber nur
+            // eine Einheit raus«. Die Werft hat diesen Fall seit je richtig
+            // (»Werft baut schon«, BuildShip), die Basis nicht.
+            //
+            // Die Kur ist die SCHLANGE (Entscheidung des Spielers, siehe
+            // Entity.BuildQueue): der laufende Bau bleibt stehen, die Bestellung
+            // wird bezahlt und hinten angehaengt.
+            if (e.BuildTime > 0f && !NoBuildQueue)
+            {
+                if (e.BuildQueue.Count >= BuildQueueMax)
+                {
+                    _order = $"Warteschlange voll ({BuildQueueMax}) — " +
+                             $"{chosen.Name} nicht bestellt";
+                    continue;
+                }
+                PayFor(e, chosen);
+                e.BuildQueue.Add(pick);
+                queued++;
+                continue;
+            }
+
             PayFor(e, chosen);
             e.BuildIndex = pick;
             e.BuildTime = BuildSeconds;
             n++;
         }
-        if (n > 0) _order = $"Produktion: {n} Basis(en)";
+        if (n > 0 && queued > 0) _order = $"Produktion: {n} begonnen, {queued} eingereiht";
+        else if (n > 0) _order = $"Produktion: {n} Basis(en)";
+        else if (queued > 0) _order = $"{queued} in die Warteschlange";
         else if (_order.Length == 0) _order = "keine Fabrik gewaehlt";
         UpdatePanel();
         QueueRedraw();
@@ -13751,6 +14256,25 @@ public partial class MapEntityLayer : Node2D
         _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.GameUnitType));
         _nav.SetOccupant(u.Col, u.Row, _entities.Count - 1);
         _order = $"{d.Name} fertig";
+
+        // ⚠ 17.08.2026 — DAS NACHRÜCKEN DER WARTESCHLANGE (Fehler C8, siehe
+        // Entity.BuildQueue). Bezahlt ist beim Einreihen worden, hier wird nur
+        // noch angefangen; deshalb steht hier kein CanAfford und kein PayFor —
+        // eine zweite Prüfung würde eine bezahlte Bestellung verfallen lassen,
+        // wenn das Lager inzwischen leer ist.
+        //
+        // ⚠ Und sie steht NACH dem Absetzen, nicht davor: der Zweig über uns
+        // (»cell == null« -> BuildTime = 1f) verlässt die Routine, ohne etwas
+        // gebaut zu haben. Rückte die Schlange davor nach, verlöre eine
+        // eingekeilte Fabrik bei jedem Versuch eine bezahlte Bestellung.
+        if (e.BuildQueue.Count > 0)
+        {
+            e.BuildIndex = e.BuildQueue[0];
+            e.BuildQueue.RemoveAt(0);
+            e.BuildTime = BuildSeconds;
+            string next = _designs[e.BuildIndex % _designs.Count].Name;
+            _order = $"{d.Name} fertig — {next} folgt ({e.BuildQueue.Count} dahinter)";
+        }
         QueueRedraw();
     }
 
@@ -16705,6 +17229,44 @@ public partial class MapEntityLayer : Node2D
             float dd = a.Pos.DistanceTo(e.Pos);
             if (dd < bd) { bd = dd; best = e; }
         }
+        if (best != null) return best;
+
+        // ⚠⚠ 17.08.2026 — FEHLER C5, UND DAS IST EINE BEWUSSTE ABWEICHUNG.
+        //
+        // Gemeldet: »Versorgungshelikopter scheinen ihren Job nicht permanent zu
+        // machen. Irgendwann bleiben sie stehen und befüllen keine Einheiten
+        // mehr.« Die Ursache steht in den KARTEN, nicht im Verhalten: der
+        // Nachladeplatz des Originals ist ausschliesslich der Nachschub-Posten
+        // (Typ 14), und ihn gibt es auf den Gefechtskarten nicht überall.
+        // Gezählt über alle 46 Kartendateien:
+        //     map_NET02  7 Flughäfen, 0 Nachschub-Posten
+        //     map_NET08  3 Flughäfen, 0 Nachschub-Posten
+        //     map_DM_11  0 Flughäfen, 0 Nachschub-Posten
+        // Auf NET02 kauft der Spieler seine Helis also am Flughafen, sie fliegen
+        // mit voller Ladung (255) los, geben pro leerem Kunden 50 ab — und nach
+        // der fünften Lieferung fällt `UpdateSupply` in den Zweig `Cargo <= 0`,
+        // findet nichts, setzt `Goal = null` und der Heli steht bis zum Ende der
+        // Partie. Genau das gemeldete Bild.
+        //
+        // Das Original ist an dieser Stelle NICHT falsch gelesen: @0x427ad5 sucht
+        // wörtlich `typ == 14` und prüft dabei keinen Besitzer (alle 63 Posten
+        // der 26 Kampagnenkarten tragen Besitzer 255). Es ist bloss eine Regel für
+        // Karten, die immer einen Posten haben — und das Gefecht hat sie nicht.
+        // Da das Gefecht seit dem 13.08.2026 ein Wettkampfmodus ist, wird hier
+        // ABGEWICHEN statt eine tote Mechanik stehenzulassen: gibt es keinen
+        // Nachschub-Posten, lädt der Heli beim FLUGHAFEN oder der BASIS seines
+        // eigenen Spielers nach — an denselben Gebäuden also, an denen er auch
+        // gekauft wird.
+        //
+        // ⚠ Der Besitzer wird hier SEHR WOHL geprüft, anders als beim Typ 14:
+        // ein herrenloser Posten steht allen offen, eine fremde Basis nicht.
+        foreach (var e in _entities)
+        {
+            if (!e.IsBuilding || e.Dead || e.Owner != a.Owner) continue;
+            if (e.BType != 9 && e.BType != 1) continue;
+            float dd = a.Pos.DistanceTo(e.Pos);
+            if (dd < bd) { bd = dd; best = e; }
+        }
         return best;
     }
 
@@ -16728,6 +17290,21 @@ public partial class MapEntityLayer : Node2D
                 a.Cargo = SupplyCargoFull;
                 a.DepotSlot = -1;
                 a.Goal = null;
+                // ⚠ Ein Nachladen an einem ANDEREN Gebäude als dem Typ 14 ist
+                // unsere Abweichung (siehe NearestDepot, Fehler C5). Sie sagt es
+                // deshalb selbst, statt still zu wirken — sonst ist »der Heli
+                // arbeitet wieder« nicht von »er hat nie aufgehört« zu
+                // unterscheiden. Gezählt wird auch, damit ein Prüflauf eine Zahl
+                // hat und nicht nur eine Zeile.
+                if (depot.BType != 14)
+                {
+                    SupplyReloadsAway++;
+                    GD.Print($"supply: {a.TypeName} slot {a.Slot} (P{a.Owner}) hat am " +
+                             $"{BuildingTypeName(depot.BType)} slot {depot.Slot} nachgeladen — " +
+                             $"diese Karte hat KEINEN Nachschub-Posten (Typ 14), " +
+                             $"unsere Abweichung, {SupplyReloadsAway}. Mal");
+                }
+                else SupplyReloads++;
             }
             return;
         }
@@ -16797,6 +17374,12 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Deliveries made this session — the harness reports it.</summary>
     public int SupplyRuns;
+
+    /// <summary>Nachladungen am Nachschub-Posten (Typ 14, wie im Original) und
+    /// an einem Ersatzgebäude (unsere Abweichung, siehe
+    /// <see cref="NearestDepot"/>). Getrennt gezählt, weil zwei verschiedene
+    /// Sachen nie in denselben Zähler dürfen.</summary>
+    public int SupplyReloads, SupplyReloadsAway;
 
     /// <summary>
     /// ZURUECK ZUM FLUGHAFEN — der Nachbau von <c>air_back_to_airport</c>

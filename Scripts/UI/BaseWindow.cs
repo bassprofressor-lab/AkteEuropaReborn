@@ -117,6 +117,20 @@ public sealed partial class BaseWindow : PanelContainer
     /// <summary>Der Knopf »Erstellen«.</summary>
     public Action? OnDesign;
 
+    /// <summary>Reiter »Forschung« — was das gewählte Gebäude gerade erforscht,
+    /// und der Knopf, der es anstösst
+    /// (<c>MapEntityLayer.ResearchNote</c>/<c>StartResearch</c>). ⚠ Bis zum
+    /// 17.08.2026 war dieser Reiter leer und sagte »noch nicht angeschlossen«,
+    /// obwohl die Mechanik seit langem auf Taste O lag — siehe Fehler C2.</summary>
+    public Func<string>? ResearchNote;
+    public Action? OnResearch;
+
+    /// <summary>Reiter »Reparatur«, dasselbe für <c>StartRepair</c> (Taste K).
+    /// ⚠ Es gibt dafür KEINE Einheit und braucht auch keine: das Gebäude
+    /// repariert sich selbst, +1 Trefferpunkt je viertem Takt. Fehler C6.</summary>
+    public Func<string>? RepairNote;
+    public Action? OnRepair;
+
     /// <summary>Das X.</summary>
     public Action? OnClose;
 
@@ -288,7 +302,30 @@ public sealed partial class BaseWindow : PanelContainer
                               "in MapEntityLayer und ist von aussen nicht änderbar";
         _remove.Disabled = true;
         _remove.TooltipText = _rename.TooltipText;
-        _make.Pressed += () => { if (_sheet.Selected >= 0) Produce?.Invoke(_sheet.Selected); Refresh(); };
+        // ⚠ 17.08.2026 — DER KNOPF GEHÖRT JETZT DEM REITER (Fehler C2 und C6).
+        // Er hiess fest »Produzieren« und rief fest die Produktion; die Reiter
+        // »Forschung« und »Reparatur« waren gezeichnet und tot. Beide Mechaniken
+        // sind seit langem GEBAUT (MapEntityLayer.StartResearch bzw.
+        // StartRepair, Tasten O und K) und waren nur über die Oberfläche nicht
+        // erreichbar — der Spieler hat genau danach gefragt: »Wo kann ich denn
+        // Forschen?« und »Beschädigte Gebäude reparieren wäre gut. Welche
+        // Einheit bietet sich da an?«.
+        //
+        // ⚠ Die Antwort auf die zweite Frage ist ausdrücklich KEINE Einheit: das
+        // Gebäude repariert sich selbst. Genau deshalb muss der Knopf am
+        // Gebäudefenster sitzen und nicht an einer Einheit.
+        _make.Pressed += () =>
+        {
+            switch (_tab)
+            {
+                case 2: OnResearch?.Invoke(); break;
+                case 3: OnRepair?.Invoke(); break;
+                default:
+                    if (_sheet.Selected >= 0) Produce?.Invoke(_sheet.Selected);
+                    break;
+            }
+            Refresh();
+        };
         _design.Pressed += () => OnDesign?.Invoke();
 
         var right = new VBoxContainer();
@@ -384,13 +421,23 @@ public sealed partial class BaseWindow : PanelContainer
         _sheet.Note = _tab switch
         {
             0 => "Depot — die Einheiten dieses Gebäudes.\nNoch nicht angeschlossen.",
-            2 => "Forschung — noch nicht angeschlossen.",
-            3 => "Reparatur — noch nicht angeschlossen.",
+            2 => ResearchNote?.Invoke() ?? "Forschung — noch nicht angeschlossen.",
+            3 => RepairNote?.Invoke() ?? "Reparatur — noch nicht angeschlossen.",
             _ => rows.Count == 0 ? "Nichts zu bauen." : "",
         };
         _sheet.Fill(rows);
-        _make.Disabled = _tab != 1 || _sheet.Selected < 0 ||
-                         _sheet.Selected >= rows.Count || !rows[_sheet.Selected].Affordable;
+        // ⚠ 17.08.2026 — die Beschriftung folgt dem Reiter. Ein Knopf, der auf
+        // dem Forschungsreiter »Produzieren« heisst und forscht, wäre schlimmer
+        // als ein toter Reiter.
+        _make.Text = _tab switch { 2 => "Forschen", 3 => "Reparieren", _ => "Produzieren" };
+        _make.Disabled = _tab switch
+        {
+            2 => OnResearch == null,
+            3 => OnRepair == null,
+            1 => _sheet.Selected < 0 || _sheet.Selected >= rows.Count ||
+                 !rows[_sheet.Selected].Affordable,
+            _ => true,
+        };
         _design.Disabled = _tab != 1;
 
         string name = _sheet.Selected >= 0 && _sheet.Selected < rows.Count

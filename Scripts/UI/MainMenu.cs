@@ -639,6 +639,26 @@ public partial class MainMenu : Control
                         + "Gilt ebenso fuer die Schiffsliste.",
         }));
 
+        // ⚠ 17.08.2026 — FEHLER C16: »Techstandard -> woher weiss ich wieviele
+        // Techstandards es gibt, und was sie bewirken?« Die Antwort stand bis
+        // heute AUSSCHLIESSLICH im TooltipText darueber, und ein Hinweis, den man
+        // nur sieht, wenn man schon ahnt, dass dort einer steht, beantwortet die
+        // Frage nicht. Deshalb eine Zeile UNTER dem Regler, die bei jeder
+        // Aenderung sagt, was diese Stufe freigibt.
+        //
+        // ⚠ Der Text kommt aus TechstandardEffect() und damit aus DERSELBEN
+        // Quelle wie die Wirkung: den Techschwellen in component_stats.json,
+        // gelesen vom Tor @0x419F30. Eine zweite, von Hand gepflegte Liste
+        // haette genau so lange gestimmt, bis jemand eine Schwelle anfasst.
+        var techNote = new Label
+        {
+            Modulate = new Color(0.70f, 0.75f, 0.80f),
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            Text = MapEntityLayer.TechstandardEffect((int)_tech.Value),
+        };
+        right.AddChild(techNote);
+        _tech.ValueChanged += v => techNote.Text = MapEntityLayer.TechstandardEffect((int)v);
+
         // ⚠ <s>DIE LOBBY steht IN der Einstellungsspalte.</s> Seit dem 13.08.2026
         // steht sie LINKS unter der Kartenliste — die Begruendung samt der drei
         // Anlaeufe steht dort, an `leftCol`. Kurz: in dieser Spalte hier hat sie
@@ -983,7 +1003,9 @@ public partial class MainMenu : Control
         foreach (var c in GetChildren()) (c as Node)?.QueueFree();
 
         var bg = new ColorRect { Color = new Color(0.05f, 0.06f, 0.08f) };
-        bg.SetAnchorsPreset(LayoutPreset.FullRect);
+        // ⚠ 17.08.2026 — siehe LoadGameScreen._Ready (Fehler C20): nur Anker,
+        // keine Raender, also ein Rechteck der Groesse null.
+        bg.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         AddChild(bg);
 
         var box = new VBoxContainer

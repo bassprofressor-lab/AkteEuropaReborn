@@ -23,11 +23,26 @@ public partial class LoadGameScreen : Control
 
     public override void _Ready()
     {
-        SetAnchorsPreset(LayoutPreset.FullRect);
+        // ⚠ 17.08.2026 — HIER STAND `SetAnchorsPreset`, UND DAS IST DER FEHLER C20
+        // (»man drückt drauf und das Fenster ist nicht mittig, sondern oben
+        // links«). Die zwei Namen sehen gleich aus und tun Verschiedenes:
+        // `SetAnchorsPreset` setzt NUR die Anker und lässt die Ränder stehen —
+        // ein frisch angelegtes Control hat die alle auf 0, behält also ein
+        // Rechteck der GRÖSSE NULL in der linken oberen Ecke. Der Panel darunter
+        // hängt an Anker 0,5 mit `-pw/2`, und die halbe Breite von null ist null:
+        // das Fenster landet exakt dort, wo es gemeldet wurde.
+        // `SetAnchorsAndOffsetsPreset` setzt beides und füllt wirklich.
+        //
+        // ⚠ Es ist DERSELBE Fehler, der in SettingsScreen.cs:56 schon einmal
+        // gefunden und dort im Kommentar festgehalten wurde (»Nothing measures a
+        // container there, so it kept a zero-size rect … up and to the left of
+        // the menu, which is where it was reported«). Er ist wiedergekommen,
+        // weil die Kur dort im Fliesstext stand und nicht am Aufruf.
+        SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         MouseFilter = MouseFilterEnum.Stop;
 
         var dim = new ColorRect { Color = new Color(0, 0, 0, 0.5f) };
-        dim.SetAnchorsPreset(LayoutPreset.FullRect);
+        dim.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         dim.MouseFilter = MouseFilterEnum.Ignore;
         AddChild(dim);
 

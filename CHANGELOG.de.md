@@ -35,6 +35,21 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Einheiten
 
+- **Das Kugelroller-Fahrgestell ist in allen acht Richtungen sichtbar.** Es war
+  in sieben von acht unsichtbar, und der Grund lag in einer alten, ausdruecklich
+  als ungeklaert vermerkten Stelle des Exporters. Nachgezaehlt ueber den ganzen
+  Teilebestand von ROBO.CWR: **35 von 36** belegten Komponenten tragen ihre
+  volle Achter-Zeile bei Block 0, **Komponente 9 als einzige bei Block 5** — und
+  zwar in allen drei Gruppen. Angesehen sind es dort acht saubere Drehungen
+  desselben Fahrgestells, waehrend die fuenf Einzelbilder davor verschiedene
+  NEIGUNGEN derselben Ansicht sind. Damit ist die zweite alte Lesart (»die
+  belegten Bilder der Reihe nach sind die acht Richtungen«, `copy_units.py`)
+  widerlegt. Der Export sucht den Block jetzt, statt ihn zu setzen: vorher 64
+  von 65 Fahrgestellen vollstaendig, jetzt **65 von 65**.
+  ⚠ Offen bleibt, WARUM dieses eine Teil seine Bloecke andersherum legt — dass
+  Block 5 fuer den Kugelroller »ebener Boden« heisst, ist erschlossen und nicht
+  gelesen, und seine Hangbilder bleiben deshalb unangetastet.
+
 - **Eine Einheit, die zum Schiessen anhaelt, faehrt jetzt danach weiter.** Bisher
   war der Fahrbefehl weg, sobald ein Ziel in Reichweite kam: die Einheit blieb
   stehen, feuerte — und stand danach fuer immer. Auf map_NET07 war das genau die
@@ -196,6 +211,51 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Gefecht
 
+- **Die Bauwarteschlange.** Mehrfach dieselbe Einheit zu bestellen hat bisher
+  jedesmal bezahlt und den laufenden Bau nur neu angestossen — drei Klicks,
+  dreimal Teile weg, eine Einheit. Jetzt reihen sich Bestellungen auf: bezahlt
+  wird beim Einreihen, hoechstens sechs warten (die Zahl des Depots im Original,
+  `cmp al,6` @0x467FBF), **Umschalt+B** nimmt die letzte zurueck und erstattet
+  sie, und die Rohstoffleiste zeigt, was laeuft und was dahintersteht.
+  Gemessen mit `--queue-check=4`: 4 bestellt, 80/160/0 bezahlt (genau 4x der
+  Preis), 4 angekommen, Schlange leer. Die Gegenprobe `--no-build-queue` stellt
+  den alten Stand her und meldet dort 80/160/0 bezahlt gegen ein Soll von
+  20/40/0 — der gemeldete Verlust, hergestellt und wieder wegmessbar.
+  ⚠ Eine Warteschlange ist **unsere Zutat**; das Original fuehrt fuer eine
+  Einheit gar keine Bauzeit, sondern ein Depot mit sechs Plaetzen.
+- **Der Techstandard steht in der Vorgabe auf 8 statt auf 1.** Auf Stufe 1 gibt
+  der Flughafen nur die zwei Versorgungshelis frei — gelesen ist daran, dass ein
+  frisches Original auf 1 startet (@0x4426F4), nicht, dass 1 eine gute
+  Wettkampfvorgabe ist. Unter dem Regler steht jetzt eine Zeile, die **ausrechnet**
+  (nicht aufschreibt), was die gewaehlte Stufe freigibt und was die naechste
+  dazubringt. Eine bestehende Installation traegt die alte 1 in ihrer
+  `settings.cfg`; sie wird **einmalig** angehoben und danach nie wieder
+  angefasst.
+- **Forschung und Reparatur sind erreichbar.** Beide Mechaniken gab es seit
+  langem auf den Tasten O und K, aber die Reiter des Basisfensters sagten
+  »noch nicht angeschlossen«, und damit war die Frage »wo kann ich forschen?«
+  unbeantwortbar. Die Reiter zeigen jetzt Stand, Kosten und naechstes Vorhaben,
+  und der Knopf heisst, was er tut. ⚠ Fuers Reparieren braucht es **keine
+  Einheit**: das Gebaeude repariert sich selbst.
+- **Der Flughafen rechnet in Teilen, nicht in Dollar.** Bezahlt hat er die ganze
+  Zeit richtig (Teilelager des Gebaeudes, wie `build_in_airport` @0x4BB3D0), nur
+  seine Kopfzeile und die Zeile im Bedienblock schrieben `$150` hin — der Preis
+  des Versorgungsdepots, das tatsaechlich Geld nimmt. Woher die Teile kommen,
+  ist jetzt auch beantwortet: **ueber die Bahn** (Typmatrix @0x504128), der
+  Nahweg beliefert allein die Basis.
+- **Versorgungshelis bleiben nicht mehr stehen.** Ein leerer Heli suchte
+  ausschliesslich einen Nachschub-Posten (Typ 14) — und **map_NET02 hat sieben
+  Flughaefen und keinen einzigen Posten**, NET08 drei und keinen, DM_11 gar
+  nichts. Dort war ein Heli nach fuenf Lieferungen fuer immer erledigt. Findet
+  er keinen Posten, laedt er jetzt am Flughafen oder der Basis seines eigenen
+  Spielers nach und sagt in der Ausgabe, dass er es getan hat. ⚠ Eine bewusste
+  Abweichung; wo es einen Posten gibt, gewinnt weiter der Posten (auf NET04
+  gemessen: 1 am Posten, 0 Abweichungen).
+- **Die Rohstoffleiste sagt, dass sie eine Summe ist.** Sie zeigt »gesamt (n)«
+  mit der Zahl der gezaehlten Gebaeude — dass sie mit dem Lager einer einzelnen
+  Basis nicht uebereinstimmt, war vorher nicht zu erkennen. Ausserdem zaehlen
+  jetzt **Flughafen und Werft-Station** mit: aus beiden wird bezahlt, und genau
+  das ist die Regel, nach der die Auswahl schon vorher gebildet war.
 - **Der eigene Startplatz steht auf der Minimap.** Eine weisse Raute mit dunklem
   Rand, dort, wo die Partie begonnen hat. Sie wandert nicht mit: genommen wird
   der Punkt einmal beim Start und dann nie wieder: wer seine Basis verliert,
@@ -213,6 +273,16 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Eine bewusste Abweichung vom Original, die Kampagne bleibt unberuehrt.
 
 ### Kampagne und Oberfläche
+
+- **»Spiel laden« sitzt wieder in der Mitte.** Der Schirm hat seine Anker
+  gesetzt, aber nicht seine Raender — damit behielt er ein Rechteck der Groesse
+  null in der linken oberen Ecke, und das Fenster darin wurde von dort aus
+  gezeichnet. Genau derselbe Fehler war im Einstellungsschirm schon einmal
+  gefunden und dort im Kommentar festgehalten worden; er ist wiedergekommen,
+  weil die Kur im Fliesstext stand und nicht am Aufruf. Dieselbe Zeile hat
+  nebenbei drei abdunkelnde Flaechen repariert, die nichts abgedunkelt haben,
+  und den Deckel des Abschlussfensters, der keine Maus abgefangen hat.
+
 
 - **Das Editorfeld stand im Gefecht, und die Missions-Popups standen im
   Hauptmenü.** Zwei Meldungen, eine Ursache. Ein Szenenwechsel ersetzt nur die

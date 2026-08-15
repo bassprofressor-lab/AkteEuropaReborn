@@ -33,6 +33,15 @@ deviate on purpose, and every deviation is marked as ours.
 
 ### Units
 
+- **The ball-roller chassis is visible in all eight facings.** It was invisible
+  in seven of eight. Counted across the whole part bank of ROBO.CWR: **35 of 36**
+  populated components carry their full row of eight at block 0 — **component 9
+  alone carries it at block 5**, in all three groups. Looked at, those eight are
+  eight clean rotations, while the five single frames before them are different
+  *pitches* of one view; that refutes the other old reading. The export now
+  *finds* the block instead of assuming it: 64 of 65 chassis complete before,
+  **65 of 65** now.
+
 - **A unit that stops to fire now carries on afterwards.** Until now the move
   order was gone the moment a target came into range: the unit stopped, fired —
   and then stood there forever. On map_NET07 that was exactly the one unit in
@@ -180,6 +189,36 @@ deviate on purpose, and every deviation is marked as ours.
 
 ### Skirmish
 
+- **A build queue.** Ordering the same unit several times used to pay every
+  time and merely restart the running build — three clicks, three lots of parts,
+  one unit. Orders now line up: paid on entry, at most six waiting (the
+  original's own depot size, `cmp al,6` @0x467FBF), **Shift+B** takes the last
+  one back and refunds it, and the resource bar shows what is running and what
+  is behind it. Measured with `--queue-check=4`: 4 ordered, 80/160/0 paid
+  (exactly 4x the price), 4 delivered, queue empty. The counter-probe
+  `--no-build-queue` restores the old behaviour and reports 80/160/0 paid
+  against a target of 20/40/0 — the reported loss, reproduced and then measured
+  away. A queue is OURS; the original has no build time at all, it has a depot.
+- **Techstandard now defaults to 8 instead of 1.** At level 1 the airfield only
+  releases the two supply helicopters. What is read is that a fresh original
+  starts at 1 (@0x4426F4) — not that 1 is a good competitive default. A line
+  under the dial now *computes* what the chosen level unlocks. An existing
+  install carries the old 1 in its `settings.cfg`; it is lifted **once** and
+  never touched again.
+- **Research and repair are reachable.** Both have been on keys O and K for a
+  long time, but the base window's tabs said "not connected yet". They now show
+  state, cost and the next project. Repair needs **no unit** — the building
+  repairs itself.
+- **The airfield counts parts, not dollars.** It always paid correctly; only its
+  heading printed `$150`, which is the supply depot's price. Where the parts
+  come from is answered too: **by rail** (type matrix @0x504128).
+- **Supply helicopters no longer stall.** An empty one looked only for a supply
+  post (type 14) — and **map_NET02 has seven airfields and no post at all**.
+  Without one it now reloads at its own player's airfield or base, and says so.
+  Where a post exists the post still wins (NET04: 1 at the post, 0 deviations).
+- **The resource bar says it is a sum**, with the number of buildings counted —
+  and airfields and shipyards now count, since parts are paid out of both.
+
 - **Your own start position is marked on the minimap.** A white diamond with a
   dark outline, where the match began. It does not follow you: the point is
   taken once at the start and never again, so that losing your base does not
@@ -195,6 +234,11 @@ deviate on purpose, and every deviation is marked as ours.
   departure from the original; the campaign is untouched.
 
 ### Campaign and interface
+
+- **"Load game" is centred again.** The screen set its anchors but not its
+  offsets, so it kept a zero-size rect in the top-left corner and drew its window
+  from there. The same call was wrong in four more places, where it left three
+  dimming layers and the end-window's mouse lid doing nothing.
 
 - **The editor overlay stood in the skirmish, and the mission pop-ups stood in
   the main menu.** Two reports, one cause. A scene change replaces only the

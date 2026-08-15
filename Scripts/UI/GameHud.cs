@@ -94,8 +94,16 @@ public sealed partial class GameHud : Control
     /// der Kontostand aus sec73.</summary>
     public readonly struct Stocks
     {
-        public Stocks(int t, int w, int f, int s, int money, bool valid)
-        { T = t; W = w; F = f; S = s; Money = money; Valid = valid; }
+        public Stocks(int t, int w, int f, int s, int money, bool valid, int buildings = 0)
+        { T = t; W = w; F = f; S = s; Money = money; Valid = valid; Buildings = buildings; }
+
+        /// <summary>Über wieviele Gebäude summiert wurde. ⚠ 17.08.2026, Fehler
+        /// C1: »Die Ressourcen in der Basis stimmen nicht mit denen über ein,
+        /// die es oben in der Ressourcenleiste steht.« Sie stimmen nie überein,
+        /// sobald es mehr als ein Gebäude gibt — die Leiste ist eine SUMME, das
+        /// Gebäudefenster zeigt EIN Lager. Das war nirgends zu sehen, deshalb
+        /// steht die Zahl jetzt in der Leiste.</summary>
+        public int Buildings { get; }
         public int T { get; }
         public int W { get; }
         public int F { get; }
@@ -217,9 +225,17 @@ public sealed partial class GameHud : Control
             (BaseWindow.IconS, IconFg, _now.S.ToString(), r.S),
         };
 
+        // ⚠ 17.08.2026 — DIE VORSILBE. Fehler C1: die Leiste sah aus wie »mein
+        // Vorrat« und ist eine SUMME über alle zahlenden Gebäude (Basis,
+        // Fabriken, Flughafen, Werft-Station). Wer sie neben ein Basisfenster
+        // hält, sieht zwei verschiedene Zahlen und hat keinen Grund, die eine
+        // für richtig zu halten. Das Wort und die Gebäudezahl beantworten das
+        // an Ort und Stelle, ohne dass jemand einen Kommentar lesen muss.
+        string lead = _now.Buildings > 0 ? $"gesamt ({_now.Buildings})" : "gesamt";
+
         float gap = W(" ") * 2f;
         float x = gap;
-        float total = gap;
+        float total = gap + W(lead) + gap;
         foreach (var c in cells)
             total += W(c.Icon) + W(" ") + W(c.Val) + W(" ") + W(RateText(c.Rate)) + gap * 1.5f;
         total += W("$") + W(" ") + W(_now.Money.ToString()) + gap;
@@ -233,6 +249,9 @@ public sealed partial class GameHud : Control
         DrawRect(new Rect2(Vector2.Zero, Size), Edge, false, 1f);
 
         float baseline = LineH - 2f;
+        DrawString(_font, new Vector2(x, baseline), lead,
+                   HorizontalAlignment.Left, -1, _fontSize, FlatFg);
+        x += W(lead) + gap;
         foreach (var c in cells)
         {
             DrawString(_font, new Vector2(x, baseline), c.Icon,
@@ -286,7 +305,8 @@ public sealed partial class GameHud : Control
     {
         if (!_have) return "hud: nichts zu zeigen (kein Gebäude des Sichtspielers)";
         var r = Rates();
-        return $"hud: T{_now.T} W{_now.W} F{_now.F} S{_now.S} ${_now.Money} | " +
+        return $"hud: T{_now.T} W{_now.W} F{_now.F} S{_now.S} ${_now.Money} " +
+               $"(Summe ueber {_now.Buildings} Gebaeude) | " +
                $"Zuwachs/s T{r.T:0.00} W{r.W:0.00} F{r.F:0.00} S{r.S:0.00} " +
                $"(gemittelt über {Span:0.0}s, {_samples.Count} Proben)" +
                (Building?.Invoke() is { Length: > 0 } b ? $" | {b}" : "");

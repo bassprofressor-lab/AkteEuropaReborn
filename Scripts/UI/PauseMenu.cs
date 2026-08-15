@@ -49,7 +49,10 @@ public partial class PauseMenu : Control
         ProcessMode = ProcessModeEnum.Always;      // runs while the tree is paused
 
         var dim = new ColorRect { Color = new Color(0, 0, 0, 0.45f) };
-        dim.SetAnchorsPreset(LayoutPreset.FullRect);
+        // ⚠ 17.08.2026 — siehe LoadGameScreen._Ready (Fehler C20): nur die Anker
+        // zu setzen lässt die Ränder auf 0 stehen, das ColorRect blieb null
+        // Pixel gross und hat nichts abgedunkelt.
+        dim.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         dim.MouseFilter = MouseFilterEnum.Ignore;
         AddChild(dim);
 

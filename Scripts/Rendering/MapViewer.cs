@@ -611,6 +611,10 @@ public partial class MapViewer : Node2D
     private bool _demoBuild;
     private bool _demoMine;
     private bool _demoResearch;
+    // --queue-check (Fehler C8): Bestellzeitpunkt, Abrechnungszeitpunkt, Anzahl.
+    private float _queueCheckAt, _queueCheckDue;
+    private float _supplyReloadAt, _supplyReloadDue;
+    private int _queueCheckN = 3;
     private bool _demoState;
     private bool _demoAir;
     private bool _demoAirPic;
@@ -802,6 +806,18 @@ public partial class MapViewer : Node2D
             else if (a == "--cheat-check") _cheatCheck = 2f;
             else if (a == "--air-buy-check") _airBuyCheck = 3f;
             else if (a == "--produce-check") _produceCheck = 2f;
+            else if (a == "--no-build-queue") MapEntityLayer.NoBuildQueue = true;
+            // --supply-reload-check (Fehler C5): leeren Heli herstellen und sehen,
+            // ob er einen Nachladeplatz findet. Siehe SupplyReloadCheckLine.
+            else if (a == "--supply-reload-check") _supplyReloadAt = 3f;
+            // --queue-check[=n]: n Einheiten in EINEM Zug bestellen und danach
+            // nachrechnen, ob bezahlt und geliefert zusammenpassen. Siehe
+            // MapEntityLayer.QueueCheckOrder — der eigentliche Fehler C8 war
+            // »bezahlt drei, geliefert eins«, und das sieht nur ein Prüfstand,
+            // der BEIDE Zahlen führt.
+            else if (a == "--queue-check") { _queueCheckAt = 2f; _queueCheckN = 3; }
+            else if (a.StartsWith("--queue-check="))
+            { _queueCheckAt = 2f; _queueCheckN = Mathf.Max(1, a["--queue-check=".Length..].ToInt()); }
             // --fresh-campaign: den Kampagnenspielstand (user://campaign.cfg)
             // VOR dem Missionsstart auf 0 setzen. Ohne ihn traegt jeder
             // Prueflauf den Kontostand der vorigen mit, und eine Geldmessung
@@ -1225,6 +1241,56 @@ public partial class MapViewer : Node2D
             {
                 _produceCheck = -1f;
                 GD.Print(_entities.ProduceCheckLine());
+            }
+        }
+        // --queue-check: erst bestellen, dann warten, dann abrechnen. Die zwei
+        // Zeitpunkte MUESSEN auseinanderliegen — eine Schlange, die sofort
+        // abgerechnet wird, hat noch nichts abgearbeitet, und der Prueflauf
+        // haette »0 von 3 angekommen« gemeldet und dabei die Wartezeit gemessen
+        // statt die Schlange.
+        if (_queueCheckAt > 0f)
+        {
+            _queueCheckAt -= (float)delta;
+            if (_queueCheckAt <= 0f)
+            {
+                _queueCheckAt = -1f;
+                _entities.QueueCheckOrder(_queueCheckN);
+                // reichlich Luft: BuildSeconds je Stueck plus Zuschlag fuer eine
+                // Basis, die kurz keine freie Zelle findet
+                _queueCheckDue = _queueCheckN * 6f + 8f;
+                GD.Print($"queue-check: {_queueCheckN} bestellt, Abrechnung in " +
+                         $"{_queueCheckDue:0.0}s");
+            }
+        }
+        else if (_queueCheckDue > 0f)
+        {
+            _queueCheckDue -= (float)delta;
+            if (_queueCheckDue <= 0f)
+            {
+                _queueCheckDue = -1f;
+                GD.Print(_entities.QueueCheckLine());
+            }
+        }
+        // --supply-reload-check: erst den leeren Heli herstellen, dann ihm Zeit
+        // zum Hinfliegen geben, dann abrechnen. Die Wartezeit ist grosszuegig —
+        // ein Flughafen kann am anderen Kartenrand liegen.
+        if (_supplyReloadAt > 0f)
+        {
+            _supplyReloadAt -= (float)delta;
+            if (_supplyReloadAt <= 0f)
+            {
+                _supplyReloadAt = -1f;
+                GD.Print(_entities.SupplyReloadCheckLine());
+                _supplyReloadDue = 60f;
+            }
+        }
+        else if (_supplyReloadDue > 0f)
+        {
+            _supplyReloadDue -= (float)delta;
+            if (_supplyReloadDue <= 0f)
+            {
+                _supplyReloadDue = -1f;
+                GD.Print(_entities.SupplyReloadResult());
             }
         }
         if (_placeForce > 0f)
@@ -1918,13 +1984,19 @@ public partial class MapViewer : Node2D
         // Bildlauf). Genau darum steht sie hier und nicht `_upTime`: der Zuwachs
         // je Sekunde muss aus dem festen Takt kommen.
         _resourceBar.SimClock = () => _entities.DebugClock;
-        // ⚠ Die Bauzeile bleibt LEER. MapEntityLayer gibt nach aussen nirgends
-        // heraus, welches Gebäude gerade woran baut (Entity.BuildTime ist
-        // privat erreichbar, BuildWatchLine() nur für die EINE Fabrik des
-        // Prüfstands). Was dafür nötig wäre, steht im Bericht — und weil das
-        // Original für eine Einheit ohnehin KEINE Bauzeit führt (siehe
-        // UI/GameHud.cs), wird hier lieber nichts gezeigt als eine erfundene
-        // Zahl gross gemacht.
+        // ⚠ 17.08.2026 — DIE BAUZEILE IST ANGESCHLOSSEN. Hier stand: »sie bleibt
+        // LEER, MapEntityLayer gibt nach aussen nirgends heraus, welches Gebäude
+        // gerade woran baut« — das stimmte, und es war mit der Bauwarteschlange
+        // (Fehler C8) nicht mehr haltbar: eine Schlange, die man nicht sieht,
+        // ist von einer verschluckten Bestellung nicht zu unterscheiden, und
+        // genau das war der gemeldete Fehler.
+        //
+        // ⚠ Der Vorbehalt von damals gilt weiter und steht jetzt IM TEXT: das
+        // Original führt für eine Einheit gar keine Bauzeit (siehe
+        // UI/GameHud.cs), die Sekundenzahl ist unsere Erfindung. Deshalb sagt
+        // BuildQueueLine() »(Bauzeit ist unsere Zutat)« dazu, solange nichts in
+        // der Schlange steht — dort ist Platz dafür.
+        _resourceBar.Building = () => _entities.BuildQueueLine();
     }
 
     /// <summary>
@@ -1970,7 +2042,7 @@ public partial class MapViewer : Node2D
         // ist) — »was ich ausgeben kann«, nicht »was ich besitze«.
         var p = _entities.PlayerStocks(_entities.ViewPlayer is >= 0 and <= 7
             ? _entities.ViewPlayer : 0);
-        return new UI.GameHud.Stocks(p.T, p.W, p.F, p.S, p.Money, p.Buildings > 0);
+        return new UI.GameHud.Stocks(p.T, p.W, p.F, p.S, p.Money, p.Buildings > 0, p.Buildings);
     }
 
     /// <summary>Die Leiste eine Probe nehmen lassen und sie an ihre Stelle
@@ -2106,6 +2178,15 @@ public partial class MapViewer : Node2D
         // »Erstellung« nur die Entwurfsstelle anzeigt, laufen Knopf und Taste
         // nie auseinander.
         _baseWindow.OnDesign = () => _entities.ToggleDesigner();
+        // ⚠ 17.08.2026 — die zwei toten Reiter sind angeschlossen (Fehler C2
+        // und C6). Beide Mechaniken lagen seit langem auf den Tasten O und K und
+        // waren über die Oberflaeche schlicht nicht zu finden; das Fenster hat
+        // stattdessen »noch nicht angeschlossen« behauptet, was fuer die
+        // MECHANIK falsch war und nur fuer den REITER stimmte.
+        _baseWindow.ResearchNote = _entities.ResearchNote;
+        _baseWindow.OnResearch = () => _entities.ResearchFromPanel();
+        _baseWindow.RepairNote = _entities.RepairNote;
+        _baseWindow.OnRepair = () => _entities.RepairFromPanel();
 
         _designWindow = new UI.DesignWindow
         {
@@ -2225,7 +2306,12 @@ public partial class MapViewer : Node2D
         // hinter dem Fenster in voller Helligkeit. Die alte Fassung legte ein
         // 55-%-Schwarz darueber — das war unsere Zutat.
         _endBanner = new Control { Visible = false, ProcessMode = ProcessModeEnum.Always };
-        _endBanner.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        // ⚠ 17.08.2026 — hier stand `SetAnchorsPreset`, und damit blieb der
+        // Deckel null Pixel gross: er hat GAR KEINE Maus abgefangen, obwohl
+        // genau das sein Zweck ist. Das Abschlussfenster selbst ist davon
+        // unberuehrt — es setzt seine Lage in ShowEndWindow absolut gegen das
+        // Sichtfeld (:2349). Siehe LoadGameScreen._Ready, Fehler C20.
+        _endBanner.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         layer.AddChild(_endBanner);
 
         _endWindow = new UI.MissionEndWindow();
@@ -2769,6 +2855,14 @@ public partial class MapViewer : Node2D
                 case Key.R: _entities.ToggleRanges(); break;
                 case Key.E: _entities.ToggleDigIn(); break;
                 case Key.M: _entities.ToggleDesigner(); break;
+                // ⚠ 17.08.2026 — Umschalt+B nimmt die LETZTE Bestellung zurück
+                // und erstattet sie. Die Zeile muss VOR dem schlichten `Key.B`
+                // stehen: C# nimmt in einem switch den ersten passenden Fall,
+                // und `case Key.B:` ohne when würde Umschalt+B mitfangen.
+                // Warum es die Taste überhaupt gibt: seit der Bauwarteschlange
+                // wird beim EINREIHEN bezahlt, also muss sich eine Bestellung
+                // auch wieder auflösen lassen (siehe Entity.BuildQueue).
+                case Key.B when key.ShiftPressed: _entities.CancelBuild(); break;
                 case Key.B: _entities.ProduceFromSelection(); break;
                 case Key.N: _entities.CycleBuildMenu(); break;
                 // the production list shares the display box with the info

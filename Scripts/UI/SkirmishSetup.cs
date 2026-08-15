@@ -58,8 +58,27 @@ public static class SkirmishSetup
     ///
     /// <para>Derselbe Wert gehört unter den <b>Schiffs</b>-Rückfall, wo heute
     /// die Konstante <c>CampaignTechLevel = 1</c> steht: dann kommen beide
-    /// Listen aus einer Quelle.</para></summary>
-    public static int Techstandard = 1;
+    /// Listen aus einer Quelle.</para>
+    ///
+    /// <para>⚠⚠ <b>DIE VORGABE IST SEIT DEM 17.08.2026 ACHT, UND DAS IST UNSERE
+    /// SETZUNG — genauer: die Wettkampfentscheidung des Spielers.</b> Hier stand
+    /// <c>1</c>, mit der Begründung »so startet ein frisches Original«
+    /// (@0x4426F4). Gelesen ist daran nur, was das Original tut; <b>dass 1 auch
+    /// für unser Gefecht richtig ist, war nie belegt</b> — und der Preis war
+    /// sichtbar, gemeldet als Fehler C3: »Kann im Flughafen nur
+    /// Versorgungshelikopter bauen, aber keine anderen Flugzeuge? (Liegt das am
+    /// Techstandard 1?)«. Ja, lag es. Auf Stufe 1 gibt das Tor @0x419F30 genau
+    /// die zwei Nachschubhelis frei, und ein Wettkampfmodus, der seine Luftwaffe
+    /// hinter einer Startbedingung versteckt, die niemand gewählt hat, ist eine
+    /// Falle und kein Spiel.</para>
+    ///
+    /// <para><b>Die gelesene Zahl bleibt gelesen:</b> 1 ist und bleibt der Wert
+    /// eines frischen Originals, und wer ihn will, stellt ihn im Gefechtsschirm
+    /// ein — der Bereich 1..8 ist unverändert der des Originals. Geändert ist
+    /// allein, wo der Regler steht, wenn niemand ihn anfasst. Das ist genau die
+    /// Trennung, die [[akte-europa-gefecht-competitive]] verlangt: gelesene
+    /// Zahlen dokumentieren, Wettkampfentscheidungen benennen.</para></summary>
+    public static int Techstandard = 8;
 
     /// <summary>
     /// <b>»Alle Einheiten« — und damit auch LUFTEINHEITEN.</b>

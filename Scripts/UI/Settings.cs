@@ -91,8 +91,51 @@ public static class Settings
     /// noch nicht — dort wäre es genauso richtig.</para></summary>
     public static int SkirmishTechstandard
     {
-        get => Mathf.Clamp(I("skirmish_techstandard", 1), 1, 8);
+        // ⚠ 17.08.2026 — die VORGABE steht auf 8, nicht mehr auf 1. Die
+        // Begründung steht vollständig bei SkirmishSetup.Techstandard; kurz: 1
+        // ist der gelesene Startwert des ORIGINALS, aber die Wettkampfvorgabe
+        // ist eine Entscheidung des Spielers, und auf Stufe 1 gibt der Flughafen
+        // nur die zwei Nachschubhelis frei (gemeldeter Fehler C3).
+        //
+        // ⚠⚠ EINE GEÄNDERTE VORGABE ERREICHT EINE BESTEHENDE INSTALLATION
+        // NICHT, und das ist hier gemessen und nicht vermutet: der
+        // Gefechtsschirm SCHREIBT den Wert bei jedem Start zurück
+        // (MainMenu.cs:1522), also steht in `user://settings.cfg` des Spielers
+        // seit langem `skirmish_techstandard=1` — nachgesehen am 17.08., dort
+        // stand genau das. Der erste Prüflauf nach der Änderung meldete
+        // dementsprechend weiter »Techstandard 1, 2 freigegeben«. Eine Vorgabe,
+        // die niemand je zu sehen bekommt, sieht erledigt aus und ist es nicht.
+        //
+        // Deshalb HebtEinmal(): ein Schlüssel, der sich merkt, dass die Anhebung
+        // stattgefunden hat. Wer danach absichtlich auf 1 zurückstellt, behält
+        // die 1 — die Umstellung passiert genau einmal und nie wieder.
+        get => Mathf.Clamp(LiftTechstandardOnce(), 1, 8);
         set => Set("skirmish_techstandard", Mathf.Clamp(value, 1, 8));
+    }
+
+    /// <summary>Die einmalige Anhebung der Techstandard-Vorgabe von 1 auf 8
+    /// (17.08.2026). Gibt den Wert zurück, der ab jetzt gilt.
+    ///
+    /// <para>Angehoben wird NUR eine gespeicherte 1 und NUR beim ersten Mal;
+    /// alles andere bleibt, wie es ist. Der Merker steht in derselben Datei,
+    /// damit die Umstellung nicht bei jedem Start wieder zuschlägt und eine
+    /// bewusste Rückstellung auf 1 überschreibt.</para>
+    ///
+    /// <para>⚠ Das ist der teure Teil einer geänderten Vorgabe und der, den man
+    /// vergisst: eine bestehende Installation hat den alten Wert längst
+    /// aufgeschrieben. Wer eine Vorgabe ändert, muss sagen, was mit dem
+    /// Aufgeschriebenen geschieht.</para></summary>
+    private static int LiftTechstandardOnce()
+    {
+        int have = I("skirmish_techstandard", 8);
+        if (B("techstandard_lifted_v060", false)) return have;
+        Set("techstandard_lifted_v060", true);
+        if (have != 1) return have;
+        Set("skirmish_techstandard", 8);
+        GD.Print("einstellungen: Techstandard-Vorgabe einmalig von 1 auf 8 gehoben " +
+                 "(Wettkampfentscheidung 17.08.2026) — im Gefechtsschirm jederzeit " +
+                 "wieder auf 1 zu stellen");
+        return 8;
     }
 
     // ---- sound --------------------------------------------------------------
