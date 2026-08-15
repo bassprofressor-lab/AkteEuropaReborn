@@ -308,6 +308,26 @@ public partial class MapEntityLayer : Node2D
         public int PathIdx;
         public Vector2I Goal;            // final target cell (for re-pathing)
         public Vector2I? Reserved;       // cell currently being driven into
+
+        /// <summary>Der Zaehler <b>»kolik«</b>, Satzfeld <b>+0x06</b> — wie weit
+        /// die Einheit in ihrem laufenden Schritt ist, in Tausendsteln eines
+        /// Originaltakt-Schrittes. Waechst je Takt um die Geschwindigkeit
+        /// (+0x20); der Schritt ist fertig bei
+        /// <see cref="StepCost"/>. Siehe NavGrid.StepCostMilli.
+        /// <para>⚠ GANZZAHLIG mit Absicht: damit haengt weder die Ankunft noch
+        /// die Zahl der Takte je Zelle an der Fliesskommarechnung der Maschine.
+        /// Vorher wuchs <c>Pos</c> Takt fuer Takt um einen float-Schritt und
+        /// trug den Fehler mit; jetzt ist <c>Pos</c> eine reine Funktion von
+        /// <c>Progress</c> und den zwei Zellmitten.</para></summary>
+        public int Progress;
+
+        /// <summary>Was der laufende Schritt kostet: 160000 gerade, 240000
+        /// schraeg (NavGrid.StepCostMilli).</summary>
+        public int StepCost;
+
+        /// <summary>Die Zellmitte, aus der der laufende Schritt fuehrt.</summary>
+        public Vector2 StepFrom;
+
         public float WaitTime;           // blocked-by-another-unit timer
 
         /// <summary>
@@ -1079,6 +1099,22 @@ public partial class MapEntityLayer : Node2D
     /// carries none.</summary>
     private static float SpeedOf(Entity e)
         => e.Speed > 0 ? e.Speed * PxPerSpeedUnit : SpeedOf(e.UnitType);
+
+    /// <summary>Dieselbe Geschwindigkeit ROH, so wie sie in Satzfeld
+    /// <b>+0x20</b> steht — das ist die Zahl, die das Original je Takt auf
+    /// »kolik« addiert (siehe NavGrid.StepCostMilli). Ueber die 54 Karten
+    /// kommen 0..17 vor, der Schwerpunkt liegt bei 4..12.
+    /// <para>⚠ Der Rueckfall ist der alte Bildpunktwert zurueckgerechnet
+    /// (<c>MoveSpeed / PxPerSpeedUnit</c> = 9), damit eine Einheit ohne eigenen
+    /// Wert nicht ploetzlich stillsteht; mindestens 1, sonst kaeme der Zaehler
+    /// nie voran und die Einheit haenge fuer immer zwischen zwei Zellen.</para>
+    /// </summary>
+    private static int RawSpeedOf(Entity e)
+    {
+        if (e.Speed > 0) return e.Speed;
+        if (_speeds.TryGetValue(e.UnitType, out int raw) && raw > 0) return raw;
+        return Mathf.Max(1, Mathf.RoundToInt(MoveSpeed / PxPerSpeedUnit));
+    }
 
     // Real unit sprites (ROBO.CWR RE): unit_type -> facing -> tight-bbox size.
     // Sprites are drawn instead of owner dots when available.
@@ -3740,6 +3776,131 @@ public partial class MapEntityLayer : Node2D
         sb.Append($"   nach dem Befehl: {withPath}/{_sel.Count} haben einen Pfad — " +
                   $"Meldung: {_order}");
         return sb.ToString();
+    }
+
+    // ========================================================================
+    //  --speed-check — B4: wie lange braucht eine Zelle, und wovon haengt das ab?
+    // ========================================================================
+
+    /// <summary>
+    /// Die Frage von B4, zweite Haelfte, als Zahl: <b>wie viele Takte kostet
+    /// EINE Zelle</b>, aufgeschluesselt nach Bodenart und nach gerade/schraeg.
+    ///
+    /// <para>Gemessen wird nicht »Zellen je Sekunde« im Rohen — das haengt an
+    /// der Geschwindigkeit der Einheit und mischt schnelle und langsame
+    /// zusammen (Arbeitsweise A: eine Quote ohne Aufschluesselung ist keine
+    /// Messung). Gemessen wird das PRODUKT <c>Takte × Geschwindigkeit</c>, und
+    /// das ist eine dimensionslose Zahl, die im Original fest sein MUSS:
+    /// <c>2·80 · SimHz/50 = 192</c> gerade und <c>2·120 · SimHz/50 = 288</c>
+    /// schraeg — unabhaengig davon, wer faehrt und worueber.</para>
+    ///
+    /// <para>⚠ Welche Fehlerklasse kann dieser Pruefstand sehen (Arbeitsweise 9)?
+    /// Genau die, um die es geht: haette der Boden Einfluss, stuenden in den
+    /// Zeilen »Geroell« andere Zahlen als in »frei«. Die Gegenprobe
+    /// <c>--old-move-cost</c> stellt den alten Stand nach und MUSS auffaellig
+    /// andere Zahlen liefern — sonst misst der Pruefstand nicht, was er zu
+    /// messen behauptet.</para>
+    /// </summary>
+    private bool _speedOn;
+    private readonly Dictionary<int, int> _spdTicks = new();
+    // (Bodenart, schraeg) -> (Schritte, Summe Takte×Geschwindigkeit, Summe Takte)
+    private readonly Dictionary<(Simulation.NavGrid.Ground, bool), (int N, long TxS, long T)> _spdBuckets = new();
+
+    public string SpeedCheckStart()
+    {
+        if (_nav == null) return "speed-check: kein Gitter";
+        string head = StuckCheckStart();          // dieselbe Gruppe, dasselbe Ziel
+        if (!_stuckOn) return "speed-check: " + head;
+        _spdTicks.Clear(); _spdBuckets.Clear();
+        _speedOn = true;
+        return $"speed-check{(Simulation.NavGrid.MoveCostOld ? " (GEGENPROBE --old-move-cost)" : "")}: " +
+               head;
+    }
+
+    /// <summary>Einen fertigen Schritt verbuchen. Wird aus der Fahrschleife
+    /// gerufen, unmittelbar bevor Spalte/Zeile fortgeschrieben werden.</summary>
+    private void SpeedCheckStep(int i, Entity e, Vector2I target)
+    {
+        if (!_speedOn) return;
+        int ticks = _spdTicks.GetValueOrDefault(i);
+        _spdTicks[i] = 0;
+        if (ticks <= 0) return;
+        bool diag = e.Col != target.X && e.Row != target.Y;
+        var g = _nav!.GroundAt(target.X, target.Y);
+        var k = (g, diag);
+        var v = _spdBuckets.GetValueOrDefault(k);
+        _spdBuckets[k] = (v.N + 1, v.TxS + (long)ticks * RawSpeedOf(e), v.T + ticks);
+    }
+
+    public string SpeedCheckLine()
+    {
+        if (!_speedOn) return "speed-check: nicht gestartet";
+        int total = 0;
+        foreach (var v in _spdBuckets.Values) total += v.N;
+        // ⚠ Zu jedem gruenen Ergebnis gehoert die Zeile, die belegt, dass der
+        // Gegenstand ueberhaupt gehandelt hat (Arbeitsweise 33).
+        if (total == 0)
+            return "speed-check: KEIN EINZIGER Schritt gemessen — auf dieser Karte " +
+                   "ist nichts gefahren, und jede Zahl darunter waere erfunden";
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"speed-check{(Simulation.NavGrid.MoveCostOld ? " (GEGENPROBE --old-move-cost)" : "")}: " +
+                  $"{total} fertige Zellschritte gemessen\n" +
+                  "   Bodenart    Richtung  Schritte  Takte×Geschw.  erwartet  Takte/Zelle");
+        var order = new[] { Simulation.NavGrid.Ground.Free, Simulation.NavGrid.Ground.Rough,
+                            Simulation.NavGrid.Ground.Water, Simulation.NavGrid.Ground.Blocked };
+        var name = new Dictionary<Simulation.NavGrid.Ground, string>
+        {
+            [Simulation.NavGrid.Ground.Free] = "frei",
+            [Simulation.NavGrid.Ground.Rough] = "Geroell",
+            [Simulation.NavGrid.Ground.Water] = "Wasser",
+            [Simulation.NavGrid.Ground.Blocked] = "gesperrt",
+        };
+        double? straightFree = null, diagFree = null;
+        foreach (var g in order)
+            foreach (bool diag in new[] { false, true })
+            {
+                if (!_spdBuckets.TryGetValue((g, diag), out var v) || v.N == 0) continue;
+                double txs = (double)v.TxS / v.N;
+                double want = (diag ? 239 : 159) * (double)SimHz / Simulation.NavGrid.OriginalHz;
+                if (g == Simulation.NavGrid.Ground.Free && !diag) straightFree = txs;
+                if (g == Simulation.NavGrid.Ground.Free && diag) diagFree = txs;
+                sb.Append($"\n   {name[g],-10}  {(diag ? "schraeg" : "gerade"),-8}  {v.N,8}  " +
+                          $"{txs,13:0.0}  {want,8:0.0}  {(double)v.T / v.N,11:0.0}");
+            }
+
+        // Die eigentliche Frage, als ein Satz mit einer Zahl dahinter.
+        if (_spdBuckets.TryGetValue((Simulation.NavGrid.Ground.Free, false), out var f) && f.N > 0 &&
+            _spdBuckets.TryGetValue((Simulation.NavGrid.Ground.Rough, false), out var ro) && ro.N > 0)
+        {
+            double a = (double)f.TxS / f.N, b = (double)ro.TxS / ro.N;
+            sb.Append($"\n   Geroell gegen frei (gerade): {b / a:0.000}× — " +
+                      $"das Original kennt 1,000 (kein Gelaendeterm in move_units)");
+        }
+        else
+            sb.Append("\n   Geroell gegen frei: auf dieser Karte nicht vergleichbar " +
+                      "(eine der beiden Bodenarten kam im Lauf nicht vor)");
+        if (straightFree is { } sf && diagFree is { } df && sf > 0)
+            sb.Append($"\n   schraeg gegen gerade: {df / sf:0.000}× — das Original kennt " +
+                      "1,503 (239/159, @0x407830 und @0x4079a4)");
+        return sb.ToString();
+    }
+
+    /// <summary>0, wenn beide gelesenen Zahlen stehen: kein Gelaendeeinfluss und
+    /// die Schraege genau anderthalbmal so teuer. Toleranz 2 %, weil die
+    /// ganzzahlige Takterhoehung je Schritt bis zu einen Takt aufrundet.</summary>
+    public int SpeedCheckRc()
+    {
+        if (!_speedOn) return 2;
+        if (!_spdBuckets.TryGetValue((Simulation.NavGrid.Ground.Free, false), out var f) || f.N == 0)
+            return 2;
+        double sf = (double)f.TxS / f.N;
+        int rc = 0;
+        if (_spdBuckets.TryGetValue((Simulation.NavGrid.Ground.Rough, false), out var ro) && ro.N > 0)
+            if (System.Math.Abs((double)ro.TxS / ro.N / sf - 1.0) > 0.02) rc = 1;
+        if (_spdBuckets.TryGetValue((Simulation.NavGrid.Ground.Free, true), out var dg) && dg.N > 0)
+            if (System.Math.Abs((double)dg.TxS / dg.N / sf - 239.0 / 159.0) > 0.03) rc = 1;
+        return rc;
     }
 
     // ========================================================================
@@ -14608,20 +14769,68 @@ public partial class MapEntityLayer : Node2D
                 _nav.SetOccupant(next.X, next.Y, i, e.Infantry >= 0);
                 e.Reserved = next;
                 e.WaitTime = 0;
+                // Ein neuer Schritt faengt an. Der Ausgangspunkt ist die
+                // ZELLMITTE und nicht e.Pos — sonst erbte die Zeichnung den
+                // Rundungsrest des vorigen Schrittes.
+                //
+                // ⚠ DER ZAEHLER WIRD NICHT GENULLT, wenn gerade ein Schritt
+                // fertig geworden ist: das Original zieht beim Ankommen
+                // `2·kosten − 1` ab und laesst den UEBERSCHUSS stehen
+                // (@0x4079a4). Der erste Anlauf hier hat ihn weggeworfen, und
+                // der Pruefstand hat es sofort gesehen — 200 statt 192 Takte×
+                // Geschwindigkeit und ein Verhaeltnis von 1,45 statt 1,50, weil
+                // jeder Schritt einzeln auf ganze Takte aufrundete. Genullt wird
+                // nur, wo die Einheit vorher STAND (StepCost == 0), so wie das
+                // Original beim Anhalten »kolik = 0« schreibt (@0x407af2).
+                e.StepFrom = CellCenter(e.Col, e.Row);
+                if (e.StepCost <= 0) e.Progress = 0;
+                e.StepCost = Simulation.NavGrid.StepCostMilli(new Vector2I(e.Col, e.Row), next);
             }
 
             var target = e.Reserved.Value;
             Vector2 dest = CellCenter(target.X, target.Y);
             Vector2 d = dest - e.Pos;
             float dist = d.Length();
-            // same factor the path cost uses, so sand really is slower on screen
-            float step = SpeedOf(e) * dt / _nav.TerrainCost(target.X, target.Y, e.Move);
             moved = true;
+            if (_speedOn) _spdTicks[i] = _spdTicks.GetValueOrDefault(i) + 1;
 
             if (dist > 0.01f) e.Facing = DirToFacing(d);
 
-            if (dist <= step)
+            // ⚠ DAS ORIGINAL ZAEHLT ZELLEN, NICHT BILDPUNKTE (16.08.2026, B4).
+            // `kolik += Geschwindigkeit` je Takt, fertig bei 80 (gerade) bzw.
+            // 120 (schraeg) — mal zwei, weil das Original von Zellmitte zu
+            // Zellmitte zaehlt. Kein Gelaendeterm, siehe NavGrid.StepCostMilli.
+            // Der Takt des Originals ist 50/s (gelesen: SetTimer 20 ms), unserer
+            // ist SimHz; die Umrechnung steht hier und ist die einzige Stelle,
+            // an der unsere Taktlaenge in die Fahrzeit eingeht.
+            bool arrived;
+            if (Simulation.NavGrid.MoveCostOld)
             {
+                // GEGENPROBE: der Stand vor dem 16.08.2026.
+                float step = SpeedOf(e) * dt / _nav.TerrainCost(target.X, target.Y, e.Move);
+                arrived = dist <= step;
+                if (!arrived) e.Pos += d / dist * step;
+            }
+            else
+            {
+                if (e.StepCost <= 0) { e.StepCost = 159_000; e.StepFrom = e.Pos; e.Progress = 0; }
+                // ⚠ BEIDE SEITEN mit SimHz erweitert, statt den Zuwachs je Takt
+                // durch SimHz zu teilen. Die Teilung schnitt ab (Geschw. 10 ->
+                // 8333 statt 8333,33) und verzog die Zahlen um bis zu 0,5 %.
+                // Erweitert ist die Rechnung exakt und bleibt ganzzahlig.
+                e.Progress += RawSpeedOf(e) * Simulation.NavGrid.OriginalHz * 1000;
+                int full = e.StepCost * SimHz;
+                arrived = e.Progress >= full;
+                if (!arrived)
+                    e.Pos = e.StepFrom.Lerp(dest, e.Progress / (float)full);
+            }
+
+            if (arrived)
+            {
+                SpeedCheckStep(i, e, target);   // VOR dem Fortschreiben: er braucht die alte Zelle
+                // Den Ueberschuss mitnehmen statt ihn wegzuwerfen — das ist das
+                // `si − (2·kosten − 1)` des Originals (@0x40799d/@0x4079a4).
+                e.Progress -= e.StepCost * SimHz;
                 _nav.ClearOccupant(e.Col, e.Row, i);
                 e.Pos = dest;
                 e.Col = target.X;
@@ -14646,6 +14855,10 @@ public partial class MapEntityLayer : Node2D
                 if (e.PathIdx >= e.Path.Count)
                 {
                     e.Path = null;
+                    // Angekommen heisst stehen, und beim Stehen schreibt das
+                    // Original »kolik = 0« (@0x407af2). StepCost = 0 sagt dem
+                    // naechsten Schrittanfang, dass er neu bei null anfaengt.
+                    e.StepCost = 0; e.Progress = 0;
                     NextQueued(i, e);      // one waypoint done: take the next order
                 }
                 // One unit of fuel per SQUARE ENTERED — confirmed: the move
@@ -14658,13 +14871,10 @@ public partial class MapEntityLayer : Node2D
                 else if (e.FuelMax > 0 && e.Fuel > 0 && --e.Fuel == 0)
                 {
                     e.Path = null;
+                    e.StepCost = 0; e.Progress = 0;   // »no fuel« @0x407af2: kolik = 0
                     e.Target = -1;
                     _order = $"slot {e.Slot}: kein Sprit";
                 }
-            }
-            else
-            {
-                e.Pos += d / dist * step;
             }
         }
 

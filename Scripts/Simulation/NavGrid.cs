@@ -297,10 +297,85 @@ public sealed class NavGrid
         return _occupant[i] >= 0 && _occupant[i] != mover && _crushable[i] ? _occupant[i] : -1;
     }
 
+    // ========================================================================
+    //  WAS EIN SCHRITT KOSTET — gelesen am 16.08.2026 (B4, zweite Haelfte)
+    // ========================================================================
+
+    /// <summary>Takte je Sekunde im Original. GELESEN, nicht gesetzt:
+    /// <c>SetTimer(fenster, 1, 0x14, 0)</c> — 20 ms — steht in beiden GAME.EXE
+    /// genau einmal (C: bei 0x14FC0, F: bei 0x14E00, Form
+    /// <c>6A 14 6A 01 50 FF 15</c>), und die Fensterprozedur @0x412E30 haengt
+    /// WM_TIMER daran. Siehe CAMPAIGN_RE.md.</summary>
+    public const int OriginalHz = 50;
+
     /// <summary>
-    /// Relative cost of crossing a cell. OURS — Can_go answers yes or no and
-    /// says nothing about speed; rough ground costing more is our reading of
-    /// what it looks like on screen.
+    /// Was ein Schritt von einer Zelle in die naechste kostet, in
+    /// TAUSENDSTELN eines Originaltakt-Schrittes.
+    ///
+    /// <para><b>Das Original zaehlt Zellen, nicht Bildpunkte.</b> Jede Einheit
+    /// fuehrt in Satzfeld <b>+0x06</b> einen Zaehler (das Spiel nennt ihn
+    /// selbst »kolik«, @0x4f6bbc). <c>move_units</c> @0x406cd0 erhoeht ihn
+    /// einmal je Takt um Feld <b>+0x20</b>, die Geschwindigkeit
+    /// (@0x40777b..@0x40778e: <c>ax = [edi+6]; si = [edi+0x20]; si += ax;
+    /// [edi+6] = si</c>) — <b>ohne jeden weiteren Term</b>. Der Schritt ist
+    /// fertig, sobald der Zaehler die Schwelle erreicht (@0x407817..@0x407839):
+    /// <c>((richtung &amp; 1) * 5 + 10) * 8</c>, also <b>80</b> gerade und
+    /// <b>120</b> schraeg. Danach wird Spalte/Zeile fortgeschrieben und der
+    /// Zaehler auf <c>si − (2·kosten − 1)</c> gesetzt (@0x40799d
+    /// <c>imul ax,ax,0xffb0</c> = ×(−80), @0x4079a4 <c>+ esi − 0x9f</c>) — von
+    /// Zellmitte zu Zellmitte sind es also <b>2·kosten</b> = 160 bzw. 240.
+    /// Die Richtungstafel @0x4f5af0 (8 × zwei i16) zeigt, welche das sind:
+    /// die GERADEN Nummern 0/2/4/6 sind (0,±1)/(±1,0), die UNGERADEN 1/3/5/7
+    /// die Gitterdiagonalen — <b>die Schraege kostet genau das Anderthalbfache</b>,
+    /// die uebliche ganzzahlige Naeherung von √2.</para>
+    ///
+    /// <para>⚠ Die Zahl hier ist <b>2·kosten − 1</b> = 159 bzw. 239, nicht 160
+    /// bzw. 240. Der Abzug von <c>2·kosten − 1</c> ist das, was das Original
+    /// wirklich rechnet, und weil der UEBERSCHUSS dabei stehenbleibt, ist genau
+    /// dieser Betrag der Zuwachs, den der Zaehler von einer Zelle zur naechsten
+    /// braucht — unabhaengig davon, wie weit er beim Ankommen ueber die Schwelle
+    /// geschossen ist. Das Verhaeltnis ist damit 239/159 = <b>1,5031</b> und
+    /// nicht glatt 1,5; die Abweichung ist die des Originals, nicht unsere.</para>
+    ///
+    /// <para>⚠⚠ <b>Und das Gelaende kommt darin nicht vor.</b> Vier
+    /// unabhaengige Proben, alle am selben Ergebnis:
+    /// (1) <c>move_units</c> liest <c>+0x20</c> in seinen ~6000 Befehlen
+    /// GENAU EINMAL und schreibt es nirgends;
+    /// (2) es ruehrt weder das Gelaenderaster (Zeiger <c>0x677e20</c>) noch das
+    /// Zonenraster sec2 (<c>0xa3aeb0</c>) an — kein einziger Zugriff, auch
+    /// nicht ueber ein Register (Regel 7 gegengeprobt: es gibt EXE-weit nur
+    /// zwei <c>mov reg, 0x6e26c8</c>, @0x406ce3 und @0x41f2f5);
+    /// (3) der einzige Schreibzugriff auf <c>+0x20</c> im laufenden Spiel steht
+    /// in der Trefferroutine (@0x40caae, »Zasah end1«: halbieren, mindestens 2)
+    /// — Schaden, nicht Boden;
+    /// (4) das einzige Ereignis je betretener Zelle (»on square« @0x407a62)
+    /// tut genau zweierlei: Geduldszaehler +0x1c neu wuerfeln und ein Sprit von
+    /// +0x2e abziehen.</para>
+    ///
+    /// <para>Damit ist unsere alte Setzung »Geroell ×1,45« <b>widerlegt</b> und
+    /// zurueckgezogen (Arbeitsweise 4). Sie hatte einen zweiten, groesseren
+    /// Fehler verdeckt: wir sind mit fester BILDPUNKT-Geschwindigkeit auf die
+    /// naechste Zellmitte zugefahren, und im schraegen Raster sind die acht
+    /// Nachbarn verschieden weit entfernt (Kachel 40×20: gerade 22,4 px, die
+    /// eine Diagonale 40 px, die andere 20 px). Die Fahrzeit haette also je
+    /// nach Himmelsrichtung um den Faktor <b>2</b> geschwankt, wo das Original
+    /// 1,5 kennt.</para>
+    /// </summary>
+    public static int StepCostMilli(Vector2I from, Vector2I to)
+        => (from.X != to.X && from.Y != to.Y) ? 239_000 : 159_000;
+
+    /// <summary>GEGENPROBE <c>--old-move-cost</c>: den Stand vor dem 16.08.2026
+    /// nachstellen — feste Bildpunktgeschwindigkeit auf die Zellmitte zu,
+    /// Geroellaufschlag ×1,45 in Fahrt UND Wegsuche. Ein Schalter, der die alte
+    /// Fassung im selben Programm nachstellt, entscheidet in einem Lauf
+    /// (Arbeitsweise 31).</summary>
+    public static bool MoveCostOld;
+
+    /// <summary>
+    /// Relative cost of crossing a cell. ⚠ ZURUECKGEZOGEN als Bremse — siehe
+    /// <see cref="StepCostMilli"/>. Steht nur noch fuer die Gegenprobe
+    /// <c>--old-move-cost</c> da, die den Stand vor dem 16.08.2026 im selben
+    /// Programm nachstellt.
     /// </summary>
     public float TerrainCost(int c, int r, MoveClass mc) => TerrainCostMilli(c, r, mc) / 1000f;
 
@@ -319,6 +394,13 @@ public sealed class NavGrid
     ///
     /// <para>Die Zahlen selbst sind unverändert UNSERE (das Original kennt in
     /// <c>Can_go</c> keine Wegkosten), nur eben in Tausendsteln.</para>
+    ///
+    /// <para>⚠⚠ <b>ZURUECKGEZOGEN am 16.08.2026.</b> Die ×1,45 waren nicht nur
+    /// unbelegt, sondern falsch: das Original bremst am Boden ueberhaupt nicht,
+    /// siehe <see cref="StepCostMilli"/> mit vier Proben. Diese Rechnung wird
+    /// nur noch aufgerufen, wenn <see cref="MoveCostOld"/> gesetzt ist — der
+    /// Schalter <c>--old-move-cost</c>, der den alten Stand im selben Programm
+    /// nachstellt (Arbeitsweise 31).</para>
     /// </summary>
     public int TerrainCostMilli(int c, int r, MoveClass mc)
     {
@@ -625,8 +707,18 @@ public sealed class NavGrid
                 var nb = new Vector2I(cur.X + d.X, cur.Y + d.Y);
                 if (closed.Contains(nb) || !CanStep(cur, nb, mc, mover)) continue;
 
-                int step = (d.X != 0 && d.Y != 0) ? 1414 : 1000;
-                step = step * TerrainCostMilli(nb.X, nb.Y, mc) / 1000;              // rough is slow
+                // ⚠ 1500, nicht 1414: die Schraege kostet im Original genau das
+                // Anderthalbfache (120 gegen 80, siehe StepCostMilli). 1414 war
+                // der Euklid und damit eine Schaetzung ueber eine Zahl, die
+                // gelesen werden konnte. Der Geroellaufschlag ist HIER
+                // MITGEFALLEN: er stand nur da, weil die Bewegung ihn hatte
+                // ("rough is slow"), und die Bewegung hat ihn nicht (16.08.2026).
+                // Ein Weg, der Geroell meidet, waere sonst ein Umweg ohne Gewinn.
+                int step = (d.X != 0 && d.Y != 0) ? 1500 : 1000;
+                if (MoveCostOld) step = step * TerrainCostMilli(nb.X, nb.Y, mc) / 1000;
+                // ⚠ UNSERE Setzung, ungelesen: das Original ist nicht daraufhin
+                // gelesen, ob es Steigungen bepreist. Sie bleibt, weil sie nur
+                // die Wahl des Weges faerbt und keine Geschwindigkeit behauptet.
                 step += Math.Abs(ElevAt(nb.X, nb.Y) - ElevAt(cur.X, cur.Y)) * 500;  // climbing costs
                 int tentative = gScore[cur] + step;
                 if (gScore.TryGetValue(nb, out int known) && tentative >= known) continue;
@@ -639,7 +731,13 @@ public sealed class NavGrid
     }
 
     /// <summary>Octile-Schätzung, in Tausendsteln — dieselbe Formel wie vorher,
-    /// nur ganzzahlig: (dx+dy)·1000 + (1414−2000)·min(dx,dy).</summary>
+    /// nur ganzzahlig: (dx+dy)·1000 + (1414−2000)·min(dx,dy).
+    /// <para>⚠ Die 1414 steht hier mit Absicht STEHEN, obwohl der Schritt jetzt
+    /// 1500 kostet: eine Schaetzung darf unterschaetzen, nie ueberschaetzen.
+    /// Mit −586 bleibt sie in beiden Fassungen zulaessig (neu 1500, alt
+    /// 1414×Gelaende ≥ 1414) und der gefundene Weg in beiden der kuerzeste;
+    /// mit −500 waere sie in der Gegenprobe <c>--old-move-cost</c> zu
+    /// optimistisch.</para></summary>
     private static int Heuristic(Vector2I a, Vector2I b)
     {
         int dx = Math.Abs(a.X - b.X), dy = Math.Abs(a.Y - b.Y);

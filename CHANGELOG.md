@@ -33,6 +33,23 @@ deviate on purpose, and every deviation is marked as ours.
 
 ### Units
 
+- **The original counts cells, not pixels — and the ground slows nobody down.**
+  The second half of the reported question about speed has been read out. Every
+  unit carries a step counter the game itself calls "kolik"; it grows by the
+  unit's speed once per tick, and the cell is done when it reaches 80 — 120 for
+  a step across a corner. That is all there is. No terrain, no slope: the 1997
+  movement loop never touches the terrain grid, and a unit's speed is changed in
+  exactly one place in the whole program — on a hit, where it is halved.
+  Our 45 % surcharge for rough ground is therefore **withdrawn**; it was a guess
+  and it was wrong. What matters more is what it hid: we drove at a fixed pixel
+  speed towards the next cell centre, and in an isometric view the eight
+  neighbours are not equally far away. Depending on the compass heading the same
+  unit took up to **twice** as long to cross a cell. Now it is the original's one
+  number: 1 straight, 1.503 diagonal. Measured on map_NET07 over 8275 completed
+  cell steps — rough against free ground 0.999 instead of 1.610, diagonal
+  against straight 1.503 instead of 1.386. As a side effect one floating-point
+  computation drops out of the network game: an integer now decides when a unit
+  arrives.
 - **Weapons have a minimum range, and we had missed it.** Checking the ranges
   turned up a field that has always been in the map data and is read exactly
   **once** in the whole 1997 game — twenty-two bytes next to the range, in the

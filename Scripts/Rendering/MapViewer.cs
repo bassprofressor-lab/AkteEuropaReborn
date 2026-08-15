@@ -386,7 +386,8 @@ public partial class MapViewer : Node2D
         }
         // ⚠ KEIN Quit hier: dieser Pruefstand braucht die Zeit danach. Der
         // Befehl geht jetzt raus, gezaehlt wird beim --quit-after.
-        if (_stuckCheck) GD.Print(_entities.StuckCheckStart());
+        if (_speedCheck) GD.Print(_entities.SpeedCheckStart());
+        else if (_stuckCheck) GD.Print(_entities.StuckCheckStart());
         if (_depotCheck)
         {
             GD.Print(_entities.DepotCheck());
@@ -881,6 +882,15 @@ public partial class MapViewer : Node2D
             // deshalb kann --group-check ihn nicht sehen. `=alt` stellt die
             // Fassung vor dem 15.08.2026 im selben Programm nach und MUSS
             // durchfallen.
+            // B4-Gegenprobe: die Fahrt wie vor dem 16.08.2026 rechnen — feste
+            // Bildpunktgeschwindigkeit auf die Zellmitte zu und Geroell ×1,45.
+            // Muss in --speed-check einen Unterschied machen, sonst misst der
+            // Pruefstand nicht, was er zu messen behauptet.
+            else if (a == "--old-move-cost") Simulation.NavGrid.MoveCostOld = true;
+            // B4: Takte je Zelle, nach Bodenart und gerade/schraeg getrennt.
+            // Fahrt wie --stuck-check, aber eine ANDERE Frage — und zwei Fragen
+            // gehoeren nie in denselben Zaehler (Arbeitsweise I).
+            else if (a == "--speed-check") { _speedCheck = true; _stuckCheck = true; }
             else if (a == "--stuck-check") _stuckCheck = true;
             else if (a == "--stuck-check=alt")
             { _stuckCheck = true; MapEntityLayer.BlockOld = true; }
@@ -1028,6 +1038,7 @@ public partial class MapViewer : Node2D
     private float _quitAfter;
     private bool _leaveCheck;
     private bool _stuckCheck;
+    private bool _speedCheck;
     private float _scriptCheck;
     private float _payCheck;
 
@@ -1314,6 +1325,12 @@ public partial class MapViewer : Node2D
             if (_bAnimCheck) GD.Print(_entities.BAnimCheck());
             GD.Print(_entities.FogWatchLine());
             GD.Print(_entities.RangeWatchLine());
+            if (_speedCheck)
+            {
+                GD.Print(_entities.SpeedCheckLine());
+                GetTree().Quit(_entities.SpeedCheckRc());
+                return;
+            }
             if (_stuckCheck)
             {
                 GD.Print(_entities.StuckCheckLine());

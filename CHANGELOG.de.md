@@ -35,6 +35,25 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Einheiten
 
+- **Das Original zaehlt Zellen, nicht Bildpunkte — und der Boden bremst
+  niemanden.** Die zweite Haelfte der gemeldeten Frage nach der Geschwindigkeit
+  ist gelesen. Jede Einheit fuehrt einen Schrittzaehler, den das Spiel selbst
+  »kolik« nennt; er waechst je Takt um die Geschwindigkeit der Einheit, und die
+  Zelle ist voll, wenn er 80 erreicht — 120 bei einem Schritt ueber Eck. Mehr
+  steht da nicht. Kein Gelaende, keine Steigung: die Bewegungsschleife des
+  Spiels von 1997 fasst das Gelaenderaster kein einziges Mal an, und die
+  Geschwindigkeit einer Einheit wird im ganzen Programm nur an einer Stelle
+  veraendert — bei einem Treffer, wo sie halbiert wird.
+  Damit ist unser Aufschlag von 45 % fuer Geroell **zurueckgenommen**; er war
+  geraten und falsch. Wichtiger ist aber, was er verdeckt hat: wir sind mit
+  fester Bildpunktgeschwindigkeit auf die naechste Zellmitte zugefahren, und in
+  der schraegen Ansicht sind die acht Nachbarzellen verschieden weit weg. Je
+  nach Himmelsrichtung fuhr dieselbe Einheit deshalb bis zu **doppelt** so lange
+  ueber eine Zelle. Jetzt ist es die eine Zahl des Originals: gerade 1, schraeg
+  1,503. Gemessen auf map_NET07 an 8275 fertigen Zellschritten, Geroell gegen
+  freien Boden 0,999 statt vorher 1,610, schraeg gegen gerade 1,503 statt 1,386.
+  Nebenher faellt eine Fliesskomma-Rechnung aus dem Netzspiel heraus: wann eine
+  Einheit ankommt, entscheidet jetzt eine ganze Zahl.
 - **Waffen haben eine Mindestreichweite, und wir haben sie uebersehen.** Beim
   Nachpruefen der Reichweiten kam ein Feld ans Licht, das seit je in den
   Kartendaten steht und im ganzen Spiel von 1997 genau **einmal** gelesen wird —
