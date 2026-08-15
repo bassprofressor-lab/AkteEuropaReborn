@@ -395,6 +395,279 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <summary>
+    /// <c>--door-check</c> — <b>kommt man an die Tür überhaupt heran?</b>
+    ///
+    /// <para>Zwei Meldungen des Spielers zeigen in dieselbe Richtung und wurden
+    /// bisher nur am Regelwerk beantwortet: <b>C9</b> »Werft und Seedock lassen
+    /// sich nicht einnehmen, nur Angreifen kann man sie« und <b>C11</b> »Von KI
+    /// eingenommene Gebäude kann man nicht einnehmen, nur zerstören«. Die
+    /// Einnahme selbst ist gelesen und gebaut; sie verlangt nur eines, nämlich
+    /// dass eine fremde Einheit auf einer Türzelle STEHT. Ob das auf diesen
+    /// Karten überhaupt möglich ist, hat noch niemand gefragt.</para>
+    ///
+    /// <para>Gefragt wird mit dem Test des Gegenstands, nicht mit einem
+    /// ähnlichen: <see cref="Simulation.NavGrid.Ask"/> — dieselbe Auskunft, die
+    /// auch die Wegsuche benutzt. Ein Prüfstand, der mit <c>IsFree</c> flutet
+    /// und mit <c>CanStep</c> läuft, misst etwas anderes als die Sache
+    /// (Arbeitsweise O).</para>
+    ///
+    /// <para>Aufgeschlüsselt nach GEBÄUDEART, weil die Meldung eine über Arten
+    /// ist. Eine Gesamtquote würde die Werft in 200 Fabriken verstecken.</para>
+    /// </summary>
+    public string DoorCheckLine()
+    {
+        if (_nav == null) return "door-check: kein Gitter";
+        // je Bauart: wieviele Gebaeude, wieviele mit erreichbarer Tuer, und
+        // woran es sonst liegt
+        var total = new Dictionary<int, int>();
+        var ok = new Dictionary<int, int>();
+        var blocked = new Dictionary<int, int>();
+        var noDoor = new Dictionary<int, int>();
+        var examples = new List<string>();
+
+        foreach (var b in _entities)
+        {
+            if (!b.IsBuilding || b.IsProp || b.Dead) continue;
+            int t = b.BType;
+            total[t] = total.GetValueOrDefault(t) + 1;
+            if (!Capturable(b))
+            {
+                // Nicht einnehmbar heisst hier: keine Tuer (Doors == 0) oder
+                // nicht fertig gebaut. Beides ist eine Aussage des ORIGINALS
+                // ueber diese Bauart, kein Fehler von uns.
+                noDoor[t] = noDoor.GetValueOrDefault(t) + 1;
+                continue;
+            }
+            bool reach = false;
+            string why = "";
+            foreach (var cell in CaptureWatchCells(b))
+            {
+                var ans = _nav.Ask(cell.X, cell.Y, Simulation.NavGrid.MoveClass.Vehicle, -1);
+                if (ans != Simulation.NavGrid.Step.Blocked) { reach = true; break; }
+                if (why.Length == 0) why = $"({cell.X},{cell.Y}) gesperrt";
+            }
+            if (reach) ok[t] = ok.GetValueOrDefault(t) + 1;
+            else
+            {
+                blocked[t] = blocked.GetValueOrDefault(t) + 1;
+                if (examples.Count < 6)
+                    examples.Add($"   {BuildingTypeName(t)} slot {b.Slot} auf " +
+                                 $"({b.Col},{b.Row}) Besitzer {b.Owner}: {why}");
+            }
+        }
+
+        var sb = new System.Text.StringBuilder("door-check: je Bauart — " +
+            "»Tuer erreichbar« heisst, eine Fahrzeugklasse darf auf mindestens " +
+            "eine Tuerzelle treten\n");
+        foreach (int t in new SortedSet<int>(total.Keys))
+        {
+            if (t > 17) continue;
+            int n = total[t], o = ok.GetValueOrDefault(t),
+                bl = blocked.GetValueOrDefault(t), nd = noDoor.GetValueOrDefault(t);
+            sb.Append($"   Typ {t,2} {BuildingTypeName(t),-18} {n,3} Stueck: " +
+                      $"{o,3} erreichbar, {bl,3} zugestellt, {nd,3} ohne Tuer\n");
+        }
+        foreach (string e in examples) sb.Append(e).Append('\n');
+        return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>
+    /// <c>--capture-enemy-check</c> — <b>lässt sich ein FEINDLICHES Gebäude
+    /// einnehmen?</b> Die Gegenprobe zu C9 und C11.
+    ///
+    /// <para>⚠ Warum es diesen Prüfstand braucht und <c>--capture-check</c>
+    /// nicht reicht: der prüft die Einnahme an einem NEUTRALEN Gebäude, und
+    /// genau dort hat sie immer funktioniert. Die Meldung war eine über
+    /// FEINDLICHE — ein Prüfstand, der den Fall nicht herstellt, um den es
+    /// geht, kann ihn nicht sehen (Arbeitsweise 9).</para>
+    ///
+    /// <para>Er stellt ihn her: ein einnehmbares Gebäude eines ANDEREN Spielers,
+    /// eine eigene fahrende Einheit direkt daneben gesetzt, dann der
+    /// Einnahmebefehl über den KLICKWEG (<c>PostCapture</c>), nicht daran
+    /// vorbei.</para></summary>
+    public string CaptureEnemyOrder()
+    {
+        if (_nav == null) return "capture-enemy-check: kein Gitter";
+        int me = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
+
+        // ein einnehmbares Gebaeude, das einem ANDEREN SPIELER gehoert (nicht
+        // neutral, nicht uns) — das ist der gemeldete Fall
+        Entity? target = null;
+        foreach (var b in _entities)
+        {
+            if (!Capturable(b) || b.Owner == me) continue;
+            if (b.Owner is < 0 or > 7) continue;          // 11 = neutral, zaehlt nicht
+            target = b; break;
+        }
+        if (target == null)
+        {
+            // Keins da? Dann eins herstellen UND ES SAGEN — sonst misst der Lauf
+            // die Kartenlage statt die Sache.
+            foreach (var b in _entities)
+                if (Capturable(b) && b.Owner != me)
+                {
+                    target = b;
+                    b.Owner = b.Team = b.ShownOwner = me == 0 ? 1 : 0;
+                    _capEnemyNote = $"(neutrales {BuildingTypeName(b.BType)} slot {b.Slot} " +
+                                    $"auf Spieler {b.Owner} gesetzt, damit es FEINDLICH ist) ";
+                    break;
+                }
+        }
+        if (target == null) return "capture-enemy-check: kein einnehmbares Gebaeude";
+
+        // eine eigene fahrende Einheit — notfalls eine fremde uebernehmen
+        int ui = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var u = _entities[i];
+            if (u.IsBuilding || u.IsProp || u.Dead || !u.Mobile) continue;
+            if (u.Owner == me) { ui = i; break; }
+        }
+        if (ui < 0)
+            for (int i = 0; i < _entities.Count; i++)
+            {
+                var u = _entities[i];
+                if (u.IsBuilding || u.IsProp || u.Dead || !u.Mobile) continue;
+                ui = i; u.Owner = u.Team = me;
+                _capEnemyNote += $"(Einheit slot {u.Slot} fuer die Probe uebernommen) ";
+                break;
+            }
+        if (ui < 0) return $"capture-enemy-check: {_capEnemyNote}keine fahrende Einheit";
+
+        // ⚠⚠ 17.08.2026 — HIER STAND `FindFreeNear(door, 2)`, UND DER PRÜFSTAND
+        // HAT SICH DAMIT SELBST BELOGEN. Zwei Zellen um die Tür herum sind zum
+        // Teil SELBST Einnahmezellen (CaptureWatchCells gibt je Tür die Türzelle
+        // UND die davor). Die Einheit stand also schon auf dem Ziel, bevor
+        // irgendein Befehl abgesetzt war — und die Gegenprobe mit dem ALTEN
+        // Angriffsweg meldete prompt ebenfalls »EINGENOMMEN«. Ein Prüfstand, der
+        // seine Voraussetzung herstellt, prüft nicht die Mechanik, sondern seine
+        // eigene Vorbereitung (Arbeitsweise 11).
+        //
+        // Jetzt steht sie WEIT weg und muss fahren, und es wird nachgesehen,
+        // dass sie zu Beginn auf KEINER Einnahmezelle steht — wer eine Bedingung
+        // stellt, muss sie danach lesen (Arbeitsweise L).
+        var watch = new HashSet<Vector2I>();
+        foreach (var c in CaptureWatchCells(target)) watch.Add(c);
+        Vector2I door = new(-1, -1);
+        foreach (var c in CaptureWatchCells(target)) { door = c; break; }
+
+        var far = FindFreeRing(door, 6, 10, watch);
+        if (far.X < 0)
+            return $"capture-enemy-check: {_capEnemyNote}keine freie Zelle 6..10 Felder " +
+                   "von der Tuer — auf dieser Karte nicht messbar";
+        {
+            var u = _entities[ui];
+            _nav.SetOccupant(u.Col, u.Row, -1);
+            u.Col = far.X; u.Row = far.Y;
+            u.Pos = CellCenter(u.Col, u.Row);
+            u.Path = null; u.Target = -1;
+            _nav.SetOccupant(u.Col, u.Row, ui);
+        }
+        {
+            var u = _entities[ui];
+            if (watch.Contains(new Vector2I(u.Col, u.Row)))
+                return "capture-enemy-check: Einheit steht schon auf einer Einnahmezelle " +
+                       "— der Lauf wuerde seine eigene Vorbereitung messen";
+        }
+
+        // ⚠⚠ UNVERWUNDBAR FÜR DIE PROBE, und das ist kein Schummeln, sondern das
+        // Wegnehmen eines FREMDEN Störfaktors: eine Basis wehrt sich, und die
+        // Einnahme dauert so viele Takte, wie sie Trefferpunkte hat. In den
+        // ersten Läufen starb die Einheit beide Male — auf DM_4 schon unterwegs,
+        // auf NET02 nach der Ankunft —, und »NICHT eingenommen« hätte damit
+        // nichts über den BEFEHL gesagt.
+        // ⚠ Es steht in der Ausgabe, weil ein Prüfstand sagen muss, was er an
+        // seinem Gegenstand verändert hat.
+        MapEntityLayer.CheatGodMode = true;
+        _capEnemyNote += "(Einheit unverwundbar gesetzt, sonst erschiesst das " +
+                         "Gebaeude sie vor Ablauf der Einnahme) ";
+
+        _capEnemyTarget = _entities.IndexOf(target);
+        _capEnemyOwner0 = target.Owner;
+        _capEnemyUnit = ui;
+        _capEnemyDoor = door;
+        _capEnemyStart = new Vector2I(_entities[ui].Col, _entities[ui].Row);
+        _sel.Clear(); _sel.Add(ui); SetPrimary();
+        // ⚠ GEGENPROBE `--capture-by-attack`: derselbe Lauf, aber über den Weg
+        // von VORHER (Rechtsklick ohne Strg = Angriff). Ohne sie ist »jetzt geht
+        // es« nicht von »ging schon immer« zu unterscheiden.
+        bool posted = CaptureByAttack ? PostAttack(target.Pos) : PostCapture(target.Pos);
+        return $"capture-enemy-check: {_capEnemyNote}{BuildingTypeName(target.BType)} " +
+               $"slot {target.Slot} gehoert Spieler {target.Owner}, " +
+               $"Einheit slot {_entities[ui].Slot} steht auf ({_entities[ui].Col}," +
+               $"{_entities[ui].Row}), Tuer ({door.X},{door.Y}) — " +
+               $"Einnahmebefehl {(posted ? "abgesetzt" : "ABGELEHNT")}: {_order}";
+    }
+
+    /// <summary><c>--capture-by-attack</c> — der Weg von vor dem 17.08.2026.</summary>
+    public static bool CaptureByAttack;
+
+    private int _capEnemyTarget = -1, _capEnemyOwner0 = -1;
+    private string _capEnemyNote = "";
+
+    /// <summary>Die Abrechnung dazu.
+    ///
+    /// <para>⚠ Sie sagt, WELCHES GLIED nicht schliesst, und das ist der ganze
+    /// Unterschied zu einer Zeile, die nur »nicht eingenommen« meldet: eine
+    /// Kette, die nicht schliesst, ist sonst nicht von einer zu unterscheiden,
+    /// die es fast tut (Arbeitsweise 9). Berichtet wird deshalb, wo die Einheit
+    /// steht, ob sie noch einen Weg hat, ob sie überhaupt losgekommen ist und
+    /// wie weit sie noch von der Tür weg ist.</para></summary>
+    public string CaptureEnemyResult()
+    {
+        if (_capEnemyTarget < 0) return "capture-enemy-check: nicht gemessen";
+        var b = _entities[_capEnemyTarget];
+        bool won = b.Owner == (ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0);
+        string wo = "Einheit weg";
+        if (_capEnemyUnit >= 0 && _capEnemyUnit < _entities.Count)
+        {
+            var u = _entities[_capEnemyUnit];
+            var watch = new HashSet<Vector2I>();
+            foreach (var c in CaptureWatchCells(b)) watch.Add(c);
+            float d = new Vector2(_capEnemyDoor.X - u.Col, _capEnemyDoor.Y - u.Row).Length();
+            wo = $"Einheit slot {u.Slot} startete auf ({_capEnemyStart.X},{_capEnemyStart.Y}), " +
+                 $"steht auf ({u.Col},{u.Row}), " +
+                 $"{(u.Dead ? "TOT" : u.Path != null ? $"faehrt noch (Weg {u.Path.Count})" : "steht")}, " +
+                 $"{d:0.0} Felder von der Tuer, " +
+                 $"{(watch.Contains(new Vector2I(u.Col, u.Row)) ? "AUF einer Einnahmezelle" : "nicht auf der Einnahmezelle")}" +
+                 $", Sprit {u.Fuel}/{u.FuelMax}, Ziel {u.Target}" +
+                 $", bewegt hat sie sich {(u.Col != _capEnemyStart.X || u.Row != _capEnemyStart.Y ? "JA" : "NEIN")}";
+        }
+        return $"capture-enemy-check: {BuildingTypeName(b.BType)} slot {b.Slot} " +
+               $"gehoerte Spieler {_capEnemyOwner0}, gehoert jetzt Spieler {b.Owner} " +
+               $"(Fortschritt {b.CaptureProgress}/{b.CaptureTotal}, Trefferpunkte " +
+               $"{b.Hp}/{b.HpMax}) — {(won ? "EINGENOMMEN" : "NICHT eingenommen")}\n" +
+               $"   {wo}";
+    }
+
+    private int _capEnemyUnit = -1;
+    private Vector2I _capEnemyStart, _capEnemyDoor;
+
+    /// <summary>Eine freie Zelle zwischen <paramref name="min"/> und
+    /// <paramref name="max"/> Feldern, die keine Einnahmezelle ist — und von der
+    /// aus die Tür auch WIRKLICH erreichbar ist.
+    ///
+    /// <para>⚠ Die Wegprüfung gehört dazu: eine Zelle jenseits eines Wassers
+    /// wäre »weit weg« und würde einen Fehlschlag melden, der nichts mit dem
+    /// Einnahmebefehl zu tun hat. Gefragt wird mit <c>FindPath</c>, also mit dem
+    /// Test des Gegenstands.</para></summary>
+    private Vector2I FindFreeRing(Vector2I at, int min, int max, HashSet<Vector2I> avoid)
+    {
+        if (_nav == null) return new Vector2I(-1, -1);
+        for (int r = min; r <= max; r++)
+            for (int dy = -r; dy <= r; dy++)
+                for (int dx = -r; dx <= r; dx++)
+                {
+                    if (Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dy)) != r) continue;
+                    var c = new Vector2I(at.X + dx, at.Y + dy);
+                    if (avoid.Contains(c) || !_nav.IsFree(c.X, c.Y)) continue;
+                    var p = _nav.FindPath(c, at, Simulation.NavGrid.MoveClass.Vehicle, -1);
+                    if (p != null && p.Count > 0) return c;
+                }
+        return new Vector2I(-1, -1);
+    }
+
+    /// <summary>
     /// <c>--demo-capture</c>: send the nearest own unit to the door of the
     /// nearest building it does not own, and look at it.
     /// </summary>

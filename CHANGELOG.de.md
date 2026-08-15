@@ -35,6 +35,16 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Einheiten
 
+- **Ein gefallener Fusssoldat verschwand nicht mehr.** Gemessen über alle 24
+  Sätze und 8 Richtungen: Laufzyklus (Block 0–7) und Stehen (11) sind
+  lückenlos, die Sterbebilder nicht — Block 12 in 21, Block 13 in 69 und Block
+  14 in 63 von je 192 Fällen tragen höchstens vier Bildpunkte. Sie dekodieren,
+  also hat der Export sie als gültige Dateien geschrieben und die Anzeige ein
+  leeres Bild gezeichnet. Jetzt werden fast leere Bilder gar nicht erst
+  geschrieben, und die Anzeige fällt vom zeitrichtigen Block rückwärts auf den
+  letzten zurück, den es für diese Richtung wirklich gibt: **192 von 192**
+  (Satz, Richtung) haben ein Leichenbild, 0 ohne.
+
 - **Das Kugelroller-Fahrgestell ist in allen acht Richtungen sichtbar.** Es war
   in sieben von acht unsichtbar, und der Grund lag in einer alten, ausdruecklich
   als ungeklaert vermerkten Stelle des Exporters. Nachgezaehlt ueber den ganzen
@@ -210,6 +220,34 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Heli also bis zu 30 Takte lang seitwärts, bevor er sich ausgerichtet hat.
 
 ### Gefecht
+
+- ⭐ **Feindliche Gebäude lassen sich einnehmen — Strg+Rechtsklick.** Gemeldet
+  war »Werft und Seedock lassen sich nicht einnehmen, nur Angreifen kann man
+  sie« und »von KI eingenommene Gebäude kann man nicht einnehmen, nur
+  zerstören«. Der neue Prüfstand `--door-check` hat zuerst gezeigt, dass es
+  NICHT daran liegt: die Türen sind erreichbar (Werft-Station 1/1 bzw. 2/2,
+  Basis, Fabriken, Flughafen, Mine, Bahnhöfe vollständig). Die Ursache war der
+  Klickweg — er versucht zuerst einen Angriff, und ein feindliches Gebäude *ist*
+  ein Ziel, also kam der Bewegungsbefehl nie dran und die Einheit konnte die
+  Türzelle gar nicht erreichen. Bei neutralen Gebäuden greift niemand an, deshalb
+  ging es dort und nur dort.
+  Gemessen: eine feindliche Basis wechselt jetzt den Besitzer, **unbeschädigt**
+  (1200/1200). Gegenprobe `--capture-by-attack`: sie bleibt fremd und steht auf
+  **0/1200** — genau das gemeldete »nur zerstören«.
+  ⚠ Seedock (0 Türen in 39 von 39) und Kraftwerk (0 in 262) bleiben
+  uneinnehmbar; das ist das Original, und der Knopf sagt es jetzt statt zu
+  schweigen. Der Hafen wechselt mit seiner Werft-Station.
+- **Eine neue Einheit kommt aus der Tür.** War seit langem gelesen
+  (`@0x410441`: die erzeugte Einheit bekommt `col + door_col` / `row +
+  door_row`) und nie gebaut — sie erschien an der Ankerzelle des Gebäudes, also
+  je nach Grundriss an der falschen Seite. Gemessen: 4 von 4 aus der Tür.
+- **Die Gegner-KI hat im Gefecht kein Bauprogramm** — das ist der Grund für
+  »manche bauen gar nicht erst los«. Der Bauplan kommt aus der MISSION; ohne
+  Mission gibt es keinen. Gemessen auf drei Karten: 9 von 9 KI-Spielern »ohne
+  Programm«. Was bleibt, ist die Streife, und die schickt nur los, was schon
+  Feinde in Reichweite sieht (NET02/NET05 »0 losgeschickt, 0 feindlich«, DM_4
+  »33 losgeschickt, 68 feindlich«). **Noch nicht behoben** — ein
+  Gefechts-Bauprogramm ist eine Wettkampfsetzung und keine Reparatur.
 
 - **Die Bauwarteschlange.** Mehrfach dieselbe Einheit zu bestellen hat bisher
   jedesmal bezahlt und den laufenden Bau nur neu angestossen — drei Klicks,

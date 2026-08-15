@@ -400,6 +400,25 @@ public sealed class UnitsExporter
                         : ""));
     }
 
+    /// <summary>Wieviele Infanteriebilder als (fast) leer übergangen wurden —
+    /// siehe <c>WriteInfantry</c>, Fehler C13. Erwartet werden rund 150 von 2880,
+    /// alle in den Sterbeblöcken.</summary>
+    public int InfantryEmpty;
+
+    /// <summary>Wieviele Bildpunkte dieses Bild überhaupt setzt. ⚠ Die Schwelle
+    /// muss eine TOLERANZ haben und darf nicht »ganz leer« heissen: die Rahmen
+    /// tragen ein paar Streupixel, und ein Ja/Nein-Kriterium auf echten Daten
+    /// geht daran vorbei (dieselbe Lehre wie bei den Schattenmasken der
+    /// Gleisteile).</summary>
+    private static int OpaquePixels(Image img)
+    {
+        int n = 0;
+        for (int y = 0; y < img.GetHeight(); y++)
+            for (int x = 0; x < img.GetWidth(); x++)
+                if (img.GetPixel(x, y).A > 0.01f) n++;
+        return n;
+    }
+
     /// <summary>Wieviele Teile ihre acht Richtungen NICHT im Block 0 haben.
     /// Erwartet wird 1 (Komponente 9, Kugelroller) — siehe
     /// <see cref="WriteChassis"/>.</summary>
@@ -453,6 +472,19 @@ public sealed class UnitsExporter
                     int idx = b + blk * CwrFile.Facings + f;
                     if (_cwr.DecodeFrame(idx) == null) continue;
                     var img = _cwr.FacingImage(idx, _pal);
+                    // ⚠ 17.08.2026 — EIN FAST LEERES BILD IST KEIN BILD (Fehler
+                    // C13). Gemessen über alle 24 Sätze und 8 Richtungen: der
+                    // Laufzyklus (Block 0..7) und das Stehen (11) sind
+                    // LÜCKENLOS, die Sterbebilder dagegen nicht — Block 12 in
+                    // 21, Block 13 in 69 und Block 14 in 63 von je 192 Fällen
+                    // haben höchstens vier Bildpunkte. Sie DEKODIEREN, also hat
+                    // der Export sie bisher als gültige Dateien geschrieben, und
+                    // die Anzeige hat ein leeres Bild gezeichnet: der gefallene
+                    // Soldat verschwand einfach.
+                    // Werden sie gar nicht erst geschrieben, kann die Anzeige
+                    // auf das letzte Bild zurückfallen, das es WIRKLICH gibt
+                    // (MapEntityLayer.InfBlock).
+                    if (OpaquePixels(img) <= 4) { InfantryEmpty++; continue; }
                     Save($"infantry/{set}/f{f}_b{blk}.png", img);
                     if (blk == InfantryIdleBlock) Save($"infantry/{set}/f{f}.png", img);
                 }

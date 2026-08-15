@@ -615,6 +615,8 @@ public partial class MapViewer : Node2D
     private float _queueCheckAt, _queueCheckDue;
     private float _supplyReloadAt, _supplyReloadDue;
     private float _railZigzagAt;
+    private float _doorCheckAt;
+    private float _capEnemyAt, _capEnemyDue;
     private int _queueCheckN = 3;
     private bool _demoState;
     private bool _demoAir;
@@ -814,6 +816,11 @@ public partial class MapViewer : Node2D
             // --rail-zigzag (Fehler C17): die gezeichnete Schiene gegen den
             // gefahrenen Weg, je Knick einzeln. Siehe RailZigzagLine.
             else if (a == "--rail-zigzag") _railZigzagAt = 3f;
+            // --door-check (Fehler C9/C11): kommt man an die Tueren heran?
+            else if (a == "--door-check") _doorCheckAt = 3f;
+            // --capture-enemy-check (C9/C11): ein FEINDLICHES Gebaeude einnehmen.
+            else if (a == "--capture-enemy-check") _capEnemyAt = 3f;
+            else if (a == "--capture-by-attack") MapEntityLayer.CaptureByAttack = true;
             // --no-rail-lift: die Gegenprobe zu C17 — der Weg nimmt wieder die
             // Hoehe der gerundeten Zelle statt die des Gleisbildes.
             else if (a == "--no-rail-lift") MapEntityLayer.RailNoLift = true;
@@ -1288,6 +1295,37 @@ public partial class MapViewer : Node2D
             {
                 _railZigzagAt = -1f;
                 GD.Print(_entities.RailZigzagLine());
+            }
+        }
+        if (_doorCheckAt > 0f)
+        {
+            _doorCheckAt -= (float)delta;
+            if (_doorCheckAt <= 0f)
+            {
+                _doorCheckAt = -1f;
+                GD.Print(_entities.DoorCheckLine());
+            }
+        }
+        // Erst befehlen, dann fahren lassen, dann abrechnen. Die Einnahme
+        // braucht so viele Takte, wie das Gebaeude Trefferpunkte hat — bei
+        // TickScale 16 sind das fuer eine 1000er-Fabrik rund eine Minute.
+        if (_capEnemyAt > 0f)
+        {
+            _capEnemyAt -= (float)delta;
+            if (_capEnemyAt <= 0f)
+            {
+                _capEnemyAt = -1f;
+                GD.Print(_entities.CaptureEnemyOrder());
+                _capEnemyDue = 90f;
+            }
+        }
+        else if (_capEnemyDue > 0f)
+        {
+            _capEnemyDue -= (float)delta;
+            if (_capEnemyDue <= 0f)
+            {
+                _capEnemyDue = -1f;
+                GD.Print(_entities.CaptureEnemyResult());
             }
         }
         if (_supplyReloadAt > 0f)
@@ -2768,7 +2806,20 @@ public partial class MapViewer : Node2D
                             // PostAttack gibt wie IssueAttack false zurück, wenn
                             // der Klick kein Ziel getroffen hat — die Weiche
                             // bleibt dieselbe.
-                            if (!_entities.PostAttack(GetGlobalMousePosition(), mb.ShiftPressed))
+                            // ⚠ 17.08.2026 — STRG MACHT DARAUS »EINNEHMEN«
+                            // (Fehler C9 und C11). Ohne diese Weiche gewinnt
+                            // immer der Angriff: ein feindliches Gebaeude IST
+                            // ein Ziel, also kam PostMove nie dran und die
+                            // Einheit konnte die Tuerzelle gar nicht erreichen.
+                            // Neutrale Gebaeude griff niemand an, deshalb ging
+                            // es dort und nur dort. Die ganze Herleitung samt
+                            // Messung steht bei PostCapture.
+                            if (mb.CtrlPressed)
+                            {
+                                if (!_entities.PostCapture(GetGlobalMousePosition(), mb.ShiftPressed))
+                                    _entities.PostMove(GetGlobalMousePosition(), mb.ShiftPressed);
+                            }
+                            else if (!_entities.PostAttack(GetGlobalMousePosition(), mb.ShiftPressed))
                                 _entities.PostMove(GetGlobalMousePosition(), mb.ShiftPressed);
                         }
                         _rightDown = false;

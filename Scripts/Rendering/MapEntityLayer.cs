@@ -10131,7 +10131,9 @@ public partial class MapEntityLayer : Node2D
                $"{_queueCostS} je Stueck): {(payOk ? "STIMMT" : "ABWEICHUNG")}\n" +
                $"   angekommen {arrived} von {soll}: {(countOk ? "STIMMT" : "ABWEICHUNG")}\n" +
                $"   Schlange am Ende {b.BuildQueue.Count}, Restbauzeit {b.BuildTime:0.0}s: " +
-               $"{(emptyOk ? "abgearbeitet" : "NICHT LEER")}";
+               $"{(emptyOk ? "abgearbeitet" : "NICHT LEER")}\n" +
+               $"   aus der Tuer ({b.Col + b.DoorCol},{b.Row + b.DoorRow}) gekommen: " +
+               $"{SpawnedAtDoor}, daneben (Tuer belegt): {SpawnedBesideDoor}";
     }
 
     /// <summary>A click on row <paramref name="i"/>: make it the pick, then
@@ -14203,6 +14205,44 @@ public partial class MapEntityLayer : Node2D
         return CanAfford(e, _designs[menu[e.MenuIndex % menu.Count]]);
     }
 
+    /// <summary>
+    /// <b>Wo eine fertige Einheit auf die Karte kommt: AUS DER TÜR.</b>
+    ///
+    /// <para>⚠ 17.08.2026, gemeldet (C22): »wenn man eine neue Einheit baut,
+    /// wird die ja neben der Basis gespawnt. Im Original kommt aber eine Einheit
+    /// aus der Tür gefahren!« — und das war <b>seit langem gelesen und nie
+    /// gebaut</b>. Der Kopfkommentar von <c>Simulation/Capture.cs</c> sagt es
+    /// wörtlich: <c>@0x410441..@0x41047C</c> schreibt die Zelle der erzeugten
+    /// Einheit als <c>col + door_col</c> / <c>row + door_row</c>, und
+    /// <c>@0x409B50</c> prüft dieselbe Zelle, wenn eine Einheit zu einem Gebäude
+    /// geschickt wird. Die Tür ist im Original also nicht nur der Weg HINEIN,
+    /// sondern auch der HERAUS.</para>
+    ///
+    /// <para>Hier stand <c>NearestFree(col, row)</c> — die nächste freie Zelle
+    /// an der ANKERZELLE des Gebäudes, also der oberen linken Ecke. Eine
+    /// 6×4-Basis hat ihre Tür bei (4,2); die Einheit erschien damit an einer
+    /// ganz anderen Seite als der, die im Bild ein Tor hat.</para>
+    ///
+    /// <para>⚠ Der RÜCKFALL bleibt und ist nötig: die Türzelle kann besetzt
+    /// sein — von der Einheit davor, von einem Belagerer, oder weil die Tür auf
+    /// Wasser zeigt. Dann wird von der TÜR aus die nächste freie gesucht, nicht
+    /// mehr vom Anker. Auch das bleibt eine Näherung: das Original hat für den
+    /// Fall »Tür besetzt« ein Depot, wir haben keins.</para></summary>
+    private Vector2I? SpawnCellFor(Entity b)
+    {
+        if (_nav == null) return null;
+        var door = new Vector2I(b.Col + b.DoorCol, b.Row + b.DoorRow);
+        if (_nav.IsFree(door.X, door.Y, Simulation.NavGrid.MoveClass.Vehicle))
+        { SpawnedAtDoor++; return door; }
+        SpawnedBesideDoor++;
+        return _nav.NearestFree(door, Simulation.NavGrid.MoveClass.Vehicle);
+    }
+
+    /// <summary>Wie oft eine Einheit wirklich auf der Türzelle entstand und wie
+    /// oft daneben, weil die Tür belegt war. Getrennt gezählt, weil das zwei
+    /// verschiedene Sachen sind.</summary>
+    public int SpawnedAtDoor, SpawnedBesideDoor;
+
     private void UpdateProduction(int i, Entity e, float dt)
     {
         UpdateEconomy(i, e, dt);
@@ -14218,7 +14258,7 @@ public partial class MapEntityLayer : Node2D
         if (e.BuildTime > 0f) return;
 
         var d = _designs[e.BuildIndex % _designs.Count];
-        var cell = _nav.NearestFree(new Vector2I(e.Col, e.Row), Simulation.NavGrid.MoveClass.Vehicle);
+        var cell = SpawnCellFor(e);
         if (cell == null) { e.BuildTime = 1f; return; }   // blocked: try again shortly
         NoteEvent(e, $"{d.Name} fertig");
 
@@ -15985,6 +16025,11 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Which animation block a foot soldier is showing right now.</summary>
     private const float InfDeathFps = 5f;
 
+    /// <summary>Wie oft ein gefallener Soldat auf KEIN Sterbebild zurückfallen
+    /// konnte und deshalb im Stehbild liegen bleibt — siehe
+    /// <see cref="InfBlock"/>. Soll 0 sein.</summary>
+    public static int InfDeathNoFrame;
+
     /// <summary>
     /// `--inf-anim-check` — does a walking foot soldier actually cycle through
     /// its eight blocks?
@@ -16298,8 +16343,32 @@ public partial class MapEntityLayer : Node2D
     private int InfBlock(Entity e)
     {
         if (e.Dead)   // fall over once, then lie there
-            return InfDeathBlocks[Mathf.Min((int)(e.DeadTime * InfDeathFps),
-                                            InfDeathBlocks.Length - 1)];
+        {
+            // ⚠⚠ 17.08.2026 — FEHLER C13, »ich sehe getoetete Infanterie, wo
+            // aber noch die Infanterie normal dasteht«. Hier stand die Zeile
+            // ohne jede Frage, OB es das Bild gibt:
+            //     return InfDeathBlocks[min(DeadTime*Fps, 2)];
+            // Gemessen ueber alle 24 Saetze und 8 Richtungen tragen Block 12 in
+            // 21, Block 13 in 69 und Block 14 in 63 von je 192 Faellen
+            // hoechstens vier Bildpunkte — waehrend Laufzyklus (0..7) und Stehen
+            // (11) LUECKENLOS sind. Der gefallene Soldat wurde damit als leeres
+            // Bild gezeichnet und war schlicht weg, obwohl der Satz sehr wohl
+            // ein Leichenbild hat, nur in einem frueheren Block.
+            //
+            // Jetzt wird zurueckgefallen: vom zeitrichtigen Block ruecklaerts
+            // bis zu dem, den es fuer DIESE Richtung wirklich gibt. Der Export
+            // schreibt fast leere Bilder gar nicht mehr, also heisst »kein
+            // Bild« hier auch wirklich »kein Bild«.
+            int want = Mathf.Min((int)(e.DeadTime * InfDeathFps), InfDeathBlocks.Length - 1);
+            for (int k = want; k >= 0; k--)
+                if (GetInfantryTexture(e.Infantry, e.Facing, InfDeathBlocks[k]) != null)
+                    return InfDeathBlocks[k];
+            // Gar kein Sterbebild fuer diese Richtung: dann bleibt der Soldat
+            // liegen wie er stand. ⚠ Das ist die schlechteste Wahl und sie wird
+            // GEZAEHLT, damit sie nicht unbemerkt haeufig wird.
+            InfDeathNoFrame++;
+            return InfIdleBlock;
+        }
         // ⚠ 11.08.2026 — hier stand nur `e.Target >= 0`, und damit zeigte ein
         // Fusssoldat die SCHUSSPOSE schon auf dem ganzen Anmarsch: gemeldet als
         // »dauerhaftes Feuer-Sprite vor der Waffe, obwohl sie noch gar nicht

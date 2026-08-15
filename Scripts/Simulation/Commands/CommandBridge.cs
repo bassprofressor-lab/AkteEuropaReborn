@@ -186,6 +186,42 @@ public partial class MapEntityLayer
         return n;
     }
 
+    /// <summary>Einen Bewegungsbefehl für EINE Einheit auf EINE Zelle absetzen —
+    /// ohne die Streuung von <see cref="PostMove"/>.
+    ///
+    /// <para>⚠ Der Unterschied ist der ganze Zweck: <c>PostMove</c> gibt jeder
+    /// Einheit ein eigenes Ziel im Umkreis von acht Zellen, damit eine Gruppe
+    /// nicht auf einen Punkt fährt. Beim Einnehmen ist genau diese Streuung
+    /// falsch — die Einheit muss auf DIE Türzelle. Steht sie schon jemandem
+    /// zu, wird der nächste freie Platz genommen, aber eng: Radius 1 statt
+    /// 8.</para></summary>
+    private bool PostMoveOne(int index, Vector2 mapPos, bool queue)
+    {
+        if (_nav == null) return false;
+        var cell = CellAt(mapPos);
+        if (cell == null) return false;
+        var e = _entities[index];
+        if (!e.Mobile || e.Dead || e.DugIn) return false;
+        if (e.FuelMax > 0 && e.Fuel <= 0) return false;
+
+        var goal = cell.Value;
+        if (!_nav.IsFree(goal.X, goal.Y, e.Move, index))
+        {
+            bool found = false;
+            for (int rad = 1; rad <= 1 && !found; rad++)
+                for (int dy = -rad; dy <= rad && !found; dy++)
+                    for (int dx = -rad; dx <= rad && !found; dx++)
+                    {
+                        var c = new Vector2I(goal.X + dx, goal.Y + dy);
+                        if (_nav.IsFree(c.X, c.Y, e.Move, index)) { goal = c; found = true; }
+                    }
+            if (!found) return false;
+        }
+        return Emit(CommandRecord.Make(CommandOp.Move, (byte)ViewPlayer,
+                                       (short)index, (short)goal.X, (short)goal.Y,
+                                       (short)(queue ? 1 : 0)));
+    }
+
     /// <summary>Die Zielzellensuche des heutigen <c>IssueMove</c>, wörtlich
     /// übernommen, damit der Vergleich der beiden Wege überhaupt eine Aussage
     /// hat. Liefert (-1,-1), wenn nichts frei ist.</summary>
@@ -235,6 +271,100 @@ public partial class MapEntityLayer
         if (n == 0) return false;
         AddOrderMark(victim.Pos, attack: true);
         _order = $"Angriffsbefehl abgesetzt -> Slot {victim.Slot}: {n} Satz/Sätze";
+        UpdatePanel();
+        QueueRedraw();
+        return true;
+    }
+
+    /// <summary>
+    /// <b>»EINNEHMEN« — Strg+Rechtsklick auf ein Gebäude.</b> Die Antwort auf
+    /// die Fehler C9 und C11 (17.08.2026).
+    ///
+    /// <para><b>Was gemeldet war:</b> »Werft und Seedock lassen sich nicht
+    /// einnehmen, nur Angreifen kann man sie« und »Von KI eingenommene Gebäude
+    /// kann man nicht einnehmen, nur zerstören«.</para>
+    ///
+    /// <para><b>Was gemessen wurde</b> (<c>--door-check</c>, NET02 und DM_4):
+    /// die Türen sind erreichbar — Werft-Station <b>1 von 1</b> bzw. <b>2 von
+    /// 2</b>, Basis, Fabriken, Flughafen, Mine, Bahnhöfe alle vollständig. Es
+    /// lag also NICHT an der Einnahme und nicht am Gelände.</para>
+    ///
+    /// <para><b>Die Ursache ist der KLICKWEG</b> (MapViewer, rechte Maustaste):
+    /// er versucht zuerst <see cref="PostAttack"/> und macht nur daraus einen
+    /// Bewegungsbefehl, wenn der Klick <i>kein</i> Ziel getroffen hat. Ein
+    /// FEINDLICHES Gebäude ist aber ein Ziel — der Befehl wurde damit immer zum
+    /// Angriff, und die Einheit konnte die Türzelle gar nicht erreichen. Bei
+    /// einem NEUTRALEN Gebäude (Besitzer 11) greift niemand an, deshalb ging es
+    /// dort und nur dort. Genau das beschreiben beide Meldungen.</para>
+    ///
+    /// <para>⚠ <b>Warum eine eigene Taste und nicht »Rechtsklick nimmt ein«:</b>
+    /// beides ist gewollt. Wer eine Werft nicht braucht, schiesst sie kaputt;
+    /// wer sie will, nimmt sie ein. Eine Weiche, die das für den Spieler
+    /// entscheidet, läge in der Hälfte der Fälle falsch — und sie wäre
+    /// gefährlich: eine Einheit, die statt zu schiessen an die Tür fährt,
+    /// verliert ein Gefecht.</para>
+    ///
+    /// <para>⚠ <b>Es ist KEIN neuer Befehlssatz.</b> Einnehmen heisst im
+    /// Original wie bei uns nur »auf der Türzelle stehen«; der Behandler dafür
+    /// ist die Einnahme selbst (Capture.cs), nicht ein Opcode. Deshalb rechnet
+    /// diese Stelle nur die ZELLE aus und setzt einen gewöhnlichen
+    /// <see cref="PostMove"/> ab. Damit läuft sie durch denselben Ring, ist auf
+    /// zwei Maschinen derselbe Satz, und es gibt keine zweite Wahrheit über
+    /// Wege.</para>
+    ///
+    /// <para>⚠ UNSERE Zutat, und im Gefecht ausdrücklich erlaubt: das Original
+    /// hat keine solche Taste, weil dort niemand auf die Idee kam, sie zu
+    /// brauchen — es kennt die Weiche »erst angreifen« gar nicht.</para>
+    /// </summary>
+    /// <returns>false, wenn dort kein einnehmbares fremdes Gebäude steht —
+    /// dann darf der Aufrufer weitermachen wie bisher.</returns>
+    public bool PostCapture(Vector2 mapPos, bool queue = false)
+    {
+        int hit = Pick(mapPos);
+        if (hit < 0) return false;
+        var b = _entities[hit];
+        if (!b.IsBuilding || b.IsProp || b.Dead) return false;
+        if (b.Owner == ViewPlayer)
+        { _order = "Das gehoert bereits Ihnen."; return true; }
+        if (!Capturable(b))
+        {
+            // ⚠ Das ist eine AUSKUNFT und keine Panne: Seedock (0 Türen in 39
+            // von 39), Kraftwerk (0 in 262) und Radarstellung haben im ORIGINAL
+            // keine Tür. Der Spieler soll das erfahren, statt auf eine Einheit
+            // zu warten, die nie ankommt.
+            _order = $"{BuildingTypeName(b.BType)} hat keine Tuer — nicht einnehmbar" +
+                     (b.BType == 11 ? " (der Hafen wechselt MIT seiner Werft-Station)" : "");
+            return true;
+        }
+
+        // Die nächstgelegene Türzelle zu der Einheit, die am nächsten steht.
+        // ⚠ Nicht die erste Tür: eine Fabrik hat zwei, und die falsche kann um
+        // das halbe Gebäude herumführen.
+        var cells = new List<Vector2I>();
+        foreach (var c in CaptureWatchCells(b)) cells.Add(c);
+        if (cells.Count == 0) return false;
+
+        int n = 0;
+        foreach (int i in _sel)
+        {
+            var u = _entities[i];
+            if (u.IsBuilding || u.IsProp || u.Dead || !u.Mobile) continue;
+            var best = cells[0];
+            float bd = float.MaxValue;
+            foreach (var c in cells)
+            {
+                float d = new Vector2(c.X - u.Col, c.Y - u.Row).LengthSquared();
+                if (d < bd) { bd = d; best = c; }
+            }
+            // ⚠ Ueber den gewoehnlichen Bewegungsbefehl, EINE Einheit je Aufruf:
+            // PostMove nimmt sonst die ganze Auswahl und streut sie im Umkreis
+            // von acht Zellen — auf einer Tuerzelle ist Streuung genau falsch.
+            if (PostMoveOne(i, CellCenter(best.X, best.Y), queue)) n++;
+        }
+        if (n == 0) { _order = "keine Einheit gewaehlt, die fahren kann"; return true; }
+        AddOrderMark(b.Pos, attack: false);
+        _order = $"Einnehmen: {n} Einheit(en) faehrt zur Tuer von " +
+                 $"{BuildingTypeName(b.BType)} (Besitzer {b.Owner})";
         UpdatePanel();
         QueueRedraw();
         return true;
