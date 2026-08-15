@@ -35,6 +35,18 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Einheiten
 
+- **Achtzehn Kartenbilder trugen ihre Gebäude noch im Boden.** Der Kartenbacker
+  lässt ein stehendes Gebäude seit einer älteren Kur **absichtlich** aus dem
+  Bild heraus — sonst blieben seine Bildpunkte für immer im Gelände stehen, und
+  ein zerstörtes Gebäude könnte nie seine Ruine zeigen. Die Bilder der Kampagnen
+  16 bis 33 stammten aus der Zeit **davor**. Aufgefallen ist es dem
+  Rundlauf-Prüfstand, der seit Tagen bei 50 von 68 stand: alle achtzehn
+  scheiterten **allein am Bild**, die Daten liefen sauber rund. Solange das
+  Gebäude steht, sieht man nichts — zwei Aufnahmen derselben Stelle sind
+  punktgleich, weil die Engine das Gebäude deckungsgleich darüber zeichnet;
+  sichtbar war der Unterschied nur auf der Minikarte, und schädlich wäre er erst
+  beim Einsturz geworden. **Eine Neuinstallation war davon nie betroffen** — sie
+  backt mit dem heutigen Stand.
 - **Ein eingenommenes Werk bekommt jetzt seinen Anfangsbestand.** Die Meldung
   war, dass die Einnahme von Horni in Kampagne 3 nichts bewirkt. Sie bewirkt im
   Original etwas: sobald der Platz einem gehoert und eine eigene Einheit auf der

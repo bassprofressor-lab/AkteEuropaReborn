@@ -655,10 +655,26 @@ public sealed class NavGrid
     };
 
     /// <summary>Can <paramref name="mover"/> step from a to b (adjacent cells)?</summary>
+    /// <summary>GEGENPROBE <c>--no-climb-limit</c>: die Steiglimite abschalten.
+    /// <see cref="MaxClimb"/> ist ausdruecklich UNSERE Setzung — »the original
+    /// has no such test in Can_go« —, und am 16.08.2026 fiel auf, dass sie auf
+    /// map_DM_4 eine Einheit einschliesst: 787 Zellen im Ring 8..30 sind
+    /// <see cref="IsFree"/>, und zu keiner einzigen findet <see cref="FindPath"/>
+    /// einen Weg. Ein Schalter, der die Setzung im selben Programm wegnimmt,
+    /// entscheidet in einem Lauf, ob sie die Ursache ist (Arbeitsweise 31).</summary>
+    public static bool ClimbOff;
+
+    /// <summary>Derselbe Schritt-Test, den <see cref="FindPath"/> benutzt — fuer
+    /// Pruefstaende, die fluten muessen. ⚠ Ein Pruefstand, der die Regel
+    /// NACHBAUT, ist kein Zeuge (Arbeitsweise 24): er muss dieselbe Stelle
+    /// fragen.</summary>
+    public bool CanStepFor(Vector2I a, Vector2I b, MoveClass mc, int mover)
+        => CanStep(a, b, mc, mover);
+
     private bool CanStep(Vector2I a, Vector2I b, MoveClass mc, int mover)
     {
         if (!IsFree(b.X, b.Y, mc, mover)) return false;
-        if (mc != MoveClass.Ship &&
+        if (!ClimbOff && mc != MoveClass.Ship &&
             Math.Abs(ElevAt(b.X, b.Y) - ElevAt(a.X, a.Y)) >= MaxClimb) return false;
         // no cutting a corner between two blocked cells
         if (a.X != b.X && a.Y != b.Y &&

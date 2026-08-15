@@ -3958,6 +3958,64 @@ public partial class MapEntityLayer : Node2D
     /// Spieler es schlecht fand« statt irgendwohin.</summary>
     public static Vector2I? StuckGoalWanted;
 
+    /// <summary>
+    /// Von <paramref name="from"/> aus die erste erreichbare Zelle im Ring
+    /// 8..30 suchen — als Rueckfall, wenn die 40 festen Kandidaten daneben
+    /// liegen.
+    ///
+    /// <para>⚠ <b>Vierzig Kandidaten sind keine Suche.</b> Die Schleife davor
+    /// probiert acht Richtungen mal fuenf Radien. Auf map_DM_4 liegen die ALLE
+    /// im Wasser (13438 der 40000 Zellen), und der Pruefstand meldete deshalb
+    /// »kein Ziel erreichbar« — als waere die Karte kaputt. Sie ist es nicht.
+    /// </para>
+    ///
+    /// <para>⚠ Geflutet wird mit <see cref="Simulation.NavGrid.CanStepFor"/>,
+    /// also mit DEMSELBEN Test, den <c>FindPath</c> benutzt — nicht mit
+    /// <c>IsFree</c>. Der Unterschied ist gross und lehrreich: mit <c>IsFree</c>
+    /// sind von map_DM_4s erster Einheit aus 9720 Zellen erreichbar, mit
+    /// <c>CanStep</c> genau <b>10</b>. Ein Pruefstand, der die Regel nachbaut
+    /// statt sie zu fragen, misst etwas anderes als die Sache (Arbeitsweise 24).
+    /// </para>
+    ///
+    /// <para>Die Reihenfolge ist fest (Nachbarn in fester Folge, Schlange), es
+    /// faellt also bei gleicher Lage immer dieselbe Zelle heraus.</para>
+    /// </summary>
+    private int StuckSuche(Entity wer, Vector2I from, int k, out int geflutet, out int imRing)
+    {
+        geflutet = 0; imRing = 0;
+        if (_nav == null) return 0;
+        var gesehen = new HashSet<Vector2I> { from };
+        var schlange = new Queue<Vector2I>();
+        schlange.Enqueue(from);
+        var richtungen = new[]
+        {
+            new Vector2I(1, 0), new Vector2I(-1, 0), new Vector2I(0, 1), new Vector2I(0, -1),
+            new Vector2I(1, 1), new Vector2I(1, -1), new Vector2I(-1, 1), new Vector2I(-1, -1),
+        };
+        int reach = 0;
+        while (schlange.Count > 0 && reach == 0 && gesehen.Count < 40000)
+        {
+            var cur = schlange.Dequeue();
+            foreach (var dd in richtungen)
+            {
+                var nb = new Vector2I(cur.X + dd.X, cur.Y + dd.Y);
+                if (!_nav.InBounds(nb.X, nb.Y) || gesehen.Contains(nb)) continue;
+                if (!_nav.CanStepFor(cur, nb, wer.Move, _stuckGroup[k])) continue;
+                gesehen.Add(nb);
+                schlange.Enqueue(nb);
+                int d8 = Mathf.Max(Mathf.Abs(nb.X - from.X), Mathf.Abs(nb.Y - from.Y));
+                if (d8 < 8 || d8 > 30) continue;
+                imRing++;
+                var weg = _nav.FindPath(from, nb, wer.Move, _stuckGroup[k]);
+                if (weg == null || weg.Count == 0) continue;
+                _stuckGoal = nb; reach = weg.Count;
+                break;
+            }
+        }
+        geflutet = gesehen.Count;
+        return reach;
+    }
+
     public string StuckCheckStart()
     {
         if (_nav == null) return "stuck-check: kein Gitter";
@@ -3984,6 +4042,22 @@ public partial class MapEntityLayer : Node2D
         // »0 von 48 haben einen Weg« — dort liegt diese Stelle schlicht in
         // keinem begehbaren Gebiet. Das haette wie ein Fehler der Wegfindung
         // ausgesehen und war einer des Prueflaufs (Arbeitsweise 30).
+        // ⚠ 16.08.2026 — NICHT BLIND DIE ERSTE EINHEIT NEHMEN.
+        //
+        // Auf map_DM_4 meldete der Pruefstand seit Tagen »in 8..30 Zellen kein
+        // Ziel erreichbar«, und das las sich wie ein Fehler der Karte. Es ist
+        // keiner: Einheit 0 steht dort MITTEN IM EIGENEN PULK. Nachgerechnet —
+        // auf dem blossen Gelaende sind von ihrer Zelle aus orthogonal 14650
+        // Zellen erreichbar, mit der Belegung sind es noch 10: jeder gerade
+        // Nachbar ist von einer eigenen Einheit besetzt, und jeder schraege
+        // Ausgang faellt unter das Verbot, zwischen zwei besetzten Zellen um die
+        // Ecke zu schneiden. Zum Zeitpunkt null ist sie eingeparkt; im Spiel
+        // faehrt sie los, sobald die anderen Platz machen.
+        //
+        // Der Pruefstand darf daraus kein Urteil ueber die KARTE machen. Er
+        // nimmt darum die erste Einheit der Gruppe, von der aus ueberhaupt ein
+        // Ziel erreichbar ist — Reihenfolge fest, also immer dieselbe.
+        int ankerK = 0, geflutet = 0, imRing = 0;
         var first = _entities[_stuckGroup[0]];
         var from = new Vector2I(first.Col, first.Row);
         _stuckGoal = from;
@@ -3997,24 +4071,36 @@ public partial class MapEntityLayer : Node2D
                        "und ein Fahrversuch dorthin misst nichts";
             _stuckGoal = want; reach = probe0.Count;
         }
-        foreach (int rad in reach > 0 ? System.Array.Empty<int>() : new[] { 30, 24, 18, 12, 8 })
+        for (ankerK = 0; ankerK < _stuckGroup.Count && reach == 0 && StuckGoalWanted == null; ankerK++)
         {
-            foreach (var d in new[] { (1, 1), (1, -1), (-1, 1), (-1, -1), (1, 0), (0, 1), (-1, 0), (0, -1) })
+            first = _entities[_stuckGroup[ankerK]];
+            from = new Vector2I(first.Col, first.Row);
+            _stuckGoal = from;
+            foreach (int rad in new[] { 30, 24, 18, 12, 8 })
             {
-                var cand = new Vector2I(Mathf.Clamp(first.Col + d.Item1 * rad, 0, _nav.Width - 1),
-                                        Mathf.Clamp(first.Row + d.Item2 * rad, 0, _nav.Height - 1));
-                if (cand == from) continue;
-                var probe = _nav.FindPath(from, cand, first.Move, _stuckGroup[0]);
-                if (probe == null || probe.Count == 0) continue;
-                _stuckGoal = cand; reach = probe.Count;
-                break;
+                foreach (var d in new[] { (1, 1), (1, -1), (-1, 1), (-1, -1), (1, 0), (0, 1), (-1, 0), (0, -1) })
+                {
+                    var cand = new Vector2I(Mathf.Clamp(first.Col + d.Item1 * rad, 0, _nav.Width - 1),
+                                            Mathf.Clamp(first.Row + d.Item2 * rad, 0, _nav.Height - 1));
+                    if (cand == from) continue;
+                    var probe = _nav.FindPath(from, cand, first.Move, _stuckGroup[ankerK]);
+                    if (probe == null || probe.Count == 0) continue;
+                    _stuckGoal = cand; reach = probe.Count;
+                    break;
+                }
+                if (reach > 0) break;
             }
-            if (reach > 0) break;
+            if (reach == 0) reach = StuckSuche(first, from, ankerK, out geflutet, out imRing);
         }
+        if (ankerK > 1 && reach > 0)
+            GD.Print($"stuck-check: Einheit 0 war eingeparkt — Anker ist die {ankerK}. der Gruppe " +
+                     $"(slot {first.Slot} auf ({from.X},{from.Y}))");
         if (reach == 0)
             return $"stuck-check: von ({from.X},{from.Y}) aus ist in 8..30 Zellen kein Ziel " +
-                   "erreichbar — auf dieser Karte ist die Frage nicht stellbar, " +
-                   "und ein gruenes Ergebnis waere hier bedeutungslos";
+                   $"erreichbar — auch von KEINER der {_stuckGroup.Count} Einheiten aus " +
+                   $"(zuletzt Antrieb {first.Move}, {geflutet} Zellen geflutet, {imRing} " +
+                   "davon im Ring). Auf dieser Karte ist die Frage nicht stellbar, und " +
+                   "ein gruenes Ergebnis waere hier bedeutungslos";
         IssueMove(CellCenter(_stuckGoal.X, _stuckGoal.Y));
         // ⚠ JEDE Einheit bekommt ein EIGENES Ziel (IssueMove streut sie im
         // Umkreis von acht Zellen um den Klick). Gegen den Klickpunkt zu messen
@@ -4470,6 +4556,26 @@ public partial class MapEntityLayer : Node2D
             if (goal == null) { failed++; continue; }
 
             var path = _nav.FindPath(new Vector2I(e.Col, e.Row), goal.Value, e.Move, i);
+            // ⚠⚠ OFFEN, gemessen am 16.08.2026 — DIE SCHWESTER VON B2.
+            //
+            // Wer hier keinen Weg bekommt, bekommt GAR NICHTS: kein Ziel, keinen
+            // Merker, keinen zweiten Versuch. Er steht bis zum Missionsende.
+            // B2 war »der Weg wird weggeworfen«; das hier ist »es gab nie
+            // einen«, und es trifft genau die Einheit, die im Augenblick des
+            // Befehls von den EIGENEN Leuten eingekeilt ist.
+            //
+            // Sichtbar wurde es erst, als --stuck-check auf map_DM_4 ueberhaupt
+            // messen konnte (siehe StuckSuche): dort fahren **6 von 48 nie los**,
+            // und keine einzige davon ist unterwegs liegengeblieben.
+            //
+            // Die Ursache liegt in der Wegsuche: `FindPath` nimmt `IsFree`, und
+            // das ist `Can_go == 2` (frei). Eine Zelle mit einer ANDEREN EINHEIT
+            // ist `Can_go == 1` — »ja, aber jemand muss ausweichen« —, und das
+            // Original faehrt dort hin und wartet. Fuer unsere Wegsuche ist sie
+            // eine Wand. Die Kur waere, beim PLANEN durch GiveWay-Zellen zu
+            // gehen und erst beim FAHREN zu warten; das ist ein Eingriff in den
+            // Lockstep-Pfad und gehoert in einen eigenen Durchgang, nicht
+            // nebenbei.
             if (path == null || path.Count == 0) { failed++; continue; }
 
             taken.Add(goal.Value);
@@ -8397,7 +8503,42 @@ public partial class MapEntityLayer : Node2D
                         mine.Add(e);
                         zoned++;
                     }
-            if (mine.Count != target) { left++; untouched.Add($"{Show(c)} [nur {mine.Count}]"); }
+            if (mine.Count != target)
+            {
+                // ⚠ 16.08.2026 — SAGEN, WARUM es nicht geht, nicht nur DASS.
+                // Mission 23 meldete auf ewig »buildings(2,0)==5 [nur 2]«, und
+                // das las sich wie ein Fehler der Mission. Es ist keiner: die
+                // Karte traegt genau zwei Bauwerke dieser Klasse (Minen), und
+                // die Mission wird durch BAUEN gewonnen — ihr Skript legt
+                // dafuer elf Vorkommen (`add_terra_place`, je 5000), die
+                // `SetTerraPlaces` auch anwendet. Dieser Prueflauf kann nur
+                // uebergeben und ausschlagen, nicht bauen; das ist seine
+                // Grenze (Arbeitsweise 11: wer eine Zahl SETZT, prueft die
+                // Zahl und nicht die Mechanik). Die Frage »kann der Spieler
+                // fuenf Minen bauen« gehoert in einen Prueflauf, der wirklich
+                // baut — so wie --produce-check es fuer Mission 5 tut.
+                int vorrat = 0;
+                foreach (var e in _entities)
+                {
+                    if (e.Dead) continue;
+                    bool passt = c.Kind switch
+                    {
+                        "objects" => e.IsBuilding && e.BType == c.A,
+                        "buildings" => e.IsBuilding && IsBuildingClass(e.BType, c.A),
+                        "units" => !e.IsBuilding,
+                        _ => false,
+                    };
+                    if (passt) vorrat++;
+                }
+                string warum = c.Kind == "buildings" && _mscript != null && _mscript.Terra.Count > 0
+                    ? $" — die Karte traegt {vorrat} davon, und das Skript legt " +
+                      $"{_mscript.Terra.Count} Vorkommen: diese Bedingung wird durch BAUEN " +
+                      "erreicht, und das kann dieser Prueflauf nicht"
+                    : $" — die Karte traegt {vorrat} davon; dieser Prueflauf kann nur " +
+                      "uebergeben und ausschlagen, nicht bauen";
+                left++;
+                untouched.Add($"{Show(c)} [nur {mine.Count}{warum}]");
+            }
         }
         // ⚠ Die Lager zuletzt, und erst nach einem Durchlauf. Mission 5 merkt
         // sich beim ersten eigenen Gebaeude der Klasse 1 die beiden Teilelager

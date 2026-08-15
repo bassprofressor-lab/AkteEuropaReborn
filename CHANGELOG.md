@@ -33,6 +33,17 @@ deviate on purpose, and every deviation is marked as ours.
 
 ### Units
 
+- **Eighteen map images still had their buildings baked into the ground.** The
+  map baker deliberately leaves a standing building out of the picture — an
+  older fix, because otherwise its pixels stay in the terrain forever and a
+  destroyed building can never show its ruin. The images for campaigns 16 to 33
+  dated from **before** that fix. The round-trip harness found it: it had been
+  stuck at 50 of 68 for days, and all eighteen failed **on the image alone**,
+  with the data round-tripping perfectly. While the building stands nothing is
+  visible — two screenshots of the same spot are pixel-identical, because the
+  engine draws the building exactly over it; the difference showed only on the
+  minimap, and would only have hurt once a building fell. **A fresh install was
+  never affected** — it bakes with current code.
 - **A captured works now gets its starting stock.** The report was that taking
   Horni in campaign 3 does nothing. In the original it does something: once the
   slot is yours and one of your units stands on the door cell, the mission script

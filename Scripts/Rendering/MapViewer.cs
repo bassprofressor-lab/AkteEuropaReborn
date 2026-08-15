@@ -893,6 +893,9 @@ public partial class MapViewer : Node2D
             // Muss in --speed-check einen Unterschied machen, sonst misst der
             // Pruefstand nicht, was er zu messen behauptet.
             else if (a == "--old-move-cost") Simulation.NavGrid.MoveCostOld = true;
+            // Gegenprobe zur Steiglimite (UNSERE Setzung, das Original hat
+            // keinen solchen Test): schliesst sie Einheiten ein?
+            else if (a == "--no-climb-limit") Simulation.NavGrid.ClimbOff = true;
             // B4: Takte je Zelle, nach Bodenart und gerade/schraeg getrennt.
             // Fahrt wie --stuck-check, aber eine ANDERE Frage — und zwei Fragen
             // gehoeren nie in denselben Zaehler (Arbeitsweise I).
