@@ -111,6 +111,17 @@ public sealed class UnitsExporter
     /// comes from looking at the frames and not from code.</summary>
     public const int InfantryBlocks = 15, InfantryIdleBlock = 11;
 
+    /// <summary>Wieviele Bilder eines Infanteriesatzes RICHTUNGSBILDER sind —
+    /// <b>117</b>, gemessen an der Hilfstafel: der Abstand von der Basis zur
+    /// ersten Animation ist bei allen 24 Sätzen derselbe. Alles ab 117 ist
+    /// Animation und darf nicht als Richtungsbild ausgegeben werden. Siehe
+    /// <c>WriteInfantry</c> für den Fehler, den das erzeugt hat (C13).</summary>
+    public const int InfantryDirFrames = 117;
+
+    /// <summary>Wieviele Bilder wegen <see cref="InfantryDirFrames"/> übergangen
+    /// wurden. Erwartet: 3 je Satz (Block 14, Richtungen 5..7), also 72.</summary>
+    public int InfantryPastEnd;
+
     // ---- the whole job ------------------------------------------------------
 
     /// <summary>`combos` are the (unit_type, weapon component) pairs actually
@@ -410,6 +421,54 @@ public sealed class UnitsExporter
     /// tragen ein paar Streupixel, und ein Ja/Nein-Kriterium auf echten Daten
     /// geht daran vorbei (dieselbe Lehre wie bei den Schattenmasken der
     /// Gleisteile).</summary>
+    /// <summary>Eine Datei wegräumen, die ein FRÜHERER Export geschrieben hat und
+    /// dieser nicht mehr schreibt.
+    ///
+    /// <para>⚠⚠ 17.08.2026 — ohne das war die Kur zu C13 WIRKUNGSLOS, und das
+    /// hat mich fast ein zweites Mal »behoben« melden lassen: der Ausleser
+    /// übersprang die drei falschen Leichenbilder je Satz brav, aber die
+    /// Dateien von gestern lagen weiter im Ordner, und die Anzeige fand sie.
+    /// <b>Ein Ausleser, der etwas überspringt, räumt nicht weg, was er beim
+    /// letzten Mal geschrieben hat</b> — bei einem Export in einen bestehenden
+    /// Ordner ist Auslassen nur die halbe Änderung.</para></summary>
+    private void Drop(string rel)
+    {
+        if (DropAt(_dst + "/" + rel)) Dropped++;
+        // ⚠⚠ UND IM PROJEKTBAUM, und das ist der Teil, der mich fast ein
+        // zweites Mal »behoben« melden liess. `Core.Content.Path` bevorzugt
+        // `user://data/…` und FÄLLT AUF DEN BAUM ZURÜCK, wenn dort nichts liegt
+        // (Arbeitsweise 13). Die Datei aus dem Nutzerordner zu löschen bringt
+        // also gar nichts, solange dieselbe Datei unter `Assets/Legacy/Units/`
+        // liegt — die Anzeige holt sie von dort und zeigt weiter das alte Bild.
+        // Gemessen: nach dem Löschen im Nutzerordner meldete der Prüflauf für
+        // Satz 2 Richtung 6 immer noch »Block 14, Bild da«, und genau die 72
+        // Dateien lagen im Baum.
+        // ⚠ Der Ordner ist gitignored UND vom Export ausgeschlossen
+        // (`exclude_filter` in export_presets.cfg), also reines
+        // Zwischenergebnis — Wegräumen ist dort ungefährlich.
+        if (rel.StartsWith("infantry/", StringComparison.Ordinal) &&
+            DropAt("res://Assets/Legacy/Units/" + rel)) DroppedTree++;
+    }
+
+    private static bool DropAt(string path)
+    {
+        string p = path.StartsWith("res://", StringComparison.Ordinal)
+            ? ProjectSettings.GlobalizePath(path) : path;
+        if (!File.Exists(p)) return false;
+        File.Delete(p);
+        // Godot legt neben jedes Bild eine .import — die muss mit, sonst zeigt
+        // der Editor auf eine Datei, die es nicht mehr gibt.
+        if (File.Exists(p + ".import")) File.Delete(p + ".import");
+        return true;
+    }
+
+    /// <summary>Wieviele veraltete Dateien im PROJEKTBAUM weggeräumt wurden —
+    /// getrennt gezählt, weil das ein anderer Ort mit anderer Ursache ist.</summary>
+    public int DroppedTree;
+
+    /// <summary>Wieviele veraltete Dateien weggeräumt wurden.</summary>
+    public int Dropped;
+
     private static int OpaquePixels(Image img)
     {
         int n = 0;
@@ -470,6 +529,32 @@ public sealed class UnitsExporter
                 for (int f = 0; f < CwrFile.Facings; f++)
                 {
                     int idx = b + blk * CwrFile.Facings + f;
+                    // ⚠⚠ 17.08.2026 — DIE RICHTUNGSBILDER HÖREN BEI +117 AUF,
+                    // und das ist der ganze Fehler C13.
+                    //
+                    // Gemeldet war zweimal »tote Infanterie steht, als würde sie
+                    // leben«. Am BILD gefunden: für Richtung 6 ist »Block 14«
+                    // kein Leichenbild, sondern ein aufrecht stehender Soldat
+                    // (Satz 2 Richtung 6: 119 Bildpunkte, Satz 0 Richtung 6:
+                    // 100) — und der Rückfall der Anzeige landete genau darauf.
+                    //
+                    // Der Grund steht in der Hilfstafel des Satzes selbst: ihre
+                    // erste Animation beginnt bei <b>base + 117</b>, und zwar bei
+                    // ALLEN 24 Sätzen gleich (gemessen, ein einziger Wert).
+                    // 117 = 14 volle Blöcke à 8 plus 5. Block 14 läuft über die
+                    // Bilder 112..119, davon sind nur 112..116 Richtungsbilder —
+                    // die Richtungen 5, 6 und 7 liegen SCHON IN DER
+                    // ANIMATIONSTAFEL. Wir haben dort also Anims als Leichen
+                    // ausgegeben.
+                    //
+                    // ⚠ Das ist derselbe Fehler wie beim Kugelroller (C21): über
+                    // das Ende eines Bereichs hinausgelesen, weil die Blockzahl
+                    // gesetzt statt gefragt war. Die 15 in InfantryBlocks ist
+                    // damit auch nicht mehr ganz richtig — sie stimmt für die
+                    // Blöcke, nicht für die Bilder, und deshalb steht die
+                    // Schranke hier am BILD und nicht an der Blockzahl.
+                    if (blk * CwrFile.Facings + f >= InfantryDirFrames)
+                    { InfantryPastEnd++; Drop($"infantry/{set}/f{f}_b{blk}.png"); continue; }
                     if (_cwr.DecodeFrame(idx) == null) continue;
                     var img = _cwr.FacingImage(idx, _pal);
                     // ⚠ 17.08.2026 — EIN FAST LEERES BILD IST KEIN BILD (Fehler
@@ -484,7 +569,8 @@ public sealed class UnitsExporter
                     // Werden sie gar nicht erst geschrieben, kann die Anzeige
                     // auf das letzte Bild zurückfallen, das es WIRKLICH gibt
                     // (MapEntityLayer.InfBlock).
-                    if (OpaquePixels(img) <= 4) { InfantryEmpty++; continue; }
+                    if (OpaquePixels(img) <= 4)
+                    { InfantryEmpty++; Drop($"infantry/{set}/f{f}_b{blk}.png"); continue; }
                     Save($"infantry/{set}/f{f}_b{blk}.png", img);
                     if (blk == InfantryIdleBlock) Save($"infantry/{set}/f{f}.png", img);
                 }
@@ -504,7 +590,10 @@ public sealed class UnitsExporter
         sb.Append("]}");
         Directory.CreateDirectory(_dst + "/infantry");
         File.WriteAllText(_dst + "/infantry/infantry_index.json", sb.ToString(), new UTF8Encoding(false));
-        say?.Invoke($"Infanterie: {InfantrySets} Saetze");
+        say?.Invoke($"Infanterie: {InfantrySets} Saetze, {InfantryEmpty} leere Bilder " +
+                    $"uebergangen, {InfantryPastEnd} hinter dem Richtungsbereich " +
+                    $"(ab Bild {InfantryDirFrames} beginnt die Animationstafel), " +
+                    $"{Dropped} veraltete Dateien im Nutzerordner und {DroppedTree} im Baum weggeraeumt");
     }
 
     // ---- aircraft and rail cars --------------------------------------------

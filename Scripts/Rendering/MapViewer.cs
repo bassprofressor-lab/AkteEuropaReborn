@@ -610,6 +610,7 @@ public partial class MapViewer : Node2D
     private int _selectTypeForShot = -1;  // --select-type=<unit_type>, engt sie ein
     private bool _demoBuild;
     private bool _demoMine;
+    private bool _demoInfDeath;
     private bool _demoBehind;
     private bool _demoResearch;
     // --queue-check (Fehler C8): Bestellzeitpunkt, Abrechnungszeitpunkt, Anzahl.
@@ -830,10 +831,16 @@ public partial class MapViewer : Node2D
             else if (a == "--no-rail-lift") MapEntityLayer.RailNoLift = true;
             // --no-unit-occlusion (C23): Gegenprobe, jede Einheit ueber jedem Gebaeude.
             else if (a == "--no-unit-occlusion") MapEntityLayer.NoUnitOcclusion = true;
+            // --no-step-out: das frische Fahrzeug bleibt in der Tuer stehen.
+            else if (a == "--no-step-out") MapEntityLayer.NoStepOutOfDoor = true;
+            // --no-clear-idle (C24): Truppen unbeteiligter Plaetze stehen lassen.
+            else if (a == "--no-clear-idle") MapEntityLayer.NoClearIdleSlots = true;
             // --demo-behind (C23): eine Einheit MITTEN in einen Gebaeudegrundriss
             // setzen und die Kamera daraufsetzen, damit der Bildvergleich den Fall
             // ueberhaupt enthaelt. Siehe BehindCheckSetup.
             else if (a == "--demo-behind") { _demo = true; _demoBehind = true; }
+            // --demo-infdeath (C13): eine Traube Fusssoldaten toeten, jeden zweiten.
+            else if (a == "--demo-infdeath") { _demo = true; _demoInfDeath = true; }
             // --queue-check[=n]: n Einheiten in EINEM Zug bestellen und danach
             // nachrechnen, ob bezahlt und geliefert zusammenpassen. Siehe
             // MapEntityLayer.QueueCheckOrder — der eigentliche Fehler C8 war
@@ -1071,6 +1078,7 @@ public partial class MapViewer : Node2D
                   : _demoSupply ? _entities.DebugDemoSupply()
                   : _demoBehind ? _entities.BehindCheckSetup()
                   : _demoCrush ? _entities.DebugDemoCrush()
+                  : _demoInfDeath ? _entities.DebugDemoInfDeath()
                   : _demoInf ? _entities.DebugDemoInfantry()
                   : _demoInfPic ? _entities.DebugDemoInfPortrait()
                   : _demoAirPic ? _entities.DebugDemoAirPortrait()

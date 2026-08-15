@@ -9922,7 +9922,11 @@ public partial class MapEntityLayer : Node2D
         // zum Flughafen bleibt es also bei dem, was `ApplyResources` beim Start
         // hineingelegt hat.
         if (e.BType == 9)
-            return $"FLUGHAFEN  W{e.StockW} F{e.StockF} S{e.StockS}";
+            // ⚠ Der HANGARSTAND gehört dazu (Fehler C25): ein gekauftes
+            // Flugzeug parkt dort und ist auf der Karte nicht zu sehen. Ohne
+            // diese Zahl sieht »gekauft« aus wie »nichts passiert«.
+            return $"FLUGHAFEN  W{e.StockW} F{e.StockF} S{e.StockS}  " +
+                   $"Hangar {e.Hangar?.Count ?? 0}/{Mathf.Max(1, e.HangarSize)} (Y startet)";
         int owner = e.Owner is >= 0 and <= 7 ? e.Owner : 0;
         return $"PRODUKTION  ${_money[owner]}";
     }
@@ -10133,7 +10137,9 @@ public partial class MapEntityLayer : Node2D
                $"   Schlange am Ende {b.BuildQueue.Count}, Restbauzeit {b.BuildTime:0.0}s: " +
                $"{(emptyOk ? "abgearbeitet" : "NICHT LEER")}\n" +
                $"   aus der Tuer ({b.Col + b.DoorCol},{b.Row + b.DoorRow}) gekommen: " +
-               $"{SpawnedAtDoor}, daneben (Tuer belegt): {SpawnedBesideDoor}";
+               $"{SpawnedAtDoor}, daneben (Tuer belegt): {SpawnedBesideDoor}\n" +
+               $"   herausgefahren: {SpawnedSteppedOut}, in der Tuer steckengeblieben: " +
+               $"{SpawnedStuckInDoor}";
     }
 
     /// <summary>A click on row <paramref name="i"/>: make it the pick, then
@@ -10869,7 +10875,28 @@ public partial class MapEntityLayer : Node2D
             a.Row = e.Row + 2;
         }
         else (e.Hangar ??= new List<int>()).Add(slot);
-        _order = $"{d.Name} fertig ({d.CostW}/{d.CostF}/{d.CostS} Teile)";
+        // ⚠⚠ 17.08.2026 — FEHLER C25, gemeldet als »ich sehe zwar die
+        // Lufteinheiten wie Jagdflieger, Bomber usw., aber wenn ich auf
+        // Produzieren drücke, kommen keine Einheiten raus, als würden sie nicht
+        // produziert werden«.
+        //
+        // Sie WERDEN produziert. Gemessen mit `--air-buy-check`: »gekauft 7,
+        // Hangar 5/20« — fünf davon standen im Hangar, und ein geparktes
+        // Flugzeug ist auf der Karte nicht zu sehen. Das ist das ORIGINAL:
+        // `spawn_aircraft` setzt nur den Arten 13 und 14 (den zwei
+        // Versorgungshelis) `+0x31 = 0xFF` und schickt sie sofort aus; alles
+        // andere bleibt stehen, bis es gestartet wird (bei uns Taste Y,
+        // LaunchAircraft).
+        //
+        // Der Fehler war also nicht die Mechanik, sondern die MELDUNG: sie sagte
+        // »fertig« und verschwieg, wo das Ding steht. Eine Rückmeldung, die den
+        // Erfolg meldet und den Verbleib nicht, ist von einem Fehlschlag nicht
+        // zu unterscheiden.
+        int imHangar = e.Hangar?.Count ?? 0;
+        _order = d.Kind is 13 or 14
+            ? $"{d.Name} fertig ({d.CostW}/{d.CostF}/{d.CostS} Teile) — fliegt sofort los"
+            : $"{d.Name} fertig ({d.CostW}/{d.CostF}/{d.CostS} Teile) — steht im HANGAR " +
+              $"({imHangar}/{Mathf.Max(1, e.HangarSize)}), Taste Y startet ihn";
         return true;
     }
 
@@ -14394,6 +14421,95 @@ public partial class MapEntityLayer : Node2D
     /// verschiedene Sachen sind.</summary>
     public int SpawnedAtDoor, SpawnedBesideDoor;
 
+    /// <summary>
+    /// <b>Ein frisches Fahrzeug fährt aus der Tür HERAUS.</b>
+    ///
+    /// <para>⚠ 17.08.2026, gemeldet als Nachtrag zu C22: »wenn die Fahrzeuge aus
+    /// der Basis kommen, stehen sie noch wie in der Tür, sie können ruhig 1 Feld
+    /// mehr rausfahren.« Seit C22 entsteht die Einheit auf der Türzelle
+    /// (<c>@0x410441</c>) — und blieb dort stehen.</para>
+    ///
+    /// <para><b>Zwei Dinge auf einmal, und das zweite ist gemessen:</b> es sieht
+    /// richtig aus, UND es räumt die Tür. Vorher stand nach dem ersten Stück
+    /// eine Einheit im Weg, und die nächste musste auf den Rückfall daneben —
+    /// gemessen <b>4 aus der Tür gegen 11 daneben</b>. Wer stehen bleibt,
+    /// blockiert die Werkbank.</para>
+    ///
+    /// <para><b>Wohin »heraus« zeigt, wird nicht gesetzt, sondern gerechnet:</b>
+    /// weg von der Mitte des Grundrisses. Eine feste Richtung (etwa »eine Zeile
+    /// nach unten«, wie sie die Einnahme benutzt) wäre falsch — die Türen sitzen
+    /// je nach Bauart an verschiedenen Seiten, und bei der Basis liegt die Zelle
+    /// eine Zeile weiter noch INNERHALB des Grundrisses.</para>
+    ///
+    /// <para>⚠ Gefahren wird über die gewöhnliche Wegsuche, nicht gesetzt: die
+    /// Einheit soll den Schritt TUN, damit sie dabei ihre Blickrichtung dreht
+    /// und nichts überspringt. Findet sie keinen Weg, bleibt sie stehen — das
+    /// ist kein Fehler, sondern eine volle Umgebung.</para></summary>
+    private void StepOutOfDoor(int idx, Entity u, Entity b)
+    {
+        if (_nav == null || !u.Mobile) return;
+        int fw = Mathf.Max(1, b.FootW), fh = Mathf.Max(1, b.FootH);
+        var mid = new Vector2(b.Col + (fw - 1) * 0.5f, b.Row + (fh - 1) * 0.5f);
+        var away = new Vector2(u.Col, u.Row) - mid;
+        if (away.LengthSquared() < 0.01f) away = new Vector2(0, 1);
+        away = away.Normalized();
+
+        // ⚠⚠ 17.08.2026 — HIER STAND »nur Zellen AUSSERHALB des Grundrisses«,
+        // und das war zu streng: bei der BASIS liegt die Tür MITTEN im 6×4
+        // (Türversatz (4,2), Zeilen 0..3), ein einzelner Schritt kommt dort gar
+        // nicht heraus. Gemessen fielen dadurch **12 von 23** Fahrzeugen in
+        // »steckengeblieben«, obwohl rundherum Platz war — der Prüfstand hat
+        // meine eigene Bedingung gemessen, nicht die Lage.
+        //
+        // Jetzt zwei Stufen, und die Reihenfolge ist die Absicht:
+        //   1. eine Zelle, die den Grundriss WIRKLICH verlässt (bis zwei
+        //      Schritte weit, damit auch eine mittige Tür herausfindet),
+        //   2. sonst wenigstens EIN Feld weiter weg von der Mitte — genau das,
+        //      was der Spieler gebeten hat (»1 Feld mehr rausfahren«).
+        bool Inside(Vector2I c) =>
+            c.X >= b.Col && c.X < b.Col + fw && c.Y >= b.Row && c.Y < b.Row + fh;
+
+        var raus = new List<Vector2I>();
+        var nah = new List<Vector2I>();
+        float baseAng = Mathf.Atan2(away.Y, away.X);
+        for (int step = 1; step <= 2; step++)
+            for (int k = 0; k < 3; k++)
+            {
+                float ang = baseAng + k switch { 0 => 0f, 1 => 0.7854f, _ => -0.7854f };
+                var d = new Vector2I(Mathf.RoundToInt(Mathf.Cos(ang)) * step,
+                                     Mathf.RoundToInt(Mathf.Sin(ang)) * step);
+                if (d == Vector2I.Zero) continue;
+                var c = new Vector2I(u.Col + d.X, u.Row + d.Y);
+                (Inside(c) ? nah : raus).Add(c);
+            }
+        var want = new List<Vector2I>(raus);
+        want.AddRange(nah);
+
+        foreach (var c in want)
+        {
+            if (!_nav.IsFree(c.X, c.Y, u.Move, idx)) continue;
+            var path = _nav.FindPath(new Vector2I(u.Col, u.Row), c, u.Move, idx);
+            if (path == null || path.Count == 0) continue;
+            u.Path = path;
+            u.PathIdx = 0;
+            u.Goal = c;
+            u.Reserved = null;
+            u.WaitTime = 0;
+            SpawnedSteppedOut++;
+            return;
+        }
+        SpawnedStuckInDoor++;
+    }
+
+    /// <summary>Wie oft der Schritt aus der Tür geklappt hat und wie oft nicht
+    /// (alles rundherum belegt). ⚠ Getrennt, weil »nicht herausgefahren« eine
+    /// Aussage über die LAGE ist und kein Fehler des Schritts.</summary>
+    public int SpawnedSteppedOut, SpawnedStuckInDoor;
+
+    /// <summary><c>--no-step-out</c> — die Gegenprobe: das Fahrzeug bleibt in
+    /// der Tür stehen, wie vor dem 17.08.2026.</summary>
+    public static bool NoStepOutOfDoor;
+
     private void UpdateProduction(int i, Entity e, float dt)
     {
         UpdateEconomy(i, e, dt);
@@ -14465,6 +14581,11 @@ public partial class MapEntityLayer : Node2D
         _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.GameUnitType));
         _nav.SetOccupant(u.Col, u.Row, _entities.Count - 1);
         _order = $"{d.Name} fertig";
+
+        // ⚠ Und gleich HERAUS aus der Tür — siehe StepOutOfDoor. Muss NACH
+        // SetOccupant stehen: die Wegsuche fragt das Belegungsgitter, und eine
+        // Einheit, die noch nicht darin steht, plant durch sich selbst hindurch.
+        if (!NoStepOutOfDoor) StepOutOfDoor(_entities.Count - 1, u, e);
 
         // ⚠ 17.08.2026 — DAS NACHRÜCKEN DER WARTESCHLANGE (Fehler C8, siehe
         // Entity.BuildQueue). Bezahlt ist beim Einreihen worden, hier wird nur
@@ -14843,6 +14964,74 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <summary>Preview harness: look at the foot soldiers on this map.</summary>
+    /// <summary>
+    /// <c>--demo-infdeath</c> — <b>eine Handvoll Fusssoldaten umbringen und die
+    /// Kamera darauf setzen.</b> Für Fehler C13, der nach dem ersten Anlauf noch
+    /// stand (»tote/besiegte Infanterie steht, als würden sie leben«).
+    ///
+    /// <para>⚠ Warum es diesen Schalter braucht: <c>--infdeath-check</c> tötet
+    /// EINEN und schreibt Blocknummern mit — das hat gesagt, dass die
+    /// Bildauswahl stimmt, und war trotzdem keine Antwort. Der gemeldete Fehler
+    /// ist einer im BILD, und ein Bild braucht ein Bild (Arbeitsweise 17). Der
+    /// erste Anlauf hat den Fall nie photographiert, weil in keinem Prüflauf
+    /// jemand starb (»dead 0«).</para>
+    ///
+    /// <para>Getötet wird eine ganze GRUPPE nebeneinander, nicht einer: der
+    /// Spieler sieht den Fehler im Gefecht, also unter mehreren Soldaten, und
+    /// genau dort entscheidet sich, ob ein LEBENDER Nachbar für den Toten
+    /// gehalten wird.</para></summary>
+    public Vector2? DebugDemoInfDeath()
+    {
+        var idxs = new List<int>();
+        for (int i = 0; i < _entities.Count; i++)
+            if (_entities[i].Infantry >= 0 && !_entities[i].Dead) idxs.Add(i);
+        if (idxs.Count == 0) { GD.Print("demo-infdeath: keine Infanterie"); return null; }
+
+        // die dichteste Traube suchen — dort ist das Bild aussagekräftig
+        int best = idxs[0], bestN = -1;
+        foreach (int i in idxs)
+        {
+            int n = 0;
+            foreach (int j in idxs)
+                if (Mathf.Abs(_entities[i].Col - _entities[j].Col) <= 4 &&
+                    Mathf.Abs(_entities[i].Row - _entities[j].Row) <= 4) n++;
+            if (n > bestN) { bestN = n; best = i; }
+        }
+        var at = _entities[best];
+        var toll = new List<string>();
+        int killed = 0;
+        foreach (int i in idxs)
+        {
+            if (Mathf.Abs(_entities[i].Col - at.Col) > 4 ||
+                Mathf.Abs(_entities[i].Row - at.Row) > 4) continue;
+            // ⚠ Jeden ZWEITEN, damit tote und lebende NEBENEINANDER stehen —
+            // genau die Lage, in der der Spieler den Fehler sieht. Alle zu
+            // töten hiesse den Vergleich wegzunehmen, um den es geht.
+            if (killed % 2 == 0)
+            {
+                var e = _entities[i];
+                Kill(i, e);
+                // ⚠ NACH dem Toeten fragen, was die Anzeige gleich zeichnen
+                // WIRD — sonst berichtet die Zeile ueber den Lebenden. Genau so
+                // eine Reihenfolge hat hier schon einmal einen Pruefstand
+                // wertlos gemacht (Arbeitsweise 9).
+                e.DeadTime = 1f;                       // ueber die Fallanimation hinaus
+                int df = InfDrawFacing(e), blk = InfBlock(e);
+                bool tex = GetInfantryTexture(e.Infantry, df, blk) != null;
+                toll.Add($"slot {e.Slot} Satz {e.Infantry} Richtung {e.Facing} auf " +
+                         $"({e.Col},{e.Row}) -> zeichnet Richtung {df} Block {blk}, " +
+                         $"Bild {(tex ? "da" : "FEHLT")}" +
+                         $"{(blk == InfIdleBlock ? "  ⚠ STEHBILD!" : "")}");
+            }
+            killed++;
+        }
+        _sel.Clear();
+        GD.Print($"demo-infdeath: {bestN} Fusssoldaten in der Traube, {toll.Count} getoetet " +
+                 $"(jeder zweite, damit Tote und Lebende nebeneinander stehen):\n   " +
+                 string.Join("\n   ", toll));
+        return CellCenter(at.Col, at.Row);
+    }
+
     public Vector2? DebugDemoInfantry()
     {
         var idxs = new List<int>();
@@ -16181,6 +16370,58 @@ public partial class MapEntityLayer : Node2D
     /// <see cref="InfBlock"/>. Soll 0 sein.</summary>
     public static int InfDeathNoFrame;
 
+    /// <summary>Wie oft die Leiche aus einer NACHBARRICHTUNG genommen werden
+    /// musste. Kein Fehler, aber eine Näherung, und sie gehört gezählt.</summary>
+    public static int InfCorpseTurned;
+
+    /// <summary>
+    /// <b>Die nächste Richtung, die für diesen Satz ein Leichenbild HAT</b> —
+    /// oder −1.
+    ///
+    /// <para>⚠ 17.08.2026, zweite Gestalt von Fehler C13. Nachdem die
+    /// Animationsbilder nicht mehr als Leichen ausgegeben werden (Block 14,
+    /// Richtungen 5..7 — siehe <c>UnitsExporter.InfantryDirFrames</c>), stehen
+    /// <b>22 von 192</b> (Satz, Richtung) ganz ohne Sterbebild da. Der alte
+    /// Rückfall war das STEHBILD, und das ist genau das Gemeldete: ein Toter,
+    /// der dasteht, als würde er leben.</para>
+    ///
+    /// <para>Ein Leichnam ist ein liegender Körper — aus einer um 45 Grad
+    /// gedrehten Ansicht sieht er fast gleich aus, ein stehender Soldat nicht.
+    /// Deshalb wird die RICHTUNG ausgewichen und nicht der Block. Gesucht wird
+    /// nach aussen: ±1, ±2, ±3, ±4 — so bleibt die Ansicht so nah wie
+    /// möglich.</para>
+    ///
+    /// <para>⚠ <b>Das ist unsere Näherung, keine gelesene Regel.</b> Was das
+    /// Original an dieser Stelle zeichnet, ist offen: es indiziert stumpf
+    /// <c>basis + block·8 + richtung</c> und bekäme dort dieselben
+    /// Animationsbilder, die wir gerade ausgeschlossen haben — es könnte den
+    /// stehenden Soldaten also selbst zeigen. Belegt ist das nicht, und
+    /// deshalb wird hier nach dem gebaut, was richtig AUSSIEHT, und es steht
+    /// als Näherung da.</para></summary>
+    private int InfCorpseFacing(Entity e)
+    {
+        for (int d = 1; d <= 4; d++)
+            foreach (int s in new[] { d, -d })
+            {
+                int f = ((e.Facing + s) % 8 + 8) % 8;
+                for (int k = InfDeathBlocks.Length - 1; k >= 0; k--)
+                    if (GetInfantryTexture(e.Infantry, f, InfDeathBlocks[k]) != null)
+                    { InfCorpseTurned++; return f; }
+            }
+        return -1;
+    }
+
+    /// <summary>Die Richtung, in der die Leiche dieses Soldaten gezeichnet wird —
+    /// seine eigene, wo es geht, sonst die nächste mit Bild.</summary>
+    private int InfDrawFacing(Entity e)
+    {
+        if (!e.Dead || e.Infantry < 0) return e.Facing;
+        foreach (int k in InfDeathBlocks)
+            if (GetInfantryTexture(e.Infantry, e.Facing, k) != null) return e.Facing;
+        int alt = InfCorpseFacing(e);
+        return alt >= 0 ? alt : e.Facing;
+    }
+
     /// <summary>
     /// `--inf-anim-check` — does a walking foot soldier actually cycle through
     /// its eight blocks?
@@ -16514,9 +16755,17 @@ public partial class MapEntityLayer : Node2D
             for (int k = want; k >= 0; k--)
                 if (GetInfantryTexture(e.Infantry, e.Facing, InfDeathBlocks[k]) != null)
                     return InfDeathBlocks[k];
-            // Gar kein Sterbebild fuer diese Richtung: dann bleibt der Soldat
-            // liegen wie er stand. ⚠ Das ist die schlechteste Wahl und sie wird
-            // GEZAEHLT, damit sie nicht unbemerkt haeufig wird.
+            // ⚠ Gar kein Sterbebild fuer DIESE Richtung — nach dem 17.08. gibt
+            // es das noch bei 22 von 192 (Satz, Richtung). Frueher stand hier
+            // `return InfIdleBlock`, also das STEHBILD, und genau das war der
+            // gemeldete Fehler in seiner zweiten Gestalt. Die Richtung wird
+            // stattdessen in InfCorpseFacing ausgewichen; hier bleibt nur der
+            // Zaehler und der Block, den diese Richtung dann liefert.
+            int alt = InfCorpseFacing(e);
+            if (alt >= 0)
+                for (int k = InfDeathBlocks.Length - 1; k >= 0; k--)
+                    if (GetInfantryTexture(e.Infantry, alt, InfDeathBlocks[k]) != null)
+                        return InfDeathBlocks[k];
             InfDeathNoFrame++;
             return InfIdleBlock;
         }
@@ -18340,15 +18589,16 @@ public partial class MapEntityLayer : Node2D
             if (FogActive && e.Owner != ViewPlayer && !e.IsBuilding && !Watched(e.Col, e.Row))
                 continue;
 
-            // a fallen soldier keeps his own frames (12..14) and stays lying
-            // there; for vehicles the wreck effect stands in for the sprite
-            if (e.Dead && e.Infantry < 0) continue;
-            if (e.Dead && _drawSprites)
-            {
-                var body = GetInfantryTexture(e.Infantry, e.Facing, InfBlock(e));
-                if (body != null) DrawTexture(body, PictureAnchor(e) - ComposedAnchor);
-                continue;
-            }
+            // ⚠ 17.08.2026 — HIER STAND DIE LEICHE EIN ZWEITES MAL, und zwar mit
+            // e.Facing statt InfDrawFacing. Seit die Rümpfe im zeilenweisen
+            // Durchgang laufen (C23) zeichnet DrawUnitBody sie schon; diese
+            // Stelle hat sie darübergemalt und damit die Richtungsausweichung
+            // von C13 wieder aufgehoben. Ein Rest der alten Schleife, der bei
+            // der Umstellung stehengeblieben ist.
+            //
+            // Gefallene bekommen hier gar nichts mehr: ihr Bild macht
+            // DrawUnitBody, das Wrack eines Fahrzeugs macht DrawEffects, und
+            // Bedienhilfen hat ein Toter keine.
             if (e.Dead) continue;
             // buildings are part of the baked map picture; they only get their
             // flag (key T), a health bar once damaged, and the selection box
@@ -18413,7 +18663,11 @@ public partial class MapEntityLayer : Node2D
         {
             if (e.Infantry >= 0 && _drawSprites)
             {
-                var body = GetInfantryTexture(e.Infantry, e.Facing, InfBlock(e));
+                // ⚠ InfDrawFacing, nicht e.Facing: für 22 von 192 (Satz,
+                // Richtung) gibt es kein Leichenbild, und dann wird die
+                // RICHTUNG ausgewichen statt auf das Stehbild zurückzufallen.
+                // Siehe InfCorpseFacing — das ist die zweite Gestalt von C13.
+                var body = GetInfantryTexture(e.Infantry, InfDrawFacing(e), InfBlock(e));
                 if (body != null) DrawTexture(body, picC - ComposedAnchor);
             }
             return;

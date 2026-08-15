@@ -699,6 +699,10 @@ public partial class MapEntityLayer : Node2D
         // nicht mehr gibt. ⚠ Und danach ist `prize` veraltet, darum wird die
         // Zahl unten neu geholt.
         var mine = new List<int>(foes) { human };
+        // ⚠ 17.08.2026 — C24: VOR dem Verteilen der Basen. Wer nicht mitspielt,
+        // soll auch keine Basis zugeteilt bekommen, und seine Einheiten sollen
+        // beim Verteilen nicht mehr im Weg stehen.
+        int idle = NoClearIdleSlots ? 0 : ClearIdleSlots(mine);
         int gaveBases = conquest ? GrantStartingBases(mine) : 0;
         if (gaveBases > 0) prize = NeutralPrizes();
         EnableSkirmishAi(foes, level);
@@ -880,6 +884,64 @@ public partial class MapEntityLayer : Node2D
     // board. It is replaced by KeepStartingTroop, which leaves an equal handful
     // per slot — see the note there and in StartSkirmish for why sweeping the
     // map clean was the wrong answer on a map with no factory to build from.
+
+    /// <summary>
+    /// <b>Die Truppen der Plätze wegräumen, die gar nicht mitspielen.</b>
+    ///
+    /// <para>⚠ 17.08.2026, gemeldet (C24): »wenn die Karte z.B. 5 KI erlaubt und
+    /// man nur 3 nutzt, dann steht an den so gesehen inaktiven Basen immer die
+    /// Starteinheit dennoch da.«</para>
+    ///
+    /// <para><b>Und genau so ist es gebaut:</b> <c>StartSkirmish</c> füllt
+    /// <c>foes</c> nur bis <c>aiCount</c> auf; alle weiteren Plätze aus
+    /// <c>live</c> bekommen keine KI — ihre Einheiten aber bleiben stehen und
+    /// rühren sich nie. Für den Spieler sind das Ziele ohne Gegner, und sie
+    /// verfälschen jede Abrechnung, weil sie als lebende Armee zählen.</para>
+    ///
+    /// <para><b>Weggeräumt werden nur die MOBILEN Einheiten</b>, nicht die
+    /// Gebäude. Ein Gebäude eines nicht mitspielenden Platzes ist ein PREIS —
+    /// es lässt sich einnehmen, und das ist auf einer Eroberungskarte der Sinn
+    /// der Sache. Eine Einheit, die niemand steuert, ist dagegen nur ein
+    /// Hindernis.</para>
+    ///
+    /// <para>Weggeräumt wird auf demselben Weg wie in
+    /// <see cref="KeepStartingTroop"/> — <c>Dead</c> mit langer Totzeit, damit
+    /// kein Wrack und kein Rauch entsteht, und die Belegung freigeben. ⚠ NICHT
+    /// aus der Liste löschen: die Sätze hängen an ihrem Index, und das Löschen
+    /// mitten im Aufbau würde jeden Verweis darauf verschieben.</para></summary>
+    /// <summary><c>--no-clear-idle</c> — die Gegenprobe zu C24: die Truppen der
+    /// nicht mitspielenden Plaetze bleiben stehen, wie vor dem 17.08.2026.</summary>
+    public static bool NoClearIdleSlots;
+
+    private int ClearIdleSlots(List<int> playing)
+    {
+        int removed = 0;
+        var per = new Dictionary<int, int>();
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead) continue;
+            if (e.Owner is < 0 or > 7 || playing.Contains(e.Owner)) continue;
+            e.Dead = true;
+            e.Hp = 0;
+            e.DeadTime = 999f;
+            e.Path = null;
+            e.Target = -1;
+            e.Orders.Clear();
+            _nav?.ClearOccupant(e.Col, e.Row, i);
+            per[e.Owner] = per.GetValueOrDefault(e.Owner) + 1;
+            removed++;
+        }
+        if (removed > 0)
+        {
+            var parts = new List<string>();
+            foreach (var kv in per) parts.Add($"P{kv.Key}: {kv.Value}");
+            GD.Print($"Gemetzel: {removed} Einheiten von {per.Count} Plaetzen weggeraeumt, " +
+                     $"die nicht mitspielen ({string.Join(", ", parts)}) — " +
+                     "ihre Gebaeude bleiben stehen und sind einnehmbar");
+        }
+        return removed;
+    }
 
     public string AiLine()
     {
