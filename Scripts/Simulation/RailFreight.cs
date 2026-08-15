@@ -1798,6 +1798,80 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     public const float ZigzagFlat = 4f;
 
+    /// <summary>
+    /// <c>--rail-gap-check</c> — <b>wie weit ist das letzte Gleisstück von
+    /// seinem Gebäude weg?</b> Die Zahl zu Fehler C14 (»nicht jede Bahnstrecke
+    /// ist sauber an Gebäude angebunden, oft fehlt noch eine Grafik, also ein
+    /// kleines Stück von der Bahnstrecke«).
+    ///
+    /// <para>⚠ <b>Warum die vorhandene Zahl das nicht beantwortet.</b>
+    /// <c>--rail-check</c> meldet »Linienenden: 0 von 70 weiter als 2 Zellen vom
+    /// Endgebäude« — die Schwelle ist <b>2</b>, also zählt ein Loch von EINER
+    /// Zelle als bestanden. Genau das ist aber »ein kleines Stück fehlt«: eine
+    /// Zellbreite ist 40 px. Eine Schranke ist kein Kriterium (Arbeitsweise 21);
+    /// hier wird deshalb die VERTEILUNG ausgegeben, nicht ein Ja/Nein.</para>
+    ///
+    /// <para>Gemessen wird der Abstand des letzten Kettengliedes zum
+    /// GRUNDRISS des Endgebäudes: 0 = das Stück liegt auf dem Grundriss (dort
+    /// gehört es hin, das Original zeichnet es unter das Gebäude), 1 = eine
+    /// Zelle Luft dazwischen, und so weiter.</para>
+    ///
+    /// <para>Aufgeschlüsselt nach GEBÄUDEART, weil die Meldung eine über
+    /// bestimmte Anschlüsse ist und eine Gesamtquote sie verstecken würde.</para>
+    /// </summary>
+    public string RailGapCheckLine()
+    {
+        if (_lineCell.Count == 0) return "rail-gap-check: keine Bahnlinie";
+        var bySlot = new Dictionary<int, Entity>();
+        foreach (var e in _entities)
+            if (e.IsBuilding && !e.IsProp) bySlot[e.Slot] = e;
+
+        var hist = new SortedDictionary<int, int>();
+        var perType = new SortedDictionary<int, (int N, int Gap)>();
+        var worst = new List<string>();
+        int ends = 0;
+
+        foreach (var kv in _lineCell)
+        {
+            var cells = kv.Value;
+            if (cells.Count == 0) continue;
+            RailLine? line = null;
+            foreach (var l in _railLines) if (l.Slot == kv.Key) { line = l; break; }
+            if (line == null) continue;
+            foreach (var (slot, tail) in new[] { (line.Bud1, false), (line.Bud2, true) })
+            {
+                if (!bySlot.TryGetValue(slot, out var b) || b.Dead) continue;
+                var c = cells[tail ? ^1 : 0];
+                int col = Mathf.RoundToInt(c.X), row = Mathf.RoundToInt(c.Y);
+                // Abstand zum RECHTECK des Grundrisses, nicht zur Ankerzelle.
+                int dx = Mathf.Max(0, Mathf.Max(b.Col - col, col - (b.Col + Mathf.Max(1, b.FootW) - 1)));
+                int dy = Mathf.Max(0, Mathf.Max(b.Row - row, row - (b.Row + Mathf.Max(1, b.FootH) - 1)));
+                int d = Mathf.Max(dx, dy);
+                ends++;
+                hist[d] = hist.GetValueOrDefault(d) + 1;
+                perType.TryGetValue(b.BType, out var t);
+                perType[b.BType] = (t.N + 1, t.Gap + (d > 0 ? 1 : 0));
+                if (d > 0 && worst.Count < 8)
+                    worst.Add($"   Linie {kv.Key}: letztes Stueck ({col},{row}) — " +
+                              $"{d} Zelle(n) vor {BuildingTypeName(b.BType)} slot {b.Slot} " +
+                              $"auf ({b.Col},{b.Row}) {b.FootW}x{b.FootH}");
+            }
+        }
+        if (ends == 0) return "rail-gap-check: kein Linienende mit Endgebaeude";
+
+        var sb = new System.Text.StringBuilder();
+        int gaps = 0;
+        foreach (var kv in hist) if (kv.Key > 0) gaps += kv.Value;
+        sb.Append($"rail-gap-check: {ends} Linienenden, {gaps} mit LUECKE zum Gebaeude " +
+                  $"({100.0 * gaps / ends:0.0} %)\n   Abstand: ");
+        foreach (var kv in hist) sb.Append($"{kv.Key} Zelle(n): {kv.Value}   ");
+        sb.Append("\n   je Bauart: ");
+        foreach (var kv in perType)
+            sb.Append($"{BuildingTypeName(kv.Key)} {kv.Value.Gap}/{kv.Value.N}   ");
+        foreach (string w in worst) sb.Append('\n').Append(w);
+        return sb.ToString();
+    }
+
     public string RailZigzagLine()
     {
         if (_lineCell.Count == 0) return "rail-zigzag: keine Bahnlinie auf dieser Karte";

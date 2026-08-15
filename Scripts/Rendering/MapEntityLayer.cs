@@ -13904,6 +13904,11 @@ public partial class MapEntityLayer : Node2D
     {
         RailTilesDrawn = 0; RailShadowsDrawn = 0; SlopeDrawn = 0; SlopeFallback = 0;
         int at = 0;
+        // ⚠ 17.08.2026 — DIE EINHEITEN LAUFEN JETZT IM SELBEN DURCHGANG MIT
+        // (Fehler C23). Die Zeilenverzahnung stand schon da, nur für das Gleis;
+        // ihr eine zweite Liste mitzugeben ist derselbe Handgriff.
+        BuildUnitDrawOrder();
+        int ui = 0;
         if (_drawSprites && Patterns != null)
             foreach (var b in BuildingsBackToFront())
             {
@@ -13911,10 +13916,156 @@ public partial class MapEntityLayer : Node2D
                 // sein Grundriss reicht so weit nach unten, und jede Kachel
                 // darin wird in ihrer eigenen Zeile gestempelt.
                 DrawRailUpTo(RailThroughRowFor(b), ref at);
+                // ⚠ Für die EINHEIT gilt eine ANDERE Schwelle als für das
+                // Gleis: das Gleis trägt zusätzlich seinen eigenen Versatz von
+                // +2 (RailDrawRowBias, gelesen @0x42DFE9), eine Einheit nicht.
+                // Maßgeblich ist allein, in welches Fach das GEBÄUDE kommt, und
+                // das ist `Zeile + 3` (BuildingDrawRowBias, gelesen @0x42FD4D).
+                // Die beiden Schwellen zu vermischen wäre der Fehler, den Regel
+                // 28 beschreibt: eine Zahl aus einem fremden Bezug übernehmen.
+                DrawUnitsUpTo(b.Row + BuildingDrawRowBias, ref ui);
                 DrawBuildingBody(b);
             }
         DrawRailUpTo(int.MaxValue, ref at);
+        DrawUnitsUpTo(int.MaxValue, ref ui);
     }
+
+    /// <summary>
+    /// <b>Wer wird vor den Gebäuden gezeichnet — und liegt damit dahinter.</b>
+    /// Die Antwort auf Fehler C23 (17.08.2026).
+    ///
+    /// <para><b>Gemeldet:</b> »wenn eine Einheit hinter dem Gebäude ist, sieht
+    /// man die ja derzeit, ohne dass die Gebäudegrafik abnimmt … ob man
+    /// Einheiten hinter Gebäuden gar nicht durchsieht, oder ob die Gebäude
+    /// leicht transparent werden«.</para>
+    ///
+    /// <para><b>Gelesen, und die Antwort ist VERDECKEN.</b> Das Original hat
+    /// zwar einen durchscheinenden Zeichner — Mischtafel 256×256 bei
+    /// <c>0xA3AFB1</c>, <c>shl ecx,8</c> + <c>mov bl,[ecx+0xA3AFB1]</c> bei
+    /// @0x4B7E80 —, aber er hat <b>genau EINEN</b> Aufrufer (@0x42B227) gegen
+    /// <b>neun</b> für den normalen (0x4B71F0), und dieser eine hängt an einem
+    /// GEBÄUDEFELD (<c>word[+0x3E] &gt; 0</c> @0x42B20D), nicht daran, ob etwas
+    /// dahintersteht. Eins ist eine Zahl, kein Eindruck.</para>
+    ///
+    /// <para>Stattdessen fächert das Original seine Zeichenliste nach
+    /// SCHIRMZEILE: Verteiler @0x42C8C0 liest das Artbyte bei <c>0xAB8068</c>,
+    /// prüft <c>cmp eax, 0x1d</c> und springt über die Tafel 0x42D7C8 in 30
+    /// Fälle. Malerordnung also — und damit Verdeckung.</para>
+    ///
+    /// <para>⚠ <b>Bei uns lief es genau andersherum:</b> <c>_Draw</c> rief
+    /// <see cref="DrawRailAndBuildings"/> und DANACH die Einheitenschleife, also
+    /// lag jede Einheit über jedem Gebäude. Jetzt wird der Rumpf einer Einheit
+    /// in denselben zeilenweisen Durchgang eingefädelt, in dem schon das Gleis
+    /// läuft.</para>
+    ///
+    /// <para>⚠ <b>Was NICHT eingefädelt wird, und das ist Absicht:</b> die
+    /// Auswahlklammern, der Besitzerring, die Balken und die Befehlslinien. Das
+    /// sind Bedienhilfen und keine Weltobjekte — eine Auswahl, die hinter einem
+    /// Gebäude verschwindet, macht das Spiel schlechter, nicht treuer. Sie
+    /// bleiben deshalb im späteren Durchgang und damit oben.</para>
+    ///
+    /// <para>Gegenprobe: <c>--no-unit-occlusion</c>.</para></summary>
+    private void BuildUnitDrawOrder()
+    {
+        _unitDraw.Clear();
+        if (NoUnitOcclusion) return;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp) continue;
+            // ⚠ Dieselbe Nebelprüfung wie in der Einheitenschleife. Stünde sie
+            // nur dort, zeichnete dieser Durchgang fremde Einheiten durch den
+            // Nebel — ein Fehler, den man erst im Spiel sieht.
+            if (FogActive && e.Owner != ViewPlayer && !Watched(e.Col, e.Row)) continue;
+            if (e.Dead && e.Infantry < 0) continue;      // Wracks macht DrawEffects
+            _unitDraw.Add(i);
+        }
+        _unitDraw.Sort((x, y) =>
+        {
+            var a = _entities[x]; var b = _entities[y];
+            return a.Row != b.Row ? a.Row - b.Row : a.Col - b.Col;
+        });
+    }
+
+    private readonly List<int> _unitDraw = new();
+
+    /// <summary><c>--behind-check</c> — eine Einheit HINTER ein Gebäude stellen
+    /// und die Kamera daraufsetzen, damit der Bildvergleich den Fall überhaupt
+    /// enthält.
+    ///
+    /// <para>⚠ Der erste Bildvergleich zu C23 zeigte <b>0 geänderte
+    /// Bildpunkte</b> — nicht weil die Verdeckung nicht wirkt, sondern weil an
+    /// der gewählten Kamerastelle gar keine Einheit hinter einem Gebäude stand.
+    /// Ein Vergleich, der den Fall nicht enthält, ist kein Beleg für seine
+    /// Abwesenheit.</para>
+    ///
+    /// <para>Gestellt wird: ein Gebäude mit mindestens 3 Zeilen Grundriss, die
+    /// Einheit auf dessen MITTLERE Zeile und mittlere Spalte — also mitten im
+    /// Grundriss, wo das Gebäudebild sie decken muss.</para></summary>
+    public Vector2? BehindCheckSetup()
+    {
+        if (_nav == null) return null;
+        // ⚠ Eine BASIS, wenn es eine gibt: sie ist hoch. Die Mine ist flach, und
+        // hinter einem flachen Gebäude ist auch im Original nichts zu verdecken —
+        // ein Bildvergleich daran zeigt fast nichts und sagt fast nichts.
+        Entity? bld = null;
+        foreach (var b in BuildingsBackToFront())
+            if (!b.Dead && b.BType == 1 && b.FootH >= 3 && b.FootW >= 3) { bld = b; break; }
+        foreach (var b in BuildingsBackToFront())
+        {
+            if (bld != null) break;
+            if (!b.Dead && b.FootH >= 3 && b.FootW >= 3) bld = b;
+        }
+        if (bld == null) { GD.Print("behind-check: kein Gebaeude mit 3x3 Grundriss"); return null; }
+
+        int ui = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var u = _entities[i];
+            if (u.IsBuilding || u.IsProp || u.Dead || !u.Mobile) continue;
+            ui = i; break;
+        }
+        if (ui < 0) { GD.Print("behind-check: keine fahrende Einheit"); return null; }
+
+        // ⚠ NICHT die Mitte des Grundrisses. Der erste Anlauf setzte die Einheit
+        // dorthin (Zeile 4 eines 1..6 tiefen Gebäudes) und mass 4 geänderte
+        // Bildpunkte — zu Recht: die VORDERE Hälfte eines Grundrisses gehört vor
+        // das Gebäude, und die Verzahnung tut dort genau das Richtige. Der
+        // gemeldete Fall ist die Einheit DAHINTER, also eine Zeile ÜBER dem
+        // Gebäude. Ein Prüfstand, der den falschen Fall herstellt, misst nichts.
+        var to = new Vector2I(bld.Col + bld.FootW / 2, Mathf.Max(0, bld.Row - 1));
+        var u2 = _entities[ui];
+        _nav.SetOccupant(u2.Col, u2.Row, -1);
+        u2.Col = to.X; u2.Row = to.Y;
+        u2.Pos = CellCenter(to.X, to.Y);
+        u2.Path = null; u2.Target = -1; u2.Owner = u2.Team = ViewPlayer;
+        _nav.SetOccupant(to.X, to.Y, ui);
+        _sel.Clear();                       // keine Klammern im Bild
+        GD.Print($"behind-check: {BuildingTypeName(bld.BType)} slot {bld.Slot} auf " +
+                 $"({bld.Col},{bld.Row}) {bld.FootW}x{bld.FootH}; Einheit slot {u2.Slot} " +
+                 $"auf ({to.X},{to.Y}) — also MITTEN im Grundriss");
+        return CellCenter(to.X, to.Y);
+    }
+
+    /// <summary>Alle vorgemerkten Einheiten bis zur Zeile
+    /// <paramref name="row"/> zeichnen.</summary>
+    private void DrawUnitsUpTo(int row, ref int idx)
+    {
+        while (idx < _unitDraw.Count && _entities[_unitDraw[idx]].Row < row)
+        {
+            DrawUnitBody(_entities[_unitDraw[idx]]);
+            idx++;
+        }
+    }
+
+    /// <summary><c>--no-unit-occlusion</c> — der Stand von vor dem 17.08.2026:
+    /// jede Einheit über jedem Gebäude.</summary>
+    public static bool NoUnitOcclusion;
+
+    /// <summary>Wieviele Einheitenrümpfe der zeilenweise Durchgang gezeichnet
+    /// hat. Steht in der Sichtzeile, damit »die Verdeckung läuft« nicht nur eine
+    /// Behauptung ist.</summary>
+    public int UnitsDrawnInOrder;
 
     /// <summary>Liegen zwei gezeichnete Stuecke Kante an Kante? Auf dem Schirm
     /// heisst das genau 40 px in x ODER 20 px in y, nichts sonst.</summary>
@@ -18214,17 +18365,66 @@ public partial class MapEntityLayer : Node2D
             // der Zelle des Satzes, nicht auf der Mitte des Grundrisses — siehe
             // PictureAnchor. Fuer alles, was 1x1 ist, sind beide gleich.
             var picC = PictureAnchor(e);
-            // owner ring on the ground under the unit
-            DrawArc(baseC, 7f, 0, Mathf.Tau, 20, new Color(oc.R, oc.G, oc.B, 0.9f), 2f);
-
-            // target line while engaging
+            // ⚠ 17.08.2026 — DER BESITZERRING UND DIE EINGRABMARKE SIND HIER
+            // RAUS, und das ist eine Berichtigung an derselben Änderung: sie
+            // liegen AUF DEM BODEN UNTER der Einheit. Als der Rumpf in den
+            // zeilenweisen Durchgang wanderte, blieben sie hier — und lagen
+            // damit plötzlich ÜBER dem Rumpf. Im Bildvergleich war genau das
+            // der einzige Unterschied (225 Bildpunkte, der rote Ring quer über
+            // dem Panzer). Sie werden jetzt in DrawUnitBody gezeichnet, direkt
+            // vor dem Sprite.
+            //
+            // Was hier BLEIBT, ist Bedienhilfe und gehört nach oben: die
+            // Auswahlklammern und die Ziellinie. Eine Auswahl, die hinter einem
+            // Gebäude verschwindet, macht das Spiel schlechter.
             if (e.Target >= 0 && _sel.Contains(i))
                 DrawLine(baseC, _entities[e.Target].Pos, new Color(1f, 0.4f, 0.3f, 0.5f), 1f);
-
-            if (e.DugIn)   // dug in: a earth-coloured bracket under the unit
-                DrawArc(baseC, 11f, Mathf.Pi * 0.15f, Mathf.Pi * 0.85f, 14,
-                        new Color(0.75f, 0.55f, 0.25f, 0.95f), 3f);
             if (_sel.Contains(i)) DrawSelectionBrackets(baseC, i == _selected);
+
+            // ⚠ 17.08.2026 — DER RUMPF IST HIER RAUS (Fehler C23). Er wird im
+            // zeilenweisen Durchgang gezeichnet, damit ein Gebäude ihn verdecken
+            // kann; siehe BuildUnitDrawOrder. Was hier bleibt, sind die
+            // BEDIENHILFEN darüber — Ring, Klammern, Linien.
+            if (!NoUnitOcclusion) continue;
+            DrawUnitBodyInline(i, e, baseC, picC, oc);
+        }
+        DrawUnitTail();
+    }
+
+    /// <summary>Der alte Weg, wenn <c>--no-unit-occlusion</c> gesetzt ist —
+    /// wortgleich mit <see cref="DrawUnitBody"/>, nur an seiner alten
+    /// Stelle.</summary>
+    private void DrawUnitBodyInline(int i, Entity e, Vector2 baseC, Vector2 picC, Color oc)
+        => DrawUnitBody(e);
+
+    /// <summary>
+    /// Der RUMPF einer Einheit — Fusssoldat, Rumpf mit Turm, zusammengesetztes
+    /// Bild oder als letztes ein Punkt. Herausgelöst am 17.08.2026, damit der
+    /// zeilenweise Durchgang ihn zeichnen kann (Fehler C23).
+    /// </summary>
+    private void DrawUnitBody(Entity e)
+    {
+        UnitsDrawnInOrder++;
+        var picC = PictureAnchor(e);
+        var oc = OwnerColor(e.Owner);
+
+        // Ein gefallener Fusssoldat bleibt liegen, wo er fiel.
+        if (e.Dead)
+        {
+            if (e.Infantry >= 0 && _drawSprites)
+            {
+                var body = GetInfantryTexture(e.Infantry, e.Facing, InfBlock(e));
+                if (body != null) DrawTexture(body, picC - ComposedAnchor);
+            }
+            return;
+        }
+
+        // Der Besitzerring und die Eingrabmarke liegen auf dem BODEN, also vor
+        // dem Rumpf — siehe die Begründung an ihrer alten Stelle.
+        DrawArc(e.Pos, 7f, 0, Mathf.Tau, 20, new Color(oc.R, oc.G, oc.B, 0.9f), 2f);
+        if (e.DugIn)
+            DrawArc(e.Pos, 11f, Mathf.Pi * 0.15f, Mathf.Pi * 0.85f, 14,
+                    new Color(0.75f, 0.55f, 0.25f, 0.95f), 3f);
 
             if (_drawSprites)
             {
@@ -18234,7 +18434,7 @@ public partial class MapEntityLayer : Node2D
                 if (e.Infantry >= 0)
                 {
                     var foot = GetInfantryTexture(e.Infantry, e.Facing, InfBlock(e));
-                    if (foot != null) { DrawTexture(foot, picC - ComposedAnchor); continue; }
+                    if (foot != null) { DrawTexture(foot, picC - ComposedAnchor); return; }
                 }
                 // hull + separately aimed turret (preferred)
                 // ⚠ Die Hangklasse gilt fuer BEIDE. Der Turmsitz wurde schon
@@ -18249,14 +18449,14 @@ public partial class MapEntityLayer : Node2D
                     if (turret != null && !HullCarriesItsOwnGun(e.UnitType))
                         DrawTexture(turret, picC - ComposedAnchor
                                             + TurretOffset(e.UnitType, e.Col, e.Row));
-                    continue;
+                    return;
                 }
                 var composed = GetComposedTexture(e.Combo, e.Facing);
                 if (composed != null)
                 {
                     // fixed 64x56 canvas, anchored at the unit's ground-center
                     DrawTexture(composed, picC - ComposedAnchor);
-                    continue;
+                    return;
                 }
                 // bare chassis (e.g. a freshly produced design) — the turret is
                 // still drawn on top, it shares the same 64x56 anchor
@@ -18267,12 +18467,20 @@ public partial class MapEntityLayer : Node2D
                                                   picC.Y - bare.GetHeight()));
                     var turret2 = GetTurretTexture(e.Weapon, aim);
                     if (turret2 != null) DrawTexture(turret2, picC - ComposedAnchor);
-                    continue;
+                    return;
                 }
             }
-            DrawCircle(baseC, 4.5f, new Color(oc.R, oc.G, oc.B, 0.85f));
-            DrawArc(baseC, 5.5f, 0, Mathf.Tau, 16, new Color(0, 0, 0, 0.6f), 1.2f);
-        }
+        // Gar kein Bild: der Besitzerpunkt. ⚠ Er haengt an e.Pos und nicht an
+        // picC — der Punkt gehoert auf die STELLE der Einheit, das Bild auf
+        // ihren Zeichenanker.
+        DrawCircle(e.Pos, 4.5f, new Color(oc.R, oc.G, oc.B, 0.85f));
+        DrawArc(e.Pos, 5.5f, 0, Mathf.Tau, 16, new Color(0, 0, 0, 0.6f), 1.2f);
+    }
+
+    /// <summary>Was nach der Einheitenschleife noch kommt — herausgezogen, weil
+    /// die Schleife jetzt frueher endet.</summary>
+    private void DrawUnitTail()
+    {
 
         // ⚠ DIE EICHUNG, in einem eigenen Durchgang NACH den Sprites
         // (--air-facing-check zeichnet sie mit).

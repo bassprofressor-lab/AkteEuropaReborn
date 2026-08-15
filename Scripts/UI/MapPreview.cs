@@ -76,7 +76,9 @@ public static class MapPreview
         string size = w > 0 ? $"{w} x {h} Felder" : "";
         string head = mission.Length > 0 ? $"„{mission}“  —  {size}" : size;
         string slots = Slots(name);
-        return slots.Length > 0 ? head + "\n" + slots : head;
+        string bases = BaseNote(name);
+        string txt = slots.Length > 0 ? head + "\n" + slots : head;
+        return bases.Length > 0 ? txt + "\n" + bases : txt;
     }
 
     // ---- die Spielform einer Gefechtskarte ----------------------------------
@@ -196,6 +198,74 @@ public static class MapPreview
     ///
     /// The counts come from the same entities.json the game plays from, so this
     /// line cannot drift away from what actually happens.</summary>
+    /// <summary>
+    /// <b>Wieviele BASEN hat diese Karte — und für wieviele Plätze?</b>
+    /// Die Auskunft zu Fehler C15 (17.08.2026).
+    ///
+    /// <para><b>Gemeldet war:</b> »Die Gegner-KI macht mal was, mal nicht.
+    /// Manche bauen gar nicht erst los, manche machen nur kurz was.«</para>
+    ///
+    /// <para>⚠ <b>Zwei eigene Fehldiagnosen unterwegs, beide zurückgezogen.</b>
+    /// Erst hiess es »die KI hat kein Bauprogramm« — sie hat keins, aber
+    /// <c>AiProduce</c> baut OHNE Programm sehr wohl (auf NET02 gemessen 10
+    /// Einheiten in 60 s). Dann hiess es »sie greift nicht an« — sie greift an
+    /// (dieselbe Zeile meldet 6 in der Welle und 1 Angriff). Beides war eine
+    /// Zahl, die ich falsch gelesen habe.</para>
+    ///
+    /// <para><b>Was wirklich dahintersteckt</b>, und es ist eine Eigenschaft der
+    /// KARTE: <c>IsUnitPlant</c> ist die BASIS und nur sie — wer keine hat, kann
+    /// nichts bauen, Mensch wie Maschine. Und viele Karten haben weniger Basen
+    /// als Startplätze:</para>
+    /// <code>
+    ///   map_DM_4    2 Basen, 5 Plaetze      map_DM_13  1 Basis,  3 Plaetze
+    ///   map_DM_11   2 Basen, 6 Plaetze      map_NET07  0 Basen,  8 Plaetze
+    /// </code>
+    /// <para>Auf DM_4 meldet der Prüflauf entsprechend <c>P5 … (0 Basen)</c> und
+    /// <c>0b</c> — dieser Gegner baut nie etwas, und zwar völlig zu Recht. Auf
+    /// NET02, wo jeder eine hat, bauen alle drei.</para>
+    ///
+    /// <para>⚠ Das ist <b>kein Fehler, den man wegmacht</b> — eine Karte mit
+    /// zwei Basen für fünf Plätze ist so gebaut. Es ist eine Auskunft, die vor
+    /// dem Start fehlte: der Spieler stellt drei Gegner ein und bekommt zwei,
+    /// die zusehen. Deshalb steht sie jetzt unter der Vorschau.</para></summary>
+    public static string BaseNote(string name)
+    {
+        string p = Core.Content.Path("Maps/" + name + ".entities.json");
+        if (!FileAccess.FileExists(p)) return "";
+        using var f = FileAccess.Open(p, FileAccess.ModeFlags.Read);
+        if (f == null) return "";
+        int bases = 0;
+        var slots = new HashSet<int>();
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(f.GetAsText());
+            if (doc.RootElement.TryGetProperty("buildings", out var arr) &&
+                arr.ValueKind == System.Text.Json.JsonValueKind.Array)
+                foreach (var b in arr.EnumerateArray())
+                    if (b.TryGetProperty("type", out var tv) &&
+                        tv.TryGetInt32(out int t) && t == 1) bases++;
+            if (doc.RootElement.TryGetProperty("entities", out var ents) &&
+                ents.ValueKind == System.Text.Json.JsonValueKind.Array)
+                foreach (var e in ents.EnumerateArray())
+                    if (e.TryGetProperty("owner", out var ov) &&
+                        ov.TryGetInt32(out int o) && o is >= 0 and < 8) slots.Add(o);
+        }
+        catch (System.Exception e) { GD.PrintErr("Basenzahl: " + e.Message); return ""; }
+
+        if (slots.Count == 0) return "";
+        if (bases == 0)
+            return $"⚠ KEINE Basis auf dieser Karte ({slots.Count} Startplaetze) — " +
+                   "hier baut niemand, es wird mit den Truppen der Karte gespielt";
+        // ⚠ »jeder kann bauen« waere auf einer EROBERUNGSKARTE eine Zusage, die
+        // erst nach der Einnahme gilt — dort gehoeren die Basen niemandem. Die
+        // Zeile nennt deshalb nur die Zahlen und ueberlaesst den Schluss dem,
+        // was die Zeile darueber schon sagt.
+        if (bases >= slots.Count)
+            return $"{bases} Basen fuer {slots.Count} Startplaetze";
+        return $"⚠ nur {bases} Basen fuer {slots.Count} Startplaetze — wer keine " +
+               "bekommt, kann NICHTS bauen und sieht zu";
+    }
+
     public static string Slots(string name)
     {
         string p = Core.Content.Path("Maps/" + name + ".entities.json");

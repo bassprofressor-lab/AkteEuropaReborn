@@ -610,11 +610,13 @@ public partial class MapViewer : Node2D
     private int _selectTypeForShot = -1;  // --select-type=<unit_type>, engt sie ein
     private bool _demoBuild;
     private bool _demoMine;
+    private bool _demoBehind;
     private bool _demoResearch;
     // --queue-check (Fehler C8): Bestellzeitpunkt, Abrechnungszeitpunkt, Anzahl.
     private float _queueCheckAt, _queueCheckDue;
     private float _supplyReloadAt, _supplyReloadDue;
     private float _railZigzagAt;
+    private float _railGapAt;
     private float _doorCheckAt;
     private float _capEnemyAt, _capEnemyDue;
     private int _queueCheckN = 3;
@@ -816,6 +818,8 @@ public partial class MapViewer : Node2D
             // --rail-zigzag (Fehler C17): die gezeichnete Schiene gegen den
             // gefahrenen Weg, je Knick einzeln. Siehe RailZigzagLine.
             else if (a == "--rail-zigzag") _railZigzagAt = 3f;
+            // --rail-gap-check (C14): Abstand des letzten Gleisstuecks zum Gebaeude.
+            else if (a == "--rail-gap-check") _railGapAt = 3f;
             // --door-check (Fehler C9/C11): kommt man an die Tueren heran?
             else if (a == "--door-check") _doorCheckAt = 3f;
             // --capture-enemy-check (C9/C11): ein FEINDLICHES Gebaeude einnehmen.
@@ -824,6 +828,12 @@ public partial class MapViewer : Node2D
             // --no-rail-lift: die Gegenprobe zu C17 — der Weg nimmt wieder die
             // Hoehe der gerundeten Zelle statt die des Gleisbildes.
             else if (a == "--no-rail-lift") MapEntityLayer.RailNoLift = true;
+            // --no-unit-occlusion (C23): Gegenprobe, jede Einheit ueber jedem Gebaeude.
+            else if (a == "--no-unit-occlusion") MapEntityLayer.NoUnitOcclusion = true;
+            // --demo-behind (C23): eine Einheit MITTEN in einen Gebaeudegrundriss
+            // setzen und die Kamera daraufsetzen, damit der Bildvergleich den Fall
+            // ueberhaupt enthaelt. Siehe BehindCheckSetup.
+            else if (a == "--demo-behind") { _demo = true; _demoBehind = true; }
             // --queue-check[=n]: n Einheiten in EINEM Zug bestellen und danach
             // nachrechnen, ob bezahlt und geliefert zusammenpassen. Siehe
             // MapEntityLayer.QueueCheckOrder — der eigentliche Fehler C8 war
@@ -1059,6 +1069,7 @@ public partial class MapViewer : Node2D
                   : _demoTakeover ? _entities.DebugDemoTakeover()
                   : _demoBuildPanel ? _entities.DebugDemoBuildPanel()
                   : _demoSupply ? _entities.DebugDemoSupply()
+                  : _demoBehind ? _entities.BehindCheckSetup()
                   : _demoCrush ? _entities.DebugDemoCrush()
                   : _demoInf ? _entities.DebugDemoInfantry()
                   : _demoInfPic ? _entities.DebugDemoInfPortrait()
@@ -1295,6 +1306,15 @@ public partial class MapViewer : Node2D
             {
                 _railZigzagAt = -1f;
                 GD.Print(_entities.RailZigzagLine());
+            }
+        }
+        if (_railGapAt > 0f)
+        {
+            _railGapAt -= (float)delta;
+            if (_railGapAt <= 0f)
+            {
+                _railGapAt = -1f;
+                GD.Print(_entities.RailGapCheckLine());
             }
         }
         if (_doorCheckAt > 0f)

@@ -35,6 +35,18 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Einheiten
 
+- ⭐ **Einheiten verschwinden hinter Gebäuden.** Bisher lag jede Einheit über
+  jedem Gebäude — ein Panzer stand auf dem Dach der Basis. Wie es das Original
+  macht, ist gelesen: es **verdeckt**, es macht nichts durchscheinend. Es *hat*
+  einen durchscheinenden Zeichner (Mischtafel 256×256 bei `0xA3AFB1`), aber der
+  hat **genau einen** Aufrufer gegen neun für den normalen, und der hängt an
+  einem Gebäudefeld, nicht daran, ob etwas dahintersteht. Stattdessen fächert
+  das Original seine Zeichenliste nach Schirmzeile (Verteiler `@0x42C8C0`, 30
+  Arten) — Malerordnung.
+  Der Rumpf einer Einheit läuft jetzt in demselben zeilenweisen Durchgang mit,
+  in dem schon das Gleis lief. Auswahlklammern und Ziellinien bleiben oben: das
+  sind Bedienhilfen, keine Weltobjekte. Gegenprobe `--no-unit-occlusion`.
+
 - **Ein gefallener Fusssoldat verschwand nicht mehr.** Gemessen über alle 24
   Sätze und 8 Richtungen: Laufzyklus (Block 0–7) und Stehen (11) sind
   lückenlos, die Sterbebilder nicht — Block 12 in 21, Block 13 in 69 und Block
@@ -220,6 +232,17 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Heli also bis zu 30 Takte lang seitwärts, bevor er sich ausgerichtet hat.
 
 ### Gefecht
+
+- **Die Kartenvorschau sagt jetzt, wieviele Basen es gibt.** Anlass war »die
+  Gegner-KI macht mal was, mal nicht — manche bauen gar nicht erst los«. Die
+  Ursache ist keine der KI, sondern der Karte: gebaut wird nur in einer BASIS,
+  und viele Karten haben weniger davon als Startplätze — `map_DM_4` **2 Basen
+  für 5 Plätze**, `map_DM_11` 2 für 6, `map_NET07` **keine** für 8. Wer keine
+  bekommt, sieht zu. Das stand nirgends; jetzt steht es unter der Vorschau,
+  mit Warnzeichen wenn es nicht reicht.
+  ⚠ Zwei eigene Diagnosen sind dabei gefallen: die KI baut sehr wohl ohne
+  Bauprogramm (10 Einheiten in 60 s gemessen), und sie greift auch an (6 in der
+  Welle, 1 Angriff). Beides hatte ich vorher falsch aus den Zählern gelesen.
 
 - ⭐ **Feindliche Gebäude lassen sich einnehmen — Strg+Rechtsklick.** Gemeldet
   war »Werft und Seedock lassen sich nicht einnehmen, nur Angreifen kann man
@@ -445,6 +468,17 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   ganz links, 35 ganz rechts.
 
 ### Zug und Strecke
+
+- **`--rail-gap-check`: wie weit ist das letzte Gleisstück vom Gebäude?** Zu
+  »oft fehlt noch ein kleines Stück von der Bahnstrecke«. Die alte Zahl konnte
+  es nicht sehen — sie meldet »0 von 70 weiter als **2** Zellen«, und eine
+  Lücke von einer Zelle ist 40 px. Gemessen: 20 von 70 (NET05), 20 von 66
+  (NET02), 16 von 48 (DM_4) Enden mit Lücke, **immer genau eine Zelle** und
+  **nur an Bahnstation und Feldbahnhof**. ⚠ Die Lücke steht in den
+  KARTENDATEN — die erste Grundrissspalte trägt dort gar keine Gleiszelle, das
+  Gebäudebild setzt die Schiene fort, und senkrecht sitzt es bündig (32/32,
+  6/6, 7/7, 0 px). An einer der Fundstellen nachgesehen: kein Loch. **Nicht
+  reproduziert** — der Prüfstand nennt jetzt Karte, Linie, Zelle und Gebäude.
 
 - ⭐ **Der Zug fährt die Diagonale, die gezeichnet dasteht.** Zum zweiten Mal
   gemeldet (»wenn eine Bahnstrecke sauber diagonal ist … so fährt aber der Zug
