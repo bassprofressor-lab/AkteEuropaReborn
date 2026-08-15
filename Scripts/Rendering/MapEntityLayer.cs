@@ -5999,6 +5999,21 @@ public partial class MapEntityLayer : Node2D
 
         if (InFiringWindow(e, dist))
         {
+            // ⚠ 16.08.2026 — DER FAHRBEFEHL UEBERLEBT DAS GEFECHT.
+            //
+            // Hier stand nur `e.Path = null`, und damit war der Befehl weg: die
+            // Einheit hielt zum Feuern an und stand danach fuer immer. Genau das
+            // war die eine »unterwegs liegengebliebene« auf map_NET07 — slot 24,
+            // zwei Zellen vor seinem Ziel, Geduld laufend, Sprit 248/300. Kein
+            // Wegfindungsfehler; der Kampf hat den Befehl gefressen.
+            //
+            // ⚠ UNSERE Setzung: ob das Original nach dem Gefecht weiterfaehrt,
+            // ist NICHT gelesen. Gebaut ist die schonende Fassung — das Ziel
+            // bleibt stehen und der Wiederholungsversuch (Entity.RetryIn) nimmt
+            // ihn wieder auf, sobald kein Ziel mehr da ist. Gegenprobe
+            // `--no-path-retry` nimmt beides weg.
+            if (e.Path != null && !RetryOff &&
+                (e.Goal.X != e.Col || e.Goal.Y != e.Row)) e.RetryIn = RetryTicks;
             e.Path = null;                      // in range: hold position and fire
             // a turreted unit keeps its hull heading and only swings the weapon;
             // one without a turret has to turn its whole body
@@ -15271,6 +15286,9 @@ public partial class MapEntityLayer : Node2D
             if (e.Path != null) { e.RetryIn = 0; continue; }
             if (--e.RetryIn > 0) continue;
             if (e.FuelMax > 0 && e.Fuel <= 0) continue;      // kein Sprit, kein Weg
+            // ⚠ Solange sie schiesst, faehrt sie nicht weiter — sonst zoege der
+            // Wiederholungsversuch sie mitten aus dem Gefecht.
+            if (e.Target >= 0) { e.RetryIn = RetryTicks; continue; }
             var weg = _nav.FindPath(new Vector2I(e.Col, e.Row), e.Goal, e.Move, i);
             if (weg == null || weg.Count == 0) { e.RetryIn = RetryTicks; continue; }
             e.Path = weg;

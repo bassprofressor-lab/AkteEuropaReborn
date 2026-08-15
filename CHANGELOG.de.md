@@ -35,6 +35,15 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Einheiten
 
+- **Eine Einheit, die zum Schiessen anhaelt, faehrt jetzt danach weiter.** Bisher
+  war der Fahrbefehl weg, sobald ein Ziel in Reichweite kam: die Einheit blieb
+  stehen, feuerte — und stand danach fuer immer. Auf map_NET07 war das genau die
+  eine von vierzig, die zwei Zellen vor ihrem Ziel liegenblieb. Ebenso behaelt
+  jetzt eine Einheit ihr Ziel, wenn im Augenblick des Befehls gar kein Weg frei
+  ist (weil die eigenen Leute im Weg stehen), und versucht es eine Sekunde
+  spaeter noch einmal, statt den Befehl stillschweigend fallenzulassen.
+  ⚠ Ob das Original nach einem Gefecht weiterfaehrt, ist nicht gelesen — das ist
+  unsere Setzung, und sie ist als solche ausgeschildert.
 - **Achtzehn Kartenbilder trugen ihre Gebäude noch im Boden.** Der Kartenbacker
   lässt ein stehendes Gebäude seit einer älteren Kur **absichtlich** aus dem
   Bild heraus — sonst blieben seine Bildpunkte für immer im Gelände stehen, und

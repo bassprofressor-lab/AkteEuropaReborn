@@ -33,6 +33,15 @@ deviate on purpose, and every deviation is marked as ours.
 
 ### Units
 
+- **A unit that stops to fire now carries on afterwards.** Until now the move
+  order was gone the moment a target came into range: the unit stopped, fired —
+  and then stood there forever. On map_NET07 that was exactly the one unit in
+  forty that stalled two cells short of its goal. Likewise, a unit that finds no
+  free path at the moment of the order (because its own comrades are in the way)
+  now keeps its goal and tries again a second later instead of silently dropping
+  the order.
+  ⚠ Whether the original resumes after a firefight is not read — that is our
+  setting, and it is marked as such.
 - **Eighteen map images still had their buildings baked into the ground.** The
   map baker deliberately leaves a standing building out of the picture — an
   older fix, because otherwise its pixels stay in the terrain forever and a
