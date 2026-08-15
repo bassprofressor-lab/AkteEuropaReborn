@@ -41,11 +41,15 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Tuerzelle steht, schreibt das Missionsskript dem Gebaeude 180 Waffen- und 127
   Fahrwerkteile ins Lager; Dolni bekommt 330 und 237. Bei uns war die Wirkung
   dieser Regel schlicht **leer** — die Bedingung stand richtig da und tat nichts.
-  Dieselbe Form steht achtzehnmal im Spiel, in vier Missionen, und sie SETZT das
-  Lager statt es zu erhoehen: in Kampagne 33 ist derselbe Befehl eine Strafe, er
-  nimmt sechs Werken ihre 660 bis 1970 Teile weg und laesst 70 stehen.
-  Gemessen: Kampagne 3 vier von vier, Kampagne 6 vier von vier, Kampagne 33
-  sechs von sechs.
+  Dieselbe Form steht zwanzigmal im Spiel, in fuenf Missionen, und sie SETZT das
+  Lager statt es zu erhoehen — in Kampagne 33 ist derselbe Befehl deshalb eine
+  Strafe statt einer Belohnung. Die Betraege haengen am Taktzaehler des
+  Missionsblocks und schwanken um bis zu neunzehn, wie im Original; Kampagne 25
+  rechnet mit einem Faktor drei. Gemessen: Kampagne 3 vier von vier, Kampagne 6
+  vier von vier, Kampagne 2 zwei von vier.
+  ⚠ Kampagne 33 rechnet **quadratisch** und ist damit noch nicht gebaut — die
+  sechs Bestueckungen sind gelesen und stehen als ehrliche Luecke da, statt eine
+  falsche Zahl zu schreiben.
 - **Das Original zaehlt Zellen, nicht Bildpunkte — und der Boden bremst
   niemanden.** Die zweite Haelfte der gemeldeten Frage nach der Geschwindigkeit
   ist gelesen. Jede Einheit fuehrt einen Schrittzaehler, den das Spiel selbst

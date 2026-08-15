@@ -39,10 +39,15 @@ deviate on purpose, and every deviation is marked as ours.
   writes 180 weapon parts and 127 chassis parts into the building's store; Dolni
   gets 330 and 237. On our side the effect of that rule was simply **empty** —
   the condition was there, correctly read, and did nothing. The same form occurs
-  eighteen times across four missions, and it ASSIGNS the store rather than
-  adding to it: in campaign 33 the very same instruction is a penalty, stripping
-  six works of their 660 to 1970 parts and leaving 70. Measured: campaign 3 four
-  of four, campaign 6 four of four, campaign 33 six of six.
+  twenty times across five missions, and it ASSIGNS the store rather than adding
+  to it — which is why in campaign 33 the very same instruction is a penalty
+  instead of a reward. The amounts hang off the mission block's tick counter and
+  vary by up to nineteen, as in the original; campaign 25 applies a factor of
+  three. Measured: campaign 3 four of four, campaign 6 four of four, campaign 2
+  two of four.
+  ⚠ Campaign 33 computes its amounts **quadratically** and is therefore not
+  built yet — its six stockings are read and left as an honest gap rather than
+  written with a wrong number.
 - **The original counts cells, not pixels — and the ground slows nobody down.**
   The second half of the reported question about speed has been read out. Every
   unit carries a step counter the game itself calls "kolik"; it grows by the

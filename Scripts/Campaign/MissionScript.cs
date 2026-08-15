@@ -642,9 +642,9 @@ public sealed class MissionScript
     /// Pruefstand gar nicht herstellen kann (Mission 2 haengt an einem
     /// Fortschrittszaehler v[20]), ist eine Grenze des Pruefstands.</para>
     /// </summary>
-    public List<(int Slot, int Off, int Var, int Add, int At, bool Bereit)> StockSites()
+    public List<(int Slot, int Off, int Var, int Add, int Mal, int At, bool Bereit)> StockSites()
     {
-        var list = new List<(int, int, int, int, int, bool)>();
+        var list = new List<(int, int, int, int, int, int, bool)>();
         foreach (var r in _script.Rules)
         {
             bool bereit = true;
@@ -655,7 +655,8 @@ public sealed class MissionScript
                 foreach (var c in r.Any) if (TestReal(c)) { bereit = true; break; }
             }
             foreach (var a in r.Then)
-                if (a.Kind == "stock") list.Add((a.A, a.B, a.C, a.D, r.At, bereit));
+                if (a.Kind == "stock")
+                    list.Add((a.A, a.B, a.C, a.D, a.E == 0 ? 1 : a.E, r.At, bereit));
         }
         return list;
     }
@@ -1674,13 +1675,15 @@ public sealed class MissionScript
                 if (a.A >= 0 && a.A < _var.Length && StoreField != null)
                     _var[a.A] = StoreField(a.B, a.C);
                 break;
-            // Lager b des Gebaeudesatzes a = v[c] + d — siehe SetStoreField.
-            // c == -1 heisst »keine Variable«, dann ist d der ganze Betrag
-            // (Mission 21 leert so vier Vorkommen mit `xor eax,eax`).
+            // Lager b des Gebaeudesatzes a = e·v[c] + d — siehe SetStoreField.
+            // c == -1 heisst »keine Variable«, dann ist d der ganze Betrag.
+            // e ist der Faktor: 1 bei M2/M3/M6, +3 und −3 bei M25
+            // (`3*v[88]+80` und `194−3*v[88]`, @0x4A1B50).
             case "stock":
                 if (SetStoreField != null && !StockOld)
                 {
-                    int wert = a.D + (a.C >= 0 && a.C < _var.Length ? _var[a.C] : 0);
+                    int f = a.E == 0 ? 1 : a.E;
+                    int wert = a.D + (a.C >= 0 && a.C < _var.Length ? f * _var[a.C] : 0);
                     SetStoreField(a.A, a.B, wert);
                 }
                 break;

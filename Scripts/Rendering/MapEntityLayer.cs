@@ -1694,10 +1694,19 @@ public partial class MapEntityLayer : Node2D
                     // down and prints "no fuel" at zero (@0x407ab8), which is
                     // also what the Treibstoffheli and the Nachschub-Posten
                     // refill. See GAMESTATE_RE.md 3.93.
-                    Hp = haveRaw ? HexByte(raw, 0x08) : GetI(e, "hp", -1),
-                    HpMax = haveRaw ? HexByte(raw, 0x29) : GetI(e, "hp_max", -1),
-                    Fuel = haveRaw ? Hex16(raw, 0x2e) : GetI(e, "hp", 0),
-                    FuelMax = haveRaw ? Hex16(raw, 0x30) : GetI(e, "hp_max", 0),
+                    // ⚠ DER RUECKFALL, berichtigt am 16.08.2026. Er zog Leben
+                    // UND Sprit aus demselben Schluessel »hp« — und der trug den
+                    // TANK, also bekam jede Einheit ohne `raw` ein Leben in
+                    // Hoehe ihres Tankinhalts. Die Datei schreibt seit heute
+                    // `fuel`/`fuel_max` und `energie`/`energie_max`.
+                    // `hp`/`hp_max` bleiben als Rueckfall stehen, aber NUR fuer
+                    // den Sprit: eine Datei aus einer aelteren Fassung liegt
+                    // unter user://data (Arbeitsweise 13) und wird von keinem
+                    // --reexport neu geschrieben, und dort war »hp« der Tank.
+                    Hp = haveRaw ? HexByte(raw, 0x08) : GetI(e, "energie", -1),
+                    HpMax = haveRaw ? HexByte(raw, 0x29) : GetI(e, "energie_max", -1),
+                    Fuel = haveRaw ? Hex16(raw, 0x2e) : GetI(e, "fuel", GetI(e, "hp", 0)),
+                    FuelMax = haveRaw ? Hex16(raw, 0x30) : GetI(e, "fuel_max", GetI(e, "hp_max", 0)),
                     // A/V = attack and defence, and they are +0x26 and +0x27.
                     //
                     // This moved twice before it settled. The damage arithmetic
@@ -8088,7 +8097,7 @@ public partial class MapEntityLayer : Node2D
                           "kein solches Gebaeude auf dieser Karte");
                 continue;
             }
-            int soll = s.Add + (s.Var >= 0 ? _mscript.VarAt(s.Var) : 0);
+            int soll = s.Add + (s.Var >= 0 ? s.Mal * _mscript.VarAt(s.Var) : 0);
             bool traf = neu == soll;
             // Nicht getroffen UND die Bedingung steht immer noch nicht: dann hat
             // der Pruefstand sie nicht herstellen koennen — das ist seine
@@ -8097,10 +8106,10 @@ public partial class MapEntityLayer : Node2D
             if (traf) ok++; else if (s.Bereit) fehl++; else unstellbar++;
             sb.Append($"\n      {zeichen} Platz {s.Slot} Lager " +
                       $"{namen.GetValueOrDefault(s.Off, "?"),-9} {alt} -> {neu}, " +
-                      $"soll {(s.Var >= 0 ? $"v[{s.Var}]={_mscript.VarAt(s.Var)}+" : "")}" +
+                      $"soll {(s.Var >= 0 ? $"{(s.Mal == 1 ? "" : s.Mal + "*")}v[{s.Var}]={s.Mal * _mscript.VarAt(s.Var)}+" : "")}" +
                       $"{s.Add} = {soll}{(traf || s.Bereit ? "" : "  [Bedingung nicht herstellbar]")}");
         }
-        sb.Append($"\n   B6 {(fehl == 0 && ok > 0 ? "behoben" : "STEHT")}: " +
+        sb.Append($"\n   B6 {(fehl > 0 ? "STEHT" : ok > 0 ? "behoben" : "NICHT MESSBAR")}: " +
                   $"{ok} getroffen, {fehl} daneben, {unstellbar} nicht ausloesbar, " +
                   $"{ungeprueft} nicht auf dieser Karte");
         if (fehl + unstellbar > 0) sb.Append("\n   Woran es liegt:" + _mscript.WhyNotStock());
@@ -8112,7 +8121,15 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>0, wenn jede Bestueckung genau ihren Sollwert getroffen hat und
     /// es ueberhaupt eine gab.</summary>
-    public int StockCheckRc() => _stockOk < 0 ? 2 : (_stockBad == 0 && _stockOk > 0 ? 0 : 1);
+    /// <remarks>⚠ »Nichts gemessen« ist NICHT »durchgefallen« (Arbeitsweise I).
+    /// Wenn keine Bestueckung getroffen hat, aber auch keine danebenlag, konnte
+    /// der Pruefstand die Lage nicht herstellen — das ist seine Grenze und gibt
+    /// 2, nicht 1. Mission 25 ist genau dieser Fall.</remarks>
+    public int StockCheckRc()
+        => _stockOk < 0 ? 2
+         : _stockBad > 0 ? 1
+         : _stockOk > 0 ? 0
+         : 2;
 
     public string PlaceForceLine()
     {

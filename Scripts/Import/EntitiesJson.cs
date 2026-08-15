@@ -113,7 +113,15 @@ public static class EntitiesJson
             w.Num("owner_old", e.Facing).Num("team", e.Owner);
             w.Num("kind", e.Kind).Num("subclass", e.Subclass);
             w.Num("unit_type", e.UnitType).Num("category", e.Category);
-            w.Num("code_base", e.CodeBase).Num("hp", e.Hp).Num("hp_max", e.HpMax);
+            // ⚠ 16.08.2026 — die Schluessel heissen jetzt, was die Felder SIND.
+            // +0x2e/+0x30 ist der TANK und +0x08/+0x29 das Leben (Korrektur vom
+            // 26.07.2026). Bis heute standen die Tankwerte unter »hp«/»hp_max«,
+            // und der Rueckfall in MapEntityLayer.Load zog daraus BEIDES.
+            // `energie`/`energie_max` sind neu und standen vorher gar nicht in
+            // der Datei — ohne `raw` war das Leben schlicht nicht ablesbar.
+            w.Num("code_base", e.CodeBase);
+            w.Num("fuel", e.Fuel).Num("fuel_max", e.FuelMax);
+            w.Num("energie", e.Energie).Num("energie_max", e.EnergieMax);
             if (e.FootW > 0) w.Num("foot_w", e.FootW).Num("foot_h", e.FootH);
             w.Str("raw", Hex(e.Raw));
             w.End();

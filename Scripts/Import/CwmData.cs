@@ -101,10 +101,20 @@ public static class CwmData
         public int Slot, PlayerBlock, Col, Row, Facing, Aim, Kind, Subclass;
         public int UnitType, Category, Energie, EnergieMax;
         /// <summary>+0x24, the constant 0x2710 = the object-code base of dir2,
-        /// and +0x2e/+0x30, which the fuel correction of 2026-07-26 showed to be
-        /// the TANK rather than health — kept under the names the exported data
-        /// has always used so the file stays comparable.</summary>
-        public int CodeBase, Hp, HpMax;
+        /// and +0x2e/+0x30 — the FUEL TANK.
+        ///
+        /// <para>⚠ Bis zum 16.08.2026 hiessen die beiden hier <c>Hp</c>/
+        /// <c>HpMax</c>, »unter den Namen, die die exportierten Daten immer
+        /// hatten, damit die Datei vergleichbar bleibt«. Die Begruendung war
+        /// falsch herum: die Vergleichbarkeit einer Datei ist nichts wert, wenn
+        /// ihr Schluessel das Falsche behauptet. Die Korrektur vom 26.07.2026
+        /// steht seit je im Kopf von <c>MapEntityLayer.Load</c> — das LEBEN
+        /// einer Einheit ist <c>energie</c> (+0x08, max +0x29), und +0x2e/+0x30
+        /// zaehlt die Bewegung herunter (»no fuel« @0x407ab8). Der alte Name hat
+        /// in der Sitzung vom 15.08. eine halbe Stunde gekostet und im
+        /// Rueckfall von <c>Load</c> jeder Einheit ein Leben in Hoehe ihres
+        /// Tankinhalts gegeben.</para></summary>
+        public int CodeBase, Fuel, FuelMax;
         public byte[] Raw = Array.Empty<byte>();
 
         /// <summary>How many cells the unit really covers, taken from the imap:
@@ -612,8 +622,8 @@ public static class CwmData
                 Energie = raw[0x08],
                 EnergieMax = raw[0x29],
                 CodeBase = BitConverter.ToUInt16(raw, 0x24),
-                Hp = BitConverter.ToUInt16(raw, 0x2e),
-                HpMax = BitConverter.ToUInt16(raw, 0x30),
+                Fuel = BitConverter.ToUInt16(raw, 0x2e),
+                FuelMax = BitConverter.ToUInt16(raw, 0x30),
                 Raw = raw,
             });
         }
