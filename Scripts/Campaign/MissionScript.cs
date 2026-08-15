@@ -614,6 +614,80 @@ public sealed class MissionScript
         return list;
     }
 
+    /// <summary>Die Bedingungen der Regeln, die ein Lager BESTUECKEN — damit
+    /// <c>--stock-check</c> sie stellen kann, statt die Mission zu spielen.
+    /// Siehe <see cref="SetStoreField"/>.</summary>
+    public List<Cond> StockConds()
+    {
+        var list = new List<Cond>();
+        foreach (var r in _script.Rules)
+        {
+            bool stockt = false;
+            foreach (var a in r.Then) if (a.Kind == "stock") { stockt = true; break; }
+            if (!stockt) continue;
+            foreach (var c in r.When) list.Add(c);
+            foreach (var c in r.Any) list.Add(c);
+        }
+        return list;
+    }
+
+    /// <summary>Jede Bestueckung dieses Skripts als Zahlenreihe: Gebaeudeplatz,
+    /// Feld, Variable (oder −1), Aufschlag — die SOLLwerte, gegen die
+    /// <c>--stock-check</c> das Ergebnis haelt.
+    ///
+    /// <para><c>Bereit</c> sagt, ob die Bedingungen der Regel gerade zutreffen,
+    /// die Sperre ausgeklammert. ⚠ Das trennt zwei Dinge, die sonst in denselben
+    /// Zaehler liefen (Arbeitsweise I): eine Regel, die feuern KONNTE und die
+    /// falsche Zahl schrieb, ist ein Fehler von uns — eine, deren Bedingung der
+    /// Pruefstand gar nicht herstellen kann (Mission 2 haengt an einem
+    /// Fortschrittszaehler v[20]), ist eine Grenze des Pruefstands.</para>
+    /// </summary>
+    public List<(int Slot, int Off, int Var, int Add, int At, bool Bereit)> StockSites()
+    {
+        var list = new List<(int, int, int, int, int, bool)>();
+        foreach (var r in _script.Rules)
+        {
+            bool bereit = true;
+            foreach (var c in r.When) if (!TestReal(c)) { bereit = false; break; }
+            if (bereit && r.Any.Count > 0)
+            {
+                bereit = false;
+                foreach (var c in r.Any) if (TestReal(c)) { bereit = true; break; }
+            }
+            foreach (var a in r.Then)
+                if (a.Kind == "stock") list.Add((a.A, a.B, a.C, a.D, r.At, bereit));
+        }
+        return list;
+    }
+
+    /// <summary>Der Wert einer Missionsvariablen — für den Prüfstand, der den
+    /// Sollwert v[c]+d nachrechnen muss.</summary>
+    public int VarAt(int n) => n >= 0 && n < _var.Length ? _var[n] : 0;
+
+    /// <summary>Jede bestueckende Regel mit ihrem Zustand, Glied fuer Glied.
+    /// ⚠ Ein Pruefstand, der schweigt, muss sagen, WELCHES Glied nicht
+    /// schliesst — sonst ist eine Kette, die nicht zumacht, nicht von einer zu
+    /// unterscheiden, die es fast tut (Arbeitsweise 9).</summary>
+    public string WhyNotStock()
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var r in _script.Rules)
+        {
+            bool stockt = false;
+            foreach (var a in r.Then) if (a.Kind == "stock") { stockt = true; break; }
+            if (!stockt) continue;
+            sb.Append($"\n      Regel @0x{r.At:X}: ");
+            sb.Append(r.Once >= 0
+                      ? $"Sperre v[{r.Once}]={VarAt(r.Once)}{(VarAt(r.Once) != 0 ? " ZU" : " offen")} | "
+                      : "keine Sperre | ");
+            foreach (var c in r.When)
+                sb.Append($"{Show(c)} {(TestReal(c) ? "JA" : "NEIN")} · ");
+            foreach (var c in r.Any)
+                sb.Append($"ODER {Show(c)} {(TestReal(c) ? "JA" : "NEIN")} · ");
+        }
+        return sb.ToString();
+    }
+
     /// <summary>Jede Einsetzung, die dieses Skript trägt, als Zahlenreihe —
     /// für den Prüfstand, der sie gegen den Kartenrahmen hält. Reihenfolge wie
     /// in der Datei, also wie im Block.</summary>
@@ -1003,6 +1077,49 @@ public sealed class MissionScript
     /// marks two of them at its start and wins when BOTH have grown — which is
     /// objective #005 word for word, "Wiederaufnahme der Produktion".</summary>
     public Func<int, int, int>? StoreField;          // building slot, offset -> value
+
+    /// <summary>
+    /// <b>Ein Lager eines Gebaeudes SETZEN</b> — die Wirkung, die B6 gefehlt hat
+    /// (gelesen am 16.08.2026).
+    ///
+    /// <para>Mission 3, Regel 11 @0x4997FD: sobald der Spieler Gebaeudeplatz 0
+    /// (Horni) besitzt UND eine seiner Einheiten auf Zelle (7,36) steht — der
+    /// Tuer —, schreibt das Original zwei Worte in den Gebaeudesatz:
+    /// <c>word[0xc0693c] = v[88] + 180</c> und
+    /// <c>word[0xc0693e] = v[88] + 127</c>. Das sind die Teilelager Waffen und
+    /// Fahrwerk. Regel 12 tut dasselbe fuer Dolni mit 330 und 237.</para>
+    ///
+    /// <para>Dieselbe Form steht 18-mal im Spiel: M2 (zwei Gebaeude), M3 (zwei),
+    /// M6 (zwei) und M33 (sechs, je 70 Fahrwerkteile). Es ist also keine
+    /// Sonderregel von Mission 3, sondern die uebliche Art, ein eingenommenes
+    /// Werk mit einem Anfangsbestand zu versehen.</para>
+    ///
+    /// <para>⚠ <b>v[88] ist der umlaufende Taktzaehler</b>, den jeder dieser
+    /// Bloecke als erstes hochzaehlt (0..19, @0x49940B). Der Betrag schwankt
+    /// deshalb um bis zu 19 — das ist im Original so und keine Nachlaessigkeit
+    /// von uns; er wird als <c>v[..] + Konstante</c> uebernommen und nicht zu
+    /// einer festen Zahl geglaettet.</para>
+    ///
+    /// <para>⚠ OFFEN und ausgeschildert: das <c>inc v[88]</c> steht im
+    /// BLOCKVORSPANN, nicht in einer Regel, und der Regelleser faengt erst bei
+    /// der ersten Bedingung an. Bei uns bleibt v[88] deshalb auf 0, und der
+    /// Betrag ist immer das untere Ende des Fensters (180 statt 180..199).
+    /// Gemessen, nicht geschaetzt — <c>--stock-check</c> druckt v[88] mit. Das
+    /// zu heilen heisst, dem Leser beizubringen, wo ein Block anfaengt, und das
+    /// ist ein eigener Durchgang.</para>
+    ///
+    /// <para>⚠⚠ <b>Die Feldnummer ist gegen 0xc06914 gerechnet, der Satz beginnt
+    /// aber bei 0xc06910.</b> +0x28 hier ist also in Wahrheit Satz +0x2c. Die
+    /// Zaehlung ist alt und durchgaengig — Ausleser wie Laufzeit rechnen gleich,
+    /// es ist kein Fehler —, aber genau sie hat B6 eine Sitzung lang wie ein
+    /// ungelesenes Feld aussehen lassen.</para>
+    /// </summary>
+    public Action<int, int, int>? SetStoreField;     // building slot, offset, value
+
+    /// <summary>GEGENPROBE <c>--no-stock</c>: den Stand vor dem 16.08.2026
+    /// nachstellen — die Regel feuert, ihre Wirkung ist leer. Genau das war B6,
+    /// und der Prueflauf MUSS damit durchfallen (Arbeitsweise 31).</summary>
+    public static bool StockOld;
 
     /// <summary>`space_in` puts one unit of design <b>typ</b> on the map for
     /// <b>player</b>, at or next to (col, row) — @0x4C1600 asks @0x4012AD for a
@@ -1557,6 +1674,16 @@ public sealed class MissionScript
                 if (a.A >= 0 && a.A < _var.Length && StoreField != null)
                     _var[a.A] = StoreField(a.B, a.C);
                 break;
+            // Lager b des Gebaeudesatzes a = v[c] + d — siehe SetStoreField.
+            // c == -1 heisst »keine Variable«, dann ist d der ganze Betrag
+            // (Mission 21 leert so vier Vorkommen mit `xor eax,eax`).
+            case "stock":
+                if (SetStoreField != null && !StockOld)
+                {
+                    int wert = a.D + (a.C >= 0 && a.C < _var.Length ? _var[a.C] : 0);
+                    SetStoreField(a.A, a.B, wert);
+                }
+                break;
             // space_in(a=spieler, b=x, c=y, typen) — die Verstaerkung startet
             // ausserhalb der Karte und braucht ihre Anflugzeit, wie im Original
             case "space_in":
@@ -1923,6 +2050,7 @@ public sealed class MissionScript
         "text" => ShowText != null,
         "find_unit" => FindUnit != null,
         "set_store" => StoreField != null,
+        "stock" => SetStoreField != null,
         "set_units" => UnitCount != null,
         "space_in" => SpaceInSpawn != null,
         "place_unit" => PlaceUnit != null,

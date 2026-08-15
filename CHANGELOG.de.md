@@ -35,6 +35,17 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Einheiten
 
+- **Ein eingenommenes Werk bekommt jetzt seinen Anfangsbestand.** Die Meldung
+  war, dass die Einnahme von Horni in Kampagne 3 nichts bewirkt. Sie bewirkt im
+  Original etwas: sobald der Platz einem gehoert und eine eigene Einheit auf der
+  Tuerzelle steht, schreibt das Missionsskript dem Gebaeude 180 Waffen- und 127
+  Fahrwerkteile ins Lager; Dolni bekommt 330 und 237. Bei uns war die Wirkung
+  dieser Regel schlicht **leer** — die Bedingung stand richtig da und tat nichts.
+  Dieselbe Form steht achtzehnmal im Spiel, in vier Missionen, und sie SETZT das
+  Lager statt es zu erhoehen: in Kampagne 33 ist derselbe Befehl eine Strafe, er
+  nimmt sechs Werken ihre 660 bis 1970 Teile weg und laesst 70 stehen.
+  Gemessen: Kampagne 3 vier von vier, Kampagne 6 vier von vier, Kampagne 33
+  sechs von sechs.
 - **Das Original zaehlt Zellen, nicht Bildpunkte — und der Boden bremst
   niemanden.** Die zweite Haelfte der gemeldeten Frage nach der Geschwindigkeit
   ist gelesen. Jede Einheit fuehrt einen Schrittzaehler, den das Spiel selbst

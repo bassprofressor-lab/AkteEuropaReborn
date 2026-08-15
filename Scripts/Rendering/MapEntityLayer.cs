@@ -6875,6 +6875,30 @@ public partial class MapEntityLayer : Node2D
                             };
                     return -1;
                 };
+                // Dasselbe Lager SETZEN — die Wirkung von B6. Das Original
+                // schreibt ein WORT, also wird hier auf 0..65535 geklemmt;
+                // negativ kann der Betrag nicht werden (v[88] ist 0..19).
+                _mscript.SetStoreField = (slot, off, wert) =>
+                {
+                    foreach (var e in _entities)
+                    {
+                        if (!e.IsBuilding || e.Slot != slot) continue;
+                        int w = Mathf.Clamp(wert, 0, 65535);
+                        switch (off)
+                        {
+                            case 0x28: e.StockW = w; break;
+                            case 0x2a: e.StockF = w; break;
+                            case 0x2c: e.StockS = w; break;
+                            case 0x2e: e.StockT = w; break;
+                            default: return;
+                        }
+                        _order = $"Gebaeudeplatz {slot}: Lager +0x{off:X} := {w}";
+                        GD.Print($"Missionsskript: {_order}");
+                        return;
+                    }
+                    GD.Print($"Missionsskript: Gebaeudeplatz {slot} nicht gefunden — " +
+                             "Lager nicht gesetzt");
+                };
                 // ---- 11.08.2026: der tutorialartige Ablauf ------------------
                 // Das Hilfefenster an seiner Stelle im 640x480-Raster des
                 // Originals. Siehe UI/HelpWindow.cs.
@@ -8006,6 +8030,90 @@ public partial class MapEntityLayer : Node2D
     /// hat: ohne diesen Einstieg loest ein Prueflauf sie nie aus, und das sieht
     /// genauso aus wie eine kaputte Einsetzung.</para>
     /// </summary>
+    /// <summary>
+    /// <c>--stock-check</c> — B6: bewirkt die Einnahme eines Gebaeudes etwas?
+    ///
+    /// <para>Die Frage des Spielers war, dass die Einnahme von Horni (Mission 3)
+    /// nichts tut. Das lag daran, dass die Wirkung der Regel bei uns LEER war;
+    /// gelesen ist sie am 16.08.2026 (siehe
+    /// <see cref="Campaign.MissionScript.SetStoreField"/>): sie bestueckt die
+    /// Teilelager des Gebaeudes.</para>
+    ///
+    /// <para>⚠ Der Prueflauf SETZT die Lager nicht — er stellt die BEDINGUNGEN
+    /// (Besitzer und eine eigene Einheit auf der Tuerzelle) und laesst das
+    /// Skript feuern. Ein Prueflauf, der die Zahl hinschreibt, prueft die Zahl
+    /// und nicht die Mechanik (Arbeitsweise 11).</para>
+    ///
+    /// <para>⚠ Der Sollwert ist <c>v[88] + Aufschlag</c>, und v[88] ist der
+    /// umlaufende Taktzaehler des Blocks — er steht beim Feuern auf irgendetwas
+    /// zwischen 0 und 19. Verglichen wird deshalb gegen das FENSTER
+    /// [Aufschlag, Aufschlag+19], und die tatsaechliche Abweichung wird
+    /// mitgedruckt, damit die Zahl nicht nur »drin« ist.</para>
+    /// </summary>
+    public string StockCheckLine()
+    {
+        if (_mscript == null) MissionScriptTick(0.001f);
+        if (_mscript == null) return "stock-check: kein Skript fuer diese Mission";
+        var sites = _mscript.StockSites();
+        if (sites.Count == 0)
+            return $"stock-check: M{_mscript.Mission} — dieses Skript bestueckt " +
+                   "kein Gebaeude; die Frage ist hier nicht stellbar";
+
+        // VORHER — und zwar die Lager, um die es geht, nicht irgendwelche.
+        var vorher = new Dictionary<(int, int), int>();
+        foreach (var s in sites)
+            vorher[(s.Slot, s.Off)] = _mscript.StoreField != null
+                                      ? _mscript.StoreField(s.Slot, s.Off) : -1;
+
+        var conds = _mscript.StockConds();
+        string zeile = MissionScriptForceCheck(conds).Replace("script-check", "stock-check");
+        _mscript.Advance(2 * Campaign.MissionScript.TicksPerSecond);
+
+        // ⚠ Die Liste NACH dem Stellen noch einmal holen: `Bereit` ist eine
+        // Aussage ueber den jetzigen Zustand, nicht ueber den vor dem Lauf.
+        sites = _mscript.StockSites();
+        var sb = new System.Text.StringBuilder(zeile);
+        int ok = 0, fehl = 0, ungeprueft = 0, unstellbar = 0;
+        var namen = new Dictionary<int, string>
+        { [0x28] = "Waffen", [0x2a] = "Fahrwerk", [0x2c] = "Spezial", [0x2e] = "Terranium" };
+        sb.Append($"\n   {sites.Count} Bestueckung(en) im Block M{_mscript.Mission}:");
+        foreach (var s in sites)
+        {
+            int alt = vorher[(s.Slot, s.Off)];
+            int neu = _mscript.StoreField != null ? _mscript.StoreField(s.Slot, s.Off) : -1;
+            if (neu < 0)
+            {
+                ungeprueft++;
+                sb.Append($"\n      ? Platz {s.Slot} Lager {namen.GetValueOrDefault(s.Off, "?")}: " +
+                          "kein solches Gebaeude auf dieser Karte");
+                continue;
+            }
+            int soll = s.Add + (s.Var >= 0 ? _mscript.VarAt(s.Var) : 0);
+            bool traf = neu == soll;
+            // Nicht getroffen UND die Bedingung steht immer noch nicht: dann hat
+            // der Pruefstand sie nicht herstellen koennen — das ist seine
+            // Grenze und kein Fehler der Wirkung.
+            string zeichen = traf ? "+" : (s.Bereit ? "!" : "~");
+            if (traf) ok++; else if (s.Bereit) fehl++; else unstellbar++;
+            sb.Append($"\n      {zeichen} Platz {s.Slot} Lager " +
+                      $"{namen.GetValueOrDefault(s.Off, "?"),-9} {alt} -> {neu}, " +
+                      $"soll {(s.Var >= 0 ? $"v[{s.Var}]={_mscript.VarAt(s.Var)}+" : "")}" +
+                      $"{s.Add} = {soll}{(traf || s.Bereit ? "" : "  [Bedingung nicht herstellbar]")}");
+        }
+        sb.Append($"\n   B6 {(fehl == 0 && ok > 0 ? "behoben" : "STEHT")}: " +
+                  $"{ok} getroffen, {fehl} daneben, {unstellbar} nicht ausloesbar, " +
+                  $"{ungeprueft} nicht auf dieser Karte");
+        if (fehl + unstellbar > 0) sb.Append("\n   Woran es liegt:" + _mscript.WhyNotStock());
+        _stockOk = ok; _stockBad = fehl;
+        return sb.ToString();
+    }
+
+    private int _stockOk = -1, _stockBad;
+
+    /// <summary>0, wenn jede Bestueckung genau ihren Sollwert getroffen hat und
+    /// es ueberhaupt eine gab.</summary>
+    public int StockCheckRc() => _stockOk < 0 ? 2 : (_stockBad == 0 && _stockOk > 0 ? 0 : 1);
+
     public string PlaceForceLine()
     {
         if (_mscript == null) MissionScriptTick(0.001f);
@@ -8060,6 +8168,10 @@ public partial class MapEntityLayer : Node2D
 
         int killed = 0, given = 0, left = 0, zoned = 0;
         var untouched = new List<string>();
+        // Einheiten, die schon auf einer verlangten Zelle stehen — keine darf
+        // ein zweites Mal genommen werden, sonst raeumt der Prueflauf seine
+        // eigene erste Bedingung wieder ab.
+        var gestellt = new HashSet<Entity>();
 
         // ⚠ ZUERST die markierte Einheit, denn `unit_field` fragt nach IHRER
         // Zelle und steht in der Kette VOR der Bedingung, die sie überhaupt
@@ -8150,15 +8262,33 @@ public partial class MapEntityLayer : Node2D
                 // mehrere ab, bleibt es beim Sichtspieler — dann sagt die
                 // Bedingung nichts ueber den Besitzer.
                 int wantOwner = lo / 1000 == (hi - 1) / 1000 ? lo / 1000 : ViewPlayer;
+                // ⚠ 16.08.2026 — JEDE ZELLE BRAUCHT IHRE EIGENE EINHEIT.
+                // Bis heute nahm dieser Zweig fuer jede imap-Bedingung wieder
+                // die ERSTE Einheit des Spielers: die zweite Bedingung holte sie
+                // von der ersten Zelle weg, und die erste war danach wieder
+                // leer. Bei Mission 3 hiess das »4 von 4 erzwungen«, waehrend
+                // genau eine der beiden Regeln feuerte — der Prueflauf hat
+                // seinen eigenen Erfolg zerstoert und trotzdem Erfolg gemeldet.
                 Entity? mover = null;
                 foreach (var e in _entities)
                     if (!e.IsBuilding && !e.IsProp && !e.Dead && e != marked &&
-                        e.Owner == wantOwner) { mover = e; break; }
-                if (mover == null) { left++; untouched.Add(Show(c) + $" [kein Fahrzeug von Spieler {wantOwner}]"); continue; }
+                        e.Owner == wantOwner && !gestellt.Contains(e)) { mover = e; break; }
+                if (mover == null)
+                { left++; untouched.Add(Show(c) + $" [keine freie Einheit von Spieler {wantOwner} mehr]"); continue; }
                 _nav.ClearOccupant(mover.Col, mover.Row, _entities.IndexOf(mover));
                 mover.Col = c.A;
                 mover.Row = c.C;
+                mover.Pos = CellCenter(c.A, c.C);
+                mover.Path = null; mover.Reserved = null;
                 _nav.SetOccupant(c.A, c.C, _entities.IndexOf(mover), mover.Infantry >= 0);
+                gestellt.Add(mover);
+                // ⚠ Und JETZT nachsehen, mit demselben Zugriff, den die
+                // Bedingung benutzt (Arbeitsweise 33: zu jedem gruenen Ergebnis
+                // gehoert die Zeile, die belegt, dass der Gegenstand gehandelt
+                // hat).
+                int steht = _mscript.ImapAt != null ? _mscript.ImapAt(c.A, c.C) : -1;
+                if (steht < lo || steht >= hi)
+                { left++; untouched.Add(Show(c) + $" [gestellt, aber imap sagt {steht}]"); continue; }
                 given++;
                 continue;
             }

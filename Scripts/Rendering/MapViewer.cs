@@ -829,6 +829,12 @@ public partial class MapViewer : Node2D
             // --place-force: die Bedingungen der einsetzenden Regeln herstellen
             // und dann laufen lassen. Siehe MapEntityLayer.PlaceForceLine.
             else if (a == "--place-force") _placeForce = 3f;
+            // --stock-check (B6): bewirkt die Einnahme eines Gebaeudes etwas?
+            else if (a == "--stock-check") _stockCheck = 3f;
+            // B6-Gegenprobe: die Wirkung der bestueckenden Regeln wieder
+            // leer lassen (Stand vor dem 16.08.2026). --stock-check MUSS
+            // damit durchfallen, sonst misst er nicht, was er behauptet.
+            else if (a == "--no-stock") Campaign.MissionScript.StockOld = true;
             else if (a.StartsWith("--place-check="))
                 _placeCheck = Mathf.Max(0.05f, a["--place-check=".Length..].ToFloat());
             else if (a == "--demo-groups") { _demo = true; _demoGroups = true; }
@@ -1086,6 +1092,7 @@ public partial class MapViewer : Node2D
     private bool _shipCheck;
     private float _shipCheckAfter;
     private float _placeForce;
+    private float _stockCheck;
 
     /// <summary>`--damage-check`: die Schadensstufen durchfahren.</summary>
     private float _damageCheck;
@@ -1220,6 +1227,19 @@ public partial class MapViewer : Node2D
             {
                 _placeForce = -1f;
                 GD.Print(_entities.PlaceForceLine());
+            }
+        }
+        // --stock-check (B6): die Bedingungen der bestueckenden Regeln stellen
+        // und nachsehen, ob die Lager danach ihren Sollwert tragen.
+        if (_stockCheck > 0f)
+        {
+            _stockCheck -= (float)delta;
+            if (_stockCheck <= 0f)
+            {
+                _stockCheck = -1f;
+                GD.Print(_entities.StockCheckLine());
+                GetTree().Quit(_entities.StockCheckRc());
+                return;
             }
         }
         if (_placeCheck > 0f)

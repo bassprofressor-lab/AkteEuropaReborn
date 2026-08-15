@@ -33,6 +33,16 @@ deviate on purpose, and every deviation is marked as ours.
 
 ### Units
 
+- **A captured works now gets its starting stock.** The report was that taking
+  Horni in campaign 3 does nothing. In the original it does something: once the
+  slot is yours and one of your units stands on the door cell, the mission script
+  writes 180 weapon parts and 127 chassis parts into the building's store; Dolni
+  gets 330 and 237. On our side the effect of that rule was simply **empty** —
+  the condition was there, correctly read, and did nothing. The same form occurs
+  eighteen times across four missions, and it ASSIGNS the store rather than
+  adding to it: in campaign 33 the very same instruction is a penalty, stripping
+  six works of their 660 to 1970 parts and leaving 70. Measured: campaign 3 four
+  of four, campaign 6 four of four, campaign 33 six of six.
 - **The original counts cells, not pixels — and the ground slows nobody down.**
   The second half of the reported question about speed has been read out. Every
   unit carries a step counter the game itself calls "kolik"; it grows by the
