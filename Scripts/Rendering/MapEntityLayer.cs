@@ -14566,6 +14566,74 @@ public partial class MapEntityLayer : Node2D
         return CellCenter(to.X, to.Y);
     }
 
+    /// <summary>
+    /// <c>--demo-front</c> — das Gegenstück zu <see cref="BehindCheckSetup"/>:
+    /// eine Einheit <b>VOR</b> ein Gebäude stellen, auf dessen vorderste
+    /// Grundrisszeile, und die Kamera daraufsetzen.
+    ///
+    /// <para><b>Gemeldet (Fehlerliste D):</b> »Wenn Einheiten genau vor den
+    /// Gebäuden stehen, sieht man nur halbe Einheit.«</para>
+    ///
+    /// <para>⚠ Der Fall gehört gemessen, BEVOR etwas geändert wird, denn die
+    /// Malerordnung ist am 16.08.2026 gleich zweimal angefasst worden (der
+    /// Bodendurchgang und der Türversatz). Mit <c>--boden-alt</c> und
+    /// <c>--tuer-alt</c> entscheidet ein Lauf, ob die Meldung eine frische
+    /// Regression ist oder älter — das ist billiger als jede Überlegung
+    /// darüber.</para>
+    ///
+    /// <para>⚠⚠ <b>ERSTER ANLAUF MASS DEN FALSCHEN FALL</b> (Regel S — ein
+    /// Prüfstand, der sich seinen Gegenstand nach der eigenen Hypothese sucht,
+    /// misst die Hypothese). Er stellte die Einheit auf die <b>vorderste</b>
+    /// Grundrisszeile, und die liegt bei jedem Gebäude NACH dem Fach: die Mine
+    /// auf (12,1) hat Grundriss 9×6 und Fach 4, die vorderste Zeile ist 6 —
+    /// <c>6 &gt; 4</c>, also wird dort ohnehin nach dem Gebäude gezeichnet und
+    /// nichts verdeckt. Alle vier Fassungen (neu, <c>--boden-alt</c>,
+    /// <c>--tuer-alt</c>, beide) meldeten deshalb dasselbe, was sich wie
+    /// »kein Befund« las.</para>
+    ///
+    /// <para>Der gemeldete Fall ist die <b>letzte Zeile, die noch verdeckt
+    /// wird</b>: <c>Fach − 1</c>. Dort steht die Einheit optisch vor der
+    /// Fassade und wird trotzdem übermalt — genau »nur halbe Einheit«. Das
+    /// Gebäude wird ja um seinen Türversatz SPÄTER einsortiert, als es steht,
+    /// und deckt damit bis zu drei Zeilen unter seiner Oberkante zu.</para></summary>
+    public Vector2? FrontCheckSetup()
+    {
+        if (_nav == null) return null;
+        Entity? bld = null;
+        foreach (var b in BuildingsBackToFront())
+            if (!b.Dead && b.FootH >= 3 && b.FootW >= 3) { bld = b; break; }
+        if (bld == null) { GD.Print("front-check: kein Gebaeude mit 3x3 Grundriss"); return null; }
+
+        int ui = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var u = _entities[i];
+            if (u.IsBuilding || u.IsProp || u.Dead || !u.Mobile) continue;
+            ui = i; break;
+        }
+        if (ui < 0) { GD.Print("front-check: keine fahrende Einheit"); return null; }
+
+        // Die letzte Zeile, die das Gebaeude noch uebermalt — der gemeldete
+        // Fall. NICHT die vorderste Grundrisszeile, siehe Kopf.
+        int fachV = bld.Row + BuildingDrawRowFor(bld);
+        var to = new Vector2I(bld.Col + Mathf.Max(1, bld.FootW) / 2,
+                              Mathf.Max(0, fachV - 1));
+        var u2 = _entities[ui];
+        _nav.SetOccupant(u2.Col, u2.Row, -1);
+        u2.Col = to.X; u2.Row = to.Y;
+        u2.Pos = CellCenter(to.X, to.Y);
+        u2.Path = null; u2.Target = -1; u2.Owner = u2.Team = ViewPlayer;
+        _nav.SetOccupant(to.X, to.Y, ui);
+        _sel.Clear();                       // keine Klammern im Bild
+        int fach = bld.Row + BuildingDrawRowFor(bld);
+        GD.Print($"front-check: {BuildingTypeName(bld.BType)} Platz {bld.Slot} auf " +
+                 $"({bld.Col},{bld.Row}) {bld.FootW}x{bld.FootH}, Fach {fach}" +
+                 $"{(bld.DoorCells.Count > 0 ? " (aus der Tuer)" : " (tuerlos)")}; " +
+                 $"Einheit Platz {u2.Slot} auf ({to.X},{to.Y}), Einheitenfach {to.Y} — " +
+                 $"{(to.Y < fach ? "VOR dem Gebaeude gezeichnet, wird also verdeckt" : "NACH dem Gebaeude, bleibt sichtbar")}");
+        return CellCenter(to.X, to.Y);
+    }
+
     /// <summary>Alle vorgemerkten Einheiten bis zur Zeile
     /// <paramref name="row"/> zeichnen.</summary>
     private void DrawUnitsUpTo(int row, ref int idx)

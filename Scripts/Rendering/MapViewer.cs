@@ -636,6 +636,7 @@ public partial class MapViewer : Node2D
     private bool _demoRailGap;
     private bool _demoInfDeath;
     private bool _demoBehind;
+    private bool _demoFront;
     private bool _demoResearch;
     // --queue-check (Fehler C8): Bestellzeitpunkt, Abrechnungszeitpunkt, Anzahl.
     private float _queueCheckAt, _queueCheckDue;
@@ -864,6 +865,8 @@ public partial class MapViewer : Node2D
             // setzen und die Kamera daraufsetzen, damit der Bildvergleich den Fall
             // ueberhaupt enthaelt. Siehe BehindCheckSetup.
             else if (a == "--demo-behind") { _demo = true; _demoBehind = true; }
+            // Das Gegenstueck: eine Einheit VOR ein Gebaeude (Fehlerliste D).
+            else if (a == "--demo-front") { _demo = true; _demoFront = true; }
             // --demo-infdeath (C13): eine Traube Fusssoldaten toeten, jeden zweiten.
             else if (a == "--demo-infdeath") { _demo = true; _demoInfDeath = true; }
             else if (a == "--demo-railgap") { _demo = true; _demoRailGap = true; }
@@ -1113,6 +1116,7 @@ public partial class MapViewer : Node2D
                   : _demoBuildPanel ? _entities.DebugDemoBuildPanel()
                   : _demoSupply ? _entities.DebugDemoSupply()
                   : _demoBehind ? _entities.BehindCheckSetup()
+                  : _demoFront ? _entities.FrontCheckSetup()
                   : _demoCrush ? _entities.DebugDemoCrush()
                   : _demoRailGap ? _entities.DebugDemoRailGap()
                   : _demoInfDeath ? _entities.DebugDemoInfDeath()
