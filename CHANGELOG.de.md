@@ -35,6 +35,44 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Einheiten
 
+- ⭐ **Der Boden eines Gebäudes verdeckt nichts mehr.** Mit Bildern gemeldet:
+  »Dort ist immer das Stück Schiene nicht sichtbar, und wenn eine Einheit
+  reinfährt, wird sie von der Bodengrafik überdeckt. Die Einheit lässt sich
+  trotzdem noch anwählen!« Genau das »noch anwählbar« war der Schlüssel — das
+  Fahrzeug war da, es wurde nur übermalt.
+  ⚠ **Die naheliegende Erklärung war falsch und ist zurückgezogen:** das
+  Gebäudemuster rage über den Grundriss hinaus. Gemessen ist der Grundriss
+  **genau** die belegte Musterfläche (Mine 9×6 und Muster bis (8,5), Basis 7×6
+  und bis (6,5), Waffen-Fabrik 8×5 und bis (7,4) — **zwölf von zwölf Typen
+  deckungsgleich**). Es gibt keinen Überhang.
+  Was übermalte, waren die **flachen** Kacheln. Ein Gebäude besteht mehrheitlich
+  aus ihnen — Basis **30 von 37**, Waffen-Fabrik 29 von 38, Kraftwerk 23 von 26
+  —, und das sind Beton, Schotter, Schatten und Rampe. Im Original sind sie
+  **Gelände**: die Stempelschleife @`0x4C97B4` schreibt sie mit der Bereichsmarke
+  `+10000` in die Kartenzelle, und der Gebäudezeichner @`0x42B1DE` malt nur ein
+  Sprite und die Türen — sechzig Kacheln kommen dort nirgends vor. Bei uns liefen
+  sie als Sprite im Zeilenfach ihres Gebäudes mit und deckten zu, was auf ihnen
+  stand: auf `map_NET02` **749** solche Kacheln und **80** Gleiszellen darunter,
+  auf `map_DM_4` 489 und 58. Sie liegen jetzt in einem eigenen Durchgang unter
+  allem Beweglichen. ⚠ Dass wir dabei zwischen flach und aufragend **teilen**,
+  ist unsere Setzung — dem Original genügt sein zweites Sprite, das wir nicht
+  haben; die Schwelle ist an der Lücke 24/25 px gemessen. Gegenprobe
+  `--boden-alt`, Prüfstand `--overdraw-check`.
+
+- **Wann ein Gebäude verdeckt, entscheidet seine TÜR.** Gelesen am Einreiher
+  @`0x42FD47`: ein Gebäude **ohne** Tür kommt in die Zeichenzeile `Zeile + 3`,
+  eines **mit** Tür in `Zeile + Zeilenversatz der Tür`. Und die Bildlage zieht
+  nicht mit — @`0x42FDD5` nimmt denselben Betrag wieder zurück, ausgerechnet
+  bleibt für jeden Türwert dieselbe Stelle. **Die Tür verschiebt die
+  Malerordnung, nie das Bild.** Die Werte sind je Typ konstant, ausgezählt über
+  alle **798** Türen der 23 Karten: Basis (4,2) 73/73, die drei Fabriken zwei
+  bei (2,3) und (5,3), Flughafen (5,4) 39/39, Mine (5,3) 49/49, Werft (2,3)
+  13/13. Damit gehört die **Basis** ein Fach früher als unsere bisherige feste 3
+  und der **Flughafen** eines später. ⚠ Unterm Strich verdeckt dadurch etwas
+  mehr, nicht weniger (auf `map_NET02` 727 → 741 Kacheln) — die Änderung ist
+  Treue, keine Verbesserung, und sie behebt den Punkt oben nicht.
+  Gegenprobe `--tuer-alt`.
+
 - ⭐ **Einheiten verschwinden hinter Gebäuden.** Bisher lag jede Einheit über
   jedem Gebäude — ein Panzer stand auf dem Dach der Basis. Wie es das Original
   macht, ist gelesen: es **verdeckt**, es macht nichts durchscheinend. Es *hat*
@@ -460,6 +498,30 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   ganz links, 35 ganz rechts.
 
 ### Zug und Strecke
+
+- ⭐ **Die Waggons zeigen dorthin, wo das Gleis hinführt.** Gemeldet mit zwei
+  Bildern (»wie doof der Zug oft aussieht«): auf einer schrägen Strecke standen
+  zwei gekuppelte Waggons in **entgegengesetzte** Richtungen und drei in drei
+  Richtungen, während das Gleis darunter glatt diagonal durchlief.
+  Die Ursache war ein einziger Ausdruck, der nur **vier** der acht Richtungen
+  kannte und bei einer Diagonale die x-Komponente ersatzlos verwarf. Seine
+  Begründung stand daneben und war der Denkfehler: die ungeraden Stücke seien
+  »Halbschritte einer Diagonale, die es auf einer Zellenkette nicht gibt«. Die
+  Diagonale gibt es sehr wohl — sie ist als **Treppe** ausgelegt, (±1,0) gefolgt
+  von (0,±1).
+  Die Zählweise steht im Original, Bildtabelle @`0x539400`: 0 = S, 1 = SW,
+  2 = W, 3 = NW, 4 = N, 5 = NO, 6 = O, 7 = SO, Gegenrichtung `+4`, und die
+  Diagonalen sind **halbe** Zellschritte (±20,±10 gegen 40 bzw. 20). Die
+  Richtung kommt jetzt aus der Zentraldifferenz über die Nachbarzellen.
+  Nach Ursache aufgeschlüsselt war der Befund eindeutig — auf `map_NET02` waren
+  von den **geraden** Zellen **0 von 738** falsch, von den **Treppen** aber
+  **389 von 389**; auf `map_DM_4` 0 von 469 gegen **354 von 354**.
+  ⚠ Der Prüfstand `--wagon-facing-check` kann die Kur nicht bestätigen (er zieht
+  seinen Sollwert aus derselben Rechnung); dass sie wirkt, zeigen ein Bildpaar
+  am selben Waggon zur selben Spielzeit und die **Kupplung**, die aus anderer
+  Quelle misst: dort kamen vorher nur die vier Stücke f0/f2/f4/f6 überhaupt vor,
+  jetzt alle acht, sichtbare Lücken bleiben **0 von 45** bzw. **0 von 51** und
+  die Lückenquote sinkt um 3 bzw. 8 %. Gegenprobe `--stueck-alt`.
 
 - **`--rail-gap-check`: wie weit ist das letzte Gleisstück vom Gebäude?** Zu
   »oft fehlt noch ein kleines Stück von der Bahnstrecke«. Die alte Zahl konnte

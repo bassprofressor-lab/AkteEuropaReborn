@@ -33,6 +33,43 @@ deviate on purpose, and every deviation is marked as ours.
 
 ### Units
 
+- ⭐ **A building's ground no longer hides anything.** Reported with
+  screenshots: "that piece of track is never visible there, and when a unit
+  drives in, the ground graphic covers it. You can still select the unit!" That
+  "still selectable" was the key — the vehicle was there, it was only painted
+  over.
+  ⚠ **The obvious explanation was wrong and is withdrawn:** that the building
+  pattern reaches beyond the footprint. Measured, the footprint is **exactly**
+  the occupied pattern area (mine 9×6 and pattern out to (8,5), base 7×6 and out
+  to (6,5), weapons factory 8×5 and out to (7,4) — **twelve of twelve types
+  identical**). There is no overhang.
+  What painted over things were the **flat** tiles. A building is mostly made of
+  them — base **30 of 37**, weapons factory 29 of 38, power plant 23 of 26 — and
+  those are concrete, gravel, shadow and ramp. In the original they are
+  **terrain**: the stamping loop at `0x4C97B4` writes them into the map cell with
+  the range marker `+10000`, and the building blitter at `0x42B1DE` draws only
+  one sprite and then the doors — sixty tiles appear nowhere in it. Here they
+  rode along in their building's row bucket and covered whatever stood on them:
+  on `map_NET02` **749** such tiles with **80** track cells underneath, on
+  `map_DM_4` 489 and 58. They now go in a pass of their own, below everything
+  that moves. ⚠ That we **split** flat from raised is ours — the original makes
+  do with its second sprite, which we do not have; the threshold sits in the
+  measured gap at 24/25 px. Counter-check `--boden-alt`, probe
+  `--overdraw-check`.
+
+- **What a building occludes is decided by its DOOR.** Read at the row-bucket
+  insert `0x42FD47`: a building **without** a door goes into draw row
+  `row + 3`, one **with** a door into `row + the door's row offset`. And the
+  picture does not move with it — `0x42FDD5` takes the same amount back off, so
+  the position works out identical for every door value. **The door shifts the
+  painter's order, never the image.** The values are constant per type, counted
+  over all **798** doors of the 23 maps: base (4,2) 73/73, the three factories
+  two at (2,3) and (5,3), airfield (5,4) 39/39, mine (5,3) 49/49, shipyard (2,3)
+  13/13. So the **base** belongs one bucket earlier than our previous fixed 3,
+  and the **airfield** one later. ⚠ On balance this occludes slightly *more*,
+  not less (on `map_NET02` 727 → 741 tiles) — the change is faithfulness, not an
+  improvement, and it does not fix the point above. Counter-check `--tuer-alt`.
+
 - ⭐ **Units disappear behind buildings.** Until now every unit was drawn over
   every building — a tank stood on the roof of the base. What the original does
   is read: it **occludes**, it does not make anything translucent. It *has* a
@@ -403,6 +440,31 @@ deviate on purpose, and every deviation is marked as ours.
   35 hard right.
 
 ### Train and track
+
+- ⭐ **The wagons face where the track goes.** Reported with two screenshots
+  ("how silly the train often looks"): on a slanted line two coupled wagons
+  faced **opposite** ways and three faced three ways, while the track below them
+  ran cleanly diagonal.
+  The cause was a single expression that knew only **four** of the eight
+  directions and, on a diagonal, dropped the x component entirely. Its
+  justification sat right next to it and was the actual mistake: that the odd
+  pieces are "half steps of a diagonal, which a cell chain does not have". The
+  diagonal is very much there — it is laid out as a **staircase**, (±1,0)
+  followed by (0,±1).
+  The encoding is in the original, picture table `0x539400`: 0 = S, 1 = SW,
+  2 = W, 3 = NW, 4 = N, 5 = NE, 6 = E, 7 = SE, opposite direction `+4`, and the
+  diagonals are **half** cell steps (±20,±10 against 40 and 20). The direction
+  now comes from the central difference across the neighbouring cells.
+  Broken down by cause the result was unambiguous — on `map_NET02` **0 of 738**
+  straight cells were wrong, but **389 of 389** staircases; on `map_DM_4` 0 of
+  469 against **354 of 354**.
+  ⚠ The probe `--wagon-facing-check` cannot confirm the fix (it takes its
+  expected value from the same computation); what shows it works is a pair of
+  screenshots of the same wagon at the same game time, plus the **coupling**,
+  which measures from another source: there, only the four pieces f0/f2/f4/f6
+  occurred at all before, now all eight do, visible gaps stay at **0 of 45** and
+  **0 of 51**, and the gap rate drops by 3 and 8 %. Counter-check
+  `--stueck-alt`.
 
 - ⭐ **The train drives the diagonal that is drawn.** Reported a second time
   ("when a rail line is cleanly diagonal … the train zigzags, while the track
