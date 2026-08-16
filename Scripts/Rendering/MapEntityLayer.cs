@@ -233,10 +233,49 @@ public partial class MapEntityLayer : Node2D
         public readonly List<(int Col, int Row)> DoorCells = new();
         public int DoorCol => DoorCells.Count > 0 ? DoorCells[0].Col : 0;
         public int DoorRow => DoorCells.Count > 0 ? DoorCells[0].Row : 0;
-        public int CaptureTotal;            // +0x38, and it tracks the hit points
-        public int CaptureProgress;         // +0x3a
-        public int Intruder = -1;           // +0x3c, the player at the door
-        public int ShownOwner = -1;         // +0x3d, flickers while it is taken
+        /// <summary>
+        /// <b>Die Obergrenze der Einnahme — Satzwort <c>+0x3C</c></b>, und sie
+        /// trägt die Trefferpunkte.
+        ///
+        /// <para>⚠⚠ <b>BEZIFFERUNG BERICHTIGT 16.08.2026: hier stand +0x38.</b>
+        /// Das ist Regel M zum dritten Mal an derselben Sorte Stelle — die
+        /// Felder waren richtig ERKANNT, aber gegen einen Satzanfang gerechnet,
+        /// den es nicht gibt (die bekannte Vier-Byte-Verschiebung gegen den
+        /// echten Anker <c>0xc06910</c>). Zwei unabhängige Belege:
+        /// @0x43CBA1 schreibt beim Besitzerwechsel <c>word[+0x3C] := word[+0x06]</c>
+        /// — und <c>+0x06</c> ist <c>hp</c>, genau das, was der alte Kommentar
+        /// »and it tracks the hit points« schon behauptete; und @0x43CD67 hält
+        /// den Fortschritt gegen <c>word[+0x3C]</c>, um das Ende zu erkennen.</para></summary>
+        public int CaptureTotal;            // +0x3C, and it tracks the hit points
+
+        /// <summary>
+        /// <b>Der Einnahme-FORTSCHRITT — Satzwort <c>+0x3E</c></b> (hier stand
+        /// +0x3a, siehe <see cref="CaptureTotal"/>).
+        ///
+        /// <para>Vollständig gelesen im Einnahme-Handler @0x43CA50 (erkennbar an
+        /// seinen eigenen Meldungen »Ihre Basis wird besetzt«, »Captured:«):
+        /// @0x43CD5E zählt ihn hoch und vergleicht mit
+        /// <see cref="CaptureTotal"/>; @0x43CD27 rechnet <c>Fortschritt·10 /
+        /// Grenze</c> für die Anzeige; @0x43D2A0 zählt ihn im Takt wieder
+        /// herunter, wenn niemand mehr an der Tür steht.</para>
+        ///
+        /// <para>⭐ <b>Und er ist der EINZIGE Grund, aus dem das Original ein
+        /// Gebäude durchscheinend zeichnet.</b> Der eine Aufrufer des
+        /// durchscheinenden Zeichners (@0x42B227) hängt an genau diesem Feld:
+        /// <c>cmp word[+0x3E], 0 / jle</c> @0x42B20D. Das beantwortet die Frage
+        /// »wird ein Gebäude durchsichtig, wenn eine Einheit dahintersteht?«
+        /// endgültig mit <b>nein</b> — es wird durchsichtig, <b>während es
+        /// eingenommen wird</b>. ⚠ Wir zeigen dasselbe stattdessen als BALKEN
+        /// (<c>Capture.DrawCaptureBars</c>), und das ist damit eine unserer
+        /// Zutaten, keine Lesung.</para></summary>
+        public int CaptureProgress;         // +0x3E
+
+        // ⚠ Für die zwei folgenden Felder gilt die Berichtigung oben NICHT
+        // ungeprüft mit: dass die Verschiebung durchgängig ist, ist NICHT
+        // belegt, und +0x41 ist laut GAMESTATE_RE der »ident«. Sie bleiben
+        // stehen, wie sie sind, bis jemand sie am Original nachliest.
+        public int Intruder = -1;           // +0x3c?, the player at the door
+        public int ShownOwner = -1;         // +0x3d?, flickers while it is taken
 
         public bool IsTarget;      // listed in the mission's win conditions
         public int Infantry = -1;  // ROBO.CWR infantry set, -1 = not a foot soldier
