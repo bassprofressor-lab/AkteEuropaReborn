@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.UI;
+﻿namespace AkteEuropaReborn.UI;
 
 using System;
 using System.Collections.Generic;
@@ -140,6 +140,10 @@ public sealed partial class BaseWindow : PanelContainer
     /// <summary>»Aussenden« — Zeile <c>k</c> aus dem Depot auf die Karte
     /// stellen. Der Knopf des Originals sitzt unten links (20,230).</summary>
     public Action<int>? OnSendOut;
+
+    /// <summary>Ist das gewählte Gebäude ein MARKT? Dann heisst der Knopf
+    /// »Bestellen« und die Liste ist die Ware, nicht die Bauliste.</summary>
+    public Func<bool>? IsMarket;
 
     /// <summary>Das X.</summary>
     public Action? OnClose;
@@ -445,7 +449,12 @@ public sealed partial class BaseWindow : PanelContainer
         // ⚠ 17.08.2026 — die Beschriftung folgt dem Reiter. Ein Knopf, der auf
         // dem Forschungsreiter »Produzieren« heisst und forscht, wäre schlimmer
         // als ein toter Reiter.
-        _make.Text = _tab switch
+        // ⚠ Am MARKT heisst der Knopf »Bestellen« — das Wort des Originals
+        // (0x50223c), und er kauft statt zu bauen. Die uebrigen Reiter sind
+        // dort ohne Sinn: ein Markt hat kein Depot, forscht nicht und
+        // repariert nicht.
+        bool markt = IsMarket?.Invoke() ?? false;
+        _make.Text = markt ? "Bestellen" : _tab switch
         { 0 => "Aussenden", 2 => "Forschen", 3 => "Reparieren", _ => "Produzieren" };
         _make.Disabled = _tab switch
         {
@@ -456,6 +465,8 @@ public sealed partial class BaseWindow : PanelContainer
                  _sheet.Selected >= rows.Count,
             1 => _sheet.Selected < 0 || _sheet.Selected >= rows.Count ||
                  !rows[_sheet.Selected].Affordable,
+            // (der Markt laeuft ueber denselben Reiter 1; die Zeile darueber
+            //  prueft schon »bezahlbar«, und das ist am Markt der Kontostand)
             _ => true,
         };
         _design.Disabled = _tab != 1;
@@ -472,8 +483,15 @@ public sealed partial class BaseWindow : PanelContainer
         // noch Fußsoldaten, weshalb der Kasten dort leer blieb.
         int pic = _sheet.Selected >= 0 && _sheet.Selected < rows.Count
                 ? rows[_sheet.Selected].Pic : 0;
+        var teile = _sheet.Selected >= 0 && _sheet.Selected < rows.Count
+                  ? (rows[_sheet.Selected].Chassis, rows[_sheet.Selected].Weapon) : (0, 0);
         if (pic > 0)
             _preview.SetPicture(pic);
+        // ⚠ Die Teile der Zeile SCHLAGEN den Namensnachschlag: wer die Zeile
+        // gebaut hat, kennt sie sicher, waehrend UnitStatBook einen Namen
+        // braucht, den ein Marktsatz oft gar nicht hat.
+        else if (teile.Item1 > 0 || teile.Item2 > 0)
+            _preview.Set(teile.Item1, teile.Item2);
         else if (name.Length > 0 && UnitStatBook.TryGet(name, out var pe))
             _preview.Set(pe.Propulsion, pe.Weapon);
         else

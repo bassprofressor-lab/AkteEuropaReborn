@@ -734,6 +734,7 @@ public partial class MapViewer : Node2D
                 _tourPrefix = q[0];
                 if (q.Length >= 2) _tourZoom = Mathf.Max(0.2f, q[1].ToFloat());
             }
+            else if (a == "--dreh-alt") MapEntityLayer.DrehAlt = true;
             else if (a.StartsWith("--shot-when="))
             {
                 var q = a["--shot-when=".Length..].Split(',');
@@ -1778,6 +1779,20 @@ public partial class MapViewer : Node2D
                 GD.Print($"MapViewer: --shot-when=treppe ausgeloest — Waggon auf Treppe " +
                          $"({sat.X:0},{sat.Y:0}), Linie {sline} | {_entities.StairsWhat}");
             }
+            // ⚠ Der Auslöser für das MARKTFENSTER. Er wartet, bis der Laden
+            // wirklich offen ist (eine eigene Einheit steht auf einer Platte),
+            // setzt die Kamera auf den Markt und lässt das übliche eine Bild
+            // verstreichen. Ohne ihn ist das neu gebaute Fenster nie zu sehen.
+            else if (_shotWhen == "markt")
+            {
+                var at = _entities.MarketShotSetup();
+                if (at == null) return;
+                _camera.Position = _entities.RailCellPoint(at.Value.X, at.Value.Y);
+                ClampCamera();
+                if (_baseWindow != null) _baseWindow.Visible = true;
+                GD.Print($"MapViewer: --shot-when=markt ausgeloest — Markt auf " +
+                         $"({at.Value.X},{at.Value.Y}), Fenster offen");
+            }
             else if (_shotWhen == "squash")
             {
                 if (_entities.RailSquashNow < _shotWhenN) return;
@@ -2408,6 +2423,7 @@ public partial class MapViewer : Node2D
         // sprangen direkt auf die Karte. Siehe MapEntityLayer.Entity.Depot.
         _baseWindow.DepotRows = _entities.DepotRows;
         _baseWindow.OnSendOut = k => _entities.SendOutFromPanel(k);
+        _baseWindow.IsMarket = () => _entities.PanelIsMarket();
 
         _designWindow = new UI.DesignWindow
         {

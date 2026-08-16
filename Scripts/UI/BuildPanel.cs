@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.UI;
+﻿namespace AkteEuropaReborn.UI;
 
 using System;
 using System.Collections.Generic;
@@ -54,9 +54,28 @@ public partial class BuildPanel : Control
     /// <summary>One buildable thing.</summary>
     public readonly struct Row
     {
-        public Row(string name, string cost, bool affordable, bool current, int pic = 0)
-        { Name = name; Cost = cost; Affordable = affordable; Current = current; Pic = pic; }
+        public Row(string name, string cost, bool affordable, bool current, int pic = 0,
+                   int chassis = 0, int weapon = 0)
+        { Name = name; Cost = cost; Affordable = affordable; Current = current; Pic = pic;
+          Chassis = chassis; Weapon = weapon; }
         public string Name { get; }
+
+        /// <summary>
+        /// <b>Fahrwerk und Aufbauteil dieser Zeile</b> — Fall 0 des Zeichners
+        /// @0x4508A0, also der zusammengesetzte Weg.
+        ///
+        /// <para>⚠ 17.08.2026, Anlass MARKT: das Fenster hat den Entwurf bisher
+        /// ueber seinen NAMEN in <c>UnitStatBook</c> nachgeschlagen, um an die
+        /// zwei Teile zu kommen. Am Laden steht in der Zeile aber oft »Entwurf
+        /// 90« — ein Satz ohne Namen —, und damit fand der Nachschlag nichts
+        /// und der Bildkasten blieb LEER. Am Bild des Marktfensters ist genau
+        /// das zu sehen. Wer die Zeile baut, kennt die Teile ohnehin; sie
+        /// ueber den Namen zurueckzuraten war der Umweg.</para>
+        ///
+        /// <para><c>0/0</c> heisst »nicht gesetzt«, dann geht das Fenster
+        /// weiter seinen alten Weg ueber den Namen.</para></summary>
+        public int Chassis { get; }
+        public int Weapon { get; }
 
         /// <summary>
         /// <b>Das fertige Bild dieses Entwurfs</b> als Bildnummer der

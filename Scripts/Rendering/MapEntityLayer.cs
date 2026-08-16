@@ -4129,6 +4129,17 @@ public partial class MapEntityLayer : Node2D
             {
                 if (!_spdBuckets.TryGetValue((g, diag), out var v) || v.N == 0) continue;
                 double txs = (double)v.TxS / v.N;
+                // ⚠ 17.08.2026 — DIESE SPALTE LIEGT SEITDEM ~2,4 % UEBER DEM
+                // GEMESSENEN WERT, UND DAS IST RICHTIG SO. Seit die Einheit in
+                // 45-Grad-Schritten dreht statt umzuklappen, FAEHRT sie waehrend
+                // des Drehens nicht (das Original ebenso, @0x405100). Gemessen
+                // auf map_DM_4: mit Drehen 195,4 gerade / 293,7 schraeg, mit
+                // --dreh-alt 190,9 / 287,0 gegen den Sollwert 190,8 / 286,8.
+                // Das VERHAELTNIS schraeg zu gerade — die eigentliche Frage —
+                // bleibt in beiden Faellen bei 1,503. Wer hier einen Fehler
+                // sucht, weil die Zahl nicht mehr genau aufgeht, sucht am
+                // falschen Ort: der Sollwert ist die reine Fahrzeit OHNE
+                // Drehtakte.
                 double want = (diag ? 239 : 159) * (double)SimHz / Simulation.NavGrid.OriginalHz;
                 if (g == Simulation.NavGrid.Ground.Free && !diag) straightFree = txs;
                 if (g == Simulation.NavGrid.Ground.Free && diag) diagFree = txs;
@@ -9169,6 +9180,31 @@ public partial class MapEntityLayer : Node2D
     // ================= production from the design list (sec47) ================
 
     /// <summary>A buildable design: the game's own name plus its components.</summary>
+    /// <summary>
+    /// <b>Einen Entwurf ueber seinen PLATZ finden — nicht ueber die Stelle in
+    /// unserer Liste.</b>
+    ///
+    /// <para>⚠⚠ 17.08.2026, gemessen am MARKT und mit einer unangenehmen
+    /// Nebenwirkung: unsere Entwurfsliste ist <b>dicht gepackt</b> (78 Saetze),
+    /// die Plaetze darin laufen aber <b>-1..194</b> — der Platz ist also NICHT
+    /// die Listenstelle. Die Marktware verweist auf Plaetze 60..130. Wer sie als
+    /// Listenstelle nahm, traf 11 von 20, und diese elf waren teils der
+    /// FALSCHE Entwurf: falscher Name, falsches Bild, und nichts daran sah
+    /// kaputt aus. Ueber den Platz gesucht treffen <b>20 von 20</b>.</para>
+    ///
+    /// <para>Dass der Platz zaehlt, steht schon in <see cref="Design.Slot"/>:
+    /// der Fahrplan der Kampagne gibt Entwuerfe NACH PLATZ frei
+    /// (@0x4d04d0 schreibt <c>sec47[slot + 200*spieler]</c>), und sec47 ist
+    /// 0x51ce20 mit Schrittweite 46 — <b>200 Plaetze je Spieler</b>.</para>
+    /// </summary>
+    private Design? DesignBySlot(int slot)
+    {
+        if (_designs == null || slot < 0) return null;
+        for (int i = 0; i < _designs.Count; i++)
+            if (_designs[i].Slot == slot) return _designs[i];
+        return null;
+    }
+
     private readonly struct Design
     {
         public Design(string name, int prop, int equip, int weapon, bool available, int slot)
@@ -9584,6 +9620,37 @@ public partial class MapEntityLayer : Node2D
     /// Weapons 65..79 are equipment (Repair, Transporter, Building Const. …) and
     /// 185..199 infantry arms — neither maps this way, so they get no turret.
     /// </summary>
+    /// <summary>
+    /// <b>Der Aufsatz eines SCHIFFS</b> — Bauteilzeile 140…145 auf die
+    /// Bildnummer, die der Einheitensatz in <c>+0x0C</c> traegt.
+    ///
+    /// <para>⚠⚠ 17.08.2026 — <b>FEHLER D DER LISTE E, die eigentliche
+    /// Ursache.</b> <c>LaunchShip</c> setzte <c>Weapon = d.WeaponComp</c>, und
+    /// <c>weapon_comp</c> wird von KEINEM unserer Einleser jemals geschrieben —
+    /// der Wert war also immer <b>0</b>. Und 0 ist im Original nicht »irgendein
+    /// Bild fehlt«, sondern der <b>Unbewaffnet-Schalter</b>: der Kampftakt
+    /// @0x40DE1E prueft <c>test al,al</c> auf +0x0C und verlaesst den Kampfteil
+    /// sofort. Jedes bei uns gebaute Schiff war damit wehrlos — genau die
+    /// Meldung »Boote scheinen keine Waffen zu haben«.</para>
+    ///
+    /// <para>Die Zuordnung ist gelesen (Bauteiltafel 0x5045A0, Satz 58 B,
+    /// Feld +0x0D; @0x4B2DCE schreibt sie nach +0x0C):
+    /// <b>140</b> 2× Maschinengewehr → 24 · <b>141</b> Bordkanone → 21 ·
+    /// <b>142</b> L.Raketenwerfer → 26 · <b>143</b> Schw.Raketenwerfer → 27 ·
+    /// <b>144</b> Mittelstreckenrakete → 28 · <b>145</b> Flak-Geschuetz → 38.
+    /// Sie liegen im selben Zahlenraum wie die Landtuerme (<see cref="TurretOf"/>
+    /// bildet 1…19 auf 21…39 ab), was zusammenpasst.</para>
+    ///
+    /// <para>Waffe <b>0</b> bleibt 0 und ist kein Versehen: Frachter, U-Boot und
+    /// die beiden Tender sind im Original unbewaffnet (4 der 10 Entwuerfe), und
+    /// von den 97 gesetzten Schiffen der Karten tragen 84 einen Aufsatz.</para>
+    /// </summary>
+    private static int ShipTurretOf(int shipWeapon) => shipWeapon switch
+    {
+        140 => 24, 141 => 21, 142 => 26, 143 => 27, 144 => 28, 145 => 38,
+        _ => 0,
+    };
+
     private static int TurretOf(int designWeapon)
     {
         if (designWeapon is >= 1 and <= 19) return designWeapon + 20;
@@ -10110,7 +10177,16 @@ public partial class MapEntityLayer : Node2D
         if (_selected < 0 || _selected >= _entities.Count) return null;
         var e = _entities[_selected];
         if (!e.IsBuilding || e.IsProp || e.Dead) return null;
-        if (e.Owner != ViewPlayer && !IsSupplyDepot(e)) return null;
+        // ⚠ 17.08.2026, richtiggestellt: hier stand `!IsSupplyDepot(e)` allein,
+        // und damit fiel der MARKT (Typ 17) schon in dieser Zeile heraus — er
+        // gehoert NIEMANDEM (owner 255 auf allen 41 Saetzen), also ist
+        // `e.Owner != ViewPlayer` fuer ihn immer wahr. Die Marktzeile weiter
+        // unten wurde nie erreicht; der Pruefstand meldete »Producer: NULL« bei
+        // gleichzeitig »offen: True«, und genau diese zwei Zahlen nebeneinander
+        // haben es gezeigt. Mein Kommentar dort sagte schon das Richtige
+        // (»steht hinter der Besitzerpruefung, wie der Nachschub-Posten«) — nur
+        // stand die Ausnahme dafuer nicht da.
+        if (e.Owner != ViewPlayer && !IsSupplyDepot(e) && e.BType != 17) return null;
         // ⚠ 11.08.2026, zweiter Anlauf: der Nachschub-Posten gehoert auf
         // map_02 NIEMANDEM (Besitzer -1), und er wird auch nicht eingenommen —
         // man faehrt auf ihn drauf (darum raeumt Load() seine Sperre weg). Mit
@@ -10121,6 +10197,14 @@ public partial class MapEntityLayer : Node2D
         // Besitzer: beide Zweige @0x44C2CF und @0x44C37C pruefen nur
         // `cmp dword [ecx*4 + 0xA9C600], eax` — den Kontostand.
         if (IsSupplyDepot(e)) return e;
+        // ⚠ Der MARKT (Typ 17) ist bedienbar, aber NUR wenn eine eigene Einheit
+        // auf einer der vier Platten steht — genau das prueft das Original in
+        // seinem Tick (@0x43E90C) und in der Zeigerlogik (@0x432569), die das
+        // Gebaeude eben dann anklickbar macht. Er gehoert KEINEM Spieler
+        // (owner 255 auf allen 41 Saetzen), deshalb steht er hier hinter der
+        // Besitzerpruefung, wie der Nachschub-Posten.
+        if (e.BType == 17)
+            return MarketOpenFor(e, ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0) ? e : null;
         return IsUnitPlant(e) || IsDock(e) || e.BType == 9 ? e : null;
     }
 
@@ -10134,6 +10218,11 @@ public partial class MapEntityLayer : Node2D
             return $"PRODUKTION  W{e.StockW} F{e.StockF} S{e.StockS}";
         if (IsSupplyDepot(e))
             return $"VERSORGUNGSDEPOT  ${_money[ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0]}";
+        // Der Markt rechnet in GELD, und das Original schreibt seinen Kontostand
+        // genau dort hin: "Geschaeftszentrum" (0x502258) und "Kontostand: $"
+        // (0x502248), gedruckt @0x47ED19 aus dword[spieler*4 + 0xA9C600].
+        if (e.BType == 17)
+            return $"GESCHAEFTSZENTRUM  ${_money[ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0]}";
         // ⚠ 17.08.2026 — FEHLER C12, gemeldet als »Flughafen kennt nur $ anstatt
         // Resourcen«. Hier stand für JEDES übrige bauende Gebäude der
         // Kontostand, also auch für den Flughafen — und dort wird gar nicht mit
@@ -10167,8 +10256,14 @@ public partial class MapEntityLayer : Node2D
     {
         var e = Producer();
         if (e == null) return null;
-        return (e.Name.Length > 0 ? e.Name : BuildingTypeName(e.BType),
-                e.Hp, e.HpMax, e.Dead ? "zerstoert" : StateName(e));
+        // ⚠ 17.08.2026, am BILD des Marktfensters gesehen: dort stand »INIT32«.
+        // Das ist der technische Kartenname des Gebaeudes, und fuer den LADEN
+        // ist er unbrauchbar — das Original nennt ihn »Geschaeftszentrum«
+        // (0x502258). Bei den uebrigen Gebaeuden bleibt der Kartenname, denn
+        // dort ist er ein richtiger Ortsname (»Karvina«, »Bolougne«).
+        string kopf = e.BType == 17 || e.Name.Length == 0
+                    ? BuildingTypeName(e.BType) : e.Name;
+        return (kopf, e.Hp, e.HpMax, e.Dead ? "zerstoert" : StateName(e));
     }
 
     public bool BuildPanelWanted => Producer() != null;
@@ -10297,6 +10392,15 @@ public partial class MapEntityLayer : Node2D
                         int yi = ShipyardOf(b);
                         if (yi >= 0) { _entities[yi].StockW = _entities[yi].StockF
                                      = _entities[yi].StockS = 9999; }
+                        // ⚠ 17.08.2026 — DIE AUSFAHRT WIRD GERAEUMT, und das ist
+                        // ein Eingriff des Pruefstands, kein Verhalten des
+                        // Spiels. Gemessen auf map_DM_4: auf beiden gelesenen
+                        // Ausfahrten des einzigen Docks liegen die auf der KARTE
+                        // GESETZTEN Schiffe des Spielers — die Ausfahrten sind
+                        // eben die Liegeplaetze. Ohne Raeumung wartet LaunchShip
+                        // zu Recht ewig, und der Pruefstand misst dann nicht den
+                        // Stapellauf, sondern nur die Enge des Hafens.
+                        DockFlowClearExit(b);
                     }
                     else
                     {
@@ -10339,8 +10443,43 @@ public partial class MapEntityLayer : Node2D
                           "launch-ship darueber sagt WOHIN"
                         : "depot-flow(dock): KEIN Schiff gebaut — der Kaufweg des Docks " +
                           "hat nichts getan (BuildShip pruefen), der Fix ist damit UNGEPRUEFT");
-                    _depotFlow = -1;
+                    if (neu <= 0) { _depotFlow = -1; return; }
+                    // ---- FAHRT: dreht sich das Schiff, oder gleitet es? -----
+                    // Fehler C der Liste E. Gemessen wird die BLICKRICHTUNG ueber
+                    // die Zeit, nicht der Eindruck.
+                    _fahrtAt = -1;
+                    for (int i2 = _entities.Count - 1; i2 >= 0; i2--)
+                        if (!_entities[i2].IsBuilding && !_entities[i2].Dead
+                            && _entities[i2].GameUnitType is 4 or 5) { _fahrtAt = i2; break; }
+                    if (_fahrtAt < 0) { _depotFlow = -1; return; }
+                    var sh = _entities[_fahrtAt];
+                    // ein Ziel SCHRAEG hinter dem Schiff — das erzwingt eine
+                    // grosse Drehung, sonst misst man nur Geradeausfahrt
+                    Vector2I? ziel = null;
+                    for (int r = 3; r <= 14 && ziel == null; r++)
+                        foreach (var (dx2, dy2) in new[] { (-r, r), (r, r), (-r, -r), (r, -r) })
+                        {
+                            var c2 = new Vector2I(sh.Col + dx2, sh.Row + dy2);
+                            if (HullFitsWater(c2, Simulation.NavGrid.HullSide(sh.GameUnitType)))
+                            { ziel = c2; break; }
+                        }
+                    if (ziel == null)
+                    { GD.Print("depot-flow(dock): kein Fahrziel auf Wasser gefunden"); _depotFlow = -1; return; }
+                    var weg = _nav.FindPath(new Vector2I(sh.Col, sh.Row), ziel.Value,
+                                            sh.Move, _fahrtAt);
+                    if (weg == null || weg.Count == 0)
+                    { GD.Print($"depot-flow(dock): kein WEG nach ({ziel.Value.X},{ziel.Value.Y})"); _depotFlow = -1; return; }
+                    sh.Path = weg; sh.PathIdx = 0; sh.Goal = ziel.Value;
+                    sh.Reserved = null; sh.WaitTime = 0;
+                    _fahrtStart = new Vector2I(sh.Col, sh.Row);
+                    _fahrtFacings.Clear(); _fahrtTakte = 0;
+                    GD.Print($"depot-flow(dock): Fahrt von ({sh.Col},{sh.Row}) nach " +
+                             $"({ziel.Value.X},{ziel.Value.Y}), {weg.Count} Schritte, " +
+                             $"Blickrichtung jetzt {sh.Facing}");
+                    _depotFlow = 3;
                     return;
+
+
                 }
                 if (e.BuildTime > 0f && e.Depot.Count == 0) return;
                 int jetzt = UnitRecords();
@@ -10366,6 +10505,59 @@ public partial class MapEntityLayer : Node2D
                          : "depot-flow: DURCHGEFALLEN");
                 _depotFlow = -1;
                 return;
+
+                case 3:                                  // Fahrt beobachten
+                {
+                    if (_fahrtAt < 0 || _fahrtAt >= _entities.Count) { _depotFlow = -1; return; }
+                    var sh = _entities[_fahrtAt];
+                    _fahrtFacings.Add(sh.Facing);
+                    _fahrtTakte++;
+                    // ⚠ 240 statt 60 Takte: der erste Anlauf brach ab, waehrend
+                    // das Schiff noch fuhr (2 von 3 Zellen), und mass damit
+                    // einen Ausschnitt statt der Fahrt.
+                    if (_fahrtTakte < 240 && sh.Path != null && sh.PathIdx < sh.Path.Count) return;
+                    // ⚠ EINE KURVE ERZWINGEN. Der erste Weg war eine gerade
+                    // Diagonale, und ueber eine Gerade laesst sich ueber das
+                    // Drehen nichts sagen. Also einmal zurueck, wo es herkam —
+                    // das ist eine 180-Grad-Wende und damit der schaerfste Fall.
+                    if (!_fahrtKurve)
+                    {
+                        _fahrtKurve = true;
+                        var weg2 = _nav.FindPath(new Vector2I(sh.Col, sh.Row),
+                                                 _fahrtStart, sh.Move, _fahrtAt);
+                        if (weg2 is { Count: > 0 })
+                        {
+                            sh.Path = weg2; sh.PathIdx = 0; sh.Goal = _fahrtStart;
+                            sh.Reserved = null; sh.WaitTime = 0;
+                            _fahrtTakte = 0;
+                            GD.Print($"depot-flow(dock): Gegenfahrt zurueck nach " +
+                                     $"({_fahrtStart.X},{_fahrtStart.Y}) — jetzt MUSS sich " +
+                                     $"die Blickrichtung aendern (steht auf {sh.Facing})");
+                            return;
+                        }
+                    }
+                    // ⚠ Regel C: DREI verschiedene Fragen, drei Zahlen.
+                    var stufen = _fahrtFacings.Distinct().Count();
+                    int wechsel = 0;
+                    for (int k = 1; k < _fahrtFacings.Count; k++)
+                        if (_fahrtFacings[k] != _fahrtFacings[k - 1]) wechsel++;
+                    int spruenge = 0;
+                    for (int k = 1; k < _fahrtFacings.Count; k++)
+                    {
+                        int a = _fahrtFacings[k - 1], b = _fahrtFacings[k];
+                        if (a == b) continue;
+                        int diff = Mathf.Abs(a - b);
+                        if (Mathf.Min(diff, 8 - diff) > 1) spruenge++;
+                    }
+                    GD.Print($"depot-flow(dock): Fahrt zu Ende nach {_fahrtTakte} Takten, " +
+                             $"({_fahrtStart.X},{_fahrtStart.Y}) -> ({sh.Col},{sh.Row}); " +
+                             $"Blickrichtung nahm {stufen} verschiedene Stufen an, " +
+                             $"wechselte {wechsel}x, davon {spruenge} SPRUENGE ueber mehr als " +
+                             $"eine Stufe " +
+                             $"({(wechsel == 0 ? "KEIN URTEIL — die Blickrichtung hat sich nie geaendert, der Weg war also gerade. Der Pruefstand sagt hier NICHTS ueber das Drehen" : spruenge == 0 ? "dreht schrittweise, wie das Original (@0x405100, ein 45-Grad-Schritt je Takt)" : "SPRINGT — das Original dreht in 45-Grad-Schritten, hier klappt die Richtung um")})");
+                    _depotFlow = -1;
+                    return;
+                }
         }
     }
 
@@ -10385,6 +10577,52 @@ public partial class MapEntityLayer : Node2D
         foreach (var x in _entities) if (!x.IsBuilding && !x.IsProp) n++;
         return n;
     }
+
+    /// <summary>Nur fuer <c>--depot-flow=dock</c>: setzt die eigenen Schiffe,
+    /// die auf den beiden gelesenen Ausfahrten liegen, aus dem Weg — sonst kann
+    /// der Stapellauf gar nicht stattfinden. Meldet jede Versetzung, damit im
+    /// Ausdruck steht, was der Pruefstand selbst getan hat.</summary>
+    private void DockFlowClearExit(Entity dock)
+    {
+        if (_nav == null) return;
+        foreach (var (cx, cy) in new[]
+                 { (dock.Col - 4, dock.Row + 1), (dock.Col + 5, dock.Row + 1),
+                   (dock.Col - 2, dock.Row + 2), (dock.Col + 5, dock.Row + 2) })
+            for (int dy = 0; dy < 4; dy++)
+            for (int dx = 0; dx < 4; dx++)
+            {
+                int occ = _nav.OccupantAt(cx + dx, cy + dy);
+                if (occ < 0 || occ >= _entities.Count) continue;
+                var u = _entities[occ];
+                if (u.IsBuilding || u.Dead) continue;
+                // ⚠ Der GANZE Rumpf, nicht die Ankerzelle: der erste Anlauf
+                // raeumte drei Schiffe und die Ausfahrt blieb trotzdem belegt,
+                // weil ein 2x2-Schiff mit Anker auf (82,16) eben auch (82,17)
+                // haelt. Genau dieselbe Verwechslung wie bei NearestFree.
+                int rs = Simulation.NavGrid.HullSide(u.GameUnitType);
+                for (int hy = 0; hy < rs; hy++)
+                for (int hx = 0; hx < rs; hx++)
+                    _nav.SetOccupant(u.Col + hx, u.Row + hy, -1);
+                u.Dead = true;                       // aus dem Weg, und zwar sichtbar
+                GD.Print($"depot-flow(dock): Liegeplatz ({u.Col},{u.Row}) geraeumt " +
+                         $"(eigenes Schiff, Spieler {u.Owner}) — Eingriff des Pruefstands");
+            }
+    }
+
+    /// <summary>GEGENPROBE <c>--dreh-alt</c>: der Stand vor dem 17.08.2026 —
+    /// die Blickrichtung klappt sofort auf die Fahrtrichtung um.</summary>
+    public static bool DrehAlt;
+
+    /// <summary>Wieviele Takte insgesamt mit Drehen statt Fahren vergangen
+    /// sind. Steht in der Sichtzeile, damit »es dreht« nicht nur eine
+    /// Behauptung ist.</summary>
+    public int DrehTicks => _drehTicks;
+    private int _drehTicks;
+
+    private bool _fahrtKurve;
+    private int _fahrtAt = -1, _fahrtTakte;
+    private Vector2I _fahrtStart;
+    private readonly List<int> _fahrtFacings = new();
 
     private int _depotFlow = -1, _depotFlowAt = -1, _depotFlowUnits;
 
@@ -10448,6 +10686,52 @@ public partial class MapEntityLayer : Node2D
                   ? "  BESTANDEN" : "  DURCHGEFALLEN");
         _selected = merk;
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// <c>--shot-when=markt</c> — stellt den Fall her, in dem das MARKTFENSTER
+    /// offen steht, und sagt WO der Markt liegt, damit die Kamera hin kann.
+    ///
+    /// <para>Denselben Handgriff macht <see cref="MarketCheck"/>; hier steht er
+    /// getrennt, weil ein Bild etwas anderes beweist als eine Zahl — das Fenster
+    /// ist gebaut, aber noch nie jemand hat es gesehen.</para>
+    ///
+    /// <para>Gibt <c>null</c>, solange es nicht geht (kein Markt, keine fahrende
+    /// Einheit). Der Auslöser wartet dann einfach weiter.</para></summary>
+    public Vector2I? MarketShotSetup()
+    {
+        if (_nav == null) return null;
+        int mi = -1;
+        for (int i = 0; i < _entities.Count; i++)
+            if (_entities[i].IsBuilding && !_entities[i].Dead && _entities[i].BType == 17)
+            { mi = i; break; }
+        if (mi < 0) return null;
+        var b = _entities[mi];
+
+        int owner = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
+        if (!MarketOpenFor(b, owner))
+        {
+            int ui = -1;
+            for (int i = 0; i < _entities.Count; i++)
+            {
+                var u = _entities[i];
+                if (u.IsBuilding || u.IsProp || u.Dead || !u.Mobile) continue;
+                ui = i; break;
+            }
+            if (ui < 0) return null;
+            var pad = MarketPads(b).First();
+            var u2 = _entities[ui];
+            _nav.SetOccupant(u2.Col, u2.Row, -1);
+            u2.Col = pad.X; u2.Row = pad.Y; u2.Owner = u2.Team = owner;
+            u2.Pos = CellCenter(pad.X, pad.Y);
+            _nav.SetOccupant(pad.X, pad.Y, ui);
+        }
+        // Geld, damit die Zeilen auch als BEZAHLBAR gezeigt werden — sonst
+        // zeigt das Bild einen Laden, in dem alles gesperrt aussieht.
+        if (_money[owner] < 2000) Money(owner, 2000);
+        _selected = mi;
+        UpdatePanel();
+        return new Vector2I(b.Col, b.Row);
     }
 
     /// <summary>
@@ -10525,11 +10809,145 @@ public partial class MapEntityLayer : Node2D
         sb.AppendLine(!vorher && nachher
             ? "  PLATTEN: BESTANDEN (zu -> auffahren -> offen)"
             : "  PLATTEN: DURCHGEFALLEN");
+        // ---- KAUFEN, und zwar ueber den Klickweg ------------------------
+        if (_market.Count > 0)
+        {
+            int owner = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
+            Money(owner, 9999);
+            int geldVor = Money(owner), wareVor = _market.Count, saetzeVor = UnitRecords();
+            int preis = _market[0].Price;
+            _selected = maerkte[0];
+            _order = "";
+            BuildPanelPick(0);
+            // ⚠ Regel 33/L: wer eine Bedingung stellt, muss sie danach LESEN.
+            // Ohne diese Zeile sagt der Pruefstand nur "FALSCH" und nicht,
+            // WORAN es lag — und genau das kostet dann eine Extrarunde.
+            var pp = Producer();
+            sb.AppendLine($"  Meldung des Kaufwegs: \"{_order}\"" +
+                          $" (Producer: {(pp == null ? "NULL" : "Typ " + pp.BType)}" +
+                          $", offen: {MarketOpenFor(b, owner)})");
+            sb.AppendLine($"  KAUF: Preis ${preis}; Konto ${geldVor} -> ${Money(owner)} " +
+                          $"({(Money(owner) == geldVor - preis ? "genau abgezogen" : "FALSCH abgezogen")}), " +
+                          $"Ware {wareVor} -> {_market.Count} " +
+                          $"({(_market.Count == wareVor - 1 ? "eines weg, richtig" : "FALSCH")}), " +
+                          $"Einheitensaetze {saetzeVor} -> {UnitRecords()} " +
+                          $"({(UnitRecords() == saetzeVor + 1 ? "eines mehr, richtig" : "NICHT abgesetzt")})");
+        }
+
+        // ---- WOHIN ZEIGT o.Design? ---------------------------------------
+        {
+            int n = _designs?.Count ?? -1;
+            var idx = _market.Select(x => x.Design).ToList();
+            int drin = idx.Count(x => x >= 0 && x < n);
+            int benannt = 0;
+            if (_designs != null)
+                foreach (int x in idx)
+                    if (x >= 0 && x < n && _designs[x].Name.Length > 0) benannt++;
+            if (_designs != null && n > 0)
+            {
+                var slots = new List<int>();
+                for (int i2 = 0; i2 < n; i2++) slots.Add(_designs[i2].Slot);
+                bool dicht = true;
+                for (int i2 = 0; i2 < n; i2++) if (slots[i2] != i2) { dicht = false; break; }
+                int trefferUeberSlot = idx.Count(x => slots.Contains(x));
+                sb.AppendLine($"  Entwurfsplaetze laufen {slots.Min()}..{slots.Max()} und sind " +
+                              $"{(dicht ? "DICHT (Platz == Listenstelle)" : "NICHT dicht — der Platz ist NICHT die Listenstelle")}; " +
+                              $"ueber den PLATZ gesucht treffen {trefferUeberSlot}/{idx.Count}");
+            }
+            sb.AppendLine($"  Entwurfsliste hat {n} Saetze; Marktware zeigt auf " +
+                          $"{idx.Min()}..{idx.Max()}, davon {drin}/{idx.Count} INNERHALB, " +
+                          $"{benannt} davon mit Namen " +
+                          $"({(drin == idx.Count ? "alle treffen" : "ZU KURZ — der Rest hat kein Bild und keinen Namen")})");
+        }
+
         sb.Append(_market.Count > 0
             ? $"  WARE: {_market.Count} Angebote aus der Karte"
             : "  WARE: keine — diese Karte bringt keinen Bestand mit, und der " +
               "LAUFZEIT-Nachschub (@0x4C0260) fehlt noch");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// <b>»Bestellen«</b> — ein Angebot des Marktes kaufen.
+    ///
+    /// <para><b>Gelesen</b> (@0x4C13A6): der Kauf zieht den Preis aus
+    /// <c>word[0x81A3A8 + 2·idx]</c> vom Kontostand ab, trägt den Käufer in
+    /// <c>byte[idx+0xB49C50]</c> ein und setzt den Preis auf <b>0xFFFF</b> —
+    /// das ist die Marke, an der der Nachschub den Platz später wiederfindet
+    /// (@0x4C03C8). Der Platz wird also nicht geleert, sondern als »verkauft«
+    /// markiert.</para>
+    ///
+    /// <para>⚠ <b>UNSERE SETZUNG, und sie ist benannt:</b> WO die gekaufte
+    /// Einheit erscheint, ist nicht gelesen. Wir setzen sie auf die Platte, auf
+    /// der die eigene Einheit steht — das ist die Zelle, an der der Spieler
+    /// gerade hinsieht, und sie ist nachweislich befahrbar. Das Original hat
+    /// dafür vermutlich einen eigenen Weg (die Ware ist ein FERTIGER
+    /// Einheitensatz in sec94, kein Entwurf); solange der nicht gelesen ist,
+    /// steht hier unsere Wahl.</para></summary>
+    public void MarketBuy(Entity markt, int row)
+    {
+        int owner = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
+        if (row < 0 || row >= _market.Count) { _order = "nichts gewaehlt"; return; }
+        var o = _market[row];
+        if (_money[owner] < o.Price)
+        {
+            // Die Meldung des Originals, woertlich (0x4FBDD0).
+            _order = "Sie haben leider nicht genug Geld.";
+            Audio.GameSounds.Play(Audio.GameSounds.Refused);
+            return;
+        }
+        var cell = MarketPads(markt).FirstOrDefault(
+            p => _nav != null && _nav.IsFree(p.X, p.Y, Simulation.NavGrid.MoveClass.Vehicle));
+        if (cell == default && !(_nav?.IsFree(markt.Col, markt.Row,
+                                 Simulation.NavGrid.MoveClass.Vehicle) ?? false))
+        { _order = "kein Platz am Markt frei"; return; }
+
+        if (!MarketSpawn(o, cell, owner)) { _order = "die Einheit liess sich nicht absetzen"; return; }
+        Money(owner, Money(owner) - o.Price);
+        _market.RemoveAt(row);
+        MarketBought++;
+        _order = $"gekauft fuer ${o.Price} — Kontostand ${Money(owner)}";
+        UpdatePanel();
+        QueueRedraw();
+    }
+
+    /// <summary>Wieviel am Markt gekauft und verkauft wurde — damit ein »der
+    /// Handel läuft« nicht nur eine Behauptung ist.</summary>
+    public int MarketBought, MarketSold;
+
+    /// <summary>Die gekaufte Ware auf die Karte stellen. Sie ist ein FERTIGER
+    /// Satz, kein Entwurf — Werte kommen aus dem Angebot, nicht aus sec47.</summary>
+    private bool MarketSpawn(MarketOffer o, Vector2I at, int owner)
+    {
+        if (_nav == null) return false;
+        // ⚠ Ueber den PLATZ, nicht ueber die Listenstelle — siehe
+        // DesignBySlot. Hier wog der Fehler schwerer als in der Zeilenliste:
+        // die gekaufte Einheit haette WAFFE und AUSRUESTUNG eines fremden
+        // Entwurfs bekommen, und das sieht man ihr nicht an.
+        var d = DesignBySlot(o.Design);
+        int hp = o.Energie > 0 ? o.Energie : 100;
+        var u = new Entity
+        {
+            Slot = -1, Col = at.X, Row = at.Y, Owner = owner, Team = owner,
+            UnitType = o.UnitType > 0 ? o.UnitType : d?.Propulsion ?? 160,
+            Name = d is { Name.Length: > 0 } dn ? dn.Name : $"Entwurf {o.Design}",
+            Hp = hp, HpMax = hp, Attack = o.Attack, Defence = o.Defence,
+            Speed = o.Speed, Sight = o.Sight, Range = o.Range,
+            Elev = ElevOf(at.X, at.Y), Facing = DefaultFacing, Mobile = true,
+            Weapon = d is { } dd ? TurretOf(dd.Weapon) : 0,
+            Equipment = d?.Equip ?? 0,
+            Chassis = d?.Derived.ChassisComponent ?? 0,
+            GameUnitType = TypeOfChassis(o.UnitType > 0 ? o.UnitType : d?.Propulsion ?? 160),
+            Move = Simulation.NavGrid.ClassOf(-1, d?.Derived.ChassisComponent ?? 0),
+            Footprint = CellRect(_ox, _oy, at.X, at.Y, ElevOf(at.X, at.Y)),
+        };
+        if (d is { } d2 && InfantryFor(d2.Weapon, out int inf, out int iw))
+        { u.Infantry = inf; u.Weapon = iw; }
+        u.Pos = CellCenter(u.Col, u.Row);
+        _entities.Add(u);
+        _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.GameUnitType));
+        _nav.SetOccupant(u.Col, u.Row, _entities.Count - 1);
+        return true;
     }
 
     /// <summary>Ein Angebot des Marktes, wie es aus der Karte kommt.</summary>
@@ -10633,6 +11051,9 @@ public partial class MapEntityLayer : Node2D
         return rows;
     }
 
+    /// <summary>Zeigt das Bedienfeld gerade einen MARKT?</summary>
+    public bool PanelIsMarket() => Producer() is { BType: 17 };
+
     /// <summary>»Aussenden« aus dem Bedienfeld — die gewählte Zeile des Depots
     /// auf die Karte stellen.</summary>
     public void SendOutFromPanel(int k)
@@ -10673,6 +11094,25 @@ public partial class MapEntityLayer : Node2D
         var e = Producer();
         if (e == null) return rows;
 
+        // ⚠ DER MARKT zeigt keine Bauliste, sondern seine WARE — fertige
+        // Einheiten mit Preis. Bezahlt wird mit GELD, nicht mit Teilen; die
+        // Spalte "Kosten" traegt deshalb ein $-Zeichen.
+        if (e.BType == 17)
+        {
+            int owner = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
+            foreach (var o in _market)
+            {
+                var d = DesignBySlot(o.Design);
+                string nm = d is { Name.Length: > 0 } dn ? dn.Name : $"Entwurf {o.Design}";
+                int pic = d is { } dd && dd.Weapon >= UI.PortraitBank.InfWeaponFrom
+                        ? UI.PortraitBank.PictureOfInfantry(dd.Slot) : 0;
+                rows.Add(new UI.BuildPanel.Row(nm, $"${o.Price}",
+                                               _money[owner] >= o.Price, false, pic,
+                                               d?.Propulsion ?? 0, d?.Weapon ?? 0));
+            }
+            return rows;
+        }
+
         if (IsUnitPlant(e) && _designs != null)
         {
             var menu = BuildableBy(e.BType);
@@ -10689,7 +11129,8 @@ public partial class MapEntityLayer : Node2D
                         : 0;
                 rows.Add(new UI.BuildPanel.Row(
                     d.Name, $"{d.CostW}/{d.CostF}/{d.CostS}",
-                    CanAfford(e, d), i == e.MenuIndex % Mathf.Max(1, menu.Count), pic));
+                    CanAfford(e, d), i == e.MenuIndex % Mathf.Max(1, menu.Count), pic,
+                    d.Propulsion, d.Weapon));
             }
             return rows;
         }
@@ -10868,6 +11309,8 @@ public partial class MapEntityLayer : Node2D
     {
         var e = Producer();
         if (e == null || i < 0) return;
+        // Der Markt VERKAUFT, er produziert nicht — eigener Weg.
+        if (e.BType == 17) { MarketBuy(e, i); return; }
         e.MenuIndex = i;
         _sel.Clear();
         _sel.Add(_selected);
@@ -11660,6 +12103,43 @@ public partial class MapEntityLayer : Node2D
 
         public int CostW, CostF, CostS;
         public int Speed, Energie, Attack, Defence, Sight, Ammo, Fuel, Reload;
+
+        /// <summary>
+        /// <b>Die REICHWEITEN des Entwurfs</b> — Satzfelder <c>+0x20</c> und
+        /// <c>+0x22</c> (CwmExtra.ShipDesigns:1031).
+        ///
+        /// <para>⚠ <b>GELESEN, seit dem 17.08.2026 abends.</b> @0x4B25E0 rechnet
+        /// einen Schiffsentwurf aus seinen zwei Bauteilen aus:
+        /// <c>+0x20 (MIN) = Bauteil[Waffe]+0x16 + Bauteil[Rumpf]+0x16</c> und
+        /// <c>+0x22 (MAX) = Bauteil[Waffe]+0x14 + Bauteil[Rumpf]+0x14</c>; der
+        /// Bauhandler kopiert +0x20 → Einheit <b>+0x2A</b> und +0x22 → Einheit
+        /// <b>+0x2B</b> (@0x4B2E4E/0x4B2E54). Und im Schusstor steht beides
+        /// nebeneinander: @0x40BF69 nimmt +0x2B mal 40 px und bricht bei »zu
+        /// weit« ab (<c>jl</c>), @0x40BF7F nimmt +0x2A und bricht bei »zu nah«
+        /// ab (<c>jg</c>). <b>Range2 ist also die Ober-, Range1 die
+        /// Untergrenze.</b></para>
+        ///
+        /// <para>⚠ <b>ALLE ZEHN RUMPFE tragen 0 bei</b> (+0x14 = +0x16 = 0) —
+        /// die ganze Reichweite kommt aus der WAFFE: 140 → 0/4 · 141 → 0/5 ·
+        /// 142 → 3/8 · 143 → 4/10 · 144 → 20/250 · 145 → 0/0. Genau das steht
+        /// auch in unseren Kartendaten (Chaingun 0/4, Katamaran 0/5, Rakete
+        /// 3/8), was die Formel von der anderen Seite bestaetigt. Eine 0 bei
+        /// Range2 heisst »kann faktisch nicht feuern« und wird nirgends
+        /// ersetzt — <b>es ist also nichts zu erfinden</b>.</para>
+        ///
+        /// <para>Vorher stand hier, die Zuordnung sei erschlossen, und zwar aus:
+        /// (1) In den Daten der 32 freigegebenen Entwuerfe hat <c>range1</c>
+        /// bei 24 den Wert 0 und nur beim RAKETENSCHIFF eine 3, waehrend
+        /// <c>range2</c> dort mit 8 den GROESSTEN Wert traegt (Chaingun 0/4,
+        /// Katamaran 0/5, Transporter 0/0) — eine Mindestreichweite, die nur
+        /// Raketen haben, ist genau das Muster von <see cref="Entity.RangeMin"/>
+        /// (@0x40bf7f, `jg`). (2) Beim LANDsatz steht die Untergrenze
+        /// <c>+0x2a</c> ebenfalls VOR der Obergrenze <c>+0x2b</c> (:1869).
+        /// Die Versaetze des Entwurfs sind aber ANDERE als die des
+        /// Einheitensatzes, deshalb bleibt es eine Erschliessung, bis
+        /// @0x4b2b20 gelesen ist.</para></summary>
+        public int Range1, Range2;
+
         public int Tech;                 // campaign level this design needs
         public bool Enable;
         public string Name = "";
@@ -11748,6 +12228,10 @@ public partial class MapEntityLayer : Node2D
                 Attack = GetI(d, "attack"), Defence = GetI(d, "defence"),
                 Sight = GetI(d, "sight"), Ammo = GetI(d, "ammo"),
                 Fuel = GetI(d, "fuel"), Reload = GetI(d, "reload"),
+                // ⚠ 17.08.2026 — diese zwei wurden NIE EINGELESEN. Sie stehen
+                // in jeder entities.json (Chaingun 0/4, Rakete 3/8), kamen aber
+                // im Spiel nicht an; siehe LaunchShip.
+                Range1 = GetI(d, "range1"), Range2 = GetI(d, "range2"),
                 Tech = GetI(d, "tech"),
             });
         }
@@ -11869,6 +12353,56 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Launch the finished ship at the dock, one row below it — the
     /// production handler writes col = dock.col and row = dock.row + 1.</summary>
+    private bool _shipExitMeldung;
+
+    /// <summary>Sagt fuer beide gelesenen Ausfahrten EINZELN, woran sie
+    /// scheitert — Zelle fuer Zelle. Ohne das steht nur »keine Ausfahrt«, und
+    /// das ist eine Diagnose, mit der man nichts anfangen kann (Regel 33).</summary>
+    private void ShipExitReport(Entity dock, int gattung, int seite)
+    {
+        var aus = gattung == 5
+            ? new[] { (dock.Col - 4, dock.Row + 1), (dock.Col + 5, dock.Row + 1) }
+            : new[] { (dock.Col - 2, dock.Row + 2), (dock.Col + 5, dock.Row + 2) };
+        for (int k = 0; k < aus.Length; k++)
+        {
+            var (cx, cy) = aus[k];
+            // ⚠ Regel C: GELAENDE und BELEGUNG sind zwei verschiedene Dinge und
+            // duerfen nicht in einer Zahl stehen. CanEnter fragt allein das
+            // Gelaende (Water/Hover @NavGrid:178), IsFree fragt zusaetzlich, ob
+            // etwas drauf steht. Der erste Anlauf zaehlte nur IsFree und haette
+            // »liegt nicht auf Wasser« und »ist verstellt« nicht auseinander
+            // halten koennen — das sind aber zwei ganz verschiedene Fehler.
+            int wasser = 0, frei = 0, ausserhalb = 0;
+            for (int dy = 0; dy < seite; dy++)
+            for (int dx = 0; dx < seite; dx++)
+            {
+                int x = cx + dx, y = cy + dy;
+                if (_nav == null || x < 0 || y < 0 || x >= _nav.Width || y >= _nav.Height)
+                { ausserhalb++; continue; }
+                bool schiffbar = _nav.CanEnter(x, y, Simulation.NavGrid.MoveClass.Ship);
+                if (schiffbar) wasser++;
+                if (schiffbar && _nav.IsFree(x, y, Simulation.NavGrid.MoveClass.Ship)) frei++;
+                else if (schiffbar)
+                {
+                    // WER steht drauf? Ohne diesen Namen ist »verstellt« keine
+                    // Diagnose, sondern nur eine zweite Frage.
+                    int occ = _nav.OccupantAt(x, y);
+                    string wer = occ >= 0 && occ < _entities.Count
+                        ? (_entities[occ].IsBuilding
+                            ? $"GEBAEUDE {BuildingTypeName(_entities[occ].BType)} Platz {_entities[occ].Slot}"
+                            : $"Einheit {_entities[occ].Name} (Spieler {_entities[occ].Owner})")
+                        : $"Sperre ohne Satz (Kennung {occ})";
+                    GD.Print($"    ({x},{y}) belegt von {wer}");
+                }
+            }
+            int n = seite * seite;
+            GD.Print($"  Ausfahrt {k + 1} ({cx},{cy}) {seite}x{seite}: " +
+                     $"{wasser}/{n} schiffbares Gelaende, davon {frei} unbesetzt, " +
+                     $"{ausserhalb}/{n} ausserhalb der Karte " +
+                     $"-> {(wasser < n ? "liegt nicht ganz auf Wasser" : frei < n ? "Wasser, aber VERSTELLT" : "waere gut")}");
+        }
+    }
+
     private void LaunchShip(Entity dock)
     {
         if (_nav == null || _shipDesigns == null) return;
@@ -11903,7 +12437,23 @@ public partial class MapEntityLayer : Node2D
         int gattung = TypeOfChassis(d.Chassis);           // 150..156 -> 4, 157/158 -> 5
         int seite = Simulation.NavGrid.HullSide(gattung);
         var cell = ShipExitCell(dock, gattung, seite);
-        if (cell == null) { dock.BuildTime = 1f; return; }   // no water free yet
+        if (cell == null)
+        {
+            // ⚠ 17.08.2026: hier ENDETE der ganze Schiffsweg still. Die Bauzeit
+            // wird neu gesetzt, der naechste Takt versucht es wieder — und wenn
+            // die Ausfahrt dauerhaft belegt ist, laeuft das ENDLOS, ohne dass
+            // irgendwo etwas steht. Der Pruefstand --depot-flow=dock blieb
+            // deshalb stumm: er wartet auf »fertig«, und fertig wurde es nie.
+            if (!_shipExitMeldung)
+            {
+                _shipExitMeldung = true;
+                GD.Print($"launch-ship: KEINE AUSFAHRT frei — Dock Platz {dock.Slot} " +
+                         $"auf ({dock.Col},{dock.Row}), Gattung {gattung}, Rumpf {seite}x{seite}. " +
+                         "Die Bauzeit wird neu gesetzt, der Bau haengt also fest.");
+                ShipExitReport(dock, gattung, seite);
+            }
+            dock.BuildTime = 1f; return;   // no water free yet
+        }
         int el = ElevOf(cell.Value.X, cell.Value.Y);
         var u = new Entity
         {
@@ -11921,7 +12471,8 @@ public partial class MapEntityLayer : Node2D
             Fuel = d.Fuel, FuelMax = d.Fuel,
             Ammo = d.Ammo, AmmoMax = d.Ammo,
             Attack = d.Attack, Defence = d.Defence,
-            Weapon = d.WeaponComp,
+            // ⚠ NICHT d.WeaponComp — das ist immer 0, siehe ShipTurretOf.
+            Weapon = d.WeaponComp > 0 ? d.WeaponComp : ShipTurretOf(d.Weapon),
             // ⚠⚠ DIESE FUENF FEHLTEN, und die erste ist die schwerste:
             // GameUnitType blieb -1, damit gab HullSide(-1) eine 2 — ein
             // gebautes SCHLACHTSCHIFF (Gattung 5, 4x4) belegte und prueft nur
@@ -11934,6 +12485,14 @@ public partial class MapEntityLayer : Node2D
             // Schiffsweg nicht.
             GameUnitType = gattung,
             Speed = d.Speed, Sight = d.Sight, Reload = d.Reload,
+            // ⚠⚠ 17.08.2026 — FEHLER D DER LISTE E: »Boote scheinen keine
+            // Waffen zu haben«. Die Waffe selbst wurde gesetzt, die REICHWEITE
+            // nicht: `Range` blieb 0. RangeOf faellt dann auf die Waffentabelle
+            // zurueck (:5724), und RangeMin blieb ohne Ausnahme 0 — womit das
+            // Raketenschiff seine gelesene Untergrenze von 3 verlor und aus
+            // naechster Naehe schiessen konnte. Die Zahlen stehen im Entwurf
+            // (siehe ShipDesign.Range1/Range2) und schlagen die Tabelle.
+            Range = d.Range2, RangeMin = d.Range1,
             Facing = DefaultFacing, Mobile = true,
             Move = Simulation.NavGrid.MoveClass.Ship,
             Footprint = CellRect(_ox, _oy, cell.Value.X, cell.Value.Y, el),
@@ -11957,7 +12516,12 @@ public partial class MapEntityLayer : Node2D
         GD.Print($"launch-ship: {d.Name} (Rumpf {d.Chassis}, Gattung {gattung}, " +
                  $"{seite}x{seite}) aus Dock ({dock.Col},{dock.Row}) " +
                  $"-> ({u.Col},{u.Row}); Rumpf ganz auf Wasser: " +
-                 $"{(HullFitsWater(new Vector2I(u.Col, u.Row), seite) ? "JA" : "NEIN")}");
+                 $"{(HullOnWater(u.Col, u.Row, seite) ? "JA" : "NEIN")}; " +
+                 // Fehler D der Liste E: was das Schiff an Bord hat. Ohne diese
+                 // Zahlen ist »Boote scheinen keine Waffen zu haben« nicht zu
+                 // pruefen, und die Waffe stand hier nie.
+                 $"Waffe {u.Weapon}, Angriff {u.Attack}, Reichweite {u.RangeMin}..{u.Range}, " +
+                 $"Munition {u.Ammo}, Nachladen {u.Reload}");
         NoteEvent(dock, $"{d.Name} fertig");
         _order = $"{d.Name} vom Stapel gelaufen";
         QueueRedraw();
@@ -11991,6 +12555,28 @@ public partial class MapEntityLayer : Node2D
                                     Simulation.NavGrid.MoveClass.Ship);
         if (frei is { } f && HullFitsWater(f, seite)) return f;
         return null;
+    }
+
+    /// <summary>
+    /// Liegt der Rumpf auf schiffbarem GELAENDE — ohne die Frage, ob etwas
+    /// darauf steht.
+    ///
+    /// <para>⚠ 17.08.2026: die Meldung des Stapellaufs benutzte hier
+    /// <see cref="HullFitsWater"/> und meldete »ganz auf Wasser: NEIN« fuer ein
+    /// Schiff, das <see cref="ShipExitCell"/> gerade wegen HullFitsWater
+    /// AUSGEWAEHLT hatte. Der Widerspruch ist keiner: die Zeile laeuft NACH
+    /// SetHull/SetOccupant, und da haelt das Schiff seine Zellen selbst. Ein
+    /// Pruefstand, der den eigenen Gegenstand als Hindernis zaehlt, misst sich
+    /// selbst — deshalb fragt diese Meldung nur noch das Gelaende.</para>
+    /// </summary>
+    private bool HullOnWater(int col, int row, int seite)
+    {
+        if (_nav == null) return false;
+        for (int dx = 0; dx < seite; dx++)
+            for (int dy = 0; dy < seite; dy++)
+                if (!_nav.CanEnter(col + dx, row + dy, Simulation.NavGrid.MoveClass.Ship))
+                    return false;
+        return true;
     }
 
     /// <summary>Liegt der GANZE Rumpf auf befahrbarem Wasser? Ein Schiff ist
@@ -17456,7 +18042,37 @@ public partial class MapEntityLayer : Node2D
             moved = true;
             if (_speedOn) _spdTicks[i] = _spdTicks.GetValueOrDefault(i) + 1;
 
-            if (dist > 0.01f) e.Facing = DirToFacing(d);
+            // ⚠⚠ 17.08.2026 — FEHLER C DER LISTE E: »Boote fahren nicht
+            // wirklich, das sieht auch wie Sliden aus«.
+            //
+            // Hier stand die Blickrichtung ohne Umschweife auf der Fahrtrichtung
+            // — die Einheit KLAPPTE also um. Gemessen an einer erzwungenen
+            // 180-Grad-Wende: 2 Stufen, 1 Wechsel, und dieser eine Wechsel war
+            // ein Sprung ueber mehr als eine Stufe.
+            //
+            // Das Original dreht in EINEM 45-Grad-Schritt je Takt (@0x405100,
+            // Blickrichtung in +0x03, Ueberlauf 8↔0 und 0xFF↔7; nur Gattung 3
+            // bekommt 16 Richtungen, alles andere den 8er-Zweig @0x4051D7).
+            // Es ist die einzige Traegheit im Spiel: erst drehen, dann fahren.
+            //
+            // ⚠ Und es geht schnell: bei 50 Takten je Sekunde ist die schaerfste
+            // Wende (4 Schritte) nach 0,08 s vorbei. Das ist Absicht — es soll
+            // nicht bremsen, sondern das Umklappen vermeiden.
+            if (dist > 0.01f)
+            {
+                int will = DirToFacing(d);
+                if (DrehAlt) e.Facing = will;
+                else if (e.Facing != will)
+                {
+                    // kuerzester Weg um den Kreis aus acht Stufen
+                    int diff = ((will - e.Facing) % 8 + 8) % 8;
+                    e.Facing = (e.Facing + (diff <= 4 ? 1 : 7)) % 8;
+                    // erst drehen, dann fahren — solange die Nase nicht stimmt,
+                    // ruckt nichts vor
+                    _drehTicks++;
+                    continue;
+                }
+            }
 
             // ⚠ DAS ORIGINAL ZAEHLT ZELLEN, NICHT BILDPUNKTE (16.08.2026, B4).
             // `kolik += Geschwindigkeit` je Takt, fertig bei 80 (gerade) bzw.
