@@ -10238,8 +10238,24 @@ public partial class MapEntityLayer : Node2D
                 for (int i = 0; i < _entities.Count; i++)
                 {
                     var b = _entities[i];
-                    if (!b.IsBuilding || b.Dead || !IsUnitPlant(b)) continue;
-                    if (BuildableBy(b.BType).Count == 0) continue;
+                    if (!b.IsBuilding || b.Dead) continue;
+                    // ⚠ Mit --depot-flow=dock wird ein SEEDOCK genommen statt
+                    // einer Fabrik. Ohne das misst der Lauf den gebauten
+                    // Schiffsweg NIE: in 60 s baut kein Dock von selbst, und
+                    // --ship-check zaehlt nur die GESETZTEN Schiffe mit
+                    // (Regel S/33 — der Pruefstand muss den Gegenstand
+                    // enthalten, sonst ist sein Gruen keines).
+                    if (DepotFlowDock)
+                    {
+                        if (!IsDock(b) || ShipMenu(b).Count == 0) continue;
+                        int yi = ShipyardOf(b);
+                        if (yi >= 0) { _entities[yi].StockW = _entities[yi].StockF
+                                     = _entities[yi].StockS = 9999; }
+                    }
+                    else
+                    {
+                        if (!IsUnitPlant(b) || BuildableBy(b.BType).Count == 0) continue;
+                    }
                     b.Owner = b.Team = ViewPlayer;      // uebernommen, und es steht unten
                     b.StockW = b.StockF = b.StockS = 9999;
                     _depotFlowAt = i; _selected = i;
@@ -10248,6 +10264,7 @@ public partial class MapEntityLayer : Node2D
                 if (_depotFlowAt < 0)
                 { GD.Print("depot-flow: keine Fabrik auf dieser Karte"); _depotFlow = -1; return; }
                 _depotFlowUnits = UnitRecords();
+                _depotFlowShips = _shipsBuilt;
                 GD.Print($"depot-flow: {BuildingTypeName(_entities[_depotFlowAt].BType)} " +
                          $"Platz {_entities[_depotFlowAt].Slot} uebernommen und Lager gefuellt; " +
                          $"{_depotFlowUnits} Einheitensaetze vorher, Depot " +
@@ -10258,6 +10275,27 @@ public partial class MapEntityLayer : Node2D
 
             case 1:                                     // auf »fertig« warten
                 if (e == null) { _depotFlow = -1; return; }
+                if (DepotFlowDock)
+                {
+                    // ⚠⚠ ZWEITER ANLAUF. Der erste zaehlte UnitRecords() — also
+                    // ALLE Einheiten — und meldete "1 Schiff vom Stapel",
+                    // waehrend in Wahrheit KEINES gebaut wurde: die +1 war eine
+                    // Einheit der KI, die in denselben Sekunden fertig wurde.
+                    // Das ist Regel C zum zweiten Mal an einem Tag (zwei
+                    // verschiedene Dinge in einem Zaehler), und es haette einen
+                    // ungeprueften Fix als belegt ausgewiesen.
+                    // Gezaehlt wird jetzt _shipsBuilt — der Zaehler, den NUR
+                    // LaunchShip hochsetzt.
+                    if (e.BuildTime > 0f && _shipsBuilt == _depotFlowShips) return;
+                    int neu = _shipsBuilt - _depotFlowShips;
+                    GD.Print(neu > 0
+                        ? $"depot-flow(dock): {neu} Schiff(e) vom Stapel — die Zeile " +
+                          "launch-ship darueber sagt WOHIN"
+                        : "depot-flow(dock): KEIN Schiff gebaut — der Kaufweg des Docks " +
+                          "hat nichts getan (BuildShip pruefen), der Fix ist damit UNGEPRUEFT");
+                    _depotFlow = -1;
+                    return;
+                }
                 if (e.BuildTime > 0f && e.Depot.Count == 0) return;
                 int jetzt = UnitRecords();
                 bool imDepot = e.Depot.Count == 1;
@@ -10303,6 +10341,10 @@ public partial class MapEntityLayer : Node2D
     }
 
     private int _depotFlow = -1, _depotFlowAt = -1, _depotFlowUnits;
+
+    /// <summary><c>--depot-flow=dock</c> — denselben Durchgang am SEEDOCK.</summary>
+    public static bool DepotFlowDock;
+    private int _depotFlowShips;
 
     /// <summary>Startet <c>--depot-flow</c>.</summary>
     public void DepotFlowStart() { _depotFlow = 0; _depotFlowAt = -1; }
@@ -11654,8 +11696,31 @@ public partial class MapEntityLayer : Node2D
         foreach (var x in menu) if (x.Index == dock.BuildIndex) d = x;
         d ??= menu[0];
 
-        var want = new Vector2I(dock.Col, dock.Row + 1);
-        var cell = _nav.NearestFree(want, Simulation.NavGrid.MoveClass.Ship);
+        // ⚠⚠ 16.08.2026 — DIE AUSFAHRT AUS DEM DOCK, gelesen (Fehler B der
+        // Liste E: »Spawnen diese direkt im Seedock, anstatt daneben«).
+        //
+        // Das Original setzt das Schiff tatsächlich MITTEN INS DOCK
+        // (@0x4B2CAC/0x4B2CB9: Spalte = Gebäude +0x00, Zeile = +0x02 plus 1) —
+        // gemessen ist diese Zelle bei 39 von 39 Seedocks gesperrt. Es holt es
+        // aber sofort wieder heraus: @0x4B2D01 setzt Auftrag 52, und der hängt
+        // über die ukol-Tafel @0x40A0D8 an @0x409C8E, der @0x43F730 nach Platz
+        // NEBEN dem Dock fragt. Die zwei Ausfahrten sind fest:
+        //
+        //     Gattung 4 (2x2):  (Spalte-2, Zeile+2)  dann  (Spalte+5, Zeile+2)
+        //     Gattung 5 (4x4):  (Spalte-4, Zeile+1)  dann  (Spalte+5, Zeile+1)
+        //
+        // ⚠ Und sie sind keine Zufallszahlen: über alle 39 Seedocks liegt
+        // MINDESTENS EINE der beiden mit dem GANZEN Rumpf auf Wasser — 35 von
+        // 39, für 2x2 und 4x4 gleichermassen.
+        //
+        // ⚠ Der zweite Fehler war die REIHENFOLGE: NearestFree lief vor
+        // SetHull und suchte deshalb mit Rumpfbreite 1 (HullOf(-1) = 1). Auf
+        // map_DM_3 lieferte es damit die Zelle diagonal an der Dockecke, und
+        // der danach gestempelte Rumpf griff auf das Dock selbst. Der Rumpf
+        // steht jetzt VOR der Platzwahl fest.
+        int gattung = TypeOfChassis(d.Chassis);           // 150..156 -> 4, 157/158 -> 5
+        int seite = Simulation.NavGrid.HullSide(gattung);
+        var cell = ShipExitCell(dock, gattung, seite);
         if (cell == null) { dock.BuildTime = 1f; return; }   // no water free yet
         int el = ElevOf(cell.Value.X, cell.Value.Y);
         var u = new Entity
@@ -11675,6 +11740,18 @@ public partial class MapEntityLayer : Node2D
             Ammo = d.Ammo, AmmoMax = d.Ammo,
             Attack = d.Attack, Defence = d.Defence,
             Weapon = d.WeaponComp,
+            // ⚠⚠ DIESE FUENF FEHLTEN, und die erste ist die schwerste:
+            // GameUnitType blieb -1, damit gab HullSide(-1) eine 2 — ein
+            // gebautes SCHLACHTSCHIFF (Gattung 5, 4x4) belegte und prueft nur
+            // 2x2. Es fiel dadurch ausserdem aus --ship-check heraus (der prueft
+            // `GameUnitType is 4 or 5`), aus der Schiffszeile des
+            // Abschlussfensters und aus dem Zielpunkt auf die Rumpfmitte:
+            // der Pruefstand konnte den Fehler gar nicht sehen, weil sein
+            // Gegenstand nicht darin vorkam (dieselbe Bauart wie Regel 30/33).
+            // Der Landweg setzt alle diese Felder laengst (:15604) — nur der
+            // Schiffsweg nicht.
+            GameUnitType = gattung,
+            Speed = d.Speed, Sight = d.Sight, Reload = d.Reload,
             Facing = DefaultFacing, Mobile = true,
             Move = Simulation.NavGrid.MoveClass.Ship,
             Footprint = CellRect(_ox, _oy, cell.Value.X, cell.Value.Y, el),
@@ -11690,10 +11767,65 @@ public partial class MapEntityLayer : Node2D
         _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.GameUnitType));
         _nav.SetOccupant(u.Col, u.Row, _entities.Count - 1);
         _shipsBuilt++;
+        ShipLaunchWide += seite;
+        // ⚠ Regel 33: ohne diese Zeile ist nicht zu sehen, ob der gebaute Weg
+        // ueberhaupt gelaufen ist — --ship-check misst auch die GESETZTEN
+        // Schiffe mit und sagt bei 40 s Lauf nichts darueber, ob eines vom
+        // Stapel lief. Genau daran waere die Pruefung fast gescheitert.
+        GD.Print($"launch-ship: {d.Name} (Rumpf {d.Chassis}, Gattung {gattung}, " +
+                 $"{seite}x{seite}) aus Dock ({dock.Col},{dock.Row}) " +
+                 $"-> ({u.Col},{u.Row}); Rumpf ganz auf Wasser: " +
+                 $"{(HullFitsWater(new Vector2I(u.Col, u.Row), seite) ? "JA" : "NEIN")}");
         NoteEvent(dock, $"{d.Name} fertig");
         _order = $"{d.Name} vom Stapel gelaufen";
         QueueRedraw();
     }
+
+    /// <summary>
+    /// <b>Wo ein fertiges Schiff neben seinem Dock zu Wasser geht</b> — die zwei
+    /// gelesenen Ausfahrten (@0x43F730, erreicht ueber Auftrag 52).
+    ///
+    /// <para>Die Reihenfolge ist die des Originals: erst die linke, dann die
+    /// rechte. Passt keine, wird gewartet statt irgendwohin auszuweichen — das
+    /// Original gibt dort 0 zurueck und laesst das Schiff im Dock stehen, bis
+    /// Platz ist.</para>
+    ///
+    /// <para>⚠ <c>NearestFree</c> bleibt als NOTNAGEL, aber jetzt MIT Rumpf und
+    /// erst nach den zwei gelesenen Stellen. Ohne den Notnagel stuende ein
+    /// Schiff auf einer engen Karte womoeglich nie aus; mit ihm allein stand es
+    /// im Dock.</para></summary>
+    private Vector2I? ShipExitCell(Entity dock, int gattung, int seite)
+    {
+        if (_nav == null) return null;
+        var kandidaten = gattung == 5
+            ? new[] { new Vector2I(dock.Col - 4, dock.Row + 1),
+                      new Vector2I(dock.Col + 5, dock.Row + 1) }
+            : new[] { new Vector2I(dock.Col - 2, dock.Row + 2),
+                      new Vector2I(dock.Col + 5, dock.Row + 2) };
+        foreach (var c in kandidaten)
+            if (HullFitsWater(c, seite)) return c;
+        // Notnagel: dieselbe Suche wie frueher, aber mit der RUMPFBREITE.
+        var frei = _nav.NearestFree(new Vector2I(dock.Col, dock.Row + 1),
+                                    Simulation.NavGrid.MoveClass.Ship);
+        if (frei is { } f && HullFitsWater(f, seite)) return f;
+        return null;
+    }
+
+    /// <summary>Liegt der GANZE Rumpf auf befahrbarem Wasser? Ein Schiff ist
+    /// 2x2 oder 4x4 — eine Pruefung auf die eine Ankerzelle war der Fehler.</summary>
+    private bool HullFitsWater(Vector2I at, int seite)
+    {
+        if (_nav == null) return false;
+        for (int dx = 0; dx < seite; dx++)
+            for (int dy = 0; dy < seite; dy++)
+                if (!_nav.IsFree(at.X + dx, at.Y + dy, Simulation.NavGrid.MoveClass.Ship))
+                    return false;
+        return true;
+    }
+
+    /// <summary>Summe der Rumpfbreiten aller gebauten Schiffe — eine 2 je Schiff
+    /// hiesse, dass GameUnitType wieder fehlt (siehe LaunchShip).</summary>
+    public int ShipLaunchWide;
 
     /// <summary>What the original counts in sec128, "Gebaute Einheiten".</summary>
     private int _shipsBuilt;

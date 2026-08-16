@@ -1075,6 +1075,8 @@ public partial class MapViewer : Node2D
             else if (a == "--produce-pics") _producePics = true;
             else if (a == "--hangar-check") _hangarCheck = true;
             else if (a == "--depot-flow") _depotFlow = true;
+            else if (a == "--depot-flow=dock")
+            { _depotFlow = true; MapEntityLayer.DepotFlowDock = true; }
             else if (a == "--sound-check") _soundCheck = true;
             else if (a == "--tutorial-check") _tutorialCheck = true;
             else if (a == "--script-coverage") _coverageCheck = true;
