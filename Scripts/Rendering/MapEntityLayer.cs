@@ -14438,6 +14438,11 @@ public partial class MapEntityLayer : Node2D
     /// Toleranz).</para></summary>
     public const int FlachBisPx = 25;
 
+    /// <summary><c>--tueren-spaet</c> — der Stand von vor dem 16.08.2026: die
+    /// Tueren laufen in der spaeten Entitaetenschleife und liegen damit ueber
+    /// jeder Einheit (Fehler D4). Messgeraet, keine Einstellung.</summary>
+    public static bool TuerenSpaet;
+
     /// <summary><c>--tuer-alt</c> — der Stand von vor dem 16.08.2026: jedes
     /// Gebäude kommt ins Fach <c>Zeile + 3</c>, egal wo seine Tür sitzt. Nur als
     /// Messgerät da; was gilt, steht in <see cref="BuildingDrawRowFor"/>.</summary>
@@ -14723,6 +14728,12 @@ public partial class MapEntityLayer : Node2D
                 // der Fehler, den Regel 28 beschreibt.
                 DrawUnitsUpTo(b.Row + BuildingDrawRowFor(b), ref ui);
                 DrawBuildingBody(b);
+                // ⚠ Die TÜREN gehören zum Gebäude und damit in SEIN Fach —
+                // Fehler D4. Das Original malt sie im selben Zeichenaufruf
+                // gleich hinter dem Körper (@0x42B259 ff.). Bis zum 16.08.2026
+                // liefen sie in der späten Entitätenschleife und lagen deshalb
+                // über jeder Einheit; ein Fahrzeug vor dem Tor war halb weg.
+                if (!TuerenSpaet) DrawBuildingDoors(b);
             }
         DrawRailUpTo(int.MaxValue, ref at);
         DrawUnitsUpTo(int.MaxValue, ref ui);
@@ -14894,8 +14905,14 @@ public partial class MapEntityLayer : Node2D
 
         // Die letzte Zeile, die das Gebaeude noch uebermalt — der gemeldete
         // Fall. NICHT die vorderste Grundrisszeile, siehe Kopf.
+        // ⚠ DIE TUERZELLE, nicht irgendeine Zelle davor: dorthin stellt das
+        // Spiel eine frisch gebaute Einheit selbst (StepOutOfDoor), und genau
+        // dort hat der Spieler sie halb verdeckt gesehen. Regel S — der
+        // Gegenstand kommt aus der Meldung.
         int fachV = bld.Row + BuildingDrawRowFor(bld);
-        var to = new Vector2I(bld.Col + Mathf.Max(1, bld.FootW) / 2,
+        var to = bld.DoorCells.Count > 0
+               ? new Vector2I(bld.Col + bld.DoorCol, bld.Row + bld.DoorRow)
+               : new Vector2I(bld.Col + Mathf.Max(1, bld.FootW) / 2,
                               Mathf.Max(0, fachV - 1));
         var u2 = _entities[ui];
         _nav.SetOccupant(u2.Col, u2.Row, -1);
@@ -19505,7 +19522,26 @@ public partial class MapEntityLayer : Node2D
             // flag (key T), a health bar once damaged, and the selection box
             if (e.IsBuilding)
             {
-                DrawBuildingDoors(e);
+                // ⚠⚠ 16.08.2026 — HIER STAND DrawBuildingDoors(e), UND DAS WAR
+                // FEHLER D4. Der Spieler hat es mit zwei Bildern auf den Punkt
+                // gebracht: »es ist also nicht das Gebäude ansich was die
+                // Einheit verdeckt, sondern die Tür«. Neben dem Tor ist das
+                // Fahrzeug ganz zu sehen, davor nur noch Räder und Besitzerring.
+                //
+                // Diese Schleife läuft NACH dem zeilenweisen Durchgang, also
+                // über allen Einheitenrümpfen — eine Tür lag damit immer oben,
+                // egal wo sie steht. Sie gehört ins Fach ihres Gebäudes und wird
+                // jetzt in DrawRailAndBuildings gleich hinter dem Körper
+                // gezeichnet, genau wie es das Original tut: der Zeichner
+                // @0x42B1DE malt EIN Sprite und danach die Türschleife
+                // (@0x42B259 ff., bei `byte[+0x34] == 0` springt er direkt aufs
+                // Funktionsende).
+                //
+                // ⚠ Das ist der ZWEITE Rest derselben Umstellung — der erste
+                // steht ein paar Zeilen weiter oben (die Einheitenleiche von
+                // C23). Wer hier etwas ergänzt, prüfe zuerst, ob es in den
+                // verzahnten Durchgang gehört.
+                if (TuerenSpaet) DrawBuildingDoors(e);
                 if (_sel.Contains(i)) DrawSelectionBrackets(e.Pos, i == _selected, 15f, 10f);
                 continue;
             }

@@ -1056,6 +1056,7 @@ public partial class MapViewer : Node2D
             // Gegenprobe zu C14: das Zeilenfach wieder fest auf `Zeile + 3`,
             // statt es aus der Tuer zu holen. Siehe BuildingDrawRowFor.
             else if (a == "--tuer-alt") MapEntityLayer.TuerAlt = true;
+            else if (a == "--tueren-spaet") MapEntityLayer.TuerenSpaet = true;
             // Gegenprobe zu C14: auch der Gebaeudeboden laeuft wieder im
             // Zeilenfach mit — der Stand, den der Spieler photographiert hat.
             else if (a == "--boden-alt") MapEntityLayer.BodenAlt = true;
