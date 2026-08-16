@@ -595,6 +595,10 @@ public partial class MapEntityLayer : Node2D
         /// Grössen: hergeleitet, an den Daten nicht bestätigt.</summary>
         public int Dir;
 
+        /// <summary>Angesammelter Weg seit dem letzten Spritabzug, in Pixeln —
+        /// siehe <c>AirDrift</c>. Rein unsere Buchhaltung.</summary>
+        public float DriftRest;
+
         /// <summary>Laufender und geplanter Auftrag, Satz +0x10/+0x11.
         /// 1 = »flieg nach (x,y)«, 7 = mit Kunden, 10/11 = die zwei
         /// Versorgungsaufträge.</summary>
@@ -19168,6 +19172,19 @@ public partial class MapEntityLayer : Node2D
                          $"faehrt->{FacingWord(would)} zeigt->{FacingWord(a.Facing)}" +
                          (would >= 0 && would != a.Facing ? "  ⚠ AUSEINANDER" : ""));
             }
+            // ⚠⚠ 16.08.2026 — OHNE ZIEL FLIEGT ES TROTZDEM (Fehler D6).
+            // Hier stand nur `continue`, und genau das ist der gemeldete
+            // Fehler: »In einer Demo sieht man Bomber auf einer Karte, die
+            // stehen aber nur in der Luft anstatt sich zu Bewegen«.
+            //
+            // Das Original hat dafür einen eigenen Zweig, und er ist GELESEN:
+            // der gemeinsame Abschluss von `move_airplanes`
+            // (@0x425050…0x425120) rechnet aus der RICHTUNG (+0x6ddf7c, in
+            // GRAD — die Konstante @0x4f9208 ist 57,2958 = 180/π) über
+            // sin/cos einen Schritt auf die Feinlage und schaltet beim
+            // Überlauf die Zelle weiter. Er läuft HINTER dem Kind-Verteiler,
+            // also für jedes Flugzeug.
+            if (a.Goal is null) { AirDrift(a, dt); continue; }
             if (a.Goal is not { } g) continue;
             var delta = g - a.Pos;
             float step = Mathf.Max(1, a.Speed) * AirPxPerSpeed * dt;
@@ -19200,6 +19217,76 @@ public partial class MapEntityLayer : Node2D
             a.Col = Mathf.Clamp((int)(a.Pos.X / TileW), 0, 255);
             a.Row = Mathf.Clamp((int)(a.Pos.Y / TileH), 0, 255);
         }
+    }
+
+    /// <summary>
+    /// <b>Geradeausflug ohne Ziel</b> — was ein Flugzeug tut, wenn ihm niemand
+    /// sagt, wohin. Die Antwort auf Fehler D6.
+    ///
+    /// <para><b>Gelesen</b> im gemeinsamen Abschluss von <c>move_airplanes</c>
+    /// (@0x425050…0x425120), also hinter dem Kind-Verteiler und damit für jede
+    /// Art:</para>
+    /// <code>
+    ///   al = byte[+0x6ddf7c]     ; die RICHTUNG
+    ///   fdiv [0x4f9208]          ; 57,2958 = 180/pi  -> der Winkel ist in GRAD
+    ///   fsin * Geschwindigkeit   ; dx
+    ///   fcos * Geschwindigkeit   ; dy
+    ///   feinX += dx  @0x42508C   bei >= 40: feinX -= 40, col++, Sprit--
+    ///   feinY += dy  @0x4250E1   bei >= 40: feinY -= 40, row++, Sprit--
+    /// </code>
+    ///
+    /// <para>⚠ <b>UNSERE UMSETZUNG rechnet in PIXELN, nicht auf der Feinlage.</b>
+    /// Unsere Flugzeuge tragen ihre Lage als <c>Pos</c>, und eine zweite,
+    /// parallele Buchführung wäre eine Fehlerquelle für sich. Der Schritt ist
+    /// derselbe (sin/cos × Geschwindigkeit), nur der Speicher ist unserer.
+    /// Der Sprit wird deshalb je zurückgelegter ZELLBREITE abgezogen statt je
+    /// Überlauf — dieselbe Rate, andere Buchhaltung.</para>
+    ///
+    /// <para>⚠⚠ <b>Die schwächste Stelle ist die RICHTUNG selbst.</b> Dass sie
+    /// im Satz bei <c>+0x0c</c> steht, ist über das Offset-Mapping hergeleitet
+    /// (Satzbasis 0x6ddf70, Schrittweite 68) — die Feinlage daneben ist an 190
+    /// Sätzen belegt (restlos 0..39), die Richtung NICHT: ihre Werte (0, 2..10,
+    /// 25) widersprechen »Winkel in Grad« nur nicht, sie stützen es nicht.
+    /// <b>Wer hier etwas ändert, prüfe das Ergebnis im BILD</b> — eine Zahl gibt
+    /// es dafür bisher nicht.</para></summary>
+    private void AirDrift(Special a, float dt)
+    {
+        if (a.Fuel <= 0) return;                 // ohne Sprit fliegt nichts
+        float rad = Mathf.DegToRad(a.Dir);
+        // Das Original nimmt sin für x und cos für y — nicht umgekehrt.
+        var step = new Vector2(Mathf.Sin(rad), Mathf.Cos(rad))
+                 * Mathf.Max(1, a.Speed) * AirPxPerSpeed * dt;
+        if (step.LengthSquared() <= 0.000001f) return;
+        a.Pos += step;
+        a.Facing = AirDirToFacing(step);
+        a.Col = Mathf.Clamp((int)(a.Pos.X / TileW), 0, 255);
+        a.Row = Mathf.Clamp((int)(a.Pos.Y / TileH), 0, 255);
+        // Sprit je zurückgelegter Zellbreite, siehe Kopf.
+        a.DriftRest += step.Length();
+        while (a.DriftRest >= TileW && a.Fuel > 0) { a.DriftRest -= TileW; a.Fuel--; }
+        AirDrifted++;
+    }
+
+    /// <summary>Wieviele Flugschritte ohne Ziel gelaufen sind — damit »die
+    /// Flugzeuge bewegen sich jetzt« nicht nur eine Behauptung ist.</summary>
+    public int AirDrifted;
+
+    /// <summary>Was der Geradeausflug getan hat — fuer Laeufe, die nicht auf
+    /// den Schirm sehen koennen. Nennt auch, wieviele Flugzeuge ueberhaupt in
+    /// der Luft sind und wieviele davon ohne Ziel: eine 0 im ersten Feld hiesse
+    /// »der Fall kommt hier gar nicht vor« und nicht »es geht nicht«.</summary>
+    public string AirDriftLine()
+    {
+        int frei = 0, ohneZiel = 0, ohneSprit = 0;
+        foreach (var a in _special)
+        {
+            if (a.Dead || a.Stored) continue;
+            frei++;
+            if (a.Goal is null) ohneZiel++;
+            if (a.Fuel <= 0) ohneSprit++;
+        }
+        return $"luft: {frei} in der Luft, {ohneZiel} davon ohne Ziel, " +
+               $"{ohneSprit} ohne Sprit | {AirDrifted} Geradeausschritte gelaufen";
     }
 
     /// <summary>Send every airworthy aircraft of a player at the nearest enemy.</summary>

@@ -1563,6 +1563,10 @@ public partial class MapViewer : Node2D
             if (_vehAnimCheck) GD.Print(_entities.VehAnimReport());
             if (_bAnimCheck) GD.Print(_entities.BAnimCheck());
             GD.Print(_entities.FogWatchLine());
+            // ⚠ Regel 33: ohne diese Zahl ist »die Flugzeuge bewegen sich
+            // jetzt« nicht von »das Bild hat sich anderswo geaendert« zu
+            // unterscheiden. Siehe MapEntityLayer.AirDrift (Fehler D6).
+            GD.Print(_entities.AirDriftLine());
             GD.Print(_entities.RangeWatchLine());
             if (_speedCheck)
             {
