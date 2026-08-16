@@ -10303,13 +10303,94 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Startet <c>--depot-flow</c>.</summary>
     public void DepotFlowStart() { _depotFlow = 0; _depotFlowAt = -1; }
 
+    /// <summary>
+    /// <c>--hangar-check</c> — <b>der ganze Weg am FLUGHAFEN: kaufen, im Hangar
+    /// liegen, im Reiter erscheinen, gestartet werden, fliegen.</b>
+    ///
+    /// <para>Zu Fehler A der Liste E. Er läuft in EINEM Zug durch, weil der
+    /// Flughafen keinen Bauzähler hat (<c>spawn_aircraft</c> @0x4B1380 setzt
+    /// sofort) — anders als <c>--depot-flow</c>, der auf die Fertigstellung
+    /// warten muss.</para>
+    ///
+    /// <para>⚠ Die Frage ist nicht »ist etwas im Hangar«, sondern die zwei
+    /// zusammen: <b>zeigt der REITER es</b> (sonst findet der Spieler es nicht)
+    /// und <b>kommt es beim Aussenden heraus</b> (sonst ist es verloren).</para></summary>
+    public string HangarCheck()
+    {
+        var sb = new System.Text.StringBuilder("hangar-check\n");
+        int merk = _selected;
+        int idx = -1;
+        for (int i = 0; i < _entities.Count; i++)
+            if (_entities[i].IsBuilding && !_entities[i].Dead && _entities[i].BType == 9)
+            { idx = i; break; }
+        if (idx < 0) { _selected = merk; return "hangar-check: kein Flughafen auf dieser Karte"; }
+
+        var ap = _entities[idx];
+        ap.Owner = ap.Team = ViewPlayer;          // uebernommen, und es steht hier
+        ap.StockW = ap.StockF = ap.StockS = 9999;
+        _selected = idx;
+        int vorher = ap.Hangar?.Count ?? 0;
+        sb.AppendLine($"  Flughafen Platz {ap.Slot} uebernommen und Lager gefuellt; " +
+                      $"Hangar {vorher}/{Mathf.Max(1, ap.HangarSize)}");
+
+        // 1. kaufen — ueber den Klickweg, nicht ueber BuyAircraft direkt
+        BuildPanelPick(0);
+        int nachKauf = ap.Hangar?.Count ?? 0;
+        int zeilen = DepotRows().Count;
+        sb.AppendLine($"  nach dem Kauf: Hangar {nachKauf} (erwartet {vorher + 1}: " +
+                      $"{(nachKauf == vorher + 1 ? "JA" : "NEIN")}), " +
+                      $"Reiter zeigt {zeilen} Zeile(n) " +
+                      $"({(zeilen == nachKauf ? "stimmt ueberein" : "STIMMT NICHT — der Spieler findet es nicht")})");
+        if (nachKauf == 0)
+        { _selected = merk; return sb.Append("  DURCHGEFALLEN: nichts im Hangar").ToString(); }
+
+        // 2. aussenden
+        int fliegtVor = _special.Count(x => !x.Stored && !x.Dead);
+        SendOutFromPanel(0);
+        int nachStart = ap.Hangar?.Count ?? 0;
+        int fliegtNach = _special.Count(x => !x.Stored && !x.Dead);
+        sb.AppendLine($"  nach dem Aussenden: Hangar {nachStart} (erwartet {nachKauf - 1}), " +
+                      $"in der Luft {fliegtNach} gegen {fliegtVor} vorher " +
+                      $"({(fliegtNach == fliegtVor + 1 ? "eines mehr, richtig" : "NICHT gestartet")})");
+        sb.Append(nachStart == nachKauf - 1 && fliegtNach == fliegtVor + 1 && zeilen == nachKauf
+                  ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        _selected = merk;
+        return sb.ToString();
+    }
+
     /// <summary>Was im Depot des gewählten Gebäudes liegt — eine Zeile je
     /// Einheit, mit ihrem Bild. Siehe <see cref="Entity.Depot"/>.</summary>
     public List<UI.BuildPanel.Row> DepotRows()
     {
         var rows = new List<UI.BuildPanel.Row>();
         var e = Producer();
-        if (e == null || _designs == null) return rows;
+        if (e == null) return rows;
+
+        // ⚠⚠ 16.08.2026 — DER FLUGHAFEN HAT KEIN DEPOT, ER HAT EINEN HANGAR
+        // (Fehler A der Liste E: »das mit Depot klappt in der Basis sehr gut,
+        // nur nicht im Flughafen«). Zwei verschiedene Speicher, gelesen:
+        // das Depot sind sechs Plätze bei 0x878e5c, der Hangar ist sec27
+        // (`+0x04 belegt == +0x03 Plätze`). Und ein gekauftes Flugzeug geht
+        // sofort hinein — `spawn_aircraft` @0x4B1380 kennt keinen Bauzähler.
+        //
+        // ⚠ Der Fehler war NICHT die Mechanik: die stimmt und ist seit C25
+        // gemessen (»gekauft 7, Hangar 5/20«). Der Fehler ist derselbe wie bei
+        // C2, C6 und D1 — die Mechanik lag auf einer TASTE (Y), und die
+        // Oberfläche schwieg. Seit es den Reiter gibt, sucht der Spieler dort,
+        // und dort stand nichts. Also zeigt der Reiter jetzt den Hangar.
+        if (e.Hangar is { Count: > 0 })
+        {
+            foreach (int slot in e.Hangar)
+            {
+                var a = _special.Find(x => x.Slot == slot && !x.Dead);
+                if (a == null) continue;
+                rows.Add(new UI.BuildPanel.Row(
+                    a.Name.Length > 0 ? a.Name : AirKindName(a.Kind), "", true, false,
+                    UI.PortraitBank.PictureOfAircraft(a.Kind)));
+            }
+            return rows;
+        }
+        if (_designs == null) return rows;
         for (int k = 0; k < e.Depot.Count; k++)
         {
             var d = _designs[e.Depot[k] % _designs.Count];
@@ -10330,6 +10411,27 @@ public partial class MapEntityLayer : Node2D
     {
         var e = Producer();
         if (e == null) { _order = "kein Gebaeude gewaehlt"; return; }
+
+        // Der Flughafen sendet aus seinem HANGAR aus, nicht aus einem Depot —
+        // siehe DepotRows. Dasselbe, was Taste Y für alle tut, hier für eines.
+        if (e.Hangar is { Count: > 0 })
+        {
+            if (k < 0 || k >= e.Hangar.Count) { _order = "nichts gewaehlt"; return; }
+            int slot = e.Hangar[k];
+            var a = _special.Find(x => x.Slot == slot && !x.Dead);
+            if (a == null) { e.Hangar.RemoveAt(k); _order = "der Platz war leer"; return; }
+            e.Hangar.RemoveAt(k);
+            a.Stored = false;
+            a.Pos = e.Pos;
+            a.Col = e.Col + 5; a.Row = e.Row + 2;   // wie spawn_aircraft, @0x426067
+            a.Target = -1; a.Goal = null;
+            _order = $"{(a.Name.Length > 0 ? a.Name : AirKindName(a.Kind))} gestartet " +
+                     $"({e.Hangar.Count} noch im Hangar)";
+            UpdatePanel();
+            QueueRedraw();
+            return;
+        }
+
         if (e.Depot.Count == 0) { _order = "das Depot ist leer"; return; }
         SendOutOfDepot(e, k);
         UpdatePanel();
