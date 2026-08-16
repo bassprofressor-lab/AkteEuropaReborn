@@ -2258,6 +2258,25 @@ public partial class MapEntityLayer : Node2D
                 _special.Add(sp);
             }
 
+        // ⚠ Die Ware des MARKTES (Typ 17). Sie gehoert der KARTE, nicht einem
+        // Gebaeude: sec94/sec95 gibt es einmal je Karte. Siehe MarketOpenFor.
+        _market.Clear();
+        if (root.TryGetValue("market", out var mkv) &&
+            mkv.VariantType == Variant.Type.Array)
+            foreach (var item in mkv.AsGodotArray())
+            {
+                if (item.VariantType != Variant.Type.Dictionary) continue;
+                var mo = item.AsGodotDictionary<string, Variant>();
+                _market.Add(new MarketOffer
+                {
+                    Slot = GetI(mo, "slot"), Price = GetI(mo, "price"),
+                    Design = GetI(mo, "design"), UnitType = GetI(mo, "unit_type"),
+                    Attack = GetI(mo, "attack"), Defence = GetI(mo, "defence"),
+                    Energie = GetI(mo, "energie"), Speed = GetI(mo, "speed"),
+                    Sight = GetI(mo, "sight"), Range = GetI(mo, "range"),
+                });
+            }
+
         // the owner now comes out of the record itself (+0x09); the hangar lists
         // add the home field and put the parked ones on their airport
         foreach (var e in _entities)
@@ -5580,7 +5599,25 @@ public partial class MapEntityLayer : Node2D
     }
 
     private static string BuildingTypeName(int type)
-        => _bldNames != null && _bldNames.TryGetValue(type, out var n) ? n : $"Typ {type}";
+        => _bldNames != null && _bldNames.TryGetValue(type, out var n) ? n
+           : ExtraTypeName(type) ?? $"Typ {type}";
+
+    /// <summary>
+    /// Namen für Gebäudetypen, die <c>building_types.json</c> nicht führt.
+    ///
+    /// <para>⚠ Die Namenstabelle des Originals (@0x4fdcc4) hat <b>16</b>
+    /// Einträge — Typ 1..16. Alles darüber stand bei uns als »Typ 17« im Bild,
+    /// obwohl es davon <b>41 Stück auf 19 von 36 Karten</b> gibt. Der Spieler
+    /// hat genau danach gefragt: »dieses Gebäude steht auf vielen Karten. Was
+    /// ist seine wirkliche Funktion?«</para>
+    ///
+    /// <para><b>Typ 17 ist der MARKT</b>, und das Spiel benennt ihn selbst:
+    /// <c>Geschäftszentrum</c> (0x502258), dazu <c>Bestellen</c> (0x50223c),
+    /// <c>Kontostand: $</c> (0x502248), <c>Verkaufen</c> (0x4fd6d8) und
+    /// <c>»Auflistung der auf dem Markt zum Erwerb angebotenen Einheiten«</c>
+    /// (0x4f1eeb). Der Name kommt also aus dem Original, nur nicht aus der
+    /// Typtabelle.</para></summary>
+    private static string? ExtraTypeName(int type) => type == 17 ? "Geschaeftszentrum" : null;
 
     // ---- infantry designs ----
     //
@@ -10411,6 +10448,142 @@ public partial class MapEntityLayer : Node2D
                   ? "  BESTANDEN" : "  DURCHGEFALLEN");
         _selected = merk;
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// <c>--market-check</c> — <b>gibt es Märkte, haben sie Ware, und geht der
+    /// Laden auf, wenn man draufffährt?</b>
+    ///
+    /// <para>Er ÜBT die Mechanik aus (Regel 11): er stellt eine eigene Einheit
+    /// wirklich auf eine der vier Platten und fragt dann
+    /// <see cref="MarketOpenFor"/> — statt bloss zu behaupten, die Zellen seien
+    /// die richtigen.</para>
+    ///
+    /// <para>⚠ Und er prüft die Gegenrichtung mit: <b>vorher</b> muss der Markt
+    /// ZU sein. Ein Prüfstand, der nur »offen« misst, würde eine Funktion, die
+    /// immer true sagt, für bestanden erklären.</para></summary>
+    public string MarketCheck()
+    {
+        var sb = new System.Text.StringBuilder("market-check\n");
+        var maerkte = new List<int>();
+        for (int i = 0; i < _entities.Count; i++)
+            if (_entities[i].IsBuilding && !_entities[i].Dead && _entities[i].BType == 17)
+                maerkte.Add(i);
+        sb.AppendLine($"  {maerkte.Count} Markt/Maerkte, {_market.Count} Angebote " +
+                      $"(Preise {(_market.Count > 0 ? $"{_market.Min(x => x.Price)}..{_market.Max(x => x.Price)}" : "—")})");
+        if (maerkte.Count == 0 || _nav == null)
+            return sb.Append("  kein Markt auf dieser Karte — hier ist nichts zu messen").ToString();
+
+        var b = _entities[maerkte[0]];
+        sb.AppendLine($"  Markt Platz {b.Slot} auf ({b.Col},{b.Row}), Grundriss " +
+                      $"{b.FootW}x{b.FootH}; Platten: " +
+                      string.Join(" ", MarketPads(b).Select(p => $"({p.X},{p.Y})")));
+
+        // Sind die vier Ecken ueberhaupt befahrbar? Wenn nicht, kann niemand
+        // draufffahren und der ganze Markt waere unerreichbar.
+        int frei = MarketPads(b).Count(p =>
+            _nav.IsFree(p.X, p.Y, Simulation.NavGrid.MoveClass.Vehicle));
+        sb.AppendLine($"  davon befahrbar: {frei} von 4 " +
+                      $"({(frei > 0 ? "erreichbar" : "UNERREICHBAR — niemand kann drauffahren")})");
+
+        bool vorher = MarketOpenFor(b, ViewPlayer);
+        sb.AppendLine($"  vor dem Auffahren: {(vorher ? "OFFEN — das waere falsch" : "zu, richtig")}");
+
+        int ui = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var u = _entities[i];
+            if (u.IsBuilding || u.IsProp || u.Dead || !u.Mobile) continue;
+            ui = i; break;
+        }
+        if (ui < 0) return sb.Append("  keine fahrende Einheit zum Auffahren").ToString();
+
+        var pad = MarketPads(b).First();
+        var u2 = _entities[ui];
+        _nav.SetOccupant(u2.Col, u2.Row, -1);
+        u2.Col = pad.X; u2.Row = pad.Y; u2.Owner = u2.Team = ViewPlayer;
+        u2.Pos = CellCenter(pad.X, pad.Y);
+        _nav.SetOccupant(pad.X, pad.Y, ui);
+        bool nachher = MarketOpenFor(b, ViewPlayer);
+        sb.AppendLine($"  Einheit Platz {u2.Slot} auf die Platte ({pad.X},{pad.Y}) gestellt " +
+                      $"(gestellt, nicht gefahren — der Fall wird HERGESTELLT)");
+        sb.AppendLine($"  danach: {(nachher ? "OFFEN, richtig" : "ZU — die Plattenpruefung greift nicht")}");
+        // ⚠ WARE und MECHANIK sind zwei verschiedene Dinge und duerfen nicht in
+        // denselben Zaehler (Regel C). Der erste Anlauf verlangte beides und
+        // meldete auf map_NET02 DURCHGEFALLEN, obwohl die Plattenpruefung
+        // tadellos lief — die Karte hat nur (noch) keine Ware.
+        //
+        // ⭐ UND DARIN STECKT EIN BEFUND: die Angebote haengen NICHT am
+        // Marktgebaeude. map_NET02 hat VIER Maerkte und NULL Angebote,
+        // map_DM_1 hat NULL Maerkte und ACHTZEHN Angebote. Eine frische Karte
+        // hat leere Regale; ein Spielstand (.DM) traegt den Bestand, der sich
+        // im Spiel angesammelt hat. Gefuellt wird er zur LAUFZEIT — der
+        // Markttick @0x4C0260 legt bei `[0x4FA240] % 300 == 222` nach
+        // ("Add ship because ", 0x53908C) und stellt bei % 300 == 111 ein
+        // Angebot scharf ("New ship type 1 for:", 0x5390A4).
+        // Dieser Nachschub ist NOCH NICHT GEBAUT.
+        sb.AppendLine(!vorher && nachher
+            ? "  PLATTEN: BESTANDEN (zu -> auffahren -> offen)"
+            : "  PLATTEN: DURCHGEFALLEN");
+        sb.Append(_market.Count > 0
+            ? $"  WARE: {_market.Count} Angebote aus der Karte"
+            : "  WARE: keine — diese Karte bringt keinen Bestand mit, und der " +
+              "LAUFZEIT-Nachschub (@0x4C0260) fehlt noch");
+        return sb.ToString();
+    }
+
+    /// <summary>Ein Angebot des Marktes, wie es aus der Karte kommt.</summary>
+    public sealed class MarketOffer
+    {
+        public int Slot, Price, Design, UnitType, Attack, Defence, Energie, Speed, Sight, Range;
+        public string Name = "";
+    }
+
+    private readonly List<MarketOffer> _market = new();
+
+    /// <summary>Die Ware aller Märkte dieser Karte. Sie gehört der KARTE, nicht
+    /// einem einzelnen Gebäude — im Original sind sec94/sec95 einmal je Karte
+    /// da, nicht je Marktgebäude.</summary>
+    public IReadOnlyList<MarketOffer> Market => _market;
+
+    /// <summary>
+    /// <b>Steht eine Einheit dieses Spielers auf einer der vier PLATTEN?</b>
+    /// Nur dann ist der Markt offen.
+    ///
+    /// <para><b>Gelesen</b> (@0x43E90C, der Tick des Typs 17): er rechnet
+    /// <c>zelle = spalte·256 + zeile</c> und liest im Belegungsraster genau
+    /// <b>vier</b> Zellen — <c>+0</c>, <c>+0x600</c> (Spalte+3), <c>+6</c>
+    /// (Zeile+3) und <c>+0x606</c> (beides). Das sind die vier ECKEN des
+    /// 4×4-Grundrisses. Steht auf keiner eine eigene Einheit, schliesst er das
+    /// Fenster (<c>Market window not found</c>, 0x4fe988). Die Zeigerlogik
+    /// @0x432569 macht das Gebäude umgekehrt genau dann anklickbar.</para>
+    ///
+    /// <para>⚠ Und die vier Ecken sind wirklich frei: in der Blockmaske des
+    /// Musters sind <c>(0,0) (3,0) (0,3) (3,3)</c> null, der Mittelblock ist
+    /// 255. Man FÄHRT auf den Markt — dieselbe Bauart wie der
+    /// Nachschub-Posten (Typ 14), der über @0x43E872 dasselbe mit EINER Zelle
+    /// tut.</para></summary>
+    public bool MarketOpenFor(Entity b, int player)
+    {
+        if (b.BType != 17 || b.Dead || _nav == null) return false;
+        foreach (var c in MarketPads(b))
+        {
+            int who = _nav.OccupantAt(c.X, c.Y);
+            if (who < 0 || who >= _entities.Count) continue;
+            var u = _entities[who];
+            if (!u.IsBuilding && !u.IsProp && !u.Dead && u.Owner == player) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Die vier Eckzellen eines Marktes — siehe
+    /// <see cref="MarketOpenFor"/>.</summary>
+    public static IEnumerable<Vector2I> MarketPads(Entity b)
+    {
+        yield return new Vector2I(b.Col, b.Row);
+        yield return new Vector2I(b.Col + 3, b.Row);
+        yield return new Vector2I(b.Col, b.Row + 3);
+        yield return new Vector2I(b.Col + 3, b.Row + 3);
     }
 
     /// <summary>Was im Depot des gewählten Gebäudes liegt — eine Zeile je

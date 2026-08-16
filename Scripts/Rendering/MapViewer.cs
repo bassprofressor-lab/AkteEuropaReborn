@@ -419,6 +419,12 @@ public partial class MapViewer : Node2D
             return;
         }
         if (_depotFlow) _entities.DepotFlowStart();
+        if (_marketCheck)
+        {
+            GD.Print(_entities.MarketCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_hangarCheck)
         {
             GD.Print(_entities.HangarCheck());
@@ -638,6 +644,8 @@ public partial class MapViewer : Node2D
     private bool _producePics;
     /// <summary><c>--hangar-check</c> — kaufen, im Hangar liegen, starten.</summary>
     private bool _hangarCheck;
+    /// <summary><c>--market-check</c> — Markt, Ware, Plattenpruefung.</summary>
+    private bool _marketCheck;
     /// <summary><c>--depot-flow</c> — bestellen, im Depot liegen, aussenden.</summary>
     private bool _depotFlow;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
@@ -1096,6 +1104,7 @@ public partial class MapViewer : Node2D
             else if (a == "--overdraw-check") _overdrawCheck = true;
             else if (a == "--produce-pics") _producePics = true;
             else if (a == "--hangar-check") _hangarCheck = true;
+            else if (a == "--market-check") _marketCheck = true;
             else if (a == "--depot-flow") _depotFlow = true;
             else if (a == "--depot-flow=dock")
             { _depotFlow = true; MapEntityLayer.DepotFlowDock = true; }
