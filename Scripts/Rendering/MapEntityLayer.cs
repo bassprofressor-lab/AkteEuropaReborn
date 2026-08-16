@@ -7327,7 +7327,16 @@ public partial class MapEntityLayer : Node2D
                 // WORT und darf negativ sein.
                 _mscript.AddMoney = (betrag, spieler) =>
                 {
-                    Money(spieler, Money(spieler) + betrag);
+                    // ⚠ 16.08.2026 — DIE 0-KLEMME, gelesen. Der Wrapper des
+                    // Originals (add_money @0x4D07C0, erreicht ueber Busbefehl
+                    // 528) klemmt ausdruecklich:
+                    //     mov dword[edi], 0   ; @0x4C3AA5
+                    //     js  +2              ; nur wenn negativ
+                    //     mov [edi], eax      ; @0x4C3AAD
+                    // Ohne sie konnte ein Strafgeld (der Betrag ist ein WORT
+                    // und darf negativ sein) den Kontostand ins MINUS ziehen —
+                    // ein Zustand, den das Original nie herstellt.
+                    Money(spieler, Mathf.Max(0, Money(spieler) + betrag));
                     // ⚠ UNSERE SETZUNG: was hier AUSGEZAHLT wird, ist das, was
                     // das Abschlussfenster "Missionsbezahlung" nennt. Der
                     // Betrag stammt aus dem Missionsblock (Busbefehl 528), die

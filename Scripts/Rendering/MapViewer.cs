@@ -334,6 +334,24 @@ public partial class MapViewer : Node2D
                                "--fresh-campaign nehmen"
                              : ""));
             }
+            // ⚠⚠ 16.08.2026 — DAS GEFECHT BEKOMMT SEIN STARTGELD (Fehler E-Geld).
+            // Bis hierher wurde SetStartMoney NUR im Kampagnenzweig darueber
+            // gerufen, und im Gefecht kam _money allein aus sec73 der Karte --
+            // die KEINE Gefechtskarte hat. Jeder Spieler stand also auf $0,
+            // und weil zugleich der MARKT fehlt, war Geld im Gefecht eine tote
+            // Zahl: keine Quelle, keine Ausgabe.
+            //
+            // Das Original setzt es beim Gefechtsaufbau @0x41ABD6 in einer
+            // Schleife an ALLE ACHT Spieler -- nicht nur an den Menschen.
+            // Sonst koennte die KI nie kaufen.
+            else if (UI.SkirmishSetup.StartMoney > 0)
+            {
+                for (int p = 0; p < 8; p++)
+                    _entities.SetStartMoney(p, UI.SkirmishSetup.StartMoney);
+                GD.Print($"Gefecht: Startkonto ${UI.SkirmishSetup.StartMoney} " +
+                         "fuer alle 8 Spieler (@0x41ABD6)");
+            }
+
             // start looking at one's own base, not at the whole map
             if (_entities.PlayerHome(me) is { } home)
             {
@@ -1064,6 +1082,10 @@ public partial class MapViewer : Node2D
             // Gegenprobe zu C14: das Zeilenfach wieder fest auf `Zeile + 3`,
             // statt es aus der Tuer zu holen. Siehe BuildingDrawRowFor.
             else if (a == "--tuer-alt") MapEntityLayer.TuerAlt = true;
+            // Das Startkonto eines Gefechts fuer Prueflaeufe -- im Spiel
+            // stellt es der Regler "Konto" im Gefechtsschirm.
+            else if (a.StartsWith("--konto="))
+                UI.SkirmishSetup.StartMoney = a["--konto=".Length..].ToInt();
             else if (a == "--tueren-spaet") MapEntityLayer.TuerenSpaet = true;
             // Gegenprobe zu C14: auch der Gebaeudeboden laeuft wieder im
             // Zeilenfach mit — der Stand, den der Spieler photographiert hat.

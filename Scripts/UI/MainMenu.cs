@@ -87,6 +87,10 @@ public partial class MainMenu : Control
     /// Optional wie <see cref="_allUnits"/>, weil der Schirm auch ohne die Zeile
     /// gebaut werden kann.</summary>
     private SpinBox? _tech;
+
+    /// <summary>»Konto« — das Startgeld eines Gefechts. Siehe
+    /// <see cref="SkirmishSetup.StartMoney"/>.</summary>
+    private SpinBox? _konto;
     private Label _hint = null!;
 
     /// <summary>The skirmish setup, which used to BE the menu and is now what
@@ -636,6 +640,31 @@ public partial class MainMenu : Control
         // ⚠ SIE STEHT ERST HIER, SEIT SIE WIRKT. Vor der Engine-Seite waere es
         // ein Schalter ohne Wirkung gewesen, und genau daran ist der Spieler
         // heute morgen schon einmal haengengeblieben.
+        // ⚠⚠ 16.08.2026 — »Konto«, das STARTGELD eines Gefechts.
+        //
+        // Es steht hier, weil es sonst nicht erreichbar wäre — und genau dieser
+        // Fehler ist heute VIERMAL aufgetreten (C2 Forschung, C6 Reparatur,
+        // D1 Depot, E-A Hangar): eine fertige Mechanik lag auf einer Taste oder
+        // in einer Zahl, und die Oberfläche schwieg. Ein fünftes Mal soll es
+        // nicht geben.
+        //
+        // Gelesen: der Gefechtsaufbau @0x41ABD6 setzt `word[0x5407A0]` an ALLE
+        // ACHT Spieler, der Knopf @0x44D425 zählt in Tausendern bis 10000 und
+        // springt dann auf 0, die Beschriftung ist `Konto ` (0x502628).
+        // Vorgabe 0 — wie im Original (@0x4426DF).
+        right.AddChild(Row("Konto", _konto = new SpinBox
+        {
+            MinValue = 0, MaxValue = 10000, Step = 1000,
+            Value = SkirmishSetup.StartMoney,
+            TooltipText = "Startgeld je Spieler, in Tausenderschritten bis 10000 "
+                        + "— die Einstellung des Originals.\n"
+                        + "Im Gefecht gibt es KEINE laufende Einnahme: gelesen "
+                        + "kommt Geld nur aus diesem Startkonto und aus\n"
+                        + "VERKAEUFEN am Markt (dem Geschaeftszentrum). "
+                        + "Rohstoffe fuellen Bauteillager, kein Konto.\n"
+                        + "Mit 0 bleibt das Konto im Gefecht leer.",
+        }));
+
         SkirmishSetup.Techstandard = Settings.SkirmishTechstandard;
         right.AddChild(Row("Techstandard", _tech = new SpinBox
         {
@@ -1544,6 +1573,12 @@ public partial class MainMenu : Control
             SkirmishSetup.Techstandard = Mathf.Clamp((int)_tech.Value, 1, 8);
             Settings.SkirmishTechstandard = SkirmishSetup.Techstandard;
         }
+        // ⚠ Der Regler ist nur so viel wert wie diese Zeile: ohne sie stünde
+        // »Konto« im Schirm und bliebe wirkungslos — dieselbe Falle, in die der
+        // Techstandard am 15.08. schon einmal gelaufen ist (X: eine geänderte
+        // Vorgabe, die keine Installation je zu sehen bekommt).
+        if (_konto != null)
+            SkirmishSetup.StartMoney = Mathf.Clamp((int)_konto.Value, 0, 10000);
         SkirmishSetup.CampaignMission = 0;      // a skirmish records nothing
     }
 

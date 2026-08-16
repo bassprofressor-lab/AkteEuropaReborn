@@ -81,6 +81,39 @@ public static class SkirmishSetup
     public static int Techstandard = 8;
 
     /// <summary>
+    /// <b>»Konto« — das Startgeld eines Gefechts.</b>
+    ///
+    /// <para>⚠ <b>NICHTS DAVON IST UNSERE SETZUNG</b>, gelesen 16.08.2026: der
+    /// Gefechtsaufbau @0x41ABD6 schreibt <c>word[0x5407A0]</c> in einer Schleife
+    /// an <b>alle acht</b> Spieler, der Menüknopf @0x44D425 zählt in
+    /// <b>Tausenderschritten bis 10000 und springt dann auf 0</b>
+    /// (<c>cmp 0x2710 / jae → 0, sonst += 0x3E8</c>), und die Beschriftung ist
+    /// die des Originals — <c>Konto </c> (0x502628), gedruckt @0x480A8D. Ein
+    /// frisches Spiel steht auf <b>0</b> (@0x4426DF, dieselbe Rücksetzroutine
+    /// wie Techstandard und Rohstoffe).</para>
+    ///
+    /// <para>⚠⚠ <b>WARUM DAS FEHLTE UND WAS ES BEDEUTET:</b> im Gefecht wurde
+    /// <c>_money</c> bisher <b>nur</b> aus sec73 der Karte gefüllt — und
+    /// <b>keine</b> Gefechtskarte hat eines. Jeder Spieler stand also auf $0.
+    /// Zusammen damit, dass der MARKT nicht gebaut ist, war Geld im Gefecht
+    /// eine <b>tote Zahl</b>: es gab keine Quelle und keine Ausgabe, die es
+    /// gebraucht hätte. Gelesen ist nämlich auch das Gegenstück — <b>eine
+    /// laufende Einnahme gibt es im Original NICHT</b> (keine der sechs
+    /// schreibenden Stellen an <c>0xA9C600</c> liegt in einer Taktschleife;
+    /// Rohstoffe und Terranium füllen Bauteillager, kein Konto). Geld kommt aus
+    /// dem Startkonto, aus VERKÄUFEN am Markt (@0x4C0628) und am Missionsende
+    /// (»Berkewitz Corp. bezahlt Ihnen $«, @0x416B0A).</para>
+    ///
+    /// <para><b>Unsere Vorgabe ist 0</b> — wie im Original. Wer im Gefecht
+    /// handeln will, stellt sie ein; das ist die Wettkampfentscheidung des
+    /// Spielers und nicht unsere.</para></summary>
+    public static int StartMoney;
+
+    /// <summary>Der Schritt des Originalknopfs: 1000 aufwärts, bei über 10000
+    /// zurück auf 0 (@0x44D425).</summary>
+    public static int NextStartMoney(int now) => now >= 10000 ? 0 : now + 1000;
+
+    /// <summary>
     /// <b>»Alle Einheiten« — und damit auch LUFTEINHEITEN.</b>
     ///
     /// <para>⚠ <b>UNSERE OPTION</b>, und sie steht hier, weil das Original für
