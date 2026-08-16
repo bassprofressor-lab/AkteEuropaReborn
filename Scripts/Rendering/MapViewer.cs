@@ -394,6 +394,18 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_overdrawCheck)
+        {
+            GD.Print(_entities.OverdrawCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_wagonFacingCheck)
+        {
+            GD.Print(_entities.WagonFacingCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_coverageCheck)
         {
             GD.Print(_entities.ScriptCoverage());
@@ -588,6 +600,12 @@ public partial class MapViewer : Node2D
     private bool _tutorialCheck;
     private bool _coverageCheck;
     private bool _depotCheck;
+    /// <summary><c>--overdraw-check</c> — welche Gebäudekachel übermalt welche
+    /// Einheit und welches Gleisstück. Siehe <c>MapEntityLayer.OverdrawCheck</c>.</summary>
+    private bool _overdrawCheck;
+    /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
+    /// seines Gleises? Siehe <c>MapEntityLayer.WagonFacingCheck</c>.</summary>
+    private bool _wagonFacingCheck;
     private bool _infDeathCheck;
     private int _buildPreview;
 
@@ -596,6 +614,11 @@ public partial class MapViewer : Node2D
     //            --map=map_05 --demo --shot=C:/tmp/shot.png --shot-delay=240
     // Drives a scripted move order and writes a screenshot, so a change can be
     // verified visually without clicking through the viewer by hand.
+    /// <summary>Ist die Kamera des <c>--shot-when</c>-Auslösers schon einen
+    /// ganzen Frame lang an ihrem Ziel? Siehe die Begründung am Auslöser: eine
+    /// im selben Bild gesetzte Kameralage wirkt erst im nächsten.</summary>
+    private bool _shotArmed;
+
     private string _shotPath = "";
     private int _shotDelay = 180;
     private int _frames;
@@ -1016,6 +1039,16 @@ public partial class MapViewer : Node2D
                 if (a.Length > 16) _stempelSlot = a["--stempel-check=".Length..].ToInt();
             }
             else if (a == "--stempel-alt") MapEntityLayer.StempelAlt = true;
+            // Gegenprobe zu C14: das Zeilenfach wieder fest auf `Zeile + 3`,
+            // statt es aus der Tuer zu holen. Siehe BuildingDrawRowFor.
+            else if (a == "--tuer-alt") MapEntityLayer.TuerAlt = true;
+            // Gegenprobe zu C14: auch der Gebaeudeboden laeuft wieder im
+            // Zeilenfach mit — der Stand, den der Spieler photographiert hat.
+            else if (a == "--boden-alt") MapEntityLayer.BodenAlt = true;
+            // Gegenprobe zum Waggonbild: nur vier Richtungen, dy gewinnt.
+            else if (a == "--stueck-alt") MapEntityLayer.StueckAlt = true;
+            else if (a == "--wagon-facing-check") _wagonFacingCheck = true;
+            else if (a == "--overdraw-check") _overdrawCheck = true;
             else if (a == "--sound-check") _soundCheck = true;
             else if (a == "--tutorial-check") _tutorialCheck = true;
             else if (a == "--script-coverage") _coverageCheck = true;
@@ -1643,28 +1676,60 @@ public partial class MapViewer : Node2D
             return;
         }
         if (_shotPath.Length == 0 || _frames++ < _shotDelay) return;
-        if (_shotWhen == "diagonal")
+        // ⚠⚠ 16.08.2026 — EIN BILD WARTEN, NACHDEM DIE KAMERA GESETZT WURDE.
+        //
+        // Alle `--shot-when`-Auslöser setzen die Kamera und schiessen im
+        // SELBEN Bild. Die neue Kameralage wird aber erst im nächsten wirksam:
+        // `RenderingServer.ForceDraw()` zeichnet den Baum, nicht die soeben
+        // geänderte Transformation. Der Schuss zeigte deshalb immer die
+        // ALTE Stelle — beim Waggonbild die Basis statt des Gleises, und weil
+        // beide Läufe dieselbe falsche Stelle zeigten, meldete der Bildvergleich
+        // dreimal »0 geänderte Bildpunkte«. Das las sich wie ein Freispruch und
+        // war einer über den falschen Gegenstand (Regel 31).
+        //
+        // Erkannt an der UHR im Bild: sie stand auf 00:02, während der Auslöser
+        // `sim=10,13s` meldete — das Bild war acht Sekunden alt.
+        // Solange der Auslöser noch nicht »scharf« ist, wird NUR die Kamera
+        // gesetzt und dann ein Bild verstreichen gelassen.
+        if (_shotWhen.Length > 0 && !_shotArmed)
         {
-            if (!_entities.RailWagonOnCorner(out var dat, out int dline)) return;
-            _camera.Position = _entities.RailCellPoint(Mathf.RoundToInt(dat.X),
-                                                       Mathf.RoundToInt(dat.Y));
-            ClampCamera();
-            GD.Print($"MapViewer: --shot-when=diagonal ausgeloest — Waggon auf Eckstueck " +
-                     $"({dat.X:0},{dat.Y:0}), Linie {dline}");
-        }
-        if (_shotWhen == "squash")
-        {
-            if (_entities.RailSquashNow < _shotWhenN) return;
-            var at = _entities.RailSquashAt;
-            // ⚠ Hier stand `at.X * 40, at.Y * 20` — daneben, siehe
-            // MapEntityLayer.RailCellPoint. Deshalb zeigte die erste Aufnahme
-            // der Stauchung eine ANDERE Linie.
-            _camera.Position = _entities.RailCellPoint(Mathf.RoundToInt(at.X),
-                                                       Mathf.RoundToInt(at.Y));
-            ClampCamera();
-            GD.Print($"MapViewer: --shot-when=squash ausgeloest — {_entities.RailSquashNow} " +
-                     $"Waggons auf Zelle ({at.X:0.00},{at.Y:0.00}), Linie {_entities.RailSquashLine}\n" +
-                     $"   Waggons: {_entities.RailSquashWagons()}");
+            if (_shotWhen == "diagonal")
+            {
+                if (!_entities.RailWagonOnCorner(out var dat, out int dline)) return;
+                _camera.Position = _entities.RailCellPoint(Mathf.RoundToInt(dat.X),
+                                                           Mathf.RoundToInt(dat.Y));
+                ClampCamera();
+                GD.Print($"MapViewer: --shot-when=diagonal ausgeloest — Waggon auf Eckstueck " +
+                         $"({dat.X:0},{dat.Y:0}), Linie {dline}");
+            }
+            // ⚠ Der Auslöser für das WAGGONBILD: er wartet auf eine Treppe der
+            // Kette, nicht auf ein Eckstück des Gleisbildes. Siehe
+            // RailFreight.RailWagonOnStairs.
+            else if (_shotWhen == "treppe")
+            {
+                if (!_entities.RailWagonOnStairs(out var sat, out int sline)) return;
+                _camera.Position = _entities.RailCellPoint(Mathf.RoundToInt(sat.X),
+                                                           Mathf.RoundToInt(sat.Y));
+                ClampCamera();
+                GD.Print($"MapViewer: --shot-when=treppe ausgeloest — Waggon auf Treppe " +
+                         $"({sat.X:0},{sat.Y:0}), Linie {sline} | {_entities.StairsWhat}");
+            }
+            else if (_shotWhen == "squash")
+            {
+                if (_entities.RailSquashNow < _shotWhenN) return;
+                var at = _entities.RailSquashAt;
+                // ⚠ Hier stand `at.X * 40, at.Y * 20` — daneben, siehe
+                // MapEntityLayer.RailCellPoint. Deshalb zeigte die erste Aufnahme
+                // der Stauchung eine ANDERE Linie.
+                _camera.Position = _entities.RailCellPoint(Mathf.RoundToInt(at.X),
+                                                           Mathf.RoundToInt(at.Y));
+                ClampCamera();
+                GD.Print($"MapViewer: --shot-when=squash ausgeloest — {_entities.RailSquashNow} " +
+                         $"Waggons auf Zelle ({at.X:0.00},{at.Y:0.00}), Linie {_entities.RailSquashLine}\n" +
+                         $"   Waggons: {_entities.RailSquashWagons()}");
+            }
+            _shotArmed = true;
+            return;                             // ein Bild warten, dann schiessen
         }
         // The window may be occluded, in which case the compositor stops drawing
         // and the viewport texture still holds a stale frame — force one draw.

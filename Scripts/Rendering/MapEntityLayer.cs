@@ -3192,6 +3192,80 @@ public partial class MapEntityLayer : Node2D
     /// comes from. A type with only one pattern (17) has no ruin and simply keeps
     /// standing — the original has no other picture for it either.</para>
     /// </summary>
+    /// <summary>
+    /// <b>Der BODEN aller Gebäude — Beton, Schotter, Schatten, Rampe.</b> Läuft
+    /// VOR dem zeilenweisen Durchgang und liegt damit unter allem Beweglichen.
+    /// Die Antwort auf Fehler C14 (16.08.2026).
+    ///
+    /// <para><b>Gelesen, und zwar positiv:</b> das Original zeichnet die
+    /// Musterkacheln eines Gebäudes gar nicht als Objekt — es <b>schreibt sie in
+    /// die KARTENZELLE</b>. Die Stempelschleife @0x4C97B4 rechnet die Zelladresse
+    /// als <c>(col·256 + row)·2 + 0xbdea80</c>, holt die Musterkachel bei
+    /// <c>[ecx+ecx*8 + 0xb97b38]</c> (180 Byte je Muster), addiert
+    /// <c>0x2710</c> = 10000 als Bereichsmarke und übergibt sie @0x4C9850 an den
+    /// Zellensetzer. Sie sind damit <b>Gelände</b>.</para>
+    ///
+    /// <para>Der Objektzeichner für Art 10 (@0x42B1DE) malt dagegen nur EIN
+    /// Sprite und danach die Türen — bei <c>byte[+0x34] == 0</c> springt er
+    /// @0x42B26A direkt auf das Funktionsende @0x42BBC6. <b>Sechzig Kacheln
+    /// kommen dort nirgends vor.</b></para>
+    ///
+    /// <para>⚠ <b>UNSERE SETZUNG, und sie ist nötig:</b> wir haben kein zweites,
+    /// aufragendes Sprite — unser Gebäudebild BESTEHT aus den Musterkacheln.
+    /// Also teilen wir sie: was flach ist (<see cref="FlachBisPx"/>), geht in
+    /// den Boden; was aufragt, bleibt im Zeilenfach und übernimmt die Rolle des
+    /// Original-Sprites. Die Schwelle ist an der Lücke 24/25 px gemessen, die
+    /// Teilung selbst ist unsere. Ohne sie gäbe es entweder keine Verdeckung
+    /// mehr (dann wäre C23 zurück) oder die gemeldete Übermalung.</para>
+    ///
+    /// <para>Gemessen, was das betrifft: map_NET02 <b>1598</b> flache Kacheln,
+    /// davon <b>749</b> vor dem Fach ihres Gebäudes, und <b>80</b> Gleiszellen
+    /// darunter; map_DM_4 1093 / 489 / 58. ⚠ Und die flachen tragen <c>YOff</c>
+    /// bis <b>67 px</b> — über drei Zellzeilen nach unten. Eine Bodenkachel malt
+    /// also gar nicht in ihre eigene Zelle, weshalb die Übermalung auch dort
+    /// auftritt, wo im Zellraster nichts liegt.</para>
+    ///
+    /// <para>Gegenprobe: <c>--boden-alt</c> — alle Kacheln wieder im Zeilenfach,
+    /// also der Stand, den der Spieler photographiert hat.</para></summary>
+    private void DrawBuildingGround()
+    {
+        if (BodenAlt || NoBuildingBody)
+        {
+            if (!_grundGemeldet)
+            {
+                _grundGemeldet = true;
+                GD.Print("boden: --boden-alt — der Gebaeudeboden laeuft im Zeilenfach mit");
+            }
+            return;
+        }
+        if (!_drawSprites || Patterns == null) return;
+        BuildingGroundDrawn = 0;
+        foreach (var b in BuildingsBackToFront())
+            DrawBuildingTiles(b, flach: true);
+        // ⚠ Regel 32/33: die eigene Zeile MUSS im Protokoll stehen, sonst ist
+        // »kein Unterschied im Bild« nicht von »der Durchgang lief gar nicht«
+        // zu unterscheiden. Genau daran waere der erste Bildvergleich fast
+        // gescheitert.
+        if (!_grundGemeldet)
+        {
+            _grundGemeldet = true;
+            GD.Print($"boden: {BuildingGroundDrawn} flache Gebaeudekacheln im eigenen " +
+                     $"Durchgang VOR Gleis und Einheiten gezeichnet " +
+                     $"({BuildingsBackToFront().Count} Gebaeude)");
+        }
+    }
+
+    private bool _grundGemeldet;
+
+    /// <summary>Wieviele Bodenkacheln der eigene Durchgang gezeichnet hat —
+    /// damit »der Boden liegt jetzt unten« nicht nur eine Behauptung ist.</summary>
+    public int BuildingGroundDrawn;
+
+    /// <summary><c>--boden-alt</c> — der Stand von vor dem 16.08.2026: auch die
+    /// flachen Kacheln laufen im Zeilenfach mit und übermalen, was auf ihnen
+    /// steht. Messgerät, keine Einstellung.</summary>
+    public static bool BodenAlt;
+
     private void DrawBuildingBody(Entity e)
     {
         // ⚠ --no-building-body: die Gegenprobe zu C14. Der Spieler vermutet, dass
@@ -3199,6 +3273,16 @@ public partial class MapEntityLayer : Node2D
         // wird (»darin verschwinden auch Fahrzeuge«). Ohne Gebaeudekoerper
         // gezeichnet entscheidet EIN Bildvergleich das.
         if (NoBuildingBody) return;
+        // Der BODEN ist schon unten durch (DrawBuildingGround); hier kommt nur
+        // noch, was aufragt. Mit --boden-alt laeuft wieder alles zusammen.
+        DrawBuildingTiles(e, flach: BodenAlt ? (bool?)null : false);
+    }
+
+    /// <summary>Die Kacheln eines Gebäudes stempeln — <paramref name="flach"/>
+    /// wählt die Gruppe: <c>true</c> nur den Boden, <c>false</c> nur das
+    /// Aufragende, <c>null</c> alles (das ist <c>--boden-alt</c>).</summary>
+    private void DrawBuildingTiles(Entity e, bool? flach)
+    {
         if (!_drawSprites || Patterns == null || e.IsProp) return;
         var tex = PatternTexture();
         if (tex == null) return;
@@ -3234,6 +3318,8 @@ public partial class MapEntityLayer : Node2D
                 {
                     int code = BuildingCellTile(first, k, dx, dy, anim);
                     if (code == 0 || !Patterns.TryGetTile(code, out var t)) continue;
+                    if (flach.HasValue && (t.H <= FlachBisPx) != flach.Value) continue;
+                    if (flach == true) BuildingGroundDrawn++;
                     int c = e.Col + dx, r = e.Row + dy;
                     float sx = _ox + c * Import.MapBaker.TileW;
                     float sy = _oy + r * Import.MapBaker.TileH
@@ -12558,24 +12644,138 @@ public partial class MapEntityLayer : Node2D
         return d1 < d0;
     }
 
-    /// <summary>Das Fahrtrichtungs-STUECK je Zelle einer Kette, in der
-    /// Zaehlweise des Originals (Bildtabelle @0x539400: 0 = nach unten,
-    /// 2 = nach links, 4 = nach oben, 6 = nach rechts; die ungeraden sind die
-    /// Halbschritte einer Diagonale, die es auf einer Zellenkette nicht gibt).
-    /// Der Waggon dreht damit an derselben Stelle wie das Gleis.</summary>
+    /// <summary>
+    /// <b>Das Fahrtrichtungs-STÜCK je Zelle einer Kette</b> — der Bildindex des
+    /// Waggons (@0x4c6de9).
+    ///
+    /// <para><b>Die Zählweise ist gelesen</b>, Bildtabelle <c>@0x539400</c> der
+    /// installierten GAME.EXE (⚠ im Entwicklungsbau auf <c>F:</c> steht an
+    /// derselben Adresse etwas anderes — Regel 8, nach der Form suchen, nicht
+    /// nach der Adresse). Sie gibt je Stück den Pixelschritt:</para>
+    /// <code>
+    ///   0 ( 0, 20) S     1 (-20, 10) SW    2 (-40,  0) W    3 (-20,-10) NW
+    ///   4 ( 0,-20) N     5 ( 20,-10) NO    6 ( 40,  0) O    7 ( 20, 10) SO
+    /// </code>
+    /// <para>Ein voller Kompass, Gegenrichtung <c>(s+4)&amp;7</c> — und die
+    /// <b>Diagonalen sind HALBE Zellschritte</b> (±20,±10 gegen 40 bzw. 20 für
+    /// eine ganze Zelle).</para>
+    ///
+    /// <para>⚠⚠ <b>ZURÜCKGEZOGEN am 16.08.2026</b>, und es war der gemeldete
+    /// Fehler: hier stand
+    /// <c>dy &gt; 0 ? 0 : dy &lt; 0 ? 4 : dx &lt; 0 ? 2 : 6</c> mit der
+    /// Begründung, die ungeraden Stücke seien »Halbschritte einer Diagonale, die
+    /// es auf einer Zellenkette nicht gibt«. <b>Die Diagonale gibt es sehr
+    /// wohl</b> — sie ist als TREPPE ausgelegt, (±1,0) gefolgt von (0,±1). Der
+    /// alte Ausdruck las jede Treppenstufe als eigene Achsenrichtung und warf
+    /// bei einem echten Diagonalschritt die x-Komponente ersatzlos weg
+    /// (<c>dy</c> gewann immer). Ergebnis: auf jeder schrägen Strecke zeigten
+    /// aufeinanderfolgende Waggons abwechselnd nach unten und nach rechts statt
+    /// gleichmässig schräg — gemeldet als »wie doof der Zug oft aussieht«, mit
+    /// zwei gekuppelten Waggons, die gegeneinander zeigen.</para>
+    ///
+    /// <para><b>Die Kur:</b> die Richtung aus der ZENTRALDIFFERENZ
+    /// <c>cells[i+1] − cells[i−1]</c> statt aus einem einzelnen Schritt. Eine
+    /// Treppe ergibt damit (±1,±1) und wird zur Diagonale, eine Gerade (±2,0)
+    /// und bleibt Achse. An den Enden wird einseitig gerechnet.</para>
+    ///
+    /// <para>Gegenprobe: <c>--stueck-alt</c> stellt den alten Ausdruck im selben
+    /// Programm wieder her; <c>--wagon-facing-check</c> zählt die Abweichung.</para>
+    /// </summary>
     private static List<int> RailPiecesOfChain(List<Vector2> cells)
     {
         var pcs = new List<int>(cells.Count);
         for (int i = 0; i < cells.Count; i++)
         {
-            var from = cells[i];
-            var to = i + 1 < cells.Count ? cells[i + 1] : cells[i];
-            if (i + 1 >= cells.Count && i > 0) { from = cells[i - 1]; to = cells[i]; }
+            if (StueckAlt)
+            {
+                var f0 = cells[i];
+                var t0 = i + 1 < cells.Count ? cells[i + 1] : cells[i];
+                if (i + 1 >= cells.Count && i > 0) { f0 = cells[i - 1]; t0 = cells[i]; }
+                int ax = Mathf.RoundToInt(t0.X - f0.X), ay = Mathf.RoundToInt(t0.Y - f0.Y);
+                pcs.Add(ay > 0 ? 0 : ay < 0 ? 4 : ax < 0 ? 2 : 6);
+                continue;
+            }
+            // ⚠ ZENTRALDIFFERENZ — sie ist der ganze Punkt: nur sie sieht die
+            // Treppe einer Diagonale als das, was sie ist.
+            var from = cells[Mathf.Max(0, i - 1)];
+            var to = cells[Mathf.Min(cells.Count - 1, i + 1)];
             int dx = Mathf.RoundToInt(to.X - from.X), dy = Mathf.RoundToInt(to.Y - from.Y);
-            pcs.Add(dy > 0 ? 0 : dy < 0 ? 4 : dx < 0 ? 2 : 6);
+            pcs.Add(RailPieceOfStep(dx, dy));
         }
         return pcs;
     }
+
+    /// <summary>Ein Schritt (<paramref name="dx"/>,<paramref name="dy"/>) in
+    /// Zellen auf das Stück der Bildtabelle @0x539400 — siehe
+    /// <see cref="RailPiecesOfChain"/> für die gelesene Zuordnung. Ein
+    /// Nullschritt behält die Vorwärtsrichtung 6 (O), wie der alte Zweig.</summary>
+    private static int RailPieceOfStep(int dx, int dy)
+    {
+        if (dx == 0 && dy == 0) return 6;
+        if (dx == 0) return dy > 0 ? 0 : 4;
+        if (dy == 0) return dx > 0 ? 6 : 2;
+        return dx > 0 ? (dy > 0 ? 7 : 5) : (dy > 0 ? 1 : 3);
+    }
+
+    /// <summary><c>--stueck-alt</c> — der Stand von vor dem 16.08.2026: nur vier
+    /// Richtungen, und bei einer Diagonale gewinnt <c>dy</c>. Messgerät, keine
+    /// Einstellung.</summary>
+    public static bool StueckAlt;
+
+    /// <summary>
+    /// <c>--wagon-facing-check</c> — <b>zeigt jeder Waggon in die Richtung, in
+    /// die sein Gleis läuft?</b>
+    ///
+    /// <para>Der Gegenstand kommt aus der Meldung (Regel S): »wie doof der Zug
+    /// oft aussieht« — auf den Fotos zeigen zwei gekuppelte Waggons in
+    /// entgegengesetzte Richtungen und drei in drei Richtungen, während das
+    /// Gleis glatt diagonal durchläuft. Gemessen wird deshalb nicht »fährt er?«,
+    /// sondern der Winkel zwischen dem gewählten BILD und dem tatsächlichen
+    /// Streckenverlauf an derselben Zelle.</para>
+    ///
+    /// <para>⚠ Aufgeschlüsselt nach vermuteter Ursache (Regel A): gerade Stücke
+    /// gegen Treppenstufen. Eine Gesamtquote würde beides mischen, und genau die
+    /// Treppen sind der Verdacht — auf ihnen kann der alte Ausdruck gar nicht
+    /// richtig liegen.</para></summary>
+    public string WagonFacingCheck()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"wagon-facing-check{(StueckAlt ? "  [--stueck-alt]" : "")}");
+        int gerade = 0, geradeFalsch = 0, treppe = 0, treppeFalsch = 0;
+        var beispiele = new List<string>();
+        foreach (var kv in _lineCellPiece)
+        {
+            if (!_lineCell.TryGetValue(kv.Key, out var cells) || cells.Count < 3) continue;
+            var pcs = kv.Value;
+            for (int i = 1; i < cells.Count - 1 && i < pcs.Count; i++)
+            {
+                // Die WAHRE Richtung an dieser Zelle, aus der Kette selbst.
+                int dx = Mathf.RoundToInt(cells[i + 1].X - cells[i - 1].X);
+                int dy = Mathf.RoundToInt(cells[i + 1].Y - cells[i - 1].Y);
+                bool istTreppe = dx != 0 && dy != 0;
+                int soll = RailPieceOfStep(dx, dy);
+                bool falsch = pcs[i] != soll;
+                if (istTreppe) { treppe++; if (falsch) treppeFalsch++; }
+                else { gerade++; if (falsch) geradeFalsch++; }
+                if (falsch && beispiele.Count < 6)
+                    beispiele.Add($"    Linie {kv.Key} Zelle ({cells[i].X:0},{cells[i].Y:0}): " +
+                                  $"Kette laeuft ({dx:+0;-0;0},{dy:+0;-0;0}) = Stueck {soll} " +
+                                  $"{RailPieceName(soll)}, gewaehlt {pcs[i]} " +
+                                  $"{RailPieceName(pcs[i])}" +
+                                  (istTreppe ? "  [TREPPE]" : "  [gerade]"));
+            }
+        }
+        sb.AppendLine($"  gerade  {gerade,5} Zellen, davon {geradeFalsch,5} mit falschem Bild");
+        sb.AppendLine($"  TREPPE  {treppe,5} Zellen, davon {treppeFalsch,5} mit falschem Bild");
+        foreach (var s in beispiele) sb.AppendLine(s);
+        return sb.ToString().TrimEnd();
+    }
+
+    private static string RailPieceName(int p) => p switch
+    {
+        0 => "S", 1 => "SW", 2 => "W", 3 => "NW",
+        4 => "N", 5 => "NO", 6 => "O", 7 => "SO", _ => "?"
+    };
 
     /// <summary>Das Bild je Zelle aus den NACHBARZELLEN. Steht seit dem
     /// 12.08.2026 für sich, weil <see cref="RailSnapToDock"/> die Kette
@@ -13878,12 +14078,296 @@ public partial class MapEntityLayer : Node2D
     private static int RailThroughRowFor(Entity b)
         => RailProbeFootH
                ? b.Row + Mathf.Max(1, b.FootH) - 1
-               : b.Row + BuildingDrawRowBias + RailDrawRowBias - 1;
+               : b.Row + BuildingDrawRowFor(b) + RailDrawRowBias - 1;
 
     /// <summary>Um wieviele Zeilen SPÄTER als seine eigene Zeile wird ein Gebäude
-    /// einsortiert — <c>3</c>, gelesen an @0x42FD4D. Siehe
-    /// <see cref="RailThroughRowFor"/>.</summary>
+    /// einsortiert — die <b>Rückgriffszahl</b> 3 für ein Gebäude OHNE Tür.
+    /// <see cref="BuildingDrawRowFor"/> ist die eigentliche Antwort.</summary>
     private const int BuildingDrawRowBias = 3;
+
+    /// <summary>
+    /// <b>In welches Zeilenfach kommt dieses Gebäude — und damit: was verdeckt
+    /// es und was nicht.</b> Die Antwort auf Fehler C14 (16.08.2026).
+    ///
+    /// <para><b>Gemeldet:</b> »diese Stelle die ich meine, hat JEDES Gebäude auf
+    /// der rechten Seite. Dort ist immer das Stück Schiene nicht sichtbar, und
+    /// wenn eine Einheit reinfährt, wird sie von der Bodengrafik überdeckt. Die
+    /// Einheit lässt sich trotzdem noch anwählen!«</para>
+    ///
+    /// <para><b>Gelesen am Einreiher @0x42FCD0..@0x42FE8D</b> (Schleife über die
+    /// 255 Gebäudesätze, <c>esi = 0xc06944 = 0xc06910 + 0x34</c>, Schritt
+    /// <c>0x4c</c> — der Anker rechnet auf: 255 × 76 Byte enden genau auf der
+    /// Schleifengrenze <c>cmp esi, 0xc0b4f8</c>, Regel M):</para>
+    /// <code>
+    ///   0x42FD47  mov al, byte[esi]      ; +0x34 = ANZAHL DER TÜREN
+    ///   0x42FD4B  jne 0x42FD53
+    ///   0x42FD4D  add bx, 3              ;   türlos → Fach = Zeile + 3
+    ///   0x42FD53  mov al, byte[esi+2]    ; +0x36 = Zeilenversatz der Tür 0
+    ///   0x42FD5B  add bx, ax             ;   sonst → Fach = Zeile + tür0.row
+    /// </code>
+    ///
+    /// <para>⚠ <b>Und die BILDLAGE zieht NICHT mit.</b> Sie wird ein paar
+    /// Befehle später um genau denselben Betrag zurückgenommen:</para>
+    /// <code>
+    ///   0x42FDD5  mov bp, 3
+    ///   0x42FDDF  sub bp, ax             ; bp = 3 − tür0.row
+    ///   0x42FDE4  imul bp, bp, 0x14      ; × 20 px = eine Zeile
+    ///   0x42FDE8  add bx, bp
+    /// </code>
+    /// <para>Ausgerechnet bleibt <c>y = (Zeile − Kamera)·20 − feinY</c>, für
+    /// jeden Türwert dasselbe. <b>Die Tür verschiebt nur die Malerordnung, nie
+    /// das Bild.</b> Das ist der Grund, warum die Einheit anwählbar bleibt: sie
+    /// steht, wo sie steht, und wird bloss übermalt.</para>
+    ///
+    /// <para><b>Die Werte sind je Typ konstant</b>, ausgezählt über alle 798
+    /// Türen der 23 Karten (<c>cwm_extra.py</c>): Basis eine Tür bei (4,<b>2</b>)
+    /// 73/73 · die drei Fabriken zwei bei (2,<b>3</b>) und (5,<b>3</b>) ·
+    /// Flughafen (5,<b>4</b>) 39/39 · Mine (5,<b>3</b>) 49/49 · Typ 12 (1,<b>3</b>)
+    /// 36/36 · Typ 15 (2,<b>4</b>) 10/10 · Werft (2,<b>3</b>) 13/13.</para>
+    ///
+    /// <para>Für uns heisst das: die <b>Basis</b> gehört ein Fach FRÜHER als
+    /// unsere feste 3 (2 statt 3) und verdeckt damit eine Zeile weniger; der
+    /// <b>Flughafen</b> und Typ 15 gehören eines SPÄTER (4). Fabriken, Mine und
+    /// Werft ändern sich nicht — was dort noch übermalt wird, ist ein anderer
+    /// Fehler und wird getrennt gemessen (<c>--overdraw-check</c>).</para>
+    ///
+    /// <para>⚠ <b>ZURÜCKGEZOGEN:</b> im Kopf von <see cref="DrawRailAndBuildings"/>
+    /// stand »jede Kachel darin wird in ihrer eigenen Zeile gestempelt«. Das ist
+    /// <b>falsch</b> — der Einreiher schreibt je Gebäude GENAU EINEN Eintrag
+    /// (Art 10, @0x42FE52: <c>byte[ecx+0xab8068] := 10</c>, dazu Index, x, y in
+    /// einen 10-Byte-Satz), und der Zeichner @0x42B1DE holt sich daraus den
+    /// Satzindex und stempelt das ganze Muster. Ein Umbau auf kachelweise
+    /// Einreihung wäre also keine Treue, sondern eine Erfindung gewesen.</para>
+    ///
+    /// <para>Gegenprobe: <c>--tuer-alt</c> stellt die feste 3 im selben Programm
+    /// wieder her.</para></summary>
+    private static int BuildingDrawRowFor(Entity b)
+        => TuerAlt || b.DoorCells.Count == 0 ? BuildingDrawRowBias : b.DoorRow;
+
+    /// <summary>
+    /// Bis zu welcher Bildhöhe eine Musterkachel als <b>flacher Boden</b> gilt
+    /// — Beton, Schotter, Schatten, Rampe.
+    ///
+    /// <para><b>Warum 25 und nicht 20:</b> die Zellhöhe ist 20 px, und dort
+    /// liegt auch die grosse Häufung (map_NET02 <b>1489</b> Kacheln, map_DM_4
+    /// <b>1006</b>, map_NET07 <b>128</b>). Ein Kriterium »genau 20« wäre aber zu
+    /// streng — es gibt 21 px (32×), 22 px (12×) und 23 px (2×), also
+    /// Bordsteinkanten mit ein paar Pixeln Überstand. Über 23 kommt bis 26
+    /// <b>nichts</b>: 24 und 25 px sind auf allen drei Karten unbesetzt. Die
+    /// Schwelle sitzt in dieser Lücke und ist damit gemessen, nicht geraten
+    /// (Regel 27 — ein Ja/Nein-Kriterium auf echten Daten braucht eine
+    /// Toleranz).</para></summary>
+    public const int FlachBisPx = 25;
+
+    /// <summary><c>--tuer-alt</c> — der Stand von vor dem 16.08.2026: jedes
+    /// Gebäude kommt ins Fach <c>Zeile + 3</c>, egal wo seine Tür sitzt. Nur als
+    /// Messgerät da; was gilt, steht in <see cref="BuildingDrawRowFor"/>.</summary>
+    public static bool TuerAlt;
+
+    /// <summary>
+    /// <c>--overdraw-check</c> — <b>wie gross ist die Fläche, auf der ein
+    /// Gebäudebild etwas übermalt, das gar nicht auf seinem Grundriss steht?</b>
+    ///
+    /// <para>Der Gegenstand kommt aus der MELDUNG (Regel S): »rechts vom Gebäude
+    /// verschwindet die Einheit und das Gleisstück, anwählbar bleibt sie«. Also
+    /// wird genau das gezählt und nicht das, was am leichtesten zu zählen wäre:
+    /// eine Musterzelle, die
+    /// <list type="number">
+    /// <item>eine Kachel trägt (<c>code != 0</c>),</item>
+    /// <item><b>FLACH</b> ist, also genau Zellhöhe hat (Beton, Schotter,
+    ///   Schatten, Rampe — dort gehört nichts verdeckt), und</item>
+    /// <item>deren Gebäude im Zeichenlauf NACH dem kommt, was auf ihr steht.</item>
+    /// </list>
+    /// Nur wo alle drei zutreffen, verschwindet etwas, das man noch anklicken
+    /// kann.</para>
+    ///
+    /// <para>⚠ <b>Gerechnet, nicht gestichprobt</b> (Regel T): über jede der 60
+    /// Musterzellen jedes Gebäudes, nicht über drei ausgewählte. Und die
+    /// betroffenen GLEISZELLEN werden einzeln benannt (Regel 24) — sie stehen
+    /// fest auf der Karte, während eine Einheit zufällig gerade woanders sein
+    /// kann. Eine Fläche, auf der nie jemand steht, wäre kein Befund; darum
+    /// zählt der Prüfstand beides getrennt.</para>
+    ///
+    /// <para>Gegenprobe: mit <c>--tuer-alt</c> muss die Zahl sich ÄNDERN, sonst
+    /// misst der Prüfstand die Änderung nicht, um die es geht.</para></summary>
+    public string OverdrawCheck()
+    {
+        if (Patterns == null) return "overdraw-check: keine Muster geladen";
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"overdraw-check{(TuerAlt ? "  [--tuer-alt: Fach fest = Zeile+3]" : "")}");
+
+        int pw = Import.CwpFile.PatternWidth, ph = Import.CwpFile.PatternHeight;
+        var perType = new Dictionary<int, (int bauten, int aussen, int uebermalt)>();
+        int gesamtAussen = 0, gesamtUeber = 0, gebaeude = 0;
+        // Zelle -> das Gebaeude, das sie uebermalt (fuer die Gleis- und
+        // Einheitenfrage weiter unten).
+        var deckt = new Dictionary<(int, int), (Entity B, int Fach)>();
+        var form = new Dictionary<int, string>();
+
+        foreach (var b in BuildingsBackToFront())
+        {
+            if (b.Dead) continue;
+            gebaeude++;
+            int fach = b.Row + BuildingDrawRowFor(b);
+            int fw = Mathf.Max(1, b.FootW), fh = Mathf.Max(1, b.FootH);
+            var bt = Patterns.GetBuildingType(b.BType);
+            var anim = BuildingAnimCells(b);
+            int aussen = 0, ueber = 0;
+            // ⚠ Der Prüfstand schreibt seine eigene Voraussetzung mit (Regel L):
+            // wie weit reicht das Muster wirklich, und wie gross ist der
+            // Grundriss, gegen den er sie hält. Ohne diese zwei Zahlen ist
+            // »0 Zellen ausserhalb« nicht von »die Frage geht ins Leere« zu
+            // unterscheiden.
+            int maxdx = -1, maxdy = -1, belegt = 0;
+            for (int dx = 0; dx < pw; dx++)
+                for (int dy = 0; dy < ph; dy++)
+                {
+                    int cd = BuildingCellTile(bt.FirstPattern, 0, dx, dy, anim);
+                    if (cd == 0 || !Patterns.TryGetTile(cd, out var kc)) continue;
+                    belegt++;
+                    if (dx > maxdx) maxdx = dx;
+                    if (dy > maxdy) maxdy = dy;
+                    // ⚠⚠ DIE FRAGE IST UMGESTELLT (16.08.2026). Sie hiess »liegt
+                    // die Kachel ausserhalb des Grundrisses« — und die Antwort
+                    // war auf jeder Karte und bei jedem Typ NULL, weil der
+                    // Grundriss GENAU die belegte Musterfläche ist (Mine 9x6 /
+                    // Muster bis (8,5), Basis 7x6 / bis (6,5), Fabrik 8x5 / bis
+                    // (7,4) — zwölf von zwölf Typen deckungsgleich). Damit ist
+                    // die Handoff-Annahme »das 10x6-Muster ragt über den
+                    // Grundriss hinaus« WIDERLEGT.
+                    //
+                    // Was übermalt, ist etwas anderes: die FLACHEN Kacheln. Ein
+                    // Gebäude besteht mehrheitlich aus ihnen (Basis 30 von 37,
+                    // Fabrik 29 von 38, Kraftwerk 23 von 26) — Beton, Schotter,
+                    // Schatten, Rampe. Sie sind BODEN und können nichts
+                    // verdecken, was auf ihnen steht; wir malen sie aber als
+                    // Sprite im Fach des ganzen Gebäudes.
+                    if (kc.H > FlachBisPx) continue;              // aufragend: darf verdecken
+                    aussen++;
+                    int c = b.Col + dx, r = b.Row + dy;
+                    // Was auf (c,r) steht, kommt ins Fach r. Uebermalt wird es,
+                    // wenn das Gebaeude ein SPAETERES Fach hat.
+                    if (r >= fach) continue;
+                    ueber++;
+                    if (!deckt.ContainsKey((c, r))) deckt[(c, r)] = (b, fach);
+                }
+            gesamtAussen += aussen; gesamtUeber += ueber;
+            perType.TryGetValue(b.BType, out var t);
+            perType[b.BType] = (t.bauten + 1, t.aussen + aussen, t.uebermalt + ueber);
+            if (!form.ContainsKey(b.BType))
+            {
+                // ⚠ Die Anschlussfrage, nachdem »Muster reicht über den
+                // Grundriss hinaus« gefallen ist: WIE HOCH sind die Kacheln?
+                // Eine Kachel von genau Zellhöhe ist flacher BODEN (Beton,
+                // Schotter, Schatten, Rampe) und kann nichts verdecken, was
+                // darauf steht — eine aufragende schon. Wir malen bisher beide
+                // gleich, als Sprite über alles.
+                int flach = 0, hoch = 0, hoechste = 0;
+                for (int dx = 0; dx < pw; dx++)
+                    for (int dy = 0; dy < ph; dy++)
+                    {
+                        int code = BuildingCellTile(bt.FirstPattern, 0, dx, dy, anim);
+                        if (code == 0 || !Patterns.TryGetTile(code, out var kachel)) continue;
+                        if (kachel.H > hoechste) hoechste = kachel.H;
+                        if (kachel.H <= FlachBisPx) flach++; else hoch++;
+                    }
+                form[b.BType] = $"Grundriss {fw}x{fh}, Muster bis ({maxdx},{maxdy}), " +
+                                $"{belegt} Kacheln: {flach} flach (<={Import.MapBaker.TileH}px), " +
+                                $"{hoch} aufragend, hoechste {hoechste}px";
+            }
+        }
+
+        // ⚠ Regel 27: die Schwelle »flach« ist ein Ja/Nein-Kriterium auf echten
+        // Daten und braucht eine LUECKE, sonst ist sie geraten. Also das
+        // Histogramm der Kachelhoehen mitschreiben und nachsehen, ob zwischen
+        // Zellhoehe und dem naechsten Wert wirklich nichts liegt.
+        var hoehen = new SortedDictionary<int, int>();
+        var yoff = new Dictionary<string, (int Min, int Max, int N)>();
+        foreach (var b in BuildingsBackToFront())
+        {
+            if (b.Dead) continue;
+            var bt2 = Patterns.GetBuildingType(b.BType);
+            var an2 = BuildingAnimCells(b);
+            for (int dx = 0; dx < pw; dx++)
+                for (int dy = 0; dy < ph; dy++)
+                {
+                    int cd = BuildingCellTile(bt2.FirstPattern, 0, dx, dy, an2);
+                    if (cd == 0 || !Patterns.TryGetTile(cd, out var kk)) continue;
+                    hoehen[kk.H] = hoehen.GetValueOrDefault(kk.H) + 1;
+                    // ⚠ Die Hoehe allein waere das falsche Mass, wenn eine
+                    // flache Kachel per YOff weit nach OBEN gesetzt wuerde —
+                    // die raegte dann doch ueber ihre Zelle. Also beide Gruppen
+                    // getrennt nach ihrer YOff-Spanne fragen.
+                    string g = kk.H <= FlachBisPx ? "flach" : "aufragend";
+                    var alt = yoff.GetValueOrDefault(g, (int.MaxValue, int.MinValue, 0));
+                    yoff[g] = (Mathf.Min(alt.Item1, kk.YOff),
+                               Mathf.Max(alt.Item2, kk.YOff), alt.Item3 + 1);
+                }
+        }
+        sb.AppendLine("  Kachelhoehen: " +
+                      string.Join("  ", hoehen.Select(h => $"{h.Key}px x{h.Value}")));
+        sb.AppendLine("  YOff je Gruppe: " +
+                      string.Join("  ", yoff.OrderBy(k => k.Key)
+                                            .Select(k => $"{k.Key} n={k.Value.N} " +
+                                                         $"YOff {k.Value.Min}..{k.Value.Max}")));
+        sb.AppendLine($"  {gebaeude} Gebaeude, {gesamtAussen} FLACHE Bodenkacheln " +
+                      $"(<= {Import.MapBaker.TileH} px, also Zellhoehe), davon " +
+                      $"{gesamtUeber} vor dem Fach ihres Gebaeudes");
+        // ⚠ Die Zahl allein waere jetzt irrefuehrend: sie beschreibt die LAGE
+        // der Kacheln, und die aendert sich durch die Kur nicht — was sich
+        // aendert, ist WANN sie gezeichnet werden. Ohne diese Zeile liest sich
+        // ein »749« nach der Behebung wie »nicht behoben«.
+        sb.AppendLine(BodenAlt
+            ? $"  --boden-alt: alle {gesamtUeber} uebermalen WIRKSAM — sie laufen im " +
+              "Zeilenfach ihres Gebaeudes mit. Das ist der photographierte Stand."
+            : $"  Bodendurchgang AKTIV: davon uebermalen {0} wirksam — die flachen " +
+              "Kacheln werden vor Gleis und Einheiten gezeichnet (DrawBuildingGround).");
+        foreach (var kv in perType.OrderByDescending(k => k.Value.uebermalt))
+        {
+            var b0 = BuildingsBackToFront().Find(x => x.BType == kv.Key && !x.Dead);
+            int tuer = b0 == null ? -1 : BuildingDrawRowFor(b0);
+            sb.AppendLine($"    Typ {kv.Key,-3} {BuildingTypeName(kv.Key),-16} " +
+                          $"{kv.Value.bauten,3}x  flach {kv.Value.aussen,4}  " +
+                          $"uebermalend {kv.Value.uebermalt,4}   Fach = Zeile+{tuer}" +
+                          (b0 != null && b0.DoorCells.Count > 0 ? " (aus der Tuer)" : " (tuerlos)"));
+            sb.AppendLine($"             {form.GetValueOrDefault(kv.Key, "?")}");
+        }
+
+        // Die GLEISZELLEN, einzeln benannt — sie liegen fest, eine Einheit nicht.
+        int gleisTreffer = 0;
+        var beispiele = new List<string>();
+        foreach (var kv in _lineCell)
+            foreach (var cell in kv.Value)
+            {
+                var key = (Mathf.RoundToInt(cell.X), Mathf.RoundToInt(cell.Y));
+                if (!deckt.TryGetValue(key, out var d)) continue;
+                gleisTreffer++;
+                if (beispiele.Count < 8)
+                    beispiele.Add($"    Zelle ({key.Item1},{key.Item2}) Linie {kv.Key} " +
+                                  $"wird von Platz {d.B.Slot} " +
+                                  $"({BuildingTypeName(d.B.BType)} auf ({d.B.Col},{d.B.Row}), " +
+                                  $"Fach {d.Fach}) uebermalt — Gleisfach " +
+                                  $"{key.Item2 + RailDrawRowBias} gegen Gleisschwelle " +
+                                  $"{d.Fach + RailDrawRowBias - 1} (<= heisst davor)");
+            }
+        sb.AppendLine($"  GLEIS: {gleisTreffer} Gleiszellen liegen unter einer solchen Kachel");
+        foreach (var s in beispiele) sb.AppendLine(s);
+
+        // Und die Einheiten, die GERADE betroffen sind.
+        int einh = 0;
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Dead) continue;
+            if (!deckt.TryGetValue((e.Col, e.Row), out var d)) continue;
+            einh++;
+            if (einh <= 5)
+                sb.AppendLine($"    Einheit Platz {e.Slot} auf ({e.Col},{e.Row}) " +
+                              $"unter Platz {d.B.Slot} ({BuildingTypeName(d.B.BType)}), " +
+                              $"Fach {d.Fach} gegen Einheitenfach {e.Row}");
+        }
+        sb.AppendLine($"  EINHEITEN: {einh} stehen gerade auf einer solchen Zelle");
+        return sb.ToString().TrimEnd();
+    }
 
     /// <summary>Gegenprobe (<c>--rail-lay=footh</c>): wieder nach der Tiefe des
     /// Grundrisses statt nach der festen 3 des Originals.</summary>
@@ -13944,18 +14428,21 @@ public partial class MapEntityLayer : Node2D
         if (_drawSprites && Patterns != null)
             foreach (var b in BuildingsBackToFront())
             {
-                // Ein Gebäude verdeckt alles bis zu seiner VORDERSTEN Zeile —
-                // sein Grundriss reicht so weit nach unten, und jede Kachel
-                // darin wird in ihrer eigenen Zeile gestempelt.
+                // ⚠ 16.08.2026 — DAS FACH HÄNGT AN DER TÜR, nicht an einer
+                // festen 3 (Fehler C14, gelesen @0x42FD47..@0x42FDE8). Siehe
+                // BuildingDrawRowFor; dort steht auch, warum die frühere
+                // Behauptung »jede Kachel wird in ihrer eigenen Zeile
+                // gestempelt« zurückgezogen ist.
                 DrawRailUpTo(RailThroughRowFor(b), ref at);
                 // ⚠ Für die EINHEIT gilt eine ANDERE Schwelle als für das
                 // Gleis: das Gleis trägt zusätzlich seinen eigenen Versatz von
-                // +2 (RailDrawRowBias, gelesen @0x42DFE9), eine Einheit nicht.
-                // Maßgeblich ist allein, in welches Fach das GEBÄUDE kommt, und
-                // das ist `Zeile + 3` (BuildingDrawRowBias, gelesen @0x42FD4D).
-                // Die beiden Schwellen zu vermischen wäre der Fehler, den Regel
-                // 28 beschreibt: eine Zahl aus einem fremden Bezug übernehmen.
-                DrawUnitsUpTo(b.Row + BuildingDrawRowBias, ref ui);
+                // +2 (RailDrawRowBias, gelesen @0x42DFE9), eine Einheit gar
+                // keinen — ihr Fach ist `Zeile + 2` gegen die Kamera gerechnet
+                // (@0x4301B3 `lea ebx, [esi+2]`), also derselbe Rand, den auch
+                // das Gebäude bekommt (@0x42FDB8). Netto: Einheit 0, Gleis +2,
+                // Gebäude +3 bzw. +tür0.row. Die Schwellen zu vermischen wäre
+                // der Fehler, den Regel 28 beschreibt.
+                DrawUnitsUpTo(b.Row + BuildingDrawRowFor(b), ref ui);
                 DrawBuildingBody(b);
             }
         DrawRailUpTo(int.MaxValue, ref at);
@@ -18572,6 +19059,14 @@ public partial class MapEntityLayer : Node2D
         //
         // Die STRECKE laeuft in demselben Durchgang mit, Zeile fuer Zeile: sie
         // gehoert unter die Gebaeude, nicht darueber (siehe DrawRailUpTo).
+        // ⚠ 16.08.2026 — DER BODEN DER GEBAEUDE ZUERST (Fehler C14). Beton,
+        // Schotter, Schatten und Rampe sind im Original KARTENZELLEN
+        // (@0x4C97B4 schreibt sie mit +10000 in die Zelltafel 0xbdea80), nicht
+        // Teil des Objekts. Sie gehoeren damit unter alles Bewegliche. Vorher
+        // liefen sie im Zeilenfach ihres Gebaeudes mit und haben Einheiten und
+        // Gleisstuecke uebermalt, die davor gehoeren — genau die gemeldete
+        // Stelle. Siehe DrawBuildingGround.
+        DrawBuildingGround();
         DrawRailAndBuildings();
 
         // burnt-out wrecks stay on the ground, under everything alive

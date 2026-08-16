@@ -2544,6 +2544,62 @@ public partial class MapEntityLayer : Node2D
         return false;
     }
 
+    /// <summary>
+    /// <c>--shot-when=treppe</c> — <b>steht gerade ein Waggon auf einer TREPPE
+    /// der Zellenkette?</b> Also dort, wo die Strecke schräg läuft und als
+    /// (±1,0)+(0,±1) ausgelegt ist.
+    ///
+    /// <para>⚠ Nicht zu verwechseln mit <see cref="RailWagonOnCorner"/>
+    /// (<c>--shot-when=diagonal</c>): das fragt das GLEISBILD nach einem
+    /// Eckstück, und Gleis und Kette sind zwei verschiedene Strukturen, die sich
+    /// nur zu 84 % decken. Ein Bildvergleich zum Waggonbild braucht die KETTE —
+    /// mit dem Gleisbild-Auslöser traf der erste Versuch einen Waggon auf einem
+    /// geraden Kettenstück und meldete <b>0 geänderte Bildpunkte</b>, was sich
+    /// wie ein Freispruch las (Regel 31: der Vergleich muss den Fall
+    /// enthalten).</para></summary>
+    /// <summary>Was der getroffene Waggon zeigt — gesetzt von
+    /// <see cref="RailWagonOnStairs"/>, damit die Meldung den Gegenstand nennt.</summary>
+    public string StairsWhat => _stairsWhat;
+    private string _stairsWhat = "";
+
+    public bool RailWagonOnStairs(out Vector2 at, out int line)
+    {
+        at = Vector2.Zero; line = -1;
+        foreach (var kv in _freightWagons)
+        {
+            if (!_lineCell.TryGetValue(kv.Key, out var cells) || cells.Count < 3) continue;
+            foreach (var w in kv.Value)
+            {
+                if (w.Hidden || !w.Freight) continue;
+                int i = Mathf.Clamp(w.Step, 1, cells.Count - 2);
+                int dx = Mathf.RoundToInt(cells[i + 1].X - cells[i - 1].X);
+                int dy = Mathf.RoundToInt(cells[i + 1].Y - cells[i - 1].Y);
+                if (dx == 0 || dy == 0) continue;          // gerade — sagt nichts
+                at = cells[i]; line = kv.Key;
+                // ⚠ Regel 33: das Bild, um das es geht, gehoert in die Meldung.
+                // Ohne diese Zeile ist »0 geaenderte Bildpunkte« nicht von
+                // »die Kur erreicht den gezeichneten Waggon gar nicht« zu
+                // unterscheiden.
+                // ⚠ Und BEIDE Weltpunkte dazu: wohin die Kamera zielt und wohin
+                // der Waggon wirklich gezeichnet wird. Ein Bildvergleich, der
+                // »0 Punkte« meldet, ist sonst nicht von »die Kamera schaut
+                // woanders hin« zu unterscheiden — genau das ist am 16.08.
+                // dreimal passiert (Regel 24: der Prüfstand muss die STELLE
+                // nennen, nicht die Vermutung).
+                var zielP = RailCellPoint(Mathf.RoundToInt(at.X), Mathf.RoundToInt(at.Y));
+                var malP = RailLifted(new Vector2(w.Col, w.Row), w.Lift)
+                           - ComposedAnchor + WagonOverRail;
+                _stairsWhat = $"W{w.Index} Schritt {w.Step} bei ({w.Col:0.00},{w.Row:0.00}) " +
+                              $"zeigt Bild {w.Piece}; Kette laeuft ({dx:+0;-0;0},{dy:+0;-0;0})" +
+                              $" | Kameraziel {zielP} vs Malstelle {malP}" +
+                              $" (ComposedAnchor {ComposedAnchor}, Abstand " +
+                              $"{zielP.DistanceTo(malP):0} px)";
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// <summary>Die Zellen aller Waggons der gestauchten Linie, als Text neben
     /// das Bild — ein Foto allein sagt nicht, welche Sprites übereinander
     /// liegen.</summary>
