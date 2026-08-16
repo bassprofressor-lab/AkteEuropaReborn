@@ -506,6 +506,32 @@ public partial class MapEntityLayer : Node2D
         /// </summary>
         public readonly List<int> BuildQueue = new();
 
+        /// <summary>
+        /// <b>Das DEPOT dieses Gebäudes</b> — was fertig ist und noch nicht
+        /// draussen steht, als Entwurfsnummern.
+        ///
+        /// <para><b>Gelesen</b>, und zwar vollständig: das Gebäudefenster
+        /// @0x467c60 hat vier Reiter, und der erste heisst <b>Depot</b>
+        /// (0x501a48). Seine Liste sind <b>sechs u16-Plätze bei
+        /// <c>0x878e5c</c>, Schrittweite 16</b> je Gebäude (Index aus Satz
+        /// <c>+0x19</c>), <c>0xFFFF</c> = leer; die Obergrenze steht als
+        /// <c>cmp al, 6</c> @0x467FBF, und wer darüber hinaus will, bekommt
+        /// »Es gibt keinen Platz mehr im Depot.« (0x4FBF60). Ein Eintrag, dessen
+        /// Auftragsbyte <c>+0x14</c> auf <c>0x33</c> steht, wird als
+        /// » (ausgesandt)« ausgewiesen (@0x4681B7). Herausgeholt wird über den
+        /// Knopf <b>Aussenden</b> unten links (20,230).</para>
+        ///
+        /// <para>⚠ <b>Warum das überhaupt gebaut wurde:</b> der Spieler kam an
+        /// seine Einheiten nicht heran — »Flughafen, Einheiten Produzieren und
+        /// dann? Wo sehe ich die?«. Der Reiter stand da und sagte wörtlich
+        /// »noch nicht angeschlossen«.</para>
+        ///
+        /// <para>⚠ Die <see cref="BuildQueue"/> bleibt DAVOR: erst bauen, dann
+        /// liegt es im Depot, dann aussenden. Sie ist unsere Wettkampfzutat,
+        /// das Depot ist das Original — die zwei tun verschiedene Dinge und
+        /// schliessen sich nicht aus.</para></summary>
+        public readonly List<int> Depot = new();
+
         public int MenuIndex;            // pick in this factory's own menu
                                          // (auto-acquired targets are never chased)
         public float Cooldown;           // seconds until the weapon can fire again
@@ -6032,7 +6058,7 @@ public partial class MapEntityLayer : Node2D
         var cols = new EndColumn[EndColumnCount];
         for (int p = 0; p < EndColumnCount; p++) cols[p] = new EndColumn();
 
-        // lebende Einheiten je Spieler und Klasse
+        // Einheitensaetze je Spieler und Klasse
         foreach (var e in _entities)
         {
             if (e.IsProp || e.IsBuilding || e.Dead || e.HpMax <= 0) continue;
@@ -10159,6 +10185,131 @@ public partial class MapEntityLayer : Node2D
         if (warum.Count > 0)
             sb.AppendLine($"  ohne Bild sind: {string.Join(", ", warum)}");
         return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>
+    /// <c>--depot-flow</c> — <b>der ganze Weg einer Einheit: bestellen, fertig
+    /// werden, im Depot LIEGEN, ausgesandt werden, draussen STEHEN.</b>
+    ///
+    /// <para>⚠ Er übt die Mechanik aus, statt ihr Ergebnis hinzuschreiben
+    /// (Regel 11). Die Frage, die er beantworten muss, ist nicht »ist das Depot
+    /// gefüllt?«, sondern die zwei, die zusammen den Fehler ausschliessen:
+    /// <b>steht nach der Fertigstellung KEINE neue Einheit auf der Karte</b>
+    /// (sonst wäre das Depot nur Zierrat), und <b>steht sie nach dem Aussenden
+    /// DORT</b> (sonst wäre sie verloren).</para>
+    ///
+    /// <para>Er zählt die Einheiten vorher und nachher selbst — eine Zahl aus
+    /// dem Lauf, nicht aus der Mechanik, die geprüft wird (Regel N).</para></summary>
+    private void PollDepotFlow()
+    {
+        if (_depotFlow < 0 || _designs == null) return;
+        var e = _depotFlowAt >= 0 && _depotFlowAt < _entities.Count
+              ? _entities[_depotFlowAt] : null;
+        switch (_depotFlow)
+        {
+            case 0:                                     // Gebäude suchen, Lager füllen
+                for (int i = 0; i < _entities.Count; i++)
+                {
+                    var b = _entities[i];
+                    if (!b.IsBuilding || b.Dead || !IsUnitPlant(b)) continue;
+                    if (BuildableBy(b.BType).Count == 0) continue;
+                    b.Owner = b.Team = ViewPlayer;      // uebernommen, und es steht unten
+                    b.StockW = b.StockF = b.StockS = 9999;
+                    _depotFlowAt = i; _selected = i;
+                    break;
+                }
+                if (_depotFlowAt < 0)
+                { GD.Print("depot-flow: keine Fabrik auf dieser Karte"); _depotFlow = -1; return; }
+                _depotFlowUnits = UnitRecords();
+                GD.Print($"depot-flow: {BuildingTypeName(_entities[_depotFlowAt].BType)} " +
+                         $"Platz {_entities[_depotFlowAt].Slot} uebernommen und Lager gefuellt; " +
+                         $"{_depotFlowUnits} Einheitensaetze vorher, Depot " +
+                         $"{_entities[_depotFlowAt].Depot.Count}");
+                BuildPanelPick(0);
+                _depotFlow = 1;
+                return;
+
+            case 1:                                     // auf »fertig« warten
+                if (e == null) { _depotFlow = -1; return; }
+                if (e.BuildTime > 0f && e.Depot.Count == 0) return;
+                int jetzt = UnitRecords();
+                bool imDepot = e.Depot.Count == 1;
+                bool nichtDraussen = jetzt == _depotFlowUnits;
+                GD.Print($"depot-flow: fertig — Depot {e.Depot.Count} (erwartet 1: " +
+                         $"{(imDepot ? "JA" : "NEIN")}), Einheitensaetze {jetzt} " +
+                         $"gegen {_depotFlowUnits} vorher " +
+                         $"({(nichtDraussen ? "keine auf der Karte, richtig" : "SCHON DRAUSSEN — das Depot waere Zierrat")})");
+                _depotFlow = imDepot && nichtDraussen ? 2 : -1;
+                return;
+
+            case 2:                                     // aussenden
+                if (e == null) { _depotFlow = -1; return; }
+                bool ok = SendOutOfDepot(e, 0);
+                int nach = UnitRecords();
+                GD.Print($"depot-flow: aussenden {(ok ? "angenommen" : "ABGELEHNT")} — " +
+                         $"Depot {e.Depot.Count} (erwartet 0), Einheitensaetze {nach} " +
+                         $"gegen {_depotFlowUnits} vorher " +
+                         $"({(nach == _depotFlowUnits + 1 ? "eine mehr, richtig" : "NICHT auf der Karte angekommen")})");
+                GD.Print(ok && e.Depot.Count == 0 && nach == _depotFlowUnits + 1
+                         ? "depot-flow: BESTANDEN"
+                         : "depot-flow: DURCHGEFALLEN");
+                _depotFlow = -1;
+                return;
+        }
+    }
+
+    /// <summary>Wieviele Saetze die Einheitenliste hat.
+    ///
+    /// <para>⚠ NICHT die Zahl der LEBENDEN: der erste Anlauf zaehlte die und
+    /// meldete auf map_DM_4 »SCHON DRAUSSEN«, weil dort eine Schlacht laeuft und
+    /// in denselben Sekunden fuenf Einheiten STARBEN (196 -> 191). Damit standen
+    /// zwei ganz verschiedene Dinge in einem Zaehler (Regel C) — »eine ist
+    /// herausgekommen« und »welche sind gefallen«, und der Pruefstand haette
+    /// beinahe einen Fehler gemeldet, den es nicht gibt. Die LISTE waechst nur:
+    /// ein Gefallener bleibt als Satz stehen. Damit misst die Laenge genau das
+    /// eine, worum es geht.</para></summary>
+    private int UnitRecords()
+    {
+        int n = 0;
+        foreach (var x in _entities) if (!x.IsBuilding && !x.IsProp) n++;
+        return n;
+    }
+
+    private int _depotFlow = -1, _depotFlowAt = -1, _depotFlowUnits;
+
+    /// <summary>Startet <c>--depot-flow</c>.</summary>
+    public void DepotFlowStart() { _depotFlow = 0; _depotFlowAt = -1; }
+
+    /// <summary>Was im Depot des gewählten Gebäudes liegt — eine Zeile je
+    /// Einheit, mit ihrem Bild. Siehe <see cref="Entity.Depot"/>.</summary>
+    public List<UI.BuildPanel.Row> DepotRows()
+    {
+        var rows = new List<UI.BuildPanel.Row>();
+        var e = Producer();
+        if (e == null || _designs == null) return rows;
+        for (int k = 0; k < e.Depot.Count; k++)
+        {
+            var d = _designs[e.Depot[k] % _designs.Count];
+            int pic = d.Weapon >= UI.PortraitBank.InfWeaponFrom
+                    ? UI.PortraitBank.PictureOfInfantry(d.Slot)
+                    : 0;
+            // ⚠ »bezahlbar« heisst hier »kann heraus«: das Depot kostet nichts,
+            // aber ohne freien Platz an der Tuer geht nichts hinaus. Die Spalte
+            // bleibt leer — ein Preis waere hier eine Erfindung.
+            rows.Add(new UI.BuildPanel.Row(d.Name, "", true, false, pic));
+        }
+        return rows;
+    }
+
+    /// <summary>»Aussenden« aus dem Bedienfeld — die gewählte Zeile des Depots
+    /// auf die Karte stellen.</summary>
+    public void SendOutFromPanel(int k)
+    {
+        var e = Producer();
+        if (e == null) { _order = "kein Gebaeude gewaehlt"; return; }
+        if (e.Depot.Count == 0) { _order = "das Depot ist leer"; return; }
+        SendOutOfDepot(e, k);
+        UpdatePanel();
     }
 
     /// <summary>One row per thing this building can make, in the same order the
@@ -15215,10 +15366,72 @@ public partial class MapEntityLayer : Node2D
         e.BuildTime -= dt;
         if (e.BuildTime > 0f) return;
 
-        var d = _designs[e.BuildIndex % _designs.Count];
+        // ⚠⚠ 16.08.2026 — FERTIG HEISST »IM DEPOT«, nicht »auf der Karte«.
+        // Gemeldet: »Flughafen, Einheiten Produzieren und dann? Wo sehe ich
+        // die? Du sagtest Depot? Depot ist aber nicht angeschlossen?«
+        //
+        // Das Original legt eine fertige Einheit in das Depot ihres Gebäudes
+        // und stellt sie erst auf den Knopf »Aussenden« hin ins Feld. Siehe
+        // Entity.Depot für die gelesenen Fundstellen.
+        if (e.Depot.Count >= DepotSlots)
+        {
+            // Voll: die Fertigstellung WARTET, sie verfällt nicht. Bezahlt ist
+            // längst, und eine verfallene Bestellung wäre ein echter Verlust —
+            // derselbe Fehler wie C8.
+            e.BuildTime = 1f;
+            _order = DepotFullWord;
+            return;
+        }
+        var fertig = _designs[e.BuildIndex % _designs.Count];
+        e.Depot.Add(e.BuildIndex);
+        NoteEvent(e, $"{fertig.Name} fertig");
+        _order = $"{fertig.Name} fertig — im Depot ({e.Depot.Count}/{DepotSlots})";
+        NextFromQueue(e, fertig.Name);
+        UpdatePanel();
+        QueueRedraw();
+    }
+
+    /// <summary>Wieviele Einheiten ein Gebäude im Depot halten kann — <b>sechs</b>,
+    /// gelesen: die Plätze liegen bei <c>0x878e5c</c> mit Schrittweite 16, und
+    /// die Obergrenze steht als <c>cmp al, 6</c> @0x467FBF.</summary>
+    public const int DepotSlots = 6;
+
+    /// <summary>Die Meldung des Originals, wörtlich (0x4FBF60).</summary>
+    public const string DepotFullWord = "Es gibt keinen Platz mehr im Depot.";
+
+    /// <summary>Das Nachrücken der Warteschlange — unverändert aus der
+    /// Fertigstellung herausgelöst, damit das Aussenden es nicht auslöst.</summary>
+    private void NextFromQueue(Entity e, string fertigName)
+    {
+        if (_designs == null || e.BuildQueue.Count == 0) return;
+        e.BuildIndex = e.BuildQueue[0];
+        e.BuildQueue.RemoveAt(0);
+        e.BuildTime = BuildSeconds;
+        string next = _designs[e.BuildIndex % _designs.Count].Name;
+        _order = $"{fertigName} fertig — {next} folgt ({e.BuildQueue.Count} dahinter)";
+    }
+
+    /// <summary>
+    /// <b>»Aussenden«</b> — eine Einheit aus dem Depot ihres Gebäudes auf die
+    /// Karte stellen. Der Knopf sitzt im Original unten links im Gebäudefenster
+    /// (20,230).
+    /// </summary>
+    /// <returns>false, wenn kein Platz frei ist; das Gebäude behält seine
+    /// Einheit dann und der Spieler kann es später wieder versuchen.</returns>
+    public bool SendOutOfDepot(Entity e, int k)
+    {
+        if (_nav == null || _designs == null) return false;
+        if (k < 0 || k >= e.Depot.Count) return false;
+
+        var d = _designs[e.Depot[k] % _designs.Count];
         var cell = SpawnCellFor(e);
-        if (cell == null) { e.BuildTime = 1f; return; }   // blocked: try again shortly
-        NoteEvent(e, $"{d.Name} fertig");
+        if (cell == null)
+        {
+            _order = $"{d.Name} kann nicht heraus — kein freier Platz an der Tuer";
+            return false;
+        }
+        e.Depot.RemoveAt(k);
+        NoteEvent(e, $"{d.Name} ausgesandt");
 
         // +0x28 of the design record: the chassis' hp_max plus whatever the
         // weapon and the equipment add. HpOfType knows the chassis alone, so it
@@ -15271,32 +15484,20 @@ public partial class MapEntityLayer : Node2D
         // und in ein anderes hineinfaehrt — siehe NavGrid.SetHull.
         _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.GameUnitType));
         _nav.SetOccupant(u.Col, u.Row, _entities.Count - 1);
-        _order = $"{d.Name} fertig";
+        _order = $"{d.Name} ausgesandt ({e.Depot.Count} noch im Depot)";
 
         // ⚠ Und gleich HERAUS aus der Tür — siehe StepOutOfDoor. Muss NACH
         // SetOccupant stehen: die Wegsuche fragt das Belegungsgitter, und eine
         // Einheit, die noch nicht darin steht, plant durch sich selbst hindurch.
         if (!NoStepOutOfDoor) StepOutOfDoor(_entities.Count - 1, u, e);
 
-        // ⚠ 17.08.2026 — DAS NACHRÜCKEN DER WARTESCHLANGE (Fehler C8, siehe
-        // Entity.BuildQueue). Bezahlt ist beim Einreihen worden, hier wird nur
-        // noch angefangen; deshalb steht hier kein CanAfford und kein PayFor —
-        // eine zweite Prüfung würde eine bezahlte Bestellung verfallen lassen,
-        // wenn das Lager inzwischen leer ist.
-        //
-        // ⚠ Und sie steht NACH dem Absetzen, nicht davor: der Zweig über uns
-        // (»cell == null« -> BuildTime = 1f) verlässt die Routine, ohne etwas
-        // gebaut zu haben. Rückte die Schlange davor nach, verlöre eine
-        // eingekeilte Fabrik bei jedem Versuch eine bezahlte Bestellung.
-        if (e.BuildQueue.Count > 0)
-        {
-            e.BuildIndex = e.BuildQueue[0];
-            e.BuildQueue.RemoveAt(0);
-            e.BuildTime = BuildSeconds;
-            string next = _designs[e.BuildIndex % _designs.Count].Name;
-            _order = $"{d.Name} fertig — {next} folgt ({e.BuildQueue.Count} dahinter)";
-        }
+        // ⚠ Das Nachrücken der Warteschlange steht NICHT mehr hier, sondern in
+        // NextFromQueue an der FERTIGSTELLUNG. Es hängt am Bauen, nicht am
+        // Aussenden — sonst hätte ein Klick auf »Aussenden« die nächste
+        // Bestellung angestossen, ohne dass etwas fertig geworden wäre.
+        UpdatePanel();
         QueueRedraw();
+        return true;
     }
 
     /// <summary>
@@ -16733,6 +16934,7 @@ public partial class MapEntityLayer : Node2D
         if (_takeoverTimer <= 0f) { _takeoverTimer = TakeoverEverySec; TakeoverTick(); }
 
         PollBuildPanelDemo();
+        PollDepotFlow();
 
         // preview harness: start the scripted build as soon as the factory has
         // manufactured enough parts

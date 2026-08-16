@@ -400,6 +400,7 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_depotFlow) _entities.DepotFlowStart();
         if (_producePics)
         {
             GD.Print(_entities.ProducePicsCheck());
@@ -611,6 +612,8 @@ public partial class MapViewer : Node2D
     private bool _overdrawCheck;
     /// <summary><c>--produce-pics</c> — hat jede Zeile der Produktion ein Bild?</summary>
     private bool _producePics;
+    /// <summary><c>--depot-flow</c> — bestellen, im Depot liegen, aussenden.</summary>
+    private bool _depotFlow;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
     /// seines Gleises? Siehe <c>MapEntityLayer.WagonFacingCheck</c>.</summary>
     private bool _wagonFacingCheck;
@@ -1061,6 +1064,7 @@ public partial class MapViewer : Node2D
             else if (a == "--wagon-facing-check") _wagonFacingCheck = true;
             else if (a == "--overdraw-check") _overdrawCheck = true;
             else if (a == "--produce-pics") _producePics = true;
+            else if (a == "--depot-flow") _depotFlow = true;
             else if (a == "--sound-check") _soundCheck = true;
             else if (a == "--tutorial-check") _tutorialCheck = true;
             else if (a == "--script-coverage") _coverageCheck = true;
@@ -2351,6 +2355,12 @@ public partial class MapViewer : Node2D
         _baseWindow.OnResearch = () => _entities.ResearchFromPanel();
         _baseWindow.RepairNote = _entities.RepairNote;
         _baseWindow.OnRepair = () => _entities.RepairFromPanel();
+        // ⚠ 16.08.2026 — der DRITTE tote Reiter ist angeschlossen (Fehler D1).
+        // Anders als bei Forschung und Reparatur lag hier keine fertige Mechanik
+        // auf einer Taste: das Depot gab es gar nicht, fertige Einheiten
+        // sprangen direkt auf die Karte. Siehe MapEntityLayer.Entity.Depot.
+        _baseWindow.DepotRows = _entities.DepotRows;
+        _baseWindow.OnSendOut = k => _entities.SendOutFromPanel(k);
 
         _designWindow = new UI.DesignWindow
         {

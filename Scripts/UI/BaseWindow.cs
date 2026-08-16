@@ -131,6 +131,16 @@ public sealed partial class BaseWindow : PanelContainer
     public Func<string>? RepairNote;
     public Action? OnRepair;
 
+    /// <summary>Was im Depot dieses Gebäudes liegt — eine Zeile je Einheit.
+    /// ⚠ Bis zum 16.08.2026 sagte der Reiter wörtlich »noch nicht
+    /// angeschlossen«, und der Spieler kam an seine fertigen Einheiten nicht
+    /// heran. Siehe <c>MapEntityLayer.Entity.Depot</c>.</summary>
+    public Func<List<BuildPanel.Row>>? DepotRows;
+
+    /// <summary>»Aussenden« — Zeile <c>k</c> aus dem Depot auf die Karte
+    /// stellen. Der Knopf des Originals sitzt unten links (20,230).</summary>
+    public Action<int>? OnSendOut;
+
     /// <summary>Das X.</summary>
     public Action? OnClose;
 
@@ -318,6 +328,7 @@ public sealed partial class BaseWindow : PanelContainer
         {
             switch (_tab)
             {
+                case 0: OnSendOut?.Invoke(_sheet.Selected); break;
                 case 2: OnResearch?.Invoke(); break;
                 case 3: OnRepair?.Invoke(); break;
                 default:
@@ -416,11 +427,16 @@ public sealed partial class BaseWindow : PanelContainer
 
         _stock.Text = StockLine(tail);
 
-        var rows = _tab == 1 ? Rows?.Invoke() ?? new List<BuildPanel.Row>()
-                             : new List<BuildPanel.Row>();
+        var rows = _tab switch
+        {
+            1 => Rows?.Invoke() ?? new List<BuildPanel.Row>(),
+            0 => DepotRows?.Invoke() ?? new List<BuildPanel.Row>(),
+            _ => new List<BuildPanel.Row>(),
+        };
         _sheet.Note = _tab switch
         {
-            0 => "Depot — die Einheiten dieses Gebäudes.\nNoch nicht angeschlossen.",
+            0 => DepotRows == null ? "Depot — noch nicht angeschlossen."
+                 : rows.Count == 0 ? "Das Depot ist leer." : "",
             2 => ResearchNote?.Invoke() ?? "Forschung — noch nicht angeschlossen.",
             3 => RepairNote?.Invoke() ?? "Reparatur — noch nicht angeschlossen.",
             _ => rows.Count == 0 ? "Nichts zu bauen." : "",
@@ -429,11 +445,15 @@ public sealed partial class BaseWindow : PanelContainer
         // ⚠ 17.08.2026 — die Beschriftung folgt dem Reiter. Ein Knopf, der auf
         // dem Forschungsreiter »Produzieren« heisst und forscht, wäre schlimmer
         // als ein toter Reiter.
-        _make.Text = _tab switch { 2 => "Forschen", 3 => "Reparieren", _ => "Produzieren" };
+        _make.Text = _tab switch
+        { 0 => "Aussenden", 2 => "Forschen", 3 => "Reparieren", _ => "Produzieren" };
         _make.Disabled = _tab switch
         {
             2 => OnResearch == null,
             3 => OnRepair == null,
+            // Im Depot gibt es nichts zu bezahlen — nur etwas zu waehlen.
+            0 => OnSendOut == null || _sheet.Selected < 0 ||
+                 _sheet.Selected >= rows.Count,
             1 => _sheet.Selected < 0 || _sheet.Selected >= rows.Count ||
                  !rows[_sheet.Selected].Affordable,
             _ => true,
