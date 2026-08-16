@@ -2115,7 +2115,7 @@ public partial class MapEntityLayer : Node2D
                     Payload = GetI(ad, "payload"), Airframe = GetI(ad, "airframe"),
                     Attack = GetI(ad, "attack"), Defence = GetI(ad, "defence"),
                     Sight = GetI(ad, "sight"), Ammo = GetI(ad, "ammo"),
-                    Fuel = GetI(ad, "fuel"),
+                    Fuel = GetI(ad, "fuel"), KindByte = GetI(ad, "kind"),
                     CostW = GetI(ad, "cost_w"), CostF = GetI(ad, "cost_f"),
                     CostS = GetI(ad, "cost_s"),
                 });
@@ -10190,7 +10190,12 @@ public partial class MapEntityLayer : Node2D
                            yard.StockF >= d.CostF && yard.StockS >= d.CostS;
                 rows.Add(new UI.BuildPanel.Row(
                     d.Name, $"{d.CostW}/{d.CostF}/{d.CostS}", pay,
-                    i == e.MenuIndex % Mathf.Max(1, menu.Count)));
+                    i == e.MenuIndex % Mathf.Max(1, menu.Count),
+                    // Fall 1 des Zeichners (@0x450AF8 blittet einmal): ein Schiff
+                    // hat EIN Bild, gewaehlt aus Rumpf und Variante. Hier stehen
+                    // beide im Entwurf — anders als bei einer gesetzten Einheit,
+                    // wo +0x3e in die Irre fuehrt (siehe PanelPortrait).
+                    UI.PortraitBank.PictureOfShip(d.Chassis, d.Variant)));
             }
         }
         return rows;
@@ -10456,7 +10461,11 @@ public partial class MapEntityLayer : Node2D
         /// <c>Kind = r[0x2d]</c> in <c>ExeTables.AircraftTemplate</c>, ein
         /// <c>"kind"</c> in <c>ContentBuilder.WriteAircraft</c>, dann hier
         /// dieses Byte statt der Nutzlast-Tafel.</para></summary>
-        public int Kind => Payload switch
+        /// <summary>Das gelesene Kind aus <c>aircraft.json</c> (<c>+0x2d</c> der
+        /// Vorlage). 0 = die Datei ist noch die alte ohne die Spalte.</summary>
+        public int KindByte;
+
+        public int Kind => KindByte > 0 ? KindByte : Payload switch
         {
             101 => 1, 105 => 2, 100 => 10, 106 => 13, 107 => 14, _ => 0,
         };
@@ -10762,7 +10771,7 @@ public partial class MapEntityLayer : Node2D
                 Payload = GetI(t, "payload"), Airframe = GetI(t, "airframe"),
                 Attack = GetI(t, "attack"), Defence = GetI(t, "defence"),
                 Sight = GetI(t, "sight"), Ammo = GetI(t, "ammo"),
-                Fuel = GetI(t, "fuel"),
+                Fuel = GetI(t, "fuel"), KindByte = GetI(t, "kind"),
                 CostW = GetI(t, "cost_w"), CostF = GetI(t, "cost_f"),
                 CostS = GetI(t, "cost_s"),
             });

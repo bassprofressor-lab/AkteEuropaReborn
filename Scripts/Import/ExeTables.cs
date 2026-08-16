@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Import;
+﻿namespace AkteEuropaReborn.Import;
 
 using System;
 using System.Collections.Generic;
@@ -866,6 +866,39 @@ public sealed class ExeTables
     public sealed class AircraftTemplate
     {
         public int Index, Speed, Hp, Payload, Airframe, Attack, Defence, Sight, Ammo, Fuel;
+
+        /// <summary>
+        /// <b>Das sec19-Kind der Vorlage</b> — Satzbyte <c>+0x2d</c>, und damit
+        /// die Zahl, aus der das Flugzeugbild kommt
+        /// (<c>UI.PortraitBank.PictureOfAircraft</c>).
+        ///
+        /// <para>⚠ Bis zum 16.08.2026 wurde die Spalte nicht gelesen, und
+        /// <c>MapEntityLayer.AirDesign.Kind</c> erschloss das Kind stattdessen
+        /// aus der NUTZLAST — mit einer Tafel, die nur fünf der acht Vorlagen
+        /// kannte. Die drei übrigen fielen auf 0 durch, und ein am Flughafen
+        /// gekaufter <b>Spionageflieger</b> bekam deshalb kein Bild. Gemeldet
+        /// als »Bilder der Lufteinheiten fehlen noch in der Produktion«.</para>
+        ///
+        /// <para>Gelesen an den acht Sätzen der installierten GAME.EXE
+        /// (Tabelle <c>0x51b021</c>, Schrittweite 48):</para>
+        /// <code>
+        ///   Jagdflieger       101 →  1     Transport Heli    103 → 12
+        ///   Bomber            105 →  2     Kampfhubschrauber 100 → 10
+        ///   Spionageflieger   102 →  3     Treibstoffheli    106 → 13
+        ///   Mechanikerheli    104 → 11     Munitionheli      107 → 14
+        /// </code>
+        /// <para>Die fünf Zuordnungen, die die alte Nutzlast-Tafel schon hatte,
+        /// stimmen damit <b>fünf von fünf</b> überein — kein Gegenbeispiel. Und
+        /// der alte Widerspruch ist entschieden: für 103/104 sagte
+        /// <c>aircraft.json</c> 11/12 und <c>AirKindName</c> 12/11; richtig ist
+        /// <b>103 → 12</b> und <b>104 → 11</b>. Nach dem Namen zuzuordnen wäre
+        /// Raten gewesen, deshalb blieb es bis hierher offen.</para>
+        ///
+        /// <para>⚠ Der <b>Transport Heli</b> (Kind 12) hat auch danach kein
+        /// Bild — Eintrag 7 der Bytetafel @0x450DC8. Das ist originaltreu und
+        /// kein Ausfall.</para></summary>
+        public int Kind;
+
         public string Name = "", Short = "";
     }
 
@@ -902,6 +935,7 @@ public sealed class ExeTables
                 Sight = r[0x27],
                 Ammo = r[0x28],
                 Fuel = BitConverter.ToUInt16(r, 0x2b),
+                Kind = r[0x2d],
             });
         }
         return list;

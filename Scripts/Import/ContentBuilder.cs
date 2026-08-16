@@ -1107,7 +1107,11 @@ public sealed class ContentBuilder
             sb.Append($"{{\"index\":{a.Index},\"name\":\"{Esc(a.Name)}\",\"short\":\"{Esc(a.Short)}\",");
             sb.Append($"\"speed\":{a.Speed},\"hp\":{a.Hp},\"payload\":{a.Payload},\"airframe\":{a.Airframe},");
             sb.Append($"\"attack\":{a.Attack},\"defence\":{a.Defence},\"sight\":{a.Sight},");
-            sb.Append($"\"ammo\":{a.Ammo},\"fuel\":{a.Fuel}}}");
+            // ⚠ »kind« ist das sec19-Kind (+0x2d) und die Zahl, aus der das
+            // Flugzeugbild kommt. Ohne sie musste die Engine es aus der
+            // Nutzlast erschliessen, und drei der acht Vorlagen fielen durch —
+            // siehe ExeTables.AircraftTemplate.Kind.
+            sb.Append($"\"ammo\":{a.Ammo},\"fuel\":{a.Fuel},\"kind\":{a.Kind}}}");
         }
         sb.Append("]}");
         File.WriteAllText(_dst + "/Maps/aircraft.json", sb.ToString(), new UTF8Encoding(false));
