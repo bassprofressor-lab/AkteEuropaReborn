@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Import;
+﻿namespace AkteEuropaReborn.Import;
 
 using System;
 using System.Collections.Generic;
@@ -33,6 +33,9 @@ public static class EntitiesJson
         public List<int> Money = new();
         public List<CwmExtra.Progress> Progress = new();
         public List<CwmExtra.Special> Special = new();
+        /// <summary>Die Ware des MARKTES (Typ 17) — sec94 + sec95.
+        /// Siehe CwmExtra.MarketOffers.</summary>
+        public List<CwmExtra.MarketOffer> Market = new();
         public List<CwmExtra.RailNode> RailNodes = new();
         public List<CwmExtra.Link> Links = new();
         public List<CwmExtra.RailCell> RailCells = new();
@@ -62,6 +65,7 @@ public static class EntitiesJson
             Money = CwmExtra.Money(m),
             Progress = CwmExtra.Progresses(m),
             Special = CwmExtra.Specials(m),
+            Market = CwmExtra.MarketOffers(m),
             RailNodes = CwmExtra.RailNodes(m),
             RailCells = CwmExtra.RailCells(m),
             Players = CwmExtra.Players(m),
@@ -230,6 +234,21 @@ public static class EntitiesJson
             w.Obj();
             w.Num("slot", p.Slot).Num("total", p.Total).Num("done", p.Done);
             w.Num("percent", p.Percent).Str("raw", Hex(p.Raw));
+            w.End();
+        }
+        w.End();
+
+        // ⚠ Die Ware des MARKTES (Typ 17). Bis zum 16.08.2026 wurden sec94 und
+        // sec95 gar nicht gelesen — der Markt fehlte vollstaendig, und der Typ
+        // galt als »Deko des Editors«. Siehe CwmExtra.MarketOffers.
+        w.Key("market").Arr();
+        foreach (var o in d.Market)
+        {
+            w.Obj();
+            w.Num("slot", o.Slot).Num("price", o.Price).Num("design", o.Design);
+            w.Num("unit_type", o.UnitType).Num("game_unit_type", o.GameUnitType);
+            w.Num("energie", o.Energie).Num("attack", o.Attack).Num("defence", o.Defence);
+            w.Num("speed", o.Speed).Num("sight", o.Sight).Num("range", o.Range);
             w.End();
         }
         w.End();

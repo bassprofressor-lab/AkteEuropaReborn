@@ -209,6 +209,72 @@ public static class CwmExtra
         public string Name = "";
     }
 
+    /// <summary>
+    /// <b>Ein Angebot des MARKTES</b> — eine fertige Einheit, die dort für Geld
+    /// zu haben ist.
+    /// </summary>
+    public sealed class MarketOffer
+    {
+        /// <summary>Platz 0..49 in sec94/sec95.</summary>
+        public int Slot;
+        /// <summary>Der Preis aus sec95. <b>0 heisst: Platz frei</b> — so
+        /// zählt das Original selbst (@0x4C0860 / @0x4C0D28).</summary>
+        public int Price;
+        /// <summary>Die Entwurfsnummer (+0x43) — damit löst sich das Angebot
+        /// gegen sec47 zu einem Namen auf.</summary>
+        public int Design;
+        public int UnitType, GameUnitType, Attack, Defence, Energie, Speed, Sight, Range;
+    }
+
+    /// <summary>
+    /// <b>Die Ware des Marktes</b> — Gebäudetyp 17, das »Geschäftszentrum«.
+    ///
+    /// <para><b>Gelesen.</b> Der Markt hält seinen Bestand in ZWEI Sektionen,
+    /// und beide sind 50 Plätze lang:</para>
+    /// <list type="bullet">
+    /// <item><b>sec94</b> — <c>0xf3c</c> = 3900 B = <b>50 × 78</b> (Laufzeit
+    /// <c>0x82AA30</c>). 78 ist die Einheitensatzbreite: das sind fünfzig
+    /// FERTIGE Einheiten, keine Entwürfe.</item>
+    /// <item><b>sec95</b> — <c>0x64</c> = 100 B = <b>50 × u16</b> (Laufzeit
+    /// <c>0x81A3A8</c>): die Preise. <c>0</c> heisst »Platz frei«, und genau so
+    /// zählt das Original (Zählschleife @0x4C0860, Suchschleife @0x4C0D28).</item>
+    /// </list>
+    ///
+    /// <para>Der Preis ist NICHT fest: @0x451010 rechnet
+    /// <c>30·(Bauteil₁+₂+₃)·Leben / Entwurf[+0x1e]</c> mal einem Prozentwert
+    /// und legt <c>× 5/2</c> davon in sec95 ab. Dasselbe Modell kommt deshalb
+    /// mit verschiedenen Preisen vor.</para>
+    ///
+    /// <para>⚠ Bis zum 16.08.2026 hat das Projekt diese zwei Sektionen gar
+    /// nicht angefasst — der ganze Markt fehlte, und Typ 17 galt als »Deko des
+    /// Editors«. Er ist keine: der Spieler fährt eine eigene Einheit auf eine
+    /// der vier freien Eckzellen des 4×4-Grundrisses, dann öffnet das Fenster
+    /// (@0x43E90C prüft genau diese vier Zellen im Belegungsraster).</para></summary>
+    public static List<MarketOffer> MarketOffers(CwmFile m)
+    {
+        var list = new List<MarketOffer>();
+        var s94 = m.Sec(94);
+        var s95 = m.Sec(95);
+        if (s94 == null || s95 == null) return list;
+        int n = Math.Min(s94.Length / CwmData.EntityStride, s95.Length / 2);
+        for (int i = 0; i < n; i++)
+        {
+            int price = BitConverter.ToUInt16(s95, i * 2);
+            if (price == 0) continue;                    // freier Platz
+            int o = i * CwmData.EntityStride;
+            list.Add(new MarketOffer
+            {
+                Slot = i, Price = price,
+                Design = s94[o + 0x43],
+                UnitType = s94[o + 0x0f], GameUnitType = s94[o + 0x0a],
+                Energie = s94[o + 0x08], Attack = s94[o + 0x26],
+                Defence = s94[o + 0x27], Speed = s94[o + 0x20],
+                Sight = s94[o + 0x2c], Range = s94[o + 0x2b],
+            });
+        }
+        return list;
+    }
+
     public static List<Special> Specials(CwmFile m)
     {
         var list = new List<Special>();
