@@ -584,6 +584,22 @@ public partial class MapEntityLayer : Node2D
         public int Speed, Hp, HpMax, Ammo, AmmoMax, Fuel, FuelMax;
         public int Payload, Airframe, Attack, Defence, Sight;
 
+        /// <summary>Feinlage innerhalb der Zelle, <b>0..39</b> — Satz +0x04/+0x06.
+        /// Die Flugbewegung des Originals rechnet auf ihnen und schaltet die
+        /// Zelle erst beim Überlauf weiter. Siehe
+        /// <see cref="Import.CwmExtra.Special"/>.</summary>
+        public int FineX, FineY;
+
+        /// <summary>Die Flugrichtung, Satz +0x0c — <b>in Grad</b> (die Konstante
+        /// @0x4f9208 ist 57,2958 = 180/π). ⚠ Die schwächste der importierten
+        /// Grössen: hergeleitet, an den Daten nicht bestätigt.</summary>
+        public int Dir;
+
+        /// <summary>Laufender und geplanter Auftrag, Satz +0x10/+0x11.
+        /// 1 = »flieg nach (x,y)«, 7 = mit Kunden, 10/11 = die zwei
+        /// Versorgungsaufträge.</summary>
+        public int Order, Order2;
+
         /// <summary>What is left of the payload (record +0x31). A full top-up
         /// of one customer costs 50, a Nachschub-Posten refills it to 255.</summary>
         public int Cargo;
@@ -2222,6 +2238,13 @@ public partial class MapEntityLayer : Node2D
                     // with their airfield's owner, none disagree.
                     Owner = GetI(sp2, "owner", -1),
                     Cargo = GetI(sp2, "cargo"),
+                    // ⚠ Fehler D6: ohne diese fuenf steht jedes Flugzeug still.
+                    // Siehe Import/CwmExtra.Special.FineX fuer die gelesene
+                    // Flugbewegung; FineX/FineY sind an 190 Saetzen belegt
+                    // (restlos 0..39), Dir ist die schwaechste der drei.
+                    FineX = GetI(sp2, "fine_x"), FineY = GetI(sp2, "fine_y"),
+                    Dir = GetI(sp2, "dir"),
+                    Order = GetI(sp2, "order"), Order2 = GetI(sp2, "order2"),
                     Footprint = CellRect(ox, oy, col, row, el),
                 };
                 sp.Pos = sp.Footprint.Position + new Vector2(TileW / 2f, TileH / 2f);

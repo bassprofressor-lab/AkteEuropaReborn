@@ -158,6 +158,53 @@ public static class CwmExtra
         public int Slot, Col, Row, Kind, Speed, Hp, HpMax, Ammo, AmmoMax;
         public int Fuel, FuelMax, Payload, Airframe, Attack, Defence, Sight;
         public int Owner, Cargo, Customer;
+
+        /// <summary>
+        /// <b>Was ein Flugzeug fliegen lässt</b> — bis zum 16.08.2026 gar nicht
+        /// gelesen, und deshalb standen die Flugzeuge der Menü-Demos still
+        /// (Fehler D6: »In einer Demo sieht man Bomber auf einer Karte, die
+        /// stehen aber nur in der Luft«).
+        ///
+        /// <para>Die Flugbewegung steht im gemeinsamen Abschluss von
+        /// <c>move_airplanes</c> (@0x425050…0x425120), also HINTER dem Verteiler
+        /// und damit für jedes Kind:</para>
+        /// <code>
+        ///   al = byte[+0x6ddf7c]        ; die RICHTUNG
+        ///   fdiv [0x4f9208]             ; die Konstante ist 57,2958 = 180/pi,
+        ///                               ;   der Winkel ist also in GRAD
+        ///   fsin * Geschwindigkeit      ; dx
+        ///   fcos * Geschwindigkeit      ; dy
+        ///   feinX += dx  @0x42508C   bei &gt;= 40: feinX -= 40, col++, Sprit--
+        ///   feinY += dy  @0x4250E1   bei &gt;= 40: feinY -= 40, row++, Sprit--
+        /// </code>
+        /// <para>Ein Flugzeug fliegt also nach seiner <b>Richtung</b>, nicht nach
+        /// seinem Kunden — geradeaus, bis der Sprit alle ist.</para>
+        ///
+        /// <para><b>Die Umrechnung Laufzeit → Datei</b> steht auf zwei Ankern:
+        /// <c>Customer</c> liegt in der Datei bei <c>+0x2e</c> und zur Laufzeit
+        /// bei <c>0x6ddf9e</c> (Satzbasis <b>0x6ddf70</b>), und die Schrittweite
+        /// ist auf beiden Seiten <b>68</b> (Datei <c>SpecialStride</c>, Laufzeit
+        /// <c>ecx·17·4</c>).</para>
+        ///
+        /// <para>✅ <b>Belegt</b> an 190 Flugzeugsätzen aller Demo-Spielstände:
+        /// <see cref="FineX"/> und <see cref="FineY"/> liegen <b>restlos in
+        /// 0..39</b> — genau der Bereich, den der Code prüft
+        /// (<c>cmp ax, 0x28</c>), kein einziger Ausreisser.</para>
+        ///
+        /// <para>⚠ <b><see cref="Dir"/> ist die schwächste der drei.</b> Sie ist
+        /// über dasselbe Offset-Mapping hergeleitet, aber ihre Werte (0, 2..10,
+        /// 25; 84 von 190 auf der 8) <b>stützen</b> die Deutung »Winkel in Grad«
+        /// nicht — sie widersprechen ihr nur nicht. Wer sie anwendet, prüfe das
+        /// Ergebnis im BILD.</para></summary>
+        public int FineX, FineY, Dir;
+
+        /// <summary>Der laufende und der geplante Auftrag (<c>+0x10</c> /
+        /// <c>+0x11</c>, Laufzeit <c>0x6ddf80/81</c>). Gelesen sind 1 (»flieg
+        /// nach x,y«, ohne Kunden), 3..5 (nicht überschreibbar), 7 (mit Kunden),
+        /// 10 und 11 (die zwei Versorgungsaufträge). ✅ Über 190 Sätze kommt
+        /// <b>kein Wert ausserhalb {0,1,4,6,7,10,11}</b> vor.</summary>
+        public int Order, Order2;
+
         public bool Stored;
         public string Name = "";
     }
@@ -185,6 +232,13 @@ public static class CwmExtra
                 Attack = s[o + 0x22], Defence = s[o + 0x23], Sight = s[o + 0x24],
                 Owner = s[o + 0x09], Cargo = s[o + 0x31],
                 Customer = BitConverter.ToUInt16(s, o + 0x2e),
+                // ⚠ Siehe Special.FineX: ohne diese fünf steht jedes Flugzeug
+                // still. Speed liegt bei +0x0d — die Richtung DIREKT DANEBEN
+                // bei +0x0c, und genau die fehlte.
+                FineX = BitConverter.ToUInt16(s, o + 0x04),
+                FineY = BitConverter.ToUInt16(s, o + 0x06),
+                Dir = s[o + 0x0c],
+                Order = s[o + 0x10], Order2 = s[o + 0x11],
             });
         }
         return list;

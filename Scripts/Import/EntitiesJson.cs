@@ -246,6 +246,10 @@ public static class EntitiesJson
             w.Num("payload", s.Payload).Num("airframe", s.Airframe);
             w.Num("attack", s.Attack).Num("defence", s.Defence).Num("sight", s.Sight);
             w.Num("owner", s.Owner).Num("cargo", s.Cargo).Num("customer", s.Customer);
+            // ⚠ Ohne diese fünf steht jedes Flugzeug still — siehe
+            // CwmExtra.Special.FineX für die gelesene Flugbewegung (D6).
+            w.Num("fine_x", s.FineX).Num("fine_y", s.FineY).Num("dir", s.Dir);
+            w.Num("order", s.Order).Num("order2", s.Order2);
             w.End();
         }
         w.End();

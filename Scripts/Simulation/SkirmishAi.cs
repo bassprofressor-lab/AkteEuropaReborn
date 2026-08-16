@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using Godot;
 
@@ -951,7 +951,10 @@ public partial class MapEntityLayer : Node2D
         return "KI " + string.Join(" ", _ai.Select(a =>
             $"P{a.Player}:{ArmyOf(a.Player).Count}E/{a.Wave.Count}W/{a.Built}b/{a.Waves}a" +
             $"/{(a.Grabber >= 0 ? 1 : 0)}g/{a.Taken}t" +
-            (a.Plan != null ? $"/{a.FromPlan}p" : "")));
+            (a.Plan != null ? $"/{a.FromPlan}p" : "")))
+            // ⚠ Seit dem Depot (16.08.2026) ist »gebaut« nicht mehr dasselbe wie
+            // »steht auf der Karte«. Diese zwei Zahlen schliessen die Luecke.
+            + $" || Depot: {AiDepotSent} ausgesandt, {AiDepotStuck}x kein Platz";
     }
 
     /// <summary>Was die Computerspieler aus ihrem Programm gezogen haben, mit
@@ -1048,6 +1051,22 @@ public partial class MapEntityLayer : Node2D
             // er ein eigener Eintrag der KI-Runde (Takte 16,20,…,44) und laeuft
             // damit auch dann, wenn gerade nichts entschieden wird.
             AiSweep(a, dt);
+
+            // ⚠⚠ 16.08.2026 — DAS DEPOT LEEREN (Fehler F der Liste E, und es ist
+            // eine REGRESSION von diesem Tag). Seit fertige Einheiten nicht mehr
+            // direkt auf der Karte stehen, sondern im Depot ihres Gebäudes
+            // liegen (siehe MapEntityLayer.Entity.Depot), muss sie jemand
+            // herausholen. Der Mensch hat dafür den Knopf »Aussenden«; die KI
+            // hatte gar nichts, und ihre Einheiten blieben liegen — gemeldet als
+            // »Die AI im Gefecht scheint Ihre Einheiten nicht aus dem Depot zu
+            // senden«.
+            //
+            // Das steht VOR dem Denk-Takt und nicht darin: das Aussenden ist
+            // keine Entscheidung, sondern die Fortsetzung des Bauens. Eine KI,
+            // die nur alle paar Sekunden denkt, dürfte sonst ihr Depot
+            // verstopfen und danach nicht mehr produzieren (das Depot hat sechs
+            // Plätze, und ist es voll, wartet die Fertigstellung).
+            AiEmptyDepots(a);
 
             a.Think -= dt;
             a.AttackTimer -= dt;
@@ -1503,6 +1522,42 @@ public partial class MapEntityLayer : Node2D
         a.FromPlan++;
         if (a.PlanNames.Count < 12) a.PlanNames.Add(d.Name);
     }
+
+    /// <summary>
+    /// <b>Alles aussenden, was in den Depots dieses KI-Spielers liegt.</b>
+    ///
+    /// <para>⚠ <b>UNSERE SETZUNG, und sie ist nötig</b>, aber sie ist bewusst
+    /// die einfachste: die KI sendet SOFORT und ALLES aus. Ob das Original seine
+    /// KI Einheiten im Depot sammeln lässt, ist <b>nicht gelesen</b> — was
+    /// gelesen ist, ist nur das Depot selbst (sechs Plätze, 0x878e5c). Bis
+    /// dahin ist »sofort raus« das Verhalten, das dem Stand vor dem Depot
+    /// entspricht, und damit das, was am wenigsten kaputtmacht.</para>
+    ///
+    /// <para>⚠ Schlägt das Aussenden fehl (kein freier Platz an der Tür), bleibt
+    /// die Einheit liegen und wird beim nächsten Durchgang erneut versucht —
+    /// <see cref="MapEntityLayer.SendOutOfDepot"/> gibt dafür false zurück,
+    /// statt sie zu verwerfen.</para></summary>
+    private void AiEmptyDepots(AiPlayer a)
+    {
+        foreach (var b in _entities)
+        {
+            if (!b.IsBuilding || b.Dead || b.Owner != a.Player) continue;
+            // rückwärts wäre falsch: das Original nimmt den ersten Platz, und
+            // die Reihenfolge ist die der Fertigstellung.
+            int wache = 0;
+            while (b.Depot.Count > 0 && wache++ < DepotSlots)
+            {
+                if (!SendOutOfDepot(b, 0)) { AiDepotStuck++; break; }
+                AiDepotSent++;
+            }
+        }
+    }
+
+    /// <summary>Wieviele Einheiten die KI aus Depots herausgeholt hat, und wie
+    /// oft es nicht ging. ⚠ Regel 33: ohne diese zwei Zahlen ist »die KI baut«
+    /// nicht von »die KI baut und alles bleibt liegen« zu unterscheiden — genau
+    /// das war der gemeldete Fehler.</summary>
+    public int AiDepotSent, AiDepotStuck;
 
     // ================= Zeilenart 1: die Flugzeuge ============================
     //
