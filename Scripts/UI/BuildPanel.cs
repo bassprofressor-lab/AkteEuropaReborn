@@ -54,9 +54,31 @@ public partial class BuildPanel : Control
     /// <summary>One buildable thing.</summary>
     public readonly struct Row
     {
-        public Row(string name, string cost, bool affordable, bool current)
-        { Name = name; Cost = cost; Affordable = affordable; Current = current; }
+        public Row(string name, string cost, bool affordable, bool current, int pic = 0)
+        { Name = name; Cost = cost; Affordable = affordable; Current = current; Pic = pic; }
         public string Name { get; }
+
+        /// <summary>
+        /// <b>Das fertige Bild dieses Entwurfs</b> als Bildnummer der
+        /// <see cref="PortraitBank"/> — <c>0</c> heisst »keins gesetzt, nimm den
+        /// Weg über Fahrwerk + Aufbauteil«.
+        ///
+        /// <para>Gebraucht wird das, weil der Zeichner des Originals (@0x4508A0)
+        /// <b>sechs Fälle</b> hat und nur Fall 0 aus Fahrwerk und Aufbauteil
+        /// besteht. Ein Flugzeug und ein Fußsoldat haben je EIN eigenes Bild,
+        /// und das Baufenster kam bisher gar nicht an sie heran: es schlug den
+        /// Entwurf über seinen Namen in <c>UnitStatBook</c> nach und bekam für
+        /// alles, was nicht in sec47 steht, nichts. Gemeldet als »Bilder der
+        /// Lufteinheiten fehlen noch in der Produktion« und dasselbe für die
+        /// Infanterie.</para>
+        ///
+        /// <para>Die Zeile weiss selbst, aus welchem Zweig sie kommt — deshalb
+        /// wird die Bildnummer dort gesetzt, wo die Zeile entsteht
+        /// (<c>MapEntityLayer.BuildPanelRows</c>), und nicht im Fenster noch
+        /// einmal erschlossen. Zwei Quellen für dieselbe Sache waren hier schon
+        /// einmal der Fehler.</para></summary>
+        public int Pic { get; }
+
         /// <summary>What it costs, already in the units that building pays in —
         /// parts for a factory, money for the airfield and the dock.</summary>
         public string Cost { get; }

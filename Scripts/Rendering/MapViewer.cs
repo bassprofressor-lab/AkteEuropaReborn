@@ -400,6 +400,12 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_producePics)
+        {
+            GD.Print(_entities.ProducePicsCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_wagonFacingCheck)
         {
             GD.Print(_entities.WagonFacingCheck());
@@ -603,6 +609,8 @@ public partial class MapViewer : Node2D
     /// <summary><c>--overdraw-check</c> — welche Gebäudekachel übermalt welche
     /// Einheit und welches Gleisstück. Siehe <c>MapEntityLayer.OverdrawCheck</c>.</summary>
     private bool _overdrawCheck;
+    /// <summary><c>--produce-pics</c> — hat jede Zeile der Produktion ein Bild?</summary>
+    private bool _producePics;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
     /// seines Gleises? Siehe <c>MapEntityLayer.WagonFacingCheck</c>.</summary>
     private bool _wagonFacingCheck;
@@ -1052,6 +1060,7 @@ public partial class MapViewer : Node2D
             else if (a == "--stueck-alt") MapEntityLayer.StueckAlt = true;
             else if (a == "--wagon-facing-check") _wagonFacingCheck = true;
             else if (a == "--overdraw-check") _overdrawCheck = true;
+            else if (a == "--produce-pics") _producePics = true;
             else if (a == "--sound-check") _soundCheck = true;
             else if (a == "--tutorial-check") _tutorialCheck = true;
             else if (a == "--script-coverage") _coverageCheck = true;

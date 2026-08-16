@@ -294,6 +294,13 @@ public static class PortraitBank
             : "";
     }
 
+    /// <summary>Ab welcher WAFFENZEILE ein Entwurf ein Fußsoldat ist und kein
+    /// Fahrzeug — <c>0xB9</c>, die Verzweigung in Fall 0 des Zeichners
+    /// @0x4508A0 (siehe den Block darunter). Wer aus einem Entwurf ein Bild
+    /// machen will, braucht genau diese Schwelle: darunter Fahrwerk + Aufbauteil,
+    /// darüber <see cref="PictureOfInfantry"/>.</summary>
+    public const int InfWeaponFrom = 0xB9;
+
     // ---- die zwölf Infanteriebilder (Folge 403) -----------------------------
     //
     // Fall 0 des Zeichners 0x4508A0 verzweigt bei WAFFE >= 0xB9 in den

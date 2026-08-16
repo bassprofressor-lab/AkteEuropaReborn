@@ -443,9 +443,18 @@ public sealed partial class BaseWindow : PanelContainer
         string name = _sheet.Selected >= 0 && _sheet.Selected < rows.Count
             ? rows[_sheet.Selected].Name : "";
         _stats.Text = StatsFor(name);
-        // Das Bild des markierten Entwurfs: Fall 0 des Zeichners, also
-        // sec47 +0x18 unten und +0x17 oben — siehe Preview.
-        if (name.Length > 0 && UnitStatBook.TryGet(name, out var pe))
+        // Das Bild des markierten Entwurfs. ⚠ Der Zeichner des Originals hat
+        // SECHS Fälle, und nur Fall 0 setzt sich aus Fahrwerk (sec47 +0x18) und
+        // Aufbauteil (+0x17) zusammen. Ein Flugzeug und ein Fußsoldat bringen
+        // je EIN fertiges Bild mit; die Zeile trägt es in `Pic`, weil nur sie
+        // weiß, aus welchem Zweig sie kommt. Bis zum 16.08.2026 fragte diese
+        // Stelle ausschließlich UnitStatBook — und das kennt weder Flugzeuge
+        // noch Fußsoldaten, weshalb der Kasten dort leer blieb.
+        int pic = _sheet.Selected >= 0 && _sheet.Selected < rows.Count
+                ? rows[_sheet.Selected].Pic : 0;
+        if (pic > 0)
+            _preview.SetPicture(pic);
+        else if (name.Length > 0 && UnitStatBook.TryGet(name, out var pe))
             _preview.Set(pe.Propulsion, pe.Weapon);
         else
             _preview.Set(0, 0);
@@ -613,6 +622,10 @@ public sealed partial class BaseWindow : PanelContainer
     {
         private int _chassis, _weapon;
 
+        /// <summary>Ein FERTIGES Bild statt Fahrwerk + Aufbauteil — die Fälle des
+        /// Zeichners, die nur eines haben (Flugzeug, Fußsoldat). 0 = keins.</summary>
+        private int _pic;
+
         /// <summary>Wieviele Bilder der letzte Zeichenlauf gemalt hat.</summary>
         public int Drawn { get; private set; } = -1;
 
@@ -620,23 +633,37 @@ public sealed partial class BaseWindow : PanelContainer
 
         public void Set(int chassis, int weapon)
         {
-            if (chassis == _chassis && weapon == _weapon) return;
-            _chassis = chassis; _weapon = weapon;
+            if (chassis == _chassis && weapon == _weapon && _pic == 0) return;
+            _chassis = chassis; _weapon = weapon; _pic = 0;
+            QueueRedraw();
+        }
+
+        /// <summary>Ein Entwurf mit EINEM eigenen Bild — Flugzeug oder
+        /// Fußsoldat. Setzt Fahrwerk und Aufbauteil zurück, damit die beiden
+        /// Wege sich nicht überlagern.</summary>
+        public void SetPicture(int pic)
+        {
+            if (pic == _pic) return;
+            _pic = pic; _chassis = _weapon = 0;
             QueueRedraw();
         }
 
         public override void _Draw()
         {
             var box = new Rect2(Vector2.Zero, Size);
-            if (PortraitBank.Ready) Drawn = PortraitBank.DrawUnit(this, box, _chassis, _weapon);
-            else { DrawRect(box, BoxBg); Drawn = 0; }
+            if (!PortraitBank.Ready) { DrawRect(box, BoxBg); Drawn = 0; }
+            else if (_pic > 0) Drawn = PortraitBank.DrawPictures(this, box, _pic, 0);
+            else Drawn = PortraitBank.DrawUnit(this, box, _chassis, _weapon);
             DrawRect(box, new Color(0.16f, 0.16f, 0.15f), false, 1f);
         }
 
         public string WatchLine()
-            => $"Fahrwerk {_chassis} (Bild {PortraitBank.IconOfComponent(_chassis)}) + " +
-               $"Aufbauteil {_weapon} (Bild {PortraitBank.IconOfComponent(_weapon)}) " +
-               $"= {Drawn} Bilder auf {Size.X:0}x{Size.Y:0} an {GlobalPosition.X:0},{GlobalPosition.Y:0}";
+            => _pic > 0
+               ? $"Einzelbild {_pic} = {Drawn} Bilder auf {Size.X:0}x{Size.Y:0} " +
+                 $"an {GlobalPosition.X:0},{GlobalPosition.Y:0}"
+               : $"Fahrwerk {_chassis} (Bild {PortraitBank.IconOfComponent(_chassis)}) + " +
+                 $"Aufbauteil {_weapon} (Bild {PortraitBank.IconOfComponent(_weapon)}) " +
+                 $"= {Drawn} Bilder auf {Size.X:0}x{Size.Y:0} an {GlobalPosition.X:0},{GlobalPosition.Y:0}";
     }
 
     /// <summary>Der schwarze Listenkasten: Name links, Preis rechts, eine Zeile

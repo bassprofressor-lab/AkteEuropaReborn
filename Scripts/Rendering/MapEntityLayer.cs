@@ -10055,6 +10055,73 @@ public partial class MapEntityLayer : Node2D
                  $"Bauzeit {b.BuildTime:0.0}s");
     }
 
+    /// <summary>
+    /// <c>--produce-pics</c> — <b>hat jede Zeile der Produktion ein Bild?</b>
+    ///
+    /// <para>Zu »Bilder der Lufteinheiten fehlen noch in der Produktion« und
+    /// demselben für die Infanterie. Gezählt wird über <b>jedes</b> produzierende
+    /// Gebäude der Karte und jede seiner Zeilen (Regel T — drei Stichproben
+    /// lesen sich wie ein Freispruch und sind keiner), aufgeschlüsselt nach der
+    /// Herkunft des Bildes.</para>
+    ///
+    /// <para>⚠ »Kein Bild« ist nicht durchweg ein Fehler: von den vierzehn
+    /// Flugzeug-Kinds haben <b>sieben</b> im Original keines (Bytetafel
+    /// @0x450DC8, Eintrag 7 = Fehlerzweig »Wrong airplane type«). Der Prüfstand
+    /// weist sie darum getrennt aus, statt sie in eine Fehlerzahl zu mischen
+    /// (Regel C: zwei verschiedene Mängel dürfen nie in denselben Zähler).</para></summary>
+    public string ProducePicsCheck()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"produce-pics{(UI.PortraitBank.Ready ? "" : "  ⚠ BANK NICHT BEREIT: " + UI.PortraitBank.Trouble)}");
+        int merk = _selected;
+        int zeilen = 0, mitBild = 0, ueberTeile = 0, ohne = 0, uebernommen = 0;
+        var proTyp = new Dictionary<string, (int n, int bild, int teile, int ohne)>();
+        // ⚠ Regel C: »ohne Bild« mischt sonst zwei ganz verschiedene Dinge —
+        // ein Flugzeug, dessen Kind im Original GAR KEIN Bild hat (sieben der
+        // vierzehn, Bytetafel @0x450DC8), und einen echten Ausfall. Die Namen
+        // werden darum mitgeschrieben, damit die Zahl nachprüfbar ist.
+        var warum = new List<string>();
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var b = _entities[i];
+            if (!b.IsBuilding || b.Dead) continue;
+            _selected = i;
+            // ⚠ Producer() laesst nur Gebaeude des SICHTSPIELERS durch. Auf einer
+            // Eroberungskarte gehoeren Flughaefen und Fabriken aber dem
+            // neutralen Besitzer, und genau der Flughafen ist der gemeldete
+            // Fall — ohne diesen Griff meldet der Pruefstand »kein Flughafen«
+            // und misst seine eigene Auswahl (Regel 30). Also kurz uebernehmen
+            // und es in der Ausgabe SAGEN.
+            int besitzerMerk = b.Owner;
+            if (b.Owner != ViewPlayer) { b.Owner = ViewPlayer; uebernommen++; }
+            var rows = BuildPanelRows();
+            b.Owner = besitzerMerk;
+            if (rows.Count == 0) continue;
+            string typ = BuildingTypeName(b.BType);
+            proTyp.TryGetValue(typ, out var t);
+            foreach (var r in rows)
+            {
+                zeilen++;
+                bool teile = r.Pic == 0 && UI.UnitStatBook.TryGet(r.Name, out _);
+                if (r.Pic > 0) { mitBild++; t.bild++; }
+                else if (teile) { ueberTeile++; t.teile++; }
+                else { ohne++; t.ohne++; if (!warum.Contains(r.Name)) warum.Add(r.Name); }
+            }
+            proTyp[typ] = (t.n + 1, t.bild, t.teile, t.ohne);
+        }
+        _selected = merk;
+        sb.AppendLine($"  {uebernommen} Gebaeude fuer die Messung UEBERNOMMEN " +
+                      "(sonst laesst Producer() nur die des Sichtspielers durch)");
+        sb.AppendLine($"  {zeilen} Zeilen: {mitBild} mit eigenem Bild, {ueberTeile} " +
+                      $"ueber Fahrwerk+Aufbauteil, {ohne} OHNE");
+        foreach (var kv in proTyp.OrderByDescending(k => k.Value.ohne))
+            sb.AppendLine($"    {kv.Key,-18} {kv.Value.n,2}x  eigenes Bild {kv.Value.bild,3}  " +
+                          $"Teile {kv.Value.teile,3}  ohne {kv.Value.ohne,3}");
+        if (warum.Count > 0)
+            sb.AppendLine($"  ohne Bild sind: {string.Join(", ", warum)}");
+        return sb.ToString().TrimEnd();
+    }
+
     /// <summary>One row per thing this building can make, in the same order the
     /// N key steps through, so the two ways of choosing cannot disagree.</summary>
     public List<UI.BuildPanel.Row> BuildPanelRows()
@@ -10069,9 +10136,17 @@ public partial class MapEntityLayer : Node2D
             for (int i = 0; i < menu.Count; i++)
             {
                 var d = _designs[menu[i]];
+                // ⚠ Ein FUSSSOLDAT hat ein eigenes Bild und besteht nicht aus
+                // Fahrwerk + Aufbauteil. Die Schwelle ist gelesen: Fall 0 des
+                // Zeichners @0x4508A0 verzweigt bei Waffe >= 0xB9 in den
+                // Infanteriezweig @0x45099B, der die Entwurfsnummer nimmt.
+                // Darunter bleibt Pic 0, und das Fenster geht seinen alten Weg.
+                int pic = d.Weapon >= UI.PortraitBank.InfWeaponFrom
+                        ? UI.PortraitBank.PictureOfInfantry(d.Slot)
+                        : 0;
                 rows.Add(new UI.BuildPanel.Row(
                     d.Name, $"{d.CostW}/{d.CostF}/{d.CostS}",
-                    CanAfford(e, d), i == e.MenuIndex % Mathf.Max(1, menu.Count)));
+                    CanAfford(e, d), i == e.MenuIndex % Mathf.Max(1, menu.Count), pic));
             }
             return rows;
         }
@@ -10093,7 +10168,12 @@ public partial class MapEntityLayer : Node2D
                     money ? _money[owner] >= HeliPrice
                           : menu[i].CostW <= e.StockW && menu[i].CostF <= e.StockF
                             && menu[i].CostS <= e.StockS,
-                    i == e.MenuIndex % Mathf.Max(1, menu.Count)));
+                    i == e.MenuIndex % Mathf.Max(1, menu.Count),
+                    // Fall 3 des Zeichners: ein Flugzeug hat GENAU EIN Bild,
+                    // gewaehlt ueber sein Typbyte. ⚠ Sieben der vierzehn Kinds
+                    // haben im Original gar keines — dort bleibt der Kasten leer,
+                    // und das ist originaltreu, kein fehlendes Bild.
+                    UI.PortraitBank.PictureOfAircraft(menu[i].Kind)));
             return rows;
         }
         if (IsDock(e))
