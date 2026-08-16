@@ -260,7 +260,16 @@ public static class CwmExtra
         for (int i = 0; i < n; i++)
         {
             int price = BitConverter.ToUInt16(s95, i * 2);
-            if (price == 0) continue;                    // freier Platz
+            // ⚠ ZWEI verschiedene »kein Angebot«, beide gelesen:
+            //   0      — nie belegter Platz (Zählschleife @0x4C0860)
+            //   0xFFFF — GEKAUFT; @0x4C13A6 setzt den Preis darauf, und der
+            //            Nachschub sucht @0x4C03C8 genau diese Plätze wieder
+            //            (`cmp word[ecx*2+0x81a3a8], 0xFFFF`), um sie neu zu
+            //            füllen.
+            // ⚠ Über alle 225 Angebote der gelieferten Karten kommt 0xFFFF
+            // NICHT vor — die Prüfung ist Vorsorge für Spielstände, die
+            // mitten im Handel gespeichert wurden, kein beobachteter Fall.
+            if (price == 0 || price == 0xFFFF) continue;
             int o = i * CwmData.EntityStride;
             list.Add(new MarketOffer
             {
