@@ -629,6 +629,61 @@ public sealed class ContentBuilder
     /// changes whenever a row of the stats block is newly understood, and the
     /// weapon names were read from six of fifty components until 2026-08-06.
     /// </summary>
+    /// <summary>
+    /// <c>--reexport-entities</c> — <b>nur die <c>*.entities.json</c> neu
+    /// schreiben</b>, ohne die Karten neu zu backen.
+    ///
+    /// <para><b>Warum es das gibt:</b> die Spielstände tragen Felder, die der
+    /// Ausleser jahrelang nicht gelesen hat — zuletzt die fünf, ohne die ein
+    /// Flugzeug stillsteht (Feinlage, Richtung, Auftrag; siehe
+    /// <c>CwmExtra.Special.FineX</c>, Fehler D6). Wer die nachträgt, braucht die
+    /// Kartendaten neu, aber nicht die 20–33-Megapixel-Bilder: das Backen ist
+    /// der teure Teil und hat mit dem Spielstand nichts zu tun.</para>
+    ///
+    /// <para>⚠ Der volle Weg wäre <c>--import-cd</c>, und der überschreibt den
+    /// gesamten importierten Inhalt des Spielers. Für ein nachgetragenes Feld
+    /// ist das zu grob — deshalb dieser Teilweg, wie es ihn für Kataloge,
+    /// Gebäude, Einheiten und Effekte schon gibt.</para>
+    ///
+    /// <para>⚠ Er schreibt nach <c>user://data/Maps</c>. Das ist der Ort, den
+    /// <c>Core.Content.Path</c> BEVORZUGT — eine Änderung nur im Projektbaum
+    /// bliebe wirkungslos (Regel 13, hier schon mehrfach teuer gewesen).</para></summary>
+    public bool ReexportEntities(Action<string>? progress = null)
+    {
+        void Say(string s) { GD.Print("reexport-entities: " + s); progress?.Invoke(s); }
+        Directory.CreateDirectory($"{_dst}/Maps");
+
+        int ok = 0, failed = 0;
+        void One(string path, string outName)
+        {
+            try
+            {
+                var doc = EntitiesJson.Decode(CwmFile.Load(path));
+                File.WriteAllText($"{_dst}/Maps/{outName}.entities.json",
+                                  EntitiesJson.Write(doc, outName.StartsWith("map_")
+                                                          ? outName["map_".Length..] : outName),
+                                  new UTF8Encoding(false));
+                ok++;
+            }
+            catch (Exception e) { failed++; Say($"{outName}: {e.Message}"); }
+        }
+
+        foreach (var (stem, path) in Levels("*.CWM")) One(path, "map_" + stem);
+        foreach (var (stem, name) in DmStems)
+        {
+            string? p = Find($"LEVELS/{stem}.DM");
+            if (p != null) One(p, "map_" + name);
+        }
+
+        // ⚠ Regel 33: eine Zahl, die belegt, dass der Lauf etwas getan hat.
+        // "fertig" ohne Anzahl ist von "keine Karte gefunden" nicht zu
+        // unterscheiden — und ohne Karten in Reichweite tut er genau nichts.
+        Say(ok == 0
+            ? "KEINE Karte gefunden — zeigt der Pfad auf die Installation oder die CDs?"
+            : $"{ok} Karten neu geschrieben, {failed} Fehler");
+        return ok > 0;
+    }
+
     public bool ReexportTables(Action<string>? progress = null)
     {
         void Say(string s) { GD.Print("reexport-tables: " + s); progress?.Invoke(s); }

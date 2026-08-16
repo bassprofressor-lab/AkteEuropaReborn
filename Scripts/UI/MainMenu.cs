@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.UI;
+﻿namespace AkteEuropaReborn.UI;
 
 using System.Collections.Generic;
 using Godot;
@@ -886,6 +886,18 @@ public partial class MainMenu : Control
                 var src = Core.ContentSources.FromFolders(dirs);
                 if (src == null) { GD.PrintErr("reexport: keiner der Ordner existiert"); GetTree().Quit(2); return; }
                 GetTree().Quit(new Import.ContentBuilder(src).ReexportUnits() ? 0 : 1);
+                return;
+            }
+            // ⚠ Nur die Spielstaende neu schreiben, ohne die Karten zu backen —
+            // siehe ContentBuilder.ReexportEntities. Fuer nachgetragene Felder
+            // (D6: Feinlage, Richtung, Auftrag) ist --import-cd zu grob.
+            else if (a.StartsWith("--reexport-entities="))
+            {
+                string[] dirs = a["--reexport-entities=".Length..]
+                    .Split(';', System.StringSplitOptions.RemoveEmptyEntries);
+                var src = Core.ContentSources.FromFolders(dirs);
+                if (src == null) { GD.PrintErr("reexport: keiner der Ordner existiert"); GetTree().Quit(2); return; }
+                GetTree().Quit(new Import.ContentBuilder(src).ReexportEntities() ? 0 : 1);
                 return;
             }
             else if (a == "--import-cd")
