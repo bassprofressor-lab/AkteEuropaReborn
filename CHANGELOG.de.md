@@ -320,6 +320,22 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Laden **nie** erscheinen — ihr Zweig hängt an einer Bedingung, die nicht
   eintreten kann.
 
+- ⭐ **Schiffe laufen aus dem Dock aus.** Gemeldet war »sie spawnen direkt im
+  Seedock, anstatt daneben« — und die Antwort ist die umgekehrte: das Original
+  setzt das Schiff **wirklich ins Dock** und holt es danach heraus. Wir taten
+  weder das eine noch das andere: das fertige Schiff sprang aus dem Nichts
+  neben das Dock, und war dort kein Platz, entstand **gar nichts** — der Bau
+  hing dann unsichtbar fest, ohne dass irgendwo etwas stand.
+  Jetzt liegt das frische Schiff sichtbar im Dock und legt ab, sobald eine der
+  beiden Ausfahrten frei ist. Ist keine frei, **bleibt es liegen und sagt
+  warum** — auf `map_DM_4` sind die Ausfahrten nämlich genau die Liegeplätze,
+  und wer dort schon zwei Schiffe hat, bekommt das dritte nicht ins Wasser.
+  Gemessen: gebaut → im Dock, dreimal gewartet, dann ausgelaufen — und zwar
+  genau auf dem Takt, den das Original dafür vorsieht.
+  ⚠ Dabei ist ein erfundener Ausweichplatz entfallen: unser Code suchte hinter
+  den zwei gelesenen Ausfahrten noch eine dritte, beliebige Stelle. Die war ein
+  Notbehelf gegen unser eigenes Verhalten und hat jetzt keinen Grund mehr.
+
 - ⭐ **Gekaufte Ware wird geliefert.** Bisher stand sie im selben Augenblick
   neben dem Markt. Im Original fährt sie: der Käufer bezahlt sofort, der Platz
   im Laden gilt als verkauft, und alle paar Sekunden macht sich ein Transport

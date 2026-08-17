@@ -289,6 +289,22 @@ deviate on purpose, and every deviation is marked as ours.
   ⚠ One bug of the original, reproduced: the highest veteran grade can **never**
   appear in the shop — its branch hangs on a condition that cannot occur.
 
+- ⭐ **Ships now put out from the dock.** Reported as "they spawn right inside
+  the sea dock instead of beside it" — and the answer is the other way round:
+  the original really does place the ship **inside** the dock and then takes it
+  out. We did neither: the finished ship appeared out of nowhere beside the
+  dock, and when there was no room there, **nothing appeared at all** — the
+  build then hung invisibly with nothing anywhere to show for it.
+  Now the new ship lies visibly in the dock and casts off as soon as one of the
+  two exits is clear. If neither is, **it stays put and says why** — on
+  `map_DM_4` the exits are precisely the moorings, so anyone already keeping two
+  ships there will not get a third into the water.
+  Measured: built → in the dock, waited three times, then put out — on exactly
+  the tick the original reserves for it.
+  ⚠ An invented fallback berth went with it: our code used to look for a third,
+  arbitrary spot behind the two that are actually read. That was a crutch
+  against our own behaviour and no longer has a reason.
+
 - ⭐ **Purchased goods are delivered.** Until now they appeared beside the market
   the same instant. In the original they travel: the buyer pays at once, the
   shop slot counts as sold, and every few seconds a transport sets off for **a
