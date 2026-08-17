@@ -148,22 +148,33 @@ public partial class MapEntityLayer
     /// kein Drift — das ist die Bedingung dafür, dass zwei Maschinen im
     /// Lockstep denselben Markt sehen.</para>
     /// </summary>
-    private int _marketAcc;
+    private int _origAcc;
 
-    /// <summary>Der Zähler des Originals, <c>dword[0x4FA240]</c>.</summary>
-    private int _marketTicks;
+    /// <summary>Der Zähler des Originals, <c>dword[0x4FA240]</c>.
+    ///
+    /// <para>⚠ <b>Umbenannt am 18.08.2026 von <c>_marketTicks</c>.</b> Er ist
+    /// nicht der Zähler des Marktes, sondern <b>der des Spiels</b> — beim
+    /// Dock-Auslauf hängt eine zweite Mechanik daran (<c>%20 == 11</c>,
+    /// @0x409C8E), und unter dem alten Namen hätte die nächste Mechanik einen
+    /// zweiten Zähler bekommen. Zwei Zähler für dieselbe Uhr wären zwei
+    /// Wahrheiten über die Zeit.</para></summary>
+    private int _origTicks;
 
-    /// <summary>Gehört in <c>SimTick</c>. Treibt den Originaltakt und ruft
-    /// <see cref="MarketTradeTickOnce"/> so oft, wie im Original Takte
-    /// vergangen wären.</summary>
-    private void MarketTradeTick()
+    /// <summary>Gehört in <c>SimTick</c>. Treibt den Takt des Originals und
+    /// ruft alles, was daran hängt, so oft, wie dort Takte vergangen
+    /// wären.</summary>
+    private void OriginalTick()
     {
-        _marketAcc += (int)OriginalTicksPerSecond;      // 50
-        while (_marketAcc >= SimHz)                     // 60
+        _origAcc += (int)OriginalTicksPerSecond;      // 50
+        while (_origAcc >= SimHz)                     // 60
         {
-            _marketAcc -= SimHz;
-            _marketTicks++;
+            _origAcc -= SimHz;
+            _origTicks++;
             MarketTradeTickOnce();
+            // Auftrag 52, der Auslauf aus dem Dock — @0x409C8E prüft
+            // `[0x4FA240] % 20 == 11`, also eine feste Phase, nicht »irgendwann
+            // in zwanzig Takten«.
+            if (_origTicks % 20 == 11) ShipLeaveDockTick();
         }
     }
 
@@ -218,7 +229,7 @@ public partial class MapEntityLayer
         }
 
         // Phase B — @0x4C030F, alle 300 Originaltakte (6 Sekunden).
-        if (_marketTicks % 300 == 111)
+        if (_origTicks % 300 == 111)
         {
             foreach (var o in _sellOffers)
             {
@@ -246,11 +257,11 @@ public partial class MapEntityLayer
 
         // Phase C — @0x4C02E6, alle 100 Originaltakte (2 Sekunden): der
         // NACHSCHUB des Ladens.
-        if (_marketTicks % 100 == 77) ShopRestock();
+        if (_origTicks % 100 == 77) ShopRestock();
 
         // Phase D — @0x4C03B1, alle 300 Originaltakte: die LIEFERUNG gekaufter
         // Ware.
-        if (_marketTicks % 300 == 222) DeliveryPhase();
+        if (_origTicks % 300 == 222) DeliveryPhase();
 
         CollectorTick();
     }
@@ -1074,7 +1085,7 @@ public partial class MapEntityLayer
                 _sellCheckUnit = pick;
                 _sellCheckMoney0 = Money(owner);
                 _sellCheckUnits0 = LivingUnitsOf(owner);
-                _sellCheckTick0 = _marketTicks;
+                _sellCheckTick0 = _origTicks;
                 _sellCheckSim0 = DebugTicks;
                 _sel.Clear(); _sel.Add(pick); _selected = pick;
 
@@ -1100,7 +1111,7 @@ public partial class MapEntityLayer
                 if (mine != null && mine.State != _sellCheckSeenState)
                 {
                     _sellCheckSeenState = mine.State;
-                    _sellLog.AppendLine($"    Takt {_marketTicks - _sellCheckTick0,5}: Angebot Zustand " +
+                    _sellLog.AppendLine($"    Takt {_origTicks - _sellCheckTick0,5}: Angebot Zustand " +
                                         $"0x{mine.State:X2} ({StateWord(mine.State)}), Konto ${Money(owner)}");
                 }
                 foreach (var s in _collectors)
@@ -1108,13 +1119,13 @@ public partial class MapEntityLayer
                     {
                         _sellCheckColLast = s.Col;
                         if (s.Col % 20 == 0 || s.Target - s.Col <= 10)
-                            _sellLog.AppendLine($"    Takt {_marketTicks - _sellCheckTick0,5}: Abholer " +
+                            _sellLog.AppendLine($"    Takt {_origTicks - _sellCheckTick0,5}: Abholer " +
                                                 $"Spalte {s.Col} -> {s.Target} (Zeile {s.Row}), Rest {s.Frac}");
                     }
 
                 if (SoldUnits > 0)
                 {
-                    int dauer = _marketTicks - _sellCheckTick0;
+                    int dauer = _origTicks - _sellCheckTick0;
                     long simDauer = DebugTicks - _sellCheckSim0;
                     int geld = Money(owner) - _sellCheckMoney0;
                     int leben = LivingUnitsOf(owner);
@@ -1146,7 +1157,7 @@ public partial class MapEntityLayer
                 }
 
                 // Abbruch, wenn nach 60 Sekunden nichts geschehen ist.
-                if (_marketTicks - _sellCheckTick0 > 60 * (int)OriginalTicksPerSecond)
+                if (_origTicks - _sellCheckTick0 > 60 * (int)OriginalTicksPerSecond)
                 {
                     _sellLog.AppendLine($"  KEIN URTEIL: nach 60 s kein Abschluss. " +
                                         $"Offene Angebote: {_sellOffers.Count}, Abholer: {_collectors.Count}");
@@ -1323,7 +1334,7 @@ public partial class MapEntityLayer
                                 $"{ShopStockTarget} aus und der Nachschub haette gar keinen Anlass.");
             _market.Clear();
             ShopAdded = 0; ShopNote = "";
-            _shopCheckTick0 = _marketTicks;
+            _shopCheckTick0 = _origTicks;
             _shopCheck = 1;
             return;
         }
@@ -1331,7 +1342,7 @@ public partial class MapEntityLayer
         // Stufe 1 — auf die Phase %100 == 77 warten, sie NICHT aufrufen.
         if (ShopAdded > 0 || _market.Count > 0)
         {
-            int dauer = _marketTicks - _shopCheckTick0;
+            int dauer = _origTicks - _shopCheckTick0;
             _shopLog.AppendLine($"  NACHSCHUB nach {dauer} Originaltakten " +
                                 $"({dauer / OriginalTicksPerSecond:0.00} s) — " +
                                 $"{(dauer <= 100 ? "innerhalb der 100-Takt-Phase, richtig" : "ZU SPAET")}");
@@ -1349,7 +1360,7 @@ public partial class MapEntityLayer
             _shopCheck = -1;
             return;
         }
-        if (_marketTicks - _shopCheckTick0 > 300)
+        if (_origTicks - _shopCheckTick0 > 300)
         {
             _shopLog.AppendLine($"  KEIN URTEIL: nach 300 Originaltakten (6 s) kein Nachschub. " +
                                 $"Die Phase %100 == 77 haette dreimal zuschlagen muessen." +
@@ -1402,7 +1413,7 @@ public partial class MapEntityLayer
             // Prüfstand seinen Kopf in JEDEM Takt neu, solange er wartete —
             // das Protokoll lief voll und die eigentliche Messung war darin
             // nicht mehr zu finden.
-            if (mi >= 0 && MarketShelf().Count == 0 && _marketTicks < 400) return;
+            if (mi >= 0 && MarketShelf().Count == 0 && _origTicks < 400) return;
 
             _buyLog.AppendLine("buy-check");
             _buyLog.AppendLine($"  Modus: {(TradeLikeOriginal ? "KAMPAGNE (originalgetreu, Lieferung)" : "GEFECHT (sofort)")}");
@@ -1419,15 +1430,15 @@ public partial class MapEntityLayer
             // dass Nachschub und Kauf zusammenspielen.
             if (MarketShelf().Count == 0)
             {
-                if (_marketTicks < 400) return;             // 8 s = vier Nachschubphasen
-                _buyLog.AppendLine($"  KEIN URTEIL: der Laden ist nach {_marketTicks} " +
+                if (_origTicks < 400) return;             // 8 s = vier Nachschubphasen
+                _buyLog.AppendLine($"  KEIN URTEIL: der Laden ist nach {_origTicks} " +
                                    $"Originaltakten immer noch leer — der Nachschub liefert nichts. " +
                                    (ShopNote.Length > 0 ? $"Letzte Meldung: {ShopNote}" : ""));
                 GD.Print(_buyLog.ToString()); _buyCheck = -1; return;
             }
-            if (_marketTicks > 0)
+            if (_origTicks > 0)
                 _buyLog.AppendLine($"  Der Laden war leer und wurde vom NACHSCHUB gefuellt " +
-                                   $"({MarketShelf().Count} Stueck nach {_marketTicks} Originaltakten)");
+                                   $"({MarketShelf().Count} Stueck nach {_origTicks} Originaltakten)");
 
             int ziel = DeliveryTargetFor(owner, markt);
             _buyLog.AppendLine(ziel < 0
@@ -1481,7 +1492,7 @@ public partial class MapEntityLayer
                   $"{(UnitRecords() == _buyCheckUnits0 + 1 ? "— sofort da, richtig" : "— NICHT abgesetzt")}");
 
             if (!TradeLikeOriginal) { GD.Print(_buyLog.ToString()); _buyCheck = -1; return; }
-            _buyCheckTick0 = _marketTicks;
+            _buyCheckTick0 = _origTicks;
             _buyCheckSim0 = DebugTicks;
             _buyCheck = 1;
             return;
@@ -1490,7 +1501,7 @@ public partial class MapEntityLayer
         // Stufe 1 — auf die Lieferung warten.
         if (MarketDelivered > 0)
         {
-            int dauer = _marketTicks - _buyCheckTick0;
+            int dauer = _origTicks - _buyCheckTick0;
             long simDauer = DebugTicks - _buyCheckSim0;
             _buyLog.AppendLine($"  GELIEFERT nach {simDauer} Simulationstakten " +
                                $"({simDauer / (double)SimHz:0.00} s), das sind {dauer} Originaltakte");
@@ -1517,7 +1528,7 @@ public partial class MapEntityLayer
             _buyCheck = -1;
             return;
         }
-        if (_marketTicks - _buyCheckTick0 > 600)
+        if (_origTicks - _buyCheckTick0 > 600)
         {
             _buyLog.AppendLine($"  KEIN URTEIL: nach 600 Originaltakten (12 s) nichts geliefert. " +
                                $"Die Phase %300 == 222 haette zweimal zuschlagen muessen. " +

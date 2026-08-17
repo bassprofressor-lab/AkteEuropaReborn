@@ -541,6 +541,12 @@ public partial class MapEntityLayer
         if (i < 0 || i >= _entities.Count) return false;      // P1 &lt; 8000 im Original
         var e = _entities[i];
         if (!e.Mobile || e.Dead || e.DugIn) return false;
+        // ⚠ Ein Schiff, das noch IM DOCK steht (Auftrag 52), nimmt keinen
+        // Fahrbefehl an. Es ist im Belegungsraster gar nicht vorhanden — eine
+        // Wegsuche von dort aus hat keinen Anfang, und ein Ziel, das es nie
+        // erreicht, saehe wie ein Fehler der Wegsuche aus. Der Auslauf ist ein
+        // eigener Schritt (ShipLeaveDockTick) und laeuft weiter.
+        if (e.LeavingDock >= 0) return false;
 
         int x = Mathf.Clamp((int)c.P2, 0, _nav.Width - 1);
         int y = Mathf.Clamp((int)c.P3, 0, _nav.Height - 1);

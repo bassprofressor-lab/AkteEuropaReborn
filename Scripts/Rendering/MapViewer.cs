@@ -422,6 +422,7 @@ public partial class MapViewer : Node2D
         if (_sellCheck) _entities.SellCheckStart();
         if (_shopCheckFlag) _entities.ShopCheckStart();
         if (_buyCheckFlag) _entities.BuyCheckStart();
+        if (_dockCheckFlag) _entities.DockCheckStart();
         if (_marketCheck)
         {
             GD.Print(_entities.MarketCheck());
@@ -662,6 +663,11 @@ public partial class MapViewer : Node2D
     /// ⚠ Braucht Ware im Regal: auf einer frischen Karte muss der Nachschub
     /// erst laufen (2 s), also mit <c>--quit-after</c> &gt; 3 starten.</summary>
     private bool _buyCheckFlag;
+    /// <summary><c>--dock-check</c> — steht das Schiff erst im Dock und laeuft
+    /// dann aus? Er stellt BEIDE Faelle her: erst ohne Raeumen (es muss warten),
+    /// dann mit. Am besten auf <c>map_DM_4</c>, wo die Ausfahrten von Haus aus
+    /// die belegten Liegeplaetze sind.</summary>
+    private bool _dockCheckFlag;
     /// <summary><c>--depot-flow</c> — bestellen, im Depot liegen, aussenden.</summary>
     private bool _depotFlow;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
@@ -1125,6 +1131,7 @@ public partial class MapViewer : Node2D
             else if (a == "--sell-check") _sellCheck = true;
             else if (a == "--shop-check") _shopCheckFlag = true;
             else if (a == "--buy-check") _buyCheckFlag = true;
+            else if (a == "--dock-check") _dockCheckFlag = true;
             else if (a == "--depot-flow") _depotFlow = true;
             else if (a == "--depot-flow=dock")
             { _depotFlow = true; MapEntityLayer.DepotFlowDock = true; }
@@ -1825,6 +1832,18 @@ public partial class MapViewer : Node2D
                 GD.Print($"MapViewer: --shot-when=verkauf ausgeloest — Einheit auf " +
                          $"({at.Value.X},{at.Value.Y}), Leiste " +
                          $"{(_orderBar is { Visible: true } ? "steht" : "STEHT NICHT")}");
+            }
+            // ⚠ Das Schiff, das IM DOCK wartet. Ohne diesen Griff zeigt jedes
+            // Bild ein leeres Hafenbecken — der Gegenstand steht nur ein paar
+            // Sekunden dort.
+            else if (_shotWhen == "dock")
+            {
+                var at = _entities.DockShotSetup();
+                if (at == null) return;
+                _camera.Position = _entities.RailCellPoint(at.Value.X, at.Value.Y);
+                ClampCamera();
+                GD.Print($"MapViewer: --shot-when=dock ausgeloest — Schiff auf " +
+                         $"({at.Value.X},{at.Value.Y})");
             }
             else if (_shotWhen == "squash")
             {

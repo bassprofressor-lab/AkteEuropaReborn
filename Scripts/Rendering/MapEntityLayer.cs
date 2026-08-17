@@ -477,6 +477,22 @@ public partial class MapEntityLayer : Node2D
         public int Target = -1;          // entity index being attacked, -1 = none
         public bool Ordered;             // true = the player ordered this attack
         public bool DugIn;               // "Eingraben" — holds position, harder to kill
+
+        /// <summary>
+        /// <b>Das Schiff steht noch IM DOCK und wartet auf eine freie
+        /// Ausfahrt</b> — der Satzindex seines Docks, sonst −1.
+        ///
+        /// <para>Das ist unser Gegenstück zu <b>Auftrag 52</b>: der
+        /// Schiffsbau @0x4B2D01 schreibt <c>byte[+0x14] = 0x34</c> und legt in
+        /// <c>byte[+0x15]</c> den Dockplatz ab — genau diese zwei Felder,
+        /// zusammengefasst.</para>
+        ///
+        /// <para>⚠ <b>Solange das Feld gesetzt ist, ist das Schiff NICHT im
+        /// Belegungsraster.</b> Es liegt auf der Zelle des Docks, und dort steht
+        /// das Gebäude; ein Rumpfabdruck darüber wäre ein Schiff, das sein
+        /// eigenes Dock blockiert. Es ist sichtbar und nicht befehlbar, wie eine
+        /// Einheit in der Tür.</para></summary>
+        public int LeavingDock = -1;
         public float BuildTime;          // seconds left on the current build
         public int BuildIndex;           // design being built
 
@@ -2266,8 +2282,9 @@ public partial class MapEntityLayer : Node2D
         // eine ganz andere Einheit. Siehe Simulation/MarketTrade.cs.
         _sellOffers.Clear();
         _collectors.Clear();
-        _marketAcc = 0; _marketTicks = 0;
+        _origAcc = 0; _origTicks = 0;
         SoldUnits = 0; SoldMoney = 0; SellNote = "";
+        ShipLeftDock = 0; ShipWaitingInDock = 0;
         if (root.TryGetValue("market", out var mkv) &&
             mkv.VariantType == Variant.Type.Array)
             foreach (var item in mkv.AsGodotArray())
@@ -10445,6 +10462,19 @@ public partial class MapEntityLayer : Node2D
                     // Gezaehlt wird jetzt _shipsBuilt — der Zaehler, den NUR
                     // LaunchShip hochsetzt.
                     if (e.BuildTime > 0f && _shipsBuilt == _depotFlowShips) return;
+                    // ⚠⚠ 18.08.2026 — ERST AUSLAUFEN LASSEN, und zwar VOR der
+                    // Protokollzeile. Seit E-B steht das frische Schiff mit
+                    // Auftrag 52 IM Dock; der Auslaufschritt holt es alle 20
+                    // Originaltakte heraus. Stand die Wache hinter dem Druck,
+                    // lief das Protokoll voll (derselbe eigene Fehler wie beim
+                    // buy-check heute frueh); stand sie gar nicht da, bekam das
+                    // Schiff im Dock ein Fahrziel, fuhr los, und der Auslauf
+                    // setzte es danach zurueck — zwei Stellen, die dasselbe
+                    // Schiff bewegen.
+                    for (int i2 = _entities.Count - 1; i2 >= 0; i2--)
+                        if (!_entities[i2].IsBuilding && !_entities[i2].Dead
+                            && _entities[i2].GameUnitType is 4 or 5)
+                        { if (_entities[i2].LeavingDock >= 0) return; break; }
                     int neu = _shipsBuilt - _depotFlowShips;
                     GD.Print(neu > 0
                         ? $"depot-flow(dock): {neu} Schiff(e) vom Stapel — die Zeile " +
@@ -12548,25 +12578,26 @@ public partial class MapEntityLayer : Node2D
         // steht jetzt VOR der Platzwahl fest.
         int gattung = TypeOfChassis(d.Chassis);           // 150..156 -> 4, 157/158 -> 5
         int seite = Simulation.NavGrid.HullSide(gattung);
-        var cell = ShipExitCell(dock, gattung, seite);
-        if (cell == null)
-        {
-            // ⚠ 17.08.2026: hier ENDETE der ganze Schiffsweg still. Die Bauzeit
-            // wird neu gesetzt, der naechste Takt versucht es wieder — und wenn
-            // die Ausfahrt dauerhaft belegt ist, laeuft das ENDLOS, ohne dass
-            // irgendwo etwas steht. Der Pruefstand --depot-flow=dock blieb
-            // deshalb stumm: er wartet auf »fertig«, und fertig wurde es nie.
-            if (!_shipExitMeldung)
-            {
-                _shipExitMeldung = true;
-                GD.Print($"launch-ship: KEINE AUSFAHRT frei — Dock Platz {dock.Slot} " +
-                         $"auf ({dock.Col},{dock.Row}), Gattung {gattung}, Rumpf {seite}x{seite}. " +
-                         "Die Bauzeit wird neu gesetzt, der Bau haengt also fest.");
-                ShipExitReport(dock, gattung, seite);
-            }
-            dock.BuildTime = 1f; return;   // no water free yet
-        }
-        int el = ElevOf(cell.Value.X, cell.Value.Y);
+
+        // ⚠⚠ 18.08.2026 — E-B, UND DER UMBAU IST DAS EIGENTLICHE. Bis heute
+        // suchte diese Stelle ZUERST eine freie Ausfahrt und setzte das Schiff
+        // gleich DORTHIN; war keine frei, entstand GAR NICHTS und die Bauzeit
+        // lief neu. Beides ist falsch:
+        //
+        //   * Das Schiff sprang aus dem Nichts neben das Dock — auslaufen sah
+        //     man nie. Genau das war die Meldung »spawnen diese direkt im
+        //     Seedock, anstatt daneben« von der falschen Seite her.
+        //   * Bei verstellter Ausfahrt hing der Bau UNSICHTBAR fest. Der
+        //     Prueflauf blieb stumm, weil er auf »fertig« wartete.
+        //
+        // Das Original setzt das Schiff auf `(Dock.Spalte, Dock.Zeile + 1)`,
+        // also MITTEN INS DOCK (@0x4B2CAC/0x4B2CB9), gibt ihm Auftrag **52**
+        // (@0x4B2D01, `byte[+0x14] = 0x34`) und merkt sich in `byte[+0x15]` das
+        // Dock. Herausgeholt wird es danach vom Auftragsschritt @0x409C8E —
+        // siehe ShipLeaveDockTick.
+        var start = new Vector2I(dock.Col, dock.Row + 1);
+        int el = ElevOf(start.X, start.Y);
+        var cell = (Vector2I?)start;
         var u = new Entity
         {
             Slot = -1, Col = cell.Value.X, Row = cell.Value.Y,
@@ -12613,12 +12644,23 @@ public partial class MapEntityLayer : Node2D
         // TurretOf — siehe InfantryFor. Ohne das kann er nicht kaempfen.
         if (InfantryFor(d.Weapon, out int inf, out int iw)) { u.Infantry = inf; u.Weapon = iw; }
         u.Pos = CellCenter(u.Col, u.Row);
+        // Auftrag 52: es steht im Dock und wartet auf eine Ausfahrt.
+        u.LeavingDock = _entities.IndexOf(dock);
+        // ⚠⚠ UND ES IST SOLANGE NICHT FAHRBEREIT. Die erste Fassung sperrte nur
+        // den Befehlsweg (ApplyMove) — und prompt hat --depot-flow=dock dem
+        // Schiff ueber die Wegsuche DIREKT ein Ziel gegeben, waehrend es noch im
+        // Dock stand: es fuhr los, und der Auslaufschritt setzte es danach auf
+        // die Ausfahrt zurueck. Zwei Stellen, die dasselbe Schiff bewegen.
+        // `Mobile` ist die Schranke, die ALLE fragen — Befehl, Wegsuche, KI und
+        // Tuerschritt. Sie wird beim Auslaufen zurueckgesetzt.
+        u.Mobile = false;
         _entities.Add(u);
-        // ⚠ Der Rumpf zuerst: SetOccupant stempelt danach die ganze Flaeche.
-        // Eine hier vergessene Zeile waere ein Schiff, das eine Zelle belegt
-        // und in ein anderes hineinfaehrt — siehe NavGrid.SetHull.
-        _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.GameUnitType));
-        _nav.SetOccupant(u.Col, u.Row, _entities.Count - 1);
+        // ⚠⚠ KEIN SetHull/SetOccupant, solange es im Dock steht. Die Zelle
+        // gehoert dem Gebaeude; ein Rumpfabdruck darueber waere ein Schiff, das
+        // seine eigene Werft blockiert — und die Ausfahrtspruefung wuerde sich
+        // danach selbst als Hindernis zaehlen (das ist Regel DD, und sie hat
+        // hier am 17.08. schon einmal zugeschlagen). Gestempelt wird erst beim
+        // Auslaufen, in ShipLeaveDockTick.
         _shipsBuilt++;
         ShipLaunchWide += seite;
         // ⚠ Regel 33: ohne diese Zeile ist nicht zu sehen, ob der gebaute Weg
@@ -12626,9 +12668,8 @@ public partial class MapEntityLayer : Node2D
         // Schiffe mit und sagt bei 40 s Lauf nichts darueber, ob eines vom
         // Stapel lief. Genau daran waere die Pruefung fast gescheitert.
         GD.Print($"launch-ship: {d.Name} (Rumpf {d.Chassis}, Gattung {gattung}, " +
-                 $"{seite}x{seite}) aus Dock ({dock.Col},{dock.Row}) " +
-                 $"-> ({u.Col},{u.Row}); Rumpf ganz auf Wasser: " +
-                 $"{(HullOnWater(u.Col, u.Row, seite) ? "JA" : "NEIN")}; " +
+                 $"{seite}x{seite}) steht IM Dock ({dock.Col},{dock.Row}) " +
+                 $"auf ({u.Col},{u.Row}) und wartet auf eine Ausfahrt; " +
                  // Fehler D der Liste E: was das Schiff an Bord hat. Ohne diese
                  // Zahlen ist »Boote scheinen keine Waffen zu haben« nicht zu
                  // pruefen, und die Waffe stand hier nie.
@@ -12640,19 +12681,288 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <summary>
-    /// <b>Wo ein fertiges Schiff neben seinem Dock zu Wasser geht</b> — die zwei
-    /// gelesenen Ausfahrten (@0x43F730, erreicht ueber Auftrag 52).
+    /// <b>DER AUSLAUF AUS DEM DOCK</b> — Auftrag 52, Schritt @0x409C8E.
+    /// Antwort auf Fehler <b>E-B</b>.
     ///
-    /// <para>Die Reihenfolge ist die des Originals: erst die linke, dann die
-    /// rechte. Passt keine, wird gewartet statt irgendwohin auszuweichen — das
-    /// Original gibt dort 0 zurueck und laesst das Schiff im Dock stehen, bis
-    /// Platz ist.</para>
+    /// <para><b>Der Takt ist gelesen, nicht gewählt:</b> @0x409C8E prüft
+    /// <c>[0x4FA240] % 20 == 11</c> — der Schritt läuft also <b>jeden
+    /// zwanzigsten Takt des Originals</b> (0,4 s), nicht in jedem. ⚠ Die
+    /// Handoff-Notiz »versetzt es binnen ≤20 Takten« beschrieb die Folge, nicht
+    /// die Regel; die Regel ist eine feste Phase.</para>
     ///
-    /// <para>⚠ <c>NearestFree</c> bleibt als NOTNAGEL, aber jetzt MIT Rumpf und
-    /// erst nach den zwei gelesenen Stellen. Ohne den Notnagel stuende ein
-    /// Schiff auf einer engen Karte womoeglich nie aus; mit ihm allein stand es
-    /// im Dock.</para></summary>
-    private Vector2I? ShipExitCell(Entity dock, int gattung, int seite)
+    /// <para><b>Was der Schritt tut</b> (@0x409CB4..0x409D0E): er fragt
+    /// <c>0x43F730</c> nach einer freien Ausfahrt. Gibt die 0 zurück, bleibt
+    /// das Schiff stehen — <b>ohne Zähler, ohne Aufgeben</b>. Sonst wird es auf
+    /// die Ausfahrt <b>gesetzt</b> (nicht gefahren: @0x409CF2/@0x409CF7 ziehen
+    /// die Spalte direkt um 2 bzw. 4 zurück) und der Auftrag wechselt auf
+    /// <b>49</b>.</para>
+    ///
+    /// <para>⚠ <b>Erst jetzt bekommt es Rumpf und Belegung.</b> Solange es im
+    /// Dock steht, ist es im Belegungsraster gar nicht vorhanden — sonst
+    /// blockierte es seine eigene Werft, und die Ausfahrtsprüfung zählte sich
+    /// selbst als Hindernis.</para>
+    ///
+    /// <para>⚠ <b>Und der Notnagel ist weg.</b> <c>ShipExitCell</c> hatte eine
+    /// dritte, erfundene Wahl (<c>NearestFree</c>), weil ohne sie ein Schiff bei
+    /// verstellter Ausfahrt nie entstand. Das war ein Notbehelf gegen unser
+    /// eigenes altes Verhalten: jetzt <b>steht</b> das Schiff sichtbar im Dock,
+    /// statt zu fehlen, und das ist genau das, was das Original tut. Ein
+    /// Ausweichplatz, den das Original nicht kennt, hat damit keinen Grund
+    /// mehr.</para></summary>
+    private void ShipLeaveDockTick()
+    {
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var u = _entities[i];
+            if (u.LeavingDock < 0) continue;
+            if (u.Dead) { u.LeavingDock = -1; continue; }
+            if (u.LeavingDock >= _entities.Count) { u.LeavingDock = -1; continue; }
+            var dock = _entities[u.LeavingDock];
+
+            int seite = Simulation.NavGrid.HullSide(u.GameUnitType);
+            var cell = ShipExitCellRead(dock, u.GameUnitType, seite);
+            if (cell == null)
+            {
+                // 0 zurueck: stehenbleiben. ⚠ Und EINMAL sagen, WORAN es liegt
+                // — »wartet« ohne Grund ist keine Diagnose, und dieselbe Zeile
+                // hat am 17.08. gezeigt, dass die Ausfahrten die Liegeplaetze
+                // sind.
+                ShipWaitingInDock++;
+                if (!_shipExitMeldung)
+                {
+                    _shipExitMeldung = true;
+                    GD.Print($"dock-auslauf: {u.Name} wartet im Dock Platz {dock.Slot} " +
+                             $"auf ({dock.Col},{dock.Row}) — beide Ausfahrten sind zu. " +
+                             $"Gattung {u.GameUnitType}, Rumpf {seite}x{seite}:");
+                    ShipExitReport(dock, u.GameUnitType, seite);
+                }
+                continue;
+            }
+
+            u.Col = cell.Value.X; u.Row = cell.Value.Y;
+            u.Elev = ElevOf(u.Col, u.Row);
+            u.Pos = CellCenter(u.Col, u.Row);
+            u.Footprint = CellRect(_ox, _oy, u.Col, u.Row, u.Elev);
+            u.LeavingDock = -1;                                    // Auftrag 49
+            u.Mobile = true;                                       // jetzt faehrt es
+            // ⚠ Rumpf VOR Belegung — siehe LaunchShip.
+            _nav?.SetHull(i, seite);
+            _nav?.SetOccupant(u.Col, u.Row, i);
+            ShipLeftDock++;
+            GD.Print($"dock-auslauf: {u.Name} aus Dock ({dock.Col},{dock.Row}) " +
+                     $"-> ({u.Col},{u.Row}), Rumpf {seite}x{seite}, " +
+                     $"ganz auf Wasser: {(HullOnWater(u.Col, u.Row, seite) ? "JA" : "NEIN")}");
+            QueueRedraw();
+        }
+    }
+
+    // ================= der Prüfstand des Dock-Auslaufs ========================
+
+    private int _dockCheck = -1, _dockCheckAt = -1, _dockCheckShips, _dockCheckTick0;
+    private readonly System.Text.StringBuilder _dockLog = new();
+
+    /// <summary><c>--dock-check</c> anwerfen.</summary>
+    public void DockCheckStart() => _dockCheck = 0;
+
+    /// <summary>
+    /// <c>--dock-check</c> — <b>steht das Schiff erst im Dock, und läuft es
+    /// dann aus?</b> Fehler <b>E-B</b>.
+    ///
+    /// <para><b>Er stellt BEIDE Fälle her, und den ersten geschenkt:</b> auf
+    /// <c>map_DM_4</c> sind die zwei gelesenen Ausfahrten von Haus aus die
+    /// <b>Liegeplätze</b> und von den Schiffen der Karte besetzt — das ist der
+    /// Befund vom 17.08.2026. Also wird zuerst gebaut, <b>ohne</b> zu räumen:
+    /// das Schiff muss im Dock stehenbleiben. Erst danach räumt der Prüfstand
+    /// die Ausfahrt (<b>und sagt es</b>) und misst den Auslauf.</para>
+    ///
+    /// <para>⚠ <b>Ohne den ersten Teil wäre der zweite wertlos</b> (Regel EE):
+    /// ein Schiff, das sofort ausläuft, beweist nicht, dass es je gewartet
+    /// hätte — und genau das Warten ist der Unterschied zum alten Verhalten,
+    /// bei dem gar nichts entstand.</para>
+    ///
+    /// <para>⚠ <b>Gelände und Belegung getrennt</b> (Regel CC): »Ausfahrt zu«
+    /// kann heissen, dass dort Land ist, oder dass ein Schiff darauf liegt. In
+    /// EINER Zahl zeigte das am 17.08. auf den falschen Täter.</para></summary>
+    private void PollDockCheck()
+    {
+        if (_dockCheck < 0 || _nav == null) return;
+
+        switch (_dockCheck)
+        {
+            case 0:
+            {
+                _dockLog.AppendLine("dock-check");
+                for (int i = 0; i < _entities.Count; i++)
+                {
+                    var b = _entities[i];
+                    if (!b.IsBuilding || b.Dead || !IsDock(b) || ShipMenu(b).Count == 0) continue;
+                    _dockCheckAt = i; break;
+                }
+                if (_dockCheckAt < 0)
+                {
+                    _dockLog.AppendLine("  KEIN URTEIL: kein bebaubares Seedock auf dieser Karte");
+                    GD.Print(_dockLog.ToString()); _dockCheck = -1; return;
+                }
+                var dock = _entities[_dockCheckAt];
+                dock.Owner = dock.Team = ViewPlayer;
+                int yi = ShipyardOf(dock);
+                if (yi >= 0) _entities[yi].StockW = _entities[yi].StockF = _entities[yi].StockS = 9999;
+                _dockLog.AppendLine($"  ⚠ EINGRIFF: Dock Platz {dock.Slot} auf ({dock.Col},{dock.Row}) " +
+                                    $"uebernommen, Werft-Lager gefuellt");
+                DockExitReport(dock);
+                _dockCheckShips = _shipsBuilt;
+                _selected = _dockCheckAt;
+                BuildPanelPick(0);
+                _dockCheck = 1;
+                return;
+            }
+
+            case 1:                                   // auf das fertige Schiff warten
+            {
+                if (_shipsBuilt == _dockCheckShips) return;
+                var dock = _entities[_dockCheckAt];
+                int si = -1;
+                for (int i = _entities.Count - 1; i >= 0; i--)
+                    if (!_entities[i].IsBuilding && !_entities[i].Dead
+                        && _entities[i].GameUnitType is 4 or 5) { si = i; break; }
+                if (si < 0)
+                {
+                    _dockLog.AppendLine("  KEIN URTEIL: kein Schiff gefunden, obwohl eines gebaut wurde");
+                    GD.Print(_dockLog.ToString()); _dockCheck = -1; return;
+                }
+                var u = _entities[si];
+                bool imDock = u.Col == dock.Col && u.Row == dock.Row + 1;
+                int occ = _nav.OccupantAt(u.Col, u.Row);
+                _dockLog.AppendLine($"  GEBAUT: {u.Name} auf ({u.Col},{u.Row}); Dock ist " +
+                                    $"({dock.Col},{dock.Row}), erwartet ({dock.Col},{dock.Row + 1}) " +
+                                    $"-> {(imDock ? "IM DOCK, richtig" : "NICHT im Dock — das ist der alte Weg")}");
+                _dockLog.AppendLine($"    Auftrag 52 gesetzt: {(u.LeavingDock >= 0 ? "ja" : "NEIN")}; " +
+                                    $"im Belegungsraster: {(occ == si ? "JA — falsch, es blockiert sein Dock" : "nein, richtig")}");
+                _dockCheckTick0 = _origTicks;
+                _dockCheck = 2;
+                return;
+            }
+
+            case 2:                                   // WARTET es wirklich?
+            {
+                if (_origTicks - _dockCheckTick0 < 60) return;     // drei Phasen abwarten
+                _dockLog.AppendLine($"  WARTEN: nach {_origTicks - _dockCheckTick0} Originaltakten " +
+                                    $"(drei Phasen) ausgelaufen {ShipLeftDock}, gewartet {ShipWaitingInDock} " +
+                                    $"-> {(ShipLeftDock == 0 && ShipWaitingInDock > 0 ? "steht im Dock, richtig" : "FALSCH — es haette warten muessen")}");
+                if (ShipLeftDock > 0)
+                {
+                    _dockLog.AppendLine("    (die Ausfahrt war schon frei — der Wartefall kam auf " +
+                                        "dieser Karte nicht vor, das Urteil darueber entfaellt)");
+                }
+                // ⚠ JETZT raeumen, und es steht in der Ausgabe.
+                _dockLog.AppendLine("  ⚠ EINGRIFF: die Ausfahrten werden geraeumt (siehe die " +
+                                    "depot-flow-Zeilen darunter)");
+                DockFlowClearExit(_entities[_dockCheckAt]);
+                DockExitReport(_entities[_dockCheckAt]);
+                _dockCheckTick0 = _origTicks;
+                _dockCheck = 3;
+                return;
+            }
+
+            case 3:                                   // laeuft es jetzt aus?
+            {
+                if (ShipLeftDock > 0)
+                {
+                    _dockLog.AppendLine($"  AUSGELAUFEN nach {_origTicks - _dockCheckTick0} " +
+                                        $"Originaltakten; Takt {_origTicks}, {_origTicks} % 20 = " +
+                                        $"{_origTicks % 20} " +
+                                        $"-> {(_origTicks % 20 == 11 ? "die gelesene Phase, richtig" : "FALSCHE PHASE")}");
+                    GD.Print(_dockLog.ToString());
+                    _dockCheck = -1;
+                    return;
+                }
+                if (_origTicks - _dockCheckTick0 > 200)
+                {
+                    _dockLog.AppendLine($"  KEIN URTEIL: nach 200 Originaltakten kein Auslauf, " +
+                                        $"obwohl geraeumt. Gewartet {ShipWaitingInDock} mal.");
+                    GD.Print(_dockLog.ToString());
+                    _dockCheck = -1;
+                }
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>--shot-when=dock</c> — die Kamera auf ein Schiff setzen, das gerade
+    /// IM DOCK wartet.
+    ///
+    /// <para>⚠ Gibt <c>null</c>, solange keines wartet. Ein Bild ohne den
+    /// Gegenstand ist kein Zeuge — und »das Schiff steht sichtbar im Dock« ist
+    /// genau die Sorte Aussage, die nur ein Bild trägt (Regel 17).</para>
+    /// <para>Zusammen mit <c>--dock-check</c> zu benutzen: der baut das Schiff
+    /// und laesst es warten.</para></summary>
+    public Vector2I? DockShotSetup()
+    {
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var u = _entities[i];
+            if (u.LeavingDock < 0 || u.Dead) continue;
+            if (u.LeavingDock >= _entities.Count) continue;
+            var dock = _entities[u.LeavingDock];
+            _sel.Clear(); _sel.Add(i); _selected = i;
+            UpdatePanel();
+            QueueRedraw();
+            GD.Print($"dock-shot: {u.Name} steht im Dock ({dock.Col},{dock.Row}) " +
+                     $"auf ({u.Col},{u.Row}) — es muss AUF dem Dock zu sehen sein");
+            return new Vector2I(u.Col, u.Row);
+        }
+        return null;
+    }
+
+    /// <summary>Die zwei gelesenen Ausfahrten eines Docks, <b>Gelände und
+    /// Belegung getrennt</b> (Regel CC).</summary>
+    private void DockExitReport(Entity dock)
+    {
+        if (_nav == null) return;
+        foreach (int gattung in new[] { 4, 5 })
+        {
+            int seite = Simulation.NavGrid.HullSide(gattung);
+            var kandidaten = gattung == 5
+                ? new[] { new Vector2I(dock.Col - 4, dock.Row + 1),
+                          new Vector2I(dock.Col + 5, dock.Row + 1) }
+                : new[] { new Vector2I(dock.Col - 2, dock.Row + 2),
+                          new Vector2I(dock.Col + 5, dock.Row + 2) };
+            for (int k = 0; k < 2; k++)
+            {
+                var c = kandidaten[k];
+                int wasser = 0, frei = 0, n = seite * seite;
+                for (int dy = 0; dy < seite; dy++)
+                    for (int dx = 0; dx < seite; dx++)
+                    {
+                        if (_nav.CanEnter(c.X + dx, c.Y + dy, Simulation.NavGrid.MoveClass.Ship)) wasser++;
+                        if (_nav.IsFree(c.X + dx, c.Y + dy, Simulation.NavGrid.MoveClass.Ship)) frei++;
+                    }
+                _dockLog.AppendLine($"    Gattung {gattung} ({seite}x{seite}), Ausfahrt {k + 1} " +
+                                    $"({c.X},{c.Y}): Gelaende {wasser}/{n} schiffbar, " +
+                                    $"Belegung {frei}/{n} unbesetzt -> " +
+                                    (wasser < n ? "kein Wasser" : frei < n ? "Wasser, aber VERSTELLT" : "frei"));
+            }
+        }
+    }
+
+    /// <summary>Wie oft ein Schiff wirklich ausgelaufen ist, und wie oft der
+    /// Schritt es warten liess. ⚠ Regel 33: ohne die zweite Zahl ist »kein
+    /// Auslauf« nicht von »der Schritt lief gar nicht« zu unterscheiden — und
+    /// genau das ist der Unterschied zwischen einer engen Karte und einem
+    /// Fehler.</summary>
+    public int ShipLeftDock, ShipWaitingInDock;
+
+    /// <summary>
+    /// <b>Die zwei gelesenen Ausfahrten, und nur sie</b> — @0x43F730, Zelle für
+    /// Zelle:
+    /// <code>
+    ///   Gattung 4 (2x2):  (Spalte-2, Zeile+2)   dann  (Spalte+5, Zeile+2)
+    ///   Gattung 5 (4x4):  (Spalte-4, Zeile+1)   dann  (Spalte+5, Zeile+1)
+    /// </code>
+    /// <para>Die Reihenfolge ist die des Originals: erst links, dann rechts,
+    /// und passt keine, gibt es <b>0</b> zurück.</para></summary>
+    private Vector2I? ShipExitCellRead(Entity dock, int gattung, int seite)
     {
         if (_nav == null) return null;
         var kandidaten = gattung == 5
@@ -12662,12 +12972,20 @@ public partial class MapEntityLayer : Node2D
                       new Vector2I(dock.Col + 5, dock.Row + 2) };
         foreach (var c in kandidaten)
             if (HullFitsWater(c, seite)) return c;
-        // Notnagel: dieselbe Suche wie frueher, aber mit der RUMPFBREITE.
-        var frei = _nav.NearestFree(new Vector2I(dock.Col, dock.Row + 1),
-                                    Simulation.NavGrid.MoveClass.Ship);
-        if (frei is { } f && HullFitsWater(f, seite)) return f;
         return null;
     }
+
+    // ⚠⚠ HIER STAND `ShipExitCell`, und es ist am 18.08.2026 ERSATZLOS
+    // ENTFALLEN. Es war dieselbe Wahl wie ShipExitCellRead, aber mit einem
+    // dritten, ERFUNDENEN Ausweichplatz (`NearestFree`) hinter den zwei
+    // gelesenen. Der Notnagel hatte einen Grund, und der ist weg: er verhinderte,
+    // dass ein Schiff bei verstellter Ausfahrt NIE ENTSTAND — was ein Fehler
+    // unseres alten Aufbaus war, nicht des Originals. Jetzt steht das Schiff
+    // sichtbar im Dock und wartet, genau wie dort.
+    //
+    // Zwei Funktionen mit derselben Frage und verschiedenen Antworten waeren
+    // zwei Wahrheiten ueber die Ausfahrt; eine davon haette irgendwann die
+    // andere ueberholt.
 
     /// <summary>
     /// Liegt der Rumpf auf schiffbarem GELAENDE — ohne die Frage, ob etwas
@@ -18091,17 +18409,19 @@ public partial class MapEntityLayer : Node2D
         _takeoverTimer -= dt;
         if (_takeoverTimer <= 0f) { _takeoverTimer = TakeoverEverySec; TakeoverTick(); }
 
-        // ⚠ Der Handel am Geschaeftszentrum laeuft auf dem TAKT DES ORIGINALS
-        // (50 Hz), nicht auf unserem — nur so lassen sich seine Bedingungen
-        // `%100 == 77` / `%300 == 111` woertlich uebernehmen, statt sie
-        // umzurechnen. Siehe Simulation/MarketTrade.cs.
-        MarketTradeTick();
+        // ⚠ Der TAKT DES ORIGINALS (50 Hz), nicht unserer — nur so lassen sich
+        // seine Bedingungen woertlich uebernehmen (`%100 == 77` beim Nachschub,
+        // `%300 == 111/222` bei Verkauf und Lieferung, `%20 == 11` beim
+        // Dock-Auslauf), statt sie umzurechnen. Siehe
+        // Simulation/MarketTrade.cs, OriginalTick.
+        OriginalTick();
 
         PollBuildPanelDemo();
         PollDepotFlow();
         PollSellCheck();
         PollShopCheck();
         PollBuyCheck();
+        PollDockCheck();
 
         // preview harness: start the scripted build as soon as the factory has
         // manufactured enough parts
