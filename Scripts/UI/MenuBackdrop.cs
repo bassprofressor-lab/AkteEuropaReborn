@@ -146,7 +146,20 @@ public partial class MenuBackdrop : CanvasLayer
         // Bild; unser Fenster ist doppelt so groß und die Schrift ist dieselbe
         // Bitmapschrift, die auf hellem Schnee verschwindet. 35 % Schwarz ist
         // das wenigste, bei dem die Zeilen noch zu lesen sind.
-        _veil = new ColorRect { Color = new Color(0, 0, 0, 0.35f), MouseFilter = Control.MouseFilterEnum.Ignore };
+        // ⚠⚠ 18.08.2026 — DER SCHLEIER IST WEG. Gemeldet: »in der Demo haben die
+        // Gebaeude die helleren Bodenmuster, aber die Umgebung wirkt wie
+        // dunkler. Das ist im Gefecht nicht so oder in der Kampagne.«
+        //
+        // Genau das tat er: 35 % Schwarz ueber das GANZE Bild. Der Grund war
+        // gut (die Bitmapschrift verschwindet auf hellem Schnee), der Preis zu
+        // hoch — abgedunkelt wurde die ganze Kulisse fuer VIER freistehende
+        // Beschriftungen. Alles andere sitzt im deckenden Menuekasten.
+        //
+        // Die Lesbarkeit macht jetzt ein Umriss an genau diesen vier Zeilen,
+        // siehe StartMenuPanel.Umriss. Die Farbe bleibt hier stehen und ist
+        // durchsichtig: wer den Schleier wiederhaben will, aendert EINE Zahl,
+        // und wer nach der abgedunkelten Kulisse sucht, findet die Stelle.
+        _veil = new ColorRect { Color = new Color(0, 0, 0, 0f), MouseFilter = Control.MouseFilterEnum.Ignore };
         _veil.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         AddChild(_veil);
 

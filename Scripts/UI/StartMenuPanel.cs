@@ -339,6 +339,68 @@ public partial class StartMenuPanel : Control
     /// setzt, und die Linien sind zwei Rechtecke aus Godot. Kein
     /// Originalbild wird angefasst, unsere Auslieferung trägt weiter keine
     /// Originalinhalte.</para></summary>
+    /// <summary>
+    /// <b>EIN UMRISS STATT EINES SCHLEIERS.</b>
+    ///
+    /// <para>⚠ 18.08.2026, gemeldet als »in der Demo haben die Gebäude die
+    /// helleren Bodenmuster, aber die Umgebung wirkt wie dunkler. Das ist im
+    /// Gefecht nicht so oder in der Kampagne.«</para>
+    ///
+    /// <para>Der Bericht trifft: <see cref="MenuBackdrop"/> legte <b>35 %
+    /// Schwarz über das ganze Bild</b>. Der Grund war gut — dieselbe
+    /// Bitmapschrift verschwindet auf hellem Schnee —, der Preis aber viel zu
+    /// hoch: die Kulisse wurde für <b>vier</b> freistehende Beschriftungen
+    /// abgedunkelt (Titel, Untertitel, Fußzeile, Versionsnummer). Alles andere
+    /// sitzt im deckenden Kasten und hätte den Schleier nie gebraucht.</para>
+    ///
+    /// <para>Ein schwarzer Umriss löst dasselbe Problem an der Stelle, an der
+    /// es auftritt. Die Kulisse ist damit so hell wie Gefecht und Kampagne —
+    /// und die zeigen dieselben Karten mit denselben Gebäudeböden.</para>
+    ///
+    /// <para>⚠ Unsere Zutat, wie der Schleier vorher: das Original stellt sein
+    /// Menüfenster ohne beides aufs Bild, weil sein Fenster halb so groß ist und
+    /// weniger Schrift daneben steht.</para></summary>
+    /// <param name="dick">Wie breit der Umriss ist. Der TITEL braucht mehr: er
+    /// steht in der Palettenfarbe des Originals (ein gedecktes Ocker), und die
+    /// hat auf hellem Schnee von sich aus kaum Abstand. Die Fusszeilen sind
+    /// hell und kommen mit weniger aus.</param>
+    private static void Umriss(Label l, int dick = 6)
+    {
+        l.AddThemeConstantOverride("outline_size", dick);
+        l.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.92f));
+    }
+
+    /// <summary>
+    /// <b>Ein Schatten, der auch unter einer BITMAPSCHRIFT liegt.</b>
+    ///
+    /// <para>⚠ <see cref="Umriss"/> tut bei der Titelschrift NICHTS: sie ist die
+    /// Bitmapschrift des Originals, und <c>outline_size</c> gilt nur für
+    /// Schriften, die einen Umriss zeichnen können. Der Aufruf lief wirkungslos
+    /// durch — aufgefallen ist es am Bildschirmfoto, nicht am Übersetzer. Genau
+    /// die Sorte Schalter, die man für gesetzt hält.</para>
+    ///
+    /// <para>Hier steht dieselbe Beschriftung noch einmal in Schwarz, zwei
+    /// Punkte nach rechts unten. Das wirkt mit jeder Schrift, weil es keine
+    /// Eigenschaft der Schrift benutzt.</para></summary>
+    private static Label Schatten(Label l)
+    {
+        var sch = new Label
+        {
+            Text = l.Text,
+            HorizontalAlignment = l.HorizontalAlignment,
+            AnchorLeft = l.AnchorLeft, AnchorRight = l.AnchorRight,
+            AnchorTop = l.AnchorTop, AnchorBottom = l.AnchorBottom,
+            OffsetLeft = l.OffsetLeft + 2, OffsetRight = l.OffsetRight + 2,
+            OffsetTop = l.OffsetTop + 2, OffsetBottom = l.OffsetBottom + 2,
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        sch.AddThemeColorOverride("font_color", new Color(0, 0, 0, 0.75f));
+        var f = l.GetThemeFont("font");
+        if (f != null) sch.AddThemeFontOverride("font", f);
+        sch.AddThemeFontSizeOverride("font_size", l.GetThemeFontSize("font_size"));
+        return sch;
+    }
+
     private void BuildRebornHead(int h)
     {
         var font2 = BriefingScreen.LegacyFont(second: true);
@@ -354,6 +416,11 @@ public partial class StartMenuPanel : Control
         wordmark.AddThemeColorOverride("font_color", Pal(0x24));
         if (font2 != null) wordmark.AddThemeFontOverride("font", font2);
         wordmark.AddThemeFontSizeOverride("font_size", 13 * (Scale + 1));
+        // ⚠ KEIN Umriss hier: der Titel steht in der BITMAPschrift des
+        // Originals, und die kennt `outline_size` nicht — der Aufruf lief
+        // wirkungslos durch. Am Bildschirmfoto gesehen, nicht vermutet.
+        // Ein doppelt gesetzter Schatten wirkt dagegen mit jeder Schrift.
+        AddChild(Schatten(wordmark));
         AddChild(wordmark);
 
         var sub = new Label
@@ -367,6 +434,7 @@ public partial class StartMenuPanel : Control
         sub.AddThemeColorOverride("font_color", Pal(0x96));
         if (font2 != null) sub.AddThemeFontOverride("font", font2);
         sub.AddThemeFontSizeOverride("font_size", 13 * Scale);
+        AddChild(Schatten(sub));
         AddChild(sub);
 
         // zwei Goldstriche links und rechts von REBORN, damit die Zeile als
@@ -508,6 +576,7 @@ public partial class StartMenuPanel : Control
             Modulate = new Color(0.62f, 0.68f, 0.75f),
             MouseFilter = MouseFilterEnum.Ignore,
         };
+        Umriss(_status);
         AddChild(_status);
 
         // The version, bottom right under the window. OURS entirely — the 1997
@@ -524,6 +593,7 @@ public partial class StartMenuPanel : Control
             MouseFilter = MouseFilterEnum.Ignore,
         };
         if (_font != null) ver.AddThemeFontOverride("font", _font);
+        Umriss(ver);
         AddChild(ver);
     }
 

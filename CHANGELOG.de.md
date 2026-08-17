@@ -693,6 +693,23 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Kampagne und Oberfläche
 
+- ⭐ **Die Demo im Hauptmenü ist nicht mehr abgedunkelt.** Gemeldet: »in der
+  Demo haben die Gebäude die helleren Bodenmuster, aber die Umgebung wirkt wie
+  dunkler. Das ist im Gefecht nicht so oder in der Kampagne.«
+
+  Es lag an **unserem** Schleier: `MenuBackdrop` legte **35 % Schwarz über das
+  ganze Bild**, damit die Menüschrift auf hellem Schnee lesbar bleibt. Der
+  Grund war gut, der Preis zu hoch — abgedunkelt wurde die ganze Kulisse für
+  **vier** freistehende Beschriftungen; alles übrige sitzt im deckenden Kasten.
+  Und weil die hellen Gebäudeböden dabei hell blieben, sahen genau sie aus wie
+  ein Schleier, der auf ihnen fehlt.
+
+  Jetzt tragen die vier Zeilen ihre eigene Lesbarkeit: Umriss bei den
+  Fußzeilen, ein **Schatten** bei Titel und Untertitel. ⚠ Der Umriss allein
+  reichte dort nicht — die Titelschrift ist die **Bitmapschrift des
+  Originals**, und die kennt `outline_size` nicht; der Aufruf lief wirkungslos
+  durch. Gesehen am Bildschirmfoto, nicht am Übersetzer.
+
 - ⭐ **4K und andere große Schirme: die Oberfläche lässt sich vergrößern.**
   Gefragt: »kann man das Spiel auch unter 4K spielen?«. Spielen ging es schon —
   nur war alles halb so groß: das Projekt hatte **gar keinen** Streckmodus
