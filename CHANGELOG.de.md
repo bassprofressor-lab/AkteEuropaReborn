@@ -693,6 +693,28 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Kampagne und Oberfläche
 
+- ⭐ **Der Missionsmonitor zeigt erst EUROPA — die Missionskarte kommt auf den
+  Knopf.** Gemeldet mit zwei Bildern nebeneinander: »die Minimap ging erst auf,
+  wenn man auf Mission geklickt hat«.
+
+  Die zehn Bilder aus `MAP.DAT` sind ein **Zoom**, kein Einlaufen des
+  Fadenkreuzes: **Bild 0** ist die Europaansicht (rotes Europa, gelbes Kreuz),
+  **Bild 9** die hineingezoomte Missionskarte. Wir spielten den Zoom beim
+  Aufschlagen von selbst durch — damit lag die Missionskarte sofort auf
+  Europa, und die zwei Knöpfe unter dem Monitor waren Zierrat.
+
+  Jetzt steht der Monitor auf Bild 0, **EUROPA** und **MISSION** fahren den
+  Zoom in beide Richtungen. Die Knöpfe sind am Hintergrundbild ausgemessen
+  (x 66..116 und 125..165 im Band y 260..276). ⚠ Ob das Original Bild für Bild
+  zoomt oder umschaltet, ist **nicht gelesen** — wir fahren alle zehn Bilder
+  durch, statt acht davon wegzuwerfen.
+
+  Gemessen: ohne Klick »Monitor auf Bild 0 von 9 — EUROPA«, nach einem Druck
+  auf MISSION »Bild 4 von 9 (Ziel 9) — unterwegs«. ⚠ Der Prüfstand
+  (`--briefing-mission`) **drückt den Knopf**, statt das Feld dahinter zu
+  setzen.
+
+
 - ⭐ **Die Demo im Hauptmenü ist nicht mehr abgedunkelt.** Gemeldet: »in der
   Demo haben die Gebäude die helleren Bodenmuster, aber die Umgebung wirkt wie
   dunkler. Das ist im Gefecht nicht so oder in der Kampagne.«

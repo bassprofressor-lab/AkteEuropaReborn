@@ -124,6 +124,16 @@ public partial class BriefingScreen : CanvasLayer
     private readonly List<Texture2D> _radarFrames = new();
     private float _radarTime;
 
+    /// <summary>Welches der zehn Bilder gerade steht und welches gemeint ist.
+    /// Beide 0 heisst: Europa, und es bewegt sich nichts. Siehe
+    /// <see cref="BuildMonitorButtons"/>.</summary>
+    private int _radarBild, _radarZiel;
+
+    /// <summary>Der MISSION-Knopf, damit ein Prueflauf ihn DRUECKEN kann statt
+    /// das Feld dahinter zu setzen — siehe <c>--briefing-mission</c>.</summary>
+    private Button? _btnMission;
+    private bool _missionGetippt;
+
     /// <summary>How long one of the ten frames stays up. OURS — the original's
     /// pace is not read; a tenth of a second makes the cross-hair walk in over
     /// a second, which is about as long as the screen takes to settle.</summary>
@@ -164,6 +174,57 @@ public partial class BriefingScreen : CanvasLayer
         GD.Print($"Briefing: Radarbild Mission {_mission}, {_radarFrames.Count} Bilder");
     }
 
+    /// <summary>
+    /// <b>DIE ZWEI KNÖPFE UNTER DEM MONITOR</b> — »EUROPE« und »MISSION«.
+    ///
+    /// <para>Sie stehen im Hintergrundbild seit jeher, waren bei uns aber
+    /// Zierrat: der Zoom lief beim Aufschlagen von selbst durch. Gemeldet mit
+    /// zwei Bildern nebeneinander, »die Minimap ging erst auf, wenn man auf
+    /// Mission geklickt hat«.</para>
+    ///
+    /// <para><b>Die Lage ist am Bild ausgemessen</b>, nicht geschätzt: die zwei
+    /// dunklen Platten mit der hellen Schrift liegen im 640×480-Bild bei
+    /// <c>x = 66..116</c> und <c>x = 125..165</c>, beide im Band
+    /// <c>y = 260..276</c>. Die Flächen hier sind ein wenig grösser als die
+    /// Platten — ein Knopf, den man knapp verfehlt, ist schlimmer als einer,
+    /// der einen Punkt zu weit reicht.</para>
+    ///
+    /// <para>⚠ <b>Was NICHT gelesen ist:</b> ob das Original den Zoom Bild für
+    /// Bild abspielt oder umschaltet, und wie schnell. Wir fahren ihn in
+    /// <see cref="RadarFrameSec"/> je Bild in beide Richtungen — das benutzt
+    /// alle zehn Bilder, die die Datei hergibt, statt acht davon
+    /// wegzuwerfen.</para></summary>
+    private void BuildMonitorButtons(Vector2 at, int scale)
+    {
+        if (_radarFrames.Count < 2) return;
+        AddChild(MonitorKnopf(at, scale, 64, 258, 54, 20, "EUROPA",
+                              () => _radarZiel = 0));
+        _btnMission = MonitorKnopf(at, scale, 123, 258, 44, 20, "MISSION",
+                                   () => _radarZiel = _radarFrames.Count - 1);
+        AddChild(_btnMission);
+    }
+
+    /// <summary>Eine durchsichtige Fläche über einem Knopf, den das
+    /// Hintergrundbild schon zeichnet. ⚠ Kein eigenes Aussehen: der Knopf ist
+    /// gemalt, und ein zweiter darüber wäre doppelt.</summary>
+    private static Button MonitorKnopf(Vector2 at, int scale, int x, int y, int w, int h,
+                                       string name, System.Action tap)
+    {
+        var b = new Button
+        {
+            Position = at + new Vector2(x * scale, y * scale),
+            Size = new Vector2(w * scale, h * scale),
+            Flat = true,
+            TooltipText = name,
+            FocusMode = Control.FocusModeEnum.None,
+        };
+        b.AddThemeStyleboxOverride("normal", new StyleBoxEmpty());
+        b.AddThemeStyleboxOverride("hover", new StyleBoxEmpty());
+        b.AddThemeStyleboxOverride("pressed", new StyleBoxEmpty());
+        b.Pressed += () => tap();
+        return b;
+    }
+
     /// <summary>Builds the faithful screen. False if the picture is not there,
     /// in which case the caller falls back to the plain layout.</summary>
     private bool BuildBackdrop()
@@ -195,6 +256,7 @@ public partial class BriefingScreen : CanvasLayer
         AddChild(pic);
 
         BuildRadar(at, scale);
+        BuildMonitorButtons(at, scale);
 
         var font = LegacyFont();
 
@@ -305,18 +367,54 @@ public partial class BriefingScreen : CanvasLayer
     /// what it actually looks like can be checked rather than assumed.</summary>
     public override void _Process(double delta)
     {
-        // the cross-hair walks in and stays on the last frame
-        if (_radar != null && _radarFrames.Count > 1)
+        // ⚠⚠ 18.08.2026 — DER MONITOR ZEIGT ERST EUROPA. Gemeldet mit zwei
+        // Bildern nebeneinander: »die Minimap ging erst auf, wenn man auf
+        // Mission geklickt hat«.
+        //
+        // Hier stand: die zehn Bilder laufen beim Aufschlagen von selbst durch
+        // und bleiben auf dem letzten stehen. Damit lag die Missionskarte
+        // sofort auf der Europakarte, und die zwei Knoepfe darunter waren
+        // Zierrat. Bild 0 IST die Europaansicht (rotes Europa, gelbes
+        // Fadenkreuz), Bild 9 die hineingezoomte Missionskarte — die zehn sind
+        // ein Zoom, kein Einlaufen des Fadenkreuzes.
+        //
+        // Jetzt: stehen auf Bild 0, und die Knoepfe fahren den Zoom.
+        if (_radar != null && _radarFrames.Count > 1 && _radarZiel != _radarBild)
         {
             _radarTime += (float)delta;
-            int f = Mathf.Min((int)(_radarTime / RadarFrameSec), _radarFrames.Count - 1);
-            if (_radar.Texture != _radarFrames[f]) _radar.Texture = _radarFrames[f];
+            while (_radarTime >= RadarFrameSec && _radarZiel != _radarBild)
+            {
+                _radarTime -= RadarFrameSec;
+                _radarBild += _radarZiel > _radarBild ? 1 : -1;
+            }
+            _radarBild = Mathf.Clamp(_radarBild, 0, _radarFrames.Count - 1);
+            if (_radar.Texture != _radarFrames[_radarBild])
+                _radar.Texture = _radarFrames[_radarBild];
         }
+
+        // ⚠ `--briefing-mission` DRUECKT den Knopf, statt _radarZiel zu setzen.
+        // Ein Pruefstand, der das Feld dahinter anfasst, prueft den Knopf nicht
+        // — und genau der war es, der fehlte.
+        if (!_missionGetippt)
+            foreach (string a in OS.GetCmdlineUserArgs())
+                if (a == "--briefing-mission" && _btnMission != null)
+                {
+                    _missionGetippt = true;
+                    _btnMission.EmitSignal(BaseButton.SignalName.Pressed);
+                }
 
         string want = "";
         foreach (string a in OS.GetCmdlineUserArgs())
             if (a.StartsWith("--briefing-shot=")) want = a["--briefing-shot=".Length..];
-        if (want.Length == 0 || _frames++ < 20) return;
+        // ⚠ Der Monitor sagt, worauf er steht — sonst muesste man es aus dem
+        // Bildschirmfoto raten, und ein Zoom, der gerade erst anlaeuft, sieht
+        // dort fast aus wie einer, der gar nicht anlaeuft.
+        if (want.Length > 0 && _frames == 20 && _radarFrames.Count > 1)
+            GD.Print($"Briefing: Monitor auf Bild {_radarBild} von " +
+                     $"{_radarFrames.Count - 1} (Ziel {_radarZiel}) — " +
+                     (_radarBild == 0 ? "EUROPA" : _radarBild == _radarFrames.Count - 1
+                        ? "MISSION" : "unterwegs"));
+        if (want.Length == 0 || _frames++ < 90) return;
         RenderingServer.ForceDraw();
         GetViewport().GetTexture().GetImage().SavePng(want);
         GD.Print($"briefing-shot -> {want}");
