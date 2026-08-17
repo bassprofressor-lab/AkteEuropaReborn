@@ -39,6 +39,27 @@ public static class Settings
     /// <summary>Keyboard panning speed in map pixels per second at zoom 1.</summary>
     public static int PanSpeed { get => I("pan_speed", 900); set => Set("pan_speed", value); }
 
+    /// <summary>
+    /// Der farbige BESITZERRING unter jeder Einheit. <b>Standard: aus.</b>
+    ///
+    /// <para>⚠ <b>Er ist unsere Zutat und stammt aus der Zeit ohne Bilder.</b>
+    /// Damals war ein farbiger Punkt mit Ring das Einzige, woran man sah, wo
+    /// eine Einheit steht und wem sie gehört; heute steht darüber ihr Bild.
+    /// Für den Ring gibt es <b>keine einzige Fundstelle im Original</b> — der
+    /// Zeichner sagt es an zwei Stellen selbst (»Bedienhilfen und keine
+    /// Weltobjekte«, »nothing here comes from the original«).</para>
+    ///
+    /// <para>Er ist deshalb ab dem 18.08.2026 <b>abgeschaltet</b> und nicht
+    /// entfernt: wer ihn gewohnt ist, schaltet ihn wieder ein. Das ist der
+    /// Unterschied zwischen einer Abweichung, die man rückgängig machen kann,
+    /// und einer, die man löscht.</para>
+    ///
+    /// <para>⚠ <b>Der RÜCKFALL bleibt unabhängig davon an:</b> eine Einheit,
+    /// für die die Bildbank nichts hergibt, bekommt weiter ihren Punkt. Ohne
+    /// ihn wäre sie unsichtbar — und ein Fehler, den man nicht sieht, wird
+    /// nicht gemeldet.</para></summary>
+    public static bool OwnerRing { get => B("owner_ring", false); set => Set("owner_ring", value); }
+
     /// <summary>Nebel des Krieges. The original has the switch too — its
     /// exploration step @0x4205b0 checks <c>byte[0x4f8a3c]</c> and, when that is
     /// clear, marks everything seen instead of stamping. Default on, as the

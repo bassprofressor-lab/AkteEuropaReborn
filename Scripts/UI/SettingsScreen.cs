@@ -117,6 +117,12 @@ public partial class SettingsScreen : Control
             Settings.RightDragPan, v => Settings.RightDragPan = v));
         box.AddChild(Check("Zeiger zeigt an, was ein Klick tut",
             Settings.CursorHints, v => Settings.CursorHints = v));
+        // ⚠ Das Wort sagt, dass es eine ZUTAT ist. Ein Schalter, der eine
+        // Abweichung vom Original anbietet, ohne sie als solche zu benennen,
+        // laesst den Spieler glauben, er stelle das Spiel ein — dabei stellt er
+        // uns ein. Standard ist aus; siehe Settings.OwnerRing.
+        box.AddChild(Check("Farbiger Ring unter jeder Einheit (unsere Zutat, im Original nicht vorhanden)",
+            Settings.OwnerRing, v => Settings.OwnerRing = v));
 
         var pan = new HSlider
         {

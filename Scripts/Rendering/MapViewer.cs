@@ -428,6 +428,7 @@ public partial class MapViewer : Node2D
         if (_bauCheckFlag) _entities.BauCheckStart(_bauCheckOrder);
         if (_ausbauCheckFlag) _entities.AusbauCheckStart();
         if (_knopfCheckFlag) _entities.KnopfCheckStart();
+        if (_ringCheckTicks > 0) _entities.RingCheckStart(_ringCheckTicks);
         if (_marketCheck)
         {
             GD.Print(_entities.MarketCheck());
@@ -695,6 +696,10 @@ public partial class MapViewer : Node2D
     /// <summary><c>--knopf-check</c> — stehen »Abbrechen« und »Starten« da,
     /// wenn es etwas zu tun gibt, und bleiben sie sonst weg?</summary>
     private bool _knopfCheckFlag;
+    /// <summary><c>--ring-check[=takte]</c> — »orange Ringe ohne Körper«. 0 = aus.
+    /// ⚠ Er braucht Takte: die Meldung spricht von Stellen GEFALLENER, und die
+    /// gibt es im ersten Takt noch nicht.</summary>
+    private int _ringCheckTicks;
     /// <summary><c>--depot-flow</c> — bestellen, im Depot liegen, aussenden.</summary>
     private bool _depotFlow;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
@@ -1163,6 +1168,9 @@ public partial class MapViewer : Node2D
             else if (a == "--radar-check") _radarCheckFlag = true;
             else if (a == "--ausbau-check") _ausbauCheckFlag = true;
             else if (a == "--knopf-check") _knopfCheckFlag = true;
+            else if (a == "--ring-check") _ringCheckTicks = 3000;
+            else if (a.StartsWith("--ring-check="))
+                _ringCheckTicks = Mathf.Max(60, a["--ring-check=".Length..].ToInt());
             else if (a == "--bau-check") { _bauCheckFlag = true; _bauCheckOrder = 5; }
             else if (a.StartsWith("--bau-check="))
             {

@@ -18643,6 +18643,7 @@ public partial class MapEntityLayer : Node2D
         PollAusbauCheck();
         PollAusbauCheck2();
         PollKnopfCheck();
+        PollRingCheck();
 
         // preview harness: start the scripted build as soon as the factory has
         // manufactured enough parts
@@ -21428,7 +21429,25 @@ public partial class MapEntityLayer : Node2D
 
         // Der Besitzerring und die Eingrabmarke liegen auf dem BODEN, also vor
         // dem Rumpf — siehe die Begründung an ihrer alten Stelle.
-        DrawArc(e.Pos, 7f, 0, Mathf.Tau, 20, new Color(oc.R, oc.G, oc.B, 0.9f), 2f);
+        //
+        // ⚠⚠ 18.08.2026 — DER RING IST STANDARDMAESSIG AUS. Er ist unsere Zutat
+        // aus der Zeit, als es noch keine Bilder gab: damals war der farbige
+        // Punkt das Einzige, woran man sah, wo eine Einheit steht und wem sie
+        // gehoert. Fuer ihn gibt es KEINE Fundstelle im Original, und zwei
+        // Stellen in diesem Zeichner sagen das selbst (»Bedienhilfen und keine
+        // Weltobjekte« in BuildUnitDrawOrder, »nothing here comes from the
+        // original« bei DrawSelectionBrackets).
+        //
+        // Damit ist auch der alte Fehlerbericht »orange Ringe ohne Koerper«
+        // erklaert: kein Zeichenfehler, ein Ueberbleibsel. Gemessen mit
+        // `--ring-check` auf vier Karten (3000-4000 Takte, 13 bis 30
+        // Gefallene je Lauf): NULL Ringe ohne Rumpf — die sichtbaren Ringe
+        // gehoerten immer zu lebenden Einheiten.
+        //
+        // Abgeschaltet und nicht geloescht: eine Abweichung, die man
+        // zuruecknehmen kann, ist besser als eine, die man wegwirft.
+        if (UI.Settings.OwnerRing)
+            DrawArc(e.Pos, 7f, 0, Mathf.Tau, 20, new Color(oc.R, oc.G, oc.B, 0.9f), 2f);
         if (e.DugIn)
             DrawArc(e.Pos, 11f, Mathf.Pi * 0.15f, Mathf.Pi * 0.85f, 14,
                     new Color(0.75f, 0.55f, 0.25f, 0.95f), 3f);
@@ -21480,8 +21499,32 @@ public partial class MapEntityLayer : Node2D
         // Gar kein Bild: der Besitzerpunkt. ⚠ Er haengt an e.Pos und nicht an
         // picC — der Punkt gehoert auf die STELLE der Einheit, das Bild auf
         // ihren Zeichenanker.
+        //
+        // ⚠⚠ DAS IST DIE STELLE, an der die gemeldeten »Ringe ohne Koerper«
+        // entstehen: ein Ring (oben, DrawArc mit der Spielerfarbe) plus dieser
+        // Punkt, und dazwischen nichts. `--ring-check` zaehlt hier mit und sagt,
+        // WELCHE Einheiten es sind — der Bericht nannte nur die Farbe, und eine
+        // Farbe ist ein Spieler, keine Ursache.
+        if (RingTrace) NoteRingWithoutBody(e);
         DrawCircle(e.Pos, 4.5f, new Color(oc.R, oc.G, oc.B, 0.85f));
         DrawArc(e.Pos, 5.5f, 0, Mathf.Tau, 16, new Color(0, 0, 0, 0.6f), 1.2f);
+    }
+
+    /// <summary>Zeichnet <c>--ring-check</c> gerade mit?</summary>
+    public static bool RingTrace;
+
+    private readonly System.Collections.Generic.Dictionary<string, int> _ringFall = new();
+    private readonly System.Collections.Generic.HashSet<int> _ringSlots = new();
+
+    /// <summary>Eine Einheit, die keinen Rumpf zeichnet, in die Liste nehmen.
+    /// Gesammelt wird nach der SIGNATUR, nicht nach der Einheit: hundert gleiche
+    /// Fälle sind ein Befund, nicht hundert.</summary>
+    private void NoteRingWithoutBody(Entity e)
+    {
+        _ringSlots.Add(e.Slot);
+        string sig = $"Rumpf {e.UnitType}, Inf {e.Infantry}, Combo {e.Combo}, " +
+                     $"Waffe {e.Weapon}, Marke {e.Mark}, \"{e.Name}\"";
+        _ringFall[sig] = _ringFall.TryGetValue(sig, out int n) ? n + 1 : 1;
     }
 
     /// <summary>Was nach der Einheitenschleife noch kommt — herausgezogen, weil

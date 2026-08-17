@@ -336,6 +336,19 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Die anderen drei Bauaufträge brauchen einen Platzierungsmodus — siehe die
   nächste Zeile.
 
+- ⭐ **Der farbige Ring unter jeder Einheit ist weg.** Er war nie Teil des
+  Originals, sondern eine Hilfe aus der Frühzeit dieses Remakes: damals gab es
+  noch keine Einheitenbilder, und ein farbiger Punkt mit Ring war das Einzige,
+  woran man sah, wo eine Einheit steht und wem sie gehört. Heute steht ihr Bild
+  darüber. In den Einstellungen lässt er sich wieder einschalten — dort steht
+  auch dabei, dass es unsere Zutat ist.
+  ⚠ Damit erledigt sich der alte Bericht über »orange Ringe ohne Körper«: das
+  war kein Zeichenfehler. Nachgemessen auf vier Karten über je 3000–4000 Takte
+  mit 13 bis 30 gefallenen Einheiten — **kein einziger** Ring ohne Körper; die
+  sichtbaren gehörten immer zu lebenden Einheiten.
+  Eine Einheit, für die es kein Bild gibt, bekommt weiterhin ihren Punkt —
+  sonst wäre sie unsichtbar statt auffällig.
+
 - ⭐ **»Abbrechen« und »Alle starten« sind jetzt Knöpfe.** Einen laufenden Bau
   abzubrechen lag nur auf Umschalt+B, die Flugzeuge eines Flughafens
   loszuschicken nur auf Y — die Bestandszeile sagte dem Spieler sogar »(Y
