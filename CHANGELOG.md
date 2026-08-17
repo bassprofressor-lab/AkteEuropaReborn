@@ -289,6 +289,19 @@ deviate on purpose, and every deviation is marked as ours.
   ⚠ One bug of the original, reproduced: the highest veteran grade can **never**
   appear in the shop — its branch hangs on a condition that cannot occur.
 
+- ⭐ **A vehicle can plant radar masts** — and the original does have
+  construction vehicles after all, contrary to what we had noted. Its own order
+  list carries "Build depot", "Build mine", "Build generator" and "Place radar";
+  what it does not have is rebuilding a ruin.
+  The **Radar Installer** carries the radar mast kit and has **twenty** masts
+  aboard. A planted mast opens the fog for ten tiles around it — for allies
+  too — and stays put when the vehicle drives on.
+  ⚠ A mast is **not a building**: no hit points, no footprint; the original
+  keeps them in a list of their own with 200 places. Once it is full, no more.
+  Measured: a pitch-dark spot (0 of 625 tiles visible), mast planted, vehicle
+  sent away — **333 tiles stay open**, held by the mast alone.
+  The other three build orders need a placement mode and follow later.
+
 - ⭐ **Power is wired up — and it throttles.** Power plants supply 90 and belong
   to nobody, generators 50 and belong to their player; factories and mines
   consume. When it is not enough, every plant runs **proportionally slower** —

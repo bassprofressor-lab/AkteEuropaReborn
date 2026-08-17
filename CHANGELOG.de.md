@@ -320,6 +320,22 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Laden **nie** erscheinen — ihr Zweig hängt an einer Bedingung, die nicht
   eintreten kann.
 
+- ⭐ **Ein Fahrzeug kann Radarmasten setzen** — und das Original hat sehr wohl
+  Baufahrzeuge, anders als wir bisher notiert hatten. In seiner eigenen
+  Befehlsliste stehen »Depot bauen«, »Mine bauen«, »Generator bauen« und
+  »Radar setzen«; was es nicht gibt, ist das Wiederaufrichten einer Ruine.
+  Der **Radar Installer** trägt den »Radarstab Ausleger« und hat **zwanzig
+  Masten** an Bord. Ein gesetzter Mast öffnet den Nebel im Umkreis von zehn
+  Feldern — auch für Verbündete — und bleibt liegen, wenn das Fahrzeug
+  weiterfährt.
+  ⚠ Ein Mast ist **kein Gebäude**: keine Trefferpunkte, kein Grundriss, er hat
+  im Original eine eigene Liste mit 200 Plätzen. Ist sie voll, geht nichts mehr.
+  Gemessen: eine stockdunkle Stelle (0 von 625 Feldern sichtbar), Mast gesetzt,
+  Fahrzeug weggeschickt — **333 Felder bleiben offen**, gehalten allein vom
+  Mast.
+  Die anderen drei Bauaufträge brauchen einen Platzierungsmodus und kommen
+  später.
+
 - ⭐ **Der Strom ist angeschlossen — und er bremst.** Kraftwerke liefern 90 und
   gehören niemandem, Generatoren 50 und gehören ihrem Spieler; Fabriken und
   Minen verbrauchen. Reicht es nicht, laufen alle Anlagen **anteilig
