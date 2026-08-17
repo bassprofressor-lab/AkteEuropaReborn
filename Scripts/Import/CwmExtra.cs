@@ -224,6 +224,22 @@ public static class CwmExtra
         /// gegen sec47 zu einem Namen auf.</summary>
         public int Design;
         public int UnitType, GameUnitType, Attack, Defence, Energie, Speed, Sight, Range;
+
+        /// <summary>Satz <b>+0x28</b> — die ERFAHRUNG der angebotenen Einheit,
+        /// und der fehlende Schlüssel zum Preis.
+        ///
+        /// <para>⚠ Bis zum 18.08.2026 wurde dieses Byte nicht mitgelesen, und
+        /// damit war der Ladenpreis nicht nachrechenbar: er ist
+        /// <c>2,5 × Wert</c>, und in den Wert geht der Stufenfaktor ein
+        /// (0,10 bis 7,00, @0x450FC5). Ohne <c>+0x28</c> kam für jedes Angebot
+        /// der Preis einer frischen Einheit heraus — beim gestrigen Vergleich
+        /// wäre das als »unsere Formel stimmt nicht« gelesen worden, obwohl die
+        /// Formel stimmt und nur eine Eingabe fehlte.</para>
+        ///
+        /// <para>Der Nachschub des Originals würfelt sie aus (@0x4C0B97) und
+        /// legt sie nach <c>+0x28</c> des Ladensatzes (@0x4C0FF6); die
+        /// Ladenwertfunktion @0x451092 liest sie von dort wieder.</para></summary>
+        public int Experience;
     }
 
     /// <summary>
@@ -279,6 +295,7 @@ public static class CwmExtra
                 Energie = s94[o + 0x08], Attack = s94[o + 0x26],
                 Defence = s94[o + 0x27], Speed = s94[o + 0x20],
                 Sight = s94[o + 0x2c], Range = s94[o + 0x2b],
+                Experience = s94[o + 0x28],
             });
         }
         return list;

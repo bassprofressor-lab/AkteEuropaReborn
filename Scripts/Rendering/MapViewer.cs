@@ -420,6 +420,7 @@ public partial class MapViewer : Node2D
         }
         if (_depotFlow) _entities.DepotFlowStart();
         if (_sellCheck) _entities.SellCheckStart();
+        if (_shopCheckFlag) _entities.ShopCheckStart();
         if (_marketCheck)
         {
             GD.Print(_entities.MarketCheck());
@@ -652,6 +653,10 @@ public partial class MapViewer : Node2D
     /// die einmaligen Pruefstaende hier drueber, sondern ueber
     /// <c>MapEntityLayer.PollSellCheck</c> im SimTick.</summary>
     private bool _sellCheck;
+    /// <summary><c>--shop-check</c> — legt der Laden nach, und das Richtige?
+    /// Ebenfalls taktgetrieben: er wartet die Phase <c>%100 == 77</c> ab,
+    /// statt den Nachschub aufzurufen.</summary>
+    private bool _shopCheckFlag;
     /// <summary><c>--depot-flow</c> — bestellen, im Depot liegen, aussenden.</summary>
     private bool _depotFlow;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
@@ -1113,6 +1118,7 @@ public partial class MapViewer : Node2D
             else if (a == "--hangar-check") _hangarCheck = true;
             else if (a == "--market-check") _marketCheck = true;
             else if (a == "--sell-check") _sellCheck = true;
+            else if (a == "--shop-check") _shopCheckFlag = true;
             else if (a == "--depot-flow") _depotFlow = true;
             else if (a == "--depot-flow=dock")
             { _depotFlow = true; MapEntityLayer.DepotFlowDock = true; }

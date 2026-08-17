@@ -248,6 +248,21 @@ public static class DesignMath
         return Import.ExeTables.StatsSoundClass < r.Length ? r[Import.ExeTables.StatsSoundClass] : -1;
     }
 
+    /// <summary>Die TECHSTUFE eines Bauteils — stats <b>+0x24</b>. Das ist die
+    /// Schwelle, die das Freigabetor @0x419E90/@0x419F30 gegen den
+    /// Techstandard hält (<c>stats[Teil].+0x24 &lt;= Techstandard</c>).
+    ///
+    /// <para>Gibt <b>−1</b> zurück, wenn es zu der Zeile keinen Satz gibt.
+    /// ⚠ Ausdrücklich nicht 0: eine 0 hiesse »Stufe 0, immer frei« und wäre ein
+    /// Wert; −1 heisst »nicht bekannt« und muss vom Aufrufer behandelt werden.
+    /// Genau diese Unterscheidung hat beim Verkaufspreis schon einmal
+    /// verhindert, dass eine Lücke wie ein Preis aussieht.</para></summary>
+    public static int TechLevel(int row)
+    {
+        if (row <= 0 || _rows == null || !_rows.TryGetValue(row, out var r)) return -1;
+        return 0x24 < r.Length ? r[0x24] : -1;
+    }
+
     // ---- the routine --------------------------------------------------------
 
     /// <summary>The tail of a design record, exactly as @0x4b1fb0 writes it.</summary>

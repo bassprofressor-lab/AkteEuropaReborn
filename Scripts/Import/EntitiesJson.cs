@@ -249,6 +249,9 @@ public static class EntitiesJson
             w.Num("unit_type", o.UnitType).Num("game_unit_type", o.GameUnitType);
             w.Num("energie", o.Energie).Num("attack", o.Attack).Num("defence", o.Defence);
             w.Num("speed", o.Speed).Num("sight", o.Sight).Num("range", o.Range);
+            // ⚠ +0x28, die Erfahrung — ohne sie ist der Ladenpreis nicht
+            // nachrechenbar. Siehe CwmExtra.MarketOffer.Experience.
+            w.Num("experience", o.Experience);
             w.End();
         }
         w.End();

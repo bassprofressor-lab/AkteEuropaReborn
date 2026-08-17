@@ -244,7 +244,325 @@ public partial class MapEntityLayer
             }
         }
 
+        // Phase C — @0x4C02E6, alle 100 Originaltakte (2 Sekunden): der
+        // NACHSCHUB des Ladens.
+        if (_marketTicks % 100 == 77) ShopRestock();
+
         CollectorTick();
+    }
+
+    // ================= DER NACHSCHUB DES LADENS ===============================
+    //
+    // @0x4C0E40, und alles daran ist gelesen. Der Einstieg im Markttick ist
+    // `[0x4FA240] % 100 == 77`; von dort:
+    //
+    //   bl = shop_count()                    @0x4C0860 — wieviel liegt aus
+    //   if (byte[0x53904c] <= bl) return     die Schwelle, und sie ist 15
+    //   bl = rand() % 10                     @0x4C0E6B
+    //   while (bl--) add_shop_item(0xFFFF)   @0x4C0E8F
+    //
+    // Das Spiel schreibt dabei seine eigenen Zeilen mit: »kolik:« (0x53917C,
+    // tschechisch »wieviel«) und »add:« (0x539174).
+
+    /// <summary>Der Laden hat <b>50</b> Plätze — <c>0x81A3A8</c>, 50 Wörter,
+    /// und die Schleifen zählen alle gegen <c>0x32</c>.</summary>
+    private const int ShopSlots = 50;
+
+    /// <summary>Unter dieser Zahl wird nachgelegt: <c>byte[0x53904C] = 0x0F</c>.
+    /// ⚠ Die Zahl steht als Byte in der EXE, nicht im Code — sie ist gemessen,
+    /// nicht aus einem Vergleich erschlossen.</summary>
+    private const int ShopStockTarget = 15;
+
+    /// <summary>Wieviel EXOTISCHE Ware der Laden vorhalten will:
+    /// <c>Schwelle / 6</c> @0x4C0A8E..0x4C0A97, also <b>2</b>. ⚠ Die 6 ist eine
+    /// Konstante im Code und die 15 ein Datenbyte — dass beide zusammengehören,
+    /// steht nur in dieser Division.</summary>
+    private const int ShopExoticTarget = ShopStockTarget / 6;
+
+    /// <summary>Höchstens so viele Stücke je Nachschub: <c>rand() % 10</c>.
+    /// ⚠ Das heisst auch: in einem von zehn Fällen kommt <b>gar nichts</b>.</summary>
+    private const int ShopRestockRoll = 10;
+
+    /// <summary>Der Suchbereich der Entwürfe: <c>bx = 50; while (bx &lt; 200)</c>
+    /// @0x4C0AA5/@0x4C0AF4, mit einer Lücke <c>100..109</c> @0x4C0AA9..0x4C0AB3.
+    ///
+    /// <para>⚠ <b>Ohne Spielerversatz</b>, und das ist kein Versehen: die
+    /// Ladenwertfunktion @0x451010 teilt den <b>Ladenplatz</b> (0..49) durch
+    /// 1000 und bekommt damit immer <b>Spieler 0</b>. Der Laden rechnet also
+    /// durchweg mit den Entwürfen von Spieler 0, und genau deshalb sucht er
+    /// auch dort.</para></summary>
+    private const int ShopSlotFirst = 50, ShopSlotLast = 199;
+    private const int ShopSlotSkipFrom = 100, ShopSlotSkipTo = 109;
+
+    /// <summary>
+    /// <c>byte[Entwurf+0x18] &gt;= 0xA0</c> @0x4C0AC7 — und <b>+0x18 ist das
+    /// FAHRWERK</b>, gemessen an 601 von 601 Sätzen gegen unsere eigene
+    /// Ausfuhr.
+    ///
+    /// <para><b>Was der Filter bedeutet:</b> er wirft die INFANTERIE hinaus.
+    /// Fussoldaten tragen Fahrwerk 148/149, Fahrzeuge 160 und darüber. Der
+    /// Laden verkauft also nie einen Soldaten.</para>
+    ///
+    /// <para><b>Gegenprobe an den Daten</b>, und sie ist eindeutig: die Ware,
+    /// die auf den 13 Gefechtskarten wirklich liegt, erfüllt diesen Filter
+    /// <b>225 von 225 Mal</b>, ohne ein einziges Gegenbeispiel. Die Karten sind
+    /// mit genau diesem Generator bestückt worden.</para></summary>
+    private const int ShopMinPropulsion = 0xA0;
+
+    /// <summary>Drei Waffen, die die Erzeugung am Ende doch verwirft
+    /// (@0x4C0F35..0x4C0F47): <b>65</b> Teleporter, <b>71</b> Transporter,
+    /// <b>78</b> Terranium Finder.
+    ///
+    /// <para>⚠ Sie werden erst NACH der Auswahl geprüft. Fällt die Wahl auf so
+    /// einen Entwurf, verpufft der Durchgang — der Laden bekommt nichts, und
+    /// einer der <c>rand()%10</c> Versuche ist verbraucht. Nachgebaut wie es
+    /// dasteht.</para></summary>
+    private static readonly int[] ShopBannedWeapons = { 65, 71, 78 };
+
+    /// <summary>Wieviel liegt aus — <c>shop_count()</c> @0x4C0860: die Plätze
+    /// mit <c>Preis &gt; 0</c>. ⚠ <b>Vorzeichenbehaftet</b> verglichen
+    /// (<c>jle</c>), also zählt ein verkaufter Platz (Preis 0xFFFF = −1)
+    /// <b>nicht</b> mit — er ist weder leer noch im Angebot.</summary>
+    private int ShopOnShelf() => _market.Count;
+
+    /// <summary>Wieviel davon ist EXOTISCH — dieselbe Sperrprüfung, aber auf
+    /// dem Ladensatz statt auf dem Entwurf (@0x4C0890, Felder +0x3d/+0x3e/+0x3f
+    /// des Satzes). Bei uns steht der Entwurf im Angebot, also fragen wir ihn
+    /// direkt.</summary>
+    private int ShopExoticOnShelf()
+    {
+        int n = 0;
+        foreach (var o in _market) if (ShopDesignLocked(o.Design)) n++;
+        return n;
+    }
+
+    /// <summary>Was der letzte Nachschub getan hat — für Prüfstand und
+    /// Protokoll.</summary>
+    public string ShopNote = "";
+    public int ShopAdded;
+
+    /// <summary>Der Nachschub selbst, @0x4C0E40.</summary>
+    private void ShopRestock()
+    {
+        if (ShopOnShelf() >= ShopStockTarget) return;
+        int n = Determinism.Roll(ShopRestockRoll);
+        int vorher = _market.Count;
+        for (int i = 0; i < n; i++) ShopAddRandom();
+        int neu = _market.Count - vorher;
+        ShopAdded += neu;
+        ShopNote = $"Nachschub: {vorher} lagen aus, {n} versucht, {neu} dazu " +
+                   $"(jetzt {_market.Count}, davon {ShopExoticOnShelf()} exotisch)";
+    }
+
+    /// <summary>
+    /// <b>Ein zufälliges Stück in den Laden legen</b> — @0x4C0A70, der Weg, den
+    /// <c>add_shop_item(0xFFFF)</c> nimmt.
+    ///
+    /// <para><b>Zwei Listen, und der Unterschied ist die Freigabe.</b> Das
+    /// Original läuft über die Entwurfsplätze und fragt für jeden
+    /// <c>design_locked()</c> @0x4C0980: hat eines der drei Bauteile
+    /// (+0x17 Waffe, +0x18 Fahrwerk, +0x19 Aufbau) im Bauteilsatz 0x5045A0 die
+    /// Freigabe <c>+0x00 == 0</c>, dann ist der Entwurf <b>gesperrt</b> und
+    /// kommt nach <c>0xB49D88</c> — sonst nach <c>0xB49CC0</c>.</para>
+    ///
+    /// <para><b>Welche Liste gezogen wird:</b> die exotische, solange weniger
+    /// als <see cref="ShopExoticTarget"/> gesperrte Stücke ausliegen; sonst die
+    /// freie. Und dann zwei Notausgänge, die im Original ausdrücklich
+    /// dastehen (@0x4C0AFB, @0x4C0B05): ist die eine Liste leer, wird die
+    /// andere genommen. Sind beide leer, sagt es <c>»Create new market brush
+    /// error A«</c> bzw. <c>»B«</c> und legt nichts hin.</para>
+    ///
+    /// <para><b>⚠ Warum das die MECHANIK des Marktes ist und nicht Beiwerk:</b>
+    /// gemessen am Fahrplan der Kampagne hat Spieler 0 bei <b>Mission 1 null</b>
+    /// freigegebene Bauteile — <b>alle 52</b> Kandidaten sind dort gesperrt, der
+    /// Laden ist also früh die <b>einzige</b> Quelle für Fahrzeuge. Bei
+    /// <b>Mission 32</b> sind es <b>51 frei / 1 gesperrt</b>, und er wird zur
+    /// Bequemlichkeit. Das ist kein Zufallsgenerator, das ist ein
+    /// Spannungsbogen.</para></summary>
+    private void ShopAddRandom()
+    {
+        // »Cannot add new unit to market-store« (0x539148)
+        if (_market.Count >= ShopSlots) { ShopNote = "der Laden ist voll"; return; }
+        LoadDesigns();
+        if (_designs == null) return;
+
+        var gesperrt = new List<int>();
+        var frei = new List<int>();
+        for (int s = ShopSlotFirst; s <= ShopSlotLast; s++)
+        {
+            if (s >= ShopSlotSkipFrom && s <= ShopSlotSkipTo) continue;
+            var d = DesignBySlot(s);
+            if (d == null) continue;
+            if (d.Value.Propulsion < ShopMinPropulsion) continue;
+            (ShopDesignLocked(s) ? gesperrt : frei).Add(s);
+        }
+
+        bool exotisch = ShopExoticOnShelf() < ShopExoticTarget;
+        if (gesperrt.Count == 0) exotisch = false;      // @0x4C0AFB
+        if (frei.Count == 0) exotisch = true;           // @0x4C0B05
+        var liste = exotisch ? gesperrt : frei;
+        if (liste.Count == 0)
+        {
+            ShopNote = exotisch
+                ? "Create new market brush error A — keine gesperrten Entwuerfe"
+                : "Create new market brush error B — keine freien Entwuerfe";
+            return;
+        }
+
+        int slot = liste[Determinism.Roll(liste.Count)];
+        ShopCreate(slot);
+    }
+
+    /// <summary>
+    /// <b>Ist dieser Entwurf gesperrt?</b> — @0x4C0980.
+    ///
+    /// <para><b>Im Original</b> ist die Frage einfach: hat eines der drei
+    /// Bauteile im Bauteilsatz 0x5045A0 die Freigabe <c>+0x00 == 0</c>? Das
+    /// Byte ist Laufzeitzustand, den die Missionsskripte über
+    /// <c>set_part(Spieler, Teil, Wert)</c> setzen.</para>
+    ///
+    /// <para><b>Bei uns kommt es aus zwei verschiedenen Quellen</b>, und die
+    /// Trennung ist benannt:</para>
+    /// <list type="bullet">
+    ///   <item><b>Kampagne</b> — aus dem FAHRPLAN, also genau dem, was
+    ///   <c>set_part</c> bis zu dieser Mission geschaltet hat
+    ///   (<c>CampaignManager.UnlocksFor(m).Parts</c>, Spieler 0). Das ist die
+    ///   Eingabe des Originals, nur aus der Ausfuhr statt aus dem
+    ///   Laufzeitbyte.</item>
+    ///   <item><b>Gefecht</b> — ⚠ <b>UNSERE ERSATZQUELLE</b>: der
+    ///   TECHSTANDARD gegen die Techstufe des Bauteils
+    ///   (<c>DesignMath.TechLevel</c>, stats +0x24). Das Gefecht hat keinen
+    ///   Fahrplan, und woher das Freigabebyte dort seinen Wert bekommt, ist
+    ///   <b>nicht gelesen</b>. Der Techstandard ist die Schranke, die das
+    ///   Original im Gefecht sonst benutzt (Tor @0x419F30,
+    ///   <c>stats[Teil].+0x24 &lt;= Techstandard</c>) — also die nächstgelegene
+    ///   gelesene Grösse. <b>Sie ist nicht dieselbe Zahl</b>, und das steht
+    ///   hier, statt es gleich aussehen zu lassen.</item>
+    /// </list>
+    ///
+    /// <para>Ist keine Quelle da, gilt <b>nichts als gesperrt</b>. Der Laden
+    /// zieht dann nur aus der freien Liste — genau das, was das Original bei
+    /// leerer Sperrliste auch tut (@0x4C0AFB). Eine Lücke, die sich wie ein
+    /// gelesener Fall verhält, statt wie ein erfundener.</para></summary>
+    private bool ShopDesignLocked(int slot)
+    {
+        var d = DesignBySlot(slot);
+        if (d == null) return false;
+        int w = d.Value.Weapon, p = d.Value.Propulsion, e = d.Value.Equip;
+
+        int mission = UI.SkirmishSetup.CampaignMission;
+        if (mission > 0)
+        {
+            var u = Campaign.CampaignManager.UnlocksFor(mission);
+            if (!u.Known) return false;
+            var mine = u.Components;
+            foreach (int c in new[] { w, p, e })
+                if (c != 0 && !mine.Contains(c)) return true;
+            return false;
+        }
+
+        int tech = UI.SkirmishSetup.Techstandard;
+        if (tech <= 0) return false;
+        foreach (int c in new[] { w, p, e })
+        {
+            if (c == 0) continue;
+            int lvl = DesignMath.TechLevel(c);
+            if (lvl > 0 && lvl > tech) return true;    // -1 = unbekannt, zaehlt nicht
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// <b>Das Stück anlegen</b> — <c>create_shop_unit</c> @0x4C0EC0, auf das
+    /// reduziert, was bei uns ein Angebot ausmacht.
+    ///
+    /// <para>Das Original füllt hier einen ganzen 78-Byte-Einheitensatz in
+    /// sec94 (Blickrichtung 0xFF, zwei Zufallsbytes auf +0x02/+0x03, die
+    /// Bauteile nach +0x3b..+0x3f, der Entwurf nach +0x43, die gewürfelte
+    /// Erfahrung nach <b>+0x28</b> @0x4C0FF6). Wir führen ein Angebot als Satz
+    /// mit den Werten, die wir daraus brauchen — der Rest entsteht beim Kauf
+    /// aus dem Entwurf.</para>
+    ///
+    /// <para><b>Der Preis kommt zuletzt und aus derselben Formel wie überall:</b>
+    /// @0x4C1194 ruft die Ladenwertfunktion und rechnet <c>25·Wert/10</c>. Weil
+    /// der Wert die Erfahrung enthält, kostet derselbe Entwurf mit Stufe 6 das
+    /// <b>Siebzigfache</b> von dem mit Stufe 0.</para></summary>
+    private void ShopCreate(int slot)
+    {
+        var d = DesignBySlot(slot);
+        if (d == null) return;
+
+        // ⚠ Erst würfeln, DANN verwerfen — das Original tut es in dieser
+        // Reihenfolge, und der verworfene Versuch ist trotzdem verbraucht.
+        int exp = ShopRollExperience(d.Value.Weapon);
+        foreach (int b in ShopBannedWeapons)
+            if (d.Value.Weapon == b)
+            {
+                ShopNote = $"Entwurf {slot} \"{d.Value.Name}\" hat Waffe {b} — verworfen";
+                return;
+            }
+
+        int hull = d.Value.Derived.Hp;
+        int wert = UnitValue.Of(d.Value.Derived.CostW, d.Value.Derived.CostF,
+                                d.Value.Derived.CostS, hull, hull, exp);
+        _market.Add(new MarketOffer
+        {
+            Slot = -1,
+            Price = UnitValue.ShopPrice(wert),
+            Design = slot,
+            UnitType = d.Value.Propulsion,
+            Attack = d.Value.Attack, Defence = d.Value.Defence,
+            Energie = hull, Speed = d.Value.Speed,
+            Sight = d.Value.Sight, Range = d.Value.Range,
+            Experience = exp,
+            Name = d.Value.Name,
+        });
+    }
+
+    /// <summary>
+    /// <b>Die Erfahrung, die der Laden auswürfelt</b> — @0x4C0B97..0x4C0C48.
+    ///
+    /// <para><b>Erst die Frage, ob überhaupt gewürfelt wird.</b> Eine
+    /// Sprungtafel über <c>Waffe − 3</c> (Bereich 0..16, Tafel 0x4C0C70 mit
+    /// Index 0x4C0C84) schickt die Waffen <b>3, 9, 14, 15, 16, 19</b> auf
+    /// »keine Erfahrung«, und <c>Waffe &gt;= 50</c> ebenfalls (@0x4C0BC9).
+    /// Aufgeschlüsselt heisst das: <b>Kampfeinheiten werden erfahren,
+    /// Nutzfahrzeuge nicht</b> — die stumme Gruppe sind Radar, Reparatur,
+    /// Konstruktion, Minen- und Fallenleger, Teleporter, Muddinger.</para>
+    ///
+    /// <para><b>Dann der Wurf</b>, ein Byte 0..255:
+    /// unter 150 nichts · 150..209 → <b>6</b> · 210..234 → <b>21</b> ·
+    /// 235..249 → <b>42</b> · ab 250 ein zweiter Wurf <c>rand()%100</c>:
+    /// unter 50 → <b>77</b>, 50..79 → <b>112</b>, 80..99 → <b>172</b>.</para>
+    ///
+    /// <para><b>⚠ Und hier steht der Beleg, dass diese Zahlen wirklich die
+    /// Erfahrung sind:</b> die Stufenschwellen der Wertfunktion sind
+    /// 5/20/40/75/110/170/254/255 — und <b>jeder</b> der sieben Werte liegt
+    /// genau EINS über einer Schwelle (6&gt;5, 21&gt;20, 42&gt;40, 77&gt;75,
+    /// 112&gt;110, 172&gt;170). Sieben von sieben, kein Ausreisser. Sie sind
+    /// gesetzt worden, um je eine Stufe zu treffen.</para>
+    ///
+    /// <para>⚠ <b>TOTER CODE im Original:</b> ein vierter Zweig setzt
+    /// <b>255</b> (Stufe 7, Faktor 10,00) für <c>rand()%100 &gt;= 100</c>
+    /// @0x4C0C3A — was nie eintreten kann. <b>Die höchste Veteranenstufe
+    /// erscheint im Laden also niemals.</b> Nachgebaut wie es dasteht, samt
+    /// dem Grund.</para></summary>
+    private static int ShopRollExperience(int weapon)
+    {
+        if (weapon >= 50) return 0;                                  // @0x4C0BC9
+        if (weapon is 3 or 9 or 14 or 15 or 16 or 19) return 0;      // Sprungtafel 0x4C0C84
+
+        int r = Determinism.Roll(256);                               // rand() & 0xFF
+        if (r < 150) return 0;
+        if (r < 210) return 6;
+        if (r < 235) return 21;
+        if (r < 250) return 42;
+        int r2 = Determinism.Roll(100);                              // rand() % 100
+        if (r2 < 50) return 77;
+        if (r2 < 80) return 112;
+        return 172;
+        // ⚠ Der Zweig `r2 >= 100 -> 255` des Originals fehlt hier nicht, er ist
+        // unerreichbar: rand()%100 gibt 0..99. Siehe Kopfkommentar.
     }
 
     // ================= der Abholer (0xB49E50, 20 Sätze zu 32 Byte) ============
@@ -675,6 +993,186 @@ public partial class MapEntityLayer
         foreach (var e in _entities)
             if (!e.IsBuilding && !e.IsProp && !e.Dead && e.Owner == player) n++;
         return n;
+    }
+
+    // ================= der Prüfstand des NACHSCHUBS ===========================
+
+    private int _shopCheck = -1;
+    private int _shopCheckTick0;
+    private readonly System.Text.StringBuilder _shopLog = new();
+
+    /// <summary><c>--shop-check</c> anwerfen.</summary>
+    public void ShopCheckStart() => _shopCheck = 0;
+
+    /// <summary>
+    /// <c>--shop-check</c> — <b>legt der Laden nach, und legt er das Richtige
+    /// nach?</b>
+    ///
+    /// <para><b>Der wertvollste Teil ist die PREISPROBE, und sie ist billig zu
+    /// haben:</b> die Karten tragen den Ladensatz (sec94) <b>und</b> den Preis
+    /// (sec95) nebeneinander. Der Sollwert kommt damit aus dem <b>Original
+    /// selbst</b> und nicht aus unserer Ableitung — genau das, was Regel N
+    /// verlangt. Rechnet unsere Formel <c>2,5 × Wert</c> aus dem Satz denselben
+    /// Preis heraus, den die Datei nennt, dann stimmen Wertformel,
+    /// Stufentafel, Faktoren und die 2,5 alle zusammen; und wenn nicht, sagt
+    /// die Zeile, welches Angebot abweicht.</para>
+    ///
+    /// <para><b>Er übt die Mechanik aus</b> (Regel 11): er räumt das Regal leer
+    /// — <b>und sagt in der Ausgabe, dass er es tut</b> —, lässt dann den
+    /// echten Takt laufen und wartet, bis die Phase <c>%100 == 77</c> von
+    /// selbst zuschlägt. Der Nachschub wird also nicht aufgerufen, er wird
+    /// abgewartet.</para>
+    ///
+    /// <para><b>Und er prüft den Würfel gegen die gelesenen Anteile.</b> Zehn-
+    /// tausend Würfe, aufgeschlüsselt nach Stufe. Ein Nachschub, der »etwas«
+    /// hinlegt, sagt nichts darüber, ob die Erfahrungsverteilung die des
+    /// Originals ist — und die ist der Grund, warum Preise um den Faktor 70
+    /// auseinanderliegen.</para></summary>
+    private void PollShopCheck()
+    {
+        if (_shopCheck < 0) return;
+
+        if (_shopCheck == 0)
+        {
+            LoadDesigns();
+            _shopLog.AppendLine("shop-check");
+            int mission = UI.SkirmishSetup.CampaignMission;
+            _shopLog.AppendLine(mission > 0
+                ? $"  Modus: KAMPAGNE M{mission} — Sperrliste aus dem FAHRPLAN (set_part)"
+                : $"  Modus: GEFECHT — Sperrliste aus dem TECHSTANDARD {UI.SkirmishSetup.Techstandard} " +
+                  $"(⚠ unsere Ersatzquelle, das Original liest dort ein anderes Byte)");
+
+            // ---- die zwei Listen ----
+            var gesperrt = new List<int>();
+            var frei = new List<int>();
+            int ohneEntwurf = 0, infanterie = 0;
+            for (int s = ShopSlotFirst; s <= ShopSlotLast; s++)
+            {
+                if (s >= ShopSlotSkipFrom && s <= ShopSlotSkipTo) continue;
+                var d = DesignBySlot(s);
+                if (d == null) { ohneEntwurf++; continue; }
+                if (d.Value.Propulsion < ShopMinPropulsion) { infanterie++; continue; }
+                (ShopDesignLocked(s) ? gesperrt : frei).Add(s);
+            }
+            _shopLog.AppendLine($"  ENTWUERFE {ShopSlotFirst}..{ShopSlotLast} ohne " +
+                                $"{ShopSlotSkipFrom}..{ShopSlotSkipTo}: " +
+                                $"{frei.Count + gesperrt.Count} Kandidaten " +
+                                $"({frei.Count} frei / {gesperrt.Count} gesperrt), " +
+                                $"{infanterie} als Infanterie ausgesiebt (Fahrwerk < {ShopMinPropulsion}), " +
+                                $"{ohneEntwurf} Luecken");
+            if (frei.Count + gesperrt.Count == 0)
+            {
+                _shopLog.AppendLine("  KEIN URTEIL: kein einziger Kandidat — hier ist nichts zu messen");
+                GD.Print(_shopLog.ToString()); _shopCheck = -1; return;
+            }
+
+            // ---- die PREISPROBE gegen die Ware der Karte ----
+            //
+            // ⚠ Sie ist NICHT »stimmt / stimmt nicht«, und der Grund ist ein
+            // gemessener Befund über die Kartendateien selbst: über alle 13
+            // Gefechtskarten liegen die gespeicherten Preise in GENAU ZWEI
+            // Gruppen, 2,5·Wert und 1,5·Wert — kein drittes Verhältnis, keine
+            // Streuung. Die 2,5 ist die des Spielcodes (beide GAME.EXE, je zwei
+            // Aufrufstellen, byteweise nachgesehen); map_DM_1 trägt sie auf
+            // allen 18 Plätzen, die übrigen zwölf Karten durchweg die 1,5.
+            //
+            // Ein Prüfstand, der hier »0 von 21« meldet, zeigt deshalb auf den
+            // falschen Täter: unsere Formel ist nicht falsch, die Kartendateien
+            // sind uneinheitlich. Also wird das VERHAELTNIS ausgewiesen.
+            _shopLog.AppendLine($"  PREISPROBE — {_market.Count} Angebote dieser Karte gegen " +
+                                $"den Preis AUS DER DATEI (sec95). ⚠ Sollwert aus zweiter Quelle:");
+            int g25 = 0, g15 = 0, sonst = 0, pruefbar = 0;
+            var fremd = new List<string>();
+            foreach (var o in _market)
+            {
+                var d = DesignBySlot(o.Design);
+                if (d == null) continue;
+                int hullMax = d.Value.Derived.Hp;
+                if (hullMax <= 0) continue;
+                pruefbar++;
+                int wert = UnitValue.Of(d.Value.Derived.CostW, d.Value.Derived.CostF,
+                                        d.Value.Derived.CostS, o.Energie, hullMax, o.Experience);
+                if (wert <= 0) { sonst++; continue; }
+                if (UnitValue.ShopPrice(wert) == o.Price) g25++;
+                else if (15 * wert / 10 == o.Price) g15++;
+                else
+                {
+                    sonst++;
+                    fremd.Add($"    Entwurf {o.Design} \"{d.Value.Name}\": Kosten " +
+                              $"{d.Value.Derived.CostW + d.Value.Derived.CostF + d.Value.Derived.CostS}, " +
+                              $"Huelle {o.Energie}/{hullMax}, Erfahrung {o.Experience} -> Wert {wert}, " +
+                              $"gespeichert ${o.Price} (Verhaeltnis {o.Price / (double)wert:0.000})");
+                }
+            }
+            _shopLog.AppendLine($"    {g25} bei 2,5·Wert (die Formel des SPIELCODES), " +
+                                $"{g15} bei 1,5·Wert, {sonst} weder noch — von {pruefbar}");
+            _shopLog.AppendLine(sonst == 0
+                ? "    kein drittes Verhaeltnis: Wertformel, Stufentafel und Faktoren gehen auf"
+                : "    ⚠ ein drittes Verhaeltnis — DAS waere ein Fehler unserer Formel:");
+            foreach (var z in fremd.GetRange(0, Mathf.Min(6, fremd.Count)))
+                _shopLog.AppendLine(z);
+            if (fremd.Count > 6)
+                _shopLog.AppendLine($"    ... und {fremd.Count - 6} weitere");
+
+            // ---- der Würfel gegen die gelesenen Anteile ----
+            _shopLog.AppendLine("  ERFAHRUNGSWURF, 10000 Wuerfe auf eine Kampfwaffe (Waffe 2):");
+            var zaehl = new Dictionary<int, int>();
+            for (int i = 0; i < 10000; i++)
+            {
+                int e = ShopRollExperience(2);
+                zaehl[e] = zaehl.GetValueOrDefault(e) + 1;
+            }
+            foreach (var (wert, soll) in new (int, double)[]
+                     { (0, 150 / 256.0), (6, 60 / 256.0), (21, 25 / 256.0), (42, 15 / 256.0),
+                       (77, 6 / 256.0 * 0.50), (112, 6 / 256.0 * 0.30), (172, 6 / 256.0 * 0.20) })
+                _shopLog.AppendLine($"    Erfahrung {wert,3} (Stufe {UnitValue.LevelOf(wert)}, " +
+                                    $"Faktor {UnitValue.LevelFactor[UnitValue.LevelOf(wert)] / 100.0:0.00}): " +
+                                    $"{zaehl.GetValueOrDefault(wert),5} gemessen, {soll * 10000,7:0} erwartet");
+            _shopLog.AppendLine($"    Erfahrung 255 (Stufe 7): {zaehl.GetValueOrDefault(255)} — " +
+                                $"MUSS 0 sein, der Zweig des Originals ist unerreichbar");
+            _shopLog.AppendLine($"    Nutzfahrzeug (Waffe 67): " +
+                                $"{(ShopRollExperience(67) == 0 ? "0, richtig" : "NICHT 0 — falsch")}");
+
+            // ---- das Regal räumen und den echten Takt abwarten ----
+            _shopLog.AppendLine($"  ⚠ EINGRIFF DES PRUEFSTANDS: das Regal wird geraeumt " +
+                                $"({_market.Count} Angebote weg). Ohne das liegt hier mehr als " +
+                                $"{ShopStockTarget} aus und der Nachschub haette gar keinen Anlass.");
+            _market.Clear();
+            ShopAdded = 0; ShopNote = "";
+            _shopCheckTick0 = _marketTicks;
+            _shopCheck = 1;
+            return;
+        }
+
+        // Stufe 1 — auf die Phase %100 == 77 warten, sie NICHT aufrufen.
+        if (ShopAdded > 0 || _market.Count > 0)
+        {
+            int dauer = _marketTicks - _shopCheckTick0;
+            _shopLog.AppendLine($"  NACHSCHUB nach {dauer} Originaltakten " +
+                                $"({dauer / OriginalTicksPerSecond:0.00} s) — " +
+                                $"{(dauer <= 100 ? "innerhalb der 100-Takt-Phase, richtig" : "ZU SPAET")}");
+            _shopLog.AppendLine($"    {ShopNote}");
+            foreach (var o in _market)
+            {
+                var d = DesignBySlot(o.Design);
+                _shopLog.AppendLine($"    Entwurf {o.Design,3} \"{(d?.Name ?? "?")}\" " +
+                                    $"Waffe {d?.Weapon,3} Fahrwerk {d?.Propulsion,3} " +
+                                    $"Erfahrung {o.Experience,3} (Stufe {UnitValue.LevelOf(o.Experience)}) " +
+                                    $"-> ${o.Price}" +
+                                    $"{(ShopDesignLocked(o.Design) ? "  [exotisch]" : "")}");
+            }
+            GD.Print(_shopLog.ToString());
+            _shopCheck = -1;
+            return;
+        }
+        if (_marketTicks - _shopCheckTick0 > 300)
+        {
+            _shopLog.AppendLine($"  KEIN URTEIL: nach 300 Originaltakten (6 s) kein Nachschub. " +
+                                $"Die Phase %100 == 77 haette dreimal zuschlagen muessen." +
+                                (ShopNote.Length > 0 ? $" Letzte Meldung: {ShopNote}" : ""));
+            GD.Print(_shopLog.ToString());
+            _shopCheck = -1;
+        }
     }
 
     // ================= was die Oberfläche davon braucht =======================

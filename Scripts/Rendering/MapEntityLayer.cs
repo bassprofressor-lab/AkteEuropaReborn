@@ -2281,6 +2281,7 @@ public partial class MapEntityLayer : Node2D
                     Attack = GetI(mo, "attack"), Defence = GetI(mo, "defence"),
                     Energie = GetI(mo, "energie"), Speed = GetI(mo, "speed"),
                     Sight = GetI(mo, "sight"), Range = GetI(mo, "range"),
+                    Experience = GetI(mo, "experience"),
                 });
             }
 
@@ -10943,6 +10944,11 @@ public partial class MapEntityLayer : Node2D
             Elev = ElevOf(at.X, at.Y), Facing = DefaultFacing, Mobile = true,
             Weapon = d is { } dd ? TurretOf(dd.Weapon) : 0,
             Equipment = d?.Equip ?? 0,
+            // ⚠ Satz +0x28 — die gekaufte Einheit bringt die ERFAHRUNG mit, fuer
+            // die der Kaeufer bezahlt hat. Ohne diese Zeile kostet ein Veteran
+            // das Siebzigfache und kommt als Rekrut auf die Karte; beim
+            // Weiterverkauf waere er dann fast nichts mehr wert.
+            Field28 = o.Experience,
             Chassis = d?.Derived.ChassisComponent ?? 0,
             GameUnitType = TypeOfChassis(o.UnitType > 0 ? o.UnitType : d?.Propulsion ?? 160),
             Move = Simulation.NavGrid.ClassOf(-1, d?.Derived.ChassisComponent ?? 0),
@@ -10962,6 +10968,17 @@ public partial class MapEntityLayer : Node2D
     {
         public int Slot, Price, Design, UnitType, Attack, Defence, Energie, Speed, Sight, Range;
         public string Name = "";
+
+        /// <summary>Satz +0x28, die ERFAHRUNG der angebotenen Einheit.
+        ///
+        /// <para>⚠ Sie ist der Grund, warum zwei gleiche Entwürfe im Laden ganz
+        /// verschieden viel kosten: der Preis ist <c>2,5 × Wert</c>, und der
+        /// Wert wird mit dem Stufenfaktor multipliziert — von <b>0,10</b> bis
+        /// <b>7,00</b>. Der Nachschub würfelt sie aus (siehe
+        /// <c>Simulation/MarketTrade.cs</c>, <c>ShopRollExperience</c>); Ware,
+        /// die schon in der Karte liegt, bringt sie aus sec94 mit.</para>
+        /// </summary>
+        public int Experience;
     }
 
     private readonly List<MarketOffer> _market = new();
@@ -17995,6 +18012,7 @@ public partial class MapEntityLayer : Node2D
         PollBuildPanelDemo();
         PollDepotFlow();
         PollSellCheck();
+        PollShopCheck();
 
         // preview harness: start the scripted build as soon as the factory has
         // manufactured enough parts

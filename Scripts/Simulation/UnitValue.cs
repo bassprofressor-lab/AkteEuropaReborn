@@ -113,10 +113,34 @@ public static class UnitValue
 
     /// <summary>
     /// <b>Was der Laden verlangt: 250 % des Werts.</b> Damit steht die Spanne des
-    /// Geschäftszentrums fest — <b>8 : 1</b> zwischen Ankauf und Verkauf. Diese
-    /// Zahl ist doppelt belegt: sie steht so in der Nachschubrechnung, und sie
-    /// erzwingt Ladenpreise <c>≡ 0 oder 2 (mod 5)</c>, was alle 21 belegten
-    /// Preise der echten <c>4.DM</c> erfüllen (zufällig 2·10⁻⁹).
+    /// Geschäftszentrums fest — <b>8 : 1</b> zwischen Ankauf und Verkauf.
+    ///
+    /// <para><b>Wo die Zahl steht</b> (18.08.2026, byteweise nachgesehen): an
+    /// beiden Stellen, die je einen Ladenpreis schreiben — <c>add_shop_item</c>
+    /// @0x4C0DB3 und <c>create_shop_unit</c> @0x4C119C —, jeweils als
+    /// <c>lea ×5</c>, <c>lea ×5</c>, <c>idiv 10</c>. Und in <b>beiden</b>
+    /// GAME.EXE.</para>
+    ///
+    /// <para><b>⚠ Und jetzt der Befund, der eine Warnung wert ist:</b> die
+    /// gespeicherten Preise der Karten folgen ihr <b>nicht durchweg</b>. Über
+    /// alle 13 Gefechtskarten liegen 225 Angebote in <b>genau zwei</b>
+    /// Verhältnissen zum gerechneten Wert — <b>18 bei 2,5</b> (das ist
+    /// <c>map_DM_1</c>, und zwar alle achtzehn) und <b>207 bei 1,5</b> (die
+    /// übrigen zwölf Karten, ausnahmslos). Kein drittes Verhältnis, keine
+    /// Streuung.</para>
+    ///
+    /// <para>Das ist eine Aussage über die <b>Dateien</b>, nicht über die
+    /// Formel: <c>map_DM_1</c> bestätigt die ganze Kette — Kosten, Hülle,
+    /// Erfahrung, Stufentafel, Faktoren, ×30 und ×2,5 — <b>18 von 18</b>.
+    /// Die zwölf anderen sind mit einer anderen Spanne bestückt worden.
+    /// <b>Nicht geradegerückt</b>: was in der Karte steht, bleibt, was der
+    /// Nachschub anlegt, folgt dem Code.</para>
+    ///
+    /// <para>⚠ <b>Eine ältere Begründung ist damit entkräftet:</b> »die 2,5
+    /// erzwingt Preise ≡ 0 oder 2 (mod 5), alle 21 erfüllen das«. Sie erfüllen
+    /// es (223 von 225), aber die 1,5-Gruppe tut es auch — die Probe kann die
+    /// beiden Spannen gar nicht unterscheiden und hat die 2,5 nie belegt.
+    /// Belegt hat sie erst der Bytevergleich in beiden EXE und map_DM_1.</para>
     /// </summary>
     public static int ShopPrice(int value) => 25 * value / 10;
 }
