@@ -349,8 +349,16 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   (`%APPDATA%\Godot\app_userdata\AkteEuropaReborn\logs`). Bisher hinterliess
   ein Absturz dort keine Spur.
 
-- ⭐ **Mission 28 hat endlich ihre Siegbedingung** — damit tragen **32 von 33**
-  Missionen ihr Skript, und nur noch Mission 21 fehlt. Ihre Bedingung ist ein
+- ⭐ **Mission 21 hat ihre Siegbedingung — damit tragen ALLE 33 Missionen der
+  Kampagne ihre eigene.** Sie verlangt neun bestimmte **Bahnverbindungen**:
+  jede muss unversehrt sein und beide Endbahnhöfe müssen Ihnen gehören. Der
+  Regelleser konnte das nicht lesen, weil das Original es als Schleife
+  schreibt; jetzt erkennt er diese Form.
+  Gemessen: keine der neun Verbindungen gehört Ihnen zu Beginn — übernimmt man
+  die neun Endgebäude, ist die Mission binnen einer Sekunde **erfüllt**.
+
+- ⭐ **Mission 28 hat endlich ihre Siegbedingung** — damit trugen **32 von 33**
+  Missionen ihr Skript. Ihre Bedingung ist ein
   Oder aus drei Und-Gruppen: drei Wissenschaftler, und **einer** von ihnen muss
   lebend an der Ausstiegsstelle stehen. Der Leser konnte so etwas bisher nicht
   ausdrücken und liess die Mission darum ganz weg — sie endete nie von selbst.

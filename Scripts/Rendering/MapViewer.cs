@@ -428,6 +428,7 @@ public partial class MapViewer : Node2D
         if (_bauCheckFlag) _entities.BauCheckStart(_bauCheckOrder);
         if (_ausbauCheckFlag) _entities.AusbauCheckStart();
         if (_knopfCheckFlag) _entities.KnopfCheckStart();
+        if (_m21CheckFlag) _entities.M21CheckStart();
         if (_ringCheckTicks > 0) _entities.RingCheckStart(_ringCheckTicks);
         if (_marketCheck)
         {
@@ -696,6 +697,9 @@ public partial class MapViewer : Node2D
     /// <summary><c>--knopf-check</c> — stehen »Abbrechen« und »Starten« da,
     /// wenn es etwas zu tun gibt, und bleiben sie sonst weg?</summary>
     private bool _knopfCheckFlag;
+    /// <summary><c>--m21-check</c> — gewinnt Mission 21, wenn der Spieler die
+    /// neun Bahnverbindungen haelt? Siehe Simulation/RailLinkCheck.cs.</summary>
+    private bool _m21CheckFlag;
     /// <summary><c>--ring-check[=takte]</c> — »orange Ringe ohne Körper«. 0 = aus.
     /// ⚠ Er braucht Takte: die Meldung spricht von Stellen GEFALLENER, und die
     /// gibt es im ersten Takt noch nicht.</summary>
@@ -1168,6 +1172,7 @@ public partial class MapViewer : Node2D
             else if (a == "--radar-check") _radarCheckFlag = true;
             else if (a == "--ausbau-check") _ausbauCheckFlag = true;
             else if (a == "--knopf-check") _knopfCheckFlag = true;
+            else if (a == "--m21-check") _m21CheckFlag = true;
             else if (a == "--ring-check") _ringCheckTicks = 3000;
             else if (a.StartsWith("--ring-check="))
                 _ringCheckTicks = Mathf.Max(60, a["--ring-check=".Length..].ToInt());

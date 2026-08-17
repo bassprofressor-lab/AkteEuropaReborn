@@ -18647,6 +18647,8 @@ public partial class MapEntityLayer : Node2D
         PollAusbauCheck2();
         PollKnopfCheck();
         PollRingCheck();
+        PollM21Check();
+        PollM21Check2();
 
         // preview harness: start the scripted build as soon as the factory has
         // manufactured enough parts

@@ -612,6 +612,3978 @@
     }
    ]
   },
+  "2": {
+   "_endregel_aus": "0x4993E8",
+   "block": "",
+   "gate": "0x499197",
+   "init": {
+    "101": 1,
+    "131": 120
+   },
+   "rules": [
+    {
+     "_at": "0x4989EA",
+     "then": [
+      {
+       "a": 88,
+       "kind": "inc"
+      }
+     ],
+     "when": []
+    },
+    {
+     "_at": "0x4989FB",
+     "then": [
+      {
+       "a": 88,
+       "b": 0,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 88,
+       "b": 19,
+       "kind": "var",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x498A7C",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 3,
+     "then": [
+      {
+       "_at": "0x498A7C",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498A89",
+       "a": 15,
+       "b": 2,
+       "c": 70,
+       "d": 70,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 15,
+       "b": 8000,
+       "c": 21,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x498AAB",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "then": [
+      {
+       "_at": "0x498AAB",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498AB8",
+       "a": 16,
+       "b": 2,
+       "c": 80,
+       "d": 30,
+       "kind": "text"
+      },
+      {
+       "a": 3,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 3,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "b": 31,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x498AE9",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "then": [
+      {
+       "_at": "0x498AE9",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498AF6",
+       "a": 17,
+       "b": 2,
+       "c": 20,
+       "d": 50,
+       "kind": "text"
+      },
+      {
+       "a": 3,
+       "kind": "inc"
+      },
+      {
+       "a": 5,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 3,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 4,
+       "b": 0,
+       "c": 0,
+       "kind": "units",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x498B64",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "then": [
+      {
+       "_at": "0x498B64",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498B77",
+       "a": 22,
+       "b": 2,
+       "c": 340,
+       "d": 280,
+       "kind": "text"
+      },
+      {
+       "a": 3,
+       "kind": "inc"
+      },
+      {
+       "a": 20,
+       "b": 3,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 0,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 63,
+       "b": 1000,
+       "c": 7,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x498BF2",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "then": [
+      {
+       "_at": "0x498BF2",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498C05",
+       "a": 23,
+       "b": 2,
+       "c": 360,
+       "d": 260,
+       "kind": "text"
+      },
+      {
+       "_at": "0x498C17",
+       "a": 1,
+       "b": 40,
+       "c": 88,
+       "d": 330,
+       "e": 1,
+       "f": 0,
+       "kind": "stock"
+      },
+      {
+       "a": 22,
+       "kind": "inc"
+      },
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x498C35",
+       "a": 1,
+       "b": 42,
+       "c": 88,
+       "d": 243,
+       "e": 1,
+       "f": 0,
+       "kind": "stock"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 0,
+       "kind": "objects",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x498C4E",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "then": [
+      {
+       "_at": "0x498C4E",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498C61",
+       "a": 24,
+       "b": 2,
+       "c": 420,
+       "d": 320,
+       "kind": "text"
+      },
+      {
+       "a": 20,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 4,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "b": 6,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x498CD9",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 34,
+     "then": [
+      {
+       "_at": "0x498CD9",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498CE6",
+       "a": 7,
+       "b": 2,
+       "c": 30,
+       "d": 60,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 3,
+       "b": 8000,
+       "c": 55,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x498D08",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 35,
+     "then": [
+      {
+       "_at": "0x498D08",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498D15",
+       "a": 8,
+       "b": 2,
+       "c": 5,
+       "d": 100,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "b": 1,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x498D94",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 50,
+     "then": [
+      {
+       "_at": "0x498D94",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498DA4",
+       "a": 39,
+       "b": 2,
+       "c": 70,
+       "d": 150,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "b": 24,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x498DCD",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 51,
+     "then": [
+      {
+       "_at": "0x498DCD",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498DDD",
+       "a": 40,
+       "b": 2,
+       "c": 70,
+       "d": 150,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "b": 25,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x498E06",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 52,
+     "then": [
+      {
+       "_at": "0x498E06",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498E16",
+       "a": 41,
+       "b": 2,
+       "c": 70,
+       "d": 150,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "b": 7,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x498E3F",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 53,
+     "then": [
+      {
+       "_at": "0x498E3F",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498E4F",
+       "a": 42,
+       "b": 2,
+       "c": 70,
+       "d": 150,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "b": 29,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x498E88",
+     "once": 61,
+     "then": [
+      {
+       "_at": "0x498E92",
+       "a": 2,
+       "b": 40,
+       "c": 88,
+       "d": 330,
+       "e": 1,
+       "f": 0,
+       "kind": "stock"
+      },
+      {
+       "_at": "0x498EA2",
+       "a": 2,
+       "b": 42,
+       "c": 88,
+       "d": 237,
+       "e": 1,
+       "f": 0,
+       "kind": "stock"
+      }
+     ],
+     "when": [
+      {
+       "a": 2,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 63,
+       "b": 1000,
+       "c": 57,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x498EEC",
+     "_tut_ausserdem": "place_unit place_unit place_unit place_unit place_unit place_unit place_unit order order order order order order order",
+     "any": [
+      {
+       "a": 1,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 2,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ],
+     "once": 70,
+     "then": [
+      {
+       "_at": "0x498EF4",
+       "a": 85,
+       "b": 32,
+       "c": 8,
+       "d": 4,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x498F04",
+       "a": 85,
+       "b": 33,
+       "c": 0,
+       "d": 4,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x498F14",
+       "a": 85,
+       "b": 34,
+       "c": 0,
+       "d": 4,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x498F24",
+       "a": 86,
+       "b": 35,
+       "c": 8,
+       "d": 4,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x498F34",
+       "a": 86,
+       "b": 30,
+       "c": 2,
+       "d": 4,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x498F44",
+       "a": 86,
+       "b": 35,
+       "c": 3,
+       "d": 4,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x498F54",
+       "a": 60,
+       "b": 32,
+       "c": 7,
+       "d": 4,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x498F73",
+       "a": 4000,
+       "b": 16,
+       "c": 20,
+       "d": 60000,
+       "e": 0,
+       "kind": "order_at"
+      },
+      {
+       "_at": "0x498F8B",
+       "a": 4001,
+       "b": 14,
+       "c": 22,
+       "d": 60000,
+       "e": 0,
+       "kind": "order_at"
+      },
+      {
+       "_at": "0x498FA3",
+       "a": 4002,
+       "b": 12,
+       "c": 21,
+       "d": 60000,
+       "e": 0,
+       "kind": "order_at"
+      },
+      {
+       "_at": "0x498FBB",
+       "a": 4003,
+       "b": 16,
+       "c": 18,
+       "d": 60000,
+       "e": 0,
+       "kind": "order_at"
+      },
+      {
+       "_at": "0x498FD3",
+       "a": 4004,
+       "b": 17,
+       "c": 23,
+       "d": 60000,
+       "e": 0,
+       "kind": "order_at"
+      },
+      {
+       "_at": "0x498FEB",
+       "a": 4005,
+       "b": 14,
+       "c": 23,
+       "d": 60000,
+       "e": 0,
+       "kind": "order_at"
+      },
+      {
+       "_at": "0x499003",
+       "a": 4006,
+       "b": 11,
+       "c": 22,
+       "d": 60000,
+       "e": 0,
+       "kind": "order_at"
+      }
+     ],
+     "when": [
+      {
+       "a": 3,
+       "b": 1000,
+       "c": 60,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49901F",
+     "_waechter": "mission_tick.py: cmp v[70],0 / je vor dem inc @0x49901F",
+     "then": [
+      {
+       "a": 70,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 70,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 70,
+       "b": 100,
+       "kind": "var",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49912B",
+     "_tut_ausserdem": "show_text",
+     "then": [
+      {
+       "_at": "0x499139",
+       "a": 120,
+       "b": 1,
+       "c": 350,
+       "d": 200,
+       "kind": "text"
+      },
+      {
+       "a": 70,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 70,
+       "b": 100,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499165",
+     "then": [
+      {
+       "a": 40,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 40,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 40,
+       "b": 50,
+       "kind": "var",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x499176",
+     "then": [
+      {
+       "a": 0,
+       "b": 3,
+       "c": 53,
+       "kind": "space_in",
+       "typen": [
+        53
+       ]
+      },
+      {
+       "a": 40,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 40,
+       "b": 50,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4991FF",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "_at": "0x49920A",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 50,
+       "kind": "text"
+      },
+      {
+       "_at": "0x499219",
+       "a": 400,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "a": 71,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x499231",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 4,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 255,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499263",
+     "_tut_ausserdem": "0x4D0EC0 0x4D0EC0 0x4D0EC0 0x4D0EC0 0x4D0EC0 0x4D0EC0 0x4D0EC0 sound",
+     "once": 71,
+     "then": [
+      {
+       "_at": "0x49926F",
+       "a": 4000,
+       "kind": "sell_unit"
+      },
+      {
+       "_at": "0x49927C",
+       "a": 4001,
+       "kind": "sell_unit"
+      },
+      {
+       "_at": "0x499289",
+       "a": 4002,
+       "kind": "sell_unit"
+      },
+      {
+       "_at": "0x499296",
+       "a": 4003,
+       "kind": "sell_unit"
+      },
+      {
+       "_at": "0x4992A3",
+       "a": 4004,
+       "kind": "sell_unit"
+      },
+      {
+       "_at": "0x4992B0",
+       "a": 4005,
+       "kind": "sell_unit"
+      },
+      {
+       "_at": "0x4992BD",
+       "a": 4006,
+       "kind": "sell_unit"
+      },
+      {
+       "_at": "0x4992C5",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 4,
+       "c": 0,
+       "kind": "units",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 0,
+       "c": 2,
+       "kind": "objects",
+       "op": "=="
+      }
+     ]
+    }
+   ]
+  },
+  "3": {
+   "_endregel_aus": "0x499C5C",
+   "block": "",
+   "gate": "0x499922",
+   "init": {
+    "101": 1,
+    "131": 130
+   },
+   "rules": [
+    {
+     "_at": "0x49940B",
+     "then": [
+      {
+       "a": 88,
+       "kind": "inc"
+      }
+     ],
+     "when": []
+    },
+    {
+     "_at": "0x49941C",
+     "then": [
+      {
+       "a": 88,
+       "b": 0,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 88,
+       "b": 19,
+       "kind": "var",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4994BD",
+     "_tut_ausserdem": "show_text2 0x4D0990",
+     "once": 0,
+     "then": [
+      {
+       "_at": "0x4994C5",
+       "a": 20,
+       "b": 2,
+       "c": 70,
+       "d": 70,
+       "kind": "text"
+      },
+      {
+       "_at": "0x4994DF",
+       "a": 1014,
+       "b": 37,
+       "c": 38,
+       "d": 0,
+       "kind": "order"
+      }
+     ],
+     "when": [
+      {
+       "a": 37,
+       "b": 65534,
+       "c": 38,
+       "kind": "imap",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4994FC",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "then": [
+      {
+       "_at": "0x4994FC",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x499509",
+       "a": 21,
+       "b": 2,
+       "c": 100,
+       "d": 30,
+       "kind": "text"
+      },
+      {
+       "a": 0,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 13,
+       "b": 1000,
+       "c": 38,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49952D",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "then": [
+      {
+       "_at": "0x49952D",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x499540",
+       "a": 22,
+       "b": 2,
+       "c": 340,
+       "d": 280,
+       "kind": "text"
+      },
+      {
+       "a": 0,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 9,
+       "b": 1000,
+       "c": 12,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x4995AE",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "then": [
+      {
+       "_at": "0x4995AE",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x4995C1",
+       "a": 23,
+       "b": 2,
+       "c": 360,
+       "d": 260,
+       "kind": "text"
+      },
+      {
+       "a": 0,
+       "kind": "inc"
+      },
+      {
+       "a": 2,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 0,
+       "kind": "objects",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4995EA",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "then": [
+      {
+       "_at": "0x4995EA",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x4995FD",
+       "a": 24,
+       "b": 2,
+       "c": 420,
+       "d": 320,
+       "kind": "text"
+      },
+      {
+       "a": 0,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 4,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "b": 6,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499673",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 50,
+     "then": [
+      {
+       "_at": "0x499673",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x499683",
+       "a": 39,
+       "b": 2,
+       "c": 70,
+       "d": 150,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "b": 24,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4996B7",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "any": [
+      {
+       "b": 25,
+       "kind": "event",
+       "op": "=="
+      },
+      {
+       "b": 10000,
+       "kind": "selected",
+       "op": "=="
+      }
+     ],
+     "once": 51,
+     "then": [
+      {
+       "_at": "0x4996B7",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x4996C7",
+       "a": 40,
+       "b": 2,
+       "c": 70,
+       "d": 150,
+       "kind": "text"
+      }
+     ],
+     "when": []
+    },
+    {
+     "_at": "0x4996F0",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 52,
+     "then": [
+      {
+       "_at": "0x4996F0",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x499700",
+       "a": 41,
+       "b": 2,
+       "c": 70,
+       "d": 150,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "b": 7,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499729",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 53,
+     "then": [
+      {
+       "_at": "0x499729",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x499739",
+       "a": 42,
+       "b": 2,
+       "c": 70,
+       "d": 150,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "b": 29,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499763",
+     "then": [
+      {
+       "a": 40,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 40,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 40,
+       "b": 50,
+       "kind": "var",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x4997FD",
+     "once": 10,
+     "then": [
+      {
+       "_at": "0x499807",
+       "a": 0,
+       "b": 40,
+       "c": 88,
+       "d": 180,
+       "e": 1,
+       "f": 0,
+       "kind": "stock"
+      },
+      {
+       "_at": "0x499817",
+       "a": 0,
+       "b": 42,
+       "c": 88,
+       "d": 127,
+       "e": 1,
+       "f": 0,
+       "kind": "stock"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 7,
+       "b": 1000,
+       "c": 36,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x499847",
+     "once": 11,
+     "then": [
+      {
+       "_at": "0x499851",
+       "a": 1,
+       "b": 40,
+       "c": 88,
+       "d": 330,
+       "e": 1,
+       "f": 0,
+       "kind": "stock"
+      },
+      {
+       "_at": "0x499861",
+       "a": 1,
+       "b": 42,
+       "c": 88,
+       "d": 237,
+       "e": 1,
+       "f": 0,
+       "kind": "stock"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 80,
+       "b": 1000,
+       "c": 29,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x499883",
+     "_tut_ausserdem": "place_unit place_unit place_unit place_unit",
+     "once": 12,
+     "then": [
+      {
+       "_at": "0x499892",
+       "a": 84,
+       "b": 62,
+       "c": 76,
+       "d": 1,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x4998A2",
+       "a": 85,
+       "b": 62,
+       "c": 77,
+       "d": 1,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x4998B2",
+       "a": 86,
+       "b": 63,
+       "c": 77,
+       "d": 1,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x4998C2",
+       "a": 84,
+       "b": 64,
+       "c": 75,
+       "d": 1,
+       "kind": "place_unit"
+      }
+     ],
+     "when": [
+      {
+       "a": 59,
+       "b": 1000,
+       "c": 38,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x4998DF",
+     "once": 13,
+     "then": [],
+     "when": [
+      {
+       "a": 85,
+       "b": 1000,
+       "c": 74,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x499901",
+     "then": [
+      {
+       "a": 17,
+       "b": 0,
+       "kind": "set"
+      },
+      {
+       "a": 18,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 17,
+       "b": 100,
+       "kind": "var",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49991B",
+     "then": [
+      {
+       "a": 17,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499B4E",
+     "_tut_ausserdem": "show_text game_time",
+     "once": 16,
+     "then": [
+      {
+       "_at": "0x499B60",
+       "a": 130,
+       "b": 1,
+       "c": 30,
+       "d": 40,
+       "kind": "text"
+      },
+      {
+       "a": 220,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "set"
+      },
+      {
+       "a": 221,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499B9E",
+     "_tut_ausserdem": "show_text2",
+     "then": [
+      {
+       "_at": "0x499BAC",
+       "a": 29,
+       "b": 2,
+       "c": 320,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 220,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 220,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 221,
+       "b": 1,
+       "kind": "time_after",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x499BD0",
+     "_tut_ausserdem": "0x4D0EC0 sound",
+     "then": [
+      {
+       "_at": "0x499BD5",
+       "a": 7000,
+       "kind": "sell_unit"
+      },
+      {
+       "a": 16,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "_at": "0x499BED",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 18,
+       "b": 200,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499C11",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "_at": "0x499C1F",
+       "a": 100,
+       "b": 1,
+       "c": 380,
+       "d": 280,
+       "kind": "text"
+      },
+      {
+       "a": 16,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x499C3E",
+       "a": 300,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "_at": "0x499C46",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 16,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 7,
+       "b": 193,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 4,
+       "b": 0,
+       "c": 0,
+       "kind": "objects",
+       "op": "!="
+      }
+     ]
+    }
+   ]
+  },
+  "4": {
+   "_endregel_aus": "0x499FD2",
+   "_uebersetzt": "Die Siegbedingung steht bei 0x499F8C als Kette: obj_owner(0..4) alle == 12 (zerstoert), dann mission_end. Wortwoertlich uebernommen — das ist die ganze Bedingung, nichts ergaenzt.",
+   "block": "0x499C7F",
+   "gate": "0x499E6B",
+   "init": {
+    "101": 1,
+    "131": 141
+   },
+   "rules": [
+    {
+     "_at": "0x499C89",
+     "then": [
+      {
+       "a": 0,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 100,
+       "kind": "var",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x499C9A",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "then": [
+      {
+       "_at": "0x499C9A",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x499CAD",
+       "a": 29,
+       "b": 2,
+       "c": 320,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 0,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 100,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499CC6",
+     "then": [
+      {
+       "a": 1,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 100,
+       "kind": "var",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x499CD8",
+     "_tut_ausserdem": "0x4D0860",
+     "then": [
+      {
+       "a": 1,
+       "b": 0,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 200,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499D24",
+     "then": [
+      {
+       "a": 5,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 5,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 5,
+       "b": 700,
+       "kind": "var",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x499F59",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "_at": "0x499F67",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 240,
+       "kind": "text"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x499F7F",
+       "a": 1600,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "_at": "0x499F87",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 6,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 7,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 8,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 2,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 4,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    }
+   ]
+  },
+  "5": {
+   "_endregel_aus": "0X49A534",
+   "block": "",
+   "gate": "0x49A41D",
+   "init": {
+    "101": 150
+   },
+   "rules": [
+    {
+     "_at": "0x49A071",
+     "_tut_ausserdem": "show_text2",
+     "once": 20,
+     "then": [
+      {
+       "_at": "0x49A07F",
+       "a": 44,
+       "b": 2,
+       "c": 420,
+       "d": 300,
+       "kind": "text"
+      }
+     ],
+     "when": []
+    },
+    {
+     "_at": "0x49A0A3",
+     "_tut_ausserdem": "show_text2",
+     "once": 0,
+     "then": [
+      {
+       "_at": "0x49A0B1",
+       "a": 32,
+       "b": 2,
+       "c": 320,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 35,
+       "b": 1000,
+       "c": 29,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49A0D5",
+     "_tut_ausserdem": "show_text2",
+     "once": 1,
+     "then": [
+      {
+       "_at": "0x49A0E3",
+       "a": 33,
+       "b": 2,
+       "c": 400,
+       "d": 320,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 22,
+       "b": 1000,
+       "c": 20,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49A107",
+     "_tut_ausserdem": "show_text2",
+     "once": 2,
+     "then": [
+      {
+       "_at": "0x49A115",
+       "a": 34,
+       "b": 2,
+       "c": 250,
+       "d": 250,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 38,
+       "b": 1000,
+       "c": 11,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49A150",
+     "_tut_ausserdem": "show_text2",
+     "once": 3,
+     "then": [
+      {
+       "_at": "0x49A158",
+       "a": 35,
+       "b": 2,
+       "c": 50,
+       "d": 50,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 57,
+       "b": 0,
+       "c": 0,
+       "kind": "units_mark",
+       "op": ">"
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 0,
+       "kind": "buildings",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A193",
+     "_tut_ausserdem": "show_text2",
+     "once": 4,
+     "then": [
+      {
+       "_at": "0x49A1A1",
+       "a": 36,
+       "b": 2,
+       "c": 450,
+       "d": 350,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 57,
+       "b": 0,
+       "c": 0,
+       "kind": "units_mark",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 0,
+       "kind": "buildings",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49A1DC",
+     "_tut_ausserdem": "show_text2",
+     "once": 5,
+     "then": [
+      {
+       "_at": "0x49A1E7",
+       "a": 37,
+       "b": 2,
+       "c": 480,
+       "d": 50,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 57,
+       "b": 0,
+       "c": 0,
+       "kind": "units_mark",
+       "op": ">"
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 0,
+       "kind": "buildings",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49A213",
+     "_tut_ausserdem": "show_text2",
+     "once": 6,
+     "then": [
+      {
+       "_at": "0x49A21E",
+       "a": 38,
+       "b": 2,
+       "c": 50,
+       "d": 350,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 5,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "b": 16,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A240",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 52,
+     "then": [
+      {
+       "_at": "0x49A240",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x49A250",
+       "a": 41,
+       "b": 2,
+       "c": 70,
+       "d": 150,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "b": 7,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A279",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 53,
+     "then": [
+      {
+       "_at": "0x49A279",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x49A289",
+       "a": 42,
+       "b": 2,
+       "c": 70,
+       "d": 150,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "b": 29,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A2B2",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 54,
+     "then": [
+      {
+       "_at": "0x49A2B2",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x49A2C2",
+       "a": 79,
+       "b": 2,
+       "c": 70,
+       "d": 150,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "b": 8,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A2F0",
+     "once": 10,
+     "then": [],
+     "when": [
+      {
+       "a": 0,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A30C",
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 300,
+       "kind": "var",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49A32F",
+     "_tut_ausserdem": "show_text",
+     "then": [
+      {
+       "_at": "0x49A33D",
+       "a": 150,
+       "b": 1,
+       "c": 450,
+       "d": 100,
+       "kind": "text"
+      },
+      {
+       "a": 10,
+       "b": 320,
+       "kind": "set"
+      },
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 300,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 1,
+       "c": 0,
+       "kind": "units",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A364",
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 300,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A37F",
+     "then": [
+      {
+       "a": 31,
+       "b": 190,
+       "kind": "take_var"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 190,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A3A9",
+     "then": [
+      {
+       "a": 32,
+       "b": 191,
+       "kind": "take_var"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 191,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A3E7",
+     "once": 33,
+     "then": [],
+     "when": [
+      {
+       "a": 30,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 32,
+       "b": 0,
+       "c": 42,
+       "kind": "var_vs_store",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49A416",
+     "once": 34,
+     "then": [],
+     "when": [
+      {
+       "a": 30,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 31,
+       "b": 0,
+       "c": 40,
+       "kind": "var_vs_store",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49A49D",
+     "once": 30,
+     "then": [
+      {
+       "a": 31,
+       "b": 0,
+       "c": 40,
+       "kind": "set_store"
+      },
+      {
+       "a": 32,
+       "b": 0,
+       "c": 42,
+       "kind": "set_store"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 0,
+       "c": 0,
+       "kind": "buildings",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49A4F9",
+     "_tut_ausserdem": "place_unit place_unit",
+     "once": 40,
+     "then": [
+      {
+       "_at": "0x49A508",
+       "a": 85,
+       "b": 37,
+       "c": 6,
+       "d": 1,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x49A518",
+       "a": 86,
+       "b": 38,
+       "c": 6,
+       "d": 1,
+       "kind": "place_unit"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "units",
+       "op": "<"
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 3,
+       "kind": "units",
+       "op": ">"
+      },
+      {
+       "a": 2,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 33,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 34,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      }
+     ]
+    }
+   ]
+  },
+  "6": {
+   "_endregel_aus": "0x49AB0E",
+   "block": "",
+   "gate": "0x49A8F4",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "103": 1,
+    "131": 160,
+    "132": 161,
+    "133": 162
+   },
+   "rules": [
+    {
+     "_at": "0x49A557",
+     "then": [
+      {
+       "a": 88,
+       "kind": "inc"
+      }
+     ],
+     "when": []
+    },
+    {
+     "_at": "0x49A568",
+     "then": [
+      {
+       "a": 88,
+       "b": 0,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 88,
+       "b": 19,
+       "kind": "var",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49A584",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 52,
+     "then": [
+      {
+       "_at": "0x49A584",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x49A594",
+       "a": 41,
+       "b": 2,
+       "c": 70,
+       "d": 150,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "b": 7,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A5BD",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 53,
+     "then": [
+      {
+       "_at": "0x49A5BD",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x49A5CD",
+       "a": 42,
+       "b": 2,
+       "c": 70,
+       "d": 150,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "b": 29,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A5F6",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 54,
+     "then": [
+      {
+       "_at": "0x49A5F6",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x49A606",
+       "a": 79,
+       "b": 2,
+       "c": 70,
+       "d": 150,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "b": 8,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A63B",
+     "_tut_ausserdem": "show_text",
+     "once": 220,
+     "then": [
+      {
+       "a": 102,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49A657",
+       "a": 161,
+       "b": 1,
+       "c": 120,
+       "d": 450,
+       "kind": "text"
+      },
+      {
+       "a": 0,
+       "b": 10,
+       "c": 5,
+       "kind": "space_in",
+       "typen": [
+        193,
+        50,
+        50,
+        50,
+        50,
+        50
+       ]
+      }
+     ],
+     "when": [
+      {
+       "a": 102,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 54,
+       "b": 1000,
+       "c": 8,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49A6F2",
+     "_tut_ausserdem": "remove_unit show_text bus_cmd sound",
+     "then": [
+      {
+       "_at": "0x49A70C",
+       "a": 100,
+       "b": 1,
+       "c": 120,
+       "d": 450,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49A71B",
+       "a": 200,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "a": 102,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49A72C",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 102,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 11,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 11,
+       "b": 193,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "!="
+      },
+      {
+       "a": 11,
+       "b": 0,
+       "c": 54,
+       "kind": "unit_field",
+       "op": "=="
+      },
+      {
+       "a": 11,
+       "b": 1,
+       "c": 8,
+       "kind": "unit_field",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A77F",
+     "_waechter": "mission_tick.py: cmp v[9],0 / je vor dem inc @0x49A77F",
+     "then": [
+      {
+       "a": 9,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 9,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 9,
+       "b": 10,
+       "kind": "var",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49A790",
+     "_tut_ausserdem": "show_text",
+     "then": [
+      {
+       "a": 9,
+       "kind": "inc"
+      },
+      {
+       "a": 103,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49A7AF",
+       "a": 162,
+       "b": 1,
+       "c": 330,
+       "d": 260,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 9,
+       "b": 10,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A883",
+     "once": 12,
+     "then": [
+      {
+       "_at": "0x49A88D",
+       "a": 1,
+       "b": 40,
+       "c": 88,
+       "d": 330,
+       "e": 1,
+       "f": 0,
+       "kind": "stock"
+      },
+      {
+       "_at": "0x49A89D",
+       "a": 1,
+       "b": 42,
+       "c": 88,
+       "d": 237,
+       "e": 1,
+       "f": 0,
+       "kind": "stock"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 53,
+       "b": 1000,
+       "c": 29,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49A8CD",
+     "once": 13,
+     "then": [
+      {
+       "_at": "0x49A8D7",
+       "a": 2,
+       "b": 40,
+       "c": 88,
+       "d": 330,
+       "e": 1,
+       "f": 0,
+       "kind": "stock"
+      },
+      {
+       "_at": "0x49A8E7",
+       "a": 2,
+       "b": 42,
+       "c": 88,
+       "d": 237,
+       "e": 1,
+       "f": 0,
+       "kind": "stock"
+      }
+     ],
+     "when": [
+      {
+       "a": 2,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 52,
+       "b": 1000,
+       "c": 55,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49A986",
+     "_tut_ausserdem": "sound",
+     "then": [
+      {
+       "a": 101,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49A98F",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 10,
+       "b": 194,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A9BD",
+     "_tut_ausserdem": "0x4D0F20",
+     "then": [
+      {
+       "a": 11,
+       "b": 0,
+       "c": 193,
+       "kind": "find_unit"
+      }
+     ],
+     "when": [
+      {
+       "a": 11,
+       "b": 0,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 102,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 193,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A9FF",
+     "_tut_ausserdem": "sound",
+     "then": [
+      {
+       "a": 102,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49AA08",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 102,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 11,
+       "b": 193,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49AA33",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "_at": "0x49AA41",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 240,
+       "kind": "text"
+      },
+      {
+       "a": 103,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49AA59",
+       "a": 400,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "_at": "0x49AA61",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 103,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 4,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    }
+   ]
+  },
+  "7": {
+   "_endregel_aus": "0x49B16B",
+   "block": "",
+   "gate": "0x49B02D",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "131": 172,
+    "132": 170
+   },
+   "rules": [
+    {
+     "_at": "0x49AB4F",
+     "_tut_ausserdem": "g_robot_class_count",
+     "once": 16,
+     "then": [],
+     "when": [
+      {
+       "a": 0,
+       "b": 190,
+       "c": 0,
+       "kind": "unit_is",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49ABB4",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 52,
+     "then": [
+      {
+       "_at": "0x49ABB4",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x49ABC4",
+       "a": 41,
+       "b": 2,
+       "c": 70,
+       "d": 150,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "b": 7,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49ABED",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 53,
+     "then": [
+      {
+       "_at": "0x49ABED",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x49ABFD",
+       "a": 42,
+       "b": 2,
+       "c": 70,
+       "d": 150,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "b": 29,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49AC26",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 54,
+     "then": [
+      {
+       "_at": "0x49AC26",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x49AC36",
+       "a": 79,
+       "b": 2,
+       "c": 70,
+       "d": 150,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "b": 8,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49ACAC",
+     "_tut_ausserdem": "0x4222C0 0x4D0EC0",
+     "once": 0,
+     "then": [
+      {
+       "_at": "0x49ACC4",
+       "a": 3000,
+       "kind": "sell_unit"
+      },
+      {
+       "a": 221,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 14,
+       "b": 1000,
+       "c": 22,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49AD05",
+     "once": 1,
+     "then": [],
+     "when": [
+      {
+       "a": 221,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 3000,
+       "b": 192,
+       "c": 0,
+       "kind": "unit_is",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49AD20",
+     "_waechter": "mission_tick.py: cmp v[1],0 / je vor dem inc @0x49AD20",
+     "then": [
+      {
+       "a": 1,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 1,
+       "b": 40,
+       "kind": "var",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49AD31",
+     "_tut_ausserdem": "show_text",
+     "then": [
+      {
+       "_at": "0x49AD42",
+       "a": 170,
+       "b": 1,
+       "c": 350,
+       "d": 260,
+       "kind": "text"
+      },
+      {
+       "a": 1,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 40,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49AFD2",
+     "_tut_ausserdem": "0x4D0860",
+     "then": [
+      {
+       "a": 6,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 6,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 7001,
+       "b": 193,
+       "c": 0,
+       "kind": "unit_is",
+       "op": "=="
+      },
+      {
+       "a": 7002,
+       "b": 193,
+       "c": 0,
+       "kind": "unit_is",
+       "op": "=="
+      },
+      {
+       "a": 7003,
+       "b": 193,
+       "c": 0,
+       "kind": "unit_is",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49B0A0",
+     "_tut_ausserdem": "0x4D0F20",
+     "then": [
+      {
+       "a": 10,
+       "b": 0,
+       "c": 193,
+       "kind": "find_unit"
+      }
+     ],
+     "when": [
+      {
+       "a": 8,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 0,
+       "b": 193,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49B104",
+     "_tut_ausserdem": "show_text sound",
+     "then": [
+      {
+       "a": 9,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49B125",
+       "a": 174,
+       "b": 1,
+       "c": 330,
+       "d": 260,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49B12D",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 9,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 102,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 12,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 5,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49B192",
+     "_tut_ausserdem": "bus_cmd",
+     "once": 13,
+     "then": [
+      {
+       "a": 12,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49B1A7",
+       "a": 400,
+       "b": 0,
+       "kind": "money"
+      }
+     ],
+     "when": [
+      {
+       "a": 102,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49B1D1",
+     "_tut_ausserdem": "bus_cmd",
+     "once": 17,
+     "then": [
+      {
+       "a": 12,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49B1E6",
+       "a": 400,
+       "b": 0,
+       "kind": "money"
+      }
+     ],
+     "when": [
+      {
+       "a": 102,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 5,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49B206",
+     "_tut_ausserdem": "show_text",
+     "once": 15,
+     "then": [
+      {
+       "_at": "0x49B21E",
+       "a": 173,
+       "b": 1,
+       "c": 150,
+       "d": 350,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 4,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    }
+   ]
+  },
+  "8": {
+   "_endregel_aus": "0x49B4AF",
+   "_uebersetzt": "Der Block ist eine Zustandsmaschine ueber v[0], v[1], v[2] und drei Ereignisfaenger. Uebernommen sind die Zeit- und Zaehlregeln; die drei Ereignisfaenger (Ereignis 7, 29, 8) fehlen, weil das Ereignisbyte 0x539930 in der Engine noch nichts setzt.",
+   "block": "0x49B275",
+   "gate": "0x49B44F",
+   "init": {
+    "101": 1,
+    "131": 180
+   },
+   "rules": [
+    {
+     "_at": "0x49B27F",
+     "_tut_ausserdem": "show_text2",
+     "once": 20,
+     "then": [
+      {
+       "_at": "0x49B28D",
+       "a": 45,
+       "b": 2,
+       "c": 350,
+       "d": 280,
+       "kind": "text"
+      }
+     ],
+     "when": []
+    },
+    {
+     "_at": "0x49B2AF",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 52,
+     "then": [
+      {
+       "_at": "0x49B2AF",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x49B2BF",
+       "a": 41,
+       "b": 2,
+       "c": 70,
+       "d": 150,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "b": 7,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49B2E8",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 53,
+     "then": [
+      {
+       "_at": "0x49B2E8",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x49B2F8",
+       "a": 42,
+       "b": 2,
+       "c": 70,
+       "d": 150,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "b": 29,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49B321",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "once": 54,
+     "then": [
+      {
+       "_at": "0x49B321",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x49B331",
+       "a": 79,
+       "b": 2,
+       "c": 70,
+       "d": 150,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "b": 8,
+       "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49B35C",
+     "_tut_ausserdem": "game_time show_text",
+     "then": [
+      {
+       "a": 0,
+       "kind": "set_time"
+      },
+      {
+       "_at": "0x49B378",
+       "a": 180,
+       "b": 1,
+       "c": 360,
+       "d": 240,
+       "kind": "text"
+      },
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 0,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 16,
+       "b": 1000,
+       "c": 24,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49B3C6",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "once": 1,
+     "then": [
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49B3E4",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49B3F3",
+       "a": 250,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "_at": "0x49B3FB",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 2,
+       "b": 14,
+       "kind": "var",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49B427",
+     "_tut_ausserdem": "show_text sound",
+     "once": 1,
+     "then": [
+      {
+       "_at": "0x49B432",
+       "a": 101,
+       "b": 1,
+       "c": 350,
+       "d": 120,
+       "kind": "text"
+      },
+      {
+       "a": 101,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49B44A",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 0,
+       "b": 29,
+       "kind": "time_after",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 2,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      }
+     ]
+    }
+   ]
+  },
+  "9": {
+   "_endregel_aus": "0X49BB42",
+   "block": "",
+   "gate": "0x49B9EB",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "103": 1,
+    "104": 1,
+    "131": 190,
+    "132": 191,
+    "133": 192,
+    "134": 193
+   },
+   "rules": [
+    {
+     "_at": "0x49B50D",
+     "_tut_ausserdem": "show_text",
+     "once": 0,
+     "then": [
+      {
+       "_at": "0x49B51E",
+       "a": 190,
+       "b": 1,
+       "c": 380,
+       "d": 400,
+       "kind": "text"
+      },
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 5,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49B5C4",
+     "_tut_ausserdem": "show_text",
+     "once": 1,
+     "then": [
+      {
+       "_at": "0x49B5D5",
+       "a": 191,
+       "b": 1,
+       "c": 380,
+       "d": 400,
+       "kind": "text"
+      },
+      {
+       "a": 102,
+       "b": 2,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 15,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49B601",
+     "_tut_ausserdem": "show_text sound",
+     "then": [
+      {
+       "a": 1,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49B61F",
+       "a": 101,
+       "b": 1,
+       "c": 380,
+       "d": 400,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49B627",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 35,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49B640",
+     "_tut_ausserdem": "show_text bus_cmd",
+     "then": [
+      {
+       "a": 1,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49B65E",
+       "a": 100,
+       "b": 1,
+       "c": 450,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49B66D",
+       "a": 1300,
+       "b": 0,
+       "kind": "money"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 230,
+       "b": 3,
+       "kind": "var",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49B7BE",
+     "_tut_ausserdem": "sound",
+     "then": [
+      {
+       "a": 2,
+       "b": 5,
+       "kind": "set"
+      },
+      {
+       "a": 103,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49B7D0",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 2,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 6000,
+       "b": 194,
+       "c": 0,
+       "kind": "unit_is",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49B85F",
+     "_tut_ausserdem": "game_time",
+     "once": 3,
+     "then": [
+      {
+       "a": 4,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 93,
+       "b": 1000,
+       "c": 45,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49B88E",
+     "_tut_ausserdem": "show_text game_time",
+     "then": [
+      {
+       "a": 3,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49B8A6",
+       "a": 193,
+       "b": 1,
+       "c": 360,
+       "d": 290,
+       "kind": "text"
+      },
+      {
+       "a": 104,
+       "b": 2,
+       "kind": "set"
+      },
+      {
+       "a": 5,
+       "b": 2000,
+       "kind": "set"
+      },
+      {
+       "a": 4,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 3,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 4,
+       "b": 8,
+       "kind": "time_after",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49BA67",
+     "then": [
+      {
+       "a": 6,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 12,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "!="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 3,
+       "kind": "units",
+       "op": "<"
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 3,
+       "kind": "units",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49BA9F",
+     "_tut_ausserdem": "add_target",
+     "once": 7,
+     "then": [
+      {
+       "_at": "0x49BAB3",
+       "a": 1,
+       "b": 2,
+       "c": 9,
+       "d": 6000,
+       "e": 0,
+       "kind": "add_target"
+      }
+     ],
+     "when": [
+      {
+       "a": 6000,
+       "b": 194,
+       "c": 0,
+       "kind": "unit_is",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49BACF",
+     "_tut_ausserdem": "add_target",
+     "once": 8,
+     "then": [
+      {
+       "_at": "0x49BAE0",
+       "a": 1,
+       "b": 1,
+       "c": 9,
+       "d": 8,
+       "e": 1,
+       "kind": "add_target"
+      }
+     ],
+     "when": [
+      {
+       "a": 103,
+       "b": 10,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49BB28",
+     "_tut_ausserdem": "bus_cmd",
+     "then": [
+      {
+       "a": 104,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 3,
+       "b": 4,
+       "kind": "var",
+       "op": "<"
+      },
+      {
+       "a": 104,
+       "b": 10,
+       "kind": "var",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      }
+     ]
+    }
+   ]
+  },
   "10": {
    "_endregel_aus": "0x49BD39",
    "_uebersetzt": "Der Block merkt sich mit v[0] einen Zeitpunkt und zuendet 40 Minuten spaeter die naechste Stufe; die Abschlussbedingung ist g_robot_class_count(3, 1) == 0. ⚠ Klasse 3 ist ein Einzelzaehler, dessen Zuordnung noch fehlt — hier steht darum Klasse 0 (alle Einheiten des Spielers 1), was STRENGER ist als das Original und ausdruecklich UNSERE Ersetzung.",
@@ -5030,874 +9002,6 @@
     }
    ]
   },
-  "2": {
-   "_endregel_aus": "0x4993E8",
-   "block": "",
-   "gate": "0x499197",
-   "init": {
-    "101": 1,
-    "131": 120
-   },
-   "rules": [
-    {
-     "_at": "0x4989EA",
-     "then": [
-      {
-       "a": 88,
-       "kind": "inc"
-      }
-     ],
-     "when": []
-    },
-    {
-     "_at": "0x4989FB",
-     "then": [
-      {
-       "a": 88,
-       "b": 0,
-       "kind": "set"
-      }
-     ],
-     "when": [
-      {
-       "a": 88,
-       "b": 19,
-       "kind": "var",
-       "op": ">"
-      }
-     ]
-    },
-    {
-     "_at": "0x498A7C",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "once": 3,
-     "then": [
-      {
-       "_at": "0x498A7C",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x498A89",
-       "a": 15,
-       "b": 2,
-       "c": 70,
-       "d": 70,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "a": 15,
-       "b": 8000,
-       "c": 21,
-       "kind": "imap",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x498AAB",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "then": [
-      {
-       "_at": "0x498AAB",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x498AB8",
-       "a": 16,
-       "b": 2,
-       "c": 80,
-       "d": 30,
-       "kind": "text"
-      },
-      {
-       "a": 3,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 3,
-       "b": 1,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "b": 31,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x498AE9",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "then": [
-      {
-       "_at": "0x498AE9",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x498AF6",
-       "a": 17,
-       "b": 2,
-       "c": 20,
-       "d": 50,
-       "kind": "text"
-      },
-      {
-       "a": 3,
-       "kind": "inc"
-      },
-      {
-       "a": 5,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 3,
-       "b": 2,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 4,
-       "b": 0,
-       "c": 0,
-       "kind": "units",
-       "op": ">"
-      }
-     ]
-    },
-    {
-     "_at": "0x498B64",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "then": [
-      {
-       "_at": "0x498B64",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x498B77",
-       "a": 22,
-       "b": 2,
-       "c": 340,
-       "d": 280,
-       "kind": "text"
-      },
-      {
-       "a": 3,
-       "kind": "inc"
-      },
-      {
-       "a": 20,
-       "b": 3,
-       "kind": "set"
-      }
-     ],
-     "when": [
-      {
-       "a": 20,
-       "b": 0,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 63,
-       "b": 1000,
-       "c": 7,
-       "kind": "imap",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x498BF2",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "then": [
-      {
-       "_at": "0x498BF2",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x498C05",
-       "a": 23,
-       "b": 2,
-       "c": 360,
-       "d": 260,
-       "kind": "text"
-      },
-      {
-       "_at": "0x498C17",
-       "a": 1,
-       "b": 40,
-       "c": 88,
-       "d": 330,
-       "e": 1,
-       "f": 0,
-       "kind": "stock"
-      },
-      {
-       "a": 22,
-       "kind": "inc"
-      },
-      {
-       "a": 20,
-       "kind": "inc"
-      },
-      {
-       "_at": "0x498C35",
-       "a": 1,
-       "b": 42,
-       "c": 88,
-       "d": 243,
-       "e": 1,
-       "f": 0,
-       "kind": "stock"
-      }
-     ],
-     "when": [
-      {
-       "a": 20,
-       "b": 3,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 0,
-       "c": 0,
-       "kind": "objects",
-       "op": "!="
-      }
-     ]
-    },
-    {
-     "_at": "0x498C4E",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "then": [
-      {
-       "_at": "0x498C4E",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x498C61",
-       "a": 24,
-       "b": 2,
-       "c": 420,
-       "d": 320,
-       "kind": "text"
-      },
-      {
-       "a": 20,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 20,
-       "b": 4,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "b": 6,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x498CD9",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "once": 34,
-     "then": [
-      {
-       "_at": "0x498CD9",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x498CE6",
-       "a": 7,
-       "b": 2,
-       "c": 30,
-       "d": 60,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "a": 3,
-       "b": 8000,
-       "c": 55,
-       "kind": "imap",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x498D08",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "once": 35,
-     "then": [
-      {
-       "_at": "0x498D08",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x498D15",
-       "a": 8,
-       "b": 2,
-       "c": 5,
-       "d": 100,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "b": 1,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x498D94",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "once": 50,
-     "then": [
-      {
-       "_at": "0x498D94",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x498DA4",
-       "a": 39,
-       "b": 2,
-       "c": 70,
-       "d": 150,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "b": 24,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x498DCD",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "once": 51,
-     "then": [
-      {
-       "_at": "0x498DCD",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x498DDD",
-       "a": 40,
-       "b": 2,
-       "c": 70,
-       "d": 150,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "b": 25,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x498E06",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "once": 52,
-     "then": [
-      {
-       "_at": "0x498E06",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x498E16",
-       "a": 41,
-       "b": 2,
-       "c": 70,
-       "d": 150,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "b": 7,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x498E3F",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "once": 53,
-     "then": [
-      {
-       "_at": "0x498E3F",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x498E4F",
-       "a": 42,
-       "b": 2,
-       "c": 70,
-       "d": 150,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "b": 29,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x498E88",
-     "once": 61,
-     "then": [
-      {
-       "_at": "0x498E92",
-       "a": 2,
-       "b": 40,
-       "c": 88,
-       "d": 330,
-       "e": 1,
-       "f": 0,
-       "kind": "stock"
-      },
-      {
-       "_at": "0x498EA2",
-       "a": 2,
-       "b": 42,
-       "c": 88,
-       "d": 237,
-       "e": 1,
-       "f": 0,
-       "kind": "stock"
-      }
-     ],
-     "when": [
-      {
-       "a": 2,
-       "b": 0,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 63,
-       "b": 1000,
-       "c": 57,
-       "kind": "imap",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x498EEC",
-     "_tut_ausserdem": "place_unit place_unit place_unit place_unit place_unit place_unit place_unit order order order order order order order",
-     "any": [
-      {
-       "a": 1,
-       "b": 0,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 2,
-       "b": 0,
-       "kind": "obj_owner",
-       "op": "=="
-      }
-     ],
-     "once": 70,
-     "then": [
-      {
-       "_at": "0x498EF4",
-       "a": 85,
-       "b": 32,
-       "c": 8,
-       "d": 4,
-       "kind": "place_unit"
-      },
-      {
-       "_at": "0x498F04",
-       "a": 85,
-       "b": 33,
-       "c": 0,
-       "d": 4,
-       "kind": "place_unit"
-      },
-      {
-       "_at": "0x498F14",
-       "a": 85,
-       "b": 34,
-       "c": 0,
-       "d": 4,
-       "kind": "place_unit"
-      },
-      {
-       "_at": "0x498F24",
-       "a": 86,
-       "b": 35,
-       "c": 8,
-       "d": 4,
-       "kind": "place_unit"
-      },
-      {
-       "_at": "0x498F34",
-       "a": 86,
-       "b": 30,
-       "c": 2,
-       "d": 4,
-       "kind": "place_unit"
-      },
-      {
-       "_at": "0x498F44",
-       "a": 86,
-       "b": 35,
-       "c": 3,
-       "d": 4,
-       "kind": "place_unit"
-      },
-      {
-       "_at": "0x498F54",
-       "a": 60,
-       "b": 32,
-       "c": 7,
-       "d": 4,
-       "kind": "place_unit"
-      },
-      {
-       "_at": "0x498F73",
-       "a": 4000,
-       "b": 16,
-       "c": 20,
-       "d": 60000,
-       "e": 0,
-       "kind": "order_at"
-      },
-      {
-       "_at": "0x498F8B",
-       "a": 4001,
-       "b": 14,
-       "c": 22,
-       "d": 60000,
-       "e": 0,
-       "kind": "order_at"
-      },
-      {
-       "_at": "0x498FA3",
-       "a": 4002,
-       "b": 12,
-       "c": 21,
-       "d": 60000,
-       "e": 0,
-       "kind": "order_at"
-      },
-      {
-       "_at": "0x498FBB",
-       "a": 4003,
-       "b": 16,
-       "c": 18,
-       "d": 60000,
-       "e": 0,
-       "kind": "order_at"
-      },
-      {
-       "_at": "0x498FD3",
-       "a": 4004,
-       "b": 17,
-       "c": 23,
-       "d": 60000,
-       "e": 0,
-       "kind": "order_at"
-      },
-      {
-       "_at": "0x498FEB",
-       "a": 4005,
-       "b": 14,
-       "c": 23,
-       "d": 60000,
-       "e": 0,
-       "kind": "order_at"
-      },
-      {
-       "_at": "0x499003",
-       "a": 4006,
-       "b": 11,
-       "c": 22,
-       "d": 60000,
-       "e": 0,
-       "kind": "order_at"
-      }
-     ],
-     "when": [
-      {
-       "a": 3,
-       "b": 1000,
-       "c": 60,
-       "kind": "imap",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x49901F",
-     "_waechter": "mission_tick.py: cmp v[70],0 / je vor dem inc @0x49901F",
-     "then": [
-      {
-       "a": 70,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 70,
-       "b": 0,
-       "kind": "var",
-       "op": "!="
-      },
-      {
-       "a": 70,
-       "b": 100,
-       "kind": "var",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x49912B",
-     "_tut_ausserdem": "show_text",
-     "then": [
-      {
-       "_at": "0x499139",
-       "a": 120,
-       "b": 1,
-       "c": 350,
-       "d": 200,
-       "kind": "text"
-      },
-      {
-       "a": 70,
-       "kind": "inc"
-      },
-      {
-       "a": 101,
-       "b": 2,
-       "kind": "set"
-      }
-     ],
-     "when": [
-      {
-       "a": 70,
-       "b": 100,
-       "kind": "var",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x499165",
-     "then": [
-      {
-       "a": 40,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 40,
-       "b": 0,
-       "kind": "var",
-       "op": "!="
-      },
-      {
-       "a": 40,
-       "b": 50,
-       "kind": "var",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x499176",
-     "then": [
-      {
-       "a": 0,
-       "b": 3,
-       "c": 53,
-       "kind": "space_in",
-       "typen": [
-        53
-       ]
-      },
-      {
-       "a": 40,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 40,
-       "b": 50,
-       "kind": "var",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x4991FF",
-     "_tut_ausserdem": "show_text bus_cmd sound",
-     "then": [
-      {
-       "_at": "0x49920A",
-       "a": 100,
-       "b": 1,
-       "c": 350,
-       "d": 50,
-       "kind": "text"
-      },
-      {
-       "_at": "0x499219",
-       "a": 400,
-       "b": 0,
-       "kind": "money"
-      },
-      {
-       "a": 71,
-       "kind": "inc"
-      },
-      {
-       "a": 101,
-       "b": 10,
-       "kind": "set"
-      },
-      {
-       "_at": "0x499231",
-       "a": 600,
-       "kind": "sound"
-      }
-     ],
-     "when": [
-      {
-       "a": 101,
-       "b": 2,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 4,
-       "c": 0,
-       "kind": "units",
-       "op": "=="
-      },
-      {
-       "a": 0,
-       "b": 255,
-       "kind": "obj_owner",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x499263",
-     "_tut_ausserdem": "0x4D0EC0 0x4D0EC0 0x4D0EC0 0x4D0EC0 0x4D0EC0 0x4D0EC0 0x4D0EC0 sound",
-     "once": 71,
-     "then": [
-      {
-       "_at": "0x49926F",
-       "a": 4000,
-       "kind": "sell_unit"
-      },
-      {
-       "_at": "0x49927C",
-       "a": 4001,
-       "kind": "sell_unit"
-      },
-      {
-       "_at": "0x499289",
-       "a": 4002,
-       "kind": "sell_unit"
-      },
-      {
-       "_at": "0x499296",
-       "a": 4003,
-       "kind": "sell_unit"
-      },
-      {
-       "_at": "0x4992A3",
-       "a": 4004,
-       "kind": "sell_unit"
-      },
-      {
-       "_at": "0x4992B0",
-       "a": 4005,
-       "kind": "sell_unit"
-      },
-      {
-       "_at": "0x4992BD",
-       "a": 4006,
-       "kind": "sell_unit"
-      },
-      {
-       "_at": "0x4992C5",
-       "a": 601,
-       "kind": "sound"
-      }
-     ],
-     "when": [
-      {
-       "a": 0,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 4,
-       "c": 0,
-       "kind": "units",
-       "op": "!="
-      }
-     ]
-    },
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 0,
-       "c": 2,
-       "kind": "objects",
-       "op": "=="
-      }
-     ]
-    }
-   ]
-  },
   "20": {
    "_endregel_aus": "0x49F591",
    "block": "",
@@ -6387,6 +9491,77 @@
        "c": 0,
        "kind": "objects",
        "op": "=="
+      }
+     ]
+    }
+   ]
+  },
+  "21": {
+   "block": "",
+   "_endregel_aus": "0x4A02C0",
+   "rules": [
+    {
+     "once": 300,
+     "when": [
+      {
+       "kind": "rail_link",
+       "a": 4,
+       "op": "==",
+       "b": 0
+      },
+      {
+       "kind": "rail_link",
+       "a": 7,
+       "op": "==",
+       "b": 0
+      },
+      {
+       "kind": "rail_link",
+       "a": 9,
+       "op": "==",
+       "b": 0
+      },
+      {
+       "kind": "rail_link",
+       "a": 12,
+       "op": "==",
+       "b": 0
+      },
+      {
+       "kind": "rail_link",
+       "a": 14,
+       "op": "==",
+       "b": 0
+      },
+      {
+       "kind": "rail_link",
+       "a": 17,
+       "op": "==",
+       "b": 0
+      },
+      {
+       "kind": "rail_link",
+       "a": 15,
+       "op": "==",
+       "b": 0
+      },
+      {
+       "kind": "rail_link",
+       "a": 16,
+       "op": "==",
+       "b": 0
+      },
+      {
+       "kind": "rail_link",
+       "a": 18,
+       "op": "==",
+       "b": 0
+      }
+     ],
+     "then": [
+      {
+       "kind": "end",
+       "a": 1
       }
      ]
     }
@@ -11766,723 +14941,6 @@
     ]
    ]
   },
-  "3": {
-   "_endregel_aus": "0x499C5C",
-   "block": "",
-   "gate": "0x499922",
-   "init": {
-    "101": 1,
-    "131": 130
-   },
-   "rules": [
-    {
-     "_at": "0x49940B",
-     "then": [
-      {
-       "a": 88,
-       "kind": "inc"
-      }
-     ],
-     "when": []
-    },
-    {
-     "_at": "0x49941C",
-     "then": [
-      {
-       "a": 88,
-       "b": 0,
-       "kind": "set"
-      }
-     ],
-     "when": [
-      {
-       "a": 88,
-       "b": 19,
-       "kind": "var",
-       "op": ">"
-      }
-     ]
-    },
-    {
-     "_at": "0x4994BD",
-     "_tut_ausserdem": "show_text2 0x4D0990",
-     "once": 0,
-     "then": [
-      {
-       "_at": "0x4994C5",
-       "a": 20,
-       "b": 2,
-       "c": 70,
-       "d": 70,
-       "kind": "text"
-      },
-      {
-       "_at": "0x4994DF",
-       "a": 1014,
-       "b": 37,
-       "c": 38,
-       "d": 0,
-       "kind": "order"
-      }
-     ],
-     "when": [
-      {
-       "a": 37,
-       "b": 65534,
-       "c": 38,
-       "kind": "imap",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x4994FC",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "then": [
-      {
-       "_at": "0x4994FC",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x499509",
-       "a": 21,
-       "b": 2,
-       "c": 100,
-       "d": 30,
-       "kind": "text"
-      },
-      {
-       "a": 0,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 0,
-       "b": 1,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 13,
-       "b": 1000,
-       "c": 38,
-       "kind": "imap",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x49952D",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "then": [
-      {
-       "_at": "0x49952D",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x499540",
-       "a": 22,
-       "b": 2,
-       "c": 340,
-       "d": 280,
-       "kind": "text"
-      },
-      {
-       "a": 0,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 0,
-       "b": 2,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 9,
-       "b": 1000,
-       "c": 12,
-       "kind": "imap",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x4995AE",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "then": [
-      {
-       "_at": "0x4995AE",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x4995C1",
-       "a": 23,
-       "b": 2,
-       "c": 360,
-       "d": 260,
-       "kind": "text"
-      },
-      {
-       "a": 0,
-       "kind": "inc"
-      },
-      {
-       "a": 2,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 0,
-       "b": 3,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 0,
-       "c": 0,
-       "kind": "objects",
-       "op": "!="
-      }
-     ]
-    },
-    {
-     "_at": "0x4995EA",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "then": [
-      {
-       "_at": "0x4995EA",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x4995FD",
-       "a": 24,
-       "b": 2,
-       "c": 420,
-       "d": 320,
-       "kind": "text"
-      },
-      {
-       "a": 0,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 0,
-       "b": 4,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "b": 6,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x499673",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "once": 50,
-     "then": [
-      {
-       "_at": "0x499673",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x499683",
-       "a": 39,
-       "b": 2,
-       "c": 70,
-       "d": 150,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "b": 24,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x4996B7",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "any": [
-      {
-       "b": 25,
-       "kind": "event",
-       "op": "=="
-      },
-      {
-       "b": 10000,
-       "kind": "selected",
-       "op": "=="
-      }
-     ],
-     "once": 51,
-     "then": [
-      {
-       "_at": "0x4996B7",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x4996C7",
-       "a": 40,
-       "b": 2,
-       "c": 70,
-       "d": 150,
-       "kind": "text"
-      }
-     ],
-     "when": []
-    },
-    {
-     "_at": "0x4996F0",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "once": 52,
-     "then": [
-      {
-       "_at": "0x4996F0",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x499700",
-       "a": 41,
-       "b": 2,
-       "c": 70,
-       "d": 150,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "b": 7,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x499729",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "once": 53,
-     "then": [
-      {
-       "_at": "0x499729",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x499739",
-       "a": 42,
-       "b": 2,
-       "c": 70,
-       "d": 150,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "b": 29,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x499763",
-     "then": [
-      {
-       "a": 40,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 40,
-       "b": 0,
-       "kind": "var",
-       "op": "!="
-      },
-      {
-       "a": 40,
-       "b": 50,
-       "kind": "var",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x4997FD",
-     "once": 10,
-     "then": [
-      {
-       "_at": "0x499807",
-       "a": 0,
-       "b": 40,
-       "c": 88,
-       "d": 180,
-       "e": 1,
-       "f": 0,
-       "kind": "stock"
-      },
-      {
-       "_at": "0x499817",
-       "a": 0,
-       "b": 42,
-       "c": 88,
-       "d": 127,
-       "e": 1,
-       "f": 0,
-       "kind": "stock"
-      }
-     ],
-     "when": [
-      {
-       "a": 0,
-       "b": 0,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 7,
-       "b": 1000,
-       "c": 36,
-       "kind": "imap",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x499847",
-     "once": 11,
-     "then": [
-      {
-       "_at": "0x499851",
-       "a": 1,
-       "b": 40,
-       "c": 88,
-       "d": 330,
-       "e": 1,
-       "f": 0,
-       "kind": "stock"
-      },
-      {
-       "_at": "0x499861",
-       "a": 1,
-       "b": 42,
-       "c": 88,
-       "d": 237,
-       "e": 1,
-       "f": 0,
-       "kind": "stock"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 0,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 80,
-       "b": 1000,
-       "c": 29,
-       "kind": "imap",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x499883",
-     "_tut_ausserdem": "place_unit place_unit place_unit place_unit",
-     "once": 12,
-     "then": [
-      {
-       "_at": "0x499892",
-       "a": 84,
-       "b": 62,
-       "c": 76,
-       "d": 1,
-       "kind": "place_unit"
-      },
-      {
-       "_at": "0x4998A2",
-       "a": 85,
-       "b": 62,
-       "c": 77,
-       "d": 1,
-       "kind": "place_unit"
-      },
-      {
-       "_at": "0x4998B2",
-       "a": 86,
-       "b": 63,
-       "c": 77,
-       "d": 1,
-       "kind": "place_unit"
-      },
-      {
-       "_at": "0x4998C2",
-       "a": 84,
-       "b": 64,
-       "c": 75,
-       "d": 1,
-       "kind": "place_unit"
-      }
-     ],
-     "when": [
-      {
-       "a": 59,
-       "b": 1000,
-       "c": 38,
-       "kind": "imap",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x4998DF",
-     "once": 13,
-     "then": [],
-     "when": [
-      {
-       "a": 85,
-       "b": 1000,
-       "c": 74,
-       "kind": "imap",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x499901",
-     "then": [
-      {
-       "a": 17,
-       "b": 0,
-       "kind": "set"
-      },
-      {
-       "a": 18,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 101,
-       "b": 2,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 17,
-       "b": 100,
-       "kind": "var",
-       "op": ">"
-      }
-     ]
-    },
-    {
-     "_at": "0x49991B",
-     "then": [
-      {
-       "a": 17,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 101,
-       "b": 2,
-       "kind": "var",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x499B4E",
-     "_tut_ausserdem": "show_text game_time",
-     "once": 16,
-     "then": [
-      {
-       "_at": "0x499B60",
-       "a": 130,
-       "b": 1,
-       "c": 30,
-       "d": 40,
-       "kind": "text"
-      },
-      {
-       "a": 220,
-       "kind": "inc"
-      },
-      {
-       "a": 101,
-       "b": 2,
-       "kind": "set"
-      },
-      {
-       "a": 221,
-       "kind": "set_time"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 0,
-       "kind": "obj_owner",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x499B9E",
-     "_tut_ausserdem": "show_text2",
-     "then": [
-      {
-       "_at": "0x499BAC",
-       "a": 29,
-       "b": 2,
-       "c": 320,
-       "d": 220,
-       "kind": "text"
-      },
-      {
-       "a": 220,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 220,
-       "b": 1,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 221,
-       "b": 1,
-       "kind": "time_after",
-       "op": ">"
-      }
-     ]
-    },
-    {
-     "_at": "0x499BD0",
-     "_tut_ausserdem": "0x4D0EC0 sound",
-     "then": [
-      {
-       "_at": "0x499BD5",
-       "a": 7000,
-       "kind": "sell_unit"
-      },
-      {
-       "a": 16,
-       "kind": "inc"
-      },
-      {
-       "a": 101,
-       "b": 1,
-       "kind": "set"
-      },
-      {
-       "_at": "0x499BED",
-       "a": 601,
-       "kind": "sound"
-      }
-     ],
-     "when": [
-      {
-       "a": 101,
-       "b": 2,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 18,
-       "b": 200,
-       "kind": "var",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x499C11",
-     "_tut_ausserdem": "show_text bus_cmd sound",
-     "then": [
-      {
-       "_at": "0x499C1F",
-       "a": 100,
-       "b": 1,
-       "c": 380,
-       "d": 280,
-       "kind": "text"
-      },
-      {
-       "a": 16,
-       "kind": "inc"
-      },
-      {
-       "a": 101,
-       "b": 10,
-       "kind": "set"
-      },
-      {
-       "_at": "0x499C3E",
-       "a": 300,
-       "b": 0,
-       "kind": "money"
-      },
-      {
-       "_at": "0x499C46",
-       "a": 600,
-       "kind": "sound"
-      }
-     ],
-     "when": [
-      {
-       "a": 16,
-       "b": 1,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 7,
-       "b": 193,
-       "c": 65535,
-       "kind": "unit_index",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 4,
-       "b": 0,
-       "c": 0,
-       "kind": "objects",
-       "op": "!="
-      }
-     ]
-    }
-   ]
-  },
   "30": {
    "_endregel_aus": "0x4A44F9",
    "block": "",
@@ -15010,2393 +17468,6 @@
      70,
      5000
     ]
-   ]
-  },
-  "4": {
-   "_endregel_aus": "0x499FD2",
-   "_uebersetzt": "Die Siegbedingung steht bei 0x499F8C als Kette: obj_owner(0..4) alle == 12 (zerstoert), dann mission_end. Wortwoertlich uebernommen — das ist die ganze Bedingung, nichts ergaenzt.",
-   "block": "0x499C7F",
-   "gate": "0x499E6B",
-   "init": {
-    "101": 1,
-    "131": 141
-   },
-   "rules": [
-    {
-     "_at": "0x499C89",
-     "then": [
-      {
-       "a": 0,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 0,
-       "b": 100,
-       "kind": "var",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x499C9A",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "then": [
-      {
-       "_at": "0x499C9A",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x499CAD",
-       "a": 29,
-       "b": 2,
-       "c": 320,
-       "d": 220,
-       "kind": "text"
-      },
-      {
-       "a": 0,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 0,
-       "b": 100,
-       "kind": "var",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x499CC6",
-     "then": [
-      {
-       "a": 1,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 0,
-       "b": 100,
-       "kind": "var",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x499CD8",
-     "_tut_ausserdem": "0x4D0860",
-     "then": [
-      {
-       "a": 1,
-       "b": 0,
-       "kind": "set"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 200,
-       "kind": "var",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x499D24",
-     "then": [
-      {
-       "a": 5,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 5,
-       "b": 0,
-       "kind": "var",
-       "op": "!="
-      },
-      {
-       "a": 5,
-       "b": 700,
-       "kind": "var",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x499F59",
-     "_tut_ausserdem": "show_text bus_cmd sound",
-     "then": [
-      {
-       "_at": "0x499F67",
-       "a": 100,
-       "b": 1,
-       "c": 350,
-       "d": 240,
-       "kind": "text"
-      },
-      {
-       "a": 101,
-       "b": 10,
-       "kind": "set"
-      },
-      {
-       "_at": "0x499F7F",
-       "a": 1600,
-       "b": 0,
-       "kind": "money"
-      },
-      {
-       "_at": "0x499F87",
-       "a": 600,
-       "kind": "sound"
-      }
-     ],
-     "when": [
-      {
-       "a": 101,
-       "b": 2,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 6,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 7,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 8,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 0,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 2,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 3,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 4,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      }
-     ]
-    }
-   ]
-  },
-  "5": {
-   "_endregel_aus": "0X49A534",
-   "block": "",
-   "gate": "0x49A41D",
-   "init": {
-    "101": 150
-   },
-   "rules": [
-    {
-     "_at": "0x49A071",
-     "_tut_ausserdem": "show_text2",
-     "once": 20,
-     "then": [
-      {
-       "_at": "0x49A07F",
-       "a": 44,
-       "b": 2,
-       "c": 420,
-       "d": 300,
-       "kind": "text"
-      }
-     ],
-     "when": []
-    },
-    {
-     "_at": "0x49A0A3",
-     "_tut_ausserdem": "show_text2",
-     "once": 0,
-     "then": [
-      {
-       "_at": "0x49A0B1",
-       "a": 32,
-       "b": 2,
-       "c": 320,
-       "d": 220,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "a": 35,
-       "b": 1000,
-       "c": 29,
-       "kind": "imap",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x49A0D5",
-     "_tut_ausserdem": "show_text2",
-     "once": 1,
-     "then": [
-      {
-       "_at": "0x49A0E3",
-       "a": 33,
-       "b": 2,
-       "c": 400,
-       "d": 320,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "a": 22,
-       "b": 1000,
-       "c": 20,
-       "kind": "imap",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x49A107",
-     "_tut_ausserdem": "show_text2",
-     "once": 2,
-     "then": [
-      {
-       "_at": "0x49A115",
-       "a": 34,
-       "b": 2,
-       "c": 250,
-       "d": 250,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "a": 38,
-       "b": 1000,
-       "c": 11,
-       "kind": "imap",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x49A150",
-     "_tut_ausserdem": "show_text2",
-     "once": 3,
-     "then": [
-      {
-       "_at": "0x49A158",
-       "a": 35,
-       "b": 2,
-       "c": 50,
-       "d": 50,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "a": 57,
-       "b": 0,
-       "c": 0,
-       "kind": "units_mark",
-       "op": ">"
-      },
-      {
-       "a": 1,
-       "b": 0,
-       "c": 0,
-       "kind": "buildings",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49A193",
-     "_tut_ausserdem": "show_text2",
-     "once": 4,
-     "then": [
-      {
-       "_at": "0x49A1A1",
-       "a": 36,
-       "b": 2,
-       "c": 450,
-       "d": 350,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "a": 57,
-       "b": 0,
-       "c": 0,
-       "kind": "units_mark",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 0,
-       "c": 0,
-       "kind": "buildings",
-       "op": ">"
-      }
-     ]
-    },
-    {
-     "_at": "0x49A1DC",
-     "_tut_ausserdem": "show_text2",
-     "once": 5,
-     "then": [
-      {
-       "_at": "0x49A1E7",
-       "a": 37,
-       "b": 2,
-       "c": 480,
-       "d": 50,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "a": 57,
-       "b": 0,
-       "c": 0,
-       "kind": "units_mark",
-       "op": ">"
-      },
-      {
-       "a": 1,
-       "b": 0,
-       "c": 0,
-       "kind": "buildings",
-       "op": ">"
-      }
-     ]
-    },
-    {
-     "_at": "0x49A213",
-     "_tut_ausserdem": "show_text2",
-     "once": 6,
-     "then": [
-      {
-       "_at": "0x49A21E",
-       "a": 38,
-       "b": 2,
-       "c": 50,
-       "d": 350,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "a": 5,
-       "b": 0,
-       "kind": "var",
-       "op": "!="
-      },
-      {
-       "b": 16,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49A240",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "once": 52,
-     "then": [
-      {
-       "_at": "0x49A240",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x49A250",
-       "a": 41,
-       "b": 2,
-       "c": 70,
-       "d": 150,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "b": 7,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49A279",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "once": 53,
-     "then": [
-      {
-       "_at": "0x49A279",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x49A289",
-       "a": 42,
-       "b": 2,
-       "c": 70,
-       "d": 150,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "b": 29,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49A2B2",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "once": 54,
-     "then": [
-      {
-       "_at": "0x49A2B2",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x49A2C2",
-       "a": 79,
-       "b": 2,
-       "c": 70,
-       "d": 150,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "b": 8,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49A2F0",
-     "once": 10,
-     "then": [],
-     "when": [
-      {
-       "a": 0,
-       "b": 0,
-       "kind": "obj_owner",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49A30C",
-     "then": [
-      {
-       "a": 10,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 10,
-       "b": 300,
-       "kind": "var",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x49A32F",
-     "_tut_ausserdem": "show_text",
-     "then": [
-      {
-       "_at": "0x49A33D",
-       "a": 150,
-       "b": 1,
-       "c": 450,
-       "d": 100,
-       "kind": "text"
-      },
-      {
-       "a": 10,
-       "b": 320,
-       "kind": "set"
-      },
-      {
-       "a": 101,
-       "b": 2,
-       "kind": "set"
-      }
-     ],
-     "when": [
-      {
-       "a": 10,
-       "b": 300,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 3,
-       "b": 1,
-       "c": 0,
-       "kind": "units",
-       "op": "!="
-      }
-     ]
-    },
-    {
-     "_at": "0x49A364",
-     "then": [
-      {
-       "a": 10,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 10,
-       "b": 300,
-       "kind": "var",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49A37F",
-     "then": [
-      {
-       "a": 31,
-       "b": 190,
-       "kind": "take_var"
-      }
-     ],
-     "when": [
-      {
-       "a": 30,
-       "b": 1,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 190,
-       "b": 0,
-       "kind": "var",
-       "op": "!="
-      }
-     ]
-    },
-    {
-     "_at": "0x49A3A9",
-     "then": [
-      {
-       "a": 32,
-       "b": 191,
-       "kind": "take_var"
-      }
-     ],
-     "when": [
-      {
-       "a": 30,
-       "b": 1,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 191,
-       "b": 0,
-       "kind": "var",
-       "op": "!="
-      }
-     ]
-    },
-    {
-     "_at": "0x49A3E7",
-     "once": 33,
-     "then": [],
-     "when": [
-      {
-       "a": 30,
-       "b": 1,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 32,
-       "b": 0,
-       "c": 42,
-       "kind": "var_vs_store",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x49A416",
-     "once": 34,
-     "then": [],
-     "when": [
-      {
-       "a": 30,
-       "b": 1,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 31,
-       "b": 0,
-       "c": 40,
-       "kind": "var_vs_store",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x49A49D",
-     "once": 30,
-     "then": [
-      {
-       "a": 31,
-       "b": 0,
-       "c": 40,
-       "kind": "set_store"
-      },
-      {
-       "a": 32,
-       "b": 0,
-       "c": 42,
-       "kind": "set_store"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 0,
-       "c": 0,
-       "kind": "buildings",
-       "op": ">"
-      }
-     ]
-    },
-    {
-     "_at": "0x49A4F9",
-     "_tut_ausserdem": "place_unit place_unit",
-     "once": 40,
-     "then": [
-      {
-       "_at": "0x49A508",
-       "a": 85,
-       "b": 37,
-       "c": 6,
-       "d": 1,
-       "kind": "place_unit"
-      },
-      {
-       "_at": "0x49A518",
-       "a": 86,
-       "b": 38,
-       "c": 6,
-       "d": 1,
-       "kind": "place_unit"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 1,
-       "c": 0,
-       "kind": "units",
-       "op": "<"
-      },
-      {
-       "a": 1,
-       "b": 0,
-       "c": 3,
-       "kind": "units",
-       "op": ">"
-      },
-      {
-       "a": 2,
-       "b": 0,
-       "kind": "obj_owner",
-       "op": "!="
-      }
-     ]
-    },
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 33,
-       "b": 0,
-       "kind": "var",
-       "op": "!="
-      },
-      {
-       "a": 34,
-       "b": 0,
-       "kind": "var",
-       "op": "!="
-      }
-     ]
-    }
-   ]
-  },
-  "6": {
-   "_endregel_aus": "0x49AB0E",
-   "block": "",
-   "gate": "0x49A8F4",
-   "init": {
-    "101": 1,
-    "102": 1,
-    "103": 1,
-    "131": 160,
-    "132": 161,
-    "133": 162
-   },
-   "rules": [
-    {
-     "_at": "0x49A557",
-     "then": [
-      {
-       "a": 88,
-       "kind": "inc"
-      }
-     ],
-     "when": []
-    },
-    {
-     "_at": "0x49A568",
-     "then": [
-      {
-       "a": 88,
-       "b": 0,
-       "kind": "set"
-      }
-     ],
-     "when": [
-      {
-       "a": 88,
-       "b": 19,
-       "kind": "var",
-       "op": ">"
-      }
-     ]
-    },
-    {
-     "_at": "0x49A584",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "once": 52,
-     "then": [
-      {
-       "_at": "0x49A584",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x49A594",
-       "a": 41,
-       "b": 2,
-       "c": 70,
-       "d": 150,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "b": 7,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49A5BD",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "once": 53,
-     "then": [
-      {
-       "_at": "0x49A5BD",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x49A5CD",
-       "a": 42,
-       "b": 2,
-       "c": 70,
-       "d": 150,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "b": 29,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49A5F6",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "once": 54,
-     "then": [
-      {
-       "_at": "0x49A5F6",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x49A606",
-       "a": 79,
-       "b": 2,
-       "c": 70,
-       "d": 150,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "b": 8,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49A63B",
-     "_tut_ausserdem": "show_text",
-     "once": 220,
-     "then": [
-      {
-       "a": 102,
-       "kind": "inc"
-      },
-      {
-       "_at": "0x49A657",
-       "a": 161,
-       "b": 1,
-       "c": 120,
-       "d": 450,
-       "kind": "text"
-      },
-      {
-       "a": 0,
-       "b": 10,
-       "c": 5,
-       "kind": "space_in",
-       "typen": [
-        193,
-        50,
-        50,
-        50,
-        50,
-        50
-       ]
-      }
-     ],
-     "when": [
-      {
-       "a": 102,
-       "b": 1,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 54,
-       "b": 1000,
-       "c": 8,
-       "kind": "imap",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x49A6F2",
-     "_tut_ausserdem": "remove_unit show_text bus_cmd sound",
-     "then": [
-      {
-       "_at": "0x49A70C",
-       "a": 100,
-       "b": 1,
-       "c": 120,
-       "d": 450,
-       "kind": "text"
-      },
-      {
-       "_at": "0x49A71B",
-       "a": 200,
-       "b": 0,
-       "kind": "money"
-      },
-      {
-       "a": 102,
-       "b": 10,
-       "kind": "set"
-      },
-      {
-       "_at": "0x49A72C",
-       "a": 600,
-       "kind": "sound"
-      }
-     ],
-     "when": [
-      {
-       "a": 102,
-       "b": 2,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 11,
-       "b": 0,
-       "kind": "var",
-       "op": "!="
-      },
-      {
-       "a": 11,
-       "b": 193,
-       "c": 0,
-       "kind": "unit_is_var",
-       "op": "!="
-      },
-      {
-       "a": 11,
-       "b": 0,
-       "c": 54,
-       "kind": "unit_field",
-       "op": "=="
-      },
-      {
-       "a": 11,
-       "b": 1,
-       "c": 8,
-       "kind": "unit_field",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49A77F",
-     "_waechter": "mission_tick.py: cmp v[9],0 / je vor dem inc @0x49A77F",
-     "then": [
-      {
-       "a": 9,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 9,
-       "b": 0,
-       "kind": "var",
-       "op": "!="
-      },
-      {
-       "a": 9,
-       "b": 10,
-       "kind": "var",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x49A790",
-     "_tut_ausserdem": "show_text",
-     "then": [
-      {
-       "a": 9,
-       "kind": "inc"
-      },
-      {
-       "a": 103,
-       "kind": "inc"
-      },
-      {
-       "_at": "0x49A7AF",
-       "a": 162,
-       "b": 1,
-       "c": 330,
-       "d": 260,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "a": 9,
-       "b": 10,
-       "kind": "var",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49A883",
-     "once": 12,
-     "then": [
-      {
-       "_at": "0x49A88D",
-       "a": 1,
-       "b": 40,
-       "c": 88,
-       "d": 330,
-       "e": 1,
-       "f": 0,
-       "kind": "stock"
-      },
-      {
-       "_at": "0x49A89D",
-       "a": 1,
-       "b": 42,
-       "c": 88,
-       "d": 237,
-       "e": 1,
-       "f": 0,
-       "kind": "stock"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 0,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 53,
-       "b": 1000,
-       "c": 29,
-       "kind": "imap",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x49A8CD",
-     "once": 13,
-     "then": [
-      {
-       "_at": "0x49A8D7",
-       "a": 2,
-       "b": 40,
-       "c": 88,
-       "d": 330,
-       "e": 1,
-       "f": 0,
-       "kind": "stock"
-      },
-      {
-       "_at": "0x49A8E7",
-       "a": 2,
-       "b": 42,
-       "c": 88,
-       "d": 237,
-       "e": 1,
-       "f": 0,
-       "kind": "stock"
-      }
-     ],
-     "when": [
-      {
-       "a": 2,
-       "b": 0,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 52,
-       "b": 1000,
-       "c": 55,
-       "kind": "imap",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x49A986",
-     "_tut_ausserdem": "sound",
-     "then": [
-      {
-       "a": 101,
-       "b": 1,
-       "kind": "set"
-      },
-      {
-       "_at": "0x49A98F",
-       "a": 601,
-       "kind": "sound"
-      }
-     ],
-     "when": [
-      {
-       "a": 101,
-       "b": 2,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 10,
-       "b": 194,
-       "c": 0,
-       "kind": "unit_is_var",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49A9BD",
-     "_tut_ausserdem": "0x4D0F20",
-     "then": [
-      {
-       "a": 11,
-       "b": 0,
-       "c": 193,
-       "kind": "find_unit"
-      }
-     ],
-     "when": [
-      {
-       "a": 11,
-       "b": 0,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 102,
-       "b": 2,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 0,
-       "b": 193,
-       "c": 65535,
-       "kind": "unit_index",
-       "op": "!="
-      }
-     ]
-    },
-    {
-     "_at": "0x49A9FF",
-     "_tut_ausserdem": "sound",
-     "then": [
-      {
-       "a": 102,
-       "b": 1,
-       "kind": "set"
-      },
-      {
-       "_at": "0x49AA08",
-       "a": 601,
-       "kind": "sound"
-      }
-     ],
-     "when": [
-      {
-       "a": 102,
-       "b": 2,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 11,
-       "b": 193,
-       "c": 0,
-       "kind": "unit_is_var",
-       "op": "!="
-      }
-     ]
-    },
-    {
-     "_at": "0x49AA33",
-     "_tut_ausserdem": "show_text bus_cmd sound",
-     "then": [
-      {
-       "_at": "0x49AA41",
-       "a": 100,
-       "b": 1,
-       "c": 350,
-       "d": 240,
-       "kind": "text"
-      },
-      {
-       "a": 103,
-       "b": 10,
-       "kind": "set"
-      },
-      {
-       "_at": "0x49AA59",
-       "a": 400,
-       "b": 0,
-       "kind": "money"
-      },
-      {
-       "_at": "0x49AA61",
-       "a": 600,
-       "kind": "sound"
-      }
-     ],
-     "when": [
-      {
-       "a": 103,
-       "b": 2,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 3,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 4,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 0,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      }
-     ]
-    }
-   ]
-  },
-  "7": {
-   "_endregel_aus": "0x49B16B",
-   "block": "",
-   "gate": "0x49B02D",
-   "init": {
-    "101": 1,
-    "102": 1,
-    "131": 172,
-    "132": 170
-   },
-   "rules": [
-    {
-     "_at": "0x49AB4F",
-     "_tut_ausserdem": "g_robot_class_count",
-     "once": 16,
-     "then": [],
-     "when": [
-      {
-       "a": 0,
-       "b": 190,
-       "c": 0,
-       "kind": "unit_is",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49ABB4",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "once": 52,
-     "then": [
-      {
-       "_at": "0x49ABB4",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x49ABC4",
-       "a": 41,
-       "b": 2,
-       "c": 70,
-       "d": 150,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "b": 7,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49ABED",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "once": 53,
-     "then": [
-      {
-       "_at": "0x49ABED",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x49ABFD",
-       "a": 42,
-       "b": 2,
-       "c": 70,
-       "d": 150,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "b": 29,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49AC26",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "once": 54,
-     "then": [
-      {
-       "_at": "0x49AC26",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x49AC36",
-       "a": 79,
-       "b": 2,
-       "c": 70,
-       "d": 150,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "b": 8,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49ACAC",
-     "_tut_ausserdem": "0x4222C0 0x4D0EC0",
-     "once": 0,
-     "then": [
-      {
-       "_at": "0x49ACC4",
-       "a": 3000,
-       "kind": "sell_unit"
-      },
-      {
-       "a": 221,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 14,
-       "b": 1000,
-       "c": 22,
-       "kind": "imap",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x49AD05",
-     "once": 1,
-     "then": [],
-     "when": [
-      {
-       "a": 221,
-       "b": 0,
-       "kind": "var",
-       "op": "!="
-      },
-      {
-       "a": 3000,
-       "b": 192,
-       "c": 0,
-       "kind": "unit_is",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49AD20",
-     "_waechter": "mission_tick.py: cmp v[1],0 / je vor dem inc @0x49AD20",
-     "then": [
-      {
-       "a": 1,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 0,
-       "kind": "var",
-       "op": "!="
-      },
-      {
-       "a": 1,
-       "b": 40,
-       "kind": "var",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x49AD31",
-     "_tut_ausserdem": "show_text",
-     "then": [
-      {
-       "_at": "0x49AD42",
-       "a": 170,
-       "b": 1,
-       "c": 350,
-       "d": 260,
-       "kind": "text"
-      },
-      {
-       "a": 1,
-       "kind": "inc"
-      },
-      {
-       "a": 102,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 40,
-       "kind": "var",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49AFD2",
-     "_tut_ausserdem": "0x4D0860",
-     "then": [
-      {
-       "a": 6,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 6,
-       "b": 1,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 7001,
-       "b": 193,
-       "c": 0,
-       "kind": "unit_is",
-       "op": "=="
-      },
-      {
-       "a": 7002,
-       "b": 193,
-       "c": 0,
-       "kind": "unit_is",
-       "op": "=="
-      },
-      {
-       "a": 7003,
-       "b": 193,
-       "c": 0,
-       "kind": "unit_is",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49B0A0",
-     "_tut_ausserdem": "0x4D0F20",
-     "then": [
-      {
-       "a": 10,
-       "b": 0,
-       "c": 193,
-       "kind": "find_unit"
-      }
-     ],
-     "when": [
-      {
-       "a": 8,
-       "b": 0,
-       "kind": "var",
-       "op": "!="
-      },
-      {
-       "a": 0,
-       "b": 193,
-       "c": 65535,
-       "kind": "unit_index",
-       "op": "!="
-      }
-     ]
-    },
-    {
-     "_at": "0x49B104",
-     "_tut_ausserdem": "show_text sound",
-     "then": [
-      {
-       "a": 9,
-       "kind": "inc"
-      },
-      {
-       "a": 101,
-       "b": 10,
-       "kind": "set"
-      },
-      {
-       "_at": "0x49B125",
-       "a": 174,
-       "b": 1,
-       "c": 330,
-       "d": 260,
-       "kind": "text"
-      },
-      {
-       "_at": "0x49B12D",
-       "a": 600,
-       "kind": "sound"
-      }
-     ],
-     "when": [
-      {
-       "a": 9,
-       "b": 3,
-       "kind": "var",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 102,
-       "b": 2,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 12,
-       "b": 2,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 3,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 5,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49B192",
-     "_tut_ausserdem": "bus_cmd",
-     "once": 13,
-     "then": [
-      {
-       "a": 12,
-       "kind": "inc"
-      },
-      {
-       "_at": "0x49B1A7",
-       "a": 400,
-       "b": 0,
-       "kind": "money"
-      }
-     ],
-     "when": [
-      {
-       "a": 102,
-       "b": 2,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 3,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49B1D1",
-     "_tut_ausserdem": "bus_cmd",
-     "once": 17,
-     "then": [
-      {
-       "a": 12,
-       "kind": "inc"
-      },
-      {
-       "_at": "0x49B1E6",
-       "a": 400,
-       "b": 0,
-       "kind": "money"
-      }
-     ],
-     "when": [
-      {
-       "a": 102,
-       "b": 2,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 5,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49B206",
-     "_tut_ausserdem": "show_text",
-     "once": 15,
-     "then": [
-      {
-       "_at": "0x49B21E",
-       "a": 173,
-       "b": 1,
-       "c": 150,
-       "d": 350,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "a": 4,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      }
-     ]
-    }
-   ]
-  },
-  "8": {
-   "_endregel_aus": "0x49B4AF",
-   "_uebersetzt": "Der Block ist eine Zustandsmaschine ueber v[0], v[1], v[2] und drei Ereignisfaenger. Uebernommen sind die Zeit- und Zaehlregeln; die drei Ereignisfaenger (Ereignis 7, 29, 8) fehlen, weil das Ereignisbyte 0x539930 in der Engine noch nichts setzt.",
-   "block": "0x49B275",
-   "gate": "0x49B44F",
-   "init": {
-    "101": 1,
-    "131": 180
-   },
-   "rules": [
-    {
-     "_at": "0x49B27F",
-     "_tut_ausserdem": "show_text2",
-     "once": 20,
-     "then": [
-      {
-       "_at": "0x49B28D",
-       "a": 45,
-       "b": 2,
-       "c": 350,
-       "d": 280,
-       "kind": "text"
-      }
-     ],
-     "when": []
-    },
-    {
-     "_at": "0x49B2AF",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "once": 52,
-     "then": [
-      {
-       "_at": "0x49B2AF",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x49B2BF",
-       "a": 41,
-       "b": 2,
-       "c": 70,
-       "d": 150,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "b": 7,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49B2E8",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "once": 53,
-     "then": [
-      {
-       "_at": "0x49B2E8",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x49B2F8",
-       "a": 42,
-       "b": 2,
-       "c": 70,
-       "d": 150,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "b": 29,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49B321",
-     "_tut_ausserdem": "close_message_windows show_text2",
-     "once": 54,
-     "then": [
-      {
-       "_at": "0x49B321",
-       "kind": "close_texts"
-      },
-      {
-       "_at": "0x49B331",
-       "a": 79,
-       "b": 2,
-       "c": 70,
-       "d": 150,
-       "kind": "text"
-      }
-     ],
-     "when": [
-      {
-       "b": 8,
-       "kind": "event",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49B35C",
-     "_tut_ausserdem": "game_time show_text",
-     "then": [
-      {
-       "a": 0,
-       "kind": "set_time"
-      },
-      {
-       "_at": "0x49B378",
-       "a": 180,
-       "b": 1,
-       "c": 360,
-       "d": 240,
-       "kind": "text"
-      },
-      {
-       "a": 101,
-       "b": 2,
-       "kind": "set"
-      }
-     ],
-     "when": [
-      {
-       "a": 0,
-       "b": 0,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 16,
-       "b": 1000,
-       "c": 24,
-       "kind": "imap",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x49B3C6",
-     "_tut_ausserdem": "show_text bus_cmd sound",
-     "once": 1,
-     "then": [
-      {
-       "a": 101,
-       "b": 10,
-       "kind": "set"
-      },
-      {
-       "_at": "0x49B3E4",
-       "a": 100,
-       "b": 1,
-       "c": 350,
-       "d": 220,
-       "kind": "text"
-      },
-      {
-       "_at": "0x49B3F3",
-       "a": 250,
-       "b": 0,
-       "kind": "money"
-      },
-      {
-       "_at": "0x49B3FB",
-       "a": 600,
-       "kind": "sound"
-      }
-     ],
-     "when": [
-      {
-       "a": 2,
-       "b": 14,
-       "kind": "var",
-       "op": ">"
-      }
-     ]
-    },
-    {
-     "_at": "0x49B427",
-     "_tut_ausserdem": "show_text sound",
-     "once": 1,
-     "then": [
-      {
-       "_at": "0x49B432",
-       "a": 101,
-       "b": 1,
-       "c": 350,
-       "d": 120,
-       "kind": "text"
-      },
-      {
-       "a": 101,
-       "b": 1,
-       "kind": "set"
-      },
-      {
-       "_at": "0x49B44A",
-       "a": 601,
-       "kind": "sound"
-      }
-     ],
-     "when": [
-      {
-       "a": 0,
-       "b": 0,
-       "kind": "var",
-       "op": "!="
-      },
-      {
-       "a": 0,
-       "b": 29,
-       "kind": "time_after",
-       "op": ">"
-      }
-     ]
-    },
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 0,
-       "b": 2,
-       "c": 0,
-       "kind": "units",
-       "op": "=="
-      }
-     ]
-    }
-   ]
-  },
-  "9": {
-   "_endregel_aus": "0X49BB42",
-   "block": "",
-   "gate": "0x49B9EB",
-   "init": {
-    "101": 1,
-    "102": 1,
-    "103": 1,
-    "104": 1,
-    "131": 190,
-    "132": 191,
-    "133": 192,
-    "134": 193
-   },
-   "rules": [
-    {
-     "_at": "0x49B50D",
-     "_tut_ausserdem": "show_text",
-     "once": 0,
-     "then": [
-      {
-       "_at": "0x49B51E",
-       "a": 190,
-       "b": 1,
-       "c": 380,
-       "d": 400,
-       "kind": "text"
-      },
-      {
-       "a": 101,
-       "b": 2,
-       "kind": "set"
-      }
-     ],
-     "when": [
-      {
-       "a": 5,
-       "kind": "time_gt",
-       "op": ">"
-      }
-     ]
-    },
-    {
-     "_at": "0x49B5C4",
-     "_tut_ausserdem": "show_text",
-     "once": 1,
-     "then": [
-      {
-       "_at": "0x49B5D5",
-       "a": 191,
-       "b": 1,
-       "c": 380,
-       "d": 400,
-       "kind": "text"
-      },
-      {
-       "a": 102,
-       "b": 2,
-       "kind": "set"
-      }
-     ],
-     "when": [
-      {
-       "a": 15,
-       "kind": "time_gt",
-       "op": ">"
-      }
-     ]
-    },
-    {
-     "_at": "0x49B601",
-     "_tut_ausserdem": "show_text sound",
-     "then": [
-      {
-       "a": 1,
-       "kind": "inc"
-      },
-      {
-       "a": 102,
-       "b": 1,
-       "kind": "set"
-      },
-      {
-       "_at": "0x49B61F",
-       "a": 101,
-       "b": 1,
-       "c": 380,
-       "d": 400,
-       "kind": "text"
-      },
-      {
-       "_at": "0x49B627",
-       "a": 601,
-       "kind": "sound"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 1,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 35,
-       "kind": "time_gt",
-       "op": ">"
-      }
-     ]
-    },
-    {
-     "_at": "0x49B640",
-     "_tut_ausserdem": "show_text bus_cmd",
-     "then": [
-      {
-       "a": 1,
-       "kind": "inc"
-      },
-      {
-       "a": 102,
-       "b": 10,
-       "kind": "set"
-      },
-      {
-       "_at": "0x49B65E",
-       "a": 100,
-       "b": 1,
-       "c": 450,
-       "d": 220,
-       "kind": "text"
-      },
-      {
-       "_at": "0x49B66D",
-       "a": 1300,
-       "b": 0,
-       "kind": "money"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 1,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 230,
-       "b": 3,
-       "kind": "var",
-       "op": ">"
-      }
-     ]
-    },
-    {
-     "_at": "0x49B7BE",
-     "_tut_ausserdem": "sound",
-     "then": [
-      {
-       "a": 2,
-       "b": 5,
-       "kind": "set"
-      },
-      {
-       "a": 103,
-       "b": 1,
-       "kind": "set"
-      },
-      {
-       "_at": "0x49B7D0",
-       "a": 601,
-       "kind": "sound"
-      }
-     ],
-     "when": [
-      {
-       "a": 2,
-       "b": 1,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 6000,
-       "b": 194,
-       "c": 0,
-       "kind": "unit_is",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49B85F",
-     "_tut_ausserdem": "game_time",
-     "once": 3,
-     "then": [
-      {
-       "a": 4,
-       "kind": "set_time"
-      }
-     ],
-     "when": [
-      {
-       "a": 93,
-       "b": 1000,
-       "c": 45,
-       "kind": "imap",
-       "op": "<"
-      }
-     ]
-    },
-    {
-     "_at": "0x49B88E",
-     "_tut_ausserdem": "show_text game_time",
-     "then": [
-      {
-       "a": 3,
-       "kind": "inc"
-      },
-      {
-       "_at": "0x49B8A6",
-       "a": 193,
-       "b": 1,
-       "c": 360,
-       "d": 290,
-       "kind": "text"
-      },
-      {
-       "a": 104,
-       "b": 2,
-       "kind": "set"
-      },
-      {
-       "a": 5,
-       "b": 2000,
-       "kind": "set"
-      },
-      {
-       "a": 4,
-       "kind": "set_time"
-      }
-     ],
-     "when": [
-      {
-       "a": 3,
-       "b": 1,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 4,
-       "b": 8,
-       "kind": "time_after",
-       "op": ">"
-      }
-     ]
-    },
-    {
-     "_at": "0x49BA67",
-     "then": [
-      {
-       "a": 6,
-       "kind": "inc"
-      }
-     ],
-     "when": [
-      {
-       "a": 12,
-       "b": 0,
-       "kind": "obj_owner",
-       "op": "!="
-      },
-      {
-       "a": 1,
-       "b": 2,
-       "c": 3,
-       "kind": "units",
-       "op": "<"
-      },
-      {
-       "a": 1,
-       "b": 0,
-       "c": 3,
-       "kind": "units",
-       "op": ">"
-      }
-     ]
-    },
-    {
-     "_at": "0x49BA9F",
-     "_tut_ausserdem": "add_target",
-     "once": 7,
-     "then": [
-      {
-       "_at": "0x49BAB3",
-       "a": 1,
-       "b": 2,
-       "c": 9,
-       "d": 6000,
-       "e": 0,
-       "kind": "add_target"
-      }
-     ],
-     "when": [
-      {
-       "a": 6000,
-       "b": 194,
-       "c": 0,
-       "kind": "unit_is",
-       "op": "!="
-      }
-     ]
-    },
-    {
-     "_at": "0x49BACF",
-     "_tut_ausserdem": "add_target",
-     "once": 8,
-     "then": [
-      {
-       "_at": "0x49BAE0",
-       "a": 1,
-       "b": 1,
-       "c": 9,
-       "d": 8,
-       "e": 1,
-       "kind": "add_target"
-      }
-     ],
-     "when": [
-      {
-       "a": 103,
-       "b": 10,
-       "kind": "var",
-       "op": "=="
-      }
-     ]
-    },
-    {
-     "_at": "0x49BB28",
-     "_tut_ausserdem": "bus_cmd",
-     "then": [
-      {
-       "a": 104,
-       "b": 10,
-       "kind": "set"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 1,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 2,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 3,
-       "b": 0,
-       "kind": "var",
-       "op": "!="
-      },
-      {
-       "a": 3,
-       "b": 4,
-       "kind": "var",
-       "op": "<"
-      },
-      {
-       "a": 104,
-       "b": 10,
-       "kind": "var",
-       "op": "!="
-      }
-     ]
-    },
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 1,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 2,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      }
-     ]
-    }
    ]
   }
  }
