@@ -320,6 +320,22 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Laden **nie** erscheinen — ihr Zweig hängt an einer Bedingung, die nicht
   eintreten kann.
 
+- ⭐ **Gekaufte Ware wird geliefert.** Bisher stand sie im selben Augenblick
+  neben dem Markt. Im Original fährt sie: der Käufer bezahlt sofort, der Platz
+  im Laden gilt als verkauft, und alle paar Sekunden macht sich ein Transport
+  auf den Weg zu **einem Gebäude des Käufers** — mit allem, was zum selben Ziel
+  geht, bis zu zwanzig Stück auf einmal. Erst dort steht die Einheit.
+  In der Kampagne ist das jetzt so; im Gefecht bleibt es sofort, aus demselben
+  Grund wie beim Verkauf.
+  ⚠ **Wohin geliefert wird, ist unsere Wahl** — wir nehmen das eigene Gebäude,
+  das dem Markt am nächsten liegt. Das Original lässt den Käufer es aussuchen;
+  wie es diese Auswahl anbietet, ist nicht gelesen, und dafür einen Dialog zu
+  erfinden wäre eine Erfindung an sichtbarer Stelle. Wer gar kein Gebäude hat,
+  bekommt den Kauf abgelehnt, statt Ware ins Nichts zu schicken.
+  Gemessen: Markt auf Spalte 80, Ziel auf Spalte 15 — und die gekaufte Einheit
+  steht am Ziel, nicht am Laden. Und in der Kampagne entsteht im Takt des Kaufs
+  **nichts**; das ist die Probe, die zeigt, dass wirklich gefahren wird.
+
 - **Die Preise der Karten stehen in zwei Gruppen, und das ist ein Befund über
   die Dateien.** Beim Nachrechnen der gespeicherten Ladenpreise fiel ein exakter
   Faktor 5/3 auf. Über alle dreizehn Karten aufgeschlüsselt gibt es genau zwei

@@ -289,6 +289,23 @@ deviate on purpose, and every deviation is marked as ours.
   ⚠ One bug of the original, reproduced: the highest veteran grade can **never**
   appear in the shop — its branch hangs on a condition that cannot occur.
 
+- ⭐ **Purchased goods are delivered.** Until now they appeared beside the market
+  the same instant. In the original they travel: the buyer pays at once, the
+  shop slot counts as sold, and every few seconds a transport sets off for **a
+  building of the buyer's** — carrying everything bound for the same
+  destination, up to twenty items at a time. Only there does the unit appear.
+  That is how the campaign works now; in a skirmish it stays immediate, for the
+  same reason as selling.
+  ⚠ **Where it is delivered is our choice** — we take the buyer's own building
+  nearest the market. The original lets the buyer pick; how it offers that
+  choice has not been read, and inventing a dialogue for it would be an
+  invention in a visible place. A buyer with no building at all has the purchase
+  refused rather than sent into the void.
+  Measured: market at column 80, destination at column 15 — and the purchased
+  unit stands at the destination, not at the shop. And in the campaign nothing
+  appears on the tick of the purchase; that is the probe which shows it really
+  travels.
+
 - **The maps' prices fall into two groups, and that is a finding about the
   files.** Recomputing the stored shop prices turned up an exact factor of 5/3.
   Broken down over all thirteen maps there are exactly two groups and no third:
