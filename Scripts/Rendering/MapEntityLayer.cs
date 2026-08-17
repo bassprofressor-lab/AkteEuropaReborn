@@ -216,7 +216,17 @@ public partial class MapEntityLayer : Node2D
         public int Capacity;                // sec24 +0x08 Lagerplatz
         public int CostStore;               // sec24 +0x0a Lagerausbaukosten
         public int CostProd;                // sec24 +0x0c Produktionserweiterungskosten
-        public int EffNum = 1, EffDen = 1;  // sec24 +0x03 / +0x04 production chance
+        /// <summary>sec24 +0x03/+0x04 (Fabrik) bzw. sec28 +0x03/+0x04 (Mine) —
+        /// und seit dem 18.08.2026 wissen wir, WAS sie sind:
+        /// <b><see cref="EffNum"/> ist die WIRKSAME und <see cref="EffDen"/> die
+        /// NENNLEISTUNG</b> der Anlage. Der Fertigungswurf @0x43DF33 vergleicht
+        /// genau diese beiden (<c>100·wirksam/nominal</c> als Prozentschwelle),
+        /// und die <b>Stromabrechnung</b> @0x440270 schreibt <c>EffNum</c> jede
+        /// Sekunde neu — siehe Simulation/Power.cs.
+        /// <para>⚠ Vorher stand hier »production chance«. Das war nicht falsch,
+        /// aber es verbarg, dass die Zahl eine LAUFENDE ist: sie stand bei uns
+        /// seit dem Laden der Karte still, weil niemand sie nachführte.</para></summary>
+        public int EffNum = 1, EffDen = 1;
         public int UpgradeStep;             // sec24 +0x06, counts 0..100
         public int Ticks;                   // this building's own tick counter
         public int ProdAccum;               // ticks banked toward the next part
@@ -13263,7 +13273,17 @@ public partial class MapEntityLayer : Node2D
         SupplyPostService(e);
 
         // mining: deposit -> the mine's own store
-        if (e.Deposit > 0 && e.StockT < MineCap)
+        //
+        // ⚠⚠ 18.08.2026, C10 — DIE FOERDERCHANCE FEHLTE. Die Mine schaufelte
+        // flach `MineRate` je Takt; das Original wuerfelt genauso wie die
+        // Fabrik, mit denselben zwei Bytes (@0x43E57F gegen @0x43DF82, sec28
+        // +0x03/+0x04). Ohne diesen Wurf bliebe der Strommangel bei Minen
+        // UNSICHTBAR — die Stromabrechnung schreibt ihre Wirkung genau nach
+        // EffNum, und niemand haette danach gefragt.
+        //
+        // ⚠ Die MENGE (5 je Takt) bleibt unsere Setzung, wie bisher. Gelesen
+        // ist der Wurf, nicht die Schaufel.
+        if (e.Deposit > 0 && e.StockT < MineCap && PowerRollPasses(e))
         {
             int take = Mathf.Min(MineRate, Mathf.Min(e.Deposit, MineCap - e.StockT));
             e.Deposit -= take;
@@ -13325,8 +13345,16 @@ public partial class MapEntityLayer : Node2D
             // auf map_NET02 bei Takt 123 (2,05 s) auseinanderlief, und zwar in
             // genau 14 Zahlen, alle Lagerbestaende. Auf map_NET07 faellt es
             // nicht auf, weil die Karte keine Fabriken hat.
-            if (Simulation.Determinism.Roll(100) >= e.EffNum * 100 / Mathf.Max(1, e.EffDen))
-                continue;
+            //
+            // ⚠⚠ 18.08.2026, C10 — der Wurf steht jetzt an EINER Stelle
+            // (PowerRollPasses), weil ihn seit heute auch die MINE braucht.
+            // Zwei Abschriften desselben Wurfs waeren zwei Wahrheiten, und die
+            // hier war um EINS daneben: das Original verwirft bei
+            // `rand()%100 > Prozent` (@0x43DF82, `jg`), wir bei `>=`. Bei
+            // Prozent 0 kommt im Original der Wurf 0 noch durch — eine Anlage
+            // ohne Strom steht also nicht ganz, sie schafft es in etwa einem
+            // von hundert Schritten.
+            if (!PowerRollPasses(e)) continue;
             e.StockT--;
             switch (e.BType)
             {
@@ -18422,6 +18450,7 @@ public partial class MapEntityLayer : Node2D
         PollShopCheck();
         PollBuyCheck();
         PollDockCheck();
+        PollPowerCheck();
 
         // preview harness: start the scripted build as soon as the factory has
         // manufactured enough parts

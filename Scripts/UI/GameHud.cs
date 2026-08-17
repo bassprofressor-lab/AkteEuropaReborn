@@ -23,8 +23,15 @@ using Godot;
 /// <c>Prozent·56/100</c> (@0x46FE66, 0x46FEB3, 0x46FEDB, 0x46FF20). Die zwei
 /// Prozentwerte stehen in <c>byte[0x991710]</c> und <c>byte[0x991714]</c>, und
 /// <b>gesetzt werden sie von der Stromabrechnung</b> @0x440270: aus
-/// <c>word[0x87A580+4·Spieler]</c> (Stromverbrauch) und
-/// <c>word[0x87A582+4·Spieler]</c> (Stromproduktion) — ist die Produktion
+/// <c>word[0x87A580+4·Spieler]</c> und <c>word[0x87A582+4·Spieler]</c>.
+/// ⚠⚠ <b>BERICHTIGT 18.08.2026:</b> hier stand »+0x00 Stromverbrauch, +0x02
+/// Stromproduktion«, und das ist <b>vertauscht</b> — den BEDARF tragen die
+/// Fabriken nach <c>+0x02</c> ein (@0x44032E), und nach <c>+0x00</c> schreibt
+/// erst der zweite Durchgang die <b>erbrachte Leistung</b> (@0x440543). Die
+/// Rechnung darunter war richtig gelesen, nur die zwei Namen standen über
+/// Kreuz. Seit C10 sind die Balken gebaut — siehe
+/// <c>Simulation/Power.cs</c> und <c>MapViewer.BuildPowerBars</c>.
+/// — ist die Produktion
 /// kleiner, wird Balken 1 auf 100 gesetzt und Balken 2 auf
 /// <c>Produktion·100/Verbrauch</c> (@0x4405F8/0x440615), sonst umgekehrt
 /// (@0x440623/0x440643). Im Bild <c>Assets/Legacy/UI/panel.png</c> sitzt genau

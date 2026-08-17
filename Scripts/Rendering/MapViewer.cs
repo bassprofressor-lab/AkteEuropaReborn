@@ -423,6 +423,7 @@ public partial class MapViewer : Node2D
         if (_shopCheckFlag) _entities.ShopCheckStart();
         if (_buyCheckFlag) _entities.BuyCheckStart();
         if (_dockCheckFlag) _entities.DockCheckStart();
+        if (_powerCheckFlag) _entities.PowerCheckStart();
         if (_marketCheck)
         {
             GD.Print(_entities.MarketCheck());
@@ -668,6 +669,11 @@ public partial class MapViewer : Node2D
     /// dann mit. Am besten auf <c>map_DM_4</c>, wo die Ausfahrten von Haus aus
     /// die belegten Liegeplaetze sind.</summary>
     private bool _dockCheckFlag;
+    /// <summary><c>--power-check</c> — bremst Strommangel die Fertigung, und
+    /// zwar anteilig? Er stellt den Mangel HER (er nimmt dem Spieler die
+    /// Generatoren) und misst gegen eine Vorhersage, nicht gegen sich
+    /// selbst.</summary>
+    private bool _powerCheckFlag;
     /// <summary><c>--depot-flow</c> — bestellen, im Depot liegen, aussenden.</summary>
     private bool _depotFlow;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
@@ -1132,6 +1138,7 @@ public partial class MapViewer : Node2D
             else if (a == "--shop-check") _shopCheckFlag = true;
             else if (a == "--buy-check") _buyCheckFlag = true;
             else if (a == "--dock-check") _dockCheckFlag = true;
+            else if (a == "--power-check") _powerCheckFlag = true;
             else if (a == "--depot-flow") _depotFlow = true;
             else if (a == "--depot-flow=dock")
             { _depotFlow = true; MapEntityLayer.DepotFlowDock = true; }
@@ -1612,6 +1619,11 @@ public partial class MapViewer : Node2D
             if (cr.Length > 0) GD.Print(cr);
             GD.Print(_entities.CaptureWatchLine());
             GD.Print(_entities.TakeoverWatchLine());
+            // ⚠ Die Stromzeile gehoert in JEDEN Lauf, nicht nur in --power-check:
+            // die zwei Balken im Bedienblock sind das einzige, was der Spieler
+            // davon sieht, und aus einem Bild ist ihre LAENGE nicht abzulesen
+            // (Regel 22). Hier stehen die Zahlen dahinter.
+            GD.Print(_entities.PowerLine());
             GD.Print(_entities.MinimapWatchLine(_minimap));
             GD.Print(_baseWindow?.WatchLine() ?? "basis-fenster: nicht gebaut");
             GD.Print(_designWindow?.WatchLine() ?? "erstellung: nicht gebaut");
@@ -1923,6 +1935,7 @@ public partial class MapViewer : Node2D
         _panelLayer.AddChild(_panelSprite);
         BuildPanelClock();
         BuildPanelPortrait();
+        BuildPowerBars();
         PlacePanel();
         GetViewport().SizeChanged += PlacePanel;
     }
@@ -2214,6 +2227,71 @@ public partial class MapViewer : Node2D
     /// @0x470097.</summary>
     private static readonly Vector2I PanelClockAt = new(23, 148);
 
+    /// <summary>
+    /// <b>DIE ZWEI STROMBALKEN im Bedienblock</b> — und ihre Masse sind
+    /// gelesen, nicht gewählt.
+    ///
+    /// <para><c>panel_draw</c> @0x46FE10 zeichnet sie als zwei Paare: einen
+    /// Grund von <b>58×4</b> bei <b>(140,148)</b> und <b>(140,157)</b>, darüber
+    /// den Wert <b>2 px hoch</b> bei (141,149) bzw. (141,158) mit der Breite
+    /// <c>Prozent·56/100</c> (@0x46FE66, 0x46FEB3, 0x46FEDB, 0x46FF20). Links
+    /// davor sitzt im Bild <c>panel.png</c> der orange BLITZ — es sind die
+    /// STROMbalken, und deshalb war der Platz die ganze Zeit da und leer.</para>
+    ///
+    /// <para><b>Oben die erbrachte Leistung, unten der Bedarf</b>, beide gegen
+    /// den grösseren der zwei skaliert: @0x4405F6 setzt bei Überschuss den
+    /// oberen auf voll und den unteren auf <c>100·Bedarf/Ist</c>, bei Mangel
+    /// umgekehrt. Wer ausreichend Strom hat, sieht also den oberen voll.</para>
+    ///
+    /// <para>⚠ <b>UNSERE Setzung ist nur die FARBE</b> (das Original nimmt
+    /// seine Palettenfarbe aus 01.PAL) — dieselbe Lücke wie bei der
+    /// Panel-Uhr.</para></summary>
+    private ColorRect? _powerBarTop, _powerBarBottom;
+
+    private static readonly Vector2I PowerBarTopAt = new(141, 149);
+    private static readonly Vector2I PowerBarBottomAt = new(141, 158);
+    private const int PowerBarWide = 56, PowerBarHigh = 2;
+
+    private void BuildPowerBars()
+    {
+        if (_panelLayer == null) return;
+        var farbe = new Color(1.0f, 0.62f, 0.15f);      // ⚠ unsere Wahl, wie beim Blitz
+        _powerBarTop = new ColorRect
+        {
+            Color = farbe, MouseFilter = Control.MouseFilterEnum.Ignore,
+            Size = new Vector2(0, PowerBarHigh * PanelScale),
+        };
+        _powerBarBottom = new ColorRect
+        {
+            Color = farbe, MouseFilter = Control.MouseFilterEnum.Ignore,
+            Size = new Vector2(0, PowerBarHigh * PanelScale),
+        };
+        _panelLayer.AddChild(_powerBarTop);
+        _panelLayer.AddChild(_powerBarBottom);
+    }
+
+    /// <summary>Die zwei Balken nachziehen — dieselbe Rechnung wie @0x4405E5.
+    /// ⚠ Die Zahlen kommen aus <c>MapEntityLayer.PowerOf</c>, also aus der
+    /// Abrechnung selbst; eine zweite Rechnung hier wäre eine zweite
+    /// Wahrheit.</summary>
+    private void UpdatePowerBars()
+    {
+        if (_powerBarTop == null || _powerBarBottom == null || _entities == null) return;
+        var (_, _, ist, soll) = _entities.PowerOf(_entities.ViewPlayer);
+        int oben, unten;
+        if (soll < ist) { oben = 100; unten = ist > 0 ? 100 * soll / ist : 0; }
+        else if (soll > 0) { unten = 100; oben = 100 * ist / soll; }
+        // ⚠ Bedarf 0 UND Leistung 0: das Original schreibt dann GAR NICHTS
+        // (@0x44061E prueft `test cx,cx / jle` und faellt durch) — die Balken
+        // behalten, was sie hatten. Wer hier auf 0 setzt, laesst sie beim
+        // Verlust der letzten Fabrik zusammenfallen, statt sie stehenzulassen.
+        else return;
+        _powerBarTop.Size = new Vector2(Mathf.Clamp(oben, 0, 100) * PowerBarWide / 100f * PanelScale,
+                                        PowerBarHigh * PanelScale);
+        _powerBarBottom.Size = new Vector2(Mathf.Clamp(unten, 0, 100) * PowerBarWide / 100f * PanelScale,
+                                           PowerBarHigh * PanelScale);
+    }
+
     private void BuildPanelClock()
     {
         if (_panelLayer == null) return;
@@ -2425,6 +2503,10 @@ public partial class MapViewer : Node2D
             _panelClock.Position = origin + (Vector2)PanelClockAt * PanelScale;
         if (_panelPortrait != null)
             _panelPortrait.Position = origin + (Vector2)PanelPortraitAt * PanelScale;
+        if (_powerBarTop != null)
+            _powerBarTop.Position = origin + (Vector2)PowerBarTopAt * PanelScale;
+        if (_powerBarBottom != null)
+            _powerBarBottom.Position = origin + (Vector2)PowerBarBottomAt * PanelScale;
     }
 
     /// <summary>Das Baumenü: seit dem 11.08.2026 ein frei schwebendes FENSTER,
@@ -2982,6 +3064,7 @@ public partial class MapViewer : Node2D
         UpdateDesignWindow();
         UpdatePanelClock();
         UpdatePanelPortrait();
+        UpdatePowerBars();
         PortraitCheckTick();
         TurretSeatCheckTick();
         StempelCheckTick();
