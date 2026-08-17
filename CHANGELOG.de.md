@@ -693,6 +693,71 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Kampagne und Oberfläche
 
+- ⭐ **Das Emblem von Akte Europa steht auf dem Briefingschirm — beide Male, und
+  beide bewegen sich.** Das Wasserzeichen hinter dem Text **dreht sich einmal
+  um die senkrechte Achse**, wenn der Schirm aufgeht; in den zwei Nischen unten
+  läuft ein **Schimmer** über das kleine Emblem, hin und zurück, und die beiden
+  Nischen laufen **gegeneinander**.
+
+  Damit ist die Stelle geschlossen, die im Eintrag darunter noch als offen
+  steht — mitsamt der falschen Deutung »Wettersymbol«.
+
+  - **Der Schwanz von `BRIEFG.DAT` hat KEINE Kopfdaten.** Genau daran lag es:
+    hier stand seit Wochen »eine Bank mit Kopfdaten«, und deshalb wurde in der
+    Datei gesucht statt im Code. Die Gliederung steht im **Maschinencode** —
+    der Lader schreibt bei `0x45BE6C..0x45C04E` Breite und Höhe von **29**
+    Bildern von Hand in eine Tabelle (`[ebx+0x8C3404]`, je 8 Byte: Breite,
+    Höhe, Zeiger), und die Schleife `@0x45C05F` rechnet die Zeiger nur fort:
+    `Zeiger[i] = Zeiger[i-1] + Breite[i-1]·Höhe[i-1]`.
+    **Die Probe geht auf: die 29 Flächen summieren sich auf exakt 43.302** —
+    den Schwanz, Byte für Byte, ohne Rest. Die Bilder sind verschieden breit
+    und stehen ohne Trennzeichen aneinander; deshalb zerfiel jede geratene
+    Breite, und deshalb war »Breite 106« nur ein Zufallstreffer quer über zwei
+    der vier **53×54**-Wettertafeln. Die Tafeln gibt es also wirklich — es sind
+    die Einträge **13..16**, acht vor dem Emblem, und sie gehören zu etwas
+    anderem.
+  - **Die Nischenbilder sind die Einträge 21..29**, je **57×40**. Die
+    Blitstelle `@0x4864DE` / `@0x48652D` schreibt sie auf **(285,432)** und
+    **(575,432)**; die Bildnummer rechnet das Original als
+    `|zaehler&15 − 8| + 21` links und `|((zaehler+8)&15) − 8| + 21` rechts —
+    der Betrag macht das Hin und Her, der Versatz von 8 die Gegenläufigkeit.
+    Der Blitter `@0x45BB00` kopiert rohe Zeilen **ohne Farbschlüssel**.
+  - **Das Wasserzeichen war überhaupt nicht in `BRIEFG.DAT`** — es ist eine
+    eigene Datei, **`SYMBOL.DAT`**, und sie teilt sich ohne Rest:
+    **748.800 = 9 × 320 × 260**. Der Lader `@0x45C110` liest von dort **260
+    Zeilen zu je 320 Byte** auf **(296,79)**, also Punkt für Punkt auf die
+    Textplatte; der Zeichner `@0x486549` holt bei Zählerstand **10..18** die
+    übrigen acht nach (Sprung auf `(zaehler−10)·325·256`, und 325·256 sind
+    83.200 = 320·260) und lässt es dann auf Bild 8 stehen.
+  - ⚠ **In BEIDEN GAME.EXE gegengeprüft.** Die Datenadressen unterscheiden sich
+    (`0x8C3404` gegen `0x8C2464`), die Tabelle ist zeichengleich: 29 Einträge,
+    Summe 43.302 in beiden. Auch die Nischenrechnung, das Fenster 10..18, die
+    Sprungweite und die Blitgeometrie liegen in beiden genau einmal vor.
+  - ⚠ **Sauberer Negativbefund: der TAKT ist nicht gelesen.** Der Zähler des
+    Originals ist ein Wort auf `[ebx+0x8C3CCC]`; ein roher Suchlauf über
+    `.text` findet ihn an sieben Stellen — einmal die Null im Lader, sechsmal
+    Lesen im Zeichner, **kein einziges Hochzählen**. Er wird über einen
+    gerechneten Zeiger fortgeschaltet. Wir setzen **0,10 s je Zählerschritt**
+    (⚠ UNSERE SETZUNG) — derselbe Wert wie beim Radarzoom nebenan, also
+    1,6 s für den Schimmer hin und zurück und 0,9 s für die Drehung.
+  - ⚠ **Das Bild ist 57×40, die Nische 55×38.** Das Original zeichnet zwei
+    Spalten und zwei Zeilen darüber hinaus; nachgemessen fällt der Überstand
+    auf Palettenindex 47 und den Rahmen und ist unsichtbar. Wir schneiden ihn
+    **nicht** ab. Ebenso laufen die 260 Zeilen des Wasserzeichens 20 Zeilen
+    unter die 240 hohe Platte — auch dort ist der Grund schon Index 47.
+
+  **Prüfstand `--emblem-check`** (im echten Briefingschirm:
+  `-- --campaign=1 --emblem-check`) misst nicht, ob Bilder da sind, sondern die
+  zwei Behauptungen: der **x-Schwerpunkt der hellen Punkte** muss über die neun
+  Nischenbilder **streng monoton wachsen** und mindestens 25 Punkte zurücklegen
+  (gemessen **9,4 → 40,0** bei 57 Punkten Breite), und von den neun
+  Wasserzeichenbildern muss das **fünfte das schmalste** und mindestens fünfmal
+  schmaler als das erste und letzte sein (gemessen **13 Spalten gegen 232 und
+  230** — das ist die Kante der Drehung). Dazu die Bankprobe (Summe 43.302),
+  die Phasenprobe (links und rechts nie gleich, alle neun Bilder kommen vor)
+  und das Fenster (genau neun Zählerstände zeichnen). Neun Kopien desselben
+  Bildes kämen an keiner dieser Stellen durch.
+
 - ⭐ **Das Briefing sieht endlich aus wie das Original: grüne Schrift auf
   dunklem Grund, und das Bild füllt den Schirm.** Gemeldet: »das Textfeld ist
   nicht original und das Hintergrundbild fehlt immer noch«.
@@ -719,17 +784,21 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Enter und Leertaste bleiben. Gemessen: **ohne** Druck auf START lädt keine
   Karte, **mit** Druck lädt sie — und der Prüfstand drückt den Knopf.
 
-  ⚠ **Noch offen, und meine Deutung war falsch:** ich hatte die zwei Nischen
+  ~~⚠ **Noch offen, und meine Deutung war falsch:** ich hatte die zwei Nischen
   für **Wettersymbole** gehalten, weil im Dateischwanz Tafeln mit CLOUDED,
   OVERCAST, SKY, DANGER, HIGH/LOW TEMPERATURE stehen. Der Spieler hat
   berichtigt: es ist das **Emblem von Akte Europa**, und es ist **animiert** —
   ein Schimmer läuft hin und zurück. Dasselbe Emblem steht als
-  **Wasserzeichen hinter dem Text** (im Vergleichsbild sichtbar, wenn man es
-  aufhellt: konzentrische bronzefarbene Ringe). Beides fehlt noch. Der
-  **43.302 Byte lange Schwanz** von `BRIEFG.DAT` hält also **mehreres**; seine
-  Gliederung ist noch nicht gelesen (bei Breite 106 wird eine Bahn lesbar, bei
-  53/55/202/208/318 zerfällt alles). Bis dahin steht in den Nischen dieselbe
-  dunkle Fläche wie im Original statt eines weissen Kastens.
+  **Wasserzeichen hinter dem Text**. Beides fehlt noch. Der **43.302 Byte
+  lange Schwanz** von `BRIEFG.DAT` hält also **mehreres**; seine Gliederung
+  ist noch nicht gelesen (bei Breite 106 wird eine Bahn lesbar, bei
+  53/55/202/208/318 zerfällt alles).~~
+
+  ⚠ **ERLEDIGT, und die Begründung war zweimal falsch.** Nicht nur die Deutung
+  »Wettersymbol« — auch der Satz »eine Bank mit **Kopfdaten**« stand hier
+  falsch und hat die Suche wochenlang in die Datei geschickt statt in den Code.
+  Der Schwanz hat keine Kopfdaten; seine Gliederung steht im Lader. Und das
+  Wasserzeichen war gar nicht in dieser Datei. Siehe den Eintrag oben.
 
 - ⭐ **Der Missionsmonitor zeigt erst EUROPA — die Missionskarte kommt auf den
   Knopf.** Gemeldet mit zwei Bildern nebeneinander: »die Minimap ging erst auf,
