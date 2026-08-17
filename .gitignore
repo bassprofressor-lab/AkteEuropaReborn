@@ -100,3 +100,6 @@ Screenshot*.png.import
 
 # Godot import stubs for the README screenshots (they are not exported)
 docs/**/*.import
+
+# Bildschirmfotos aus den Pruefstaenden — Belege fuer Meldungen, kein Quelltext.
+Bug Bilder/

@@ -35,6 +35,41 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Einheiten
 
+- ⭐ **Der Mechaniker repariert wieder, was neben ihm steht** — und er heißt auch
+  wieder so. Gemeldet als »die Reparatureinheit nennt sich noch Bauteil 43 und
+  repariert keine Fahrzeuge«. Beides stimmte, und beides hing an einem
+  Satzfeld, das wir gar nicht gelesen hatten: **+0x0E**, die Bauteilzeile. Der
+  Name kam aus +0x10 (der *dritten* Komponente — Schild, Kamikaze,
+  Spiegelbild), und die stand bei einem Mechaniker auf Null.
+
+  Die Wirkung ist jetzt gelesen: die Weiche @0x40730B prüft `byte[+0x0e]` gegen
+  **70**, und `mechanic_tick` @0x411F40 ruft alle 30 Takte viermal `repair_at`
+  auf — die **vier orthogonalen** Nachbarzellen, nicht die Diagonalen. Was dort
+  steht, bekommt einen Punkt (eine Einheit) oder **fünf** (ein Gebäude), ohne
+  dass der Besitzer gefragt wird. Gleich daneben steht das **Reparateur**-Modul
+  (@0x40731B, `byte[+0x10] == 86`): alle **100** Takte ein Punkt, und nur für
+  sich selbst.
+
+  ⚠ Aufgefallen ist es nicht beim Lesen. Ich hatte geantwortet, es sei
+  *originalgetreu*, dass diese Einheit nichts repariert — belegt mit den 21
+  Fundstellen des Feldes +0x10, von denen nur zwei einen Wert prüfen. Der
+  Befund stimmte; er betraf nur das falsche Feld. Gefunden hat es der Spieler,
+  indem er die **hauseigene Enzyklopädie** aufschlug: »Mechaniker reparieren
+  automatisch alle Einheiten, die sich neben ihnen befinden.« Die Datei liegt
+  seit jeher neben dem Spiel und war als Quelle nie gefragt worden.
+
+  Neu ist `--mechaniker-check`: er stellt seinen Fall selbst her (ein
+  Mechaniker, ein beschädigtes Fahrzeug daneben, eins diagonal, eins sechs
+  Felder weiter) und misst +5/+0/+0 — die Rate, die dasteht.
+
+- ⭐ **Flugzeuge verlassen die Karte nicht mehr.** Gemeldet als »fliegen
+  geradlinig Richtung Norden, sogar außerhalb der Map«. Ein Flugzeug ohne Ziel
+  fliegt geradeaus — das ist gelesen —, aber begrenzt war nur seine *Zelle*,
+  nicht seine *Lage*: das Flugzeug war längst neben der Karte, während seine
+  Zelle am Rand klebte. Am Rand fliegt es jetzt heim (`air_back_to_airport`,
+  die Antwort des Originals) und macht kehrt, wenn es keinen Flughafen gibt.
+  ⚠ Dass man sie im Gefecht nicht anwählen kann, bleibt offen.
+
 - ⭐ **Der Boden eines Gebäudes verdeckt nichts mehr.** Mit Bildern gemeldet:
   »Dort ist immer das Stück Schiene nicht sichtbar, und wenn eine Einheit
   reinfährt, wird sie von der Bodengrafik überdeckt. Die Einheit lässt sich

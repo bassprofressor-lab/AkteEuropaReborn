@@ -427,6 +427,7 @@ public partial class MapViewer : Node2D
         if (_radarCheckFlag) _entities.RadarCheckStart();
         if (_bauCheckFlag) _entities.BauCheckStart(_bauCheckOrder);
         if (_ausbauCheckFlag) _entities.AusbauCheckStart();
+        if (_mechCheckFlag) _entities.MechanikerCheckStart();
         if (_knopfCheckFlag) _entities.KnopfCheckStart();
         if (_m21CheckFlag) _entities.M21CheckStart();
         if (_ringCheckTicks > 0) _entities.RingCheckStart(_ringCheckTicks);
@@ -694,6 +695,10 @@ public partial class MapViewer : Node2D
     /// <summary><c>--ausbau-check</c> — tut der Knopf »Lagerausbau« wirklich
     /// etwas? Siehe Simulation/UpgradeCheck.cs.</summary>
     private bool _ausbauCheckFlag;
+
+    /// <summary><c>--mechaniker-check</c> — repariert der Mechaniker die
+    /// Nachbarzellen? Siehe Simulation/MechanicCheck.cs.</summary>
+    private bool _mechCheckFlag;
     /// <summary><c>--knopf-check</c> — stehen »Abbrechen« und »Starten« da,
     /// wenn es etwas zu tun gibt, und bleiben sie sonst weg?</summary>
     private bool _knopfCheckFlag;
@@ -1171,6 +1176,7 @@ public partial class MapViewer : Node2D
             else if (a == "--power-check") _powerCheckFlag = true;
             else if (a == "--radar-check") _radarCheckFlag = true;
             else if (a == "--ausbau-check") _ausbauCheckFlag = true;
+            else if (a == "--mechaniker-check") _mechCheckFlag = true;
             else if (a == "--knopf-check") _knopfCheckFlag = true;
             else if (a == "--m21-check") _m21CheckFlag = true;
             else if (a == "--ring-check") _ringCheckTicks = 3000;

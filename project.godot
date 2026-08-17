@@ -17,6 +17,18 @@ run/main_scene="res://Scenes/Main/MainMenu.tscn"
 config/features=PackedStringArray("4.7", "C#")
 config/icon="res://Assets/Textures/Icon.svg"
 
+; ⚠ 18.08.2026 — KEIN GODOT-LOGO MEHR BEIM START. Der Motor gehört nicht auf
+; den Startbildschirm eines Spiels; die Farbe ist dieselbe wie der Hintergrund
+; des Hauptmenüs, damit der Übergang nicht blinkt.
+;
+; ⚠ Ein EIGENES Bild ist damit noch nicht da, sondern nur der Platz dafür: es
+; müsste als Datei im Projekt liegen (`res://`), und der Inhalt des Spiels
+; entsteht erst beim Spieler aus seinen CDs — aus ihm lässt sich also kein
+; Startbild nehmen. Wer eines will, legt eine PNG nach Assets/Textures und
+; trägt sie hier als `boot_splash/image` ein.
+boot_splash/show_image=false
+boot_splash/bg_color=Color(0.1, 0.1, 0.12, 1)
+
 [autoload]
 
 GameManager="*res://Scripts/Core/GameManager.cs"

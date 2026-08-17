@@ -99,6 +99,40 @@ public partial class MapEntityLayer : Node2D
         /// a second copy of the unit on the map.</summary>
         public int Equipment;
 
+        /// <summary>
+        /// <b>Die BAUTEILZEILE eines Ausrüstungsträgers</b> — Satzfeld
+        /// <b>+0x0E</b>, Zeilen 65..79 der Bauteiltafel.
+        ///
+        /// <para>Bei <see cref="Armed"/> steht oben schon, wie es dorthin kommt:
+        /// die Aufstell-Weiche schiebt eine Entwurfszeile ≥ 50 aus <c>+0x0d</c>
+        /// nach <c>+0x0e</c>. Was dort landet, ist die Zeile, die das Spiel
+        /// danach ABFRAGT — <c>+0x0c</c> ist nur der Aufsatz fürs Bild.</para>
+        ///
+        /// <para>⚠ 18.08.2026 — gemeldet als »die Reparatureinheit nennt sich noch
+        /// Bauteil 43 und repariert keine Fahrzeuge«. Beides hing an diesem Feld,
+        /// das wir <b>gar nicht gelesen</b> hatten:</para>
+        /// <list type="bullet">
+        ///   <item>der Name kam aus <c>+0x10</c> (der DRITTEN Komponente:
+        ///   Schild, Kamikaze, Spiegelbild, Reparateur …) und war dort leer,</item>
+        ///   <item>und die Wirkung prüft das Original @0x40730B als
+        ///   <c>cmp byte [Satz+0x0e], 0x46</c> — 70, der Mechaniker.</item>
+        /// </list>
+        ///
+        /// <para><b>Gemessen</b> über alle Karten, 4781 Einheiten mit Rohsatz,
+        /// ohne Gegenbeispiel: Aufsatz 40→66, 41→67, 42→68, <b>43→70</b>, 46→71,
+        /// 47→72, 48→73, 49→74, 50→75, 52→77. Die Folge ist NICHT regelmässig
+        /// (43 überspringt die 69) — eine gerechnete Regel »Aufsatz = Zeile − 25«
+        /// hätte für 43 den Minenräumer ergeben und war falsch.</para></summary>
+        public int Part;
+
+        /// <summary>Aufgelaufene Originaltakte des Mechanikers bzw. des
+        /// Reparateurmoduls — siehe <see cref="MechanicTick"/>.</summary>
+        public int MechanicRest, SelfRepairRest;
+
+        /// <summary>Der eigene Wirtschaftstakt dieser Einheit — siehe
+        /// <see cref="UnitRepairTick"/>.</summary>
+        public float RepairTimer;
+
         /// <summary>Ammunition, record +0x39 / +0x3a. Max 0 = the unit carries
         /// no ammunition at all (infantry and unarmed vehicles) and fires
         /// without limit. One shot costs one round (@0x40c587) and firing is
@@ -1962,6 +1996,8 @@ public partial class MapEntityLayer : Node2D
                     Elev = el,
                     Facing = facing,
                     Equipment = haveRaw ? HexByte(raw, 0x10) : 0,
+                    // +0x0e ist die BAUTEILZEILE (65..79) — siehe Entity.Part.
+                    Part = haveRaw ? HexByte(raw, 0x0e) : 0,
                     Ammo = haveRaw ? HexByte(raw, 0x39) : 0,
                     AmmoMax = haveRaw ? HexByte(raw, 0x3a) : 0,
                     Weapon = haveRaw ? HexByte(raw, 0x0c) : 0,
@@ -5898,6 +5934,10 @@ public partial class MapEntityLayer : Node2D
         // Reichweite ERFUNDEN, also auch fuer die Ausruestung 40..54. Ueber
         // alle Karten sind das 218 Einheiten, die damit tatsaechlich
         // geschossen haben. Ausruestung bekommt jetzt 0/0.
+        // ⚠ Ein Ausruestungsaufsatz hat KEINEN Waffennamen — der Name steht in
+        // der Ausruestungszeile der Einheit, nicht in ihrer Aufsatznummer.
+        // Siehe MountName(Entity): DIESE Ueberladung kennt die Einheit nicht
+        // und kann darum nur die Nummer nennen.
         if (IsEquipmentMount(comp)) return ($"BAUTEIL {comp}", 0, 0f);
         if (_weapons != null && _weapons.TryGetValue(comp, out var w)) return w;
         return ($"BAUTEIL {comp}", 10, 5f);
@@ -5919,6 +5959,97 @@ public partial class MapEntityLayer : Node2D
     /// Entwurfswaffe 65..79 -&gt; Aufsatz 40..54 ist gelesen, siehe
     /// <see cref="TurretOf"/>.</summary>
     private static bool IsEquipmentMount(int comp) => comp is >= 40 and <= 54;
+
+    /// <summary>
+    /// <b>Was auf dieser Einheit sitzt, in Worten</b> — eine Waffe mit ihrem
+    /// Namen, sonst die AUSRÜSTUNG.
+    ///
+    /// <para>⚠⚠ 18.08.2026, gemeldet als »die Reparatureinheit nennt sich noch
+    /// Bauteil 43«. Es sind <b>zwei Zählungen mit demselben Wort</b>, und die
+    /// Anzeige nahm die falsche:</para>
+    /// <list type="bullet">
+    ///   <item><c>Entity.Weapon</c> ist der <b>AUFSATZ</b> (Satz +0x0C).
+    ///   40..54 sind die Aufsätze, die gar keine Waffe tragen — ein
+    ///   Baufahrzeug hat 47 oder 48, der Reparateur 43.</item>
+    ///   <item><c>Entity.Equipment</c> ist die <b>AUSRÜSTUNG</b> (Satz +0x10),
+    ///   und die Zeilen 65..88 der Statustafel haben Namen: 70 »Repair
+    ///   Device«, 86 »AutoRepair«, 72 »Building Construct« …</item>
+    /// </list>
+    /// <para>Die Namen waren die ganze Zeit da (<see cref="EquipName"/>) — sie
+    /// wurden nur nie gefragt. Genau dieselbe Verwechslung steckte in der
+    /// Bauauftrags-Triage (»Bauteil 43 Mechaniker«), und sie hat dort einen
+    /// halben Tag gekostet.</para></summary>
+    private static string MountName(Entity e)
+    {
+        if (e.Weapon == 0) return "UNBEWAFFNET";
+        if (!IsEquipmentMount(e.Weapon)) return WeaponOf(e.Weapon).Name;
+
+        // ⚠⚠ 18.08.2026, zweite Fassung. Die erste nahm `e.Equipment` (+0x10) —
+        // das ist die DRITTE Komponente (Schild, Kamikaze, Spiegelbild,
+        // Reparateur), und bei einem Mechaniker steht sie auf 0. Massgeblich ist
+        // die Bauteilzeile +0x0e; siehe Entity.Part.
+        string n = PartNameDe(e.Part);
+        if (n is "?" or "keine") n = PartNameDe(PartRowOfMount(e.Weapon));
+        // Die dritte Komponente wird nur genannt, wenn es sie gibt — sonst
+        // stuende bei jeder zweiten Einheit ein leeres Anhaengsel.
+        string extra = PartNameDe(e.Equipment);
+        if (extra is not ("?" or "keine")) n = n is "?" or "keine" ? extra : $"{n} + {extra}";
+
+        // ⚠ Kein Name gefunden: dann die NUMMERN, alle drei. Ein »?« sagt dem
+        // Spieler nichts und uns auch nicht.
+        return n is "?" or "keine"
+             ? $"BAUTEIL {e.Weapon}/ZEILE {e.Part}/AUSR. {e.Equipment}" : n;
+    }
+
+    /// <summary>
+    /// <b>Aufsatz → Bauteilzeile</b>, der Rückweg für Einheiten ohne Rohsatz.
+    ///
+    /// <para><b>Gemessen</b>, nicht gerechnet: über alle Karten, 4781 Einheiten
+    /// mit Rohsatz, kein Gegenbeispiel. Die Folge ist unregelmässig — 43 springt
+    /// über die 69 —, deshalb steht sie hier als Tafel und nicht als Formel.
+    /// Fünf Aufsätze (44, 45, 51, 53, 54) kommen auf keiner Karte vor; sie sind
+    /// mit <c>0</c> gefüllt statt geraten, damit ein falscher Name nicht wie ein
+    /// gemessener aussieht.</para></summary>
+    /// <summary>
+    /// <b>Die deutschen Namen der Bauteile</b> — Zeile für Zeile aus
+    /// <c>component_stats.json</c>, also aus GAME.EXE selbst (Tafel @0x5045A0,
+    /// Schrittweite 58, der lange Name im Satz).
+    ///
+    /// <para>⚠ <see cref="EquipName"/> daneben führt dieselben Zeilen auf
+    /// ENGLISCH (»Repair Device«, »Gas Sucker«) — das sind die Namen aus
+    /// <c>research.json</c>. Für das Infofeld ist das falsche Fach: dort steht
+    /// sonst alles deutsch. Beide bleiben, weil beide echte Quellen sind; nur
+    /// die ANZEIGE nimmt jetzt diese hier.</para>
+    ///
+    /// <para>Gegengelesen mit der Enzyklopädie des Originals (ENCYCLOG.TXT):
+    /// sie führt dieselben fünfzehn Ausrüstungen in derselben Reihenfolge, nur
+    /// mit ihrer eigenen flachen Zählung (Zeile − 29).</para></summary>
+    private static string PartNameDe(int row) => row switch
+    {
+        0 => "keine",
+        65 => "Teleporter", 66 => "Luftsauger", 67 => "Radar",
+        68 => "Minenräumer", 69 => "Fallenräumer", 70 => "Mechaniker",
+        71 => "Transporter", 72 => "Gebäude-Techniker", 73 => "Boden-Techniker",
+        74 => "Generatorenbauer", 75 => "Radarstab Ausleger", 76 => "Antimagnetiker",
+        77 => "Antiradar", 78 => "Terranium Finder", 79 => "Zielfokus",
+        80 => "keine",
+        81 => "Schild", 82 => "Kamikaze", 83 => "Spiegelbild", 84 => "Illusionator",
+        85 => "Funktionsverstärker", 86 => "Reparateur", 87 => "Gasabwehr",
+        88 => "Radarweiterung",
+        _ => "?",
+    };
+
+    private static int PartRowOfMount(int mount) => mount switch
+    {
+        40 => 66, 41 => 67, 42 => 68, 43 => 70, 46 => 71,
+        47 => 72, 48 => 73, 49 => 74, 50 => 75, 52 => 77,
+        _ => 0,
+    };
+
+    /// <summary>Der Hinweg: die Waffenzeile eines ENTWURFS nach <c>+0x0e</c>, so
+    /// wie die Aufstell-Weiche @0x4B1B6E es tut — Zeile ≥ 50 wandert dorthin,
+    /// alles darunter ist eine echte Waffe und bleibt in <c>+0x0d</c>.</summary>
+    private static int PartRowOf(int designWeapon) => designWeapon >= 50 ? designWeapon : 0;
 
     /// <summary>Rounds left. A unit whose maximum is 0 carries no ammunition at
     /// all — infantry and the unarmed rows read 0/0 in every map file — and
@@ -11228,6 +11359,7 @@ public partial class MapEntityLayer : Node2D
             Elev = ElevOf(at.X, at.Y), Facing = DefaultFacing, Mobile = true,
             Weapon = d is { } dd ? TurretOf(dd.Weapon) : 0,
             Equipment = d?.Equip ?? 0,
+            Part = d is { } pd ? PartRowOf(pd.Weapon) : 0,
             // ⚠ Satz +0x28 — die gekaufte Einheit bringt die ERFAHRUNG mit, fuer
             // die der Kaeufer bezahlt hat. Ohne diese Zeile kostet ein Veteran
             // das Siebzigfache und kommt als Rekrut auf die Karte; beim
@@ -13381,6 +13513,232 @@ public partial class MapEntityLayer : Node2D
     /// (@0x4127e8, walking the neighbouring cells of the spatial grid). Without
     /// it a unit that fires its magazine dry stays dry until a Munitionheli
     /// happens by.</summary>
+    /// <summary>
+    /// <b>WER IM GEBÄUDE STEHT, WIRD REPARIERT</b> — +1 Trefferpunkt je Takt.
+    ///
+    /// <para>⚠⚠ 18.08.2026, gemeldet als »die Reparatureinheit repariert keine
+    /// Fahrzeuge«. Der Bericht stimmt, aber die Ursache liegt woanders — und
+    /// das war der ganze Gegenstand des Lesens:</para>
+    /// <list type="bullet">
+    ///   <item>⚠⚠ <b>HIER STAND EIN FALSCHER SCHLUSS, und er stand einen Tag
+    ///   lang da:</b> »die Ausrüstung 70 hat im Original keinen Zweig, also ist
+    ///   es originalgetreu, dass sie nichts repariert«. Belegt hatte ich das mit
+    ///   den 21 Fundstellen des Feldes <b>+0x10</b>, von denen nur 83 (Mirror)
+    ///   und 87 (Gashield) einen Wert prüfen. Der Befund stimmt — er betrifft nur
+    ///   <b>das falsche Feld</b>. Die Bauteilzeile steht in <b>+0x0e</b>
+    ///   (siehe <see cref="Entity.Part"/>), und dort prüft das Spiel sie sehr
+    ///   wohl. Aufgefallen ist es NICHT beim Lesen, sondern weil der Spieler die
+    ///   hauseigene Enzyklopädie aufschlug: »Mechaniker reparieren automatisch
+    ///   alle Einheiten, die sich neben ihnen befinden.« Siehe
+    ///   <see cref="MechanicTick"/> und <see cref="SelfRepairTick"/>.</item>
+    ///   <item><b>Fahrzeuge repariert das GEBÄUDE.</b> Im Gebäudetakt
+    ///   @0x43E9C5 verzweigt der Typ (<c>byte[+0x04]</c>): <b>1 Basis</b> →
+    ///   0x43E9E4, <b>5 Depot</b> → 0x43EA3C, <b>9 Flughafen</b> → 0x43EA96;
+    ///   alles andere fällt heraus. Die Basis geht über <b>sechs</b> Plätze
+    ///   (Liste <c>word[0x878E5C + 16·Platz]</c>, 0xFFFF = leer) und tut je
+    ///   Eintrag genau das:</item>
+    /// </list>
+    /// <code>
+    ///   bl = byte[Einheit + 0x29]     ; die Hülle, die sie haben KANN
+    ///   al = byte[Einheit + 0x08]     ; die Hülle, die sie HAT
+    ///   bl &lt;= al  -> nichts          ; schon heil
+    ///   al++ ; byte[Einheit + 0x08] = al
+    /// </code>
+    ///
+    /// <para>⚠ <b>Ein Punkt je Takt, nicht je Sekunde</b>, und ohne jede
+    /// Bedingung an Geld, Vorrat oder Bauteil. Bei uns ist die Liste des
+    /// Gebäudes <see cref="Entity.Depot"/> — dieselbe, aus der »Aussenden«
+    /// holt.</para>
+    ///
+    /// <para>⚠ <b>Unsere Setzung, benannt:</b> das Original kennt drei Typen
+    /// mit je eigener Liste; wir haben nur eine Depotliste und wenden sie auf
+    /// dieselben drei Typen an. Die ZAHL (+1) und die Bedingung (»solange sie
+    /// unter ihrem Höchstwert ist«) sind gelesen.</para></summary>
+    private void RepairInDepot(Entity b)
+    {
+        if (!b.IsBuilding || b.Dead || b.Depot.Count == 0) return;
+        if (b.BType is not (1 or 5 or 9)) return;        // Basis, Depot, Flughafen
+        foreach (int slot in b.Depot)
+            foreach (var e in _entities)
+            {
+                if (e.IsBuilding || e.IsProp || e.Dead || e.Slot != slot) continue;
+                if (e.HpMax <= 0 || e.Hp >= e.HpMax) break;
+                e.Hp = Mathf.Min(e.Hp + TickScale / DepotRepairTick, e.HpMax);
+                DepotRepairs++;
+                break;
+            }
+    }
+
+    /// <summary>Wie oft ein Fahrzeug im Gebäude einen Trefferpunkt bekommen
+    /// hat — für den Prüfstand.</summary>
+    public int DepotRepairs { get; private set; }
+
+    /// <summary>Ein Punkt je ORIGINALTAKT (@0x43EA29 <c>inc al</c>, ohne jede
+    /// Periode). ⚠ Unsere Wirtschaft rechnet <see cref="TickScale"/> Takte je
+    /// Sekunde, also steht hier eine 1 und keine Umrechnung.</summary>
+    private const int DepotRepairTick = 1;
+
+    /// <summary>
+    /// <b>DER MECHANIKER</b> — er repariert, was neben ihm steht.
+    ///
+    /// <para>Die Enzyklopädie des Originals (ENCYCLOG.TXT, Seite 60) sagt es in
+    /// einem Satz: <i>»Mechaniker reparieren automatisch alle Einheiten, die
+    /// sich neben ihnen befinden.«</i> Der Spieler hat uns darauf gestossen,
+    /// nachdem ich das Gegenteil behauptet hatte — siehe
+    /// <see cref="RepairInDepot"/>.</para>
+    ///
+    /// <para><b>Gelesen</b>, in beiden Fassungen. Die Weiche im Einheitentakt
+    /// @0x40730B:</para>
+    /// <code>
+    ///   al = byte[Satz + 0x0e]        ; die BAUTEILZEILE
+    ///   cmp al, 0x46                  ; 70 = Mechaniker
+    ///   jne weiter
+    ///   push Platz ; call mechanic_tick
+    /// </code>
+    /// <para><c>mechanic_tick</c> @0x411F40:</para>
+    /// <code>
+    ///   byte[+0x14] != 0   -> nichts          ; er tut gerade etwas anderes
+    ///   byte[+0x04] != 0xff -> nichts         ; er hat einen Auftrag
+    ///   (Takt + Platz) % 30 != 0 -> nichts    ; alle 30 Takte, nach Platz versetzt
+    ///   repair_at(Spalte+1, Zeile) ; (Spalte-1, Zeile)
+    ///   repair_at(Spalte, Zeile+1) ; (Spalte, Zeile-1)
+    /// </code>
+    /// <para>und <c>repair_at(Spalte, Zeile)</c> @0x411E30 schlägt in der
+    /// Belegungskarte <c>word[0xBDEA80 + 2·(Spalte·256 + Zeile)]</c> nach, was
+    /// dort steht:</para>
+    /// <code>
+    ///   Wert &lt; 8000                 -> EINHEIT: byte[+0x08] += 1, gedeckelt auf +0x29
+    ///   60000 &lt;= Wert &lt; 60300     -> GEBÄUDE: word[+0x06] += 5, gedeckelt auf +0x26
+    /// </code>
+    ///
+    /// <para>⚠ <b>Vier Zellen, nicht acht</b> — die Diagonalen stehen nicht da.
+    /// ⚠ <b>Kein Besitzerabgleich</b>: <c>repair_at</c> fragt nicht, wem das
+    /// Ziel gehört. Das ist gelesen, nicht vergessen; die Enzyklopädie sagt
+    /// ebenfalls »alle Einheiten«.</para>
+    ///
+    /// <para>⚠ <b>Unsere Setzung, benannt:</b> die beiden Sperren <c>+0x14 == 0</c>
+    /// und <c>+0x04 == 0xff</c> haben bei uns kein Gegenstück mit gesicherter
+    /// Bedeutung. Wir setzen dafür die naheliegende und PRÜFBARE Bedingung: der
+    /// Mechaniker repariert nur, wenn er steht (kein Ziel, kein Weg). Wer die
+    /// beiden Felder liest, ersetze das hier.</para></summary>
+    /// <summary>Der eigene Wirtschaftstakt der EINHEITEN. Gebäude haben ihren in
+    /// <see cref="UpdateEconomy"/>; die Einheitenschleife läuft dagegen je Bild,
+    /// und eine Reparatur je Bild wäre um Größenordnungen zu schnell. Hier
+    /// entsteht derselbe Takt wie dort: <see cref="TickScale"/> Originaltakte je
+    /// <see cref="EconTick"/> Sekunde.</summary>
+    private void UnitRepairTick(int index, Entity e, float dt)
+    {
+        if (e.Part != MechanicPart && e.Equipment != SelfRepairPart) return;
+        e.RepairTimer -= dt;
+        if (e.RepairTimer > 0f) return;
+        e.RepairTimer = EconTick;
+        MechanicTick(e);
+        SelfRepairTick(e);
+    }
+
+    private void MechanicTick(Entity e)
+    {
+        if (e.IsBuilding || e.IsProp || e.Dead) return;
+        if (e.Part != MechanicPart) return;
+        // ⚠⚠ HIER STAND EINE ERFUNDENE SPERRE, und sie hat die ganze Mechanik
+        // aufgehoben: »der Mechaniker repariert nur, wenn er steht«. Gedacht war
+        // sie als Platzhalter für die zwei ungelesenen Bedingungen des Originals
+        // (+0x14 == 0, +0x04 == 0xff). Der Prüfstand meldete daraufhin »nebenan
+        // +0 TP« — die Einheit trug einen Weg, und damit tat sie nie etwas.
+        //
+        // Sie ist weg. Die Enzyklopädie sagt »reparieren AUTOMATISCH alle
+        // Einheiten, die sich neben ihnen befinden«, ohne jede Bedingung, und
+        // eine geratene Sperre, die das Gelesene aufhebt, ist schlechter als
+        // keine. Wer +0x14 und +0x04 liest, setze sie hier wieder ein.
+        // ⚠ UNSERE BUCHHALTUNG, benannt: das Original prüft
+        // `(Takt + Platz) % 30 == 0`. Unser Wirtschaftstakt springt in
+        // Schritten von TickScale (16) — ein Modulo auf 30 träfe die Null NIE,
+        // und der Mechaniker hätte still nichts getan. Aufaddiert ergibt
+        // dieselbe RATE (ein Punkt je 30 Originaltakte), unabhängig von der
+        // Schrittweite. Der Versatz nach Steckplatz entfällt damit; er verteilt
+        // im Original nur die Last, er ändert die Rate nicht.
+        e.MechanicRest += TickScale;
+        if (e.MechanicRest < MechanicPeriod) return;
+        e.MechanicRest -= MechanicPeriod;
+
+        // die vier Aufrufe von mechanic_tick, in ihrer Reihenfolge
+        RepairAt(e.Col + 1, e.Row);
+        RepairAt(e.Col - 1, e.Row);
+        RepairAt(e.Col, e.Row + 1);
+        RepairAt(e.Col, e.Row - 1);
+    }
+
+    /// <summary>Bauteilzeile 70 — der Mechaniker (@0x40730B <c>cmp al,0x46</c>).</summary>
+    private const int MechanicPart = 70;
+
+    /// <summary>Alle 30 Takte, nach Steckplatz versetzt (@0x411F82
+    /// <c>mov ecx,0x1e; idiv</c>).</summary>
+    private const int MechanicPeriod = 30;
+
+    /// <summary>Was auf DIESER Zelle steht, bekommt einen Punkt — <c>repair_at</c>
+    /// @0x411E30. Einheit +1, Gebäude +5, beides bis zum eigenen Höchstwert.
+    /// Der Besitzer wird nicht gefragt, siehe <see cref="MechanicTick"/>.</summary>
+    private void RepairAt(int col, int row)
+    {
+        foreach (var t in _entities)
+        {
+            if (t.Dead || t.IsProp || t.Col != col || t.Row != row) continue;
+            if (t.HpMax <= 0 || t.Hp >= t.HpMax) continue;
+            t.Hp = Mathf.Min(t.Hp + (t.IsBuilding ? RepairPerTickBuilding
+                                                  : RepairPerTickUnit), t.HpMax);
+            MechanicRepairs++;
+            return;                                       // eine Zelle, ein Ziel
+        }
+    }
+
+    /// <summary>@0x411E8F <c>inc cl</c> — ein Punkt für eine Einheit.</summary>
+    private const int RepairPerTickUnit = 1;
+
+    /// <summary>@0x411EE0 <c>add cx, 5</c> — fünf für ein Gebäude.</summary>
+    private const int RepairPerTickBuilding = 5;
+
+    /// <summary>Wie viele Punkte Mechaniker vergeben haben — für den Prüfstand.
+    /// Getrennt von <see cref="DepotRepairs"/>, weil zwei verschiedene Sachen
+    /// nie in denselben Zähler dürfen.</summary>
+    public int MechanicRepairs { get; private set; }
+
+    /// <summary>
+    /// <b>DER REPARATEUR</b> — das Modul, das eine Einheit SICH SELBST flickt.
+    ///
+    /// <para>Die Enzyklopädie (Seite 75): <i>»Durch Hinzufügen des
+    /// Reparateurmoduls ist Ihr Fahrzeug in der Lage, sich selbst zu
+    /// reparieren.«</i> — und das Original tut genau das, @0x40731B:</para>
+    /// <code>
+    ///   al = byte[Satz + 0x10]        ; die DRITTE Komponente
+    ///   cmp al, 0x56                  ; 86 = Reparateur
+    ///   push Platz ; call self_repair  (@0x412060)
+    ///     (Takt + Platz) % 100 != 0 -> nichts
+    ///     byte[+0x08] += 1, gedeckelt auf +0x29
+    /// </code>
+    /// <para>⚠ <b>Alle 100 Takte, nicht 30</b> — das Modul ist deutlich langsamer
+    /// als ein Mechaniker, und es hilft nur sich selbst. Die 86 ist dieselbe
+    /// Zeile, die <c>component_stats.json</c> »Reparateur« nennt.</para></summary>
+    private void SelfRepairTick(Entity e)
+    {
+        if (e.IsBuilding || e.IsProp || e.Dead) return;
+        if (e.Equipment != SelfRepairPart) return;
+        e.SelfRepairRest += TickScale;                    // wie oben aufaddiert
+        if (e.SelfRepairRest < SelfRepairPeriod) return;
+        e.SelfRepairRest -= SelfRepairPeriod;
+        if (e.HpMax <= 0 || e.Hp >= e.HpMax) return;
+        e.Hp = Mathf.Min(e.Hp + RepairPerTickUnit, e.HpMax);
+        SelfRepairs++;
+    }
+
+    /// <summary>Zeile 86 — der Reparateur (@0x40731B <c>cmp al,0x56</c>).</summary>
+    private const int SelfRepairPart = 86;
+
+    /// <summary>Alle 100 Takte (@0x41206A <c>mov ecx,0x64</c>).</summary>
+    private const int SelfRepairPeriod = 100;
+
+    /// <summary>Wie oft sich eine Einheit selbst geflickt hat — für den Prüfstand.</summary>
+    public int SelfRepairs { get; private set; }
+
     private void RearmNeighbours(Entity b)
     {
         if (!b.IsBuilding || b.Owner is < 0 or > 7) return;
@@ -13457,6 +13815,7 @@ public partial class MapEntityLayer : Node2D
         if (e.Dead) return;
 
         RearmNeighbours(e);
+        RepairInDepot(e);
         SupplyPostService(e);
 
         // mining: deposit -> the mine's own store
@@ -17142,6 +17501,10 @@ public partial class MapEntityLayer : Node2D
             Owner = e.Owner, Team = e.Team, UnitType = d.Propulsion,
             Hp = hp, HpMax = hp, Elev = ElevOf(cell.Value.X, cell.Value.Y),
             Name = d.Name, Equipment = d.Equip, Weapon = TurretOf(d.Weapon),
+            // +0x0e: die Aufstell-Weiche schiebt eine Entwurfszeile >= 50
+            // dorthin — siehe Entity.Part. Ohne das repariert ein GEBAUTER
+            // Mechaniker nichts, obwohl der aus der Karte es tut.
+            Part = PartRowOf(d.Weapon),
             // the spawn routine @0x4b1b9e copies design +0x2c into entity +0x0b,
             // which is the field the voice routine switches on — so a unit off
             // the line answers like the same chassis on the map does. Kind 1 is
@@ -17243,6 +17606,10 @@ public partial class MapEntityLayer : Node2D
             Owner = player, Team = player, UnitType = d.Propulsion,
             Hp = hp, HpMax = hp, Elev = el,
             Name = d.Name, Equipment = d.Equip, Weapon = TurretOf(d.Weapon),
+            // +0x0e: die Aufstell-Weiche schiebt eine Entwurfszeile >= 50
+            // dorthin — siehe Entity.Part. Ohne das repariert ein GEBAUTER
+            // Mechaniker nichts, obwohl der aus der Karte es tut.
+            Part = PartRowOf(d.Weapon),
             Chassis = d.Derived.ChassisComponent, GameUnitType = TypeOfChassis(d.Propulsion),
             Mark = typ,                       // record +0x43, written by create_unit
             Attack = d.Attack, Defence = d.Defence,
@@ -18251,7 +18618,7 @@ public partial class MapEntityLayer : Node2D
             units++;
             if (e.Weapon != 0)
             {
-                string n = WeaponOf(e.Weapon).Name;
+                string n = MountName(e);
                 names.Add(n);
                 if (n.StartsWith("BAUTEIL ")) unnamed++;
             }
@@ -18644,6 +19011,7 @@ public partial class MapEntityLayer : Node2D
         PollBauCheck2();
         PollBauCheck3();
         PollAusbauCheck();
+        PollMechanikerCheck();
         PollAusbauCheck2();
         PollKnopfCheck();
         PollRingCheck();
@@ -18665,6 +19033,15 @@ public partial class MapEntityLayer : Node2D
             if (e.IsProp) continue;
             if (e.Dead) { e.DeadTime += dt; continue; }
             if (e.IsBuilding) { UpdateProduction(i, e, dt); continue; }
+
+            // ⚠⚠ 18.08.2026 — DIE ZWEI REPARATUREN DER EINHEITEN GEHÖREN HIERHIN.
+            // Erst standen sie neben RepairInDepot im Gebäudetakt, weil dort schon
+            // eine Reparatur stand. Sie liefen damit NIE: die Zeile darüber
+            // schickt jedes Gebäude mit `continue` weg, und alles darunter ist
+            // der Einheitentakt — genau der, in dem das Original die beiden
+            // Weichen hat (@0x40730B, @0x40731B). Der Prüfstand hat es gezeigt
+            // ("nebenan +0 TP"), gelesen hätte ich es nicht.
+            UnitRepairTick(i, e, dt);
 
             UpdateCombat(i, e, dt);
 
@@ -20064,7 +20441,15 @@ public partial class MapEntityLayer : Node2D
     /// at 0x4f8a3c that its exploration step checks.</summary>
     public void ToggleFog()
     {
-        UI.Settings.FogOfWar = !UI.Settings.FogOfWar;
+        // ⚠ 18.08.2026 — GEGEN DEN GESPEICHERTEN WERT, nicht gegen den
+        // gelesenen. `Settings.FogOfWar` gibt WÄHREND DER MENÜKULISSE immer
+        // `false` zurück (`FogSuppressed`), und wer dort umschaltet, schreibt
+        // deshalb `true` — ganz gleich, was eingestellt war. Ein Schalter, der
+        // nicht umschaltet, sondern setzt.
+        //
+        // `FogOfWarSetting` ist der Wert aus der Datei, ungeachtet der
+        // Unterdrückung; der Einstellungsschirm liest ihn aus demselben Grund.
+        UI.Settings.FogOfWar = !UI.Settings.FogOfWarSetting;
         _fogTick = FogEverySec;          // take effect on the next tick, not in ten
         UpdateFog();
         _fogDrawn = -1;
@@ -20850,6 +21235,40 @@ public partial class MapEntityLayer : Node2D
     private void AirDrift(Special a, float dt)
     {
         if (a.Fuel <= 0) return;                 // ohne Sprit fliegt nichts
+
+        // ⚠⚠ 18.08.2026 — ER FLIEGT NICHT MEHR AUS DER KARTE HINAUS.
+        //
+        // Gemeldet: »wenn ich Hubschrauber oder Flieger baue, fliegen die
+        // geradlinig Richtung Norden, sogar ausserhalb der Map«. Beides stand
+        // hier: ein Flugzeug OHNE Ziel fliegt geradeaus (das ist gelesen), und
+        // `Dir` ist bei einem frisch gebauten 0 — `sin 0 = 0`, `cos 0 = 1`,
+        // also stur in eine Richtung. Begrenzt wurde dabei nur `Col`/`Row`
+        // (auf 0..255), die POSITION nicht: das Flugzeug war laengst neben der
+        // Karte, waehrend seine Zelle am Rand klebte.
+        //
+        // Der Heimflug ist KEINE Erfindung: `air_back_to_airport` ist die
+        // Antwort des Originals auf »niemand braucht mich mehr« und steht hier
+        // schon (elf Aufrufstellen in `move_airplanes`). Sie wird jetzt auch
+        // fuer »ich bin am Rand« benutzt.
+        //
+        // ⚠ Ohne Flughafen bleibt nur das Umkehren — sonst waere das Flugzeug
+        // fuer den Spieler verloren, und ein Fahrzeug, das die Karte verlaesst
+        // und nie wiederkommt, ist schlimmer als eines, das im Kreis fliegt.
+        if (_nav != null)
+        {
+            float rand = TileW * 1.5f;
+            float maxX = _ox + _nav.Width * TileW, maxY = _oy + _nav.Height * TileH;
+            if (a.Pos.X < _ox + rand || a.Pos.X > maxX - rand ||
+                a.Pos.Y < _oy + rand || a.Pos.Y > maxY - rand)
+            {
+                if (AirHeadHome(a)) return;      // ein Flughafen nimmt ihn auf
+                a.Dir = (a.Dir + 180) % 360;     // sonst: kehrtmachen
+                a.Pos = new Vector2(Mathf.Clamp(a.Pos.X, _ox + rand, maxX - rand),
+                                    Mathf.Clamp(a.Pos.Y, _oy + rand, maxY - rand));
+                AirTurnedBack++;
+            }
+        }
+
         float rad = Mathf.DegToRad(a.Dir);
         // Das Original nimmt sin für x und cos für y — nicht umgekehrt.
         var step = new Vector2(Mathf.Sin(rad), Mathf.Cos(rad))
@@ -20868,6 +21287,10 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Wieviele Flugschritte ohne Ziel gelaufen sind — damit »die
     /// Flugzeuge bewegen sich jetzt« nicht nur eine Behauptung ist.</summary>
     public int AirDrifted;
+
+    /// <summary>Wie oft ein Flugzeug am Kartenrand umgekehrt ist, statt
+    /// hinauszufliegen — der Beleg dafür, dass die Sperre greift.</summary>
+    public int AirTurnedBack;
 
     /// <summary>Was der Geradeausflug getan hat — fuer Laeufe, die nicht auf
     /// den Schirm sehen koennen. Nennt auch, wieviele Flugzeuge ueberhaupt in
@@ -21193,7 +21616,7 @@ public partial class MapEntityLayer : Node2D
                 $"{LabelOf(e.UnitType).ToUpper()}\n" +
                 $"SPIELER {(e.Owner < 0 ? "?" : e.Owner.ToString())}  TEAM {e.Team}\n" +
                 $"ENERGIE {e.Hp}/{e.HpMax}\n" +
-                $"{(e.Weapon == 0 ? "UNBEWAFFNET" : wp2.Name.ToUpper())}\n" +
+                $"{MountName(e).ToUpper()}\n" +
                 (levels.Length > 0 ? levels : $"ZELLE {e.Col},{e.Row}") + "\n" +
                 warn;
         }
@@ -21714,8 +22137,17 @@ public partial class MapEntityLayer : Node2D
                 }
             }
 
-        // player-start markers (diamonds)
-        if (_showDots || _markers.Count > 0)
+        // ⚠⚠ 18.08.2026 — DIE WEISSEN RAUTEN SIND AUS. Hier stand
+        // `if (_showDots || _markers.Count > 0)`, und das ZWEITE Glied hat den
+        // Schalter aufgehoben: eine Karte hat immer Marker (142 auf map_DM_1),
+        // also lagen die Rauten IMMER auf Bäumen, Büschen und allem übrigen
+        // Beiwerk. Gemeldet als »Bäume und solche Map-Sprites haben noch eine
+        // weisse Raute«.
+        //
+        // Ein `|| <Liste ist nicht leer>` neben einem Schalter ist kein
+        // Rückfall, sondern die Abschaffung des Schalters. Jetzt hängen sie an
+        // Taste **G** wie die übrigen Punkte — zum Nachsehen da, nicht im Weg.
+        if (_showDots)
             foreach (var m in _markers)
             {
                 var c = m.Footprint.Position + new Vector2(TileW / 2f, TileH / 2f);
