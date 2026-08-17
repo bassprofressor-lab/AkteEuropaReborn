@@ -1150,12 +1150,38 @@ public partial class MapEntityLayer : Node2D
     /// seconds are ours.</summary>
     private const float FogEverySec = 5f / 25f;
 
-    /// <summary>What a cell that has been seen but is not watched looks like,
-    /// and what one never seen looks like. OURS: the original keeps two arrays
-    /// and this keeps three states, so it can dim what a unit walked away
-    /// from.</summary>
-    private static readonly Color FogSeen = new(0, 0, 0, 0.45f);
+    /// <summary>
+    /// Wie eine Zelle aussieht, die schon gesehen wurde, aber gerade niemand
+    /// beobachtet — und wie eine, die nie gesehen wurde.
+    ///
+    /// <para>⚠⚠ 18.08.2026 — <b>DER GRAUSCHLEIER IST WEG.</b> Gemeldet: »unser
+    /// Fog of War ist aber eh anders als der Originale«, mit einem
+    /// Bildschirmfoto des Originals dazu
+    /// (<c>Bug Bilder/kampagne1 original tutorial7.png</c>).</para>
+    ///
+    /// <para><b>Am Bild abgelesen</b>, und in zwei Aufnahmen dieselbe Aussage
+    /// (tutorial7 und tutorial15): das erkundete Gelände ist <b>voll hell</b>.
+    /// Auf tutorial15 stehen alle Einheiten des Spielers in einer Ecke, und die
+    /// ganze Insel daneben liegt trotzdem in voller Helligkeit — es gibt dort
+    /// keinen zweiten, dunkleren Zustand. Was der Nebel verbirgt, sind die
+    /// <b>Einheiten und Gebäude</b>, nicht das Gelände.</para>
+    ///
+    /// <para>Hier standen <b>45 % Schwarz</b>, ausdrücklich als »OURS« markiert:
+    /// »the original keeps two arrays and this keeps three states, so it can dim
+    /// what a unit walked away from«. Die Begründung stimmte — zwei Zustände im
+    /// Original, drei bei uns —, aber die Folge war ein Bild, das anders
+    /// aussieht als das Original. Der dritte Zustand bleibt bestehen (er
+    /// entscheidet weiter, wer gezeichnet wird); er ist nur nicht mehr
+    /// <b>sichtbar</b>.</para>
+    ///
+    /// <para>⚠ Nie Gesehenes bleibt schwarz — das ist unverändert und im
+    /// Original genauso.</para></summary>
+    private static readonly Color FogSeen = new(0, 0, 0, 0f);
     private static readonly Color FogUnseen = new(0, 0, 0, 1f);
+
+    /// <summary><c>--nebel-alt</c> — die Gegenprobe: der Grauschleier von vor
+    /// dem 18.08.2026, damit der Unterschied im Bild messbar bleibt.</summary>
+    public static bool FogDimOld;
 
     /// <summary>`--fog` turns the fog on for THIS run without touching the
     /// player's setting — the harness needs it on to show that the overview map
@@ -1304,7 +1330,8 @@ public partial class MapEntityLayer : Node2D
         // times a second — 64k interop calls per rebuild would be paid for in
         // frame time, and the picture is only three distinct colours
         _fogPixels ??= new byte[w * h * 4];
-        byte seen = (byte)(FogSeen.A * 255f), unseen = (byte)(FogUnseen.A * 255f);
+        byte seen = (byte)((FogDimOld ? 0.45f : FogSeen.A) * 255f),
+             unseen = (byte)(FogUnseen.A * 255f);
         for (int r = 0, i = 0; r < h; r++)
             for (int c = 0; c < w; c++, i += 4)
             {
