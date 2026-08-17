@@ -10208,6 +10208,49 @@ public partial class MapEntityLayer : Node2D
         return null;
     }
 
+    /// <summary>
+    /// Was am gewählten Gebäude gerade abzubrechen wäre — <c>null</c>, wenn
+    /// nichts. Der Rückgabewert ist der NAME dessen, was verfiele.
+    ///
+    /// <para>⚠ <b>Damit »Bau abbrechen« einen Knopf hat.</b> Es lag nur auf
+    /// <b>Umschalt+B</b>; das ist derselbe Fehler wie bei den zwei Ausbauten und
+    /// damit der siebte Fall. Der Preis wird erstattet (<c>Refund</c>) — genau
+    /// deshalb soll man den Knopf finden können.</para></summary>
+    public string? CancelChoiceOfSelection()
+    {
+        if (_designs == null || _designs.Count == 0) return null;
+        foreach (int i in _sel)
+        {
+            if (i < 0 || i >= _entities.Count) continue;
+            var e = _entities[i];
+            if (!IsUnitPlant(e) || e.Dead || e.Owner != ViewPlayer) continue;
+            if (e.BuildQueue.Count > 0)
+                return _designs[e.BuildQueue[^1] % _designs.Count].Name;
+            if (e.BuildTime > 0f)
+                return _designs[e.BuildIndex % _designs.Count].Name;
+        }
+        return null;
+    }
+
+    /// <summary>Wieviele Flugzeuge im Hangar des gewählten Flughafens stehen —
+    /// <c>null</c>, wenn kein Flughafen gewählt ist.
+    ///
+    /// <para>⚠ <b>Der achte Fall:</b> »Starten« lag nur auf <b>Y</b>. Die
+    /// Bestandszeile des Flughafens sagte dem Spieler wörtlich »(Y startet)«
+    /// — ein Hinweis auf eine Taste ist das Eingeständnis, dass der Knopf
+    /// fehlt.</para></summary>
+    public int? HangarOfSelection()
+    {
+        foreach (int i in _sel)
+        {
+            if (i < 0 || i >= _entities.Count) continue;
+            var e = _entities[i];
+            if (!e.IsBuilding || e.Dead || e.BType != 9 || e.Owner != ViewPlayer) continue;
+            return e.Hangar?.Count ?? 0;
+        }
+        return null;
+    }
+
     /// <summary><c>--shot-when=ausbau</c> — eine eigene Fabrik wählen, damit die
     /// zwei Ausbauknöpfe auf ein Bild kommen. Ohne diesen Griff zeigt jedes Bild
     /// ein Fenster ohne sie, denn sie stehen nur bei einer Fabrik.</summary>
@@ -10401,8 +10444,11 @@ public partial class MapEntityLayer : Node2D
             // ⚠ Der HANGARSTAND gehört dazu (Fehler C25): ein gekauftes
             // Flugzeug parkt dort und ist auf der Karte nicht zu sehen. Ohne
             // diese Zahl sieht »gekauft« aus wie »nichts passiert«.
+            // ⚠ Hier stand »(Y startet)«. Ein Hinweis auf eine TASTE in einer
+            // Bestandszeile ist das Eingestaendnis, dass der Knopf fehlt —
+            // seit dem 18.08.2026 gibt es ihn (»Starten«, UI/BaseWindow.cs).
             return $"FLUGHAFEN  W{e.StockW} F{e.StockF} S{e.StockS}  " +
-                   $"Hangar {e.Hangar?.Count ?? 0}/{Mathf.Max(1, e.HangarSize)} (Y startet)";
+                   $"Hangar {e.Hangar?.Count ?? 0}/{Mathf.Max(1, e.HangarSize)}";
         // ⚠ 18.08.2026 — DERSELBE FEHLER WIE C12, eine Etage tiefer: seit die
         // FABRIK ihr Fenster bekommt (siehe Producer), stand auch bei ihr der
         // Kontostand da. Eine Fabrik rechnet aber nicht in Geld, sie STELLT
@@ -18596,6 +18642,7 @@ public partial class MapEntityLayer : Node2D
         PollBauCheck3();
         PollAusbauCheck();
         PollAusbauCheck2();
+        PollKnopfCheck();
 
         // preview harness: start the scripted build as soon as the factory has
         // manufactured enough parts
@@ -20848,6 +20895,18 @@ public partial class MapEntityLayer : Node2D
                 a.Stored = false;
                 a.Pos = home.Pos;
                 a.Col = home.Col; a.Row = home.Row;
+                // ⚠⚠ 18.08.2026 — DIESE ZEILE FEHLTE, und der Hangar blieb
+                // stehen. `SendOutFromPanel` (der Reiter »Depot«) räumt den
+                // Platz ordentlich weg, dieser Weg hier tat es nicht: das
+                // Flugzeug flog, stand aber in der Liste des Flughafens weiter
+                // drin. Der Knopf »Alle starten« zeigte danach dieselbe Zahl
+                // wie vorher — gefunden mit `--knopf-check` auf map_DM_3
+                // (»gestartet: 6, Hangar jetzt 6«).
+                //
+                // Zwei Wege in denselben Zustand, und nur einer räumte auf:
+                // genau die Sorte Fehler, die man erst sieht, wenn eine
+                // Oberfläche die Zahl anzeigt.
+                home.Hangar?.Remove(a.Slot);
             }
             // "Aussenden": head for the nearest enemy so the sortie has a
             // direction; once inside the aircraft's own sight it picks a target

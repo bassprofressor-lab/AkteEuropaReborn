@@ -336,6 +336,13 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Die anderen drei Bauaufträge brauchen einen Platzierungsmodus — siehe die
   nächste Zeile.
 
+- ⭐ **»Abbrechen« und »Alle starten« sind jetzt Knöpfe.** Einen laufenden Bau
+  abzubrechen lag nur auf Umschalt+B, die Flugzeuge eines Flughafens
+  loszuschicken nur auf Y — die Bestandszeile sagte dem Spieler sogar »(Y
+  startet)«. Beim Messen kam heraus, dass der Hangar dabei **nie leer wurde**:
+  die Flugzeuge flogen, standen aber weiter in der Liste des Flughafens. Auch
+  das ist behoben.
+
 - ⭐ **Fabriken haben endlich ein Fenster — und zwei Knöpfe darin.**
   **Lagerausbau** und **Produktionserweiterung** gab es seit langem, sie lagen
   aber nur auf den Tasten V und C und waren damit praktisch nicht vorhanden.

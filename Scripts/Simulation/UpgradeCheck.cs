@@ -139,4 +139,113 @@ public partial class MapEntityLayer
                        : "— FALSCH, der Lagerausbau hat den anderen Preis angefasst"));
         GD.Print(sb.ToString());
     }
+
+    // ================= die zwei anderen neuen Knöpfe ==========================
+
+    private int _knopfCheck = -1;
+
+    /// <summary><c>--knopf-check</c> anwerfen.</summary>
+    public void KnopfCheckStart() => _knopfCheck = 0;
+
+    /// <summary>
+    /// <c>--knopf-check</c> — <b>»Abbrechen« und »Starten«: stehen sie da, wenn
+    /// es etwas zu tun gibt, und verschwinden sie, wenn nicht?</b>
+    ///
+    /// <para>Beide Mechaniken (<see cref="CancelBuild"/>,
+    /// <see cref="LaunchAircraft"/>) gab es längst; neu ist, dass man sie
+    /// FINDET. Geprüft wird deshalb genau das Neue: die Auskunft, an der die
+    /// Knöpfe hängen — <b>und in beide Richtungen</b>, denn ein Knopf, der
+    /// immer da ist, wäre so falsch wie einer, der nie da ist.</para>
+    ///
+    /// <para>⚠ Er stellt seinen Fall selbst her: er lässt eine eigene Fabrik
+    /// über den Knopfweg (<see cref="ProduceFromSelection"/>) etwas bestellen.
+    /// Auf eine Karte zu hoffen, auf der gerade gebaut wird, wäre kein
+    /// Prüfstand.</para></summary>
+    private void PollKnopfCheck()
+    {
+        if (_knopfCheck != 0) return;
+        _knopfCheck = -1;
+        var sb = new System.Text.StringBuilder("knopf-check\n");
+        LoadDesigns();
+
+        // ---- »Abbrechen« ----
+        int werk = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (!IsUnitPlant(e) || e.Dead || e.Owner != ViewPlayer) continue;
+            werk = i; break;
+        }
+        if (werk < 0) sb.AppendLine("  Abbrechen: keine eigene Fertigung — der Fall entfaellt");
+        else
+        {
+            var e = _entities[werk];
+            _sel.Clear(); _sel.Add(werk); _selected = werk;
+            string? vorher = CancelChoiceOfSelection();
+            sb.AppendLine($"  {BuildingTypeName(e.BType)} \"{e.Name}\": vor der Bestellung " +
+                          (vorher == null ? "nichts abzubrechen — richtig"
+                                          : $"schon \"{vorher}\" — der Fall ist unsauber"));
+            int owner = Mathf.Clamp(e.Owner, 0, 7);
+            int geld = _money[owner];
+            ProduceFromSelection();
+            string? jetzt = CancelChoiceOfSelection();
+            sb.AppendLine($"  nach dem Knopf »Produzieren«: " +
+                          (jetzt != null ? $"»Abbrechen ({jetzt})« steht da — richtig"
+                                         : "KEIN Abbrechen-Knopf — FALSCH oder nichts bestellbar") +
+                          $"  [Konto ${geld} -> ${_money[owner]}]");
+            if (jetzt != null)
+            {
+                CancelBuild();
+                string? danach = CancelChoiceOfSelection();
+                sb.AppendLine($"  nach dem Knopf »Abbrechen«: " +
+                              (danach == null ? "der Knopf ist weg — richtig"
+                                              : $"steht immer noch \"{danach}\" — FALSCH") +
+                              $"  [Konto ${_money[owner]}" +
+                              (_money[owner] == geld ? ", erstattet — richtig" : "") + "]");
+            }
+        }
+
+        // ---- »Starten« ----
+        int hafen = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding && !e.Dead && e.BType == 9 && e.Owner == ViewPlayer) { hafen = i; break; }
+        }
+        if (hafen < 0)
+        {
+            // ⚠ Das ist die halbe Auskunft, und sie steht als solche da: auf
+            // dieser Karte gibt es keinen Flughafen, also ist der Knopf
+            // »Starten« hier NICHT gemessen. Ein »richtig« an dieser Stelle
+            // waere eine Behauptung ueber einen Fall, der nicht eintritt.
+            sb.Append("  Starten: kein eigener Flughafen auf dieser Karte — " +
+                      "NICHT GEMESSEN (nur die Gegenrichtung: der Knopf bleibt weg)");
+            sb.AppendLine();
+            _sel.Clear(); if (werk >= 0) { _sel.Add(werk); _selected = werk; }
+            sb.AppendLine($"    Gegenprobe: HangarOfSelection() = " +
+                          (HangarOfSelection() == null ? "null — richtig" : "eine Zahl — FALSCH"));
+        }
+        else
+        {
+            var h = _entities[hafen];
+            _sel.Clear(); _sel.Add(hafen); _selected = hafen;
+            int n = HangarOfSelection() ?? -1;
+            sb.AppendLine($"  Flughafen \"{h.Name}\": Hangar {n}, Knopf " +
+                          (n > 0 ? "steht da" : "bleibt weg (leer)"));
+            if (n > 0)
+            {
+                int los = LaunchAircraft(ViewPlayer);
+                int rest = HangarOfSelection() ?? -1;
+                // ⚠⚠ DIESE ZEILE HAT EINEN ECHTEN FEHLER GEFUNDEN: sie meldete
+                // »gestartet: 6, Hangar jetzt 6«. `LaunchAircraft` hat das
+                // Flugzeug fliegen lassen, es aber nicht aus der Hangarliste
+                // genommen — anders als `SendOutFromPanel`. Zwei Wege in
+                // denselben Zustand, und nur einer raeumte auf.
+                sb.AppendLine($"    »Alle starten«: {los} gestartet, Hangar {n} -> {rest} " +
+                              (rest == 0 ? "— richtig, er ist leer"
+                                         : "— FALSCH, die Liste wurde nicht geraeumt"));
+            }
+        }
+        GD.Print(sb.ToString());
+    }
 }

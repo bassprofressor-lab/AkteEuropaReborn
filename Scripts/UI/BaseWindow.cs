@@ -166,6 +166,25 @@ public sealed partial class BaseWindow : PanelContainer
     /// Produktionserweiterung.</summary>
     public System.Action<bool>? OnUpgrade;
 
+    /// <summary>Was gerade abgebrochen werden könnte — <c>null</c> blendet den
+    /// Knopf aus. ⚠ <b>Bis zum 18.08.2026 lag das nur auf Umschalt+B</b>, und
+    /// ein Abbruch, den niemand findet, ist keiner. Der Preis wird
+    /// zurückgezahlt, deshalb steht er im Knopf.</summary>
+    public Func<string?>? CancelChoice;
+
+    /// <summary>Den laufenden Bau bzw. den letzten Eintrag der Warteschlange
+    /// abbrechen.</summary>
+    public System.Action? OnCancelBuild;
+
+    /// <summary>Wieviele Flugzeuge im Hangar stehen — <c>null</c> blendet den
+    /// Knopf aus. ⚠ Auch das lag nur auf einer Taste; die Bestandszeile des
+    /// Flughafens sagte dem Spieler wörtlich »(Y startet)«, und genau das ist
+    /// das Eingeständnis, dass der Knopf fehlte.</summary>
+    public Func<int?>? HangarCount;
+
+    /// <summary>Alles starten, was im Hangar steht.</summary>
+    public System.Action? OnLaunch;
+
     // ---- Bauteile des Fensters ----------------------------------------------
     private readonly Label _title = new();
     private readonly Button _x = new();
@@ -190,6 +209,12 @@ public sealed partial class BaseWindow : PanelContainer
     /// Reiter wäre eine Erfindung gewesen, denn die vier Reiterwörter sind
     /// gelesen und ein fünftes gibt es nicht.</para></summary>
     private readonly Button _expand = new(), _prodUp = new();
+
+    /// <summary>»Abbrechen« und »Starten«. ⚠ Derselbe Fall wie die zwei
+    /// Ausbauten: beide Mechaniken waren fertig und lagen nur auf Umschalt+B
+    /// bzw. Y. Siehe <see cref="CancelChoice"/> und
+    /// <see cref="HangarCount"/>.</summary>
+    private readonly Button _cancel = new(), _launch = new();
     private readonly Preview _preview = new();
     private readonly Label _stats = new();
 
@@ -328,7 +353,8 @@ public sealed partial class BaseWindow : PanelContainer
         foreach (var (b, text) in new[]
                  { (_rename, "Umbenennen"), (_remove, "Entfernen"),
                    (_make, "Produzieren"), (_design, "Erstellen"),
-                   (_expand, "Lagerausbau"), (_prodUp, "Produktionserw.") })
+                   (_expand, "Lagerausbau"), (_prodUp, "Produktionserw."),
+                   (_cancel, "Abbrechen"), (_launch, "Starten") })
         {
             b.Text = text;
             b.FocusMode = FocusModeEnum.None;
@@ -369,6 +395,8 @@ public sealed partial class BaseWindow : PanelContainer
         _design.Pressed += () => OnDesign?.Invoke();
         _expand.Pressed += () => { OnUpgrade?.Invoke(true); Refresh(); };
         _prodUp.Pressed += () => { OnUpgrade?.Invoke(false); Refresh(); };
+        _cancel.Pressed += () => { OnCancelBuild?.Invoke(); Refresh(); };
+        _launch.Pressed += () => { OnLaunch?.Invoke(); Refresh(); };
 
         var right = new VBoxContainer();
         right.AddThemeConstantOverride("separation", 4);
@@ -520,6 +548,22 @@ public sealed partial class BaseWindow : PanelContainer
             _expand.Disabled = _prodUp.Disabled = !up.Value.Ready;
         }
 
+        // »Abbrechen« steht nur da, wenn es etwas abzubrechen GIBT — die Zeile
+        // sagt gleich, was. Ein immer sichtbarer Abbruchknopf, der meist
+        // »nichts abzubrechen« antwortet, waere schlimmer als keiner.
+        string? cancel = CancelChoice?.Invoke();
+        _cancel.Visible = cancel != null;
+        if (cancel != null) _cancel.Text = $"Abbrechen ({cancel})";
+
+        // »Starten« nur am Flughafen, und nur wenn etwas im Hangar steht.
+        // ⚠ »ALLE starten« sagt, was der Knopf tut, und grenzt ihn vom Reiter
+        // »Depot« ab: dort wird EIN Flugzeug ausgesandt (»Aussenden«), hier
+        // gehen alle auf einmal los. Zwei verschiedene Handlungen — ein Knopf,
+        // der beides »Starten« hiesse, waere eine Falle.
+        int? hangar = HangarCount?.Invoke();
+        _launch.Visible = hangar is > 0;
+        if (hangar is > 0) _launch.Text = $"Alle starten ({hangar})";
+
         string name = _sheet.Selected >= 0 && _sheet.Selected < rows.Count
             ? rows[_sheet.Selected].Name : "";
         _stats.Text = StatsFor(name);
@@ -669,6 +713,8 @@ public sealed partial class BaseWindow : PanelContainer
                    ? $"\"{_expand.Text}\" / \"{_prodUp.Text}\"" +
                      (_expand.Disabled ? " (gesperrt)" : " (bedienbar)")
                    : "keine Fabrik gewaehlt") +
+               ", Abbrechen: " + (_cancel.Visible ? $"\"{_cancel.Text}\"" : "nichts") +
+               ", Starten: " + (_launch.Visible ? $"\"{_launch.Text}\"" : "kein Hangar") +
                $", Vorschau: {_preview.WatchLine()}";
     }
 

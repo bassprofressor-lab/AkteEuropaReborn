@@ -427,6 +427,7 @@ public partial class MapViewer : Node2D
         if (_radarCheckFlag) _entities.RadarCheckStart();
         if (_bauCheckFlag) _entities.BauCheckStart(_bauCheckOrder);
         if (_ausbauCheckFlag) _entities.AusbauCheckStart();
+        if (_knopfCheckFlag) _entities.KnopfCheckStart();
         if (_marketCheck)
         {
             GD.Print(_entities.MarketCheck());
@@ -691,6 +692,9 @@ public partial class MapViewer : Node2D
     /// <summary><c>--ausbau-check</c> — tut der Knopf »Lagerausbau« wirklich
     /// etwas? Siehe Simulation/UpgradeCheck.cs.</summary>
     private bool _ausbauCheckFlag;
+    /// <summary><c>--knopf-check</c> — stehen »Abbrechen« und »Starten« da,
+    /// wenn es etwas zu tun gibt, und bleiben sie sonst weg?</summary>
+    private bool _knopfCheckFlag;
     /// <summary><c>--depot-flow</c> — bestellen, im Depot liegen, aussenden.</summary>
     private bool _depotFlow;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
@@ -1158,6 +1162,7 @@ public partial class MapViewer : Node2D
             else if (a == "--power-check") _powerCheckFlag = true;
             else if (a == "--radar-check") _radarCheckFlag = true;
             else if (a == "--ausbau-check") _ausbauCheckFlag = true;
+            else if (a == "--knopf-check") _knopfCheckFlag = true;
             else if (a == "--bau-check") { _bauCheckFlag = true; _bauCheckOrder = 5; }
             else if (a.StartsWith("--bau-check="))
             {
@@ -2618,6 +2623,13 @@ public partial class MapViewer : Node2D
         // eigenen Preis um die Haelfte) — und fuer den Spieler nicht vorhanden.
         _baseWindow.UpgradeChoice = () => _entities.UpgradeChoiceOfSelection();
         _baseWindow.OnUpgrade = lager => _entities.StartUpgrade(lager);
+        // ⚠ Der SIEBTE und ACHTE Fall: »Bau abbrechen« lag nur auf Umschalt+B,
+        // »Starten« nur auf Y — und die Bestandszeile des Flughafens sagte dem
+        // Spieler sogar »(Y startet)«, was das Eingestaendnis dafuer ist.
+        _baseWindow.CancelChoice = () => _entities.CancelChoiceOfSelection();
+        _baseWindow.OnCancelBuild = () => _entities.CancelBuild();
+        _baseWindow.HangarCount = () => _entities.HangarOfSelection();
+        _baseWindow.OnLaunch = () => _entities.LaunchAircraft(_entities.ViewPlayer);
         // ⚠ 16.08.2026 — der DRITTE tote Reiter ist angeschlossen (Fehler D1).
         // Anders als bei Forschung und Reparatur lag hier keine fertige Mechanik
         // auf einer Taste: das Depot gab es gar nicht, fertige Einheiten
