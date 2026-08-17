@@ -294,6 +294,49 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Gemessen mit `--sell-check` in beiden Modi, mit Gegenprobe in beide
   Richtungen: `$4000 → $4058` nach dem Warten, `$44850 → $44917` sofort.
 
+- ⭐ **Der Laden füllt sich nach.** Alle zwei Sekunden sieht das
+  Geschäftszentrum nach, ob noch fünfzehn Stück ausliegen; wenn nicht, kommen
+  bis zu neun neue dazu. Und was dabei entsteht, ist keine Zufallsauswahl,
+  sondern der Spannungsbogen des Marktes: das Spiel führt zwei Listen — die
+  Entwürfe, deren Bauteile der Spieler schon hat, und die, die er noch **nicht
+  bauen kann** —, und hält von den zweiten immer etwa zwei im Regal. In
+  Mission 1 hat er von 52 Fahrzeugentwürfen **keinen einzigen** freigeschaltet;
+  der Laden ist dort also die einzige Quelle für Fahrzeuge überhaupt. Bis
+  Mission 32 dreht es sich um (51 frei, 1 gesperrt) und er wird zur
+  Bequemlichkeit.
+  **Fußsoldaten verkauft er nie** — der Filter des Originals lässt nur Fahrwerke
+  ab 160 durch, und das sind genau die Fahrzeuge. Gegenprobe an den Daten: die
+  Ware, die auf den dreizehn Gefechtskarten wirklich liegt, erfüllt diesen
+  Filter **225 von 225 Mal**.
+  ⚠ Neu und vorher unbekannt: **die Ware hat Kampferfahrung, und die macht den
+  Preis.** Das Spiel würfelt sie aus — meist keine, in einem von sechs Fällen
+  Stufe 1, ganz selten Stufe 6 —, und weil der Wert einer Einheit mit der Stufe
+  von 0,10 auf 7,00 steigt, kostet derselbe Entwurf als Veteran das
+  **Siebzigfache**. Ein Nutzfahrzeug (Radar, Reparatur, Minenleger) bekommt nie
+  Erfahrung; nur Kampfeinheiten. Dass diese Zahlen wirklich die Erfahrung sind,
+  steht in ihnen selbst: alle sieben liegen genau **eins über** einer
+  Stufengrenze.
+  ⚠ Ein Fehler des Originals, nachgebaut: die höchste Veteranenstufe kann im
+  Laden **nie** erscheinen — ihr Zweig hängt an einer Bedingung, die nicht
+  eintreten kann.
+
+- **Die Preise der Karten stehen in zwei Gruppen, und das ist ein Befund über
+  die Dateien.** Beim Nachrechnen der gespeicherten Ladenpreise fiel ein exakter
+  Faktor 5/3 auf. Über alle dreizehn Karten aufgeschlüsselt gibt es genau zwei
+  Gruppen und keine dritte: `map_DM_1` ist mit **2,5 × Wert** bepreist — das ist
+  die Formel, die im Spielcode steht — und die zwölf anderen mit 1,5 × Wert.
+  `map_DM_1` bestätigt damit die ganze Rechnung auf einen Schlag: Kosten,
+  Hülle, Erfahrung, Stufentafel und beide Multiplikatoren, **18 von 18**.
+  Geradegerückt wird nichts: was in der Karte steht, bleibt; was der Laden
+  nachlegt, folgt dem Code.
+
+- **Behoben: die Computerspieler stürzten in jedem Gefecht ab**, sobald einer
+  das erste Mal etwas fertigbaute — die Routine, die ihre Depots leert, lief
+  über eine Liste, die sie beim Aussenden selbst verlängert. Danach brach der
+  ganze KI-Takt ab, Bild für Bild. Jetzt schickt ein Computerspieler seine
+  fertigen Einheiten wirklich los (gemessen: 8 in 25 Sekunden statt eines
+  Abbruchs beim ersten).
+
 - **Die gewählte Einheit hat jetzt eine Befehlsleiste** — Verkaufen (mit dem
   Preis im Knopf), Ein-/Ausgraben, Anhalten. Anlass ist eine Lehre aus vier
   eigenen Fehlern: Forschung, Reparatur, Depot und Hangar waren alle vier

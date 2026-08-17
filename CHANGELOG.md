@@ -267,6 +267,44 @@ deviate on purpose, and every deviation is marked as ours.
   Measured with `--sell-check` in both modes, with the counter-probe in both
   directions: `$4000 → $4058` after the wait, `$44850 → $44917` at once.
 
+- ⭐ **The shop restocks itself.** Every two seconds the trading centre checks
+  whether fifteen items are still on the shelf; if not, up to nine new ones
+  arrive. And what turns up is not a random draw but the market's whole arc:
+  the game keeps two lists — the designs whose components the player already
+  has, and the ones he **cannot build yet** — and keeps about two of the latter
+  in stock at all times. In mission 1 he has unlocked **none** of the 52 vehicle
+  designs, so the shop is the only source of vehicles at all. By mission 32 it
+  is the other way round (51 free, 1 locked) and it becomes a convenience.
+  **It never sells foot soldiers** — the original's filter only lets chassis 160
+  and up through, and those are exactly the vehicles. Counter-check against the
+  data: the stock actually present on the thirteen skirmish maps satisfies that
+  filter **225 times out of 225**.
+  ⚠ New and previously unknown: **the goods carry combat experience, and that is
+  what makes the price.** The game rolls for it — usually none, one time in six
+  grade 1, very rarely grade 6 — and since a unit's value rises with the grade
+  from 0.10 to 7.00, the same design costs **seventy times** as much as a
+  veteran. Utility vehicles (radar, repair, minelayer) never get any; only
+  combat units do. That these numbers really are the experience is written into
+  them: all seven sit exactly **one above** a grade boundary.
+  ⚠ One bug of the original, reproduced: the highest veteran grade can **never**
+  appear in the shop — its branch hangs on a condition that cannot occur.
+
+- **The maps' prices fall into two groups, and that is a finding about the
+  files.** Recomputing the stored shop prices turned up an exact factor of 5/3.
+  Broken down over all thirteen maps there are exactly two groups and no third:
+  `map_DM_1` is priced at **2.5 × value** — the formula that stands in the game
+  code — and the other twelve at 1.5 × value. `map_DM_1` thereby confirms the
+  whole calculation at a stroke: costs, hull, experience, grade table and both
+  multipliers, **18 out of 18**. Nothing is straightened out: what the map says
+  stays, what the shop restocks follows the code.
+
+- **Fixed: the computer players crashed in every skirmish** as soon as one of
+  them first finished building something — the routine that empties their
+  depots iterated a list that it lengthens itself when sending a unit out.
+  After that the whole AI tick aborted, frame after frame. Now a computer
+  player really does send its finished units out (measured: 8 in 25 seconds
+  instead of an abort on the first).
+
 - **The selected unit now has an order bar** — Sell (with the price on the
   button), Dig in/out, Stop. The reason is a lesson from four of our own
   mistakes: research, repair, depot and hangar were all four built and sat on
