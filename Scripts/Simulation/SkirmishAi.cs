@@ -797,6 +797,26 @@ public partial class MapEntityLayer : Node2D
     ///
     /// <para>Die uebrigen neutralen Gebaeude bleiben liegen; nur die Basis wird
     /// vorweggenommen. <c>--no-start-base</c> stellt den alten Stand her.</para>
+    ///
+    /// <para>⚠⚠ <b>UND SIE LAEUFT NUR AUF EROBERUNGSKARTEN — das ist so
+    /// entschieden und kein Versehen</b> (18.08.2026, Fehlerpunkt C15).
+    /// Gemessen ueber alle 21 Gefechtskarten:</para>
+    /// <list type="bullet">
+    ///   <item><b>map_NET01..08</b>: die Basen sind NEUTRAL (Eigner 11), also
+    ///   greift diese Verteilung und jeder Mitspieler bekommt eine.
+    ///   ⚠ <b>map_NET07 hat gar keine Basis</b>, map_NET01 dagegen vier, die
+    ///   schon Spielern gehoeren.</item>
+    ///   <item><b>map_DM_1..13</b>: die Basen gehoeren bereits Spielern — aber
+    ///   NICHT allen. map_DM_4 hat fuenf besetzte Plaetze und zwei Basen (P0,
+    ///   P1); map_DM_11 sechs Plaetze und zwei; auf <b>map_DM_9 und
+    ///   map_DM_13</b> hat P1 eine und <b>der Mensch auf Platz 0 keine</b>.
+    ///   Hier gibt es nichts Neutrales zu verteilen, also laeuft diese
+    ///   Verteilung gar nicht erst an.</item>
+    /// </list>
+    /// <para><b>Entscheidung des Spielers, 18.08.2026: nichts aendern.</b> Die
+    /// Ungleichheit gehoert zur KARTE. Wer das spaeter fuer einen Fehler haelt,
+    /// findet hier die Zahlen und die Entscheidung — C15 ist damit
+    /// beantwortet, nicht offen.</para>
     /// </summary>
     private int GrantStartingBases(List<int> players)
     {
