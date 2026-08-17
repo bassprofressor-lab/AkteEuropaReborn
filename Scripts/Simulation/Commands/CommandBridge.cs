@@ -714,12 +714,37 @@ public partial class MapEntityLayer
         if (e.FuelMax > 0 && e.Fuel <= 0) return false;
 
         var path = _nav.FindPath(new Vector2I(e.Col, e.Row), goal, e.Move, i);
-        if (path == null || path.Count == 0) return false;
+        if (path == null || path.Count == 0)
+        {
+            // ⚠⚠ 18.08.2026 — HIER STAND NUR `return false`, UND DAS WAR EIN
+            // ECHTER RÜCKSCHRITT, kein bloßer Prüfstandsfehler.
+            //
+            // <c>IssueMove</c> — der alte Direktweg — behält in diesem Fall das
+            // Ziel und setzt <see cref="Entity.RetryIn"/>: wer von den eigenen
+            // Leuten eingekeilt steht, fährt los, sobald sie Platz machen. Genau
+            // das war die Reparatur vom 16.08.2026 (»NICHT MEHR VERGESSEN«).
+            // Beim Umbau auf den Befehlsring ist sie nicht mitgekommen — und
+            // seither geht JEDER Klick des Spielers durch DIESEN Weg. Eine
+            // eingekeilte Einheit stand damit bis zum Missionsende.
+            e.Goal = goal;
+            e.RetryIn = RetryOff ? 0 : RetryTicks;
+            return false;
+        }
         e.Path = path;
         e.PathIdx = 0;
         e.Goal = goal;
+        e.RetryIn = 0;
         e.Reserved = null;
         e.WaitTime = 0;
+        // ⚠ UND DIE GEDULD. Ohne diese Zeile fängt ein frisch befohlener Wagen
+        // mit <c>Block = 0</c> an und gibt beim ERSTEN versperrten Takt auf
+        // (siehe BlockedStep) — der alte Weg setzt sie, dieser tat es nicht.
+        //
+        // ⚠ Der Wurf ist zugleich der Grund, warum <c>--befehl-check</c> ROT
+        // meldete: <c>Determinism.Roll</c> zieht eine Zahl aus dem Strom. Ein
+        // Weg, der sie zieht, und einer, der es nicht tut, laufen danach
+        // auseinander — nicht wegen des Befehls, sondern wegen des Stroms.
+        e.Block = BlockEnter + Determinism.Roll(BlockEnterSpread);
         return true;
     }
 

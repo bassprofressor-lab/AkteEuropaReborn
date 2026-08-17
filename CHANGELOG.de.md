@@ -62,6 +62,30 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Mechaniker, ein beschädigtes Fahrzeug daneben, eins diagonal, eins sechs
   Felder weiter) und misst +5/+0/+0 — die Rate, die dasteht.
 
+- ⭐⚠ **Befohlene Einheiten geben nicht mehr sofort auf — und eingekeilte
+  fahren wieder los.** Gefunden, weil `--befehl-check` ROT meldete; der
+  Prüfstand vergleicht den Befehlsring gegen den alten Direktweg. Der Ring ist
+  der Weg, den **jeder Klick des Spielers heute geht**, und ihm fehlten drei
+  Dinge, die der alte Weg tut:
+
+  - **kein Weg gefunden** → der alte Weg behält das Ziel und versucht es
+    wieder (`RetryIn`); der Ring tat gar nichts. Wer von den eigenen Leuten
+    eingekeilt stand, stand **bis zum Missionsende**. Das war genau die
+    Reparatur vom 16.08. — beim Umbau auf den Ring ist sie nicht mitgekommen.
+  - **Weg gefunden** → `RetryIn` wurde nicht zurückgesetzt.
+  - **frischer Befehl** → die Geduld (`Block`) blieb auf **0**, also gab der
+    Wagen beim **ersten** versperrten Takt auf, statt zu warten.
+
+  Die dritte Zeile erklärt auch den Prüfstand: die Geduld wird **gewürfelt**,
+  und ein Weg, der würfelt, neben einem, der es nicht tut, lässt die
+  Zufallsströme auseinanderlaufen. ⚠ Nebenbei ist der Wurf jetzt an der
+  richtigen Stelle: im **Behandler**, der auf allen Maschinen läuft, statt beim
+  Absender, der nur auf einer läuft.
+
+  Gemessen: `--befehl-check` grün in allen vier Varianten (1 Einheit, 8
+  Einheiten, Klick auf Nachbarzelle, Befehl bei Takt 200), Giftprobe schlägt
+  weiter an, `--stuck-check` meldet 21 von 21 mit Weg.
+
 - ⭐ **Flugzeuge lassen sich anwählen — und im GEFECHT auch steuern.**
   Gemeldet: »außerdem kann ich die Einheiten nicht anwählen. Im Gefecht wäre
   es doch sinnvoll die Einheiten eigenständig zu steuern oder nicht?«
