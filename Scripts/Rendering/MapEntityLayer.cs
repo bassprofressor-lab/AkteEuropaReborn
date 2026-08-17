@@ -21198,6 +21198,31 @@ public partial class MapEntityLayer : Node2D
                     if (dd < best) { best = dd; a.Target = j; }
                 }
             }
+            // ⚠⚠ 18.08.2026 — OHNE ZIEL FLIEGT ER HEIM, NICHT GERADEAUS.
+            // Gemeldet: »Flugzeug fliegt trotzdem immer noch sinnlos nach
+            // Norden; bis ich es anwaehle und woanders hinbewege — ist die
+            // Bewegung aber erledigt, faengt er wieder an geradlinig
+            // runterzufliegen.«
+            //
+            // Die Randsperre von heute frueh hielt es auf der Karte, aber das
+            // war die Fessel, nicht die Kur: ein Flugzeug ohne Ziel LIEF
+            // weiter geradeaus (AirDrift), und nach dem Spielerbefehl fing es
+            // wieder damit an.
+            //
+            // Der Heimflug ist die Antwort des ORIGINALS auf »niemand braucht
+            // mich mehr«: air_back_to_airport, elf Aufrufstellen in
+            // move_airplanes. Beim Treibstoff- (@0x423269 »air M«) wie beim
+            // Munitionsheli (@0x4233AC »air Q«) steht genau das, sobald die
+            // Suche 0xFFFF liefert.
+            //
+            // ⚠ UNSERE SETZUNG bleibt, dass fuer die KAMPFarten (1, 2, 10)
+            // dieselbe Antwort gilt — deren eigene Zweige (@0x422fa7,
+            // @0x423081, @0x4230c9) sind nicht bis zum Ende gelesen. Was dabei
+            // NICHT passieren darf: dass er wieder losfliegt, sobald er steht.
+            // AirHeadHome lagert ihn am Flughafen ein, und der Parkzweig oben
+            // faengt ihn dann ab.
+            if (a.Target < 0 && a.PlayerGoal == null) { if (AirHeadHome(a)) continue; }
+
             if (a.Target >= 0)
             {
                 var t = _entities[a.Target];

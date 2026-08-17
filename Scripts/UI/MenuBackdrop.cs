@@ -260,7 +260,22 @@ public partial class MenuBackdrop : CanvasLayer
             }
         }
 
-        if (_fade < 1f) { _fade = Mathf.Min(1f, _fade + dt * 0.7f); _world.Modulate = new Color(1, 1, 1, _fade); }
+        // ⚠⚠ 18.08.2026 — KEIN AUFBLENDEN MEHR. Gemeldet: »im Hauptmenu hast du
+        // scheinbar einen Effekt genommen der von dunkler zu hell macht gleich
+        // am Anfang, deswegen sind am Anfang kurz wieder die hellen Stellen der
+        // Gebaeude zu sehen, das kannst du rausnehmen, lass es von Anfang an
+        // hell ohne den Effekt.«
+        //
+        // Er hat recht, und der Effekt war doppelt schaedlich: waehrend er lief,
+        // war die Kulisse dunkler als die Gebaeudeboeden — also genau der
+        // Kontrast, den der Schleier vorher dauerhaft erzeugt hat und der heute
+        // frueh weggenommen wurde. Das Aufblenden hat ihn fuer eine Sekunde
+        // zurueckgeholt.
+        //
+        // ⚠ `_fade` bleibt als Feld stehen und wird weiter gesetzt: an ihm
+        // haengt die Sonde bei `_probe` (»erst messen, wenn das Bild steht«).
+        // Nur die HELLIGKEIT haengt nicht mehr daran.
+        if (_fade < 1f) _fade = 1f;
 
         // Der Ablaufzähler des Originals, in Sekunden statt in Takten.
         _left -= dt;
@@ -288,7 +303,7 @@ public partial class MenuBackdrop : CanvasLayer
             _anchorAt = (_anchorAt + 1) % _anchors.Count;
             _dwell = Dwell;
             _swing = 0f;
-            _fade = 0.35f;                  // kurzes Aufblenden statt hartem Schnitt
+            _fade = 1f;                     // kein Aufblenden mehr, siehe oben
         }
         // ein knapper Schwenk um den Standpunkt, damit das Bild lebt
         _swing += dt;
@@ -351,8 +366,9 @@ public partial class MenuBackdrop : CanvasLayer
         _cam = _anchors[0];
         _dwell = Dwell;
         _swing = 0f;
-        _fade = 0f;
-        _world.Modulate = new Color(1, 1, 1, 0);
+        // ⚠ Von Anfang an hell — siehe oben. Kein Modulate mehr.
+        _fade = 1f;
+        _world.Modulate = new Color(1, 1, 1, 1);
         _probe = 0f; _probeFrames = 0; _probeWorst = 0f;
         Place();
         GD.Print($"Menü: Demo {map} läuft ({_anchors.Count} Basen, Blick von Platz {seen})");

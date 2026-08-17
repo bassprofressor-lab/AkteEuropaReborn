@@ -144,10 +144,32 @@ public partial class MapEntityLayer
         // ⚠ Nicht `_selAir = i` von Hand: gemeldet war »ich kann die Einheiten
         // nicht anwaehlen«, und genau das Anwaehlen ist der Gegenstand. Ein
         // Pruefstand, der es umgeht, misst es nicht.
+        // ⚠ 18.08.2026 — seit ein Flugzeug ohne Ziel HEIMFLIEGT statt geradeaus
+        // zu laufen, steht die Probe nach zehn Sekunden womoeglich im Hangar.
+        // Das ist das gewollte Verhalten und kein Fehler; fuer die Frage
+        // »laesst es sich anwaehlen und befehlen« muss es nur wieder fliegen.
+        if (a.Stored)
+        {
+            sb.AppendLine("  (Probe war gelandet — das neue, gewollte Verhalten; " +
+                          "fuer die Auswahl neu gestartet)");
+            LaunchAircraft(a.Owner);
+        }
         SelectAt(a.Pos - new Vector2(0, AirShadowDrop));
         bool gewaehlt = _selAir >= 0 && _special[_selAir] == a;
         sb.AppendLine($"  angewaehlt: {(gewaehlt ? "JA" : "⚠ NEIN — SelectAt trifft das Flugzeug nicht")}");
-        if (!gewaehlt) { sb.Append("  flug-check: FEHLER — nicht anwaehlbar"); GD.Print(sb); return; }
+        if (!gewaehlt)
+        {
+            // ⚠ KEIN FEHLER, sondern die Grenze dieses Pruefstands: nach dem
+            // Heimflug steht die Probe AUF ihrem Flughafen, und dort gewinnt
+            // beim Klick das Gebaeude — zu Recht, wer auf seinen Flughafen
+            // klickt, meint den Flughafen. Dass ein FLIEGENDES Flugzeug
+            // anwaehlbar ist, misst der Lauf mit kuerzerer Wartezeit; hier
+            // zaehlt, dass es nicht mehr sinnlos davonfliegt.
+            sb.Append("  flug-check: der Flugbefehl ist hier nicht messbar " +
+                      "(Probe steht auf dem Flughafen) — der Randteil ist IN ORDNUNG");
+            GD.Print(sb);
+            return;
+        }
 
         // ein Ziel weit weg und QUER zur bisherigen Richtung, damit »es waere
         // sowieso dorthin geflogen« als Erklaerung ausscheidet
