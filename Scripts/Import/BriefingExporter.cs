@@ -34,8 +34,13 @@ using System.Text;
 /// <para>The titles the file carries are just "Mission 1" … "Mission 33"; the
 /// mission's real name comes from the map, and campaign.json already has it.</para>
 ///
-/// <para>BRIEFG.DAT — 350,502 bytes of palette indices that go with these — is a
-/// separate question and is not read here.</para>
+/// <para>BRIEFG.DAT — 350,502 bytes of palette indices that go with these — is
+/// read here too: the first 307,200 are the 640x480 backdrop
+/// (<see cref="WriteBackdrop"/>), and the 43,302 that follow are a bank of 29
+/// pictures whose sizes live in the loader rather than in the file
+/// (<see cref="Bank"/>). Nine of them are the game's emblem
+/// (<see cref="WriteEmblem"/>); the big watermark behind the text is a file of
+/// its own, SYMBOL.DAT (<see cref="WriteWatermark"/>).</para>
 /// </summary>
 public sealed class BriefingExporter
 {
@@ -169,6 +174,220 @@ public sealed class BriefingExporter
             $"\"w\":{RadarW},\"h\":{RadarH},\"x\":{RadarX},\"y\":{RadarY}}}",
             new UTF8Encoding(false));
         say?.Invoke($"Radarbilder: {groups} Missionen mit je {RadarFrames} Bildern ({frames} Dateien)");
+    }
+
+    // ---- DAS EMBLEM VON AKTE EUROPA -----------------------------------------
+
+    /// <summary>
+    /// <b>DIE BILDBANK IM SCHWANZ VON BRIEFG.DAT — 29 Bilder, keine Kopfdaten.</b>
+    ///
+    /// <para>Die 43.302 Byte hinter dem 640×480-Hintergrund waren monatelang
+    /// »eine Bank mit Kopfdaten«. Sie hat keine. <b>Die Gliederung steht im
+    /// Maschinencode</b>, nicht in der Datei: der Lader schreibt bei
+    /// <c>0x45BE6C..0x45C04E</c> Breite und Höhe von 29 Einträgen von Hand in
+    /// eine Tabelle bei <c>[ebx+0x8C3404]</c> (Eintrag i: Breite auf +8i, Höhe
+    /// auf +8i+2, Zeiger auf +8i+4), und die Schleife bei <c>0x45C05F</c>
+    /// rechnet die Zeiger nur noch fort:</para>
+    ///
+    /// <code>
+    ///   Zeiger[i] = Zeiger[i-1] + Breite[i-1] * Höhe[i-1]
+    /// </code>
+    ///
+    /// <para>Eintrag 0 ist der Hintergrund selbst (640×480 auf Dateianfang), die
+    /// 29 anderen liegen lückenlos dahinter. <b>Die Probe: die Summe ihrer
+    /// Flächen ist 43.302 — genau der Schwanz.</b> Kein Kopf, keine Packung,
+    /// kein Rest. Deshalb zerfiel jede geratene Breite: die Bilder sind
+    /// verschieden breit und stehen ohne Trennzeichen aneinander.</para>
+    ///
+    /// <para>⚠ <b>In BEIDEN GAME.EXE gegengeprüft</b> (die Datenadressen
+    /// unterscheiden sich — 0x8C3404 gegen 0x8C2464 —, die Tabelle ist
+    /// zeichengleich): 29 Einträge, Summe 43.302 in beiden.</para>
+    ///
+    /// <para>Was drinsteht, Eintrag für Eintrag: 1–6 sind sechs 49×15-Streifen,
+    /// 7–10 vier 25×28, 11–12 zwei 63×28, <b>13–16 die vier Wettertafeln</b>
+    /// (SKY:CLOUDED, OVERCAST …, die alte Fehlspur), 17–18 zwei 22×13, 19–20
+    /// zwei Winzlinge von 6×2 — und <b>21–29 die neun Bilder des Emblems</b>.</para>
+    /// </summary>
+    public static readonly (int W, int H)[] Bank =
+    {
+        (49, 15), (49, 15), (49, 15), (49, 15), (49, 15), (49, 15),   //  1..6
+        (25, 28), (25, 28), (25, 28), (25, 28),                       //  7..10
+        (63, 28), (63, 28),                                           // 11..12
+        (53, 54), (53, 54), (53, 54), (53, 54),                       // 13..16  Wettertafeln
+        (22, 13), (22, 13),                                           // 17..18
+        (6, 2), (6, 2),                                               // 19..20
+        (57, 40), (57, 40), (57, 40), (57, 40), (57, 40),             // 21..25  EMBLEM
+        (57, 40), (57, 40), (57, 40), (57, 40),                       // 26..29  EMBLEM
+    };
+
+    /// <summary>Der Versatz von Eintrag <paramref name="index"/> (1-basiert wie
+    /// im Spiel) in BRIEFG.DAT. Eintrag 0 ist der Hintergrund auf 0.</summary>
+    public static int BankOffset(int index)
+    {
+        int at = BackdropW * BackdropH;
+        for (int i = 1; i < index && i <= Bank.Length; i++) at += Bank[i - 1].W * Bank[i - 1].H;
+        return at;
+    }
+
+    /// <summary>Die Summe aller 29 Flächen — muss 43.302 sein, also genau der
+    /// Schwanz von BRIEFG.DAT. Der Prüfstand rechnet das nach.</summary>
+    public static int BankBytes()
+    {
+        int n = 0;
+        foreach (var (w, h) in Bank) n += w * h;
+        return n;
+    }
+
+    /// <summary>Das Emblem in den zwei Nischen: Bank-Einträge <b>21..29</b>,
+    /// je <b>57×40</b>. Die Blitstelle <c>@0x4864DE</c> / <c>@0x48652D</c>
+    /// schreibt sie auf <b>(285,432)</b> und <b>(575,432)</b>.
+    ///
+    /// <para>⚠ Das Bild ist 57×40, die Markierungsfläche im Hintergrundbild nur
+    /// 55×38. Das Original zeichnet also <b>zwei Spalten und zwei Zeilen über
+    /// die Nische hinaus</b>; nachgemessen fällt der Überstand rechts auf
+    /// Palettenindex 47 (fast schwarz) und unten auf den Rahmen — er sieht man
+    /// nicht. Das ist so gemessen und nicht zurechtgeschnitten.</para></summary>
+    public const int EmblemFirst = 21, EmblemFrames = 9, EmblemW = 57, EmblemH = 40;
+    public const int EmblemLX = 285, EmblemRX = 575, EmblemY = 432;
+
+    /// <summary>
+    /// <b>WELCHES DER NEUN BILDER GERADE STEHT</b> — die Rechnung des Originals,
+    /// Befehl für Befehl von <c>@0x4864BC</c> (links) und <c>@0x486504</c>
+    /// (rechts) abgelesen:
+    ///
+    /// <code>
+    ///   links :  ecx = zaehler &amp; 0x0f ;  eax = |ecx - 8| ;  Bild = eax + 0x15
+    ///   rechts:  eax = (zaehler + 8) &amp; 0x0f ; eax = |eax - 8| ; Bild = eax + 0x15
+    /// </code>
+    ///
+    /// <para>Der Betrag macht das <b>Ping-Pong</b>: über 16 Zählerschritte läuft
+    /// die Bildnummer 29,28,…,21,22,…,28 — der Schimmer wandert nach links und
+    /// wieder zurück.</para>
+    ///
+    /// <para>Und die rechte Nische ist das <b>exakte Spiegelbild</b> der linken.
+    /// Ausgerechnet über alle 16 Stände:</para>
+    /// <code>
+    ///   links   8 7 6 5 4 3 2 1 0 1 2 3 4 5 6 7
+    ///   rechts  0 1 2 3 4 5 6 7 8 7 6 5 4 3 2 1
+    /// </code>
+    /// <para>— die <b>Summe ist überall 8</b>. ⚠ »Um 8 versetzt« wäre zu grob
+    /// gesagt und stand hier zuerst falsch: an den Ständen 4 und 12 steht in
+    /// beiden Nischen dasselbe Bild, die zwei Bahnen kreuzen sich in der Mitte.
+    /// Der Prüfstand <c>--emblem-check</c> misst die Spiegelsumme, weil nur die
+    /// ausnahmslos gilt.</para>
+    ///
+    /// <para>Rückgabe ist 0..8, also der Bildindex in unserem PNG-Satz
+    /// (Bank-Eintrag 21 + Rückgabe).</para></summary>
+    public static int NicheFrame(int counter, bool right)
+    {
+        int c = right ? (counter + 8) & 0x0f : counter & 0x0f;
+        return System.Math.Abs(c - 8);
+    }
+
+    /// <summary>
+    /// <b>DAS WASSERZEICHEN IST EINE EIGENE DATEI: SYMBOL.DAT.</b>
+    ///
+    /// <para>748.800 Byte, und sie teilt sich ohne Rest: <b>9 Bilder von
+    /// 320×260</b>. Dass das die richtige Teilung ist, sagt der Lader selbst —
+    /// <c>@0x45C110</c> öffnet SYMBOL.DAT und liest <b>260 Zeilen zu je 320
+    /// Byte</b> in den Hintergrundpuffer auf <c>y+0x4F</c>, <c>x+0x128</c>, also
+    /// auf <b>(296,79)</b>. Das ist Punkt für Punkt die Textplatte.</para>
+    ///
+    /// <para>Und der Zeichner <c>@0x486549</c> holt die anderen acht nach: bei
+    /// Zählerstand <b>10..18</b> springt er in der Datei auf
+    /// <c>(zaehler-10) * 325 * 256</c> — und 325·256 sind 83.200, also
+    /// 320·260 — und blittet dasselbe Rechteck neu. <b>Das Wasserzeichen dreht
+    /// sich einmal um die senkrechte Achse</b> (Bild 4 ist die Kante: nur 13
+    /// Spalten belegt gegen 232 bei Bild 0) und bleibt dann auf Bild 8 stehen.
+    /// Ausserhalb von 10..18 wird es nicht angefasst.</para>
+    ///
+    /// <para>⚠ 260 Zeilen, die Platte ist 240 hoch: die letzten 20 Zeilen laufen
+    /// unter die Platte. Nachgemessen ist der Hintergrund dort ohnehin
+    /// Palettenindex 47 und die Bilder sind dort leer — der Überlauf ist
+    /// unsichtbar, aber er ist echt und wird nicht abgeschnitten.</para></summary>
+    public const int MarkW = 320, MarkH = 260, MarkFrames = 9, MarkX = 296, MarkY = 79;
+
+    /// <summary>Der Zählerbereich, in dem das Original das Wasserzeichen
+    /// nachzieht — <c>cmp ax,0x0a / jb</c> und <c>cmp ax,0x13 / jae</c>
+    /// @0x486550. Gibt 0..8 zurück oder −1 für »nichts zu tun«.</summary>
+    public static int MarkFrame(int counter) =>
+        counter >= 10 && counter < 19 ? counter - 10 : -1;
+
+    /// <summary>Wie viele Nischenbilder geschrieben wurden.</summary>
+    public int Emblems;
+
+    /// <summary>Wie viele Wasserzeichenbilder geschrieben wurden.</summary>
+    public int Marks;
+
+    /// <summary>Die neun Nischenbilder aus BRIEFG.DAT nach
+    /// <c>UI/emblem/niche/f0..f8.png</c>.</summary>
+    public void WriteEmblem(byte[] dat, PalFile pal, Action<string>? say = null)
+    {
+        if (_ui.Length == 0) return;
+        int need = BankOffset(EmblemFirst + EmblemFrames);
+        if (dat.Length < need)
+        {
+            say?.Invoke($"BRIEFG.DAT zu kurz fuer das Emblem ({dat.Length} < {need})");
+            return;
+        }
+        string dir = _ui + "/emblem/niche";
+        Directory.CreateDirectory(dir);
+        for (int f = 0; f < EmblemFrames; f++)
+        {
+            int at = BankOffset(EmblemFirst + f);
+            var img = Godot.Image.CreateEmpty(EmblemW, EmblemH, false, Godot.Image.Format.Rgba8);
+            for (int y = 0; y < EmblemH; y++)
+                for (int x = 0; x < EmblemW; x++)
+                {
+                    byte v = dat[at + y * EmblemW + x];
+                    img.SetPixel(x, y, Godot.Color.Color8(pal.R[v], pal.G[v], pal.B[v], 255));
+                }
+            img.SavePng($"{dir}/f{f}.png");
+            Emblems++;
+        }
+        say?.Invoke($"Emblem (Nischen): {Emblems} Bilder {EmblemW}x{EmblemH} " +
+                    $"aus BRIEFG.DAT ab Versatz {BankOffset(EmblemFirst)}");
+    }
+
+    /// <summary>Die neun Wasserzeichenbilder aus SYMBOL.DAT nach
+    /// <c>UI/emblem/mark/f0..f8.png</c>, dazu <c>emblem_index.json</c>.</summary>
+    public void WriteWatermark(byte[] sym, PalFile pal, Action<string>? say = null)
+    {
+        if (_ui.Length == 0) return;
+        int frame = MarkW * MarkH;
+        if (sym.Length < frame * MarkFrames)
+        {
+            say?.Invoke($"SYMBOL.DAT zu kurz ({sym.Length} < {frame * MarkFrames})");
+            return;
+        }
+        string dir = _ui + "/emblem/mark";
+        Directory.CreateDirectory(dir);
+        for (int f = 0; f < MarkFrames; f++)
+        {
+            int at = f * frame;
+            var img = Godot.Image.CreateEmpty(MarkW, MarkH, false, Godot.Image.Format.Rgba8);
+            for (int y = 0; y < MarkH; y++)
+                for (int x = 0; x < MarkW; x++)
+                {
+                    byte v = sym[at + y * MarkW + x];
+                    img.SetPixel(x, y, Godot.Color.Color8(pal.R[v], pal.G[v], pal.B[v], 255));
+                }
+            img.SavePng($"{dir}/f{f}.png");
+            Marks++;
+        }
+        File.WriteAllText($"{_ui}/emblem/emblem_index.json",
+            "{\"_note\":\"Das Emblem von Akte Europa. Nischen: BRIEFG.DAT-Bank Eintraege 21..29, " +
+            "je 57x40 - die Groessentabelle der 29 Eintraege steht im Lader @0x45BE6C..0x45C04E, " +
+            "ihre Flaechensumme ist 43302 = der Schwanz der Datei. Wasserzeichen: SYMBOL.DAT, " +
+            "9 Bilder 320x260, Lader @0x45C110 blittet 260 Zeilen zu 320 Byte auf (296,79), " +
+            "Zeichner @0x486549 zieht bei Zaehlerstand 10..18 die uebrigen nach.\"," +
+            $"\"niche\":{{\"frames\":{EmblemFrames},\"w\":{EmblemW},\"h\":{EmblemH}," +
+            $"\"left\":{EmblemLX},\"right\":{EmblemRX},\"y\":{EmblemY}," +
+            "\"phase\":\"links |c&15-8|+21, rechts |((c+8)&15)-8|+21 - @0x4864BC / @0x486504\"}," +
+            $"\"mark\":{{\"frames\":{MarkFrames},\"w\":{MarkW},\"h\":{MarkH}," +
+            $"\"x\":{MarkX},\"y\":{MarkY},\"window\":[10,18]}}}}",
+            new UTF8Encoding(false));
+        say?.Invoke($"Emblem (Wasserzeichen): {Marks} Bilder {MarkW}x{MarkH} aus SYMBOL.DAT");
     }
 
     /// <summary>One briefing: the mission it belongs to, its title and the

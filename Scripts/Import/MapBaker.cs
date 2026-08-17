@@ -248,6 +248,76 @@ public sealed class MapBaker
         return raus;
     }
 
+    /// <summary>
+    /// <b>AB WANN RAGT EIN OBJEKT AUF</b> — also ab wann es eine Einheit
+    /// verdecken kann und darum nicht mehr in den Boden gebacken werden darf.
+    ///
+    /// <para><b>Gemessen</b> mit <see cref="ObjectHeights"/> über alle 36
+    /// Karten, 13.491 verschiedene Objektbilder: bei <b>20 px</b> — genau der
+    /// Zellhöhe <see cref="TileH"/> — sitzen <b>7228 Bilder auf 40.582
+    /// Zellen</b>, der mit Abstand grösste Haufen. Alles darunter ist flaches
+    /// Bodendetail (1..19 px, zusammen 181 Bilder, mit mehreren Lücken).</para>
+    ///
+    /// <para>⚠ <b>Anders als bei den Gebäudekacheln gibt es oben KEINE
+    /// Lücke</b>: die Verteilung läuft von 20 bis 70 px durch. Ein »gemessener
+    /// Sprung« wie bei <c>MapEntityLayer.FlachBisPx</c> ist hier also nicht zu
+    /// haben, und das gehört gesagt statt verschwiegen.</para>
+    ///
+    /// <para><b>Warum trotzdem 25 und nicht 20:</b> 21..25 px sind ein Überstand
+    /// von einem bis fünf Bildpunkten — damit lässt sich keine Einheit
+    /// verdecken, es kostet aber 3.300 Zellen im lebenden Durchgang. Und 25 ist
+    /// die Zahl, die für die GEBÄUDEkacheln bereits gemessen ist
+    /// (<c>FlachBisPx</c>); eine Regel für beide ist besser als zwei
+    /// Zahlen für dieselbe Frage. ⚠ Insofern ist die 25 hier <b>übernommen</b>,
+    /// nicht neu gemessen.</para>
+    ///
+    /// <para>Damit gehen <b>79.925</b> von 125.116 Objektzellen in die zweite
+    /// Ebene, <b>45.191</b> bleiben im Boden.</para></summary>
+    public const int RagtAbPx = 25;
+
+    /// <summary>Die zweite Ebene: nur die aufragenden Objekte, alles andere
+    /// durchsichtig. <c>null</c>, solange keines vorkam.</summary>
+    private byte[]? _objects;
+
+    /// <summary>Wo die aufragenden Objekte in der zweiten Ebene liegen — je
+    /// Eintrag die Zelle und das Rechteck im Bild. Der Zeichner braucht beides:
+    /// die Zelle für das Zeilenfach, das Rechteck zum Ausschneiden.</summary>
+    public readonly List<(int Col, int Row, int X, int Y, int W, int H)> Objects = new();
+
+    /// <summary>Die zweite Ebene als Bild, oder <c>null</c>, wenn kein Objekt
+    /// aufragte. ⚠ Erst nach <see cref="Bake"/> gefüllt.</summary>
+    public Image? ObjectLayer()
+        => _objects == null ? null
+         : Image.CreateFromData(PixelW, PixelH, false, Image.Format.Rgba8, _objects);
+
+    /// <summary>Wie <see cref="Blit"/>, aber auf eine übergebene Leinwand — und
+    /// ⚠ mit DURCHSICHTIGKEIT: die zweite Ebene liegt über dem Kartenbild, ein
+    /// undurchsichtiger Rand würde den Boden ringsum ausstanzen.</summary>
+    private void BlitTo(byte[] dst, Sprite? s, int col, int row, int elev)
+    {
+        if (s == null) return;
+        int sx = col * TileW;
+        int sy = OriginY + row * TileH - elev * ElevStep + BlitAnchor + s.YOff;
+        for (int y = 0; y < s.H; y++)
+        {
+            int dy = sy + y;
+            if (dy < 0 || dy >= PixelH) continue;
+            int srcRow = y * s.W * 4;
+            int dstRow = dy * PixelW * 4;
+            for (int x = 0; x < s.W; x++)
+            {
+                if (s.Rgba[srcRow + x * 4 + 3] == 0) continue;
+                int dx = sx + x;
+                if (dx < 0 || dx >= PixelW) continue;
+                int d = dstRow + dx * 4, o = srcRow + x * 4;
+                dst[d] = s.Rgba[o];
+                dst[d + 1] = s.Rgba[o + 1];
+                dst[d + 2] = s.Rgba[o + 2];
+                dst[d + 3] = 255;
+            }
+        }
+    }
+
     private void Blit(Sprite? s, int col, int row, int elev)
     {
         if (s == null) return;
@@ -356,6 +426,20 @@ public sealed class MapBaker
 
         // pass C — objects, back to front. Buildings are left out: they are
         // drawn live so they can fall down. See BuildingCells.
+        //
+        // ⚠⚠ 18.08.2026 — UND AUFRAGENDE OBJEKTE EBENSO. Gemeldet: »im Original
+        // verdecken z. B. auch Baeume Einheiten, bei uns nicht«. Der Grund stand
+        // genau hier: ein eingebackener Baum liegt UNTER allem, was danach
+        // gezeichnet wird, und kann darum nichts verdecken — im Gegensatz zum
+        // Gebaeude, das seit jeher ausgenommen ist.
+        //
+        // Aufragende Objekte kommen jetzt in eine ZWEITE Ebene mit
+        // Durchsichtigkeit (<see cref="ObjectLayer"/>), und der Zeichner setzt
+        // sie im Zeilenfach zwischen die Einheiten — dieselbe Loesung wie bei
+        // den Gebaeudekacheln (dort: flach in den Boden, Aufragendes ins Fach).
+        //
+        // Die Schwelle steht bei <see cref="RagtAbPx"/> und ist dort begruendet.
+        Objects.Clear();
         var isBuilding = BuildingCells(code);
         if (objects)
             for (int r = 0; r < h; r++)
@@ -364,7 +448,16 @@ public sealed class MapBaker
                     int i = r * w + c;
                     if (code[i] < GroundMax) continue;
                     if (isBuilding[i]) { MarkSkipped(ObjectSprite(code[i]), c, r, elev[i]); continue; }
-                    Blit(ObjectSprite(code[i]), c, r, elev[i]);
+                    var sp = ObjectSprite(code[i]);
+                    if (sp != null && TileH - (BlitAnchor + sp.YOff) > RagtAbPx)
+                    {
+                        BlitTo(_objects ??= new byte[PixelW * PixelH * 4], sp, c, r, elev[i]);
+                        Objects.Add((c, r, c * TileW,
+                                     OriginY + r * TileH - elev[i] * ElevStep + BlitAnchor + sp.YOff,
+                                     sp.W, sp.H));
+                        continue;
+                    }
+                    Blit(sp, c, r, elev[i]);
                 }
 
         return Image.CreateFromData(PixelW, PixelH, false, Image.Format.Rgba8, _canvas);

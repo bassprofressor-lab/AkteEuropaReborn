@@ -1186,6 +1186,8 @@ public partial class MapViewer : Node2D
             else if (a == "--power-check") _powerCheckFlag = true;
             else if (a == "--radar-check") _radarCheckFlag = true;
             else if (a == "--ausbau-check") _ausbauCheckFlag = true;
+            else if (a == "--keine-objekt-verdeckung")
+                MapEntityLayer.NoObjectOcclusion = true;
             else if (a == "--mechaniker-check") _mechCheckFlag = true;
             else if (a == "--flug-check") _flugCheckFlag = true;
             else if (a == "--schiff-waffe-check") _schiffCheckFlag = true;

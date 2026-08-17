@@ -256,6 +256,17 @@ public sealed class ContentBuilder
                 byte[]? radar = mapDat != null ? File.ReadAllBytes(mapDat) : Asset("MAP.DAT");
                 if (radar != null && bgPal != null)
                     br.WriteRadar(radar, PalFile.Load(bgPal), Say);
+
+                // ⚠ 18.08.2026 — DAS EMBLEM VON AKTE EUROPA, beide Darstellungen.
+                // Die neun Nischenbilder stecken im Schwanz von BRIEFG.DAT (die
+                // Bank ohne Kopfdaten, siehe BriefingExporter.Bank), das grosse
+                // Wasserzeichen ist SYMBOL.DAT — 748.800 Byte = 9 x 320 x 260,
+                // und der Lader @0x45C110 liest genau das auf die Textplatte.
+                if (dat != null && bgPal != null) br.WriteEmblem(dat, PalFile.Load(bgPal), Say);
+                string? symDat = Find("SYMBOL.DAT") ?? Find("DATA/SYMBOL.DAT");
+                byte[]? sym = symDat != null ? File.ReadAllBytes(symDat) : Asset("SYMBOL.DAT");
+                if (sym != null && bgPal != null)
+                    br.WriteWatermark(sym, PalFile.Load(bgPal), Say);
             }
         }
         catch (Exception e) { Say("Briefings: " + e.Message); }
@@ -700,6 +711,60 @@ public sealed class ContentBuilder
     /// dieselbe Verteilung für die OBJEKTE aus, über alle Karten aller
     /// Tilesets — damit die Schwelle wieder aus den Daten kommt und nicht aus
     /// dem Gefühl.</para></summary>
+    /// <summary>
+    /// <b>Nur die KARTENBILDER neu backen</b> — Bild, zweite Ebene und Meta.
+    ///
+    /// <para>Nötig geworden am 18.08.2026: aufragende Objekte gehören seither
+    /// nicht mehr ins Kartenbild, sondern in eine zweite Ebene
+    /// (<c>&lt;karte&gt;.objects.png</c>), damit ein Baum eine Einheit verdecken
+    /// kann. Eine Karte aus einem älteren Import hat diese Datei nicht; der
+    /// Zeichner kommt damit zurecht und verdeckt dort eben nichts.</para>
+    ///
+    /// <para>Ein VOLLER Import wäre dafür Minuten für eine Sache, die die
+    /// Spielstände, Tabellen, Klänge und Bilder gar nicht berührt — deshalb
+    /// dieser eigene Weg, wie ihn <see cref="ReexportEntities"/> und die
+    /// anderen auch gehen.</para></summary>
+    public bool ReexportMaps(Action<string>? progress = null)
+    {
+        void Say(string s) { GD.Print("reexport-maps: " + s); progress?.Invoke(s); }
+        Directory.CreateDirectory($"{_dst}/Maps");
+
+        int ok = 0, failed = 0;
+        long mitEbene = 0, objZellen = 0;
+        void One(string path, string outName)
+        {
+            if (!File.Exists(path)) return;
+            try
+            {
+                var m = CwmFile.Load(path);
+                string? cwp = Find($"DATA/{m.Tileset:00}.CWP");
+                string? pal = Find($"DATA/{m.Tileset:00}.PAL");
+                if (cwp == null || pal == null) { failed++; Say($"{outName}: Tileset {m.Tileset:00} fehlt"); return; }
+                var img = ExportMap(m, CwpFile.Load(cwp), PalFile.Load(pal), $"{_dst}/Maps",
+                                    outName, out var baker, out _);
+                ok++;
+                if (baker.Objects.Count > 0) { mitEbene++; objZellen += baker.Objects.Count; }
+                Say($"{outName}: {img.GetWidth()}x{img.GetHeight()}, " +
+                    $"{baker.Objects.Count} aufragende Objekte in die zweite Ebene");
+            }
+            catch (Exception e) { failed++; Say($"{outName}: {e.Message}"); }
+        }
+
+        foreach (var (stem, path) in Levels("*.CWM")) One(path, "map_" + stem);
+        foreach (var (stem, name) in DmStems)
+        {
+            string? p = Find($"LEVELS/{stem}.DM");
+            if (p != null) One(p, "map_" + name);
+        }
+
+        // ⚠ Regel 33: eine Zahl, die belegt, dass der Lauf etwas getan hat.
+        Say(ok == 0
+            ? "KEINE Karte gefunden — zeigt der Pfad auf die Installation oder die CDs?"
+            : $"{ok} Karten neu gebacken, {failed} Fehler; {mitEbene} davon mit zweiter Ebene, "
+              + $"{objZellen} aufragende Objekte insgesamt");
+        return ok > 0;
+    }
+
     public bool ReportObjectHeights(Action<string>? progress = null)
     {
         void Say(string s) { GD.Print("objekt-hoehen: " + s); progress?.Invoke(s); }
@@ -972,6 +1037,13 @@ public sealed class ContentBuilder
         baker = new MapBaker(m, cwp, pal);
         var img = baker.Bake();
         img.SavePng($"{mapsDir}/{outName}.png");
+        // ⚠ 18.08.2026 — DIE ZWEITE EBENE: nur die aufragenden Objekte, alles
+        // andere durchsichtig. Ohne sie koennen Baeume keine Einheit verdecken
+        // (siehe MapBaker.RagtAbPx). Fehlt die Datei, faellt der Zeichner auf
+        // den alten Zustand zurueck — eine Karte aus einem aelteren Import
+        // bleibt also spielbar, sie verdeckt nur nichts.
+        var ol = baker.ObjectLayer();
+        if (ol != null) ol.SavePng($"{mapsDir}/{outName}.objects.png");
         File.WriteAllText($"{mapsDir}/{outName}.json", MapMeta(m, baker), new UTF8Encoding(false));
         // the game state: units, buildings, markers, rails, zones. Without
         // it a map draws but nothing stands on it — and Content.Ready looks
@@ -1092,6 +1164,26 @@ public sealed class ContentBuilder
         // ERZEUGTEN Karte, die kein Missionsskript hat; Simulation.NavGrid liest
         // sie hier wieder heraus, damit CellOnDeposit @0x4205C0 etwas zu fragen
         // hat.
+        // ⚠ Die AUFRAGENDEN OBJEKTE: je Eintrag die Zelle (fuer das Zeilenfach)
+        // und das Rechteck in der zweiten Ebene (zum Ausschneiden). Der
+        // Zeichner braucht beides; sortiert wird bei ihm, nicht hier.
+        if (b.Objects.Count > 0)
+        {
+            sb.Append("\"objects_note\":\"aufragende Objekte (> MapBaker.RagtAbPx ueber der ");
+            sb.Append("Zellunterkante). Sie stehen NICHT im Kartenbild, sondern in ");
+            sb.Append("<karte>.objects.png, und werden im Zeilenfach zwischen die Einheiten ");
+            sb.Append("gezeichnet — sonst koennte ein Baum nichts verdecken.\",");
+            sb.Append("\"objects\":[");
+            for (int i = 0; i < b.Objects.Count; i++)
+            {
+                var o = b.Objects[i];
+                if (i > 0) sb.Append(',');
+                sb.Append($"{{\"col\":{o.Col},\"row\":{o.Row},\"x\":{o.X},\"y\":{o.Y},");
+                sb.Append($"\"w\":{o.W},\"h\":{o.H}}}");
+            }
+            sb.Append("],");
+        }
+
         if (m.Terra.Count > 0)
         {
             sb.Append("\"terra_source\":\"Editor/MapDeposits — UNSERE ZUTAT; im Original ");

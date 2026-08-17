@@ -1468,6 +1468,7 @@ public partial class MapEntityLayer : Node2D
         _entities.Clear();
         _ammoCap.Clear();
         LoadPatterns(meta);
+        LoadObjectLayer(meta, name);
         _markers.Clear();
         _targetSlots.Clear();
         _selected = -1;
@@ -16819,6 +16820,11 @@ public partial class MapEntityLayer : Node2D
         // ihr eine zweite Liste mitzugeben ist derselbe Handgriff.
         BuildUnitDrawOrder();
         int ui = 0;
+        // ⚠ 18.08.2026 — die aufragenden Kartenobjekte laufen im selben
+        // Fachwerk mit, sonst koennte ein Baum keine Einheit verdecken.
+        // Siehe Rendering/MapObjects.cs.
+        int oi = 0;
+        ObjectsDrawn = 0;
         if (_drawSprites && Patterns != null)
             foreach (var b in BuildingsBackToFront())
             {
@@ -16836,6 +16842,7 @@ public partial class MapEntityLayer : Node2D
                 // das Gebäude bekommt (@0x42FDB8). Netto: Einheit 0, Gleis +2,
                 // Gebäude +3 bzw. +tür0.row. Die Schwellen zu vermischen wäre
                 // der Fehler, den Regel 28 beschreibt.
+                DrawObjectsUpTo(b.Row + BuildingDrawRowFor(b), ref oi);
                 DrawUnitsUpTo(b.Row + BuildingDrawRowFor(b), ref ui);
                 DrawBuildingBody(b);
                 // ⚠ Die TÜREN gehören zum Gebäude und damit in SEIN Fach —
@@ -16846,6 +16853,7 @@ public partial class MapEntityLayer : Node2D
                 if (!TuerenSpaet) DrawBuildingDoors(b);
             }
         DrawRailUpTo(int.MaxValue, ref at);
+        DrawObjectsUpTo(int.MaxValue, ref oi);
         DrawUnitsUpTo(int.MaxValue, ref ui);
     }
 

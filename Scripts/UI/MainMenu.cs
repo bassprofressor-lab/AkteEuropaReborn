@@ -836,6 +836,17 @@ public partial class MainMenu : Control
                 GetTree().Quit(ok ? 0 : 1);
                 return;
             }
+            else if (a.StartsWith("--reexport-maps="))
+            {
+                // nur die Kartenbilder samt zweiter Ebene — siehe
+                // ContentBuilder.ReexportMaps
+                string[] dirs = a["--reexport-maps=".Length..]
+                    .Split(';', System.StringSplitOptions.RemoveEmptyEntries);
+                var src = Core.ContentSources.FromFolders(dirs);
+                if (src == null) { GD.PrintErr("reexport: keiner der Ordner existiert"); GetTree().Quit(2); return; }
+                GetTree().Quit(new Import.ContentBuilder(src).ReexportMaps() ? 0 : 1);
+                return;
+            }
             else if (a.StartsWith("--objekt-hoehen="))
             {
                 // ⚠ KEIN Export, sondern eine MESSUNG: wie weit ragen die
