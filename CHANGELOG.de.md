@@ -336,6 +336,20 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Die anderen drei Bauaufträge brauchen einen Platzierungsmodus — siehe die
   nächste Zeile.
 
+- ⭐ **Fabriken haben endlich ein Fenster — und zwei Knöpfe darin.**
+  **Lagerausbau** und **Produktionserweiterung** gab es seit langem, sie lagen
+  aber nur auf den Tasten V und C und waren damit praktisch nicht vorhanden.
+  Beim Einbau der Knöpfe kam heraus, dass das Fabrikfenster **überhaupt nie
+  aufging**: eine Fabrik zählte nicht als bauendes Gebäude. Jetzt öffnet es
+  sich, zeigt ihr Lager mit **Platz und Tempo** und sagt, dass eine Fabrik
+  Teile herstellt und keine Entwürfe. Der Preis steht im Knopf, denn er wächst
+  mit jedem Ausbau um die Hälfte.
+  Gemessen über den Knopfweg: Konto −$20, Platz **90 → 100**, Preis
+  **$20 → $30** — und der Preis der *anderen* Ausbaustufe bleibt bei $50, denn
+  es sind zwei getrennte Felder.
+  ⚠ Nebenher beantwortet: eine Produktionserweiterung hebt **nicht** die
+  Nennleistung der Anlage, sondern ihr Tempo. Der Strombedarf bleibt gleich.
+
 - ⭐ **Depot, Mine und Generator lassen sich bauen.** Damit sind alle vier
   Bauaufträge des Originals da. Ein **Gebäude-Techniker** kann »Depot bauen«
   und »Mine bauen«, ein **Generatorenbauer** »Generator bauen«. Der Knopf

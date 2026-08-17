@@ -111,7 +111,17 @@ public partial class MapEntityLayer
     ///
     /// <para>⚠ Sollte sich zeigen, dass 72/74 in unseren Entwürfen NICHT im
     /// Waffenfeld stehen, sagt <c>--bau-check</c> das in seiner ersten Zeile
-    /// (»kein Entwurf mit Bauteil …«) — statt still gar nichts zu tun.</para>
+    /// (»kein Entwurf mit Bauteil …«) — statt still gar nichts zu tun.
+    /// Gemessen ist es: Entwurf <b>70 »Building Const.«</b> trägt 72, Entwurf
+    /// <b>71 »M-Generator«</b> trägt 74.</para>
+    ///
+    /// <para>⚠ <b>Nicht verwechseln mit dem »BAUTEIL« im Infofeld.</b> Das ist
+    /// <see cref="Entity.Weapon"/>, der <b>Aufsatz</b> aus Satz +0x0C — ein
+    /// Baufahrzeug trägt dort 47 oder 48. Zwei verschiedene Zählungen, und
+    /// beide heissen »Bauteil«: die eine nummeriert den Aufsatz, die andere die
+    /// Ausrüstungsliste (40..88), in der 72, 74 und 75 stehen. Das Bild
+    /// <c>Bug Bilder/bauleiste.png</c> zeigt genau diesen Widerspruch, und er
+    /// ist keiner.</para>
     /// </summary>
     private int BuildPartOf(Entity e)
     {
@@ -521,6 +531,64 @@ public partial class MapEntityLayer
             if (w.Order == order) return BeginPlacement(w.Index, order);
         BuildOrderNote = "keine baufaehige Einheit gewaehlt";
         return false;
+    }
+
+    /// <summary>
+    /// <c>--shot-when=bauleiste</c> / <c>=radarleiste</c> — eine Einheit mit dem
+    /// gefragten Bauteil setzen und wählen, damit die Befehlsleiste mit ihren
+    /// Knöpfen auf ein Bild kommt.
+    ///
+    /// <para>⚠ Ohne diesen Griff zeigt jedes Bild eine leere Karte: auf keiner
+    /// Karte steht ein Gebäude-Techniker oder ein Radar Installer von Haus aus,
+    /// und die Leiste steht nur, wenn eine solche Einheit gewählt ist. Der
+    /// Eingriff steht in der Ausgabe.</para></summary>
+    public Vector2I? OrderBarShotSetup(int part)
+    {
+        LoadDesigns();
+        if (_designs == null || _nav == null) return null;
+        int slot = -1; string nm = "";
+        for (int i = 0; i < _designs.Count; i++)
+            if (_designs[i].Weapon == part)
+            { slot = _designs[i].Slot; nm = _designs[i].Name; break; }
+        if (slot < 0)
+        { GD.Print($"leiste-shot: kein Entwurf mit Bauteil {part}"); return null; }
+
+        int owner = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
+        // neben eine eigene Einheit stellen, damit das Bild nicht ins Leere
+        // blickt — die Gegend ist dann auch aufgedeckt.
+        var wo = new Vector2I(-1, -1);
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != owner) continue;
+            for (int dr = -2; dr <= 2 && wo.X < 0; dr++)
+                for (int dc = -2; dc <= 2; dc++)
+                {
+                    int c = e.Col + dc, r = e.Row + dr;
+                    if (!_nav.InBounds(c, r)) continue;
+                    if (!_nav.IsFree(c, r, Simulation.NavGrid.MoveClass.Vehicle)) continue;
+                    wo = new Vector2I(c, r); break;
+                }
+            if (wo.X >= 0) break;
+        }
+        if (wo.X < 0) { GD.Print("leiste-shot: kein freier Platz"); return null; }
+
+        int satz = SpawnReinforcement(slot % 200, wo.X, wo.Y, owner);
+        if (satz < 0) { GD.Print("leiste-shot: liess sich nicht absetzen"); return null; }
+        // ⚠ Die Falle FF: der Rueckgabewert ist der SATZ, nicht die Listenstelle.
+        int idx = -1;
+        for (int i = _entities.Count - 1; i >= 0; i--)
+            if (_entities[i].Slot == satz && _entities[i].Owner == owner
+                && !_entities[i].IsBuilding && !_entities[i].Dead) { idx = i; break; }
+        if (idx < 0) { GD.Print($"leiste-shot: Satz {satz} nicht wiedergefunden"); return null; }
+
+        _sel.Clear(); _sel.Add(idx); _selected = idx;
+        UpdatePanel();
+        QueueRedraw();
+        GD.Print($"leiste-shot: ⚠ EINGRIFF — \"{nm}\" (Bauteil {part}) auf " +
+                 $"({wo.X},{wo.Y}) gesetzt und gewaehlt; die Leiste zeigt " +
+                 $"{BuildChoicesOfSelection().Count} Bauauftraege" +
+                 (part == RadarKitWeapon ? $" und {RadarChargesOf(idx)} Masten" : ""));
+        return wo;
     }
 
     /// <summary>Eine Zeile über die Bauaufträge — für Prüfstand und Protokoll.</summary>

@@ -155,6 +155,17 @@ public sealed partial class BaseWindow : PanelContainer
     /// Zeile fertig angeschlossen.</summary>
     public Func<(string Name, int Hp, int HpMax, string Status)?>? Head;
 
+    /// <summary>Was die zwei Ausbauten gerade kosten und ob sie überhaupt gehen
+    /// — <c>null</c> blendet beide Knöpfe aus (das gewählte Gebäude ist keine
+    /// Fabrik). ⚠ Der Preis steht IM Knopf, wie beim Verkauf: er wächst mit
+    /// jedem Ausbau um die Hälfte, und das soll man sehen, bevor man drückt.
+    /// </summary>
+    public Func<(int CostStore, int CostProd, bool Ready)?>? UpgradeChoice;
+
+    /// <summary>Ausbau anwerfen — <c>true</c> Lagerausbau, <c>false</c>
+    /// Produktionserweiterung.</summary>
+    public System.Action<bool>? OnUpgrade;
+
     // ---- Bauteile des Fensters ----------------------------------------------
     private readonly Label _title = new();
     private readonly Button _x = new();
@@ -166,6 +177,19 @@ public sealed partial class BaseWindow : PanelContainer
     private readonly Sheet _sheet = new();
     private readonly Label _stock = new();
     private readonly Button _rename = new(), _remove = new(), _make = new(), _design = new();
+
+    /// <summary>Die zwei Fabrikausbauten. ⚠ <b>Sie lagen bis zum 18.08.2026 NUR
+    /// auf den Tasten V und C</b> — und damit war die ganze Mechanik für den
+    /// Spieler nicht vorhanden. Das ist derselbe Fehler wie bei Forschung,
+    /// Reparatur, Depot, Hangar und dem Verkauf; er ist damit der sechste
+    /// Fall, siehe UI/UnitOrderBar.cs.
+    ///
+    /// <para>⚠ <b>Die WÖRTER sind die des Originals</b> (0x501B30 und
+    /// 0x501B40 — dieselben, die das Fabrikfenster als Zustand ausgibt, siehe
+    /// <c>MapEntityLayer.StateName</c>). Unser ist nur die STELLE: ein fünfter
+    /// Reiter wäre eine Erfindung gewesen, denn die vier Reiterwörter sind
+    /// gelesen und ein fünftes gibt es nicht.</para></summary>
+    private readonly Button _expand = new(), _prodUp = new();
     private readonly Preview _preview = new();
     private readonly Label _stats = new();
 
@@ -303,7 +327,8 @@ public sealed partial class BaseWindow : PanelContainer
         left.AddChild(keys);
         foreach (var (b, text) in new[]
                  { (_rename, "Umbenennen"), (_remove, "Entfernen"),
-                   (_make, "Produzieren"), (_design, "Erstellen") })
+                   (_make, "Produzieren"), (_design, "Erstellen"),
+                   (_expand, "Lagerausbau"), (_prodUp, "Produktionserw.") })
         {
             b.Text = text;
             b.FocusMode = FocusModeEnum.None;
@@ -342,6 +367,8 @@ public sealed partial class BaseWindow : PanelContainer
             Refresh();
         };
         _design.Pressed += () => OnDesign?.Invoke();
+        _expand.Pressed += () => { OnUpgrade?.Invoke(true); Refresh(); };
+        _prodUp.Pressed += () => { OnUpgrade?.Invoke(false); Refresh(); };
 
         var right = new VBoxContainer();
         right.AddThemeConstantOverride("separation", 4);
@@ -443,7 +470,15 @@ public sealed partial class BaseWindow : PanelContainer
                  : rows.Count == 0 ? "Das Depot ist leer." : "",
             2 => ResearchNote?.Invoke() ?? "Forschung — noch nicht angeschlossen.",
             3 => RepairNote?.Invoke() ?? "Reparatur — noch nicht angeschlossen.",
-            _ => rows.Count == 0 ? "Nichts zu bauen." : "",
+            // ⚠ Eine FABRIK hat hier nichts stehen, und das ist kein Mangel:
+            // sie stellt Teile her (W/F/S), keine Entwürfe. »Nichts zu bauen«
+            // wäre an dieser Stelle eine Fehlauskunft — sie baut die ganze Zeit.
+            _ => rows.Count == 0
+                 ? (UpgradeChoice?.Invoke() != null
+                    ? "Eine Fabrik stellt TEILE her,\nkeine Entwuerfe.\n\n" +
+                      "Ihr Lager steht oben,\nausbauen kann man sie unten."
+                    : "Nichts zu bauen.")
+                 : "",
         };
         _sheet.Fill(rows);
         // ⚠ 17.08.2026 — die Beschriftung folgt dem Reiter. Ein Knopf, der auf
@@ -470,6 +505,20 @@ public sealed partial class BaseWindow : PanelContainer
             _ => true,
         };
         _design.Disabled = _tab != 1;
+
+        // Die zwei Ausbauten. ⚠ Sie stehen NUR bei einer Fabrik da — ein Knopf,
+        // der bei jedem Gebaeude erscheint und bei den meisten nichts tut, ist
+        // schlimmer als keiner. `Ready` ist falsch, solange das Gebaeude schon
+        // etwas anderes tut (Reparatur, ein laufender Ausbau); dann sind sie
+        // sichtbar, aber gesperrt, damit man sieht, DASS es sie gibt.
+        var up = UpgradeChoice?.Invoke();
+        _expand.Visible = _prodUp.Visible = up != null;
+        if (up != null)
+        {
+            _expand.Text = $"Lagerausbau (${up.Value.CostStore})";
+            _prodUp.Text = $"Produktionserw. (${up.Value.CostProd})";
+            _expand.Disabled = _prodUp.Disabled = !up.Value.Ready;
+        }
 
         string name = _sheet.Selected >= 0 && _sheet.Selected < rows.Count
             ? rows[_sheet.Selected].Name : "";
@@ -511,7 +560,14 @@ public sealed partial class BaseWindow : PanelContainer
         if (tail.StartsWith("$", StringComparison.Ordinal)) return tail;
         int w = Num(tail, 'W'), f = Num(tail, 'F'), s = Num(tail, 'S');
         if (w < 0 && f < 0 && s < 0) return tail;
-        return $"{IconW}{Mathf.Max(0, w)} {IconF}{Mathf.Max(0, f)} {IconS}{Mathf.Max(0, s)}";
+        // ⚠ Was hinter »Platz« steht, bleibt STEHEN. Die drei Sinnbilder sind
+        // die Form des Originals, aber die Fabrik bringt zwei Zahlen mit, die
+        // es dort nicht gibt und die man braucht: der Lagerausbau hebt den
+        // Platz, die Produktionserweiterung das Tempo — ohne sie sähe man nicht,
+        // wofür man bezahlt hat. Ohne diese Zeile fielen sie hier heraus.
+        int extra = tail.IndexOf("Platz", StringComparison.Ordinal);
+        return $"{IconW}{Mathf.Max(0, w)} {IconF}{Mathf.Max(0, f)} {IconS}{Mathf.Max(0, s)}"
+             + (extra >= 0 ? "  " + tail[extra..] : "");
     }
 
     private static int Num(string s, char key)
@@ -606,6 +662,13 @@ public sealed partial class BaseWindow : PanelContainer
                (_sheet.Selected < 0 || _sheet.Selected >= rows.Count
                    ? "-" : $"{_sheet.Selected + 1} \"{rows[_sheet.Selected].Name}\"") +
                $", Bestand \"{_stock.Text}\", Titel \"{_title.Text}\"" +
+               // ⚠ Die zwei Ausbauknoepfe stehen mit in dieser Zeile, weil ein
+               // kopfloser Lauf sonst nicht sagen kann, OB es sie gibt — und
+               // genau das war der Fehler, den sie beheben.
+               ", Ausbau: " + (_expand.Visible
+                   ? $"\"{_expand.Text}\" / \"{_prodUp.Text}\"" +
+                     (_expand.Disabled ? " (gesperrt)" : " (bedienbar)")
+                   : "keine Fabrik gewaehlt") +
                $", Vorschau: {_preview.WatchLine()}";
     }
 

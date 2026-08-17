@@ -426,6 +426,7 @@ public partial class MapViewer : Node2D
         if (_powerCheckFlag) _entities.PowerCheckStart();
         if (_radarCheckFlag) _entities.RadarCheckStart();
         if (_bauCheckFlag) _entities.BauCheckStart(_bauCheckOrder);
+        if (_ausbauCheckFlag) _entities.AusbauCheckStart();
         if (_marketCheck)
         {
             GD.Print(_entities.MarketCheck());
@@ -687,6 +688,9 @@ public partial class MapViewer : Node2D
     /// Auftrag: der zweite Fall duerfte sonst auf dem Zustand des ersten
     /// messen.</summary>
     private int _bauCheckOrder = 5;
+    /// <summary><c>--ausbau-check</c> — tut der Knopf »Lagerausbau« wirklich
+    /// etwas? Siehe Simulation/UpgradeCheck.cs.</summary>
+    private bool _ausbauCheckFlag;
     /// <summary><c>--depot-flow</c> — bestellen, im Depot liegen, aussenden.</summary>
     private bool _depotFlow;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
@@ -1153,6 +1157,7 @@ public partial class MapViewer : Node2D
             else if (a == "--dock-check") _dockCheckFlag = true;
             else if (a == "--power-check") _powerCheckFlag = true;
             else if (a == "--radar-check") _radarCheckFlag = true;
+            else if (a == "--ausbau-check") _ausbauCheckFlag = true;
             else if (a == "--bau-check") { _bauCheckFlag = true; _bauCheckOrder = 5; }
             else if (a.StartsWith("--bau-check="))
             {
@@ -1854,6 +1859,19 @@ public partial class MapViewer : Node2D
                 GD.Print($"MapViewer: --shot-when=markt ausgeloest — Markt auf " +
                          $"({at.Value.X},{at.Value.Y}), Fenster offen");
             }
+            // ⚠ Der Auslöser für die zwei AUSBAUKNÖPFE. Sie stehen nur bei einer
+            // eigenen Fabrik; ohne diesen Griff zeigt jedes Bild ein Fenster
+            // ohne sie und bewiese das Gegenteil von dem, was gemeint ist.
+            else if (_shotWhen == "ausbau")
+            {
+                var at = _entities.FactoryShotSetup();
+                if (at == null) return;
+                _camera.Position = _entities.RailCellPoint(at.Value.X, at.Value.Y);
+                ClampCamera();
+                if (_baseWindow != null) { _baseWindow.Visible = true; _baseWindow.Refresh(); }
+                GD.Print("MapViewer: --shot-when=ausbau ausgeloest — " +
+                         (_baseWindow?.WatchLine() ?? "kein Fenster"));
+            }
             // ⚠ Der Auslöser für die BEFEHLSLEISTE der Einheit. Sie steht nur,
             // wenn etwas Verkäufliches gewählt ist — ohne diesen Griff zeigt
             // jedes Bild eine leere Karte und beweist gar nichts.
@@ -1866,6 +1884,25 @@ public partial class MapViewer : Node2D
                 UpdateUnitOrderBar();
                 GD.Print($"MapViewer: --shot-when=verkauf ausgeloest — Einheit auf " +
                          $"({at.Value.X},{at.Value.Y}), Leiste " +
+                         $"{(_orderBar is { Visible: true } ? "steht" : "STEHT NICHT")}");
+            }
+            // ⚠ Die BEFEHLSLEISTE mit den Bauknoepfen bzw. dem Radarknopf.
+            // Beide brauchen eine Einheit mit dem passenden Bauteil, und die
+            // steht auf keiner Karte von Haus aus — der Ausloeser setzt sie und
+            // sagt es. Zwei Bilder, weil eine Leiste immer nur EINE Einheit
+            // bedient: der Gebaeude-Techniker kann Depot und Mine, der Radar
+            // Installer setzt Masten.
+            else if (_shotWhen is "bauleiste" or "radarleiste")
+            {
+                int teil = _shotWhen == "radarleiste"
+                         ? MapEntityLayer.RadarKitWeapon
+                         : MapEntityLayer.PartBuildingTech;
+                var at = _entities.OrderBarShotSetup(teil);
+                if (at == null) return;
+                _camera.Position = _entities.RailCellPoint(at.Value.X, at.Value.Y);
+                ClampCamera();
+                UpdateUnitOrderBar();
+                GD.Print($"MapViewer: --shot-when={_shotWhen} ausgeloest — Leiste " +
                          $"{(_orderBar is { Visible: true } ? "steht" : "STEHT NICHT")}");
             }
             // ⚠ Das Schiff, das IM DOCK wartet. Ohne diesen Griff zeigt jedes
@@ -2574,6 +2611,13 @@ public partial class MapViewer : Node2D
         _baseWindow.OnResearch = () => _entities.ResearchFromPanel();
         _baseWindow.RepairNote = _entities.RepairNote;
         _baseWindow.OnRepair = () => _entities.RepairFromPanel();
+        // ⚠ 18.08.2026 — DER SECHSTE FALL desselben Fehlers: Lagerausbau und
+        // Produktionserweiterung lagen nur auf den Tasten V und C. Die Mechanik
+        // war seit langem fertig und befehlsgenau gebaut (Lagerplatz +10,
+        // Produktionsgeschwindigkeit +1, jeder Ausbau verteuert NUR seinen
+        // eigenen Preis um die Haelfte) — und fuer den Spieler nicht vorhanden.
+        _baseWindow.UpgradeChoice = () => _entities.UpgradeChoiceOfSelection();
+        _baseWindow.OnUpgrade = lager => _entities.StartUpgrade(lager);
         // ⚠ 16.08.2026 — der DRITTE tote Reiter ist angeschlossen (Fehler D1).
         // Anders als bei Forschung und Reparatur lag hier keine fertige Mechanik
         // auf einer Taste: das Depot gab es gar nicht, fertige Einheiten

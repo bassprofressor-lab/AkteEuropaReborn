@@ -225,7 +225,25 @@ public partial class MapEntityLayer : Node2D
         /// Sekunde neu — siehe Simulation/Power.cs.
         /// <para>⚠ Vorher stand hier »production chance«. Das war nicht falsch,
         /// aber es verbarg, dass die Zahl eine LAUFENDE ist: sie stand bei uns
-        /// seit dem Laden der Karte still, weil niemand sie nachführte.</para></summary>
+        /// seit dem Laden der Karte still, weil niemand sie nachführte.</para>
+        ///
+        /// <para><b>✔ BEANTWORTET 18.08.2026 — nein, eine Ausbaustufe hebt den
+        /// Nennwert NICHT.</b> Die Frage stand seit dem 18.08. offen. Gelesen
+        /// sind jetzt beide Ausbauten, und keiner rührt <c>+0x87A2C4</c> an:
+        /// der <b>Lagerausbau</b> @0x43E0F1 schreibt <c>+0x87A2C8 += 10</c> (der
+        /// Lagerplatz), die <b>Produktionserweiterung</b> @0x43E172 schreibt
+        /// <c>inc byte[+0x87A2C5]</c> — den Index in die Taktzahltafel
+        /// <c>0x4FACA0</c>, also <see cref="ProdSpeed"/>. Den Nennwert schreibt
+        /// im ganzen Programm nur der allgemeine Setzer @0x41F3B9 (Feldnummer
+        /// aus <c>byte[esi−0x15]−2</c>, Sprungtafel 0x41F498), und der gehört
+        /// zum Aufbau, nicht zum Spielverlauf.</para>
+        ///
+        /// <para>⚠ Nebenbefund: die zwei Ausbauten haben <b>getrennte
+        /// Preisfelder</b> — <c>+0x0A</c> (<see cref="CostStore"/>) und
+        /// <c>+0x0C</c> (<see cref="CostProd"/>) —, und jeder Ausbau
+        /// vervielfacht <b>nur seinen eigenen</b> mit 3/2 (@0x43E0FC gegen
+        /// @0x43E178). Wer beide aus einem Feld bezahlen liesse, machte den
+        /// zweiten Ausbau zu teuer.</para></summary>
         public int EffNum = 1, EffDen = 1;
         public int UpgradeStep;             // sec24 +0x06, counts 0..100
         public int Ticks;                   // this building's own tick counter
@@ -10165,8 +10183,55 @@ public partial class MapEntityLayer : Node2D
         QueueRedraw();
     }
 
-    /// <summary>Lagerausbau (key V) or Produktionserweiterung (key C) on the
-    /// selected factories.  Both cost what the factory's own record says and
+    /// <summary>
+    /// Was die zwei Ausbauten am gewählten Gebäude kosten, und ob sie gerade
+    /// gehen — <c>null</c>, wenn keine Fabrik gewählt ist.
+    ///
+    /// <para>⚠ <b>Damit sie überhaupt einen Knopf haben.</b> Bis zum 18.08.2026
+    /// lagen Lagerausbau und Produktionserweiterung NUR auf den Tasten V und C;
+    /// das ist derselbe Fehler wie bei Forschung, Reparatur, Depot, Hangar und
+    /// dem Verkauf und damit der sechste Fall. Siehe UI/BaseWindow.cs.</para>
+    ///
+    /// <para><c>Ready</c> ist falsch, solange das Gebäude etwas anderes tut —
+    /// dann steht der Knopf da und ist gesperrt, statt zu fehlen. Der Preis
+    /// steht IM Knopf, weil er mit jedem Ausbau um die Hälfte wächst
+    /// (@0x43E0FC / @0x43E178).</para></summary>
+    public (int CostStore, int CostProd, bool Ready)? UpgradeChoiceOfSelection()
+    {
+        foreach (int i in _sel)
+        {
+            if (i < 0 || i >= _entities.Count) continue;
+            var e = _entities[i];
+            if (!IsFactory(e) || e.Dead || e.Owner != ViewPlayer) continue;
+            return (e.CostStore, e.CostProd, e.State == StAktiv);
+        }
+        return null;
+    }
+
+    /// <summary><c>--shot-when=ausbau</c> — eine eigene Fabrik wählen, damit die
+    /// zwei Ausbauknöpfe auf ein Bild kommen. Ohne diesen Griff zeigt jedes Bild
+    /// ein Fenster ohne sie, denn sie stehen nur bei einer Fabrik.</summary>
+    public Vector2I? FactoryShotSetup()
+    {
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (!IsFactory(e) || e.Dead || e.Owner != ViewPlayer) continue;
+            _sel.Clear(); _sel.Add(i); _selected = i;
+            UpdatePanel();
+            QueueRedraw();
+            GD.Print($"ausbau-shot: Fabrik {i} ({BuildingTypeName(e.BType)}) auf " +
+                     $"({e.Col},{e.Row}) gewaehlt — Lagerausbau ${e.CostStore}, " +
+                     $"Produktionserw. ${e.CostProd}, Zustand {StateName(e)}");
+            return new Vector2I(e.Col, e.Row);
+        }
+        GD.Print("ausbau-shot: keine eigene Fabrik gefunden");
+        return null;
+    }
+
+    /// <summary>Lagerausbau (Knopf »Lagerausbau«, Taste V) oder
+    /// Produktionserweiterung (Knopf »Produktionserw.«, Taste C) auf den
+    /// gewählten Fabriken.  Both cost what the factory's own record says and
     /// take 100 steps; afterwards the cost is multiplied by 3/2.</summary>
     public void StartUpgrade(bool storage)
     {
@@ -10283,6 +10348,21 @@ public partial class MapEntityLayer : Node2D
         // Besitzerpruefung, wie der Nachschub-Posten.
         if (e.BType == 17)
             return MarketOpenFor(e, ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0) ? e : null;
+        // ⚠⚠ 18.08.2026 — DIE FABRIK STAND HIER NICHT, und damit ging ihr
+        // Fenster nie auf. Aufgefallen ist es erst, als die zwei Ausbauknöpfe
+        // eingebaut waren und das Bild sie nicht zeigte: der Prüflauf meldete
+        // »basis-fenster: offen … Ausbau: bedienbar«, im Bild war gar kein
+        // Fenster. `Producer()` hatte es im selben Bild wieder zugemacht.
+        //
+        // Dass das Original ein Fabrikfenster HAT, steht in seinen eigenen
+        // Wörtern: »Lagerausbau« (0x501B30) und »Produktionserweiterung«
+        // (0x501B40) sind die Zustandszeilen dieses Fensters, und sec24 führt
+        // für eine Fabrik fünf Zustände — die zeigt niemand sonst an.
+        //
+        // ⚠ Die Bauliste bleibt für sie LEER, und das ist richtig: eine Fabrik
+        // stellt Teile her (W/F/S), keine Entwürfe. Was sie hat, steht in der
+        // Bestandszeile; was sie tut, im Zustand.
+        if (IsFactory(e)) return e;
         return IsUnitPlant(e) || IsDock(e) || e.BType == 9 ? e : null;
     }
 
@@ -10323,6 +10403,21 @@ public partial class MapEntityLayer : Node2D
             // diese Zahl sieht »gekauft« aus wie »nichts passiert«.
             return $"FLUGHAFEN  W{e.StockW} F{e.StockF} S{e.StockS}  " +
                    $"Hangar {e.Hangar?.Count ?? 0}/{Mathf.Max(1, e.HangarSize)} (Y startet)";
+        // ⚠ 18.08.2026 — DERSELBE FEHLER WIE C12, eine Etage tiefer: seit die
+        // FABRIK ihr Fenster bekommt (siehe Producer), stand auch bei ihr der
+        // Kontostand da. Eine Fabrik rechnet aber nicht in Geld, sie STELLT
+        // TEILE HER und legt sie in ihr eigenes Lager; bezahlt wird an ihr nur
+        // der Ausbau, und dessen Preis steht im Knopf. Was hierher gehört, ist
+        // also ihr Lagerstand — mit der Obergrenze daneben, denn genau die hebt
+        // der Lagerausbau um 10 (@0x43E0F1), und ohne die Zahl sähe man nicht,
+        // wofür man bezahlt hat.
+        if (IsFactory(e))
+            // ⚠ Das T steht HINTER »Platz«, nicht davor: die Bestandszeile des
+            // Fensters behält vom Kopf nur die drei Sinnbilder W/F/S und alles
+            // ab »Platz« (UI/BaseWindow.StockLine). Davor wäre es still
+            // verschwunden.
+            return $"LAGER  W{e.StockW} F{e.StockF} S{e.StockS}  " +
+                   $"Platz {e.Capacity}  Tempo {e.ProdSpeed}  T{e.StockT}";
         int owner = e.Owner is >= 0 and <= 7 ? e.Owner : 0;
         return $"PRODUKTION  ${_money[owner]}";
     }
@@ -18499,6 +18594,8 @@ public partial class MapEntityLayer : Node2D
         PollBauCheck();
         PollBauCheck2();
         PollBauCheck3();
+        PollAusbauCheck();
+        PollAusbauCheck2();
 
         // preview harness: start the scripted build as soon as the factory has
         // manufactured enough parts
