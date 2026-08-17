@@ -198,6 +198,56 @@ public sealed class MapBaker
 
     private byte[] _canvas = Array.Empty<byte>();
 
+    /// <summary>
+    /// <b>WIE HOCH RAGT EIN OBJEKT ÜBER SEINE ZELLE?</b> — die Messung, aus der
+    /// die Schwelle für »verdeckt Einheiten« kommen muss.
+    ///
+    /// <para>Anlass: gemeldet als »im Original verdecken z. B. auch Bäume
+    /// Einheiten, bei uns nicht«. Der Grund steht in <see cref="Bake"/>,
+    /// Durchgang C: Objekte werden ins Kartenbild <b>eingebacken</b> und liegen
+    /// damit unter allem; nur GEBÄUDE sind ausgenommen und werden lebend
+    /// gezeichnet. Ein eingebackener Baum <i>kann</i> nichts verdecken.</para>
+    ///
+    /// <para>Für Gebäudekacheln gibt es die gemessene Schwelle
+    /// <c>MapEntityLayer.FlachBisPx = 25</c> — flach bleibt im Boden, Aufragendes
+    /// kommt ins Zeilenfach. Für Objekte fehlt die entsprechende Zahl, und
+    /// geraten wird sie nicht. Diese Zeile zählt aus, wie weit jedes
+    /// vorkommende Objekt über die UNTERKANTE seiner Zelle hinausragt; die
+    /// Schwelle gehört dann in eine Lücke der Verteilung, wie bei den
+    /// Gebäudekacheln auch.</para>
+    ///
+    /// <para>Gerechnet wie in <see cref="Blit"/>: das Sprite beginnt bei
+    /// <c>row·TileH + BlitAnchor + YOff</c> gegen den Zellursprung, die Zelle
+    /// endet bei <c>row·TileH + TileH</c>. Der Überstand nach oben ist also
+    /// <c>TileH − (BlitAnchor + YOff)</c> … minus dem, was das Sprite selbst
+    /// nach unten reicht — hier gezählt wird die <b>sichtbare Höhe über der
+    /// Zellunterkante</b>: <c>(BlitAnchor + YOff + H) </c> ist die Unterkante des
+    /// Sprites, und <c>TileH</c> die der Zelle.</para></summary>
+    /// <returns>Je Objektcode: Breite, Höhe, YOff und der Überstand über der
+    /// Zellunterkante, dazu wie oft der Code auf dieser Karte vorkommt.</returns>
+    public List<(int Code, int W, int H, int YOff, int Rise, int Count)> ObjectHeights()
+    {
+        var zahl = new Dictionary<int, int>();
+        var rec = _map.Records;
+        for (int i = 0; i < Width * Height; i++)
+        {
+            int c = BitConverter.ToUInt16(rec, i * 4);
+            if (c >= GroundMax) zahl[c] = zahl.TryGetValue(c, out int n) ? n + 1 : 1;
+        }
+
+        var raus = new List<(int, int, int, int, int, int)>();
+        foreach (var kv in zahl)
+        {
+            var s = ObjectSprite(kv.Key);
+            if (s == null) continue;
+            int oben = BlitAnchor + s.YOff;           // Oberkante gegen den Zellursprung
+            int rise = TileH - oben;                  // sichtbare Hoehe ueber der Zellunterkante
+            raus.Add((kv.Key, s.W, s.H, s.YOff, rise, kv.Value));
+        }
+        raus.Sort((a, b) => a.Item5 != b.Item5 ? a.Item5 - b.Item5 : a.Item1 - b.Item1);
+        return raus;
+    }
+
     private void Blit(Sprite? s, int col, int row, int elev)
     {
         if (s == null) return;

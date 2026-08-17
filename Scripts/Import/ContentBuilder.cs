@@ -684,6 +684,78 @@ public sealed class ContentBuilder
         return ok > 0;
     }
 
+    /// <summary>
+    /// <b>WIE HOCH RAGEN DIE OBJEKTE?</b> — kein Export, sondern eine Messung.
+    ///
+    /// <para>Anlass: gemeldet als »im Original verdecken z. B. auch Bäume
+    /// Einheiten, bei uns nicht«. Bäume werden in <see cref="MapBaker.Bake"/>
+    /// Durchgang C ins Kartenbild eingebacken; nur Gebäude sind ausgenommen und
+    /// werden lebend gezeichnet. Ein eingebackener Baum kann nichts
+    /// verdecken.</para>
+    ///
+    /// <para>Die Kur ist dieselbe wie bei den Gebäudekacheln: <b>flach bleibt im
+    /// Boden, Aufragendes kommt ins Zeilenfach</b>. Dafür braucht es eine
+    /// Schwelle, und die Schwelle der Gebäude (<c>FlachBisPx = 25</c>) sitzt in
+    /// einer <b>gemessenen Lücke</b> der Höhenverteilung. Diese Zeile zählt
+    /// dieselbe Verteilung für die OBJEKTE aus, über alle Karten aller
+    /// Tilesets — damit die Schwelle wieder aus den Daten kommt und nicht aus
+    /// dem Gefühl.</para></summary>
+    public bool ReportObjectHeights(Action<string>? progress = null)
+    {
+        void Say(string s) { GD.Print("objekt-hoehen: " + s); progress?.Invoke(s); }
+
+        // Ueberstand -> (wie viele CODES, wie viele ZELLEN ueber alle Karten)
+        var proRise = new SortedDictionary<int, (int Codes, long Cells)>();
+        var gesehen = new HashSet<(int Tileset, int Code)>();
+        int karten = 0, fehler = 0;
+
+        void One(string path, string name)
+        {
+            try
+            {
+                var m = CwmFile.Load(path);
+                string? cwp = Find($"DATA/{m.Tileset:00}.CWP");
+                string? pal = Find($"DATA/{m.Tileset:00}.PAL");
+                if (cwp == null || pal == null) return;
+                var baker = new MapBaker(m, CwpFile.Load(cwp), PalFile.Load(pal));
+                baker.Bake(fill: false, objects: false);      // nur die Masse setzen
+                karten++;
+                foreach (var o in baker.ObjectHeights())
+                {
+                    bool neu = gesehen.Add((m.Tileset, o.Code));
+                    proRise.TryGetValue(o.Rise, out var v);
+                    proRise[o.Rise] = (v.Codes + (neu ? 1 : 0), v.Cells + o.Count);
+                }
+            }
+            catch (Exception e) { fehler++; Say($"{name}: {e.Message}"); }
+        }
+
+        foreach (var (stem, path) in Levels("*.CWM")) One(path, "map_" + stem);
+        foreach (var (stem, name) in DmStems)
+        {
+            string? p = Find($"LEVELS/{stem}.DM");
+            if (p != null) One(p, "map_" + name);
+        }
+
+        if (karten == 0)
+        { Say("KEINE Karte gefunden — zeigt der Pfad auf die Installation oder die CDs?"); return false; }
+
+        Say($"{karten} Karten, {gesehen.Count} verschiedene Objektbilder, {fehler} Fehler");
+        Say("Ueberstand ueber der Zellunterkante -> Bilder / Zellen:");
+        int letzte = -999;
+        foreach (var kv in proRise)
+        {
+            // ⚠ Die LUECKEN sind der eigentliche Gegenstand: dort gehoert die
+            // Schwelle hin. Sie werden darum ausdruecklich genannt und nicht
+            // nur durch fehlende Zeilen angedeutet.
+            if (letzte > -999 && kv.Key > letzte + 1)
+                Say($"   -- LUECKE {letzte + 1}..{kv.Key - 1} px --");
+            Say($"   {kv.Key,4} px : {kv.Value.Codes,4} Bilder, {kv.Value.Cells,7} Zellen");
+            letzte = kv.Key;
+        }
+        return true;
+    }
+
     public bool ReexportTables(Action<string>? progress = null)
     {
         void Say(string s) { GD.Print("reexport-tables: " + s); progress?.Invoke(s); }

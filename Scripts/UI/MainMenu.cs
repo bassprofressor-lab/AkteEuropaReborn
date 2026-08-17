@@ -836,6 +836,19 @@ public partial class MainMenu : Control
                 GetTree().Quit(ok ? 0 : 1);
                 return;
             }
+            else if (a.StartsWith("--objekt-hoehen="))
+            {
+                // ⚠ KEIN Export, sondern eine MESSUNG: wie weit ragen die
+                // Objekte (Baeume usw.) ueber ihre Zelle? Daraus kommt die
+                // Schwelle, ab der ein Objekt ins Zeilenfach gehoert und damit
+                // Einheiten verdecken kann. Siehe ContentBuilder.ReportObjectHeights.
+                string[] dirs = a["--objekt-hoehen=".Length..]
+                    .Split(';', System.StringSplitOptions.RemoveEmptyEntries);
+                var src = Core.ContentSources.FromFolders(dirs);
+                if (src == null) { GD.PrintErr("objekt-hoehen: keiner der Ordner existiert"); GetTree().Quit(2); return; }
+                GetTree().Quit(new Import.ContentBuilder(src).ReportObjectHeights() ? 0 : 1);
+                return;
+            }
             else if (a.StartsWith("--reexport-states="))
             {
                 // only the game-state files, the pictures stay as they are
