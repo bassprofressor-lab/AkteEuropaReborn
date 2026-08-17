@@ -139,6 +139,56 @@ public partial class MapEntityLayer : Node2D
     }
 
     private readonly List<RailLine> _railLines = new();
+
+    /// <summary>
+    /// <b>Hält Spieler <paramref name="owner"/> die Bahnverbindung
+    /// <paramref name="slot"/>?</b> — die Frage, an der <b>Mission 21</b> hängt
+    /// (»Bringen Sie das Streckennetz unter Ihre Kontrolle«).
+    ///
+    /// <para>Drei Prüfungen, Befehl für Befehl aus dem Missionsblock
+    /// @0x4A0224 (F: @0x49FB30), und in dieser Reihenfolge:</para>
+    /// <code>
+    ///   byte[Satz + 0xD5] == 3   -> NEIN        die »faze« (siehe Klassenkopf)
+    ///   je Endgebäude:  byte[+0x05] != Spieler  -> NEIN   der Besitzer
+    ///                   byte[+0x04] == 0        -> NEIN   es gibt es nicht
+    /// </code>
+    ///
+    /// <para>⚠ <b>Nicht faze 4 abfragen.</b> Naheliegend wäre »die Linie darf
+    /// nicht tot sein«, aber das Original prüft <b>nur die 3</b>. Es braucht
+    /// die 4 auch nicht: sie heisst »die Enden gehören verschiedenen Spielern«,
+    /// und wer beide Enden hält, bekommt vom Automaten sofort wieder eine 0
+    /// (@0x4C78E0). Eine zusätzliche Bedingung wäre hier strenger als das
+    /// Original.</para>
+    ///
+    /// <para>⚠ <b>Wir gehen über <see cref="RailLine.Bud1"/>/<c>Bud2</c>, das
+    /// Original über den KNOTEN</b> (<c>Satz+0x00/+0x01</c> →
+    /// <c>word[Knotentafel + 8·Knoten]</c>). Auf map_21 stimmen beide Wege in
+    /// allen neun Linien überein, und das Einnehmen eines Gebäudes ändert
+    /// seinen Besitzer, nicht seinen Platz am Knoten. <b>Gemessen, nicht
+    /// angenommen</b> — steht ein Gegenbeispiel an, ist das hier die Stelle.</para>
+    /// </summary>
+    public bool RailLinkHeld(int slot, int owner)
+    {
+        foreach (var l in _railLines)
+        {
+            if (l.Slot != slot) continue;
+            if (l.Faze == 3) return false;
+            return EndHeld(l.Bud1, owner) && EndHeld(l.Bud2, owner);
+        }
+        return false;                       // die Linie gibt es auf dieser Karte nicht
+    }
+
+    /// <summary>Ein Endgebäude einer Linie: es muss STEHEN und dem Spieler
+    /// gehören. ⚠ Ein zerstörtes zählt nicht — im Original ist das
+    /// <c>byte[+0x04] == 0</c>, der Gebäudetyp, und der wird beim Abriss
+    /// genullt.</summary>
+    private bool EndHeld(int slot, int owner)
+    {
+        foreach (var e in _entities)
+            if (e.IsBuilding && !e.IsProp && e.Slot == slot)
+                return !e.Dead && e.BType != 0 && e.Owner == owner;
+        return false;
+    }
     private readonly Dictionary<int, Entity> _bldBySlot = new();
 
     /// <summary>Wie oft der Automat je Sekunde läuft. <b>Aus den Daten:</b> die

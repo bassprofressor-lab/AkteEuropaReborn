@@ -43,6 +43,21 @@ window/size/viewport_width=1600
 window/size/viewport_height=900
 window/size/resizable=true
 
+[debug]
+
+; ⚠ 18.08.2026 — DIE AUSGELIEFERTE FASSUNG SCHREIBT JETZT EIN PROTOKOLL.
+; Anlass: ein Absturz kurz nach dem Hauptmenü, der sich hier nicht auslösen
+; liess (drei Minuten Menü, Gefecht und Kampagne — alles lief). Ohne Datei
+; hinterlässt die exportierte Fassung KEINE Spur: sie hat kein Fenster für die
+; Ausgabe, und die Protokolle im Benutzerordner stammten alle aus Läufen im
+; Editor. Ein Fehler, den man nicht sehen kann, ist keiner, den man sucht —
+; er ist einer, den man rät.
+;
+; Es landet in user://logs/ (%APPDATA%\Godot\app_userdata\AkteEuropaReborn\logs).
+file_logging/enable_file_logging=true
+file_logging/enable_file_logging.pc=true
+file_logging/max_log_files=10
+
 [dotnet]
 
 project/assembly_name="Akte Europa Reborn"

@@ -4,5 +4,36 @@
     <TargetFramework Condition=" '$(GodotTargetPlatform)' == 'android' ">net9.0</TargetFramework>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <RootNamespace>AkteEuropaReborn</RootNamespace>
+
+    <!--
+      ⚠⚠ DER NEBENLÄUFIGE MÜLLSAMMLER IST AUS — und das ist kein Feintuning,
+      sondern die Behebung eines ABSTURZES der ausgelieferten Fassung
+      (18.08.2026).
+
+      Was geschah: das Spiel zeigte das Hauptmenü und beendete sich nach rund
+      acht Sekunden mit 0xC0000005. Im Klartext:
+
+          Unhandled exception. System.ArgumentException:
+            Disposable not registered. (Parameter 'weakReference')
+            at Godot.DisposablesTracker.UnregisterDisposable(...)
+            at Godot.Variant.Disposer.Dispose(Boolean)
+            at Godot.Variant.Disposer.Finalize()
+
+      Also ein Wettlauf im FINALISIERER zwischen Godots Variant-Buchhaltung und
+      dem nebenläufigen Sammler — nicht in unserem Code. Gemessen: ohne
+      Schalter 3 von 3 Abstürzen nach 8,0 / 8,2 s; mit Schalter 2 von 2 Läufen
+      über 45 s ohne Zwischenfall.
+
+      ⚠⚠ UND DIE EIGENTLICHE LEHRE: unser Prüfstand setzt
+      `DOTNET_gcConcurrent=0` schon lange in der Umgebung — das ausgelieferte
+      Spiel bekam es nie. Der Notbehelf im Prüfstand hat den Fehler genau so
+      lange verdeckt, wie es ihn gibt: JEDER kopflose Lauf war grün, und das
+      Spiel stürzte trotzdem beim ersten Start ab. Ein Notbehelf, der nur im
+      Prüfstand steht, prüft eine Fassung, die niemand ausliefert.
+
+      Hier steht er jetzt im PROJEKT und landet damit in
+      `*.runtimeconfig.json` — also in jedem Bau, auch im ausgelieferten.
+    -->
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
   </PropertyGroup>
 </Project>

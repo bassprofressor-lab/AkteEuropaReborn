@@ -1263,6 +1263,24 @@ public sealed class MissionScript
     public Func<int, int, int>? MarkCount;           // marke, spieler -> Anzahl
     public Func<int, int, bool>? UnitHasMark;        // einheit, marke
     public Func<int, int>? MoneyOf;                  // spieler -> Kontostand
+
+    /// <summary>
+    /// <b>Hält Spieler <i>p</i> die Bahnverbindung <i>n</i>?</b> — der Haken,
+    /// an dem Mission 21 hängt. <c>(Linie, Spieler)</c>.
+    ///
+    /// <para>Die Frage ist die des Originals, Befehl für Befehl (@0x4A0224,
+    /// F: @0x49FB30): der Satz der Linie liegt in einer Tafel mit
+    /// <b>Schrittweite 214</b>, und geprüft werden <b>drei</b> Dinge:</para>
+    /// <code>
+    ///   byte[Satz+0xD5] == 3   -> NEIN      die »faze«, siehe RailFreight
+    ///   je Endknoten:  Gebäude = word[Knotentafel + 8·Knoten]
+    ///                  byte[Gebäude+0x05] != Spieler -> NEIN   (Besitzer)
+    ///                  byte[Gebäude+0x04] == 0       -> NEIN   (gibt es nicht)
+    /// </code>
+    /// <para>⚠ Der Spieler ist im Original <b>fest 0</b> (<c>test al,al</c>) —
+    /// er steht hier trotzdem als Parameter, damit die Bedingung nicht
+    /// heimlich vom Menschen ausgeht.</para></summary>
+    public Func<int, int, bool>? RailLinkHeld;
     public Func<int, int, int>? TerrainAt;           // x, y -> Geländebyte
     public Func<int, int, int>? ImapAt;              // spalte, zeile -> Belegung
     public Action<int, int>? AddMoney;               // betrag, spieler
@@ -1627,6 +1645,9 @@ public sealed class MissionScript
                      Cmp(UnitHasMark(c.A, c.B) ? 1 : 0, c.Op, c.C),
         // get_money(a)
         "money_of" => MoneyOf != null && Cmp(MoneyOf(c.A), c.Op, c.B),
+        // Haelt Spieler b die Bahnverbindung a? Siehe RailLinkHeld — Mission 21
+        // fragt neun davon, und ALLE muessen halten.
+        "rail_link" => RailLinkHeld != null && RailLinkHeld(c.A, c.B),
         // terrain_at(a, b) — Mission 1 prüft damit, ob der Panzer auf der
         // Brücke steht (> 4)
         "terrain" => TerrainAt != null && Cmp(TerrainAt(c.A, c.B), c.Op, c.C),
@@ -2110,6 +2131,7 @@ public sealed class MissionScript
         "unit_field" => $"Einheit v[{c.A}]={Var(c.A)} Feld+{c.B}{c.Op}{c.C}",
         "unit_index" => $"find_unit(P{c.A},Marke{c.B}){c.Op}{c.C}",
         "unit_is_var" => $"Einheit v[{c.A}]={Var(c.A)} hat Marke {c.B}{c.Op}{c.C}",
+        "rail_link" => $"Bahnlinie {c.A} gehoert P{c.B}",
         "units_mark" => $"Marke({c.A},P{c.B}){c.Op}{c.C}",
         "time_gt" => $"Spielminute>{c.A}",
         "event" => $"Ereignis{c.Op}{c.B}",
@@ -2177,6 +2199,7 @@ public sealed class MissionScript
         "selected" => Selection != null,
         "units_mark" => MarkCount != null,
         "unit_is" or "unit_is_var" => UnitHasMark != null,
+        "rail_link" => RailLinkHeld != null,
         "money_of" => MoneyOf != null,
         "terrain" => TerrainAt != null,
         "imap" => ImapAt != null,

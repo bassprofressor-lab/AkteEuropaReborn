@@ -336,6 +336,19 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Die anderen drei Bauaufträge brauchen einen Platzierungsmodus — siehe die
   nächste Zeile.
 
+- 🐞 **Das Spiel schloss sich kurz nach dem Hauptmenü — behoben.** Nach rund
+  acht Sekunden beendete es sich ohne Meldung. Die Ursache lag nicht im Spiel,
+  sondern im **nebenläufigen Müllsammler** von .NET: er geriet mit Godots
+  interner Buchhaltung ins Gehege. Unsere eigenen Prüfläufe hatten den
+  Sammler seit jeher abgeschaltet — im ausgelieferten Spiel war er an, und
+  deshalb war jeder Prüflauf grün, während das Spiel abstürzte. Jetzt gilt die
+  Einstellung für **jeden** Bau.
+  Gemessen: vorher 3 von 3 Abstürzen nach acht Sekunden, danach 3 von 3
+  Läufen ohne Zwischenfall.
+  ⚠ Und das ausgelieferte Spiel **schreibt jetzt ein Protokoll**
+  (`%APPDATA%\Godot\app_userdata\AkteEuropaReborn\logs`). Bisher hinterliess
+  ein Absturz dort keine Spur.
+
 - ⭐ **Mission 28 hat endlich ihre Siegbedingung** — damit tragen **32 von 33**
   Missionen ihr Skript, und nur noch Mission 21 fehlt. Ihre Bedingung ist ein
   Oder aus drei Und-Gruppen: drei Wissenschaftler, und **einer** von ihnen muss

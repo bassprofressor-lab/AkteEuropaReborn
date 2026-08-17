@@ -7515,6 +7515,9 @@ public partial class MapEntityLayer : Node2D
                     return false;
                 };
                 _mscript.MoneyOf = Money;
+                // Haelt dieser Spieler die Bahnverbindung? Siehe
+                // MissionScript.RailLinkHeld — Mission 21 fragt neun davon.
+                _mscript.RailLinkHeld = RailLinkHeld;
                 // terrain_at(x, y) — das Gelaendebyte der Zelle. Unser Gitter
                 // fuehrt es als `Ground`; die Zahlen sind dieselbe Ordnung
                 // (frei/grob/wasser/gesperrt), aber ⚠ ob 4 im Original genau
