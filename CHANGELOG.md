@@ -289,6 +289,20 @@ deviate on purpose, and every deviation is marked as ours.
   ⚠ One bug of the original, reproduced: the highest veteran grade can **never**
   appear in the shop — its branch hangs on a condition that cannot occur.
 
+- ⭐ **Power is wired up — and it throttles.** Power plants supply 90 and belong
+  to nobody, generators 50 and belong to their player; factories and mines
+  consume. When it is not enough, every plant runs **proportionally slower** —
+  they do not stop, they merely succeed less often. And both sources count: your
+  own generators and the map's ownerless power plants together.
+  The two small bars beside the orange lightning bolt in the control block are
+  filled at last: output on top, demand below. The space was there and empty
+  from the start — those are the original's power bars, in its place and at its
+  measurements.
+  Measured: 224 parts at full supply, 136 at 55 % — 123 were predicted, and the
+  difference is within what the dice allow.
+  ⚠ Along the way the **mine** got the extraction roll it had been missing
+  entirely; without it a power shortage would have done nothing there.
+
 - ⭐ **Ships now put out from the dock.** Reported as "they spawn right inside
   the sea dock instead of beside it" — and the answer is the other way round:
   the original really does place the ship **inside** the dock and then takes it

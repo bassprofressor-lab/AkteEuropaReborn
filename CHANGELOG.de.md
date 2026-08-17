@@ -320,6 +320,21 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Laden **nie** erscheinen — ihr Zweig hängt an einer Bedingung, die nicht
   eintreten kann.
 
+- ⭐ **Der Strom ist angeschlossen — und er bremst.** Kraftwerke liefern 90 und
+  gehören niemandem, Generatoren 50 und gehören ihrem Spieler; Fabriken und
+  Minen verbrauchen. Reicht es nicht, laufen alle Anlagen **anteilig
+  langsamer** — sie stehen nicht still, sie schaffen es nur seltener. Und
+  beides zusammen zählt: die eigenen Generatoren und die herrenlosen
+  Kraftwerke der Karte.
+  Die zwei kleinen Balken rechts neben dem orangen Blitz im Bedienblock sind
+  jetzt gefüllt: oben die erbrachte Leistung, unten der Bedarf. Der Platz war
+  von Anfang an da und leer — es sind die Strombalken des Originals, an seiner
+  Stelle und in seinen Massen.
+  Gemessen: 224 Teile bei voller Versorgung, 136 bei 55 % — vorhergesagt waren
+  123, und der Unterschied liegt innerhalb dessen, was der Zufall hergibt.
+  ⚠ Nebenbei bekam die **Mine** ihre Förderchance, die ihr bisher ganz fehlte;
+  ohne sie hätte der Strommangel dort gar nichts bewirkt.
+
 - ⭐ **Schiffe laufen aus dem Dock aus.** Gemeldet war »sie spawnen direkt im
   Seedock, anstatt daneben« — und die Antwort ist die umgekehrte: das Original
   setzt das Schiff **wirklich ins Dock** und holt es danach heraus. Wir taten
