@@ -143,7 +143,7 @@ public partial class BriefingScreen : CanvasLayer
     /// already draws a frame around: MAP.DAT group (mission-1), ten frames, at
     /// x=17 y=38 — the position the loader @0x45c093 reads them to. See
     /// <see cref="Import.BriefingExporter.WriteRadar"/>.</summary>
-    private void BuildRadar(Vector2 at, int scale)
+    private void BuildRadar(Vector2 at, float scale)
     {
         if (_mission <= 0) return;
         for (int f = 0; f < Import.BriefingExporter.RadarFrames; f++)
@@ -194,7 +194,7 @@ public partial class BriefingScreen : CanvasLayer
     /// <see cref="RadarFrameSec"/> je Bild in beide Richtungen — das benutzt
     /// alle zehn Bilder, die die Datei hergibt, statt acht davon
     /// wegzuwerfen.</para></summary>
-    private void BuildMonitorButtons(Vector2 at, int scale)
+    private void BuildMonitorButtons(Vector2 at, float scale)
     {
         if (_radarFrames.Count < 2) return;
         AddChild(MonitorKnopf(at, scale, 64, 258, 54, 20, "EUROPA",
@@ -207,7 +207,7 @@ public partial class BriefingScreen : CanvasLayer
     /// <summary>Eine durchsichtige Fläche über einem Knopf, den das
     /// Hintergrundbild schon zeichnet. ⚠ Kein eigenes Aussehen: der Knopf ist
     /// gemalt, und ein zweiter darüber wäre doppelt.</summary>
-    private static Button MonitorKnopf(Vector2 at, int scale, int x, int y, int w, int h,
+    private static Button MonitorKnopf(Vector2 at, float scale, int x, int y, int w, int h,
                                        string name, System.Action tap)
     {
         var b = new Button
@@ -241,7 +241,14 @@ public partial class BriefingScreen : CanvasLayer
         if (tex == null) return false;
 
         var view = GetViewport().GetVisibleRect().Size;
-        int scale = Mathf.Max(1, Mathf.FloorToInt(Mathf.Min(view.X / BgW, view.Y / BgH)));
+        // ⚠⚠ 18.08.2026 — HIER STAND EIN GANZZAHLIGER MASSSTAB, und der war bei
+        // 1600×900 gleich EINS: das 640×480-Bild sass als kleiner Kasten mitten
+        // auf schwarzem Grund. Gemeldet als »das Hintergrundbild fehlt immer
+        // noch« — es fehlte nicht, es war nur ein Viertel so gross wie der
+        // Schirm. Der Grund fuer die ganze Zahl war »damit die Bildpunkte
+        // quadratisch bleiben«; das stimmt, wiegt aber nicht auf, dass der
+        // Bildschirm zu drei Vierteln leer bleibt. Das Original fuellte ihn.
+        float scale = Mathf.Max(1f, Mathf.Min(view.X / BgW, view.Y / BgH));
         var size = new Vector2(BgW * scale, BgH * scale);
         var at = ((view - size) * 0.5f).Floor();
 
@@ -254,6 +261,34 @@ public partial class BriefingScreen : CanvasLayer
             StretchMode = TextureRect.StretchModeEnum.Scale,
         };
         AddChild(pic);
+
+        // ⚠ Die Markierungsflaeche zudecken, BEVOR etwas darauf steht — siehe
+        // PlatteGrund. Das Original zeichnet dort seinen eigenen Grund; unser
+        // Bild traegt an der Stelle nur den Platzhalter.
+        AddChild(new ColorRect
+        {
+            Color = PlatteGrund,
+            Position = at + new Vector2(PlateX * scale, PlateY * scale),
+            Size = new Vector2(PlateW * scale, PlateH * scale),
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        });
+
+        // ⚠ Die zwei kleinen Markierungsflaechen unten ebenso zudecken. Dort
+        // gehoert ein WETTERSYMBOL hin — im Original ein Wirbelsturm —, und das
+        // ist noch nicht gelesen: die Bilddaten liegen im 43.302 Byte langen
+        // Schwanz von BRIEFG.DAT (lesbar darin: CLOUDED, OVERCAST, SKY, DANGER,
+        // HIGH/LOW TEMPERATURE), aber als Sprite-Bank mit Kopfdaten, nicht als
+        // schlichtes Bitmap. Bis dahin steht dort dieselbe dunkle Nische wie im
+        // Original — ein WEISSER Kasten sieht aus wie ein Fehler, eine leere
+        // Nische wie eine Nische.
+        foreach (int wx in new[] { WeatherLX, WeatherRX })
+            AddChild(new ColorRect
+            {
+                Color = PlatteGrund,
+                Position = at + new Vector2(wx * scale, WeatherY * scale),
+                Size = new Vector2(WeatherW * scale, WeatherH * scale),
+                MouseFilter = Control.MouseFilterEnum.Ignore,
+            });
 
         BuildRadar(at, scale);
         BuildMonitorButtons(at, scale);
@@ -343,21 +378,51 @@ public partial class BriefingScreen : CanvasLayer
 
     /// <summary>The atlas holds the glyphs white and the shadow black, so the
     /// colour comes from the modulation rather than the pixels.</summary>
-    private static void Style(Label l, Font? font, int scale, bool head = false, bool dark = false)
+    private static void Style(Label l, Font? font, float scale, bool head = false, bool dark = false)
     {
         if (font != null)
         {
             l.AddThemeFontOverride("font", font);
             // the atlas cell is 13 px high; whole multiples keep it crisp, the
             // same rule MapViewer follows for the HUD
-            l.AddThemeFontSizeOverride("font_size", 13 * scale);
+            l.AddThemeFontSizeOverride("font_size", Mathf.RoundToInt(13 * scale));
         }
         else l.AddThemeFontSizeOverride("font_size", scale > 1 ? 28 : 17);
         l.AddThemeColorOverride("font_color",
-            dark ? new Color(0.09f, 0.09f, 0.07f)          // on the white plate
+            dark ? PlatteSchrift                            // auf der Textplatte
                  : head ? new Color(1f, 0.86f, 0.45f)
                         : new Color(0.95f, 0.96f, 0.97f));
     }
+
+    /// <summary>
+    /// <b>DIE TEXTPLATTE IST NICHT WEISS — SIE IST EINE MARKIERUNG.</b>
+    ///
+    /// <para>⚠⚠ 18.08.2026, gemeldet als »das Textfeld ist nicht original«, mit
+    /// dem Originalbild daneben: dort steht <b>grüne Schrift auf fast
+    /// schwarzem Grund</b>, bei uns dunkle Schrift auf Weiss.</para>
+    ///
+    /// <para><b>Gemessen an BRIEFG.DAT selbst:</b> Palettenindex <b>144</b>
+    /// (in 01.PAL 255,255,247, also weiss) kommt im ganzen 640×480-Bild an
+    /// <b>genau zwei Stellen</b> vor — der grossen Platte
+    /// (x 296..615, y 79..318) und dem unteren Streifen (x 285..629,
+    /// y 432..469). <b>80.986 Punkte, und 320×240 + 2×55×38 sind 80.980.</b>
+    /// Nirgends sonst im Bild. Ein Weiss, das nur dort auftritt, wo etwas
+    /// hingezeichnet wird, ist keine Farbe, sondern ein <b>Platzhalter</b> —
+    /// das Spiel überschreibt alle drei Flächen zur Laufzeit.</para>
+    ///
+    /// <para><b>Die beiden Farben sind aus dem Originalbild gemessen</b> und
+    /// dann auf die Palette gelegt: der Grund kommt als (15,16,11) heraus, das
+    /// ist <c>0x2f</c> = (19,19,15); die Schrift als (57,130,38) ≈ <c>0x08</c>
+    /// = (43,143,11). ⚠ Die Abweichung geht auf die Videokompression des
+    /// Vergleichsbildes — die Palettenwerte sind die belastbaren.</para></summary>
+    /// <summary>Die zwei Wetterfelder, am Bild ausgemessen: Index 144 liegt
+    /// dort in zwei Bloecken von genau <b>55×38</b> auf <b>(285,432)</b> und
+    /// <b>(575,432)</b>. Siehe <see cref="PlatteGrund"/>.</summary>
+    private const int WeatherLX = 285, WeatherRX = 575, WeatherY = 432,
+                      WeatherW = 55, WeatherH = 38;
+
+    private static readonly Color PlatteGrund = Color.Color8(19, 19, 15);
+    private static readonly Color PlatteSchrift = Color.Color8(43, 143, 11);
 
     // ---- harness -----------------------------------------------------------
 

@@ -693,6 +693,32 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Kampagne und Oberfläche
 
+- ⭐ **Das Briefing sieht endlich aus wie das Original: grüne Schrift auf
+  dunklem Grund, und das Bild füllt den Schirm.** Gemeldet: »das Textfeld ist
+  nicht original und das Hintergrundbild fehlt immer noch«.
+
+  Zwei Ursachen, beide gemessen:
+
+  - **Die weisse Platte war nie eine Farbe, sondern eine Markierung.**
+    Palettenindex **144** (in 01.PAL weiss) kommt im ganzen 640×480-Bild an
+    **genau zwei Stellen** vor — der grossen Textplatte und dem unteren
+    Streifen: **80.986 Punkte**, und 320×240 + 2×55×38 sind **80.980**.
+    Nirgends sonst. Das Spiel überschreibt diese Flächen zur Laufzeit. Die
+    zwei Farben sind aus dem Originalbild gemessen und auf die Palette gelegt:
+    Grund (15,16,11) → `0x2f` (19,19,15), Schrift (57,130,38) → `0x08`
+    (43,143,11).
+  - **Das Bild »fehlte« nicht, es war zu klein.** Der Maßstab war
+    **ganzzahlig**, und bei 1600×900 ist das eine **1** — das 640×480-Bild sass
+    als kleiner Kasten mitten auf schwarzem Grund. Jetzt füllt es den Schirm.
+
+  ⚠ **Noch offen:** die zwei **Wettersymbole** in den kleinen Nischen (im
+  Original ein Wirbelsturm). Die Bilddaten liegen im **43.302 Byte langen
+  Schwanz** von `BRIEFG.DAT` — darin lesbar: CLOUDED, OVERCAST, SKY, DANGER,
+  HIGH/LOW TEMPERATURE —, aber als **Sprite-Bank mit Kopfdaten**, nicht als
+  schlichtes Bitmap. Bis das gelesen ist, steht dort dieselbe dunkle Nische wie
+  im Original statt eines weissen Kastens: ein weisser Kasten sieht aus wie ein
+  Fehler, eine leere Nische wie eine Nische.
+
 - ⭐ **Der Missionsmonitor zeigt erst EUROPA — die Missionskarte kommt auf den
   Knopf.** Gemeldet mit zwei Bildern nebeneinander: »die Minimap ging erst auf,
   wenn man auf Mission geklickt hat«.
