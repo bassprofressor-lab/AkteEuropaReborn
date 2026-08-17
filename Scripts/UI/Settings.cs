@@ -64,7 +64,40 @@ public static class Settings
     /// exploration step @0x4205b0 checks <c>byte[0x4f8a3c]</c> and, when that is
     /// clear, marks everything seen instead of stamping. Default on, as the
     /// game ships it.</summary>
-    public static bool FogOfWar { get => !FogSuppressed && B("fog", true); set => Set("fog", value); }
+    public static bool FogOfWar
+    { get => !FogSuppressed && FogOnce(); set => Set("fog", value); }
+
+    /// <summary>
+    /// <b>DER NEBEL WIRD EINMAL WIEDER EINGESCHALTET.</b>
+    ///
+    /// <para>⚠⚠ 18.08.2026, zum zweiten Mal gemeldet: »immer noch kein Fog of
+    /// War in der Kampagne sowie im Gefecht«. Die Vorgabe steht auf <c>true</c>
+    /// und stand es auch — in der <c>settings.cfg</c> des Spielers stand aber
+    /// <c>fog=false</c>, und ein gespeicherter Wert gewinnt gegen jede
+    /// Vorgabe.</para>
+    ///
+    /// <para>Wie die 1 beim Techstandard angehoben wurde, wird hier <b>eine
+    /// gespeicherte Null einmalig</b> auf wahr gesetzt — und nur einmal. Der
+    /// Merker steht in derselben Datei, damit eine bewusste Abschaltung danach
+    /// bestehen bleibt. ⚠ Das ist der Teil einer Vorgabe, den man vergisst:
+    /// eine bestehende Installation hat den alten Wert längst
+    /// aufgeschrieben.</para>
+    ///
+    /// <para>⚠ <b>Offen und für die nächste Sitzung vorgemerkt:</b> der Spieler
+    /// sagt, unser Nebel sehe anders aus als der des Originals
+    /// (<c>Bug Bilder/kampagne1 original tutorial7.png</c>). Das ist eine
+    /// eigene Aufgabe und hier NICHT erledigt.</para></summary>
+    private static bool FogOnce()
+    {
+        bool have = B("fog", true);
+        if (B("fog_on_v060", false)) return have;
+        Set("fog_on_v060", true);
+        if (have) return true;
+        Set("fog", true);
+        GD.Print("Nebel: gespeichertes fog=false einmalig auf true gesetzt " +
+                 "(Merker fog_on_v060) — eine bewusste Abschaltung danach bleibt");
+        return true;
+    }
 
     /// <summary>Der GESPEICHERTE Wert, ungeachtet der Unterdrückung — für den
     /// Einstellungsschirm, der zeigen muss, was der Spieler eingestellt hat,

@@ -267,6 +267,21 @@ public sealed class ContentBuilder
                 byte[]? sym = symDat != null ? File.ReadAllBytes(symDat) : Asset("SYMBOL.DAT");
                 if (sym != null && bgPal != null)
                     br.WriteWatermark(sym, PalFile.Load(bgPal), Say);
+
+                // ⚠ 18.08.2026 — DAS FELD »NEUE TECHNOLOGIEN« desselben Schirms.
+                // Die Zuordnung Mission -> angekuendigte Technik ist eine eigene
+                // Tafel in GAME.EXE (224 Byte je Mission, zehn Eintraege zu 22),
+                // und die Bilder kommen aus ENCYCLOG.PIC — 96 Stueck zu 60x60,
+                // NICHT aus der PortraitBank. Siehe MissionTechExporter.
+                byte[]? exeB = _src.Exe != null ? File.ReadAllBytes(_src.Exe) : Asset("GAME.EXE");
+                var encTxt = Asset("ENCYCLOG.TXT");
+                string? encPicP = Find("ENCYCLOG.PIC") ?? Find("DATA/ENCYCLOG.PIC");
+                byte[]? encPic = encPicP != null ? File.ReadAllBytes(encPicP) : Asset("ENCYCLOG.PIC");
+                if (exeB != null && encTxt != null)
+                    MissionTechExporter.WriteAll(exeB, encTxt, encPic,
+                                                 bgPal != null ? PalFile.Load(bgPal) : null,
+                                                 _dst, Say);
+                else Say("mission-tech: GAME.EXE oder ENCYCLOG.TXT fehlt — Kasten bleibt leer");
             }
         }
         catch (Exception e) { Say("Briefings: " + e.Message); }

@@ -104,10 +104,25 @@ public static class SkirmishSetup
     /// dem Startkonto, aus VERKÄUFEN am Markt (@0x4C0628) und am Missionsende
     /// (»Berkewitz Corp. bezahlt Ihnen $«, @0x416B0A).</para>
     ///
-    /// <para><b>Unsere Vorgabe ist 0</b> — wie im Original. Wer im Gefecht
-    /// handeln will, stellt sie ein; das ist die Wettkampfentscheidung des
-    /// Spielers und nicht unsere.</para></summary>
-    public static int StartMoney;
+    /// <para>⚠⚠ 18.08.2026 — <b>UNSERE VORGABE IST JETZT 5000, UND DAS IST EINE
+    /// BEWUSSTE ABWEICHUNG.</b> Hier stand 0, »wie im Original«, mit dem
+    /// Hinweis, wer handeln wolle, stelle es ein. Der Spieler hat es zweimal
+    /// gemeldet — »Gefecht: sollten wir nicht echtes Startgeld haben? Aktuell
+    /// ist Kontostand $ 0« und danach »im Gefecht nach wie vor Kontostand
+    /// 0 $«.</para>
+    ///
+    /// <para>Er hat recht, und zwar aus einem Grund, der in dieser Fassung
+    /// stärker wiegt als die Treue: <b>bei uns gibt es den Markt</b>, und ein
+    /// Gefecht, das mit leerem Konto beginnt, hat ihn faktisch nicht — die
+    /// erste Mark müsste erst aus einem Verkauf kommen. Nach der Trennachse
+    /// des Projekts darf das Gefecht bewusst abweichen; die Kampagne bleibt
+    /// unberührt, sie holt ihren Stand ohnehin aus dem Spielstand.</para>
+    ///
+    /// <para>⚠ 5000 ist <b>gewählt, nicht gemessen</b>: es ist die Mitte des
+    /// Originalknopfs (0…10000 in Tausenderschritten, @0x44D425). Wer es anders
+    /// will, stellt es im Menü unter »Konto« ein — der Regler bleibt, was er
+    /// war, und 0 bleibt einstellbar.</para></summary>
+    public static int StartMoney = 5000;
 
     /// <summary>Der Schritt des Originalknopfs: 1000 aufwärts, bei über 10000
     /// zurück auf 0 (@0x44D425).</summary>

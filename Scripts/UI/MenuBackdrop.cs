@@ -188,6 +188,7 @@ public partial class MenuBackdrop : CanvasLayer
     public override void _ExitTree()
     {
         Settings.FogSuppressed = false;
+        HelpWindow.Suppressed = false;
         Audio.SoundBankPlayer.ListenerCell = new Vector2(float.NaN, float.NaN);
     }
 
@@ -204,6 +205,7 @@ public partial class MenuBackdrop : CanvasLayer
         { _entities.SetProcess(false); _entities.QueueFree(); _entities = null; }
         if (IsInstanceValid(_sprite)) { _sprite.Texture = null; _sprite.QueueFree(); }
         Settings.FogSuppressed = false;
+        HelpWindow.Suppressed = false;
         Audio.SoundBankPlayer.ListenerCell = new Vector2(float.NaN, float.NaN);
     }
 

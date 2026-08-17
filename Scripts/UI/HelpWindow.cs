@@ -143,8 +143,32 @@ public sealed partial class HelpWindow : PanelContainer
 
     /// <summary>Ein Fenster aufmachen. <paramref name="ox"/>/<paramref name="oy"/>
     /// sind die Stelle im 640×480-Raster des Originals.</summary>
+    /// <summary>
+    /// <b>SOLANGE GESETZT, GEHT KEIN FENSTER AUF.</b>
+    ///
+    /// <para>⚠⚠ 18.08.2026, gemeldet: »Popups aus Kampagnen öffnen sich wieder
+    /// im Hauptmenü, nachdem man die Kampagne beendet hat.«</para>
+    ///
+    /// <para>Es ist NICHT die alte Mission, die nachhallt — <see
+    /// cref="Core.LeaveToMenu.Tidy"/> ruft <see cref="Forget"/> und räumt sie
+    /// weg. Die Fenster sind <b>neu</b>: die Menü-Kulisse spielt einen echten
+    /// Spielstand (siehe <see cref="MenuBackdrop"/>, die Demos 1..13 des
+    /// Originals), und ein Spielstand bringt seine <b>Missionsregeln</b> mit.
+    /// Deren <c>show_text</c> feuert im Menü genauso wie im Spiel.</para>
+    ///
+    /// <para>Dieselbe Bauart wie <see cref="Settings.FogSuppressed"/>: der
+    /// Riegel steht in der Kulisse, nicht in der Regel — die Regel ist
+    /// richtig, sie läuft nur am falschen Ort.</para></summary>
+    public static bool Suppressed;
+
+    /// <summary>Wie viele Fenster der Riegel abgefangen hat — ⚠ ohne die Zahl
+    /// ist »es geht keines auf« nicht von »es käme ohnehin keines« zu
+    /// unterscheiden.</summary>
+    public static int SuppressedCount { get; private set; }
+
     public static HelpWindow? Show(Node host, int id, int ox, int oy)
     {
+        if (Suppressed) { SuppressedCount++; return null; }
         // Vom Spieler weggeklickt? Dann kommt es nicht wieder.
         if (Dismissed.Contains(id)) return null;
 

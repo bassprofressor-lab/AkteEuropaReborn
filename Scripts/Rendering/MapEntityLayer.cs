@@ -2820,6 +2820,23 @@ public partial class MapEntityLayer : Node2D
             if (e.Owner == ViewPlayer) _dotsMine++; else _dotsForeign++;
             list.Add((e.Pos, e.Owner, e.IsBuilding));
         }
+
+        // ⚠⚠ 18.08.2026 — UND DIE FLUGZEUGE. Gemeldet: »Gefecht: Flugzeuge sind
+        // nicht sichtbar auf der Minimap.« Sie standen hier nie drin: diese
+        // Schleife laeuft ueber `_entities`, Flugzeuge leben in `_special`.
+        //
+        // Dieselben zwei Bedingungen wie oben: eingelagerte zeigen nichts (sie
+        // stehen im Hangar), und ein fremdes Flugzeug nur, wo hingesehen wird.
+        // ⚠ Ein Flugzeug ist KEIN Gebaeude — der dritte Wert bleibt false, sonst
+        // bekaeme es den groesseren Gebaeudepunkt.
+        foreach (var a2 in _special)
+        {
+            if (a2.Dead || a2.Stored) continue;
+            if (FogActive && a2.Owner != ViewPlayer && !Watched(a2.Col, a2.Row))
+            { _dotsHidden++; continue; }
+            if (a2.Owner == ViewPlayer) _dotsMine++; else _dotsForeign++;
+            list.Add((a2.Pos, a2.Owner, false));
+        }
         return list;
     }
 
