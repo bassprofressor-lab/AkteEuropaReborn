@@ -49,11 +49,20 @@ public sealed partial class UnitOrderBar : PanelContainer
     /// <summary>»Anhalten« — dieselbe Stelle wie Taste X.</summary>
     public Action? OnStop;
 
+    /// <summary>Wieviele Radarmasten die gewählte Einheit noch hat —
+    /// <c>null</c> blendet den Knopf aus. ⚠ Der Knopf steht NUR bei einer
+    /// Einheit mit dem Radarstab-Ausleger (Bauteil 75); im Original ist genau
+    /// das Menü das Tor, nicht der Befehl.</summary>
+    public Func<int?>? RadarCharges;
+
+    /// <summary>»Radar setzen« — Kommando 27.</summary>
+    public Action? OnPlaceRadar;
+
     /// <summary>Die Rückmeldung des letzten Befehls, z. B. warum nichts
     /// geschah.</summary>
     public Func<string>? Note;
 
-    private readonly Button _sell = new(), _dig = new(), _stop = new();
+    private readonly Button _sell = new(), _dig = new(), _stop = new(), _radar = new();
     private readonly Label _note = new();
     private readonly ConfirmDialog _ask = new();
 
@@ -77,7 +86,9 @@ public sealed partial class UnitOrderBar : PanelContainer
         _sell.Pressed += AskAndSell;
         _dig.Pressed += () => OnDigIn?.Invoke();
         _stop.Pressed += () => OnStop?.Invoke();
+        _radar.Pressed += () => OnPlaceRadar?.Invoke();
         row.AddChild(_sell);
+        row.AddChild(_radar);
         row.AddChild(_dig);
         row.AddChild(_stop);
 
@@ -90,12 +101,12 @@ public sealed partial class UnitOrderBar : PanelContainer
     /// <summary>Die Wörter, die von aussen gesetzt werden — damit die Leiste
     /// die Namen des Originals trägt und nicht unsere. Aufrufer:
     /// <c>MapViewer.BuildUnitOrderBar</c>.</summary>
-    public void SetWords(string sell, string digIn, string stop)
+    public void SetWords(string sell, string digIn, string stop, string radar)
     {
-        _sellWord = sell; _dig.Text = digIn; _stop.Text = stop;
+        _sellWord = sell; _dig.Text = digIn; _stop.Text = stop; _radarWord = radar;
     }
 
-    private string _sellWord = "Verkaufen";
+    private string _sellWord = "Verkaufen", _radarWord = "Radar setzen";
 
     /// <summary>
     /// <b>Der Dialog des Originals, wörtlich.</b> Er rechnet nichts und fragt
@@ -124,6 +135,11 @@ public sealed partial class UnitOrderBar : PanelContainer
         var w = SellChoice?.Invoke();
         _sell.Visible = w != null;
         if (w != null) _sell.Text = $"{_sellWord} (${w.Value.Price})";
+        // ⚠ Der Vorrat steht IM Knopf. »Radar setzen« ohne die Zahl liesse den
+        // Spieler raten, wann Schluss ist — und Schluss ist nach zwanzig.
+        int? rad = RadarCharges?.Invoke();
+        _radar.Visible = rad is > 0;
+        if (rad is > 0) _radar.Text = $"{_radarWord} ({rad})";
         string n = Note?.Invoke() ?? "";
         _note.Visible = n.Length > 0;
         _note.Text = n;
@@ -145,7 +161,7 @@ public sealed partial class UnitOrderBar : PanelContainer
     public void SetFont(Font? font, int size)
     {
         if (font == null) return;
-        foreach (var c in new Control[] { _sell, _dig, _stop, _note })
+        foreach (var c in new Control[] { _sell, _radar, _dig, _stop, _note })
         {
             c.AddThemeFontOverride(c is Button ? "font" : "font", font);
             c.AddThemeFontSizeOverride(c is Button ? "font_size" : "font_size", size);

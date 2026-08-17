@@ -139,6 +139,26 @@ public static class CommandOp
     /// </summary>
     public const short Sell = 529;
 
+    /// <summary>
+    /// <b>27 = RADAR SETZEN.</b> P1 = die Einheit, sonst nichts.
+    ///
+    /// <para>Der Absender ist der Befehlsmenü-Eintrag <b>20 »Radar setzen«</b>
+    /// @0x448A4A: <c>word[Kladde] = 0x1B</c>, <c>P1 = word[0x4FA0C8]</c> (die
+    /// gewählte Einheit). ⚠ <b>Er ist der einzige der vier Bauaufträge ohne
+    /// Platzierungsmodus</b> — 17/18/19 (»Depot/Mine/Generator bauen«) setzen
+    /// <c>dword[0x502ACC]</c> und warten auf einen Klick, dieser hier wirkt
+    /// sofort auf der Zelle der Einheit.</para>
+    ///
+    /// <para>Der Behandler @0x422180 nimmt einen Mast vom Vorrat
+    /// (<c>byte[+0x45]</c>), legt ihn über <c>place_radar</c> @0x421B40 an und
+    /// setzt <c>word[+0x40] = 10</c>. Unser Profil sagt für 27 »P1« — und der
+    /// Behandler liest genau <c>word[Ring+0xE0]</c>. Zwei Seiten, dieselbe
+    /// Zählung.</para>
+    ///
+    /// <para>⚠ Ein Radar ist <b>kein Gebäude</b>, sondern ein Satz in einer
+    /// eigenen Tafel — siehe Simulation/RadarMast.cs.</para></summary>
+    public const short PlaceRadar = 27;
+
     /// <summary>⚠ <b>1001 trägt den ZUFALLSKEIM.</b> @0x419512..0x419525:
     /// <c>call rand; mov word[0xB4FA20],ax; mov word[Kladde+0x08],ax; mov
     /// word[Kladde+0x00],0x3E9</c> — der Keim der Partie wird als P1 eines
@@ -195,6 +215,7 @@ public static class CommandOp
         Move => "Bewegen",
         BuildShip => "Schiff bauen",
         Sell => "Verkaufen",
+        PlaceRadar => "Radar setzen",
         Seed => "Zufallskeim",
         OursAttack => "Angreifen (unsere Setzung)",
         OursStop => "Anhalten (unsere Setzung)",

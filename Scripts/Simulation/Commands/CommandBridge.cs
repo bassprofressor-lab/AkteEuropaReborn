@@ -469,6 +469,62 @@ public partial class MapEntityLayer
         return true;
     }
 
+    /// <summary>
+    /// <b>»Radar setzen«</b> — Kommando 27. P1 = die Einheit, sonst nichts.
+    ///
+    /// <para>⚠ Die Zelle steht NICHT im Satz: das Original nimmt sie im
+    /// Behandler aus der Einheit selbst (@0x4221C3). Das ist die Ordnung, die
+    /// es überall hat — geprüft und gelesen wird im Behandler, nicht beim
+    /// Absenden. Ein Satz, der die Zelle mitbrächte, könnte im Netzspiel eine
+    /// andere nennen als die, auf der die Einheit steht.</para></summary>
+    /// <returns>false, wenn nichts abgesetzt wurde; der Grund steht dann in
+    /// <see cref="RadarNote"/>.</returns>
+    public bool PostPlaceRadar(int idx)
+    {
+        if (idx < 0 || idx >= _entities.Count)
+        { RadarNote = "keine Einheit gewaehlt"; return false; }
+        var e = _entities[idx];
+        if (e.IsBuilding || e.IsProp || e.Dead)
+        { RadarNote = "das kann keinen Mast setzen"; return false; }
+        if (e.Owner != ViewPlayer)
+        { RadarNote = "das ist nicht Ihre Einheit"; return false; }
+        if (RadarChargesOf(idx) <= 0)
+        { RadarNote = "kein Radarstab mehr an Bord"; return false; }
+        if (!Emit(CommandRecord.Make(CommandOp.PlaceRadar, (byte)ViewPlayer, (short)idx)))
+        { RadarNote = "der Befehl liess sich nicht absetzen"; return false; }
+        return true;
+    }
+
+    /// <summary>
+    /// 27, Radar setzen — @0x422180.
+    ///
+    /// <para>⚠ Die Reihenfolge des Originals: <b>erst den Vorrat prüfen und
+    /// abziehen, dann setzen</b>. Schlägt das Setzen fehl (Tafel voll, Zelle
+    /// belegt), ist der Mast trotzdem verbraucht — das steht so da und wird so
+    /// nachgebaut. Der Prüfstand weist die Ablehnungen deshalb getrennt
+    /// aus.</para></summary>
+    private bool ApplyPlaceRadar(in CommandRecord c)
+    {
+        int i = c.P1;
+        if (i < 0 || i >= _entities.Count) return false;
+        var e = _entities[i];
+        if (e.IsBuilding || e.IsProp || e.Dead) return false;
+        if (RadarChargesOf(i) <= 0) return false;
+
+        e.RadarCharges--;                                  // @0x4221AF
+        int owner = e.Owner is >= 0 and <= 7 ? e.Owner : 0;
+        if (!PlaceRadarMast(e.Col, e.Row, owner))
+        {
+            RadarMastsRefused++;
+            if (RadarNote.Length == 0) RadarNote = "die Zelle nimmt keinen Mast";
+            return true;                                   // verbraucht ist er trotzdem
+        }
+        RadarNote = $"Radarmast auf ({e.Col},{e.Row}) — noch {e.RadarCharges} an Bord";
+        UpdateFog();
+        QueueRedraw();
+        return true;
+    }
+
     /// <summary>Einen fertigen Satz absetzen — für Prüfstand, Wiederholung und
     /// später den Netzempfang. Der Weg, auf dem ein Befehl von aussen
     /// hereinkommt, ist derselbe wie der von innen; nur so ist gesagt, dass
@@ -492,6 +548,7 @@ public partial class MapEntityLayer
         CommandOp.OursAttack => ApplyAttack(c),
         CommandOp.OursStop => ApplyStop(c),
         CommandOp.Sell => ApplySell(c),
+        CommandOp.PlaceRadar => ApplyPlaceRadar(c),
         _ => false,
     };
 

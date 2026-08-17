@@ -424,6 +424,7 @@ public partial class MapViewer : Node2D
         if (_buyCheckFlag) _entities.BuyCheckStart();
         if (_dockCheckFlag) _entities.DockCheckStart();
         if (_powerCheckFlag) _entities.PowerCheckStart();
+        if (_radarCheckFlag) _entities.RadarCheckStart();
         if (_marketCheck)
         {
             GD.Print(_entities.MarketCheck());
@@ -674,6 +675,10 @@ public partial class MapViewer : Node2D
     /// Generatoren) und misst gegen eine Vorhersage, nicht gegen sich
     /// selbst.</summary>
     private bool _powerCheckFlag;
+    /// <summary><c>--radar-check</c> — setzt eine Einheit mit Radarstab einen
+    /// Mast, und oeffnet der Mast wirklich Sicht? Er misst die beobachteten
+    /// Zellen vor und nach dem Setzen.</summary>
+    private bool _radarCheckFlag;
     /// <summary><c>--depot-flow</c> — bestellen, im Depot liegen, aussenden.</summary>
     private bool _depotFlow;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
@@ -1139,6 +1144,7 @@ public partial class MapViewer : Node2D
             else if (a == "--buy-check") _buyCheckFlag = true;
             else if (a == "--dock-check") _dockCheckFlag = true;
             else if (a == "--power-check") _powerCheckFlag = true;
+            else if (a == "--radar-check") _radarCheckFlag = true;
             else if (a == "--depot-flow") _depotFlow = true;
             else if (a == "--depot-flow=dock")
             { _depotFlow = true; MapEntityLayer.DepotFlowDock = true; }
@@ -2575,10 +2581,14 @@ public partial class MapViewer : Node2D
         layer.AddChild(_orderBar);
         _orderBar.SetWords(MapEntityLayer.OrderWord(MapEntityLayer.OrderSell),
                            MapEntityLayer.OrderWord(7) + "/" + MapEntityLayer.OrderWord(8),
-                           MapEntityLayer.OrderWord(26));
+                           MapEntityLayer.OrderWord(26),
+                           // 20 = »Radar setzen«, wieder das Wort des SPIELS
+                           MapEntityLayer.OrderWord(20));
         _orderBar.SellChoice = () => _entities.SellChoiceOfSelection() is { } w
                                    ? (w.Name, w.Price) : null;
         _orderBar.OnSell = () => _entities.SellFromPanel();
+        _orderBar.RadarCharges = () => _entities.RadarChoiceOfSelection()?.Charges;
+        _orderBar.OnPlaceRadar = () => _entities.PlaceRadarFromPanel();
         _orderBar.OnDigIn = () => _entities.ToggleDigIn();
         _orderBar.OnStop = () => _entities.StopSelected();
         _orderBar.Note = () => _entities.SellNote;
@@ -2593,7 +2603,8 @@ public partial class MapViewer : Node2D
     private void UpdateUnitOrderBar()
     {
         if (_orderBar == null || _entities == null) return;
-        bool want = _entities.SellChoiceOfSelection() != null;
+        bool want = _entities.SellChoiceOfSelection() != null
+                 || _entities.RadarChoiceOfSelection() != null;
         if (want != _orderBar.Visible)
         {
             _orderBar.Visible = want;

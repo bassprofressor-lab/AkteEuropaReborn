@@ -503,6 +503,12 @@ public partial class MapEntityLayer : Node2D
         /// eigenes Dock blockiert. Es ist sichtbar und nicht befehlbar, wie eine
         /// Einheit in der Tür.</para></summary>
         public int LeavingDock = -1;
+
+        /// <summary>Satz <b>+0x45</b> — wieviele RADARMASTEN diese Einheit noch
+        /// setzen kann. <b>−1 = noch nicht bestimmt</b>; siehe
+        /// <c>RadarChargesOf</c> in Simulation/RadarMast.cs, das den Wert beim
+        /// ersten Fragen aus dem Entwurf auflöst.</summary>
+        public int RadarCharges = -1;
         public float BuildTime;          // seconds left on the current build
         public int BuildIndex;           // design being built
 
@@ -1178,6 +1184,12 @@ public partial class MapEntityLayer : Node2D
             // den Kopf dieser Methode.
             yield return (e.Col + half.X, e.Row + half.Y, s, 1);
         }
+
+        // ⚠ Und die RADARMASTEN, seit C7. Sie sind keine Gebaeude und stehen
+        // in keiner Entitaetenliste — im Original haben sie eine eigene Tafel
+        // (0x677F30) und werden im Nebeltakt @0x4209AE getrennt durchgegangen.
+        // Genau deshalb stehen sie auch hier als eigene Schleife.
+        foreach (var w in RadarWatchers()) yield return w;
     }
 
     /// <summary>The fog as a W x H texture drawn over the map, the same trick
@@ -18451,6 +18463,8 @@ public partial class MapEntityLayer : Node2D
         PollBuyCheck();
         PollDockCheck();
         PollPowerCheck();
+        PollRadarCheck();
+        PollRadarCheck2();
 
         // preview harness: start the scripted build as soon as the factory has
         // manufactured enough parts
