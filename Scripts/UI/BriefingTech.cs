@@ -136,7 +136,12 @@ public partial class BriefingScreen
         {
             Position = at + new Vector2(TechBarX * scale, TechBarY * scale),
             Size = new Vector2(TechBarW * scale, TechBarH * scale),
-            HorizontalAlignment = HorizontalAlignment.Center,
+            // ⚠ LINKSBÜNDIG, nicht zentriert: 0x401041 bekommt die Stelle
+            // (0x32, 0x154) und setzt den Text DORT an — dieselbe x wie der
+            // Streifen. Im Vergleichsbild fängt »LEICHTE BORDKANONE« genau an
+            // der linken Kante des Streifens an; zentriert lag es 4 Punkte zu
+            // weit rechts.
+            HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Center,
             ClipText = true,               // ein langer Name laeuft nicht aus dem Streifen
             MouseFilter = Control.MouseFilterEnum.Ignore,
@@ -158,12 +163,27 @@ public partial class BriefingScreen
         // Eintrag gibt — das Original zeichnet sie ebenfalls immer; sie tun dann
         // schlicht nichts (0x486A9E/0x486AD8 klemmen den Stand bei 0 und
         // Anzahl−1 fest).
-        AddChild(MonitorKnopf(at, scale, TechPrevX, TechArrowY, TechArrowW, TechArrowH,
-                              "vorige Technologie", () => TechStep(-1)));
-        AddChild(MonitorKnopf(at, scale, TechNextX, TechArrowY, TechArrowW, TechArrowH,
-                              "naechste Technologie", () => TechStep(+1)));
+        var zurueck = MonitorKnopf(at, scale, TechPrevX, TechArrowY, TechArrowW, TechArrowH,
+                                   "vorige Technologie", () => TechStep(-1));
+        var weiter = MonitorKnopf(at, scale, TechNextX, TechArrowY, TechArrowW, TechArrowH,
+                                  "naechste Technologie", () => TechStep(+1));
+        AddChild(zurueck);
+        AddChild(weiter);
 
         TechShow();
+
+        // ⚠ `--tech-next=<n>` DRÜCKT den Knopf, statt _techAt zu setzen —
+        // dieselbe Lehre wie bei `--briefing-mission`: ein Prüfstand, der das
+        // Feld dahinter anfasst, prüft den Knopf nicht.
+        foreach (string a in OS.GetCmdlineUserArgs())
+        {
+            Button? b = a.StartsWith("--tech-next=") ? weiter
+                      : a.StartsWith("--tech-prev=") ? zurueck : null;
+            if (b == null) continue;
+            int n = a[(a.IndexOf('=') + 1)..].ToInt();
+            for (int i = 0; i < n; i++) b.EmitSignal(BaseButton.SignalName.Pressed);
+            GD.Print($"Briefing: »{a}« — Kasten steht auf Eintrag {_techAt + 1} von {_tech.Count}");
+        }
         GD.Print($"Briefing: Mission {_mission} kuendigt {_tech.Count} Technologie(n) an — " +
                  string.Join(", ", _tech.ConvertAll(e => $"{e.Name} (Seite {e.Page}, Bild {e.Picture})")));
     }
@@ -299,7 +319,62 @@ public partial class BriefingScreen
                         "»--tech-export=<Installation>« schreibt sie");
             rc |= 1;
         }
+        rc |= TechGegenPython();
         GD.Print(rc == 0 ? "tech-check: in Ordnung" : $"tech-check: BEANSTANDET (rc={rc})");
         return rc;
+    }
+
+    /// <summary>
+    /// <b>Die zweite Messung: der C#-Leser gegen den Python-Leser.</b>
+    ///
+    /// <para><c>aekernel-tools/mission_tech.py</c> sucht dieselbe Tafel
+    /// unabhängig (eigener PE-Gang, eigene Formprüfung) und schreibt
+    /// <c>mission_tech.json</c> daneben. Beide müssen dasselbe sagen — dieselbe
+    /// Bauart, in der <c>--selftest-exe</c> den Fahrplan gegen
+    /// <c>mission_unlocks.json</c> hält. Ist die Datei nicht da (ein
+    /// ausgeliefertes Spiel hat kein aekernel-tools), wird die Messung
+    /// übersprungen und das gesagt — nicht stillschweigend bestanden.</para>
+    /// </summary>
+    private static int TechGegenPython()
+    {
+        string p = ProjectSettings.GlobalizePath("res://aekernel-tools/mission_tech.json");
+        if (!System.IO.File.Exists(p))
+        {
+            GD.Print("tech-check: aekernel-tools/mission_tech.json fehlt — " +
+                     "Gegenprobe uebersprungen (»python mission_tech.py <GAME.EXE> " +
+                     "--encyclog <ENCYCLOG.TXT> --json mission_tech.json«)");
+            return 0;
+        }
+        using var json = new Json();
+        if (json.Parse(System.IO.File.ReadAllText(p)) != Error.Ok ||
+            json.Data.VariantType != Variant.Type.Dictionary)
+        {
+            GD.PrintErr("tech-check: mission_tech.json des Python-Lesers ist kein JSON-Objekt");
+            return 1;
+        }
+        int gleich = 0, anders = 0;
+        foreach (var kv in json.Data.AsGodotDictionary<string, Variant>())
+        {
+            var soll = new List<string>();
+            if (kv.Value.VariantType == Variant.Type.Array)
+                foreach (var e in kv.Value.AsGodotArray())
+                {
+                    var d = e.AsGodotDictionary<string, Variant>();
+                    soll.Add($"{d["name"].AsString()}/{d["page"].AsInt32()}/{d["picture"].AsInt32()}");
+                }
+            var ist = new List<string>();
+            foreach (var e in Import.MissionTechTable.Of(kv.Key.ToInt()) ??
+                              new List<Import.MissionTechTable.Entry>())
+                ist.Add($"{e.Name}/{e.Page}/{e.Picture}");
+            if (string.Join("|", soll) == string.Join("|", ist)) gleich++;
+            else
+            {
+                anders++;
+                GD.PrintErr($"tech-check: Mission {kv.Key} — Python »{string.Join(" ", soll)}«, " +
+                            $"wir »{string.Join(" ", ist)}«");
+            }
+        }
+        GD.Print($"tech-check: gegen mission_tech.py — {gleich} Missionen gleich, {anders} abweichend");
+        return anders == 0 ? 0 : 1;
     }
 }

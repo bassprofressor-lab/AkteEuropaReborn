@@ -693,6 +693,71 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Kampagne und Oberfläche
 
+- ⭐ **Der Kasten »neue technologien« im Briefing ist gefüllt** — Überschrift auf
+  schwarzem Streifen, darunter das Bild, wie im Original. Mission 2 kündigt
+  »LEICHTE BORDKANONE« an, Mission 1 kündigt nichts an und bleibt leer; beides
+  gegen die zwei Bildschirmfotos des Spielers geprüft.
+
+  **Die Zuordnung Mission → Technik ist eine eigene Tafel in GAME.EXE**, und sie
+  ist weder der Missionssatz noch der Freischalt-Fahrplan. Gefunden über den
+  **Zeichner**, nicht über die Datei: der Briefingschirm ist **Fensterart 43**
+  (sein Erbauer `@0x45BC10` schreibt `byte[…] = 0x2B`), in der Zeichnertafel
+  `@0x487888` steht auf Platz 42 die Routine **`0x486480`**, und deren letzter
+  Block `0x486AFA..0x486C92` malt genau die drei Dinge des Kastens: den
+  **schwarzen Streifen** `0x4021DA(0x32, 0x154, 0x96, 0x0F, 0, …)` = **(50,340)
+  150×15**, den **Namen** darauf `0x401041(0x32, 0x154, …)` und das **Bild**
+  darunter auf **(30,370) 60×60**.
+
+  Die Form der Tafel ist aus den zwei Adressen abgezählt, die der Zeichner
+  benutzt — `0x4FEB0C` (Name) und `0x4FEB20` (Seite) liegen 20 Byte
+  auseinander: **je Eintrag 20 Byte Name + 1 Wort, je Mission 10 Einträge zu
+  22 Byte in 224 Byte**. Die 10 sind die `cmp ax,0xA`, mit der der Erbauer
+  `@0x45BD17` seinen Zähler abbricht.
+
+  **Was herauskommt, gezählt: 74 Einträge in 30 der 33 Missionen**; ohne Eintrag
+  sind **1, 4 und 28**. In beiden GAME.EXE **Byte für Byte gleich** (1.421.824 B
+  auf `0x4FEB0C`, 1.420.800 B auf `0x4FDB4C`, 40 Sätze verglichen) — gesucht wird
+  sie deshalb nach der **Form**, nie nach einer Adresse, und der Satz **davor**
+  muss die Form brechen, sonst stünde alles um eine Mission verschoben.
+
+  - ⚠ **Das Bild kommt NICHT aus der Bildbank der Oberfläche.** Der Zeichner
+    öffnet **`ENCYCLOG.PIC`**, springt auf `3600·(Bild−1)` und liest 3.600 Byte.
+    Damit ist die Frage beantwortet, die der Enzyklopädie-Leser offengelassen
+    hatte (»bei 120×120 nur 24 Bilder, die Nummern laufen bis 97«): es sind
+    **96 Bilder zu 60×60**. Das Wort in der Tafel ist die **Enzyklopädieseite**,
+    und die Bildnummer steht hinter dem Komma ihrer Seitenmarke in
+    `ENCYCLOG.TXT` (`#p36,17` → »Bordkanone«, Bild 17). ⚠ Latin-1 wie die Tafel
+    selbst.
+  - **Eine unabhängige Bestätigung von der anderen Seite:** der
+    Freischalt-Fahrplan aus dem Missionsaufbau gibt Mission 2 die Bauteilzeilen
+    **1, 4, 161 und 80**. Die Tafel nennt für Mission 2 »Leichte Bordkanone«
+    (Zeile 1), »Maschinengewehr« (4) und »Reifen« (161) — die drei mit Bild;
+    Zeile 80 ist eine der neun Verbesserungen, die im Original kein Bild haben.
+    Zwei getrennt gelesene Tafeln, dieselbe Aussage.
+  - ⚠ **Die Tafel ist REDAKTIONELL und folgt der Freischaltung nicht überall.**
+    Mission 6 schaltet Bauteilzeile 5 frei, kündigt aber »Leichte Infanterie«
+    an, die als »2xMaschinengewehr« erst in Mission 7 im Kasten steht. Das ist
+    so gelesen und wird nicht geglättet.
+  - **Die zwei leeren Platten links von START blättern.** Das Original hält den
+    Stand in `byte[0x8C3CC9]` und zeichnet die Pfeile auf **(65,452)** und
+    **(107,452)** (`0x486A25`/`0x486A5C`); es zeigt immer nur **einen** Eintrag.
+    Ohne Blättern wären die Missionen 22 und 25 mit ihren je sechs Einträgen zu
+    fünf Sechsteln unerreichbar. `--tech-next=<n>` **drückt den Knopf** statt den
+    Stand zu setzen — dieselbe Lehre wie bei `--briefing-mission`.
+  - **Prüfstand `--tech-check`** (mit `--campaign=<n>`): zählt die Missionen mit
+    Technik, prüft, dass Mission 1 **keine** hat und Mission 2 mit »Leichte
+    Bordkanone« anfängt, dass jedes Bild ladbar ist, und hält den C#-Leser gegen
+    den unabhängigen Python-Leser `aekernel-tools/mission_tech.py`. Gemessen:
+    *33 Missionen geführt, 30 mit Technik, 74 Einträge, 0 ohne Bildnummer,
+    0 Bild nicht ladbar, 33 Missionen gleich, 0 abweichend*. Er kann scheitern —
+    ein von Hand verbogener Name in der JSON wird beanstandet.
+  - ⚠ **Offen: der eine Haken im regulären Einlesen.** Geschrieben wird die
+    Zuordnung heute mit `--tech-export=<Installation>` (derselbe Notbehelf, den
+    die Bildbank mit `--reexport-effects=` nimmt), weil `ContentBuilder.cs`
+    gerade einem zweiten Agenten gehört. Fehlt nur der Aufruf
+    `MissionTechExporter.WriteAll(exe, ENCYCLOG.TXT, ENCYCLOG.PIC, 01.PAL, _dst)`
+    neben dem von `BRIEFG.DAT`.
+
 - ⭐ **Das Emblem von Akte Europa steht auf dem Briefingschirm — beide Male, und
   beide bewegen sich.** Das Wasserzeichen hinter dem Text **dreht sich einmal
   um die senkrechte Achse**, wenn der Schirm aufgeht; in den zwei Nischen unten
