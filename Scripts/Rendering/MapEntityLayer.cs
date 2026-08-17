@@ -2261,6 +2261,13 @@ public partial class MapEntityLayer : Node2D
         // ⚠ Die Ware des MARKTES (Typ 17). Sie gehoert der KARTE, nicht einem
         // Gebaeude: sec94/sec95 gibt es einmal je Karte. Siehe MarketOpenFor.
         _market.Clear();
+        // Die VERKAUFSseite haengt an derselben Karte und muss mit ihr gehen —
+        // ein Angebot traegt einen Satzindex, und der zeigt nach dem Laden auf
+        // eine ganz andere Einheit. Siehe Simulation/MarketTrade.cs.
+        _sellOffers.Clear();
+        _collectors.Clear();
+        _marketAcc = 0; _marketTicks = 0;
+        SoldUnits = 0; SoldMoney = 0; SellNote = "";
         if (root.TryGetValue("market", out var mkv) &&
             mkv.VariantType == Variant.Type.Array)
             foreach (var item in mkv.AsGodotArray())
@@ -17979,8 +17986,15 @@ public partial class MapEntityLayer : Node2D
         _takeoverTimer -= dt;
         if (_takeoverTimer <= 0f) { _takeoverTimer = TakeoverEverySec; TakeoverTick(); }
 
+        // ⚠ Der Handel am Geschaeftszentrum laeuft auf dem TAKT DES ORIGINALS
+        // (50 Hz), nicht auf unserem — nur so lassen sich seine Bedingungen
+        // `%100 == 77` / `%300 == 111` woertlich uebernehmen, statt sie
+        // umzurechnen. Siehe Simulation/MarketTrade.cs.
+        MarketTradeTick();
+
         PollBuildPanelDemo();
         PollDepotFlow();
+        PollSellCheck();
 
         // preview harness: start the scripted build as soon as the factory has
         // manufactured enough parts

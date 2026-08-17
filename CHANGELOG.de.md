@@ -271,6 +271,37 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Gefecht
 
+- ⭐ **Einheiten lassen sich verkaufen.** Der Befehl gehört dem Original — es
+  führt ihn als Eintrag 4 seiner eigenen Befehlsliste (»Angreifen, Bewegen,
+  Beschützen, Selbstzerstörung, **Verkaufen**, …«), und damit ist er ein Befehl
+  an die *Einheit*, kein Knopf im Marktfenster: man muss dafür nirgendwohin
+  fahren.
+  Den Preis rechnet das Spiel, nicht der Verkäufer — **30 % des Werts**, und der
+  Wert hängt an der Hülle: eine angeschlagene Einheit bringt weniger. Der Dialog
+  fragt nur noch »Akzeptieren Sie $X für diese Einheit?«, wörtlich wie das
+  Original. Der Laden verlangt umgekehrt **250 %**; die Spanne des
+  Geschäftszentrums ist also **8 : 1**.
+  ⚠ **Kampagne und Gefecht laufen hier bewusst verschieden.** In der Kampagne
+  ist es originalgetreu: die Einheit bleibt stehen, ein Abholer fährt vom
+  Kartenrand heran, und erst bei seiner Ankunft gibt es Geld (gemessen: 2,83 s
+  auf `map_01`). Im Gefecht kommt das Geld sofort — ein Wettkampfmodus, in dem
+  eine Einnahme sechs Sekunden hinter der Entscheidung herläuft, ist schlechter
+  zu spielen.
+  ⚠ Was der Abholer **nicht** hat, ist ein Bild: ob das Original ihn überhaupt
+  zeichnet, ist nicht gelesen, und ihm eines zu erfinden wäre eine Erfindung an
+  der sichtbarsten Stelle des Spiels. Seine Fahrt dagegen ist ganz nachgebaut,
+  bis zum Abbremsen auf den letzten zehn Feldern.
+  Gemessen mit `--sell-check` in beiden Modi, mit Gegenprobe in beide
+  Richtungen: `$4000 → $4058` nach dem Warten, `$44850 → $44917` sofort.
+
+- **Die gewählte Einheit hat jetzt eine Befehlsleiste** — Verkaufen (mit dem
+  Preis im Knopf), Ein-/Ausgraben, Anhalten. Anlass ist eine Lehre aus vier
+  eigenen Fehlern: Forschung, Reparatur, Depot und Hangar waren alle vier
+  gebaut, lagen auf den Tasten O, K und Y — und wurden alle vier als »fehlt«
+  gemeldet, weil die Oberfläche schwieg. Eine Mechanik, die nur auf einer Taste
+  liegt, ist für den Spieler nicht vorhanden. Das Original hat für seine
+  Einheitenbefehle ebenfalls eine Knopfleiste.
+
 - **Die Kartenvorschau sagt jetzt, wieviele Basen es gibt.** Anlass war »die
   Gegner-KI macht mal was, mal nicht — manche bauen gar nicht erst los«. Die
   Ursache ist keine der KI, sondern der Karte: gebaut wird nur in einer BASIS,

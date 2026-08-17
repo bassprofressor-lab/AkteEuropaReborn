@@ -419,6 +419,7 @@ public partial class MapViewer : Node2D
             return;
         }
         if (_depotFlow) _entities.DepotFlowStart();
+        if (_sellCheck) _entities.SellCheckStart();
         if (_marketCheck)
         {
             GD.Print(_entities.MarketCheck());
@@ -646,6 +647,11 @@ public partial class MapViewer : Node2D
     private bool _hangarCheck;
     /// <summary><c>--market-check</c> — Markt, Ware, Plattenpruefung.</summary>
     private bool _marketCheck;
+    /// <summary><c>--sell-check</c> — eine Einheit verkaufen und zusehen.
+    /// ⚠ Er laeuft ueber TAKTE (der Abholer braucht Sekunden), also nicht wie
+    /// die einmaligen Pruefstaende hier drueber, sondern ueber
+    /// <c>MapEntityLayer.PollSellCheck</c> im SimTick.</summary>
+    private bool _sellCheck;
     /// <summary><c>--depot-flow</c> — bestellen, im Depot liegen, aussenden.</summary>
     private bool _depotFlow;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
@@ -1106,6 +1112,7 @@ public partial class MapViewer : Node2D
             else if (a == "--produce-pics") _producePics = true;
             else if (a == "--hangar-check") _hangarCheck = true;
             else if (a == "--market-check") _marketCheck = true;
+            else if (a == "--sell-check") _sellCheck = true;
             else if (a == "--depot-flow") _depotFlow = true;
             else if (a == "--depot-flow=dock")
             { _depotFlow = true; MapEntityLayer.DepotFlowDock = true; }
@@ -1793,6 +1800,20 @@ public partial class MapViewer : Node2D
                 GD.Print($"MapViewer: --shot-when=markt ausgeloest — Markt auf " +
                          $"({at.Value.X},{at.Value.Y}), Fenster offen");
             }
+            // ⚠ Der Auslöser für die BEFEHLSLEISTE der Einheit. Sie steht nur,
+            // wenn etwas Verkäufliches gewählt ist — ohne diesen Griff zeigt
+            // jedes Bild eine leere Karte und beweist gar nichts.
+            else if (_shotWhen == "verkauf")
+            {
+                var at = _entities.SellShotSetup();
+                if (at == null) return;
+                _camera.Position = _entities.RailCellPoint(at.Value.X, at.Value.Y);
+                ClampCamera();
+                UpdateUnitOrderBar();
+                GD.Print($"MapViewer: --shot-when=verkauf ausgeloest — Einheit auf " +
+                         $"({at.Value.X},{at.Value.Y}), Leiste " +
+                         $"{(_orderBar is { Visible: true } ? "steht" : "STEHT NICHT")}");
+            }
             else if (_shotWhen == "squash")
             {
                 if (_entities.RailSquashNow < _shotWhenN) return;
@@ -2433,6 +2454,39 @@ public partial class MapViewer : Node2D
             OnClose = () => { if (_entities.Designer.Active) _entities.ToggleDesigner(); },
         };
         layer.AddChild(_designWindow);
+
+        // ⚠ Die Befehlsleiste der EINHEIT — siehe UI/UnitOrderBar.cs. Sie liegt
+        // auf derselben Ebene wie das Basisfenster, weil sie dieselbe Rolle
+        // spielt: das Fenster bedient ein Gebaeude, die Leiste eine Einheit.
+        _orderBar = new UI.UnitOrderBar { Visible = false };
+        layer.AddChild(_orderBar);
+        _orderBar.SetWords(MapEntityLayer.OrderWord(MapEntityLayer.OrderSell),
+                           MapEntityLayer.OrderWord(7) + "/" + MapEntityLayer.OrderWord(8),
+                           MapEntityLayer.OrderWord(26));
+        _orderBar.SellChoice = () => _entities.SellChoiceOfSelection() is { } w
+                                   ? (w.Name, w.Price) : null;
+        _orderBar.OnSell = () => _entities.SellFromPanel();
+        _orderBar.OnDigIn = () => _entities.ToggleDigIn();
+        _orderBar.OnStop = () => _entities.StopSelected();
+        _orderBar.Note = () => _entities.SellNote;
+    }
+
+    /// <summary>Die Befehlsleiste der gewählten Einheit — siehe
+    /// UI/UnitOrderBar.cs.</summary>
+    private UI.UnitOrderBar? _orderBar;
+
+    /// <summary>Sie steht da, sobald eine eigene, bewegliche Einheit gewählt
+    /// ist, und geht weg, wenn die Auswahl weg ist.</summary>
+    private void UpdateUnitOrderBar()
+    {
+        if (_orderBar == null || _entities == null) return;
+        bool want = _entities.SellChoiceOfSelection() != null;
+        if (want != _orderBar.Visible)
+        {
+            _orderBar.Visible = want;
+            if (want) _orderBar.PlaceBottomCentre();
+        }
+        if (want) { _orderBar.Refresh(); _orderBar.PlaceBottomCentre(); }
     }
 
     /// <summary>Der Entwurfsdialog — siehe UI/DesignWindow.cs. Er hat keinen
@@ -2498,6 +2552,7 @@ public partial class MapViewer : Node2D
         _hud.AddThemeConstantOverride("line_spacing", 2 * LegacyFontScale);
         _entities.SetUiFont(font, size);
         _baseWindow?.SetFont(font, size);
+        _orderBar?.SetFont(font, size);
         _designWindow?.SetFont(font, size);
         // Die Rohstoffleiste MUSS diese Schrift haben: ihre drei Sinnbilder sind
         // die Zeichen ] [ { aus FONT.CWD — mit einer anderen Schrift stünden
@@ -2892,6 +2947,7 @@ public partial class MapViewer : Node2D
         UpdateResourceBar();
         QuitIfDue(delta);
         UpdateProductionPanel();
+        UpdateUnitOrderBar();
         UpdateDesignWindow();
         UpdatePanelClock();
         UpdatePanelPortrait();

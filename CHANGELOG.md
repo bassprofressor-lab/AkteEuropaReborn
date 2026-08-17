@@ -246,6 +246,34 @@ deviate on purpose, and every deviation is marked as ours.
 
 ### Skirmish
 
+- ⭐ **Units can be sold.** The order belongs to the original — it carries it as
+  entry 4 of its own order list ("Attack, Move, Guard, Self-destruct, **Sell**,
+  …"), which makes it an order given to the *unit*, not a button in the market
+  window: you do not have to drive anywhere for it.
+  The game computes the price, not the seller — **30 % of the value**, and the
+  value hangs on the hull, so a damaged unit fetches less. The dialogue only
+  asks "Do you accept $X for this unit?", word for word as the original does.
+  The shop charges **250 %** the other way round, so the trading centre's spread
+  is **8 : 1**.
+  ⚠ **Campaign and skirmish deliberately differ here.** The campaign is
+  faithful: the unit stays put, a collector drives in from the map edge, and the
+  money only arrives when it does (measured: 2.83 s on `map_01`). In a skirmish
+  the money is immediate — a competitive mode in which income trails six seconds
+  behind the decision plays worse.
+  ⚠ What the collector does **not** have is a picture: whether the original
+  draws it at all has not been read, and inventing one would be an invention at
+  the most visible place in the game. Its journey, on the other hand, is
+  reproduced in full, down to the braking over the last ten tiles.
+  Measured with `--sell-check` in both modes, with the counter-probe in both
+  directions: `$4000 → $4058` after the wait, `$44850 → $44917` at once.
+
+- **The selected unit now has an order bar** — Sell (with the price on the
+  button), Dig in/out, Stop. The reason is a lesson from four of our own
+  mistakes: research, repair, depot and hangar were all four built and sat on
+  the keys O, K and Y — and all four were reported as "missing", because the
+  interface said nothing. A mechanic that lives only on a key does not exist for
+  the player. The original has a button bar for its unit orders too.
+
 - ⭐ **Enemy buildings can be captured — Ctrl+right-click.** Reported as "the
   shipyard and the sea dock cannot be captured, all you can do is attack them"
   and "buildings the AI has captured cannot be captured back, only destroyed".

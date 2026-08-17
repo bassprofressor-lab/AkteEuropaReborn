@@ -381,6 +381,94 @@ public partial class MapEntityLayer
         return n;
     }
 
+    /// <summary>
+    /// <b>»Verkaufen« für EINE Einheit</b> — Kommando 529.
+    ///
+    /// <para>Der Preis wird <b>hier</b> gerechnet und in den Satz geschrieben,
+    /// nicht im Behandler, und das ist die Ordnung des Originals: der Dialog
+    /// @0x446470 rechnet <c>3·Wert/10</c> und legt ihn in seinen Merksatz, das
+    /// Ja @0x44B138 nimmt ihn von dort als <b>P2</b>. Der Behandler @0x4BFFF0
+    /// trägt den Preis nur noch ein.</para>
+    ///
+    /// <para>⚠ <b>Und das ist mehr als Buchhaltung.</b> Der Wert hängt an der
+    /// HÜLLE JETZT (@0x450F94) — er sinkt also, während die Einheit beschossen
+    /// wird. Stünde die Rechnung im Behandler, käme im Netzspiel je nach
+    /// Ankunftstakt ein anderer Preis heraus, und beim Zusehen sähe alles
+    /// richtig aus. Im Satz steht die Zahl fest, sobald der Spieler zugestimmt
+    /// hat.</para>
+    ///
+    /// <para>⚠ <b>Keine Marktprüfung</b>, weil das Original keine hat: Dialog
+    /// und Behandler sind ganz gelesen, keiner von beiden fragt nach einem
+    /// Gebäude. Wer eine hinzufügte, erfände eine Regel.</para>
+    /// </summary>
+    /// <returns>Der Preis, zu dem abgesetzt wurde, oder −1 wenn nichts
+    /// abgesetzt wurde. ⚠ Der Grund steht dann in <see cref="SellNote"/> —
+    /// ein Aufrufer, der nur »ging nicht« erfährt, kann dem Spieler nicht
+    /// sagen, welches Glied fehlt.</returns>
+    public int PostSell(int idx)
+    {
+        if (idx < 0 || idx >= _entities.Count)
+        { SellNote = "keine Einheit gewaehlt"; return -1; }
+        var e = _entities[idx];
+        if (e.IsBuilding || e.IsProp)
+        { SellNote = "ein Gebaeude laesst sich nicht verkaufen"; return -1; }
+        if (e.Dead)
+        { SellNote = "die Einheit ist zerstoert"; return -1; }
+        if (e.Owner != ViewPlayer)
+        { SellNote = "das ist nicht Ihre Einheit"; return -1; }
+        foreach (var o in _sellOffers)
+            if (o.Unit == idx)
+            {
+                // ⚠ Das Original tut es TROTZDEM und schreibt nur »Robot
+                // already sold.« (0x539050) ins Protokoll — es zahlt dann
+                // zweimal. Wir halten hier an, und das ist eine bewusste
+                // Abweichung: der Doppelverkauf ist kein Verhalten, das ein
+                // Spieler will, sondern eine offene Kasse. Die gelesene
+                // Fassung steht in CommandOp.Sell, damit sie nicht verloren ist.
+                SellNote = "diese Einheit ist bereits verkauft";
+                return -1;
+            }
+
+        int price = SellPriceOf(idx);
+        if (price < 0)
+        { SellNote = $"der Entwurf dieser Einheit (Marke {e.Mark}) ist nicht auffindbar"; return -1; }
+
+        var c = CommandRecord.Make(CommandOp.Sell, (byte)ViewPlayer,
+                                   (short)idx, (short)price);
+        if (!Emit(c)) { SellNote = "der Befehl liess sich nicht absetzen"; return -1; }
+        return price;
+    }
+
+    /// <summary>
+    /// 529, Verkaufen. P1 = Einheit, P2 = Preis — @0x4BFFF0.
+    ///
+    /// <para>Kampagne: eintragen mit Zustand <c>0xFF</c> und den Markttick
+    /// machen lassen. Gefecht: sofort abrechnen. Beides läuft durch DIESEN
+    /// Satz, also über den Ring — im Netzspiel sehen damit beide Maschinen
+    /// dasselbe Geschäft im selben Takt.</para>
+    /// </summary>
+    private bool ApplySell(in CommandRecord c)
+    {
+        int i = c.P1;
+        if (i < 0 || i >= _entities.Count) return false;
+        var e = _entities[i];
+        if (e.IsBuilding || e.IsProp || e.Dead) return false;
+        int price = c.P2;
+        if (price < 0) return false;
+
+        if (!TradeLikeOriginal) { SellAtOnce(i, price); return true; }
+
+        // byte[ent+0x14] = 0 — der laufende Auftrag geht weg (@0x4C000B).
+        e.Path = null;
+        e.Orders.Clear();
+        e.Target = -1;
+        if (e.Reserved is { } rc) { _nav?.ClearOccupant(rc.X, rc.Y, i); e.Reserved = null; }
+
+        _sellOffers.Add(new SellOffer { Unit = i, Price = price, State = 0xFF });
+        SellNote = $"verkauft fuer ${price} — der Abholer kommt";
+        return true;
+    }
+
     /// <summary>Einen fertigen Satz absetzen — für Prüfstand, Wiederholung und
     /// später den Netzempfang. Der Weg, auf dem ein Befehl von aussen
     /// hereinkommt, ist derselbe wie der von innen; nur so ist gesagt, dass
@@ -403,6 +491,7 @@ public partial class MapEntityLayer
         CommandOp.Move => ApplyMove(c),
         CommandOp.OursAttack => ApplyAttack(c),
         CommandOp.OursStop => ApplyStop(c),
+        CommandOp.Sell => ApplySell(c),
         _ => false,
     };
 

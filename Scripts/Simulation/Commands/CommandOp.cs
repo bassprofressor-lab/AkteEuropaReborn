@@ -109,6 +109,36 @@ public static class CommandOp
     /// unser Profil sagt für 508 »P1, P2, P3«. Es passt.</summary>
     public const short BuildShip = 508;
 
+    /// <summary>
+    /// <b>529 = EINE EINHEIT VERKAUFEN.</b> P1 = Einheitsnummer, P2 = Preis.
+    ///
+    /// <para>Von beiden Seiten gelesen (18.08.2026). <b>Der Absender</b> ist die
+    /// Ja-Schaltfläche des Verkaufsfensters @0x44B138: <c>word[Kladde] = 0x211</c>,
+    /// <c>P1 = word[Satz+0x8C3CDA]</c> (die Einheit), <c>P2 = word[Satz+0x8C3CDC]</c>
+    /// (der Preis, den der Dialog vorher selbst gerechnet hat). <b>Der
+    /// Behandler</b> @0x4BFFF0 löscht den laufenden Auftrag der Einheit
+    /// (<c>byte[ent+0x14] = 0</c>) und trägt sie in die Angebotstafel
+    /// <c>0xB4A0D0</c> ein — 1000 Sätze zu 6 Byte, <c>{u16 Einheit, u16 Preis,
+    /// u8 Zustand}</c> — auf dem ersten Platz, dessen Einheitsfeld
+    /// <c>0xFFFF</c> ist, mit <b>Zustand 0xFF</b>.</para>
+    ///
+    /// <para>Unser Profil sagt für 529 »P1, P2« (<c>cmd_opcodes.py</c>), und der
+    /// Behandler holt genau <c>word[Ring+0xE0]</c> und <c>word[Ring+0xE2]</c>.
+    /// Zwei Seiten, dieselbe Zählung.</para>
+    ///
+    /// <para>⚠ <b>Der Doppelverkauf wird NICHT verhindert.</b> Der Behandler
+    /// durchsucht die Tafel vorher nach derselben Einheit und schreibt nur eine
+    /// Zeile ins Protokoll (<c>»Robot already sold.«</c>, 0x539050) — dann trägt
+    /// er sie ein zweites Mal ein.</para>
+    ///
+    /// <para>⚠ <b>Kein Markt weit und breit.</b> Weder der Dialog noch dieser
+    /// Behandler prüfen ein Gebäude, eine Zelle oder eine Entfernung; beide
+    /// Funktionen sind ganz gelesen. Verkaufen ist im Original ein
+    /// <b>Einheitenbefehl</b> (Eintrag 4 der Befehlsliste 0x4FD660), kein
+    /// Knopf im Fenster des Geschäftszentrums.</para>
+    /// </summary>
+    public const short Sell = 529;
+
     /// <summary>⚠ <b>1001 trägt den ZUFALLSKEIM.</b> @0x419512..0x419525:
     /// <c>call rand; mov word[0xB4FA20],ax; mov word[Kladde+0x08],ax; mov
     /// word[Kladde+0x00],0x3E9</c> — der Keim der Partie wird als P1 eines
@@ -164,6 +194,7 @@ public static class CommandOp
     {
         Move => "Bewegen",
         BuildShip => "Schiff bauen",
+        Sell => "Verkaufen",
         Seed => "Zufallskeim",
         OursAttack => "Angreifen (unsere Setzung)",
         OursStop => "Anhalten (unsere Setzung)",
