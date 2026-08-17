@@ -1539,8 +1539,28 @@ public partial class MapEntityLayer : Node2D
     /// statt sie zu verwerfen.</para></summary>
     private void AiEmptyDepots(AiPlayer a)
     {
-        foreach (var b in _entities)
+        // ⚠⚠ 18.08.2026 — HIER STAND EIN `foreach (var b in _entities)`, UND ES
+        // WARF. `SendOutOfDepot` stellt die fertige Einheit auf die Karte und
+        // HAENGT SIE DAMIT AN `_entities` AN; der naechste Schritt des
+        // Aufzaehlers stirbt dann an »Collection was modified; enumeration
+        // operation may not execute«.
+        //
+        // Gemessen: auf map_DM_1 und map_DM_4 in JEDEM Lauf, sobald ein
+        // Computerspieler das erste Mal etwas fertigbaut — der Takt bricht ab,
+        // die Ausnahme wiederholt sich Bild fuer Bild. Gefunden ist er beim
+        // Nachschub des Ladens, nicht beim Ansehen der KI: der Prueflauf lief
+        // laenger als die uebrigen und kam dadurch ueberhaupt erst so weit.
+        // (Das ist Regel 14 von der anderen Seite — ein Fehler in Datei A faellt
+        // bei der Arbeit an Datei B auf.)
+        //
+        // Ueber den Index, mit der Laenge VON VORHER: was waehrend des Laufs
+        // hinten dazukommt, ist die gerade ausgesandte Einheit und hat hier
+        // nichts zu suchen. Die zweite Bedingung faengt den Fall ab, dass
+        // anderswo etwas entfernt wird.
+        int stand = _entities.Count;
+        for (int i = 0; i < stand && i < _entities.Count; i++)
         {
+            var b = _entities[i];
             if (!b.IsBuilding || b.Dead || b.Owner != a.Player) continue;
             // rückwärts wäre falsch: das Original nimmt den ersten Platz, und
             // die Reihenfolge ist die der Fertigstellung.
