@@ -307,6 +307,21 @@ public partial class BriefingScreen : CanvasLayer
 
         var font = LegacyFont();
 
+        // ⚠⚠ 18.08.2026 — DIE SCHRIFT SPRANG IN GANZEN VIELFACHEN. Gemeldet:
+        // »unser Text ist noch etwas zu gross im Kampagnen-Missions-Preview«.
+        //
+        // `LegacyFont` setzt `FixedSizeScaleMode.IntegerOnly`, damit die 13 px
+        // Bildpunkte scharf bleiben. Solange das Bild selbst in ganzen
+        // Vielfachen sass, passte das zusammen. Seit es den Schirm FUELLT, steht
+        // es bei 1600×900 auf 1,875 — und die Schrift sprang auf das naechste
+        // ganze Vielfache, also 2×. Das sind **6,7 % zu gross**, und genau das
+        // sieht man: der Text laeuft frueher um als im Original.
+        //
+        // Hier, und NUR hier, darf sie bruchteilig mitgehen. Die Schrift ist
+        // eine Kopie (LegacyFont dupliziert), das Hauptmenue bleibt also
+        // unberuehrt und behaelt seine scharfen ganzen Stufen.
+        if (font is FontFile ff) ff.FixedSizeScaleMode = TextServer.FixedSizeScaleMode.Enabled;
+
         // the mission's name on the picture's own header strip
         var head = new Label
         {
