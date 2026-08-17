@@ -159,6 +159,52 @@ public sealed partial class HelpWindow : PanelContainer
     /// <para>Dieselbe Bauart wie <see cref="Settings.FogSuppressed"/>: der
     /// Riegel steht in der Kulisse, nicht in der Regel — die Regel ist
     /// richtig, sie läuft nur am falschen Ort.</para></summary>
+    /// <summary>
+    /// <b>DAS SPIEL STEHT, SOLANGE EIN HILFEFENSTER OFFEN IST.</b>
+    ///
+    /// <para>⚠ 18.08.2026, aus der Beobachtung des Spielers am Original: »auch
+    /// dass das Spiel während eines Tutorialfensters pausiert, bis man bei
+    /// Pause Fenster weiter drückt«.</para>
+    ///
+    /// <para><b>Das Original hat dafür sogar einen eigenen Schalter</b>, und er
+    /// steht seit dem 02.08.2026 in unserem eigenen Quelltext, ohne dass er je
+    /// umgesetzt wurde: die Hilfezeilen der Optionen (Tafel 0x4F0280,
+    /// Schrittweite 75) nennen acht Schalter, und einer davon heisst wörtlich
+    /// <i>»Spiel anhalten waehrend eines Hilfe-Fensters«</i>. In
+    /// <c>OPTIONS.CFG</c> neben der Exe stehen acht 0/1-Bytes auf +0x0C — also
+    /// dieselbe Anzahl.</para>
+    ///
+    /// <para>⚠ <b>WELCHES der acht Bytes es ist, ist NICHT gelesen.</b> Die
+    /// Reihenfolge der Hilfezeilen muss nicht die der Bytes sein. Unsere
+    /// Vorgabe ist deshalb <b>an</b> — so, wie der Spieler es am Original
+    /// gesehen hat — und sie steht als eigene Einstellung da, nicht als
+    /// stillschweigende Setzung.</para>
+    ///
+    /// <para>Das Fenster selbst läuft weiter (<c>ProcessMode.Always</c>, siehe
+    /// unten) — sonst könnte man es nicht mehr wegklicken.</para></summary>
+    public static bool PauseWhileOpen
+    {
+        get => Settings.PauseOnHelp;
+        set => Settings.PauseOnHelp = value;
+    }
+
+    /// <summary>Anhalten, solange eines offen ist — und wieder loslassen, wenn
+    /// keines mehr da ist. ⚠ An EINER Stelle, damit nicht jeder Aufrufer daran
+    /// denken muss; und ⚠ nur, wenn nicht ohnehin schon jemand anders angehalten
+    /// hat (das Pausenmenü), sonst liefe das Spiel beim Schliessen des Fensters
+    /// hinter dem Pausenmenü weiter.</summary>
+    private static void Anhalten(Node host)
+    {
+        if (!PauseWhileOpen) return;
+        var tree = host.GetTree();
+        if (tree == null) return;
+        bool willst = Open.Count > 0;
+        if (willst) { _hatAngehalten = true; tree.Paused = true; }
+        else if (_hatAngehalten) { _hatAngehalten = false; tree.Paused = false; }
+    }
+
+    private static bool _hatAngehalten;
+
     public static bool Suppressed;
 
     /// <summary>Wie viele Fenster der Riegel abgefangen hat — ⚠ ohne die Zahl
@@ -185,6 +231,7 @@ public sealed partial class HelpWindow : PanelContainer
         var w = new HelpWindow(id, paras, ox, oy);
         Layer(host).AddChild(w);
         Open.Add(w);
+        Anhalten(host);
         return w;
     }
 
@@ -342,6 +389,7 @@ public sealed partial class HelpWindow : PanelContainer
     {
         Dismissed.Add(Id);
         Open.Remove(this);
+        Anhalten(this);
         QueueFree();
     }
 }

@@ -111,6 +111,21 @@ public static class Settings
     /// false, also entscheidet dort weiter allein die Einstellung.</summary>
     public static bool FogSuppressed;
 
+    /// <summary>
+    /// <b>Spiel anhalten, während ein Hilfefenster offen ist.</b>
+    ///
+    /// <para>⚠ Der Schalter ist <b>nicht unserer</b>: die Hilfezeilen der
+    /// Optionen des Originals (Tafel 0x4F0280, Schrittweite 75) nennen ihn
+    /// wörtlich — <i>»Spiel anhalten waehrend eines Hilfe-Fensters«</i> —, und
+    /// <c>OPTIONS.CFG</c> trägt acht 0/1-Bytes auf +0x0C, also dieselbe Anzahl
+    /// wie die acht genannten Schalter.</para>
+    ///
+    /// <para>⚠ Welches der acht Bytes es ist, ist <b>nicht gelesen</b>; die
+    /// Vorgabe <b>an</b> folgt der Beobachtung des Spielers am laufenden
+    /// Original (18.08.2026), nicht der Datei.</para></summary>
+    public static bool PauseOnHelp
+    { get => B("pause_on_help", true); set => Set("pause_on_help", value); }
+
     // ---- Gefecht ------------------------------------------------------------
 
     /// <summary>»Alle Einheiten« im Gefechtsschirm — siehe

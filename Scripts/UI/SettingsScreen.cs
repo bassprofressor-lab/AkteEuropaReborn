@@ -132,6 +132,10 @@ public partial class SettingsScreen : Control
 
         box.AddChild(new HSeparator());
         box.AddChild(Head("Steuerung"));
+        // ⚠ Kein Schalter von uns: die Hilfezeilen der Optionen des Originals
+        // (Tafel 0x4F0280) nennen ihn woertlich. Siehe Settings.PauseOnHelp.
+        box.AddChild(Check("Spiel anhalten waehrend eines Hilfe-Fensters",
+            Settings.PauseOnHelp, v => Settings.PauseOnHelp = v));
         box.AddChild(Check("Rechte Maustaste gedrueckt halten schiebt die Karte",
             Settings.RightDragPan, v => Settings.RightDragPan = v));
         box.AddChild(Check("Zeiger zeigt an, was ein Klick tut",
