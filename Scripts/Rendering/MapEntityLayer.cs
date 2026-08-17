@@ -509,6 +509,37 @@ public partial class MapEntityLayer : Node2D
         /// <c>RadarChargesOf</c> in Simulation/RadarMast.cs, das den Wert beim
         /// ersten Fragen aus dem Entwurf auflöst.</summary>
         public int RadarCharges = -1;
+
+        /// <summary>Satz <b>+0x38</b> — der wartende <b>Setzmodus</b> eines
+        /// Baufahrzeugs: 5 »Depot bauen«, 6 »Mine bauen«, 7 »Generator bauen«.
+        /// <b>0 = kein Bauauftrag.</b>
+        ///
+        /// <para>Geschrieben von Kommando 20 (@0x4C3351), gelesen vom Leerlauf
+        /// des Rumpfes 72 (@0x40806A <c>mov al, byte[edi+0x38]</c>). ⚠ Der
+        /// Generatorenbauer (Rumpf 74, @0x4082DD) fragt es GAR NICHT ab — er
+        /// kann nur eines, und das steht schon fest. Bei uns trägt er trotzdem
+        /// die 7, weil sonst die Ankunft nicht wüsste, was sie setzen soll;
+        /// <b>das ist unsere Zutat</b> und ändert nichts am Verhalten.</para></summary>
+        public int BuildOrder;
+
+        /// <summary>Satz <b>+0x40</b> — die <b>Nutzlast</b> des Bauauftrags, und
+        /// sie bedeutet je Modus etwas anderes (@0x4C3289 gegen @0x4C32A9):
+        ///
+        /// <list type="bullet">
+        ///   <item>Modus 5 und 7: die <b>gepackte Zielzelle</b>
+        ///   <c>(Zeile &lt;&lt; 8) | Spalte</c>. Die Ankunft vergleicht sie mit
+        ///   der Zelle, auf der die Einheit steht — steht sie woanders, wird der
+        ///   Auftrag verworfen (@0x4080BA).</item>
+        ///   <item>Modus 6: die <b>Nummer des Vorkommens</b>, auf dem die Mine
+        ///   stehen soll.</item>
+        /// </list>
+        ///
+        /// <para>⚠ <b>0 heisst »nichts vorgemerkt«</b> — dieselbe Prüfung wie im
+        /// Original (<c>test ax, ax</c> @0x4082E1). Zelle (0,0) ist damit als
+        /// Bauplatz nicht ansprechbar; das ist der Preis, den das Original
+        /// zahlt, und wir zahlen ihn mit.</para></summary>
+        public int BuildTarget;
+
         public float BuildTime;          // seconds left on the current build
         public int BuildIndex;           // design being built
 
@@ -18465,6 +18496,9 @@ public partial class MapEntityLayer : Node2D
         PollPowerCheck();
         PollRadarCheck();
         PollRadarCheck2();
+        PollBauCheck();
+        PollBauCheck2();
+        PollBauCheck3();
 
         // preview harness: start the scripted build as soon as the factory has
         // manufactured enough parts

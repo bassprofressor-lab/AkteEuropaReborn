@@ -178,6 +178,12 @@ public partial class MapEntityLayer
             // Die Stromabrechnung — @0x4161C4 prüft `% 50 == 13`, also einmal
             // je Sekunde des Originals. Siehe Simulation/Power.cs.
             if (_origTicks % PowerPeriod == PowerPhase) PowerTick();
+            // Auftrag 0, der Leerlauf — dort holt ein Baufahrzeug seinen
+            // vorgemerkten Bauauftrag ab (@0x407F38 → @0x40806A / @0x4082DD).
+            // ⚠ JEDEN Takt und ohne Phase: der Leerlaufverteiler hängt an
+            // keiner Modulo-Bedingung, er läuft, sobald der Fahrauftrag zu
+            // Ende ist. Siehe Simulation/BuildOrders.cs.
+            BuildArrivalTick();
         }
     }
 

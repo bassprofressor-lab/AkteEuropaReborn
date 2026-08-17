@@ -425,6 +425,7 @@ public partial class MapViewer : Node2D
         if (_dockCheckFlag) _entities.DockCheckStart();
         if (_powerCheckFlag) _entities.PowerCheckStart();
         if (_radarCheckFlag) _entities.RadarCheckStart();
+        if (_bauCheckFlag) _entities.BauCheckStart(_bauCheckOrder);
         if (_marketCheck)
         {
             GD.Print(_entities.MarketCheck());
@@ -679,6 +680,13 @@ public partial class MapViewer : Node2D
     /// Mast, und oeffnet der Mast wirklich Sicht? Er misst die beobachteten
     /// Zellen vor und nach dem Setzen.</summary>
     private bool _radarCheckFlag;
+    /// <summary><c>--bau-check</c> — setzt ein Gebaeude-Techniker ein Depot, und
+    /// zwar ERST BEI DER ANKUNFT? Siehe Simulation/BuildOrdersCheck.cs.</summary>
+    private bool _bauCheckFlag;
+    /// <summary>Welcher der drei — 5 Depot, 6 Mine, 7 Generator. ⚠ Ein Lauf, ein
+    /// Auftrag: der zweite Fall duerfte sonst auf dem Zustand des ersten
+    /// messen.</summary>
+    private int _bauCheckOrder = 5;
     /// <summary><c>--depot-flow</c> — bestellen, im Depot liegen, aussenden.</summary>
     private bool _depotFlow;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
@@ -1145,6 +1153,15 @@ public partial class MapViewer : Node2D
             else if (a == "--dock-check") _dockCheckFlag = true;
             else if (a == "--power-check") _powerCheckFlag = true;
             else if (a == "--radar-check") _radarCheckFlag = true;
+            else if (a == "--bau-check") { _bauCheckFlag = true; _bauCheckOrder = 5; }
+            else if (a.StartsWith("--bau-check="))
+            {
+                _bauCheckFlag = true;
+                _bauCheckOrder = a[12..] switch
+                {
+                    "mine" => 6, "generator" => 7, _ => 5,
+                };
+            }
             else if (a == "--depot-flow") _depotFlow = true;
             else if (a == "--depot-flow=dock")
             { _depotFlow = true; MapEntityLayer.DepotFlowDock = true; }
@@ -2589,9 +2606,24 @@ public partial class MapViewer : Node2D
         _orderBar.OnSell = () => _entities.SellFromPanel();
         _orderBar.RadarCharges = () => _entities.RadarChoiceOfSelection()?.Charges;
         _orderBar.OnPlaceRadar = () => _entities.PlaceRadarFromPanel();
+        // Die drei anderen Bauauftraege — siehe Simulation/BuildOrders.cs. Sie
+        // schalten den Setzmodus ein; der naechste Linksklick auf die Karte
+        // setzt den Befehl ab (_UnhandledInput weiter unten).
+        _orderBar.BuildChoices = () =>
+        {
+            var ws = _entities.BuildChoicesOfSelection();
+            var outp = new (int, string)[ws.Count];
+            for (int k = 0; k < ws.Count; k++) outp[k] = (ws[k].Order, ws[k].Word);
+            return outp;
+        };
+        _orderBar.OnBuildOrder = order => _entities.BeginPlacementFromPanel(order);
         _orderBar.OnDigIn = () => _entities.ToggleDigIn();
         _orderBar.OnStop = () => _entities.StopSelected();
-        _orderBar.Note = () => _entities.SellNote;
+        // ⚠ Im Setzmodus hat die Bauzeile Vorrang: sie sagt, worauf gewartet
+        // wird. Sonst stuende dort weiter die letzte Verkaufsmeldung, und der
+        // Spieler saehe nicht, dass sein Klick jetzt etwas anderes bedeutet.
+        _orderBar.Note = () => _entities.PlacementMode != 0 || _entities.SellNote.Length == 0
+                             ? _entities.BuildOrderNote : _entities.SellNote;
     }
 
     /// <summary>Die Befehlsleiste der gewählten Einheit — siehe
@@ -2604,7 +2636,8 @@ public partial class MapViewer : Node2D
     {
         if (_orderBar == null || _entities == null) return;
         bool want = _entities.SellChoiceOfSelection() != null
-                 || _entities.RadarChoiceOfSelection() != null;
+                 || _entities.RadarChoiceOfSelection() != null
+                 || _entities.BuildChoicesOfSelection().Count > 0;
         if (want != _orderBar.Visible)
         {
             _orderBar.Visible = want;
@@ -3126,7 +3159,18 @@ public partial class MapViewer : Node2D
                     }
                     else
                     {
-                        if (_leftDown && _boxSelect)
+                        // ⚠⚠ IM SETZMODUS BEDEUTET DER LINKSKLICK ETWAS ANDERES:
+                        // er waehlt den Bauplatz, statt eine Einheit zu waehlen.
+                        // Genau so ist es im Original — der Klickbehandler
+                        // @0x437FAB prueft dword[0x502ACC], BEVOR er zur
+                        // gewoehnlichen Auswahl kommt, und nullt den Modus
+                        // danach. Ohne diese Weiche waere der Setzmodus ein
+                        // Knopf, der nichts bewirkt: der Klick ginge in die
+                        // Auswahl und der Bauauftrag verfiele.
+                        if (_leftDown && !_boxSelect && _entities.PlacementMode != 0 &&
+                            _entities.CellAt(GetGlobalMousePosition()) is { } bc)
+                            _entities.PlacementClick(bc.X, bc.Y);
+                        else if (_leftDown && _boxSelect)
                             _entities.BoxSelect(RectFrom(_bandStart, GetGlobalMousePosition()),
                                                 mb.ShiftPressed);
                         else if (_leftDown)
@@ -3134,6 +3178,7 @@ public partial class MapViewer : Node2D
                         _leftDown = false;
                         _boxSelect = false;
                         _entities.SetBand(null);
+                        UpdateUnitOrderBar();
                     }
                     break;
                 case MouseButton.Right:
@@ -3150,6 +3195,19 @@ public partial class MapViewer : Node2D
                     }
                     else
                     {
+                        // Ein Rechtsklick bricht den Setzmodus ab — und gibt
+                        // KEINEN Fahrbefehl. Das ist unsere Zutat (das Original
+                        // hat für den Abbruch keinen gelesenen Weg); ohne sie
+                        // säße der Spieler in einem Modus fest, den nur ein
+                        // gültiger Bauplatz wieder beendet.
+                        if (_rightDown && !_rightDrag && _entities.PlacementMode != 0)
+                        {
+                            _entities.CancelPlacement();
+                            _entities.BuildOrderNote = "abgebrochen";
+                            UpdateUnitOrderBar();
+                            _rightDown = false; _rightDrag = false;
+                            break;
+                        }
                         if (_rightDown && !_rightDrag)
                         {
                             // ⚠ EINGABEN WERDEN DATEN. Der Klick setzt einen
@@ -3204,9 +3262,18 @@ public partial class MapViewer : Node2D
         }
         else if (@event is InputEventMouseMotion motion)
         {
+            // Die Bauvorschau folgt dem Zeiger, solange der Setzmodus laeuft —
+            // das ist `0x421200` mit `Merken = 1`, die jede gepruefte Zelle mit
+            // ihrem Ja/Nein nach 0xA32188 schreibt. Unsere Vorschau war schon
+            // da (Simulation/Construction.cs), sie hatte nur nie einen Bediener.
+            if (_entities.PlacementMode != 0 &&
+                _entities.CellAt(GetGlobalMousePosition()) is { } hover)
+                _entities.PlacementHover(hover.X, hover.Y);
+
             // A held left button with enough travel becomes a selection box
             // (a small wobble on click still selects the unit under the cursor).
-            if (_leftDown && !_boxSelect &&
+            // ⚠ Im Setzmodus NICHT: dort ist der Zug kein Auswahlrahmen.
+            if (_leftDown && !_boxSelect && _entities.PlacementMode == 0 &&
                 (motion.Position - _leftStart).Length() > ClickSlop)
                 _boxSelect = true;
 
@@ -3308,6 +3375,17 @@ public partial class MapViewer : Node2D
                 case Key.V: _entities.StartUpgrade(true); break;   // Lagerausbau
                 case Key.C: _entities.StartUpgrade(false); break;  // Produktionserw.
                 case Key.Escape:
+                    // ⚠ Erst der Setzmodus, dann die Pause. Wer im Setzmodus
+                    // Esc drueckt, will den Bauauftrag los und nicht das Spiel
+                    // anhalten — und haette sonst keinen Weg zurueck ausser
+                    // einem Klick, der etwas baut.
+                    if (_entities.PlacementMode != 0)
+                    {
+                        _entities.CancelPlacement();
+                        _entities.BuildOrderNote = "abgebrochen";
+                        UpdateUnitOrderBar();
+                        break;
+                    }
                     TogglePause();
                     break;
                 // Space centres on what is selected — the map is up to

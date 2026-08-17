@@ -159,6 +159,50 @@ public static class CommandOp
     /// eigenen Tafel — siehe Simulation/RadarMast.cs.</para></summary>
     public const short PlaceRadar = 27;
 
+    /// <summary>
+    /// <b>20 = BAUPLATZ SETZEN (Gebäude-Techniker).</b> P1 = die Einheit,
+    /// P2/P3 = die geklickte Zelle, P4 = der Modus, P5 = die Vorkommensnummer.
+    ///
+    /// <para><b>Der Absender</b> ist der Kartenklick @0x437FCA, und er verzweigt
+    /// vorher nach dem <b>Rumpf</b> der Einheit (<c>byte[+0x0E]</c>, @0x437FAB):
+    /// <c>0x48 = 72</c> → dieser Befehl, <c>0x4A = 74</c> → Befehl 21,
+    /// <c>0xC6 = 198</c> → Befehl 16. Er schreibt <c>word[0xB8A3D8] = 0x14</c>,
+    /// P2/P3 als <b>Zelle + 1</b>, P4 aus <c>dword[0x502ACC]</c> und
+    /// P5 aus <c>byte[0x81A3A4] − 1</c>; danach setzt er den Modus auf 0
+    /// zurück.</para>
+    ///
+    /// <para><b>Der Behandler</b> @0x4C3241 trennt nach P4:</para>
+    /// <code>
+    ///   P4 == 5 (Depot):  order(Einheit, P2, P3, 0)
+    ///                     cx = (P3 &lt;&lt; 8) | P2            ; gepackte Zelle
+    ///   P4 == 6 (Mine):   cx = P5                         ; Vorkommensnummer
+    ///                     Spalte = byte[0x6783E9 + 14·P5]
+    ///                     Zeile  = byte[0x6783EA + 14·P5]
+    ///                     order(Einheit, Spalte, Zeile, 0)
+    ///   word[Einheit + 0x40] = cx        @0x4C3320
+    ///   byte[Einheit + 0x38] = P4        @0x4C3351
+    /// </code>
+    ///
+    /// <para>⚠ <b>Der Befehl BAUT nichts</b> — er merkt nur vor und schickt die
+    /// Einheit los. Gebaut wird bei der Ankunft, im Leerlauf (Auftrag 0), und
+    /// zwar vom Rumpf-Handler @0x40806A. Wer hier baute, käme ohne Fahrt aus und
+    /// hätte eine andere Mechanik.</para>
+    ///
+    /// <para>⚠ Die Nummer 20 kollidiert nicht mit »Radar setzen«: das ist
+    /// <b>Eintrag 20 der Befehlsliste</b> und <b>Kommando 27</b>. Zwei
+    /// Zählungen, die man leicht verwechselt.</para></summary>
+    public const short PlaceBuilding = 20;
+
+    /// <summary>
+    /// <b>21 = BAUPLATZ SETZEN (Generatorenbauer).</b> P1 = die Einheit,
+    /// P2/P3 = die geklickte Zelle. <b>Kein P4</b> — @0x438023 schreibt
+    /// <c>word[0xB8A3D8] = 0x15</c> und danach nur P1..P3.
+    ///
+    /// <para>Das ist folgerichtig: der Rumpf 74 kann genau ein Gebäude, und sein
+    /// Leerlauf @0x4082DD fragt <c>byte[+0x38]</c> gar nicht ab, sondern geht
+    /// unmittelbar von <c>word[+0x40]</c> zum <c>push 7</c>.</para></summary>
+    public const short PlaceGenerator = 21;
+
     /// <summary>⚠ <b>1001 trägt den ZUFALLSKEIM.</b> @0x419512..0x419525:
     /// <c>call rand; mov word[0xB4FA20],ax; mov word[Kladde+0x08],ax; mov
     /// word[Kladde+0x00],0x3E9</c> — der Keim der Partie wird als P1 eines
@@ -216,6 +260,8 @@ public static class CommandOp
         BuildShip => "Schiff bauen",
         Sell => "Verkaufen",
         PlaceRadar => "Radar setzen",
+        PlaceBuilding => "Bauplatz setzen (Gebaeude-Techniker)",
+        PlaceGenerator => "Bauplatz setzen (Generatorenbauer)",
         Seed => "Zufallskeim",
         OursAttack => "Angreifen (unsere Setzung)",
         OursStop => "Anhalten (unsere Setzung)",

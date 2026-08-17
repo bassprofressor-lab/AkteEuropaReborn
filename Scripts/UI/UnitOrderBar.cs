@@ -58,6 +58,20 @@ public sealed partial class UnitOrderBar : PanelContainer
     /// <summary>»Radar setzen« — Kommando 27.</summary>
     public Action? OnPlaceRadar;
 
+    /// <summary>Die BAUAUFTRÄGE, die die gewählte Einheit anbietet — je Eintrag
+    /// die Modusnummer (5/6/7) und das Wort des Spiels. Leer blendet sie aus.
+    ///
+    /// <para>⚠ <b>Anders als »Radar setzen« wirkt keiner davon sofort.</b> Sie
+    /// schalten den <b>Setzmodus</b> ein (<c>dword[0x502ACC]</c>), und erst der
+    /// nächste Klick auf die Karte setzt den Befehl ab. Deshalb schreibt der
+    /// Knopf, wenn er gedrückt ist, in die Notizzeile, was als nächstes
+    /// erwartet wird — sonst sähe es aus, als sei nichts geschehen.</para></summary>
+    public Func<(int Order, string Word)[]>? BuildChoices;
+
+    /// <summary>Einen Bauauftrag anwerfen — der Parameter ist die
+    /// Modusnummer.</summary>
+    public Action<int>? OnBuildOrder;
+
     /// <summary>Die Rückmeldung des letzten Befehls, z. B. warum nichts
     /// geschah.</summary>
     public Func<string>? Note;
@@ -65,6 +79,13 @@ public sealed partial class UnitOrderBar : PanelContainer
     private readonly Button _sell = new(), _dig = new(), _stop = new(), _radar = new();
     private readonly Label _note = new();
     private readonly ConfirmDialog _ask = new();
+
+    /// <summary>Die Bauknöpfe — höchstens drei (Depot, Mine, Generator), und ein
+    /// Fahrzeug bietet nie mehr als zwei an. Sie werden einmal angelegt und
+    /// danach nur ein- und ausgeblendet; ein Knopf, der bei jedem Nachziehen neu
+    /// entsteht, verliert den Mausfokus mitten im Klick.</summary>
+    private readonly Button[] _build = { new(), new(), new() };
+    private readonly int[] _buildOrder = { 0, 0, 0 };
 
     public UnitOrderBar()
     {
@@ -89,6 +110,16 @@ public sealed partial class UnitOrderBar : PanelContainer
         _radar.Pressed += () => OnPlaceRadar?.Invoke();
         row.AddChild(_sell);
         row.AddChild(_radar);
+        // Die drei Bauknöpfe stehen NEBEN dem Radarknopf, weil sie im Original
+        // dieselben vier Einträge sind (17..20 der Liste 0x4FD660) — sie
+        // gehören zusammen, auch wenn nur einer sofort wirkt.
+        for (int k = 0; k < _build.Length; k++)
+        {
+            int slot = k;
+            _build[k].Visible = false;
+            _build[k].Pressed += () => OnBuildOrder?.Invoke(_buildOrder[slot]);
+            row.AddChild(_build[k]);
+        }
         row.AddChild(_dig);
         row.AddChild(_stop);
 
@@ -140,6 +171,17 @@ public sealed partial class UnitOrderBar : PanelContainer
         int? rad = RadarCharges?.Invoke();
         _radar.Visible = rad is > 0;
         if (rad is > 0) _radar.Text = $"{_radarWord} ({rad})";
+
+        var bc = BuildChoices?.Invoke() ?? Array.Empty<(int, string)>();
+        for (int k = 0; k < _build.Length; k++)
+        {
+            bool have = k < bc.Length;
+            _build[k].Visible = have;
+            if (!have) { _buildOrder[k] = 0; continue; }
+            _buildOrder[k] = bc[k].Order;
+            _build[k].Text = bc[k].Word;
+        }
+
         string n = Note?.Invoke() ?? "";
         _note.Visible = n.Length > 0;
         _note.Text = n;
@@ -161,7 +203,8 @@ public sealed partial class UnitOrderBar : PanelContainer
     public void SetFont(Font? font, int size)
     {
         if (font == null) return;
-        foreach (var c in new Control[] { _sell, _radar, _dig, _stop, _note })
+        foreach (var c in new Control[] { _sell, _radar, _build[0], _build[1], _build[2],
+                                          _dig, _stop, _note })
         {
             c.AddThemeFontOverride(c is Button ? "font" : "font", font);
             c.AddThemeFontSizeOverride(c is Button ? "font_size" : "font_size", size);

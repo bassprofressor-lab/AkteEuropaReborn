@@ -333,8 +333,28 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Gemessen: eine stockdunkle Stelle (0 von 625 Feldern sichtbar), Mast gesetzt,
   Fahrzeug weggeschickt — **333 Felder bleiben offen**, gehalten allein vom
   Mast.
-  Die anderen drei Bauaufträge brauchen einen Platzierungsmodus und kommen
-  später.
+  Die anderen drei Bauaufträge brauchen einen Platzierungsmodus — siehe die
+  nächste Zeile.
+
+- ⭐ **Depot, Mine und Generator lassen sich bauen.** Damit sind alle vier
+  Bauaufträge des Originals da. Ein **Gebäude-Techniker** kann »Depot bauen«
+  und »Mine bauen«, ein **Generatorenbauer** »Generator bauen«. Der Knopf
+  schaltet den Zeiger um, der Klick wählt die Stelle — und dann **fährt das
+  Fahrzeug erst hin**. Gebaut wird bei der Ankunft, nicht beim Klick: wird das
+  Fahrzeug unterwegs abgedrängt, verfällt der Auftrag, genau wie im Original.
+  Rechtsklick oder Esc bricht ab, und die Vorschau zeigt schon beim Zielen, ob
+  die Stelle trägt.
+  ⚠ **Das Fahrzeug ist der Preis.** Auf dem ganzen Weg wird kein einziger
+  Rohstoff abgebucht — statt dessen geht das Fahrzeug im fertigen Gebäude auf.
+  ⚠ Eine Mine hängt nicht an einer Zelle, sondern an einem **Vorkommen**: der
+  Klick wählt das Vorkommen aus, und sie entsteht um ein Feld nach links und
+  **zwei** nach oben versetzt — Depot und Generator nur um je eines. Diese
+  Ungleichheit ist die des Originals und nicht geglättet.
+  Gemessen für alle drei: nach dem Befehl steht noch **nichts**, die Einheit
+  fährt; bei der Ankunft steht das Gebäude auf dem Feld, das aus der
+  Originalfassung gelesen ist, und das Fahrzeug ist weg. Die gebaute Mine
+  bringt **5000 Terranium** mit — vorher waren es −1, also nichts, und das hat
+  erst der Prüflauf ans Licht gebracht.
 
 - ⭐ **Der Strom ist angeschlossen — und er bremst.** Kraftwerke liefern 90 und
   gehören niemandem, Generatoren 50 und gehören ihrem Spieler; Fabriken und

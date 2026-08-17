@@ -166,8 +166,16 @@ public partial class MapEntityLayer
         return false;
     }
 
+    /// <param name="skipDeposit">⚠ Nur für den Bauauftrag »Mine bauen«
+    /// (Simulation/BuildOrders.cs). Das Original prüft den Platz an der
+    /// <b>Vorkommenszelle</b> (<c>0x4014CE(Einheit, byte[0x6783E9],
+    /// byte[0x6783EA], 0)</c> @0x4081E8) und setzt das Gebäude erst danach am
+    /// Versatz <c>(−1,−2)</c>. Beides in EINEM Aufruf geht nicht: die
+    /// Vorkommensfrage gilt für die eine Zelle, die Grundrissfrage für die
+    /// andere. Der Aufrufer stellt deshalb die Vorkommensfrage selbst und
+    /// schaltet sie hier ab.</param>
     public bool CanBuild(IBuildingPatterns cwp, int typ, int col, int row, int builder = -1,
-                         List<SiteCell>? collect = null)
+                         List<SiteCell>? collect = null, bool skipDeposit = false)
     {
         collect?.Clear();
         if (_nav == null || cwp == null || !cwp.HasBuildings) return false;
@@ -176,7 +184,7 @@ public partial class MapEntityLayer
         // Saying "yes" from the ground test offered 1247 sites on map_25 where
         // the original would allow a handful — so we say NO until the deposits
         // are in. A missing feature beats a wrong one.
-        if (typ == TypeFieldMine)
+        if (typ == TypeFieldMine && !skipDeposit)
         {
             if (!HasDeposits) return false;
             if (!CellOnDeposit(col, row)) return false;
@@ -479,12 +487,12 @@ public partial class MapEntityLayer
     private bool _previewOk;
 
     /// <summary>Show (or move) the build-site preview. Type 0 clears it.</summary>
-    public void SetBuildPreview(int typ, int col, int row)
+    public void SetBuildPreview(int typ, int col, int row, bool skipDeposit = false)
     {
         if (typ <= 0 || Patterns == null) { ClearBuildPreview(); return; }
         if (typ == _previewType && col == _previewCol && row == _previewRow) return;
         _previewType = typ; _previewCol = col; _previewRow = row;
-        _previewOk = CanBuild(Patterns, typ, col, row, -1, _previewCells);
+        _previewOk = CanBuild(Patterns, typ, col, row, -1, _previewCells, skipDeposit);
         QueueRedraw();
     }
 

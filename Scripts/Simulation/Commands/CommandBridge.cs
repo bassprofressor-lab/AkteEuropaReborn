@@ -549,6 +549,8 @@ public partial class MapEntityLayer
         CommandOp.OursStop => ApplyStop(c),
         CommandOp.Sell => ApplySell(c),
         CommandOp.PlaceRadar => ApplyPlaceRadar(c),
+        CommandOp.PlaceBuilding => ApplyPlaceBuilding(c),
+        CommandOp.PlaceGenerator => ApplyPlaceBuilding(c),
         _ => false,
     };
 
