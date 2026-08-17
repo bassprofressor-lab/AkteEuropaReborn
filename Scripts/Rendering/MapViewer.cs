@@ -429,6 +429,7 @@ public partial class MapViewer : Node2D
         if (_ausbauCheckFlag) _entities.AusbauCheckStart();
         if (_mechCheckFlag) _entities.MechanikerCheckStart();
         if (_flugCheckFlag) _entities.FlugCheckStart();
+        if (_schiffCheckFlag) _entities.SchiffWaffeCheckStart();
         if (_knopfCheckFlag) _entities.KnopfCheckStart();
         if (_m21CheckFlag) _entities.M21CheckStart();
         if (_ringCheckTicks > 0) _entities.RingCheckStart(_ringCheckTicks);
@@ -704,6 +705,10 @@ public partial class MapViewer : Node2D
     /// <summary><c>--flug-check</c> — was tut ein gekauftes Kampfflugzeug?
     /// Siehe Simulation/AirControlCheck.cs.</summary>
     private bool _flugCheckFlag;
+
+    /// <summary><c>--schiff-waffe-check</c> — wo verlaesst ein Schuss ein
+    /// Schiff? Siehe Simulation/ShipWeaponCheck.cs.</summary>
+    private bool _schiffCheckFlag;
     /// <summary><c>--knopf-check</c> — stehen »Abbrechen« und »Starten« da,
     /// wenn es etwas zu tun gibt, und bleiben sie sonst weg?</summary>
     private bool _knopfCheckFlag;
@@ -1183,6 +1188,7 @@ public partial class MapViewer : Node2D
             else if (a == "--ausbau-check") _ausbauCheckFlag = true;
             else if (a == "--mechaniker-check") _mechCheckFlag = true;
             else if (a == "--flug-check") _flugCheckFlag = true;
+            else if (a == "--schiff-waffe-check") _schiffCheckFlag = true;
             else if (a == "--knopf-check") _knopfCheckFlag = true;
             else if (a == "--m21-check") _m21CheckFlag = true;
             else if (a == "--ring-check") _ringCheckTicks = 3000;

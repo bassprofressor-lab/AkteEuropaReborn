@@ -62,6 +62,29 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Mechaniker, ein beschädigtes Fahrzeug daneben, eins diagonal, eins sechs
   Felder weiter) und misst +5/+0/+0 — die Rate, die dasteht.
 
+- ⭐ **Schlachtschiff und Kreuzer springen nicht mehr, sobald sie fahren.**
+  Gemeldet: »ich hatte einen Kreuzer mit einer Langstreckenrakete, die Rakete
+  wird irgendwo außerhalb vom Boot abgeschossen paar Felder entfernt im
+  Wasser«. Der Bericht stimmt auf die Zahl: **1,68 Felder**.
+
+  Die Ursache lag nicht bei der Rakete. Ein Schiff mit 4×4 Grundriss bekommt
+  beim Laden seine Lage als **Mitte des Grundrisses**; der **Fahrschritt**
+  rechnete danach mit der **Zellmitte** und ließ den Versatz von (60,30) weg.
+  Beim ersten Schritt sprang das Schiff also — und mit ihm alles, was an seiner
+  Lage hängt: Bild, Mündungsfeuer, Auswahlrahmen, Lebensbalken. Sichtbar wurde
+  davon die Rakete, weil sie im leeren Wasser startete.
+
+  ⚠ Betroffen sind **nur mehrzellige** Einheiten — für alles 1×1, also für
+  fast jede Einheit, ist die neue Rechnung Zeichen für Zeichen die alte.
+  Gemessen mit `--schiff-waffe-check` (neu): Abweichung nach 600 Schritten
+  **1,68 → 0,00** Felder; ohne die Reparatur meldet er weiter FEHLER.
+
+  ⚠ **Was NICHT geändert wurde:** dass auf Schlachtschiff und Kreuzer kein
+  Geschütz gezeichnet wird. Das ist eine frühere **Entscheidung des Spielers**
+  — das Original liest an dieser Stelle selbst eine uninitialisierte
+  Stack-Zelle (»Wrong chassis of ship«), ist dort also nicht nachbaubar, und
+  gewählt wurde »keine Waffe zeichnen« statt eigener Montagepunkte.
+
 - ⭐⚠ **Befohlene Einheiten geben nicht mehr sofort auf — und eingekeilte
   fahren wieder los.** Gefunden, weil `--befehl-check` ROT meldete; der
   Prüfstand vergleicht den Befehlsring gegen den alten Direktweg. Der Ring ist

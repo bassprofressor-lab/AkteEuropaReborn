@@ -2931,6 +2931,31 @@ public partial class MapEntityLayer : Node2D
         return (a + b) * 0.5f;
     }
 
+    /// <summary>
+    /// <b>Die Mitte des Grundrisses, wenn die Einheit auf DIESER Zelle stünde.</b>
+    ///
+    /// <para>⚠⚠ 18.08.2026 — die fehlende Hälfte von <see cref="BodyCenter"/>,
+    /// und sie hat zwei Jahre Schiffsfehler erklärt.
+    /// <see cref="InitEntityMovement"/> setzt <c>Pos = BodyCenter(e)</c> — aber
+    /// nur EINMAL, beim Laden. Der Fahrschritt rechnete danach mit
+    /// <c>CellCenter</c>, also ohne den Versatz. Ein 4×4-Schiff (Schlachtschiff
+    /// 157, Kreuzer 158) sprang deshalb beim <b>ersten Schritt</b> um
+    /// <b>1,68 Felder</b> — gemessen mit <c>--schiff-waffe-check</c> —, und
+    /// alles, was an <c>Pos</c> hängt, sprang mit: Bild, Mündungsfeuer,
+    /// Auswahlrahmen, Lebensbalken.</para>
+    ///
+    /// <para>Gemeldet hatte der Spieler davon die auffälligste Folge: »die
+    /// Rakete wird irgendwo außerhalb vom Boot abgeschossen paar Felder
+    /// entfernt im Wasser«. Das Schiff wurde 1,68 Felder in die eine Richtung
+    /// gezeichnet und der Schuss 1,68 in die andere gesetzt.</para>
+    ///
+    /// <para>⚠ Für alles 1×1 — also für fast jede Einheit — ist das Zeichen für
+    /// Zeichen <see cref="CellCenter"/>. Die Änderung kann nur mehrzellige
+    /// Einheiten berühren.</para></summary>
+    private Vector2 BodyCenterAt(Entity e, int col, int row)
+        => CellCenter(col, row) + new Vector2((Mathf.Max(1, e.FootW) - 1) * TileW / 2f,
+                                              (Mathf.Max(1, e.FootH) - 1) * TileH / 2f);
+
     /// <summary>Current body rect of an entity — follows it while it drives, and
     /// is as big as the unit really is. A ship covers 2x2 cells (the imap says
     /// so, see CwmData.UnitFootprints); giving it a one-cell box made it hard to
@@ -6593,6 +6618,35 @@ public partial class MapEntityLayer : Node2D
     /// hinausragt.</summary>
     private const float MuzzleReach = 14f;
 
+    /// <summary>
+    /// <b>WO EIN SCHUSS DIE EINHEIT VERLÄSST</b> — der Punkt am BILD, nicht am
+    /// Grundriss.
+    ///
+    /// <para>⚠⚠ 18.08.2026, gemeldet als »ich hatte einen Kreuzer mit einer
+    /// Langstreckenrakete, die Rakete wird irgendwo außerhalb vom Boot
+    /// abgeschossen paar Felder entfernt im Wasser«. Der Bericht stimmt auf die
+    /// Zahl: <b>zwei Felder</b>, gemessen mit <c>--schiff-waffe-check</c>.</para>
+    ///
+    /// <para>Die Ursache stand seit dem 13.08.2026 im selben Quelltext, nur eine
+    /// Stelle weiter: <see cref="Entity.Pos"/> ist die <b>Mitte des
+    /// Grundrisses</b>, gezeichnet wird aber auf die <b>Satzzelle</b> (siehe
+    /// <see cref="PictureAnchor"/>). Bei einem 1×1-Fahrzeug ist beides derselbe
+    /// Punkt — bei einem 4×4-Kreuzer liegen 60 px und 30 px dazwischen, also
+    /// genau die zwei Felder. Damals wurde das BILD auf den Anker gesetzt; das
+    /// Mündungsfeuer hing weiter am Grundriss.</para>
+    ///
+    /// <para>⚠ <c>Pos</c> bleibt, was es war (Trefferfläche, Auswahl, Ring,
+    /// Balken hängen daran, und die Fläche aus der imap ist die Aussage der
+    /// KARTE darüber, wo das Schiff steht). Verschoben wird nur, was man
+    /// SIEHT.</para></summary>
+    private Vector2 ShotOrigin(Entity e)
+        => e.Pos + TurretOffset(e.UnitType, e.Col, e.Row);
+
+    /// <summary>Wohin ein Schuss zielt — aus demselben Grund der BILDpunkt des
+    /// Ziels. Ein Einschlag zwei Felder neben dem getroffenen Schiff wäre
+    /// derselbe Fehler noch einmal, nur am anderen Ende.</summary>
+    private static Vector2 ShotAim(Entity e) => e.Pos - new Vector2(0, 6);
+
     private void Fire(int si, Entity shooter, int vi, Entity victim,
                       (string Name, int Damage, float RangeTiles) w)
     {
@@ -6654,8 +6708,7 @@ public partial class MapEntityLayer : Node2D
         if (shooter.Weapon < InfantryWeaponFirst)
             _effects.Add(new Effect
             {
-                Pos = shooter.Pos + TurretOffset(shooter.UnitType, shooter.Col, shooter.Row)
-                      + dir * MuzzleReach,
+                Pos = ShotOrigin(shooter) + dir * MuzzleReach,
                 Kind = "muzzle", FrameTime = 0.035f,
             });
 
@@ -6672,9 +6725,8 @@ public partial class MapEntityLayer : Node2D
             _shots.Add(new Projectile
             {
                 // dieselbe Muendung wie das Feuer darueber
-                Pos = shooter.Pos + TurretOffset(shooter.UnitType, shooter.Col, shooter.Row)
-                      + dir * MuzzleReach,
-                Aim = victim.Pos - new Vector2(0, 6),
+                Pos = ShotOrigin(shooter) + dir * MuzzleReach,
+                Aim = ShotAim(victim),
                 Target = vi, Shooter = si, Damage = w.Damage,
                 Facing = DirToFacing(dir), Kind = rocket, Speed = RocketSpeed,
             });
@@ -9133,7 +9185,7 @@ public partial class MapEntityLayer : Node2D
                 _nav.ClearOccupant(mover.Col, mover.Row, _entities.IndexOf(mover));
                 mover.Col = c.A;
                 mover.Row = c.C;
-                mover.Pos = CellCenter(c.A, c.C);
+                mover.Pos = BodyCenterAt(mover, c.A, c.C);
                 mover.Path = null; mover.Reserved = null;
                 _nav.SetOccupant(c.A, c.C, _entities.IndexOf(mover), mover.Infantry >= 0);
                 gestellt.Add(mover);
@@ -11114,7 +11166,7 @@ public partial class MapEntityLayer : Node2D
             var u2 = _entities[ui];
             _nav.SetOccupant(u2.Col, u2.Row, -1);
             u2.Col = pad.X; u2.Row = pad.Y; u2.Owner = u2.Team = owner;
-            u2.Pos = CellCenter(pad.X, pad.Y);
+            u2.Pos = BodyCenterAt(u2, pad.X, pad.Y);
             _nav.SetOccupant(pad.X, pad.Y, ui);
         }
         // Geld, damit die Zeilen auch als BEZAHLBAR gezeigt werden — sonst
@@ -11177,7 +11229,7 @@ public partial class MapEntityLayer : Node2D
         var u2 = _entities[ui];
         _nav.SetOccupant(u2.Col, u2.Row, -1);
         u2.Col = pad.X; u2.Row = pad.Y; u2.Owner = u2.Team = ViewPlayer;
-        u2.Pos = CellCenter(pad.X, pad.Y);
+        u2.Pos = BodyCenterAt(u2, pad.X, pad.Y);
         _nav.SetOccupant(pad.X, pad.Y, ui);
         bool nachher = MarketOpenFor(b, ViewPlayer);
         sb.AppendLine($"  Einheit Platz {u2.Slot} auf die Platte ({pad.X},{pad.Y}) gestellt " +
@@ -11397,7 +11449,7 @@ public partial class MapEntityLayer : Node2D
         };
         if (d is { } d2 && InfantryFor(d2.Weapon, out int inf, out int iw))
         { u.Infantry = inf; u.Weapon = iw; }
-        u.Pos = CellCenter(u.Col, u.Row);
+        u.Pos = BodyCenterAt(u, u.Col, u.Row);
         _entities.Add(u);
         _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.GameUnitType));
         _nav.SetOccupant(u.Col, u.Row, _entities.Count - 1);
@@ -12997,7 +13049,7 @@ public partial class MapEntityLayer : Node2D
         // Ein Fussoldat traegt seine Waffe aus infantry.json, nicht aus
         // TurretOf — siehe InfantryFor. Ohne das kann er nicht kaempfen.
         if (InfantryFor(d.Weapon, out int inf, out int iw)) { u.Infantry = inf; u.Weapon = iw; }
-        u.Pos = CellCenter(u.Col, u.Row);
+        u.Pos = BodyCenterAt(u, u.Col, u.Row);
         // Auftrag 52: es steht im Dock und wartet auf eine Ausfahrt.
         u.LeavingDock = _entities.IndexOf(dock);
         // ⚠⚠ UND ES IST SOLANGE NICHT FAHRBEREIT. Die erste Fassung sperrte nur
@@ -13095,7 +13147,7 @@ public partial class MapEntityLayer : Node2D
 
             u.Col = cell.Value.X; u.Row = cell.Value.Y;
             u.Elev = ElevOf(u.Col, u.Row);
-            u.Pos = CellCenter(u.Col, u.Row);
+            u.Pos = BodyCenterAt(u, u.Col, u.Row);
             u.Footprint = CellRect(_ox, _oy, u.Col, u.Row, u.Elev);
             u.LeavingDock = -1;                                    // Auftrag 49
             u.Mobile = true;                                       // jetzt faehrt es
@@ -16904,7 +16956,7 @@ public partial class MapEntityLayer : Node2D
         var u2 = _entities[ui];
         _nav.SetOccupant(u2.Col, u2.Row, -1);
         u2.Col = to.X; u2.Row = to.Y;
-        u2.Pos = CellCenter(to.X, to.Y);
+        u2.Pos = BodyCenterAt(u2, to.X, to.Y);
         u2.Path = null; u2.Target = -1; u2.Owner = u2.Team = ViewPlayer;
         _nav.SetOccupant(to.X, to.Y, ui);
         _sel.Clear();                       // keine Klammern im Bild
@@ -16975,7 +17027,7 @@ public partial class MapEntityLayer : Node2D
         var u2 = _entities[ui];
         _nav.SetOccupant(u2.Col, u2.Row, -1);
         u2.Col = to.X; u2.Row = to.Y;
-        u2.Pos = CellCenter(to.X, to.Y);
+        u2.Pos = BodyCenterAt(u2, to.X, to.Y);
         u2.Path = null; u2.Target = -1; u2.Owner = u2.Team = ViewPlayer;
         _nav.SetOccupant(to.X, to.Y, ui);
         _sel.Clear();                       // keine Klammern im Bild
@@ -17556,7 +17608,7 @@ public partial class MapEntityLayer : Node2D
         // Ein Fussoldat traegt seine Waffe aus infantry.json, nicht aus
         // TurretOf — siehe InfantryFor. Ohne das kann er nicht kaempfen.
         if (InfantryFor(d.Weapon, out int inf, out int iw)) { u.Infantry = inf; u.Weapon = iw; }
-        u.Pos = CellCenter(u.Col, u.Row);
+        u.Pos = BodyCenterAt(u, u.Col, u.Row);
         _entities.Add(u);
         // ⚠ Der Rumpf zuerst: SetOccupant stempelt danach die ganze Flaeche.
         // Eine hier vergessene Zeile waere ein Schiff, das eine Zelle belegt
@@ -17647,7 +17699,7 @@ public partial class MapEntityLayer : Node2D
         // Ein Fussoldat traegt seine Waffe aus infantry.json, nicht aus
         // TurretOf — siehe InfantryFor. Ohne das kann er nicht kaempfen.
         if (InfantryFor(d.Weapon, out int inf, out int iw)) { u.Infantry = inf; u.Weapon = iw; }
-        u.Pos = CellCenter(u.Col, u.Row);
+        u.Pos = BodyCenterAt(u, u.Col, u.Row);
         _entities.Add(u);
         // ⚠ Der Rumpf zuerst: SetOccupant stempelt danach die ganze Flaeche.
         // Eine hier vergessene Zeile waere ein Schiff, das eine Zelle belegt
@@ -19038,6 +19090,8 @@ public partial class MapEntityLayer : Node2D
         PollAusbauCheck();
         PollMechanikerCheck();
         PollFlugCheck();
+        PollSchiffCheck();
+        PollSchiffFahrt();
         PollAusbauCheck2();
         PollKnopfCheck();
         PollRingCheck();
@@ -19101,13 +19155,13 @@ public partial class MapEntityLayer : Node2D
                 // jeder Schritt einzeln auf ganze Takte aufrundete. Genullt wird
                 // nur, wo die Einheit vorher STAND (StepCost == 0), so wie das
                 // Original beim Anhalten »kolik = 0« schreibt (@0x407af2).
-                e.StepFrom = CellCenter(e.Col, e.Row);
+                e.StepFrom = BodyCenterAt(e, e.Col, e.Row);
                 if (e.StepCost <= 0) e.Progress = 0;
                 e.StepCost = Simulation.NavGrid.StepCostMilli(new Vector2I(e.Col, e.Row), next);
             }
 
             var target = e.Reserved.Value;
-            Vector2 dest = CellCenter(target.X, target.Y);
+            Vector2 dest = BodyCenterAt(e, target.X, target.Y);
             Vector2 d = dest - e.Pos;
             float dist = d.Length();
             moved = true;
