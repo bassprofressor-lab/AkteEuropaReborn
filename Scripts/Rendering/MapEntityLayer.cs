@@ -10810,10 +10810,14 @@ public partial class MapEntityLayer : Node2D
         // map_DM_1 hat NULL Maerkte und ACHTZEHN Angebote. Eine frische Karte
         // hat leere Regale; ein Spielstand (.DM) traegt den Bestand, der sich
         // im Spiel angesammelt hat. Gefuellt wird er zur LAUFZEIT — der
-        // Markttick @0x4C0260 legt bei `[0x4FA240] % 300 == 222` nach
-        // ("Add ship because ", 0x53908C) und stellt bei % 300 == 111 ein
-        // Angebot scharf ("New ship type 1 for:", 0x5390A4).
-        // Dieser Nachschub ist NOCH NICHT GEBAUT.
+        // Markttick @0x4C0260 legt bei `[0x4FA240] % 100 == 77` NACH
+        // (@0x4C0E40) und schickt bei % 300 == 222 die LIEFERUNG los
+        // ("Add ship because ", 0x53908C); % 300 == 111 startet den Abholer
+        // eines Verkaufs ("New ship type 1 for:", 0x5390A4).
+        // ⚠ BERICHTIGT 18.08.2026 — hier stand "Dieser Nachschub ist NOCH NICHT
+        // GEBAUT" und die drei Phasen waren durcheinander: %300==222 ist nicht
+        // der Nachschub, sondern die Lieferung. Alle drei stehen jetzt in
+        // Simulation/MarketTrade.cs.
         sb.AppendLine(!vorher && nachher
             ? "  PLATTEN: BESTANDEN (zu -> auffahren -> offen)"
             : "  PLATTEN: DURCHGEFALLEN");
@@ -10822,8 +10826,13 @@ public partial class MapEntityLayer : Node2D
         {
             int owner = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
             Money(owner, 9999);
-            int geldVor = Money(owner), wareVor = _market.Count, saetzeVor = UnitRecords();
-            int preis = _market[0].Price;
+            // ⚠ Gezaehlt wird das REGAL, nicht die Liste: seit der Lieferung
+            // bleibt ein gekaufter Platz stehen (im Original mit Preis 0xFFFF)
+            // und verschwindet erst bei der Ablieferung. Wer `_market.Count`
+            // nimmt, misst im Kampagnenmodus "nichts passiert".
+            int geldVor = Money(owner), wareVor = MarketShelf().Count,
+                saetzeVor = UnitRecords();
+            int preis = MarketShelf()[0].Price;
             _selected = maerkte[0];
             _order = "";
             BuildPanelPick(0);
@@ -10836,10 +10845,16 @@ public partial class MapEntityLayer : Node2D
                           $", offen: {MarketOpenFor(b, owner)})");
             sb.AppendLine($"  KAUF: Preis ${preis}; Konto ${geldVor} -> ${Money(owner)} " +
                           $"({(Money(owner) == geldVor - preis ? "genau abgezogen" : "FALSCH abgezogen")}), " +
-                          $"Ware {wareVor} -> {_market.Count} " +
-                          $"({(_market.Count == wareVor - 1 ? "eines weg, richtig" : "FALSCH")}), " +
+                          $"Regal {wareVor} -> {MarketShelf().Count} " +
+                          $"({(MarketShelf().Count == wareVor - 1 ? "eines weg, richtig" : "FALSCH")}), " +
                           $"Einheitensaetze {saetzeVor} -> {UnitRecords()} " +
-                          $"({(UnitRecords() == saetzeVor + 1 ? "eines mehr, richtig" : "NICHT abgesetzt")})");
+                          // ⚠ In der KAMPAGNE darf hier NICHTS dazukommen: die
+                          // Ware faehrt erst. Ein Pruefstand, der beide Modi
+                          // gleich beurteilt, meldete den richtigen Weg als
+                          // Fehler.
+                          (TradeLikeOriginal
+                              ? $"({(UnitRecords() == saetzeVor ? "unveraendert, richtig — die Lieferung faehrt noch" : "SCHON DA, das ist der Gefechtsweg")})"
+                              : $"({(UnitRecords() == saetzeVor + 1 ? "eines mehr, richtig" : "NICHT abgesetzt")})"));
         }
 
         // ---- WOHIN ZEIGT o.Design? ---------------------------------------
@@ -10895,8 +10910,12 @@ public partial class MapEntityLayer : Node2D
     public void MarketBuy(Entity markt, int row)
     {
         int owner = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
-        if (row < 0 || row >= _market.Count) { _order = "nichts gewaehlt"; return; }
-        var o = _market[row];
+        var regal = MarketShelf();
+        if (row < 0 || row >= regal.Count) { _order = "nichts gewaehlt"; return; }
+        var o = regal[row];
+        // ⚠ Die Reihenfolge des Originals: erst Geld, dann Preis, dann alles
+        // Weitere (@0x4C138A/@0x4C138E). Ein Platz mit Preis < 1 ist einer, der
+        // schon verkauft ist — bei uns faengt ihn MarketShelf ab.
         if (_money[owner] < o.Price)
         {
             // Die Meldung des Originals, woertlich (0x4FBDD0).
@@ -10904,6 +10923,34 @@ public partial class MapEntityLayer : Node2D
             Audio.GameSounds.Play(Audio.GameSounds.Refused);
             return;
         }
+
+        // ---- KAMPAGNE: der Platz wird als verkauft MARKIERT, geliefert wird
+        // spaeter. Genau das tut der Kaufbehandler @0x4C1360: Konto abziehen,
+        // Kaeufer nach 0xB49C50, Ziel nach 0xB49C88, Preis auf 0xFFFF.
+        if (TradeLikeOriginal)
+        {
+            int ziel = DeliveryTargetFor(owner, markt);
+            if (ziel < 0)
+            {
+                _order = "Sie haben kein Gebaeude, an das geliefert werden koennte";
+                Audio.GameSounds.Play(Audio.GameSounds.Refused);
+                return;
+            }
+            Money(owner, Money(owner) - o.Price);
+            o.Sold = true;
+            o.Buyer = owner;
+            o.TargetBuilding = ziel;
+            MarketBought++;
+            var zb = _entities[ziel];
+            _order = $"gekauft fuer ${o.Price} — Lieferung an " +
+                     $"{BuildingTypeName(zb.BType)} ({zb.Col},{zb.Row}), Kontostand ${Money(owner)}";
+            UpdatePanel();
+            QueueRedraw();
+            return;
+        }
+
+        // ---- GEFECHT: sofort, wie bisher. ⚠ UNSERE Abweichung, dieselbe
+        // Entscheidung wie beim Verkauf (18.08.2026).
         var cell = MarketPads(markt).FirstOrDefault(
             p => _nav != null && _nav.IsFree(p.X, p.Y, Simulation.NavGrid.MoveClass.Vehicle));
         if (cell == default && !(_nav?.IsFree(markt.Col, markt.Row,
@@ -10912,11 +10959,21 @@ public partial class MapEntityLayer : Node2D
 
         if (!MarketSpawn(o, cell, owner)) { _order = "die Einheit liess sich nicht absetzen"; return; }
         Money(owner, Money(owner) - o.Price);
-        _market.RemoveAt(row);
+        _market.Remove(o);
         MarketBought++;
         _order = $"gekauft fuer ${o.Price} — Kontostand ${Money(owner)}";
         UpdatePanel();
         QueueRedraw();
+    }
+
+    /// <summary>Die Plätze, die wirklich im Angebot stehen — ohne die schon
+    /// gekauften. <b>Die eine Zählung</b>, an der sich Fensterliste und
+    /// <see cref="MarketBuy"/> gemeinsam ausrichten.</summary>
+    private List<MarketOffer> MarketShelf()
+    {
+        var l = new List<MarketOffer>();
+        foreach (var o in _market) if (!o.Sold) l.Add(o);
+        return l;
     }
 
     /// <summary>Wieviel am Markt gekauft und verkauft wurde — damit ein »der
@@ -10979,6 +11036,32 @@ public partial class MapEntityLayer : Node2D
         /// die schon in der Karte liegt, bringt sie aus sec94 mit.</para>
         /// </summary>
         public int Experience;
+
+        /// <summary>
+        /// <b>Ist dieser Platz GEKAUFT und noch nicht geliefert?</b>
+        ///
+        /// <para>Im Original gibt es dafür kein eigenes Feld: der Kauf
+        /// @0x4C139C setzt den <b>Preis auf 0xFFFF</b>, und das ist die Marke.
+        /// Der Platz bleibt belegt — <c>shop_count</c> @0x4C0860 zählt
+        /// vorzeichenbehaftet (<c>jle</c>) und übergeht ihn deshalb, der
+        /// Nachschub legt also nach; und die Lieferung @0x4C03C8 sucht genau
+        /// diese 0xFFFF wieder. Erst sie gibt den Platz frei, mit
+        /// <b>Preis 0</b> (@0x4C1526).</para>
+        ///
+        /// <para>⚠ Bei uns stand hier bis zum 18.08.2026 gar nichts: der Kauf
+        /// hat den Satz aus der Liste ENTFERNT. Das ging, solange die Ware
+        /// sofort erschien — mit der Lieferung ginge dabei die Marke verloren,
+        /// an der sie den Platz wiederfindet.</para></summary>
+        public bool Sold;
+
+        /// <summary>Wer gekauft hat — <c>byte[0xB49C50 + Platz]</c>
+        /// (@0x4C1396).</summary>
+        public int Buyer = -1;
+
+        /// <summary>Wohin geliefert wird: der Gebäudeplatz aus
+        /// <c>byte[0xB49C88 + Platz]</c> (@0x4C13AD), im Original der dritte
+        /// Parameter des Kaufbefehls 530.</summary>
+        public int TargetBuilding = -1;
     }
 
     private readonly List<MarketOffer> _market = new();
@@ -11124,7 +11207,12 @@ public partial class MapEntityLayer : Node2D
         if (e.BType == 17)
         {
             int owner = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
-            foreach (var o in _market)
+            // ⚠ Nur das REGAL, nicht die schon gekauften Plaetze: seit der
+            // Lieferung bleibt ein gekaufter Satz stehen (Preis 0xFFFF im
+            // Original) und darf trotzdem nicht mehr in der Liste auftauchen.
+            // MarketShelf() ist DIESELBE Liste, die MarketBuy nummeriert —
+            // zwei verschiedene Zaehlungen waeren ein Griff ins falsche Regal.
+            foreach (var o in MarketShelf())
             {
                 var d = DesignBySlot(o.Design);
                 string nm = d is { Name.Length: > 0 } dn ? dn.Name : $"Entwurf {o.Design}";
@@ -18013,6 +18101,7 @@ public partial class MapEntityLayer : Node2D
         PollDepotFlow();
         PollSellCheck();
         PollShopCheck();
+        PollBuyCheck();
 
         // preview harness: start the scripted build as soon as the factory has
         // manufactured enough parts

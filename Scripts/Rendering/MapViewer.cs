@@ -421,6 +421,7 @@ public partial class MapViewer : Node2D
         if (_depotFlow) _entities.DepotFlowStart();
         if (_sellCheck) _entities.SellCheckStart();
         if (_shopCheckFlag) _entities.ShopCheckStart();
+        if (_buyCheckFlag) _entities.BuyCheckStart();
         if (_marketCheck)
         {
             GD.Print(_entities.MarketCheck());
@@ -657,6 +658,10 @@ public partial class MapViewer : Node2D
     /// Ebenfalls taktgetrieben: er wartet die Phase <c>%100 == 77</c> ab,
     /// statt den Nachschub aufzurufen.</summary>
     private bool _shopCheckFlag;
+    /// <summary><c>--buy-check</c> — kaufen und der Ware beim Ankommen zusehen.
+    /// ⚠ Braucht Ware im Regal: auf einer frischen Karte muss der Nachschub
+    /// erst laufen (2 s), also mit <c>--quit-after</c> &gt; 3 starten.</summary>
+    private bool _buyCheckFlag;
     /// <summary><c>--depot-flow</c> — bestellen, im Depot liegen, aussenden.</summary>
     private bool _depotFlow;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
@@ -1119,6 +1124,7 @@ public partial class MapViewer : Node2D
             else if (a == "--market-check") _marketCheck = true;
             else if (a == "--sell-check") _sellCheck = true;
             else if (a == "--shop-check") _shopCheckFlag = true;
+            else if (a == "--buy-check") _buyCheckFlag = true;
             else if (a == "--depot-flow") _depotFlow = true;
             else if (a == "--depot-flow=dock")
             { _depotFlow = true; MapEntityLayer.DepotFlowDock = true; }

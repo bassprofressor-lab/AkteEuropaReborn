@@ -248,8 +248,157 @@ public partial class MapEntityLayer
         // NACHSCHUB des Ladens.
         if (_marketTicks % 100 == 77) ShopRestock();
 
+        // Phase D — @0x4C03B1, alle 300 Originaltakte: die LIEFERUNG gekaufter
+        // Ware.
+        if (_marketTicks % 300 == 222) DeliveryPhase();
+
         CollectorTick();
     }
+
+    // ================= DIE LIEFERUNG GEKAUFTER WARE ===========================
+    //
+    // @0x4C03BD, und sie ist die Umkehrung des Nachschubs:
+    //
+    //   suche den ersten Ladenplatz mit Preis == 0xFFFF          @0x4C03C8
+    //   c   = byte[0xB49C88 + Platz]                             das ZIELGEBAEUDE
+    //   new_ship(-10, word[bld+0x02], word[bld+0x00], 2)         @0x4C043A
+    //   Ladung = alle weiteren Plaetze mit Preis 0xFFFF UND demselben Ziel,
+    //            hoechstens 20                                   @0x4C045A..0x4C0493
+    //
+    // ⚠ `word[0xC06910 + 76*c + 0x00]` ist die SPALTE und `+0x02` die ZEILE des
+    // Gebaeudes. Das sieht gegen GAMESTATE_RE falsch aus (dort steht »+0x00
+    // typ«) und ist es nicht: der Gebaeudesatz traegt seine Position in den
+    // ERSTEN VIER BYTES, der Typ sitzt bei +0x04. Das ist die bekannte
+    // Vier-Byte-Verschiebung (Regel M), und Import/CwmData.cs sagt es im
+    // Kopfkommentar bereits selbst.
+
+    /// <summary>Ein Abholer nimmt höchstens so viele Stücke mit:
+    /// <c>cmp al, 0x14</c> @0x4C0491.</summary>
+    private const int CollectorCargo = 20;
+
+    /// <summary>
+    /// <b>Wohin geliefert wird</b> — im Original der dritte Parameter des
+    /// Kaufbefehls 530, den das Marktfenster mitgibt (@0x44C6BD liest ihn aus
+    /// dem Fensterfeld <c>+0x8C3CD8</c>).
+    ///
+    /// <para>⚠ <b>UNSERE SETZUNG, und sie ist eine Lücke mit Ansage:</b> das
+    /// Original lässt den Käufer das Zielgebäude WÄHLEN; unser Marktfenster hat
+    /// dafür keinen Platz, und wie das Original die Auswahl anbietet, ist nicht
+    /// gelesen. Wir nehmen das <b>eigene Gebäude, das dem Markt am nächsten
+    /// liegt</b> — die Wahl, die ein Spieler fast immer treffen würde, und die
+    /// einzige, die ohne neue Oberfläche auskommt.</para>
+    ///
+    /// <para>⚠ <b>Warum überhaupt ein Gebäude und nicht der Markt selbst:</b>
+    /// weil das Original an ein Gebäude liefert und der Markt keinem Spieler
+    /// gehört (Besitzer 255 auf allen 41 Sätzen). Ohne eigenes Gebäude gibt es
+    /// im Original niemanden, der die Ware annehmen könnte — der Kauf wird dann
+    /// abgelehnt, statt die Ware ins Nichts zu schicken.</para>
+    /// </summary>
+    /// <returns>Der Satzindex des Zielgebäudes, oder −1.</returns>
+    private int DeliveryTargetFor(int owner, Entity markt)
+    {
+        int best = -1;
+        long bd = long.MaxValue;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var b = _entities[i];
+            if (!b.IsBuilding || b.IsProp || b.Dead || b.Owner != owner) continue;
+            long dx = b.Col - markt.Col, dy = b.Row - markt.Row;
+            long d = dx * dx + dy * dy;
+            if (d < bd) { bd = d; best = i; }
+        }
+        return best;
+    }
+
+    /// <summary>Die Lieferphase, @0x4C03BD. <b>Ein Abholer je Takt</b>, und er
+    /// nimmt alles mit, was zum selben Ziel geht.</summary>
+    private void DeliveryPhase()
+    {
+        if (_collectors.Count >= CollectorSlots) return;
+
+        MarketOffer? erste = null;
+        foreach (var o in _market)
+            if (o.Sold && o.TargetBuilding >= 0) { erste = o; break; }
+        if (erste == null) return;
+
+        int ziel = erste.TargetBuilding;
+        if (ziel < 0 || ziel >= _entities.Count) { _market.Remove(erste); return; }
+        var b = _entities[ziel];
+        if (b.Dead)
+        {
+            // ⚠ Das Ziel ist zerstoert. Das Original prueft das hier NICHT —
+            // es liest die Zelle des Satzes, wie er dasteht. Wir brechen die
+            // Lieferung ab, statt an eine Ruine zu fahren; das ist unsere
+            // Abweichung und sie steht hier, weil sie sonst wie ein Befund
+            // aussaehe.
+            _market.Remove(erste);
+            ShopNote = "das Zielgebaeude ist zerstoert — die Lieferung entfaellt";
+            return;
+        }
+
+        var s = new Collector
+        {
+            Col = CollectorStartCol, Row = b.Row, Target = b.Col,
+            Frac = 0, Kind = 2, Cargo = new List<MarketOffer>(), CargoTarget = ziel,
+        };
+        // Alles, was zum selben Ziel geht — bis zu zwanzig (@0x4C0491).
+        foreach (var o in _market)
+        {
+            if (!o.Sold || o.TargetBuilding != ziel) continue;
+            s.Cargo.Add(o);
+            if (s.Cargo.Count >= CollectorCargo) break;
+        }
+        foreach (var o in s.Cargo) o.TargetBuilding = -2;   // vergeben, nicht doppelt laden
+        _collectors.Add(s);
+    }
+
+    /// <summary>
+    /// <b>Die Ankunft der Lieferung</b> — @0x4C067F, und je Stück
+    /// <c>deliver_one</c> @0x4C1480.
+    ///
+    /// <para>Das Original sucht einen freien Platz neben dem Gebäude, nimmt
+    /// einen freien Einheitensatz des KÄUFERS und <b>kopiert die 78 Byte des
+    /// Ladensatzes hinüber</b> — die Ware IST ein fertiger Einheitensatz, kein
+    /// Entwurf. Danach ist der Ladenplatz mit <b>Preis 0</b> wieder frei
+    /// (@0x4C1526), und ein Effekt <c>0x60</c> läuft an der Stelle.</para>
+    ///
+    /// <para>⚠ Findet es keinen Platz, meldet es <c>»Incredible error ...no
+    /// free place for new robot«</c> (0x539198) und das Stück ist <b>weg</b> —
+    /// der Ladenplatz wird trotzdem geleert. Bezahlt ist es längst. Wir halten
+    /// den Platz in dem Fall belegt und versuchen es beim nächsten Abholer
+    /// wieder; <b>unsere Abweichung</b>, und zwar eine, die dem Spieler sein
+    /// Geld nicht wegnimmt.</para></summary>
+    private void DeliverCargo(Collector s)
+    {
+        if (s.Cargo == null || s.Cargo.Count == 0) return;
+        int geliefert = 0, verschoben = 0;
+        foreach (var o in s.Cargo)
+        {
+            int owner = o.Buyer is >= 0 and <= 7 ? o.Buyer : 0;
+            var cell = _nav?.NearestFree(new Vector2I(s.Target, s.Row),
+                                         NavGrid.MoveClass.Vehicle);
+            if (cell == null || !MarketSpawn(o, cell.Value, owner))
+            {
+                o.TargetBuilding = s.CargoTarget;    // zurueck in die Schlange
+                verschoben++;
+                continue;
+            }
+            _market.Remove(o);
+            geliefert++;
+        }
+        ShopNote = verschoben == 0
+            ? $"Lieferung: {geliefert} Stueck an ({s.Target},{s.Row})"
+            : $"Lieferung: {geliefert} Stueck an ({s.Target},{s.Row}), " +
+              $"{verschoben} zurueckgestellt — kein freier Platz";
+        MarketDelivered += geliefert;
+        UpdatePanel();
+        QueueRedraw();
+    }
+
+    /// <summary>Wieviele gekaufte Stücke wirklich angekommen sind. ⚠ Regel 33:
+    /// ohne diese Zahl ist »die Lieferung läuft« nicht von »der Abholer fährt
+    /// und liefert nichts ab« zu unterscheiden.</summary>
+    public int MarketDelivered;
 
     // ================= DER NACHSCHUB DES LADENS ===============================
     //
@@ -322,8 +471,18 @@ public partial class MapEntityLayer
     /// <summary>Wieviel liegt aus — <c>shop_count()</c> @0x4C0860: die Plätze
     /// mit <c>Preis &gt; 0</c>. ⚠ <b>Vorzeichenbehaftet</b> verglichen
     /// (<c>jle</c>), also zählt ein verkaufter Platz (Preis 0xFFFF = −1)
-    /// <b>nicht</b> mit — er ist weder leer noch im Angebot.</summary>
-    private int ShopOnShelf() => _market.Count;
+    /// <b>nicht</b> mit — er ist weder leer noch im Angebot.
+    ///
+    /// <para>Das ist keine Spitzfindigkeit: <b>der Nachschub legt für gekaufte
+    /// Ware sofort nach</b>, obwohl deren Platz noch belegt ist. Wer die
+    /// verkauften mitzählte, bekäme einen Laden, der erst nach der Lieferung
+    /// wieder auffüllt.</para></summary>
+    private int ShopOnShelf()
+    {
+        int n = 0;
+        foreach (var o in _market) if (!o.Sold) n++;
+        return n;
+    }
 
     /// <summary>Wieviel davon ist EXOTISCH — dieselbe Sperrprüfung, aber auf
     /// dem Ladensatz statt auf dem Entwurf (@0x4C0890, Felder +0x3d/+0x3e/+0x3f
@@ -332,7 +491,7 @@ public partial class MapEntityLayer
     private int ShopExoticOnShelf()
     {
         int n = 0;
-        foreach (var o in _market) if (ShopDesignLocked(o.Design)) n++;
+        foreach (var o in _market) if (!o.Sold && ShopDesignLocked(o.Design)) n++;
         return n;
     }
 
@@ -594,11 +753,26 @@ public partial class MapEntityLayer
         public int Target;
         /// <summary>+0x06, der Rest der Bruchrechnung beim Abbremsen.</summary>
         public int Frac;
-        /// <summary>+0x07, die Art. 1 = holt einen Verkauf ab. 0 = Platz
-        /// frei.</summary>
+        /// <summary>+0x07, die Art. <b>1</b> = holt einen Verkauf ab,
+        /// <b>2</b> = liefert gekaufte Ware, 0 = Platz frei.
+        ///
+        /// <para>⚠ Es gibt auch eine <b>3</b> (@0x4C06C3), und die ist NICHT
+        /// der Markt: sie ruft <c>space_in</c> @0x4C1600, also den
+        /// Kampagnennachschub. Der ist bei uns längst gebaut
+        /// (<c>SpawnReinforcement</c>) und geht seinen eigenen Weg — hier wäre
+        /// er ein zweiter Ort für dieselbe Sache.</para></summary>
         public int Kind;
-        /// <summary>+0x08, welches Angebot er bedient.</summary>
+
+        /// <summary>+0x08, welches Angebot er bedient (Art 1).</summary>
         public SellOffer? Offer;
+
+        /// <summary>Die Ladung (Art 2): <c>byte[+0x0B + i]</c>, Anzahl in
+        /// <c>byte[+0x0A]</c>, höchstens zwanzig.</summary>
+        public List<MarketOffer>? Cargo;
+
+        /// <summary>Der Gebäudeplatz, zu dem die Ladung gehört — damit ein
+        /// Stück, das keinen Platz fand, wieder in die Schlange kann.</summary>
+        public int CargoTarget = -1;
     }
 
     private readonly List<Collector> _collectors = new();
@@ -618,7 +792,12 @@ public partial class MapEntityLayer
         if (_collectors.Count >= CollectorSlots) return false;   // @0x4C01ED
         _collectors.Add(new Collector
         {
-            Col = CollectorStartCol, Row = u.Row, Target = u.Col,
+            // ⚠ BERICHTIGT 18.08.2026: hier stand `Target = u.Col`. Das
+            // Original uebergibt `Spalte − 2` (@0x4C0389, `sub cx, 2`), der
+            // Abholer haelt also zwei Felder VOR der Einheit. Der Unterschied
+            // ist klein und trotzdem einer: er verschiebt die Ankunft, und die
+            // Ankunft ist der Takt, in dem das Geld kommt.
+            Col = CollectorStartCol, Row = u.Row, Target = u.Col - 2,
             Frac = 0, Kind = 1, Offer = o,
         });
         return true;
@@ -673,11 +852,16 @@ public partial class MapEntityLayer
 
             if (s.Col != s.Target) continue;              // @0x4C0574
 
-            // ---- Ankunft, Art 1 — @0x4C05A5 ----
             _collectors.RemoveAt(i);
-            var o = s.Offer;
-            if (o == null) continue;
-            PayForSale(o);
+            switch (s.Kind)
+            {
+                case 1:                                   // Ankunft, @0x4C05A5
+                    if (s.Offer != null) PayForSale(s.Offer);
+                    break;
+                case 2:                                   // Lieferung, @0x4C067F
+                    DeliverCargo(s);
+                    break;
+            }
         }
     }
 
@@ -1172,6 +1356,178 @@ public partial class MapEntityLayer
                                 (ShopNote.Length > 0 ? $" Letzte Meldung: {ShopNote}" : ""));
             GD.Print(_shopLog.ToString());
             _shopCheck = -1;
+        }
+    }
+
+    // ================= der Prüfstand der LIEFERUNG ============================
+
+    private int _buyCheck = -1;
+    private int _buyCheckTick0, _buyCheckMoney0, _buyCheckUnits0, _buyCheckPrice, _buyCheckTarget = -1;
+    private long _buyCheckSim0;
+    private readonly System.Text.StringBuilder _buyLog = new();
+
+    /// <summary><c>--buy-check</c> anwerfen.</summary>
+    public void BuyCheckStart() => _buyCheck = 0;
+
+    /// <summary>
+    /// <c>--buy-check</c> — <b>kaufen und der Ware beim Ankommen zusehen.</b>
+    ///
+    /// <para>Er geht über <see cref="BuildPanelPick"/>, also den <b>Klickweg des
+    /// Fensters</b> und nicht an ihm vorbei. Und er misst beide Hälften
+    /// getrennt, weil sie zwei verschiedene Dinge sind: <b>der Kauf</b> (Geld
+    /// weg, Regal kürzer, Platz als verkauft markiert) und <b>die Lieferung</b>
+    /// (Einheit da, Ladenplatz frei).</para>
+    ///
+    /// <para><b>⚠ Die Gegenprobe ist wieder der Kern:</b> in der Kampagne darf
+    /// im Takt des Kaufs <b>keine Einheit</b> entstehen — sonst hätten wir den
+    /// Gefechtsweg gebaut und es gemerkt hätte es niemand. Der Prüfstand liest
+    /// die Einheitenzahl deshalb ZWEIMAL: direkt nach dem Kauf und nach der
+    /// Ankunft.</para>
+    ///
+    /// <para>⚠ Und er sagt, wieviele Takte es gedauert hat. »Angekommen« ohne
+    /// Dauer wäre von »sofort erschienen« nicht zu unterscheiden.</para>
+    /// </summary>
+    private void PollBuyCheck()
+    {
+        if (_buyCheck < 0) return;
+        int owner = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
+
+        if (_buyCheck == 0)
+        {
+            int mi = -1;
+            for (int i = 0; i < _entities.Count; i++)
+                if (_entities[i].IsBuilding && !_entities[i].Dead && _entities[i].BType == 17) { mi = i; break; }
+
+            // ⚠ ZUERST warten, DANN protokollieren. Andersherum schrieb der
+            // Prüfstand seinen Kopf in JEDEM Takt neu, solange er wartete —
+            // das Protokoll lief voll und die eigentliche Messung war darin
+            // nicht mehr zu finden.
+            if (mi >= 0 && MarketShelf().Count == 0 && _marketTicks < 400) return;
+
+            _buyLog.AppendLine("buy-check");
+            _buyLog.AppendLine($"  Modus: {(TradeLikeOriginal ? "KAMPAGNE (originalgetreu, Lieferung)" : "GEFECHT (sofort)")}");
+            if (mi < 0)
+            {
+                _buyLog.AppendLine("  KEIN URTEIL: kein Geschaeftszentrum auf dieser Karte");
+                GD.Print(_buyLog.ToString()); _buyCheck = -1; return;
+            }
+            var markt = _entities[mi];
+            // ⚠ Eine frische Karte hat LEERE Regale — die Ware der .DM-Dateien
+            // ist angesammelter Spielstand, die Kampagnenkarten bringen keine
+            // mit (13 von 19 Marktkarten der Kampagne: 0 Angebote). Also wird
+            // auf den Nachschub GEWARTET statt aufzugeben; das prueft zugleich,
+            // dass Nachschub und Kauf zusammenspielen.
+            if (MarketShelf().Count == 0)
+            {
+                if (_marketTicks < 400) return;             // 8 s = vier Nachschubphasen
+                _buyLog.AppendLine($"  KEIN URTEIL: der Laden ist nach {_marketTicks} " +
+                                   $"Originaltakten immer noch leer — der Nachschub liefert nichts. " +
+                                   (ShopNote.Length > 0 ? $"Letzte Meldung: {ShopNote}" : ""));
+                GD.Print(_buyLog.ToString()); _buyCheck = -1; return;
+            }
+            if (_marketTicks > 0)
+                _buyLog.AppendLine($"  Der Laden war leer und wurde vom NACHSCHUB gefuellt " +
+                                   $"({MarketShelf().Count} Stueck nach {_marketTicks} Originaltakten)");
+
+            int ziel = DeliveryTargetFor(owner, markt);
+            _buyLog.AppendLine(ziel < 0
+                ? $"  ⚠ Spieler {owner} hat KEIN eigenes Gebaeude — der Kauf muss abgelehnt werden"
+                : $"  Ziel der Lieferung (UNSERE Wahl: naechstes eigenes Gebaeude): Satz {ziel}, " +
+                  $"{BuildingTypeName(_entities[ziel].BType)} auf " +
+                  $"({_entities[ziel].Col},{_entities[ziel].Row}); der Markt steht auf " +
+                  $"({markt.Col},{markt.Row})");
+            _buyCheckTarget = ziel;
+
+            // ⚠ EINGRIFF DES PRUEFSTANDS, und er muss genannt werden: der Laden
+            // ist nur offen, solange eine eigene Einheit auf einer der vier
+            // Platten steht (@0x43E90C). Ohne das gibt `Producer()` gar nicht
+            // den Markt zurueck — der erste Anlauf meldete deshalb einen
+            // leeren Kaufweg und sah aus wie ein Fehler des Kaufs.
+            bool offenVorher = MarketOpenFor(markt, owner);
+            if (MarketShotSetup() == null)
+            {
+                _buyLog.AppendLine("  KEIN URTEIL: keine eigene Einheit da, um den Laden zu oeffnen");
+                GD.Print(_buyLog.ToString()); _buyCheck = -1; return;
+            }
+            _buyLog.AppendLine($"  Laden: vorher {(offenVorher ? "offen" : "zu")}, " +
+                               $"eine eigene Einheit auf eine Platte GESTELLT (nicht gefahren) " +
+                               $"-> {(MarketOpenFor(markt, owner) ? "offen" : "ZU — die Plattenpruefung greift nicht")}");
+
+            Money(owner, 99999);
+            _buyCheckMoney0 = Money(owner);
+            _buyCheckUnits0 = UnitRecords();
+            _buyCheckPrice = MarketShelf()[0].Price;
+            int regalVor = MarketShelf().Count;
+
+            // ⚠ Ueber den KLICKWEG des Fensters, nicht ueber MarketBuy direkt.
+            _selected = mi;
+            _order = "";
+            BuildPanelPick(0);
+
+            _buyLog.AppendLine($"  Meldung des Kaufwegs: \"{_order}\"");
+            _buyLog.AppendLine($"  KAUF: Preis ${_buyCheckPrice}; Konto ${_buyCheckMoney0} -> ${Money(owner)} " +
+                               $"({(Money(owner) == _buyCheckMoney0 - _buyCheckPrice ? "genau abgezogen" : "FALSCH")}), " +
+                               $"Regal {regalVor} -> {MarketShelf().Count} " +
+                               $"({(MarketShelf().Count == regalVor - 1 ? "eines weg, richtig" : "FALSCH")})");
+            int verkauft = 0;
+            foreach (var x in _market) if (x.Sold) verkauft++;
+            _buyLog.AppendLine($"  Plaetze als verkauft markiert: {verkauft} " +
+                               $"(im Original waere das Preis 0xFFFF)");
+            // ⚠ Die GEGENPROBE, im selben Takt gelesen.
+            _buyLog.AppendLine(TradeLikeOriginal
+                ? $"  Gegenprobe Kampagne: Einheitensaetze {_buyCheckUnits0} -> {UnitRecords()} " +
+                  $"{(UnitRecords() == _buyCheckUnits0 ? "— unveraendert, richtig, die Ware faehrt erst" : "— SCHON DA, das waere der Gefechtsweg")}"
+                : $"  Gegenprobe Gefecht: Einheitensaetze {_buyCheckUnits0} -> {UnitRecords()} " +
+                  $"{(UnitRecords() == _buyCheckUnits0 + 1 ? "— sofort da, richtig" : "— NICHT abgesetzt")}");
+
+            if (!TradeLikeOriginal) { GD.Print(_buyLog.ToString()); _buyCheck = -1; return; }
+            _buyCheckTick0 = _marketTicks;
+            _buyCheckSim0 = DebugTicks;
+            _buyCheck = 1;
+            return;
+        }
+
+        // Stufe 1 — auf die Lieferung warten.
+        if (MarketDelivered > 0)
+        {
+            int dauer = _marketTicks - _buyCheckTick0;
+            long simDauer = DebugTicks - _buyCheckSim0;
+            _buyLog.AppendLine($"  GELIEFERT nach {simDauer} Simulationstakten " +
+                               $"({simDauer / (double)SimHz:0.00} s), das sind {dauer} Originaltakte");
+            _buyLog.AppendLine($"    {ShopNote}");
+            _buyLog.AppendLine($"  Einheitensaetze {_buyCheckUnits0} -> {UnitRecords()} " +
+                               $"({(UnitRecords() > _buyCheckUnits0 ? "angekommen, richtig" : "NICHTS ANGEKOMMEN")})");
+            int verkauft = 0;
+            foreach (var x in _market) if (x.Sold) verkauft++;
+            _buyLog.AppendLine($"  noch offene Kaeufe: {verkauft} " +
+                               $"({(verkauft == 0 ? "Ladenplatz wieder frei, richtig" : "einer blieb liegen")})");
+            if (_buyCheckTarget >= 0 && _buyCheckTarget < _entities.Count)
+            {
+                var b = _entities[_buyCheckTarget];
+                int nah = 0;
+                foreach (var u in _entities)
+                    if (!u.IsBuilding && !u.IsProp && !u.Dead && u.Owner == owner &&
+                        Mathf.Abs(u.Col - b.Col) <= 3 && Mathf.Abs(u.Row - b.Row) <= 3) nah++;
+                _buyLog.AppendLine($"  eigene Einheiten im Umkreis von 3 um das Ziel " +
+                                   $"({b.Col},{b.Row}): {nah} — die Ware muss DORT stehen, " +
+                                   $"nicht am Markt");
+            }
+            _buyLog.AppendLine($"  Gegenprobe Kampagne: {(simDauer > 60 ? $"es wurde gewartet ({simDauer} Takte)" : $"NUR {simDauer} Takte — das ist kein Warten")}");
+            GD.Print(_buyLog.ToString());
+            _buyCheck = -1;
+            return;
+        }
+        if (_marketTicks - _buyCheckTick0 > 600)
+        {
+            _buyLog.AppendLine($"  KEIN URTEIL: nach 600 Originaltakten (12 s) nichts geliefert. " +
+                               $"Die Phase %300 == 222 haette zweimal zuschlagen muessen. " +
+                               $"Abholer unterwegs: {_collectors.Count}." +
+                               (ShopNote.Length > 0 ? $" Letzte Meldung: {ShopNote}" : ""));
+            foreach (var s in _collectors)
+                _buyLog.AppendLine($"    Abholer Art {s.Kind}: Spalte {s.Col} -> {s.Target}, " +
+                                   $"Zeile {s.Row}, Ladung {s.Cargo?.Count ?? 0}");
+            GD.Print(_buyLog.ToString());
+            _buyCheck = -1;
         }
     }
 
