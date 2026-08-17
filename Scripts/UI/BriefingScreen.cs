@@ -305,6 +305,15 @@ public partial class BriefingScreen : CanvasLayer
         BuildRadar(at, scale);
         BuildMonitorButtons(at, scale);
 
+        // ⚠ Zwei Anschlussstellen, jede in ihrer EIGENEN Teildatei, damit an
+        // ihnen unabhaengig voneinander gearbeitet werden kann:
+        //   BriefingEmblem.cs  — das Emblem (Wasserzeichen + die zwei Nischen)
+        //   BriefingTech.cs    — das Feld »neue technologien«
+        // Beide sind heute leer und zeichnen nichts; der Schirm sieht damit aus
+        // wie vorher.
+        BuildEmblems(at, scale);
+        BuildTechPanel(at, scale);
+
         var font = LegacyFont();
 
         // ⚠⚠ 18.08.2026 — DIE SCHRIFT SPRANG IN GANZEN VIELFACHEN. Gemeldet:
@@ -512,6 +521,8 @@ public partial class BriefingScreen : CanvasLayer
         string want = "";
         foreach (string a in OS.GetCmdlineUserArgs())
             if (a.StartsWith("--briefing-shot=")) want = a["--briefing-shot=".Length..];
+        TickEmblems(delta);
+
         // ⚠ Der Monitor sagt, worauf er steht — sonst muesste man es aus dem
         // Bildschirmfoto raten, und ein Zoom, der gerade erst anlaeuft, sieht
         // dort fast aus wie einer, der gar nicht anlaeuft.
