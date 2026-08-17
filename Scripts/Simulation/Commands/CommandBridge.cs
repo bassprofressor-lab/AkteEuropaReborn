@@ -186,6 +186,47 @@ public partial class MapEntityLayer
         return n;
     }
 
+    /// <summary>
+    /// <b>FLUGZIEL SETZEN</b> — der Rechtsklick für ein angewähltes Flugzeug.
+    ///
+    /// <para>Gemeldet: »im Gefecht wäre es doch sinnvoll die Einheiten
+    /// eigenständig zu steuern oder nicht?«. Ja — aber es ist eine
+    /// <b>Abweichung</b>, und sie steht bei <see cref="CommandOp.OursAirMove"/>
+    /// mit dem Negativbefund, auf den sie sich stützt: kein Befehlsbehandler
+    /// des Originals schreibt das Zielfeld eines Flugzeugs.</para>
+    ///
+    /// <para>Der Weg ist derselbe wie bei jedem anderen Befehl — über den Ring,
+    /// wirksam am nächsten Taktanfang. Ein zweiter, direkter Draht für
+    /// Flugzeuge wäre genau die Sorte Ausnahme, die ein Netzspiel später
+    /// auseinanderlaufen lässt.</para>
+    ///
+    /// <para>⚠ P1 ist der <b>Steckplatz</b> des Flugzeugs, nicht ein
+    /// Einheitenindex. Deshalb darf dieser Befehl nicht durch
+    /// <see cref="Owns"/> laufen — das prüft <c>_entities[P1]</c> und würde hier
+    /// eine fremde Einheit befragen.</para></summary>
+    /// <returns>Wie viele Sätze abgesetzt wurden (0 oder 1).</returns>
+    public int PostAirMove(Vector2 mapPos, bool queue = false)
+    {
+        if (_nav == null) return 0;
+        if (_selAir < 0 || _selAir >= _special.Count) return 0;
+        var a = _special[_selAir];
+        if (a.Dead || a.Stored) { _order = "das Flugzeug steht im Hangar"; return 0; }
+        if (a.Owner != ViewPlayer) { _order = "nicht Ihr Flugzeug"; return 0; }
+
+        var cell = CellAt(mapPos);
+        if (cell == null) { _order = "outside the map"; return 0; }
+
+        var c = CommandRecord.Make(CommandOp.OursAirMove, (byte)ViewPlayer,
+                                   (short)a.Slot, (short)cell.Value.X, (short)cell.Value.Y);
+        if (!Emit(c)) { _order = "kein Befehl abgesetzt"; return 0; }
+
+        AddOrderMark(CellCenter(cell.Value.X, cell.Value.Y), attack: false);
+        _order = $"Flugziel abgesetzt -> ({cell.Value.X},{cell.Value.Y})";
+        UpdatePanel();
+        QueueRedraw();
+        return 1;
+    }
+
     /// <summary>Einen Bewegungsbefehl für EINE Einheit auf EINE Zelle absetzen —
     /// ohne die Streuung von <see cref="PostMove"/>.
     ///
@@ -543,6 +584,10 @@ public partial class MapEntityLayer
     /// </summary>
     public bool ApplyCommand(in CommandRecord c) => c.Op switch
     {
+        // ⚠ VOR der Owns-Schranke: bei diesem Befehl ist P1 ein
+        // FLUGZEUG-Steckplatz, keine Einheitennummer. Owns() würde
+        // _entities[P1] befragen — eine ganz andere Einheit.
+        CommandOp.OursAirMove => ApplyAirMove(c),
         _ when !Owns(c) => false,
         CommandOp.Move => ApplyMove(c),
         CommandOp.OursAttack => ApplyAttack(c),
@@ -583,6 +628,51 @@ public partial class MapEntityLayer
         if (i < 0 || i >= _entities.Count) return false;
         return _entities[i].Owner == c.Player;
     }
+
+    /// <summary>
+    /// <b>Flugziel, unsere Nummer 2003.</b> P1 = Steckplatz, P2/P3 = Zielzelle.
+    ///
+    /// <para>Getan wird genau das, was <c>air_back_to_airport</c> @0x42646D tut:
+    /// Zielspalte und Zielzeile in den Satz, Auftrag auf 1. Bei uns heisst das
+    /// <c>Goal</c> und <c>Order = 1</c>.</para>
+    ///
+    /// <para>⚠⚠ <b>NUR AUSSERHALB DER KAMPAGNE.</b> Nach der Trennachse des
+    /// Projekts (<c>CampaignMission &gt; 0</c>) bleibt die Kampagne
+    /// originaltreu; das Gefecht darf bewusst abweichen. Ein Flugbefehl in
+    /// Mission 7 wäre eine stille Änderung am Original — hier wird er
+    /// verworfen, und der Ring bleibt trotzdem für beide Seiten gleich, weil
+    /// die Verwerfung aus dem MISSIONSSTAND folgt und nicht aus dem Zufall
+    /// einer Maschine.</para>
+    ///
+    /// <para>⚠ Der Eigentümer wird auch hier im BEHANDLER geprüft, aus demselben
+    /// Grund wie bei <see cref="Owns"/>: was vom Absender kommt, ist keine
+    /// Aussage über die Wahrheit.</para></summary>
+    private bool ApplyAirMove(in CommandRecord c)
+    {
+        if (_nav == null) return false;
+        if (UI.SkirmishSetup.CampaignMission > 0) return false;   // s.o.
+
+        Special? a = null;
+        foreach (var s in _special) if (s.Slot == c.P1) { a = s; break; }
+        if (a == null || a.Dead || a.Stored) return false;
+        if (a.Owner != c.Player) return false;
+
+        // geklemmt wie bei Opcode 3 (@0x4C2324): ein Satz aus dem Netz oder
+        // einer Wiederholung darf nichts umwerfen.
+        int col = Mathf.Clamp(c.P2, 0, _nav.Width - 1);
+        int row = Mathf.Clamp(c.P3, 0, _nav.Height - 1);
+
+        a.PlayerGoal = CellCenter(col, row);
+        a.Goal = a.PlayerGoal;
+        a.Order = 1;                     // gelesen: 1 = »flieg nach (x,y)«
+        a.Customer = -1;                 // ein Versorgungsheli lässt seine Kundschaft
+        a.HomePoint = null;              // und den gewürfelten Heimatpunkt
+        AirOrdersGiven++;
+        return true;
+    }
+
+    /// <summary>Wie viele Flugbefehle angekommen sind — für den Prüfstand.</summary>
+    public int AirOrdersGiven { get; private set; }
 
     /// <summary>
     /// Opcode 3, Bewegen. P1 = Einheit, P2/P3 = Zielzelle, P4 = angereiht.

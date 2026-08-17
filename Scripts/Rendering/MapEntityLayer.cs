@@ -792,6 +792,22 @@ public partial class MapEntityLayer : Node2D
         /// UEBERGANG auf. Unsere Heimkehr laeuft je Takt — wer hier neu wuerfelt,
         /// bekommt einen Heli, der zappelt statt zu fliegen.</summary>
         public Vector2? HomePoint;
+
+        /// <summary>
+        /// <b>Wohin der SPIELER dieses Flugzeug geschickt hat</b> — gesetzt,
+        /// heisst: alles Selbständige ruht, bis es dort ist.
+        ///
+        /// <para>⚠ <b>Unsere Zutat, und eine bewusste Abweichung</b> — siehe
+        /// <see cref="Simulation.Commands.CommandOp.OursAirMove"/> samt dem
+        /// Negativbefund, auf den sie sich stützt.</para>
+        ///
+        /// <para>⚠ Warum ein EIGENES Feld und nicht <see cref="Order"/>: der
+        /// Auftrag kommt aus dem Kartensatz (+0x10) und steht dort schon auf 1,
+        /// wenn ein Flugzeug beim Laden unterwegs war. Ein Spielerbefehl, der
+        /// auf demselben Byte sässe, wäre von einem geladenen nicht zu
+        /// unterscheiden — und jedes solche Flugzeug hinge an einem Ziel, das
+        /// der Spieler nie gegeben hat.</para></summary>
+        public Vector2? PlayerGoal;
         public int Target = -1;      // entity being attacked
         public float Cooldown;
         public bool Dead;
@@ -3082,9 +3098,18 @@ public partial class MapEntityLayer : Node2D
     public void SelectAt(Vector2 mapPos, bool additive = false)
     {
         int hit = Pick(mapPos);
-        // Ein FLUGZEUG gewinnt nur, wo keine Einheit und kein Gebäude liegt: es
-        // fliegt über allem, und wer auf einen Panzer klickt, meint den Panzer.
-        if (hit < 0 && !additive)
+        // Ein FLUGZEUG gewinnt, wo nichts liegt, das der Spieler befehligen
+        // könnte: es fliegt über allem, und wer auf seinen Panzer klickt, meint
+        // den Panzer.
+        //
+        // ⚠ 18.08.2026 — hier stand `hit < 0`, also »wo GAR NICHTS liegt«.
+        // Gemeldet als »außerdem kann ich die Einheiten nicht anwählen«: ein
+        // Flugzeug über einem fremden Panzer, einem Gebäude oder einem Baum war
+        // unanklickbar, weil `Pick` etwas fand — etwas, das ohnehin nicht
+        // ausgewählt werden konnte. Der Quelltext wusste es sogar schon: die
+        // Bildersuche für die Demos notiert an ihrer Fundstelle »etwas anderes
+        // lag davor«.
+        if (!Commandable(hit))
         {
             int air = PickAir(mapPos);
             if (air >= 0)
@@ -19012,6 +19037,7 @@ public partial class MapEntityLayer : Node2D
         PollBauCheck3();
         PollAusbauCheck();
         PollMechanikerCheck();
+        PollFlugCheck();
         PollAusbauCheck2();
         PollKnopfCheck();
         PollRingCheck();
@@ -20395,6 +20421,10 @@ public partial class MapEntityLayer : Node2D
         {
             var s = _special[i];
             if (s.Dead || s.Stored) continue;
+            // ⚠ 18.08.2026 — nur EIGENE. Vorher liess sich jedes Flugzeug
+            // anwählen, auch das des Gegners; mit dem neuen Flugbefehl wäre das
+            // dasselbe Loch, das `Commandable` für Einheiten längst schliesst.
+            if (s.Owner != ViewPlayer) continue;
             if (!AirRect(s).HasPoint(p)) continue;
             float d = p.DistanceTo(s.Pos - new Vector2(0, AirShadowDrop));
             if (d < bd) { bd = d; best = i; }
@@ -21061,6 +21091,21 @@ public partial class MapEntityLayer : Node2D
             // Hause, weder ohne Kundschaft noch mit leerem Tank. UpdateSupply
             // schickt ihn jetzt selbst heim; ist er angekommen, ist er
             // eingelagert und dieser Takt fuer ihn zu Ende.
+            // ⚠ DER SPIELERBEFEHL HAT VORRANG, und zwar vor ALLEM — auch vor
+            // dem Versorgungszweig. Sonst hätte der Spieler einen Heli
+            // angewiesen, und der wäre trotzdem zu seiner Kundschaft geflogen:
+            // ein Befehl, der nichts tut, ist schlimmer als keiner.
+            // Angekommen -> Feld leeren, und ab dem nächsten Takt handelt das
+            // Flugzeug wieder selbst.
+            if (a.PlayerGoal is Vector2 pg)
+            {
+                a.Goal = pg;
+                a.Target = -1;
+                if (a.Pos.DistanceTo(pg) < TileW * 1.5f)
+                { a.PlayerGoal = null; a.Order = 0; AirOrdersReached++; }
+                goto move;
+            }
+
             if (a.IsSupply) { UpdateSupply(a); if (a.Stored) continue; goto move; }
 
             // Sprit unter der gelesenen Schwelle — oder, UNSERE Zutat, nichts
@@ -21291,6 +21336,11 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Wie oft ein Flugzeug am Kartenrand umgekehrt ist, statt
     /// hinauszufliegen — der Beleg dafür, dass die Sperre greift.</summary>
     public int AirTurnedBack;
+
+    /// <summary>Wie viele Flugbefehle ihr Ziel ERREICHT haben. ⚠ Getrennt von
+    /// <c>AirOrdersGiven</c>: »abgesetzt« und »angekommen« sind zwei
+    /// verschiedene Aussagen, und nur zusammen sagen sie etwas.</summary>
+    public int AirOrdersReached;
 
     /// <summary>Was der Geradeausflug getan hat — fuer Laeufe, die nicht auf
     /// den Schirm sehen koennen. Nennt auch, wieviele Flugzeuge ueberhaupt in

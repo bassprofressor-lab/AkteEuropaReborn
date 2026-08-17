@@ -62,6 +62,30 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Mechaniker, ein beschädigtes Fahrzeug daneben, eins diagonal, eins sechs
   Felder weiter) und misst +5/+0/+0 — die Rate, die dasteht.
 
+- ⭐ **Flugzeuge lassen sich anwählen — und im GEFECHT auch steuern.**
+  Gemeldet: »außerdem kann ich die Einheiten nicht anwählen. Im Gefecht wäre
+  es doch sinnvoll die Einheiten eigenständig zu steuern oder nicht?«
+
+  Das Anwählen gab es schon — aber nur, wo unter dem Flugzeug **gar nichts**
+  lag. Ein Flieger über einem fremden Panzer, einem Gebäude oder einem Baum
+  war unanklickbar. Jetzt gewinnt er überall dort, wo nichts liegt, das der
+  Spieler ohnehin befehligen könnte; dafür sind nur noch die **eigenen**
+  Flugzeuge anwählbar.
+
+  Der Flugbefehl selbst ist eine ⚠ **bewusste Abweichung** und steht als
+  solche im Quelltext. Belegt ist sie durch einen Negativbefund: das Zielfeld
+  eines Flugzeugs (`+0x14/+0x15`) wird an zwanzig Stellen geschrieben, **alle**
+  im Flugtakt selbst, **keine** in einem Befehlsbehandler. Im Original handeln
+  Flugzeuge selbständig. Die Mechanik dagegen ist gelesen und wird nur
+  ausgelöst: Auftrag **1** heißt »flieg nach (x,y)«, und
+  `air_back_to_airport` @0x42646D setzt genau diese drei Bytes.
+
+  ⚠⚠ **Die Kampagne bleibt originaltreu.** Der Befehl wird dort **verworfen**,
+  und zwar im Behandler, nicht in der Eingabe — eine Sperre in der Eingabe
+  wäre auf der zweiten Maschine eines Netzspiels nicht vorhanden. Gemessen:
+  im Gefecht »1 Satz abgesetzt, Ziel erreicht«, in der Kampagne »1 Satz
+  abgesetzt, **0 beim Behandler angekommen**«.
+
 - ⭐ **Flugzeuge verlassen die Karte nicht mehr.** Gemeldet als »fliegen
   geradlinig Richtung Norden, sogar außerhalb der Map«. Ein Flugzeug ohne Ziel
   fliegt geradeaus — das ist gelesen —, aber begrenzt war nur seine *Zelle*,

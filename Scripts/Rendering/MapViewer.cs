@@ -428,6 +428,7 @@ public partial class MapViewer : Node2D
         if (_bauCheckFlag) _entities.BauCheckStart(_bauCheckOrder);
         if (_ausbauCheckFlag) _entities.AusbauCheckStart();
         if (_mechCheckFlag) _entities.MechanikerCheckStart();
+        if (_flugCheckFlag) _entities.FlugCheckStart();
         if (_knopfCheckFlag) _entities.KnopfCheckStart();
         if (_m21CheckFlag) _entities.M21CheckStart();
         if (_ringCheckTicks > 0) _entities.RingCheckStart(_ringCheckTicks);
@@ -699,6 +700,10 @@ public partial class MapViewer : Node2D
     /// <summary><c>--mechaniker-check</c> — repariert der Mechaniker die
     /// Nachbarzellen? Siehe Simulation/MechanicCheck.cs.</summary>
     private bool _mechCheckFlag;
+
+    /// <summary><c>--flug-check</c> — was tut ein gekauftes Kampfflugzeug?
+    /// Siehe Simulation/AirControlCheck.cs.</summary>
+    private bool _flugCheckFlag;
     /// <summary><c>--knopf-check</c> — stehen »Abbrechen« und »Starten« da,
     /// wenn es etwas zu tun gibt, und bleiben sie sonst weg?</summary>
     private bool _knopfCheckFlag;
@@ -1177,6 +1182,7 @@ public partial class MapViewer : Node2D
             else if (a == "--radar-check") _radarCheckFlag = true;
             else if (a == "--ausbau-check") _ausbauCheckFlag = true;
             else if (a == "--mechaniker-check") _mechCheckFlag = true;
+            else if (a == "--flug-check") _flugCheckFlag = true;
             else if (a == "--knopf-check") _knopfCheckFlag = true;
             else if (a == "--m21-check") _m21CheckFlag = true;
             else if (a == "--ring-check") _ringCheckTicks = 3000;
@@ -3311,6 +3317,24 @@ public partial class MapViewer : Node2D
                             // Neutrale Gebaeude griff niemand an, deshalb ging
                             // es dort und nur dort. Die ganze Herleitung samt
                             // Messung steht bei PostCapture.
+                            // ⚠ 18.08.2026 — EIN ANGEWÄHLTES FLUGZEUG BEKOMMT
+                            // EIN FLUGZIEL. Gemeldet als »im Gefecht wäre es
+                            // doch sinnvoll die Einheiten eigenständig zu
+                            // steuern«. Die Weiche steht ganz vorn, weil ein
+                            // Flugzeug und eine Bodenauswahl sich ausschliessen
+                            // (SetPrimary) — es kann also nichts anderes meinen.
+                            //
+                            // Ob der Befehl überhaupt angenommen wird, entscheidet
+                            // der BEHANDLER (nur ausserhalb der Kampagne, siehe
+                            // CommandBridge.ApplyAirMove) — nicht diese Stelle.
+                            // Eine Sperre in der Eingabe wäre auf der zweiten
+                            // Maschine nicht vorhanden.
+                            if (_entities.PostAirMove(GetGlobalMousePosition(),
+                                                      mb.ShiftPressed) > 0)
+                            {
+                                _rightDown = false; _rightDrag = false;
+                                break;
+                            }
                             if (mb.CtrlPressed)
                             {
                                 if (!_entities.PostCapture(GetGlobalMousePosition(), mb.ShiftPressed))

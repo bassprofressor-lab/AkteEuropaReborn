@@ -238,6 +238,28 @@ public static class CommandOp
     /// stride 30) — welcher Opcode ihn ausführt, ist NICHT gelesen.</summary>
     public const short OursStop = 2002;
 
+    /// <summary>
+    /// ⚠⚠ <b>UNSERE SETZUNG, und eine BEWUSSTE ABWEICHUNG</b>: ein Flugbefehl
+    /// des Spielers. P1 = Steckplatz des Flugzeugs (nicht Einheitennummer!),
+    /// P2/P3 = Zielzelle.
+    ///
+    /// <para><b>Das Original hat diesen Befehl nicht.</b> Gesucht wurde nach
+    /// der FORM: das Zielfeld eines Flugzeugs liegt auf <c>+0x14/+0x15</c>
+    /// (0x6DDF84/85), und geschrieben wird es an 20 Stellen — alle im
+    /// Flugtakt selbst (0x423xxx–0x426xxx), <b>keine</b> in einem
+    /// Befehlsbehandler (0x43xxxx–0x45xxxx). Flugzeuge handeln im Original
+    /// selbständig; der Spieler kauft sie und schickt sie los, mehr nicht.</para>
+    ///
+    /// <para>Die MECHANIK dagegen ist gelesen und wird nur ausgelöst, nicht
+    /// erfunden: Auftrag <b>1</b> heißt »flieg nach (x,y)«, und
+    /// <c>air_back_to_airport</c> @0x42646D setzt genau diese drei Bytes
+    /// (Zielspalte, Zielzeile, Auftrag 1). Wir setzen dieselben.</para>
+    ///
+    /// <para>⚠ Der Befehl wird NUR außerhalb der Kampagne angenommen — siehe
+    /// <c>CommandBridge.ApplyAirMove</c>. Die Kampagne bleibt originaltreu,
+    /// das Gefecht darf abweichen, und die Abweichung steht hier.</para></summary>
+    public const short OursAirMove = 2003;
+
     /// <summary>Geht dieser Befehl in die Wiederholung? (Schranke des
     /// Originals, @0x4C20A4.) Unsere eigenen Nummern liegen darüber und werden
     /// deshalb wie örtliche behandelt — ⚠ das ist eine Folge unserer
@@ -257,6 +279,7 @@ public static class CommandOp
     public static string NameOf(short op) => op switch
     {
         Move => "Bewegen",
+        OursAirMove => "Flugziel (unsere Abweichung)",
         BuildShip => "Schiff bauen",
         Sell => "Verkaufen",
         PlaceRadar => "Radar setzen",
