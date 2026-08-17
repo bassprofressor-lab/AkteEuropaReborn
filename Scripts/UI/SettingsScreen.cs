@@ -111,6 +111,25 @@ public partial class SettingsScreen : Control
         };
         box.AddChild(Row("Bildratengrenze", fps));
 
+        // ⚠ 18.08.2026 — gemeldet als »kann man das Spiel auch unter 4K
+        // spielen?«. Spielen ging es schon; lesbar war es nicht. Siehe
+        // Settings.ApplyUiScale — und ⚠ das ist UNSERE Zutat: das Original von
+        // 1997 lief in einer festen Aufloesung und kennt so etwas nicht.
+        var skala = new OptionButton();
+        skala.AddItem($"automatisch (jetzt {Settings.EffectiveUiScale:0}×)");
+        for (int k = 1; k <= 3; k++) skala.AddItem($"{k}×");
+        skala.Selected = Mathf.Clamp(Settings.UiScale, 0, 3);
+        skala.ItemSelected += i => { Settings.UiScale = (int)i; Settings.Apply(); };
+        box.AddChild(Row("Oberfläche vergrößern", skala));
+        box.AddChild(new Label
+        {
+            Text = "Vergrößert Karte und Leiste zusammen — kein Zoom: bei 2× auf einem "
+                 + "4K-Schirm sieht man genauso viel Karte wie bei 1× auf 1080p. "
+                 + "(Unsere Zutat, im Original nicht vorhanden.)",
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Modulate = new Color(0.6f, 0.64f, 0.7f),
+        });
+
         box.AddChild(new HSeparator());
         box.AddChild(Head("Steuerung"));
         box.AddChild(Check("Rechte Maustaste gedrueckt halten schiebt die Karte",

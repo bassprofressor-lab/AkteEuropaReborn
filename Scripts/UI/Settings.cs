@@ -211,6 +211,87 @@ public static class Settings
             ? DisplayServer.VSyncMode.Enabled
             : DisplayServer.VSyncMode.Disabled);
         Engine.MaxFps = FpsLimit;
+        ApplyUiScale();
+    }
+
+    /// <summary>
+    /// <b>DIE OBERFLÄCHE AUF GROSSEN BILDSCHIRMEN.</b> Antwort auf »kann man
+    /// das Spiel auch unter 4K spielen?«
+    ///
+    /// <para>Spielen ging es schon — es lief, nur war alles halb so groß. Das
+    /// Projekt hatte <b>gar keinen</b> Streckmodus gesetzt, und Godots Vorgabe
+    /// ist »aus«: die Zeichenfläche folgt der Fenstergröße 1:1. Auf 1600×900
+    /// ist die Leiste unten so hoch wie gedacht, auf 3840×2160 ist sie es immer
+    /// noch — also ein Viertel der Fläche statt der Hälfte.</para>
+    ///
+    /// <para><c>content_scale_factor</c> vergrößert die ganze 2D-Ebene, Karte
+    /// und Leiste zusammen. ⚠ Das ist <b>kein</b> Zoom: bei Faktor 2 auf einem
+    /// 4K-Schirm sieht der Spieler genauso viel Karte wie bei Faktor 1 auf
+    /// 1080p, nur doppelt so groß gezeichnet. Der Kartenzoom bleibt daneben,
+    /// was er war.</para>
+    ///
+    /// <para>⚠ <b>Unsere Zutat, offen gesagt:</b> das Original von 1997 lief in
+    /// einer festen Auflösung und kennt so etwas nicht. Es gibt hier also nichts
+    /// zu lesen und nichts nachzubauen — die Zahl ist gewählt, nicht
+    /// gemessen.</para>
+    ///
+    /// <para>0 heißt <b>automatisch</b>: ein Schritt je volle 900 Bildpunkte
+    /// Höhe, gedeckelt auf 3. Damit bleibt 1080p bei 1, 1440p bei 1 und 2160p
+    /// bei 2 — wer es anders will, stellt es ein.</para></summary>
+    public static void ApplyUiScale()
+    {
+        var tree = (SceneTree?)Engine.GetMainLoop();
+        var win = tree?.Root;
+        if (win == null) return;
+        // ⚠ Ohne diesen Modus tut der Faktor NICHTS. Godot rechnet ihn nur im
+        // Streckmodus `canvas_items`; bei `disabled` wird er stillschweigend
+        // ignoriert — die Sorte Schalter, die man für kaputt hält.
+        win.ContentScaleMode = Window.ContentScaleModeEnum.CanvasItems;
+        win.ContentScaleAspect = Window.ContentScaleAspectEnum.Expand;
+        win.ContentScaleFactor = EffectiveUiScale;
+        // ⚠ Einmal ins Protokoll, und zwar mit dem WIRKLICH gesetzten Wert vom
+        // Fenster, nicht mit dem gewuenschten. Ein Schalter, der still nicht
+        // wirkt, ist die Sorte Fehler, die man erst beim Spieler bemerkt — und
+        // die ausgelieferte Fassung schreibt seit dem 18.08. ein Protokoll.
+        if (!_skalaGesagt)
+        {
+            _skalaGesagt = true;
+            var s = DisplayServer.ScreenGetSize();
+            GD.Print($"Oberflaeche: Schirm {s.X}x{s.Y}, Einstellung " +
+                     $"{(UiScale == 0 ? "automatisch" : UiScale + "x")}, " +
+                     $"gesetzt {win.ContentScaleFactor:0.##}x " +
+                     $"(Modus {win.ContentScaleMode})");
+        }
+    }
+
+    private static bool _skalaGesagt;
+
+    /// <summary>Der eingestellte Faktor, oder bei 0 der automatische.</summary>
+    public static float EffectiveUiScale
+    {
+        get
+        {
+            int gewaehlt = UiScale;
+            if (gewaehlt > 0) return gewaehlt;
+            int h = DisplayServer.ScreenGetSize().Y;
+            return Mathf.Clamp(h / 900, 1, 3);
+        }
+    }
+
+    /// <summary>0 = automatisch, sonst 1..3 — siehe <see cref="ApplyUiScale"/>.</summary>
+    public static int UiScale
+    {
+        get
+        {
+            // ⚠ Ein Schalter für den Prüflauf UND für den Spieler, der seine
+            // Einstellung einmal ausprobieren will, ohne sie zu speichern:
+            // `--ui-skala=2`. Er sticht die Datei, schreibt sie aber nicht.
+            foreach (string a in Core.CommandLine.Args)
+                if (a.StartsWith("--ui-skala=") &&
+                    int.TryParse(a["--ui-skala=".Length..], out int v)) return Mathf.Clamp(v, 0, 3);
+            return I("ui_scale", 0);
+        }
+        set => Set("ui_scale", value);
     }
 
     // ---- the file ---------------------------------------------------------

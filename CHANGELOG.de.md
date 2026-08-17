@@ -693,6 +693,32 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Kampagne und Oberfläche
 
+- ⭐ **4K und andere große Schirme: die Oberfläche lässt sich vergrößern.**
+  Gefragt: »kann man das Spiel auch unter 4K spielen?«. Spielen ging es schon —
+  nur war alles halb so groß: das Projekt hatte **gar keinen** Streckmodus
+  gesetzt, und Godots Vorgabe ist »aus«, die Zeichenfläche folgt also 1:1 der
+  Fenstergröße. Neu in den Einstellungen: **Oberfläche vergrößern**
+  (automatisch, 1×, 2×, 3×), dazu `--ui-skala=N` zum Ausprobieren ohne
+  Speichern.
+
+  ⚠ Das ist **kein Zoom**: bei 2× auf einem 4K-Schirm sieht man genauso viel
+  Karte wie bei 1× auf 1080p, nur doppelt so groß gezeichnet. Automatisch
+  heißt ein Schritt je volle 900 Bildpunkte Höhe — 1080p und 1440p bleiben bei
+  1×, 2160p bekommt 2×. ⚠ Unsere Zutat: das Original lief in einer festen
+  Auflösung und kennt so etwas nicht.
+
+  Gemessen (die ausgelieferte Fassung schreibt es ins Protokoll):
+  `Oberflaeche: Schirm 3440x1440, Einstellung 2x, gesetzt 2x (Modus CanvasItems)`
+  — der **wirklich gesetzte** Wert vom Fenster, nicht der gewünschte.
+
+- **Der Nebel in den Demos des Hauptmenüs — beantwortet, nichts geändert.**
+  Gefragt: »die Demos zeigen nur Fog of War bei Gebäuden?«. Sie zeigen
+  **überhaupt keinen**: `MenuBackdrop` setzt `FogSuppressed`, weil ein Demo
+  seinen Erkundungsstand nicht mitbringt und sonst der halbe Bildschirm schwarz
+  wäre. Die hellen Flächen um die Gebäude sind deren **eigene Bodenplatten**
+  aus den Musterkacheln der Karte (1009 flache Kacheln über 46 Gebäude auf
+  Demo 1) — Spielgrafik, kein Schleier.
+
 - ⭐ **Die Enzyklopädie des Originals ist im Spiel.** Der Menüpunkt sollte auf
   unser Wiki verlinken. Beim Nachsehen, was das *Original* hinter der Zeile hat,
   lag **`ENCYCLOG.TXT` mit 106 Seiten** neben GAME.EXE — Fahrwerke, Waffen,
