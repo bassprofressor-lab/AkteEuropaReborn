@@ -132,6 +132,7 @@ public partial class BriefingScreen : CanvasLayer
     /// <summary>Der MISSION-Knopf, damit ein Prueflauf ihn DRUECKEN kann statt
     /// das Feld dahinter zu setzen — siehe <c>--briefing-mission</c>.</summary>
     private Button? _btnMission;
+    private Button? _btnStart;
     private bool _missionGetippt;
 
     /// <summary>How long one of the ten frames stays up. OURS — the original's
@@ -273,14 +274,25 @@ public partial class BriefingScreen : CanvasLayer
             MouseFilter = Control.MouseFilterEnum.Ignore,
         });
 
-        // ⚠ Die zwei kleinen Markierungsflaechen unten ebenso zudecken. Dort
-        // gehoert ein WETTERSYMBOL hin — im Original ein Wirbelsturm —, und das
-        // ist noch nicht gelesen: die Bilddaten liegen im 43.302 Byte langen
-        // Schwanz von BRIEFG.DAT (lesbar darin: CLOUDED, OVERCAST, SKY, DANGER,
-        // HIGH/LOW TEMPERATURE), aber als Sprite-Bank mit Kopfdaten, nicht als
-        // schlichtes Bitmap. Bis dahin steht dort dieselbe dunkle Nische wie im
-        // Original — ein WEISSER Kasten sieht aus wie ein Fehler, eine leere
-        // Nische wie eine Nische.
+        // ⚠ Die zwei kleinen Markierungsflaechen unten ebenso zudecken.
+        //
+        // ⚠⚠ HIER STAND »WETTERSYMBOL«, UND DAS WAR FALSCH. Ich hatte im
+        // Dateischwanz Tafeln mit CLOUDED, OVERCAST, SKY, DANGER, HIGH/LOW
+        // TEMPERATURE gefunden und daraus geschlossen, das runde Zeichen in den
+        // zwei Nischen sei ein Wirbelsturm. Der Spieler hat berichtigt: es ist
+        // das EMBLEM von Akte Europa, und es ist ANIMIERT — ein Schimmer laeuft
+        // von links nach rechts und wieder zurueck darueber. Dasselbe Emblem
+        // steht als Wasserzeichen hinter dem Text (im Vergleichsbild sichtbar,
+        // wenn man es aufhellt): konzentrische Ringe, bronzefarben.
+        //
+        // Die Tafeln im Schwanz gibt es trotzdem — der Schwanz haelt also
+        // MEHRERES. Was fehlt, ist seine Gliederung: bei Breite 106 wird eine
+        // Bahn lesbar, bei 53/55/202/208/318 zerfaellt alles. Es ist eine Bank
+        // mit Kopfdaten, und die gehoert an der BLITSTELLE gelesen.
+        //
+        // Bis dahin steht dort dieselbe dunkle Nische wie im Original — ein
+        // WEISSER Kasten sieht aus wie ein Fehler, eine leere Nische wie eine
+        // Nische.
         foreach (int wx in new[] { WeatherLX, WeatherRX })
             AddChild(new ColorRect
             {
@@ -324,15 +336,23 @@ public partial class BriefingScreen : CanvasLayer
         Style(body, font, scale, dark: true);
         scroll.AddChild(body);
 
-        var go = new Button
-        {
-            Text = "Auftrag annehmen  [Enter]",
-            Position = at + new Vector2(PlateX * scale, (PlateY + PlateH + 10) * scale),
-            Size = new Vector2(PlateW * scale, 26 * scale),
-        };
-        go.Pressed += Continue;
-        AddChild(go);
-        go.CallDeferred(Control.MethodName.GrabFocus);
+        // ⚠⚠ 18.08.2026 — KEIN EIGENER »AUFTRAG ANNEHMEN«-KNOPF MEHR. Der
+        // Spieler dazu: »kannst unser Auftrag annehmen [Enter] raus, weil man ja
+        // die Mission über den Start-Knopf startet, der unten links ist«.
+        //
+        // Er hat recht, und der Knopf war doppelt: das Hintergrundbild zeichnet
+        // unten links ein START, und das ist der Weg des Originals. Unser
+        // eigener Knopf lag zusätzlich über der Textplatte und war das
+        // deutlichste Stück Fremdkörper auf diesem Schirm.
+        //
+        // Die Lage ist am Bild ausgemessen: die Platte mit der Aufschrift
+        // START liegt bei x 154..212, y 454..476. Die Fläche hier ist etwas
+        // grösser gehalten, aus demselben Grund wie bei den Monitorknöpfen.
+        //
+        // ⚠ Enter und Leertaste bleiben — sie laufen über _UnhandledInput und
+        // hingen nie an diesem Knopf.
+        _btnStart = MonitorKnopf(at, scale, 152, 452, 62, 26, "START", Continue);
+        AddChild(_btnStart);
         return true;
     }
 
@@ -466,6 +486,12 @@ public partial class BriefingScreen : CanvasLayer
                 {
                     _missionGetippt = true;
                     _btnMission.EmitSignal(BaseButton.SignalName.Pressed);
+                }
+                else if (a == "--briefing-start" && _btnStart != null)
+                {
+                    _missionGetippt = true;
+                    GD.Print("Briefing: START gedrueckt");
+                    _btnStart.EmitSignal(BaseButton.SignalName.Pressed);
                 }
 
         string want = "";

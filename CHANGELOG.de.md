@@ -711,13 +711,25 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
     **ganzzahlig**, und bei 1600×900 ist das eine **1** — das 640×480-Bild sass
     als kleiner Kasten mitten auf schwarzem Grund. Jetzt füllt es den Schirm.
 
-  ⚠ **Noch offen:** die zwei **Wettersymbole** in den kleinen Nischen (im
-  Original ein Wirbelsturm). Die Bilddaten liegen im **43.302 Byte langen
-  Schwanz** von `BRIEFG.DAT` — darin lesbar: CLOUDED, OVERCAST, SKY, DANGER,
-  HIGH/LOW TEMPERATURE —, aber als **Sprite-Bank mit Kopfdaten**, nicht als
-  schlichtes Bitmap. Bis das gelesen ist, steht dort dieselbe dunkle Nische wie
-  im Original statt eines weissen Kastens: ein weisser Kasten sieht aus wie ein
-  Fehler, eine leere Nische wie eine Nische.
+- ⭐ **Der eigene »Auftrag annehmen«-Knopf ist weg — gestartet wird mit START.**
+  Gemeldet: »kannst unser Auftrag annehmen [Enter] raus, weil man ja die
+  Mission über den Start-Knopf startet, der unten links ist«. Er war doppelt:
+  das Hintergrundbild zeichnet unten links ein **START**, und das ist der Weg
+  des Originals. Die Fläche ist am Bild ausgemessen (x 154..212, y 454..476).
+  Enter und Leertaste bleiben. Gemessen: **ohne** Druck auf START lädt keine
+  Karte, **mit** Druck lädt sie — und der Prüfstand drückt den Knopf.
+
+  ⚠ **Noch offen, und meine Deutung war falsch:** ich hatte die zwei Nischen
+  für **Wettersymbole** gehalten, weil im Dateischwanz Tafeln mit CLOUDED,
+  OVERCAST, SKY, DANGER, HIGH/LOW TEMPERATURE stehen. Der Spieler hat
+  berichtigt: es ist das **Emblem von Akte Europa**, und es ist **animiert** —
+  ein Schimmer läuft hin und zurück. Dasselbe Emblem steht als
+  **Wasserzeichen hinter dem Text** (im Vergleichsbild sichtbar, wenn man es
+  aufhellt: konzentrische bronzefarbene Ringe). Beides fehlt noch. Der
+  **43.302 Byte lange Schwanz** von `BRIEFG.DAT` hält also **mehreres**; seine
+  Gliederung ist noch nicht gelesen (bei Breite 106 wird eine Bahn lesbar, bei
+  53/55/202/208/318 zerfällt alles). Bis dahin steht in den Nischen dieselbe
+  dunkle Fläche wie im Original statt eines weissen Kastens.
 
 - ⭐ **Der Missionsmonitor zeigt erst EUROPA — die Missionskarte kommt auf den
   Knopf.** Gemeldet mit zwei Bildern nebeneinander: »die Minimap ging erst auf,
