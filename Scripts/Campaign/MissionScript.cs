@@ -97,6 +97,30 @@ public sealed class MissionScript
         /// Wer das ODER übersieht, hat wieder eine zu schwache Bedingung.</para>
         /// </summary>
         public readonly List<Cond> Any = new();
+
+        /// <summary>
+        /// <b>Das ODER über GRUPPEN</b> — mindestens EINE Gruppe muss
+        /// vollständig zutreffen. Leer heisst: kein Gruppen-ODER.
+        ///
+        /// <para>⚠ <b>Nicht dasselbe wie <see cref="Any"/>.</b> Dort verbindet
+        /// das ODER einzelne GLIEDER, hier ganze UND-GRUPPEN. Mission 28 ist
+        /// der Fall, für den es das gibt (@0x4A3698, in beiden GAME.EXE
+        /// gleich): drei Wissenschaftler, und <b>einer</b> von ihnen muss lebend
+        /// auf (11, 243) stehen —</para>
+        /// <code>
+        ///   (v[51]==2 &amp;&amp; v[54] lebt als Entwurf 193 &amp;&amp; Spalte==11 &amp;&amp; Zeile==243)
+        ///   ODER (v[52]==2 &amp;&amp; v[55] …)
+        ///   ODER (v[51]==2 &amp;&amp; v[56] …)
+        /// </code>
+        ///
+        /// <para>⚠⚠ <b>Eine Regel mit leerem <see cref="When"/> und gefülltem
+        /// AnyGroups ist NICHT bedingungslos</b> — genau so ist M28 gebaut, und
+        /// wer das übersieht, gewinnt die Mission in der Sekunde, in der sie
+        /// anfängt. Deshalb prüft <see cref="HasOr"/> beide Listen, und jede
+        /// Stelle, die früher <c>Any.Count &gt; 0</c> fragte, fragt jetzt
+        /// dort.</para></summary>
+        public readonly List<List<Cond>> AnyGroups = new();
+
         public readonly List<Act> Then = new();
 
         /// <summary>Die Adresse, aus der die Regel uebersetzt wurde (`_at`) —
@@ -255,7 +279,7 @@ public sealed class MissionScript
                     if (c.Kind == "var" && !Cmp(Start(c.A), c.Op, c.B) && !Writes(c.A))
                     { reachable = false; break; }
                 // Ein ODER lebt, solange EIN Glied lebt.
-                if (reachable && r.Any.Count > 0 && !AnyReachable(r, new HashSet<int>()))
+                if (reachable && HasOr(r) && !AnyReachable(r, new HashSet<int>()))
                     reachable = false;
                 if (reachable) return true;
             }
@@ -275,8 +299,24 @@ public sealed class MissionScript
     private bool AnyTrue(Rule r)
     {
         foreach (var c in r.Any) if (Test(c)) return true;
+        // ⚠ Eine GRUPPE muss GANZ zutreffen — sie ist ein UND. Wer hier
+        // dieselbe Schleife wie oben schriebe, machte aus dem Gruppen-ODER ein
+        // ODER ueber alle Glieder und liesse M28 gewinnen, sobald EIN
+        // Wissenschaftler auch nur den richtigen Zustand haette.
+        foreach (var g in r.AnyGroups)
+        {
+            bool alle = true;
+            foreach (var c in g) if (!Test(c)) { alle = false; break; }
+            if (alle) return true;
+        }
         return false;
     }
+
+    /// <summary>Hat diese Regel überhaupt ein ODER — als Glieder oder als
+    /// Gruppen? ⚠ Jede Stelle, die früher <c>Any.Count &gt; 0</c> fragte, muss
+    /// das hier fragen: sonst gilt eine Regel mit leerem <c>When</c> und
+    /// gefüllten Gruppen als bedingungslos.</summary>
+    private static bool HasOr(Rule r) => r.Any.Count > 0 || r.AnyGroups.Count > 0;
 
     /// <summary>
     /// PRÜFSTAND `--oder-check`: das ODER an seiner MECHANIK, nicht an seinem
@@ -352,7 +392,7 @@ public sealed class MissionScript
                 if (!ok) alle = false;
                 teile.Add(Show(c) + (ok ? "=ja" : "=NEIN"));
             }
-            bool oder = r.Any.Count == 0 || AnyTrue(r);
+            bool oder = !HasOr(r) || AnyTrue(r);
             foreach (var c in r.Any)
                 teile.Add("ODER " + Show(c) + (Test(c) ? "=ja" : "=NEIN"));
             bool feuert = !zu && alle && oder;
@@ -499,7 +539,7 @@ public sealed class MissionScript
                 }
                 // Ein ODER lebt, solange EIN Glied lebt — sonst kann die Regel
                 // nie feuern und ist als Erzeuger nichts wert.
-                if (can && r.Any.Count > 0 && !AnyReachable(r, onPath)) can = false;
+                if (can && HasOr(r) && !AnyReachable(r, onPath)) can = false;
                 // Der `once`-Riegel verlangt v[once] == 0; das ist eine
                 // Bedingung wie jede andere.
                 if (can && r.Once >= 0 && Start(r.Once) != 0) can = false;
@@ -522,6 +562,21 @@ public sealed class MissionScript
             if (c.Kind != "var") return true;                 // Weltbedingung
             if (Cmp(Start(c.A), c.Op, c.B)) return true;       // schon wahr
             if (Writes(c.A, onPath)) return true;
+        }
+        // ⚠ Eine GRUPPE ist erreichbar, wenn ALLE ihre Glieder es sind — sie
+        // ist ein UND. Dieselbe Rechnung wie in `Decides` fuer `When`, nur
+        // gruppenweise; ein einzelnes erreichbares Glied genuegt hier NICHT.
+        foreach (var g in r.AnyGroups)
+        {
+            bool alle = true;
+            foreach (var c in g)
+            {
+                if (c.Kind != "var") continue;                // Weltbedingung
+                if (Cmp(Start(c.A), c.Op, c.B)) continue;      // schon wahr
+                if (Writes(c.A, onPath)) continue;
+                alle = false; break;
+            }
+            if (alle) return true;
         }
         return false;
     }
@@ -620,6 +675,7 @@ public sealed class MissionScript
             if (!setzt) continue;
             foreach (var c in r.When) list.Add(c);
             foreach (var c in r.Any) list.Add(c);
+            foreach (var g in r.AnyGroups) foreach (var c in g) list.Add(c);
         }
         return list;
     }
@@ -637,6 +693,7 @@ public sealed class MissionScript
             if (!stockt) continue;
             foreach (var c in r.When) list.Add(c);
             foreach (var c in r.Any) list.Add(c);
+            foreach (var g in r.AnyGroups) foreach (var c in g) list.Add(c);
         }
         return list;
     }
@@ -659,10 +716,17 @@ public sealed class MissionScript
         {
             bool bereit = true;
             foreach (var c in r.When) if (!TestReal(c)) { bereit = false; break; }
-            if (bereit && r.Any.Count > 0)
+            if (bereit && HasOr(r))
             {
                 bereit = false;
                 foreach (var c in r.Any) if (TestReal(c)) { bereit = true; break; }
+                // ⚠ Eine GRUPPE zaehlt nur GANZ — dasselbe wie in AnyTrue.
+                foreach (var g in r.AnyGroups)
+                {
+                    bool alleG = true;
+                    foreach (var c in g) if (!TestReal(c)) { alleG = false; break; }
+                    if (alleG) { bereit = true; break; }
+                }
             }
             foreach (var a in r.Then)
                 if (a.Kind == "stock")
@@ -979,6 +1043,28 @@ public sealed class MissionScript
                             C = cd.TryGetValue("c", out var c2) ? c2.AsInt32() : 0,
                             Op = cd.TryGetValue("op", out var o) ? o.AsString() : "==",
                         });
+                    }
+                // Das ODER über GRUPPEN — siehe Rule.AnyGroups. ⚠ Eine Gruppe
+                // ohne Glieder wird NICHT übernommen: sie wäre immer wahr und
+                // machte die ganze Regel bedingungslos.
+                if (rd.TryGetValue("any_groups", out var ggv) && ggv.VariantType == Variant.Type.Array)
+                    foreach (var g in ggv.AsGodotArray())
+                    {
+                        if (g.VariantType != Variant.Type.Array) continue;
+                        var gruppe = new List<Cond>();
+                        foreach (var c in g.AsGodotArray())
+                        {
+                            var cd = c.AsGodotDictionary<string, Variant>();
+                            gruppe.Add(new Cond
+                            {
+                                Kind = cd.TryGetValue("kind", out var k) ? k.AsString() : "",
+                                A = cd.TryGetValue("a", out var a) ? a.AsInt32() : 0,
+                                B = cd.TryGetValue("b", out var b) ? b.AsInt32() : 0,
+                                C = cd.TryGetValue("c", out var c2) ? c2.AsInt32() : 0,
+                                Op = cd.TryGetValue("op", out var o) ? o.AsString() : "==",
+                            });
+                        }
+                        if (gruppe.Count > 0) rule.AnyGroups.Add(gruppe);
                     }
                 if (rd.TryGetValue("then", out var tv) && tv.VariantType == Variant.Type.Array)
                     foreach (var a in tv.AsGodotArray())
@@ -1404,7 +1490,7 @@ public sealed class MissionScript
             if (!all) continue;
             // Und das ODER: mindestens ein Glied aus `any`. Leer heisst »kein
             // ODER«, NICHT »immer wahr« — siehe Rule.Any.
-            if (r.Any.Count > 0 && !AnyTrue(r)) continue;
+            if (HasOr(r) && !AnyTrue(r)) continue;
 
             _ruleNo = ri;
             if (Fired.Count < FiredMax)
@@ -1859,6 +1945,7 @@ public sealed class MissionScript
             // welche, aber ein Prüfstand, der sie stillschweigend fallen liesse,
             // hätte wieder eine zu schwache Bedingung vor sich.
             foreach (var c in r.Any) list.Add(c);
+            foreach (var g in r.AnyGroups) foreach (var c in g) list.Add(c);
         }
         return list;
     }
@@ -2002,6 +2089,7 @@ public sealed class MissionScript
         }
         foreach (var c in r.When) Take(c, "");
         foreach (var c in r.Any) Take(c, "ODER ");
+        foreach (var g in r.AnyGroups) foreach (var c in g) Take(c, "ODER-GRUPPE ");
         if (parts.Count == 0) return "(ohne Bedingung)";
         return string.Join(" ", parts);
     }

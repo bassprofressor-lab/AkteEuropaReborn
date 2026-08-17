@@ -336,6 +336,16 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Die anderen drei Bauaufträge brauchen einen Platzierungsmodus — siehe die
   nächste Zeile.
 
+- ⭐ **Mission 28 hat endlich ihre Siegbedingung** — damit tragen **32 von 33**
+  Missionen ihr Skript, und nur noch Mission 21 fehlt. Ihre Bedingung ist ein
+  Oder aus drei Und-Gruppen: drei Wissenschaftler, und **einer** von ihnen muss
+  lebend an der Ausstiegsstelle stehen. Der Leser konnte so etwas bisher nicht
+  ausdrücken und liess die Mission darum ganz weg — sie endete nie von selbst.
+  ⚠ Nebenher aufgefallen und behoben: das Werkzeug, das die Aufbauregeln
+  einträgt, hätte in drei anderen Missionen je einen von Hand nachgetragenen
+  Wächter überschrieben. Ein Zähler wäre dort von Spielbeginn an gelaufen
+  statt erst nach seinem Auslöser.
+
 - ⭐ **Der farbige Ring unter jeder Einheit ist weg.** Er war nie Teil des
   Originals, sondern eine Hilfe aus der Frühzeit dieses Remakes: damals gab es
   noch keine Einheitenbilder, und ein farbiger Punkt mit Ring war das Einzige,
