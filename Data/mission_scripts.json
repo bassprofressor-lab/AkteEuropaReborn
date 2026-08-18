@@ -37,24 +37,6 @@
    },
    "rules": [
     {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 1,
-       "c": 0,
-       "kind": "units",
-       "op": "=="
-      }
-     ]
-    },
-    {
      "_at": "0x498471",
      "then": [
       {
@@ -906,6 +888,24 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4989DD",
      "_von": "mission_loserules",
      "then": [
@@ -1214,24 +1214,6 @@
     "99": 0
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 0,
-       "b": 1,
-       "c": 0,
-       "kind": "buildings",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x49BDAD",
      "_tut_ausserdem": "close_message_windows show_text2",
@@ -2218,6 +2200,24 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 1,
+       "c": 0,
+       "kind": "buildings",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49C7B3",
      "_von": "mission_loserules",
      "then": [
@@ -2281,45 +2281,6 @@
     "132": 222
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 1,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 0,
-       "b": 1,
-       "c": 0,
-       "kind": "units",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 4,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 0,
-       "b": 4,
-       "c": 0,
-       "kind": "units",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x49C7FB",
      "once": 231,
@@ -2540,6 +2501,45 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 1,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 4,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 4,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49CA69",
      "_von": "mission_loserules",
      "then": [
@@ -2582,51 +2582,6 @@
     "136": 236
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 22,
-       "b": 0,
-       "kind": "var",
-       "op": "!="
-      },
-      {
-       "a": 1,
-       "b": 2,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 0,
-       "b": 2,
-       "c": 0,
-       "kind": "units",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 4,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 0,
-       "b": 4,
-       "c": 0,
-       "kind": "units",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x49CA89",
      "_tut_ausserdem": "close_message_windows show_text2",
@@ -3339,6 +3294,51 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 22,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 2,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 4,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 4,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49D1AD",
      "_von": "mission_loserules",
      "then": [
@@ -3377,23 +3377,6 @@
     "132": 245
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 20,
-       "b": 20,
-       "kind": "var",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x49D1C4",
      "_tut_ausserdem": "place_unit place_unit place_unit",
@@ -3957,6 +3940,23 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 20,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49D753",
      "_von": "mission_loserules",
      "then": [
@@ -3995,38 +3995,6 @@
     "133": 252
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 1,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 2,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 4,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x49D774",
      "_tut_ausserdem": "show_text",
@@ -4334,6 +4302,38 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 4,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49DA57",
      "_von": "mission_loserules",
      "then": [
@@ -4374,23 +4374,6 @@
     "133": 262
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 22,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x49DA81",
      "_tut_ausserdem": "place_unit place_unit place_unit",
@@ -4524,6 +4507,108 @@
        "c": 0,
        "kind": "unit_is_var",
        "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49DBE8",
+     "_tut_ausserdem": "0x4D0860",
+     "then": [
+      {
+       "_at": "0x49DBF3",
+       "a": 21,
+       "b": 30,
+       "c": 103,
+       "kind": "move_var"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 21,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 21,
+       "b": 1,
+       "c": 108,
+       "kind": "unit_field",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49DC2C",
+     "_tut_ausserdem": "0x4D0860",
+     "then": [
+      {
+       "_at": "0x49DC37",
+       "a": 22,
+       "b": 30,
+       "c": 103,
+       "kind": "move_var"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 22,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 22,
+       "b": 1,
+       "c": 108,
+       "kind": "unit_field",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49DC70",
+     "_tut_ausserdem": "0x4D0860",
+     "then": [
+      {
+       "_at": "0x49DC7B",
+       "a": 21,
+       "b": 30,
+       "c": 103,
+       "kind": "move_var"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 23,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 23,
+       "b": 1,
+       "c": 108,
+       "kind": "unit_field",
+       "op": "<"
       }
      ]
     },
@@ -4893,6 +4978,23 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 22,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49DFE0",
      "_von": "mission_loserules",
      "then": [
@@ -4931,45 +5033,6 @@
     "132": 275
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 1,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 2,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 3,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 15,
-       "b": 0,
-       "c": 0,
-       "kind": "objects",
-       "op": "!="
-      }
-     ]
-    },
     {
      "_at": "0x49E05A",
      "_tut_ausserdem": "set_relation game_time show_text",
@@ -5580,6 +5643,45 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 3,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 15,
+       "b": 0,
+       "c": 0,
+       "kind": "objects",
+       "op": "!="
+      }
+     ]
+    },
+    {
      "_at": "0x49E61C",
      "_von": "mission_loserules",
      "then": [
@@ -5618,31 +5720,6 @@
     "132": 281
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 0,
-       "b": 1,
-       "c": 3,
-       "kind": "units",
-       "op": "<"
-      },
-      {
-       "a": 0,
-       "b": 2,
-       "c": 3,
-       "kind": "units",
-       "op": "<"
-      }
-     ]
-    },
     {
      "_at": "0x49E633",
      "_tut_ausserdem": "place_unit place_unit place_unit",
@@ -6030,6 +6107,31 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 1,
+       "c": 3,
+       "kind": "units",
+       "op": "<"
+      },
+      {
+       "a": 0,
+       "b": 2,
+       "c": 3,
+       "kind": "units",
+       "op": "<"
+      }
+     ]
+    },
+    {
      "_at": "0x49EA9C",
      "_von": "mission_loserules",
      "then": [
@@ -6065,38 +6167,6 @@
     "134": 293
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 1,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 2,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 3,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x49EABD",
      "_tut_ausserdem": "show_text game_time",
@@ -6748,6 +6818,38 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 3,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49EFC7",
      "_von": "mission_loserules",
      "then": [
@@ -6784,24 +6886,6 @@
     "131": 120
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 0,
-       "c": 2,
-       "kind": "objects",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x4989EA",
      "then": [
@@ -7999,6 +8083,24 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 0,
+       "c": 2,
+       "kind": "objects",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4993FE",
      "_von": "mission_loserules",
      "then": [
@@ -8034,31 +8136,6 @@
     "135": 305
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 1,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 2,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x49EFEF",
      "_tut_ausserdem": "show_text",
@@ -8861,6 +8938,31 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49F5EB",
      "_von": "mission_loserules",
      "then": [
@@ -8913,71 +9015,6 @@
     "139": 309
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 4,
-       "b": 0,
-       "kind": "rail_link",
-       "op": "=="
-      },
-      {
-       "a": 7,
-       "b": 0,
-       "kind": "rail_link",
-       "op": "=="
-      },
-      {
-       "a": 9,
-       "b": 0,
-       "kind": "rail_link",
-       "op": "=="
-      },
-      {
-       "a": 12,
-       "b": 0,
-       "kind": "rail_link",
-       "op": "=="
-      },
-      {
-       "a": 14,
-       "b": 0,
-       "kind": "rail_link",
-       "op": "=="
-      },
-      {
-       "a": 17,
-       "b": 0,
-       "kind": "rail_link",
-       "op": "=="
-      },
-      {
-       "a": 15,
-       "b": 0,
-       "kind": "rail_link",
-       "op": "=="
-      },
-      {
-       "a": 16,
-       "b": 0,
-       "kind": "rail_link",
-       "op": "=="
-      },
-      {
-       "a": 18,
-       "b": 0,
-       "kind": "rail_link",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x49F618",
      "_tut_ausserdem": "0x439410 0x439410 0x439410 0x439410 0x439410 0x439410 0x439410 0x439410 0x439410 0x439410",
@@ -10545,6 +10582,71 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 4,
+       "b": 0,
+       "kind": "rail_link",
+       "op": "=="
+      },
+      {
+       "a": 7,
+       "b": 0,
+       "kind": "rail_link",
+       "op": "=="
+      },
+      {
+       "a": 9,
+       "b": 0,
+       "kind": "rail_link",
+       "op": "=="
+      },
+      {
+       "a": 12,
+       "b": 0,
+       "kind": "rail_link",
+       "op": "=="
+      },
+      {
+       "a": 14,
+       "b": 0,
+       "kind": "rail_link",
+       "op": "=="
+      },
+      {
+       "a": 17,
+       "b": 0,
+       "kind": "rail_link",
+       "op": "=="
+      },
+      {
+       "a": 15,
+       "b": 0,
+       "kind": "rail_link",
+       "op": "=="
+      },
+      {
+       "a": 16,
+       "b": 0,
+       "kind": "rail_link",
+       "op": "=="
+      },
+      {
+       "a": 18,
+       "b": 0,
+       "kind": "rail_link",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A0362",
      "_von": "mission_loserules",
      "then": [
@@ -10593,24 +10695,6 @@
     "138": 328
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 1,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x4A036F",
      "then": [
@@ -11665,6 +11749,24 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A0C72",
      "_von": "mission_loserules",
      "then": [
@@ -11701,24 +11803,6 @@
     "131": 330
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 2,
-       "b": 0,
-       "c": 5,
-       "kind": "buildings",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x4A0C89",
      "once": 0,
@@ -11849,6 +11933,24 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 2,
+       "b": 0,
+       "c": 5,
+       "kind": "buildings",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A0DE1",
      "_von": "mission_loserules",
      "then": [
@@ -11951,23 +12053,6 @@
     "303": 1
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 0,
-       "b": 2,
-       "kind": "obj_owner",
-       "op": "!="
-      }
-     ]
-    },
     {
      "_at": "0x4A0DEE",
      "then": [
@@ -13062,6 +13147,23 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 2,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
      "_at": "0x4A1AA6",
      "_von": "mission_loserules",
      "then": [
@@ -13108,38 +13210,6 @@
     "136": 355
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 1,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 2,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 4,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x4A1AB3",
      "then": [
@@ -13934,6 +14004,38 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 4,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A214A",
      "_von": "mission_loserules",
      "then": [
@@ -13992,23 +14094,6 @@
     "131": 360
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 13,
-       "b": 3,
-       "kind": "obj_owner",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x4A216B",
      "_tut_ausserdem": "show_text game_time",
@@ -14365,6 +14450,23 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 13,
+       "b": 3,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A24C5",
      "_von": "mission_loserules",
      "then": [
@@ -14428,38 +14530,6 @@
     "133": 372
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 1,
-       "c": 0,
-       "kind": "units",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 2,
-       "c": 0,
-       "kind": "units",
-       "op": "=="
-      },
-      {
-       "a": 0,
-       "b": 4,
-       "c": 0,
-       "kind": "units",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x4A2513",
      "then": [
@@ -14739,6 +14809,38 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 4,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A2993",
      "_von": "mission_loserules",
      "then": [
@@ -14775,105 +14877,6 @@
     "131": 380
    },
    "rules": [
-    {
-     "any_groups": [
-      [
-       {
-        "a": 51,
-        "b": 2,
-        "kind": "var",
-        "op": "=="
-       },
-       {
-        "a": 54,
-        "b": 193,
-        "c": 0,
-        "kind": "unit_is_var",
-        "op": "!="
-       },
-       {
-        "a": 54,
-        "b": 0,
-        "c": 11,
-        "kind": "unit_field",
-        "op": "=="
-       },
-       {
-        "a": 54,
-        "b": 1,
-        "c": 243,
-        "kind": "unit_field",
-        "op": "=="
-       }
-      ],
-      [
-       {
-        "a": 52,
-        "b": 2,
-        "kind": "var",
-        "op": "=="
-       },
-       {
-        "a": 55,
-        "b": 193,
-        "c": 0,
-        "kind": "unit_is_var",
-        "op": "!="
-       },
-       {
-        "a": 55,
-        "b": 0,
-        "c": 11,
-        "kind": "unit_field",
-        "op": "=="
-       },
-       {
-        "a": 55,
-        "b": 1,
-        "c": 243,
-        "kind": "unit_field",
-        "op": "=="
-       }
-      ],
-      [
-       {
-        "a": 51,
-        "b": 2,
-        "kind": "var",
-        "op": "=="
-       },
-       {
-        "a": 56,
-        "b": 193,
-        "c": 0,
-        "kind": "unit_is_var",
-        "op": "!="
-       },
-       {
-        "a": 56,
-        "b": 0,
-        "c": 11,
-        "kind": "unit_field",
-        "op": "=="
-       },
-       {
-        "a": 56,
-        "b": 1,
-        "c": 243,
-        "kind": "unit_field",
-        "op": "=="
-       }
-      ]
-     ],
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": []
-    },
     {
      "_at": "0x4A29A0",
      "then": [
@@ -16723,6 +16726,105 @@
        "op": ">"
       }
      ]
+    },
+    {
+     "any_groups": [
+      [
+       {
+        "a": 51,
+        "b": 2,
+        "kind": "var",
+        "op": "=="
+       },
+       {
+        "a": 54,
+        "b": 193,
+        "c": 0,
+        "kind": "unit_is_var",
+        "op": "!="
+       },
+       {
+        "a": 54,
+        "b": 0,
+        "c": 11,
+        "kind": "unit_field",
+        "op": "=="
+       },
+       {
+        "a": 54,
+        "b": 1,
+        "c": 243,
+        "kind": "unit_field",
+        "op": "=="
+       }
+      ],
+      [
+       {
+        "a": 52,
+        "b": 2,
+        "kind": "var",
+        "op": "=="
+       },
+       {
+        "a": 55,
+        "b": 193,
+        "c": 0,
+        "kind": "unit_is_var",
+        "op": "!="
+       },
+       {
+        "a": 55,
+        "b": 0,
+        "c": 11,
+        "kind": "unit_field",
+        "op": "=="
+       },
+       {
+        "a": 55,
+        "b": 1,
+        "c": 243,
+        "kind": "unit_field",
+        "op": "=="
+       }
+      ],
+      [
+       {
+        "a": 51,
+        "b": 2,
+        "kind": "var",
+        "op": "=="
+       },
+       {
+        "a": 56,
+        "b": 193,
+        "c": 0,
+        "kind": "unit_is_var",
+        "op": "!="
+       },
+       {
+        "a": 56,
+        "b": 0,
+        "c": 11,
+        "kind": "unit_field",
+        "op": "=="
+       },
+       {
+        "a": 56,
+        "b": 1,
+        "c": 243,
+        "kind": "unit_field",
+        "op": "=="
+       }
+      ]
+     ],
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": []
     }
    ]
   },
@@ -16745,38 +16847,6 @@
     "136": 395
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 1,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 2,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 5,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x4A37C4",
      "_tut_ausserdem": "show_text game_time",
@@ -17958,6 +18028,38 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 5,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A41CF",
      "_von": "mission_loserules",
      "then": [
@@ -18021,24 +18123,6 @@
     "131": 130
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 4,
-       "b": 0,
-       "c": 0,
-       "kind": "objects",
-       "op": "!="
-      }
-     ]
-    },
     {
      "_at": "0x49940B",
      "then": [
@@ -19004,6 +19088,24 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 4,
+       "b": 0,
+       "c": 0,
+       "kind": "objects",
+       "op": "!="
+      }
+     ]
+    },
+    {
      "_at": "0x499C72",
      "_von": "mission_loserules",
      "then": [
@@ -19037,38 +19139,6 @@
     "133": 402
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 1,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 2,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 5,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x4A4246",
      "_tut_ausserdem": "sound",
@@ -19429,6 +19499,38 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 5,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A4520",
      "_von": "mission_loserules",
      "then": [
@@ -19510,38 +19612,6 @@
     "135": 415
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 4,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 5,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 6,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x4A4541",
      "_tut_ausserdem": "show_text",
@@ -20385,6 +20455,38 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 4,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 5,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 6,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A4CF9",
      "_von": "mission_loserules",
      "then": [
@@ -20456,53 +20558,6 @@
     "135": 424
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 112,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 113,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 114,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 115,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 116,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 117,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x4A4D1A",
      "_tut_ausserdem": "show_text game_time",
@@ -20991,6 +21046,53 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 112,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 113,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 114,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 115,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 116,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 117,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A5134",
      "_von": "mission_loserules",
      "then": [
@@ -21070,93 +21172,6 @@
     "134": 433
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 1,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 2,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 4,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 6,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 91,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 92,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 93,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 94,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 95,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 96,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 97,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 98,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x4A5141",
      "then": [
@@ -22161,6 +22176,93 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 4,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 6,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 91,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 92,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 93,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 94,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 95,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 96,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 97,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 98,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A5A8C",
      "_von": "mission_loserules",
      "then": [
@@ -22245,47 +22347,6 @@
     "131": 141
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 0,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 2,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 3,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 4,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x499C89",
      "then": [
@@ -22613,6 +22674,47 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 2,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 4,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49A027",
      "_tut_ausserdem": "show_text",
      "any": [
@@ -22700,29 +22802,6 @@
     "101": 150
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 33,
-       "b": 0,
-       "kind": "var",
-       "op": "!="
-      },
-      {
-       "a": 34,
-       "b": 0,
-       "kind": "var",
-       "op": "!="
-      }
-     ]
-    },
     {
      "_at": "0x49A071",
      "_tut_ausserdem": "show_text2",
@@ -23316,6 +23395,29 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 33,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 34,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      }
+     ]
+    },
+    {
      "_at": "0x49A54A",
      "_von": "mission_loserules",
      "then": [
@@ -23349,23 +23451,6 @@
     "133": 162
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 0,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x49A557",
      "then": [
@@ -23951,6 +24036,23 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49AB24",
      "_von": "mission_loserules",
      "then": [
@@ -23982,41 +24084,6 @@
     "132": 170
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 102,
-       "b": 2,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 12,
-       "b": 2,
-       "kind": "var",
-       "op": "=="
-      },
-      {
-       "a": 3,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      },
-      {
-       "a": 5,
-       "b": 12,
-       "kind": "obj_owner",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x49AB4F",
      "_tut_ausserdem": "g_robot_class_count",
@@ -24573,6 +24640,41 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 102,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 12,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 5,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49B192",
      "_tut_ausserdem": "bus_cmd",
      "once": 13,
@@ -24669,24 +24771,6 @@
     "131": 180
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 0,
-       "b": 2,
-       "c": 0,
-       "kind": "units",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x49B27F",
      "_tut_ausserdem": "show_text2",
@@ -24898,6 +24982,24 @@
      ]
     },
     {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 2,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49B4D6",
      "_von": "mission_loserules",
      "then": [
@@ -24959,31 +25061,6 @@
     "134": 193
    },
    "rules": [
-    {
-     "once": 300,
-     "then": [
-      {
-       "a": 1,
-       "kind": "end"
-      }
-     ],
-     "when": [
-      {
-       "a": 1,
-       "b": 1,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      },
-      {
-       "a": 1,
-       "b": 2,
-       "c": 0,
-       "kind": "objects",
-       "op": "=="
-      }
-     ]
-    },
     {
      "_at": "0x49B50D",
      "_tut_ausserdem": "show_text",
@@ -25618,6 +25695,31 @@
        "b": 10,
        "kind": "var",
        "op": "!="
+      }
+     ]
+    },
+    {
+     "once": 300,
+     "then": [
+      {
+       "a": 1,
+       "kind": "end"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 0,
+       "kind": "objects",
+       "op": "=="
       }
      ]
     },

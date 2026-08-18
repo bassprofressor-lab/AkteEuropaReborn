@@ -2138,6 +2138,27 @@ public sealed class MissionScript
             case "move":
                 MoveUnit?.Invoke(a.A, a.B, a.C);
                 break;
+            // BEWEGEN mit dem Platz aus einer MISSIONSVARIABLEN. Dieselbe
+            // Wirkung, nur dass das Ziel nicht als Zahl im Programm steht:
+            //
+            //     0x49DC2C  mov ax, word[0xBC56BC]      ; v[22]
+            //     0x49DC32  push 0x67 / push 0x1E / push eax
+            //     0x49DC37  call <bewegen>
+            //
+            // Der Leser gab das bis zum 18.08.2026 gar nicht her — er las ein
+            // Register als »unbekanntes Argument« und warf die ganze Wirkung
+            // weg. Mission 16 hat fuenf Fahrbefehle und hatte KEINE Regel;
+            // drei davon sind jetzt da.
+            //
+            // ⚠ Der Platz kann 0 sein (die Einheit gibt es nicht mehr) — dann
+            // faehrt niemand. Das Original prueft das eine Zeile vorher selbst
+            // (`cmp word[v], 0; je ueberspringen`), und die Bedingung steht in
+            // der Regel; hier wird es trotzdem geprueft, weil eine Wirkung
+            // sich nicht auf ihre Bedingung verlassen soll.
+            case "move_var":
+                if (a.A >= 0 && a.A < _var.Length && _var[a.A] != 0)
+                    MoveUnit?.Invoke(_var[a.A], a.B, a.C);
+                break;
             case "set_ai":
                 SetAi?.Invoke(a.A, a.B);
                 break;
@@ -2736,7 +2757,7 @@ public sealed class MissionScript
         "sound" => PlaySound != null,
         "close_texts" => CloseTexts != null,
         "order" => OrderUnit != null,
-        "move" => MoveUnit != null,
+        "move" or "move_var" => MoveUnit != null,
         "set_ai" => SetAi != null,
         "fire_at" => FireAt != null,
         "add_target" => AddTarget != null,
