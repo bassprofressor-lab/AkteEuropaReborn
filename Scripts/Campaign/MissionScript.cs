@@ -2319,6 +2319,23 @@ public sealed class MissionScript
             case "set_time":
                 if (a.A >= 0 && a.A < _var.Length) _var[a.A] = Minutes;
                 break;
+            // v[a] = v[b] + game_time() — eine Frist MIT VORLAUF. Das Original
+            // setzt seine Untermissionsfristen so:
+            //
+            //     0x4A26D5  call game_time
+            //     0x4A26DA  mov cx, word[0xBC5730]     ; v[80]
+            //     0x4A26E1  add cx, ax
+            //     0x4A26E4  mov word[0xBC56BA], cx     ; v[21] = v[80] + Uhr
+            //
+            // Der Leser gab das bis zum 18.08.2026 als unlesbar ab, und weil
+            // eine unlesbare Wirkung die GANZE Regel aus der Datei haelt, fiel
+            // bei Mission 27 die Regel mit, die die erste Untermission auf
+            // »erfüllt« setzt — sie war damit unerfüllbar. Der Spieler hat
+            // genau das gemeldet (»0 von 3«).
+            case "set_time_off":
+                if (a.A >= 0 && a.A < _var.Length && a.B >= 0 && a.B < _var.Length)
+                    _var[a.A] = _var[a.B] + Minutes;
+                break;
             case "end":
                 // ⚠ EIN SIEG ENDET NICHT SOFORT, wenn noch eine Untermission
                 // offen ist — siehe TickGrace. Bis zum 18.08.2026 tat er das,
@@ -2771,7 +2788,7 @@ public sealed class MissionScript
     /// <summary>Wirkungsarten, für die ein Haken hängt.</summary>
     private bool Hooked(Act a) => a.Kind switch
     {
-        "inc" or "set" or "set_time" or "take_var" or "end" => true,
+        "inc" or "set" or "set_time" or "set_time_off" or "take_var" or "end" => true,
         "text" => ShowText != null,
         "find_unit" => FindUnit != null,
         "set_store" => StoreField != null,

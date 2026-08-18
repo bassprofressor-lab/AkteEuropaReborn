@@ -5991,6 +5991,150 @@
      ]
     },
     {
+     "_at": "0x49E8A5",
+     "_tut_ausserdem": "remove_unit",
+     "then": [
+      {
+       "_at": "0x49E8AC",
+       "a": 21,
+       "kind": "remove_unit_var"
+      },
+      {
+       "a": 21,
+       "b": 1000,
+       "kind": "set"
+      },
+      {
+       "a": 24,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 21,
+       "b": 1000,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 21,
+       "b": 20,
+       "c": 50,
+       "kind": "unit_field",
+       "op": "=="
+      },
+      {
+       "a": 21,
+       "b": 21,
+       "c": 4,
+       "kind": "unit_field",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49E909",
+     "_tut_ausserdem": "remove_unit",
+     "then": [
+      {
+       "_at": "0x49E910",
+       "a": 22,
+       "kind": "remove_unit_var"
+      },
+      {
+       "a": 22,
+       "b": 1000,
+       "kind": "set"
+      },
+      {
+       "a": 24,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 22,
+       "b": 1000,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 22,
+       "b": 20,
+       "c": 50,
+       "kind": "unit_field",
+       "op": "=="
+      },
+      {
+       "a": 22,
+       "b": 21,
+       "c": 4,
+       "kind": "unit_field",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49E96D",
+     "_tut_ausserdem": "remove_unit",
+     "then": [
+      {
+       "_at": "0x49E974",
+       "a": 23,
+       "kind": "remove_unit_var"
+      },
+      {
+       "a": 23,
+       "b": 1000,
+       "kind": "set"
+      },
+      {
+       "a": 24,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 23,
+       "b": 1000,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 23,
+       "b": 20,
+       "c": 50,
+       "kind": "unit_field",
+       "op": "=="
+      },
+      {
+       "a": 23,
+       "b": 21,
+       "c": 4,
+       "kind": "unit_field",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49E9A2",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
@@ -12545,6 +12689,61 @@
      ]
     },
     {
+     "_at": "0x4A125A",
+     "_tut_ausserdem": "0x4D0EC0 find_unit_with_part",
+     "then": [
+      {
+       "a": 30,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "a": 104,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "_at": "0x4A1274",
+       "a": 5000,
+       "kind": "sell_unit"
+      },
+      {
+       "a": 304,
+       "b": 1,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 5000,
+       "b": 190,
+       "c": 0,
+       "kind": "unit_is",
+       "op": "!="
+      },
+      {
+       "a": 5000,
+       "b": 130,
+       "c": 0,
+       "kind": "unit_pos",
+       "op": "=="
+      },
+      {
+       "a": 5000,
+       "b": 127,
+       "c": 1,
+       "kind": "unit_pos",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A1301",
      "_tut_ausserdem": "show_text",
      "once": 50,
@@ -14707,6 +14906,115 @@
      ]
     },
     {
+     "_at": "0x4A2635",
+     "_tut_ausserdem": "show_text game_time sound",
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "_at": "0x4A2653",
+       "a": 101,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 21,
+       "b": 80,
+       "kind": "set_time_off"
+      },
+      {
+       "_at": "0x4A2678",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 4,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 11,
+       "b": 20,
+       "kind": "time_after",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A2699",
+     "_tut_ausserdem": "show_text bus_cmd game_time sound",
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x4A26B7",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x4A26C6",
+       "a": 1850,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 21,
+       "b": 80,
+       "kind": "set_time_off"
+      },
+      {
+       "_at": "0x4A26EB",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 4,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 1,
+       "kind": "objects",
+       "op": ">"
+      }
+     ]
+    },
+    {
      "_at": "0x4A270D",
      "_tut_ausserdem": "show_text game_time game_time",
      "then": [
@@ -14751,6 +15059,101 @@
      ]
     },
     {
+     "_at": "0x4A276B",
+     "_tut_ausserdem": "game_time sound",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 31,
+       "b": 80,
+       "kind": "set_time_off"
+      },
+      {
+       "a": 30,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A278F",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 21,
+       "b": 15,
+       "kind": "time_after",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A27AC",
+     "_tut_ausserdem": "show_text bus_cmd game_time sound",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x4A27CA",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x4A27D9",
+       "a": 2630,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "a": 31,
+       "b": 80,
+       "kind": "set_time_off"
+      },
+      {
+       "a": 30,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A27FE",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 20,
+       "b": 4,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
      "_at": "0x4A2820",
      "_tut_ausserdem": "show_text game_time",
      "then": [
@@ -14785,6 +15188,40 @@
       {
        "a": 31,
        "b": 3,
+       "kind": "time_after",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A2873",
+     "_tut_ausserdem": "game_time sound",
+     "then": [
+      {
+       "a": 30,
+       "kind": "inc"
+      },
+      {
+       "a": 31,
+       "b": 80,
+       "kind": "set_time_off"
+      },
+      {
+       "_at": "0x4A2890",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 31,
+       "b": 15,
        "kind": "time_after",
        "op": ">"
       }
