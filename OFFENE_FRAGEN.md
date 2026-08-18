@@ -103,3 +103,42 @@ eingebaut** — unser Nebel bleibt, wie er ist, bis das gelesen ist.
 Karte, am besten zwei kurz nacheinander, während eine Einheit in unbekanntes
 Gebiet fährt. Dann sehe ich, ob der Rand wirklich weich ist oder ob nur die
 Objekte fehlen und das Gelände durchgehend sichtbar bleibt.
+
+### Die Schleifen des Regellesers (18.08.2026, Negativbefund)
+
+**41 der 69 verbliebenen Verwürfe** heißen »Schleife«. Zwei Anläufe, beide
+gemessen, beide **null Regeln**:
+
+1. **Über die Rücksprungkante hinweg weiterlesen.** Strukturell richtig (was
+   vor dem Schleifenkopf steht, gilt auch dahinter). Ergebnis: Schleifen­verwürfe
+   25 → 23, Gesamtzahl unverändert 86, gelesene Wirkungen unverändert.
+2. **Die zweite Zählerform** — der Zähler auf dem Stapel statt im Register
+   (`mov al, byte[esp+K] / inc al / mov byte[esp+K], al / cmp al, N`). Erkannt
+   samt Startwert und Laufindex, dazu die zwei Wirkungen im Rumpf. Ergebnis:
+   684 Regeln vorher wie nachher, kein Durchlauf ausschreibbar.
+
+Beide zurückgenommen. Der Grund steht als Vermerk im Leser, damit niemand
+denselben Weg ein drittes Mal geht.
+
+⚠ **Wer es weiterversucht**, fange bei Mission 28 an: Rumpf `0x4A30A8..0x4A3130`,
+alle Filter springen auf `0x4A3124`, die zwei Wirkungen sind `0x4A3107`
+(`v[51+k]` hochzählen über ein Register) und `0x4A311C`
+(`v[61+k] = game_time()`). Dort sitzt noch mindestens ein Blocker, den ich
+nicht gefunden habe.
+
+### Die Klänge — was das Original spielt und wir nicht
+
+Das Spiel ruft seine Klangroutine `0x4047E0` an **111 Stellen**, davon 89 mit
+einer festen Nummer; **62 verschiedene Nummern**. Die vollständige Aufstellung
+mit Modus, Aufrufstellen und der Protokollmarke, die das Spiel selbst dazu
+druckt, liegt in `aekernel-tools/KLAENGE.md`.
+
+Gebaut ist davon bisher nur ein Teil. Sicher erkannt und **heute gebaut** ist
+der Befehlsklang (`0x429480`). Nicht gebaut sind unter anderem die
+Warnungen des Bauwesens (»Ihre Basis wird besetzt« — Nummern 123..134,
+Modus 0) und die Flugzeugmeldungen (Nummern 303/304/308/309, »air A:«/
+»air B (no fuel):«).
+
+⚠ Die Zahl »44 fehlen« aus einem Zwischenstand ist zu hoch gegriffen: sie kam
+aus einem groben Abgleich, der unsere Konstanten per Muster suchte. Verlässlich
+ist die Aufstellung, nicht die Differenz.
