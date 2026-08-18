@@ -2807,10 +2807,25 @@ public partial class MapEntityLayer : Node2D
     /// nicht auf der Zelle.</para>
     ///
     /// <para>⚠ Was UNSERE Setzung bleibt: dass die <b>Hauptauswahl</b> (die,
-    /// die das Feld beschreibt) etwas heller gezeichnet wird als die übrigen.
-    /// Das Original zeigt für eine GRUPPE etwas anderes — ein weisses Rechteck
-    /// um alle und einen Balken über jeder Einheit
-    /// (<c>tutorial15.png</c>) —, und das ist noch nicht gebaut.</para>
+    /// die das Feld beschreibt) etwas heller gezeichnet wird als die übrigen.</para>
+    ///
+    /// <para>⚠⚠ <b>ZURÜCKGEZOGEN (19.08.2026).</b> Hier stand: »Das Original
+    /// zeigt für eine GRUPPE etwas anderes — ein weisses Rechteck um alle und
+    /// einen Balken über jeder Einheit (tutorial15.png) —, und das ist noch
+    /// nicht gebaut.« Das war aus EINEM Bild geschlossen und ist so nicht
+    /// haltbar.
+    ///
+    /// <c>tutorial12.png</c> zeigt eine ausgewählte GRUPPE — das Bedienfeld
+    /// sagt dort ausdrücklich »GRUPPE / EINHEITEN 11 / GESCHW. 8/11« —, und
+    /// darin trägt <b>jede einzelne Einheit ihre vier Winkel</b> plus den
+    /// Balken. Ein Rechteck gibt es nicht. Wir machen es also schon richtig.
+    ///
+    /// In <c>tutorial15.png</c> ist die Mission BEENDET (das Feld zeigt die
+    /// Gesamtübersicht »MISSION 1 / KONTOSTAND 50 …«), und dort steht ein
+    /// weisses Rechteck um die Einheiten, ohne Winkel. ⚠ <b>Was dieses
+    /// Rechteck ist, ist NICHT gelesen</b> — naheliegend wäre der Aufziehrahmen
+    /// der Mausauswahl, belegt ist es nicht. Bis das jemand am Code liest,
+    /// wird hier nichts danach gebaut.</para>
     ///
     /// <para>⚠ Die zwei Parameter <c>hw</c>/<c>hh</c> bleiben in der Liste,
     /// weil mehrere Aufrufer sie mitgeben; sie sind wirkungslos geworden. Wer
@@ -5891,10 +5906,15 @@ public partial class MapEntityLayer : Node2D
           .Append("Gebaeudetafel (2, 5, 6, 8, 11, 18, 20, 21, 23, 27, 46) — der ")
           .Append("Bedienblock (Art 9) ist nicht darunter, 0 Treffer in seinen ")
           .Append("5048 Byte\n");
+        // ⚠ KORRIGIERT 18.08.2026: hier stand »Kontostand an (11,45)«, um eine
+        // Zeile zu hoch. Der Übersetzer lädt `edi` mit dem Text der NÄCHSTEN
+        // Zeile mitten in die push-Folge der laufenden hinein; wer beides paart,
+        // verschiebt die ganze Spalte. Siehe MissionSummaryText.
         sb.Append("      was der Bedienblock statt eines Bildes zeigt: Zweig ")
-          .Append("0x470E76 druckt »Kontostand « (0x501CF0) an (11,45) und ")
-          .Append("»Sprit gesamt « (0x501CE0) an (11,61) — das Bildfeld traegt ")
-          .Append("dort TEXT\n");
+          .Append("0x470E76 druckt den MISSIONSNAMEN (Puffer 0x77CAD0) an ")
+          .Append("(11,45), darunter »Kontostand « (0x501CF0) an (11,61) und ")
+          .Append("»Sprit gesamt « (0x501CE0) an (11,74) — sechs Zeilen, das ")
+          .Append("Bildfeld traegt dort TEXT\n");
 
         // ---- die Einheiten dieser Karte, nach dem Grund gruppiert -----------
         var byReason = new SortedDictionary<string, int>();
@@ -22144,6 +22164,157 @@ public partial class MapEntityLayer : Node2D
                $"({parked} im Hangar, {flying} in der Luft, {armed} bewaffnet){aimLine}{one}{dreh}{loop}{sup}{supOne}";
     }
 
+    /// <summary>
+    /// <b>DIE MISSIONSUEBERSICHT</b> — was der Bedienblock zeigt, solange
+    /// nichts gewählt ist. Bis zum 18.08.2026 stand hier unsere eigene
+    /// Erfindung (»N EINHEITEN / KEINE AUSWAHL«); das Original hat einen
+    /// eigenen, vollständig gelesenen Zustand dafür.
+    ///
+    /// <para><b>Die Weiche</b> steht im Zeichner des Bedienblocks. Er liest den
+    /// Anwählgriff <c>word[0x4FA0C8]</c> und verzweigt viermal:
+    /// <c>&lt; 0x1F40</c> Einheit (@0x470119), <c>== 0x2710</c> Gruppe
+    /// (@0x4705F4), <c>0x4E20..0x4F4B</c> Flugzeugplatz (@0x470C10) — und
+    /// ALLES ÜBRIGE nach <c>0x470E76</c>, dieser Übersicht. Die
+    /// Anwählroutine 0x4331E0 schreibt in den Griff nur 0xFFFF, 0x2710, eine
+    /// Landeinheit oder einen Flugzeugplatz — also ist »alles übrige«
+    /// genau <b>0xFFFF = nichts gewählt</b>.</para>
+    ///
+    /// <para><b>Die sechs Zeilen</b>, alle bei x=11, mit den Zeichenketten und
+    /// den y-Werten aus den <c>push</c>-Paaren vor <c>text_out</c> (0x401041):
+    /// <list type="bullet">
+    /// <item>y=45 der Missionsname aus dem Puffer 0x77CAD0</item>
+    /// <item>y=61 »Kontostand « (0x501CF0) + <c>dword[0xA9C600 + 4*spieler]</c></item>
+    /// <item>y=74 »Sprit gesamt « (0x501CE0) + 0x436740 + »%« (0x5016B8)</item>
+    /// <item>y=87 »Munition gesamt « (0x501CCC) + 0x436800 + »%«</item>
+    /// <item>y=100 »Ausgeschaltet « (0x501CB8) + 0x4368C0</item>
+    /// <item>y=113 »Verluste « (0x501CAC) + 0x4368E0</item>
+    /// </list></para>
+    ///
+    /// <para>⚠ <b>Die Zeichenkette gehört zur NÄCHSTEN Zeile, nicht zur
+    /// gerade gezeichneten.</b> Der Übersetzer lädt <c>edi</c> mit dem Text,
+    /// den er als nächstes braucht, mitten in die <c>push</c>-Folge des
+    /// laufenden Aufrufs hinein — <c>mov edi, 0x501CE0</c> steht bei 0x470F13
+    /// zwischen <c>push 0x3D</c> und <c>call</c>. Wer die beiden paart, liest
+    /// jede Zeile um eine zu hoch. Genau so stand es bis heute im Prüfbericht
+    /// dieses Baums (»0x470E76 druckt Kontostand an (11,45)«) — richtig ist
+    /// (11,61), und an (11,45) steht der Missionsname.</para>
+    ///
+    /// <para><b>Die vier Wertgeber</b> sind gelesen, nicht geraten. Abschuesse
+    /// (0x4368C0) und Verluste (0x4368E0) sind je ein Dreizeiler
+    /// <c>dword[0x87B160 + 40*spieler]</c> bzw. <c>+0x24</c> — der Spielersatz,
+    /// den wir als <see cref="_killCount"/>/<see cref="_lossCount"/> führen.
+    /// Sprit (0x436740) und Munition (0x436800) laufen über die 1000
+    /// Einheitenplätze des eigenen Spielers und mitteln <c>100*ist/voll</c>;
+    /// übersprungen wird ein leerer Platz (<c>+0x09 == 0xFF</c>), <b>die
+    /// Infanterie</b> (<c>+0x0A == 1</c>) und jede Einheit ohne Tank bzw. ohne
+    /// Magazin. Daraus fällt nebenbei ein bisher unbenanntes Feldpaar:
+    /// <c>+0x2E/+0x30</c> Sprit und <c>+0x39/+0x3A</c> Munition, je Ist gegen
+    /// Voll.</para>
+    ///
+    /// <para>⚠ <b>Unser ist die FORM, nicht der Inhalt.</b> Das Original
+    /// setzt sechs einzelne Zeilen an feste Punkte im 204x170-Block; wir haben
+    /// dort ein einziges Textfeld und trennen mit Zeilenumbrüchen. Die
+    /// Reihenfolge, die Wörter und die Zahlen sind die des Originals.</para>
+    /// </summary>
+    private string MissionSummaryText()
+    {
+        int me = ViewPlayer;
+        int spritSumme = 0, spritZahl = 0, munSumme = 0, munZahl = 0;
+        foreach (var u in _entities)
+        {
+            if (u.IsBuilding || u.IsProp || u.Dead || u.Owner != me) continue;
+            if (u.GameUnitType == 1) continue;      // die Infanterie bleibt draussen
+            if (u.FuelMax > 0) { spritSumme += 100 * u.Fuel / u.FuelMax; spritZahl++; }
+            if (u.AmmoMax > 0) { munSumme += 100 * u.Ammo / u.AmmoMax; munZahl++; }
+        }
+        int kills = me is >= 0 and < 8 ? _killCount[me] : 0;
+        int losses = me is >= 0 and < 8 ? _lossCount[me] : 0;
+        return $"{_mission}\n" +
+               $"KONTOSTAND {Money(me)}\n" +
+               $"SPRIT GESAMT {(spritZahl > 0 ? spritSumme / spritZahl : 0)}%\n" +
+               $"MUNITION GESAMT {(munZahl > 0 ? munSumme / munZahl : 0)}%\n" +
+               $"AUSGESCHALTET {kills}\n" +
+               $"VERLUSTE {losses}";
+    }
+
+    /// <summary>
+    /// <b>DAS GRUPPENFELD</b> — was der Bedienblock zeigt, wenn mehr als eine
+    /// Einheit gewählt ist. Bis zum 18.08.2026 zeigten wir stattdessen die
+    /// erste Einheit der Auswahl; das Original hat auch dafür einen eigenen
+    /// Zustand (<c>word[0x4FA0C8] == 0x2710</c>, Zweig @0x4705F4).
+    ///
+    /// <para><b>Sechs Zeilen in ZWEI Spalten</b>, x=11 und x=90, y aus den
+    /// <c>push</c>-Paaren vor 0x401041:
+    /// <list type="bullet">
+    /// <item>y=45 »Gruppe « (0x501D3C) — oder der Name der Gruppe, wenn
+    /// 0x436900 eine Nummer statt 0xFF liefert (Satz 0x833A00, Schrittweite
+    /// 422)</item>
+    /// <item>y=58 »Einheiten « (0x501D2C) + <c>word[0x4FA278]</c></item>
+    /// <item>y=71 »Geschw. « (0x5017CC) + langsamstes/schnellstes Mitglied</item>
+    /// <item>y=84 »Zustand « (0x501D20) + % · x=90 »Schlecht « (0x501D14) + Zahl</item>
+    /// <item>y=97 »Sprit « (0x5019F8) + % · x=90 »Niedrig « (0x501D08) + Zahl</item>
+    /// <item>y=110 »Munition « (0x5019EC) + % · x=90 »Wenig « (0x501D00) + Zahl</item>
+    /// </list></para>
+    ///
+    /// <para><b>Was »Geschw. 8/11« heißt</b>, war nicht zu raten und ist
+    /// gemessen: 0x436940 läuft über die Mitgliederliste <c>0x833098</c>
+    /// (ein Wort je Mitglied) und führt ZWEI Register mit — <c>al</c> fällt
+    /// von 0x64 auf das MINIMUM, <c>cl</c> steigt von 0 auf das MAXIMUM des
+    /// Tempofeldes <c>byte[+0x20]</c>. Also »langsamstes/schnellstes«, und
+    /// nicht etwa »8 von 11 Einheiten sind schnell«. (Ein Flugzeugplatz in der
+    /// Gruppe wird über die andere Tafel 0x591EFD gelesen — bei uns tragen
+    /// die Flugzeuge ihr Tempo selbst.)</para>
+    ///
+    /// <para><b>Die Schwelle ist 25 %</b>, dreimal dieselbe: 0x436D50
+    /// (»Schlecht«, Hülle +0x08 gegen +0x29), 0x436AF0 (»Niedrig«, Sprit)
+    /// und 0x436F50 (»Wenig«, Munition +0x39 gegen +0x3A) rechnen
+    /// <c>100*ist/voll</c> und zählen mit, was <c>cmp eax,0x19; jge</c> NICHT
+    /// überspringt — also alles UNTER 25.</para>
+    ///
+    /// <para>⚠ <b>Unser ist wieder nur die Form.</b> Zwei Spalten an festen
+    /// x-Werten haben wir nicht; die Paare stehen darum durch Leerzeichen
+    /// getrennt auf einer Zeile. Und wir zeigen immer »GRUPPE«: benannte
+    /// Gruppen (0x833A00) kennt unsere Auswahl nicht.</para>
+    /// </summary>
+    private string GroupPanelText()
+    {
+        int n = 0, langsam = int.MaxValue, schnell = 0;
+        int hpS = 0, hpN = 0, spS = 0, spN = 0, muS = 0, muN = 0;
+        int schlecht = 0, niedrig = 0, wenig = 0;
+        foreach (int i in _sel)
+        {
+            if (i < 0 || i >= _entities.Count) continue;
+            var u = _entities[i];
+            if (u.Dead) continue;
+            n++;
+            int tempo = RawSpeedOf(u);
+            if (tempo < langsam) langsam = tempo;
+            if (tempo > schnell) schnell = tempo;
+            if (u.HpMax > 0)
+            {
+                int p = 100 * u.Hp / u.HpMax;
+                hpS += p; hpN++; if (p < 25) schlecht++;
+            }
+            if (u.FuelMax > 0)
+            {
+                int p = 100 * u.Fuel / u.FuelMax;
+                spS += p; spN++; if (p < 25) niedrig++;
+            }
+            if (u.AmmoMax > 0)
+            {
+                int p = 100 * u.Ammo / u.AmmoMax;
+                muS += p; muN++; if (p < 25) wenig++;
+            }
+        }
+        if (langsam == int.MaxValue) langsam = 0;
+        return "GRUPPE\n" +
+               $"EINHEITEN {n}\n" +
+               $"GESCHW. {langsam}/{schnell}\n" +
+               $"ZUSTAND {(hpN > 0 ? hpS / hpN : 0)}%  SCHLECHT {schlecht}\n" +
+               $"SPRIT {(spN > 0 ? spS / spN : 0)}%  NIEDRIG {niedrig}\n" +
+               $"MUNITION {(muN > 0 ? muS / muN : 0)}%  WENIG {wenig}";
+    }
+
     private void UpdatePanel()
     {
         // Ein angewaehltes FLUGZEUG: Name, Art, Huelle, Munition und Sprit —
@@ -22164,10 +22335,18 @@ public partial class MapEntityLayer : Node2D
         }
         if (_selected < 0)
         {
-            // idle panel: mission + selection summary, so the frame is never empty
             _panel.Visible = _panelTextOn;
-            _panel.Text = $"{_mission}\n{_entities.Count} EINHEITEN\n" +
-                          (_order.Length > 0 ? _order.ToUpper() : "KEINE AUSWAHL");
+            _panel.Text = MissionSummaryText();
+            ShowPanelBars(null);
+            return;
+        }
+        // Mehr als eine Einheit gewaehlt: das Original zeigt dann NICHT die
+        // erste, sondern das Gruppenfeld - siehe GroupPanelText.
+        if (_sel.Count > 1)
+        {
+            _panel.Visible = _panelTextOn;
+            _panel.Text = GroupPanelText();
+            ShowPanelBars(null);
             return;
         }
         var e = _entities[_selected];
