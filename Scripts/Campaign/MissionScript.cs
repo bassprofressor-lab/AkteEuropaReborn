@@ -429,6 +429,129 @@ public sealed class MissionScript
                sb.ToString().TrimEnd();
     }
 
+    /// <summary>
+    /// PRÜFSTAND <c>--hilfe-check</c>: <b>DIE HILFEFENSTER DIESER MISSION —
+    /// wieviele koennen ueberhaupt aufgehen?</b>
+    ///
+    /// <para>⚠ 18.08.2026. Der Anlass ist eine Zahl, die seit dem 11.08. im
+    /// Quelltext stand und nie nachgemessen wurde: »Mission 1 ruft daraus
+    /// <b>siebzehn</b> Fenster auf.« In <c>Data/mission_scripts.json</c>
+    /// standen elf. Die sechs fehlenden hingen an vier Abfragen, die der
+    /// Regelleser nicht las — und eine fehlende Regel sieht im Spiel aus wie
+    /// ein Tutorial, das nach dem ersten Fenster stehenbleibt, nicht wie ein
+    /// Fehler.</para>
+    ///
+    /// <para>Gemessen wird darum die Zahl, die genau das trennt, und zwar in
+    /// drei Stufen, die alle scheitern koennen:</para>
+    /// <list type="number">
+    /// <item><b>Text da?</b> — <c>HelpWindow.TextOf(id)</c>. Ohne
+    /// <c>help.json</c> faellt jedes Fenster aus, und das darf nicht wie ein
+    /// Erfolg aussehen.</item>
+    /// <item><b>Haken da?</b> — jedes Glied der Bedingung muss beantwortet
+    /// werden koennen (<see cref="Hooked(Cond)"/>). Ein fehlender Haken macht
+    /// die Bedingung FALSCH und das Fenster still.</item>
+    /// <item><b>Erzeuger da?</b> — jede Variablenbedingung, die zu Beginn nicht
+    /// schon wahr ist, braucht eine Regel, die diese Variable setzt und selbst
+    /// feuern kann (<see cref="Writes(int)"/>, transitiv, mit Kreiserkennung).
+    /// Dasselbe gilt fuer den <c>once</c>-Riegel.</item>
+    /// </list>
+    ///
+    /// <para>Und danach der <b>Trockenlauf</b>: jede Fensterregel wird EINMAL
+    /// durch denselben <see cref="Do"/>-Weg geschickt wie im Spiel, mit
+    /// vorgegebenen Bedingungen (<c>_vorgabe</c>, dieselbe Mechanik wie bei
+    /// <c>--oder-check</c>). Gezaehlt wird, was am Haken
+    /// <see cref="ShowText"/> ankommt — Nummer, Fensterart und Stelle. Damit
+    /// misst der Prüfstand den ganzen Weg von der JSON bis zum Fenster und
+    /// nicht nur die Datei.</para>
+    ///
+    /// <para>⚠ Der Trockenlauf laesst den Haken unangetastet: er zaehlt nur
+    /// mit. Wer ihn im echten Spiel laufen laesst, sieht die Fenster wirklich
+    /// aufgehen — das ist Absicht, denn ein Prüfstand, der seinen Gegenstand
+    /// nachbildet statt ihn aufzurufen, misst ihn nicht.</para>
+    /// </summary>
+    public string TutorialCheck()
+    {
+        var sb = new System.Text.StringBuilder();
+        int fenster = 0, mitText = 0, kannFeuern = 0;
+
+        foreach (var r in _script.Rules)
+        {
+            foreach (var a in r.Then)
+            {
+                if (a.Kind != "text") continue;
+                fenster++;
+                bool text = UI.HelpWindow.TextOf(a.A) is { Count: > 0 };
+                if (text) mitText++;
+
+                var fehlt = new List<string>();
+                foreach (var c in r.When)
+                {
+                    if (!Hooked(c)) { fehlt.Add("kein Haken: " + c.Kind); continue; }
+                    if (c.Kind == "var" && !Cmp(Start(c.A), c.Op, c.B) && !Writes(c.A))
+                        fehlt.Add($"ohne Erzeuger: v[{c.A}]");
+                }
+                foreach (var c in r.Any)
+                    if (!Hooked(c)) fehlt.Add("kein Haken (ODER): " + c.Kind);
+                if (r.Once >= 0 && Start(r.Once) != 0 && !Writes(r.Once))
+                    fehlt.Add($"Riegel v[{r.Once}] startet auf {Start(r.Once)}");
+                if (!text) fehlt.Add("kein Text in help.json");
+
+                if (fehlt.Count == 0) kannFeuern++;
+                sb.Append($"   @0x{r.At:X} #{a.A,-4} Art{a.B} bei ({a.C,3},{a.D,3}) " +
+                          $"once={r.Once,3}  " +
+                          (fehlt.Count == 0 ? "kann feuern" : "BLOCKIERT: " +
+                              string.Join(", ", fehlt)) + "\n" +
+                          "        " +
+                          Glieder(r) + "\n");
+            }
+        }
+
+        // ---- Trockenlauf: jede Fensterregel einmal wirklich ausloesen ------
+        var gesehen = new List<string>();
+        var vorher = ShowText;
+        ShowText = (id, art, x, y) =>
+        {
+            gesehen.Add($"#{id}");
+            vorher?.Invoke(id, art, x, y);
+        };
+        _vorgabe ??= new Dictionary<Cond, bool>();
+        try
+        {
+            foreach (var r in _script.Rules)
+            {
+                bool hatText = false;
+                foreach (var a in r.Then) if (a.Kind == "text") hatText = true;
+                if (!hatText) continue;
+                foreach (var c in r.When) _vorgabe[c] = true;
+                foreach (var c in r.Any) _vorgabe[c] = true;
+                bool alle = true;
+                foreach (var c in r.When) if (!Test(c)) alle = false;
+                if (!alle) continue;              // die Vorgabe hat nicht gegriffen
+                foreach (var a in r.Then) if (a.Kind == "text") Do(a);
+            }
+        }
+        finally
+        {
+            _vorgabe.Clear();
+            ShowText = vorher;
+        }
+
+        return $"hilfe-check: M{Mission} {fenster} Hilfefenster, {mitText} mit Text, " +
+               $"{kannFeuern} koennen feuern, {fenster - kannFeuern} blockiert; " +
+               $"Trockenlauf {gesehen.Count}/{fenster} am Haken " +
+               $"[{string.Join(" ", gesehen)}]\n" + sb.ToString().TrimEnd();
+    }
+
+    /// <summary>Die Glieder einer Regel mit ihrem jetzigen Wahrheitswert — wie
+    /// <see cref="Links"/>, aber ohne die Suche nach Erzeugern.</summary>
+    private string Glieder(Rule r)
+    {
+        var parts = new List<string>();
+        foreach (var c in r.When) parts.Add(Show(c) + (Test(c) ? "=ja" : "=NEIN"));
+        foreach (var c in r.Any) parts.Add("ODER " + Show(c) + (Test(c) ? "=ja" : "=NEIN"));
+        return parts.Count == 0 ? "(ohne Bedingung)" : string.Join("  ", parts);
+    }
+
     /// <summary>Die Prüfstände, die sich selbst aus der Befehlszeile lesen —
     /// die zentrale Schalterschleife gehört einer anderen Datei, und das Muster
     /// ist schon da (MapEntityLayer liest seine eigenen ebenso). Läuft genau
@@ -439,16 +562,18 @@ public sealed class MissionScript
     {
         if (_bankGelaufen) return;
         _bankGelaufen = true;
-        bool oder = false, regeln = false, ziele = false;
+        bool oder = false, regeln = false, ziele = false, tut = false;
         foreach (string a in Core.CommandLine.Args)
         {
             if (a == "--oder-check") oder = true;
             else if (a == "--rule-check") regeln = true;
             else if (a == "--ziel-check") ziele = true;
+            else if (a == "--hilfe-check") tut = true;
         }
         if (oder) GD.Print(OrCheck());
         if (regeln) GD.Print(RuleCheck());
         if (ziele) GD.Print(GoalCheck());
+        if (tut) GD.Print(TutorialCheck());
     }
 
     /// <summary>
@@ -1322,6 +1447,28 @@ public sealed class MissionScript
     public Action<int, int>? AddMoney;               // betrag, spieler
     public Action<int>? PlaySound;                   // 600 / 601
     public Action? CloseTexts;                       // close_message_windows()
+
+    /// <summary><c>window_open(n)</c> @0x4D0600 — <b>IST HILFEFENSTER n NOCH
+    /// OFFEN?</b>
+    ///
+    /// <para>⚠ 18.08.2026. Das ist der TAKTGEBER des Tutorials, und er hat
+    /// gefehlt. Der Rumpf (0x4D0600 → 0x4475B0) läuft das Fensterfeld ab —
+    /// Basis 0x8B9038, Schrittweite 0xAD24, zwölf Plätze — und gibt 1 zurück,
+    /// wenn ein Fenster der Art 0x1E (30) mit +0xACA0 == n dabei ist. Dieselbe
+    /// Art 30, die <c>close_message_windows()</c> @0x447560 wegräumt.</para>
+    ///
+    /// <para>Mission 1 schaltet daran ihre Kette weiter: #002 kommt erst, wenn
+    /// der Spieler #001 weggeklickt hat, #012 erst nach #011. Ohne diese Frage
+    /// fielen beide Regeln beim Lesen weg — im Spiel sah das aus, als bliebe
+    /// das Tutorial nach dem ersten Fenster einfach stehen.</para>
+    ///
+    /// <para>Der Haken hängt <b>von Haus aus</b> an <see cref="UI.HelpWindow"/>
+    /// — anders als die übrigen, die die Kartenschicht einträgt. Grund: die
+    /// Antwort steht vollständig in unserem eigenen Fensterverwalter, es gibt
+    /// nichts, was die Welt dazu beitragen könnte. Ein Prüfstand darf ihn
+    /// trotzdem überschreiben.</para></summary>
+    public Func<int, bool>? TextOpen = UI.HelpWindow.IsOpen;
+
     public Action<int, int, int, int>? OrderUnit;    // einheit, ukol, x, y
 
     /// <summary>
@@ -1687,6 +1834,32 @@ public sealed class MissionScript
         // terrain_at(a, b) — Mission 1 prüft damit, ob der Panzer auf der
         // Brücke steht (> 4)
         "terrain" => TerrainAt != null && Cmp(TerrainAt(c.A, c.B), c.Op, c.C),
+        // ---- 18.08.2026: die vier letzten Glieder des Tutorials ------------
+
+        // Takte seit Missionsbeginn (0x4FA240). ⚠ NICHT die Spieluhr: die zählt
+        // Spielminuten zu je 250 Takten (`time_gt`). Mission 1 hält ihr
+        // Willkommensfenster #001 damit zehn Takte zurück — 0,2 s bei 50 Hz.
+        "ticks" => Cmp((int)Math.Min(_ticks, int.MaxValue), c.Op, c.B),
+        // window_open(a) — siehe TextOpen. Kein Haken heisst FALSCH … und das
+        // wäre hier die falsche Antwort: »kein Fenster offen« ist 0, und die
+        // Regeln fragen auf `== 0`. Darum antwortet der Nullfall mit »nicht
+        // offen«, nicht mit »Bedingung unerfüllt«.
+        "text_open" => Cmp((TextOpen != null && TextOpen(c.A)) ? 1 : 0, c.Op, c.B),
+        // terrain_at unter der EIGENEN EINHEIT a (Satz a, Felder +0x00 Spalte
+        // und +0x01 Zeile). Mission 1 zeigt daran #020, »Ist eine Einheit auf
+        // einem @Hügel …« — die Bedingung ist wörtlich die des Textes.
+        "terrain_unit" => TerrainAt != null && UnitField != null &&
+                          UnitField(c.A, 0) >= 0 && UnitField(c.A, 1) >= 0 &&
+                          Cmp(TerrainAt(UnitField(c.A, 0), UnitField(c.A, 1)),
+                              c.Op, c.B),
+        // Feld +b der ANGEWÄHLTEN Einheit. +0x14 heisst im Spiel selbst UKOL
+        // (Debug-Auszug @0x416F00); Mission 1 fragt damit auf UKOL == 1 und
+        // zeigt #009, den Text über die @Handsteuerung.
+        "sel_field" => Selection != null && UnitField != null &&
+                       Selection() >= 0 && Selection() < 8000 &&
+                       UnitField(Selection(), c.B) >= 0 &&
+                       Cmp(UnitField(Selection(), c.B), c.Op, c.C),
+
         // Eine Zelle der BELEGUNGSKARTE (Spalte a, Zeile c). Das Original hält
         // dort je Zelle ein Wort: den Einheitenplatz, ab 8000 ein Gebäude, und
         // 0xFFFE für »frei«. Mission 1 startet daran ihren Zähler für die vier
@@ -2172,6 +2345,15 @@ public sealed class MissionScript
         "time_gt" => $"Spielminute>{c.A}",
         "event" => $"Ereignis{c.Op}{c.B}",
         "selected" => $"Auswahl{c.Op}{c.B}",
+        "ticks" => $"Takt {_ticks}{c.Op}{c.B}",
+        "text_open" => $"Hilfefenster #{c.A} offen=" +
+                       (TextOpen != null && TextOpen(c.A) ? 1 : 0) + $"{c.Op}{c.B}",
+        "terrain_unit" => $"Gelaende unter Einheit {c.A}=" +
+                          (TerrainAt != null && UnitField != null
+                           ? TerrainAt(UnitField(c.A, 0), UnitField(c.A, 1)) : -1) +
+                          $"{c.Op}{c.B}",
+        "sel_field" => $"Auswahl={(Selection != null ? Selection() : -1)} " +
+                       $"Feld+0x{c.B:X}{c.Op}{c.C}",
         _ => $"{c.Kind}({c.A},{c.B},{c.C}){c.Op}",
     };
 
@@ -2238,6 +2420,11 @@ public sealed class MissionScript
         "rail_link" => RailLinkHeld != null,
         "money_of" => MoneyOf != null,
         "terrain" => TerrainAt != null,
+        "terrain_unit" => TerrainAt != null && UnitField != null,
+        "sel_field" => Selection != null && UnitField != null,
+        // `ticks` braucht nur die eigene Uhr, `text_open` haengt von Haus aus.
+        "ticks" => true,
+        "text_open" => TextOpen != null,
         "imap" => ImapAt != null,
         _ => false,
     };

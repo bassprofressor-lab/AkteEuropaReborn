@@ -21,6 +21,36 @@ using Godot;
 /// das ist <see cref="CloseAll"/>, und die Blöcke rufen es vor fast jedem neuen
 /// Fenster (40 Mal über alle Missionen).</para>
 ///
+/// <para><b>⚠ 18.08.2026 — DIE SIEBZEHN SIND JETZT NACHGEZÄHLT, und in unserer
+/// Datei standen elf.</b> Der Block von Mission 1 ruft
+/// <c>show_text</c>/<c>show_text2</c> mit #001..#006, #008..#013, #018, #020,
+/// #039, #040 und #110. Sechs davon fehlten in
+/// <c>Data/mission_scripts.json</c>, weil der Regelleser ihre Bedingung nicht
+/// las — darunter #001, das Willkommensfenster selbst. Was nachgetragen wurde
+/// und wie es gemessen ist, steht dort unter <c>_hilfefenster</c>; der
+/// Prüfstand heisst <c>--hilfe-check</c> und meldet »17 Fenster, 17 mit Text,
+/// 17 können feuern, Trockenlauf 17/17«.</para>
+///
+/// <para><b>Die REIHENFOLGE hängt an einer eigenen Abfrage:</b>
+/// <c>window_open(n)</c> @0x4D0600 → @0x4475B0, »ist Hilfefenster n noch
+/// offen?«. Sie läuft dasselbe Fensterfeld ab, das <see cref="CloseAll"/>
+/// räumt, und sucht ein Fenster der Art 30 mit +0xACA0 == n. Mission 1 zeigt
+/// #002 erst, wenn der Spieler #001 weggeklickt hat, und #012 erst nach #011 —
+/// das Tutorial wartet also wirklich auf den Spieler und nicht auf eine Uhr.
+/// Hier ist das <see cref="IsOpen"/>.</para>
+///
+/// <para><b>Und das Original hat einen EIGENEN Einmal-Riegel je Text</b>, den
+/// wir nicht nachgebaut hatten: <c>show_text2</c> prüft als erstes
+/// <c>byte[0x87AE00 + id]</c> und kehrt um, wenn dort schon etwas steht und das
+/// vierte Argument 0 ist (@0x4432F6 ff.); beim Anzeigen setzt es dieselbe
+/// Stelle auf 1 (@0x443340). ALLE siebzehn Aufrufe von Mission 1 geben als
+/// viertes Argument 0 — <b>jeder Text kommt also höchstens einmal</b>. Das
+/// deckt sich mit dem, was <see cref="Dismissed"/> hier bewirkt, nur setzt das
+/// Original den Riegel schon beim ERSTEN ZEIGEN und nicht erst beim
+/// Wegklicken. ⚠ Der Unterschied ist nicht gemessen und darum auch nicht
+/// nachgebaut; er fällt nur auf, wenn eine Regel dasselbe Fenster zweimal
+/// öffnen wollte, ohne dass der Spieler es angefasst hat.</para>
+///
 /// <para><b>Das <c>@</c></b> vor einem Wort hebt es hervor; der Import lässt es
 /// stehen (siehe <c>Import.HelpExporter</c>), gedeutet wird es hier.</para>
 ///
@@ -106,6 +136,32 @@ public sealed partial class HelpWindow : PanelContainer
     /// <summary>Wieviele Fenster gerade offen sind. Der Block fragt das selbst
     /// (0x4D0600, »ist Fenster n noch offen?«).</summary>
     public static int OpenCount => Open.Count;
+
+    /// <summary><c>window_open(n)</c> @0x4D0600 → @0x4475B0 — <b>ist
+    /// Hilfefenster n noch offen?</b>
+    ///
+    /// <para>Das Original läuft dafür das Fensterfeld ab (Basis 0x8B9038,
+    /// Schrittweite 0xAD24, zwölf Plätze) und gibt 1 zurück, wenn ein Fenster
+    /// der Art 0x1E (30) mit +0xACA0 == n dabei ist — dieselbe Art 30, die
+    /// <see cref="CloseAll"/> wegräumt. Hier ist das Feld die Liste
+    /// <c>Open</c>, und der Vergleich geht über <see cref="Id"/>.</para>
+    ///
+    /// <para>⚠ Ein VORGEMERKTES Fenster gilt als geschlossen. Im Original
+    /// schliesst <c>close_message_windows()</c> sofort; unser Aufschub (siehe
+    /// <see cref="CloseAll"/>) ist ein Notbehelf gegen das Neuöffnen im selben
+    /// Takt und darf die Antwort nicht verändern — sonst hinge die
+    /// Tutorialkette einen Takt lang an einem Fenster, das das Original in
+    /// derselben Zeile schon weggeräumt hat.</para>
+    ///
+    /// <para>Daran hängt die ganze Reihenfolge von Mission 1: #002 kommt erst,
+    /// wenn der Spieler #001 weggeklickt hat, #012 erst nach #011.</para>
+    /// </summary>
+    public static bool IsOpen(int id)
+    {
+        foreach (var w in Open)
+            if (w.Id == id && !w._pendingClose) return true;
+        return false;
+    }
 
     /// <summary><c>close_message_windows()</c> @0x447560 — aber AUFGESCHOBEN.
     ///

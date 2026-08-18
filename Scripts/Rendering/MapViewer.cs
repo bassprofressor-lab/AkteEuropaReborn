@@ -2608,9 +2608,14 @@ public partial class MapViewer : Node2D
         // untere LINKE Ecke — siehe BuildLegacyPanel fuer den Befund
         var origin = new Vector2(0, view.Y - size.Y);
         _panelSprite.Position = origin;
-        // Steht das Einheitenbild, geht der Infotext in die rechte Spalte —
-        // sonst laege er darunter. Siehe PanelBoxRight.
-        Rect2 rel = _panelPortrait is { Visible: true } ? PanelBoxRight : PanelBox;
+        // ⚠⚠ 18.08.2026 — DER TEXT NIMMT WIEDER DAS GANZE FELD. Hier stand:
+        // »Steht das Einheitenbild, geht der Infotext in die rechte Spalte —
+        // sonst laege er darunter«, und das war richtig, solange der Text fuenf
+        // Zeilen mit Zahlen hatte. Seit die Zahlen durch BALKEN ersetzt sind
+        // (siehe MapEntityLayer.BuildPanelBars), ist er eine Zeile: der NAME.
+        // Und der steht im Original oben LINKS ueber dem Bild, quer ueber das
+        // ganze Feld — nicht in einer Spalte daneben.
+        Rect2 rel = PanelBox;
         var box = new Rect2(origin + rel.Position * PanelScale, rel.Size * PanelScale);
         _entities.SetPanelBox(box);
         if (_panelClock != null)

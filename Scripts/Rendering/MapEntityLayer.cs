@@ -1474,6 +1474,113 @@ public partial class MapEntityLayer : Node2D
         _panel.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0));
         _panel.AddThemeConstantOverride("outline_size", 6);
         layer.AddChild(_panel);
+        BuildPanelBars(layer);
+    }
+
+    /// <summary>
+    /// <b>DIE DREI BALKEN IM EINHEITENFELD</b> — Hülle, Sprit, Munition.
+    ///
+    /// <para>⚠⚠ 18.08.2026. Bei uns standen dort <b>Zahlen</b> (»HP 100/100
+    /// MUN 15/15 SPRIT 1400«). Das Original zeigt <b>drei Balken mit Symbol</b>,
+    /// und zwar in dieser Reihenfolge — siehe
+    /// <c>Bug Bilder/kampagne1 original tutorial7.png</c>, Heavy Tank:</para>
+    /// <list type="bullet">
+    ///   <item>ein <b>Herz</b> und ein <b>grüner</b> Balken (Hülle),</item>
+    ///   <item>ein <b>Kanister</b> und ein <b>blauer</b> (Sprit),</item>
+    ///   <item>drei <b>Patronen</b> und ein <b>beiger</b> (Munition).</item>
+    /// </list>
+    ///
+    /// <para><b>Die Farben sind gemessen und liegen auf der Palette</b>: aus dem
+    /// Bild kommen (97,211,89), (40,80,203) und (223,196,141); in
+    /// <c>DATA/01.PAL</c> sind das die Indizes <b>5</b> (103,215,95),
+    /// <b>3</b> (43,83,203) und <b>84</b> (227,199,147). Drei Treffer auf drei
+    /// Versuche — das ist der Beleg, dass es die Farben des Spiels sind und
+    /// nicht meine.</para>
+    ///
+    /// <para>⚠ <b>Die LAGE ist von der Aufnahme abgelesen, nicht auf den Punkt
+    /// gemessen</b>: die Aufnahme zeigt das Spiel 2,156-fach, und die Ränder des
+    /// vertieften Feldes sind darin nicht scharf genug, um Versätze im
+    /// Einzelpunkt zu bestimmen. Die drei Zeilen sitzen in der rechten Hälfte
+    /// des Feldes, gleichmässig verteilt.</para>
+    ///
+    /// <para>⚠⚠ <b>DIE DREI SYMBOLE FEHLEN NOCH.</b> Sie stehen weder in
+    /// <c>PANEL.DTA</c> (34.680 Byte = genau 204×170, kein Anhang) noch in
+    /// <c>CONTROL.CWD</c> (das ist ein Hintergrundbild, 254×167, nachgesehen).
+    /// Bis sie gefunden sind, unterscheiden die drei <b>Farben</b> die Zeilen —
+    /// und die sind die des Originals.</para></summary>
+    private void BuildPanelBars(CanvasLayer layer)
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            _barBack[i] = new ColorRect { Color = new Color(0, 0, 0, 0.85f), Visible = false };
+            _barFill[i] = new ColorRect { Color = PanelBarColour[i], Visible = false };
+            layer.AddChild(_barBack[i]);
+            layer.AddChild(_barFill[i]);
+        }
+    }
+
+    private readonly ColorRect[] _barBack = new ColorRect[3];
+    private readonly ColorRect[] _barFill = new ColorRect[3];
+
+    /// <summary>Hülle, Sprit, Munition — die drei Farben aus DATA/01.PAL,
+    /// Indizes 5, 3 und 84. Siehe <see cref="BuildPanelBars"/>.</summary>
+    private static readonly Color[] PanelBarColour =
+    {
+        Color.Color8(103, 215,  95),
+        Color.Color8( 43,  83, 203),
+        Color.Color8(227, 199, 147),
+    };
+
+    /// <summary>Wo die drei Zeilen im vertieften Feld sitzen, als Anteil seiner
+    /// Breite und Höhe — von der Aufnahme abgelesen, siehe
+    /// <see cref="BuildPanelBars"/>.</summary>
+    /// <summary>Wie hoch der Namensstreifen oben im Feld ist.</summary>
+    private const float PanelTitleH = 34f;
+
+    private const float BarLeftFrac = 0.44f, BarWidthFrac = 0.40f,
+                        BarTopFrac = 0.30f, BarGapFrac = 0.24f, BarHeightPx = 10f;
+
+    /// <summary>Die drei Balken an das vertiefte Feld setzen.</summary>
+    private void PlacePanelBars(Rect2 box)
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            if (_barBack[i] == null) continue;
+            var at = box.Position + new Vector2(box.Size.X * BarLeftFrac,
+                                                box.Size.Y * (BarTopFrac + i * BarGapFrac));
+            _barBack[i].Position = at - Vector2.One;
+            _barBack[i].Size = new Vector2(box.Size.X * BarWidthFrac + 2, BarHeightPx + 2);
+            _barFill[i].Position = at;
+            _barFill[i].Size = new Vector2(box.Size.X * BarWidthFrac, BarHeightPx);
+        }
+        _panelBarBox = box;
+    }
+
+    private Rect2 _panelBarBox;
+
+    /// <summary>Die drei Balken füllen — oder wegnehmen, wenn nichts Einzelnes
+    /// ausgewählt ist. ⚠ Ein Wert, den es nicht gibt (ein Fusssoldat hat keinen
+    /// Sprit), zeigt einen LEEREN Balken statt eines vollen: voll hiesse
+    /// »randvoll«, und das wäre eine Falschaussage.</summary>
+    private void ShowPanelBars(Entity? e)
+    {
+        bool an = e != null && _compactPanel;
+        for (int i = 0; i < 3; i++)
+        {
+            if (_barBack[i] == null) continue;
+            _barBack[i].Visible = an;
+            _barFill[i].Visible = an;
+        }
+        if (!an || e == null) return;
+        float[] anteil =
+        {
+            e.HpMax   > 0 ? Mathf.Clamp((float)e.Hp   / e.HpMax,   0, 1) : 0f,
+            e.FuelMax > 0 ? Mathf.Clamp((float)e.Fuel / e.FuelMax, 0, 1) : 0f,
+            e.AmmoMax > 0 ? Mathf.Clamp((float)e.Ammo / e.AmmoMax, 0, 1) : 0f,
+        };
+        for (int i = 0; i < 3; i++)
+            _barFill[i].Size = new Vector2(_panelBarBox.Size.X * BarWidthFrac * anteil[i],
+                                           BarHeightPx);
     }
 
     /// <summary>The buildable types of this map's tileset, or null when the
@@ -5335,11 +5442,20 @@ public partial class MapEntityLayer : Node2D
     public void SetPanelBox(Rect2 box)
     {
         _compactPanel = true;
+        // ⚠ LINKSBUENDIG und oben, wie im Original: dort steht »HEAVY TANK« in
+        // der oberen linken Ecke des vertieften Feldes. Mittig gesetzt sah es
+        // aus wie eine Ueberschrift und nicht wie ein Name.
+        _panel.HorizontalAlignment = HorizontalAlignment.Left;
+        _panel.VerticalAlignment = VerticalAlignment.Top;
         _panel.Position = box.Position + new Vector2(4, 3);
-        _panel.Size = box.Size - new Vector2(8, 6);
+        // ⚠ Nur ein STREIFEN oben, nicht das ganze Feld: darunter stehen das
+        // Einheitenbild und die drei Balken. Vorher nahm der Text die volle
+        // Hoehe und schob eine Warnung mitten ins Bild.
+        _panel.Size = new Vector2(box.Size.X - 8, PanelTitleH);
         _panel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         _panel.ClipText = true;
         _panel.AddThemeConstantOverride("outline_size", 0);
+        PlacePanelBars(box);
     }
 
     /// <summary>
@@ -21966,13 +22082,20 @@ public partial class MapEntityLayer : Node2D
             string warn = e.AmmoMax > 0 && e.Ammo <= 0 ? "KEINE MUNITION"
                         : e.FuelMax > 0 && e.Fuel <= 0 ? "KEIN SPRIT"
                         : st;
+            // ⚠⚠ 18.08.2026 — DIE ZAHLEN SIND WEG, es zeigen die BALKEN.
+            // Das Original schreibt in dieses Feld den Namen und darunter drei
+            // Balken mit Symbol (Huelle gruen, Sprit blau, Munition beige) —
+            // KEINE Zahlen. Siehe BuildPanelBars, wo auch die drei gemessenen
+            // Palettenfarben stehen.
+            //
+            // ⚠ Was bleibt: Name, Bewaffnung und eine WARNUNG. »Kein Sprit«
+            // und »keine Munition« sind der einzige Fall, in dem ein leerer
+            // Balken allein zu wenig ist — das Spiel haelt die Einheit dann an
+            // (@0x407ab8), und das gehoert gesagt.
             _panel.Text =
-                $"{LabelOf(e.UnitType).ToUpper()}\n" +
-                $"SPIELER {(e.Owner < 0 ? "?" : e.Owner.ToString())}  TEAM {e.Team}\n" +
-                $"ENERGIE {e.Hp}/{e.HpMax}\n" +
-                $"{MountName(e).ToUpper()}\n" +
-                (levels.Length > 0 ? levels : $"ZELLE {e.Col},{e.Row}") + "\n" +
-                warn;
+                $"{(e.Name.Length > 0 ? e.Name : LabelOf(e.UnitType)).ToUpper()}\n" +
+                (warn == st ? "" : warn);
+            ShowPanelBars(e);
         }
         else
         {

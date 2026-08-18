@@ -11,7 +11,12 @@ using System.Text;
 ///
 /// <para><b>Warum es gebraucht wird</b> (11.08.2026): der Missionsblock von
 /// Mission 1 @0x49844D ruft <c>show_text</c> @0x401A69 und <c>show_text2</c>
-/// @0x401D66 siebzehnmal, mit den Nummern 1..13, 18, 20, 39, 40 und 110 — und
+/// @0x401D66 siebzehnmal, mit den Nummern 1..6, 8..13, 18, 20, 39, 40 und 110
+/// — ⚠ <b>BERICHTIGT 18.08.2026</b>: hier stand »1..13«, und das war eine
+/// Nummer zu grosszügig. <b>#007 wird in Mission 1 nicht aufgerufen</b>
+/// (»Untersuchen Sie das @Einheiten @Menü mit einem Doppelklick«) — zwölf
+/// Nummern aus 1..13 plus fünf, das sind die siebzehn. Nachgezählt am Block,
+/// auf beiden GAME.EXE gleich, und —
 /// genau das ist der tutorialartige Ablauf, den das Original dort hat:
 /// »Willkommen bei Akte Europa« (#001), »Sie können eine Einheit @ANWÄHLEN«
 /// (#002), »Zum @BEWEGEN der angewählten Einheit…« (#004), »Für den @ANGRIFF…«
