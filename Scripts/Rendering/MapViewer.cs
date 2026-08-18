@@ -2937,6 +2937,42 @@ public partial class MapViewer : Node2D
             _endWindow.SetFont(_legacyFont, LegacyFontCell * LegacyFontScale);
     }
 
+    private UI.GraceWindow? _graceWindow;
+    private CanvasLayer? _graceLayer;
+
+    /// <summary>Das Fenster »Mission beendet / Zeit für unbeendete
+    /// Untermissionen« auf- und zumachen und seinen Zähler nachführen.
+    /// Gebaut wird es erst, wenn es gebraucht wird — die meisten Missionen
+    /// sehen es nie.</summary>
+    private void UpdateGraceWindow()
+    {
+        int rest = _entities.MissionGrace;
+        if (rest < 0)
+        {
+            if (_graceLayer != null) _graceLayer.Visible = false;
+            return;
+        }
+        if (_graceWindow == null)
+        {
+            // ⚠ Ebene 92: ÜBER den Hilfefenstern der Mission (90), UNTER der
+            // Abrechnung (95). Dieselbe Reihenfolge, die BuildEndBanner sich
+            // schon einmal einhandeln musste.
+            _graceLayer = new CanvasLayer { Layer = 92 };
+            AddChild(_graceLayer);
+            _graceWindow = new UI.GraceWindow();
+            _graceLayer.AddChild(_graceWindow);
+            _graceWindow.OnFinish = () => _entities.FinishGrace();
+            if (_legacyFont != null)
+                _graceWindow.SetFont(_legacyFont, LegacyFontCell * LegacyFontScale);
+            // Oben rechts, wo im Bildschirmfoto die freischwebenden Fenster des
+            // Originals sitzen (⚠ unsere Stelle — das Original setzt sie aus
+            // seiner eigenen Fenstertafel).
+            _graceWindow.Position = new Vector2(GetViewportRect().Size.X - 260, 40);
+        }
+        _graceLayer!.Visible = true;
+        _graceWindow.SetRest(rest);
+    }
+
     private void ToMenu()
     {
         UI.SkirmishSetup.Active = false;
@@ -3294,6 +3330,7 @@ public partial class MapViewer : Node2D
         // sonst allein an der MAUSBEWEGUNG, und die vier roten Dreiecke des
         // Angriffszeigers blieben stehen, sobald die Hand stillhaelt. Im
         // Original wandern sie weiter.
+        UpdateGraceWindow();
         _cursorTime += (float)delta;
         if (_lastMapPos != null) UpdateCursor(_lastMapPos.Value);
         PortraitCheckTick();

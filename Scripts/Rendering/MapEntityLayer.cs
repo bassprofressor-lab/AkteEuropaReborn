@@ -9861,15 +9861,39 @@ public partial class MapEntityLayer : Node2D
             ? $"obj_owner({c.A}){c.Op}{c.B}"
             : $"{c.Kind}({c.A},{c.B}){c.Op}{c.C}";
 
+    /// <summary>Der Rest der Nachfrist für offene Untermissionen, oder −1.
+    /// Siehe <see cref="Campaign.MissionScript.TickGrace"/>.</summary>
+    public int MissionGrace => _mscript?.Grace ?? -1;
+
+    /// <summary>Die Nachfrist abbrechen — was der Knopf »Beenden« tut.</summary>
+    public void FinishGrace() => _mscript?.EndGraceNow();
+
     public string Verdict()
     {
-        // A mission that carries its own script is judged by it and by nothing
-        // else — that script is the original's condition, the fallback below is
-        // ours.
+        // Eine Mission mit eigenem Skript wird von IHM beurteilt und von nichts
+        // sonst — das Skript ist die Bedingung des Originals, die Notregel
+        // darunter ist unsere.
         if (_mscript != null && _mscript.Decides)
-            return _mscript.Ended
-                ? (_mscript.Success ? "MISSION ERFUELLT" : "MISSION GESCHEITERT")
-                : "";
+        {
+            if (_mscript.Ended)
+                return _mscript.Success ? "MISSION ERFUELLT" : "MISSION GESCHEITERT";
+            // ⚠⚠ 18.08.2026 — EINE AUSNAHME, UND WARUM SIE NÖTIG IST. Hier
+            // stand nur `return ""`, und das war jahrelang eine LEISE
+            // Fehlfunktion: keine einzige Kampagnenmission hatte eine
+            // Niederlageregel (der Leser kannte die zweite Endfunktion nicht),
+            // und dieser Zweig schaltete zugleich die Notregel ab. Der Spieler
+            // konnte also alles verlieren — jede Einheit, jedes Gebäude — und
+            // die Mission lief weiter. Nichts stuerzte ab, nichts meldete
+            // etwas; das Spiel war nur unverlierbar.
+            //
+            // Jetzt haben 31 der 33 Missionen ihre eigenen Niederlageregeln,
+            // und für die gilt weiterhin: das Skript entscheidet allein.
+            // Bei den drei ohne springt die Notregel ein — das ist UNSERE
+            // Zutat und ausdrücklich ein Ersatz, kein gelesenes Verhalten.
+            if (!_mscript.HasDefeat && AssetsOf(ViewPlayer) == 0)
+                return "MISSION GESCHEITERT";
+            return "";
+        }
 
         // A skirmish does not need the map's own player table — the NET maps
         // carry none at all. Judge it by what is left standing instead.

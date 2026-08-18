@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Campaign;
+﻿namespace AkteEuropaReborn.Campaign;
 
 using System;
 using System.Collections.Generic;
@@ -289,6 +289,33 @@ public sealed class MissionScript
     /// of the truncated-chain bug it fixes. So an end rule counts only when
     /// every variable it tests is one that some translated rule writes.
     /// </summary>
+    /// <summary>
+    /// Kennt dieses Skript überhaupt eine NIEDERLAGE?
+    ///
+    /// <para>Bis zum 18.08.2026 kannte kein einziges eine: die Vokabel
+    /// <c>end(a=0)</c> stand im Wortverzeichnis und wurde nie benutzt, weil der
+    /// Leser nur die eine Endfunktion (<c>mission_end</c>) kannte und nicht die
+    /// zweite (0x4D0280, setzt den Missionszustand auf 5000 statt auf 1). Siehe
+    /// <c>aekernel-tools/mission_loserules.py</c>.</para>
+    ///
+    /// <para>Jetzt haben 31 der 33 Missionen mindestens eine. Für die drei
+    /// übrigen — M10 (eine imap-Zelle, nur auf einer Fassung lesbar), M14
+    /// (auf keiner) und M28 (die Kette ist unvollständig, ein
+    /// <c>unit_alive</c>-Glied fehlt) — braucht <c>Verdict()</c> genau diese
+    /// Auskunft, um seine Notregel nur dort einspringen zu lassen, wo wirklich
+    /// nichts gelesen ist.</para>
+    /// </summary>
+    public bool HasDefeat
+    {
+        get
+        {
+            foreach (var r in _script.Rules)
+                foreach (var a in r.Then)
+                    if (a.Kind == "end" && a.A == 0) return true;
+            return false;
+        }
+    }
+
     public bool Decides
     {
         get
@@ -1738,6 +1765,10 @@ public sealed class MissionScript
             TickIncoming();
             Step(_ticks % BlockPeriod == 0);
             _ticks++;
+            // Die Nachfrist NACH dem Block: das Original prueft sie im
+            // Hauptlauf (0x4160FC), also nachdem der Missionsblock gelaufen
+            // ist und eine Untermission gerade noch erfuellt haben kann.
+            TickGrace();
         }
     }
 
@@ -2240,8 +2271,22 @@ public sealed class MissionScript
                 if (a.A >= 0 && a.A < _var.Length) _var[a.A] = Minutes;
                 break;
             case "end":
+                // ⚠ EIN SIEG ENDET NICHT SOFORT, wenn noch eine Untermission
+                // offen ist — siehe TickGrace. Bis zum 18.08.2026 tat er das,
+                // und damit fehlte genau das Fenster, das der Spieler
+                // photographiert hat.
+                if (a.A != 0 && Grace < 0 && OpenObjectives() > 0)
+                {
+                    Grace = GraceSteps;
+                    _graceMinute = Minutes;
+                    GD.Print($"Missionsskript {_script.Mission}: Ziel erreicht, " +
+                             $"aber {OpenObjectives()} Untermissionen offen — " +
+                             $"Nachfrist {Grace}");
+                    break;
+                }
                 _ended = true;
                 Success = a.A != 0;
+                Grace = -1;
                 GD.Print($"Missionsskript {_script.Mission}: " +
                          (Success ? "Mission erfolgreich beendet" : "Mission gescheitert") +
                          $" nach {Minutes} Minuten, {RulesFired + 1} Regeln");
@@ -2508,6 +2553,104 @@ public sealed class MissionScript
     /// Untermission mit den Schiffen. Wer sie erfuellte, bekam Geld und einen
     /// Klang, aber nirgends eine Bestaetigung — gemeldet als »die Nebenmission
     /// laesst sich nicht sauber abschliessen«.</para></summary>
+    /// <summary>
+    /// Wie viele Untermissionen noch OFFEN sind.
+    ///
+    /// <para>⚠ Nicht dasselbe wie <see cref="Objectives"/>: das überspringt
+    /// Plätze ohne Textnummer, weil es eine ANZEIGE ist. Der Zähler des
+    /// Originals fragt nur nach dem Zustand, und einen Platz ohne Text gibt es
+    /// (M5 hat einen). Würde man hier dieselbe Liste nehmen, endete die
+    /// Mission bei M5 zu früh.</para>
+    ///
+    /// <para><b>Gelesen</b> aus der Schleife @0x416D1E..0x416D42: sie läuft
+    /// über 0xBC575A..0xBC5796 in Schritten von 2 — das sind bei VAR_BASE
+    /// 0xBC5690 genau die <b>30 Wörter ab v[101]</b> — und zählt einen Platz
+    /// als offen, wenn er weder <c>0</c> (unbenutzt) noch <c>&gt;= 10</c>
+    /// (erfüllt) ist. Also <b>1..9</b>.</para>
+    /// </summary>
+    public int OpenObjectives()
+    {
+        int n = 0;
+        for (int k = 0; k < 30; k++)
+        {
+            int st = 101 + k;
+            if (st >= _var.Length) break;
+            if (_var[st] >= 1 && _var[st] < 10) n++;
+        }
+        return n;
+    }
+
+    /// <summary>Wie viele Schritte die Nachfrist hat: <c>byte[0x4F6FA4] = 0xA</c>
+    /// @0x416D11.</summary>
+    public const int GraceSteps = 10;
+
+    /// <summary>Der Rest der Nachfrist, oder −1, solange keine läuft. Das ist
+    /// die Zahl, die im Fenster hinter »00:« steht — der Spieler hat sie als
+    /// »ZEIT FÜR UNBEENDETE UNTERMISSIONEN 00:09« photographiert.</summary>
+    public int Grace { get; private set; } = -1;
+
+    private int _graceMinute = -1;
+
+    /// <summary>
+    /// <b>DIE NACHFRIST FÜR OFFENE UNTERMISSIONEN.</b>
+    ///
+    /// <para><c>mission_end</c> beendet die Mission <b>nicht</b>, solange eine
+    /// Untermission offen ist — es setzt das Phasenbyte <c>0x4F6FA0</c> auf 1
+    /// und kehrt zurück. Der Hauptlauf sieht die 1 (@0x416CF0), setzt sie auf
+    /// 2, öffnet das Fenster (<c>push 0xA; call 0x401F32</c>) und setzt
+    /// <c>byte[0x4F6FA4] = 0xA</c>. Danach gilt:
+    /// <list type="bullet">
+    /// <item>Jede Spielminute geht der Zähler um eins herunter (@0x4160FC).</item>
+    /// <item>Steht er auf 0, endet die Mission trotzdem — als <b>SIEG</b>
+    /// (<c>word[0x4FA280] = 1</c> @0x41612C).</item>
+    /// <item>Sind vorher alle Untermissionen erledigt, endet sie sofort, ebenso
+    /// als Sieg (@0x416D48).</item>
+    /// </list></para>
+    ///
+    /// <para>⚠ <b>Der Takt.</b> Das Original zählt an einem Minutenmerker
+    /// herunter, den der Hauptlauf alle 250 Takte setzt — bei
+    /// <see cref="TicksPerSecond"/> ist das eine SPIELMINUTE. Wir hängen den
+    /// Zähler darum an <see cref="Minutes"/> und rechnen die 250 nicht nach:
+    /// dieselbe Uhr, ein Rechenweg weniger.</para>
+    ///
+    /// <para>⚠ Nur der SIEG kennt die Nachfrist. Die Niederlage (0x4D0280) ist
+    /// ein Zweizeiler ohne jede Prüfung und wirkt sofort.</para>
+    /// </summary>
+    private void TickGrace()
+    {
+        if (Grace < 0 || _ended) return;
+        if (OpenObjectives() == 0)
+        {
+            _ended = true;
+            Success = true;
+            Grace = -1;
+            GD.Print($"Missionsskript {_script.Mission}: alle Untermissionen " +
+                     "erledigt, Mission erfolgreich beendet");
+            return;
+        }
+        if (Minutes == _graceMinute) return;
+        _graceMinute = Minutes;
+        Grace--;
+        if (Grace > 0) return;
+        _ended = true;
+        Success = true;
+        Grace = -1;
+        GD.Print($"Missionsskript {_script.Mission}: Nachfrist abgelaufen, " +
+                 $"{OpenObjectives()} Untermissionen offen, Mission beendet");
+    }
+
+    /// <summary>Die Nachfrist von Hand beenden — der Knopf »Beenden«.
+    /// ⚠ UNSERE Deutung: das Original hat den Knopf, seine Wirkung ist
+    /// ungelesen. Hier tut er dasselbe wie ein abgelaufener Zähler.</summary>
+    public void EndGraceNow()
+    {
+        if (Grace < 0 || _ended) return;
+        Grace = -1;
+        _ended = true;
+        Success = true;
+        GD.Print($"Missionsskript {_script.Mission}: Nachfrist von Hand beendet");
+    }
+
     public List<(int Text, int State)> Objectives()
     {
         var list = new List<(int, int)>();
