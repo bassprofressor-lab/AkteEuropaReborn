@@ -185,7 +185,97 @@ public static class CampaignManager
         }
     }
 
-    public static void Reset() { Completed = 0; Balance = 0; }
+    /// <summary>
+    /// <b>DER KONTOSTAND, MIT DEM EINE MISSION BEGONNEN HAT.</b>
+    ///
+    /// <para>⚠⚠ 18.08.2026, gemeldet: »das ist doof, wenn jemand Kampagne 1
+    /// immer und immer wieder spielen will, dann hat er ja immer einen
+    /// grösseren Kontostand, bloss weil er schon in Wirklichkeit bei
+    /// Kampagne 22 ist.«</para>
+    ///
+    /// <para>Er hat recht, und der Grund ist die Bauart: <see cref="Balance"/>
+    /// ist EINE laufende Zahl. Wer Mission 1 zum zweiten Mal spielt, bringt
+    /// den Stand von Mission 22 mit — das Original kann das nicht anders
+    /// gemeint haben, denn dort ist der Kontostand die Kette der Missionen
+    /// <i>dieses</i> Durchlaufs.</para>
+    ///
+    /// <para>Gemerkt wird darum der Stand <b>beim Beginn jeder Mission</b>.
+    /// Wird eine schon geschaffte Mission noch einmal begonnen, gilt wieder
+    /// ihr eigener Anfangsstand statt des aktuellen.</para>
+    ///
+    /// <para>⚠ <b>UNSERE SETZUNG</b>, und sie ist es doppelt: das Original
+    /// führt (soweit gelesen) keine solche Tabelle, und ob es Wiederholen
+    /// überhaupt vorsieht, ist nicht gelesen — sein Menü kennt nur »Neues
+    /// Spiel« und »Spiel laden«. Die Missionsübersicht, aus der man eine
+    /// geschaffte Mission erneut wählt, ist ohnehin unsere Zutat
+    /// (<see cref="UI.CampaignScreen"/>).</para></summary>
+    public static int StartBalanceOf(int mission)
+    {
+        using var c = new ConfigFile();
+        if (c.Load(SavePath) != Error.Ok) return 0;
+        var v = c.GetValue("mission_balance", mission.ToString(), -1);
+        return (int)v;
+    }
+
+    /// <summary>Den Anfangsstand dieser Mission festhalten — beim ERSTEN Mal.
+    /// ⚠ Ein zweiter Anlauf darf ihn nicht überschreiben, sonst wäre die
+    /// Tabelle nach einem Wiederholungslauf wieder die laufende Zahl.</summary>
+    public static void NoteStartBalance(int mission, int value)
+    {
+        if (mission <= 0 || StartBalanceOf(mission) >= 0) return;
+        using var c = new ConfigFile();
+        c.Load(SavePath);
+        c.SetValue("mission_balance", mission.ToString(), value);
+        c.Save(SavePath);
+    }
+
+    /// <summary>Womit diese Mission zu beginnen hat: ihr gemerkter
+    /// Anfangsstand, sonst der laufende. Und der gemerkte wird dabei
+    /// angelegt, falls er fehlt.</summary>
+    public static int BalanceForStartOf(int mission)
+    {
+        int gemerkt = StartBalanceOf(mission);
+        if (gemerkt >= 0) return gemerkt;
+
+        // ⚠⚠ KEIN EINTRAG — und dann entscheidet, ob die Mission SCHON
+        // GESCHAFFT ist. Das ist der Fall, den die Meldung meint: ein
+        // Spielstand aus der Zeit vor dieser Tabelle hat für Mission 1 nichts
+        // gemerkt, und der laufende Stand ist der von Mission 22.
+        //
+        //  * Mission 1 beginnt mit 0. Das ist BELEGT, nicht gesetzt — siehe
+        //    den Nachweis bei <see cref="Balance"/> (0 + 320 + 150 = 470 auf
+        //    dem Bildschirmfoto des Spielers).
+        //  * Eine andere schon geschaffte Mission bekommt die Summe der
+        //    Missionsbezahlungen davor. ⚠ Das ist eine REKONSTRUKTION und als
+        //    solche ungenau: was IN einer Mission verdient wurde (Mission 1
+        //    holt 150 aus drei Schiffen), fehlt darin. Sie ist trotzdem
+        //    ungleich näher als der laufende Stand — und sie wird nur einmal
+        //    gebraucht, danach steht der Eintrag.
+        //  * Eine noch NICHT geschaffte Mission ist der Normalfall: dort ist
+        //    der laufende Stand genau richtig.
+        int wert;
+        if (mission > Completed) wert = Balance;
+        else if (mission <= 1) wert = 0;
+        else
+        {
+            wert = 0;
+            for (int m = 1; m < mission; m++) wert += PayFor(m);
+        }
+        NoteStartBalance(mission, wert);
+        return wert;
+    }
+
+    public static void Reset()
+    {
+        Completed = 0;
+        Balance = 0;
+        // ⚠ Auch die gemerkten Anfangsstaende — sonst schleppte ein neuer
+        // Durchlauf die Zahlen des alten mit, und genau das war die Meldung.
+        using var c = new ConfigFile();
+        c.Load(SavePath);
+        if (c.HasSection("mission_balance")) c.EraseSection("mission_balance");
+        c.Save(SavePath);
+    }
 
     // ---- die Missionsbezahlung ---------------------------------------------
 

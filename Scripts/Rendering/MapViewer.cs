@@ -324,10 +324,21 @@ public partial class MapViewer : Node2D
                              "(geschaffte Missionen und Kontostand) auf 0 gesetzt");
                 }
                 int geschafft = Campaign.CampaignManager.Completed;
-                int mit = Campaign.CampaignManager.Balance;
+                // ⚠⚠ 18.08.2026 — DER ANFANGSSTAND DIESER MISSION, nicht der
+                // laufende. Gemeldet: »das ist doof, wenn jemand Kampagne 1
+                // immer und immer wieder spielen will, dann hat er ja immer
+                // einen groesseren Kontostand, bloss weil er schon in
+                // Wirklichkeit bei Kampagne 22 ist.«
+                // Siehe CampaignManager.BalanceForStartOf.
+                int mit = Campaign.CampaignManager.BalanceForStartOf(
+                              UI.SkirmishSetup.CampaignMission);
                 _entities.SetStartMoney(me, mit);
                 GD.Print($"Kampagne: Mission {UI.SkirmishSetup.CampaignMission} " +
                          $"beginnt mit Kontostand ${mit}" +
+                         (Campaign.CampaignManager.Balance != mit
+                             ? $" (gemerkter Anfangsstand dieser Mission; laufend waeren es " +
+                               $"${Campaign.CampaignManager.Balance})"
+                             : "") +
                          (mit != 0 || geschafft != 0
                              ? $"   ⚠ AUS DEM SPIELSTAND {Campaign.CampaignManager.SavePath} " +
                                $"({geschafft} Missionen geschafft) — fuer eine Geldmessung " +

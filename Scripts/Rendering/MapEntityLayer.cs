@@ -793,6 +793,10 @@ public partial class MapEntityLayer : Node2D
         /// bekommt einen Heli, der zappelt statt zu fliegen.</summary>
         public Vector2? HomePoint;
 
+        /// <summary>Wo auf seinem Warteschleifenbogen es gerade steht — siehe
+        /// <c>AirPatrol</c>. ⚠ Unsere Zutat.</summary>
+        public float PatrolPhase;
+
         /// <summary>
         /// <b>Wohin der SPIELER dieses Flugzeug geschickt hat</b> — gesetzt,
         /// heisst: alles Selbständige ruht, bis es dort ist.
@@ -1176,8 +1180,38 @@ public partial class MapEntityLayer : Node2D
     ///
     /// <para>⚠ Nie Gesehenes bleibt schwarz — das ist unverändert und im
     /// Original genauso.</para></summary>
-    private static readonly Color FogSeen = new(0, 0, 0, 0f);
-    private static readonly Color FogUnseen = new(0, 0, 0, 1f);
+    private static readonly Color FogSeen = new(0, 0, 0, FogDim);
+    private static readonly Color FogUnseen = new(0, 0, 0, FogDim);
+
+    /// <summary>
+    /// <b>WIE STARK DER NEBEL IST — und warum beide Zustände denselben Wert
+    /// haben.</b>
+    ///
+    /// <para>⚠⚠ 18.08.2026, <b>zweite Berichtigung an derselben Stelle.</b>
+    /// Erst lagen hier 45 % Schwarz auf »gesehen« und 100 % auf »nie
+    /// gesehen«. Dann las ich aus zwei Bildern »das Gelände ist voll hell« und
+    /// setzte auf 0 — auch das war falsch. Der Spieler hat es dann in Worte
+    /// gefasst, und die sind eindeutig:</para>
+    ///
+    /// <para><i>»Die ganze Karte ist so gesehen im Original sichtbar, jedoch
+    /// schon mit einem leichten Nebel bedeckt. Man hat eben nur den hellen und
+    /// sichtbaren Bereich dank der Einheit; ist diese aber aus dem Bereich
+    /// raus, wird er wieder so leicht nebelig.«</i></para>
+    ///
+    /// <para>Also <b>zwei</b> Zustände, nicht drei, und <b>kein Schwarz</b>:
+    /// beobachtet = klar, alles andere = leichter Nebel. Genau das steht hier;
+    /// »gesehen« und »nie gesehen« bekommen darum denselben Wert.</para>
+    ///
+    /// <para>⚠ <b>Die ZAHL ist gewählt, nicht gemessen.</b> Die
+    /// Vergleichsbilder sind Videoaufnahmen; auf keiner der sechzehn ist eine
+    /// Nebelkante zu sehen, an der sich eine Deckkraft ablesen liesse — das
+    /// wurde versucht. 30 % ist »leicht« im Sinne der Beschreibung: das
+    /// Gelände bleibt erkennbar, der beobachtete Bereich hebt sich ab. Wer es
+    /// anders will, dreht diese eine Zahl.</para>
+    ///
+    /// <para>Gegenprobe: <c>--nebel-alt</c> stellt den alten Zustand her
+    /// (45 % auf gesehen, undurchsichtig auf nie gesehen).</para></summary>
+    private const float FogDim = 0.30f;
 
     /// <summary><c>--nebel-alt</c> — die Gegenprobe: der Grauschleier von vor
     /// dem 18.08.2026, damit der Unterschied im Bild messbar bleibt.</summary>
@@ -1331,7 +1365,7 @@ public partial class MapEntityLayer : Node2D
         // frame time, and the picture is only three distinct colours
         _fogPixels ??= new byte[w * h * 4];
         byte seen = (byte)((FogDimOld ? 0.45f : FogSeen.A) * 255f),
-             unseen = (byte)(FogUnseen.A * 255f);
+             unseen = (byte)((FogDimOld ? 1f : FogUnseen.A) * 255f);
         for (int r = 0, i = 0; r < h; r++)
             for (int c = 0; c < w; c++, i += 4)
             {
@@ -21267,7 +21301,7 @@ public partial class MapEntityLayer : Node2D
             // NICHT passieren darf: dass er wieder losfliegt, sobald er steht.
             // AirHeadHome lagert ihn am Flughafen ein, und der Parkzweig oben
             // faengt ihn dann ab.
-            if (a.Target < 0 && a.PlayerGoal == null) { if (AirHeadHome(a)) continue; }
+            if (a.Target < 0 && a.PlayerGoal == null) { AirPatrol(a); goto move; }
 
             if (a.Target >= 0)
             {
@@ -21410,6 +21444,65 @@ public partial class MapEntityLayer : Node2D
     /// 25) widersprechen »Winkel in Grad« nur nicht, sie stützen es nicht.
     /// <b>Wer hier etwas ändert, prüfe das Ergebnis im BILD</b> — eine Zahl gibt
     /// es dafür bisher nicht.</para></summary>
+    /// <summary>
+    /// <b>OHNE ZIEL KREIST ES ÜBER SEINEM FLUGHAFEN.</b>
+    ///
+    /// <para>⚠⚠ 18.08.2026, <b>zweite Berichtigung an derselben Stelle.</b>
+    /// Erst flog ein Flugzeug ohne Ziel stur geradeaus aus der Karte. Dann
+    /// baute ich eine Randsperre — das war die Fessel, nicht die Kur, und der
+    /// Spieler meldete es prompt wieder. Dann liess ich es HEIMFLIEGEN und
+    /// landen; auch das war falsch, und er sagt warum:</para>
+    ///
+    /// <para><i>»Jetzt ist es so, man baut einen Flieger, will ihn entsenden,
+    /// dann hat man ihn nicht mehr greifbar. Eine Schleife um den Flughafen bis
+    /// Gegner auftauchen wäre praktisch.«</i></para>
+    ///
+    /// <para>Er hat recht, und der Grund ist handfest: ein gelandetes Flugzeug
+    /// steht AUF seinem Flughafen, und dort gewinnt beim Klick das Gebäude —
+    /// zu Recht. Ein Flugzeug, das man nicht mehr anklicken kann, ist für den
+    /// Spieler weg.</para>
+    ///
+    /// <para>Es kreist jetzt in einem festen Bogen um seinen Flughafen und
+    /// bleibt damit greifbar; die Zielsuche läuft nebenher weiter, ein
+    /// auftauchender Gegner holt es also sofort heraus.</para>
+    ///
+    /// <para>⚠ <b>UNSERE SETZUNG, ganz und gar.</b> Das Original kennt für die
+    /// Kampfarten (1 Jagdflieger, 2 Bomber, 10 Kampfhubschrauber) eigene
+    /// Zweige (@0x422fa7, @0x423081, @0x4230c9), und die sind <b>nicht bis zum
+    /// Ende gelesen</b> — ob dort gekreist, gewartet oder gelandet wird, steht
+    /// hier nicht. Auch Bogenweite und Umlaufzeit sind gewählt. Was gelesen
+    /// ist, bleibt der Heimflug für den Fall »kein Sprit / keine Munition«
+    /// (siehe <c>AirFuelHome</c>) — der greift weiterhin und geht vor.</para>
+    ///
+    /// <para>Ohne Flughafen gibt es nichts zu umkreisen; dann bleibt es beim
+    /// Heimflug, der sich in dem Fall selbst um einen Ersatz kümmert.</para></summary>
+    private void AirPatrol(Special a)
+    {
+        var feld = a.HomeSlot < 0 ? null
+                 : _entities.Find(x => x.IsBuilding && x.Slot == a.HomeSlot && !x.Dead);
+        feld ??= NearestAirfield(a);
+        if (feld == null) { AirHeadHome(a); return; }
+
+        a.HomeSlot = feld.Slot;
+        a.PatrolPhase += PatrolStep;
+        if (a.PatrolPhase >= Mathf.Tau) a.PatrolPhase -= Mathf.Tau;
+        a.Goal = feld.Pos + new Vector2(Mathf.Cos(a.PatrolPhase) * PatrolRadiusX,
+                                        Mathf.Sin(a.PatrolPhase) * PatrolRadiusY);
+    }
+
+    /// <summary>⚠ UNSERE SETZUNG: wie weit der Bogen reicht. Vier Zellen breit
+    /// und vier hoch (in Bildpunkten, also 4·40 und 4·20) — weit genug, dass
+    /// das Flugzeug neben dem Flughafen steht und anklickbar bleibt, eng
+    /// genug, dass es nicht über die halbe Karte zieht.</summary>
+    private const float PatrolRadiusX = 4 * TileW, PatrolRadiusY = 4 * TileH;
+
+    /// <summary>⚠ UNSERE SETZUNG: wie schnell der Bogen weiterwandert. Ein
+    /// Hundertstel Vollkreis je Takt — bei SimHz 60 also rund anderthalb
+    /// Sekunden je Umlauf des ZIELpunkts; das Flugzeug selbst hinkt ihm mit
+    /// seiner eigenen Geschwindigkeit hinterher und fliegt dadurch die
+    /// Schleife.</summary>
+    private const float PatrolStep = Mathf.Tau / 100f;
+
     private void AirDrift(Special a, float dt)
     {
         if (a.Fuel <= 0) return;                 // ohne Sprit fliegt nichts
