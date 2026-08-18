@@ -22679,7 +22679,20 @@ public partial class MapEntityLayer : Node2D
             DrawRect(AirRect(_special[_selAir]), new Color(0.3f, 1f, 0.3f, 0.9f),
                      false, 2f);
 
-        if (_selected >= 0)
+        // ⚠⚠ 18.08.2026 — DER FARBIGE KASTEN UEBER DER HAUPTAUSWAHL IST WEG.
+        // Er lag als gefuelltes Rechteck in der Spielerfarbe ueber dem
+        // Fahrzeug und war auf jedem Bildschirmfoto das Auffaelligste am
+        // ganzen Bild — ein blauer Block mitten auf der Einheit.
+        //
+        // Das Original markiert die Auswahl mit den VIER WINKELN und mit sonst
+        // nichts (siehe DrawSelectionBrackets, am abgefilmten Original
+        // ausgemessen). Der Kasten war von uns und ist jetzt doppelt.
+        //
+        // ⚠ Er bleibt fuer den Fall OHNE BILDER: wo die Bildbank nichts
+        // hergibt, zeichnet der Rueckfall nur einen Punkt, und dann ist der
+        // Rahmen das Einzige, woran man die Auswahl sieht. Derselbe Grund, aus
+        // dem der Besitzerpunkt dort bestehen bleibt.
+        if (_selected >= 0 && !_drawSprites)
         {
             var e = _entities[_selected];
             var col = e.IsProp ? PropColor : OwnerColor(e.Owner);
