@@ -1527,6 +1527,11 @@ public sealed class MissionScript
     public Func<int, int>? KillCount;                // spieler -> ausgeschaltet
     public Func<int, int>? LossCount;                // spieler -> Verluste
 
+    /// <summary>(spieler, teil) -&gt; Platz der ersten Einheit, die das Bauteil
+    /// traegt, oder 0xFFFF. Routine 0x4D0FB0 — siehe
+    /// <c>MapEntityLayer.FindUnitWithPart</c>.</summary>
+    public Func<int, int, int>? FindPart;
+
     /// <summary>
     /// <b>Hält Spieler <i>p</i> die Bahnverbindung <i>n</i>?</b> — der Haken,
     /// an dem Mission 21 hängt. <c>(Linie, Spieler)</c>.
@@ -1903,6 +1908,11 @@ public sealed class MissionScript
                           Cmp(_var[c.A] + c.C, c.Op, KillCount(c.B)),
         // Lebt der Einheitensatz a? (+0x09 != 0xFF im Original)
         "unit_alive" => UnitAlive != null && Cmp(UnitAlive(c.A) ? 1 : 255, c.Op, 255),
+        // find_unit_with_part(spieler, teil) gegen 0xFFFF — »traegt noch
+        // irgendeine Einheit dieses Spielers dieses Bauteil?«. Das Original
+        // vergleicht den Rueckgabewert selbst (0x49F3C7, 0x4A18C5), darum
+        // steht die Schranke in c.C und nicht fest im Code.
+        "find_part" => FindPart != null && Cmp(FindPart(c.A, c.B), c.Op, c.C),
         // Brückenplatz a belegt?
         "bridge" => BridgeUsed != null && Cmp(BridgeUsed(c.A), c.Op, c.B),
         "kills" => KillCount != null && Cmp(KillCount(c.A), c.Op, c.B),
@@ -2588,6 +2598,7 @@ public sealed class MissionScript
         "unit_field" => $"Einheit v[{c.A}]={Var(c.A)} Feld+{c.B}{c.Op}{c.C}",
         "unit_index" => $"find_unit(P{c.A},Marke{c.B}){c.Op}{c.C}",
         "unit_is_var" => $"Einheit v[{c.A}]={Var(c.A)} hat Marke {c.B}{c.Op}{c.C}",
+        "find_part" => $"Bauteil {c.B} bei P{c.A}{c.Op}{c.C}",
         "rail_link" => $"Bahnlinie {c.A} gehoert P{c.B}",
         "units_mark" => $"Marke({c.A},P{c.B}){c.Op}{c.C}",
         "time_gt" => $"Spielminute>{c.A}",
@@ -2763,6 +2774,7 @@ public sealed class MissionScript
         "selected" => Selection != null,
         "units_mark" => MarkCount != null,
         "unit_is" or "unit_is_var" => UnitHasMark != null,
+        "find_part" => FindPart != null,
         "rail_link" => RailLinkHeld != null,
         "money_of" => MoneyOf != null,
         "kills" => KillCount != null,

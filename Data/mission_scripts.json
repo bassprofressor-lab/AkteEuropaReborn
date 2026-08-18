@@ -8813,6 +8813,55 @@
      ]
     },
     {
+     "_at": "0x49F3CD",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49F3EB",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49F3FA",
+       "a": 1500,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "_at": "0x49F402",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 171,
+       "c": 65535,
+       "kind": "find_part",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_abgerollt": "Schleife 0x49F418..0x49F431, Durchlauf 19",
      "_at": "0x49F418",
      "then": [
@@ -13235,6 +13284,58 @@
        "b": 192,
        "c": 0,
        "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A18CB",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x4A18EC",
+       "a": 346,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x4A18FB",
+       "a": 2000,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "_at": "0x4A1903",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "kind": "block_gate"
+      },
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 2,
+       "b": 171,
+       "c": 65535,
+       "kind": "find_part",
        "op": "=="
       }
      ]
@@ -20918,6 +21019,56 @@
        "c": 1,
        "kind": "objects",
        "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A4C1C",
+     "_tut_ausserdem": "show_text",
+     "then": [
+      {
+       "a": 30,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A4C31",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "kind": "block_gate"
+      },
+      {
+       "a": 30,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 6,
+       "b": 171,
+       "c": 65535,
+       "kind": "find_part",
+       "op": "=="
+      },
+      {
+       "a": 5,
+       "b": 171,
+       "c": 65535,
+       "kind": "find_part",
+       "op": "=="
+      },
+      {
+       "a": 4,
+       "b": 171,
+       "c": 65535,
+       "kind": "find_part",
+       "op": "=="
       }
      ]
     },

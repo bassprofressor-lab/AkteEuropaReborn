@@ -234,6 +234,13 @@ public partial class MapEntityLayer : Node2D
         public int StockW, StockF, StockS;  // stored Waffen / Fahrwerk / Spezial parts
         public int Deposit = -1;            // Terranium left in the ground (sec28)
         public int DepositStart;            // what it held when the map was saved
+        /// <summary>Die zwei Bauteilbytes, die <c>find_unit_with_part</c> neben
+        /// <see cref="Equipment"/> (+0x10) abfragt: Satz +0x0D und +0x0F. Roh,
+        /// ohne Deutung — <see cref="Armed"/> und <see cref="ShipVariant"/>
+        /// lesen dasselbe Byte +0x0D, aber als Fahne bzw. als Bildvariante.
+        /// </summary>
+        public int Comp0D, Comp0F;
+
         public int Grade;                   // deposit grade 0..6 (sec28 +0x0a)
         public int StockT;                  // Terranium stored in the building (+0x2e)
         public float EconTimer;             // seconds until the next economy tick
@@ -2277,6 +2284,15 @@ public partial class MapEntityLayer : Node2D
                     Elev = el,
                     Facing = facing,
                     Equipment = haveRaw ? HexByte(raw, 0x10) : 0,
+                    // ⚠ +0x0D und +0x0F ALS ZAHL. Beide Bytes werden hier
+                    // schon gelesen, aber gedeutet: +0x0D als Waffenfahne
+                    // (`Armed`) bzw. als Schiffsvariante, +0x0F gar nicht.
+                    // `find_unit_with_part` @0x4D0FB0 braucht sie ROH: es
+                    // vergleicht das gesuchte Bauteil gegen +0x0D, +0x0F UND
+                    // +0x10 (0x4D0FFE, 0x4D1006, 0x4D100E) — drei Bauteilplaetze
+                    // je Einheit, und +0x0E ist NICHT darunter.
+                    Comp0D = haveRaw ? HexByte(raw, 0x0d) : 0,
+                    Comp0F = haveRaw ? HexByte(raw, 0x0f) : 0,
                     // +0x0e ist die BAUTEILZEILE (65..79) — siehe Entity.Part.
                     Part = haveRaw ? HexByte(raw, 0x0e) : 0,
                     Ammo = haveRaw ? HexByte(raw, 0x39) : 0,
@@ -7998,6 +8014,7 @@ public partial class MapEntityLayer : Node2D
                     return 12;
                 };
                 _mscript.UnitCount = UnitClassCount;
+                _mscript.FindPart = FindUnitWithPart;
                 // AUSGESCHALTET und VERLUSTE je Spieler — dieselben Zaehler,
                 // die schon der Abschlussbericht zeigt (BuildEndReport).
                 // ⚠ GEBAUTE Brücken kennt dieses Spiel (noch) NICHT. Unsere
@@ -9909,6 +9926,38 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Die Nachfrist abbrechen — was der Knopf »Beenden« tut.</summary>
     public void FinishGrace() => _mscript?.EndGraceNow();
+
+    /// <summary>
+    /// <c>find_unit_with_part(spieler, teil)</c> — die Routine <b>0x4D0FB0</b>.
+    /// Gibt den ersten passenden Platz zurueck oder <b>0xFFFF</b>.
+    ///
+    /// <para>Sie laeuft ueber die 1000 Plaetze des Spielers und ueberspringt
+    /// einen leeren Platz (<c>+0x09 == 0xFF</c>, @0x4D0FEA) und alles mit
+    /// <c>+0x14 &gt;= 0x2D</c> (@0x4D0FF6) — also was tot ist oder anderweitig
+    /// gebunden. Getroffen ist, was das gesuchte Bauteil in EINEM der drei
+    /// Bauteilbytes traegt: <b>+0x0D, +0x0F oder +0x10</b>. ⚠ <c>+0x0E</c> ist
+    /// nicht dabei, obwohl es ebenfalls ein Bauteilfeld ist.</para>
+    ///
+    /// <para>Bis zum 18.08.2026 stand diese Abfrage als »gelesen, nicht
+    /// gebaut« da, weil zwei der drei Bytes bei uns nicht gefuehrt wurden.
+    /// Sie werden jetzt gefuehrt (<see cref="Entity.Comp0D"/>,
+    /// <see cref="Entity.Comp0F"/>), und daran haengen zwei Untermissionen:
+    /// M20 »Entfernung jeglicher Bodensysteme der Droiden« und M24
+    /// »Beseitigung der Bodeninstallationen« fragen beide
+    /// <c>find_unit_with_part(spieler, 0xAB) == 0xFFFF</c>.</para>
+    /// </summary>
+    public int FindUnitWithPart(int player, int part)
+    {
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != player) continue;
+            // `ukol >= 45` faellt weg; `Dead` deckt bei uns den toten Satz ab,
+            // und einen zweiten Zustand mit derselben Wirkung fuehren wir nicht.
+            if (e.Comp0D == part || e.Comp0F == part || e.Equipment == part)
+                return e.Slot;
+        }
+        return 0xFFFF;
+    }
 
     public string Verdict()
     {
