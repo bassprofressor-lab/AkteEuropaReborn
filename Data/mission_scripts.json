@@ -6535,6 +6535,276 @@
      ]
     },
     {
+     "_abgerollt": "Schleife 0x498B18..0x498B4D, Durchlauf 0",
+     "_at": "0x498B18",
+     "then": [
+      {
+       "_at": "0x498B39",
+       "a": 21,
+       "b": 2,
+       "c": 70,
+       "d": 70,
+       "kind": "text"
+      },
+      {
+       "a": 5,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 20,
+       "c": 0,
+       "kind": "unit_pos",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x498B18..0x498B4D, Durchlauf 1",
+     "_at": "0x498B19",
+     "then": [
+      {
+       "_at": "0x498B39",
+       "a": 21,
+       "b": 2,
+       "c": 70,
+       "d": 70,
+       "kind": "text"
+      },
+      {
+       "a": 5,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 20,
+       "c": 0,
+       "kind": "unit_pos",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x498B18..0x498B4D, Durchlauf 2",
+     "_at": "0x498B1A",
+     "then": [
+      {
+       "_at": "0x498B39",
+       "a": 21,
+       "b": 2,
+       "c": 70,
+       "d": 70,
+       "kind": "text"
+      },
+      {
+       "a": 5,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 2,
+       "b": 20,
+       "c": 0,
+       "kind": "unit_pos",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x498B18..0x498B4D, Durchlauf 3",
+     "_at": "0x498B1B",
+     "then": [
+      {
+       "_at": "0x498B39",
+       "a": 21,
+       "b": 2,
+       "c": 70,
+       "d": 70,
+       "kind": "text"
+      },
+      {
+       "a": 5,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 3,
+       "b": 20,
+       "c": 0,
+       "kind": "unit_pos",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x498B18..0x498B4D, Durchlauf 4",
+     "_at": "0x498B1C",
+     "then": [
+      {
+       "_at": "0x498B39",
+       "a": 21,
+       "b": 2,
+       "c": 70,
+       "d": 70,
+       "kind": "text"
+      },
+      {
+       "a": 5,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 4,
+       "b": 20,
+       "c": 0,
+       "kind": "unit_pos",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x498B18..0x498B4D, Durchlauf 5",
+     "_at": "0x498B1D",
+     "then": [
+      {
+       "_at": "0x498B39",
+       "a": 21,
+       "b": 2,
+       "c": 70,
+       "d": 70,
+       "kind": "text"
+      },
+      {
+       "a": 5,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 5,
+       "b": 20,
+       "c": 0,
+       "kind": "unit_pos",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x498B18..0x498B4D, Durchlauf 6",
+     "_at": "0x498B1E",
+     "then": [
+      {
+       "_at": "0x498B39",
+       "a": 21,
+       "b": 2,
+       "c": 70,
+       "d": 70,
+       "kind": "text"
+      },
+      {
+       "a": 5,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 6,
+       "b": 20,
+       "c": 0,
+       "kind": "unit_pos",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x498B18..0x498B4D, Durchlauf 7",
+     "_at": "0x498B1F",
+     "then": [
+      {
+       "_at": "0x498B39",
+       "a": 21,
+       "b": 2,
+       "c": 70,
+       "d": 70,
+       "kind": "text"
+      },
+      {
+       "a": 5,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 7,
+       "b": 20,
+       "c": 0,
+       "kind": "unit_pos",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x498B18..0x498B4D, Durchlauf 8",
+     "_at": "0x498B20",
+     "then": [
+      {
+       "_at": "0x498B39",
+       "a": 21,
+       "b": 2,
+       "c": 70,
+       "d": 70,
+       "kind": "text"
+      },
+      {
+       "a": 5,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 8,
+       "b": 20,
+       "c": 0,
+       "kind": "unit_pos",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x498B18..0x498B4D, Durchlauf 9",
+     "_at": "0x498B21",
+     "then": [
+      {
+       "_at": "0x498B39",
+       "a": 21,
+       "b": 2,
+       "c": 70,
+       "d": 70,
+       "kind": "text"
+      },
+      {
+       "a": 5,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 9,
+       "b": 20,
+       "c": 0,
+       "kind": "unit_pos",
+       "op": ">"
+      }
+     ]
+    },
+    {
      "_at": "0x498B64",
      "_tut_ausserdem": "close_message_windows show_text2",
      "then": [
@@ -7836,6 +8106,177 @@
        "a": 5,
        "kind": "time_gt",
        "op": ">"
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x49F418..0x49F431, Durchlauf 19",
+     "_at": "0x49F418",
+     "then": [
+      {
+       "a": 23,
+       "b": 1,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 19,
+       "b": 2,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x49F418..0x49F431, Durchlauf 20",
+     "_at": "0x49F419",
+     "then": [
+      {
+       "a": 23,
+       "b": 1,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 2,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x49F418..0x49F431, Durchlauf 21",
+     "_at": "0x49F41A",
+     "then": [
+      {
+       "a": 23,
+       "b": 1,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 21,
+       "b": 2,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x49F418..0x49F431, Durchlauf 22",
+     "_at": "0x49F41B",
+     "then": [
+      {
+       "a": 23,
+       "b": 1,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 22,
+       "b": 2,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x49F418..0x49F431, Durchlauf 23",
+     "_at": "0x49F41C",
+     "then": [
+      {
+       "a": 23,
+       "b": 1,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 23,
+       "b": 2,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x49F418..0x49F431, Durchlauf 24",
+     "_at": "0x49F41D",
+     "then": [
+      {
+       "a": 23,
+       "b": 1,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 24,
+       "b": 2,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x49F418..0x49F431, Durchlauf 25",
+     "_at": "0x49F41E",
+     "then": [
+      {
+       "a": 23,
+       "b": 1,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 25,
+       "b": 2,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x49F418..0x49F431, Durchlauf 26",
+     "_at": "0x49F41F",
+     "then": [
+      {
+       "a": 23,
+       "b": 1,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 26,
+       "b": 2,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x49F418..0x49F431, Durchlauf 27",
+     "_at": "0x49F420",
+     "then": [
+      {
+       "a": 23,
+       "b": 1,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 27,
+       "b": 2,
+       "kind": "obj_owner",
+       "op": "!="
       }
      ]
     },
@@ -19733,7 +20174,7 @@
     },
     {
      "_abgerollt": "Schleife 0x4A54C3..0x4A5508, Durchlauf 40",
-     "_at": "0x4A54EB",
+     "_at": "0x4A54C3",
      "once": 42,
      "then": [
       {
@@ -19741,6 +20182,7 @@
        "kind": "inc"
       },
       {
+       "_at": "0x4A54FB",
        "a": 4000,
        "b": 0,
        "kind": "money"
@@ -19763,7 +20205,7 @@
     },
     {
      "_abgerollt": "Schleife 0x4A54C3..0x4A5508, Durchlauf 41",
-     "_at": "0x4A54EC",
+     "_at": "0x4A54C4",
      "once": 43,
      "then": [
       {
@@ -19771,6 +20213,7 @@
        "kind": "inc"
       },
       {
+       "_at": "0x4A54FB",
        "a": 4000,
        "b": 0,
        "kind": "money"
@@ -19793,7 +20236,7 @@
     },
     {
      "_abgerollt": "Schleife 0x4A54C3..0x4A5508, Durchlauf 42",
-     "_at": "0x4A54ED",
+     "_at": "0x4A54C5",
      "once": 44,
      "then": [
       {
@@ -19801,6 +20244,7 @@
        "kind": "inc"
       },
       {
+       "_at": "0x4A54FB",
        "a": 4000,
        "b": 0,
        "kind": "money"
@@ -19823,7 +20267,7 @@
     },
     {
      "_abgerollt": "Schleife 0x4A54C3..0x4A5508, Durchlauf 43",
-     "_at": "0x4A54EE",
+     "_at": "0x4A54C6",
      "once": 45,
      "then": [
       {
@@ -19831,6 +20275,7 @@
        "kind": "inc"
       },
       {
+       "_at": "0x4A54FB",
        "a": 4000,
        "b": 0,
        "kind": "money"
@@ -19884,7 +20329,7 @@
     },
     {
      "_abgerollt": "Schleife 0x4A5550..0x4A5595, Durchlauf 78",
-     "_at": "0x4A559E",
+     "_at": "0x4A5550",
      "once": 48,
      "then": [
       {
@@ -19892,6 +20337,7 @@
        "kind": "inc"
       },
       {
+       "_at": "0x4A5588",
        "a": 4000,
        "b": 0,
        "kind": "money"
@@ -19914,7 +20360,7 @@
     },
     {
      "_abgerollt": "Schleife 0x4A5550..0x4A5595, Durchlauf 79",
-     "_at": "0x4A559F",
+     "_at": "0x4A5551",
      "once": 49,
      "then": [
       {
@@ -19922,6 +20368,7 @@
        "kind": "inc"
       },
       {
+       "_at": "0x4A5588",
        "a": 4000,
        "b": 0,
        "kind": "money"
@@ -19944,7 +20391,7 @@
     },
     {
      "_abgerollt": "Schleife 0x4A5550..0x4A5595, Durchlauf 80",
-     "_at": "0x4A55A0",
+     "_at": "0x4A5552",
      "once": 50,
      "then": [
       {
@@ -19952,6 +20399,7 @@
        "kind": "inc"
       },
       {
+       "_at": "0x4A5588",
        "a": 4000,
        "b": 0,
        "kind": "money"
