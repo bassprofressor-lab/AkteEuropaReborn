@@ -1492,6 +1492,11 @@ public sealed class MissionScript
     /// als »AI« / »AI end« (@0x4BFB8C, @0x4BFE3A).</summary>
     public Action<int, int>? SetAi;                  // spieler, wert
 
+    /// <summary>FEUERN AUF EINE ZELLE — <c>0x4D0AD0</c>, 7 Aufrufstellen.
+    /// Siehe <c>MissionFireAt</c> für die Beweiskette und für das, was dabei
+    /// unsere Setzung bleibt.</summary>
+    public Action<int, int, int>? FireAt;            // einheit, x, y
+
     public Func<int, int>? KillCount;                // spieler -> ausgeschaltet
     public Func<int, int>? LossCount;                // spieler -> Verluste
 
@@ -2105,6 +2110,9 @@ public sealed class MissionScript
             case "set_ai":
                 SetAi?.Invoke(a.A, a.B);
                 break;
+            case "fire_at":
+                FireAt?.Invoke(a.A, a.B, a.C);
+                break;
             // place_unit(entwurf, spalte, zeile, spieler) @0x4D0810 — siehe
             // PlaceUnit. Gezaehlt wird, WIEVIELE eine Mission auslöst: die
             // gelesene Zahl je Mission ist die Messlatte (M2 7, M3 4, M5 2,
@@ -2587,6 +2595,7 @@ public sealed class MissionScript
         "order" => OrderUnit != null,
         "move" => MoveUnit != null,
         "set_ai" => SetAi != null,
+        "fire_at" => FireAt != null,
         "add_target" => AddTarget != null,
         "remove_unit" => RemoveUnit != null,
         "sell_unit" => SellUnit != null,

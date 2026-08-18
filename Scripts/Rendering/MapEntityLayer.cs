@@ -8053,6 +8053,8 @@ public partial class MapEntityLayer : Node2D
                 // BEWEGEN (Befehl 3 des Originals) — dieselbe Bahn wie
                 // `order_at`, das vierte Argument gibt es hier nicht.
                 _mscript.MoveUnit = (slot, x, y) => MissionOrderAt(slot, x, y, -1);
+                // FEUERN AUF EINE ZELLE — siehe MissionFireAt.
+                _mscript.FireAt = MissionFireAt;
                 // ⚠ DEN KI-MODUS KOENNEN WIR NICHT SETZEN. Die Kampagne hat
                 // bei uns keine KI, die man je Spieler an- und abschalten
                 // koennte (`SkirmishAi` gehoert zum GEFECHT, und Kampagne und

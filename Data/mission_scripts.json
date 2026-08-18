@@ -4416,7 +4416,7 @@
     },
     {
      "_at": "0x49DD76",
-     "_tut_ausserdem": "0x4D0860 place_unit 0x4D0AD0",
+     "_tut_ausserdem": "0x4D0860 place_unit fire_at",
      "then": [
       {
        "_at": "0x49DD93",
@@ -9896,7 +9896,7 @@
     },
     {
      "_at": "0x49FFD1",
-     "_tut_ausserdem": "show_text 0x4D0AD0 set_relation",
+     "_tut_ausserdem": "show_text fire_at set_relation",
      "then": [
       {
        "a": 30,
@@ -9909,6 +9909,13 @@
        "c": 350,
        "d": 220,
        "kind": "text"
+      },
+      {
+       "_at": "0x49FFFA",
+       "a": 6000,
+       "b": 72,
+       "c": 22,
+       "kind": "fire_at"
       },
       {
        "_at": "0x4A0008",
@@ -14192,9 +14199,16 @@
     },
     {
      "_at": "0x4A2904",
-     "_tut_ausserdem": "0x4D0AD0 remove_unit",
+     "_tut_ausserdem": "fire_at remove_unit",
      "once": 8,
      "then": [
+      {
+       "_at": "0x4A2917",
+       "a": 5000,
+       "b": 12,
+       "c": 220,
+       "kind": "fire_at"
+      },
       {
        "_at": "0x4A2924",
        "a": 5000,
@@ -21684,6 +21698,90 @@
        "b": 700,
        "kind": "var",
        "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x499D36",
+     "_tut_ausserdem": "fire_at",
+     "then": [
+      {
+       "_at": "0x499D3F",
+       "a": 6000,
+       "b": 5,
+       "c": 59,
+       "kind": "fire_at"
+      }
+     ],
+     "when": [
+      {
+       "a": 5,
+       "b": 200,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499D52",
+     "_tut_ausserdem": "fire_at",
+     "then": [
+      {
+       "_at": "0x499D5B",
+       "a": 6001,
+       "b": 5,
+       "c": 54,
+       "kind": "fire_at"
+      }
+     ],
+     "when": [
+      {
+       "a": 5,
+       "b": 210,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499D6E",
+     "_tut_ausserdem": "fire_at",
+     "then": [
+      {
+       "_at": "0x499D77",
+       "a": 6002,
+       "b": 5,
+       "c": 58,
+       "kind": "fire_at"
+      }
+     ],
+     "when": [
+      {
+       "a": 5,
+       "b": 250,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499D8A",
+     "_tut_ausserdem": "fire_at",
+     "then": [
+      {
+       "_at": "0x499D93",
+       "a": 6003,
+       "b": 4,
+       "c": 48,
+       "kind": "fire_at"
+      }
+     ],
+     "when": [
+      {
+       "a": 5,
+       "b": 280,
+       "kind": "var",
+       "op": "=="
       }
      ]
     },

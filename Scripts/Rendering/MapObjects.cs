@@ -393,6 +393,48 @@ public partial class MapEntityLayer
     /// schickt jede sichtbare Wald- und Objektzelle durch Zasah. Die Zahl ist
     /// also nicht eigens für den Missionsstart erfunden, sondern das
     /// Hausmittel »zünde das hier an«.</para></summary>
+    /// <summary>`fire_at(einheit, x, y)` — das Missionsskript laesst eine
+    /// Einheit auf eine ZELLE feuern (Original <c>0x4D0AD0</c>, 7 Aufrufstellen
+    /// in M4, M16, M21, M27).
+    ///
+    /// <para>Die Kette dorthin: <c>0x4D0AD0</c> reicht (einheit, x, y, 65000)
+    /// an <c>0x40C8C0</c> weiter, das ueber die WAFFE (+0x0D) verzweigt —
+    /// Waffe 9 in den »gas-thr«-Zweig, 0 und 0x12 ins Leere, sonst in die
+    /// SCHUSSROUTINE <c>0x40BB00</c>. Dass die zwei Zahlen eine Zielzelle
+    /// sind, ist an der STREUUNG belegt: fuer Waffe 8 wuerfelt das Original
+    /// zweimal <c>10 - rand%20</c> und schlaegt es auf beide auf
+    /// (@0x40BB85..0x40BBB9). Das vierte Argument 65000 wird im Rumpf nicht
+    /// gelesen.</para>
+    ///
+    /// <para>⚠ WAS UNSERE SETZUNG BLEIBT — dieselbe wie bei den
+    /// SETUP-Treffern: <b>wieviel Schaden ein Schuss macht, ist nicht
+    /// gelesen</b>. Genommen wird die HAELFTE der Huelle, damit die Einheit
+    /// sichtbar beschaedigt und nicht zerstoert ist. ⚠ Und die STREUUNG bauen
+    /// wir NICHT nach: sie haengt am Zufallsstrom des Originals, den wir nicht
+    /// treffen — ein eigener Wuerfel waere kein Nachbau, sondern ein zweiter
+    /// Zufall.</para></summary>
+    private void MissionFireAt(int slot, int col, int row)
+    {
+        Entity schuetze = null;
+        foreach (var e in _entities)
+            if (!e.IsBuilding && !e.Dead && e.Slot == slot) { schuetze = e; break; }
+        if (schuetze == null)
+        {
+            GD.PrintErr($"fire_at: Einheitenplatz {slot} ist leer");
+            return;
+        }
+        // Munition: das Original bricht bei +0x39 == 0 ab (@0x40BB44).
+        if (schuetze.Ammo == 0 && schuetze.AmmoMax > 0)
+        {
+            GD.Print($"fire_at: Platz {slot} hat keine Munition — kein Schuss");
+            return;
+        }
+        ApplyMissionHits(new[] { (col, row) });
+        if (schuetze.AmmoMax > 0) schuetze.Ammo = Mathf.Max(0, schuetze.Ammo - 1);
+        GD.Print($"fire_at: Einheit {slot} (Spieler {schuetze.Owner}) feuert auf " +
+                 $"({col},{row})");
+    }
+
     private void ApplyMissionHits(System.Collections.Generic.IReadOnlyList<(int Col, int Row)> zellen)
     {
         if (zellen.Count == 0) return;
