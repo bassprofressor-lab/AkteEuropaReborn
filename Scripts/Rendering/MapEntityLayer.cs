@@ -2953,6 +2953,12 @@ public partial class MapEntityLayer : Node2D
     /// siehe die Stelle, die ihn zeichnet. 14 x 3 Punkte.</summary>
     private const float BarW = 14f, BarH = 3f;
 
+    /// <summary>Der Teiler und die Hoehe des EINNAHMEBALKENS, beide gelesen:
+    /// <c>idiv bx</c> mit <c>bx = 6</c> @0x4B7E1F und 0x4B7E2E, und
+    /// <c>push 8</c> @0x4B7E23.</summary>
+    private const int CaptureBarDiv = 6;
+    private const float CaptureBarH = 8f;
+
     /// <summary>Wie weit über dem Bodenpunkt er sitzt. Am Bild sitzt er über
     /// dem Turm, nicht auf der Zellkante.</summary>
     private const float BarLift = 28f;
@@ -22994,6 +23000,52 @@ public partial class MapEntityLayer : Node2D
             DrawRect(new Rect2(hb, new Vector2(BarW * fr, BarH)),
                      fr >= BarYellowBelow ? new Color(0.42f, 0.84f, 0.35f)
                                           : new Color(0.95f, 0.95f, 0.18f));
+        }
+
+        // ---- DER EINNAHMEBALKEN ueber einem Gebaeude ------------------------
+        //
+        // Gemeldet als »gebaeudeeinnahme einnahme strahl grafik«: waehrend ein
+        // Gebaeude eingenommen wird, traegt es einen breiten Balken, links in
+        // der einen und rechts in der anderen Spielerfarbe. Bei uns stand der
+        // Fortschritt bisher NUR als Text im Bedienfeld (»BESETZT 40% P2«),
+        // also nur fuer das eine angewaehlte Gebaeude und nirgends auf der
+        // Karte.
+        //
+        // ⚠ GELESEN, NICHT ABGEMESSEN. Der erste Anlauf hat die Breite aus dem
+        // Bildschirmfoto genommen (»rund 365 von 400 Videopunkten«) und daraus
+        // geschlossen, der Balken folge dem GRUNDRISS. Falsch: er folgt der
+        // EINNAHMEDAUER. Der Zeichner ist 0x4B7DF0, gerufen aus der
+        // Objektzeichenliste bei 0x42B227:
+        //
+        //     0x42B20D  cmp word[76*n + 0xC0694E], 0   ; +0x3A Fortschritt
+        //     0x42B215  jle <kein Balken>              ; nur waehrend der Einnahme
+        //     0x4B7E0A  ax = word[+0x3A] ; idiv 6      ; die FUELLUNG
+        //     0x4B7E25  ax = word[+0x38] ; idiv 6 ; +2 ; die BREITE
+        //     0x4B7E23  push 8                          ; die HOEHE
+        //
+        // Und die zwei Farben kommen aus dem Satz selbst (0x4B7B2B/0x4B7B39):
+        // <c>byte[+0x01]</c> der Besitzer und <c>byte[+0x3C]</c> der
+        // Eindringling, je als Palettenindex <c>Spieler*4 + 2</c>. Der Balken
+        // zeigt also nicht »Fortschritt gegen Rest«, sondern WER gerade wieviel
+        // davon haelt — darum die zwei Farben im Bildschirmfoto.
+        //
+        // ⚠ UNSER ist der Punkt, an dem er sitzt (das Original rechnet ihn aus
+        // der Zeichenliste, x-12/y+118 gegen Werte, die wir nicht fuehren) und
+        // die Umrechnung des Palettenindex in unsere Spielerfarbe.
+        foreach (var e in _entities)
+        {
+            if (!e.IsBuilding || e.Dead || e.CaptureProgress <= 0 || e.CaptureTotal <= 0)
+                continue;
+            float breite = e.CaptureTotal / (float)CaptureBarDiv + 2f;
+            float voll = Mathf.Min(breite, e.CaptureProgress / (float)CaptureBarDiv);
+            var cb = e.Pos + new Vector2(-breite / 2f, -BarLift - CaptureBarH - 3f);
+            DrawRect(new Rect2(cb - Vector2.One, new Vector2(breite + 2, CaptureBarH + 2)),
+                     new Color(0, 0, 0, 0.75f));
+            DrawRect(new Rect2(cb, new Vector2(breite, CaptureBarH)),
+                     OwnerColor(e.Owner));
+            if (e.Intruder >= 0)
+                DrawRect(new Rect2(cb, new Vector2(voll, CaptureBarH)),
+                         OwnerColor(e.Intruder));
         }
 
         // sec19 aircraft: the airframe sprite well above its ground shadow
