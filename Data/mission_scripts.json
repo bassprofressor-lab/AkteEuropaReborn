@@ -3967,6 +3967,55 @@
      ]
     },
     {
+     "_at": "0x49D68E",
+     "_tut_ausserdem": "show_text bus_cmd",
+     "then": [
+      {
+       "_at": "0x49D69C",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 7,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49D6BB",
+       "a": 1000,
+       "b": 0,
+       "kind": "money"
+      }
+     ],
+     "when": [
+      {
+       "a": 7,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 8,
+       "b": 46,
+       "kind": "time_after",
+       "op": "<"
+      },
+      {
+       "a": 102,
+       "b": 10,
+       "kind": "var",
+       "op": "!="
+      }
+     ]
+    },
+    {
      "once": 300,
      "then": [
       {

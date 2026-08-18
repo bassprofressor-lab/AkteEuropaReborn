@@ -1876,7 +1876,15 @@ public sealed class MissionScript
         // game_time() <op> a
         "time_gt" => Cmp(Minutes, c.Op == "==" ? ">" : c.Op, c.A),
         // game_time() > v[a] + b
-        "time_after" => c.A >= 0 && c.A < _var.Length && Minutes > _var[c.A] + c.B,
+        // ⚠ 18.08.2026 — MIT DEM OPERATOR. Hier stand `Minutes > …` fest, und
+        // der Leser lehnte darum jede andere Fassung ab (zu Recht: sie waere
+        // hier still zu »groesser« geworden). Das Original schreibt sie aber:
+        // Mission 14 fragt bei 0x49D680 `game_time() < v[8] + 46` und erfuellt
+        // damit ihre zweite Untermission, »Ziel der Mission in 45 Minuten zu
+        // beenden«. Alle 102 vorhandenen Glieder tragen ausdruecklich '>',
+        // aendern sich also nicht.
+        "time_after" => c.A >= 0 && c.A < _var.Length
+                        && Cmp(Minutes, c.Op, _var[c.A] + c.B),
         // DAS TOR DES BLOCKS: Takt mod 100 == 0.
         // ⚠ Das steht hier NICHT, weil die Engine es sonst nicht wüsste — sie
         // ordnet die Regeln längst über <see cref="Rule.EveryTick"/> ein
