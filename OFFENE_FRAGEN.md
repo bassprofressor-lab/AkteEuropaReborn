@@ -83,3 +83,36 @@ sie nicht in Vergessenheit geraten.
   Bezugspunkt nicht (das Original rechnet ihn aus einer Zeichenliste, deren
   Felder wir nicht führen).
 * **Wohin »Weiter« am Kampagnenende führt** — bei uns ins Menü.
+
+---
+
+## In Arbeit / Teilbefund
+
+### Der weiche Nebel (18.08.2026)
+
+Gemeldet: »unser fog of war ist schon gut aber deckt wie kacheln auf — im
+original ist das aber wie weich«.
+
+**Gelesen ist der Unterbau**, aber noch nicht die Weichheit:
+
+* `0x678B58` — ein Byte je Zelle, 256×256, **jeden Nebeltakt neu gebaut**
+  (`rep stosd` @0x4205BF) und dort auf 1 gesetzt, wo gerade jemand hinsieht
+  (@0x420268, @0x42029A). Das ist unser *Watched*.
+* `0x689710` — dieselbe Indizierung, aber **bleibend**: beim Aufdecken wird
+  der Wert der Zelle aus `0x542E18` hinüberkopiert (@0x4202C5). Das ist unser
+  *Seen*, nur dass es nicht »gesehen ja/nein« speichert, sondern **den
+  Geländewert selbst**.
+* Gezeichnet wird aus dem SCHATTENFELD: der Zeichner @0x432367 fragt
+  `byte[0x689710 + zelle] == 0x63` **oder den rechten Nachbarn**
+  `byte[0x689711 + zelle] == 0x63`. Eine Zelle wird also mitgezeichnet, wenn
+  ihr NACHBAR den Wert trägt — daher kein harter Zellrand.
+
+⚠ **Was ich NICHT belegt habe:** ob daraus die weiche Kante entsteht oder ob
+es dafür noch eine eigene Stelle gibt. `0x542E18` ist als Geländefeld gedeutet
+und nicht bewiesen, und was `0x63` bedeutet, ist offen. **Nichts davon ist
+eingebaut** — unser Nebel bleibt, wie er ist, bis das gelesen ist.
+
+**Was mir hülfe:** ein Bildschirmfoto aus einer Mission mit *unaufgedeckter*
+Karte, am besten zwei kurz nacheinander, während eine Einheit in unbekanntes
+Gebiet fährt. Dann sehe ich, ob der Rand wirklich weich ist oder ob nur die
+Objekte fehlen und das Gelände durchgehend sichtbar bleibt.
