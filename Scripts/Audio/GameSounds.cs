@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Audio;
+﻿namespace AkteEuropaReborn.Audio;
 
 using System.Collections.Generic;
 using System.Text.Json;
@@ -308,6 +308,102 @@ public static class GameSounds
         }
 
         // @0x42938e: no second group, or two throws in three, and it is a di line
+        if (v.Bp == 0 || Roll(3) != 0) return v.Di + Roll(v.DiCount);
+        return v.Bp + Roll(3);
+    }
+
+    /// <summary>Die Zweige von @0x429480, in der Reihenfolge der Sprungtafel
+    /// @0x4295D0 mit der Bytetafel @0x4295EC. Index = (Fahrwerk &gt;&gt; 1) − 1.
+    /// ⚠ Die Bytetafel ist [0,1,2,3,6,6,6,6,4,5,5] — Index 9 und 10 zeigen auf
+    /// den Eintrag 5, und der ist das <c>ret</c> bei 0x4295C8: diese zwei
+    /// Fahrwerke sagen beim Befehl <b>nichts</b>.</summary>
+    private static readonly VoiceSet?[] OrderByChassis =
+    {
+        new VoiceSet(203, 2, 205),   // 0  -> 0x429542
+        new VoiceSet(215, 2, 217),   // 1  -> 0x42954C
+        new VoiceSet(203, 2, 205),   // 2  -> 0x429542, wie 0
+        new VoiceSet(226, 2, 228),   // 3  -> 0x429556
+        new VoiceSet(191, 2, 193),   // 4  -> 0x429538, der Standard
+        new VoiceSet(191, 2, 193),   // 5
+        new VoiceSet(191, 2, 193),   // 6
+        new VoiceSet(191, 2, 193),   // 7
+        new VoiceSet(237, 2, 239),   // 8  -> 0x429560
+        null,                        // 9  -> 0x4295C8, das ret: schweigt
+        null,                        // 10 -> ebenso
+    };
+
+    /// <summary>Was ein Gebäude oder ein Flugzeugplatz auf einen Befehl sagt:
+    /// eine einzige Zeile, <c>mov si, 0xB9</c> @0x4294B9.</summary>
+    public const int OrderVoiceBuilding = 185;
+
+    /// <summary>
+    /// <b>WAS EINE EINHEIT AUF EINEN BEFEHL SAGT</b> — Routine <b>@0x429480</b>.
+    ///
+    /// <para>Gemeldet: »alle einheiten haben sounds die abgespielt werden wenn
+    /// man diese wohin bewegt, meistens aber jede klasse für sich einen sound,
+    /// also schiffe haben alle einen gemeinsamen, fahrzeuge auch usw«. Genau so
+    /// ist es gebaut, und es ist derselbe Bau wie beim Anwählen
+    /// (<see cref="Voice"/>) — nur mit anderen Nummern.</para>
+    ///
+    /// <para><b>Wo sie hängt.</b> Die Eingaberoutine <c>0x437060</c> ruft sie
+    /// VIERMAL (0x437458, 0x43746A, 0x437581, 0x4375A8), jedes Mal gleich
+    /// nachdem der Befehl abgesetzt ist — bei 0x437477 steht der Busbefehl 11
+    /// daneben. Den Anwählklang ruft dieselbe Routine nur EINMAL (0x437985).
+    /// </para>
+    ///
+    /// <para><b>Die Zahlen liegen zwei über denen des Anwählens</b>: 152→154,
+    /// 189→191, 201→203, 213→215, 224→226, 235→237, 165→167. Die zweite Gruppe
+    /// (<c>bp</c>) ist dieselbe. Im Klangvorrat liegen also je Einheitenart
+    /// zwei Anwählzeilen, zwei Befehlszeilen und drei gemeinsame.</para>
+    ///
+    /// <para>Der Würfel ist derselbe wie beim Anwählen (@0x429572): gibt es
+    /// eine zweite Gruppe, kommt sie in einem von drei Fällen, sonst die
+    /// erste.</para>
+    ///
+    /// <para>⚠ Ein <b>Gebäude oder Flugzeugplatz</b> (Auswahl ≥ 8000 und nicht
+    /// die Gruppe) sagt <see cref="OrderVoiceBuilding"/>, eine einzige Zeile.
+    /// Bei einer <b>Gruppe</b> holt sich das Original ein Mitglied
+    /// (<c>call 0x4018BB</c> @0x4294A6) und lässt DIESES sprechen — nicht alle.
+    /// </para>
+    /// </summary>
+    /// <param name="subclass">Satz +0x0a</param>
+    /// <param name="chassis">Satz +0x0b</param>
+    /// <param name="field28">Satz +0x28, dasselbe Feld wie bei
+    /// <see cref="Voice"/></param>
+    public static int OrderVoice(int subclass, int chassis, int field28,
+                                 System.Random? rng = null)
+    {
+        int Roll(int n) => n <= 1 ? 0 : (rng?.Next(n) ?? (int)(GD.Randi() % (uint)n));
+
+        VoiceSet v;
+        switch (subclass)
+        {
+            case 0:
+                // `cmp al,0x32; seta cl` @0x4294E3, geprueft bei 0x429509
+                v = field28 > 50 ? new VoiceSet(167, 2, 169) : new VoiceSet(154, 2, 156);
+                break;
+            case 1:
+                int i = (chassis >> 1) - 1;
+                if (i >= 0 && i < OrderByChassis.Length)
+                {
+                    var w = OrderByChassis[i];
+                    if (w == null) return -1;      // die zwei stummen Fahrwerke
+                    v = w.Value;
+                }
+                else
+                {
+                    v = new VoiceSet(191, 2, 193);
+                }
+                break;
+            case 3:
+                v = new VoiceSet(167, 2, 169);
+                break;
+            default:
+                // `mov si,0xB2; mov bl,1; xor bp,bp` @0x4294FE
+                v = new VoiceSet(178, 1, 0);
+                break;
+        }
+
         if (v.Bp == 0 || Roll(3) != 0) return v.Di + Roll(v.DiCount);
         return v.Bp + Roll(3);
     }

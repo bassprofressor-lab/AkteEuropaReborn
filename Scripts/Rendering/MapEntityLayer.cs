@@ -3534,6 +3534,37 @@ public partial class MapEntityLayer : Node2D
         if (s >= 0) Audio.SoundBankPlayer.Play(s);
     }
 
+    /// <summary>
+    /// <b>Was eine Einheit auf einen BEFEHL sagt</b> — die Routine 0x429480,
+    /// siehe <see cref="Audio.GameSounds.OrderVoice"/>.
+    ///
+    /// <para>Gemeldet: »alle einheiten haben sounds die abgespielt werden wenn
+    /// man diese wohin bewegt«. Wir hatten den Anwählklang und den
+    /// Trefferklang, aber den Befehlsklang nicht — dabei ruft ihn die
+    /// Eingaberoutine des Originals VIERMAL (0x437458, 0x43746A, 0x437581,
+    /// 0x4375A8), öfter als den Anwählklang.</para>
+    ///
+    /// <para>⚠ <b>Es spricht EINE Einheit, nicht die ganze Auswahl.</b> Das
+    /// Original liest den Anwählgriff <c>word[0x4FA0C8]</c>; steht dort eine
+    /// Gruppe (0x2710), holt es sich mit <c>call 0x4018BB</c> EIN Mitglied und
+    /// lässt dieses sprechen. Bei uns ist das die führende Einheit der
+    /// Auswahl. Ein Chor von zwölf Panzern wäre nicht bloß laut, er wäre
+    /// falsch.</para>
+    /// </summary>
+    private void SpeakOrdered()
+    {
+        if (!UI.Settings.Announcements) return;
+        if (_selected < 0 || _selected >= _entities.Count) return;
+        var e = _entities[_selected];
+        if (e.IsProp || e.Dead || e.Owner != ViewPlayer) return;
+        // Ein Gebäude oder Flugzeugplatz sagt seine eine Zeile (0x4294B9);
+        // eine Einheit würfelt (0x4294C7 ff.).
+        int s = e.IsBuilding || e.Chassis < 0
+            ? Audio.GameSounds.OrderVoiceBuilding
+            : Audio.GameSounds.OrderVoice(e.GameUnitType, e.Chassis, e.Field28);
+        if (s >= 0) Audio.SoundBankPlayer.Play(s);
+    }
+
     /// <summary>When the clock may next carry a hit line. The original keeps one
     /// such gate for the whole game (0x4f5aec against the clock 0x4fa240), not
     /// one per unit, and that is what stops a battle sounding like a chorus.
@@ -5434,7 +5465,11 @@ public partial class MapEntityLayer : Node2D
             e.Block = BlockEnter + Simulation.Determinism.Roll(BlockEnterSpread);
             ordered++;
         }
-        if (ordered > 0) AddOrderMark(CellCenter(cell.Value.X, cell.Value.Y), attack: false);
+        if (ordered > 0)
+        {
+            AddOrderMark(CellCenter(cell.Value.X, cell.Value.Y), attack: false);
+            SpeakOrdered();
+        }
         _order = ordered > 0
             ? $"move -> ({cell.Value.X},{cell.Value.Y}): {ordered} unit(s)" +
               (failed > 0 ? $", {failed} no route" : "") +
@@ -6874,6 +6909,7 @@ public partial class MapEntityLayer : Node2D
         }
         if (n == 0) return false;
         AddOrderMark(victim.Pos, attack: true);
+        SpeakOrdered();
         _order = $"attack -> slot {victim.Slot} ({LabelOf(victim.UnitType)}): {n} unit(s)";
         UpdatePanel();
         QueueRedraw();
