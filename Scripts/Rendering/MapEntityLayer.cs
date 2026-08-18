@@ -7895,6 +7895,15 @@ public partial class MapEntityLayer : Node2D
                             {
                                 0x28 => e.StockW, 0x2a => e.StockF,
                                 0x2c => e.StockS, 0x2e => e.StockT,
+                                // ⚠ 19.08.2026 — ENERGIE und ENERGIE VOLL. Der
+                                // Debugausdruck des Originals benennt diese
+                                // zwei NICHT; sie sind an den Karten gemessen:
+                                // ueber 8 Karten und 65 Saetze ist +0x12 ==
+                                // +0x02 und +0x02 je Gebaeudetyp konstant
+                                // (1200/1000/800/700). WELCHES das laufende
+                                // ist, entscheidet M19 @0x49EDE0: dort wird
+                                // von +0x02 abgezogen.
+                                0x02 => e.Hp, 0x12 => e.HpMax,
                                 _ => -1,
                             };
                     return -1;

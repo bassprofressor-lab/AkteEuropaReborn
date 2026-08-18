@@ -1828,6 +1828,13 @@ public sealed class MissionScript
         // (@0x49EB45 / @0x4A0A3B, `add eax, 0x1e`), M21 den blossen Vergleich.
         "kills_vs_losses" => KillCount != null && LossCount != null &&
                              Cmp(KillCount(c.A), c.Op, LossCount(c.B) + c.C),
+        // ENERGIE(a) <op> ENERGIE VOLL(a) / b — »das Gebaeude ist beschaedigt«
+        // (b = 1) bzw. »unter einem Fuenftel« (M19 @0x49EDF2, b = 5).
+        // ⚠ b == 0 kaeme aus einem Lesefehler; dann lieber FALSCH als eine
+        // Division durch null.
+        "store_energy" => StoreField != null && c.B > 0 &&
+                          StoreField(c.A, 0x02) >= 0 && StoreField(c.A, 0x12) >= 0 &&
+                          Cmp(StoreField(c.A, 0x02), c.Op, StoreField(c.A, 0x12) / c.B),
         // v[a] + c <op> VERLUSTE(b)   (M24 @0x4A1611, M30 @0x4A4237)
         "var_vs_losses" => LossCount != null && c.A >= 0 && c.A < _var.Length &&
                            Cmp(_var[c.A] + c.C, c.Op, LossCount(c.B)),
@@ -2488,6 +2495,7 @@ public sealed class MissionScript
         "losses" => LossCount != null,
         "kills_vs_losses" => KillCount != null && LossCount != null,
         "var_vs_losses" => LossCount != null,
+        "store_energy" => StoreField != null,
         "terrain" => TerrainAt != null,
         "terrain_unit" => TerrainAt != null && UnitField != null,
         "sel_field" => Selection != null && UnitField != null,
