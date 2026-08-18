@@ -192,6 +192,13 @@ public sealed class InterfaceExporter
     private static readonly (string Name, int Seq)[] Picked =
     {
         ("muzzle", 232), ("explosion", 48), ("blast", 550), ("wreck", 0),
+        // ⚠ 18.08.2026 — DAS FEUER. Gemeldet als »in Original Kampagne 1 gibt
+        // es z.B. von Haus aus ein paar brennende Baeume, die haben wir
+        // garnicht«. Die Folge 82 ist NICHT geraten: die Trefferroutine Zasah
+        // schiebt sie @0x40CB07 zusammen mit Spalte, Zeile und Hoehe der
+        // getroffenen Sache in den Effektaufruf —  ist die einzige
+        // kleine Zahl im ganzen Rumpf.
+        ("fire", 82),
         // The BUILDING DOORS, and this one is not our choice — the game says so.
         // The draw code @0x42B338 computes `tile*4 + word[0x7a44fe] + phase`,
         // and 0x7a44fe is the `first frame` field of ANIM.CWA sequence 301

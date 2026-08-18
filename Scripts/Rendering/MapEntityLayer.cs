@@ -7828,6 +7828,8 @@ public partial class MapEntityLayer : Node2D
                 // Rohstoffminen« lautet, gegen 329 fuer das Depot und 1411 fuer
                 // den Generator. Die Mission war damit unloesbar.
                 SetTerraPlaces(_mscript.Terra);
+                // Was der SETUP-Block schon getroffen hat — siehe ApplyMissionHits.
+                ApplyMissionHits(_mscript.Treffer);
                 var watched = _mscript.WatchedSlots();
                 if (watched.Count > 0)
                 {

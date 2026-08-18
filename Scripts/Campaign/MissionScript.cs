@@ -184,6 +184,28 @@ public sealed class MissionScript
         /// unlösbar, und zwar nicht wegen der Mission.</para>
         /// </summary>
         public readonly List<(int Col, int Row, int Amount)> Terra = new();
+
+        /// <summary>
+        /// <b>ZELLEN, DIE BEIM MISSIONSSTART SCHON GETROFFEN SIND.</b>
+        ///
+        /// <para>⚠ 18.08.2026, gemeldet als »in Original Kampagne 1 gibt es
+        /// z. B. von Haus aus ein paar brennende Bäume, die haben wir
+        /// garnicht«.</para>
+        ///
+        /// <para>Sie stehen <b>nicht in der Kartendatei</b>. Der SETUP-Block
+        /// fährt eine Schleife über eine Zellenliste, schlägt in der
+        /// Belegungskarte nach, was dort steht, und schickt es durch
+        /// <c>Zasah</c> (@0x40C9A0 — die Zeichenkette steht in seinem eigenen
+        /// Protokollaufruf). Was dabei zerstört wird, brennt.</para>
+        ///
+        /// <para>⚠ Die Liste wird <b>Byte für Byte auf dem Stack</b> gebaut, und
+        /// zwar im gemeinsamen Vorspann der Setup-Funktion — dieselbe Klasse
+        /// Problem wie bei <c>space_in</c>. Gelesen mit
+        /// <c>aekernel-tools/mission_hits.py</c>, das nach der FORM sucht;
+        /// <b>beide GAME.EXE liefern für Mission 1 dieselben fünf Zellen</b>
+        /// (1,39) (9,40) (7,41) (19,52) (36,68), und vier davon tragen auf
+        /// map_01 ein Objekt.</para></summary>
+        public readonly List<(int Col, int Row)> Treffer = new();
     }
 
     // ---- state ------------------------------------------------------------
@@ -664,6 +686,9 @@ public sealed class MissionScript
     /// einen Bauplatz.</summary>
     public IReadOnlyList<(int Col, int Row, int Amount)> Terra => _script.Terra;
 
+    /// <summary>Siehe <see cref="Script.Treffer"/>.</summary>
+    public IReadOnlyList<(int Col, int Row)> Treffer => _script.Treffer;
+
     public List<Cond> PlaceConds()
     {
         var list = new List<Cond>();
@@ -1002,6 +1027,17 @@ public sealed class MissionScript
                     var q = e.AsGodotArray();
                     if (q.Count < 3) continue;
                     s.Terra.Add((q[0].AsInt32(), q[1].AsInt32(), q[2].AsInt32()));
+                }
+            // Die Zellen, die beim Missionsstart einen TREFFER bekommen — siehe
+            // Script.Treffer.
+            if (body.TryGetValue("treffer", out var hv) &&
+                hv.VariantType == Variant.Type.Array)
+                foreach (var e in hv.AsGodotArray())
+                {
+                    if (e.VariantType != Variant.Type.Array) continue;
+                    var q = e.AsGodotArray();
+                    if (q.Count < 2) continue;
+                    s.Treffer.Add((q[0].AsInt32(), q[1].AsInt32()));
                 }
             if (!body.TryGetValue("rules", out var rv) ||
                 rv.VariantType != Variant.Type.Array) continue;

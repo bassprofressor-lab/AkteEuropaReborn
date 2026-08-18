@@ -610,6 +610,28 @@
       }
      ]
     }
+   ],
+   "treffer": [
+    [
+     1,
+     39
+    ],
+    [
+     9,
+     40
+    ],
+    [
+     7,
+     41
+    ],
+    [
+     19,
+     52
+    ],
+    [
+     36,
+     68
+    ]
    ]
   },
   "2": {
@@ -17470,5 +17492,6 @@
     ]
    ]
   }
- }
+ },
+ "_treffer_note": "Zellen, die der SETUP-Block beim Missionsstart durch die Trefferroutine Zasah (@0x40C9A0) schickt — was dort steht, brennt. Gelesen mit aekernel-tools/mission_hits.py; beide GAME.EXE liefern dasselbe."
 }
