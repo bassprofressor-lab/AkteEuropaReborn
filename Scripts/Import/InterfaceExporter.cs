@@ -355,6 +355,71 @@ public sealed class InterfaceExporter
         WritePanelIcons(anim);
     }
 
+    // ---- die MAUSZEIGER aus ROBO.CWR ---------------------------------------
+
+    /// <summary>
+    /// <b>Alle Mauszeiger des Spiels</b> als PNG, einer je Bild.
+    ///
+    /// <para>Sie liegen im Anhang von ROBO.CWR — siehe
+    /// <see cref="CwrFile.Cursors"/> für die Tafel, den Blob und die
+    /// Codestellen. Geschrieben wird nach <c>UI/cursors/tNN_fM.png</c>, dazu
+    /// ein Verzeichnis mit Maßen und Nullpunkt.</para>
+    ///
+    /// <para>⚠ <b>Der Griff liegt bei (32, 32), in BEIDEN Achsen.</b> Das
+    /// Original zeichnet ab (MausX−32, MausY−32), also fällt die Maus auf
+    /// den Bildpunkt (32, 32) der gezeichneten Fläche.
+    ///
+    /// ⚠⚠ Hier stand zuerst <c>(32, 32−yoff)</c> — der Gedanke war, dass ein
+    /// Bild mit <c>yoff</c>=16 sechzehn Punkte tiefer anfängt. Das ist wahr und
+    /// hier trotzdem falsch: <see cref="Canvas"/> legt den Versatz bereits als
+    /// Rand oben an, die Fläche ist <c>yoff+h</c> hoch. Wer ihn noch einmal
+    /// abzieht, zählt ihn doppelt.
+    ///
+    /// NACHGEMESSEN an den geschriebenen Bildern (Deckkraft &gt; 0): der
+    /// Angriffszeiger füllt x 17..48, y 16..47 — genau 32×32 —, seine Mitte
+    /// liegt also auf (32,5 / 31,5), und (32,32) ist die Mitte des Fadenkreuzes.
+    /// Beim Pfeil (Typ 0, x 30..48, y 30..57) trifft (32,32) die SPITZE. Beide
+    /// Proben gehen nur mit dem unveränderten 32 auf.</para>
+    /// </summary>
+    public void WriteCursors(CwrFile robo)
+    {
+        string dir = _ui + "/cursors";
+        Directory.CreateDirectory(dir);
+        var sb = new StringBuilder();
+        sb.Append("{\"source\":\"ROBO.CWR\",\"palette\":\"DATA/01.PAL\",");
+        sb.Append("\"hotspot_from_origin\":").Append(CwrFile.CursorHotspot);
+        sb.Append(",\"attack\":").Append(CwrFile.CursorAttack);
+        sb.Append(",\"move\":").Append(CwrFile.CursorMove);
+        sb.Append(",\"cursors\":{");
+        bool first = true;
+        int bilder = 0;
+        foreach (var c in robo.Cursors())
+        {
+            var (w, h) = Bounds(c.Frames);
+            for (int i = 0; i < c.Frames.Count; i++)
+            {
+                Save($"{dir}/t{c.Type:00}_f{i}.png", Canvas(c.Frames[i], w, h));
+                bilder++;
+            }
+            if (!first) sb.Append(',');
+            first = false;
+            int yoff = c.Frames[0].YOffset;
+            sb.Append($"\"{c.Type}\":{{\"frames\":{c.Frames.Count},\"w\":{w},");
+            sb.Append($"\"h\":{h},\"yoff\":{yoff},");
+            sb.Append($"\"hotspot\":[{CwrFile.CursorHotspot},");
+            sb.Append($"{CwrFile.CursorHotspot}]}}");
+            Cursors++;
+        }
+        sb.Append("}}");
+        File.WriteAllText($"{dir}/cursors_index.json", sb.ToString(), new UTF8Encoding(false));
+        GD.Print($"Mauszeiger: {Cursors} Arten mit {bilder} Bildern aus dem " +
+                 $"ROBO.CWR-Anhang -> {dir}");
+    }
+
+    /// <summary>Wie viele Zeigerarten <see cref="WriteCursors"/> geschrieben
+    /// hat.</summary>
+    public int Cursors { get; private set; }
+
     // ---- die drei Symbole im Bedienblock ------------------------------------
 
     /// <summary>Die Folge, in der Herz, Kanister und Patronen liegen. Der

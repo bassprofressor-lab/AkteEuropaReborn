@@ -1106,6 +1106,10 @@ public sealed class ContentBuilder
             // Oberflaeche und soll ohne vollen Neuimport nachziehbar sein.
             var cww = Asset("WINDOWS.CWW");
             if (cww != null) ui.WriteWindVane(cww);
+            // Die Mauszeiger haengen ebenfalls hier dran: sie sind Oberflaeche,
+            // stecken aber im Anhang von ROBO.CWR. Siehe CwrFile.Cursors.
+            byte[]? roboCur = Asset("ROBO.CWR");
+            if (roboCur != null) ui.WriteCursors(CwrFile.FromBytes(roboCur));
             Say($"{ui.Effects} Effekte mit {ui.EffectFrames} Bildern, " +
                 $"Windfahne {ui.VaneFrames} Bilder");
             return ui.Effects > 0;

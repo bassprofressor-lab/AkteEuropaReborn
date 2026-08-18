@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Import;
+﻿namespace AkteEuropaReborn.Import;
 
 using System;
 using System.Collections.Generic;
@@ -21,9 +21,17 @@ using Godot;
 ///     0x263    1020   aux
 ///     0x65F    40000  the frame table: 10000 u32 byte offsets into the blob,
 ///                     0xFFFFFFFF marking an empty slot
-///     0xA29F   1760   aux
-///     0xA97F   u32    size of the trailing per-frame meta block
+///     0xA29F   1760   the MOUSE CURSOR table — 440 u32, see CursorBank
+///     0xA97F   u32    size of the trailing block
 ///     0xA983          the blob — this is what the frame offsets index
+///     0xA983+blob     the MOUSE CURSOR bank, `size` bytes long
+///
+/// ⚠ 18.08.2026 — die zwei letzten Zeilen standen hier als »aux« und »per-frame
+/// meta block«, und beides war eine Vermutung. Es ist die MAUSZEIGERBANK: die
+/// Tafel bei 0xA29F und die Bilder dahinter. Der Zeichner 0x4A9DF0 rechnet
+/// `[ecx*4 + 0xa31aa4] + 0xa183e8`, also Tafel und Blob im Speicher — und
+/// 0xA983 + Blobgröße + diese Größe ist auf der ausgelieferten Datei GENAU
+/// ihre Länge (0x319F6B). Siehe <see cref="Cursors"/>.
 ///
 /// A frame has the same grammar as a terrain sprite (see <see cref="CwpFile"/>),
 /// which is why both share one reader.
@@ -45,6 +53,89 @@ public sealed class CwrFile
     public const int PartCount = 151;
     public const int FrameSlots = 10000;
     public const int Facings = 8;
+
+    // ---- die MAUSZEIGER -----------------------------------------------------
+
+    /// <summary>Wo die Zeigertafel liegt und wie sie gebaut ist: 440 u32, je
+    /// <b>elf</b> auf einen Zeigertyp — der erste ist die Bildzahl, danach
+    /// stehen bis zu zehn Versatzwerte in die Zeigerbank.
+    ///
+    /// <para><b>Die Elf ist gemessen, nicht geraten.</b> Der Zeichner rechnet
+    /// bei 0x4A9EFC/0x4A9F02 <c>ecx = 11*byte[0xA182D0]</c> und liest dann
+    /// <c>[ecx*4 + 0xA31AA4]</c> — also Tafelanfang + 4, mithin Eintrag 1 des
+    /// Satzes. Und das Zählwerk der Bildphase prüft bei 0x4AA014
+    /// <c>byte[ecx + 0xA31AA0]</c> mit <c>ecx = 44*Typ</c>, was dasselbe in
+    /// Bytes ist: 44 = 11*4.</para></summary>
+    public const int CursorTableOff = 0xA29F, CursorTableWords = 440,
+                     CursorStride = 11, CursorTypes = CursorTableWords / CursorStride;
+
+    /// <summary>Ein Zeigertyp: seine Bilder, schon entschlüsselt.</summary>
+    public sealed class Cursor
+    {
+        public int Type;
+        public List<CwpFile.Frame> Frames = new();
+    }
+
+    /// <summary>
+    /// <b>DIE MAUSZEIGER DES SPIELS</b> — 40 Plätze, davon 29 belegt.
+    ///
+    /// <para>Der Angriffszeiger, den der Spieler gemeldet hat (»das erscheint
+    /// wenn man über eine gegnerische Einheit kommt«), ist <b>Typ 2</b> mit
+    /// fünf Bildern — ein Fadenkreuz, um das vier rote Dreiecke nach außen
+    /// wandern. Er ist <b>kein Weltmarker</b>, sondern der Mauszeiger selbst;
+    /// im Bildschirmfoto steht das Fadenkreuz neben dem Panzer, nicht auf ihm.
+    /// An derselben Stelle zeigt ein anderes Foto den Zeiger mit den vier
+    /// weißen Pfeilen — Typ 4, »Bewegen«.</para>
+    ///
+    /// <para>Welchen Typ das Original nimmt, entscheidet 0x4A9AB0 aus dem Modus
+    /// <c>dword[0x502AD4]</c> (Sprungtafel 0x4A9BEC für die Modi 0..25 plus
+    /// Sonderfälle); die Modi <b>2, 7, 10 und 1001</b> laufen auf
+    /// <c>mov dl,2</c> @0x4A9B5F zusammen. ⚠ <b>Wer den Modus SETZT, ist
+    /// ungelesen</b> — die Zuordnung Modus→Spielsituation steht also nicht
+    /// fest, und darum hängen wir den Angriffszeiger an unsere eigene
+    /// Bedingung (Zeiger über einer feindlichen Einheit), nicht an eine
+    /// nachgebaute Modustabelle.</para>
+    ///
+    /// <para>Gezeichnet wird bei 0x4A9DF0: erst 64x64 Hintergrund nach
+    /// 0xA30A88 sichern, dann <c>0x401E1F(zeiger, MausX-0x20, MausY-0x20)</c>.
+    /// Der Nullpunkt liegt also <b>32 Punkte links und oben</b> von der
+    /// Mausspitze; mit <c>yoff</c>=16 und 49x32 Rohmaß landet der sichtbare
+    /// Inhalt genau auf einem 32x32-Feld um die Spitze herum.</para>
+    /// </summary>
+    public List<Cursor> Cursors()
+    {
+        var raus = new List<Cursor>();
+        int blob = BitConverter.ToInt32(_d, 3);
+        int bank = 0xA983 + blob;
+        if (bank + 4 > _d.Length) return raus;
+        for (int t = 0; t < CursorTypes; t++)
+        {
+            int at = CursorTableOff + t * CursorStride * 4;
+            if (at + CursorStride * 4 > _d.Length) break;
+            int n = BitConverter.ToInt32(_d, at);
+            if (n <= 0 || n > CursorStride - 1) continue;
+            var c = new Cursor { Type = t };
+            for (int i = 0; i < n; i++)
+            {
+                int off = BitConverter.ToInt32(_d, at + 4 + i * 4);
+                if (off < 0 || bank + off >= _d.Length) break;
+                try { c.Frames.Add(CwpFile.DecodeFrameAt(_d, bank + off)); }
+                catch (Exception) { break; }
+            }
+            if (c.Frames.Count > 0) raus.Add(c);
+        }
+        return raus;
+    }
+
+    /// <summary>Der Angriffszeiger — Typ 2, siehe <see cref="Cursors"/>.</summary>
+    public const int CursorAttack = 2;
+
+    /// <summary>Der Bewegenzeiger — Typ 4, die vier weißen Pfeile.</summary>
+    public const int CursorMove = 4;
+
+    /// <summary>Wie weit der Nullpunkt eines Zeigerbildes von der Mausspitze
+    /// liegt: <c>0x4A9F19 push MausX-0x20 / MausY-0x20</c>.</summary>
+    public const int CursorHotspot = 0x20;
 
     /// <summary>
     /// EIN FLUGGERÄT HAT SECHZEHN BLICKRICHTUNGEN, kein Boden-Teil hat das.

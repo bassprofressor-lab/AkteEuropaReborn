@@ -3290,6 +3290,12 @@ public partial class MapViewer : Node2D
         UpdatePanelPortrait();
         UpdatePowerBars();
         UpdateWindVane();
+        // ⚠ Die Zeigerbildfolge braucht einen eigenen Takt: UpdateCursor haengt
+        // sonst allein an der MAUSBEWEGUNG, und die vier roten Dreiecke des
+        // Angriffszeigers blieben stehen, sobald die Hand stillhaelt. Im
+        // Original wandern sie weiter.
+        _cursorTime += (float)delta;
+        if (_lastMapPos != null) UpdateCursor(_lastMapPos.Value);
         PortraitCheckTick();
         TurretSeatCheckTick();
         StempelCheckTick();
@@ -3494,7 +3500,8 @@ public partial class MapViewer : Node2D
             else if (!_leftDown)
             {
                 _entities.HoverAt(GetGlobalMousePosition());
-                UpdateCursor(GetGlobalMousePosition());
+                _lastMapPos = GetGlobalMousePosition();
+                UpdateCursor(_lastMapPos.Value);
             }
         }
         else if (@event is InputEventKey key && key.Pressed && !key.Echo)
@@ -3641,14 +3648,25 @@ public partial class MapViewer : Node2D
     private Vector2 _rightStart;
     private Input.CursorShape _cursor = Input.CursorShape.Arrow;
 
-    /// <summary>Lets the pointer say what a click would do: a cross-hair over
-    /// something worth shooting at, a pointing hand over one's own unit, the
-    /// plain arrow over open ground. Only changed when it actually differs, so
-    /// this costs nothing while the mouse moves.</summary>
+    /// <summary>
+    /// Der Zeiger sagt, was ein Klick täte.
+    ///
+    /// <para>⚠ <b>18.08.2026 — MIT DEN BILDERN DES ORIGINALS.</b> Hier standen
+    /// Godots Systemzeiger (Fadenkreuz, zeigende Hand, Pfeil). Die Bilder des
+    /// Spiels liegen im Anhang von ROBO.CWR, und welcher Zeiger wann kommt,
+    /// steht ausgeschrieben in <c>0x4A9AB0</c> — beides jetzt gelesen und
+    /// gebaut, siehe <see cref="UI.GameCursors"/>. Der Angriffszeiger ist der,
+    /// den der Spieler gemeldet hat.</para>
+    ///
+    /// <para>Fehlen die Bilder (nicht ausgespielt), fällt alles auf die
+    /// Systemzeiger von vorher zurück — ein halb gesetzter Zeiger wäre
+    /// schlimmer als gar keiner.</para>
+    /// </summary>
     private void UpdateCursor(Vector2 mapPos)
     {
         if (!UI.Settings.CursorHints)
         {
+            UI.GameCursors.Reset();
             if (_cursor != Input.CursorShape.Arrow)
             {
                 _cursor = Input.CursorShape.Arrow;
@@ -3656,16 +3674,40 @@ public partial class MapViewer : Node2D
             }
             return;
         }
-        var want = _entities.CursorHintAt(mapPos) switch
+        var hint = _entities.CursorHintAt(mapPos);
+        if (UI.GameCursors.Available)
+        {
+            UI.GameCursors.Use(hint switch
+            {
+                MapEntityLayer.Hint.Enemy => UI.GameCursors.Attack,
+                MapEntityLayer.Hint.OwnFoot => UI.GameCursors.Foot,
+                MapEntityLayer.Hint.Own => UI.GameCursors.Select,
+                _ => UI.GameCursors.Arrow,
+            }, _cursorTime);
+            return;
+        }
+        var want = hint switch
         {
             MapEntityLayer.Hint.Enemy => Input.CursorShape.Cross,
-            MapEntityLayer.Hint.Own => Input.CursorShape.PointingHand,
+            MapEntityLayer.Hint.Own or MapEntityLayer.Hint.OwnFoot
+                => Input.CursorShape.PointingHand,
             _ => Input.CursorShape.Arrow,
         };
         if (want == _cursor) return;
         _cursor = want;
         Input.SetDefaultCursorShape(want);
     }
+
+    /// <summary>Wo die Maus zuletzt stand, in Kartenpunkten — damit der Takt
+    /// den Zeiger auch dann weiterdrehen kann, wenn sie sich nicht bewegt.
+    /// Solange sie noch nie über der Karte war, bleibt er leer und der Zeiger
+    /// unangetastet.</summary>
+    private Vector2? _lastMapPos;
+
+    /// <summary>Die Uhr der Zeigerbildfolge. Sie läuft weiter, auch wenn die
+    /// Maus stillsteht — im Original wandern die vier roten Dreiecke des
+    /// Angriffszeigers auch dann.</summary>
+    private float _cursorTime;
 
     private static Rect2 RectFrom(Vector2 a, Vector2 b)
         => new Rect2(a, b - a).Abs();

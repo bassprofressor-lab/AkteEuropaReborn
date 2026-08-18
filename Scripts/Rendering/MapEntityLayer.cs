@@ -21081,7 +21081,11 @@ public partial class MapEntityLayer : Node2D
     /// <summary>What a click at this spot would mean. OURS — the original had
     /// one pointer for everything; this is the modern convenience the player
     /// asked for, not a recovered behaviour.</summary>
-    public enum Hint { Ground, Own, Enemy }
+    /// <summary>Worauf die Maus zeigt. <c>OwnFoot</c> ist seit dem 18.08.2026
+    /// dabei, weil das Original bei eigener INFANTERIE einen anderen Zeiger
+    /// nimmt als bei allem anderen Eigenen — siehe
+    /// <see cref="UI.GameCursors"/>.</summary>
+    public enum Hint { Ground, Own, OwnFoot, Enemy }
 
     /// <summary>Reads the cursor hint for a map position: something hostile
     /// under the pointer while one has a selection means the click attacks,
@@ -21092,7 +21096,11 @@ public partial class MapEntityLayer : Node2D
         if (i < 0 || i >= _entities.Count) return Hint.Ground;
         var e = _entities[i];
         if (e.IsProp || e.Dead) return Hint.Ground;
-        if (e.Owner == ViewPlayer) return Hint.Own;
+        // Das Original trennt hier NUR die Infanterie ab: der Arm @0x4A9B1C
+        // rechnet aus dem Klassenbyte +0x0A eine 5 fuer Klasse 1 und sonst eine
+        // 1 — Gebaeude und Flugzeugplaetze bekommen dieselbe 1 wie ein Panzer.
+        if (e.Owner == ViewPlayer)
+            return !e.IsBuilding && e.GameUnitType == 1 ? Hint.OwnFoot : Hint.Own;
         return _sel.Count > 0 ? Hint.Enemy : Hint.Ground;
     }
 
