@@ -7867,7 +7867,20 @@ public partial class MapEntityLayer : Node2D
                 {
                     foreach (var e in _entities)
                         if (!e.IsBuilding && e.Slot == index && !e.Dead)
-                            return off == 0 ? e.Col : off == 1 ? e.Row : -1;
+                            return off switch
+                            {
+                                0x00 => e.Col,
+                                0x01 => e.Row,
+                                // ⚠ Energie und Energie-voll kamen am
+                                // 19.08. dazu: M11 fragt beide vom Satz 3000
+                                // ab (@0x71BB40 / @0x71BB61). Die Offsets sind
+                                // NICHT geraten — der Importer liest HpMax
+                                // seit Langem aus genau `raw[0x29]`, siehe
+                                // ganz oben in dieser Datei.
+                                0x08 => e.Hp,
+                                0x29 => e.HpMax,
+                                _ => -1,
+                            };
                     return -1;
                 };
                 // Ein Wort aus einem Gebaeudesatz. Die Karte fuehrt dieselben
