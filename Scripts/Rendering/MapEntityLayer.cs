@@ -2677,28 +2677,82 @@ public partial class MapEntityLayer : Node2D
 
     private int ElevOf(int col, int row) => _elevLookup.TryGetValue((col, row), out var e) ? e : 0;
 
-    // ---- selection and order feedback (game feel) ---------------------------
-    //
-    // A ring around every selected unit reads as noise once a dozen are picked,
-    // so the selection is drawn as four corner brackets on the unit's cell —
-    // the primary unit (the one the panel describes) gets brighter, longer
-    // ones. Purely presentation; nothing here comes from the original.
+    // ---- selection and order feedback ---------------------------------------
+
+    /// <summary>
+    /// <b>DIE AUSWAHLMARKEN DES ORIGINALS</b> — vier weisse Winkel um die
+    /// Einheit, die Spitzen nach aussen.
+    ///
+    /// <para>⚠⚠ 18.08.2026 — hier standen <b>vier grüne Eckklammern</b>, und der
+    /// Kommentar daneben sagte es selbst: »Purely presentation; nothing here
+    /// comes from the original«. Der Spieler hat das Original abgefilmt, und es
+    /// sieht anders aus: vier <b>weisse</b> Winkel (‹ › ^ v), gleichmässig um
+    /// die Einheit verteilt, die Spitzen nach aussen. Dasselbe Zeichen steht
+    /// als Symbol im Tutorialfenster »Sie können eine Einheit ANWÄHLEN…«
+    /// (<c>Bug Bilder/kampagne1 original tutorial1.png</c>).</para>
+    ///
+    /// <para><b>Am Bild ausgemessen</b> (<c>tutorial7.png</c>, Heavy Tank): das
+    /// Spiel läuft dort in 640×480 und die Aufnahme zeigt es 2,156-fach
+    /// (Kartenfläche x 220..1600 für 640 Punkte). Die vier Spitzen liegen
+    /// rund <b>19 Punkte</b> von der Mitte, jeder Winkel ist etwa <b>8 Punkte</b>
+    /// breit, die Striche <b>2 Punkte</b> stark — und die Mitte sitzt
+    /// <b>14 Punkte über dem Bodenpunkt</b>, also auf dem Fahrzeugkörper und
+    /// nicht auf der Zelle.</para>
+    ///
+    /// <para>⚠ Was UNSERE Setzung bleibt: dass die <b>Hauptauswahl</b> (die,
+    /// die das Feld beschreibt) etwas heller gezeichnet wird als die übrigen.
+    /// Das Original zeigt für eine GRUPPE etwas anderes — ein weisses Rechteck
+    /// um alle und einen Balken über jeder Einheit
+    /// (<c>tutorial15.png</c>) —, und das ist noch nicht gebaut.</para>
+    ///
+    /// <para>⚠ Die zwei Parameter <c>hw</c>/<c>hh</c> bleiben in der Liste,
+    /// weil mehrere Aufrufer sie mitgeben; sie sind wirkungslos geworden. Wer
+    /// sie entfernt, muss alle Aufrufer anfassen — das gehört in einen eigenen
+    /// Durchgang und nicht hierher.</para></summary>
     private void DrawSelectionBrackets(Vector2 c, bool primary, float hw = 13f, float hh = 8f)
     {
-        var col = primary ? new Color(0.45f, 1f, 0.6f, 1f) : new Color(0.3f, 0.9f, 0.5f, 0.75f);
-        float len = primary ? 6f : 4f, w = primary ? 2f : 1.5f;
-        Vector2[] corners =
+        var col = primary ? new Color(1f, 1f, 1f, 1f) : new Color(1f, 1f, 1f, 0.65f);
+        var mitte = c - new Vector2(0, SelMarkLift);
+        float w = primary ? 2f : 1.5f;
+
+        // je Richtung: die Spitze aussen, zwei Arme schraeg zurueck nach innen
+        Vector2[] richtung = { new(0, -1), new(0, 1), new(-1, 0), new(1, 0) };
+        foreach (var d in richtung)
         {
-            new(c.X - hw, c.Y - hh), new(c.X + hw, c.Y - hh),
-            new(c.X - hw, c.Y + hh), new(c.X + hw, c.Y + hh),
-        };
-        for (int k = 0; k < 4; k++)
-        {
-            float sx = k % 2 == 0 ? 1 : -1, sy = k < 2 ? 1 : -1;
-            DrawLine(corners[k], corners[k] + new Vector2(len * sx, 0), col, w);
-            DrawLine(corners[k], corners[k] + new Vector2(0, len * sy), col, w);
+            var spitze = mitte + d * SelMarkRadius;
+            // die Querachse zur Richtung — daran laufen die Arme auseinander
+            var quer = new Vector2(-d.Y, d.X);
+            var a1 = spitze - d * SelMarkArm + quer * SelMarkArm;
+            var a2 = spitze - d * SelMarkArm - quer * SelMarkArm;
+            DrawLine(spitze, a1, col, w);
+            DrawLine(spitze, a2, col, w);
         }
     }
+
+    /// <summary>Wie weit die vier Spitzen von der Mitte stehen — am Bild
+    /// ausgemessen, siehe <see cref="DrawSelectionBrackets"/>.</summary>
+    /// <summary>Der Lebensbalken über einer Einheit — am Original ausgemessen,
+    /// siehe die Stelle, die ihn zeichnet. 14 x 3 Punkte.</summary>
+    private const float BarW = 14f, BarH = 3f;
+
+    /// <summary>Wie weit über dem Bodenpunkt er sitzt. Am Bild sitzt er über
+    /// dem Turm, nicht auf der Zellkante.</summary>
+    private const float BarLift = 28f;
+
+    /// <summary>⚠ UNSERE SETZUNG: ab wann der Balken gelb wird. Das Original
+    /// hat zwei Farben (grün und gelb), das ist abgelesen — der SCHWELLWERT
+    /// nicht: zwei gelbe Beispiele auf einem Bild reichen dafür nicht.</summary>
+    private const float BarYellowBelow = 0.5f;
+
+    private const float SelMarkRadius = 19f;
+
+    /// <summary>Wie lang ein Arm eines Winkels ist. 4 Punkte je Arm ergeben
+    /// die am Bild gemessenen rund 8 Punkte Gesamtbreite.</summary>
+    private const float SelMarkArm = 4f;
+
+    /// <summary>Wie weit über dem Bodenpunkt die Marken sitzen — sie gehören
+    /// auf den Fahrzeugkörper, nicht auf die Zelle. Am Bild 14 Punkte.</summary>
+    private const float SelMarkLift = 14f;
 
     // ---- control groups -----------------------------------------------------
     private readonly Dictionary<int, List<int>> _groups = new();
@@ -17009,6 +17063,30 @@ public partial class MapEntityLayer : Node2D
     /// <para>Gestellt wird: ein Gebäude mit mindestens 3 Zeilen Grundriss, die
     /// Einheit auf dessen MITTLERE Zeile und mittlere Spalte — also mitten im
     /// Grundriss, wo das Gebäudebild sie decken muss.</para></summary>
+    /// <summary><c>--demo-auswahl</c> — eine eigene Einheit ANWAEHLEN und die
+    /// Kamera daraufsetzen.
+    ///
+    /// <para>Gebraucht, weil eine Aenderung an den AUSWAHLMARKEN sonst nicht zu
+    /// pruefen ist: ohne ausgewaehlte Einheit zeigt kein Bildschirmfoto sie.
+    /// Derselbe Grund wie bei <see cref="BehindCheckSetup"/> — »ein Vergleich,
+    /// der den Fall nicht enthaelt, ist kein Beleg fuer seine
+    /// Abwesenheit«.</para></summary>
+    public Vector2? AuswahlDemoSetup()
+    {
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || !e.Mobile) continue;
+            if (e.Owner != ViewPlayer) continue;
+            _sel.Clear(); _sel.Add(i); _selected = i;
+            SetPrimary();
+            GD.Print($"demo-auswahl: \"{e.Name}\" auf ({e.Col},{e.Row}) angewaehlt");
+            return e.Pos;
+        }
+        GD.Print("demo-auswahl: keine eigene bewegliche Einheit gefunden");
+        return null;
+    }
+
     public Vector2? BehindCheckSetup()
     {
         if (_nav == null) return null;
@@ -22275,21 +22353,36 @@ public partial class MapEntityLayer : Node2D
                 DrawCircle(fl, 3f, new Color(0.35f, 1f, 0.45f));
             }
 
-        // health bars in a second pass — the unit sprites are up to 55 px tall and
-        // would otherwise cover the bar of the unit standing behind them
+        // ⚠⚠ 18.08.2026 — DER LEBENSBALKEN WAR DREIMAL ZU GROSS. Er war
+        // `TileW + 2` breit und 6 hoch (also 42x6) und deckte die Einheit halb
+        // zu; auf einem Bildschirmfoto unserer eigenen Auswahl war vom Fahrzeug
+        // kaum etwas zu sehen.
+        //
+        // AM ORIGINAL AUSGEMESSEN (Bug Bilder/kampagne1 original tutorial15.png,
+        // die Gruppe): die Aufnahme zeigt das Spiel 2,14-fach (Kartenflaeche
+        // x 230..1600 fuer 640 Punkte). Ein Balken misst dort 30 x 6,5
+        // Videopunkte, im Spiel also rund **14 x 3**, mit einem dunklen Rand.
+        // Er sitzt UEBER dem Fahrzeug, nicht auf seiner Zellkante.
+        //
+        // ⚠ Die FARBEN sind ebenfalls abgelesen und keine Rampe: **gruen**, und
+        // bei Schaden **gelb** — auf dem Bild tragen zwei der sechs Einheiten
+        // einen gelben, teilweise gefuellten Balken. Unsere alte Rampe
+        // (rot->gruen ueber den Fuellstand) gibt es dort nicht.
+        // ⚠ Bei WELCHEM Anteil sie umschlaegt, ist NICHT abzulesen — zwei
+        // Beispiele reichen dafuer nicht. Die Haelfte ist gewaehlt.
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
             if (e.IsProp || e.Dead || e.HpMax <= 0) continue;
             bool sel = _sel.Contains(i);
             if (!sel && e.Hp >= e.HpMax) continue;
-            var hb = e.Pos + new Vector2(-TileW / 2f, -TileH / 2f - 8);
             float fr = Mathf.Clamp((float)e.Hp / e.HpMax, 0, 1);
-            DrawRect(new Rect2(hb - new Vector2(1, 1), new Vector2(TileW + 2, 6)),
+            var hb = e.Pos + new Vector2(-BarW / 2f, -BarLift);
+            DrawRect(new Rect2(hb - Vector2.One, new Vector2(BarW + 2, BarH + 2)),
                      new Color(0, 0, 0, 0.75f));
-            DrawRect(new Rect2(hb, new Vector2(TileW * fr, 4)),
-                     sel && fr >= 1f ? new Color(0.3f, 1f, 0.3f)
-                                     : new Color(1f - fr, 0.25f + fr * 0.75f, 0.2f));
+            DrawRect(new Rect2(hb, new Vector2(BarW * fr, BarH)),
+                     fr >= BarYellowBelow ? new Color(0.42f, 0.84f, 0.35f)
+                                          : new Color(0.95f, 0.95f, 0.18f));
         }
 
         // sec19 aircraft: the airframe sprite well above its ground shadow

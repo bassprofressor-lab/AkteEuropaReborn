@@ -5,7 +5,7 @@ using Godot;
 using GDict = Godot.Collections.Dictionary<string, Godot.Variant>;
 
 /// <summary>
-/// <b>AUFRAGENDE KARTENOBJEKTE — Bäume, Masten, Felsen.</b>
+/// <b>AUFRAGENDE KARTENOBJEKTE — Bäume, Masten, Felsen — UND IHR FEUER.</b>
 ///
 /// <para>⚠⚠ 18.08.2026, gemeldet als »im Original verdecken z. B. auch Bäume
 /// Einheiten, bei uns nicht«. Der Bericht stimmt, und die Ursache lag im
@@ -21,11 +21,15 @@ using GDict = Godot.Collections.Dictionary<string, Godot.Variant>;
 /// <c>objects</c>. Dieser Durchgang schneidet sie dort aus und setzt sie
 /// zwischen die Einheiten.</para>
 ///
-/// <para><b>Die Schwelle ist gemessen</b>, siehe <c>MapBaker.RagtAbPx</c>: über
-/// 36 Karten und 13.491 verschiedene Objektbilder sitzt bei 20 px — genau der
-/// Zellhöhe — der grösste Haufen (7228 Bilder, 40.582 Zellen); darüber läuft
-/// die Verteilung bis 70 px durch. 79.925 von 125.116 Objektzellen ragen
-/// auf.</para>
+/// <para>⚠⚠ <b>WELCHE Objekte aufragen, ist seit dem 18.08.2026 GELESEN und
+/// nicht mehr geraten.</b> Hier stand eine Pixelschwelle
+/// (<c>MapBaker.RagtAbPx = 25</c>), von den Gebäudekacheln übernommen. Das
+/// Original kennt gar keine: sein Zeichner (@0x4B4150) teilt die Zellen nach
+/// der BELEGUNGSKARTE der Kartendatei auf — der flache Durchgang @0x4B41EB
+/// überspringt jede Zelle mit einer Belegung ab 14000, und der verzahnte
+/// Durchgang @0x4B43BB, in dem Einheiten und Kacheln zeilenweise abwechseln,
+/// nimmt die Belegungen 50000..63999 (@0x4B446C). Alles dazu steht bei
+/// <c>Import.MapForest.ImZeilenfach</c>.</para>
 ///
 /// <para>⚠ <b>Eine Karte aus einem älteren Import hat die zweite Ebene
 /// nicht.</b> Dann bleibt alles wie vorher: die Bäume stehen im Kartenbild und
@@ -37,10 +41,33 @@ public partial class MapEntityLayer
 {
     private Texture2D? _objTex;
 
-    /// <summary>Je aufragendem Objekt: seine Zelle (fürs Zeilenfach) und sein
-    /// Rechteck in der zweiten Ebene. Nach Zeile sortiert, damit der Zeichner
-    /// nur durchlaufen muss.</summary>
-    private readonly List<(int Row, Rect2 Src)> _objDraw = new();
+    /// <summary>Ein aufragendes Objekt, so wie der Zeichner es braucht.</summary>
+    private sealed class Kartenobjekt
+    {
+        /// <summary>Die Zelle — die Zeile entscheidet über das Zeilenfach.</summary>
+        public int Col, Row;
+
+        /// <summary>Sein Rechteck in der zweiten Ebene. ⚠ Quelle UND Ziel: der
+        /// Backofen hat es an genau die Stelle gemalt, an die es gehört.</summary>
+        public Rect2 Src;
+
+        /// <summary>Die VERKOHLTE Fassung im Streifen, oder ein leeres Rechteck,
+        /// wenn die Zelle kein Wald ist. Sie hat ein eigenes Ziel, weil der
+        /// verkohlte Baum ein anderes Bild ist als der grüne (kürzere Krone,
+        /// gleicher Fuss — gemessen: 967 von 991 Paaren auf den Pixel).</summary>
+        public Rect2 KohleSrc;
+        public Vector2 KohleZiel;
+        public bool HatKohle;
+
+        /// <summary>Seit wann diese Zelle brennt (Sekunden seit Spielstart),
+        /// oder &lt; 0. Solange sie brennt, steht die verkohlte Kachel und die
+        /// Flamme läuft darüber.</summary>
+        public float BrandVon = -1f;
+    }
+
+    /// <summary>Je aufragendem Objekt sein Eintrag. Nach Zeile sortiert, damit
+    /// der Zeichner nur durchlaufen muss.</summary>
+    private readonly List<Kartenobjekt> _objDraw = new();
 
     /// <summary>Wie viele aufragende Objekte der letzte Durchgang gezeichnet
     /// hat — ⚠ Regel 33: ohne diese Zahl ist »kein Unterschied im Bild« nicht
@@ -51,6 +78,10 @@ public partial class MapEntityLayer
     /// gerade im Bild sind).</summary>
     public int ObjectsLoaded => _objDraw.Count;
 
+    /// <summary>Wie viele Zellen gerade BRENNEN — dieselbe Regel 33 für das
+    /// Feuer.</summary>
+    public int ObjectsBurning { get; private set; }
+
     /// <summary><c>--keine-objekt-verdeckung</c> — die Gegenprobe: der Stand von
     /// vor dem 18.08.2026, alles im Boden.</summary>
     public static bool NoObjectOcclusion;
@@ -60,6 +91,7 @@ public partial class MapEntityLayer
     {
         _objTex = null;
         _objDraw.Clear();
+        ObjectsBurning = 0;
         if (NoObjectOcclusion) return;
 
         string p = Core.Content.Path($"Maps/{mapName}.objects.png");
@@ -73,20 +105,50 @@ public partial class MapEntityLayer
         }
         if (_objTex == null) return;
 
+        // ⚠ Der STREIFEN mit den verkohlten Bäumen hängt UNTEN an derselben
+        // Ebene an (MapBaker.BurntAtlas). Eine Karte aus einem älteren Import
+        // hat ihn nicht — dann brennt eben nichts, statt dass etwas kaputtgeht.
+        var kohle = new List<Rect2>();
+        if (meta.TryGetValue("burnt", out var bv) && bv.VariantType == Variant.Type.Array)
+            foreach (var item in bv.AsGodotArray())
+            {
+                if (item.VariantType != Variant.Type.Dictionary) continue;
+                var a = item.AsGodotDictionary<string, Variant>();
+                kohle.Add(new Rect2(GetI(a, "x"), GetI(a, "y"), GetI(a, "w"), GetI(a, "h")));
+            }
+
         if (!meta.TryGetValue("objects", out var ov) || ov.VariantType != Variant.Type.Array) return;
         foreach (var item in ov.AsGodotArray())
         {
             if (item.VariantType != Variant.Type.Dictionary) continue;
             var o = item.AsGodotDictionary<string, Variant>();
-            _objDraw.Add((GetI(o, "row"),
-                          new Rect2(GetI(o, "x"), GetI(o, "y"), GetI(o, "w"), GetI(o, "h"))));
+            var e = new Kartenobjekt
+            {
+                Col = GetI(o, "col"),
+                Row = GetI(o, "row"),
+                Src = new Rect2(GetI(o, "x"), GetI(o, "y"), GetI(o, "w"), GetI(o, "h")),
+            };
+            if (o.ContainsKey("burnt"))
+            {
+                int k = GetI(o, "burnt");
+                if (k >= 0 && k < kohle.Count)
+                {
+                    e.HatKohle = true;
+                    e.KohleSrc = kohle[k];
+                    e.KohleZiel = new Vector2(GetI(o, "bx"), GetI(o, "by"));
+                }
+            }
+            _objDraw.Add(e);
         }
         // ⚠ Nach ZEILE sortieren, nicht nach Lage im Bild: das Zeilenfach
         // entscheidet, was vor wem liegt, und der Backofen liefert schon in
         // Zeilenfolge — die Sortierung ist die Zusicherung, nicht die Arbeit.
         _objDraw.Sort((a, b) => a.Row - b.Row);
+        int brennbar = 0;
+        foreach (var e in _objDraw) if (e.HatKohle) brennbar++;
         GD.Print($"objekte: {_objDraw.Count} aufragende Kartenobjekte aus " +
-                 $"{mapName}.objects.png — sie verdecken jetzt Einheiten");
+                 $"{mapName}.objects.png — sie verdecken jetzt Einheiten; " +
+                 $"{brennbar} davon sind Wald und koennen brennen ({kohle.Count} verkohlte Kacheln)");
     }
 
     /// <summary>Alles bis einschliesslich dieser Zeile zeichnen. Genauso
@@ -96,20 +158,96 @@ public partial class MapEntityLayer
     /// <para>⚠ Die Zeile eines Objekts ist seine ZELLE, ohne Zuschlag. Ein
     /// Gebäude bekommt <c>+3</c> bzw. <c>+tür0.row</c> und ein Gleis <c>+2</c>
     /// (beides gelesen); für ein Objekt ist im Original nichts dergleichen
-    /// belegt, also steht hier keine Zahl. ⚠ UNSERE SETZUNG insofern, als das
-    /// Original diese Objekte gar nicht in ein Fach einreiht — es zeichnet sie
-    /// in einem Durchgang von hinten nach vorn, und Einheiten laufen im selben
-    /// Fachwerk mit.</para></summary>
+    /// belegt, also steht hier keine Zahl. ⚠ Der Waldbrand des Originals kommt
+    /// dagegen MIT Zuschlag ins Fach (<c>inc bx</c> @0x42E6FC, also Zeile+1) —
+    /// das betrifft aber nur die Flamme, nicht die Kachel.</para></summary>
     private void DrawObjectsUpTo(int throughRow, ref int at)
     {
         if (_objTex == null) return;
         for (; at < _objDraw.Count && _objDraw[at].Row <= throughRow; at++)
         {
-            var s = _objDraw[at].Src;
-            DrawTextureRectRegion(_objTex, new Rect2(s.Position, s.Size), s);
+            var e = _objDraw[at];
+            if (e.BrandVon >= 0f && e.HatKohle)
+            {
+                // BRENNT: die verkohlte Kachel steht anstelle des grünen Baums
+                // (das ist der Kacheltausch aus zapal @0x4CACE5), und die
+                // Flamme läuft darüber.
+                DrawTextureRectRegion(_objTex, new Rect2(e.KohleZiel, e.KohleSrc.Size), e.KohleSrc);
+                Flamme(e);
+            }
+            else
+            {
+                DrawTextureRectRegion(_objTex, new Rect2(e.Src.Position, e.Src.Size), e.Src);
+            }
             ObjectsDrawn++;
         }
     }
+
+    /// <summary>
+    /// <b>DIE FLAMME</b> — ANIM.CWA-Folge 550, sieben Bilder, bei uns als Effekt
+    /// <c>blast</c> eingespielt.
+    ///
+    /// <para>Gelesen am Zeichner des Zeilenfachs, Art 0x0C @0x42B422:
+    /// <c>phase = (bildzähler/2 + index) mod 7</c>, gezeichnet bei
+    /// <c>x = spalte*40 + (index mod 10) − 5</c> und
+    /// <c>y = zeile*20 − höhe*15</c> (der Einreiher @0x42E760 setzt beides).
+    /// Der Blitter des Originals (@0x4AC1D9) addiert den <c>YOffset</c> des
+    /// Bildes selbst dazu — und genau so liegt unsere Leinwand, weil
+    /// <c>InterfaceExporter.Canvas</c> jedes Bild an seinem <c>YOffset</c>
+    /// ablegt und die Leinwandhöhe <c>max(YOffset + Höhe)</c> ist.</para>
+    ///
+    /// <para>⚠ Zwei UNSERE SETZUNGEN, beide benannt: das Original wechselt für
+    /// Wälder mit ungeradem Index auf Folge <b>552</b> — die haben wir nicht
+    /// ausgespielt, wir nehmen für alle 550. Und der Bildzähler des Originals
+    /// ist sein Spielschritt; wir rechnen mit
+    /// <see cref="FlammenSekunden"/> Sekunden je Bild.</para></summary>
+    private void Flamme(Kartenobjekt e)
+    {
+        var bilder = EffectFrames("blast");
+        if (bilder.Count == 0) return;
+        // Der Index tut im Original zweierlei: er versetzt die PHASE, damit
+        // nicht alle Bäume im Gleichschritt flackern, und er versetzt die Lage
+        // um bis zu 10 px. Wir nehmen dafür die Zelle — sie ist dieselbe feste
+        // Zahl je Baum, die das Original aus dem Tafelindex zieht.
+        int idx = e.Col * 31 + e.Row;
+        int phase = (int)(Time.GetTicksMsec() / (FlammenSekunden * 1000f) + idx) % bilder.Count;
+        if (phase < 0) phase += bilder.Count;
+        DrawTexture(bilder[phase],
+                    new Vector2(_ox + e.Col * TileW + idx % 10 - 5,
+                                _oy + e.Row * TileH - ElevOf(e.Col, e.Row) * 15));
+    }
+
+    /// <summary>Wie lange ein Flammenbild steht. Das Original springt alle ZWEI
+    /// Spielschritte weiter (<c>sar eax, 1</c> @0x42B438); ⚠ UNSERE SETZUNG ist,
+    /// das mit 0,1 s gleichzusetzen.</summary>
+    private const float FlammenSekunden = 0.1f;
+
+    /// <summary>
+    /// <b>EINE WALDZELLE ANZÜNDEN</b> — <c>zapal</c> @0x4CAC50.
+    ///
+    /// <para>Was das Original tut: Zustand auf <c>rand() % 150 + 2</c> setzen
+    /// (@0x4CACAB), die Kachel gegen die verkohlte tauschen (@0x4CACE5) und die
+    /// beiden Nachbarzeilen neu zeichnen lassen. Der Brandtakt @0x4CA330 zählt
+    /// dann jeden vierten Spielschritt hoch und legt bei 255 die Bodenkachel
+    /// hin. Bei uns steht die Kachel, solange die Zelle brennt; das AUSGEHEN
+    /// ist noch nicht gebaut — siehe <c>CHANGELOG.de.md</c>.</para>
+    ///
+    /// <para>Gibt zurück, ob wirklich etwas angezündet wurde. ⚠ Es kann nur
+    /// brennen, was der Backofen als Wald erkannt und mit einer verkohlten
+    /// Fassung versehen hat.</para></summary>
+    private bool Anzuenden(int col, int row)
+    {
+        bool ok = false;
+        foreach (var e in _objDraw)
+        {
+            if (e.Row != row || e.Col != col || !e.HatKohle || e.BrandVon >= 0f) continue;
+            e.BrandVon = (float)Time.GetTicksMsec() / 1000f;
+            ObjectsBurning++;
+            ok = true;
+        }
+        return ok;
+    }
+
     /// <summary>
     /// <b>WAS BEIM MISSIONSSTART SCHON GETROFFEN IST.</b>
     ///
@@ -130,21 +268,34 @@ public partial class MapEntityLayer
     /// bei <c>space_in</c>. Gelesen mit
     /// <c>aekernel-tools/mission_hits.py</c>, das nach der FORM sucht.</para>
     ///
-    /// <para><b>Der Effekt ist ebenfalls gelesen</b>: <c>Zasah</c> schiebt
-    /// @0x40CB07 <c>push 0x52</c> — ANIM.CWA-Folge <b>82</b> — zusammen mit
-    /// Spalte, Zeile und Höhe der getroffenen Sache in den Effektaufruf. Sie
-    /// ist als <c>fire</c> eingespielt.</para>
+    /// <para><b>⚠⚠ 18.08.2026 — DAS FEUER IST JETZT GELESEN.</b> Hier stand,
+    /// ANIM-Folge 82 sei nur ein Funkenschlag und das dauerhafte Brennen
+    /// »nicht erklärt«. Das stimmte, und die Vermutung, es müsse eine andere
+    /// KACHEL sein, stimmte auch. <c>Zasah</c> führt einen Getroffenen mit
+    /// Belegung 50000..55999 (also einen WALD) auf einen eigenen Zweig
+    /// @0x40D61D. Dort rechnet er aus Angreifer und Schaden eine Zahl aus und
+    /// verzweigt:</para>
+    /// <code>
+    ///   &gt;= 70 -> "zrus"    @0x4CAD40  (weg, ohne Feuer)
+    ///   &gt;  45 -> "zapal A" @0x4CAC50  (ANZUENDEN)
+    ///   &gt;  22 -> "zapal B", jeder vierte Wurf
+    ///   &gt;  12 -> "zapal C", jeder achte Wurf
+    /// </code>
+    /// <para>»zapal« ist tschechisch für »zünde an«. Und der Angreifer der
+    /// SETUP-Liste, <c>0x9C72</c> = 40050, ist damit auch gedeutet: Zasah
+    /// behandelt 40000..40999 als reine SCHADENSZAHL (@0x40CC8B:
+    /// <c>add ax, 0x63C0</c>, also Schaden = arg1 − 40000 = <b>50</b>), und aus
+    /// 50 wird mit ±4 Würfelrauschen 46..54 — <b>immer »zapal A«</b>. Diese
+    /// vier Bäume brennen also im Original bei jedem Start, ohne Zufall.</para>
     ///
-    /// <para>⚠⚠ <b>WAS NOCH FEHLT, und es gehört gesagt:</b> Folge 82 ist ein
-    /// <b>Funkenschlag</b>, kein anhaltendes Feuer — nachgesehen an den sieben
-    /// Bildern. Die dauerhaft brennenden Bäume des Originals sind damit
-    /// <b>nicht</b> erklärt; sie dürften eine andere KACHEL sein, die beim
-    /// Zerstören eines Objekts an dessen Stelle tritt. Diese Zeile hier baut
-    /// den TREFFER nach, nicht das Brennen.</para></summary>
+    /// <para>⚠ Dieselbe 40050 steht noch an einer zweiten Stelle: @0x43ABE3
+    /// schickt jede sichtbare Wald- und Objektzelle durch Zasah. Die Zahl ist
+    /// also nicht eigens für den Missionsstart erfunden, sondern das
+    /// Hausmittel »zünde das hier an«.</para></summary>
     private void ApplyMissionHits(System.Collections.Generic.IReadOnlyList<(int Col, int Row)> zellen)
     {
         if (zellen.Count == 0) return;
-        int einheiten = 0, objekte = 0, leer = 0;
+        int einheiten = 0, brennt = 0, leer = 0;
         foreach (var (c, r) in zellen)
         {
             bool getroffen = false;
@@ -152,24 +303,24 @@ public partial class MapEntityLayer
             {
                 var e = _entities[i];
                 if (e.Dead || e.IsProp || e.Col != c || e.Row != r) continue;
-                // ⚠ Wieviel Schaden, ist NICHT gelesen — Zasah rechnet ihn aus
-                // Feldern des Angreifers, und der Angreifer ist hier 0x9C72
-                // (40050), eine Zahl zwischen Einheiten (<8000) und Gebaeuden
-                // (60000..60299), die wir nicht deuten koennen. Genommen wird
-                // darum die HAELFTE der Huelle: sichtbar beschaedigt, aber
-                // nicht zerstoert — und als Setzung benannt.
+                // ⚠ Wieviel Schaden eine Einheit bekommt, ist NICHT gelesen:
+                // fuer einen Getroffenen unter 8000 rechnet Zasah mit Feldern
+                // des Fahrzeugs, die wir nicht alle deuten. Genommen wird die
+                // HAELFTE der Huelle — sichtbar beschaedigt, nicht zerstoert.
+                // ⚠ UNSERE SETZUNG. Fuer den WALD ist der Schaden dagegen
+                // gelesen (50, siehe oben), und darum brennt er.
                 e.Hp = Mathf.Max(1, e.Hp / 2);
                 einheiten++; getroffen = true;
                 break;
             }
-            // Ein aufragendes Objekt auf der Zelle: es verschwindet. Das ist
-            // die einzige Wirkung, die wir fuer ein Objekt ueberhaupt haben —
-            // eine BRENNENDE Kachel gibt es bei uns nicht (siehe Kopf).
-            for (int i = _objDraw.Count - 1; i >= 0; i--)
-                if (_objDraw[i].Row == r && ObjektAufZelle(i, c))
-                { _objDraw.RemoveAt(i); objekte++; getroffen = true; }
+
+            // Ein WALD auf der Zelle faengt Feuer — das ist der ganze Punkt.
+            if (Anzuenden(c, r)) { brennt++; getroffen = true; }
 
             if (!getroffen) leer++;
+            // Der Funkenschlag des Treffers selbst: ANIM-Folge 82, die Zasah
+            // @0x40CB07 mit `push 0x52` in den Effektaufruf schiebt. Er ist
+            // KURZ und erklaert das Brennen nicht — das tut die Kachel.
             _effects.Add(new Effect
             {
                 Pos = CellCenter(c, r),
@@ -177,14 +328,7 @@ public partial class MapEntityLayer
             });
         }
         GD.Print($"treffer: {zellen.Count} Zellen aus dem SETUP-Block getroffen — " +
-                 $"{einheiten} Einheiten, {objekte} Objekte entfernt, {leer} leer " +
-                 "(Zasah @0x40C9A0, Effektfolge 82)");
+                 $"{einheiten} Einheiten, {brennt} Waldzellen angezuendet, {leer} leer " +
+                 "(Zasah @0x40C9A0 -> zapal A @0x4CAC50, Kachel +285)");
     }
-
-    /// <summary>Liegt das Objekt <paramref name="i"/> auf dieser Spalte? Die
-    /// Liste haelt nur Zeile und Rechteck; die Spalte kommt aus dem Rechteck
-    /// zurueck, weil der Backofen sie mit <c>col * TileW</c> gesetzt hat.</summary>
-    private bool ObjektAufZelle(int i, int col)
-        => Mathf.RoundToInt(_objDraw[i].Src.Position.X / TileW) == col;
-
 }

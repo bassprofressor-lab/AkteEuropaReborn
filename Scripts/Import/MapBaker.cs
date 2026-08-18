@@ -252,28 +252,31 @@ public sealed class MapBaker
     /// <b>AB WANN RAGT EIN OBJEKT AUF</b> — also ab wann es eine Einheit
     /// verdecken kann und darum nicht mehr in den Boden gebacken werden darf.
     ///
-    /// <para><b>Gemessen</b> mit <see cref="ObjectHeights"/> über alle 36
-    /// Karten, 13.491 verschiedene Objektbilder: bei <b>20 px</b> — genau der
-    /// Zellhöhe <see cref="TileH"/> — sitzen <b>7228 Bilder auf 40.582
-    /// Zellen</b>, der mit Abstand grösste Haufen. Alles darunter ist flaches
-    /// Bodendetail (1..19 px, zusammen 181 Bilder, mit mehreren Lücken).</para>
+    /// <para>⚠⚠ <b>18.08.2026 — DIE FRAGE WAR FALSCH GESTELLT.</b> Hier stand
+    /// bis heute <c>RagtAbPx = 25</c>, und der Kommentar sagte selbst, dass die
+    /// 25 von den GEBÄUDEkacheln <b>übernommen</b> und nicht gemessen war. Die
+    /// Messung, die sie hätte tragen sollen, gibt es auch gar nicht: über 36
+    /// Karten und 13.491 Objektbilder sitzt bei 20 px der grösste Haufen, und
+    /// <b>darüber läuft die Verteilung ohne Lücke bis 70 px durch</b> (siehe
+    /// <see cref="ObjectHeights"/>). Eine Lücke, in die eine Schwelle gehört,
+    /// ist da nicht.</para>
     ///
-    /// <para>⚠ <b>Anders als bei den Gebäudekacheln gibt es oben KEINE
-    /// Lücke</b>: die Verteilung läuft von 20 bis 70 px durch. Ein »gemessener
-    /// Sprung« wie bei <c>MapEntityLayer.FlachBisPx</c> ist hier also nicht zu
-    /// haben, und das gehört gesagt statt verschwiegen.</para>
+    /// <para><b>Weil das Original gar keine Höhe fragt.</b> Sein Zeichner
+    /// (@0x4B4150) teilt die Zellen nach der BELEGUNGSKARTE auf: der flache
+    /// Durchgang @0x4B41EB überspringt jede Zelle ab Belegung 14000, und der
+    /// verzahnte Durchgang @0x4B43BB — der, in dem Einheiten und Kacheln
+    /// zeilenweise abwechseln — nimmt ausdrücklich die Belegungen
+    /// <b>50000..63999</b> (@0x4B446C). Das ist die ganze Regel. Sie steht
+    /// samt Adressen bei <see cref="MapForest.ImZeilenfach"/>.</para>
     ///
-    /// <para><b>Warum trotzdem 25 und nicht 20:</b> 21..25 px sind ein Überstand
-    /// von einem bis fünf Bildpunkten — damit lässt sich keine Einheit
-    /// verdecken, es kostet aber 3.300 Zellen im lebenden Durchgang. Und 25 ist
-    /// die Zahl, die für die GEBÄUDEkacheln bereits gemessen ist
-    /// (<c>FlachBisPx</c>); eine Regel für beide ist besser als zwei
-    /// Zahlen für dieselbe Frage. ⚠ Insofern ist die 25 hier <b>übernommen</b>,
-    /// nicht neu gemessen.</para>
+    /// <para>Gemessen, was der Wechsel ausmacht: von 68.391 Objektzellen der 23
+    /// mitgelieferten <c>.CWM</c> kommen jetzt <b>38.306</b> ins Fach (37.231
+    /// Wald + 1.075 Objekt) statt der bisherigen Schätzung — und 14.710 Zellen,
+    /// die nur Bodenschmuck sind, bleiben im Bild, wo sie hingehören.</para>
     ///
-    /// <para>Damit gehen <b>79.925</b> von 125.116 Objektzellen in die zweite
-    /// Ebene, <b>45.191</b> bleiben im Boden.</para></summary>
-    public const int RagtAbPx = 25;
+    /// <para>⚠ <see cref="ObjectHeights"/> bleibt stehen. Nicht als Schwelle,
+    /// sondern als Prüfstand: er zeigt, dass die Höhe die Frage NICHT
+    /// beantworten kann.</para></summary>
 
     /// <summary>Die zweite Ebene: nur die aufragenden Objekte, alles andere
     /// durchsichtig. <c>null</c>, solange keines vorkam.</summary>
@@ -281,14 +284,54 @@ public sealed class MapBaker
 
     /// <summary>Wo die aufragenden Objekte in der zweiten Ebene liegen — je
     /// Eintrag die Zelle und das Rechteck im Bild. Der Zeichner braucht beides:
-    /// die Zelle für das Zeilenfach, das Rechteck zum Ausschneiden.</summary>
-    public readonly List<(int Col, int Row, int X, int Y, int W, int H)> Objects = new();
+    /// die Zelle für das Zeilenfach, das Rechteck zum Ausschneiden.
+    ///
+    /// <para><c>Kohle</c> ist der Platz der VERKOHLTEN Fassung im Streifen
+    /// (<see cref="BurntAtlas"/>) oder −1, wenn die Zelle kein Wald ist;
+    /// <c>KX/KY</c> ist, wo sie hin muss — sie hat einen eigenen Anschlag,
+    /// weil der verkohlte Baum ein anderes Bild ist als der grüne.</para></summary>
+    public readonly List<(int Col, int Row, int X, int Y, int W, int H,
+                          int Kohle, int KX, int KY)> Objects = new();
+
+    /// <summary>
+    /// <b>DER STREIFEN MIT DEN VERKOHLTEN BÄUMEN.</b>
+    ///
+    /// <para>Ein brennender Baum ist im Original keine Zutat, sondern ein
+    /// KACHELTAUSCH: <c>zapal</c> @0x4CACE5 schreibt die verkohlte Fassung an
+    /// die Stelle des grünen Baums (Rechnung und Adressen bei
+    /// <see cref="MapForest.Verkohlt"/>). Diese Kachel muss also im Bild
+    /// liegen, bevor irgendetwas brennt.</para>
+    ///
+    /// <para><b>Warum ein Streifen und keine dritte Ebene:</b> die verkohlte
+    /// Fassung hängt nur an der Baumart (0, 19 oder 38) und der Geländeart
+    /// (0..18) — also höchstens <b>57</b> verschiedene Bilder je Karte, egal
+    /// wie viele Bäume darauf stehen. Eine ganze zweite Leinwand dafür wäre bei
+    /// map_01 rund 10 MB für 563 Zellen. Der Streifen hängt darum UNTEN an
+    /// <c>&lt;karte&gt;.objects.png</c> an; seine Y-Werte liegen ab
+    /// <see cref="PixelH"/>.</para>
+    ///
+    /// <para>Je Eintrag: der Kachelcode und sein Rechteck im Streifen, dazu
+    /// <c>YOff</c> — der Zeichner braucht ihn, um die Kachel gegen die Zelle zu
+    /// setzen, und der ist bei der verkohlten Fassung ein anderer als beim
+    /// grünen Baum.</para></summary>
+    public readonly List<(int Code, int X, int Y, int W, int H, int YOff)> BurntAtlas = new();
+
+    private byte[]? _burnt;                 // der Streifen, PixelW x _burntH
+    private int _burntH;
 
     /// <summary>Die zweite Ebene als Bild, oder <c>null</c>, wenn kein Objekt
-    /// aufragte. ⚠ Erst nach <see cref="Bake"/> gefüllt.</summary>
+    /// aufragte. ⚠ Erst nach <see cref="Bake"/> gefüllt. Ist ein Streifen mit
+    /// verkohlten Bäumen entstanden, hängt er unten an.</summary>
     public Image? ObjectLayer()
-        => _objects == null ? null
-         : Image.CreateFromData(PixelW, PixelH, false, Image.Format.Rgba8, _objects);
+    {
+        if (_objects == null) return null;
+        if (_burnt == null || _burntH <= 0)
+            return Image.CreateFromData(PixelW, PixelH, false, Image.Format.Rgba8, _objects);
+        var alles = new byte[PixelW * (PixelH + _burntH) * 4];
+        Array.Copy(_objects, alles, _objects.Length);
+        Array.Copy(_burnt, 0, alles, _objects.Length, _burnt.Length);
+        return Image.CreateFromData(PixelW, PixelH + _burntH, false, Image.Format.Rgba8, alles);
+    }
 
     /// <summary>Wie <see cref="Blit"/>, aber auf eine übergebene Leinwand — und
     /// ⚠ mit DURCHSICHTIGKEIT: die zweite Ebene liegt über dem Kartenbild, ein
@@ -427,20 +470,29 @@ public sealed class MapBaker
         // pass C — objects, back to front. Buildings are left out: they are
         // drawn live so they can fall down. See BuildingCells.
         //
-        // ⚠⚠ 18.08.2026 — UND AUFRAGENDE OBJEKTE EBENSO. Gemeldet: »im Original
-        // verdecken z. B. auch Baeume Einheiten, bei uns nicht«. Der Grund stand
-        // genau hier: ein eingebackener Baum liegt UNTER allem, was danach
-        // gezeichnet wird, und kann darum nichts verdecken — im Gegensatz zum
-        // Gebaeude, das seit jeher ausgenommen ist.
+        // ⚠⚠ 18.08.2026 — UND DIE ZELLEN DES VERZAHNTEN DURCHGANGS EBENSO.
+        // Gemeldet: »im Original verdecken z. B. auch Baeume Einheiten, bei uns
+        // nicht«. Der Grund stand genau hier: ein eingebackener Baum liegt
+        // UNTER allem, was danach gezeichnet wird, und kann darum nichts
+        // verdecken — im Gegensatz zum Gebaeude, das seit jeher ausgenommen ist.
         //
-        // Aufragende Objekte kommen jetzt in eine ZWEITE Ebene mit
-        // Durchsichtigkeit (<see cref="ObjectLayer"/>), und der Zeichner setzt
-        // sie im Zeilenfach zwischen die Einheiten — dieselbe Loesung wie bei
-        // den Gebaeudekacheln (dort: flach in den Boden, Aufragendes ins Fach).
+        // WELCHE Zellen aufragen, entscheidet seit heute die BELEGUNGSKARTE der
+        // Kartendatei und keine geratene Pixelschwelle mehr: das Original
+        // zeichnet in seinem verzahnten Durchgang @0x4B43BB ausdruecklich die
+        // Belegungen 50000..63999 (@0x4B446C) und sonst nichts. Begruendung,
+        // Adressen und Messung stehen bei MapForest.ImZeilenfach.
         //
-        // Die Schwelle steht bei <see cref="RagtAbPx"/> und ist dort begruendet.
+        // ⚠ Ein WALD kann brennen, und Brennen ist im Original ein
+        // Kacheltausch. Darum wandert jede Waldzelle zusaetzlich mit ihrer
+        // VERKOHLTEN Fassung in den Streifen — siehe BurntAtlas.
         Objects.Clear();
+        BurntAtlas.Clear();
+        _burnt = null; _burntH = 0;
         var isBuilding = BuildingCells(code);
+        // Kachelcode der verkohlten Fassung -> Platz im Streifen. Hoechstens 57
+        // je Karte, darum eine kleine Tafel und kein Bild je Zelle.
+        var kohleSlot = new Dictionary<int, int>();
+        var kohleSpr = new List<Sprite>();
         if (objects)
             for (int r = 0; r < h; r++)
                 for (int c = 0; c < w; c++)
@@ -449,16 +501,91 @@ public sealed class MapBaker
                     if (code[i] < GroundMax) continue;
                     if (isBuilding[i]) { MarkSkipped(ObjectSprite(code[i]), c, r, elev[i]); continue; }
                     var sp = ObjectSprite(code[i]);
-                    if (sp != null && TileH - (BlitAnchor + sp.YOff) > RagtAbPx)
+                    int imap = MapForest.Imap(_map, c, r);
+                    if (sp != null && MapForest.ImZeilenfach(imap))
                     {
                         BlitTo(_objects ??= new byte[PixelW * PixelH * 4], sp, c, r, elev[i]);
+
+                        // Die verkohlte Fassung — nur fuer WALD; ein
+                        // zerstoerbares Objekt (61000..) hat eine andere
+                        // Mechanik (Schadensstufen, @0x40D4FB) und ist hier
+                        // nicht dran.
+                        int kohle = -1, kx = 0, ky = 0;
+                        if (MapForest.IstWald(imap))
+                        {
+                            int kc = MapForest.Verkohlt(code[i], flag[i]);
+                            if (!kohleSlot.TryGetValue(kc, out kohle))
+                            {
+                                var ks = ObjectSprite(kc);
+                                if (ks != null)
+                                {
+                                    kohle = kohleSpr.Count;
+                                    kohleSlot[kc] = kohle;
+                                    kohleSpr.Add(ks);
+                                    BurntAtlas.Add((kc, 0, 0, ks.W, ks.H, ks.YOff));
+                                }
+                                else kohle = -1;
+                            }
+                            if (kohle >= 0)
+                            {
+                                kx = c * TileW;
+                                ky = OriginY + r * TileH - elev[i] * ElevStep
+                                     + BlitAnchor + kohleSpr[kohle].YOff;
+                            }
+                        }
                         Objects.Add((c, r, c * TileW,
                                      OriginY + r * TileH - elev[i] * ElevStep + BlitAnchor + sp.YOff,
-                                     sp.W, sp.H));
+                                     sp.W, sp.H, kohle, kx, ky));
                         continue;
                     }
                     Blit(sp, c, r, elev[i]);
                 }
+
+        // Der Streifen: die gesammelten verkohlten Bilder nebeneinander, mit
+        // Umbruch an PixelW. Er haengt unten an der zweiten Ebene an, seine
+        // Y-Werte beginnen darum bei PixelH.
+        if (kohleSpr.Count > 0)
+        {
+            int zx = 0, zy = 0, zeileH = 0;
+            for (int k = 0; k < kohleSpr.Count; k++)
+            {
+                var ks = kohleSpr[k];
+                if (zx + ks.W > PixelW && zx > 0) { zx = 0; zy += zeileH; zeileH = 0; }
+                var e = BurntAtlas[k];
+                BurntAtlas[k] = (e.Code, zx, PixelH + zy, ks.W, ks.H, ks.YOff);
+                zx += ks.W;
+                if (ks.H > zeileH) zeileH = ks.H;
+            }
+            _burntH = zy + zeileH;
+            _burnt = new byte[PixelW * _burntH * 4];
+            for (int k = 0; k < kohleSpr.Count; k++)
+            {
+                var ks = kohleSpr[k];
+                var e = BurntAtlas[k];
+                for (int y = 0; y < ks.H; y++)
+                {
+                    int dy = e.Y - PixelH + y;
+                    if (dy < 0 || dy >= _burntH) continue;
+                    for (int x = 0; x < ks.W; x++)
+                    {
+                        int o = (y * ks.W + x) * 4;
+                        if (ks.Rgba[o + 3] == 0) continue;
+                        int dx = e.X + x;
+                        if (dx < 0 || dx >= PixelW) continue;
+                        int d = (dy * PixelW + dx) * 4;
+                        _burnt[d] = ks.Rgba[o];
+                        _burnt[d + 1] = ks.Rgba[o + 1];
+                        _burnt[d + 2] = ks.Rgba[o + 2];
+                        _burnt[d + 3] = 255;
+                    }
+                }
+            }
+            // ⚠ Ohne aufragende Objekte gibt es keine zweite Ebene, an die der
+            // Streifen haengen koennte — und ohne Waldzelle gibt es keinen
+            // Streifen. Beides zusammen kann also nicht vorkommen; die Zusage
+            // steht hier, damit ObjectLayer sie nicht pruefen muss.
+            _objects ??= new byte[PixelW * PixelH * 4];
+        }
 
         return Image.CreateFromData(PixelW, PixelH, false, Image.Format.Rgba8, _canvas);
     }

@@ -780,6 +780,28 @@ public sealed class ContentBuilder
         return ok > 0;
     }
 
+    /// <summary>
+    /// <b>DER PRÜFSTAND ZU BEIDEN FRAGEN</b> — »ab wann ragt ein Objekt auf«
+    /// und »welche Kachel brennt«. Erreichbar über <c>--objekt-hoehen=</c>.
+    ///
+    /// <para>Er tut drei Dinge, und jedes davon kann <b>scheitern</b>:</para>
+    /// <list type="number">
+    ///   <item><b>Die Höhenverteilung</b> — wie bisher. ⚠ Sie ist seit dem
+    ///     18.08.2026 <i>kein</i> Schwellenlieferant mehr, sondern der Beleg,
+    ///     dass sie keiner sein kann: sie läuft ohne Lücke durch.</item>
+    ///   <item><b>Die Aufteilung nach der BELEGUNGSKARTE</b> — wie viele
+    ///     Objektzellen Wald, Objekt, Gebäude oder gar nichts tragen, und wie
+    ///     viele Kacheln in BEIDEN Töpfen vorkommen. Wäre die Lesung falsch,
+    ///     wäre der Überschneidungshaufen gross; gemessen sind es 5 von
+    ///     6.601.</item>
+    ///   <item><b>Die verkohlte Kachel</b> — für jede Waldzelle jeder Karte
+    ///     wird <see cref="MapForest.Verkohlt"/> gerechnet und das Ergebnis
+    ///     <b>aus dem Kachelsatz geholt</b>. Ein Code ohne Bild ist ein Fehler,
+    ///     wird gezählt und lässt den Lauf scheitern.</item>
+    /// </list>
+    ///
+    /// <para>⚠ Regel 5: er ruft <see cref="MapBaker"/> und
+    /// <see cref="MapForest"/> auf, er bildet sie nicht nach.</para></summary>
     public bool ReportObjectHeights(Action<string>? progress = null)
     {
         void Say(string s) { GD.Print("objekt-hoehen: " + s); progress?.Invoke(s); }
@@ -789,6 +811,18 @@ public sealed class ContentBuilder
         var gesehen = new HashSet<(int Tileset, int Code)>();
         int karten = 0, fehler = 0;
 
+        // (2) die Aufteilung nach der Belegungskarte
+        long zWald = 0, zObjekt = 0, zGebaeude = 0, zBoden = 0, zSonst = 0, ohneImap = 0;
+        var codesFach = new HashSet<(int, int)>();
+        var codesBoden = new HashSet<(int, int)>();
+
+        // (3) die verkohlten Kacheln
+        long kohleZellen = 0;
+        int kohleFehlt = 0, kohleFussGleich = 0, kohleFussDaneben = 0;
+        var kohleCodes = new HashSet<(int, int)>();
+        var kohleBeispiel = new List<string>();
+        var kohleGut = new List<string>();
+
         void One(string path, string name)
         {
             try
@@ -797,7 +831,8 @@ public sealed class ContentBuilder
                 string? cwp = Find($"DATA/{m.Tileset:00}.CWP");
                 string? pal = Find($"DATA/{m.Tileset:00}.PAL");
                 if (cwp == null || pal == null) return;
-                var baker = new MapBaker(m, CwpFile.Load(cwp), PalFile.Load(pal));
+                var tiles = CwpFile.Load(cwp);
+                var baker = new MapBaker(m, tiles, PalFile.Load(pal));
                 baker.Bake(fill: false, objects: false);      // nur die Masse setzen
                 karten++;
                 foreach (var o in baker.ObjectHeights())
@@ -806,6 +841,73 @@ public sealed class ContentBuilder
                     proRise.TryGetValue(o.Rise, out var v);
                     proRise[o.Rise] = (v.Codes + (neu ? 1 : 0), v.Cells + o.Count);
                 }
+
+                if (m.Sec(MapForest.ImapSektion) == null) { ohneImap++; return; }
+                for (int r = 0; r < m.Height; r++)
+                    for (int c = 0; c < m.Width; c++)
+                    {
+                        int code = m.CodeAt(c, r);
+                        if (code < MapBaker.GroundMax) continue;
+                        int imap = MapForest.Imap(m, c, r);
+                        if (MapForest.IstWald(imap))
+                        {
+                            zWald++;
+                            codesFach.Add((m.Tileset, code));
+                            // Die verkohlte Fassung MUSS es geben — sonst
+                            // koennte das Original diese Zelle nicht anzuenden.
+                            int kc = MapForest.Verkohlt(code, m.FlagAt(c, r));
+                            kohleZellen++;
+                            if (!kohleCodes.Add((m.Tileset, kc))) continue;
+                            CwpFile.Frame? f = null;
+                            try { f = tiles.DecodeObject(kc); }
+                            catch (ArgumentOutOfRangeException) { }
+                            if (f == null || f.IsEmpty)
+                            {
+                                kohleFehlt++;
+                                Say($"   [!] {name}: Kachel {code} -> verkohlt {kc} — KEIN BILD");
+                            }
+                            else
+                            {
+                                // ⚠ DIE EIGENTLICHE PROBE, und sie ist schaerfer
+                                // als jede Hoehe: der verkohlte Baum steht auf
+                                // DEMSELBEN FUSS wie der gruene. Er ist oben
+                                // kuerzer (die Krone ist weg) und faengt darum
+                                // weiter unten an — aber `YOffset + Height` ist
+                                // dieselbe Zahl. Eine falsch gelesene Rechnung
+                                // wuerde hier streuen; gemessen sind 3021 von
+                                // 3080 Paaren auf den Pixel gleich, 50 um 1 px
+                                // daneben, 9 um 15 px.
+                                var gruen = tiles.DecodeObject(code);
+                                if (gruen.YOffset + gruen.Height == f.YOffset + f.Height)
+                                {
+                                    kohleFussGleich++;
+                                    if (kohleGut.Count < 4)
+                                        kohleGut.Add($"{code} ({gruen.Width}x{gruen.Height}, yoff {gruen.YOffset}) "
+                                                     + $"-> {kc} ({f.Width}x{f.Height}, yoff {f.YOffset})");
+                                }
+                                else
+                                {
+                                    kohleFussDaneben++;
+                                    if (kohleBeispiel.Count < 6)
+                                        kohleBeispiel.Add($"[!] {code} -> {kc}: Fuss {gruen.YOffset + gruen.Height} "
+                                                          + $"gegen {f.YOffset + f.Height}");
+                                }
+                            }
+                        }
+                        else if (imap >= MapForest.ObjektVon && imap < MapForest.ObjektBis)
+                        {
+                            zObjekt++;
+                            codesFach.Add((m.Tileset, code));
+                        }
+                        else if (imap >= MapForest.GebaeudeVon && imap < MapForest.GebaeudeBis)
+                            zGebaeude++;
+                        else if (imap >= 0xFFFC || (imap >= 0 && imap < 8000))
+                        {
+                            zBoden++;
+                            codesBoden.Add((m.Tileset, code));
+                        }
+                        else zSonst++;
+                    }
             }
             catch (Exception e) { fehler++; Say($"{name}: {e.Message}"); }
         }
@@ -821,19 +923,46 @@ public sealed class ContentBuilder
         { Say("KEINE Karte gefunden — zeigt der Pfad auf die Installation oder die CDs?"); return false; }
 
         Say($"{karten} Karten, {gesehen.Count} verschiedene Objektbilder, {fehler} Fehler");
-        Say("Ueberstand ueber der Zellunterkante -> Bilder / Zellen:");
+        Say("(1) Ueberstand ueber der Zellunterkante -> Bilder / Zellen:");
         int letzte = -999;
         foreach (var kv in proRise)
         {
-            // ⚠ Die LUECKEN sind der eigentliche Gegenstand: dort gehoert die
-            // Schwelle hin. Sie werden darum ausdruecklich genannt und nicht
-            // nur durch fehlende Zeilen angedeutet.
+            // ⚠ Die LUECKEN sind der eigentliche Gegenstand: dort HAETTE eine
+            // Schwelle hingehoert. Sie werden darum ausdruecklich genannt und
+            // nicht nur durch fehlende Zeilen angedeutet — und dass oberhalb
+            // von 20 px keine mehr kommt, ist genau der Befund.
             if (letzte > -999 && kv.Key > letzte + 1)
                 Say($"   -- LUECKE {letzte + 1}..{kv.Key - 1} px --");
             Say($"   {kv.Key,4} px : {kv.Value.Codes,4} Bilder, {kv.Value.Cells,7} Zellen");
             letzte = kv.Key;
         }
-        return true;
+
+        long objZellen = zWald + zObjekt + zGebaeude + zBoden + zSonst;
+        Say($"(2) Aufteilung von {objZellen} Objektzellen nach der BELEGUNGSKARTE:");
+        Say($"   Wald   (50000..55999) : {zWald,7}  -> Zeilenfach, kann verdecken");
+        Say($"   Objekt (61000..63999) : {zObjekt,7}  -> Zeilenfach, kann verdecken");
+        Say($"   Gebaeude (60000..)    : {zGebaeude,7}  -> zeichnet der Gebaeudeweg");
+        Say($"   ohne Eintrag          : {zBoden,7}  -> bleibt im Kartenbild");
+        Say($"   sonstige Belegung     : {zSonst,7}");
+        if (ohneImap > 0) Say($"   [!] {ohneImap} Karten ohne Sektion 6 — nicht mitgezaehlt");
+        int beides = 0;
+        foreach (var k in codesFach) if (codesBoden.Contains(k)) beides++;
+        Say($"   Kacheln nur im Fach {codesFach.Count}, nur im Boden {codesBoden.Count}, "
+            + $"in BEIDEN {beides} — je mehr in beiden, desto weniger taugt die Aufteilung");
+
+        Say($"(3) verkohlte Kacheln: {kohleZellen} Waldzellen, {kohleCodes.Count} verschiedene Paare");
+        Say($"   auf demselben Fuss: {kohleFussGleich}, daneben: {kohleFussDaneben}, ohne Bild: {kohleFehlt}");
+        foreach (var b in kohleGut) Say($"   {b}");
+        foreach (var b in kohleBeispiel) Say($"   {b}");
+        if (kohleFehlt > 0)
+            Say($"   [!!] {kohleFehlt} Codes OHNE BILD — die Rechnung stimmt nicht");
+        // ⚠ Regel: der Prueftstand muss SCHEITERN koennen. Er tut es, wenn ein
+        // Code kein Bild hat oder wenn weniger als 19 von 20 Paaren auf dem
+        // Fuss uebereinstimmen — beides waere eine falsch gelesene Rechnung.
+        bool gut = kohleFehlt == 0
+                && kohleFussGleich >= (kohleFussGleich + kohleFussDaneben) * 19 / 20;
+        if (!gut) Say("   [!!] die Rechnung aus zapal @0x4CACB4 traegt hier NICHT");
+        return gut;
     }
 
     public bool ReexportTables(Action<string>? progress = null)
@@ -1184,17 +1313,45 @@ public sealed class ContentBuilder
         // Zeichner braucht beides; sortiert wird bei ihm, nicht hier.
         if (b.Objects.Count > 0)
         {
-            sb.Append("\"objects_note\":\"aufragende Objekte (> MapBaker.RagtAbPx ueber der ");
-            sb.Append("Zellunterkante). Sie stehen NICHT im Kartenbild, sondern in ");
-            sb.Append("<karte>.objects.png, und werden im Zeilenfach zwischen die Einheiten ");
-            sb.Append("gezeichnet — sonst koennte ein Baum nichts verdecken.\",");
+            sb.Append("\"objects_note\":\"aufragende Objekte: die Zellen, deren BELEGUNG ");
+            sb.Append("(Sektion 6) 50000..55999 (Wald) oder 61000..63999 (zerstoerbares ");
+            sb.Append("Objekt) ist — genau die, die das Original in seinem verzahnten ");
+            sb.Append("Durchgang @0x4B43BB zeichnet (@0x4B446C). Sie stehen NICHT im ");
+            sb.Append("Kartenbild, sondern in <karte>.objects.png, und werden im Zeilenfach ");
+            sb.Append("zwischen die Einheiten gezeichnet — sonst koennte ein Baum nichts ");
+            sb.Append("verdecken. Siehe MapForest.ImZeilenfach.\",");
             sb.Append("\"objects\":[");
             for (int i = 0; i < b.Objects.Count; i++)
             {
                 var o = b.Objects[i];
                 if (i > 0) sb.Append(',');
                 sb.Append($"{{\"col\":{o.Col},\"row\":{o.Row},\"x\":{o.X},\"y\":{o.Y},");
-                sb.Append($"\"w\":{o.W},\"h\":{o.H}}}");
+                sb.Append($"\"w\":{o.W},\"h\":{o.H}");
+                // Der Platz der VERKOHLTEN Fassung im Streifen und wohin sie
+                // gehoert. Fehlt, wenn die Zelle kein Wald ist.
+                if (o.Kohle >= 0)
+                    sb.Append($",\"burnt\":{o.Kohle},\"bx\":{o.KX},\"by\":{o.KY}");
+                sb.Append('}');
+            }
+            sb.Append("],");
+        }
+
+        // ⚠ DER STREIFEN MIT DEN VERKOHLTEN BAEUMEN. Brennen ist im Original
+        // ein Kacheltausch (zapal @0x4CACE5), keine Zutat obendrauf — die
+        // Ersatzkachel muss also mit ins Bild. Sie haengt unten an
+        // <karte>.objects.png; die Y-Werte hier beginnen bei pixel_h.
+        if (b.BurntAtlas.Count > 0)
+        {
+            sb.Append("\"burnt_note\":\"verkohlte Baumkacheln, angehaengt unten an ");
+            sb.Append("<karte>.objects.png. Code = 10666 + 19*((kachel-10381)%57/19) + flag, ");
+            sb.Append("gelesen an zapal @0x4CACB4..0x4CACE5. Hoechstens 57 je Karte.\",");
+            sb.Append("\"burnt\":[");
+            for (int i = 0; i < b.BurntAtlas.Count; i++)
+            {
+                var a = b.BurntAtlas[i];
+                if (i > 0) sb.Append(',');
+                sb.Append($"{{\"code\":{a.Code},\"x\":{a.X},\"y\":{a.Y},");
+                sb.Append($"\"w\":{a.W},\"h\":{a.H},\"yoff\":{a.YOff}}}");
             }
             sb.Append("],");
         }
