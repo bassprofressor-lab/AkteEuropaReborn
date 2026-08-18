@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Import;
+﻿namespace AkteEuropaReborn.Import;
 
 using System;
 using System.Collections.Generic;
@@ -1079,14 +1079,28 @@ public sealed class ContentBuilder
         void Say(string s) { GD.Print("reexport-effects: " + s); progress?.Invoke(s); }
         try
         {
-            string? palPath = Find("DATA/01.PAL");
+            // ⚠ 18.08.2026 — ÜBER `Asset`, NICHT über `Find`. Hier stand
+            // `Find("DATA/01.PAL")`, und das sieht nur an EINER Stelle nach:
+            // lose unter DATA/. Eine gewöhnliche Installation (F:\Akte Europa)
+            // hat aber gar kein DATA-Verzeichnis — dort liegen alle Dateien
+            // flach nebeneinander, und 01.PAL ist überhaupt nicht dabei. Der
+            // Schalter meldete darum »ANIM.CWA oder 01.PAL nicht gefunden«,
+            // obwohl ANIM.CWA danebenlag. `Asset` sieht lose UND unter DATA/
+            // UND im Archiv nach, genau wie eine Zeile darunter für ANIM.CWA.
+            //
+            // ⚠ Das löst den Fall nur halb, und das gehört gesagt: fehlt die
+            // Palette auf dem Datenträger ganz, hilft kein Suchweg. Dann sind
+            // ZWEI Ordner anzugeben, mit Strichpunkt getrennt —
+            // `--reexport-effects=F:/Akte Europa;<Ordner mit DATA/01.PAL>`;
+            // ContentSources.FromFolders durchsucht sie der Reihe nach.
+            byte[]? palRaw = Asset("01.PAL");
             byte[]? anim = Asset("ANIM.CWA");
-            if (palPath == null || anim == null)
+            if (palRaw == null || anim == null)
             {
                 Say("ANIM.CWA oder 01.PAL nicht gefunden");
                 return false;
             }
-            var ui = new InterfaceExporter(PalFile.Load(palPath), _dst + "/UI", _dst + "/Effects");
+            var ui = new InterfaceExporter(PalFile.FromBytes(palRaw), _dst + "/UI", _dst + "/Effects");
             ui.WriteEffects(AnimFile.FromBytes(anim));
             // Die Windfahne haengt am selben Weg: sie ist ein Bild der
             // Oberflaeche und soll ohne vollen Neuimport nachziehbar sein.

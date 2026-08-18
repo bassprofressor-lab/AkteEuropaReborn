@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Import;
+﻿namespace AkteEuropaReborn.Import;
 
 using System;
 using System.Collections.Generic;
@@ -352,6 +352,83 @@ public sealed class InterfaceExporter
         // vollständige Import als auch `--reexport-effects=<Quelle>`, ohne dass
         // ein zweiter Schalter in einer fremden Datei nötig wäre.
         WritePortraits(anim);
+        WritePanelIcons(anim);
+    }
+
+    // ---- die drei Symbole im Bedienblock ------------------------------------
+
+    /// <summary>Die Folge, in der Herz, Kanister und Patronen liegen. Der
+    /// Zeichner 0x44FEB0 liest sie über <c>word[0x7A44FA]</c>, und das ist der
+    /// Startrahmen der Folge — nicht eine feste Bildnummer.</summary>
+    public const int PanelIconSeq = 300;
+
+    /// <summary>Die drei Versatzwerte in der Folge. Sie stehen als
+    /// Tabellenzugriff im Code: <c>[eax*4 + 0x8155A0]</c>, <c>+0x8155A4</c> und
+    /// <c>+0x8155A8</c> gegen den Tabellenanfang 0x815580 — also
+    /// <c>0x20/4 = 8</c>, 9 und 10.</summary>
+    public static readonly int[] PanelIconAt = { 8, 9, 10 };
+
+    public static readonly string[] PanelIconName = { "heart", "fuel", "ammo" };
+
+    /// <summary>
+    /// <b>HERZ, KANISTER UND PATRONEN</b> — die drei Symbole, die im
+    /// Bedienblock links neben den Statusbalken stehen.
+    ///
+    /// <para>Sie waren lange gesucht und standen in <see cref="Rendering
+    /// .MapEntityLayer"/> als ausdrückliche Lücke vermerkt (»weder in PANEL.DTA
+    /// noch in CONTROL.CWD«). Beides stimmte — sie liegen in <b>ANIM.CWA</b>,
+    /// derselben Datei wie die Explosionen.</para>
+    ///
+    /// <para><b>Die Fundstelle</b> ist der Zeichner <c>0x44FEB0</c>, erreicht
+    /// aus <c>panel_draw</c> (0x46FE10) über <c>0x46FF29</c>:
+    /// <list type="bullet">
+    /// <item><c>0x44FEF8: movsx eax, word[0x7A44FA]</c> — der Startrahmen der
+    /// Folge 300</item>
+    /// <item><c>0x44FF03: mov ecx, [eax*4 + 0x8155A0]</c> → Versatz 8, gezeichnet
+    /// an (72, 61)</item>
+    /// <item><c>0x44FF42: [eax*4 + 0x8155A4]</c> → Versatz 9, an (72, 81)</item>
+    /// <item><c>0x44FF83: [eax*4 + 0x8155A8]</c> → Versatz 10, an (72, 101)</item>
+    /// </list>
+    /// Ein zweiter Zweig ab <c>0x44FF95</c> zeichnet dieselben drei Bilder für
+    /// ein Objekt aus dem Bereich 0x4E20..0x4F4C (Flugzeugplatz) bei x=71.</para>
+    ///
+    /// <para>⚠ <b>Die Folge, nicht die Bildnummer.</b> Der Code rechnet den
+    /// Rahmen aus dem Folgenanfang aus; wir tun dasselbe. Bei der ausgelieferten
+    /// ANIM.CWA fällt daraus 960/961/962, aber diese Zahlen stehen NICHT im
+    /// Programm und werden darum auch hier nicht hingeschrieben.</para>
+    ///
+    /// <para>Nebenbefund, nicht gebaut: derselben Folge gehört bei Versatz 11
+    /// ein <b>Blitz</b> an, den 0x44FEB0 nicht zeichnet (kein Zugriff auf
+    /// 0x8155AC). Wo er hingehört, ist ungelesen.</para>
+    /// </summary>
+    public void WritePanelIcons(AnimFile anim)
+    {
+        Directory.CreateDirectory(_ui);
+        var (count, start) = anim.Sequence(PanelIconSeq);
+        var sb = new StringBuilder();
+        sb.Append("{\"source\":\"ANIM.CWA\",\"sequence\":").Append(PanelIconSeq);
+        sb.Append(",\"first_frame\":").Append(start).Append(",\"icons\":{");
+        int written = 0;
+        for (int i = 0; i < PanelIconAt.Length; i++)
+        {
+            int off = PanelIconAt[i];
+            if (off >= count) continue;
+            var f = anim.Frame(start + off);
+            if (f == null) continue;
+            var img = Canvas(f, f.Width, f.YOffset + f.Height);
+            Save($"{_ui}/panel_{PanelIconName[i]}.png", img);
+            if (written > 0) sb.Append(',');
+            sb.Append($"\"{PanelIconName[i]}\":{{\"offset\":{off},");
+            sb.Append($"\"frame\":{start + off},\"w\":{f.Width},");
+            sb.Append($"\"h\":{f.YOffset + f.Height},\"yoff\":{f.YOffset}}}");
+            written++;
+        }
+        sb.Append("}}");
+        File.WriteAllText($"{_ui}/panel_icons_index.json", sb.ToString(),
+                          new UTF8Encoding(false));
+        GD.Print($"Bedienblock-Symbole: {written} von {PanelIconAt.Length} aus " +
+                 $"ANIM.CWA Folge {PanelIconSeq} (Rahmen {start}+" +
+                 string.Join("/", PanelIconAt) + $") -> {_ui}");
     }
 
     // ---- die 86 Bauteilbilder aus ANIM.CWA ----------------------------------

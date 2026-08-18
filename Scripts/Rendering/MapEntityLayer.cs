@@ -1497,17 +1497,20 @@ public partial class MapEntityLayer : Node2D
     /// Versuche — das ist der Beleg, dass es die Farben des Spiels sind und
     /// nicht meine.</para>
     ///
-    /// <para>⚠ <b>Die LAGE ist von der Aufnahme abgelesen, nicht auf den Punkt
-    /// gemessen</b>: die Aufnahme zeigt das Spiel 2,156-fach, und die Ränder des
-    /// vertieften Feldes sind darin nicht scharf genug, um Versätze im
-    /// Einzelpunkt zu bestimmen. Die drei Zeilen sitzen in der rechten Hälfte
-    /// des Feldes, gleichmässig verteilt.</para>
+    /// <para>⚠ <b>KORRIGIERT 18.08.2026: die Lage ist GEMESSEN.</b> Hier stand,
+    /// sie sei »von der Aufnahme abgelesen, nicht auf den Punkt gemessen« — die
+    /// Aufnahme zeigt das Spiel 2,156-fach, und darin sind die Ränder des
+    /// vertieften Feldes nicht scharf genug. Das stimmte, solange niemand den
+    /// Zeichner gelesen hatte; er nennt die Punkte selbst. Siehe
+    /// <see cref="PanelBarFrameAt"/>.</para>
     ///
-    /// <para>⚠⚠ <b>DIE DREI SYMBOLE FEHLEN NOCH.</b> Sie stehen weder in
-    /// <c>PANEL.DTA</c> (34.680 Byte = genau 204×170, kein Anhang) noch in
-    /// <c>CONTROL.CWD</c> (das ist ein Hintergrundbild, 254×167, nachgesehen).
-    /// Bis sie gefunden sind, unterscheiden die drei <b>Farben</b> die Zeilen —
-    /// und die sind die des Originals.</para></summary>
+    /// <para>⚠⚠ <b>UND DIE DREI SYMBOLE SIND GEFUNDEN.</b> Hier stand »sie
+    /// fehlen noch — weder in PANEL.DTA noch in CONTROL.CWD«. Beides war
+    /// richtig und beides führte in die Irre: sie liegen in <b>ANIM.CWA</b>,
+    /// derselben Datei wie die Explosionen, in Folge 300 bei Versatz 8/9/10.
+    /// Gezeichnet werden sie von <c>0x44FEB0</c>, das der Bedienblock über
+    /// <c>0x46FF29</c> ruft. Siehe
+    /// <see cref="Import.InterfaceExporter.WritePanelIcons"/>.</para></summary>
     private void BuildPanelBars(CanvasLayer layer)
     {
         for (int i = 0; i < 3; i++)
@@ -1516,11 +1519,38 @@ public partial class MapEntityLayer : Node2D
             _barFill[i] = new ColorRect { Color = PanelBarColour[i], Visible = false };
             layer.AddChild(_barBack[i]);
             layer.AddChild(_barFill[i]);
+            // Das Symbol LINKS neben dem Balken. Fehlt die Datei, bleibt es weg
+            // — die Balken allein sind lesbar, ein leeres Rechteck nicht.
+            string p = Core.Content.Path("UI/panel_" + PanelIconFile[i] + ".png");
+            Texture2D? t = ResourceLoader.Exists(p) ? ResourceLoader.Load<Texture2D>(p) : null;
+            if (t == null && FileAccess.FileExists(p))
+            {
+                var img = Image.LoadFromFile(p);
+                if (img != null) t = ImageTexture.CreateFromImage(img);
+            }
+            if (t == null) continue;
+            _barIcon[i] = new TextureRect
+            {
+                Texture = t,
+                TextureFilter = TextureFilterEnum.Nearest,
+                StretchMode = TextureRect.StretchModeEnum.Scale,
+                Visible = false,
+            };
+            layer.AddChild(_barIcon[i]);
         }
     }
 
     private readonly ColorRect[] _barBack = new ColorRect[3];
     private readonly ColorRect[] _barFill = new ColorRect[3];
+
+    /// <summary>Herz, Kanister, Patronen — die drei Symbole aus ANIM.CWA
+    /// Folge 300, geschrieben von
+    /// <see cref="Import.InterfaceExporter.WritePanelIcons"/>. Das Original
+    /// zeichnet sie in <c>0x44FEB0</c>, gerufen aus dem Bedienblock über
+    /// <c>0x46FF29</c>.</summary>
+    private readonly TextureRect?[] _barIcon = new TextureRect?[3];
+
+    private static readonly string[] PanelIconFile = { "heart", "fuel", "ammo" };
 
     /// <summary>Hülle, Sprit, Munition — die drei Farben aus DATA/01.PAL,
     /// Indizes 5, 3 und 84. Siehe <see cref="BuildPanelBars"/>.</summary>
@@ -1540,14 +1570,68 @@ public partial class MapEntityLayer : Node2D
     private const float BarLeftFrac = 0.44f, BarWidthFrac = 0.40f,
                         BarTopFrac = 0.30f, BarGapFrac = 0.24f, BarHeightPx = 10f;
 
-    /// <summary>Die drei Balken an das vertiefte Feld setzen.</summary>
+    /// <summary>Wo die drei Symbole im Block sitzen — <b>gelesen</b> aus
+    /// <c>0x44FEB0</c>: <c>push 0x48</c> (x=72) und <c>push 0x3D/0x51/0x65</c>
+    /// (y=61/81/101), je 20 Punkte Abstand. Der zweite Zweig ab 0x44FF95
+    /// zeichnet dieselben Bilder für einen Flugzeugplatz bei x=71; den einen
+    /// Punkt Unterschied machen wir nicht mit.</summary>
+    private static readonly Vector2I[] PanelIconAt =
+    {
+        new(72, 61), new(72, 81), new(72, 101),
+    };
+
+    /// <summary>Wo die drei Balken sitzen — <b>gelesen</b> aus dem Zeichner des
+    /// Bedienblocks. Er malt je einen Rahmen und darin den Füllstand:
+    /// <c>0x470CAC push 0x5B/0x42/0x28/6</c> = Rahmen (91,66) 40x6, darin
+    /// <c>0x470D33 push 0x5C/0x43</c> = Füllung ab (92,67), Höhe 4, Länge
+    /// <c>38*ist/voll</c>. Die zwei weiteren Paare stehen bei 0x470CA6/0x470E0D
+    /// auf y=86/87 und y=107/108.</summary>
+    private static readonly Vector2I[] PanelBarFrameAt =
+    {
+        new(91, 66), new(91, 86), new(91, 107),
+    };
+
+    private const int PanelBarFrameW = 40, PanelBarFrameH = 6,
+                      PanelBarFillW = 38, PanelBarFillH = 4;
+
+    /// <summary>
+    /// Die drei Balken und ihre Symbole an das Bedienfeld setzen.
+    ///
+    /// <para>⚠ <b>18.08.2026 — die Lage ist jetzt GEMESSEN.</b> Bis heute
+    /// standen hier Bruchteile des vertieften Feldes (<c>BarLeftFrac</c> und
+    /// Geschwister), von einer 2,156-fach vergrößerten Aufnahme abgelesen, mit
+    /// dem ausdrücklichen Vermerk »nicht auf den Punkt gemessen«. Der Zeichner
+    /// nennt die Punkte selbst — siehe <see cref="PanelBarFrameAt"/> und
+    /// <see cref="PanelIconAt"/> —, und damit fällt das Ablesen weg. Die
+    /// Bruchteile bleiben als Rückfall stehen, falls die Blockecke fehlt.</para>
+    /// </summary>
     private void PlacePanelBars(Rect2 box)
     {
+        bool echt = _panelScale > 0f;
         for (int i = 0; i < 3; i++)
         {
             if (_barBack[i] == null) continue;
-            var at = box.Position + new Vector2(box.Size.X * BarLeftFrac,
-                                                box.Size.Y * (BarTopFrac + i * BarGapFrac));
+            Vector2 at;
+            Vector2 hintergrund, fuellung;
+            if (echt)
+            {
+                at = _panelOrigin + (Vector2)(PanelBarFrameAt[i] + Vector2I.One) * _panelScale;
+                hintergrund = new Vector2(PanelBarFrameW, PanelBarFrameH) * _panelScale;
+                fuellung = new Vector2(PanelBarFillW, PanelBarFillH) * _panelScale;
+                _barBack[i].Position = _panelOrigin + (Vector2)PanelBarFrameAt[i] * _panelScale;
+                _barBack[i].Size = hintergrund;
+                _barFill[i].Position = at;
+                _barFill[i].Size = fuellung;
+                if (_barIcon[i] != null)
+                {
+                    var t = _barIcon[i]!.Texture;
+                    _barIcon[i]!.Position = _panelOrigin + (Vector2)PanelIconAt[i] * _panelScale;
+                    _barIcon[i]!.Size = (t?.GetSize() ?? Vector2.One) * _panelScale;
+                }
+                continue;
+            }
+            at = box.Position + new Vector2(box.Size.X * BarLeftFrac,
+                                            box.Size.Y * (BarTopFrac + i * BarGapFrac));
             _barBack[i].Position = at - Vector2.One;
             _barBack[i].Size = new Vector2(box.Size.X * BarWidthFrac + 2, BarHeightPx + 2);
             _barFill[i].Position = at;
@@ -1555,6 +1639,9 @@ public partial class MapEntityLayer : Node2D
         }
         _panelBarBox = box;
     }
+
+    private Vector2 _panelOrigin;
+    private float _panelScale;
 
     private Rect2 _panelBarBox;
 
@@ -1570,6 +1657,7 @@ public partial class MapEntityLayer : Node2D
             if (_barBack[i] == null) continue;
             _barBack[i].Visible = an;
             _barFill[i].Visible = an;
+            if (_barIcon[i] != null) _barIcon[i]!.Visible = an;
         }
         if (!an || e == null) return;
         float[] anteil =
@@ -1579,8 +1667,16 @@ public partial class MapEntityLayer : Node2D
             e.AmmoMax > 0 ? Mathf.Clamp((float)e.Ammo / e.AmmoMax, 0, 1) : 0f,
         };
         for (int i = 0; i < 3; i++)
-            _barFill[i].Size = new Vector2(_panelBarBox.Size.X * BarWidthFrac * anteil[i],
-                                           BarHeightPx);
+        {
+            if (_barIcon[i] != null) _barIcon[i]!.Visible = true;
+            // Die Länge ist im Original `38*ist/voll` bei fester Höhe 4
+            // (0x470D25..0x470D37). Mit der gemessenen Lage rechnen wir genauso;
+            // ohne sie bleibt der alte Bruchteil.
+            _barFill[i].Size = _panelScale > 0f
+                ? new Vector2(PanelBarFillW * _panelScale * anteil[i],
+                              PanelBarFillH * _panelScale)
+                : new Vector2(_panelBarBox.Size.X * BarWidthFrac * anteil[i], BarHeightPx);
+        }
     }
 
     /// <summary>The buildable types of this map's tileset, or null when the
@@ -5453,6 +5549,18 @@ public partial class MapEntityLayer : Node2D
     }
 
     private bool _panelTextOn = true;
+
+    /// <summary>Wie <see cref="SetPanelBox(Rect2)"/>, aber MIT der Ecke des
+    /// Bedienblocks und seiner Vergrößerung. Damit lassen sich Balken und
+    /// Symbole an die im Zeichner gelesenen Blockpunkte setzen, statt sie aus
+    /// Bruchteilen des vertieften Feldes zu schätzen — siehe
+    /// <see cref="PlacePanelBars"/>.</summary>
+    public void SetPanelBox(Rect2 box, Vector2 blockEcke, float vergroesserung)
+    {
+        _panelOrigin = blockEcke;
+        _panelScale = vergroesserung;
+        SetPanelBox(box);
+    }
 
     public void SetPanelBox(Rect2 box)
     {

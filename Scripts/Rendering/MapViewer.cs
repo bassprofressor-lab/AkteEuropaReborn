@@ -2671,7 +2671,7 @@ public partial class MapViewer : Node2D
         // ganze Feld — nicht in einer Spalte daneben.
         Rect2 rel = PanelBox;
         var box = new Rect2(origin + rel.Position * PanelScale, rel.Size * PanelScale);
-        _entities.SetPanelBox(box);
+        _entities.SetPanelBox(box, origin, PanelScale);
         if (_panelClock != null)
             _panelClock.Position = origin + (Vector2)PanelClockAt * PanelScale;
         if (_panelPortrait != null)
