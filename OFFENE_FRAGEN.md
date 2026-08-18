@@ -1,4 +1,4 @@
-# Offene Fragen an den Spieler
+﻿# Offene Fragen an den Spieler
 
 Alles, wo ich **im Original nichts gefunden habe** oder wo eine Deutung nicht
 zu beweisen war. Kein Punkt hier ist geraten und eingebaut — entweder er ist
@@ -21,32 +21,19 @@ nachsehen oder Bildschirmfotos machen.
 
 ## Offen
 
-### 1. Vier Untermissionen, die wir nicht erfüllen können
+### ~~1. Untermissionen, die wir nicht erfuellen konnten~~ — ERLEDIGT
 
-Von ursprünglich acht sind vier übrig. Ihr **Text** steht fest (aus
-`HELPG.TXT`), die **Codestelle** auch — was fehlt, ist die Bedingung davor,
-die unser Leser nicht liest.
+Alle acht sind gebaut. Der Abgleich Original gegen unsere Datei meldet fuer
+**alle 33 Missionen keine einzige Abweichung** mehr: keine fehlt, keine ist zu
+viel. Vier Formen haben gefehlt, alle vier jetzt gelesen:
 
-| Mission | Ziel laut Spieltext | Codestelle |
-|---|---|---|
-| M6 / 1 | »Befreiung des Hadgi Ibn Mustaffa und seine Begleitung zum Lagerzentrum-Nord« | `0x49A81E` |
-| M14 / 2 | »Ziel der Mission in 45 Minuten zu beenden« | `0x49D6AB` |
-| M20 / 1 | »Entfernung jeglicher Bodensysteme der Droiden« | `0x49F3D6` |
-| M24 / 1 | »Beseitigung der Bodeninstallationen« | `0x4A18D4` |
-
-**Was mir hülfe:** was der Spieler dort *tut*, wenn das Ziel umspringt. Bei M6
-etwa: wohin genau muss Hadgi gebracht werden, und woran merkt man, dass es
-gezählt hat?
-
-### 2. Zwei Untermissionen, die NUR wir erfüllen
-
-Umgekehrter Fall — wir setzen sie auf »erfüllt«, das Original schreibt an der
-Stelle keine literale 10.
-
-* **M24 / Ziel 3** — unentscheidbar, dort schreibt nur ein Register.
-* **M25 / Ziel 1** — sieht nach unserer eigenen Zutat aus.
-
-**Was mir hülfe:** ob diese zwei Ziele im Original überhaupt erfüllbar sind.
+* `find_unit_with_part(spieler, teil)` (M20, M24) — die Abfrage stand als
+  »gelesen, nicht gebaut« da, weil zwei der drei Bauteilbytes bei uns fehlten.
+* `time_after` mit einem anderen Operator als `>` (M14) — die Laufzeit rechnete
+  `>` fest.
+* `find_unit(...) == v[n]`, also gegen eine Variable statt gegen eine Zahl (M6).
+* Untermissionen im ENDBLOCK (M7, M16) — der Leser uebersprang jeden
+  Basisblock, der die Endfunktion ruft, samt allem anderen darin.
 
 ### 3. Die Nachfrist selbst
 

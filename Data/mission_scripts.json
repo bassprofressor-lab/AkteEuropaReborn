@@ -3197,6 +3197,68 @@
      ]
     },
     {
+     "_at": "0x49CFF4",
+     "_tut_ausserdem": "remove_unit show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 19,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "a": 106,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49D00D",
+       "a": 240,
+       "kind": "remove_unit_var"
+      },
+      {
+       "_at": "0x49D023",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49D02F",
+       "a": 0,
+       "b": 50,
+       "kind": "money"
+      },
+      {
+       "_at": "0x49D037",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 19,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 194,
+       "c": 240,
+       "kind": "unit_index_var",
+       "op": "=="
+      },
+      {
+       "a": 240,
+       "b": 20,
+       "c": 50,
+       "kind": "unit_field",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49D054",
      "_tut_ausserdem": "game_time",
      "once": 21,
@@ -24483,6 +24545,70 @@
        "a": 9,
        "b": 10,
        "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49A81E",
+     "_tut_ausserdem": "remove_unit show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49A82E",
+       "a": 10,
+       "kind": "remove_unit_var"
+      },
+      {
+       "_at": "0x49A844",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49A853",
+       "a": 650,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "_at": "0x49A85B",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 194,
+       "c": 10,
+       "kind": "unit_index_var",
+       "op": "=="
+      },
+      {
+       "a": 10,
+       "b": 0,
+       "c": 28,
+       "kind": "unit_field",
+       "op": "=="
+      },
+      {
+       "a": 10,
+       "b": 1,
+       "c": 6,
+       "kind": "unit_field",
        "op": "=="
       }
      ]

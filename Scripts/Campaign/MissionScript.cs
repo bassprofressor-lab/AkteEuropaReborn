@@ -1951,6 +1951,12 @@ public sealed class MissionScript
         "objects" => ObjectCount != null && Cmp(ObjectCount(c.A, c.B), c.Op, c.C),
         // find_unit(a, b) <op> c   — c = 65535 heisst "es gibt sie nicht"
         "unit_index" => FindUnit != null && Cmp(FindUnit(c.A, c.B), c.Op, c.C),
+        // Dasselbe, aber gegen eine MISSIONSVARIABLE statt gegen eine Zahl:
+        // "ist der gefundene Satz derselbe, den sich die Mission gemerkt hat?"
+        // Mission 6 fragt so (@0x49A7EF), bevor sie prueft, ob Hadgi Ibn
+        // Mustaffa auf Zelle (28,6) angekommen ist.
+        "unit_index_var" => FindUnit != null && c.C >= 0 && c.C < _var.Length
+                            && Cmp(FindUnit(c.A, c.B), c.Op, _var[c.C]),
         // Feld +b der Einheit, deren Index in v[a] steht, <op> c.
         // ⚠ Ein unbekanntes Feld (-1) macht die Bedingung FALSCH, nicht wahr:
         // eine Kette, die nicht beantwortet werden kann, darf nicht gewinnen.
@@ -2605,6 +2611,7 @@ public sealed class MissionScript
                           (StoreField != null ? StoreField(c.B, c.C) : -1),
         "unit_field" => $"Einheit v[{c.A}]={Var(c.A)} Feld+{c.B}{c.Op}{c.C}",
         "unit_index" => $"find_unit(P{c.A},Marke{c.B}){c.Op}{c.C}",
+        "unit_index_var" => $"find_unit(P{c.A},Marke{c.B}){c.Op}v[{c.C}]={Var(c.C)}",
         "unit_is_var" => $"Einheit v[{c.A}]={Var(c.A)} hat Marke {c.B}{c.Op}{c.C}",
         "find_part" => $"Bauteil {c.B} bei P{c.A}{c.Op}{c.C}",
         "rail_link" => $"Bahnlinie {c.A} gehoert P{c.B}",
@@ -2776,7 +2783,7 @@ public sealed class MissionScript
         "units" => UnitCount != null,
         "buildings" => BuildingCount != null,
         "objects" => ObjectCount != null,
-        "unit_index" => FindUnit != null,
+        "unit_index" or "unit_index_var" => FindUnit != null,
         "unit_field" or "unit_pos" => UnitField != null,
         "var_vs_store" => StoreField != null,
         "selected" => Selection != null,
