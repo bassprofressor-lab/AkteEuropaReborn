@@ -5005,6 +5005,25 @@
      ]
     },
     {
+     "_at": "0x49DFB0",
+     "_tut_ausserdem": "mission_end",
+     "then": [
+      {
+       "a": 103,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 22,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "once": 300,
      "then": [
       {
@@ -25144,6 +25163,43 @@
        "a": 9,
        "b": 3,
        "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49B162",
+     "_tut_ausserdem": "mission_end",
+     "then": [
+      {
+       "a": 102,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 102,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 12,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 5,
+       "b": 12,
+       "kind": "obj_owner",
        "op": "=="
       }
      ]
