@@ -1843,6 +1843,16 @@ public sealed class MissionScript
         "capture_frac" => StoreField != null && c.B > 0 &&
                           StoreField(c.A, 0x3A) >= 0 && StoreField(c.A, 0x38) > 0 &&
                           Cmp(StoreField(c.A, 0x3A), c.Op, StoreField(c.A, 0x38) / c.B),
+        // ENERGIE(a) <op> ENERGIE VOLL(a) / b — dieselbe Frage wie
+        // `store_energy`, nur fuer eine EINHEIT. M7 @0x49AC5A liest
+        // +0x08 gegen +0x29 und laesst weiter, wenn voll groesser ist:
+        // »die Einheit ist beschaedigt«.
+        "unit_energy" => UnitField != null && c.B > 0 &&
+                         UnitField(c.A, 0x08) >= 0 && UnitField(c.A, 0x29) > 0 &&
+                         Cmp(UnitField(c.A, 0x08), c.Op, UnitField(c.A, 0x29) / c.B),
+        // v[a] + c <op> AUSGESCHALTET(b)   (M24 @0x4A1625)
+        "var_vs_kills" => KillCount != null && c.A >= 0 && c.A < _var.Length &&
+                          Cmp(_var[c.A] + c.C, c.Op, KillCount(c.B)),
         // Lebt der Einheitensatz a? (+0x09 != 0xFF im Original)
         "unit_alive" => UnitAlive != null && Cmp(UnitAlive(c.A) ? 1 : 255, c.Op, 255),
         // Brückenplatz a belegt?
@@ -2526,6 +2536,8 @@ public sealed class MissionScript
         "bridge" => BridgeUsed != null,
         "store" or "capture_frac" => StoreField != null,
         "unit_alive" => UnitAlive != null,
+        "unit_energy" => UnitField != null,
+        "var_vs_kills" => KillCount != null,
         "terrain" => TerrainAt != null,
         "terrain_unit" => TerrainAt != null && UnitField != null,
         "sel_field" => Selection != null && UnitField != null,

@@ -9374,6 +9374,100 @@
      ]
     },
     {
+     "_at": "0x4A0059",
+     "_tut_ausserdem": "show_text set_relation add_target",
+     "any": [
+      {
+       "a": 194,
+       "b": 1000,
+       "c": 136,
+       "kind": "imap",
+       "op": "<"
+      },
+      {
+       "a": 194,
+       "b": 1000,
+       "c": 137,
+       "kind": "imap",
+       "op": "<"
+      },
+      {
+       "a": 194,
+       "b": 1000,
+       "c": 138,
+       "kind": "imap",
+       "op": "<"
+      },
+      {
+       "a": 194,
+       "b": 1000,
+       "c": 139,
+       "kind": "imap",
+       "op": "<"
+      },
+      {
+       "a": 195,
+       "b": 1000,
+       "c": 136,
+       "kind": "imap",
+       "op": "<"
+      },
+      {
+       "a": 195,
+       "b": 1000,
+       "c": 139,
+       "kind": "imap",
+       "op": "<"
+      }
+     ],
+     "once": 261,
+     "then": [
+      {
+       "a": 30,
+       "b": 4,
+       "kind": "set"
+      },
+      {
+       "a": 109,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A0081",
+       "a": 309,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 0,
+       "b": 19,
+       "c": 58,
+       "kind": "space_in",
+       "typen": [
+        193
+       ]
+      },
+      {
+       "_at": "0x4A00A9",
+       "a": 1,
+       "b": 6,
+       "c": 0,
+       "kind": "set_relation"
+      },
+      {
+       "_at": "0x4A00BE",
+       "a": 1,
+       "b": 2,
+       "c": 9,
+       "d": 6000,
+       "e": 0,
+       "kind": "add_target"
+      }
+     ],
+     "when": []
+    },
+    {
      "_at": "0x4A00E5",
      "_tut_ausserdem": "0x4D0F20 add_target",
      "then": [
@@ -11524,6 +11618,47 @@
        "b": 192,
        "c": 0,
        "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A1639",
+     "_tut_ausserdem": "game_time",
+     "any": [
+      {
+       "a": 51,
+       "b": 8,
+       "kind": "time_after",
+       "op": ">"
+      },
+      {
+       "a": 54,
+       "b": 0,
+       "c": 5,
+       "kind": "var_vs_losses",
+       "op": "<"
+      },
+      {
+       "a": 55,
+       "b": 0,
+       "c": 5,
+       "kind": "var_vs_kills",
+       "op": "<"
+      }
+     ],
+     "once": 53,
+     "then": [
+      {
+       "a": 51,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 50,
+       "b": 3,
+       "kind": "var",
        "op": "=="
       }
      ]
@@ -21397,6 +21532,30 @@
        "b": 8,
        "kind": "event",
        "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49AC69",
+     "_tut_ausserdem": "0x4222C0 0x4D0EC0",
+     "once": 0,
+     "then": [
+      {
+       "_at": "0x49AC81",
+       "a": 3000,
+       "kind": "sell_unit"
+      },
+      {
+       "a": 221,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 3000,
+       "b": 1,
+       "kind": "unit_energy",
+       "op": "<"
       }
      ]
     },
