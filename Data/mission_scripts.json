@@ -7306,6 +7306,29 @@
      ]
     },
     {
+     "_at": "0x49938B",
+     "_tut_ausserdem": "show_text bus_cmd",
+     "once": 40,
+     "then": [
+      {
+       "_at": "0x499399",
+       "a": 121,
+       "b": 1,
+       "c": 330,
+       "d": 180,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 0,
+       "kind": "bridge",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "once": 300,
      "then": [
       {
@@ -16080,6 +16103,78 @@
      ]
     },
     {
+     "_at": "0x499782",
+     "then": [
+      {
+       "a": 0,
+       "b": 17,
+       "c": 22,
+       "kind": "space_in",
+       "typen": [
+        53
+       ]
+      }
+     ],
+     "when": [
+      {
+       "a": 40,
+       "b": 50,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 0,
+       "kind": "bridge",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4997A0",
+     "then": [
+      {
+       "a": 0,
+       "b": 52,
+       "c": 38,
+       "kind": "space_in",
+       "typen": [
+        53
+       ]
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 0,
+       "kind": "bridge",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4997BE",
+     "then": [
+      {
+       "a": 0,
+       "b": 78,
+       "c": 75,
+       "kind": "space_in",
+       "typen": [
+        53
+       ]
+      }
+     ],
+     "when": [
+      {
+       "a": 2,
+       "b": 0,
+       "kind": "bridge",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4997FD",
      "once": 10,
      "then": [
@@ -16294,6 +16389,99 @@
        "a": 55,
        "b": 0,
        "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499A06",
+     "_tut_ausserdem": "show_text bus_cmd",
+     "once": 59,
+     "then": [
+      {
+       "_at": "0x499A14",
+       "a": 121,
+       "b": 1,
+       "c": 330,
+       "d": 180,
+       "kind": "text"
+      },
+      {
+       "a": 40,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 0,
+       "kind": "bridge",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499A5C",
+     "_tut_ausserdem": "show_text bus_cmd",
+     "once": 59,
+     "then": [
+      {
+       "_at": "0x499A6A",
+       "a": 121,
+       "b": 1,
+       "c": 330,
+       "d": 180,
+       "kind": "text"
+      },
+      {
+       "a": 40,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 20,
+       "kind": "money_of",
+       "op": ">"
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "kind": "bridge",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499AAE",
+     "_tut_ausserdem": "show_text bus_cmd",
+     "once": 59,
+     "then": [
+      {
+       "_at": "0x499ABC",
+       "a": 121,
+       "b": 1,
+       "c": 330,
+       "d": 180,
+       "kind": "text"
+      },
+      {
+       "a": 40,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 20,
+       "kind": "money_of",
+       "op": ">"
+      },
+      {
+       "a": 2,
+       "b": 0,
+       "kind": "bridge",
        "op": "=="
       }
      ]

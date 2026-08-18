@@ -7830,6 +7830,20 @@ public partial class MapEntityLayer : Node2D
                 _mscript.UnitCount = UnitClassCount;
                 // AUSGESCHALTET und VERLUSTE je Spieler — dieselben Zaehler,
                 // die schon der Abschlussbericht zeigt (BuildEndReport).
+                // ⚠ GEBAUTE Brücken kennt dieses Spiel (noch) NICHT. Unsere
+                // Brücken sind Gelände; das Original führt daneben eine Tafel
+                // von 100 Plätzen für WÄHREND DES SPIELS gebaute Brücken, und
+                // die ist in allen Kampagnenkarten beim Start LEER.
+                //
+                // Solange wir nicht bauen können, ist »Platz frei« immer wahr
+                // — und genau das ist auch im Original der Zustand, bis der
+                // Spieler die erste Brücke baut. Die vier Regeln, die daran
+                // hängen (M2 und M3), zeigen einen HINWEIS, solange die Brücke
+                // fehlt; sie verhalten sich damit wie das Original.
+                //
+                // ⚠ Wer hier das Brückenbauen nachrüstet, MUSS diesen Haken
+                // mitnehmen, sonst bleiben die Hinweise für immer stehen.
+                _mscript.BridgeUsed = _ => 0;
                 _mscript.KillCount = p => p >= 0 && p < _killCount.Length ? _killCount[p] : 0;
                 _mscript.LossCount = p => p >= 0 && p < _lossCount.Length ? _lossCount[p] : 0;
                 _mscript.BuildingCount = BuildingClassCount;

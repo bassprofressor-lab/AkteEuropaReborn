@@ -1466,6 +1466,14 @@ public sealed class MissionScript
     /// beim <b>Besitzer</b> (@0x40B4D7, Besitzer = Satzindex / 1000).
     /// Dieselbe Lage steht unabhängig davon in der Kartendatei, siehe
     /// <c>CwmExtra</c> (+0x20 / +0x24 bei Satzweite 40).</para></summary>
+    /// <summary>Ist der GEBAUTE-BRÜCKEN-Platz k belegt? (1 ja, 0 frei)
+    /// <para>Im Original eine Tafel von 100 Sätzen zu 24 Byte (C: 0xBFEA80,
+    /// F: 0xBFDAE0, Abschnitt 17 der Kartendatei); +0x12 ist das Kennzeichen,
+    /// und der Vergeber nimmt den ersten Platz mit +0x12 == 0. Den Namen gibt
+    /// das Spiel selbst: die Routine, die gleich danach in dieser Tafel
+    /// nachschlägt, protokolliert sich als »Erase bridge«.</para></summary>
+    public Func<int, int>? BridgeUsed;               // platz -> belegt?
+
     public Func<int, int>? KillCount;                // spieler -> ausgeschaltet
     public Func<int, int>? LossCount;                // spieler -> Verluste
 
@@ -1820,6 +1828,8 @@ public sealed class MissionScript
         // nachweislich hinter ihrem Tor.
         "block_gate" => _ticks % BlockPeriod == 0,
         // AUSGESCHALTET / VERLUSTE des Spielers a
+        // Brückenplatz a belegt?
+        "bridge" => BridgeUsed != null && Cmp(BridgeUsed(c.A), c.Op, c.B),
         "kills" => KillCount != null && Cmp(KillCount(c.A), c.Op, c.B),
         "losses" => LossCount != null && Cmp(LossCount(c.A), c.Op, c.B),
         // AUSGESCHALTET(a) <op> VERLUSTE(b) + c — das Original vergleicht die
@@ -2496,6 +2506,7 @@ public sealed class MissionScript
         "kills_vs_losses" => KillCount != null && LossCount != null,
         "var_vs_losses" => LossCount != null,
         "store_energy" => StoreField != null,
+        "bridge" => BridgeUsed != null,
         "terrain" => TerrainAt != null,
         "terrain_unit" => TerrainAt != null && UnitField != null,
         "sel_field" => Selection != null && UnitField != null,
