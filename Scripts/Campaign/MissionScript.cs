@@ -536,10 +536,42 @@ public sealed class MissionScript
             ShowText = vorher;
         }
 
+        // ---- Das TOR der Kette an seiner Wahrheitstafel ---------------------
+        //
+        // ⚠ Nicht an seinem Ergebnis, sondern an seiner Mechanik (dieselbe
+        // Ueberlegung wie bei --oder-check): `window_open(n)` wird einmal auf
+        // »offen« und einmal auf »zu« gestellt, und die Regel MUSS im ersten
+        // Fall schweigen und im zweiten durchlassen. Eine Regel, die in beiden
+        // Faellen dasselbe sagt, haette kein Tor — und genau das war der
+        // Zustand vor dem 18.08.: die Regel gab es gar nicht.
+        var tor = new List<string>();
+        var vorherTor = TextOpen;
+        try
+        {
+            foreach (var r in _script.Rules)
+            {
+                Cond? gate = null;
+                foreach (var c in r.When) if (c.Kind == "text_open") gate = c;
+                if (gate == null) continue;
+                int wartet = 0;
+                foreach (var a in r.Then) if (a.Kind == "text") wartet = a.A;
+                TextOpen = _ => true;
+                bool zu = Test(gate);
+                TextOpen = _ => false;
+                bool auf = Test(gate);
+                tor.Add($"#{wartet}<-Fenster#{gate.A}: offen={(zu ? "durch" : "haelt")}" +
+                        $", zu={(auf ? "durch" : "haelt")}" +
+                        (!zu && auf ? " ok" : " ⚠ KEIN TOR"));
+            }
+        }
+        finally { TextOpen = vorherTor; }
+
         return $"hilfe-check: M{Mission} {fenster} Hilfefenster, {mitText} mit Text, " +
                $"{kannFeuern} koennen feuern, {fenster - kannFeuern} blockiert; " +
                $"Trockenlauf {gesehen.Count}/{fenster} am Haken " +
-               $"[{string.Join(" ", gesehen)}]\n" + sb.ToString().TrimEnd();
+               $"[{string.Join(" ", gesehen)}]\n" +
+               (tor.Count == 0 ? "" : "   Tor der Kette: " + string.Join("  ", tor) + "\n") +
+               sb.ToString().TrimEnd();
     }
 
     /// <summary>Die Glieder einer Regel mit ihrem jetzigen Wahrheitswert — wie

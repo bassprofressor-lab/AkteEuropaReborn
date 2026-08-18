@@ -251,7 +251,7 @@ public sealed partial class HelpWindow : PanelContainer
     /// hinter dem Pausenmenü weiter.</summary>
     private static void Anhalten(Node host)
     {
-        if (!PauseWhileOpen) return;
+        if (!PauseWhileOpen || !PauseErlaubt()) return;
         var tree = host.GetTree();
         if (tree == null) return;
         bool willst = Open.Count > 0;
@@ -260,6 +260,38 @@ public sealed partial class HelpWindow : PanelContainer
     }
 
     private static bool _hatAngehalten;
+
+    /// <summary><b>OHNE BILDSCHIRM WIRD NICHT ANGEHALTEN.</b>
+    ///
+    /// <para>⚠ 18.08.2026, und es ist genau die Falle, vor der die Arbeitsweise
+    /// warnt: ein Prüfstand, der stillsteht, sieht aus wie eine Mission, die
+    /// nichts tut. Seit Mission 1 ihr Willkommensfenster #001 wieder öffnet
+    /// (elf Takte nach dem Start), hielt jeder <c>--headless</c>-Lauf dort an
+    /// — und in einem headless-Lauf gibt es niemanden, der das Fenster
+    /// wegklicken könnte. <c>--script-check</c> wartet 15 s Spielzeit, die
+    /// dann nie vergehen: der Lauf endete ohne eine einzige Zeile, und das las
+    /// sich wie ein kaputtes Skript, nicht wie ein angehaltenes Spiel.</para>
+    ///
+    /// <para>Darum: das Anhalten gilt nur, wo es auch jemanden gibt, der weiter
+    /// drücken kann. <c>--no-help-pause</c> schaltet es zusätzlich im Fenster
+    /// ab — für einen Bildschirmfoto-Lauf, der über ein Fenster hinauskommen
+    /// soll.</para></summary>
+    private static bool PauseErlaubt()
+    {
+        if (_erlaubt.HasValue) return _erlaubt.Value;
+        bool aus = false;
+        foreach (string a in Core.CommandLine.Args)
+            if (a == "--no-help-pause") aus = true;
+        if (DisplayServer.GetName() == "headless") aus = true;
+        _erlaubt = !aus;
+        if (aus)
+            GD.Print("Hilfefenster: das Spiel wird NICHT angehalten " +
+                     "(kein Bildschirm oder --no-help-pause) — sonst haelt ein " +
+                     "Fenster, das niemand wegklicken kann, jeden Prueflauf an");
+        return _erlaubt.Value;
+    }
+
+    private static bool? _erlaubt;
 
     public static bool Suppressed;
 

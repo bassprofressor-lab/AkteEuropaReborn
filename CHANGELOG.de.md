@@ -693,6 +693,88 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Kampagne und Oberfläche
 
+- ⭐⭐ **Mission 1 ist wieder das Tutorial, das sie im Original ist — alle
+  siebzehn Hilfefenster, an ihrer Bedingung und an ihrer Stelle.** Gemeldet mit
+  sechzehn abgefilmten Bildern des Originals und dem Satz: »wo und wann diese
+  aufploppen, das ist deine Aufgabe zu finden.«
+
+  Sie standen zur Hälfte schon da. Der Kommentar in `HelpExporter.cs` sagte seit
+  dem 11.08. »Mission 1 ruft daraus **siebzehn** Fenster auf«, und in
+  `Data/mission_scripts.json` standen **elf**. Nachgezählt am Block
+  `0x49844D..0x4989E9`: siebzehn Aufrufe von `show_text`/`show_text2`, mit den
+  Nummern **#001..#006, #008..#013, #018, #020, #039, #040 und #110**. ⚠ Der
+  alte Kommentar schrieb »1..13« und war da eine Nummer zu großzügig — **#007
+  ruft Mission 1 nicht auf**; das ist berichtigt.
+
+  **Die sechs fehlenden hingen an vier ungelesenen Abfragen**, und alle vier
+  sind jetzt gelesen — auf **beiden** GAME.EXE dieses Rechners gleich
+  (`mission_setrules.py check`: 33 von 33 Missionen deckungsgleich):
+
+  - **`window_open(n)`** `@0x4D0600` → `@0x4475B0`: läuft das Fensterfeld ab
+    (Basis `0x8B9038`, Schrittweite `0xAD24`, zwölf Plätze) und meldet, ob ein
+    Fenster der Art `0x1E` mit `+0xACA0 == n` offen steht — dieselbe Art 30, die
+    `close_message_windows()` `@0x447560` wegräumt. **Das ist der Taktgeber des
+    Tutorials:** #002 kommt erst, wenn der Spieler #001 weggeklickt hat, #012
+    erst nach #011. Das Tutorial wartet also auf den Spieler, nicht auf eine
+    Uhr — und genau das zeigt auch das Bildmaterial (zwischen #001 und #002
+    liegen dort 15 Sekunden, zwischen #003 und #004 zwei).
+  - **Takte seit Missionsbeginn** (`0x4FA240`): jeden Takt `+1` `@0x4160A5`,
+    genullt an genau **einer** Stelle — `@0x442728`, im Fensteraufbau, den der
+    Spielanfang *»Get run begin«* (`@0x4193A0`, Zeichenkette `0x4F8084`) mit
+    (10, 10) aufruft. Mission 1 hält ihr Willkommensfenster damit zehn Takte
+    zurück, bei 50 Hz also 0,2 s. ⚠ **Nicht die Spieluhr**: die zählt
+    Spielminuten zu je 250 Takten, der Faktor wäre 250 gewesen.
+  - **`terrain_at` unter der eigenen Einheit**: die beiden Argumente kommen
+    nicht als Zahlen, sondern aus dem Einheitensatz 0 (`+0x00` Spalte, `+0x01`
+    Zeile). Daran hängt **#020**, »Ist eine Einheit auf einem @Hügel, hat sie
+    eine größere Aufklärungsreichweite« — die Bedingung ist wörtlich die des
+    Textes (`Geländebyte > 4`).
+  - **Feld der ANGEWÄHLTEN Einheit**: `0x4FA0C8` als Index, Satzweite 78.
+    Mission 1 fragt `+0x14` — im Spiel selbst **`UKOL`** (der Debug-Auszug
+    `@0x416F00` druckt das Feld mit dieser Beschriftung) — auf `== 1` und zeigt
+    **#009** über die @Handsteuerung. Damit sagt der Block selbst, was `UKOL 1`
+    bedeutet; geraten ist daran nichts.
+
+  **Dazu zwei Formen, die der Rückwärtsleser bisher nicht las** — beide eng
+  gefasst, damit aus »zwei Wege herein« keine zu schwache Bedingung wird:
+  ein **Sprungziel mit genau EINEM Weg herein** beendet die Kette nicht mehr
+  (ohne das hätte die Regel für #012 nur noch `window_open(11) == 0` verlangt
+  und wäre im ersten Takt gefeuert); und ein Block, **in den beide Zweige einer
+  Verzweigung münden**, ist unbedingt — daran hing der Zähler `v[3]`
+  `@0x498647`, und ohne ihn konnte **#006** (»Für den @ANGRIFF…«) nie feuern.
+  Gemessen: der erste Fall wirkt sich auf **genau eine Mission** aus (M1, drei
+  Regeln bekommen ein Glied dazu), der zweite auf zwei (M1, M19).
+
+  **Was das Original außerdem hat und wir nicht:** `show_text2` prüft als erstes
+  `byte[0x87AE00 + id]` und kehrt um, wenn dort schon etwas steht (`@0x4432F6`);
+  beim Anzeigen setzt es dieselbe Stelle (`@0x443340`). Alle siebzehn Aufrufe
+  von Mission 1 geben als viertes Argument 0 — **jeder Text kommt höchstens
+  einmal**. Unser `Dismissed` bewirkt dasselbe, setzt den Riegel aber erst beim
+  Wegklicken statt beim Zeigen. ⚠ Der Unterschied ist **nicht gemessen** und
+  darum auch nicht nachgebaut.
+
+  **Prüfstand `--hilfe-check`** (in `MissionScript`, liest sich selbst aus der
+  Befehlszeile): er zählt die Hilfefenster der laufenden Mission und prüft jedes
+  in drei Stufen, die alle scheitern können — Text in `help.json` vorhanden,
+  jedes Glied der Bedingung mit einem Haken, jede Variablenbedingung mit einem
+  Erzeuger, der selbst feuern kann (transitiv, mit Kreiserkennung). Danach der
+  **Trockenlauf**: jede Fensterregel einmal durch denselben `Do`-Weg wie im
+  Spiel, gezählt wird, was am Haken ankommt. Stand:
+  **»M1 17 Hilfefenster, 17 mit Text, 17 können feuern, 0 blockiert;
+  Trockenlauf 17/17«.** Der Lauf davor meldete `16 … 1 blockiert` und nannte den
+  Grund (»ohne Erzeuger: v[3]«) — daher der Zusammenfluss oben.
+
+  Nebenbei gefallen sind zwei Fenster in anderen Missionen, die an derselben
+  Abfrage hingen: **M3 #026** und in **M20** eine Verstärkung.
+
+  ⚠ **Was gemessen, aber NICHT eingetragen ist:** die Regelleser sind seit dem
+  letzten Eintragen weitergekommen, und in `mission_scripts.json` fehlen dadurch
+  **39 lesbare Regeln in Mission 21** sowie je eine in M2 und M19. Sie stehen
+  hier nicht drin, weil ein ungefiltertes Eintragen **drei von Hand berichtigte
+  Zählerregeln** (M2, M6, M7; sie tragen ein `_waechter`-Feld) in die schwächere
+  Fassung zurückschriebe. `mission_setrules.py apply` hat dafür jetzt `--nur`
+  und warnt von sich aus, statt sie still zu überschreiben.
+
 - ⭐ **Der Kasten »neue technologien« im Briefing ist gefüllt** — Überschrift auf
   schwarzem Streifen, darunter das Bild, wie im Original. Mission 2 kündigt
   »LEICHTE BORDKANONE« an, Mission 1 kündigt nichts an und bleibt leer; beides
