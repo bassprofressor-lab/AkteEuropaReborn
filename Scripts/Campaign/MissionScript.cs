@@ -1457,6 +1457,18 @@ public sealed class MissionScript
     public Func<int, int, bool>? UnitHasMark;        // einheit, marke
     public Func<int, int>? MoneyOf;                  // spieler -> Kontostand
 
+    /// <summary>AUSGESCHALTET und VERLUSTE des Spielers — die zwei Zahlen aus
+    /// dem Original-HUD (»AUSGESCHALTET 17 / VERLUSTE 0«).
+    /// <para>Im Original zwei Zähler in einem Satz von 40 Byte je Spieler
+    /// (C: 0x87B160 / 0x87B164). AUSGESCHALTET erhöht die Trefferroutine beim
+    /// <b>Angreifer</b>, sobald das Ziel stirbt (@0x40D20E, ohne Angreifer —
+    /// 0xFF — wird nicht gezählt); VERLUSTE erhöht der Tod der Einheit selbst
+    /// beim <b>Besitzer</b> (@0x40B4D7, Besitzer = Satzindex / 1000).
+    /// Dieselbe Lage steht unabhängig davon in der Kartendatei, siehe
+    /// <c>CwmExtra</c> (+0x20 / +0x24 bei Satzweite 40).</para></summary>
+    public Func<int, int>? KillCount;                // spieler -> ausgeschaltet
+    public Func<int, int>? LossCount;                // spieler -> Verluste
+
     /// <summary>
     /// <b>Hält Spieler <i>p</i> die Bahnverbindung <i>n</i>?</b> — der Haken,
     /// an dem Mission 21 hängt. <c>(Linie, Spieler)</c>.
@@ -1807,6 +1819,18 @@ public sealed class MissionScript
         // dieselbe Rechnung, und alle 17 so gelesenen Regeln liegen
         // nachweislich hinter ihrem Tor.
         "block_gate" => _ticks % BlockPeriod == 0,
+        // AUSGESCHALTET / VERLUSTE des Spielers a
+        "kills" => KillCount != null && Cmp(KillCount(c.A), c.Op, c.B),
+        "losses" => LossCount != null && Cmp(LossCount(c.A), c.Op, c.B),
+        // AUSGESCHALTET(a) <op> VERLUSTE(b) + c — das Original vergleicht die
+        // zwei Zaehler gegeneinander, teils mit einem Vorsprung: M19 und M22
+        // verlangen »hoechstens 30 Verluste mehr als Abschuesse«
+        // (@0x49EB45 / @0x4A0A3B, `add eax, 0x1e`), M21 den blossen Vergleich.
+        "kills_vs_losses" => KillCount != null && LossCount != null &&
+                             Cmp(KillCount(c.A), c.Op, LossCount(c.B) + c.C),
+        // v[a] + c <op> VERLUSTE(b)   (M24 @0x4A1611, M30 @0x4A4237)
+        "var_vs_losses" => LossCount != null && c.A >= 0 && c.A < _var.Length &&
+                           Cmp(_var[c.A] + c.C, c.Op, LossCount(c.B)),
         // obj_owner(a) <op> b
         "obj_owner" => ObjOwner != null && Cmp(ObjOwner(c.A), c.Op, c.B),
         // g_robot_class_count(a, b) <op> c
@@ -2460,6 +2484,10 @@ public sealed class MissionScript
         "unit_is" or "unit_is_var" => UnitHasMark != null,
         "rail_link" => RailLinkHeld != null,
         "money_of" => MoneyOf != null,
+        "kills" => KillCount != null,
+        "losses" => LossCount != null,
+        "kills_vs_losses" => KillCount != null && LossCount != null,
+        "var_vs_losses" => LossCount != null,
         "terrain" => TerrainAt != null,
         "terrain_unit" => TerrainAt != null && UnitField != null,
         "sel_field" => Selection != null && UnitField != null,

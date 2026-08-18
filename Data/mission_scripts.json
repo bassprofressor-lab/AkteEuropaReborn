@@ -1861,6 +1861,90 @@
      ]
     },
     {
+     "_at": "0x49C8A0",
+     "_tut_ausserdem": "sound",
+     "then": [
+      {
+       "a": 1,
+       "b": 3,
+       "kind": "set"
+      },
+      {
+       "a": 101,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49C8B2",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 5,
+       "kind": "losses",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49C8CB",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 1,
+       "b": 3,
+       "kind": "set"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49C8EB",
+       "a": 100,
+       "b": 1,
+       "c": 450,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49C8FA",
+       "a": 400,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "_at": "0x49C902",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 19,
+       "kind": "kills",
+       "op": ">"
+      }
+     ]
+    },
+    {
      "_at": "0x49C92C",
      "_tut_ausserdem": "show_text",
      "once": 2,
@@ -5246,6 +5330,55 @@
      ]
     },
     {
+     "_at": "0x49EB57",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49EB75",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49EB84",
+       "a": 300,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "_at": "0x49EB8C",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 0,
+       "c": 30,
+       "kind": "kills_vs_losses",
+       "op": ">"
+      }
+     ]
+    },
+    {
      "_at": "0x49EBB3",
      "_tut_ausserdem": "show_text",
      "once": 20,
@@ -8055,6 +8188,111 @@
      ]
     },
     {
+     "_at": "0x49FC67",
+     "_tut_ausserdem": "show_text",
+     "any": [
+      {
+       "a": 49,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "!="
+      },
+      {
+       "a": 50,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "!="
+      },
+      {
+       "a": 51,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "!="
+      },
+      {
+       "a": 52,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ],
+     "once": 70,
+     "then": [
+      {
+       "_at": "0x49FC70",
+       "a": 49,
+       "b": 46,
+       "c": -1,
+       "d": 0,
+       "e": 1,
+       "f": 0,
+       "kind": "stock"
+      },
+      {
+       "_at": "0x49FC77",
+       "a": 50,
+       "b": 46,
+       "c": -1,
+       "d": 0,
+       "e": 1,
+       "f": 0,
+       "kind": "stock"
+      },
+      {
+       "_at": "0x49FC82",
+       "a": 51,
+       "b": 46,
+       "c": -1,
+       "d": 0,
+       "e": 1,
+       "f": 0,
+       "kind": "stock"
+      },
+      {
+       "_at": "0x49FC8D",
+       "a": 52,
+       "b": 46,
+       "c": -1,
+       "d": 0,
+       "e": 1,
+       "f": 0,
+       "kind": "stock"
+      },
+      {
+       "a": 107,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49FC9F",
+       "a": 316,
+       "b": 1,
+       "c": 350,
+       "d": 200,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 45,
+       "kind": "time_gt",
+       "op": ">"
+      },
+      {
+       "a": 13,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 0,
+       "c": 0,
+       "kind": "kills_vs_losses",
+       "op": ">"
+      }
+     ]
+    },
+    {
      "_at": "0x49FCE9",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
@@ -9506,6 +9744,44 @@
        "a": 62,
        "b": 15,
        "kind": "time_after",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A0A51",
+     "_tut_ausserdem": "game_time show_text",
+     "once": 8,
+     "then": [
+      {
+       "a": 9,
+       "kind": "inc"
+      },
+      {
+       "a": 7,
+       "kind": "set_time"
+      },
+      {
+       "_at": "0x4A0A7B",
+       "a": 325,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 9,
+       "b": 0,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 0,
+       "c": 30,
+       "kind": "kills_vs_losses",
        "op": ">"
       }
      ]
@@ -11241,6 +11517,46 @@
      ]
     },
     {
+     "_at": "0x4A1CF8",
+     "_tut_ausserdem": "show_text",
+     "once": 20,
+     "then": [
+      {
+       "a": 102,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A1D17",
+       "a": 352,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 10,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 6,
+       "b": 0,
+       "kind": "kills",
+       "op": ">"
+      },
+      {
+       "a": 3,
+       "b": 6,
+       "c": 0,
+       "kind": "units",
+       "op": "!="
+      }
+     ]
+    },
+    {
      "_at": "0x4A1D3A",
      "_tut_ausserdem": "show_text bus_cmd game_time sound",
      "then": [
@@ -11487,6 +11803,42 @@
      ]
     },
     {
+     "_at": "0x4A1F11",
+     "_tut_ausserdem": "show_text game_time",
+     "once": 50,
+     "then": [
+      {
+       "a": 105,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A1F30",
+       "a": 355,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 51,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 6,
+       "kind": "time_gt",
+       "op": ">"
+      },
+      {
+       "a": 0,
+       "b": 100,
+       "kind": "kills",
+       "op": "<"
+      }
+     ]
+    },
+    {
      "_at": "0x4A1F64",
      "_tut_ausserdem": "show_text sound",
      "then": [
@@ -11529,6 +11881,61 @@
      ]
     },
     {
+     "_at": "0x4A1FA3",
+     "_tut_ausserdem": "show_text bus_cmd game_time",
+     "then": [
+      {
+       "a": 50,
+       "kind": "inc"
+      },
+      {
+       "a": 105,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x4A1FC4",
+       "a": 356,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x4A1FD3",
+       "a": 2800,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "a": 60,
+       "kind": "inc"
+      },
+      {
+       "a": 106,
+       "kind": "inc"
+      },
+      {
+       "a": 51,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 50,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 100,
+       "kind": "kills",
+       "op": ">"
+      }
+     ]
+    },
+    {
      "_at": "0x4A2015",
      "_tut_ausserdem": "show_text sound",
      "then": [
@@ -11566,6 +11973,54 @@
        "a": 51,
        "b": 15,
        "kind": "time_after",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A2056",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 60,
+       "kind": "inc"
+      },
+      {
+       "a": 106,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x4A2074",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x4A2083",
+       "a": 6500,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "_at": "0x4A208B",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 60,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 200,
+       "kind": "kills",
        "op": ">"
       }
      ]
@@ -15076,6 +15531,41 @@
    },
    "rules": [
     {
+     "_at": "0x4A4246",
+     "_tut_ausserdem": "sound",
+     "then": [
+      {
+       "a": 101,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "a": 10,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A4256",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 11,
+       "b": 0,
+       "c": 0,
+       "kind": "var_vs_losses",
+       "op": "<"
+      }
+     ]
+    },
+    {
      "_at": "0x4A4278",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
@@ -15829,6 +16319,40 @@
        "op": ">"
       }
      ]
+    },
+    {
+     "_at": "0x4A48D5",
+     "_tut_ausserdem": "show_text",
+     "any": [
+      {
+       "a": 6,
+       "b": 0,
+       "kind": "kills",
+       "op": "!="
+      },
+      {
+       "a": 4,
+       "b": 0,
+       "kind": "kills",
+       "op": "!="
+      }
+     ],
+     "once": 30,
+     "then": [
+      {
+       "a": 103,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A48F4",
+       "a": 413,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": []
     },
     {
      "_at": "0x4A4906",
@@ -16914,6 +17438,92 @@
      ]
     },
     {
+     "_at": "0x4A5195",
+     "_tut_ausserdem": "show_text",
+     "once": 10,
+     "then": [
+      {
+       "a": 101,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A51B4",
+       "a": 430,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 4,
+       "kind": "time_gt",
+       "op": ">"
+      },
+      {
+       "a": 0,
+       "b": 5,
+       "kind": "losses",
+       "op": "<"
+      },
+      {
+       "a": 4,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "!="
+      },
+      {
+       "a": 5,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A51D4",
+     "_tut_ausserdem": "game_time sound",
+     "then": [
+      {
+       "a": 101,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "a": 10,
+       "kind": "inc"
+      },
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 21,
+       "kind": "set_time"
+      },
+      {
+       "_at": "0x4A51F6",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 5,
+       "kind": "losses",
+       "op": ">"
+      }
+     ]
+    },
+    {
      "_at": "0x4A5221",
      "_tut_ausserdem": "show_text bus_cmd game_time sound",
      "then": [
@@ -16972,6 +17582,82 @@
        "b": 12,
        "kind": "obj_owner",
        "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A5294",
+     "_tut_ausserdem": "show_text",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A52B3",
+       "a": 431,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 21,
+       "b": 5,
+       "kind": "time_after",
+       "op": ">"
+      },
+      {
+       "a": 0,
+       "b": 50,
+       "kind": "losses",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A52CF",
+     "_tut_ausserdem": "sound",
+     "then": [
+      {
+       "a": 102,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A52DF",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 50,
+       "kind": "losses",
+       "op": ">"
       }
      ]
     },
@@ -19932,6 +20618,90 @@
       {
        "a": 5,
        "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49B549",
+     "_tut_ausserdem": "sound",
+     "then": [
+      {
+       "a": 0,
+       "b": 3,
+       "kind": "set"
+      },
+      {
+       "a": 101,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49B55B",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 0,
+       "kind": "losses",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49B574",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 0,
+       "b": 3,
+       "kind": "set"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49B594",
+       "a": 100,
+       "b": 1,
+       "c": 450,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49B5A3",
+       "a": 200,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "_at": "0x49B5AB",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 9,
+       "kind": "kills",
        "op": ">"
       }
      ]

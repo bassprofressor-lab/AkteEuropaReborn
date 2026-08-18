@@ -7828,6 +7828,10 @@ public partial class MapEntityLayer : Node2D
                     return 12;
                 };
                 _mscript.UnitCount = UnitClassCount;
+                // AUSGESCHALTET und VERLUSTE je Spieler — dieselben Zaehler,
+                // die schon der Abschlussbericht zeigt (BuildEndReport).
+                _mscript.KillCount = p => p >= 0 && p < _killCount.Length ? _killCount[p] : 0;
+                _mscript.LossCount = p => p >= 0 && p < _lossCount.Length ? _lossCount[p] : 0;
                 _mscript.BuildingCount = BuildingClassCount;
                 _mscript.ObjectCount = (type, owner) =>
                 {
