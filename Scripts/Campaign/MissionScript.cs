@@ -1474,6 +1474,12 @@ public sealed class MissionScript
     /// nachschlägt, protokolliert sich als »Erase bridge«.</para></summary>
     public Func<int, int>? BridgeUsed;               // platz -> belegt?
 
+    /// <summary>Steht auf Einheitenplatz <paramref name="a"/> eine lebende
+    /// Einheit? Im Original ist das Feld <c>+0x09</c> des Satzes: <b>0xFF
+    /// heisst leer</b>, und genau daran überspringt <c>find_unit</c> die
+    /// leeren Sätze. Mission 28 fragt zweimal so (@0x4A2BBF, @0x4A2C05).</summary>
+    public Func<int, bool>? UnitAlive;               // satz -> lebt?
+
     public Func<int, int>? KillCount;                // spieler -> ausgeschaltet
     public Func<int, int>? LossCount;                // spieler -> Verluste
 
@@ -1828,6 +1834,17 @@ public sealed class MissionScript
         // nachweislich hinter ihrem Tor.
         "block_gate" => _ticks % BlockPeriod == 0,
         // AUSGESCHALTET / VERLUSTE des Spielers a
+        // Feld +b des Gebäudesatzes a <op> c
+        "store" => StoreField != null && StoreField(c.A, c.B) >= 0 &&
+                   Cmp(StoreField(c.A, c.B), c.Op, c.C),
+        // Einnahme-FORTSCHRITT gegen BEZUGSENERGIE / b. Das Original hält den
+        // Fortschritt proportional zur Energie nach (@0x43CB70) und zeichnet
+        // danach abwechselnd den alten und den neuen Besitzer (@0x43CD27).
+        "capture_frac" => StoreField != null && c.B > 0 &&
+                          StoreField(c.A, 0x3A) >= 0 && StoreField(c.A, 0x38) > 0 &&
+                          Cmp(StoreField(c.A, 0x3A), c.Op, StoreField(c.A, 0x38) / c.B),
+        // Lebt der Einheitensatz a? (+0x09 != 0xFF im Original)
+        "unit_alive" => UnitAlive != null && Cmp(UnitAlive(c.A) ? 1 : 255, c.Op, 255),
         // Brückenplatz a belegt?
         "bridge" => BridgeUsed != null && Cmp(BridgeUsed(c.A), c.Op, c.B),
         "kills" => KillCount != null && Cmp(KillCount(c.A), c.Op, c.B),
@@ -2507,6 +2524,8 @@ public sealed class MissionScript
         "var_vs_losses" => LossCount != null,
         "store_energy" => StoreField != null,
         "bridge" => BridgeUsed != null,
+        "store" or "capture_frac" => StoreField != null,
+        "unit_alive" => UnitAlive != null,
         "terrain" => TerrainAt != null,
         "terrain_unit" => TerrainAt != null && UnitField != null,
         "sel_field" => Selection != null && UnitField != null,

@@ -7844,6 +7844,13 @@ public partial class MapEntityLayer : Node2D
                 // ⚠ Wer hier das Brückenbauen nachrüstet, MUSS diesen Haken
                 // mitnehmen, sonst bleiben die Hinweise für immer stehen.
                 _mscript.BridgeUsed = _ => 0;
+                // Lebt der Einheitensatz? Im Original `+0x09 != 0xFF`.
+                _mscript.UnitAlive = index =>
+                {
+                    foreach (var e in _entities)
+                        if (!e.IsBuilding && e.Slot == index && !e.Dead) return true;
+                    return false;
+                };
                 _mscript.KillCount = p => p >= 0 && p < _killCount.Length ? _killCount[p] : 0;
                 _mscript.LossCount = p => p >= 0 && p < _lossCount.Length ? _lossCount[p] : 0;
                 _mscript.BuildingCount = BuildingClassCount;
@@ -7918,6 +7925,15 @@ public partial class MapEntityLayer : Node2D
                                 // ist, entscheidet M19 @0x49EDE0: dort wird
                                 // von +0x02 abgezogen.
                                 0x02 => e.Hp, 0x12 => e.HpMax,
+                                // Die EINNAHME: Bezugsenergie, Fortschritt und
+                                // der einnehmende Spieler. Alle drei kommen aus
+                                // dem Einnahmeblock des Originals (@0x43CB70
+                                // haelt +0x3A proportional zur Energie nach,
+                                // @0x43CD02 legt den Eindringling auf +0x3C ab)
+                                // und stehen bei uns laengst im Satz.
+                                0x38 => e.CaptureTotal,
+                                0x3a => e.CaptureProgress,
+                                0x3c => e.Intruder,
                                 _ => -1,
                             };
                     return -1;

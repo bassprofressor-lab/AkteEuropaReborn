@@ -12967,6 +12967,36 @@
      ]
     },
     {
+     "_at": "0x4A2282",
+     "_tut_ausserdem": "show_text",
+     "once": 0,
+     "then": [
+      {
+       "_at": "0x4A229A",
+       "a": 361,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 13,
+       "b": 60,
+       "c": 3,
+       "kind": "store",
+       "op": "=="
+      },
+      {
+       "a": 13,
+       "b": 3,
+       "kind": "capture_frac",
+       "op": ">"
+      }
+     ]
+    },
+    {
      "_at": "0x4A22BA",
      "once": 2,
      "then": [],
@@ -13694,6 +13724,84 @@
        "b": 2,
        "kind": "time_after",
        "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A2BD1",
+     "_tut_ausserdem": "0x4D0860 add_target",
+     "then": [
+      {
+       "_at": "0x4A2BEC",
+       "a": 1,
+       "b": 4,
+       "c": 9,
+       "d": 17,
+       "e": 5,
+       "kind": "add_target"
+      },
+      {
+       "a": 20,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 3000,
+       "kind": "unit_alive",
+       "op": "!="
+      },
+      {
+       "a": 3000,
+       "b": 55,
+       "c": 1,
+       "kind": "unit_pos",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A2C17",
+     "_tut_ausserdem": "add_target 0x4D0860",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x4A2C28",
+       "a": 1,
+       "b": 4,
+       "c": 9,
+       "d": 32,
+       "e": 4,
+       "kind": "add_target"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 3000,
+       "kind": "unit_alive",
+       "op": "!="
+      },
+      {
+       "a": 3000,
+       "b": 6,
+       "c": 1,
+       "kind": "unit_pos",
+       "op": "<"
       }
      ]
     },
