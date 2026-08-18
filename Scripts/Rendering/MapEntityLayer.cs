@@ -8005,6 +8005,17 @@ public partial class MapEntityLayer : Node2D
                     // und darf negativ sein) den Kontostand ins MINUS ziehen —
                     // ein Zustand, den das Original nie herstellt.
                     Money(spieler, Mathf.Max(0, Money(spieler) + betrag));
+                    // ⚠ 19.08.2026 — DAS FENSTER »EINKOMMEN: N«. Gemeldet:
+                    // »fehlt noch das fenster für die 50$ prämie pro abschuss
+                    // pro boot«. Es ist nicht unsere Zutat, sondern steht im
+                    // Geldbefehl des Originals: @0x4C3AAF vergleicht den
+                    // Empfaenger gegen den EIGENEN Spieler (byte[0x4FA284]),
+                    // @0x4C3AC2 laesst nur POSITIVE Betraege durch (`test dx,dx
+                    // / jle`), dann baut @0x4C3AD4..0x4C3ADA den Text aus
+                    // "Einkommen: " (0x4FB6C8) und der Zahl und zeigt ihn.
+                    if (betrag > 0 && spieler == ViewPlayer)
+                        UI.HelpWindow.ShowText(GetTree().Root,
+                                               $"Einkommen: {betrag}", 0, 0);
                     // ⚠ UNSERE SETZUNG: was hier AUSGEZAHLT wird, ist das, was
                     // das Abschlussfenster "Missionsbezahlung" nennt. Der
                     // Betrag stammt aus dem Missionsblock (Busbefehl 528), die
@@ -8116,7 +8127,10 @@ public partial class MapEntityLayer : Node2D
                 // den Generator. Die Mission war damit unloesbar.
                 SetTerraPlaces(_mscript.Terra);
                 // Was der SETUP-Block schon getroffen hat — siehe ApplyMissionHits.
-                ApplyMissionHits(_mscript.Treffer);
+                // ⚠ OHNE FUNKEN: diese Treffer stammen aus dem SETUP-Block,
+                // sind also VOR dem Missionsbeginn geschehen. Es brennt, aber
+                // es blitzt nicht. Siehe ApplyMissionHits.
+                ApplyMissionHits(_mscript.Treffer, funken: false);
                 var watched = _mscript.WatchedSlots();
                 if (watched.Count > 0)
                 {

@@ -12,6 +12,25 @@ public static class SkirmishSetup
     /// scene then goes back to the menu on Esc instead of quitting.</summary>
     public static bool Active;
 
+    /// <summary>Die Mission, die das Hauptmenü <b>sofort nach dem Laden</b>
+    /// starten soll — mit Vorschau, wie jeder andere Weg auch. 0 = keine.
+    ///
+    /// <para>⚠ Warum es diesen Umweg gibt: »Weiter« im Abschlussfenster lud
+    /// die nächste Karte bisher DIREKT (<c>ReloadCurrentScene</c>) und sprang
+    /// damit an der Vorschau vorbei. Gemeldet: »wenn man kampagne 1
+    /// durchspielt und auf weiter drückt, kommt man wieder ins hauptmenu
+    /// anstatt zu kampagne 2 preview«. Die Vorschau hängt aber am Menü
+    /// (<c>MainMenu.StartMission</c> ruft <c>BriefingScreen.For</c>) — das ist
+    /// die EINE Stelle, an der sich Menüknopf, Missionswähler und
+    /// <c>--campaign</c> treffen. Also geht »Weiter« jetzt durch dieselbe Tür,
+    /// statt eine zweite danebenzubauen.</para>
+    ///
+    /// <para>Nebenwirkung, und sie ist erwünscht: der Weg über das Menü läuft
+    /// durch <c>Core.LeaveToMenu.Tidy()</c>, das die offenen Missionsfenster
+    /// abräumt. Damit kann keine Meldung aus der alten Mission in die neue
+    /// hinüberlecken.</para></summary>
+    public static int PendingMission;
+
     public static string Map = "map_NET07";
     public static int Human;                       // which player the human is
     public static int AiCount = 3;                 // how many opponents

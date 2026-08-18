@@ -323,6 +323,27 @@ public sealed partial class HelpWindow : PanelContainer
         return w;
     }
 
+    /// <summary>Ein Fenster mit FREIEM Text, ohne Hilfetextnummer.
+    ///
+    /// <para>Gebraucht fuer »Einkommen: N« — das Original baut diesen Text im
+    /// Geldbefehl selbst zusammen (@0x4C3AD4: "Einkommen: " aus 0x4FB6C8 plus
+    /// die Zahl) und hat dafuer keinen Eintrag in HELPG. Es ist also kein
+    /// Hilfetext, sondern eine Meldung.</para>
+    ///
+    /// <para>⚠ Ohne Nummer gibt es auch <b>keinen Riegel</b>: die Meldung darf
+    /// bei jeder Praemie neu kommen, und das tut sie im Original auch (Mission
+    /// 1 zahlt dreimal 50). Sie zaehlt darum weder in <c>Dismissed</c> noch
+    /// gegen ein schon offenes Fenster derselben Nummer.</para></summary>
+    public static HelpWindow? ShowText(Node host, string text, int ox, int oy)
+    {
+        if (Suppressed) { SuppressedCount++; return null; }
+        var w = new HelpWindow(-1, new System.Collections.Generic.List<string> { text }, ox, oy);
+        Layer(host).AddChild(w);
+        Open.Add(w);
+        Anhalten(host);
+        return w;
+    }
+
     /// <summary>Die Ebene, auf der die Fenster liegen.
     ///
     /// ⚠ Sie MUSS eine eigene <c>CanvasLayer</c> sein. Der erste Versuch hing

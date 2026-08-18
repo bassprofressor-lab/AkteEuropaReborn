@@ -2938,7 +2938,17 @@ public partial class MapViewer : Node2D
             // ByIndex(-1) nie eine Mission und fiel ins Menue zurueck. Der
             // Knopf war ausserdem unsichtbar. Ohne diese eine Zeile gab es
             // keinen Weg von einer beendeten Mission zur naechsten.
-            _nextMission = next?.Index ?? -1;
+            // ⚠ 19.08.2026 — DIE NAECHSTE MISSION IST DIE NAECHSTE NACH DER
+            // GESPIELTEN, nicht die nach dem hoechsten Fortschritt. `Next()`
+            // liest `Completed`, und das faellt nie zurueck (`Finished` geht
+            // nur vorwaerts, mit Absicht). Wer eine fruehe Mission NOCHMAL
+            // spielt — oder wer die Kampagne schon durch hat —, bekam damit
+            // »Die Kampagne ist zu Ende« und landete im Hauptmenue. Genau so
+            // gemeldet: »wenn man kampagne 1 durchspielt und auf weiter
+            // drueckt, kommt man wieder ins hauptmenu anstatt zu kampagne 2«.
+            var danach = Campaign.CampaignManager.ByIndex(mission + 1) ?? next;
+            _nextMission = danach?.Index ?? -1;
+            next = danach;
             hint = next != null ? $"Naechste Mission: {next.Label}" : "Die Kampagne ist zu Ende";
             GD.Print($"Kampagne: Mission {mission} geschafft, weiter mit " +
                      $"{(next != null ? next.Label : "— nichts mehr")}");
@@ -3002,18 +3012,22 @@ public partial class MapViewer : Node2D
     /// (MainMenu.StartMission), und der Weg dorthin und zurueck waere ein
     /// Szenenwechsel mehr. Wer es sehen will, geht ueber das Menue -- das steht
     /// so auch auf dem Knopf daneben.</summary>
+    /// <summary>»Weiter« im Abschlussfenster: die nächste Mission MIT Vorschau.
+    ///
+    /// <para>⚠ 19.08.2026 — hier stand <c>ReloadCurrentScene()</c>, und das lud
+    /// die nächste Karte DIREKT. Damit fiel die Vorschau aus, die im Original
+    /// zwischen zwei Missionen steht. Gemeldet: »anstatt zu kampagne 2
+    /// preview«. Die Vorschau hängt am Menü, also wird die Mission dort
+    /// angemeldet (<see cref="UI.SkirmishSetup.PendingMission"/>) und das Menü
+    /// startet sie durch dieselbe Tür wie der Menüknopf.</para></summary>
     private void StartNextMission()
     {
         var m = Campaign.CampaignManager.ByIndex(_nextMission);
         if (m == null) { ToMenu(); return; }
-        UI.SkirmishSetup.Map = m.Map;
-        UI.SkirmishSetup.Human = 0;
-        UI.SkirmishSetup.AiCount = 0;
-        UI.SkirmishSetup.CampaignMission = m.Index;
-        UI.SkirmishSetup.Active = true;
-        GD.Print($"Kampagne: weiter mit {m.Label} ({m.Map})");
+        GD.Print($"Kampagne: weiter mit {m.Label} ({m.Map}) — ueber die Vorschau");
+        UI.SkirmishSetup.PendingMission = m.Index;
         GetTree().Paused = false;
-        GetTree().ReloadCurrentScene();
+        GetTree().ChangeSceneToFile(UI.SkirmishSetup.MenuScene);
     }
 
     private void LoadMap(int index)

@@ -435,7 +435,8 @@ public partial class MapEntityLayer
                  $"({col},{row})");
     }
 
-    private void ApplyMissionHits(System.Collections.Generic.IReadOnlyList<(int Col, int Row)> zellen)
+    private void ApplyMissionHits(System.Collections.Generic.IReadOnlyList<(int Col, int Row)> zellen,
+                                 bool funken = true)
     {
         if (zellen.Count == 0) return;
         int einheiten = 0, brennt = 0, leer = 0;
@@ -464,11 +465,21 @@ public partial class MapEntityLayer
             // Der Funkenschlag des Treffers selbst: ANIM-Folge 82, die Zasah
             // @0x40CB07 mit `push 0x52` in den Effektaufruf schiebt. Er ist
             // KURZ und erklaert das Brennen nicht — das tut die Kachel.
-            _effects.Add(new Effect
-            {
-                Pos = CellCenter(c, r),
-                Kind = "fire", FrameTime = 0.08f,
-            });
+            //
+            // ⚠ 19.08.2026 — BEIM MISSIONSSTART GEHOERT ER NICHT HIN. Gemeldet:
+            // »die blitze gehoeren nicht in Kampagne 1, nur das feuer«. Und das
+            // ist nicht bloss Geschmack, sondern folgt aus dem Original: der
+            // SETUP-Block schlaegt die Zellen an, BEVOR die Mission laeuft — im
+            // Bild des Spielers brennen die Baeume, aber es blitzt nichts. Ein
+            // Funke ist die Anzeige eines Treffers IM AUGENBLICK; wer ihn beim
+            // Start zeigt, behauptet, es werde gerade geschossen.
+            // Bei `fire_at` (ein Schuss WAEHREND der Mission) bleibt er.
+            if (funken)
+                _effects.Add(new Effect
+                {
+                    Pos = CellCenter(c, r),
+                    Kind = "fire", FrameTime = 0.08f,
+                });
         }
         GD.Print($"treffer: {zellen.Count} Zellen aus dem SETUP-Block getroffen — " +
                  $"{einheiten} Einheiten, {brennt} Waldzellen angezuendet, {leer} leer " +

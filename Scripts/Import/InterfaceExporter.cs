@@ -184,6 +184,71 @@ public sealed class InterfaceExporter
         File.WriteAllText($"{_ui}/panel_index.json", sb.ToString(), new UTF8Encoding(false));
     }
 
+    // ---- WINDOWS.CWW: die WINDFAHNE ----------------------------------------
+
+    /// <summary>Die acht Stellungen der Windfahne aus <c>WINDOWS.CWW</c>.
+    ///
+    /// <para><b>Was das Ding ist</b>, sagt das Bedienfeld selbst: <c>panel_draw</c>
+    /// enthält GENAU EINEN Bildaufruf (@0x46FF62), und der rechnet
+    /// <c>261 + ((byte[0x4F8D68] + 4) &amp; 7)</c> und zeichnet bei (90, 147).
+    /// <c>0x4F8D68</c> ist die WINDRICHTUNG — dieselbe Stelle, aus der die
+    /// Waldbrandausbreitung ihre Richtung nimmt. Das kleine runde Ding unten in
+    /// der Mitte ist also keine Kompassrose, sondern eine <b>Windfahne</b>, und
+    /// das <c>+4</c> heißt: sie zeigt in die GEGENRICHTUNG.</para>
+    ///
+    /// <para><b>Der Bestand</b>: <c>0x455D50</c> liest <c>windows.cww</c> am
+    /// Stück nach <c>0x8938D8</c> (<c>fread(…, 1, 0x21BB0, f)</c>), und die
+    /// Zeichenroutine @0x455DB0 rechnet die Satzadresse als <c>440·Nummer</c>
+    /// (<c>lea</c>-Kette @0x455DB9..0x455DCF) und beginnt die Bildpunkte bei
+    /// <c>+0x16</c>. Die Datei ist 138.160 Byte = <b>314 Sätze zu 440</b>, und
+    /// 440 − 0x16 = 418 = <b>22 × 19</b> — die Bildgröße geht also genau auf.</para>
+    ///
+    /// <para>Die Palette läuft über denselben Weg wie alles andere
+    /// (<see cref="PalFile"/> nimmt die Rohwerte). ⚠ Gegengeprüft an den
+    /// Bildschirmfotos des Spielers: schwarzes Zifferblatt, Messinggehäuse,
+    /// rot-orange Nadel — Pixel für Pixel dieselben Farben. (Beim Lesen hatte
+    /// ich zuerst mit ×4 gestreckt und ein olivgrünes Blatt bekommen; das war
+    /// mein Fehler, nicht der der Datei.)</para></summary>
+    public const int VaneW = 22, VaneH = 19, VaneFirst = 261, VaneCount = 8;
+    private const int CwwStride = 440, CwwHead = 0x16;
+
+    public int VaneFrames { get; private set; }
+
+    public void WriteWindVane(byte[] cww)
+    {
+        Directory.CreateDirectory(_ui);
+        int need = CwwStride * (VaneFirst + VaneCount);
+        if (cww.Length < need)
+            throw new InvalidDataException(
+                $"WINDOWS.CWW ist {cww.Length} Bytes, fuer Satz {VaneFirst + VaneCount - 1} " +
+                $"werden {need} gebraucht");
+        var img = Image.CreateEmpty(VaneW * VaneCount, VaneH, false, Image.Format.Rgba8);
+        img.Fill(new Color(0, 0, 0, 0));
+        for (int k = 0; k < VaneCount; k++)
+        {
+            int at = CwwStride * (VaneFirst + k) + CwwHead;
+            for (int y = 0; y < VaneH; y++)
+                for (int x = 0; x < VaneW; x++)
+                {
+                    byte v = cww[at + y * VaneW + x];
+                    if (v == 0xFF) continue;
+                    img.SetPixel(k * VaneW + x, y,
+                                 Color.Color8(_pal.R[v], _pal.G[v], _pal.B[v], 255));
+                }
+            VaneFrames++;
+        }
+        img.SavePng($"{_ui}/windvane.png");
+
+        var sb = new StringBuilder();
+        sb.Append("{\"source\":\"WINDOWS.CWW\",\"record_stride\":440,\"pixels_at\":22,");
+        sb.Append($"\"first\":{VaneFirst},\"count\":{VaneCount},");
+        sb.Append($"\"size\":[{VaneW},{VaneH}],\"layout\":\"frame = (wind + 4) & 7\",");
+        sb.Append("\"draw_at\":[90,147],\"evidence\":\"panel_draw @0x46FF3B liest ");
+        sb.Append("byte[0x4F8D68], addiert 4, mod 8, plus 0x105; zeichnet @0x46FF62\",");
+        sb.Append("\"transparent\":255,\"palette\":\"DATA/01.PAL (unskaliert)\"}");
+        File.WriteAllText($"{_ui}/windvane_index.json", sb.ToString(), new UTF8Encoding(false));
+    }
+
     // ---- ANIM.CWA -----------------------------------------------------------
 
     /// <summary>The sequences picked off the 141-sequence contact sheet. Which

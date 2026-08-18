@@ -1293,6 +1293,27 @@ public partial class MainMenu : Control
         foreach (string a in OS.GetCmdlineUserArgs())
             if (a == "--no-briefing") _skipBriefing = true;
 
+        // ⚠ »WEITER« AUS DEM ABSCHLUSSFENSTER. Es lädt die nächste Karte nicht
+        // mehr selbst, sondern meldet sie hier an — damit läuft sie durch
+        // GENAU DIESELBE Tür wie der Menüknopf, samt Vorschau. Siehe
+        // SkirmishSetup.PendingMission und MapViewer.StartNextMission.
+        //
+        // Vor dem Start zurücksetzen: sonst startet ein späterer Menübesuch
+        // dieselbe Mission ein zweites Mal.
+        if (SkirmishSetup.PendingMission > 0)
+        {
+            int weiter = SkirmishSetup.PendingMission;
+            SkirmishSetup.PendingMission = 0;
+            var m = Campaign.CampaignManager.ByIndex(weiter);
+            if (m != null)
+            {
+                GD.Print($"Kampagne: Vorschau fuer {m.Label} — aus dem Abschlussfenster");
+                StartMission(m);
+                return true;
+            }
+            GD.PrintErr($"Kampagne: Mission {weiter} gibt es nicht — bleibe im Menue");
+        }
+
         foreach (string a in OS.GetCmdlineUserArgs())
         {
             if (a.StartsWith("--briefing="))

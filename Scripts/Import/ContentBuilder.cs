@@ -215,9 +215,14 @@ public sealed class ContentBuilder
                 if (font2 != null)
                     ui.WriteFont(font2, InterfaceExporter.Font2Name, "FONT2.CWD");
                 if (panel != null) ui.WritePanel(panel);
+                // Die WINDFAHNE unten in der Mitte des Bedienfelds — acht
+                // Stellungen aus WINDOWS.CWW, siehe WriteWindVane.
+                var cww = Asset("WINDOWS.CWW");
+                if (cww != null) ui.WriteWindVane(cww);
                 if (anim != null) ui.WriteEffects(AnimFile.FromBytes(anim));
                 Say($"Oberflaeche: {ui.Fonts} Schriften mit {ui.Glyphs} Glyphen, " +
                     $"Panel {(panel != null ? "ja" : "nein")}, " +
+                    $"Windfahne {ui.VaneFrames} Bilder, " +
                     $"{ui.Effects} Effekte mit {ui.EffectFrames} Bildern");
             }
         }
@@ -1083,7 +1088,12 @@ public sealed class ContentBuilder
             }
             var ui = new InterfaceExporter(PalFile.Load(palPath), _dst + "/UI", _dst + "/Effects");
             ui.WriteEffects(AnimFile.FromBytes(anim));
-            Say($"{ui.Effects} Effekte mit {ui.EffectFrames} Bildern");
+            // Die Windfahne haengt am selben Weg: sie ist ein Bild der
+            // Oberflaeche und soll ohne vollen Neuimport nachziehbar sein.
+            var cww = Asset("WINDOWS.CWW");
+            if (cww != null) ui.WriteWindVane(cww);
+            Say($"{ui.Effects} Effekte mit {ui.EffectFrames} Bildern, " +
+                $"Windfahne {ui.VaneFrames} Bilder");
             return ui.Effects > 0;
         }
         catch (Exception e) { Say(e.Message); return false; }
