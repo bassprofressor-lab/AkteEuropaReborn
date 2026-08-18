@@ -19732,6 +19732,126 @@
      ]
     },
     {
+     "_abgerollt": "Schleife 0x4A54C3..0x4A5508, Durchlauf 40",
+     "_at": "0x4A54EB",
+     "once": 42,
+     "then": [
+      {
+       "a": 46,
+       "kind": "inc"
+      },
+      {
+       "a": 4000,
+       "b": 0,
+       "kind": "money"
+      }
+     ],
+     "when": [
+      {
+       "a": 40,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 40,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A54C3..0x4A5508, Durchlauf 41",
+     "_at": "0x4A54EC",
+     "once": 43,
+     "then": [
+      {
+       "a": 46,
+       "kind": "inc"
+      },
+      {
+       "a": 4000,
+       "b": 0,
+       "kind": "money"
+      }
+     ],
+     "when": [
+      {
+       "a": 40,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 41,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A54C3..0x4A5508, Durchlauf 42",
+     "_at": "0x4A54ED",
+     "once": 44,
+     "then": [
+      {
+       "a": 46,
+       "kind": "inc"
+      },
+      {
+       "a": 4000,
+       "b": 0,
+       "kind": "money"
+      }
+     ],
+     "when": [
+      {
+       "a": 40,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 42,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A54C3..0x4A5508, Durchlauf 43",
+     "_at": "0x4A54EE",
+     "once": 45,
+     "then": [
+      {
+       "a": 46,
+       "kind": "inc"
+      },
+      {
+       "a": 4000,
+       "b": 0,
+       "kind": "money"
+      }
+     ],
+     "when": [
+      {
+       "a": 40,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 43,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A552C",
      "_tut_ausserdem": "bus_cmd",
      "once": 47,
@@ -19756,6 +19876,96 @@
       },
       {
        "a": 64,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A5550..0x4A5595, Durchlauf 78",
+     "_at": "0x4A559E",
+     "once": 48,
+     "then": [
+      {
+       "a": 46,
+       "kind": "inc"
+      },
+      {
+       "a": 4000,
+       "b": 0,
+       "kind": "money"
+      }
+     ],
+     "when": [
+      {
+       "a": 40,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 78,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A5550..0x4A5595, Durchlauf 79",
+     "_at": "0x4A559F",
+     "once": 49,
+     "then": [
+      {
+       "a": 46,
+       "kind": "inc"
+      },
+      {
+       "a": 4000,
+       "b": 0,
+       "kind": "money"
+      }
+     ],
+     "when": [
+      {
+       "a": 40,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 79,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A5550..0x4A5595, Durchlauf 80",
+     "_at": "0x4A55A0",
+     "once": 50,
+     "then": [
+      {
+       "a": 46,
+       "kind": "inc"
+      },
+      {
+       "a": 4000,
+       "b": 0,
+       "kind": "money"
+      }
+     ],
+     "when": [
+      {
+       "a": 40,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 80,
        "b": 12,
        "kind": "obj_owner",
        "op": "=="
