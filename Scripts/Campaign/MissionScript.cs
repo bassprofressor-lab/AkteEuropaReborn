@@ -1480,6 +1480,18 @@ public sealed class MissionScript
     /// leeren Sätze. Mission 28 fragt zweimal so (@0x4A2BBF, @0x4A2C05).</summary>
     public Func<int, bool>? UnitAlive;               // satz -> lebt?
 
+    /// <summary>BEWEGEN — Befehl 3 des Originals (<c>0x4D0860</c>, 46
+    /// Aufrufstellen in den Missionsblöcken). P1 = Einheitsnummer, P2/P3 =
+    /// Zielzelle; siehe <see cref="Simulation.Commands.CommandOp.Move"/>,
+    /// wo die Deutung von zwei Seiten belegt ist.</summary>
+    public Action<int, int, int>? MoveUnit;          // einheit, x, y
+
+    /// <summary>Den KI-Modus eines Spielers setzen — <c>byte[0x538BB8 +
+    /// spieler] = wert</c> (<c>0x4D0EE0</c>). Dass es die KI ist, sagt das
+    /// Spiel selbst: die Funktion, die diese Tafel liest, protokolliert sich
+    /// als »AI« / »AI end« (@0x4BFB8C, @0x4BFE3A).</summary>
+    public Action<int, int>? SetAi;                  // spieler, wert
+
     public Func<int, int>? KillCount;                // spieler -> ausgeschaltet
     public Func<int, int>? LossCount;                // spieler -> Verluste
 
@@ -2085,6 +2097,14 @@ public sealed class MissionScript
             case "order":
                 OrderUnit?.Invoke(a.A, a.B, a.C, a.D);
                 break;
+            // BEWEGEN (Befehl 3). Dieselbe Wirkung wie `order_at`, nur ohne
+            // dessen viertes, ungelesenes Argument.
+            case "move":
+                MoveUnit?.Invoke(a.A, a.B, a.C);
+                break;
+            case "set_ai":
+                SetAi?.Invoke(a.A, a.B);
+                break;
             // place_unit(entwurf, spalte, zeile, spieler) @0x4D0810 — siehe
             // PlaceUnit. Gezaehlt wird, WIEVIELE eine Mission auslöst: die
             // gelesene Zahl je Mission ist die Messlatte (M2 7, M3 4, M5 2,
@@ -2565,6 +2585,8 @@ public sealed class MissionScript
         "sound" => PlaySound != null,
         "close_texts" => CloseTexts != null,
         "order" => OrderUnit != null,
+        "move" => MoveUnit != null,
+        "set_ai" => SetAi != null,
         "add_target" => AddTarget != null,
         "remove_unit" => RemoveUnit != null,
         "sell_unit" => SellUnit != null,

@@ -1365,6 +1365,34 @@
        "kind": "place_unit"
       },
       {
+       "_at": "0x49BF8A",
+       "a": 6000,
+       "b": 55,
+       "c": 8,
+       "kind": "move"
+      },
+      {
+       "_at": "0x49BF9B",
+       "a": 6001,
+       "b": 56,
+       "c": 8,
+       "kind": "move"
+      },
+      {
+       "_at": "0x49BFAC",
+       "a": 6002,
+       "b": 57,
+       "c": 9,
+       "kind": "move"
+      },
+      {
+       "_at": "0x49BFBD",
+       "a": 6003,
+       "b": 58,
+       "c": 10,
+       "kind": "move"
+      },
+      {
        "a": 2,
        "kind": "inc"
       }
@@ -1410,6 +1438,13 @@
        "c": 0,
        "d": 5,
        "kind": "place_unit"
+      },
+      {
+       "_at": "0x49C026",
+       "a": 5000,
+       "b": 54,
+       "c": 4,
+       "kind": "move"
       },
       {
        "a": 3,
@@ -1465,6 +1500,41 @@
       {
        "a": 3,
        "kind": "set_time"
+      },
+      {
+       "_at": "0x49C07E",
+       "a": 6000,
+       "b": 61,
+       "c": 18,
+       "kind": "move"
+      },
+      {
+       "_at": "0x49C08F",
+       "a": 6001,
+       "b": 61,
+       "c": 18,
+       "kind": "move"
+      },
+      {
+       "_at": "0x49C0A0",
+       "a": 6002,
+       "b": 61,
+       "c": 18,
+       "kind": "move"
+      },
+      {
+       "_at": "0x49C0B1",
+       "a": 6003,
+       "b": 61,
+       "c": 18,
+       "kind": "move"
+      },
+      {
+       "_at": "0x49C0C2",
+       "a": 5000,
+       "b": 64,
+       "c": 14,
+       "kind": "move"
       }
      ],
      "when": [
@@ -1502,6 +1572,13 @@
       {
        "a": 3,
        "kind": "set_time"
+      },
+      {
+       "_at": "0x49C109",
+       "a": 5000,
+       "b": 59,
+       "c": 21,
+       "kind": "move"
       },
       {
        "_at": "0x49C122",
@@ -1557,6 +1634,13 @@
       {
        "a": 3,
        "kind": "set_time"
+      },
+      {
+       "_at": "0x49C17B",
+       "a": 5000,
+       "b": 68,
+       "c": 31,
+       "kind": "move"
       }
      ],
      "when": [
@@ -1594,6 +1678,13 @@
       {
        "a": 3,
        "kind": "set_time"
+      },
+      {
+       "_at": "0x49C1C4",
+       "a": 5000,
+       "b": 77,
+       "c": 32,
+       "kind": "move"
       }
      ],
      "when": [
@@ -1612,6 +1703,13 @@
       {
        "a": 3,
        "kind": "set_time"
+      },
+      {
+       "_at": "0x49C1FD",
+       "a": 5000,
+       "b": 77,
+       "c": 32,
+       "kind": "move"
       }
      ],
      "when": [
@@ -1695,6 +1793,13 @@
        "c": 40,
        "d": 7,
        "kind": "place_unit"
+      },
+      {
+       "_at": "0x49C2AB",
+       "a": 7000,
+       "b": 47,
+       "c": 8,
+       "kind": "move"
       },
       {
        "a": 6,
@@ -6156,6 +6261,13 @@
        "c": 103,
        "d": 4,
        "kind": "place_unit"
+      },
+      {
+       "_at": "0x49EE4D",
+       "a": 4000,
+       "b": 10,
+       "c": 100,
+       "kind": "move"
       }
      ],
      "when": [
@@ -9469,6 +9581,13 @@
        "a": 80,
        "b": 1,
        "kind": "set"
+      },
+      {
+       "_at": "0x49FD5B",
+       "a": 7000,
+       "b": 74,
+       "c": 5,
+       "kind": "move"
       }
      ],
      "when": [
@@ -14278,6 +14397,12 @@
        "kind": "inc"
       },
       {
+       "_at": "0x4A2B5E",
+       "a": 1,
+       "b": 1,
+       "kind": "set_ai"
+      },
+      {
        "_at": "0x4A2B7C",
        "a": 1,
        "b": 4,
@@ -14285,6 +14410,13 @@
        "d": 13,
        "e": 49,
        "kind": "add_target"
+      },
+      {
+       "_at": "0x4A2B8D",
+       "a": 3000,
+       "b": 13,
+       "c": 49,
+       "kind": "move"
       },
       {
        "_at": "0x4A2BA6",
@@ -14318,6 +14450,13 @@
      "_at": "0x4A2BD1",
      "_tut_ausserdem": "0x4D0860 add_target",
      "then": [
+      {
+       "_at": "0x4A2BDA",
+       "a": 3000,
+       "b": 17,
+       "c": 5,
+       "kind": "move"
+      },
       {
        "_at": "0x4A2BEC",
        "a": 1,
@@ -14369,6 +14508,13 @@
        "d": 32,
        "e": 4,
        "kind": "add_target"
+      },
+      {
+       "_at": "0x4A2C39",
+       "a": 3000,
+       "b": 36,
+       "c": 12,
+       "kind": "move"
       }
      ],
      "when": [
@@ -14452,6 +14598,13 @@
        "c": 12,
        "d": 3,
        "kind": "place_unit"
+      },
+      {
+       "_at": "0x4A2CC5",
+       "a": 3000,
+       "b": 7,
+       "c": 91,
+       "kind": "move"
       }
      ],
      "when": [
@@ -14489,6 +14642,606 @@
        "b": 3,
        "kind": "time_after",
        "op": ">"
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 0",
+     "_at": "0x4A2CF3",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1000,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1000,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 1",
+     "_at": "0x4A2CF4",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1001,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1001,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 2",
+     "_at": "0x4A2CF5",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1002,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1002,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 3",
+     "_at": "0x4A2CF6",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1003,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1003,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 4",
+     "_at": "0x4A2CF7",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1004,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1004,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 5",
+     "_at": "0x4A2CF8",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1005,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1005,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 6",
+     "_at": "0x4A2CF9",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1006,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1006,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 7",
+     "_at": "0x4A2CFA",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1007,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1007,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 8",
+     "_at": "0x4A2CFB",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1008,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1008,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 9",
+     "_at": "0x4A2CFC",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1009,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1009,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 10",
+     "_at": "0x4A2CFD",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1010,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1010,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 11",
+     "_at": "0x4A2CFE",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1011,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1011,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 12",
+     "_at": "0x4A2CFF",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1012,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1012,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 13",
+     "_at": "0x4A2D00",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1013,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1013,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 14",
+     "_at": "0x4A2D01",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1014,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1014,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 15",
+     "_at": "0x4A2D02",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1015,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1015,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 16",
+     "_at": "0x4A2D03",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1016,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1016,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 17",
+     "_at": "0x4A2D04",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1017,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1017,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 18",
+     "_at": "0x4A2D05",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1018,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1018,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 19",
+     "_at": "0x4A2D06",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1019,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1019,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 20",
+     "_at": "0x4A2D07",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1020,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1020,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 21",
+     "_at": "0x4A2D08",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1021,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1021,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 22",
+     "_at": "0x4A2D09",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1022,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1022,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 23",
+     "_at": "0x4A2D0A",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1023,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1023,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 24",
+     "_at": "0x4A2D0B",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1024,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1024,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 25",
+     "_at": "0x4A2D0C",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1025,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1025,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 26",
+     "_at": "0x4A2D0D",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1026,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1026,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 27",
+     "_at": "0x4A2D0E",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1027,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1027,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 28",
+     "_at": "0x4A2D0F",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1028,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1028,
+       "kind": "unit_alive",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x4A2CF3..0x4A2D30, Durchlauf 29",
+     "_at": "0x4A2D10",
+     "then": [
+      {
+       "_at": "0x4A2D23",
+       "a": 1029,
+       "b": 7,
+       "c": 83,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 1029,
+       "kind": "unit_alive",
+       "op": "!="
       }
      ]
     },
@@ -20893,6 +21646,13 @@
        "a": 1,
        "b": 0,
        "kind": "set"
+      },
+      {
+       "_at": "0x499CEA",
+       "a": 1000,
+       "b": 9,
+       "c": 43,
+       "kind": "move"
       }
      ],
      "when": [
@@ -22626,9 +23386,190 @@
      ]
     },
     {
+     "_at": "0x49AE51",
+     "_tut_ausserdem": "0x4D0860",
+     "then": [
+      {
+       "_at": "0x49AE5A",
+       "a": 7001,
+       "b": 37,
+       "c": 46,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 7001,
+       "b": 55,
+       "c": 0,
+       "kind": "unit_pos",
+       "op": "=="
+      },
+      {
+       "a": 7001,
+       "b": 49,
+       "c": 1,
+       "kind": "unit_pos",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49AE74",
+     "_tut_ausserdem": "0x4D0860",
+     "then": [
+      {
+       "_at": "0x49AE7D",
+       "a": 7002,
+       "b": 45,
+       "c": 35,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 7002,
+       "b": 55,
+       "c": 0,
+       "kind": "unit_pos",
+       "op": "=="
+      },
+      {
+       "a": 7002,
+       "b": 49,
+       "c": 1,
+       "kind": "unit_pos",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49AE97",
+     "_tut_ausserdem": "0x4D0860",
+     "then": [
+      {
+       "_at": "0x49AEA0",
+       "a": 7003,
+       "b": 49,
+       "c": 17,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 7003,
+       "b": 55,
+       "c": 0,
+       "kind": "unit_pos",
+       "op": "=="
+      },
+      {
+       "a": 7003,
+       "b": 49,
+       "c": 1,
+       "kind": "unit_pos",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49AEBA",
+     "_tut_ausserdem": "0x4D0860",
+     "then": [
+      {
+       "_at": "0x49AEC3",
+       "a": 7001,
+       "b": 37,
+       "c": 23,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 7001,
+       "b": 37,
+       "c": 0,
+       "kind": "unit_pos",
+       "op": "=="
+      },
+      {
+       "a": 7001,
+       "b": 46,
+       "c": 1,
+       "kind": "unit_pos",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49AEDD",
+     "_tut_ausserdem": "0x4D0860",
+     "then": [
+      {
+       "_at": "0x49AEE6",
+       "a": 7002,
+       "b": 37,
+       "c": 23,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 7002,
+       "b": 45,
+       "c": 0,
+       "kind": "unit_pos",
+       "op": "=="
+      },
+      {
+       "a": 7002,
+       "b": 35,
+       "c": 1,
+       "kind": "unit_pos",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49AF00",
+     "_tut_ausserdem": "0x4D0860",
+     "then": [
+      {
+       "_at": "0x49AF09",
+       "a": 7003,
+       "b": 37,
+       "c": 23,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 7003,
+       "b": 49,
+       "c": 0,
+       "kind": "unit_pos",
+       "op": "=="
+      },
+      {
+       "a": 7003,
+       "b": 17,
+       "c": 1,
+       "kind": "unit_pos",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49AFD2",
      "_tut_ausserdem": "0x4D0860",
      "then": [
+      {
+       "_at": "0x49AFDB",
+       "a": 7004,
+       "b": 32,
+       "c": 2,
+       "kind": "move"
+      },
       {
        "a": 6,
        "kind": "inc"
@@ -23383,6 +24324,13 @@
        "kind": "place_unit"
       },
       {
+       "_at": "0x49B6D9",
+       "a": 6000,
+       "b": 52,
+       "c": 53,
+       "kind": "move"
+      },
+      {
        "_at": "0x49B6E9",
        "a": 50,
        "b": 66,
@@ -23509,6 +24457,13 @@
        "a": 937,
        "b": 0,
        "kind": "money"
+      },
+      {
+       "_at": "0x49B819",
+       "a": 6000,
+       "b": 56,
+       "c": 31,
+       "kind": "move"
       }
      ],
      "when": [

@@ -8050,6 +8050,20 @@ public partial class MapEntityLayer : Node2D
                     _nav != null && _nav.InBounds(x, y) ? (int)_nav.GroundAt(x, y) : -1;
                 // bus_cmd(11, einheit, ukol, x, y) — ukol 4 ist Angriff.
                 _mscript.OrderUnit = MissionOrder;
+                // BEWEGEN (Befehl 3 des Originals) — dieselbe Bahn wie
+                // `order_at`, das vierte Argument gibt es hier nicht.
+                _mscript.MoveUnit = (slot, x, y) => MissionOrderAt(slot, x, y, -1);
+                // ⚠ DEN KI-MODUS KOENNEN WIR NICHT SETZEN. Die Kampagne hat
+                // bei uns keine KI, die man je Spieler an- und abschalten
+                // koennte (`SkirmishAi` gehoert zum GEFECHT, und Kampagne und
+                // Gefecht werden nicht vermischt). Es wird darum nur
+                // protokolliert — aber der Haken MUSS da sein: ohne ihn waere
+                // die ganze Regel blockiert, und M28 verloere auch ihr
+                // `add_target`. Beide Aufrufstellen der Kampagne setzen den
+                // Wert 1 (M26 Spieler 5, M28 Spieler 1).
+                _mscript.SetAi = (spieler, wert) =>
+                    GD.Print($"Missionsskript: KI-Modus Spieler {spieler} = {wert} " +
+                             "— die Kampagne hat keine KI, es geschieht nichts");
                 _mscript.RemoveUnit = slot => MissionRemove(slot, false);
                 _mscript.SellUnit = slot => MissionRemove(slot, true);
                 _mscript.ChangeOwner = (slot, spieler) =>
