@@ -2205,6 +2205,34 @@ public sealed class MissionScript
             case "sell_unit":
                 SellUnit?.Invoke(a.A);
                 break;
+            // Dieselben zwei Wirkungen mit dem Platz aus einer
+            // MISSIONSVARIABLEN. Das Original benutzt die Form staendig, weil
+            // der Platz erst zur Laufzeit feststeht (die Mission hat ihn sich
+            // vorher mit `find_unit` gemerkt):
+            //
+            //     0x49E909  mov ax, word[0xBC56BC]     ; v[22]
+            //     0x49E90F  push eax
+            //     0x49E910  call <entfernen>
+            //
+            // Bis zum 18.08.2026 gab der Leser sie gar nicht her: ein Register
+            // galt als unbekanntes Argument, und die Wirkung fiel weg. Von 30
+            // `remove_unit`-Aufrufstellen hatten 24 keine Regel. Welche drei
+            // Wirkungen die Form ueberhaupt benutzen, ist gemessen (siehe
+            // VAR_ARG0 in mission_logic.py): bewegen, entfernen, verkaufen.
+            //
+            // ⚠ Der Platz kann 0 oder 1000 sein — beides heisst im Original
+            // »kein Satz« (1000 ist der Anfang des naechsten Spielerblocks und
+            // wird als Loeschmarke geschrieben, siehe 0x49E915). Die Regeln
+            // pruefen das selbst; hier wird es trotzdem geprueft, weil eine
+            // Wirkung sich nicht auf ihre Bedingung verlassen soll.
+            case "remove_unit_var":
+                if (a.A >= 0 && a.A < _var.Length && _var[a.A] > 0)
+                    RemoveUnit?.Invoke(_var[a.A]);
+                break;
+            case "sell_unit_var":
+                if (a.A >= 0 && a.A < _var.Length && _var[a.A] > 0)
+                    SellUnit?.Invoke(_var[a.A]);
+                break;
             case "change_owner":
                 ChangeOwner?.Invoke(a.A, a.B);
                 break;
@@ -2761,8 +2789,8 @@ public sealed class MissionScript
         "set_ai" => SetAi != null,
         "fire_at" => FireAt != null,
         "add_target" => AddTarget != null,
-        "remove_unit" => RemoveUnit != null,
-        "sell_unit" => SellUnit != null,
+        "remove_unit" or "remove_unit_var" => RemoveUnit != null,
+        "sell_unit" or "sell_unit_var" => SellUnit != null,
         "change_owner" => ChangeOwner != null,
         "set_relation" => SetRelation != null,
         "stop_transport" => StopTransport != null,

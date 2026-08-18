@@ -1920,6 +1920,11 @@
       {
        "a": 7,
        "kind": "inc"
+      },
+      {
+       "_at": "0x49C4E8",
+       "a": 8,
+       "kind": "remove_unit_var"
       }
      ],
      "when": [
@@ -2092,7 +2097,13 @@
      "_at": "0x49C6B0",
      "_tut_ausserdem": "remove_unit",
      "once": 16,
-     "then": [],
+     "then": [
+      {
+       "_at": "0x49C6B7",
+       "a": 17,
+       "kind": "remove_unit_var"
+      }
+     ],
      "when": [
       {
        "a": 7,
@@ -2120,7 +2131,13 @@
      "_at": "0x49C705",
      "_tut_ausserdem": "remove_unit",
      "once": 15,
-     "then": [],
+     "then": [
+      {
+       "_at": "0x49C70C",
+       "a": 18,
+       "kind": "remove_unit_var"
+      }
+     ],
      "when": [
       {
        "a": 7,
@@ -2717,6 +2734,11 @@
        "kind": "inc"
       },
       {
+       "_at": "0x49CBDA",
+       "a": 2,
+       "kind": "remove_unit_var"
+      },
+      {
        "a": 103,
        "b": 10,
        "kind": "set"
@@ -3138,6 +3160,11 @@
        "a": 19,
        "b": 3,
        "kind": "set"
+      },
+      {
+       "_at": "0x49CFA2",
+       "a": 17,
+       "kind": "remove_unit_var"
       }
      ],
      "when": [
@@ -5409,6 +5436,11 @@
        "kind": "text"
       },
       {
+       "_at": "0x49E3B3",
+       "a": 11,
+       "kind": "remove_unit_var"
+      },
+      {
        "_at": "0x49E3C2",
        "a": 2000,
        "b": 0,
@@ -6502,6 +6534,11 @@
      "_at": "0x49ED45",
      "_tut_ausserdem": "remove_unit game_time add_target add_target add_target sound",
      "then": [
+      {
+       "_at": "0x49ED4C",
+       "a": 31,
+       "kind": "remove_unit_var"
+      },
       {
        "a": 32,
        "kind": "set_time"
@@ -10140,6 +10177,11 @@
        "kind": "inc"
       },
       {
+       "_at": "0x49FE71",
+       "a": 81,
+       "kind": "remove_unit_var"
+      },
+      {
        "a": 81,
        "kind": "set_time"
       }
@@ -12817,6 +12859,11 @@
        "kind": "set"
       },
       {
+       "_at": "0x4A177E",
+       "a": 52,
+       "kind": "sell_unit_var"
+      },
+      {
        "a": 51,
        "kind": "set_time"
       }
@@ -12901,6 +12948,11 @@
        "a": 98,
        "b": 0,
        "kind": "set"
+      },
+      {
+       "_at": "0x4A1820",
+       "a": 52,
+       "kind": "sell_unit_var"
       },
       {
        "a": 50,
@@ -13094,6 +13146,11 @@
       {
        "a": 21,
        "kind": "inc"
+      },
+      {
+       "_at": "0x4A1A1B",
+       "a": 22,
+       "kind": "sell_unit_var"
       },
       {
        "_at": "0x4A1A2A",
@@ -17380,6 +17437,11 @@
        "kind": "set"
       },
       {
+       "_at": "0x4A3B73",
+       "a": 24,
+       "kind": "remove_unit_var"
+      },
+      {
        "_at": "0x4A3B82",
        "a": 4000,
        "b": 0,
@@ -17591,6 +17653,11 @@
       {
        "a": 40,
        "kind": "inc"
+      },
+      {
+       "_at": "0x4A3DF2",
+       "a": 42,
+       "kind": "sell_unit_var"
       }
      ],
      "when": []
@@ -23609,6 +23676,11 @@
      "_at": "0x49A6F2",
      "_tut_ausserdem": "remove_unit show_text bus_cmd sound",
      "then": [
+      {
+       "_at": "0x49A6F9",
+       "a": 11,
+       "kind": "remove_unit_var"
+      },
       {
        "_at": "0x49A70C",
        "a": 100,
