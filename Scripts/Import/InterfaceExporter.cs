@@ -203,14 +203,30 @@ public sealed class InterfaceExporter
     /// <c>+0x16</c>. Die Datei ist 138.160 Byte = <b>314 Sätze zu 440</b>, und
     /// 440 − 0x16 = 418 = <b>22 × 19</b> — die Bildgröße geht also genau auf.</para>
     ///
+    /// <para>⚠⚠ <b>DAS SATZFORMAT, BERICHTIGT.</b> Zuerst hatte ich die 418
+    /// Bytes hinter dem Kopf als flaches 22×19-Feld gelesen — 418 = 22·19 geht
+    /// glatt auf, und das Bild sah RICHTIG aus. Es war trotzdem falsch. Der
+    /// Blit-Rumpf @0x455DDF..0x455E25 sagt es genau: er zählt <b>20 Zeilen</b>
+    /// (<c>mov dword [esp+0xc], 0x14</c> @0x455DC3), nimmt je Zeile zwei
+    /// Kopfbytes — <c>[+0] Startspalte</c>, <c>[+1] Länge</c> (@0x455DE3,
+    /// @0x455DE9) — kopiert danach <c>Länge</c> Bildpunkte und rückt um
+    /// <c>0x16 = 22</c> Byte vor (@0x455DFA). Ein Satz ist also
+    /// <b>20 Zeilen à 22 Byte</b> = 440, und die Bildpunkte einer Zeile
+    /// beginnen bei <c>+2</c>.
+    ///
+    /// Die flache Lesart nahm die zwei Kopfbytes der NÄCHSTEN Zeile als
+    /// Bildpunkte 20 und 21 der laufenden und verschob damit jede Zeile um
+    /// zwei Punkte. Bei der Fahne fiel das kaum auf, weil alle 20 Zeilen
+    /// <c>0/20</c> tragen (nachgezählt) — ein Beinahe-Treffer, kein Treffer.</para>
+    ///
     /// <para>Die Palette läuft über denselben Weg wie alles andere
     /// (<see cref="PalFile"/> nimmt die Rohwerte). ⚠ Gegengeprüft an den
     /// Bildschirmfotos des Spielers: schwarzes Zifferblatt, Messinggehäuse,
     /// rot-orange Nadel — Pixel für Pixel dieselben Farben. (Beim Lesen hatte
     /// ich zuerst mit ×4 gestreckt und ein olivgrünes Blatt bekommen; das war
     /// mein Fehler, nicht der der Datei.)</para></summary>
-    public const int VaneW = 22, VaneH = 19, VaneFirst = 261, VaneCount = 8;
-    private const int CwwStride = 440, CwwHead = 0x16;
+    public const int VaneW = 20, VaneH = 20, VaneFirst = 261, VaneCount = 8;
+    private const int CwwStride = 440, CwwRow = 22, CwwRows = 20;
 
     public int VaneFrames { get; private set; }
 
@@ -226,21 +242,27 @@ public sealed class InterfaceExporter
         img.Fill(new Color(0, 0, 0, 0));
         for (int k = 0; k < VaneCount; k++)
         {
-            int at = CwwStride * (VaneFirst + k) + CwwHead;
-            for (int y = 0; y < VaneH; y++)
-                for (int x = 0; x < VaneW; x++)
+            for (int y = 0; y < CwwRows; y++)
+            {
+                int row = CwwStride * (VaneFirst + k) + CwwRow * y;
+                int x0 = cww[row], len = cww[row + 1];
+                for (int i = 0; i < len && i < CwwRow - 2; i++)
                 {
-                    byte v = cww[at + y * VaneW + x];
+                    int x = x0 + i;
+                    if (x >= VaneW) break;
+                    byte v = cww[row + 2 + i];
                     if (v == 0xFF) continue;
                     img.SetPixel(k * VaneW + x, y,
                                  Color.Color8(_pal.R[v], _pal.G[v], _pal.B[v], 255));
                 }
+            }
             VaneFrames++;
         }
         img.SavePng($"{_ui}/windvane.png");
 
         var sb = new StringBuilder();
-        sb.Append("{\"source\":\"WINDOWS.CWW\",\"record_stride\":440,\"pixels_at\":22,");
+        sb.Append("{\"source\":\"WINDOWS.CWW\",\"record_stride\":440,");
+        sb.Append("\"rows\":20,\"row_stride\":22,\"row\":\"[startspalte][laenge][bis 20 punkte]\",");
         sb.Append($"\"first\":{VaneFirst},\"count\":{VaneCount},");
         sb.Append($"\"size\":[{VaneW},{VaneH}],\"layout\":\"frame = (wind + 4) & 7\",");
         sb.Append("\"draw_at\":[90,147],\"evidence\":\"panel_draw @0x46FF3B liest ");

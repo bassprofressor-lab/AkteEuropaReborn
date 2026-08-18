@@ -19381,6 +19381,9 @@ public partial class MapEntityLayer : Node2D
         _musicTick += dt;
         if (_musicTick >= 2f) { _musicTick = 0; Audio.MidiMusic.Poll(); }
 
+        // Der Wind — er bewegt heute nur die Fahne im Bedienfeld.
+        TickWind(dt);
+
         _simAcc += dt;
         int steps = 0;
         bool moved = false;
@@ -20264,6 +20267,75 @@ public partial class MapEntityLayer : Node2D
 
     private float _clock;
     private float _musicTick;
+
+    // ---- DER WIND -----------------------------------------------------------
+    //
+    /// <summary>Die Windrichtung, 0..7 wie eine Himmelsrichtung. Im Original
+    /// <c>byte[0x4F8D68]</c>.
+    ///
+    /// <para><b>Wozu das Spiel sie braucht</b>: die Waldbrandausbreitung nimmt
+    /// ihre Richtung daraus (<c>zapal_forestA</c> @0x4CA7E0), und das
+    /// Bedienfeld zeichnet daraus die WINDFAHNE unten in der Mitte —
+    /// <c>panel_draw</c> @0x46FF3B rechnet
+    /// <c>261 + ((byte[0x4F8D68] + 4) &amp; 7)</c> und zeichnet bei (90,147).
+    /// Das <c>+4</c> heisst: die Fahne zeigt in die GEGENRICHTUNG.</para>
+    ///
+    /// <para><b>Woher der Wert kommt</b>, ist gelesen: beim Start
+    /// <c>rand &amp; 7</c> (@0x41A185), danach ein Zufallsgang — je Aufruf
+    /// <c>rand mod 3 - 1</c> auf die Richtung, mit Umlauf 7↔0
+    /// (@0x422225..0x42225B).</para>
+    ///
+    /// <para>⚠ <b>WIE OFT der Zufallsgang laeuft, ist NICHT gelesen</b>: die
+    /// Funktion hat keinen eigenen Aufrufer, sie haengt in einem groesseren
+    /// Rumpf. <see cref="WindDriftSeconds"/> ist darum UNSERE Zahl.</para>
+    ///
+    /// <para>⚠ Nebenbefund am Original: bei den Grenzen der STAERKE schreibt es
+    /// zweimal in die RICHTUNG statt in die Staerke (@0x422277 setzt
+    /// <c>[0x4F8D68] = 0</c>, @0x422289 setzt sie auf 9). Das sieht nach einem
+    /// Fehler des Originals aus; wir bauen ihn NICHT nach.</para></summary>
+    public int WindDir { get; private set; } = -1;
+
+    /// <summary>Die Windstaerke. Im Original <c>byte[0x4F8D6C]</c>, beim Start
+    /// mindestens 2 (@0x41A177 <c>add dl, 2</c>), danach derselbe Zufallsgang.
+    /// Sie wird heute nur GEFUEHRT, nicht benutzt — die Ausbreitung des Feuers
+    /// ist noch nicht gebaut.</summary>
+    public int WindStrength { get; private set; } = 2;
+
+    /// <summary>⚠ UNSERE ZAHL: alle zwei Sekunden ein Schritt des
+    /// Zufallsgangs. Zwei Sekunden sind nicht frei gewaehlt, sondern der einzige
+    /// Takt dieser Groessenordnung, den das Spiel nachweislich hat — der
+    /// Blocktakt der Missionslogik (100 Takte bei 50 Hz, siehe
+    /// <see cref="Campaign.MissionScript.BlockPeriod"/>). Bis der echte Takt
+    /// gelesen ist, ist das die ehrlichste Annaeherung.</summary>
+    private const float WindDriftSeconds = 2f;
+    private float _windTick;
+
+    /// <summary>Den Wind setzen und weiterdrehen.
+    ///
+    /// <para>⚠ Der Wuerfel laeuft ueber <see cref="Simulation.Determinism"/>,
+    /// damit zwei Rechner denselben Wind sehen. Der TAKT haengt allerdings an
+    /// der Spieluhr und damit an der Bildrate — solange der Wind nur die Fahne
+    /// bewegt, kann daraus kein Auseinanderlaufen des Spiels werden. ⚠ Wer das
+    /// Feuer an den Wind haengt, MUSS den Takt vorher auf die Simulation
+    /// umstellen.</para></summary>
+    private void TickWind(float dt)
+    {
+        if (WindDir < 0)
+        {
+            WindDir = Simulation.Determinism.Roll(8);
+            WindStrength = 2 + Simulation.Determinism.Roll(8);
+            GD.Print($"wind: Start Richtung {WindDir}, Staerke {WindStrength} " +
+                     "(Original @0x41A185: rand & 7)");
+            return;
+        }
+        _windTick += dt;
+        if (_windTick < WindDriftSeconds) return;
+        _windTick = 0;
+        // `rand mod 3 - 1` -> -1, 0, +1, mit Umlauf 7<->0 (@0x422232..0x42225B)
+        WindDir = (WindDir + Simulation.Determinism.Roll(3) - 1 + 8) % 8;
+        int s = WindStrength + Simulation.Determinism.Roll(3) - 1;
+        WindStrength = Mathf.Clamp(s, 1, 9);
+    }
 
     /// <summary>One of the 24 infantry sets from ROBO.CWR's aux table.</summary>
     private Texture2D? GetInfantryTexture(int set, int facing, int block = InfIdleBlock)

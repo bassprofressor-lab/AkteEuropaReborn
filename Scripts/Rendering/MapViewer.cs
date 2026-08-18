@@ -2050,6 +2050,7 @@ public partial class MapViewer : Node2D
         BuildPanelClock();
         BuildPanelPortrait();
         BuildPowerBars();
+        BuildWindVane();
         PlacePanel();
         GetViewport().SizeChanged += PlacePanel;
     }
@@ -2362,6 +2363,59 @@ public partial class MapViewer : Node2D
     /// Panel-Uhr.</para></summary>
     private ColorRect? _powerBarTop, _powerBarBottom;
 
+    /// <summary>Wo die WINDFAHNE sitzt und wie gross sie ist — beides gelesen,
+    /// nicht gesetzt: <c>panel_draw</c> schiebt bei @0x46FF5F/@0x46FF5A die
+    /// Zielstelle (0x5A, 0x93) = <b>(90, 147)</b>, und die Bilder aus
+    /// WINDOWS.CWW sind 20 Zeilen hoch und hoechstens 22 breit (Satzaufbau
+    /// siehe InterfaceExporter.WriteWindVane).</summary>
+    private static readonly Vector2I WindVaneAt = new(90, 147);
+    private const int WindVaneW = 20, WindVaneH = 20;
+
+    private TextureRect? _windVane;
+    private AtlasTexture? _windVaneAtlas;
+    private int _windVaneFrame = -1;
+
+    /// <summary>Die Fahne anlegen. Ohne das Bild (eine Karte aus einem aelteren
+    /// Import) bleibt sie einfach weg — ein fehlendes Bild darf kein Loch ins
+    /// Bedienfeld reissen, dieselbe Regel wie bei der zweiten Kartenebene.</summary>
+    private void BuildWindVane()
+    {
+        if (_panelLayer == null) return;
+        string p = Core.Content.Path("UI/windvane.png");
+        Texture2D? blatt = ResourceLoader.Exists(p) ? ResourceLoader.Load<Texture2D>(p) : null;
+        if (blatt == null && FileAccess.FileExists(p))
+        {
+            var im = Image.LoadFromFile(ProjectSettings.GlobalizePath(p));
+            if (im != null) blatt = ImageTexture.CreateFromImage(im);
+        }
+        if (blatt == null) { GD.Print("windfahne: kein windvane.png — bleibt leer"); return; }
+        _windVaneAtlas = new AtlasTexture { Atlas = blatt, Region = new Rect2(0, 0, WindVaneW, WindVaneH) };
+        _windVane = new TextureRect
+        {
+            Texture = _windVaneAtlas,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            // ⚠ NEAREST: das Bild ist 22 Bildpunkte breit und wird um PanelScale
+            // vergroessert. Mit Glaettung wird aus der Nadel ein Fleck.
+            TextureFilter = CanvasItem.TextureFilterEnum.Nearest,
+            StretchMode = TextureRect.StretchModeEnum.Scale,
+            Size = new Vector2(WindVaneW * PanelScale, WindVaneH * PanelScale),
+        };
+        _panelLayer.AddChild(_windVane);
+    }
+
+    /// <summary>Die Nadel nachziehen: Bild <c>(Windrichtung + 4) &amp; 7</c>,
+    /// genau wie @0x46FF40..0x46FF4F.</summary>
+    private void UpdateWindVane()
+    {
+        if (_windVane == null || _windVaneAtlas == null || _entities == null) return;
+        int dir = _entities.WindDir;
+        if (dir < 0) return;
+        int frame = (dir + 4) & 7;
+        if (frame == _windVaneFrame) return;
+        _windVaneFrame = frame;
+        _windVaneAtlas.Region = new Rect2(frame * WindVaneW, 0, WindVaneW, WindVaneH);
+    }
+
     private static readonly Vector2I PowerBarTopAt = new(141, 149);
     private static readonly Vector2I PowerBarBottomAt = new(141, 158);
     private const int PowerBarWide = 56, PowerBarHigh = 2;
@@ -2626,6 +2680,8 @@ public partial class MapViewer : Node2D
             _powerBarTop.Position = origin + (Vector2)PowerBarTopAt * PanelScale;
         if (_powerBarBottom != null)
             _powerBarBottom.Position = origin + (Vector2)PowerBarBottomAt * PanelScale;
+        if (_windVane != null)
+            _windVane.Position = origin + (Vector2)WindVaneAt * PanelScale;
     }
 
     /// <summary>Das Baumenü: seit dem 11.08.2026 ein frei schwebendes FENSTER,
@@ -3233,6 +3289,7 @@ public partial class MapViewer : Node2D
         UpdatePanelClock();
         UpdatePanelPortrait();
         UpdatePowerBars();
+        UpdateWindVane();
         PortraitCheckTick();
         TurretSeatCheckTick();
         StempelCheckTick();
