@@ -1047,6 +1047,120 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   wird von uns. Aus vier Gebäuden werden auf einer großen Karte über siebzig,
   darunter Flughäfen, Fabriken und Basen zum Einnehmen.
 
+### Die Karte und was auf ihr steht
+
+- ⭐ **Die Bäume brennen — und es ist eine Kachel, keine Zutat.** Gemeldet als
+  »in Original Kampagne 1 gibt es z. B. von Haus aus ein paar brennende Bäume,
+  die haben wir garnicht«. Der Bericht stimmt, das Bild dazu liegt bei
+  (`Bug Bilder/kampagne1 original tutorial7.png`), und die halbe Antwort stand
+  seit dem Morgen schon da: der SETUP-Block der Mission schickt fünf Zellen
+  durch die Trefferroutine **Zasah** (C: @0x40C9A0). Was fehlte, war die
+  Wirkung — die dort gespielte ANIM-Folge 82 ist ein **Funkenschlag** und
+  erklärt kein anhaltendes Feuer.
+
+  Sie steht in einem Zweig, den wir nicht gelesen hatten. Zasah teilt den
+  Getroffenen nach seiner **Belegung** auf, und 50000..55999 ist ein **WALD**
+  (@0x40D61D). Dort rechnet er aus dem Angreifer eine Zahl und verzweigt in vier
+  Fälle, deren Protokollzeilen alles verraten:
+
+  ```
+    >= 70 -> "zrus"    @0x4CAD40   (weg, ohne Feuer)
+    >  45 -> "zapal A" @0x4CAC50   (ANZUENDEN)
+    >  22 -> "zapal B", jeder vierte Wurf
+    >  12 -> "zapal C", jeder achte Wurf
+  ```
+
+  »zapal« ist tschechisch für »zünde an«. Und damit ist auch der Angreifer der
+  SETUP-Liste gedeutet, der bis dahin als »eine Zahl zwischen Einheiten und
+  Gebäuden, die wir nicht deuten können« dastand: **0x9C72 = 40050**. Zasah
+  behandelt 40000..40999 als reine **Schadenszahl** (@0x40CC8B `add ax, 0x63C0`,
+  also 40050 − 40000 = **50**), und 50 wird mit ±4 Würfelrauschen zu 46..54 —
+  **immer »zapal A«**. Diese Bäume brennen im Original bei jedem Start, ohne
+  Zufall. Dieselbe 40050 steht noch an einer zweiten Stelle (@0x43ABE3, »zünde
+  alles Sichtbare an«), ist also kein Einzelstück, sondern das Hausmittel.
+
+  Was `zapal` tut, ist ein **Kacheltausch** (@0x4CACB4..0x4CACE5):
+
+  ```
+    kachel = (kachel − 10381) mod 57 ; auf Vielfache von 19 abrunden
+           + geländeart(zelle)       ; Byte +3 des Zellsatzes
+           + 10666
+  ```
+
+  Nachgesehen: 10666 und Nachbarn sind **verkohlte, blattlose Bäume** in
+  Baumhöhe — dieselbe Silhouette wie die grünen, nur schwarz. Die Flamme
+  obendrauf ist ANIM-Folge **550**, sieben Bilder (@0x42B422), bei uns längst
+  als Effekt `blast` eingespielt; der Kommentar dort hatte sie schon 2026-08-07
+  richtig erraten (»the same fire that burns on trees«), nur ohne Beleg.
+
+  Eingebaut ist die ganze Kette: der Backofen legt zu jeder Waldzelle die
+  **verkohlte** und die **abgebrannte** Fassung in einen Streifen unten an
+  `<karte>.objects.png` (höchstens 2×57 Bilder je Karte, weil beide nur an
+  Baumart und Geländeart hängen), und der Zeichner tauscht sie ein. Die
+  Branddauer ist gerechnet, nicht gewählt: Zustand `rand()%150 + 2`
+  (@0x4CACAB), jeder vierte Spielschritt +1 (@0x4CA340), Schluss bei 255 — bei
+  20 ms je Schritt sind das **8,3 bis 20,2 Sekunden**. Danach bleibt der Stumpf,
+  und bei jeder zwanzigsten Zelle der verkohlte Baum stehen (@0x4CA3B2, Zeilen
+  »dohorel forest — sjizdnej« gegen »— nesjizdnej«, also passierbar gegen
+  nicht).
+
+  Gemessen: **4 von 5** SETUP-Zellen der Mission 1 tragen einen Waldeintrag und
+  fangen Feuer, die fünfte ist leer — genau die Aufteilung, die die Kartendatei
+  vorgibt.
+
+  ⚠ **Was gelesen, aber nicht gebaut ist:** das Feuer **greift weiter**.
+  Derselbe Takt ruft `zapal_forestA` (@0x4CA7E0), das eine von acht
+  Nachbarrichtungen auswürfelt und den Nachbarwald mit einer Wahrscheinlichkeit
+  anzündet, die an **Windrichtung** (`0x4F8D68`) und **Windstärke** (`0x4F8D6C`)
+  hängt. Solange das fehlt, gehen die vier Feuer nach ihrer Zeit aus und
+  entzünden nichts weiter.
+
+- ⭐ **Es gibt gar keine Höhenschwelle — die Karte sagt selbst, was aufragt.**
+  Hier stand `MapBaker.RagtAbPx = 25`: ab wieviel Pixeln Überstand ein
+  Kartenobjekt ins Zeilenfach kommt und damit eine Einheit verdecken kann. Der
+  Kommentar daneben sagte selbst, dass die 25 von den **Gebäude**kacheln
+  *übernommen* und nicht gemessen war — und die Messung, die sie hätte tragen
+  sollen, gibt es auch nicht: über 36 Karten und 13.491 Objektbilder sitzt bei
+  20 px der grösste Haufen, und **darüber läuft die Verteilung ohne eine
+  einzige Lücke bis 70 px durch**. Es gibt dort keine Stelle, an die eine
+  Schwelle gehört.
+
+  Weil das Original keine hat. Sein Zeichner (@0x4B4150) malt die Karte in drei
+  Durchgängen, und zwei davon teilen sich die Zellen nach der
+  **Belegungskarte**:
+
+  - @0x4B41EB — ein flacher Durchgang über alle sichtbaren Zellen; er
+    **überspringt** jede Zelle mit einer Belegung ab 14000 (@0x4B4262). Was er
+    malt, liegt unter allem Folgenden.
+  - @0x4B43BB — der **verzahnte** Durchgang: je Zeile erst die Einträge des
+    Zeilenfachs, dann die Zellen dieser Zeile — und ausdrücklich nur die mit
+    Belegung **50000..63999** (@0x4B446C). Hier verdecken Bäume Einheiten und
+    Einheiten Bäume, je nach Zeile.
+
+  Beide Tafeln stehen in der Kartendatei: Sektion 18 ist die **Waldtafel**
+  (6000 × 3 Byte, Spalte/Zeile/Zustand), Sektion 4 die **Objekttafel**
+  (2000 × 6). Beides über den Spielstandschreiber @0x41D210 zugeordnet, der 131
+  Blöcke in fester Reihenfolge ablegt.
+
+  Gemessen über alle 36 Karten, 125.117 Objektzellen: **67.475 Wald** und
+  **1.913 Objekt** kommen ins Fach, 25.230 sind Gebäude (die zeichnet ohnehin
+  der Gebäudeweg), und **30.455 tragen gar keinen Eintrag** und bleiben im
+  Kartenbild, wo sie hingehören. Von den 8.521 vorkommenden Objektkacheln
+  stehen 3.580 nur je im Fach und 4.910 nur je im Boden — **31** in beidem. Die
+  Karte trennt also sauber, und nicht die Bildhöhe.
+
+  Der Wechsel ist auch am Prüfstand `--selftest-bake` messbar, der unser
+  Kartenbild gegen die Python-Vorlage hält: die Abweichung sinkt auf **jeder**
+  Karte (01: 25,03 → 24,20 %, 10: 5,96 → 5,41 %, NET02: 9,24 → 9,20 %, 05
+  unverändert).
+
+  `--objekt-hoehen=<ordner>` ist jetzt der Prüfstand zu beidem und kann
+  **scheitern**: er rechnet für jede Waldzelle jeder Karte die verkohlte Kachel
+  aus und holt sie aus dem Kachelsatz. **991 Paare, kein einziges ohne Bild**,
+  und **967 davon auf den Pixel auf demselben Fuss** (`yoff + höhe` gleich —
+  der verkohlte Baum ist oben kürzer, steht aber an derselben Stelle). Eine
+  falsch gelesene Rechnung würde hier streuen.
+
 ### Klang
 
 - **Ein Klang kommt jetzt von links oder rechts.** Die Dämpfung nach Entfernung

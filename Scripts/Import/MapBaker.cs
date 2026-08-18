@@ -289,9 +289,13 @@ public sealed class MapBaker
     /// <para><c>Kohle</c> ist der Platz der VERKOHLTEN Fassung im Streifen
     /// (<see cref="BurntAtlas"/>) oder −1, wenn die Zelle kein Wald ist;
     /// <c>KX/KY</c> ist, wo sie hin muss — sie hat einen eigenen Anschlag,
-    /// weil der verkohlte Baum ein anderes Bild ist als der grüne.</para></summary>
+    /// weil der verkohlte Baum ein anderes Bild ist als der grüne.
+    /// <c>Asche</c> und <c>AX/AY</c> sind dasselbe für die Kachel, die
+    /// ÜBRIGBLEIBT, wenn das Feuer aus ist (Stumpf bzw. blanker Boden).</para>
+    /// </summary>
     public readonly List<(int Col, int Row, int X, int Y, int W, int H,
-                          int Kohle, int KX, int KY)> Objects = new();
+                          int Kohle, int KX, int KY,
+                          int Asche, int AX, int AY)> Objects = new();
 
     /// <summary>
     /// <b>DER STREIFEN MIT DEN VERKOHLTEN BÄUMEN.</b>
@@ -302,9 +306,9 @@ public sealed class MapBaker
     /// <see cref="MapForest.Verkohlt"/>). Diese Kachel muss also im Bild
     /// liegen, bevor irgendetwas brennt.</para>
     ///
-    /// <para><b>Warum ein Streifen und keine dritte Ebene:</b> die verkohlte
-    /// Fassung hängt nur an der Baumart (0, 19 oder 38) und der Geländeart
-    /// (0..18) — also höchstens <b>57</b> verschiedene Bilder je Karte, egal
+    /// <para><b>Warum ein Streifen und keine dritte Ebene:</b> beide Fassungen
+    /// hängen nur an der Baumart (0, 19 oder 38) und der Geländeart (0..18) —
+    /// also höchstens <b>2 × 57</b> verschiedene Bilder je Karte, egal
     /// wie viele Bäume darauf stehen. Eine ganze zweite Leinwand dafür wäre bei
     /// map_01 rund 10 MB für 563 Zellen. Der Streifen hängt darum UNTEN an
     /// <c>&lt;karte&gt;.objects.png</c> an; seine Y-Werte liegen ab
@@ -493,6 +497,22 @@ public sealed class MapBaker
         // je Karte, darum eine kleine Tafel und kein Bild je Zelle.
         var kohleSlot = new Dictionary<int, int>();
         var kohleSpr = new List<Sprite>();
+
+        // Eine Ersatzkachel in den Streifen legen — oder ihren Platz
+        // wiederfinden, denn dieselben paar Codes kommen tausendfach vor.
+        // −1, wenn der Kachelsatz sie nicht hat; dann bleibt der Baum eben
+        // stehen, statt dass ein Loch entsteht.
+        int Streifenplatz(int tileCode)
+        {
+            if (kohleSlot.TryGetValue(tileCode, out int slot)) return slot;
+            var ks = ObjectSprite(tileCode);
+            if (ks == null) return -1;
+            slot = kohleSpr.Count;
+            kohleSlot[tileCode] = slot;
+            kohleSpr.Add(ks);
+            BurntAtlas.Add((tileCode, 0, 0, ks.W, ks.H, ks.YOff));
+            return slot;
+        }
         if (objects)
             for (int r = 0; r < h; r++)
                 for (int c = 0; c < w; c++)
@@ -511,31 +531,31 @@ public sealed class MapBaker
                         // Mechanik (Schadensstufen, @0x40D4FB) und ist hier
                         // nicht dran.
                         int kohle = -1, kx = 0, ky = 0;
+                        int asche = -1, ax = 0, ay = 0;
                         if (MapForest.IstWald(imap))
                         {
-                            int kc = MapForest.Verkohlt(code[i], flag[i]);
-                            if (!kohleSlot.TryGetValue(kc, out kohle))
-                            {
-                                var ks = ObjectSprite(kc);
-                                if (ks != null)
-                                {
-                                    kohle = kohleSpr.Count;
-                                    kohleSlot[kc] = kohle;
-                                    kohleSpr.Add(ks);
-                                    BurntAtlas.Add((kc, 0, 0, ks.W, ks.H, ks.YOff));
-                                }
-                                else kohle = -1;
-                            }
+                            // Zwei Ersatzkacheln je Waldzelle: die VERKOHLTE,
+                            // solange sie brennt (zapal @0x4CACE5), und die
+                            // ABGEBRANNTE, wenn das Feuer aus ist (Brandtakt
+                            // @0x4CA424, Protokollzeile »dohorel forest«).
+                            kohle = Streifenplatz(MapForest.Verkohlt(code[i], flag[i]));
+                            asche = Streifenplatz(MapForest.Abgebrannt(code[i], flag[i]));
                             if (kohle >= 0)
                             {
                                 kx = c * TileW;
                                 ky = OriginY + r * TileH - elev[i] * ElevStep
                                      + BlitAnchor + kohleSpr[kohle].YOff;
                             }
+                            if (asche >= 0)
+                            {
+                                ax = c * TileW;
+                                ay = OriginY + r * TileH - elev[i] * ElevStep
+                                     + BlitAnchor + kohleSpr[asche].YOff;
+                            }
                         }
                         Objects.Add((c, r, c * TileW,
                                      OriginY + r * TileH - elev[i] * ElevStep + BlitAnchor + sp.YOff,
-                                     sp.W, sp.H, kohle, kx, ky));
+                                     sp.W, sp.H, kohle, kx, ky, asche, ax, ay));
                         continue;
                     }
                     Blit(sp, c, r, elev[i]);

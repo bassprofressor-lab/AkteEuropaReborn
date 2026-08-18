@@ -1331,6 +1331,9 @@ public sealed class ContentBuilder
                 // gehoert. Fehlt, wenn die Zelle kein Wald ist.
                 if (o.Kohle >= 0)
                     sb.Append($",\"burnt\":{o.Kohle},\"bx\":{o.KX},\"by\":{o.KY}");
+                // Und die Kachel, die uebrigbleibt, wenn das Feuer aus ist.
+                if (o.Asche >= 0)
+                    sb.Append($",\"ash\":{o.Asche},\"ax\":{o.AX},\"ay\":{o.AY}");
                 sb.Append('}');
             }
             sb.Append("],");
@@ -1342,9 +1345,11 @@ public sealed class ContentBuilder
         // <karte>.objects.png; die Y-Werte hier beginnen bei pixel_h.
         if (b.BurntAtlas.Count > 0)
         {
-            sb.Append("\"burnt_note\":\"verkohlte Baumkacheln, angehaengt unten an ");
-            sb.Append("<karte>.objects.png. Code = 10666 + 19*((kachel-10381)%57/19) + flag, ");
-            sb.Append("gelesen an zapal @0x4CACB4..0x4CACE5. Hoechstens 57 je Karte.\",");
+            sb.Append("\"burnt_note\":\"Ersatzkacheln fuer Waldzellen, angehaengt unten an ");
+            sb.Append("<karte>.objects.png. VERKOHLT (solange es brennt) = 10666 + ");
+            sb.Append("19*((kachel-10381)%57/19) + flag, gelesen an zapal @0x4CACB4..0x4CACE5; ");
+            sb.Append("ABGEBRANNT (wenn es aus ist) = dieselbe Rechnung mit 10381, gelesen am ");
+            sb.Append("Brandtakt @0x4CA3F1..0x4CA424. Hoechstens 2x57 je Karte.\",");
             sb.Append("\"burnt\":[");
             for (int i = 0; i < b.BurntAtlas.Count; i++)
             {

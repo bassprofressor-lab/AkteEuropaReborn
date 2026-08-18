@@ -59,10 +59,26 @@ public partial class MapEntityLayer
         public Vector2 KohleZiel;
         public bool HatKohle;
 
-        /// <summary>Seit wann diese Zelle brennt (Sekunden seit Spielstart),
-        /// oder &lt; 0. Solange sie brennt, steht die verkohlte Kachel und die
+        /// <summary>Dasselbe für die Kachel, die ÜBRIGBLEIBT, wenn das Feuer
+        /// aus ist — Stumpf oder blanker Boden.</summary>
+        public Rect2 AscheSrc;
+        public Vector2 AscheZiel;
+        public bool HatAsche;
+
+        /// <summary>Seit wann diese Zelle brennt — in SPIELZEIT
+        /// (<c>DebugClock</c>), nicht in Wanduhrzeit: das Original zählt
+        /// Spielschritte, und ein angehaltenes Spiel brennt nicht weiter.
+        /// &lt; 0 heisst »brennt nicht«. Solange sie brennt, steht die verkohlte Kachel und die
         /// Flamme läuft darüber.</summary>
         public float BrandVon = -1f;
+
+        /// <summary>Wie lange dieser Brand dauert (Sekunden). Das Original
+        /// würfelt ihn beim Anzünden aus — siehe <c>Anzuenden</c>.</summary>
+        public float BrandDauer;
+
+        /// <summary>Ist das Feuer durch? Dann steht die abgebrannte Kachel
+        /// (19 von 20) oder der verkohlte Baum bleibt stehen (1 von 20).</summary>
+        public bool Abgebrannt, Steht;
     }
 
     /// <summary>Je aufragendem Objekt sein Eintrag. Nach Zeile sortiert, damit
@@ -138,6 +154,16 @@ public partial class MapEntityLayer
                     e.KohleZiel = new Vector2(GetI(o, "bx"), GetI(o, "by"));
                 }
             }
+            if (o.ContainsKey("ash"))
+            {
+                int k = GetI(o, "ash");
+                if (k >= 0 && k < kohle.Count)
+                {
+                    e.HatAsche = true;
+                    e.AscheSrc = kohle[k];
+                    e.AscheZiel = new Vector2(GetI(o, "ax"), GetI(o, "ay"));
+                }
+            }
             _objDraw.Add(e);
         }
         // ⚠ Nach ZEILE sortieren, nicht nach Lage im Bild: das Zeilenfach
@@ -164,10 +190,23 @@ public partial class MapEntityLayer
     private void DrawObjectsUpTo(int throughRow, ref int at)
     {
         if (_objTex == null) return;
+        // ⚠ Einmal je Bild, und darum hier: dieser Durchgang ist der einzige
+        // Ort in dieser Datei, den jeder Bildaufbau anfaesst. Der Zeiger `at`
+        // steht am Anfang des Zeilenfachs auf 0.
+        if (at == 0) Ausbrennen();
         for (; at < _objDraw.Count && _objDraw[at].Row <= throughRow; at++)
         {
             var e = _objDraw[at];
-            if (e.BrandVon >= 0f && e.HatKohle)
+            if (e.Abgebrannt)
+            {
+                // AUS. 19 von 20 Zellen zeigen die abgebrannte Kachel (Stumpf
+                // bzw. blanker Boden), bei jeder zwanzigsten bleibt der
+                // verkohlte Baum stehen — siehe Ausbrennen.
+                var q = e.Steht ? e.KohleSrc : e.AscheSrc;
+                var z = e.Steht ? e.KohleZiel : e.AscheZiel;
+                DrawTextureRectRegion(_objTex, new Rect2(z, q.Size), q);
+            }
+            else if (e.BrandVon >= 0f && e.HatKohle)
             {
                 // BRENNT: die verkohlte Kachel steht anstelle des grünen Baums
                 // (das ist der Kacheltausch aus zapal @0x4CACE5), und die
@@ -210,7 +249,7 @@ public partial class MapEntityLayer
         // um bis zu 10 px. Wir nehmen dafür die Zelle — sie ist dieselbe feste
         // Zahl je Baum, die das Original aus dem Tafelindex zieht.
         int idx = e.Col * 31 + e.Row;
-        int phase = (int)(Time.GetTicksMsec() / (FlammenSekunden * 1000f) + idx) % bilder.Count;
+        int phase = (int)(DebugClock / FlammenSekunden + idx) % bilder.Count;
         if (phase < 0) phase += bilder.Count;
         DrawTexture(bilder[phase],
                     new Vector2(_ox + e.Col * TileW + idx % 10 - 5,
@@ -218,9 +257,11 @@ public partial class MapEntityLayer
     }
 
     /// <summary>Wie lange ein Flammenbild steht. Das Original springt alle ZWEI
-    /// Spielschritte weiter (<c>sar eax, 1</c> @0x42B438); ⚠ UNSERE SETZUNG ist,
-    /// das mit 0,1 s gleichzusetzen.</summary>
-    private const float FlammenSekunden = 0.1f;
+    /// Spielschritte weiter (<c>sar eax, 1</c> @0x42B438), und ein Spielschritt
+    /// ist 20 ms (<c>SetTimer</c> @0x415BC5, siehe
+    /// <see cref="OriginalTicksPerSecond"/>) — also 0,04 s. Das ist GERECHNET,
+    /// nicht gewählt.</summary>
+    private const float FlammenSekunden = 2f / OriginalTicksPerSecond;
 
     /// <summary>
     /// <b>EINE WALDZELLE ANZÜNDEN</b> — <c>zapal</c> @0x4CAC50.
@@ -240,12 +281,72 @@ public partial class MapEntityLayer
         bool ok = false;
         foreach (var e in _objDraw)
         {
-            if (e.Row != row || e.Col != col || !e.HatKohle || e.BrandVon >= 0f) continue;
-            e.BrandVon = (float)Time.GetTicksMsec() / 1000f;
+            if (e.Row != row || e.Col != col || !e.HatKohle || e.BrandVon >= 0f
+                || e.Abgebrannt) continue;
+            e.BrandVon = (float)DebugClock;
+            // Die BRENNDAUER, gerechnet wie im Original: Zustand
+            // rand()%150 + 2 (@0x4CACAB), jeder vierte Spielschritt +1
+            // (@0x4CA340/@0x4CA395), Schluss bei 255 (@0x4CA39A). Also
+            // (255 − Zustand) · 4 Spielschritte, und ein Spielschritt ist
+            // 20 ms (SetTimer @0x415BC5, siehe OriginalTicksPerSecond).
+            // Macht 8,3 bis 20,2 Sekunden.
+            int zustand = (int)(GD.Randi() % (uint)(Import.MapForest.BrandZustandBis
+                                                    - Import.MapForest.BrandZustandVon + 1))
+                          + Import.MapForest.BrandZustandVon;
+            e.BrandDauer = (Import.MapForest.BrandEnde - zustand) * Import.MapForest.BrandTakt
+                           / OriginalTicksPerSecond;
+            // Und die eine von zwanzig, bei der der verkohlte Baum stehen
+            // bleibt: @0x4CA3B2 `div 0x14`, Rest 0 fuehrt auf die Zeile
+            // »dohorel forest - nesjizdnej« (@0x53969C, »abgebrannt —
+            // unpassierbar«), sonst »- sjizdnej« (@0x5396C0, »passierbar«).
+            e.Steht = GD.Randi() % 20 == 0 || !e.HatAsche;
             ObjectsBurning++;
             ok = true;
+            // ⚠ Regel 33: die ausgewuerfelte Dauer gehoert ins Protokoll. Ohne
+            // sie ist nicht zu sehen, ob der Wurf im gelesenen Fenster liegt
+            // (8,3 .. 20,2 s) oder ob jemand an den Zahlen gedreht hat.
+            GD.Print($"wald: ({col},{row}) angezuendet, brennt {e.BrandDauer:0.0}s Spielzeit "
+                     + $"(Zustand {zustand}, Fenster "
+                     + $"{(Import.MapForest.BrandEnde - Import.MapForest.BrandZustandBis) * Import.MapForest.BrandTakt / OriginalTicksPerSecond:0.0}"
+                     + $"..{(Import.MapForest.BrandEnde - Import.MapForest.BrandZustandVon) * Import.MapForest.BrandTakt / OriginalTicksPerSecond:0.0}s), "
+                     + (e.Steht ? "bleibt danach als verkohlter Baum stehen" : "wird danach zum Stumpf"));
         }
         return ok;
+    }
+
+    /// <summary>
+    /// <b>WAS AUS IST, IST AUS</b> — der Brandtakt @0x4CA330.
+    ///
+    /// <para>Er zählt jeden vierten Spielschritt den Zustand einer brennenden
+    /// Zelle hoch und legt bei 255 die abgebrannte Kachel hin. Bei uns steht
+    /// die Dauer beim Anzünden fest; hier läuft nur die Uhr ab.</para>
+    ///
+    /// <para>⚠⚠ <b>WAS FEHLT, und es gehört gesagt:</b> das Original lässt ein
+    /// Feuer WEITERGREIFEN. Derselbe Takt ruft für jede brennende Zelle
+    /// <c>zapal_forestA</c> (@0x4CA7E0, Protokollzeile @0x539700) auf, das eine
+    /// von acht Nachbarrichtungen auswürfelt und den Nachbarwald mit einer
+    /// Wahrscheinlichkeit anzündet, die an WINDRICHTUNG (<c>0x4F8D68</c>) und
+    /// WINDSTÄRKE (<c>0x4F8D6C</c>) hängt (@0x4CA873..0x4CA8DA). Das ist
+    /// gelesen, aber nicht gebaut. Solange es fehlt, gehen die vier Feuer des
+    /// Missionsstarts nach ihrer Zeit aus und entzünden nichts weiter.</para>
+    /// </summary>
+    private void Ausbrennen()
+    {
+        if (ObjectsBurning == 0) return;
+        float jetzt = (float)DebugClock;
+        foreach (var e in _objDraw)
+        {
+            if (e.BrandVon < 0f || e.Abgebrannt) continue;
+            if (jetzt - e.BrandVon < e.BrandDauer) continue;
+            e.Abgebrannt = true;
+            ObjectsBurning--;
+            // ⚠ Regel 33: ohne diese Zeile ist »das Feuer ist aus« nicht von
+            // »es hat nie gebrannt« zu unterscheiden. Es sind wenige Zellen.
+            GD.Print($"wald: ({e.Col},{e.Row}) nach {e.BrandDauer:0.0}s Spielzeit abgebrannt — "
+                     + (e.Steht ? "verkohlter Baum bleibt stehen (1 von 20, imap 0xFFFF)"
+                                : "Stumpf, Zelle wieder frei (imap 0xFFFE)")
+                     + $"; noch {ObjectsBurning} brennend");
+        }
     }
 
     /// <summary>
