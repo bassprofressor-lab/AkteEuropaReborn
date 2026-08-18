@@ -7892,6 +7892,12 @@ public partial class MapEntityLayer : Node2D
                             {
                                 0x00 => e.Col,
                                 0x01 => e.Row,
+                                // ⚠ +0x0A ist die KLASSE (»typ«) — dieselbe,
+                                // nach der `g_robot_class_count` sortiert:
+                                // 0/3 Bodenfahrzeuge, 1 Personen, 4/5 Schiffe.
+                                // Unser `GameUnitType` wird aus genau diesem
+                                // Byte gelesen (raw[0x0a], siehe oben).
+                                0x0a => e.GameUnitType,
                                 // ⚠ Energie und Energie-voll kamen am
                                 // 19.08. dazu: M11 fragt beide vom Satz 3000
                                 // ab (@0x71BB40 / @0x71BB61). Die Offsets sind
@@ -7914,6 +7920,11 @@ public partial class MapEntityLayer : Node2D
                         if (e.IsBuilding && e.Slot == slot)
                             return off switch
                             {
+                                // ⚠ +0x00 ist der GEBAEUDETYP — im Original
+                                // `typ`, das erste Feld des Satzes (Debug-
+                                // ausdruck @0x413230). Unser `BType` kommt aus
+                                // sec3 +0x04, also derselben Stelle.
+                                0x00 => e.BType,
                                 0x28 => e.StockW, 0x2a => e.StockF,
                                 0x2c => e.StockS, 0x2e => e.StockT,
                                 // ⚠ 19.08.2026 — ENERGIE und ENERGIE VOLL. Der
