@@ -1798,6 +1798,15 @@ public sealed class MissionScript
         "time_gt" => Cmp(Minutes, c.Op == "==" ? ">" : c.Op, c.A),
         // game_time() > v[a] + b
         "time_after" => c.A >= 0 && c.A < _var.Length && Minutes > _var[c.A] + c.B,
+        // DAS TOR DES BLOCKS: Takt mod 100 == 0.
+        // ⚠ Das steht hier NICHT, weil die Engine es sonst nicht wüsste — sie
+        // ordnet die Regeln längst über <see cref="Rule.EveryTick"/> ein
+        // (At < Gate). Es steht hier, weil der Regelleser das Tor jetzt LIEST
+        // und als Glied einträgt; eine Bedingung ohne Haken wäre FALSCH und
+        // die Regel damit tot. Widersprechen können sich beide nie: es ist
+        // dieselbe Rechnung, und alle 17 so gelesenen Regeln liegen
+        // nachweislich hinter ihrem Tor.
+        "block_gate" => _ticks % BlockPeriod == 0,
         // obj_owner(a) <op> b
         "obj_owner" => ObjOwner != null && Cmp(ObjOwner(c.A), c.Op, c.B),
         // g_robot_class_count(a, b) <op> c
@@ -2438,7 +2447,7 @@ public sealed class MissionScript
     /// <summary>Bedingungsarten, für die ein Haken hängt.</summary>
     private bool Hooked(Cond c) => c.Kind switch
     {
-        "var" or "time_gt" or "time_after" or "event" => true,
+        "var" or "time_gt" or "time_after" or "event" or "block_gate" => true,
         "obj_owner" => ObjOwner != null,
         "units" => UnitCount != null,
         "buildings" => BuildingCount != null,

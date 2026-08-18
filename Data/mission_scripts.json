@@ -1080,6 +1080,58 @@
      ]
     },
     {
+     "_at": "0x49BCB4",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 3,
+       "kind": "inc"
+      },
+      {
+       "a": 103,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49BCD2",
+       "a": 100,
+       "b": 1,
+       "c": 400,
+       "d": 300,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49BCE1",
+       "a": 300,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "_at": "0x49BCE9",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "kind": "block_gate"
+      },
+      {
+       "a": 3,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 1,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49BD0B",
      "_tut_ausserdem": "show_text",
      "then": [
@@ -1703,6 +1755,23 @@
        "b": 1,
        "kind": "var",
        "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49C774",
+     "once": 2,
+     "then": [],
+     "when": [
+      {
+       "kind": "block_gate"
+      },
+      {
+       "a": 0,
+       "b": 0,
+       "c": 2,
+       "kind": "buildings",
+       "op": ">"
       }
      ]
     },
@@ -2582,6 +2651,65 @@
      ]
     },
     {
+     "_at": "0x49D0FE",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 9,
+       "kind": "inc"
+      },
+      {
+       "a": 104,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49D11C",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 200,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49D12B",
+       "a": 800,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "_at": "0x49D133",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "kind": "block_gate"
+      },
+      {
+       "a": 9,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 4,
+       "c": 0,
+       "kind": "buildings",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 4,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "once": 300,
      "then": [
       {
@@ -3397,6 +3525,46 @@
      ]
     },
     {
+     "_at": "0x49D8F2",
+     "_tut_ausserdem": "show_text",
+     "once": 20,
+     "then": [
+      {
+       "a": 102,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49D911",
+       "a": 251,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 0,
+       "b": 99,
+       "c": 14,
+       "kind": "space_in",
+       "typen": [
+        71
+       ]
+      }
+     ],
+     "when": [
+      {
+       "kind": "block_gate"
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 0,
+       "kind": "buildings",
+       "op": "!="
+      }
+     ]
+    },
+    {
      "_at": "0x49D94E",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
@@ -3801,6 +3969,46 @@
        "c": 11,
        "kind": "unit_field",
        "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x49DDD4",
+     "_tut_ausserdem": "show_text add_target",
+     "once": 10,
+     "then": [
+      {
+       "_at": "0x49DDEC",
+       "a": 260,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 101,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49DE05",
+       "a": 1,
+       "b": 1,
+       "c": 9,
+       "d": 18,
+       "e": 1,
+       "kind": "add_target"
+      }
+     ],
+     "when": [
+      {
+       "kind": "block_gate"
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 1,
+       "kind": "buildings",
+       "op": ">"
       }
      ]
     },
@@ -4866,6 +5074,60 @@
        "b": 3,
        "kind": "var",
        "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49EA6E",
+     "_tut_ausserdem": "bus_cmd",
+     "then": [
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49EA7E",
+       "a": 1000,
+       "b": 0,
+       "kind": "money"
+      }
+     ],
+     "when": [
+      {
+       "kind": "block_gate"
+      },
+      {
+       "a": 0,
+       "b": 1,
+       "c": 3,
+       "kind": "units",
+       "op": "<"
+      },
+      {
+       "a": 0,
+       "b": 2,
+       "c": 3,
+       "kind": "units",
+       "op": "<"
+      },
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 8,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "!="
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "var",
+       "op": "!="
       }
      ]
     },
@@ -6738,6 +7000,46 @@
      ]
     },
     {
+     "_at": "0x49F37C",
+     "_tut_ausserdem": "show_text game_time",
+     "once": 10,
+     "then": [
+      {
+       "a": 101,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49F39B",
+       "a": 301,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 11,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "kind": "block_gate"
+      },
+      {
+       "a": 4,
+       "b": 0,
+       "c": 0,
+       "kind": "units",
+       "op": "!="
+      },
+      {
+       "a": 5,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
+    {
      "_at": "0x49F44F",
      "_tut_ausserdem": "game_time",
      "once": 50,
@@ -6921,6 +7223,7 @@
   "21": {
    "_endregel_aus": "0x4A02C0",
    "block": "",
+   "gate": "0x4A01E3",
    "init": {
     "101": 1,
     "102": 1,
@@ -9245,6 +9548,34 @@
      ]
     },
     {
+     "_at": "0x4A0BCC",
+     "then": [
+      {
+       "a": 8,
+       "b": 0,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "kind": "block_gate"
+      },
+      {
+       "a": 8,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 0,
+       "b": 4,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A0C08",
      "then": [
       {
@@ -9413,6 +9744,41 @@
        "b": 0,
        "kind": "var",
        "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A0D9F",
+     "then": [
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "kind": "block_gate"
+      },
+      {
+       "a": 101,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 1,
+       "c": 0,
+       "kind": "buildings",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 1,
+       "c": 0,
+       "kind": "buildings",
+       "op": "=="
       }
      ]
     },
@@ -9653,6 +10019,133 @@
        "c": 0,
        "kind": "units",
        "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A0F63",
+     "_tut_ausserdem": "show_text bus_cmd place_unit sound",
+     "then": [
+      {
+       "a": 30,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "a": 103,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x4A0F82",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x4A0F91",
+       "a": 500,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "_at": "0x4A0FA4",
+       "a": 190,
+       "b": 107,
+       "c": 101,
+       "d": 0,
+       "kind": "place_unit"
+      },
+      {
+       "_at": "0x4A0FAC",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 14,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "!="
+      },
+      {
+       "a": 108,
+       "b": 1000,
+       "c": 99,
+       "kind": "imap",
+       "op": "<"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A0FE9",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 30,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "a": 103,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x4A1008",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x4A1017",
+       "a": 500,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "_at": "0x4A101F",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 14,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 108,
+       "b": 1000,
+       "c": 99,
+       "kind": "imap",
+       "op": "<"
+      },
+      {
+       "a": 1,
+       "b": 4,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
       }
      ]
     },
@@ -10660,6 +11153,90 @@
        "b": 1,
        "kind": "obj_owner",
        "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A1C57",
+     "_tut_ausserdem": "set_relation set_relation set_relation set_relation show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 10,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x4A1C6E",
+       "a": 0,
+       "b": 1,
+       "c": 1,
+       "kind": "set_relation"
+      },
+      {
+       "_at": "0x4A1C7C",
+       "a": 2,
+       "b": 1,
+       "c": 0,
+       "kind": "set_relation"
+      },
+      {
+       "_at": "0x4A1C8A",
+       "a": 4,
+       "b": 1,
+       "c": 0,
+       "kind": "set_relation"
+      },
+      {
+       "_at": "0x4A1C98",
+       "a": 6,
+       "b": 1,
+       "c": 0,
+       "kind": "set_relation"
+      },
+      {
+       "_at": "0x4A1CAE",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x4A1CBD",
+       "a": 4000,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "_at": "0x4A1CC5",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 58,
+       "b": 999,
+       "c": 198,
+       "kind": "imap",
+       "op": ">"
+      },
+      {
+       "a": 5,
+       "b": 1,
+       "kind": "obj_owner",
+       "op": "=="
       }
      ]
     },
@@ -11735,6 +12312,7 @@
   "28": {
    "_endregel_aus": "0x4A3786",
    "block": "",
+   "gate": "0x4A35BC",
    "init": {
     "101": 1,
     "131": 380
@@ -13040,6 +13618,33 @@
      ]
     },
     {
+     "_at": "0x4A3B03",
+     "_tut_ausserdem": "show_text",
+     "then": [
+      {
+       "a": 19,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x4A3B1D",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 14,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x4A3B63",
      "_tut_ausserdem": "remove_unit bus_cmd sound",
      "then": [
@@ -14246,6 +14851,36 @@
       {
        "a": 101,
        "b": 2,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x499939",
+     "_tut_ausserdem": "place_unit",
+     "then": [
+      {
+       "_at": "0x499944",
+       "a": 193,
+       "b": 124,
+       "c": 18,
+       "d": 7,
+       "kind": "place_unit"
+      },
+      {
+       "a": 55,
+       "b": 1,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "kind": "block_gate"
+      },
+      {
+       "a": 55,
+       "b": 0,
        "kind": "var",
        "op": "=="
       }
@@ -15822,6 +16457,60 @@
      ]
     },
     {
+     "_at": "0x4A4E7D",
+     "_tut_ausserdem": "show_text bus_cmd",
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x4A4E9B",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x4A4EAA",
+       "a": 4000,
+       "b": 0,
+       "kind": "money"
+      }
+     ],
+     "when": [
+      {
+       "kind": "block_gate"
+      },
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 3,
+       "kind": "buildings",
+       "op": ">"
+      },
+      {
+       "a": 9,
+       "b": 0,
+       "c": 0,
+       "kind": "objects",
+       "op": "!="
+      }
+     ]
+    },
+    {
      "_at": "0x4A4ECD",
      "_tut_ausserdem": "show_text bus_cmd game_time sound",
      "then": [
@@ -17073,6 +17762,79 @@
      ]
     },
     {
+     "_at": "0x499E9B",
+     "_tut_ausserdem": "show_text",
+     "once": 6,
+     "then": [
+      {
+       "_at": "0x499EAC",
+       "a": 141,
+       "b": 1,
+       "c": 260,
+       "d": 130,
+       "kind": "text"
+      },
+      {
+       "a": 101,
+       "kind": "inc"
+      },
+      {
+       "a": 1,
+       "b": 24,
+       "c": 18,
+       "kind": "space_in",
+       "typen": [
+        92,
+        92,
+        84,
+        85,
+        86,
+        86
+       ]
+      },
+      {
+       "a": 1,
+       "b": 23,
+       "c": 63,
+       "kind": "space_in",
+       "typen": [
+        92,
+        92,
+        84,
+        85,
+        86,
+        86
+       ]
+      },
+      {
+       "a": 1,
+       "b": 26,
+       "c": 49,
+       "kind": "space_in",
+       "typen": [
+        92,
+        92,
+        84,
+        85,
+        86,
+        86
+       ]
+      }
+     ],
+     "when": [
+      {
+       "kind": "block_gate"
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 0,
+       "kind": "objects",
+       "op": "!="
+      }
+     ]
+    },
+    {
      "_at": "0x499F59",
      "_tut_ausserdem": "show_text bus_cmd sound",
      "then": [
@@ -17706,6 +18468,59 @@
      ]
     },
     {
+     "_at": "0x49A446",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "_at": "0x49A454",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "a": 10,
+       "b": 350,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49A475",
+       "a": 180,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "_at": "0x49A47D",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "kind": "block_gate"
+      },
+      {
+       "a": 10,
+       "b": 320,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 1,
+       "c": 0,
+       "kind": "units",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49A49D",
      "once": 30,
      "then": [
@@ -18170,6 +18985,49 @@
      ]
     },
     {
+     "_at": "0x49A92A",
+     "_tut_ausserdem": "show_text 0x4D0F20",
+     "once": 240,
+     "then": [
+      {
+       "a": 101,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49A946",
+       "a": 160,
+       "b": 1,
+       "c": 450,
+       "d": 120,
+       "kind": "text"
+      },
+      {
+       "a": 10,
+       "b": 0,
+       "c": 194,
+       "kind": "find_unit"
+      }
+     ],
+     "when": [
+      {
+       "kind": "block_gate"
+      },
+      {
+       "a": 101,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 194,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "!="
+      }
+     ]
+    },
+    {
      "_at": "0x49A986",
      "_tut_ausserdem": "sound",
      "then": [
@@ -18577,6 +19435,37 @@
        "c": 0,
        "kind": "unit_is",
        "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49B056",
+     "_tut_ausserdem": "show_text game_time",
+     "once": 5,
+     "then": [
+      {
+       "_at": "0x49B06E",
+       "a": 171,
+       "b": 1,
+       "c": 350,
+       "d": 280,
+       "kind": "text"
+      },
+      {
+       "a": 220,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "kind": "block_gate"
+      },
+      {
+       "a": 0,
+       "b": 86,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "!="
       }
      ]
     },
