@@ -6726,7 +6726,1321 @@
   "21": {
    "_endregel_aus": "0x4A02C0",
    "block": "",
+   "init": {
+    "101": 1,
+    "102": 1,
+    "103": 1,
+    "104": 1,
+    "105": 1,
+    "106": 1,
+    "107": 1,
+    "108": 1,
+    "109": 1,
+    "131": 310,
+    "132": 311,
+    "133": 312,
+    "134": 313,
+    "135": 314,
+    "136": 315,
+    "137": 316,
+    "138": 318,
+    "139": 309
+   },
    "rules": [
+    {
+     "_at": "0x49F618",
+     "_tut_ausserdem": "0x439410 0x439410 0x439410 0x439410 0x439410 0x439410 0x439410 0x439410 0x439410 0x439410",
+     "once": 0,
+     "then": [],
+     "when": [
+      {
+       "a": 13,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49F741",
+     "_tut_ausserdem": "show_text game_time",
+     "once": 10,
+     "then": [
+      {
+       "a": 101,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49F760",
+       "a": 310,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "a": 11,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "kind": "time_gt",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49F794",
+     "_tut_ausserdem": "show_text sound",
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 1,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49F7B2",
+       "a": 101,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49F7BA",
+       "a": 601,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 11,
+       "b": 10,
+       "kind": "time_after",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49F7DB",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 10,
+       "kind": "inc"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49F7F9",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49F808",
+       "a": 250,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "_at": "0x49F810",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 2,
+       "kind": "buildings",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49F82D",
+     "_tut_ausserdem": "game_time",
+     "once": 20,
+     "then": [
+      {
+       "a": 21,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 13,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49F85C",
+     "_tut_ausserdem": "obj_owner",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 21,
+       "b": 9,
+       "kind": "time_after",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49F871",
+     "_tut_ausserdem": "show_text",
+     "then": [
+      {
+       "a": 102,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49F889",
+       "a": 311,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 18,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49F89A",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 21,
+       "b": 9,
+       "kind": "time_after",
+       "op": ">"
+      },
+      {
+       "a": 18,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49F8B9",
+     "_tut_ausserdem": "show_text bus_cmd game_time sound",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 102,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49F8D7",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49F8E6",
+       "a": 500,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "a": 21,
+       "kind": "set_time"
+      },
+      {
+       "_at": "0x49F8F9",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 18,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49F919",
+     "_tut_ausserdem": "obj_owner",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 21,
+       "b": 1,
+       "kind": "time_after",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49F92E",
+     "_tut_ausserdem": "show_text",
+     "then": [
+      {
+       "a": 103,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49F946",
+       "a": 312,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 19,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49F957",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 21,
+       "b": 1,
+       "kind": "time_after",
+       "op": ">"
+      },
+      {
+       "a": 19,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49F976",
+     "_tut_ausserdem": "show_text bus_cmd game_time sound",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 103,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49F994",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49F9A3",
+       "a": 700,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "a": 21,
+       "kind": "set_time"
+      },
+      {
+       "_at": "0x49F9B6",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 4,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 19,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49F9D6",
+     "_tut_ausserdem": "obj_owner",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 5,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 21,
+       "b": 1,
+       "kind": "time_after",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49F9EB",
+     "_tut_ausserdem": "show_text",
+     "then": [
+      {
+       "a": 104,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49FA03",
+       "a": 313,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49FA14",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 5,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 21,
+       "b": 1,
+       "kind": "time_after",
+       "op": ">"
+      },
+      {
+       "a": 30,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49FA33",
+     "_tut_ausserdem": "show_text bus_cmd game_time sound",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 104,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49FA51",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49FA60",
+       "a": 1000,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "a": 21,
+       "kind": "set_time"
+      },
+      {
+       "_at": "0x49FA73",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 6,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 30,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49FA93",
+     "_tut_ausserdem": "obj_owner",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 7,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 21,
+       "b": 1,
+       "kind": "time_after",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49FAA8",
+     "_tut_ausserdem": "show_text",
+     "then": [
+      {
+       "a": 105,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49FAC0",
+       "a": 314,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 32,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49FAD1",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 7,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 21,
+       "b": 1,
+       "kind": "time_after",
+       "op": ">"
+      },
+      {
+       "a": 32,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49FAF0",
+     "_tut_ausserdem": "show_text bus_cmd game_time sound",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 105,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49FB0E",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49FB1D",
+       "a": 1450,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "a": 21,
+       "kind": "set_time"
+      },
+      {
+       "_at": "0x49FB30",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 8,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 32,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49FB50",
+     "_tut_ausserdem": "obj_owner",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 9,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 21,
+       "b": 1,
+       "kind": "time_after",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49FB65",
+     "_tut_ausserdem": "show_text",
+     "then": [
+      {
+       "a": 106,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49FB7D",
+       "a": 315,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 31,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49FB8E",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 9,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 21,
+       "b": 1,
+       "kind": "time_after",
+       "op": ">"
+      },
+      {
+       "a": 31,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49FBAD",
+     "_tut_ausserdem": "show_text bus_cmd game_time sound",
+     "then": [
+      {
+       "a": 20,
+       "kind": "inc"
+      },
+      {
+       "a": 106,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49FBCB",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49FBDA",
+       "a": 2000,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "a": 21,
+       "kind": "set_time"
+      },
+      {
+       "_at": "0x49FBED",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 20,
+       "b": 10,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 31,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49FCE9",
+     "_tut_ausserdem": "show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 70,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49FCFE",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x49FD0D",
+       "a": 3000,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "_at": "0x49FD15",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 70,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 49,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 50,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 51,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 52,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49FD49",
+     "_tut_ausserdem": "0x4D0860",
+     "then": [
+      {
+       "a": 80,
+       "b": 1,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 80,
+       "b": 0,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 13,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      },
+      {
+       "a": 7000,
+       "b": 194,
+       "c": 0,
+       "kind": "unit_is",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49FD84",
+     "_tut_ausserdem": "0x4D0F20",
+     "once": 260,
+     "then": [
+      {
+       "a": 80,
+       "b": 2,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 7000,
+       "b": 194,
+       "c": 0,
+       "kind": "unit_is",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49FDD9",
+     "then": [
+      {
+       "a": 80,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 260,
+       "b": 0,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 7000,
+       "b": 194,
+       "c": 0,
+       "kind": "unit_is",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 194,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49FDEC",
+     "_tut_ausserdem": "remove_unit",
+     "then": [
+      {
+       "a": 80,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x49FE08",
+       "a": 7000,
+       "kind": "remove_unit"
+      }
+     ],
+     "when": [
+      {
+       "a": 80,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49FE33",
+     "then": [
+      {
+       "a": 80,
+       "b": 10,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 80,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 81,
+       "b": 194,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49FE63",
+     "_tut_ausserdem": "remove_unit game_time",
+     "then": [
+      {
+       "a": 80,
+       "kind": "inc"
+      },
+      {
+       "a": 81,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 80,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 81,
+       "b": 20,
+       "c": 50,
+       "kind": "unit_field",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49FEA1",
+     "_tut_ausserdem": "show_text",
+     "then": [
+      {
+       "a": 80,
+       "kind": "inc"
+      },
+      {
+       "a": 108,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49FEC0",
+       "a": 318,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      }
+     ],
+     "when": [
+      {
+       "a": 80,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 81,
+       "b": 5,
+       "kind": "time_after",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49FF63",
+     "_tut_ausserdem": "game_time",
+     "once": 30,
+     "then": [
+      {
+       "a": 31,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 53,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49FFA4",
+     "_tut_ausserdem": "game_time",
+     "any": [
+      {
+       "a": 31,
+       "b": 15,
+       "kind": "time_after",
+       "op": ">"
+      },
+      {
+       "a": 3,
+       "b": 0,
+       "c": 4,
+       "kind": "units",
+       "op": ">"
+      }
+     ],
+     "then": [
+      {
+       "a": 30,
+       "kind": "inc"
+      },
+      {
+       "a": 31,
+       "kind": "set_time"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49FFD1",
+     "_tut_ausserdem": "show_text 0x4D0AD0 set_relation",
+     "then": [
+      {
+       "a": 30,
+       "kind": "inc"
+      },
+      {
+       "_at": "0x49FFE9",
+       "a": 319,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x4A0008",
+       "a": 0,
+       "b": 6,
+       "c": 1,
+       "kind": "set_relation"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 31,
+       "b": 1,
+       "kind": "time_after",
+       "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x4A00E5",
+     "_tut_ausserdem": "0x4D0F20 add_target",
+     "then": [
+      {
+       "a": 30,
+       "kind": "inc"
+      },
+      {
+       "a": 32,
+       "b": 0,
+       "c": 193,
+       "kind": "find_unit"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 4,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 193,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A0139",
+     "then": [
+      {
+       "a": 30,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "a": 109,
+       "b": 1,
+       "kind": "set"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 5,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 32,
+       "b": 193,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4A0198",
+     "_tut_ausserdem": "0x4D0D30 show_text bus_cmd sound",
+     "then": [
+      {
+       "a": 30,
+       "kind": "inc"
+      },
+      {
+       "a": 109,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "_at": "0x4A01AF",
+       "a": 6000,
+       "b": 0,
+       "kind": "change_owner"
+      },
+      {
+       "_at": "0x4A01C5",
+       "a": 100,
+       "b": 1,
+       "c": 350,
+       "d": 220,
+       "kind": "text"
+      },
+      {
+       "_at": "0x4A01D4",
+       "a": 800,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "_at": "0x4A01DC",
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 30,
+       "b": 5,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 32,
+       "b": 0,
+       "c": 193,
+       "kind": "unit_field",
+       "op": ">"
+      },
+      {
+       "a": 32,
+       "b": 1,
+       "c": 135,
+       "kind": "unit_field",
+       "op": ">"
+      },
+      {
+       "a": 6000,
+       "b": 73,
+       "c": 0,
+       "kind": "unit_is",
+       "op": "!="
+      }
+     ]
+    },
     {
      "once": 300,
      "then": [
