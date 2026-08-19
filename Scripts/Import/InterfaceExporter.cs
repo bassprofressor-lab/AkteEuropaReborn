@@ -310,6 +310,11 @@ public sealed class InterfaceExporter
         // Weg aber nicht gerufen). Wir hatten nur die eine — damit flackerten
         // alle brennenden Baeume mit demselben Bild.
         ("blast2", 552),
+        // ⚠ 19.08.2026 — DIE RAUCHSPUR. Der Geschosstakt legt fuer die Arten
+        // 5..20 unterwegs Effekte an: @0x45286B rechnet `rand()%3 + 0x2A`,
+        // also Folge **42, 43 oder 44** (11/10/10 Bilder). Wie oft, haengt am
+        // Zweig: `& 1` = jeder zweite Takt, `% 3` = jeder dritte.
+        ("smoke0", 42), ("smoke1", 43), ("smoke2", 44),
         // ⚠ 18.08.2026 — DAS FEUER. Gemeldet als »in Original Kampagne 1 gibt
         // es z.B. von Haus aus ein paar brennende Baeume, die haben wir
         // garnicht«. Die Folge 82 ist NICHT geraten: die Trefferroutine Zasah

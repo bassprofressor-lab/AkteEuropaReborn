@@ -222,6 +222,10 @@ public partial class MapEntityLayer : Node2D
         /// </summary>
         public int Erfahrung;
 
+        /// <summary>Der Bremszaehler des Rumpfes beim Drehen — Satz +0x16,
+        /// <c>OTACIM</c>. Nur Schiffe fuehren ihn; siehe die Drehstelle.</summary>
+        public int DrehWarten;
+
         public Rect2 Footprint;
         public bool IsProp;        // true = generic grid prop (no owner/hp)
         public bool IsBuilding;    // true = a sec3 building (drawn into the map)
@@ -728,7 +732,78 @@ public partial class MapEntityLayer : Node2D
         /// »Klangklasse« aus dem Statssatz +0x1C. Sie entscheidet ueber die
         /// Einschlagfolge und darueber, ob das Bild eine Richtung hat.</summary>
         public int Art;
+
+        /// <summary>Wie hoch die Wurfbahn im Scheitel steigt, in Bildpunkten —
+        /// 0 heisst gerade Bahn. Siehe <see cref="Scheitelteiler"/>.</summary>
+        public float Scheitel;
+
+        /// <summary>Die Entfernung beim Abschuss; daran wird der Fortschritt
+        /// gemessen, aus dem die Bogenhoehe folgt.</summary>
+        public float Weite;
+
+        /// <summary>Wann die naechste Rauchwolke faellt, in Sekunden.</summary>
+        public float RauchAt;
     }
+
+    /// <summary>
+    /// <b>WELCHE GESCHOSSE EINE WURFBAHN FLIEGEN — und wie hoch.</b>
+    ///
+    /// <para>⚠ 19.08.2026. Der Geschosstakt des Originals (0x452190) verzweigt
+    /// ueber eine <b>Klassentafel</b> <c>byte[0x4530DC + art]</c> auf eine
+    /// Sprungtafel <c>[0x453064 + 4·klasse]</c> mit <b>30</b> Klassen. Selbst
+    /// ausgelesen und zusammengefasst:</para>
+    ///
+    /// <code>
+    ///   0x4521DA  gerade          38 Arten
+    ///   0x452400  WURFBAHN        22 Arten: 5,6,16,53,54,57,58,61,65,66,69,
+    ///                                       70,73,74,77,78,81,82,85,86,89,90
+    ///   0x452638  Steig/Sturz      1 Art:   7  (der Marschflugkoerper)
+    ///   0x4521C3  Ausgang         30 Arten (unbenutzte Zeilen)
+    /// </code>
+    ///
+    /// <para><b>Die Probe, und sie ist gut:</b> dieselbe 91-Byte-Klassentafel
+    /// kommt in der ZWEITEN GAME.EXE <b>genau einmal</b> vor (F @0x451D88) —
+    /// die Daten sind Byte fuer Byte dieselben. Damit haengt die Bahnart
+    /// <b>allein an der Geschossart</b>, nicht an Reichweite, Waffengattung
+    /// oder einem Flag.</para>
+    ///
+    /// <para><b>Der Scheitel.</b> Das Original rechnet beim Anlegen
+    /// <c>h = d/(2v)</c>, <c>g = d / (h(1+h)/2) · f</c>, <c>vz = h·g</c> und je
+    /// Takt <c>Bogen += vz; vz −= g</c>. Die Summe kuerzt sich weg: der
+    /// <b>Scheitel ist exakt d·f</b>. Die beiden Faktoren stehen als
+    /// Fliesskommazahlen im Programm und sind nachgelesen:
+    /// <c>0x4F2E24 = 0,5</c> und <c>0x4F2E28 = 0,0909…</c> (= 1/11).</para>
+    ///
+    /// <para>Wir rechnen deshalb nicht Takt fuer Takt mit, sondern setzen die
+    /// Parabel geschlossen: <c>hoehe = 4·Scheitel·t·(1−t)</c> mit dem
+    /// Fortschritt t. Das ist dieselbe Kurve mit demselben Scheitel und
+    /// unabhaengig von unserer Bildrate — eine Taktnachbildung waere hier
+    /// genauer im Buchstaben und ungenauer im Ergebnis.</para>
+    ///
+    /// <para>⚠ WAS NICHT VON MIR GELESEN IST: welche der 22 Arten den flachen
+    /// (1/11) und welche den steilen Faktor (1/2) nimmt. Die Aufteilung stammt
+    /// aus der Tiefenlesung und ist hier uebernommen; nachgeprueft habe ich die
+    /// ZUGEHOERIGKEIT zur Wurfbahn und die beiden Faktoren, nicht die Zuordnung.
+    /// Praktisch betrifft es drei baubare Waffen: Art 5 und 6 (Bauteil 26/27,
+    /// die Raketenwerfer) flach, Art 16 (Bauteil 37) steil.</para>
+    /// </summary>
+    /// <summary>Wie hoch das Geschoss gerade ueber seiner Bahn steht. Der
+    /// Fortschritt kommt aus der RESTentfernung, damit er nicht von unserer
+    /// Bildrate abhaengt.</summary>
+    private static float BogenHoehe(Projectile p)
+    {
+        if (p.Scheitel <= 0f || p.Weite <= 1f) return 0f;
+        float t = 1f - p.Pos.DistanceTo(p.Aim) / p.Weite;
+        t = Mathf.Clamp(t, 0f, 1f);
+        return 4f * p.Scheitel * t * (1f - t);
+    }
+
+    private static float Scheitelteiler(int art) => art switch
+    {
+        5 or 6 or 57 or 58 or 61 or 65 or 66 or 73 or 74 or 78 or 82 or 85 or 86 or 90 => 1f / 11f,
+        16 or 53 or 54 or 69 or 70 or 77 or 81 or 89 => 0.5f,
+        _ => 0f,          // gerade Bahn
+    };
 
     /// <summary>One sec19 record — an AIRCRAFT. The section holds 200 x 68 of
     /// them; +0x08 is the kind and +0x3b the map's English name.
@@ -1138,6 +1213,7 @@ public partial class MapEntityLayer : Node2D
     private int _selected = -1;
     private int _hovered = -1;
     private int _schiffFootLog;
+    private int _dreh4x4Takt;
 
     /// <summary>Der angewählte FLUGZEUGPLATZ — die Zeile in <see cref="_special"/>,
     /// oder −1. Flugzeuge sind bei uns keine <see cref="Entity"/>, deshalb
@@ -7545,6 +7621,10 @@ public partial class MapEntityLayer : Node2D
                     Target = vi, Shooter = si, Damage = w.Damage,
                     Facing = fach, Kind = flug, Art = art,
                     Speed = schnell,
+                    // Die Wurfbahn: Scheitel = Entfernung mal Faktor, siehe
+                    // Scheitelteiler. Bei gerader Bahn bleibt beides 0.
+                    Weite = muendung.DistanceTo(ShotAim(victim)),
+                    Scheitel = Scheitelteiler(art) * muendung.DistanceTo(ShotAim(victim)),
                 });
             }
 
@@ -7815,11 +7895,30 @@ public partial class MapEntityLayer : Node2D
         }
         _effects.Add(new Effect { Pos = victim.Pos - new Vector2(0, 6),
                                   Kind = "explosion", FrameTime = 0.06f });
-        // the rubble variant is picked from where it fell, so two wrecks side by
-        // side do not look stamped from the same mould — see DrawWreck
-        _effects.Add(new Effect { Pos = victim.Pos, Kind = "wreck",
-                                  FrameTime = 0.25f, Hold = true,
-                                  Variant = victim.Col * 3 + victim.Row });
+        // ⚠⚠ 19.08.2026 — EIN SCHIFF HINTERLAESST KEIN WRACK.
+        //
+        // Die Todesroutine des Originals (»likvid typ:« @0x406F1B) verzweigt
+        // ueber 0x40A048 nach der Gattung, und nur EIN Zweig legt ein Wrack an:
+        //
+        //   Gattung 0 Fahrzeug   @0x406F3D  -> Wrack (0x4A97C0, Tafel 0x9C6FB8)
+        //   Gattung 1/2 Inf/Flug @0x40716B  -> keines
+        //   Gattung 3            @0x407026  -> Zelle := 0xFFFE (leer)
+        //   Gattung 4 Schiff 2x2 @0x407094  -> Zelle := 0xFFFC (WASSER)
+        //   Gattung 5 Schiff 4x4 @0x4070FF  -> alle vier Zellen := 0xFFFC
+        //
+        // Ein versenktes Schiff laesst also nichts zurueck — kein Wrack, kein
+        // Oelfleck, keine Truemmer; nur die Einschlagsanimation des Geschosses
+        // und den Klang. Was bleibt, ist Wasser.
+        //
+        // (Die Wracks der Fahrzeuge altern uebrigens: alle 10 Takte +1 auf
+        // byte[0x9C6FBF + 10*i], solange != 0 — @0x4A9860. Das haben wir noch
+        // nicht, steht in OFFENE_FRAGEN.md.)
+        if (victim.GameUnitType is not (4 or 5))
+            // the rubble variant is picked from where it fell, so two wrecks side
+            // by side do not look stamped from the same mould — see DrawWreck
+            _effects.Add(new Effect { Pos = victim.Pos, Kind = "wreck",
+                                      FrameTime = 0.25f, Hold = true,
+                                      Variant = victim.Col * 3 + victim.Row });
     }
 
     // ---- ANIM.CWA effect sprites ----
@@ -7868,6 +7967,31 @@ public partial class MapEntityLayer : Node2D
             if (dist > step)
             {
                 p.Pos += d / dist * step;
+                // ⭐ 19.08.2026 — DIE RAUCHSPUR. Der Geschosstakt des Originals
+                // legt unterwegs Effekte an (@0x45286B): `rand()%3 + 0x2A`,
+                // also Folge **42, 43 oder 44**. Nur fuer die Arten **5..20**
+                // und nur, wenn `byte[0x4FE9DC]` gesetzt ist — eine
+                // Einstellung, die wir als »an« nehmen.
+                //
+                // Wie oft, haengt am Zweig: einmal `& 1` (jeder zweite Takt),
+                // einmal `% 3` (jeder dritte). ⚠ WELCHER Zweig fuer welche Art
+                // gilt, ist nicht gelesen; genommen ist der SELTENERE, weil
+                // eine zu dichte Spur schlimmer aussieht als eine zu duenne.
+                // Ein Takt sind 1/50 s, drei also 0,06 s.
+                if (p.Art is >= 5 and <= 20)
+                {
+                    p.RauchAt -= dt;
+                    if (p.RauchAt <= 0f)
+                    {
+                        p.RauchAt = 3f / Simulation.SimulationState.TicksPerSecond;
+                        _effects.Add(new Effect
+                        {
+                            Pos = p.Pos - new Vector2(0, BogenHoehe(p)),
+                            Kind = $"smoke{Simulation.Determinism.Roll(3)}",
+                            FrameTime = 0.06f,
+                        });
+                    }
+                }
                 _shots[i] = p;
                 continue;
             }
@@ -7983,7 +8107,12 @@ public partial class MapEntityLayer : Node2D
                 // wird von Art 1 und Art 21 benutzt -- ohne diese Schranke
                 // griffe Art 21 daneben.
                 var tex = ProjectileTexture(p.Kind, p.Art is >= 2 and <= 86 ? p.Facing : 0);
-                if (tex != null) DrawTexture(tex, p.Pos - tex.GetSize() / 2f);
+                // Die Bogenhoehe: geschlossene Parabel mit demselben Scheitel,
+                // den das Original ueber seine Takte aufsummiert — siehe
+                // Scheitelteiler. Bei gerader Bahn ist Scheitel 0 und die
+                // Rechnung faellt weg.
+                if (tex != null) DrawTexture(tex, p.Pos - tex.GetSize() / 2f
+                                                  - new Vector2(0, BogenHoehe(p)));
             }
 
         foreach (var fx in _effects)
@@ -20678,6 +20807,33 @@ public partial class MapEntityLayer : Node2D
                 {
                     // kuerzester Weg um den Kreis — jetzt um EINEN Kreis, der
                     // acht oder sechzehn Stufen haben kann
+                    // ⚠⚠ 19.08.2026 — EIN SCHIFF DREHT LANGSAMER, und das ist
+                    // gelesen. Gemeldet: »die Schiffe fahren sehr komisch«.
+                    //
+                    // Das Original (0x404E80, F 0x404E60) fuehrt fuer den Rumpf
+                    // ein eigenes Feld mit — `OTACIM` (+0x16, »ich drehe«, der
+                    // Name stammt aus dem Aufzeichner):
+                    //
+                    //   Gattung 5 : wenn (Taktzaehler 0x4FA240 & 1) != 0 -> gar nichts
+                    //   Gattung 3/4/5: wenn +0x16 > 1 : herunterzaehlen, NICHT drehen
+                    //                  sonst +0x16 := 3, dann eine Stufe
+                    //
+                    // Also **eine Sechzehntelstufe alle drei Takte**, und ein
+                    // 4x4-Schiff nur an geraden Takten — alle sechs. Eine volle
+                    // Drehung dauert damit 48 bzw. 96 Takte, knapp eine bzw. zwei
+                    // Sekunden. Wir drehten JEDEN Takt: sechzehnmal zu schnell.
+                    //
+                    // ⚠ Der TURM (AimFacing) ist davon nicht betroffen — er
+                    // dreht im Original ohne Bremse, eine Stufe je Takt
+                    // (0x405100). Diese Stelle bewegt nur den Rumpf.
+                    if (stufen > 8)
+                    {
+                        // Gattung 5 (4x4) ruehrt sich nur an geraden Takten.
+                        if (Simulation.NavGrid.HullSide(e.GameUnitType) > 2
+                            && (_dreh4x4Takt++ & 1) != 0) { _drehTicks++; continue; }
+                        if (e.DrehWarten > 1) { e.DrehWarten--; _drehTicks++; continue; }
+                        e.DrehWarten = 3;
+                    }
                     int diff = ((will - e.Facing) % stufen + stufen) % stufen;
                     e.Facing = (e.Facing + (diff <= stufen / 2 ? 1 : stufen - 1)) % stufen;
                     // erst drehen, dann fahren — solange die Nase nicht stimmt,

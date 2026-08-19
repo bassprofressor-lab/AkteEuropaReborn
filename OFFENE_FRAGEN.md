@@ -703,3 +703,22 @@ Takt.
 * **Die y-Halbierung beim Einschlag**: `0x4528EF` übergibt `py/2`, `0x435BD0`
   dagegen `dy+10` — einer der beiden rechnet mit halber senkrechter Auflösung.
   **Was mir hülfe:** ein Blick ins Original auf ein Geschoss über einer Steigung.
+
+### SHOOT.CWT — nachgemessen, aber der ANKER fehlt (19.08.2026)
+
+Selbst nachgemessen, und der Bericht stimmt auf den Eintrag: **28.800 Byte =
+9.600 Sätze zu drei Byte**, Flags **413 / 756 / 8.431** (gezeichnet / vorhanden
+aber verdeckt / leer). Belegt sind die Waffen **0…17** sowie 40 und 41 — und das
+Spiel hat 18 Waffenbauteile. Waffe 17 hat als einzige **vier** Mündungen je Bild,
+die Waffen 4, 5, 6, 10, 13, 15, 40, 41 haben zwei.
+
+**Was fehlt, um es zu bauen:** die Zuordnung des Ankers. Der Zeichner setzt die
+Mündung auf `Zeichenpunkt + (x − 25, y − 68)`. Die 25/68 sind der Ankerpunkt
+*des Originals* in seinem Waffenbild; unser zusammengesetztes Bild hängt an
+`ComposedAnchor = (30, 55)`. Welcher Punkt dem anderen entspricht, ist **nicht
+gelesen** — und ohne das wäre jede Umrechnung geraten. `MuzzleReach = 14` bleibt
+deshalb vorerst stehen und ist weiter als unsere Setzung gekennzeichnet.
+
+**Was mir hülfe:** ein Bildschirmfoto aus dem Original, auf dem ein Panzer
+gerade schiesst, möglichst formatfüllend — daran messe ich, wo die Mündung
+relativ zum Fahrzeugbild sitzt, und habe den Anker.
