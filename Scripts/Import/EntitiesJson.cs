@@ -43,6 +43,10 @@ public static class EntitiesJson
         /// <summary>Die BELADENEN TRANSPORTER der Karte — sec37.
         /// Siehe CwmExtra.TransportLoads.</summary>
         public List<CwmExtra.TransportLoad> Transports = new();
+
+        /// <summary>Die FREIEN Vorkommen der Karte — sec38.
+        /// Nicht zu verwechseln mit Deposits (sec28).</summary>
+        public List<CwmExtra.TerraPlace> TerraPlaces = new();
         public List<CwmExtra.Player> Players = new();
         public List<CwmExtra.AirDesign> AirDesigns = new();
         public List<CwmExtra.ShipDesign> ShipDesigns = new();
@@ -73,6 +77,7 @@ public static class EntitiesJson
             RailNodes = CwmExtra.RailNodes(m),
             RailCells = CwmExtra.RailCells(m),
             Transports = CwmExtra.TransportLoads(m),
+            TerraPlaces = CwmExtra.TerraPlaces(m),
             Players = CwmExtra.Players(m),
             AirDesigns = CwmExtra.AirDesigns(m),
             ShipDesigns = CwmExtra.ShipDesigns(m),
@@ -335,6 +340,21 @@ public static class EntitiesJson
         // geschrieben: Satz, Traeger, Deckel, dann die Fracht. Sie ist selten
         // (30 Saetze auf 7 von 62 Dateien), aber ohne sie stehen auf 05.CWM
         // fuenfzehn Einheiten neben dem Schiff statt darin.
+        // sec38 — die Stellen, auf die man eine Mine setzen darf. NICHT
+        // dasselbe wie "deposits" (sec28, der Zustand vorhandener Minen).
+        w.Key("terra_places").Arr();
+        foreach (var tp in d.TerraPlaces)
+        {
+            w.Obj();
+            w.Key("slot").Num(tp.Slot);
+            w.Key("col").Num(tp.Col);
+            w.Key("row").Num(tp.Row);
+            w.Key("amount").Num(tp.Amount);
+            w.Key("kind").Num(tp.Kind);
+            w.End();
+        }
+        w.End();
+
         w.Key("transports").Arr();
         foreach (var t in d.Transports)
         {

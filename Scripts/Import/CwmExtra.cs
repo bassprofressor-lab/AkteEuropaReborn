@@ -972,6 +972,59 @@ public static class CwmExtra
         return list;
     }
 
+    // ---- sec38: DIE FREIEN TERRANIUM-VORKOMMEN ------------------------------
+
+    /// <summary>
+    /// EINE STELLE, AUF DIE MAN EINE MINE SETZEN DARF — <b>sec38</b>.
+    ///
+    /// <para>Zuteiler <c>@0x420E30</c> (F: <c>@0x41FFE0</c>), Meldung
+    /// »Cannot place more terra« (0x4F917C): 50 Plaetze (<c>cmp dl,0x32</c>) zu
+    /// 14 Byte. Satz GEMESSEN: <c>+0x00</c> belegt, <c>+0x01</c> Spalte,
+    /// <c>+0x02</c> Zeile, <c>+0x04</c> u16 Menge, <c>+0x06</c>/<c>+0x07</c>
+    /// Artmarke (genau eine der beiden steht auf 1).</para>
+    ///
+    /// <para>⚠ <b>Das ist NICHT <see cref="Deposits"/>.</b> Jene liest sec28 —
+    /// den Zustand vorhandener MinenGEBAEUDE, jeder Satz zeigt auf ein Gebaeude.
+    /// sec38 sind die noch FREIEN Stellen. Beides gleichzusetzen war ein Fehler
+    /// in unseren Notizen (»sec28 ist die Vorkommenstafel«).</para>
+    ///
+    /// <para>⚠ Und es widerlegt die Behauptung in <c>Simulation/Deposits.cs</c>,
+    /// »eine gelieferte Karte traegt hier nichts«. GEMESSEN ueber beide
+    /// Datentraeger: <b>9 Vorkommen auf 6 Karten</b> (14, 17, 19, 20 mit vier,
+    /// 22, NET01), Menge durchweg 10000. Auf den Missionen 14, 17, 20 und 22
+    /// legt das Missionsskript <b>keine</b> an — dort hatte der Spieler bei uns
+    /// also gar keinen Bauplatz fuer eine Mine.</para>
+    /// </summary>
+    public sealed class TerraPlace
+    {
+        public int Slot, Col, Row, Amount, Kind;
+    }
+
+    public const int TerraStride = 14, TerraSlots = 50;
+
+    /// <summary>sec38 auspacken. Siehe <see cref="TerraPlace"/>.</summary>
+    public static List<TerraPlace> TerraPlaces(CwmFile m)
+    {
+        var list = new List<TerraPlace>();
+        var s = m.Sec(38);
+        if (s == null) return list;
+        int n = Math.Min(TerraSlots, s.Length / TerraStride);
+        for (int i = 0; i < n; i++)
+        {
+            int o = i * TerraStride;
+            if (s[o] == 0) continue;                       // Platz frei
+            list.Add(new TerraPlace
+            {
+                Slot = i, Col = s[o + 1], Row = s[o + 2],
+                Amount = BitConverter.ToUInt16(s, o + 4),
+                // Die Artmarke steht in einem von zwei Bytes; wir merken uns,
+                // in welchem — welche Art das bedeutet, ist ungelesen.
+                Kind = s[o + 6] != 0 ? 0 : 1,
+            });
+        }
+        return list;
+    }
+
     // ---- sec37: DIE TRANSPORTLADUNG ----------------------------------------
 
     /// <summary>

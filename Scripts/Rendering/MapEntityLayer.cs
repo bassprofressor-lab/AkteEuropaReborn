@@ -2541,6 +2541,15 @@ public partial class MapEntityLayer : Node2D
         // Zelle (5,11), was fuer aufgestellte Einheiten unmoeglich ist. Wer sie
         // trotzdem aufstellt, bekommt einen Stapel Geister neben dem Schiff.
         // Herleitung und Messung: CwmExtra.TransportLoads.
+        _karteTerra.Clear();
+        if (root.TryGetValue("terra_places", out var tqv) && tqv.VariantType == Variant.Type.Array)
+            foreach (var item in tqv.AsGodotArray())
+            {
+                if (item.VariantType != Variant.Type.Dictionary) continue;
+                var q = item.AsGodotDictionary<string, Variant>();
+                _karteTerra.Add((GetI(q, "col"), GetI(q, "row"), GetI(q, "amount")));
+            }
+
         _anBord.Clear();
         _bordDeckel.Clear();
         _frachtPlaetze.Clear();
@@ -8802,9 +8811,14 @@ public partial class MapEntityLayer : Node2D
     {
         _deposits.Clear();
         foreach (var (col, row, amount) in list) _deposits.Add((col, row, amount));
+        // Die Karte bringt eigene mit (sec38) — sie werden DAZUGELEGT, nicht
+        // ersetzt. Warum, steht bei _karteTerra.
+        int ausSkript = _deposits.Count;
+        foreach (var v in _karteTerra) _deposits.Add(v);
         if (_deposits.Count > 0)
-            GD.Print($"Vorkommen: {_deposits.Count} Rohstoffstellen aus dem " +
-                     "Missionsaufbau — die Feld-Rohstoffmine hat jetzt Bauplaetze");
+            GD.Print($"Vorkommen: {_deposits.Count} Rohstoffstellen — {ausSkript} aus dem " +
+                     $"Missionsaufbau, {_karteTerra.Count} aus der Karte (sec38); " +
+                     "die Feld-Rohstoffmine hat jetzt Bauplaetze");
     }
 
     /// <summary>

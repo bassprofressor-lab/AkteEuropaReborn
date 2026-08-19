@@ -41,6 +41,21 @@ public partial class MapEntityLayer
 {
     private readonly List<(int Col, int Row, int Amount)> _depositList = new();
 
+    /// <summary>
+    /// <b>Die dritte Quelle: die KARTE selbst (sec38).</b>
+    ///
+    /// <para>Der Klassenkommentar oben sagte, »eine gelieferte Karte traegt hier
+    /// nichts«. Das ist widerlegt: sec38 ist die Tafel der freien Stellen
+    /// (Zuteiler @0x420E30, »Cannot place more terra«, 50 Plaetze zu 14 Byte).
+    /// GEMESSEN: 9 Vorkommen auf 6 Karten. Auf den Missionen 14, 17, 20 und 22
+    /// legt das Missionsskript KEINE an — dort stand der Spieler bei uns vor
+    /// einer Karte ohne einen einzigen Bauplatz fuer eine Mine.</para>
+    ///
+    /// <para>Skript und Karte werden VEREINIGT, nicht gegeneinander gestellt:
+    /// im Original laedt der Kartenlader sec38, und <c>add_terra_place</c> des
+    /// Missionsaufbaus legt weitere DAZU.</para></summary>
+    private readonly List<(int Col, int Row, int Amount)> _karteTerra = new();
+
     /// <summary>Das Gitter, aus dem <see cref="_depositList"/> gefüllt wurde —
     /// null, solange nichts nachgezogen wurde.</summary>
     private Simulation.NavGrid? _depositNav;
@@ -56,9 +71,12 @@ public partial class MapEntityLayer
                 _depositNav = _nav;
                 _depositList.Clear();
                 foreach (var d in _nav.Deposits) _depositList.Add(d);
+                foreach (var d in _karteTerra) _depositList.Add(d);
                 if (_depositList.Count > 0)
                     Godot.GD.Print($"Vorkommen: {_depositList.Count} Rohstoffstellen aus der " +
-                                   "KARTE (erzeugte Karte, kein Missionsskript — unsere Zutat)");
+                                   $"KARTE — {_karteTerra.Count} davon aus sec38 (echte " +
+                                   $"Kartendaten), {_depositList.Count - _karteTerra.Count} " +
+                                   "aus dem Gitter einer erzeugten Karte (unsere Zutat)");
             }
             return _depositList;
         }
