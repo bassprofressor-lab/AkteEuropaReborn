@@ -38,6 +38,8 @@ further down, with the addresses it was read at.
 | **Muzzle flashes come from the game's own table.** | Four sequences by weapon — and thirteen weapons have **none** in the original. |
 | **Buildings get no selection brackets.** | The original has them for units only; a building answers with its window. |
 | **"Sell" only where a market exists.** | Campaign maps 1–10 have none. |
+| **The objectives box on the preview screen.** | It was missing entirely — and it is the only place the original swaps in its second typeface. |
+| **Bridges and ramps stand up.** | 578 cells that hang on a second grid table we had never read. |
 | **Popups no longer trap the mouse in the menu.** | The cause was not a leftover popup but a **pause** left standing. |
 | **Fog uncovers softly**, not tile by tile. Marching squares over a 257×257 corner grid, plus the original's own dither pattern in its own palette colour. |
 | **Thirteen weapons get a flying projectile** instead of three — each with its own impact. Out of a table we had read one twenty-second of. |
