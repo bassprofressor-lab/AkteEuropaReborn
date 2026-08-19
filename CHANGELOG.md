@@ -40,6 +40,7 @@ further down, with the addresses it was read at.
 | **"Sell" only where a market exists.** | Campaign maps 1–10 have none. |
 | **The objectives box on the preview screen.** | It was missing entirely — and it is the only place the original swaps in its second typeface. |
 | **Bridges and ramps stand up.** | 578 cells that hang on a second grid table we had never read. |
+| **Projectiles stop at obstacles.** | A building catches what flies over a tank — six thresholds, all read. |
 | **Popups no longer trap the mouse in the menu.** | The cause was not a leftover popup but a **pause** left standing. |
 | **Fog uncovers softly**, not tile by tile. Marching squares over a 257×257 corner grid, plus the original's own dither pattern in its own palette colour. |
 | **Thirteen weapons get a flying projectile** instead of three — each with its own impact. Out of a table we had read one twenty-second of. |

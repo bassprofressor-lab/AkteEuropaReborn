@@ -41,6 +41,7 @@ weiter unten ausführlich, mit den Adressen, an denen er gelesen wurde.
 | **»Verkaufen« nur, wo es einen Markt gibt.** | Die Kampagnenkarten 1–10 haben gar keinen. |
 | **Der Zielkasten im Vorschaufenster.** | Er fehlte ganz — und er ist der einzige Ort, für den das Original die zweite Schrift einwechselt. |
 | **Brücken und Rampen ragen auf.** | 578 Zellen, die an einer zweiten Rastertafel hängen, die wir gar nicht gelesen haben. |
+| **Ein Geschoss bleibt an Hindernissen hängen.** | Ein Gebäude fängt ab, was über einen Panzer hinweggeht — sechs Schwellen, alle gelesen. |
 | **Popups fangen die Maus nicht mehr im Menü.** | Die Ursache war keine Popup-Leiche, sondern eine stehengebliebene **Pause**. |
 | **Der Nebel deckt weich auf.** | Statt Kachel für Kachel. Marching Squares über ein 257×257-Eckengitter, dazu das Schachbrettmuster des Originals in seiner Palettenfarbe. |
 | **Dreizehn Waffen bekommen ein fliegendes Geschoss** statt drei — und jede ihren eigenen Einschlag. Aus einer Tafel, die wir zu einem Zweiundzwanzigstel gelesen hatten. |
