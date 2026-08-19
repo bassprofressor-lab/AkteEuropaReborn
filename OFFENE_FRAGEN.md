@@ -567,3 +567,139 @@ stehen** — eine falsche Zahl einzusetzen wäre schlechter als die gemessene.
 Einheit angewählt** ist, möglichst formatfüllend. Daran messe ich, wie weit die
 Winkel wirklich auseinanderstehen und wie hoch die Markierung über dem
 Bodenpunkt sitzt.
+
+---
+
+## F. Schiffe und Waffen, zweite Tiefenlesung (19.08.2026)
+
+### ⭐ ERLEDIGT: Feld +0x14 ist eine HÖHE
+
+Vormittags stand hier »Aufschlag auf die Lafettensuche, Bedeutung ungeklärt«.
+Die Kette endet zwei Sprünge weiter: `0x435BD0 → 0x4B5CE0 → 0x401AAF`, und der
+Schwanz `mov cl,0x0F / imul cl / add al,bl` (C `0x4B6129`, F `0x4B5A5B`, das
+Muster gibt es in beiden EXE genau 29-mal) liefert **Zellhöhe · 15 + Anteil in
+der Kachel**. Eine Geländestufe = **15 Einheiten**. Die Werte 10…30 sind also
+zwei Drittel bis zwei Stufen. Gegenprobe: derselbe Maßstab beim Einschlag
+(Einheit +15, Gebäude +60). Umbenannt in `MuzzleHeight`.
+
+⚠ Und `0x435BD0` ist **keine** »Lafettensuche«: sie bekommt
+`(KOLIK, POHYB, &Satz[0], &Satz[1])` und rechnet den **Bildpunkt der Einheit in
+ihrer Zelle** aus dem Fahrfortschritt.
+
+### ⭐ GEBAUT: Zwillingslafette und Zielstreuung
+
+Beide Rohre feuern **im selben Takt** (0x40C35E und 0x40C449), Versatz senkrecht
+zur Rohrrichtung, Rohr A `+v`, Rohr B `−v`. Vor **jedem** Schuss wird der
+Zielpunkt verwürfelt: `x −(zufall mod 20)+9`, `y −(zufall mod 10)+4` — beide
+Rohre streuen unabhängig.
+
+⚠ **Berichtigt:** in Abschnitt B stand »**vier** Geschosstypen feuern zwei
+Geschosse«. Vier sind die *Werte* (0/6/8/20), die *Arten* sind **21**. Baubare
+Waffenbauteile sind davon aber nur **drei**: 26, 27 und 31 — nachgezählt über
+`stats[zeile][+0x1C] → Geschossart → +0x15`.
+
+**Was mir hülfe:** halbiert das Original den Schaden je Rohr? Ich habe es nicht
+gelesen. Falls Dir diese drei Waffen im Spiel zu stark vorkommen, sag es — dann
+suche ich gezielt danach.
+
+### NICHT GEBAUT: die Wurfbahn
+
+Die Bahnart hängt **allein an der Geschossart**, an einer fest verdrahteten
+Tafel (`byte[0x4530DC + art]` → `[0x453064 + 4·klasse]`), nicht an Reichweite
+oder Waffengattung. Drei Rümpfe: gerade, **Wurfbahn** (22 Arten) und ein
+Steig-/Sinkprofil (nur Art 7, der Marschflugkörper).
+
+Die Rechnung beim Anlegen (`0x451DF4`): `h = d/(2v)`, `g = d / (h(1+h)/2) / K`,
+`vz = h·g`; je Takt `Bogen += vz`, `Höhe = Grundhöhe + round(Bogen)`, `vz −= g`.
+**Der Scheitel ist exakt `d/K`** — die Summe kürzt sich weg. `K = 11` (flach)
+für 14 Arten, `K = 2` (steil) für 8. Probe, dass die Lesung stimmt: die
+Anlegeroutine hat eine **eigene** Tafel, und deren Wurfbahn-Arten sind genau
+dieselben 22.
+
+Art 7 steigt in Siebenerschritten bis Höhe 150 (zehn Stufen), marschiert und
+stürzt, sobald `(Zielhöhe−Höhe)/7 + 1 ≥ Restschritte`.
+
+### NICHT GEBAUT: die acht Einschlagszweige
+
+Vor der Trefferprüfung holt das Spiel die Geländehöhe am Geschosspunkt und
+vergleicht `Gelände + Schwelle` gegen die Geschosshöhe:
+
+| Belegung | was | Schwelle |
+|---|---|---|
+| < 8000 | lebende Einheit | **+15** |
+| ≥ 8000 mit Lagenbyte 1…59 | aufragendes Hindernis | **+40** |
+| 10000…13999 | Infanteriezelle | +15 |
+| 50000…55999 | Wald | +40 |
+| 60000…60299 | **Gebäude** | **+60** |
+| 61000…63999 | zerstörbares Objekt | +30 |
+| sonst | Boden | +0 |
+
+Dazu: **kein Eigenbeschuss** (`byte[0x87B155 + 40·schütze + ziel]`), ein Ziel mit
+`UKOL ≥ 100` wird durchflogen, und die Arten 5…20 ziehen eine **Rauchspur**
+(Effekt 42 + zufall mod 3, mit 1/3 bzw. 1/2 Wahrscheinlichkeit je Takt).
+
+### ⭐ NICHT GEBAUT, aber wertvoll: SHOOT.CWT ist die Mündungstafel
+
+Waffenindex = **`ZBRAN − 1`** (`0x429B8E`), Bild = dasselbe wie beim Turm,
+Mündung = Einheitenanker + **`(x − 25, y − 68)`** (`0x42A188`). Gemessen an der
+Datei: 9600 Sätze, davon **413 mit Flag 0** (werden gezeichnet), **756 mit
+Flag 1** (Punkt vorhanden, aber hinter dem Turm), 8431 leer. Belegt sind genau
+die Plätze 0…17 — und das Spiel hat 18 Waffenbauteile. Waffe 17 hat als einzige
+**vier** Mündungen in einer Reihe (ein Vierlingsgestell).
+
+Damit liesse sich unsere geratene `MuzzleReach = 14` ersetzen.
+
+⚠ **Und der Negativbefund »es gibt kein Mündungsfeuer« ist zu präzisieren:** er
+stimmt für die *Schussroutine*, die legt keinen Effekt an. Der **Zeichner** malt
+aber sehr wohl eines aus SHOOT.CWT, solange `byte[Einheit+0x42]` läuft. Unser
+`Kind = "muzzle"` ist im Grundsatz richtig — es sitzt nur am falschen Ort.
+
+### NICHT GEBAUT: Transport
+
+Tafel `0xBBFEF8`, 100 Plätze zu 38 Byte: `+0x00` belegt, `+0x02` Schiff,
+`+0x04` Anzahl, `+0x06…+0x23` fünfzehn Einheitenindizes, `+0x24` Gewicht.
+Fahrzeug +5 (abgelehnt über 10), Infanterie +1 (abgelehnt über 14) — also
+**drei Fahrzeuge oder fünfzehn Mann**, gemischt erlaubt. Beladen nur aus einer
+der vier orthogonalen Nachbarzellen und nur, wenn die Einheit steht.
+Rampenmarken in der zweiten Rasterebene: **≥ 100** beladen, **≥ 200** entladen.
+
+⚠ **Beim Versenken wird die Ladung gelöscht, nicht abgesetzt** (`0x410E9B` →
+`0x4CEE00` → je Einheit `0x410E60`, dort `byte[+0x09] = 0xFF`).
+
+### Was ein versenktes Schiff hinterlässt: nichts
+
+Nur **Landfahrzeuge** legen ein Wrack an (`0x4A97C0`, 1000 Plätze zu 10 Byte).
+Ein 2×2-Schiff setzt seine Zellen auf `0xFFFC` (Wasser), ein 4×4 alle vier.
+Kein Wrack, kein Ölfleck.
+
+### Wie ein Schiff dreht
+
+`0x404E80`: Gattung 3/4/5 rechnen in Sechzehnteln (`Ziel = wunsch·2`), und das
+Feld `OTACIM` (+0x16) bremst: **eine Stufe alle drei Takte**. Gattung 5 (4×4)
+tut ausserdem nur an geraden Takten etwas — also **alle sechs**. Volle Drehung:
+48 bzw. 96 Takte. Der **Turm** (+0x03) dreht dagegen ohne Bremse, eine Stufe je
+Takt.
+
+⚠ Wir drehen den Rumpf derzeit **jeden** Takt. Das ist zu schnell.
+
+### Kleinere Berichtigungen
+
+* **`+0x2A` ist eine MINDESTreichweite**: `0x40BF7F` bricht ab, wenn
+  `+0x2A · 40 > Entfernung`. In `ENTITY_FELDER.md` steht nur `+0x2B = range`.
+* **Die Mittelpunktregel für 4×4** ist `40·spalte + 78`, nicht +80 — zwei
+  Bildpunkte, aber gemessen (`0x40BE41`).
+* **`Satz+0x1E` zählt NICHT in Achterschritten**, sondern wählt den
+  Neigungsblock: steigend 0x10, fallend 8, sonst 0. Damit ist die offene Frage
+  aus Abschnitt B beantwortet — **drei Blöcke zu acht**.
+
+### Was offen blieb
+
+* **Wer `NABYTO` (+0x32) herunterzählt.** Ausgeschlossen ist jede Form mit der
+  Absolutadresse (in beiden EXE null Treffer für `dec word` / `sub …,1`); der
+  Zähler läuft über einen Registersockel. Es bräuchte einen Durchgang durch den
+  Einheitentakt `0x406D20`.
+* **Das EINlaufen ins Dock** — nur das Auslaufen ist gelesen. Ansatz:
+  `'Seedock'` (0x4FDD8C) und `'Error in shipyard'` (0x4FAE74).
+* **Die y-Halbierung beim Einschlag**: `0x4528EF` übergibt `py/2`, `0x435BD0`
+  dagegen `dy+10` — einer der beiden rechnet mit halber senkrechter Auflösung.
+  **Was mir hülfe:** ein Blick ins Original auf ein Geschoss über einer Steigung.

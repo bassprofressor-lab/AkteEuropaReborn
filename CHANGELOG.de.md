@@ -26,7 +26,10 @@ weiter unten ausführlich, mit den Adressen, an denen er gelesen wurde.
 | **Bäume verdecken wieder.** | ⚠ Dreimal gemeldet, zweimal falsch erklärt. Es *war* ein Codefehler: wir haben Bäume und Einheiten nur an den Zeilen der **Gebäude** ineinandergemischt, das Original tut es an **jeder** Zeile. |
 | **Kein weißes Kästchen mehr beim Überfahren.** | Das war von uns. Das Original meldet es mit dem Mauszeiger. |
 | **Der Auswahlkranz sitzt auf der Einheit.** | Er hing am Bodenpunkt, nicht am Bild — im Mittel 6 bis 8 Bildpunkte daneben, im schlimmsten Fall 21. |
-| **Die Flamme brennt auf ihrem Baum.** | Sie stand daneben: eigene Lagerechnung statt der des Backofens, und als einziger Effekt ohne Ankerabzug. |
+| **Die Flamme brennt auf ihrem Baum.** | Sie stand daneben: eigene Lagerechnung statt der des Backofens, und als einziger Effekt ohne Ankerabzug. Dazu: es gibt **zwei** Flammenbilder im Wechsel, wir kannten eines. |
+| **Einheiten melden sich auch beim Wegpunkt.** | Der Zweig für angereihte Befehle stieg vor dem Klang aus. |
+| **Der Text im Vorschaufenster ist so gross wie im Original.** | Der Zeichenvorschub war um 1 px zu gross (+17,2 %), und der Fliesstext lief auf der falschen Schrift (+8,9 %). Jetzt 49 statt 38 Zeichen je Zeile — die Zahl des Originals. |
+| **Zwillingslafetten feuern zwei Geschosse.** | Und jeder Schuss streut, wie im Original. Betrifft drei Waffen. |
 | **Popups fangen die Maus nicht mehr im Menü.** | Die Ursache war keine Popup-Leiche, sondern eine stehengebliebene **Pause**. |
 | **Der Nebel deckt weich auf.** | Statt Kachel für Kachel. Marching Squares über ein 257×257-Eckengitter, dazu das Schachbrettmuster des Originals in seiner Palettenfarbe. |
 | **Dreizehn Waffen bekommen ein fliegendes Geschoss** statt drei — und jede ihren eigenen Einschlag. Aus einer Tafel, die wir zu einem Zweiundzwanzigstel gelesen hatten. |

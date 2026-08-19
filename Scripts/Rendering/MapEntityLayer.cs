@@ -7468,15 +7468,66 @@ public partial class MapEntityLayer : Node2D
         if (flug != null)
         {
             int tempo = Audio.GameSounds.ProjectileSpeed(art);
-            _shots.Add(new Projectile
+            float schnell = (tempo > 0 ? tempo : 12) * PxPerProjectileSpeed;
+            var muendung = ShotOrigin(shooter) + dir * MuzzleReach;
+            int fach = DirToFacing(dir);
+
+            // ⭐ 19.08.2026 — DIE ZWILLINGSLAFETTE, gelesen und jetzt gebaut.
+            //
+            // Feld +0x15 der Geschosstafel war seit heute frueh importiert, aber
+            // ungenutzt: diese Waffen feuerten bei uns EIN Geschoss statt zwei.
+            //
+            // Das Original (0x40BFBB..0x40C449): ist der Wert 0, wird `bx` auf
+            // 0xFF gesetzt (0x40C25A) und es gibt ein Geschoss. Sonst werden
+            // ZWEI Saetze gefuellt und **im selben Takt** angelegt (0x40C35E
+            // und 0x40C449, beide `call 0x401CCB`). <b>Kein Zeitversatz, kein
+            // Abwechseln.</b>
+            //
+            // Der Versatz steht SENKRECHT auf der Rohrrichtung; Rohr A bekommt
+            // +v, Rohr B −v. Die Achtwegetafel 0x40C5E0 rechnet mit 7/10 und
+            // 7/20 — das ist genau das Seitenverhaeltnis der Kachel (40x20),
+            // also derselbe isometrische Halbierer wie ueberall sonst.
+            //
+            // ⚠ Berichtigt: in OFFENE_FRAGEN.md stand »VIER Geschosstypen
+            // feuern zwei Geschosse«. Vier sind die WERTE (0, 6, 8, 20); die
+            // Arten sind **einundzwanzig**.
+            int zwilling = Audio.GameSounds.TwinOffset(art);
+            var quer = new Vector2(-dir.Y, dir.X * 0.5f).Normalized();
+
+            void Anlegen(float seite)
             {
-                // dieselbe Muendung wie das Feuer darueber
-                Pos = ShotOrigin(shooter) + dir * MuzzleReach,
-                Aim = ShotAim(victim),
-                Target = vi, Shooter = si, Damage = w.Damage,
-                Facing = DirToFacing(dir), Kind = flug, Art = art,
-                Speed = (tempo > 0 ? tempo : 12) * PxPerProjectileSpeed,
-            });
+                _shots.Add(new Projectile
+                {
+                    Pos = muendung + quer * seite,
+                    // ⭐ DIE ZIELSTREUUNG, ebenfalls neu. Vor JEDEM Schuss
+                    // verwuerfelt das Original den Zielpunkt (0x40C288/0x40C2B4
+                    // fuer das eine Rohr, 0x40C389/0x40C39B fuer das andere):
+                    //     x' = x − (zufall mod 20) + 9   ->  −10 .. +9
+                    //     y' = y − (zufall mod 10) + 4   ->   −5 .. +4
+                    // Wieder 2:1. Zwei Rohre streuen UNABHAENGIG — deshalb
+                    // steht das hier drin und nicht vor dem Aufruf.
+                    Aim = ShotAim(victim)
+                          + new Vector2(Simulation.Determinism.Roll(20) - 9,
+                                        Simulation.Determinism.Roll(10) - 4),
+                    Target = vi, Shooter = si, Damage = w.Damage,
+                    Facing = fach, Kind = flug, Art = art,
+                    Speed = schnell,
+                });
+            }
+
+            // ⚠ WAS DAS FUER DEN SCHADEN HEISST, und es ist nachgezaehlt: zwei
+            // Geschosse treffen auch zweimal. Betroffen sind aber nur DREI
+            // baubare Waffenbauteile — 26 (Art 5, Versatz 8), 27 (Art 6, 8) und
+            // 31 (Art 10, 6); die uebrigen 18 Zwillingsarten gehoeren zu
+            // Entwuerfen und zu Gattung 3. Ausgezaehlt ueber die Statstafel
+            // (Zeile+0x1C -> Geschossart -> Feld +0x15).
+            //
+            // Es ist also kein pauschaler Kraftzuwachs, sondern genau das, was
+            // das Original mit diesen drei tut. Sollte es zu stark wirken, ist
+            // die Frage »halbiert das Original den Schaden je Rohr?« — die habe
+            // ich NICHT gelesen und sie steht in OFFENE_FRAGEN.md.
+            if (zwilling > 0) { Anlegen(zwilling); Anlegen(-zwilling); }
+            else Anlegen(0f);
             return;
         }
 

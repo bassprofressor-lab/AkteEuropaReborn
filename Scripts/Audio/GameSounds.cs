@@ -468,7 +468,7 @@ public static class GameSounds
             _tempo = Column(doc, "tempo");
             _flug = Column(doc, "flug");
             _einschlag = Column(doc, "einschlag");
-            _lafette = Column(doc, "lafette");
+            _hoehe = Column(doc, "hoehe");
             _zwilling = Column(doc, "zwilling");
         }
         catch (System.Exception e) { GD.PrintErr("Ton: weapon_sounds.json — " + e.Message); }
@@ -489,7 +489,7 @@ public static class GameSounds
     /// table at 0x4f98f2 (stride 22) — both exported to
     /// <c>Sound/weapon_sounds.json</c>. See
     /// <see cref="Import.ExeTables.FireSoundTable"/> for the disassembly.</summary>
-    private static int[]? _tempo, _flug, _einschlag, _lafette, _zwilling;
+    private static int[]? _tempo, _flug, _einschlag, _hoehe, _zwilling;
 
     private static int Feld(int[]? sp, int art)
         => sp != null && art >= 0 && art < sp.Length ? sp[art] : -1;
@@ -517,7 +517,7 @@ public static class GameSounds
     /// nichts benutzt und steht nur da, damit die Zahl nicht wieder verloren
     /// geht. Belegstelle in <see cref="Import.ExeTables.ProjectileTable"/>.
     /// </summary>
-    public static int MountBias(int art) { LoadWeaponSounds(); return Feld(_lafette, art); }
+    public static int MuzzleHeight(int art) { LoadWeaponSounds(); return Feld(_hoehe, art); }
 
     /// <summary>Seitlicher Versatz der ZWILLINGSLAFETTE. Ist er ungleich 0,
     /// feuert das Original ZWEI Geschosse nebeneinander (0x40C35E und

@@ -25,7 +25,10 @@ further down, with the addresses it was read at.
 | **Trees occlude again.** | ⚠ Reported three times, explained wrong twice. It *was* a code fault: we interleaved trees and units only at **building** rows; the original does it at **every** row. |
 | **No more white box on hover.** | That was ours. The original signals hover with the mouse cursor. |
 | **The selection brackets sit on the unit.** | They hung off the ground point, not the sprite — 6 to 8 px out on average, 21 at worst. |
-| **The flame burns on its own tree.** | It stood beside it: its own position arithmetic instead of the baker's, and the only effect that skipped its anchor. |
+| **The flame burns on its own tree.** | It stood beside it: its own position arithmetic instead of the baker's, and the only effect that skipped its anchor. Also: there are **two** flame sprites in alternation; we knew one. |
+| **Units answer a waypoint too.** | The queued-order branch bailed out before the sound. |
+| **Preview text is the size the original sets.** | The advance was 1 px too wide (+17.2%) and the body ran on the wrong typeface (+8.9%). Now 49 characters per line instead of 38 — the original's number. |
+| **Twin mounts fire two projectiles.** | And every shot scatters, as in the original. Affects three weapons. |
 | **Popups no longer trap the mouse in the menu.** | The cause was not a leftover popup but a **pause** left standing. |
 | **Fog uncovers softly**, not tile by tile. Marching squares over a 257×257 corner grid, plus the original's own dither pattern in its own palette colour. |
 | **Thirteen weapons get a flying projectile** instead of three — each with its own impact. Out of a table we had read one twenty-second of. |

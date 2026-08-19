@@ -121,7 +121,7 @@ public sealed class ExeTables
     ///   +0x06  u16  Bildfolge des EINSCHLAGS    (30000 = keine)
     ///   +0x0A  u16  Schussklang (Grundzahl, das Spiel wuerfelt +0/+1)
     ///   +0x0C  u16  Klang beim Einschlag, Modus 3
-    ///   +0x14  u8   Aufschlag auf die Lafettensuche (10..30)  -- s.u.
+    ///   +0x14  u8   MUENDUNGSHOEHE ueber Grund (10..30)      -- s.u.
     ///   +0x15  u8   seitlicher Versatz der ZWILLINGSLAFETTE (0/6/8/20)
     /// </code>
     ///
@@ -168,18 +168,50 @@ public sealed class ExeTables
     /// ist die Kachelbreite), <b>+7 ist die Geschossart</b>. Feld +0x14 landet
     /// also auf <b>keinem</b> davon.</para>
     ///
-    /// <para>Damit bleibt: es ist ein <b>Aufschlag auf den Wert der
-    /// Lafettensuche</b>, je Geschossart 10..30. Ob dieser Wert eine Hoehe, eine
-    /// Zeichenebene oder ein Drittes ist, ist NICHT gelesen — die Lafettensuche
-    /// 0x435BD0 faechert ueber acht Richtungen auf und ist nicht zu Ende
-    /// verfolgt. Deshalb heisst das Feld hier <c>MountBias</c> und nicht
-    /// »Hoehe«.</para>
+    /// <para>⭐ <b>AM 19.08.2026 NACHMITTAGS ZU ENDE VERFOLGT — es IST eine
+    /// Hoehe.</b> Vormittags stand hier noch, der Wert sei »ein Aufschlag auf
+    /// die Lafettensuche« und was der Grundwert bedeute, sei nicht gelesen. Die
+    /// Kette endet zwei Spruenge weiter:</para>
+    ///
+    /// <code>
+    ///   0x40BDDA  call 0x40155F -> 0x435BD0     ; Rueckgabe -> Satz+3
+    ///   0x435C30  call 0x4019DD -> 0x4B5CE0
+    ///   0x4B6121  call 0x401AAF                 ; die Hoehe der Zelle
+    ///   0x4B6129  mov cl,0x0F / imul cl / add al,bl / ret
+    /// </code>
+    ///
+    /// <para>0x4B5CE0 liefert <b>Zellhoehe · 15 + Anteil innerhalb der
+    /// Kachel</b>. Eine Gelaendestufe sind also <b>15 Einheiten</b>, und der
+    /// Anteil wird ueber die Kachel linear interpoliert (19 Faelle nach der
+    /// Gelaendeform, je <c>px·15/40</c> bzw. <c>py·15/20</c>).</para>
+    ///
+    /// <para>Nachgeprueft: das Muster <c>mov cl,0x0F / imul cl</c> gibt es in
+    /// <b>beiden</b> GAME.EXE genau <b>29-mal</b>, und die hier gemeinte Stelle
+    /// ist C 0x4B6129 / F 0x4B5A5B.</para>
+    ///
+    /// <para><b>Die Gegenprobe steht im Einschlag</b>: derselbe Massstab, mit
+    /// dem eine lebende Einheit +15 (= eine Stufe) und ein Gebaeude +60
+    /// (= vier Stufen) hoch ist (0x452996 bzw. 0x452D41). Die Werte 10..30
+    /// dieses Feldes sind damit zwei Drittel bis zwei Stufen.</para>
+    ///
+    /// <para>⚠ Und 0x435BD0 ist auch keine »Lafettensuche«, wie hier vormittags
+    /// stand: sie bekommt <c>(KOLIK, POHYB, &amp;Satz[0], &amp;Satz[1])</c> und
+    /// rechnet den <b>Bildpunkt der Einheit innerhalb ihrer Zelle</b> aus dem
+    /// Fahrfortschritt — erst danach holt sie die Gelaendehoehe an diesem
+    /// Punkt.</para>
     ///
     /// <para>⚠ Nicht verwechseln mit SHOOT.CWT: die Datei gibt es, und sie wird
     /// gelesen (Lader 0x4544F0 nach 0x87D6B0, benutzt vom ZEICHNER 0x42A188).
-    /// Sie traegt je Waffenbild vier Punkte. Die SCHUSSroutine 0x40BDC0 ruehrt
-    /// sie nicht an — beides sind verschiedene Wege, und keiner davon ist eine
-    /// »Rohrlaenge« im Sinne unseres <c>MuzzleReach</c>.</para>
+    /// Die SCHUSSroutine 0x40BDC0 ruehrt sie nicht an — beides sind
+    /// verschiedene Wege.</para>
+    ///
+    /// <para>⭐ <b>Und SHOOT.CWT ist die MUENDUNGSTAFEL</b>, die unsere geratene
+    /// <c>MuzzleReach = 14</c> ersetzen kann: Waffenindex = <c>ZBRAN − 1</c>
+    /// (0x429B8E), Bild = dasselbe wie beim Turm, Muendung = Einheitenanker +
+    /// <c>(x − 25, y − 68)</c> (0x42A188). Gemessen an der Datei: 9600 Saetze,
+    /// davon 413 mit Flag 0 (werden gezeichnet), 756 mit Flag 1 (Punkt liegt
+    /// hinter dem Turm), 8431 leer. Belegt sind genau die Plaetze 0..17 — und
+    /// das Spiel hat 18 Waffenbauteile. Steht in OFFENE_FRAGEN.md.</para>
     /// </summary>
     /// <summary>Die Marke »keine Folge« in den Feldern +0x02 und +0x06.
     /// ANIM.CWA fuehrt 1000 Folgen (<see cref="AnimFile.SeqCount"/>) — 30000 ist
@@ -197,7 +229,7 @@ public sealed class ExeTables
 
     public readonly record struct Projectile(int Speed, int Flight, int Impact,
                                              int FireSound, int HitSound,
-                                             int MountBias, int Twin);
+                                             int MuzzleHeight, int Twin);
 
     /// <summary>Die ganze Tafel, Zeile fuer Zeile. Eine Zeile, die sich nicht
     /// lesen laesst, kommt als lauter Nullen zurueck — nie als geratene

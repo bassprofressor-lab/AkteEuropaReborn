@@ -145,7 +145,7 @@ public sealed class SoundExporter
         Spalte("tempo", p => p.Speed);
         Spalte("flug", p => p.Flight);
         Spalte("einschlag", p => p.Impact);
-        Spalte("lafette", p => p.MountBias);
+        Spalte("hoehe", p => p.MuzzleHeight);
         Spalte("zwilling", p => p.Twin);
         sb.Length--;                       // das letzte Komma
         sb.Append('}');
