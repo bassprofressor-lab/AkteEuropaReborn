@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.UI;
+﻿namespace AkteEuropaReborn.UI;
 
 using System.Collections.Generic;
 using Godot;
@@ -440,6 +440,51 @@ public partial class BriefingScreen : CanvasLayer
         };
         Style(body, font, scale, dark: true);
         scroll.AddChild(body);
+
+        // ⭐⭐ 19.08.2026 — DER ZIELKASTEN, und er ist der einzige Ort fuer
+        // FONT2.CWD.
+        //
+        // Bis heute fehlte er ganz: `objectives.json` war exportiert, wurde auf
+        // diesem Schirm aber nirgends gezeichnet. Das Original setzt ihn unten
+        // rechts, und dafuer — und NUR dafuer — tauscht es die zweite Schrift
+        // ein (0x45C15A sichern, 0x45C174 einsetzen, 0x45C31C zurueck; die drei
+        // `mov ecx,0x1478` sind die einzigen im ganzen Programm).
+        //
+        // Gelesen, Zeichenschleife C 0x45C2A3..0x45C31A / F 0x45AF4E:
+        //
+        //   x            = 355     (`mov ax,0x163`)
+        //   y erste Zeile= 390     (`mov di,0x186`)
+        //   Zeilenabstand= 11      (`add di,0xb`)
+        //   Umbruch      = wenn x > 490 UND das Zeichen ein Leerzeichen ist
+        //   abgeschnitten ab x >= Bildbreite − 10
+        //
+        // ⚠ Der Umbruch ist im Original ein ZEICHEN-, kein Wortumbruch: er
+        // schaut erst beim naechsten Leerzeichen, ob die Grenze ueberschritten
+        // ist. Godots WordSmart bricht frueher — das ist unsere Abweichung, und
+        // sie faellt nur bei sehr langen Wortketten auf.
+        //
+        // ⚠ Die Zeilenhoehe 11 gilt NUR hier. Unser .fnt traegt 15 (dieselbe
+        // Zahl, die der Fliesstext braucht), deshalb wird sie ueberschrieben.
+        var ziele = Campaign.MissionObjectives.For(_mission);
+        if (ziele.Count > 0)
+        {
+            var zielFont = LegacyFont(second: true);
+            const int ZX = 355, ZY = 390, ZW = 490 - 355, ZH = 11;
+            var kasten = new Label
+            {
+                Text = string.Join("\n", ziele),
+                Position = at + new Vector2(ZX * scale, ZY * scale),
+                Size = new Vector2(ZW * scale, 80 * scale),
+                AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            };
+            Style(kasten, zielFont, scale, dark: true);
+            // ⚠ Negativ: 11 Zeilenabstand bei 13 px Zeichenhoehe heisst, dass
+            // die Zeilen ENGER stehen als die Zeichen hoch sind — im Original
+            // ueberlappen sie leicht. Godot nimmt einen negativen Abstand an.
+            kasten.AddThemeConstantOverride("line_spacing",
+                                            Mathf.RoundToInt((ZH - 13) * scale));
+            AddChild(kasten);
+        }
 
         // ⚠⚠ 18.08.2026 — KEIN EIGENER »AUFTRAG ANNEHMEN«-KNOPF MEHR. Der
         // Spieler dazu: »kannst unser Auftrag annehmen [Enter] raus, weil man ja

@@ -812,3 +812,43 @@ dieser Folge, oder der Maßstab 2,156 gilt für die Flammen nicht.
 **Was mir hülfe:** ein Standbild, auf dem ein brennender Baum und eine Einheit
 dicht beieinander stehen. An der Einheit habe ich einen zweiten Maßstab und
 kann entscheiden, ob es an unserem Bild oder an meiner Rechnung liegt.
+
+---
+
+## H. Abgearbeitet am 19.08.2026 spätabends
+
+### ⭐ Der Zielkasten im Vorschaufenster — GEBAUT
+
+Er fehlte ganz: `objectives.json` war exportiert und wurde auf dem Schirm nirgends
+gezeichnet. Jetzt an der gelesenen Stelle (`0x45C2A3`…`0x45C31A`): **x 355,
+y 390, Zeilenabstand 11, Umbruch bei x > 490**, und in **FONT2.CWD** — dem
+einzigen Ort, für den das Original die zweite Schrift überhaupt einwechselt.
+
+⚠ Der Umbruch des Originals ist ein **Zeichen-**, kein Wortumbruch (er schaut
+erst beim nächsten Leerzeichen). Godots `WordSmart` bricht früher; das ist
+unsere Abweichung und fällt nur bei langen Wortketten auf.
+
+### ⭐ Sektion 20, die Zeichenlage — GEBAUT, aber ⚠ NOCH WIRKUNGSLOS
+
+Die Aufnahmeregel des verzahnten Durchgangs ist jetzt die des Originals
+(selbst nachgelesen, `0x4B446C`…`0x4B4491`):
+
+```
+imap in [50000, 64000)  -> Lagenbyte pruefen
+imap == 0xFFFF          -> Lagenbyte pruefen
+sonst                   -> ueberspringen
+Lagenbyte: 0 -> zeichnen · 1..99 -> ueberspringen · >=100 -> zeichnen
+```
+
+Vorher standen dort zwei Bereiche und kein Lagenbyte. Damit kommen die **578
+Zellen** herein, die das Original aufragen lässt — Brücken und Rampen.
+
+⚠⚠ **Die Änderung wirkt erst nach einem neuen Einlesen.** Die gebackenen Karten
+liegen fertig im Nutzerordner, und die `.CWM`-Quellen liegen **nicht** in
+`F:\Akte Europa` — sie kommen von den CDs. Ein Neubacken war hier deshalb nicht
+möglich. Damit es beim nächsten Mal auffällt, zählt der Backofen die Zellen und
+sagt sie: *„… davon N nur über die Zeichenlage (Sektion 20, Brücken und
+Rampen)"*. Steht dort **0**, hat die Regel nicht gegriffen.
+
+**Was mir hülfe:** einmal `--reexport-maps=<CD-Pfad>` laufen lassen und mir die
+Zeile zeigen. Erwartet sind rund 578.

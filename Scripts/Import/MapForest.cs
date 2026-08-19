@@ -201,6 +201,18 @@ public static class MapForest
         return i < 0 || i * 2 + 1 >= s.Length ? -1 : BitConverter.ToUInt16(s, i * 2);
     }
 
+    /// <summary>Die ZEICHENLAGE dieser Zelle aus Sektion 20 — 0, wenn die
+    /// Sektion fehlt. Derselbe Index wie die Belegungskarte
+    /// (<c>spalte·256 + zeile</c>), im Original <c>byte[0x542E18 + i]</c>.
+    /// </summary>
+    public static int Lage(CwmFile m, int col, int row)
+    {
+        var s = m.Sec(LagenSektion);
+        if (s == null) return 0;
+        int i = col * 256 + row;
+        return i < 0 || i >= s.Length ? 0 : s[i];
+    }
+
     /// <summary>
     /// <b>KOMMT DIESE ZELLE INS ZEILENFACH?</b> — die Frage, für die bisher
     /// eine geratene Pixelschwelle dastand.
@@ -235,9 +247,57 @@ public static class MapForest
     /// <c>MapBaker.BuildingCells</c> längst ausgenommen, und der lebende
     /// Zeichner setzt sie selbst ins Fach.</para>
     /// </summary>
-    public static bool ImZeilenfach(int imap)
-        => (imap >= WaldVon && imap < WaldBis)
-        || (imap >= ObjektVon && imap < ObjektBis);
+    /// <summary>Die ZEICHENLAGE je Zelle — <c>.CWM</c>-Sektion 20, im Original
+    /// nach <c>0x542E18</c> geladen (F <c>0x541E78</c>), 256×256 Byte.</summary>
+    public const int LagenSektion = 20;
+
+    /// <summary>
+    /// <b>Welche Zelle in den VERZAHNTEN Durchgang gehört</b> — die Regel des
+    /// Originals, jetzt vollständig.
+    ///
+    /// <para>⚠ 19.08.2026. Hier standen ZWEI Bereiche (50000…55999 Wald und
+    /// 61000…63999 Objekt) und sonst nichts. Nachgelesen bei <c>0x4B446C</c> bis
+    /// <c>0x4B4491</c> sind es aber ein Bereich und ein Sonderfall, und darüber
+    /// eine zweite Tafel:</para>
+    ///
+    /// <code>
+    ///   cmp si, 0xC350 (50000)  jb  -> weiter zum 0xFFFF-Test
+    ///   cmp si, 0xFA00 (64000)  jb  -> aufnehmen, Lagenbyte pruefen
+    ///   cmp si, 0xFFFF          jne -> UEBERSPRINGEN
+    ///   al = byte[zelle + 0x542E18]        ; die Zeichenlage
+    ///     al == 0         -> zeichnen
+    ///     al &lt; 0x64 (100) -> ueberspringen
+    ///     sonst           -> zeichnen
+    /// </code>
+    ///
+    /// <para><b>Was uns das gekostet hat, gemessen:</b> über alle Karten
+    /// <b>578 Zellen</b> mit <c>imap == 0xFFFF</c> und einem Lagenbyte von 0
+    /// oder ≥ 100 — die nimmt das Original auf, wir liessen sie durchfallen.
+    /// Auf <c>map_01</c> sind es 10 Zellen (558 statt 568). Ihre Kachelcodes
+    /// (10001…10071, 40×38 bis 40×48 px) und die Bytegruppen 100…108 sprechen
+    /// für <b>Brücken und Rampen</b>.</para>
+    ///
+    /// <para>Der Bereich 56000…60999 fällt nebenbei mit hinein; dort liegt auf
+    /// keiner Karte eine Zelle, aber die FORM ist jetzt die des Originals und
+    /// nicht mehr zwei Bereiche, die zufällig dasselbe leisten.</para>
+    ///
+    /// <para>⚠ <paramref name="lage"/> ist das Byte aus Sektion 20. Fehlt die
+    /// Sektion, kommt 0 herein — dann gilt für den Bereich die alte Antwort und
+    /// der 0xFFFF-Fall bleibt aus. Eine Karte ohne Sektion 20 sieht damit aus
+    /// wie bisher, statt still anders zu werden.</para>
+    /// </summary>
+    public static bool ImZeilenfach(int imap, int lage = 0)
+    {
+        bool imBereich = imap >= WaldVon && imap < ObjektBis;
+        if (!imBereich)
+        {
+            if (imap != 0xFFFF) return false;
+            // 0xFFFF zaehlt nur, wenn das Lagenbyte es sagt — und ohne Sektion
+            // 20 (lage == 0) waere das JEDE freie Zelle. Deshalb hier ≥ 100.
+            return lage >= 100;
+        }
+        return lage == 0 || lage >= 100;
+    }
 
     /// <summary>Ist die Belegung ein Waldeintrag? Dann kann die Zelle
     /// BRENNEN.</summary>

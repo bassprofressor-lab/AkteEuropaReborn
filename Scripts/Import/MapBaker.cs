@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Import;
+﻿namespace AkteEuropaReborn.Import;
 
 using System;
 using System.Collections.Generic;
@@ -55,6 +55,13 @@ public sealed class MapBaker
     public int Height => _map.Height;
     public int PixelW { get; private set; }
     public int PixelH { get; private set; }
+
+    /// <summary>Wieviele Zellen NUR über die Zeichenlage aus Sektion 20 in den
+    /// verzahnten Durchgang kommen (<c>imap == 0xFFFF</c> und Lagenbyte ≥ 100)
+    /// — Brücken und Rampen. Über alle Karten gemessen: 578. Steht in der
+    /// Meldung, damit ein Neubacken sichtbar macht, ob die Regel greift.
+    /// </summary>
+    public int LagenZellen;
     public int OriginY { get; private set; }
 
     public MapBaker(CwmFile map, CwpFile tiles, PalFile pal)
@@ -522,7 +529,20 @@ public sealed class MapBaker
                     if (isBuilding[i]) { MarkSkipped(ObjectSprite(code[i]), c, r, elev[i]); continue; }
                     var sp = ObjectSprite(code[i]);
                     int imap = MapForest.Imap(_map, c, r);
-                    if (sp != null && MapForest.ImZeilenfach(imap))
+                    // ⚠⚠ 19.08.2026 — die ZEICHENLAGE aus Sektion 20 entscheidet
+                    // mit. Siehe MapForest.ImZeilenfach; sie bringt die 578
+                    // Zellen mit `imap == 0xFFFF` herein, die das Original
+                    // aufragen laesst und wir bisher haben durchfallen lassen.
+                    //
+                    // ⚠ DIESE AENDERUNG WIRKT ERST NACH EINEM NEUEN EINLESEN.
+                    // Die gebackenen Karten liegen fertig im Nutzerordner; wer
+                    // sie nicht neu backt, sieht nichts davon. Genau das ist
+                    // schon einmal als »Baeume verdecken nicht« gemeldet worden
+                    // und wurde zweimal falsch erklaert. Damit es beim naechsten
+                    // Mal auffaellt, wird gezaehlt und gesagt.
+                    int lage = MapForest.Lage(_map, c, r);
+                    if (imap == 0xFFFF && lage >= 100) LagenZellen++;
+                    if (sp != null && MapForest.ImZeilenfach(imap, lage))
                     {
                         BlitTo(_objects ??= new byte[PixelW * PixelH * 4], sp, c, r, elev[i]);
 

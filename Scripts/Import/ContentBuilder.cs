@@ -751,6 +751,7 @@ public sealed class ContentBuilder
 
         int ok = 0, failed = 0;
         long mitEbene = 0, objZellen = 0;
+        long lagenZellen = 0;
         void One(string path, string outName)
         {
             if (!File.Exists(path)) return;
@@ -764,6 +765,7 @@ public sealed class ContentBuilder
                                     outName, out var baker, out _);
                 ok++;
                 if (baker.Objects.Count > 0) { mitEbene++; objZellen += baker.Objects.Count; }
+                lagenZellen += baker.LagenZellen;
                 Say($"{outName}: {img.GetWidth()}x{img.GetHeight()}, " +
                     $"{baker.Objects.Count} aufragende Objekte in die zweite Ebene");
             }
@@ -781,7 +783,12 @@ public sealed class ContentBuilder
         Say(ok == 0
             ? "KEINE Karte gefunden — zeigt der Pfad auf die Installation oder die CDs?"
             : $"{ok} Karten neu gebacken, {failed} Fehler; {mitEbene} davon mit zweiter Ebene, "
-              + $"{objZellen} aufragende Objekte insgesamt");
+              + $"{objZellen} aufragende Objekte insgesamt"
+              // ⚠ Die Zahl, die belegt, dass die Zeichenlage aus
+              // Sektion 20 wirklich greift. Ueber alle Karten
+              // gemessen: 578. Steht sie auf 0, ist entweder die
+              // Sektion nicht da oder die Regel greift nicht.
+              + $"; davon {lagenZellen} nur ueber die Zeichenlage (Sektion 20, Bruecken und Rampen)");
         return ok > 0;
     }
 
