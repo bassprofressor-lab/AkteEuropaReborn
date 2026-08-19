@@ -47,10 +47,20 @@ further down, with the addresses it was read at.
 | **Units earn experience and gain rank.** | We had been reading the field for months; nobody ever changed it. A veteran deals more damage and takes less. |
 | **Ships have sixteen facings.** | Eight of them had never been exported. A ship could not point north-north-west. |
 | **The entity record now carries the game's own field names.** | The original ships a recorder that names every field. See `ENTITY_FELDER.md`. |
+| ⭐ **The campaign is complete: 33 maps instead of 15.** | Missions 16–33 live on the **second CD** and were simply absent. We had been maintaining their rules for months — they could never be loaded. |
+| **Transports arrive loaded.** | The maps ship them with cargo. We were placing that cargo as loose figures next to the ship. |
+| **Maps carry their own terranium deposits.** | On four missions the script places none — so there was **not a single build site for a mine**. |
+| **The help window has its pictures back.** | 132 pictures for help and encyclopedia sat unused. The text flows beside them, exactly as in the original. |
+| **A bridge and a ramp know which one they are.** | The map's layer byte is not merely "one is here" — it is the slot number. |
 
-⚠ **What is deliberately NOT in here:** online multiplayer, unit transport, and
-the twin mount (four weapons fire two projectiles side by side in the original,
-one here). Every open question is listed in `OFFENE_FRAGEN.md`.
+⚠ **What is deliberately NOT in here:** online multiplayer, and loading and
+unloading transports by hand — the maps now deliver their cargo correctly, but
+you cannot load one yourself yet. Every open question is listed in
+`OFFENE_FRAGEN.md`.
+
+⚠ **A correction to this box:** it claimed until now that the twin mount was
+not included. It is, and it is listed two rows above. A defect list whose
+reasons go stale sends you down the same road twice.
 
 ### The four areas of this release
 
@@ -948,6 +958,91 @@ deviate on purpose, and every deviation is marked as ours.
   from seven shipped maps; the distribution and placement are ours. Four
   buildings become over seventy on a large map, airports, factories and bases
   among them, all there to be captured.
+
+### The map and what stands on it
+
+- ⭐⭐ **The campaign is complete for the first time — 33 maps instead of 15.**
+
+  Everything ever imported came from **CD 1**. Missions **16 to 33 live on
+  CD 2** and were not in the project at all: 18 maps, 57 tile sets, 16 AI
+  files, 67 MB in total.
+
+  The galling part: the **rules** for all 33 missions had long been in
+  `mission_scripts.json` (read out of `GAME.EXE`, 684 setter rules, 34 defeat
+  conditions), and all 33 briefings were in `briefings.json`. Only the
+  *terrain* was missing. Months of maintaining rules for missions nobody could
+  load.
+
+  | | before | now |
+  |---|---|---|
+  | Campaign maps | 15 | **33** |
+  | Demos | 3 | **13** |
+
+  All 33 run sixty seconds untouched in the rig.
+
+  ⚠ **The installation directory holds no terrain file at all.** The original
+  reads terrain from the CD at run time. Re-importing needs **both** discs.
+
+- ⭐ **The map's layer byte is the structure's slot number.**
+
+  Section 20 gives a draw layer per cell. Above 100 this meant "a bridge or a
+  ramp is here" — without saying which. It says more:
+
+  | layer byte | meaning |
+  |---|---|
+  | 0 | draw (ordinary ground) |
+  | 1…99 | skip in the interleaved pass |
+  | **100 + n** | **bridge/mole no. n** (section 17) |
+  | **200 + n** | **ramp no. n** (section 21) |
+
+  Measured across both discs with **not a single exception**: 110 of 110
+  bridges on 21 maps, 85 of 85 ramps on 12. So a cell knows *which* structure
+  stands on it — and through the two tables, its hit points (500 and 200) and
+  length.
+
+  ⚠ **Neither needs drawing.** The map raster already carries
+  `10000 + tile number` at those cells; the bridge is part of the terrain.
+
+- **Maps carry their own terranium deposits** (section 38, allocator
+  `0x420E30`, "Cannot place more terra"). Nine deposits on six maps.
+
+  This corrects two of our own claims. Section 28 was "the deposit table" here —
+  it is the **state of existing mine buildings**. And the code said "a shipped
+  map carries nothing here". Both wrong, and it mattered: on missions 14, 17,
+  20 and 22 the mission script places no deposits, so the player faced a map
+  without a single build site for a mine. Mission 14 now has one and mission 20
+  has four.
+
+- **Transports arrive loaded** (section 37, `0x4CED60`, "Too many transport
+  ships"). Measured: **30 valid records on 7 maps carrying 65 units.**
+
+  The trap is in the list itself — it holds dead records. A record is valid
+  only when the **unit** points back at it through its own `+0x40`; walking the
+  list picks up 27 units too many on one map alone. Cargo is marked by the task
+  field `UKOL = 57` (all 65, no exception). That the cargo does not stand on the
+  map is something the original says itself: on mission 5 fifteen loaded units
+  share one cell — impossible for units actually placed.
+
+  ⚠ On mission 8 **two** records claim the same three units and both are
+  formally valid. The ship table (`0x52EDA0`, type = hull + 80) settles it: one
+  carrier is a **freighter** (attack 0) with fifteen aboard, the other a
+  **coastguard** (attack 7). First claim wins. The proof rides along: after the
+  cleanup exactly the five freighters carry cargo and both warships carry none,
+  although the rule never looks at the hull.
+
+- **The help window has its pictures back.** `HELPG.PIC` holds 36 and
+  `ENCYCLOG.PIC` 96 raw 60×60 images with no header.
+
+  The path from text to picture is read end to end: `HELPG.DAT` gives the
+  picture number (0 = none), and the picture sits at `3600·(n−1)` — **one
+  based**. Our first pass counted from zero and would have shown the wrong
+  picture for every text, an off-by-one that shows up nowhere. The placement is
+  read too, not invented: the picture goes at (30,30), and right behind the copy
+  loop the original does `sub …, 0x50` — **the wrap width shrinks by 80 pixels**
+  when a picture is present, so the text flows beside it.
+
+  The benchmark is exact: 36 texts carry a picture, all 36 pictures are used,
+  each exactly once, none missing.
 
 ### Sound
 

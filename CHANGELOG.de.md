@@ -48,11 +48,21 @@ weiter unten ausführlich, mit den Adressen, an denen er gelesen wurde.
 | **Einheiten sammeln Erfahrung und steigen im Rang.** | Das Feld dafür lasen wir seit Monaten, verändert hat es nie jemand. Ein Veteran macht mehr Schaden und steckt mehr ein. |
 | **Schiffe haben sechzehn Blickrichtungen.** | Acht davon waren nie exportiert worden. Ein Schiff konnte nicht nach Nordnordwest zeigen. |
 | **Der Einheitensatz hat jetzt die Namen des Spiels.** | Das Original führt einen eigenen Aufzeichner, der jedes Feld benennt. `ENTITY_FELDER.md`. |
+| ⭐ **Die Kampagne ist vollständig: 33 Karten statt 15.** | Die Missionen 16–33 liegen auf der **zweiten CD** und fehlten schlicht. Die Regeln dazu pflegen wir seit Monaten — laden konnte man sie nie. |
+| **Transporter kommen beladen an.** | Die Karten liefern sie mit Inhalt aus. Wir haben die Ladung als Einzelfiguren neben das Schiff gestellt. |
+| **Karten bringen eigene Terranium-Vorkommen mit.** | Auf vier Missionen legt das Skript keine an — dort gab es bei uns **keinen einzigen Bauplatz für eine Mine**. |
+| **Die Hilfe hat wieder ihre Bilder.** | 132 Sachbilder zu Hilfe und Enzyklopädie lagen ungenutzt. Der Text fliesst daneben, genau wie im Original. |
+| **Brücke und Rampe wissen, welche sie sind.** | Das Lagenbyte der Karte ist nicht nur »hier ist eine« — es ist die Platznummer. |
 
 ⚠ **Was ausdrücklich NICHT drin ist:** der Mehrspielerbetrieb über das Netz,
-der Transport von Einheiten und die Zwillingslafette (vier Waffen feuern im
-Original zwei Geschosse nebeneinander, bei uns eines). Alles Ungeklärte steht
-in `OFFENE_FRAGEN.md`.
+und das Be- und Entladen von Transportern von Hand — die Karten liefern ihre
+Ladung inzwischen richtig aus, aber selbst aufladen kann man noch nicht. Alles
+Ungeklärte steht in `OFFENE_FRAGEN.md`.
+
+⚠ **Berichtigung an diesem Kasten:** hier stand bis zuletzt, die
+Zwillingslafette sei nicht dabei — sie ist es, und zwei Zeilen weiter oben
+steht sie auch. Eine Fehlerliste, deren Begründungen veralten, schickt einen
+zweimal denselben Weg.
 
 ### Die vier Bereiche dieser Fassung
 
@@ -1556,6 +1566,87 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   darunter Flughäfen, Fabriken und Basen zum Einnehmen.
 
 ### Die Karte und was auf ihr steht
+
+- ⭐⭐ **Die Kampagne ist zum ersten Mal vollständig — 33 Karten statt 15.**
+
+  Alles, was je eingelesen wurde, stammte von **CD 1**. Die Missionen **16 bis
+  33 liegen auf CD 2** und waren im Projekt gar nicht vorhanden: 18 Karten, 57
+  Geländesätze, 16 KI-Dateien, zusammen 67 MB.
+
+  Das Bittere daran: die **Regeln** aller 33 Missionen standen längst in
+  `mission_scripts.json` (aus `GAME.EXE` gelesen, 684 Setzer-Regeln, 34
+  Niederlagebedingungen), und alle 33 Einsatzbesprechungen lagen in
+  `briefings.json`. Es fehlte einzig das **Gelände**. Monatelang gepflegte
+  Regeln für Missionen, die man nicht laden konnte.
+
+  | | vorher | jetzt |
+  |---|---|---|
+  | Kampagnenkarten | 15 | **33** |
+  | Vorführungen | 3 | **13** |
+
+  *Death Valley, Black Sea, Danube Delta, The Dam, Chanel Tunnel, Polar Circle,
+  ODIN's eye, Scottland* — die gibt es jetzt. Alle 33 laufen im Prüflauf
+  sechzig Sekunden ohne Zutun durch.
+
+  ⚠ **`F:\Akte Europa` enthält keine einzige Geländedatei.** Das Original liest
+  sie zur Laufzeit von der CD. Wer neu einliest, braucht **beide** Datenträger.
+
+- ⭐ **Das Lagenbyte der Karte ist die Platznummer des Bauwerks.**
+
+  Sektion 20 gibt je Zelle eine Zeichenlage. Über 100 hiess das bisher »hier
+  ist eine Brücke oder Rampe« — ohne zu wissen, welche. Es ist mehr:
+
+  | Lagenbyte | bedeutet |
+  |---|---|
+  | 0 | zeichnen (gewöhnlicher Boden) |
+  | 1…99 | im verzahnten Durchgang überspringen |
+  | **100 + n** | **Brücke/Mole Nr. n** (Abschnitt 17) |
+  | **200 + n** | **Rampe Nr. n** (Abschnitt 21) |
+
+  Gemessen über beide Datenträger, **ohne eine einzige Ausnahme**: 110 von 110
+  Brücken auf 21 Karten, 85 von 85 Rampen auf 12. Damit weiss man ohne Suche,
+  *welches* Bauwerk auf einer Zelle steht — und über die beiden Tafeln auch
+  dessen Trefferpunkte (500 bzw. 200) und Länge.
+
+  ⚠ **Zeichnen muss man die beiden nicht.** Das Kartenraster trägt an diesen
+  Zellen längst `10000 + Kachelnummer`; die Brücke steht im Gelände. Die
+  Tafeln braucht man für den Zustand — und dafür, dass die Nummer etwas
+  bedeutet.
+
+- **Karten bringen eigene Terranium-Vorkommen mit** (Abschnitt 38, Zuteiler
+  `0x420E30`, »Cannot place more terra«). Neun Vorkommen auf sechs Karten.
+
+  Das berichtigt zwei eigene Behauptungen. Erstens war Abschnitt 28 bei uns
+  »die Vorkommenstafel« — er ist der **Zustand vorhandener Minengebäude**, jeder
+  Satz zeigt auf ein Gebäude. Zweitens stand im Code, »eine gelieferte Karte
+  trägt hier nichts«. Beides falsch, und es hatte Folgen: auf den Missionen 14,
+  17, 20 und 22 legt das Missionsskript **keine** Vorkommen an, also stand der
+  Spieler dort vor einer Karte ohne einen einzigen Bauplatz für eine Mine.
+  Jetzt hat Mission 14 einen und Mission 20 vier. Skript und Karte werden
+  vereinigt, nicht gegeneinander gestellt.
+
+- **Transporter kommen beladen an** (Abschnitt 37, `0x4CED60`, »Too many
+  transport ships«): 100 Plätze zu 38 Byte, `+0x02` der Transporter,
+  `+0x04` die Anzahl, ab `+0x06` fünfzehn Griffe.
+
+  Gemessen: **30 gültige Sätze auf 7 Karten mit 65 geladenen Einheiten.** Der
+  Fallstrick steckt in der Liste selbst — sie enthält Karteileichen. Gültig ist
+  ein Satz nur, wenn die **Einheit** in ihrem Feld `+0x40` auf ihn zurückzeigt;
+  wer die Liste durchläuft, holt sich allein auf einer Karte 27 Einheiten zu
+  viel. Fracht ist am Auftragsfeld `UKOL = 57` kenntlich (alle 65, keine
+  Ausnahme).
+
+  Dass die Ladung nicht auf der Karte steht, sagt das Original selbst: auf
+  Mission 5 teilen sich fünfzehn geladene Einheiten dieselbe Zelle — für
+  aufgestellte Einheiten unmöglich.
+
+  ⚠ Auf Mission 8 beanspruchen **zwei** Sätze dieselben drei Einheiten, und
+  beide sind formal gültig. Entschieden hat es die Schiffstafel (`0x52EDA0`,
+  Typ = Rumpf + 80): der eine Träger ist ein **Frachter** (Angriff 0) mit
+  fünfzehn Mann, der andere eine **Küstenwache** (Angriff 7) — ein Kriegsschiff,
+  das drei davon auch haben will. Der erste Anspruch gilt. Die Probe läuft mit:
+  nach dem Aufräumen tragen genau die fünf Frachter Ladung und beide
+  Kriegsschiffe nichts, obwohl die Regel den Rumpf gar nicht ansieht.
 
 - ⭐ **Die Bäume brennen — und es ist eine Kachel, keine Zutat.** Gemeldet als
   »in Original Kampagne 1 gibt es z. B. von Haus aus ein paar brennende Bäume,
