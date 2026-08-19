@@ -23884,9 +23884,35 @@ public partial class MapEntityLayer : Node2D
                 // C23). Wer hier etwas ergänzt, prüfe zuerst, ob es in den
                 // verzahnten Durchgang gehört.
                 if (TuerenSpaet) DrawBuildingDoors(e);
-                // Gebaeude behalten den gemessenen Hub gegen den Bodenpunkt —
-                // fuer sie ist die Bildmitte nicht ausgerechnet.
-                if (_sel.Contains(i))
+                // ⚠⚠ 19.08.2026 — EIN GEBAEUDE BEKOMMT KEINE AUSWAHLMARKIERUNG.
+                //
+                // Gemeldet: »aktuell haben Gebaeude auch diese Grafik zum
+                // Auswaehlen wie Einheiten. Schau bitte, wie im Original die
+                // Gebaeude angewaehlt wurden, ob sie einen Kasten drumherum
+                // hatten, oder ob die Gebaeudegrafik allein gereicht hat.«
+                //
+                // **Die Gebaeudegrafik allein.** Nachgelesen, und der Beleg
+                // liegt in der Trennung der Tafeln:
+                //
+                //   * Die Auswahlmarkierung wird an GENAU ZWEI Stellen gemalt,
+                //     0x42AA7E und 0x42CB8E — und beide lesen
+                //     `byte[esi + 0x6E26E3]`, also **+0x1B des EINHEITENsatzes**
+                //     (OZNACEN, »markiert«, der Name stammt aus dem Aufzeichner
+                //     des Originals).
+                //   * Ein Gebaeude steht in einer ANDEREN Tafel: 0xC06910,
+                //     76 Byte je Satz. Ihr Zeichner (Art 10 im Zeilenfach,
+                //     @0x42B1DE) liest daraus die Felder +0x04, +0x05, +0x19,
+                //     +0x34..+0x37, +0x3E und +0x41 — Bauart, Besitzer, Bild,
+                //     Tuere. **Kein Auswahlbyte, kein zusaetzlicher Blit.**
+                //
+                // Angewaehlt wird ein Gebaeude sehr wohl (der Griff 0x4FA0C8
+                // nimmt bei `si >= 0x1F40` auch Nicht-Einheiten auf, @0x43322C)
+                // — die Rueckmeldung ist aber das FENSTER, das aufgeht, nicht
+                // ein Kranz auf der Karte.
+                //
+                // ⚠ Der Rueckfall ohne Bilder bleibt: wo die Bildbank nichts
+                // hergibt, waere sonst gar nicht zu sehen, was angewaehlt ist.
+                if (_sel.Contains(i) && !_drawSprites)
                     DrawSelectionBrackets(e.Pos - new Vector2(0, SelMarkLift),
                                           i == _selected, 15f, 10f);
                 continue;
