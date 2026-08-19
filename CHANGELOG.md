@@ -8,6 +8,28 @@ your own copy of the 1997 game.
 
 ## 0.6.0 — unreleased
 
+### At a glance
+
+The headline changes, without the evidence. Every one of them is written out
+further down, with the addresses it was read at.
+
+| | |
+|---|---|
+| **The campaign can be lost.** | It could not be — 33 "won" conditions and **zero** "lost" ones. There are two end routines, and we knew one. Now 34 defeat conditions. |
+| **Every side mission can be completed.** | Eight were unreachable. Compared against the original across all 33 missions, there is no difference left. |
+| **"Mission over — time for unfinished sub-missions"** | The grace window did not exist here. Ten game minutes, then the mission ends anyway — as a win. |
+| **The control panel has all four of its states.** | The mission summary and the group panel were missing entirely. |
+| **Heart, canister and bullets.** | The three icons beside the status bars. They live in `ANIM.CWA`, the file that holds the explosions. |
+| **The original's mouse cursors.** | 28 kinds out of the appendix of `ROBO.CWR`, the attack crosshair among them. |
+| **Units answer an order.** | We had the selection line but not the order line — which the original plays four times as often. |
+| **Trees occlude again.** | Not a code fault: the maps had never been re-baked. |
+
+⚠ **What is deliberately NOT in here:** the original's soft fog edge. The
+substructure is read, the softness is not proven — so nothing was built. Every
+open question is listed in `OFFENE_FRAGEN.md`.
+
+### The four areas of this release
+
 Everything committed after 0.5.0 goes here. Four areas, in the order they were
 chosen:
 
@@ -246,6 +268,132 @@ deviate on purpose, and every deviation is marked as ours.
 
 ### Skirmish
 
+- ⭐ **Units can be sold.** The order belongs to the original — it carries it as
+  entry 4 of its own order list ("Attack, Move, Guard, Self-destruct, **Sell**,
+  …"), which makes it an order given to the *unit*, not a button in the market
+  window: you do not have to drive anywhere for it.
+  The game computes the price, not the seller — **30 % of the value**, and the
+  value hangs on the hull, so a damaged unit fetches less. The dialogue only
+  asks "Do you accept $X for this unit?", word for word as the original does.
+  The shop charges **250 %** the other way round, so the trading centre's spread
+  is **8 : 1**.
+  ⚠ **Campaign and skirmish deliberately differ here.** The campaign is
+  faithful: the unit stays put, a collector drives in from the map edge, and the
+  money only arrives when it does (measured: 2.83 s on `map_01`). In a skirmish
+  the money is immediate — a competitive mode in which income trails six seconds
+  behind the decision plays worse.
+  ⚠ What the collector does **not** have is a picture: whether the original
+  draws it at all has not been read, and inventing one would be an invention at
+  the most visible place in the game. Its journey, on the other hand, is
+  reproduced in full, down to the braking over the last ten tiles.
+  Measured with `--sell-check` in both modes, with the counter-probe in both
+  directions: `$4000 → $4058` after the wait, `$44850 → $44917` at once.
+
+- ⭐ **The shop restocks itself.** Every two seconds the trading centre checks
+  whether fifteen items are still on the shelf; if not, up to nine new ones
+  arrive. And what turns up is not a random draw but the market's whole arc:
+  the game keeps two lists — the designs whose components the player already
+  has, and the ones he **cannot build yet** — and keeps about two of the latter
+  in stock at all times. In mission 1 he has unlocked **none** of the 52 vehicle
+  designs, so the shop is the only source of vehicles at all. By mission 32 it
+  is the other way round (51 free, 1 locked) and it becomes a convenience.
+  **It never sells foot soldiers** — the original's filter only lets chassis 160
+  and up through, and those are exactly the vehicles. Counter-check against the
+  data: the stock actually present on the thirteen skirmish maps satisfies that
+  filter **225 times out of 225**.
+  ⚠ New and previously unknown: **the goods carry combat experience, and that is
+  what makes the price.** The game rolls for it — usually none, one time in six
+  grade 1, very rarely grade 6 — and since a unit's value rises with the grade
+  from 0.10 to 7.00, the same design costs **seventy times** as much as a
+  veteran. Utility vehicles (radar, repair, minelayer) never get any; only
+  combat units do. That these numbers really are the experience is written into
+  them: all seven sit exactly **one above** a grade boundary.
+  ⚠ One bug of the original, reproduced: the highest veteran grade can **never**
+  appear in the shop — its branch hangs on a condition that cannot occur.
+
+- ⭐ **A vehicle can plant radar masts** — and the original does have
+  construction vehicles after all, contrary to what we had noted. Its own order
+  list carries "Build depot", "Build mine", "Build generator" and "Place radar";
+  what it does not have is rebuilding a ruin.
+  The **Radar Installer** carries the radar mast kit and has **twenty** masts
+  aboard. A planted mast opens the fog for ten tiles around it — for allies
+  too — and stays put when the vehicle drives on.
+  ⚠ A mast is **not a building**: no hit points, no footprint; the original
+  keeps them in a list of their own with 200 places. Once it is full, no more.
+  Measured: a pitch-dark spot (0 of 625 tiles visible), mast planted, vehicle
+  sent away — **333 tiles stay open**, held by the mast alone.
+  The other three build orders need a placement mode and follow later.
+
+- ⭐ **Power is wired up — and it throttles.** Power plants supply 90 and belong
+  to nobody, generators 50 and belong to their player; factories and mines
+  consume. When it is not enough, every plant runs **proportionally slower** —
+  they do not stop, they merely succeed less often. And both sources count: your
+  own generators and the map's ownerless power plants together.
+  The two small bars beside the orange lightning bolt in the control block are
+  filled at last: output on top, demand below. The space was there and empty
+  from the start — those are the original's power bars, in its place and at its
+  measurements.
+  Measured: 224 parts at full supply, 136 at 55 % — 123 were predicted, and the
+  difference is within what the dice allow.
+  ⚠ Along the way the **mine** got the extraction roll it had been missing
+  entirely; without it a power shortage would have done nothing there.
+
+- ⭐ **Ships now put out from the dock.** Reported as "they spawn right inside
+  the sea dock instead of beside it" — and the answer is the other way round:
+  the original really does place the ship **inside** the dock and then takes it
+  out. We did neither: the finished ship appeared out of nowhere beside the
+  dock, and when there was no room there, **nothing appeared at all** — the
+  build then hung invisibly with nothing anywhere to show for it.
+  Now the new ship lies visibly in the dock and casts off as soon as one of the
+  two exits is clear. If neither is, **it stays put and says why** — on
+  `map_DM_4` the exits are precisely the moorings, so anyone already keeping two
+  ships there will not get a third into the water.
+  Measured: built → in the dock, waited three times, then put out — on exactly
+  the tick the original reserves for it.
+  ⚠ An invented fallback berth went with it: our code used to look for a third,
+  arbitrary spot behind the two that are actually read. That was a crutch
+  against our own behaviour and no longer has a reason.
+
+- ⭐ **Purchased goods are delivered.** Until now they appeared beside the market
+  the same instant. In the original they travel: the buyer pays at once, the
+  shop slot counts as sold, and every few seconds a transport sets off for **a
+  building of the buyer's** — carrying everything bound for the same
+  destination, up to twenty items at a time. Only there does the unit appear.
+  That is how the campaign works now; in a skirmish it stays immediate, for the
+  same reason as selling.
+  ⚠ **Where it is delivered is our choice** — we take the buyer's own building
+  nearest the market. The original lets the buyer pick; how it offers that
+  choice has not been read, and inventing a dialogue for it would be an
+  invention in a visible place. A buyer with no building at all has the purchase
+  refused rather than sent into the void.
+  Measured: market at column 80, destination at column 15 — and the purchased
+  unit stands at the destination, not at the shop. And in the campaign nothing
+  appears on the tick of the purchase; that is the probe which shows it really
+  travels.
+
+- **The maps' prices fall into two groups, and that is a finding about the
+  files.** Recomputing the stored shop prices turned up an exact factor of 5/3.
+  Broken down over all thirteen maps there are exactly two groups and no third:
+  `map_DM_1` is priced at **2.5 × value** — the formula that stands in the game
+  code — and the other twelve at 1.5 × value. `map_DM_1` thereby confirms the
+  whole calculation at a stroke: costs, hull, experience, grade table and both
+  multipliers, **18 out of 18**. Nothing is straightened out: what the map says
+  stays, what the shop restocks follows the code.
+
+- **Fixed: the computer players crashed in every skirmish** as soon as one of
+  them first finished building something — the routine that empties their
+  depots iterated a list that it lengthens itself when sending a unit out.
+  After that the whole AI tick aborted, frame after frame. Now a computer
+  player really does send its finished units out (measured: 8 in 25 seconds
+  instead of an abort on the first).
+
+- **The selected unit now has an order bar** — Sell (with the price on the
+  button), Dig in/out, Stop. The reason is a lesson from four of our own
+  mistakes: research, repair, depot and hangar were all four built and sat on
+  the keys O, K and Y — and all four were reported as "missing", because the
+  interface said nothing. A mechanic that lives only on a key does not exist for
+  the player. The original has a button bar for its unit orders too.
+
 - ⭐ **Enemy buildings can be captured — Ctrl+right-click.** Reported as "the
   shipyard and the sea dock cannot be captured, all you can do is attack them"
   and "buildings the AI has captured cannot be captured back, only destroyed".
@@ -318,6 +466,171 @@ deviate on purpose, and every deviation is marked as ours.
   departure from the original; the campaign is untouched.
 
 ### Campaign and interface
+
+- ⭐⭐ **The campaign could not be lost — now it can.** A player could lose every
+  unit and every building and the mission would carry on. Nothing crashed,
+  nothing reported anything; the game was simply unloseable.
+
+  `Data/mission_scripts.json` held **33 "won" conditions and zero "lost" ones**.
+  The vocabulary for losing had existed for months and had never been used —
+  and because our fallback verdict switches itself off as soon as a script
+  decides, there was no path to a loss at all.
+
+  **The reason: there are two end routines, and we knew one.**
+
+  | | address (both GAME.EXE) | sets the mission state |
+  |---|---|---|
+  | win | `0x4CFC10` / `0x4CF7C0` | to **1** |
+  | defeat | `0x4D0280` / `0x4CFE30` | to **5000** |
+
+  The win routine was easy to find: it prints its own log line. The defeat
+  routine prints nothing — it is a two-liner, `mov word ptr [state], 0x1388`
+  followed by `ret`. It is now found by exactly that **shape**, with the state
+  address taken out of the body of the win routine; on both builds that yields
+  exactly one hit.
+
+  **34 rules out of 38 call sites**, all read identically on both GAME.EXE, and
+  not one new vocabulary entry was needed for them. Which says something on its
+  own: the defeat conditions were never hard to read, nobody had looked.
+
+  ⚠ **One rule was wrong and is deliberately NOT in the file.** Mission 28 read
+  as "none of the three scientists has been delivered" — entirely plausible,
+  read the same way on both builds. And still incomplete: a fourth link sits in
+  front of it, and all three variables are **zero at mission start**. The rule
+  would have lost every game on the first tick — which is exactly what the test
+  run reported. The tool now checks structurally: every link of an AND chain is
+  a jump to the same escape label, so there must be as many such jumps as links
+  read. If that does not match, **nothing** is taken — a condition that is too
+  weak is worse than none.
+
+  **The check that now belongs to every rule change:** run all 33 missions for
+  sixty game seconds and count how many decide immediately. It must be zero
+  everywhere.
+
+- ⭐ **All eight side missions that could not be completed.** Reported from a
+  playthrough of the original: mission 27 has three sub-missions and the player
+  finished 0 of 3. His guess — that the bases have to be **captured** rather
+  than destroyed — was right, and both halves of that are in the game itself.
+
+  **The objectives are in the game data in plain text**, and nobody had ever
+  looked: `OBJECTG.TXT` carries the main objectives, `HELPG.TXT` the
+  sub-missions. That makes it possible to check every code site against its own
+  wording. In mission 27 they agree to the minute — the text says "occupy the
+  droid base **within 20 minutes**", the block says "player 0 owns more than one
+  headquarters" for completion and a 20-minute deadline for the reset. More than
+  one headquarters is something you only get by capturing one.
+
+  Four forms had been missing:
+
+  | form | missions | what was wrong |
+  |---|---|---|
+  | sub-mission **in the end block** | 7, 16 | The reader skipped every basic block that calls the end routine — along with everything else inside it. Mission 16 finishes its third sub-mission in the same breath as the win. |
+  | `find_unit_with_part` | 20, 24 | Marked "read, not built": two of its three component bytes were missing from our unit model. |
+  | `time_after` with `<` instead of `>` | 14 | The runtime had `>` hard-coded. "Finish the mission within 45 minutes" is that condition the other way round. |
+  | comparison against a **variable** | 6 | "Is the man we found still the same one?" — asked before checking whether Hadgi Ibn Mustaffa has reached cell (28,6). |
+
+  Comparing the original against our file now reports **no difference at all
+  across the 33 missions**: no sub-mission missing, none too many.
+
+  ⚠ Three apparent additions of ours turned out to be a **measurement fault**:
+  the comparison only looked for the literal form, while the original often
+  writes through a register and serves two variables at once. A measurement
+  that knows only one of two spellings does not measure what it claims.
+
+- ⭐ **"Mission over — time for unfinished sub-missions 00:09".** The window
+  from the reference footage did not exist here, and neither did the mechanic
+  behind it: `mission_end` does **not** end the mission while a sub-mission is
+  still open. It opens this window instead and grants ten game minutes; the
+  counter drops by one each minute, and at zero the mission ends anyway — as a
+  **win**. Finish everything before that and it ends at once.
+
+  "Open" means state 1..9, counted over the thirty words from `v[101]`. The
+  wording of the window is the original's, line by line out of its drawer.
+  ⚠ Ours is what the "Finish" button does — here it cuts the grace short; that
+  is confirmed in play, not read in the program.
+
+- ⭐ **The control panel has all four of the original's states.** It branches on
+  the selection handle four ways, and two of them were missing entirely:
+
+  - **The mission summary** when nothing is selected — mission name, balance,
+    total fuel, total ammunition, kills, losses. What stood there was our own
+    invention ("N units / no selection").
+  - **The group panel** when several units are selected — units, speed,
+    condition/poor, fuel/low, ammunition/scarce in two columns. Our panel showed
+    the first unit of the selection instead.
+
+  Two numbers could not be guessed and were measured: "Speed 8/11" is **slowest
+  to fastest** member, not "8 of 11 are fast"; and the threshold for *poor*,
+  *low* and *scarce* is the same one three times — **below 25 %**.
+
+  ⚠ This turned up a misreading that had been sitting quietly in our notes: the
+  compiler loads the string for the **next** line into the middle of the call
+  setup for the **current** one. Pair the two and every line of a panel reads
+  one row too high — and it looks entirely plausible, because the order is right.
+
+- ⭐ **Heart, canister and bullets — the three icons beside the status bars.**
+  The code had said for weeks, in as many words, "still missing — neither in
+  `PANEL.DTA` nor in `CONTROL.CWD`". Both were true and both were misleading:
+  they are in **`ANIM.CWA`**, the same file as the explosions.
+
+  They are looked up by **sequence**, not by frame number — the drawer computes
+  it too. With the shipped file that works out to 960/961/962, but those numbers
+  appear nowhere in the program.
+
+  The bars beside them now sit on read coordinates as well. Before, their
+  placement was taken off a screenshot, with the honest note "not measured to
+  the pixel". The drawer states the points itself, including the fill length.
+
+- ⭐ **The original's mouse cursors, attack crosshair included.** Reported as
+  "the thing that appears when you move over an enemy unit". It is not a world
+  marker but the **mouse cursor** — a crosshair with four red triangles
+  travelling outwards.
+
+  They live in the **appendix of `ROBO.CWR`**, which our own header comment had
+  guessed to be "aux" and a "per-frame meta block". It is the cursor bank:
+  **28 kinds, 103 frames**. The arithmetic closes to the byte — blob start plus
+  blob size plus bank size is exactly the file length.
+
+  Which cursor appears when is read, not chosen: the plain arrow, one's own
+  object, a separate cursor for **infantry**, and the attack cursor. ⚠ Whoever
+  *sets* the cursor mode is unread, so the remaining 24 kinds are not wired.
+
+- **The capture bar above a building.** While a building is being taken it
+  carries a wide bar, one player's colour on the left and the other's on the
+  right. Here the progress showed only as text in the panel — that is, only for
+  the one selected building and nowhere on the map.
+
+  ⚠ The first attempt took the width off the screenshot and concluded the bar
+  follows the building's footprint. Wrong: it follows the **capture duration**.
+  And the two colours are not "progress against remainder" but **owner against
+  intruder**. A screenshot is good for "such a thing exists"; what a number is
+  derived from can only be read in the code.
+
+- ⭐ **The wind vane at the bottom centre of the control panel.** Reported as
+  "the little compass at the bottom middle is missing". It turns now, and its
+  eight frames come out of `WINDOWS.CWW`.
+
+  ⚠ This corrected the **record format of that file**, and the old misreading is
+  instructive: a record is 440 bytes, and after a 22-byte header 418 remain —
+  and 418 is 22·19. It divided so neatly that it passed for the image size, and
+  the rendered picture looked right at first glance. The blit loop says
+  otherwise: **20 rows** of 22 bytes, two of them header. The flat reading took
+  the next row's header bytes as pixels of the current one — every row shifted
+  by two. Arithmetic that works out is a hint; the proof is the loop that copies
+  the image.
+
+  ⚠ Ours is **how fast** it turns — the original carries a wind direction but
+  states no rate.
+
+- **Trees occlude units again.** Reported twice, and both times it was not the
+  code: after the last change to object heights the maps had **never been
+  re-baked**. 36 maps re-exported, 69,388 raised objects. A fault that looks
+  like a code fault and is a data state — which is why it is written down here.
+
+- **"Continue" at the end of a campaign mission** led to the main menu instead
+  of the next mission's briefing — and showed the help windows of the mission
+  just finished.
+
 
 - ⭐ **The original's encyclopedia is in the game.** The menu row was meant to
   link to our wiki. Looking at what the *original* has behind it turned up
@@ -425,6 +738,22 @@ deviate on purpose, and every deviation is marked as ours.
   among them, all there to be captured.
 
 ### Sound
+
+- ⭐ **Units answer when you send them somewhere.** Reported as "every unit has
+  a sound that plays when you move it — mostly one per class". That is exactly
+  how it is built, and it is the same construction as the selection line; we had
+  the selection line and the hit line, but not the **order line** — which the
+  original's input routine calls **four times** as often.
+
+  Per unit kind the sound bank holds two selection lines, two order lines and
+  three shared ones; the roll takes a shared one in one case out of three. Two
+  chassis say **nothing** on an order — their entry in the jump table points at
+  the `ret`.
+
+  ⚠ **One** unit speaks, not the selection. If a group is selected, the original
+  picks a single member and lets that one talk. A chorus of twelve tanks would
+  not merely be loud, it would be wrong.
+
 
 - **A sound now comes from the left or the right.** Attenuation by distance was
   already there; the panning had been read and deliberately left as a gap. The

@@ -9,6 +9,28 @@ bisher nur dort beschrieben.*
 
 ## 0.6.0 — unveröffentlicht
 
+### Auf einen Blick
+
+Das Wichtigste aus dieser Fassung, ohne die Beweisführung. Jeder Punkt steht
+weiter unten ausführlich, mit den Adressen, an denen er gelesen wurde.
+
+| | |
+|---|---|
+| **Die Kampagne kann verloren gehen.** | Sie konnte es nicht — 33-mal »gewonnen«, **null**-mal »verloren«. Es gibt zwei Endfunktionen, und wir kannten eine. Jetzt 34 Niederlagebedingungen. |
+| **Jede Nebenmission lässt sich abschliessen.** | Acht waren unerreichbar. Der Abgleich mit dem Original meldet über alle 33 Missionen keine Abweichung mehr. |
+| **»Mission beendet — Zeit für unbeendete Untermissionen«** | Das Fenster mit der Nachfrist gab es bei uns nicht. Zehn Spielminuten, dann endet die Mission trotzdem — als Sieg. |
+| **Der Bedienblock hat alle vier Zustände.** | Missionsübersicht und Gruppenfeld fehlten ganz. |
+| **Herz, Kanister und Patronen.** | Die drei Symbole neben den Statusbalken. Sie lagen in `ANIM.CWA`, der Datei mit den Explosionen. |
+| **Die Mauszeiger des Originals.** | 28 Arten aus dem Anhang von `ROBO.CWR`, darunter das Angriffsfadenkreuz. |
+| **Einheiten melden sich auf einen Befehl.** | Den Anwählklang hatten wir, den Befehlsklang nicht — dabei ruft ihn das Original viermal so oft. |
+| **Bäume verdecken wieder.** | Kein Codefehler: die Karten waren nie neu gebacken worden. |
+
+⚠ **Was ausdrücklich NICHT drin ist:** der weiche Nebelrand des Originals. Der
+Unterbau ist gelesen, die Weichheit nicht belegt — also ist nichts gebaut.
+Alles Ungeklärte steht in `OFFENE_FRAGEN.md`.
+
+### Die vier Bereiche dieser Fassung
+
 Hierher geht alles, was nach 0.5.0 entsteht. Vier Bereiche, in der Reihenfolge,
 in der sie gewählt wurden:
 
@@ -34,6 +56,112 @@ Die Kampagne bleibt originaltreu; Gefecht und Mehrspieler dürfen bewusst
 abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Einheiten
+
+- ⭐ **Der Mechaniker repariert wieder, was neben ihm steht** — und er heißt auch
+  wieder so. Gemeldet als »die Reparatureinheit nennt sich noch Bauteil 43 und
+  repariert keine Fahrzeuge«. Beides stimmte, und beides hing an einem
+  Satzfeld, das wir gar nicht gelesen hatten: **+0x0E**, die Bauteilzeile. Der
+  Name kam aus +0x10 (der *dritten* Komponente — Schild, Kamikaze,
+  Spiegelbild), und die stand bei einem Mechaniker auf Null.
+
+  Die Wirkung ist jetzt gelesen: die Weiche @0x40730B prüft `byte[+0x0e]` gegen
+  **70**, und `mechanic_tick` @0x411F40 ruft alle 30 Takte viermal `repair_at`
+  auf — die **vier orthogonalen** Nachbarzellen, nicht die Diagonalen. Was dort
+  steht, bekommt einen Punkt (eine Einheit) oder **fünf** (ein Gebäude), ohne
+  dass der Besitzer gefragt wird. Gleich daneben steht das **Reparateur**-Modul
+  (@0x40731B, `byte[+0x10] == 86`): alle **100** Takte ein Punkt, und nur für
+  sich selbst.
+
+  ⚠ Aufgefallen ist es nicht beim Lesen. Ich hatte geantwortet, es sei
+  *originalgetreu*, dass diese Einheit nichts repariert — belegt mit den 21
+  Fundstellen des Feldes +0x10, von denen nur zwei einen Wert prüfen. Der
+  Befund stimmte; er betraf nur das falsche Feld. Gefunden hat es der Spieler,
+  indem er die **hauseigene Enzyklopädie** aufschlug: »Mechaniker reparieren
+  automatisch alle Einheiten, die sich neben ihnen befinden.« Die Datei liegt
+  seit jeher neben dem Spiel und war als Quelle nie gefragt worden.
+
+  Neu ist `--mechaniker-check`: er stellt seinen Fall selbst her (ein
+  Mechaniker, ein beschädigtes Fahrzeug daneben, eins diagonal, eins sechs
+  Felder weiter) und misst +5/+0/+0 — die Rate, die dasteht.
+
+- ⭐ **Schlachtschiff und Kreuzer springen nicht mehr, sobald sie fahren.**
+  Gemeldet: »ich hatte einen Kreuzer mit einer Langstreckenrakete, die Rakete
+  wird irgendwo außerhalb vom Boot abgeschossen paar Felder entfernt im
+  Wasser«. Der Bericht stimmt auf die Zahl: **1,68 Felder**.
+
+  Die Ursache lag nicht bei der Rakete. Ein Schiff mit 4×4 Grundriss bekommt
+  beim Laden seine Lage als **Mitte des Grundrisses**; der **Fahrschritt**
+  rechnete danach mit der **Zellmitte** und ließ den Versatz von (60,30) weg.
+  Beim ersten Schritt sprang das Schiff also — und mit ihm alles, was an seiner
+  Lage hängt: Bild, Mündungsfeuer, Auswahlrahmen, Lebensbalken. Sichtbar wurde
+  davon die Rakete, weil sie im leeren Wasser startete.
+
+  ⚠ Betroffen sind **nur mehrzellige** Einheiten — für alles 1×1, also für
+  fast jede Einheit, ist die neue Rechnung Zeichen für Zeichen die alte.
+  Gemessen mit `--schiff-waffe-check` (neu): Abweichung nach 600 Schritten
+  **1,68 → 0,00** Felder; ohne die Reparatur meldet er weiter FEHLER.
+
+  ⚠ **Was NICHT geändert wurde:** dass auf Schlachtschiff und Kreuzer kein
+  Geschütz gezeichnet wird. Das ist eine frühere **Entscheidung des Spielers**
+  — das Original liest an dieser Stelle selbst eine uninitialisierte
+  Stack-Zelle (»Wrong chassis of ship«), ist dort also nicht nachbaubar, und
+  gewählt wurde »keine Waffe zeichnen« statt eigener Montagepunkte.
+
+- ⭐⚠ **Befohlene Einheiten geben nicht mehr sofort auf — und eingekeilte
+  fahren wieder los.** Gefunden, weil `--befehl-check` ROT meldete; der
+  Prüfstand vergleicht den Befehlsring gegen den alten Direktweg. Der Ring ist
+  der Weg, den **jeder Klick des Spielers heute geht**, und ihm fehlten drei
+  Dinge, die der alte Weg tut:
+
+  - **kein Weg gefunden** → der alte Weg behält das Ziel und versucht es
+    wieder (`RetryIn`); der Ring tat gar nichts. Wer von den eigenen Leuten
+    eingekeilt stand, stand **bis zum Missionsende**. Das war genau die
+    Reparatur vom 16.08. — beim Umbau auf den Ring ist sie nicht mitgekommen.
+  - **Weg gefunden** → `RetryIn` wurde nicht zurückgesetzt.
+  - **frischer Befehl** → die Geduld (`Block`) blieb auf **0**, also gab der
+    Wagen beim **ersten** versperrten Takt auf, statt zu warten.
+
+  Die dritte Zeile erklärt auch den Prüfstand: die Geduld wird **gewürfelt**,
+  und ein Weg, der würfelt, neben einem, der es nicht tut, lässt die
+  Zufallsströme auseinanderlaufen. ⚠ Nebenbei ist der Wurf jetzt an der
+  richtigen Stelle: im **Behandler**, der auf allen Maschinen läuft, statt beim
+  Absender, der nur auf einer läuft.
+
+  Gemessen: `--befehl-check` grün in allen vier Varianten (1 Einheit, 8
+  Einheiten, Klick auf Nachbarzelle, Befehl bei Takt 200), Giftprobe schlägt
+  weiter an, `--stuck-check` meldet 21 von 21 mit Weg.
+
+- ⭐ **Flugzeuge lassen sich anwählen — und im GEFECHT auch steuern.**
+  Gemeldet: »außerdem kann ich die Einheiten nicht anwählen. Im Gefecht wäre
+  es doch sinnvoll die Einheiten eigenständig zu steuern oder nicht?«
+
+  Das Anwählen gab es schon — aber nur, wo unter dem Flugzeug **gar nichts**
+  lag. Ein Flieger über einem fremden Panzer, einem Gebäude oder einem Baum
+  war unanklickbar. Jetzt gewinnt er überall dort, wo nichts liegt, das der
+  Spieler ohnehin befehligen könnte; dafür sind nur noch die **eigenen**
+  Flugzeuge anwählbar.
+
+  Der Flugbefehl selbst ist eine ⚠ **bewusste Abweichung** und steht als
+  solche im Quelltext. Belegt ist sie durch einen Negativbefund: das Zielfeld
+  eines Flugzeugs (`+0x14/+0x15`) wird an zwanzig Stellen geschrieben, **alle**
+  im Flugtakt selbst, **keine** in einem Befehlsbehandler. Im Original handeln
+  Flugzeuge selbständig. Die Mechanik dagegen ist gelesen und wird nur
+  ausgelöst: Auftrag **1** heißt »flieg nach (x,y)«, und
+  `air_back_to_airport` @0x42646D setzt genau diese drei Bytes.
+
+  ⚠⚠ **Die Kampagne bleibt originaltreu.** Der Befehl wird dort **verworfen**,
+  und zwar im Behandler, nicht in der Eingabe — eine Sperre in der Eingabe
+  wäre auf der zweiten Maschine eines Netzspiels nicht vorhanden. Gemessen:
+  im Gefecht »1 Satz abgesetzt, Ziel erreicht«, in der Kampagne »1 Satz
+  abgesetzt, **0 beim Behandler angekommen**«.
+
+- ⭐ **Flugzeuge verlassen die Karte nicht mehr.** Gemeldet als »fliegen
+  geradlinig Richtung Norden, sogar außerhalb der Map«. Ein Flugzeug ohne Ziel
+  fliegt geradeaus — das ist gelesen —, aber begrenzt war nur seine *Zelle*,
+  nicht seine *Lage*: das Flugzeug war längst neben der Karte, während seine
+  Zelle am Rand klebte. Am Rand fliegt es jetzt heim (`air_back_to_airport`,
+  die Antwort des Originals) und macht kehrt, wenn es keinen Flughafen gibt.
+  ⚠ Dass man sie im Gefecht nicht anwählen kann, bleibt offen.
 
 - ⭐ **Der Boden eines Gebäudes verdeckt nichts mehr.** Mit Bildern gemeldet:
   »Dort ist immer das Stück Schiene nicht sichtbar, und wenn eine Einheit
@@ -271,6 +399,228 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Gefecht
 
+- ⭐ **Einheiten lassen sich verkaufen.** Der Befehl gehört dem Original — es
+  führt ihn als Eintrag 4 seiner eigenen Befehlsliste (»Angreifen, Bewegen,
+  Beschützen, Selbstzerstörung, **Verkaufen**, …«), und damit ist er ein Befehl
+  an die *Einheit*, kein Knopf im Marktfenster: man muss dafür nirgendwohin
+  fahren.
+  Den Preis rechnet das Spiel, nicht der Verkäufer — **30 % des Werts**, und der
+  Wert hängt an der Hülle: eine angeschlagene Einheit bringt weniger. Der Dialog
+  fragt nur noch »Akzeptieren Sie $X für diese Einheit?«, wörtlich wie das
+  Original. Der Laden verlangt umgekehrt **250 %**; die Spanne des
+  Geschäftszentrums ist also **8 : 1**.
+  ⚠ **Kampagne und Gefecht laufen hier bewusst verschieden.** In der Kampagne
+  ist es originalgetreu: die Einheit bleibt stehen, ein Abholer fährt vom
+  Kartenrand heran, und erst bei seiner Ankunft gibt es Geld (gemessen: 2,83 s
+  auf `map_01`). Im Gefecht kommt das Geld sofort — ein Wettkampfmodus, in dem
+  eine Einnahme sechs Sekunden hinter der Entscheidung herläuft, ist schlechter
+  zu spielen.
+  ⚠ Was der Abholer **nicht** hat, ist ein Bild: ob das Original ihn überhaupt
+  zeichnet, ist nicht gelesen, und ihm eines zu erfinden wäre eine Erfindung an
+  der sichtbarsten Stelle des Spiels. Seine Fahrt dagegen ist ganz nachgebaut,
+  bis zum Abbremsen auf den letzten zehn Feldern.
+  Gemessen mit `--sell-check` in beiden Modi, mit Gegenprobe in beide
+  Richtungen: `$4000 → $4058` nach dem Warten, `$44850 → $44917` sofort.
+
+- ⭐ **Der Laden füllt sich nach.** Alle zwei Sekunden sieht das
+  Geschäftszentrum nach, ob noch fünfzehn Stück ausliegen; wenn nicht, kommen
+  bis zu neun neue dazu. Und was dabei entsteht, ist keine Zufallsauswahl,
+  sondern der Spannungsbogen des Marktes: das Spiel führt zwei Listen — die
+  Entwürfe, deren Bauteile der Spieler schon hat, und die, die er noch **nicht
+  bauen kann** —, und hält von den zweiten immer etwa zwei im Regal. In
+  Mission 1 hat er von 52 Fahrzeugentwürfen **keinen einzigen** freigeschaltet;
+  der Laden ist dort also die einzige Quelle für Fahrzeuge überhaupt. Bis
+  Mission 32 dreht es sich um (51 frei, 1 gesperrt) und er wird zur
+  Bequemlichkeit.
+  **Fußsoldaten verkauft er nie** — der Filter des Originals lässt nur Fahrwerke
+  ab 160 durch, und das sind genau die Fahrzeuge. Gegenprobe an den Daten: die
+  Ware, die auf den dreizehn Gefechtskarten wirklich liegt, erfüllt diesen
+  Filter **225 von 225 Mal**.
+  ⚠ Neu und vorher unbekannt: **die Ware hat Kampferfahrung, und die macht den
+  Preis.** Das Spiel würfelt sie aus — meist keine, in einem von sechs Fällen
+  Stufe 1, ganz selten Stufe 6 —, und weil der Wert einer Einheit mit der Stufe
+  von 0,10 auf 7,00 steigt, kostet derselbe Entwurf als Veteran das
+  **Siebzigfache**. Ein Nutzfahrzeug (Radar, Reparatur, Minenleger) bekommt nie
+  Erfahrung; nur Kampfeinheiten. Dass diese Zahlen wirklich die Erfahrung sind,
+  steht in ihnen selbst: alle sieben liegen genau **eins über** einer
+  Stufengrenze.
+  ⚠ Ein Fehler des Originals, nachgebaut: die höchste Veteranenstufe kann im
+  Laden **nie** erscheinen — ihr Zweig hängt an einer Bedingung, die nicht
+  eintreten kann.
+
+- ⭐ **Ein Fahrzeug kann Radarmasten setzen** — und das Original hat sehr wohl
+  Baufahrzeuge, anders als wir bisher notiert hatten. In seiner eigenen
+  Befehlsliste stehen »Depot bauen«, »Mine bauen«, »Generator bauen« und
+  »Radar setzen«; was es nicht gibt, ist das Wiederaufrichten einer Ruine.
+  Der **Radar Installer** trägt den »Radarstab Ausleger« und hat **zwanzig
+  Masten** an Bord. Ein gesetzter Mast öffnet den Nebel im Umkreis von zehn
+  Feldern — auch für Verbündete — und bleibt liegen, wenn das Fahrzeug
+  weiterfährt.
+  ⚠ Ein Mast ist **kein Gebäude**: keine Trefferpunkte, kein Grundriss, er hat
+  im Original eine eigene Liste mit 200 Plätzen. Ist sie voll, geht nichts mehr.
+  Gemessen: eine stockdunkle Stelle (0 von 625 Feldern sichtbar), Mast gesetzt,
+  Fahrzeug weggeschickt — **333 Felder bleiben offen**, gehalten allein vom
+  Mast.
+  Die anderen drei Bauaufträge brauchen einen Platzierungsmodus — siehe die
+  nächste Zeile.
+
+- 🐞 **Das Spiel schloss sich kurz nach dem Hauptmenü — behoben.** Nach rund
+  acht Sekunden beendete es sich ohne Meldung. Die Ursache lag nicht im Spiel,
+  sondern im **nebenläufigen Müllsammler** von .NET: er geriet mit Godots
+  interner Buchhaltung ins Gehege. Unsere eigenen Prüfläufe hatten den
+  Sammler seit jeher abgeschaltet — im ausgelieferten Spiel war er an, und
+  deshalb war jeder Prüflauf grün, während das Spiel abstürzte. Jetzt gilt die
+  Einstellung für **jeden** Bau.
+  Gemessen: vorher 3 von 3 Abstürzen nach acht Sekunden, danach 3 von 3
+  Läufen ohne Zwischenfall.
+  ⚠ Und das ausgelieferte Spiel **schreibt jetzt ein Protokoll**
+  (`%APPDATA%\Godot\app_userdata\AkteEuropaReborn\logs`). Bisher hinterliess
+  ein Absturz dort keine Spur.
+
+- ⭐ **Mission 21 hat ihre Siegbedingung — damit tragen ALLE 33 Missionen der
+  Kampagne ihre eigene.** Sie verlangt neun bestimmte **Bahnverbindungen**:
+  jede muss unversehrt sein und beide Endbahnhöfe müssen Ihnen gehören. Der
+  Regelleser konnte das nicht lesen, weil das Original es als Schleife
+  schreibt; jetzt erkennt er diese Form.
+  Gemessen: keine der neun Verbindungen gehört Ihnen zu Beginn — übernimmt man
+  die neun Endgebäude, ist die Mission binnen einer Sekunde **erfüllt**.
+
+- ⭐ **Mission 28 hat endlich ihre Siegbedingung** — damit trugen **32 von 33**
+  Missionen ihr Skript. Ihre Bedingung ist ein
+  Oder aus drei Und-Gruppen: drei Wissenschaftler, und **einer** von ihnen muss
+  lebend an der Ausstiegsstelle stehen. Der Leser konnte so etwas bisher nicht
+  ausdrücken und liess die Mission darum ganz weg — sie endete nie von selbst.
+  ⚠ Nebenher aufgefallen und behoben: das Werkzeug, das die Aufbauregeln
+  einträgt, hätte in drei anderen Missionen je einen von Hand nachgetragenen
+  Wächter überschrieben. Ein Zähler wäre dort von Spielbeginn an gelaufen
+  statt erst nach seinem Auslöser.
+
+- ⭐ **Der farbige Ring unter jeder Einheit ist weg.** Er war nie Teil des
+  Originals, sondern eine Hilfe aus der Frühzeit dieses Remakes: damals gab es
+  noch keine Einheitenbilder, und ein farbiger Punkt mit Ring war das Einzige,
+  woran man sah, wo eine Einheit steht und wem sie gehört. Heute steht ihr Bild
+  darüber. In den Einstellungen lässt er sich wieder einschalten — dort steht
+  auch dabei, dass es unsere Zutat ist.
+  ⚠ Damit erledigt sich der alte Bericht über »orange Ringe ohne Körper«: das
+  war kein Zeichenfehler. Nachgemessen auf vier Karten über je 3000–4000 Takte
+  mit 13 bis 30 gefallenen Einheiten — **kein einziger** Ring ohne Körper; die
+  sichtbaren gehörten immer zu lebenden Einheiten.
+  Eine Einheit, für die es kein Bild gibt, bekommt weiterhin ihren Punkt —
+  sonst wäre sie unsichtbar statt auffällig.
+
+- ⭐ **»Abbrechen« und »Alle starten« sind jetzt Knöpfe.** Einen laufenden Bau
+  abzubrechen lag nur auf Umschalt+B, die Flugzeuge eines Flughafens
+  loszuschicken nur auf Y — die Bestandszeile sagte dem Spieler sogar »(Y
+  startet)«. Beim Messen kam heraus, dass der Hangar dabei **nie leer wurde**:
+  die Flugzeuge flogen, standen aber weiter in der Liste des Flughafens. Auch
+  das ist behoben.
+
+- ⭐ **Fabriken haben endlich ein Fenster — und zwei Knöpfe darin.**
+  **Lagerausbau** und **Produktionserweiterung** gab es seit langem, sie lagen
+  aber nur auf den Tasten V und C und waren damit praktisch nicht vorhanden.
+  Beim Einbau der Knöpfe kam heraus, dass das Fabrikfenster **überhaupt nie
+  aufging**: eine Fabrik zählte nicht als bauendes Gebäude. Jetzt öffnet es
+  sich, zeigt ihr Lager mit **Platz und Tempo** und sagt, dass eine Fabrik
+  Teile herstellt und keine Entwürfe. Der Preis steht im Knopf, denn er wächst
+  mit jedem Ausbau um die Hälfte.
+  Gemessen über den Knopfweg: Konto −$20, Platz **90 → 100**, Preis
+  **$20 → $30** — und der Preis der *anderen* Ausbaustufe bleibt bei $50, denn
+  es sind zwei getrennte Felder.
+  ⚠ Nebenher beantwortet: eine Produktionserweiterung hebt **nicht** die
+  Nennleistung der Anlage, sondern ihr Tempo. Der Strombedarf bleibt gleich.
+
+- ⭐ **Depot, Mine und Generator lassen sich bauen.** Damit sind alle vier
+  Bauaufträge des Originals da. Ein **Gebäude-Techniker** kann »Depot bauen«
+  und »Mine bauen«, ein **Generatorenbauer** »Generator bauen«. Der Knopf
+  schaltet den Zeiger um, der Klick wählt die Stelle — und dann **fährt das
+  Fahrzeug erst hin**. Gebaut wird bei der Ankunft, nicht beim Klick: wird das
+  Fahrzeug unterwegs abgedrängt, verfällt der Auftrag, genau wie im Original.
+  Rechtsklick oder Esc bricht ab, und die Vorschau zeigt schon beim Zielen, ob
+  die Stelle trägt.
+  ⚠ **Das Fahrzeug ist der Preis.** Auf dem ganzen Weg wird kein einziger
+  Rohstoff abgebucht — statt dessen geht das Fahrzeug im fertigen Gebäude auf.
+  ⚠ Eine Mine hängt nicht an einer Zelle, sondern an einem **Vorkommen**: der
+  Klick wählt das Vorkommen aus, und sie entsteht um ein Feld nach links und
+  **zwei** nach oben versetzt — Depot und Generator nur um je eines. Diese
+  Ungleichheit ist die des Originals und nicht geglättet.
+  Gemessen für alle drei: nach dem Befehl steht noch **nichts**, die Einheit
+  fährt; bei der Ankunft steht das Gebäude auf dem Feld, das aus der
+  Originalfassung gelesen ist, und das Fahrzeug ist weg. Die gebaute Mine
+  bringt **5000 Terranium** mit — vorher waren es −1, also nichts, und das hat
+  erst der Prüflauf ans Licht gebracht.
+
+- ⭐ **Der Strom ist angeschlossen — und er bremst.** Kraftwerke liefern 90 und
+  gehören niemandem, Generatoren 50 und gehören ihrem Spieler; Fabriken und
+  Minen verbrauchen. Reicht es nicht, laufen alle Anlagen **anteilig
+  langsamer** — sie stehen nicht still, sie schaffen es nur seltener. Und
+  beides zusammen zählt: die eigenen Generatoren und die herrenlosen
+  Kraftwerke der Karte.
+  Die zwei kleinen Balken rechts neben dem orangen Blitz im Bedienblock sind
+  jetzt gefüllt: oben die erbrachte Leistung, unten der Bedarf. Der Platz war
+  von Anfang an da und leer — es sind die Strombalken des Originals, an seiner
+  Stelle und in seinen Massen.
+  Gemessen: 224 Teile bei voller Versorgung, 136 bei 55 % — vorhergesagt waren
+  123, und der Unterschied liegt innerhalb dessen, was der Zufall hergibt.
+  ⚠ Nebenbei bekam die **Mine** ihre Förderchance, die ihr bisher ganz fehlte;
+  ohne sie hätte der Strommangel dort gar nichts bewirkt.
+
+- ⭐ **Schiffe laufen aus dem Dock aus.** Gemeldet war »sie spawnen direkt im
+  Seedock, anstatt daneben« — und die Antwort ist die umgekehrte: das Original
+  setzt das Schiff **wirklich ins Dock** und holt es danach heraus. Wir taten
+  weder das eine noch das andere: das fertige Schiff sprang aus dem Nichts
+  neben das Dock, und war dort kein Platz, entstand **gar nichts** — der Bau
+  hing dann unsichtbar fest, ohne dass irgendwo etwas stand.
+  Jetzt liegt das frische Schiff sichtbar im Dock und legt ab, sobald eine der
+  beiden Ausfahrten frei ist. Ist keine frei, **bleibt es liegen und sagt
+  warum** — auf `map_DM_4` sind die Ausfahrten nämlich genau die Liegeplätze,
+  und wer dort schon zwei Schiffe hat, bekommt das dritte nicht ins Wasser.
+  Gemessen: gebaut → im Dock, dreimal gewartet, dann ausgelaufen — und zwar
+  genau auf dem Takt, den das Original dafür vorsieht.
+  ⚠ Dabei ist ein erfundener Ausweichplatz entfallen: unser Code suchte hinter
+  den zwei gelesenen Ausfahrten noch eine dritte, beliebige Stelle. Die war ein
+  Notbehelf gegen unser eigenes Verhalten und hat jetzt keinen Grund mehr.
+
+- ⭐ **Gekaufte Ware wird geliefert.** Bisher stand sie im selben Augenblick
+  neben dem Markt. Im Original fährt sie: der Käufer bezahlt sofort, der Platz
+  im Laden gilt als verkauft, und alle paar Sekunden macht sich ein Transport
+  auf den Weg zu **einem Gebäude des Käufers** — mit allem, was zum selben Ziel
+  geht, bis zu zwanzig Stück auf einmal. Erst dort steht die Einheit.
+  In der Kampagne ist das jetzt so; im Gefecht bleibt es sofort, aus demselben
+  Grund wie beim Verkauf.
+  ⚠ **Wohin geliefert wird, ist unsere Wahl** — wir nehmen das eigene Gebäude,
+  das dem Markt am nächsten liegt. Das Original lässt den Käufer es aussuchen;
+  wie es diese Auswahl anbietet, ist nicht gelesen, und dafür einen Dialog zu
+  erfinden wäre eine Erfindung an sichtbarer Stelle. Wer gar kein Gebäude hat,
+  bekommt den Kauf abgelehnt, statt Ware ins Nichts zu schicken.
+  Gemessen: Markt auf Spalte 80, Ziel auf Spalte 15 — und die gekaufte Einheit
+  steht am Ziel, nicht am Laden. Und in der Kampagne entsteht im Takt des Kaufs
+  **nichts**; das ist die Probe, die zeigt, dass wirklich gefahren wird.
+
+- **Die Preise der Karten stehen in zwei Gruppen, und das ist ein Befund über
+  die Dateien.** Beim Nachrechnen der gespeicherten Ladenpreise fiel ein exakter
+  Faktor 5/3 auf. Über alle dreizehn Karten aufgeschlüsselt gibt es genau zwei
+  Gruppen und keine dritte: `map_DM_1` ist mit **2,5 × Wert** bepreist — das ist
+  die Formel, die im Spielcode steht — und die zwölf anderen mit 1,5 × Wert.
+  `map_DM_1` bestätigt damit die ganze Rechnung auf einen Schlag: Kosten,
+  Hülle, Erfahrung, Stufentafel und beide Multiplikatoren, **18 von 18**.
+  Geradegerückt wird nichts: was in der Karte steht, bleibt; was der Laden
+  nachlegt, folgt dem Code.
+
+- **Behoben: die Computerspieler stürzten in jedem Gefecht ab**, sobald einer
+  das erste Mal etwas fertigbaute — die Routine, die ihre Depots leert, lief
+  über eine Liste, die sie beim Aussenden selbst verlängert. Danach brach der
+  ganze KI-Takt ab, Bild für Bild. Jetzt schickt ein Computerspieler seine
+  fertigen Einheiten wirklich los (gemessen: 8 in 25 Sekunden statt eines
+  Abbruchs beim ersten).
+
+- **Die gewählte Einheit hat jetzt eine Befehlsleiste** — Verkaufen (mit dem
+  Preis im Knopf), Ein-/Ausgraben, Anhalten. Anlass ist eine Lehre aus vier
+  eigenen Fehlern: Forschung, Reparatur, Depot und Hangar waren alle vier
+  gebaut, lagen auf den Tasten O, K und Y — und wurden alle vier als »fehlt«
+  gemeldet, weil die Oberfläche schwieg. Eine Mechanik, die nur auf einer Taste
+  liegt, ist für den Spieler nicht vorhanden. Das Original hat für seine
+  Einheitenbefehle ebenfalls eine Knopfleiste.
+
 - **Die Kartenvorschau sagt jetzt, wieviele Basen es gibt.** Anlass war »die
   Gegner-KI macht mal was, mal nicht — manche bauen gar nicht erst los«. Die
   Ursache ist keine der KI, sondern der Karte: gebaut wird nur in einer BASIS,
@@ -364,6 +714,503 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Eine bewusste Abweichung vom Original, die Kampagne bleibt unberuehrt.
 
 ### Kampagne und Oberfläche
+
+- ⭐⭐ **Die Kampagne konnte nicht verloren gehen — jetzt kann sie es.** Der
+  Spieler durfte jede Einheit und jedes Gebäude einbüssen, und die Mission lief
+  weiter. Nichts stürzte ab, nichts meldete etwas; das Spiel war nur
+  unverlierbar.
+
+  In `Data/mission_scripts.json` standen **33-mal »gewonnen« und null-mal
+  »verloren«**. Die Vokabel für das Verlieren gab es seit Monaten und wurde nie
+  benutzt — und weil unsere Notregel sich abschaltet, sobald ein Skript
+  entscheidet, gab es überhaupt keinen Weg mehr, eine Mission zu verlieren.
+
+  **Der Grund: es gibt zwei Endfunktionen, und wir kannten eine.**
+
+  | | Adresse (beide GAME.EXE) | setzt den Missionszustand |
+  |---|---|---|
+  | Sieg | `0x4CFC10` / `0x4CF7C0` | auf **1** |
+  | Niederlage | `0x4D0280` / `0x4CFE30` | auf **5000** |
+
+  Die Siegfunktion war leicht zu finden, sie druckt ihre eigene Meldung »Ende
+  von Mission«. Die Niederlagefunktion hat keine — sie ist ein Zweizeiler,
+  `mov word ptr [Zustand], 0x1388` gefolgt von `ret`. Gesucht wird sie jetzt
+  nach genau dieser **Form**, mit der Zustandsadresse aus dem Rumpf der
+  Siegfunktion; auf beiden Fassungen gibt das genau einen Treffer.
+
+  **34 Regeln aus 38 Aufrufstellen**, alle auf beiden GAME.EXE gleich gelesen,
+  und dafür brauchte es keine einzige neue Vokabel. Was für sich genommen schon
+  etwas sagt: die Niederlage war nie schwer zu lesen, es hat nur nie jemand
+  danach gesucht.
+
+  ⚠ **Eine Regel war falsch und ist bewusst NICHT eingetragen.** Mission 28 las
+  sich als »keiner der drei Wissenschaftler ist abgeliefert« — vollkommen
+  plausibel, von beiden Fassungen gleich gelesen. Und trotzdem unvollständig:
+  davor steht ein viertes Glied (`unit_alive(...) == 0`), und die drei
+  Variablen stehen bei Missionsbeginn **alle auf 0**. Die Regel hätte jede
+  Partie im ersten Takt verloren — der Prüflauf hat genau das gemeldet.
+  Das Werkzeug zählt jetzt strukturell nach: jedes Glied einer UND-Kette ist
+  ein Sprung auf dieselbe Ausstiegsmarke, also müssen es genau so viele
+  Sprünge sein wie gelesene Glieder. Stimmt das nicht, wird **nichts**
+  genommen — eine zu schwache Bedingung ist schlimmer als gar keine.
+
+  **Gegenprobe, die jetzt zu jeder Regeländerung gehört:** alle 33 Missionen
+  sechzig Spielsekunden laufen lassen und zählen, ob eine sich sofort
+  entscheidet. Muss überall null sein.
+
+- ⭐ **Alle acht Nebenmissionen, die sich nicht abschliessen liessen.** Gemeldet
+  aus einem Durchspiel des Originals: in Mission 27 stehen drei Untermissionen,
+  und der Spieler kam auf 0 von 3. Seine Vermutung — man müsse die Basen
+  **einnehmen** statt zu zerstören — war richtig, und beides steht im Spiel
+  selbst.
+
+  **Die Ziele stehen im Klartext in den Spieldaten**, und darauf hatte nie
+  jemand geschaut: `OBJECTG.TXT` führt die Hauptziele, `HELPG.TXT` über
+  `v[131+k]` die Untermissionen. Damit lässt sich jede Codestelle gegen ihren
+  eigenen Text prüfen. Bei Mission 27 stimmen sie auf die Minute überein — der
+  Text sagt »Besetzung der Droiden-Basis **innerhalb 20 Minuten**«, der Block
+  sagt `objects(Typ 1, Spieler 0) > 1` für das Erfüllen und `time_after(11,
+  **20**)` für das Zurücksetzen. Mehr als ein Hauptgebäude bekommt der Spieler
+  nur durchs Einnehmen.
+
+  Vier Formen hatten gefehlt:
+
+  | Form | Missionen | was fehlte |
+  |---|---|---|
+  | Untermission **im Endblock** | 7, 16 | Der Leser übersprang jeden Basisblock, der die Endfunktion ruft — samt allem, was darin sonst noch geschieht. Mission 16 erledigt ihre dritte Untermission im selben Atemzug wie den Sieg. |
+  | `find_unit_with_part` | 20, 24 | Stand als »gelesen, nicht gebaut« da: zwei der drei Bauteilbytes fehlten in unserem Einheitenmodell. |
+  | `time_after` mit `<` statt `>` | 14 | Die Laufzeit rechnete `>` fest ein. »Ziel der Mission in 45 Minuten zu beenden« ist die Bedingung andersherum. |
+  | Vergleich gegen eine **Variable** | 6 | »Ist der gefundene Mann noch derselbe?« — vor der Ortsprüfung, ob Hadgi Ibn Mustaffa auf Zelle (28,6) angekommen ist. |
+
+  Der Abgleich Original gegen unsere Datei meldet jetzt über **alle 33
+  Missionen keine einzige Abweichung**: keine Untermission fehlt, keine ist zu
+  viel.
+
+  ⚠ Drei vermeintliche Zutaten von uns waren ein **Messfehler**: der Abgleich
+  suchte nur die literale Schreibweise, das Original schreibt aber oft über ein
+  Register und bedient damit zwei Variablen auf einmal. Eine Messung, die nur
+  eine von zwei Schreibweisen kennt, misst nicht, was sie behauptet.
+
+- ⭐ **»Mission beendet — Zeit für unbeendete Untermissionen 00:09«.** Das
+  Fenster aus dem Bildmaterial gab es bei uns nicht, und die Mechanik dahinter
+  auch nicht: `mission_end` beendet die Mission **nicht**, solange eine
+  Untermission offen ist. Es öffnet stattdessen dieses Fenster und gibt zehn
+  Spielminuten Nachfrist; jede Minute geht der Zähler um eins herunter, bei
+  null endet die Mission trotzdem — und zwar als **Sieg**. Sind vorher alle
+  Untermissionen erledigt, endet sie sofort.
+
+  Offen heisst dabei Zustand 1..9, gezählt über die dreissig Wörter ab `v[101]`.
+  Der Wortlaut des Fensters ist der des Originals, Zeile für Zeile aus seinem
+  Zeichner. ⚠ Unser ist, was der Knopf »Beenden« tut — er bricht bei uns die
+  Nachfrist ab; im Spiel ist das bestätigt, im Programm nicht gelesen.
+
+- ⭐ **Der Bedienblock hat alle vier Zustände des Originals.** Er verzweigt über
+  den Anwählgriff viermal, und zwei davon fehlten ganz:
+
+  - **Die Missionsübersicht**, wenn nichts gewählt ist — Missionsname,
+    Kontostand, Sprit gesamt, Munition gesamt, Ausgeschaltet, Verluste. Bei uns
+    stand dort unsere eigene Erfindung (»N Einheiten / keine Auswahl«).
+  - **Das Gruppenfeld**, wenn mehrere Einheiten gewählt sind — Einheiten,
+    Geschwindigkeit, Zustand/Schlecht, Sprit/Niedrig, Munition/Wenig in zwei
+    Spalten. Bei uns zeigte der Block die erste Einheit der Auswahl.
+
+  Zwei Zahlen waren nicht zu raten und sind gemessen: »Geschw. 8/11« ist
+  **langsamstes zu schnellstem** Mitglied, nicht »8 von 11 sind schnell«; und
+  die Schwelle für *Schlecht*, *Niedrig* und *Wenig* ist dreimal dieselbe —
+  **unter 25 %**.
+
+  ⚠ Dabei ist ein Lesefehler aufgefallen, der still in unseren Notizen stand:
+  der Übersetzer lädt die Zeichenkette der **nächsten** Zeile mitten in die
+  Aufrufvorbereitung der **laufenden** hinein. Wer beides paart, liest jede
+  Zeile eines Feldes um eine zu hoch — und das sieht vollkommen plausibel aus,
+  weil die Reihenfolge stimmt.
+
+- ⭐ **Herz, Kanister und Patronen — die drei Symbole neben den Statusbalken.**
+  Im Code stand seit Wochen ausdrücklich »sie fehlen noch — weder in
+  `PANEL.DTA` noch in `CONTROL.CWD`«. Beides stimmte und beides führte in die
+  Irre: sie liegen in **`ANIM.CWA`**, derselben Datei wie die Explosionen.
+
+  Gesucht wird über die **Bildfolge**, nicht über die Bildnummer — der Zeichner
+  rechnet sie auch aus. Bei der ausgelieferten Datei fällt 960/961/962 heraus,
+  aber diese Zahlen stehen nirgends im Programm.
+
+  Die Balken daneben sitzen jetzt ebenfalls auf gelesenen Punkten. Vorher war
+  ihre Lage von einer Bildschirmaufnahme abgelesen, mit dem ehrlichen Vermerk
+  »nicht auf den Punkt gemessen«. Der Zeichner nennt die Punkte selbst, samt
+  Länge `38 · ist/voll`.
+
+- ⭐ **Die Mauszeiger des Originals, samt Angriffsfadenkreuz.** Gemeldet als
+  »das erscheint, wenn man über eine gegnerische Einheit kommt«. Es ist kein
+  Weltmarker, sondern der **Mauszeiger** — ein Fadenkreuz, um das vier rote
+  Dreiecke nach aussen wandern.
+
+  Sie liegen im **Anhang von `ROBO.CWR`**, den unser eigener Kopfkommentar als
+  »aux« und »per-frame meta block« vermutete. Es ist die Zeigerbank: **28 Arten
+  mit 103 Bildern**. Die Rechnung geht auf die Byte auf — Blobanfang plus
+  Blobgrösse plus Bankgrösse ist genau die Dateilänge.
+
+  Welcher Zeiger wann, ist gelesen und nicht gewählt: der gewöhnliche Pfeil,
+  das eigene Objekt, ein eigener Zeiger für die **Infanterie**, und der
+  Angriffszeiger. ⚠ Wer den Zeigermodus *setzt*, ist ungelesen — die übrigen 24
+  Arten sind darum nicht angeschlossen.
+
+- **Der Einnahmebalken über einem Gebäude.** Während ein Gebäude eingenommen
+  wird, trägt es einen breiten Balken, links in der einen und rechts in der
+  anderen Spielerfarbe. Bei uns stand der Fortschritt nur als Text im
+  Bedienfeld — also nur für das eine angewählte Gebäude und nirgends auf der
+  Karte.
+
+  ⚠ Der erste Anlauf nahm die Breite aus dem Bildschirmfoto und schloss daraus,
+  der Balken folge dem Grundriss. Falsch: er folgt der **Einnahmedauer**. Und
+  die zwei Farben sind nicht »Fortschritt gegen Rest«, sondern **Besitzer gegen
+  Eindringling**. Ein Bildschirmfoto ist gut für »es gibt so etwas«; woraus sich
+  eine Zahl ergibt, sagt nur der Code.
+
+- ⭐ **Die Windfahne unten in der Mitte des Bedienblocks.** Gemeldet als »der
+  kleine Kompass unten in der Mitte fehlt«. Sie dreht sich jetzt, und ihre acht
+  Bilder kommen aus `WINDOWS.CWW`.
+
+  ⚠ Dabei ist das **Satzformat dieser Datei berichtigt** worden, und der alte
+  Lesefehler ist lehrreich: ein Satz ist 440 Byte, nach 22 Byte Kopf bleiben
+  418 — und 418 ist 22·19. Das ging so glatt auf, dass es als Bildgrösse
+  durchging, und das gerenderte Bild sah auf den ersten Blick richtig aus. Der
+  Blitrumpf sagt etwas anderes: **20 Zeilen** zu je 22 Byte, davon zwei
+  Kopfbytes. Die flache Lesart nahm die Kopfbytes der nächsten Zeile als Punkte
+  der laufenden — jede Zeile um zwei verschoben. Eine Rechnung, die aufgeht, ist
+  ein Hinweis; der Beleg ist die Schleife, die das Bild kopiert.
+
+  ⚠ Unser ist, **wie schnell** sie dreht — das Original führt eine Windrichtung,
+  nennt aber keinen Takt.
+
+- **Bäume verdecken wieder Einheiten.** Zweimal gemeldet, und beide Male lag es
+  nicht am Code: die Karten waren nach der letzten Änderung an der Objekthöhe
+  **nie neu gebacken** worden. 36 Karten neu ausgespielt, 69.388 erhöhte
+  Objekte. Ein Fehler, der wie ein Codefehler aussieht und ein Datenstand ist —
+  darum steht er hier.
+
+- **»Weiter« am Ende einer Kampagnenmission** führte ins Hauptmenü statt zur
+  Vorschau der nächsten Mission — und zeigte dort weiter die Hilfefenster der
+  gerade beendeten.
+
+
+- ⭐⭐ **Mission 1 ist wieder das Tutorial, das sie im Original ist — alle
+  siebzehn Hilfefenster, an ihrer Bedingung und an ihrer Stelle.** Gemeldet mit
+  sechzehn abgefilmten Bildern des Originals und dem Satz: »wo und wann diese
+  aufploppen, das ist deine Aufgabe zu finden.«
+
+  Sie standen zur Hälfte schon da. Der Kommentar in `HelpExporter.cs` sagte seit
+  dem 11.08. »Mission 1 ruft daraus **siebzehn** Fenster auf«, und in
+  `Data/mission_scripts.json` standen **elf**. Nachgezählt am Block
+  `0x49844D..0x4989E9`: siebzehn Aufrufe von `show_text`/`show_text2`, mit den
+  Nummern **#001..#006, #008..#013, #018, #020, #039, #040 und #110**. ⚠ Der
+  alte Kommentar schrieb »1..13« und war da eine Nummer zu großzügig — **#007
+  ruft Mission 1 nicht auf**; das ist berichtigt.
+
+  **Die sechs fehlenden hingen an vier ungelesenen Abfragen**, und alle vier
+  sind jetzt gelesen — auf **beiden** GAME.EXE dieses Rechners gleich
+  (`mission_setrules.py check`: 33 von 33 Missionen deckungsgleich):
+
+  - **`window_open(n)`** `@0x4D0600` → `@0x4475B0`: läuft das Fensterfeld ab
+    (Basis `0x8B9038`, Schrittweite `0xAD24`, zwölf Plätze) und meldet, ob ein
+    Fenster der Art `0x1E` mit `+0xACA0 == n` offen steht — dieselbe Art 30, die
+    `close_message_windows()` `@0x447560` wegräumt. **Das ist der Taktgeber des
+    Tutorials:** #002 kommt erst, wenn der Spieler #001 weggeklickt hat, #012
+    erst nach #011. Das Tutorial wartet also auf den Spieler, nicht auf eine
+    Uhr — und genau das zeigt auch das Bildmaterial (zwischen #001 und #002
+    liegen dort 15 Sekunden, zwischen #003 und #004 zwei).
+  - **Takte seit Missionsbeginn** (`0x4FA240`): jeden Takt `+1` `@0x4160A5`,
+    genullt an genau **einer** Stelle — `@0x442728`, im Fensteraufbau, den der
+    Spielanfang *»Get run begin«* (`@0x4193A0`, Zeichenkette `0x4F8084`) mit
+    (10, 10) aufruft. Mission 1 hält ihr Willkommensfenster damit zehn Takte
+    zurück, bei 50 Hz also 0,2 s. ⚠ **Nicht die Spieluhr**: die zählt
+    Spielminuten zu je 250 Takten, der Faktor wäre 250 gewesen.
+  - **`terrain_at` unter der eigenen Einheit**: die beiden Argumente kommen
+    nicht als Zahlen, sondern aus dem Einheitensatz 0 (`+0x00` Spalte, `+0x01`
+    Zeile). Daran hängt **#020**, »Ist eine Einheit auf einem @Hügel, hat sie
+    eine größere Aufklärungsreichweite« — die Bedingung ist wörtlich die des
+    Textes (`Geländebyte > 4`).
+  - **Feld der ANGEWÄHLTEN Einheit**: `0x4FA0C8` als Index, Satzweite 78.
+    Mission 1 fragt `+0x14` — im Spiel selbst **`UKOL`** (der Debug-Auszug
+    `@0x416F00` druckt das Feld mit dieser Beschriftung) — auf `== 1` und zeigt
+    **#009** über die @Handsteuerung. Damit sagt der Block selbst, was `UKOL 1`
+    bedeutet; geraten ist daran nichts.
+
+  **Dazu zwei Formen, die der Rückwärtsleser bisher nicht las** — beide eng
+  gefasst, damit aus »zwei Wege herein« keine zu schwache Bedingung wird:
+  ein **Sprungziel mit genau EINEM Weg herein** beendet die Kette nicht mehr
+  (ohne das hätte die Regel für #012 nur noch `window_open(11) == 0` verlangt
+  und wäre im ersten Takt gefeuert); und ein Block, **in den beide Zweige einer
+  Verzweigung münden**, ist unbedingt — daran hing der Zähler `v[3]`
+  `@0x498647`, und ohne ihn konnte **#006** (»Für den @ANGRIFF…«) nie feuern.
+  Gemessen: der erste Fall wirkt sich auf **genau eine Mission** aus (M1, drei
+  Regeln bekommen ein Glied dazu), der zweite auf zwei (M1, M19).
+
+  **Was das Original außerdem hat und wir nicht:** `show_text2` prüft als erstes
+  `byte[0x87AE00 + id]` und kehrt um, wenn dort schon etwas steht (`@0x4432F6`);
+  beim Anzeigen setzt es dieselbe Stelle (`@0x443340`). Alle siebzehn Aufrufe
+  von Mission 1 geben als viertes Argument 0 — **jeder Text kommt höchstens
+  einmal**. Unser `Dismissed` bewirkt dasselbe, setzt den Riegel aber erst beim
+  Wegklicken statt beim Zeigen. ⚠ Der Unterschied ist **nicht gemessen** und
+  darum auch nicht nachgebaut.
+
+  **Prüfstand `--hilfe-check`** (in `MissionScript`, liest sich selbst aus der
+  Befehlszeile): er zählt die Hilfefenster der laufenden Mission und prüft jedes
+  in drei Stufen, die alle scheitern können — Text in `help.json` vorhanden,
+  jedes Glied der Bedingung mit einem Haken, jede Variablenbedingung mit einem
+  Erzeuger, der selbst feuern kann (transitiv, mit Kreiserkennung). Danach der
+  **Trockenlauf**: jede Fensterregel einmal durch denselben `Do`-Weg wie im
+  Spiel, gezählt wird, was am Haken ankommt. Stand:
+  **»M1 17 Hilfefenster, 17 mit Text, 17 können feuern, 0 blockiert;
+  Trockenlauf 17/17«.** Der Lauf davor meldete `16 … 1 blockiert` und nannte den
+  Grund (»ohne Erzeuger: v[3]«) — daher der Zusammenfluss oben.
+
+  Nebenbei gefallen sind zwei Fenster in anderen Missionen, die an derselben
+  Abfrage hingen: **M3 #026** und in **M20** eine Verstärkung.
+
+  ⚠ **Was gemessen, aber NICHT eingetragen ist:** die Regelleser sind seit dem
+  letzten Eintragen weitergekommen, und in `mission_scripts.json` fehlen dadurch
+  **39 lesbare Regeln in Mission 21** sowie je eine in M2 und M19. Sie stehen
+  hier nicht drin, weil ein ungefiltertes Eintragen **drei von Hand berichtigte
+  Zählerregeln** (M2, M6, M7; sie tragen ein `_waechter`-Feld) in die schwächere
+  Fassung zurückschriebe. `mission_setrules.py apply` hat dafür jetzt `--nur`
+  und warnt von sich aus, statt sie still zu überschreiben.
+
+- ⭐ **Der Kasten »neue technologien« im Briefing ist gefüllt** — Überschrift auf
+  schwarzem Streifen, darunter das Bild, wie im Original. Mission 2 kündigt
+  »LEICHTE BORDKANONE« an, Mission 1 kündigt nichts an und bleibt leer; beides
+  gegen die zwei Bildschirmfotos des Spielers geprüft.
+
+  **Die Zuordnung Mission → Technik ist eine eigene Tafel in GAME.EXE**, und sie
+  ist weder der Missionssatz noch der Freischalt-Fahrplan. Gefunden über den
+  **Zeichner**, nicht über die Datei: der Briefingschirm ist **Fensterart 43**
+  (sein Erbauer `@0x45BC10` schreibt `byte[…] = 0x2B`), in der Zeichnertafel
+  `@0x487888` steht auf Platz 42 die Routine **`0x486480`**, und deren letzter
+  Block `0x486AFA..0x486C92` malt genau die drei Dinge des Kastens: den
+  **schwarzen Streifen** `0x4021DA(0x32, 0x154, 0x96, 0x0F, 0, …)` = **(50,340)
+  150×15**, den **Namen** darauf `0x401041(0x32, 0x154, …)` und das **Bild**
+  darunter auf **(30,370) 60×60**.
+
+  Die Form der Tafel ist aus den zwei Adressen abgezählt, die der Zeichner
+  benutzt — `0x4FEB0C` (Name) und `0x4FEB20` (Seite) liegen 20 Byte
+  auseinander: **je Eintrag 20 Byte Name + 1 Wort, je Mission 10 Einträge zu
+  22 Byte in 224 Byte**. Die 10 sind die `cmp ax,0xA`, mit der der Erbauer
+  `@0x45BD17` seinen Zähler abbricht.
+
+  **Was herauskommt, gezählt: 74 Einträge in 30 der 33 Missionen**; ohne Eintrag
+  sind **1, 4 und 28**. In beiden GAME.EXE **Byte für Byte gleich** (1.421.824 B
+  auf `0x4FEB0C`, 1.420.800 B auf `0x4FDB4C`, 40 Sätze verglichen) — gesucht wird
+  sie deshalb nach der **Form**, nie nach einer Adresse, und der Satz **davor**
+  muss die Form brechen, sonst stünde alles um eine Mission verschoben.
+
+  - ⚠ **Das Bild kommt NICHT aus der Bildbank der Oberfläche.** Der Zeichner
+    öffnet **`ENCYCLOG.PIC`**, springt auf `3600·(Bild−1)` und liest 3.600 Byte.
+    Damit ist die Frage beantwortet, die der Enzyklopädie-Leser offengelassen
+    hatte (»bei 120×120 nur 24 Bilder, die Nummern laufen bis 97«): es sind
+    **96 Bilder zu 60×60**. Das Wort in der Tafel ist die **Enzyklopädieseite**,
+    und die Bildnummer steht hinter dem Komma ihrer Seitenmarke in
+    `ENCYCLOG.TXT` (`#p36,17` → »Bordkanone«, Bild 17). ⚠ Latin-1 wie die Tafel
+    selbst.
+  - **Eine unabhängige Bestätigung von der anderen Seite:** der
+    Freischalt-Fahrplan aus dem Missionsaufbau gibt Mission 2 die Bauteilzeilen
+    **1, 4, 161 und 80**. Die Tafel nennt für Mission 2 »Leichte Bordkanone«
+    (Zeile 1), »Maschinengewehr« (4) und »Reifen« (161) — die drei mit Bild;
+    Zeile 80 ist eine der neun Verbesserungen, die im Original kein Bild haben.
+    Zwei getrennt gelesene Tafeln, dieselbe Aussage.
+  - ⚠ **Die Tafel ist REDAKTIONELL und folgt der Freischaltung nicht überall.**
+    Mission 6 schaltet Bauteilzeile 5 frei, kündigt aber »Leichte Infanterie«
+    an, die als »2xMaschinengewehr« erst in Mission 7 im Kasten steht. Das ist
+    so gelesen und wird nicht geglättet.
+  - **Die zwei leeren Platten links von START blättern.** Das Original hält den
+    Stand in `byte[0x8C3CC9]` und zeichnet die Pfeile auf **(65,452)** und
+    **(107,452)** (`0x486A25`/`0x486A5C`); es zeigt immer nur **einen** Eintrag.
+    Ohne Blättern wären die Missionen 22 und 25 mit ihren je sechs Einträgen zu
+    fünf Sechsteln unerreichbar. `--tech-next=<n>` **drückt den Knopf** statt den
+    Stand zu setzen — dieselbe Lehre wie bei `--briefing-mission`.
+  - **Prüfstand `--tech-check`** (mit `--campaign=<n>`): zählt die Missionen mit
+    Technik, prüft, dass Mission 1 **keine** hat und Mission 2 mit »Leichte
+    Bordkanone« anfängt, dass jedes Bild ladbar ist, und hält den C#-Leser gegen
+    den unabhängigen Python-Leser `aekernel-tools/mission_tech.py`. Gemessen:
+    *33 Missionen geführt, 30 mit Technik, 74 Einträge, 0 ohne Bildnummer,
+    0 Bild nicht ladbar, 33 Missionen gleich, 0 abweichend*. Er kann scheitern —
+    ein von Hand verbogener Name in der JSON wird beanstandet.
+  - ⚠ **Offen: der eine Haken im regulären Einlesen.** Geschrieben wird die
+    Zuordnung heute mit `--tech-export=<Installation>` (derselbe Notbehelf, den
+    die Bildbank mit `--reexport-effects=` nimmt), weil `ContentBuilder.cs`
+    gerade einem zweiten Agenten gehört. Fehlt nur der Aufruf
+    `MissionTechExporter.WriteAll(exe, ENCYCLOG.TXT, ENCYCLOG.PIC, 01.PAL, _dst)`
+    neben dem von `BRIEFG.DAT`.
+
+- ⭐ **Das Emblem von Akte Europa steht auf dem Briefingschirm — beide Male, und
+  beide bewegen sich.** Das Wasserzeichen hinter dem Text **dreht sich einmal
+  um die senkrechte Achse**, wenn der Schirm aufgeht; in den zwei Nischen unten
+  läuft ein **Schimmer** über das kleine Emblem, hin und zurück, und die beiden
+  Nischen laufen **gegeneinander**.
+
+  Damit ist die Stelle geschlossen, die im Eintrag darunter noch als offen
+  steht — mitsamt der falschen Deutung »Wettersymbol«.
+
+  - **Der Schwanz von `BRIEFG.DAT` hat KEINE Kopfdaten.** Genau daran lag es:
+    hier stand seit Wochen »eine Bank mit Kopfdaten«, und deshalb wurde in der
+    Datei gesucht statt im Code. Die Gliederung steht im **Maschinencode** —
+    der Lader schreibt bei `0x45BE6C..0x45C04E` Breite und Höhe von **29**
+    Bildern von Hand in eine Tabelle (`[ebx+0x8C3404]`, je 8 Byte: Breite,
+    Höhe, Zeiger), und die Schleife `@0x45C05F` rechnet die Zeiger nur fort:
+    `Zeiger[i] = Zeiger[i-1] + Breite[i-1]·Höhe[i-1]`.
+    **Die Probe geht auf: die 29 Flächen summieren sich auf exakt 43.302** —
+    den Schwanz, Byte für Byte, ohne Rest. Die Bilder sind verschieden breit
+    und stehen ohne Trennzeichen aneinander; deshalb zerfiel jede geratene
+    Breite, und deshalb war »Breite 106« nur ein Zufallstreffer quer über zwei
+    der vier **53×54**-Wettertafeln. Die Tafeln gibt es also wirklich — es sind
+    die Einträge **13..16**, acht vor dem Emblem, und sie gehören zu etwas
+    anderem.
+  - **Die Nischenbilder sind die Einträge 21..29**, je **57×40**. Die
+    Blitstelle `@0x4864DE` / `@0x48652D` schreibt sie auf **(285,432)** und
+    **(575,432)**; die Bildnummer rechnet das Original als
+    `|zaehler&15 − 8| + 21` links und `|((zaehler+8)&15) − 8| + 21` rechts —
+    der Betrag macht das Hin und Her, der Versatz von 8 die Gegenläufigkeit.
+    Der Blitter `@0x45BB00` kopiert rohe Zeilen **ohne Farbschlüssel**.
+  - **Das Wasserzeichen war überhaupt nicht in `BRIEFG.DAT`** — es ist eine
+    eigene Datei, **`SYMBOL.DAT`**, und sie teilt sich ohne Rest:
+    **748.800 = 9 × 320 × 260**. Der Lader `@0x45C110` liest von dort **260
+    Zeilen zu je 320 Byte** auf **(296,79)**, also Punkt für Punkt auf die
+    Textplatte; der Zeichner `@0x486549` holt bei Zählerstand **10..18** die
+    übrigen acht nach (Sprung auf `(zaehler−10)·325·256`, und 325·256 sind
+    83.200 = 320·260) und lässt es dann auf Bild 8 stehen.
+  - ⚠ **In BEIDEN GAME.EXE gegengeprüft.** Die Datenadressen unterscheiden sich
+    (`0x8C3404` gegen `0x8C2464`), die Tabelle ist zeichengleich: 29 Einträge,
+    Summe 43.302 in beiden. Auch die Nischenrechnung, das Fenster 10..18, die
+    Sprungweite und die Blitgeometrie liegen in beiden genau einmal vor.
+  - ⚠ **Sauberer Negativbefund: der TAKT ist nicht gelesen.** Der Zähler des
+    Originals ist ein Wort auf `[ebx+0x8C3CCC]`; ein roher Suchlauf über
+    `.text` findet ihn an sieben Stellen — einmal die Null im Lader, sechsmal
+    Lesen im Zeichner, **kein einziges Hochzählen**. Er wird über einen
+    gerechneten Zeiger fortgeschaltet. Wir setzen **0,10 s je Zählerschritt**
+    (⚠ UNSERE SETZUNG) — derselbe Wert wie beim Radarzoom nebenan, also
+    1,6 s für den Schimmer hin und zurück und 0,9 s für die Drehung.
+  - ⚠ **Das Bild ist 57×40, die Nische 55×38.** Das Original zeichnet zwei
+    Spalten und zwei Zeilen darüber hinaus; nachgemessen fällt der Überstand
+    auf Palettenindex 47 und den Rahmen und ist unsichtbar. Wir schneiden ihn
+    **nicht** ab. Ebenso laufen die 260 Zeilen des Wasserzeichens 20 Zeilen
+    unter die 240 hohe Platte — auch dort ist der Grund schon Index 47.
+
+  **Prüfstand `--emblem-check`** (im echten Briefingschirm:
+  `-- --campaign=1 --emblem-check`) misst nicht, ob Bilder da sind, sondern die
+  zwei Behauptungen: der **x-Schwerpunkt der hellen Punkte** muss über die neun
+  Nischenbilder **streng monoton wachsen** und mindestens 25 Punkte zurücklegen
+  (gemessen **9,4 → 40,0** bei 57 Punkten Breite), und von den neun
+  Wasserzeichenbildern muss das **fünfte das schmalste** und mindestens fünfmal
+  schmaler als das erste und letzte sein (gemessen **13 Spalten gegen 232 und
+  230** — das ist die Kante der Drehung). Dazu die Bankprobe (Summe 43.302),
+  die Phasenprobe (links und rechts nie gleich, alle neun Bilder kommen vor)
+  und das Fenster (genau neun Zählerstände zeichnen). Neun Kopien desselben
+  Bildes kämen an keiner dieser Stellen durch.
+
+- ⭐ **Das Briefing sieht endlich aus wie das Original: grüne Schrift auf
+  dunklem Grund, und das Bild füllt den Schirm.** Gemeldet: »das Textfeld ist
+  nicht original und das Hintergrundbild fehlt immer noch«.
+
+  Zwei Ursachen, beide gemessen:
+
+  - **Die weisse Platte war nie eine Farbe, sondern eine Markierung.**
+    Palettenindex **144** (in 01.PAL weiss) kommt im ganzen 640×480-Bild an
+    **genau zwei Stellen** vor — der grossen Textplatte und dem unteren
+    Streifen: **80.986 Punkte**, und 320×240 + 2×55×38 sind **80.980**.
+    Nirgends sonst. Das Spiel überschreibt diese Flächen zur Laufzeit. Die
+    zwei Farben sind aus dem Originalbild gemessen und auf die Palette gelegt:
+    Grund (15,16,11) → `0x2f` (19,19,15), Schrift (57,130,38) → `0x08`
+    (43,143,11).
+  - **Das Bild »fehlte« nicht, es war zu klein.** Der Maßstab war
+    **ganzzahlig**, und bei 1600×900 ist das eine **1** — das 640×480-Bild sass
+    als kleiner Kasten mitten auf schwarzem Grund. Jetzt füllt es den Schirm.
+
+- ⭐ **Der eigene »Auftrag annehmen«-Knopf ist weg — gestartet wird mit START.**
+  Gemeldet: »kannst unser Auftrag annehmen [Enter] raus, weil man ja die
+  Mission über den Start-Knopf startet, der unten links ist«. Er war doppelt:
+  das Hintergrundbild zeichnet unten links ein **START**, und das ist der Weg
+  des Originals. Die Fläche ist am Bild ausgemessen (x 154..212, y 454..476).
+  Enter und Leertaste bleiben. Gemessen: **ohne** Druck auf START lädt keine
+  Karte, **mit** Druck lädt sie — und der Prüfstand drückt den Knopf.
+
+  ~~⚠ **Noch offen, und meine Deutung war falsch:** ich hatte die zwei Nischen
+  für **Wettersymbole** gehalten, weil im Dateischwanz Tafeln mit CLOUDED,
+  OVERCAST, SKY, DANGER, HIGH/LOW TEMPERATURE stehen. Der Spieler hat
+  berichtigt: es ist das **Emblem von Akte Europa**, und es ist **animiert** —
+  ein Schimmer läuft hin und zurück. Dasselbe Emblem steht als
+  **Wasserzeichen hinter dem Text**. Beides fehlt noch. Der **43.302 Byte
+  lange Schwanz** von `BRIEFG.DAT` hält also **mehreres**; seine Gliederung
+  ist noch nicht gelesen (bei Breite 106 wird eine Bahn lesbar, bei
+  53/55/202/208/318 zerfällt alles).~~
+
+  ⚠ **ERLEDIGT, und die Begründung war zweimal falsch.** Nicht nur die Deutung
+  »Wettersymbol« — auch der Satz »eine Bank mit **Kopfdaten**« stand hier
+  falsch und hat die Suche wochenlang in die Datei geschickt statt in den Code.
+  Der Schwanz hat keine Kopfdaten; seine Gliederung steht im Lader. Und das
+  Wasserzeichen war gar nicht in dieser Datei. Siehe den Eintrag oben.
+
+- ⭐ **Der Missionsmonitor zeigt erst EUROPA — die Missionskarte kommt auf den
+  Knopf.** Gemeldet mit zwei Bildern nebeneinander: »die Minimap ging erst auf,
+  wenn man auf Mission geklickt hat«.
+
+  Die zehn Bilder aus `MAP.DAT` sind ein **Zoom**, kein Einlaufen des
+  Fadenkreuzes: **Bild 0** ist die Europaansicht (rotes Europa, gelbes Kreuz),
+  **Bild 9** die hineingezoomte Missionskarte. Wir spielten den Zoom beim
+  Aufschlagen von selbst durch — damit lag die Missionskarte sofort auf
+  Europa, und die zwei Knöpfe unter dem Monitor waren Zierrat.
+
+  Jetzt steht der Monitor auf Bild 0, **EUROPA** und **MISSION** fahren den
+  Zoom in beide Richtungen. Die Knöpfe sind am Hintergrundbild ausgemessen
+  (x 66..116 und 125..165 im Band y 260..276). ⚠ Ob das Original Bild für Bild
+  zoomt oder umschaltet, ist **nicht gelesen** — wir fahren alle zehn Bilder
+  durch, statt acht davon wegzuwerfen.
+
+  Gemessen: ohne Klick »Monitor auf Bild 0 von 9 — EUROPA«, nach einem Druck
+  auf MISSION »Bild 4 von 9 (Ziel 9) — unterwegs«. ⚠ Der Prüfstand
+  (`--briefing-mission`) **drückt den Knopf**, statt das Feld dahinter zu
+  setzen.
+
+
+- ⭐ **Die Demo im Hauptmenü ist nicht mehr abgedunkelt.** Gemeldet: »in der
+  Demo haben die Gebäude die helleren Bodenmuster, aber die Umgebung wirkt wie
+  dunkler. Das ist im Gefecht nicht so oder in der Kampagne.«
+
+  Es lag an **unserem** Schleier: `MenuBackdrop` legte **35 % Schwarz über das
+  ganze Bild**, damit die Menüschrift auf hellem Schnee lesbar bleibt. Der
+  Grund war gut, der Preis zu hoch — abgedunkelt wurde die ganze Kulisse für
+  **vier** freistehende Beschriftungen; alles übrige sitzt im deckenden Kasten.
+  Und weil die hellen Gebäudeböden dabei hell blieben, sahen genau sie aus wie
+  ein Schleier, der auf ihnen fehlt.
+
+  Jetzt tragen die vier Zeilen ihre eigene Lesbarkeit: Umriss bei den
+  Fußzeilen, ein **Schatten** bei Titel und Untertitel. ⚠ Der Umriss allein
+  reichte dort nicht — die Titelschrift ist die **Bitmapschrift des
+  Originals**, und die kennt `outline_size` nicht; der Aufruf lief wirkungslos
+  durch. Gesehen am Bildschirmfoto, nicht am Übersetzer.
+
+- ⭐ **4K und andere große Schirme: die Oberfläche lässt sich vergrößern.**
+  Gefragt: »kann man das Spiel auch unter 4K spielen?«. Spielen ging es schon —
+  nur war alles halb so groß: das Projekt hatte **gar keinen** Streckmodus
+  gesetzt, und Godots Vorgabe ist »aus«, die Zeichenfläche folgt also 1:1 der
+  Fenstergröße. Neu in den Einstellungen: **Oberfläche vergrößern**
+  (automatisch, 1×, 2×, 3×), dazu `--ui-skala=N` zum Ausprobieren ohne
+  Speichern.
+
+  ⚠ Das ist **kein Zoom**: bei 2× auf einem 4K-Schirm sieht man genauso viel
+  Karte wie bei 1× auf 1080p, nur doppelt so groß gezeichnet. Automatisch
+  heißt ein Schritt je volle 900 Bildpunkte Höhe — 1080p und 1440p bleiben bei
+  1×, 2160p bekommt 2×. ⚠ Unsere Zutat: das Original lief in einer festen
+  Auflösung und kennt so etwas nicht.
+
+  Gemessen (die ausgelieferte Fassung schreibt es ins Protokoll):
+  `Oberflaeche: Schirm 3440x1440, Einstellung 2x, gesetzt 2x (Modus CanvasItems)`
+  — der **wirklich gesetzte** Wert vom Fenster, nicht der gewünschte.
+
+- **Der Nebel in den Demos des Hauptmenüs — beantwortet, nichts geändert.**
+  Gefragt: »die Demos zeigen nur Fog of War bei Gebäuden?«. Sie zeigen
+  **überhaupt keinen**: `MenuBackdrop` setzt `FogSuppressed`, weil ein Demo
+  seinen Erkundungsstand nicht mitbringt und sonst der halbe Bildschirm schwarz
+  wäre. Die hellen Flächen um die Gebäude sind deren **eigene Bodenplatten**
+  aus den Musterkacheln der Karte (1009 flache Kacheln über 46 Gebäude auf
+  Demo 1) — Spielgrafik, kein Schleier.
 
 - ⭐ **Die Enzyklopädie des Originals ist im Spiel.** Der Menüpunkt sollte auf
   unser Wiki verlinken. Beim Nachsehen, was das *Original* hinter der Zeile hat,
@@ -482,7 +1329,138 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   wird von uns. Aus vier Gebäuden werden auf einer großen Karte über siebzig,
   darunter Flughäfen, Fabriken und Basen zum Einnehmen.
 
+### Die Karte und was auf ihr steht
+
+- ⭐ **Die Bäume brennen — und es ist eine Kachel, keine Zutat.** Gemeldet als
+  »in Original Kampagne 1 gibt es z. B. von Haus aus ein paar brennende Bäume,
+  die haben wir garnicht«. Der Bericht stimmt, das Bild dazu liegt bei
+  (`Bug Bilder/kampagne1 original tutorial7.png`), und die halbe Antwort stand
+  seit dem Morgen schon da: der SETUP-Block der Mission schickt fünf Zellen
+  durch die Trefferroutine **Zasah** (C: @0x40C9A0). Was fehlte, war die
+  Wirkung — die dort gespielte ANIM-Folge 82 ist ein **Funkenschlag** und
+  erklärt kein anhaltendes Feuer.
+
+  Sie steht in einem Zweig, den wir nicht gelesen hatten. Zasah teilt den
+  Getroffenen nach seiner **Belegung** auf, und 50000..55999 ist ein **WALD**
+  (@0x40D61D). Dort rechnet er aus dem Angreifer eine Zahl und verzweigt in vier
+  Fälle, deren Protokollzeilen alles verraten:
+
+  ```
+    >= 70 -> "zrus"    @0x4CAD40   (weg, ohne Feuer)
+    >  45 -> "zapal A" @0x4CAC50   (ANZUENDEN)
+    >  22 -> "zapal B", jeder vierte Wurf
+    >  12 -> "zapal C", jeder achte Wurf
+  ```
+
+  »zapal« ist tschechisch für »zünde an«. Und damit ist auch der Angreifer der
+  SETUP-Liste gedeutet, der bis dahin als »eine Zahl zwischen Einheiten und
+  Gebäuden, die wir nicht deuten können« dastand: **0x9C72 = 40050**. Zasah
+  behandelt 40000..40999 als reine **Schadenszahl** (@0x40CC8B `add ax, 0x63C0`,
+  also 40050 − 40000 = **50**), und 50 wird mit ±4 Würfelrauschen zu 46..54 —
+  **immer »zapal A«**. Diese Bäume brennen im Original bei jedem Start, ohne
+  Zufall. Dieselbe 40050 steht noch an einer zweiten Stelle (@0x43ABE3, »zünde
+  alles Sichtbare an«), ist also kein Einzelstück, sondern das Hausmittel.
+
+  Was `zapal` tut, ist ein **Kacheltausch** (@0x4CACB4..0x4CACE5):
+
+  ```
+    kachel = (kachel − 10381) mod 57 ; auf Vielfache von 19 abrunden
+           + geländeart(zelle)       ; Byte +3 des Zellsatzes
+           + 10666
+  ```
+
+  Nachgesehen: 10666 und Nachbarn sind **verkohlte, blattlose Bäume** in
+  Baumhöhe — dieselbe Silhouette wie die grünen, nur schwarz. Die Flamme
+  obendrauf ist ANIM-Folge **550**, sieben Bilder (@0x42B422), bei uns längst
+  als Effekt `blast` eingespielt; der Kommentar dort hatte sie schon 2026-08-07
+  richtig erraten (»the same fire that burns on trees«), nur ohne Beleg.
+
+  Eingebaut ist die ganze Kette: der Backofen legt zu jeder Waldzelle die
+  **verkohlte** und die **abgebrannte** Fassung in einen Streifen unten an
+  `<karte>.objects.png` (höchstens 2×57 Bilder je Karte, weil beide nur an
+  Baumart und Geländeart hängen), und der Zeichner tauscht sie ein. Die
+  Branddauer ist gerechnet, nicht gewählt: Zustand `rand()%150 + 2`
+  (@0x4CACAB), jeder vierte Spielschritt +1 (@0x4CA340), Schluss bei 255 — bei
+  20 ms je Schritt sind das **8,3 bis 20,2 Sekunden**. Danach bleibt der Stumpf,
+  und bei jeder zwanzigsten Zelle der verkohlte Baum stehen (@0x4CA3B2, Zeilen
+  »dohorel forest — sjizdnej« gegen »— nesjizdnej«, also passierbar gegen
+  nicht).
+
+  Gemessen: **4 von 5** SETUP-Zellen der Mission 1 tragen einen Waldeintrag und
+  fangen Feuer, die fünfte ist leer — genau die Aufteilung, die die Kartendatei
+  vorgibt.
+
+  ⚠ **Was gelesen, aber nicht gebaut ist:** das Feuer **greift weiter**.
+  Derselbe Takt ruft `zapal_forestA` (@0x4CA7E0), das eine von acht
+  Nachbarrichtungen auswürfelt und den Nachbarwald mit einer Wahrscheinlichkeit
+  anzündet, die an **Windrichtung** (`0x4F8D68`) und **Windstärke** (`0x4F8D6C`)
+  hängt. Solange das fehlt, gehen die vier Feuer nach ihrer Zeit aus und
+  entzünden nichts weiter.
+
+- ⭐ **Es gibt gar keine Höhenschwelle — die Karte sagt selbst, was aufragt.**
+  Hier stand `MapBaker.RagtAbPx = 25`: ab wieviel Pixeln Überstand ein
+  Kartenobjekt ins Zeilenfach kommt und damit eine Einheit verdecken kann. Der
+  Kommentar daneben sagte selbst, dass die 25 von den **Gebäude**kacheln
+  *übernommen* und nicht gemessen war — und die Messung, die sie hätte tragen
+  sollen, gibt es auch nicht: über 36 Karten und 13.491 Objektbilder sitzt bei
+  20 px der grösste Haufen, und **darüber läuft die Verteilung ohne eine
+  einzige Lücke bis 70 px durch**. Es gibt dort keine Stelle, an die eine
+  Schwelle gehört.
+
+  Weil das Original keine hat. Sein Zeichner (@0x4B4150) malt die Karte in drei
+  Durchgängen, und zwei davon teilen sich die Zellen nach der
+  **Belegungskarte**:
+
+  - @0x4B41EB — ein flacher Durchgang über alle sichtbaren Zellen; er
+    **überspringt** jede Zelle mit einer Belegung ab 14000 (@0x4B4262). Was er
+    malt, liegt unter allem Folgenden.
+  - @0x4B43BB — der **verzahnte** Durchgang: je Zeile erst die Einträge des
+    Zeilenfachs, dann die Zellen dieser Zeile — und ausdrücklich nur die mit
+    Belegung **50000..63999** (@0x4B446C). Hier verdecken Bäume Einheiten und
+    Einheiten Bäume, je nach Zeile.
+
+  Beide Tafeln stehen in der Kartendatei: Sektion 18 ist die **Waldtafel**
+  (6000 × 3 Byte, Spalte/Zeile/Zustand), Sektion 4 die **Objekttafel**
+  (2000 × 6). Beides über den Spielstandschreiber @0x41D210 zugeordnet, der 131
+  Blöcke in fester Reihenfolge ablegt.
+
+  Gemessen über alle 36 Karten, 125.117 Objektzellen: **67.475 Wald** und
+  **1.913 Objekt** kommen ins Fach, 25.230 sind Gebäude (die zeichnet ohnehin
+  der Gebäudeweg), und **30.455 tragen gar keinen Eintrag** und bleiben im
+  Kartenbild, wo sie hingehören. Von den 8.521 vorkommenden Objektkacheln
+  stehen 3.580 nur je im Fach und 4.910 nur je im Boden — **31** in beidem. Die
+  Karte trennt also sauber, und nicht die Bildhöhe.
+
+  Der Wechsel ist auch am Prüfstand `--selftest-bake` messbar, der unser
+  Kartenbild gegen die Python-Vorlage hält: die Abweichung sinkt auf **jeder**
+  Karte (01: 25,03 → 24,20 %, 10: 5,96 → 5,41 %, NET02: 9,24 → 9,20 %, 05
+  unverändert).
+
+  `--objekt-hoehen=<ordner>` ist jetzt der Prüfstand zu beidem und kann
+  **scheitern**: er rechnet für jede Waldzelle jeder Karte die verkohlte Kachel
+  aus und holt sie aus dem Kachelsatz. **991 Paare, kein einziges ohne Bild**,
+  und **967 davon auf den Pixel auf demselben Fuss** (`yoff + höhe` gleich —
+  der verkohlte Baum ist oben kürzer, steht aber an derselben Stelle). Eine
+  falsch gelesene Rechnung würde hier streuen.
+
 ### Klang
+
+- ⭐ **Einheiten melden sich, wenn man sie losschickt.** Gemeldet als »alle
+  Einheiten haben Sounds, die abgespielt werden, wenn man diese wohin bewegt —
+  meistens aber jede Klasse für sich einen Sound«. Genau so ist es gebaut, und
+  es ist derselbe Bau wie beim Anwählen; wir hatten den Anwählklang und den
+  Trefferklang, aber den **Befehlsklang** gar nicht — dabei ruft ihn die
+  Eingaberoutine des Originals **viermal** so oft.
+
+  Je Einheitenart liegen im Klangvorrat zwei Anwählzeilen, zwei Befehlszeilen
+  und drei gemeinsame; der Würfel nimmt die gemeinsamen in einem von drei
+  Fällen. Zwei Fahrwerke sagen beim Befehl **nichts** — ihr Eintrag in der
+  Sprungtafel zeigt auf das `ret`.
+
+  ⚠ Es spricht **eine** Einheit, nicht die Auswahl. Steht dort eine Gruppe,
+  holt sich das Original ein Mitglied und lässt dieses sprechen. Ein Chor von
+  zwölf Panzern wäre nicht bloss laut, er wäre falsch.
+
 
 - **Ein Klang kommt jetzt von links oder rechts.** Die Dämpfung nach Entfernung
   gab es schon, das Panorama war gelesen und ausdrücklich als Lücke
