@@ -1423,6 +1423,17 @@ public partial class MapEntityLayer : Node2D
         // Laufzeit gefuellt und ist aus der EXE nicht zu lesen. Gelesen ist die
         // EINTEILUNG (welche Zelle welchen Fall bekommt), gebaut ist eine
         // stetige Rampe statt sechzehn fester Bilder.
+        //
+        // ⭐ 19.08.2026 — DER SPIELER HAT ES GESEHEN UND ANGENOMMEN, und zwar
+        // mit offenen Augen fuer den Unterschied: »nicht ganz der originale,
+        // aber sieht top aus, schoen weich. kann man so lassen, besser als
+        // alle bisherigen versionen.«
+        //
+        // Damit ist die Rampe keine offene Schuld mehr, sondern eine BEWUSSTE
+        // Abweichung mit Urteil. Wer sie spaeter doch gegen die sechzehn Bilder
+        // tauschen will, braucht dafuer die Tafel 0xBAC72C — und die ist nur
+        // aus einem laufenden Spiel oder aus dem Kachelsatz zu holen, nicht aus
+        // der EXE. Ohne diesen Grund bitte nichts anfassen.
         int n = FogSub;
         int tw = w * n, th = h * n;
         _fogPixels ??= new byte[tw * th * 4];

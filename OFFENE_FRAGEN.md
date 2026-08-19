@@ -75,7 +75,7 @@ sie nicht in Vergessenheit geraten.
 
 ## In Arbeit / Teilbefund
 
-### Der weiche Nebel (18.08.2026)
+### ~~Der weiche Nebel~~ — ERLEDIGT am 19.08.2026
 
 Gemeldet: »unser fog of war ist schon gut aber deckt wie kacheln auf — im
 original ist das aber wie weich«.
@@ -99,10 +99,19 @@ es dafür noch eine eigene Stelle gibt. `0x542E18` ist als Geländefeld gedeutet
 und nicht bewiesen, und was `0x63` bedeutet, ist offen. **Nichts davon ist
 eingebaut** — unser Nebel bleibt, wie er ist, bis das gelesen ist.
 
-**Was mir hülfe:** ein Bildschirmfoto aus einer Mission mit *unaufgedeckter*
-Karte, am besten zwei kurz nacheinander, während eine Einheit in unbekanntes
-Gebiet fährt. Dann sehe ich, ob der Rand wirklich weich ist oder ob nur die
-Objekte fehlen und das Gelände durchgehend sichtbar bleibt.
+**Gebaut und angenommen.** Die Ursache war Marching Squares über ein
+257×257-Eckengitter plus ein 50-%-Schachbrett in Palettenfarbe 47 (`#13130F`).
+Beides gelesen, beides gebaut; die Deckkraft ist damit **gemessen (0,50)**
+statt geschätzt (0,30).
+
+Urteil des Spielers am fertigen Bau: »nicht ganz der originale, aber sieht top
+aus, schön weich. kann man so lassen, besser als alle bisherigen versionen.«
+
+⚠ **Was daran bewusst abweicht:** das Original hat je Eckenmuster ein festes
+Übergangsbild (Tafel `0xBAC72C`), wir haben eine stetige Rampe zwischen den
+vier Ecken. Die Tafel liegt im BSS, wird zur Laufzeit gefüllt und ist aus der
+EXE nicht zu lesen — sie käme nur aus einem laufenden Spiel oder aus dem
+Kachelsatz. Solange es dafür keinen Anlass gibt, bleibt es, wie es ist.
 
 ### Die Schleifen des Regellesers (18.08.2026, Negativbefund)
 
