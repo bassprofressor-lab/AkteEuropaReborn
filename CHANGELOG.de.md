@@ -23,7 +23,9 @@ weiter unten ausführlich, mit den Adressen, an denen er gelesen wurde.
 | **Herz, Kanister und Patronen.** | Die drei Symbole neben den Statusbalken. Sie lagen in `ANIM.CWA`, der Datei mit den Explosionen. |
 | **Die Mauszeiger des Originals.** | 28 Arten aus dem Anhang von `ROBO.CWR`, darunter das Angriffsfadenkreuz. |
 | **Einheiten melden sich auf einen Befehl.** | Den Anwählklang hatten wir, den Befehlsklang nicht — dabei ruft ihn das Original viermal so oft. |
-| **Bäume verdecken wieder.** | Kein Codefehler: die Karten waren nie neu gebacken worden. |
+| **Bäume verdecken wieder.** | ⚠ Dreimal gemeldet, zweimal falsch erklärt. Es *war* ein Codefehler: wir haben Bäume und Einheiten nur an den Zeilen der **Gebäude** ineinandergemischt, das Original tut es an **jeder** Zeile. |
+| **Kein weißes Kästchen mehr beim Überfahren.** | Das war von uns. Das Original meldet es mit dem Mauszeiger. |
+| **Popups fangen die Maus nicht mehr im Menü.** | Die Ursache war keine Popup-Leiche, sondern eine stehengebliebene **Pause**. |
 | **Der Nebel deckt weich auf.** | Statt Kachel für Kachel. Marching Squares über ein 257×257-Eckengitter, dazu das Schachbrettmuster des Originals in seiner Palettenfarbe. |
 | **Dreizehn Waffen bekommen ein fliegendes Geschoss** statt drei — und jede ihren eigenen Einschlag. Aus einer Tafel, die wir zu einem Zweiundzwanzigstel gelesen hatten. |
 | **Einheiten sammeln Erfahrung und steigen im Rang.** | Das Feld dafür lasen wir seit Monaten, verändert hat es nie jemand. Ein Veteran macht mehr Schaden und steckt mehr ein. |
@@ -836,6 +838,51 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Kampagne und Oberfläche
 
+- ⭐⭐ **Bricht man eine Kampagne mittendrin ab, ist die Maus im Menü wieder
+  brauchbar — und die Popups waren gar nicht die Ursache.**
+
+  Gemeldet, zum zweiten Mal: »nachdem ich eine Kampagne mittendrin beende,
+  tauchen die Popups im Menü auf, und ich muss sie erst schließen, um wieder
+  meine Maus benutzen zu können.«
+
+  Ein Hilfefenster **hält das Spiel an** — das ist kein Einfall von uns, es ist
+  einer der acht Schalter aus den Optionen des Originals (»Spiel anhalten
+  während eines Hilfe-Fensters«). Bricht man die Mission ab, während eines
+  offen steht, wurden die Fenster zwar weggeräumt, **die Pause blieb stehen**.
+  Im Menü friert damit alles ein, was auf `ProcessMode.Inherit` steht, also der
+  ganze Mausbetrieb. Nur das Hilfefenster selbst läuft weiter (`ProcessMode.Always`,
+  sonst könnte man es nie wegklicken) — und sein Wegklicken gibt die Pause frei.
+
+  **Die Popups waren also nicht die Ursache, sondern das Einzige, was noch
+  reagierte.** Deshalb las sich der Fehler wie »Popups fangen die Maus«, und
+  deshalb half Wegklicken.
+
+  ⚠ **Warum drei Prüfläufe grün meldeten, ohne zu lügen:**
+  `HelpWindow.PauseErlaubt` schaltet die Pause **kopflos ganz ab** — mit gutem
+  Grund, denn ein Fenster, das niemand wegklicken kann, hängt jeden Prüflauf
+  auf. Jeder Prüflauf lief damit in einer Welt, in der es diesen Fehler gar
+  nicht geben *kann*. Neu ist `--help-pause`, das die Abschaltung aufhebt, und
+  `--abbruch-check`, der eine echte Kampagnenmission ein Stück weit spielt und
+  dann durch dieselbe Tür geht wie der Knopf »Beenden«. Mit `=alt` zeigt er den
+  Fehler: *Popups im Hauptmenü: JA · mausfangende Knoten: 2 · Baum angehalten:
+  JA*. Mit der Kur: alles auf null.
+
+  ⚠ Nebenbei berichtigt: am 18.08. war ein Riegel gegen Popups aus der
+  Menü-Kulisse gebaut worden, mit der Begründung, die Kulisse spiele einen
+  echten Spielstand samt Missionsregeln. Der Riegel wurde **nie gesetzt** (zwei
+  Zuweisungen im ganzen Baum, beide auf `false`) — und seine Begründung trägt
+  auch nicht: `--kulissen-check=900` zeigt, dass er in 900 Bildern **null**
+  Fenster abfängt, denn die Kulisse spielt `map_DM_*`, also Gefechtskarten
+  **ohne Missionsskript**. Er ist jetzt gesetzt und steht ausdrücklich als
+  Gürtel da, nicht als Heilmittel.
+
+- **Das weiße Kästchen beim Überfahren einer Einheit ist weg.** Es war von uns,
+  stand ungeschützt da und wurde bei jedem Überfahren gezeichnet. Das Original
+  meldet das Überfahren mit dem **Mauszeiger** — 28 Zeigerarten aus dem Anhang
+  von `ROBO.CWR`, darunter eigene für eigene Einheit, gegnerische Einheit
+  (das Fadenkreuz) und Fußsoldat. Ein Rahmen um das Ziel gehört nicht dazu.
+  ⚠ Er bleibt für den Fall ohne Bilder, wo sonst gar nichts zu sehen wäre.
+
 - ⭐⭐ **Die Kampagne konnte nicht verloren gehen — jetzt kann sie es.** Der
   Spieler durfte jede Einheit und jedes Gebäude einbüssen, und die Mission lief
   weiter. Nichts stürzte ab, nichts meldete etwas; das Spiel war nur
@@ -1003,11 +1050,55 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   ⚠ Unser ist, **wie schnell** sie dreht — das Original führt eine Windrichtung,
   nennt aber keinen Takt.
 
-- **Bäume verdecken wieder Einheiten.** Zweimal gemeldet, und beide Male lag es
-  nicht am Code: die Karten waren nach der letzten Änderung an der Objekthöhe
-  **nie neu gebacken** worden. 36 Karten neu ausgespielt, 69.388 erhöhte
-  Objekte. Ein Fehler, der wie ein Codefehler aussieht und ein Datenstand ist —
-  darum steht er hier.
+- ⭐⭐ **Bäume verdecken wieder Einheiten — und diesmal aus dem richtigen Grund.**
+
+  ⚠ **Dreimal gemeldet. Die ersten beiden Erklärungen waren falsch**, zuletzt
+  diese hier, die bis heute an dieser Stelle stand: »beide Male lag es nicht am
+  Code: die Karten waren nie neu gebacken worden«. Das Neubacken war nötig und
+  richtig — die Daten sind seither in Ordnung, nachgemessen: `map_01.json` nennt
+  558 Objekte, und 01.CWM hat 553 Wald + 5 Objekt = **558**, auf den Eintrag
+  genau. Über alle 23 Karten stimmen **37.231 von 37.231** Waldeinträgen mit der
+  Belegungskarte überein. Es war trotzdem *auch* ein Codefehler, und der blieb.
+
+  **Was falsch war:** wir haben Bäume und Einheiten nur an den Zeilen der
+  **Gebäude** ineinandergemischt, und innerhalb einer Schwelle kamen die Bäume
+  **vor** den Einheiten.
+
+  **Warum das rechnerisch nie funktionieren konnte:** eine Einheit auf Zeile *b*
+  wird beim ersten Gebäudeschwellwert *T > b* gezeichnet, ein Baum auf Zeile *a*
+  beim ersten *T ≥ a*. Der Baum liegt also nur über der Einheit, wenn es einen
+  Gebäudeschwellwert mit *b < T < a* gibt. Daraus folgt sofort: **ein Baum, der
+  EINE Zeile vor der Einheit steht, kann sie auf keiner Karte verdecken** —
+  zwischen *b* und *b+1* liegt keine ganze Zahl. Und das ist der Alltagsfall.
+
+  Auf **map_01**, der Mission, die der Spieler spielt: 72 Zeilen, Bäume auf
+  **allen 72**, aber nur **vier** Gebäude — auf den Zeilen 2, 5, 13 und 31.
+  Unterhalb von Zeile 31 gab es überhaupt keine Schwelle mehr; dort lag jede
+  Einheit über jedem Baum.
+
+  **Was das Original tut** (Kartenzeichner `0x4B4150` / F `0x4B3A80`, dritter
+  Durchgang @`0x4B43BB`): er läuft über **Zeilen** und macht je Zeile
+  @`0x4B43F9` **erst das Zeilenfach** (Einheiten, Gebäude, Gleis, Effekte) und
+  @`0x4B4429` **dann die Kacheln**. Es gibt keine Sortierung nach Höhe, keinen
+  Höhenwert je Objekt und keine getrennte Objektlage — nur diese Reihenfolge.
+  Genau so läuft es jetzt auch bei uns.
+
+  ⚠ **Und der Schalter musste mit.** Die ganze Verzahnung hing an
+  `_drawSprites && Patterns != null`. Fehlte der Bau-Atlas (er kann die
+  Höchstgröße einer Textur überschreiten), wurde sie übersprungen — dann gab es
+  garantiert null Verdeckung, auch für Gleis und Einheiten.
+
+  **Gemessen** mit dem neuen `--verdeck-check`, der an den wirklich abgesetzten
+  Zeichenaufrufen zählt: Mission 5 → 37 Einheiten, 76 Kacheln, **1597 Paare, in
+  denen eine Kachel eine Einheit verdeckt, und 0 in falscher Reihenfolge**.
+  Mission 1 → 275 und 0.
+
+  ⚠ **Warum das nie auffiel:** es gab `--behind-check` und `--demo-front`, aber
+  beide stellen eine Einheit **neben ein Gebäude** — also genau dorthin, wo die
+  alte Verzahnung funktionierte. Ein Prüfstand nach demselben Muster hätte grün
+  gemeldet, während der echte Fall scheitert. Der neue prüft ausdrücklich ohne
+  Gebäude in der Nähe und sagt **»nicht gemessen«**, wenn eine Karte keine
+  Bäume oder keine Einheiten hat (Mission 20 und 27 tun das).
 
 - **»Weiter« am Ende einer Kampagnenmission** führte ins Hauptmenü statt zur
   Vorschau der nächsten Mission — und zeigte dort weiter die Hilfefenster der

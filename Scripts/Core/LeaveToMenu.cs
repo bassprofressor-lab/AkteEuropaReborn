@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Core;
+﻿namespace AkteEuropaReborn.Core;
 
 using Godot;
 
@@ -60,9 +60,38 @@ public static class LeaveToMenu
     public static bool Report;
 
     /// <summary>Die eine Zeile, die <c>MainMenu._Ready</c> ruft.</summary>
-    public static void Tidy()
+    public static void Tidy(Node host = null!)
     {
         if (Skip) return;
+        // ⚠⚠ 19.08.2026 — ZUERST DIE PAUSE, und sie war der eigentliche Fehler.
+        //
+        // Gemeldet, zum zweiten Mal: »nachdem ich eine Kampagne mittendrin
+        // beende, tauchen die Popups im Menue auf, und ich muss sie erst
+        // schliessen, um wieder die Maus benutzen zu koennen.«
+        //
+        // Ein Hilfefenster HAELT DAS SPIEL AN (HelpWindow.PauseWhileOpen, aus
+        // den Optionen des Originals gelesen). Bricht man die Mission ab,
+        // waehrend eines offen steht, wurden die Fenster hier zwar weggeraeumt
+        // — die Pause blieb stehen. Im Menue friert damit alles ein, was auf
+        // ProcessMode.Inherit steht, also der ganze Mausbetrieb. Nur das
+        // Hilfefenster laeuft weiter (ProcessMode.Always, sonst koennte man es
+        // nie wegklicken), und sein Wegklicken gibt die Pause frei.
+        //
+        // Die Popups waren also nicht die Ursache — sie waren das EINZIGE, was
+        // noch reagierte. Deshalb las sich der Fehler wie »Popups fangen die
+        // Maus«, und deshalb half Wegklicken.
+        //
+        // ⚠ Warum drei Prueflaeufe gruen meldeten: HelpWindow.PauseErlaubt
+        // schaltet die Pause KOPFLOS ganz ab (mit gutem Grund — ein Fenster,
+        // das niemand wegklicken kann, haengt jeden Prueflauf auf). Jeder
+        // Prueflauf lief damit in einer Welt, in der es diesen Fehler nicht
+        // geben KANN. Seit heute hebt `--help-pause` das auf.
+        var tree = host?.GetTree();
+        if (tree != null && (UI.HelpWindow.HaeltPause || tree.Paused))
+        {
+            GD.Print("LeaveToMenu: Baum war angehalten (Hilfefenster) — Pause freigegeben");
+            tree.Paused = false;
+        }
         // Die Missions-Popups: Fenster schliessen und das Weggeklickte
         // vergessen. Dieselbe Methode, die der Kartenlader beim Missionsstart
         // ruft — sie ist nicht neu, sie wurde auf diesem Weg nur nie erreicht.
@@ -103,7 +132,55 @@ public static class LeaveToMenu
                   $"Bearbeitungsmodus {(active ? "AN" : "aus")}\n");
         sb.Append($"   ein neues Gefecht bekaeme das Editorfeld: " +
                   $"{(wouldOverlay ? "JA — B9 steht" : "nein")}\n");
-        sb.Append($"   Popups im Hauptmenue: {(windows > 0 ? "JA — B10 steht" : "nein")}");
+        sb.Append($"   Popups im Hauptmenue: {(windows > 0 ? "JA — B10 steht" : "nein")}\n");
+
+        // ⚠ 19.08.2026 — DAS VOLLSTAENDIGE VERZEICHNIS, und zwar weil die
+        // schmale Zaehlung gelogen hat, ohne unwahr zu sein.
+        //
+        // Der Spieler meldet zum zweiten Mal: »die Popups tauchen im Menue auf
+        // und fangen die Maus«. Der Prueflauf sagte beide Male »nein« — er
+        // zaehlt aber nur HelpWindow-Knoten unter der HelpLayer. Was ihn
+        // faengt, muss kein HelpWindow sein: es reicht IRGENDEIN Control an
+        // SceneTree.Root, das die Maus nicht durchlaesst.
+        //
+        // Deshalb steht hier jetzt alles, was an der Wurzel haengt, mit Art und
+        // Mausdurchlass. Eine Zahl, die nur eine Bauart kennt, kann den Fehler
+        // nicht finden, den eine andere Bauart macht.
+        sb.Append("   was sonst an der Wurzel haengt:\n");
+        int faenger = 0;
+        foreach (var c in tree.Root.GetChildren())
+        {
+            if (c.IsQueuedForDeletion()) continue;
+            string art = c.GetType().Name;
+            string zusatz = "";
+            if (c is Control ct)
+            {
+                bool faengt = ct.MouseFilter != Control.MouseFilterEnum.Ignore && ct.Visible;
+                if (faengt) faenger++;
+                zusatz = $" [Control, Maus {ct.MouseFilter}, {(ct.Visible ? "sichtbar" : "unsichtbar")}]";
+            }
+            else if (c is CanvasLayer cl2)
+            {
+                int kinder = 0, sichtbar = 0;
+                foreach (var k in cl2.GetChildren())
+                {
+                    if (k.IsQueuedForDeletion()) continue;
+                    kinder++;
+                    if (k is Control kc && kc.Visible
+                        && kc.MouseFilter != Control.MouseFilterEnum.Ignore) { sichtbar++; faenger++; }
+                }
+                zusatz = $" [CanvasLayer, {kinder} Kinder, davon {sichtbar} mausfangend]";
+            }
+            sb.Append($"      {c.Name} ({art}){zusatz}\n");
+        }
+        sb.Append($"   mausfangende Knoten ueber dem Menue: {faenger}\n");
+        // ⚠ DIE ZAHL, DIE HIER GEFEHLT HAT. Ein angehaltener Baum friert im
+        // Menue alles ein, was auf ProcessMode.Inherit steht — das sieht fuer
+        // den Spieler genauso aus wie ein Fenster, das die Maus faengt, und war
+        // in Wahrheit die Ursache. Sie steht jetzt im Bericht, damit der
+        // Prueflauf beim naechsten Mal nicht wieder danebenschaut.
+        sb.Append($"   Baum angehalten: {(tree.Paused ? "JA — DAS FRIERT DAS MENUE EIN" : "nein")}");
+        if (tree.Paused) windows++;      // faellt damit auch durch
         report = sb.ToString();
         return (wouldOverlay || windows > 0) ? 1 : 0;
     }

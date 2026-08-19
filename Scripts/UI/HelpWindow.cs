@@ -129,9 +129,42 @@ public sealed partial class HelpWindow : PanelContainer
     {
         _texts = null; _tried = false;
         Dismissed.Clear();
+        // ⚠⚠ 19.08.2026 — DIE PAUSE MUSS MIT WEG, und das war der ganze Fehler.
+        //
+        // Gemeldet, zum zweiten Mal: »nachdem ich eine Kampagne mittendrin
+        // beende, tauchen die Popups im Menue auf, und ich muss sie erst
+        // schliessen, um wieder die Maus benutzen zu koennen.«
+        //
+        // Ein Hilfefenster HAELT DAS SPIEL AN (siehe <see cref="Anhalten"/>) —
+        // `tree.Paused = true`. Bricht man die Mission ab, waehrend eines
+        // offen steht, raeumte diese Methode zwar die Fenster weg, liess die
+        // Pause aber stehen. Im Menue ist dann ALLES eingefroren, was auf
+        // ProcessMode.Inherit steht — der ganze Mausbetrieb. Nur das
+        // Hilfefenster selbst laeuft weiter (ProcessMode.Always, damit man es
+        // ueberhaupt wegklicken kann), und sein Wegklicken ruft `Anhalten` und
+        // gibt die Pause frei. Genau deshalb »muss man sie erst schliessen«.
+        //
+        // Die Fenster waren also nicht die Ursache, sondern das einzige, was
+        // noch reagierte.
+        //
+        // ⚠ Warum drei Prueflaeufe das nie sahen: <see cref="PauseErlaubt"/>
+        // schaltet die Pause KOPFLOS ganz ab. Jeder Prueflauf lief also in
+        // einer Welt, in der es diesen Fehler gar nicht geben kann. Seit heute
+        // laesst sich das mit `--help-pause` aufheben, und
+        // `--abbruch-check` meldet den Pausenzustand mit.
+        // ⚠ Freigegeben wird die Pause NICHT hier, sondern in
+        // <see cref="Core.LeaveToMenu.Tidy"/>: dort liegt der Baum vor, und dort
+        // ist auch der Ort, an dem feststeht, dass wir die Spielwelt verlassen.
+        // Hier waere nur ueber ein Fenster heranzukommen, das gleich freigegeben
+        // wird — und wenn die Liste leer ist, gar nicht.
+        _hatAngehalten = false;
         foreach (var w in Open.ToArray()) w.QueueFree();
         Open.Clear();
     }
+
+    /// <summary>Ob ein Fenster gerade die Pause haelt. Nur zum Freigeben von
+    /// aussen, wenn die Spielwelt verlassen wird.</summary>
+    public static bool HaeltPause => _hatAngehalten;
 
     /// <summary>Wieviele Fenster gerade offen sind. Der Block fragt das selbst
     /// (0x4D0600, »ist Fenster n noch offen?«).</summary>
@@ -279,10 +312,27 @@ public sealed partial class HelpWindow : PanelContainer
     private static bool PauseErlaubt()
     {
         if (_erlaubt.HasValue) return _erlaubt.Value;
-        bool aus = false;
+        bool aus = false, erzwungen = false;
         foreach (string a in Core.CommandLine.Args)
+        {
             if (a == "--no-help-pause") aus = true;
-        if (DisplayServer.GetName() == "headless") aus = true;
+            // ⚠ 19.08.2026 — DER GEGENSCHALTER, und er ist der Grund, warum
+            // dieser Fehler zweimal durchgerutscht ist.
+            //
+            // Die Zeile darunter schaltet die Pause kopflos ab, mit gutem
+            // Grund: ein Fenster, das niemand wegklicken kann, haengt jeden
+            // Prueflauf auf. Die Folge war aber, dass JEDER Prueflauf in einer
+            // Welt lief, in der die Pause gar nicht existiert — und der
+            // gemeldete Fehler besteht genau darin, dass eine Pause
+            // stehenbleibt. Drei Prueflaeufe meldeten gruen, ohne zu luegen:
+            // sie konnten den Fall nicht herstellen.
+            //
+            // `--help-pause` hebt die kopflose Abschaltung auf. Wer ihn setzt,
+            // muss selbst dafuer sorgen, dass der Lauf endet (z.B.
+            // `--abbruch-check`, der nach fester Zeit aussteigt).
+            else if (a == "--help-pause") erzwungen = true;
+        }
+        if (DisplayServer.GetName() == "headless" && !erzwungen) aus = true;
         _erlaubt = !aus;
         if (aus)
             GD.Print("Hilfefenster: das Spiel wird NICHT angehalten " +

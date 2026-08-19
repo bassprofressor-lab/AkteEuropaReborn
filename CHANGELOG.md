@@ -22,7 +22,9 @@ further down, with the addresses it was read at.
 | **Heart, canister and bullets.** | The three icons beside the status bars. They live in `ANIM.CWA`, the file that holds the explosions. |
 | **The original's mouse cursors.** | 28 kinds out of the appendix of `ROBO.CWR`, the attack crosshair among them. |
 | **Units answer an order.** | We had the selection line but not the order line — which the original plays four times as often. |
-| **Trees occlude again.** | Not a code fault: the maps had never been re-baked. |
+| **Trees occlude again.** | ⚠ Reported three times, explained wrong twice. It *was* a code fault: we interleaved trees and units only at **building** rows; the original does it at **every** row. |
+| **No more white box on hover.** | That was ours. The original signals hover with the mouse cursor. |
+| **Popups no longer trap the mouse in the menu.** | The cause was not a leftover popup but a **pause** left standing. |
 | **Fog uncovers softly**, not tile by tile. Marching squares over a 257×257 corner grid, plus the original's own dither pattern in its own palette colour. |
 | **Thirteen weapons get a flying projectile** instead of three — each with its own impact. Out of a table we had read one twenty-second of. |
 | **Units earn experience and gain rank.** | We had been reading the field for months; nobody ever changed it. A veteran deals more damage and takes less. |
@@ -585,6 +587,41 @@ deviate on purpose, and every deviation is marked as ours.
 
 ### Campaign and interface
 
+- ⭐⭐ **Abort a campaign mid-mission and the mouse works again in the menu — and
+  the popups were never the cause.**
+
+  Reported for the second time: "after I quit a campaign halfway through, the
+  popups turn up in the menu and I have to close them before I can use my mouse
+  again."
+
+  A help window **pauses the game** — not our invention, it is one of the eight
+  options the original ships ("pause the game while a help window is open").
+  Abort the mission while one is open and the windows were cleared, **but the
+  pause stayed**. In the menu that freezes everything on `ProcessMode.Inherit`,
+  i.e. all mouse handling. Only the help window itself keeps running
+  (`ProcessMode.Always`, or it could never be clicked away) — and clicking it
+  away releases the pause.
+
+  **So the popups were not the cause, they were the only thing still
+  responding.** That is why the fault read as "popups trap the mouse", and why
+  closing them helped.
+
+  ⚠ **Why three harnesses reported green without lying:**
+  `HelpWindow.PauseErlaubt` disables the pause entirely when **headless** — for
+  a good reason, since a window nobody can click away hangs every run. Every
+  harness therefore ran in a world where this fault *cannot* exist. New:
+  `--help-pause` lifts that, and `--abbruch-check` plays a real campaign
+  mission for a while and then leaves through the same door as the "Quit"
+  button. With `=alt` it shows the fault — *popups in the main menu: YES ·
+  mouse-catching nodes: 2 · tree paused: YES*. With the fix, all zero.
+
+- **The white box on hovering a unit is gone.** It was ours, sat there
+  unguarded, and was drawn on every hover. The original signals hover with the
+  **mouse cursor** — 28 kinds from the appendix of `ROBO.CWR`, including
+  separate ones for own unit, enemy unit (the crosshair) and infantry. A frame
+  around the target is not among them. ⚠ It stays for the no-sprites case,
+  where nothing else would be visible.
+
 - ⭐⭐ **The campaign could not be lost — now it can.** A player could lose every
   unit and every building and the mission would carry on. Nothing crashed,
   nothing reported anything; the game was simply unloseable.
@@ -740,10 +777,51 @@ deviate on purpose, and every deviation is marked as ours.
   ⚠ Ours is **how fast** it turns — the original carries a wind direction but
   states no rate.
 
-- **Trees occlude units again.** Reported twice, and both times it was not the
-  code: after the last change to object heights the maps had **never been
-  re-baked**. 36 maps re-exported, 69,388 raised objects. A fault that looks
-  like a code fault and is a data state — which is why it is written down here.
+- ⭐⭐ **Trees occlude units again — and this time for the right reason.**
+
+  ⚠ **Reported three times. The first two explanations were wrong**, most
+  recently the one that stood here until today: "both times it was not the code,
+  the maps had never been re-baked". Re-baking was necessary and correct — the
+  data has been sound since, measured: `map_01.json` names 558 objects, and
+  01.CWM holds 553 forest + 5 object = **558**, exact to the entry. Across all
+  23 maps, **37,231 of 37,231** forest entries agree with the occupancy map. It
+  was *also* a code fault, and that one stayed.
+
+  **What was wrong:** we interleaved trees and units only at **building** rows,
+  and within a threshold the trees came **before** the units.
+
+  **Why that could never work, arithmetically:** a unit on row *b* is drawn at
+  the first building threshold *T > b*, a tree on row *a* at the first *T ≥ a*.
+  So the tree covers the unit only if some building threshold satisfies
+  *b < T < a*. From which it follows immediately: **a tree standing ONE row in
+  front of a unit can never cover it on any map** — there is no integer between
+  *b* and *b+1*. And that is the everyday case.
+
+  On **map_01**, the mission the player is playing: 72 rows, trees on **all
+  72**, but only **four** buildings — on rows 2, 5, 13 and 31. Below row 31
+  there was no threshold at all; every unit lay above every tree.
+
+  **What the original does** (map drawer `0x4B4150` / F `0x4B3A80`, third pass
+  @`0x4B43BB`): it loops over **rows**, and per row draws @`0x4B43F9` **the row
+  bucket first** (units, buildings, rail, effects) and @`0x4B4429` **the tiles
+  after**. There is no depth sort, no per-object height and no separate object
+  layer — only that order. Ours now does the same.
+
+  ⚠ **And the switch had to go too.** The whole interleaving hung on
+  `_drawSprites && Patterns != null`. If the building atlas was missing (it can
+  exceed a texture's maximum size) the loop was skipped — and then there was
+  guaranteed to be no occlusion at all, for rail and units either.
+
+  **Measured** with the new `--verdeck-check`, which counts at the draw calls
+  actually issued: mission 5 → 37 units, 76 tiles, **1597 pairs where a tile
+  covers a unit, and 0 in the wrong order**. Mission 1 → 275 and 0.
+
+  ⚠ **Why it was never caught:** `--behind-check` and `--demo-front` existed,
+  but both place a unit **next to a building** — precisely where the old
+  interleaving did work. A harness built the same way would have reported green
+  while the real case failed. The new one deliberately checks away from
+  buildings and says **"not measured"** when a map has no trees or no units
+  (missions 20 and 27 do exactly that).
 
 - **"Continue" at the end of a campaign mission** led to the main menu instead
   of the next mission's briefing — and showed the help windows of the mission

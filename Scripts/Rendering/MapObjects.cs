@@ -197,6 +197,8 @@ public partial class MapEntityLayer
         for (; at < _objDraw.Count && _objDraw[at].Row <= throughRow; at++)
         {
             var e = _objDraw[at];
+            // siehe MapEntityLayer.Zeichenfolge — nur für --verdeck-check
+            Zeichenfolge?.Add(('B', e.Row));
             if (e.Abgebrannt)
             {
                 // AUS. 19 von 20 Zellen zeigen die abgebrannte Kachel (Stumpf

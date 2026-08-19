@@ -448,3 +448,102 @@ aufgestellte Radare** sind drei baugleiche Routinen mit je eigener Liste,
 **Selbstverteidiger** sind eine eigene Liste im Haupttakt, und es gibt fünfzehn
 Schummelcodes samt `ENABLEDEVEL`, das vermutlich die ganze Protokollausgabe
 freischaltet.
+
+---
+
+## E. Kartenbau (19.08.2026) — der Baumbefund und was daneben abfiel
+
+Die Verdeckung ist **gebaut und gemessen** (siehe CHANGELOG). Was aus derselben
+Recherche offen blieb oder berichtigt gehört:
+
+### ⚠ BERICHTIGT: »in Kampagne 1 brennen von Haus aus ein paar Bäume«
+
+Lässt sich an den Daten **nicht** belegen. Über alle 23 mitgelieferten `.CWM`
+hat **jeder einzelne der 37.231 Waldeinträge den Zustand 1 (steht)** — kein
+einziger im Brandbereich 2…254. Wenn im Original etwas brennt, setzt es das
+**Missionsskript**, nicht die Kartendatei.
+
+**Was mir hülfe:** ein Standbild aus dem Let's Play von Mission 1 direkt nach
+dem Start. Brennt dort etwas, ohne dass geschossen wurde? Dann suche ich die
+Regel; wenn nicht, ist der Punkt erledigt.
+
+### Sektion 20 der `.CWM` ist eine ZEICHENLAGE je Zelle — und wir lesen sie nicht
+
+`0x542E18` (F `0x541E78`), 256×256 Byte. Aus den beiden Toren @`0x4B4274` und
+@`0x4B4485` ergibt sich die **Wirkung**:
+
+| Wert | Wirkung |
+|---|---|
+| `0` | Vorgabe — die Belegungskarte entscheidet |
+| `1…98` | Zelle wird in den **flachen** Durchgang gezwungen (liegt unter allem) |
+| `99` | Zelle wird von **beiden** Durchgängen übersprungen (unsichtbar) |
+| `≥ 100` | Zelle kommt in den **verzahnten** Durchgang (verdeckt) |
+
+Geschrieben wird sie von den Funktionen zu **Brücke, Rampe und Gebäudebau**
+(`0x43CB12` schreibt 99, `0x43DE88` schreibt 98, `0x4CC4F0`/`0x4CC889` einen
+laufenden Wert, »Erase bridge« @`0x4CB0A0` löscht drei Spalten auf 0).
+
+**Was uns das kostet, gemessen:** **578 Zellen** über alle Karten haben
+`imap == 0xFFFF` und ein Byte von 0 oder ≥ 100 — die zeichnet das Original im
+verzahnten Durchgang, unsere `MapForest.ImZeilenfach()` lässt sie durchfallen.
+Auf **map_01 sind das 10 Zellen** (558 statt 568). Die Kachelcodes (10001…10071,
+40×38 bis 40×48 px) und die Bytegruppen 100…108 sprechen für **Brücken und
+Rampen**.
+
+⚠ **Die Bedeutung der Zahlen ist nicht gelesen**, nur ihre Wirkung. Ob 1…98 eine
+Bauwerksnummer ist oder eine Lage, ist offen.
+
+**Was mir hülfe:** ein Blick ins Original auf eine Karte mit **Brücke**
+(04.CWM hat 40 solcher Zellen, NET05 hat 77). Läuft eine Einheit über die
+Brücke *darüber* oder *darunter durch*?
+
+### Der Schatten ist im Original eine EIGENE LAGE
+
+Zweiter Durchgang @`0x4B4342`, über **alle** Zeilen, eigener Zeichner
+`0x42C8C0` — also zwischen Boden und allem Beweglichen. Ein Schatten liegt im
+Original **nie** auf einer Einheit und nie auf einem Baum. Bei uns laufen die
+Gleisschatten **im** verzahnten Durchgang mit. Sichtbar wird der Unterschied,
+sobald zwei Einheiten dicht beieinanderstehen. **Nicht gebaut.**
+
+### Unsere Grundierung ist unsere Zutat
+
+Der Zeichner des Originals malt **je Zelle genau ein Sprite**. Einen zweiten
+»Grundierungsblit« wie unseren Durchgang A in `MapBaker.cs` gibt es nicht.
+Ob er schadet, ist **nicht gemessen** — er kann Übergangs- und Küstenkacheln
+anders aussehen lassen als im Original.
+
+**Was mir hülfe:** ein Standbild des Originals mit einem einzelnen Baum auf
+einer Übergangskachel.
+
+### Die Auswahlmarkierung ist ein SPRITE, keine vier gezeichneten Linien
+
+Gemeldet: »diese originale Markierung um die Einheiten sitzt noch nicht ganz
+genau.« Zu Recht — unsere vier Winkel sind **am abgefilmten Original
+ausgemessen**, nicht gelesen. Gelesen ist jetzt:
+
+Bei gesetztem `OZNACEN` (Satz `+0x1B`, der Name stammt aus `ENTITY_FELDER.md`)
+zeichnet das Original @`0x42AA88` **ein Sprite**:
+
+```
+sub ebx, 7            ; x -= 7
+sub ebp, 0x12         ; y -= 18
+push ebx / push ebp
+eax = [0xA31C04] + 0xA183E8      ; der Bildzeiger
+call 0x401B1D                    ; derselbe Blitter wie fuer Geschosse
+```
+
+Zwei Fundstellen je EXE, **beide mit denselben Zahlen 7 und 18**. `0xA183E8` ist
+derselbe Bildblock, aus dem auch die **Mauszeiger** kommen (@`0x4A9F14`) — also
+der Anhang von `ROBO.CWR`. Dessen Eintrag **7** ist genau das gesuchte Zeichen:
+vier Winkel mit den Spitzen nach außen, wie im Tutorialfenster.
+
+⚠ **Was NICHT zusammenpasst und deshalb nicht gebaut ist:** dieser Eintrag misst
+**58×58** Bildpunkte. Ein 58×58-Bild mit dem Anker (−7, −18) läge völlig
+daneben. Entweder ist es ein anderes Bild, oder der Anker ist nicht die linke
+obere Ecke. **Solange das nicht geklärt ist, bleibt unsere gezeichnete Fassung
+stehen** — eine falsche Zahl einzusetzen wäre schlechter als die gemessene.
+
+**Was mir hülfe:** ein Bildschirmfoto aus dem Original, in dem **eine einzelne
+Einheit angewählt** ist, möglichst formatfüllend. Daran messe ich, wie weit die
+Winkel wirklich auseinanderstehen und wie hoch die Markierung über dem
+Bodenpunkt sitzt.

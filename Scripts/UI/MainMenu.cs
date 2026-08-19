@@ -256,6 +256,74 @@ public partial class MainMenu : Control
         if (_empty != null) _empty.Visible = false;
     }
 
+    private int _kulissenCheck;
+
+    /// <summary>
+    /// <b>`--kulissen-check=&lt;Bilder&gt;` — TAUCHEN IM MENUE POPUPS AUF?</b>
+    ///
+    /// <para>⚠⚠ 19.08.2026, zum zweiten Mal gemeldet: »nachdem ich eine
+    /// Kampagne mittendrin beende, tauchen die Popups im Menue auf, und ich
+    /// muss sie erst schliessen, um wieder die Maus benutzen zu koennen.«</para>
+    ///
+    /// <para><b>Warum es einen ZWEITEN Prueflauf braucht.</b> Es gab schon
+    /// <c>--leave-check</c>, und der war gruen — zu Recht: er misst, ob ein
+    /// Fenster der ALTEN Mission den Ausstieg ueberlebt. Der gemeldete Fehler
+    /// ist ein anderer: die Fenster sind <b>neu</b>. Die Menue-Kulisse spielt
+    /// einen echten Spielstand, und der bringt seine Missionsregeln mit; deren
+    /// <c>show_text</c> feuert im Menue genauso wie im Spiel.
+    /// <c>--leave-check</c> kann das nicht sehen, weil er in
+    /// <c>_Ready</c> <b>vor</b> <see cref="StartBackdrop"/> aussteigt. Ein
+    /// Prueflauf, der seinen Fall nicht herstellen kann, ist keiner
+    /// (Arbeitsweise 32) — also hier einer, der ihn herstellt: Kulisse an,
+    /// laufen lassen, nachzaehlen.</para>
+    ///
+    /// <para>⚠ <b>Gruen reicht nicht, wenn nichts passiert ist.</b> »Null
+    /// Fenster offen« hat zwei moegliche Ursachen: der Riegel greift, oder es
+    /// hat einfach keine Regel gefeuert. Der Prueflauf verlangt deshalb
+    /// <b>beides</b>: <c>OpenCount == 0</c> UND
+    /// <c>SuppressedCount &gt; 0</c>. Ohne die zweite Zahl sagt er
+    /// ausdruecklich »nicht gemessen« und faellt durch, statt zu schweigen
+    /// (Arbeitsweise 33).</para>
+    /// </summary>
+    private void KulissenCheckGo()
+    {
+        int start = UI.HelpWindow.SuppressedCount;
+        int bilder = 0;
+        void Takt()
+        {
+            if (++bilder < _kulissenCheck) return;
+            GetTree().ProcessFrame -= Takt;
+            int offen = UI.HelpWindow.OpenCount;
+            int gehalten = UI.HelpWindow.SuppressedCount - start;
+            GD.Print($"kulissen-check: nach {bilder} Bildern — {offen} Fenster offen, " +
+                     $"{gehalten} vom Riegel abgefangen, Riegel {(UI.HelpWindow.Suppressed ? "AN" : "AUS")}");
+            int rc;
+            if (offen > 0)
+            {
+                GD.PrintErr($"kulissen-check: FEHLGESCHLAGEN — {offen} Popup(s) stehen im " +
+                            "Menue und fangen die Maus. Das ist der gemeldete Fehler.");
+                rc = 1;
+            }
+            else if (gehalten == 0)
+            {
+                GD.PrintErr("kulissen-check: NICHT GEMESSEN — kein Fenster offen, aber der " +
+                            "Riegel hat auch keines abgefangen. Es hat also in dieser Zeit " +
+                            "gar keine Regel gefeuert; laenger laufen lassen " +
+                            "(--kulissen-check=<mehr Bilder>) oder ein Demo mit Textregeln " +
+                            "waehlen. Ein gruenes Ergebnis waere hier geraten.");
+                rc = 2;
+            }
+            else
+            {
+                GD.Print("kulissen-check: bestanden — der Riegel hat gegriffen, und dass er " +
+                         "etwas zu tun hatte, steht in der zweiten Zahl.");
+                rc = 0;
+            }
+            GetTree().Quit(rc);
+        }
+        GetTree().ProcessFrame += Takt;
+    }
+
     /// <summary>Die Menüzeile »Naechstes Demo«: eins weiter, hinter dem letzten
     /// wieder von vorn — wie <c>dword[0x540740] = 2</c> im Original.</summary>
     private void NextDemo()
@@ -384,7 +452,7 @@ public partial class MainMenu : Control
         // Kur hier sitzt und nicht an den neun Ausgaengen, steht samt Befund in
         // Core/LeaveToMenu.cs — B9 (Editorfeld im Gefecht) und B10 (Popups im
         // Hauptmenue) sind zwei Gesichter derselben fehlenden Gegenstelle.
-        Core.LeaveToMenu.Tidy();
+        Core.LeaveToMenu.Tidy(this);
         if (Core.LeaveToMenu.Report)
         {
             Core.LeaveToMenu.Report = false;
@@ -398,7 +466,11 @@ public partial class MainMenu : Control
         }
         SetAnchorsPreset(LayoutPreset.FullRect);
         foreach (string a in OS.GetCmdlineUserArgs())
+        {
             if (a == "--no-backdrop") _noBackdrop = true;
+            else if (a.StartsWith("--kulissen-check="))
+                _kulissenCheck = Mathf.Max(1, a["--kulissen-check=".Length..].ToInt());
+        }
         _empty = new ColorRect
         {
             Color = new Color(0.05f, 0.06f, 0.08f),
@@ -1067,6 +1139,11 @@ public partial class MainMenu : Control
         if (!Core.Content.Ready) { ShowImportScreen(); return; }
         if (AutoStart()) return;      // ein Lauf, der gleich losspielt, braucht keine Kulisse
         StartBackdrop();
+        // ⚠ NACH StartBackdrop(), im Gegensatz zu jedem anderen kopflosen
+        // Schalter: dieser Prueflauf misst genau die Kulisse. Wer vorher
+        // aussteigt, misst sie nicht — und das war der Grund, warum
+        // --leave-check den gemeldeten Fehler nie sehen konnte.
+        if (_kulissenCheck > 0) KulissenCheckGo();
     }
 
     // ---- first start: where the content comes from --------------------------

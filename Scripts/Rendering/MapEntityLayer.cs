@@ -17714,33 +17714,88 @@ public partial class MapEntityLayer : Node2D
         // Siehe Rendering/MapObjects.cs.
         int oi = 0;
         ObjectsDrawn = 0;
-        if (_drawSprites && Patterns != null)
-            foreach (var b in BuildingsBackToFront())
+
+        // ⚠⚠⚠ 19.08.2026 — DIE VERZAHNUNG LÄUFT JETZT ÜBER ZEILEN, NICHT ÜBER
+        // GEBÄUDE. Das ist die Ursache von »Bäume verdecken immer noch keine
+        // Einheiten«, dreimal gemeldet und zweimal falsch erklärt.
+        //
+        // <para><b>Was hier stand</b>: eine Schleife über die GEBÄUDE, und an
+        // jeder Gebäudezeile wurden alle Objekte und alle Einheiten bis dorthin
+        // ausgeworfen — Objekte zuerst, Einheiten danach.</para>
+        //
+        // <para><b>Warum das rechnerisch nie funktionieren konnte.</b> Eine
+        // Einheit auf Zeile b kommt beim ersten Gebäudeschwellwert T &gt; b, ein
+        // Baum auf Zeile a beim ersten T ≥ a. Der Baum liegt also nur dann
+        // über der Einheit, wenn es einen Gebäudeschwellwert T mit
+        // <b>b &lt; T &lt; a</b> gibt. Daraus folgt sofort: <b>ein Baum, der EINE
+        // Zeile vor der Einheit steht, kann sie auf keiner Karte verdecken</b> —
+        // zwischen b und b+1 liegt keine ganze Zahl. Und genau das ist der
+        // Alltagsfall.
+        //
+        // Auf map_01 (Mission 1, die der Spieler spielt): 72 Zeilen, Bäume auf
+        // <b>allen 72</b>, aber nur <b>vier</b> Gebäude — auf den Zeilen 2, 5,
+        // 13 und 31. Unterhalb von Zeile 31 gibt es überhaupt keine Schwelle
+        // mehr; dort lief alles in den Schlussdurchgang, Objekte zuerst,
+        // Einheiten danach. Jede Einheit lag über jedem Baum.
+        //
+        // <para><b>Was das Original tut</b> — Kartenzeichner C 0x4B4150 /
+        // F 0x4B3A80, dritter Durchgang @0x4B43BB. Er läuft über ZEILEN (ab −2,
+        // Fachschrittweite 0x138A @0x4B46A5) und macht je Zeile:</para>
+        // <list type="number">
+        // <item>@0x4B43F9 — <b>erst das Zeilenfach</b>: Einheiten, Gebäude,
+        // Gleis, Effekte (Zeichner 0x429900);</item>
+        // <item>@0x4B4429 — <b>dann die Kacheln</b> dieser Zeile, ausgewählt an
+        // der Belegungskarte 0xBDEA80.</item>
+        // </list>
+        // Es gibt <b>keine</b> Sortierung nach Höhe, keinen Höhenwert je Objekt
+        // und keine getrennte Objektlage — nur diese Reihenfolge. Ein Baum in
+        // Zeile r liegt damit über einer Einheit in Zeile r und unter einer
+        // Einheit in Zeile r+1.
+        //
+        // ⚠ <b>Und der Schalter musste mit.</b> Die ganze Verzahnung hing an
+        // <c>_drawSprites &amp;&amp; Patterns != null</c>. Fehlt der Bau-Atlas
+        // (er kann die Höchstgröße einer Textur überschreiten), wurde die
+        // Schleife übersprungen — und dann gab es garantiert null Verdeckung,
+        // auch für Gleis und Einheiten. Geprüft wird der Atlas jetzt nur dort,
+        // wo er wirklich gebraucht wird: beim Gebäudekörper.
+        int letzteZeile = _nav != null ? _nav.Height : 0;
+        foreach (var b in BuildingsBackToFront())
+            letzteZeile = Mathf.Max(letzteZeile, b.Row + BuildingDrawRowFor(b));
+        var gebaeude = BuildingsBackToFront();
+        int gi = 0;
+        for (int r = 0; r <= letzteZeile; r++)
+        {
+            // (1) das Gleis dieser Zeile — es trägt seinen eigenen Versatz
+            // schon in DrawRow (RailDrawRowBias, gelesen @0x42DFE9).
+            DrawRailUpTo(r, ref at);
+            // (2) die EINHEITEN dieser Zeile. DrawUnitsUpTo nimmt `Row < row`,
+            // also r+1 für »alle bis einschliesslich r«.
+            DrawUnitsUpTo(r + 1, ref ui);
+            // (3) die Gebäude, deren Fach in dieser Zeile liegt.
+            while (gi < gebaeude.Count
+                   && gebaeude[gi].Row + BuildingDrawRowFor(gebaeude[gi]) <= r)
             {
-                // ⚠ 16.08.2026 — DAS FACH HÄNGT AN DER TÜR, nicht an einer
-                // festen 3 (Fehler C14, gelesen @0x42FD47..@0x42FDE8). Siehe
-                // BuildingDrawRowFor; dort steht auch, warum die frühere
-                // Behauptung »jede Kachel wird in ihrer eigenen Zeile
-                // gestempelt« zurückgezogen ist.
-                DrawRailUpTo(RailThroughRowFor(b), ref at);
-                // ⚠ Für die EINHEIT gilt eine ANDERE Schwelle als für das
-                // Gleis: das Gleis trägt zusätzlich seinen eigenen Versatz von
-                // +2 (RailDrawRowBias, gelesen @0x42DFE9), eine Einheit gar
-                // keinen — ihr Fach ist `Zeile + 2` gegen die Kamera gerechnet
-                // (@0x4301B3 `lea ebx, [esi+2]`), also derselbe Rand, den auch
-                // das Gebäude bekommt (@0x42FDB8). Netto: Einheit 0, Gleis +2,
-                // Gebäude +3 bzw. +tür0.row. Die Schwellen zu vermischen wäre
-                // der Fehler, den Regel 28 beschreibt.
-                DrawObjectsUpTo(b.Row + BuildingDrawRowFor(b), ref oi);
-                DrawUnitsUpTo(b.Row + BuildingDrawRowFor(b), ref ui);
-                DrawBuildingBody(b);
-                // ⚠ Die TÜREN gehören zum Gebäude und damit in SEIN Fach —
-                // Fehler D4. Das Original malt sie im selben Zeichenaufruf
-                // gleich hinter dem Körper (@0x42B259 ff.). Bis zum 16.08.2026
-                // liefen sie in der späten Entitätenschleife und lagen deshalb
-                // über jeder Einheit; ein Fahrzeug vor dem Tor war halb weg.
-                if (!TuerenSpaet) DrawBuildingDoors(b);
+                var b = gebaeude[gi++];
+                if (_drawSprites && Patterns != null)
+                {
+                    DrawBuildingBody(b);
+                    // ⚠ Die TÜREN gehören zum Gebäude und damit in SEIN Fach —
+                    // Fehler D4. Das Original malt sie im selben Zeichenaufruf
+                    // gleich hinter dem Körper (@0x42B259 ff.).
+                    if (!TuerenSpaet) DrawBuildingDoors(b);
+                }
             }
+            // (4) ZULETZT die aufragenden Kacheln dieser Zeile. Das ist der
+            // ganze Unterschied: hier lagen sie bisher VOR den Einheiten.
+            DrawObjectsUpTo(r, ref oi);
+        }
+
+        // ⚠ Was hier vom früheren Aufbau NICHT übernommen wurde und warum:
+        // `RailThroughRowFor(b)` gab dem Gleis eine eigene, an das Gebäude
+        // gebundene Schwelle. Die braucht es nicht mehr — der Versatz des
+        // Gleises (+2, gelesen @0x42DFE9) steckt bereits in `DrawRow`, und in
+        // einer Zeilenschleife ist `DrawRow <= r` genau dieselbe Aussage, nur
+        // ohne den Umweg über ein Gebäude, das zufällig in der Nähe steht.
         DrawRailUpTo(int.MaxValue, ref at);
         DrawObjectsUpTo(int.MaxValue, ref oi);
         DrawUnitsUpTo(int.MaxValue, ref ui);
@@ -17963,6 +18018,73 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Alle vorgemerkten Einheiten bis zur Zeile
     /// <paramref name="row"/> zeichnen.</summary>
+    /// <summary>
+    /// <b>`--verdeck-check` — VERDECKT EIN BAUM EINE EINHEIT?</b>
+    ///
+    /// <para>⚠ 19.08.2026, <b>dreimal</b> gemeldet: »Bäume verdecken immer noch
+    /// keine Einheiten wie im Original«. Zweimal falsch erklärt, zuletzt mit
+    /// »kein Codefehler, die Karten waren nie neu gebacken worden«. Die Karten
+    /// sind in Ordnung — der Zeichner war es nicht, siehe
+    /// <see cref="DrawRailAndBuildings"/>.</para>
+    ///
+    /// <para><b>Warum es diesen Prüfstand vorher nicht gab und der vorhandene
+    /// nichts genützt hätte.</b> <c>--behind-check</c> und <c>--demo-front</c>
+    /// stellen eine Einheit <b>neben ein Gebäude</b>. Genau dort funktionierte
+    /// die alte Verzahnung ja — das Gebäude lieferte die Schwelle. Ein
+    /// Prüfstand nach demselben Muster hätte <b>grün gemeldet, während der
+    /// echte Fall scheitert</b>. Deshalb prüft dieser hier ausdrücklich die
+    /// Zellen OHNE Gebäude in der Nähe.</para>
+    ///
+    /// <para>Gemessen wird an der <see cref="Zeichenfolge"/>, also an den
+    /// wirklich abgesetzten Zeichenaufrufen. Die Regel des Originals lautet:
+    /// eine Kachel der Zeile r liegt über einer Einheit der Zeile ≤ r und unter
+    /// einer Einheit der Zeile &gt; r.</para>
+    /// </summary>
+    public string VerdeckCheck()
+    {
+        var sb = new System.Text.StringBuilder();
+        Zeichenfolge = new List<(char, int)>();
+        QueueRedraw();
+        DrawRailAndBuildings();
+        var folge = Zeichenfolge;
+        Zeichenfolge = null;
+
+        int einheiten = 0, baeume = 0, verletzt = 0, verdeckend = 0;
+        int letzteEinheit = int.MinValue;
+        // Für jeden Baum: welche Einheiten wurden VOR ihm gezeichnet? Liegt
+        // eine davon in einer SPAETEREN Zeile, ist die Reihenfolge falsch.
+        var vorher = new List<int>();
+        foreach (var (art, zeile) in folge)
+        {
+            if (art == 'E') { einheiten++; vorher.Add(zeile); letzteEinheit = zeile; }
+            else
+            {
+                baeume++;
+                foreach (int ez in vorher)
+                {
+                    if (ez > zeile) verletzt++;      // Einheit weiter vorn, aber frueher gemalt
+                    else if (ez <= zeile) verdeckend++;
+                }
+            }
+        }
+        sb.AppendLine($"verdeck-check: {einheiten} Einheiten, {baeume} Kacheln gezeichnet");
+        sb.AppendLine($"   Paare, in denen eine Kachel eine Einheit VERDECKT: {verdeckend}");
+        sb.AppendLine($"   Paare in FALSCHER Reihenfolge (Einheit weiter vorn, aber frueher " +
+                      $"gemalt): {verletzt}");
+        if (baeume == 0 || einheiten == 0)
+            sb.AppendLine("   ⚠ NICHT GEMESSEN — auf dieser Karte fehlt das eine oder das " +
+                          "andere. Ein gruenes Ergebnis waere hier geraten.");
+        else if (verletzt > 0)
+            sb.AppendLine("   ⚠ FEHLGESCHLAGEN — die Reihenfolge stimmt nicht.");
+        else if (verdeckend == 0)
+            sb.AppendLine("   ⚠ NICHT GEMESSEN — kein einziges Paar, in dem ueberhaupt etwas " +
+                          "zu verdecken waere. Laenger laufen lassen oder andere Karte.");
+        else
+            sb.AppendLine("   bestanden — und die mittlere Zahl belegt, dass es etwas zu " +
+                          "verdecken GAB.");
+        return sb.ToString();
+    }
+
     private void DrawUnitsUpTo(int row, ref int idx)
     {
         while (idx < _unitDraw.Count && _entities[_unitDraw[idx]].Row < row)
@@ -23229,8 +23351,19 @@ public partial class MapEntityLayer : Node2D
     /// Bild oder als letztes ein Punkt. Herausgelöst am 17.08.2026, damit der
     /// zeilenweise Durchgang ihn zeichnen kann (Fehler C23).
     /// </summary>
+    /// <summary>
+    /// <b>Die Zeichenfolge mitschreiben</b> — für <c>--verdeck-check</c>.
+    ///
+    /// <para>⚠ Aufgezeichnet wird an den STELLEN, DIE WIRKLICH ZEICHNEN, nicht
+    /// in der Schleife, die die Reihenfolge festlegt. Ein Prüfstand, der den
+    /// Plan nachrechnet, misst nichts (Arbeitsweise: er würde auch dann grün
+    /// melden, wenn ein Zeichenaufruf gar nicht ankommt).</para>
+    /// </summary>
+    internal static List<(char Art, int Zeile)>? Zeichenfolge;
+
     private void DrawUnitBody(Entity e)
     {
+        Zeichenfolge?.Add(('E', e.Row));
         UnitsDrawnInOrder++;
         var picC = PictureAnchor(e);
         var oc = OwnerColor(e.Owner);
@@ -23635,7 +23768,23 @@ public partial class MapEntityLayer : Node2D
             }
         }
 
-        if (_hovered >= 0 && _hovered != _selected)
+        // ⚠⚠ 19.08.2026 — DAS WEISSE KAESTCHEN BEIM UEBERFAHREN IST WEG.
+        //
+        // Gemeldet: »unser weisses Kaestchen wird noch angezeigt, wenn man
+        // ueber eine Einheit geht«. Es war von uns, stand ungeschuetzt da (kein
+        // Schalter davor) und wurde bei JEDEM Ueberfahren gezeichnet.
+        //
+        // Das Original meldet das Ueberfahren mit dem MAUSZEIGER und mit sonst
+        // nichts: 28 Zeigerarten liegen im Anhang von ROBO.CWR (siehe
+        // UI/GameCursors.cs), darunter eigene fuer »eigene Einheit«,
+        // »gegnerische Einheit« (das Angriffsfadenkreuz, Typ 2) und
+        // »Fusssoldat«. Ein Rahmen um das Ziel gehoert nicht dazu.
+        //
+        // ⚠ Er bleibt fuer den Fall OHNE BILDER — dieselbe Begruendung wie beim
+        // Auswahlrahmen ein Stueck weiter unten: wo die Bildbank nichts
+        // hergibt, zeichnet der Rueckfall nur einen Punkt, und dann waere ohne
+        // Rahmen gar nicht zu sehen, worueber die Maus steht.
+        if (_hovered >= 0 && _hovered != _selected && !_drawSprites)
             DrawRect(BodyRect(_entities[_hovered]), new Color(1, 1, 1, 0.9f), false, 2f);
 
         // das angewaehlte Flugzeug bekommt seinen Rahmen wie eine Einheit

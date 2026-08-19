@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.UI;
+﻿namespace AkteEuropaReborn.UI;
 
 using System.Collections.Generic;
 using Godot;
@@ -168,6 +168,28 @@ public partial class MenuBackdrop : CanvasLayer
         // Bildschirm schwarz. Die EINSTELLUNG des Spielers wird dabei nicht
         // angefasst — siehe Settings.FogSuppressed.
         Settings.FogSuppressed = true;
+
+        // ⚠ 19.08.2026 — DIESER RIEGEL WURDE NIE GESETZT, und er ist trotzdem
+        // nicht die Kur gewesen. Beides gehoert hierher.
+        //
+        // Im ganzen Baum standen zwei Zuweisungen auf `HelpWindow.Suppressed`,
+        // BEIDE auf `false` (`_ExitTree` und `Stop`). Ein Riegel, der nur
+        // geoeffnet wird, ist keiner — das allein rechtfertigt diese Zeile.
+        //
+        // ⚠⚠ ABER: die Begruendung, mit der er am 18.08. gebaut wurde, traegt
+        // NICHT. Sie lautete »die Kulisse spielt einen echten Spielstand, und
+        // der bringt seine Missionsregeln mit — deren `show_text` feuert im
+        // Menue genauso«. Nachgemessen mit `--kulissen-check=900`: in 900
+        // Bildern hat der Riegel **null** Fenster abgefangen. Die Demos sind
+        // `map_DM_*`, also GEFECHTSkarten, und die haben gar kein
+        // Missionsskript.
+        //
+        // Der gemeldete Fehler (»Popups im Menue, die die Maus fangen«) hatte
+        // eine ganz andere Ursache: eine stehengebliebene PAUSE. Siehe
+        // Core/LeaveToMenu.Tidy. Diese Zeile bleibt als Sperre fuer den Fall,
+        // dass eine Kulisse doch einmal eine Kampagnenkarte zeigt — sie ist ein
+        // Guertel, kein Heilmittel, und steht ausdruecklich als solcher da.
+        HelpWindow.Suppressed = true;
 
         // Kampfgeräusche aus der Kulisse gehören nicht ins Menü. Das Ohr wird
         // so weit weg gestellt, dass die Dämpfung von @0x40495E jeden Klang

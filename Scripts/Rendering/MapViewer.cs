@@ -480,6 +480,13 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_abbruchCheck > 0f) { AbbruchCheckGo(); return; }
+        if (_verdeckCheck)
+        {
+            GD.Print(_entities.VerdeckCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_tutorialCheck)
         {
             GD.Print(_entities.TutorialCheck());
@@ -867,6 +874,18 @@ public partial class MapViewer : Node2D
             // MapEntityLayer.TickCheck.
             else if (a.StartsWith("--tick-check"))
                 _tickCheck = a.Contains('=') ? a[(a.IndexOf('=') + 1)..].ToFloat() : 10f;
+            else if (a == "--verdeck-check") _verdeckCheck = true;
+            else if (a == "--abbruch-check=alt")
+            {
+                // ⚠ DIE GEGENPROBE: 60 s spielen, aber NICHT aufraeumen. Ohne
+                // sie waere nicht belegt, dass der Prueflauf den Fehler
+                // ueberhaupt zeigen KANN — und genau das war das Problem der
+                // drei Prueflaeufe davor.
+                _abbruchCheck = 60f;
+                Core.LeaveToMenu.Skip = true;
+            }
+            else if (a.StartsWith("--abbruch-check"))
+                _abbruchCheck = a.Contains('=') ? a[(a.IndexOf('=') + 1)..].ToFloat() : 20f;
             // --hud-check[=<sek>]: was die STEHENDE Rohstoffleiste anzeigt, im
             // selben Takt wie --econ-check. Beide zusammen sind die Gegenprobe:
             // oben die Summe und der Zuwachs, darunter die einzelnen Lager, aus
@@ -1320,6 +1339,8 @@ public partial class MapViewer : Node2D
     /// <summary>`--tick-check[=<sekunden>]` — wieviele Sekunden Missionsskript
     /// der Prueflauf ohne jedes Zutun laufen laesst. 0 = aus.</summary>
     private float _tickCheck;
+    private float _abbruchCheck;
+    private bool _verdeckCheck;
     private float _upTime;
 
     /// <summary>`--demo-leave=<n>` sends the demo's unit back where it came from
@@ -1759,6 +1780,45 @@ public partial class MapViewer : Node2D
     /// faellt die Popup-Haelfte aus, und ein gruenes Ergebnis waere hier eine
     /// Luege (Arbeitsweise 33).</para>
     /// </summary>
+    /// <summary>
+    /// <b>`--abbruch-check=&lt;Sekunden&gt;` — WAS BLEIBT STEHEN, WENN MAN EINE
+    /// KAMPAGNE MITTENDRIN ABBRICHT?</b>
+    ///
+    /// <para>⚠ 19.08.2026, zum zweiten Mal gemeldet: »nachdem ich eine Kampagne
+    /// mittendrin beende, tauchen die Popups im Menue auf, und ich muss sie
+    /// erst schliessen, um wieder die Maus benutzen zu koennen.«</para>
+    ///
+    /// <para><b>Warum es einen DRITTEN Prueflauf braucht.</b>
+    /// <see cref="LeaveCheckGo"/> war gruen — er macht aber ein Fenster
+    /// <i>von Hand</i> auf und geht dann raus. <c>--kulissen-check</c> misst die
+    /// Menue-Kulisse, und die spielt <c>map_DM_*</c>, also Gefechtskarten
+    /// <b>ohne Missionsskript</b> — dort feuert nie eine Textregel, wie der
+    /// Prueflauf selbst meldet. Keiner der beiden stellt den gemeldeten Fall
+    /// her: eine ECHTE Kampagnenmission ein Stueck weit spielen und dann durch
+    /// dieselbe Tuer gehen wie der Knopf »Beenden«.</para>
+    ///
+    /// <para>Genau das tut dieser hier. Gezaehlt wird drueben in
+    /// <c>MainMenu._Ready</c> ueber <see cref="Core.LeaveToMenu.Report"/> —
+    /// dieselbe Zaehlstelle wie beim Ausstiegs-Prueflauf, damit beide dasselbe
+    /// meinen.</para>
+    /// </summary>
+    private void AbbruchCheckGo()
+    {
+        // ⚠ ERST SPIELEN, DANN ABBRECHEN. Ohne diese Zeile misst der
+        // Prueflauf den Zustand direkt nach dem Laden — da hat noch keine
+        // Regel gefeuert, und er waere aus demselben Grund gruen wie die
+        // beiden vor ihm. TickCheck laesst die Simulation wirklich laufen,
+        // samt Missionsskript und dessen ShowText-Haken.
+        GD.Print(_entities.TickCheck(_abbruchCheck));
+        int offenVorher = UI.HelpWindow.OpenCount;
+        GD.Print($"abbruch-check: {_abbruchCheck:0.0} s Mission gespielt, " +
+                 $"{offenVorher} Fenster offen — jetzt derselbe Ausstieg wie »Beenden«");
+        Core.LeaveToMenu.Report = true;
+        UI.SkirmishSetup.Active = false;
+        Audio.MidiMusic.Stop();
+        GetTree().ChangeSceneToFile(UI.SkirmishSetup.MenuScene);
+    }
+
     private void LeaveCheckGo()
     {
         int id = -1;
