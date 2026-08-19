@@ -881,3 +881,59 @@ eine überschaubare Sache.
 
 ⚠⚠ Wie die Zeichenlage selbst: **wirkt erst nach `--reexport-maps` von den CDs.**
 
+
+---
+
+## I. Was die zweite CD gebracht hat (19.08.2026, Nacht)
+
+⭐⭐⭐ **Die Kampagne ist zum ersten Mal vollständig.** Bis heute hatten wir
+**15 von 33** Kampagnenkarten — die Missionen **16 bis 33 lagen auf CD 2** und
+waren im Projekt gar nicht vorhanden (18 `.CWM`, 57 Geländesatzdateien, 16
+KI-Dateien; zusammen 67 MB). Die *Regeln* aller 33 standen längst in
+`mission_scripts.json` und alle 33 Einsatzbesprechungen in `briefings.json` —
+es fehlte nur das **Gelände**.
+
+Nach dem Backen von beiden Datenträgern:
+
+| | vorher | jetzt |
+|---|---|---|
+| Kampagnenkarten | 15 | **33** |
+| Vorführungen (`.DM`) | 3 | **13** |
+| Netzkarten | 8 | 8 |
+
+Stichprobe: Mission 20 (118 Einheiten, 35 Gebäude), 25 (136/57), 33 (184/80) —
+alle laden mit Gelände, Regeln und Skriptplätzen und treffen keine sofortige
+Entscheidung.
+
+⚠ **Die Installation `F:\Akte Europa` enthält KEINE einzige `.CWP/.PAL/.CWG/.CWS`** —
+das Gelände liest das Original zur Laufzeit von der CD. Wer neu einliest, braucht
+also **beide** Datenträger.
+
+### Was auf den CDs weiterhin ungenutzt liegt
+
+| | Umfang | Stand |
+|---|---|---|
+| **Filme (`.RPL`)** | 35 Stück, 853 MB, **70,7 min** | keiner wird abgespielt |
+| **KI-Dateien `AI*.CWI`** | 43 × 2968 B, alle verschieden | ungelesen |
+| **`HELPG.PIC` / `ENCYCLOG.PIC`** | 36 + 96 Bilder à 60×60 | ungelesen |
+| **`SPR.DAT`** | 31 KB, 57 Einträge | Format halb gelesen |
+| **`MARK.CWK`** | 640 B, 320 Bytepaare | Bedeutung offen |
+| **`game.007`** | echter Spielstand des Originals | ungenutzt |
+
+**Die Filme** laufen im Original nach *jeder gewonnenen Mission* (Zustand `0xC8`
+→ `0x4CF930`), dazu Vorspann und Abspann nach Mission 33. Format ist ARMovie/RPL
+mit Escape 124 — FFmpeg kann beides. Die CD-1-Hälfte liegt schon im Baum.
+
+⭐ **`game.007` ist ein Prüfstand, den keine Rechnung ersetzt:** ein echter
+Endzustand von Mission 1 im `.CWM`-Format, den unser eigener Zerleger vollständig
+liest (131 Abschnitte, 0 Byte Rest). Damit liesse sich unsere Simulation gegen
+den Ausgang des Originalmotors prüfen statt gegen unsere eigene Deutung.
+
+⚠ **Berichtigung an `GAMESTATE_RE.md` §3.85:** dort steht, drei `.DM`-Missionen
+hätten gar keine `.CWM` (Sätze 21, 25, 26). Das war nur wahr, solange CD 2
+fehlte — `21.CWM`, `25.CWM` und `26.CWM` liegen auf `E:\LEVELS`.
+
+⚠ **Nicht alle `.DM` haben 131 Abschnitte:** gemessen 1× 131, 8× 122, 4× 120.
+Die 120er/122er sind vom 08.07.1997, `1.DM` vom 04.08.1997 — ein älterer
+Formatstand. **`1.DM` ist damit die einzige Datei auf beiden CDs mit allen 131
+Abschnitten** und der beste Prüfgegenstand für alles jenseits von `sec120`.
