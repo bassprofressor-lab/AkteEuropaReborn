@@ -481,6 +481,12 @@ public partial class MapViewer : Node2D
             return;
         }
         if (_abbruchCheck > 0f) { AbbruchCheckGo(); return; }
+        if (_einschlagCheck)
+        {
+            GD.Print(_entities.EinschlagCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_schiffBildCheck)
         {
             GD.Print(_entities.SchiffBildCheck());
@@ -896,6 +902,8 @@ public partial class MapViewer : Node2D
             else if (a == "--auswahl-check") _auswahlCheck = true;
             else if (a == "--befehl-check") _befehlCheck = true;
             else if (a == "--schiffbild-check") _schiffBildCheck = true;
+            else if (a == "--einschlag-check") _einschlagCheck = true;
+            else if (a == "--keine-einschlaghoehen") MapEntityLayer.KeineEinschlagHoehen = true;
             else if (a == "--abbruch-check=alt")
             {
                 // ⚠ DIE GEGENPROBE: 60 s spielen, aber NICHT aufraeumen. Ohne
@@ -1365,6 +1373,7 @@ public partial class MapViewer : Node2D
     private bool _auswahlCheck;
     private bool _befehlCheck;
     private bool _schiffBildCheck;
+    private bool _einschlagCheck;
     private float _upTime;
 
     /// <summary>`--demo-leave=<n>` sends the demo's unit back where it came from

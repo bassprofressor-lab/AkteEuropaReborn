@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Rendering;
+﻿namespace AkteEuropaReborn.Rendering;
 
 using System.Collections.Generic;
 using Godot;
@@ -85,6 +85,11 @@ public partial class MapEntityLayer
     /// der Zeichner nur durchlaufen muss.</summary>
     private readonly List<Kartenobjekt> _objDraw = new();
 
+    /// <summary>Zelle (<c>spalte·1024 + zeile</c>) → Einschlagschwelle der
+    /// aufragenden Kachel, die dort steht. Siehe
+    /// <see cref="SchwelleAn"/>.</summary>
+    private readonly Dictionary<int, int> _objSchwelle = new();
+
     /// <summary>Wie viele aufragende Objekte der letzte Durchgang gezeichnet
     /// hat — ⚠ Regel 33: ohne diese Zahl ist »kein Unterschied im Bild« nicht
     /// von »der Durchgang lief gar nicht« zu unterscheiden.</summary>
@@ -107,6 +112,7 @@ public partial class MapEntityLayer
     {
         _objTex = null;
         _objDraw.Clear();
+        _objSchwelle.Clear();
         ObjectsBurning = 0;
         if (NoObjectOcclusion) return;
 
@@ -165,6 +171,11 @@ public partial class MapEntityLayer
                 }
             }
             _objDraw.Add(e);
+            // ⚠ 19.08.2026 — die EINSCHLAGSCHWELLE dieser Zelle gleich mit
+            // merken. Der Geschosstakt fragt sie je Schritt ab, und eine Liste
+            // durchzugehen waere dafuer zu teuer. Wald 40, zerstoerbares
+            // Objekt 30 — siehe MapEntityLayer.SchwelleAn.
+            _objSchwelle[e.Col * 1024 + e.Row] = e.HatKohle ? 40 : 30;
         }
         // ⚠ Nach ZEILE sortieren, nicht nach Lage im Bild: das Zeilenfach
         // entscheidet, was vor wem liegt, und der Backofen liefert schon in

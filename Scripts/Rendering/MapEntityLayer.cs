@@ -743,6 +743,10 @@ public partial class MapEntityLayer : Node2D
 
         /// <summary>Wann die naechste Rauchwolke faellt, in Sekunden.</summary>
         public float RauchAt;
+
+        /// <summary>Flughoehe an der Muendung und am Ziel, in Fuenfzehnteln
+        /// einer Gelaendestufe. Siehe <see cref="GeschossHoehe"/>.</summary>
+        public float HoeheStart, HoeheZiel;
     }
 
     /// <summary>
@@ -815,6 +819,61 @@ public partial class MapEntityLayer : Node2D
         17 => 47,
         _ => -1,               // 0xFFFF in der Tafel: kein Muendungsfeuer
     };
+
+    /// <summary>
+    /// <b>WIE HOCH EIN HINDERNIS AUF DIESER ZELLE IST</b> — in derselben
+    /// Einheit wie alles andere: eine Gelaendestufe = 15.
+    ///
+    /// <para>⚠ 19.08.2026, gelesen. Der Geschosstakt des Originals prueft vor
+    /// jedem Schritt, ob das Geschoss noch UEBER dem hinwegkommt, was auf der
+    /// Zelle steht. Sechs Vergleiche, alle in der Form
+    /// <c>add reg, schwelle ; cmp reg, hoehe ; jle weiterfliegen</c> — selbst
+    /// ausgezaehlt im Bereich 0x4528B1..0x452FAB:</para>
+    ///
+    /// <code>
+    ///   0x452996  add eax, 15   ; lebende Einheit
+    ///   0x452A9C  add ecx, 40   ; aufragendes Hindernis
+    ///   0x452B88  add eax, 15   ; Infanteriezelle
+    ///   0x452C71  add ecx, 40   ; Wald
+    ///   0x452D41  add ecx, 60   ; GEBAEUDE
+    ///   0x452E11  add ecx, 30   ; zerstoerbares Objekt
+    /// </code>
+    ///
+    /// <para>Die drei, die in mein F-Fenster fielen, stehen dort an denselben
+    /// Stellen (0x45191B, 0x4519EB, 0x451ABB) mit denselben Zahlen.</para>
+    ///
+    /// <para><b>Die Richtung des Vergleichs</b>, und sie ist das Entscheidende:
+    /// <c>jle</c> springt zum WEITERfliegen. Getroffen wird also, wenn
+    /// <c>Geschosshoehe &lt; Gelaende + Schwelle</c>. Ein Gebaeude (60 = vier
+    /// Stufen) faengt damit Geschosse ab, die ueber einen Panzer (15 = eine
+    /// Stufe) hinweggehen — genau das, was die alte Notiz behauptete und was
+    /// jetzt belegt ist.</para>
+    ///
+    /// <para>⚠ UNSER: das Original liest die Art aus seiner Belegungskarte, wir
+    /// aus dem, was wir ohnehin fuehren — Besatzer der Zelle fuer Einheit und
+    /// Gebaeude, die gemerkte Kachelschwelle fuer Wald und Objekt. Dieselbe
+    /// Einteilung auf einem anderen Weg; die ZAHLEN sind gelesen.</para>
+    /// </summary>
+    private int SchwelleAn(int col, int row)
+    {
+        int occ = _nav?.OccupantAt(col, row) ?? -1;
+        if (occ >= 0 && occ < _entities.Count)
+        {
+            var b = _entities[occ];
+            if (!b.Dead && !b.IsProp) return b.IsBuilding ? 60 : 15;
+        }
+        return _objSchwelle.TryGetValue(col * 1024 + row, out int s) ? s : 0;
+    }
+
+    /// <summary>Wie hoch das Geschoss gerade fliegt — Grundhoehe plus Bogen, in
+    /// Fuenfzehnteln einer Gelaendestufe. Die Grundhoehe geht linear von der
+    /// Muendung zur Zielhoehe, wie im Original (@0x452543 ff.).</summary>
+    private float GeschossHoehe(Projectile p)
+    {
+        float t = p.Weite <= 1f ? 1f
+                : Mathf.Clamp(1f - p.Pos.DistanceTo(p.Aim) / p.Weite, 0f, 1f);
+        return Mathf.Lerp(p.HoeheStart, p.HoeheZiel, t) + BogenHoehe(p);
+    }
 
     private static float Scheitelteiler(int art) => art switch
     {
@@ -1231,6 +1290,28 @@ public partial class MapEntityLayer : Node2D
     private int _selected = -1;
     private int _hovered = -1;
     private int _schiffFootLog;
+
+    /// <summary>Wie oft ein Geschoss unterwegs an einem Hindernis haengengeblieben
+    /// ist, statt sein Ziel zu erreichen — siehe SchwelleAn. ⚠ Ohne diese Zahl
+    /// waere »die Einschlagshoehen sind eingebaut« nicht von »sie greifen nie«
+    /// zu unterscheiden.</summary>
+    public int GeschossGestoppt;
+
+    /// <summary>
+    /// <c>--keine-einschlaghoehen</c> — DIE GEGENPROBE zu den Hoehenschwellen.
+    ///
+    /// <para>⚠ Sie sind ein spuerbarer Eingriff: auf map_01 tragen <b>553 von
+    /// 3024</b> Zellen die Waldschwelle 40, und ein Geschoss fliegt auf
+    /// Muendungshoehe (10…30). Ein Schuss quer durch den Wald bleibt damit im
+    /// Baum stecken — gemessen bleiben auf Hoehe 15 <b>100 %</b> der Bahnen
+    /// haengen, auf 60 noch 78 %, auf 120 keine.</para>
+    ///
+    /// <para>Das ist die Regel des Originals (Zahlen und Fundstellen bei
+    /// <see cref="SchwelleAn"/>), aber wer sie im Spiel als zu hart empfindet,
+    /// soll den Stand davor zum Vergleich haben — ohne dass jemand den Code
+    /// aendern muss.</para>
+    /// </summary>
+    public static bool KeineEinschlagHoehen;
     private int _dreh4x4Takt;
 
     /// <summary>Der angewählte FLUGZEUGPLATZ — die Zeile in <see cref="_special"/>,
@@ -7734,6 +7815,13 @@ public partial class MapEntityLayer : Node2D
                     // Scheitelteiler. Bei gerader Bahn bleibt beides 0.
                     Weite = muendung.DistanceTo(ShotAim(victim)),
                     Scheitel = Scheitelteiler(art) * muendung.DistanceTo(ShotAim(victim)),
+                    // Die Flughoehe. Sie faengt auf der Muendungshoehe ueber dem
+                    // Gelaende des SCHUETZEN an (Feld +0x14 der Geschosstafel,
+                    // heute frueh als Hoehe geklaert) und laeuft linear auf die
+                    // Gelaendehoehe des ZIELS zu.
+                    HoeheStart = ElevOf(shooter.Col, shooter.Row) * 15
+                                 + Mathf.Max(0, Audio.GameSounds.MuzzleHeight(art)),
+                    HoeheZiel = ElevOf(victim.Col, victim.Row) * 15,
                 });
             }
 
@@ -8073,9 +8161,52 @@ public partial class MapEntityLayer : Node2D
             float step = p.Speed * dt;
             if (dist > 0.01f) p.Facing = DirToFacing(d);
 
+            bool gestoppt = false;
             if (dist > step)
             {
                 p.Pos += d / dist * step;
+
+                // ⭐⭐ 19.08.2026 — SCHLAEGT DAS GESCHOSS UNTERWEGS EIN?
+                //
+                // Das Original prueft das vor JEDEM Schritt: es holt die
+                // Gelaendehoehe am Geschosspunkt und vergleicht sie samt der
+                // Schwelle dessen, was dort steht, gegen die Flughoehe. Ist die
+                // Flughoehe kleiner, ist Schluss. Zahlen und Fundstellen bei
+                // SchwelleAn.
+                //
+                // ⚠ Zwei Ausnahmen, beide gelesen:
+                //   * KEIN EIGENBESCHUSS — @0x452944 liest die Buendnistafel
+                //     `byte[0x87B155 + 40*schuetze + ziel]`; ist der Eintrag
+                //     gesetzt, fliegt das Geschoss durch.
+                //   * Die Zelle des SCHUETZEN selbst zaehlt nicht, sonst
+                //     schluege jeder Schuss sofort im eigenen Rumpf ein.
+                var zelle = CellAt(p.Pos);
+                if (zelle is { } zz)
+                {
+                    int zc = Mathf.RoundToInt(zz.X), zr = Mathf.RoundToInt(zz.Y);
+                    int occ = _nav?.OccupantAt(zc, zr) ?? -1;
+                    bool eigen = occ == p.Shooter;
+                    bool freund = false;
+                    if (!eigen && occ >= 0 && occ < _entities.Count
+                        && p.Shooter >= 0 && p.Shooter < _entities.Count)
+                        freund = !IsHostile(_entities[p.Shooter], _entities[occ]);
+                    if (!eigen && !freund && !KeineEinschlagHoehen)
+                    {
+                        int schwelle = SchwelleAn(zc, zr);
+                        if (schwelle > 0 &&
+                            GeschossHoehe(p) < ElevOf(zc, zr) * 15 + schwelle)
+                        {
+                            // Hier ist Schluss. Das Ziel wird das, was im Weg
+                            // stand — nicht mehr das urspruengliche. Kein
+                            // `continue`: der Einschlagsblock unten uebernimmt.
+                            p.Aim = p.Pos;
+                            p.Target = occ >= 0 && occ < _entities.Count
+                                       && !_entities[occ].IsProp ? occ : -1;
+                            GeschossGestoppt++;
+                            gestoppt = true;
+                        }
+                    }
+                }
                 // ⭐ 19.08.2026 — DIE RAUCHSPUR. Der Geschosstakt des Originals
                 // legt unterwegs Effekte an (@0x45286B): `rand()%3 + 0x2A`,
                 // also Folge **42, 43 oder 44**. Nur fuer die Arten **5..20**
@@ -8101,8 +8232,7 @@ public partial class MapEntityLayer : Node2D
                         });
                     }
                 }
-                _shots[i] = p;
-                continue;
+                if (!gestoppt) { _shots[i] = p; continue; }
             }
 
             // impact
@@ -10174,6 +10304,10 @@ public partial class MapEntityLayer : Node2D
         sb.Append($"tick-check: Mission {_mscript.Mission} nach {seconds:0.0} s ohne " +
                   $"Zutun — {_mscript.TickLine(seconds)}\n");
         sb.Append($"   ausgeloest: {texts} Texte, {money} Geldbuchungen, {sounds} Klaenge");
+        // ⚠ Die Zahl zu den Einschlagshoehen: wie oft ein Geschoss unterwegs
+        // an einem Hindernis haengengeblieben ist. Siehe SchwelleAn.
+        if (GeschossGestoppt > 0)
+            sb.Append($", {GeschossGestoppt} Geschosse unterwegs gestoppt");
         if (sounds > 0 || money > 0)
             sb.Append("   ⚠ das Skript meldet einen Erfolg, den niemand erspielt hat");
         sb.Append('\n');
@@ -18774,6 +18908,60 @@ public partial class MapEntityLayer : Node2D
         sb.AppendLine(ohne == 0
             ? "   bestanden — jedes Schiff findet ein Bild, der Besitzerpunkt kommt nicht dran."
             : $"   ⚠ {ohne} Schiffe OHNE Bild — genau die zeigen den Punkt statt eines Rumpfes.");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// <b>`--einschlag-check` — HABEN DIE HOEHENSCHWELLEN ZAEHNE?</b>
+    ///
+    /// <para>⚠ 19.08.2026. Der Takt-Prueflauf meldet 0 gestoppte Geschosse —
+    /// aber er laeuft »ohne Zutun«, da faellt gar kein Schuss. Eine Null, die
+    /// nur bedeutet »nichts ist passiert«, ist keine Messung.</para>
+    ///
+    /// <para>Dieser Prueflauf stellt den Fall her: er zaehlt erst, was auf der
+    /// Karte ueberhaupt eine Schwelle hat, und schickt dann <b>kuenstliche
+    /// Geschosse</b> auf gerader Bahn quer ueber die Karte — einmal auf
+    /// Muendungshoehe (15) und einmal hoch (60) — und zaehlt, wie viele
+    /// unterwegs haengenbleiben. Bleiben bei 15 mehr haengen als bei 60, hat
+    /// die Regel Zaehne.</para>
+    /// </summary>
+    public string EinschlagCheck()
+    {
+        var sb = new System.Text.StringBuilder();
+        var zaehler = new Dictionary<int, int>();
+        int w = _nav?.Width ?? 0, h = _nav?.Height ?? 0;
+        for (int c = 0; c < w; c++)
+            for (int r = 0; r < h; r++)
+            {
+                int t = SchwelleAn(c, r);
+                if (t > 0) zaehler[t] = zaehler.GetValueOrDefault(t) + 1;
+            }
+        sb.AppendLine($"einschlag-check: Karte {w}x{h}");
+        foreach (var kv in new SortedDictionary<int, int>(zaehler))
+            sb.AppendLine($"   Schwelle {kv.Key,2}: {kv.Value,6} Zellen  " +
+                          (kv.Key == 60 ? "(Gebaeude)" : kv.Key == 40 ? "(Wald / Hindernis)"
+                           : kv.Key == 30 ? "(zerstoerbares Objekt)" : "(Einheit)"));
+        if (zaehler.Count == 0)
+            return sb.Append("   ⚠ NICHT GEMESSEN — keine Zelle mit Schwelle.\n").ToString();
+
+        // Kuenstliche Bahnen: waagerecht ueber jede achte Zeile.
+        foreach (int hoehe in new[] { 15, 60, 120 })
+        {
+            int bahnen = 0, gestoppt = 0;
+            for (int r = 0; r < h; r += 8)
+            {
+                bahnen++;
+                for (int c = 0; c < w; c++)
+                {
+                    int t = SchwelleAn(c, r);
+                    if (t > 0 && hoehe < ElevOf(c, r) * 15 + t) { gestoppt++; break; }
+                }
+            }
+            sb.AppendLine($"   auf Hoehe {hoehe,3}: {gestoppt,3} von {bahnen,3} Bahnen " +
+                          $"bleiben haengen ({100.0 * gestoppt / Mathf.Max(1, bahnen):0}%)");
+        }
+        sb.AppendLine("   ⚠ Ein flaches Geschoss muss oefter haengenbleiben als ein hohes — " +
+                      "sonst greift die Schwelle nicht.");
         return sb.ToString();
     }
 
