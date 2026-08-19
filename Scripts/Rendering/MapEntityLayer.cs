@@ -18965,6 +18965,40 @@ public partial class MapEntityLayer : Node2D
         return sb.ToString();
     }
 
+    /// <summary>
+    /// <b>`--rampen-check` — HAT DIE KARTE RAMPEN, UND WO?</b>
+    ///
+    /// <para>⚠ 19.08.2026. Die Rampenmarken aus Sektion 20 sind die Vorbedingung
+    /// des Transports: ab Lagenbyte <b>100</b> darf beladen, ab <b>200</b>
+    /// entladen werden (0x40950C/0x409763 bzw. 0x409383/0x4097B8). Ohne diesen
+    /// Prueflauf waere »der Transport tut nichts« nicht von »die Karte hat keine
+    /// Rampen« oder »die Karte ist aus einem alten Import« zu unterscheiden.</para>
+    /// </summary>
+    public string RampenCheck()
+    {
+        var sb = new System.Text.StringBuilder();
+        int beladen = 0, entladen = 0;
+        int w = _nav?.Width ?? 0, h = _nav?.Height ?? 0;
+        var erste = new List<string>();
+        for (int c = 0; c < w; c++)
+            for (int r = 0; r < h; r++)
+            {
+                bool b = RampeBeladen(c, r), e = RampeEntladen(c, r);
+                if (b) beladen++;
+                if (e) entladen++;
+                if ((b || e) && erste.Count < 6)
+                    erste.Add($"({c},{r}){(e ? " entladen" : " beladen")}");
+            }
+        sb.AppendLine($"rampen-check: Karte {w}x{h}, {RampenZellen} Rampenzellen in der Meta");
+        sb.AppendLine($"   davon beladbar (>=100): {beladen}, entladbar (>=200): {entladen}");
+        if (erste.Count > 0) sb.AppendLine($"   erste: {string.Join(", ", erste)}");
+        sb.AppendLine(RampenZellen == 0
+            ? "   ⚠ KEINE — entweder hat die Karte keine, oder sie stammt aus einem "
+              + "Import vor dem 19.08.2026. Dann hilft --reexport-maps=<CD-Pfad>."
+            : "   die Daten sind da; der Transport haette, wo er absetzen kann.");
+        return sb.ToString();
+    }
+
     private void DrawUnitsUpTo(int row, ref int idx)
     {
         while (idx < _unitDraw.Count && _entities[_unitDraw[idx]].Row < row)

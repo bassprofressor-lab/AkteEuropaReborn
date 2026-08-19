@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Import;
+﻿namespace AkteEuropaReborn.Import;
 
 using System;
 using System.Collections.Generic;
@@ -286,12 +286,6 @@ public static class MapForest
     /// der 0xFFFF-Fall bleibt aus. Eine Karte ohne Sektion 20 sieht damit aus
     /// wie bisher, statt still anders zu werden.</para>
     /// </summary>
-    /// <summary>Die Belegungswerte der GEBÄUDE. Sie liegen im selben Bereich,
-    /// gehen im Original aber einen eigenen Weg (<c>0x4B44C6</c>:
-    /// <c>cmp si,0xEB8C / jae</c> — darunter der Gebäudezweig über
-    /// <c>0x40135C</c>, darüber die gewöhnliche Kachel).</summary>
-    public const int GebaeudeVon = 60000, GebaeudeBis = 60300;
-
     public static bool ImZeilenfach(int imap, int lage = 0)
     {
         // ⚠⚠ 19.08.2026, BERICHTIGUNG NOCH AM SELBEN ABEND. Der erste Anlauf
