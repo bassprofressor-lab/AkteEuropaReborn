@@ -315,6 +315,20 @@ public sealed class InterfaceExporter
         // also Folge **42, 43 oder 44** (11/10/10 Bilder). Wie oft, haengt am
         // Zweig: `& 1` = jeder zweite Takt, `% 3` = jeder dritte.
         ("smoke0", 42), ("smoke1", 43), ("smoke2", 44),
+        // ⚠⚠ 19.08.2026 — DAS ECHTE MUENDUNGSFEUER. Unser "muzzle" ist Folge
+        // 232 (30x27) und war GERATEN. Das Original waehlt es ueber eine Tafel
+        // `word[0x4FA4F8 + 2*ZBRAN]` (50 Eintraege; in der zweiten GAME.EXE
+        // ueber die Form gefunden, @0x4F9500, byteweise dieselbe):
+        //
+        //   ZBRAN 1,2   (Turm 21,22)     -> Folge 46   Kanonen
+        //   ZBRAN 4,5,18(Turm 24,25,38)  -> Folge 45   Schnellfeuer
+        //   ZBRAN 6,7   (Turm 26,27)     -> Folge 48   Raketen
+        //   ZBRAN 17    (Turm 37)        -> Folge 47
+        //   alle uebrigen                -> 0xFFFF, also GAR KEINS
+        //
+        // Die Bilder sind winzig (7x8 bis 21x13) und passen damit zu dem, was
+        // im Standbild zu messen war — Folge 232 war rund sechsmal zu gross.
+        ("mzf45", 45), ("mzf46", 46), ("mzf47", 47), ("mzf48", 48),
         // ⚠ 18.08.2026 — DAS FEUER. Gemeldet als »in Original Kampagne 1 gibt
         // es z.B. von Haus aus ein paar brennende Baeume, die haben wir
         // garnicht«. Die Folge 82 ist NICHT geraten: die Trefferroutine Zasah

@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Rendering;
+﻿namespace AkteEuropaReborn.Rendering;
 
 using System.Collections.Generic;
 using Godot;
@@ -1591,6 +1591,27 @@ public partial class MapEntityLayer
     /// </summary>
     public SellChoice? SellChoiceOfSelection()
     {
+        // ⚠⚠ 19.08.2026 — OHNE KAEUFER KEIN VERKAUF. Gemeldet: »in der Kampagne
+        // sehe ich diesen Verkaufen-Knopf unten, den gibt es dort in der
+        // originalen Kampagne nicht.«
+        //
+        // Er hat recht, und die Kartendaten erklaeren es: **die
+        // Kampagnenkarten 1 bis 10 haben ueberhaupt kein Geschaeftszentrum**
+        // (Typ 17). Von 80 Karten fuehren 33 eines; map_01..map_10, 18, 26, 28,
+        // 30 und map_DM_1 gehoeren nicht dazu. Wo es keinen Markt gibt, gibt es
+        // niemanden, an den man verkaufen koennte.
+        //
+        // ⚠ UNSERE ABLEITUNG, und das gehoert dazugesagt: dass das Original den
+        // Befehl genau an dieser Bedingung ausblendet, ist NICHT gelesen — der
+        // Verteiler @0x448746 und das Fenster @0x446470 sind nicht bis zur
+        // Bedingung verfolgt. Belegt sind zwei Dinge: der Spieler sieht den
+        // Knopf im Original dort nicht, und auf diesen Karten steht kein Markt.
+        // Die Regel erklaert beides und erfindet nichts dazu.
+        bool markt = false;
+        foreach (var b in _entities)
+            if (b.IsBuilding && !b.Dead && b.BType == 17) { markt = true; break; }
+        if (!markt) return null;
+
         foreach (int i in _sel)
         {
             if (i < 0 || i >= _entities.Count) continue;

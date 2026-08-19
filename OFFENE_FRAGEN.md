@@ -727,6 +727,35 @@ relativ zum Fahrzeugbild sitzt, und habe den Anker.
 
 ## G. Zwei Messungen an den Originalbildern (19.08.2026 abends)
 
+> ⚠⚠ **BERICHTIGT NOCH AM SELBEN ABEND — DER MASSSTAB WAR FALSCH.**
+> Ich habe unten mit **2,156** gerechnet, in der Annahme, die Bildfläche von
+> 1380 Bildpunkten seien 640 Spielpunkte. Das Spiel hat aber eine
+> **Auflösungstafel** (`0x538858`, fünf Einträge, in beiden GAME.EXE über die
+> Form gefunden und byte-gleich): **640×480, 800×600, 1024×768, 1280×1024,
+> 1600×1200** — und sie wird direkt an `SetDisplayMode` weitergereicht. Das
+> Video läuft auf **800×600**, der Maßstab ist **1,725**.
+>
+> Drei unabhängige Messungen belegen das: die Zeichenvorschübe von
+> »Heavy Tank« aus FONT.CWD (alle acht Abstände 1,71…1,72), die Grundperiode
+> der Bodentextur (3,45 px = das 2-Punkt-Raster) und die Größe des Panzers
+> (bei 2,156 wäre er nicht höher als seine bloßen Ketten).
+>
+> **Alle Zahlen unten sind damit um 25 % zu klein und mit 1,25 zu
+> multiplizieren.** Insbesondere:
+>
+> * **Die Flamme ist RICHTIG.** Original 34×64 (stehend) und 38×43 (seitlich)
+>   gegen ANIM.CWA 550 = 41…46 × 65…73 und 552 = 34…40 × 45…58. Meine „1,7-mal
+>   zu groß" verglich außerdem die **Leinwand** (60×79 = `max(w)` über alle
+>   sieben Bilder) mit der *Farbfläche* des Originals — zwei verschiedene Dinge.
+>   **Nichts zu ändern.**
+> * Das Mündungsfeuer wird aus 5,1×4,2 zu **6,4×5,2**, seine Lage aus
+>   (+6,7/−2,1) zu **(+8,4/−2,6)**.
+>
+> Die Lehre steht in der Arbeitsweise: **ein Maßstab ist eine Messung und keine
+> Annahme.** Ich hatte „640" gesetzt, weil das Spiel von 1997 ist.
+
+
+
 Der Spieler hat `mündungsfeuer.png` (aus dem Let's Play) und die sechzehn
 `kampagne1 original tutorial*.png` bereitgestellt. Maßstab in beiden: die
 Kartenfläche ist **1380 Bildpunkte für 640** → **2,156**, an den schwarzen

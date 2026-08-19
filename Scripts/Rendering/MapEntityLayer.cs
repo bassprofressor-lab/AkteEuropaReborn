@@ -798,6 +798,24 @@ public partial class MapEntityLayer : Node2D
         return 4f * p.Scheitel * t * (1f - t);
     }
 
+    /// <summary>
+    /// <b>Welche ANIM.CWA-Folge das Muendungsfeuer dieser Waffe ist</b> —
+    /// <c>−1</c> heisst: keines. Tafel <c>word[0x4FA4F8 + 2·ZBRAN]</c>,
+    /// 50 Eintraege, in der zweiten GAME.EXE ueber die Form gefunden
+    /// (@0x4F9500) und byteweise dieselbe. Geholt wird sie im Original von
+    /// 0x436450, gerufen aus dem Zeichner @0x429B72.
+    ///
+    /// <para><c>ZBRAN = Turmbauteil − 20</c>, an allen 23 Karten nachgezaehlt.</para>
+    /// </summary>
+    private static int MuendungsFolge(int waffenBauteil) => (waffenBauteil - 20) switch
+    {
+        1 or 2 => 46,          // Bordkanone und die zweite Kanone
+        4 or 5 or 18 => 45,    // die beiden MG und das Flak-Geschuetz
+        6 or 7 => 48,          // L. und Schw. Raketenwerfer
+        17 => 47,
+        _ => -1,               // 0xFFFF in der Tafel: kein Muendungsfeuer
+    };
+
     private static float Scheitelteiler(int art) => art switch
     {
         5 or 6 or 57 or 58 or 61 or 65 or 66 or 73 or 74 or 78 or 82 or 85 or 86 or 90 => 1f / 11f,
@@ -7554,11 +7572,40 @@ public partial class MapEntityLayer : Node2D
         // zusaetzliches Muendungsfeuer — ihre Schusspose (Bilder 9 und 10)
         // traegt den roten Blitz schon im Sprite. Die Grenze ist
         // InfantryWeaponFirst.
-        if (shooter.Weapon < InfantryWeaponFirst)
+        // ⚠⚠⚠ 19.08.2026 — DIE MUENDUNGSFOLGE STEHT IN EINER TAFEL, und unsere
+        // war geraten.
+        //
+        // Hier stand `Kind = "muzzle"` — ANIM.CWA-Folge 232, 30x27 Bildpunkte,
+        // fuer JEDE Waffe ausser Infanterie. Am Standbild des Spielers
+        // gemessen ist das Muendungsfeuer aber nur rund 8x6 gross, und das
+        // Original waehlt es je Waffe:
+        //
+        //   0x429B72  eax = call 0x401695 -> 0x436450   ; die Folge holen
+        //   0x436450  bl = einheit[+0x0D]               ; ZBRAN
+        //             if (bl > 0x31) fehler("Special part can not have any shooting!")
+        //             return word[0x4FA4F8 + 2*bl]
+        //
+        // Die Tafel (50 x u16) habe ich selbst nachgeprueft: dieselbe
+        // 100-Byte-Folge steht in der zweiten GAME.EXE **genau einmal**
+        // (@0x4F9500). Sie gibt:
+        //
+        //   ZBRAN 1,2 -> 46 · 4,5,18 -> 45 · 6,7 -> 48 · 17 -> 47
+        //   alles andere -> 0xFFFF, also **KEIN Muendungsfeuer**
+        //
+        // ⚠ Damit bekommen dreizehn Waffen im Original gar keines — wir haben
+        // bisher allen eines gegeben, und das erklaert, warum es zu viel wirkte.
+        //
+        // ZBRAN = Turmbauteil − 20; das ist an allen 23 Karten nachgezaehlt
+        // (21↔1, 22↔2, … 39↔19), kein Gegenbeispiel.
+        //
+        // ACHTUNG, unveraendert und belegt: INFANTERIE bekommt ohnehin keines —
+        // ihre Schusspose traegt den roten Blitz schon im Sprite.
+        int mzf = MuendungsFolge(shooter.Weapon);
+        if (shooter.Weapon < InfantryWeaponFirst && mzf >= 0)
             _effects.Add(new Effect
             {
                 Pos = ShotOrigin(shooter) + dir * MuzzleReach,
-                Kind = "muzzle", FrameTime = 0.035f,
+                Kind = $"mzf{mzf}", FrameTime = 0.035f,
             });
 
         // the weapon's own report, out of the game's own table: a component
@@ -11840,7 +11887,18 @@ public partial class MapEntityLayer : Node2D
             // Zeile ist UNSERE Zutat — das Original schweigt vermutlich auch —,
             // aber sie kostet nichts und spart dem Spieler das Raten.
             _order = "Geschaeftszentrum: geschlossen — es oeffnet, sobald eine "
-                   + "eigene Einheit auf einer der vier Platten steht.";
+                   + "eigene Einheit auf einer der vier Platten steht."
+                   // ⚠ 19.08.2026 — DIE ZWEITE MOEGLICHKEIT DAZUSAGEN. Gemeldet
+                   // fuer map_NET02: »es war eine Einheit auf einem der vier
+                   // Felder und nix ist passiert.« Der Prueflauf kauft dort
+                   // aber ordnungsgemaess — und nennt im selben Atemzug den
+                   // Grund: »Der Laden war LEER und wurde vom Nachschub
+                   // gefuellt (2 Stueck nach 77 Originaltakten)«. Auf NET02
+                   // faengt das Regal leer an. Wer frueh klickt, sieht nichts.
+                   + (MarketShelf().Count == 0
+                      ? " ⚠ Das Regal ist ausserdem noch LEER — der Nachschub "
+                      + "fuellt es erst nach einiger Zeit."
+                      : "");
             UpdatePanel();
             return null;
         }
