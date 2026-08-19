@@ -22,11 +22,45 @@ further down, with the addresses it was read at.
 | **Heart, canister and bullets.** | The three icons beside the status bars. They live in `ANIM.CWA`, the file that holds the explosions. |
 | **The original's mouse cursors.** | 28 kinds out of the appendix of `ROBO.CWR`, the attack crosshair among them. |
 | **Units answer an order.** | We had the selection line but not the order line — which the original plays four times as often. |
-| **Trees occlude again.** | Not a code fault: the maps had never been re-baked. |
+| **Trees occlude again.** | ⚠ Reported three times, explained wrong twice. It *was* a code fault: we interleaved trees and units only at **building** rows; the original does it at **every** row. |
+| **No more white box on hover.** | That was ours. The original signals hover with the mouse cursor. |
+| **The selection brackets sit on the unit.** | They hung off the ground point, not the sprite — 6 to 8 px out on average, 21 at worst. |
+| **The flame burns on its own tree.** | It stood beside it: its own position arithmetic instead of the baker's, and the only effect that skipped its anchor. Also: there are **two** flame sprites in alternation; we knew one. |
+| **Units answer a waypoint too.** | The queued-order branch bailed out before the sound. |
+| **Preview text is the size the original sets.** | The advance was 1 px too wide (+17.2%) and the body ran on the wrong typeface (+8.9%). Now 49 characters per line instead of 38 — the original's number. |
+| **Twin mounts fire two projectiles.** | And every shot scatters, as in the original. Affects three weapons. |
+| **Rockets fly an arc.** | 22 projectile kinds; the apex is exactly distance/11 or /2 — both factors are literal floats in the program. |
+| **Projectiles trail smoke.** | Three sequences in rotation, for kinds 5 to 20. |
+| **Large ships can be selected.** | They had no footprint — a battleship got a 1×1 click box underneath the dock. |
+| **Ships turn at the original's rate.** | One step every three ticks, 4×4 hulls every six. We turned every tick — sixteen times too fast. |
+| **A sunk ship leaves nothing behind.** | No wreck, no slick. Only ground vehicles leave one. |
+| **The submarine dives.** | Anyone not allied sees only a dithered blue shadow. It really is unarmed — a scout. |
+| **Muzzle flashes come from the game's own table.** | Four sequences by weapon — and thirteen weapons have **none** in the original. |
+| **Buildings get no selection brackets.** | The original has them for units only; a building answers with its window. |
+| **"Sell" only where a market exists.** | Campaign maps 1–10 have none. |
+| **The objectives box on the preview screen.** | It was missing entirely — and it is the only place the original swaps in its second typeface. |
+| **Bridges and ramps stand up.** | 578 cells that hang on a second grid table we had never read. |
+| **Projectiles stop at obstacles.** | A building catches what flies over a tank — six thresholds, all read. |
+| **Popups no longer trap the mouse in the menu.** | The cause was not a leftover popup but a **pause** left standing. |
+| **Fog uncovers softly**, not tile by tile. Marching squares over a 257×257 corner grid, plus the original's own dither pattern in its own palette colour. |
+| **Thirteen weapons get a flying projectile** instead of three — each with its own impact. Out of a table we had read one twenty-second of. |
+| **Units earn experience and gain rank.** | We had been reading the field for months; nobody ever changed it. A veteran deals more damage and takes less. |
+| **Ships have sixteen facings.** | Eight of them had never been exported. A ship could not point north-north-west. |
+| **The entity record now carries the game's own field names.** | The original ships a recorder that names every field. See `ENTITY_FELDER.md`. |
+| ⭐ **The campaign is complete: 33 maps instead of 15.** | Missions 16–33 live on the **second CD** and were simply absent. We had been maintaining their rules for months — they could never be loaded. |
+| **Transports arrive loaded.** | The maps ship them with cargo. We were placing that cargo as loose figures next to the ship. |
+| **Maps carry their own terranium deposits.** | On four missions the script places none — so there was **not a single build site for a mine**. |
+| **The help window has its pictures back.** | 132 pictures for help and encyclopedia sat unused. The text flows beside them, exactly as in the original. |
+| **A bridge and a ramp know which one they are.** | The map's layer byte is not merely "one is here" — it is the slot number. |
 
-⚠ **What is deliberately NOT in here:** the original's soft fog edge. The
-substructure is read, the softness is not proven — so nothing was built. Every
-open question is listed in `OFFENE_FRAGEN.md`.
+⚠ **What is deliberately NOT in here:** online multiplayer, and loading and
+unloading transports by hand — the maps now deliver their cargo correctly, but
+you cannot load one yourself yet. Every open question is listed in
+`OFFENE_FRAGEN.md`.
+
+⚠ **A correction to this box:** it claimed until now that the twin mount was
+not included. It is, and it is listed two rows above. A defect list whose
+reasons go stale sends you down the same road twice.
 
 ### The four areas of this release
 
@@ -54,6 +88,120 @@ Campaign stays faithful to the original; skirmish and multiplayer are allowed to
 deviate on purpose, and every deviation is marked as ours.
 
 ### Units
+
+- ⭐⭐ **Thirteen weapons instead of three get a flying projectile — and the
+  numbers no longer live in our source, they live in the game.**
+
+  A list of three component ids decided which weapon fired a visible
+  projectile; everything else drew a tracer. Speed was **one** number for all
+  of them (190 px/s), the impact **one** explosion for all of them. All three
+  were guesses and were marked as such.
+
+  The game answers the question itself, in a table at `0x4F98E8`: **91 rows of
+  22 bytes**, indexed by the "sound class" from stats `+0x1C` — which is in
+  fact the *projectile kind*. We had read exactly **one** of its fields, the
+  firing sound.
+
+  | field | what it holds |
+  |---|---|
+  | `+0x00` | speed per tick, 5…35 — **different per kind** |
+  | `+0x02` | flight sequence, `30000` = none |
+  | `+0x06` | impact sequence |
+  | `+0x0A` | firing sound (the one field we had) |
+  | `+0x0C` | impact sound |
+  | `+0x14` | a bias added to the mount lookup |
+  | `+0x15` | lateral offset of the twin mount |
+
+  That `30000` is the "none" marker and not a sequence number is not a reading:
+  `ANIM.CWA` holds **1000** sequences. By that table thirteen components have a
+  flight sprite — and the two fastest (speed 35) are exactly the ones that
+  really do just draw a tracer.
+
+  The exporter now writes **30 flight sequences and 13 impact sequences** out of
+  `ANIM.CWA`. Two further impact sequences the table names (87 and 309) are
+  **empty** there — so those weapons show no impact in the original, and that is
+  now reproduced rather than painted over.
+
+  **The check:** the table is byte-for-byte identical in both `GAME.EXE` builds
+  on this machine (91 × 22 = 2002 bytes), and every one of the 62 used rows
+  resolves to real frames afterwards — counted, none missing.
+
+- ⭐⭐ **Units earn experience and gain rank.**
+
+  Record `+0x28` had been read for months and fed into the damage formula.
+  Nobody ever wrote it — it is 0 on 1941 of 1971 map units, which we filed as
+  "almost always ineffective". The real reason is a different one: **it is not
+  set, it is earned.**
+
+  The hit routine ends with (@0x40CEF7…0x40CF7D):
+
+  ```
+  gain = (reload+1) · damage · (defence + 2·elev_victim)
+                    ÷ (attack + 2·elev_shooter) ÷ 8
+  ```
+
+  The points sit in `+0x4C` — as a **byte**, and that is the whole point: when
+  it overflows, the rank in `+0x28` goes up by one. The game prints both
+  together as `exp: (byte[+0x28] << 8) | byte[+0x4C]`.
+
+  Read as design: the game rewards **hitting a well-armoured target in good
+  cover with a slow-reloading weapon**. A sniper on a hill learns more from a
+  tank than the tank learns from him. **Buildings give nothing** (@0x40CEEA) —
+  the same `0x1F40` threshold that separates unit from building on the panel.
+
+  This also makes the **veteran voice set** meaningful for the first time: the
+  voice routine compares `+0x28` against 50 and takes a different set above it.
+  Until now nothing could reach that threshold.
+
+  ⚠ Fixed alongside: `+0x28` was loaded into **two** fields (`Rating28` and
+  `Field28`), under two names with two comments. While both were only read, that
+  went unnoticed; the moment rank starts rising, one copy would have gone stale
+  — the veteran would have kept the recruit's voice.
+
+- ⭐ **A ship can finally point north-north-west: sixteen facings, not eight.**
+
+  The exporter pulled `f0…f7` for every hull. For a ship that is **eight of
+  sixteen** — half a turn, not every second step. The very same mistake had
+  already been found once for aircraft; it was never about one part, it was
+  about the assumption that eight holds everywhere.
+
+  ⚠ The justification our notes carried does **not** hold, though: "the sprites
+  are mirror-symmetric 1↔15". Measured on the frame dimensions, ships match
+  **neither** the period-8 pairing **nor** the period-16 one — ships simply are
+  not drawn symmetrically (tracked chassis match 5 to 7 of 7 pairs). What does
+  hold:
+
+  1. Every ship part owns **exactly 16 frames in one group**; ground parts own
+     48, 96 or 144, i.e. six slope blocks of eight. A ship sails on water and
+     has no slope.
+  2. Looked at: the 16 frames are one continuous full turn with no repeat at
+     eight.
+  3. **The shipped maps say so themselves.** Of 213 ships, **21 carry a facing
+     above 7**, up to 15 — out of 4592 land units, exactly one. That evidence
+     depends on neither the code nor my eyes.
+
+- ⭐ **The entity record now carries the game's own field names** —
+  `ENTITY_FELDER.md`.
+
+  The original ships a recorder (`RECORDING` / `REPLAY`) that writes every field
+  of every unit out **by name**, every tick. It yields 56 names; 46 could be
+  bound to an offset.
+
+  The harness compares **distances**, not addresses: the entity base differs
+  between the two `GAME.EXE` builds (`0x6E26C8` vs `0x6E1728`). That it
+  **rejects** ten of the 56 names — names belonging to other tables, which moved
+  by a different amount — is the actual evidence that it measures.
+
+  What came out: `+0x02` is `OT_PODV` (rotation of the **chassis**), `+0x03` is
+  `OT_HLAV` (rotation of the **barrel**), `+0x0B` `SPODEK` (lower part), `+0x0C`
+  `VRSEK` (upper part), `+0x0F` `l_engine` (the propulsion — which is exactly
+  what our "unit types" 160…175 are), `+0x3D` `RELOAD`. Our importer had all of
+  it separated correctly already; now the reason is on record too.
+
+  It also resolved a contradiction that had put the sixteen ship facings in
+  doubt: the turn routine @0x405100 does give sixteen steps to class 3 — but
+  what it turns there is `+0x03`, the **superstructure**. A ship's **hull** sits
+  in `+0x02`, and that is a different routine.
 
 - ⭐ **A building's ground no longer hides anything.** Reported with
   screenshots: "that piece of track is never visible there, and when a unit
@@ -185,7 +333,6 @@ deviate on purpose, and every deviation is marked as ours.
   minimum range, 30 targets dropped because of it, and zero with
   `--no-min-range`. ⚠ The report also says when a map has no such unit at all —
   there the zero is not a result.
-
 
 - **A group no longer strands at a bottleneck.** Reported as "selecting a group
   and driving them one behind the other, over a bridge say, stops them dead as
@@ -467,6 +614,41 @@ deviate on purpose, and every deviation is marked as ours.
 
 ### Campaign and interface
 
+- ⭐⭐ **Abort a campaign mid-mission and the mouse works again in the menu — and
+  the popups were never the cause.**
+
+  Reported for the second time: "after I quit a campaign halfway through, the
+  popups turn up in the menu and I have to close them before I can use my mouse
+  again."
+
+  A help window **pauses the game** — not our invention, it is one of the eight
+  options the original ships ("pause the game while a help window is open").
+  Abort the mission while one is open and the windows were cleared, **but the
+  pause stayed**. In the menu that freezes everything on `ProcessMode.Inherit`,
+  i.e. all mouse handling. Only the help window itself keeps running
+  (`ProcessMode.Always`, or it could never be clicked away) — and clicking it
+  away releases the pause.
+
+  **So the popups were not the cause, they were the only thing still
+  responding.** That is why the fault read as "popups trap the mouse", and why
+  closing them helped.
+
+  ⚠ **Why three harnesses reported green without lying:**
+  `HelpWindow.PauseErlaubt` disables the pause entirely when **headless** — for
+  a good reason, since a window nobody can click away hangs every run. Every
+  harness therefore ran in a world where this fault *cannot* exist. New:
+  `--help-pause` lifts that, and `--abbruch-check` plays a real campaign
+  mission for a while and then leaves through the same door as the "Quit"
+  button. With `=alt` it shows the fault — *popups in the main menu: YES ·
+  mouse-catching nodes: 2 · tree paused: YES*. With the fix, all zero.
+
+- **The white box on hovering a unit is gone.** It was ours, sat there
+  unguarded, and was drawn on every hover. The original signals hover with the
+  **mouse cursor** — 28 kinds from the appendix of `ROBO.CWR`, including
+  separate ones for own unit, enemy unit (the crosshair) and infantry. A frame
+  around the target is not among them. ⚠ It stays for the no-sprites case,
+  where nothing else would be visible.
+
 - ⭐⭐ **The campaign could not be lost — now it can.** A player could lose every
   unit and every building and the mission would carry on. Nothing crashed,
   nothing reported anything; the game was simply unloseable.
@@ -622,15 +804,55 @@ deviate on purpose, and every deviation is marked as ours.
   ⚠ Ours is **how fast** it turns — the original carries a wind direction but
   states no rate.
 
-- **Trees occlude units again.** Reported twice, and both times it was not the
-  code: after the last change to object heights the maps had **never been
-  re-baked**. 36 maps re-exported, 69,388 raised objects. A fault that looks
-  like a code fault and is a data state — which is why it is written down here.
+- ⭐⭐ **Trees occlude units again — and this time for the right reason.**
+
+  ⚠ **Reported three times. The first two explanations were wrong**, most
+  recently the one that stood here until today: "both times it was not the code,
+  the maps had never been re-baked". Re-baking was necessary and correct — the
+  data has been sound since, measured: `map_01.json` names 558 objects, and
+  01.CWM holds 553 forest + 5 object = **558**, exact to the entry. Across all
+  23 maps, **37,231 of 37,231** forest entries agree with the occupancy map. It
+  was *also* a code fault, and that one stayed.
+
+  **What was wrong:** we interleaved trees and units only at **building** rows,
+  and within a threshold the trees came **before** the units.
+
+  **Why that could never work, arithmetically:** a unit on row *b* is drawn at
+  the first building threshold *T > b*, a tree on row *a* at the first *T ≥ a*.
+  So the tree covers the unit only if some building threshold satisfies
+  *b < T < a*. From which it follows immediately: **a tree standing ONE row in
+  front of a unit can never cover it on any map** — there is no integer between
+  *b* and *b+1*. And that is the everyday case.
+
+  On **map_01**, the mission the player is playing: 72 rows, trees on **all
+  72**, but only **four** buildings — on rows 2, 5, 13 and 31. Below row 31
+  there was no threshold at all; every unit lay above every tree.
+
+  **What the original does** (map drawer `0x4B4150` / F `0x4B3A80`, third pass
+  @`0x4B43BB`): it loops over **rows**, and per row draws @`0x4B43F9` **the row
+  bucket first** (units, buildings, rail, effects) and @`0x4B4429` **the tiles
+  after**. There is no depth sort, no per-object height and no separate object
+  layer — only that order. Ours now does the same.
+
+  ⚠ **And the switch had to go too.** The whole interleaving hung on
+  `_drawSprites && Patterns != null`. If the building atlas was missing (it can
+  exceed a texture's maximum size) the loop was skipped — and then there was
+  guaranteed to be no occlusion at all, for rail and units either.
+
+  **Measured** with the new `--verdeck-check`, which counts at the draw calls
+  actually issued: mission 5 → 37 units, 76 tiles, **1597 pairs where a tile
+  covers a unit, and 0 in the wrong order**. Mission 1 → 275 and 0.
+
+  ⚠ **Why it was never caught:** `--behind-check` and `--demo-front` existed,
+  but both place a unit **next to a building** — precisely where the old
+  interleaving did work. A harness built the same way would have reported green
+  while the real case failed. The new one deliberately checks away from
+  buildings and says **"not measured"** when a map has no trees or no units
+  (missions 20 and 27 do exactly that).
 
 - **"Continue" at the end of a campaign mission** led to the main menu instead
   of the next mission's briefing — and showed the help windows of the mission
   just finished.
-
 
 - ⭐ **The original's encyclopedia is in the game.** The menu row was meant to
   link to our wiki. Looking at what the *original* has behind it turned up
@@ -737,6 +959,91 @@ deviate on purpose, and every deviation is marked as ours.
   buildings become over seventy on a large map, airports, factories and bases
   among them, all there to be captured.
 
+### The map and what stands on it
+
+- ⭐⭐ **The campaign is complete for the first time — 33 maps instead of 15.**
+
+  Everything ever imported came from **CD 1**. Missions **16 to 33 live on
+  CD 2** and were not in the project at all: 18 maps, 57 tile sets, 16 AI
+  files, 67 MB in total.
+
+  The galling part: the **rules** for all 33 missions had long been in
+  `mission_scripts.json` (read out of `GAME.EXE`, 684 setter rules, 34 defeat
+  conditions), and all 33 briefings were in `briefings.json`. Only the
+  *terrain* was missing. Months of maintaining rules for missions nobody could
+  load.
+
+  | | before | now |
+  |---|---|---|
+  | Campaign maps | 15 | **33** |
+  | Demos | 3 | **13** |
+
+  All 33 run sixty seconds untouched in the rig.
+
+  ⚠ **The installation directory holds no terrain file at all.** The original
+  reads terrain from the CD at run time. Re-importing needs **both** discs.
+
+- ⭐ **The map's layer byte is the structure's slot number.**
+
+  Section 20 gives a draw layer per cell. Above 100 this meant "a bridge or a
+  ramp is here" — without saying which. It says more:
+
+  | layer byte | meaning |
+  |---|---|
+  | 0 | draw (ordinary ground) |
+  | 1…99 | skip in the interleaved pass |
+  | **100 + n** | **bridge/mole no. n** (section 17) |
+  | **200 + n** | **ramp no. n** (section 21) |
+
+  Measured across both discs with **not a single exception**: 110 of 110
+  bridges on 21 maps, 85 of 85 ramps on 12. So a cell knows *which* structure
+  stands on it — and through the two tables, its hit points (500 and 200) and
+  length.
+
+  ⚠ **Neither needs drawing.** The map raster already carries
+  `10000 + tile number` at those cells; the bridge is part of the terrain.
+
+- **Maps carry their own terranium deposits** (section 38, allocator
+  `0x420E30`, "Cannot place more terra"). Nine deposits on six maps.
+
+  This corrects two of our own claims. Section 28 was "the deposit table" here —
+  it is the **state of existing mine buildings**. And the code said "a shipped
+  map carries nothing here". Both wrong, and it mattered: on missions 14, 17,
+  20 and 22 the mission script places no deposits, so the player faced a map
+  without a single build site for a mine. Mission 14 now has one and mission 20
+  has four.
+
+- **Transports arrive loaded** (section 37, `0x4CED60`, "Too many transport
+  ships"). Measured: **30 valid records on 7 maps carrying 65 units.**
+
+  The trap is in the list itself — it holds dead records. A record is valid
+  only when the **unit** points back at it through its own `+0x40`; walking the
+  list picks up 27 units too many on one map alone. Cargo is marked by the task
+  field `UKOL = 57` (all 65, no exception). That the cargo does not stand on the
+  map is something the original says itself: on mission 5 fifteen loaded units
+  share one cell — impossible for units actually placed.
+
+  ⚠ On mission 8 **two** records claim the same three units and both are
+  formally valid. The ship table (`0x52EDA0`, type = hull + 80) settles it: one
+  carrier is a **freighter** (attack 0) with fifteen aboard, the other a
+  **coastguard** (attack 7). First claim wins. The proof rides along: after the
+  cleanup exactly the five freighters carry cargo and both warships carry none,
+  although the rule never looks at the hull.
+
+- **The help window has its pictures back.** `HELPG.PIC` holds 36 and
+  `ENCYCLOG.PIC` 96 raw 60×60 images with no header.
+
+  The path from text to picture is read end to end: `HELPG.DAT` gives the
+  picture number (0 = none), and the picture sits at `3600·(n−1)` — **one
+  based**. Our first pass counted from zero and would have shown the wrong
+  picture for every text, an off-by-one that shows up nowhere. The placement is
+  read too, not invented: the picture goes at (30,30), and right behind the copy
+  loop the original does `sub …, 0x50` — **the wrap width shrinks by 80 pixels**
+  when a picture is present, so the text flows beside it.
+
+  The benchmark is exact: 36 texts carry a picture, all 36 pictures are used,
+  each exactly once, none missing.
+
 ### Sound
 
 - ⭐ **Units answer when you send them somewhere.** Reported as "every unit has
@@ -753,7 +1060,6 @@ deviate on purpose, and every deviation is marked as ours.
   ⚠ **One** unit speaks, not the selection. If a group is selected, the original
   picks a single member and lets that one talk. A chorus of twelve tanks would
   not merely be loud, it would be wrong.
-
 
 - **A sound now comes from the left or the right.** Attenuation by distance was
   already there; the panning had been read and deliberately left as a gap. The

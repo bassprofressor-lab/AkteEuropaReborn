@@ -23,11 +23,46 @@ weiter unten ausführlich, mit den Adressen, an denen er gelesen wurde.
 | **Herz, Kanister und Patronen.** | Die drei Symbole neben den Statusbalken. Sie lagen in `ANIM.CWA`, der Datei mit den Explosionen. |
 | **Die Mauszeiger des Originals.** | 28 Arten aus dem Anhang von `ROBO.CWR`, darunter das Angriffsfadenkreuz. |
 | **Einheiten melden sich auf einen Befehl.** | Den Anwählklang hatten wir, den Befehlsklang nicht — dabei ruft ihn das Original viermal so oft. |
-| **Bäume verdecken wieder.** | Kein Codefehler: die Karten waren nie neu gebacken worden. |
+| **Bäume verdecken wieder.** | ⚠ Dreimal gemeldet, zweimal falsch erklärt. Es *war* ein Codefehler: wir haben Bäume und Einheiten nur an den Zeilen der **Gebäude** ineinandergemischt, das Original tut es an **jeder** Zeile. |
+| **Kein weißes Kästchen mehr beim Überfahren.** | Das war von uns. Das Original meldet es mit dem Mauszeiger. |
+| **Der Auswahlkranz sitzt auf der Einheit.** | Er hing am Bodenpunkt, nicht am Bild — im Mittel 6 bis 8 Bildpunkte daneben, im schlimmsten Fall 21. |
+| **Die Flamme brennt auf ihrem Baum.** | Sie stand daneben: eigene Lagerechnung statt der des Backofens, und als einziger Effekt ohne Ankerabzug. Dazu: es gibt **zwei** Flammenbilder im Wechsel, wir kannten eines. |
+| **Einheiten melden sich auch beim Wegpunkt.** | Der Zweig für angereihte Befehle stieg vor dem Klang aus. |
+| **Der Text im Vorschaufenster ist so gross wie im Original.** | Der Zeichenvorschub war um 1 px zu gross (+17,2 %), und der Fliesstext lief auf der falschen Schrift (+8,9 %). Jetzt 49 statt 38 Zeichen je Zeile — die Zahl des Originals. |
+| **Zwillingslafetten feuern zwei Geschosse.** | Und jeder Schuss streut, wie im Original. Betrifft drei Waffen. |
+| **Raketen fliegen einen Bogen.** | 22 Geschossarten, Scheitel genau Entfernung/11 oder /2 — beide Faktoren stehen als Zahl im Programm. |
+| **Geschosse ziehen eine Rauchspur.** | Drei Bildfolgen im Wechsel, für die Arten 5 bis 20. |
+| **Grosse Schiffe lassen sich anwählen.** | Ihnen fehlte der Grundriss — ein Schlachtschiff hatte ein 1×1 grosses Klickfeld unter dem Dock. |
+| **Schiffe drehen im Takt des Originals.** | Eine Stufe alle drei Takte, 4×4-Schiffe alle sechs. Wir drehten jeden — sechzehnmal zu schnell. |
+| **Ein versenktes Schiff hinterlässt nichts.** | Kein Wrack, kein Ölfleck. Nur Landfahrzeuge lassen eines zurück. |
+| **Das U-Boot taucht.** | Wer nicht verbündet ist, sieht nur einen gerasterten blauen Schatten. Es ist wirklich unbewaffnet — ein Späher. |
+| **Das Mündungsfeuer kommt aus der Tafel des Spiels.** | Vier Bildfolgen je nach Waffe — und dreizehn Waffen haben im Original **gar keines**. |
+| **Gebäude bekommen keinen Auswahlkranz.** | Den gibt es im Original nur für Einheiten; ein Gebäude meldet sich durch sein Fenster. |
+| **»Verkaufen« nur, wo es einen Markt gibt.** | Die Kampagnenkarten 1–10 haben gar keinen. |
+| **Der Zielkasten im Vorschaufenster.** | Er fehlte ganz — und er ist der einzige Ort, für den das Original die zweite Schrift einwechselt. |
+| **Brücken und Rampen ragen auf.** | 578 Zellen, die an einer zweiten Rastertafel hängen, die wir gar nicht gelesen haben. |
+| **Ein Geschoss bleibt an Hindernissen hängen.** | Ein Gebäude fängt ab, was über einen Panzer hinweggeht — sechs Schwellen, alle gelesen. |
+| **Popups fangen die Maus nicht mehr im Menü.** | Die Ursache war keine Popup-Leiche, sondern eine stehengebliebene **Pause**. |
+| **Der Nebel deckt weich auf.** | Statt Kachel für Kachel. Marching Squares über ein 257×257-Eckengitter, dazu das Schachbrettmuster des Originals in seiner Palettenfarbe. |
+| **Dreizehn Waffen bekommen ein fliegendes Geschoss** statt drei — und jede ihren eigenen Einschlag. Aus einer Tafel, die wir zu einem Zweiundzwanzigstel gelesen hatten. |
+| **Einheiten sammeln Erfahrung und steigen im Rang.** | Das Feld dafür lasen wir seit Monaten, verändert hat es nie jemand. Ein Veteran macht mehr Schaden und steckt mehr ein. |
+| **Schiffe haben sechzehn Blickrichtungen.** | Acht davon waren nie exportiert worden. Ein Schiff konnte nicht nach Nordnordwest zeigen. |
+| **Der Einheitensatz hat jetzt die Namen des Spiels.** | Das Original führt einen eigenen Aufzeichner, der jedes Feld benennt. `ENTITY_FELDER.md`. |
+| ⭐ **Die Kampagne ist vollständig: 33 Karten statt 15.** | Die Missionen 16–33 liegen auf der **zweiten CD** und fehlten schlicht. Die Regeln dazu pflegen wir seit Monaten — laden konnte man sie nie. |
+| **Transporter kommen beladen an.** | Die Karten liefern sie mit Inhalt aus. Wir haben die Ladung als Einzelfiguren neben das Schiff gestellt. |
+| **Karten bringen eigene Terranium-Vorkommen mit.** | Auf vier Missionen legt das Skript keine an — dort gab es bei uns **keinen einzigen Bauplatz für eine Mine**. |
+| **Die Hilfe hat wieder ihre Bilder.** | 132 Sachbilder zu Hilfe und Enzyklopädie lagen ungenutzt. Der Text fliesst daneben, genau wie im Original. |
+| **Brücke und Rampe wissen, welche sie sind.** | Das Lagenbyte der Karte ist nicht nur »hier ist eine« — es ist die Platznummer. |
 
-⚠ **Was ausdrücklich NICHT drin ist:** der weiche Nebelrand des Originals. Der
-Unterbau ist gelesen, die Weichheit nicht belegt — also ist nichts gebaut.
-Alles Ungeklärte steht in `OFFENE_FRAGEN.md`.
+⚠ **Was ausdrücklich NICHT drin ist:** der Mehrspielerbetrieb über das Netz,
+und das Be- und Entladen von Transportern von Hand — die Karten liefern ihre
+Ladung inzwischen richtig aus, aber selbst aufladen kann man noch nicht. Alles
+Ungeklärte steht in `OFFENE_FRAGEN.md`.
+
+⚠ **Berichtigung an diesem Kasten:** hier stand bis zuletzt, die
+Zwillingslafette sei nicht dabei — sie ist es, und zwei Zeilen weiter oben
+steht sie auch. Eine Fehlerliste, deren Begründungen veralten, schickt einen
+zweimal denselben Weg.
 
 ### Die vier Bereiche dieser Fassung
 
@@ -56,6 +91,122 @@ Die Kampagne bleibt originaltreu; Gefecht und Mehrspieler dürfen bewusst
 abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Einheiten
+
+- ⭐⭐ **Dreizehn Waffen statt drei bekommen ein fliegendes Geschoss — und die
+  Zahlen dafür stehen nicht mehr im Quelltext, sondern im Spiel.**
+
+  Bei uns entschied eine Liste von drei Bauteilnummern, welche Waffe ein
+  sichtbares Geschoss abfeuert; alles andere zog eine Leuchtspur. Die
+  Geschwindigkeit war **eine** Zahl für alle (190 px/s), der Einschlag **eine**
+  Explosion für alle. Alle drei waren geraten und als solche gekennzeichnet.
+
+  Das Spiel beantwortet die Frage selbst, in einer Tafel bei `0x4F98E8`:
+  **91 Zeilen zu 22 Byte**, Index ist die »Klangklasse« aus dem Statssatz
+  `+0x1C` — die in Wahrheit die *Geschossart* ist. Wir hatten davon **ein**
+  Feld gelesen, nämlich den Schussklang.
+
+  | Feld | was drinsteht |
+  |---|---|
+  | `+0x00` | Geschwindigkeit je Takt, 5…35 — **je Art verschieden** |
+  | `+0x02` | Bildfolge des Fluges, `30000` = keine |
+  | `+0x06` | Bildfolge des Einschlags |
+  | `+0x0A` | Schussklang (das eine Feld, das wir hatten) |
+  | `+0x0C` | Klang beim Einschlag |
+  | `+0x14` | ein Aufschlag auf die Lafettensuche |
+  | `+0x15` | Seitenversatz der Zwillingslafette |
+
+  Dass `30000` die Marke »keine« ist und keine Folgennummer, ist keine
+  Auslegung: `ANIM.CWA` führt **1000** Folgen. Danach haben dreizehn Bauteile
+  ein Flugbild — und die beiden schnellsten (Tempo 35) sind genau die, die
+  wirklich nur eine Spur ziehen.
+
+  Der Ausgeber schreibt jetzt **30 Flugfolgen und 13 Einschlagfolgen** aus
+  `ANIM.CWA`. Zwei weitere Einschlagfolgen, die die Tafel nennt (87 und 309),
+  sind dort **leer** — diese Waffen zeigen im Original also gar keinen
+  Einschlag, und das wird jetzt nachgebildet statt übertüncht.
+
+  **Die Probe:** die Tafel ist in beiden vorliegenden `GAME.EXE` Byte für Byte
+  gleich (91 × 22 = 2002 Byte), und jede der 62 benutzten Zeilen findet
+  hinterher ihre Bilder — nachgezählt, keine fehlt.
+
+- ⭐⭐ **Einheiten sammeln Erfahrung und steigen im Rang.**
+
+  Satz `+0x28` lasen wir seit Monaten und gaben ihn in die Schadensformel.
+  Verändert hat ihn nie jemand — auf 1941 von 1971 Karteneinheiten steht er auf
+  Null, und das galt uns als »fast wirkungslos«. Der wahre Grund ist ein
+  anderer: **er wird nicht gestellt, er wird verdient.**
+
+  Die Trefferroutine rechnet am Ende (@0x40CEF7…0x40CF7D):
+
+  ```
+  Zuwachs = (Nachladezeit+1) · Schaden · (Verteidigung + 2·Höhe_Opfer)
+                              ÷ (Angriff + 2·Höhe_Schütze) ÷ 8
+  ```
+
+  Die Punkte stehen in `+0x4C` — als **Byte**, und genau darauf kommt es an:
+  läuft es über, steigt der Rang in `+0x28` um eins. Beide zusammen druckt das
+  Spiel als `exp: (byte[+0x28] << 8) | byte[+0x4C]`.
+
+  Wer daraus liest, was das Spiel belohnt: **einen Treffer auf ein gut
+  gepanzertes Ziel in gutem Gelände, mit einer langsam nachladenden Waffe.** Ein
+  Scharfschütze auf einem Hügel lernt an einem Panzer mehr als der Panzer an ihm.
+  **Gebäude geben nichts** (@0x40CEEA) — dieselbe Schranke `0x1F40`, an der auch
+  die Anzeigetafel Einheit von Gebäude trennt.
+
+  Damit ergibt auch der **Veteranen-Tonfall** erstmals Sinn: die Stimmroutine
+  vergleicht `+0x28` mit 50 und nimmt darüber einen anderen Satz. Bisher konnte
+  diese Schwelle niemand erreichen.
+
+  ⚠ Nebenbei behoben: `+0x28` wurde in **zwei** Felder geladen (`Rating28` und
+  `Field28`), mit zwei Namen und zwei Kommentaren. Solange beide nur gelesen
+  wurden, fiel das nicht auf; sobald der Rang steigt, wäre eine Kopie
+  stehengeblieben — der Veteran hätte die Stimme des Rekruten behalten.
+
+- ⭐ **Ein Schiff kann endlich nach Nordnordwest zeigen: sechzehn
+  Blickrichtungen statt acht.**
+
+  Der Ausgeber zog für jeden Rumpf `f0…f7`. Bei einem Schiff sind das **acht von
+  sechzehn** — eine halbe Drehung, nicht jede zweite Stufe. Genau derselbe
+  Fehler war bei den Flugzeugen schon einmal gefunden worden; er hing nicht an
+  einem Teil, sondern an der Annahme »acht gilt überall«.
+
+  ⚠ Die Begründung, die in unseren Notizen stand, trägt allerdings **nicht**:
+  »die Bilder sind spiegelsymmetrisch 1↔15«. Nachgemessen an den Abmessungen
+  der Einzelbilder trifft bei Schiffen **weder** die Spiegelung zu acht **noch**
+  die zu sechzehn — Schiffe sind schlicht nicht symmetrisch gezeichnet
+  (Kettenteile treffen dagegen 5 bis 7 von 7 Paaren). Was wirklich trägt:
+
+  1. Jedes Schiffsteil besitzt **genau 16 Bilder in einer Gruppe**; Bodenteile
+     haben 48, 96 oder 144, also sechs Neigungsblöcke zu acht. Ein Schiff fährt
+     auf Wasser und hat keine Neigung.
+  2. Angesehen: die 16 Bilder sind eine durchgehende Volldrehung ohne
+     Wiederholung bei acht.
+  3. **Die ausgelieferten Karten sagen es selbst.** Von 213 Schiffen tragen
+     **21 eine Blickrichtung über 7**, bis 15 — von 4592 Landeinheiten eine
+     einzige. Dieser Beleg hängt weder am Code noch an meinem Auge.
+
+- ⭐ **Der Einheitensatz hat jetzt die Namen des Spiels** — `ENTITY_FELDER.md`.
+
+  Das Original führt einen eigenen Aufzeichner (`RECORDING` / `REPLAY`), der je
+  Takt jedes Feld jeder Einheit **mit seinem Namen** herausschreibt. Aus ihm
+  kommen 56 Namen; 46 liessen sich an einen Versatz binden.
+
+  Der Prüfstand vergleicht dabei nicht Adressen, sondern **Abstände**: der
+  Sockel des Einheitensatzes ist in den beiden `GAME.EXE` verschieden
+  (`0x6E26C8` gegen `0x6E1728`). Dass er zehn der 56 Namen **aussortiert** —
+  Namen aus anderen Tafeln, die um einen anderen Betrag gewandert sind — ist
+  der eigentliche Beleg dafür, dass er misst.
+
+  Was dabei herauskam: `+0x02` heisst `OT_PODV` (Drehung des **Fahrwerks**),
+  `+0x03` heisst `OT_HLAV` (Drehung des **Rohrs**), `+0x0B` `SPODEK`
+  (Unterteil), `+0x0C` `VRSEK` (Oberteil), `+0x0F` `l_engine` (der Antrieb —
+  und genau das sind unsere »Rumpftypen« 160…175), `+0x3D` `RELOAD`. Unser
+  Importeur hatte all das schon richtig getrennt; jetzt steht auch dabei, warum.
+
+  Damit löste sich nebenbei ein Widerspruch auf, der die sechzehn
+  Schiffsrichtungen in Frage stellte: die Drehroutine @0x405100 gibt sechzehn
+  Stufen der Gattung 3 — aber sie dreht damit `+0x03`, den **Aufbau**. Der
+  **Rumpf** eines Schiffes steht in `+0x02`, und das ist eine andere Routine.
 
 - ⭐ **Der Mechaniker repariert wieder, was neben ihm steht** — und er heißt auch
   wieder so. Gemeldet als »die Reparatureinheit nennt sich noch Bauteil 43 und
@@ -306,7 +457,6 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   gemessen: 18 Einheiten mit Mindestreichweite, 30 Ziele deswegen
   fallengelassen, mit `--no-min-range` null. ⚠ Die Meldung sagt ausserdem, wenn
   eine Karte gar keine solche Einheit hat — dort ist die Null kein Ergebnis.
-
 
 - **Eine Gruppe bleibt an der Engstelle nicht mehr liegen.** Gemeldet als
   »Gruppenauswahl und hintereinander weg fahren wie über brücken lässt einheiten
@@ -715,6 +865,51 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Kampagne und Oberfläche
 
+- ⭐⭐ **Bricht man eine Kampagne mittendrin ab, ist die Maus im Menü wieder
+  brauchbar — und die Popups waren gar nicht die Ursache.**
+
+  Gemeldet, zum zweiten Mal: »nachdem ich eine Kampagne mittendrin beende,
+  tauchen die Popups im Menü auf, und ich muss sie erst schließen, um wieder
+  meine Maus benutzen zu können.«
+
+  Ein Hilfefenster **hält das Spiel an** — das ist kein Einfall von uns, es ist
+  einer der acht Schalter aus den Optionen des Originals (»Spiel anhalten
+  während eines Hilfe-Fensters«). Bricht man die Mission ab, während eines
+  offen steht, wurden die Fenster zwar weggeräumt, **die Pause blieb stehen**.
+  Im Menü friert damit alles ein, was auf `ProcessMode.Inherit` steht, also der
+  ganze Mausbetrieb. Nur das Hilfefenster selbst läuft weiter (`ProcessMode.Always`,
+  sonst könnte man es nie wegklicken) — und sein Wegklicken gibt die Pause frei.
+
+  **Die Popups waren also nicht die Ursache, sondern das Einzige, was noch
+  reagierte.** Deshalb las sich der Fehler wie »Popups fangen die Maus«, und
+  deshalb half Wegklicken.
+
+  ⚠ **Warum drei Prüfläufe grün meldeten, ohne zu lügen:**
+  `HelpWindow.PauseErlaubt` schaltet die Pause **kopflos ganz ab** — mit gutem
+  Grund, denn ein Fenster, das niemand wegklicken kann, hängt jeden Prüflauf
+  auf. Jeder Prüflauf lief damit in einer Welt, in der es diesen Fehler gar
+  nicht geben *kann*. Neu ist `--help-pause`, das die Abschaltung aufhebt, und
+  `--abbruch-check`, der eine echte Kampagnenmission ein Stück weit spielt und
+  dann durch dieselbe Tür geht wie der Knopf »Beenden«. Mit `=alt` zeigt er den
+  Fehler: *Popups im Hauptmenü: JA · mausfangende Knoten: 2 · Baum angehalten:
+  JA*. Mit der Kur: alles auf null.
+
+  ⚠ Nebenbei berichtigt: am 18.08. war ein Riegel gegen Popups aus der
+  Menü-Kulisse gebaut worden, mit der Begründung, die Kulisse spiele einen
+  echten Spielstand samt Missionsregeln. Der Riegel wurde **nie gesetzt** (zwei
+  Zuweisungen im ganzen Baum, beide auf `false`) — und seine Begründung trägt
+  auch nicht: `--kulissen-check=900` zeigt, dass er in 900 Bildern **null**
+  Fenster abfängt, denn die Kulisse spielt `map_DM_*`, also Gefechtskarten
+  **ohne Missionsskript**. Er ist jetzt gesetzt und steht ausdrücklich als
+  Gürtel da, nicht als Heilmittel.
+
+- **Das weiße Kästchen beim Überfahren einer Einheit ist weg.** Es war von uns,
+  stand ungeschützt da und wurde bei jedem Überfahren gezeichnet. Das Original
+  meldet das Überfahren mit dem **Mauszeiger** — 28 Zeigerarten aus dem Anhang
+  von `ROBO.CWR`, darunter eigene für eigene Einheit, gegnerische Einheit
+  (das Fadenkreuz) und Fußsoldat. Ein Rahmen um das Ziel gehört nicht dazu.
+  ⚠ Er bleibt für den Fall ohne Bilder, wo sonst gar nichts zu sehen wäre.
+
 - ⭐⭐ **Die Kampagne konnte nicht verloren gehen — jetzt kann sie es.** Der
   Spieler durfte jede Einheit und jedes Gebäude einbüssen, und die Mission lief
   weiter. Nichts stürzte ab, nichts meldete etwas; das Spiel war nur
@@ -882,16 +1077,59 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   ⚠ Unser ist, **wie schnell** sie dreht — das Original führt eine Windrichtung,
   nennt aber keinen Takt.
 
-- **Bäume verdecken wieder Einheiten.** Zweimal gemeldet, und beide Male lag es
-  nicht am Code: die Karten waren nach der letzten Änderung an der Objekthöhe
-  **nie neu gebacken** worden. 36 Karten neu ausgespielt, 69.388 erhöhte
-  Objekte. Ein Fehler, der wie ein Codefehler aussieht und ein Datenstand ist —
-  darum steht er hier.
+- ⭐⭐ **Bäume verdecken wieder Einheiten — und diesmal aus dem richtigen Grund.**
+
+  ⚠ **Dreimal gemeldet. Die ersten beiden Erklärungen waren falsch**, zuletzt
+  diese hier, die bis heute an dieser Stelle stand: »beide Male lag es nicht am
+  Code: die Karten waren nie neu gebacken worden«. Das Neubacken war nötig und
+  richtig — die Daten sind seither in Ordnung, nachgemessen: `map_01.json` nennt
+  558 Objekte, und 01.CWM hat 553 Wald + 5 Objekt = **558**, auf den Eintrag
+  genau. Über alle 23 Karten stimmen **37.231 von 37.231** Waldeinträgen mit der
+  Belegungskarte überein. Es war trotzdem *auch* ein Codefehler, und der blieb.
+
+  **Was falsch war:** wir haben Bäume und Einheiten nur an den Zeilen der
+  **Gebäude** ineinandergemischt, und innerhalb einer Schwelle kamen die Bäume
+  **vor** den Einheiten.
+
+  **Warum das rechnerisch nie funktionieren konnte:** eine Einheit auf Zeile *b*
+  wird beim ersten Gebäudeschwellwert *T > b* gezeichnet, ein Baum auf Zeile *a*
+  beim ersten *T ≥ a*. Der Baum liegt also nur über der Einheit, wenn es einen
+  Gebäudeschwellwert mit *b < T < a* gibt. Daraus folgt sofort: **ein Baum, der
+  EINE Zeile vor der Einheit steht, kann sie auf keiner Karte verdecken** —
+  zwischen *b* und *b+1* liegt keine ganze Zahl. Und das ist der Alltagsfall.
+
+  Auf **map_01**, der Mission, die der Spieler spielt: 72 Zeilen, Bäume auf
+  **allen 72**, aber nur **vier** Gebäude — auf den Zeilen 2, 5, 13 und 31.
+  Unterhalb von Zeile 31 gab es überhaupt keine Schwelle mehr; dort lag jede
+  Einheit über jedem Baum.
+
+  **Was das Original tut** (Kartenzeichner `0x4B4150` / F `0x4B3A80`, dritter
+  Durchgang @`0x4B43BB`): er läuft über **Zeilen** und macht je Zeile
+  @`0x4B43F9` **erst das Zeilenfach** (Einheiten, Gebäude, Gleis, Effekte) und
+  @`0x4B4429` **dann die Kacheln**. Es gibt keine Sortierung nach Höhe, keinen
+  Höhenwert je Objekt und keine getrennte Objektlage — nur diese Reihenfolge.
+  Genau so läuft es jetzt auch bei uns.
+
+  ⚠ **Und der Schalter musste mit.** Die ganze Verzahnung hing an
+  `_drawSprites && Patterns != null`. Fehlte der Bau-Atlas (er kann die
+  Höchstgröße einer Textur überschreiten), wurde sie übersprungen — dann gab es
+  garantiert null Verdeckung, auch für Gleis und Einheiten.
+
+  **Gemessen** mit dem neuen `--verdeck-check`, der an den wirklich abgesetzten
+  Zeichenaufrufen zählt: Mission 5 → 37 Einheiten, 76 Kacheln, **1597 Paare, in
+  denen eine Kachel eine Einheit verdeckt, und 0 in falscher Reihenfolge**.
+  Mission 1 → 275 und 0.
+
+  ⚠ **Warum das nie auffiel:** es gab `--behind-check` und `--demo-front`, aber
+  beide stellen eine Einheit **neben ein Gebäude** — also genau dorthin, wo die
+  alte Verzahnung funktionierte. Ein Prüfstand nach demselben Muster hätte grün
+  gemeldet, während der echte Fall scheitert. Der neue prüft ausdrücklich ohne
+  Gebäude in der Nähe und sagt **»nicht gemessen«**, wenn eine Karte keine
+  Bäume oder keine Einheiten hat (Mission 20 und 27 tun das).
 
 - **»Weiter« am Ende einer Kampagnenmission** führte ins Hauptmenü statt zur
   Vorschau der nächsten Mission — und zeigte dort weiter die Hilfefenster der
   gerade beendeten.
-
 
 - ⭐⭐ **Mission 1 ist wieder das Tutorial, das sie im Original ist — alle
   siebzehn Hilfefenster, an ihrer Bedingung und an ihrer Stelle.** Gemeldet mit
@@ -1168,7 +1406,6 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   (`--briefing-mission`) **drückt den Knopf**, statt das Feld dahinter zu
   setzen.
 
-
 - ⭐ **Die Demo im Hauptmenü ist nicht mehr abgedunkelt.** Gemeldet: »in der
   Demo haben die Gebäude die helleren Bodenmuster, aber die Umgebung wirkt wie
   dunkler. Das ist im Gefecht nicht so oder in der Kampagne.«
@@ -1238,7 +1475,6 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   weil die Kur im Fliesstext stand und nicht am Aufruf. Dieselbe Zeile hat
   nebenbei drei abdunkelnde Flaechen repariert, die nichts abgedunkelt haben,
   und den Deckel des Abschlussfensters, der keine Maus abgefangen hat.
-
 
 - **Das Editorfeld stand im Gefecht, und die Missions-Popups standen im
   Hauptmenü.** Zwei Meldungen, eine Ursache. Ein Szenenwechsel ersetzt nur die
@@ -1330,6 +1566,87 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   darunter Flughäfen, Fabriken und Basen zum Einnehmen.
 
 ### Die Karte und was auf ihr steht
+
+- ⭐⭐ **Die Kampagne ist zum ersten Mal vollständig — 33 Karten statt 15.**
+
+  Alles, was je eingelesen wurde, stammte von **CD 1**. Die Missionen **16 bis
+  33 liegen auf CD 2** und waren im Projekt gar nicht vorhanden: 18 Karten, 57
+  Geländesätze, 16 KI-Dateien, zusammen 67 MB.
+
+  Das Bittere daran: die **Regeln** aller 33 Missionen standen längst in
+  `mission_scripts.json` (aus `GAME.EXE` gelesen, 684 Setzer-Regeln, 34
+  Niederlagebedingungen), und alle 33 Einsatzbesprechungen lagen in
+  `briefings.json`. Es fehlte einzig das **Gelände**. Monatelang gepflegte
+  Regeln für Missionen, die man nicht laden konnte.
+
+  | | vorher | jetzt |
+  |---|---|---|
+  | Kampagnenkarten | 15 | **33** |
+  | Vorführungen | 3 | **13** |
+
+  *Death Valley, Black Sea, Danube Delta, The Dam, Chanel Tunnel, Polar Circle,
+  ODIN's eye, Scottland* — die gibt es jetzt. Alle 33 laufen im Prüflauf
+  sechzig Sekunden ohne Zutun durch.
+
+  ⚠ **`F:\Akte Europa` enthält keine einzige Geländedatei.** Das Original liest
+  sie zur Laufzeit von der CD. Wer neu einliest, braucht **beide** Datenträger.
+
+- ⭐ **Das Lagenbyte der Karte ist die Platznummer des Bauwerks.**
+
+  Sektion 20 gibt je Zelle eine Zeichenlage. Über 100 hiess das bisher »hier
+  ist eine Brücke oder Rampe« — ohne zu wissen, welche. Es ist mehr:
+
+  | Lagenbyte | bedeutet |
+  |---|---|
+  | 0 | zeichnen (gewöhnlicher Boden) |
+  | 1…99 | im verzahnten Durchgang überspringen |
+  | **100 + n** | **Brücke/Mole Nr. n** (Abschnitt 17) |
+  | **200 + n** | **Rampe Nr. n** (Abschnitt 21) |
+
+  Gemessen über beide Datenträger, **ohne eine einzige Ausnahme**: 110 von 110
+  Brücken auf 21 Karten, 85 von 85 Rampen auf 12. Damit weiss man ohne Suche,
+  *welches* Bauwerk auf einer Zelle steht — und über die beiden Tafeln auch
+  dessen Trefferpunkte (500 bzw. 200) und Länge.
+
+  ⚠ **Zeichnen muss man die beiden nicht.** Das Kartenraster trägt an diesen
+  Zellen längst `10000 + Kachelnummer`; die Brücke steht im Gelände. Die
+  Tafeln braucht man für den Zustand — und dafür, dass die Nummer etwas
+  bedeutet.
+
+- **Karten bringen eigene Terranium-Vorkommen mit** (Abschnitt 38, Zuteiler
+  `0x420E30`, »Cannot place more terra«). Neun Vorkommen auf sechs Karten.
+
+  Das berichtigt zwei eigene Behauptungen. Erstens war Abschnitt 28 bei uns
+  »die Vorkommenstafel« — er ist der **Zustand vorhandener Minengebäude**, jeder
+  Satz zeigt auf ein Gebäude. Zweitens stand im Code, »eine gelieferte Karte
+  trägt hier nichts«. Beides falsch, und es hatte Folgen: auf den Missionen 14,
+  17, 20 und 22 legt das Missionsskript **keine** Vorkommen an, also stand der
+  Spieler dort vor einer Karte ohne einen einzigen Bauplatz für eine Mine.
+  Jetzt hat Mission 14 einen und Mission 20 vier. Skript und Karte werden
+  vereinigt, nicht gegeneinander gestellt.
+
+- **Transporter kommen beladen an** (Abschnitt 37, `0x4CED60`, »Too many
+  transport ships«): 100 Plätze zu 38 Byte, `+0x02` der Transporter,
+  `+0x04` die Anzahl, ab `+0x06` fünfzehn Griffe.
+
+  Gemessen: **30 gültige Sätze auf 7 Karten mit 65 geladenen Einheiten.** Der
+  Fallstrick steckt in der Liste selbst — sie enthält Karteileichen. Gültig ist
+  ein Satz nur, wenn die **Einheit** in ihrem Feld `+0x40` auf ihn zurückzeigt;
+  wer die Liste durchläuft, holt sich allein auf einer Karte 27 Einheiten zu
+  viel. Fracht ist am Auftragsfeld `UKOL = 57` kenntlich (alle 65, keine
+  Ausnahme).
+
+  Dass die Ladung nicht auf der Karte steht, sagt das Original selbst: auf
+  Mission 5 teilen sich fünfzehn geladene Einheiten dieselbe Zelle — für
+  aufgestellte Einheiten unmöglich.
+
+  ⚠ Auf Mission 8 beanspruchen **zwei** Sätze dieselben drei Einheiten, und
+  beide sind formal gültig. Entschieden hat es die Schiffstafel (`0x52EDA0`,
+  Typ = Rumpf + 80): der eine Träger ist ein **Frachter** (Angriff 0) mit
+  fünfzehn Mann, der andere eine **Küstenwache** (Angriff 7) — ein Kriegsschiff,
+  das drei davon auch haben will. Der erste Anspruch gilt. Die Probe läuft mit:
+  nach dem Aufräumen tragen genau die fünf Frachter Ladung und beide
+  Kriegsschiffe nichts, obwohl die Regel den Rumpf gar nicht ansieht.
 
 - ⭐ **Die Bäume brennen — und es ist eine Kachel, keine Zutat.** Gemeldet als
   »in Original Kampagne 1 gibt es z. B. von Haus aus ein paar brennende Bäume,
@@ -1460,7 +1777,6 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   ⚠ Es spricht **eine** Einheit, nicht die Auswahl. Steht dort eine Gruppe,
   holt sich das Original ein Mitglied und lässt dieses sprechen. Ein Chor von
   zwölf Panzern wäre nicht bloss laut, er wäre falsch.
-
 
 - **Ein Klang kommt jetzt von links oder rechts.** Die Dämpfung nach Entfernung
   gab es schon, das Panorama war gelesen und ausdrücklich als Lücke
