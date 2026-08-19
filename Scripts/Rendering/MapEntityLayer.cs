@@ -1137,6 +1137,7 @@ public partial class MapEntityLayer : Node2D
     }
     private int _selected = -1;
     private int _hovered = -1;
+    private int _schiffFootLog;
 
     /// <summary>Der angewählte FLUGZEUGPLATZ — die Zeile in <see cref="_special"/>,
     /// oder −1. Flugzeuge sind bei uns keine <see cref="Entity"/>, deshalb
@@ -2480,6 +2481,38 @@ public partial class MapEntityLayer : Node2D
                     Footprint = CellRect(ox, oy, col, row, el), IsProp = false,
                 });
                 var last = _entities[^1];
+                // ⚠⚠ 19.08.2026 — EIN SCHIFF IST NIE EINZELLIG, auch wenn die
+                // Kartendatei nichts dazu sagt.
+                //
+                // Gemessen mit `--schiffbild-check` auf Kampagne 5: von 19
+                // Schiffen kamen **drei** mit Grundriss 1x1 herein (Rumpf 153,
+                // der Frachter) — die uebrigen sechzehn mit 2x2. Die Kartendatei
+                // fuehrt `foot_w`/`foot_h` also nicht bei jeder Einheit.
+                //
+                // Ein einzelliges Schiff ist kein kleiner Fehler: `Pos` kommt
+                // dann auf die Mitte der OBEREN LINKEN Zelle statt auf die
+                // Rumpfmitte (BodyCenterAt), und daran haengen Bildlage,
+                // Klickfeld und der Besitzerpunkt gleichermassen — alles sitzt
+                // 60/30 Bildpunkte daneben. Genau das ist die Meldung »die
+                // Schiffe fahren sehr komisch«.
+                //
+                // Die Gattung weiss es besser als die Datei: +0x0A == 4 heisst
+                // 2x2, == 5 heisst 4x4 (NavGrid.HullSide, aus Can_go gelesen).
+                // Deshalb hat sie hier das letzte Wort — und wenn die Datei
+                // widerspricht, wird das GESAGT statt still ueberschrieben.
+                if (last.GameUnitType is 4 or 5)
+                {
+                    int soll = Simulation.NavGrid.HullSide(last.GameUnitType);
+                    if (last.FootW != soll || last.FootH != soll)
+                    {
+                        if (_schiffFootLog++ < 4)
+                            GD.Print($"schiff-grundriss: Platz {last.Slot} Rumpf {last.UnitType} " +
+                                     $"Gattung {last.GameUnitType} kam als {last.FootW}x{last.FootH} " +
+                                     $"aus der Karte — auf {soll}x{soll} gesetzt.");
+                        last.FootW = soll;
+                        last.FootH = soll;
+                    }
+                }
                 if (last.Weapon > 0 && last.AmmoMax > 0)
                     _ammoCap[last.Weapon] = last.AmmoMax;   // capacity per weapon
             }
@@ -14094,6 +14127,34 @@ public partial class MapEntityLayer : Node2D
             // Der Landweg setzt alle diese Felder laengst (:15604) — nur der
             // Schiffsweg nicht.
             GameUnitType = gattung,
+            // ⚠⚠⚠ 19.08.2026 — UND DAS WAR DIE SECHSTE. Gemeldet: »im
+            // Gefechtsmodus spawnen grosse Schiffe wie Schlachtschiffe und
+            // Kreuzer im Seedock, so dass ich sie nicht anwaehlen kann« — und
+            // »die Schiffe fahren immer noch sehr komisch«. Beides ist DIESE
+            // eine Zeile.
+            //
+            // `FootW`/`FootH` stehen auf 1 und werden nur vom Kartenlader
+            // gesetzt (:2478) oder fuer Gebaeude (:2585). Ein GEBAUTES Schiff
+            // bekam sie nie — und drei Rechnungen haengen daran:
+            //
+            //   BodyCenterAt  Pos = Zellmitte + (Foot−1)·Kachel/2
+            //   BodyRect      das KLICKFELD, Foot·40 x Foot·20
+            //   PictureAnchor wo das BILD haengt
+            //
+            // Ein Schlachtschiff (4x4) bekam damit ein **1x1 grosses Klickfeld**
+            // — 40x20 statt 160x80 — und zwar an der Mitte seiner OBEREN LINKEN
+            // Zelle statt an der Rumpfmitte, also 60 Bildpunkte daneben. Im Dock
+            // liegt dieser Fleck unter dem Gebaeude; anklicken kann man ihn
+            // praktisch nicht. Und weil `Pos` um 60/30 verschoben ist, sitzt
+            // auch das Bild falsch — daher »faehrt komisch«.
+            //
+            // ⚠ Es traf NUR gebaute Schiffe. Die der Karten bringen `foot_w`/
+            // `foot_h` aus der JSON mit — deshalb sieht es in der Kampagne
+            // richtig aus und im Gefecht nicht.
+            //
+            // Dieselbe Bauart wie die fuenf Felder darueber, und derselbe Grund:
+            // der Landweg setzt sie, der Schiffsweg nicht.
+            FootW = seite, FootH = seite,
             Speed = d.Speed, Sight = d.Sight, Reload = d.Reload,
             // ⚠⚠ 17.08.2026 — FEHLER D DER LISTE E: »Boote scheinen keine
             // Waffen zu haben«. Die Waffe selbst wurde gesetzt, die REICHWEITE
@@ -14134,6 +14195,17 @@ public partial class MapEntityLayer : Node2D
         // ueberhaupt gelaufen ist — --ship-check misst auch die GESETZTEN
         // Schiffe mit und sagt bei 40 s Lauf nichts darueber, ob eines vom
         // Stapel lief. Genau daran waere die Pruefung fast gescheitert.
+        // ⚠ STOLPERFALLE, 19.08.2026. Sechs Felder mussten hier einzeln
+        // nachgetragen werden, jedes nach einer eigenen Meldung des Spielers —
+        // zuletzt der GRUNDRISS, an dem Klickfeld, Bildlage und Rumpfmitte
+        // haengen. Der Weg dahin war jedes Mal derselbe: ein Feld, das der
+        // Landweg setzt und der Schiffsweg nicht. Statt auf das siebte zu
+        // warten, faellt es jetzt beim Bauen auf.
+        if (u.FootW != seite || u.FootH != seite || u.GameUnitType != gattung)
+            GD.PrintErr($"launch-ship: ⚠ ein gebautes Schiff kommt falsch heraus — " +
+                        $"Grundriss {u.FootW}x{u.FootH} (erwartet {seite}x{seite}), " +
+                        $"Gattung {u.GameUnitType} (erwartet {gattung}). Daran haengen " +
+                        $"Klickfeld, Bildlage und Rumpfmitte.");
         GD.Print($"launch-ship: {d.Name} (Rumpf {d.Chassis}, Gattung {gattung}, " +
                  $"{seite}x{seite}) steht IM Dock ({dock.Col},{dock.Row}) " +
                  $"auf ({u.Col},{u.Row}) und wartet auf eine Ausfahrt; " +
@@ -18390,6 +18462,50 @@ public partial class MapEntityLayer : Node2D
         sb.AppendLine(stumm == 0 && ohneKlang == 0
             ? "   bestanden — jede Bauart hat einen Befehlsklang, und er liegt in der Bank."
             : $"   ⚠ {stumm} Einheiten ohne Platz, {ohneKlang} mit Platz aber ohne Klang.");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// <b>`--schiffbild-check` — HAT EIN SCHIFF ÜBERHAUPT EIN BILD?</b>
+    ///
+    /// <para>⚠ 19.08.2026 gemeldet: »Schiffe haben noch den blauen Kreis von
+    /// Godot« und »die Schiffe fahren immer noch sehr komisch — fehlen hier
+    /// vielleicht wieder Sprites wie damals bei der Infanterie?«</para>
+    ///
+    /// <para>Der »blaue Kreis« ist kein Godot-Zeichen, sondern <b>unser
+    /// Besitzerpunkt</b>: <c>DrawCircle(e.Pos, 4.5f, Spielerfarbe)</c> ganz am
+    /// Ende von <see cref="DrawUnitBody"/> — er wird nur erreicht, wenn
+    /// <b>keiner</b> der vier Nachschlagewege ein Bild geliefert hat. Der
+    /// Verdacht des Spielers ist also die richtige Spur, und dieser Prüflauf
+    /// sagt, welcher Weg versagt: Rumpfbank, zusammengesetztes Bild, nacktes
+    /// Bild — oder gar keiner.</para>
+    /// </summary>
+    public string SchiffBildCheck()
+    {
+        var sb = new System.Text.StringBuilder();
+        int n = 0, ohne = 0;
+        var wege = new Dictionary<string, int>();
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Dead) continue;
+            if (e.GameUnitType is not (4 or 5)) continue;      // nur Schiffe
+            n++;
+            string weg =
+                GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e.Col, e.Row)) != null ? "Rumpfbank"
+                : GetComposedTexture(e.Combo, e.Facing) != null ? "zusammengesetzt"
+                : GetUnitTexture(e.UnitType, e.Facing) != null ? "nackt"
+                : "KEINS";
+            if (weg == "KEINS") ohne++;
+            wege[$"Rumpf {e.UnitType} Blick {e.Facing} Grundriss {e.FootW}x{e.FootH}: {weg}"] =
+                wege.GetValueOrDefault($"Rumpf {e.UnitType} Blick {e.Facing} Grundriss {e.FootW}x{e.FootH}: {weg}") + 1;
+        }
+        if (n == 0)
+            return "schiffbild-check: ⚠ NICHT GEMESSEN — kein Schiff auf dieser Karte.\n";
+        sb.AppendLine($"schiffbild-check: {n} Schiffe");
+        foreach (var kv in wege) sb.AppendLine($"   {kv.Value,3}x  {kv.Key}");
+        sb.AppendLine(ohne == 0
+            ? "   bestanden — jedes Schiff findet ein Bild, der Besitzerpunkt kommt nicht dran."
+            : $"   ⚠ {ohne} Schiffe OHNE Bild — genau die zeigen den Punkt statt eines Rumpfes.");
         return sb.ToString();
     }
 
