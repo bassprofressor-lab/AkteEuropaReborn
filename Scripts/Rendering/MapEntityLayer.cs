@@ -1218,7 +1218,39 @@ public partial class MapEntityLayer : Node2D
     ///
     /// <para>Gegenprobe: <c>--nebel-alt</c> stellt den alten Zustand her
     /// (45 % auf gesehen, undurchsichtig auf nie gesehen).</para></summary>
-    private const float FogDim = 0.30f;
+    private const float FogDim = 0.50f;
+
+    /// <summary>
+    /// <b>Wie viele Texel je Zelle die Nebeltextur bekommt.</b> Vier reichen:
+    /// der Rand laeuft damit in Vierteln durch die Zelle statt an ihrer Kante,
+    /// und die Textur bleibt auf der groessten Karte (254x254) bei gut vier
+    /// Megabyte, die fuenfmal je Sekunde neu geschrieben werden.
+    /// ⚠ UNSERE ZAHL — das Original zeichnet je Eckenmuster ein festes Bild,
+    /// siehe <see cref="BuildFogTexture"/>.</summary>
+    private const int FogSub = 4;
+
+    /// <summary>
+    /// <b>Die Farbe des Nebels, GEMESSEN.</b> Palettenindex <b>47</b> aus
+    /// <c>DATA/01.PAL</c> = <c>#13130F</c> — der Wert, den der Nebelzeichner
+    /// <c>0x4AC990</c> woertlich schreibt (<c>mov al, 0x2F</c> @0x4AC9B6).
+    /// Nicht Schwarz: ein sehr dunkles Olivgrau.
+    ///
+    /// <para><b>Und daher kommt auch die Deckkraft.</b> Der Zeichner setzt
+    /// <b>20 Zeilen zu 20 Punkten mit Schrittweite 2</b> und einem Zeilenversatz,
+    /// der zwischen 1 und 0 wechselt (<c>mov ch,0x14</c> / <c>mov cl,0x14</c> /
+    /// <c>xor dl,0xff</c> / <c>and dl,1</c> / <c>add esi,2</c>, 0x4AC9B8…0x4AC9D0).
+    /// Auf einer 40x20 Punkte grossen Zelle ist das <b>jeder zweite Punkt im
+    /// Schachbrett</b> — also genau 50 % Deckung mit dieser einen Farbe.
+    /// Halbtransparenz, wie man sie 1997 ohne Alphakanal gebaut hat.</para>
+    ///
+    /// <para>Ein 50 % dichtes Schachbrett einer Farbe und dieselbe Farbe mit
+    /// Alpha 0,5 ergeben denselben Mischwert. Wir zeichnen darum mit Alpha —
+    /// das Ergebnis ist gleich, und es haengt nicht an der Vergroesserung
+    /// (ein echtes Punktraster wuerde beim Hineinzoomen zu Karos zerfallen).
+    /// <b>Damit ist <see cref="FogDim"/> keine gewaehlte Zahl mehr, sondern
+    /// eine gelesene:</b> 0,50 statt der frueheren 0,30, die aus der
+    /// Beschreibung des Spielers geschaetzt war.</para></summary>
+    private const byte FogR = 0x13, FogG = 0x13, FogB = 0x0F;
 
     /// <summary><c>--nebel-alt</c> — die Gegenprobe: der Grauschleier von vor
     /// dem 18.08.2026, damit der Unterschied im Bild messbar bleibt.</summary>
@@ -1370,21 +1402,65 @@ public partial class MapEntityLayer : Node2D
         // a byte buffer, not SetPixel: NET05 is 254 x 254 and this runs five
         // times a second — 64k interop calls per rebuild would be paid for in
         // frame time, and the picture is only three distinct colours
-        _fogPixels ??= new byte[w * h * 4];
-        byte seen = (byte)((FogDimOld ? 0.45f : FogSeen.A) * 255f),
-             unseen = (byte)((FogDimOld ? 1f : FogUnseen.A) * 255f);
-        for (int r = 0, i = 0; r < h; r++)
-            for (int c = 0; c < w; c++, i += 4)
+        // ⚠⚠ 19.08.2026 — VIERFACHE AUFLOESUNG UND EIN SAUM. Bis heute war das
+        // hier ein Texel je Zelle, und genau das hat der Spieler gemeldet:
+        // »unser fog of war deckt wie kacheln auf — im original ist das aber
+        // wie weich«. Der Rand lief zwangslaeufig an den Zellkanten entlang.
+        //
+        // Das Original loest es mit MARCHING SQUARES: es fuehrt ein
+        // 257x257-ECKENgitter, jede beobachtete Kachel markiert ihre vier
+        // Ecken, und der Rand wird aus dem Eckenmuster gezeichnet — er laeuft
+        // damit DURCH die Zelle. Die Maske dazu steht in
+        // `FogGrid.CornerAt`, samt Adressen.
+        //
+        // Wir bilden das ab, indem die Nebeltextur je Zelle NxN Texel bekommt
+        // und die Deckung darin aus den vier Eckenwerten bilinear gerechnet
+        // wird. Bei einer Zelle, deren linke obere Ecke hell ist, laeuft die
+        // Kante diagonal durch die Zelle statt an ihr entlang.
+        //
+        // ⚠ UNSER ist diese Interpolation. Das Original hat je Eckenmuster ein
+        // eigenes UEBERGANGSBILD (Tafel 0xBAC72C); die liegt im BSS, wird zur
+        // Laufzeit gefuellt und ist aus der EXE nicht zu lesen. Gelesen ist die
+        // EINTEILUNG (welche Zelle welchen Fall bekommt), gebaut ist eine
+        // stetige Rampe statt sechzehn fester Bilder.
+        int n = FogSub;
+        int tw = w * n, th = h * n;
+        _fogPixels ??= new byte[tw * th * 4];
+        float seen = FogDimOld ? 0.45f : FogSeen.A,
+              unseen = FogDimOld ? 1f : FogUnseen.A;
+        for (int r = 0; r < h; r++)
+            for (int c = 0; c < w; c++)
             {
-                _fogPixels[i] = 0; _fogPixels[i + 1] = 0; _fogPixels[i + 2] = 0;
-                _fogPixels[i + 3] = _fog.At(c, r) switch
+                byte zustand = _fog.At(c, r);
+                float voll = zustand switch
                 {
-                    Simulation.FogGrid.Watched => (byte)0,
+                    Simulation.FogGrid.Watched => 0f,
                     Simulation.FogGrid.Seen => seen,
                     _ => unseen,
                 };
+                int maske = _fog.CornerAt(c, r);
+                // vier Ecken: 1 = hell (kein Nebel), 0 = verhangen
+                float e00 = (maske & 1) != 0 ? 0f : 1f;
+                float e10 = (maske & 2) != 0 ? 0f : 1f;
+                float e01 = (maske & 4) != 0 ? 0f : 1f;
+                float e11 = (maske & 8) != 0 ? 0f : 1f;
+                for (int sy = 0; sy < n; sy++)
+                {
+                    float ty = (sy + 0.5f) / n;
+                    for (int sx = 0; sx < n; sx++)
+                    {
+                        float tx = (sx + 0.5f) / n;
+                        float a = (e00 * (1 - tx) + e10 * tx) * (1 - ty)
+                                + (e01 * (1 - tx) + e11 * tx) * ty;
+                        int p = ((r * n + sy) * tw + (c * n + sx)) * 4;
+                        _fogPixels[p] = FogR;
+                        _fogPixels[p + 1] = FogG;
+                        _fogPixels[p + 2] = FogB;
+                        _fogPixels[p + 3] = (byte)(voll * a * 255f);
+                    }
+                }
             }
-        var img = Image.CreateFromData(w, h, false, Image.Format.Rgba8, _fogPixels);
+        var img = Image.CreateFromData(tw, th, false, Image.Format.Rgba8, _fogPixels);
         if (_fogTex == null) _fogTex = ImageTexture.CreateFromImage(img);
         else _fogTex.Update(img);
         _fogDrawn = _fog.Version;

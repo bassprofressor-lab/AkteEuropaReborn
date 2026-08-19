@@ -86,6 +86,40 @@ public sealed class FogGrid
 {
     public const byte Unseen = 0, Seen = 1, Watched = 2;
 
+    /// <summary>
+    /// <b>DIE ECKENMASKE — vier Bit je Zelle, welche ihrer Ecken »hell« sind.</b>
+    ///
+    /// <para>Bit 0 = (Spalte, Zeile), Bit 1 = (Spalte+1, Zeile),
+    /// Bit 2 = (Spalte, Zeile+1), Bit 3 = (Spalte+1, Zeile+1).</para>
+    ///
+    /// <para><b>Warum es sie gibt.</b> Das Original zeichnet den Nebelrand nicht
+    /// an der Zellkante, sondern <b>durch die Zelle hindurch</b>. Dafür führt es
+    /// ein eigenes <b>Eckengitter</b> mit 257×257 Bytes (<c>0x5739D8</c>, die
+    /// Löschgrösse <c>0x4080·4+1 = 66049 = 257²</c> @0x41FD65 ist der Beleg,
+    /// dass es Ecken und nicht Zellen sind). Jede beobachtete Kachel markiert
+    /// ihre <b>vier</b> Ecken (@0x41FDB7 … @0x41FDC9, Versätze 0, 1, 257, 258).
+    /// </para>
+    ///
+    /// <para>Danach setzt ein zweiter Ganzkartendurchgang (@0x41FF50) jede
+    /// NICHT beobachtete Zelle, an der eine markierte Ecke hängt, auf einen
+    /// eigenen dritten Zustand (<c>byte[…] = 2</c> @0x420013) — den <b>Saum</b>.
+    /// Aus den vier Ecken bildet <c>0x41FB90</c> dann eine vierstellige
+    /// Ziffernfolge (<c>1000·a + 100·c + 10·b + d − 1111·min</c>, nachgerechnet
+    /// aus 0x41FBFD…0x41FC2D) und schlägt sie in einer <b>16-Einträge-Tafel</b>
+    /// nach (<c>0x4F89F8</c>: 0000, 0101, 0011, 1010, 1100, 0001, 0010, 1000,
+    /// 0100, 0111, 1011, 1110, 1101, 0110, 1001, 1111 — vollzählig, kein
+    /// Füllwert). Das ist <b>Marching Squares</b>, und es ist der Grund, warum
+    /// die Kante im Original weich aussieht und bei uns nach Kacheln.</para>
+    ///
+    /// <para>Wir führen dieselbe Maske; was daraus gezeichnet wird, steht bei
+    /// <c>MapEntityLayer.BuildFogTexture</c>.</para>
+    /// </summary>
+    public byte CornerAt(int col, int row)
+        => _corner != null && col >= 0 && row >= 0 && col < Width && row < Height
+            ? _corner[row * Width + col] : (byte)0;
+
+    private byte[]? _corner;
+
     /// <summary>The original's own clamp; overridden by the exported table.</summary>
     public const int MaxRadius = 19;
 
@@ -115,6 +149,7 @@ public sealed class FogGrid
     public void RevealAll()
     {
         for (int i = 0; i < _cells.Length; i++) _cells[i] = Watched;
+        MarkCorners();
         Version++;
     }
 
@@ -147,8 +182,49 @@ public sealed class FogGrid
             if (_cells[i] == Watched) _cells[i] = Seen;
 
         foreach (var (col, row, sight) in watchers) Stamp(col, row, sight);
+        MarkCorners();
         Version++;
     }
+
+    /// <summary>
+    /// Der zweite und dritte Ganzkartendurchgang des Originals, zusammengezogen:
+    /// erst die Ecken jeder beobachteten Kachel markieren (@0x41FD60), dann
+    /// jeder Zelle ihre vier Ecken als Maske geben (@0x41FF50). Siehe
+    /// <see cref="CornerAt"/>.
+    ///
+    /// <para>⚠ Das Original braucht dafür ZWEI volle Durchgänge über die Karte
+    /// und ein eigenes 257×257-Feld. Wir kommen mit einem Feld und zwei
+    /// Schleifen aus, weil wir die Maske ohnehin je Zelle brauchen und nicht je
+    /// Ecke — das Ergebnis ist dasselbe, der Weg ist kürzer.</para>
+    /// </summary>
+    private void MarkCorners()
+    {
+        int w = Width, h = Height;
+        _ecken ??= new byte[(w + 1) * (h + 1)];
+        _corner ??= new byte[w * h];
+        System.Array.Clear(_ecken, 0, _ecken.Length);
+        for (int r = 0, i = 0; r < h; r++)
+            for (int c = 0; c < w; c++, i++)
+            {
+                if (_cells[i] != Watched) continue;
+                int k = r * (w + 1) + c;
+                _ecken[k] = 1;
+                _ecken[k + 1] = 1;
+                _ecken[k + w + 1] = 1;
+                _ecken[k + w + 2] = 1;
+            }
+        for (int r = 0, i = 0; r < h; r++)
+            for (int c = 0; c < w; c++, i++)
+            {
+                int k = r * (w + 1) + c;
+                _corner[i] = (byte)(_ecken[k]
+                                    | (_ecken[k + 1] << 1)
+                                    | (_ecken[k + w + 1] << 2)
+                                    | (_ecken[k + w + 2] << 3));
+            }
+    }
+
+    private byte[]? _ecken;
 
     /// <summary>The ground-unit call site's own arithmetic, @0x4207C8/@0x4207CF
     /// (F: @0x41F988/@0x41F98F): <c>elevation + sight - 1</c>. A unit two levels
@@ -180,6 +256,7 @@ public sealed class FogGrid
 
         foreach (var (col, row, sight, elev) in watchers)
             Stamp(col, row, UnitRadius(sight, elev));
+        MarkCorners();
         Version++;
     }
 
