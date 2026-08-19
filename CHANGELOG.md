@@ -34,6 +34,10 @@ further down, with the addresses it was read at.
 | **Large ships can be selected.** | They had no footprint — a battleship got a 1×1 click box underneath the dock. |
 | **Ships turn at the original's rate.** | One step every three ticks, 4×4 hulls every six. We turned every tick — sixteen times too fast. |
 | **A sunk ship leaves nothing behind.** | No wreck, no slick. Only ground vehicles leave one. |
+| **The submarine dives.** | Anyone not allied sees only a dithered blue shadow. It really is unarmed — a scout. |
+| **Muzzle flashes come from the game's own table.** | Four sequences by weapon — and thirteen weapons have **none** in the original. |
+| **Buildings get no selection brackets.** | The original has them for units only; a building answers with its window. |
+| **"Sell" only where a market exists.** | Campaign maps 1–10 have none. |
 | **Popups no longer trap the mouse in the menu.** | The cause was not a leftover popup but a **pause** left standing. |
 | **Fog uncovers softly**, not tile by tile. Marching squares over a 257×257 corner grid, plus the original's own dither pattern in its own palette colour. |
 | **Thirteen weapons get a flying projectile** instead of three — each with its own impact. Out of a table we had read one twenty-second of. |

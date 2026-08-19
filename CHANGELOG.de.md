@@ -35,6 +35,10 @@ weiter unten ausführlich, mit den Adressen, an denen er gelesen wurde.
 | **Grosse Schiffe lassen sich anwählen.** | Ihnen fehlte der Grundriss — ein Schlachtschiff hatte ein 1×1 grosses Klickfeld unter dem Dock. |
 | **Schiffe drehen im Takt des Originals.** | Eine Stufe alle drei Takte, 4×4-Schiffe alle sechs. Wir drehten jeden — sechzehnmal zu schnell. |
 | **Ein versenktes Schiff hinterlässt nichts.** | Kein Wrack, kein Ölfleck. Nur Landfahrzeuge lassen eines zurück. |
+| **Das U-Boot taucht.** | Wer nicht verbündet ist, sieht nur einen gerasterten blauen Schatten. Es ist wirklich unbewaffnet — ein Späher. |
+| **Das Mündungsfeuer kommt aus der Tafel des Spiels.** | Vier Bildfolgen je nach Waffe — und dreizehn Waffen haben im Original **gar keines**. |
+| **Gebäude bekommen keinen Auswahlkranz.** | Den gibt es im Original nur für Einheiten; ein Gebäude meldet sich durch sein Fenster. |
+| **»Verkaufen« nur, wo es einen Markt gibt.** | Die Kampagnenkarten 1–10 haben gar keinen. |
 | **Popups fangen die Maus nicht mehr im Menü.** | Die Ursache war keine Popup-Leiche, sondern eine stehengebliebene **Pause**. |
 | **Der Nebel deckt weich auf.** | Statt Kachel für Kachel. Marching Squares über ein 257×257-Eckengitter, dazu das Schachbrettmuster des Originals in seiner Palettenfarbe. |
 | **Dreizehn Waffen bekommen ein fliegendes Geschoss** statt drei — und jede ihren eigenen Einschlag. Aus einer Tafel, die wir zu einem Zweiundzwanzigstel gelesen hatten. |
