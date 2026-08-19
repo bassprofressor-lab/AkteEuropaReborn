@@ -2532,6 +2532,56 @@ public partial class MapEntityLayer : Node2D
             return false;
         var root = json.Data.AsGodotDictionary<string, Variant>();
 
+        // ====================================================================
+        //  sec37 — WER SCHON AN BORD IST
+        // ====================================================================
+        // Muss VOR den Einheiten gelesen werden: die Fracht darf gar nicht
+        // erst in `_entities` landen. Im Original steht sie auch nicht auf der
+        // Karte — auf 05.CWM tragen fuenfzehn geladene Einheiten dieselbe
+        // Zelle (5,11), was fuer aufgestellte Einheiten unmoeglich ist. Wer sie
+        // trotzdem aufstellt, bekommt einen Stapel Geister neben dem Schiff.
+        // Herleitung und Messung: CwmExtra.TransportLoads.
+        _anBord.Clear();
+        _bordDeckel.Clear();
+        _frachtPlaetze.Clear();
+        TransportSaetze = 0;
+        FrachtUebersprungen = 0;
+        FrachtDoppelt = 0;
+        if (root.TryGetValue("transports", out var tpv) && tpv.VariantType == Variant.Type.Array)
+            foreach (var item in tpv.AsGodotArray())
+            {
+                if (item.VariantType != Variant.Type.Dictionary) continue;
+                var td = item.AsGodotDictionary<string, Variant>();
+                int carrier = GetI(td, "carrier", -1);
+                if (carrier < 0) continue;
+                TransportSaetze++;
+                _bordDeckel[carrier] = GetI(td, "cap");
+                if (!td.TryGetValue("cargo", out var cv) || cv.VariantType != Variant.Type.Array)
+                    continue;
+                var liste = new List<int>();
+                foreach (var g in cv.AsGodotArray())
+                {
+                    int slot = g.AsInt32();
+                    // ⚠ ZWEI Saetze koennen dieselbe Einheit beanspruchen.
+                    // GEMESSEN auf 08.CWM: Satz 7 (Traeger 1, Rumpf 73) traegt
+                    // den lueckenlosen Lauf 15..29 und ist damit bis auf den
+                    // letzten seiner 15 Plaetze voll; Satz 3 (Traeger 3) will
+                    // 23, 24 und 28 — drei verstreute Stuecke DARAUS. Der
+                    // zweite ist eine Leiche vom Umladen, die niemand geloescht
+                    // hat, und beide bestehen die Zeigerprobe.
+                    //
+                    // ⚠ UNSERE SETZUNG, nicht aus der EXE gelesen: der ERSTE
+                    // Anspruch gilt. Eine Einheit kann nur an einem Ort sein,
+                    // und welchen Satz das Original vorzieht, steht in den
+                    // Daten nicht. Betrifft 3 von 65 Frachtplaetzen, nur diese
+                    // eine Karte. Steht in OFFENE_FRAGEN.md.
+                    if (_frachtPlaetze.ContainsKey(slot)) { FrachtDoppelt++; continue; }
+                    liste.Add(slot);
+                    _frachtPlaetze[slot] = carrier;
+                }
+                if (liste.Count > 0) _anBord[carrier] = liste;
+            }
+
         if (root.TryGetValue("entities", out var ev) && ev.VariantType == Variant.Type.Array)
         {
             foreach (var item in ev.AsGodotArray())
@@ -2548,6 +2598,9 @@ public partial class MapEntityLayer : Node2D
                 // hostility tests (@0x409bde, @0x40d058) index the alliance
                 // matrix with. The old heading-from-+0x08 conversion is gone.
                 int facing = haveRaw ? HexByte(raw, 0x02) & 7 : DefaultFacing;
+                // ⚠ Fracht wird NICHT aufgestellt (siehe oben). Die Zahl dazu
+                // steht im --transport-check.
+                if (_frachtPlaetze.ContainsKey(GetI(e, "slot", -1))) { FrachtUebersprungen++; continue; }
                 _entities.Add(new Entity
                 {
                     Slot = GetI(e, "slot", -1), Col = col, Row = row,
@@ -17563,6 +17616,30 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Wie viele Gleisstuecke der letzte Durchgang gelegt hat — der
     /// Pruefstand liest es, sonst waere „die Strecke ist da" wieder nur eine
     /// Behauptung.</summary>
+    // ---- sec37: die Ladung, die die Karte mitbringt ------------------------
+
+    /// <summary>Traeger-Platz -> die Einheitenplaetze an Bord, in der
+    /// Reihenfolge der Datei. Sie ist auch die Reihenfolge beim Ausladen.</summary>
+    private readonly Dictionary<int, List<int>> _anBord = new();
+
+    /// <summary>Traeger-Platz -> Deckel aus +0x24. GEMESSEN 0, 12, 13, 15 —
+    /// er haengt am Rumpf, es ist KEINE feste 15.</summary>
+    private readonly Dictionary<int, int> _bordDeckel = new();
+
+    /// <summary>Frachtplatz -> Traeger. Die Umkehrung von <see cref="_anBord"/>,
+    /// damit der Einheitenlader in einem Griff weiss, wen er weglassen muss.</summary>
+    private readonly Dictionary<int, int> _frachtPlaetze = new();
+
+    /// <summary>Wieviele Transportsaetze die Karte mitbrachte (auch leere).</summary>
+    public int TransportSaetze;
+
+    /// <summary>Wieviele Einheiten deshalb NICHT aufgestellt wurden.</summary>
+    public int FrachtUebersprungen;
+
+    /// <summary>Frachtplaetze, die ein zweiter Satz auch haben wollte. Siehe
+    /// die Setzung beim Einlesen.</summary>
+    public int FrachtDoppelt;
+
     public int RailTilesDrawn;
 
     /// <summary>Wie viele NACHBARN unter den gelegten Stuecken nicht Kante an
@@ -18966,6 +19043,61 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <summary>
+    /// <summary>
+    /// <b>`--transport-check` — WER FAEHRT BELADEN LOS?</b>
+    ///
+    /// <para>Die Karte liefert Transporter mit Inhalt aus (sec37). Der Prueflauf
+    /// beantwortet drei Fragen mit Zahlen: wieviele Saetze die Karte hat, wieviel
+    /// darin sitzt, und ob jeder Traeger auch wirklich auf dem Feld steht. Der
+    /// letzte Punkt ist der wunde: zeigt ein Satz auf einen Platz, den wir nicht
+    /// aufgestellt haben, ist die Ladung verwaist — sie kaeme nie wieder heraus.</para>
+    ///
+    /// <para>MESSLATTE aus den Dateien beider Datentraeger: 7 Karten tragen
+    /// Saetze, aber nur <b>map_05 (24 Stueck)</b> und <b>map_08 (41)</b> tragen
+    /// wirklich Fracht — zusammen 65. Alle anderen Saetze sind leere Transporter.
+    /// Ein Lauf auf map_05, der nicht 24 meldet, ist falsch.</para>
+    /// </summary>
+    public string TransportCheck()
+    {
+        var sb = new System.Text.StringBuilder();
+        int fracht = 0;
+        foreach (var kv in _anBord) fracht += kv.Value.Count;
+        sb.AppendLine($"transport-check: {TransportSaetze} Saetze in der Karte, " +
+                      $"{_anBord.Count} davon beladen, {fracht} Einheiten an Bord");
+        sb.AppendLine($"   nicht aufgestellt (weil an Bord): {FrachtUebersprungen}" +
+                      (FrachtUebersprungen == fracht
+                           ? "  — deckt sich"
+                           : $"  ⚠ WEICHT AB von {fracht}: ein Frachtplatz stand nicht in den Einheiten"));
+        if (FrachtDoppelt > 0)
+            sb.AppendLine($"   {FrachtDoppelt} Frachtplaetze wollte ein ZWEITER Satz auch " +
+                          "haben — der erste Anspruch gilt (unsere Setzung, siehe Lader)");
+
+        var plaetze = new HashSet<int>();
+        foreach (var e in _entities) plaetze.Add(e.Slot);
+        int verwaist = 0;
+        var beispiel = new List<string>();
+        foreach (var kv in _anBord)
+        {
+            bool da = plaetze.Contains(kv.Key);
+            if (!da) verwaist++;
+            if (beispiel.Count < 5)
+            {
+                int deckel = _bordDeckel.TryGetValue(kv.Key, out var dk) ? dk : 0;
+                beispiel.Add($"Traeger {kv.Key}{(da ? "" : " FEHLT")}: {kv.Value.Count} Stueck" +
+                             (deckel > 0 ? $" von {deckel}" : " (Deckel sagt die Karte nicht)"));
+            }
+        }
+        foreach (string b in beispiel) sb.AppendLine("   " + b);
+        sb.AppendLine(verwaist == 0
+            ? "   jeder beladene Traeger steht auch auf dem Feld"
+            : $"   ⚠ {verwaist} Traeger stehen NICHT auf dem Feld — ihre Ladung kaeme nie heraus");
+        if (TransportSaetze == 0)
+            sb.AppendLine("   ⚠ KEINE Saetze — entweder hat die Karte keine, oder die "
+                          + ".entities.json stammt aus einem Import vor dem 19.08.2026. "
+                          + "Dann hilft --reexport-entities=<CD-Pfad>.");
+        return sb.ToString();
+    }
+
     /// <b>`--rampen-check` — HAT DIE KARTE RAMPEN, UND WO?</b>
     ///
     /// <para>⚠ 19.08.2026. Die Rampenmarken aus Sektion 20 sind die Vorbedingung

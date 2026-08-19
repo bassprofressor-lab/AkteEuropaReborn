@@ -937,3 +937,99 @@ fehlte — `21.CWM`, `25.CWM` und `26.CWM` liegen auf `E:\LEVELS`.
 Die 120er/122er sind vom 08.07.1997, `1.DM` vom 04.08.1997 — ein älterer
 Formatstand. **`1.DM` ist damit die einzige Datei auf beiden CDs mit allen 131
 Abschnitten** und der beste Prüfgegenstand für alles jenseits von `sec120`.
+
+---
+
+## J. Die Abschnitte der Kartendatei — was wirklich fehlt (19.08.2026)
+
+Ein Prüflauf über alle 130 Abschnitte hat die Tafel in `CwmSections.Sizes`
+Zeile für Zeile bestätigt (130 von 130, 0 Abweichungen) und den Schnitt
+zwischen `.CWM` und `.DM` an einer Adresse festgemacht: **Kopfbyte 3**
+(`@0x41E6A5`, `cmp cl,2 / jne`) — `.CWM` = 1 → sec1..sec38, `.DM` = 2 →
+sec1..sec131. Es gibt im ganzen Lader nur diesen einen Zweig.
+
+### ⚠ Zwei Berichtigungen an einem Bericht, den ich fast übernommen hätte
+
+**1. »Wir lesen sec22 (die Gleise) nicht« — falsch.** Wir lesen sie bis in den
+Zeichner (`CwmExtra.RailCells` → `rail_cells` → `MapEntityLayer`). Gemessen
+nach dem Neuschreiben: **27 Karten, 19 977 Gleiszellen**, `map_32` allein 1986
+— genau die Zahl, die in der Datei steht. Was gefehlt hat, war nicht der
+Leser, sondern die **Dateien**: die `.entities.json` der Missionen 16–33 gab es
+nicht, weil es die Karten nicht gab.
+
+⚠ **Mein eigener Messfehler dabei, und er ist die Lehre:** mein erster Zähllauf
+bekam einen MSYS-Pfad (`/c/Users/...`), fand **null Dateien** und meldete
+seelenruhig »0 Karten, 0 Zellen«. Ich hätte daraufhin einen funktionierenden
+Leser neu gebaut. **Ein Zähler, der nichts findet, muss sagen können, wieviel
+er angesehen hat** — sonst ist »0 Treffer« nicht von »0 Versuche« zu
+unterscheiden.
+
+**2. Die Satzform von sec37 stimmte nicht.** Gemeldet war »+0x04, 16 Griffe,
+Deckel immer 15«. Gemessen ist es **+0x06, 15 Griffe** (2+2+2+15·2+2 = 38 geht
+auf) und der Deckel ist **0, 12, 13 oder 15** — er hängt am Rumpf.
+
+### Was wir nach dieser Prüfung wirklich nicht lesen
+
+| Abschnitt | Inhalt | Menge über die `.CWM` |
+|---|---|---|
+| **sec17** | Brücken und Molen, 100 × 24 | 92 |
+| **sec21** | Rampentafel, 50 × 4 | 78 |
+| **sec25 / sec29** | Zustand von Depot und Seedock | 3 / 27 |
+| **sec38** | Terranium-Vorkommen der Karte, 50 × 14 | 9 |
+| **sec16** | Infanteriezellen, 4000 × 22 | auf 26 von 49 Karten |
+
+⚠ Zu **sec38** eine Klarstellung an unseren eigenen Notizen: `sec28` ist
+**nicht** die Vorkommenstafel, sondern der Zustand der Minen-*Gebäude*. Die
+freien Vorkommen, auf die man eine Mine setzt, sind sec38.
+
+**Sauber ausgeschlossen** (kein Kartendatum, sondern erst Spielstand):
+Minen (sec84), Fallen (sec85), Radare (sec86), Gas (sec82, **0 belegte Sätze
+in allen 62 Dateien**). Die **Selbstverteidiger** stehen in *gar keinem*
+Abschnitt: ihre Tafel `0x53d8d8` liegt genau am Ende von sec126, und der
+Nullfüllblock des Laders hört bei `cmp eax,0x53d8d8` auf. Sie werden nicht
+gespeichert. Ebenso gibt es **keinen Abschnitt mit Programmform** — die
+Missionslogik liegt in der EXE, nicht in der Karte.
+
+### sec37 — der Transport, jetzt eingebaut
+
+Die Karten liefern **beladene** Transporter aus. Der Zuteiler `@0x4CED60`
+(F: `@0x4CE910`) meldet »Too many transport ships«: 100 Plätze zu 38 Byte.
+
+```
++0x00 u16 belegt   +0x02 u16 Einheitenplatz des Transporters
++0x04 u16 Anzahl   +0x06..+0x22  15 × u16 Griffe   +0x24 u16 Deckel
+```
+
+⚠ **Man darf die Liste nicht durchlaufen.** Sie enthält Karteileichen; gültig
+ist ein Satz nur, wenn die **Einheit** in `+0x40` auf ihn zeigt. Gemessen über
+beide Datenträger: **30 gültige Sätze auf 7 Karten mit 65 geladenen
+Einheiten, 0 Zeiger auf einen fremden Satz.** Wer stattdessen die Liste
+durchläuft, bekommt allein auf `05.CWM` 27 Einheiten zu viel.
+
+Fracht ist an **UKOL 57** (+0x14) kenntlich — alle 65 tragen sie, keine freie
+Einheit tut es, 0 Ausnahmen. Transporterrümpfe sind **2, 70, 72, 73**; die 2
+heißt: es gibt auch einen **Landtransport**, nicht nur Schiffe.
+
+**Eingebaut:** die Fracht wird nicht mehr aufgestellt. Im Original steht sie
+auch nicht auf der Karte — auf `05.CWM` teilen sich fünfzehn geladene
+Einheiten die Zelle (5,11), was für aufgestellte Einheiten unmöglich ist.
+Prüfstand `--transport-check`, Messlatte: map_05 **24**, map_08 **38**,
+map_01 **0**.
+
+### ❓ Was ich brauche: welcher Satz gilt bei einer Kollision?
+
+Auf `08.CWM` beanspruchen **zwei** Sätze dieselben drei Einheiten (23, 24, 28),
+und beide bestehen die Zeigerprobe:
+
+* Satz 7, Träger 1 (Rumpf 73, Zelle 19,51): der **lückenlose** Lauf 15…29 —
+  genau seine 15 Plätze voll.
+* Satz 3, Träger 3 (Rumpf 72, Zelle 16,50): 23, 24, 28 — drei verstreute
+  Stücke **daraus**.
+
+Satz 3 sieht aus wie eine Leiche vom Umladen. **Meine Setzung: der erste
+Anspruch gilt** — betrifft 3 von 65 Frachtplätzen und nur diese eine Karte.
+Aus den Daten ist nicht zu entscheiden, welchen das Original nimmt.
+
+**Was mir hülfe:** In Mission 8 die beiden Schiffe bei (19,51) und (16,50)
+anwählen und nachsehen, wieviel jedes trägt — 15 und 0, oder 12 und 3? Das
+entscheidet es in einer halben Minute, und ich müsste nichts raten.

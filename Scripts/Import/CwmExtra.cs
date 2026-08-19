@@ -972,6 +972,95 @@ public static class CwmExtra
         return list;
     }
 
+    // ---- sec37: DIE TRANSPORTLADUNG ----------------------------------------
+
+    /// <summary>
+    /// EIN BELADENER TRANSPORTER, wie ihn die Karte ausliefert.
+    ///
+    /// <para><b>sec37</b>, 100 Plaetze zu 38 Byte. Der Zuteiler @0x4CED60
+    /// (F: @0x4CE910) meldet »Too many transport ships«, prueft
+    /// <c>cmp .. 0x64</c> = 100 Plaetze und rechnet mit Schrittweite 38.</para>
+    ///
+    /// <para><b>Der Satz — GEMESSEN, nicht uebernommen:</b>
+    /// <c>+0x00</c> u16 belegt, <c>+0x02</c> u16 <b>Einheitenplatz des
+    /// Transporters</b>, <c>+0x04</c> u16 Anzahl, <c>+0x06..+0x22</c>
+    /// <b>15</b> u16 Griffe, <c>+0x24</c> u16 Deckel. Die Rechnung geht auf:
+    /// 2+2+2+15*2+2 = 38.</para>
+    ///
+    /// <para>⚠ <b>Man darf diese Liste NICHT durchlaufen.</b> Sie enthaelt
+    /// Karteileichen: 05.CWM traegt sieben belegte Saetze, von denen drei auf
+    /// denselben Transporter zeigen wie drei andere. Gueltig ist ein Satz nur,
+    /// wenn die EINHEIT auf ihn zeigt — <c>+0x40</c> des Datensatzes ist die
+    /// Satznummer. Deshalb laeuft dieser Leser ueber die Einheiten und folgt
+    /// dem Zeiger zurueck. GEMESSEN ueber beide Datentraeger: <b>30 gueltige
+    /// Saetze auf 7 Karten mit 65 geladenen Einheiten, und 0 Zeiger, die auf
+    /// einen fremden Satz fallen</b>. Wer stattdessen die Liste durchlaeuft,
+    /// bekommt auf 05.CWM allein 27 Einheiten zu viel.</para>
+    ///
+    /// <para><b>Woran eine Fracht kenntlich ist:</b> ihr Auftragsfeld
+    /// <c>UKOL</c> (+0x14, siehe ENTITY_FELDER.md) steht auf <b>57</b>.
+    /// GEMESSEN: alle 65 geladenen Einheiten tragen die 57, und keine
+    /// ungeladene Einheit derselben Karten tut es — 0 Ausnahmen.</para>
+    ///
+    /// <para>⚠ Der Deckel ist <b>keine</b> feste 15: gemessen 0, 12, 13 und 15.
+    /// Er haengt am Rumpf. Rumpftypen der Transporter: 2, 70, 72, 73 — es gibt
+    /// also auch einen LANDtransport, nicht nur Schiffe.</para>
+    /// </summary>
+    public sealed class TransportLoad
+    {
+        /// <summary>Satznummer in sec37 — die Zahl, die in <c>+0x40</c> der
+        /// Einheit steht.</summary>
+        public int Slot;
+        /// <summary>Einheitenplatz des Transporters selbst.</summary>
+        public int Carrier;
+        /// <summary>Wieviel er tragen darf (+0x24). 0 heisst: die Karte sagt
+        /// nichts, dann entscheidet der Rumpf.</summary>
+        public int Cap;
+        /// <summary>Die Einheitenplaetze an Bord, in der Reihenfolge der
+        /// Datei — sie ist auch die Reihenfolge beim Ausladen.</summary>
+        public List<int> Cargo = new();
+    }
+
+    /// <summary>Das Auftragsfeld einer Einheit, die im Transporter sitzt
+    /// (<c>UKOL</c> +0x14). GEMESSEN, siehe <see cref="TransportLoad"/>.</summary>
+    public const int UkolImTransport = 57;
+
+    public const int TransportStride = 38, TransportSlots = 100, TransportCargoMax = 15;
+
+    /// <summary>sec37 auspacken — ueber die EINHEITEN, nicht ueber die Liste.
+    /// Warum, steht bei <see cref="TransportLoad"/>.</summary>
+    public static List<TransportLoad> TransportLoads(CwmFile m)
+    {
+        var list = new List<TransportLoad>();
+        var s = m.Sec(37);
+        var u = m.Sec(5);
+        if (s == null || u == null) return list;
+        int slots = Math.Min(TransportSlots, s.Length / TransportStride);
+        int n = u.Length / CwmData.EntityStride;
+        for (int i = 0; i < n; i++)
+        {
+            int e = i * CwmData.EntityStride;
+            int zeiger = u[e + 0x40];
+            if (zeiger <= 0 || zeiger >= slots) continue;
+
+            int o = zeiger * TransportStride;
+            if (BitConverter.ToUInt16(s, o) == 0) continue;          // Platz frei
+            if (BitConverter.ToUInt16(s, o + 2) != i) continue;      // zeigt woanders hin
+
+            int anz = BitConverter.ToUInt16(s, o + 4);
+            if (anz > TransportCargoMax) continue;                   // kaputter Satz
+            var t = new TransportLoad
+            {
+                Slot = zeiger, Carrier = i,
+                Cap = BitConverter.ToUInt16(s, o + 0x24),
+            };
+            for (int k = 0; k < anz; k++)
+                t.Cargo.Add(BitConverter.ToUInt16(s, o + 6 + 2 * k));
+            list.Add(t);
+        }
+        return list;
+    }
+
     // ---- sec119 / sec120: what a player may build ---------------------------
 
     /// <summary>sec120 — the buildable aircraft per player (dest 0x51b020),

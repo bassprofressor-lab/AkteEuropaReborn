@@ -39,6 +39,10 @@ public static class EntitiesJson
         public List<CwmExtra.RailNode> RailNodes = new();
         public List<CwmExtra.Link> Links = new();
         public List<CwmExtra.RailCell> RailCells = new();
+
+        /// <summary>Die BELADENEN TRANSPORTER der Karte — sec37.
+        /// Siehe CwmExtra.TransportLoads.</summary>
+        public List<CwmExtra.TransportLoad> Transports = new();
         public List<CwmExtra.Player> Players = new();
         public List<CwmExtra.AirDesign> AirDesigns = new();
         public List<CwmExtra.ShipDesign> ShipDesigns = new();
@@ -68,6 +72,7 @@ public static class EntitiesJson
             Market = CwmExtra.MarketOffers(m),
             RailNodes = CwmExtra.RailNodes(m),
             RailCells = CwmExtra.RailCells(m),
+            Transports = CwmExtra.TransportLoads(m),
             Players = CwmExtra.Players(m),
             AirDesigns = CwmExtra.AirDesigns(m),
             ShipDesigns = CwmExtra.ShipDesigns(m),
@@ -322,6 +327,24 @@ public static class EntitiesJson
             w.Arr();
             w.Num(c.Index); w.Num(c.Col); w.Num(c.Row);
             w.Num(c.Frame); w.Num(c.Line); w.Num(c.Hp);
+            w.End();
+        }
+        w.End();
+
+        // Ein Transporter, den die Karte BELADEN ausliefert (sec37). Knapp
+        // geschrieben: Satz, Traeger, Deckel, dann die Fracht. Sie ist selten
+        // (30 Saetze auf 7 von 62 Dateien), aber ohne sie stehen auf 05.CWM
+        // fuenfzehn Einheiten neben dem Schiff statt darin.
+        w.Key("transports").Arr();
+        foreach (var t in d.Transports)
+        {
+            w.Obj();
+            w.Key("slot").Num(t.Slot);
+            w.Key("carrier").Num(t.Carrier);
+            w.Key("cap").Num(t.Cap);
+            w.Key("cargo").Arr();
+            foreach (int g in t.Cargo) w.Num(g);
+            w.End();
             w.End();
         }
         w.End();
