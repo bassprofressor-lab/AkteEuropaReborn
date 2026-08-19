@@ -602,7 +602,7 @@ Waffenbauteile sind davon aber nur **drei**: 26, 27 und 31 — nachgezählt übe
 gelesen. Falls Dir diese drei Waffen im Spiel zu stark vorkommen, sag es — dann
 suche ich gezielt danach.
 
-### NICHT GEBAUT: die Wurfbahn
+### ✅ GEBAUT 19.08.2026: die Wurfbahn  (Scheitelteiler/BogenHoehe)
 
 Die Bahnart hängt **allein an der Geschossart**, an einer fest verdrahteten
 Tafel (`byte[0x4530DC + art]` → `[0x453064 + 4·klasse]`), nicht an Reichweite
@@ -619,7 +619,7 @@ dieselben 22.
 Art 7 steigt in Siebenerschritten bis Höhe 150 (zehn Stufen), marschiert und
 stürzt, sobald `(Zielhöhe−Höhe)/7 + 1 ≥ Restschritte`.
 
-### NICHT GEBAUT: die acht Einschlagszweige
+### ✅ GEBAUT 19.08.2026: die acht Einschlagszweige  (SchwelleAn)
 
 Vor der Trefferprüfung holt das Spiel die Geländehöhe am Geschosspunkt und
 vergleicht `Gelände + Schwelle` gegen die Geschosshöhe:
@@ -654,7 +654,7 @@ stimmt für die *Schussroutine*, die legt keinen Effekt an. Der **Zeichner** mal
 aber sehr wohl eines aus SHOOT.CWT, solange `byte[Einheit+0x42]` läuft. Unser
 `Kind = "muzzle"` ist im Grundsatz richtig — es sitzt nur am falschen Ort.
 
-### NICHT GEBAUT: Transport
+### ✅ GEBAUT 19.08.2026: Transport — die Karte liefert ihn beladen aus (sec37, Abschnitt J)
 
 Tafel `0xBBFEF8`, 100 Plätze zu 38 Byte: `+0x00` belegt, `+0x02` Schiff,
 `+0x04` Anzahl, `+0x06…+0x23` fünfzehn Einheitenindizes, `+0x24` Gewicht.
@@ -828,7 +828,13 @@ einzigen Ort, für den das Original die zweite Schrift überhaupt einwechselt.
 erst beim nächsten Leerzeichen). Godots `WordSmart` bricht früher; das ist
 unsere Abweichung und fällt nur bei langen Wortketten auf.
 
-### ⭐ Sektion 20, die Zeichenlage — GEBAUT, aber ⚠ NOCH WIRKUNGSLOS
+### ✅ Sektion 20, die Zeichenlage — GEBAUT UND WIRKSAM (19.08.2026)
+
+⚠ Der Vorbehalt unten (»wirkt erst nach einem neuen Einlesen«) ist **erledigt**:
+die CDs waren gemountet, alle 54 Karten sind neu gebacken. Gemessen ueber alle
+Karten: **125 971 aufragende Objekte, davon 980 nur ueber die Zeichenlage**.
+`map_01` meldet die erwarteten 568.
+
 
 Die Aufnahmeregel des verzahnten Durchgangs ist jetzt die des Originals
 (selbst nachgelesen, `0x4B446C`…`0x4B4491`):
@@ -853,7 +859,7 @@ Rampen)"*. Steht dort **0**, hat die Regel nicht gegriffen.
 **Was mir hülfe:** einmal `--reexport-maps=<CD-Pfad>` laufen lassen und mir die
 Zeile zeigen. Erwartet sind rund 578.
 
-### Der Transport — vorbereitet, aber ⚠ noch nicht gebaut
+### ✅ Der Transport — GEBAUT (19.08.2026), Einzelheiten in Abschnitt J
 
 Die Zahlen sind nachgeprüft, nicht übernommen. Ich habe die Laderoutine
 `0x4CEE80` selbst gelesen:
