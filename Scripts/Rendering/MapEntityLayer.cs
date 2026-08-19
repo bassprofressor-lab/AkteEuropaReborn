@@ -19147,7 +19147,11 @@ public partial class MapEntityLayer : Node2D
                 if (b) beladen++;
                 if (e) entladen++;
                 if ((b || e) && erste.Count < 6)
-                    erste.Add($"({c},{r}){(e ? " entladen" : " beladen")}");
+                {
+                    var (art, nr) = BauwerkAn(c, r);
+                    erste.Add($"({c},{r}){(e ? " entladen" : " beladen")}" +
+                              (art == 2 ? $" [Rampe {nr}]" : art == 1 ? $" [Bruecke {nr}]" : ""));
+                }
             }
         sb.AppendLine($"rampen-check: Karte {w}x{h}, {RampenZellen} Rampenzellen in der Meta");
         sb.AppendLine($"   davon beladbar (>=100): {beladen}, entladbar (>=200): {entladen}");

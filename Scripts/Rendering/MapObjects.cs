@@ -90,9 +90,30 @@ public partial class MapEntityLayer
     /// <see cref="SchwelleAn"/>.</summary>
     private readonly Dictionary<int, int> _objSchwelle = new();
 
-    /// <summary>Zelle → Lagenbyte aus Sektion 20, aber nur für Zellen ab 100:
-    /// die RAMPEN. Ab 100 darf beladen, ab 200 entladen werden.</summary>
+    /// <summary>
+    /// Zelle → Lagenbyte aus Sektion 20, aber nur für Zellen ab 100.
+    ///
+    /// <para>⭐ <b>Das Byte ist mehr als »hier ist eine Rampe« — es ist die
+    /// PLATZNUMMER.</b> GEMESSEN über beide Datenträger, ohne Ausnahme:</para>
+    /// <list type="bullet">
+    /// <item><c>100 + n</c> = Brücke/Mole Nr. <c>n</c> aus sec17 — 110 von 110</item>
+    /// <item><c>200 + n</c> = Rampe Nr. <c>n</c> aus sec21 — 85 von 85</item>
+    /// </list>
+    /// <para>Damit weiß man ohne Suche, WELCHES Bauwerk auf einer Zelle steht,
+    /// und über die beiden Abschnitte auch dessen Trefferpunkte (500 bzw. 200)
+    /// und Länge. Siehe <see cref="BauwerkAn"/>.</para></summary>
     private readonly Dictionary<int, int> _rampen = new();
+
+    /// <summary>Welches Bauwerk steht auf dieser Zelle? Gibt
+    /// <c>(art, nummer)</c> zurück: art 1 = Brücke/Mole (sec17), 2 = Rampe
+    /// (sec21), 0 = keines. Herleitung bei <see cref="_rampen"/>.</summary>
+    public (int Art, int Nr) BauwerkAn(int col, int row)
+    {
+        if (!_rampen.TryGetValue(col * 1024 + row, out int l)) return (0, 0);
+        if (l >= 200) return (2, l - 200);
+        if (l >= 100) return (1, l - 100);
+        return (0, 0);
+    }
 
     /// <summary>Darf auf dieser Zelle BELADEN werden? Lagenbyte ≥ 100
     /// (0x40950C, 0x409763).</summary>
