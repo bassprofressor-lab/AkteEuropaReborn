@@ -286,8 +286,27 @@ public static class MapForest
     /// der 0xFFFF-Fall bleibt aus. Eine Karte ohne Sektion 20 sieht damit aus
     /// wie bisher, statt still anders zu werden.</para>
     /// </summary>
+    /// <summary>Die Belegungswerte der GEBÄUDE. Sie liegen im selben Bereich,
+    /// gehen im Original aber einen eigenen Weg (<c>0x4B44C6</c>:
+    /// <c>cmp si,0xEB8C / jae</c> — darunter der Gebäudezweig über
+    /// <c>0x40135C</c>, darüber die gewöhnliche Kachel).</summary>
+    public const int GebaeudeVon = 60000, GebaeudeBis = 60300;
+
     public static bool ImZeilenfach(int imap, int lage = 0)
     {
+        // ⚠⚠ 19.08.2026, BERICHTIGUNG NOCH AM SELBEN ABEND. Der erste Anlauf
+        // fasste 50000…63999 zu EINEM Bereich zusammen — richtig gelesen, aber
+        // für unseren Backofen falsch: darin liegen auch die GEBÄUDE
+        // (60000…60299), und die zeichnet das Original in einem eigenen Zweig
+        // aus seiner Gebäudetafel, nicht als Kachel. Wir zeichnen sie LEBEND,
+        // damit eine zerstörte Ruine zeigen kann.
+        //
+        // Aufgefallen an der Zahl: map_01 sprang von 558 auf 628 Objekte, wo
+        // 568 zu erwarten waren — **70 statt 10**. Ohne diese Gegenrechnung
+        // wären sechzig Gebäudekacheln fest ins Bild gebacken worden und hätten
+        // sich nie mehr entfernen lassen.
+        if (imap >= GebaeudeVon && imap < GebaeudeBis) return false;
+
         bool imBereich = imap >= WaldVon && imap < ObjektBis;
         if (!imBereich)
         {

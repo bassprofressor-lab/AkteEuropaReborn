@@ -90,6 +90,25 @@ public partial class MapEntityLayer
     /// <see cref="SchwelleAn"/>.</summary>
     private readonly Dictionary<int, int> _objSchwelle = new();
 
+    /// <summary>Zelle → Lagenbyte aus Sektion 20, aber nur für Zellen ab 100:
+    /// die RAMPEN. Ab 100 darf beladen, ab 200 entladen werden.</summary>
+    private readonly Dictionary<int, int> _rampen = new();
+
+    /// <summary>Darf auf dieser Zelle BELADEN werden? Lagenbyte ≥ 100
+    /// (0x40950C, 0x409763).</summary>
+    public bool RampeBeladen(int col, int row)
+        => _rampen.TryGetValue(col * 1024 + row, out int l) && l >= 100;
+
+    /// <summary>Darf auf dieser Zelle ENTLADEN werden? Lagenbyte ≥ 200
+    /// (0x409383, 0x4097B8).</summary>
+    public bool RampeEntladen(int col, int row)
+        => _rampen.TryGetValue(col * 1024 + row, out int l) && l >= 200;
+
+    /// <summary>Wieviele Rampenzellen die Karte trägt — ⚠ ohne diese Zahl wäre
+    /// »der Transport tut nichts« nicht von »die Karte hat keine Rampen« zu
+    /// unterscheiden.</summary>
+    public int RampenZellen => _rampen.Count;
+
     /// <summary>Wie viele aufragende Objekte der letzte Durchgang gezeichnet
     /// hat — ⚠ Regel 33: ohne diese Zahl ist »kein Unterschied im Bild« nicht
     /// von »der Durchgang lief gar nicht« zu unterscheiden.</summary>
@@ -137,6 +156,23 @@ public partial class MapEntityLayer
                 if (item.VariantType != Variant.Type.Dictionary) continue;
                 var a = item.AsGodotDictionary<string, Variant>();
                 kohle.Add(new Rect2(GetI(a, "x"), GetI(a, "y"), GetI(a, "w"), GetI(a, "h")));
+            }
+
+        // ⭐ 19.08.2026 — DIE RAMPENZELLEN aus Sektion 20. Sie sind die
+        // Vorbedingung des Transports: >= 100 heisst BELADEN erlaubt
+        // (0x40950C, 0x409763), >= 200 ENTLADEN (0x409383, 0x4097B8).
+        // Ohne sie koennte ein Schiff seine Ladung nirgends absetzen.
+        //
+        // ⚠ Eine Karte aus einem aelteren Import hat den Block nicht. Dann
+        // bleibt die Liste leer, und der Transport sagt es, statt still nichts
+        // zu tun.
+        _rampen.Clear();
+        if (meta.TryGetValue("ramps", out var rv) && rv.VariantType == Variant.Type.Array)
+            foreach (var item in rv.AsGodotArray())
+            {
+                if (item.VariantType != Variant.Type.Dictionary) continue;
+                var a2 = item.AsGodotDictionary<string, Variant>();
+                _rampen[GetI(a2, "col") * 1024 + GetI(a2, "row")] = GetI(a2, "lage");
             }
 
         if (!meta.TryGetValue("objects", out var ov) || ov.VariantType != Variant.Type.Array) return;
