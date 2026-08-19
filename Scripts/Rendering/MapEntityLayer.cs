@@ -2570,11 +2570,22 @@ public partial class MapEntityLayer : Node2D
                     // zweite ist eine Leiche vom Umladen, die niemand geloescht
                     // hat, und beide bestehen die Zeigerprobe.
                     //
-                    // ⚠ UNSERE SETZUNG, nicht aus der EXE gelesen: der ERSTE
-                    // Anspruch gilt. Eine Einheit kann nur an einem Ort sein,
-                    // und welchen Satz das Original vorzieht, steht in den
-                    // Daten nicht. Betrifft 3 von 65 Frachtplaetzen, nur diese
-                    // eine Karte. Steht in OFFENE_FRAGEN.md.
+                    // Regel: der ERSTE Anspruch gilt. Eine Einheit kann nur an
+                    // einem Ort sein.
+                    //
+                    // ⚠ Das war zuerst eine blosse Setzung. BESTAETIGT am
+                    // 19.08.2026 aus dem laufenden Spiel und aus den Rumpfarten:
+                    // Traeger 1 ist ein FRACHTER (Rumpf 73, Angriff 0) und traegt
+                    // die vollen 15; Traeger 3 ist eine KUESTENWACHE (Rumpf 72,
+                    // Angriff 7) — ein Kriegsschiff, das drei Infanteristen will,
+                    // die schon im Frachter sitzen. Der Spieler zaehlt auf dieser
+                    // Karte »4 Frachter und 2 kleine Kampfschiffe« und sieht bei
+                    // einem Frachter 15 Infanteristen: beides trifft.
+                    //
+                    // Die Probe, die nichts kostet: nach dem Aufraeumen tragen
+                    // GENAU die fuenf Frachter Ladung und BEIDE Kriegsschiffe
+                    // nichts — obwohl diese Regel den Rumpf gar nicht ansieht.
+                    // Faellt das je auseinander, stimmt die Regel nicht mehr.
                     if (_frachtPlaetze.ContainsKey(slot)) { FrachtDoppelt++; continue; }
                     liste.Add(slot);
                     _frachtPlaetze[slot] = carrier;
@@ -19070,7 +19081,7 @@ public partial class MapEntityLayer : Node2D
                            : $"  ⚠ WEICHT AB von {fracht}: ein Frachtplatz stand nicht in den Einheiten"));
         if (FrachtDoppelt > 0)
             sb.AppendLine($"   {FrachtDoppelt} Frachtplaetze wollte ein ZWEITER Satz auch " +
-                          "haben — der erste Anspruch gilt (unsere Setzung, siehe Lader)");
+                          "haben — der erste Anspruch gilt (bestaetigt, siehe Lader)");
 
         var plaetze = new HashSet<int>();
         foreach (var e in _entities) plaetze.Add(e.Slot);
@@ -19083,8 +19094,11 @@ public partial class MapEntityLayer : Node2D
             if (beispiel.Count < 5)
             {
                 int deckel = _bordDeckel.TryGetValue(kv.Key, out var dk) ? dk : 0;
+                int typ = 0;
+                foreach (var e in _entities) if (e.Slot == kv.Key) { typ = e.UnitType; break; }
                 beispiel.Add($"Traeger {kv.Key}{(da ? "" : " FEHLT")}: {kv.Value.Count} Stueck" +
-                             (deckel > 0 ? $" von {deckel}" : " (Deckel sagt die Karte nicht)"));
+                             (deckel > 0 ? $" von {deckel}" : " (Deckel sagt die Karte nicht)") +
+                             $"  [Typ {typ}{(typ == 153 ? " Frachter" : "")}]");
             }
         }
         foreach (string b in beispiel) sb.AppendLine("   " + b);

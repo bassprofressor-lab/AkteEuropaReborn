@@ -1016,7 +1016,7 @@ Einheiten die Zelle (5,11), was für aufgestellte Einheiten unmöglich ist.
 Prüfstand `--transport-check`, Messlatte: map_05 **24**, map_08 **38**,
 map_01 **0**.
 
-### ❓ Was ich brauche: welcher Satz gilt bei einer Kollision?
+### ✅ ERLEDIGT 19.08.2026: welcher Satz gilt bei einer Kollision?
 
 Auf `08.CWM` beanspruchen **zwei** Sätze dieselben drei Einheiten (23, 24, 28),
 und beide bestehen die Zeigerprobe:
@@ -1026,10 +1026,32 @@ und beide bestehen die Zeigerprobe:
 * Satz 3, Träger 3 (Rumpf 72, Zelle 16,50): 23, 24, 28 — drei verstreute
   Stücke **daraus**.
 
-Satz 3 sieht aus wie eine Leiche vom Umladen. **Meine Setzung: der erste
-Anspruch gilt** — betrifft 3 von 65 Frachtplätzen und nur diese eine Karte.
-Aus den Daten ist nicht zu entscheiden, welchen das Original nimmt.
+**Antwort aus dem laufenden Spiel:** auf dieser Karte stehen »4 Frachter und
+2 kleine Kampfschiffe«, zwei Frachter laden je 3 Einheiten aus, einer trägt
+15 Infanteristen.
 
-**Was mir hülfe:** In Mission 8 die beiden Schiffe bei (19,51) und (16,50)
-anwählen und nachsehen, wieviel jedes trägt — 15 und 0, oder 12 und 3? Das
-entscheidet es in einer halben Minute, und ich müsste nichts raten.
+Beides trifft, und zusammen entscheidet es die Frage. Die Schiffstafel
+(`ships.json`, GAME.EXE 0x52eda0) benennt die Rümpfe — Typ = Rumpf + 80:
+
+| Rumpf | Typ | Schiff | Angriff |
+|---|---|---|---|
+| 70 | 150 | Patrol-Boot | 5 |
+| 72 | 152 | Küstenwache | 7 |
+| **73** | **153** | **Frachter** | **0** |
+
+Träger 1 ist ein **Frachter** und trägt die vollen 15 (alles Laser Trooper —
+die Frachtarten sind über `infantry.json`, Regel `spodek = (waffe·2−124)&0xFF`,
+allesamt **Infanterie**). Träger 3 ist eine **Küstenwache**: ein Kriegsschiff,
+das drei Infanteristen will, die schon im Frachter sitzen. Der erste Anspruch
+gilt — und es war keine Setzung, sondern der Befund.
+
+⭐ **Die Probe, die nichts kostet und mitläuft:** nach dem Aufräumen tragen
+**genau die fünf Frachter** Ladung und **beide Kriegsschiffe nichts** — obwohl
+die Regel den Rumpf gar nicht ansieht. Der `--transport-check` schreibt den
+Schiffstyp jetzt mit, damit das sichtbar bleibt; fällt es je auseinander,
+stimmt die Regel nicht mehr.
+
+⚠ Offen bleibt eine Kleinigkeit: die Daten führen **fünf** Frachter, gezählt
+wurden vier. Die zwei weiteren (Träger 36 und 37, mit 8 und 9 Infanteristen)
+liegen bei (10,61) und (3,57) — weit von der Gruppe. Vermutlich schlicht nicht
+mitgezählt; ein Blick dorthin würde es abschliessen.
