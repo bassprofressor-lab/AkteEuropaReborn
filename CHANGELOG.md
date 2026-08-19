@@ -24,6 +24,8 @@ further down, with the addresses it was read at.
 | **Units answer an order.** | We had the selection line but not the order line — which the original plays four times as often. |
 | **Trees occlude again.** | ⚠ Reported three times, explained wrong twice. It *was* a code fault: we interleaved trees and units only at **building** rows; the original does it at **every** row. |
 | **No more white box on hover.** | That was ours. The original signals hover with the mouse cursor. |
+| **The selection brackets sit on the unit.** | They hung off the ground point, not the sprite — 6 to 8 px out on average, 21 at worst. |
+| **The flame burns on its own tree.** | It stood beside it: its own position arithmetic instead of the baker's, and the only effect that skipped its anchor. |
 | **Popups no longer trap the mouse in the menu.** | The cause was not a leftover popup but a **pause** left standing. |
 | **Fog uncovers softly**, not tile by tile. Marching squares over a 257×257 corner grid, plus the original's own dither pattern in its own palette colour. |
 | **Thirteen weapons get a flying projectile** instead of three — each with its own impact. Out of a table we had read one twenty-second of. |

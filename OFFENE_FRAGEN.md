@@ -515,7 +515,27 @@ anders aussehen lassen als im Original.
 **Was mir hülfe:** ein Standbild des Originals mit einem einzelnen Baum auf
 einer Übergangskachel.
 
-### Die Auswahlmarkierung ist ein SPRITE, keine vier gezeichneten Linien
+### Die Auswahlmarkierung — ANKER ERLEDIGT, Aussehen offen
+
+⭐ **Der Anker ist berichtigt (19.08.2026).** Gemeldet: »sitzt noch nicht ganz
+mittig«. Am Bildschirmfoto nachgemessen (Massstab 1,625, gewonnen am Rahmen des
+Lebensbalkens: 26 Bildpunkte fuer die gezeichneten 16): die vier Winkel standen
+mittig auf **283,0**, der Balkenrahmen auf **283,5** — der Kranz sass also genau
+auf `Entity.Pos`, dem Bodenpunkt. Zwischen dem und der sichtbaren Bildflaeche
+liegen laut `--stempel-check` bei einzelligen Einheiten im Mittel **6,7** und bis
+zu **11** Bildpunkte.
+
+Er haengt jetzt an der schattenfreien Mitte des Bildes. `--auswahl-check`
+(ebenfalls neu) hat dabei die **erste** Fassung verworfen — mit der geometrischen
+Leinwandmitte wurde es auf Kampagne 5 schlechter statt besser:
+
+| | Kampagne 1 | Kampagne 5 | Kampagne 20 |
+|---|---|---|---|
+| vorher, mittlerer Abstand | 6,2 / 9,0 | 8,4 / 9,0 | 4,4 / 3,8 |
+| jetzt | **1,6 / 0,3** | **1,5 / 0,6** | **2,7 / 0,3** |
+| groesster Abstand | 20,7 → **4,6** | 20,7 → **4,6** | 20,8 → **4,6** |
+
+**Was weiter offen ist: das Aussehen.**
 
 Gemeldet: »diese originale Markierung um die Einheiten sitzt noch nicht ganz
 genau.« Zu Recht — unsere vier Winkel sind **am abgefilmten Original

@@ -25,6 +25,8 @@ weiter unten ausführlich, mit den Adressen, an denen er gelesen wurde.
 | **Einheiten melden sich auf einen Befehl.** | Den Anwählklang hatten wir, den Befehlsklang nicht — dabei ruft ihn das Original viermal so oft. |
 | **Bäume verdecken wieder.** | ⚠ Dreimal gemeldet, zweimal falsch erklärt. Es *war* ein Codefehler: wir haben Bäume und Einheiten nur an den Zeilen der **Gebäude** ineinandergemischt, das Original tut es an **jeder** Zeile. |
 | **Kein weißes Kästchen mehr beim Überfahren.** | Das war von uns. Das Original meldet es mit dem Mauszeiger. |
+| **Der Auswahlkranz sitzt auf der Einheit.** | Er hing am Bodenpunkt, nicht am Bild — im Mittel 6 bis 8 Bildpunkte daneben, im schlimmsten Fall 21. |
+| **Die Flamme brennt auf ihrem Baum.** | Sie stand daneben: eigene Lagerechnung statt der des Backofens, und als einziger Effekt ohne Ankerabzug. |
 | **Popups fangen die Maus nicht mehr im Menü.** | Die Ursache war keine Popup-Leiche, sondern eine stehengebliebene **Pause**. |
 | **Der Nebel deckt weich auf.** | Statt Kachel für Kachel. Marching Squares über ein 257×257-Eckengitter, dazu das Schachbrettmuster des Originals in seiner Palettenfarbe. |
 | **Dreizehn Waffen bekommen ein fliegendes Geschoss** statt drei — und jede ihren eigenen Einschlag. Aus einer Tafel, die wir zu einem Zweiundzwanzigstel gelesen hatten. |
