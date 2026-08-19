@@ -23,10 +23,15 @@ further down, with the addresses it was read at.
 | **The original's mouse cursors.** | 28 kinds out of the appendix of `ROBO.CWR`, the attack crosshair among them. |
 | **Units answer an order.** | We had the selection line but not the order line — which the original plays four times as often. |
 | **Trees occlude again.** | Not a code fault: the maps had never been re-baked. |
+| **Fog uncovers softly**, not tile by tile. Marching squares over a 257×257 corner grid, plus the original's own dither pattern in its own palette colour. |
+| **Thirteen weapons get a flying projectile** instead of three — each with its own impact. Out of a table we had read one twenty-second of. |
+| **Units earn experience and gain rank.** | We had been reading the field for months; nobody ever changed it. A veteran deals more damage and takes less. |
+| **Ships have sixteen facings.** | Eight of them had never been exported. A ship could not point north-north-west. |
+| **The entity record now carries the game's own field names.** | The original ships a recorder that names every field. See `ENTITY_FELDER.md`. |
 
-⚠ **What is deliberately NOT in here:** the original's soft fog edge. The
-substructure is read, the softness is not proven — so nothing was built. Every
-open question is listed in `OFFENE_FRAGEN.md`.
+⚠ **What is deliberately NOT in here:** online multiplayer, unit transport, and
+the twin mount (four weapons fire two projectiles side by side in the original,
+one here). Every open question is listed in `OFFENE_FRAGEN.md`.
 
 ### The four areas of this release
 
@@ -54,6 +59,120 @@ Campaign stays faithful to the original; skirmish and multiplayer are allowed to
 deviate on purpose, and every deviation is marked as ours.
 
 ### Units
+
+- ⭐⭐ **Thirteen weapons instead of three get a flying projectile — and the
+  numbers no longer live in our source, they live in the game.**
+
+  A list of three component ids decided which weapon fired a visible
+  projectile; everything else drew a tracer. Speed was **one** number for all
+  of them (190 px/s), the impact **one** explosion for all of them. All three
+  were guesses and were marked as such.
+
+  The game answers the question itself, in a table at `0x4F98E8`: **91 rows of
+  22 bytes**, indexed by the "sound class" from stats `+0x1C` — which is in
+  fact the *projectile kind*. We had read exactly **one** of its fields, the
+  firing sound.
+
+  | field | what it holds |
+  |---|---|
+  | `+0x00` | speed per tick, 5…35 — **different per kind** |
+  | `+0x02` | flight sequence, `30000` = none |
+  | `+0x06` | impact sequence |
+  | `+0x0A` | firing sound (the one field we had) |
+  | `+0x0C` | impact sound |
+  | `+0x14` | a bias added to the mount lookup |
+  | `+0x15` | lateral offset of the twin mount |
+
+  That `30000` is the "none" marker and not a sequence number is not a reading:
+  `ANIM.CWA` holds **1000** sequences. By that table thirteen components have a
+  flight sprite — and the two fastest (speed 35) are exactly the ones that
+  really do just draw a tracer.
+
+  The exporter now writes **30 flight sequences and 13 impact sequences** out of
+  `ANIM.CWA`. Two further impact sequences the table names (87 and 309) are
+  **empty** there — so those weapons show no impact in the original, and that is
+  now reproduced rather than painted over.
+
+  **The check:** the table is byte-for-byte identical in both `GAME.EXE` builds
+  on this machine (91 × 22 = 2002 bytes), and every one of the 62 used rows
+  resolves to real frames afterwards — counted, none missing.
+
+- ⭐⭐ **Units earn experience and gain rank.**
+
+  Record `+0x28` had been read for months and fed into the damage formula.
+  Nobody ever wrote it — it is 0 on 1941 of 1971 map units, which we filed as
+  "almost always ineffective". The real reason is a different one: **it is not
+  set, it is earned.**
+
+  The hit routine ends with (@0x40CEF7…0x40CF7D):
+
+  ```
+  gain = (reload+1) · damage · (defence + 2·elev_victim)
+                    ÷ (attack + 2·elev_shooter) ÷ 8
+  ```
+
+  The points sit in `+0x4C` — as a **byte**, and that is the whole point: when
+  it overflows, the rank in `+0x28` goes up by one. The game prints both
+  together as `exp: (byte[+0x28] << 8) | byte[+0x4C]`.
+
+  Read as design: the game rewards **hitting a well-armoured target in good
+  cover with a slow-reloading weapon**. A sniper on a hill learns more from a
+  tank than the tank learns from him. **Buildings give nothing** (@0x40CEEA) —
+  the same `0x1F40` threshold that separates unit from building on the panel.
+
+  This also makes the **veteran voice set** meaningful for the first time: the
+  voice routine compares `+0x28` against 50 and takes a different set above it.
+  Until now nothing could reach that threshold.
+
+  ⚠ Fixed alongside: `+0x28` was loaded into **two** fields (`Rating28` and
+  `Field28`), under two names with two comments. While both were only read, that
+  went unnoticed; the moment rank starts rising, one copy would have gone stale
+  — the veteran would have kept the recruit's voice.
+
+- ⭐ **A ship can finally point north-north-west: sixteen facings, not eight.**
+
+  The exporter pulled `f0…f7` for every hull. For a ship that is **eight of
+  sixteen** — half a turn, not every second step. The very same mistake had
+  already been found once for aircraft; it was never about one part, it was
+  about the assumption that eight holds everywhere.
+
+  ⚠ The justification our notes carried does **not** hold, though: "the sprites
+  are mirror-symmetric 1↔15". Measured on the frame dimensions, ships match
+  **neither** the period-8 pairing **nor** the period-16 one — ships simply are
+  not drawn symmetrically (tracked chassis match 5 to 7 of 7 pairs). What does
+  hold:
+
+  1. Every ship part owns **exactly 16 frames in one group**; ground parts own
+     48, 96 or 144, i.e. six slope blocks of eight. A ship sails on water and
+     has no slope.
+  2. Looked at: the 16 frames are one continuous full turn with no repeat at
+     eight.
+  3. **The shipped maps say so themselves.** Of 213 ships, **21 carry a facing
+     above 7**, up to 15 — out of 4592 land units, exactly one. That evidence
+     depends on neither the code nor my eyes.
+
+- ⭐ **The entity record now carries the game's own field names** —
+  `ENTITY_FELDER.md`.
+
+  The original ships a recorder (`RECORDING` / `REPLAY`) that writes every field
+  of every unit out **by name**, every tick. It yields 56 names; 46 could be
+  bound to an offset.
+
+  The harness compares **distances**, not addresses: the entity base differs
+  between the two `GAME.EXE` builds (`0x6E26C8` vs `0x6E1728`). That it
+  **rejects** ten of the 56 names — names belonging to other tables, which moved
+  by a different amount — is the actual evidence that it measures.
+
+  What came out: `+0x02` is `OT_PODV` (rotation of the **chassis**), `+0x03` is
+  `OT_HLAV` (rotation of the **barrel**), `+0x0B` `SPODEK` (lower part), `+0x0C`
+  `VRSEK` (upper part), `+0x0F` `l_engine` (the propulsion — which is exactly
+  what our "unit types" 160…175 are), `+0x3D` `RELOAD`. Our importer had all of
+  it separated correctly already; now the reason is on record too.
+
+  It also resolved a contradiction that had put the sixteen ship facings in
+  doubt: the turn routine @0x405100 does give sixteen steps to class 3 — but
+  what it turns there is `+0x03`, the **superstructure**. A ship's **hull** sits
+  in `+0x02`, and that is a different routine.
 
 - ⭐ **A building's ground no longer hides anything.** Reported with
   screenshots: "that piece of track is never visible there, and when a unit
@@ -185,7 +304,6 @@ deviate on purpose, and every deviation is marked as ours.
   minimum range, 30 targets dropped because of it, and zero with
   `--no-min-range`. ⚠ The report also says when a map has no such unit at all —
   there the zero is not a result.
-
 
 - **A group no longer strands at a bottleneck.** Reported as "selecting a group
   and driving them one behind the other, over a bridge say, stops them dead as
@@ -631,7 +749,6 @@ deviate on purpose, and every deviation is marked as ours.
   of the next mission's briefing — and showed the help windows of the mission
   just finished.
 
-
 - ⭐ **The original's encyclopedia is in the game.** The menu row was meant to
   link to our wiki. Looking at what the *original* has behind it turned up
   **`ENCYCLOG.TXT` with 106 pages** next to GAME.EXE — chassis, weapons,
@@ -753,7 +870,6 @@ deviate on purpose, and every deviation is marked as ours.
   ⚠ **One** unit speaks, not the selection. If a group is selected, the original
   picks a single member and lets that one talk. A chorus of twelve tanks would
   not merely be loud, it would be wrong.
-
 
 - **A sound now comes from the left or the right.** Attenuation by distance was
   already there; the panning had been read and deliberately left as a gap. The

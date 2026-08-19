@@ -1,4 +1,6 @@
-namespace AkteEuropaReborn.Import;
+﻿namespace AkteEuropaReborn.Import;
+
+using System;
 
 using System;
 using System.Collections.Generic;
@@ -117,7 +119,36 @@ public sealed class SoundExporter
         sb.Append("],\"second\":[");
         var mz = t.SecondSounds();
         for (int i = 0; i < mz.Length; i++) { if (i > 0) sb.Append(','); sb.Append(mz[i]); }
-        sb.Append("]}");
+        sb.Append("],");
+        // ⚠ 19.08.2026 — DIE UEBRIGEN FUENF SPALTEN DERSELBEN ZEILE. Was hier
+        // bisher als "Klangsatz" stand, ist Feld +10 eines 22 Byte breiten
+        // GESCHOSSSATZES ab 0x4F98E8; siehe ExeTables.ProjectileTable. Der
+        // Index ist derselbe, also gehoert alles in dieselbe Datei — sonst
+        // muesste die Laufzeit zwei Dateien ueber denselben Schluessel
+        // zusammenfuehren.
+        //
+        // Damit fallen drei geratene Zahlen aus dem Zeichner weg:
+        // Geschossgeschwindigkeit, Bildfolge des Fluges und die des
+        // Einschlags. Feld +20 ist KEINE Rohrlaenge (siehe dort).
+        var pr = t.Projectiles();
+        sb.Append("\"_geschoss\":\"0x4f98e8, Schrittweite 22, 91 Zeilen, in beiden ");
+        sb.Append("GAME.EXE byteweise gleich. +0 Tempo in Bildpunkten je Takt, +2 Flugfolge, ");
+        sb.Append("+6 Einschlagfolge, +10 Schussklang, +12 Klang Modus 3, +20 Aufschlag auf ");
+        sb.Append("die Lafettensuche (KEINE Hoehe, siehe ExeTables), +21 Seitenversatz der ");
+        sb.Append("Zwillingslafette. 30000 heisst keine.\",");
+        void Spalte(string name, Func<ExeTables.Projectile, int> f)
+        {
+            sb.Append($"\"{name}\":[");
+            for (int i = 0; i < pr.Length; i++) { if (i > 0) sb.Append(','); sb.Append(f(pr[i])); }
+            sb.Append("],");
+        }
+        Spalte("tempo", p => p.Speed);
+        Spalte("flug", p => p.Flight);
+        Spalte("einschlag", p => p.Impact);
+        Spalte("lafette", p => p.MountBias);
+        Spalte("zwilling", p => p.Twin);
+        sb.Length--;                       // das letzte Komma
+        sb.Append('}');
         File.WriteAllText(_dst + "/weapon_sounds.json", sb.ToString(), new UTF8Encoding(false));
         say?.Invoke($"Waffenklaenge: {v.Length} Klassen, {good} davon plausibel (gerade und unter 40)");
     }

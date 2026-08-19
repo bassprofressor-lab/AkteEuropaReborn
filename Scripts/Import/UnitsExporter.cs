@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Import;
+﻿namespace AkteEuropaReborn.Import;
 
 using System;
 using System.Collections.Generic;
@@ -364,7 +364,8 @@ public sealed class UnitsExporter
     private void WriteChassis(IEnumerable<int> unitTypes, Action<string>? say)
     {
         var sb = new StringBuilder();
-        sb.Append("{\"_note\":\"Block-0 chassis sprites, 8 facings, from ROBO.CWR RE\",\"units\":{");
+        sb.Append("{\"_note\":\"Block-0 chassis sprites from ROBO.CWR RE — 8 Richtungen, ");
+        sb.Append("Schiffe (Teil 70..76,100,101) 16; das Feld \\\"facings\\\" sagt es je Einheit\",\"units\":{");
         bool first = true;
         foreach (int ut in unitTypes)
         {
@@ -377,13 +378,23 @@ public sealed class UnitsExporter
             // und die Schleife bricht sofort ab; bei Komponente 9 ist es Block 5,
             // und genau daran war der Kugelroller in sieben von acht Richtungen
             // unsichtbar.
-            int blk = FullFacingBlock(b);
+            // ⚠ 19.08.2026 — SCHIFFE HABEN SECHZEHN, siehe CwrFile.ShipFacings.
+            // Bis heute zog auch ein Rumpf nur f0..f7 und damit eine HALBE
+            // Drehung; ein Schiff konnte gar nicht nach Nordwesten zeigen.
+            // Genau derselbe Fehler war bei den Luftteilen schon einmal da
+            // (CwrFile.AirFacings) — er ist nicht auf ein Teil beschraenkt
+            // gewesen, sondern auf die Annahme »acht gilt ueberall«.
+            //
+            // Die Neigungsbloecke fallen fuer Schiffe weg: Wasser hat keine
+            // Neigung, und ihre Teiletafel nennt genau EINE Gruppe.
+            int n = CwrFile.IsShipPart(comp) ? CwrFile.ShipFacings : CwrFile.Facings;
+            int blk = n == CwrFile.Facings ? FullFacingBlock(b) : 0;
             if (blk != 0) FacingBlockShifted++;
             int fb = b + blk * CwrFile.Facings;
 
             var facings = new StringBuilder();
             bool ff = true, any = false;
-            for (int f = 0; f < CwrFile.Facings; f++)
+            for (int f = 0; f < n; f++)
             {
                 var fr = _cwr.DecodeFrame(fb + f);
                 if (fr == null) continue;
@@ -398,6 +409,9 @@ public sealed class UnitsExporter
             if (!first) sb.Append(',');
             first = false;
             sb.Append($"\"{ut}\":{{\"name\":\"{Esc(NameOf(ut))}\",\"category\":\"{Esc(CategoryOf(ut))}\",");
+            // Die ZAHL der Richtungen gehoert mit in die Datei: der Zeichner
+            // darf sie nicht aus der Einheitennummer erraten muessen.
+            sb.Append($"\"n_facings\":{n},");
             sb.Append("\"facings\":{").Append(facings).Append("}}");
         }
         sb.Append("}}");

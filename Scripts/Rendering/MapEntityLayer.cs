@@ -194,7 +194,34 @@ public partial class MapEntityLayer : Node2D
         /// map_07 tragen 150 und 240. Er ist also fast immer wirkungslos — aber
         /// eben nicht immer, und deshalb wird er gelesen statt als 0 gesetzt.</para>
         /// </summary>
+        /// <para>⚠⚠ 19.08.2026 — <b>DAS IST DER RANG, UND ER WAECHST IM SPIEL.</b>
+        /// Damit ist auch beantwortet, warum er auf 1941 von 1971 Karteneinheiten
+        /// 0 ist: er wird nicht gestellt, er wird <b>verdient</b>. Belegstelle
+        /// @0x40CF5E, siehe <see cref="Erfahrung"/>.</para>
         public int Rating28;
+
+        /// <summary>
+        /// <b>Erfahrungspunkte — Satz +0x4C.</b> Ein einzelnes Byte, das
+        /// <b>ueberlaeuft</b>: sobald der Zuwachs nicht mehr hineinpasst, steigt
+        /// der Rang (<see cref="Rating28"/>) um eins und der Rest laeuft weiter.
+        ///
+        /// <para>Gelesen @0x40CF29..0x40CF7D, in beiden GAME.EXE:</para>
+        /// <code>
+        ///   cl = [V+0x4C]                      ; Punkte
+        ///   edx = 0xFF - cl                    ; was noch hineinpasst
+        ///   if (edx > zuwachs) [V+0x4C] += zuwachs
+        ///   else if ([V+0x28] &lt; 0xFF) {      ; UEBERLAUF
+        ///       [V+0x28]++;  [V+0x4C] += zuwachs + 1;
+        ///   }
+        /// </code>
+        ///
+        /// <para>Nur sechs Stellen im ganzen Programm ruehren +0x4C an, und fuenf
+        /// davon stehen in diesem einen Block. Die sechste (0x4178DD) liegt neben
+        /// der einzigen weiteren Stelle fuer +0x28 ausserhalb der Trefferroutine
+        /// — das ist der Aufzeichner, nicht das Spiel.</para>
+        /// </summary>
+        public int Erfahrung;
+
         public Rect2 Footprint;
         public bool IsProp;        // true = generic grid prop (no owner/hp)
         public bool IsBuilding;    // true = a sec3 building (drawn into the map)
@@ -400,12 +427,26 @@ public partial class MapEntityLayer : Node2D
         /// <see cref="HullGaitFps"/>.</summary>
         public int Pose;
 
-        /// <summary>Record +0x28, and it is NOT the fuel tank — that is +0x2e.
-        /// This one is <b>0 on 2847 of the 2863 units the maps carry</b>, so it
-        /// is a runtime field rather than a stat; the damage arithmetic
-        /// @0x40cd90 reads it beside +0x27. The voice routine compares it with
-        /// 50 and takes a different set above. Carried unnamed.</summary>
-        public int Field28;
+        /// <summary>
+        /// ⚠ 19.08.2026 — <b>DAS WAR EINE ZWEITE KOPIE DESSELBEN BYTES.</b>
+        ///
+        /// <para>Hier stand ein eigenes Feld <c>Field28</c>, das der Lader aus
+        /// <c>raw[0x28]</c> fuellte — genau wie <see cref="Rating28"/> zwei
+        /// Zeilen weiter oben. Zwei Namen, zwei Kommentare, ein Byte. Solange
+        /// beide nur GELESEN wurden, fiel das niemandem auf.</para>
+        ///
+        /// <para>Ab heute steigt der Rang im Spiel (Trefferroutine @0x40CF5E),
+        /// und damit waere eine der beiden Kopien stehengeblieben: die Stimme
+        /// haette weiter die des Rekruten gewaehlt, waehrend der
+        /// Schadensrechnung ein Veteran gegenuebersteht. Deshalb ist
+        /// <c>Field28</c> jetzt nur noch ein anderer Name fuer dasselbe Feld und
+        /// kein eigener Speicher mehr.</para>
+        ///
+        /// <para>Die Stimmroutine vergleicht ihn mit 50 und nimmt darueber einen
+        /// anderen Satz — das ist der VETERANENTONFALL, und er ergibt jetzt
+        /// erst Sinn, weil ein Rang von 50 ueberhaupt erreichbar ist.</para>
+        /// </summary>
+        public int Field28 => Rating28;
         public string Combo => $"{UnitType}_{Weapon}";
 
         // ---- live movement state (Step E) ----
@@ -681,8 +722,12 @@ public partial class MapEntityLayer : Node2D
         public int Shooter;
         public int Damage;
         public int Facing;
-        public string Kind;      // "rocket_l" or "rocket_h"
+        public string Kind;      // "flug_<Folge>", der Ordner unter Effects/
         public float Speed;
+        /// <summary>Die GESCHOSSART — Zeile der Tafel 0x4F98E8, zugleich die
+        /// »Klangklasse« aus dem Statssatz +0x1C. Sie entscheidet ueber die
+        /// Einschlagfolge und darueber, ob das Bild eine Richtung hat.</summary>
+        public int Art;
     }
 
     /// <summary>One sec19 record — an AIRCRAFT. The section holds 200 x 68 of
@@ -927,6 +972,28 @@ public partial class MapEntityLayer : Node2D
         float ang = Mathf.RadToDeg(Mathf.Atan2(d.Y, d.X));   // 0 = right, 90 = down
         int f = Mathf.RoundToInt((ang - 90f) / 45f);
         return ((f % 8) + 8) % 8;
+    }
+
+    /// <summary>
+    /// Dasselbe fuer einen Rumpf, der MEHR als acht Richtungen kennt.
+    ///
+    /// <para>⚠ 19.08.2026 — Schiffe haben sechzehn Bilder, und bis heute
+    /// bekamen sie eine Blickrichtung aus acht Stufen: acht der sechzehn
+    /// Bilder waren damit unerreichbar, und die Drehung sprang in
+    /// 45-Grad-Schritten durch einen Satz, der 22,5 kann.</para>
+    ///
+    /// <para>Die Rechnung ist dieselbe wie bei acht, nur feiner geteilt — der
+    /// Versatz von 90 Grad bleibt, weil er am Bild haengt und nicht an der
+    /// Stufenzahl. Fuer <c>stufen == 8</c> ist sie Zeichen fuer Zeichen
+    /// <see cref="DirToFacing"/>.</para>
+    /// </summary>
+    public static int DirToFacing(Vector2 d, int stufen)
+    {
+        if (stufen <= 8) return DirToFacing(d);
+        if (d.LengthSquared() < 0.0001f) return DefaultFacing * (stufen / 8);
+        float ang = Mathf.RadToDeg(Mathf.Atan2(d.Y, d.X));
+        int f = Mathf.RoundToInt((ang - 90f) / (360f / stufen));
+        return ((f % stufen) + stufen) % stufen;
     }
 
     /// <summary>
@@ -2404,7 +2471,9 @@ public partial class MapEntityLayer : Node2D
                     // code masks the rest to three bits (@0x429b37).
                     Pose = haveRaw && HexByte(raw, 0x11) != 0xFF ? HexByte(raw, 0x11) & 7 : 0,
                     GameUnitType = haveRaw ? HexByte(raw, 0x0a) : -1,
-                    Field28 = haveRaw ? HexByte(raw, 0x28) : 0,
+                    // Field28 ist seit 19.08.2026 nur ein Name fuer Rating28
+                    // (dieselbe Zelle, vier Zeilen hoeher gesetzt).
+                    Erfahrung = haveRaw ? HexByte(raw, 0x4c) : 0,
                     AimFacing = haveRaw ? HexByte(raw, 0x03) & 7 : -1,
                     FootW = System.Math.Max(1, GetI(e, "foot_w", 1)),
                     FootH = System.Math.Max(1, GetI(e, "foot_h", 1)),
@@ -7120,17 +7189,46 @@ public partial class MapEntityLayer : Node2D
         }
     }
 
-    /// <summary>Rocket launchers get a flying projectile; guns keep the tracer.</summary>
-    private static string? RocketKind(int weaponComp) => weaponComp switch
+    /// <summary>
+    /// <b>WELCHE WAFFE EIN FLIEGENDES GESCHOSS HAT — das Spiel sagt es selbst.</b>
+    ///
+    /// <para>⚠ 19.08.2026. Hier stand bis heute eine Liste von drei Bauteilen
+    /// (26, 27, 28), die »Raketenwerfer« hiessen und als einzige ein Geschoss
+    /// bekamen; alles andere zog eine Leuchtspur. Das war geraten. Die
+    /// Geschosstafel <c>0x4F98E8</c> beantwortet die Frage: Feld +0x02 ist die
+    /// Flugfolge, und <c>30000</c> heisst »keine«. Nach ihr haben die Bauteile
+    /// 21, 22, 23, 26, 27, 28, 30, 31, 32, 33, 34, 37 und 38 ein fliegendes
+    /// Geschoss — <b>dreizehn statt drei</b> — und 24, 25 (Tempo 35, keine
+    /// Flugfolge) sind die, die wirklich nur eine Spur ziehen.</para>
+    ///
+    /// <para>Der Name ist der Ordner, den
+    /// <see cref="Import.InterfaceExporter"/> geschrieben hat.</para>
+    /// </summary>
+    private static string? FlightKind(int art)
     {
-        26 => "rocket_l",              // L.Raketenwerfer
-        27 or 28 => "rocket_h",        // Schw.Raketenwerfer, Mittelstreckenrakete
-        _ => null,
-    };
+        int seq = Audio.GameSounds.FlightSequence(art);
+        return seq < 0 || seq == Import.ExeTables.KeineFolge ? null : $"flug_{seq}";
+    }
 
-    // px/s. No projectile-speed field could be identified in the data, so this
-    // is ours — like the rate of fire.
-    private const float RocketSpeed = 190f;
+    /// <summary>Der Einschlag derselben Zeile, Feld +0x06. Zwei der Folgen (87
+    /// und 309) sind in ANIM.CWA <b>leer</b> — diese Waffen zeigen im Original
+    /// keinen Einschlag. Der Ausgeber schreibt deshalb keinen Ordner, und
+    /// <see cref="EffectFrames"/> liefert eine leere Liste, was der Zeichner
+    /// schon vertraegt.</summary>
+    private static string? ImpactKind(int art)
+    {
+        int seq = Audio.GameSounds.ImpactSequence(art);
+        return seq < 0 || seq == Import.ExeTables.KeineFolge ? null : $"schlag_{seq}";
+    }
+
+    /// <summary>⚠ UNSER MASSSTAB, aber nicht mehr unsere ORDNUNG. Feld +0x00 der
+    /// Geschosstafel gibt das Tempo je TAKT (5..35); wie viele Bildpunkte ein
+    /// Takt ist, steht dort nicht — genauso wenig wie bei der Fahrgeschwindigkeit
+    /// der Einheiten, wo <see cref="PxPerSpeedUnit"/> dieselbe Rolle spielt.
+    /// 16 ist so gewaehlt, dass die Raketen (Tempo 10..20) bei ihren bisherigen
+    /// rund 190 px/s bleiben; das VERHAELTNIS zwischen den Geschossarten kommt
+    /// jetzt aus dem Spiel und nicht mehr aus einer einzigen Konstante.</summary>
+    private const float PxPerProjectileSpeed = 16f;
 
     /// <summary>⚠ UNSERE SETZUNG: wie weit die Muendung vor dem Turmdrehpunkt
     /// liegt. Der DREHPUNKT ist gelesen (TurretOffset, Tabelle 0x4FA320), die
@@ -7240,17 +7338,24 @@ public partial class MapEntityLayer : Node2D
         // next at random (@0x40c4c0). See Audio/GameSounds.Fire.
         Audio.GameSounds.Fire(WeaponRowOf(shooter.Weapon), null, shooter.Col, shooter.Row);
 
-        string? rocket = RocketKind(shooter.Weapon);
-        if (rocket != null)
+        // Ab hier entscheidet die GESCHOSSART, nicht mehr eine Liste im Code.
+        // Die Art ist dieselbe Zahl, die schon den Schussklang gewaehlt hat --
+        // Statssatz +0x1C -- und der Schuss @0x40BF4D liest sie an genau dieser
+        // Stelle (`mov al, byte [ebx*2 + 0x5045BC]`, ebx*2 = Zeile*58, also
+        // +0x1C) in den Geschosssatz.
+        int art = Simulation.DesignMath.SoundClass(WeaponRowOf(shooter.Weapon));
+        string? flug = FlightKind(art);
+        if (flug != null)
         {
-            // rockets travel — the hit is resolved in UpdateProjectiles
+            int tempo = Audio.GameSounds.ProjectileSpeed(art);
             _shots.Add(new Projectile
             {
                 // dieselbe Muendung wie das Feuer darueber
                 Pos = ShotOrigin(shooter) + dir * MuzzleReach,
                 Aim = ShotAim(victim),
                 Target = vi, Shooter = si, Damage = w.Damage,
-                Facing = DirToFacing(dir), Kind = rocket, Speed = RocketSpeed,
+                Facing = DirToFacing(dir), Kind = flug, Art = art,
+                Speed = (tempo > 0 ? tempo : 12) * PxPerProjectileSpeed,
             });
             return;
         }
@@ -7269,6 +7374,71 @@ public partial class MapEntityLayer : Node2D
         // ueber die Rel32-Aufrufsuche nicht finden — sie wird nicht direkt
         // gerufen. Solange das nicht geklaert ist, wird hier nichts erfunden.
         ApplyHit(si, vi, victim, w.Damage);
+    }
+
+    /// <summary>
+    /// <b>ERFAHRUNG — jeder Treffer zaehlt, und irgendwann wird man befoerdert.</b>
+    ///
+    /// <para>⚠ 19.08.2026, neu. Bis heute stieg bei uns niemand auf: Satz +0x28
+    /// wurde gelesen und in die Schadensrechnung gegeben, aber nie veraendert,
+    /// und +0x4C wurde gar nicht erst geladen. Die Trefferroutine des Originals
+    /// (Zasah, @0x40CC41) macht am Ende genau das hier — nachgelesen bei
+    /// 0x40CEEA..0x40CF7D, in beiden GAME.EXE dieselbe Form:</para>
+    ///
+    /// <code>
+    ///   0x40CEEA  cmp word[esp+0x2c], 0x1f40 / jae ende   ; GEBAEUDE: nichts
+    ///   0x40CEF7  eax = schuetze*78                        ; sein Satz
+    ///   0x40CF07  al  = byte[schuetze + 0x3D]              ; NACHLADEZEIT
+    ///   0x40CF13  inc ax                                   ; +1
+    ///   0x40CF18  imul eax, ecx                            ; * SCHADEN
+    ///   0x40CF1B  imul eax, [esp+0x1c]                     ; * (Vert + 2*Hoehe_V)
+    ///   0x40CF21  idiv [esp+0x20]                          ; / (Angr + 2*Hoehe_S)
+    ///   0x40CF3D  sar eax, 3                               ; / 8
+    /// </code>
+    ///
+    /// <para>Die beiden Klammern sind <b>dieselben zwei Groessen</b>, die
+    /// <see cref="ShotCore"/> schon rechnet — das Original legt sie bei
+    /// 0x40CE41 und 0x40CE4F beiseite und holt sie hier wieder. Deshalb wird
+    /// hier nichts neu erfunden, sondern dieselbe Rechnung noch einmal
+    /// aufgeschrieben.</para>
+    ///
+    /// <para><b>Was die Formel bedeutet:</b> Erfahrung gibt es fuer einen
+    /// Treffer auf ein gut gepanzertes Ziel in gutem Gelaende, mit einer
+    /// langsam nachladenden Waffe — und weniger, je staerker die eigene Waffe
+    /// ist. Ein Scharfschuetze auf einem Huegel lernt an einem Panzer mehr als
+    /// der Panzer an ihm.</para>
+    ///
+    /// <para>⚠ <b>Gebaeude geben keine Erfahrung</b> (0x40CEEA). Das ist keine
+    /// Auslegung: 0x1F40 ist dieselbe Schranke, an der auch die Anzeigetafel
+    /// Einheit von Gebaeude trennt.</para>
+    ///
+    /// <para>⚠ UNSER: das Original wuerfelt hier nicht, also wuerfeln wir auch
+    /// nicht. Es rechnet aber in BYTES, und <c>[V+0x4C] += zuwachs</c> laeuft
+    /// ueber — genau daran haengt die Befoerderung. Wir rechnen deshalb
+    /// ausdruecklich modulo 256 statt in int, sonst gaebe es nie einen
+    /// Aufstieg.</para>
+    /// </summary>
+    private void Erfahren(Entity? shooter, Entity victim, int damage)
+    {
+        // Kein Schuetze, kein Schaden, oder ein Gebaeude getroffen: nichts.
+        if (shooter == null || damage <= 0 || victim.IsBuilding) return;
+        // Wer die Erfahrung bekommt, ist der SCHUETZE (@0x40CEF7 rechnet mit
+        // seinem Satz), aber der Zuwachs bemisst sich am OPFER.
+        int wehr = victim.Defence + 2 * ElevOf(victim.Col, victim.Row);
+        int wucht = shooter.Attack + 2 * ElevOf(shooter.Col, shooter.Row);
+        if (wucht <= 0) return;                    // idiv durch 0 gaebe es nie
+        int zuwachs = (shooter.Reload + 1) * damage * wehr / wucht / 8;
+        if (zuwachs <= 0) return;
+
+        if (255 - shooter.Erfahrung > zuwachs)
+        {
+            shooter.Erfahrung = (shooter.Erfahrung + zuwachs) & 0xFF;
+            return;
+        }
+        if (shooter.Rating28 >= 255) return;       // @0x40CF6A: bei 0xFF ist Schluss
+        shooter.Rating28++;
+        shooter.Erfahrung = (shooter.Erfahrung + zuwachs + 1) & 0xFF;
+        NoteEvent(shooter, $"befoerdert (Rang {shooter.Rating28})");
     }
 
     /// <summary>Damage plus everything that follows from it (death, retaliation).</summary>
@@ -7375,6 +7545,7 @@ public partial class MapEntityLayer : Node2D
         // Unverwundbar: der Treffer wird gezählt und gemeldet wie immer, nur
         // der Schaden bleibt aus — so bleiben Klang, Meldung und Zielwahl heil.
         if (CheatGodMode && Cheated(victim)) damage = 0;
+        Erfahren(shooter, victim, damage);
         bool lethal = !victim.IsBuilding && damage >= victim.Hp && damage > 0;
         victim.Hp -= victim.DugIn ? Mathf.RoundToInt(damage * DugInDamageFactor) : damage;
         if (lethal) victim.Hp = 0;
@@ -7499,7 +7670,15 @@ public partial class MapEntityLayer : Node2D
 
             // impact
             _shots.RemoveAt(i);
-            _effects.Add(new Effect { Pos = p.Aim, Kind = "explosion", FrameTime = 0.06f });
+            // ⚠ 19.08.2026 — hier stand fuer JEDES Geschoss dasselbe
+            // "explosion". Die Geschosstafel hat je Art eine eigene
+            // Einschlagfolge (+0x06): 80, 79, 83, 84, 86, 88, 91, 510 ... und
+            // fuer die Arten 6, 16 und 47 die Folge 309, die in ANIM.CWA LEER
+            // ist. Diese Waffen zeigen im Original also gar keinen Einschlag,
+            // und deshalb wird hier nichts angelegt, wo es nichts gibt.
+            string? schlag = ImpactKind(p.Art);
+            if (schlag != null)
+                _effects.Add(new Effect { Pos = p.Aim, Kind = schlag, FrameTime = 0.06f });
             if (CellAt(p.Aim) is { } ic)
             {
                 Audio.GameSounds.Explosion(ic.X, ic.Y);
@@ -7518,7 +7697,35 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <summary>Directional projectile sprite (Effects/rocket_*/f0..f7.png).</summary>
+    /// <summary>
+    /// Das Bild eines fliegenden Geschosses.
+    ///
+    /// <para>⚠ 19.08.2026 — <b>DER RUECKFALL AUF BILD 0 GEHOERT HIERHER</b>, an
+    /// die Stelle, die alle fragen. Seit die Flugbilder aus der Geschosstafel
+    /// kommen, gibt es Folgen mit <b>einem einzigen Bild</b> (60, 61, 71, 250,
+    /// 251, 271, 273, 276, 279) — und Folge 61 wird von Art 1 UND Art 21
+    /// benutzt. Art 1 holt nach der Regel des Originals gar keine Richtung
+    /// (nur 2..86 tun das), Art 21 schon: sie fragte nach <c>f5.png</c> in
+    /// einem Ordner, der nur <c>f0.png</c> hat, und es wurde <b>nichts</b>
+    /// gezeichnet. Ein Geschoss, das man nicht sieht, ist schlimmer als eins,
+    /// das in die falsche Richtung zeigt.</para>
+    ///
+    /// <para>⚠ OFFEN, und ausdruecklich nicht erfunden: das Original rechnet
+    /// <c>Bild = Folgenanfang + Satz[+0x26] + Richtung</c> (@0x42B198) und
+    /// haette bei Folge 61 damit in die NAECHSTE Folge gegriffen — die Bilder
+    /// liegen in ANIM.CWA fortlaufend hintereinander (Folge 60 ab 214, 61 ab
+    /// 215, 62 ab 216). Ob das im Original wirklich so aussieht oder ob diese
+    /// Arten nie mit Richtung feuern, ist NICHT gelesen. Bis das geklaert ist,
+    /// zeigen wir lieber dasselbe Bild aus jeder Richtung. Steht in
+    /// OFFENE_FRAGEN.md.</para>
+    /// </summary>
     private Texture2D? ProjectileTexture(string kind, int facing)
+    {
+        var tex = ProjectilePng(kind, facing);
+        return tex ?? (facing == 0 ? null : ProjectilePng(kind, 0));
+    }
+
+    private Texture2D? ProjectilePng(string kind, int facing)
     {
         string key = $"{kind}/f{facing}";
         if (_projTex.TryGetValue(key, out var cached)) return cached;
@@ -7566,7 +7773,12 @@ public partial class MapEntityLayer : Node2D
         if (!ground)
             foreach (var p in _shots)
             {
-                var tex = ProjectileTexture(p.Kind, p.Facing);
+                // Die Richtung holt das Original nur fuer die Arten 2..86
+                // (@0x42B177: `lea ecx,[edi-2]; cmp ecx,0x54; ja` -> sonst
+                // `xor cl,cl`). Folge 61 zum Beispiel hat ein EINZIGES Bild und
+                // wird von Art 1 und Art 21 benutzt -- ohne diese Schranke
+                // griffe Art 21 daneben.
+                var tex = ProjectileTexture(p.Kind, p.Art is >= 2 and <= 86 ? p.Facing : 0);
                 if (tex != null) DrawTexture(tex, p.Pos - tex.GetSize() / 2f);
             }
 
@@ -12119,7 +12331,7 @@ public partial class MapEntityLayer : Node2D
             // die der Kaeufer bezahlt hat. Ohne diese Zeile kostet ein Veteran
             // das Siebzigfache und kommt als Rekrut auf die Karte; beim
             // Weiterverkauf waere er dann fast nichts mehr wert.
-            Field28 = o.Experience,
+            Rating28 = o.Experience,
             Chassis = d?.Derived.ChassisComponent ?? 0,
             GameUnitType = TypeOfChassis(o.UnitType > 0 ? o.UnitType : d?.Propulsion ?? 160),
             Move = Simulation.NavGrid.ClassOf(-1, d?.Derived.ChassisComponent ?? 0),
@@ -19897,13 +20109,31 @@ public partial class MapEntityLayer : Node2D
             // nicht bremsen, sondern das Umklappen vermeiden.
             if (dist > 0.01f)
             {
-                int will = DirToFacing(d);
+                // ⚠ 19.08.2026 — DIE STUFUNG KOMMT VOM RUMPF, nicht aus einer
+                // festen 8. Ein Schiff hat sechzehn Bilder und dreht deshalb in
+                // 22,5-Grad-Schritten; bis heute drehte es in 45ern durch einen
+                // Satz, von dem es nur die Haelfte je zu sehen bekam. Das
+                // ⚠ NICHT VERWECHSELN mit @0x405100. Dort gibt es auch einen
+                // 16er-Zweig, aber der gehoert Gattung 3 (+0x0A == 3) und dreht
+                // das FELD +0x03 — OT_HLAV, den Aufbau, nicht den Rumpf
+                // (@0x405148 vergleicht byte[+0x03] gegen `wunsch*2`, rechnet
+                // also in Sechzehnteln, waehrend der Aufrufer Achtel liefert).
+                // Auf den Karten hat Gattung 3 ganze zehn Einheiten, alle vom
+                // Rumpftyp 138.
+                //
+                // Der Rumpf eines SCHIFFES dreht in +0x02 (OT_PODV), und dass
+                // DER sechzehn Stufen hat, steht in den ausgelieferten Karten:
+                // 21 von 213 Schiffen tragen dort einen Wert ueber 7, von 4592
+                // Landeinheiten keine einzige.
+                int stufen = FacingsOf(e.UnitType);
+                int will = DirToFacing(d, stufen);
                 if (DrehAlt) e.Facing = will;
                 else if (e.Facing != will)
                 {
-                    // kuerzester Weg um den Kreis aus acht Stufen
-                    int diff = ((will - e.Facing) % 8 + 8) % 8;
-                    e.Facing = (e.Facing + (diff <= 4 ? 1 : 7)) % 8;
+                    // kuerzester Weg um den Kreis — jetzt um EINEN Kreis, der
+                    // acht oder sechzehn Stufen haben kann
+                    int diff = ((will - e.Facing) % stufen + stufen) % stufen;
+                    e.Facing = (e.Facing + (diff <= stufen / 2 ? 1 : stufen - 1)) % stufen;
                     // erst drehen, dann fahren — solange die Nase nicht stimmt,
                     // ruckt nichts vor
                     _drehTicks++;
@@ -20124,6 +20354,20 @@ public partial class MapEntityLayer : Node2D
     private static Color OwnerColor(int owner)
         => owner >= 0 && owner < Factions.Length ? Factions[owner] : PropColor;
 
+    /// <summary>Rumpftyp -> Zahl seiner Blickrichtungen, aus units_index.json.
+    /// Fehlt ein Eintrag, gelten acht — das ist der Fall fuer alles ausser den
+    /// neun Schiffen.</summary>
+    private static readonly Dictionary<int, int> _unitFacings = new();
+
+    /// <summary>Wieviele Blickrichtungen ein Rumpf kennt. <b>Acht bei allem,
+    /// was faehrt oder laeuft; sechzehn bei den Schiffen</b> — siehe
+    /// <see cref="Import.CwrFile.ShipFacings"/>.</summary>
+    public static int FacingsOf(int unitType)
+    {
+        LoadUnitIndex();
+        return _unitFacings.TryGetValue(unitType, out int n) && n > 0 ? n : 8;
+    }
+
     private static void LoadUnitIndex()
     {
         if (_unitAnchors != null) return;
@@ -20145,6 +20389,14 @@ public partial class MapEntityLayer : Node2D
             if (!int.TryParse(kv.Key, out int ut) || kv.Value.VariantType != Variant.Type.Dictionary)
                 continue;
             var u = kv.Value.AsGodotDictionary<string, Variant>();
+            // ⚠ 19.08.2026 — WIEVIELE RICHTUNGEN DIESER RUMPF HAT, steht seit
+            // heute in der Datei. Schiffe haben SECHZEHN (Begruendung bei
+            // Import.CwrFile.ShipFacings), alles andere acht. Es wird
+            // ABGELESEN und nicht an der Typnummer erraten: der Bildersatz und
+            // die Drehung muessen aus derselben Quelle kommen, sonst dreht die
+            // Einheit in Stufen, die es als Bild nicht gibt.
+            if (u.TryGetValue("n_facings", out var nv) && nv.VariantType == Variant.Type.Int)
+                _unitFacings[ut] = (int)nv;
             if (!u.TryGetValue("facings", out var fv) || fv.VariantType != Variant.Type.Dictionary)
                 continue;
             var fac = new Dictionary<int, (int, int, int)>();

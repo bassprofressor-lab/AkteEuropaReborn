@@ -24,10 +24,16 @@ weiter unten ausführlich, mit den Adressen, an denen er gelesen wurde.
 | **Die Mauszeiger des Originals.** | 28 Arten aus dem Anhang von `ROBO.CWR`, darunter das Angriffsfadenkreuz. |
 | **Einheiten melden sich auf einen Befehl.** | Den Anwählklang hatten wir, den Befehlsklang nicht — dabei ruft ihn das Original viermal so oft. |
 | **Bäume verdecken wieder.** | Kein Codefehler: die Karten waren nie neu gebacken worden. |
+| **Der Nebel deckt weich auf.** | Statt Kachel für Kachel. Marching Squares über ein 257×257-Eckengitter, dazu das Schachbrettmuster des Originals in seiner Palettenfarbe. |
+| **Dreizehn Waffen bekommen ein fliegendes Geschoss** statt drei — und jede ihren eigenen Einschlag. Aus einer Tafel, die wir zu einem Zweiundzwanzigstel gelesen hatten. |
+| **Einheiten sammeln Erfahrung und steigen im Rang.** | Das Feld dafür lasen wir seit Monaten, verändert hat es nie jemand. Ein Veteran macht mehr Schaden und steckt mehr ein. |
+| **Schiffe haben sechzehn Blickrichtungen.** | Acht davon waren nie exportiert worden. Ein Schiff konnte nicht nach Nordnordwest zeigen. |
+| **Der Einheitensatz hat jetzt die Namen des Spiels.** | Das Original führt einen eigenen Aufzeichner, der jedes Feld benennt. `ENTITY_FELDER.md`. |
 
-⚠ **Was ausdrücklich NICHT drin ist:** der weiche Nebelrand des Originals. Der
-Unterbau ist gelesen, die Weichheit nicht belegt — also ist nichts gebaut.
-Alles Ungeklärte steht in `OFFENE_FRAGEN.md`.
+⚠ **Was ausdrücklich NICHT drin ist:** der Mehrspielerbetrieb über das Netz,
+der Transport von Einheiten und die Zwillingslafette (vier Waffen feuern im
+Original zwei Geschosse nebeneinander, bei uns eines). Alles Ungeklärte steht
+in `OFFENE_FRAGEN.md`.
 
 ### Die vier Bereiche dieser Fassung
 
@@ -56,6 +62,122 @@ Die Kampagne bleibt originaltreu; Gefecht und Mehrspieler dürfen bewusst
 abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Einheiten
+
+- ⭐⭐ **Dreizehn Waffen statt drei bekommen ein fliegendes Geschoss — und die
+  Zahlen dafür stehen nicht mehr im Quelltext, sondern im Spiel.**
+
+  Bei uns entschied eine Liste von drei Bauteilnummern, welche Waffe ein
+  sichtbares Geschoss abfeuert; alles andere zog eine Leuchtspur. Die
+  Geschwindigkeit war **eine** Zahl für alle (190 px/s), der Einschlag **eine**
+  Explosion für alle. Alle drei waren geraten und als solche gekennzeichnet.
+
+  Das Spiel beantwortet die Frage selbst, in einer Tafel bei `0x4F98E8`:
+  **91 Zeilen zu 22 Byte**, Index ist die »Klangklasse« aus dem Statssatz
+  `+0x1C` — die in Wahrheit die *Geschossart* ist. Wir hatten davon **ein**
+  Feld gelesen, nämlich den Schussklang.
+
+  | Feld | was drinsteht |
+  |---|---|
+  | `+0x00` | Geschwindigkeit je Takt, 5…35 — **je Art verschieden** |
+  | `+0x02` | Bildfolge des Fluges, `30000` = keine |
+  | `+0x06` | Bildfolge des Einschlags |
+  | `+0x0A` | Schussklang (das eine Feld, das wir hatten) |
+  | `+0x0C` | Klang beim Einschlag |
+  | `+0x14` | ein Aufschlag auf die Lafettensuche |
+  | `+0x15` | Seitenversatz der Zwillingslafette |
+
+  Dass `30000` die Marke »keine« ist und keine Folgennummer, ist keine
+  Auslegung: `ANIM.CWA` führt **1000** Folgen. Danach haben dreizehn Bauteile
+  ein Flugbild — und die beiden schnellsten (Tempo 35) sind genau die, die
+  wirklich nur eine Spur ziehen.
+
+  Der Ausgeber schreibt jetzt **30 Flugfolgen und 13 Einschlagfolgen** aus
+  `ANIM.CWA`. Zwei weitere Einschlagfolgen, die die Tafel nennt (87 und 309),
+  sind dort **leer** — diese Waffen zeigen im Original also gar keinen
+  Einschlag, und das wird jetzt nachgebildet statt übertüncht.
+
+  **Die Probe:** die Tafel ist in beiden vorliegenden `GAME.EXE` Byte für Byte
+  gleich (91 × 22 = 2002 Byte), und jede der 62 benutzten Zeilen findet
+  hinterher ihre Bilder — nachgezählt, keine fehlt.
+
+- ⭐⭐ **Einheiten sammeln Erfahrung und steigen im Rang.**
+
+  Satz `+0x28` lasen wir seit Monaten und gaben ihn in die Schadensformel.
+  Verändert hat ihn nie jemand — auf 1941 von 1971 Karteneinheiten steht er auf
+  Null, und das galt uns als »fast wirkungslos«. Der wahre Grund ist ein
+  anderer: **er wird nicht gestellt, er wird verdient.**
+
+  Die Trefferroutine rechnet am Ende (@0x40CEF7…0x40CF7D):
+
+  ```
+  Zuwachs = (Nachladezeit+1) · Schaden · (Verteidigung + 2·Höhe_Opfer)
+                              ÷ (Angriff + 2·Höhe_Schütze) ÷ 8
+  ```
+
+  Die Punkte stehen in `+0x4C` — als **Byte**, und genau darauf kommt es an:
+  läuft es über, steigt der Rang in `+0x28` um eins. Beide zusammen druckt das
+  Spiel als `exp: (byte[+0x28] << 8) | byte[+0x4C]`.
+
+  Wer daraus liest, was das Spiel belohnt: **einen Treffer auf ein gut
+  gepanzertes Ziel in gutem Gelände, mit einer langsam nachladenden Waffe.** Ein
+  Scharfschütze auf einem Hügel lernt an einem Panzer mehr als der Panzer an ihm.
+  **Gebäude geben nichts** (@0x40CEEA) — dieselbe Schranke `0x1F40`, an der auch
+  die Anzeigetafel Einheit von Gebäude trennt.
+
+  Damit ergibt auch der **Veteranen-Tonfall** erstmals Sinn: die Stimmroutine
+  vergleicht `+0x28` mit 50 und nimmt darüber einen anderen Satz. Bisher konnte
+  diese Schwelle niemand erreichen.
+
+  ⚠ Nebenbei behoben: `+0x28` wurde in **zwei** Felder geladen (`Rating28` und
+  `Field28`), mit zwei Namen und zwei Kommentaren. Solange beide nur gelesen
+  wurden, fiel das nicht auf; sobald der Rang steigt, wäre eine Kopie
+  stehengeblieben — der Veteran hätte die Stimme des Rekruten behalten.
+
+- ⭐ **Ein Schiff kann endlich nach Nordnordwest zeigen: sechzehn
+  Blickrichtungen statt acht.**
+
+  Der Ausgeber zog für jeden Rumpf `f0…f7`. Bei einem Schiff sind das **acht von
+  sechzehn** — eine halbe Drehung, nicht jede zweite Stufe. Genau derselbe
+  Fehler war bei den Flugzeugen schon einmal gefunden worden; er hing nicht an
+  einem Teil, sondern an der Annahme »acht gilt überall«.
+
+  ⚠ Die Begründung, die in unseren Notizen stand, trägt allerdings **nicht**:
+  »die Bilder sind spiegelsymmetrisch 1↔15«. Nachgemessen an den Abmessungen
+  der Einzelbilder trifft bei Schiffen **weder** die Spiegelung zu acht **noch**
+  die zu sechzehn — Schiffe sind schlicht nicht symmetrisch gezeichnet
+  (Kettenteile treffen dagegen 5 bis 7 von 7 Paaren). Was wirklich trägt:
+
+  1. Jedes Schiffsteil besitzt **genau 16 Bilder in einer Gruppe**; Bodenteile
+     haben 48, 96 oder 144, also sechs Neigungsblöcke zu acht. Ein Schiff fährt
+     auf Wasser und hat keine Neigung.
+  2. Angesehen: die 16 Bilder sind eine durchgehende Volldrehung ohne
+     Wiederholung bei acht.
+  3. **Die ausgelieferten Karten sagen es selbst.** Von 213 Schiffen tragen
+     **21 eine Blickrichtung über 7**, bis 15 — von 4592 Landeinheiten eine
+     einzige. Dieser Beleg hängt weder am Code noch an meinem Auge.
+
+- ⭐ **Der Einheitensatz hat jetzt die Namen des Spiels** — `ENTITY_FELDER.md`.
+
+  Das Original führt einen eigenen Aufzeichner (`RECORDING` / `REPLAY`), der je
+  Takt jedes Feld jeder Einheit **mit seinem Namen** herausschreibt. Aus ihm
+  kommen 56 Namen; 46 liessen sich an einen Versatz binden.
+
+  Der Prüfstand vergleicht dabei nicht Adressen, sondern **Abstände**: der
+  Sockel des Einheitensatzes ist in den beiden `GAME.EXE` verschieden
+  (`0x6E26C8` gegen `0x6E1728`). Dass er zehn der 56 Namen **aussortiert** —
+  Namen aus anderen Tafeln, die um einen anderen Betrag gewandert sind — ist
+  der eigentliche Beleg dafür, dass er misst.
+
+  Was dabei herauskam: `+0x02` heisst `OT_PODV` (Drehung des **Fahrwerks**),
+  `+0x03` heisst `OT_HLAV` (Drehung des **Rohrs**), `+0x0B` `SPODEK`
+  (Unterteil), `+0x0C` `VRSEK` (Oberteil), `+0x0F` `l_engine` (der Antrieb —
+  und genau das sind unsere »Rumpftypen« 160…175), `+0x3D` `RELOAD`. Unser
+  Importeur hatte all das schon richtig getrennt; jetzt steht auch dabei, warum.
+
+  Damit löste sich nebenbei ein Widerspruch auf, der die sechzehn
+  Schiffsrichtungen in Frage stellte: die Drehroutine @0x405100 gibt sechzehn
+  Stufen der Gattung 3 — aber sie dreht damit `+0x03`, den **Aufbau**. Der
+  **Rumpf** eines Schiffes steht in `+0x02`, und das ist eine andere Routine.
 
 - ⭐ **Der Mechaniker repariert wieder, was neben ihm steht** — und er heißt auch
   wieder so. Gemeldet als »die Reparatureinheit nennt sich noch Bauteil 43 und
@@ -306,7 +428,6 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   gemessen: 18 Einheiten mit Mindestreichweite, 30 Ziele deswegen
   fallengelassen, mit `--no-min-range` null. ⚠ Die Meldung sagt ausserdem, wenn
   eine Karte gar keine solche Einheit hat — dort ist die Null kein Ergebnis.
-
 
 - **Eine Gruppe bleibt an der Engstelle nicht mehr liegen.** Gemeldet als
   »Gruppenauswahl und hintereinander weg fahren wie über brücken lässt einheiten
@@ -892,7 +1013,6 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   Vorschau der nächsten Mission — und zeigte dort weiter die Hilfefenster der
   gerade beendeten.
 
-
 - ⭐⭐ **Mission 1 ist wieder das Tutorial, das sie im Original ist — alle
   siebzehn Hilfefenster, an ihrer Bedingung und an ihrer Stelle.** Gemeldet mit
   sechzehn abgefilmten Bildern des Originals und dem Satz: »wo und wann diese
@@ -1168,7 +1288,6 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   (`--briefing-mission`) **drückt den Knopf**, statt das Feld dahinter zu
   setzen.
 
-
 - ⭐ **Die Demo im Hauptmenü ist nicht mehr abgedunkelt.** Gemeldet: »in der
   Demo haben die Gebäude die helleren Bodenmuster, aber die Umgebung wirkt wie
   dunkler. Das ist im Gefecht nicht so oder in der Kampagne.«
@@ -1238,7 +1357,6 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   weil die Kur im Fliesstext stand und nicht am Aufruf. Dieselbe Zeile hat
   nebenbei drei abdunkelnde Flaechen repariert, die nichts abgedunkelt haben,
   und den Deckel des Abschlussfensters, der keine Maus abgefangen hat.
-
 
 - **Das Editorfeld stand im Gefecht, und die Missions-Popups standen im
   Hauptmenü.** Zwei Meldungen, eine Ursache. Ein Szenenwechsel ersetzt nur die
@@ -1460,7 +1578,6 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   ⚠ Es spricht **eine** Einheit, nicht die Auswahl. Steht dort eine Gruppe,
   holt sich das Original ein Mitglied und lässt dieses sprechen. Ein Chor von
   zwölf Panzern wäre nicht bloss laut, er wäre falsch.
-
 
 - **Ein Klang kommt jetzt von links oder rechts.** Die Dämpfung nach Entfernung
   gab es schon, das Panorama war gelesen und ausdrücklich als Lücke

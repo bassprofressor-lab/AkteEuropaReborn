@@ -300,15 +300,48 @@ public sealed class InterfaceExporter
         ("door", 301),
     };
 
-    /// <summary>Sequences 64 and 65 are rockets drawn as 8 facings x 3 phases
-    /// (`frame = phase*8 + facing`), so they are written per facing and a
-    /// projectile simply picks the sprite for its direction.</summary>
-    private static readonly (string Name, int Seq)[] Rockets =
-    {
-        ("rocket_l", 64), ("rocket_h", 65),
-    };
+    /// <summary>
+    /// <b>⚠ 19.08.2026 — HIER STAND EINE LISTE VON ZWEI, UND DAS SPIEL HAT
+    /// DREISSIG.</b>
+    ///
+    /// <para>Bis heute wurden genau zwei Flugbilder ausgegeben:
+    /// <c>("rocket_l", 64)</c> und <c>("rocket_h", 65)</c>. Die beiden Zahlen
+    /// waren richtig — aber es waren zwei von dreissig, herausgegriffen, weil
+    /// wir nur zwei Waffen als »Raketenwerfer« eingestuft hatten. Welche Waffe
+    /// ein fliegendes Geschoss hat, entscheidet das Spiel selbst, und zwar in
+    /// der Geschosstafel <c>0x4F98E8</c>: Feld +0x02 ist die Flugfolge,
+    /// Feld +0x06 die Einschlagfolge, <b>30000 heisst keine</b>.</para>
+    ///
+    /// <para>Dass 30000 die Marke ist und keine Folgennummer, ist keine
+    /// Vermutung: ANIM.CWA fuehrt <see cref="AnimFile.SeqCount"/> = <b>1000</b>
+    /// Folgen. 30000 gibt es dort nicht.</para>
+    ///
+    /// <para>Ausgezaehlt kommen dabei <b>30 Flugfolgen</b> und <b>15
+    /// Einschlagfolgen</b> heraus. Zwei der Einschlagfolgen (87 und 309) sind in
+    /// ANIM.CWA <b>leer</b> — die betreffenden Waffen zeigen im Original also
+    /// keinen Einschlag, und das ist ein Befund, kein Fehler. Sie werden hier
+    /// uebersprungen, damit die Laufzeit gar nicht erst nach ihnen sucht.</para>
+    ///
+    /// <para><b>Die Richtung.</b> Der Zeichner @0x42B198 rechnet
+    /// <c>Bild = Folgenanfang + Satz[+0x26] + Richtung</c> und holt die Richtung
+    /// nur, wenn die Geschossart in <b>2..86</b> liegt (@0x42B177:
+    /// <c>lea ecx,[edi-2]; cmp ecx,0x54; ja</c> → sonst <c>xor cl,cl</c>).
+    /// Deshalb wird die Richtung hier NICHT am Bilderzaehler festgemacht,
+    /// sondern zur Laufzeit an der Art — eine Folge wie 61 (ein einziges Bild)
+    /// wird von Art 1 UND Art 21 benutzt, und nur die zweite ist im
+    /// Richtungsbereich.</para>
+    ///
+    /// <para>⚠ OFFEN: ob <c>Satz[+0x26]</c> in Achterschritten zaehlt. Wir
+    /// zeichnen weiter <c>Bild = Phase*8 + Richtung</c>, was bei den Folgen
+    /// 64/65 sichtbar stimmt; die Formel des Originals liesse auch
+    /// <c>Phase + Richtung</c> zu. Das steht in OFFENE_FRAGEN.md.</para>
+    /// </summary>
+    private static string FlightDir(int seq) => $"flug_{seq}";
+    private static string ImpactDir(int seq) => $"schlag_{seq}";
 
-    public void WriteEffects(AnimFile anim)
+    public void WriteEffects(AnimFile anim) => WriteEffects(anim, null);
+
+    public void WriteEffects(AnimFile anim, ExeTables? exe)
     {
         Directory.CreateDirectory(_fx);
         var sb = new StringBuilder();
@@ -329,19 +362,53 @@ public sealed class InterfaceExporter
             Effects++;
         }
 
-        foreach (var (name, seq) in Rockets)
+        // Die Flug- und Einschlagbilder kommen aus der Geschosstafel, nicht aus
+        // einer Liste hier. Ohne GAME.EXE bleibt es beim Alten -- dann fehlen
+        // sie eben, statt dass geraten wird.
+        if (exe != null)
         {
-            var frames = Decode(anim, seq, 24);
-            if (frames.Count < 8) continue;
-            var (w, h) = Bounds(frames);
-            for (int f = 0; f < 8; f++)                  // phase 0 = the whole rocket
-                Save($"{_fx}/{name}/f{f}.png", Canvas(frames[f], w, h));
-            if (!first) sb.Append(',');
-            first = false;
-            sb.Append($"\"{name}\":{{\"sequence\":{seq},\"facings\":8,");
-            sb.Append($"\"phases\":{frames.Count / 8},\"w\":{w},\"h\":{h},");
-            sb.Append($"\"anchor\":[{w / 2},{h / 2}],\"layout\":\"frame = phase*8 + facing\"}}");
-            Effects++;
+            var tafel = exe.Projectiles();
+            var flug = new SortedSet<int>();
+            var schlag = new SortedSet<int>();
+            foreach (var p in tafel)
+            {
+                if (p.Speed == 0) continue;              // unbenutzte Zeile
+                if (p.Flight != ExeTables.KeineFolge) flug.Add(p.Flight);
+                if (p.Impact != ExeTables.KeineFolge) schlag.Add(p.Impact);
+            }
+
+            // FLUG: unangetastete Nummerierung f0..fN, denn der Zeichner holt
+            // sich das Bild ueber ProjectileTexture(art, richtung) ohne Polster.
+            foreach (int seq in flug)
+            {
+                var frames = Decode(anim, seq, int.MaxValue);
+                if (frames.Count == 0) continue;
+                var (w, h) = Bounds(frames);
+                for (int f = 0; f < frames.Count; f++)
+                    Save($"{_fx}/{FlightDir(seq)}/f{f}.png", Canvas(frames[f], w, h));
+                if (!first) sb.Append(',');
+                first = false;
+                sb.Append($"\"{FlightDir(seq)}\":{{\"sequence\":{seq},");
+                sb.Append($"\"frames\":{frames.Count},\"w\":{w},\"h\":{h},");
+                sb.Append($"\"anchor\":[{w / 2},{h / 2}]}}");
+                Effects++;
+            }
+
+            // EINSCHLAG: gepolstert f00.., denn den holt EffectFrames.
+            foreach (int seq in schlag)
+            {
+                var frames = Decode(anim, seq, int.MaxValue);
+                if (frames.Count == 0) continue;         // 87 und 309 sind leer
+                var (w, h) = Bounds(frames);
+                for (int f = 0; f < frames.Count; f++)
+                    Save($"{_fx}/{ImpactDir(seq)}/f{f:00}.png", Canvas(frames[f], w, h));
+                if (!first) sb.Append(',');
+                first = false;
+                sb.Append($"\"{ImpactDir(seq)}\":{{\"sequence\":{seq},");
+                sb.Append($"\"frames\":{frames.Count},\"w\":{w},\"h\":{h},");
+                sb.Append($"\"anchor\":[{w / 2},{h / 2}]}}");
+                Effects++;
+            }
         }
 
         sb.Append("}}");

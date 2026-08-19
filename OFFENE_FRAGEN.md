@@ -257,7 +257,68 @@ Nebenbefunde: `0x542E18` ist **kein** Geländefeld, sondern das Bauwerksgitter
 (`'Too many radars'`); und es gibt einen **Störsender** (Gerät 77), der
 fremde Sicht wieder löscht — bei uns nicht vorhanden.
 
-## B. Schuss und Einschlag — die Tafel, die vieles ersetzt
+## B. Schuss und Einschlag — ERLEDIGT am 19.08.2026
+
+**Die Tafel ist importiert und angeschlossen.** Was unten steht, ist der Befund
+von damals; hier zuerst, was daraus geworden ist und was sich dabei als falsch
+herausgestellt hat.
+
+### Gebaut
+
+* `ExeTables.Projectiles()` liest alle **91 Zeilen zu 22 Byte**. Der Ausgeber
+  schreibt sie in dieselbe `weapon_sounds.json` wie den Klang — der Index ist
+  derselbe, denn die »Klangklasse« aus dem Statssatz `+0x1C` **ist** die
+  Geschossart.
+* **Drei geratene Konstanten sind weg**: `RocketSpeed` (eine Zahl für alles),
+  `RocketKind` (eine Liste von drei Bauteilen) und der immer gleiche
+  Einschlag `"explosion"`.
+* **Aus 3 mach 13.** Welche Waffe ein fliegendes Geschoss hat, sagt Feld `+0x02`
+  (30000 = keine). Danach haben **dreizehn** der Bauteile eines — bisher hatten
+  drei eines und alle anderen zogen eine Leuchtspur.
+* Der Ausgeber schreibt jetzt **30 Flugfolgen und 13 Einschlagfolgen** aus
+  ANIM.CWA (vorher: zwei fest verdrahtete). Zwei weitere Einschlagfolgen (87 und
+  309) sind in ANIM.CWA **leer** — diese Waffen zeigen im Original also gar
+  keinen Einschlag, und das wird jetzt nachgebildet.
+* **Die Erfahrung wächst.** `Erfahren()` in `MapEntityLayer` rechnet
+  `((Nachladezeit+1) · Schaden · (Verteidigung+2·Höhe_Opfer)) / (Angriff+2·Höhe_Schütze) / 8`,
+  Punkte in `+0x4C` als Byte mit Überlauf, und beim Überlauf steigt der Rang
+  `+0x28`. **Gebäude geben keine Erfahrung** (@0x40CEEA). Damit ergibt auch der
+  Veteranen-Tonfall der Stimmroutine (Schwelle 50) erstmals Sinn.
+
+### ⚠ Zwei eigene Behauptungen, die dabei gefallen sind
+
+1. **»+0x14 ist die Mündungshöhe über Grund.«** Zu viel behauptet. Belegt ist
+   nur: der Wert wird auf das zurückaddiert, was die *Lafettensuche* (0x435BD0)
+   liefert, und landet auf Byte +3 des Schusssatzes — nicht auf einer der beiden
+   Zellzahlen (+4/+5) und nicht auf dem Bildpunkt (+0). Was jener Grundwert
+   bedeutet, ist **nicht gelesen**. Das Feld heisst deshalb jetzt `MountBias`.
+2. **»Eine Rohrlänge gibt es im Original nicht.«** Auch das war zu grob.
+   SHOOT.CWT gibt es und wird gelesen — aber vom **Zeichner** 0x42A188, nicht von
+   der Schussroutine. Unser `MuzzleReach = 14` bleibt damit unsere Setzung, und
+   der richtige Weg dorthin ist SHOOT.CWT, nicht Feld +0x14.
+
+### Was daraus NEU offen ist
+
+* **Zeigen wir jetzt das Mündungsfeuer doppelt?** Der Negativbefund unten sagt:
+  der Blitz an der Mündung **ist** das erste Bild der Flugfolge, das Original
+  legt keinen eigenen Effekt an. Wir legen weiter einen an (`Kind = "muzzle"`),
+  und seit heute haben dreizehn statt drei Waffen zusätzlich eine Flugfolge.
+  ⚠ **Das ist eine Sache für den Blick, nicht für den Zähler** — bitte einmal
+  ansehen, ob es zu hell wirkt. Bis dahin bleibt es, wie es ist.
+* **Zählt `Satz[+0x26]` in Achterschritten?** Das Original rechnet
+  `Bild = Folgenanfang + Satz[+0x26] + Richtung` (@0x42B198). Wir zeichnen
+  weiter `Phase*8 + Richtung`, was bei den Folgen 64/65 sichtbar stimmt. Bei
+  Folgen mit **einem einzigen Bild** (60, 61, 71, 250, 251, 271, 273, 276, 279)
+  hätte die Formel des Originals in die **nächste** Folge gegriffen — die Bilder
+  liegen in ANIM.CWA fortlaufend. Ob das im Original so aussieht oder ob diese
+  Arten nie mit Richtung feuern, ist nicht gelesen; wir zeigen dort dasselbe
+  Bild aus jeder Richtung.
+* Der **Zwillingsversatz** (+0x15, vier Arten) ist gelesen und importiert, aber
+  noch **nicht gebaut**: diese Waffen feuern bei uns ein Geschoss statt zwei.
+
+---
+
+### Der Befund von damals (bleibt als Beleg stehen)
 
 Die ganze Zuordnung sitzt in **einer** Tafel: `0x4F98E8` (C) / `0x4F88F0` (F),
 Schrittweite 22, Index = Geschosstyp, in beiden Fassungen **Byte für Byte
@@ -298,10 +359,47 @@ ausgezählt. Der Blitz an der Mündung ist das erste Bild der Flugfolge.
 * **Zehn Schiffsarten**, Tafel `0x52EDA0`, 42 Byte je Satz, beide EXE gleich.
   Gegenprobe an den Karten: 97 von 97 Schiffen stimmen in Bauteil **und**
   Waffenplatz mit der Tafel überein, kein Gegenbeispiel.
-* **16 Blickrichtungen**, dreifach belegt: die Drehroutine bricht bei 16 um,
-  die Bauteiltafel von ROBO.CWR hat Abstand 16, und die Bilder selbst sind
-  spiegelsymmetrisch 1↔15, 2↔14, 3↔13, 4↔12. ⚠ Unser Ausgeber nimmt **8** —
-  die Schiffsbilder sind also halb exportiert.
+* **16 Blickrichtungen** — ⭐ **ERLEDIGT am 19.08.2026**, aber die Begründung
+  musste ausgetauscht werden.
+
+  ⚠ **Die Spiegelsymmetrie 1↔15 stimmt nicht.** Nachgemessen an den
+  Abmessungen der Einzelbilder (die bei einem gespiegelten Paar zwangsläufig
+  gleich sind) treffen bei den Schiffsteilen **weder** die Paare zu 8 **noch**
+  die zu 16 — während Kettenteile 5 bis 7 von 7 Paaren zu 8 treffen. Schiffe
+  sind schlicht nicht spiegelsymmetrisch gezeichnet. Der Punkt war trotzdem
+  richtig, nur aus anderen Gründen:
+
+  1. Jedes Schiffsteil besitzt **genau 16 Bilder**, und die Teiletafel nennt
+     dafür **eine** Gruppe. Bodenteile haben 48, 96 oder 144 — sechs
+     Neigungsblöcke zu acht. Ein Schiff fährt auf Wasser und hat keine Neigung.
+  2. **Angesehen**: die 16 Bilder sind eine durchgehende Volldrehung, der Bug
+     wandert Bild für Bild weiter und wiederholt sich bei 8 nicht. Beim
+     Kettenteil wiederholen sich die Richtungen im zweiten Achterblock sehr wohl.
+  3. **Die ausgelieferten Karten sagen es selbst**: von 213 Schiffen tragen
+     **21 eine Richtung über 7** (bis 15) — von 4592 Landeinheiten **eine
+     einzige**. Das ist der stärkste der drei Belege, weil er weder am Code noch
+     an meinem Auge hängt.
+
+  Gebaut: `CwrFile.ShipFacings = 16` mit `IsShipPart`, der Ausgeber schreibt für
+  die neun Schiffstypen 150…158 jetzt `f0…f15` und vermerkt `n_facings` in
+  `units_index.json`; die Laufzeit liest die Stufenzahl von dort und dreht in
+  22,5-Grad-Schritten statt in 45ern.
+
+  ⚠ **Ein Widerspruch, der sich beim Nachlesen aufgelöst hat.** Im Quelltext
+  stand »@0x405100: nur Gattung 3 bekommt 16 Richtungen«, während `Can_go`
+  `+0x0A == 4 oder 5` als Schiff behandelt. Beides stimmt — es sind **zwei
+  verschiedene Felder**:
+
+  * Der 16er-Zweig bei 0x405132 (`cmp al,3`) dreht **`+0x03` = OT_HLAV**, den
+    *Aufbau*: @0x405148 vergleicht `byte[+0x03]` gegen `wunsch*2`, rechnet also
+    in Sechzehnteln, während der Aufrufer Achtel liefert. Gattung 3 hat auf
+    allen Karten zehn Einheiten, alle vom Rumpftyp 138.
+  * Der *Rumpf* eines Schiffes steht in **`+0x02` = OT_PODV**, und dass der
+    sechzehn Stufen hat, sagen die Kartendaten (siehe Punkt 3 oben).
+
+  Die Namen stammen aus dem Aufzeichner des Originals, siehe `ENTITY_FELDER.md`.
+  Unser Importeur hatte beides schon richtig getrennt (`Facing = raw[0x02]`,
+  `Aim = raw[0x03]`).
 * **`+0x0d` heisst `ZBRAN` = Waffe**, das Spiel druckt den Namen selbst. Unsere
   Deutung »Bildvariante des Rumpfes« ist falsch; das Rumpfbild kommt aus
   `+0x0b`.

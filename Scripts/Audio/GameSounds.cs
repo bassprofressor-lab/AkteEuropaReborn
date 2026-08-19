@@ -465,6 +465,11 @@ public static class GameSounds
             using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
             using var doc = JsonDocument.Parse(f.GetAsText());
             _fire = Column(doc, "base");
+            _tempo = Column(doc, "tempo");
+            _flug = Column(doc, "flug");
+            _einschlag = Column(doc, "einschlag");
+            _lafette = Column(doc, "lafette");
+            _zwilling = Column(doc, "zwilling");
         }
         catch (System.Exception e) { GD.PrintErr("Ton: weapon_sounds.json — " + e.Message); }
 
@@ -484,6 +489,41 @@ public static class GameSounds
     /// table at 0x4f98f2 (stride 22) — both exported to
     /// <c>Sound/weapon_sounds.json</c>. See
     /// <see cref="Import.ExeTables.FireSoundTable"/> for the disassembly.</summary>
+    private static int[]? _tempo, _flug, _einschlag, _lafette, _zwilling;
+
+    private static int Feld(int[]? sp, int art)
+        => sp != null && art >= 0 && art < sp.Length ? sp[art] : -1;
+
+    /// <summary>
+    /// <b>Was ein Geschoss dieser Art ausmacht</b> — alles aus derselben Zeile
+    /// wie der Schussklang, Tafel <c>0x4F98E8</c>. Siehe
+    /// <see cref="Import.ExeTables.ProjectileTable"/>.
+    ///
+    /// <para>Die »Klangklasse« aus dem Statssatz (+0x1C) ist in Wahrheit die
+    /// <b>Geschossart</b>; dass sie bisher nur einen Klang gewaehlt hat, lag
+    /// daran, dass wir nur eine Spalte gelesen hatten.</para>
+    /// </summary>
+    public static int ProjectileSpeed(int art) { LoadWeaponSounds(); return Feld(_tempo, art); }
+
+    /// <summary>Bildfolge des Fluges, oder −1 / 30000 wenn es keine gibt.</summary>
+    public static int FlightSequence(int art) { LoadWeaponSounds(); return Feld(_flug, art); }
+
+    /// <summary>Bildfolge des Einschlags.</summary>
+    public static int ImpactSequence(int art) { LoadWeaponSounds(); return Feld(_einschlag, art); }
+
+    /// <summary>⚠ Der <b>Aufschlag auf die Lafettensuche</b> (10..30), Feld
+    /// +0x14. Was der Grundwert bedeutet, ist nicht gelesen — deshalb ist das
+    /// hier KEINE »Hoehe« und schon gar keine Rohrlaenge. Wird bisher von
+    /// nichts benutzt und steht nur da, damit die Zahl nicht wieder verloren
+    /// geht. Belegstelle in <see cref="Import.ExeTables.ProjectileTable"/>.
+    /// </summary>
+    public static int MountBias(int art) { LoadWeaponSounds(); return Feld(_lafette, art); }
+
+    /// <summary>Seitlicher Versatz der ZWILLINGSLAFETTE. Ist er ungleich 0,
+    /// feuert das Original ZWEI Geschosse nebeneinander (0x40C35E und
+    /// 0x40C449).</summary>
+    public static int TwinOffset(int art) { LoadWeaponSounds(); return Feld(_zwilling, art); }
+
     public static int FireBase(int soundClass)
     {
         LoadWeaponSounds();

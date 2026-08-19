@@ -219,7 +219,7 @@ public sealed class ContentBuilder
                 // Stellungen aus WINDOWS.CWW, siehe WriteWindVane.
                 var cww = Asset("WINDOWS.CWW");
                 if (cww != null) ui.WriteWindVane(cww);
-                if (anim != null) ui.WriteEffects(AnimFile.FromBytes(anim));
+                if (anim != null) ui.WriteEffects(AnimFile.FromBytes(anim), _exe);
                 Say($"Oberflaeche: {ui.Fonts} Schriften mit {ui.Glyphs} Glyphen, " +
                     $"Panel {(panel != null ? "ja" : "nein")}, " +
                     $"Windfahne {ui.VaneFrames} Bilder, " +
@@ -1093,6 +1093,18 @@ public sealed class ContentBuilder
             // ZWEI Ordner anzugeben, mit Strichpunkt getrennt —
             // `--reexport-effects=F:/Akte Europa;<Ordner mit DATA/01.PAL>`;
             // ContentSources.FromFolders durchsucht sie der Reihe nach.
+            // ⚠ 19.08.2026 — SEIT HEUTE BRAUCHT DIESER WEG AUCH GAME.EXE.
+            // Die Flug- und Einschlagbilder stehen nicht in einer Liste im
+            // Quelltext, sondern in der Geschosstafel 0x4F98E8; ohne sie gaebe
+            // der Ausgeber nur die sechs benannten Effekte aus, und das sah wie
+            // ein Erfolg aus ("6 Effekte"), obwohl dreiundvierzig fehlten.
+            // Fehlt die EXE wirklich, wird das GESAGT und nicht verschwiegen.
+            if (_exe == null)
+            {
+                byte[]? exeRaw = _src.Exe != null ? File.ReadAllBytes(_src.Exe) : Asset("GAME.EXE");
+                if (exeRaw != null) _exe = ExeTables.FromBytes(exeRaw);
+                else Say("⚠ GAME.EXE nicht gefunden — Flug- und Einschlagbilder bleiben aus");
+            }
             byte[]? palRaw = Asset("01.PAL");
             byte[]? anim = Asset("ANIM.CWA");
             if (palRaw == null || anim == null)
@@ -1101,7 +1113,7 @@ public sealed class ContentBuilder
                 return false;
             }
             var ui = new InterfaceExporter(PalFile.FromBytes(palRaw), _dst + "/UI", _dst + "/Effects");
-            ui.WriteEffects(AnimFile.FromBytes(anim));
+            ui.WriteEffects(AnimFile.FromBytes(anim), _exe);
             // Die Windfahne haengt am selben Weg: sie ist ein Bild der
             // Oberflaeche und soll ohne vollen Neuimport nachziehbar sein.
             var cww = Asset("WINDOWS.CWW");

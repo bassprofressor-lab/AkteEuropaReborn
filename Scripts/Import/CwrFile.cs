@@ -162,6 +162,48 @@ public sealed class CwrFile
     /// </summary>
     public const int AirFacings = 16;
 
+    /// <summary>
+    /// <b>EIN SCHIFF HAT AUCH SECHZEHN — und wir haben ihm acht gegeben.</b>
+    ///
+    /// <para>⚠ 19.08.2026. <see cref="Facings"/> = 8 galt bisher fuer alles
+    /// ausser den Luftteilen, und das war mit »bewiesen« vermerkt. Der Beweis
+    /// gilt aber nur fuer die BODENteile: dort sind die Blockwerte der
+    /// Zustandstafel @0x4FA4B0 Vielfache von 8, und die Spiegelung 1↔7 ist an
+    /// den Kettenbildern messbar. Fuer Schiffe traegt beides nicht — ihre
+    /// Bilder sind ueberhaupt nicht spiegelsymmetrisch (gemessen: weder 1↔7
+    /// noch 1↔15 findet gleiche Abmessungen, waehrend Kettenteile 5 bis 7 von
+    /// 7 Paaren treffen).</para>
+    ///
+    /// <para><b>Was stattdessen zaehlt, drei voneinander unabhaengige Dinge:</b></para>
+    /// <list type="number">
+    /// <item>Die Schiffsteile besitzen <b>genau 16 Bilder</b> und die Teiletafel
+    /// nennt dafuer <b>eine</b> Gruppe (erstes u16 = 256). Bodenteile haben 48,
+    /// 96 oder 144 — also 6 Neigungsbloecke zu 8. Ein Schiff faehrt auf Wasser
+    /// und hat keine Neigung; 16 Bilder in einer Gruppe sind daher 16
+    /// RICHTUNGEN, nicht 2 Bloecke zu 8.</item>
+    /// <item>Angesehen: die 16 Bilder eines Rumpfs sind eine <b>durchgehende
+    /// Volldrehung</b>, der Bug wandert Bild fuer Bild weiter und wiederholt
+    /// sich bei 8 NICHT. Bei einem Kettenteil wiederholen sich die Richtungen im
+    /// zweiten Achterblock sehr wohl.</item>
+    /// <item>Der Zeichner @0x42AE1F addiert die Blickrichtung <b>roh</b>:
+    /// <c>ecx = Sockel[+0x0C] + byte[+0x03] + Block</c>, ohne Maske und ohne
+    /// mal 8. Der Block ist dort 0 oder <b>0x30 = 48 = 3 x 16</b>.</item>
+    /// </list>
+    ///
+    /// <para>Welche Teile das sind, sagt der Zeichner selbst @0x42ADBF: er
+    /// prueft das Fahrwerk (+0x0B) gegen <b>0x46, 0x47, 0x48</b> und meldet
+    /// sonst »Wrong chassis of ship«. Die uebrigen Teile des Bereichs (73..76,
+    /// 100..101) tragen ebenfalls 16 oder ein Vielfaches davon.</para>
+    /// </summary>
+    public const int ShipFacings = 16;
+
+    /// <summary>Die Teilenummern, die nach <see cref="ShipFacings"/> gezeichnet
+    /// werden. 70..72 sind die drei Ruempfe, die der Zeichner namentlich
+    /// prueft; 73..76 und 100..101 liegen im selben Bereich und tragen dieselbe
+    /// Bilderzahl.</summary>
+    public static bool IsShipPart(int comp)
+        => comp is >= 70 and <= 76 or 100 or 101;
+
     private const int PartTblOff = 7, PartTblSize = 0x25c;
     private const int AuxTblOff = 0x263, AuxTblSize = 1020;
     private const int FrameTblOff = 0x65f;

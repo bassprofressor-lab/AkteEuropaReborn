@@ -106,6 +106,115 @@ public sealed class ExeTables
     /// <summary>Where a component's sound class sits in its stats record.</summary>
     public const int StatsSoundClass = 0x1c;
 
+    /// <summary>
+    /// <b>DIE GESCHOSSTAFEL — und der Klangsatz ist nur EINE ihrer Spalten.</b>
+    ///
+    /// <para>Bis zum 19.08.2026 stand hier nur <see cref="FireSoundTable"/>
+    /// (0x4F98F2). Das ist <b>Feld +10</b> eines 22 Byte breiten Satzes, dessen
+    /// Anfang bei <b>0x4F98E8</b> liegt und der alles traegt, was ein Geschoss
+    /// ausmacht. Der Index ist derselbe: die Klangklasse aus dem Statssatz
+    /// (+0x1C) — sie ist in Wahrheit die <b>Geschossart</b>.</para>
+    ///
+    /// <code>
+    ///   +0x00  u16  Geschwindigkeit in Bildpunkten je TAKT   (5..35)
+    ///   +0x02  u16  Bildfolge des FLUGES        (30000 = keine)
+    ///   +0x06  u16  Bildfolge des EINSCHLAGS    (30000 = keine)
+    ///   +0x0A  u16  Schussklang (Grundzahl, das Spiel wuerfelt +0/+1)
+    ///   +0x0C  u16  Klang beim Einschlag, Modus 3
+    ///   +0x14  u8   Aufschlag auf die Lafettensuche (10..30)  -- s.u.
+    ///   +0x15  u8   seitlicher Versatz der ZWILLINGSLAFETTE (0/6/8/20)
+    /// </code>
+    ///
+    /// <para>Die uebrigen elf Bytes jeder Zeile sind auf allen 91 Zeilen
+    /// <b>null</b> — nachgezaehlt.</para>
+    ///
+    /// <para><b>Die Probe:</b> die Tafel ist in beiden GAME.EXE dieses Rechners
+    /// <b>Byte fuer Byte gleich</b> (91 x 22 = 2002 Byte). Das ist der Grund,
+    /// warum sie hier steht und nicht eine geratene Konstante.</para>
+    ///
+    /// <para><b>Wer welches Feld liest</b> — gesucht wurde nach der FORM, also
+    /// nach jedem Vorkommen der Absolutadresse im Codeabschnitt, und beide
+    /// GAME.EXE liefern dieselbe Anzahl Fundstellen je Feld:</para>
+    ///
+    /// <code>
+    ///   +0x00  0x451839, 0x451DB4                 (2 Stellen)
+    ///   +0x02  0x42B1AA, 0x42CCB1                 (2, der Zeichner)
+    ///   +0x06  0x4529E1 .. 0x453009               (8 Stellen)
+    ///   +0x0A  0x40C4D3, 0x4271AB, 0x4275AE       (3, der Klang)
+    ///   +0x0C  0x4048E6                           (1)
+    ///   +0x14  0x40BFA9, 0x453DEB                 (2)
+    ///   +0x15  0x40BFAF, 0x43B426, 0x453DFE       (3)
+    /// </code>
+    ///
+    /// <para>⚠⚠ <b>Was +0x14 IST und was es NICHT ist.</b> Am 19.08.2026 stand
+    /// hier zuerst »Muendungshoehe ueber Grund«. Das war mehr, als die
+    /// Fundstelle hergibt. Nachgelesen bei 0x40BFA9 gilt genau dies:</para>
+    ///
+    /// <code>
+    ///   0x40BDCF  push ecx / push eax    ; Zeiger auf Satz+1 und Satz+0
+    ///   0x40BDDA  call 0x40155F -> 0x435BD0   ; die LAFETTENSUCHE
+    ///   0x40BDE3  mov  [Satz+3], al           ; ihr Rueckgabewert
+    ///   ...
+    ///   0x40BF95  mov  bl, [Satz+3]
+    ///   0x40BFA7  mov  al, [ecx + 0x4F98FC]   ; ecx = Art*22, also +0x14
+    ///   0x40BFB3  add  bl, al                 ; AUFSCHLAG
+    ///   0x40BFB7  mov  [Satz+3], bl
+    /// </code>
+    ///
+    /// <para>Der Satz ab <c>esp+0x10</c> geht bei 0x40C35E an die Anlegeroutine
+    /// 0x401CCB. Von ihm ist gelesen: <b>+4/+5 sind die beiden Zellzahlen</b>
+    /// (im Zwillingszweig 0x40BFD1/D5 direkt aus Spalte und Zeile gefuellt),
+    /// <b>+0 ist der Bildpunkt in der Zelle</b> (wird bei 40 umgebrochen, und 40
+    /// ist die Kachelbreite), <b>+7 ist die Geschossart</b>. Feld +0x14 landet
+    /// also auf <b>keinem</b> davon.</para>
+    ///
+    /// <para>Damit bleibt: es ist ein <b>Aufschlag auf den Wert der
+    /// Lafettensuche</b>, je Geschossart 10..30. Ob dieser Wert eine Hoehe, eine
+    /// Zeichenebene oder ein Drittes ist, ist NICHT gelesen — die Lafettensuche
+    /// 0x435BD0 faechert ueber acht Richtungen auf und ist nicht zu Ende
+    /// verfolgt. Deshalb heisst das Feld hier <c>MountBias</c> und nicht
+    /// »Hoehe«.</para>
+    ///
+    /// <para>⚠ Nicht verwechseln mit SHOOT.CWT: die Datei gibt es, und sie wird
+    /// gelesen (Lader 0x4544F0 nach 0x87D6B0, benutzt vom ZEICHNER 0x42A188).
+    /// Sie traegt je Waffenbild vier Punkte. Die SCHUSSroutine 0x40BDC0 ruehrt
+    /// sie nicht an — beides sind verschiedene Wege, und keiner davon ist eine
+    /// »Rohrlaenge« im Sinne unseres <c>MuzzleReach</c>.</para>
+    /// </summary>
+    /// <summary>Die Marke »keine Folge« in den Feldern +0x02 und +0x06.
+    /// ANIM.CWA fuehrt 1000 Folgen (<see cref="AnimFile.SeqCount"/>) — 30000 ist
+    /// keine davon, sondern das Zeichen, dass es nichts zu zeichnen gibt.
+    /// Folge <b>0</b> dagegen ist echt und wird benutzt.</summary>
+    public const int KeineFolge = 30000;
+
+    public const uint ProjectileTable = 0x4f98e8;
+    public const int ProjectileRows = 91;
+
+    /// <summary>Wo die Geschosstafel in DIESEM Programmstand anfaengt — zehn
+    /// Byte vor dem Klangfeld, das ohnehin schon gesucht und verschoben
+    /// wird.</summary>
+    public uint ProjectileBase => FireSoundBase - 10;
+
+    public readonly record struct Projectile(int Speed, int Flight, int Impact,
+                                             int FireSound, int HitSound,
+                                             int MountBias, int Twin);
+
+    /// <summary>Die ganze Tafel, Zeile fuer Zeile. Eine Zeile, die sich nicht
+    /// lesen laesst, kommt als lauter Nullen zurueck — nie als geratene
+    /// Zahl.</summary>
+    public Projectile[] Projectiles()
+    {
+        var v = new Projectile[ProjectileRows];
+        for (int i = 0; i < ProjectileRows; i++)
+        {
+            var r = Read((uint)(ProjectileBase + i * FireSoundStride), FireSoundStride);
+            if (r.Length < FireSoundStride) continue;
+            int W(int o) => r[o] | (r[o + 1] << 8);
+            v[i] = new Projectile(W(0), W(2), W(6), W(10), W(12), r[20], r[21]);
+        }
+        return v;
+    }
+
     /// <summary>Das ZWEITE Wort jeder Zeile des Klangsatzes (+0x02).
     ///
     /// <para>Es ist ebenfalls eine Klang-Nummer, keine Bildfolge. Belegt

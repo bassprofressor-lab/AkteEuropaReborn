@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Rendering;
+﻿namespace AkteEuropaReborn.Rendering;
 
 using Godot;
 
@@ -62,7 +62,11 @@ public partial class MapEntityLayer
             if (versatz == Vector2.Zero) ohneAufsatz++;
 
             string waffe = e.Weapon == 0 ? "keine" : WeaponOf(e.Weapon).Name;
-            string rak = RocketKind(e.Weapon) is { } r ? $", Rakete \"{r}\"" : "";
+            // 19.08.2026: RocketKind ist weg, die Geschosstafel entscheidet.
+            // Der Pruefstand nennt jetzt die ART mit, denn sie ist es, an der
+            // sich Flugbild, Tempo und Einschlag aufhaengen.
+            int art = Simulation.DesignMath.SoundClass(WeaponRowOf(e.Weapon));
+            string rak = FlightKind(art) is { } r ? $", Art {art}, Flugbild \"{r}\"" : $", Art {art}, ohne Flugbild";
             sb.AppendLine($"  Rumpf {e.UnitType} \"{e.Name}\" Zelle ({e.Col},{e.Row}) " +
                           $"Waffe {e.Weapon} = {waffe}{rak}");
             sb.AppendLine($"    Zellmitte ({mitte.X:0},{mitte.Y:0})  " +
