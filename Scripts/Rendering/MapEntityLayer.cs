@@ -17959,6 +17959,11 @@ public partial class MapEntityLayer : Node2D
             // (4) ZULETZT die aufragenden Kacheln dieser Zeile. Das ist der
             // ganze Unterschied: hier lagen sie bisher VOR den Einheiten.
             DrawObjectsUpTo(r, ref oi);
+            // (5) und ganz zum Schluss die FLAMMEN dieser Zeile — das Original
+            // reiht sie in das Fach der naechsten Zeile ein (`inc bx`
+            // @0x42E6FC), sie liegen damit ueber allen Kacheln ihrer eigenen
+            // Zeile. Siehe MapObjects.FlammenZeichnen.
+            FlammenZeichnen();
         }
 
         // ⚠ Was hier vom früheren Aufbau NICHT übernommen wurde und warum:
@@ -17970,6 +17975,10 @@ public partial class MapEntityLayer : Node2D
         DrawRailUpTo(int.MaxValue, ref at);
         DrawObjectsUpTo(int.MaxValue, ref oi);
         DrawUnitsUpTo(int.MaxValue, ref ui);
+        // ⚠ Auch der Nachzuegler-Durchgang braucht seinen Flammenabschluss —
+        // sonst blieben die Flammen der letzten Zeile vorgemerkt liegen und
+        // wuerden im naechsten Bild doppelt gezeichnet.
+        FlammenZeichnen();
     }
 
     /// <summary>

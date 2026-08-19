@@ -377,16 +377,22 @@ public partial class BriefingScreen : CanvasLayer
         // unberuehrt und behaelt seine scharfen ganzen Stufen.
         if (font is FontFile ff) ff.FixedSizeScaleMode = TextServer.FixedSizeScaleMode.Enabled;
 
-        // the mission's name on the picture's own header strip
-        var head = new Label
-        {
-            Text = _title.ToUpperInvariant(),
-            Position = at + new Vector2(PlateX * scale, (PlateY - 26) * scale),
-            Size = new Vector2(PlateW * scale, 22 * scale),
-            HorizontalAlignment = HorizontalAlignment.Center,
-        };
-        Style(head, font, scale, head: true);
-        AddChild(head);
+        // ⚠⚠ 19.08.2026 — DER EIGENE TITELSTREIFEN IST WEG, und er war die
+        // Ursache des gemeldeten Fehlers.
+        //
+        // Gemeldet: »im Kampagnen-Preview ist der Titel 01 - Airborne Ambush
+        // überdeckt vom Text«. Das habe ich mir selbst eingebrockt: der Streifen
+        // sass bei `PlateY − 26` = 53, und als der Textkasten kurz zuvor auf die
+        // gelesene Stelle y = 50 wanderte, lagen beide uebereinander.
+        //
+        // Die Kur ist aber nicht, den Streifen zu verschieben — es gibt ihn im
+        // Original gar nicht. Der Titel ist dort schlicht die ERSTE ZEILE
+        // desselben Textes: linksbuendig bei x = 320, y = 50, in gemischter
+        // Schreibung, in derselben Schrift und Farbe wie der Rest. Er laeuft
+        // durch dieselbe Zeichenschleife (@0x486759) wie jede andere Zeile.
+        //
+        // Er steht deshalb jetzt als erste Zeile im Fliesstext (siehe unten) —
+        // damit verschwindet auch die Grossschreibung, die von uns war.
 
         // ⚠⚠ 19.08.2026 — DER TEXTKASTEN IST NICHT DIE WEISSE PLATTE.
         //
@@ -422,9 +428,13 @@ public partial class BriefingScreen : CanvasLayer
         };
         AddChild(scroll);
 
+        // Der Titel als ERSTE ZEILE des Textes — siehe oben, wo der eigene
+        // Streifen weggefallen ist. Eine Leerzeile dahinter, damit er sich vom
+        // Fliesstext absetzt; das ist unsere Zutat, das Original trennt nur
+        // durch den Zeilenwechsel.
         var body = new Label
         {
-            Text = string.Join("\n\n", _paragraphs),
+            Text = _title + "\n\n" + string.Join("\n\n", _paragraphs),
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
             CustomMinimumSize = new Vector2(TxtW * scale, 0),
         };

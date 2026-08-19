@@ -214,7 +214,9 @@ public partial class MapEntityLayer
                 // (das ist der Kacheltausch aus zapal @0x4CACE5), und die
                 // Flamme läuft darüber.
                 DrawTextureRectRegion(_objTex, new Rect2(e.KohleZiel, e.KohleSrc.Size), e.KohleSrc);
-                Flamme(e);
+                // ⚠⚠ 19.08.2026, DRITTE BERICHTIGUNG — die Flamme wird hier
+                // nur VORGEMERKT, nicht gezeichnet. Siehe FlammenZeichnen.
+                _flammen.Add(e);
             }
             else
             {
@@ -242,6 +244,52 @@ public partial class MapEntityLayer
     /// ausgespielt, wir nehmen für alle 550. Und der Bildzähler des Originals
     /// ist sein Spielschritt; wir rechnen mit
     /// <see cref="FlammenSekunden"/> Sekunden je Bild.</para></summary>
+    /// <summary>Die Flammen, die in dieser Zeile noch zu zeichnen sind.</summary>
+    private readonly List<Kartenobjekt> _flammen = new();
+
+    /// <summary>
+    /// <b>DIE FLAMMEN EINER ZEILE, NACH DEREN KACHELN</b> — und das war der
+    /// dritte Anlauf auf denselben gemeldeten Fehler.
+    ///
+    /// <para>⚠⚠ 19.08.2026, dreimal gemeldet: »das Feuer auf den Bäumen passt
+    /// noch nicht«. Erst stand die Flamme neben ihrem Baum (falscher
+    /// Bezugspunkt), dann sass sie richtig, war aber <b>teilweise verdeckt</b> —
+    /// und genau das hatte der Spieler schon beim ersten Mal beschrieben:
+    /// »als wären andere Bäume darüber gesetzt«.</para>
+    ///
+    /// <para><b>Er hatte recht, und die Ursache ist ein einziger Befehl.</b> Der
+    /// Einreiher der Flamme (C 0x42E6D0, F 0x42D890) liest die Waldtafel
+    /// (0xBFF3E0, drei Byte je Eintrag), nimmt nur Einträge mit Zustand &gt; 1
+    /// (also brennende) — und macht dann:</para>
+    ///
+    /// <code>
+    ///   0x42E6E9  al = byte[esi]      ; Spalte
+    ///   0x42E6EB  bl = byte[esi+1]    ; Zeile
+    ///   0x42E6FC  inc bx              ; ⚠ ZEILE + 1
+    /// </code>
+    ///
+    /// <para>Die Flamme kommt also ins Zeilenfach der <b>nächsten</b> Zeile.
+    /// Damit wird sie nach ALLEN Kacheln ihrer eigenen Zeile gezeichnet — auch
+    /// nach den Bäumen, die in der Liste hinter ihr stehen. Bei uns lief sie
+    /// mitten in der Kachelschleife und wurde von jedem späteren Baum derselben
+    /// Zeile überdeckt.</para>
+    ///
+    /// <para>Die Zeile +1 hebt sich in der y-Rechnung wieder auf: der Einreiher
+    /// rechnet <c>bx*20 − (Kamera + 20)</c> mit der ERHÖHTEN Zeile, und die 20
+    /// nimmt sie wieder zurück. Der Versatz gegen die Kachel bleibt −18/−20 wie
+    /// gehabt. Das +1 wirkt also <b>nur auf die Zeichenreihenfolge</b> — es ist
+    /// kein Positionsfehler, sondern ein Reihenfolgefehler, und darum sah die
+    /// Flamme richtig platziert und trotzdem falsch aus.</para>
+    ///
+    /// <para>Beide GAME.EXE tragen dieselbe Form (`mov esi, &lt;Waldtafel&gt;`
+    /// gefolgt von `inc bx` im selben Fenster).</para>
+    /// </summary>
+    private void FlammenZeichnen()
+    {
+        foreach (var e in _flammen) Flamme(e);
+        _flammen.Clear();
+    }
+
     private void Flamme(Kartenobjekt e)
     {
         // ⚠ 19.08.2026 — ZWEI FLAMMEN, nach der Parität des Index. Der Zeichner
