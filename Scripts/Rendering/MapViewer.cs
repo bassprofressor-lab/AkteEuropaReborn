@@ -481,6 +481,12 @@ public partial class MapViewer : Node2D
             return;
         }
         if (_abbruchCheck > 0f) { AbbruchCheckGo(); return; }
+        if (_befehlCheck)
+        {
+            GD.Print(_entities.BefehlCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_auswahlCheck)
         {
             GD.Print(_entities.AuswahlCheck());
@@ -882,6 +888,7 @@ public partial class MapViewer : Node2D
                 _tickCheck = a.Contains('=') ? a[(a.IndexOf('=') + 1)..].ToFloat() : 10f;
             else if (a == "--verdeck-check") _verdeckCheck = true;
             else if (a == "--auswahl-check") _auswahlCheck = true;
+            else if (a == "--befehl-check") _befehlCheck = true;
             else if (a == "--abbruch-check=alt")
             {
                 // ⚠ DIE GEGENPROBE: 60 s spielen, aber NICHT aufraeumen. Ohne
@@ -1349,6 +1356,7 @@ public partial class MapViewer : Node2D
     private float _abbruchCheck;
     private bool _verdeckCheck;
     private bool _auswahlCheck;
+    private bool _befehlCheck;
     private float _upTime;
 
     /// <summary>`--demo-leave=<n>` sends the demo's unit back where it came from

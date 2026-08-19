@@ -5662,6 +5662,21 @@ public partial class MapEntityLayer : Node2D
             if (q > 0)
             {
                 AddOrderMark(CellCenter(cell.Value.X, cell.Value.Y), attack: false);
+                // ⚠ 19.08.2026 — HIER FEHLTE DER BEFEHLSKLANG. Gemeldet:
+                // »Landeinheiten geben einen Sound, wenn man sie anklickt, aber
+                // nicht, wenn man ihnen einen Wegpunkt setzt — das machen die
+                // dort nämlich jedes Mal, wenn man sie wohin bewegt.«
+                //
+                // Der einfache Zug ein Stück weiter unten sprach schon, und der
+                // ANGRIFF spricht auch für angereihte Befehle (dort läuft alles
+                // durch dasselbe `n` bis ans Funktionsende). Nur dieser Zweig
+                // steigt vorher mit `return` aus — und nahm den Klang mit.
+                //
+                // Das Original macht keinen Unterschied: die Eingaberoutine
+                // ruft den Befehlsklang an VIER Stellen (0x437458, 0x43746A,
+                // 0x437581, 0x4375A8), und keine davon fragt, ob der Befehl
+                // angereiht wurde.
+                SpeakOrdered();
                 _order = $"angereiht -> ({cell.Value.X},{cell.Value.Y}): {q} Einheit(en)";
                 UpdatePanel();
                 QueueRedraw();
@@ -18257,6 +18272,64 @@ public partial class MapEntityLayer : Node2D
         sb.AppendLine(neuMax < altMax
             ? "   besser — der Kranz sitzt naeher an der Farbflaeche."
             : "   ⚠ NICHT BESSER. Die Umstellung bringt nichts und gehoert zurueckgenommen.");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// <b>`--befehl-check` — SAGT EINE EINHEIT ETWAS, WENN MAN SIE WOHIN
+    /// SCHICKT?</b>
+    ///
+    /// <para>⚠ 19.08.2026, gemeldet: »Landeinheiten geben einen Sound, wenn man
+    /// sie anklickt, aber nicht, wenn man ihnen einen Wegpunkt setzt — das
+    /// machen die dort nämlich jedes Mal, wenn man sie wohin bewegt.«</para>
+    ///
+    /// <para>Die Kette hat vier Glieder, und jedes kann still versagen:
+    /// <see cref="SpeakOrdered"/> wird gerufen → die Ansagen sind an →
+    /// <see cref="Audio.GameSounds.OrderVoice"/> liefert einen Platz ≥ 0 →
+    /// die Klangbank hat dort wirklich einen Klang
+    /// (<c>SoundBankPlayer.Stream</c> gibt sonst <c>null</c> zurück, und
+    /// <c>Play</c> steigt <b>lautlos</b> aus). Der Prüflauf geht alle vier
+    /// durch und nennt bei jedem die Zahl — ein »es tut nichts« ohne Angabe,
+    /// WO es nichts tut, hilft niemandem.</para>
+    /// </summary>
+    public string BefehlCheck()
+    {
+        var sb = new System.Text.StringBuilder();
+        var proTyp = new Dictionary<(int, int), (int Anzahl, int Platz, bool Klang)>();
+        int eigene = 0;
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != ViewPlayer) continue;
+            eigene++;
+            var schluessel = (e.GameUnitType, e.Chassis);
+            if (proTyp.ContainsKey(schluessel))
+            {
+                var v = proTyp[schluessel];
+                proTyp[schluessel] = (v.Anzahl + 1, v.Platz, v.Klang);
+                continue;
+            }
+            int platz = e.IsBuilding || e.Chassis < 0
+                ? Audio.GameSounds.OrderVoiceBuilding
+                : Audio.GameSounds.OrderVoice(e.GameUnitType, e.Chassis, e.Field28);
+            bool klang = platz >= 0 && Audio.SoundBankPlayer.Stream(platz) != null;
+            proTyp[schluessel] = (1, platz, klang);
+        }
+        sb.AppendLine($"befehl-check: {eigene} eigene Einheiten, {proTyp.Count} Bauarten");
+        sb.AppendLine($"   Ansagen eingeschaltet: {(UI.Settings.Announcements ? "ja" : "NEIN — dann ist alles still")}");
+        int stumm = 0, ohneKlang = 0;
+        foreach (var kv in proTyp)
+        {
+            var (art, fahrwerk) = kv.Key;
+            var (n, platz, klang) = kv.Value;
+            if (platz < 0) stumm += n;
+            else if (!klang) ohneKlang += n;
+            sb.AppendLine($"   Gattung {art,2} Fahrwerk {fahrwerk,2}: {n,3} Stueck  " +
+                          (platz < 0 ? "KEIN Platz (OrderVoice gibt -1)"
+                                     : $"Platz {platz}  Klang {(klang ? "da" : "FEHLT in der Bank")}"));
+        }
+        sb.AppendLine(stumm == 0 && ohneKlang == 0
+            ? "   bestanden — jede Bauart hat einen Befehlsklang, und er liegt in der Bank."
+            : $"   ⚠ {stumm} Einheiten ohne Platz, {ohneKlang} mit Platz aber ohne Klang.");
         return sb.ToString();
     }
 

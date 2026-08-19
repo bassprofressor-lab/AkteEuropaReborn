@@ -244,7 +244,17 @@ public partial class MapEntityLayer
     /// <see cref="FlammenSekunden"/> Sekunden je Bild.</para></summary>
     private void Flamme(Kartenobjekt e)
     {
-        var bilder = EffectFrames("blast");
+        // ⚠ 19.08.2026 — ZWEI FLAMMEN, nach der Parität des Index. Der Zeichner
+        // @0x42B461 rechnet `edi = (index & 1) * 2 + 0x226` — also Folge 550
+        // oder 552. Beide haben sieben Bilder. Vorher brannten alle Bäume mit
+        // demselben Bild.
+        // ⚠ UNSER Ersatz für den Index: das Original nimmt die Nummer des Baums
+        // in der Waldtafel, wir die Zelle. Die Aufteilung ist dieselbe (halb
+        // halb, fest je Baum), die ZUORDNUNG ist es nicht — welcher Baum welche
+        // der beiden Flammen bekommt, weicht damit vom Original ab. Das ist
+        // sichtbar nur als anderes Muster, nicht als anderer Eindruck.
+        var bilder = EffectFrames((e.Col * 31 + e.Row) % 2 == 0 ? "blast" : "blast2");
+        if (bilder.Count == 0) bilder = EffectFrames("blast");
         if (bilder.Count == 0) return;
         // Der Index tut im Original zweierlei: er versetzt die PHASE, damit
         // nicht alle Bäume im Gleichschritt flackern, und er versetzt die Lage
@@ -276,15 +286,36 @@ public partial class MapEntityLayer
         //
         // Jetzt hängt die Flamme an der Kachel, die WIRKLICH gezeichnet wurde:
         // unten mittig auf ihr, mit dem seitlichen Versatz des Originals.
+        // ⚠⚠ 19.08.2026, ZWEITE BERICHTIGUNG — JETZT GELESEN STATT GESETZT.
+        //
+        // Der erste Versuch heute früh hängte die Flamme »unten mittig« an die
+        // Kachel. Das war besser als vorher (sie stand gar nicht auf ihrem
+        // Baum), aber es war UNSERE Regel. Gemeldet: »das Feuer hat noch nicht
+        // ganz gepasst.«
+        //
+        // Das Original sagt es selbst. Die Einreihstelle der Flamme (Art 12,
+        // C @0x42E7FF / F @0x42D9B6 — dieselbe Form, 22 Einreihstellen mit
+        // identischer Artenliste in beiden EXE) rechnet:
+        //
+        //     sub bx, 0x46      ; y − 70
+        //     sub cx, 0x12      ; x − 18
+        //     [Fach+6] = cx     ; x
+        //     [Fach+8] = bx     ; y
+        //
+        // und der Zeichner @0x42B474 addiert danach nur noch den seitlichen
+        // Versatz `(index mod 10) − 5`. Eine KACHEL derselben Zelle wird
+        // dagegen bei y − 0x32 (= −50) gesetzt (@0x4B42DF, dreimal wortgleich).
+        //
+        // Der Unterschied ist also **18 nach links und 20 nach oben gegenüber
+        // der Kachel** — und das ist eine relative Angabe, die unabhängig davon
+        // gilt, wie unser Backofen seinen Nullpunkt legt. Genau deshalb wird
+        // sie hier so verwendet und nicht in absolute Zahlen umgerechnet.
         var bild = bilder[phase];
-        Vector2 fuss = e.HatKohle
-            ? e.KohleZiel + new Vector2(e.KohleSrc.Size.X / 2f, e.KohleSrc.Size.Y)
-            : new Vector2(_ox + e.Col * TileW + TileW / 2f,
-                          _oy + e.Row * TileH - ElevOf(e.Col, e.Row) * 15);
-        // Der Index versetzt die Flamme im Original um bis zu 10 px seitlich —
-        // damit nicht alle Bäume gleich aussehen. Das bleibt.
-        DrawTexture(bild, fuss - new Vector2(bild.GetSize().X / 2f - (idx % 10 - 5),
-                                             bild.GetSize().Y));
+        Vector2 kachel = e.HatKohle
+            ? e.KohleZiel
+            : new Vector2(_ox + e.Col * TileW,
+                          _oy + e.Row * TileH - ElevOf(e.Col, e.Row) * 15 - 50);
+        DrawTexture(bild, kachel + new Vector2(-18 + (idx % 10 - 5), -20));
     }
 
     /// <summary>Wie lange ein Flammenbild steht. Das Original springt alle ZWEI

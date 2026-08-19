@@ -279,6 +279,14 @@ public sealed class InterfaceExporter
     private static readonly (string Name, int Seq)[] Picked =
     {
         ("muzzle", 232), ("explosion", 48), ("blast", 550), ("wreck", 0),
+        // ⚠ 19.08.2026 — DIE ZWEITE FLAMME. Der Zeichner des Originals
+        // @0x42B461 rechnet `edi = (index & 1) * 2 + 0x226`, also **550 ODER
+        // 552** je nachdem, ob der Tafelindex des Baums gerade oder ungerade
+        // ist. Beide Folgen haben in ANIM.CWA sieben Bilder (550 ab Bild 1459,
+        // 552 ab 1473; die 551 dazwischen ist ebenfalls belegt, wird von DIESEM
+        // Weg aber nicht gerufen). Wir hatten nur die eine — damit flackerten
+        // alle brennenden Baeume mit demselben Bild.
+        ("blast2", 552),
         // ⚠ 18.08.2026 — DAS FEUER. Gemeldet als »in Original Kampagne 1 gibt
         // es z.B. von Haus aus ein paar brennende Baeume, die haben wir
         // garnicht«. Die Folge 82 ist NICHT geraten: die Trefferroutine Zasah
