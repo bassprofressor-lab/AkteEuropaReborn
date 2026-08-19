@@ -1227,3 +1227,37 @@ nicht — dafür bräuchte jede Nummer noch eine Lesung der umgebenden Funktion.
 Ein Klang an der falschen Stelle ist hörbarer Unsinn und schlimmer als keiner.
 Wer weitermacht, fängt bei 124/125 an: die Summe über `0x878AB0` zu benennen
 klärt zwei Nummern auf einmal.
+
+---
+
+## N. ⭐ Sektion 20 ist vollständig erklärt (19.08.2026)
+
+Das Lagenbyte über 100 war bisher »Brücken und Rampen« — ohne zu wissen,
+welche. Es ist mehr als das: **es ist die Platznummer.**
+
+| Lagenbyte | bedeutet |
+|---|---|
+| 0 | zeichnen (gewöhnlicher Boden) |
+| 1…99 | im verzahnten Durchgang überspringen |
+| **100 + n** | **Brücke/Mole Nr. n aus sec17** |
+| **200 + n** | **Rampe Nr. n aus sec21** |
+
+**GEMESSEN über beide Datenträger, ohne eine einzige Ausnahme:**
+
+* `sec20[spalte·256 + zeile] == 100 + Platznummer` — **110 von 110** Brücken
+  auf 21 Karten.
+* dasselbe mit 200 für die Rampen — **85 von 85** auf 12 Karten.
+
+Damit ist die Zuordnung *Zelle → Bauwerk* geschenkt: wer auf einer Zelle steht,
+weiß ohne Suche, welche Brücke oder Rampe das ist — und über sec17/sec21 auch
+deren Trefferpunkte (500 bzw. 200) und Länge.
+
+⚠ **Mein eigener Fehlschlag auf dem Weg dorthin, und er ist lehrreich.** Der
+erste Vergleich ergab **null** Überschneidung zwischen sec21 und den Zellen mit
+Lagenbyte ≥ 100 — ich hätte daraus »das sind verschiedene Dinge« geschlossen.
+Der Grund war, dass mein Prüfscript `zeile·256 + spalte` rechnete, während der
+Index `spalte·256 + zeile` ist. Der Code war die ganze Zeit richtig; **falsch
+war der Prüfstand**. Ein Nullbefund aus einem selbstgeschriebenen Vergleich
+gehört an einem bekannten Fall geeicht, bevor man ihm glaubt — hier hätte ein
+Blick auf die eine Zelle (43,37) gereicht, die der Laufzeit-Prüfstand schon
+gemeldet hatte.
