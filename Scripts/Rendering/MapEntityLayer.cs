@@ -3099,10 +3099,16 @@ public partial class MapEntityLayer : Node2D
     /// weil mehrere Aufrufer sie mitgeben; sie sind wirkungslos geworden. Wer
     /// sie entfernt, muss alle Aufrufer anfassen — das gehört in einen eigenen
     /// Durchgang und nicht hierher.</para></summary>
-    private void DrawSelectionBrackets(Vector2 c, bool primary, float hw = 13f, float hh = 8f)
+    /// <remarks>⚠ 19.08.2026 — <paramref name="mitte"/> IST JETZT DIE MITTE.
+    /// Vorher kam hier der Bodenpunkt herein und die Methode zog selbst
+    /// <see cref="SelMarkLift"/> ab. Das war ein fester Hub gegen einen Punkt,
+    /// der mit dem Bild gar nichts zu tun hat — siehe
+    /// <see cref="AuswahlMitte"/>, wo die Zahlen stehen. Wer den Hub braucht
+    /// (Gebäude, Rückfall ohne Bilder), zieht ihn beim AUFRUF ab; so steht an
+    /// jeder Stelle, welchen Punkt sie meint.</remarks>
+    private void DrawSelectionBrackets(Vector2 mitte, bool primary, float hw = 13f, float hh = 8f)
     {
         var col = primary ? new Color(1f, 1f, 1f, 1f) : new Color(1f, 1f, 1f, 0.65f);
-        var mitte = c - new Vector2(0, SelMarkLift);
         float w = primary ? 2f : 1.5f;
 
         // je Richtung: die Spitze aussen, zwei Arme schraeg zurueck nach innen
@@ -3493,6 +3499,105 @@ public partial class MapEntityLayer : Node2D
     {
         var size = new Vector2(TileW * Mathf.Max(1, e.FootW), TileH * Mathf.Max(1, e.FootH));
         return new Rect2(e.Pos - size / 2f, size);
+    }
+
+    /// <summary>
+    /// <b>WORUM DIE AUSWAHLMARKIERUNG STEHEN SOLL</b> — um das BILD, nicht um
+    /// den Bodenpunkt.
+    ///
+    /// <para>⚠ 19.08.2026, gemeldet mit Bildschirmfoto: »diese originale
+    /// Markierung um die Einheiten sitzt noch nicht ganz mittig«. Am Foto
+    /// nachgemessen (Massstab 1,625, gewonnen am Rahmen des Lebensbalkens: 26
+    /// Bildpunkte für die gezeichneten 16): die vier Winkel stehen bei x 252…314,
+    /// Mitte <b>283,0</b> — und der Balkenrahmen bei x 271…296, Mitte
+    /// <b>283,5</b>. Die Markierung sass also <b>genau auf
+    /// <see cref="Entity.Pos"/></b>, und das war das Problem, nicht die
+    /// Lösung.</para>
+    ///
+    /// <para><c>--stempel-check</c> nennt die Zahl: zwischen <c>Pos</c> und der
+    /// sichtbaren Bildfläche liegen bei einzelligen Einheiten im Mittel
+    /// <b>6,7</b> und bis zu <b>11</b> Bildpunkte waagerecht, senkrecht im
+    /// Mittel <b>19,5</b>. Ein Kranz um <c>Pos</c> steht damit zwangsläufig
+    /// daneben.</para>
+    ///
+    /// <para><b>Und so macht es das Original.</b> Bei gesetztem <c>OZNACEN</c>
+    /// (Satz +0x1B) blittet es @0x42AA88 ein Sprite auf <c>(x−7, y−18)</c>,
+    /// wobei <c>x,y</c> <b>derselbe Zeichenpunkt ist, an dem auch das
+    /// Einheitenbild hängt</b> (Zeilenfach, Satz +6/+8). Die Markierung hängt
+    /// im Original also am BILD. Genau das wird hier nachgezogen.</para>
+    ///
+    /// <para>⚠ <b>Genommen wird die geometrische Mitte des Bildes, nicht die
+    /// Mitte der sichtbaren Farbe.</b> Die Farbfläche verschiebt sich mit jeder
+    /// Blickrichtung — ein Kranz, der ihr folgt, würde beim Drehen zappeln. Das
+    /// Original hat einen festen Versatz, also nehmen wir auch einen.</para>
+    ///
+    /// <para>⚠ WAS OFFEN BLEIBT: die Grösse der Markierung selbst. Das Original
+    /// zeichnet ein Sprite, wir zeichnen vier Linien; siehe
+    /// <see cref="DrawSelectionBrackets"/> und OFFENE_FRAGEN.md.</para>
+    /// </summary>
+    private Vector2 AuswahlMitte(Entity e)
+    {
+        var tex = AuswahlBild(e);
+        // Ohne Bild bleibt es beim Bodenpunkt samt gemessenem Hub — dort ist der
+        // Rueckfall ohnehin nur ein Punkt, und der sitzt auf Pos.
+        if (tex == null) return e.Pos - new Vector2(0, SelMarkLift);
+        return PictureAnchor(e) - ComposedAnchor + KoerperMitte(tex);
+    }
+
+    private Texture2D? AuswahlBild(Entity e)
+        => e.Infantry >= 0
+            ? GetInfantryTexture(e.Infantry, e.Facing, InfBlock(e))
+            : GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e.Col, e.Row))
+              ?? GetComposedTexture(e.Combo, e.Facing);
+
+    private static readonly Dictionary<ulong, Vector2> _koerperMitte = new();
+
+    /// <summary>
+    /// <b>Die Mitte des FAHRZEUGS in seinem Bild</b> — ohne Leinwandrand und
+    /// <b>ohne den Schatten</b>.
+    ///
+    /// <para>⚠ 19.08.2026, und der erste Versuch war messbar falsch. Zuerst
+    /// stand hier die geometrische Mitte der Leinwand (<c>Größe / 2</c>). Der
+    /// Prüflauf <c>--auswahl-check</c> hat sie verworfen: auf Kampagne 5 wurde
+    /// der mittlere Abstand zur Farbfläche dadurch <b>schlechter</b> (|dx| 8,4
+    /// → 9,8, größter Abstand 20,7 → 22,1). Unsere zusammengesetzten Bilder
+    /// legen das Fahrzeug nicht mittig auf die 64×64-Leinwand.</para>
+    ///
+    /// <para><b>Warum der Schatten draussen bleibt.</b> Er gehört zum Bild, aber
+    /// nicht zum Fahrzeug: er liegt nach rechts unten versetzt und zöge die
+    /// Mitte dorthin. Gemeldet war »sitzt nicht ganz mittig <b>um die
+    /// Einheit</b>« — und die Einheit ist der helle Teil. Ausgeschlossen werden
+    /// deshalb Punkte, die fast schwarz sind.</para>
+    ///
+    /// <para>Einmal je Bild gerechnet und gemerkt: es hängt allein am Bild, und
+    /// dasselbe Bild kommt bei jeder Einheit desselben Typs und derselben
+    /// Blickrichtung wieder. Damit wackelt der Kranz auch nicht — er ändert
+    /// sich genau dann, wenn sich das Bild ändert.</para>
+    /// </summary>
+    private static Vector2 KoerperMitte(Texture2D tex)
+    {
+        ulong id = tex.GetRid().Id;
+        if (_koerperMitte.TryGetValue(id, out var fertig)) return fertig;
+        var mitte = tex.GetSize() / 2f;
+        var img = tex.GetImage();
+        if (img != null)
+        {
+            int x0 = int.MaxValue, y0 = int.MaxValue, x1 = int.MinValue, y1 = int.MinValue;
+            for (int y = 0; y < img.GetHeight(); y++)
+                for (int x = 0; x < img.GetWidth(); x++)
+                {
+                    var c = img.GetPixel(x, y);
+                    if (c.A <= 0.3f) continue;
+                    if (c.R + c.G + c.B < 0.45f) continue;      // Schatten
+                    if (x < x0) x0 = x;
+                    if (x > x1) x1 = x;
+                    if (y < y0) y0 = y;
+                    if (y > y1) y1 = y;
+                }
+            if (x1 >= x0) mitte = new Vector2((x0 + x1 + 1) / 2f, (y0 + y1 + 1) / 2f);
+        }
+        _koerperMitte[id] = mitte;
+        return mitte;
     }
 
     /// <summary>
@@ -18085,6 +18190,76 @@ public partial class MapEntityLayer : Node2D
         return sb.ToString();
     }
 
+    /// <summary>
+    /// <b>`--auswahl-check` — SITZT DER KRANZ AUF DER EINHEIT?</b>
+    ///
+    /// <para>⚠ 19.08.2026, gemeldet mit Bildschirmfoto: »die Markierung sitzt
+    /// noch nicht ganz mittig«. Er hat recht, und bis heute gab es keine Zahl
+    /// dafür — die vier Winkel hingen an <see cref="Entity.Pos"/>, dem
+    /// Bodenpunkt, und das Bild hängt woanders.</para>
+    ///
+    /// <para><b>Wogegen gemessen wird und warum das nicht rundläuft.</b> Der
+    /// Massstab ist die Mitte der <b>gesamten</b> sichtbaren Farbfläche,
+    /// <b>Schatten eingeschlossen</b>. <see cref="AuswahlMitte"/> rechnet
+    /// dagegen <b>ohne</b> Schatten. Beide Punkte sind also verschieden
+    /// definiert — der Prüflauf rechnet nicht nach, was der Zeichner tut, er
+    /// hält zwei unabhängige Antworten nebeneinander.</para>
+    ///
+    /// <para>⚠ Er hat die erste Fassung dieser Umstellung auch prompt
+    /// <b>verworfen</b>: mit der geometrischen Leinwandmitte wurde der mittlere
+    /// Abstand auf Kampagne 5 schlechter statt besser. Erst die
+    /// schattenfreie Farbfläche bestand.</para>
+    /// </summary>
+    public string AuswahlCheck()
+    {
+        var sb = new System.Text.StringBuilder();
+        int n = 0;
+        double altX = 0, altY = 0, neuX = 0, neuY = 0, altMax = 0, neuMax = 0;
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Dead) continue;
+            var tex = e.Infantry >= 0
+                ? GetInfantryTexture(e.Infantry, e.Facing, InfBlock(e))
+                : GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e.Col, e.Row))
+                  ?? GetComposedTexture(e.Combo, e.Facing);
+            if (tex == null) continue;
+            var img = tex.GetImage();
+            if (img == null) continue;
+            int x0 = int.MaxValue, y0 = int.MaxValue, x1 = int.MinValue, y1 = int.MinValue;
+            for (int y = 0; y < img.GetHeight(); y++)
+                for (int x = 0; x < img.GetWidth(); x++)
+                    if (img.GetPixel(x, y).A > 0.3f)
+                    {
+                        if (x < x0) x0 = x;
+                        if (x > x1) x1 = x;
+                        if (y < y0) y0 = y;
+                        if (y > y1) y1 = y;
+                    }
+            if (x1 < x0) continue;
+            var ecke = PictureAnchor(e) - ComposedAnchor;
+            var farbe = ecke + new Vector2((x0 + x1 + 1) / 2f, (y0 + y1 + 1) / 2f);
+            var alt = e.Pos - new Vector2(0, SelMarkLift);
+            var neu = AuswahlMitte(e);
+            double ax = Mathf.Abs(alt.X - farbe.X), ay = Mathf.Abs(alt.Y - farbe.Y);
+            double nx = Mathf.Abs(neu.X - farbe.X), ny = Mathf.Abs(neu.Y - farbe.Y);
+            altX += ax; altY += ay; neuX += nx; neuY += ny;
+            altMax = Mathf.Max(altMax, Mathf.Sqrt(ax * ax + ay * ay));
+            neuMax = Mathf.Max(neuMax, Mathf.Sqrt(nx * nx + ny * ny));
+            n++;
+        }
+        if (n == 0)
+            return "auswahl-check: ⚠ NICHT GEMESSEN — keine Einheit mit Bild auf dieser Karte.\n";
+        sb.AppendLine($"auswahl-check: {n} Einheiten mit Bild");
+        sb.AppendLine($"   ALT (Pos − Hub {SelMarkLift:0}):  |dx| {altX / n:0.0}  |dy| {altY / n:0.0}" +
+                      $"   groesster Abstand {altMax:0.0}");
+        sb.AppendLine($"   NEU (Bildmitte):        |dx| {neuX / n:0.0}  |dy| {neuY / n:0.0}" +
+                      $"   groesster Abstand {neuMax:0.0}");
+        sb.AppendLine(neuMax < altMax
+            ? "   besser — der Kranz sitzt naeher an der Farbflaeche."
+            : "   ⚠ NICHT BESSER. Die Umstellung bringt nichts und gehoert zurueckgenommen.");
+        return sb.ToString();
+    }
+
     private void DrawUnitsUpTo(int row, ref int idx)
     {
         while (idx < _unitDraw.Count && _entities[_unitDraw[idx]].Row < row)
@@ -23304,7 +23479,11 @@ public partial class MapEntityLayer : Node2D
                 // C23). Wer hier etwas ergänzt, prüfe zuerst, ob es in den
                 // verzahnten Durchgang gehört.
                 if (TuerenSpaet) DrawBuildingDoors(e);
-                if (_sel.Contains(i)) DrawSelectionBrackets(e.Pos, i == _selected, 15f, 10f);
+                // Gebaeude behalten den gemessenen Hub gegen den Bodenpunkt —
+                // fuer sie ist die Bildmitte nicht ausgerechnet.
+                if (_sel.Contains(i))
+                    DrawSelectionBrackets(e.Pos - new Vector2(0, SelMarkLift),
+                                          i == _selected, 15f, 10f);
                 continue;
             }
 
@@ -23328,7 +23507,7 @@ public partial class MapEntityLayer : Node2D
             // Gebäude verschwindet, macht das Spiel schlechter.
             if (e.Target >= 0 && _sel.Contains(i))
                 DrawLine(baseC, _entities[e.Target].Pos, new Color(1f, 0.4f, 0.3f, 0.5f), 1f);
-            if (_sel.Contains(i)) DrawSelectionBrackets(baseC, i == _selected);
+            if (_sel.Contains(i)) DrawSelectionBrackets(AuswahlMitte(e), i == _selected);
 
             // ⚠ 17.08.2026 — DER RUMPF IST HIER RAUS (Fehler C23). Er wird im
             // zeilenweisen Durchgang gezeichnet, damit ein Gebäude ihn verdecken

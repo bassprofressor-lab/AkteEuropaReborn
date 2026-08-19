@@ -253,9 +253,38 @@ public partial class MapEntityLayer
         int idx = e.Col * 31 + e.Row;
         int phase = (int)(DebugClock / FlammenSekunden + idx) % bilder.Count;
         if (phase < 0) phase += bilder.Count;
-        DrawTexture(bilder[phase],
-                    new Vector2(_ox + e.Col * TileW + idx % 10 - 5,
-                                _oy + e.Row * TileH - ElevOf(e.Col, e.Row) * 15));
+
+        // ⚠⚠ 19.08.2026 — DIE FLAMME STAND NEBEN IHREM BAUM.
+        //
+        // Gemeldet mit Bildschirmfoto: »links bei dem einen Feuer sieht es aus,
+        // als wären andere Bäume darüber gesetzt, deswegen ist das teils
+        // verdeckt«. Der Spieler hat richtig gesehen, dass etwas nicht stimmt,
+        // die Ursache ist aber eine andere: die Flamme lag gar nicht auf ihrem
+        // Baum.
+        //
+        // Hier stand `_ox + Col*TileW`, `_oy + Row*TileH − Hoehe*15` — die Lage
+        // wurde also aus der Zelle NEU gerechnet, während die Baumkachel
+        // daneben ihre Lage vom Backofen bekommt (`bx`/`by` aus der Karten-JSON,
+        // einschliesslich Kachelanker −50). Zwei Rechenwege für dieselbe Zelle,
+        // und sie liefern nicht denselben Punkt.
+        //
+        // Dazu kam ein zweiter Fehler: `DrawTexture` setzt die LINKE OBERE ECKE
+        // auf den Punkt. Jeder andere Effekt in diesem Baum zieht vorher seinen
+        // Ankerpunkt ab (`fx.Pos − _fxAnchor[fx.Kind]`, siehe UpdateEffects) —
+        // dieser eine nicht. Bei »blast« (60×79) sind das 30 px nach rechts und
+        // 79 nach unten Versatz.
+        //
+        // Jetzt hängt die Flamme an der Kachel, die WIRKLICH gezeichnet wurde:
+        // unten mittig auf ihr, mit dem seitlichen Versatz des Originals.
+        var bild = bilder[phase];
+        Vector2 fuss = e.HatKohle
+            ? e.KohleZiel + new Vector2(e.KohleSrc.Size.X / 2f, e.KohleSrc.Size.Y)
+            : new Vector2(_ox + e.Col * TileW + TileW / 2f,
+                          _oy + e.Row * TileH - ElevOf(e.Col, e.Row) * 15);
+        // Der Index versetzt die Flamme im Original um bis zu 10 px seitlich —
+        // damit nicht alle Bäume gleich aussehen. Das bleibt.
+        DrawTexture(bild, fuss - new Vector2(bild.GetSize().X / 2f - (idx % 10 - 5),
+                                             bild.GetSize().Y));
     }
 
     /// <summary>Wie lange ein Flammenbild steht. Das Original springt alle ZWEI
