@@ -1369,6 +1369,34 @@ public sealed class ContentBuilder
         // ⚠ Die AUFRAGENDEN OBJEKTE: je Eintrag die Zelle (fuer das Zeilenfach)
         // und das Rechteck in der zweiten Ebene (zum Ausschneiden). Der
         // Zeichner braucht beides; sortiert wird bei ihm, nicht hier.
+        // ⭐ 19.08.2026 — DIE RAMPENZELLEN. Die zweite Rasterebene (Sektion 20,
+        // im Original nach 0x542E18 geladen) traegt je Zelle eine Zahl, und ab
+        // 100 bzw. 200 ist die Zelle eine RAMPE: >= 100 wird zum BELADEN
+        // geprueft (0x40950C, 0x409763), >= 200 zum ENTLADEN (0x409383,
+        // 0x4097B8). Ohne diese Liste kann der Transport nicht wissen, wo ein
+        // Schiff seine Ladung absetzen darf — die Laufzeit hat Sektion 20 sonst
+        // gar nicht.
+        //
+        // ⚠ Es sind wenige Zellen je Karte, deshalb eine schlichte Liste und
+        // keine zweite Ebene.
+        {
+            var rampen = new System.Text.StringBuilder();
+            int nr = 0;
+            for (int c = 0; c < b.Width; c++)
+                for (int r = 0; r < b.Height; r++)
+                {
+                    int lage = MapForest.Lage(m, c, r);
+                    if (lage < 100) continue;
+                    if (nr++ > 0) rampen.Append(',');
+                    rampen.Append($"{{\"col\":{c},\"row\":{r},\"lage\":{lage}}}");
+                }
+            if (nr > 0)
+            {
+                sb.Append("\"ramps_note\":\"Rampenzellen aus Sektion 20 (im Original ");
+                sb.Append("0x542E18): >= 100 zum Beladen, >= 200 zum Entladen.\",");
+                sb.Append("\"ramps\":[").Append(rampen).Append("],");
+            }
+        }
         if (b.Objects.Count > 0)
         {
             sb.Append("\"objects_note\":\"aufragende Objekte: die Zellen, deren BELEGUNG ");

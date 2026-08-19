@@ -852,3 +852,32 @@ Rampen)"*. Steht dort **0**, hat die Regel nicht gegriffen.
 
 **Was mir hülfe:** einmal `--reexport-maps=<CD-Pfad>` laufen lassen und mir die
 Zeile zeigen. Erwartet sind rund 578.
+
+### Der Transport — vorbereitet, aber ⚠ noch nicht gebaut
+
+Die Zahlen sind nachgeprüft, nicht übernommen. Ich habe die Laderoutine
+`0x4CEE80` selbst gelesen:
+
+```
+al = byte[einheit*78 + 0x6E2708]     ; Einheit +0x40 = ihr Transportplatz
+cl = byte[schiff*78  + 0x6E26D2]     ; +0x0A = Gattung
+  == 0 -> Fahrzeugzweig · == 1 -> Infanterie
+  sonst -> 'Wrong type of unit tries to go in transport ship'
+Fahrzeugzweig: al = byte[19*platz*2 + 0xBBFF1C] ; cmp al,0x0A ; jbe weiter
+```
+
+`19·2 = 38` ist die Schrittweite, und `0xBBFF1C − 0xBBFEF8 = 0x24` das
+Gewichtsfeld — beides deckt sich mit der Tiefenlesung. Grenze 10 für Fahrzeuge
+(+5 je Stück → drei), 14 für Infanterie (+1 → fünfzehn).
+
+⚠ **Warum er trotzdem nicht gebaut ist:** das Entladen hängt an den
+**Rampenmarken**, und die stehen in Sektion 20 — der Zeichenlage, die die
+Laufzeit **gar nicht kennt**. Ohne sie könnte ein Schiff nirgends absetzen.
+
+**Deshalb ist der erste Schritt jetzt gemacht:** der Kartenausgeber schreibt die
+Rampenzellen in die Meta (`ramps`, je Zelle mit ihrem Lagenbyte). Damit hat die
+Laufzeit die Daten, sobald neu eingelesen wurde — und dann ist der Transport
+eine überschaubare Sache.
+
+⚠⚠ Wie die Zeichenlage selbst: **wirkt erst nach `--reexport-maps` von den CDs.**
+
