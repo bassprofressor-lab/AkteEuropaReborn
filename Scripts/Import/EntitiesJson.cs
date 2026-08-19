@@ -47,6 +47,12 @@ public static class EntitiesJson
         /// <summary>Die FREIEN Vorkommen der Karte — sec38.
         /// Nicht zu verwechseln mit Deposits (sec28).</summary>
         public List<CwmExtra.TerraPlace> TerraPlaces = new();
+
+        /// <summary>Bruecken und Molen (sec17) sowie Rampen (sec21).
+        /// Die Platznummer ist der Schluessel: das Lagenbyte in Sektion 20
+        /// ist 100+Nr bzw. 200+Nr. Siehe CwmExtra.Bridges/Ramps.</summary>
+        public List<CwmExtra.Bridge> Bridges = new();
+        public List<CwmExtra.Ramp> Ramps = new();
         public List<CwmExtra.Player> Players = new();
         public List<CwmExtra.AirDesign> AirDesigns = new();
         public List<CwmExtra.ShipDesign> ShipDesigns = new();
@@ -78,6 +84,8 @@ public static class EntitiesJson
             RailCells = CwmExtra.RailCells(m),
             Transports = CwmExtra.TransportLoads(m),
             TerraPlaces = CwmExtra.TerraPlaces(m),
+            Bridges = CwmExtra.Bridges(m),
+            Ramps = CwmExtra.Ramps(m),
             Players = CwmExtra.Players(m),
             AirDesigns = CwmExtra.AirDesigns(m),
             ShipDesigns = CwmExtra.ShipDesigns(m),
@@ -342,6 +350,28 @@ public static class EntitiesJson
         // fuenfzehn Einheiten neben dem Schiff statt darin.
         // sec38 — die Stellen, auf die man eine Mine setzen darf. NICHT
         // dasselbe wie "deposits" (sec28, der Zustand vorhandener Minen).
+        // sec17/sec21 — nicht zum Zeichnen (das Gelaende traegt sie schon),
+        // sondern damit die Platznummer aus dem Lagenbyte etwas bedeutet.
+        w.Key("bridges").Arr();
+        foreach (var b in d.Bridges)
+        {
+            w.Obj();
+            w.Key("slot").Num(b.Slot); w.Key("col").Num(b.Col); w.Key("row").Num(b.Row);
+            w.Key("dir").Num(b.Dir); w.Key("len").Num(b.Len); w.Key("hp").Num(b.Hp);
+            w.End();
+        }
+        w.End();
+
+        w.Key("ramps_table").Arr();
+        foreach (var r in d.Ramps)
+        {
+            w.Obj();
+            w.Key("slot").Num(r.Slot); w.Key("col").Num(r.Col); w.Key("row").Num(r.Row);
+            w.Key("mark").Num(r.Mark); w.Key("count").Num(r.Count);
+            w.End();
+        }
+        w.End();
+
         w.Key("terra_places").Arr();
         foreach (var tp in d.TerraPlaces)
         {

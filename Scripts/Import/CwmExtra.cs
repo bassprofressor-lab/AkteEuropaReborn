@@ -972,6 +972,86 @@ public static class CwmExtra
         return list;
     }
 
+    // ---- sec17 / sec21: BRUECKEN, MOLEN UND RAMPEN --------------------------
+
+    /// <summary>
+    /// EIN BAUWERK AUF DEM WASSER — <b>sec17</b>, 100 Plaetze zu 24 Byte.
+    ///
+    /// <para>Zugriffsform <c>@0x421FA3</c>: <c>(i*3) &lt;&lt; 3</c> = Schrittweite 24.
+    /// Satz GEMESSEN: <c>+0x00/+0x01</c> Zelle, <c>+0x02</c> Richtung (0/1),
+    /// <c>+0x03..+0x11</c> ein <b>3x5-Kachelfeld</b> (die Laenge 1..3 nutzt drei
+    /// bis fuenf Spalten, der Rest steht auf Null), <c>+0x12</c> belegt,
+    /// <c>+0x13</c> Laenge, <c>+0x16</c> u16 Trefferpunkte.</para>
+    ///
+    /// <para>GEMESSEN ueber beide Datentraeger: <b>110 Bauwerke auf 21 Karten</b>,
+    /// Trefferpunkte 500 in 110 von 110.</para>
+    ///
+    /// <para>⚠ <b>Zum ZEICHNEN braucht man das nicht.</b> Das Kartenraster traegt
+    /// an diesen Zellen schon <c>10000 + Kachelnummer</c>; die Bruecke steht also
+    /// im Gelaende. Gebraucht wird der Abschnitt fuer den ZUSTAND — und dafuer,
+    /// dass <c>MapObjects.BauwerkAn</c> seine Nummer aufloesen kann.</para>
+    /// </summary>
+    public sealed class Bridge
+    {
+        public int Slot, Col, Row, Dir, Len, Hp;
+    }
+
+    public const int BridgeStride = 24, BridgeSlots = 100;
+
+    public static List<Bridge> Bridges(CwmFile m)
+    {
+        var list = new List<Bridge>();
+        var s = m.Sec(17);
+        if (s == null) return list;
+        int n = Math.Min(BridgeSlots, s.Length / BridgeStride);
+        for (int i = 0; i < n; i++)
+        {
+            int o = i * BridgeStride;
+            if (s[o + 0x12] == 0) continue;
+            list.Add(new Bridge
+            {
+                Slot = i, Col = s[o], Row = s[o + 1], Dir = s[o + 2],
+                Len = s[o + 0x13], Hp = BitConverter.ToUInt16(s, o + 0x16),
+            });
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// EINE RAMPE — <b>sec21</b>, 50 Plaetze zu 4 Byte. Behandler
+    /// <c>@0x4CBAB0</c> (»Destroy ramp«, 0x539754): <c>+0</c> Spalte,
+    /// <c>+1</c> Zeile, <c>+2</c> Marke (0xFF = frei), <c>+3</c> Zaehler.
+    ///
+    /// <para>GEMESSEN: <b>85 Rampen auf 12 Karten</b>. ⚠ Der leere Satz ist
+    /// <c>00 00 FF 00</c>, nicht Null — wer auf »alles Null« prueft, zaehlt
+    /// 50 von 50.</para>
+    /// </summary>
+    public sealed class Ramp
+    {
+        public int Slot, Col, Row, Mark, Count;
+    }
+
+    public const int RampStride = 4, RampSlots = 50, RampEmpty = 0xFF;
+
+    public static List<Ramp> Ramps(CwmFile m)
+    {
+        var list = new List<Ramp>();
+        var s = m.Sec(21);
+        if (s == null) return list;
+        int n = Math.Min(RampSlots, s.Length / RampStride);
+        for (int i = 0; i < n; i++)
+        {
+            int o = i * RampStride;
+            if (s[o + 2] == RampEmpty) continue;
+            list.Add(new Ramp
+            {
+                Slot = i, Col = s[o], Row = s[o + 1],
+                Mark = s[o + 2], Count = s[o + 3],
+            });
+        }
+        return list;
+    }
+
     // ---- sec38: DIE FREIEN TERRANIUM-VORKOMMEN ------------------------------
 
     /// <summary>
