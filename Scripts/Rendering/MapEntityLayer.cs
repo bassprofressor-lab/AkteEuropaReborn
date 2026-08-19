@@ -3671,6 +3671,68 @@ public partial class MapEntityLayer : Node2D
         return PictureAnchor(e) - ComposedAnchor + KoerperMitte(tex);
     }
 
+    /// <summary>Das Rumpfbauteil des U-Boots — <c>SPODEK</c> 74.</summary>
+    private const int UBootRumpf = 74;
+
+    /// <summary>Das Bauteil, das ein GETAUCHTES U-Boot zeigt: dieselbe
+    /// Silhouette als gerasterter blauer Schatten.</summary>
+    private const int UBootGetaucht = 77;
+
+    /// <summary>
+    /// <b>⭐ DAS U-BOOT TAUCHT — und das ist die einzige Sonderbehandlung
+    /// seines Rumpfes im ganzen Programm.</b>
+    ///
+    /// <para>⚠ 19.08.2026. Der Spieler: »ich kann mir nicht vorstellen, dass ein
+    /// U-Boot ohne Waffen kommt, dann waere es voellig nutzlos.« Die Entwurfstafel
+    /// bleibt dabei — <b>Waffe 0, ZBRAN 0, Munition 0</b>, dreifach belegt: die
+    /// Tafel selbst (Feld fuer Feld am Fertigungshandler 0x4B2B20 nachgezaehlt),
+    /// <b>104 Saetze</b> aus den dreizehn .DM-Missionen (64x »Submarine«, 40x
+    /// »U-Boot«, alle gleich), und die Enzyklopaedie des Spiels in eigenen
+    /// Worten (ENCYCLOG.TXT): »Recht schwache und <b>unbewaffnete</b> Einheit,
+    /// aber sehr wirkungsvoll wenn es darum geht, mit seinen Sonarsystemen
+    /// gegnerische Seepositionen auszuspionieren.«</para>
+    ///
+    /// <para><b>Nutzlos ist es trotzdem nicht — es TAUCHT.</b> Gelesen im
+    /// Zeichner, C 0x42ACBD / F 0x429EAB, und es ist die einzige Stelle im
+    /// Programm, die den Rumpf 74 gesondert behandelt (von 52 Zugriffen auf
+    /// SPODEK in jeder EXE steht nur bei dieser ein <c>cmp al,0x4A</c>):</para>
+    ///
+    /// <code>
+    ///   al = byte[+0x0B]                     ; SPODEK
+    ///   cmp al, 0x4A                         ; 74 = der U-Boot-Rumpf
+    ///   jne  weiter
+    ///   cl = byte[0x4FA284]                  ; der ZUSEHENDE Spieler
+    ///   cl = byte[0x87B155 + 40*zuseher + eigner]   ; die Buendnistafel
+    ///   test cl,cl / jne weiter              ; verbuendet -> normal zeichnen
+    ///   mov al, 0x4D                         ; 77 statt 74
+    ///  weiter:
+    /// </code>
+    ///
+    /// <para>Bauteil 77 ist aus ROBO.CWR ausgelesen und angesehen: <b>dieselbe
+    /// Silhouette wie 74, aber als duenn gerasterter blauer Schatten</b> — das
+    /// getauchte Boot. Beide haben 16 Bilder in einer Gruppe (74 ab 4136,
+    /// 77 ab 4184), Bild fuer Bild mit denselben Abmessungen.</para>
+    ///
+    /// <para>Der Eigner und seine Verbuendeten sehen also das Boot, alle
+    /// anderen nur den Schatten. Ein waffenloser Spaeher, den man nicht ohne
+    /// weiteres anklicken kann.</para>
+    ///
+    /// <para>⚠ WAS NICHT GELESEN IST: ob das getauchte Boot auch fuer die
+    /// ZIELWAHL unsichtbar ist. Belegt ist nur der Bildtausch; eine zweite
+    /// Sonderbehandlung des Rumpfes gibt es nicht. Wir tauschen deshalb nur das
+    /// Bild und lassen die Zielwahl, wie sie ist — steht in OFFENE_FRAGEN.md.</para>
+    /// </summary>
+    private Texture2D? GetauchtesBoot(Entity e)
+    {
+        if (e.Chassis != UBootRumpf) return null;
+        if (e.Owner is < 0 or > 7 || ViewPlayer is < 0 or > 7) return null;
+        // Eigner und Verbuendete sehen das echte Boot.
+        if (e.Owner == ViewPlayer) return null;
+        if (_haveAllies && _allied[ViewPlayer, e.Owner]) return null;
+        return LoadUnitPart("part", UBootGetaucht.ToString(), e.Facing)
+               ?? LoadUnitPart("part", UBootGetaucht.ToString(), 0);
+    }
+
     private Texture2D? AuswahlBild(Entity e)
         => e.Infantry >= 0
             ? GetInfantryTexture(e.Infantry, e.Facing, InfBlock(e))
@@ -24110,6 +24172,14 @@ public partial class MapEntityLayer : Node2D
                 // immer danach gerueckt, das Bild aber nicht — der Rumpf blieb
                 // flach auf kippendem Boden.
                 int slope = SlopeClassOf(e.Col, e.Row);
+                // ⭐⭐ 19.08.2026 — DAS GETAUCHTE U-BOOT. Es geht VOR allem
+                // anderen: wer es nicht sehen darf, sieht den Schatten und
+                // sonst nichts.
+                if (GetauchtesBoot(e) is { } getaucht)
+                {
+                    DrawTexture(getaucht, picC - ComposedAnchor);
+                    return;
+                }
                 var hull = GetHullTexture(e.UnitType, e.Facing, PoseOf(e), slope);
                 if (hull != null)
                 {

@@ -201,8 +201,14 @@ public sealed class CwrFile
     /// werden. 70..72 sind die drei Ruempfe, die der Zeichner namentlich
     /// prueft; 73..76 und 100..101 liegen im selben Bereich und tragen dieselbe
     /// Bilderzahl.</summary>
+    /// <remarks>⚠ 19.08.2026 — <b>77 KAM DAZU.</b> Die Liste hiess urspruenglich
+    /// »70..76, 100, 101«, weil das die Ruempfe der neun Schiffstypen sind.
+    /// Teil 77 gehoert aber genauso dazu: es ist das <b>getauchte U-Boot</b>
+    /// (siehe MapEntityLayer.GetauchtesBoot) und traegt dieselben 16 Bilder
+    /// in einer Gruppe (a=256, Anfang 4184) wie seine Nachbarn. Ohne diese
+    /// Zeile gab die Teilebank ihm acht — eine halbe Drehung.</remarks>
     public static bool IsShipPart(int comp)
-        => comp is >= 70 and <= 76 or 100 or 101;
+        => comp is >= 70 and <= 77 or 100 or 101;
 
     private const int PartTblOff = 7, PartTblSize = 0x25c;
     private const int AuxTblOff = 0x263, AuxTblSize = 1020;

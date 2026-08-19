@@ -296,11 +296,16 @@ public sealed class UnitsExporter
         foreach (var p in _cwr.PopulatedParts())
         {
             int groups = _cwr.PartGroups(p.Component);
-            int blocks = System.Math.Max(1, System.Math.Min(p.Frames, CwrFile.GroupFrames)
-                                            / CwrFile.Facings);
+            // ⚠ 19.08.2026 — auch die TEILEBANK dreht Schiffsteile in sechzehn
+            // Stufen. WriteChassis war am 19.08. umgestellt worden, diese
+            // Schleife nicht — sie schrieb weiter f0..f7, also eine halbe
+            // Drehung. Aufgefallen ist es am getauchten U-Boot (Teil 77), das
+            // nur ueber die Bank erreichbar ist.
+            int nf = CwrFile.IsShipPart(p.Component) ? CwrFile.ShipFacings : CwrFile.Facings;
+            int blocks = System.Math.Max(1, System.Math.Min(p.Frames, CwrFile.GroupFrames) / nf);
             for (int g = 0; g < groups; g++)
                 for (int blk = 0; blk < blocks; blk++)
-                    for (int f = 0; f < CwrFile.Facings; f++)
+                    for (int f = 0; f < nf; f++)
                     {
                         int fr = _cwr.PartFrame(p.Component, f, blk, g);
                         if (fr < 0 || _cwr.DecodeFrame(fr) == null) continue;
