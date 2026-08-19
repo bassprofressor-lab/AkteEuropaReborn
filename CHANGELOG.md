@@ -29,6 +29,11 @@ further down, with the addresses it was read at.
 | **Units answer a waypoint too.** | The queued-order branch bailed out before the sound. |
 | **Preview text is the size the original sets.** | The advance was 1 px too wide (+17.2%) and the body ran on the wrong typeface (+8.9%). Now 49 characters per line instead of 38 — the original's number. |
 | **Twin mounts fire two projectiles.** | And every shot scatters, as in the original. Affects three weapons. |
+| **Rockets fly an arc.** | 22 projectile kinds; the apex is exactly distance/11 or /2 — both factors are literal floats in the program. |
+| **Projectiles trail smoke.** | Three sequences in rotation, for kinds 5 to 20. |
+| **Large ships can be selected.** | They had no footprint — a battleship got a 1×1 click box underneath the dock. |
+| **Ships turn at the original's rate.** | One step every three ticks, 4×4 hulls every six. We turned every tick — sixteen times too fast. |
+| **A sunk ship leaves nothing behind.** | No wreck, no slick. Only ground vehicles leave one. |
 | **Popups no longer trap the mouse in the menu.** | The cause was not a leftover popup but a **pause** left standing. |
 | **Fog uncovers softly**, not tile by tile. Marching squares over a 257×257 corner grid, plus the original's own dither pattern in its own palette colour. |
 | **Thirteen weapons get a flying projectile** instead of three — each with its own impact. Out of a table we had read one twenty-second of. |

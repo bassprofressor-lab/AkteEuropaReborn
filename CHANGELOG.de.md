@@ -30,6 +30,11 @@ weiter unten ausführlich, mit den Adressen, an denen er gelesen wurde.
 | **Einheiten melden sich auch beim Wegpunkt.** | Der Zweig für angereihte Befehle stieg vor dem Klang aus. |
 | **Der Text im Vorschaufenster ist so gross wie im Original.** | Der Zeichenvorschub war um 1 px zu gross (+17,2 %), und der Fliesstext lief auf der falschen Schrift (+8,9 %). Jetzt 49 statt 38 Zeichen je Zeile — die Zahl des Originals. |
 | **Zwillingslafetten feuern zwei Geschosse.** | Und jeder Schuss streut, wie im Original. Betrifft drei Waffen. |
+| **Raketen fliegen einen Bogen.** | 22 Geschossarten, Scheitel genau Entfernung/11 oder /2 — beide Faktoren stehen als Zahl im Programm. |
+| **Geschosse ziehen eine Rauchspur.** | Drei Bildfolgen im Wechsel, für die Arten 5 bis 20. |
+| **Grosse Schiffe lassen sich anwählen.** | Ihnen fehlte der Grundriss — ein Schlachtschiff hatte ein 1×1 grosses Klickfeld unter dem Dock. |
+| **Schiffe drehen im Takt des Originals.** | Eine Stufe alle drei Takte, 4×4-Schiffe alle sechs. Wir drehten jeden — sechzehnmal zu schnell. |
+| **Ein versenktes Schiff hinterlässt nichts.** | Kein Wrack, kein Ölfleck. Nur Landfahrzeuge lassen eines zurück. |
 | **Popups fangen die Maus nicht mehr im Menü.** | Die Ursache war keine Popup-Leiche, sondern eine stehengebliebene **Pause**. |
 | **Der Nebel deckt weich auf.** | Statt Kachel für Kachel. Marching Squares über ein 257×257-Eckengitter, dazu das Schachbrettmuster des Originals in seiner Palettenfarbe. |
 | **Dreizehn Waffen bekommen ein fliegendes Geschoss** statt drei — und jede ihren eigenen Einschlag. Aus einer Tafel, die wir zu einem Zweiundzwanzigstel gelesen hatten. |
