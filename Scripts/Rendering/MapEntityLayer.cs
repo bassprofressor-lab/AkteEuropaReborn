@@ -11824,7 +11824,26 @@ public partial class MapEntityLayer : Node2D
         // (owner 255 auf allen 41 Saetzen), deshalb steht er hier hinter der
         // Besitzerpruefung, wie der Nachschub-Posten.
         if (e.BType == 17)
-            return MarketOpenFor(e, ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0) ? e : null;
+        {
+            if (MarketOpenFor(e, ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0)) return e;
+            // ⚠ 19.08.2026 — SAGEN, WARUM NICHTS PASSIERT. Gemeldet: »im
+            // Gefecht das Geschaeftszentrum noch ohne Funktion«.
+            //
+            // Es HAT eine Funktion — der Prueflauf `--buy-check` kauft auf
+            // map_DM_4 ordnungsgemaess (Preis 495 abgebucht, Regal 21 -> 20).
+            // Aber der Laden ist ZU, solange keine eigene Einheit auf einer der
+            // vier Platten steht, und genau das prueft auch das Original
+            // (@0x43E90C im Takt, @0x432569 in der Zeigerlogik).
+            //
+            // Ein Gebaeude, das auf einen Klick nichts tut und nicht sagt
+            // warum, ist von einem kaputten nicht zu unterscheiden. Diese
+            // Zeile ist UNSERE Zutat — das Original schweigt vermutlich auch —,
+            // aber sie kostet nichts und spart dem Spieler das Raten.
+            _order = "Geschaeftszentrum: geschlossen — es oeffnet, sobald eine "
+                   + "eigene Einheit auf einer der vier Platten steht.";
+            UpdatePanel();
+            return null;
+        }
         // ⚠⚠ 18.08.2026 — DIE FABRIK STAND HIER NICHT, und damit ging ihr
         // Fenster nie auf. Aufgefallen ist es erst, als die zwei Ausbauknöpfe
         // eingebaut waren und das Bild sie nicht zeigte: der Prüflauf meldete
