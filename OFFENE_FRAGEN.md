@@ -142,3 +142,52 @@ Modus 0) und die Flugzeugmeldungen (Nummern 303/304/308/309, »air A:«/
 ⚠ Die Zahl »44 fehlen« aus einem Zwischenstand ist zu hoch gegriffen: sie kam
 aus einem groben Abgleich, der unsere Konstanten per Muster suchte. Verlässlich
 ist die Aufstellung, nicht die Differenz.
+
+
+### Die Schriftfarben — die Tafel ist gelesen (19.08.2026)
+
+Gefragt war: »haben wir überall die gleichen Schriftfarben«. Der Textzeichner
+des Originals ist **`0x4BA420`** (über den Stummel `0x401041`) — **366
+Aufrufstellen in 43 Funktionen**, darunter der Bedienblock. Das ist *der*
+Zeichner der ganzen Oberfläche, es gibt keinen zweiten für gewöhnlichen Text.
+
+**Er färbt je ZEICHEN, nicht je Wort.** Für jedes Zeichen rechnet er
+`c − 0x24`, schlägt in einer Bytetafel bei `0x4BA504` nach und springt über
+`0x4BA4E8` in einen von sieben Armen. Sechs Zeichen haben eine eigene Farbe,
+alles andere fällt auf 0:
+
+| Zeichen | Farbe | Palettenpaar | dunkel | hell |
+|---|---|---|---|---|
+| *(alles andere)* | 0 | — | die Schrift trägt ihre eigenen Farben |
+| `]` | 1 | 156 / 153 | `#C1292F` | `#F05131` — rot-orange |
+| `[` | 2 | 169 / 150 | `#AB871F` | `#F4B81C` — gold |
+| `{` | 3 | 127 / 124 | `#63637F` | `#A3A3B7` — blaugrau |
+| `$` | 4 | 87 / 84 | `#B79F73` | `#E3C793` — beige |
+| `}` | 5 | 101 / 98 | `#9BB78B` | `#CBDBBF` — hellgrün |
+| `^` | 6 | 55 / 53 | `#9B8F67` | `#B3AB83` — olivbeige |
+
+Farbe 0 zeichnet mit `0x401852`, die sechs anderen mit `0x4020EA` und dem
+Indexpaar als zusätzlichen Argumenten (zweite Sprungtafel `0x4BA560`).
+
+**In `HELPG.TXT` kommen davon genau zwei vor:** `^` **738-mal** — immer am
+Zeilenanfang und genau einmal je Zeile — und `$` **135-mal**, dort als echtes
+Währungszeichen (»50$ für jeden versenkten Frachter«). `[`, `]`, `{` und `}`
+kommen **nie** vor. Das `@` (577-mal) ist **kein** Farbzeichen; es fällt auf
+Farbe 0 und ist der Absatzmarker, den wir schon behandeln.
+
+**Was wir daraus schon richtig haben:** zwei unserer Farbwerte sind exakt
+Farbe 2 (`#F4B81C` und `#AB871F`) — die hat jemand vor mir gelesen. Andere
+sind daneben: unser Rot ist `#E86048`, das des Originals `#F05131`.
+
+⚠ **Was NICHT geklärt ist, und darum ist nichts geändert:** im Tutorialfenster
+des Originals sind **ganze Wörter** eingefärbt (»Zum **BEWEGEN** der
+angewählten Einheit … mit der **Linken Maus Taste**«). Mit einer Farbe je
+Zeichen und ohne Klammern in `HELPG.TXT` kann das aus dieser Tafel nicht
+kommen. Entweder färbt das Nachrichtenfenster (`show_text` `0x443490` /
+`show_text2` `0x4432E0`) selbst ein, oder es gibt eine Auszeichnung, die ich
+nicht gefunden habe.
+
+**Was mir hülfe:** ein Bildschirmfoto eines Hilfefensters, in dem ein
+eingefärbtes Wort gut zu lesen ist, zusammen mit der Textnummer (steht oft im
+Fenstertitel). Dann kann ich die Zeile in `HELPG.TXT` aufschlagen und sehen,
+was dort wirklich um das Wort herum steht.
