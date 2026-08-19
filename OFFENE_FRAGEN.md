@@ -1194,3 +1194,36 @@ Der Text fließt daneben, nicht darunter. Beides ist so eingebaut.
 ⚠ Beide GAME.EXE tragen dieselbe Anordnung: `HELPG.PIC` hat in C und F je
 **einen** Verweis, `ENCYCLOG.PIC` je **drei**, und der Abstand zwischen dem
 ersten und zweiten ist in beiden Fassungen `0x7D8`.
+
+---
+
+## M. Die sechs ungebauten Gebäudeklänge — die Auslöser sind gelesen (19.08.2026)
+
+Gebaut haben wir 128 (Mining), 129 (Upgrading), 130 (Enlarging), 131
+(InfantryDies), 132 (BuildingCaptured), 136 (ResearchDone), 140 (Refused).
+Von der Gruppe 123…134 fehlen sechs. Alle rufen `0x40162c(nr,0,0,0)`.
+
+| Nr | Stelle | Bedingung davor |
+|---|---|---|
+| **123** | 0x43DFC7 | `dx = eax−1` nach `word [bld+0xC06942]`, dann `test ax,ax / jne` — ein **Zähler im Gebäudesatz läuft ab** (0xC06910 ist die Gebäudetafel, also +0x32) |
+| **124** | 0x440460 | `ecx = tafel[spieler*4+0x878AB0] + edx; cmp ecx,0x64; jge` → klingt bei **Summe < 100** |
+| **125** | 0x440493 | dieselbe Summe, `cmp eax,0x64; jl` → klingt bei **Summe ≥ 100** |
+| **127** | 0x43E04F | `cmp byte [bld+0xC06915], cl / jne` — nur wenn der **Besitzer** passt |
+| **133** | 0x43D068 | `cmp byte [bld+0xC06915], byte[0x4FA284]` |
+| **134** | 0x43CED6 | dasselbe |
+
+⭐ **Zwei Dinge, die darüber hinaus taugen:**
+
+1. **`byte[0x4FA284]` ist der EIGENE Spieler.** Das Muster
+   `cmp byte [gebaeude+0xC06915], byte[0x4FA284]` heißt »nur für ein Gebäude,
+   das mir gehört« — genau die Bedingung, unter der das Original eine Meldung
+   überhaupt ausgibt. `+0x05` im Gebäudesatz ist demnach der Besitzer.
+2. **124 und 125 sind ein PAAR** an derselben Summe, einmal unter und einmal ab
+   100. Das ist keine Warnung und ihr Gegenteil, sondern eine Schwelle, die in
+   beide Richtungen meldet.
+
+⚠ **Nicht gebaut, und mit Absicht.** Der Auslöser ist gelesen, die *Bedeutung*
+nicht — dafür bräuchte jede Nummer noch eine Lesung der umgebenden Funktion.
+Ein Klang an der falschen Stelle ist hörbarer Unsinn und schlimmer als keiner.
+Wer weitermacht, fängt bei 124/125 an: die Summe über `0x878AB0` zu benennen
+klärt zwei Nummern auf einmal.
