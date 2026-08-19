@@ -1113,6 +1113,17 @@ public sealed class ContentBuilder
                 return false;
             }
             var ui = new InterfaceExporter(PalFile.FromBytes(palRaw), _dst + "/UI", _dst + "/Effects");
+            // ⚠ 19.08.2026 — DIE SCHRIFTEN HAENGEN JETZT AUCH HIER DRAN.
+            // Sie wurden bisher NUR beim vollen Import geschrieben, und genau
+            // dort aendert sich etwas, wenn eine Zahl im Schriftausgeber
+            // berichtigt wird (heute: der Vorschub, `w` statt `w+1`). Ohne
+            // diesen Weg muesste der Spieler alles neu einlesen, um eine
+            // Schriftkorrektur zu sehen.
+            var fnt = Asset("FONT.CWD");
+            var fnt2 = Asset("FONT2.CWD");
+            if (fnt != null) ui.WriteFont(fnt);
+            if (fnt2 != null) ui.WriteFont(fnt2, InterfaceExporter.Font2Name, "FONT2.CWD");
+            if (fnt == null && fnt2 == null) Say("⚠ FONT.CWD/FONT2.CWD nicht gefunden");
             ui.WriteEffects(AnimFile.FromBytes(anim), _exe);
             // Die Windfahne haengt am selben Weg: sie ist ein Bild der
             // Oberflaeche und soll ohne vollen Neuimport nachziehbar sein.

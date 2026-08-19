@@ -76,7 +76,30 @@ public partial class BriefingScreen : CanvasLayer
         box.AddThemeConstantOverride("separation", 14);
         margin.AddChild(box);
 
-        var font = LegacyFont();
+        // ⚠⚠ 19.08.2026 — DER FLIESSTEXT LAEUFT AUF FONT.CWD, NICHT AUF FONT2.
+        //
+        // Der Vorschauschirm LAEDT zwar FONT2.CWD (@0x45BE02) — daran hing die
+        // falsche Annahme, sie sei »die Schrift dieses Schirms«. Er tauscht sie
+        // aber nur fuer den ZIELKASTEN unten rechts ein und gleich wieder
+        // zurueck; dreimal `rep movsd` mit `mov ecx,0x1478`, und diese drei
+        // Stellen sind in BEIDEN GAME.EXE die einzigen im ganzen Programm:
+        //
+        //   0x45C15A  FONT.CWD sichern  (nach 0x8BE224)
+        //   0x45C174  FONT2 einsetzen   (nach 0xB26440)
+        //   ... OBJECTG.TXT zeichnen ...
+        //   0x45C31C  FONT.CWD zurueck
+        //
+        // Der BRIEFINGtext wird ganz woanders gezeichnet (@0x486814), also
+        // ausserhalb dieses Tauschs — mit FONT.CWD.
+        //
+        // Gemessen: derselbe Text mit FONT2 statt FONT ist noch einmal 8,9 %
+        // breiter. FONT2 ist die NIEDRIGERE Schrift (Versalhoehe 7 px statt 9),
+        // aber die BREITERE im Vorschub — 92 von 160 Zeichen haben Breite 7.
+        // Genau das liess den Satz aufgeblasen wirken: zu niedrig UND zu breit
+        // zugleich.
+        //
+        // ⚠ BriefingTech bleibt bewusst auf FONT2: das IST der Zielkasten.
+        var font = LegacyFont(second: false);
 
         var head = new Label
         {
@@ -314,7 +337,30 @@ public partial class BriefingScreen : CanvasLayer
         BuildEmblems(at, scale);
         BuildTechPanel(at, scale);
 
-        var font = LegacyFont();
+        // ⚠⚠ 19.08.2026 — DER FLIESSTEXT LAEUFT AUF FONT.CWD, NICHT AUF FONT2.
+        //
+        // Der Vorschauschirm LAEDT zwar FONT2.CWD (@0x45BE02) — daran hing die
+        // falsche Annahme, sie sei »die Schrift dieses Schirms«. Er tauscht sie
+        // aber nur fuer den ZIELKASTEN unten rechts ein und gleich wieder
+        // zurueck; dreimal `rep movsd` mit `mov ecx,0x1478`, und diese drei
+        // Stellen sind in BEIDEN GAME.EXE die einzigen im ganzen Programm:
+        //
+        //   0x45C15A  FONT.CWD sichern  (nach 0x8BE224)
+        //   0x45C174  FONT2 einsetzen   (nach 0xB26440)
+        //   ... OBJECTG.TXT zeichnen ...
+        //   0x45C31C  FONT.CWD zurueck
+        //
+        // Der BRIEFINGtext wird ganz woanders gezeichnet (@0x486814), also
+        // ausserhalb dieses Tauschs — mit FONT.CWD.
+        //
+        // Gemessen: derselbe Text mit FONT2 statt FONT ist noch einmal 8,9 %
+        // breiter. FONT2 ist die NIEDRIGERE Schrift (Versalhoehe 7 px statt 9),
+        // aber die BREITERE im Vorschub — 92 von 160 Zeichen haben Breite 7.
+        // Genau das liess den Satz aufgeblasen wirken: zu niedrig UND zu breit
+        // zugleich.
+        //
+        // ⚠ BriefingTech bleibt bewusst auf FONT2: das IST der Zielkasten.
+        var font = LegacyFont(second: false);
 
         // ⚠⚠ 18.08.2026 — DIE SCHRIFT SPRANG IN GANZEN VIELFACHEN. Gemeldet:
         // »unser Text ist noch etwas zu gross im Kampagnen-Missions-Preview«.
@@ -342,11 +388,36 @@ public partial class BriefingScreen : CanvasLayer
         Style(head, font, scale, head: true);
         AddChild(head);
 
-        // the text goes on the white plate, so it is written dark
+        // ⚠⚠ 19.08.2026 — DER TEXTKASTEN IST NICHT DIE WEISSE PLATTE.
+        //
+        // Hier stand `PlateX+8 / PlateY+6`, Breite `PlateW-16` = 304 — abgeleitet
+        // aus dem Rechteck 296,79,320,240. Das ist aber die WASSERZEICHENflaeche:
+        // genau dorthin laedt der Lader @0x45C120 das Bild aus SYMBOL.DAT
+        // (260 Zeilen zu 320 Byte auf (296,79)). Der Text steht darueber hinaus.
+        //
+        // Der Fliesstext des Originals, gelesen in der Zeichenschleife
+        // @0x486759..0x48684C (F @0x484E29, gleiche Form):
+        //
+        //   0x486828  add esi, 0x140       ; linker Rand x = 320
+        //   0x486835  add eax, 0x32        ; erste Zeile y = 50
+        //   0x48682F/32  3*Zeile -> 15*Zeile ; Zeilenabstand 15 px
+        //   0x4867CF  cmp eax, 0x118       ; SPALTENBREITE = 280 px
+        //   0x4867B2  cmp ax, 0x12c        ; ein Wort > 300 px bricht ab
+        //   0x486807  cmp cl, 0x5e         ; '^' = harter Zeilenwechsel
+        //
+        // Und das dunkle Feld, an BRIEFG.DAT gemessen (Palettenindex 47),
+        // laeuft x 277..634, y 3..389 — der Text sitzt mit 43 px linkem und
+        // 34 px rechtem Rand mittig darin und hat 339 px Hoehe.
+        //
+        // ⚠ Ueber alle 33 Briefings gemessen: der laengste Text hat 21 Zeilen
+        // und endet bei y 363, das Feld bei 389. **Das Original rollt nie** —
+        // es ist so gesetzt, dass alles hineinpasst. Unsere 228 px schnitten ab,
+        // wo das Original 339 hat.
+        const int TxtX = 320, TxtY = 50, TxtW = 280, TxtH = 339;
         var scroll = new ScrollContainer
         {
-            Position = at + new Vector2((PlateX + 8) * scale, (PlateY + 6) * scale),
-            Size = new Vector2((PlateW - 16) * scale, (PlateH - 12) * scale),
+            Position = at + new Vector2(TxtX * scale, TxtY * scale),
+            Size = new Vector2(TxtW * scale, TxtH * scale),
             HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
         };
         AddChild(scroll);
@@ -355,7 +426,7 @@ public partial class BriefingScreen : CanvasLayer
         {
             Text = string.Join("\n\n", _paragraphs),
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            CustomMinimumSize = new Vector2((PlateW - 16) * scale, 0),
+            CustomMinimumSize = new Vector2(TxtW * scale, 0),
         };
         Style(body, font, scale, dark: true);
         scroll.AddChild(body);

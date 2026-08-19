@@ -124,7 +124,30 @@ public sealed class InterfaceExporter
             int code = i + 0x20;
             int uni = code >= 0x80 ? Cp437.Char((byte)code) : code;
             chars.Append($"char id={uni} x={gx} y={gy} width={w} height={CellHeight} ");
-            chars.Append($"xoffset=0 yoffset=0 xadvance={w + 1} page=0 chnl=15\n");
+            // ⚠⚠ 19.08.2026 — HIER STAND `w + 1`, UND DAS WAR DER GROESSTE
+            // ANTEIL AM ZU BREITEN SATZ.
+            //
+            // Gemeldet, mehrfach: »der Text im Kampagnen-Vorschaufenster ist
+            // immer noch zu gross«. Das Original rueckt um GENAU die
+            // Glyphenbreite vor, ohne Zuschlag — nachgelesen an zwei Stellen,
+            // die dieselbe Tafel summieren:
+            //
+            //   Breitenrechnung 0x45A560 (in beiden GAME.EXE gleiche Form):
+            //     movsx ax, byte[eax + ecx*2 + 0xB253E0]   ; eax+ecx*2 = 131*c
+            //     add   bp, ax                             ; ROH addiert
+            //   Glyphenzeichner 0x4BA2B0, Rueckgabewert:
+            //     mov eax, [esp+0x10]   ; die Breite
+            //     add eax, edx          ; neues x = x + Breite
+            //
+            // ⚠ Gemessen am UMBRUCH, nicht am eingestellten Punktwert — das ist
+            // die Lehre aus einem frueheren Fehlversuch. Derselbe Missionstext
+            // braucht im Original 5163 px Gesamtvorschub, mit `w+1` 6050:
+            // **17,2 % zu breit**. Bei einer mittleren Glyphenbreite von 5,64 px
+            // ist ein zusaetzlicher Bildpunkt fast ein Fuenftel.
+            //
+            // ⚠ Die Zwillingsfassung in aekernel-tools/font_export.py hatte
+            // denselben Fehler und ist mitgeaendert.
+            chars.Append($"xoffset=0 yoffset=0 xadvance={w} page=0 chnl=15\n");
             count++;
             Glyphs++;
         }
