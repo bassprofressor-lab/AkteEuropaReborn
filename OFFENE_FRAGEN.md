@@ -1061,3 +1061,82 @@ stimmt die Regel nicht mehr.
 wurden vier. Die zwei weiteren (Träger 36 und 37, mit 8 und 9 Infanteristen)
 liegen bei (10,61) und (3,57) — weit von der Gruppe. Vermutlich schlicht nicht
 mitgezählt; ein Blick dorthin würde es abschliessen.
+
+---
+
+## K. Die restlichen Kartenabschnitte — vier davon brauchen wir NICHT (19.08.2026)
+
+Der Reihe nach abgearbeitet. Bei jedem stand zuerst die Frage, ob wir die
+Sache nicht längst haben — bei den Gleisen hätte mich das Auslassen dieser
+Frage fast einen zweiten Leser gekostet.
+
+### sec17 (Brücken/Molen) und sec21 (Rampen) — schon im Gelände
+
+Satzform gelesen. sec17: 100 Plätze zu 24 Byte, **110 Bauwerke auf 21 Karten**;
+`+0x00/+0x01` Zelle, `+0x02` Richtung, `+0x03..+0x11` ein **3×5-Kachelfeld**
+(die Länge 1…3 nutzt drei bis fünf Spalten, der Rest steht auf Null),
+`+0x13` Länge, `+0x16` u16 Trefferpunkte = 500 in **110 von 110** Sätzen.
+sec21: **85 Rampen**, `+0/+1` Zelle, `+2` Marke, `+3` Zähler 200.
+
+⭐ **Beide muss man nicht zeichnen.** Das Kartenraster trägt an genau diesen
+Zellen `10000 + Kachelnummer` — die Brücke bei (35,49) auf `01.CWM` steht dort
+als 10063/10012/10069, die Rampen auf `05.CWM` als 10727. Wir zeichnen sie
+also längst. Die Abschnitte werden erst gebraucht, wenn man ein Bauwerk
+**zerstören** können will (»Destroy ramp«, 0x539754).
+
+### sec23–sec31 (Gebäudezustände) — leer, bis auf einen Zeiger
+
+GEMESSEN über beide Datenträger, Zustand hinter dem Kopf, verschiedene Werte:
+
+| Abschnitt | | Sätze | verschiedene Zustände |
+|---|---|---|---|
+| sec23 | Basis | 202 | **1** |
+| sec24 | Fabriken | 737 | **1** |
+| sec25 | Depot | 5 | **1** |
+| sec26 | Generator | 14 | **1** |
+| sec30 | Bahnstation | 220 | **1** |
+| sec31 | Kraftwerk | 252 | **1** |
+| sec29 | Seedock | 36 | 16 |
+
+Sechs von sieben tragen **nur die Vorgabe** — sie zu lesen brächte nichts. Und
+die 16 des Seedocks sind kein Zustand: `+0x02` ist fast immer **Gebäudeplatz +
+1** (13→14, 21→22, 9→10, 29→30), ein Zeiger auf das Nachbargebäude.
+
+**Damit sind sec25 und sec29 von der Fehlerliste gestrichen** — nicht gebaut,
+sondern als gegenstandslos erwiesen.
+
+### sec16 (Infanteriezellen) — vollständig gelesen und trotzdem entbehrlich
+
+4000 Blöcke zu 22 Byte: `+0x00` u16 Anzahl, `+0x02` Spalte, `+0x03` Zeile,
+ab `+0x04` **neun** u16-Griffe mit `0xFFFF` als leer.
+
+⚠ Meine erste Lesung war falsch (Griffe ab `+0x00`, und `0xFFFF` als Griff
+mitgezählt) und ergab 26 % Treffer. Das ist die nützliche Zahl gewesen: **eine
+Struktur, die zu einem Viertel aufgeht, ist keine.** Richtig gelesen:
+
+**579 Griffe, 579 echte Einheiten, alle 579 auf der Zelle ihres Blocks, die
+Anzahl trifft in 445 von 445 Fällen — 0 Ausnahmen.**
+
+Und genau deshalb brauchen wir ihn nicht: jede dieser Einheiten steht bereits
+in sec5 an derselben Stelle. sec16 ist ein **Sucheintrag**, kein Datum. Nötig
+wird er erst, wenn die Reihenfolge im Stapel eine Rolle spielt.
+
+### `game.007` — der Prüfstand des Originals
+
+Liest sich vollständig: **131 Abschnitte, 0 Byte Rest**, »Mission 1«, 42×72,
+dieselbe Karte wie `01.CWM`. Der Vergleich zeigt, was der Originalmotor während
+einer Mission anfasst: **21 Abschnitte unverändert, 17 verändert, 93 neu**.
+
+Am wertvollsten ist der Feldvergleich in sec5 — **47 Einheitensätze, 829 Byte**.
+Er bestätigt unsere Feldtafel und legt die Lücken offen. Die vermeintlich
+unbekannten Versätze `+0x35`, `+0x37`, `+0x41` sind nur die **oberen Bytes** der
+u16-Felder darüber (STRILI_NA, UTOK_NA, trans). Echt ungelesen bleiben:
+**+0x08** (35×), **+0x24/+0x25** (21×), **+0x29**, **+0x2C**, **+0x2E** (20×),
+**+0x30**, **+0x39** (17×), **+0x3E**, **+0x47**.
+
+**Teilbefund zu sec11/sec12**, die in jeder Karte leer sind und hier gefüllt:
+608 Einträge, sec13 = sec14 = 608 als Zähler. sec11 ist ein Einheitenplatz
+(608 von 608 gültig), sec12 ein kleiner Code (0,1,2,3,6,255). Nur **35
+verschiedene** Plätze in **341 Blöcken** — also **verschachtelt, nicht je
+Einheit gruppiert**: eine zeitliche Liste, kein Wegplan. Was der Code bedeutet,
+ist offen.
