@@ -220,6 +220,19 @@ public sealed class ContentBuilder
                 var cww = Asset("WINDOWS.CWW");
                 if (cww != null) ui.WriteWindVane(cww);
                 if (anim != null) ui.WriteEffects(AnimFile.FromBytes(anim), _exe);
+                // Die SACHBILDER zu Hilfe und Enzyklopaedie. Die Texte hatten
+                // wir laengst, die Bilder lagen ungenutzt. Sie liegen NICHT
+                // unter DATA/, sondern neben der GAME.EXE im Spielordner —
+                // deshalb Asset() ohne Unterordner.
+                var helpPic = Asset("HELPG.PIC");
+                var encPic = Asset("ENCYCLOG.PIC");
+                if (helpPic != null || encPic != null) ui.WritePictures(helpPic, encPic);
+                Say($"Sachbilder: {ui.HelpPics} Hilfe + {ui.EncycPics} Enzyklopaedie" +
+                    (ui.PicsBlank > 0 ? $", {ui.PicsBlank} davon einfarbig" : "") +
+                    (helpPic == null && encPic == null
+                         ? "  ⚠ KEINE — HELPG.PIC/ENCYCLOG.PIC liegen neben der GAME.EXE, "
+                           + "nicht auf den CDs"
+                         : ""));
                 Say($"Oberflaeche: {ui.Fonts} Schriften mit {ui.Glyphs} Glyphen, " +
                     $"Panel {(panel != null ? "ja" : "nein")}, " +
                     $"Windfahne {ui.VaneFrames} Bilder, " +
@@ -302,7 +315,8 @@ public sealed class ContentBuilder
             else
             {
                 var hx = new HelpExporter(_dst + "/UI");
-                hx.Write(help, Say);
+                // HELPG.DAT traegt die Bildnummer je Text — siehe HelpExporter.
+                hx.Write(help, Say, Asset("HELPG.DAT"));
                 TablesWritten++;
             }
         }
@@ -635,7 +649,7 @@ public sealed class ContentBuilder
             var raw = Asset("HELPG.TXT");
             if (raw == null) { Say("HELPG.TXT nicht gefunden"); return false; }
             var hx = new HelpExporter(_dst + "/UI");
-            hx.Write(raw, Say);
+            hx.Write(raw, Say, Asset("HELPG.DAT"));
             // Die Missionsziele kommen gleich mit: dieselbe Quelle, dieselben
             // paar Kilobyte, und wer die Texte neu schreibt, meint sie mit.
             var obj = Asset("OBJECTG.TXT");
@@ -1140,6 +1154,17 @@ public sealed class ContentBuilder
             // stecken aber im Anhang von ROBO.CWR. Siehe CwrFile.Cursors.
             byte[]? roboCur = Asset("ROBO.CWR");
             if (roboCur != null) ui.WriteCursors(CwrFile.FromBytes(roboCur));
+            // Die Sachbilder aus demselben Grund: Oberflaeche, ohne vollen
+            // Neuimport nachziehbar. Sie liegen NEBEN der GAME.EXE.
+            var hp = Asset("HELPG.PIC");
+            var ep = Asset("ENCYCLOG.PIC");
+            if (hp != null || ep != null)
+            {
+                ui.WritePictures(hp, ep);
+                Say($"Sachbilder: {ui.HelpPics} Hilfe + {ui.EncycPics} Enzyklopaedie" +
+                    (ui.PicsBlank > 0 ? $", {ui.PicsBlank} davon einfarbig" : ""));
+            }
+            else Say("⚠ HELPG.PIC/ENCYCLOG.PIC nicht gefunden — sie liegen neben der GAME.EXE");
             Say($"{ui.Effects} Effekte mit {ui.EffectFrames} Bildern, " +
                 $"Windfahne {ui.VaneFrames} Bilder");
             return ui.Effects > 0;

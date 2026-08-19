@@ -1140,3 +1140,57 @@ u16-Felder darüber (STRILI_NA, UTOK_NA, trans). Echt ungelesen bleiben:
 verschiedene** Plätze in **341 Blöcken** — also **verschachtelt, nicht je
 Einheit gruppiert**: eine zeitliche Liste, kein Wegplan. Was der Code bedeutet,
 ist offen.
+
+---
+
+## L. Die Sachbilder — 132 Stück, und das Hilfefenster zeigt sie jetzt (19.08.2026)
+
+`HELPG.PIC` (36 Bilder) und `ENCYCLOG.PIC` (96) sind rohe Punktdaten **ohne
+Kopf**: 60×60 zu einem Byte, Palette `DATA/01.PAL`, Punktwert 255 durchsichtig.
+Beide gehen ohne Rest auf (129 600 = 36 · 3600, 345 600 = 96 · 3600).
+
+⭐ **Gegenprobe, die nichts kostet:** `MissionTechExporter` schreibt die
+Enzyklopädiebilder schon lange auf einem eigenen Weg. **8 von 8 Stichproben
+sind byteweise gleich** — zwei unabhängig geschriebene Ausgeber kommen auf
+dasselbe Bild, also stimmen Palette, Größe *und* Nummerierung.
+
+⚠ **Einsbasiert.** Das Spiel rechnet `3600·(Bild−1)` (@0x486B7C für die
+Enzyklopädie, @0x45A608 für die Hilfe). Meine erste Fassung schrieb
+`enc00…enc95` — das hätte zu jedem Text das **falsche** Bild geliefert, ein
+Versatz um eins, der nirgends auffällt. Jetzt `enc01…enc96`, `help01…help36`.
+
+### Das Bild zum Text — der Weg ist vollständig gelesen
+
+```
+mov ecx, [eax*4 + 0x8b62b0]   ; Tafel[textnummer] = Bildnummer
+test ecx, ecx / je ...        ; 0 heisst: kein Bild
+lea edx, [ecx + ecx*4 - 5]    ;   5·(n−1)
+lea eax, [edx + edx*4]        ;  25·(n−1)
+lea eax, [eax + eax*8]        ; 225·(n−1)
+shl eax, 4                    ; 3600·(n−1)
+fread(0x8b7258, 1, 0xe10)     ; 3600 Byte
+```
+
+Die Tafel bei `0x8b62b0` liegt im uninitialisierten Speicher — gefüllt wird sie
+aus **`HELPG.DAT`**, 4000 Byte = 1000 dword, Werte 0…36.
+
+**MESSLATTE, und sie ist lückenlos: genau 36 Texte tragen ein Bild, alle 36
+Bilder kommen vor, jedes genau einmal, keines fehlt.** Prüfstand
+`--hilfebild-check`; er lädt sie auch wirklich (36 von 36).
+
+### Wo es sitzt — auch das gelesen, nicht gesetzt
+
+C `@0x47CFF2`…`@0x47D032`: je Zeile 60 Byte nach `x = 0x1E = 30`,
+`y = zeile + 0x1E = 30` — oben links. Und die Zeile direkt hinter der
+Kopierschleife ist der Grund, warum es den Text nicht überdeckt:
+
+```
+sub word ptr [ebp + 0x8b903e], 0x50
+```
+
+Die **Umbruchbreite schrumpft um 0x50 = 80 Punkte**, sobald ein Bild da ist.
+Der Text fließt daneben, nicht darunter. Beides ist so eingebaut.
+
+⚠ Beide GAME.EXE tragen dieselbe Anordnung: `HELPG.PIC` hat in C und F je
+**einen** Verweis, `ENCYCLOG.PIC` je **drei**, und der Abstand zwischen dem
+ersten und zweiten ist in beiden Fassungen `0x7D8`.

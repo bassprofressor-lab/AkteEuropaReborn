@@ -28,6 +28,10 @@ public sealed class InterfaceExporter
     /// davon leer sind (Bild 0 ist es).</summary>
     public int Portraits, PortraitsEmpty;
 
+    /// <summary>Wieviele Sachbilder geschrieben wurden — siehe
+    /// <see cref="WritePictures"/>.</summary>
+    public int HelpPics, EncycPics, PicsBlank;
+
     public InterfaceExporter(PalFile pal, string uiDir, string effectsDir)
     {
         _pal = pal;
@@ -795,5 +799,79 @@ public sealed class InterfaceExporter
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         img.SavePng(path);
         EffectFrames++;
+    }
+
+    // ========================================================================
+    //  HELPG.PIC und ENCYCLOG.PIC — die Sachbilder zu Hilfe und Enzyklopaedie
+    // ========================================================================
+
+    /// <summary>Kantenlaenge eines Sachbilds. GEMESSEN: beide Dateien gehen
+    /// ohne Rest in 3600-Byte-Bloecke auf (129 600 = 36 x 3600,
+    /// 345 600 = 96 x 3600), und 3600 = 60 x 60 bei einem Byte je Bildpunkt.
+    /// Einen Kopf haben sie nicht — der erste Block ist schon Bildinhalt.</summary>
+    public const int PicSide = 60;
+
+    public const int PicBytes = PicSide * PicSide;
+
+    /// <summary>
+    /// DIE 132 SACHBILDER AUSGEBEN.
+    ///
+    /// <para>Wir haben die Texte der Hilfe und der Enzyklopaedie
+    /// (<c>HELP.TXT</c>, <c>ENCYCLOG.TXT</c>) laengst — die Bilder dazu lagen
+    /// ungenutzt. <c>HELPG.PIC</c> traegt <b>36</b>, <c>ENCYCLOG.PIC</c>
+    /// <b>96</b>.</para>
+    ///
+    /// <para>Rohe Punktdaten ohne Kopf, ein Byte je Punkt, Palette
+    /// <c>DATA/01.PAL</c> wie beim uebrigen Bedienwerk. Punktwert 255 ist
+    /// durchsichtig — dieselbe Setzung wie bei Tafel und Windfahne.</para>
+    ///
+    /// <para>Ein Bild, das nur aus EINEM Punktwert besteht, wird als leer
+    /// gezaehlt und trotzdem geschrieben: die Nummer ist der Schluessel zum
+    /// Text, eine Luecke darin waere schlimmer als ein leeres Bild.</para>
+    /// </summary>
+    public void WritePictures(byte[]? help, byte[]? encyc)
+    {
+        HelpPics = EncycPics = PicsBlank = 0;
+        string dir = _ui + "/pictures";
+        Directory.CreateDirectory(dir);
+
+        var meta = new StringBuilder();
+        meta.Append("{\"source\":\"HELPG.PIC + ENCYCLOG.PIC\",\"palette\":\"DATA/01.PAL\",");
+        meta.Append($"\"side\":{PicSide},\"transparent\":255,\"first\":1,\"note\":\"Bildnummern sind EINSBASIERT (3600*(Bild-1) @0x486B7C)\",\"sets\":{{");
+
+        int Einen(byte[]? roh, string vorsatz)
+        {
+            if (roh == null) return 0;
+            int n = roh.Length / PicBytes;
+            for (int k = 0; k < n; k++)
+            {
+                var img = Image.CreateEmpty(PicSide, PicSide, false, Image.Format.Rgba8);
+                bool einfarbig = true;
+                byte erster = roh[k * PicBytes];
+                for (int y = 0; y < PicSide; y++)
+                    for (int x = 0; x < PicSide; x++)
+                    {
+                        byte i = roh[k * PicBytes + y * PicSide + x];
+                        if (i != erster) einfarbig = false;
+                        img.SetPixel(x, y, i == 255
+                            ? new Color(0, 0, 0, 0)
+                            : Color.Color8(_pal.R[i], _pal.G[i], _pal.B[i]));
+                    }
+                // ⚠ EINSBASIERT. Das Spiel rechnet die Sprungweite als
+                // 3600*(Bild-1) (@0x486B7C), spricht die Bilder also ab 1 an,
+                // und MissionTechExporter schreibt sie ebenso (p01..). Wer hier
+                // ab 0 zaehlt, schlaegt zu jedem Text das FALSCHE Bild nach —
+                // ein Versatz um eins, der nirgends auffaellt.
+                img.SavePng($"{dir}/{vorsatz}{k + 1:00}.png");
+                if (einfarbig) PicsBlank++;
+            }
+            return n;
+        }
+
+        HelpPics = Einen(help, "help");
+        EncycPics = Einen(encyc, "enc");
+        meta.Append($"\"help\":{HelpPics},\"encyclopedia\":{EncycPics}}},");
+        meta.Append($"\"blank\":{PicsBlank}}}");
+        File.WriteAllText($"{dir}/index.json", meta.ToString(), new UTF8Encoding(false));
     }
 }

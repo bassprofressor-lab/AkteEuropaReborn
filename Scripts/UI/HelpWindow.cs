@@ -70,6 +70,10 @@ public sealed partial class HelpWindow : PanelContainer
 
     /// <summary>Die Texte aus HELPG.TXT, einmal geladen.</summary>
     private static Godot.Collections.Dictionary<string, Variant>? _texts;
+
+    /// <summary>Textnummer -> Bildnummer in HELPG.PIC, aus HELPG.DAT.
+    /// GEMESSEN: 36 Texte tragen eines, jedes Bild genau einmal.</summary>
+    private static Godot.Collections.Dictionary<string, Variant>? _pictures;
     private static bool _tried;
 
     /// <summary>Die Absätze eines Hilfetexts, oder null. Öffentlich, damit ein
@@ -91,6 +95,11 @@ public sealed partial class HelpWindow : PanelContainer
                     if (root.TryGetValue("texts", out var tv) &&
                         tv.VariantType == Variant.Type.Dictionary)
                         _texts = tv.AsGodotDictionary<string, Variant>();
+                    // Das Bild zum Text: HELPG.DAT[nummer] = Bildnummer.
+                    // Herleitung und Messlatte bei HelpExporter.
+                    if (root.TryGetValue("pictures", out var pv) &&
+                        pv.VariantType == Variant.Type.Dictionary)
+                        _pictures = pv.AsGodotDictionary<string, Variant>();
                 }
             }
             GD.Print(_texts != null
@@ -105,6 +114,67 @@ public sealed partial class HelpWindow : PanelContainer
         var list = new List<string>();
         foreach (var p in arr) list.Add(p.AsString());
         return list;
+    }
+
+    /// <summary>
+    /// DAS BILD ZU EINEM HILFETEXT, oder null.
+    ///
+    /// <para>Der Weg ist der des Originals (C @0x45A608, F @0x4592A9):
+    /// <c>HELPG.DAT[nummer]</c> gibt die Bildnummer, 0 heisst keins, und das
+    /// Bild liegt in <c>HELPG.PIC</c> bei <c>3600*(n-1)</c> — EINSBASIERT.
+    /// Unser Ausgeber schreibt sie als <c>UI/pictures/helpNN.png</c>.</para>
+    /// </summary>
+    public static Texture2D? PictureOf(int id)
+    {
+        TextOf(id);                                  // laedt die Tafel mit
+        if (_pictures == null) return null;
+        if (!_pictures.TryGetValue(id.ToString(), out var v)) return null;
+        int nr = v.AsInt32();
+        if (nr <= 0) return null;
+        string path = Core.Content.Path($"UI/pictures/help{nr:00}.png");
+        if (!FileAccess.FileExists(path)) return null;
+        var img = Image.LoadFromFile(path);
+        return img == null ? null : ImageTexture.CreateFromImage(img);
+    }
+
+    /// <summary>
+    /// <b>`--hilfebild-check` — TRAEGT JEDER TEXT SEIN BILD?</b>
+    ///
+    /// <para>MESSLATTE aus HELPG.DAT: genau <b>36</b> Texte tragen ein Bild,
+    /// alle 36 Bilder kommen vor, jedes <b>genau einmal</b>, keines fehlt. Es
+    /// ist eine lueckenlose Zuordnung — jede Abweichung heisst, dass die Datei
+    /// oder unsere Lesung nicht stimmt.</para>
+    /// </summary>
+    public static string PictureCheck()
+    {
+        TextOf(1);
+        var sb = new System.Text.StringBuilder();
+        if (_pictures == null)
+            return "hilfebild-check: KEINE Tafel in help.json — "
+                   + "--reexport-help=<Quelle> schreibt sie (braucht HELPG.DAT)";
+        int mit = 0, geladen = 0, fehlt = 0;
+        var benutzt = new Dictionary<int, int>();
+        var ohneDatei = new List<int>();
+        foreach (var k in _pictures.Keys)
+        {
+            int nr = _pictures[k].AsInt32();
+            if (nr <= 0) continue;
+            mit++;
+            benutzt[nr] = benutzt.TryGetValue(nr, out var c) ? c + 1 : 1;
+            if (PictureOf(int.Parse(k)) != null) geladen++;
+            else { fehlt++; if (ohneDatei.Count < 6) ohneDatei.Add(nr); }
+        }
+        int doppelt = 0;
+        foreach (var kv in benutzt) if (kv.Value > 1) doppelt++;
+        sb.AppendLine($"hilfebild-check: {mit} Texte tragen ein Bild (erwartet 36), " +
+                      $"{benutzt.Count} verschiedene Bilder, {doppelt} mehrfach benutzt");
+        sb.AppendLine($"   davon wirklich geladen: {geladen}, ohne Datei: {fehlt}" +
+                      (ohneDatei.Count > 0 ? $" (z.B. {string.Join(",", ohneDatei)})" : ""));
+        bool gut = mit == 36 && benutzt.Count == 36 && doppelt == 0 && fehlt == 0;
+        sb.AppendLine(gut
+            ? "   lueckenlos — 36 Texte, 36 Bilder, jedes genau einmal"
+            : "   ⚠ WEICHT AB von der Messlatte 36/36/0/0");
+        return sb.ToString();
     }
 
     /// <summary>Was der Spieler in dieser Mission schon weggeklickt hat.
@@ -455,6 +525,36 @@ public sealed partial class HelpWindow : PanelContainer
         // Der Knopf ist UNSERE Zutat und aendert am Weg nichts: er ruft
         // dasselbe Dismiss wie die beiden Tasten.
         var row = new HBoxContainer();
+
+        // ====================================================================
+        //  DAS BILD ZUM TEXT
+        // ====================================================================
+        // GELESEN (C @0x47CFF2..0x47D032, F an derselben Stelle): der Zeichner
+        // kopiert je Zeile 60 Byte nach x = 0x1E = 30, y = zeile + 0x1E = 30 —
+        // das Bild sitzt also OBEN LINKS im Fenster. Und die Zeile direkt hinter
+        // der Kopierschleife ist der Grund, warum es den Text nicht ueberdeckt:
+        //
+        //     sub word ptr [ebp + 0x8b903e], 0x50
+        //
+        // Die Umbruchbreite schrumpft um 0x50 = 80 Punkte, sobald ein Bild da
+        // ist. Der Text flieszt daneben, nicht darunter.
+        var bild = PictureOf(id);
+        if (bild != null)
+        {
+            row.AddChild(new TextureRect
+            {
+                Texture = bild,
+                CustomMinimumSize = new Vector2(60, 60),
+                StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+                SizeFlagsVertical = SizeFlags.ShrinkBegin,
+                MouseFilter = MouseFilterEnum.Ignore,
+            });
+            // Die 80 des Originals, minus der 60 des Bildes: der Rest ist der
+            // Abstand zum Text.
+            row.AddThemeConstantOverride("separation", 80 - 60);
+            label.CustomMinimumSize = new Vector2(360 - 80, 0);
+        }
+
         row.AddChild(label);
         var close = new Button
         {

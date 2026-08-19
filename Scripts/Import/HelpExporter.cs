@@ -135,7 +135,11 @@ public sealed class HelpExporter
     /// <summary>Nummern, die in der Datei mehr als einmal vorkommen.</summary>
     public static readonly List<int> Doubles = new();
 
-    public void Write(byte[] raw, Action<string>? say = null)
+    /// <summary>Wieviele Hilfetexte ein Bild zugeordnet bekamen (HELPG.DAT).
+    /// MESSLATTE: 36, und jedes Bild genau einmal.</summary>
+    public int PicturesLinked;
+
+    public void Write(byte[] raw, Action<string>? say = null, byte[]? dat = null)
     {
         var list = Parse(raw);
         Directory.CreateDirectory(_dst);
@@ -165,9 +169,46 @@ public sealed class HelpExporter
             sb.Append(']');
             Texts++;
         }
+        sb.Append("},");
+
+        // ====================================================================
+        //  DAS BILD ZUM TEXT — HELPG.DAT
+        // ====================================================================
+        // GELESEN, in beiden GAME.EXE (C @0x45A608, F @0x4592A9):
+        //
+        //   mov ecx, [eax*4 + 0x8b62b0]   ; Tafel[textnummer] = Bildnummer
+        //   test ecx, ecx / je ...        ; 0 heisst: kein Bild
+        //   lea edx, [ecx + ecx*4 - 5]    ; 5*(n-1)
+        //   lea eax, [edx + edx*4]        ; 25*(n-1)
+        //   lea eax, [eax + eax*8]        ; 225*(n-1)
+        //   shl eax, 4                    ; 3600*(n-1)   -> Sprung in HELPG.PIC
+        //   ... fread(0x8b7258, 1, 0xe10) ; 3600 Byte = 60x60
+        //
+        // Die Tafel bei 0x8b62b0 liegt im uninitialisierten Speicher, wird also
+        // beim Laden gefuellt — aus HELPG.DAT, 4000 Byte = 1000 dword.
+        //
+        // MESSLATTE: genau 36 Texte tragen ein Bild, alle 36 Bilder kommen vor,
+        // jedes GENAU EINMAL, keines fehlt. Eine lueckenlose Zuordnung; weicht
+        // sie ab, stimmt die Datei oder die Lesung nicht.
+        int mitBild = 0;
+        sb.Append("\"_picture\":\"HELPG.DAT[textnummer] = Bildnummer, 0 = keins; ");
+        sb.Append("Bild n liegt in HELPG.PIC bei 3600*(n-1), 60x60 (C @0x45A608)\",");
+        sb.Append("\"pictures\":{");
+        if (dat != null)
+            for (int i = 0; i + 4 <= dat.Length; i += 4)
+            {
+                int bild = BitConverter.ToInt32(dat, i);
+                if (bild == 0) continue;
+                if (mitBild > 0) sb.Append(',');
+                sb.Append($"\"{i / 4}\":{bild}");
+                mitBild++;
+            }
         sb.Append("}}");
         File.WriteAllText(_dst + "/help.json", sb.ToString(), new UTF8Encoding(false));
+        PicturesLinked = mitBild;
         Duplicates = Doubles.Count;
+        say?.Invoke($"Hilfebilder: {PicturesLinked} Texte tragen eines" +
+                     (dat == null ? "  ⚠ HELPG.DAT fehlt — kein Text bekommt ein Bild" : ""));
         say?.Invoke($"Hilfetexte: {Texts} Saetze, {Empty} leere Platzhalter uebergangen " +
                     $"(von {ids} Nummern), {Duplicates} doppelte Nummern " +
                     $"[{string.Join(",", Doubles)}] — die erste Fassung gilt");

@@ -493,6 +493,12 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_hilfebildCheck)
+        {
+            GD.Print(UI.HelpWindow.PictureCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_einschlagCheck)
         {
             GD.Print(_entities.EinschlagCheck());
@@ -917,6 +923,7 @@ public partial class MapViewer : Node2D
             else if (a == "--einschlag-check") _einschlagCheck = true;
             else if (a == "--rampen-check") _rampenCheck = true;
             else if (a == "--transport-check") _transportCheck = true;
+            else if (a == "--hilfebild-check") _hilfebildCheck = true;
             else if (a == "--keine-einschlaghoehen") MapEntityLayer.KeineEinschlagHoehen = true;
             else if (a == "--abbruch-check=alt")
             {
@@ -1390,6 +1397,7 @@ public partial class MapViewer : Node2D
     private bool _einschlagCheck;
     private bool _rampenCheck;
     private bool _transportCheck;
+    private bool _hilfebildCheck;
     private float _upTime;
 
     /// <summary>`--demo-leave=<n>` sends the demo's unit back where it came from
