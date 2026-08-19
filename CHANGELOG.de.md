@@ -9,6 +9,28 @@ bisher nur dort beschrieben.*
 
 ## 0.6.0 — unveröffentlicht
 
+### Auf einen Blick
+
+Das Wichtigste aus dieser Fassung, ohne die Beweisführung. Jeder Punkt steht
+weiter unten ausführlich, mit den Adressen, an denen er gelesen wurde.
+
+| | |
+|---|---|
+| **Die Kampagne kann verloren gehen.** | Sie konnte es nicht — 33-mal »gewonnen«, **null**-mal »verloren«. Es gibt zwei Endfunktionen, und wir kannten eine. Jetzt 34 Niederlagebedingungen. |
+| **Jede Nebenmission lässt sich abschliessen.** | Acht waren unerreichbar. Der Abgleich mit dem Original meldet über alle 33 Missionen keine Abweichung mehr. |
+| **»Mission beendet — Zeit für unbeendete Untermissionen«** | Das Fenster mit der Nachfrist gab es bei uns nicht. Zehn Spielminuten, dann endet die Mission trotzdem — als Sieg. |
+| **Der Bedienblock hat alle vier Zustände.** | Missionsübersicht und Gruppenfeld fehlten ganz. |
+| **Herz, Kanister und Patronen.** | Die drei Symbole neben den Statusbalken. Sie lagen in `ANIM.CWA`, der Datei mit den Explosionen. |
+| **Die Mauszeiger des Originals.** | 28 Arten aus dem Anhang von `ROBO.CWR`, darunter das Angriffsfadenkreuz. |
+| **Einheiten melden sich auf einen Befehl.** | Den Anwählklang hatten wir, den Befehlsklang nicht — dabei ruft ihn das Original viermal so oft. |
+| **Bäume verdecken wieder.** | Kein Codefehler: die Karten waren nie neu gebacken worden. |
+
+⚠ **Was ausdrücklich NICHT drin ist:** der weiche Nebelrand des Originals. Der
+Unterbau ist gelesen, die Weichheit nicht belegt — also ist nichts gebaut.
+Alles Ungeklärte steht in `OFFENE_FRAGEN.md`.
+
+### Die vier Bereiche dieser Fassung
+
 Hierher geht alles, was nach 0.5.0 entsteht. Vier Bereiche, in der Reihenfolge,
 in der sie gewählt wurden:
 
@@ -693,6 +715,184 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Kampagne und Oberfläche
 
+- ⭐⭐ **Die Kampagne konnte nicht verloren gehen — jetzt kann sie es.** Der
+  Spieler durfte jede Einheit und jedes Gebäude einbüssen, und die Mission lief
+  weiter. Nichts stürzte ab, nichts meldete etwas; das Spiel war nur
+  unverlierbar.
+
+  In `Data/mission_scripts.json` standen **33-mal »gewonnen« und null-mal
+  »verloren«**. Die Vokabel für das Verlieren gab es seit Monaten und wurde nie
+  benutzt — und weil unsere Notregel sich abschaltet, sobald ein Skript
+  entscheidet, gab es überhaupt keinen Weg mehr, eine Mission zu verlieren.
+
+  **Der Grund: es gibt zwei Endfunktionen, und wir kannten eine.**
+
+  | | Adresse (beide GAME.EXE) | setzt den Missionszustand |
+  |---|---|---|
+  | Sieg | `0x4CFC10` / `0x4CF7C0` | auf **1** |
+  | Niederlage | `0x4D0280` / `0x4CFE30` | auf **5000** |
+
+  Die Siegfunktion war leicht zu finden, sie druckt ihre eigene Meldung »Ende
+  von Mission«. Die Niederlagefunktion hat keine — sie ist ein Zweizeiler,
+  `mov word ptr [Zustand], 0x1388` gefolgt von `ret`. Gesucht wird sie jetzt
+  nach genau dieser **Form**, mit der Zustandsadresse aus dem Rumpf der
+  Siegfunktion; auf beiden Fassungen gibt das genau einen Treffer.
+
+  **34 Regeln aus 38 Aufrufstellen**, alle auf beiden GAME.EXE gleich gelesen,
+  und dafür brauchte es keine einzige neue Vokabel. Was für sich genommen schon
+  etwas sagt: die Niederlage war nie schwer zu lesen, es hat nur nie jemand
+  danach gesucht.
+
+  ⚠ **Eine Regel war falsch und ist bewusst NICHT eingetragen.** Mission 28 las
+  sich als »keiner der drei Wissenschaftler ist abgeliefert« — vollkommen
+  plausibel, von beiden Fassungen gleich gelesen. Und trotzdem unvollständig:
+  davor steht ein viertes Glied (`unit_alive(...) == 0`), und die drei
+  Variablen stehen bei Missionsbeginn **alle auf 0**. Die Regel hätte jede
+  Partie im ersten Takt verloren — der Prüflauf hat genau das gemeldet.
+  Das Werkzeug zählt jetzt strukturell nach: jedes Glied einer UND-Kette ist
+  ein Sprung auf dieselbe Ausstiegsmarke, also müssen es genau so viele
+  Sprünge sein wie gelesene Glieder. Stimmt das nicht, wird **nichts**
+  genommen — eine zu schwache Bedingung ist schlimmer als gar keine.
+
+  **Gegenprobe, die jetzt zu jeder Regeländerung gehört:** alle 33 Missionen
+  sechzig Spielsekunden laufen lassen und zählen, ob eine sich sofort
+  entscheidet. Muss überall null sein.
+
+- ⭐ **Alle acht Nebenmissionen, die sich nicht abschliessen liessen.** Gemeldet
+  aus einem Durchspiel des Originals: in Mission 27 stehen drei Untermissionen,
+  und der Spieler kam auf 0 von 3. Seine Vermutung — man müsse die Basen
+  **einnehmen** statt zu zerstören — war richtig, und beides steht im Spiel
+  selbst.
+
+  **Die Ziele stehen im Klartext in den Spieldaten**, und darauf hatte nie
+  jemand geschaut: `OBJECTG.TXT` führt die Hauptziele, `HELPG.TXT` über
+  `v[131+k]` die Untermissionen. Damit lässt sich jede Codestelle gegen ihren
+  eigenen Text prüfen. Bei Mission 27 stimmen sie auf die Minute überein — der
+  Text sagt »Besetzung der Droiden-Basis **innerhalb 20 Minuten**«, der Block
+  sagt `objects(Typ 1, Spieler 0) > 1` für das Erfüllen und `time_after(11,
+  **20**)` für das Zurücksetzen. Mehr als ein Hauptgebäude bekommt der Spieler
+  nur durchs Einnehmen.
+
+  Vier Formen hatten gefehlt:
+
+  | Form | Missionen | was fehlte |
+  |---|---|---|
+  | Untermission **im Endblock** | 7, 16 | Der Leser übersprang jeden Basisblock, der die Endfunktion ruft — samt allem, was darin sonst noch geschieht. Mission 16 erledigt ihre dritte Untermission im selben Atemzug wie den Sieg. |
+  | `find_unit_with_part` | 20, 24 | Stand als »gelesen, nicht gebaut« da: zwei der drei Bauteilbytes fehlten in unserem Einheitenmodell. |
+  | `time_after` mit `<` statt `>` | 14 | Die Laufzeit rechnete `>` fest ein. »Ziel der Mission in 45 Minuten zu beenden« ist die Bedingung andersherum. |
+  | Vergleich gegen eine **Variable** | 6 | »Ist der gefundene Mann noch derselbe?« — vor der Ortsprüfung, ob Hadgi Ibn Mustaffa auf Zelle (28,6) angekommen ist. |
+
+  Der Abgleich Original gegen unsere Datei meldet jetzt über **alle 33
+  Missionen keine einzige Abweichung**: keine Untermission fehlt, keine ist zu
+  viel.
+
+  ⚠ Drei vermeintliche Zutaten von uns waren ein **Messfehler**: der Abgleich
+  suchte nur die literale Schreibweise, das Original schreibt aber oft über ein
+  Register und bedient damit zwei Variablen auf einmal. Eine Messung, die nur
+  eine von zwei Schreibweisen kennt, misst nicht, was sie behauptet.
+
+- ⭐ **»Mission beendet — Zeit für unbeendete Untermissionen 00:09«.** Das
+  Fenster aus dem Bildmaterial gab es bei uns nicht, und die Mechanik dahinter
+  auch nicht: `mission_end` beendet die Mission **nicht**, solange eine
+  Untermission offen ist. Es öffnet stattdessen dieses Fenster und gibt zehn
+  Spielminuten Nachfrist; jede Minute geht der Zähler um eins herunter, bei
+  null endet die Mission trotzdem — und zwar als **Sieg**. Sind vorher alle
+  Untermissionen erledigt, endet sie sofort.
+
+  Offen heisst dabei Zustand 1..9, gezählt über die dreissig Wörter ab `v[101]`.
+  Der Wortlaut des Fensters ist der des Originals, Zeile für Zeile aus seinem
+  Zeichner. ⚠ Unser ist, was der Knopf »Beenden« tut — er bricht bei uns die
+  Nachfrist ab; im Spiel ist das bestätigt, im Programm nicht gelesen.
+
+- ⭐ **Der Bedienblock hat alle vier Zustände des Originals.** Er verzweigt über
+  den Anwählgriff viermal, und zwei davon fehlten ganz:
+
+  - **Die Missionsübersicht**, wenn nichts gewählt ist — Missionsname,
+    Kontostand, Sprit gesamt, Munition gesamt, Ausgeschaltet, Verluste. Bei uns
+    stand dort unsere eigene Erfindung (»N Einheiten / keine Auswahl«).
+  - **Das Gruppenfeld**, wenn mehrere Einheiten gewählt sind — Einheiten,
+    Geschwindigkeit, Zustand/Schlecht, Sprit/Niedrig, Munition/Wenig in zwei
+    Spalten. Bei uns zeigte der Block die erste Einheit der Auswahl.
+
+  Zwei Zahlen waren nicht zu raten und sind gemessen: »Geschw. 8/11« ist
+  **langsamstes zu schnellstem** Mitglied, nicht »8 von 11 sind schnell«; und
+  die Schwelle für *Schlecht*, *Niedrig* und *Wenig* ist dreimal dieselbe —
+  **unter 25 %**.
+
+  ⚠ Dabei ist ein Lesefehler aufgefallen, der still in unseren Notizen stand:
+  der Übersetzer lädt die Zeichenkette der **nächsten** Zeile mitten in die
+  Aufrufvorbereitung der **laufenden** hinein. Wer beides paart, liest jede
+  Zeile eines Feldes um eine zu hoch — und das sieht vollkommen plausibel aus,
+  weil die Reihenfolge stimmt.
+
+- ⭐ **Herz, Kanister und Patronen — die drei Symbole neben den Statusbalken.**
+  Im Code stand seit Wochen ausdrücklich »sie fehlen noch — weder in
+  `PANEL.DTA` noch in `CONTROL.CWD`«. Beides stimmte und beides führte in die
+  Irre: sie liegen in **`ANIM.CWA`**, derselben Datei wie die Explosionen.
+
+  Gesucht wird über die **Bildfolge**, nicht über die Bildnummer — der Zeichner
+  rechnet sie auch aus. Bei der ausgelieferten Datei fällt 960/961/962 heraus,
+  aber diese Zahlen stehen nirgends im Programm.
+
+  Die Balken daneben sitzen jetzt ebenfalls auf gelesenen Punkten. Vorher war
+  ihre Lage von einer Bildschirmaufnahme abgelesen, mit dem ehrlichen Vermerk
+  »nicht auf den Punkt gemessen«. Der Zeichner nennt die Punkte selbst, samt
+  Länge `38 · ist/voll`.
+
+- ⭐ **Die Mauszeiger des Originals, samt Angriffsfadenkreuz.** Gemeldet als
+  »das erscheint, wenn man über eine gegnerische Einheit kommt«. Es ist kein
+  Weltmarker, sondern der **Mauszeiger** — ein Fadenkreuz, um das vier rote
+  Dreiecke nach aussen wandern.
+
+  Sie liegen im **Anhang von `ROBO.CWR`**, den unser eigener Kopfkommentar als
+  »aux« und »per-frame meta block« vermutete. Es ist die Zeigerbank: **28 Arten
+  mit 103 Bildern**. Die Rechnung geht auf die Byte auf — Blobanfang plus
+  Blobgrösse plus Bankgrösse ist genau die Dateilänge.
+
+  Welcher Zeiger wann, ist gelesen und nicht gewählt: der gewöhnliche Pfeil,
+  das eigene Objekt, ein eigener Zeiger für die **Infanterie**, und der
+  Angriffszeiger. ⚠ Wer den Zeigermodus *setzt*, ist ungelesen — die übrigen 24
+  Arten sind darum nicht angeschlossen.
+
+- **Der Einnahmebalken über einem Gebäude.** Während ein Gebäude eingenommen
+  wird, trägt es einen breiten Balken, links in der einen und rechts in der
+  anderen Spielerfarbe. Bei uns stand der Fortschritt nur als Text im
+  Bedienfeld — also nur für das eine angewählte Gebäude und nirgends auf der
+  Karte.
+
+  ⚠ Der erste Anlauf nahm die Breite aus dem Bildschirmfoto und schloss daraus,
+  der Balken folge dem Grundriss. Falsch: er folgt der **Einnahmedauer**. Und
+  die zwei Farben sind nicht »Fortschritt gegen Rest«, sondern **Besitzer gegen
+  Eindringling**. Ein Bildschirmfoto ist gut für »es gibt so etwas«; woraus sich
+  eine Zahl ergibt, sagt nur der Code.
+
+- ⭐ **Die Windfahne unten in der Mitte des Bedienblocks.** Gemeldet als »der
+  kleine Kompass unten in der Mitte fehlt«. Sie dreht sich jetzt, und ihre acht
+  Bilder kommen aus `WINDOWS.CWW`.
+
+  ⚠ Dabei ist das **Satzformat dieser Datei berichtigt** worden, und der alte
+  Lesefehler ist lehrreich: ein Satz ist 440 Byte, nach 22 Byte Kopf bleiben
+  418 — und 418 ist 22·19. Das ging so glatt auf, dass es als Bildgrösse
+  durchging, und das gerenderte Bild sah auf den ersten Blick richtig aus. Der
+  Blitrumpf sagt etwas anderes: **20 Zeilen** zu je 22 Byte, davon zwei
+  Kopfbytes. Die flache Lesart nahm die Kopfbytes der nächsten Zeile als Punkte
+  der laufenden — jede Zeile um zwei verschoben. Eine Rechnung, die aufgeht, ist
+  ein Hinweis; der Beleg ist die Schleife, die das Bild kopiert.
+
+  ⚠ Unser ist, **wie schnell** sie dreht — das Original führt eine Windrichtung,
+  nennt aber keinen Takt.
+
+- **Bäume verdecken wieder Einheiten.** Zweimal gemeldet, und beide Male lag es
+  nicht am Code: die Karten waren nach der letzten Änderung an der Objekthöhe
+  **nie neu gebacken** worden. 36 Karten neu ausgespielt, 69.388 erhöhte
+  Objekte. Ein Fehler, der wie ein Codefehler aussieht und ein Datenstand ist —
+  darum steht er hier.
+
+- **»Weiter« am Ende einer Kampagnenmission** führte ins Hauptmenü statt zur
+  Vorschau der nächsten Mission — und zeigte dort weiter die Hilfefenster der
+  gerade beendeten.
+
+
 - ⭐⭐ **Mission 1 ist wieder das Tutorial, das sie im Original ist — alle
   siebzehn Hilfefenster, an ihrer Bedingung und an ihrer Stelle.** Gemeldet mit
   sechzehn abgefilmten Bildern des Originals und dem Satz: »wo und wann diese
@@ -1244,6 +1444,23 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   falsch gelesene Rechnung würde hier streuen.
 
 ### Klang
+
+- ⭐ **Einheiten melden sich, wenn man sie losschickt.** Gemeldet als »alle
+  Einheiten haben Sounds, die abgespielt werden, wenn man diese wohin bewegt —
+  meistens aber jede Klasse für sich einen Sound«. Genau so ist es gebaut, und
+  es ist derselbe Bau wie beim Anwählen; wir hatten den Anwählklang und den
+  Trefferklang, aber den **Befehlsklang** gar nicht — dabei ruft ihn die
+  Eingaberoutine des Originals **viermal** so oft.
+
+  Je Einheitenart liegen im Klangvorrat zwei Anwählzeilen, zwei Befehlszeilen
+  und drei gemeinsame; der Würfel nimmt die gemeinsamen in einem von drei
+  Fällen. Zwei Fahrwerke sagen beim Befehl **nichts** — ihr Eintrag in der
+  Sprungtafel zeigt auf das `ret`.
+
+  ⚠ Es spricht **eine** Einheit, nicht die Auswahl. Steht dort eine Gruppe,
+  holt sich das Original ein Mitglied und lässt dieses sprechen. Ein Chor von
+  zwölf Panzern wäre nicht bloss laut, er wäre falsch.
+
 
 - **Ein Klang kommt jetzt von links oder rechts.** Die Dämpfung nach Entfernung
   gab es schon, das Panorama war gelesen und ausdrücklich als Lücke
