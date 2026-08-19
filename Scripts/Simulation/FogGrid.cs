@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Simulation;
+﻿namespace AkteEuropaReborn.Simulation;
 
 using System.Collections.Generic;
 using Godot;
@@ -204,7 +204,28 @@ public sealed class FogGrid
             if (y < 0 || y >= Height) continue;
             int half = Span(r, r - Mathf.Abs(dy));
             if (half <= 0) continue;
-            int x0 = Mathf.Max(0, col - half + 1), x1 = Mathf.Min(Width - 1, col + half - 1);
+            // ⚠⚠ 19.08.2026 — JEDE ZEILE WAR ZWEI ZELLEN ZU SCHMAL. Hier stand
+            // `col - half + 1 .. col + half - 1`, also die Breite `2t-1`. Das
+            // Original nimmt `col - t .. col + t` EINSCHLIESSLICH, also `2t+1`:
+            //
+            //     0x4201A0  mov ax, word[t*2 + 0x4F8A48]   ; der Tafelwert
+            //     0x4201A8  mov cx, di / sub cx, ax        ; links  = Spalte - t
+            //     0x4201B4  add ax, di                     ; rechts = Spalte + t
+            //
+            // ⚠ AUSSER IN DER MITTELZEILE. Dort rechnet das Original mit dem
+            // RADIUS statt mit dem Tafelwert (0x4201B9: `mov cx,di / lea
+            // eax,[edi+esi] / sub cx,si`), und weil `t[r][r] == r+1` ist, kommt
+            // dort `2r+1 = 2t-1` heraus — genau unsere alte Formel. Unsere
+            // Mittelzeile stimmte also zufaellig, und das hat den Fehler in
+            // allen anderen Zeilen verdeckt.
+            //
+            // GEMESSEN an der Tafel (beide GAME.EXE byteweise gleich):
+            //     r= 6   Original 145   vorher 121   (-24)
+            //     r=10   Original 373   vorher 333   (-40)
+            //     r=19   Original 1229  vorher 1153  (-76)
+            // Jede Einheit sah also spuerbar weniger, als sie soll.
+            int arm = dy == 0 ? half - 1 : half;
+            int x0 = Mathf.Max(0, col - arm), x1 = Mathf.Min(Width - 1, col + arm);
             int at = y * Width;
             for (int x = x0; x <= x1; x++) _cells[at + x] = Watched;
         }
