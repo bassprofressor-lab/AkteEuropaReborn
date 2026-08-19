@@ -722,3 +722,64 @@ deshalb vorerst stehen und ist weiter als unsere Setzung gekennzeichnet.
 **Was mir hülfe:** ein Bildschirmfoto aus dem Original, auf dem ein Panzer
 gerade schiesst, möglichst formatfüllend — daran messe ich, wo die Mündung
 relativ zum Fahrzeugbild sitzt, und habe den Anker.
+
+---
+
+## G. Zwei Messungen an den Originalbildern (19.08.2026 abends)
+
+Der Spieler hat `mündungsfeuer.png` (aus dem Let's Play) und die sechzehn
+`kampagne1 original tutorial*.png` bereitgestellt. Maßstab in beiden: die
+Kartenfläche ist **1380 Bildpunkte für 640** → **2,156**, an den schwarzen
+Balken gemessen und in beiden Bildern gleich.
+
+### Das Mündungsfeuer — gemessen, aber nicht baubar
+
+| | Original | wir |
+|---|---|---|
+| Größe | **5,1 × 4,2** Spielpunkte | Folge 232: **30 × 27** |
+| Lage | **(+6,7 / −2,1)** von der Rumpfmitte | `ShotOrigin + Richtung · 14` |
+
+**Unser Mündungsfeuer ist rund sechsmal zu groß.** Das ist die Antwort auf die
+Frage von heute mittag, ob es „zu hell wirkt" — es ist nicht zu hell, es ist zu
+groß.
+
+⚠ **Warum ich es trotzdem nicht geändert habe.** Beides fehlt noch:
+* Die **Folge** ist im Original eine Variable, keine Konstante:
+  `0x42A1C1` liest `word[edx*4 + 0x7A404A]` mit `edx = word[esp+0x22]` — die
+  Nummer kommt vom Aufrufer. Welche es ist, ist nicht verfolgt.
+* Die **Lage** hängt an der Blickrichtung: SHOOT.CWT führt je Waffe und je Bild
+  einen eigenen Punkt (`Zeichenpunkt + (x−25, y−68)`, `0x42A188`). Die gemessenen
+  (+6,7 / −2,1) gelten nur für die eine Richtung auf diesem Bild. Eine feste Zahl
+  daraus zu machen wäre schlechter als die jetzige Rechnung.
+
+**Was mir hülfe:** zwei bis drei weitere Standbilder desselben Panzers beim
+Schuss in **verschiedene Richtungen**. Damit habe ich die Punkte je Richtung und
+kann die Tafel anhängen, ohne den Anker zu erraten.
+
+### Das Feuer — die Folge stimmt, die GRÖSSE nicht
+
+⭐ **Bestätigt:** `kampagne1 original tutorial7.png` zeigt zwei brennende Bäume
+**nebeneinander mit zwei verschiedenen Flammen** — links die seitliche mit
+weißglühender Spitze, rechts der aufrechte Feuerball. Unsere Wechselfolge
+550/552 ist also richtig. Und die Sprungtafel bestätigt den Weg unabhängig:
+Art 12 → Bytetafel `0x42BC10` Index 9 → `0x42BBD0` → **`0x42B422`**, dort
+`edi = (index&1)·2 + 0x226` und `word[edi·4 + 0x7A404A]` als Anfangsbild.
+
+⭐ **Ebenfalls beantwortet:** in `kampagne1 original tutorial.png` brennt ein Baum
+**mitten im dichten Wald**, und die Kronen davor verdecken seinen unteren Teil.
+Der Eindruck „strange" ist also **originalgetreu** — nichts zu ändern.
+
+⚠ **ABER die Größe passt nicht, und das ist ungeklärt.** Gemessen an drei Feuern
+in `mündungsfeuer.png` und zweien in `tutorial7.png`:
+
+| | Original | unser Sprite (heller Kern) |
+|---|---|---|
+| Flamme | **23…29 breit, 31…45 hoch** | `blast` 44 × 70, `blast2` 35 × 52 |
+
+Rund **1,7-mal zu groß**, und das bei derselben gelesenen Folge — die Sprites
+kommen ja aus ANIM.CWA 550/552. Entweder exportieren wir die falschen Bilder
+dieser Folge, oder der Maßstab 2,156 gilt für die Flammen nicht.
+
+**Was mir hülfe:** ein Standbild, auf dem ein brennender Baum und eine Einheit
+dicht beieinander stehen. An der Einheit habe ich einen zweiten Maßstab und
+kann entscheiden, ob es an unserem Bild oder an meiner Rechnung liegt.
