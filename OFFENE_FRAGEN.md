@@ -191,3 +191,153 @@ nicht gefunden habe.
 eingefärbtes Wort gut zu lesen ist, zusammen mit der Textnummer (steht oft im
 Fenstertitel). Dann kann ich die Zeile in `HELPG.TXT` aufschlagen und sehen,
 was dort wirklich um das Wort herum steht.
+
+
+---
+
+# Vier Recherchen im Original (19.08.2026)
+
+Vier Untersuchungen am Programm von 1997, jede gegen **beide** GAME.EXE geprüft.
+Was hier steht, ist der Ertrag, **nicht** die vollständigen Berichte — und
+ausdrücklich getrennt nach »gelesen und gebaut«, »gelesen und offen« und
+»behauptet und widerlegt«.
+
+## Gelesen und schon gebaut
+
+* **Der Sichtkreis war jede Zeile zwei Zellen zu schmal** (`9b1a005`). Das
+  Original stempelt `Spalte−t … Spalte+t` einschliesslich, wir nahmen
+  `−t+1 … +t−1`. Nachgerechnet: bei Sichtweite 10 sah jede Einheit 333 statt
+  373 Zellen. ⚠ Die Mittelzeile stimmte zufällig, weil das Original dort mit
+  dem Radius statt dem Tafelwert rechnet — und dieser Zufall hat den Fehler in
+  allen anderen Zeilen verdeckt.
+
+## A. Der weiche Nebel — die Ursache ist gefunden
+
+Meine Vermutung »das Original dunkelt das Gelände gar nicht ab« ist
+**widerlegt**: der Geländezeichner hat eine Dreiwegverzweigung genau auf dem
+Sichtgitter. Die Weichheit hat drei Ursachen:
+
+1. **Ein 50-%-Schachbrett statt Volldeckung** (`0x4AC990`): 40×20 Punkte, jeder
+   zweite gesetzt, je Zeile um eins versetzt, Palettenindex 47. Halbtransparenz
+   ohne Alphakanal.
+2. **Ein dritter Sichtzustand, der SAUM** (`0x41FF50`) — eine Ein-Zellen-
+   Ausweitung des Sichtbereichs.
+3. **Marching Squares**: ein 257×257-Eckengitter (`0x5739D8`), aus dessen vier
+   Ecken ein Vierziffern-Code wird, nachgeschlagen in einer 16-Einträge-Tafel
+   (`0x4F89F8`, vollständig, kein Füllwert). Die Kante läuft dadurch **durch**
+   die Kachel, nicht an ihr entlang. Ein von allen Seiten umschlossenes Loch
+   bekommt gar keinen Nebel (`0xFFFF`).
+
+Dazu: das Original führt **drei** Merkgitter, nicht eines — Bauwerksmarke,
+Belegung und Kachelbild je Zelle. Die Übersichtskarte zeigt das Erinnerte, die
+Kampfkarte nur das Gesehene.
+
+⚠ **Warum trotzdem nichts gebaut ist:** im Zeichenpfad des Originals gibt es
+gar keinen Zustand »gesehen, aber gerade nicht beobachtet« — `0x678B58` wird
+jede Runde neu gebaut. Das widerspricht einer Ablesung in unserem Baum
+(»auf tutorial15 liegt die ganze Insel in voller Helligkeit«). Eines von
+beiden ist falsch, und das gehört entschieden, **bevor** jemand den Nebel
+umbaut.
+
+**Was mir hülfe:** ein Bildschirmfoto mit einer sichtbaren Nebelkante. Bei
+genügend Zoom ist das Schachbrett unmittelbar als Punktraster zu sehen — und
+dieselbe Aufnahme beantwortet auch die Frage nach dem Erinnerungszustand.
+
+Nebenbefunde: `0x542E18` ist **kein** Geländefeld, sondern das Bauwerksgitter
+(`0x63` = Türzelle); Radarmasten sind 200 Plätze zu 6 Byte mit Sichtweite 10
+(`'Too many radars'`); und es gibt einen **Störsender** (Gerät 77), der
+fremde Sicht wieder löscht — bei uns nicht vorhanden.
+
+## B. Schuss und Einschlag — die Tafel, die vieles ersetzt
+
+Die ganze Zuordnung sitzt in **einer** Tafel: `0x4F98E8` (C) / `0x4F88F0` (F),
+Schrittweite 22, Index = Geschosstyp, in beiden Fassungen **Byte für Byte
+gleich**. Sie trägt Geschwindigkeit, Flugfolge, Einschlagsfolge, Schussklang,
+Mündungshöhe und Zwillingsversatz. Wir haben davon bisher **ein** Feld
+importiert.
+
+Damit fallen mehrere unserer Setzungen weg: `RocketSpeed`, `MuzzleReach`,
+`RocketKind` und die geratene Einschlagsfolge stehen alle gelesen da.
+
+Weitere Befunde:
+* **Geschosse fliegen wirklich**, 1000 feste Plätze zu 32 Byte, Geschwindigkeit
+  5…35 Bildpunkte je Takt **je Typ**, jeden Takt gegen die Restentfernung neu
+  gerechnet — das Geschoss zielt nach.
+* **Zwei Bahnarten**: gerade und eine echte **Wurfbahn** mit Schwerkraft. Die
+  Probe, dass die Lesung stimmt: nach genau `n = d/v` Schritten ist die
+  Steiggeschwindigkeit auf ihren negativen Startwert gefallen.
+* **Vier Geschosstypen feuern zwei Geschosse nebeneinander** (Zwillingslafette).
+* **Acht Einschlagszweige mit eigenen Höhenschwellen**: ein Gebäude (60) fängt
+  Geschosse ab, die über einen Panzer (15) hinweggehen.
+* **Einheiten werden mit jedem Treffer stärker.** `+0x28` ist der
+  Erfahrungs-RANG, `+0x4C` die Punkte — das Spiel nennt es selbst:
+  `printf("exp:", (byte[+0x28]<<8) | byte[+0x4C])` @0x4178F2, von mir
+  nachgeprüft. Der Rang steht in **beiden** Vorfaktoren der Schadensformel: ein
+  Rang mehr macht mehr Schaden **und** steckt mehr ein. Wir lassen ihn nie
+  wachsen.
+* **Waldbrand breitet sich mit dem WIND aus**: die Wahrscheinlichkeit hängt vom
+  Winkel zwischen Ausbreitungsrichtung und Windrichtung ab — mit dem Wind
+  4,6-mal so oft wie quer dazu. Der Wind (`0x4F8D68`/`0x4F8D6C`) ist bei uns
+  ungenutzt.
+
+⚠ **Negativbefund mit Beleg: es gibt kein Mündungsfeuer.** Die Schussroutine
+legt in ihren 2816 Byte **keinen einzigen** Effekt an — alle Aufrufe wurden
+ausgezählt. Der Blitz an der Mündung ist das erste Bild der Flugfolge.
+
+## C. Schiffe
+
+* **Zehn Schiffsarten**, Tafel `0x52EDA0`, 42 Byte je Satz, beide EXE gleich.
+  Gegenprobe an den Karten: 97 von 97 Schiffen stimmen in Bauteil **und**
+  Waffenplatz mit der Tafel überein, kein Gegenbeispiel.
+* **16 Blickrichtungen**, dreifach belegt: die Drehroutine bricht bei 16 um,
+  die Bauteiltafel von ROBO.CWR hat Abstand 16, und die Bilder selbst sind
+  spiegelsymmetrisch 1↔15, 2↔14, 3↔13, 4↔12. ⚠ Unser Ausgeber nimmt **8** —
+  die Schiffsbilder sind also halb exportiert.
+* **`+0x0d` heisst `ZBRAN` = Waffe**, das Spiel druckt den Namen selbst. Unsere
+  Deutung »Bildvariante des Rumpfes« ist falsch; das Rumpfbild kommt aus
+  `+0x0b`.
+* **Der Dock-Auslauf ist gelesen** und ersetzt unsere Setzung: Auftrag 52 wählt
+  die Seite, Auftrag 49 lässt das Schiff geskriptet über zwei bzw. vier Zellen
+  gleiten, und **erst danach** stempelt es sich ins Belegungsgitter.
+* **Transport gibt es, und wir haben ihn nicht**: eine Tafel mit 100 Plätzen zu
+  38 Byte, Gewichtssystem 5 je Fahrzeug / 1 je Infanterist, Deckel 15 — also
+  **drei Fahrzeuge oder fünfzehn Mann**. Flugzeuge und Schiffe werden
+  abgelehnt. Die »Rampe« ist keine Bauart, sondern eine Zellmarke (≥100 zum
+  Beladen, ≥200 zum Entladen).
+* **Ein Schiff ohne Sprit tut gar nichts** — der ganze Auftragsverteiler wird
+  übersprungen.
+
+### ⚠ Eine Behauptung der Recherche, die ich WIDERLEGT habe
+
+Der Bericht führt »die Mittelpunktregel fehlt« als Erklärung für die gemeldete
+Rakete, die »paar Felder entfernt im Wasser« abgeht. **Das stimmt nicht.** Das
+Original setzt ein 2×2-Schiff auf `40·col + 40`, ein 4×4 auf `40·col + 80` —
+also auf die Mitte des Grundrisses. Unser `BodyCenter` rechnet
+`CellCenter + TileW/2` bzw. `+ 1,5·TileW`, und das ist **derselbe absolute
+Punkt**. Nachgerechnet, nicht geglaubt. Die Ursache der gemeldeten Rakete ist
+also weiter offen.
+
+## D. Was sonst noch ungelesen ist — die drei grössten Posten
+
+1. **Das Original hat einen eigenen Determinismus-Prüfstand.** Marken
+   `RECORDING` / `REPLAY`, Dateien `replay.beg` (Anfangszustand), `replay.mes`
+   (Befehlsstrom), `replay.txt` (Protokoll). Er schreibt je Takt **56 benannte
+   Felder jeder Einheit** heraus und vergleicht sie beim Abspielen. Im ganzen
+   Baum: null Treffer. Genau die Frage, an der »Multiplayer online« hängt — und
+   nebenbei die vollständige, geordnete Feldliste des Einheitensatzes aus dem
+   Mund des Spiels.
+2. **Die Reihenfolge des Haupttakts steht im Klartext da**: 44 benannte
+   Stationen mit 28 Zufallsprüfpunkten dazwischen. Unser Takt hat eine
+   **andere** Reihenfolge, und mindestens 14 Stationen fehlen ganz — darunter
+   `Check gas`, `Self-defenders`, `Mines and traps`, `craters`, `Check AA`.
+   Die Reihenfolge *ist* der Determinismus.
+3. **`game.007` ist ein echter Spielstand** (566 KB) und wir haben ihn nie
+   angefasst. Er enthält die Bauteiltafel im Klartext — also eine **zweite
+   Quelle**, gegen die sich jedes gelesene Satzformat byte-genau prüfen lässt,
+   ohne unsere eigene Ableitung zu befragen.
+
+Dazu: **Gas** ist eine eigene Objektart mit zwei Takten, **Minen, Fallen und
+aufgestellte Radare** sind drei baugleiche Routinen mit je eigener Liste,
+**Selbstverteidiger** sind eine eigene Liste im Haupttakt, und es gibt fünfzehn
+Schummelcodes samt `ENABLEDEVEL`, das vermutlich die ganze Protokollausgabe
+freischaltet.
