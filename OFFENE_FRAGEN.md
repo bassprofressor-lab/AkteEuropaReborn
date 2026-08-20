@@ -1,4 +1,4 @@
-﻿# Offene Fragen an den Spieler
+# Offene Fragen an den Spieler
 
 Alles, wo ich **im Original nichts gefunden habe** oder wo eine Deutung nicht
 zu beweisen war. Kein Punkt hier ist geraten und eingebaut — entweder er ist
@@ -1214,38 +1214,57 @@ ersten und zweiten ist in beiden Fassungen `0x7D8`.
 
 ---
 
-## M. Die sechs ungebauten Gebäudeklänge — die Auslöser sind gelesen (19.08.2026)
+## ~~M. Die sechs ungebauten Gebäudeklänge~~ — ERLEDIGT am 20.08.2026
 
-Gebaut haben wir 128 (Mining), 129 (Upgrading), 130 (Enlarging), 131
-(InfantryDies), 132 (BuildingCaptured), 136 (ResearchDone), 140 (Refused).
-Von der Gruppe 123…134 fehlen sechs. Alle rufen `0x40162c(nr,0,0,0)`.
+Hier stand eine Tabelle mit sechs Nummern (123, 124, 125, 127, 133, 134) und
+dem Satz »nicht gebaut, und mit Absicht: der Auslöser ist gelesen, die
+*Bedeutung* nicht«. Beides ist jetzt geklärt — und **zwei der sechs waren schon
+gebaut**, als die Liste geschrieben wurde.
 
-| Nr | Stelle | Bedingung davor |
-|---|---|---|
-| **123** | 0x43DFC7 | `dx = eax−1` nach `word [bld+0xC06942]`, dann `test ax,ax / jne` — ein **Zähler im Gebäudesatz läuft ab** (0xC06910 ist die Gebäudetafel, also +0x32) |
-| **124** | 0x440460 | `ecx = tafel[spieler*4+0x878AB0] + edx; cmp ecx,0x64; jge` → klingt bei **Summe < 100** |
-| **125** | 0x440493 | dieselbe Summe, `cmp eax,0x64; jl` → klingt bei **Summe ≥ 100** |
-| **127** | 0x43E04F | `cmp byte [bld+0xC06915], cl / jne` — nur wenn der **Besitzer** passt |
-| **133** | 0x43D068 | `cmp byte [bld+0xC06915], byte[0x4FA284]` |
-| **134** | 0x43CED6 | dasselbe |
+**Die Voraussetzung, an der es hing:** der ganze Block 120…143 ist **gemessen**
+eine einzige Aufnahmereihe **gesprochener Ansagen** — 24 Stücke, 1,04…2,31 s,
+eine männliche Stimme, Grundton 155…212 Hz. Die Trennung Sprache/Geräusch ist
+an bekannten Gruppen geeicht und überlappt nirgends: Stimmhaftigkeit 0,42…0,77
+bei allen fünf Sprachbänken gegen 0,00…0,08 bei allen Effektbänken.
 
-⭐ **Zwei Dinge, die darüber hinaus taugen:**
+| Nr | Stand |
+|---|---|
+| **124** | **gebaut** — Stromdeckung fällt unter 100 %, in `PowerMessages` (@0x440460) |
+| **125** | **gebaut** — Deckung wieder ≥ 100 %, reine Aufwärtsflanke (@0x440491) |
+| **127** | **gebaut** — ein Teilelager trifft seinen Lagerplatz (@0x43E04F), `jne` nicht `jge` |
+| **133** | **war schon gebaut** — `Capture.cs`, geht an den NEUEN Besitzer (@0x43D068) |
+| **134** | **war schon gebaut** — `Capture.cs`, geht an den ALTEN Besitzer (@0x43CED6) |
+| **123** | **kann im Original nie erklingen** — siehe unten |
 
-1. **`byte[0x4FA284]` ist der EIGENE Spieler.** Das Muster
-   `cmp byte [gebaeude+0xC06915], byte[0x4FA284]` heißt »nur für ein Gebäude,
-   das mir gehört« — genau die Bedingung, unter der das Original eine Meldung
-   überhaupt ausgibt. `+0x05` im Gebäudesatz ist demnach der Besitzer.
-2. **124 und 125 sind ein PAAR** an derselben Summe, einmal unter und einmal ab
-   100. Das ist keine Warnung und ihr Gegenteil, sondern eine Schwelle, die in
-   beide Richtungen meldet.
+### ⭐ 123 ist ein echter Fehler des Originals
 
-⚠ **Nicht gebaut, und mit Absicht.** Der Auslöser ist gelesen, die *Bedeutung*
-nicht — dafür bräuchte jede Nummer noch eine Lesung der umgebenden Funktion.
-Ein Klang an der falschen Stelle ist hörbarer Unsinn und schlimmer als keiner.
-Wer weitermacht, fängt bei 124/125 an: die Summe über `0x878AB0` zu benennen
-klärt zwei Nummern auf einmal.
+Der Wächter des Blocks steigt bei 0 ganz aus (C `@0x43DEC2` / F `@0x43CED2`:
+`cmp word[bld+0x32], 0` / `je` aus dem Block). Weiter unten wird abgezogen — und
+der Klangtest liest den Wert **vor** dem Abzug:
 
----
+    ax = word[bld+0x32]
+    test ax, ax          ; setzt ZF am ALTEN Wert
+    lea edx, [eax-1]     ; lea aendert keine Flaggen
+    word[bld+0x32] = dx
+    jne <weiter>         ; also IMMER genommen
+    Klang 123
+
+Gewollt war »abziehen, und wenn er dabei auf 0 fällt, ansagen«. Gebaut ist
+»ansagen, wenn er schon 0 war« — und genau das hatte der Wächter ausgeschlossen.
+Der `test` steht **einen Befehl zu früh**. In **beiden** Auslieferungen gleich,
+geprüft über die Fundstellen des Feldes statt über geratene Adressen.
+
+⚠ **Nicht nachgebaut, und das ist die Antwort, kein offener Punkt.** Eine Ansage
+nachzubauen, die das Original nie spielt, wäre keine Originaltreue.
+
+### ⚠ Was diese Liste über sich selbst lehrt
+
+Sie führte **133 und 134 als ungebaut**, während `Simulation/Capture.cs` sie
+längst spielte — mit derselben Begründung, die ich am 20.08. noch einmal
+hergeleitet habe (der Anker ist der Besitzerwechsel: 134 steht davor, 133
+danach). **Auch die Begründung eines offenen Punktes gehört geprüft, nicht nur
+der Punkt.**
+
 
 ## N. ⭐ Sektion 20 ist vollständig erklärt (19.08.2026)
 

@@ -1,4 +1,4 @@
-﻿namespace AkteEuropaReborn.Audio;
+namespace AkteEuropaReborn.Audio;
 
 using System.Collections.Generic;
 using System.Text.Json;
@@ -222,33 +222,43 @@ public static class GameSounds
     public const int StoreFull = 127;
 
     /// <summary>
-    /// <b>Drei Ansagen, die BEWUSST nicht gebaut sind</b> (Stand 20.08.2026) —
-    /// ihre Auslöser sind gelesen, ihr Anlass nicht.
+    /// <b>ANSAGE 123 KANN IM ORIGINAL NIE ERKLINGEN</b> — und das ist gelesen,
+    /// nicht vermutet. Einer der ganz wenigen echten Fehler des Originals.
     ///
-    /// <list type="bullet">
-    ///   <item><b>123</b> @0x43DFC7 — ein Zähler im Gebäudesatz
-    ///   (<c>word[+0x32]</c>) läuft ab. ⚠ Es gibt den belegten Verdacht, dass
-    ///   sie im Original <b>nie</b> erklingt: der Eingangswächter des Zustands
-    ///   (@0x43DEC5) schliesst den Wert 0 aus, der Klangtest (@0x43DFA9) prüft
-    ///   aber den Wert VOR dem Abzug. Gewollt war »Vorrat gerade auf 0
-    ///   gefallen«, gebaut wurde der Test eine Zeile zu früh. <b>Nicht
-    ///   nachgeprüft</b> — und in diesem Projekt gilt: wer einen Fehler im
-    ///   Original findet, misstraut zuerst sich selbst.</item>
-    ///   <item><b>133</b> @0x43D068 — davor läuft eine Schleife über alle 255
-    ///   Gebäude, die bei passendem Typ und Besitzer <c>word[+0x2E]</c> und
-    ///   <c>word[+0x30]</c> um je 100 erhöht; danach klingt es, wenn das
-    ///   auslösende Gebäude mir gehört. WAS da geliefert wird, ist ungelesen.
-    ///   </item>
-    ///   <item><b>134</b> @0x43CED6 — davor vier Durchläufe mit
-    ///   <c>0x4B1170</c> (aus der Einheiten-Erzeugungsfamilie); danach derselbe
-    ///   Besitzertest. Anlass ungelesen.</item>
-    /// </list>
+    /// <para>Der Zähler ist <c>word[Gebäude + 0x32]</c>. Der Block prüft ihn
+    /// zuerst als WÄCHTER und steigt bei 0 ganz aus:</para>
+    /// <code>
+    ///   C @0x43DEC2 / F @0x43CED2   cmp word[bld+0x32], 0
+    ///                               je  &lt;raus aus dem ganzen Block&gt;
+    /// </code>
+    /// <para>Weiter unten wird abgezogen und dabei der Klang geprüft — nur
+    /// liest die Prüfung den Wert VOR dem Abzug:</para>
+    /// <code>
+    ///   C @0x43DFA9 / F @0x43CFB0   ax = word[bld+0x32]
+    ///                               test ax, ax        ; setzt ZF am ALTEN Wert
+    ///                               lea edx, [eax-1]   ; lea aendert keine Flaggen
+    ///                               word[bld+0x32] = dx
+    ///                               jne  &lt;weiter&gt;      ; also IMMER genommen
+    ///                               Klang 123
+    /// </code>
+    /// <para>Gewollt war offensichtlich »abziehen, und wenn er dabei auf 0
+    /// fällt, ansagen«. Gebaut ist »ansagen, wenn er schon 0 war« — und genau
+    /// das hat der Wächter zwei Bildschirmseiten vorher ausgeschlossen. Der
+    /// <c>test</c> steht einen Befehl zu früh.</para>
     ///
-    /// <para><b>Warum nicht trotzdem gesetzt:</b> ein Klang an der falschen
-    /// Stelle ist hörbarer Unsinn und schlimmer als keiner. Der Besitzertest
-    /// <c>cmp byte[gebaeude+0x05], byte[0x4FA284]</c> ist bei allen dreien
-    /// gelesen — es fehlt nur der Anlass.</para></summary>
-    public const int NotBuiltYet123 = 123, NotBuiltYet133 = 133, NotBuiltYet134 = 134;
+    /// <para><b>In BEIDEN Auslieferungen gleich</b>, Befehl für Befehl und in
+    /// derselben Reihenfolge — geprüft über die Fundstellen des Feldes, nicht
+    /// über geratene Adressen (der .bss-Versatz ist C = F + 0xFA0).</para>
+    ///
+    /// <para>⚠ Der Nebeneffekt bleibt ebenfalls unerreichbar: bei 0 schriebe
+    /// der Abzug <c>0 − 1 = 0xFFFF</c> zurück.</para>
+    ///
+    /// <para><b>Nicht gebaut, und das ist die Antwort, kein offener Punkt:</b>
+    /// eine Ansage nachzubauen, die das Original nie spielt, wäre keine
+    /// Originaltreue. Die Nummer steht hier, damit niemand ein zweites Mal
+    /// danach sucht.</para>
+    /// </summary>
+    public const int NeverHeard123 = 123;
 
     /// <summary>Research reported — @0x4ab41b, right after "Nachricht des
     /// FORSCHUNGSLABORS:" and in the routine that prints "Neue Waffe
