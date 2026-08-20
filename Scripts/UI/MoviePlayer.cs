@@ -79,6 +79,10 @@ public partial class MoviePlayer : CanvasLayer
     private bool _fertig;
     private readonly AudioStreamPlayer? _ton;
 
+    /// <summary>Lief die Menuemusik, als der Film anfing? Dann geht sie
+    /// danach weiter. Siehe <see cref="MusikAnhalten"/>.</summary>
+    private readonly bool _musikLief;
+
     /// <summary>
     /// Den Film einer Mission suchen. <c>null</c>, wenn er nirgends liegt —
     /// dann wird stillschweigend übersprungen.
@@ -148,6 +152,7 @@ public partial class MoviePlayer : CanvasLayer
         _bild.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         AddChild(_bild);
 
+        _musikLief = MusikAnhalten();
         _ton = TonAnlegen();
         GD.Print($"Film: {System.IO.Path.GetFileName(pfad)}, {_film.Chunks.Count} Bilder, " +
                  $"{_film.Width}x{_film.Height}, {_film.Fps:0.##} B/s " +
@@ -168,6 +173,34 @@ public partial class MoviePlayer : CanvasLayer
             Ende();
             GetViewport().SetInputAsHandled();
         }
+    }
+
+    /// <summary>
+    /// <b>Die Menuemusik anhalten, solange der Film laeuft.</b>
+    ///
+    /// <para>⚠ 20.08.2026, gemeldet: »videos laufen, nur hoert man die Musik
+    /// vermutlich aus dem Hauptmenu?«. Genau so war es. Ein Film bringt seine
+    /// eigene Tonspur mit — zwei Stuecke uebereinander sind keine Untermalung,
+    /// sondern ein Fehler.</para>
+    ///
+    /// <para>⚠ <b>Warum das nicht schon <c>StopBackdrop()</c> erledigt hat:</b>
+    /// die Menuemusik ist in Wahrheit die MISSIONSMUSIK der Kulisse — die
+    /// Kulisse spielt einen echten Spielstand, und der ruft
+    /// <see cref="Audio.MidiMusic.StartForMission"/>. Die Kulisse wird vor dem
+    /// Briefing abgeraeumt, die Musik nicht: sie laeuft ueber MCI im PROZESS,
+    /// nicht am Knoten. Ein weggeraeumter Knoten nimmt sie darum nicht mit.
+    /// </para>
+    ///
+    /// <para>Nach dem Film geht dasselbe Stueck weiter
+    /// (<see cref="Audio.MidiMusic.Resume"/>), damit das Briefing klingt wie
+    /// vorher — hier wird nur der Film freigeraeumt, sonst nichts.</para>
+    /// </summary>
+    private static bool MusikAnhalten()
+    {
+        if (Audio.MidiMusic.Track < 0) return false;
+        Audio.MidiMusic.Stop();
+        GD.Print("Film: Menuemusik angehalten");
+        return true;
     }
 
     /// <summary>Den ganzen Ton des Films dekodieren und einen Spieler dafür
@@ -270,6 +303,7 @@ public partial class MoviePlayer : CanvasLayer
         if (_fertig) return;
         _fertig = true;
         _ton?.Stop();
+        if (_musikLief && Audio.MidiMusic.Resume()) GD.Print("Film: Menuemusik laeuft weiter");
         SetProcess(false);
         SetProcessInput(false);
         QueueFree();
