@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using Godot;
 
 namespace AkteEuropaReborn.Rendering;
@@ -2927,6 +2927,9 @@ public partial class MapEntityLayer : Node2D
         sb.Append($" | alte Ableitung wich ab: {RailDiffOnlyOurs} Zellen nur wir, " +
                   $"{RailDiffOnlyMap} nur Karte, {RailDiffFrame} von {RailDiffChecked} " +
                   "gemeinsamen mit anderem Bild");
+        // ⚠ Ohne diese Zahl ist »die Rampenregel greift nicht« nicht von
+        // »diese Karte hat keine Steigung unter dem Gleis« zu unterscheiden.
+        sb.Append($" (davon Rampen aus der Hoehe gelegt: {RailRampsLaid}; die Abweichung teilt sich in {RailDiffRampOnlyOurs}x Rampe nur bei uns, {RailDiffRampOnlyMap}x Rampe nur auf der Karte, {RailDiffFrameOther}x anderes Bild)");
         var per = new int[10];
         var kind = new int[4];
         int pylon = 0;

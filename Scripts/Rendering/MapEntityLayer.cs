@@ -1,4 +1,4 @@
-﻿namespace AkteEuropaReborn.Rendering;
+namespace AkteEuropaReborn.Rendering;
 
 using System.Collections.Generic;
 using System.Linq;
@@ -16054,6 +16054,10 @@ public partial class MapEntityLayer : Node2D
     /// Einzige, was gezeichnet wurde.</summary>
     public int RailDiffOnlyOurs, RailDiffOnlyMap, RailDiffFrame, RailDiffChecked;
 
+    /// <summary>Die Abweichung nach Art: wir legen eine Rampe, wo die Karte
+    /// flach ist / umgekehrt / etwas ganz anderes. Siehe RailRampFrame.</summary>
+    public int RailDiffRampOnlyOurs, RailDiffRampOnlyMap, RailDiffFrameOther;
+
     /// <summary>
     /// <b>Der Takt des Originals: 50 je Sekunde.</b> <c>SetTimer(fenster, 1,
     /// 0x14, NULL)</c> @0x415BC5 — 0x14 = 20 ms, und die Zeitgebernachricht
@@ -16481,6 +16485,11 @@ public partial class MapEntityLayer : Node2D
         RailChainWorstWhere = "";
         RailCellsBroken = 0;
         RailDiffOnlyOurs = RailDiffOnlyMap = RailDiffFrame = RailDiffChecked = 0;
+        RailDiffRampOnlyOurs = RailDiffRampOnlyMap = RailDiffFrameOther = 0;
+        // ⚠ RailRampsLaid wird hier NICHT genullt: die Bilder sind laengst
+        // gelegt, wenn dieser Vergleich laeuft. Der erste Anlauf tat es und
+        // meldete darum "0 Rampen gelegt" neben Zahlen, die es ohne die Rampen
+        // gar nicht gaebe.
         if (_railCells.Count == 0) return;
 
         // 1) messen: unsere alte Ableitung gegen die Karte, Zelle fuer Zelle
@@ -16505,7 +16514,18 @@ public partial class MapEntityLayer : Node2D
         {
             if (!mapCell.TryGetValue(kv.Key, out var c)) { RailDiffOnlyOurs++; continue; }
             RailDiffChecked++;
-            if (c.Base != kv.Value) RailDiffFrame++;
+            if (c.Base == kv.Value) continue;
+            RailDiffFrame++;
+            // ⚠ 20.08.2026 — die Abweichung AUFTEILEN, sonst sagt die Zahl
+            // nicht, ob die Rampenregel hilft oder schadet. Ein Sammelzaehler
+            // fuer »anderes Bild« kann nicht zwischen »wir legen eine Rampe,
+            // wo die Karte flach ist« (unser Fehler) und »die Karte hat eine
+            // Rampe, wir nicht« (unsere Luecke) unterscheiden — und genau
+            // dieser Unterschied entscheidet, ob die Regel richtig ist.
+            bool unsRampe = kv.Value >= 6, karteRampe = c.Base >= 6;
+            if (unsRampe && !karteRampe) RailDiffRampOnlyOurs++;
+            else if (!unsRampe && karteRampe) RailDiffRampOnlyMap++;
+            else RailDiffFrameOther++;
         }
         foreach (var kv in mapCell) if (!ourCell.ContainsKey(kv.Key)) RailDiffOnlyMap++;
 
@@ -16915,7 +16935,7 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Das Bild je Zelle aus den NACHBARZELLEN. Steht seit dem
     /// 12.08.2026 für sich, weil <see cref="RailSnapToDock"/> die Kette
     /// nachträglich ändert und die Bilder dann neu gerechnet werden müssen.</summary>
-    private static List<int> RailFramesOf(List<Vector2> cells)
+    private List<int> RailFramesOf(List<Vector2> cells)
     {
         var frames = new List<int>(cells.Count);
         for (int i = 0; i < cells.Count; i++)
@@ -16925,10 +16945,65 @@ public partial class MapEntityLayer : Node2D
             if (a < 0 && b < 0) { frames.Add(0); continue; }
             if (a < 0) a = RailOppositePort(b);
             if (b < 0) b = RailOppositePort(a);
-            frames.Add(RailFrameOfPorts(a, b));
+            frames.Add(RailRampFrame(RailFrameOfPorts(a, b), cells, i));
         }
         return frames;
     }
+
+    /// <summary>
+    /// <b>WANN DAS ORIGINAL EINE RAMPE LEGT</b> — offen seit dem 12.08.2026,
+    /// gelesen am 20.08.2026.
+    ///
+    /// <para>Die Bilder <b>6/7</b> (waagerecht) und <b>8/9</b> (senkrecht) sind
+    /// keine eigenen Formen, sondern die GERADEN 0 und 1 als Steigung. Die
+    /// Regel, gegen das Höhenfeld gemessen:</para>
+    ///
+    /// <blockquote>Für eine <b>gerade</b> Zelle: ist der Nachbar <b>vor</b> ihr
+    /// um genau <b>eine</b> Geländestufe höher, gilt Bild <b>6</b> bzw.
+    /// <b>8</b>; ist der Nachbar <b>nach</b> ihr höher, gilt <b>7</b> bzw.
+    /// <b>9</b>; sonst das flache Bild.</blockquote>
+    ///
+    /// <para><b>10379 von 10379 geraden Zellen, 0 Ausnahmen.</b> Kurven: 9010
+    /// von 9010 — <b>kein Kurvenbild trägt je eine Rampe</b>, deshalb steht die
+    /// Prüfung hier hinter <c>f is 0 or 1</c> und nicht davor. Flache Bilder
+    /// haben nie einen um +1 höheren Nachbarn (Bild 0 → (0,0) 3810×, (−1,0)
+    /// 139×, (0,−1) 125×, (−1,−1) 3×).</para>
+    ///
+    /// <para>⚠ <b>Es zählt nur GENAU +1.</b> Bild 6 kommt 311× mit (+1,0) und
+    /// 67× mit (+1,−1) vor — der Nachbar dahinter darf also durchaus tiefer
+    /// liegen; entschieden wird allein an der einen Stufe nach oben.</para>
+    ///
+    /// <para>⚠ <b>Eine unbekannte Höhe darf keine Rampe erfinden.</b>
+    /// <see cref="ElevOf"/> gibt für eine Zelle ausserhalb des Höhenfelds
+    /// stillschweigend 0 zurück; stünde die eigene Zelle auf 0 und der Nachbar
+    /// wäre bloss unbekannt, käme eine Steigung heraus, die es nicht gibt.
+    /// Darum wird hier ausdrücklich nach dem Eintrag gefragt.</para>
+    /// </summary>
+    private int RailRampFrame(int f, List<Vector2> cells, int i)
+    {
+        if (f is not (0 or 1)) return f;                  // Kurven nie
+        if (!RailElev(cells[i], out int hier)) return f;
+        bool vorHoeher  = i > 0 && RailElev(cells[i - 1], out int v) && v == hier + 1;
+        bool nachHoeher = i + 1 < cells.Count && RailElev(cells[i + 1], out int n) && n == hier + 1;
+        if (vorHoeher)  { RailRampsLaid++; return f == 0 ? 6 : 8; }
+        if (nachHoeher) { RailRampsLaid++; return f == 0 ? 7 : 9; }
+        return f;
+    }
+
+    /// <summary>Die Höhe einer Gleiszelle, und ob sie überhaupt bekannt ist.
+    /// Siehe <see cref="RailRampFrame"/>.</summary>
+    private bool RailElev(Vector2 cell, out int elev)
+    {
+        int c = Mathf.RoundToInt(cell.X), r = Mathf.RoundToInt(cell.Y);
+        if (_elevLookup.TryGetValue((c, r), out elev)) return true;
+        elev = 0;
+        return false;
+    }
+
+    /// <summary>Wieviele Rampenbilder die Ableitung gelegt hat. ⚠ Ohne die Zahl
+    /// ist »die Regel greift nicht« nicht von »diese Karte hat keine Steigung
+    /// unter dem Gleis« zu unterscheiden.</summary>
+    public int RailRampsLaid;
 
     /// <summary>
     /// <b>Die ANSCHLUSSZEILE eines Gebäudes</b> — die Musterzeile, in der seine
