@@ -1,4 +1,4 @@
-﻿# Änderungen
+# Änderungen
 
 Alle nennenswerten Änderungen an Akte Europa Reborn. Ausgeliefert wird **nur
 die Engine** — Gelände, Einheiten, Karten, Tabellen und Klänge entstehen auf
@@ -37,6 +37,11 @@ weiter unten ausführlich, mit den Adressen, an denen er gelesen wurde.
 | **Ein versenktes Schiff hinterlässt nichts.** | Kein Wrack, kein Ölfleck. Nur Landfahrzeuge lassen eines zurück. |
 | **Das U-Boot taucht.** | Wer nicht verbündet ist, sieht nur einen gerasterten blauen Schatten. Es ist wirklich unbewaffnet — ein Späher. |
 | **Das Mündungsfeuer kommt aus der Tafel des Spiels.** | Vier Bildfolgen je nach Waffe — und dreizehn Waffen haben im Original **gar keines**. |
+| **Der Handelsposten lässt sich anklicken.** | Er steht auf 76 Stellen der Karten und tat nichts. Der Markt dahinter war seit Tagen fertig — nur kam die Maus nicht an ihn heran. |
+| **Die Bahn läuft auf Zellkanten.** | Ein Routenpunkt ist keine Zelle, sondern eine Kante; die Gleiszelle liegt *zwischen* zwei Punkten. Damit findet unsere Ableitung **jede** Zelle, die die Karte hat. |
+| **Rampen unter dem Gleis.** | Wann das Original eine legt, war seit dem 12.08. offen. 10379 von 10379 geraden Zellen, ohne Ausnahme. |
+| **Drei gesprochene Ansagen mehr.** | Strom knapp, Strom wieder gedeckt, Lager voll. Dass es Ansagen und keine Geräusche sind, ist gemessen. |
+| **21 Bahnlinien, die der Lader weggeworfen hat.** | Er hielt »kein Knoten« für »kein Satz«. Genau das war »Linie 0 sammelt Fremdzellen«. |
 | **Gebäude bekommen keinen Auswahlkranz.** | Den gibt es im Original nur für Einheiten; ein Gebäude meldet sich durch sein Fenster. |
 | **»Verkaufen« nur, wo es einen Markt gibt.** | Die Kampagnenkarten 1–10 haben gar keinen. |
 | **Der Zielkasten im Vorschaufenster.** | Er fehlte ganz — und er ist der einzige Ort, für den das Original die zweite Schrift einwechselt. |
@@ -865,6 +870,47 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Kampagne und Oberfläche
 
+- ⭐⭐ **Der Handelsposten lässt sich anklicken — und dahinter lag ein
+  fertiger Markt, an den nie jemand herankam.**
+
+  Auf den ausgelieferten Karten stehen **76** davon, immer herrenlos, immer mit
+  700 Trefferpunkten. Gemeldet wurde er als »dieses Gebäude steht auf vielen
+  Karten, was ist seine Funktion?«.
+
+  Er ist das **Geschäftszentrum**. Regal, Kauf, Nachschub, Lieferung,
+  Kontostand und die Prüfung der vier Handelspunkte waren längst gebaut; die
+  Prüfläufe waren grün. Sie setzten die Anwahl nur von Hand. **Mit der Maus war
+  der Markt nie erreichbar**, denn die Trefferprüfung liess jeden Gebäudetyp
+  ausserhalb 1…16 nicht durch — und die 16 stammt aus der Namentabelle des
+  Originals.
+
+  Die richtige Grenze ist nicht die Namentabelle, sondern der Verteiler
+  »Fenster dieses Gebäudes öffnen«, und der hat **17** Arme: Typ 8 und Typ 16
+  zeigen auf den Standardausgang, Typ 17 auf einen eigenen. Der öffnet
+  Fensterart **33**, und welche das ist, sagt das Spiel selbst — die
+  Suchfunktion dafür druckt beim Fehlschlag »Market window not found«.
+  Gegenprobe: das Ladenfenster ist Art 31.
+
+  Das Original nennt ihn an zwei Stellen: das Fenster heisst
+  »Geschäftszentrum«, die Enzyklopädie führt ihn als **Handelsposten** und
+  erklärt dort auch die Bedienung — *»Steht eine Einheit auf einem der
+  Handelspunkte, ist der Warenbestand aufrufbar.«* Das sind die vier Ecken
+  seines 4×4-Grundrisses; die vier Plättchen mit dem Kreismuster im Bild sind
+  genau sie.
+
+  ⚠ Gezeichnet wird er weiterhin nicht von uns: seine Kacheln stecken schon im
+  gebackenen Kartenbild, weil der Bäcker nur Gebäude aussparen darf, die als
+  gebaut markiert sind — und alle 76 sind es nicht. Gegenprobe: eine Basis ist
+  im gebackenen Bild **nicht** zu sehen, der Handelsposten sehr wohl.
+
+- **»INIT11« ist kein Ortsname.** Im Feld eines angewählten Gebäudes stand der
+  technische Vorgabename, den das Original einem unbenannten Satz gibt.
+  Gemessen über alle 80 Karten: **1146** Sätze heissen exakt »Init« plus
+  Platznummer, quer durch alle Typen; **1217** tragen einen echten Ortsnamen
+  (Calais 67, Artois 60, Bolougne 39), und **kein einziger** davon fängt mit
+  »Init« an. Die Namenszeile bleibt jetzt leer, die Typzeile trägt den Namen
+  allein.
+
 - ⭐⭐ **Bricht man eine Kampagne mittendrin ab, ist die Maus im Menü wieder
   brauchbar — und die Popups waren gar nicht die Ursache.**
 
@@ -1567,6 +1613,22 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Die Karte und was auf ihr steht
 
+- ⭐ **Ein echter Spielstand des Originals ist jetzt ein Prüfstand.** Die Datei
+  liegt in jeder Installation, heisst im Programm fest so und ist ein
+  **Spielstand von Mission 1** — 566.257 Byte, und sie geht restlos auf. Weil
+  dieselbe Karte auch als Leveldatei danebenliegt, ist der Unterschied zwischen
+  beiden genau das, was der Originalmotor geschrieben hat: die Karte führt
+  **39** Abschnitte, der Spielstand **131**, davon 93 nur er. Er trägt Tafeln,
+  die eine Karte gar nicht hat — 64 Flugzeug- und 80 Schiffsentwürfe, 16
+  Marktangebote, acht Konten, 132 Zugsätze.
+
+  ⚠ **Und der erste Lauf zeigte sofort einen Fehler bei uns**: 256 Gebäude
+  statt 4. Unser Leerkriterium hiess »kein Typ **und** kein Name«. Auf einer
+  Karte reicht das — ein Spielstand schreibt seinen leeren Sätzen aber einen
+  Namen, nämlich die Platznummer als Text. Die Prüfung ist darum **strenger**
+  geworden und nicht anders: ein Satz ohne Typ **und** ohne Trefferpunkte ist
+  unter jeder Lesart leer. Danach: vier Gebäude, wie in der Leveldatei.
+
 - ⭐⭐ **Die Kampagne ist zum ersten Mal vollständig — 33 Karten statt 15.**
 
   Alles, was je eingelesen wurde, stammte von **CD 1**. Die Missionen **16 bis
@@ -1762,6 +1824,41 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
 
 ### Klang
 
+- ⭐ **Drei gesprochene Ansagen des Originals, die es bei uns nicht gab** —
+  und die Voraussetzung dafür ist eine Messung, keine Vermutung.
+
+  Der Block der Nummern 120…143 ist **eine einzige Aufnahmereihe**: 24 Stücke
+  von 1,04 bis 2,31 Sekunden, eine männliche Stimme, Grundton 155…212 Hz. Dass
+  es Sprache und keine Geräusche sind, ist an bekannten Gruppen geeicht und
+  überlappt nirgends — Stimmhaftigkeit 0,42…0,77 bei allen fünf Sprachbänken
+  gegen 0,00…0,08 bei allen Effektbänken. Bis dahin waren diese Klänge
+  **absichtlich** nicht gebaut: ein Klang an der falschen Stelle ist hörbarer
+  Unsinn.
+
+  | Nr | wann |
+  |---|---|
+  | **124** | die Summe der zwei Stromprozentsätze fällt unter 100 |
+  | **125** | sie erreicht wieder 100 — reine Aufwärtsflanke |
+  | **127** | ein Teilelager trifft seinen Lagerplatz |
+
+  Bei 127 hängt alles an einem einzigen Sprungbefehl: das Original vergleicht
+  den neuen Lagerstand **auf Gleichheit** mit dem Lagerplatz. Die Ansage kommt
+  also genau in dem Schritt, der ihn trifft — mit »grösser oder gleich« käme
+  sie danach in jedem Schritt wieder, also einmal je Sekunde, solange die
+  Fabrik voll bleibt.
+
+  Und 124 ist keine einmalige Meldung, sondern eine mahnende: solange es schon
+  knapp ist, wiederholt das Original sie in **einem von fünfzig** Läufen.
+
+- **Ansage 123 kann im Original nie erklingen**, und das ist gelesen, nicht
+  vermutet. Der Wächter des Blocks steigt aus, wenn der Zähler 0 ist. Weiter
+  unten wird abgezogen — aber der Klangtest liest den Wert **vor** dem Abzug
+  und springt bei allem ausser 0 weg. Gewollt war »abziehen, und wenn er dabei
+  auf 0 fällt, ansagen«; gebaut ist »ansagen, wenn er schon 0 war«, was der
+  Wächter ausgeschlossen hatte. Der Test steht einen Befehl zu früh. In beiden
+  Auslieferungen gleich. **Nicht nachgebaut** — eine Ansage nachzubauen, die
+  das Original nie spielt, wäre keine Originaltreue.
+
 - ⭐ **Einheiten melden sich, wenn man sie losschickt.** Gemeldet als »alle
   Einheiten haben Sounds, die abgespielt werden, wenn man diese wohin bewegt —
   meistens aber jede Klasse für sich einen Sound«. Genau so ist es gebaut, und
@@ -1792,6 +1889,53 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   ganz links, 35 ganz rechts.
 
 ### Zug und Strecke
+
+- ⭐⭐ **Ein Routenpunkt ist eine ZELLKANTE, keine Zelle.** Damit fällt die
+  Frage, an der wir seit dem 12.08. vorbeigearbeitet haben.
+
+  Die Strecke steht auf ganzen Spalten und **halben** Zeilen. Wir haben jeden
+  Punkt für eine Zelle gehalten und mussten deshalb bei jeder halben Zeile
+  **raten**, ob er zur Zelle darüber oder darunter gehört. Richtig ist: eine
+  gerade Halbzeile ist eine **waagerechte** Kante, eine ungerade eine
+  **senkrechte** — und die Gleiszelle liegt *zwischen* zwei aufeinanderfolgenden
+  Punkten, nämlich dort, wo beide Kanten sich berühren.
+
+  Über die Originaldateien haben **22341 von 22341** Punktpaaren genau eine
+  gemeinsame Zelle: keins leer, keins mehrdeutig.
+
+  **Die Probe**, beide Rechenarten im selben Bau gegen die Gleisdaten der Karte:
+
+  | | alte Ableitung | Kantenmodell |
+  |---|---|---|
+  | M20 | 95 nur wir / 72 nur Karte, 43 von 104 falsch | 26 / **0**, 5 von 176 |
+  | M30 | 506 / 358, 281 von 976 falsch | 152 / **0**, 77 von 1334 |
+  | M32 | 773 / 528, 348 von 1439 falsch | 250 / **0**, 51 von 1967 |
+
+  »Nur Karte« fällt auf **null**: das Modell findet jede Zelle, die die Karte
+  hat. Was übrig bleibt, sind rund **vier je Linie** — die Routenpunkte, die im
+  Endgebäude liegen.
+
+- ⭐ **Rampen: wann das Original eine legt.** Offen seit dem 12.08. Für eine
+  **gerade** Zelle gilt: ist der Nachbar **vor** ihr um genau eine Geländestufe
+  höher, kommt das Rampenbild der einen Richtung, ist der Nachbar **nach** ihr
+  höher, das der anderen; sonst bleibt es flach. **10379 von 10379** geraden
+  Zellen, keine Ausnahme — und **kein Kurvenbild** trägt je eine Rampe
+  (9010 von 9010). Auf drei Karten gemessen: 14, 144 und 173 Rampen gelegt,
+  **null** davon dort, wo die Karte flach ist.
+
+- **21 Bahnlinien, die der Lader weggeworfen hat.** Er übersprang jeden
+  Streckensatz, dessen erstes Byte 255 war — das ist aber der **erste Knoten**,
+  und 255 heisst dort »kein Knoten«, nicht »kein Satz«. Damit fiel jede Linie
+  weg, die an einem Ende frei ausläuft, und ihre Gleiszellen blieben ohne Linie
+  stehen. Genau das war der alte Befund »Linie 0 sammelt Fremdzellen«.
+  Gemessen: 650 Sätze vorher, 671 nachher, **0** Verlust, 21 Gewinn auf 9
+  Karten mit 670 Gleiszellen. Mission 20 hat jetzt sieben Linien statt sechs.
+
+- **Die Schritt-Tafel hat zwölf Einträge, nicht sechzehn.** Die letzten vier
+  waren Fremdbytes der nächsten Tafel. Beim Lesen ohne Wirkung (22.213
+  Routencodes, keiner ab 12), beim **Schreiben** einer Karte im Editor aber
+  nicht: dort hätte ein Code entstehen können, den das Original ganz anders
+  liest.
 
 - ⭐ **Die Waggons zeigen dorthin, wo das Gleis hinführt.** Gemeldet mit zwei
   Bildern (»wie doof der Zug oft aussieht«): auf einer schrägen Strecke standen
@@ -1900,6 +2044,20 @@ abweichen, und jede Abweichung wird als unsere gekennzeichnet.
   eine Behauptung; so ist belegt, dass es die 4,11 vorher schon gab.
 
 ### Mehrspieler
+
+- ⚠⚠ **Ein Auseinanderlaufen behoben, das nur im Netzspiel auftritt.** Die
+  Drosselung der Stromansage zog ihren Wurf aus dem **gemeinsamen** Würfel —
+  und wegen der Kurzschlussauswertung nur dann, wenn die eigene Deckung unter
+  100 lag. Diese Deckung hängt am **Sichtspieler**. Zwei Maschinen im Lockstep
+  haben verschiedene Sichtspieler, ziehen damit verschieden oft aus dem Strom,
+  und ab dem ersten Lauf, in dem der eine knapp ist und der andere nicht,
+  würfeln beide den Rest der Partie versetzt — das trifft Produktion,
+  Trefferstreuung und Markt, nicht bloss eine Ansage.
+
+  Der Zwillings-Prüfstand kann das nicht sehen: er läuft mit **gleichem**
+  Sichtspieler auf einer Maschine, und das ist der einzige Fall, in dem es
+  nicht auffällt. Die Drosselung entscheidet, wie oft ein Mensch etwas hört —
+  sie gehört nicht in den Simulationsstrom und hat jetzt einen eigenen Würfel.
 
 - **Die Computerspieler müssen nicht durch den Befehlsring** — und das ist
   gemessen, nicht angenommen. Im Programm von 1997 erreicht **genau eines von 21

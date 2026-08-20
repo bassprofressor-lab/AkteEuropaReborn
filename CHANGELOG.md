@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to Akte Europa Reborn. The build ships **only the engine** —
 terrain, units, maps, tables and now sound are derived on your own machine from
@@ -33,6 +33,11 @@ further down, with the addresses it was read at.
 | **Projectiles trail smoke.** | Three sequences in rotation, for kinds 5 to 20. |
 | **Large ships can be selected.** | They had no footprint — a battleship got a 1×1 click box underneath the dock. |
 | **Ships turn at the original's rate.** | One step every three ticks, 4×4 hulls every six. We turned every tick — sixteen times too fast. |
+| **The trading post can be clicked.** | It stands in 76 places across the maps and did nothing. The market behind it had been finished for days — the mouse just could not reach it. |
+| **The railway runs on cell EDGES.** | A route point is not a cell but an edge; the rail cell lies *between* two points. Our derivation now finds **every** cell the map has. |
+| **Ramps under the track.** | When the original lays one had been open since 12 Aug. 10379 of 10379 straight cells, no exception. |
+| **Three more spoken announcements.** | Power short, power restored, store full. That these are speech and not effects is measured, not assumed. |
+| **21 rail lines the loader threw away.** | It took "no node" for "no record". That was exactly the old "line 0 collects foreign cells". |
 | **A sunk ship leaves nothing behind.** | No wreck, no slick. Only ground vehicles leave one. |
 | **The submarine dives.** | Anyone not allied sees only a dithered blue shadow. It really is unarmed — a scout. |
 | **Muzzle flashes come from the game's own table.** | Four sequences by weapon — and thirteen weapons have **none** in the original. |
@@ -614,6 +619,44 @@ deviate on purpose, and every deviation is marked as ours.
 
 ### Campaign and interface
 
+- **The trading post can be clicked — and behind it lay a finished market
+  nobody could ever reach.**
+
+  The shipped maps carry **76** of them, always ownerless, always with 700 hit
+  points. It was reported as "this building stands on a lot of maps, what does
+  it do?".
+
+  It is the trade centre. Shelf, purchase, restock, delivery, account and the
+  test for the four trading spots had all been built; the harnesses were green.
+  They just set the selection by hand. **With the mouse the market was never
+  reachable**, because the hit test let no building type outside 1..16 through —
+  and that 16 comes from the original's table of type names.
+
+  The real boundary is not the name table but the dispatcher that opens a
+  building's window, and that has **17** arms: type 8 and type 16 go to the
+  default exit, type 17 to one of its own. It opens window kind **33**, and the
+  game says which one that is itself — the lookup for it prints "Market window
+  not found" when it fails. Counter-probe: the store window is kind 31.
+
+  The original names it in two places: the window is called
+  "Geschaeftszentrum", and the encyclopedia lists it as **Handelsposten** and
+  explains the handling there too — *"if a unit stands on one of the trading
+  spots, the stock can be called up."* Those are the four corners of its 4x4
+  footprint; the four plates with the circular marking in the screenshot are
+  exactly them.
+
+  Note it is still not drawn by us: its tiles are already in the baked map
+  picture, because the baker only leaves out buildings marked as built — and
+  none of the 76 are. Counter-probe: a base is **not** visible in the baked
+  picture, the trading post is.
+
+- **"INIT11" is not a place name.** The panel of a selected building showed the
+  technical default name the original gives an unnamed record. Measured across
+  all 80 maps: **1146** records are called exactly "Init" plus slot number,
+  across every type; **1217** carry a real place name (Calais 67, Artois 60,
+  Bolougne 39), and **not one** of those starts with "Init". The name line now
+  stays empty and the type line carries the name alone.
+
 - ⭐⭐ **Abort a campaign mid-mission and the mouse works again in the menu — and
   the popups were never the cause.**
 
@@ -961,6 +1004,22 @@ deviate on purpose, and every deviation is marked as ours.
 
 ### The map and what stands on it
 
+- **A real saved game of the original is now a test bench.** The file sits in
+  every installation, is named in the program itself and is a **saved game of
+  mission 1** — 566,257 bytes, and it accounts for every one of them. Because
+  the same map also lies next to it as a level file, the difference between the
+  two is exactly what the original engine wrote: the map carries **39**
+  sections, the save **131**, 93 of them only in the save. It holds tables a map
+  does not have at all — 64 aircraft and 80 ship designs, 16 market offers,
+  eight accounts, 132 train records.
+
+  **And the first run showed a bug of ours straight away**: 256 buildings
+  instead of 4. Our emptiness test read "no type **and** no name". On a map that
+  is enough — but a saved game writes a name into its empty records, the slot
+  number as text. The test has therefore become **stricter** rather than
+  different: a record with no type **and** no hit points is empty under any
+  reading. After that: four buildings, as in the level file.
+
 - ⭐⭐ **The campaign is complete for the first time — 33 maps instead of 15.**
 
   Everything ever imported came from **CD 1**. Missions **16 to 33 live on
@@ -1046,6 +1105,40 @@ deviate on purpose, and every deviation is marked as ours.
 
 ### Sound
 
+- **Three spoken announcements of the original that we did not have** — and the
+  precondition for building them is a measurement, not a hunch.
+
+  The block of numbers 120..143 is **one single recording session**: 24 pieces
+  of 1.04 to 2.31 seconds, one male voice, fundamental 155..212 Hz. That these
+  are speech and not effects is calibrated against known groups and does not
+  overlap anywhere — voicing 0.42..0.77 across all five speech banks against
+  0.00..0.08 across all effect banks. Until then these sounds were **deliberately**
+  not built: a sound in the wrong place is audible nonsense.
+
+  | No | when |
+  |---|---|
+  | **124** | the sum of the two power percentages drops below 100 |
+  | **125** | it reaches 100 again — a rising edge only |
+  | **127** | a parts store hits its capacity |
+
+  For 127 everything hangs on a single branch: the original compares the new
+  stock level with the capacity **for equality**. The announcement therefore
+  comes exactly in the step that hits it — with "greater or equal" it would
+  come again in every step after that, once a second for as long as the factory
+  stays full.
+
+  And 124 is not a one-shot but a nagging one: while it is already short, the
+  original repeats it in **one run out of fifty**.
+
+- **Announcement 123 can never sound in the original**, and that is read, not
+  guessed. The guard of the block bails out when the counter is 0. Further down
+  it is decremented — but the sound test reads the value **before** the
+  decrement and jumps away for anything but 0. The intent was clearly "decrement,
+  and announce when it reaches 0"; what was built is "announce when it already
+  was 0", which the guard had ruled out. The test sits one instruction too
+  early. Identical in both shipped builds. **Not reproduced** — rebuilding an
+  announcement the original never plays would not be faithfulness.
+
 - ⭐ **Units answer when you send them somewhere.** Reported as "every unit has
   a sound that plays when you move it — mostly one per class". That is exactly
   how it is built, and it is the same construction as the selection line; we had
@@ -1075,6 +1168,52 @@ deviate on purpose, and every deviation is marked as ours.
   35 hard right.
 
 ### Train and track
+
+- **A route point is a cell EDGE, not a cell.** That settles the question we
+  had been working around since 12 Aug.
+
+  The route sits on whole columns and **half** rows. We took every point for a
+  cell and therefore had to **guess**, at every half row, whether it belonged to
+  the cell above or below. The truth: an even half-row is a **horizontal** edge,
+  an odd one a **vertical** edge — and the rail cell lies *between* two
+  consecutive points, namely where both edges meet.
+
+  Across the original files **22341 of 22341** point pairs have exactly one
+  cell in common: none empty, none ambiguous.
+
+  **The proof**, both methods in the same build against the map's own rail data:
+
+  | | old derivation | edge model |
+  |---|---|---|
+  | M20 | 95 ours only / 72 map only, 43 of 104 wrong | 26 / **0**, 5 of 176 |
+  | M30 | 506 / 358, 281 of 976 wrong | 152 / **0**, 77 of 1334 |
+  | M32 | 773 / 528, 348 of 1439 wrong | 250 / **0**, 51 of 1967 |
+
+  "Map only" falls to **zero**: the model finds every cell the map has. What
+  remains is roughly **four per line** — the route points that lie inside the
+  end building.
+
+- **Ramps: when the original lays one.** Open since 12 Aug. For a **straight**
+  cell: if the neighbour **before** it is exactly one terrain step higher, the
+  ramp image of one direction applies; if the neighbour **after** it is higher,
+  the other; otherwise it stays flat. **10379 of 10379** straight cells, no
+  exception — and **no curve** ever carries a ramp (9010 of 9010). Measured on
+  three maps: 14, 144 and 173 ramps laid, **none** of them where the map is
+  flat.
+
+- **21 rail lines the loader threw away.** It skipped every route record whose
+  first byte was 255 — but that is the **first node**, and 255 means "no node"
+  there, not "no record". Every line that runs free at one end was dropped, and
+  its rail cells stayed behind without a line. That was exactly the old finding
+  "line 0 collects foreign cells". Measured: 650 records before, 671 after,
+  **0** lost, 21 gained across 9 maps with 670 rail cells. Mission 20 now has
+  seven lines instead of six.
+
+- **The step table has twelve entries, not sixteen.** The last four were
+  foreign bytes of the next table. No effect when reading (22.213 route codes,
+  none from 12 up), but not harmless when **writing** a map in the editor: a
+  code could have been produced there that the original reads as something else
+  entirely.
 
 - ⭐ **The wagons face where the track goes.** Reported with two screenshots
   ("how silly the train often looks"): on a slanted line two coupled wagons
@@ -1178,6 +1317,20 @@ deviate on purpose, and every deviation is marked as ours.
   before.
 
 ### Multiplayer
+
+- **A desync fixed that only shows up over the network.** The throttle on the
+  power announcement drew its roll from the **shared** die — and, because of
+  short-circuit evaluation, only when the player's own coverage was below 100.
+  That coverage depends on the **viewing player**. Two machines in lockstep have
+  different viewing players, so they draw a different number of times from the
+  stream, and from the first run in which one is short and the other is not,
+  both roll out of step for the rest of the game — which affects production,
+  hit scatter and the market, not just an announcement.
+
+  The twin harness cannot see this: it runs with the **same** viewing player on
+  one machine, and that is the one case in which it does not show. The throttle
+  decides how often a human hears something — it does not belong in the
+  simulation stream and now has a die of its own.
 
 - **The computer players do not need to go through the command ring** — measured,
   not assumed. In the 1997 program **exactly one of the 21 targets** of the
