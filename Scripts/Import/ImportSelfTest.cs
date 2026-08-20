@@ -694,8 +694,96 @@ public static class ImportSelfTest
         {
             if (maxFilme > 0 && pfade.Count > maxFilme) pfade.RemoveRange(maxFilme, pfade.Count - maxFilme);
             rc |= RunRplBild(pfade, wieViele, ffmpeg);
+            rc |= RunRplTon(pfade, ffmpeg);
         }
         return rc;
+    }
+
+    /// <summary>
+    /// <b>DER TONVERGLEICH</b> — <see cref="RplAudio"/> gegen ffmpeg.
+    ///
+    /// <para>Dieselbe Abnahme wie beim Bild: <b>byteweise identisch</b>, nichts
+    /// darunter. Verglichen wird der ganze Ton des Films, nicht ein Ausschnitt —
+    /// ⚠ ein Tonstück des Originals hat <b>keinen eigenen Kopf</b>, Vorhersage
+    /// und Schrittweite laufen über die Stückgrenzen weiter. Ein Ausschnitt
+    /// bewiese daher nichts über die Grenzen.</para>
+    ///
+    /// <para>⚠ Nur die <b>ersten</b> <c>Bilder</c> eines Films werden gelesen,
+    /// sonst dauert der Lauf über 853 MB zu lange — aber immer <b>ab Bild 0</b>,
+    /// weil der Ton sonst gar nicht dekodierbar wäre.</para>
+    /// </summary>
+    private static int RunRplTon(List<string> pfade, string ffmpeg)
+    {
+        string ff = FindeFfmpeg(ffmpeg);
+        if (ff.Length == 0)
+        {
+            GD.Print("selftest-rpl-ton: kein ffmpeg gefunden — Tonvergleich uebersprungen. " +
+                     "⚠ Das ist KEIN gruenes Ergebnis.");
+            return 0;
+        }
+        int filme = 0, genau = 0, daneben = 0;
+        long proben = 0;
+        string schluss = "";
+        foreach (string datei in pfade)
+        {
+            RplFile r;
+            try { r = new RplFile(datei); } catch { continue; }
+            var unser = RplAudio.DecodeAll(r);
+            if (unser.Length == 0) continue;
+            filme++;
+            var p = FfmpegTon(ff, datei);
+            using var aus = p.StandardOutput.BaseStream;
+            // den WAV-Kopf ueberspringen: ffmpeg schreibt 44 Byte, wenn es in
+            // eine Pipe schreibt, gibt es die Groessen als 0xFFFFFFFF aus --
+            // fuer den Vergleich zaehlt nur, dass 44 Byte vorne weg sind.
+            // ⚠ 20.08.2026 — hier wurden erst 44 Byte WAV-Kopf uebersprungen,
+            // und das war falsch: ffmpeg schreibt in eine PIPE keinen Kopf
+            // fester Laenge. Der Vergleich lief dadurch versetzt und meldete
+            // "1047794 von 1048576 daneben, erste bei 0" -- was wie ein
+            // kaputter Dekoder aussah und ein kaputter PRUEFSTAND war.
+            // FfmpegTon holt jetzt rohes s16le ohne jeden Kopf.
+            var soll = new byte[Math.Min(unser.Length, 1 << 20) * 2];
+            bool ok = LiesGenau(aus, soll, soll.Length);
+            p.Kill(true);
+            if (!ok) { daneben++; if (schluss.Length == 0) schluss = $"{System.IO.Path.GetFileName(datei)}: ffmpeg lieferte weniger Ton als wir"; continue; }
+            int n = soll.Length / 2, schlecht = 0, ersteStelle = -1;
+            for (int i = 0; i < n; i++)
+            {
+                short w = BitConverter.ToInt16(soll, i * 2);
+                if (w != unser[i]) { schlecht++; if (ersteStelle < 0) ersteStelle = i; }
+            }
+            proben += n;
+            if (schlecht == 0) genau++;
+            else
+            {
+                daneben++;
+                if (schluss.Length == 0)
+                    schluss = $"{System.IO.Path.GetFileName(datei)}: {schlecht} von {n} Abtastungen " +
+                              $"daneben, erste bei {ersteStelle}";
+            }
+        }
+        GD.Print($"selftest-rpl-ton: {filme} Filme, {proben} Abtastungen verglichen, " +
+                 $"{genau} Filme BYTEWEISE GENAU, {daneben} daneben");
+        if (schluss.Length > 0) GD.PrintErr("   " + schluss);
+        return daneben == 0 ? 0 : 1;
+    }
+
+    private static System.Diagnostics.Process FfmpegTon(string ff, string datei)
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo(ff)
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (string a in new[] { "-v", "error", "-i", datei, "-vn",
+                                     "-c:a", "pcm_s16le", "-f", "s16le", "-" })
+            psi.ArgumentList.Add(a);
+        var p = System.Diagnostics.Process.Start(psi)!;
+        p.ErrorDataReceived += (_, _) => { };
+        p.BeginErrorReadLine();
+        return p;
     }
 
     /// <summary>
