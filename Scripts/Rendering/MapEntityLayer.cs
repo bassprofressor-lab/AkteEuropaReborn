@@ -10257,8 +10257,17 @@ public partial class MapEntityLayer : Node2D
         return $"econ-check: P{me} " +
                (facs.Count > 0 ? "Fabriken " + string.Join(" ", facs) : "keine Fabrik") +
                (hqs.Count > 0 ? "  " + string.Join(" ", hqs) : "  keine Basis") +
-               $"  | gefahren W{_econMovedW} F{_econMovedF} S{_econMovedS} T{_econMovedT}";
+               $"  | gefahren W{_econMovedW} F{_econMovedF} S{_econMovedS} T{_econMovedT}" +
+               // ⚠ Ohne diese Zahl ist »ich habe die Ansage nie gehoert« nicht
+               // von »die Stelle wird nie erreicht« zu unterscheiden. Sie zaehlt
+               // die Schritte, in denen ein Teilelager des SICHTSPIELERS genau
+               // seinen Lagerplatz getroffen hat — der Auslöser von Ansage 127.
+               $"  | Lager voll {StoreFullMessages}x [Ansage {Audio.GameSounds.StoreFull}]";
     }
+
+    /// <summary>Wie oft »das Lager ist voll« angesagt wurde. Siehe
+    /// <see cref="Audio.GameSounds.StoreFull"/>.</summary>
+    public int StoreFullMessages;
 
     /// <summary>Wieviele Entwuerfe dieses Gebaeude aus seinen eigenen drei
     /// Lagern bezahlen koennte — die Zahl, an der sich »ich kann nichts bauen«
@@ -15690,11 +15699,37 @@ public partial class MapEntityLayer : Node2D
             // von hundert Schritten.
             if (!PowerRollPasses(e)) continue;
             e.StockT--;
+            int stand;
             switch (e.BType)
             {
-                case 2: e.StockW++; break;
-                case 3: e.StockF++; break;
-                default: e.StockS++; break;
+                case 2: stand = ++e.StockW; break;
+                case 3: stand = ++e.StockF; break;
+                default: stand = ++e.StockS; break;
+            }
+            // ⭐ 20.08.2026 — »DAS LAGER IST VOLL«, Ansage 127 (@0x43E04F).
+            //
+            // Das Original zählt in denselben drei Zweigen je eins auf
+            // word[Gebäude+0x2C/+0x2E/+0x30] — das sind genau diese drei
+            // Teilelager — und prüft danach:
+            //
+            //     cmp word[esi + 0x87A2C8], ax   ; ist der Lagerplatz getroffen?
+            //     jne raus
+            //     cmp byte[gebaeude + 0x05], cl  ; nur MEIN Gebäude
+            //     jne raus
+            //     Klang 127
+            //
+            // ⚠ Es ist `jne`, nicht `jge`: die Ansage kommt GENAU in dem
+            // Schritt, der den Lagerplatz trifft. Mit `>=` käme sie danach in
+            // jedem Schritt wieder — und weil eine volle Fabrik viele Schritte
+            // lang voll bleibt, wäre das eine Ansage je Sekunde statt einer.
+            //
+            // ⚠ Und sie ist an den SICHTSPIELER gebunden, nicht an den
+            // Besitzer der Fabrik: byte[0x4FA284] ist der eigene Spieler. Ohne
+            // das spräche die Ansage auch für die Lager des Gegners.
+            if (e.Capacity > 0 && stand == e.Capacity && e.Owner == ViewPlayer)
+            {
+                StoreFullMessages++;
+                Audio.GameSounds.Play(Audio.GameSounds.StoreFull);
             }
         }
     }

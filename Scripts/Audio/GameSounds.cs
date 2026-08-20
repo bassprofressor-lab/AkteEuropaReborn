@@ -168,6 +168,88 @@ public static class GameSounds
     /// "enlarging". The original repairs silently.</summary>
     public const int RepairIsSilent = -1;
 
+    // ---- die Gruppe 120..143: ANSAGEN, keine Geräusche ----------------------
+    //
+    // ⭐ 20.08.2026 — GEMESSEN, nicht vermutet. Der ganze Block 120..143 ist
+    // EINE Aufnahmereihe: 24 Stücke von 1,04 bis 2,31 s, eine männliche Stimme,
+    // Grundton 155..212 Hz. Die Trennung Sprache/Geräusch ist an bekannten
+    // Gruppen geeicht und überlappt nirgends: Stimmhaftigkeit 0,42..0,77 bei
+    // allen fünf Sprachbänken gegen 0,00..0,08 bei allen Effektbänken.
+    //
+    // ⚠⚠ DARAUS FOLGT EINE BERICHTIGUNG an dieser Datei: `InfantryDies = 131`
+    // steht oben mit einer richtig gelesenen AUFRUFSTELLE (@0x40d37c, direkt
+    // nach "Hit to exploding infantry!!!") und einem falschen NAMEN. 131 misst
+    // Stimmhaftigkeit 0,81 bei Grundton 155 Hz über 1,77 s — das ist ein
+    // gesprochener Satz, kein Explosionsgeräusch. Was er sagt, ist ungelesen;
+    // deshalb bleibt die Konstante stehen, wie sie ist, statt einen zweiten
+    // geratenen Namen zu bekommen.
+
+    /// <summary>
+    /// <b>»Die Stromversorgung reicht nicht«</b> — @0x440460, in der
+    /// Stromabrechnung selbst.
+    ///
+    /// <para>Bedingung, Befehl für Befehl gelesen: <c>ecx =
+    /// dword[0x878AB0 + 4·Spieler] + GlobalProzent; cmp ecx, 0x64; jge</c> —
+    /// also die <b>Summe der zwei Prozentsätze unter 100</b>, und zwar für
+    /// <c>byte[0x4FA284]</c>, den EIGENEN Spieler. Siehe
+    /// <see cref="MapEntityLayer.PowerMessages"/> für die Flanke und die
+    /// Drosselung.</para></summary>
+    public const int PowerShort = 124;
+
+    /// <summary><b>»Die Stromversorgung ist wieder ausreichend«</b> —
+    /// @0x440491, dieselbe Summe, aber <c>cmp eax,0x64; jl</c> und nur, wenn
+    /// der gemerkte Wert des letzten Laufs UNTER 100 lag. Reine Aufwärtsflanke.
+    /// </summary>
+    public const int PowerRestored = 125;
+
+    /// <summary>
+    /// <b>»Das Lager ist voll«</b> — @0x43E04F.
+    ///
+    /// <para>Drei Zweige zählen je eins auf <c>word[Gebäude+0x2C]</c>,
+    /// <c>+0x2E</c> oder <c>+0x30</c> — das sind die drei Teilelager W/F/S.
+    /// Danach:</para>
+    /// <code>
+    ///   cmp word[esi + 0x87A2C8], ax   ; erreicht der neue Stand den Lagerplatz?
+    ///   jne  raus
+    ///   cmp byte[gebaeude + 0x05], cl  ; nur MEIN Gebäude
+    ///   jne  raus
+    ///   Klang 127
+    /// </code>
+    /// <para>⚠ Es ist <c>jne</c>, nicht <c>jge</c>: die Ansage kommt <b>genau in
+    /// dem Schritt</b>, in dem der Stand den Lagerplatz trifft — nicht in jedem
+    /// Schritt danach. Ein <c>&gt;=</c> wäre eine Ansage je Sekunde.</para>
+    /// </summary>
+    public const int StoreFull = 127;
+
+    /// <summary>
+    /// <b>Drei Ansagen, die BEWUSST nicht gebaut sind</b> (Stand 20.08.2026) —
+    /// ihre Auslöser sind gelesen, ihr Anlass nicht.
+    ///
+    /// <list type="bullet">
+    ///   <item><b>123</b> @0x43DFC7 — ein Zähler im Gebäudesatz
+    ///   (<c>word[+0x32]</c>) läuft ab. ⚠ Es gibt den belegten Verdacht, dass
+    ///   sie im Original <b>nie</b> erklingt: der Eingangswächter des Zustands
+    ///   (@0x43DEC5) schliesst den Wert 0 aus, der Klangtest (@0x43DFA9) prüft
+    ///   aber den Wert VOR dem Abzug. Gewollt war »Vorrat gerade auf 0
+    ///   gefallen«, gebaut wurde der Test eine Zeile zu früh. <b>Nicht
+    ///   nachgeprüft</b> — und in diesem Projekt gilt: wer einen Fehler im
+    ///   Original findet, misstraut zuerst sich selbst.</item>
+    ///   <item><b>133</b> @0x43D068 — davor läuft eine Schleife über alle 255
+    ///   Gebäude, die bei passendem Typ und Besitzer <c>word[+0x2E]</c> und
+    ///   <c>word[+0x30]</c> um je 100 erhöht; danach klingt es, wenn das
+    ///   auslösende Gebäude mir gehört. WAS da geliefert wird, ist ungelesen.
+    ///   </item>
+    ///   <item><b>134</b> @0x43CED6 — davor vier Durchläufe mit
+    ///   <c>0x4B1170</c> (aus der Einheiten-Erzeugungsfamilie); danach derselbe
+    ///   Besitzertest. Anlass ungelesen.</item>
+    /// </list>
+    ///
+    /// <para><b>Warum nicht trotzdem gesetzt:</b> ein Klang an der falschen
+    /// Stelle ist hörbarer Unsinn und schlimmer als keiner. Der Besitzertest
+    /// <c>cmp byte[gebaeude+0x05], byte[0x4FA284]</c> ist bei allen dreien
+    /// gelesen — es fehlt nur der Anlass.</para></summary>
+    public const int NotBuiltYet123 = 123, NotBuiltYet133 = 133, NotBuiltYet134 = 134;
+
     /// <summary>Research reported — @0x4ab41b, right after "Nachricht des
     /// FORSCHUNGSLABORS:" and in the routine that prints "Neue Waffe
     /// erfunden".</summary>

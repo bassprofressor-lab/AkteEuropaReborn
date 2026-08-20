@@ -186,11 +186,37 @@ public partial class MapEntityLayer
     {
         if (_origTicks <= 300) { _powerLast = PowerSum(); return; }
         int jetzt = PowerSum();
-        bool wiederholen = _powerLast >= 100 || Simulation.Determinism.Roll(50) == 1;
+        // ⚠⚠ 20.08.2026 — HIER STAND `Simulation.Determinism.Roll(50)`, ALSO
+        // DER GEMEINSAME WÜRFEL, UND DAS WAR EIN DESYNC.
+        //
+        // `||` verkürzt: der Wurf wird NUR gezogen, wenn `_powerLast < 100` —
+        // und `_powerLast` ist `PowerSum()`, also `_powerOwn[ViewPlayer] +
+        // _powerGlobal`. Zwei Maschinen im Lockstep haben verschiedene
+        // Sichtspieler, kommen damit auf verschiedene `_powerLast` und ziehen
+        // VERSCHIEDEN OFT aus dem gemeinsamen Strom. Ab dem ersten Lauf, in dem
+        // der eine knapp ist und der andere nicht, würfeln beide Maschinen den
+        // Rest der Partie versetzt — und das trifft dann Produktion,
+        // Trefferstreuung und Markt, nicht bloss eine Ansage.
+        //
+        // Aufgefallen beim Anschliessen des Klangs, nicht beim Zwillingslauf:
+        // der prüft mit gleichem Sichtspieler auf einer Maschine, und genau
+        // dieser Fall ist der einzige, in dem es NICHT auffällt.
+        //
+        // Die Drosselung gehört ohnehin nicht in den Simulationsstrom: sie
+        // entscheidet, wie oft der Mensch am Schirm eine Ansage hört. Das ist
+        // Darstellung, also ein eigener, ungekeimter Würfel. ⚠ Damit weicht die
+        // FOLGE der Wiederholungen vom Original ab — die Rate (eine von
+        // fünfzig) ist dieselbe.
+        bool wiederholen = _powerLast >= 100 || _meldeWurf.Next(50) == 1;
         if (jetzt < 100 && wiederholen) NotePowerShort(true);
         if (_powerLast < 100 && jetzt >= 100) NotePowerShort(false);
         _powerLast = jetzt;
     }
+
+    /// <summary>Der Würfel für die MELDUNGSDROSSELUNG — bewusst NICHT der
+    /// gekeimte aus <see cref="Simulation.Determinism"/>. Siehe
+    /// <see cref="PowerMessages"/>.</summary>
+    private readonly System.Random _meldeWurf = new();
 
     private int PowerSum()
     {
@@ -207,9 +233,24 @@ public partial class MapEntityLayer
         _order = knapp
             ? $"Stromknappheit — die Anlagen laufen mit {Mathf.Min(100, PowerSum())} %"
             : "Die Stromversorgung ist wieder ausreichend.";
+        // ⭐ 20.08.2026 — DER KLANG DAZU, und er ist erst seit heute setzbar.
+        // Die Nummern standen seit dem 19.08. fest, ihre BEDEUTUNG nicht, und
+        // ein Klang an der falschen Stelle ist hörbarer Unsinn. Gemessen ist
+        // jetzt beides: 124 und 125 sind gesprochene Ansagen (Stimmhaftigkeit
+        // 0,77 bzw. 0,79 gegen 0,00..0,08 bei jedem Effekt), und die Stelle,
+        // an der das Original sie ruft, ist genau diese hier.
+        Audio.GameSounds.Play(knapp ? Audio.GameSounds.PowerShort
+                                    : Audio.GameSounds.PowerRestored);
         PowerShortMessages += knapp ? 1 : 0;
+        PowerRestoredMessages += knapp ? 0 : 1;
         _ = p;
     }
+
+    /// <summary>Wie oft »wieder genug Strom« gemeldet wurde. ⚠ Getrennt von
+    /// <see cref="PowerShortMessages"/> gezählt: zwei Ansagen in einem Zähler
+    /// wären zwei Wahrheiten, und die Aufwärtsflanke ist die seltenere.
+    /// </summary>
+    public int PowerRestoredMessages;
 
     /// <summary>Wie oft »Strom knapp« gemeldet wurde. ⚠ Ohne die Zahl ist
     /// nicht zu sehen, ob die Flanke je ausgelöst hat.</summary>
@@ -447,6 +488,12 @@ public partial class MapEntityLayer
         int p = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
         return $"Strom P{p}: erbracht {_powerDone[p]} / Bedarf {_powerNeed[p]}, " +
                $"eigen {_powerOwn[p]} % + global {_powerGlobal} % = {PowerSum()} %" +
-               $" ({PowerRuns} Abrechnungen, {PowerShortMessages}x knapp gemeldet)";
+               // ⚠ Beide Flanken einzeln, und die Klangnummern dazu: ohne die
+               // Zahlen ist »es kam keine Ansage« nicht von »die Flanke hat nie
+               // ausgeloest« zu unterscheiden, und genau daran haengt, ob die
+               // seit heute angeschlossenen Klaenge 124/125 wirklich gehen.
+               $" ({PowerRuns} Abrechnungen, {PowerShortMessages}x knapp" +
+               $" [Ansage {Audio.GameSounds.PowerShort}], {PowerRestoredMessages}x" +
+               $" wieder gedeckt [Ansage {Audio.GameSounds.PowerRestored}])";
     }
 }
