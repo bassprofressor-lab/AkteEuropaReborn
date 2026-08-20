@@ -1307,6 +1307,21 @@ public partial class MainMenu : Control
         // the one place all three ways in meet: the menu button, the mission
         // picker and --campaign. No text (a skirmish, or content imported before
         // briefings.json existed) simply means straight on, as before.
+        // ⭐ 20.08.2026 — DER FILM LAEUFT VOR DEM BRIEFING (Entscheidung des
+        // Spielers). Filmnummer = Missionsnummer; fehlt der Film, geht es
+        // stillschweigend weiter, und MoviePlayer.Play gibt dafuer false.
+        // ESC ueberspringt. ⚠ --no-briefing schaltet auch den Film ab: ein
+        // kopfloser Prueflauf haette sonst minutenlang Kino.
+        if (!_skipBriefing && MoviePlayer.Play(this, m.Index, () => NachDemFilm(m)))
+            return;
+        NachDemFilm(m);
+    }
+
+    /// <summary>Was nach dem Film kommt: das Briefing, oder gleich die Karte.
+    /// Herausgeloest, weil es jetzt zwei Wege hierher gibt — mit Film und
+    /// ohne.</summary>
+    private void NachDemFilm(Campaign.CampaignManager.Mission m)
+    {
         var br = _skipBriefing ? null : BriefingScreen.For(m.Index);
         if (br == null) { GetTree().ChangeSceneToFile(SkirmishSetup.GameScene); return; }
         GD.Print($"Briefing: \"{br.Value.Title}\", {br.Value.Paragraphs.Count} Absaetze");
@@ -1373,7 +1388,8 @@ public partial class MainMenu : Control
     private bool AutoStart()
     {
         foreach (string a in OS.GetCmdlineUserArgs())
-            if (a == "--no-briefing") _skipBriefing = true;
+            if (a == "--no-briefing") { _skipBriefing = true; MoviePlayer.Disabled = true; }
+            else if (a == "--no-movie") MoviePlayer.Disabled = true;
 
         // ⚠ »WEITER« AUS DEM ABSCHLUSSFENSTER. Es lädt die nächste Karte nicht
         // mehr selbst, sondern meldet sie hier an — damit läuft sie durch
