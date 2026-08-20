@@ -524,7 +524,31 @@ public static class CwmExtra
 
         for (int i = 0; i + SpojStride <= s34.Length; i += SpojStride)
         {
-            if (s34[i] == 0xFF || AllZero(s34, i, SpojStride)) continue;
+            // ⚠⚠ 20.08.2026 — HIER STAND `s34[i] == 0xFF ||`, UND DAS WAR
+            // »LINIE 0 SAMMELT FREMDZELLEN«.
+            //
+            // `s34[i]` ist der ERSTE KNOTEN, und 0xFF heisst dort »kein
+            // Knoten«, nicht »kein Satz«. Wir haben damit jede Linie
+            // weggeworfen, die an einem Ende frei ausläuft — und ihre
+            // Gleiszellen blieben mit ihrer Liniennummer in sec22 stehen, ohne
+            // dass es dazu noch eine Linie gab. Die sammelten sich dann bei
+            // uns unter der 0.
+            //
+            // GEMESSEN über alle 75 Kartendateien beider CDs:
+            //   heutiger Filter (Knoten != 0xFF)   650 Sätze
+            //   neuer Filter    (delka > 0)        671 Sätze
+            //   davon nur heute (Verlust)            0
+            //   davon nur neu   (Gewinn)            21   auf 9 Karten, 670 Zellen
+            //
+            // Der Wechsel ist also REIN ADDITIV, kein Satz fällt weg. Das
+            // Musterbeispiel ist `20.CWM` Satz 0: delka 40 und 36 = 40−4
+            // sec22-Zellen in einem zusammenhängenden Lauf. Die fehlenden vier
+            // sind die Routenpunkte, die IM ENDGEBÄUDE liegen — dasselbe
+            // Muster, das die Streckenmessung überall findet.
+            //
+            // `delka` ist die Zahl der Routenpunkte; ein Satz ohne Punkte ist
+            // keine Linie, egal was in seinen Knotenbytes steht.
+            if (AllZero(s34, i, SpojStride) || s34[i + 0x0c] == 0) continue;
             var d = new Link
             {
                 Slot = i / SpojStride, Node1 = s34[i], Node2 = s34[i + 1],
@@ -640,8 +664,14 @@ public static class CwmExtra
         return list;
     }
 
+    /// <summary>Das Gebäude hinter einem Knoten. ⚠ <b>0xFF heisst »kein
+    /// Knoten«</b> und muss <b>−1</b> ergeben, nicht 0: <c>Bud1</c>/<c>Bud2</c>
+    /// werden gegen <c>Entity.Slot</c> gehalten, und Platz <b>0</b> ist ein
+    /// gültiges Gebäude — eine 0 würde die freien Enden aller 21 offenen Linien
+    /// an das Gebäude auf Platz 0 heften.</summary>
     private static int NodeBuilding(byte[] s33, int node)
-        => node * 8 + 2 <= s33.Length ? BitConverter.ToUInt16(s33, node * 8) : 0;
+        => node == 0xFF ? -1
+         : node * 8 + 2 <= s33.Length ? BitConverter.ToUInt16(s33, node * 8) : 0;
 
     /// <summary>Die Summe der Höhenschritte einer Route, in HALBEN Zeilen.</summary>
     private static int SumDy(byte[] s34, int at, int delka)
