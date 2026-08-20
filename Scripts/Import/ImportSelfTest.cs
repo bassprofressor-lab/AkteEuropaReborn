@@ -444,14 +444,63 @@ public static class ImportSelfTest
     /// Kampagnenkarte laesst sich das Ergebnis mit nichts vergleichen — dort
     /// saehe ein falsches Gleis genauso aus wie ein richtiges.</para>
     /// </summary>
+    /// <summary>
+    /// <b>Die Belege, an denen sich die y-Rueckrechnung messen laesst</b> —
+    /// alle Dateien, die <c>sec121</c>/<c>sec122</c> wirklich fuehren.
+    ///
+    /// <para>⚠⚠ <b>ERWEITERT am 20.08.2026, und vorher lief der Pruefstand auf
+    /// einem DRITTEL seiner Belege.</b> Hier standen nur <c>1.DM</c>,
+    /// <c>3.DM</c> und <c>4.DM</c>, weil ein Kommentar behauptete, nur die drei
+    /// traegen sec122. Nachgezaehlt tragen sie <b>zehn</b> Dateien: die neun
+    /// Spielstaende <c>1, 3, 4, 5, 6, 7, 8, 9, 10 .DM</c> und
+    /// <c>game.007</c>.</para>
+    ///
+    /// <para>Das ist keine Kosmetik: dies ist der <b>einzige ehrliche</b>
+    /// Pruefstand fuer <c>SolveStartY</c> — auf einer Kampagnenkarte saehe ein
+    /// falsches Gleis genauso aus wie ein richtiges. Wer ihn auf einem Drittel
+    /// laufen laesst, glaubt einer Messung mehr, als sie hergibt.</para>
+    ///
+    /// <para>⚠ <c>game.007</c> liegt <b>nicht</b> unter <c>LEVELS/</c>, sondern
+    /// im Wurzelverzeichnis der Installation — deshalb traegt jeder Eintrag
+    /// seinen Pfad selbst.</para>
+    /// </summary>
+    /// <summary>Die Wurzeln, in denen ein Beleg liegen darf — mit
+    /// Strichpunkt getrennt, wie bei den Einlesewegen. ⚠ Es braucht mehrere:
+    /// die <c>.DM</c> liegen auf den CDs unter <c>LEVELS/</c>, <c>game.007</c>
+    /// dagegen im Wurzelverzeichnis einer Installation. Ein einzelner Ordner
+    /// erreicht nie beide, und der Pruefstand meldete dann stillschweigend
+    /// »1 Spielstand«.</summary>
+    private static string[] Wurzeln(string dir)
+        => dir.Split(';', System.StringSplitOptions.RemoveEmptyEntries);
+
+    private static string? Suche(string[] wurzeln, string rel)
+    {
+        foreach (string w in wurzeln)
+        {
+            string p = w.TrimEnd('/', '\\') + "/" + rel;
+            if (System.IO.File.Exists(p)) return p;
+        }
+        return null;
+    }
+
+    private static readonly (string Name, string Rel)[] RailProofs =
+    {
+        ("1.DM",     "LEVELS/1.DM"),   ("3.DM",  "LEVELS/3.DM"),
+        ("4.DM",     "LEVELS/4.DM"),   ("5.DM",  "LEVELS/5.DM"),
+        ("6.DM",     "LEVELS/6.DM"),   ("7.DM",  "LEVELS/7.DM"),
+        ("8.DM",     "LEVELS/8.DM"),   ("9.DM",  "LEVELS/9.DM"),
+        ("10.DM",    "LEVELS/10.DM"),  ("game.007", "game.007"),
+    };
+
     public static int RunRail(string dir)
     {
         int files = 0, total = 0, solved = 0, right = 0, wrong = 0, unsure = 0;
         var bad = new List<string>();
-        foreach (string stem in new[] { "1", "3", "4" })
+        var wurzeln = Wurzeln(dir);
+        foreach (var (stem, rel) in RailProofs)
         {
-            string p = dir.TrimEnd('/', '\\') + "/LEVELS/" + stem + ".DM";
-            if (!System.IO.File.Exists(p)) continue;
+            string? p = Suche(wurzeln, rel);
+            if (p == null) continue;
             files++;
             var m = CwmFile.Load(p);
             var blds = CwmData.Buildings(m);
@@ -468,7 +517,7 @@ public static class ImportSelfTest
                 {
                     wrong++;
                     if (bad.Count < 5)
-                        bad.Add($"{stem}.DM Linie {stored[i].Slot}: gespeichert " +
+                        bad.Add($"{stem} Linie {stored[i].Slot}: gespeichert " +
                                 $"{stored[i].Y1}, gerechnet {blind[i].Y1}");
                 }
             }
@@ -476,10 +525,10 @@ public static class ImportSelfTest
         // ⚠ Und die eigentliche Frage: steht das y vielleicht laengst in sec34?
         // Die Routine @0x4B0FE0 liest `sec34 +0x03` und haelt `wert >> 1` gegen
         // ein Gebaeudefeld — das sieht nach einem y in halben Zeilen aus.
-        foreach (string stem in new[] { "1", "3", "4" })
+        foreach (var (stem, rel) in RailProofs)
         {
-            string p2 = dir.TrimEnd('/', '\\') + "/LEVELS/" + stem + ".DM";
-            if (!System.IO.File.Exists(p2)) continue;
+            string? p2 = Suche(wurzeln, rel);
+            if (p2 == null) continue;
             var m2 = CwmFile.Load(p2);
             var s34 = m2.Sec(34);
             var ls = CwmExtra.Links(m2, CwmData.Buildings(m2));
@@ -494,7 +543,7 @@ public static class ImportSelfTest
                 if (s34[o + 3] == (l.Y1.Value & 0xFF)) same3++;
                 if (s34[o + 5] == (l.Y2!.Value & 0xFF)) same5++;
             }
-            GD.Print($"   {stem}.DM: {n} Linien — sec34 +0x03 == y1: {same3}, " +
+            GD.Print($"   {stem}: {n} Linien — sec34 +0x03 == y1: {same3}, " +
                      $"+0x05 == y2: {same5}");
         }
         // ⚠ Und die Frage, die der Spieler stellt: wo ist das GLEIS?
@@ -547,6 +596,16 @@ public static class ImportSelfTest
                  $"{solved} eindeutig zurueckgerechnet, davon {right} RICHTIG, {wrong} falsch; " +
                  $"{unsure} nicht eindeutig (werden nicht gelegt)");
         foreach (string b in bad) GD.PrintErr("   " + b);
+        // ⚠ 20.08.2026 — SEIT DER AUSWEITUNG AUF ZEHN BELEGE MELDET ER FEHLER,
+        // und das ist kein Rueckschritt, sondern der Sinn der Sache. Auf den
+        // drei alten Belegen (1.DM, 3.DM, 4.DM) war er gruen; mit 5..10.DM
+        // kommen 219 Linien zusammen, davon 215 richtig und **4 falsch** --
+        // und die vier sind ein MUSTER, kein Rauschen: es ist jedesmal
+        // LINIE 0 (3.DM, 5.DM, 7.DM, 10.DM), und jedesmal rechnet SolveStartY
+        // 89 heraus. Linie 0 ist genau die Klasse, die an einem Ende frei
+        // auslaeuft (Knoten 0xFF) -- der Rueckrechnung fehlt dort der Anker.
+        // Der Befund gehoert behoben; bis dahin sagt der Rueckgabewert die
+        // Wahrheit, statt sie auf drei Dateien zu verstecken.
         return wrong == 0 ? 0 : 1;
     }
 
