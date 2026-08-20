@@ -191,9 +191,11 @@ public partial class MoviePlayer : CanvasLayer
     /// nicht am Knoten. Ein weggeraeumter Knoten nimmt sie darum nicht mit.
     /// </para>
     ///
-    /// <para>Nach dem Film geht dasselbe Stueck weiter
-    /// (<see cref="Audio.MidiMusic.Resume"/>), damit das Briefing klingt wie
-    /// vorher — hier wird nur der Film freigeraeumt, sonst nichts.</para>
+    /// <para>⚠ <b>Nach dem Film bleibt sie aus</b> — Ansage des Spielers: das
+    /// Briefing ist still, dort spricht nur die Missionsansage. Abgestellt wird
+    /// sie ohnehin schon beim Start der Mission (<c>MainMenu.StartCampaign</c>),
+    /// weil es zwei Wege ins Briefing gibt; das hier ist die zweite Bremse fuer
+    /// den Fall, dass ein Film ausserhalb dieses Weges laeuft.</para>
     /// </summary>
     private static bool MusikAnhalten()
     {
@@ -303,7 +305,12 @@ public partial class MoviePlayer : CanvasLayer
         if (_fertig) return;
         _fertig = true;
         _ton?.Stop();
-        if (_musikLief && Audio.MidiMusic.Resume()) GD.Print("Film: Menuemusik laeuft weiter");
+        // ⚠ 20.08.2026 — HIER STAND EIN Resume(), und es ist WEG. Auf Ansage
+        // des Spielers bleibt das Briefing still: »da darf nur die
+        // missionsansage kommen, keine musik«. Der Film raeumt die Musik also
+        // nicht bloss fuer sich frei, sie bleibt danach aus, bis die Karte
+        // ihre eigene auflegt. _musikLief steht nur noch im Protokoll.
+        if (_musikLief) GD.Print("Film: Menuemusik bleibt aus — das Briefing ist still");
         SetProcess(false);
         SetProcessInput(false);
         QueueFree();

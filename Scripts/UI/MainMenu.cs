@@ -1303,6 +1303,25 @@ public partial class MainMenu : Control
         // Text weiter und hält ihre 30-MB-Textur fest, bis der Spieler klickt
         StopBackdrop();
 
+        // ⭐ 20.08.2026 — UND DIE MUSIK AUCH, auf Ansage des Spielers: »briefing
+        // soll still bleiben, da darf nur die missionsansage kommen, keine
+        // musik«.
+        //
+        // ⚠ Sie hier abzustellen und nicht erst im Film ist der Punkt: es gibt
+        // ZWEI Wege ins Briefing — mit Film und ohne (fehlende Scheibe,
+        // uebersprungen, kein Film zur Mission). Wer nur den Film freiraeumt,
+        // laesst den zweiten Weg klingen.
+        //
+        // ⚠ Und warum StopBackdrop() das nicht schon tut: die »Menuemusik« ist
+        // die MISSIONSMUSIK DER KULISSE — die Kulisse spielt einen echten
+        // Spielstand und ruft MidiMusic.StartForMission. Die Musik laeuft ueber
+        // MCI im PROZESS, nicht am Knoten; ein weggeraeumter Knoten nimmt sie
+        // nicht mit.
+        //
+        // Die Karte legt danach ihre eigene auf (MapEntityLayer ->
+        // StartForMission), hier wird also nichts dauerhaft stillgelegt.
+        Audio.MidiMusic.Stop();
+
         // The briefing goes here rather than in the map scene, because this is
         // the one place all three ways in meet: the menu button, the mission
         // picker and --campaign. No text (a skirmish, or content imported before
