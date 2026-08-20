@@ -22,8 +22,10 @@ using System.Collections.Generic;
 /// <see cref="DecodeAll"/> den ganzen Film und nicht ein Stück.</para>
 ///
 /// <para><b>Die Tafeln stehen in <c>WINSTR.DLL</c></b> — nicht in EDEC oder
-/// WINSDEC, die tragen keine. Es ist der übliche IMA-Satz: 89 Schrittweiten bis
-/// 32767 und eine Indextafel, die dort auf 16 Einträge verdoppelt ist.</para>
+/// WINSDEC, die tragen keine. Gefunden wurden dort 89 Schrittweiten bis 32767
+/// und eine Indextafel, die auf 16 Einträge verdoppelt ist. ⚠ <b>Dass die
+/// Tafeln wie beim üblichen IMA aussehen, heisst nicht, dass die RECHNUNG
+/// dieselbe ist</b> — siehe die Warnung unten.</para>
 ///
 /// <para>⚠⚠ <b>DIESE FASSUNG IST NOCH NICHT RICHTIG — Stand 20.08.2026.</b>
 /// Sie rechnet mit dem GEWÖHNLICHEN IMA-Satz, und das Original benutzt einen
@@ -44,8 +46,9 @@ using System.Collections.Generic;
 /// </summary>
 public static class RplAudio
 {
-    /// <summary>Die 89 Schrittweiten. Der übliche IMA-Satz; in
-    /// <c>WINSTR.DLL</c> bei VA 0x10010070 / 0x10010270.</summary>
+    /// <summary>Die 89 Schrittweiten aus <c>WINSTR.DLL</c>
+    /// (VA 0x10010070 / 0x10010270). ⚠ Die Tafel ist die des üblichen IMA —
+    /// die Rechnung darum herum ist es nicht.</summary>
     private static readonly int[] StepTable =
     {
         7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37,
