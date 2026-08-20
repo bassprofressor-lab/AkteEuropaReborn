@@ -1,4 +1,4 @@
-﻿namespace AkteEuropaReborn.UI;
+namespace AkteEuropaReborn.UI;
 
 using System.Collections.Generic;
 using Godot;
@@ -1056,6 +1056,11 @@ public partial class MainMenu : Control
             else if (a.StartsWith("--selftest-rail="))
             {
                 GetTree().Quit(Import.ImportSelfTest.RunRail(a["--selftest-rail=".Length..]));
+                return;
+            }
+            else if (a.StartsWith("--selftest-rpl="))
+            {
+                GetTree().Quit(Import.ImportSelfTest.RunRpl(a["--selftest-rpl=".Length..]));
                 return;
             }
             else if (a.StartsWith("--selftest-cwp="))

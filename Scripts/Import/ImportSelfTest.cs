@@ -609,6 +609,67 @@ public static class ImportSelfTest
         return wrong == 0 ? 0 : 1;
     }
 
+    /// <summary>
+    /// <c>--selftest-rpl=&lt;ordner&gt;[;&lt;ordner&gt;]</c> — <b>der Behälter der Filme
+    /// gegen sich selbst.</b>
+    ///
+    /// <para>Er prüft die zwei Aussagen, die den ganzen Behälter tragen, und
+    /// beide müssen <b>0</b> ergeben:</para>
+    /// <list type="number">
+    ///   <item>Der nächste Abschnitt beginnt auf <b>4 ausgerichtet</b> hinter
+    ///   Bild und Ton.</item>
+    ///   <item>Das erste Doppelwort eines Bildes wiederholt seine
+    ///   <b>Videogrösse</b>.</item>
+    /// </list>
+    ///
+    /// <para>Gemessen über alle 35 Filme: <b>104.488 Bilder, 0 Verstösse in
+    /// beiden</b>. Dazu die Gegenprobe, die keine Rechnung ist, sondern ein
+    /// Vergleich: das Kopffeld <c>number_of_chunks</c> ist in <b>allen 35</b>
+    /// Dateien um <b>eins zu klein</b> — wer ihm glaubt, verliert das letzte
+    /// Bild jedes Films.</para>
+    /// </summary>
+    public static int RunRpl(string dirs)
+    {
+        string[] wurzeln = Wurzeln(dirs);
+        int filme = 0, bilder = 0, schief = 0, groesse = 0, feldFalsch = 0;
+        double sek = 0;
+        long bytes = 0;
+        var namen = new List<string>();
+        foreach (string w in wurzeln)
+        {
+            string d = w.TrimEnd('/', '\\');
+            if (!Directory.Exists(d)) continue;
+            foreach (string f in Directory.GetFiles(d, "*.RPL"))
+            {
+                string kurz = System.IO.Path.GetFileName(f).ToUpperInvariant();
+                if (namen.Contains(kurz)) continue;      // beide CDs tragen 34.RPL
+                namen.Add(kurz);
+                RplFile r;
+                try { r = new RplFile(f); }
+                catch (Exception e) { GD.PrintErr($"   {kurz}: {e.Message}"); return 2; }
+                var (n, al, sz) = r.Check();
+                filme++; bilder += n; schief += al; groesse += sz;
+                bytes += new FileInfo(f).Length;
+                if (r.Fps > 0) sek += n / r.Fps;
+                if (r.ChunksClaimed != n) feldFalsch++;
+                if (r.VideoFormat != 124)
+                    GD.PrintErr($"   {kurz}: Bildformat {r.VideoFormat}, erwartet 124");
+            }
+        }
+        GD.Print($"selftest-rpl: {filme} Filme, {bilder} Bilder, {bytes} Byte, " +
+                 // ⚠ ABSCHNEIDEN, nicht runden: {sek/60:0} machte aus
+                 // 4243,4 s (70 min 43 s) eine "71 min 43 s".
+                 $"{(int)(sek / 60)} min {sek % 60:0} s");
+        GD.Print($"   Ausrichtung auf 4: {schief} Verstoesse (muss 0 sein)");
+        GD.Print($"   Groesse im Bildkopf: {groesse} Abweichungen (muss 0 sein)");
+        GD.Print($"   Kopffeld number_of_chunks falsch in {feldFalsch} von {filme} " +
+                 "Dateien — erwartet ist ALLE, das Feld ist ueberall um eins zu klein");
+        // ⚠ Der Behaelter ist in Ordnung, wenn die zwei Aussagen halten. Das
+        // falsche Kopffeld ist ein Befund UEBER das Original, kein Fehler bei
+        // uns — es darf den Lauf darum nicht durchfallen lassen.
+        return filme > 0 && schief == 0 && groesse == 0 ? 0 : 1;
+    }
+
     public static int RunEntities(string aekernel)
     {
         aekernel = aekernel.TrimEnd('/', '\\');
