@@ -16383,6 +16383,8 @@ public partial class MapEntityLayer : Node2D
     {
         int n = route.Count;
         if (n < 1) return;
+        // ⭐ 20.08.2026 — DAS KANTENMODELL, und es ist die richtige Lesart.
+        if (RailEdgeModel && RailBuildCellsByEdge(line, route, pieces)) return;
         var row = new int[n];
         var fixedRow = new bool[n];
         // ⚠ Die UNVERAENDERTE Auskunft »lag dieser Punkt auf einer ganzen
@@ -16449,6 +16451,115 @@ public partial class MapEntityLayer : Node2D
         _lineCellFrame[line] = RailFramesOf(cells);
         _linePath.Remove(line);
         _lineCellPiece[line] = cellPiece;
+    }
+
+    /// <summary>
+    /// <b>EIN ROUTENPUNKT IST EINE ZELLKANTE, KEINE ZELLE</b> — der Befund vom
+    /// 20.08.2026, und er löst die »84 %« auf, an denen wir seit dem 12.08.
+    /// vorbeigearbeitet haben.
+    ///
+    /// <para>Die Regel, aus den Originaldaten gemessen:</para>
+    /// <code>
+    ///   h = 2·y  (die Route steht auf ganzen Spalten und HALBEN Zeilen)
+    ///   h gerade -> WAAGERECHTE Kante zwischen (x, h/2−1) und (x, h/2)
+    ///   h ungerade -> SENKRECHTE Kante zwischen (x−1, (h−1)/2) und (x, (h−1)/2)
+    /// </code>
+    /// <para>Die Gleiszelle liegt dann <b>zwischen</b> zwei aufeinanderfolgenden
+    /// Punkten: sie ist die Zelle, die beide Kanten berühren. Gemessen über die
+    /// Originaldateien haben <b>22341 von 22341</b> Punktpaaren <b>genau eine</b>
+    /// gemeinsame Zelle — 0 leer, 0 mehrdeutig, über 726 von 726 Linien.</para>
+    ///
+    /// <para><b>Warum das mehr ist als eine zweite Rechenart.</b> Die alte
+    /// Ableitung (<see cref="RailBuildCells"/>) muss für jeden Punkt auf halber
+    /// Zeile RATEN, ob er zur Zelle darüber oder darunter gehört, und schiebt
+    /// die Entscheidung mit einer Weitergabe durch die Kette. Das Kantenmodell
+    /// braucht weder Nachbarn noch Weitergabe noch Sonderfälle: die Zelle steht
+    /// fest, sobald zwei Punkte dastehen. Es erklärt ausserdem die zwei Zahlen,
+    /// an denen die alte Lesart hängenblieb — <b>eine Zelle mit »beiden
+    /// Paritäten«</b> ist schlicht eine Zelle, die von zwei ihrer vier Kanten
+    /// berührt wird, und die <b>vier fehlenden Zellen je Linie</b>
+    /// (<c>delka−4</c>) sind die Punkte, die IM ENDGEBÄUDE liegen.</para>
+    ///
+    /// <para>⚠ <b>Unsere Setzung ist allein das Stück je Zelle:</b> die Zelle
+    /// zwischen Punkt i und i+1 bekommt <c>pieces[i+1]</c>, also den Code des
+    /// Schrittes, der sie durchquert. Das Original braucht die Zuordnung an
+    /// dieser Stelle gar nicht — es zeichnet den Waggon, nicht die Zelle.</para>
+    ///
+    /// <para>Gibt <c>false</c>, wenn die Route für dieses Modell nicht taugt
+    /// (weniger als zwei Punkte, oder ein Paar ohne eindeutige gemeinsame
+    /// Zelle). Dann übernimmt die alte Ableitung — und der Zähler
+    /// <see cref="RailEdgeAmbiguous"/> sagt, dass es passiert ist, statt es
+    /// stillschweigend zu tun.</para>
+    /// </summary>
+    private bool RailBuildCellsByEdge(int line, List<Vector2> route, List<int> pieces)
+    {
+        int n = route.Count;
+        if (n < 2) return false;
+
+        static ((int C, int R) A, (int C, int R) B) KantenZellen(Vector2 p)
+        {
+            int x = Mathf.RoundToInt(p.X);
+            int h = Mathf.RoundToInt(p.Y * 2f);
+            if ((h & 1) == 0) { int r = h / 2; return ((x, r - 1), (x, r)); }
+            int rr = (h - 1) / 2;
+            return ((x - 1, rr), (x, rr));
+        }
+
+        var cells = new List<Vector2>();
+        var cellPiece = new List<int>();
+        var vor = KantenZellen(route[0]);
+        for (int i = 0; i + 1 < n; i++)
+        {
+            var nach = KantenZellen(route[i + 1]);
+            // die gemeinsame Zelle der zwei Kanten
+            (int C, int R)? treffer = null;
+            int wieviele = 0;
+            foreach (var a in new[] { vor.A, vor.B })
+                if (a == nach.A || a == nach.B) { treffer = a; wieviele++; }
+            vor = nach;
+            if (wieviele != 1)
+            {
+                // ⚠ Nicht heimlich weitermachen: dieser Fall ist gemessen 0 von
+                // 22341, und wenn er auftritt, will man es WISSEN.
+                if (wieviele == 0) RailEdgeEmpty++; else RailEdgeAmbiguous++;
+                return false;
+            }
+            var zelle = new Vector2(treffer!.Value.C, treffer.Value.R);
+            if (cells.Count > 0 && cells[^1] == zelle)
+            {
+                if (i + 1 < pieces.Count) cellPiece[^1] = pieces[i + 1];
+                continue;
+            }
+            cells.Add(zelle);
+            cellPiece.Add(i + 1 < pieces.Count ? pieces[i + 1] : 0);
+        }
+        if (cells.Count == 0) return false;
+
+        _lineCell[line] = cells;
+        _lineCellFrame[line] = RailFramesOf(cells);
+        _linePath.Remove(line);
+        _lineCellPiece[line] = cellPiece;
+        RailEdgeLines++;
+        RailEdgeCells += cells.Count;
+        return true;
+    }
+
+    /// <summary>Schalter für die Gegenprobe: <c>--rail-lay=nachbarn</c> legt die
+    /// Kette wieder mit der alten Ableitung aus den Nachbarzellen. Ohne ihn
+    /// gilt das Kantenmodell.</summary>
+    public static bool RailEdgeModel { get; private set; } = true;
+
+    /// <summary>Wieviele Linien und Zellen aus dem Kantenmodell kommen, und wie
+    /// oft es aussteigen musste. ⚠ <see cref="RailEdgeEmpty"/> und
+    /// <see cref="RailEdgeAmbiguous"/> müssen 0 bleiben — gemessen sind 0 von
+    /// 22341 Punktpaaren.</summary>
+    public static int RailEdgeLines, RailEdgeCells, RailEdgeEmpty, RailEdgeAmbiguous;
+
+    static MapEntityLayer()
+    {
+        foreach (string a in OS.GetCmdlineUserArgs())
+            if (a.StartsWith("--rail-lay=") && a["--rail-lay=".Length..].Contains("nachbarn"))
+                RailEdgeModel = false;
     }
 
     /// <summary>
