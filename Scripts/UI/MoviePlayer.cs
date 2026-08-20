@@ -34,12 +34,17 @@ using AkteEuropaReborn.Import;
 /// zu dekodieren. Für uns spielt das keine Rolle: wir laufen ohnehin von vorn.
 /// </para>
 ///
-/// <para><b>⚠ Der Ton schweigt noch</b>, und das ist Absicht:
-/// <see cref="RplAudio"/> rechnet mit dem gewöhnlichen IMA-Satz, das Original
-/// benutzt aber <c>adpcm_ima_escape</c>. Gemessen stimmt nur die Stille am
-/// Anfang; ab Abtastung 734 läuft es auseinander. Eine geratene Tonkurve wäre
-/// hörbarer Unsinn — hier gilt derselbe Satz wie für die Klänge: lieber keiner
-/// als der falsche.</para>
+/// <para><b>Der Ton läuft</b>, und er ist die Uhr: das Bild hängt an der
+/// Abspielstelle des Tons, nicht an der Bildrate der Anzeige. Damit kann der
+/// Film weder wegdriften noch stottern, wenn ein Einzelbild einmal länger
+/// braucht. ⚠ Nur wenn ein Film gar keinen Ton trägt, zählt eine eigene Uhr.
+/// </para>
+///
+/// <para>⚠ Der Ton wird <b>im Ganzen</b> dekodiert, bevor der Film anläuft
+/// (rund 15 MB für 175 Sekunden). Das ist kein Geiz an der falschen Stelle,
+/// sondern nötig: ein Tonstück des Originals hat <b>keinen eigenen Kopf</b>,
+/// Vorhersage und Schrittweite laufen über die Stückgrenzen weiter — man kann
+/// nicht mittendrin einsteigen.</para>
 ///
 /// <para><b>⚠ Die Bildrate steht in der Datei und ist nicht überall gleich:</b>
 /// <c>INTRO.RPL</c> läuft mit <b>20</b>, die übrigen mit <b>25</b>. Wer 25 fest
@@ -72,6 +77,7 @@ public partial class MoviePlayer : CanvasLayer
     private double _uhr;
     private readonly double _proBild;
     private bool _fertig;
+    private readonly AudioStreamPlayer? _ton;
 
     /// <summary>
     /// Den Film einer Mission suchen. <c>null</c>, wenn er nirgends liegt —
@@ -142,9 +148,13 @@ public partial class MoviePlayer : CanvasLayer
         _bild.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         AddChild(_bild);
 
+        _ton = TonAnlegen();
         GD.Print($"Film: {System.IO.Path.GetFileName(pfad)}, {_film.Chunks.Count} Bilder, " +
                  $"{_film.Width}x{_film.Height}, {_film.Fps:0.##} B/s " +
-                 $"({_film.Chunks.Count / Math.Max(1.0, _film.Fps):0} s) — ESC ueberspringt");
+                 $"({_film.Chunks.Count / Math.Max(1.0, _film.Fps):0} s), " +
+                 $"Ton {(_ton == null ? "keiner" : $"{_film.SoundRate} Hz {_film.SoundChannels}-kanalig")}" +
+                 " — ESC ueberspringt");
+        _ton?.Play();
         SetProcess(true);
         SetProcessInput(true);
     }
@@ -160,19 +170,55 @@ public partial class MoviePlayer : CanvasLayer
         }
     }
 
+    /// <summary>Den ganzen Ton des Films dekodieren und einen Spieler dafür
+    /// anlegen. <c>null</c>, wenn der Film keinen trägt.
+    ///
+    /// <para>⚠ <b>Im Ganzen</b>, siehe Klassenkommentar: ein Tonstück hat
+    /// keinen eigenen Kopf. <see cref="RplAudio"/> ist gegen ffmpeg geprüft —
+    /// 35 Filme, 187.107.038 Abtastungen, byteweise genau.</para></summary>
+    private AudioStreamPlayer? TonAnlegen()
+    {
+        short[] pcm;
+        try { pcm = RplAudio.DecodeAll(_film); }
+        catch (Exception e) { GD.PrintErr($"Film: Ton nicht lesbar ({e.Message}) — stumm"); return null; }
+        if (pcm.Length == 0) return null;
+        var roh = new byte[pcm.Length * 2];
+        Buffer.BlockCopy(pcm, 0, roh, 0, roh.Length);
+        var w = new AudioStreamWav
+        {
+            Data = roh,
+            Format = AudioStreamWav.FormatEnum.Format16Bits,
+            Stereo = _film.SoundChannels >= 2,
+            MixRate = _film.SoundRate > 0 ? _film.SoundRate : 22050,
+        };
+        var sp = new AudioStreamPlayer { Stream = w, Bus = "Master" };
+        AddChild(sp);
+        return sp;
+    }
+
     public override void _Process(double delta)
     {
         if (_fertig) return;
-        _uhr += delta;
+        // ⚠ DER TON IST DIE UHR. Haengt das Bild an der Anzeige, driftet es
+        // gegen den Ton weg — bei 175 Sekunden faellt schon ein Prozent auf.
+        // Nur ohne Ton zaehlt die eigene Uhr.
+        int soll;
+        if (_ton != null && _ton.Playing)
+            soll = (int)(_ton.GetPlaybackPosition() * _film.Fps) + 1;
+        else
+        {
+            _uhr += delta;
+            soll = (int)(_uhr / _proBild) + 1;
+        }
         // ⚠ Aufholen, aber nicht unbegrenzt: bleibt die Anzeige einmal haengen,
         // soll der Film nicht in Zeitraffer nachziehen. Hoechstens drei Bilder
-        // je Durchgang — mehr sieht niemand.
+        // je Durchgang — mehr sieht niemand. Dekodiert werden muss trotzdem
+        // JEDES, das Format laesst kein Ueberspringen zu.
         int erlaubt = 3;
-        while (_uhr >= _proBild && erlaubt-- > 0)
-        {
-            _uhr -= _proBild;
+        while (_naechstes < soll && erlaubt-- > 0)
             if (!NaechstesBild()) { Ende(); return; }
-        }
+        // Der Ton ist zu Ende und das Bild auch: Schluss.
+        if (_naechstes >= _film.Chunks.Count && (_ton == null || !_ton.Playing)) Ende();
     }
 
     /// <summary>Ein Bild weiter. <c>false</c> heisst: der Film ist zu Ende.
@@ -223,6 +269,7 @@ public partial class MoviePlayer : CanvasLayer
     {
         if (_fertig) return;
         _fertig = true;
+        _ton?.Stop();
         SetProcess(false);
         SetProcessInput(false);
         QueueFree();

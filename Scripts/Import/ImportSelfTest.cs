@@ -708,9 +708,20 @@ public static class ImportSelfTest
     /// und Schrittweite laufen über die Stückgrenzen weiter. Ein Ausschnitt
     /// bewiese daher nichts über die Grenzen.</para>
     ///
-    /// <para>⚠ Nur die <b>ersten</b> <c>Bilder</c> eines Films werden gelesen,
-    /// sonst dauert der Lauf über 853 MB zu lange — aber immer <b>ab Bild 0</b>,
-    /// weil der Ton sonst gar nicht dekodierbar wäre.</para>
+    /// <para>⚠ Anders als beim Bild ist hier <b>nichts gedeckelt</b>: verglichen
+    /// wird der <b>ganze</b> Ton jedes Films, ab Bild 0 bis zum letzten Stück,
+    /// und <b>die Länge zählt mit</b> — ffmpeg muss genau so viele Abtastungen
+    /// liefern wie wir, keine mehr und keine weniger. ⚠ 20.08.2026 stand hier
+    /// ein Deckel von 2^20 Abtastungen; er war die Abnahmeschwelle und nicht das
+    /// Maß der Sache. Er ist weg, weil der Dekoder ihn nicht mehr braucht — wer
+    /// ihn wieder einzieht, macht den Prüfstand weicher, nicht schneller
+    /// (schneller wird er über <c>filme=&lt;n&gt;</c>).</para>
+    ///
+    /// <para>⚠ <b>Was dieser Prüfstand nicht sehen kann:</b> einen Fehler, den
+    /// ffmpeg genauso macht wie wir. Das ist kein leeres Zugeständnis — es ist
+    /// der Grund, warum die Rechnung zusätzlich aus <c>WINSTR.DLL</c> gelesen
+    /// wurde und nicht aus ffmpegs Quelle (siehe Kopf von
+    /// <see cref="RplAudio"/>).</para>
     /// </summary>
     private static int RunRplTon(List<string> pfade, string ffmpeg)
     {
@@ -726,27 +737,40 @@ public static class ImportSelfTest
         string schluss = "";
         foreach (string datei in pfade)
         {
+            string kurz = System.IO.Path.GetFileName(datei);
             RplFile r;
             try { r = new RplFile(datei); } catch { continue; }
             var unser = RplAudio.DecodeAll(r);
             if (unser.Length == 0) continue;
             filme++;
             var p = FfmpegTon(ff, datei);
-            using var aus = p.StandardOutput.BaseStream;
-            // den WAV-Kopf ueberspringen: ffmpeg schreibt 44 Byte, wenn es in
-            // eine Pipe schreibt, gibt es die Groessen als 0xFFFFFFFF aus --
-            // fuer den Vergleich zaehlt nur, dass 44 Byte vorne weg sind.
-            // ⚠ 20.08.2026 — hier wurden erst 44 Byte WAV-Kopf uebersprungen,
-            // und das war falsch: ffmpeg schreibt in eine PIPE keinen Kopf
-            // fester Laenge. Der Vergleich lief dadurch versetzt und meldete
-            // "1047794 von 1048576 daneben, erste bei 0" -- was wie ein
-            // kaputter Dekoder aussah und ein kaputter PRUEFSTAND war.
-            // FfmpegTon holt jetzt rohes s16le ohne jeden Kopf.
-            var soll = new byte[Math.Min(unser.Length, 1 << 20) * 2];
-            bool ok = LiesGenau(aus, soll, soll.Length);
-            p.Kill(true);
-            if (!ok) { daneben++; if (schluss.Length == 0) schluss = $"{System.IO.Path.GetFileName(datei)}: ffmpeg lieferte weniger Ton als wir"; continue; }
-            int n = soll.Length / 2, schlecht = 0, ersteStelle = -1;
+            byte[] soll;
+            using (var aus = p.StandardOutput.BaseStream)
+            using (var sammel = new MemoryStream(unser.Length * 2 + 4096))
+            {
+                // ⚠ 20.08.2026 — hier wurden erst 44 Byte WAV-Kopf uebersprungen,
+                // und das war falsch: ffmpeg schreibt in eine PIPE keinen Kopf
+                // fester Laenge. Der Vergleich lief dadurch versetzt und meldete
+                // "1047794 von 1048576 daneben, erste bei 0" -- was wie ein
+                // kaputter Dekoder aussah und ein kaputter PRUEFSTAND war.
+                // FfmpegTon holt rohes s16le ohne jeden Kopf.
+                aus.CopyTo(sammel);
+                soll = sammel.ToArray();
+            }
+            p.WaitForExit();
+
+            // ⚠ Die LAENGE ist Teil der Abnahme. Ein Dekoder, der auf halber
+            // Strecke aufhoert, wuerde sonst als "byteweise genau" durchgehen.
+            if (soll.Length != unser.Length * 2)
+            {
+                daneben++;
+                if (schluss.Length == 0)
+                    schluss = $"{kurz}: ffmpeg liefert {soll.Length / 2} Abtastungen, " +
+                              $"wir {unser.Length} — die Laengen muessen gleich sein";
+                continue;
+            }
+
+            int n = unser.Length, schlecht = 0, ersteStelle = -1;
             for (int i = 0; i < n; i++)
             {
                 short w = BitConverter.ToInt16(soll, i * 2);
@@ -758,11 +782,12 @@ public static class ImportSelfTest
             {
                 daneben++;
                 if (schluss.Length == 0)
-                    schluss = $"{System.IO.Path.GetFileName(datei)}: {schlecht} von {n} Abtastungen " +
+                    schluss = $"{kurz}: {schlecht} von {n} Abtastungen " +
                               $"daneben, erste bei {ersteStelle}";
             }
         }
-        GD.Print($"selftest-rpl-ton: {filme} Filme, {proben} Abtastungen verglichen, " +
+        GD.Print($"selftest-rpl-ton: {filme} Filme VOLLSTAENDIG verglichen, " +
+                 $"{proben} Abtastungen (= {proben * 2} Byte PCM), " +
                  $"{genau} Filme BYTEWEISE GENAU, {daneben} daneben");
         if (schluss.Length > 0) GD.PrintErr("   " + schluss);
         return daneben == 0 ? 0 : 1;
