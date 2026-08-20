@@ -413,16 +413,64 @@ public static class CwmExtra
     /// earlier least-squares fit could not see, which had drawn 81 of 115 lines
     /// half a tile off in x. Walking this table hits the stored end point on
     /// 115 of 115 lines of the three .DM missions.</summary>
+    /// <remarks>
+    /// ⚠⚠ <b>BERICHTIGT 20.08.2026 — die Tafel hat ZWÖLF Einträge, nicht
+    /// sechzehn.</b> Hier standen 16 Paare, und die letzten vier waren
+    /// <b>Fremdbytes</b>: die nächste Tafel beginnt bei <c>0x5043D8</c>, und
+    /// <c>0x5043D8 − 0x5043C0 = 24 Byte = genau 12 Paare</c>. Was wir als
+    /// Schritte 12..15 führten, sind die ersten Einträge der Tafel
+    /// »Gleisbild → zwei Nachbarn«.
+    ///
+    /// <para><b>Wirkung des Fehlers: null</b>, und das ist gemessen, nicht
+    /// gehofft — über alle Kartendateien beider CDs stehen <b>22.213</b>
+    /// Routencodes, und <b>kein einziger</b> ist ≥ 12. Alle zwölf von 0 bis 11
+    /// kommen dagegen vor (der seltenste, Code 5, immerhin 156-mal), die Tafel
+    /// ist also weder zu lang noch zu kurz.</para>
+    ///
+    /// <para>⚠ Gefährlich war trotzdem die andere Richtung: <c>MapOpen</c> hat
+    /// beim SCHREIBEN einer Karte über alle 16 Einträge gesucht und hätte damit
+    /// einen Code 12..15 in eine Datei schreiben können, den das Original ganz
+    /// anders liest. Diese Schleife läuft jetzt bis
+    /// <see cref="SpojCodeCount"/>.</para>
+    /// </remarks>
     public static readonly (int Dx, int Dy)[] SpojStep =
     {
-        (0, 2), (0, -2), (1, 0), (-1, 0), (0, 1), (-1, -1), (-1, 1), (0, -1),
-        (1, 1), (0, 1), (1, -1), (0, -1), (1, 0), (0, 0), (-1, -1), (0, 0),
+        (0, 2), (0, -2), (1, 0), (-1, 0), (0, 1), (-1, -1),
+        (-1, 1), (0, -1), (1, 1), (0, 1), (1, -1), (0, -1),
     };
+
+    /// <summary>Wieviele Routencodes es gibt. Siehe <see cref="SpojStep"/>.
+    /// </summary>
+    public const int SpojCodeCount = 12;
 
     /// <summary>The same code byte picks the rail piece the wagon is drawn on,
     /// through the second table at VA 0x5393f0; the tick stores the result in
-    /// wagon +0x0b (@0x4c6de9).</summary>
-    public static readonly int[] SpojPiece = { 0, 4, 6, 2, 7, 3, 1, 5, 7, 1, 5, 3, 0, 0, 0, 0 };
+    /// wagon +0x0b (@0x4c6de9). ⚠ Ebenfalls zwölf — die vier Nullen dahinter
+    /// waren Polster, siehe <see cref="SpojStep"/>.</summary>
+    public static readonly int[] SpojPiece = { 0, 4, 6, 2, 7, 3, 1, 5, 7, 1, 5, 3 };
+
+    /// <summary>Wie oft ein Routencode ausserhalb 0..11 gesehen wurde. ⚠ Muss
+    /// 0 bleiben: gemessen sind 0 von 22.213. Wird es je etwas anderes, ist
+    /// entweder die Tafel doch länger oder wir lesen an der falschen Stelle —
+    /// beides will man WISSEN und nicht stillschweigend auf (0,0) abbiegen.
+    /// </summary>
+    public static int SpojCodeOutOfRange;
+
+    /// <summary>Der Schritt eines Routencodes, mit Bereichswache.</summary>
+    public static (int Dx, int Dy) StepOf(int code)
+    {
+        if ((uint)code < SpojCodeCount) return SpojStep[code];
+        SpojCodeOutOfRange++;
+        return (0, 0);
+    }
+
+    /// <summary>Das Gleisstück eines Routencodes, mit Bereichswache.</summary>
+    public static int PieceOf(int code)
+    {
+        if ((uint)code < SpojCodeCount) return SpojPiece[code];
+        SpojCodeOutOfRange++;
+        return 0;
+    }
 
     /// <summary>sec34 — the SPOJ lines, 80 x 214 (dump @0x413400, format
     /// @0x4f7230). Bytes 0 and 1 are node numbers, the node's +0x00 a building.
@@ -613,7 +661,7 @@ public static class CwmExtra
                 int lo = 0, hi = 0, run = 0;
                 for (int k = 0; k < d.Delka && i + 0x0d + k < i + SpojStride; k++)
                 {
-                    run += SpojStep[s34[i + 0x0d + k] & 15].Dy;
+                    run += StepOf(s34[i + 0x0d + k] & 15).Dy;
                     if (run < lo) lo = run;
                     if (run > hi) hi = run;
                 }
@@ -649,14 +697,15 @@ public static class CwmExtra
                 // row but never on a half column
                 int hx = d.X1, hy = d.Y1.Value;
                 d.Route = new List<(int, double)> { (hx, hy / 2.0) };
-                d.Pieces = new List<int> { d.Delka != 0 ? SpojPiece[s34[i + 0x0d] & 15] : 0 };
+                d.Pieces = new List<int> { d.Delka != 0 ? PieceOf(s34[i + 0x0d] & 15) : 0 };
                 for (int k = 0; k < d.Delka && i + 0x0d + k < i + SpojStride; k++)
                 {
                     int c = s34[i + 0x0d + k] & 15;
-                    hx += SpojStep[c].Dx;
-                    hy += SpojStep[c].Dy;
+                    var schritt = StepOf(c);
+                    hx += schritt.Dx;
+                    hy += schritt.Dy;
                     d.Route.Add((hx, hy / 2.0));
-                    d.Pieces.Add(SpojPiece[c]);
+                    d.Pieces.Add(PieceOf(c));
                 }
             }
             list.Add(d);

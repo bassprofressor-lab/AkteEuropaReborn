@@ -643,7 +643,11 @@ public static class MapOpen
             int dx = xs[k + 1] - xs[k], dy = ys[k + 1] - ys[k];
             int want = k + 1 < pieces.Count ? pieces[k + 1] : -1;
             int code = -1;
-            for (int c = 0; c < 16; c++)
+            // ⚠ 20.08.2026 — hier stand `c < 16`, und das konnte beim
+            // SCHREIBEN einer Karte einen Routencode 12..15 erzeugen. Die
+            // Tafel des Originals hat zwoelf Eintraege; 12..15 waren
+            // Fremdbytes der naechsten Tafel. Siehe CwmExtra.SpojStep.
+            for (int c = 0; c < CwmExtra.SpojCodeCount; c++)
                 if (CwmExtra.SpojStep[c].Dx == dx && CwmExtra.SpojStep[c].Dy == dy &&
                     (want < 0 || CwmExtra.SpojPiece[c] == want))
                 { code = c; break; }
