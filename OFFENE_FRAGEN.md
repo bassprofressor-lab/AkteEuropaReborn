@@ -35,15 +35,46 @@ viel. Vier Formen haben gefehlt, alle vier jetzt gelesen:
 * Untermissionen im ENDBLOCK (M7, M16) — der Leser uebersprang jeden
   Basisblock, der die Endfunktion ruft, samt allem anderen darin.
 
-### 3. Die Nachfrist selbst
+### 3. Die Nachfrist — ⚠ die Antwort des Spielers WIDERSPRICHT dem Code (20.08.2026)
 
-`byte[0x4F6FA4] = 0xA`, jede Spielminute eins herunter, bei 0 endet die Mission
-als **Sieg**. Das ist gelesen. **Ungelesen** ist, ob ein Schritt wirklich eine
-Spielminute ist — gemessen sind 250 Takte je Schritt, und dass 250 Takte eine
-Spielminute sind, ist unsere Umrechnung.
+**Seine Messung am Video:** »die stoppuhr ist tatsächlich realistisch. 10
+sekunden sind 10 sekunden.« Also läuft »00:10« bis »00:00« in **zehn realen
+Sekunden**, ein Schritt dauert **eine Sekunde**.
 
-**Was mir hülfe:** wie lange die »00:10« im Bild real dauert (Stoppuhr am
-Video reicht: von 00:10 bis 00:00).
+**Was im Programm steht** (C, @0x4160B3 ff, Befehl für Befehl):
+
+    al = byte[0x81AA28] ; inc al ; cmp al, 0xFA ; jb <raus>
+    ...  alle 250 Takte:
+    byte[0x81AA28] = 0
+    if (byte[0x4F6FA0] != 0)          ; laeuft eine Nachfrist?
+        byte[0x4F6FA4]--              ; EINS HERUNTER
+
+Der Zähler hängt also **eindeutig an denselben 250 Takten** wie die Spielminute
+— das war richtig gelesen. Und die Anzeige ist der **Rohwert** hinter »00:«
+(@0x487485), nicht eine Sekundenzahl.
+
+**Damit klaffen zwei Aussagen um genau den Faktor 5:**
+
+| | |
+|---|---|
+| 250 Takte je Schritt bei **50 Hz** | 5 s je Schritt → 10 Schritte = **50 s** |
+| gemessen am Video | 10 Schritte = **10 s** |
+
+⚠ **Der Verdächtige ist nicht die 250, sondern unsere 50 Hz.** `TicksPerSecond
+= 50` ist eine SETZUNG von uns, keine gelesene Zahl. Wäre der Takt des
+Originals **250 Hz**, ginge seine Messung glatt auf — und dann stimmt auch
+unsere Umrechnung an anderen Stellen nicht (Markttick, Bahn, Produktion).
+
+**Was mir hülfe — und es kostet zehn Sekunden Video:** wie lange steht **eine
+einzelne Zahl** im Fenster? Also von »00:10« bis »00:09«.
+
+* **eine Sekunde** → 250 Takte sind eine Sekunde, unser 50-Hz-Takt ist falsch,
+  und das ist ein Befund weit über dieses Fenster hinaus.
+* **fünf Sekunden** → unser Modell stimmt, und »10 Sekunden sind 10 Sekunden«
+  meinte etwas anderes als den Zähler.
+
+**Nicht geändert**, bis das entschieden ist: eine Anzeige umzustellen, die an
+einer falschen Grundkonstante hängt, verschöbe den Fehler nur.
 
 ### ~~4. Zeigerarten~~ — ERLEDIGT am 20.08.2026, **ohne** Bildschirmfoto
 
