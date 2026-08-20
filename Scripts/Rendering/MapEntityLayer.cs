@@ -13045,10 +13045,17 @@ public partial class MapEntityLayer : Node2D
         // Kaeufer nach 0xB49C50, Ziel nach 0xB49C88, Preis auf 0xFFFF.
         if (TradeLikeOriginal)
         {
+            // ⚠ 20.08.2026 — geliefert wird an DEN ANGEKLICKTEN HANDELSPOSTEN,
+            // siehe DeliveryTargetFor. Die frühere Ablehnung »Sie haben kein
+            // Gebaeude, an das geliefert werden koennte« ist damit hinfaellig:
+            // sie hing an unserer Wahl »naechstes eigenes Gebaeude«, und die
+            // gibt es im Original nicht. Ein -1 heisst jetzt, dass der Markt
+            // selbst nicht in der Liste steht — das waere ein Fehler bei uns
+            // und keine Spielsituation, also bleibt die Bremse stehen.
             int ziel = DeliveryTargetFor(owner, markt);
             if (ziel < 0)
             {
-                _order = "Sie haben kein Gebaeude, an das geliefert werden koennte";
+                _order = "Lieferung ohne Ziel — der Handelsposten steht nicht in der Liste";
                 Audio.GameSounds.Play(Audio.GameSounds.Refused);
                 return;
             }

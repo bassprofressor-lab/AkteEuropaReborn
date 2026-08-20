@@ -1,4 +1,4 @@
-﻿namespace AkteEuropaReborn.Rendering;
+namespace AkteEuropaReborn.Rendering;
 
 using System.Collections.Generic;
 using Godot;
@@ -297,37 +297,43 @@ public partial class MapEntityLayer
     private const int CollectorCargo = 20;
 
     /// <summary>
-    /// <b>Wohin geliefert wird</b> — im Original der dritte Parameter des
-    /// Kaufbefehls 530, den das Marktfenster mitgibt (@0x44C6BD liest ihn aus
-    /// dem Fensterfeld <c>+0x8C3CD8</c>).
+    /// <b>Wohin geliefert wird: an DEN HANDELSPOSTEN, auf den geklickt wurde.</b>
     ///
-    /// <para>⚠ <b>UNSERE SETZUNG, und sie ist eine Lücke mit Ansage:</b> das
-    /// Original lässt den Käufer das Zielgebäude WÄHLEN; unser Marktfenster hat
-    /// dafür keinen Platz, und wie das Original die Auswahl anbietet, ist nicht
-    /// gelesen. Wir nehmen das <b>eigene Gebäude, das dem Markt am nächsten
-    /// liegt</b> — die Wahl, die ein Spieler fast immer treffen würde, und die
-    /// einzige, die ohne neue Oberfläche auskommt.</para>
+    /// <para>⚠⚠ <b>BERICHTIGT am 20.08.2026, und hier stand vorher eine falsche
+    /// Setzung mit ausführlicher Begründung.</b> Sie lautete: »das Original
+    /// lässt den Käufer das Zielgebäude WÄHLEN; wie es die Auswahl anbietet,
+    /// ist nicht gelesen — wir nehmen das eigene Gebäude, das dem Markt am
+    /// nächsten liegt«. <b>Der Käufer wählt gar nicht.</b></para>
     ///
-    /// <para>⚠ <b>Warum überhaupt ein Gebäude und nicht der Markt selbst:</b>
-    /// weil das Original an ein Gebäude liefert und der Markt keinem Spieler
-    /// gehört (Besitzer 255 auf allen 41 Sätzen). Ohne eigenes Gebäude gibt es
-    /// im Original niemanden, der die Ware annehmen könnte — der Kauf wird dann
-    /// abgelehnt, statt die Ware ins Nichts zu schicken.</para>
+    /// <para>Der dritte Parameter des Kaufbefehls ist
+    /// <c>word[Fenster + 0xACA0]</c> — das <b>Objekt des Fensters</b>. Und
+    /// dieses Feld hat genau einen Schreiber: das Marktfenster wird nur von
+    /// <c>0x443CF0</c> erzeugt, das nur aus dem Zweig »Gebäudeart 17« des
+    /// Gebäude-Klickverteilers gerufen wird, und nur <c>0x443DA5</c> schreibt
+    /// <c>+0xACA0</c> — <b>alle 66 Fundstellen des Feldes aufgelöst</b>.
+    /// Geliefert wird also immer an genau den Handelsposten, den der Spieler
+    /// angeklickt hat; das Händlerschiff kommt von Spalte −10 auf dessen
+    /// Zeile.</para>
+    ///
+    /// <para>Damit fällt auch die zweite Hälfte der alten Begründung weg. Dort
+    /// stand, es müsse ein Gebäude des Spielers sein, weil der Markt niemandem
+    /// gehört — und daraus folgte die Ablehnung »Sie haben kein Gebäude, an das
+    /// geliefert werden könnte«. Die gibt es im Original nicht: der
+    /// Handelsposten nimmt die Ware selbst an, ganz gleich, ob der Käufer sonst
+    /// noch etwas besitzt.</para>
+    ///
+    /// <para>⚠ <b>Was das im Spiel ändert:</b> die Ware erscheint jetzt am
+    /// Markt statt an der eigenen Basis. Das ist weiter zu laufen — und genau
+    /// das ist der Preis, den das Original verlangt.</para>
     /// </summary>
-    /// <returns>Der Satzindex des Zielgebäudes, oder −1.</returns>
+    /// <returns>Der Satzindex des Marktes, oder −1, wenn er nicht in der Liste
+    /// steht (dann stimmt etwas anderes nicht).</returns>
     private int DeliveryTargetFor(int owner, Entity markt)
     {
-        int best = -1;
-        long bd = long.MaxValue;
+        _ = owner;
         for (int i = 0; i < _entities.Count; i++)
-        {
-            var b = _entities[i];
-            if (!b.IsBuilding || b.IsProp || b.Dead || b.Owner != owner) continue;
-            long dx = b.Col - markt.Col, dy = b.Row - markt.Row;
-            long d = dx * dx + dy * dy;
-            if (d < bd) { bd = d; best = i; }
-        }
-        return best;
+            if (ReferenceEquals(_entities[i], markt)) return i;
+        return -1;
     }
 
     /// <summary>Die Lieferphase, @0x4C03BD. <b>Ein Abholer je Takt</b>, und er
@@ -1452,7 +1458,7 @@ public partial class MapEntityLayer
             int ziel = DeliveryTargetFor(owner, markt);
             _buyLog.AppendLine(ziel < 0
                 ? $"  ⚠ Spieler {owner} hat KEIN eigenes Gebaeude — der Kauf muss abgelehnt werden"
-                : $"  Ziel der Lieferung (UNSERE Wahl: naechstes eigenes Gebaeude): Satz {ziel}, " +
+                : $"  Ziel der Lieferung (der ANGEKLICKTE Handelsposten, @0x443DA5): Satz {ziel}, " +
                   $"{BuildingTypeName(_entities[ziel].BType)} auf " +
                   $"({_entities[ziel].Col},{_entities[ziel].Row}); der Markt steht auf " +
                   $"({markt.Col},{markt.Row})");
@@ -1528,9 +1534,13 @@ public partial class MapEntityLayer
                 foreach (var u in _entities)
                     if (!u.IsBuilding && !u.IsProp && !u.Dead && u.Owner == owner &&
                         Mathf.Abs(u.Col - b.Col) <= 3 && Mathf.Abs(u.Row - b.Row) <= 3) nah++;
+                // ⚠ 20.08.2026 — hier stand »die Ware muss DORT stehen, nicht am
+                // Markt«. Der Satz stammt aus der alten, falschen Setzung
+                // (»naechstes eigenes Gebaeude«) und widerspricht sich seit der
+                // Berichtigung selbst: das Ziel IST der Markt.
                 _buyLog.AppendLine($"  eigene Einheiten im Umkreis von 3 um das Ziel " +
-                                   $"({b.Col},{b.Row}): {nah} — die Ware muss DORT stehen, " +
-                                   $"nicht am Markt");
+                                   $"({b.Col},{b.Row}): {nah} — das Ziel ist der " +
+                                   $"angeklickte Handelsposten, dort muss die Ware stehen");
             }
             _buyLog.AppendLine($"  Gegenprobe Kampagne: {(simDauer > 60 ? $"es wurde gewartet ({simDauer} Takte)" : $"NUR {simDauer} Takte — das ist kein Warten")}");
             GD.Print(_buyLog.ToString());
