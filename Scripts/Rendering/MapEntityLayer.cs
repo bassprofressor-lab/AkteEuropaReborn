@@ -12787,6 +12787,43 @@ public partial class MapEntityLayer : Node2D
         sb.AppendLine($"  davon befahrbar: {frei} von 4 " +
                       $"({(frei > 0 ? "erreichbar" : "UNERREICHBAR — niemand kann drauffahren")})");
 
+        // ---- DIE MAUS, und sie hat bis zum 20.08.2026 GEFEHLT ---------------
+        //
+        // ⚠⚠ Der ganze Prueflauf hat den Markt bisher mit `_selected = ...` von
+        // Hand angewaehlt und damit genau die Stufe uebersprungen, an der es
+        // klemmte: <see cref="Pick"/> liess <see cref="Entity.NoStructure"/>
+        // nicht durch, und die stand fuer JEDEN Typ ausserhalb 1..16 — also
+        // auch fuer den Handelsposten. Regal, Kauf und Platten waren gruen,
+        // und der Spieler kam trotzdem nicht heran (»im Gefecht das
+        // Geschaeftszentrum noch ohne Funktion«). Deshalb steht hier jetzt der
+        // KLICK, und nicht die Anwahl.
+        int getroffen = Pick(BodyRect(b).GetCenter());
+        sb.AppendLine($"  KLICK auf die Mitte des Marktes {BodyRect(b).GetCenter()}: " +
+                      (getroffen == maerkte[0]
+                       ? $"trifft Platz {b.Slot}, richtig"
+                       : $"trifft {(getroffen < 0 ? "NICHTS" : "Platz " + _entities[getroffen].Slot)} " +
+                         "— DURCHGEFALLEN, der Markt ist mit der Maus nicht erreichbar"));
+
+        // ⚠ Die GEGENPROBE, und ohne sie ist die Zeile darueber wertlos: eine
+        // Kulisse (Typ 18..74, ohne eigenen Arm im Fensterverteiler) muss
+        // weiterhin durchfallen. Wer nur »der Markt ist anklickbar« misst,
+        // haette auch ein `return true` bestanden.
+        int kulisse = -1;
+        for (int i = 0; i < _entities.Count; i++)
+            if (_entities[i].IsBuilding && !_entities[i].Dead && _entities[i].BType > MarketType)
+            { kulisse = i; break; }
+        if (kulisse < 0)
+            sb.AppendLine("  Gegenprobe Kulisse: keine auf dieser Karte — kein Urteil");
+        else
+        {
+            var k = _entities[kulisse];
+            int kt = Pick(BodyRect(k).GetCenter());
+            sb.AppendLine($"  Gegenprobe: Klick auf die Kulisse Typ {k.BType} auf ({k.Col},{k.Row}) " +
+                          (kt == kulisse
+                           ? "TRIFFT SIE — falsch, Kulisse darf nicht anwaehlbar sein"
+                           : "trifft sie nicht, richtig"));
+        }
+
         bool vorher = MarketOpenFor(b, ViewPlayer);
         sb.AppendLine($"  vor dem Auffahren: {(vorher ? "OFFEN — das waere falsch" : "zu, richtig")}");
 
@@ -12867,6 +12904,14 @@ public partial class MapEntityLayer : Node2D
         }
 
         // ---- WOHIN ZEIGT o.Design? ---------------------------------------
+        // ⚠ 20.08.2026 — dieser Block hat den ganzen Prueflauf ABGESTUERZT,
+        // sobald die Karte keine Ware mitbringt: `idx.Min()` auf einer leeren
+        // Liste wirft. Genau der Fall ist der haeufige — map_NET02 hat VIER
+        // Maerkte und NULL Angebote —, und der Absturz kam NACH der
+        // Plattenpruefung, also sah man von der gar nichts mehr. Ein
+        // Pruefstand, der am haeufigsten Fall stirbt, misst nie das, wofuer er
+        // gebaut wurde.
+        if (_market.Count > 0)
         {
             int n = _designs?.Count ?? -1;
             var idx = _market.Select(x => x.Design).ToList();
@@ -22712,11 +22757,63 @@ public partial class MapEntityLayer : Node2D
         for (int i = 0; i < _entities.Count; i++)
             // NoStructure: der Satz existiert fuer die Skripte, aber nicht auf
             // dem Bildschirm — er darf sich auch nicht anwaehlen lassen.
-            if (!_entities[i].Dead && !_entities[i].NoStructure &&
+            // ⚠ Ausser dem HANDELSPOSTEN, siehe Anfassbar().
+            if (!_entities[i].Dead && (!_entities[i].NoStructure || Anfassbar(_entities[i])) &&
                 BodyRect(_entities[i]).HasPoint(p) && _entities[i].Row > bestRow)
             { best = i; bestRow = _entities[i].Row; }
         return best;
     }
+
+    /// <summary>
+    /// <b>Ein Satz OHNE eigenes Bauwerk auf dem Schirm, den man trotzdem
+    /// anklicken koennen muss.</b> Zurzeit gibt es genau einen: den
+    /// <b>HANDELSPOSTEN</b>, Gebaeudetyp <see cref="MarketType"/>.
+    ///
+    /// <para>⚠ 20.08.2026 — hier lag der Grund fuer »im Gefecht das
+    /// Geschaeftszentrum noch ohne Funktion«, und er lag NICHT im Markt.
+    /// Regal, Kauf, Nachschub, Kontostand und die Plattenpruefung stehen seit
+    /// dem 18./19.08. und werden von <c>--buy-check</c> gemessen — der
+    /// Pruefstand setzt aber <c>_selected</c> von Hand. <b>Mit der Maus war der
+    /// Markt nie erreichbar</b>, denn <see cref="Pick"/> liess
+    /// <see cref="Entity.NoStructure"/> nicht durch, und die stand fuer jeden
+    /// Typ ausserhalb 1..16.</para>
+    ///
+    /// <para><b>Warum die Grenze bei 16 falsch war.</b> Sie kam aus der
+    /// Namentabelle <c>0x4FDCC4</c> (16 Eintraege zu 20 Byte). Der Verteiler
+    /// »Fenster dieses Gebaeudes oeffnen« hat aber <b>17</b> Arme
+    /// (F 0x4361C0 / Tafel 0x436B50, C 0x437140 / Tafel 0x4379F0, Index =
+    /// Typ−1): Typ 8 und Typ 16 zeigen auf den Standardausgang, <b>Typ 17 auf
+    /// einen eigenen</b> (F 0x4364A1 → 0x442CE0, C 0x437341 → 0x443CF0). Der
+    /// oeffnet Fensterart <b>0x21 = 33</b>, und welche Art das ist, sagt das
+    /// Spiel selbst: <c>find_market_window</c> laedt dieselbe 0x21 und druckt
+    /// beim Fehlschlag <c>'Market window not found'</c> (F 0x44FE89 / 0x4FD9C0,
+    /// C 0x4511D9 / 0x4FE988). Gegenprobe aus derselben Ecke: das Ladenfenster
+    /// (<c>'Store window not found'</c>) ist Art 0x1F. <b>Die Grenze ist der
+    /// Verteiler, nicht die Namentabelle.</b> Typ 18..74 haben keinen Arm und
+    /// bleiben Kulisse.</para>
+    ///
+    /// <para>⚠ <b>Und warum er trotzdem NoStructure bleibt.</b> Er darf nicht
+    /// gezeichnet werden: seine Kacheln stecken schon im gebackenen
+    /// Kartenbild, weil <see cref="Import.MapBaker"/> nur Gebaeude mit
+    /// <c>built != 0</c> ausspart (MapBaker.cs, <c>BuildingCells</c>) — und
+    /// alle <b>76</b> Handelsposten der ausgelieferten Karten tragen
+    /// <c>built = 0</c>. Wer ihn in <see cref="BuildingsBackToFront"/> haengt,
+    /// malt ihn ein zweites Mal darueber. Gegenprobe: eine Basis (Typ 1) ist im
+    /// gebackenen Bild NICHT zu sehen, der Handelsposten sehr wohl.</para>
+    ///
+    /// <para>Das Original nennt ihn an zwei Stellen selbst: das Fenster heisst
+    /// <c>Geschaeftszentrum</c> (0x502258), die Enzyklopaedie fuehrt ihn als
+    /// <b>Handelsposten</b> (ENCYCLOG.TXT, Abschnitt <c>#p12 Gebaeude</c>,
+    /// Eintrag <c>#r157</c>, Bild 84) und erklaert dort auch die Bedienung:
+    /// »Steht eine Einheit auf einem der Handelspunkte, ist der Warenbestand
+    /// aufrufbar« — das sind die vier Zellen aus
+    /// <see cref="MarketPads"/>.</para>
+    /// </summary>
+    private static bool Anfassbar(Entity e) => e.IsBuilding && e.BType == MarketType;
+
+    /// <summary>Der Gebaeudetyp des Handelspostens. Siehe
+    /// <see cref="Anfassbar"/>.</summary>
+    public const int MarketType = 17;
 
     /// <summary>Das Flugzeug unter einem Punkt, oder −1. Ein Flugzeug im Hangar
     /// ist nicht auf dem Bildschirm und lässt sich deshalb auch nicht anklicken
