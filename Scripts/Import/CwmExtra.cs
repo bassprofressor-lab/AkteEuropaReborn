@@ -674,17 +674,50 @@ public static class CwmExtra
                 // ENDGEBAEUDE: die Strecke faengt an einem an und hoert am
                 // anderen auf. Genommen wird der Kandidat, dessen beide Enden
                 // ihren Gebaeuden am naechsten liegen.
-                int best = by, bestCost = int.MaxValue;
-                for (int add = 0; add <= 512; add += 256)
+                // ⚠⚠ 20.08.2026 — OHNE STARTKNOTEN GIBT ES HIER NICHTS
+                // ZURÜCKZURECHNEN, und das ist gemessen, nicht gefolgert.
+                //
+                // Seit heute kommen die 21 Linien durch, die an einem Ende frei
+                // auslaufen (Knoten 0xFF). Für sie trägt `+0x03` NICHT das
+                // Start-y: auf 3.DM, 5.DM, 7.DM und 10.DM steht dort jedesmal
+                // **89**, während sec122 **0** bzw. **41** führt — und schon
+                // dass zwei Spielstände derselben Linie verschiedene Werte
+                // tragen, zeigt, dass es Laufzeitzustand ist und kein Feld der
+                // Strecke.
+                //
+                // Der Auswahlschritt darunter hilft auch nicht: er wägt über
+                // `EndCost` die Nähe BEIDER Enden zu ihren Gebäuden ab, und an
+                // einem freien Ende gibt es kein Gebäude, zu dem hin gemessen
+                // werden könnte.
+                //
+                // Also wird kein y gesetzt. Die Linie wird dann nicht blind
+                // gelegt — dieselbe Regel wie überall hier: lieber eine
+                // sichtbare Lücke als ein Gleis, das anderswo verläuft als im
+                // Original. ⚠ Im Spiel kostet das nichts: die Zellen kommen
+                // ohnehin aus sec22 der Karte (siehe RailAdoptCells), und ein
+                // Spielstand trägt sein y in sec122.
+                //
+                // Gefunden hat das der Prüfstand, nachdem er am selben Tag von
+                // drei auf zehn Belege erweitert wurde. Auf den drei alten war
+                // er grün, weil 1.DM und 4.DM echte Knoten haben.
+                if (d.Bud1 < 0)
                 {
-                    int cand = by + add;
-                    if (cand + lo < 0 || cand + hi > limit) continue;
-                    int cost = EndCost(at, d.X1, cand / 2) + EndCost(at, d.X2, (cand + sum) / 2);
-                    if (cost < bestCost) { bestCost = cost; best = cand; }
+                    d.Rebuilt = true;          // versucht, aber nicht lösbar
                 }
-                d.Y1 = best;
-                d.Y2 = d.Y1 + sum;
-                d.Rebuilt = true;
+                else
+                {
+                    int best = by, bestCost = int.MaxValue;
+                    for (int add = 0; add <= 512; add += 256)
+                    {
+                        int cand = by + add;
+                        if (cand + lo < 0 || cand + hi > limit) continue;
+                        int cost = EndCost(at, d.X1, cand / 2) + EndCost(at, d.X2, (cand + sum) / 2);
+                        if (cost < bestCost) { bestCost = cost; best = cand; }
+                    }
+                    d.Y1 = best;
+                    d.Y2 = d.Y1 + sum;
+                    d.Rebuilt = true;
+                }
             }
             if (d.Y1.HasValue && at.Count > 0)
             {
@@ -766,14 +799,29 @@ public static class CwmExtra
         if (EndX(s34, at, d.Delka, d.X1) != d.X2) return (0, false);   // Vorprobe
         int dy = SumDy(s34, at, d.Delka);
 
+        // ⚠⚠ 20.08.2026 — DIESE FUNKTION WIRD NIRGENDS GERUFEN. Sie ist die
+        // stillgelegte Sackgasse von 11.08.: das y aus den zwei Endgebäuden
+        // zurückrechnen. Der Prüfstand meldete damals »0 von 115 eindeutig«,
+        // weil der Streckenendpunkt meist gar nicht auf einem Gebäude liegt
+        // (nur 164 von 542 Paaren). Das y steht in Wahrheit im Satz selbst, auf
+        // `+0x03` — siehe den blinden Zweig in <see cref="Links"/>.
+        //
+        // Sie bleibt als Beleg stehen, und die Bereichswache unten ist
+        // trotzdem richtig: ein fehlender Knoten hat `Bud` = −1, und
+        // `buildingAt` gibt für »kein Gebäude« ebenfalls −1 — zwei Bedeutungen
+        // auf einem Wert. Wer sie je wieder anwirft, soll nicht in dieselbe
+        // Falle laufen.
+        bool anker1 = d.Bud1 >= 0, anker2 = d.Bud2 >= 0;
+        if (!anker1 && !anker2) return (0, false);
+
         int found = 0, first = 0;
         // halbe Zeilen; 254 Zeilen ist die größte Karte
         for (int y = 0; y <= 254 * 2; y++)
         {
-            if (buildingAt(d.X1, y / 2) != d.Bud1) continue;
+            if (anker1 && buildingAt(d.X1, y / 2) != d.Bud1) continue;
             int y2 = y + dy;
             if (y2 < 0) continue;
-            if (buildingAt(d.X2, y2 / 2) != d.Bud2) continue;
+            if (anker2 && buildingAt(d.X2, y2 / 2) != d.Bud2) continue;
             if (found++ == 0) first = y;
             if (found > 1) return (0, false);
         }
