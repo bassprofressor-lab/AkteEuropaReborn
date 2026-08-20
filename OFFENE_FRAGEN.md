@@ -45,15 +45,27 @@ Spielminute sind, ist unsere Umrechnung.
 **Was mir hülfe:** wie lange die »00:10« im Bild real dauert (Stoppuhr am
 Video reicht: von 00:10 bis 00:00).
 
-### 4. Zeigerarten
+### ~~4. Zeigerarten~~ — ERLEDIGT am 20.08.2026, **ohne** Bildschirmfoto
 
-Von den 28 Mauszeigern im `ROBO.CWR`-Anhang ist die Bedeutung von vieren
-gelesen (0 Pfeil, 1 eigenes Objekt, 2 Angriff, 5 eigene Infanterie). Die
-übrigen 24 sind nur nach Augenschein benannt, weil ungelesen ist, **wer den
-Modus `dword[0x502AD4]` setzt**.
+Hier stand: »von den 28 Mauszeigern ist die Bedeutung von vieren gelesen, die
+übrigen 24 nur nach Augenschein benannt, weil ungelesen ist, wer den Modus
+`dword[0x502AD4]` setzt«. Gelesen, und die Frage an den Spieler entfällt.
 
-**Was mir hülfe:** Bildschirmfotos, in denen ein ungewöhnlicher Zeiger zu sehen
-ist, mit einem Wort dazu, was gerade passiert.
+**`dword[0x502AD4]` ist kein Zeigerindex, sondern ein ZUSTAND.** 59 feste
+Schreibstellen, 30 davon allein in der 5,5-kB-Trefferprüfung C `0x4315D0`. Die
+Umsetzung Zustand → Zeiger macht C `0x4A9AB0` / F `0x4A93E0` über eine
+26er-Sprungtafel `0x4A9BEC` (plus die Sonderwerte 100, 1000, 1001, 1002); das
+Ergebnis landet in `byte[0xA182D0]`. Unter anderem: 14 »Ziel gültig«,
+15 »ungültig«, 23 »zu weit«, 20 Gummiband, 0xFF aus.
+
+Die 28 Zeiger selbst liegen in einer bis dahin unbekannten Tafel im
+**`ROBO.CWR`-Kopf** (`0xA31AA0`, 1760 B = 40 Sätze zu 44 B = Bildzahl plus zehn
+Versätze; belegt sind 0…28, Satz 9 ist leer). Der Lader `0x429020` geht auf das
+Byte auf.
+
+⚠ **Vier Zeiger (6, 7, 8, 25) sind gefüllt, aber tot** — kein Code wählt sie.
+Wer sie im Original je gesehen hat, hätte einen Befund; erwarten würde ich es
+nicht.
 
 ---
 
@@ -188,18 +200,23 @@ Farbe 0 und ist der Absatzmarker, den wir schon behandeln.
 Farbe 2 (`#F4B81C` und `#AB871F`) — die hat jemand vor mir gelesen. Andere
 sind daneben: unser Rot ist `#E86048`, das des Originals `#F05131`.
 
-⚠ **Was NICHT geklärt ist, und darum ist nichts geändert:** im Tutorialfenster
-des Originals sind **ganze Wörter** eingefärbt (»Zum **BEWEGEN** der
-angewählten Einheit … mit der **Linken Maus Taste**«). Mit einer Farbe je
-Zeichen und ohne Klammern in `HELPG.TXT` kann das aus dieser Tafel nicht
-kommen. Entweder färbt das Nachrichtenfenster (`show_text` `0x443490` /
-`show_text2` `0x4432E0`) selbst ein, oder es gibt eine Auszeichnung, die ich
-nicht gefunden habe.
+⚠⚠ **ERLEDIGT am 20.08.2026, und die Fährte war falsch.** Hier stand: »im
+Tutorialfenster sind ganze Wörter eingefärbt, das kann aus dieser Tafel nicht
+kommen — was mir hülfe, ist ein Bildschirmfoto«. Es brauchte keins.
 
-**Was mir hülfe:** ein Bildschirmfoto eines Hilfefensters, in dem ein
-eingefärbtes Wort gut zu lesen ist, zusammen mit der Textnummer (steht oft im
-Fenstertitel). Dann kann ich die Zeile in `HELPG.TXT` aufschlagen und sehen,
-was dort wirklich um das Wort herum steht.
+**Die Auszeichnung ist `@`** — ein Zeichen ohne Breite vor einem Wort, **577
+mal** in `HELPG.TXT` und in **keiner** anderen `.TXT`. Wir hielten es für den
+Absatzmarker; das ist `^`. Der Hilfetext wird **wortweise** gemalt
+(C `0x47CF10` / F `0x47B800`): die Breitenmessung `0x45A560` überspringt das
+`@`, und ab Wort+1 wird mit dem Farbpaar **(0x97, 0x9A)** — orange-rot —
+gezeichnet statt mit (0x94, 0x96) — gelb.
+
+⚠ Warum die alte Überlegung danebenlag: `@` steht in der Zeichentafel
+`0x4BA504` auf »ohne Farbe«, und `[ ] { }` kommen in `HELPG.TXT` gar nicht vor.
+Beides stimmte — nur war die Färbung nie eine Sache der Zeichentafel.
+
+**Noch offen dazu:** die zweite Hilfefenster-Fassung `0x47D6D0` benutzt
+dasselbe Hervorhebungs-Farbpaar **ohne** die `@`-Prüfung. Ungelesen.
 
 
 ---
