@@ -12265,9 +12265,54 @@ public partial class MapEntityLayer : Node2D
         // ist er unbrauchbar — das Original nennt ihn »Geschaeftszentrum«
         // (0x502258). Bei den uebrigen Gebaeuden bleibt der Kartenname, denn
         // dort ist er ein richtiger Ortsname (»Karvina«, »Bolougne«).
-        string kopf = e.BType == 17 || e.Name.Length == 0
+        //
+        // ⚠ 20.08.2026 — der Sonderfall »BType == 17« ist damit UEBERFLUESSIG
+        // geworden, siehe PlatzhalterName: nicht der Markt ist besonders,
+        // sondern der Name. Er bleibt trotzdem stehen, denn er kostet nichts
+        // und faengt einen Handelsposten ab, der ausnahmsweise einen echten
+        // Namen traegt.
+        string kopf = e.BType == MarketType || e.Name.Length == 0 || PlatzhalterName(e)
                     ? BuildingTypeName(e.BType) : e.Name;
         return (kopf, e.Hp, e.HpMax, e.Dead ? "zerstoert" : StateName(e));
+    }
+
+    /// <summary>
+    /// <b>Traegt dieses Gebaeude gar keinen Namen, sondern den PLATZHALTER des
+    /// Originals?</b> Der sieht aus wie <c>Init&lt;Platznummer&gt;</c>.
+    ///
+    /// <para>⚠ 20.08.2026, gemeldet als »wenn ich normal drauf clicke steht
+    /// init11 Geschaeftszentrum«. <c>INIT11</c> ist kein Ortsname, es ist der
+    /// Vorgabename, den das Original einem unbenannten sec3-Satz gibt.</para>
+    ///
+    /// <para><b>GEMESSEN ueber alle 80 eingelesenen Karten</b>, damit die Regel
+    /// nicht auf einem Eindruck steht:</para>
+    /// <list type="bullet">
+    ///   <item><b>1146</b> Saetze heissen exakt <c>Init&lt;Platz&gt;</c>, und
+    ///   zwar quer durch ALLE Typen — Kraftwerk 193, Radarstellung 110,
+    ///   Nachschub-Posten 97, Handelsposten 75, Basis 10. Es ist also nichts,
+    ///   was nur die Kulisse betrifft.</item>
+    ///   <item><b>1217</b> Saetze tragen einen echten Namen, <b>156</b>
+    ///   verschiedene, und alle sind Ortsnamen: Calais 67, Artois 60,
+    ///   Bolougne 39, St.Omer 37, Seres 26. <b>Kein einziger</b> davon faengt
+    ///   mit <c>Init</c> an — deshalb ist der Vorsilbentest sicher.</item>
+    ///   <item>Genau <b>eine</b> Ausnahme von der Platznummer: <c>map_16</c>
+    ///   Platz 1 heisst <c>Init2</c>. Darum wird die ZIFFER nicht gegen den
+    ///   Platz geprueft, sondern nur, dass eine dasteht — sonst bliebe dieser
+    ///   eine Satz als »INIT2« stehen.</item>
+    /// </list>
+    ///
+    /// <para>⚠ <b>Unsere Setzung ist, was STATTDESSEN dasteht</b>, nicht die
+    /// Erkennung: die Namenszeile bleibt leer und die Typzeile darunter traegt
+    /// den Namen allein. Was das Original in seine Titelzeile schreibt, wenn
+    /// ein Gebaeude keinen Namen hat, ist ungelesen.</para>
+    /// </summary>
+    private static bool PlatzhalterName(Entity e)
+    {
+        if (!e.Name.StartsWith("Init", System.StringComparison.OrdinalIgnoreCase)) return false;
+        if (e.Name.Length == 4) return false;              // »Init« allein: kein Platzhalter
+        for (int i = 4; i < e.Name.Length; i++)
+            if (e.Name[i] is < '0' or > '9') return false;
+        return true;
     }
 
     public bool BuildPanelWanted => Producer() != null;
@@ -12803,6 +12848,14 @@ public partial class MapEntityLayer : Node2D
                        ? $"trifft Platz {b.Slot}, richtig"
                        : $"trifft {(getroffen < 0 ? "NICHTS" : "Platz " + _entities[getroffen].Slot)} " +
                          "— DURCHGEFALLEN, der Markt ist mit der Maus nicht erreichbar"));
+
+        // Was im Feld steht, wenn man ihn anklickt. Gemeldet: »wenn ich normal
+        // drauf clicke steht init11 Geschaeftszentrum« — siehe PlatzhalterName.
+        sb.AppendLine($"  Feld nach dem Klick: Namenszeile \"" +
+                      $"{(PlatzhalterName(b) ? "" : b.Name)}\" " +
+                      $"(die Karte sagt \"{b.Name}\"" +
+                      $"{(PlatzhalterName(b) ? ", Platzhalter — unterdrueckt" : "")}), " +
+                      $"Typzeile \"{BuildingTypeName(b.BType)}\"");
 
         // ⚠ Die GEGENPROBE, und ohne sie ist die Zeile darueber wertlos: eine
         // Kulisse (Typ 18..74, ohne eigenen Arm im Fensterverteiler) muss
@@ -24252,7 +24305,7 @@ public partial class MapEntityLayer : Node2D
         else if (e.IsBuilding)
         {
             _panel.Text =
-                $"{e.Name.ToUpper()}\n" +
+                $"{(PlatzhalterName(e) ? "" : e.Name.ToUpper())}\n" +
                 $"{BuildingTypeName(e.BType).ToUpper()}\n" +
                 // while it is being taken the panel shows the flickering owner
                 // (+0x3d), the way the original's does
