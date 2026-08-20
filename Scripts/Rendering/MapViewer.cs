@@ -1284,10 +1284,34 @@ public partial class MapViewer : Node2D
             else if (a.StartsWith("--bau-check="))
             {
                 _bauCheckFlag = true;
-                _bauCheckOrder = a[12..] switch
+                // ⚠ 20.08.2026 — hier stand `_ => 5`, und das war ein LÜGENDER
+                // PRÜFSTAND. Wer `--bau-check=6` schrieb (die Modusnummer, die
+                // in jeder Zeile des Prüfstands selbst steht), bekam ohne ein
+                // Wort der Warnung den DEPOT-Lauf und darunter »1 gebaut« —
+                // also ein sattes Grün für etwas, wonach er gar nicht gefragt
+                // hatte. Mich hat das drei Läufe gekostet, und ich hätte
+                // beinahe Mine und Generator als gemessen abgehakt, obwohl
+                // beide nie gelaufen waren.
+                //
+                // Jetzt gilt: die Modusnummern des Originals sind erlaubt (5
+                // Depot, 6 Mine, 7 Generator), die Wörter ebenso — und alles
+                // andere wird ABGELEHNT statt still ersetzt.
+                string w = a[12..];
+                _bauCheckOrder = w switch
                 {
-                    "mine" => 6, "generator" => 7, _ => 5,
+                    "depot" or "5" => 5,
+                    "mine" or "6" => 6,
+                    "generator" or "7" => 7,
+                    _ => -1,
                 };
+                if (_bauCheckOrder < 0)
+                {
+                    GD.PrintErr($"--bau-check={w}: unbekannt. Erlaubt sind " +
+                                "depot|5, mine|6, generator|7 — der Lauf misst nichts, " +
+                                "statt heimlich etwas anderes zu messen.");
+                    _bauCheckFlag = false;
+                    _bauCheckOrder = 5;
+                }
             }
             else if (a == "--depot-flow") _depotFlow = true;
             else if (a == "--depot-flow=dock")
