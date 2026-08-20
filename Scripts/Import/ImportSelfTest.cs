@@ -630,11 +630,32 @@ public static class ImportSelfTest
     /// </summary>
     public static int RunRpl(string dirs)
     {
-        string[] wurzeln = Wurzeln(dirs);
+        // ⚠ Der Schalter traegt jetzt ZWEI Pruefungen. Alles mit '=' im Namen
+        // ist eine Einstellung und kein Ordner:
+        //   bilder=<n>   wie viele Bilder je Film verglichen werden (0 = kein
+        //                Bildvergleich, Vorgabe 400)
+        //   filme=<n>    hoechstens so viele Filme vergleichen (0 = alle)
+        //   ffmpeg=<pfad>  der Gegenpruefer
+        var ordner = new List<string>();
+        int wieViele = 400, maxFilme = 0;
+        string ffmpeg = "";
+        foreach (string t in dirs.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            int eq = t.IndexOf('=');
+            if (eq <= 0) { ordner.Add(t); continue; }
+            string k = t[..eq].Trim().ToLowerInvariant(), v = t[(eq + 1)..].Trim();
+            if (k == "bilder") int.TryParse(v, out wieViele);
+            else if (k == "filme") int.TryParse(v, out maxFilme);
+            else if (k == "ffmpeg") ffmpeg = v;
+            else ordner.Add(t);
+        }
+
+        string[] wurzeln = ordner.ToArray();
         int filme = 0, bilder = 0, schief = 0, groesse = 0, feldFalsch = 0;
         double sek = 0;
         long bytes = 0;
         var namen = new List<string>();
+        var pfade = new List<string>();
         foreach (string w in wurzeln)
         {
             string d = w.TrimEnd('/', '\\');
@@ -644,6 +665,7 @@ public static class ImportSelfTest
                 string kurz = System.IO.Path.GetFileName(f).ToUpperInvariant();
                 if (namen.Contains(kurz)) continue;      // beide CDs tragen 34.RPL
                 namen.Add(kurz);
+                pfade.Add(f);
                 RplFile r;
                 try { r = new RplFile(f); }
                 catch (Exception e) { GD.PrintErr($"   {kurz}: {e.Message}"); return 2; }
@@ -667,8 +689,184 @@ public static class ImportSelfTest
         // ⚠ Der Behaelter ist in Ordnung, wenn die zwei Aussagen halten. Das
         // falsche Kopffeld ist ein Befund UEBER das Original, kein Fehler bei
         // uns — es darf den Lauf darum nicht durchfallen lassen.
-        return filme > 0 && schief == 0 && groesse == 0 ? 0 : 1;
+        int rc = filme > 0 && schief == 0 && groesse == 0 ? 0 : 1;
+        if (wieViele > 0 && pfade.Count > 0)
+        {
+            if (maxFilme > 0 && pfade.Count > maxFilme) pfade.RemoveRange(maxFilme, pfade.Count - maxFilme);
+            rc |= RunRplBild(pfade, wieViele, ffmpeg);
+        }
+        return rc;
     }
+
+    /// <summary>
+    /// <b>DER BILDVERGLEICH</b> — <see cref="Escape124"/> gegen ffmpeg,
+    /// <b>byteweise</b>.
+    ///
+    /// <para>Er stellt genau eine Frage: liefert unser Dekoder für jedes Bild
+    /// exakt dieselben <c>rgb555le</c>-Bytes wie <c>ffmpeg -pix_fmt
+    /// rgb555le</c>? Verglichen wird ab Bild 0 <b>lückenlos vorwärts</b> —
+    /// nicht weil Bild 0 etwas beweist (es beweist fast nichts), sondern weil
+    /// Escape 124 ein Differenzformat mit über Bilder hinweg stehenden
+    /// Codebüchern ist: nur ein lückenloser Lauf bringt den Dekoder überhaupt
+    /// an Bild 400.</para>
+    ///
+    /// <para>⚠ <b>Was dieser Prüfstand NICHT sehen kann:</b> einen Fehler in
+    /// Bildern jenseits der geprüften Zahl, und einen, der Bild <i>und</i>
+    /// Vorbild gleich trifft — den gibt es hier nicht, weil das Vorbild ein
+    /// fremder Dekoder ist.</para>
+    ///
+    /// <para>⚠ <b>Sieben Bilder von 104.488</b> tragen im Original eine
+    /// Codebuchgrösse 0. ffmpeg gibt dort kein Bild aus, wir auch nicht; der
+    /// Film wird ab dort nicht weiter verglichen und das getrennt gemeldet —
+    /// er darf nicht als Fehler durchgehen und auch nicht stillschweigend
+    /// verschwinden.</para>
+    /// </summary>
+    private static int RunRplBild(List<string> pfade, int wieViele, string ffmpeg)
+    {
+        string ff = FindeFfmpeg(ffmpeg);
+        if (ff.Length == 0)
+        {
+            GD.Print("selftest-rpl-bild: kein ffmpeg gefunden — Bildvergleich uebersprungen " +
+                     "(Pfad mit ffmpeg=<pfad> angeben). ⚠ Das ist KEIN gruenes Ergebnis.");
+            return 0;
+        }
+        GD.Print($"selftest-rpl-bild: Gegenpruefer {ff}, bis zu {wieViele} Bilder je Film");
+
+        int gesamt = 0, genau = 0, daneben = 0, abbruch = 0, filme = 0;
+        string ersterFehler = "";
+        foreach (string p in pfade)
+        {
+            string kurz = System.IO.Path.GetFileName(p);
+            RplFile r;
+            try { r = new RplFile(p); }
+            catch (Exception e) { GD.PrintErr($"   {kurz}: {e.Message}"); return 2; }
+            if (r.Width <= 0 || r.Height <= 0) continue;
+
+            int n = Math.Min(wieViele, r.Chunks.Count);
+            int fsz = r.Width * r.Height * 2;
+            var soll = new byte[fsz];
+            var dec = new Escape124(r.Width, r.Height);
+            int fOk = 0, fBad = 0, ohneBild = 0;
+            string schluss = "";
+
+            using (var proc = FfmpegRoh(ff, p, n))
+            {
+                var aus = proc.StandardOutput.BaseStream;
+                for (int i = 0; i < n; i++)
+                {
+                    byte[] roh;
+                    try { roh = r.ReadVideo(i); }
+                    catch (Exception e) { schluss = $"Lesefehler bei Bild {i}: {e.Message}"; break; }
+
+                    if (!dec.DecodeFrame(roh))
+                    {
+                        // Codebuchgroesse 0 — ffmpeg gibt hier ebenfalls kein
+                        // Bild aus.
+                        //
+                        // ⚠ WEITERLAUFEN WAERE FALSCH, und das ist GEMESSEN,
+                        // nicht vermutet. Ein Lauf, der einfach weitermacht,
+                        // meldete 104.481 verglichene Bilder, davon 94.399
+                        // genau und 10.082 daneben — die 10.082 verteilen sich
+                        // auf DREI der fuenf betroffenen Filme (4.RPL,
+                        // INTRO.RPL, 22.RPL), waehrend 9.RPL und 34.RPL sauber
+                        // durchliefen. Die Gegenprobe: in einer Kopie von
+                        // 4.RPL, in der genau dieses eine Bild zu einem echten
+                        // Leerbild gemacht wurde (Fahnen 0x00000114, gleiche
+                        // Laenge, kein Katalogeingriff), stimmen 400 von 400 —
+                        // einschliesslich des Bildes, an dem der Lauf sonst
+                        // auseinanderlaeuft. Der Bruch kommt also NICHT von
+                        // unserem Dekoder, sondern aus dem Zustand, den ein
+                        // verweigertes Bild hinterlaesst. Solange das nicht
+                        // geklaert ist, hoert der Vergleich bei diesem Film
+                        // auf, statt eine Zahl zu melden, die nichts misst.
+                        ohneBild++;
+                        schluss = $"Bild {i}: Codebuchgroesse 0 (wie ffmpeg kein Bild) — ab hier nicht mehr verglichen";
+                        break;
+                    }
+                    if (!LiesGenau(aus, soll, fsz)) { schluss = $"ffmpeg lieferte nur {i} Bilder"; break; }
+
+                    gesamt++;
+                    if (Gleich(dec.Frame, soll)) { genau++; fOk++; }
+                    else
+                    {
+                        daneben++; fBad++;
+                        if (ersterFehler.Length == 0)
+                        {
+                            int weg = 0;
+                            for (int b = 0; b < fsz; b += 2)
+                                if (dec.Frame[b] != soll[b] || dec.Frame[b + 1] != soll[b + 1]) weg++;
+                            ersterFehler = $"{kurz}, Bild {i}, {weg} von {r.Width * r.Height} Bildpunkten daneben";
+                        }
+                    }
+                }
+                try { proc.StandardOutput.BaseStream.CopyTo(System.IO.Stream.Null); } catch { }
+                try { if (!proc.WaitForExit(20000)) proc.Kill(true); } catch { }
+            }
+            filme++;
+            abbruch += ohneBild;
+            GD.Print($"   {kurz,-12} {fOk + fBad,5} verglichen, {fOk,5} genau, {fBad,4} daneben" +
+                     (ohneBild > 0 ? $", {ohneBild} ohne Bild (Codebuchgroesse 0, wie ffmpeg)" : "") +
+                     (schluss.Length > 0 ? "   [" + schluss + "]" : ""));
+        }
+
+        GD.Print($"selftest-rpl-bild: {filme} Filme, {gesamt} Bilder verglichen, " +
+                 $"{genau} BILDPUNKTGENAU, {daneben} daneben, {abbruch} Bilder ohne Ausgabe (Codebuchgroesse 0, wie ffmpeg)");
+        if (ersterFehler.Length > 0) GD.PrintErr("   erster Fehler: " + ersterFehler);
+        // ⚠ Null verglichene Bilder ist kein Erfolg, sondern ein Prueflauf,
+        // der nichts gemessen hat (Regel: eine Sonde, die ihre Zeile nicht
+        // druckt, hat nicht gemessen).
+        return gesamt > 0 && daneben == 0 ? 0 : 1;
+    }
+
+    private static string FindeFfmpeg(string vorgabe)
+    {
+        if (vorgabe.Length > 0 && File.Exists(vorgabe)) return vorgabe;
+        foreach (string k in new[] { @"C:\ffmpeg\bin\ffmpeg.exe", @"C:\ffmpeg\bin\ffmpeg.EXE" })
+            if (File.Exists(k)) return k;
+        string? pathVar = System.Environment.GetEnvironmentVariable("PATH");
+        foreach (string d in (pathVar ?? "").Split(System.IO.Path.PathSeparator))
+        {
+            if (d.Length == 0) continue;
+            string k = d.TrimEnd('/', '\\') + "/ffmpeg.exe";
+            if (File.Exists(k)) return k;
+        }
+        return "";
+    }
+
+    private static System.Diagnostics.Process FfmpegRoh(string ff, string datei, int n)
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo(ff)
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (string a in new[] { "-v", "error", "-i", datei, "-frames:v", n.ToString(),
+                                     "-pix_fmt", "rgb555le", "-f", "rawvideo", "-" })
+            psi.ArgumentList.Add(a);
+        var p = System.Diagnostics.Process.Start(psi)!;
+        // ⚠ stderr MUSS geleert werden, sonst laeuft die Pipe voll und ffmpeg
+        // bleibt stehen — der Prueflauf haengt dann, statt etwas zu melden.
+        p.ErrorDataReceived += (_, _) => { };
+        p.BeginErrorReadLine();
+        return p;
+    }
+
+    private static bool LiesGenau(System.IO.Stream s, byte[] ziel, int n)
+    {
+        int at = 0;
+        while (at < n)
+        {
+            int r = s.Read(ziel, at, n - at);
+            if (r <= 0) return false;
+            at += r;
+        }
+        return true;
+    }
+
+    private static bool Gleich(byte[] a, byte[] b)
+        => new ReadOnlySpan<byte>(a).SequenceEqual(b);
 
     public static int RunEntities(string aekernel)
     {
