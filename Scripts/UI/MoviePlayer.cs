@@ -83,6 +83,11 @@ public partial class MoviePlayer : CanvasLayer
     /// danach weiter. Siehe <see cref="MusikAnhalten"/>.</summary>
     private readonly bool _musikLief;
 
+    /// <summary>Wieviel Ton dekodiert wurde — nur fürs Protokoll, damit
+    /// »stumm« von »kein Ton dekodiert« zu unterscheiden ist.</summary>
+    private int _tonAbtastungen;
+    private double _tonSekunden;
+
     /// <summary>
     /// Den Film einer Mission suchen. <c>null</c>, wenn er nirgends liegt —
     /// dann wird stillschweigend übersprungen.
@@ -159,9 +164,30 @@ public partial class MoviePlayer : CanvasLayer
                  $"({_film.Chunks.Count / Math.Max(1.0, _film.Fps):0} s), " +
                  $"Ton {(_ton == null ? "keiner" : $"{_film.SoundRate} Hz {_film.SoundChannels}-kanalig")}" +
                  " — ESC ueberspringt");
-        _ton?.Play();
         SetProcess(true);
         SetProcessInput(true);
+    }
+
+    /// <summary>
+    /// ⚠⚠ <b>HIER — UND NICHT IM KONSTRUKTOR — FAENGT DER TON AN.</b>
+    ///
+    /// <para>Gemeldet: »die videos scheinen allgemein stumm«. Der Grund war
+    /// genau das: <c>Play()</c> stand in der Konstruktion, und der Knoten kommt
+    /// erst danach in den Baum (<c>eltern.AddChild(mp)</c> läuft, nachdem der
+    /// Konstruktor zurück ist). Ein <see cref="AudioStreamPlayer"/> ausserhalb
+    /// des Baums spielt nichts und sagt auch nichts dazu — kein Fehler, kein
+    /// Ton.</para>
+    ///
+    /// <para>⚠ Der Dekoder war nie schuld: <see cref="RplAudio"/> ist gegen
+    /// ffmpeg geprüft, 35 Filme, 187.107.038 Abtastungen byteweise genau. Der
+    /// Ton war da, er ging nur nirgendwohin.</para>
+    /// </summary>
+    public override void _Ready()
+    {
+        if (_ton == null) return;
+        _ton.Play();
+        GD.Print($"Film: Ton laeuft — {_tonAbtastungen} Abtastungen " +
+                 $"({_tonSekunden:0.0} s), spielt: {_ton.Playing}");
     }
 
     public override void _Input(InputEvent e)
@@ -226,6 +252,9 @@ public partial class MoviePlayer : CanvasLayer
             Stereo = _film.SoundChannels >= 2,
             MixRate = _film.SoundRate > 0 ? _film.SoundRate : 22050,
         };
+        _tonAbtastungen = pcm.Length;
+        int kanaele = Math.Max(1, _film.SoundChannels);
+        _tonSekunden = pcm.Length / (double)kanaele / Math.Max(1, _film.SoundRate);
         var sp = new AudioStreamPlayer { Stream = w, Bus = "Master" };
         AddChild(sp);
         return sp;
