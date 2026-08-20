@@ -1,4 +1,4 @@
-﻿namespace AkteEuropaReborn.Import;
+namespace AkteEuropaReborn.Import;
 
 using System;
 using System.Collections.Generic;
@@ -560,6 +560,22 @@ public sealed class ContentBuilder
             string? p = Find($"LEVELS/{stem}.DM");
             if (p != null) One(p, "map_" + name);
         }
+        // ⭐ 20.08.2026 — `game.007`, DER PRUEFSTAND GEGEN DEN ORIGINALMOTOR.
+        //
+        // Er liegt in der Installation, nicht auf einer CD, heisst im Programm
+        // fest so (geladen @0x4CF85B) und ist ein ECHTER Spielstand von
+        // Mission 1: 42x72, Kachelsatz 01, Kopfbyte 3 = 2 (Spielstand statt
+        // Karte), 566.257 Byte und `consumed == filelen` — er geht restlos auf.
+        //
+        // ⚠ Was ihn wertvoll macht: `01.CWM` derselben Karte liegt daneben, und
+        // der Unterschied ist genau das, was der Motor von 1997 geschrieben hat.
+        // Gemessen: die Karte fuehrt 39 Sektionen, der Spielstand 131 — davon
+        // 93 nur er, 52 davon mit Inhalt. Von den 38 gemeinsamen unterscheiden
+        // sich 17. Wer unser Zustandsmodell pruefen will, prueft es hier gegen
+        // einen Zustand, den nicht wir erzeugt haben.
+        string? g007 = Find("game.007");
+        if (g007 != null) One(g007, "map_game007");
+        else Say("game.007: nicht gefunden — der Prueflauf gegen den Originalmotor entfaellt");
 
         Say($"fertig: {done} Spielstaende neu geschrieben, {failed} fehlgeschlagen");
         return done > 0 && failed == 0;

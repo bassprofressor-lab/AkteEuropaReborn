@@ -178,7 +178,30 @@ public static class CwmData
         for (int k = 0; k + BuildingStride <= s3.Length; k += BuildingStride)
         {
             string nm = Name(s3, k + 0x1b, 0x11);
-            if (s3[k + 0x04] == 0 && nm.Length == 0) continue;
+            // ⚠⚠ 20.08.2026 — GEFUNDEN VOM PRUEFSTAND `game.007`, und ohne den
+            // waere es nie aufgefallen.
+            //
+            // Hier stand nur `typ == 0 && Name leer`. Auf einer KARTE reicht
+            // das: ein leerer Satz traegt dort weder Typ noch Namen. Ein
+            // SPIELSTAND des Originals schreibt seinen leeren Saetzen aber
+            // einen Namen — die Platznummer als Text (»5 «, »6 «, »7 « …).
+            // Damit kamen aus `game.007` **252 leere Gebaeude** durch: 256
+            // statt 4, und 252 davon mit Typ 0 und 0 Trefferpunkten.
+            //
+            // GEMESSEN ueber alle Karten, alle .DM und game.007:
+            //   heute durch und echt      3764
+            //   heute durch, aber LEER     252   <- alle aus game.007
+            //   heute abgewiesen, echt      70   <- Typ 0, kein Name, aber TP
+            //   heute abgewiesen und leer 18714
+            //
+            // ⚠ Deshalb wird die Pruefung STRENGER und nicht ANDERS: haenge man
+            // sie allein an `hp_max`, kaemen die 70 neu herein, und ob die echt
+            // sind, ist ungelesen — das Original nennt einen Satz mit Typ 0
+            // woertlich »kein Gebaeude« (`obj_owner` @0x4D076D gibt dafuer 12
+            // zurueck). Ein Satz ohne Typ UND ohne Trefferpunkte ist dagegen
+            // unter jeder Lesart leer.
+            if (s3[k + 0x04] == 0 &&
+                (nm.Length == 0 || BitConverter.ToUInt16(s3, k + 0x16) == 0)) continue;
             var b = new Building
             {
                 Slot = k / BuildingStride,
