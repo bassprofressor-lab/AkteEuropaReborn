@@ -1430,8 +1430,9 @@ läuft — nicht, dass die Sache stimmt.
   belegt mit `--gruppen-check`.
 * **Drei Missionen** haben keine Tore bekommen, weil die zwei GAME.EXE dort
   verschiedene Torfolgen liefern.
-* Die Fahrt der verlegten Einheit **mit den Güterzügen** ist nicht nachgebaut —
-  siehe Abschnitt R, der Anfang ist gelesen.
+* ~~Die Fahrt der verlegten Einheit **mit den Güterzügen** ist nicht
+  nachgebaut~~ — ⭐ **GEBAUT am 21.08.2026**, siehe Abschnitt R. Es gab kein
+  Tempo zu lesen: sie fährt mit dem Zug.
 * Zuarbeit des Spielers: ~~Nachfrist-Video~~ (**erledigt 21.08.2026**),
   **Diagonalkosten** im Gefecht, **Mündungsanker**, die **y-Halbierung** beim
   Einschlag, die zwei **Frachter in Mission 8**.
@@ -1528,43 +1529,71 @@ Reparatur ganz: sie stünde auf 2 und niemand führte sie aus. Beim Bau gemessen
 
 ---
 
-## R. Die verlegte Einheit FÄHRT im Original (21.08.2026, Anfang gelesen)
+## R. ⭐ Die verlegte Einheit fährt — GEBAUT am 21.08.2026
 
-Bei uns ist »Transportieren« ein Sprung: `e.Depot.RemoveAt(k); ziel.Depot.Add(nr)`
-(`MapEntityLayer`, Transportknopf). Das Original tut etwas anderes, und der
-Anfang davon ist jetzt gelesen — **das spart der nächsten Sitzung die Suche.**
+Bei uns war »Transportieren« ein Sprung: `e.Depot.RemoveAt(k); ziel.Depot.Add(nr)`.
+Das Original tut etwas anderes, und es ist jetzt ganz gelesen **und gebaut**.
 
-**Befehl 518** (`0x206`), Behandler **C `0x4CEA90`**:
+**Befehl 518** (`0x206`), Behandler `CreateConvoy` **C `0x4CEA90`**:
 
 ```
   Schleife ueber 200 Saetze zu 48 Byte bei 0xBC0DD0, gesucht wird +0x00 == 0
     keiner frei -> Fehlerzeile ueber 0x539824 und RAUS
-  rep movsd ecx=0xA von 0xBC3350 nach +0x04     ; die ROUTE, 10 dwords
-  byte[+0x00] = 1                                ; belegt
-  word[+0x02] = Einheit
-  byte[+0x2C] = 0 ; byte[+0x2D] = 0              ; zwei Zaehler, bei null los
-  byte[+0x2E] = Gebaeudetyp der Quelle
+  rep movsd ecx=0xA von 0xBC3350 nach +0x04     ; die ROUTE, 40 Byte Knoten
+  byte[+0x00] = 1 ; word[+0x02] = Einheit
+  byte[+0x2C] = 0 ; byte[+0x2D] = 0             ; Wegindex, faehrt-gerade
+  byte[+0x2E] = Zielknoten
 ```
 
-Der Satz trägt also **die Einheit UND ihren Weg** — bis zu zehn Abschnitte.
-Damit ist belegt: die Einheit ist während der Fahrt **unterwegs**, nicht am
-Ziel. `0xBC3350` ist der Puffer, in den die Flutsuche (`0x4CE710`, siehe
-`Simulation/RailNetwork.cs`) ihre gefundene Route schreibt.
+### ⭐ Die Frage nach dem TEMPO war falsch gestellt
 
-**Was noch fehlt, und wo es steht:** der Weiterschalter. Die Tafel wird ausser
-vom Behandler noch an diesen Stellen angefasst — dort ist er zu suchen:
+Hier stand: »solange das Tempo nicht gelesen ist, bleibt der Sprung stehen«.
+Es gibt **kein Tempo**. Die Einheit hat keine eigene Geschwindigkeit — sie
+fährt mit dem Güterzug, und ihr Wegindex rückt um eins, wenn der Zug einen
+Knoten erreicht. Dass die Tafel zum Zug gehört, sagt das Spiel selbst: die
+Funktion, die sie weiterschaltet, ist dieselbe, die »**Wrong index of slope for
+train**« meldet (`0x4C69C0`).
 
-| Feld | Stellen |
-|---|---|
-| `+0x00` (belegt) | `0x410E2E` `0x41D71C` `0x41E78D` `0x41EF29` `0x4C64ED` `0x4C7DFC` |
-| `+0x02` (Einheit) | `0x410E00` `0x4C7DED` `0x4CEC7B` |
-| `+0x04` (Route) | `0x410E28` `0x4C6507` `0x4C6CC5` `0x4C711A` `0x4CEC72` `0x4CED19` |
-| `+0x2C` (Zähler) | `0x410E1A` `0x4C64FD` `0x4C6CAE` `0x4C6CB8` `0x4C7103` `0x4C710D` |
-| `+0x2E` (Typ) | `0x4C6CBE` `0x4C7113` `0x4CED09` |
+**Zusteigen** — `spoj_launch` @0x4C64C5..0x4C651B, und es ist eine Bedingung,
+keine Wahl:
 
-Die Häufung um `0x4C6CAE` und `0x4C711A` sieht nach dem Takt aus; `0x410Exx`
-gehört zum Aufräumer oder zum Spielstand.
+```
+  ueber alle Saetze:  +0x00 != 0
+    eax = byte[+0x2C]                     ; der laufende Wegindex
+    if (route[eax]   != Abfahrtsknoten) weiter
+    if (route[eax+1] != Ankunftsknoten) weiter
+    -> zusteigen, +0x2D = 1
+```
 
-⚠ **Solange das Tempo nicht gelesen ist, bleibt der Sprung stehen.** Eine Fahrt
-mit geratener Dauer wäre schlechter als ein ehrlicher Sprung — sie sähe richtig
-aus und wäre es nicht.
+**Aussteigen** — @0x4C6CA5..0x4C6CC9: `+0x2D = 0`, `+0x2C` um eins hoch, und
+wenn `route[+0x2C] == +0x2E` ist, ist die Einheit da. **Drei Plätze je Wagen**
+(`cmp bl, 3` @0x4C6CD6).
+
+### Was daran unser ist
+
+* Unser Depot hält **Entwurfsnummern**, keine Einheitensätze — der Satz trägt
+  darum die Entwurfsnummer. ⚠ Genau das stand hier als Grund, warum nichts
+  gebaut sei (»es gibt kein Stück, das unterwegs sein könnte«). Der Einwand war
+  zu eng: **der Satz IST dieses Stück**, auch im Original bewegt er nicht die
+  Einheit, sondern belegt einen Platz in einer eigenen Tafel.
+* ⚠ Steht das **Zielgebäude** bei der Ankunft nicht mehr, ist die Einheit weg.
+  Was das Original bei dessen Verlust tut, ist **nicht gelesen**; sie still ins
+  nächstbeste Depot zu legen wäre die schlechtere Erfindung. Sie wird gezählt
+  (`RailTransfersLost`) und gemeldet.
+
+### Gemessen
+
+`--transport-netz-check` prüft jetzt die **Fahrt** statt des Sprungs — vorher
+war seine Messlatte »Ziel += 1 sofort«, er hätte den Umbau also als Fehler
+gemeldet:
+
+```
+  map_21  Verlegen 67 -> 68: Quelle 0, Ziel noch 0, unterwegs 1
+          ... nach 44,1 s Bahnfahrt: Ziel 1, angekommen 1
+  map_20  Verlegen 94 -> 100, nach 35,3 s angekommen
+  Gegenprobe (Ziel ohne Anschluss): abgelehnt
+```
+
+Und `--save-check` trägt die Fahrten mit: ohne das wäre eine verlegte Einheit
+beim Speichern **weg** — aus dem Quelldepot heraus, im Zieldepot noch nicht.
+Dieselbe Fehlerklasse wie bei den Merkpunkten, nur andersherum.

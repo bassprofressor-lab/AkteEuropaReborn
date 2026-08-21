@@ -124,6 +124,26 @@ public partial class MapEntityLayer
         }
         w.ArrayEnd();
 
+        // ---- die Einheiten, die gerade mit der Bahn unterwegs sind ---------
+        //
+        // ⚠ Ohne diese Zeilen wäre eine verlegte Einheit beim Speichern WEG:
+        // aus dem Quelldepot ist sie heraus, im Zieldepot noch nicht. Genau
+        // die Fehlerklasse, die die Merkpunkte oben hatten — nur dass hier
+        // etwas verschwindet statt etwas Falsches stehenzubleiben.
+        w.ArrayStart("rail_transfers");
+        foreach (var t in RailTransfers)
+        {
+            w.ItemStart();
+            w.Num("design", t.Design).Num("at", t.At).Num("dest", t.DestNode)
+             .Num("owner", t.Owner).Num("line", t.Line).Bool("riding", t.Riding);
+            var r = new System.Text.StringBuilder("[");
+            for (int i = 0; i < t.Route.Length; i++)
+            { if (i > 0) r.Append(','); r.Append(t.Route[i]); }
+            w.Raw("route", r.Append(']').ToString());
+            w.ItemEnd();
+        }
+        w.ArrayEnd();
+
         w.ArrayStart("marks");
         for (int i = 0; i < Marks.Length; i++)
         {
@@ -269,6 +289,21 @@ public partial class MapEntityLayer
                 }
             }
 
+        RailTransfersClear();
+        if (root.TryGetValue("rail_transfers", out var rt) && rt.VariantType == Variant.Type.Array)
+            foreach (var item in rt.AsGodotArray())
+            {
+                if (item.VariantType != Variant.Type.Dictionary) continue;
+                var d = item.AsGodotDictionary<string, Variant>();
+                var route = new List<int>();
+                if (d.TryGetValue("route", out var rv) && rv.VariantType == Variant.Type.Array)
+                    foreach (var q in rv.AsGodotArray()) route.Add(q.AsInt32());
+                if (route.Count == 0) continue;
+                RailTransferRestore(GetI(d, "design"), route, GetI(d, "at"),
+                                    GetB(d, "riding"), GetI(d, "dest", -1),
+                                    GetI(d, "owner", -1), GetI(d, "line", -1));
+            }
+
         if (root.TryGetValue("marks", out var kv2) && kv2.VariantType == Variant.Type.Array)
             foreach (var item in kv2.AsGodotArray())
             {
@@ -363,10 +398,23 @@ public partial class MapEntityLayer
                 gzellen += (Marks[i].Col * 3 + Marks[i].Row * 5) * (i + 1);
             }
 
+            // Die Bahnfahrten gehen ueber ihren Inhalt ein, nicht ueber die
+            // Anzahl: eine Fahrt, die mit falschem Wegindex zurueckkaeme,
+            // waere sonst nicht von der richtigen zu unterscheiden.
+            int fahrten = 0, fpruef = 0;
+            foreach (var t in RailTransfers)
+            {
+                fahrten++;
+                fpruef += (t.Design + 1) * 7 + (t.At + 1) * 13 + (t.DestNode + 1) * 17
+                        + t.Route.Length * 23 + (t.Riding ? 29 : 0);
+                foreach (int knoten in t.Route) fpruef += knoten;
+            }
+
             return $"{n} Einheiten ({buildings} Gebaeude, {dead} tot), HP {hp}, " +
                    $"Besitzer {own}, Zellen {cells}, Lager {stock}, Geld {money}, Nebel {fog}, " +
                    $"{gruppen} Gruppen mit {mitglieder} Mitgliedern (Zellen {gzellen}, " +
-                   $"Namen {gnamen}), {merk} Merkpunkte (Namen {mnamen})";
+                   $"Namen {gnamen}), {merk} Merkpunkte (Namen {mnamen}), " +
+                   $"{fahrten} Bahnfahrten (Pruefzahl {fpruef})";
         }
 
         // Ein Prueflauf, der nichts zu verlieren hat, kann nichts verlieren:
@@ -390,6 +438,12 @@ public partial class MapEntityLayer
         {
             Marks[1].Col = 12; Marks[1].Row = 34; Marks[1].Name = "Merk Zwei";
             gelegt += " (Merkpunkt 2 gelegt)";
+        }
+        if (RailTransfers.Count == 0)
+        {
+            // Auch hier: ohne Gegenstand kann nichts verlorengehen.
+            RailTransferStart(3, new List<int> { 5, 9, 12 }, 0);
+            gelegt += " (eine Bahnfahrt gelegt)";
         }
 
         string before = Fingerprint();

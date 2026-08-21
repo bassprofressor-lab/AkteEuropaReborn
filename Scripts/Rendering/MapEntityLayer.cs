@@ -13437,11 +13437,32 @@ public partial class MapEntityLayer : Node2D
             von.Depot.Add(0);
             int zielVor = nach.Depot.Count;
             TransportFromPanel(0, z);
-            bool weg = von.Depot.Count == 0, an = nach.Depot.Count == zielVor + 1;
-            verlegtGeprueft = true; verlegtOk = weg && an;
+
+            // ⚠⚠ HIER STAND `an = nach.Depot.Count == zielVor + 1` — der
+            // Pruefstand hat also geprueft, dass die Einheit SPRINGT. Seit dem
+            // 21.08.2026 faehrt sie (siehe RailTransfer), und damit prueft er
+            // das Gegenteil: beim Absetzen ist sie aus dem Quelldepot heraus,
+            // aber noch NICHT am Ziel — sonst waere die Fahrt nur ein Name.
+            bool weg = von.Depot.Count == 0;
+            bool nochNicht = nach.Depot.Count == zielVor;
+            bool unterwegs = RailTransfers.Count > 0;
             sb.AppendLine($"  Verlegen {q} -> {z}: Quelle {von.Depot.Count} (erwartet 0), " +
-                          $"Ziel {nach.Depot.Count} (erwartet {zielVor + 1}): " +
-                          $"{(weg && an ? "stimmt" : "STIMMT NICHT")} [{_order}]");
+                          $"Ziel {nach.Depot.Count} (erwartet noch {zielVor}), " +
+                          $"unterwegs {RailTransfers.Count} " +
+                          $"{(weg && nochNicht && unterwegs ? "stimmt" : "STIMMT NICHT")} [{_order}]");
+
+            // ... und dann den Bahnautomaten laufen lassen, bis sie da ist.
+            int fertigVor = RailTransfersDone;
+            float gefahren = 0f;
+            for (int t = 0; t < 20000 && RailTransfersDone == fertigVor; t++)
+            { UpdateFreight(0.05f); gefahren += 0.05f; }
+            bool angekommen = RailTransfersDone == fertigVor + 1
+                              && nach.Depot.Count == zielVor + 1;
+            verlegtGeprueft = true;
+            verlegtOk = weg && nochNicht && unterwegs && angekommen;
+            sb.AppendLine($"  ... nach {gefahren:0.0} s Bahnfahrt: Ziel {nach.Depot.Count} " +
+                          $"(erwartet {zielVor + 1}), angekommen {RailTransfersDone - fertigVor}: " +
+                          $"{(angekommen ? "stimmt" : "STIMMT NICHT — sie ist nie eingetroffen")}");
 
             // Gegenprobe: ein Gebaeude OHNE Bahnanschluss muss abgelehnt werden.
             int ohne = -1;
@@ -14314,14 +14335,20 @@ public partial class MapEntityLayer : Node2D
     /// <c>0x38</c> und <c>+0x15 = Zielgebäude</c>: sie landet im
     /// <b>Zieldepot</b>.</para>
     ///
-    /// <para>⚠ <b>UNSERE SETZUNG, ausdrücklich:</b> das Fahren mit den
-    /// Güterzügen ist hier <b>nicht</b> nachgebaut. Die Einheit wechselt sofort
-    /// das Depot. Der Grund ist nicht Bequemlichkeit, sondern dass unser Depot
-    /// <b>Entwurfsnummern</b> hält und keine Einheitensätze — es gibt kein
-    /// Stück, das unterwegs sein könnte, und ein erfundener Zwischenzustand
-    /// wäre eine zweite Wahrheit neben dem Original. Der Weg wird trotzdem
-    /// <b>gesucht</b> und muss bestehen; nur die Fahrzeit fehlt. Sobald das
-    /// Depot echte Sätze führt, gehört sie hier hinein.</para>
+    /// <para>⭐ <b>SEIT DEM 21.08.2026 FÄHRT SIE.</b> Hier stand »das Fahren mit
+    /// den Güterzügen ist nicht nachgebaut, die Einheit wechselt sofort das
+    /// Depot«, begründet damit, dass unser Depot Entwurfsnummern hält und
+    /// keine Einheitensätze — »es gibt kein Stück, das unterwegs sein
+    /// könnte«. Der Einwand war zu eng: <b>der Transportsatz IST dieses
+    /// Stück</b>, genau wie im Original, wo er auch nicht die Einheit selbst
+    /// bewegt, sondern einen Platz in einer eigenen Tafel belegt. Siehe
+    /// <c>Simulation.MapEntityLayer.RailTransfer</c>.</para>
+    ///
+    /// <para>Und die Frage »wie schnell fährt sie« war falsch gestellt: sie hat
+    /// <b>kein eigenes Tempo</b>. Ihr Wegindex rückt um eins, wenn der Zug
+    /// einen Knoten erreicht; zugestiegen wird, wenn <c>route[i]</c> der
+    /// Abfahrts- und <c>route[i+1]</c> der Ankunftsknoten der Fahrt ist
+    /// (@0x4C64C5..0x4C651B).</para>
     ///
     /// <para>⚠ Die Verbindungsprüfung selbst ist echt — samt der zwei Schranken
     /// des Originals in der Kampagne, siehe
@@ -14360,11 +14387,16 @@ public partial class MapEntityLayer : Node2D
         LoadDesigns();
         int nr = e.Depot[k];
         e.Depot.RemoveAt(k);
-        ziel.Depot.Add(nr);
         Transported++;
         string name = _designs != null && nr >= 0 && nr < _designs.Count
                       ? _designs[nr].Name : "Einheit";
-        _order = $"{name} verlegt nach {(ziel.Name.Length > 0 ? ziel.Name : "Gebaeude " + zielGebaeude)} " +
+
+        // ⚠⚠ HIER STAND `ziel.Depot.Add(nr)` — die Einheit sprang. Seit dem
+        // 21.08.2026 fährt sie: der Satz wandert in die Warteschlange am
+        // Startknoten und steigt in den nächsten Güterzug, der in die richtige
+        // Richtung fährt. Siehe RailTransfer in Simulation/RailFreight.cs.
+        RailTransferStart(nr, weg, e.Owner);
+        _order = $"{name} faehrt nach {(ziel.Name.Length > 0 ? ziel.Name : "Gebaeude " + zielGebaeude)} " +
                  $"ueber {weg.Count - 1} Strecke(n)";
         UpdatePanel();
         QueueRedraw();

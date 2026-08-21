@@ -140,6 +140,161 @@ public partial class MapEntityLayer : Node2D
 
     private readonly List<RailLine> _railLines = new();
 
+    // ==== DIE VERLEGTE EINHEIT FAEHRT MIT ===================================
+
+    /// <summary>
+    /// <b>Eine Einheit, die gerade mit den Güterzügen unterwegs ist.</b>
+    /// Das Gegenstück zur 200×48-Tafel <c>0xBC0DD0</c> des Originals
+    /// (<c>CreateConvoy</c> C <c>0x4CEA90</c>), gelesen am 21.08.2026.
+    ///
+    /// <para><b>Der Satz des Originals, Feld für Feld:</b></para>
+    /// <code>
+    ///   +0x00  belegt (0 = frei; der Zuteiler sucht linear über 200)
+    ///   +0x02  die Einheit
+    ///   +0x04  die ROUTE — 40 Byte Knotennummern, aus 0xBC3350 kopiert
+    ///          (`rep movsd ecx=0xA`), dem Puffer der Flutsuche 0x4CE710
+    ///   +0x2C  der laufende Wegindex
+    ///   +0x2D  fährt gerade (1) oder wartet an einem Knoten (0)
+    ///   +0x2E  der Zielknoten
+    /// </code>
+    ///
+    /// <para>⚠ <b>Es gibt kein Tempo.</b> Das war die Frage, an der dieser
+    /// Punkt hing — und die Antwort ist, dass die Frage falsch gestellt war:
+    /// die Einheit hat keine eigene Geschwindigkeit, sie fährt mit dem Zug.
+    /// Ihr Wegindex rückt um eins, wenn der Zug einen Knoten erreicht.</para>
+    ///
+    /// <para><b>Zusteigen</b> (<c>spoj_launch</c> @0x4C64C5..0x4C651B): ein
+    /// Satz kommt genau dann auf den abfahrenden Zug, wenn
+    /// <c>route[i]</c> der ABFAHRTS- und <c>route[i+1]</c> der ANKUNFTSknoten
+    /// dieser Fahrt ist. Keine Wahl, keine Wartezeit — eine Bedingung.</para>
+    ///
+    /// <para><b>Aussteigen</b> (@0x4C6CA5..0x4C6CC9): <c>+0x2D = 0</c>,
+    /// <c>+0x2C</c> um eins hoch, und wenn <c>route[+0x2C] == +0x2E</c> ist,
+    /// ist die Einheit da. <b>Drei Plätze je Wagen</b> (<c>cmp bl, 3</c>
+    /// @0x4C6CD6).</para>
+    ///
+    /// <para>⚠ <b>Was UNSER ist:</b> unser Depot hält Entwurfsnummern, keine
+    /// Einheitensätze — der Satz trägt darum die Entwurfsnummer. Genau das war
+    /// der Grund, aus dem hier bis zum 21.08.2026 nichts stand (»es gibt kein
+    /// Stück, das unterwegs sein könnte«); der Satz IST dieses Stück.</para>
+    /// </summary>
+    public sealed class RailTransfer
+    {
+        public int Design;          // was verlegt wird (unsere Depotnummer)
+        public int[] Route = System.Array.Empty<int>();
+        public int At;              // +0x2C
+        public bool Riding;         // +0x2D
+        public int DestNode;        // +0x2E
+        public int Owner;
+        public int Line = -1;       // auf welcher Linie er gerade sitzt
+    }
+
+    private readonly List<RailTransfer> _railTransfers = new();
+
+    /// <summary>Die Sätze, die gerade unterwegs oder am Warten sind — für die
+    /// Anzeige und den Prüfstand.</summary>
+    public IReadOnlyList<RailTransfer> RailTransfers => _railTransfers;
+
+    /// <summary>Wie viele Einheiten angekommen sind, und wie viele verloren
+    /// gingen, weil ihr Zielgebäude nicht mehr stand.</summary>
+    public int RailTransfersDone, RailTransfersLost;
+
+    /// <summary>Drei Plätze je Fahrt — <c>cmp bl, 3</c> @0x4C6CD6.</summary>
+    public const int RailTransferSeats = 3;
+
+    /// <summary>Einen Satz aufgeben: die Einheit ist aus dem Quelldepot heraus
+    /// und wartet am Startknoten auf einen Zug in die richtige Richtung.</summary>
+    public void RailTransferStart(int design, List<int> route, int owner)
+    {
+        _railTransfers.Add(new RailTransfer
+        {
+            Design = design,
+            Route = route.ToArray(),
+            At = 0,
+            Riding = false,
+            DestNode = route[^1],
+            Owner = owner,
+        });
+    }
+
+    /// <summary>Alle Sätze wegwerfen — der Spielstand baut sie neu auf.</summary>
+    public void RailTransfersClear() => _railTransfers.Clear();
+
+    /// <summary>Einen Satz aus dem Spielstand zurückholen. ⚠ Ohne ihn wäre
+    /// eine verlegte Einheit beim Speichern weg: aus dem Quelldepot heraus,
+    /// im Zieldepot noch nicht.</summary>
+    public void RailTransferRestore(int design, List<int> route, int at, bool riding,
+                                    int destNode, int owner, int line)
+    {
+        _railTransfers.Add(new RailTransfer
+        {
+            Design = design,
+            Route = route.ToArray(),
+            At = Mathf.Clamp(at, 0, route.Count - 1),
+            Riding = riding,
+            DestNode = destNode >= 0 ? destNode : route[^1],
+            Owner = owner,
+            Line = line,
+        });
+    }
+
+    /// <summary>
+    /// <b>Zusteigen</b> — die Regel des Originals, ohne Zutat: wer an diesem
+    /// Knoten wartet und als nächstes zum Ankunftsknoten dieser Fahrt will,
+    /// kommt mit. Höchstens <see cref="RailTransferSeats"/>.
+    /// </summary>
+    private void RailTransferBoard(RailLine l, int vonKnoten, int nachKnoten)
+    {
+        if (_railTransfers.Count == 0 || vonKnoten < 0 || nachKnoten < 0) return;
+        int plaetze = RailTransferSeats;
+        foreach (var t in _railTransfers)
+        {
+            if (plaetze <= 0) break;
+            if (t.Riding) continue;
+            if (t.At < 0 || t.At + 1 >= t.Route.Length) continue;
+            if (t.Route[t.At] != vonKnoten || t.Route[t.At + 1] != nachKnoten) continue;
+            t.Riding = true;
+            t.Line = l.Slot;
+            plaetze--;
+        }
+    }
+
+    /// <summary>
+    /// <b>Aussteigen</b> — Wegindex eins weiter; steht dort der Zielknoten, ist
+    /// die Einheit da und geht ins Depot des Zielgebäudes.
+    ///
+    /// <para>⚠ Steht das Zielgebäude nicht mehr, ist die Einheit <b>weg</b>.
+    /// Das ist UNSERE Setzung: das Original hält den Satz an einem
+    /// Gebäudeplatz, und was es bei dessen Verlust tut, ist nicht gelesen. Sie
+    /// still ins nächstbeste Depot zu legen wäre die schlechtere Erfindung —
+    /// darum wird sie gezählt und gemeldet.</para></summary>
+    private void RailTransferArrive(RailLine l, Entity ziel)
+    {
+        if (_railTransfers.Count == 0) return;
+        for (int i = _railTransfers.Count - 1; i >= 0; i--)
+        {
+            var t = _railTransfers[i];
+            if (!t.Riding || t.Line != l.Slot) continue;
+            t.Riding = false;
+            t.Line = -1;
+            t.At++;
+            if (t.At >= t.Route.Length || t.Route[t.At] != t.DestNode) continue;
+
+            _railTransfers.RemoveAt(i);
+            if (ziel is { IsBuilding: true, Dead: false })
+            {
+                ziel.Depot.Add(t.Design);
+                RailTransfersDone++;
+            }
+            else
+            {
+                RailTransfersLost++;
+                GD.Print("verlegen: das Zielgebaeude steht nicht mehr — die Einheit ist weg");
+            }
+        }
+    }
+
+
     /// <summary>
     /// <b>Hält Spieler <paramref name="owner"/> die Bahnverbindung
     /// <paramref name="slot"/>?</b> — die Frage, an der <b>Mission 21</b> hängt
@@ -427,6 +582,12 @@ public partial class MapEntityLayer : Node2D
 
         for (int k = 0; k < 4; k++) if (l.Cargo[k] > 0) RailAdd(src, k, -l.Cargo[k]);
 
+        // ⚠ ERST die Ware, DANN die Mitfahrer — dieselbe Reihenfolge wie im
+        // Original: spoj_launch laedt die vier Waren und geht erst danach die
+        // Transportsaetze durch (@0x4C64C5).
+        RailTransferBoard(l, NodeOfBuilding((dir == 0 ? a : b).Slot),
+                             NodeOfBuilding((dir == 0 ? b : a).Slot));
+
         l.TravelFull = RailTravelSeconds(l);        // aus den Streckencodes, gerechnet
         l.Travel = l.TravelFull;
         RailSpawnWagons(l);
@@ -448,6 +609,8 @@ public partial class MapEntityLayer : Node2D
             RailMoved += l.Cargo[k];
             l.Cargo[k] = 0;
         }
+        RailTransferArrive(l, dst);
+
         l.Trips++;
         RailTrips++;
         l.Travel = 0f;
