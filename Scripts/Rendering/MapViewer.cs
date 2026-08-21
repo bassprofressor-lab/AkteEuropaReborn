@@ -1024,6 +1024,31 @@ public partial class MapViewer : Node2D
             // arrives and nothing ever calls Quit. This ends the run on the clock
             // instead, which is what a scripted check needs.
             else if (a.StartsWith("--quit-after=")) _quitAfter = a[13..].ToFloat();
+            // ⭐ --film=<sekunden>[,<art>]  — Aufnahmemodus, siehe FilmTakt.
+            //    art: l Land · s Schiffe · i Infanterie · sonst alles.
+            else if (a.StartsWith("--film="))
+            {
+                var teile = a[7..].Split(',');
+                _filmSek = teile[0].ToFloat();
+                _filmArt = teile.Length > 1 && teile[1].Length > 0 ? teile[1][0] : ' ';
+                _quitAfter = _filmSek;
+                // ⚠⚠ 21.08.2026 — OHNE DIESE ZEILE LAEUFT DIE AUFNAHME EWIG.
+                //
+                // Seit die Kontexthilfe 34 Tore hat, geht bei der ersten Anwahl
+                // ein Hilfefenster auf — und das HAELT DAS SPIEL AN. Die Uhr
+                // (_upTime) steht dann still, --quit-after wird nie erreicht,
+                // der Filmschreiber schreibt aber unbeirrt weiter. Der erste
+                // Versuch nahm 533 Sekunden statt 26 auf, bis die Zeitgrenze
+                // ihn erschlug.
+                //
+                // ⭐ Der Fehler ist keiner der Kontexthilfe: sie tut genau, was
+                // sie soll. Er entsteht erst daraus, dass ein AUFNAHMELAUF
+                // niemanden hat, der das Fenster wegklickt — dieselbe Klasse
+                // Problem wie beim kopflosen Pruefstand, wo HelpWindow schon
+                // seit langem stumm geschaltet wird.
+                UI.HelpWindow.Suppressed = true;
+            }
+            else if (a.StartsWith("--film-zoom=")) _filmZoom = a[12..].ToFloat();
             else if (a.StartsWith("--demo-leave=")) _demoLeave = a["--demo-leave=".Length..].ToFloat();
             else if (a == "--demo") _demo = true;
             else if (a == "--demo-naval") { _demo = true; _demoNaval = true; }
@@ -1524,6 +1549,79 @@ public partial class MapViewer : Node2D
         }
     }
 
+    /// <summary>
+    /// <b>DER AUFNAHMEMODUS</b> — <c>--film=&lt;sekunden&gt;[,&lt;art&gt;]</c>, gebaut am
+    /// 21.08.2026 für zwei Minuten Vorführmaterial.
+    ///
+    /// <para>Er tut drei Dinge, und jedes davon ist nötig:</para>
+    /// <list type="number">
+    /// <item><b>Er zettelt an.</b> Auf einer Kampagnenkarte marschiert das
+    /// Original nicht von sich aus — es steht dort minutenlang gar nichts. Alle
+    /// <see cref="FilmAngriffAlle"/> Sekunden wird darum ein neuer Angriff
+    /// befohlen.</item>
+    /// <item><b>Er sucht die Schlacht, nicht das nächste Paar.</b>
+    /// <see cref="MapEntityLayer.FilmBrennpunkt"/> nimmt die Stelle mit den
+    /// meisten Kämpfern BEIDER Seiten — zwei Panzer am Kartenrand sind kein
+    /// Bild.</item>
+    /// <item><b>Er fährt die Kamera weich.</b> Ein Sprung je Sekunde sähe aus
+    /// wie ein Fehler; es wird interpoliert.</item>
+    /// </list>
+    ///
+    /// <para>⚠ <b>Ausdrücklich UNSERE Zutat.</b> Nichts davon steht im Original;
+    /// es ist ein Aufnahmehelfer und beeinflusst nur, wohin die Kamera zeigt und
+    /// wer wen angreift. An der Simulation ändert er nichts, was ein Spieler
+    /// nicht auch täte.</para>
+    ///
+    /// <para>Aufnahme mit Godots eigenem Filmschreiber:
+    /// <c>--write-movie datei.avi --fixed-fps 30 --resolution 1920x1080</c>.
+    /// ⚠ Diese drei gehören VOR das <c>--</c>, der Rest dahinter.</para></summary>
+    private const float FilmZielAlle = 1.0f;
+    private const float FilmAngriffAlle = 6.0f;
+
+    private void FilmTakt(float delta)
+    {
+        _filmNaechstesZiel -= delta;
+        _filmNaechsterAngriff -= delta;
+
+        if (_filmNaechsterAngriff <= 0f)
+        {
+            _filmNaechsterAngriff = FilmAngriffAlle;
+            // ⚠ Alle zwei Runden wird ein Gefecht GESTELLT statt nur befohlen.
+            // Der erste Anlauf hat nur befohlen und zwei Minuten marschierende
+            // Panzer auf leerem Boden geliefert — auf einer Gefechtskarte
+            // stehen die Parteien zu weit auseinander.
+            if (++_filmRunde % 2 == 1)
+            {
+                var stelle = _entities.FilmGefechtStellen(_filmArt);
+                if (stelle != null)
+                {
+                    _filmZielPos = stelle.Value; _filmHatZiel = true;
+                    _camera.Position = stelle.Value;   // sofort hin, nicht weich
+                }
+            }
+            int n = _entities.FilmAngriff(_filmArt);
+            // ⚠ Findet die gewünschte Art nichts, wird OHNE Filter noch einmal
+            // gesucht — ein Film ohne Bewegung ist schlimmer als einer mit der
+            // falschen Einheitenart, und die Meldung sagt, was passiert ist.
+            if (n == 0 && _filmArt != ' ') n = _entities.FilmAngriff(' ');
+            if (n > 0) GD.Print($"[{_upTime:0}s] film: {n} Einheiten greifen an");
+        }
+
+        if (_filmNaechstesZiel <= 0f)
+        {
+            _filmNaechstesZiel = FilmZielAlle;
+            var p = _entities.FilmBrennpunkt(_filmArt) ?? _entities.FilmBrennpunkt(' ');
+            if (p != null) { _filmZielPos = p.Value; _filmHatZiel = true; }
+        }
+
+        if (!_filmHatZiel) return;
+        // Weich nachfahren: je Bild ein Stück der Reststrecke.
+        _camera.Position = _camera.Position.Lerp(_filmZielPos,
+                                                 Mathf.Clamp(delta * 1.8f, 0f, 1f));
+        _camera.Zoom = new Vector2(_filmZoom, _filmZoom);
+        ClampCamera();
+    }
+
     private void StartDemo()
     {
         var focus = _demoEnd != 0 ? _entities.DebugDemoEnd(_demoEnd == 1)
@@ -1563,6 +1661,16 @@ public partial class MapViewer : Node2D
 
     /// <summary>Seconds after which a scripted run gives up and quits; 0 = never.</summary>
     private float _quitAfter;
+
+    /// <summary>⭐ <c>--film=&lt;sekunden&gt;[,&lt;art&gt;]</c> — der AUFNAHMEMODUS.
+    /// Siehe <see cref="FilmTakt"/>. 0 = aus.</summary>
+    private float _filmSek;
+    private char _filmArt = ' ';
+    private float _filmZoom = 2.3f;
+    private float _filmNaechstesZiel, _filmNaechsterAngriff;
+    private Vector2 _filmZielPos;
+    private bool _filmHatZiel;
+    private int _filmRunde;
     private bool _leaveCheck;
     private bool _stuckCheck;
     private bool _speedCheck;
@@ -1940,6 +2048,7 @@ public partial class MapViewer : Node2D
                          ?? "pay-check: diese Mission hat kein Skript");
             }
         }
+        if (_filmSek > 0f) FilmTakt((float)delta);
         if (_quitAfter <= 0f) { _upTime += (float)delta; DemoLeaveIfDue(); return; }
         _upTime += (float)delta;
         DemoLeaveIfDue();

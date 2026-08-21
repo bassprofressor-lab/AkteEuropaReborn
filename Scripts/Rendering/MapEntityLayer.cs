@@ -22733,6 +22733,192 @@ public partial class MapEntityLayer : Node2D
         return (atk.Pos + vic.Pos) / 2f;
     }
 
+    // ==== DER FILMMODUS ======================================================
+
+    /// <summary>
+    /// <b>Wo gerade wirklich gekämpft wird</b> — der Mittelpunkt der dichtesten
+    /// feindlichen Begegnung, oder <c>null</c>.
+    ///
+    /// <para>⚠ Nicht »das nächste feindliche Paar« (das tut
+    /// <see cref="DebugDemoFight"/>), sondern die Stelle mit den MEISTEN
+    /// Kämpfern beider Seiten in Reichweite. Für einen Film ist das der
+    /// Unterschied zwischen zwei Panzern am Kartenrand und einer Schlacht.</para>
+    ///
+    /// <para><paramref name="art"/> filtert, was zählen darf: 'l' Land, 's'
+    /// Schiffe, 'f' Flugzeuge, 'i' Infanterie, sonst alles.</para></summary>
+    public Vector2? FilmBrennpunkt(char art = ' ')
+    {
+        bool Passt(Entity e)
+        {
+            if (e.Dead || e.IsProp || e.IsBuilding || !CanFight(e)) return false;
+            return art switch
+            {
+                'l' => e.GameUnitType is not (4 or 5) && e.Infantry < 0,
+                's' => e.GameUnitType is 4 or 5,
+                'i' => e.Infantry >= 0,
+                'f' => false,           // Flugzeuge stehen nicht in _entities
+                _ => true,
+            };
+        }
+
+        Vector2 bester = Vector2.Zero;
+        int meiste = 0;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var a2 = _entities[i];
+            if (!Passt(a2)) continue;
+            int freund = 0, feind = 0;
+            for (int j = 0; j < _entities.Count; j++)
+            {
+                var b = _entities[j];
+                if (b.Dead || b.IsProp || !CanFight(b)) continue;
+                if (CellDistance(a2, b) > 12f) continue;
+                if (IsHostile(a2, b)) feind++; else freund++;
+            }
+            // ⚠ Beide Seiten müssen da sein. Zwanzig eigene Panzer allein sind
+            // kein Gefecht, sondern eine Parade.
+            if (feind == 0 || freund == 0) continue;
+            int wert = System.Math.Min(freund, feind) * 10 + freund + feind;
+            if (wert > meiste) { meiste = wert; bester = a2.Pos; }
+        }
+        return meiste > 0 ? bester : null;
+    }
+
+    /// <summary>
+    /// <b>Für den Film: eine neue Schlägerei anzetteln.</b> Sucht das dichteste
+    /// feindliche Paar der gewünschten Art und schickt alles in der Nähe darauf.
+    ///
+    /// <para>⚠ Das ist ausdrücklich UNSERE Zutat und hat mit dem Original nichts
+    /// zu tun — es ist ein Aufnahmehelfer. Ohne ihn steht auf einer
+    /// Kampagnenkarte oft minutenlang gar nichts, weil das Original auf einer
+    /// Kampagnenkarte nicht von sich aus marschiert.</para></summary>
+    public int FilmAngriff(char art = ' ')
+    {
+        bool Passt(Entity e)
+        {
+            if (e.Dead || e.IsProp || e.IsBuilding || !CanFight(e) || !e.Mobile) return false;
+            return art switch
+            {
+                'l' => e.GameUnitType is not (4 or 5) && e.Infantry < 0,
+                's' => e.GameUnitType is 4 or 5,
+                'i' => e.Infantry >= 0,
+                _ => true,
+            };
+        }
+
+        int bestA = -1, bestB = -1;
+        float best = float.MaxValue;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            if (!Passt(_entities[i])) continue;
+            for (int j = 0; j < _entities.Count; j++)
+            {
+                var b = _entities[j];
+                if (i == j || b.Dead || b.IsProp || !IsHostile(_entities[i], b)) continue;
+                float d = CellDistance(_entities[i], b);
+                if (d < best) { best = d; bestA = i; bestB = j; }
+            }
+        }
+        if (bestA < 0) return 0;
+
+        var atk = _entities[bestA];
+        int n = 0;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.Dead || e.IsProp || e.IsBuilding || !CanFight(e)) continue;
+            if (e.Owner != atk.Owner || !IsHostile(e, _entities[bestB])) continue;
+            if (CellDistance(e, atk) > 14f) continue;
+            e.Target = bestB; e.Ordered = true; n++;
+        }
+        return n;
+    }
+
+    /// <summary>
+    /// <b>Für den Film: ein Gefecht HERSTELLEN.</b> Sucht das dichteste
+    /// feindliche Paar und setzt bis zu <paramref name="wieviele"/> Angreifer
+    /// direkt daneben, dann greifen sie an.
+    ///
+    /// <para>⚠⚠ <b>Das ist Kulisse, keine Simulation.</b> Es verschiebt
+    /// Einheiten, ohne dass sie den Weg gefahren wären — im Spiel gäbe es das
+    /// nicht. Der erste Versuch, ein Gefecht bloss zu BEFEHLEN und darauf zu
+    /// warten, lieferte zwei Minuten marschierende Panzer auf leerem
+    /// Wüstenboden: auf einer Gefechtskarte stehen die Parteien weit
+    /// auseinander, und zwanzig Sekunden reichen nicht einmal für die Anfahrt.
+    /// Für ein Vorführband ist das Herstellen der einzige Weg — und es gehört
+    /// dazugesagt, statt es als Spielablauf auszugeben.</para>
+    ///
+    /// <para>Gibt den Mittelpunkt zurück, damit die Kamera dorthin kann.</para>
+    /// </summary>
+    public Vector2? FilmGefechtStellen(char art = ' ', int wieviele = 14)
+    {
+        bool Passt(Entity e)
+        {
+            if (e.Dead || e.IsProp || e.IsBuilding || !CanFight(e) || !e.Mobile) return false;
+            return art switch
+            {
+                'l' => e.GameUnitType is not (4 or 5) && e.Infantry < 0,
+                's' => e.GameUnitType is 4 or 5,
+                'i' => e.Infantry >= 0,
+                _ => true,
+            };
+        }
+
+        // Die zwei grössten verfeindeten Haufen suchen.
+        int bestA = -1, bestB = -1, meiste = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            if (!Passt(_entities[i])) continue;
+            for (int j = 0; j < _entities.Count; j++)
+            {
+                var b = _entities[j];
+                if (b.Dead || b.IsProp || !IsHostile(_entities[i], b)) continue;
+                int n = 0;
+                for (int k = 0; k < _entities.Count; k++)
+                    if (Passt(_entities[k]) && _entities[k].Owner == _entities[i].Owner
+                        && CellDistance(_entities[k], _entities[i]) <= 20f) n++;
+                if (n > meiste) { meiste = n; bestA = i; bestB = j; }
+            }
+        }
+        if (bestA < 0) return null;
+
+        var ziel = _entities[bestB];
+        var mitte = new Vector2I(ziel.Col, ziel.Row);
+        int gesetzt = 0;
+        for (int i = 0; i < _entities.Count && gesetzt < wieviele; i++)
+        {
+            var e = _entities[i];
+            if (!Passt(e) || e.Owner != _entities[bestA].Owner) continue;
+            if (!IsHostile(e, ziel)) continue;
+            if (CellDistance(e, ziel) <= 7f) { e.Target = bestB; e.Ordered = true; gesetzt++; continue; }
+            var frei = FreieZelleUm(new Vector2I(mitte.X + (gesetzt % 5) - 2,
+                                                 mitte.Y + (gesetzt / 5) + 3));
+            if (frei == null) continue;
+            _nav?.ClearOccupant(e.Col, e.Row, i);
+            e.Col = frei.Value.X; e.Row = frei.Value.Y;
+            e.Elev = ElevOf(e.Col, e.Row);
+            e.Pos = CellCenter(e.Col, e.Row);
+            e.Footprint = CellRect(_ox, _oy, e.Col, e.Row, e.Elev);
+            e.Reserved = null; e.Path = null; e.PathIdx = 0;
+            e.Target = bestB; e.Ordered = true;
+            gesetzt++;
+        }
+        // Und die Verteidiger schiessen zurueck.
+        int gegner = 0;
+        for (int j = 0; j < _entities.Count; j++)
+        {
+            var b = _entities[j];
+            if (b.Dead || b.IsProp || b.IsBuilding || !CanFight(b)) continue;
+            if (b.Owner != ziel.Owner) continue;
+            if (CellDistance(b, ziel) > 10f) continue;
+            b.Target = bestA; b.Ordered = true; gegner++;
+        }
+        GD.Print($"film: Gefecht gestellt — {gesetzt} Angreifer gegen {gegner} Verteidiger "
+                 + $"bei ({ziel.Col},{ziel.Row})");
+        QueueRedraw();
+        return ziel.Pos;
+    }
+
     /// <summary>Preview harness: select the first building that sits on a deposit.</summary>
     public Vector2? DebugDemoMine()
     {
