@@ -7114,3 +7114,401 @@ Fehlerliste. In der Reihenfolge, in der die Änderungen die Kampagne berühren:
 | `sec62` fehlt im Ausleser | offen | dadurch `sec110 == 0`, und das kippt den Gegner in den **»Take all«**-Zweig (AV.18) |
 | Kontexthilfe | 20.08. | 34 Tore, Schranke `Missionsnummer < 50` |
 | Die Auflösungswahl | 21.08. | `1280×960` war unsere Erfindung, das Original hat `1280×1024` |
+
+---
+
+## BA. ⭐⭐ DIE FENSTER- UND ZEICHENMASCHINE (21.08.2026)
+
+Gelesen in **beiden** Auslieferungen. Verglichen wurde nie eine geratene
+Adresse, sondern die **normierte Befehlsfolge** (Mnemonik + Operandenform, alle
+Absolutadressen ausgeblendet) und die **Ruferzahl**.
+
+⭐ Nebenbefund, der Regel 1 selbst stützt: alle hier genannten `.bss`-Globalen
+haben Abstand **C − F = genau `0xFA0`**, alle `.data`-Zeichenketten `0xFC0` bzw.
+`0x1020` — gemessen an 27 Adressen aus fünf Funktionen, **kein Ausreisser**.
+
+### BA.1 ⭐⭐ `0x455E50` ist der Fensterrahmenzeichner — und seine 44 Rufer sind die 44 Fensterarten
+
+| | C | F |
+|---|---|---|
+| Rahmenzeichner | `0x455E50` (1168 B) | `0x454AF0` (1168 B) |
+| Rufer | **44** | **43** |
+| Gleichheit der normierten Folge | **1.000 — kein einziger Unterschied** | |
+
+Die 44 Rufer sind Adresse für Adresse die Fensterart-Funktionen, **jede genau
+einmal**: `0x463D60 0x463FB0 0x464A20 0x464BE0 0x465050 0x467C60 0x46C490
+0x46EDC0 0x4716C0 0x471800 0x472D40 0x4732A0 0x4733B0 0x473750 0x473BF0
+0x473EC0 0x474220 0x474FE0 0x476410 0x476880 0x476D00 0x4790A0 0x47A740
+0x47AAE0 0x47AE80 0x47BB10 0x47C800 0x47CA30 0x47CD60 0x47D340 0x47D6D0
+0x47DF70 0x47F150 0x480390 0x480650 0x480870 0x482290 0x484C00 0x485F10
+0x486020 0x4861A0 0x487060 0x487180 0x4872A0`.
+
+⭐ Die **vier**, die ihn *nicht* rufen: `0x46FE10` (Art 9), `0x47CF10` (Art 30,
+Hilfe), `0x486480` (Art 43, Vollbild), `0x486F20` (Art 44). Für Art 30 und 43
+gibt es **eigene** Zeichner (BA.3) — das ist die Erklärung am Kontrollfluss.
+
+```
+rahmen_zeichnen(x, y, wZellen, hZellen, puffer, zeilenschritt, titelleiste, sondereck)
+   arg3/arg4 sind ZELLEN, nicht Punkte.
+   Vorbedingung: arg3 > 2 UND arg4 > 2, sonst tut die Funktion NICHTS.
+```
+
+#### ⭐ Der Zufall ist keiner: `srand` mit der Fensterbreite
+
+| C | Handlung |
+|---|---|
+| `0x455E61` | `srand(wZellen)` |
+| `0x455F21` | `srand(wZellen + 5)` |
+| `0x456192` | `srand(wZellen + 10)` |
+| `0x4561D6`/`DF` | `srand(time(NULL))` — **Rückgabe des Generators an das Spiel** |
+
+(CRT: `0x4D6C50` = `srand`, `0x4D6C70` = `rand`, `0x4D7690` = `time`.)
+
+⭐ **Die Rahmensprenkelung ist damit eine reine Funktion der Fensterbreite** —
+sie flimmert nicht, wenn ein Fenster mehrfach neu gemalt wird. Für den Nachbau:
+**dieselben drei Startwerte, dieselbe Reihenfolge der `rand()`-Aufrufe**, sonst
+ist das Bild ein anderes.
+
+#### Die Kacheln, die er setzt (Elementnummern aus `WINDOWS.CWW`)
+
+| C | Element | Ort |
+|---|---|---|
+| `0x455EDA` | `0 + rand%3` | linke Senkrechte |
+| `0x455EFC` | `6 + rand%3` | rechte Senkrechte |
+| `0x455F84` | `46 + rand%3` | obere Kante **mit** Titelleiste |
+| `0x455FB1` | `43 + rand%3` | obere linke Ecke mit Titelleiste |
+| `0x455FE7` | `49 + rand%3` | obere rechte Ecke der Titelleiste |
+| `0x456003` | `12` fest | obere linke Ecke **ohne** Titelleiste |
+| `0x45603F` | `3 + rand%3` | obere Kante ohne Titelleiste |
+| `0x456097` | `9 + rand%3` | untere Kante |
+| `0x456108` | `14`, bzw. **`297`** wenn arg8≠0 | untere rechte Ecke |
+| `0x456165` | **`16 + rand%9`** | **Innenfläche**, Doppelschleife |
+| `0x4561AF` | `13` fest | obere rechte Ecke |
+| `0x4561CC` | `15` fest | untere linke Ecke |
+
+⭐ **Nullmodell für die Eckenzuordnung, unabhängig vom Code gewonnen.** Aus
+`WINDOWS.CWW` selbst: die Zeilenköpfe `[leftoff][count]` sagen die Form. Genau
+die Elemente, die der Code an die **linke** Fensterkante setzt, sind um 3 Punkte
+eingerückt — alle anderen nicht:
+
+| Element | Zeilenprofil | Code setzt es an |
+|---|---|---|
+| 0, 1, 2 · 12 · 43 | `leftoff 3, count 17` | linke Kante bzw. linke obere Ecke |
+| 15 | `3 : 17`, **letzte zwei Zeilen `9 : 11`** | linke untere Ecke — die Abrundung ist da |
+| 13 | `0 : 17` in den **ersten fünf** Zeilen | rechte obere Ecke — die Kerbe ist da |
+| 3, 6, 9, 14, 46, 49 | `0 : 20` | überall sonst |
+
+**6 von 6 linken Kacheln eingerückt, 0 von 12 übrigen.**
+
+### BA.2 ⭐ Die Grundwerkzeuge — die praktisch wertvollsten Adressen des Reviers
+
+| Aufgabe | C | F | Byte | Rufer |
+|---|---|---|---:|---|
+| Kachel zeichnen | `0x455DB0` | `0x454A50` | 160 | 58 |
+| **Rechteck füllen** | `0x455C50` | `0x4548F0` | 160 | **88** |
+| ⭐ **Maus im Rechteck?** | `0x455CF0` | `0x454990` | 96 | **363** |
+| **Knopf zeichnen** | `0x456670` | `0x455310` | 528 | **123 / F 117** |
+| Knopf, Variante | `0x456880` | `0x455520` | 464 | 3 |
+| Rollbalken zeichnen | `0x456FF0` | `0x455C90` | 336 | 5 |
+| Rollbalken auswerten | `0x457140` | `0x455DE0` | 448 | 18 |
+
+⚠ Wo die Ähnlichkeit unter 1.000 liegt, ist es **reine Registerwahl** des
+Übersetzers (`esi`↔`ebx`, `lea` statt `add`, `jg` statt `jl` mit vertauschten
+Operanden), Zeile für Zeile nachgesehen. **Solche Zahlen dürfen nicht als
+»Unterschied« gemeldet werden.**
+
+**`rechteck_fuellen(x, y, breite, hoehe, farbe, puffer, zeilenschritt)`** — x/y/b/h
+und Schritt als **Worte**, Farbe als **Byte**, auf ein Dword gespreizt,
+`rep stosd` + `rep stosb`. **Keine Beschneidung.**
+
+**`maus_in_rechteck(x, y, breite, hoehe)`** — `MausX = dword[0x8B62A4]`
+(F `0x8B5304`), `MausY = dword[0x8B62A0]` (F `0x8B5300`).
+⚠ **363 Rufstellen — der meistgerufene Code des Reviers.** Er wird über den
+Stummel `0x401CF8` gerufen; **wer die Stummel nicht auflöst, sieht drei.**
+⭐ Unabhängig bestätigt: **`word[0x502AC8]` (F `0x501B08`) ist der
+Maustastenzustand**.
+
+**`knopf_zeichnen`** — Startwert `srand(x · y)`: **ein Knopf sieht an derselben
+Stelle immer gleich aus.** Elemente `25 + art + 2·rand%3` (linke Kappe),
+`31 + …` (Mitte je Zelle), `37 + …` (rechte Kappe); `art` = 0 normal, 1 gedrückt.
+Beschriftung mittig über `0x4BA160` (Textbreite) und `0x4BA5E0` (Ausgabe),
+Versatz `(+0,+3)` normal / `(+1,+4)` gedrückt.
+⚠⚠ **Ein hässlicher, aber wichtiger Kniff:** die Funktion legt den
+**Zeilenschritt des Zielpuffers vorübergehend in `dword[0x5387C8]`** (die
+»Bildbreite«) ab, weil der Textzeichner seinen Schritt von dort holt, und stellt
+sie danach wieder her (`0x456673`, `0x45676F`, `0x4567F1`).
+
+**Der Rollbalken:** drei Treffflächen von **20 × 10** Punkten — Pfeil hinauf bei
+`(x, y+20)` → 0; Pfeil hinunter bei `(x, y+n·20−30)` → n−1; Schieber ab
+`(x, y+30)`. Gemalt mit Element **60** (oben), **63** (unten), **61/62** (Mitte,
+`rand%2`).
+
+### BA.3 ⭐ Es gibt nicht einen Rahmen, sondern DREI
+
+| Zeichner C | F | Byte | Rufer | Elementsatz | Wofür |
+|---|---|---:|---|---|---|
+| `0x455E50` | `0x454AF0` | 1168 | 44 | **0…24, 43…51, 297** | Normalfenster |
+| `0x4562E0` | `0x454F80` | 912 | 1 (`0x47CF10`) | **229…247** | **Art 30, Hilfefenster** |
+| `0x456CC0` | `0x455960` | 816 | 1 (`0x47CF10`) | **298…309** + Füllung 16…24 | der olivfarbene Satz |
+
+Die Farbwerte bestätigen es unabhängig: Satz 1 benutzt Palettenindizes
+`0x24…0x2F`, Satz 229 zusätzlich `0x7F…0x83`, Satz 298 zusätzlich `0xA5…0xAF` —
+**drei getrennte Farbbänder**.
+⭐ **Nullmodell:** höchste je benutzte Elementnummer = **309**, die Datei hat
+**314** (`138160 / 440 = 314`, Rest 0). Es geht auf und fällt nicht durch.
+
+### BA.4 ⭐⭐ 45 Fensterarten mit ihren Punktmassen
+
+Der Bereich `0x4573C0 … 0x45CA30` ist **kein Zeichencode**, sondern **eine
+Anlegefunktion je Fensterart**. Jede tut dasselbe:
+
+```
+1. freien Platz suchen:  byte[SOCKEL + 44324·k] == 0,  k = 0 … 19
+   voll  ->  Rueckgabe 0xFFFF
+2. die 44324 Byte des Satzes nullen (rep stosd, ecx = 0x2B49 = 11081 Dwords)
+3. byte[+0x00] = Art ; word[+0x02] = x ; word[+0x04] = y
+   word[+0x06] = Breite in PUNKTEN ; word[+0x08] = Hoehe in PUNKTEN
+4. malloc(Breite·Hoehe)  ->  dword[+0xAC9C]
+5. den Puffer mit 0xFF fuellen  =  vollstaendig DURCHSICHTIG
+```
+
+**Fenstersatz-Sockel: C `0x8B9038` · F `0x8B8098`.**
+
+⭐⭐ **Nullmodell für »20 Plätze à 44 324 Byte«, zweifach unabhängig:**
+`0x8B9038 + 20·44324 = 0x991708`, nächste belegte Globale `0x991820` — **Lücke
+280 Byte**. `0x8B8098 + 20·44324 = 0x990768`, nächste `0x990880` — **Lücke 280
+Byte**. Dieselbe Lücke, zweimal. **Ein 21. Platz passte nicht hinein.**
+
+| Art | C | F | px | Art | C | F | px |
+|---:|---|---|---|---:|---|---|---|
+| 1 | `0x4573C0` | `0x456060` | 80×80 | 25 | `0x45A070` | `0x458D10` | 280×220 |
+| 2 | `0x4575F0` | `0x456290` | 300×280 | 26 | `0x459B70` | `0x458810` | 560×300 |
+| 4 | `0x4578C0` | `0x456560` | 300×100 | 27 | `0x459CB0` | `0x458950` | 620×300 |
+| 5 | `0x457A00` | `0x4566A0` | 360×340 | 28 | `0x45A1B0` | `0x458E50` | 220×60 |
+| 6 | `0x457BB0` | `0x456850` | 360×340 | 29 | `0x45A2E0` | `0x458F80` | 220×220 |
+| 7 | `0x457D50` | `0x4569F0` | 600×340 | **30** | `0x45A5F0` | `0x459290` | **360 × wächst** |
+| 8 | `0x457EC0` | `0x456B60` | 260×240 | 31 | `0x45ABE0` | `0x459880` | 260×100 |
+| **9** | `0x458000` | `0x456CA0` | **204×170** | **32** | `0x45AD10` | `0x4599B0` | 500×340 |
+| 10 | `0x458150` | `0x456DF0` | 300×100 | 33 | `0x45AFD0` | `0x459C70` | 360×260 |
+| 11 | `0x4582C0` | `0x456F60` | 360×300 | 34 | `0x45A420` | `0x4590C0` | 360×300 |
+| 12 | `0x458410` | `0x4570B0` | 180×100 | 35 | `0x45B100` | `0x459DA0` | 200×240 |
+| 13 | `0x4586D0` | `0x457370` | 60×80 | 36 | `0x45B230` | `0x459ED0` | 300×60 |
+| 14 | `0x4589B0` | `0x457650` | 300×400 | 37 | `0x45B3A0` | `0x45A040` | 600×420 |
+| 15 | `0x458CB0` | `0x457950` | 300×360 | 38 | `0x45B4E0` | `0x45A180` | 600×420 |
+| 16 | `0x458FD0` | `0x457C70` | 280×120 | 39 | `0x45B620` | `0x45A2C0` | 560×300 |
+| 17 | `0x4593F0` | `0x458090` | 200×300 | 40 | `0x45B770` | `0x45A410` | 180×60 |
+| 18 | `0x459530` | `0x4581D0` | 260×240 | 41 | `0x45B8A0` | `0x45A540` | 280×60 |
+| 19 | `0x459670` | `0x458310` | 140×200 | 42 | `0x45B9D0` | `0x45A670` | 300×160 |
+| 20 | `0x4597B0` | `0x458450` | 220×100 | **43** | `0x45BC10` | `0x45A8B0` | **640×480** |
+| 21 | `0x4598F0` | `0x458590` | 220×100 | 44 | `0x45C540` | `0x45B1E0` | 420×20 |
+| 22 | `0x459A30` | `0x4586D0` | 640×320 | 45 | `0x45C670` | `0x45B310` | 220×60 |
+| 23 | `0x459DF0` | `0x458A90` | 360×260 | 46 | `0x45C8F0` | `0x45B590` | 120×100 |
+| 24 | `0x459F30` | `0x458BD0` | 280×140 | 47 | `0x45C7B0` | `0x45B450` | 220×60 |
+| | | | | **48** | `0x45CA30` | **fehlt** | 200×180 |
+
+⚠ **Art 3 (Kartenfenster) hat keinen solchen Anleger** — seine Grösse ist nicht
+fest.
+
+⭐⭐ **Das Nullmodell, das die ganze Zeichenmaschine erklärt:** von **44 festen
+Massen sind 43 restlos durch 20 teilbar.** Die einzige Ausnahme ist
+**Art 9 = 204 × 170 = 34 680 = genau `PANEL.DTA`.** Und das 20er-Raster ist kein
+Zufall, sondern **erzwungen** — siehe BA.5.
+Art 43 = 640 × 480 = 307 200 — dasselbe `0x12C00`-Dword-Mass, mit dem `0x4409E0`
+dieses eine Fenster mit **einem einzigen `rep movsd`** auf den Schirm wirft.
+
+### BA.5 ⭐⭐ Wie durchsichtig kopiert wird — und warum es KEINE Beschneidung gibt
+
+**Die Kachel:** `0x455DB0` / F `0x454A50` —
+`kachel_zeichnen(puffer, x, y, elementnr, zeilenschritt)`. Satz = 440 B ab
+C `0x8938D8` / F `0x892938`, **20 Zeilen à 22 Byte**, Zeile =
+`[u8 leftoff][u8 count][20 Byte Punkte]`, Quelle = Satz + 2 + leftoff.
+**20 Zeilen fest** (`0x455DC3: mov [esp+0xc], 0x14`).
+⭐ **Die Durchsichtigkeit läuft hier NICHT über `0xFF`, sondern über
+`leftoff`/`count`** — je Zeile wird nur ein Lauf kopiert.
+
+**Der durchsichtige Kopierer:** `0x4409B0` / F `0x43F9C0`, 48 Byte, Gleichheit
+1.000:
+```
+zeile_kopieren_durchsichtig(quelle, ziel, laenge):
+    fuer laenge Byte:  al = [quelle];  wenn al != 0xFF:  [ziel] = al
+```
+Gerufen ausschliesslich von `0x4409E0` / F `0x43F9F0` (*fenster_auf_schirm*),
+einmal je Bildzeile:
+`Ziel = dword[0x87B044] + y·dword[0x5387C8] + x`, `Quelle = Fenstersatz + 0xAC9C`.
+
+#### ⭐⭐ Und die Antwort auf »wie wird geschnitten?« — **gar nicht, und das ist Absicht**
+
+Weder `0x455DB0` noch `0x455C50` noch `0x4409B0` prüft eine Grenze. Sie
+**brauchen keine**:
+
+> Jedes Fenster hat seinen **eigenen 8-Bit-Puffer** von genau `Breite × Höhe`.
+> Alles Zeichnen geht mit **Zeilenschritt = Fensterbreite** in diesen Puffer.
+> Weil alle Fenstermasse (bis auf Art 9) **Vielfache von 20** sind und die
+> Kachel **20 × 20** misst, **kann eine Kachel den Puffer nicht überlaufen.**
+> Erst beim Aufsetzen auf den Bildschirm wird `0xFF` übersprungen.
+
+⭐ **Das 20er-Raster der Fenstermasse und die fehlende Beschneidung sind
+dieselbe Entscheidung.** Für unseren Nachbau: wer Fenster in beliebiger
+Punktgrösse zulässt, muss eine Beschneidung **erfinden**, die das Original nicht
+hat — und bekommt ein anderes Bild.
+
+#### Der Fenstersatz, soweit gelesen
+
+| Versatz | Breite | Inhalt |
+|---|---|---|
+| `+0x00` | Byte | **Fensterart** (1…48), 0 = Platz frei |
+| `+0x02` / `+0x04` | Wort | x / y |
+| `+0x06` / `+0x08` | Wort | Breite / Höhe in Punkten |
+| `+0x0A` | Byte | (Art 30 nullt es) |
+| `+0x0C` | Text | **Fenstertext / Titel** |
+| `+0x1394` | Wort | Bildnummer (Art 30) |
+| `+0xAC9C` | Dword | **Zeiger auf den Punktpuffer** |
+| `+0xACA0` | Wort | Betriebsart (Art 3) |
+| `+0xAD23` | Byte | Zoomstufe (Art 3), Index in `0x4FD610` |
+
+### BA.6 Die Lader
+
+**`0x45A5F0` / F `0x459290` — Art 30, das Hilfefenster** (1520 B, 2 Rufer
+`0x4432E0`, `0x443490`):
+* ⭐ **`HELPG.DAT` ist belegt, nicht mehr vermutet:** `dword[0x8B62B0 + 4·textnr]`
+  (F `0x8B5310`) liefert die **Bildnummer**. 4000 B = 1000 Dwords, geht auf.
+* Bild: `fseek((nr−1)·3600)`, `fread(0x8B7258, 1, 0xE10)`.
+  **`0xE10 = 3600 = 60 × 60`; `129600 / 3600 = 36` Bilder, Rest 0.**
+* ⭐ **Wie `HELPG.TXT` zerlegt wird** (`0x45A695 … 0x45A762`): Byte für Byte über
+  `fread(buf,1,1,f)` in einen **5036-Byte-Stapelpuffer** (`mov eax, 0x13AC`):
+  `0x0D` → verwerfen · `0x0A` → **wird zum Leerzeichen**, vorher werden
+  nachlaufende Leerzeichen rückwärts abgeschnitten (**Absätze werden zu einer
+  Zeile verklebt**) · `0x23` (`#`) → **Satzende**, das `#` wird zur Null · danach
+  `buf[3] = 0` und `atoi` → **die Satznummer hat genau DREI Ziffern**. Nicht
+  gefunden → `" : Text is not in the file."` (C `0x5015E8`).
+* Das Fenster ist **360 Punkte breit**, startet mit **Höhe 10** und **wächst
+  zeilenweise**; Umbruchgrenze ist `Breite − 40 = 320` (`0x45A967`).
+  ⭐ **Deshalb hat es keine feste Grösse und fehlt in der Tafel von BA.4.**
+
+**`0x45AD10` / F `0x4599B0` — Art 32, die Enzyklopädie**, 500 × 340:
+⭐ **`ENCYCLOG.DAT` ist jetzt gedeutet, nicht nur »geht auf«:**
+
+| Block | C | F | Bedeutung, belegt durch |
+|---|---|---|---|
+| A | `0x8B8070` | `0x8B70D0` | **Byteversatz in `ENCYCLOG.TXT`** — Argument von `fseek` (`0x45AD6D`) |
+| B | `0x9927C8` | `0x991828` | **Anzahl Bytes** — Schleifenschranke (`0x45ADC1`) |
+| C | `0x991820` | `0x990880` | **Bildnummer in `ENCYCLOG.PIC`** — `fseek((b−1)·3600)` (`0x45AE1A`) |
+
+Textzerlegung viel einfacher als bei HELPG: `count` Bytes einzeln lesen,
+**alles ab `0x20` übernehmen**, `0x0A` als Leerzeichen anhängen, in Puffer
+C `0x892130`. **Kein `#`, keine Nummern, keine Umbruchlogik** — der Satz wird
+über Versatz + Länge geschnitten, nicht gesucht.
+⚠ `cmp al,0xFF; ja` bei `0x45AD9C` ist **toter Code** (ein Byte ist nie > 0xFF).
+⭐ **`ENCYCLOG.PIC`: `345600 / 3600 = 96` Bilder à 60 × 60, Rest 0** — dasselbe
+Bildmass wie `HELPG.PIC`. Puffer C `0x8B5490`.
+
+**⚠⚠ BERICHTIGUNG: `0x458000` lädt `PANEL.DTA` NICHT.** Sie ist der Anleger des
+204 × 170-Fensters (Art 9); der Name taucht dort nur als Argument auf. **Der
+Lader bleibt `0x4B9F70`.**
+⭐ Sie ist aber der **unabhängige Beleg für das Panelmass**: `word[+0x06] = 204`,
+`word[+0x08] = 170`, und die `malloc`-Grösse wird als **34 680** ausgerechnet
+(`0x4580AA…0x4580BE`) — **genau die Dateigrösse. Das Mass steht zweimal getrennt
+im Programm.**
+
+### BA.7 ⚠⚠ EIN SAUBERER NEGATIVBEFUND: die zwei grössten Funktionen des Reviers zeichnen NICHTS
+
+Das Revier `0x450000 … 0x45B000` zerfällt in **zwei** Bausteine. Alles
+**unterhalb `0x455B00`** gehört zum **Waffen- und Wirkungsmodul** (die
+tschechischen Marken `kresli_laser1` @`0x4554A0`, `kresli_laser2` @`0x454CF0`,
+`Add missile` @`0x451B40` stehen mittendrin). **Erst ab `0x455C50` beginnt die
+Oberfläche.**
+
+* **`0x453AA0`** (C 1888 B / F `0x452750`, Rufer `0x454300`, `0x4543C0`)
+  berechnet den **Mündungspunkt und erzeugt ein Geschoss**: Einheitensatz
+  `0x6E26C8` (Schrittweite 78), **Feinraster 40 Unterschritte je Zelle**
+  (`imul ax, ax, 0x28`), `fild/fsqrt` für die Entfernung, eine **8-Wege-
+  Sprungtafel bei `0x454060`** für den Rohrversatz, dann `0x4517A0`
+  (Geschoss anlegen) und eine Warteschleife auf `0x452190`. Waffentafel
+  `0x4F98FC`, Schrittweite 22.
+* **`0x454600`** (C 1248 B / F `0x4532B0`, **1 Rufer: `0x415CF0` = `Main_funct`**)
+  ist der **wachsende Explosionsring**: läuft nur jeden dritten Takt
+  (`dword[0x4FA240] % 3 == 0`), geht die Liste ab `0x88E390` durch und sucht alle
+  Zellen, deren **`sqrt(dx²+dy²)` genau dem gespeicherten Radius gleicht**. Für
+  jede: Belegungskarte `0xBDEA80` befragen, `0x40C9A0` (`Zasah`) rufen, und über
+  `0x435950` Wirkungsbilder streuen (`rand()%9 + 0x1FE`, `rand()%6 + 0x136`,
+  `rand()%0x3C + 10`).
+* Ebenso **kein Zeichencode**: `0x4536C0` (Einheitensatz, `fild/fsqrt` →
+  Entfernung, 4 Rufer) und `0x4554F0` (Geschossmodul, Daten `0x884730 ff.`,
+  2 Rufer).
+
+### BA.8 ⭐⭐ DER ZEHNTE AUSLIEFERUNGSUNTERSCHIED: C hat 48 Fensterarten, F nur 47
+
+Nicht abgetastet — die **Sprungtafel aufgezählt**:
+
+| | C | F |
+|---|---|---|
+| Verteiler | `0x487630`, 992 B | `0x485D00`, 976 B |
+| Schranke | `cmp eax, 0x2F` (47) | `cmp eax, 0x2E` (46) |
+| Tafel | `0x487888` | `0x485F4C` |
+| Arme | **48** | **47** |
+
+Die Arme 1…47 entsprechen einander eins zu eins (C-Arm 47 `0x487180` ↔ F-Arm 47
+`0x485850`, beide »Synchronisieren…«). **Es fehlt in F genau Art 48 =
+C `0x480650`** — das zweite Hauptmenü mit dem Eintrag **»Enzyklopädie«**
+(Art 35 `0x480390` ist das Menü mit »Netzwerkspiel«).
+
+⭐ **Vier voneinander unabhängige Zählungen, dieselbe Erklärung:** F hat keinen
+Anleger für Art 48 · der Rahmenzeichner hat in F **43** statt 44 Rufer · die
+Knopfroutine **117** statt 123 · und die Sprungtafel einen Arm weniger.
+
+⚠ Das ist der **einzige** Unterschied dieses Laufs, der behauptet wird. Alle
+anderen Abweichungen der Ähnlichkeitszahlen sind Registerwahl und **werden
+verworfen**.
+
+### BA.9 Weitere eingeordnete Funktionen
+
+| C | F | Byte | Rufer | Was es ist |
+|---|---|---:|---|---|
+| `0x4589B0` | `0x457650` | 768 | 1 | Anleger Art 14, 300 × 400 (»Spielstand laden«) |
+| `0x458CB0` | `0x457950` | 800 | 1 | Anleger Art 15, 300 × 360 (»Spiel speichern«) |
+| `0x458150` | `0x456DF0` | 368 | 6 | Anleger Art 10 — ruft danach den Fensterverteiler `0x487630` |
+| `0x459110` | `0x457DB0` | 736 | 5 | **`gebaeudename(platz)`** — »Bahnhof «, »Rohstoff-Mine «, »Hafen «, »Basis «, »Waffenfabrik «, »Fahrwerkfabrik «, »Spezialfabrik «, »Flughafen « nach `byte[0xC06914]` |
+| `0x4501C0` | `0x44EE70` | 224 | 18 | **`fenstertitel_setzen_wenn_anders`** — vergleicht mit `+0x0C` und kopiert nur bei Unterschied |
+| `0x457300` | `0x455FA0` | 192 | 8 | vier Kacheln, nur von Art 1 (Einheiten-Menü) |
+| `0x4588E0` | `0x457580` | 208 | 5 | schreibt nach `+0xAD20`, `sprintf`-artig |
+| `0x45A560` | `0x459200` | 144 | 4 | Texthilfe, ruft `0x4BA0A0` |
+| `0x455D50` | `0x4549F0` | 96 | — | `WINDOWS.CWW` laden |
+| `0x456A50` | `0x4556F0` | 624 | — | vertiefte Mulde |
+| `0x457730` | `0x4563D0` | 400 | — | Fenster anlegen |
+| `0x4409E0` | `0x43F9F0` | 1008 | — | Fenster auf den Schirm |
+
+**Aufgelöste Stummel:** `0x402275→0x455DB0` · `0x401CF8→0x455CF0` ·
+`0x4015AF→0x4409B0` · `0x402306→0x4517A0` · `0x4014B0→0x452190` ·
+`0x401C08→0x4BA160` (Textbreite) · `0x4020A4→0x4BA5E0` (Text zeichnen) ·
+`0x40155F→0x435BD0` · `0x401AAF→0x41D0E0` (`terrain_at`) ·
+`0x401217→0x40C9A0` (`Zasah`) · `0x401172→0x435950` · `0x4010BE→0x43B750`.
+
+### BA.10 ⚠ Was offen blieb, und wodurch das Verfahren blind ist
+
+1. ⚠ **`0x4517A0` gegen F `0x450450`: Ähnlichkeit 0.758 bei gleicher Grösse und
+   gleicher Ruferzahl.** Der Unterschied wurde **nicht** am Kontrollfluss erklärt
+   und darum **nicht** als Befund gemeldet. Die einzige offene Stelle der
+   C/F-Zuordnung im Revier.
+2. ⚠ **Art 3 (Kartenfenster) hat keinen gefundenen Anleger.** Der Sucher verlangt
+   die Platzsuche `cmp si, 0x14` im selben Rumpf; wo sie ausgelagert ist, findet
+   er nichts. **Bekannte Blindheit, kein Beleg für Nichtexistenz.**
+3. ⚠ Die Elemente **17…24** (Innenflächen-Sprenkel) wurden nicht angesehen —
+   Element 16 hat genau eine Farbe (`0x2C`), ob 17…24 Schmutz, Nieten oder
+   Schatten sind, sagt nur das Bild.
+4. ⚠ **`0x455E50` ist nur statisch gelesen.** Der Rahmen wurde **nicht**
+   nachgezeichnet und gegen ein Bildschirmfoto gehalten. Die Eckenzuordnung ruht
+   auf zwei unabhängigen Stützen (Stapelrechnung + Kacheleinrückung), aber **auf
+   keinem Bild**. ⭐ Das wäre der nächste, billige Prüfstand: 314 Elemente
+   auspacken, `rahmen_zeichnen(0,0,15,17,…)` nachrechnen, mit einem echten
+   Fenster vergleichen.
+5. ⚠ Die Bedeutung von `arg7` (Titelleiste) und `arg8` (Sonderecke 297) ist **aus
+   der Form erschlossen, nicht aus den Rufern**.
+6. ⚠ **Die Ähnlichkeitszahl ist kein Beweis.** `difflib` über normierte Befehle
+   bestraft Registerwahl genauso hart wie echte Logikänderungen. Jede Zahl unter
+   1.000 wurde von Hand nachgesehen; **wer die Tafel später weiterverwendet, darf
+   die Zahlen nicht als »Unterschied« lesen.**
+7. ⚠ **Die Ruferzählung geht über `E8`-Aufrufe mit aufgelösten Stummeln.**
+   Aufrufe über Zeiger oder Sprungtafeln zählt sie **nicht**. Für `0x455CF0` mit
+   363 Stellen folgenlos — für `0x459B70`, `0x45B8A0` und `0x45CA30` mit
+   »0 Rufern« wäre es genau die falsche Schlussfolgerung: **diese drei werden
+   über die Verteilertafel erreicht.**
