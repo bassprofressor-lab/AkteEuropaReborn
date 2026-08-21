@@ -94,7 +94,7 @@ Die 28 Zeiger selbst liegen in einer bis dahin unbekannten Tafel im
 Versätze; belegt sind 0…28, Satz 9 ist leer). Der Lader `0x429020` geht auf das
 Byte auf.
 
-⚠ **Vier Zeiger (6, 7, 8, 25) sind gefüllt, aber tot** — kein Code wählt sie.
+⚠⚠ ~~**Vier Zeiger (6, 7, 8, 25) sind gefüllt, aber tot** — kein Code wählt sie.~~ **WIDERLEGT am 21.08.2026, siehe Abschnitt AK.3:** 6, 7 und 8 leben — sie werden nicht über den Zustandsautomaten gewählt, sondern direkt aus der Satztafel gezeichnet (Klickmarkierung und die zwei Auswahlmarken). **Nur 25 ist tot.**
 Wer sie im Original je gesehen hat, hätte einen Befund; erwarten würde ich es
 nicht.
 
@@ -4097,3 +4097,189 @@ nachzulaufen:
   Adresskonstanten.
 
 ⚠ Alle drei Gruppen sind damit **ungeprüft**, nicht bestätigt.
+
+---
+
+## AK. ⭐⭐ DER NACHLAUF, zweiter Teil — was die Vollerhebung nicht konnte (21.08.2026)
+
+Abschnitt AJ hat alle 130 Abschnittspuffer neu erhoben und dabei drei Gruppen
+ausdrücklich als **ungeprüft** liegenlassen: feldweise Befunde, Konstanten statt
+Adressen, und Sprungtafel-Fälle. Sie sind jetzt nachgelaufen. **Fünf von sechs
+Befunden halten — einer ist widerlegt, und zwei Zahlen waren zu klein.**
+
+⚠ Alle Läufe nennen ihre **Eichung**: naiv gegen resynchronisiert. Ohne diese
+zwei Zahlen weiss niemand, ob das ganze Bild gesehen wurde.
+
+| | naiv | Abbruch bei | resynchronisiert | Anteil |
+|---|---|---|---|---|
+| C | 78 845 | `0x42BC1F` | **443 471** | **17,8 %** |
+| F | 16 622 | `0x409FB0` | **442 952** | **3,8 %** |
+
+⚠ Zwei Läufe haben unabhängig gemeldet, dass diese Prozente im Kopf von
+`reloc_refs.py` **vertauscht** standen. Berichtigt; `--stat` rechnet sie jetzt
+selbst aus, statt sie abzuschreiben.
+
+### AK.1 ⭐ Die drei feldweisen Befunde halten — alle drei
+
+Verfahren: Vollerhebung, dann **jede** Fundstelle einzeln zerlegt und der
+Feldversatz **aus dem Indexregister** nachgerechnet — plus die
+**Operandenbreite** je Zugriff (ein Wortzugriff auf `+8` läse `+9` mit). Alle
+sechs Läufe (C und F × sec62/60/56): **0 UNKLAR**.
+
+| Frage | Verweise C / F | auf das Feld | Datei-Sätze | Abweichungen |
+|---|---|---:|---:|---:|
+| **sec62 `+0x00`** liest jemand? | 74 / 74 | 6 — **kein Speicherzugriff** | 28 560 | Werte `{0,3,4,6}` wie vorhergesagt |
+| **sec60 `+2`** | 38 / 38 | **0** | 112 000 | **0** |
+| **sec56 `+9`** | 46 / 46 | **0** | 13 552 | **0** |
+
+**sec62 `+0x00`:** Die 68 Zugriffe auf `+1` sind **ausnahmslos `mov byte`** — in
+ganz sec62 gibt es keinen Wort- oder Dwordzugriff, die `mov ax, word[…]`-Falle
+ist damit ausgeschlossen. Die 6 auf `+0` haben **überhaupt keinen
+Speicheroperanden**: zwei `push` in die `fread`/`fwrite`-Hüllen, zwei
+`rep stosd`-Nullungen, ein Zeiger für den Initialisierer und eine
+Schleifenschranke (`cmp eax, Basis+510`, 510 = 2 × 255).
+
+⭐ Der Initialisierer (C `0x488347…0x4883B6`) belegt die Deutung aufs Wort:
+`cmp edi,edx` → **6 = gehört mir** · `cmp cl,0xB` → **4 = Besitzer 11** ·
+`byte[…+sec53+0x15]` (Diplomatie) → **3 = Feind** · sonst **0**.
+
+**sec60 `+2`:** ⭐ Beide Verfahren treffen sich — der **rohe Byteabtast** auf
+`Basis+2` findet im gesamten 1,4-MB-Bild **null Vorkommen**. Wo der rohe Abtast
+überzählt, kann er nicht null melden. Alle 34 Bytezugriffe benutzen einen Index
+aus `lea reg,[u+u*2]` = **3·u**, einzeln nachgerechnet. Die einzige Zeigerform,
+die ein `[reg+2]` erlaubte (C `0x4BC691`), ist verfolgt: zwei Benutzungen, beide
+`+0`. Und im Zeichenbestand **beider** EXE gibt es `CPU0:` und `CPU1:` —
+**kein `CPU2:`**.
+
+**sec56 `+9`:** ⭐⭐ **Es ist ein AUSRICHTUNGSLOCH, kein vergessenes Feld.** Der
+Satzlöscher (C `0x4BBBDF…0x4BBBF1`) räumt einen Satz mit genau vier Befehlen —
+`+7`, `+6`, `+8` byteweise, dann `mov word [ebp+Basis+0xA], ax`. **`+9` wird
+übersprungen**, weil es das Füllbyte ist, das das Wort auf `+0xA` gerade
+ausrichtet. Kein einziger `+8`-Zugriff ist ein Wortzugriff; ein
+`mov ax, word[+8]` hätte `+9` mitgelesen.
+
+⭐ **Nebenbefund, hart:** `+6 == +7` in **13 552 von 13 552** Sätzen — die
+»Kopie« ist keine Vermutung mehr.
+
+### AK.2 ⭐ Opcode 975 hält — und »zwei tote Nummern« waren sieben
+
+**Verfahren, und es ist besser als das alte:** ein Sofortwert 975 steht auf x86
+immer als zusammenhängende Bytefolge `cf 03` im Befehl. Also **alle `cf 03` roh
+aufzählen** (7 je Datei) und an **jedem** Startversatz davor decodieren. Damit
+ist die Ausrichtung des Abtasts für den **Fund** irrelevant; sie sortiert nur
+noch aus. Kontrollprobe mit 976: genau ein Befehl je Datei, auf der
+Befehlsgrenze — der bekannte `Z`-Sender.
+
+* **Kein Befehl** trägt 975 als Sofortwert. Die 7 rohen `cf 03` je Datei liegen
+  alle **innerhalb** anderer Befehle (`jmp`-Versatz, `imul ecx,edi`,
+  `add ecx,edi`, `movsx ecx,di`) — genau der Falschtreffer des Byteabtasts.
+* **Keine Tafel:** das Wort `0x03CF` kommt in **keiner** Sektion ausserhalb
+  `.text` vor, in beiden Dateien. `.text` ist die einzige ausführbare Sektion.
+* **Keine Rechnung:** auf dem Opcode-Feld steht kein `inc`/`add`/`xor`, nur `mov`.
+* **Dateiversätze bestätigt**, mitsamt Befehl: C `mov word[0xB8A3D8], 0x3D0`
+  @`0x4139F5`, `d0 03` bei **`0x12DFC`**; F `mov word[0xB89438], 0x3D0`
+  @`0x4137AA`, bei **`0x12BB1`**.
+
+⭐ **Die alte Bytesuche `66 c7 05` sah nur 140 von 148 Schreibern.** Es gibt je
+Bau **8 Schreiber über ein Register**, alle mit einer Konstanten unmittelbar
+davor — und **1100** (C `0x4C2303`) und **1004** (C `0x4C49C0`) haben **keinen
+anderen Erzeuger**. Jede Liste, die nur `66 c7 05` gezählt hat, führt sie zu
+Unrecht als tot.
+
+⭐ **Nicht zwei tote Nummern, sondern sieben** — eigener Behandler, kein
+Erzeuger, in C und F identisch: **10, 523, 526, 975, 992, 997, 1200**. Weitere
+195 Nummern ohne Erzeuger zeigen nur auf den **Vorgabe-Behandler**
+(C `0x4C4CCD`) — das sind Lücken, keine toten Befehle.
+
+⭐ **Zwei Adressen, die Regel 1 noch fehlten:** Rohpuffer F **`0xB89438`**,
+Programmpuffer F **`0xB4FA38`**, Verteiler F `0x4C2262`.
+
+⚠ **Der Netzweg bleibt offen.** C `0x404480` / F `0x404460` (DirectPlay-Empfang,
+`call [esi+0x54]`) schreibt 236 rohe Paketbytes **direkt** in einen
+Programmsatz. Ein Gegenspieler könnte jeden Opcode liefern, 975 eingeschlossen.
+»Kein Schreiber in beiden Bauten« bleibt richtig — »975 ist unerreichbar« wäre
+es nicht. Über Datei geht es dagegen nicht: es gibt **kein `fread`** von 236 B.
+
+### AK.3 ⭐⭐ WIDERLEGT: die Mauszeiger 6, 7 und 8 leben
+
+Der Befund lautete: »vier Zeiger (6, 7, 8, 25) sind gefüllt, aber tot — kein
+Code wählt sie«. **Drei davon leben.** Sie werden nur nicht über den
+Zustandsautomaten gewählt, sondern **direkt aus der Satztafel gezeichnet** —
+deshalb hat eine Analyse der Sprungtafel sie übersehen.
+
+| Satz | C-Stellen | was es ist |
+|---|---|---|
+| **6** (+268) | `4B43A6` | **Klickmarkierung auf der Karte**, 5-Bild-Einmalanimation |
+| **7** (+312) | `42A7B6`, `42AC14`, `42AE8C`, `42B0C3`, `42BB8D` | **Auswahlmarke am Objekt** |
+| **8** (+356) | `42AA8F`, `42CB9F` | zweite Auswahlmarke |
+
+Satz 6 wird über `byte[0x5387E4]` durchgezählt: `0x4B6C40` setzt 0 und merkt die
+Klickstelle (gerufen aus der Befehlsvergabe), `0x4B6C70` zählt hoch bis 4 und
+setzt dann `0xFF` (Stopp). Sätze 7/8 hängen am Objektflag
+`byte[0x6E26E3 + 78·id]`, das 10 Schreiber im Auswahlcode hat.
+
+⚠ **Satz 25 bleibt tot** (5 Bilder, `0x1336F`…`0x147DB`, kein Leser). Satz 9 ist
+in `ROBO.CWR` leer.
+
+### ⭐ Die vollständige Tafel Zustand → Zeiger (C `0x4A9BEC` / F `0x4A951C`)
+
+Beide Tafeln byteweise deckungsgleich, Versatz konstant `0x6D0`.
+
+| Zust. | Zeiger | Zust. | Zeiger | Zust. | Zeiger |
+|---|---|---|---|---|---|
+| 0 | 0 | 9 | 13 | 18 | 22 |
+| 1 | **1 oder 5 (berechnet)** | 10 | 2 | 19 | 23 |
+| 2 | 2 | 11 | 11 | 20 | 14 |
+| 3 | **27 oder 4 (bedingt)** | 12 | 16 | 21 | 15 |
+| 4 | 0 | 13 | 19 | 22 | 17 |
+| 5 | 11 | 14 | 17 | 23 | unverändert |
+| 6 | 10 | 15 | 18 | 24 | unverändert |
+| 7 | 2 | 16 | 20 | 25 | 24 |
+| 8 | 12 | 17 | 21 | | |
+
+Sonderwerte: **100** → 26 · **1000** → 3 · **1001** → 2 · **1002** → `0xFF`
+(Zeiger aus). 26…99, > 1002 und negative Werte lassen den Zeiger unverändert.
+
+⭐⭐ **Zeiger 5 steht nirgends als Konstante im Code** — er entsteht nur in
+Zustand 1 aus `byte[0x6E26D2 + 78·id]` (`dec/cmp/sbb/and 4/inc` @`0x4A9B4B`).
+**Ein Konstantenabtast hätte auch ihn für tot erklärt.** Dasselbe gilt für
+Zeiger 27 (`0x4A9B7D`, nur bei `word[0x4FA0C8] == 10000`).
+
+Sechs **Direktschreiber** auf `byte[0xA182D0]`, in beiden EXE gleich:
+`0x415236`/`0x4152EB`/`0x4315EE` → `0xFF`; **`0x4152B8` → 28, der EINZIGE Weg zu
+Satz 28**; `0x441C25` → 0; `0x4A9BCF` → die Funktion selbst.
+
+### AK.4 `SPR.DAT`: 34 von 35 tot — bestätigt, Begründung berichtigt
+
+⭐ **`SPR.DAT` hat 57 Plätze, nicht 35:** 0–26 belegt, 27–37 leer, **38–45
+belegt**, 46–56 leer → 35 vorhandene Bilder. Der Lader (C `0x4B4100`) läuft
+`esi = 0…37` (`cmp esi,0x26`) — die 8 nicht geladenen sind also genau
+**38…45**. Der Grund war richtig benannt, die **Zahl der Plätze** nicht.
+
+* **1 lebendig**: Index **19**, die Ersatzkachel für die Kennung `0xFFFF`.
+  Gelesen wird **nur** `0xB0E188 + 4·19`, immer als Konstante, **nie
+  berechnet** — C `0x4B42AB`, `0x4B44C0`.
+* **26 geladen, nie gelesen**: 0–18 und 20–26.
+* ⚠ **Zusatz:** Index 26 bekommt Grösse `0xFFFFA609` (der Folgeeintrag ist der
+  Leer-Marker) → `malloc` scheitert, faktisch auch nicht geladen.
+* ⚠ **F hat einen Leser mehr:** `0x4B8F00` ist ein zweiter, fast identischer
+  Geländezeichner (Schleifenschranke `cmp eax,0x320`), der **in C nicht
+  existiert**. Auch er benutzt nur Index 19.
+
+⭐ **Nebenbefund:** die Bilder 19–26 und 38–45 sind je **865 B** — zwei Sätze zu
+acht gleich grossen Kacheln, von denen nur die erste verdrahtet ist.
+Kachelvarianten, die nie angeschlossen wurden.
+
+### ⚠ Was auch dieser Nachlauf nicht kann
+
+* **Er führt nichts aus.** »Kann erzeugt werden« ist nicht »tritt auf«.
+* **Blockbefehle mit gerechneter Adresse** (3 963 in C, 3 957 in F) sind nicht
+  einzeln aufgelöst. Für *feldweise* Fragen ist das die falsche Bauform — ein
+  `rep` arbeitet dwordweise über ganze Sätze —, für Puffer bleibt es ein
+  **Reichweitenargument, kein Beweis**.
+* **Nachbarüberlauf:** sec56 endet exakt bei sec60, sec60 exakt bei sec123,
+  sec103 exakt bei sec62. Die Schranken der Nachbarschleifen sind konstant und
+  liegen im Nachbarn — wieder Reichweite, nicht Beweis.
+* **Zeigerweitergabe über mehrere Register oder Strukturen** ist nicht verfolgt.
+* Der **`ROBO.CWR`-Kopf** wurde aus der F-Fassung gelesen; zu C könnte eine
+  andere Datei gehören.
