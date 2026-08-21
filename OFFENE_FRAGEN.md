@@ -474,7 +474,13 @@ also weiter offen.
 
 ## D. Was sonst noch ungelesen ist — die drei grössten Posten
 
-1. **Das Original hat einen eigenen Determinismus-Prüfstand.** Marken
+1. ⚠ **ERLEDIGT und WIDERLEGT am 21.08.2026 — siehe Abschnitt U.** Es gibt
+   keinen benutzbaren Determinismus-Prüfstand: die Feldnamen kommen aus einer
+   Bildschirm-Einblendung für EINE Einheit, und das Abspielen ist in beiden
+   ausgelieferten Bauten unfertig (null Aufrufer, kein `fread`). Der Absatz
+   bleibt als Beleg stehen:
+
+   **Das Original hat einen eigenen Determinismus-Prüfstand.** Marken
    `RECORDING` / `REPLAY`, Dateien `replay.beg` (Anfangszustand), `replay.mes`
    (Befehlsstrom), `replay.txt` (Protokoll). Er schreibt je Takt **56 benannte
    Felder jeder Einheit** heraus und vergleicht sie beim Abspielen. Im ganzen
@@ -490,8 +496,10 @@ also weiter offen.
    jeder `push <Zeichenkette>` vor dem Protokollaufruf benennt eine Station.
 
    **Die Ankerpunkte:** `CPU` 14 (0x41618C) · `Power` 16 · `Trains` 21 ·
-   `Transported` 22 · `Buildings` **63** (0x416683) · `Movement` **64** ·
-   `Airplanes` 69 · `unexplored` 75 · `marks` 79.
+   `Transported` 22 · `Self-defenders` **63** · `Buildings` **64** (0x416683) ·
+   `Movement` **65** · `Airplanes` 69 · `marks` 79. ⚠ **Ab `Self-defenders` war
+   unsere Zählung um eins zu niedrig** — berichtigt am 21.08.2026, siehe
+   Abschnitt T.
 
    ⭐ **Was davon gebaut ist (20.08.2026):** die Geschwindigkeitsschleife
    (`SimHz` 50 statt 60, 1…3 Takte je Zeitgeberschlag), die **zwei getrennten
@@ -501,10 +509,9 @@ also weiter offen.
    `Transported`, `Airplanes`, `unexplored`, `marks`. Prüfstand
    `--takt-check`.
 
-   **Offen bleibt:** die 32 Würfelzüge je Takt, die wir nicht ziehen (12 % aller
-   Wurfstellen — betrifft den Lockstep, nicht das Spielgefühl), und die
-   Stationen, die ganz fehlen: `Check gas`, `Self-defenders`,
-   `Mines and traps`, `craters`, `Check AA`.
+   ⚠ **Es sind 29 Würfelzüge, nicht 32** (21.08.2026 in beiden Bauten
+   nachgezählt), und die `rnd`-Marken sind **Kontrollpunkte, keine
+   Verbraucher**. ⭐ **Die fünf fehlenden Stationen sind gelesen** — Abschnitt T.
    Die Reihenfolge *ist* der Determinismus.
 3. **`game.007` ist ein echter Spielstand** (566 KB) und wir haben ihn nie
    angefasst. Er enthält die Bauteiltafel im Klartext — also eine **zweite
@@ -1767,3 +1774,465 @@ abgelehnt), die Rampendaten liegen auf **33 Karten** in der Meta (`ramps`, je
 Zelle mit Lagenbyte) — der alte Blocker »die Laufzeit kennt sec20 gar nicht«
 ist damit **weg**. Es fehlt die Bedienung: ein Auftrag »absetzen« und ein
 Auftrag »einsteigen«.
+---
+
+## T. Die fünf fehlenden Takt-Stationen — gelesen am 21.08.2026
+
+`Check gas`, `Self-defenders`, `Mines and traps`, `craters` und `Check AA`
+fehlten in unserem Nachbau **ganz**. Alle fünf sind jetzt gelesen, in beiden
+Bauständen befehlsweise verglichen (15 der 17 beteiligten Funktionen identisch,
+2 nur mit anderer Registerwahl), und alle Tafeln liegen im `.bss` exakt auf
+C = F + 0xFA0.
+
+### ⚠ Zwei Berichtigungen an unseren eigenen Zahlen
+
+**Es sind 29 Würfelzüge je Takt, nicht 32.** Selbst nachgezählt in beiden
+Bauten: genau 29 Aufrufe des Würfels zwischen C `0x415CF0` und `0x4168A7` und
+genau 29 `rnd`-Marken. Und die Marken sind **Kontrollpunkte, keine
+Verbraucher**: jede zieht eine Zahl und protokolliert sie, damit ein
+Auseinanderlaufen auf eine Gruppe eingegrenzt werden kann.
+
+**`Buildings` ist Station 64, nicht 63.** Ab `Self-defenders` war unsere
+Zählung um eins zu niedrig; die Adresse `0x416683` stimmte, die Nummer nicht.
+Nachgezählt: 85 Protokollpunkte, Punkt 63 = `Self-defenders`, 64 = `Buildings`.
+
+### ⭐ Es gibt ZWEI Zufallsquellen, und nur eine zählt
+
+| | Adresse | Art |
+|---|---|---|
+| **der deterministische** | C `0x4C5B30`, F `0x4C56E0` | `seed = seed + 25 + (int)(sin(seed·K1)·K2)` über `word[0x539240]`, wenn `dword[0x539234] != 0`; sonst Rückfall auf `rand()` |
+| `rand()` | `0x4D6C70` | MSVC-LCG (214013 / 0x269EC3 auf `0x53A338`) |
+
+**Nur der erste ist determinismusrelevant.** Der zweite wird ausschliesslich
+beim *Aufstellen* (Minen, Fallen, Radare) und beim *Anlegen* von Kratern
+benutzt — und genau deshalb sind die Krater für einen Lockstep harmlos.
+
+### Die fünf Stationen
+
+| Station | Nr. | Handler (C) | Tafel (C) | Satz | Plätze | Abschnitt |
+|---|---|---|---|---|---|---|
+| `Check AA` | 26 | `0x428600` | `0x6E1498` | 8 | 200 | **nicht gespeichert** |
+| `Gas 2` | 46 | `0x439C50` | `0x833870` | 8 | 50 | sec83 |
+| `Check gas` | 47 | `0x4396C0` | `0x77CAE8` | 8 | 4000 | sec82 |
+| `Mines and traps` | 49 | `0x4216F0` | `0x552E18` / `0x688B58` / `0x677F30` | 6 | 500 / 500 / 200 | sec84 / 85 / 86 |
+| `Self-defenders` | 63 | `0x411820` | `0x53D8D8` | 6 | 200 | **nicht gespeichert** |
+| `craters` | 73 | `0x4A9A70` | `0x9C9948` | 6 | 1000 | sec45 |
+
+### Was daran für den Nachbau zählt
+
+**`Self-defenders`** bestätigt die alte Vermutung mit einer Zahl: die
+Füllschleife des Laders (`0x41EE75`) schreibt `0xFFFF` bis `cmp eax,0x53D8D8` —
+sec126 endet auf dem **ersten Byte der Tafel**. Eingetragen wird aus der
+**Trefferroutine** `0x40C9A0`, mit `+0x04 = 0x14` = **20 Takte Wartezeit**;
+läuft sie ab und hat das Opfer immer noch keinen Befehl (`+0x14 == 0`,
+`+0x34 == 0xFFFF`), setzt `0x40FC90` den Angriffsbefehl. Ein Platz wird nie
+freigegeben — `+0x04 == 0` *ist* frei.
+
+**`craters`** beeinflussen die Simulation **nicht**: ausser Anlegen, Altern,
+Speichern und zwei Zeichnern gibt es keinen Leser. Alter beginnt bei
+`rand()%80 + 5`, steigt bei `Takt%10 == 4`, Schluss beim Überlauf von 255 —
+Lebensdauer **1720…2510 Takte**, genau **zwei** Bildstufen (`(Alter − 2)/130`).
+
+**`Mines and traps`** sind dreimal dieselben 60 Befehle. Eine Mine ruft die
+Trefferroutine; eine **Falle setzt `Einheit +0x20 = 0`** — sie hält an, sie
+verletzt nicht. Radare zählen bei `Takt%25 == 13` herunter: 255 · 25 =
+**6375 Takte**, und `unexplored` deckt für jedes lebende Radius 10 auf.
+⭐ **Ein toter Zufall:** `+0x02`/`+0x03` werden beim Aufstellen mit
+`rand()%20+10` bzw. `rand()%10+5` gefüllt und in **beiden** EXE von niemandem
+gelesen.
+
+**Das Gas** ist zweistufig: 50 Quellen stossen je **7 × 10 Wolken** aus; die
+Wolken driften mit Wind (Tafel `0x4FA560`, acht Einheitsvektoren ×100, in C und
+F byteidentisch), Geländegefälle (`0x4FA580`), Zerfall `v = v·19/20` und
+Dichteabstossung über eine 256×256-Karte, die jeder Takt neu aufbaut. Ein
+Treffer setzt `Einheit +0x2e = (rnd&3)+1`. ⚠ **Der grösste Zufallsverbrauch des
+ganzen Takts** — bei voller Tafel bis rund 28 000 Züge je Takt.
+
+**`Check AA`** wird aus dem Schiessen (`0x40DDB0` ← `Movement`) eingetragen,
+wenn `Einheit +0x0c == 0x26` (Flak). Vier Rohre, `+0x07 = 4` Schüsse, je Schuss
+ein 50-%-Tor und Streuung `30 − rnd%60`. Schaden
+`= ((rnd&3 + Schütze[+0x26]) − (rnd&3 + Flugzeug[+0x23])) / 2`.
+
+⚠ **Was auch dieser Befund NICHT belegt:** `Einheit +0x26` wird hier als
+Angriffswert benutzt, steht in `GAMESTATE_RE.md` aber als »category/role«.
+**Eine** Fundstelle ist nach unserer eigenen Regel kein Befund.
+
+---
+
+## U. Der »Wiederholungs-Prüfstand« — die Erwartung war falsch (21.08.2026)
+
+Abschnitt D führte als grössten ungelesenen Posten: »Das Original hat einen
+eigenen Determinismus-Prüfstand … Er schreibt je Takt **56 benannte Felder
+jeder Einheit** heraus und vergleicht sie beim Abspielen.« Daraus sollte die
+vollständige Feldliste kommen **und** ein Weg, unsere Simulation gegen den
+Originalmotor zu halten.
+
+**Beides trifft nicht zu, und das ist der Befund.**
+
+### Die 56 war ein Zufallstreffer
+
+Die Feldnamen stammen nicht aus einem Aufzeichner, sondern aus einer
+**Bildschirm-Einblendung**: `draw_text(x, y, "NAME:", Wert, Schrift)` zeigt die
+Felder **einer** Einheit — Index in `word[0x4FA0C8]`, Grenze `cmp ax,0x1F40`
+(8000). Sie schreibt nichts und vergleicht nichts.
+
+Die Zahl 56 kommt vermutlich aus einem **anderen** Zeichenkettennest: die
+Ablaufspur-Senke hat ihr dichtestes Vorkommen mit n = 56 in beiden Bauten bei
+C `0x416191..0x416BCD` — das sind aber Hauptschleifen-Marken (`Start
+Main_funct`, `CPU`, `Power`, `Search`), nicht Feldnamen.
+
+Der echte Feldausgeber liegt bei **C `0x416E4E..0x417CF2`** (F `0x416C8A`,
+Abstand durchgehend `0x1C4`): **64 Pushes** = 4 Kopfmarken + **60 Feld-Pushes**
+= **59 verschiedene Namen**, davon **37 Versätze in den Einheitensatz**.
+
+### Was das für `ENTITY_FELDER.md` heisst
+
+⭐ **Keine einzige Widersprüchlichkeit bei den Versätzen** — alle 37 stimmen,
+darunter `+0x02`/`+0x03` als Fahrwerk/Rohr, `+0x3D = RELOAD`, `+0x0F =
+l_engine` und die exp-Formel `(byte[+0x28]<<8) | byte[+0x4C]`.
+
+Falsch sind die **Zahlen und drei Zuschreibungen**:
+
+* »56 Namen« → **59** verschiedene, 60 Pushes · »46 Versätze« → **37**
+* `ANIM` ist **bindbar**: `byte[+0x11] & 7`, dasselbe Byte wie `ANIM_SPODEK`.
+  Die Doku führt es unter »nicht bindbar«.
+* `pin` existiert in diesem Zeichenkettenvorrat **gar nicht**.
+* **Neu: Vorzeichen.** `SMX`/`SMY` sind vorzeichenbehaftete `i8`,
+  `KOLIK`/`NABYTO`/`speed` sind `i16` (`movsx`).
+* Die sechs namenlosen Zeilen der Doku (`+0x08 Hp`, `+0x0A Gattung`,
+  `+0x26 Attack`, `+0x27 Defence`, `+0x29 HpMax`, `+0x2E Sprit`) fasst der
+  Ausgeber **nicht an** — sie bleiben durch diese Quelle unbelegt.
+
+### ⚠ Zu `trans` (+0x40): kein Widerspruch, sondern zwei Tafeln
+
+Der Bericht las: `if (byte[+0x0C] == 0x2E) idx = word[+0x40]`, Index in einen
+**18-Byte-Nebensatz** bei C `0x77AC50` (`zdroj0-3`, `cil`, `weap`, `chas`,
+`spec`, `anga`, `sklad`, `max_sklad`, `robot`, `activ`, `jedu`, `dalsi`) — und
+schloss daraus, `+0x40` sei »kein Transport«.
+
+**Das gilt so nicht.** Der Zugriff hängt an `+0x0C == 0x2E`; für diese eine
+Einheitenart zeigt `+0x40` dorthin. Unsere Transportdeutung steht unabhängig
+davon: die Laderoutine `0x4CEE80` liest `byte[Träger·78 + 0x6E2708]` = `+0x40`
+als Satznummer in die Transporttafel, und das ist über **beide Datenträger**
+gemessen (30 gültige Sätze, 65 geladene Einheiten, 0 Zeiger auf einen fremden
+Satz). **`+0x40` ist ein Verweis, dessen Tafel von der Einheitenart abhängt** —
+beides ist wahr.
+
+### ⭐ Aufzeichnen geht, Abspielen gibt es nicht
+
+**Einschalten** ist gelesen: im Spiel **`ENABLEDEVEL`** tippen (Schummeltafel
+C `0x4FA100`, Schrittweite 21, Index 12 → `0x43AF28`, meldet »Developers'
+cheats enabled«). Danach schaltet **`K`** die Feldeinblendung um
+(`byte[0x4F6FB4]`), und **`Z`** sendet Opcode **976**.
+
+Das Aufzeichnen selbst hängt an **Opcode 975** → C `0x4C3F52` → `0x4C2090`
+(`Modus = 1`, `replay.beg` speichern, `.mes`/`.txt` leeren). ⚠ **975 wird
+nirgends erzeugt** — kein Schreiber in beiden Bauten. Erreichbar nur über einen
+Zweibyte-Eingriff `976 → 975` (Dateiversatz `0x12DFC` in C, `0x12BB1` in F,
+je `d0 03` → `cf 03`).
+
+⚠⚠ **ABSPIELEN IST IN BEIDEN AUSGELIEFERTEN BAUTEN UNFERTIG.**
+`mov byte[Modus],2` (C `0x4C2100`) hat **null Aufrufer** und wird auch als
+dword nirgends referenziert. Der von ihr geöffnete `FILE*` hat 12 Fundstellen,
+und **keine einzige liest** — ein `fread` von `replay.mes` existiert nicht.
+Der Modus-2-Zweig führt statt dessen in den **Netzwerk**-Empfänger.
+
+**Damit ist die Hoffnung aus Abschnitt D erledigt:** es gibt keinen Weg, unsere
+Simulation gegen den Ausgang des Originalmotors laufen zu lassen. Der
+Prüfstand, den wir uns davon versprochen haben, ist im Original selbst nie
+fertig geworden. `game.007` bleibt die einzige zweite Quelle.
+
+### Der Befehlssatz, nebenbei bestätigt
+
+Die 236 Byte: `+0x00` Opcode (i16), `+0x02` Merker, `+0x04` Fälligkeit (i32),
+**`+0x08..+0x18` neun Parameterwörter**, `+0x22` Takt, `+0x24` ein Feld mit
+16 Fundstellen, **alle Zeichenkettenkopien**. Unser `CommandRecord` führt genau
+diese Aufteilung samt der Lücke von P11 bis P15 — ⭐ neu ist der Hinweis, dass
+`+0x24` (»P15«) ein **Textfeld** sein dürfte. Das passt zu den Nummern, die es
+benutzen: 505, 533 und 30 — Gruppen- und Lokatorfenster nehmen einen **Namen**
+entgegen. Nachgelesen ist die Deutung noch nicht.
+
+⚠ `replay.mes` bekommt nur Opcodes **unter 800** (`cmp word[esi],0x320` bei
+C `0x4C25E0` — die in Abschnitt D genannte Adresse `0x4C20A4` war eine
+F-Adresse).
+---
+
+## V. `SPR.DAT` und `MARK.CWK` — beide gelesen (21.08.2026)
+
+Zwei Dateien, die im Baum **null Codestellen** hatten. Eine ist fast ganz tot,
+die andere quicklebendig — und beide berichtigen `CAB_ASSETS_RE.md`.
+
+### `SPR.DAT` — die Ersatzkachel-Bank, und 34 von 35 Bildern sind tot
+
+`F:\Akte Europa\SPR.DAT`, **31 048 B**; im Kabinett `D:\DATA1.CAB` als Eintrag
+32 von 38 mit derselben Sollgrösse. ⚠ Das CAB ist ein **InstallShield-5**-Archiv
+(`ISc(`), kein MS-CAB — `expand.exe` kann es nicht.
+
+**Behälterformat**, belegt an Grössen- (C `0x4ABEA0`) und Ladefunktion
+(C `0x4ABC00`):
+
+| Versatz | Breite | Bedeutung |
+|---|---|---|
+| `+0` | 3 B | Magie `"MSF"` (`strcmp` gegen `0x504068`) |
+| `+3` | u16 | **Anzahl Slots = 57** |
+| `+5` | n×u32 | Versatztabelle, blobrelativ; `0xFFFFFFFF` = leer |
+| `+233` | — | Blobanfang |
+
+Satzgrösse ist `tab[i+1] − tab[i]`. Der Inhalt ist ein CWR-Bild: `+0` Zeilen,
+`+1` yoff, dann je Zeile `[count][leftoff][mode]` und `count` Palettenbytes,
+Zeilenschritt `count+3`, Schluss `58 58 58`.
+
+**Gemessen über alle Einträge:** 57 Slots, **35 belegt**, 22 leer. 33 der 35
+sind messbar — **33 von 33** decodieren sauber, **33 von 33** enden auf
+`58 58 58`, **33 von 33** sind **40 px breit**.
+
+⭐ **Gelesen wird davon genau EIN Eintrag: Nummer 19.** Ein Abtast aller Dwords
+in `.text`, die ins Zeigerfeld `0xB0E188` fallen, findet dort nur den
+schreibenden Zugriff des Laders — und als einzige Leser zwei feste Zugriffe auf
+`0xB0E1D4` = `0xB0E188 + 19·4`. Beide sind der Zweig *»die Kachelnummer ist
+0xFFFF«* im Geländezeichner (C `0x4B42AB` und `0x4B44C0`). Die Umgebung
+bestätigt die Masse: Kachelschritt `add eax,0x28` = **40** = die gemessene
+Bildbreite, `sub ebp,0x32` = **50** = das gemessene yoff.
+
+**Also: `SPR.DAT` ist die Ersatzkachel des Geländezeichners.** Von 35
+vorhandenen Bildern sind **34 tot** — 26 werden geladen und nie gelesen, 8
+werden nicht einmal geladen, denn der Lader läuft nur bis Index 37
+(`cmp esi,0x26`, in beiden EXE).
+
+⭐ **Und ein echter Fehler des Originals:** für `i = 26` (und 45) ist der
+Folgeversatz `0xFFFFFFFF`, die Grösse wird damit zu `0xFFFFA4C9` statt 865. Die
+Grössenfunktion prüft nur `tab[i]` auf −1, nie `tab[i+1]` — in **beiden** EXE
+gleich. Das ist der zweite belegte Originalfehler überhaupt (nach M5s `jge`).
+
+Nebenbei: die Fehlermeldungen des Behälters sind **tschechisch** —
+`"soubor nenalezen"`, `"Neni to MSF"`, `"Chybny index sprajtu"`. ⚠ Das ist
+**kein** Hinweis auf einen tschechischen Entwickler; dieser Fehlschluss ist im
+Projekt schon einmal gezogen und zurückgenommen worden.
+
+### `MARK.CWK` — die Punktschablone für Bodenspuren, und sie lebt
+
+640 B, Lader C `0x4A9740`: `fread(0x9C96C8, 1, 0x280, f)` — ganze Datei, kein
+Kopf, **genau ein Aufrufer** in beiden EXE.
+
+⚠ **Die naheliegende Deutung »320 Bytepaare« trifft die Byteanzahl, verfehlt
+aber die Gliederung.** Belegt am Leser (C `0x42D320…0x42D3B3`, in F Befehl für
+Befehl gleich):
+
+```
+640 B = 5 Bodenarten × 8 Richtungen × 8 Punkte × (u8 dx, u8 dy)
+      = 40 Gruppen zu 16 Byte
+```
+
+* `k` = 0…7 (`inc di; cmp di,8; jl`)
+* `G = Bodenbasis + Richtung`, `G·8` (`shl eax,3`)
+* **Bodenbasis** = `byte[0x4FA4D8 + 2·t]`, `t` = Bodenbyte der Karte. Für
+  `t = 0…4` sind die Werte **0, 16, 32, 8, 24** — genau die fünf Achtergrenzen.
+* **Richtung** = `Markensatz[+2] & 0x7F`
+
+Gemessen: dx 9…41, dy 10…38 — beides innerhalb einer 40-px-Kachel, was zur
+SPR-Kachelbreite passt.
+
+**Wozu:** Objektart 19 des Anzeigelisten-Zeichners setzt je Marke **acht
+Bildpunkte**. Der *vorhandene* Bildpunkt wird gelesen, über die 256-Byte-Tafel
+`0xB135B0` abgedunkelt und zurückgeschrieben — **die Datei enthält keine Farben
+und kein Bild**, sie verdunkelt den Boden darunter. Dazu ein **Zittern** von ±2
+aus der EXE-Tafel `0x5029B0` (in beiden EXE byteidentisch).
+
+Der Markenspeicher: `0x9CB0B8`, **13 Byte je Satz, 500 × 40 = 20 000 Sätze**.
+Anlegen: Platz = `rand()%40`, `+4` = **180** Takte Lebensdauer; das Abklingen
+senkt `+4` je Durchlauf um eins.
+
+**Also: vergängliche Bodenspuren** — Fahr- und Kettenspuren, Brandflecke, deren
+Punktmuster von **Bodenart und Fahrtrichtung** abhängt.
+
+### ⚠ Zwei Berichtigungen an `CAB_ASSETS_RE.md`
+
+1. **`SPR.DAT`:** dort steht »`MSF9` tagged container«, Tabelle bei `+9`, 38
+   Einträge. Richtig: die Magie ist **3 Byte** `"MSF"` — das `'9'` ist
+   `0x39` = **57**, das niedrige Byte des Zählers. Die Tabelle steht bei
+   **`+5`** (`tab[0] = 0` wurde übersehen) und hat **57** Einträge; 38 ist die
+   Schleifengrenze des *Laders*. Die dort vermutete »per-sub metadata region
+   0x161..0x361« gibt es nicht — das ist der Rumpf von Teilbild 0. Damit ist
+   die dortige offene Frage 1 (»per-sub raster dimensions unresolved«)
+   **erledigt**: alle Bilder sind 40 px breit.
+2. **`MARK.CWK`:** dort steht »colour from an in-exe table `0x5029B0`«. Die
+   **Farbaussage ist falsch** — `0x5029B0` ist die ±2-Zittertafel; die Farbe
+   kommt aus `0xB135B0`, angewandt auf den bereits vorhandenen Bildpunkt.
+
+### Was auch hier offen bleibt
+
+* **Welches SPR-Bild welche Kachel ist** — nicht auflösbar, solange 34 von 35
+  nie gelesen werden; das ginge nur durchs Ansehen.
+* Was die Bodenarten `t = 0…4` **heissen** (die Zuordnung zu den Blöcken ist
+  gelesen, die Namen nicht). Ab `t = 5` liefert `0x4FA4D8` unter anderem
+  **100** — `G = 100 + Richtung` läge weit hinter dem Dateiende; die Tafel wird
+  offenbar noch für etwas anderes mitbenutzt.
+* Vom 13-Byte-Markensatz sind nur `+0…+5` verfolgt.
+
+---
+
+## W. ⭐ Die KI-Dateien `AI*.CWI` sind gelesen (21.08.2026)
+
+Der grösste ungelesene Block des Projekts. 43 Dateien à 2968 B — und sie sind
+**keine** Bau- oder Wellensteuerung, sondern die **strategische Wegekarte der
+KI**: ein 11×11-Sektorennetz über der Karte, dessen Kanten von **Brücken**
+abhängen.
+
+### Der Teiler geht auf: 2000 + 484 + 484 = 2968
+
+Am Lader abgelesen (C `0x41CB00`, `push 0x7d0 / push 0x1e4 / push 0x1e4`),
+Ziele C `0x542330 / 0x541F60 / 0x542148` — **C = F + 0xFA0 in allen dreien**.
+
+Der Dateiname entsteht als `"ai" + (Mission < 10 ? "0") + Missionsnummer +
+".cwi"`; das Laufwerk hängt an der Mission (< 16 → CD1, 16…39 → CD2).
+
+| Block | Datei | Form | Inhalt |
+|---|---|---|---|
+| **A** | `0x0000–0x07CF` | 400 × 5 | Brückenregeln |
+| **B** | `0x07D0–0x09B3` | 2 × 121 × 2 | Ankerpunkt je Sektor |
+| **C** | `0x09B4–0x0B97` | 2 × 121 × 2 | Kanten offen/zu |
+
+**Block A**, je Satz: `+0x00` X der Brückenzelle (0 = frei), `+0x01` Y,
+`+0x02` Sektor-X = X/24, `+0x03` Sektor-Y = Y/24, `+0x04` Richtung
+(0 = Kante zu Sektor+11, 1 = zu Sektor+1). Die Regel feuert nur, wenn
+`byte[0x542E18 + (X<<8) + Y]` in **100…199** liegt — also **wenn dort eine
+Brücke steht**.
+
+**Block B**: `+0` Ankerpunkt X, `+1` Y, `0xFF` = Sektor unbenutzt. Knotenindex
+= SektorX·11 + SektorY; Sektorkante **24** Felder (`div cl` mit `cl = 0x18`).
+
+**Block C**: je Sektor zwei Kantenbytes. **Ebene 1 ist die unversehrte
+Fassung** — `restore` kopiert sie nach Ebene 0 zurück, dann läuft `apply`.
+
+### Was die Datei bewirkt
+
+Der einzige Laufzeitleser von Block C ist ein **Dijkstra über die 121
+Sektoren** (C `0x4BEAE0`, Kostenfeld `0xB45FB0`). Der einzige Leser von Block B
+schickt die Angriffsgruppe der KI mit **Busbefehl 3 (BEWEGEN)** auf den
+Ankerpunkt ± `(rand&7 − 4)`. Die Protokollstationen daneben heissen
+`get target in sector`, `Attack group not available`, `Take all`,
+`Enough units`.
+
+⭐ **Und die Bedingung ist die Brücke.** `restore+apply` wird ausserhalb des
+Laders von genau zwei Stellen gerufen: die eine steht unmittelbar vor der
+Protokollzeile **»end erase bridge«**, die andere am Ende der Gegenroutine, die
+das Liniengitter stempelt. **Wird eine Brücke zerschossen, fällt die
+Sektorkante weg und die KI marschiert anders.**
+
+### Die Zahlen
+
+* 17 200 Plätze angesehen, **475 belegt**. `+0x02`/`+0x03` decken alle 11
+  Werte ab, `+0x04` ∈ {0,1} (254/221).
+* **475/475** zeigen auf einen benutzten Gitterknoten. **475/475** zielen auf
+  eine Kante, die in Block C **0** ist — die Sätze **öffnen ausschliesslich**.
+* 2162 von 5203 Knotenplätzen belegt, **nie halb** (0 Mischfälle).
+  **2162/2162** erfüllen X/24 = Index/11 und Y/24 = Index%11.
+* **Ebene 1 von Block B ist in 43/43 Dateien vollständig 0.**
+* Gegenprobe an den Karten (Sektion 20, 41 Karten, 457 Regelzellen): der Wert
+  ist **entweder 0 oder 100…120 — nie etwas anderes**, obwohl dasselbe Gitter
+  sonst 1…60 (Bahnlinien) führt. ⭐ Das bestätigt **Abschnitt N** von einer
+  ganz anderen Seite: `Code = 100 + Brückennummer`.
+
+### Die Zuordnung
+
+**AI01…AI33 ↔ Missionen 1…33**, **AI51…AI58 ↔ NET01…NET08**; `AI00` und `AI34`
+haben auf keiner CD eine Karte. 33 + 8 + 2 = 43 ✔
+
+Härteste Zahl: für alle 41 zuordenbaren Dateien liegt **jeder** benutzte
+Knoten im Sektorrechteck der zugehörigen Karte (0 Ausreisser), und in 18 von 41
+ist die Knotenzahl exakt ⌈W/24⌉·⌈H/24⌉. Die 16 auf beiden CDs doppelt
+liegenden Dateien sind byteweise identisch und entsprechen genau den
+Missionsnummern der `.DM`-Karten.
+
+⚠ **`0x41C850` ist kein Lader, sondern der ERZEUGER**: fehlt die CD-Datei,
+scannt das Spiel die Karte selbst und **schreibt die Datei mit `"wb"`**.
+
+### Was auch hier offen bleibt
+
+* **Block B, Ebene 1** ist in allen 43 Dateien null; das Format hat Platz für
+  einen zweiten Ankersatz, ein Leser dafür ist nicht aufgetaucht.
+* Woher das Byte kommt, das der Brückenbauer ins Liniengitter stempelt —
+  »Code = 100 + Brückennummer« ist aus den **Kartendaten** erschlossen, nicht
+  am Code abgelesen.
+* Warum 288 der 457 Regelzellen in der ausgelieferten Karte 0 lesen.
+  Verträglich mit »die Brücke muss erst gebaut werden«, aber unbeobachtet.
+
+---
+
+## X. `game.007` als zweite Quelle — vierzehn Widersprüche (21.08.2026)
+
+Der Spielstand liest sich restlos: **131 Abschnitte, 0 Byte Rest**, Mission 1,
+42×72 — dieselbe Karte wie `01.CWM`. Von 76 geprüften Kartendateien schaffen
+das nur `1.DM` und `game.007`.
+
+⚠ **Der Wert dieser Prüfung liegt in dem, was sie WIDERLEGT.** Alle folgenden
+Punkte sind Befunde gegen unsere **eigenen** Dokumente. Sie sind aus den Daten
+gemessen und **nicht** gegen die zwei GAME.EXE gegengelesen — wer danach baut,
+liest erst nach.
+
+### Die zwei, die am meisten wehtun
+
+**W1 — die Tafel »unit_type → hp_max« in `GAMESTATE_RE.md` §2 ist die
+`fuel_max`-Tafel.** Über 192 belegte Einheitensätze: gegen `+0x29`
+(energie_max) **0 Treffer, 172 Widersprüche**, und die Zuordnung ist nicht
+einmal eindeutig. Gegen `+0x30` (fuel_max) sind **14 von 14** Schlüsseln
+eindeutig und 12 von 12 gemeinsamen Typen exakt getroffen.
+⭐ **Folge:** »148, 149 = non-combat (scenery/waypoint)« ist falsch — es sind
+**Infanteristen** (`+0x0d` = 190 = die Infanteriewaffe). ✔ Unser *Spielcode*
+führt sie längst richtig (`d.Propulsion is 148 or 149 → infOwn++`); der Fehler
+steckt allein im RE-Dokument.
+
+**W8 — `GAMESTATE_RE.md` §3.8 trägt oben noch die ZURÜCKGEZOGENE Satzform**
+(»4-Byte-Kopf + 255 Sätze bei `4 + 76·k`«), während §3.86 sie längst zugunsten
+von `76·k` und 300 Sätzen widerruft. Gegenprobe: mit `76·k` liegen **0 von
+3545** Gebäuden ausserhalb der Karte. **Wer §3.8 von oben liest, baut den
+Fehler nach.**
+
+### Die übrigen zwölf, knapp
+
+| | Behauptung | Messung |
+|---|---|---|
+| W2 | `+0x08 == +0x29` als Blickrichtungs-Kandidat | 24 von 28 `<`, 0 `>` — es ist Leben/Höchstleben, Kandidat erledigt |
+| W3 | `+0x0f`: »Rumpftypen 160…175« | **66 von 192** ausserhalb (148, 149, 153, 158) |
+| W4 | `+0x14`: »kleiner Index < 0x1e« | **14 von 192** darüber, UKOL 100 und 54 |
+| W5 | `+0x26` = »category/role« gegen »Attack« | **18 von 192** ausserhalb der genannten Menge; **keine** der 58 Bauteilspalten reproduziert es. **Ungeklärt** |
+| W6 | `+0x06 KOLIK`: »Zähler bis 80« | vorzeichenbehaftet, **−112…+119** |
+| W7 | Gebäudebesitzer `sec3 +0x05` 0…7/0xFF | **1006 von 3545** tragen **11** |
+| W9 | `+0x40` = sec37-Zeiger | `1.DM`: sec37 **restlos null**, aber 19 Einheiten mit `+0x40` ∈ 1…18. Ein Vorfilter »`+0x40 != 0`« ist an beiden Enden falsch |
+| W10 | sec16 `+0x00` u16 Anzahl, »445 von 445« | u8 trifft 93,9 %, u16 85,9 % — **keine** Lesart ist ausnahmefrei |
+| W11 | §3.80 »belegte Plätze == `cis_typ`-Menge« | `1.DM`: 16 gegen 15 |
+| W12 | §3.87 »kein y ausserhalb 0..2H« | **3** Waggons mit y = 146/148 gegen 2H = 144 |
+| W13 | sec119/120 Namen | **sprachabhängig** — `game.007` deutsch, `1.DM` englisch |
+| W14 | `+0x08/+0x29/+0x2E/+0x30` »echt ungelesen« | alle vier sind in `GAMESTATE_RE` benannt |
+
+### ⭐ Ein neuer Befund nebenbei: sec100 ist die ENGLISCHE Bauteiltafel
+
+sec46 und sec100 sind beide 92 800 B = 1600 × 58 und zu **84,5 %** byteweise
+gleich. In `game.007` ist sec46 deutsch (Kanone, S.Kanone, SchallKmp.) und
+sec100 englisch (Cannon, H-Cannon, Radiator); in `1.DM` sind **beide**
+englisch. **sec46 ist die lokalisierte Kopie, sec100 die englische** — und
+sec100 wird bei uns gar nicht gelesen. Praktische Folge: **jede namensbasierte
+Gegenprobe gegen sec46 ist über Dateien hinweg nicht stabil.**
+
+### Was die Prüfung BESTÄTIGT hat
+
+* `ZBRAN = VRSEK − 20`: **110 von 132**, die 22 Ausnahmen sind genau die
+  ausgenommenen Bereiche — unabhängige Bestätigung von der Datenseite.
+* `exp = (byte[+0x28]<<8) | byte[+0x4C]`: frische Karte 0 von 37 ungleich null,
+  gespielter Stand **16 von 28**, Höchstwert **466** — nur erreichbar, wenn
+  `+0x28` das obere Byte ist.
+* `+0x09 == 0xFF` als leerer Platz: 0 Gegenbeispiele. ⚠ Der höchste Wert bei
+  einer lebenden Einheit ist **194** — der Abstand zu 0xFF ist nur 61.
+* `+0x34/+0x36` sind **u16**-Griffe, nicht Byte.
+* sec2 3024 Zellen alle in {0,1,2,3}; sec6 25 Griffe, alle lebend; sec20
+  **15 von 15** Lagenbytes 100 gegen genau eine Brücke in sec17; sec53
+  Bündnismatrix symmetrisch 64 von 64; sec47 **alle 592** Entwürfe mit
+  lesbarem cp437-Namen.
+
+### Die lohnendsten ungedeuteten Abschnitte
+
+Gemessen als »Byte, die vom häufigsten Füllbyte abweichen«: **sec51** (131 072,
+davon 65 617 aussagend, 256×256 u16), **sec39** (260 000 / 41 506, 32 500 × 8),
+**sec42** (20 000 / 7 709) und **sec52** — ein **zweites Griffgitter**
+256×256 u16 mit Füllung `0xFFFF` statt `0xFFFC`, das in 24 von 25 Zellen mit
+sec6 übereinstimmt. Insgesamt **42 belegte Abschnitte ohne volle Deutung**.
