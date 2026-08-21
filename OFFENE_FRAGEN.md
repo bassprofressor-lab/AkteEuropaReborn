@@ -6145,6 +6145,104 @@ Gegner in eine andere Betriebsart.** Zu tun ist zweierlei:
    eigenem Gebäude (der Wert, der im Original 311 von 324 Fällen ausmacht), in
    der Kampagne 0. **Die Ersatzregel ist unsere, nicht die des Originals.**
 
+
+### AV.19 Adressverzeichnis zur Hauptschleife
+
+⚠ **Warum es hier steht.** Beim Verdichten des Laufs sind die meisten
+Funktionsadressen weggefallen — der Text las sich besser und war schlechter zu
+benutzen. `funktionen.py` hat es sofort gezeigt: `Flip pages`, `Get run begin`,
+`JOJO`, `Achtung` und `pratelsky, cis:` galten weiter als »nirgends erwähnt«,
+obwohl sie oben beschrieben sind. **Dieselbe Lektion wie bei AQ, und sie gilt
+weiter: eine Zusammenfassung ohne Adressen ist eine Erzählung, kein
+Nachschlagewerk.**
+
+| Was | C | F | Grösse |
+|---|---|---|---|
+| **`WinMain`** (Nachrichtenschleife) | `0x414E20…0x4156C2` | `0x414C60…0x4154FE` | 2210 / 2206 B |
+| **`WndProc`** (Fensterverfahren) | `0x412E30…0x414774` | `0x412C00…0x41459C` | ⚠ 6468 / 6556 B (Sprungtafel hinter dem `ret`) |
+| **`Main_funct`** (ein Bild) | `0x415CF0…0x417EF9` | `0x415B30…0x417D35` | 8713 / 8709 B |
+| `WM_TIMER`-Arm | `0x414010` | `0x413E25` | 4 Befehle |
+| **`flip_ddraw`** | `0x415CB0…0x415CE3` | `0x415AF0…0x415B23` | 51 B |
+| **`bildpuffer_leeren`** | `0x419250…0x4192CB` | `0x419090…0x41910B` | 123 B |
+| **`Flip pages`** (eigenständiges Bild) | `0x4192F0…0x419374` | `0x419130…0x4191B4` | 132 B |
+| **`Get run begin`** (Netzstart) | `0x4193A0…0x41992B` | `0x4191E0…0x41976B` | 1419 B |
+| `doInit 1` | `0x4158F0…0x415BE8` | `0x415730…0x415A28` | 760 B |
+| `Multi:` (Gefechtskarten einlesen) | `0x418DE0…0x419169` | `0x418C20…0x418FA9` | 905 B |
+| `MEMORY INFO` | `0x418BB0…0x418CAC` | `0x4189F0…0x418AEC` | 252 B |
+| ⭐ `CWorms Player` (DirectPlay) | `0x403B60…0x403CF4` | `0x403B40…0x403CD4` | 404 B |
+| ⭐ `JOJO` (unerreichbar) | `0x428EC0…0x428ED5` | `0x4280B0…0x4280C5` | 21 B |
+| `Search:` (Wegsuche je Takt) | `0x4D3810…0x4D4658` | `0x4D33A0…0x4D41E8` | 3656 B |
+| `Message-buffer is full!!!!` | `0x4C5F50…0x4C631D` | `0x4C5B00…0x4C5ECD` | 973 B |
+| `0.tmp` (Vollabgleich, **tot**) | `0x4C5C30…0x4C5EA5` | `0x4C57E0…0x4C5A55` | 629 B |
+| `d:\screen.bmp` **lebend** | `0x418B00…0x418B89` | `0x418940…0x4189C9` | 137 B |
+| `d:\screen.bmp` **tot** | `0x4226C0…0x422AC8` | `0x421880…0x421C8C` | 1032 / 1036 B |
+| **`spielstand_schreiben(name)`** | `0x41D210` | `0x41C3D0` | 2934 B |
+| `ring_weiter(&idx)` (Umlauf 1000) | `0x4C2070…0x4C2089` | `0x4C1B30…0x4C1B49` | 25 B |
+| `cd_stop()` (MCI_STOP) | `0x4D50C0` | `0x4D4C50` | 41 B |
+| `cd_close()` (MCI_CLOSE) | `0x4D4F70` | `0x4D4B00` | 31 B |
+| `palette_animieren(primär)` | `0x4B5BF0…0x4B5C44` | `0x4B5520…` | 84 B |
+| Taste **I** (Einheiten-Auszug) | `0x413622` | `0x4133F2` | — |
+| Taste **F11** | `0x413DDC` | `0x413BF1` | — |
+| Taste **Strg+R** (`c:\cw_log.txt`) | `0x413708` | `0x4134D8` | — |
+| ⭐ Taste **ROLLEN** (Bildschirmfoto) | `0x413E2E` | `0x413C43` | — |
+| `WM_KEYDOWN`-Kopf / `WM_KEYUP` | `0x412F97` / `0x413E45` | `0x412D67` | — |
+| Befehlsbus-Verteiler | `0x4C2280` | `0x4C1D40` | 11 601 B |
+| » Geschwindigkeitsdeckel `0x14` | `0x4C4420` | — | — |
+| » Geschwindigkeit setzen | `0x4C443E`, `0x4C444E` | — | — |
+| Vollabgleich absenden | `0x4C2160` | — | — |
+| »Error reading network message« | `0x404480` | — | — |
+| Fortschrittsbalken | `0x444180` | — | — |
+| `pratelsky, cis:` (Aufrufer der Freund/Feind-Probe) | `0x4054D0` | `0x4054B0` | — |
+| `Achtung` (Meldungsfenster) | `0x418CF0` | `0x418B30` | — |
+| `Selected level not found!` | `0x419A90` | — | — |
+| `There is no place to appear` | `0x419B20` | — | — |
+| `Cannot add more probr structures` | `0x41C180` | — | — |
+| `Internal error: No group selected` | `0x436910` | — | — |
+| `Out of map!` | `0x43A1B0` | — | — |
+| `Developers' cheats disabled` | `0x43AE50`, Umschalter `0x43AF5A` | — | — |
+| `Drücken Sie Alt-F4 zum Beenden` (CD-Laufwerksbuchstabe) | `0x43B580` | — | — |
+| `error 4` | `0x43BF00` | — | — |
+| `Place encyc` | `0x442B30` | — | — |
+| `Post quit message` | `0x4AA1E0` | — | — |
+| `Error!!!!` | `0x4ABDB0` | — | — |
+| `handle is null` / `createcompatible dc failed` | `0x4C8400` / `0x4C84B0` | — | — |
+| `status playerSnd position` / `open sequencer!%s alias playerSnd` | `0x4D5600` / `0x4D5660` | — | — |
+
+**Veränderliche**
+
+| Was | C | F |
+|---|---|---|
+| Zeitgeberzähler (WM_TIMER) | `byte[0x53920C]` | `byte[0x538244]` |
+| ⭐ **Zwangstakt-Schalter** (Anfangswert **1**) | `byte[0x4F6FB0]` | `byte[0x4F5FAC]` |
+| Taktfreigabe | `byte[0x4F7F60]` | `byte[0x4F6F40]` |
+| ⭐ **Spielgeschwindigkeit** (Durchläufe je Bild) | `byte[0x4FA23C]` | `byte[0x4F9244]` |
+| Takte seit Missionsbeginn | `dword[0x4FA240]` | `dword[0x4F9248]` |
+| Pause-/Endewort | `word[0x4FA280]` | `word[0x4F9288]` |
+| Netzspiel/Determinismus | `dword[0x539234]` | — |
+| Bildzähler / letzte Messsekunde | `dword[0x54074C]` / `dword[0x540724]` | `dword[0x53F7AC]` / `dword[0x53F784]` |
+| ⭐ **gemessene Bilder/s** (nirgends gelesen) | `dword[0x54072C]` | `dword[0x53F78C]` |
+| primäre DD-Oberfläche / Rückpuffer | `dword[0x540770]` / `dword[0x540744]` | `dword[0x53F7D0]` / `dword[0x53F7A4]` |
+| `IDirectDraw`-Objekt / Fensterkennung | `dword[0x540730]` / `dword[0x540748]` | `dword[0x53F790]` / `dword[0x53F7A8]` |
+| Breite / Höhe des Puffers | `dword[0x5387C8]` / `dword[0x5387CC]` | — |
+| Tastenzustandsfeld, 256 B | `0xA182E8` | `0xA17348` |
+| Tastenindextafel (137 B) / Sprungtafel | `0x414644` / `0x4145A4` (40 Arme) | `0x414474` / `0x4143B4` (**48** Arme) |
+| Befehlsring (1000 × 236 B) | `0xB509D8` | `0xB4FA38` |
+| Ring-Zeiger schreiben / füllen / ausführen | `word[0x539254]` / `[0x539258]` / `[0x53925C]` | — / `[0x538290]` / `[0x538294]` |
+| Kratzbefehl (236 B) / Spielerflaggen (8 B) | `0xB8A3D8` / `0xB8A3B8` | `0xB89438` / `0xB89418` |
+| Wegsuch-Auftragsring (u16 / u8) | `0xBDA0E8` / `0xBDA8C0` | `0xBD9148` / `0xBD9920` |
+| Wegsuche schreib / lese | `word[0x539B10]` / `[0x539B14]` | `word[0x538B78]` / `[0x538B7C]` |
+| Wegsuchzähler / Sekundenkopie | `dword[0xBCA010]` / `dword[0x539B18]` | — |
+| Gefechtskartentafel (20 × 50 B) | `0x5407A8` | `0x53F808` |
+| deutsche Kartennamen (21 B je Eintrag) | `0x4F805B` | `0x4F703B` |
+| `MEMORYSTATUS` | `0xB97AB0` | `0xB96B10` |
+| DirectPlay-GUID | `0x4F01C0` | `0x4EF1C0` |
+| Entwicklerschalter | `byte[0x4FA0C0]` | `byte[0x4F90C8]` |
+| eigene Spielernummer | `byte[0x4FA284]` | `byte[0x4F928C]` |
+| ⭐ `MEMORY INFO`-Schalter (**nie gesetzt**) | `byte[0x4F6FB8]` | `byte[0x4F5FB4]` |
+| Schalter des Einheiten-Auszugs (Taste I) | `dword[0x4F6FD0]` | `dword[0x4F5FCC]` |
+| Schalter der Taste F11 | `dword[0x4F6FCC]` | `dword[0x4F5FC8]` |
+| Einheitentafel (**8000 × 78 B**) | `0x6E26C8…0x77AC51` | — |
+
 ---
 
 ## AW. ⭐⭐ DIE FÜNF LETZTEN RÄTSEL DES DATEIFORMATS (21.08.2026)
@@ -6902,3 +7000,41 @@ nie ansieht.
    und weil die Nachbarzeile im selben Rumpf es anders macht.** Wo dieser zweite
    Halt fehlte, wurde nichts gemeldet — ein fünfter Durchfall (in `0x4407C0`)
    ist wirkungslos, weil beide Zweige dieselben Zahlen schreiben.
+
+---
+
+## AY. ⭐ DIE MESSLATTE, EHRLICHER: 47 % DER FUNKTIONEN, ABER 80 % DER BYTES
+
+`funktionen.py` zählt seit dem 21.08.2026 **zweierlei**, und die zwei Zahlen
+sagen Verschiedenes:
+
+```
+  Funktionen (ohne Thunks)        1107
+  davon mit eigener Marke          257   (23,2 %)
+  davon bei uns erwaehnt           521   (47,1 %)
+  ⭐ nach BYTES statt Stueck    689 264 / 861 488   (80,0 %)
+     ⭐ HOEHER als die Stueckquote: die Ungelesenen sind die KLEINEREN
+        (293 gegen 1322 Byte im Schnitt).
+```
+
+⭐ **Der grosse, tragende Code ist gelesen.** Was bleibt, sind **586 Funktionen
+mit 172 224 Byte** — im Schnitt 293 Byte, gegen 1322 Byte bei den gelesenen.
+⚠ **Klein heisst nicht unwichtig:** die Setzer des Missionsskripts (`sec61`,
+`sec77`, `sec106`) sind rund 20 Byte gross und tragen trotzdem ganze
+Verhaltensweisen.
+
+⚠ **Was auch die Bytequote nicht sagt:** eine *erwähnte* Adresse ist nicht
+dasselbe wie eine *verstandene* Funktion. Beide Zahlen sind **Obergrenzen**.
+Umgekehrt sind sie zu klein, wo etwas verstanden, die Adresse aber nie
+hingeschrieben wurde — genau dafür gibt es die Adressverzeichnisse AQ und AV.19.
+
+### ⚠ Und eine Lektion, die sich zum zweiten Mal gemeldet hat
+
+Nach dem Anhängen von Abschnitt AV stand die Quote bei 496 — obwohl AV die
+Hauptschleife, `Flip pages`, `Get run begin`, `JOJO` und `Achtung` ausführlich
+beschreibt. Der Grund war derselbe wie bei AQ: **beim Verdichten des Laufberichts
+sind die Adresstafeln weggefallen.** Das Nachtragen als AV.19 hat die Quote in
+einem Schritt von **496 auf 521** gehoben und die Zahl der »benannt, aber nie
+erwähnt« von **27 auf 7** gesenkt.
+
+> ⭐ **Regel: Ein Laufbericht darf verdichtet werden, seine Adresstafel nicht.**
