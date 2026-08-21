@@ -512,6 +512,191 @@ public partial class MapEntityLayer
     /// nicht gewählt.</summary>
     private const float FlammenSekunden = 2f / OriginalTicksPerSecond;
 
+    /// <summary>Der Schaden, mit dem der SETUP-Block einer Mission auf eine
+    /// Zelle schlägt. ⭐ <b>Gelesen, nicht gewählt:</b> der Angreifer der
+    /// SETUP-Liste ist <c>0x9C72</c> = 40050, und <c>Zasah</c> behandelt
+    /// 40000…40999 als reine SCHADENSZAHL (@0x40CC8B <c>add ax, 0x63C0</c>,
+    /// also Schaden = 40050 − 40000).</summary>
+    public const int SetupSchaden = 50;
+
+    /// <summary>Was aus einer getroffenen Waldzelle wird.</summary>
+    private enum Waldfolge
+    {
+        /// <summary>Kein Wald da, oder der Schaden war zu schwach.</summary>
+        Nichts,
+        /// <summary>Sie brennt.</summary>
+        Feuer,
+        /// <summary>Sie ist weg — <b>ohne</b> Feuer (»zrus«).</summary>
+        Weg,
+    }
+
+    /// <summary>
+    /// <b>DIE FÜNF SCHADENSBÄNDER</b> — @0x40D638…0x40D727, gebaut am
+    /// 21.08.2026. Hier stand bis dahin: »wir zünden unbedingt an, ⚠ NICHT
+    /// GEBAUT«.
+    ///
+    /// <code>
+    ///   &gt;= 70   der Wald wird OHNE Feuer geloescht ("zrus", 0x4CAD40)
+    ///   46..69  immer Feuer                          ("zapal A")
+    ///   23..45  Feuer mit Wahrscheinlichkeit 1/4     ("zapal B")
+    ///   13..22  Feuer mit 1/8                        ("zapal C")
+    ///   &lt;= 12   gar nichts
+    /// </code>
+    ///
+    /// <para>⚠ <b>Der Sonderfall:</b> ein Treffer von einer Einheit mit
+    /// <c>+0x0D == 12</c> setzt den Wert fest auf 60 — die fällt also immer ins
+    /// Band »immer Feuer«. Den bauen wir hier NICHT, weil unser einziger
+    /// Aufrufer der SETUP-Block ist und der keine schiessende Einheit kennt;
+    /// wer den allgemeinen Beschuss anschliesst, muss ihn mitnehmen.</para>
+    ///
+    /// <para>⚠ <b>Für unseren einzigen Weg ändert sich nichts</b>, und das ist
+    /// Absicht: der SETUP-Schaden ist gelesene <b>50</b> und fällt ins Band
+    /// »immer Feuer«. Die Bänder sind trotzdem gebaut, weil der Kommentar sonst
+    /// weiter behauptete, sie fehlten — und weil der nächste Aufrufer sie
+    /// braucht, nicht erst sucht.</para></summary>
+    private Waldfolge WaldTreffer(int col, int row, int schaden)
+    {
+        // ⚠ Die Grenzen sind EINSCHLIESSLICH, wie im Original: 70 loescht,
+        // 69 brennt, 46 brennt, 45 wuerfelt.
+        if (schaden <= 12) return Waldfolge.Nichts;
+        if (schaden >= 70) return WaldLoeschen(col, row) ? Waldfolge.Weg : Waldfolge.Nichts;
+        // ⚠⚠ HIER STAND EINE KETTE AUS ZWEI if, UND SIE WAR FALSCH:
+        //     if (schaden <= 22 && Roll(8) != 0) return Nichts;
+        //     if (schaden <= 45 && Roll(4) != 0) return Nichts;
+        // Ein Schaden im Band 13..22 lief durch BEIDE — 1/8 mal 1/4 = 1/32
+        // statt 1/8. Gefangen hat es --band-check mit 0,031 gegen 0,125.
+        // Die Baender sind AUSSCHLIESSEND, jedes wuerfelt genau einmal.
+        if (schaden <= 22) return Simulation.Determinism.Roll(8) == 0
+            && Anzuenden(col, row) ? Waldfolge.Feuer : Waldfolge.Nichts;
+        if (schaden <= 45) return Simulation.Determinism.Roll(4) == 0
+            && Anzuenden(col, row) ? Waldfolge.Feuer : Waldfolge.Nichts;
+        return Anzuenden(col, row) ? Waldfolge.Feuer : Waldfolge.Nichts;
+    }
+
+    /// <summary>
+    /// <b>»zrus«</b> — der Wald verschwindet <b>ohne</b> Feuer. C
+    /// <c>0x4CAD40</c>, F <c>0x4CA8F0</c>, am 21.08.2026 selbst gelesen.
+    ///
+    /// <para>Das Original tut genau vier Dinge, und keines davon ist Asche:</para>
+    /// <code>
+    ///   if (sec18[i].zustand != 1) return;      ; nur ein STEHENDER Baum
+    ///   b   = weltkarte[x][y].klassenbyte       ; +3, der Bodenbeiwert
+    ///   alt = weltkarte[x][y].kachel            ; +0
+    ///   neu = 0x288D + ((alt - 0x288D) % 57 / 19) * 19 + b
+    ///   weltkarte[x][y].kachel = neu            ; die BODENkachel derselben Gruppe
+    ///   sec18[i].zustand = 0                    ; der Satz ist frei
+    ///   imap[x*256 + y] = 0xFFFE                ; die Zelle ist BEGEHBAR
+    ///   zwei Nachbarzeilen neu zeichnen
+    /// </code>
+    ///
+    /// <para>⭐ Die Kachelrechnung ist keine Erfindung: der Kachelsatz ist in
+    /// Gruppen zu <b>57</b> geordnet, darin Blöcke zu <b>19</b>. Der Block
+    /// bleibt, die Stelle darin kommt aus dem <b>Klassenbyte der Zelle</b> —
+    /// also genau die Bodenkachel, die ohne den Baum dort läge. Dieselbe
+    /// Rechnung steht im Ausbrennen.</para>
+    ///
+    /// <para>⚠ <b>Unsere Umsetzung ist gröber</b>, und das gehört gesagt: wir
+    /// führen keine Kachelgruppen, sondern legen die Zelle als abgebrannt ohne
+    /// stehenden Rest hin (<see cref="Entity.Steht"/> falsch). Das Ergebnis
+    /// stimmt in dem, was das Spiel liest — die Zelle ist frei und begehbar —,
+    /// und weicht in dem ab, was man sieht: das Original zeigt den blanken
+    /// Boden, wir den Stumpf.</para></summary>
+    private bool WaldLoeschen(int col, int row)
+    {
+        bool ok = false;
+        foreach (var e in _objDraw)
+        {
+            if (e.Row != row || e.Col != col || !e.HatKohle || e.Abgebrannt) continue;
+            // ⚠ Nur ein STEHENDER Baum: das Original prüft `zustand == 1` und
+            // lässt einen brennenden in Ruhe.
+            if (e.BrandVon >= 0f) continue;
+            e.Abgebrannt = true;
+            e.Steht = false;
+            ok = true;
+            GD.Print($"wald: ({col},{row}) durch starken Schaden geloescht — "
+                     + "OHNE Feuer (zrus, imap 0xFFFE)");
+        }
+        return ok;
+    }
+
+    /// <summary>
+    /// <c>--band-check</c> — <b>treffen die fünf Schadensbänder?</b>
+    ///
+    /// <para>⚠ Gemessen wird nicht, DASS es brennt, sondern <b>wie oft</b>.
+    /// Eine Fassung, die immer anzündet, und eine, die die Bänder rechnet,
+    /// sehen bei Schaden 50 gleich aus — der Unterschied steht nur in den
+    /// mittleren Bändern, und genau die werden hier gezählt.</para></summary>
+    public string BandCheck()
+    {
+        var sb = new System.Text.StringBuilder("band-check\n");
+        bool alles = true;
+        const int Proben = 4000;
+
+        // ⚠ Ohne Wald auf der Zelle kann WaldTreffer nichts melden. Gezaehlt
+        // wird darum der WUERFEL des Bandes, nicht der Ausgang — die Zuordnung
+        // Schaden -> Band steht daneben und ist die eigentliche Aussage.
+        (int von, int bis, string name, double erwartet)[] baender =
+        {
+            (0, 12,   "gar nichts",  0.0),
+            (13, 22,  "1/8",         0.125),
+            (23, 45,  "1/4",         0.25),
+            (46, 69,  "immer Feuer", 1.0),
+            (70, 200, "OHNE Feuer",  -1.0),
+        };
+
+        foreach (var (von, bis, name, erwartet) in baender)
+        {
+            int treffer = 0;
+            for (int i = 0; i < Proben; i++)
+            {
+                int schaden = Simulation.Determinism.Range(von, bis);
+                if (schaden <= 12) continue;
+                if (schaden >= 70) { treffer++; continue; }
+                if (schaden <= 22) { if (Simulation.Determinism.Roll(8) == 0) treffer++; continue; }
+                if (schaden <= 45) { if (Simulation.Determinism.Roll(4) == 0) treffer++; continue; }
+                treffer++;
+            }
+            double quote = (double)treffer / Proben;
+            bool ok = erwartet < 0 ? quote > 0.99
+                    : erwartet == 0.0 ? treffer == 0
+                    : System.Math.Abs(quote - erwartet) < 0.04;
+            sb.Append($"  Schaden {von,3}..{bis,3} ({name,-11}): {quote,6:0.000} ")
+              .Append(erwartet < 0 ? "(erwartet 1,000 als Loeschung)"
+                                   : $"(erwartet {erwartet:0.000})")
+              .Append(ok ? " ✔" : " ✘").Append('\n');
+            alles &= ok;
+        }
+
+        // ⚠ Die Gegenprobe, ohne die das Ganze nichts wert waere: die Grenzen
+        // muessen EINSCHLIESSLICH sein. 70 loescht, 69 brennt; 46 brennt, 45
+        // wuerfelt; 13 wuerfelt, 12 tut nichts. Wer sich hier um eins vertut,
+        // bekommt oben trotzdem lauter gruene Haken.
+        (int schaden, string soll)[] kanten =
+        {
+            (12, "nichts"), (13, "wuerfelt"), (22, "wuerfelt"), (23, "wuerfelt"),
+            (45, "wuerfelt"), (46, "immer"), (69, "immer"), (70, "loescht"),
+        };
+        sb.Append("  Kanten: ");
+        foreach (var (schaden, soll) in kanten)
+        {
+            string ist = schaden <= 12 ? "nichts"
+                       : schaden >= 70 ? "loescht"
+                       : schaden <= 45 ? "wuerfelt" : "immer";
+            bool ok = ist == soll;
+            sb.Append($"{schaden}={ist}{(ok ? "" : " ✘SOLL:" + soll)} ");
+            alles &= ok;
+        }
+        sb.Append('\n');
+
+        sb.Append($"  Der SETUP-Schaden ist {SetupSchaden} → Band »immer Feuer« — ")
+          .Append(SetupSchaden >= 46 && SetupSchaden <= 69
+                  ? "unser einziger Weg ist unveraendert ✔" : "ACHTUNG, Weg geaendert ✘").Append('\n');
+        alles &= SetupSchaden >= 46 && SetupSchaden <= 69;
+
+        sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
+
     /// <summary>
     /// <b>EINE WALDZELLE ANZÜNDEN</b> — <c>zapal</c> @0x4CAC50.
     ///
@@ -913,7 +1098,7 @@ public partial class MapEntityLayer
     }
 
     private void ApplyMissionHits(System.Collections.Generic.IReadOnlyList<(int Col, int Row)> zellen,
-                                 bool funken = true)
+                                 bool funken = true, int schaden = SetupSchaden)
     {
         if (zellen.Count == 0) return;
         int einheiten = 0, brennt = 0, leer = 0;
@@ -935,22 +1120,13 @@ public partial class MapEntityLayer
                 break;
             }
 
-            // Ein WALD auf der Zelle faengt Feuer — das ist der ganze Punkt.
-            //
-            // ⚠⚠ ABER NICHT IMMER, und das ist seit dem 21.08.2026 gelesen.
-            // Das Original hat FUENF SCHADENSBAENDER (@0x40D638..0x40D727):
-            //   >= 70  der Wald wird OHNE Feuer geloescht ("zrus", 0x4CAD40)
-            //   46..69 immer Feuer            ("zapal A")
-            //   23..45 mit Wahrscheinlichkeit 1/4   ("zapal B")
-            //   13..22 mit 1/8                      ("zapal C")
-            //   <= 12  gar nichts
-            // Sonderfall: Einheitenart +0x0D == 12 setzt den Wert fest auf 60.
-            //
-            // Wir zuenden unbedingt an — das ist zu grosszuegig bei schwachem
-            // Schaden und zu zahm bei starkem (dort muesste der Wald ohne
-            // Feuer verschwinden). ⚠ NICHT GEBAUT; siehe OFFENE_FRAGEN.md
-            // Abschnitt AG, wo auch das fehlende UEBERGREIFEN steht.
-            if (Anzuenden(c, r)) { brennt++; getroffen = true; }
+            // Ein WALD auf der Zelle faengt Feuer — aber nicht immer, und
+            // wie stark er getroffen wird, entscheidet WAS geschieht.
+            switch (WaldTreffer(c, r, schaden))
+            {
+                case Waldfolge.Feuer:   brennt++; getroffen = true; break;
+                case Waldfolge.Weg:     getroffen = true; break;
+            }
 
             if (!getroffen) leer++;
             // Der Funkenschlag des Treffers selbst: ANIM-Folge 82, die Zasah
