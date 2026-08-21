@@ -15,7 +15,7 @@
   "Der ganze Block laeuft nur bei Missionsnummer < 50."
  ],
  "_ausreisser_der_selbstprobe": "Text = var-300 scheitert bei v[346] (67) und v[347] (19), und beide sind erklaert: Text 67 ist DOPPELT vergeben (v[367] zeigt ihn ueber top_spec 79 \"Zielfokus\", v[346] ueber den Entwurfsplatz \"Target\") — es gibt zwei Wege zum Fokussierer. HELPG #019 ist eine LEERE Marke: die Zeile steht da, der Rumpf fehlt; das Tor zeigt im Original ein leeres Fenster. Beide Tore sind nachtraeglich eingeschoben und stehen darum ausser der Reihe im Block.",
- "_offen": "v[373]/376/378: die drei Fenster gibt es in unserem Nachbau noch nicht. Warum v[377] (Mine, Typ 10) den FABRIK-Text 77 zeigt, ist ungedeutet — der Code ist eindeutig (push 0xa). HELPG #081 fehlt in der F-Auslieferung (die erste Textgruppe endet bei 80), HELPG #019 ist eine LEERE Marke.",
+ "_offen": "Warum v[377] (Mine, Typ 10) den FABRIK-Text 77 zeigt, ist ungedeutet — der Code ist eindeutig (push 0xa). HELPG #081 fehlt in der F-Auslieferung ganz (die erste Textgruppe endet bei 80), HELPG #019 ist eine LEERE Marke.",
  "tore": [
   {
    "var": 346,
@@ -411,7 +411,7 @@
    "fensterart": 2,
    "fenster_name": "Bahnhof",
    "loescht_ereignis": true,
-   "_ungebaut": "Dieses Fenster gibt es in unserem Nachbau noch nicht."
+   "_gebaut_am": "21.08.2026 — das Fenster gibt es jetzt (UI/BuildingWindow.cs)"
   },
   {
    "var": 374,
@@ -448,7 +448,7 @@
    "fensterart": 5,
    "fenster_name": "Flughafen (Hangar)",
    "loescht_ereignis": true,
-   "_ungebaut": "Dieses Fenster gibt es in unserem Nachbau noch nicht."
+   "_gebaut_am": "21.08.2026 — das Fenster gibt es jetzt (UI/BuildingWindow.cs)"
   },
   {
    "var": 377,
@@ -472,7 +472,7 @@
    "fensterart": 18,
    "fenster_name": "Terranium-Mine",
    "loescht_ereignis": true,
-   "_ungebaut": "Dieses Fenster gibt es in unserem Nachbau noch nicht."
+   "_gebaut_am": "21.08.2026 — das Fenster gibt es jetzt (UI/BuildingWindow.cs)"
   },
   {
    "var": 381,

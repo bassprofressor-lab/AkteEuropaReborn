@@ -1,4 +1,4 @@
-﻿namespace AkteEuropaReborn.UI;
+namespace AkteEuropaReborn.UI;
 
 using System.Collections.Generic;
 using Godot;
@@ -212,6 +212,16 @@ public sealed partial class HelpWindow : PanelContainer
     /// erste löscht gleich danach die Entwurfsliste sec47, die zweite baut die
     /// Diplomatie für acht Spieler auf.</para></summary>
     public static IEnumerable<int> GezeigteTexte => Dismissed;
+
+    /// <summary>⚠ NUR für Prüfstände: den Einmal-Riegel leeren.
+    ///
+    /// <para>Ein Prüfstand, der ein Tor der Kontexthilfe zum Feuern bringen
+    /// will, muss auch DIESE Tafel leeren — sonst schweigt das Fenster, weil
+    /// der Text im laufenden Spiel schon einmal gezeigt wurde, und die Messung
+    /// meldet »feuert nie« für einen Bau, der in Ordnung ist. Genau das ist am
+    /// 21.08.2026 passiert, nachdem der Riegel vom Wegklicken aufs Anzeigen
+    /// umgestellt worden war.</para></summary>
+    public static void VergissGezeigte() => Dismissed.Clear();
 
     /// <summary>Aus dem Spielstand zurückholen.</summary>
     public static void MerkeGezeigt(int id) => Dismissed.Add(id);

@@ -1,4 +1,4 @@
-﻿namespace AkteEuropaReborn.Rendering;
+namespace AkteEuropaReborn.Rendering;
 
 using Godot;
 using GDict = Godot.Collections.Dictionary<string, Godot.Variant>;
@@ -1969,6 +1969,7 @@ public partial class MapViewer : Node2D
             GD.Print(_entities.PowerLine());
             GD.Print(_entities.MinimapWatchLine(_minimap));
             GD.Print(_baseWindow?.WatchLine() ?? "basis-fenster: nicht gebaut");
+            GD.Print(_gebaeudeFenster?.WatchLine() ?? "gebaeude-fenster: nicht gebaut");
             GD.Print(_designWindow?.WatchLine() ?? "erstellung: nicht gebaut");
             GD.Print(_entities.EventWatchLine());
             GD.Print(_entities.VoiceWatchLine());
@@ -3007,6 +3008,11 @@ public partial class MapViewer : Node2D
     /// <c>Row</c>-Satz als Schnittstelle benutzt.</para></summary>
     private UI.BaseWindow? _baseWindow;
 
+    /// <summary>Bahnhof, Flughafen und Terranium-Mine — die drei Fenster,
+    /// an denen drei Tore der Kontexthilfe haengen. Siehe
+    /// <see cref="UI.BuildingWindow"/>.</summary>
+    private UI.BuildingWindow? _gebaeudeFenster;
+
     /// <summary>Die Ebene des Fensters: ÜBER dem Bedienfeld (2), aber UNTER den
     /// Hilfefenstern der Mission (90) und der Abrechnung (95) — dieselbe Regel,
     /// die BuildEndBanner sich schon einmal einhandeln musste.</summary>
@@ -3018,6 +3024,20 @@ public partial class MapViewer : Node2D
         AddChild(layer);
         _baseWindow = new UI.BaseWindow { Visible = false };
         layer.AddChild(_baseWindow);
+
+        // Die drei Gebaeudefenster teilen sich die Ebene mit dem Baufenster.
+        _gebaeudeFenster = new UI.BuildingWindow { Visible = false };
+        layer.AddChild(_gebaeudeFenster);
+        _gebaeudeFenster.Daten = _entities.BuildingWindowData;
+        _gebaeudeFenster.OnStart = _entities.BuildingWindowStart;
+        _gebaeudeFenster.OnRepair = _entities.BuildingWindowRepair;
+        // ⚠ "Anhalten" ist NICHT angeschlossen, und das ist gelesen, nicht
+        // vergessen: die Zustandstafeln bilden vier Auftraege ab (aktiv,
+        // reparieren, Lagerausbau, Produktionserweiterung). Einen Befehl, der
+        // eine Mine ANHAELT, hat die Bytesuche in beiden EXE nicht gefunden —
+        // genauso wenig wie den, der die Basis in "vergroessern" bringt. Der
+        // Knopf steht darum gesperrt da und sagt es im Hinweistext.
+        _entities.OnBuildingWindow = art => _gebaeudeFenster.Open(art);
         _baseWindow.Rows = _entities.BuildPanelRows;
         _baseWindow.TitleLine = _entities.BuildPanelTitle;
         // Name, Energie und Zustand des gewaehlten Gebaeudes — damit in der

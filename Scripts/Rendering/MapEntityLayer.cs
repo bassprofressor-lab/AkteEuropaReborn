@@ -4408,6 +4408,12 @@ public partial class MapEntityLayer : Node2D
         // keiner der zwanzig Aufrufer daran denken muss.
         if (_sel.Count > 0) _selAir = -1;
         UpdatePanel();
+        // ⭐ Die drei Gebaeudefenster. Sie MUESSEN vor der Kontexthilfe
+        // aufgehen: das Aufmachen setzt das Ereignisbyte, und genau darauf
+        // pruefen drei der 34 Tore. Andersherum kaeme der Hinweis erst beim
+        // naechsten Anklicken — einen Klick zu spaet.
+        var fart = Fenstergebaeude() is { } fg ? FensterArtVon(fg) : null;
+        if (fart != null) OnBuildingWindow?.Invoke(fart.Value);
         KontexthilfePruefen();
     }
 
@@ -4541,6 +4547,12 @@ public partial class MapEntityLayer : Node2D
     private static void NurDiesesTor(Campaign.CampaignHints.Tor tor)
     {
         Campaign.CampaignHints.Vergiss();
+        // ⚠ Und den Einmal-Riegel der Hilfetexte mit. Ein Tor kann feuern und
+        // trotzdem KEIN Fenster zeigen, wenn sein Text im laufenden Spiel schon
+        // einmal zu sehen war — auf einer spaeten Karte feuert v[372] beim
+        // Laden von selbst. Ohne diese Zeile meldet die Messung "feuert nie"
+        // fuer einen Bau, der in Ordnung ist.
+        UI.HelpWindow.VergissGezeigte();
         foreach (var t in Campaign.CampaignHints.Tore)
             if (t.Var != tor.Var) Campaign.CampaignHints.Merke(t.Var);
     }
@@ -4772,6 +4784,46 @@ public partial class MapEntityLayer : Node2D
               .Append(spaeter ? "1 Fenster ✔" : "0 Fenster ✘ es feuert NIE").Append('\n');
             alles &= zuFrueh && spaeter;
         }
+
+
+        // --- 7. DIE DREI FENSTERTORE ---------------------------------------
+        //
+        // ⚠ Sie sind der Grund, warum die drei Gebaeudefenster gebaut wurden.
+        // Gemessen wird nicht, DASS ein Fenster aufgeht, sondern dass sein
+        // Aufgehen das EREIGNISBYTE setzt und damit das zugehoerige Tor feuert
+        // — und dass ein FALSCHES Ereignis es NICHT tut.
+        UI.HelpWindow.CloseAll(); UI.HelpWindow.CommitClose();
+        int fensterTore = 0, fensterOk = 0;
+        foreach (var t in tore)
+        {
+            if (t.Was != Campaign.CampaignHints.Art.FensterGeoeffnet) continue;
+            fensterTore++;
+            NurDiesesTor(t);
+
+            // das RICHTIGE Ereignis: das Tor muss feuern
+            Campaign.CampaignHints.Ereignis = t.FensterArt;
+            int vorF = KontexthilfeGezeigt;
+            KontexthilfePruefen();
+            bool feuert = KontexthilfeGezeigt == vorF + 1;
+
+            // ⚠ Und die Gegenprobe, ohne die das nichts wert waere: ein
+            // anderes Fenster darf dieses Tor NICHT ausloesen.
+            UI.HelpWindow.CloseAll(); UI.HelpWindow.CommitClose();
+            NurDiesesTor(t);
+            Campaign.CampaignHints.Ereignis = t.FensterArt == 99 ? 98 : 99;
+            int vorG = KontexthilfeGezeigt;
+            KontexthilfePruefen();
+            bool fremdStumm = KontexthilfeGezeigt == vorG;
+
+            sb.Append($"  Tor v[{t.Var}] (Fensterart {t.FensterArt}): ")
+              .Append(feuert ? "feuert ✔" : "FEUERT NICHT ✘")
+              .Append(" / fremdes Fenster: ")
+              .Append(fremdStumm ? "schweigt ✔" : "FEUERT AUCH ✘").Append('\n');
+            if (feuert && fremdStumm) fensterOk++;
+            alles &= feuert && fremdStumm;
+        }
+        sb.Append($"  Fenstertore: {fensterOk} von {fensterTore} in Ordnung\n");
+        Campaign.CampaignHints.Ereignis = 0;
 
         e.Comp0D = merkWaffe; e.Owner = merkBesitzer;
         UI.HelpWindow.CloseAll(); UI.HelpWindow.CommitClose();
@@ -12969,6 +13021,85 @@ public partial class MapEntityLayer : Node2D
     /// <summary>The selected building, if it is one the view player can build
     /// from. Only the player's own — a list over somebody else's factory would
     /// be an offer that cannot be taken.</summary>
+    // ---- die drei Gebaeudefenster (Bahnhof, Flughafen, Mine) -----------------
+
+    /// <summary>Welches der drei Fenster gehoert zu diesem Gebaeude — oder
+    /// <c>null</c>. ⭐ Die Zuordnung Gebaeudeart → Fensterart ist die des
+    /// Originals: Bahnstation (6) und Feldbahnhof (12) teilen sich den
+    /// »Bahnhof« (Art 2), der Flughafen (9) hat Art 5, die Mine (10, und die
+    /// zweite Minenart 15) Art 18.</summary>
+    public static UI.BuildingWindow.Art? FensterArtVon(Entity e)
+    {
+        if (!e.IsBuilding || e.IsProp || e.Dead) return null;
+        return e.BType switch
+        {
+            6 or 12 => UI.BuildingWindow.Art.Bahnhof,
+            9 => UI.BuildingWindow.Art.Flughafen,
+            10 or 15 => UI.BuildingWindow.Art.Mine,
+            _ => null,
+        };
+    }
+
+    /// <summary>Das angewaehlte Gebaeude, wenn es eines der drei ist und dem
+    /// Betrachter gehoert. ⚠ Eigenes Gebaeude: das Original zeigt diese
+    /// Fenster nur fuer eigene Bauten — sie enthalten Knoepfe.</summary>
+    private Entity? Fenstergebaeude()
+    {
+        if (_selected < 0 || _selected >= _entities.Count) return null;
+        var e = _entities[_selected];
+        if (e.Owner != ViewPlayer) return null;
+        return FensterArtVon(e) == null ? null : e;
+    }
+
+    /// <summary>Was das Fenster anzuzeigen hat. Alle Werte kommen aus Feldern,
+    /// die wir ohnehin fuehren — hier wird nichts ausgerechnet.</summary>
+    public UI.BuildingWindow.Stand? BuildingWindowData()
+    {
+        var e = Fenstergebaeude();
+        if (e == null) return null;
+        var st = new UI.BuildingWindow.Stand
+        {
+            Name = e.Name.Length == 0 || PlatzhalterName(e) ? BuildingTypeName(e.BType) : e.Name,
+            Hp = e.Hp, HpMax = e.HpMax,
+            Status = e.Dead ? "zerstoert" : StateName(e),
+            StockW = e.StockW, StockF = e.StockF, StockS = e.StockS, StockT = e.StockT,
+            Kapazitaet = e.Capacity, AusbauKosten = e.CostStore,
+            Geld = Money(ViewPlayer),
+            Vorkommen = e.Deposit, VorkommenStart = e.DepositStart, Grad = e.Grade,
+            // ⚠ »Laeuft« heisst: der Zustand ist AKTIV. Zustand 0 ist StAktiv,
+            // alles andere ist reparieren oder ausbauen — dann foerdert die
+            // Mine nicht.
+            Laeuft = e.State == StAktiv,
+            HangarPlaetze = e.HangarSize,
+        };
+        if (e.Hangar != null)
+            foreach (int slot in e.Hangar)
+                st.Hangar.Add($"Flugzeug {slot}");
+        return st;
+    }
+
+    /// <summary>»Start« — zurueck auf aktiv. ⭐ Das ist ein GELESENER Befehl:
+    /// die Minentafel bildet Opcode 517 auf Zustand 0 ab (Fabrik: 511).</summary>
+    public void BuildingWindowStart()
+    {
+        var e = Fenstergebaeude();
+        if (e == null) return;
+        GiveBuildingJob(_entities.IndexOf(e), BuildingJob.Idle);
+    }
+
+    /// <summary>»Reparatur«/»Reparieren« — derselbe Auftrag wie im Baufenster.
+    /// </summary>
+    public void BuildingWindowRepair()
+    {
+        var e = Fenstergebaeude();
+        if (e == null) return;
+        GiveBuildingJob(_entities.IndexOf(e), BuildingJob.Repair);
+    }
+
+    /// <summary>Wird gerufen, sobald ein Gebaeude angewaehlt wird, fuer das es
+    /// eines der drei Fenster gibt. Der Zeichner haengt sich hier ein.</summary>
+    public System.Action<UI.BuildingWindow.Art>? OnBuildingWindow;
+
     private Entity? Producer()
     {
         if (_selected < 0 || _selected >= _entities.Count) return null;
