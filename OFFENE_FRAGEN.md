@@ -2236,3 +2236,409 @@ davon 65 617 aussagend, 256×256 u16), **sec39** (260 000 / 41 506, 32 500 × 8)
 **sec42** (20 000 / 7 709) und **sec52** — ein **zweites Griffgitter**
 256×256 u16 mit Füllung `0xFFFF` statt `0xFFFC`, das in 24 von 25 Zellen mit
 sec6 übereinstimmt. Insgesamt **42 belegte Abschnitte ohne volle Deutung**.
+---
+
+## Y. ⭐ Die vollständige LADERTAFEL, und was sie aufschliesst (21.08.2026)
+
+Das Werkzeug, das lange gefehlt hat. Der Lader (C `0x41E070`, F `0x41D230`) und
+der **Speicherer** (C `0x41D210`, F `0x41C3D0`) tragen beide dieselbe Folge von
+131 `(Ziel, Grösse)`-Paaren. **Alle vier Tafeln getrennt gezogen — 0
+Abweichungen.** Die Grössen sind in C und F byteweise gleich.
+
+**Wozu das gut ist:** wer weiss, wohin ein Abschnitt kopiert wird, findet über
+einen Adressabtast des `.text` alle Funktionen, die ihn anfassen — und das Spiel
+benennt seine Funktionen selbst. Damit sind in einem Durchgang **rund zwanzig**
+Abschnitte eingeordnet worden, statt jeden einzeln zu erraten.
+
+### ⚠⚠ BERICHTIGUNG AN EINER REGEL, DIE WIR ÜBERALL ZITIEREN
+
+Wir schreiben seit Wochen »im `.bss` gilt C = F + `0xFA0`«. Das stimmt — **aber
+im `.data` gilt es nicht**, und dort ist der Versatz auch nicht einheitlich:
+
+| Versatz | Abschnitte |
+|---|---|
+| `0xF98` | sec13, sec14 |
+| `0xFA0` | alles im `.bss` |
+| `0xFC0` | sec7–10, **sec46, sec47**, sec105, sec109, **sec119, sec120**, sec131 |
+| `0xFC8` | sec61 |
+| `0xFF8` | sec54, sec99, sec111, sec127 |
+| `0x1000` | sec125 |
+| `0x1004` | sec129, sec130 |
+
+**Selbst nachgeprüft**, und zwar hart: an den vier `.data`-Paaren sec46, sec47,
+sec119 und sec120 sind die ersten 64 Byte in beiden Bauten **byteweise
+identisch** — die Paarung mit `0xFC0` ist damit bewiesen, nicht geschlossen.
+(`.bss`-Abschnitte liefern beim Vergleich nichts, weil sie gar keinen
+Dateiinhalt haben.)
+
+⚠ **Wer eine `.data`-Adresse umrechnet, muss den Einzelfall nehmen.**
+
+### Ein zweiter Fund aus der Tafel selbst
+
+**sec89 und sec114 laden in DENSELBEN Puffer** `0x6786A8`, beide 1200 B —
+belegt in allen vier Tafeln. sec114 überschreibt also sec89. Entweder ein
+Fehler im Spiel oder zwei Namen für dieselbe Tabelle; die 1200 Byte stehen in
+der Datei aber **zweimal**. Welche der beiden das Spiel danach benutzt, ist
+offen.
+
+### Die Tafel
+
+Grössen in Byte. `.CWM` lädt sec1…38, `.DM` alle 131 (Kopfbyte 3, `@0x41E6A5`).
+
+
+| Abschnitt | Grösse | Ziel C | Ziel F | C−F |
+|---:|---:|---|---|---|
+| 1 | W*H*4 | *(Zeiger)* | *(Zeiger)* | — |
+| 2 | 66049 | `0xA3AEB0` | `0xA39F10` | `0xFA0` |
+| 3 | 22800 | `0xC06910` | `0xC05970` | `0xFA0` |
+| 4 | 12000 | `0xC03A30` | `0xC02A90` | `0xFA0` |
+| 5 | 624000 | `0x6E26C8` | `0x6E1728` | `0xFA0` |
+| 6 | 131072 | `0xBDEA80` | `0xBDDAE0` | `0xFA0` |
+| 7 | 4 | `0x5387AC` | `0x5377EC` | `0xFC0` |
+| 8 | 4 | `0x5387B0` | `0x5377F0` | `0xFC0` |
+| 9 | 4 | `0x5387B8` | `0x5377F8` | `0xFC0` |
+| 10 | 4 | `0x5387BC` | `0x5377FC` | `0xFC0` |
+| 11 | 2000 | `0xBDA0E8` | `0xBD9148` | `0xFA0` |
+| 12 | 1000 | `0xBDA8C0` | `0xBD9920` | `0xFA0` |
+| 13 | 2 | `0x539B10` | `0x538B78` | `0xF98` |
+| 14 | 2 | `0x539B14` | `0x538B7C` | `0xF98` |
+| 15 | 400000 | `0x7AEC38` | `0x7ADC98` | `0xFA0` |
+| 16 | 88000 | `0x7847E8` | `0x783848` | `0xFA0` |
+| 17 | 2400 | `0xBFEA80` | `0xBFDAE0` | `0xFA0` |
+| 18 | 18000 | `0xBFF3E0` | `0xBFE440` | `0xFA0` |
+| 19 | 13600 | `0x6DDF70` | `0x6DCFD0` | `0xFA0` |
+| 20 | 65536 | `0x542E18` | `0x541E78` | `0xFA0` |
+| 21 | 200 | `0xC2FCB8` | `0xC2ED18` | `0xFA0` |
+| 22 | 15000 | `0xC2C220` | `0xC2B280` | `0xFA0` |
+| 23 | 800 | `0x878E58` | `0x877EB8` | `0xFA0` |
+| 24 | 700 | `0x87A2C0` | `0x879320` | `0xFA0` |
+| 25 | 700 | `0x879F38` | `0x878F98` | `0xFA0` |
+| 26 | 200 | `0x87A5A8` | `0x879608` | `0xFA0` |
+| 27 | 2600 | `0x879438` | `0x878498` | `0xFA0` |
+| 28 | 900 | `0x878AD0` | `0x877B30` | `0xFA0` |
+| 29 | 200 | `0x87A1F8` | `0x879258` | `0xFA0` |
+| 30 | 700 | `0x879178` | `0x8781D8` | `0xFA0` |
+| 31 | 200 | `0x879E70` | `0x878ED0` | `0xFA0` |
+| 32 | 169 | `0xA68E68` | `0xA67EC8` | `0xFA0` |
+| 33 | 960 | `0xA8D508` | `0xA8C568` | `0xFA0` |
+| 34 | 17120 | `0xA89220` | `0xA88280` | `0xFA0` |
+| 35 | 16481 | `0xA8D8C8` | `0xA8C928` | `0xFA0` |
+| 36 | 10500 | `0x830790` | `0x82F7F0` | `0xFA0` |
+| 37 | 3800 | `0xBBFEF8` | `0xBBEF58` | `0xFA0` |
+| 38 | 700 | `0x6783E8` | `0x677448` | `0xFA0` |
+| 39 | 260000 | `0x9CB0B8` | `0x9CA118` | `0xFA0` |
+| 40 | 500 | `0xA0A858` | `0xA098B8` | `0xFA0` |
+| 41 | 10000 | `0x9C6FB8` | `0x9C6018` | `0xFA0` |
+| 42 | 20000 | `0x8106C0` | `0x80F720` | `0xFA0` |
+| 43 | 32032 | `0x884730` | `0x883790` | `0xFA0` |
+| 44 | 5760 | `0xB95F48` | `0xB94FA8` | `0xFA0` |
+| 45 | 6000 | `0x9C9948` | `0x9C89A8` | `0xFA0` |
+| 46 | 92800 | `0x5045A0` | `0x5035E0` | `0xFC0` |
+| 47 | 73600 | `0x51CE20` | `0x51BE60` | `0xFC0` |
+| 48 | 7200 | `0x77AC50` | `0x779CB0` | `0xFA0` |
+| 49 | 9600 | `0xBC0DD0` | `0xBBFE30` | `0xFA0` |
+| 50 | 65536 | `0x678B58` | `0x677BB8` | `0xFA0` |
+| 51 | 131072 | `0x5539D0` | `0x552A30` | `0xFA0` |
+| 52 | 131072 | `0xC0C220` | `0xC0B280` | `0xFA0` |
+| 53 | 320 | `0x87B140` | `0x87A1A0` | `0xFA0` |
+| 54 | 4 | `0x4FA240` | `0x4F9248` | `0xFF8` |
+| 55 | 1936 | `0xB461C0` | `0xB45220` | `0xFA0` |
+| 56 | 11616 | `0xB3D390` | `0xB3C3F0` | `0xFA0` |
+| 57 | 32 | `0xB461A0` | `0xB45200` | `0xFA0` |
+| 58 | 16 | `0xB38D40` | `0xB37DA0` | `0xFA0` |
+| 59 | 8 | `0xB46950` | `0xB459B0` | `0xFA0` |
+| 60 | 24000 | `0xB400F0` | `0xB3F150` | `0xFA0` |
+| 61 | 8 | `0x538BD8` | `0x537C10` | `0xFC8` |
+| 62 | 4080 | `0xBC41E0` | `0xBC3240` | `0xFA0` |
+| 63 | 1200 | `0xBC51D0` | `0xBC4230` | `0xFA0` |
+| 64 | 4 | `0xBC5680` | `0xBC46E0` | `0xFA0` |
+| 65 | 4 | `0xBC5684` | `0xBC46E4` | `0xFA0` |
+| 66 | 4 | `0xBC5688` | `0xBC46E8` | `0xFA0` |
+| 67 | 8 | `0xB38528` | `0xB37588` | `0xFA0` |
+| 68 | 6464 | `0xB36BE0` | `0xB35C40` | `0xFA0` |
+| 69 | 4800 | `0xBC5A78` | `0xBC4AD8` | `0xFA0` |
+| 70 | 8 | `0xBC6D38` | `0xBC5D98` | `0xFA0` |
+| 71 | 500 | `0x87AE00` | `0x879E60` | `0xFA0` |
+| 72 | 1000 | `0xBC5690` | `0xBC46F0` | `0xFA0` |
+| 73 | 32 | `0xA9C600` | `0xA9B660` | `0xFA0` |
+| 74 | 4 | `0xA9A1D8` | `0xA99238` | `0xFA0` |
+| 75 | 8 | `0xA9A200` | `0xA99260` | `0xFA0` |
+| 76 | 8 | `0xA9A208` | `0xA99268` | `0xFA0` |
+| 77 | 8 | `0xB46198` | `0xB451F8` | `0xFA0` |
+| 78 | 300 | `0xBC6D40` | `0xBC5DA0` | `0xFA0` |
+| 79 | 800 | `0x834C38` | `0x833C98` | `0xFA0` |
+| 80 | 92 | `0x799FA8` | `0x799008` | `0xFA0` |
+| 81 | 4220 | `0x833A00` | `0x832A60` | `0xFA0` |
+| 82 | 32000 | `0x77CAE8` | `0x77BB48` | `0xFA0` |
+| 83 | 400 | `0x833870` | `0x8328D0` | `0xFA0` |
+| 84 | 3000 | `0x552E18` | `0x551E78` | `0xFA0` |
+| 85 | 3000 | `0x688B58` | `0x687BB8` | `0xFA0` |
+| 86 | 1200 | `0x677F30` | `0x676F90` | `0xFA0` |
+| 87 | 200 | `0x834B70` | `0x833BD0` | `0xFA0` |
+| 88 | 200 | `0x88E390` | `0x88D3F0` | `0xFA0` |
+| 89 | 1200 | `0x6786A8` | `0x677708` | `0xFA0` |
+| 90 | 640 | `0xB49E50` | `0xB48EB0` | `0xFA0` |
+| 91 | 6000 | `0xB4A0D0` | `0xB49130` | `0xFA0` |
+| 92 | 50 | `0xB49C50` | `0xB48CB0` | `0xFA0` |
+| 93 | 50 | `0xB49C88` | `0xB48CE8` | `0xFA0` |
+| 94 | 3900 | `0x82AA30` | `0x829A90` | `0xFA0` |
+| 95 | 100 | `0x81A3A8` | `0x819408` | `0xFA0` |
+| 96 | 160 | `0xA3A9D0` | `0xA39A30` | `0xFA0` |
+| 97 | 2 | `0xA3A9C8` | `0xA39A28` | `0xFA0` |
+| 98 | 1560 | `0x81A410` | `0x819470` | `0xFA0` |
+| 99 | 1 | `0x4FA27C` | `0x4F9284` | `0xFF8` |
+| 100 | 92800 | `0xA9C620` | `0xA9B680` | `0xFA0` |
+| 101 | 9200 | `0xA9A210` | `0xA99270` | `0xFA0` |
+| 102 | 500 | `0x87AC08` | `0x879C68` | `0xFA0` |
+| 103 | 1000 | `0xBC3DF8` | `0xBC2E58` | `0xFA0` |
+| 104 | 32 | `0xA9A1E0` | `0xA99240` | `0xFA0` |
+| 105 | 1 | `0x504598` | `0x5035D8` | `0xFC0` |
+| 106 | 8 | `0xB38D38` | `0xB37D98` | `0xFA0` |
+| 107 | 160 | `0xB36B20` | `0xB35B80` | `0xFA0` |
+| 108 | 1984 | `0xB3CBD0` | `0xB3BC30` | `0xFA0` |
+| 109 | 8 | `0x538BB0` | `0x537BF0` | `0xFC0` |
+| 110 | 32 | `0xB36BC0` | `0xB35C20` | `0xFA0` |
+| 111 | 1 | `0x4FA284` | `0x4F928C` | `0xFF8` |
+| 112 | 72000 | `0xA51110` | `0xA50170` | `0xFA0` |
+| 113 | 2400 | `0xA62A50` | `0xA61AB0` | `0xFA0` |
+| 114 | 1200 | `0x6786A8` | `0x677708` | `0xFA0` |
+| 115 | 1 | `0x81AA2C` | `0x819A8C` | `0xFA0` |
+| 116 | 1 | `0x8154E4` | `0x814544` | `0xFA0` |
+| 117 | 4 | `0x833868` | `0x8328C8` | `0xFA0` |
+| 118 | 1 | `0x81AA28` | `0x819A88` | `0xFA0` |
+| 119 | 3360 | `0x52EDA0` | `0x52DDE0` | `0xFC0` |
+| 120 | 7680 | `0x51B020` | `0x51A060` | `0xFC0` |
+| 121 | 480 | `0xB95D60` | `0xB94DC0` | `0xFA0` |
+| 122 | 320 | `0xA66DD8` | `0xA65E38` | `0xFA0` |
+| 123 | 255 | `0xB45EB0` | `0xB44F10` | `0xFA0` |
+| 124 | 256 | `0x991718` | `0x990778` | `0xFA0` |
+| 125 | 4 | `0x4F5AEC` | `0x4F4AEC` | `0x1000` |
+| 126 | 4000 | `0x53C938` | `0x53B998` | `0xFA0` |
+| 127 | 4 | `0x4FAD14` | `0x4F9D1C` | `0xFF8` |
+| 128 | 2 | `0x9937E0` | `0x992840` | `0xFA0` |
+| 129 | 1 | `0x4F6FA0` | `0x4F5F9C` | `0x1004` |
+| 130 | 1 | `0x4F6FA4` | `0x4F5FA0` | `0x1004` |
+| 131 | 8 | `0x538BB8` | `0x537BF8` | `0xFC0` |
+
+
+### Was der Adressabtast aufgeschlossen hat
+
+Der Abtast war streng: ein Dword zählt nur, wenn es an einer echten x86-Form
+steht **und beide EXE denselben relativen Versatz** in den Puffer zeigen. Das
+ist der entscheidende Filter — bei sec15 fiel die Rohzahl von 66 auf 15, bei
+sec52 von 54 auf 11; der Rest waren Nachbarglobale, die im selben Adressfenster
+liegen, aber in den zwei Bauten verschieden.
+
+**Am Code gelesen** (Schrittweite aus den `lea`-Ketten, in beiden EXE):
+
+| Abschnitt | Grösse | Form | was es ist |
+|---|---:|---|---|
+| **sec15** | 400 000 | **8000 × 50 B** | **der WEG einer Einheit** — Richtungscodes, `0xFF` = Ende. Schreiber ist die Wegsuche (C `0x4D2CEF`), Leser die Bewegung (C `0x407C57`, setzt `+0x04 = 0xFF` = »steht«) |
+| **sec48** | 7 200 | **400 × 18 B** | `rob_trans` — der Index steht im Einheitensatz bei **`+0x40`**. Die Funktion sagt es selbst: »**Transport check : wrong index of robot in 'rob_trans'**« |
+| **sec94** | 3 900 | **50 × 78 B** | Einheitensätze im **Marktlager** (dieselbe Satzgrösse wie sec5). »**Cannot add new unit to market-store**« |
+| **sec81** | 4 220 | **10 × 422 B** | die **benannten Gruppen** — 22 B Name, dann 200 Wortplätze. ✔ Deckt sich mit unserer Lesung in `MapEntityLayer` |
+| **sec63** | 1 200 | **8 × 50 × 3 B** | die **Bauschlange** je Spieler. »**Cannot add new 'vyroba'**« |
+| **sec91** | 6 000 | **1000 × 6 B** | die **Verkaufsschlange**. »**Robot already sold.**« |
+| **sec98** | 1 560 | **20 × 78 B** | wieder Einheitensätze — **Lagerbestand eines Gebäudes** (Depot/Hangar), 20 fertige Stück |
+| **sec18** | 18 000 | **6000 × 3 B** | die **brennenden Waldfelder**. »**hori forest / dohorel forest — sjizdnej / nesjizdnej**« (brennt / abgebrannt — befahrbar / nicht) |
+| **sec80** | 92 | **4 × 23 B** | die vier **Merkpunkte** (21 B Name, Spalte, Zeile, `0xFF` = leer). ✔ Deckt sich mit Abschnitt N unserer Lesung |
+| **sec55 / sec56** | 1 936 / 11 616 | **8 × 121 × 2** / **8 × 121 × 12** | das **KI-Wichtigkeitsraster** (»imp«), je Spieler 11 × 11 Zellen — **dasselbe Raster wie die `AI*.CWI`** aus Abschnitt W |
+| **sec11 / 12 / 13** | 2 000 / 1 000 / 2 | 1000 × u16 / 1000 × u8 / Zähler | **eine Suchliste**. »**Search buffer is full!**«, »**Search: / typ: / Found**« |
+| **sec32** | 169 | **13 × 13** | Verbindungsmatrix der **13 bahnfähigen Gebäude**. »**Cannon build more 'rail-possible' buildings**« |
+| **sec40** | 500 | 500 Belegt-Bytes | die Belegungsmarken der `ROB_PROD`-Tafel. »**WRONG ROB_PROD in PLACE!!!!**« |
+| **sec95** | 100 | 50 × u16 | parallel zu sec94 — Preis **oder** Restzeit, das ist noch offen |
+| **sec54** | 4 | Dword | der **laufende Taktwert**, gesetzt in derselben Uhrroutine wie der 250er-Vorzähler sec118 |
+| **sec64/65/66** | je 4 | Dword | die drei **Zeitzähler der Missionsuhr**, angestossen von sec118 |
+| **sec72** | 1 000 | 500 × u16 | die **Missionsvariablen v[0…499]** — ✔ das kennen wir längst (`VAR_BASE = 0xBC5690`), es stand nur nicht in `GAMESTATE_RE.md` |
+
+**Erklärbar, aber nur angelesen:** sec60 (24 000, KI-Tabelle, 11 benannte
+Leser), sec108 (KI-**Angriffsgruppen**, »Attack group not available«), sec110 /
+sec57 (KI-Kopfwerte je Spieler), sec71 (500 B am Hilfetextfenster —
+*vermutet*: welcher `HELPG`-Text schon gezeigt wurde), sec62 (1020 Dwords im
+Kampagnenzustand), sec131 (Zustand des Einheiten-Auswahlfensters).
+
+### ⭐ Und eine tote Tafel: sec101
+
+**9 200 Byte bei C `0xA9A210` — KEIN LESER.** Roh über das ganze `.text`: C = 9
+Treffer, F = 5. Die fünf in F sind Init, Lader, Speicherer und zweimal der
+Missions-Reset; die vier zusätzlichen in C haben in F **keinen** Gegenpart mit
+gleichem Versatz — Zufallstreffer. Der einzige verbleibende »Leser« ist ein
+Massen-Nullsetzer.
+
+→ **sec101 wird geschrieben, gespeichert, genullt — und nie gelesen.** Das ist
+nach den vier toten Mauszeigern, den zwei toten Befehlsnummern (523/526), den
+34 toten `SPR.DAT`-Bildern und dem toten Zufall in den Minensätzen der fünfte
+Fund dieser Art.
+
+### Was als Nächstes lohnt
+
+1. **sec60** (24 000 B, 11 benannte KI-Leser) — die grösste offene Tafel mit
+   Lesern, die einen Namen tragen.
+2. **sec62** (4 080 B) — liegt mitten im schon gelesenen Missionszustand.
+3. **sec108 + sec55/56/110/57** als Paket »KI-Zustand«; sec56 ist gelesen, die
+   Nachbarn teilen den Zellenindex.
+4. **sec95** — nur noch Preis oder Restzeit.
+5. **sec18** — Schrittweite und Name stehen, offen ist die Feldbelegung.
+6. **Nicht mehr anfassen:** sec101 (tot), sec72 und sec64–66 (anderswo gedeutet).
+
+### ⚠ Was diese Lesung NICHT ist
+
+Alle Schrittweiten oben sind **am Code beider EXE gelesen, aber nicht an
+Prüfdaten gemessen** — `game.007` und `1.DM` wurden dabei nicht geöffnet. Der
+nächste Schritt wäre, jede Form gegen die 131 Abschnitte in `game.007` zu
+halten. Bei sec81 und sec80 haben wir das indirekt schon: beide decken sich mit
+dem, was wir aus den Dateien gelesen hatten.
+
+Offen blieben ausserdem: **sec1** (Ziel steht in einem Register, nicht als
+Konstante), **sec9/sec10** (als Paar erkennbar, ohne Protokollmarke nicht
+benennbar), und die Frage, welche der beiden Tafeln **sec89/sec114** das Spiel
+benutzt.
+
+
+---
+
+## Z. ⭐ sec50 + sec51 + sec52 sind das GEDÄCHTNIS des Nebels (21.08.2026)
+
+Die zwei 256×256-Gitter gehören zusammen — und mit sec50 zu dritt. Der Anstoss
+steht im Haupttakt unter der Marke **`unexplored`**.
+
+| | Ziel C | Ziel F | Form | was es merkt |
+|---|---|---|---|---|
+| **sec50** | `0x678B58` | `0x677BB8` | 65536 × u8 | **jetzt sichtbar** (0/1/2) |
+| **sec51** | `0x5539D0` | `0x552A30` | 65536 × u16 | das **Bodenbild**, das der Spieler sieht |
+| **sec52** | `0xC0C220` | `0xC0B280` | 65536 × u16 | der zuletzt gesehene **sec6-Griff** |
+
+Index überall `spalte·256 + zeile` — **kein Tausch**, am Holer `0x41D0C0`
+belegt (`shl ecx,8; add ecx,zeile; mov ax, word[ecx*2+0x5539D0]`).
+
+### Der Motor
+
+`0x4205B0` läuft bei **`tick % 5 == 1`**: sec50 komplett nullen, dann für jedes
+**verbündete** Gebäude und jede Einheit einen Kreis vom Sichtradius stempeln
+(Sehnentafel `0x4F8A48`, Radius ≤ 19). Je gestempelter Zelle:
+`sec50 = 1`, `sec52 = sec6`, `sec51 = das rohe Wort des Kachelgitters`.
+
+### ⭐ Der Beweis steht im Gegenteil
+
+In `1.DM` stehen **22 Objekte in sec6, die nie in sec52 auftauchen — 21 davon
+Einheiten, ALLE Besitzer 1.** Der Spieler ist 0 und nur mit 3 verbündet;
+gesehen wurden Besitzer 3 (37×), 0 (21×), 2 (10×), 1 (4×). **Das ist Nebel des
+Krieges, in Zahlen.**
+
+Und die Abweichungen zwischen sec52 und sec6 sind **Geister**: game.007 hat
+genau einen (eine Einheit ist eine Kachel weitergefahren), `1.DM` dreizehn —
+**13 von 14 Geisterzellen liegen ≤ 2 Kacheln neben der heutigen Position**. Die
+Gemeinsamkeit ist nicht Art oder Grundriss, sondern **Bewegung seit dem letzten
+Blick**.
+
+### Die `0xFFFF`-Frage ist beantwortet
+
+sec6 füllt mit `0xFFFC`, sec52 mit `0xFFFF` — **anderer Schreiber, anderer
+Leerwert**: die Missionsanfangs-Rüstung `0x437F10` setzt `0xFFFF` (und nullt
+dabei zugleich die Uhrbytes). Übereinstimmung sec52 ↔ sec6 im Übrigen:
+**98,8 %** (game.007) und **98,5 %** (1.DM).
+
+### Was in sec51 steht
+
+Je Zelle der Sprite-Code, den der Spieler sieht: `< 10000` → Bank `0xBB4588`,
+`≥ 10000` → Bank `0xBA5100`, `0xFFFF` → das Ersatzbild aus **`SPR.DAT` Nr. 19**
+(siehe Abschnitt V — dort war es die einzige je gelesene Kachel; hier steht,
+wofür).
+
+Zwei Quellen füllen es: eine **nie gesehene** Bodenzelle bekommt
+`Basis + rnd()%Anzahl` aus einer Tafel, deren Schlüssel aus den **vier Eckwerten
+von sec2** (Höhe und Neigung) und der Geländeart gebildet wird; eine **gesehene**
+bekommt das rohe Wort des Kachelgitters.
+
+**Die Zahlen:** wo sec50 ≠ 0 ist, gilt `sec51 == Kachelwort` in **235/235**
+(game.007) und **7085/7085 = 100 %** (1.DM). Die nie gesehenen Zellen zerfallen
+nach dem Schlüssel in 125 bzw. 70 Gruppen, deren Wertebereiche sich in **keinem
+Fall überlappen**.
+
+⚠ **Ausserhalb `W×H` ist sec51 Müll** — dort wird nie geschrieben. Nicht deuten.
+
+⚠ **Zwei Mitspieler gehen beim Speichern verloren:** `0x689710` (die gemerkte
+Zeichenlage je Zelle) und `0x5739D8` (die 257²-Eckmaske) sind **keine
+Abschnitte**. Nach dem Laden ist die Lagen-Erinnerung weg.
+
+---
+
+## AA. ⭐ sec39 und sec42 — und eine Bestätigung über Kreuz (21.08.2026)
+
+### sec39 sind die FAHRSPUREN — und »32500 × 8« war falsch
+
+**500 Gruppen × 40 Sätze × 13 Byte** = 260 000. Belegt an **neun voneinander
+unabhängigen Fundstellen, alle in beiden EXE** — Neustart-Init, Alterungstakt,
+Zeichenliste, Zuteiler, Zeichner und vier Gruppen-Zuteiler.
+
+| Versatz | Breite | Bedeutung |
+|---|---|---|
+| +0x00 / +0x01 | u8 | Kartenspalte / Kartenzeile |
+| +0x02 | u8 | Richtung 0…7, Bit 7 = Halbfeld |
+| +0x03 | u8 | Anzahl belegter Marken (1…8) |
+| +0x04 | u8 | **Verfallszähler, Start 180, 0 = FREI** |
+| +0x05…+0x0C | u8[8] | Spurvariante je Einzelmarke |
+
+Der Gruppenindex steht in **Einheit `+0x24`** (`0x2710` = keine), die
+Belegungsflaggen in **sec40**.
+
+⭐ **NUR RADFAHRZEUGE HINTERLASSEN SPUREN.** Beim Erzeugen prüft der Spawn das
+Fahrwerk gegen die Flaggentafel `0x4FA24F`: Flagge 1 haben Reifen, Panzerreifen,
+6×6, Ketten, Schwere Ketten, Luftkissen … — **Flagge 0 haben genau die drei
+beinigen: Spinne (1), Stahlsucher (16), Läufer (17).**
+
+### ⭐⭐ Zwei Agenten, dieselbe Mechanik von zwei Seiten
+
+Der Agent für `MARK.CWK` (Abschnitt V) fand: eine Punktschablone,
+5 Bodenarten × 8 Richtungen × 8 Punkte, dazu ein Markenspeicher bei
+`0x9CB0B8` mit **13 Byte je Satz, 500 × 40**, Lebensdauer **180** Takte,
+gezeichnet als acht abgedunkelte Bildpunkte.
+
+Der Agent für sec39 fand — ohne davon zu wissen — **dieselbe Tafel unter ihrer
+Abschnittsnummer**, mit denselben Zahlen. `0x9CB0B8` **ist** sec39.
+
+**`MARK.CWK` ist die Schablone, sec39 der Speicher.** Zwei unabhängige Wege,
+dasselbe Ergebnis — das ist die stärkste Bestätigung, die dieses Projekt kennt.
+
+### Die Gegenprobe zur alten Form
+
+Unter Schrittweite 8 liegen die Koordinaten in **keinem** Fall zu 100 % auf der
+Karte (bestenfalls 88,6 % / 96,9 %); unter 13 sind es **100,0 %** in beiden
+Dateien bei drei unabhängigen Prüfgrössen. Und die »7470 belegten Sätze« der
+alten Zählung waren Müll: beim Zuteilen wird nur `+0x04` genullt, der Rest
+bleibt stehen.
+
+Belegt sind wirklich **31** (game.007) und **698** (1.DM) Sätze — und **6/6
+bzw. 52/52** der benutzten Gruppen gehören einer **lebenden** Einheit.
+
+### sec42 sind die laufenden ANIMATIONEN — 2000 × 10 stimmt
+
+Jetzt am Leser belegt statt aus der Grösse geraten. `+0x00`/`+0x01` Zelle,
+`+0x02`/`+0x03` Teilfeld 0…39, `+0x04` i16 Höhe über Boden, **`+0x06` u16
+Kennung (`0xFFFF` = frei)**, `+0x08` laufendes Einzelbild, **`+0x09`
+ungenutzt** (0 in allen 2000 Sätzen beider Dateien).
+
+Angelegt an **37 Stellen** je EXE — Einschläge, Explosionen, Laser und der
+Fahrstaub aus »jedu:«. Kennungen **42…44** rücken nur jeden zweiten Takt vor.
+
+⭐ Eine hübsche Rückkopplung: die einzigen Kennungen in `1.DM` sind 42 (9×),
+44 (9×), 43 (3×) und 312 (2×) — **genau die drei, die der Takt gesondert
+behandelt.**
+
+### Berichtigung an `GAMESTATE_RE.md`
+
+§3.83 führt »sec39 32500 × 8«. Richtig ist **500 × 40 × 13**. Nebenbei am
+Neustart-Init mitgeprüft und bestätigt: sec41 1000×10, sec42 2000×10,
+sec44 240×24, sec45 1000×6; neu ablesbar sec43 Schritt 0x20, sec48 400×18,
+sec49 200×48.
+
+### Was offen bleibt
+
+* Die **zweite Spurensorte** (Marken 10…17, für Fahrwerk 7 und 9) kommt in
+  keiner Prüfdatei vor — 0 von 1613 Marken; ihr Zeichenzweig ist unbelegt.
+* In sec40 sind **281 bzw. 213** Flaggen gesetzt, für die keine Einheit mehr
+  existiert — die Freigabe wird offenbar nicht auf jedem Todesweg erreicht.
+  Umgekehrt gilt lückenlos: **keine** Einheit hält eine Gruppe ohne Flagge.
+* `game.007` hat **0** belegte sec42-Sätze; alle Wertebereiche dort stützen
+  sich auf die 23 Sätze aus `1.DM`.
+
