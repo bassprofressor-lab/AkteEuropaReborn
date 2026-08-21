@@ -576,14 +576,12 @@ public partial class MapEntityLayer
     /// Zelle hoch und legt bei 255 die abgebrannte Kachel hin. Bei uns steht
     /// die Dauer beim Anzünden fest; hier läuft nur die Uhr ab.</para>
     ///
-    /// <para>⚠⚠ <b>WAS FEHLT, und es gehört gesagt:</b> das Original lässt ein
-    /// Feuer WEITERGREIFEN. Derselbe Takt ruft für jede brennende Zelle
-    /// <c>zapal_forestA</c> (@0x4CA7E0, Protokollzeile @0x539700) auf, das eine
-    /// von acht Nachbarrichtungen auswürfelt und den Nachbarwald mit einer
-    /// Wahrscheinlichkeit anzündet, die an WINDRICHTUNG (<c>0x4F8D68</c>) und
-    /// WINDSTÄRKE (<c>0x4F8D6C</c>) hängt (@0x4CA873..0x4CA8DA). Das ist
-    /// gelesen, aber nicht gebaut. Solange es fehlt, gehen die vier Feuer des
-    /// Missionsstarts nach ihrer Zeit aus und entzünden nichts weiter.</para>
+    /// <para>⭐ <b>DAS WEITERGREIFEN IST GEBAUT</b> (21.08.2026) — hier stand
+    /// bis dahin »gelesen, aber nicht gebaut«. Derselbe Takt ruft für jede
+    /// brennende Zelle <c>zapal_forestA</c> (@0x4CA7E0, Protokollzeile
+    /// @0x539700) auf; die Formel und ihre Messung stehen am nächsten Block,
+    /// gebaut ist sie in <see cref="BrandGreiftUeber"/>, gerufen aus
+    /// <see cref="BrandTakt"/>.</para>
     /// </summary>
     /// <summary>
     /// <b>DAS FEUER GREIFT ÜBER</b> — <c>zapal_forestA</c> @0x4CA7E0, gelesen am

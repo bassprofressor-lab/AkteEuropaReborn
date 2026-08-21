@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Rendering;
+﻿namespace AkteEuropaReborn.Rendering;
 
 using System.Collections.Generic;
 using System.Linq;
@@ -24742,8 +24742,9 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Die Windstaerke. Im Original <c>byte[0x4F8D6C]</c>, beim Start
     /// mindestens 2 (@0x41A177 <c>add dl, 2</c>), danach derselbe Zufallsgang.
-    /// Sie wird heute nur GEFUEHRT, nicht benutzt — die Ausbreitung des Feuers
-    /// ist noch nicht gebaut.</summary>
+    /// ⭐ Sie WIRKT seit dem 21.08.2026: <see cref="MapObjects.BrandGreiftUeber"/>
+    /// rechnet mit ihr die Wahrscheinlichkeit des Uebergreifens (<c>9 − Staerke</c>).
+    /// ⚠ Hier stand »wird nur gefuehrt, nicht benutzt«.</summary>
     public int WindStrength { get; private set; } = 2;
 
     /// <summary>⚠ UNSERE ZAHL: alle zwei Sekunden ein Schritt des
