@@ -19420,6 +19420,240 @@ public partial class MapEntityLayer : Node2D
     /// Einheit entsteht.</para></summary>
     private readonly Dictionary<int, List<Entity>> _fracht = new();
 
+    /// <summary>
+    /// <b>EINE EINHEIT AUS DER LISTE NEHMEN — und alles mitziehen, was auf
+    /// Listenstellen zeigt.</b>
+    ///
+    /// <para>⚠ <b>Das ist die einzige heikle Stelle am Einsteigen.</b> Im
+    /// laufenden Spiel wird bei uns sonst NIE eine Einheit entfernt — wer
+    /// stirbt, bekommt <c>Dead = true</c> und bleibt stehen. Eine Einheit, die
+    /// an Bord geht, muss aber weg, sonst wird sie weitergezeichnet.</para>
+    ///
+    /// <para>Auf Listenstellen zeigen vier Dinge, und alle vier werden hier
+    /// nachgezogen: das <b>Belegungsgitter</b> (neu gestempelt, ohne die Wege
+    /// anzufassen — <c>InitEntityMovement</c> würde jede laufende Fahrt
+    /// vergessen), die <b>Auswahl</b>, die <b>zehn Gruppen</b> und jedes
+    /// <c>Target</c>. Wer hier eines vergisst, bekommt keinen Absturz, sondern
+    /// eine Einheit, die auf die falsche schiesst.</para></summary>
+    private void EinheitAusListeNehmen(int idx)
+    {
+        if (idx < 0 || idx >= _entities.Count) return;
+        _entities.RemoveAt(idx);
+
+        // 1. das Belegungsgitter neu stempeln — NICHT ueber InitEntityMovement,
+        //    das setzt Path und Reserved zurueck.
+        if (_nav != null)
+        {
+            _nav.ClearOccupants();
+            for (int i = 0; i < _entities.Count; i++)
+            {
+                var q = _entities[i];
+                if (q.Dead) continue;
+                if (!q.IsBuilding && !q.IsProp)
+                    _nav.SetHull(i, Simulation.NavGrid.HullSide(q.GameUnitType));
+                _nav.SetOccupant(q.Col, q.Row, i, q.Infantry >= 0,
+                                 immobile: q.IsBuilding || q.IsProp);
+            }
+        }
+
+        // 2. die Auswahl
+        var neuSel = new List<int>();
+        foreach (int i in _sel) neuSel.Add(i > idx ? i - 1 : i);
+        neuSel.RemoveAll(i => i == idx);
+        _sel.Clear();
+        foreach (int i in neuSel) if (i != idx) _sel.Add(i);
+        if (_selected == idx) _selected = -1;
+        else if (_selected > idx) _selected--;
+
+        // 3. die zehn Gruppen
+        foreach (var k in new List<int>(_groups.Keys))
+        {
+            var g = _groups[k];
+            for (int i = g.Count - 1; i >= 0; i--)
+            {
+                if (g[i] == idx) g.RemoveAt(i);
+                else if (g[i] > idx) g[i]--;
+            }
+            if (g.Count == 0) { _groups.Remove(k); _groupNames.Remove(k); }
+        }
+
+        // 4. jedes Ziel
+        foreach (var q in _entities)
+        {
+            if (q.Target == idx) q.Target = -1;
+            else if (q.Target > idx) q.Target--;
+        }
+    }
+
+    /// <summary>
+    /// <b>Was ein Stück an Bord wiegt</b> — <c>0x4CEE80</c>, und die Gattung
+    /// des STÜCKS entscheidet (<c>byte[+0x0A]</c>):
+    /// <list type="bullet">
+    /// <item><b>0 = Fahrzeug</b>, wiegt <b>5</b> (@0x4CEF05 <c>add al, 5</c>)</item>
+    /// <item><b>1 = Infanterist</b>, wiegt <b>1</b> (@0x4CEF56 <c>inc al</c>)</item>
+    /// <item>alles andere wird abgewiesen: »<i>Wrong type of unit tries to go
+    /// in transport ship</i>« (0x53988C) — damit sind Schiffe und Flugzeuge
+    /// draussen, ohne dass eine eigene Liste nötig wäre</item>
+    /// </list></summary>
+    public static int BeladeGewicht(Entity u) => u.GameUnitType switch
+    {
+        0 => 5,
+        1 => 1,
+        _ => -1,
+    };
+
+    /// <summary>
+    /// <b>Passt dieses Stück noch an Bord?</b> Die zwei Schranken sind
+    /// verschieden, und das ist gelesen, nicht vereinheitlicht:
+    /// ein <b>Fahrzeug</b> darf aufsteigen, solange das Gewicht
+    /// <b>≤ 10</b> ist (@0x4CEEFA <c>cmp al, 0x0A; jbe</c>) — also drei Stück;
+    /// ein <b>Infanterist</b>, solange es <b>≤ 14</b> ist (@0x4CEF4B
+    /// <c>cmp al, 0x0E; jbe</c>) — also fünfzehn. Gemischt ist erlaubt, und
+    /// dann trägt ein Frachter zum Beispiel zwei Fahrzeuge und vier Mann.
+    /// </summary>
+    public bool PasstAnBord(int carrierSlot, Entity u, out string grund)
+    {
+        int w = BeladeGewicht(u);
+        if (w < 0)
+        {
+            grund = "Wrong type of unit tries to go in transport ship";
+            return false;
+        }
+        int last = 0;
+        foreach (var q in FrachtAnBord(carrierSlot))
+        {
+            int gq = BeladeGewicht(q);
+            if (gq > 0) last += gq;
+        }
+        int schranke = w == 5 ? 10 : 14;
+        if (last > schranke)
+        {
+            grund = $"voll — Gewicht {last}, Schranke {schranke}";
+            return false;
+        }
+        grund = "";
+        return true;
+    }
+
+    /// <summary>Wie viele Einheiten eingestiegen und wie viele abgewiesen
+    /// wurden — für den Prüfstand.</summary>
+    public int Beladen, BeladenAbgewiesen;
+
+    /// <summary>
+    /// <b>EINSTEIGEN.</b> Die Einheit steht auf einer Ladezelle
+    /// (Lagenbyte ≥ 100) und geht an Bord eines eigenen Trägers.
+    ///
+    /// <para><b>Die 100 ist gelesen</b>, und zwar im Einheitendurchgang
+    /// <c>0x406CD0</c>: <c>cmp dl, 0x64; jb raus</c> @0x409510 und @0x409767
+    /// gegen die Lagentafel 0x542E18. Nach Abschnitt N ist <c>100 + n</c> eine
+    /// <b>Brücke/Mole</b> aus sec17 — genau der Ort, an dem man ein Schiff
+    /// besteigt.</para>
+    ///
+    /// <para>⚠ <b>WELCHEN Träger sie nimmt, ist UNSERE Regel:</b> den nächsten
+    /// eigenen, der einen Transportsatz hat und noch Platz. Das Original
+    /// entscheidet das im Bewegungsschritt, und dieser Teil ist <b>nicht
+    /// gelesen</b>. Die Gewichte und die zwei Schranken dagegen sind es
+    /// (siehe <see cref="PasstAnBord"/>) — an denen ist nichts geraten.</para>
+    /// </summary>
+    /// <returns>der Trägerplatz, oder −1; der Grund steht in <c>_order</c>.</returns>
+    public int BeladeVersuch(int idx)
+    {
+        if (idx < 0 || idx >= _entities.Count) { _order = "keine Einheit"; return -1; }
+        var u = _entities[idx];
+        if (u.IsBuilding || u.IsProp || u.Dead) { _order = "das geht nicht an Bord"; return -1; }
+        if (!RampeBeladen(u.Col, u.Row))
+        {
+            _order = "hier ist keine Ladestelle";
+            return -1;
+        }
+
+        // Der naechste eigene Traeger mit Platz — UNSERE Regel, siehe oben.
+        int besterSlot = -1, besteEntfernung = int.MaxValue;
+        string letzterGrund = "kein eigener Traeger in der Naehe";
+        foreach (var q in _entities)
+        {
+            if (q.Dead || q.IsBuilding || q.IsProp) continue;
+            if (q.Owner != u.Owner) continue;
+            if (!_bordDeckel.ContainsKey(q.Slot) && FrachtAnBord(q.Slot).Count == 0) continue;
+            int dist = Mathf.Max(Mathf.Abs(q.Col - u.Col), Mathf.Abs(q.Row - u.Row));
+            if (dist > BeladeReichweite || dist >= besteEntfernung) continue;
+            if (!PasstAnBord(q.Slot, u, out string grund)) { letzterGrund = grund; continue; }
+            besterSlot = q.Slot; besteEntfernung = dist;
+        }
+        if (besterSlot < 0)
+        {
+            _order = letzterGrund;
+            BeladenAbgewiesen++;
+            Audio.GameSounds.Play(Audio.GameSounds.Refused);
+            return -1;
+        }
+
+        _nav?.ClearOccupant(u.Col, u.Row, idx);
+        EinheitAusListeNehmen(idx);
+        FrachtAufnehmen(besterSlot, u);
+        Beladen++;
+        _order = $"an Bord — Gewicht jetzt {BordGewicht(besterSlot)}";
+        UpdatePanel();
+        QueueRedraw();
+        return besterSlot;
+    }
+
+    /// <summary>
+    /// <b>Der Einsteigetakt: wer auf einer Ladezelle steht und nichts mehr
+    /// vorhat, geht an Bord.</b>
+    ///
+    /// <para>Im Original geschieht das im Bewegungsschritt selbst
+    /// (<c>0x406CD0</c> prüft die Lagentafel beim Betreten einer Zelle). Wir
+    /// fragen es einmal je Takt statt im heissen Pfad — das Ergebnis ist
+    /// dasselbe (»steht auf der Ladezelle → steigt ein«), und der
+    /// Bewegungscode bleibt unangetastet.</para>
+    ///
+    /// <para>⚠ <b>EINE je Takt</b>, und danach wird abgebrochen: das Einsteigen
+    /// nimmt die Einheit aus der Liste, und weiterzulaufen hiesse über eine
+    /// Liste zu laufen, die sich gerade verschoben hat. Dieselbe Vorsicht wie
+    /// beim Absetzen — und dieselbe Wirkung, weil ein Takt 20 ms ist.</para>
+    ///
+    /// <para>⚠ <b>Nur wer nichts mehr vorhat.</b> Eine Einheit, die gerade
+    /// über die Ladezelle FÄHRT, soll nicht ungefragt einsteigen — sonst
+    /// verschluckt eine Mole jeden, der daran vorbeikommt.</para></summary>
+    private void BeladeTakt()
+    {
+        for (int i = _entities.Count - 1; i >= 0; i--)
+        {
+            var u = _entities[i];
+            if (u.Dead || u.IsBuilding || u.IsProp || !u.Mobile) continue;
+            if (u.Path != null || u.Orders.Count > 0) continue;      // faehrt noch
+            if (BeladeGewicht(u) < 0) continue;                      // kann gar nicht
+            if (!RampeBeladen(u.Col, u.Row)) continue;
+            if (BeladeVersuch(i) >= 0) return;                       // s.o.
+        }
+    }
+
+    /// <summary>Wie weit der Träger von der Ladezelle stehen darf. ⚠ UNSERE
+    /// Zahl — ein Frachter ist 4×4 und liegt am Ufer, die Ladestelle davor.
+    /// </summary>
+    private const int BeladeReichweite = 6;
+
+    /// <summary>Das Gewicht, das dieser Träger gerade fährt.</summary>
+    public int BordGewicht(int carrierSlot)
+    {
+        int last = 0;
+        foreach (var q in FrachtAnBord(carrierSlot))
+        {
+            int g = BeladeGewicht(q);
+            if (g > 0) last += g;
+        }
+        return last;
+    }
+
+    /// <summary>Einen Träger leerfahren — für den Prüfstand.</summary>
+    public void FrachtLeeren(int carrierSlot)
+    {
+        if (!_fracht.TryGetValue(carrierSlot, out var l)) return;
+        foreach (var u in l) _frachtPlaetze.Remove(u.Slot);
+        _fracht.Remove(carrierSlot);
+    }
+
     /// <summary>Alle Ladung wegwerfen — der Spielstand baut sie neu auf.</summary>
     public void FrachtZuruecksetzen() { _fracht.Clear(); _frachtPlaetze.Clear(); }
 
@@ -23306,6 +23540,8 @@ public partial class MapEntityLayer : Node2D
         // Was noch abzusetzen ist: EINES je Takt und Traeger. Siehe
         // Entity.UnloadRest — das Original fuehrt denselben Zaehler im Satz.
         FrachtAbsetzenTakt();
+        // Und die Gegenrichtung: wer auf einer Ladezelle steht, geht an Bord.
+        BeladeTakt();
 
         // ⚠⚠ DIE KI GEHÖRT NACH VORN (20.08.2026) — Station **14** von rund
         // siebzig, und die Reihenfolge ist nicht geraten: das Original schreibt

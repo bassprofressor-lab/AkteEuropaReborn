@@ -1718,9 +1718,50 @@ Bahnfahrten, Ladung).
 Frachter auf tot. Der Prüflauf hielt daraufhin ein Gebäude mit demselben Platz
 für einen Träger. Über `--campaign=N` steht die Karte, wie sie ist.
 
-### Was damit noch fehlt
+### ⭐ Das BELADEN ist gebaut (21.08.2026)
 
-Das **Beladen** von Hand. Die Laderoutine `0x4CEE80` ist längst gelesen
+Die Einheit steht auf einer Ladezelle (**Lagenbyte ≥ 100**, gelesen im
+Einheitendurchgang `0x406CD0` @0x409510/@0x409767) und geht an Bord. Die
+Laderoutine `0x4CEE80` ist selbst nachgelesen, nicht aus der Notiz übernommen:
+
+```
+  al = byte[TRAEGER*78 + 0x6E2708]      ; +0x40 = sein Transportsatz
+  cl = byte[STUECK*78  + 0x6E26D2]      ; +0x0A = die GATTUNG des Stuecks
+     == 0 -> Fahrzeug     cmp al,0x0A ; jbe   dann  add al, 5
+     == 1 -> Infanterist  cmp al,0x0E ; jbe   dann  inc al
+     sonst -> "Wrong type of unit tries to go in transport ship"
+```
+
+⚠ **Die zwei Schranken sind verschieden, und das ist gelesen, nicht
+vereinheitlicht:** ein Fahrzeug steigt auf, solange das Gewicht **≤ 10** ist —
+also **drei** —, ein Infanterist, solange es **≤ 14** ist — also **fünfzehn**.
+Gemischt ist erlaubt. Und dass Schiffe und Flugzeuge draussen bleiben, braucht
+keine eigene Liste: ihre Gattung ist weder 0 noch 1.
+
+**Gemessen** (`--beladen-check`, map_05): 3 von 5 Fahrzeugen, 15 von 17
+Infanteristen, ein Schiff abgewiesen mit dem Wortlaut des Originals, und eine
+Einheit abseits der Ladezelle steigt gar nicht erst ein.
+
+**Was UNSER ist:** welchen Träger die Einheit nimmt (den nächsten eigenen mit
+Platz, Umkreis 6). Das Original entscheidet das im Bewegungsschritt, und dieser
+Teil ist nicht gelesen.
+
+⚠ **Die heikle Stelle ist das Herausnehmen aus der Einheitenliste.** Im
+laufenden Spiel wird bei uns sonst NIE eine Einheit entfernt — wer stirbt,
+bekommt `Dead = true` und bleibt stehen. Auf Listenstellen zeigen vier Dinge,
+und alle vier werden nachgezogen: Belegungsgitter, Auswahl, die zehn Gruppen
+und jedes `Target`. ⚠ Nicht über `InitEntityMovement` neu stempeln — das setzt
+Wege und Belegungen zurück und liesse jede laufende Fahrt vergessen.
+
+### Der Auslöser
+
+Im Original geschieht das Einsteigen im **Bewegungsschritt** selbst
+(`0x406CD0` prüft die Lagentafel beim Betreten einer Zelle). Wir fragen es
+einmal je Takt statt im heissen Pfad — dasselbe Ergebnis (»steht auf der
+Ladezelle → steigt ein«), und der Bewegungscode bleibt unangetastet.
+⚠ **Eine je Takt**, denn das Einsteigen verschiebt die Einheitenliste; und
+⚠ **nur wer nichts mehr vorhat**, sonst verschluckt eine Mole jeden, der
+daran vorbeifährt. Die Laderoutine `0x4CEE80` ist längst gelesen
 (Gewichte 5 je Fahrzeug / 1 je Infanterist, Deckel 15, Flugzeuge und Schiffe
 abgelehnt), die Rampendaten liegen auf **33 Karten** in der Meta (`ramps`, je
 Zelle mit Lagenbyte) — der alte Blocker »die Laufzeit kennt sec20 gar nicht«

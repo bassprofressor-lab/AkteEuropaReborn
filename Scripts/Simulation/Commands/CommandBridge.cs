@@ -729,6 +729,142 @@ public partial class MapEntityLayer
 
     private static int MapObjectsRampBasis() => RampenKachelBasis;
 
+    /// <summary>
+    /// <c>--beladen-check</c> — <b>die zwei Schranken des Originals, an
+    /// echten Einheiten.</b>
+    ///
+    /// <para>Gemessen wird genau das, was gelesen ist, und beides in seiner
+    /// eigenen Zahl:</para>
+    /// <list type="number">
+    /// <item>Ein <b>Fahrzeug</b> steigt auf, solange das Gewicht ≤ 10 ist —
+    /// also <b>drei</b>, und das vierte wird abgewiesen.</item>
+    /// <item>Ein <b>Infanterist</b>, solange es ≤ 14 ist — also
+    /// <b>fünfzehn</b>, und der sechzehnte wird abgewiesen.</item>
+    /// <item>⚠ Ein <b>Schiff</b> wird mit dem Wortlaut des Originals
+    /// abgewiesen. Ohne diesen Punkt bestünde auch eine Fassung, die alles
+    /// aufnimmt.</item>
+    /// <item>⚠ Und eine Einheit, die <b>nicht auf einer Ladezelle</b> steht,
+    /// darf gar nicht erst einsteigen.</item>
+    /// </list></summary>
+    public string BeladenCheck()
+    {
+        var sb = new System.Text.StringBuilder("beladen-check\n");
+        bool alles = true;
+
+        // Ein Traeger mit Transportsatz.
+        int traeger = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var q = _entities[i];
+            if (q.Dead || q.IsBuilding || q.IsProp) continue;
+            if (!_bordDeckel.ContainsKey(q.Slot) && FrachtAnBord(q.Slot).Count == 0) continue;
+            traeger = i; break;
+        }
+        if (traeger < 0)
+            return sb.Append("  ⚠ ABBRUCH: kein Traeger mit Transportsatz auf dieser Karte.\n")
+                     .Append("  DURCHGEFALLEN").ToString();
+
+        var t0 = _entities[traeger];
+        // Fuer die Messung faehrt er leer.
+        FrachtLeeren(t0.Slot);
+        sb.Append($"  Traeger Platz {t0.Slot} auf ({t0.Col},{t0.Row}), leergefahren; ")
+          .Append($"Gewicht {BordGewicht(t0.Slot)}\n");
+
+        // Irgendeine Ladezelle der Karte.
+        int lc = -1, lr = -1;
+        for (int c = 0; c < 400 && lc < 0; c++)
+            for (int r = 0; r < 400; r++)
+                if (RampeBeladen(c, r)) { lc = c; lr = r; break; }
+        if (lc < 0)
+            return sb.Append($"  ⚠ ABBRUCH: keine Ladezelle (Lage >= 100) auf dieser Karte ")
+                     .Append($"(Rampenzellen insgesamt: {RampenZellen}).\n")
+                     .Append("  DURCHGEFALLEN").ToString();
+
+        // ⚠ EINGRIFF, und er steht in der Ausgabe: der Traeger wird an die
+        // Ladestelle gestellt. Gemessen werden sollen die zwei GEWICHTS-
+        // schranken, nicht die Frage, wo dieser Frachter zufaellig liegt.
+        int altC = t0.Col, altR = t0.Row;
+        t0.Col = lc; t0.Row = lr + 1;
+        sb.Append($"  Ladezelle ({lc},{lr}); ⚠ EINGRIFF: Traeger von ({altC},{altR}) ")
+          .Append($"nach ({t0.Col},{t0.Row}) gestellt — gemessen werden die Schranken\n");
+
+        // Ein Probestueck bauen und immer wieder hinstellen.
+        int Probe(int gattung)
+        {
+            var u = new Entity
+            {
+                Slot = 9000 + _entities.Count, Col = lc, Row = lr,
+                Owner = t0.Owner, Team = t0.Owner,
+                UnitType = 1, GameUnitType = gattung, Infantry = gattung == 1 ? 1 : -1,
+                Hp = 100, HpMax = 100, Mobile = true,
+                Footprint = CellRect(_ox, _oy, lc, lr, ElevOf(lc, lr)),
+            };
+            _entities.Add(u);
+            return _entities.Count - 1;
+        }
+
+        // --- 1. Fahrzeuge: drei gehen, das vierte nicht ---------------------
+        int drin = 0;
+        for (int k = 0; k < 5; k++)
+            if (BeladeVersuch(Probe(0)) >= 0) drin++;
+        bool fzOk = drin == 3;
+        sb.Append($"  Fahrzeuge (Gewicht 5, Schranke 10): {drin} von 5 Versuchen an Bord ")
+          .Append($"(erwartet 3), Gewicht jetzt {BordGewicht(t0.Slot)} ")
+          .Append(fzOk ? "✔" : "✘").Append('\n');
+        alles &= fzOk;
+
+        // --- 2. Infanterie: fuenfzehn ---------------------------------------
+        FrachtLeeren(t0.Slot);
+        drin = 0;
+        for (int k = 0; k < 17; k++)
+            if (BeladeVersuch(Probe(1)) >= 0) drin++;
+        bool infOk = drin == 15;
+        sb.Append($"  Infanterie (Gewicht 1, Schranke 14): {drin} von 17 Versuchen an Bord ")
+          .Append($"(erwartet 15), Gewicht jetzt {BordGewicht(t0.Slot)} ")
+          .Append(infOk ? "✔" : "✘").Append('\n');
+        alles &= infOk;
+
+        // --- 3. ein Schiff wird abgewiesen ----------------------------------
+        FrachtLeeren(t0.Slot);
+        int schiff = Probe(4);
+        bool weg = BeladeVersuch(schiff) < 0;
+        sb.Append($"  ein Schiff (Gattung 4): {(weg ? "abgewiesen ✔" : "AUFGENOMMEN ✘")} ")
+          .Append($"[{_order}]\n");
+        alles &= weg;
+
+        // --- 4. abseits der Ladezelle geht gar nichts -----------------------
+        int abseits = Probe(1);
+        _entities[abseits].Col = lc + 20;
+        _entities[abseits].Row = lr + 20;
+        bool nein = BeladeVersuch(abseits) < 0;
+        sb.Append($"  20 Zellen abseits: {(nein ? "abgewiesen ✔" : "AUFGENOMMEN ✘")} ")
+          .Append($"[{_order}]\n");
+        alles &= nein;
+
+        // --- 5. und der TAKT loest es von selbst aus ------------------------
+        //
+        // ⚠ Ohne diesen Punkt waere BeladeVersuch eine Methode, die niemand
+        // ruft — ein Auftrag, den es im Spiel gar nicht gibt.
+        FrachtLeeren(t0.Slot);
+        // ⚠ ERST AUFRAEUMEN. Die abgewiesenen Probestuecke der Punkte 1 bis 4
+        // stehen noch auf der Ladezelle — im ersten Anlauf stiegen sie hier
+        // mit ein und der Prueflauf mass seinen eigenen Abfall (»4
+        // eingestiegen« statt einem).
+        foreach (var q in _entities)
+            if (!q.IsBuilding && q.Col == lc && q.Row == lr) { q.Col = 1; q.Row = 1; }
+        int probe = Probe(1);
+        _entities[probe].Col = lc; _entities[probe].Row = lr;
+        int vorTakt = FrachtAnBord(t0.Slot).Count;
+        for (int k = 0; k < 4; k++) SimTick(SimDt);
+        bool vonSelbst = FrachtAnBord(t0.Slot).Count == vorTakt + 1;
+        sb.Append($"  im Takt, ohne Zutun: {FrachtAnBord(t0.Slot).Count - vorTakt} eingestiegen ")
+          .Append(vonSelbst ? "✔" : "✘ (niemand loest das Einsteigen aus)").Append('\n');
+        alles &= vonSelbst;
+
+        sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
+
     // ==== ABSETZEN — Befehl 18 ==============================================
 
     /// <summary>
