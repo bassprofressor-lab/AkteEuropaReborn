@@ -5734,3 +5734,388 @@ Gebäudepflege-Sprungtafel `0x4BE6E0`.
 Sektor-Kostenkarte `0xB45FB0` (121 × 4 B) · Vorgängerkarte `0xB36AA0` (121 B) ·
 Warteschlange `0xB38D50` (Sätze zu 16 B) · Freiliste `0xB38530` (Wörter) ·
 Zufallsliste `0xB38D00` (Bytes).
+
+---
+
+## AV. ⭐⭐ DIE HAUPTSCHLEIFE — UND WARUM »50 Hz« SO NICHT STIMMT (21.08.2026)
+
+Elf selbstbenannte Funktionen gelesen, **alle in beiden EXE befehlsweise
+verglichen**. Die Hauptschleife ist in C und F dieselbe — und sie sieht anders
+aus, als wir dreimal angenommen haben.
+
+### AV.1 ⭐⭐⭐ Der Aufbau, vollständig
+
+```
+doInit  (C 0x4158F0 / F 0x415730)   letzte Handlung:
+        SetTimer(hwnd, 1, 0x14, NULL)            C 0x415BC5 / F 0x415A05
+
+WndProc, Fall 0x113 = WM_TIMER      C 0x414010 / F 0x413E25:
+        byte[0x53920C]++ ; fertig.               ← MEHR NICHT
+
+WinMain (C 0x414E20 / F 0x414C60):
+  0x41518A  PeekMessage(PM_REMOVE) — Nachricht? -> Dispatch, zurück zum Kopf
+  0x415470  wenn byte[0x4F6FB0] != 0 :  byte[0x53920C] = 1
+  0x415480  wenn byte[0x53920C] == 0 :  zurück zum Kopf
+  0x415570  call Main_funct                      C 0x415CF0 / F 0x415B30
+```
+
+**Je Durchlauf wird genau EINE Fensternachricht verarbeitet ODER genau EIN
+`Main_funct` gefahren.** Es gibt **kein `GetMessage` und kein `WaitMessage`** im
+ganzen Bild (`PeekMessageA` 4 Stellen, `GetMessage` **0**) — die Schleife dreht
+frei.
+
+### AV.2 ⚠⚠ DER ZEITGEBER IST IM AUSLIEFERUNGSZUSTAND WIRKUNGSLOS
+
+`byte[0x4F6FB0]` (F `0x4F5FAC`) hat im ganzen Bild **genau einen** Verweis: den
+Lesebefehl `0x415471`. Sein Anfangswert in `.data` ist **`0x01`**, in **beiden**
+EXE. Also wird `byte[0x53920C] = 1` **vor jeder Prüfung** gesetzt, und der vom
+`WM_TIMER` hochgezählte Rückstand wird **überschrieben, bevor er gelesen wird**.
+
+> **Zahl:** 1 Verweis unter 31 650 `.text`-Verweisen, und er ist ein Leser.
+> **Nullmodell:** die Relokationstafel ist eine Vollerhebung — ein Schreiber mit
+> fester Adresse **müsste** auftauchen. Alle zehn Nachbarn (`0x4F6FA0`…`0x4F6FC8`)
+> haben eigene, einzelne Verweise; ein Blockschreiber über eine Zeigerbasis ist
+> damit sehr unwahrscheinlich, aber (AV.10) nicht ausgeschlossen.
+
+Damit ist auch die **Rückstandskappung tot**, die sonst schön wäre
+(`cmp al,4; ja -> byte[0x53920C]=1` @C `0x415F01`): sie kann nur über den zweiten
+Aufrufer von `Main_funct` (`Get run begin` `0x4198D6`) je greifen.
+
+### AV.3 ⭐⭐ Was den Takt WIRKLICH begrenzt: der Strahlrücklauf
+
+`flip_ddraw` (C `0x415CB0` / F `0x415AF0`, 51 B, gleich):
+
+```
+push 0                 ; dwFlags = 0
+call [vtbl+0x2C]       ; IDirectDrawSurface::Flip(NULL, 0)
+cmp eax, 0x887601C2    ; DDERR_SURFACELOST  -> Restore
+cmp eax, 0x8876021C    ; DDERR_WASSTILLDRAWING -> nochmal, Warteschleife
+```
+
+`Flip` mit `dwFlags == 0` **wartet auf den vertikalen Rücklauf**. Das ist der
+einzige Bremsklotz im Bildweg. ⭐ **Der Bildtakt des Originals ist die
+Bildwiederholrate des Monitors, nicht 20 ms.** Dazu passt, dass das Programm
+sich überhaupt eine Bildrate misst (AV.5) — bei festen 50 Hz wäre das sinnlos.
+
+### AV.4 ⭐⭐ Simulationstakt und Zeichentakt sind getrennt — durch einen Faktor
+
+In `Main_funct` steckt eine **innere Wiederholung**:
+
+```
+0x41605A  cmp word[0x4FA280],0 ; jne Ende      Pause/Ende -> gar keine Simulation
+0x41606A  al = byte[0x4FA23C]  ; == 0 -> nichts
+0x416077: ▼ dword[0x4FA240]++ (Takt) ; rnd, CPU, Power, Search, Movement, …
+0x4168A7  cmp bl,al ; jb 0x416077              ▲ WIEDERHOLEN
+0x4168B4: »move window« · »Draw windows« · »Palette anim« · »Flip pages« -> Flip
+```
+
+> **`byte[0x4FA23C]` (F `0x4F9244`) ist die SPIELGESCHWINDIGKEIT — die Zahl der
+> Simulationsdurchläufe je gezeichnetem Bild.**
+
+6 Leser, 6 Schreiber. Mit **1** geschrieben in `Get run begin` (`0x4193C8`) und
+im Wiedergabezweig (`0x416D67`); im Befehlsbus-Verteiler `0x4C2280` auf
+**`0x14` = 20 gedeckelt** (`0x4C4420`) und aus dem Befehlssatz gesetzt
+(`0x4C443E`, `0x4C444E`). ⭐ **Die Geschwindigkeit läuft über den Befehlsbus —
+sie ist im Netzspiel mitsynchronisiert** und dort hart auf 1 gezwungen.
+
+| | |
+|---|---|
+| **Zeichentakt** | 1 Bild je `Main_funct`, begrenzt vom `Flip` auf den Strahlrücklauf |
+| **Simulationstakt** | `byte[0x4FA23C]` Durchläufe je Bild = **Bildrate × Geschwindigkeit** |
+| **Zeitgeber (20 ms)** | läuft und zählt — und wird vor jeder Prüfung überschrieben. **Er begrenzt nichts.** |
+| **Netzspiel** | `byte[0x4F7F60]` wird bei `dword[0x539234] != 0` nicht gesetzt (`0x4153CB`); der Takt läuft nur nach einem abgeglichenen Befehl → **Gleichschritt über den Bus** |
+
+### AV.5 ⚠⚠ DER WIDERSPRUCH ZU UNSERER EIGENEN ZAHL — offen, nicht entschieden
+
+Wir führen **`TicksPerSecond = 50`** als *gemessen*, dreifach: der `SetTimer` mit
+20 ms, die Ableitung »eine Spielminute = 250 Takte = 5,00 s«, und der Takt aus
+`doInit` (AT.5).
+
+**Dieser Befund entwertet den ersten der drei Belege** und deutet den dritten
+um: der `SetTimer` ist da, aber sein Ergebnis wird überschrieben.
+
+⚠⚠ **Das ist NICHT als erledigt zu verbuchen.** Der Lauf war eine reine
+Codelesung; das Original lief dabei nicht. Zwei Lesarten stehen nebeneinander:
+
+1. **Der Befund stimmt** → die Taktrate des Originals hing an Monitor und
+   Geschwindigkeitsregler, war also **nie fest**. Dann ist unsere 50 eine
+   willkürlich herausgegriffene Zahl, die zufällig in der Nähe lag.
+2. **Der Befund ist unvollständig** → irgendetwas setzt `byte[0x4F6FB0]` doch
+   auf 0 (über eine Zeigerbasis, die die Relokationstafel nicht sieht), und der
+   Zeitgeber greift.
+
+⭐ **Der Prüfstand, der das entscheidet, ist klein und muss gebaut werden:** das
+Original laufen lassen und `dword[0x4FA240]` (Takte seit Missionsbeginn) je
+Sekunde gegen die Bildwiederholrate halten, bei Geschwindigkeit 1.
+**Bis dahin bleibt `TicksPerSecond = 50` stehen** — eine ungeprüfte Umstellung
+wäre schlimmer als eine bekannte Unsicherheit.
+
+### AV.6 ⭐ Das Original misst seine eigene Bildrate — und wirft die Zahl weg
+
+C `0x417DD1` / F `0x417C0D`, am Ende jedes `Main_funct`, einmal je Sekunde:
+`dword[0x54072C] = Bilder · 1000 / verstrichene ms`. Die `·1000` ist keine
+Deutung: `lea ·5, lea ·5, lea ·5, shl 3` = 5·5·5·8.
+
+> ⭐ **Negativbefund mit Zahl:** `dword[0x54072C]` (F `0x53F78C`) hat **genau
+> einen** Verweis — den Schreibbefehl. **Die gemessene Bildrate wird nirgends
+> gelesen und nirgends angezeigt.** In C und F gleich.
+
+Denselben Bau hat der Wegsuchzähler `dword[0xBCA010]`.
+
+### AV.7 ⭐⭐ DER SIEBTE AUSLIEFERUNGSUNTERSCHIED: NUM0…NUM7
+
+Die Tastenindextafel ist in beiden 137 B (VK 9…0x91). Von 101 abweichenden
+Einträgen sind 100 nur die andere Nummer des Vorgabearms (C 39, F 47). Die
+**inhaltliche** Abweichung sind acht:
+
+| VK | C | F |
+|---|---|---|
+| `0x60`…`0x67` (**NUM0…NUM7**) | Vorgabe → `DefWindowProc` | **Arme 25…32** |
+
+Der F-Arm ist achtmal derselbe 12-Byte-Stummel:
+`mov byte[0x4F928C], k` (k = 0…7) — und `byte[0x4F928C]` ist F's **eigene
+Spielernummer** (in C `byte[0x4FA284]`, belegt über den befehlsgleichen Griff
+`mov byte[eax + 0xB8A3B8], 1` @C `0x4151E4` gegen `0xB89418` @F `0x415024`).
+
+> ⭐⭐ **In der frühen Auslieferung (F, 16.09.1997) schaltet man mit dem
+> Nummernblock 0…7 auf jeden der acht Spieler um. In der späteren (C,
+> 22.01.1998) ist dieser Entwicklergriff ENTFERNT.**
+> 8 Tafeleinträge, 8 Sprungtafelarme (32 B), 96 B Stummelcode — und die
+> restliche Tastentafel ist Arm für Arm dieselbe.
+
+### AV.8 ⭐ Der achte und neunte Unterschied
+
+**Achter — C hält beim Beenden die CD an.** Am Schluss von `WinMain` ist bis auf
+**einen** Befehl alles gleich: C ruft zusätzlich `cd_stop()`
+(`0x4D50C0` = `mciSendCommandA(…, 0x808 = MCI_STOP, …)`) vor `cd_close()`.
+Beide EXE *besitzen* die Funktion (F `0x4D4C50`, dort von 3 Stellen im
+CD-Fenster gerufen) — **F ruft sie beim Beenden nur nicht.**
+Befehlszahl `WinMain`: C 583, F 582 — **genau ein Befehl.**
+
+**Neunter — das Entwicklerprotokoll `c:\cw_log.txt` (Strg+R):**
+
+| | F (09/1997) | C (01/1998) |
+|---|---|---|
+| Öffnungsart | **`"r+t"`** — Datei muss vorher da sein | **`"wt"`** — wird angelegt |
+| Formatzeile | 8 `%d` (`nr typ faze ukol prod energie reload spodek`) | dieselbe **+ `akce x y`** — 11 `%d` |
+| Stapelabbau | `add esp, 0x28` = 10 Doppelworte ✔ | `add esp, 0x34` = 13 ✔ |
+
+⭐ **Beide Fassungen sind in sich stimmig** — kein Fehler, sondern eine
+Erweiterung.
+
+⭐ Nebenbei belegt: die Einheitentafel `0x6E26C8`, **78 B je Satz**, 8000 Sätze —
+`(0x77AC51−0x6E26D1)/78 = 8000`, und der Spielstandschreiber sichert genau
+`0x98580 = 624 000 = 8000 × 78`.
+
+### AV.9 ⭐ Das Bildschirmfoto IST erreichbar — über ROLLEN
+
+`0x418B00` (C) / `0x418940` (F), 137 B, befehlsgleich:
+`fopen("d:\screen.bmp","r+b")` → `fseek(0x436)` → `Lock(Rückpuffer)` →
+`fwrite(pixel, 1, 0x75300)`.
+
+> ⭐⭐ **Beide Zahlen gehen auf:**
+> `0x436 = 1078 = 14 + 40 + 1024` — genau der Kopf einer 8-Bit-BMP.
+> `0x75300 = 480 000 = **800 × 600**`, rohes 8 Bit.
+> **Nullmodell:** 480 000 zerfällt auch in 640×750, 960×500, 1200×400 … — von
+> allen Teilerpaaren ist **800 × 600 das einzige Bildschirmmass**, und es ist
+> Stufe 1 der Modustafel `0x538858` (Abschnitt AS).
+
+**Weg:** `VK_SCROLL (0x91)` → C `0x413E2E` / F `0x413C43`; prüft
+`byte[0x4FA0C0]` (Entwicklerschalter) und ruft sonst nichts.
+→ **Praktisch verwertbar: »Developers' cheats enabled« (C `0x43AF5A`), dann
+ROLLEN.** ⚠ Zwei Vorbehalte: `d:\screen.bmp` muss **vorher existieren** samt
+gültigem 1078-Byte-Kopf (`"r+b"` legt nichts an), und es wird **fest 800 × 600**
+geschrieben.
+
+⚠ Die zweite `d:\screen.bmp`-Funktion `0x4226C0` / F `0x421880` ist **tot**
+(0 Aufrufer, 0 Relokationen, auch über ihren Stummel) — sie schreibt `save.sav`
+und ist ein Entwicklerwerkzeug, kein Bildschirmfoto.
+
+⭐ **Das Tastenzustandsfeld ist `0xA182E8`** (F `0xA17348`), 256 B. Es wird für
+**genau 16** Tasten abgefragt, in beiden EXE dieselben: `0x00`, Umschalt, Strg,
+die vier Pfeile, und A E H Q R S T W Z. **Strg an 24 Stellen, Umschalt an 13, in
+C und F gleich viele** — damit sind alle »Strg+X«-Griffe an einer Stelle lesbar.
+
+### AV.10 ⭐ `CWorms Player` ist der DirectPlay-Spielername
+
+`0x403B60` / F `0x403B40`, 404 B, befehlsgleich. Ein Aufrufer: `Get run begin`.
+Vier benutzte Tafelplätze, alle auf `IDirectPlay` (Fassung 1):
+`+0x08 Release`(1 Arg) · `+0x10 Close`(1) · `+0x14 CreatePlayer`(5) ·
+`+0x50 Open`(2).
+
+> **Zahl:** 4 von 4 treffen die semantisch richtige Methode **und** die
+> Argumentzahl. **Nullmodell:** `IDirectPlay` hat rund 30 Methoden — vier
+> geratene Indizes, die alle passen *und* die Stellenzahl treffen, liegen bei
+> etwa 1 : 10⁶.
+
+Und die Sitzungsstruktur geht **restlos auf**: `dwSize = 0x7C = 124`, GUID nach
+`+0x04`, **`+0x18 = 8`**, `+0x20 = 2`, Name ab `+0x24` — genau
+`DPSESSIONDESC` der Fassung 1 (124 B).
+⭐⭐ **`dwMaxPlayers = 8` — ein dritter, ganz unabhängiger Beleg für die acht
+Spieler aus AT.2.**
+
+**Warum »CWorms«?** Es ist der **Name der Spielmaschine selbst.** Im `.data`
+stehen zwölf Dateiendungen, die alle mit `CW` beginnen (`.cwa .cwd .cwg .cwi
+.cwk .cwm .cwn .cwp .cwr .cws .cwt .cww`) plus der Dialogfilter
+`CW Map File (*.CWM)`; und `CWorms` kommt im ganzen Bild **genau einmal** vor.
+→ **Kein Rest eines fremden Programms, sondern der Arbeitsname unseres eigenen.**
+
+⭐ Die DirectPlay-GUID ist in C und F **byteweise gleich**
+(`67F21240-51C1-11D0-B7C5-008048A81FDF`) — eine F- und eine C-Auslieferung
+könnten einander im Netz finden.
+
+⚠ Ein echter Schnitzer in beiden: `push 0x7F00; call SetCursor` — dort wird die
+**Ressourcennummer** `IDC_ARROW` als Zeigerkennung übergeben (`0x403B93`, `0x4194A4`).
+
+### AV.11 ⭐ Der Befehlsbus — und eine Grösse, die aufs Byte aufgeht
+
+`Message-buffer is full!!!!` (C `0x4C5F50` / F `0x4C5B00`) ist die
+**Gleichschritt-Sperre** des Mehrspielerbetriebs. Ein Aufrufer: der
+Befehlsbus-Verteiler C `0x4C253E`.
+
+⭐ **Opcodes ≤ 1000 laufen über die Sperre, Opcodes > 1000 örtlich.**
+
+Der Ring: Basis C `0xB509D8` / F `0xB4FA38`, Satzweite **236 B** (`lea`-Kette
+`i→7i→29i→59i`, dann `·4`), Umlauf **1000** (`ring_weiter` C `0x4C2070`).
+
+> ⭐⭐ **Die Grösse geht aufs Byte auf, zweimal unabhängig:**
+> `1000 × 236 = 236 000 = 0x399E0`.
+> C: `0xB509D8 + 0x399E0 = 0xB8A3B8` — genau die 8-Byte-Spielerflaggentafel, die
+> `WinMain` @`0x4151E9` beschreibt.
+> F: `0xB4FA38 + 0x399E0 = 0xB89418` — genau die Stelle in F `0x415029`.
+> **Nullmodell:** dass der ausgerechnete Ringschluss in beiden Bauten zufällig
+> auf eine unabhängig bekannte Nachbarveränderliche fällt, ist ausgeschlossen.
+
+⚠ **Und danach wird nicht abgebrochen — der Spieler sieht aber doch etwas:** auf
+die stumme Protokollsenke folgt ein **echtes `MessageBoxA`** (»Message buffer is
+full(2) «), das **nicht** über `meldung()` läuft und darum **nicht** vom
+Entwicklerschalter abhängt. Danach läuft die Schleife weiter.
+
+Die Sperre wartet höchstens **2000 ms** (`timeGetTime + 0x7D0`, C `0x4C5FC8`),
+führt für jeden der acht Plätze eine Anwesenheitsflagge, und **`0x44C = 1100`**
+ist der Takt-Bestätigungsbefehl.
+
+### AV.12 ⭐ Der Netz-Vollabgleich `0.tmp` — und er wird nie gerufen
+
+`0x4C5C30` / F `0x4C57E0`, 629 B: schreibt den **kompletten Spielstand** nach
+`0.tmp` und schickt ihn in Blöcken zu `0x7D0 = 2000` B über den Bus, in zehn
+Häppchen zu `0x32·4 = 200` B, mit Befehl **`0x2BC = 700`** — genau dem
+Sonderzweig, den `opcodes.py` seit dem 08.08. führt. Dazu ein Fortschrittsbalken
+(`0x444180`), passend zu Fensterart 47 »Synchronisieren…«.
+
+⚠⚠ **Und er ist tot.** 0 direkte Aufrufer, 0 Relokationsverweise, auch über
+seinen Stummel — in **beiden** EXE. Dieselbe Signatur wie `sejmi 1` und `JOJO`.
+
+⭐ Ein Nebenfund von grossem Wert: **`0x41D210` ist der Spielstandschreiber**
+(2934 B, Kennung `"CWM"`). Er wird auch mit `"replay.tst"` gerufen (C `0x416D75`)
+bei Takt **`0x1388 = 5000`**, danach `PostQuitMessage` — **der
+Determinismus-Prüfstand des Originals schreibt bei Takt 5000 einen vollen
+Spielstand und beendet das Programm.**
+
+### AV.13 ⭐ `JOJO` — 21 Byte, unerreichbar
+
+```
+push 0 ; push "JOJO" ; push "Chyba" ; push 0 ; call MessageBoxA ; ret
+```
+0 direkte Aufrufer, 0 Relokationsverweise, und `"Chyba"` (tschechisch »Fehler«)
+wird im ganzen Bild **nur hier** benutzt. Ein Entwicklerscherz (»jojo« ≈ »jaja«)
+unter dem Titel »Fehler«, unerreichbar wie `sejmi 1`.
+
+### AV.14 `Multi:` — und der Mechanismus hinter dem Fehler von AT.4
+
+`0x418DE0` / F `0x418C20`, 905 B: baut `net01.cwm` … `net08.cwm`
+(`cmp al,9; jb`), sucht sonst auf der CD unter `<Laufwerk>:\levels\`.
+
+⭐ **Und der 53-Byte-Kopf aus AT.2 geht restlos auf** — die Lesefolge verbraucht
+ihn aufs Byte:
+
+| Kopfversatz | Bytes | wohin |
+|---|---|---|
+| `+0x00` | 2 | verworfen |
+| `+0x02` | 1 | ⭐ **Zahl der belegten Plätze** (AT.2) |
+| `+0x03`, `+0x04` | 1 + 1 | örtlich |
+| `+0x05` | 21 | örtlich |
+| `+0x1A` | 2 | ⭐ **Index in die deutsche Namenstafel `0x4F805B`** |
+| `+0x1C` | 21 | `0x77CAD0` |
+| `+0x31`, `+0x33` | 2 + 2 | Kartentafel `+0x2A` / `+0x2C` |
+| | **= 53** | |
+
+→ **Das ist der Mechanismus hinter AT.4:** NET06/07/08 tragen im Kopf die
+Indizes 56/57/58, und dort steht in der Namenstafel nichts.
+
+Die Gefechtskartentafel ist `0x5407A8` / F `0x53F808`, **20 × 50 B = 1000 B** —
+unmittelbar über den Gefechtseinstellungen aus AT.3.
+`»Too many multiplayer levels«` feuert bei 20 (`cmp al,0x14`), läuft über
+`meldung()` (also **stumm**), **bricht nicht ab** — und kann bei nur 8 gesuchten
+Dateien ohnehin nie auslösen.
+
+### AV.15 `MEMORY INFO` — sieben Felder, und unerreichbar
+
+`0x418BB0` / F `0x4189F0` blendet Überschrift plus **sieben** Zahlen aus einer
+`MEMORYSTATUS` bei C `0xB97AB0` / F `0xB96B10` ein: `MemoryLoad` `+0x04` …
+`AvailVirtual` `+0x1C`.
+
+> **Zahl:** 7 von 7 Wertfeldern, in exakter Reihenfolge, auf lückenlos
+> aufeinanderfolgenden Doppelwortversätzen ab `+4`.
+
+**Aber** der Aufruf hängt an `byte[0x4F6FB8]`, und das hat **genau einen
+Verweis — den Lesebefehl** — bei Anfangswert 0. Keine Taste, kein Befehl setzt
+es. ⭐ **Im ausgelieferten Programm nicht erreichbar**, beide EXE.
+(Der grosse Einheiten-Auszug daneben hängt dagegen an `dword[0x4F6FD0]`, und das
+schaltet die Taste **I** um.)
+
+### AV.16 `Search:` — die Wegsuche, ein Auftrag je Takt
+
+`0x4D3810` / F `0x4D33A0`, 3656 B in beiden, gerufen **genau einmal je
+Simulationsdurchlauf**. Auftragsring: Nummern (u16) `0xBDA0E8`, Art (u8, `0xFF` =
+leer) `0xBDA8C0`, Zeiger `word[0x539B10]` / `[0x539B14]`.
+
+> ⭐ **Die Ringlänge 1000 steht dreifach:** im Code (`cmp …,0x3E8`), und im
+> Spielstandschreiber, der `0x7D0 = 2000` B ab `0xBDA0E8` (= 1000 × u16) und
+> `0x3E8 = 1000` B ab `0xBDA8C0` (= 1000 × u8) sichert.
+
+Je Takt wird **genau ein** Auftrag abgearbeitet — der erste ab dem Lesezeiger,
+dessen Besitzer nicht ausgeschieden ist und dessen Einheit lebt.
+
+### AV.17 ⚠ Was offen blieb, und wodurch das Verfahren blind ist
+
+* **Berechnete Adressen.** Alle »genau ein Verweis«-Aussagen (`0x4F6FB0`,
+  `0x4F6FB8`, `0x54072C`) stützen sich auf die Relokationstafel, die nur
+  **literale** absolute Adressen aufzählt.
+* **Das Programm lief nicht.** Die zentrale Aussage von AV.2/AV.3 ist eine reine
+  Codelesung — siehe den Prüfstand in AV.5.
+* ⭐ **Der Vorgabewert von `byte[0x4FA23C]` (Geschwindigkeit) ist ungelesen.**
+  Das ist **die eine Zahl, die für den Nachbau des Takts noch fehlt**; sie steht
+  vermutlich in `options.cfg` oder in `0x447040`.
+* `0x4C2280` (11 601 B) wurde nur an den Rändern gelesen — wer den Gleichschritt
+  nachbauen will, muss dort hinein.
+* Die Felder `+0x2A`/`+0x2C` der Gefechtskartentafel sind als »zwei Worte«
+  gelesen, ihre Bedeutung nicht. »Breite/Höhe« ist **Wortlaut, kein Befund**.
+* Warum die Sprungtafelfläche in `WndProc` bei F 24 B grösser ist, obwohl F acht
+  Arme **mehr** hat, wurde nicht aufgerechnet — es sind Daten hinter dem `ret`,
+  und die Regel verlangt, solche »Unterschiede« zu verwerfen.
+
+⚠⚠ **Und eine Selbstkorrektur des Laufs, die für alle künftigen Läufe gilt:**
+das erste Werkzeug erkannte Funktionsgrenzen an **einem** `0xCC`. Das ist falsch
+— `0xCC` kommt massenhaft als Adressbyte vor (z. B. `push 0x4F79CC` @`0x41684D`).
+Dadurch zerfiel `Main_funct` scheinbar in **neun** Funktionen mit »0 Aufrufern«,
+die in Wahrheit **eine** 8713-Byte-Funktion sind. **Die Polsterung ist erst ab
+DREI aufeinanderfolgenden `0xCC` verlässlich.** Wer in älteren Notizen »auf = 0«
+zu einer Adresse zwischen `0x415CF0` und `0x417EF9` findet, muss dort nachrechnen.
+
+### AV.18 ⚠ Eine Lücke, die beim Bauen des Sektorenrasters auffiel
+
+Unser Ausleser exportiert **sec62 gar nicht.** In `map_09.entities.json` gibt es
+weder ein `imp`-Feld am Gebäude noch eine eigene Tafel; `targets` ist eine leere
+Liste. Damit ist beim Bau von `AiSetImpCpu` (Abschnitt AU.4) `sec110[p] == 0`
+für **jeden** Spieler in **jeder** Kampagnenmission — und `sec110 == 0` ist
+genau die Bedingung, unter der das Original in den **»Take all«**-Zweig geht und
+gar keine Verteidiger zurückhält.
+
+⭐ Es ist also nicht bloss ein fehlendes Feld: **die fehlende Tafel kippt den
+Gegner in eine andere Betriebsart.** Zu tun ist zweierlei:
+1. sec62 aus den 13 `.DM` mit ausexportieren (8 × 255 × 2 B, gemessene Werte
+   6/4/9/2 — siehe AU.4),
+2. bis dahin steht in `AiImpVon` eine benannte Ersatzregel: im Gefecht **6** je
+   eigenem Gebäude (der Wert, der im Original 311 von 324 Fällen ausmacht), in
+   der Kampagne 0. **Die Ersatzregel ist unsere, nicht die des Originals.**

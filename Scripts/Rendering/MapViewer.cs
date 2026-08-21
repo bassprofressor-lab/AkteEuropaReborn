@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Rendering;
+﻿namespace AkteEuropaReborn.Rendering;
 
 using Godot;
 using GDict = Godot.Collections.Dictionary<string, Godot.Variant>;
@@ -531,6 +531,12 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_sektorCheck)
+        {
+            GD.Print(_entities.SektorCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_hinweisCheck)
         {
             GD.Print(_entities.HinweisCheck());
@@ -858,6 +864,7 @@ public partial class MapViewer : Node2D
     private bool _beladenCheck;
     private bool _brandCheck;
     private bool _bandCheck;
+    private bool _sektorCheck;
     private bool _hinweisCheck;
 
     /// <summary><c>--gruppen-check</c> — zehn Gruppen, Ausschliesslichkeit,
@@ -1443,6 +1450,7 @@ public partial class MapViewer : Node2D
             else if (a == "--beladen-check") _beladenCheck = true;
             else if (a == "--brand-check") _brandCheck = true;
             else if (a == "--band-check") _bandCheck = true;
+            else if (a == "--sektor-check") _sektorCheck = true;
             else if (a == "--hinweis-check") _hinweisCheck = true;
             else if (a == "--gruppen-check") _gruppenCheck = true;
             else if (a == "--market-check") _marketCheck = true;

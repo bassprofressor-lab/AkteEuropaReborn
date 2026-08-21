@@ -1120,6 +1120,12 @@ public partial class MapEntityLayer : Node2D
             // Kampagnenkarte richtet die Mission aus, was geschieht — bis deren
             // Block (0x498000..0x4A5600) gelesen ist, ist Stillhalten näher am
             // Original als Herumfahren.
+            // ⭐ sec106 — die Skriptsperre. Sie heisst NICHT »ausgeschieden«,
+            // sondern »dieser Spieler wird vom Missionsskript gefuehrt«: im
+            // Original faellt sein ganzer KI-Zug aus, noch vor jeder
+            // Aufgabenwahl (@0x4BFBFA).
+            if (AiGesperrt(a.Player)) continue;
+
             if (!InCampaign)
             {
                 AiGrab(a);
@@ -1239,36 +1245,90 @@ public partial class MapEntityLayer : Node2D
         var list = _missionTargets[a.Player];
         if (list.Count == 0) return;
 
-        int best = -1, bestPrio = int.MinValue;
-        for (int k = list.Count - 1; k >= 0; k--)
-        {
-            int idx = ResolveTarget(a.Player, list[k]);
-            if (idx < 0) { list.RemoveAt(k); continue; }   // erledigt — streichen
-            if (list[k].Priority > bestPrio) { bestPrio = list[k].Priority; best = idx; }
-        }
-        if (best < 0) return;
+        // ⭐ NEU AM 21.08.2026 — die Auftragswahl ist jetzt die des Originals.
+        //
+        // Hier stand vorher: »nimm das Ziel mit dem hoechsten Priority«, und
+        // dazu das Eingestaendnis, die Zahl der losziehenden Einheiten sei
+        // UNSERE Setzung, weil `target:` @0x4BECF0 nicht gelesen sei. Sie ist
+        // jetzt gelesen (OFFENE_FRAGEN.md, AU.2), und sie sieht anders aus:
+        //
+        //     po = pway / imp        -> das KLEINSTE po gewinnt
+        //     Gruppengroesse = (3*po)/2, geklemmt 3..99
+        //     losgeschickt nur, wenn  freie > po  ODER  sec61 == 5
+        //
+        // Ein doppelt so wichtiges Ziel darf also doppelt so weit weg liegen —
+        // und ein weites oder unwichtiges Ziel verlangt mehr Ueberschuss.
+        // Die ganze Kette steht in Scripts/Simulation/SkirmishAiSectors.cs.
+        if (AiGesperrt(a.Player)) return;          // sec106: das Skript fuehrt ihn
 
-        // ⚠ UNSERE Setzung ist die Zahl der Einheiten, die losgehen: das
-        // Original waehlt sie in @0x4BECF0, das hier nicht gelesen ist. Genommen
-        // wird dieselbe Wellengroesse wie im Gefecht, damit wenigstens EINE
-        // Zahl im Spiel steht und nicht zwei verschiedene.
-        var army = ArmyOf(a.Player);
-        a.Wave.RemoveAll(i => i >= _entities.Count || _entities[i].Dead ||
-                              _entities[i].Owner != a.Player);
-        if (a.Wave.Count > 0 && a.TargetIdx == best) return;   // schon unterwegs
-        if (army.Count <= guard) return;
+        AiGruppenPflegen(a.Player);
+        AiZustandVorlaeufig(a.Player);
+        AiStaerkeraster(a.Player);
+        AiSetImpCpu(a.Player);
 
+        int freie = AiFreieAngreifer(a.Player, out int sx, out int sy);
+        if (freie == 0) return;                    // »Not free attacker:«
+
+        var (platz, po) = AiZielwahl(a.Player, list, sx, sy);
+        if (platz < 0) return;                     // r_best == 0xFF
+
+        // Die Freigabe des Originals. `sec61 == 5` haengt sie aus: diese
+        // Betriebsart greift auch dann an, wenn zu wenige frei sind.
+        if (!(freie > po || _aiSec61[a.Player] == 5)) return;
+
+        int ziel = ResolveTarget(a.Player, list[platz]);
+        if (ziel < 0) return;
+
+        int g = AiGruppeBilden(a.Player, platz, po);
+        if (g < 0) return;                         // »Attack group not available«
+
+        // ⚠ UNSER Anteil bleibt das FAHREN. `0x4BCF30` (671 Befehle) und die
+        // sec108-Wegpunkte sind noch nicht gelesen; bis dahin schicken wir die
+        // Gruppe wie bisher mit `AiSend` los.
         a.Wave.Clear();
-        int take = Mathf.Min(waveSize, army.Count - guard);
-        for (int k = 0; k < take && k < army.Count; k++)
+        foreach (int i in _aiGruppen[a.Player][g].Einheiten)
         {
-            a.Wave.Add(army[k]);
-            AiSend(army[k], best);
+            a.Wave.Add(i);
+            AiSend(i, ziel);
         }
-        a.TargetIdx = best;
+        a.TargetIdx = ziel;
         a.Waves++;
-        GD.Print($"KI P{a.Player}: {take} Einheiten auf das Missionsziel " +
-                 $"{_entities[best].Name} bei ({_entities[best].Col},{_entities[best].Row})");
+        GD.Print($"KI P{a.Player}: Gruppe {g} mit {a.Wave.Count} Einheiten auf " +
+                 $"{_entities[ziel].Name} bei ({_entities[ziel].Col},{_entities[ziel].Row}) " +
+                 $"— po={po}, freie={freie}, Start-Sektor ({sx},{sy})");
+    }
+
+    /// <summary>
+    /// ⚠⚠ <b>EINE BRÜCKE, KEIN FUND — und sie soll wieder verschwinden.</b>
+    ///
+    /// <para><see cref="AiSetImpCpu"/> zählt <c>+0xA</c> aus den Einheiten mit
+    /// <c>CPU0 == 1</c> oder <c>2</c>. <b>Wer diese beiden Werte setzt, ist
+    /// genau die Funktion, die noch nicht gelesen ist</b> — der Gruppenlauf
+    /// <c>0x4BCF30</c> / F <c>0x4BC9F0</c> mit seinen sec108-Wegpunkten (»auf dem
+    /// Marsch« → 1, »angekommen« → 2). Ohne sie bliebe <c>+0xA</c> auf Null, es
+    /// gäbe nie freie Angreifer, und das ganze Raster liefe leer.</para>
+    ///
+    /// <para>Wir setzen darum vorläufig jede untätige Einheit auf <c>CPU0 = 2</c>
+    /// im Sektor, in dem sie steht. Das ist der Zustand, auf den das Original
+    /// zuläuft — aber es ist <b>unsere</b> Abkürzung dorthin, und sie gehört
+    /// gestrichen, sobald <c>0x4BCF30</c> gelesen ist.</para>
+    ///
+    /// <para>Was hier NICHT angefasst wird, ist Absicht: <c>CPU0 == 3</c>
+    /// (greift an), <c>== 5</c> (Wachposten), <c>== 10</c> (in einer Gruppe) und
+    /// <c>== 20</c> (Transportroboter) bleiben stehen.</para>
+    /// </summary>
+    private void AiZustandVorlaeufig(int p)
+    {
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != p || !e.Mobile) continue;
+            if (!CanFight(e)) continue;
+            if (e.AiCpu0 != 0) continue;                 // 3/5/10/20 bleiben
+            var (sx, sy) = AiSektorVon(e.Col, e.Row);
+            e.AiCpu0 = 2;                                // »angekommen«
+            e.AiCpu1 = (sy << 4) | sx;                   // das Halbbytepaar
+        }
     }
 
     private bool AliveAsPlayer(int p)

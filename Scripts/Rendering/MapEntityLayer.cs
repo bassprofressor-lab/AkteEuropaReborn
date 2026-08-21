@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Rendering;
+﻿namespace AkteEuropaReborn.Rendering;
 
 using System.Collections.Generic;
 using System.Linq;
@@ -34,6 +34,38 @@ public partial class MapEntityLayer : Node2D
         // zusammen mit `Defence`.
         public int Slot, Col, Row, Owner, Team, UnitType, Hp, HpMax, Elev;
         public int Mark = -1;      // record +0x43 — the campaign's handle on one unit
+
+        /// <summary>
+        /// <b>CPU0 und CPU1 — der KI-Zustand, den das Original IM
+        /// EINHEITENSATZ führt.</b>
+        ///
+        /// <para>Sie stehen hier und nicht im Gegner, weil sie im Original auch
+        /// dort stehen: sec5 trägt sie je Einheit. <c>Set imp cpu:</c>
+        /// (C <c>0x4BBB80</c>) benutzt <c>CPU0</c> als Sprungtafel
+        /// (<c>0x4BC214</c>) und <c>CPU1</c> als Sektornummer.</para>
+        ///
+        /// <list type="bullet">
+        ///   <item><c>0</c> — untätig; mit <c>UKOL == 0</c> geht sie in die
+        ///   Freiliste.</item>
+        ///   <item><c>1</c> — auf dem Marsch in den Sektor aus <c>CPU1</c>.</item>
+        ///   <item><c>2</c> — dort angekommen. Gemessen: bei <c>CPU0 == 2</c>
+        ///   nennt <c>CPU1</c> in <b>67 %</b> den eigenen Sektor; Nullmodell
+        ///   einer Zufallseinheit: <b>0,9 %</b>.</item>
+        ///   <item><c>3</c> — greift an.</item>
+        ///   <item><c>5</c> — auf einem Wachposten (sec107).</item>
+        ///   <item><c>10</c> — in einer Angriffsgruppe; <c>CPU1</c> ist dann die
+        ///   <b>Gruppennummer</b> 0…3, kein Sektor.</item>
+        ///   <item><c>20</c> — ⚠ <b>der Transportroboter-Zustand.</b> Gemessen:
+        ///   trifft <b>133 der 136</b> Roboter und nur 3 andere Einheiten. Eine
+        ///   ältere Notiz nannte ihn »frisch produziert«; das ist berichtigt.</item>
+        /// </list>
+        ///
+        /// <para><c>CPU1</c> ist als Sektor ein <b>Halbbytepaar</b> (niederes
+        /// Halbbyte = sx, höheres = sy). Belegt an 655 von 655 Einheiten mit
+        /// <c>CPU1 != 0</c>: beide Halbbytes ≤ 10. Nullmodell bei beliebigem
+        /// Byte: 47 %, erwartet wären 309.</para>
+        /// </summary>
+        public int AiCpu0, AiCpu1;
         /// <summary>Bis wann die Schusspose gezeigt wird — von Fire() gesetzt.
         /// UNSERE Zutat: das Original hat dafuer einen eigenen Zaehler, den wir
         /// nicht gelesen haben.</summary>
