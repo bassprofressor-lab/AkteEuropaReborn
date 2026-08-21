@@ -12203,11 +12203,23 @@ public partial class MapEntityLayer : Node2D
     /// <para>⚠⚠ 17.08.2026 — <b>FEHLER D DER LISTE E, die eigentliche
     /// Ursache.</b> <c>LaunchShip</c> setzte <c>Weapon = d.WeaponComp</c>, und
     /// <c>weapon_comp</c> wird von KEINEM unserer Einleser jemals geschrieben —
-    /// der Wert war also immer <b>0</b>. Und 0 ist im Original nicht »irgendein
-    /// Bild fehlt«, sondern der <b>Unbewaffnet-Schalter</b>: der Kampftakt
-    /// @0x40DE1E prueft <c>test al,al</c> auf +0x0C und verlaesst den Kampfteil
-    /// sofort. Jedes bei uns gebaute Schiff war damit wehrlos — genau die
-    /// Meldung »Boote scheinen keine Waffen zu haben«.</para>
+    /// der Wert war also immer <b>0</b>. Jedes bei uns gebaute Schiff war damit
+    /// wehrlos — genau die Meldung »Boote scheinen keine Waffen zu haben«.</para>
+    ///
+    /// <para>⚠ <b>DIE BEGRÜNDUNG DAFÜR WAR FALSCH, das Ergebnis nicht.</b> Hier
+    /// stand: »0 ist der Unbewaffnet-Schalter: der Kampftakt @0x40DE1E prueft
+    /// <c>test al,al</c> auf <b>+0x0C</b>«. Am Code steht dort <b>+0x0D</b>:</para>
+    /// <code>
+    ///   0040DDF0  mov al, byte[edi + 0x6E26D5]   ; +0x0D ZBRAN
+    ///   0040DDFE  mov cl, byte[edi + 0x6E26D4]   ; +0x0C -- nur gegen 0x26 (Flak)
+    ///   0040DE1E  test al, al                    ; al ist +0x0D, NICHT +0x0C
+    /// </code>
+    /// <para><b>Der Unbewaffnet-Schalter ist ZBRAN, nicht VRSEK</b>, und das
+    /// passt zusammen: Infanterie hat <c>+0x0C == 0</c> und kämpft trotzdem.
+    /// Dass ein Schiff seinen Aufsatz braucht, kann aus anderem Grund richtig
+    /// bleiben — die Zuordnung unten ist davon unberührt —, aber die zitierte
+    /// Stelle zeigt aufs falsche Feld. ⚠ <b>Nicht weiterverfolgt:</b> woran es
+    /// bei Schiffen wirklich hing, ist damit wieder offen.</para>
     ///
     /// <para>Die Zuordnung ist gelesen (Bauteiltafel 0x5045A0, Satz 58 B,
     /// Feld +0x0D; @0x4B2DCE schreibt sie nach +0x0C):
