@@ -224,6 +224,68 @@ public static class CommandOp
     /// unmittelbar von <c>word[+0x40]</c> zum <c>push 7</c>.</para></summary>
     public const short PlaceGenerator = 21;
 
+    /// <summary>
+    /// <b>DIE FÜNFZEHN GEBÄUDEBEFEHLE — vier Tafeln, eine je Gebäudeart.</b>
+    /// Gelesen am 21.08.2026, und die Zuordnung schliesst von beiden Seiten.
+    ///
+    /// <para><b>Was jeder Behandler tut.</b> Alle fünfzehn sind derselbe
+    /// Dreizeiler: Satzindex aus P1, Eigentümer gegen <c>byte[Gebäude+0x05]</c>
+    /// aus P2, dann <c>byte[Tafel + Satz·Länge + 0x02] = ZUSTAND</c>. Die zwei
+    /// bezahlten setzen zusätzlich <c>+0x06 = 0</c> (den Fortschritt) und
+    /// ziehen den Preis von <c>dword[0xA9C600 + Spieler·4]</c> ab — dem
+    /// Kontostand, also sec73.</para>
+    ///
+    /// <code>
+    ///   Gebäudeart      Abschnitt  Tafel (C)  Satz   Befehle (→ Zustand)
+    ///   Fabrik 2,3,4    sec24      0x87A2C0   50x14  509→3 510→4 519→2 511→0
+    ///   Mine 10,15      sec28      0x878AD0   50x18  515→3 516→4 522→2 517→0
+    ///   Flughafen       sec27      0x879438   50x52  536→2 520→1 524→0
+    ///   Basis           sec23      0x878E58   50x16  521→1 525→0
+    /// </code>
+    ///
+    /// <para>⭐ <b>Die Zuordnung Tafel→Abschnitt stand schon in unserem Baum</b>
+    /// und musste nicht geraten werden: <c>Import/BuildingPatterns.cs</c> hat
+    /// »der Lader legt sec24 (0x2bc = 50x14) nach 0x87A2C0 und sec28 (0x384 =
+    /// 50x18) nach 0x878AD0«, <c>GAMESTATE_RE.md</c> hat sec27 → 0x879438
+    /// (50x52) und sec23 → Basis (16 Byte). Neu ist nur, welcher BEFEHL welche
+    /// Zahl hineinschreibt.</para>
+    ///
+    /// <para>⭐ <b>Und die Zustandszahlen sind unsere eigenen.</b> 3 und 4 sind
+    /// <c>FaExpand</c>/<c>FaProdUp</c>, 2 ist <c>FaRepair</c>, 1 ist
+    /// <c>StRepair</c>, 0 ist <c>StAktiv</c> — alle vier standen seit Wochen
+    /// so im Baum, aus einer ganz anderen Quelle gelesen (den vier Zeichnern).
+    /// Zwei unabhängige Lesungen, dasselbe Ergebnis.</para>
+    ///
+    /// <para><b>Welcher Ausbau welcher ist</b>, entscheidet der PREIS und nicht
+    /// eine Vermutung: 509 nimmt <c>word[Satz+0x0A]</c>, 510 nimmt
+    /// <c>word[Satz+0x0C]</c> (@0x44AD8A gegen @0x44AE9F) — und +0x0A/+0x0C
+    /// heissen bei uns seit dem 18.08. <c>CostStore</c> und <c>CostProd</c>.
+    /// Jeder Ausbau vervielfacht nur seinen EIGENEN Preis mit 3/2.</para>
+    ///
+    /// <para>⚠ <b>523 und 526 sind TOT.</b> Beide sind ein zweiter »zurück auf
+    /// 0« für Fabrik bzw. Mine, beide haben einen vollständigen Behandler — und
+    /// im ganzen Programm keinen einzigen Absender (Bytesuche nach
+    /// <c>mov word[0xB8A3D8], imm16</c>: 35 der 37 Nummern aus Bereich B haben
+    /// einen, diese zwei nicht). Dieselbe Sorte Fund wie die vier toten
+    /// Mauszeiger.</para>
+    ///
+    /// <para>⚠ <b>Der Absender prüft, der Behandler auch.</b> @0x44AD6D fragt
+    /// <c>cmp cl,3; je</c> — wer schon ausbaut, sendet gar nicht erst; und
+    /// @0x44AD91 vergleicht den Preis mit dem Konto, bevor gesendet wird. Der
+    /// Behandler tut beides noch einmal. Wir halten es genauso: geprüft wird in
+    /// <c>MapEntityLayer.GiveBuildingJob</c>, also im Behandler.</para>
+    /// </summary>
+    public const short FactoryExpandStore = 509, FactoryExpandProd = 510,
+                       FactoryIdle = 511, FactoryRepair = 519;
+    public const short MineExpandStore = 515, MineExpandProd = 516,
+                       MineIdle = 517, MineRepair = 522;
+    public const short AirportHalt = 520, AirportIdle = 524, AirportExpand = 536;
+    public const short BaseRepair = 521, BaseIdle = 525;
+
+    /// <summary>Die zwei Nummern aus Bereich B, die niemand sendet — sie stehen
+    /// hier, damit niemand sie für eine Lücke hält. Siehe oben.</summary>
+    public const short DeadFactoryIdle2 = 523, DeadMineIdle2 = 526;
+
     /// <summary>⚠ <b>1001 trägt den ZUFALLSKEIM.</b> @0x419512..0x419525:
     /// <c>call rand; mov word[0xB4FA20],ax; mov word[Kladde+0x08],ax; mov
     /// word[Kladde+0x00],0x3E9</c> — der Keim der Partie wird als P1 eines

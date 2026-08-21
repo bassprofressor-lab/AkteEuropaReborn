@@ -495,6 +495,12 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_gebaeudeCheck)
+        {
+            GD.Print(_entities.GebaeudeCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_repairCheck)
         {
             GD.Print(_entities.RepairCheck());
@@ -810,6 +816,7 @@ public partial class MapViewer : Node2D
     /// <summary><c>--takt-check</c> — 50 Hz, und macht die Geschwindigkeit
     /// wirklich mehr Takte?</summary>
     private bool _taktCheck;
+    private bool _gebaeudeCheck;
 
     /// <summary><c>--gruppen-check</c> — zehn Gruppen, Ausschliesslichkeit,
     /// vier Merkpunkte.</summary>
@@ -1363,6 +1370,7 @@ public partial class MapViewer : Node2D
             else if (a == "--vars-check") _varsCheck = true;
             else if (a == "--repair-check") _repairCheck = true;
             else if (a == "--takt-check") _taktCheck = true;
+            else if (a == "--gebaeude-check") _gebaeudeCheck = true;
             else if (a == "--gruppen-check") _gruppenCheck = true;
             else if (a == "--market-check") _marketCheck = true;
             else if (a == "--sell-check") _sellCheck = true;
@@ -2969,15 +2977,15 @@ public partial class MapViewer : Node2D
         _baseWindow.ResearchNote = _entities.ResearchNote;
         _baseWindow.OnResearch = () => _entities.ResearchFromPanel();
         _baseWindow.RepairNote = _entities.RepairNote;
-        _baseWindow.OnRepair = () => _entities.RepairFromPanel();
-        _baseWindow.OnRepairStop = () => _entities.StopRepairFromPanel();
+        _baseWindow.OnRepair = () => _entities.PostRepairFromPanel();
+        _baseWindow.OnRepairStop = () => _entities.PostStopRepairFromPanel();
         // ⚠ 18.08.2026 — DER SECHSTE FALL desselben Fehlers: Lagerausbau und
         // Produktionserweiterung lagen nur auf den Tasten V und C. Die Mechanik
         // war seit langem fertig und befehlsgenau gebaut (Lagerplatz +10,
         // Produktionsgeschwindigkeit +1, jeder Ausbau verteuert NUR seinen
         // eigenen Preis um die Haelfte) — und fuer den Spieler nicht vorhanden.
         _baseWindow.UpgradeChoice = () => _entities.UpgradeChoiceOfSelection();
-        _baseWindow.OnUpgrade = lager => _entities.StartUpgrade(lager);
+        _baseWindow.OnUpgrade = lager => _entities.PostUpgradeFromPanel(lager);
         // ⚠ Der SIEBTE und ACHTE Fall: »Bau abbrechen« lag nur auf Umschalt+B,
         // »Starten« nur auf Y — und die Bestandszeile des Flughafens sagte dem
         // Spieler sogar »(Y startet)«, was das Eingestaendnis dafuer ist.

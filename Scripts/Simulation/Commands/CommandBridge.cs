@@ -596,8 +596,252 @@ public partial class MapEntityLayer
         CommandOp.PlaceRadar => ApplyPlaceRadar(c),
         CommandOp.PlaceBuilding => ApplyPlaceBuilding(c),
         CommandOp.PlaceGenerator => ApplyPlaceBuilding(c),
+
+        // Die fünfzehn Gebäudebefehle — vier Tafeln, eine je Gebäudeart.
+        // Siehe CommandOp und ApplyBuildingJob.
+        CommandOp.FactoryExpandStore or CommandOp.MineExpandStore
+            => ApplyBuildingJob(c, BuildingJob.ExpandStore),
+        CommandOp.FactoryExpandProd or CommandOp.MineExpandProd
+            => ApplyBuildingJob(c, BuildingJob.ExpandProd),
+        CommandOp.FactoryRepair or CommandOp.MineRepair
+            or CommandOp.AirportHalt or CommandOp.BaseRepair
+            => ApplyBuildingJob(c, BuildingJob.Repair),
+        CommandOp.FactoryIdle or CommandOp.MineIdle
+            or CommandOp.AirportIdle or CommandOp.BaseIdle
+            => ApplyBuildingJob(c, BuildingJob.Idle),
+
         _ => false,
     };
+
+    // ==== die fünfzehn GEBÄUDEBEFEHLE ========================================
+
+    /// <summary>
+    /// Welche Befehlsnummer dieses Gebäude für diesen Auftrag trägt, oder 0.
+    ///
+    /// <para>Das Original hat je Gebäudeart eine eigene Tafel und darum je Art
+    /// eigene Nummern — dieselbe Handlung heisst bei der Fabrik 509 und bei der
+    /// Mine 515. Diese Zeile ist die einzige Stelle, die das weiss.</para>
+    ///
+    /// <para>⚠ Die Basis kennt <b>keinen</b> Ausbaubefehl: in ihre Tafel
+    /// (0x878E58) schreibt kein einziger Befehl eine 2 oder 3, obwohl ihr
+    /// Fenster »vergrössern« und »forschen« anzeigt. Das ist gelesen, nicht
+    /// vergessen — wer dort eine Nummer einträgt, erfindet sie.</para></summary>
+    public static short BuildingOpFor(Entity e, BuildingJob job)
+    {
+        bool fabrik = e.BType is 2 or 3 or 4;
+        bool mine = e.BType is 10 or 15;
+        bool flug = e.BType == 5;
+        return job switch
+        {
+            BuildingJob.ExpandStore => fabrik ? CommandOp.FactoryExpandStore
+                                     : mine ? CommandOp.MineExpandStore : (short)0,
+            BuildingJob.ExpandProd => fabrik ? CommandOp.FactoryExpandProd
+                                    : mine ? CommandOp.MineExpandProd : (short)0,
+            BuildingJob.Repair => fabrik ? CommandOp.FactoryRepair
+                                : mine ? CommandOp.MineRepair
+                                : flug ? CommandOp.AirportHalt : CommandOp.BaseRepair,
+            BuildingJob.Idle => fabrik ? CommandOp.FactoryIdle
+                              : mine ? CommandOp.MineIdle
+                              : flug ? CommandOp.AirportIdle : CommandOp.BaseIdle,
+            _ => 0,
+        };
+    }
+
+    /// <summary>
+    /// Einen Gebäudeauftrag <b>absetzen</b> — je gewähltem Gebäude einen Satz,
+    /// wie das Original (sein P1 ist die laufende Nummer INNERHALB der Art,
+    /// also nennt auch dort jeder Satz genau ein Gebäude).
+    /// </summary>
+    /// <returns>wie viele Sätze auf den Weg gingen.</returns>
+    public int PostBuildingJob(BuildingJob job)
+    {
+        int n = 0;
+        foreach (int i in new List<int>(Selection))
+        {
+            if (i < 0 || i >= _entities.Count) continue;
+            var e = _entities[i];
+            if (!e.IsBuilding || e.Dead) continue;
+            short op = BuildingOpFor(e, job);
+            if (op == 0) continue;
+            if (Emit(CommandRecord.Make(op, (byte)ViewPlayer, (short)i))) n++;
+        }
+        return n;
+    }
+
+    /// <summary>
+    /// <c>--gebaeude-check</c> — <b>gehen die Gebäudebefehle wirklich durch den
+    /// Ring, und weist der Behandler die falsche Tafel ab?</b>
+    ///
+    /// <para>Geprüft wird, was diesem Umbau eigen ist und was ein
+    /// Zustandsvergleich allein nicht sieht:</para>
+    /// <list type="number">
+    /// <item>Ein abgesetzter Auftrag wirkt <b>erst im nächsten Takt</b> — beim
+    /// Absenden darf sich nichts ändern. Ein Behandler, der schon beim Post
+    /// wirkt, wäre der alte Direktweg mit neuem Namen.</item>
+    /// <item>Danach steht der <b>Zustand der Gebäudeart</b> da, nicht
+    /// irgendeine 2.</item>
+    /// <item>Der Preis ist <b>genau einmal</b> abgebucht.</item>
+    /// <item>⚠ Die <b>Gegenprobe</b>: derselbe Satz mit der Nummer einer
+    /// FREMDEN Gebäudeart muss abgewiesen werden. Ohne diese Zeile wäre ein
+    /// Satz aus dem Netz ein Weg, in eine fremde Tafel zu schreiben.</item>
+    /// </list></summary>
+    public string GebaeudeCheck()
+    {
+        var sb = new System.Text.StringBuilder("gebaeude-check\n");
+        bool alles = true;
+
+        // Den Ring leerlaufen lassen und sagen, wie viele Taktanfänge es
+        // brauchte. ⚠ EINER reicht NICHT: ein Satz wird auf `Tick + 1 + Lead`
+        // fällig (CommandRing.Post), und genau daran ist dieser Prüfstand beim
+        // ersten Anlauf gescheitert — er las den Zustand, bevor der Satz dran
+        // war, und schrieb den Fehlschlag dem Behandler zu.
+        int Leerlaufen()
+        {
+            for (int t = 0; t < 8; t++)
+            {
+                if (Commands.Pending == 0) return t;
+                CommandTick();
+            }
+            return 8;
+        }
+
+        int fabrik = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var q = _entities[i];
+            if (!q.IsBuilding || q.Dead || q.State != MapEntityLayer.StAktiv) continue;
+            if (q.BType is 2 or 3 or 4) { fabrik = i; break; }
+        }
+        if (fabrik < 0)
+        {
+            // ⚠ Ein Prüfstand ohne Gegenstand meldet keinen Erfolg — und er
+            // sagt, WAS er statt dessen gefunden hat. Ein blosses »kein
+            // Gegenstand« schickt den nächsten auf dieselbe Suche.
+            var arten = new System.Collections.Generic.SortedDictionary<int, int>();
+            int geb = 0;
+            foreach (var q in _entities)
+            {
+                if (!q.IsBuilding || q.Dead) continue;
+                geb++;
+                arten.TryGetValue(q.BType, out int k); arten[q.BType] = k + 1;
+            }
+            sb.Append("  ⚠ ABBRUCH: keine Fabrik (Art 2,3,4) im Zustand »aktiv«. ")
+              .Append($"Auf der Karte: {geb} Gebaeude, Arten");
+            foreach (var kv in arten) sb.Append($" {kv.Key}x{kv.Value}");
+            sb.Append($"; Sichtspieler {ViewPlayer}\n  DURCHGEFALLEN");
+            return sb.ToString();
+        }
+
+        var f = _entities[fabrik];
+        int owner = Mathf.Clamp(f.Owner, 0, 7);
+        ViewPlayer = f.Owner;
+        _money[owner] = 999999;
+        int kasse = _money[owner], preis = f.CostStore;
+        int erwartet = MapEntityLayer.JobState(f, BuildingJob.ExpandStore);
+
+        // --- 1. absetzen wirkt NICHT sofort ---------------------------------
+        _sel.Clear(); _sel.Add(fabrik);
+        int n = PostBuildingJob(BuildingJob.ExpandStore);
+        bool nochAktiv = f.State == MapEntityLayer.StAktiv && _money[owner] == kasse;
+        sb.Append($"  Fabrik {fabrik} (Art {f.BType}, Spieler {f.Owner}): {n} Satz abgesetzt; ")
+          .Append("beim Absenden noch unveraendert: ")
+          .Append(nochAktiv ? "ja ✔" : "NEIN ✘ — der Ring wird umgangen").Append('\n');
+        alles &= n == 1 && nochAktiv;
+
+        // --- 2. nach dem Taktanfang steht der Zustand der ART da -------------
+        int takte = Leerlaufen();
+        bool zustandOk = f.State == erwartet;
+        bool geldOk = _money[owner] == kasse - preis;
+        sb.Append($"  nach {takte} Taktanfaengen: Zustand {f.State} (erwartet {erwartet}) ")
+          .Append(zustandOk ? "✔" : "✘")
+          .Append($", Konto {kasse} − {preis} = {_money[owner]} ")
+          .Append(geldOk ? "✔" : "✘").Append('\n');
+        alles &= zustandOk && geldOk;
+
+        // --- 3. Gegenprobe: die Nummer einer FREMDEN Gebaeudeart -------------
+        f.State = MapEntityLayer.StAktiv;
+        kasse = _money[owner];
+        PostRaw(CommandRecord.Make(CommandOp.MineExpandStore, (byte)f.Owner, (short)fabrik));
+        Leerlaufen();
+        bool abgewiesen = f.State == MapEntityLayer.StAktiv && _money[owner] == kasse;
+        sb.Append("  Gegenprobe — Minenbefehl 515 auf eine Fabrik: ")
+          .Append(abgewiesen ? "abgewiesen ✔" : "AUSGEFUEHRT ✘ (fremde Tafel beschreibbar)")
+          .Append('\n');
+        alles &= abgewiesen;
+
+        // --- 4. und die richtige Nummer derselben Art geht durch -------------
+        PostRaw(CommandRecord.Make(CommandOp.FactoryExpandStore, (byte)f.Owner, (short)fabrik));
+        Leerlaufen();
+        bool durch = f.State == erwartet && _money[owner] == kasse - preis;
+        sb.Append($"  dieselbe Handlung mit 509: Zustand {f.State}, ")
+          .Append($"Konto {_money[owner]} ").Append(durch ? "✔" : "✘").Append('\n');
+        alles &= durch;
+
+        // --- 5. die Nummernwahl je Art --------------------------------------
+        sb.Append("  Nummern je Art (reparieren/aktiv):");
+        var proben = new[] { ("Fabrik", 2, 519, 511), ("Mine", 10, 522, 517),
+                             ("Flughafen", 5, 520, 524), ("Basis", 1, 521, 525) };
+        foreach (var (name, bt, wantR, wantI) in proben)
+        {
+            var probe = new Entity { IsBuilding = true, BType = bt };
+            short r = BuildingOpFor(probe, BuildingJob.Repair);
+            short id = BuildingOpFor(probe, BuildingJob.Idle);
+            bool ok = r == wantR && id == wantI;
+            alles &= ok;
+            sb.Append($" {name} {r}/{id}{(ok ? "" : $" ✘ (erwartet {wantR}/{wantI})")}");
+        }
+        // ⚠ Die Basis kennt keinen Ausbaubefehl — kein Befehl schreibt in ihre
+        // Tafel eine 2 oder 3. Wer dort eine Nummer einträgt, erfindet sie.
+        var basis = new Entity { IsBuilding = true, BType = 1 };
+        bool basisOhne = BuildingOpFor(basis, BuildingJob.ExpandStore) == 0;
+        sb.Append($"; Basis ohne Ausbaubefehl: {(basisOhne ? "ja ✔" : "NEIN ✘")}\n");
+        alles &= basisOhne;
+
+        sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
+
+    /// <summary>Die drei Fensterknöpfe, jetzt über den Ring. <b>Das ist der
+    /// Umbau</b>: bis zum 21.08.2026 riefen sie <c>StartRepair</c>,
+    /// <c>StartUpgrade</c> und <c>StopRepairFromPanel</c> unmittelbar, also am
+    /// Befehlsbus vorbei — im Netzspiel hätte nur die klickende Maschine den
+    /// Ausbau gesehen, und zwei Maschinen wären mit verschiedenem Kontostand
+    /// weitergelaufen.
+    ///
+    /// <para><c>AimAtPanelBuilding</c> steht davor, weil das Fenster immer das
+    /// Gebäude meint, das es zeigt — dieselbe Zeile, die der Direktweg
+    /// hatte.</para></summary>
+    public int PostRepairFromPanel()
+    { AimAtPanelBuilding(); return PostBuildingJob(BuildingJob.Repair); }
+
+    public int PostStopRepairFromPanel()
+    { AimAtPanelBuilding(); return PostBuildingJob(BuildingJob.Idle); }
+
+    public int PostUpgradeFromPanel(bool storage)
+    { AimAtPanelBuilding(); return PostBuildingJob(storage ? BuildingJob.ExpandStore
+                                                          : BuildingJob.ExpandProd); }
+
+    /// <summary>
+    /// Aus einem Gebäudesatz Zustand machen.
+    ///
+    /// <para>⚠ <b>Die Nummer muss zur Gebäudeart passen.</b> Ein Satz mit 509
+    /// (Fabriktafel), der auf eine Mine zeigt, wird verworfen — im Original
+    /// KANN das nicht vorkommen, weil 509 in die Fabriktafel schreibt und dort
+    /// gar keine Mine steht. Bei uns zeigt P1 auf die gemeinsame
+    /// Einheitenliste, also muss diese Zeile die Trennung nachholen. Ohne sie
+    /// wäre ein Satz aus dem Netz ein Weg, fremde Tafeln zu beschreiben.</para>
+    /// </summary>
+    private bool ApplyBuildingJob(in CommandRecord c, BuildingJob job)
+    {
+        int i = c.P1;
+        if (i < 0 || i >= _entities.Count) return false;
+        var e = _entities[i];
+        if (!e.IsBuilding || e.Dead) return false;
+        if (BuildingOpFor(e, job) != c.Op) return false;      // s.o.
+        bool ok = GiveBuildingJob(i, job);
+        if (ok) { UpdatePanel(); QueueRedraw(); }
+        return ok;
+    }
 
     /// <summary>
     /// GEHÖRT DIE EINHEIT DEM, DER DEN BEFEHL GEGEBEN HAT?

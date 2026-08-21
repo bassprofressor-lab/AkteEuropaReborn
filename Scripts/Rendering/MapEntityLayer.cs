@@ -12241,23 +12241,8 @@ public partial class MapEntityLayer : Node2D
     /// here; the +1-hp-every-4th-tick pace is the game's own.</summary>
     public void StartRepair()
     {
-        foreach (int i in _sel)
-        {
-            var e = _entities[i];
-            if (!e.IsBuilding || e.Dead || e.HpMax <= 0) continue;
-            if (e.Hp >= e.HpMax)
-            {
-                _order = "unbeschaedigt";
-                Audio.GameSounds.Play(Audio.GameSounds.Refused);
-                continue;
-            }
-            e.State = e.BType is 2 or 3 or 4 ? FaRepair : StRepair;
-            _order = "Status : reparieren";
-            // NO sound here on purpose: the routine @0x43e196 plays one after
-            // "mining 3", after "enlarging" and after "upgrading", but there is
-            // no call between "repair" and "enlarging". Repairing is silent in
-            // the original, so it is silent here.
-        }
+        foreach (int i in new List<int>(_sel))
+            GiveBuildingJob(i, BuildingJob.Repair);
         UpdatePanel();
         QueueRedraw();
     }
@@ -12351,39 +12336,155 @@ public partial class MapEntityLayer : Node2D
         return null;
     }
 
+    // ==== DIE GEBAEUDEAUFTRAEGE — Bereich B des Befehlsbusses ================
+
+    /// <summary>
+    /// <b>Was ein Gebäude gerade tut</b> — in der Sprache, die für ALLE vier
+    /// Gebäudearten dieselbe ist.
+    ///
+    /// <para>⚠ Die ZAHL dahinter ist je Art eine andere, und genau daran ist
+    /// hier schon zweimal etwas schiefgegangen (siehe
+    /// <see cref="StopRepairFromPanel"/>). Darum steht die Absicht in dieser
+    /// Aufzählung und die Zahl nur noch an einer einzigen Stelle:
+    /// <see cref="JobState"/>.</para></summary>
+    public enum BuildingJob { Idle = 0, Repair, ExpandStore, ExpandProd }
+
+    /// <summary>
+    /// Die Zustandszahl, die dieser Auftrag <b>bei dieser Gebäudeart</b> hat,
+    /// oder −1, wenn die Art den Auftrag nicht kennt.
+    ///
+    /// <para>Gelesen aus den vier Befehlstafeln des Originals (21.08.2026) —
+    /// jede Gebäudeart hat ihre eigene, und die Befehlsnummer sagt, welche:</para>
+    /// <code>
+    ///   Fabrik (2,3,4)  sec24  0x87A2C0  50x14   509→3 510→4 519→2 511→0
+    ///   Mine (10,15)    sec28  0x878AD0  50x18   515→3 516→4 522→2 517→0
+    ///   Flughafen (5)   sec27  0x879438  50x52   536→2 520→1 524→0
+    ///   Basis (1)       sec23  0x878E58  50x16   521→1 525→0
+    /// </code>
+    /// <para>Die Zuordnung Tafel→Abschnitt stand schon in unserem Baum
+    /// (<c>BuildingPatterns</c> für sec24/sec28, <c>GAMESTATE_RE.md</c> für
+    /// sec27/sec23); neu ist, welcher BEFEHL welche Zahl schreibt.</para></summary>
+    public static int JobState(Entity e, BuildingJob job)
+    {
+        bool fabrik = e.BType is 2 or 3 or 4;
+        bool mine = e.BType is 10 or 15;
+        // ⚠⚠ HIER STEHT ABSICHTLICH NUR `fabrik`, UND DAS IST EIN OFFENER
+        // PUNKT, KEIN VERSEHEN. Nach dem Original müsste die MINE dieselben
+        // Zahlen tragen: Befehl 522 schreibt eine 2 in die Minentafel (sec28,
+        // 0x878AD0), 515/516 schreiben 3 und 4 — die Mine ist dort eine Fabrik
+        // zweiter Art, samt beider Ausbauten und einer eigenen
+        // Geschwindigkeitstafel (0x4FACB8, zehn Stufen).
+        //
+        // Bei uns rechnet aber der ganze Takt mit »Mine = 1«:
+        // <see cref="StateName"/>, <see cref="PercentDone"/> und vor allem der
+        // Takthandler (`bool fact = e.BType is 2 or 3 or 4`) prüfen alle nur
+        // die drei Fabriktypen. Wer die Mine hier auf 2 hebt, ohne die drei
+        // mitzuziehen, nimmt ihr die Reparatur ganz: sie stünde auf 2 und
+        // niemand führte sie aus. Gemessen beim Bau dieses Umbaus.
+        //
+        // Der Umzug ist die nächste Aufgabe und braucht einen eigenen
+        // Prüfstand. Bis dahin bleibt die Zahl, die der Rest des Programms
+        // versteht.
+        return job switch
+        {
+            BuildingJob.Idle => StAktiv,
+            BuildingJob.Repair => fabrik ? FaRepair : StRepair,
+            BuildingJob.ExpandStore => fabrik ? FaExpand : -1,
+            BuildingJob.ExpandProd => fabrik ? FaProdUp : -1,
+            _ => -1,
+        };
+    }
+
+    /// <summary>
+    /// <b>EINEM Gebäude einen Auftrag geben — die einzige Stelle, die das
+    /// tut.</b>
+    ///
+    /// <para>Der Direktweg (die Fensterknöpfe über <c>_sel</c>) und der Ring
+    /// (<c>CommandBridge.ApplyBuildingJob</c>) rufen beide hierher. Vorher
+    /// stand die Weiche »welche Zustandszahl« an vier Stellen, und an einer
+    /// davon fehlte die Mine.</para>
+    ///
+    /// <para>⚠ Bezahlt wird HIER, nicht beim Absenden — dieselbe Regel, die
+    /// das Original vorgibt (Opcode 3 klemmt seine Zellen erst im Behandler).
+    /// Im Netzspiel darf der Kontostand nicht davon abhängen, welche Maschine
+    /// geklickt hat.</para></summary>
+    /// <returns>ob der Auftrag angenommen wurde; der Grund steht in
+    /// <c>_order</c>.</returns>
+    public bool GiveBuildingJob(int idx, BuildingJob job)
+    {
+        if (idx < 0 || idx >= _entities.Count) return false;
+        var e = _entities[idx];
+        if (!e.IsBuilding || e.Dead) return false;
+
+        int ziel = JobState(e, job);
+        if (ziel < 0) { _order = "diese Gebaeudeart kennt das nicht"; return false; }
+
+        if (job == BuildingJob.Idle)
+        {
+            // ⚠⚠ NUR DIE REPARATUR WIRD ANGEHALTEN. Ein laufender Ausbau ist
+            // BEZAHLT; ihn mit abzuräumen hat schon einmal Geld verschluckt.
+            // Das Original setzt pauschal 0, aber unsere Zustände tragen mehr
+            // als das eine Byte — die Abweichung steht hier, statt still zu
+            // wirken.
+            if (e.State != JobState(e, BuildingJob.Repair)) return false;
+            e.State = StAktiv;
+            RepairsStopped++;
+            _order = "Reparatur angehalten";
+            return true;
+        }
+
+        if (job == BuildingJob.Repair)
+        {
+            if (e.HpMax <= 0) return false;
+            if (e.Hp >= e.HpMax)
+            {
+                _order = "unbeschaedigt";
+                Audio.GameSounds.Play(Audio.GameSounds.Refused);
+                return false;
+            }
+            e.State = ziel;
+            _order = "Status : reparieren";
+            // Kein Klang: die Routine @0x43e196 spielt einen nach »mining 3«,
+            // nach »enlarging« und nach »upgrading«, aber zwischen »repair« und
+            // »enlarging« steht kein Aufruf. Reparieren ist im Original stumm.
+            return true;
+        }
+
+        // ---- die zwei bezahlten Ausbauten ----------------------------------
+        bool lager = job == BuildingJob.ExpandStore;
+        if (e.State != StAktiv)
+        {
+            _order = "Gebaeude beschaeftigt";
+            Audio.GameSounds.Play(Audio.GameSounds.Refused);
+            return false;
+        }
+        int owner = Mathf.Clamp(e.Owner, 0, 7);
+        int cost = lager ? e.CostStore : e.CostProd;
+        if (_money[owner] < cost)
+        {
+            _order = "Sie haben nicht genug Geld";   // der Wortlaut des Spiels
+            Audio.GameSounds.Play(Audio.GameSounds.Refused);
+            return false;
+        }
+        _money[owner] -= cost;
+        e.State = ziel;
+        e.UpgradeStep = 0;
+        _order = lager ? $"Lagerausbau $ {cost}" : $"Produktionserw. $ {cost}";
+        // »enlarging« @0x43e794 und »upgrading« @0x43e837
+        Audio.GameSounds.Play(lager ? Audio.GameSounds.Enlarging
+                                    : Audio.GameSounds.Upgrading);
+        return true;
+    }
+
     /// <summary>Lagerausbau (Knopf »Lagerausbau«, Taste V) oder
     /// Produktionserweiterung (Knopf »Produktionserw.«, Taste C) auf den
     /// gewählten Fabriken.  Both cost what the factory's own record says and
     /// take 100 steps; afterwards the cost is multiplied by 3/2.</summary>
     public void StartUpgrade(bool storage)
     {
-        foreach (int i in _sel)
-        {
-            var e = _entities[i];
-            if (!IsFactory(e) || e.Dead) continue;
-            if (e.State != StAktiv)
-            {
-                _order = "Gebaeude beschaeftigt";
-                Audio.GameSounds.Play(Audio.GameSounds.Refused);
-                continue;
-            }
-            int owner = Mathf.Clamp(e.Owner, 0, 7);
-            int cost = storage ? e.CostStore : e.CostProd;
-            if (_money[owner] < cost)
-            {
-                _order = "Sie haben nicht genug Geld";   // the game's own wording
-                Audio.GameSounds.Play(Audio.GameSounds.Refused);
-                continue;
-            }
-            _money[owner] -= cost;
-            e.State = storage ? FaExpand : FaProdUp;
-            e.UpgradeStep = 0;
-            _order = storage ? $"Lagerausbau $ {cost}"
-                             : $"Produktionserw. $ {cost}";
-            // "enlarging" and "upgrading" — @0x43e794 and @0x43e837
-            Audio.GameSounds.Play(storage ? Audio.GameSounds.Enlarging
-                                          : Audio.GameSounds.Upgrading);
-        }
+        var job = storage ? BuildingJob.ExpandStore : BuildingJob.ExpandProd;
+        foreach (int i in new List<int>(_sel))
+            GiveBuildingJob(i, job);
         UpdatePanel();
         QueueRedraw();
     }
@@ -14516,36 +14617,18 @@ public partial class MapEntityLayer : Node2D
     {
         AimAtPanelBuilding();
         int n = 0;
-        foreach (int i in _sel)
-        {
-            var e = _entities[i];
-            if (!e.IsBuilding || e.Dead) continue;
-            // ⚠⚠ DIE STATUSZAHL BEDEUTET JE GEBÄUDEART ETWAS ANDERES, und hier
-            // stand `e.State != FaRepair && e.State != StRepair` — also »2 oder
-            // 1«, ohne die Art zu fragen. Bei einer BASIS ist 2 aber
-            // <see cref="StExpand"/>, nicht Reparatur: der Abbruch hätte einen
-            // laufenden LAGERAUSBAU abgeräumt, und der ist bezahlt.
-            //
-            // Gemessen (20.08.2026, an den vier Zeichnern C 0x467E7F,
-            // 0x46F44F, 0x47460B, 0x4657B2): reparieren heisst **1** bei Basis
-            // und Flughafen, **2** bei Fabrik und Mine. Genau so steht es schon
-            // in StartRepair — der Abbruch muss dieselbe Weiche nehmen, sonst
-            // sind es zwei Wahrheiten über dieselbe Zahl.
-            int reparaturZustand = e.BType is 2 or 3 or 4 ? FaRepair : StRepair;
-            if (e.State != reparaturZustand) continue;
-            e.State = 0;
-            n++;
-        }
+        foreach (int i in new List<int>(_sel))
+            if (GiveBuildingJob(i, BuildingJob.Idle)) n++;
         if (n > 0)
         {
-            _order = "Reparatur angehalten";
-            RepairsStopped += n;
             UpdatePanel();
             QueueRedraw();
         }
     }
 
-    /// <summary>Wie oft ein Reiterwechsel eine Reparatur angehalten hat.</summary>
+    /// <summary>Wie oft eine laufende Reparatur angehalten wurde — für den
+    /// Prüfstand, damit »hat es gewirkt« eine Zahl ist und kein Eindruck.
+    /// </summary>
     public int RepairsStopped;
 
     /// <summary>
