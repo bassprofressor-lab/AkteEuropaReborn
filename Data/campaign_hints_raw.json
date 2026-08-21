@@ -1,270 +1,492 @@
 {
- "_note": "Der VORSPANN der Kampagne: 34 Einmal-Tore aus dem Block 0x497540..0x49814D. Wer eine Einheit anwaehlt, die ein bestimmtes Bauteil traegt, bekommt EINMAL in der ganzen Kampagne den Hilfetext dazu. Feld = Versatz im Einheitensatz (0x0D ZBRAN Waffe, 0x0E top_spec, 0x0F l_engine). Text = HELPG-Nummer; die Probe Text == var-300 haelt bei 32 von 34. GEBAUT am 21.08.2026 (Campaign/CampaignHints.cs, --hinweis-check) - siehe OFFENE_FRAGEN.md Abschnitt AE.",
- "_offen": "Neun der 34 Tore tragen keinen Satzversatz und sind damit nicht auswertbar (v[346], 372..378, 381); vier davon haben einen Wert, aber kein Feld. Sie pruefen etwas anderes als ein Bauteilbyte der angewaehlten Einheit. Die uebrigen 25 sind gebaut.",
+ "_note": "Der VORSPANN der Kampagne: 34 Einmal-Tore aus dem Block C 0x497540..0x49814D, F 0x496E50..0x497A5E. C und F stimmen Befehl fuer Befehl ueberein (72 Zeilen, 0 Unterschiede). Text = HELPG-Nummer. GEBAUT am 21.08.2026 (Campaign/CampaignHints.cs, --hinweis-check).",
+ "_nur_wenn_missionsnummer_kleiner": 50,
+ "_missionsschranke_belegt": "cmp word[C 0x539934],0x32; jge Ende @C 0x497643 — damit ist \"nur in der Kampagne\" gemessen, nicht gedeutet.",
+ "_arten": {
+  "einheit_feld": "Satzfeld der ANGEWAEHLTEN Einheit (Satzlaenge 78): 0x0D ZBRAN, 0x0E top_spec, 0x0F l_engine, 0x10 Ausruestung.",
+  "gebaeude_vorhanden": "zaehle_gebaeude(typ, besitzer) != 0, dazu eine Missionsschranke.",
+  "fenster_geoeffnet": "byte[C 0x539930] == Fensterart; das Ereignisbyte wird danach auf 0 gesetzt.",
+  "flughafen_platz_belegt": "ein eigener Flughafen (Typ 9), dessen STELLPLATZ 0 (sec27 +0x0B) nicht 0xFF ist."
+ },
+ "_berichtigt_am_21_08_2026": [
+  "15 Tore (v[347], v[356..369]) tragen die Vorbedingung ZBRAN == 0 — nur UNBEWAFFNETE Einheiten. Der erste Ausleser hatte sie verschluckt.",
+  "v[371] ist KEIN Oder: +0x0D != 19 (Ausschluss) UND +0x0F == 172.",
+  "Vier Tore (v[373], 376, 378, 381) zeigen bei 70/150, nicht bei 100/200.",
+  "Der ganze Block laeuft nur bei Missionsnummer < 50."
+ ],
+ "_ausreisser_der_selbstprobe": "Text = var-300 scheitert bei v[346] (67) und v[347] (19), und beide sind erklaert: Text 67 ist DOPPELT vergeben (v[367] zeigt ihn ueber top_spec 79 \"Zielfokus\", v[346] ueber den Entwurfsplatz \"Target\") — es gibt zwei Wege zum Fokussierer. HELPG #019 ist eine LEERE Marke: die Zeile steht da, der Rumpf fehlt; das Tor zeigt im Original ein leeres Fenster. Beide Tore sind nachtraeglich eingeschoben und stehen darum ausser der Reihe im Block.",
+ "_offen": "v[373]/376/378: die drei Fenster gibt es in unserem Nachbau noch nicht. Warum v[377] (Mine, Typ 10) den FABRIK-Text 77 zeigt, ist ungedeutet — der Code ist eindeutig (push 0xa). HELPG #081 fehlt in der F-Auslieferung (die erste Textgruppe endet bei 80), HELPG #019 ist eine LEERE Marke.",
  "tore": [
   {
    "var": 346,
-   "feld": null,
+   "text": 67,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
+   "feld": 67,
+   "feld_name": "rob_prod (+0x43) — der ENTWURFSPLATZ, nicht eine Marke",
    "werte": [
     55
    ],
-   "text": 67
+   "entwurf_name": "Target (Fokussierer)",
+   "_belegt": "create_unit C 0x4B34E0 schreibt in +0x43 genau die Zahl, mit der es vorher die Entwurfszeile aufschlaegt; das Spiel nennt sie selbst so (\"WRONG ROB_PROD in PLACE!!!!\" @0x538568). 26 Leser/Schreiber in C, 26 in F, eins zu eins dieselben Funktionen.",
+   "_gattung": "⚠ Die Tafel haengt an der GATTUNG: Land -> sec47 0x51CE20, Schrittweite 46, 200 Plaetze je Spieler; Schiff -> 0x52EDA0, Schrittweite 42, nur 10 Plaetze. Fuer dieses Tor folgenlos: 55 ist als Schiffsplatz nicht darstellbar, es greift also nur bei Fahrzeugen."
   },
   {
    "var": 347,
+   "text": 19,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 14,
    "werte": [
     69
    ],
-   "text": 19
+   "vorbedingung": {
+    "feld": 13,
+    "gleich": 0,
+    "_grund": "test cl,cl; jne raus — nur UNBEWAFFNETE Einheiten"
+   }
   },
   {
    "var": 348,
+   "text": 48,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 13,
    "werte": [
     6,
     7
-   ],
-   "text": 48
+   ]
   },
   {
    "var": 349,
+   "text": 49,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 13,
    "werte": [
     8
-   ],
-   "text": 49
+   ]
   },
   {
    "var": 350,
+   "text": 50,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 13,
    "werte": [
     9
-   ],
-   "text": 50
+   ]
   },
   {
    "var": 351,
+   "text": 51,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 13,
    "werte": [
     14
-   ],
-   "text": 51
+   ]
   },
   {
    "var": 352,
+   "text": 52,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 13,
    "werte": [
     15
-   ],
-   "text": 52
+   ]
   },
   {
    "var": 353,
+   "text": 53,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 13,
    "werte": [
     16
-   ],
-   "text": 53
+   ]
   },
   {
    "var": 354,
+   "text": 54,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 13,
    "werte": [
     18
-   ],
-   "text": 54
+   ]
   },
   {
    "var": 355,
+   "text": 55,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 13,
    "werte": [
     19
-   ],
-   "text": 55
+   ]
   },
   {
    "var": 356,
+   "text": 56,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 14,
    "werte": [
     65
    ],
-   "text": 56
+   "vorbedingung": {
+    "feld": 13,
+    "gleich": 0,
+    "_grund": "test cl,cl; jne raus — nur UNBEWAFFNETE Einheiten"
+   }
   },
   {
    "var": 357,
+   "text": 57,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 14,
    "werte": [
     66
    ],
-   "text": 57
+   "vorbedingung": {
+    "feld": 13,
+    "gleich": 0,
+    "_grund": "test cl,cl; jne raus — nur UNBEWAFFNETE Einheiten"
+   }
   },
   {
    "var": 358,
+   "text": 58,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 14,
    "werte": [
     68
    ],
-   "text": 58
+   "vorbedingung": {
+    "feld": 13,
+    "gleich": 0,
+    "_grund": "test cl,cl; jne raus — nur UNBEWAFFNETE Einheiten"
+   }
   },
   {
    "var": 359,
+   "text": 59,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 14,
    "werte": [
     70
    ],
-   "text": 59
+   "vorbedingung": {
+    "feld": 13,
+    "gleich": 0,
+    "_grund": "test cl,cl; jne raus — nur UNBEWAFFNETE Einheiten"
+   }
   },
   {
    "var": 360,
+   "text": 60,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 14,
    "werte": [
     72
    ],
-   "text": 60
+   "vorbedingung": {
+    "feld": 13,
+    "gleich": 0,
+    "_grund": "test cl,cl; jne raus — nur UNBEWAFFNETE Einheiten"
+   }
   },
   {
    "var": 361,
+   "text": 61,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 14,
    "werte": [
     73
    ],
-   "text": 61
+   "vorbedingung": {
+    "feld": 13,
+    "gleich": 0,
+    "_grund": "test cl,cl; jne raus — nur UNBEWAFFNETE Einheiten"
+   }
   },
   {
    "var": 362,
+   "text": 62,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 14,
    "werte": [
     74
    ],
-   "text": 62
+   "vorbedingung": {
+    "feld": 13,
+    "gleich": 0,
+    "_grund": "test cl,cl; jne raus — nur UNBEWAFFNETE Einheiten"
+   }
   },
   {
    "var": 363,
+   "text": 63,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 14,
    "werte": [
     75
    ],
-   "text": 63
+   "vorbedingung": {
+    "feld": 13,
+    "gleich": 0,
+    "_grund": "test cl,cl; jne raus — nur UNBEWAFFNETE Einheiten"
+   }
   },
   {
    "var": 364,
+   "text": 64,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 14,
    "werte": [
     76
    ],
-   "text": 64
+   "vorbedingung": {
+    "feld": 13,
+    "gleich": 0,
+    "_grund": "test cl,cl; jne raus — nur UNBEWAFFNETE Einheiten"
+   }
   },
   {
    "var": 365,
+   "text": 65,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 14,
    "werte": [
     77
    ],
-   "text": 65
+   "vorbedingung": {
+    "feld": 13,
+    "gleich": 0,
+    "_grund": "test cl,cl; jne raus — nur UNBEWAFFNETE Einheiten"
+   }
   },
   {
    "var": 366,
+   "text": 66,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 14,
    "werte": [
     78
    ],
-   "text": 66
+   "vorbedingung": {
+    "feld": 13,
+    "gleich": 0,
+    "_grund": "test cl,cl; jne raus — nur UNBEWAFFNETE Einheiten"
+   }
   },
   {
    "var": 367,
+   "text": 67,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 14,
    "werte": [
     79
    ],
-   "text": 67
+   "vorbedingung": {
+    "feld": 13,
+    "gleich": 0,
+    "_grund": "test cl,cl; jne raus — nur UNBEWAFFNETE Einheiten"
+   }
   },
   {
    "var": 368,
+   "text": 68,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 16,
    "werte": [
     83
    ],
-   "text": 68
+   "vorbedingung": {
+    "feld": 13,
+    "gleich": 0,
+    "_grund": "test cl,cl; jne raus — nur UNBEWAFFNETE Einheiten"
+   }
   },
   {
    "var": 369,
+   "text": 69,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 16,
    "werte": [
     84
    ],
-   "text": 69
+   "vorbedingung": {
+    "feld": 13,
+    "gleich": 0,
+    "_grund": "test cl,cl; jne raus — nur UNBEWAFFNETE Einheiten"
+   }
   },
   {
    "var": 370,
+   "text": 70,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 15,
    "werte": [
     171
-   ],
-   "text": 70
+   ]
   },
   {
    "var": 371,
+   "text": 71,
+   "x": 100,
+   "y": 200,
+   "art": "einheit_feld",
    "feld": 15,
    "werte": [
-    19,
     172
    ],
-   "text": 71
+   "vorbedingung": {
+    "feld": 13,
+    "ungleich": 19,
+    "_grund": "cmp bl,0x13; je raus — Ausschluss, nicht Oder"
+   }
   },
   {
    "var": 372,
-   "feld": null,
-   "werte": [],
-   "text": 72
+   "text": 72,
+   "x": 100,
+   "y": 200,
+   "art": "gebaeude_vorhanden",
+   "mission_groesser": 16,
+   "gebaeudetypen": [
+    6,
+    12
+   ],
+   "besitzer": 0,
+   "_name": "Bahnstation oder Feldbahnhof"
   },
   {
    "var": 373,
-   "feld": null,
-   "werte": [
-    2
-   ],
-   "text": 73
+   "text": 73,
+   "x": 70,
+   "y": 150,
+   "art": "fenster_geoeffnet",
+   "fensterart": 2,
+   "fenster_name": "Bahnhof",
+   "loescht_ereignis": true,
+   "_ungebaut": "Dieses Fenster gibt es in unserem Nachbau noch nicht."
   },
   {
    "var": 374,
-   "feld": null,
-   "werte": [],
-   "text": 74
+   "text": 74,
+   "x": 100,
+   "y": 200,
+   "art": "gebaeude_vorhanden",
+   "mission_groesser": 12,
+   "gebaeudetypen": [
+    7
+   ],
+   "besitzer": 0,
+   "_name": "Generator"
   },
   {
    "var": 375,
-   "feld": null,
-   "werte": [],
-   "text": 75
+   "text": 75,
+   "x": 100,
+   "y": 200,
+   "art": "gebaeude_vorhanden",
+   "mission_groesser": 16,
+   "gebaeudetypen": [
+    9
+   ],
+   "besitzer": 0,
+   "_name": "Flughafen"
   },
   {
    "var": 376,
-   "feld": null,
-   "werte": [
-    5
-   ],
-   "text": 76
+   "text": 76,
+   "x": 70,
+   "y": 150,
+   "art": "fenster_geoeffnet",
+   "fensterart": 5,
+   "fenster_name": "Flughafen (Hangar)",
+   "loescht_ereignis": true,
+   "_ungebaut": "Dieses Fenster gibt es in unserem Nachbau noch nicht."
   },
   {
    "var": 377,
-   "feld": null,
-   "werte": [],
-   "text": 77
+   "text": 77,
+   "x": 100,
+   "y": 200,
+   "art": "gebaeude_vorhanden",
+   "mission_groesser": 12,
+   "gebaeudetypen": [
+    10
+   ],
+   "besitzer": 0,
+   "_name": "Mine"
   },
   {
    "var": 378,
-   "feld": null,
-   "werte": [
-    18
-   ],
-   "text": 78
+   "text": 78,
+   "x": 70,
+   "y": 150,
+   "art": "fenster_geoeffnet",
+   "fensterart": 18,
+   "fenster_name": "Terranium-Mine",
+   "loescht_ereignis": true,
+   "_ungebaut": "Dieses Fenster gibt es in unserem Nachbau noch nicht."
   },
   {
    "var": 381,
-   "feld": null,
-   "werte": [],
-   "text": 81
+   "text": 81,
+   "x": 70,
+   "y": 150,
+   "art": "flughafen_platz_belegt",
+   "voraussetzung_var": 375,
+   "gebaeudetyp": 9,
+   "besitzer": "betrachter",
+   "platz": 0,
+   "loescht_ereignis": true,
+   "_warnung": "HELPG.TXT der F-Auslieferung hat keinen Text 81 — die erste Textgruppe endet bei 80."
   }
- ]
+ ],
+ "_entschieden_am_21_08_2026": "+0x43 war strittig (rob_prod gegen \"Missionsmarke\") und ist entschieden: es ist EIN Byte mit EINER Bedeutung, dem Entwurfsplatz. find_unit @C 0x4D0F20 vergleicht denselben Versatz — unser find_unit_with_mark ist RICHTIG gebaut, nur der Name war falsch."
 }

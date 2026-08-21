@@ -2646,8 +2646,17 @@ public partial class MapEntityLayer : Node2D
                 {
                     Slot = GetI(e, "slot", -1), Col = col, Row = row,
                     Owner = GetI(e, "owner", -1), Team = GetI(e, "team", -1),
-                    // +0x43 ist die MISSIONSMARKE: damit zeigt die Kampagne auf
-                    // EINE bestimmte Einheit (`find_unit` @0x4D0F20). Gegenprobe
+                    // ⭐ +0x43 ist der ENTWURFSPLATZ (rob_prod), nicht eine Marke.
+                    // ⚠ Hier stand "die MISSIONSMARKE: damit zeigt die Kampagne auf
+                    // eine Einheit". Das Byte stimmt, der NAME war falsch:
+                    // create_unit @C 0x4B34E0 meldet "WRONG ROB_PROD in PLACE!!!!"
+                    // und schreibt genau die Zahl hierher, mit der es vorher die
+                    // Entwurfszeile aufgeschlagen hat. find_unit @C 0x4D0F20 liest
+                    // denselben Versatz — unser find_unit_with_mark ist RICHTIG,
+                    // es sucht die Einheit mit diesem Entwurfsplatz.
+                    // ⚠ Die Tafel haengt an der GATTUNG: Land → sec47, 200 Plaetze
+                    // je Spieler; Schiff → 0x52EDA0, nur 10. Wer gattungsblind
+                    // gegen sec47 aufloest, liest bei Schiffen die falsche Zeile.
                     // an den Karten: map_03 traegt genau eine 193 und Mission 3
                     // sucht 193, map_06 eine 194 und Mission 6 sucht 194 — quer
                     // durch fuenfzehn Missionen. Liegt hinter dem Fenster, das
@@ -4403,43 +4412,137 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <summary>
-    /// <b>DIE KONTEXTHILFE DER KAMPAGNE</b> — der Vorspann des Originals,
-    /// gebaut am 21.08.2026. Siehe <see cref="Campaign.CampaignHints"/>, dort
-    /// steht die ganze Herleitung.
+    /// <b>DIE KONTEXTHILFE DER KAMPAGNE</b> — der Vorspann des Originals.
+    /// Die ganze Herleitung steht in <see cref="Campaign.CampaignHints"/>.
     ///
-    /// <para>Das Original prüft die 34 Tore gegen <c>word[0x4FA0C8]</c>, die
-    /// ANGEWÄHLTE Einheit. Bei uns ist das <c>_selected</c>, und darum hängt
-    /// die Prüfung hier: an der einen Stelle, die die Hauptauswahl setzt.</para>
+    /// <para>⚠ <b>Hier hing die Prüfung bis zum 21.08.2026 NUR an der
+    /// Anwahl</b>, weil alle damals gelesenen Tore ein Bauteil der angewählten
+    /// Einheit prüften. Das galt für 25 von 34. Die übrigen neun prüfen den
+    /// BAUSTAND, ein geöffnetes FENSTER und die MISSIONSNUMMER — und keines
+    /// davon ändert sich beim Anklicken. Darum läuft der Block jetzt zusätzlich
+    /// im TAKT, so wie im Original: er ist Teil der Skriptauswertung und wird
+    /// jeden Durchgang durchgesehen.</para>
     ///
-    /// <para>⚠ <b>Nur in der Kampagne.</b> Der Block liegt vor den 33
-    /// Missionsblöcken und läuft im Gefecht nicht — die Trennachse des
-    /// Projekts gilt auch hier.</para>
+    /// <para>⚠ <b>Nur in der Kampagne</b>, und das ist keine Auslegung mehr:
+    /// der Block prüft selbst <c>Missionsnummer &lt; 50</c> (@C 0x497643).
+    /// <see cref="Campaign.CampaignHints.Passend"/> hält diese Schranke.</para>
     ///
     /// <para>⚠ <b>Und nur für EIGENE Einheiten.</b> Das Original kann gar nicht
-    /// anders: <c>0x4FA0C8</c> trägt nur, was der Spieler angewählt hat, und
-    /// anwählen kann er nur seine eigenen.</para></summary>
+    /// anders: <c>0x4FA0C8</c> trägt nur, was der Spieler angewählt hat.</para>
+    /// </summary>
     private void KontexthilfePruefen()
     {
-        if (UI.SkirmishSetup.CampaignMission <= 0) return;      // s.o.
-        if (_selected < 0 || _selected >= _entities.Count) return;
-        var e = _entities[_selected];
-        if (e.Dead || e.IsBuilding || e.IsProp) return;
-        if (e.Owner != ViewPlayer) return;
+        int mission = UI.SkirmishSetup.CampaignMission;
+        if (mission <= 0) return;
 
-        // ⚠ ZBRAN ist +0x0D; unser Weapon hält den AUFSATZ +0x0C (VRSEK), und
-        // ZBRAN = VRSEK − 20. Siehe TurretOf, das dieselbe Beziehung
-        // andersherum abbildet.
-        int zbran = e.Weapon > 20 ? e.Weapon - 20 : -1;
-        var tor = Campaign.CampaignHints.Passend(zbran, e.Part, e.UnitType, e.Equipment);
+        // --- was ist angewaehlt? -------------------------------------------
+        var auswahl = Campaign.CampaignHints.Auswahl.Keine;
+        Entity? e = null;
+        if (_selected >= 0 && _selected < _entities.Count)
+        {
+            var q = _entities[_selected];
+            if (!q.Dead && !q.IsBuilding && !q.IsProp && q.Owner == ViewPlayer)
+            {
+                e = q;
+                // ⭐⚠ HIER STAND EINE ABLEITUNG, WO EIN ROHBYTE DALIEGT.
+                //
+                // Am 21.08.2026 rechnete diese Stelle ZBRAN als `Weapon - 20`
+                // (Weapon ist +0x0C VRSEK) und nahm fuer +0x0F den UnitType.
+                // Beides ist falsch, und das erste ist SCHLIMM: `Weapon > 20 ?
+                // Weapon - 20 : -1` kann ZBRAN == 0 gar nicht ausdruecken —
+                // und genau auf 0 pruefen FUENFZEHN der Tore als Vorbedingung.
+                // Die Ableitung machte also ausgerechnet die haeufigste
+                // Bedingung des ganzen Blocks unerfuellbar.
+                //
+                // Die vier Bytes werden beim Laden ohnehin roh gefuehrt:
+                //   +0x0D Comp0D  +0x0E Part  +0x0F Comp0F  +0x10 Equipment
+                // Es gab nie einen Grund, eines davon auszurechnen.
+                auswahl = new Campaign.CampaignHints.Auswahl(
+                    q.Comp0D, q.Part, q.Comp0F, q.Equipment, q.Mark);
+            }
+        }
+
+        var tor = Campaign.CampaignHints.Passend(mission, auswahl,
+            HatGebaeudeVomTyp, FlughafenPlatzNullBelegt);
         if (tor == null) return;
 
-        // Die vier Zahlen des Originals: show_text2(100, 200, id, 0).
-        if (UI.HelpWindow.Show(this, tor.Text, 100, 200) == null) return;
+        // ⚠ Die Koordinaten sind NICHT überall gleich: 30 Tore zeigen bei
+        // 100/200, die vier Fenster- und Flughafentore bei 70/150. Sie stehen
+        // darum am Tor, nicht als feste Zahl hier.
+        if (UI.HelpWindow.Show(this, tor.Text, tor.X, tor.Y) == null) return;
         Campaign.CampaignHints.Gefeuert(tor);
         KontexthilfeGezeigt++;
-        GD.Print($"kontexthilfe: v[{tor.Var}] gefeuert — Feld +0x{tor.Feld:X2} = " +
-                 $"{(tor.Feld == 0x0D ? zbran : tor.Feld == 0x0E ? e.Part : tor.Feld == 0x0F ? e.UnitType : e.Equipment)}" +
-                 $", Hilfetext {tor.Text}");
+
+        // ⚠ Die drei Fenstertore verbrauchen das Ereignis — sonst feuerte das
+        // nächste Tor derselben Art im selben Augenblick mit.
+        if (tor.Was == Campaign.CampaignHints.Art.FensterGeoeffnet
+            || tor.Was == Campaign.CampaignHints.Art.FlughafenPlatzBelegt)
+            Campaign.CampaignHints.Ereignis = 0;
+
+        string wodurch = tor.Was switch
+        {
+            Campaign.CampaignHints.Art.EinheitFeld
+                => $"Feld +0x{tor.Feld:X2} = {auswahl[tor.Feld]}"
+                   + (tor.VorFeld >= 0
+                      ? $" (Vorbedingung +0x{tor.VorFeld:X2} "
+                        + $"{(tor.VorUngleich ? "!=" : "==")} {tor.VorWert} erfuellt)" : ""),
+            Campaign.CampaignHints.Art.GebaeudeVorhanden
+                => $"Gebaeudetyp {string.Join("/", tor.GebaeudeTypen)} vorhanden, Mission > {tor.MissionGroesser}",
+            Campaign.CampaignHints.Art.FensterGeoeffnet
+                => $"Fenster der Art {tor.FensterArt} geoeffnet",
+            _ => "ein Flugzeug steht auf Stellplatz 0 des eigenen Flughafens",
+        };
+        GD.Print($"kontexthilfe: v[{tor.Var}] gefeuert — {wodurch}, "
+                 + $"Hilfetext {tor.Text} bei {tor.X}/{tor.Y}");
+    }
+
+    /// <summary><c>zaehle_gebaeude(typ, besitzer) != 0</c> des Originals
+    /// (C <c>0x4CFA70</c>, Gebäudetafel <c>0xC06914</c>, Schrittweite 76, 255
+    /// Sätze).
+    ///
+    /// <para>⚠ <b>Ein Widerspruch im ORIGINAL, nicht bei uns:</b> die vier
+    /// Baustand-Tore zählen Gebäude von Besitzer <b>0</b> als feste Zahl, das
+    /// Flughafentor v[381] vergleicht dagegen gegen <c>byte[0x4FA284]</c>, den
+    /// Betrachter. In der Kampagne ist beides dasselbe; im Gefecht wäre es das
+    /// nicht — dort läuft der Block ohnehin nicht. Wir bauen beide Seiten so
+    /// nach, wie sie dastehen.</para></summary>
+    private bool HatGebaeudeVomTyp(int typ, int besitzer)
+    {
+        foreach (var b in _entities)
+            if (b.IsBuilding && !b.Dead && b.BType == typ && b.Owner == besitzer)
+                return true;
+        return false;
+    }
+
+    /// <summary>Steht ein Flugzeug auf <b>Stellplatz 0</b> eines eigenen
+    /// Flughafens? ⚠ Das Original liest genau diesen einen Platz
+    /// (sec27 <c>+0x0B</c>, <c>0xFF</c> = frei) — <b>nicht</b> »irgendeinen
+    /// Platz«. Wer es grosszügiger baut, lässt den Hinweis zu früh
+    /// kommen.</summary>
+    private bool FlughafenPlatzNullBelegt()
+    {
+        foreach (var b in _entities)
+            if (b.IsBuilding && !b.Dead && b.BType == 9 && b.Owner == ViewPlayer
+                && b.Hangar != null && b.Hangar.Count > 0 && b.Hangar[0] >= 0)
+                return true;
+        return false;
+    }
+
+    /// <summary>Für den Prüfstand: <b>genau ein Tor scharf lassen</b>, alle
+    /// anderen als »schon gezeigt« vormerken.
+    ///
+    /// <para>⚠ Ohne das misst der Prüfstand seinen eigenen Abfall. Die
+    /// Vorbereitung ruft <c>SetPrimary()</c>, und das prüft die Kontexthilfe
+    /// mit — in einer späten Mission mit Bahnstation feuert dabei sofort ein
+    /// Baustand-Tor und ist verbraucht, bevor die Messung anfängt. Genau
+    /// dieser Fehler hat am 21.08.2026 zwei Missionen widersprüchlich gemeldet:
+    /// »feuert nie« auf der einen, »feuert zu früh« auf der anderen Karte, bei
+    /// identischem Code.</para></summary>
+    private static void NurDiesesTor(Campaign.CampaignHints.Tor tor)
+    {
+        Campaign.CampaignHints.Vergiss();
+        foreach (var t in Campaign.CampaignHints.Tore)
+            if (t.Var != tor.Var) Campaign.CampaignHints.Merke(t.Var);
     }
 
     /// <summary>Wie oft die Kontexthilfe gefeuert hat — für den Prüfstand.
@@ -4463,8 +4566,21 @@ public partial class MapEntityLayer : Node2D
         var sb = new System.Text.StringBuilder("hinweis-check\n");
         bool alles = true;
         var tore = Campaign.CampaignHints.Tore;
-        sb.Append($"  {tore.Count} von {Campaign.CampaignHints.ToreInDatei} Toren auswertbar ")
-          .Append($"({Campaign.CampaignHints.OhneBedingung} ohne Bedingung)\n");
+        sb.Append($"  {Campaign.CampaignHints.ToreInDatei} Tore, ")
+          .Append($"{Campaign.CampaignHints.Auswertbar} auswertbar, ")
+          .Append($"{Campaign.CampaignHints.NichtAuswertbar} nicht\n");
+        // ⚠ Die Aufschluesselung nach ART gehoert gedruckt: "25 auswertbar"
+        // sagt nicht, ob alle vier Arten vertreten sind — und genau das war der
+        // Fehler, den dieser Pruefstand am 21.08.2026 NICHT gefangen hat.
+        var nachArt = new System.Collections.Generic.Dictionary<Campaign.CampaignHints.Art, int>();
+        foreach (var t in tore)
+        {
+            nachArt.TryGetValue(t.Was, out int n);
+            nachArt[t.Was] = n + 1;
+        }
+        foreach (var kv in nachArt) sb.Append($"    {kv.Key}: {kv.Value}\n");
+        foreach (var t in tore)
+            if (t.Grund != null) sb.Append($"    v[{t.Var}] uebergangen: {t.Grund}\n");
         if (tore.Count == 0)
             return sb.Append("  ⚠ ABBRUCH: keine Tore geladen.\n  DURCHGEFALLEN").ToString();
 
@@ -4475,7 +4591,9 @@ public partial class MapEntityLayer : Node2D
 
         // Ein Tor mit Feld +0x0D nehmen und eine Einheit dafuer herrichten.
         Campaign.CampaignHints.Tor? ziel = null;
-        foreach (var t in tore) if (t.Feld == 0x0D) { ziel = t; break; }
+        foreach (var t in tore)
+            if (t.Was == Campaign.CampaignHints.Art.EinheitFeld
+                && t.Feld == 0x0D && t.VorFeld < 0) { ziel = t; break; }
         if (ziel == null)
             return sb.Append("  ⚠ ABBRUCH: kein Tor auf die Waffe (+0x0D).\n  DURCHGEFALLEN").ToString();
 
@@ -4490,9 +4608,14 @@ public partial class MapEntityLayer : Node2D
             return sb.Append("  ⚠ ABBRUCH: keine Einheit auf dieser Karte.\n  DURCHGEFALLEN").ToString();
 
         var e = _entities[idx];
-        int merkWaffe = e.Weapon, merkBesitzer = e.Owner;
+        int merkWaffe = e.Comp0D, merkBesitzer = e.Owner;
         ViewPlayer = e.Owner;
-        e.Weapon = ziel.Werte[0] + 20;          // ZBRAN = VRSEK − 20
+        e.Comp0D = ziel.Werte[0];               // +0x0D roh, keine Ableitung
+        // ⚠ NUR dieses Tor scharf lassen. Auf einer spaeten Karte mit
+        // Bahnstation feuert sonst waehrend der Anwahl ein BAUSTAND-Tor mit,
+        // und "zweite Anwahl: 1 Fenster" meldete faelschlich, der Hinweis
+        // komme wieder — dabei war es ein anderer.
+        NurDiesesTor(ziel);
         sb.Append($"  Tor v[{ziel.Var}]: Waffe {ziel.Werte[0]} → Hilfetext {ziel.Text}; ")
           .Append($"Einheit {idx} hergerichtet\n");
 
@@ -4516,8 +4639,11 @@ public partial class MapEntityLayer : Node2D
 
         // --- 3. Gegenprobe: ein Bauteil ohne Tor loest nichts aus -----------
         UI.HelpWindow.CloseAll(); UI.HelpWindow.CommitClose();
+        // ⚠ Erst wieder SCHARF machen: eine Gegenprobe an einem bereits
+        // verbrauchten Tor schweigt immer und misst nichts.
+        NurDiesesTor(ziel);
         int vor3 = KontexthilfeGezeigt;
-        e.Weapon = 20 + 250;                     // ZBRAN 250 — dafuer gibt es kein Tor
+        e.Comp0D = 250;                          // ZBRAN 250 — dafuer gibt es kein Tor
         _sel.Clear(); SetPrimary();
         _sel.Add(idx); SetPrimary();
         bool stumm = KontexthilfeGezeigt == vor3;
@@ -4527,11 +4653,11 @@ public partial class MapEntityLayer : Node2D
 
         // --- 4. und im Gefecht schweigt es ganz -----------------------------
         UI.HelpWindow.CloseAll(); UI.HelpWindow.CommitClose();
-        Campaign.CampaignHints.Vergiss();
+        NurDiesesTor(ziel);
         int merkMission = UI.SkirmishSetup.CampaignMission;
         UI.SkirmishSetup.CampaignMission = 0;
         int vor4 = KontexthilfeGezeigt;
-        e.Weapon = ziel.Werte[0] + 20;
+        e.Comp0D = ziel.Werte[0];
         _sel.Clear(); SetPrimary();
         _sel.Add(idx); SetPrimary();
         bool imGefecht = KontexthilfeGezeigt == vor4;
@@ -4540,7 +4666,114 @@ public partial class MapEntityLayer : Node2D
           .Append(imGefecht ? "✔ schweigt" : "✘").Append('\n');
         alles &= imGefecht;
 
-        e.Weapon = merkWaffe; e.Owner = merkBesitzer;
+
+        // --- 5. DIE VERSCHLUCKTE VORBEDINGUNG (ZBRAN == 0) ------------------
+        //
+        // ⚠ Das ist die Messung, die am 21.08.2026 gefehlt hat. Fuenfzehn Tore
+        // verlangen zusaetzlich +0x0D == 0, zeigen also NUR bei unbewaffneten
+        // Einheiten. Baut man die Vorbedingung falschherum ein, feuern sie
+        // entweder nie oder immer — und BEIDES bestuende die Punkte 1..4 oben.
+        // Darum wird hier beides gemessen: bewaffnet muss SCHWEIGEN, unbewaffnet
+        // muss ZEIGEN.
+        UI.HelpWindow.CloseAll(); UI.HelpWindow.CommitClose();
+        Campaign.CampaignHints.Vergiss();
+        Campaign.CampaignHints.Tor? mitVor = null;
+        foreach (var t in tore)
+            if (t.Was == Campaign.CampaignHints.Art.EinheitFeld
+                && t.VorFeld == 0x0D && !t.VorUngleich && t.VorWert == 0
+                && t.Feld == 0x0E
+                // ⚠ v[347] taugt als Probe NICHT: sein Text ist HELPG #019,
+                // und das ist eine LEERE Marke — die Zeile steht in der Datei,
+                // der Rumpf fehlt. Unser Fenster zeigt dann nichts und meldet
+                // null zurueck, das Tor feuert nie. Im Original ginge ein leeres
+                // Fenster auf. Das ist ein Befund ueber die Datei, kein Fehler
+                // des Baus, aber es macht v[347] als Messpunkt untauglich.
+                && t.Var != 347) { mitVor = t; break; }
+        if (mitVor == null)
+        {
+            sb.Append("  ⚠ kein Tor mit Vorbedingung ZBRAN == 0 gefunden — ")
+              .Append("die Berichtigung vom 21.08. ist NICHT in der Datei ✘\n");
+            alles = false;
+        }
+        else
+        {
+            int merkPart = e.Part;
+            e.Part = mitVor.Werte[0];
+            NurDiesesTor(mitVor);
+
+            // ⚠ NICHT 7 nehmen: auf ZBRAN 6/7 sitzt das Tor v[348], das dann
+            // statt des gepruefen feuert und die Messung gruen luegt. 250
+            // trifft kein einziges Tor — gemessen wird also wirklich die
+            // Vorbedingung und nicht irgendein Nachbar.
+            e.Comp0D = 250;                          // BEWAFFNET, aber ohne eigenes Tor
+            int vor5 = KontexthilfeGezeigt;
+            _sel.Clear(); SetPrimary();
+            _sel.Add(idx); SetPrimary();
+            bool bewaffnetStumm = KontexthilfeGezeigt == vor5;
+
+            UI.HelpWindow.CloseAll(); UI.HelpWindow.CommitClose();
+            e.Comp0D = 0;                            // ZBRAN 0 — UNBEWAFFNET
+            int vor6 = KontexthilfeGezeigt;
+            _sel.Clear(); SetPrimary();
+            _sel.Add(idx); SetPrimary();
+            bool unbewaffnetZeigt = KontexthilfeGezeigt == vor6 + 1;
+
+            sb.Append($"  Tor v[{mitVor.Var}] (top_spec {mitVor.Werte[0]}, Vorbedingung ZBRAN == 0):\n");
+            sb.Append("    mit Waffe 250: ")
+              .Append(bewaffnetStumm ? "0 Fenster ✔ schweigt"
+                                     : "ES ZEIGT TROTZDEM ✘").Append('\n');
+            sb.Append("    ohne Waffe:   ")
+              .Append(unbewaffnetZeigt ? "1 Fenster ✔"
+                                       : "0 Fenster ✘ ES SCHWEIGT IMMER").Append('\n');
+            alles &= bewaffnetStumm && unbewaffnetZeigt;
+            e.Part = merkPart;
+        }
+
+        // --- 6. EIN TOR, DAS GAR NICHT AN DER ANWAHL HAENGT -----------------
+        //
+        // ⚠ Vier Tore feuern, weil der Spieler ein GEBAEUDE besitzt. Sie
+        // koennen im alten Bau gar nicht ausgeloest worden sein, weil dort nur
+        // die Anwahl geprueft wurde. Gemessen wird darum OHNE jede Anwahl.
+        UI.HelpWindow.CloseAll(); UI.HelpWindow.CommitClose();
+        Campaign.CampaignHints.Vergiss();
+        Campaign.CampaignHints.Tor? bauTor = null;
+        foreach (var t in tore)
+            if (t.Was == Campaign.CampaignHints.Art.GebaeudeVorhanden
+                && HatGebaeudeVomTyp(t.GebaeudeTypen[0], 0)) { bauTor = t; break; }
+        if (bauTor == null)
+        {
+            sb.Append("  Baustand-Tore: auf dieser Karte steht keines der vier ")
+              .Append("Gebaeude — ungemessen (kein Fehler)\n");
+        }
+        else
+        {
+            int merkMission2 = UI.SkirmishSetup.CampaignMission;
+            _sel.Clear(); SetPrimary();
+            NurDiesesTor(bauTor);
+
+            // zu frueh: die Missionsschranke muss es zurueckhalten
+            UI.SkirmishSetup.CampaignMission = bauTor.MissionGroesser;
+            int vor7 = KontexthilfeGezeigt;
+            KontexthilfePruefen();
+            bool zuFrueh = KontexthilfeGezeigt == vor7;
+
+            UI.HelpWindow.CloseAll(); UI.HelpWindow.CommitClose();
+            UI.SkirmishSetup.CampaignMission = bauTor.MissionGroesser + 1;
+            int vor8 = KontexthilfeGezeigt;
+            KontexthilfePruefen();
+            bool spaeter = KontexthilfeGezeigt == vor8 + 1;
+
+            UI.SkirmishSetup.CampaignMission = merkMission2;
+            sb.Append($"  Tor v[{bauTor.Var}] (Gebaeudetyp {bauTor.GebaeudeTypen[0]}, ")
+              .Append($"Mission > {bauTor.MissionGroesser}), OHNE Anwahl:\n");
+            sb.Append($"    in Mission {bauTor.MissionGroesser}: ")
+              .Append(zuFrueh ? "0 Fenster ✔ die Schranke haelt" : "ES FEUERT ZU FRUEH ✘").Append('\n');
+            sb.Append($"    in Mission {bauTor.MissionGroesser + 1}: ")
+              .Append(spaeter ? "1 Fenster ✔" : "0 Fenster ✘ es feuert NIE").Append('\n');
+            alles &= zuFrueh && spaeter;
+        }
+
+        e.Comp0D = merkWaffe; e.Owner = merkBesitzer;
         UI.HelpWindow.CloseAll(); UI.HelpWindow.CommitClose();
         UI.HelpWindow.PauseWhileOpen = merkPause;
         Campaign.CampaignHints.Vergiss();
@@ -23699,6 +23932,12 @@ public partial class MapEntityLayer : Node2D
         BrandTakt();
         // Und die Gegenrichtung: wer auf einer Ladezelle steht, geht an Bord.
         BeladeTakt();
+        // ⭐ Der Vorspann der Kampagne. Er hängt NICHT allein an der Anwahl:
+        // neun seiner Tore prüfen den Baustand, ein geöffnetes Fenster oder
+        // die Missionsnummer, und keines davon ändert sich beim Anklicken.
+        // Im Original ist der Block Teil der Skriptauswertung und wird jeden
+        // Durchgang durchgesehen — genau das tut er hier.
+        KontexthilfePruefen();
 
         // ⚠⚠ DIE KI GEHÖRT NACH VORN (20.08.2026) — Station **14** von rund
         // siebzig, und die Reihenfolge ist nicht geraten: das Original schreibt
