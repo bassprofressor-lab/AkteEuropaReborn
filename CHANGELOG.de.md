@@ -7,7 +7,7 @@ dem eigenen Rechner aus der eigenen Fassung des Spiels von 1997.
 *In English: [CHANGELOG.md](CHANGELOG.md). Ältere Fassungen als 0.5.0 sind
 bisher nur dort beschrieben.*
 
-## 0.6.0 — unveröffentlicht
+## 0.6.0 — 21.08.2026
 
 ### Auf einen Blick
 
@@ -58,11 +58,17 @@ weiter unten ausführlich, mit den Adressen, an denen er gelesen wurde.
 | **Karten bringen eigene Terranium-Vorkommen mit.** | Auf vier Missionen legt das Skript keine an — dort gab es bei uns **keinen einzigen Bauplatz für eine Mine**. |
 | **Die Hilfe hat wieder ihre Bilder.** | 132 Sachbilder zu Hilfe und Enzyklopädie lagen ungenutzt. Der Text fliesst daneben, genau wie im Original. |
 | **Brücke und Rampe wissen, welche sie sind.** | Das Lagenbyte der Karte ist nicht nur »hier ist eine« — es ist die Platznummer. |
+| ⭐ **Transporter lassen sich be- und entladen.** | Beides von Hand. Drei Fahrzeuge oder fünfzehn Mann — zwei verschiedene Schranken, beide aus der Laderoutine gelesen. |
+| **Die fünfzehn Gebäudebefehle laufen durch den Befehlsring.** | Reparieren, Lagerausbau, Produktionserweiterung, Abbrechen — vier Tafeln, eine je Gebäudeart. Der Schritt, der das Netzspiel möglich macht. |
+| ⭐ **Die Mine ist eine Fabrik zweiter Art.** | Ihre Produktionserweiterung war ein **bezahlter Knopf ohne Wirkung**: sie zählte eine Stufe hoch, die niemand las. Jetzt fördert die Mine nach der Zehnerstufentafel des Originals. |
+| **Die verlegte Einheit fährt wirklich mit.** | Sie sprang von Depot zu Depot. Jetzt steigt sie in den Güterzug, wechselt an jedem Knoten und kommt an. |
+| **Gruppen und Merkpunkte überstehen den Spielstand.** | Und die Merkpunkte zeigten nach dem Laden in die **vorige Karte**. |
+| **Der Takt des Spiels ist gemessen, nicht gesetzt.** | 50 Takte je Sekunde — am Video des Originals mit der Stoppuhr nachgeprüft. Daran hängen Markt, Bahn, Produktion und jede Skriptzeit. |
+| **19 Tore mehr in drei Missionen.** | Sie fehlten, weil unser eigener Prüfstand die zwei Spielfassungen über **Byteweiten** verglich statt über die Regeln. |
+| **Die Rohstoffleiste liegt nicht mehr über der Auftragszeile.** | Sie sass fest auf 4 Bildpunkten, obwohl der Kommentar daneben behauptete, die Höhe werde gefragt. |
 
-⚠ **Was ausdrücklich NICHT drin ist:** der Mehrspielerbetrieb über das Netz,
-und das Be- und Entladen von Transportern von Hand — die Karten liefern ihre
-Ladung inzwischen richtig aus, aber selbst aufladen kann man noch nicht. Alles
-Ungeklärte steht in `OFFENE_FRAGEN.md`.
+⚠ **Was ausdrücklich NICHT drin ist:** der Mehrspielerbetrieb über das Netz.
+Alles Ungeklärte steht in `OFFENE_FRAGEN.md`.
 
 ⚠ **Berichtigung an diesem Kasten:** hier stand bis zuletzt, die
 Zwillingslafette sei nicht dabei — sie ist es, und zwei Zeilen weiter oben

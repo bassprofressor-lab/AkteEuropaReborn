@@ -2859,9 +2859,22 @@ public partial class MapViewer : Node2D
         if (_resourceBar.Visible != want) _resourceBar.Visible = want;
         if (!want) return;
         _resourceBar.Sample();
-        // Unter der Statusplatte durch: die ist links oben und so hoch, wie ihr
-        // Text sie macht — darum wird ihre Höhe gefragt und nicht geraten.
-        _resourceBar.Place(GetViewportRect().Size, 4f);
+        // ⚠⚠ HIER STAND EINE FESTE 4 — und der Kommentar daneben behauptete,
+        // die Höhe der Statusplatte werde »gefragt und nicht geraten«. Sie
+        // wurde nicht gefragt: die Leiste sitzt oben MITTIG, die Platte oben
+        // LINKS, und sobald deren Auftragszeile lang genug ist, laufen beide
+        // ineinander. Auf Mission 21 (»Besetzen Sie die Minen im Süden · …«)
+        // lag die Rohstoffleiste mitten im Text.
+        //
+        // Jetzt wird wirklich gefragt: reicht die Platte in die Spalte der
+        // Leiste hinein, geht die Leiste darunter; sonst bleibt sie oben.
+        var sicht = GetViewportRect().Size;
+        float oben = 4f;
+        float leisteLinks = Mathf.Max(0f, (sicht.X - _resourceBar.Size.X) * 0.5f);
+        float platteRechts = _hudBg.Position.X + _hudBg.Size.X;
+        if (_hudBg.Visible && platteRechts > leisteLinks - 8f)
+            oben = _hudBg.Position.Y + _hudBg.Size.Y + 4f;
+        _resourceBar.Place(sicht, oben);
     }
 
     /// <summary>The overview map, sitting on top of the side panel.

@@ -6,7 +6,7 @@ your own copy of the 1997 game.
 
 *Auf Deutsch: [CHANGELOG.de.md](CHANGELOG.de.md).*
 
-## 0.6.0 — unreleased
+## 0.6.0 — 2026-08-21
 
 ### At a glance
 
@@ -57,11 +57,17 @@ further down, with the addresses it was read at.
 | **Maps carry their own terranium deposits.** | On four missions the script places none — so there was **not a single build site for a mine**. |
 | **The help window has its pictures back.** | 132 pictures for help and encyclopedia sat unused. The text flows beside them, exactly as in the original. |
 | **A bridge and a ramp know which one they are.** | The map's layer byte is not merely "one is here" — it is the slot number. |
+| ⭐ **Transports can be loaded and unloaded by hand.** | Three vehicles or fifteen men — two different limits, both read out of the game's own load routine. |
+| **The fifteen building commands go through the command ring.** | Repair, storage upgrade, production upgrade, cancel — four tables, one per building kind. The step that makes network play possible. |
+| ⭐ **A mine is a factory of the second kind.** | Its production upgrade was a **paid button with no effect**: it counted up a level nobody read. Mines now dig by the original's ten-step period table. |
+| **A relocated unit really rides along.** | It used to jump from depot to depot. Now it boards the freight train, changes at every node, and arrives. |
+| **Groups and map marks survive a save.** | And the marks used to point into the *previous* map after loading. |
+| **The game's tick rate is measured, not assumed.** | 50 ticks per second — checked with a stopwatch against footage of the original. Market, rail, production and every scripted time hang off it. |
+| **19 more gates in three missions.** | They were missing because our own check compared the two builds by **byte distance** instead of by the rules they span. |
+| **The resource bar no longer sits on the objective line.** | It was pinned to 4 pixels, while the comment beside it claimed the height was being asked for. |
 
-⚠ **What is deliberately NOT in here:** online multiplayer, and loading and
-unloading transports by hand — the maps now deliver their cargo correctly, but
-you cannot load one yourself yet. Every open question is listed in
-`OFFENE_FRAGEN.md`.
+⚠ **What is deliberately NOT in here:** online multiplayer. Every open question
+is listed in `OFFENE_FRAGEN.md`.
 
 ⚠ **A correction to this box:** it claimed until now that the twin mount was
 not included. It is, and it is listed two rows above. A defect list whose
