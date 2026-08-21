@@ -1063,6 +1063,21 @@ public partial class MainMenu : Control
                 GetTree().Quit(Import.ImportSelfTest.RunRpl(a["--selftest-rpl=".Length..]));
                 return;
             }
+            // ⚠ EIGENER SCHALTER, weil `--selftest-cwp=` seinen Ordner an ein
+            // Dutzend Pruefstaende weiterreicht, von denen nur dieser hier
+            // mehrere Wurzeln versteht. Ein »D:/;E:/« dort haette die anderen
+            // ins Leere laufen lassen und den Rueckgabewert vergiftet.
+            // Beispiel: `--selftest-cwm=D:/;E:/`
+            else if (a.StartsWith("--selftest-pay="))
+            {
+                GetTree().Quit(Import.ImportSelfTest.RunPay(a["--selftest-pay=".Length..]));
+                return;
+            }
+            else if (a.StartsWith("--selftest-cwm="))
+            {
+                GetTree().Quit(Import.ImportSelfTest.RunCwm(a["--selftest-cwm=".Length..]));
+                return;
+            }
             else if (a.StartsWith("--selftest-cwp="))
             {
                 string dir = a["--selftest-cwp=".Length..];

@@ -298,7 +298,10 @@ public static class EntitiesJson
         foreach (var n in d.RailNodes)
         {
             w.Obj();
-            w.Num("node", n.Node).Num("building", n.Building);
+            // ⚠ `type` ist das Feld +0x02 des Knotens (Gebaeudetyp, 0 = frei).
+            // Ohne es hier kann MapOpen es beim Zurueckschreiben nur erhalten,
+            // nicht setzen — und ein neu angelegter Knoten bekaeme keinen Typ.
+            w.Num("node", n.Node).Num("building", n.Building).Num("type", n.Type);
             w.Key("links").Arr();
             foreach (int v in n.Links) w.Num(v);
             w.End();

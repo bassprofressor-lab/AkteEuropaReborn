@@ -256,17 +256,57 @@ public static class ImportSelfTest
 
     public static int RunCwm(string aekernel)
     {
-        aekernel = aekernel.TrimEnd('/', '\\');
-        string levels = aekernel + "/LEVELS";
-        string mapOut = aekernel + "/map_out";
-        if (!Directory.Exists(levels)) { GD.PrintErr("selftest-cwm: LEVELS fehlt"); return 2; }
+        // ⚠⚠ 20.08.2026 — DIESER PRUEFSTAND SAH BISHER 23 VON 41 KARTEN, und
+        // das ist derselbe Fehler, der schon einmal einen echten Fehler
+        // versteckt hat (siehe RunRail: drei Belege statt zehn).
+        //
+        // Zwei Luecken auf einmal:
+        //   * **Nur EIN Ordner.** Die Kampagne liegt auf ZWEI CDs; `16..33.CWM`
+        //     stehen auf der zweiten. Wer nur D: durchsucht, misst 23 Karten
+        //     und meldet trotzdem gruen — 56 % Abdeckung, ohne dass es
+        //     danebensteht.
+        //   * **Nur 3 von 13 Spielstaenden.** Hier standen `1.DM`, `3.DM`,
+        //     `4.DM` — dieselben drei wie beim Bahn-Pruefstand, und aus
+        //     demselben ueberholten Kommentar heraus.
+        //
+        // Jetzt nimmt er, wie `RunRail`, MEHRERE Wurzeln (Strichpunkt
+        // getrennt) und alle Spielstaende, die er findet. ⚠ Und er sagt am
+        // Ende, WIEVIELE er gefunden hat — ein Pruefstand, der still weniger
+        // misst als er soll, ist schlimmer als keiner.
+        var wurzeln = Wurzeln(aekernel);
+        string erste = wurzeln[0].TrimEnd('/', '\\');
+        string mapOut = erste + "/map_out";
 
         int files = 0, bad = 0, entOk = 0, entBad = 0, bldOk = 0, bldBad = 0, noRef = 0;
         var secCount = new Dictionary<int, int>();
-        var paths = new List<string>(Directory.GetFiles(levels, "*.CWM"));
-        foreach (string dm in new[] { "1.DM", "3.DM", "4.DM" })
-            if (File.Exists(levels + "/" + dm)) paths.Add(levels + "/" + dm);
+        var paths = new List<string>();
+        var gesehen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        int ordner = 0, dmZahl = 0;
+        foreach (string w in wurzeln)
+        {
+            string lv = w.TrimEnd('/', '\\') + "/LEVELS";
+            if (!Directory.Exists(lv)) continue;
+            ordner++;
+            foreach (string f in Directory.GetFiles(lv, "*.CWM"))
+                // ⚠ Nach DATEINAME entdoppeln, nicht nach Pfad: liegt dieselbe
+                // Karte auf beiden CDs, waere sie sonst zweimal gezaehlt und
+                // die Zahl sagte mehr Abdeckung, als da ist.
+                if (gesehen.Add(Path.GetFileName(f))) paths.Add(f);
+            for (int i = 1; i <= 13; i++)
+            {
+                string dm = lv + "/" + i + ".DM";
+                if (File.Exists(dm) && gesehen.Add(i + ".DM")) { paths.Add(dm); dmZahl++; }
+            }
+        }
+        // `game.007` liegt NICHT unter LEVELS/, sondern in der Wurzel — genau
+        // wie bei RunRail. Er hat sec122 und faellt sonst weg.
+        string? g7 = Suche(wurzeln, "game.007");
+        if (g7 != null) paths.Add(g7);
+        if (paths.Count == 0) { GD.PrintErr("selftest-cwm: LEVELS fehlt"); return 2; }
         paths.Sort();
+        GD.Print($"selftest-cwm: {ordner} Ordner, {paths.Count} Belege " +
+                 $"({paths.Count - dmZahl - (g7 != null ? 1 : 0)} .CWM, {dmZahl} .DM" +
+                 $"{(g7 != null ? ", game.007" : "")})");
 
         foreach (string path in paths)
         {
@@ -481,6 +521,72 @@ public static class ImportSelfTest
             if (System.IO.File.Exists(p)) return p;
         }
         return null;
+    }
+
+    /// <summary>
+    /// <c>--selftest-pay</c> — <b>stimmt unsere Missionsbezahlung mit der in
+    /// den Spielständen überein?</b>
+    ///
+    /// <para>Die 33 Beträge in <see cref="Campaign.CampaignManager.PayFor"/>
+    /// sind aus <c>GAME.EXE</c> gelesen. <b>sec74</b> der Karten und Stände ist
+    /// dieselbe Zahl aus einer <b>zweiten, unabhängigen Quelle</b> — der
+    /// Missionsblock setzt sie beim Start in <c>0xA9A1D8</c>, und bei Erfolg
+    /// kommt sie im Block <c>Succ100</c> (<c>0x4169F1</c>:
+    /// <c>mov ecx,[0xA9C600]; add ecx,[0xA9A1D8]</c>) aufs Konto.</para>
+    ///
+    /// <para>⚠ <b>Warum das einen eigenen Lauf wert ist.</b> Zwei Quellen, die
+    /// dasselbe sagen sollen, sind nur dann ein Beleg, wenn jemand sie
+    /// wirklich gegeneinander hält. Bis heute war das eine einmalige Messung
+    /// in einem Bericht; ab jetzt fällt es auf, wenn eine der beiden wandert.
+    /// ⚠ Und der Lauf sagt, <b>wie viele</b> Dateien er beurteilen konnte —
+    /// eine Karte ohne Missionsnummer oder mit sec74 = 0 beweist nichts, und
+    /// »0 geprüft, 0 falsch« darf nicht wie ein Erfolg aussehen.</para></summary>
+    public static int RunPay(string dir)
+    {
+        var wurzeln = Wurzeln(dir);
+        int geprueft = 0, gleich = 0, ohne = 0;
+        var schief = new List<string>();
+        var gesehen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var pfade = new List<string>();
+        foreach (string w in wurzeln)
+        {
+            string lv = w.TrimEnd('/', '\\') + "/LEVELS";
+            if (Directory.Exists(lv))
+                foreach (string f in Directory.GetFiles(lv))
+                    if ((f.EndsWith(".CWM", StringComparison.OrdinalIgnoreCase) ||
+                         f.EndsWith(".DM", StringComparison.OrdinalIgnoreCase)) &&
+                        gesehen.Add(Path.GetFileName(f))) pfade.Add(f);
+        }
+        string? g7 = Suche(wurzeln, "game.007");
+        if (g7 != null) pfade.Add(g7);
+        pfade.Sort();
+
+        foreach (string pfad in pfade)
+        {
+            CwmFile m;
+            try { m = CwmFile.Load(pfad); } catch { continue; }
+            var s74 = m.Sec(74);
+            if (s74 == null || s74.Length < 4) { ohne++; continue; }
+            int wert = BitConverter.ToInt32(s74, 0);
+            int nr = m.MissionNumber;
+            if (wert == 0 || nr < 1 || nr > 33) { ohne++; continue; }
+            geprueft++;
+            int unser = Campaign.CampaignManager.PayFor(nr);
+            if (unser == wert) gleich++;
+            else schief.Add($"{Path.GetFileName(pfad)} (M{nr}): sec74 {wert}, wir {unser}");
+        }
+
+        GD.Print($"selftest-pay: {pfade.Count} Dateien, {geprueft} beurteilbar " +
+                 $"({ohne} ohne Missionsnummer oder ohne Betrag); " +
+                 $"{gleich} stimmen ueberein, {schief.Count} weichen ab");
+        foreach (string z in schief) GD.PrintErr("  " + z);
+        if (geprueft == 0)
+        {
+            GD.PrintErr("selftest-pay: NICHTS BEURTEILT — das ist kein Erfolg. " +
+                        "Ohne Spielstaende (.DM) hat der Lauf keine zweite Quelle.");
+            return 2;
+        }
+        return schief.Count == 0 ? 0 : 1;
     }
 
     private static readonly (string Name, string Rel)[] RailProofs =

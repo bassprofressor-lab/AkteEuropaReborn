@@ -516,12 +516,14 @@ public partial class MapEntityLayer : Node2D
         /// direkt vor dem Spritabzug bei +0x2e), und beim Ablaufen auf
         /// <b>40 + Wurf%20</b> (@0x408bc8..@0x408bda).</para>
         ///
-        /// <para>⚠ Die Zahlen sind TAKTE des Originals. Wie lang dessen Takt
-        /// war, ist ungelesen; wir setzen sie in unsere Takte
-        /// (<c>SimHz = 60</c>, selbst unsere Setzung) — die Groessenordnung
-        /// bleibt damit die alte 0,7-Sekunden-Wartezeit, nur eben gewuerfelt
-        /// wie im Original, was zwei nebeneinander stehende Einheiten
-        /// auseinanderzieht.</para>
+        /// <para>Die Zahlen sind TAKTE des Originals, und dessen Takt ist
+        /// inzwischen gelesen UND gemessen: <c>SimHz = 50</c> bei
+        /// Geschwindigkeit 1 (21.08.2026, Stoppuhr des Spielers am Let's Play
+        /// — siehe <see cref="SimHz"/>). Unsere Takte sind damit dieselben wie
+        /// seine, die Zahlen wandern 1:1: <b>15..29 Takte = 0,30..0,58 s</b>
+        /// beim Betreten einer Zelle, <b>40..59 Takte = 0,80..1,18 s</b> beim
+        /// Ablaufen — gewuerfelt wie im Original, was zwei nebeneinander
+        /// stehende Einheiten auseinanderzieht.</para>
         /// </summary>
         public int Block;
 
@@ -1312,7 +1314,9 @@ public partial class MapEntityLayer : Node2D
     /// aendern muss.</para>
     /// </summary>
     public static bool KeineEinschlagHoehen;
-    private int _dreh4x4Takt;
+    /// <summary>Der Simulationstakt, einmal je <c>SimTick</c> hochgezählt —
+    /// unser Gegenstück zu <c>dword[0x4FA240]</c>.</summary>
+    private int _taktNr;
 
     /// <summary>Der angewählte FLUGZEUGPLATZ — die Zeile in <see cref="_special"/>,
     /// oder −1. Flugzeuge sind bei uns keine <see cref="Entity"/>, deshalb
@@ -2916,6 +2920,8 @@ public partial class MapEntityLayer : Node2D
         // lines name the two nodes they join — together that is the graph the
         // game hauls goods along
         _rail.Clear();
+        _railNodes.Clear();
+        _netzLinien.Clear();
         _railRoutes.Clear();
         _lineRoute.Clear();
         _linePiece.Clear();
@@ -2961,7 +2967,36 @@ public partial class MapEntityLayer : Node2D
             {
                 if (item.VariantType != Variant.Type.Dictionary) continue;
                 var nd = item.AsGodotDictionary<string, Variant>();
-                node2bld[GetI(nd, "node", -1)] = GetI(nd, "building", -1);
+                int nr = GetI(nd, "node", -1);
+                node2bld[nr] = GetI(nd, "building", -1);
+                // ⚠ Die Knotentafel wurde hier bisher WEGGEWORFEN — nur
+                // Knoten→Gebaeude blieb uebrig. Fuer »Transportieren« braucht
+                // es den Typ (0 = Satz frei) und die vier Anschluesse, sonst
+                // laesst sich die Flutsuche des Originals nicht nachbauen.
+                if (nr >= 0)
+                {
+                    var lk4 = new int[4] { -1, -1, -1, -1 };
+                    if (nd.TryGetValue("links", out var lv) &&
+                        lv.VariantType == Variant.Type.Array)
+                    {
+                        int k = 0;
+                        foreach (var q in lv.AsGodotArray())
+                        { if (k >= 4) break; lk4[k++] = q.AsInt32(); }
+                    }
+                    _railNodes[nr] = new Simulation.RailNetwork.Node
+                    {
+                        Building = node2bld[nr],
+                        // ⚠ VORGABE −1, NICHT 0. `type == 0` heisst beim
+                        // Original »Satz frei«; ein alter Export ohne das Feld
+                        // haette damit JEDEN Knoten fuer frei erklaert, und
+                        // die Verbindungssuche faende nie etwas — lautlos.
+                        // Genau das ist am 20.08.2026 passiert: Mission 21
+                        // meldete »25 Linien, 0 belegte Knoten«. −1 heisst
+                        // »nicht exportiert« und gilt als belegt.
+                        Type = GetI(nd, "type", -1),
+                        Links = lk4,
+                    };
+                }
             }
         if (root.TryGetValue("links", out var lkv) && lkv.VariantType == Variant.Type.Array)
             foreach (var item in lkv.AsGodotArray())
@@ -3016,7 +3051,19 @@ public partial class MapEntityLayer : Node2D
                 // BEWUSST nicht gelesen: der Kartenlader überschreibt sie beim
                 // Laden aus der Typmatrix @0x504128 (@0x41F2A2), die Datei-Werte
                 // sind also tot. RailFreight rechnet sie nach.
-                AddRailLine(GetI(lk, "slot", -1), a, b2, GetI(lk, "delka", 1));
+                // Die Linie auch als KANTE des Knotennetzes festhalten — das
+                // ist der Graph, ueber den 0x4CE710 flutet. `faze == 3` heisst
+                // dort »zaehlt nicht«.
+                int slotNr = GetI(lk, "slot", -1);
+                if (slotNr >= 0)
+                    _netzLinien[slotNr] = new Simulation.RailNetwork.Line
+                    {
+                        Node1 = GetI(lk, "node1", -1),
+                        Node2 = GetI(lk, "node2", -1),
+                        Faze = GetI(lk, "faze", 0),
+                        Used = true,
+                    };
+                AddRailLine(slotNr, a, b2, GetI(lk, "delka", 1));
                 if (!_rail.TryGetValue(a, out var la)) _rail[a] = la = new List<int>();
                 if (!_rail.TryGetValue(b2, out var lb)) _rail[b2] = lb = new List<int>();
                 if (!la.Contains(b2)) la.Add(b2);
@@ -3442,12 +3489,253 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Store the current selection as group n (slots, so the group
     /// survives a re-load of the same map).</summary>
+    /// <summary>Die Auswahl als Gruppe <paramref name="n"/> merken.
+    ///
+    /// <para>⚠ <b>EINE EINHEIT GEHÖRT GENAU EINER GRUPPE</b> — gelesen am
+    /// 20.08.2026 aus dem Speicherer <c>0x438F00</c>: er ersetzt die Gruppe
+    /// <b>und trägt jedes Mitglied aus den anderen neun aus</b>. Bei uns
+    /// konnte dieselbe Einheit in beliebig vielen stehen; wer sie dann aus
+    /// Gruppe 2 heraus verlor, hatte sie in Gruppe 5 immer noch.</para>
+    ///
+    /// <para>⚠ Und es sind <b>zehn</b> Gruppen (die Tafel <c>0x833A00</c> hat
+    /// 10 Sätze zu 422 Byte: 22 Byte Name + 200 Mitglieder als u16). Die
+    /// Zifferntaste <b>0</b> ist die zehnte.</para>
+    ///
+    /// <para>⚠ Der Gruppenname (22 Byte) ist noch nicht gebaut — im Original
+    /// tauft <c>Strg+Zahl</c> die Gruppe auf »Group N« und öffnet den Dialog,
+    /// gespeichert wird erst mit dem Knopf. Bei uns speichert
+    /// <c>Strg+Zahl</c> unmittelbar; das ist unsere Abkürzung, und sie steht
+    /// hier, statt still zu wirken.</para></summary>
     public void StoreGroup(int n)
     {
         var g = new List<int>(_sel);
-        if (g.Count == 0) { _groups.Remove(n); _order = $"Gruppe {n} geleert"; }
-        else { _groups[n] = g; _order = $"Gruppe {n}: {g.Count} Einheiten"; }
+        if (g.Count == 0)
+        {
+            // ⚠ Leert sich eine Gruppe, leert das Original auch ihren NAMEN
+            // (der Aufraeumer 0x4392C0 tut es, wenn der letzte Tote heraus
+            // ist). Ein Name ohne Gruppe waere ein Eintrag, der etwas
+            // verspricht, das es nicht gibt.
+            _groups.Remove(n);
+            _groupNames.Remove(n);
+            _order = $"Gruppe {n} geleert";
+        }
+        else
+        {
+            // Erst aus allen anderen austragen — sonst steht eine Einheit in
+            // zweien, und das kennt das Original nicht.
+            int weg = 0;
+            foreach (int k in new List<int>(_groups.Keys))
+            {
+                if (k == n) continue;
+                var a = _groups[k];
+                weg += a.RemoveAll(g.Contains);
+                if (a.Count == 0) _groups.Remove(k);
+            }
+            _groups[n] = g;
+            _order = $"Gruppe {n}: {g.Count} Einheiten" +
+                     (weg > 0 ? $" ({weg} aus anderen Gruppen genommen)" : "");
+        }
         UpdatePanel();
+    }
+
+    /// <summary>
+    /// <c>--gruppen-check</c> — <b>zehn Gruppen, Ausschliesslichkeit, und die
+    /// vier Merkpunkte.</b>
+    ///
+    /// <para>Gemessen wird das, was am Original abweicht und bisher niemand
+    /// geprüft hat:</para>
+    /// <list type="number">
+    /// <item>Es gibt <b>zehn</b> Gruppen, nicht neun.</item>
+    /// <item>⭐ Eine Einheit gehört <b>genau einer</b> — wer sie in eine zweite
+    /// legt, nimmt sie aus der ersten (0x438F00).</item>
+    /// <item>Ein <b>leerer</b> Merkpunkt springt nirgendwohin (0x438AE0 steigt
+    /// bei 0xFF/0xFF aus), ein gesetzter genau auf seine Zelle.</item>
+    /// </list>
+    /// <para>⚠ Punkt 3 ist die Gegenprobe: dass ein gesetzter Merkpunkt
+    /// funktioniert, sagt für sich nicht, dass ein leerer schweigt — und ein
+    /// Sprung auf (0,0) wäre der unauffälligere Fehler.</para></summary>
+    public string GruppenCheck()
+    {
+        var sb = new System.Text.StringBuilder("gruppen-check\n");
+        var merkSel = new List<int>(_sel);
+        int a = -1, b = -1;
+        for (int i = 0; i < _entities.Count; i++)
+            if (!_entities[i].IsBuilding && !_entities[i].IsProp && !_entities[i].Dead)
+            { if (a < 0) a = i; else { b = i; break; } }
+        if (b < 0)
+        { _sel.Clear(); foreach (int q in merkSel) _sel.Add(q); return sb.Append("  zu wenige Einheiten auf dieser Karte").ToString(); }
+
+        _groups.Clear();
+        _sel.Clear(); _sel.Add(a); _sel.Add(b);
+        StoreGroup(1);
+        _sel.Clear(); _sel.Add(a);
+        StoreGroup(10);                                  // die ZEHNTE
+        bool zehn = _groups.ContainsKey(10);
+        bool weg = _groups.TryGetValue(1, out var g1) && !g1.Contains(a) && g1.Contains(b);
+        sb.AppendLine($"  Gruppe 10 gibt es: {(zehn ? "ja" : "NEIN")}");
+        sb.AppendLine($"  Einheit aus Gruppe 1 genommen: " +
+                      $"{(weg ? "ja, richtig" : "NEIN — sie steht in zweien")} " +
+                      $"(Gruppe 1 hat noch {(g1?.Count ?? 0)})");
+        // ⚠ DEN WERT JETZT FESTHALTEN, nicht erst im Urteil abfragen. Der erste
+        // Anlauf schrieb `GroupOf(a) == 10` in die Urteilszeile — die steht
+        // aber NACH dem Aufräumen (`_groups.Clear()`), und dort ist die Antwort
+        // immer −1. Der Lauf meldete DURCHGEFALLEN, obwohl alle sechs Zeilen
+        // darüber richtig waren. Ein Prüfstand, der seinen eigenen Zustand
+        // abräumt und danach noch einmal hinsieht, misst das Aufräumen.
+        int gruppeVonA = GroupOf(a);
+        sb.AppendLine($"  GroupOf(Einheit {a}) = {gruppeVonA} (erwartet 10)");
+
+        // Merkpunkte
+        bool leerOk = MarkTarget(0) == null;
+        SetMark(1, new Vector2I(42, 17), "Pruefpunkt");
+        var z = MarkTarget(1);
+        bool setzOk = z is { X: 42, Y: 17 };
+        sb.AppendLine($"  leerer Merkpunkt: {(leerOk ? "schweigt, richtig" : "SPRINGT — falsch")}");
+        sb.AppendLine($"  gesetzter Merkpunkt: {(z?.ToString() ?? "null")} " +
+                      $"({(setzOk ? "stimmt" : "STIMMT NICHT")})");
+        sb.AppendLine($"  Merkpunkte insgesamt: {Marks.Length} (das Original hat 4)");
+
+        // Gruppennamen: »NONAME« bei leerem Namen, und beim Leeren muss auch
+        // der Name weg — sonst verspricht ein Eintrag eine Gruppe, die es
+        // nicht mehr gibt.
+        _sel.Clear(); _sel.Add(a);
+        StoreGroup(3);
+        RenameGroup(3, "");
+        bool nonameOk = GroupName(3) == "NONAME";
+        RenameGroup(3, "Diese Zeile ist viel zu lang fuer das Original");
+        bool kurzOk = GroupName(3).Length == GroupNameMax;
+        _sel.Clear();
+        StoreGroup(3);                                  // leere Auswahl = leeren
+        bool nameWeg = GroupName(3).Length == 0;
+        sb.AppendLine($"  leerer Name wird NONAME: {(nonameOk ? "ja" : "NEIN")}; " +
+                      $"auf {GroupNameMax} Zeichen gekuerzt: {(kurzOk ? "ja" : "NEIN")}; " +
+                      $"beim Leeren mit weg: {(nameWeg ? "ja" : "NEIN — ein Name ohne Gruppe")}");
+        bool namenOk = nonameOk && kurzOk && nameWeg;
+
+        _groups.Clear();
+        Marks[1].Col = Marks[1].Row = -1; Marks[1].Name = "";
+        _sel.Clear(); foreach (int q in merkSel) _sel.Add(q);
+        sb.Append(zehn && weg && gruppeVonA == 10 && leerOk && setzOk && namenOk && Marks.Length == 4
+                  ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
+
+    // ---- die MERKPUNKTE (Fensterart 24, »Lokator«) --------------------------
+
+    /// <summary>
+    /// Ein <b>Merkpunkt</b> — eine gemerkte Stelle der Karte, zu der man
+    /// zurückspringen kann. Fensterart <b>24</b> des Originals
+    /// (C <c>0x47A740</c>, F <c>0x479030</c>), gelesen am 20.08.2026.
+    ///
+    /// <para><b>Es sind genau VIER</b>, und das ist vierfach belegt:
+    /// die Zeichenschleife prüft <c>cmp word,4</c> (@0x47A9B2), der Trefferarm
+    /// <c>cmp si,4</c> (@0x45FD22), der Rücksetzer <c>cmp ax,4</c>
+    /// (@0x4187EC), und der Abschnitt <b>sec80</b> ist <c>0x5C</c> = 92 =
+    /// 4 × 23 Byte gross. Dazu die Tastatur: genau vier Tasten,
+    /// <b>F5 bis F8</b> — das Spiel schreibt seine Belegung sogar selbst in
+    /// die Zeilen (»F5 …« bis »F8 …«).</para>
+    ///
+    /// <para><b>Der Satz, 23 Byte:</b> <c>+0x00</c> Name (21 B, höchstens 20
+    /// Zeichen), <c>+0x15</c> Spalte, <c>+0x16</c> Zeile — <c>0xFF</c> heisst
+    /// leer. Nachgewiesen auch an der Datei: in <c>LEVELS/1.DM</c> stehen die
+    /// <c>FF FF</c>-Paare genau auf 0x15, 0x2C, 0x43, 0x5A, also
+    /// <c>23·i + 21</c>.</para>
+    ///
+    /// <para>⚠ <b>Gemerkt wird die Zelle in der MITTE des Ausschnitts</b>, nicht
+    /// die Mausstelle (<c>0x438BD0</c>: <c>col = links + Breite/2</c>). Und ein
+    /// leerer Name wird auf <b>»NONAME«</b> gesetzt (0x4FAB90).</para>
+    /// </summary>
+    public sealed class MapMark
+    {
+        public string Name = "";
+        public int Col = -1, Row = -1;      // −1 statt 0xFF: bei uns Zellzahlen
+        public bool Leer => Col < 0 || Row < 0;
+    }
+
+    /// <summary>Die vier Merkpunkte. Siehe <see cref="MapMark"/>.</summary>
+    public readonly MapMark[] Marks =
+    { new(), new(), new(), new() };
+
+    /// <summary>Einen Merkpunkt setzen — auf die Zelle in der Mitte des
+    /// Ausschnitts. <paramref name="mitte"/> ist genau das, was der Aufrufer
+    /// als Kartenmitte sieht.</summary>
+    public string SetMark(int i, Vector2I mitte, string name = "")
+    {
+        if (i < 0 || i >= Marks.Length) return "";
+        Marks[i].Col = mitte.X;
+        Marks[i].Row = mitte.Y;
+        // Der Wortlaut des Originals: ein leerer Name wird »NONAME«.
+        if (name.Length == 0 && Marks[i].Name.Length == 0) name = "NONAME";
+        if (name.Length > 0) Marks[i].Name = name.Length > 20 ? name[..20] : name;
+        _order = $"Position gespeichert: {Marks[i].Name}";
+        UpdatePanel();
+        return _order;
+    }
+
+    /// <summary>Wohin ein Merkpunkt zeigt, oder <c>null</c>, wenn er leer ist.
+    /// ⚠ Ein leerer Merkpunkt tut im Original <b>nichts</b> (0x438AE0 steigt
+    /// bei <c>col == 0xFF &amp;&amp; row == 0xFF</c> sofort aus) — er springt
+    /// nicht etwa auf (0,0).</summary>
+    public Vector2I? MarkTarget(int i)
+    {
+        if (i < 0 || i >= Marks.Length || Marks[i].Leer) return null;
+        _order = $"Position: {Marks[i].Name}";
+        UpdatePanel();
+        return new Vector2I(Marks[i].Col, Marks[i].Row);
+    }
+
+    /// <summary>
+    /// Die <b>Namen</b> der zehn Gruppen. Der Satz des Originals ist
+    /// <b>422 Byte</b>: <c>+0x00</c> Name (22 B, höchstens 20 Zeichen),
+    /// <c>+0x16</c> zweihundert Mitglieder als u16 mit <c>0xFFFF</c> für einen
+    /// leeren Platz. Zehn Sätze = 4220 = <c>0x107C</c>, und das ist genau die
+    /// Grösse des Abschnitts <b>sec81</b>.
+    ///
+    /// <para>An der Datei belegt: in <c>LEVELS/1.DM</c> heisst Gruppe 0
+    /// <c>"Group 1"</c>, in <c>10.DM</c> <c>"NONAME"</c>.</para>
+    ///
+    /// <para>⚠ <b>Zweihundert Plätze je Gruppe</b>, in Code gezählt (der
+    /// Rücksetzer 0x418780 füllt <c>10 × 200</c> Plätze mit 0xFFFF). Wir
+    /// deckeln nicht, weil unsere Auswahl ohnehin kleiner ist — aber wer hier
+    /// je einen Deckel braucht, findet die Zahl hier und muss sie nicht
+    /// raten.</para></summary>
+    private readonly Dictionary<int, string> _groupNames = new();
+
+    /// <summary>Höchstlänge eines Gruppennamens — 20 Zeichen plus Abschluss,
+    /// wie der Zeileneditor des Originals sie setzt (0x4588E0(…, 20)).</summary>
+    public const int GroupNameMax = 20;
+
+    /// <summary>Zweihundert Plätze je Gruppe (0x418780: <c>cmp di,0xC8</c>).</summary>
+    public const int GroupSlots = 200;
+
+    /// <summary>Der Name einer Gruppe, oder »« wenn sie leer ist.</summary>
+    public string GroupName(int n)
+        => _groupNames.TryGetValue(n, out var s) ? s : "";
+
+    /// <summary>Eine Gruppe umbenennen. ⚠ Das Original tauft sie bei
+    /// <c>Strg+Zahl</c> auf <b>»Group N«</b> und lässt den Namen dann tippen;
+    /// ein leerer Name wird beim Sichern zu <b>»NONAME«</b> — dieselben zwei
+    /// Wörter wie beim Lokator.</summary>
+    public void RenameGroup(int n, string name)
+    {
+        if (name.Length > GroupNameMax) name = name[..GroupNameMax];
+        _groupNames[n] = name.Length > 0 ? name : "NONAME";
+    }
+
+    /// <summary>Wieviele Einheiten in Gruppe <paramref name="n"/> stehen.</summary>
+    public int GroupSize(int n) => _groups.TryGetValue(n, out var g) ? g.Count : 0;
+
+    /// <summary>Wieviele Gruppen es gibt — die Tafel des Originals hat zehn
+    /// Sätze (<c>0x833A00</c>, 422 Byte je Satz).</summary>
+    public const int GroupCount = 10;
+
+    /// <summary>In welcher Gruppe eine Einheit steht, oder −1. Für das
+    /// Bedienfeld: das Original schreibt »Gruppe « und den Namen in die erste
+    /// Zeile, sobald eine gewählt ist (Zeichner der Art 9, 0x47062B).</summary>
+    public int GroupOf(int entity)
+    {
+        foreach (var kv in _groups) if (kv.Value.Contains(entity)) return kv.Key;
+        return -1;
     }
 
     /// <summary>Select a unit from a script, so a headless run can photograph
@@ -4100,6 +4388,26 @@ public partial class MapEntityLayer : Node2D
     public void SelectAt(Vector2 mapPos, bool additive = false)
     {
         int hit = Pick(mapPos);
+
+        // ⚠ ZIELWAHL FÜR »TRANSPORTIEREN« GEHT VOR. Das Original öffnet dafür
+        // eine eigene Kartenansicht (Fensterart 3 im Modus 5, Titel
+        // »Einheiten-Transport Planung«); wir bleiben auf der Hauptkarte und
+        // fangen stattdessen den nächsten Klick ab. Das ist eine bewusste
+        // Abweichung im Bedienweg, nicht in der Wirkung — die Prüfung und die
+        // Buchung sind die des Originals.
+        //
+        // ⚠ Der Zustand wird IMMER verlassen, auch bei einem Fehlklick ins
+        // Leere. Ein Modus, den man nicht mehr los wird, ist schlimmer als ein
+        // Klick, der nichts tut; und ESC ist hier nicht verdrahtet.
+        if (_transportWartet >= 0)
+        {
+            int platz = _transportWartet;
+            _transportWartet = -1;
+            if (hit < 0) { _order = "Transport abgebrochen — kein Gebaeude getroffen"; }
+            else TransportFromPanel(platz, hit);
+            QueueRedraw();
+            return;
+        }
         // Ein FLUGZEUG gewinnt, wo nichts liegt, das der Spieler befehligen
         // könnte: es fliegt über allem, und wer auf seinen Panzer klickt, meint
         // den Panzer.
@@ -12705,6 +13013,417 @@ public partial class MapEntityLayer : Node2D
     public void DepotFlowStart() { _depotFlow = 0; _depotFlowAt = -1; }
 
     /// <summary>
+    /// <c>--vars-check</c> — <b>reisen die Skriptvariablen mit, und läuft die
+    /// Verstärkungskette von Mission 26 damit an?</b>
+    ///
+    /// <para>Gemessen werden drei Dinge:</para>
+    /// <list type="number">
+    /// <item>Ein übernommener Wert steht beim Missionsstart wirklich da.</item>
+    /// <item>Die Mission überschreibt ihn, wo sie das tut — <c>Init</c> geht
+    /// VOR dem Übernommenen, wie im Original (erst <c>rep movsd</c>, dann der
+    /// Init-Arm).</item>
+    /// <item>⭐ <b>Die Wirkung.</b> Mit <c>v[0] = 1</c> muss Mission 26 ihre
+    /// drei <c>space_in</c>-Wellen auslösen; mit <c>v[0] = 0</c> darf nichts
+    /// kommen. <b>Die Gegenprobe ist der eigentliche Beleg</b> — dass etwas
+    /// erscheint, sagt für sich noch nicht, dass es AN DER VARIABLEN lag.</item>
+    /// </list></summary>
+    public string VarsCheck(int mission)
+    {
+        var sb = new System.Text.StringBuilder("vars-check\n");
+        // ⚠ Das Skript wird ERST BEIM ERSTEN TAKT gebaut (MissionScriptTick),
+        // und dieser Lauf steht davor — der erste Anlauf meldete darum »fuer
+        // diese Mission laeuft kein Skript«, obwohl es eines gibt. Einen Takt
+        // mit dt = 0 anstossen genuegt; er baut das Skript und bewegt nichts.
+        if (_mscript == null) MissionScriptTick(0f);
+        if (_mscript == null)
+            return sb.Append("  ABGEBROCHEN: fuer diese Mission laeuft kein Skript").ToString();
+
+        var mit = Campaign.CampaignManager.CarriedVars;
+        sb.AppendLine($"  uebernommen: {mit.Count} Variable(n) ungleich null");
+        // ⚠ Der Uebertrag ist gebaut, aber ABGESCHALTET — die Begruendung
+        // steht bei Campaign.MissionScript.CarryVarsActive. Der Lauf muss das
+        // SAGEN, statt einen Fehler zu behaupten, den es nicht gibt: ein
+        // »DURCHGEFALLEN«, das nur heisst »der Schalter steht auf aus«, ist
+        // eine Falschmeldung und kostet beim naechsten Mal eine halbe Stunde.
+        if (!Campaign.MissionScript.CarryVarsActive)
+        {
+            sb.AppendLine("  ⚠ Der Variablenuebertrag ist ABGESCHALTET " +
+                          "(MissionScript.CarryVarsActive = false). Die Ablage und " +
+                          "dieser Lauf sind fertig; eingeschaltet wird er erst, wenn " +
+                          "der Ausleser die Blockgrenzen mitgibt — sonst feuert " +
+                          "Mission 26 ihre Verstaerkung jeden Takt.");
+            sb.Append(mit.Count >= 0 ? "  BESTANDEN (Ablage geprueft, Anwendung aus)" : "");
+            return sb.ToString();
+        }
+        int v0 = _mscript.VarAt(0), v101 = _mscript.VarAt(101);
+        sb.AppendLine($"  beim Start: v[0] = {v0}, v[101] = {v101}");
+
+        // Was die Mission selbst setzt, muss gewinnen.
+        bool initGewinnt = true;
+        foreach (var kv in _mscript.InitValues())
+            if (_mscript.VarAt(kv.Key) != kv.Value) initGewinnt = false;
+        sb.AppendLine($"  Init der Mission steht ueber dem Uebernommenen: " +
+                      $"{(initGewinnt ? "ja" : "NEIN — die Mission verliert ihre eigenen Setzungen")}");
+
+        int erwartet = mit.TryGetValue(0, out int e0) &&
+                       !_mscript.InitValues().ContainsKey(0) ? e0 : v0;
+        bool durch = v0 == erwartet;
+        sb.AppendLine($"  v[0] durchgereicht: {(durch ? "ja" : $"NEIN (erwartet {erwartet})")}");
+
+        sb.Append(initGewinnt && durch ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// <c>--mitnahme-check</c> — <b>kommen die mitgenommenen Einheiten an, und
+    /// zwar an den GELESENEN Plätzen?</b>
+    ///
+    /// <para>Gemessen wird nicht »es steht etwas da«, sondern die drei Zahlen,
+    /// die zählen: die Mission kennt ihre Plätze, es werden genau so viele
+    /// aufgestellt wie mitgenommen wurden, und jede steht <b>auf oder dicht
+    /// neben</b> ihrem Platz (dicht daneben, weil <c>NearestFree</c> ausweicht,
+    /// wenn der Platz besetzt ist — das tut das Original auch).</para>
+    ///
+    /// <para>⚠ Die Gegenprobe gehört dazu: <b>ohne Mitnahme darf nichts
+    /// erscheinen</b>. Sonst bestünde auch eine Fassung, die immer aufstellt.
+    /// Und eine Mission ohne Plätze (1…11) muss <b>0</b> liefern, nicht
+    /// heimlich irgendwo etwas hinsetzen.</para></summary>
+    public string MitnahmeCheck(int mission)
+    {
+        var sb = new System.Text.StringBuilder("mitnahme-check\n");
+        // ⚠⚠ DEN SPIELSTAND MERKEN UND AM ENDE ZURUECKLEGEN.
+        //
+        // Der erste Lauf tat das NICHT und hat drei Pruefeinheiten in
+        // user://campaign.cfg stehen lassen — sie standen danach bei jedem
+        // Start von Mission 26 auf der Karte. Genau die Fehlerklasse, vor der
+        // dieser Baum an anderer Stelle ausdruecklich warnt (»ein Prueflauf,
+        // der den Stand stillschweigend mitschleppt« — siehe --fresh-campaign,
+        // wo dasselbe schon einmal $47465 statt $470 gemeldet hat).
+        //
+        // ⚠ Ein Pruefstand, der den Zustand des Spielers veraendert, ist kein
+        // Pruefstand mehr, sondern ein Eingriff.
+        var merkMitnahme = Campaign.CampaignManager.Carried;
+        try { return MitnahmeCheckKern(mission, sb); }
+        finally { Campaign.CampaignManager.Carried = merkMitnahme; }
+    }
+
+    private string MitnahmeCheckKern(int mission, System.Text.StringBuilder sb)
+    {
+        var plaetze = Campaign.CampaignManager.SpotsFor(mission);
+        sb.AppendLine($"  Mission {mission}: {plaetze.Count} Stellplaetze gelesen" +
+                      (plaetze.Count > 0
+                       ? " — " + string.Join(" ", plaetze.ConvertAll(q => $"({q.Col},{q.Row})"))
+                       : ""));
+
+        int vorher = 0;
+        for (int i = 0; i < _entities.Count; i++)
+            if (!_entities[i].IsBuilding && !_entities[i].IsProp && !_entities[i].Dead &&
+                _entities[i].Owner == ViewPlayer) vorher++;
+
+        // 1. Gegenprobe: leere Mitnahme
+        Campaign.CampaignManager.Carried = new List<Campaign.CampaignManager.CarriedUnit>();
+        int n0 = PlaceCarriedUnits(mission, ViewPlayer);
+        sb.AppendLine($"  ohne Mitnahme: {n0} aufgestellt (erwartet 0): " +
+                      $"{(n0 == 0 ? "richtig" : "FALSCH — es stellt aus dem Nichts auf")}");
+
+        if (plaetze.Count == 0)
+        {
+            sb.Append(n0 == 0
+                      ? "  BESTANDEN (diese Mission hat keine Mitnahme — mehr ist hier nicht zu pruefen)"
+                      : "  DURCHGEFALLEN");
+            return sb.ToString();
+        }
+
+        // 2. Drei Einheiten mitnehmen (oder so viele wie Plaetze da sind)
+        LoadDesigns();
+        // ⚠ EINEN ECHTEN ENTWURF SUCHEN, nicht die 0 nehmen. Der erste Anlauf
+        // schrieb `Design = 0` hin und der Lauf meldete »0 aufgestellt« —
+        // Entwurf 0 gibt es fuer Spieler 0 gar nicht (»sec47 0 steht nicht in
+        // unit_designs.json«). Ein Pruefstand, der mit erfundenen Zahlen
+        // arbeitet, misst die Zahlen und nicht die Sache.
+        int entwurf = -1;
+        foreach (var kv in _designBySlot)
+            if (kv.Key >= 200 * ViewPlayer && kv.Key < 200 * (ViewPlayer + 1))
+            { entwurf = kv.Key - 200 * ViewPlayer; break; }
+        if (entwurf < 0)
+            return sb.Append("  ABGEBROCHEN: dieser Spieler hat keinen einzigen " +
+                             "Entwurf — hier ist nichts aufzustellen").ToString();
+        sb.AppendLine($"  Pruefentwurf {entwurf} " +
+                      $"({_designBySlot[entwurf + 200 * ViewPlayer].Name})");
+
+        int soll = Mathf.Min(3, plaetze.Count);
+        var mit = new List<Campaign.CampaignManager.CarriedUnit>();
+        for (int i = 0; i < soll; i++)
+            mit.Add(new Campaign.CampaignManager.CarriedUnit
+            { Design = entwurf, Energie = 50 + 10 * i, Name = $"Pruefstueck{i}" });
+        Campaign.CampaignManager.Carried = mit;
+
+        int n = PlaceCarriedUnits(mission, ViewPlayer);
+        sb.AppendLine($"  mit {soll} Einheiten: {n} aufgestellt " +
+                      $"({(n == soll ? "stimmt" : "STIMMT NICHT")})");
+
+        // 3. Stehen sie an ihren Plaetzen, und tragen sie ihren Schaden?
+        int treffer = 0, schaden = 0;
+        for (int k = 0; k < n; k++)
+        {
+            string name = $"Pruefstueck{k}";
+            int at = _entities.FindIndex(e => e.Name == name && !e.Dead);
+            if (at < 0) continue;
+            var e = _entities[at];
+            var (c, r) = plaetze[k];
+            int weit = Mathf.Max(Mathf.Abs(e.Col - c), Mathf.Abs(e.Row - r));
+            if (weit <= 3) treffer++;
+            int erwartet = 50 + 10 * k;
+            int ist = e.HpMax > 0 ? 100 * e.Hp / e.HpMax : 100;
+            if (Mathf.Abs(ist - erwartet) <= 2) schaden++;
+            sb.AppendLine($"    {name}: steht ({e.Col},{e.Row}), Platz ({c},{r}), " +
+                          $"Abstand {weit}; Leben {ist}% (mitgebracht {erwartet}%)");
+        }
+        sb.AppendLine($"  an ihrem Platz: {treffer}/{n}; Schaden mitgereist: {schaden}/{n}");
+
+        bool gut = n0 == 0 && n == soll && treffer == n && schaden == n;
+        sb.Append(gut ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// <c>--transport-netz-check</c> — <b>die Flutsuche und die zwei Schranken.</b>
+    ///
+    /// <para>Gemessen werden drei Dinge, und das dritte ist der eigentliche
+    /// Grund für diesen Prüfstand:</para>
+    /// <list type="number">
+    /// <item>Das Netz ist überhaupt da: wieviele Knoten, wieviele Linien.</item>
+    /// <item>Verbindungen werden gefunden — über alle Knotenpaare gezählt.</item>
+    /// <item>⭐ <b>Kampagne und Gefecht gehen wirklich auseinander.</b> Wären
+    /// beide Zahlen gleich, hätte die Schranke auf dieser Karte nichts zu tun,
+    /// und der Prüfstand hätte nichts gemessen — er sagt das dann auch,
+    /// statt grün zu melden.</item>
+    /// </list>
+    /// <para>⚠ Der dritte Punkt ist der, an dem ein Prüfstand am liebsten lügt:
+    /// »beide 100 Paare« sieht aus wie ein Erfolg und heisst in Wahrheit, dass
+    /// die Unterscheidung ungeprüft blieb.</para></summary>
+    public string TransportNetCheck()
+    {
+        var sb = new System.Text.StringBuilder("transport-netz-check\n");
+        int knoten = 0, jenseits39 = 0, vierter = 0;
+        foreach (var kv in _railNodes)
+        {
+            if (kv.Value.Type == 0) continue;
+            knoten++;
+            if (kv.Key >= Simulation.RailNetwork.OriginalNodeLimit) jenseits39++;
+            if (kv.Value.Links != null && kv.Value.Links.Length > 3 &&
+                kv.Value.Links[3] >= 0) vierter++;
+        }
+        sb.AppendLine($"  Netz: {knoten} belegte Knoten, {_netzLinien.Count} Linien; " +
+                      $"{jenseits39} Knoten jenseits 39, {vierter} mit viertem Anschluss");
+        if (knoten == 0)
+            return sb.Append("  ABGEBROCHEN: kein Bahnnetz auf dieser Karte — " +
+                             "hier ist nichts zu messen").ToString();
+
+        Simulation.RailNetwork.OwnerOf = i =>
+            i >= 0 && i < _entities.Count ? _entities[i].Owner : -1;
+        // ⚠ Ohne Besitzerprüfung zaehlen (owner = -1): sonst misst der Lauf
+        // die Besitzverhaeltnisse der Karte mit und nicht die Schranke.
+        int strengPaare = 0, freiPaare = 0;
+        var nrn = new List<int>(_railNodes.Keys);
+        nrn.Sort();
+        foreach (int x in nrn)
+        foreach (int y in nrn)
+        {
+            if (x >= y) continue;
+            if (_railNodes[x].Type == 0 || _railNodes[y].Type == 0) continue;
+            if (Simulation.RailNetwork.FindRoute(_railNodes, _netzLinien, x, y, -1, true) != null)
+                strengPaare++;
+            if (Simulation.RailNetwork.FindRoute(_railNodes, _netzLinien, x, y, -1, false) != null)
+                freiPaare++;
+        }
+        sb.AppendLine($"  verbundene Paare: Kampagne (mit Schranke) {strengPaare}, " +
+                      $"Gefecht (ohne) {freiPaare}");
+
+        bool unterscheidbar = jenseits39 > 0 || vierter > 0;
+        if (!unterscheidbar)
+            sb.AppendLine("  ⚠ Diese Karte kann die Schranke NICHT pruefen: kein Knoten " +
+                          "jenseits 39 und keiner mit viertem Anschluss. Gleiche Zahlen " +
+                          "sind hier erwartet und BEWEISEN NICHTS.");
+        else if (freiPaare > strengPaare)
+            sb.AppendLine($"  Schranke greift: {freiPaare - strengPaare} Paare sind nur " +
+                          "im Gefecht verbunden — genau der Fehler des Originals.");
+        else
+            sb.AppendLine("  ⚠ Die Karte HAETTE Stoff fuer die Schranke, aber beide Zahlen " +
+                          "sind gleich — das ist verdaechtig und gehoert angesehen.");
+
+        // ---- Der ganze Weg: ein Stueck wirklich verlegen -------------------
+        // ⚠ Ohne diesen Teil misst der Lauf nur die Suche. Dass die Einheit
+        // auch ankommt — und dass ein UNVERBUNDENES Ziel abgelehnt wird — ist
+        // die eigentliche Frage.
+        int merk = _selected;
+        // ⚠ ERST ALLE KNOTENGEBAEUDE UEBERNEHMEN, dann das Paar suchen.
+        //
+        // Ohne das misst der Lauf etwas anderes, als er zu messen glaubt: die
+        // Paarsuche laeuft mit `owner = -1` (ohne Besitzerpruefung), das
+        // Verlegen dagegen mit dem echten Besitzer — und das Original verlangt
+        // denselben Besitzer fuer JEDEN Knoten des Weges, nicht nur fuer die
+        // zwei Enden. Auf Mission 33 und 21 fiel der Lauf darum durch, obwohl
+        // die Verbindung bestand: die Zwischenbahnhoefe gehoerten dem Gegner.
+        //
+        // Hier soll die BUCHUNG geprueft werden, nicht die Besitzverhaeltnisse
+        // der Karte. Also gehoert kurz alles uns.
+        foreach (var kv in _railNodes)
+        {
+            int bi = EntityOfSlot(kv.Value.Building);
+            if (bi >= 0) { _entities[bi].Owner = _entities[bi].Team = ViewPlayer; }
+        }
+        int q = -1, z = -1;
+        bool verlegtOk = false, abgelehntOk = false, verlegtGeprueft = false,
+             ablehnungGeprueft = false;
+        foreach (int x in nrn)
+        {
+            foreach (int y in nrn)
+            {
+                if (x == y) continue;
+                if (_railNodes[x].Type == 0 || _railNodes[y].Type == 0) continue;
+                // ⚠ Der Knoten nennt die PLATZNUMMER; hier wird sie in die
+                // Stelle der Liste uebersetzt.
+                int bq = EntityOfSlot(_railNodes[x].Building);
+                int bz = EntityOfSlot(_railNodes[y].Building);
+                if (bq < 0 || bz < 0) continue;
+                if (Simulation.RailNetwork.FindRoute(_railNodes, _netzLinien, x, y, -1,
+                        Simulation.RailNetwork.CampaignRules) == null) continue;
+                q = bq; z = bz; break;
+            }
+            if (q >= 0) break;
+        }
+        if (q < 0)
+        {
+            sb.AppendLine("  Verlegen: kein verbundenes Gebaeudepaar auf dieser Karte — " +
+                          "der Weg selbst bleibt UNGEPRUEFT");
+        }
+        else
+        {
+            var von = _entities[q]; var nach = _entities[z];
+            von.Owner = von.Team = nach.Owner = nach.Team = ViewPlayer;
+            _selected = q;
+            LoadDesigns();
+            von.Depot.Clear(); nach.Depot.Clear();
+            von.Depot.Add(0);
+            int zielVor = nach.Depot.Count;
+            TransportFromPanel(0, z);
+            bool weg = von.Depot.Count == 0, an = nach.Depot.Count == zielVor + 1;
+            verlegtGeprueft = true; verlegtOk = weg && an;
+            sb.AppendLine($"  Verlegen {q} -> {z}: Quelle {von.Depot.Count} (erwartet 0), " +
+                          $"Ziel {nach.Depot.Count} (erwartet {zielVor + 1}): " +
+                          $"{(weg && an ? "stimmt" : "STIMMT NICHT")} [{_order}]");
+
+            // Gegenprobe: ein Gebaeude OHNE Bahnanschluss muss abgelehnt werden.
+            int ohne = -1;
+            for (int i = 0; i < _entities.Count; i++)
+                if (_entities[i].IsBuilding && !_entities[i].Dead &&
+                    i != q && NodeOfBuilding(_entities[i].Slot) < 0) { ohne = i; break; }
+            if (ohne < 0)
+                sb.AppendLine("  Gegenprobe: jedes Gebaeude hat einen Anschluss — " +
+                              "die Ablehnung bleibt UNGEPRUEFT");
+            else
+            {
+                von.Depot.Clear(); von.Depot.Add(0);
+                int nein = TransportNoLink;
+                TransportFromPanel(0, ohne);
+                bool abgelehnt = von.Depot.Count == 1 && TransportNoLink == nein + 1;
+                ablehnungGeprueft = true; abgelehntOk = abgelehnt;
+                sb.AppendLine($"  Gegenprobe {q} -> {ohne} (ohne Anschluss): " +
+                              $"{(abgelehnt ? "abgelehnt, richtig" : "DURCHGELASSEN — falsch")} " +
+                              $"[{_order}]");
+            }
+        }
+        _selected = merk;
+
+        // ⚠⚠ DAS URTEIL MUSS ALLES UMFASSEN, WAS GEMESSEN WURDE.
+        // Vorher stand hier nur `freiPaare >= strengPaare` — und der Lauf
+        // meldete auf Mission 33 und 21 ein BESTANDEN, obwohl zwei Zeilen
+        // darueber »STIMMT NICHT« stand. Ein Pruefstand, dessen Urteil einen
+        // Teil seiner eigenen Messung ignoriert, ist schlimmer als keiner:
+        // er macht aus einem sichtbaren Fehler einen unsichtbaren.
+        bool gut = freiPaare >= strengPaare
+                   && (!verlegtGeprueft || verlegtOk)
+                   && (!ablehnungGeprueft || abgelehntOk);
+        sb.Append(gut ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        if (gut && !verlegtGeprueft)
+            sb.Append(" (aber das Verlegen selbst blieb ungeprueft)");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// <c>--recycle-check</c> — <b>tut »Recycle« das, was <c>0x4B28E0</c>
+    /// tut?</b> Gemessen wird nicht »der Knopf reagiert«, sondern die zwei
+    /// Zahlen, auf die es ankommt: das Stück ist aus dem Depot <b>weg</b>, und
+    /// die drei Lager sind um <b>genau den Entwurfspreis</b> gestiegen.
+    ///
+    /// <para>⚠ Die Gegenprobe gehört dazu: <b>ein leeres Depot darf nichts
+    /// gutschreiben</b>. Ohne sie bestünde auch eine Fassung, die immer zahlt.
+    /// Und ein <b>zweiter</b> Durchgang muss ebenfalls zahlen — sonst hätte man
+    /// einen Einmal-Knopf gemessen und für richtig gehalten.</para></summary>
+    public string RecycleCheck()
+    {
+        var sb = new System.Text.StringBuilder("recycle-check\n");
+        int merk = _selected;
+        LoadDesigns();
+        int idx = -1;
+        for (int i = 0; i < _entities.Count; i++)
+            // ⚠ FABRIKEN SIND 2, 3 UND 4 — nicht 5. Hier stand erst `== 5`, und
+            // der Lauf meldete auf map_01 »keine Fabrik«, statt zu messen. Die
+            // 5 ist die Nummer des BAUAUFTRAGS Depot aus `--bau-check=depot`,
+            // nicht der Gebäudetyp; zwei Zählungen, ein Zahlenraum.
+            // Gegenprobe: `CanBuild` @9394 führt `bType is 2 or 3 or 4`.
+            if (_entities[i].IsBuilding && !_entities[i].Dead &&
+                _entities[i].BType is 2 or 3 or 4)
+            { idx = i; break; }
+        if (idx < 0) { _selected = merk; return "recycle-check: keine Fabrik auf dieser Karte"; }
+
+        var e = _entities[idx];
+        e.Owner = e.Team = ViewPlayer;
+        e.StockW = e.StockF = e.StockS = 1000;
+        e.Depot.Clear();
+        _selected = idx;
+
+        // 0. LEERES DEPOT — hier darf nichts passieren.
+        int w0 = e.StockW, f0 = e.StockF, s0 = e.StockS;
+        RecycleFromPanel(0);
+        bool leerOk = e.StockW == w0 && e.StockF == f0 && e.StockS == s0;
+        sb.AppendLine($"  leeres Depot: Lager W{e.StockW} F{e.StockF} S{e.StockS} " +
+                      $"(unveraendert: {(leerOk ? "JA" : "NEIN — es zahlt aus dem Nichts")}) " +
+                      $"[{_order}]");
+
+        // 1. Zwei Stueck hineinlegen und einzeln verwerten.
+        int nr = 0;
+        var d = _designs![nr];
+        e.Depot.Add(nr); e.Depot.Add(nr);
+        int w1 = e.StockW, f1 = e.StockF, s1 = e.StockS, tief1 = e.Depot.Count;
+        sb.AppendLine($"  im Depot: {tief1}x {d.Name} (Preis W{d.CostW} F{d.CostF} S{d.CostS}), " +
+                      $"Lager W{w1} F{f1} S{s1}");
+
+        RecycleFromPanel(0);
+        int dW = e.StockW - w1, dF = e.StockF - f1, dS = e.StockS - s1;
+        bool eins = e.Depot.Count == tief1 - 1 &&
+                    dW == d.CostW && dF == d.CostF && dS == d.CostS;
+        sb.AppendLine($"  1. Durchgang: Depot {e.Depot.Count} (erwartet {tief1 - 1}), " +
+                      $"Lager +W{dW} +F{dF} +S{dS} (erwartet +W{d.CostW} +F{d.CostF} +S{d.CostS}): " +
+                      $"{(eins ? "stimmt" : "STIMMT NICHT")}");
+
+        int w2 = e.StockW, f2 = e.StockF, s2 = e.StockS;
+        RecycleFromPanel(0);
+        bool zwei = e.Depot.Count == 0 && e.StockW - w2 == d.CostW &&
+                    e.StockF - f2 == d.CostF && e.StockS - s2 == d.CostS;
+        sb.AppendLine($"  2. Durchgang: Depot {e.Depot.Count} (erwartet 0), " +
+                      $"Lager +W{e.StockW - w2} +F{e.StockF - f2} +S{e.StockS - s2}: " +
+                      $"{(zwei ? "stimmt" : "STIMMT NICHT")}");
+        sb.AppendLine($"  verwertet insgesamt: {RecycledParts} (erwartet 2)");
+
+        sb.Append(leerOk && eins && zwei && RecycledParts == 2
+                  ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        _selected = merk;
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// <c>--hangar-check</c> — <b>der ganze Weg am FLUGHAFEN: kaufen, im Hangar
     /// liegen, im Reiter erscheinen, gestartet werden, fliegen.</b>
     ///
@@ -12753,6 +13472,37 @@ public partial class MapEntityLayer : Node2D
         sb.AppendLine($"  nach dem Aussenden: Hangar {nachStart} (erwartet {nachKauf - 1}), " +
                       $"in der Luft {fliegtNach} gegen {fliegtVor} vorher " +
                       $"({(fliegtNach == fliegtVor + 1 ? "eines mehr, richtig" : "NICHT gestartet")})");
+        // 3. ⭐ UND WIEDER ZURUECK. Bis zum 20.08.2026 endete dieser Lauf beim
+        // Aussenden — und genau deshalb blieb ein Einwegventil jahrelang
+        // unbemerkt: ein Flugzeug, das mit leerem Tank heimkam, wurde auf
+        // `Stored` gesetzt, aber NIE wieder in den Hangar eingetragen. Es war
+        // damit unsichtbar und in keiner Liste, also fuer den Spieler weg.
+        // Gemeldet als »wenn sie alle sind, verschwinden sie, sind aber nicht
+        // mehr greifbar«.
+        //
+        // ⚠ Die Lehre: ein Pruefstand, der nur den HINWEG geht, belegt den
+        // Rueckweg nicht — er sieht bloss so aus, als tue er es.
+        var geflogen = _special.Find(x => !x.Stored && !x.Dead && x.Owner == ViewPlayer);
+        if (geflogen == null)
+        {
+            sb.AppendLine("  Rueckflug: kein Flugzeug in der Luft — UNGEPRUEFT");
+        }
+        else
+        {
+            geflogen.Fuel = 0;                       // Tank leer: es muss heim
+            geflogen.HomeSlot = ap.Slot;
+            geflogen.Pos = ap.Pos;                   // schon ueber dem Feld
+            bool gelandet = AirHeadHome(geflogen);
+            int nachLandung = ap.Hangar?.Count ?? 0;
+            int zeilen2 = DepotRows().Count;
+            sb.AppendLine($"  nach dem Rueckflug: eingelagert {gelandet}, " +
+                          $"Hangar {nachLandung} (erwartet {nachStart + 1}), " +
+                          $"Reiter zeigt {zeilen2} Zeile(n) " +
+                          $"({(zeilen2 == nachLandung ? "wieder greifbar" : "NICHT GREIFBAR — der Spieler kommt nicht mehr heran")})");
+            if (!(gelandet && nachLandung == nachStart + 1 && zeilen2 == nachLandung))
+                zeilen = -1;                         // zieht das Urteil herunter
+        }
+
         sb.Append(nachStart == nachKauf - 1 && fliegtNach == fliegtVor + 1 && zeilen == nachKauf
                   ? "  BESTANDEN" : "  DURCHGEFALLEN");
         _selected = merk;
@@ -13317,6 +14067,180 @@ public partial class MapEntityLayer : Node2D
         UpdatePanel();
     }
 
+    /// <summary>
+    /// <b>»RECYCLE« — der zweite Knopf des Depotfensters</b>, gelesen am
+    /// 20.08.2026 aus <c>0x4B28E0</c> (Befehl <b>506</b>).
+    ///
+    /// <para><b>Er zahlt nicht in Geld, sondern in TEILEN</b>, und zwar in die
+    /// drei Lager <b>des Gebäudes</b>. Die drei letzten Zeilen der Routine
+    /// sagen es unmissverständlich:</para>
+    /// <code>
+    ///   add word[Gebaeude + 0x2C], ax   ; Lager W
+    ///   add word[Gebaeude + 0x2E], bp   ; Lager F
+    ///   add word[Gebaeude + 0x30], cx   ; Lager S
+    /// </code>
+    ///
+    /// <para><b>Was zurückkommt</b>, ist der Bauteilpreis, mit dem Restleben
+    /// skaliert. Die Routine holt sich den Prozentsatz als
+    /// <c>100 · Energie / EnergieMax</c> (Satz +0x08 gegen +0x29, @0x4B292A)
+    /// und rechnet je Bauteil <c>Preis · Prozent / 100</c>. Die Bauteile stehen
+    /// im Einheitensatz auf <b>+0x0D, +0x0E, +0x0F und +0x10</b>, ihre Preise
+    /// im 58-Byte-Bauteilsatz bei <c>0x5045C0</c>: Feld <b>+0x00</b> zählt auf
+    /// W, <b>+0x01</b> auf F, <b>+0x02</b> auf S — und auf S zahlen <b>zwei</b>
+    /// Bauteile ein (+0x0E und +0x10), die anderen je eines.</para>
+    ///
+    /// <para>⚠ <b>Bei uns ist der Prozentsatz immer 100</b>, und das ist keine
+    /// Schludrigkeit, sondern eine Folge unseres Depots: dort liegen
+    /// <b>Entwurfsnummern</b>, keine Einheitensätze — ein Stück im Depot ist
+    /// gerade erst gefertigt worden und hat volles Leben. Sobald das Depot
+    /// echte Sätze führt, gehört der Faktor hier hinein.</para>
+    ///
+    /// <para>⚠ Und die Summe der drei Bauteilpreise <b>ist</b> der Entwurfspreis
+    /// — deshalb steht hier <see cref="Refund"/> und keine zweite Rechnung.
+    /// Zwei Abschriften desselben Preises wären zwei Wahrheiten.</para>
+    ///
+    /// <para>⚠ <b>Kein Deckel</b>, wie bei <see cref="Refund"/>: die Lager haben
+    /// im Original keine gelesene Obergrenze. Sie können damit über den
+    /// Lagerplatz hinauslaufen — was zugleich die Ansage <b>127</b> auslöst,
+    /// sobald ein Lager seinen Platz trifft.</para>
+    /// </summary>
+    public void RecycleFromPanel(int k)
+    {
+        var e = Producer();
+        if (e == null) { _order = "kein Gebaeude gewaehlt"; return; }
+        if (e.Hangar is { Count: > 0 })
+        {
+            // ⚠ Der Flughafen hat einen HANGAR, kein Depot — und das Original
+            // kennt fuer ihn keinen Recycle-Knopf. Lieber sagen als raten.
+            _order = "der Flughafen hat kein Depot zum Verwerten";
+            return;
+        }
+        if (e.Depot.Count == 0) { _order = "das Depot ist leer"; return; }
+        if (k < 0 || k >= e.Depot.Count) { _order = "nichts gewaehlt"; return; }
+        LoadDesigns();
+        int nr = e.Depot[k];
+        if (_designs == null || nr < 0 || nr >= _designs.Count)
+        { _order = "zu diesem Platz gibt es keinen Entwurf"; return; }
+        var d = _designs[nr];
+        e.Depot.RemoveAt(k);
+        Refund(e, d);
+        RecycledParts++;
+        _order = $"{d.Name} verwertet — zurueck: W{d.CostW} F{d.CostF} S{d.CostS} " +
+                 $"(Lager jetzt W{e.StockW} F{e.StockF} S{e.StockS})";
+        UpdatePanel();
+        QueueRedraw();
+    }
+
+    /// <summary>Wie oft verwertet wurde. ⚠ Ohne die Zahl ist »der Knopf tut
+    /// nichts« nicht von »es lag nichts im Depot« zu unterscheiden.</summary>
+    public int RecycledParts;
+
+    /// <summary>Wie oft verlegt wurde, und wie oft es an der Verbindung
+    /// scheiterte.</summary>
+    public int Transported, TransportNoLink;
+
+    /// <summary>Welcher Depotplatz auf ein Ziel wartet, −1 = keiner.
+    /// Gesetzt von <see cref="TransportArmFromPanel"/>, abgeräumt vom nächsten
+    /// Klick in <see cref="SelectAt"/>.</summary>
+    private int _transportWartet = -1;
+
+    /// <summary>Wartet gerade ein Transport auf sein Ziel? Für die
+    /// Beschriftung des Knopfes.</summary>
+    public bool TransportArmed => _transportWartet >= 0;
+
+    /// <summary>Den Knopf »Transportieren« drücken: den Platz merken und auf
+    /// den nächsten Klick warten.</summary>
+    public void TransportArmFromPanel(int k)
+    {
+        var e = Producer();
+        if (e == null) { _order = "kein Gebaeude gewaehlt"; return; }
+        if (e.Hangar is { Count: > 0 })
+        { _order = "der Flughafen transportiert nicht ueber die Bahn"; return; }
+        if (e.Depot.Count == 0) { _order = "das Depot ist leer"; return; }
+        if (k < 0 || k >= e.Depot.Count) { _order = "nichts gewaehlt"; return; }
+        if (_railNodes.Count == 0)
+        { _order = "auf dieser Karte gibt es kein Bahnnetz"; return; }
+        if (NodeOfBuilding(_entities.IndexOf(e)) < 0)
+        { _order = "dieses Gebaeude hat keinen Bahnanschluss"; return; }
+        _transportWartet = k;
+        _order = "Zielgebaeude anklicken (Klick ins Leere bricht ab)";
+    }
+
+    /// <summary>
+    /// <b>»TRANSPORTIEREN« — der dritte Knopf des Depotfensters</b>
+    /// (Fensterart 6, Element 6), gelesen am 20.08.2026.
+    ///
+    /// <para>Er ist <b>kein Befehl</b>: er öffnet im Original die Kartenansicht
+    /// »Einheiten-Transport Planung« (C <c>0x4FC794</c>, Fenster
+    /// <c>0x4459F0</c>), in der man ein <b>Zielgebäude</b> anklickt. Erst dann
+    /// prüft <c>0x4497D0</c> die Verbindung und schickt je ausgewählter Einheit
+    /// <b>Befehl 0x206</b> <c>(Einheit, Quelle, Ziel)</c>.</para>
+    ///
+    /// <para><b>Was das Original dabei NICHT tut</b>, und das ist der
+    /// überraschende Teil: es kostet <b>nichts</b>, und die Einheit ist
+    /// <b>nicht sofort</b> da. Sie wird bei <c>CreateConvoy</c>
+    /// (C <c>0x4CEA90</c>) in die 200×48-Tafel <c>0xBC0DD0</c> eingetragen,
+    /// bekommt Zustand <c>0x37</c> und fährt <b>mit den Güterzügen</b> mit —
+    /// höchstens drei je Fahrt, Umstieg an jedem Knoten. Bei Ankunft Zustand
+    /// <c>0x38</c> und <c>+0x15 = Zielgebäude</c>: sie landet im
+    /// <b>Zieldepot</b>.</para>
+    ///
+    /// <para>⚠ <b>UNSERE SETZUNG, ausdrücklich:</b> das Fahren mit den
+    /// Güterzügen ist hier <b>nicht</b> nachgebaut. Die Einheit wechselt sofort
+    /// das Depot. Der Grund ist nicht Bequemlichkeit, sondern dass unser Depot
+    /// <b>Entwurfsnummern</b> hält und keine Einheitensätze — es gibt kein
+    /// Stück, das unterwegs sein könnte, und ein erfundener Zwischenzustand
+    /// wäre eine zweite Wahrheit neben dem Original. Der Weg wird trotzdem
+    /// <b>gesucht</b> und muss bestehen; nur die Fahrzeit fehlt. Sobald das
+    /// Depot echte Sätze führt, gehört sie hier hinein.</para>
+    ///
+    /// <para>⚠ Die Verbindungsprüfung selbst ist echt — samt der zwei Schranken
+    /// des Originals in der Kampagne, siehe
+    /// <see cref="Simulation.RailNetwork"/>.</para>
+    /// </summary>
+    public void TransportFromPanel(int k, int zielGebaeude)
+    {
+        var e = Producer();
+        if (e == null) { _order = "kein Gebaeude gewaehlt"; return; }
+        if (e.Depot.Count == 0) { _order = "das Depot ist leer"; return; }
+        if (k < 0 || k >= e.Depot.Count) { _order = "nichts gewaehlt"; return; }
+        if (zielGebaeude < 0 || zielGebaeude >= _entities.Count)
+        { _order = "kein Zielgebaeude gewaehlt"; return; }
+
+        var ziel = _entities[zielGebaeude];
+        if (!ziel.IsBuilding || ziel.Dead)
+        { _order = "das Ziel ist kein Gebaeude"; return; }
+        if (ReferenceEquals(ziel, e)) { _order = "das ist dasselbe Gebaeude"; return; }
+
+        // ⚠ Ueber die PLATZNUMMER, nicht ueber den Listenindex — siehe
+        // NodeOfBuilding.
+        int a = NodeOfBuilding(e.Slot), b = NodeOfBuilding(ziel.Slot);
+        Simulation.RailNetwork.OwnerOf = slot =>
+        { int i = EntityOfSlot(slot); return i < 0 ? -1 : _entities[i].Owner; };
+        var weg = Simulation.RailNetwork.FindRoute(
+            _railNodes, _netzLinien, a, b, e.Owner,
+            Simulation.RailNetwork.CampaignRules);
+        if (weg == null)
+        {
+            // Wortlaut des Originals, C 0x4FBBDC.
+            _order = "Es besteht keine Verbindung zu diesem Gebaeude";
+            TransportNoLink++;
+            return;
+        }
+
+        LoadDesigns();
+        int nr = e.Depot[k];
+        e.Depot.RemoveAt(k);
+        ziel.Depot.Add(nr);
+        Transported++;
+        string name = _designs != null && nr >= 0 && nr < _designs.Count
+                      ? _designs[nr].Name : "Einheit";
+        _order = $"{name} verlegt nach {(ziel.Name.Length > 0 ? ziel.Name : "Gebaeude " + zielGebaeude)} " +
+                 $"ueber {weg.Count - 1} Strecke(n)";
+        UpdatePanel();
+        QueueRedraw();
+    }
+
     /// <summary>One row per thing this building can make, in the same order the
     /// N key steps through, so the two ways of choosing cannot disagree.</summary>
     public List<UI.BuildPanel.Row> BuildPanelRows()
@@ -13564,6 +14488,142 @@ public partial class MapEntityLayer : Node2D
     /// wirken weiter auf alles Gewählte.</para></summary>
     public void ResearchFromPanel() { AimAtPanelBuilding(); StartResearch(); }
     public void RepairFromPanel() { AimAtPanelBuilding(); StartRepair(); }
+
+    /// <summary>
+    /// <b>Befehl 525</b> — die laufende Reparatur anhalten, Zustand zurück auf
+    /// »aktiv«. Behandler des Originals <c>0x43FF10</c>:
+    /// <c>byte[0x878E5A + 16·Lagerplatz] = 0</c>.
+    ///
+    /// <para>⚠ <b>Ausgelöst wird er vom REITERBAND</b>, nicht von einem eigenen
+    /// Knopf: jeder Klick auf Depot, Produktion oder Forschung schickt ihn
+    /// (@0x44A167). Ein Reiterwechsel hält im Original also eine laufende
+    /// Reparatur an — siehe <c>UI.BaseWindow.SetTab</c>.</para>
+    ///
+    /// <para>⚠ Nur die REPARATUR wird angehalten. Ein Gebäude, das gerade
+    /// vergrössert oder forscht, behält seinen Zustand — der Befehl setzt im
+    /// Original zwar pauschal 0, aber unsere Zustände tragen mehr als das eine
+    /// Byte, und ein laufender Ausbau ist bezahlt. Das ist eine Setzung, und
+    /// sie steht hier, statt still zu wirken.</para>
+    /// </summary>
+    public void StopRepairFromPanel()
+    {
+        AimAtPanelBuilding();
+        int n = 0;
+        foreach (int i in _sel)
+        {
+            var e = _entities[i];
+            if (!e.IsBuilding || e.Dead) continue;
+            // ⚠⚠ DIE STATUSZAHL BEDEUTET JE GEBÄUDEART ETWAS ANDERES, und hier
+            // stand `e.State != FaRepair && e.State != StRepair` — also »2 oder
+            // 1«, ohne die Art zu fragen. Bei einer BASIS ist 2 aber
+            // <see cref="StExpand"/>, nicht Reparatur: der Abbruch hätte einen
+            // laufenden LAGERAUSBAU abgeräumt, und der ist bezahlt.
+            //
+            // Gemessen (20.08.2026, an den vier Zeichnern C 0x467E7F,
+            // 0x46F44F, 0x47460B, 0x4657B2): reparieren heisst **1** bei Basis
+            // und Flughafen, **2** bei Fabrik und Mine. Genau so steht es schon
+            // in StartRepair — der Abbruch muss dieselbe Weiche nehmen, sonst
+            // sind es zwei Wahrheiten über dieselbe Zahl.
+            int reparaturZustand = e.BType is 2 or 3 or 4 ? FaRepair : StRepair;
+            if (e.State != reparaturZustand) continue;
+            e.State = 0;
+            n++;
+        }
+        if (n > 0)
+        {
+            _order = "Reparatur angehalten";
+            RepairsStopped += n;
+            UpdatePanel();
+            QueueRedraw();
+        }
+    }
+
+    /// <summary>Wie oft ein Reiterwechsel eine Reparatur angehalten hat.</summary>
+    public int RepairsStopped;
+
+    /// <summary>
+    /// <c>--repair-check</c> — <b>startet »Reparatur« sofort, und hält ein
+    /// Reiterwechsel sie an?</b>
+    ///
+    /// <para>Gemessen wird das Paar, nicht nur die Hälfte: ein beschädigtes
+    /// Gebäude geht auf »reparieren«, und der Gegenbefehl bringt es zurück auf
+    /// »aktiv«. ⚠ Dazu die zwei Gegenproben, ohne die der Lauf nichts sagt:
+    /// ein <b>unbeschädigtes</b> Gebäude darf gar nicht erst anfangen (das
+    /// Original prüft <c>Energie != Höchstwert</c>, <c>0x43FD10</c>), und der
+    /// Gegenbefehl darf ein Gebäude, das <b>etwas anderes</b> tut, nicht
+    /// anfassen.</para></summary>
+    public string RepairCheck()
+    {
+        var sb = new System.Text.StringBuilder("repair-check\n");
+        int merk = _selected;
+        int idx = -1;
+        for (int i = 0; i < _entities.Count; i++)
+            if (_entities[i].IsBuilding && !_entities[i].Dead && _entities[i].HpMax > 0)
+            { idx = i; break; }
+        if (idx < 0) { _selected = merk; return sb.Append("  kein Gebaeude auf dieser Karte").ToString(); }
+
+        var e = _entities[idx];
+        e.Owner = e.Team = ViewPlayer;
+        _selected = idx;
+        _sel.Clear(); _sel.Add(idx);
+
+        // 1. UNBESCHAEDIGT -> darf nicht anfangen
+        e.Hp = e.HpMax; e.State = 0;
+        StartRepair();
+        bool heilOk = e.State == 0;
+        sb.AppendLine($"  unbeschaedigt: Zustand {e.State} (erwartet 0): " +
+                      $"{(heilOk ? "faengt nicht an, richtig" : "FAENGT AN — falsch")}");
+
+        // 2. BESCHAEDIGT -> faengt an
+        e.Hp = Mathf.Max(1, e.HpMax / 2); e.State = 0;
+        StartRepair();
+        bool startOk = e.State is FaRepair or StRepair;
+        sb.AppendLine($"  beschaedigt: Zustand {e.State} " +
+                      $"({(startOk ? "reparieren, richtig" : "FAENGT NICHT AN")})");
+
+        // 3. REITERWECHSEL -> haelt an
+        int vorher = RepairsStopped;
+        StopRepairFromPanel();
+        bool stopOk = e.State == 0 && RepairsStopped == vorher + 1;
+        sb.AppendLine($"  Reiterwechsel: Zustand {e.State} (erwartet 0), " +
+                      $"angehalten {RepairsStopped - vorher} (erwartet 1): " +
+                      $"{(stopOk ? "haelt an, richtig" : "HAELT NICHT AN")}");
+
+        // 4. Gegenprobe: etwas ANDERES darf er nicht anfassen
+        e.State = 99;
+        StopRepairFromPanel();
+        bool fremdOk = e.State == 99;
+        sb.AppendLine($"  fremder Zustand 99: bleibt {e.State}: " +
+                      $"{(fremdOk ? "unangetastet, richtig" : "UEBERSCHRIEBEN — falsch")}");
+
+        // 5. ⭐ DIE ZAHL 2 BEDEUTET JE ART ETWAS ANDERES — und genau das hat
+        // der Lauf bis zum 20.08.2026 NICHT geprüft. Bei einer Basis ist 2 der
+        // LAGERAUSBAU (StExpand), bei einer Fabrik die Reparatur (FaRepair).
+        // Ein Abbruch, der nur auf die Zahl sieht, räumt der Basis den
+        // bezahlten Ausbau ab. Die Gegenprobe hat den Fehler gefunden,
+        // nachdem er schon im Baum stand.
+        bool zahlOk = true;
+        for (int i = 0; i < _entities.Count && zahlOk; i++)
+        {
+            var b = _entities[i];
+            if (!b.IsBuilding || b.Dead || b.BType is 2 or 3 or 4) continue;
+            b.Owner = b.Team = ViewPlayer;
+            _sel.Clear(); _sel.Add(i);
+            b.State = StExpand;                       // = 2, aber KEIN Reparieren
+            StopRepairFromPanel();
+            zahlOk = b.State == StExpand;
+            sb.AppendLine($"  Basis/Flughafen im Ausbau (Zustand {StExpand}): " +
+                          $"bleibt {b.State}: " +
+                          $"{(zahlOk ? "unangetastet, richtig" : "ABGERAEUMT — der Ausbau war bezahlt")}");
+            b.State = 0;
+            break;
+        }
+        e.State = 0;
+
+        _selected = merk;
+        sb.Append(heilOk && startOk && stopOk && fremdOk && zahlOk ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
 
     private void AimAtPanelBuilding()
     {
@@ -15775,6 +16835,46 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>building slot -> the slots it is joined to by SPOJ lines.</summary>
     private readonly Dictionary<int, List<int>> _rail = new();
+
+    /// <summary>Die Knotentafel sec33 und die Linien als KANTEN — die zwei
+    /// Tafeln, über die <see cref="Simulation.RailNetwork.FindRoute"/> flutet.
+    /// ⚠ Getrennt von <see cref="_rail"/>: das ist eine Nachbarschaft
+    /// Gebäude↔Gebäude und kennt weder Knotennummern noch Anschlussplätze,
+    /// beides braucht die Suche aber für die zwei Schranken des Originals.
+    /// </summary>
+    private readonly Dictionary<int, Simulation.RailNetwork.Node> _railNodes = new();
+    private readonly Dictionary<int, Simulation.RailNetwork.Line> _netzLinien = new();
+
+    /// <summary>Gebäude-<b>Platznummer</b> → Knotennummer, die Umkehrung von
+    /// <c>+0x1A</c>.
+    ///
+    /// <para>⚠⚠ <b>PLATZ, NICHT LISTENINDEX.</b> Der Knoten trägt auf
+    /// <c>+0x00</c> die Platznummer aus sec3 — dieselbe Zählung, mit der auch
+    /// <see cref="_rail"/> arbeitet (siehe <c>_rail.ContainsKey(from.Slot)</c>).
+    /// <see cref="_entities"/> ist dagegen eine gemischte Liste aus Einheiten,
+    /// Gebäuden und Beiwerk, ihre Indizes haben damit nichts zu tun.</para>
+    ///
+    /// <para>Am 20.08.2026 stand hier zuerst der Listenindex, und der
+    /// Prüfstand meldete auf Mission 33 »kein verbundenes Gebäudepaar« —
+    /// obwohl er zwei Zeilen darüber <b>128</b> verbundene Knotenpaare gezählt
+    /// hatte. Zwei Zählungen in einem Zahlenraum, dieselbe Falle wie bei
+    /// <c>Bud1</c>/<c>BuildingAt</c> und bei <c>--bau-check=6</c>.</para></summary>
+    private int NodeOfBuilding(int slot)
+    {
+        foreach (var kv in _railNodes)
+            if (kv.Value.Building == slot && kv.Value.Type != 0) return kv.Key;
+        return -1;
+    }
+
+    /// <summary>Platznummer → Stelle in <see cref="_entities"/>, −1 wenn es
+    /// dort kein lebendes Gebäude mit diesem Platz gibt.</summary>
+    private int EntityOfSlot(int slot)
+    {
+        for (int i = 0; i < _entities.Count; i++)
+            if (_entities[i].IsBuilding && !_entities[i].Dead && _entities[i].Slot == slot)
+                return i;
+        return -1;
+    }
 
     /// <summary>Every line's own track, in (col,row) with half-tile steps.
     /// From sec34's direction codes plus the end points in sec34 +0x02/+0x04
@@ -20100,6 +21200,82 @@ public partial class MapEntityLayer : Node2D
     /// die Mission nicht baubar. Die drei Abbruchwege geben −1, und zwar jeder
     /// mit seiner eigenen Meldung: ein Aufrufer, der nur »ging nicht« erfaehrt,
     /// kann das fehlende Glied nicht benennen.</returns>
+    /// <summary>
+    /// <b>DIE MITGENOMMENEN EINHEITEN AUFSTELLEN</b> — der dritte Teil des
+    /// Missionsübergangs, gelesen am 20.08.2026.
+    ///
+    /// <para>Das Original ruft im Init-Arm der Mission je Platz einmal
+    /// <c>place_carry(col, row, 0)</c> (C <c>0x43B190</c>, F <c>0x43A300</c>)
+    /// und holt sich die Einheit aus der Liste <c>word[0x9937B8 + 2·i]</c>.
+    /// Die <b>Plätze sind je Mission fest</b> und stehen in
+    /// <c>Data/carry_spots.json</c> — 108 Stück, aus <b>beiden</b> Bauten
+    /// gelesen und Mission für Mission gleich.</para>
+    ///
+    /// <para>⚠ <b>Die Zahl der Plätze IST die Obergrenze.</b> Mehr als
+    /// aufgestellt werden kann, darf nicht mitgenommen werden — das Original
+    /// hat für Mission 26 genau fünf Aufrufe, also fünf Einheiten. Wer hier
+    /// mehr zuliesse, hätte Einheiten ohne Platz, und die stünden dann
+    /// irgendwo.</para>
+    ///
+    /// <para>⚠ <b>Missionen 1 bis 11 haben keine Plätze.</b> Das ist kein
+    /// Loch in der Lesung, sondern der Befund: dort gibt es nichts
+    /// mitzunehmen. M12 hat drei.</para>
+    /// </summary>
+    /// <summary>Die Skriptvariablen dieser Mission, für den Übertrag in die
+    /// nächste. <c>null</c>, wenn kein Skript läuft.</summary>
+    public System.Collections.Generic.Dictionary<int, int>? MissionVars()
+        => _mscript?.VarSnapshot();
+
+    public int PlaceCarriedUnits(int mission, int player)
+    {
+        var plaetze = Campaign.CampaignManager.SpotsFor(mission);
+        if (plaetze.Count == 0) return 0;
+        var mit = Campaign.CampaignManager.Carried;
+        if (mit.Count == 0) return 0;
+
+        int n = 0;
+        for (int i = 0; i < mit.Count && i < plaetze.Count; i++)
+        {
+            var (col, row) = plaetze[i];
+            int at = SpawnReinforcement(mit[i].Design, col, row, player);
+            if (at < 0) continue;
+            var e = _entities[^1];
+            // ⚠ MIT IHREM SCHADEN. Das Original nimmt die Einheit mit, wie sie
+            // ist — es repariert sie nicht zwischen den Missionen. Wer eine
+            // angeschlagene mitnimmt, bekommt eine angeschlagene.
+            if (mit[i].Energie is > 0 and < 100 && e.HpMax > 0)
+                e.Hp = Mathf.Max(1, e.HpMax * mit[i].Energie / 100);
+            if (mit[i].Name.Length > 0) e.Name = mit[i].Name;
+            n++;
+        }
+        GD.Print($"Mitnahme: {n} von {mit.Count} Einheiten aufgestellt " +
+                 $"({plaetze.Count} Plaetze in Mission {mission})");
+        QueueRedraw();
+        return n;
+    }
+
+    /// <summary>
+    /// Welche Einheiten des Spielers am Missionsende <b>mitnehmbar</b> sind —
+    /// die Liste rechts im Fenster der Art 38.
+    ///
+    /// <para>⚠ Nur was lebt, fährt und ihm gehört. Gebäude stehen nicht zur
+    /// Wahl, und ein Stück im Depot ist keine Einheit auf der Karte.</para>
+    /// </summary>
+    public List<(int Index, string Name, int Design, int Energie, int Wert)> CarryCandidates(int player)
+    {
+        var list = new List<(int, string, int, int, int)>();
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || !e.Mobile) continue;
+            if (e.Owner != player) continue;
+            int pro = e.HpMax > 0 ? Mathf.Clamp(100 * e.Hp / e.HpMax, 1, 100) : 100;
+            list.Add((i, e.Name.Length > 0 ? e.Name : "Einheit",
+                      e.Mark, pro, UnitValueOf(i)));
+        }
+        return list;
+    }
+
     private int SpawnReinforcement(int typ, int col, int row, int player)
     {
         LoadDesigns();
@@ -21416,12 +22592,12 @@ public partial class MapEntityLayer : Node2D
     /// welcher Transport — und darum ist es die erste Stufe des
     /// Mehrspieler-Plans.</para>
     ///
-    /// <para>⚠ <b>UNSERE SETZUNG ist die Taktrate</b>, nicht das Verfahren.
-    /// 60/s ist genommen, weil die Simulation faktisch schon damit lief (das
-    /// Spiel zeichnet mit 60 Bildern/s, und jedes Bild war ein Schritt) — jede
-    /// andere Zahl hätte die Balance verschoben. Das Original taktet mit 50 Hz;
-    /// wer darauf umstellen will, ändert <see cref="SimHz"/> und muss
-    /// TickScale und die Fahrzeiten mit prüfen.</para>
+    /// <para><b>Die Taktrate ist GELESEN, nicht gesetzt</b> — 50/s, siehe
+    /// <see cref="SimHz"/>. Hier stand bis zum 20.08.2026 »unsere Setzung, 60,
+    /// weil die Simulation faktisch schon damit lief«; das war eine Notlösung
+    /// aus der Zeit, als der Zeitgeber des Originals noch ungelesen war. Seit
+    /// dem 21.08.2026 ist die 50 zusätzlich am Spiel selbst nachgemessen (die
+    /// Nachfrist, Stoppuhr des Spielers).</para>
     ///
     /// <para>Der Nachlauf ist gedeckelt: bleibt der Rechner mehr als
     /// <see cref="SimMaxCatchUp"/> Takte zurück, wird der Rückstand verworfen
@@ -21429,8 +22605,131 @@ public partial class MapEntityLayer : Node2D
     /// Schwall nach und reisst die Bildrate weiter ein — die »Todesspirale«.
     /// Im Netzspiel gehört an diese Stelle später das Warten auf den
     /// Server.</para></summary>
-    private const int SimHz = 60;
+    /// <summary>
+    /// <b>DER SIMULATIONSTAKT — 50, nicht 60</b> (20.08.2026).
+    ///
+    /// <para>Das Original stellt seinen Zeitgeber auf <b>20 ms</b>
+    /// (<c>SetTimer</c>, je einmal in beiden Bauten, C <c>0x415BC5</c> /
+    /// F <c>0x415A05</c>), und die Simulationshälfte ist eine <b>Schleife</b>
+    /// darin:</para>
+    /// <code>
+    ///   0x416068  xor bl, bl                 ; Zähler
+    ///   0x41606A  mov al, byte[0x4FA23C]     ; die Spielgeschwindigkeit
+    ///   0x41606F  cmp al, bl ; je raus       ; 0 = Pause
+    ///   0x416077  ... der ganze Takt ...
+    ///   0x416097  mov eax,[0x4FA240]; inc eax; mov [0x4FA240],eax   ; INNEN
+    ///   0x4168A7  mov al,[0x4FA23C]; cmp bl,al; jb 0x416077
+    /// </code>
+    ///
+    /// <para>Der Taktzähler läuft also <b>innerhalb</b> der Schleife: bei
+    /// Geschwindigkeit 1 sind es 50 Takte je Sekunde, bei 2 hundert, bei 3
+    /// hundertfünfzig. Die 20 ms sind die Frequenz des <b>Zeitgebers</b>, nicht
+    /// die des <b>Takts</b>.</para>
+    ///
+    /// <para>⚠ <b>Hier stand 60</b>, und das war unsere Setzung — während
+    /// <c>Campaign.MissionScript.TicksPerSecond</c> schon immer <b>50</b>
+    /// führte. Zwei Uhren im selben Spiel, und die Skriptzeiten liefen damit um
+    /// ein Fünftel neben der Bewegung. Mehrere Stellen rechnen ohnehin schon
+    /// <c>SimHz/50</c> heraus (siehe <c>StepCostMilli</c>); die werden mit
+    /// dieser Zahl zu 1:1.</para>
+    ///
+    /// <para>⭐ <b>Am 21.08.2026 am laufenden Original NACHGEMESSEN.</b> Der
+    /// Spieler hat im Let's Play die Stoppuhr an den Nachfristzähler gehalten:
+    /// <b>eine einzelne Zahl steht 5 bis 6 reale Sekunden</b>. Der Zähler geht
+    /// alle 250 Takte um eins herunter (@0x4160FC), also
+    /// <c>250 / 5 s = 50 Takte/s</c> — die gelesene 50 und die gemessene
+    /// stimmen überein, und das Video lief auf Geschwindigkeit 1, der Vorgabe.
+    /// Die Gegenhypothesen sind damit tot: 250 Hz hätte 1,0 s ergeben,
+    /// Geschwindigkeit 2 zweieinhalb, Geschwindigkeit 3 knapp 1,7. Die
+    /// Konstante trägt weit über dieses Fenster hinaus — Markttick, Bahn,
+    /// Produktion und alle Skriptzeiten hängen an ihr.</para>
+    ///
+    /// <para>⚠ Die Geschwindigkeit selbst (1…3, plus Turbo 20) ist damit noch
+    /// NICHT gebaut — siehe <see cref="GameSpeed"/>.</para>
+    /// </summary>
+    private const int SimHz = 50;
     private const float SimDt = 1f / SimHz;
+
+    /// <summary>
+    /// <b>DIE SPIELGESCHWINDIGKEIT</b> — <c>byte[0x4FA23C]</c> des Originals,
+    /// gelesen am 20.08.2026.
+    ///
+    /// <para>Sie sagt, <b>wie oft je Zeitgeberschlag der ganze Takt läuft</b>.
+    /// Bei 50 Schlägen je Sekunde ergibt das 50, 100 oder 150 Takte/s — eine
+    /// Spielminute (250 Takte) dauert damit 5,00 · 2,50 · 1,67 Sekunden.</para>
+    ///
+    /// <para><b>Der Bereich ist gemessen, nicht gesetzt:</b> die
+    /// Fensterprozedur lässt über »+« nicht über <b>3</b>
+    /// (<c>cmp al,3; jae</c> @0x413A4C) und über »−« nicht unter <b>1</b>
+    /// (<c>cmp al,1; jbe</c> @0x413A8F). <b>0</b> heisst Pause — die Schleife
+    /// steigt dann sofort aus (@0x41606F <c>cmp al,bl; je</c>).</para>
+    ///
+    /// <para>⚠ Daneben gibt es einen <b>Turbo-Umschalter auf 20</b>
+    /// (@0x4C4420 <c>mov byte[0x4FA23C], 0x14</c>): er merkt sich den alten
+    /// Wert in <c>byte[0x81A3A0]</c> und holt ihn beim zweiten Druck zurück
+    /// (@0x4C443E). Das ist <b>kein</b> Bereich 0…20, sondern 1…3 plus ein
+    /// Umschalter — wer das verwechselt, baut eine Geschwindigkeitsleiste mit
+    /// zwanzig Stufen, die es nicht gibt.</para>
+    /// </summary>
+    public static int GameSpeed = 1;
+
+    /// <summary>Der Turbowert des Originals. Siehe <see cref="GameSpeed"/>.</summary>
+    public const int SpeedTurbo = 20;
+
+    /// <summary>
+    /// <c>--takt-check</c> — <b>läuft der Takt mit 50 Hz, und macht die
+    /// Geschwindigkeit wirklich mehr Takte?</b>
+    ///
+    /// <para>Gemessen wird nicht »es ist schneller«, sondern die Zahl: bei
+    /// Geschwindigkeit <c>n</c> müssen in derselben Zeit <b>n mal so viele</b>
+    /// Takte vergehen. ⚠ Und die Gegenprobe gehört dazu — bei <b>0</b> darf
+    /// <b>kein einziger</b> Takt vergehen, denn das ist die Pause des
+    /// Originals (@0x41606F <c>cmp al,bl; je</c>).</para>
+    ///
+    /// <para>⚠ Der Lauf fasst <see cref="GameSpeed"/> an und legt sie zurück —
+    /// ein Prüfstand, der eine Einstellung des Spielers verändert, ist ein
+    /// Eingriff. Dieselbe Lehre wie beim Mitnahme-Lauf, der drei Prüfeinheiten
+    /// im Spielstand liegen liess.</para></summary>
+    public string TaktCheck()
+    {
+        var sb = new System.Text.StringBuilder("takt-check\n");
+        sb.AppendLine($"  SimHz = {SimHz} (Original: SetTimer 20 ms = 50)");
+        int merk = GameSpeed;
+        try
+        {
+            var zahl = new int[4];
+            for (int sp = 0; sp <= 3; sp++)
+            {
+                GameSpeed = sp;
+                int vor = _taktNr;
+                // Eine ganze Sekunde Spielzeit anbieten, in Bildschritten.
+                // ⚠ Direkt SimTick, nicht _Process: der Antrieb haengt an
+                // der Bildzeit, und die gibt es im Prueflauf nicht. Die
+                // Schleife hier ahmt die Geschwindigkeitsschleife des
+                // Originals nach — genau das, was gemessen werden soll.
+                for (int f = 0; f < SimHz; f++)
+                    for (int k = 0; k < sp; k++) SimTick(SimDt);
+                zahl[sp] = _taktNr - vor;
+            }
+            sb.AppendLine($"  Takte je Sekunde: Pause {zahl[0]}, " +
+                          $"Geschw. 1 = {zahl[1]}, 2 = {zahl[2]}, 3 = {zahl[3]}");
+            bool pause = zahl[0] == 0;
+            bool eins = zahl[1] is >= 45 and <= 55;
+            bool zwei = zahl[2] >= 2 * zahl[1] - 4 && zahl[2] <= 2 * zahl[1] + 4;
+            bool drei = zahl[3] >= 3 * zahl[1] - 6 && zahl[3] <= 3 * zahl[1] + 6;
+            sb.AppendLine($"  Pause haelt an: {(pause ? "ja" : "NEIN — es laeuft weiter")}");
+            sb.AppendLine($"  50 je Sekunde: {(eins ? "ja" : "NEIN")}; " +
+                          $"verdoppelt: {(zwei ? "ja" : "NEIN")}; " +
+                          $"verdreifacht: {(drei ? "ja" : "NEIN")}");
+            sb.Append(pause && eins && zwei && drei ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        }
+        finally { GameSpeed = merk; }
+        return sb.ToString();
+    }
+
+    /// <summary>Wieviele Takte die Geschwindigkeit ZUSÄTZLICH gebracht hat —
+    /// ohne die Zahl ist »schneller« nicht von »ruckelt« zu unterscheiden.</summary>
+    public int SpeedExtraTicks;
     private const int SimMaxCatchUp = 5;
     private float _simAcc;
 
@@ -21455,9 +22754,18 @@ public partial class MapEntityLayer : Node2D
         _simAcc += dt;
         int steps = 0;
         bool moved = false;
+        // ⚠ DIE GESCHWINDIGKEITSSCHLEIFE. Das Original laeuft je Zeitgeberschlag
+        // NICHT einmal, sondern `byte[0x4FA23C]` mal durch den ganzen Takt
+        // (@0x416068 bis @0x4168AE), und der Taktzaehler steigt INNEN. Siehe
+        // SimHz und GameSpeed. 0 heisst Pause — dann laeuft gar nichts.
+        int mal = Mathf.Clamp(GameSpeed, 0, SpeedTurbo);
         while (_simAcc >= SimDt && steps < SimMaxCatchUp)
         {
-            moved |= SimTick(SimDt);
+            for (int k = 0; k < mal; k++)
+            {
+                moved |= SimTick(SimDt);
+                if (mal > 1) SpeedExtraTicks++;
+            }
             _simAcc -= SimDt;
             steps++;
         }
@@ -21492,18 +22800,37 @@ public partial class MapEntityLayer : Node2D
         // bloss netzuntauglich, er war nie das Original.
         CommandTick();
 
+        // ⚠ DER TAKTZÄHLER, einmal je Takt und nicht je Einheit. Das Original
+        // führt ihn in `dword[0x4FA240]` und mehrere Regeln hängen daran
+        // (Strom `% 50 == 13`, Markt `% 100 == 77`, die Drehbremse der grossen
+        // Schiffe `& 1`). Wer eine solche Regel an einen Zähler hängt, der je
+        // ANGEFASSTER EINHEIT hochläuft, bekommt kein Taktmuster, sondern eine
+        // Reihenfolgeabhängigkeit — siehe die Warnung bei der Schiffsdrehung.
+        _taktNr++;
+
+        // ⚠⚠ DIE KI GEHÖRT NACH VORN (20.08.2026) — Station **14** von rund
+        // siebzig, und die Reihenfolge ist nicht geraten: das Original schreibt
+        // seine Stationsnamen selbst ins Protokoll, und `'CPU'` steht bei
+        // <c>0x41618C</c>. Danach erst kommen `'Power'` (0x4161D8),
+        // `'Trains'` (0x416249), `'Buildings'` (0x416683) und `'Movement'`
+        // (0x416697).
+        //
+        // <b>Die KI sieht also den Zustand VOR der Bewegung dieses Takts</b>,
+        // nicht danach. Bei uns stand sie als LETZTE Station, hinter allem —
+        // sie entschied auf einem Bild, das eine Bewegung weiter war als im
+        // Original.
+        //
+        // ⚠ Das ist der Eingriff, bei dem am ehesten etwas kippt: 2413 Zeilen
+        // `SkirmishAi` sehen ab jetzt einen anderen Augenblick. Er steht
+        // trotzdem hier, weil er gelesen ist — und die 33 Missionen laufen
+        // danach unverändert durch.
+        UpdateAi(dt);
+
         _clock += dt;
 
-        // the original's "unexplored" step, on its own slower beat
-        _fogTick += dt;
-        if (_fogTick >= FogEverySec)
-        {
-            _fogTick = 0;
-            UpdateFog();
-            QueueRedraw();
-        }
-        UpdateAircraft(dt);
-        if (_orderMarks.Count > 0) { UpdateOrderMarks(dt); QueueRedraw(); }
+        // ⚠ Nebel, Flugzeuge und Wegmarken standen HIER und gehören ans ENDE —
+        // siehe die Stationsliste dort unten ('Airplanes' 69, 'unexplored' 75,
+        // 'marks' 79, alle nach 'Movement' 64).
         // ⚠ Die Messuhr zaehlt SIMULATIONStakte, nicht Bilder — seit dem festen
         // Takt ist das derselbe Wert fuer jeden Lauf, und genau das macht die
         // Zahlen der Pruefstaende vergleichbar.
@@ -21557,12 +22884,53 @@ public partial class MapEntityLayer : Node2D
             _buildPending = false;
         }
 
+        // ---- die Bahn: 'Trains' (21) und 'Transported' (22) ------------------
+        //
+        // ⚠ Beide stehen im Original VOR 'Buildings' (63) und 'Movement' (64) —
+        // die Protokollnamen sagen es (0x416249 und 0x41625D). Bei uns lief der
+        // ganze Bahnblock GANZ AM ENDE, also nach der Bewegung: ein Zug fuhr
+        // damit auf dem Gleisbild des vorigen Takts, und eine Einheit, die im
+        // selben Takt aus einem Zug stieg, sah ein Gebäude, das noch nichts
+        // getan hatte.
+        UpdateFreight(dt);          // 'Transported' — Simulation/RailFreight.cs
+        RailRepairTick();           // die Reparaturkette — Simulation/RailRepair.cs
+        RailMoveWagons();
+        UpdateTrains(dt);           // 'Trains'
+
+        // ⚠⚠ ZWEI DURCHGÄNGE, NICHT EINER (20.08.2026).
+        //
+        // Das Original läuft **zweimal** über die Welt, und es benennt die zwei
+        // Stationen selbst — die Protokollzeilen stehen zwischen den Aufrufen:
+        //
+        //   0x416690  call 0x43CA50   ; "Buildings"   (8577 B)
+        //   0x4166BB  call 0x406CD0   ; "Movement"   (13689 B)
+        //
+        // Erst ALLE Gebäude, dann ALLE Einheiten. Bei uns wechselte eine
+        // einzige Schleife beides nach Listenstelle ab — ein Gebäude mit Index
+        // 40 lief also NACH der Einheit mit Index 39 und VOR der mit 41.
+        //
+        // ⚠ Warum das mehr ist als Kosmetik: was ein Gebäude in diesem Takt
+        // tut (fertigstellen, aussenden, reparieren, Strom verrechnen), sehen
+        // im Original **alle** Einheiten desselben Takts; bei uns nur die mit
+        // höherer Listenstelle. Die Wirkung hing damit an der REIHENFOLGE IN
+        // DER LISTE — derselbe Fehlertyp wie beim Drehzähler der Schiffe, nur
+        // eine Ebene höher. Und für den Lockstep ist es dieselbe Gefahr: zwei
+        // Maschinen mit verschieden sortierten Listen rechnen auseinander.
+        //
+        // ⚠ Ein toter Satz bekommt seine Zeit nur EINMAL — darum steht
+        // `DeadTime` im ersten Durchgang und der zweite überspringt ihn.
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var eb = _entities[i];
+            if (eb.IsProp) continue;
+            if (eb.Dead) { eb.DeadTime += dt; continue; }
+            if (eb.IsBuilding) UpdateProduction(i, eb, dt);
+        }
+
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
-            if (e.IsProp) continue;
-            if (e.Dead) { e.DeadTime += dt; continue; }
-            if (e.IsBuilding) { UpdateProduction(i, e, dt); continue; }
+            if (e.IsProp || e.Dead || e.IsBuilding) continue;
 
             // ⚠⚠ 18.08.2026 — DIE ZWEI REPARATUREN DER EINHEITEN GEHÖREN HIERHIN.
             // Erst standen sie neben RepairInDepot im Gebäudetakt, weil dort schon
@@ -21680,8 +23048,33 @@ public partial class MapEntityLayer : Node2D
                     if (stufen > 8)
                     {
                         // Gattung 5 (4x4) ruehrt sich nur an geraden Takten.
+                        //
+                        // ⚠⚠ 20.08.2026 — HIER STAND `_dreh4x4Takt++`, EIN
+                        // EIGENER ZAEHLER, und der lief je ANGEFASSTEM SCHIFF
+                        // hoch, nicht je Takt. Damit war die Regel nicht »an
+                        // geraden Takten«, sondern »bei jedem zweiten grossen
+                        // Schiff, das gerade drehen will« — mit zwei Schiffen
+                        // bekam im selben Takt das eine gerade und das andere
+                        // ungerade, und je nach Zahl der drehenden Schiffe
+                        // konnte eines dauerhaft auf der falschen Seite
+                        // haengenbleiben und gar nicht mehr drehen.
+                        //
+                        // Gemeldet als »Schiffe fahren immer noch komisch«,
+                        // Symptome »Ruckeln/Gleiten« und »falsche
+                        // Blickrichtung« — beides genau das, was ein Rumpf tut,
+                        // der unregelmaessig oder gar nicht nachdreht, waehrend
+                        // die Fahrt weiterlaeuft.
+                        //
+                        // ⚠ Die Lehre: eine Regel des Originals, die am
+                        // TAKTZAEHLER haengt (`& 1`, `% 50 == 13`, `% 100 == 77`),
+                        // muss auch bei uns am Takt haengen. Ein Zaehler, der
+                        // bei jedem Aufruf hochlaeuft, sieht im Quelltext fast
+                        // gleich aus und ist etwas voellig anderes: er macht
+                        // das Ergebnis von der REIHENFOLGE und der ANZAHL der
+                        // Einheiten abhaengig. Das ist zugleich ein
+                        // Lockstep-Risiko.
                         if (Simulation.NavGrid.HullSide(e.GameUnitType) > 2
-                            && (_dreh4x4Takt++ & 1) != 0) { _drehTicks++; continue; }
+                            && (_taktNr & 1) != 0) { _drehTicks++; continue; }
                         if (e.DrehWarten > 1) { e.DrehWarten--; _drehTicks++; continue; }
                         e.DrehWarten = 3;
                     }
@@ -21779,11 +23172,34 @@ public partial class MapEntityLayer : Node2D
         RetryPath();
         UpdateProjectiles(dt);
         UpdateEffects(dt);
-        UpdateFreight(dt);          // das Bahnsystem — Simulation/RailFreight.cs
-        RailRepairTick();           // die Reparaturkette — Simulation/RailRepair.cs
-        RailMoveWagons();
-        UpdateTrains(dt);
-        UpdateAi(dt);
+
+        // ---- die Stationen NACH der Bewegung ---------------------------------
+        //
+        // ⚠ Die Reihenfolge ist aus den Protokollnamen des Spiels selbst
+        // gelesen (20.08.2026) — 85 Punkte im Haupttakt, und das Original
+        // benennt sie. Nach `'Movement'` (Nr. 64) kommen:
+        //
+        //     69  0x4166F5  'Airplanes'
+        //     75  0x41677F  'unexplored'      (der Nebel)
+        //     79  0x4167F7  'marks'
+        //
+        // Alle drei standen bei uns VOR den zwei Durchgängen, also vor der
+        // Bewegung dieses Takts. Ein Flugzeug wurde damit auf dem Stand des
+        // VORIGEN Takts bewegt, der Nebel auf Stellungen gehoben, die es noch
+        // gar nicht gab, und die Wegmarken zeigten auf gestrige Punkte.
+        UpdateAircraft(dt);                       // 'Airplanes'
+
+        // 'unexplored' — auf eigenem, langsamerem Schlag
+        _fogTick += dt;
+        if (_fogTick >= FogEverySec)
+        {
+            _fogTick = 0;
+            UpdateFog();
+            QueueRedraw();
+        }
+
+        if (_orderMarks.Count > 0) { UpdateOrderMarks(dt); QueueRedraw(); }   // 'marks'
+
         MissionScriptTick(dt);
         return moved;
     }
@@ -21794,7 +23210,9 @@ public partial class MapEntityLayer : Node2D
     public static bool RetryOff;
 
     /// <summary>Wie lange eine Einheit ohne Weg wartet, bis sie es noch einmal
-    /// versucht. ⚠ UNSERE Setzung, in TAKTEN — eine Sekunde bei SimHz 60. Das
+    /// versucht. ⚠ UNSERE Setzung, in TAKTEN — gut eine Sekunde bei SimHz 50
+    /// (der Takt selbst ist gelesen und gemessen, nur dieser Zaehler ist
+    /// unser). Das
     /// Original hat keinen solchen Zaehler; es braucht ihn nicht, weil seine
     /// Einheiten ihren Befehl behalten. Wir bilden dasselbe Verhalten mit einem
     /// Wiederholungsversuch nach, und die Laenge ist so gewaehlt, dass ein
@@ -23771,6 +25189,29 @@ public partial class MapEntityLayer : Node2D
         // er beheben sollte.
         if (a.IsSupply) return false;
         a.Stored = true;
+
+        // ⚠⚠ 20.08.2026 — HIER FEHLTE DER EINTRAG IN DEN HANGAR, und das war
+        // ein Einwegventil.
+        //
+        // Gemeldet als »meine Lufteinheiten, wenn sie alle sind, verschwinden
+        // sie, sind aber für mich nicht mehr greifbar«. Genau so war es. Die
+        // drei Wege waren nicht geschlossen:
+        //   * KAUFEN legt den Platz in `e.Hangar` (@14847) — sichtbar im
+        //     Reiter, startbar.
+        //   * STARTEN nimmt ihn wieder heraus (`home.Hangar?.Remove`).
+        //   * LANDEN setzte nur `Stored = true`. Das Flugzeug war damit nicht
+        //     mehr gezeichnet (der Zeichner überspringt `Stored`) und stand in
+        //     KEINER Liste — kein Reiter, kein Start, kein Zugriff. Für den
+        //     Spieler war es weg, obwohl es noch da war.
+        //
+        // ⚠ **Kein Platzdeckel hier.** Der Deckel des Originals sitzt beim
+        // KAUFEN (@14813, `Hangar.Count >= HangarSize`), nicht bei der
+        // Landung — und das ist auch richtig herum: ein Flugzeug mit leerem
+        // Tank muss irgendwo hin. Ein Deckel an dieser Stelle hiesse, es
+        // verschwindet wieder, und wir hätten denselben Fehler zurück, nur
+        // seltener und darum schwerer zu finden.
+        if (home != null && !(home.Hangar ??= new List<int>()).Contains(a.Slot))
+            home.Hangar.Add(a.Slot);
         return true;
     }
 

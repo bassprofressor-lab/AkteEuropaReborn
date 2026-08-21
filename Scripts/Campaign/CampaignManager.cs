@@ -232,6 +232,205 @@ public static class CampaignManager
     /// <summary>Womit diese Mission zu beginnen hat: ihr gemerkter
     /// Anfangsstand, sonst der laufende. Und der gemerkte wird dabei
     /// angelegt, falls er fehlt.</summary>
+    /// <summary>
+    /// <b>EINE MITGENOMMENE EINHEIT.</b> Am Ende einer Mission darf der
+    /// Spieler einige seiner Überlebenden in die nächste hinübernehmen; der
+    /// Rest wird verkauft.
+    ///
+    /// <para>⚠ <b>Das Original speichert hier etwas ANDERES als wir</b>, und
+    /// der Unterschied ist keine Bequemlichkeit. Es hält in
+    /// <c>word[0x9937B8 + 2·i]</c> (20 Plätze, <c>0xFFFF</c> = leer) bloss die
+    /// <b>Platznummern</b> der Einheiten — die Sätze selbst bleiben einfach im
+    /// Speicher stehen, weil die nächste Karte den 1000er-Block des Menschen
+    /// gar nicht belegt. Bei uns wird zwischen zwei Missionen der ganze Stand
+    /// neu geladen; eine blosse Platznummer zeigte danach ins Leere. Also
+    /// merken wir uns, was nötig ist, um die Einheit wieder herzustellen.</para>
+    ///
+    /// <para>⚠ <see cref="Energie"/> reist mit: das Original nimmt die Einheit
+    /// <b>wie sie ist</b> mit, nicht frisch repariert. Wer eine angeschlagene
+    /// Einheit mitnimmt, bekommt eine angeschlagene.</para>
+    /// </summary>
+    public sealed class CarriedUnit
+    {
+        public int Design;          // Entwurfsnummer
+        public int Energie = 100;   // Restleben in Prozent
+        public string Name = "";
+
+        public string Pack() => $"{Design}|{Energie}|{Name.Replace('|', ' ')}";
+
+        public static CarriedUnit? Unpack(string s)
+        {
+            var t = s.Split('|');
+            if (t.Length < 2 || !int.TryParse(t[0], out int d) ||
+                !int.TryParse(t[1], out int e)) return null;
+            return new CarriedUnit
+            { Design = d, Energie = e, Name = t.Length > 2 ? t[2] : "" };
+        }
+    }
+
+    /// <summary>Wieviele Einheiten das Original höchstens mitnehmen lässt —
+    /// die Liste hat <b>20</b> Plätze (<c>0x4421E6</c>: <c>cmp cl, 0x14</c>).
+    /// ⚠ Wieviele eine EINZELNE Mission zulässt, sagt das Fenster; gemessen
+    /// sind es <see cref="SpotsFor"/> viele, denn mehr kann sie gar nicht
+    /// aufstellen.</summary>
+    public const int CarrySlots = 20;
+
+    /// <summary>Was aus der letzten Mission mitkommt. Leer, wenn nichts.</summary>
+    public static List<CarriedUnit> Carried
+    {
+        get
+        {
+            var list = new List<CarriedUnit>();
+            using var c = new ConfigFile();
+            if (c.Load(SavePath) != Error.Ok) return list;
+            var roh = c.GetValue("campaign", "carried", new Godot.Collections.Array());
+            if (roh.VariantType != Variant.Type.Array) return list;
+            foreach (var v in roh.AsGodotArray())
+            {
+                var u = CarriedUnit.Unpack(v.AsString());
+                if (u != null) list.Add(u);
+            }
+            return list;
+        }
+        set
+        {
+            var arr = new Godot.Collections.Array();
+            foreach (var u in value)
+            {
+                if (arr.Count >= CarrySlots) break;
+                arr.Add(u.Pack());
+            }
+            using var c = new ConfigFile();
+            c.Load(SavePath);
+            c.SetValue("campaign", "carried", arr);
+            c.Save(SavePath);
+        }
+    }
+
+    /// <summary>Wieviele Skriptvariablen das Original zwischen zwei Missionen
+    /// mitnimmt: <b>500 Wörter</b> — <c>rep movsd</c> mit <c>ecx = 0xFA</c>,
+    /// also 1000 Byte (C <c>0x4D0410</c> beim Laden, <c>0x4D0130</c> beim
+    /// Speichern).</summary>
+    public const int VarCount = 500;
+
+    /// <summary>
+    /// <b>DIE SKRIPTVARIABLEN DER VORMISSION.</b> Gelesen am 20.08.2026.
+    ///
+    /// <para>Das Original trägt sie mit, und zwar in beide Richtungen
+    /// spiegelbildlich:</para>
+    /// <code>
+    ///   Speichern 0x4D0126:  esi=0xBC5690  edi=0xBC3DF8  ecx=0xFA  rep movsd
+    ///   Laden     0x4D0406:  esi=0xBC3DF8  edi=0xBC5690  ecx=0xFA  rep movsd
+    /// </code>
+    /// <para><c>0xBC5690</c> ist <c>v[0]</c>; die Variablen sind <b>Wörter</b>.
+    /// Gegenprobe: Mission 26 setzt laut Skript <c>init {"101": 1}</c>, und im
+    /// Init-Arm steht <c>inc word ptr [0xBC575A]</c> — und
+    /// <c>0xBC5690 + 2·101 = 0xBC575A</c>.</para>
+    ///
+    /// <para><b>Warum das zählt.</b> Die Verstärkungskette von Mission 26 ist
+    /// <b>in sich kreisförmig</b>: <c>v[0]</c> wird nur auf 1 gesetzt, wenn es
+    /// vorher 3 war, 3 nur über 2, 2 nur über 1. Startet <c>v[0]</c> bei
+    /// <b>0</b>, feuert <c>space_in</c> <b>nie</b> — die drei Wellen zu je 17
+    /// Einheiten bleiben aus. Mit einem übernommenen <c>v[0]</c> läuft die
+    /// Kette sofort an.</para>
+    ///
+    /// <para>⚠ <b>Auch die »once«-Zähler reisen mit</b>, denn sie liegen im
+    /// selben Feld. Eine Regel, die in der Vormission einmal gefeuert hat,
+    /// kann damit in der nächsten schon als abgehakt gelten. Das ist <b>kein
+    /// Versehen von uns, sondern das Verhalten des Originals</b> — dort ist es
+    /// dasselbe Feld und derselbe <c>rep movsd</c>. Wer hier »aufräumt«, baut
+    /// eine eigene Mechanik.</para>
+    ///
+    /// <para>⚠ Gespeichert werden nur die Plätze <b>ungleich null</b>, als
+    /// <c>n:wert</c>. Fünfhundert Nullen in die Datei zu schreiben wäre
+    /// dasselbe in unleserlich.</para>
+    /// </summary>
+    public static Dictionary<int, int> CarriedVars
+    {
+        get
+        {
+            var d = new Dictionary<int, int>();
+            using var c = new ConfigFile();
+            if (c.Load(SavePath) != Error.Ok) return d;
+            string roh = (string)c.GetValue("campaign", "vars", "");
+            foreach (string t in roh.Split(' ', System.StringSplitOptions.RemoveEmptyEntries))
+            {
+                int k = t.IndexOf(':');
+                if (k <= 0) continue;
+                if (int.TryParse(t[..k], out int n) && int.TryParse(t[(k + 1)..], out int v)
+                    && n >= 0 && n < VarCount) d[n] = v;
+            }
+            return d;
+        }
+        set
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (var kv in value)
+            {
+                if (kv.Key < 0 || kv.Key >= VarCount || kv.Value == 0) continue;
+                if (sb.Length > 0) sb.Append(' ');
+                sb.Append(kv.Key).Append(':').Append(kv.Value);
+            }
+            using var c = new ConfigFile();
+            c.Load(SavePath);
+            c.SetValue("campaign", "vars", sb.ToString());
+            c.Save(SavePath);
+        }
+    }
+
+    private static Godot.Collections.Dictionary? _spots;
+
+    /// <summary>
+    /// <b>WO die mitgenommenen Einheiten stehen</b> — je Mission feste Plätze,
+    /// aus beiden <c>GAME.EXE</c> gelesen und in <c>Data/carry_spots.json</c>
+    /// abgelegt (108 Plätze, C und F Zeichen für Zeichen gleich).
+    ///
+    /// <para>⚠ <b>Nicht abgeleitet, sondern gelesen.</b> Die Plätze stehen im
+    /// Init-Arm der Mission als Folge von <c>place_carry(col, row, 0)</c>. Für
+    /// Mission 26 sind es (200,50) (198,52) (203,52) (194,49) (204,46) — genau
+    /// die fünf Stellen um Senja, an denen sie im Original stehen.</para>
+    ///
+    /// <para>⚠ <b>Missionen 1 bis 11 haben keine</b>, dort gibt es nichts
+    /// mitzunehmen. Mission 12 hat drei, alle übrigen fünf. Die Zahl der Plätze
+    /// IST damit zugleich die Obergrenze dieser Mission.</para>
+    /// </summary>
+    public static List<(int Col, int Row)> SpotsFor(int mission)
+    {
+        var list = new List<(int, int)>();
+        if (_spots == null)
+        {
+            _spots = new Godot.Collections.Dictionary();
+            foreach (string pfad in new[] { "res://Data/carry_spots.json",
+                                            "user://data/carry_spots.json" })
+            {
+                if (!FileAccess.FileExists(pfad)) continue;
+                using var f = FileAccess.Open(pfad, FileAccess.ModeFlags.Read);
+                if (f == null) continue;
+                var j = Json.ParseString(f.GetAsText());
+                if (j.VariantType != Variant.Type.Dictionary) continue;
+                var d = j.AsGodotDictionary();
+                if (d.TryGetValue("missionen", out var mv) &&
+                    mv.VariantType == Variant.Type.Dictionary)
+                { _spots = mv.AsGodotDictionary(); break; }
+            }
+        }
+        if (!_spots.TryGetValue(mission.ToString(), out var av) ||
+            av.VariantType != Variant.Type.Array) return list;
+        foreach (var p in av.AsGodotArray())
+        {
+            if (p.VariantType != Variant.Type.Array) continue;
+            var q = p.AsGodotArray();
+            if (q.Count >= 2) list.Add((q[0].AsInt32(), q[1].AsInt32()));
+        }
+        return list;
+    }
+
+    /// <summary>Was <b>Berkewitz Corp.</b> für eine zurückgelassene Einheit
+    /// zahlt: <b>30 %</b> ihres Werts. Gelesen aus <c>0x4C1720</c>, wo über den
+    /// 1000er-Block des Menschen summiert wird — <c>esi += 3·Wert / 10</c>,
+    /// mit ganzzahliger Division, also abgerundet.</summary>
+    public static int SellPrice(int wert) => 3 * wert / 10;
+
     public static int BalanceForStartOf(int mission)
     {
         int gemerkt = StartBalanceOf(mission);

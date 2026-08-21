@@ -1,4 +1,4 @@
-﻿namespace AkteEuropaReborn.Campaign;
+namespace AkteEuropaReborn.Campaign;
 
 using System;
 using System.Collections.Generic;
@@ -68,6 +68,29 @@ public sealed class MissionScript
         /// 191 resolves to a design the game itself names "Col.Hullman".
         /// </summary>
         public int[] Types = Array.Empty<int>();
+    }
+
+    /// <summary>
+    /// <b>EIN TOR</b> — ein Sprung des Originals, der einen ganzen
+    /// ADRESSBEREICH überspringt. Additiv zu den Regeln: die Regeln selbst
+    /// sind unverändert, das Tor sagt nur, wann sie gar nicht erst
+    /// drankommen.
+    ///
+    /// <para><see cref="When"/> wird <b>nicht neu gedeutet</b> — es ist das
+    /// <c>when</c> der ersten Regel im Bereich, also die vom geprüften
+    /// Ausleser gelesene Fassung samt aller äusseren Glieder. Eine zweite
+    /// Deutung wäre eine zweite Wahrheit.</para>
+    ///
+    /// <para>⚠ Eingetragen sind nur Tore, die <b>beide</b> GAME.EXE gleich
+    /// liefern und die <b>mehr als eine</b> Regel umspannen — ein Tor um eine
+    /// einzige Regel sagt nichts, was deren eigenes <c>when</c> nicht schon
+    /// sagt. Drei Missionen liefern in den zwei Bauten verschiedene Torfolgen
+    /// und bleiben darum ganz ohne (Regel 8).</para>
+    /// </summary>
+    public sealed class Gate
+    {
+        public int Von, Bis;
+        public List<Cond> When = new();
     }
 
     public sealed class Rule
@@ -167,6 +190,9 @@ public sealed class MissionScript
         /// (1 = open, 10 = done), v[131+k] its text number.</summary>
         public readonly Dictionary<int, int> Init = new();
 
+        /// <summary>Die Tore des Blocks, in Adressreihenfolge.</summary>
+        public readonly List<Gate> Gates = new();
+
         /// <summary>
         /// Die ROHSTOFFVORKOMMEN dieser Mission — `[spalte, zeile, menge]` je
         /// Eintrag, aus <c>add_terra_place(spalte, zeile, menge)</c> im
@@ -229,7 +255,14 @@ public sealed class MissionScript
     /// (<c>inc byte [0x53920C]</c> @0x414010), die Hauptschleife arbeitet je
     /// Durchlauf genau einen ab (<c>dec</c> @0x415F0E) und deckelt den Vorrat
     /// bei vier (@0x415EFC) — sie kann also aufholen, aber nicht davonlaufen.
-    /// </summary>
+    ///
+    /// <para>⭐ <b>Nicht mehr nur gelesen, sondern gemessen (21.08.2026).</b>
+    /// Der Spieler hat die Stoppuhr an den Nachfristzähler im Let's Play
+    /// gehalten: eine einzelne Zahl steht <b>5 bis 6 reale Sekunden</b>. Ein
+    /// Schritt sind 250 Takte (<see cref="TicksPerGameMinute"/>), also
+    /// <c>250 / 5 s = 50 Takte/s</c>. Die Gegenhypothese »der Takt ist in
+    /// Wahrheit 250 Hz« hätte eine Sekunde je Zahl verlangt und ist
+    /// erledigt.</para></summary>
     public const int TicksPerSecond = 50;
 
     /// <summary>Alle 100 Takte laeuft der zweite Teil des Missionsblocks: die
@@ -822,6 +855,10 @@ public sealed class MissionScript
     }
     public bool Success { get; private set; }
     public int Mission => _script.Mission;
+    /// <summary>Wie oft ein Tor einen Bereich zugehalten hat — fuer den
+    /// Pruefstand.</summary>
+    public int GatesClosed;
+
     public int RulesFired { get; private set; }
 
     /// <summary>Wieviele Einsetzungen (<c>place_unit</c>) dieses Skript
@@ -1012,11 +1049,78 @@ public sealed class MissionScript
         return list;
     }
 
+    /// <summary>
+    /// ⚠⚠ <b>DER VARIABLENÜBERTRAG IST GEBAUT, ABER ABGESCHALTET</b> —
+    /// 20.08.2026, und der Grund gehört hierher, nicht in eine Fussnote.
+    ///
+    /// <para>Das Original trägt die 500 Skriptvariablen von einer Mission in
+    /// die nächste (<c>rep movsd</c>, <c>0x4D0406</c> hinein, <c>0x4D0126</c>
+    /// hinaus). Das ist gelesen, nachgemessen und in
+    /// <see cref="CampaignManager.CarriedVars"/> gebaut; <c>--vars-check</c>
+    /// belegt, dass ein übernommener Wert ankommt und die Mission ihre eigenen
+    /// Setzungen darüber behält.</para>
+    ///
+    /// <para><b>Eingeschaltet macht es Mission 26 unspielbar</b>, und das liegt
+    /// nicht am Übertrag, sondern an <b>unserem Skriptmodell</b>. Gemessen mit
+    /// <c>v[0] = 1</c> und 300 Takten: <b>775</b> Verstärkungsanforderungen zu
+    /// je 17 Einheiten und <b>3878</b> Meldungen »alle 20 Plätze belegt«. Es
+    /// feuert jeden Takt.</para>
+    ///
+    /// <para><b>Woran es liegt.</b> Im Original ist <c>0x4A2330</c>…<c>0x4A23F6</c>
+    /// EIN BLOCK hinter einem Tor (<c>0x4A2322</c>:
+    /// <c>cmp word[0xBC5690], 1; jne 0x4A23F6</c>), und die erste Anweisung
+    /// darin ist <c>inc v0</c> — der Block läuft also <b>genau einmal je
+    /// Runde</b>. Unser Ausleser hat daraus <b>drei gleichrangige Regeln</b>
+    /// gemacht, jede nur mit ihrer eigenen Bedingung. Die
+    /// <c>space_in</c>-Regel prüft <c>v[1] == 1</c>, und das bleibt bis zur
+    /// nächsten Runde stehen — also feuert sie jeden Takt.</para>
+    ///
+    /// <para>⚠ <b>Der Fehler ist alt</b>, er war nur unsichtbar: ohne Übertrag
+    /// wurde <c>v[0]</c> nie 1, die Kette lief nie an, und niemand konnte
+    /// sehen, dass die Verschachtelung fehlt. Ein zweiter Fall derselben Art
+    /// steckt vermutlich in jeder Mission mit geschachtelten Toren.</para>
+    ///
+    /// <para><b>Was zu tun ist</b>, bevor das hier auf <c>true</c> geht: der
+    /// Ausleser (<c>aekernel-tools/mission_setrules.py</c>) muss die
+    /// Blockgrenzen mitgeben — er kennt sie, er schreibt schon <c>gate</c> und
+    /// <c>_endregel_aus</c> —, und die Ausführung muss ein Tor einmal am
+    /// Blockanfang prüfen statt bei jeder Regel neu. Danach ist die stehende
+    /// Gegenprobe <c>mission_setrules.py check</c> (33 Missionen gleich) neu zu
+    /// fahren.</para>
+    ///
+    /// <para>⚠ Ich liefere lieber eine abgeschaltete richtige Sache aus als
+    /// eine eingeschaltete, die eine Mission flutet.</para>
+    /// </summary>
+    public const bool CarryVarsActive = true;
+
     private MissionScript(Script s)
     {
         _script = s;
+        // ⚠ ERST DIE ÜBERNOMMENEN, DANN DIE EIGENEN — in genau dieser
+        // Reihenfolge macht es das Original: 0x4D03C8 holt den ganzen Block
+        // v[] aus der Vormission zurück (`rep movsd`, 500 Wörter), und ERST
+        // DANACH läuft der Init-Arm der Mission und setzt seine eigenen Werte
+        // darüber. Andersherum würde die Mission ihre Setzungen wieder
+        // verlieren. Siehe Campaign.CampaignManager.CarriedVars.
+        if (CarryVarsActive)
+            foreach (var kv in CampaignManager.CarriedVars)
+                if (kv.Key >= 0 && kv.Key < _var.Length) _var[kv.Key] = kv.Value;
         foreach (var kv in s.Init)
             if (kv.Key >= 0 && kv.Key < _var.Length) _var[kv.Key] = kv.Value;
+    }
+
+    /// <summary>Was die Mission selbst setzt — für den Prüfstand, der wissen
+    /// muss, welche Werte NICHT vom Übertrag stammen dürfen.</summary>
+    public Dictionary<int, int> InitValues() => new(_script.Init);
+
+    /// <summary>Alle Variablen ungleich null — das, was in die nächste Mission
+    /// mitgeht. Siehe <see cref="CampaignManager.CarriedVars"/>.</summary>
+    public Dictionary<int, int> VarSnapshot()
+    {
+        var d = new Dictionary<int, int>();
+        for (int i = 0; i < _var.Length && i < CampaignManager.VarCount; i++)
+            if (_var[i] != 0) d[i] = _var[i];
+        return d;
     }
 
     /// <summary>The script of a mission, or null when none is carried for it.
@@ -1197,7 +1301,38 @@ public sealed class MissionScript
             var s = new Script { Mission = m };
             if (body.TryGetValue("block", out var bv)) s.Block = bv.AsString();
             if (body.TryGetValue("gate", out var gv)) s.Gate = Hex(gv.AsString());
-            if (body.TryGetValue("init", out var iv) &&
+            // ⚠ DIE TORE, aus `tore`. Sie stehen NEBEN den Regeln, nicht darin:
+        // die Regelliste bleibt byteweise dieselbe, damit die stehende
+        // Gegenprobe `mission_setrules.py check` (33 Missionen gleich) weiter
+        // gilt. Siehe Gate.
+        if (body.TryGetValue("tore", out var torv) && torv.VariantType == Variant.Type.Array)
+            foreach (var t in torv.AsGodotArray())
+            {
+                if (t.VariantType != Variant.Type.Dictionary) continue;
+                var td = t.AsGodotDictionary<string, Variant>();
+                var g = new Gate
+                {
+                    Von = td.TryGetValue("von", out var vo) ? Hex(vo.AsString()) : 0,
+                    Bis = td.TryGetValue("bis", out var bi) ? Hex(bi.AsString()) : 0,
+                };
+                if (g.Von <= 0 || g.Bis <= g.Von) continue;
+                if (td.TryGetValue("when", out var gw) && gw.VariantType == Variant.Type.Array)
+                    foreach (var c in gw.AsGodotArray())
+                    {
+                        var cd = c.AsGodotDictionary<string, Variant>();
+                        g.When.Add(new Cond
+                        {
+                            Kind = cd.TryGetValue("kind", out var k) ? k.AsString() : "",
+                            A = cd.TryGetValue("a", out var a) ? a.AsInt32() : 0,
+                            B = cd.TryGetValue("b", out var b) ? b.AsInt32() : 0,
+                            C = cd.TryGetValue("c", out var c2) ? c2.AsInt32() : 0,
+                            Op = cd.TryGetValue("op", out var o) ? o.AsString() : "==",
+                        });
+                    }
+                if (g.When.Count > 0) s.Gates.Add(g);
+            }
+
+        if (body.TryGetValue("init", out var iv) &&
                 iv.VariantType == Variant.Type.Dictionary)
                 foreach (var e in iv.AsGodotDictionary<string, Variant>())
                     if (int.TryParse(e.Key, out int n)) s.Init[n] = e.Value.AsInt32();
@@ -1785,9 +1920,42 @@ public sealed class MissionScript
     {
         BankVielleicht();
         if (full) BlockRuns++;
+        // ⚠⚠ DIE TORE. Das Original ist geradliniger Code mit Sprüngen, kein
+        // Satz gleichrangiger Regeln: ein Tor überspringt einen ganzen
+        // ADRESSBEREICH. Mission 26 zeigt, was der Unterschied ist —
+        //
+        //   0x4A2322  cmp word[v0], 1
+        //   0x4A232A  jne 0x4A23F6      <- überspringt 0x4A2330..0x4A23F6
+        //   0x4A2330  inc v0 ; inc v1   <- und erhöht v0 als ERSTES
+        //   0x4A23B7  space_in ×3       <- Bedingung v1==1
+        //
+        // Wer die drei Regeln einzeln prüft, lässt `space_in` feuern, solange
+        // v1 == 1 ist — also jeden Takt. Gemessen: **775** Anforderungen zu je
+        // 17 Einheiten in 300 Takten statt drei. Mit dem Tor läuft der Bereich
+        // einmal je Runde, weil v0 drinnen sofort auf 2 geht.
+        //
+        // ⚠ Ein Tor wird EINMAL JE DURCHLAUF geprüft, und zwar in dem
+        // Augenblick, in dem die erste Regel seines Bereichs erreicht wird —
+        // nicht vorher. Das ist der Punkt: im Original steht der Vergleich VOR
+        // der ersten Anweisung des Bereichs, also bevor irgendetwas darin die
+        // Variable ändert.
+        var zuBis = -1;                       // bis hierher wird übersprungen
+        var geprueft = _script.Gates.Count > 0
+                       ? new bool[_script.Gates.Count] : System.Array.Empty<bool>();
         for (int ri = 0; ri < _script.Rules.Count; ri++)
         {
             var r = _script.Rules[ri];
+            if (r.At > 0 && r.At < zuBis) continue;
+            for (int gi = 0; gi < _script.Gates.Count; gi++)
+            {
+                var g = _script.Gates[gi];
+                if (geprueft[gi] || r.At <= 0 || r.At < g.Von || r.At >= g.Bis) continue;
+                geprueft[gi] = true;
+                bool offen = true;
+                foreach (var c in g.When) if (!Test(c)) { offen = false; break; }
+                if (!offen) { zuBis = Mathf.Max(zuBis, g.Bis); GatesClosed++; }
+            }
+            if (r.At > 0 && r.At < zuBis) continue;
             if (!full && !r.EveryTick) continue;
             // ⚠ nur der Pruefstand: was --pay-check schon von Hand ausgeloest
             // hat, darf nicht ein zweites Mal von selbst feuern. Ohne diese

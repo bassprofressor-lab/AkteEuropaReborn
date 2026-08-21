@@ -286,11 +286,33 @@ public partial class MapEntityLayer
     public void PowerCheckStart() => _powerCheck = 0;
 
     /// <summary>Wieviele Teile die Fabriken eines Spielers zusammen haben.</summary>
+    /// <summary>
+    /// Wieviele Teile der Spieler hat — <b>überall, nicht nur in den
+    /// Fabriken</b>.
+    ///
+    /// <para>⚠⚠ 20.08.2026 — HIER STAND <c>BType is 2 or 3 or 4</c>, also nur
+    /// die drei Fabriken, und der Prüfstand meldete auf jeder Kampagnenkarte
+    /// <b>»0 Teile in 400 Wirtschaftstakten«</b> und daraufhin »Gegenprobe
+    /// FEHLGESCHLAGEN: der Mangel hat nichts gebremst«. Das sah wie ein Fehler
+    /// der Stromabrechnung aus und war einer der MESSUNG.</para>
+    ///
+    /// <para>Die Ursache: <c>Haul</c> fährt die fertigen Teile laufend zur
+    /// <b>Basis</b> (BType 1), vier je Takt gegen eine Fertigung von etwa
+    /// einem Teil je sechzehn Takten. Die Fabriklager sind also fast immer
+    /// leer — nicht weil nichts entsteht, sondern weil es sofort abgeholt
+    /// wird. Auf <c>map_DM_4</c> fiel es nicht auf, weil dort der Bahnzweig in
+    /// <c>Haul</c> früh aussteigt und sich etwas ansammelt.</para>
+    ///
+    /// <para>⚠ Die Lehre ist die teurere: ein Zähler, der an EINEM Ort nachsieht,
+    /// misst nicht die Menge, sondern den Ort. Gezählt wird jetzt bei jedem
+    /// Gebäude des Spielers — wo die Teile liegen, ist für die Frage
+    /// »wieviel wurde gefertigt« gleichgültig.</para>
+    /// </summary>
     private int PartsOf(int player)
     {
         int n = 0;
         foreach (var b in _entities)
-            if (b.IsBuilding && !b.Dead && b.Owner == player && b.BType is 2 or 3 or 4)
+            if (b.IsBuilding && !b.Dead && b.Owner == player)
                 n += b.StockW + b.StockF + b.StockS;
         return n;
     }

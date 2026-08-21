@@ -15,6 +15,7 @@ nachsehen oder Bildschirmfotos machen.
 | Frage | Antwort | eingebaut |
 |---|---|---|
 | Beendet der Knopf **BEENDEN** im Nachfrist-Fenster die Mission sofort? | **Ja** — die verbleibende Zeit ist damit verloren, die Nebenmission lässt sich nicht mehr abschließen. | ja, `MissionScript.EndGraceNow` |
+| Wie lange steht **eine Zahl** im Nachfrist-Fenster? | **5 bis 6 reale Sekunden** (Stoppuhr am Let's Play, 21.08.2026). Damit ist `TicksPerSecond = 50` gemessen, nicht mehr gesetzt — siehe Abschnitt 3. | ja, keine Änderung nötig |
 | **Mission 27**: warum 0 von 3 Untermissionen? | Die Basen müssen **eingenommen** werden, nicht zerstört. Bestätigt durch den Spieltext #370 (»Besetzung der Droiden-Basis innerhalb 20 Minuten«) **und** den Code (`objects(Typ1, P0) > 1`). | ja, alle drei Ziele lesbar |
 
 ---
@@ -35,46 +36,45 @@ viel. Vier Formen haben gefehlt, alle vier jetzt gelesen:
 * Untermissionen im ENDBLOCK (M7, M16) — der Leser uebersprang jeden
   Basisblock, der die Endfunktion ruft, samt allem anderen darin.
 
-### 3. Die Nachfrist — ⚠ die Antwort des Spielers WIDERSPRICHT dem Code (20.08.2026)
+### ~~3. Die Nachfrist~~ — ⭐ ERLEDIGT am 21.08.2026, **am Video nachgemessen**
 
-**Seine Messung am Video:** »die stoppuhr ist tatsächlich realistisch. 10
-sekunden sind 10 sekunden.« Also läuft »00:10« bis »00:00« in **zehn realen
-Sekunden**, ein Schritt dauert **eine Sekunde**.
+**Die Messung des Spielers:** »1 Sekunde im Spiel sind wohl so 5–6 Sekunden im
+echten Leben« — also steht **eine einzelne Zahl des Zählers 5 bis 6 reale
+Sekunden**, gestoppt am Let's Play.
 
-**Was im Programm steht** (C, @0x4160B3 ff, Befehl für Befehl):
+**Damit geht die Rechnung des Programms glatt auf.** Der Zähler geht alle
+**250 Takte** um eins herunter (@0x4160FC), der Taktzähler steigt innerhalb der
+Geschwindigkeitsschleife (@0x416097), und die Schleife läuft bei der Vorgabe
+**einmal** je Zeitgeberschlag von 20 ms:
 
-    al = byte[0x81AA28] ; inc al ; cmp al, 0xFA ; jb <raus>
-    ...  alle 250 Takte:
-    byte[0x81AA28] = 0
-    if (byte[0x4F6FA0] != 0)          ; laeuft eine Nachfrist?
-        byte[0x4F6FA4]--              ; EINS HERUNTER
+    250 Takte / 50 Takte je Sekunde = 5,00 s je Zahl        ✔ gemessen 5–6 s
 
-Der Zähler hängt also **eindeutig an denselben 250 Takten** wie die Spielminute
-— das war richtig gelesen. Und die Anzeige ist der **Rohwert** hinter »00:«
-(@0x487485), nicht eine Sekundenzahl.
+| Hypothese | ergäbe je Zahl | Urteil |
+|---|---|---|
+| **250 Takte @ 50 Hz, Geschwindigkeit 1** | **5,00 s** | ⭐ **das ist es** |
+| Geschwindigkeit 2 | 2,50 s | tot |
+| Geschwindigkeit 3 | 1,67 s | tot |
+| der Takt wäre in Wahrheit 250 Hz | 1,00 s | tot |
 
-**Damit klaffen zwei Aussagen um genau den Faktor 5:**
+⭐ **Der Befund reicht weit über dieses Fenster hinaus.** `TicksPerSecond = 50`
+war bis heute als **unsere Setzung** ausgeschildert und stand unter Verdacht,
+weil eine frühere Aussage des Spielers (»10 Sekunden sind 10 Sekunden«) einen
+Faktor 5 dagegen behauptete. Die Konstante ist jetzt **gelesen und gemessen**,
+und mit ihr alles, was an ihr hängt: Markttick, Bahn, Produktion, Fahrzeiten
+und sämtliche Skriptzeiten. Die frühere Aussage meinte nicht den Zähler.
 
-| | |
-|---|---|
-| 250 Takte je Schritt bei **50 Hz** | 5 s je Schritt → 10 Schritte = **50 s** |
-| gemessen am Video | 10 Schritte = **10 s** |
+**Am Code war nichts zu ändern** — er rechnet seit dem 20.08. genau so
+(`GameSpeed`, Tasten `+` und `−`, belegt mit `--takt-check`: *»Takte je
+Sekunde: Pause 0, Geschw. 1 = 50, 2 = 100, 3 = 150«*). Zu ändern waren nur die
+Stellen, die die 50 noch als unsichere Setzung auswiesen; drei sprachen sogar
+noch von `SimHz = 60`, das es seit dem 20.08. nicht mehr gibt.
 
-⚠ **Der Verdächtige ist nicht die 250, sondern unsere 50 Hz.** `TicksPerSecond
-= 50` ist eine SETZUNG von uns, keine gelesene Zahl. Wäre der Takt des
-Originals **250 Hz**, ginge seine Messung glatt auf — und dann stimmt auch
-unsere Umrechnung an anderen Stellen nicht (Markttick, Bahn, Produktion).
+**Die Anzeige bleibt der Rohwert** hinter »00:« (@0x487485) — das ist die des
+Originals, sie meint Spielminuten und nicht Sekunden.
 
-**Was mir hülfe — und es kostet zehn Sekunden Video:** wie lange steht **eine
-einzelne Zahl** im Fenster? Also von »00:10« bis »00:09«.
-
-* **eine Sekunde** → 250 Takte sind eine Sekunde, unser 50-Hz-Takt ist falsch,
-  und das ist ein Befund weit über dieses Fenster hinaus.
-* **fünf Sekunden** → unser Modell stimmt, und »10 Sekunden sind 10 Sekunden«
-  meinte etwas anderes als den Zähler.
-
-**Nicht geändert**, bis das entschieden ist: eine Anzeige umzustellen, die an
-einer falschen Grundkonstante hängt, verschöbe den Fehler nur.
+⚠ **Was das ausdrücklich NICHT sagt:** dass das Let's Play durchgehend auf
+Geschwindigkeit 1 lief. Für diese Stelle ist es belegt (5 s je Zahl); wer eine
+andere Zeit aus demselben Video misst, muss die Geschwindigkeit mitbedenken.
 
 ### ~~4. Zeigerarten~~ — ERLEDIGT am 20.08.2026, **ohne** Bildschirmfoto
 
@@ -481,10 +481,30 @@ also weiter offen.
    Baum: null Treffer. Genau die Frage, an der »Multiplayer online« hängt — und
    nebenbei die vollständige, geordnete Feldliste des Einheitensatzes aus dem
    Mund des Spiels.
-2. **Die Reihenfolge des Haupttakts steht im Klartext da**: 44 benannte
-   Stationen mit 28 Zufallsprüfpunkten dazwischen. Unser Takt hat eine
-   **andere** Reihenfolge, und mindestens 14 Stationen fehlen ganz — darunter
-   `Check gas`, `Self-defenders`, `Mines and traps`, `craters`, `Check AA`.
+2. **Die Reihenfolge des Haupttakts steht im Klartext da** — ⚠ **die Zahl
+   hier war falsch, berichtigt am 20.08.2026.** Es sind nicht 44 Stationen mit
+   28 Würfelpunkten, sondern **rund 85 Protokollpunkte**, davon 32 Würfelmarken
+   (`rnd A`, `rnd b`, `rnd c` … `rnd p`). Die 44 stammten aus einer alphabetisch
+   sortierten Etikettenspalte, nicht aus der Aufruffolge. Die echte Folge steht
+   zwischen C `0x415CF0` und `0x4168A7` und lässt sich so auslesen:
+   jeder `push <Zeichenkette>` vor dem Protokollaufruf benennt eine Station.
+
+   **Die Ankerpunkte:** `CPU` 14 (0x41618C) · `Power` 16 · `Trains` 21 ·
+   `Transported` 22 · `Buildings` **63** (0x416683) · `Movement` **64** ·
+   `Airplanes` 69 · `unexplored` 75 · `marks` 79.
+
+   ⭐ **Was davon gebaut ist (20.08.2026):** die Geschwindigkeitsschleife
+   (`SimHz` 50 statt 60, 1…3 Takte je Zeitgeberschlag), die **zwei getrennten
+   Durchgänge** (erst alle Gebäude `0x43CA50`, dann alle Einheiten `0x406CD0`
+   — vorher wechselte eine Schleife beides nach Listenstelle ab), `UpdateAi`
+   auf Station 14, und die vier verschobenen Stationen `Trains`,
+   `Transported`, `Airplanes`, `unexplored`, `marks`. Prüfstand
+   `--takt-check`.
+
+   **Offen bleibt:** die 32 Würfelzüge je Takt, die wir nicht ziehen (12 % aller
+   Wurfstellen — betrifft den Lockstep, nicht das Spielgefühl), und die
+   Stationen, die ganz fehlen: `Check gas`, `Self-defenders`,
+   `Mines and traps`, `craters`, `Check AA`.
    Die Reihenfolge *ist* der Determinismus.
 3. **`game.007` ist ein echter Spielstand** (566 KB) und wir haben ihn nie
    angefasst. Er enthält die Bauteiltafel im Klartext — also eine **zweite
@@ -1328,3 +1348,89 @@ war der Prüfstand**. Ein Nullbefund aus einem selbstgeschriebenen Vergleich
 gehört an einem bekannten Fall geeicht, bevor man ihm glaubt — hier hätte ein
 Blick auf die eine Zelle (43,37) gereicht, die der Laufzeit-Prüfstand schon
 gemeldet hatte.
+
+---
+
+## O. Der 20.08.2026 — was gebaut wurde und was dabei auffiel
+
+### Gebaut und mit einem Prüfstand belegt
+
+| Sache | Prüfstand | Beleg im Original |
+|---|---|---|
+| **Recycle** im Depot | `--recycle-check` | `0x4B28E0`, Befehl 506 |
+| **Transportieren** über die Bahn | `--transport-netz-check` | Flut `0x4CE710`, Befehl 0x206 |
+| **Einheitenmitnahme** zwischen Missionen | `--mitnahme-check` | Fensterart 38 `0x482290`, Liste `word[0x9937B8]` |
+| **Reparatur als Knopf** | `--repair-check` | `0x44A122`, 521 gegen 525 |
+| **Geschwindigkeitsschleife**, SimHz 50 | `--takt-check` | `0x416068`…`0x4168AE` |
+| **Zehn Gruppen, vier Merkpunkte** | `--gruppen-check` | `0x833A00` / `0x799FA8` |
+| **Missionsbezahlung gegen sec74** | `--selftest-pay` | zwei unabhängige Quellen |
+
+### ⚠ Die Fehlerklasse des Tages: der Prüfstand, der lügt
+
+Sechsmal in einer Sitzung, und jedes Mal anders:
+
+1. **Er misst den Ort statt der Menge.** `PartsOf` zählte nur in den Fabriken;
+   der Nachschub fährt die Teile aber zur Basis. Der Lauf meldete »0 Teile« und
+   »Gegenprobe FEHLGESCHLAGEN« — nach der Berichtigung 582 gegen 6.
+2. **Er räumt auf und sieht danach noch einmal hin.** `--gruppen-check` fragte
+   `GroupOf()` nach dem `_groups.Clear()` ab und meldete DURCHGEFALLEN, obwohl
+   alle sechs Messzeilen richtig waren.
+3. **Er lässt seinen Zustand liegen.** `--mitnahme-check` schrieb drei
+   Prüfeinheiten in `campaign.cfg`, die danach bei jedem Start von Mission 26
+   auf der Karte standen.
+4. **Sein Urteil umfasst nur einen Teil der Messung.** `--transport-netz-check`
+   meldete BESTANDEN, während zwei Zeilen darüber »STIMMT NICHT« stand.
+5. **Er geht nur den Hinweg.** `--hangar-check` endete beim Aussenden — und
+   deshalb blieb jahrelang unbemerkt, dass ein gelandetes Flugzeug in KEINE
+   Liste zurückkommt.
+6. **Er endet nie.** `--power-check` lief vollständig durch, druckte seinen
+   Bericht und kehrte dann in den Spielbetrieb zurück; nur `--quit-after`
+   beendet einen kopflosen Lauf. Gemeldet wurde »hängt«.
+
+**Die Lehre in einem Satz:** ein Prüfstand ohne Gegenprobe misst, dass er
+läuft — nicht, dass die Sache stimmt.
+
+### ⚠ Die zweite Fehlerklasse: zwei Zählungen in einem Zahlenraum
+
+* `Bud1` = −1 gegen `BuildingAt` = −1 (Bahnlinien, 11.08.)
+* `--bau-check=6` fiel still auf den Depot-Lauf zurück
+* **Platznummer gegen Listenstelle** — »kein verbundenes Gebäudepaar« zwei
+  Zeilen unter »128 verbundene Knotenpaare«
+* **`StExpand` = `FaRepair` = 2** — der Reparaturabbruch hätte einer Basis den
+  bezahlten Lagerausbau abgeräumt
+* Ein Zähler, der **je Einheit** statt **je Takt** hochläuft: die Drehbremse
+  der grossen Schiffe hing damit an Reihenfolge und Anzahl der Schiffe statt
+  am Taktzähler (gemeldet als »Schiffe fahren komisch«)
+
+### Berichtigungen an unserem eigenen Baum
+
+* `CommandOp.cs`: **alle vier** Sprungtafeln standen um 0x478 zu niedrig.
+* `CommandRecord.cs`: die Behauptung, dem C-Bau fehlten die Wiederholungsdateien
+  (»Bytesuche: keine«), ist widerlegt — er enthält alle vier.
+* `CwmExtra.RailNodes`: `+0x02` ist der **Gebäudetyp**, kein fünfter Anschluss;
+  es sind **vier** Anschlüsse (`+0x03..+0x06`).
+* `MapOpen.cs` überschrieb beim Speichern genau diesen Typ mit `0xFF`.
+* `CwmExtra.TransportLoads`: `sec5 +0x40` ist ein **Wort**, kein Byte
+  (17 Wortzugriffe gegen 7 Bytezugriffe, in beiden Bauten gleich).
+* `ImportSelfTest.RunCwm` sah **23 von 41** Karten und 3 von 13 Spielständen.
+* `GameHud.cs` schloss aus »keine Knopfaufrufe im Zeichner«, der Bedienblock
+  habe keine Bedienung — die Knöpfe liegen im Trefferarm `0x45E541`.
+* `SoundBankPlayer.cs` deutet `0x833A16` als Klangkanaltafel; es ist die
+  Mitgliederliste der zehn Gruppen.
+
+### Noch offen
+
+* **32 Würfelzüge je Takt** — wir ziehen sie nicht (Lockstep).
+* **Fünfzehn Gebäudebefehle** (501…537) laufen in `CommandBridge` nicht;
+  Empfehlung des Fensterberichts: **ein** Fenster, aber mit einer Tabelle je
+  Gebäudeart — die Nummern unterscheiden sich, weil der Parameter
+  `byte[Gebäude+0x19]` die laufende Nummer *innerhalb der Art* ist.
+* ~~**Fensterart 24 und 25** (Lokator, Gruppieren) sind gelesen, aber nicht
+  gebaut~~ — **gebaut am 20.08.2026** (`LocatorWindow.cs`, `GroupWindow.cs`),
+  belegt mit `--gruppen-check`.
+* **Drei Missionen** haben keine Tore bekommen, weil die zwei GAME.EXE dort
+  verschiedene Torfolgen liefern.
+* Die Fahrt der verlegten Einheit **mit den Güterzügen** ist nicht nachgebaut.
+* Zuarbeit des Spielers: ~~Nachfrist-Video~~ (**erledigt 21.08.2026**),
+  **Diagonalkosten** im Gefecht, **Mündungsanker**, die **y-Halbierung** beim
+  Einschlag, die zwei **Frachter in Mission 8**.

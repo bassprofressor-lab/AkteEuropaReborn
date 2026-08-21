@@ -1,4 +1,4 @@
-﻿namespace AkteEuropaReborn.UI;
+namespace AkteEuropaReborn.UI;
 
 using System;
 using System.Collections.Generic;
@@ -141,6 +141,22 @@ public sealed partial class BaseWindow : PanelContainer
     /// stellen. Der Knopf des Originals sitzt unten links (20,230).</summary>
     public Action<int>? OnSendOut;
 
+    /// <summary>»Recycle« — Zeile <c>k</c> aus dem Depot verwerten. Der Knopf
+    /// des Originals sitzt unten rechts (140,255) und schickt Befehl <b>506</b>
+    /// an <c>0x4B28E0</c>. ⚠ Er zahlt in <b>Teilen</b> in die drei Lager DIESES
+    /// Gebäudes, nicht in Geld — siehe
+    /// <c>MapEntityLayer.RecycleFromPanel</c>.</summary>
+    public Action<int>? OnRecycle;
+
+    /// <summary>»Transportieren« — Zeile <c>k</c> aus dem Depot ueber die Bahn
+    /// in ein anderes Gebaeude verlegen. Der Knopf des Originals sitzt unten
+    /// links (20,255). ⚠ Er ist KEIN Befehl: er verlangt erst ein Ziel, dann
+    /// prueft er die Verbindung (0x4497D0) und schickt Befehl 0x206.</summary>
+    public Action<int>? OnTransport;
+
+    /// <summary>Wartet gerade ein Transport auf sein Ziel?</summary>
+    public Func<bool>? TransportArmed;
+
     /// <summary>Ist das gewählte Gebäude ein MARKT? Dann heisst der Knopf
     /// »Bestellen« und die Liste ist die Ware, nicht die Bauliste.</summary>
     public Func<bool>? IsMarket;
@@ -214,7 +230,7 @@ public sealed partial class BaseWindow : PanelContainer
     /// Ausbauten: beide Mechaniken waren fertig und lagen nur auf Umschalt+B
     /// bzw. Y. Siehe <see cref="CancelChoice"/> und
     /// <see cref="HangarCount"/>.</summary>
-    private readonly Button _cancel = new(), _launch = new();
+    private readonly Button _cancel = new(), _launch = new(), _recycle = new(), _transport = new();
     private readonly Preview _preview = new();
     private readonly Label _stats = new();
 
@@ -354,7 +370,8 @@ public sealed partial class BaseWindow : PanelContainer
                  { (_rename, "Umbenennen"), (_remove, "Entfernen"),
                    (_make, "Produzieren"), (_design, "Erstellen"),
                    (_expand, "Lagerausbau"), (_prodUp, "Produktionserw."),
-                   (_cancel, "Abbrechen"), (_launch, "Starten") })
+                   (_cancel, "Abbrechen"), (_launch, "Starten"),
+                   (_recycle, "Recycle"), (_transport, "Transportieren") })
         {
             b.Text = text;
             b.FocusMode = FocusModeEnum.None;
@@ -397,6 +414,8 @@ public sealed partial class BaseWindow : PanelContainer
         _prodUp.Pressed += () => { OnUpgrade?.Invoke(false); Refresh(); };
         _cancel.Pressed += () => { OnCancelBuild?.Invoke(); Refresh(); };
         _launch.Pressed += () => { OnLaunch?.Invoke(); Refresh(); };
+        _recycle.Pressed += () => { OnRecycle?.Invoke(_sheet.Selected); Refresh(); };
+        _transport.Pressed += () => { OnTransport?.Invoke(_sheet.Selected); Refresh(); };
 
         var right = new VBoxContainer();
         right.AddThemeConstantOverride("separation", 4);
@@ -450,12 +469,63 @@ public sealed partial class BaseWindow : PanelContainer
 
     // ---- Reiter -------------------------------------------------------------
 
+    /// <summary>
+    /// <b>⚠⚠ DAS REITERBAND SCHALTET ZUGLEICH DEN GEBÄUDEZUSTAND</b> — gelesen
+    /// am 20.08.2026 aus dem Klickblock der Fensterart 6 (C <c>0x44A097</c>,
+    /// Tafel <c>0x44DE98</c>) und Zeile für Zeile nachgemessen:
+    ///
+    /// <code>
+    ///   cmp bp, 4
+    ///   jne 0x44A167
+    ///     dl = byte[16·Lagerplatz + 0x878E5A]
+    ///     if (dl == 1) -> nichts               ; repariert schon
+    ///     word[0xB8A3D8] = 0x209               ; Befehl 521 — REPARIEREN
+    ///   0x44A167:                              ; Elemente 1, 2, 3
+    ///     word[0xB8A3D8] = 0x20D               ; Befehl 525 — Status 0
+    /// </code>
+    ///
+    /// <para><b>»Reparatur« ist kein Reiter.</b> Der vierte Knopf hat keinen
+    /// eigenen Inhalt — der Zeichner fragt Merker #4 nirgends ab (nur #1
+    /// @0x467F7D, #2 @0x468EE0, #3 @0x46A273). Er stösst die Reparatur an und
+    /// sonst nichts; angezeigt bleibt, was vorher zu sehen war.</para>
+    ///
+    /// <para><b>Und die anderen drei brechen sie ab.</b> Befehl 525 setzt
+    /// <c>byte[0x878E5A + 16·L] = 0</c> (Behandler <c>0x43FF10</c>), Befehl 521
+    /// setzt ihn auf 1 (<c>0x43FD10</c>) — letzteres nur, wenn die Energie
+    /// unter dem Höchstwert liegt. Ein Reiterwechsel während einer laufenden
+    /// Reparatur hält sie also an. Das ist im Original so, und es ist keine
+    /// Nebenwirkung, sondern derselbe Klickpfad.</para>
+    ///
+    /// <para>⚠ Bei uns war »Reparatur« bis heute ein vierter Reiter mit
+    /// eigenem Inhalt und einem Knopf darin — man musste zweimal klicken, und
+    /// ein Reiterwechsel brach nichts ab. Beides ist jetzt richtig herum.</para>
+    /// </summary>
     private void SetTab(int which)
     {
+        // Der vierte »Reiter« ist der Reparaturknopf: anstossen und den
+        // ANGEZEIGTEN Reiter lassen, wo er war.
+        if (which == RepairTab)
+        {
+            _tabs[RepairTab].ButtonPressed = false;
+            for (int i = 0; i < _tabs.Length; i++) _tabs[i].ButtonPressed = i == _tab;
+            OnRepair?.Invoke();
+            Refresh();
+            return;
+        }
+        // Jeder andere Reiter haelt eine laufende Reparatur an — Befehl 525.
+        if (which != _tab) OnRepairStop?.Invoke();
         _tab = which;
         for (int i = 0; i < _tabs.Length; i++) _tabs[i].ButtonPressed = i == which;
         Refresh();
     }
+
+    /// <summary>Die Stelle des Reparaturknopfes im Reiterband — er ist der
+    /// vierte, aber kein Reiter. Siehe <see cref="SetTab"/>.</summary>
+    private const int RepairTab = 3;
+
+    /// <summary>Befehl <b>525</b>: die laufende Reparatur anhalten. Wird von
+    /// jedem Klick auf Depot, Produktion oder Forschung ausgelöst.</summary>
+    public Action? OnRepairStop;
 
     // ---- Füllen -------------------------------------------------------------
 
@@ -561,6 +631,22 @@ public sealed partial class BaseWindow : PanelContainer
         // gehen alle auf einmal los. Zwei verschiedene Handlungen — ein Knopf,
         // der beides »Starten« hiesse, waere eine Falle.
         int? hangar = HangarCount?.Invoke();
+        // »Recycle« steht NUR am Depotreiter — das Original hat ihn genau
+        // dort, neben »Aussenden«. ⚠ Und nicht am Flughafen: dessen Liste ist
+        // der Hangar, und fuer den kennt das Original kein Verwerten.
+        _recycle.Visible = _tab == 0 && !markt && hangar is not > 0;
+        _recycle.Disabled = OnRecycle == null || _sheet.Selected < 0 ||
+                            _sheet.Selected >= rows.Count;
+
+        // »Transportieren« steht neben »Recycle«, unter denselben Bedingungen.
+        // ⚠ Wartet gerade eine Zielwahl, sagt die Beschriftung das — sonst
+        // steckt der Spieler in einem Modus, ohne es zu wissen.
+        _transport.Visible = _recycle.Visible;
+        _transport.Disabled = OnTransport == null || _sheet.Selected < 0 ||
+                              _sheet.Selected >= rows.Count;
+        _transport.Text = TransportArmed?.Invoke() == true
+                          ? "Ziel anklicken…" : "Transportieren";
+
         _launch.Visible = hangar is > 0;
         if (hangar is > 0) _launch.Text = $"Alle starten ({hangar})";
 

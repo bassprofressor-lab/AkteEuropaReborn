@@ -1,4 +1,4 @@
-﻿namespace AkteEuropaReborn.Rendering;
+namespace AkteEuropaReborn.Rendering;
 
 using Godot;
 using GDict = Godot.Collections.Dictionary<string, Godot.Variant>;
@@ -307,6 +307,14 @@ public partial class MapViewer : Node2D
             // ist gelesen, siehe Campaign.CampaignManager.Balance. Vorher fing
             // JEDE Kampagnenmission bei $0 an; genau das hat der Spieler als
             // »in Kampagne 2 habe ich kein Geld« gemeldet.
+            // ⚠ DIE MITGENOMMENEN EINHEITEN, und zwar HIER: nach
+            // StartCampaign (die Karte steht, die Navigationskarte auch) und
+            // VOR dem Kameraschwenk auf PlayerHome — sonst sieht der Spieler
+            // sie erst, wenn er selbst hinscrollt. Siehe
+            // MapEntityLayer.PlaceCarriedUnits.
+            if (UI.SkirmishSetup.CampaignMission > 0)
+                _entities.PlaceCarriedUnits(UI.SkirmishSetup.CampaignMission, me);
+
             if (UI.SkirmishSetup.CampaignMission > 0)
             {
                 // ⚠ 13.08.2026 — DER SPIELSTAND EINES FRUEHEREN LAUFS. Ein
@@ -434,7 +442,26 @@ public partial class MapViewer : Node2D
         if (_shopCheckFlag) _entities.ShopCheckStart();
         if (_buyCheckFlag) _entities.BuyCheckStart();
         if (_dockCheckFlag) _entities.DockCheckStart();
-        if (_powerCheckFlag) _entities.PowerCheckStart();
+        // ⚠⚠ 20.08.2026 — EIN EINMAL-URTEIL BRAUCHT EINE EIGENE FRIST.
+        //
+        // Gemeldet als »--power-check haengt«. Es hing nichts: der Lauf ist
+        // vollstaendig durch, druckt seinen Bericht nach rund zwei
+        // Spielsekunden — und kehrt dann in den normalen Spielbetrieb zurueck,
+        // der nie endet. Die EINZIGE Stelle, die einen kopflosen Lauf beendet,
+        // ist `_quitAfter` (:1857), und die setzte nur `--quit-after=`.
+        //
+        // ⚠ Der Unterschied, auf den es ankommt: `--econ-check` ist eine
+        // WACHZEILE (sie setzt ihren Wecker jedes Mal neu, wie --store-check
+        // und --rail-check) — dort waere ein Ende falsch. `--power-check` ist
+        // ein Einmal-Urteil und soll enden.
+        //
+        // ⚠ Eine ausdrueckliche `--quit-after=` hat Vorrang: `ParseCmdline()`
+        // laeuft in `_Ready` vor dieser Zeile.
+        if (_powerCheckFlag)
+        {
+            _entities.PowerCheckStart();
+            if (_quitAfter <= 0f) _quitAfter = 15f;
+        }
         if (_radarCheckFlag) _entities.RadarCheckStart();
         if (_bauCheckFlag) _entities.BauCheckStart(_bauCheckOrder);
         if (_ausbauCheckFlag) _entities.AusbauCheckStart();
@@ -447,6 +474,48 @@ public partial class MapViewer : Node2D
         if (_marketCheck)
         {
             GD.Print(_entities.MarketCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_varsCheck)
+        {
+            GD.Print(_entities.VarsCheck(UI.SkirmishSetup.CampaignMission));
+            GetTree().Quit(0);
+            return;
+        }
+        if (_gruppenCheck)
+        {
+            GD.Print(_entities.GruppenCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_taktCheck)
+        {
+            GD.Print(_entities.TaktCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_repairCheck)
+        {
+            GD.Print(_entities.RepairCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_mitnahmeCheck)
+        {
+            GD.Print(_entities.MitnahmeCheck(UI.SkirmishSetup.CampaignMission));
+            GetTree().Quit(0);
+            return;
+        }
+        if (_transportNetCheck)
+        {
+            GD.Print(_entities.TransportNetCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_recycleCheck)
+        {
+            GD.Print(_entities.RecycleCheck());
             GetTree().Quit(0);
             return;
         }
@@ -718,6 +787,33 @@ public partial class MapViewer : Node2D
     private bool _producePics;
     /// <summary><c>--hangar-check</c> — kaufen, im Hangar liegen, starten.</summary>
     private bool _hangarCheck;
+
+    /// <summary><c>--recycle-check</c> — verwertet »Recycle« wirklich in die
+    /// drei Lager, und zahlt es nicht aus einem leeren Depot?</summary>
+    private bool _recycleCheck;
+
+    /// <summary><c>--transport-netz-check</c> — findet die Flutsuche Verbindungen,
+    /// und gehen Kampagne und Gefecht wirklich auseinander?</summary>
+    private bool _transportNetCheck;
+
+    /// <summary><c>--mitnahme-check</c> — kommen die mitgenommenen Einheiten
+    /// an ihren gelesenen Plätzen an, und bleibt es ohne Mitnahme leer?</summary>
+    private bool _mitnahmeCheck;
+
+    /// <summary><c>--vars-check</c> — reisen die Skriptvariablen mit?</summary>
+    private bool _varsCheck;
+
+    /// <summary><c>--repair-check</c> — startet der Knopf sofort, haelt ein
+    /// Reiterwechsel an?</summary>
+    private bool _repairCheck;
+
+    /// <summary><c>--takt-check</c> — 50 Hz, und macht die Geschwindigkeit
+    /// wirklich mehr Takte?</summary>
+    private bool _taktCheck;
+
+    /// <summary><c>--gruppen-check</c> — zehn Gruppen, Ausschliesslichkeit,
+    /// vier Merkpunkte.</summary>
+    private bool _gruppenCheck;
     /// <summary><c>--market-check</c> — Markt, Ware, Plattenpruefung.</summary>
     private bool _marketCheck;
     /// <summary><c>--sell-check</c> — eine Einheit verkaufen und zusehen.
@@ -1261,6 +1357,13 @@ public partial class MapViewer : Node2D
             else if (a == "--overdraw-check") _overdrawCheck = true;
             else if (a == "--produce-pics") _producePics = true;
             else if (a == "--hangar-check") _hangarCheck = true;
+            else if (a == "--recycle-check") _recycleCheck = true;
+            else if (a == "--transport-netz-check") _transportNetCheck = true;
+            else if (a == "--mitnahme-check") _mitnahmeCheck = true;
+            else if (a == "--vars-check") _varsCheck = true;
+            else if (a == "--repair-check") _repairCheck = true;
+            else if (a == "--takt-check") _taktCheck = true;
+            else if (a == "--gruppen-check") _gruppenCheck = true;
             else if (a == "--market-check") _marketCheck = true;
             else if (a == "--sell-check") _sellCheck = true;
             else if (a == "--shop-check") _shopCheckFlag = true;
@@ -2867,6 +2970,7 @@ public partial class MapViewer : Node2D
         _baseWindow.OnResearch = () => _entities.ResearchFromPanel();
         _baseWindow.RepairNote = _entities.RepairNote;
         _baseWindow.OnRepair = () => _entities.RepairFromPanel();
+        _baseWindow.OnRepairStop = () => _entities.StopRepairFromPanel();
         // ⚠ 18.08.2026 — DER SECHSTE FALL desselben Fehlers: Lagerausbau und
         // Produktionserweiterung lagen nur auf den Tasten V und C. Die Mechanik
         // war seit langem fertig und befehlsgenau gebaut (Lagerplatz +10,
@@ -2887,6 +2991,9 @@ public partial class MapViewer : Node2D
         // sprangen direkt auf die Karte. Siehe MapEntityLayer.Entity.Depot.
         _baseWindow.DepotRows = _entities.DepotRows;
         _baseWindow.OnSendOut = k => _entities.SendOutFromPanel(k);
+        _baseWindow.OnRecycle = k => _entities.RecycleFromPanel(k);
+        _baseWindow.OnTransport = k => _entities.TransportArmFromPanel(k);
+        _baseWindow.TransportArmed = () => _entities.TransportArmed;
         _baseWindow.IsMarket = () => _entities.PanelIsMarket();
 
         _designWindow = new UI.DesignWindow
@@ -3123,9 +3230,65 @@ public partial class MapViewer : Node2D
     /// <summary>Was der Knopf »Weiter« tut. Gibt es eine Folgemission, dann
     /// startet sie; sonst geht es ins Menue (⚠ unsere Setzung — wohin das
     /// Original am Kampagnenende fuehrt, ist ungelesen).</summary>
+    private UI.CarryWindow? _carryWindow;
+    private CanvasLayer? _carryLayer;
+
+    /// <summary>
+    /// Nach der Abrechnung kommt im Original <b>Fensterart 38</b, »Mitnehmbare
+    /// Einheiten« — erst danach startet die nächste Mission. Genau diese
+    /// Reihenfolge steht hier: »Mission beendet« → <i>Weiter</i> → Mitnahme →
+    /// <i>Start der nächsten Mission</i>.
+    ///
+    /// <para>⚠ Das Fenster kommt <b>nur</b>, wenn es etwas zu entscheiden gibt:
+    /// eine nächste Mission mit Stellplätzen (1…11 haben keine) und mindestens
+    /// eine überlebende Einheit. Sonst wäre es ein Fenster, das den Spieler
+    /// fragt, ob er nichts mitnehmen möchte.</para>
+    /// </summary>
     private void ContinueAfterMission()
     {
+        if (_nextMission > 0 && ZeigeMitnahme()) return;
         if (_nextMission > 0) StartNextMission(); else ToMenu();
+    }
+
+    private bool ZeigeMitnahme()
+    {
+        int plaetze = Campaign.CampaignManager.SpotsFor(_nextMission).Count;
+        if (plaetze <= 0) return false;
+        var roh = _entities.CarryCandidates(_entities.ViewPlayer);
+        if (roh.Count == 0) return false;
+
+        var zeilen = new System.Collections.Generic.List<UI.CarryWindow.Row>();
+        foreach (var (i, name, design, energie, wert) in roh)
+            zeilen.Add(new UI.CarryWindow.Row(i, name, design, energie, wert));
+
+        if (_carryWindow == null)
+        {
+            // ⚠ Ebene 96: UEBER der Abrechnung (95), sonst steht die Mitnahme
+            // dahinter — derselbe Fehler, den BuildEndBanner mit den
+            // Hilfefenstern schon einmal hatte.
+            _carryLayer = new CanvasLayer { Layer = 96 };
+            AddChild(_carryLayer);
+            _carryWindow = new UI.CarryWindow { ProcessMode = ProcessModeEnum.Always };
+            _carryLayer.AddChild(_carryWindow);
+            _carryWindow.OnStart = (mit, erloes) =>
+            {
+                var liste = new System.Collections.Generic.List<Campaign.CampaignManager.CarriedUnit>();
+                foreach (var r in mit)
+                    liste.Add(new Campaign.CampaignManager.CarriedUnit
+                    { Design = r.Design, Energie = r.Energie, Name = r.Name });
+                Campaign.CampaignManager.Carried = liste;
+                // Der Erloes fuer die Zurueckgelassenen geht aufs Konto — er
+                // steht im Original schon im Kontostand DIESES Fensters.
+                Campaign.CampaignManager.Balance += erloes;
+                GD.Print($"Mitnahme: {liste.Count} Einheit(en) gemerkt, " +
+                         $"${erloes} fuer den Rest");
+                if (_carryLayer != null) _carryLayer.Visible = false;
+                if (_nextMission > 0) StartNextMission(); else ToMenu();
+            };
+        }
+        _carryLayer!.Visible = true;
+        _carryWindow.Fill(zeilen, plaetze, Campaign.CampaignManager.Balance);
+        return true;
     }
 
     private void CheckEnd()
@@ -3214,6 +3377,13 @@ public partial class MapViewer : Node2D
             report.Balance += report.Pay;
         }
         if (record && mission > 0) Campaign.CampaignManager.Balance = report.Balance;
+        // ⚠ Die Skriptvariablen gehen in die nächste Mission mit — dasselbe
+        // `rep movsd` wie beim Geld, nur 500 Wörter statt acht Zahlen. Ohne das
+        // startet jede Mission mit v[] = 0, und Ketten, die auf einen von der
+        // Vormission gesetzten Wert warten, laufen nie an (Mission 26).
+        // ⚠ Nur bei `record`: ein Prüfstand darf den Fortschritt nicht anfassen.
+        if (record && mission > 0 && _entities.MissionVars() is { } vars)
+            Campaign.CampaignManager.CarriedVars = vars;
         _endWindow.Fill(report, won, name, label, hint);
         _endBanner.Visible = true;
         CenterEndWindow();
@@ -3755,7 +3925,22 @@ public partial class MapViewer : Node2D
                 case Key.O: _entities.StartResearch(); break;
                 case Key.K: _entities.StartRepair(); break;
                 case Key.L: _entities.ToggleRail(); break;
-                case Key.Y: _entities.LaunchAircraft(_entities.ViewPlayer); break;
+                // ⚠ DIE SPIELGESCHWINDIGKEIT, 1…3 wie im Original — die
+            // Fensterprozedur laesst ueber »+« nicht ueber 3 (@0x413A4C) und
+            // ueber »−« nicht unter 1 (@0x413A8F). Siehe
+            // MapEntityLayer.GameSpeed; der Turbo auf 20 ist NICHT auf einer
+            // Taste, weil er im Original ein eigener Umschalter ist.
+            case Key.Plus or Key.KpAdd or Key.Equal:
+                MapEntityLayer.GameSpeed = Mathf.Min(3, MapEntityLayer.GameSpeed + 1);
+                GD.Print($"Geschwindigkeit {MapEntityLayer.GameSpeed} " +
+                         $"({50 * MapEntityLayer.GameSpeed} Takte/s)");
+                break;
+            case Key.Minus or Key.KpSubtract:
+                MapEntityLayer.GameSpeed = Mathf.Max(1, MapEntityLayer.GameSpeed - 1);
+                GD.Print($"Geschwindigkeit {MapEntityLayer.GameSpeed} " +
+                         $"({50 * MapEntityLayer.GameSpeed} Takte/s)");
+                break;
+            case Key.Y: _entities.LaunchAircraft(_entities.ViewPlayer); break;
                 case Key.V: _entities.StartUpgrade(true); break;   // Lagerausbau
                 case Key.C: _entities.StartUpgrade(false); break;  // Produktionserw.
                 case Key.Escape:
@@ -3782,7 +3967,8 @@ public partial class MapViewer : Node2D
                     _showMinimap = !_showMinimap;
                     if (_minimap != null) _minimap.Visible = _showMinimap;
                     break;
-                default: HandleGroupKey(key); break;
+                case >= Key.F5 and <= Key.F8: HandleMarkKey(key); break;
+            default: HandleGroupKey(key); break;
             }
         }
     }
@@ -3792,18 +3978,141 @@ public partial class MapViewer : Node2D
     /// convention, ours — the original's key layout is not in the data.</summary>
     private int _lastGroup = -1;
 
+    /// <summary>
+    /// <b>F5 bis F8 — die vier Merkpunkte</b> (Fensterart 24 »Lokator«).
+    /// Gelesen am 20.08.2026: <c>F5..F8</c> springt hin (Arme 0x413C36,
+    /// 0x413C9D, 0x413D04, 0x413D6B → <c>0x438AE0</c>).
+    ///
+    /// <para>⚠ <b>Im Original setzt Strg+F5 den Merkpunkt NICHT</b> — es öffnet
+    /// nur den Lokator mit der Zeile vorgewählt; gesichert wird erst mit dem
+    /// Knopf »Sichern« (der Speicherer <c>0x438BD0</c> hat genau <b>einen</b>
+    /// Rufer, und das ist der Knopf). Solange wir das Fenster nicht haben,
+    /// sichert <c>Strg+F5..F8</c> bei uns unmittelbar. Das ist eine
+    /// <b>Abkürzung im Bedienweg</b>, keine in der Wirkung — und sie steht
+    /// hier, statt still zu wirken.</para>
+    ///
+    /// <para>⚠ Gemerkt wird die Zelle in der <b>Mitte des Ausschnitts</b>, wie
+    /// im Original, nicht die Mausstelle.</para>
+    /// </summary>
+    private void HandleMarkKey(InputEventKey key)
+    {
+        int i = key.Keycode switch
+        {
+            >= Key.F5 and <= Key.F8 => (int)(key.Keycode - Key.F5),
+            _ => -1,
+        };
+        if (i < 0) return;
+        if (key.CtrlPressed) { ZeigeLokator(i); return; }
+        var ziel = _entities.MarkTarget(i);
+        if (ziel == null) return;              // leer -> nichts, wie im Original
+        _camera.Position = _entities.RailCellPoint(ziel.Value.X, ziel.Value.Y);
+        ClampCamera();
+    }
+
+    private UI.LocatorWindow? _locator;
+    private CanvasLayer? _locatorLayer;
+
+    /// <summary>Den Lokator aufmachen, Zeile vorgewählt — das tut
+    /// <c>Strg+F5..F8</c> im Original (Öffner 0x442D40). ⚠ Gesichert wird
+    /// erst mit dem Knopf; der Speicherer 0x438BD0 hat genau einen Rufer, und
+    /// das ist er.</summary>
+    private void ZeigeLokator(int zeile)
+    {
+        if (_locator == null)
+        {
+            _locatorLayer = new CanvasLayer { Layer = 94 };
+            AddChild(_locatorLayer);
+            _locator = new UI.LocatorWindow { ProcessMode = ProcessModeEnum.Always };
+            _locatorLayer.AddChild(_locator);
+            _locator.Rows = () =>
+            {
+                var l = new System.Collections.Generic.List<(string, bool)>();
+                foreach (var m in _entities.Marks) l.Add((m.Name, !m.Leer));
+                return l;
+            };
+            _locator.OnLocate = i =>
+            {
+                var z = _entities.MarkTarget(i);
+                if (z == null) return;
+                _camera.Position = _entities.RailCellPoint(z.Value.X, z.Value.Y);
+                ClampCamera();
+            };
+            _locator.OnSave = (i, name) =>
+            {
+                var mitte = _entities.CellAt(_camera.Position);
+                if (mitte == null) return;
+                GD.Print(_entities.SetMark(i, mitte.Value, name));
+            };
+        }
+        _locator.Open(zeile);
+    }
+
+    private UI.GroupWindow? _groupWin;
+    private CanvasLayer? _groupLayer;
+
+    /// <summary>Das Gruppenfenster aufmachen, Zeile vorgewählt — das tut
+    /// <c>Strg+Zahl</c> im Original (Öffner 0x442C70). Gespeichert wird erst
+    /// mit dem Knopf.</summary>
+    private void ZeigeGruppen(int gruppe)
+    {
+        if (_groupWin == null)
+        {
+            _groupLayer = new CanvasLayer { Layer = 94 };
+            AddChild(_groupLayer);
+            _groupWin = new UI.GroupWindow { ProcessMode = ProcessModeEnum.Always };
+            _groupLayer.AddChild(_groupWin);
+            _groupWin.Rows = () =>
+            {
+                var l = new System.Collections.Generic.List<(string, int)>();
+                for (int g = 1; g <= MapEntityLayer.GroupCount; g++)
+                    l.Add((_entities.GroupName(g), _entities.GroupSize(g)));
+                return l;
+            };
+            _groupWin.OnStore = (g, name) =>
+            {
+                _entities.StoreGroup(g);
+                _entities.RenameGroup(g, name);
+            };
+            _groupWin.OnRecall = g =>
+            {
+                if (_entities.RecallGroup(g)) JumpToSelection();
+            };
+        }
+        _groupWin.Open(gruppe);
+    }
+
     private void HandleGroupKey(InputEventKey key)
     {
+        // ⚠ ZEHN GRUPPEN, NICHT NEUN — die NULL ist Gruppe 10. Das Original
+        // führt sie in einer Tafel von 10 Sätzen zu 422 Byte (0x833A00), und
+        // die Zifferntaste 0 ruft die zehnte (@0x41309A). Bis heute endeten wir
+        // bei neun, und die zehnte war unerreichbar.
         int n = key.Keycode switch
         {
             >= Key.Key1 and <= Key.Key9 => (int)(key.Keycode - Key.Key1) + 1,
             >= Key.Kp1 and <= Key.Kp9 => (int)(key.Keycode - Key.Kp1) + 1,
+            Key.Key0 or Key.Kp0 => 10,
             _ => 0,
         };
         if (n == 0) return;
-        if (key.CtrlPressed) { _entities.StoreGroup(n); _lastGroup = -1; return; }
+        // ⚠ STRG+ZAHL SPEICHERT NICHT — es öffnet den Dialog. Gelesen am
+        // 20.08.2026: der Speicherer 0x438F00 hat GENAU EINEN Rufer, und das
+        // ist der Knopf »Gruppe speichern« (0x44C29C). Strg+Zahl ruft nur den
+        // Öffner 0x442C70 und tauft die Gruppe auf »Group N«.
+        //
+        // ⚠ Bei uns speicherte es bisher unmittelbar. Das war unsere Setzung
+        // (so hält es .wolf/memory.md auch fest) — sie fällt zugunsten des
+        // Originals. Wer es schneller will, drückt im Dialog gleich »Gruppe
+        // speichern«; die Zeile ist schon vorgewählt und der Name gesetzt.
+        if (key.CtrlPressed) { ZeigeGruppen(n); _lastGroup = -1; return; }
         if (!_entities.RecallGroup(n)) return;
-        if (_lastGroup == n) JumpToSelection();
+        // ⚠ ZENTRIERT WIRD MIT UMSCHALT, nicht durch zweimaliges Drücken
+        // derselben Zahl. Das Original fragt die Umschalttaste INNERHALB des
+        // Abrufs ab (0x438D20) und schiebt dann die Kamera auf das erste
+        // Mitglied. Das »zweimal dieselbe Zahl« war unsere Setzung — sie bleibt
+        // zusätzlich stehen, weil sie niemandem weh tut und sich viele daran
+        // gewöhnt haben; das Original bekommt aber seinen eigenen Weg.
+        if (key.ShiftPressed || _lastGroup == n) JumpToSelection();
         _lastGroup = n;
     }
 

@@ -10,14 +10,35 @@ namespace AkteEuropaReborn.Simulation.Commands;
 ///   cmp eax,0x1F4   jg  →  nächster Bereich      ; 500
 ///   je              →  ein Sonderfall @0x4C3278
 ///   dec eax; cmp eax,0x1D; ja → Fehler           ; 30 Einträge
-///   jmp [eax*4+0x4C48DC]                         ; Bereich A: 1..30
+///   jmp [eax*4+0x4C4D54]                         ; Bereich A: 1..30
 ///   cmp eax,0x2BC   jg  →  nächster Bereich      ; 700
 ///   je              →  ein Sonderfall @0x4C3928
 ///   sub eax,0x1F5; cmp eax,0x24; ja → Fehler     ; 37 Einträge
-///   jmp [eax*4+0x4C4954]                         ; Bereich B: 501..537
+///   jmp [eax*4+0x4C4DCC]                         ; Bereich B: 501..537
 ///   sub eax,0x3CD; cmp eax,0xE4; ja → Fehler     ; 229 Einträge
-///   mov cl,[eax+0x4C4A74]; jmp [ecx*4+0x4C49E8]  ; Bereich C: 973..1201
+///   mov cl,[eax+0x4C4EEC]; jmp [ecx*4+0x4C4E60]  ; Bereich C: 973..1201
 /// </code>
+///
+/// <para>⚠⚠ <b>20.08.2026 — ALLE VIER TAFELADRESSEN STANDEN HIER UM 0x478 ZU
+/// NIEDRIG</b> (0x4C48DC / 0x4C4954 / 0x4C49E8 / 0x4C4A74). Der Aufbau des
+/// Blocks war richtig gelesen, die Adressen nicht — und ein gleichmässiger
+/// Versatz über alle vier heisst: nicht vier Tippfehler, sondern **eine**
+/// falsche Quelle.</para>
+///
+/// <para>Nachgewiesen ist es zweifach. Erstens durch Suche nach dem Opcode
+/// selbst (<c>FF 24 85 imm32</c>): im ganzen <c>.text</c> gibt es zwischen
+/// 0x4C4000 und 0x4C5000 <b>genau zwei</b> solche Sprünge, <c>0x4C26F7</c> mit
+/// <c>0x4C4D54</c> und <c>0x4C2719</c> mit <c>0x4C4DCC</c> — und beide stehen
+/// hinter genau den Schranken, die oben stehen (<c>dec eax; cmp eax,0x1D</c>
+/// bzw. <c>sub eax,0x1F5; cmp eax,0x24</c>). Zweitens durch den Inhalt: unter
+/// 0x4C4DCC stehen acht aufsteigende Codeadressen (0x4C3726, 0x4C374B,
+/// 0x4C3780 …), unter dem alten 0x4C4954 stehen Befehlsbytes.</para>
+///
+/// <para>⚠ Bei <c>0x4C4EEC</c> ist die Gegenprobe umgekehrt zu lesen: das ist
+/// die <b>Byte</b>-Tafel für <c>mov cl,[…]</c>, dort gehören aufsteigende
+/// Indizes hin (<c>02 01 22 02 | 03 04 05 06 …</c>) und eben KEINE
+/// Codeadressen. Wer sie mit demselben Massstab prüft wie die drei anderen,
+/// erklärt die richtige Adresse für falsch.</para>
 ///
 /// <para><b>Zwei Schranken, die für Lockstep und Wiederholung entscheidend
 /// sind</b> — und die zeigen, dass das Original seine Befehle selbst in

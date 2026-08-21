@@ -383,11 +383,36 @@ public static class CwmExtra
 
     /// <summary>sec33 — the node table, 120 x 8 (dest 0xa8d508). A building's
     /// `rail` (+0x1a) is its node number and the node's +0x00 points back at
-    /// the building — 76 of 76 agree on 1.DM and 10.DM. +0x02..+0x06 list up to
-    /// five attached links, 0xFF meaning empty.</summary>
+    /// the building — 76 of 76 agree on 1.DM and 10.DM.
+    ///
+    /// <para>⚠⚠ <b>20.08.2026 — HIER STAND »+0x02..+0x06 sind bis zu FÜNF
+    /// Anschlüsse«, UND DAS WAR FALSCH.</b> <c>+0x02</c> ist der
+    /// <b>Gebäudetyp</b>; die Anschlüsse sind <c>+0x03..+0x06</c>, also
+    /// <b>vier</b>. Der Anleger <c>AllocNode</c> (C <c>0x4B00A0</c>, F
+    /// <c>0x4AF9E0</c>) sagt es in vier Zeilen:</para>
+    /// <code>
+    ///   cmp dl, 0xC ; ja -> Fehler                    ; Typ 0..12
+    ///   mov  word[eax*8 + 0xA8D508], cx               ; +0x00 Gebäude
+    ///   mov  byte[eax*8 + 0xA8D50A], dl               ; +0x02 TYP
+    ///   mov dword[eax*8 + 0xA8D50B], 0xFFFFFFFF       ; +0x03..+0x06, VIER
+    /// </code>
+    /// <para>Ein einzelner Dword-Schreibvorgang leert die Anschlüsse — vier
+    /// Byte, nicht fünf. Und die Freiplatzsuche darüber liest <c>0xA8D50A</c>
+    /// (= <c>+0x02</c>) und hält <b>0</b> für frei (<c>test bl,bl; je</c>), was
+    /// nur für ein Typfeld einen Sinn ergibt.</para>
+    ///
+    /// <para>⚠ Was der Fehler anrichtete: die Schleife lief <c>k = 2..6</c>,
+    /// las also alle vier echten Anschlüsse — <b>und dazu den Typ als fünften,
+    /// erfundenen</b>. Der ist nie 0xFF, sondern 1..12, und das sind
+    /// <b>gültige Liniennummern</b>. Jeder Knoten mit einem Gebäude bekam so
+    /// eine Linie angehängt, die es nicht gibt. Kein Absturz, keine Meldung —
+    /// nur ein Netz, das dichter ist als das Original.</para></summary>
     public sealed class RailNode
     {
         public int Node, Building;
+        /// <summary>Der Gebäudetyp aus <c>+0x02</c>. <b>0 heisst: Satz frei</b>
+        /// — dasselbe Kriterium, das <c>AllocNode</c> benutzt.</summary>
+        public int Type;
         public List<int> Links = new();
     }
 
@@ -399,8 +424,15 @@ public static class CwmExtra
         for (int i = 0; i + 8 <= s.Length; i += 8)
         {
             if (AllZero(s, i, 8)) continue;
-            var n = new RailNode { Node = i / 8, Building = BitConverter.ToUInt16(s, i) };
-            for (int k = 2; k < 7; k++) if (s[i + k] != 0xFF) n.Links.Add(s[i + k]);
+            var n = new RailNode
+            {
+                Node = i / 8,
+                Building = BitConverter.ToUInt16(s, i),
+                Type = s[i + 2],
+            };
+            // ⚠ VIER Anschlüsse, +0x03..+0x06 — siehe den Kommentar an
+            // <see cref="RailNode"/>. Der Typ auf +0x02 ist KEIN Anschluss.
+            for (int k = 3; k < 7; k++) if (s[i + k] != 0xFF) n.Links.Add(s[i + k]);
             list.Add(n);
         }
         return list;
@@ -1300,7 +1332,20 @@ public static class CwmExtra
         for (int i = 0; i < n; i++)
         {
             int e = i * CwmData.EntityStride;
-            int zeiger = u[e + 0x40];
+            // ⚠⚠ 20.08.2026 — `+0x40` IST EIN WORT, KEIN BYTE. Hier stand
+            // `u[e + 0x40]`, also nur das untere Byte. Nachgezählt über beide
+            // GAME.EXE, wie oft der Motor die Adresse Sockel+0x40 anfasst:
+            // **17 Mal als Wort gegen 7 Mal als Byte**, und in C und F genau
+            // gleich (C 0x6E2708, F 0x6E1768). Der Leerwert ist entsprechend
+            // **0xFFFF**, nicht 0xFF.
+            //
+            // ⚠ Das war bisher unschädlich, aber nur durch Glück: der
+            // Rückzeigertest unten (`s[o+2] != i`) wirft einen falsch
+            // gelesenen Platz ohnehin weg. Ein Platz über 255 wäre also nicht
+            // falsch geladen, sondern still verschwunden — die unauffälligere
+            // der zwei Fehlerarten und darum die schlechtere.
+            int zeiger = BitConverter.ToUInt16(u, e + 0x40);
+            if (zeiger == 0xFFFF) continue;                           // leer
             if (zeiger <= 0 || zeiger >= slots) continue;
 
             int o = zeiger * TransportStride;

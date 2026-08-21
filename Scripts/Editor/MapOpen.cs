@@ -547,8 +547,26 @@ public static class MapOpen
     //  sec33 / sec34 / sec122 — das Gleisnetz
     // =======================================================================
 
-    /// <summary>sec33 — die Knotentafel. ⚠ Die fuenf Verweisplaetze +0x02..+0x06
-    /// werden auf 0xFF vorgesetzt: 0 ist die gueltige Linie 0.</summary>
+    /// <summary>sec33 — die Knotentafel.
+    ///
+    /// <para>⚠⚠ <b>20.08.2026 — DIESE ROUTINE HAT DEN GEBÄUDETYP ZERSTÖRT.</b>
+    /// Hier stand »die fuenf Verweisplaetze +0x02..+0x06«, und danach
+    /// <c>for (k = 2; k &lt; 7; k++) s[o+k] = 0xFF;</c> mit Anschlüssen ab
+    /// <c>j = 2</c>. <c>+0x02</c> ist aber der <b>Gebäudetyp</b>, es gibt nur
+    /// <b>vier</b> Anschlüsse (<c>+0x03..+0x06</c>) — belegt am Anleger
+    /// <c>AllocNode</c> C <c>0x4B00A0</c>, siehe
+    /// <see cref="Import.CwmExtra.RailNode"/>.</para>
+    ///
+    /// <para>Jedes Speichern schrieb dem Knoten also <b>0xFF</b> als Typ, oder
+    /// die erste Liniennummer. Das ist die schlimmere Hälfte des Fehlerpaares:
+    /// beim Lesen entstand nur eine erfundene Linie, hier ging eine echte
+    /// Angabe <b>verloren</b> — und zwar in die Datei hinein. Der Typ 0 heisst
+    /// für das Original »Satz frei«; ein Knoten mit 0xFF ist weder frei noch
+    /// gültig, und <c>AllocNode</c> gibt ihn nie wieder aus.</para>
+    ///
+    /// <para>⚠ <c>0xFF</c> bleibt für die <b>Anschlüsse</b> richtig: dort ist
+    /// 0 die gültige Linie 0, ein Leerwert muss also 0xFF sein. Nur eben nicht
+    /// für +0x02.</para></summary>
     private static int RailNodes(CwmFile m, JsonElement ent)
     {
         var s = m.Sec(33);
@@ -559,8 +577,13 @@ public static class MapOpen
             int o = I(e, "node") * 8;
             if (o < 0 || o + 8 > s.Length) continue;
             Put16(s, o, I(e, "building"));
-            for (int k = 2; k < 7; k++) s[o + k] = 0xFF;
-            int j = 2;
+            // +0x02 = Gebaeudetyp. Steht er im JSON, kommt er von dort; sonst
+            // bleibt stehen, was schon da ist. ⚠ NICHT ueberschreiben, wenn
+            // wir ihn nicht kennen — lieber der alte Wert als 0xFF.
+            if (e.TryGetProperty("type", out var ty)) s[o + 2] = (byte)ty.GetInt32();
+            // Nur die VIER Anschluesse leeren.
+            for (int k = 3; k < 7; k++) s[o + k] = 0xFF;
+            int j = 3;
             if (e.TryGetProperty("links", out var ls))
                 foreach (var v in ls.EnumerateArray())
                 {

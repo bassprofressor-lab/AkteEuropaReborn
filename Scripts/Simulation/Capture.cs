@@ -358,21 +358,32 @@ public partial class MapEntityLayer : Node2D
         b.Intruder = -1;
     }
 
-    /// <summary>A bar over every building that is being taken, in the colour of
-    /// the player taking it, plus a mark on the door tile. Called at the end of
-    /// <c>_Draw</c>.</summary>
+    /// <summary>
+    /// Die Türmarken auf der Einnahmezelle. <b>Der BALKEN steht nicht mehr
+    /// hier</b> — siehe die Warnung unten.
+    ///
+    /// <para>⚠⚠ <b>20.08.2026 — HIER WURDE EIN ZWEITER EINNAHMEBALKEN
+    /// GEZEICHNET.</b> Gemeldet als »wir haben noch 2 Einnahme Balken im
+    /// Gefecht«, und genau so war es: diese Fassung malte einen schmalen
+    /// Balken (Breite <c>TileW</c>, 4 px hoch, <b>eine</b> Farbe) bei
+    /// <c>Pos + (-TileW/2, -TileH/2 - 16)</c>, und der Zeichner in
+    /// <c>MapEntityLayer._Draw</c> malte kurz davor noch einen zweiten —
+    /// den <b>gelesenen</b>: Breite <c>CaptureTotal/6</c>, 8 px hoch, in
+    /// <b>zwei</b> Spielerfarben, weil das Original den bisherigen Besitzer
+    /// links und den Eindringling rechts zeigt.</para>
+    ///
+    /// <para>Der gelesene bleibt, dieser ist weg. ⚠ Und die Lehre ist die
+    /// teurere Hälfte: eine <b>zweite</b> Darstellung derselben Sache ist beim
+    /// Bauen unsichtbar — beide Fassungen für sich sahen richtig aus, der
+    /// Fehler entstand erst dadurch, dass es sie zweimal gab. Wer hier etwas
+    /// zeichnet, prüfe zuerst mit <c>grep</c>, ob es das schon gibt.</para>
+    /// </summary>
     private void DrawCaptureBars()
     {
         foreach (var b in _entities)
         {
             if (!Capturable(b) || b.CaptureProgress <= 0 || b.CaptureTotal <= 0) continue;
-            float fr = Mathf.Clamp((float)b.CaptureProgress / b.CaptureTotal, 0, 1);
-            var at = b.Pos + new Vector2(-TileW / 2f, -TileH / 2f - 16);
-            DrawRect(new Rect2(at - new Vector2(1, 1), new Vector2(TileW + 2, 6)),
-                     new Color(0, 0, 0, 0.8f));
             var c = OwnerColor(b.Intruder);
-            DrawRect(new Rect2(at, new Vector2(TileW * fr, 4)), c);
-
             var (door, front) = CaptureCells(b);
             DrawRect(new Rect2(CellCenter(door.X, door.Y) - new Vector2(3, 2),
                                new Vector2(6, 4)), new Color(c.R, c.G, c.B, 0.55f));

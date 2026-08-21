@@ -58,11 +58,23 @@ using System;
 /// <para>⚠ <b>Die zwei GAME.EXE sind nicht dasselbe Programm</b>, und das ist
 /// hier keine Nebensache. In C:\… ist jede dieser Zahlen <b>genau um 1
 /// kleiner</b> (119/76/47/24/14/4/4/5/6) und P10/P11 kommen auf <b>0</b>. Die
-/// fehlende Stelle ist immer dieselbe: der Protokollierer. In C:\… fehlen die
-/// Formatzeile <c>M:%d …</c>, die drei Wiederholungsdateien
-/// (<c>c:\replay.mes</c>, <c>.txt</c>, <c>.beg</c>) und alle ihre
-/// Fundstellen — direkte
-/// Bytesuche: keine. <c>F:\Akte Europa</c> ist ein <b>Entwicklungsbau</b>.</para>
+/// fehlende Stelle ist immer dieselbe: der Protokollierer.</para>
+///
+/// <para>⚠⚠ <b>20.08.2026 — WAS HIER STAND, WAR FALSCH.</b> Es hiess, in C:\…
+/// fehlten »die drei Wiederholungsdateien (<c>c:\replay.mes</c>, <c>.txt</c>,
+/// <c>.beg</c>) und alle ihre Fundstellen — direkte Bytesuche: keine«, und
+/// F:\… sei darum ein <b>Entwicklungsbau</b>. Beides stimmt nicht.
+/// Nachgemessen mit einer Bytesuche über die ganze Datei findet C:\… <b>alle
+/// vier</b> Namen: <c>replay.mes</c>, <c>replay.txt</c>, <c>replay.beg</c> und
+/// <c>replay.tst</c> — dazu den kompletten Aufzeichner. Der Unterschied ist
+/// <b>genau eine</b> Sache: die Spurzeile <c>"M:%d …"</c>, die es nur in F:\…
+/// gibt (dort @0x5383BC). Das erklärt auch die Differenz von 1 oben — sie
+/// kommt von dieser einen Zeile, nicht von einem fehlenden Aufzeichner.</para>
+///
+/// <para>⚠ Die Lehre daraus ist die teurere Hälfte: eine Bytesuche, die
+/// »keine« meldet, muss <b>nachgewiesen</b> werden, sonst begründet sie eine
+/// Behauptung über das ganze Programm (»Entwicklungsbau«), die dann
+/// weitergetragen wird. Hier ist sie zweimal weitergetragen worden.</para>
 ///
 /// <para>Deshalb, genau abgegrenzt: <b>P1..P9 und P15 sind in BEIDEN Bauten
 /// durch benutzenden Code belegt.</b> Die Existenz von <b>P10/P11 ist nur im
