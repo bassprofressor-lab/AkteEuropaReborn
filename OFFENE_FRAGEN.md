@@ -5038,3 +5038,21 @@ Rauch/Teilchen `0x77CAE8` · Marktlager `0x82AA30` (sec94) · Preise `0x81A3A8` 
 Zoomstufe `0x8C3D5B` · Zoomwerte `0x4FD610` · Gebäudenamen `0x4FDCB0` (16 × 20) ·
 Verträglichkeitstafel `0x4FDC00` (10 je Zielart) · Befehlsnamen `0x4FD660` (30 B) ·
 hervorgehobene Strecke `0x4FD63C` · Flugzeug in Planung `0x4FD640`.
+
+### AQ.2 Nachtrag — schon gelesen, aber ohne Adresse geführt
+
+⚠ Beim Durchsehen der »70 benannten, nie erwähnten« fiel auf: **neun davon sind
+längst gelesen**, sie standen nur ohne Adresse im Text. Derselbe Fehler wie in
+AQ, eine Ebene tiefer.
+
+| Marke | C | wo es steht |
+|---|---|---|
+| Cannot add new rawmat | `0x438980` | AL.4, sec79 — benennt Einheitenfeld `+0x40` |
+| Cannot remove rawmat | `0x438A10` | dieselbe Kette, Gegenweg |
+| Too many gr_ins to fix | `0x43A8D0` | AL.4, sec87 |
+| Wrong size of fly_part | `0x4AD520` | AL.1, sec112 — der Streuer |
+| hori strom | `0x4C9FC0` | AL.3, sec4 — der Takt der Einzelobjekte |
+| check_forest | `0x4CAB10` | Abschnitt AG, der Waldbrand |
+| AI: transport - no target found | `0x4BB7D0` | Abschnitt AF — **die erste** C/F-Differenz (sec59) |
+| Attack group not available | `0x4BC920` | Abschnitt Y, sec108 |
+| Wrong type of tr.unit | `0x4B92E0` | Abschnitt R, die verlegte Einheit |
