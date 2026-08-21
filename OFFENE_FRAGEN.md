@@ -3577,7 +3577,7 @@ Das ersetzt den Adressabtast durch eine Vollerhebung.
 
 ⚠⚠ **Und dabei ist herausgekommen: ein naiver Linearabtast des `.text` mit
 capstone bricht STILL AB** — C nach 78 845 Befehlen bei `0x42BC1D`, F schon nach
-16 622 bei `0x409FAE`. Das sind **4 % bzw. 18 %** des Abschnitts. Mit
+16 622 bei `0x409FAE`. Das sind **18 % bzw. 4 %** des Abschnitts (⚠ hier stand die Zuordnung vertauscht; am 21.08.2026 nachgerechnet). Mit
 Resynchronisation (bei Fehlschlag ein Byte weiter) sind es **443 471 / 442 952**
 Befehle.
 
@@ -3956,3 +3956,144 @@ brennende Felder ihren Waldgriff `50000+n` (Nullmodell x/y vertauscht: 27,8 %).
   Bilddaten gemessen — das Bildschirmfoto aus Abschnitt A wird weiterhin
   gebraucht.
 * Warum die Tür erst bei Zähler 250 gesetzt wird.
+
+---
+
+## AJ. ⭐⭐ DER NACHLAUF — alle 130 Abschnitte über die Relokationstafel nachgezählt (21.08.2026)
+
+Abschnitt AH hat gezeigt, dass unser Suchverfahren löchrig war. Dieser Abschnitt
+zieht die Folgerung: **jeder Abschnittspuffer beider EXE ist neu erhoben**, nicht
+abgetastet. Werkzeug: `aekernel-tools/reloc_refs.py` und `nachlauf.py`.
+⚠ Beide liegen in `aekernel-tools/` und sind damit **nicht versioniert** — wer
+sie braucht, findet die Herleitung hier.
+
+### ⚠ Zuerst zwei Berichtigungen an eigenen Angaben
+
+**1. Die Prozente waren vertauscht.** In AH stand »C nach 4 %, F nach 18 %«. Es
+ist umgekehrt: **C bricht nach 78 845 von 443 471 Befehlen ab (18 %), F nach
+16 622 von 442 952 (4 %)**. Nachgerechnet mit `reloc_refs.py --stat`, das die
+Zahl jetzt selbst ausrechnet, statt sie abzuschreiben.
+
+**2. Das erste Werkzeug hatte denselben Fehler wie das Verfahren, das es
+ersetzen sollte.** Es suchte von der Relokationsstelle **rückwärts** nach einem
+Befehl, der sie überdeckt. Der Selbsttest an sec58 — einem unabhängig gelesenen
+Fall — lieferte:
+
+```
+  0041EFC4  liest     adc eax, 0xb38d40          <-- FALSCH
+  0041EFC3  SCHREIBT  mov dword ptr [0xb38d40], edx   <-- richtig
+```
+
+`89 15 40 8D B3 00` gegen `15 40 8D B3 00`: **dieselben vier Adressbytes, ein
+Byte Versatz — und aus einem Schreiber wird ein Leser.** Genau die Art Fehler,
+die einen Negativbefund kippt, und zwar in die bequeme Richtung. Das Werkzeug
+baut jetzt **einen Befehlsindex von vorn durch das ganze `.text`** (mit
+Resynchronisation) und meldet **UNKLAR**, wenn der Befehl an einer Stelle die
+Adresse nicht wirklich trägt.
+
+⭐ **Der Selbsttest ist der Punkt.** Ein Werkzeug, das Negativbefunde prüfen soll,
+muss zuerst an einem bekannten Fall zeigen, dass es die richtige Antwort gibt.
+
+### ⭐ Und der Rohabtast lag in die andere Richtung falsch
+
+Der alte Befund zu sec101 meldete »roh über das ganze `.text`: **C = 9 Treffer,
+F = 5**«. Die Vollerhebung findet **5 in beiden**. Die vier zusätzlichen in C
+waren **Falschtreffer** des Bytemusters — der Rohabtast hatte sie schon damals
+als »Zufallstreffer« abgetan, aber geraten, nicht gemessen.
+
+**Damit sind beide alten Verfahren belegt fehlerhaft, und zwar gegenläufig:**
+der Linearabtast findet zu **wenig** (er bricht ab), der Rohabtast zu **viel**
+(er trifft Datenbytes). Ein Befund, der nur auf einem von beiden steht, ist
+wertlos.
+
+### Das Ergebnis: 130 Abschnitte, ein einziger wirklich toter
+
+| | |
+|---|---|
+| Abschnitte erhoben (beide EXE) | **130** |
+| **ohne jeden Benutzer ausser Lader und Speicherer** | **1 — sec36** |
+| mit Blockregister (`mov esi/edi, <Puffer>`) | 46 |
+| deren Verweiszahl in C und F abweicht | 21 |
+
+### ⭐⭐ sec36 ist tot — 10 500 Byte, C `0x830790` / F `0x82F7F0`
+
+```
+  C:  0041D60A  push 0x830790      (Speicherer)
+      0041E664  push 0x830790      (Lader)
+  F:  0041C7CA  push 0x82f7f0
+      0041D823  push 0x82f7f0
+```
+
+**Zwei Verweise je Fassung, sonst nichts.** Kein Schreiber, kein Leser, **kein
+`mov esi/edi`** — also auch kein Blockbefehl, auf den eine Konstante zeigt.
+
+⭐ **Und die Daten stimmen zu:** über **13 von 13** `.DM`-Dateien ist sec36
+**0 von 10 500 Byte ungleich null**. Ein Puffer, der geladen und gespeichert
+wird, nie angefasst und immer leer ist.
+
+Das ist der **sechste** Fund dieser Art — nach den vier toten Mauszeigern, den
+zwei toten Befehlsnummern (523/526), den 34 toten `SPR.DAT`-Bildern, dem toten
+Zufall in den Minensätzen und dem toten sec32-Initialisierer — und der erste,
+den der systematische Lauf gefunden hat statt eines Zufallsblicks.
+
+⚠ **Was das NICHT heisst:** 3 963 Blockbefehle stehen im `.text` von C. Keiner
+davon wird von einer Konstanten auf sec36 gerichtet, aber eine Blockoperation
+mit vollständig berechneter Adresse bliebe unsichtbar. Der Befund ist so hart,
+wie ein Negativbefund werden kann — bewiesen ist er nicht.
+
+### ⚠ sec101 und seine vier Nachbarn tragen denselben Fingerabdruck
+
+| Abschnitt | Grösse | Verweise / Schreiber / Leser / Blockregister |
+|---|---:|---|
+| sec100 | 92 800 | 5 / 0 / 2 / **3** |
+| **sec101** | 9 200 | 5 / 0 / 2 / **3** |
+| sec102 | 500 | 5 / 0 / 2 / **3** |
+| sec103 | 1 000 | 5 / 0 / 2 / **3** |
+| sec104 | 32 | 5 / 0 / 2 / **3** |
+
+Fünf Abschnitte, **identisches Muster in beiden EXE**: null Schreiber, dafür je
+drei Stellen, die die Adresse nach `esi`/`edi` laden. Das ist die Handschrift
+einer **Blockkopie** — genau das, woran sec101 einmal falsch für tot erklärt
+wurde. ⭐ **Der Fingerabdruck ist damit ein Suchmuster**, kein Einzelfall: wo
+»0 Schreiber, aber Blockregister« steht, ist die Frage nicht *ob*, sondern *wo*
+kopiert wird.
+
+### ⚠ 21 Abschnitte zählen in C und F verschieden viele Verweise
+
+Die grössten Abstände: sec111 (361 zu 369), sec54 (75 zu 81), sec48 (148 zu
+141), sec7 (117 zu 122), sec5 (2 370 zu 2 360), sec3 (1 094 zu 1 086), sec52
+(13 zu 15), **sec59 (10 zu 9)**.
+
+⭐ sec59 ist die **schon bekannte** Verhaltensdifferenz (C setzt `sec59 = 1`
+@`0x4BB7FC`, F nicht). Dass der Lauf sie unabhängig wiederfindet, ist die
+Eichung dieser Spalte.
+
+⚠⚠ **Aber die anderen zwanzig sind KEIN Befund**, und das ist wichtig: eine
+abweichende Verweiszahl entsteht auch dann, wenn beide Fassungen dasselbe
+rechnen. Der sec32-Lauf hat es vorgeführt — dort waren vier Stellen anders
+codiert (`[ecx + edi*4 + ADR]` gegen `[edx + ADR]`), **die Rechnung war
+dieselbe**. Registerwahl, Einbettung und Befehlsanordnung des Übersetzers
+verschieben die Zahl, ohne dass sich etwas ändert.
+
+→ Die zwanzig sind **Kandidaten für eine Verhaltensdifferenz**, mehr nicht. Wer
+einen daraus machen will, muss die Stellen paarweise gegenlesen, so wie es bei
+sec59 und sec32 geschehen ist. **Als Liste sind sie trotzdem wertvoll**: sie
+sagt, wo zu suchen wäre, und sie sagt, wo NICHT — die 109 übrigen Abschnitte
+stimmen in der Zahl überein.
+
+### Was der Nachlauf NICHT geprüft hat
+
+Die Vollerhebung greift nur bei **Puffern mit einer Adresse**. Diese
+Negativbefunde stehen weiterhin auf dem alten Verfahren und wären einzeln
+nachzulaufen:
+
+* **Feldweise Befunde** — »sec62 `+0x00` hat 0 Lesestellen«, »`+2` ist tot«,
+  »`+9` ist tot«. Der Puffer wird benutzt; die Frage ist, welches Byte darin.
+  Das entscheidet nur Codelesen.
+* **Konstanten statt Adressen** — »Opcode 975 wird nirgends erzeugt«. Eine
+  Zahl im Befehlsstrom ist keine Relokation.
+* **Die vier toten Mauszeiger (6, 7, 8, 25)** und die **34 toten
+  `SPR.DAT`-Bilder**: beides hängt an Sprungtafeln und Ladeschleifen, nicht an
+  Adresskonstanten.
+
+⚠ Alle drei Gruppen sind damit **ungeprüft**, nicht bestätigt.
