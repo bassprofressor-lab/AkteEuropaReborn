@@ -3854,7 +3854,7 @@ zwei Unterbänder: `1…59` und `60…98`.
 | `60000 + n` | 9 924 | Gebäudeplatz n aus sec3 (300 Plätze) |
 | `< 8000` | 2 198 | Einheitenplatz |
 | `10000…13999` | 290 | Infanteriezelle |
-| `≥ 60300` | 842 | ⚠ noch unbenannt |
+| `61000 + n` | 842 | ⭐ **sec4-Objekt n** — benannt am 21.08.2026, siehe Abschnitt AL |
 
 ⚠⚠ **Berichtigung an einer Zahl, die wir zitieren:** `0xEA60` ist **60000**, nicht
 50000. Der Bereichstest im Aufdecker (C `0x420253`) prüft also **60000…60299 =
@@ -3951,7 +3951,7 @@ brennende Felder ihren Waldgriff `50000+n` (Nullmodell x/y vertauscht: 27,8 %).
   Tafel nicht.
 * **`sec20 == 98`**: 1102 Einzelzellen, 90,5 % davon `0xFFFF` in sec6. Ein
   sperrender Aufbau — welcher, sagt keine Datei.
-* **`sec6 ≥ 60300`**: 842 Zellen, keiner Tafel zugeordnet.
+* ~~**`sec6 ≥ 60300`**: 842 Zellen, keiner Tafel zugeordnet.~~ ⭐ **ERLEDIGT am 21.08.2026:** es ist `61000 + n` = sec4-Objekt n, belegt am Loeschtrupp C `0x4CA610` und mit 1913/1913 Rueckschluss gemessen. Siehe Abschnitt AL.
 * **Die weiche Nebelkante selbst.** Der Saum (`sec50 == 2`) ist noch nicht gegen
   Bilddaten gemessen — das Bildschirmfoto aus Abschnitt A wird weiterhin
   gebraucht.
@@ -4283,3 +4283,261 @@ Kachelvarianten, die nie angeschlossen wurden.
 * **Zeigerweitergabe über mehrere Register oder Strukturen** ist nicht verfolgt.
 * Der **`ROBO.CWR`-Kopf** wurde aus der F-Fassung gelesen; zu C könnte eine
   andere Datei gehören.
+
+---
+
+## AL. ⭐⭐ DIE UNBESEHENEN ABSCHNITTE — vier Läufe, und fast alles ist gelesen (21.08.2026)
+
+Vier Agenten haben die Abschnitte gelesen, die bis dahin nur mit Adresse und
+Grösse in der Ladertafel standen. **Von 27 sind jetzt 25 gedeutet, 2 bleiben
+ausdrücklich offen.**
+
+⚠ **Zuerst eine Berichtigung an meiner eigenen Zählung.** Ich hatte »27
+unbesehene Abschnitte, 5,3 % der Datei« gemeldet. Die Zahl war zu pessimistisch:
+sie zählte Erwähnungen in **diesem Dokument**, nicht das, was der Nachbau schon
+weiss. `CwmExtra.cs` führt sec34 seit langem als *»sec34 — the SPOJ lines,
+80 × 214«*. Über Dokument **und** Code gezählt waren es **20 Abschnitte, 3,5 %**.
+
+⚠ Und eine zweite: ich hatte einem Agenten die C-Adresse von `sec116` als
+`0x815484` in den Auftrag geschrieben. Richtig ist `0x8154E4`, und so steht es
+auch hier — **der Tippfehler war meiner, nicht der des Dokuments**. Der Agent hat
+ihn über die Probe `.bss` C = F + `0xFA0` selbst gefunden (21 von 22 gingen auf,
+nur dieser ergab `0xF40`).
+
+### AL.1 ⭐⭐ `sec112` = `fly_part` — das Partikelsystem der Explosionen
+
+**C `0xA51110` / F `0xA50170`, 72 000 B = 2000 Sätze × 36.** Der Name steht im
+Bild: der Streuer bricht mit **`"Wrong size of fly_part"`** ab (C `0x504108`).
+
+Die Schrittweite 36 kommt aus drei unabhängigen Stellen in **beiden** EXE
+(`lea eax,[ebx*4]` + `[eax+eax*8+Basis]`), dazu die Schleifenschranke
+`Basis + 6 + 36000`.
+
+| Versatz | Feld | Versatz | Feld |
+|---|---|---|---|
+| +0x00/+0x01 | Kachel X / Y | +0x14 | f32 Steiggeschwindigkeit |
+| +0x02/+0x03 | Feinlage X (0…39) / Y (0…19) | +0x18 | f32 Schwerkraft je Takt |
+| +0x04 | i16 Höhe Z | +0x1C | f32 Bogenhöhe |
+| +0x06 | **Art: 0 frei, 1 Trümmer, 2 Rauch** | +0x20 | i16 Grundhöhe, überblendet |
+| +0x08 | u16 Sprite/Anim | +0x22 | Bildnummer = `(Takt + Satz) mod Bildzahl` |
+| +0x0A…+0x0E | Ziel (Kachel, Feinlage, Höhe) | +0x23 | Rauchfahne 0/1/2 |
+| +0x10 | Tempo | +0x0F | Richtung — **geschrieben, NIE gelesen** |
+
+**Art 1** fliegt auf einer echten Wurfparabel (`+1C += +14`, `+14 -= +18`),
+**Art 2** treibt mit dem **Wind** — über dieselben `byte[0x4F8D68]` /
+`byte[0x4F8D6C]`, die auch den Waldbrand tragen, mit einer 8-Richtungstafel bei
+`0x5040E0`.
+
+⭐ **Vergabe:** erster freier Platz von 0 aufwärts; ist alles voll, würfelt der
+Erzeuger `rnd%1000` und **gibt auf, wenn das > 300 ist** — Partikel werden unter
+Last **verworfen**, nicht überschrieben.
+
+**Die zwei tragenden Messungen**, nur auf lebenden Art-1-Sätzen:
+
+| Aussage | Treffer | Nullmodelle |
+|---|---|---|
+| `+04 == +20 + trunc(+1C)` (die Wurfbahn) | **832/832 = 100 %** | `+14` statt `+1C`: **3,97 %** · Nachbarsatz: **3,25 %** · ohne `+20`: **17,07 %** |
+| Stil `+23` folgt dem Sprite | **832/832 = 100 %** | Nachbarsatz: **83,17 %** |
+
+⚠ Das zweite Nullmodell mit **83 %** ist der Grund, warum es dazugehört: ohne die
+Gegenzahl sähe die Regel nach einer Entdeckung aus, obwohl fast jede Zuordnung
+sie erfüllt hätte.
+
+⭐ **Nebenertrag:** weil `+22` gleichverteilt ist, verrät sec112 die
+**Bildzahlen der Effekt-Sprites**, die sonst nur in einer Laufzeittabelle stehen:
+Anim 19…24 → 1 Bild, 29…38 → 6, 200…204 → 8, 210…212 → 12, 240…242 → 12.
+
+#### ⭐⭐ Die ZWEITE Verhaltensdifferenz zwischen den Auslieferungen
+
+| | C `0x42EAB0` | F `0x42DC70` |
+|---|---|---|
+| Kappe je Bildschirmzeile | `cmp bp,0x1F3` | `cmp ax,0x1F3` |
+| **zusätzliche Zeilenschranke** | **`cmp al,0x46 / jae überspringen`** | **fehlt** |
+
+C weigert sich, ein Partikel für Bildschirmzeile ≥ 70 einzutragen; **F trägt es
+ein und schreibt über das Feldende hinaus.** C ist die gehärtete Fassung. Sonst
+ist die Kette befehlsgleich (Aktualisierer 524/524, Streuer 195/195). Das ist
+nach `sec59` der **zweite** belegte Unterschied.
+
+⚠ **Offen:** der Puffer fasst 2000 Sätze, alle drei Schleifen enden bei 1000 —
+aber **drei der 13 Dateien haben Sätze bis 1999 belegt**, und die bestehen alle
+Formprüfungen. Aus den ausgelieferten EXE ist die obere Hälfte unerreichbar. Für
+den Nachbau: **1000 aktive Plätze, 2000 Plätze Speicher.**
+
+### AL.2 ⭐ `sec34` + `sec35` — die Verkehrslinien und ihre Belegungskarte
+
+⭐ **Die krumme Zahl ist geknackt:** `16481 = ⌈257 · 513 / 8⌉` — 131 841 Bit, 7
+Füllbits. **`sec35` ist ein Bitfeld**, ein Bit je Zelle, Index `257·yh + x`, wobei
+`yh` in **halben Zeilen** zählt. Vier unabhängige Belege, darunter ein
+Zwillings-Bytefeld, das auf **7 Byte genau** vor sec34 endet.
+
+**`sec34` = 80 Linien à 214 B**, Satzweite dreifach aus dem Code. ⚠ **Zwei
+Schranken im selben Bild:** die Aufräumschleife läuft über alle **80**, der
+Zustandsautomat nur über die ersten **60**.
+
+| Prüfung | Modell | Nullmodell |
+|---|---|---|
+| Strecke ab `(+2,+3)` endet auf `(+4,+5)` | **215/215 = 100 %** | vertauscht 0/215 · `(+2,+3)` 0/215 · `(+6,+7)` 0/215 |
+| Satzweite 214 gültig | **780/780 = 100 %** | 212: 2,6 % · 213: 4,6 % · 215: 14,6 % |
+| Streckenzelle → Bit gesetzt | **3577/4961 = 72,1 %** | Index vertauscht 1,69 % · **Zufallszelle 0,73 %** |
+| Fehlstellen je Linie | genau vorn 2 + hinten 3, **215/215** | — |
+
+⚠ **Das war für uns keine Neuentdeckung, sondern eine Bestätigung über Kreuz:**
+unsere `RailLine` führt seit langem `Bud1`, `Bud2`, `Steps` und `Faze (+0xd5)` —
+genau diesen Satz. Neu sind die **Endpunkte** `+0x02…+0x05`, die **Schritttafel**
+`0x5043C0` und `sec35` vollständig.
+
+⚠ Offen: warum 42 von 215 Linien **kein** Bit tragen, und dass 40 % der gesetzten
+Bits zu keiner heutigen Linie gehören (in `1.DM` liegen 66 von 70 davon
+**ausserhalb der Karte**). Zu sec35 gibt es nur Test und Setzen, keinen Löscher —
+das Feld sammelt offenbar an.
+
+### AL.3 ⭐ `sec19` = die Flugzeuge · `sec4` = die brennbaren Einzelobjekte
+
+**`sec19` — 200 × 68 B, bestätigt.** Die Zahlen stehen wörtlich im Code
+(`cmp dx, 0xC8`, `i·68`). Gegen die acht Flugzeug-Vorlagen der EXE gehalten,
+**sieben Felder auf einmal**:
+
+| | Treffer | |
+|---|---|---|
+| **Schrittweite 68** | **189/190 = 99,5 %** | der eine Ausreisser ist ein Editorrest in `NET05.CWM` |
+| Satzanfang +4 | 0/169 = 0 % | |
+| Schrittweite 67 / 69 / 70 | 13,5 % / 8,9 % / 8,8 % | |
+
+⭐ **`(0,0)` ist kein Ort, sondern der Merker »im Hangarbestand«:** 19 Sätze
+stehen darauf, **alle 19** stehen in einer Hangarliste, von den 161 nicht
+gelisteten **keiner**. ⚠ Die Umkehrung gilt nicht — 11 der 30 gelisteten sind
+unterwegs. Die Liste ist der **Bestand**, nicht »steht gerade da«.
+
+Arten: 1 `Shark` (Jagd), 2 `Whale` (Bomber), 10 `Fight` (Kampfheli), 13 `Fuel`,
+14 `Ammo`. Besitzer `+0x09` bei 189/189 im Bereich 0…7.
+
+**`sec4` — der Verdacht war FALSCH, und die Widerlegung hat ihn aufgeschlossen.**
+Die Vermutung lautete: sec4 beginnt am Ende der Waldtafel sec18, ist also
+vielleicht eine zweite Spalte dazu. ⚠ **Die Adressnachbarschaft ist sogar eine
+Falle:** drei der 41 Fundstellen im sec4-Fenster sind gar keine sec4-Zugriffe,
+sondern die **Schleifenenden von sec18** — genau weil sec18 dort endet.
+Binderarithmetik, keine Bedeutung.
+
+sec4 ist **2000 × 6** mit eigenem Indexraum, und das Spiel benennt es:
+**`hori strom`** / **`dohorel strom`** (C `0x53968C` / `0x53967C`). ⭐ **sec18 sind
+die Wald_felder_, sec4 die einzelnen Objekte** — bedient von derselben Routine:
+
+```
+v = imap[X·256+Y]
+if 50000 <= v < 56000:  sec18[v-50000].Zustand = 1    ; brennender Wald aus
+if 61000 <= v < 64000:  sec4[v-61000].Zustand = 0     ; brennendes Objekt aus
+```
+
+⭐ **Damit ist das imap-Band `61000 + n` benannt** — es stand hier als
+»`≥ 60300` · 842 · ⚠ noch unbenannt«.
+
+| Prüfung | Treffer | Nullmodelle |
+|---|---|---|
+| Kachel der Karte im Band `10000+T … +9` | 1931/1961 = 98,5 % | Zufallszelle **0,15 %** · Nachbarzelle 0,10 % |
+| **Rückschluss imap → sec4** | **1913/1913 = 100 %** | vertauscht **0** · Index ±1 **0** · Zufallszelle **0** |
+
+⚠ **Andere Konstanten als beim Wald, und das ist wichtig:** Klasse 0 zündet bei
+Schaden **> 80 / 41…80 / 21…40 (⅓) / 11…20 (⅙) / ≤ 10**, setzt
+`Zustand = rand()%106 + 150` und zählt **abwärts**. Der Wald hat 70/46/23/13 und
+zählt **aufwärts**. Die zwei Tafeln teilen die Mechanik, **nicht die Zahlen** —
+wer die Einzelobjekte baut, darf die Waldwerte nicht wiederverwenden.
+
+⚠ **Berichtigt:** `GAMESTATE_RE.md` §3 führte sec4 als »Map Markers, Start-/
+Zielmarken je Spieler«. Die »fünf erwarteten« auf `map_01` waren eine Koinzidenz;
+`4.DM` führt elf.
+
+### AL.4 ⭐ Die 22 kleinen — 14 gedeutet, 4 teilweise, 2 offen
+
+Fundstellenzahl in **C und F bei allen 22 gleich**.
+
+#### ⭐⭐ Die Missionsuhr ist vollständig
+
+```
+Takt++ → sec118 ++, Umbruch bei 250
+   → sec64/65/66 ++
+   → sec115 ++, Umbruch bei 60
+      → sec116 ++, Umbruch bei 24
+         → sec117 ++
+```
+
+`0x4CF570` (C) / `0x4CF110` (F), befehlsgleich: **`sec115 + 60·sec116 +
+1440·sec117`** — das ist `game_time()` mit seinen 288 Aufrufen. Also
+**Minuten / Stunden / Tage**. Das Spiel schreibt es selbst:
+`'Missionszeit : '` + Tage + `' Tag, '` / `' Tage, '` + Stunden + Minuten.
+
+⭐ **Eine Spielminute = 250 Takte = 5,00 reale Sekunden** — dieselbe Zahl, die am
+Nachfrist-Fenster mit der Stoppuhr gemessen wurde. Ein Spieltag = 2 reale Stunden.
+
+**sec65/sec66** sind **derselbe Minutenzähler, dreifach geführt**, seit
+Programmstart und nie zurückgesetzt: je vier Fundstellen (ein `inc`, Speicherer,
+Lader), **kein Leser**. `sec64 == sec65 == sec66` in 13/13.
+
+#### ⭐ sec124 — die Statistiktafel, und die Rechnung geht auf
+
+8 Spieler × 4 Klassen × (zerstört / verloren), Überschriften **Bewaffnete ·
+Unbewaffnete · Schiffe · Flugzeuge**. Probe in `1.DM`: die Klassensummen
+reproduzieren `sec53 +0x20` (Kills) und `+0x24` (Verluste) — **8 von 8 Spielern,
+kein Ausreisser**.
+
+⚠ **Die Schiffsspalte hat in beiden EXE keinen Schreiber** — untergegangene
+Schiffe erscheinen in der Statistik nie.
+
+#### Die übrigen
+
+| Abschnitt | Deutung | tragende Zahl |
+|---|---|---|
+| **sec128** | »Gebaute Einheiten« des lokalen Spielers | drei `inc`, je nur wenn der Bauende der lokale ist |
+| **sec75/76** | je Spieler: Entwurf und Klasse der zuletzt gebauten Einheit, **einmal abholbar** (`take_flag`) | Klasse gegen `sec47+0x18 < 150`: **32/34** |
+| **sec79** | 100 × 8 — **RAWMAT**-Sätze (`'Cannot add new rawmat'`) | ⭐ benennt **Einheitenfeld +0x40 = Rawmat-Platz** |
+| **sec96/97** | 10 × 16 laufende **Forschungen** (`'Too many researches'`) + Losnummer | sec97 ≠ 0 **genau** in den 5 Dateien mit sec96-Satz: 13/13 |
+| **sec87** | 50 × 4 — »gr_ins to fix«-Warteschlange | 3 Reste, alle mit `Einheit+0x04 == 0xFF`: **3/3** |
+| **sec90** | 20 × 32 — die **Handelsschiffe** (`'More mer_ships needed'`) | `8.DM`: x = 183 bei W = 180 — knapp ausserhalb, wie einlaufend |
+| **sec92/93** | zahlender Spieler und Gebäude je Nachschubplatz | in 13/13 vollständig 0 — reiner Laufzeitzustand |
+| **sec113** | 400 × 6 — Rauch/Staub; `+0x02` = **15 × Geländehöhe** | 85/85 mit x < W und y < H; `+0x02` nur 0/15/30/45 |
+| **sec88** | 50 × 4 — Flächenwirkung mit Radius 6, jeder dritte Takt | ⭐ Nebenertrag: **`0x4222C0`** — bisher als offen geführt — ist der sec114-Erzeuger |
+| **sec69** | 8 × 100 × 6 Ziellisten — **bestätigt** | Typbyte in allen belegten Sätzen = 1 |
+| **sec121** | 240 × u16, y der Waggons — **bestätigt** | `Waggon+0x01 == sec121[i]/2` bei **424/424** |
+
+#### ⚠ Zwei bleiben offen
+
+**`sec77`** (8 B): fünf Fundstellen, darunter die Missionsvokabel `0x4D0970`
+(`byte[Basis + arg1] = arg0`), die hier ohnehin als offen steht. **Kein Leser.**
+⭐ `sec77[p] == 1 ⇒ sec53[p].Zustand == 1` (aktive KI) in **28 von 28** — geprüft
+und **verworfen** wurden »hat Gebäude« (widerlegt), »hat Einheiten«, »hat Ziele«.
+Der Leser läuft mit Sicherheit über ein Register: sec57 liegt lückenlos dahinter,
+und `esi−8` sieht die Relokationstafel nicht.
+
+**`sec67`** (8 B): vier Fundstellen (Speicherer, Lader, zwei Nullungen), **0 in
+13/13 Dateien**. Eines von sechs 8-Byte-Feldern, die der Lader im selben Muster
+paarweise nullt. Für den Nachbau: acht Nullbytes lesen und schreiben.
+
+### ⚠⚠ Ein Fehler in UNSEREM Werkzeug, von einem der Läufe gefunden
+
+`reloc_refs.py` zählte `movsx reg, word ptr […]` als **SCHREIBT**. Die Ursache
+war `mnemonic.startswith("movs")` — `movsx` und `movsd` fangen so an, sind aber
+keine Zeichenkettenbefehle und **lesen nur**. Bei `sec121` waren von »6
+Schreibstellen« nur **2** echte.
+
+Berichtigt: `startswith("rep")` bleibt, dazu eine **Aufzählung** der echten
+Zeichenkettenbefehle. Gegenprobe: sec121 meldet jetzt 2 statt 6, und der
+Selbsttest an sec58 bleibt bei 2 Schreibern / 4 Lesern.
+
+⚠ Gefunden hat es der Lauf, der die Zahlen **nachgerechnet** hat, statt sie zu
+übernehmen. Genau dafür steht in jedem Auftrag, jede Fundstelle einzeln zu
+zerlegen — und es ist der zweite Werkzeugfehler an einem Tag, den erst ein
+Selbsttest sichtbar gemacht hat.
+
+### ⚠ Wodurch alle vier Läufe blind sind
+
+* **Berechnete Adressen.** `mov esi, Nachbar; mov al, [esi−8]` erscheint unter
+  dem **Nachbarn**. Bei `sec77` und `sec67` ist genau das die wahrscheinlichste
+  Erklärung für »kein Leser«.
+* **Zeiger über den Stapel.** Bei `sec88` im Fund belegt: die Basis erscheint
+  **einmal**, danach läuft die ganze Schleife registerrelativ und kein einziger
+  Feldzugriff ist sichtbar.
+* **Blockbefehle.** Alle 22 kleinen werden vom Kurzweg des Laders per
+  `rep stosd` genullt; Einzelfelder sind darin unsichtbar.
+* **Nur 13 Dateien**, und `3/5/6/7/10.DM` sind offensichtlich Abkömmlinge
+  derselben Karte — »13 von 13« wiegt dort weniger, als es aussieht.
+  `sec124` und `sec128` hängen an **einer** Datei.
