@@ -29,6 +29,21 @@ public static class Settings
     public const string SavePath = "user://settings.cfg";
 
     public static bool Fullscreen { get => B("fullscreen", false); set => Set("fullscreen", value); }
+
+    /// <summary>
+    /// <b>DIE FENSTERGRÖSSE</b> — 0 heisst »so lassen, wie es kommt«.
+    ///
+    /// <para>⚠ <b>Das ist UNSERE Zutat</b>, so wie der Streckfaktor daneben:
+    /// das Original von 1997 lief in einer festen Auflösung (640×480) und kennt
+    /// keine Wahl. Gewünscht war sie trotzdem.</para>
+    ///
+    /// <para>⚠ Sie wirkt nur im <b>Fenster</b>. Im Vollbild bestimmt der
+    /// Bildschirm die Auflösung, und Godot füllt ihn — eine hier eingestellte
+    /// Grösse würde dort stillschweigend übergangen, und das wäre schlimmer als
+    /// gar keine Einstellung. Der Einstellungsschirm sagt es darum dazu und
+    /// sperrt die Auswahl, solange Vollbild an ist.</para></summary>
+    public static int WindowW { get => I("window_w", 0); set => Set("window_w", value); }
+    public static int WindowH { get => I("window_h", 0); set => Set("window_h", value); }
     public static bool VSync { get => B("vsync", true); set => Set("vsync", value); }
     /// <summary>0 = no limit.</summary>
     public static int FpsLimit { get => I("fps_limit", 0); set => Set("fps_limit", value); }
@@ -255,6 +270,23 @@ public static class Settings
         DisplayServer.WindowSetMode(Fullscreen
             ? DisplayServer.WindowMode.Fullscreen
             : DisplayServer.WindowMode.Windowed);
+
+        // Die Fenstergroesse, und nur im Fenster — siehe WindowW.
+        if (!Fullscreen && WindowW > 0 && WindowH > 0)
+        {
+            var gewuenscht = new Vector2I(WindowW, WindowH);
+            if (DisplayServer.WindowGetSize() != gewuenscht)
+            {
+                DisplayServer.WindowSetSize(gewuenscht);
+                // ⚠ Und mittig setzen: ein Fenster, das nach dem Vergroessern
+                // halb aus dem Bildschirm ragt, sieht wie ein Fehler aus.
+                int schirm = DisplayServer.WindowGetCurrentScreen();
+                Vector2I frei = DisplayServer.ScreenGetUsableRect(schirm).Size;
+                Vector2I ecke = DisplayServer.ScreenGetPosition(schirm)
+                              + (frei - gewuenscht) / 2;
+                DisplayServer.WindowSetPosition(ecke);
+            }
+        }
         DisplayServer.WindowSetVsyncMode(VSync
             ? DisplayServer.VSyncMode.Enabled
             : DisplayServer.VSyncMode.Disabled);

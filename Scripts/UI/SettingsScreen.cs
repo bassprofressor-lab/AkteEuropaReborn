@@ -96,8 +96,40 @@ public partial class SettingsScreen : Control
         box.AddChild(new HSeparator());
 
         box.AddChild(Head("Bild"));
+
+        // ⚠ Vorwaerts erklaert: der Vollbildschalter muss die Aufloesungsauswahl
+        // sperren koennen, also wird sie zuerst gebaut und der Schalter danach.
+        var aufl = new OptionButton();
+        var groessen = Aufloesungen();
+        aufl.AddItem("automatisch");
+        foreach (var g in groessen) aufl.AddItem($"{g.X} × {g.Y}");
+        int gewaehlt = 0;
+        for (int k = 0; k < groessen.Count; k++)
+            if (groessen[k].X == Settings.WindowW && groessen[k].Y == Settings.WindowH)
+                gewaehlt = k + 1;
+        aufl.Selected = gewaehlt;
+        aufl.ItemSelected += i =>
+        {
+            if (i == 0) { Settings.WindowW = 0; Settings.WindowH = 0; }
+            else
+            {
+                var g = groessen[(int)i - 1];
+                Settings.WindowW = g.X; Settings.WindowH = g.Y;
+            }
+            Settings.Apply();
+        };
+        aufl.Disabled = Settings.Fullscreen;
+
         box.AddChild(Check("Vollbild", Settings.Fullscreen,
-            v => { Settings.Fullscreen = v; Settings.Apply(); }));
+            v =>
+            {
+                Settings.Fullscreen = v;
+                // ⚠ Im Vollbild bestimmt der Bildschirm die Aufloesung. Die
+                // Auswahl stehenzulassen, waere eine Luege: sie taete nichts.
+                aufl.Disabled = v;
+                Settings.Apply();
+            }));
+        box.AddChild(Row("Aufloesung (nur im Fenster)", aufl));
         box.AddChild(Check("Bildsynchronisation (VSync)", Settings.VSync,
             v => { Settings.VSync = v; Settings.Apply(); }));
 
@@ -228,6 +260,21 @@ public partial class SettingsScreen : Control
         mvolRow.AddChild(mvol);
         mvolRow.AddChild(mvolVal);
         box.AddChild(mvolRow);
+        // ⚠ 21.08.2026 — der Regler kann nicht mehr, als er hier sagt, und das
+        // gehoert dazugeschrieben statt vorgetaeuscht. Gemeldet war: ihn
+        // herunterzuziehen nahm AUCH die uebrigen Klaenge weg. Ursache und
+        // Begruendung stehen in MidiMusic.Volume.
+        box.AddChild(new Label
+        {
+            Text = "Der Regler schaltet die Musik auf 0 STUMM. Dazwischen regelt er nichts:\n"
+                 + "Windows spielt MIDI ueber einen Sequenzer, der den Lautstaerkebefehl nicht\n"
+                 + "kennt (Rueckgabe 261, Unbekannter Befehl). Der fruehere Weg darum herum\n"
+                 + "stellte das MIDI-Geraet SYSTEMWEIT leiser und nahm damit auch alle anderen\n"
+                 + "Klaenge mit — er ist entfernt.",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            CustomMinimumSize = new Vector2(520, 0),
+            Modulate = new Color(0.75f, 0.75f, 0.68f),
+        });
 
         // The two speech switches are the original's own, down to their names,
         // and both blocks of samples are identified. What is not identified is
@@ -296,4 +343,38 @@ public partial class SettingsScreen : Control
         c.Toggled += v => set(v);
         return c;
     }
+    /// <summary>Die Fenstergrössen zur Auswahl — <b>gefiltert nach dem, was
+    /// wirklich auf den Bildschirm passt</b>.
+    ///
+    /// <para>⚠ Eine Liste, die 3840×2160 auf einem 1080p-Schirm anbietet, ist
+    /// keine Auswahl, sondern eine Falle: das Fenster wäre grösser als der
+    /// Bildschirm, und der Spieler käme an die Einstellungen nicht mehr heran,
+    /// um es zurückzustellen. Darum wird gegen den <b>nutzbaren</b> Bereich
+    /// geprüft (ohne Taskleiste), nicht gegen die rohe Bildschirmgrösse.</para>
+    ///
+    /// <para>⚠ <b>Unsere Zutat, und das Seitenverhältnis ist der Grund für die
+    /// Auswahl:</b> das Original lief in 640×480 (4:3). Die Liste führt beides —
+    /// die 4:3-Stufen für alle, die es original mögen, und die 16:9-Stufen für
+    /// heutige Schirme.</para></summary>
+    private static System.Collections.Generic.List<Vector2I> Aufloesungen()
+    {
+        var alle = new[]
+        {
+            new Vector2I(640, 480), new Vector2I(800, 600), new Vector2I(1024, 768),
+            new Vector2I(1280, 960), new Vector2I(1600, 1200),
+            new Vector2I(1280, 720), new Vector2I(1366, 768), new Vector2I(1600, 900),
+            new Vector2I(1920, 1080), new Vector2I(2560, 1440), new Vector2I(3840, 2160),
+        };
+        int schirm = DisplayServer.WindowGetCurrentScreen();
+        Vector2I frei = DisplayServer.ScreenGetUsableRect(schirm).Size;
+        var raus = new System.Collections.Generic.List<Vector2I>();
+        foreach (var g in alle)
+            if (g.X <= frei.X && g.Y <= frei.Y) raus.Add(g);
+        // ⚠ Passt gar nichts (winziger Schirm), bleibt wenigstens die kleinste
+        // Stufe stehen — eine leere Auswahl sähe nach einem Fehler aus.
+        if (raus.Count == 0) raus.Add(alle[0]);
+        raus.Sort((x, y) => (x.X * x.Y).CompareTo(y.X * y.Y));
+        return raus;
+    }
+
 }

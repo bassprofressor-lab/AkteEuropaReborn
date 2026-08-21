@@ -176,10 +176,59 @@ public static class MidiMusic
             Send($"setaudio {Alias} volume to {p * 10}", quiet: true);
             MciVolumeCode = LastCode;
         }
-        if (!OperatingSystem.IsWindows()) { VolumeCode = -1; return; }
-        // 0..100 -> 0..0xFFFF, gleiche Lautstärke links wie rechts
-        uint v = (uint)(p * 0xFFFF / 100);
-        VolumeCode = MidiOutSetVolume(IntPtr.Zero, v | (v << 16));
+        VolumeCode = -1;
+        // ⚠⚠ 21.08.2026 — HIER STAND midiOutSetVolume, UND ES HAT DAS GANZE
+        // SPIEL STUMMGESCHALTET.
+        //
+        // Gemeldet: »wenn man unter Ton MIDI Musik herunterregelt, sind auch
+        // die normalen Klaenge weg. MIDI-Musik an/aus laesst sie dagegen
+        // hoerbar.« Genau der Unterschied entlarvt die Ursache: der Schalter
+        // ruft Stop(), der Regler rief midiOutSetVolume.
+        //
+        // Der Aufruf lautete MidiOutSetVolume(IntPtr.Zero, ...). Die Null ist
+        // KEIN Handle, sondern die GERAETENUMMER 0 — und bei den ueblichen
+        // Windows-Treibern haengt das MIDI-Geraet am selben Ausgabepfad wie
+        // alles andere, was das Programm spielt. Wer die Musik auf 20 % stellt,
+        // stellt die ganze Anwendung auf 20 %.
+        //
+        // ⭐ Der Hinweis stand seit dem 10.08.2026 als Warnung im Kommentar
+        // darunter (»stellt bei manchen Treibern die Lautstaerke geraeteweit
+        // und ueber das Programm hinaus«) — gemessen hat es erst der Spieler.
+        // Eine Warnung, die man stehenlaesst statt ihr nachzugehen, verhindert
+        // nichts.
+        //
+        // Der Aufruf ist ERSATZLOS raus. Was bleibt:
+        //   * setaudio oben, falls ein Sequenzer es beherrscht (der von
+        //     Windows nicht, Rueckgabe 261 »Unbekannter Befehl«),
+        //   * und der Riegel unten: 0 % heisst STUMM, und stumm machen wir,
+        //     indem wir die Musik anhalten — genau das, was der Schalter tut,
+        //     der nachweislich funktioniert.
+        //
+        // ⚠ WAS DAS KOSTET, und es gehoert gesagt: zwischen 1 und 100 regelt
+        // der Schieber nichts mehr, solange der Windows-Sequenzer setaudio
+        // nicht kennt. Eine stufenlose Musiklautstaerke bekaeme nur, wer das
+        // Abspielen selbst uebernimmt (MIDI-Datei lesen, midiOutShortMsg,
+        // CC 7 je Kanal) statt MCI den Sequenzer fuehren zu lassen. Das ist
+        // ein eigenes Stueck Arbeit und NICHT gebaut.
+        if (p == 0 && _open) Stop();
+    }
+
+    /// <summary>
+    /// ⚠ <b>Aufraeumen nach einer aelteren Fassung.</b> Bis zum 21.08.2026 hat
+    /// <see cref="Volume"/> die Lautstaerke des MIDI-Geraets <b>systemweit</b>
+    /// heruntergestellt — und dieser Wert bleibt stehen, auch nachdem das Spiel
+    /// beendet ist. Wer vorher am Regler war, hat sein MIDI-Geraet womoeglich
+    /// immer noch leise.
+    ///
+    /// <para>Darum wird es beim Start <b>einmal auf voll</b> gesetzt. Das ist
+    /// kein Nachbau von irgendetwas, sondern die Reparatur eines Schadens, den
+    /// wir angerichtet haben.</para></summary>
+    public static void GeraeteLautstaerkeZuruecksetzen()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        VolumeCode = MidiOutSetVolume(IntPtr.Zero, 0xFFFFFFFF);
+        GD.Print($"Musik: MIDI-Geraetelautstaerke auf voll zurueckgestellt "
+                 + $"(Rueckgabe {VolumeCode}) — Schadensbehebung, siehe MidiMusic.Volume");
     }
 
     public static void Stop()

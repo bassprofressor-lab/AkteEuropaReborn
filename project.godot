@@ -15,7 +15,7 @@ config/description="Clean-room RTS remake of Akte Europa (1997)"
 config/version="0.6.0"
 run/main_scene="res://Scenes/Main/MainMenu.tscn"
 config/features=PackedStringArray("4.7", "C#")
-config/icon="res://Assets/Textures/Icon.svg"
+config/icon="res://Assets/Textures/Icon.png"
 
 ; ⚠ 18.08.2026 — KEIN GODOT-LOGO MEHR BEIM START. Der Motor gehört nicht auf
 ; den Startbildschirm eines Spiels; die Farbe ist dieselbe wie der Hintergrund

@@ -14,7 +14,7 @@
 ;   Godot --path . --headless --export-release "Windows Desktop"
 
 #define AppName        "Akte Europa Reborn"
-#define AppVersion     "0.6.0"
+#define AppVersion     "0.7.0"
 #define AppPublisher   "chr1zZo"
 #define AppExeName     "AkteEuropaReborn.exe"
 #define BuildDir       "..\build\windows"
@@ -41,10 +41,13 @@ OutputBaseFilename=AkteEuropaReborn-{#AppVersion}-setup
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
+; Das Symbol des Installers selbst. Es liegt neben dieser Datei und wird von
+; packaging\make_icon.py erzeugt (7 Groessen, 16..256).
+SetupIconFile=AkteEuropaReborn.ico
 ArchitecturesInstallIn64BitMode=x64compatible
 ArchitecturesAllowed=x64compatible
 DisableProgramGroupPage=yes
-UninstallDisplayIcon={app}\{#AppExeName}
+UninstallDisplayIcon={app}\AkteEuropaReborn.ico
 
 [Languages]
 Name: "de"; MessagesFile: "compiler:Languages\German.isl"
@@ -54,10 +57,17 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 Source: "{#BuildDir}\{#AppExeName}";                  DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildDir}\AkteEuropaReborn.pck";           DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildDir}\{#DotNetDir}\*";                 DestDir: "{app}\{#DotNetDir}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Das Symbol muss MIT INSTALLIERT werden, sonst zeigt IconFilename unten ins Leere.
+Source: "AkteEuropaReborn.ico";                        DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#AppName}";        Filename: "{app}\{#AppExeName}"
-Name: "{autodesktop}\{#AppName}";  Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
+; ⚠ Die Verknuepfungen bekommen das Symbol AUSDRUECKLICH mitgegeben, statt es
+; sich aus der .exe zu holen. Godot bettet das Symbol nur ein, wenn im Editor
+; ein rcedit hinterlegt ist — ist es das nicht, traegt die .exe still das
+; Godot-Symbol weiter, und niemand merkt es bis zum Blick auf den Desktop.
+; Mit IconFilename stimmt das Symbol in JEDEM Fall.
+Name: "{group}\{#AppName}";        Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\AkteEuropaReborn.ico"
+Name: "{autodesktop}\{#AppName}";  Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\AkteEuropaReborn.ico"; Tasks: desktopicon
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
