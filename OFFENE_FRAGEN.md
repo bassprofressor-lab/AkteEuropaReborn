@@ -4541,3 +4541,500 @@ Selbsttest sichtbar gemacht hat.
 * **Nur 13 Dateien**, und `3/5/6/7/10.DM` sind offensichtlich Abkömmlinge
   derselben Karte — »13 von 13« wiegt dort weniger, als es aussieht.
   `sec124` und `sec128` hängen an **einer** Datei.
+
+---
+
+## AM. ⭐⭐ SIEBZEHN UNGELESENE MECHANIKEN — die »Zuteiler« sind gefunden (21.08.2026)
+
+Die 118 Funktionen, die das Spiel selbst benennt und die bei uns nirgends
+standen, enthielten eine ganze Klasse: **Zuteilerfunktionen** (`add_*`). Jede
+sucht einen freien Platz in einer Tafel, und **die Fehlermeldung nennt die
+Schranke**. Alle 17 Marken in C und F gefunden, alle 17 Funktionspaare zerlegt.
+
+⚠ **»Test shooting unit« hatte zuerst keinen Treffer, weil die Zeichenkette ein
+Leerzeichen am Ende trägt** (`"Test shooting unit "`). Wer ohne das sucht, findet
+nichts und hält es für einen Negativbefund.
+
+⚠ **Und eine Falle, in die der Lauf fast gefallen wäre:** bei »There is no free
+place for the ramp« stimmen nur 29 von 64 Befehlen zwischen C und F überein — das
+sah nach einem dritten Verhaltensunterschied aus. Zeile für Zeile verglichen hält
+F nur einen Wert in `esi` statt auf dem Stapel; **alle Konstanten sind gleich**.
+**Ein Befehlszähler-Unterschied ist kein Verhaltensunterschied.**
+
+### AM.1 Minen und Fallen — je 500 Plätze
+
+| | Tafel C | Abschnitt | Satz | Plätze |
+|---|---|---|---|---|
+| Minen | `0x552E18` | **sec84** | 6 B | **500** |
+| Fallen | `0x688B58` | **sec85** | 6 B | **500** |
+
+`+0x02 = rand()%20 + 10`, `+0x03 = rand()%10 + 5`, `+0x04` belegt, `+0x05` Spieler.
+
+| Prüfung (877 Minensätze) | Treffer | Nullmodell |
+|---|---|---|
+| `+0x02` in 10…29 | **877/877** | dieselbe Stelle in **freien** Sätzen: **3,5 %** |
+| `+0x03` in 5…14 | **877/877** | freie Sätze: **3,5 %** |
+| imap-Tor erfüllt | **877/877** | Zufallszelle: **44,0 %** |
+
+⭐ **Die Kampagnenmissionen verminen ihre Karten per Skript:** 17 der 18
+Minen-Aufrufstellen stehen in `mission_init`. Der eine übrige steht in
+`move units` — eine Einheit legt selbst eine Mine.
+
+⚠ Die 877 stehen in nur **fünf** Dateien derselben Kartenfamilie. »877 von 877«
+wiegt hier weniger, als es aussieht; die Bandbreiten sind aber Byte für Byte der
+Würfel im Code und davon unabhängig.
+
+### AM.2 ⭐⭐ »terra« — zwei Tafeln, und wir lesen eine davon falsch
+
+| | Tafel C | Abschnitt | Satz | Plätze |
+|---|---|---|---|---|
+| **terra_place** (Erz im Boden) | `0xBC6D40` | **sec78** | 6 B | 50 |
+| **terra** (aufgeschlossenes Vorkommen) | `0x6783E8` | **sec38** | 14 B | 50 |
+
+⭐ **Die Mission legt Erz in den Boden, eine EINHEIT schliesst es auf.**
+`add_terra` hat über die ganze Vollerhebung **genau einen** Aufrufer:
+`move units` `0x408717`.
+
+Beim Aufschliessen wird ein 3×3-Feld gesetzt: Kacheln `10240 + 3·ze + sp`,
+imap `0xFFFF`/`0xFFFE` nach festem Muster. **27 von 27 Zellen, 3 von 3 Sätzen.**
+
+⚠⚠ **Und damit ist ein Feld bei uns falsch gedeutet.** `CwmExtra.cs` führt
+sec38 `+0x06`/`+0x07` als *»Artmarke (genau eine der beiden steht auf 1)«*. Es
+sind **acht Byte, eines je Spieler**: der Zeichner liest
+`byte[+0x06 + byte[0x4FA284]]`, und `0x4FA284` ist der lokale Spieler.
+**`+0x06+p` heisst »Spieler p sieht dieses Vorkommen«**, und der Zuteiler setzt
+nur das Byte des Aufschliessers. Dass in den Daten »eines von zweien« auf 1
+steht, liegt allein daran, dass nur Spieler 0 vorkommt.
+
+### AM.3 Die übrigen fünfzehn, gerafft
+
+| Mechanik | Tafel C | Satz × Plätze | Kern |
+|---|---|---|---|
+| **Selbstverteidiger** | `0x53D8D8` | 6 × 200 | ein Eintrag je Opfer, `+0x04 = 20` Takte; nur wenn das Opfer untätig, ohne Ziel und bewaffnet ist |
+| **Gaswerfer** | `0x833870` | 8 × 50 (**sec83**) | Waffenart **9**; `NABYTO = 120` Takte Sperre; `+0x00 = 7` Wolken, Richtung aus der Windtafel |
+| **Teleport** | — | — | ⭐ **Befehlsnummer 23**; bei einer Infanteriezelle werden **alle 9 Mann** einzeln umgesetzt |
+| **Rampe** | `0xC2FCB8` | 4 × 50 (**sec21**) | ⭐ macht **rauhes Gelände befahrbar**: Vorbedingung imap `0xFFFD`, danach `0xFFFE` |
+| **Bahnstation / Depot** | `0x879178` / `0x879F38` | 14 × 50 (**sec30** / **sec25**) | je eine Warteschlange von **sechs** Robotern, nicht »Kopf + Zustand« |
+| **Auswahlliste** | `0x833098` | 2 × 1000 | ⚠ **schreibt zuerst und prüft danach** — siehe unten |
+| **Infanteriezelle** | `0x7847E8` | 22 × 4000 (**sec16**) | höchstens **9** Mann |
+
+⭐ **Die Rampe beantwortet eine offene Frage aus Abschnitt S:** wozu sie zählt.
+Sie ist das Bauwerk, mit dem eine Einheit **grobes Gelände befahrbar macht**.
+57 belegte Sätze, `+0x03 == 200` in 57/57; Kachel `== 10723 + art` in 36/57, und
+⚠ **die 21 Fehlschläge sind Editorabfall**: alle in `08/09/NET07.CWM`, wobei `09`
+dasselbe wie `08` ist, nur mit weggeputzten Kacheln bei stehengebliebener Tafel.
+Ohne diese drei: **36 von 36 = 100 %**.
+
+⚠⚠ **Die Auswahlliste ist der einzige der 17 Zuteiler, der NICHT schützt.** Der
+Eintrag landet auf Index `anzahl`, die Anzahl steigt, und **erst dann** meldet
+`cmp ax,0x3e8` »Too many units in this group«. Ab 1001 schreibt sie in **sec117**
+hinein und meldet gar nichts mehr. ⭐ Die 1000 ist doppelt belegt: im Code **und**
+weil `0x833098 + 2·1000 = 0x833868` **auf das Byte genau** der Anfang von sec117
+ist.
+
+⭐ **Nebenertrag — der Griffraum ist vollständig:** ein Listenwert < 8000 ist ein
+Einheitenplatz, ein Wert **≥ 20000 ein FLUGZEUG**. Belegt über
+`0x591EF0 + 68·20000 = 0x6DDF70` = sec19, auf die Adresse genau.
+⚠ **Warnung:** `0x591EF0` sieht wie eine eigene Tafel aus, ist aber nur der
+**vorgespannte Versatz** einer Tafel 1,3 MB weiter. Wer sie als Tafelanfang
+deutet, deutet einen Übersetzertrick.
+
+### AM.4 ⭐ »Test shooting unit« — die Zielsuche folgt einer TAFEL, nicht dem Abstand
+
+| Tafel | C | Inhalt |
+|---|---|---|
+| Zellenzahl je Reichweite | `0x4F5B28` | `0, 8, 20, 36, 56, 88, 136, 0` |
+| Abtastfolge | `0x4F5B38` | `(0,0) (−1,0) (0,−1) (1,0) (0,1) (−1,−1) …` |
+
+Die Folge ist nach Entfernung sortiert — **es gewinnt der erste Treffer in dieser
+Reihenfolge**, nicht der nächste.
+
+⚠ **Bei uns ist das anders gebaut:** `AutoAcquire` geht alle Einheiten durch und
+nimmt die **kürzeste Entfernung**; die beiden Tafeln kommen in `Scripts/` nirgends
+vor. Bei gleichweit entfernten Zielen entscheidet im Original die Tafelreihenfolge,
+bei uns die Listenreihenfolge — **genau die Art Naht, an der ein Gleichlauf reisst.**
+
+### ⚠ Der Kern für den Nachbau
+
+**Von diesen siebzehn Mechaniken hat unser Bau keine einzige vollständig.** Fünf
+Tafeln werden importiert (sec16, sec21, sec37, sec38 — eine davon mit falsch
+gedeutetem Feld), **sieben sind gar nicht angeschlossen** (sec25, sec30, sec48,
+sec78, sec83, sec84, sec85), und die Zuteiler gibt es nirgends.
+
+---
+
+## AN. ⭐⭐ DIE FORSCHUNG IST VOLLSTÄNDIG GELESEN — und unsere beruht auf einer falschen Prämisse (21.08.2026)
+
+### AN.1 Der Fahrplan in einem Satz
+
+⭐ **Die Forschung schaltet nichts frei.** Sie tut zwei Dinge: sie **verbessert
+die Zahlen eines Bauteils, das man schon besitzt** (Stufe 0…9), oder sie
+**erfindet eine neue Waffe** aus 40 Rezepten. Und **der Preis IST die Dauer**:
+`+0x02` des Laufsatzes ist der Preis in $, `+0x04` steigt **um 1 je Takt**.
+
+| | 500 $ | 2000 $ | 5000 $ |
+|---|---|---|---|
+| | Kleine | Mittlere | Große Forschung |
+| bei 50 Takten/s | **10,0 s** | **40,0 s** | **100,0 s** |
+
+### AN.2 Der Preis, ausgerechnet
+
+```
+Grundpreis = LEITER[Mission]                       ; 100…1500
+Wert       = sec46[ Bauteil ≥ 0xA0 ? +0x21 : +0x20 ]
+Preis      = pow(3.2, sec46[+0x24] − Grundpreis/100 + 1) · pow(2.3, Stufe) · (Wert/2) · 10
+Preis      = min(Preis, 30000)
+```
+
+**`+0x24` ist die Techstufe und schliesst das Tor** (`3.2^Stufe`), **die
+Missionsleiter öffnet es wieder**, und **jede Stufe kostet ×2,3**. Damit kostet
+die Kanone in Mission 0 224 $, der Laser 30 000 $ — und in Mission 33 alles 1 $.
+
+⚠ **Das Vorzeichen hängt an einem Befehl** (`DE E1 = FSUBRP`). Kippt es, wird aus
+dem Missionsrabatt ein Aufschlag und fortgeschrittene Bauteile wären billiger als
+die Kanone — als Entwurf unsinnig. Belegt ist die Kodierung; die Spielsicht
+stützt sie nur.
+
+### AN.3 ⭐ »Too many researches« steht dreimal — und es sind KEINE drei Schlangen
+
+Zwei der drei Wächter bewachen dieselbe 10er-Tafel. Und beide sind **tot**, weil
+davor eine echte Spielregel steht: beide Funktionen laufen **zuerst** über alle
+10 Laufsätze und **löschen jeden, der demselben Spieler gehört**.
+
+> ⭐ **Ein Spieler kann genau EINE Forschung laufen haben. Eine neue bricht die
+> alte ab — ohne Rückzahlung.**
+
+### AN.4 ⭐ `for_vyv` und `next_rand` sind dieselbe Sache
+
+`for_vyv` (tschech. *pro vývoj*, »für die Entwicklung«) ist 40 Byte lang und tut
+eines: `AUFWERTUNG[i].+0x02 = rand() & 3`. Gerufen **genau einmal**, unmittelbar
+bevor die neue Stufe eingetragen wird.
+
+⭐ **`next_rand` ist die vorgewürfelte Nebenwirkung der NÄCHSTEN Stufe.** Jede
+Stufe verbessert immer den Hauptwert und **einen von vier** Nebenwerten — welchen,
+steht schon fest, bevor der Spieler kauft. Das Angebot zeigt darum eine ehrliche
+Vorschau.
+
+### AN.5 ⭐⭐ Die Erfindung — und der stärkste Beleg des ganzen Tages
+
+40 Rezepte à 70 B bei `0x502B00`; die Tafel endet **auf das Byte genau** dort, wo
+die Aufwertungstafel beginnt. Vier Namensvarianten je Rezept = **160 Namen**.
+
+Der Ablauf würfelt aus der gemeinsamen **Losnummer** ein Budget und drei Rezepte,
+mischt deren Werte und hängt bei einem Namen auf `-` zwei Ziffern an.
+
+⭐ **Prüfstand »Hiff-64«:** drei `.DM` tragen in Zeile 20 eine erfundene Waffe.
+Zurückgerechnet stimmen **11 von 11 Feldern** — darunter zwei nur dann, wenn man
+den Code *einschliesslich seiner Schrulligkeiten* liest: die
+Reichweiten-Nachkorrektur, und dass Rezept 3 im Wert **doppelt** zählt.
+Nullmodell: vier Rezepte aus 40⁴ = 2,56 Mio. Möglichkeiten, und alle elf Felder
+treffen.
+
+### AN.6 ⭐ Die KI forscht NICHT — sie erbt
+
+`enemy_upgrade`, gerufen aus `mission_init`:
+
+> ⭐ **Die KI-Spieler besitzen immer exakt das, was der Mensch besitzt** (Feld
+> `+0x00` wird jede Mission neu von Scheibe 0 kopiert).
+> ⭐ **Jede Mission setzt alle KI-Aufwertungen auf 0 zurück** (`PARTS.CWD` wird
+> neu geladen).
+> ⭐ Dann bekäme jeder KI-Spieler je Bauteil `n` bis `2n−1` Stufen.
+
+⚠⚠ **Aber die Schraube steht auf Null.** `n = (byte + 10) / 15` mit einem Byte,
+das in **allen drei verfügbaren Beständen 0** ist. **Die KI wird im
+ausgelieferten Spiel niemals aufgewertet.** Der Mechanismus ist vollständig
+gelesen; **belegt ist er nur als schlafend.**
+⚠ Wir haben genau **eine** `PARTS.CWD` — »immer 0« ist damit nicht gezeigt.
+
+### AN.7 ⚠⚠ Was unser Nachbau falsch macht
+
+| Original | Nachbau heute |
+|---|---|
+| Forschung **schaltet nichts frei**, sie verbessert Zahlen | `_researchedStatic.Add(tech)` — sie **schaltet frei** |
+| Ziele sind die **35 Bauteile** der Aufwertungstafel (`0x01`…`0x13`, `0xA0`…`0xAF`) | Ziele sind **Zeilen 65…88** — ⚠ die kommen in der Aufwertungstafel **überhaupt nicht vor** |
+| **Stufe 0…9** je Bauteil je Spieler | fehlt |
+| Preis aus der Formel oben | `ResearchCost = 2000`, fest, selbst erfunden |
+| Gesamtaufwand **= Preis**, `+1` je Takt | `ResearchTotal = 5000` fest, `ResearchRate = 60` |
+| **eine Forschung je Spieler**, neue bricht alte ab | hängt am **Gebäude**, beliebig viele parallel |
+| Erfindung aus 40 Rezepten | fehlt |
+
+⭐ **Immerhin eine Zahl stimmt zufällig:** `GameSounds.ResearchDone = 136`, und
+der Klang des Originals ist `0x88` = 136.
+
+⚠ **Nicht gebaut, nur aufgeschrieben.** Die Zeilen 65…79 bleiben als
+**Ausrüstungen** im Entwurfsschirm richtig — sie sind es, und `EquipMountOrder`
+ist heute unabhängig belegt worden. Falsch ist allein, sie als **Forschungsziele**
+zu führen.
+
+### ⚠ Zur Sicherheit: eine »Berichtigung«, die keine war
+
+Der Lauf meldete, `UNIT_STATS_RE.md` rechne mit der falschen sec46-Basis
+`0x5045BA`. **Dort steht die Berichtigung seit dem 10.08.2026.** Neu ist der
+zusätzliche Beleg: `PARTS.CWD` ist **exakt 92 800 B = 1600 × 58**, und ihre
+Scheibe 0 stimmt mit dem `.data`-Block ab `0x5045A0` in **11 600 von 11 600 Byte**
+überein.
+
+---
+
+## AO. ⭐⭐ GESCHOSSE, LASER UND ZWEI NEUE UNTERSCHIEDE DER AUSLIEFERUNGEN (21.08.2026)
+
+### AO.1 Die Geschosstafel
+
+`0x884730`, **32 B × 1000 Plätze**, frei = `+0x06 == 0xFF`. Ist keiner frei, kehrt
+der Anleger **wortlos** zurück — das Geschoss fällt aus.
+⭐ Der Satz bei `0x88C430` (der 1001.) ist kein Geschoss, sondern eine Kladde —
+darum ist **sec43 32 032 B** und nicht 32 000.
+
+⭐ **Drei Bahnarten, nicht zwei:** gerade Bahn · Wurfbahn (**22 Arten**) · und
+**nur für Art 7** (Mittelstreckenrakete) eine eigene: steigt, deckelt bei Höhe
+150, fällt dann 7 je Takt. Die 22 stimmen exakt mit der unabhängigen Tafel
+überein, die den Scheitelpunkt auf 1/11 oder 1/2 setzt.
+
+⚠ **Es gibt keinen »fliegt aus der Karte«-Tod** — ein Geschoss verschwindet nur
+durch einen Einschlag. Negativbefund aus der Vollerhebung, nicht aus einer Suche.
+
+### AO.2 ⭐ Die Waffentafel benennt sich selbst — und `Art = ZBRAN − 1`
+
+19 Waffen mit Namen aus der EXE. ⭐ **Die vier mit ganz leerer Arttafelzeile**
+(Gaswerfer, Minenleger, Fallenleger, Membranbombe) sind **genau die vier**, die
+der Takt als »Wrong type of missile« abweist. Ein Nullmodell, das in beide
+Richtungen aufgeht.
+
+### AO.3 ⭐⭐ Der LASER — zwei Dinge, und eines fehlt uns ganz
+
+**Der Fahrzeuglaser** (ZBRAN 10/11) ist ein gewöhnliches Geschoss und braucht
+**keinen neuen Code**, nur die richtigen Tafelwerte.
+
+**Der Roboterlaser ist ein STRAHL**, und den haben wir nicht: Tafel `0x87B448`,
+**44 B × 200 Plätze**, mit `Place laser` als Anleger und `kresli_laser2` als
+Takt- und Zeichenschritt.
+
+⚠ **`kresli_laser1` und `kresli_laser2` sind KEINE zwei Zeichner.**
+`kresli_laser1` ist 23 Befehle lang und tut nichts als
+`for i in 0..199: if aktiv: kresli_laser2(i)`. Die Vermutung »zwei Zeichner ⇒
+zwei Waffenarten« trägt nicht.
+
+Der Strahl wächst je Takt um 20 oder 40 Bildpunkte (40 beim Flugzeug), Farbe 73
+oder 74, und schlägt am Ende ein.
+
+| Waffe | Einheiten auf den 36 Karten |
+|---|---:|
+| 10 »Laser« | **230** |
+| 11 »Zwillingslaser« | **131** |
+| 191 »Laser« (S-Infanterie) | **328** |
+| 194 »LaserXXL« | ⚠ **0** — Col. Hullman kommt auf keiner Karte vor |
+
+**689 Lasereinheiten auf 17 der 36 Karten.** Das ist keine Randerscheinung.
+
+⭐ Nebenertrag: **`+0x43` ist der Musterindex** in sec47 — nachgemessen an
+**2025 von 2025** bewaffneten Landeinheiten, kein Gegenbeispiel. Das bestätigt
+Abschnitt AE-3 aus einer zweiten Richtung.
+
+### AO.4 »Place laser:« ist keine Anlage
+
+*Place* heisst **eintragen**, nicht *aufstellen*. Es gibt kein Gebäude dieses
+Namens; der **»Laserturm«** ist Muster 103 und schiesst gewöhnliche Geschosse.
+
+### AO.5 ⭐ Zwei Fenster, zwei Zwecke
+
+| Marke | Fensterart | was es ist |
+|---|---|---|
+| **Market window not found** | **33** | »Geschäftszentrum« — gebrauchte **Einheiten** |
+| **Store window not found** | **31** | »Angebot des Nachschubpostens« — **Treibstoff- und Munitions-Helikopter** |
+
+Beide Funktionen **schliessen** ein Fenster; die Zeichenkette ist nur die Meldung
+des Fehlschlags. Ausgelöst, wenn rund um die Tür keine eigene Einheit mehr steht.
+
+### AO.6 ⚠⚠ ZWEI NEUE Verhaltensunterschiede zwischen C und F
+
+Damit sind es **vier** insgesamt (nach sec59 und der Partikel-Zeilenschranke).
+Beide neuen stecken im **Schuss**:
+
+**(a) C verbietet den Schuss von Geländeklasse 99.**
+```
+C 0x40BB17 :  cmp bl, 0x63 ; je -> return 0      ; KEIN SCHUSS
+F 0x40BA07 :  fehlt vollständig
+```
+Die 99 ist die **Türzelle**, die heute früh gemessen wurde. In C kann eine
+Einheit, die dort steht, nicht feuern; in F kann sie es.
+
+**(b) C putzt Geisterbelegungen aus der imap.** Ist das Opfer längst tot,
+ruft C eine eigene 73-Byte-Funktion, die **alle 65 536 imap-Zellen** durchgeht
+und jede zurücksetzt, die noch diese Platznummer trägt. ⚠ **In F gibt es diese
+Funktion überhaupt nicht** — gesucht mit und ohne angepasste Basis, kein Treffer.
+Eine nachträgliche Fehlerbehebung in C gegen stehengebliebene Blockaden.
+
+---
+
+## AP. ⭐⭐ DAS KARTENFENSTER — sechs Betriebsarten, und wir haben nichts davon (21.08.2026)
+
+Die fünf »Planungsschirme« sind **keine fünf Fenster**, sondern **sechs
+Betriebsarten EINES Fensters** — der Fensterart 3 »Karte«. Die sechste heisst
+**»Einheiten-Transport Planung«** und stand nicht auf der Liste.
+
+| Art | Marke | was sie tut |
+|---:|---|---|
+| 0 | **Einsatzkarte** | »Hier klicken, um die Hauptansicht zu verschieben« |
+| 1 | **Verknüpfungskarte** | Bahnstrecke anklicken → Einstellungsfenster |
+| 2 | **Luft-Einsatzplanung** | »Ziel anwählen« für ein Flugzeug |
+| 3 | **Raketen-Einsatzplanung** | Mindestreichweite, 13×13-Zielsuche, Befehle 2 und 9 |
+| 4 | **Materialtransport Planung** | Start- und Zielgebäude, **Befehl 512** |
+| 5 | **Einheiten-Transport Planung** | Verbindungsprüfung, bis zu 6× **Befehl 518** |
+
+**Drei Zoomstufen** (1, 2, 3 Bildpunkte je Zelle), Aufruf über **Taste M** und aus
+sechs anderen Fenstern heraus. ⭐ **C und F sind hier verhaltensgleich** — kein
+dritter Unterschied.
+
+⭐⭐ **Der Kartenmaler liest ausschliesslich die GEMERKTEN Felder** (sec50, die
+gemerkte Lage, sec52) — die Karte zeigt Erinnerung, nicht Wahrheit. Hilfszeile
+und Klick lesen dagegen die **lebenden** Felder. Eine saubere Trennung, die so
+noch nicht aufgeschrieben war.
+
+⚠ **Ein Befund, der codeseitig sicher und datenseitig unbestätigt ist:** trägt
+eine Zelle in sec20 einen Wert **1…59**, so ist das nach dem Befehlsstrom ein
+einsbasierter Platz in sec34 (die Rechnung `214·v` ist eindeutig). Der Vergleich
+mit den Endzellen scheitert aber: **0 von 752**. Entweder sind `+0x02…+0x05`
+anders kodiert, oder die 1…59 bezeichnen in den Dateien noch etwas anderes.
+**Der Code ist eindeutig, die Datei bestätigt ihn nicht** — das gehört so
+stehengelassen.
+
+Die Streckendeutung selbst trägt dagegen: `sec34[+0x00]` → sec33 → sec3 ist eine
+**Bahnstation oder ein Feldbahnhof** in **224 von 371 = 60,4 %**, gegen ein Mittel
+über **alle 214 Versätze** von **1,1 %**.
+
+⭐ **Zwei Tafeln, die wir noch nicht führen:** die 16 **Gebäudenamen des Spiels**
+(Basis, Waffen-Fabrik, …, Werft-Station) und die **Verträglichkeitstafel des
+Materialtransports** (welche Quelle zu welchem Ziel darf). Beide liegen fertig in
+beiden EXE.
+
+⚠ **Unser Nachbau hat davon nichts.** `Minimap.cs` baut eine **stehende** Minimap
+und begründet das damit, das Original habe keine. Das stimmt — es hat stattdessen
+**dieses Fenster**.
+
+---
+
+## AQ. Adressverzeichnis zu den Abschnitten AM…AP (21.08.2026)
+
+⚠ **Warum dieses Verzeichnis nötig ist.** Die Abschnitte AM…AP fassen vier Läufe
+zusammen, und beim Zusammenfassen sind die meisten **Funktionsadressen**
+weggefallen — der Text las sich besser und war schlechter zu benutzen. Aufgefallen
+ist es an `funktionen.py`: die Quote »bei uns erwähnt« stand nach dem Anhängen
+unverändert bei 361 von 1107. **Eine Zusammenfassung ohne Adressen ist eine
+Erzählung, kein Nachschlagewerk.**
+
+Alle Paare C / F, beide Auslieferungen geprüft.
+
+### Zuteiler und Mechaniken (AM)
+
+| Was | C | F |
+|---|---|---|
+| Mine legen | `0x421940` | `0x420B00` |
+| Falle legen | `0x421A40` | `0x420C00` |
+| terra aufschliessen | `0x420E20` | `0x41FFE0` |
+| terra_place (Missionsvokabel) | `0x4D0A10` | `0x4D05C0` |
+| Selbstverteidiger | `0x411770` | `0x411540` |
+| Teleport (Befehl 23) | `0x43A420` | `0x439590` |
+| Gaswerfer | `0x439B30` | `0x438C90` |
+| Gaswolkentakt | `0x439C50` | — |
+| Was unter Infanterie liegt | `0x4125F0` | `0x4123C0` |
+| Infanterieschritt | `0x4052D0` | `0x4052B0` |
+| Zielsuche »Test shooting unit « | `0x40F0A0` | `0x40EED0` |
+| STOP TRANS (Befehl 12/29) | `0x4103B0` | `0x4101E0` |
+| ST TRANS (Befehl 514) | `0x4108D0` | `0x410700` |
+| Roboter in Bahnstation | `0x43C370` | `0x43B500` |
+| Roboter in Depot | `0x43C630` | `0x43B7C0` |
+| rob_trans-Gegenprobe | `0x436260` | `0x4353C0` |
+| Auswahlliste, Eintrag | `0x4344D0` | `0x433610` |
+| Auswahlliste, Austrag | `0x4345D0` | — |
+| in Infanteriezelle aufnehmen | `0x433B90` | `0x432CE0` |
+| Rampe anlegen | `0x4CBEE0` | `0x4CBAA0` |
+| Minentakt (liest `+0x05`) | `0x4216F0` | — |
+
+**Tafeln:** Minen `0x552E18` (sec84) · Fallen `0x688B58` (sec85) ·
+terra `0x6783E8` (sec38) · terra_place `0xBC6D40` (sec78) ·
+Selbstverteidiger `0x53D8D8` · Gaswolken `0x833870` (sec83) ·
+Rampen `0xC2FCB8` (sec21) · Bahnstation `0x879178` (sec30) ·
+Depot `0x879F38` (sec25) · Auswahlliste `0x833098` ·
+Zielsuche-Tafeln `0x4F5B28` und `0x4F5B38`.
+
+### Forschung und Aufwertung (AN)
+
+| Was | C | F |
+|---|---|---|
+| Angebot: Aufwertung | `0x4AA360` | `0x4A9C90` |
+| Angebot: neue Forschung | `0x4AA890` | `0x4AA1C0` |
+| Angebotstafel neu bauen | `0x4AA950` | `0x4AA280` |
+| `for_vyv` | `0x4AAA20` | `0x4AA350` |
+| Aufwertung anwenden (Befehl 531) | `0x4AAA80` | `0x4AA3B0` |
+| Aufwertung beginnen | `0x4AABD0` | `0x4AA500` |
+| freie Bauteilzeile suchen | `0x4AAE00` | `0x4AA730` |
+| Erfindung abschliessen | `0x4AAE70` | `0x4AA7A0` |
+| Waffe erfinden | `0x4AAF00` | `0x4AA830` |
+| Forschungstakt | `0x4AB580` | `0x4AAEB0` |
+| Forschung beginnen | `0x4AB830` | `0x4AB160` |
+| läuft eine Forschung? | `0x4AB910` | `0x4AB240` |
+| alle abfeuern (Missionsende) | `0x4AB950` | `0x4AB280` |
+| KI-Aufwertung, einzeln | `0x4ABA80` | `0x4AB3B0` |
+| KI-Aufwertung, Paket | `0x437CD0` | `0x436E30` |
+| Bezahlknopf | `0x44A87D` | `0x449870` |
+| freies Gebäude suchen | `0x4D5700` | `0x4D5290` |
+| Markt: Einheit einstellen | `0x4C0D20` | `0x4C07E0` |
+| gemeinsamer Zufall (Netz) | `0x4C5B30` | `0x4C56E0` |
+
+**Tafeln:** Angebote `0xA39640` (100 × 50) · Rezepte `0x502B00` (40 × 70) ·
+Aufwertungen `0x5035F0` (50 × 24) · Bauteile `0x5045A0` (sec46, 1600 × 58) ·
+Grundpreisleiter `0x503AA8` · Techstufenleiter `0x503AF0` ·
+Preise 500/2000/5000 `0x503B38` · Erfindungsbudget `0x503B80`.
+
+### Geschosse, Laser, Handel (AO)
+
+| Was | C | F |
+|---|---|---|
+| Geschoss anlegen (`add strela`) | `0x451B40` | `0x4507F0` |
+| Geschosstakt / Einschlag | `0x452190` | `0x450E40` |
+| Geschosse löschen | `0x451780` | — |
+| Strahl anlegen (`Place laser:`) | `0x455320` | `0x453FC0` |
+| Strahlenschleife (`kresli_laser1`) | `0x4554A0` | `0x454140` |
+| ein Strahl (`kresli_laser2`) | `0x454CF0` | `0x4539A0` |
+| Schussverteiler (Waffe → Zweig) | `0x40C8C0` | `0x40C780` |
+| Schussroutine | `0x40BB00` | `0x40B9F0` |
+| Trefferroutine `Zasah` | `0x40C9A0` | `0x40C800` |
+| ⭐ imap-Putzfunktion | `0x40C940` | **fehlt in F** |
+| Marktfenster schliessen | `0x4511D0` | `0x44FE80` |
+| Nachschubfenster schliessen | `0x451270` | `0x44FF20` |
+| Untermissionsliste (`SUB:`) | `0x451530` | — |
+
+**Tafeln:** Geschosse `0x884730` (32 × 1000, sec43) · Geschossarten `0x4F98E8` ·
+Bahnart-Index `0x4530DC`, Sprungtafel `0x453064` · Strahlen `0x87B448` (44 × 200) ·
+Rauch/Teilchen `0x77CAE8` · Marktlager `0x82AA30` (sec94) · Preise `0x81A3A8` (sec95).
+
+**Die zwei neuen Unterschiede:** Schussverbot auf Geländeklasse 99 @C `0x40BB17`
+(fehlt in F @`0x40BA07`) · imap-Putzen @C `0x40C9A7` (fehlt in F).
+
+### Das Kartenfenster (AP)
+
+| Was | C | F |
+|---|---|---|
+| Fenster anlegen (Art 3) | `0x457730` | `0x4563D0` |
+| Zeichner Art 3 | `0x464A20` | `0x463310` |
+| ⭐ Kartenmaler | `0x4B7ED0` | `0x4B7810` |
+| auf den Schirm bringen | `0x4409E0` | `0x43F9F0` |
+| Befehlsbehandler | `0x4485D0` | `0x4475D0` |
+| Hilfszeile | `0x447920` | `0x446910` |
+| Hilfszeile setzen | `0x4501C0` | `0x44EE70` |
+| Fenster schliessen | `0x4471A0` | `0x446170` |
+| nach vorn holen | `0x44FC20` | `0x44E8D0` |
+| **Einsatzkarte** | `0x444740` | `0x443720` |
+| **Verknüpfungskarte** | `0x444A30` | `0x443A00` |
+| **Luft-Einsatzplanung** | `0x444D90` | `0x443D50` |
+| **Raketen-Einsatzplanung** | `0x4450F0` | `0x4440A0` |
+| **Materialtransport Planung** | `0x445650` | `0x444600` |
+| **Einheiten-Transport Planung** | `0x4459F0` | `0x444990` |
+| Verbindungsprüfung | `0x4CE710` | `0x4CE2C0` |
+| Streckenfenster öffnen | `0x445D70` | `0x444D00` |
+| »There is no airplane selected« | `0x450310` | `0x44EFC0` |
+
+**Tafeln:** Fenstersätze `0x8B9038` (44324 je Fenster) · Betriebsart `0x8C3CD8` ·
+Zoomstufe `0x8C3D5B` · Zoomwerte `0x4FD610` · Gebäudenamen `0x4FDCB0` (16 × 20) ·
+Verträglichkeitstafel `0x4FDC00` (10 je Zielart) · Befehlsnamen `0x4FD660` (30 B) ·
+hervorgehobene Strecke `0x4FD63C` · Flugzeug in Planung `0x4FD640`.

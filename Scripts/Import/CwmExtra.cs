@@ -1219,8 +1219,21 @@ public static class CwmExtra
     /// <para>Zuteiler <c>@0x420E30</c> (F: <c>@0x41FFE0</c>), Meldung
     /// »Cannot place more terra« (0x4F917C): 50 Plaetze (<c>cmp dl,0x32</c>) zu
     /// 14 Byte. Satz GEMESSEN: <c>+0x00</c> belegt, <c>+0x01</c> Spalte,
-    /// <c>+0x02</c> Zeile, <c>+0x04</c> u16 Menge, <c>+0x06</c>/<c>+0x07</c>
-    /// Artmarke (genau eine der beiden steht auf 1).</para>
+    /// <c>+0x02</c> Zeile, <c>+0x04</c> u16 Menge.</para>
+    ///
+    /// <para>⚠⚠ <b>21.08.2026 — HIER STAND EINE FALSCHE DEUTUNG.</b> Der Text
+    /// führte <c>+0x06</c>/<c>+0x07</c> als »Artmarke (genau eine der beiden
+    /// steht auf 1)«. Es sind <b>ACHT Byte, eines je Spieler</b>: der Zeichner
+    /// liest <c>byte[+0x06 + byte[0x4FA284]]</c>, und <c>0x4FA284</c> ist der
+    /// LOKALE Spieler. <b><c>+0x06+p</c> heisst »Spieler p sieht dieses
+    /// Vorkommen«</b>, und der Zuteiler setzt beim Aufschliessen nur das Byte
+    /// des Aufschliessers.</para>
+    ///
+    /// <para>⭐ <b>Warum die falsche Deutung so plausibel aussah:</b> in allen
+    /// Prüfdateien kommt nur Spieler 0 vor, also steht immer genau eines der
+    /// ersten beiden Byte auf 1. »Genau eine von zweien« war eine richtige
+    /// BEOBACHTUNG mit der falschen Erklärung — der Fall, gegen den ein
+    /// Nullmodell nicht hilft, weil die Stichprobe selbst einseitig ist.</para>
     ///
     /// <para>⚠ <b>Das ist NICHT <see cref="Deposits"/>.</b> Jene liest sec28 —
     /// den Zustand vorhandener MinenGEBAEUDE, jeder Satz zeigt auf ein Gebaeude.
@@ -1256,12 +1269,26 @@ public static class CwmExtra
             {
                 Slot = i, Col = s[o + 1], Row = s[o + 2],
                 Amount = BitConverter.ToUInt16(s, o + 4),
-                // Die Artmarke steht in einem von zwei Bytes; wir merken uns,
-                // in welchem — welche Art das bedeutet, ist ungelesen.
-                Kind = s[o + 6] != 0 ? 0 : 1,
+                // ⚠ Kind traegt jetzt die SICHTBARKEITSMASKE: Bit p = Spieler p
+                // hat dieses Vorkommen aufgeschlossen (+0x06 .. +0x0D, acht
+                // Byte). Frueher stand hier eine "Artmarke" aus zwei Bytes —
+                // siehe die Berichtigung im Klassenkommentar.
+                Kind = SichtMaske(s, o),
             });
         }
         return list;
+    }
+
+    /// <summary>Die acht Sichtbarkeitsbytes eines sec38-Satzes als Bitmaske —
+    /// Bit p = Spieler p hat dieses Terraniumvorkommen aufgeschlossen.
+    /// ⚠ In den ausgelieferten Karten ist immer nur Bit 0 gesetzt, weil dort nur
+    /// Spieler 0 vorkommt.</summary>
+    private static int SichtMaske(byte[] s, int o)
+    {
+        int m = 0;
+        for (int p = 0; p < 8; p++)
+            if (o + 6 + p < s.Length && s[o + 6 + p] != 0) m |= 1 << p;
+        return m;
     }
 
     // ---- sec37: DIE TRANSPORTLADUNG ----------------------------------------

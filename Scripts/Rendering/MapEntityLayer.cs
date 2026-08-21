@@ -12566,6 +12566,39 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     // ================= research (Forschung) ===================================
     //
+    // ⚠⚠⚠ 21.08.2026 — DIESE FORSCHUNG BERUHT AUF EINER FALSCHEN PRAEMISSE.
+    //
+    // Das Original ist vollstaendig gelesen (OFFENE_FRAGEN.md Abschnitt AN), und
+    // es tut etwas ANDERES:
+    //
+    //   * Forschung SCHALTET NICHTS FREI. Sie verbessert die Zahlen eines
+    //     Bauteils, das man schon besitzt (Stufe 0..9) -- oder sie ERFINDET
+    //     eine neue Waffe aus 40 Rezepten.
+    //   * Die Ziele sind die 35 Bauteile der Aufwertungstafel 0x5035F0
+    //     (Waffen 0x01..0x13, Fahrwerke 0xA0..0xAF). ⚠ Die Zeilen 65..88, mit
+    //     denen wir hier rechnen, kommen darin UEBERHAUPT NICHT VOR.
+    //   * Der Preis ist gerechnet, nicht fest:
+    //       pow(3.2, techstufe - grundpreis/100 + 1) * pow(2.3, stufe)
+    //         * (wert/2) * 10,  gedeckelt auf 30000
+    //     Kanone in Mission 0: 224 $, Laser: 30000 $, in Mission 33 alles 1 $.
+    //   * DER PREIS IST DIE DAUER: der Fortschritt steigt um 1 JE TAKT, das
+    //     Ziel ist der Preis. 500 $ = 10 s, 5000 $ = 100 s bei 50 Takten/s.
+    //   * Ein Spieler hat GENAU EINE Forschung; eine neue bricht die alte ab,
+    //     ohne Rueckzahlung. Bei uns haengt sie am Gebaeude, beliebig oft.
+    //   * Die KI forscht NICHT -- sie erbt jede Mission den Besitz des
+    //     Menschen, und ihre Aufwertungsschraube steht im ausgelieferten Spiel
+    //     auf NULL.
+    //
+    // ⚠ NICHT UMGEBAUT, nur vermerkt: das ist ein eigenes Stueck Arbeit und
+    // gehoert in die Bauphase, nicht in die Lesephase. Wer es angeht, findet in
+    // Abschnitt AN alle Adressen, die Satzformen und den Pruefstand "Hiff-64",
+    // an dem sich die Erfindung mit 11 von 11 Feldern nachrechnen laesst.
+    //
+    // ⭐ Was RICHTIG bleibt: die Zeilen 65..79 als AUSRUESTUNGEN im
+    // Entwurfsschirm (LoadDesignParts). Sie sind es -- EquipMountOrder ist am
+    // selben Tag unabhaengig am Code belegt worden. Falsch ist allein, sie als
+    // FORSCHUNGSZIELE zu fuehren.
+    //
     // What the original does, as far as it could be recovered:
     //   * technologies are rows 65..88 of the component stats table, with German
     //     names; a design's equipment value IS that row number.
