@@ -259,7 +259,43 @@ Leser in dieselben schickt.
 - 36 Klänge des Originals sind aufgestellt, aber nicht gebaut; mehrere hängen an
   Dingen, die es hier noch nicht gibt.
 - Die Formationsverschiebung beim Gruppenbefehl ist gelesen, aber bewusst nicht
-  gebaut — sie ändert das Gruppenverhalten spürbar.
+  gebaut. ⭐ **Nachtrag:** sie muss gar nicht entschieden werden — `options.cfg`
+  Feld 16 ist genau dieser Schalter (»Gruppe Standard« ↔ »Formation Standard«).
+  Zu bauen sind **beide** Verhalten plus der Schalter.
+- ⚠ **Gemeldet, noch nicht untersucht:** in der Kampagne geht seit den vielen
+  Änderungen einiges nicht mehr. Die Reihenfolge steht: erst das Lesen zu Ende,
+  dann einarbeiten, dann ein sauberer Prüflauf.
+
+### Nachtrag desselben Tages — nach dem Bau dieser Fassung
+
+⚠ **Diese Punkte stecken NICHT in der ausgelieferten 0.7.0.** Sie entstanden am
+Abend des 21.08. und gehören in die nächste Fassung.
+
+- ⭐⭐ **Der Gegner hat das Sektorenraster des Originals bekommen.** Bisher war
+  seine Auftragswahl »nimm das wichtigste Ziel«; das Original rechnet
+  **`po = Wegkosten / Wichtigkeit`** und nimmt das **kleinste**. Ein doppelt so
+  wichtiges Ziel darf doppelt so weit weg liegen. Dazu das 11 × 11-Raster, die
+  freien Angreifer als **Überschuss je Sektor** statt globaler Armeegröße, und
+  die harte Grenze von **vier Gruppen zu je hundert Einheiten**.
+- ⭐ Ein neuer Prüfstand `--sektor-check` mit **sieben** Messlatten. Die siebte
+  misst als einzige den **Verlauf** statt eines Zustands — und hat einen Fehler
+  gefunden, den die anderen sechs nicht sehen konnten: Angriffsgruppen gaben
+  ihre Einheiten nie wieder frei, sodass der Gegner nach wenigen Wellen
+  erstarrte.
+- ⚠ **Missionsziele der Art 3 und 4 waren vertauscht.** Art 3 ist ein
+  sec17-Objekt, Art 4 die rohe Kartenzelle — und deren Spalte und Zeile waren
+  ebenfalls falsch herum.
+- ⭐⭐ **Gelesen: die Wegsuche des Originals.** Eine schlichte 8-Nachbar-
+  Breitensuche mit Wellenmarken, ohne Kostenfunktion und ohne Heuristik; der Weg
+  sind fünfzig Richtungsziffern, und bei mehr als fünfzig Schritten plant das
+  Spiel neu. Unsere Navigation ist bis heute **komplett eigene Erfindung** —
+  das ist die größte Bauaufgabe, die aus dem Lesen entstanden ist.
+- ⭐ Ebenfalls gelesen: die Fenster- und Zeichenmaschine (und **warum das
+  Original ohne Beschneidung auskommt**), die Zeichenliste mit ihren siebzig
+  Körben, die Palettenlogik (**der flimmernde Farbring ist das Wasser**) und der
+  Einheitentakt.
+- ⚠ Von **einem** belegten Unterschied der zwei Auslieferungen sind es jetzt
+  **elf** — und einer der elf war falsch beschrieben.
 
 ---
 
