@@ -1430,7 +1430,8 @@ läuft — nicht, dass die Sache stimmt.
   belegt mit `--gruppen-check`.
 * **Drei Missionen** haben keine Tore bekommen, weil die zwei GAME.EXE dort
   verschiedene Torfolgen liefern.
-* Die Fahrt der verlegten Einheit **mit den Güterzügen** ist nicht nachgebaut.
+* Die Fahrt der verlegten Einheit **mit den Güterzügen** ist nicht nachgebaut —
+  siehe Abschnitt R, der Anfang ist gelesen.
 * Zuarbeit des Spielers: ~~Nachfrist-Video~~ (**erledigt 21.08.2026**),
   **Diagonalkosten** im Gefecht, **Mündungsanker**, die **y-Halbierung** beim
   Einschlag, die zwei **Frachter in Mission 8**.
@@ -1524,3 +1525,46 @@ Sechsundzwanzigstel; über die Stufen holt sie es wieder ein (Stufe 8 liegt bei
 ⚠ **Der Umzug musste am Stück geschehen.** Wer die Mine nur auf Zustand 2 hebt,
 ohne `StateName`, `PercentDone` und den Takthandler mitzuziehen, nimmt ihr die
 Reparatur ganz: sie stünde auf 2 und niemand führte sie aus. Beim Bau gemessen.
+
+---
+
+## R. Die verlegte Einheit FÄHRT im Original (21.08.2026, Anfang gelesen)
+
+Bei uns ist »Transportieren« ein Sprung: `e.Depot.RemoveAt(k); ziel.Depot.Add(nr)`
+(`MapEntityLayer`, Transportknopf). Das Original tut etwas anderes, und der
+Anfang davon ist jetzt gelesen — **das spart der nächsten Sitzung die Suche.**
+
+**Befehl 518** (`0x206`), Behandler **C `0x4CEA90`**:
+
+```
+  Schleife ueber 200 Saetze zu 48 Byte bei 0xBC0DD0, gesucht wird +0x00 == 0
+    keiner frei -> Fehlerzeile ueber 0x539824 und RAUS
+  rep movsd ecx=0xA von 0xBC3350 nach +0x04     ; die ROUTE, 10 dwords
+  byte[+0x00] = 1                                ; belegt
+  word[+0x02] = Einheit
+  byte[+0x2C] = 0 ; byte[+0x2D] = 0              ; zwei Zaehler, bei null los
+  byte[+0x2E] = Gebaeudetyp der Quelle
+```
+
+Der Satz trägt also **die Einheit UND ihren Weg** — bis zu zehn Abschnitte.
+Damit ist belegt: die Einheit ist während der Fahrt **unterwegs**, nicht am
+Ziel. `0xBC3350` ist der Puffer, in den die Flutsuche (`0x4CE710`, siehe
+`Simulation/RailNetwork.cs`) ihre gefundene Route schreibt.
+
+**Was noch fehlt, und wo es steht:** der Weiterschalter. Die Tafel wird ausser
+vom Behandler noch an diesen Stellen angefasst — dort ist er zu suchen:
+
+| Feld | Stellen |
+|---|---|
+| `+0x00` (belegt) | `0x410E2E` `0x41D71C` `0x41E78D` `0x41EF29` `0x4C64ED` `0x4C7DFC` |
+| `+0x02` (Einheit) | `0x410E00` `0x4C7DED` `0x4CEC7B` |
+| `+0x04` (Route) | `0x410E28` `0x4C6507` `0x4C6CC5` `0x4C711A` `0x4CEC72` `0x4CED19` |
+| `+0x2C` (Zähler) | `0x410E1A` `0x4C64FD` `0x4C6CAE` `0x4C6CB8` `0x4C7103` `0x4C710D` |
+| `+0x2E` (Typ) | `0x4C6CBE` `0x4C7113` `0x4CED09` |
+
+Die Häufung um `0x4C6CAE` und `0x4C711A` sieht nach dem Takt aus; `0x410Exx`
+gehört zum Aufräumer oder zum Spielstand.
+
+⚠ **Solange das Tempo nicht gelesen ist, bleibt der Sprung stehen.** Eine Fahrt
+mit geratener Dauer wäre schlechter als ein ehrlicher Sprung — sie sähe richtig
+aus und wäre es nicht.

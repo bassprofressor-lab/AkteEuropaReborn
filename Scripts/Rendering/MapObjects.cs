@@ -448,8 +448,14 @@ public partial class MapEntityLayer
     /// (@0x4CACAB), die Kachel gegen die verkohlte tauschen (@0x4CACE5) und die
     /// beiden Nachbarzeilen neu zeichnen lassen. Der Brandtakt @0x4CA330 zählt
     /// dann jeden vierten Spielschritt hoch und legt bei 255 die Bodenkachel
-    /// hin. Bei uns steht die Kachel, solange die Zelle brennt; das AUSGEHEN
-    /// ist noch nicht gebaut — siehe <c>CHANGELOG.de.md</c>.</para>
+    /// hin.</para>
+    ///
+    /// <para>⚠ <b>Hier stand »das AUSGEHEN ist noch nicht gebaut«.</b> Das
+    /// stimmt seit dem 19.08.2026 nicht mehr — <see cref="Ausbrennen"/> läuft
+    /// einmal je Bild, rechnet die Brenndauer aus derselben Formel und legt
+    /// danach Stumpf oder verkohlten Baum hin. Am 21.08.2026 nachgeprüft und
+    /// berichtigt: ein Kommentar, der eine gebaute Sache als fehlend führt,
+    /// schickt den nächsten auf eine Suche nach etwas, das schon dasteht.</para>
     ///
     /// <para>Gibt zurück, ob wirklich etwas angezündet wurde. ⚠ Es kann nur
     /// brennen, was der Backofen als Wald erkannt und mit einer verkohlten
