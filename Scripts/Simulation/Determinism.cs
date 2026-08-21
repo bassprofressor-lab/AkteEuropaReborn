@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Simulation;
+﻿namespace AkteEuropaReborn.Simulation;
 
 using System;
 using AkteEuropaReborn.Core.Math;
@@ -147,13 +147,24 @@ public static class Determinism
         Seed = s;
         ResetStreams();
 
-        // Godots GLOBALER Würfel. `GD.Randi()` steht heute noch an drei Stellen
-        // im Spiel (MapEntityLayer 4215/4217 Schadensrechnung,
-        // RailFreight 1083 Gleisbruch); die gehören uns nicht, aber ihre Quelle
-        // lässt sich von hier aus keimen. Das macht sie REPRODUZIERBAR, nicht
-        // netztauglich — der globale Würfel wird auch von Klang und Anzeige
-        // angefasst, und die laufen auf Bildzeit. Der Bericht nennt den
-        // eigentlichen Umbau.
+        // Godots GLOBALER Würfel wird mitgekeimt.
+        //
+        // ⚠ HIER STANDEN DREI FUNDSTELLEN, DIE ES NICHT MEHR GIBT
+        // (»MapEntityLayer 4215/4217 Schadensrechnung, RailFreight 1083
+        // Gleisbruch«) — nachgezählt am 21.08.2026. Eine Zeilenangabe in einem
+        // Kommentar wandert mit jeder Einfügung; wer ihr folgt, landet
+        // irgendwo. Darum steht hier jetzt eine PRÜFBARE Aussage statt einer
+        // Adresse:
+        //
+        // Stand 21.08.2026 ruft KEINE simulationsrelevante Stelle mehr
+        // GD.Randi. Übrig sind allein die vier Würfe in Audio/GameSounds.cs
+        // (welche Stimmprobe, welche Tonhöhe) — die dürfen dort bleiben, weil
+        // ein Klang den Spielzustand nicht verändert. Nachzählen mit:
+        //   grep -rn "GD.Randi()" Scripts --include=*.cs
+        //
+        // Das Keimen macht auch die REPRODUZIERBAR, aber nicht netztauglich:
+        // der globale Würfel wird von Klang und Anzeige angefasst, und die
+        // laufen auf Bildzeit — zwei Maschinen ziehen daraus verschieden oft.
         GD.Seed(s);
     }
 

@@ -545,16 +545,25 @@ public partial class MapEntityLayer
             // (255 − Zustand) · 4 Spielschritte, und ein Spielschritt ist
             // 20 ms (SetTimer @0x415BC5, siehe OriginalTicksPerSecond).
             // Macht 8,3 bis 20,2 Sekunden.
-            int zustand = (int)(GD.Randi() % (uint)(Import.MapForest.BrandZustandBis
-                                                    - Import.MapForest.BrandZustandVon + 1))
-                          + Import.MapForest.BrandZustandVon;
+            // ⭐ 21.08.2026: dieser Wurf lief bis heute über GD.Randi und war
+            // damit der EINE simulationsrelevante Würfel ausserhalb des
+            // gekeimten Gangs. Er entscheidet, WIE LANGE eine Zelle brennt —
+            // und weil eine brennende Zelle ihre Nachbarn anzündet und danach
+            // Stumpf oder Baum hinterlässt, entscheidet er mittelbar über die
+            // Begehbarkeit der Karte. Zwei Maschinen im Netzspiel wären
+            // auseinandergelaufen.
+            int zustand = Simulation.Determinism.Range(Import.MapForest.BrandZustandVon,
+                                                       Import.MapForest.BrandZustandBis);
             e.BrandDauer = (Import.MapForest.BrandEnde - zustand) * Import.MapForest.BrandTakt
                            / OriginalTicksPerSecond;
             // Und die eine von zwanzig, bei der der verkohlte Baum stehen
             // bleibt: @0x4CA3B2 `div 0x14`, Rest 0 fuehrt auf die Zeile
             // »dohorel forest - nesjizdnej« (@0x53969C, »abgebrannt —
             // unpassierbar«), sonst »- sjizdnej« (@0x5396C0, »passierbar«).
-            e.Steht = GD.Randi() % 20 == 0 || !e.HatAsche;
+            // ⭐ Ebenfalls seit dem 21.08.2026 gekeimt: dieser Wurf legt fest,
+            // ob die Zelle danach UNPASSIERBAR ist — der unmittelbarste
+            // Eingriff ins Gelände, den das Feuer hat.
+            e.Steht = Simulation.Determinism.Roll(20) == 0 || !e.HatAsche;
             ObjectsBurning++;
             ok = true;
             // ⚠ Regel 33: die ausgewuerfelte Dauer gehoert ins Protokoll. Ohne
@@ -607,10 +616,12 @@ public partial class MapEntityLayer
     /// <para>⚠ <b>Gewürfelt wird mit dem EINEN Würfel</b>
     /// (<c>Simulation.Determinism.Roll</c>), nicht mit <c>GD.Randi</c>: das
     /// Übergreifen verändert, welche Zellen später begehbar sind, und ist damit
-    /// simulationsrelevant. ⚠ Die zwei älteren Würfe in <see cref="Anzuenden"/>
-    /// (Branddauer und »steht der verkohlte Baum«) laufen noch über
-    /// <c>GD.Randi</c> — das ist eine bestehende Lücke, die hier sichtbar wird
-    /// und nicht von hier stammt.</para></summary>
+    /// simulationsrelevant. ⭐ <b>Und die zwei älteren Würfe in
+    /// <see cref="Anzuenden"/> ebenfalls</b> (Branddauer, »steht der verkohlte
+    /// Baum«): hier stand »eine bestehende Lücke, die hier sichtbar wird und
+    /// nicht von hier stammt« — sie ist am 21.08.2026 geschlossen worden.
+    /// <b>Im ganzen Brandwesen läuft jetzt kein <c>GD.Randi</c> mehr.</b></para>
+    /// </summary>
     private void BrandGreiftUeber()
     {
         if (ObjectsBurning == 0) return;
@@ -708,6 +719,43 @@ public partial class MapEntityLayer
           .Append(flachOk ? "flach ✔" : "SCHIEF ✘ (der Wuerfel selbst hat eine Vorzugsrichtung)")
           .Append('\n');
         alles &= flachOk;
+
+        // --- 4. DER WUERFEL IST GEKEIMT -------------------------------------
+        //
+        // ⚠ Bis zum 21.08.2026 liefen die zwei Wuerfe in Anzuenden (Branddauer,
+        // "steht der verkohlte Baum") ueber GD.Randi. Beide entscheiden, welche
+        // Zellen spaeter begehbar sind — zwei Maschinen im Netzspiel waeren
+        // auseinandergelaufen, OHNE dass es irgendwo aufgefallen waere.
+        //
+        // Gemessen wird das Einzige, was zaehlt: derselbe Keim gibt dieselbe
+        // Folge. Und die GEGENPROBE gehoert dazu — ein Wuerfel, der immer 7
+        // sagt, bestuende die erste Haelfte muehelos.
+        uint keimVorher = Simulation.Determinism.Seed;
+        var forcedVorher = Simulation.Determinism.Forced;
+
+        string Folge(uint keim)
+        {
+            Simulation.Determinism.Forced = keim;
+            Simulation.Determinism.NewMap("brand-check");
+            var t = new System.Text.StringBuilder();
+            for (int i = 0; i < 40; i++)
+            {
+                t.Append(Simulation.Determinism.Range(Import.MapForest.BrandZustandVon,
+                                                      Import.MapForest.BrandZustandBis));
+                t.Append(Simulation.Determinism.Roll(20) == 0 ? 'S' : '.');
+            }
+            return t.ToString();
+        }
+
+        string a1 = Folge(4711), a2 = Folge(4711), b1 = Folge(4712);
+        bool gleich = a1 == a2, anders = a1 != b1;
+        sb.Append($"  Keim 4711, zweimal: {(gleich ? "deckungsgleich ✔" : "AUSEINANDER ✘")}\n");
+        sb.Append($"  Keim 4712 dagegen: {(anders ? "andere Folge ✔" : "DIESELBE ✘ — der Keim wirkt nicht")}\n");
+        sb.Append($"  Probe: {a1.Substring(0, 24)}...\n");
+        alles &= gleich && anders;
+
+        Simulation.Determinism.Forced = forcedVorher;
+        if (forcedVorher == null) Simulation.Determinism.Forced = keimVorher;
 
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();

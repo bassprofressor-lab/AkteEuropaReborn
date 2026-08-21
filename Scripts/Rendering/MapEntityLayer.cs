@@ -25991,8 +25991,13 @@ public partial class MapEntityLayer : Node2D
     /// nicht einmal mit Richtung.</summary>
     private static Vector2 AirTurnPoint(Vector2 from)
     {
-        int dx = (int)(10 + GD.Randi() % 10) * ((GD.Randi() & 1) == 0 ? 1 : -1);
-        int dy = (int)(10 + GD.Randi() % 10) * ((GD.Randi() & 1) == 0 ? 1 : -1);
+        // ⭐ 21.08.2026 auf den EINEN Würfel umgestellt: wohin ein Flugzeug
+        // wendet, entscheidet mit, wo es schiesst und wo es abgeschossen wird.
+        // Das ist simulationsrelevant und darf nicht am globalen Würfel
+        // hängen, den auch Klang und Anzeige anfassen.
+        var w = Simulation.Determinism.Roll;
+        int dx = (10 + w(10)) * (w(2) == 0 ? 1 : -1);
+        int dy = (10 + w(10)) * (w(2) == 0 ? 1 : -1);
         return from + new Vector2(dx * TileW, dy * TileH);
     }
 
@@ -26047,9 +26052,12 @@ public partial class MapEntityLayer : Node2D
                 var mine = _entities.FindAll(x => x.IsBuilding && !x.Dead && x.Owner == a.Owner);
                 if (mine.Count > 0)
                 {
-                    home = mine[(int)(GD.Randi() % (uint)mine.Count)];
+                    // ⭐ 21.08.2026 gekeimt: welches Gebäude der Heli ansteuert,
+                    // ist eine Ortsentscheidung und damit simulationsrelevant.
+                    home = mine[Simulation.Determinism.Roll(mine.Count)];
                     a.HomePoint = home.Pos + new Vector2(
-                        (int)(GD.Randi() % 6) * TileW, (int)(GD.Randi() % 6) * TileH);
+                        Simulation.Determinism.Roll(6) * TileW,
+                        Simulation.Determinism.Roll(6) * TileH);
                 }
                 // ⚠ UNSERE ABWEICHUNG, und zwar bewusst: hat der Spieler KEIN
                 // eigenes Gebaeude mehr, schickt das Original den Heli auf eine
