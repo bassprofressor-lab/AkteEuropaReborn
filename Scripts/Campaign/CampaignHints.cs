@@ -39,10 +39,12 @@ using GDict = Godot.Collections.Dictionary<string, Godot.Variant>;
 /// niemand sonst diese Variablen liest, und im Original tut das niemand: die
 /// 34 Tore sind ihre einzigen Leser und Schreiber.</para>
 ///
-/// <para>⚠ <b>Fünf Tore fehlen</b> (v[372], 374, 375, 377, 381): sie prüfen
-/// etwas anderes als ein Bauteilbyte der angewählten Einheit, und was, ist
-/// nicht gelesen. Sie stehen in der Datei ohne Bedingung und werden hier
-/// übergangen — <b>nicht</b> geraten.</para>
+/// <para>⚠ <b>NEUN Tore fehlen</b> — v[346], v[372…378] und v[381]. ⚠ Hier
+/// stand »fünf«: das zählte nur die Tore ganz ohne Wert. Vier weitere
+/// (v[346], 373, 376, 378) tragen zwar einen Wert, aber <b>kein Feld</b> —
+/// sie prüfen etwas anderes als ein Bauteilbyte der angewählten Einheit, und
+/// was, ist nicht gelesen. Alle neun werden übergangen und <b>gezählt</b>
+/// (<see cref="OhneBedingung"/>), nicht geraten.</para>
 /// </summary>
 public static class CampaignHints
 {
