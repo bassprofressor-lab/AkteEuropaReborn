@@ -79,7 +79,9 @@ public sealed class CwmFile
     // ungelesen. Das gilt nicht mehr: sec20 ist die ZEICHENLAGE je Zelle
     // (100+n Bruecke aus sec17, 200+n Rampe aus sec21, gemessen 195 von 195),
     // und im Spiel liegt sie bei 0x542E18, indiziert spalte*256 + zeile.
-    // Siehe OFFENE_FRAGEN.md Abschnitt N und S.
+    // Siehe OFFENE_FRAGEN.md Abschnitt N und S. (Zum Lagenbyte: >=100 zum
+    // Beladen, >=200 zum Entladen -- beide Schranken stehen im
+    // Einheitendurchgang 0x406CD0.)
     //
     // Was reicht, ist eine CwmFile IM SPEICHER: dahinter haengt der ganze
     // vorhandene Schreibweg — `ContentBuilder.ExportMap` → `MapBaker.Bake` →

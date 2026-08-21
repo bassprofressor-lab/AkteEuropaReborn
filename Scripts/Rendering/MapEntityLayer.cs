@@ -2625,9 +2625,15 @@ public partial class MapEntityLayer : Node2D
                 // hostility tests (@0x409bde, @0x40d058) index the alliance
                 // matrix with. The old heading-from-+0x08 conversion is gone.
                 int facing = haveRaw ? HexByte(raw, 0x02) & 7 : DefaultFacing;
-                // ⚠ Fracht wird NICHT aufgestellt (siehe oben). Die Zahl dazu
-                // steht im --transport-check.
-                if (_frachtPlaetze.ContainsKey(GetI(e, "slot", -1))) { FrachtUebersprungen++; continue; }
+                // ⚠ Fracht wird nicht aufgestellt — aber sie wird GEBAUT.
+                //
+                // ⚠⚠ 21.08.2026: hier stand ein `continue`, und damit war die
+                // Ladung der Karte fuer immer weg. Sie geht jetzt durch
+                // DIESELBE Bauzeile wie jede andere Einheit und wird
+                // unmittelbar danach wieder herausgenommen (siehe
+                // FrachtAusListeNehmen). Zwei Bauwege waeren zwei Wahrheiten
+                // darueber, wie eine Einheit entsteht — und die Ladung soll ja
+                // beim Entladen genau die Einheit sein, die die Karte meint.
                 _entities.Add(new Entity
                 {
                     Slot = GetI(e, "slot", -1), Col = col, Row = row,
@@ -2774,6 +2780,9 @@ public partial class MapEntityLayer : Node2D
             // ⚠ und jetzt die Gegenprobe an der imap selbst: nicht jeder
             // mehrzellige Stempel ist ein Grundriss — siehe StampIsAStep.
             DropSteppingFootprints(root);
+
+            // Die Ladung aus der Liste nehmen — ab hier ist sie an Bord.
+            FrachtAusListeNehmen();
         }
 
         if (root.TryGetValue("markers", out var mv) && mv.VariantType == Variant.Type.Array)
@@ -19390,6 +19399,42 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Traeger-Platz -> die Einheitenplaetze an Bord, in der
     /// Reihenfolge der Datei. Sie ist auch die Reihenfolge beim Ausladen.</summary>
+    /// <summary>
+    /// <b>Die Einheiten, die wirklich an Bord sind</b> — gebaut wie jede
+    /// andere, aber aus der Einheitenliste genommen. Schlüssel ist der
+    /// Platz des Trägers.
+    ///
+    /// <para>⚠ Bis zum 21.08.2026 wurde Fracht beim Laden mit <c>continue</c>
+    /// übersprungen: die Ladung der Karte war für immer weg, und
+    /// <c>--transport-check</c> konnte nur zählen, wie viel fehlte. Jetzt läuft
+    /// sie durch dieselbe Bauzeile wie jede andere Einheit und wird danach
+    /// herausgenommen — zwei Bauwege wären zwei Wahrheiten darüber, wie eine
+    /// Einheit entsteht.</para></summary>
+    private readonly Dictionary<int, List<Entity>> _fracht = new();
+
+    /// <summary>Was an Bord dieses Trägers steht (Platznummer).</summary>
+    public IReadOnlyList<Entity> FrachtAnBord(int carrierSlot)
+        => _fracht.TryGetValue(carrierSlot, out var l) ? l : System.Array.Empty<Entity>();
+
+    /// <summary>Die frisch gebaute Ladung aus der Einheitenliste nehmen. Läuft
+    /// einmal, direkt nach dem Aufbau.</summary>
+    private void FrachtAusListeNehmen()
+    {
+        _fracht.Clear();
+        FrachtUebersprungen = 0;
+        for (int i = _entities.Count - 1; i >= 0; i--)
+        {
+            if (!_frachtPlaetze.TryGetValue(_entities[i].Slot, out int carrier)) continue;
+            if (!_fracht.TryGetValue(carrier, out var l)) _fracht[carrier] = l = new List<Entity>();
+            l.Add(_entities[i]);
+            _entities.RemoveAt(i);
+            FrachtUebersprungen++;
+        }
+        // Die Karte zaehlt von hinten nach vorn — die Ladung soll aber in der
+        // Reihenfolge der Karte herauskommen.
+        foreach (var l in _fracht.Values) l.Reverse();
+    }
+
     private readonly Dictionary<int, List<int>> _anBord = new();
 
     /// <summary>Traeger-Platz -> Deckel aus +0x24. GEMESSEN 0, 12, 13, 15 —

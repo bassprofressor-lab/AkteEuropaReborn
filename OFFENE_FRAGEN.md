@@ -1620,14 +1620,42 @@ Das ist **derselbe Index, den Abschnitt N gemessen hat** — `spalte·256 + zeil
 nicht andersherum. Dort war es aus den Dateien erschlossen; hier steht es im
 Code. Zwei unabhängige Seiten.
 
-### ⭐ Die Zellmarke fürs Absetzen ist ≥ 200, also die RAMPE — nicht die Brücke
+### ⚠⚠ Eine Berichtigung MEINER Berichtigung, am selben Tag
 
-Hier stand (aus dem Recherchebericht): »Die »Rampe« ist keine Bauart, sondern
-eine Zellmarke (**≥100 zum Beladen, ≥200 zum Entladen**)«. Die erste Hälfte ist
-**falsch**. Die Prüfung ist ein einziges `cmp …, 0xC8; jb raus`: unter 200
-passiert gar nichts. Und 100+n ist nach Abschnitt N eine **Brücke/Mole** aus
-sec17, kein Ladeplatz. Es ist damit dieselbe Quelle, die schon einmal danebenlag
-(siehe »Eine Behauptung der Recherche, die ich WIDERLEGT habe«).
+Hier stand seit einer Stunde: »die Zellmarke fürs Absetzen ist ≥ 200; die alte
+Notiz *≥100 zum Beladen, ≥200 zum Entladen* ist in ihrer ersten Hälfte falsch«.
+**Das war mein Fehler, und er ist zurückgezogen.**
+
+Ich hatte EINE Stelle gelesen (`0x4CF100`, `cmp …, 0xC8; jb raus`) und daraus
+geschlossen, es gebe keine 100er-Schranke. Es gibt sie — im **Einheiten­durch­gang
+`0x406CD0`** (»move kolik:«, »on square«, »no fuel«), und zwar viermal gegen
+dieselbe Tafel:
+
+| Stelle | Vergleich | heisst |
+|---|---|---|
+| `0x409510` | `cmp dl, 0x64; jb raus` | **≥ 100** |
+| `0x409767` | `cmp cl, 0x64; jb raus` | **≥ 100** |
+| `0x409387` | `cmp cl, 0xC8; jae …` | **≥ 200** |
+| `0x4097BC` | `cmp cl, 0xC8; jae …` | **≥ 200** |
+
+Damit stimmt die alte Notiz: die **Einheit** steigt beim Betreten einer Zelle
+mit ≥ 100 ein und bei ≥ 200 aus. `0x4CF100` fragt nur nach ≥ 200, weil es der
+**Entladebefehl** ist — dort ist die 200 richtig, aber sie ist nicht die ganze
+Regel.
+
+⭐ **Die Lehre, und sie ist teuer bezahlt:** ich habe aus dem Fehlen einer
+Schranke *an einer Stelle* auf ihr Fehlen *im Programm* geschlossen. Das ist
+derselbe Fehlschluss wie »null Aufrufer, also toter Code« ohne
+Thunk-Auflösung — ein Negativbefund aus einer einzigen Fundstelle ist keiner.
+Aufgefallen ist es nur, weil unser eigener Code die zwei Adressen
+`0x40950C`/`0x409763` schon in einem Kommentar führte.
+
+### Und was ≥ 100 und ≥ 200 nach Abschnitt N sind
+
+`100 + n` ist eine **Brücke/Mole** (sec17), `200 + n` eine **Rampe** (sec21) —
+das bleibt gemessen (110 von 110 und 85 von 85). Beides zugleich zu halten ist
+kein Widerspruch: eine **Mole** ist genau der Ort, an dem man ein Schiff
+besteigt, eine **Rampe** der, über den man herunterfährt.
 
 ### Der Rampenschritt
 
