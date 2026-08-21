@@ -3819,9 +3819,9 @@ Entladebefehl C `0x4CF100`, und die Werte selbst.
 | Wert | Stück | was es ist |
 |---:|---:|---|
 | **0** | 317 428 | nichts, gewöhnlicher Boden |
-| **1 … 34** | 3 574 | **nummerierte Linienzüge** — ⚠ ungeklärt, s. u. |
-| **98** | 1 102 | Einzelzellen; 90,5 % tragen `0xFFFF` (gesperrt) in sec6 |
-| **99** | 322 | **Türzelle eines Gebäudes** |
+| **1 … 80** | 3 574 | ⭐ **GLEIS DER VERKEHRSLINIE `n − 1`** — geklaert am 21.08.2026, siehe AW.3: jede markierte Zelle steht in sec22 unter genau dieser Linie, **7 872 / 7 872 = 100,00 %** (Nullmodelle: Linie `n` 0,88 %, `n−2` 0 %, zufaellig 1,96 %). sec34 hat 80 Plaetze -> 80 Werte, geht auf. Hoechster je beobachteter Wert: 43. |
+| **98** | 1 102 | ⭐ **von einem Betriebsgebaeude (Typ 2/3/4) geraeumte und DAUERHAFT GESPERRTE Zelle** — geschrieben an genau einer Stelle, C `0x43DE88`, nur wenn dort ein Landschaftsobjekt (> 8000) stand; setzt zugleich `sec6 = 0xFFFF`. Gleiszellen mit 98: **1 600 / 1 600 = 100 %** gesperrt (Nullmodell aller Gleiszellen: 16,6 %). Siehe AW.4. |
+| **99** | 322 | ⭐ **Tuerzelle eines Gebaeudes** — jetzt am Code belegt (C `0x43CB12`) und gemessen: **813 / 813 = 100,0 %** liegen auf `(x + [+0x35], y + [+0x36])` eines Gebaeudes, Nullmodell 0,12 %. ⭐ Damit heisst »aus Gelaendeklasse 99 darf nicht geschossen werden« woertlich: **aus einer Tueroeffnung heraus wird nicht geschossen.** Siehe AW.4. |
 | **100 + n** | 264 | **Brücke/Mole Nr. n aus sec17** |
 | **200 + n** | 12 | **Rampe Nr. n aus sec21** |
 
@@ -4006,12 +4006,18 @@ der Linearabtast findet zu **wenig** (er bricht ab), der Rohabtast zu **viel**
 (er trifft Datenbytes). Ein Befund, der nur auf einem von beiden steht, ist
 wertlos.
 
-### Das Ergebnis: 130 Abschnitte, ein einziger wirklich toter
+### Das Ergebnis: 130 Abschnitte, ~~ein einziger~~ ⚠ **ZWEI** wirklich tote
+
+⚠⚠ **BERICHTIGT am 21.08.2026, siehe AW.1.** Dieser Lauf suchte nach »2
+Fundstellen« und hat **sec67** darum uebersehen: es hat vier, aber zwei davon
+sind die **Nullung des Laders selbst**. Das richtige Kriterium lautet **»keine
+Fundstelle ausserhalb von Lader `0x41E070` und Speicherer `0x41D210`«** — und
+danach sind es **sec36 und sec67**.
 
 | | |
 |---|---|
 | Abschnitte erhoben (beide EXE) | **130** |
-| **ohne jeden Benutzer ausser Lader und Speicherer** | **1 — sec36** |
+| **ohne jeden Benutzer ausser Lader und Speicherer** | ⚠ **2 — sec36 UND sec67** (berichtigt, AW.1) |
 | mit Blockregister (`mov esi/edi, <Puffer>`) | 46 |
 | deren Verweiszahl in C und F abweicht | 21 |
 
@@ -4378,6 +4384,12 @@ Zustandsautomat nur über die ersten **60**.
 | Prüfung | Modell | Nullmodell |
 |---|---|---|
 | Strecke ab `(+2,+3)` endet auf `(+4,+5)` | **215/215 = 100 %** | vertauscht 0/215 · `(+2,+3)` 0/215 · `(+6,+7)` 0/215 |
+
+⚠⚠ **BERICHTIGT am 21.08.2026 (AW.5): `+0x03` und `+0x05` sind nur die
+NIEDERWERTIGEN BYTES der y-Halbzeile.** Die vollen 16 Bit stehen in
+**sec122** (C `0xA66DD8`, 80 × 2 × u16). Halbzeilen laufen bis `2·H`; bei
+H > 127 ueberlaeuft das Byte. ⚠ Die 23 `.CWM` tragen sec122 gar nicht.
+
 | Satzweite 214 gültig | **780/780 = 100 %** | 212: 2,6 % · 213: 4,6 % · 215: 14,6 % |
 | Streckenzelle → Bit gesetzt | **3577/4961 = 72,1 %** | Index vertauscht 1,69 % · **Zufallszelle 0,73 %** |
 | Fehlstellen je Linie | genau vorn 2 + hinten 3, **215/215** | — |
@@ -4387,7 +4399,13 @@ unsere `RailLine` führt seit langem `Bud1`, `Bud2`, `Steps` und `Faze (+0xd5)` 
 genau diesen Satz. Neu sind die **Endpunkte** `+0x02…+0x05`, die **Schritttafel**
 `0x5043C0` und `sec35` vollständig.
 
-⚠ Offen: warum 42 von 215 Linien **kein** Bit tragen, und dass 40 % der gesetzten
+⭐ **ERLEDIGT am 21.08.2026 (AW.5): mit sec122 sind es 0 von 215**, und das
+Fehlstellenmuster ist dann exakt (2 vorn, 3 hinten) in 215/215. Die 40 %
+schrumpfen auf 11–19 % je Datei; der Rest ist die **Spur einer Linie aus
+einer groesseren Karte** — zu sec35 gibt es Test und Setzen, aber keinen
+Loescher, das Bitfeld sammelt an.
+
+~~⚠ Offen:~~ warum 42 von 215 Linien **kein** Bit tragen, und dass 40 % der gesetzten
 Bits zu keiner heutigen Linie gehören (in `1.DM` liegen 66 von 70 davon
 **ausserhalb der Karte**). Zu sec35 gibt es nur Test und Setzen, keinen Löscher —
 das Feld sammelt offenbar an.
@@ -4503,7 +4521,14 @@ Schiffe erscheinen in der Statistik nie.
 
 **`sec77`** (8 B): fünf Fundstellen, darunter die Missionsvokabel `0x4D0970`
 (`byte[Basis + arg1] = arg0`), die hier ohnehin als offen steht. **Kein Leser.**
-⭐ `sec77[p] == 1 ⇒ sec53[p].Zustand == 1` (aktive KI) in **28 von 28** — geprüft
+⚠⚠ **BERICHTIGT am 21.08.2026 (AW.2): DIESE ZAHL TRAEGT FAST NICHTS.** Von den
+76 Plaetzen mit `sec77[p] == 0` erfuellen **63** dieselbe Bedingung — **das
+Nullmodell ist 83 %, nicht 0 %.** 28/28 darunter hat eine
+Zufallswahrscheinlichkeit von 2,3 %: ein Streifschuss, keine Entdeckung.
+⭐ Was sec77 wirklich ist, steht in AW.2 — die dritte Skriptsperre, **ohne
+einen einzigen Leser**.
+
+~~⭐ `sec77[p] == 1 ⇒ sec53[p].Zustand == 1` (aktive KI) in **28 von 28**~~ — geprüft
 und **verworfen** wurden »hat Gebäude« (widerlegt), »hat Einheiten«, »hat Ziele«.
 Der Leser läuft mit Sicherheit über ein Register: sec57 liegt lückenlos dahinter,
 und `esi−8` sieht die Relokationstafel nicht.
@@ -6119,3 +6144,761 @@ Gegner in eine andere Betriebsart.** Zu tun ist zweierlei:
 2. bis dahin steht in `AiImpVon` eine benannte Ersatzregel: im Gefecht **6** je
    eigenem Gebäude (der Wert, der im Original 311 von 324 Fällen ausmacht), in
    der Kampagne 0. **Die Ersatzregel ist unsere, nicht die des Originals.**
+
+---
+
+## AW. ⭐⭐ DIE FÜNF LETZTEN RÄTSEL DES DATEIFORMATS (21.08.2026)
+
+Alle Zahlen aus 23 `.CWM` + 13 `.DM` und aus der **Vollerhebung über die
+Relokationstafel** beider EXE. Das Werkzeug wurde vorher an sec58 geeicht
+(C `0xB38D40` → 2 Schreiber / 4 Leser, F genauso).
+
+### AW.0 Adresstafel
+
+| Sache | C | F |
+|---|---|---|
+| sec20 Lagentafel | `0x542E18` | `0x541E78` |
+| sec22 Gleiszellen (15 000 B, 5-B-Sätze) | `0xC2C220` | `0xC2B280` |
+| sec34 Linien (80 × 214) | `0xA89220` | `0xA88280` |
+| sec35 Belegungsbitfeld (16 481 B) | `0xA8D8C8` | `0xA8C928` |
+| ⭐ **sec122 Linien-y (80 × 2 × u16)** | `0xA66DD8` | `0xA65E38` |
+| sec3 Gebäude (**300 × 76**) | `0xC06910` | `0xC05970` |
+| sec6 Handhabungsgitter | `0xBDEA80` | `0xBDDAE0` |
+| **sec67** (8 B) | `0xB38528` | `0xB37588` |
+| **sec77** (8 B) | `0xB46198` | `0xB451F8` |
+| **sec112** `fly_part` (72 000 B) | `0xA51110` | `0xA50170` |
+| Speicherer / Lader | `0x41D210` / `0x41E070` | `0x41C3D0` / `0x41D230` |
+| Gebäudetakt (`doors`·`mines`·`mining`) | `0x43CA50` | `0x43BAF0` |
+| » Schreiber **99** | `0x43CB12` | `0x43BBB2` |
+| » Schreiber **98** | `0x43DE88` | `0x43CE94` |
+| » Typumschalter / Tafel / Indexkarte | `0x43DC4E` / `0x43ECAC` / `0x43ECD8` | `0x43CC53` / `0x43DCC4` / `0x43DCF0` |
+| Prüfer »sec20 > 99« (Thunk C `0x4023C9`) | `0x4CE6E0` | `0x4CE290` |
+| Prüfer »sec20 ≥ 200« | `0x4CF100` | `0x4CECA0` |
+| sec77-Setzer (Thunk C `0x40220C`) | `0x4D0970` | `0x4D0520` |
+| sec109- / sec131-Setzer (Thunks `0x40123F` / `0x4020A9`) | `0x4D0F00` / `0x4D0EE0` | — |
+| sec112 Nullung `rep stosd` 72 000 B | `0x41EFA9` | `0x41E164` |
+| sec112 Schranke **Satz 1000** | `0xA59DB6` | `0xA58E16` |
+| » im Aktualisierer / im Zuteiler | `0x42EBE8` / `0x4AD8C7` | `0x42DDB0` / `0x4AD1F7` |
+| » dritte Schranke `cmp si, 0x3E8` | `0x4AE4A2` | `0x4ADDD2` |
+| Schritttafel der Linien (12 × i8,i8) | `0x5043C0` | — |
+
+### AW.1 ⭐⭐ sec67 ist der ZWEITE tote Abschnitt
+
+**Genau vier Fundstellen, und alle vier liegen im Speicherer oder im Lader** —
+zwei davon sind die **Nullung des Laders selbst**:
+
+```
+C  0x41D87A  push 0xB38528              (Speicherer)
+   0x41E8F5  push 0xB38528              (Lader)
+   0x41F02D  mov dword[0xB38528], edx   ┐ die Nullung, zwei Doppelworte
+   0x41F033  mov eax, 0xB38528          ┘ 0x41F042: mov dword[eax+4], edx
+F  0x41CA3A / 0x41DAB4 / 0x41E1EC / 0x41E1F2 — befehlsgleich
+```
+
+| Aussage | Zahl | Nullmodell |
+|---|---|---|
+| Fundstellen **ausserhalb** von Lader/Speicherer | **0 von 4** | über alle 130 Abschnitte trifft »0 ausserhalb« auf **2 zu = 1,5 %** |
+| belegte Bytes in den `.DM` | **0 von 8, in 13 von 13** | — |
+| 4 Fundstellen ist Bodenniveau | nur 6 von 130 haben ≤ 4 | **Median 12** |
+
+⚠ Und die Gegenprobe, dass 4 Fundstellen sonst *nicht* »tot« heisst: sec64/65/66
+haben ebenfalls je 4 — aber zwei davon sind echt (`mov ecx,[0xBC5684]` @`0x4160CC`
+und zurück @`0x4160E5`, beide im Hauptdurchgang). Bei sec67 gibt es kein
+solches Paar.
+
+⚠⚠ **BERICHTIGUNG AN ABSCHNITT AJ.** Dort steht »130 Abschnitte, **ein einziger**
+wirklich toter — sec36«. **Falsch, es sind zwei.** Der damalige Lauf suchte nach
+»2 Fundstellen«; sec67 hat 4. Das richtige Kriterium lautet **»keine Fundstelle
+ausserhalb von Lader `0x41E070` und Speicherer `0x41D210`«** — und danach sind es
+sec36 (2/2) und **sec67 (4/4)**.
+
+⭐ **Die Nachbarschaft ist ein Indiz:** sec67 sitzt zwischen `0xB38520` (dem
+u16-Kopf der Warteschlange des Sektor-Wegsuchers, `0x4BEA30`) und `0xB38530`
+(der 1000er-Kandidatenliste der KI) — **mitten im KI-Kladdenspeicher**, als
+einziges davon in der Ladertafel. Das riecht nach einem Feld, das beim Umbau
+der KI herausfiel und dessen Zeile in Lader und Speicherer stehenblieb.
+
+⚠ Blockbefehle geprüft: von 3 963 `rep` in C sind 181 mit auflösbarem Ziel;
+**keiner** deckt `0xB38528`. Der `rep stosd` nebenan (`0x41F047`, `edi=0xB36BE0`,
+`ecx=0x650`) trifft exakt sec68 (6 464 B) und hört bei `0xB38520` auf.
+
+**Für den Nachbau: acht Nullbytes lesen, acht schreiben. Mehr ist nicht drin.**
+
+### AW.2 ⭐⭐ sec77 — 119 Schreibstellen, KEIN Leser
+
+```
+C 0x4D0970 (Thunk 0x40220C):  xor ecx,ecx ; al=[esp+4] ; cl=[esp+8]
+                              mov byte[ecx + 0xB46198], al ; ret
+```
+Also `sec77[Spieler] = Wert`. ⭐ **Die Rechnung geht auf:** die Rücksetzschleife
+@C `0x488406` endet auf `cmp esi, 8` — **8 B / 1 B je Spieler = 8, restlos.** In
+den 13 `.DM` kommen nur **0 und 1** vor.
+
+⭐ **Die Familie ist gefunden** — gleichgebaute Setzer, die nur das
+Missionsskript ruft:
+
+| Abschnitt | Setzer C | Thunk | Rufstellen | Zustand |
+|---|---|---|---:|---|
+| sec61 | `0x4D1050` | `0x402022` | 72 | Betriebsart der KI — **wird gelesen** |
+| sec106 | `0x4D09F0` | `0x40237E` | 14 | Skriptsperre — **wird gelesen** |
+| **sec77** | `0x4D0970` | `0x40220C` | **119** | ⚠ **kein Leser in beiden EXE** |
+| sec109 | `0x4D0F00` | `0x40123F` | — | — |
+| sec131 | `0x4D0EE0` | `0x4020A9` | — | — |
+
+| Aussage | Treffer | Nullmodell |
+|---|---|---|
+| `sec61[p] ≠ 2` ⇒ `sec77[p] == 1` | **12/12 = 100 %** | dieselben Spieler mit `sec77[p]==0`: **0/76 = 0 %** |
+| sec61-Setzer innerhalb 48 B einer sec77-Rufstelle mit **demselben** Index | **38/47 = 81 %** | zufällige Indexpaarung: **16 %** |
+
+**Ergebnis: sec77 ist die dritte Skriptsperre derselben Familie — »Spieler p ist
+eine vom Skript eingeschaltete KI«. Wirkung hat sie in keiner der beiden
+Auslieferungen, weil kein Befehl sie liest.** Für den Nachbau: mitschreiben,
+sonst ignorieren.
+
+⚠⚠ **BERICHTIGUNG AN ABSCHNITT AL.4.** Dort steht »`sec77[p]==1 ⇒
+sec53[p].Zustand == 1` in **28 von 28**«. Die Zahl stimmt, **aber sie trägt fast
+nichts**: von den 76 Plätzen mit `sec77[p]==0` erfüllen **63** dieselbe
+Bedingung. **Das Nullmodell ist 83 %, nicht 0 %.** 28/28 darunter hat eine
+Zufallswahrscheinlichkeit von 2,3 % — das ist keine Entdeckung, das ist ein
+Streifschuss. Die Aussage gehört mit ihrer Gegenzahl ins Dokument oder gar nicht.
+
+⚠ **Ein Verdacht, ausdrücklich NICHT als Auslieferungsunterschied gemeldet:**
+der Setzer hat in C **119**, in F **123** Rufer. Da sec77 keinen Leser hat, wäre
+der Unterschied ohnehin wirkungslos — und das Funktionsanfangsraten des Laufs
+liefert im Skriptbereich 13 Anfänge in C gegen 7 in F, ist dort also unsicher.
+**Verdacht, nicht Befund.**
+
+### AW.3 ⭐⭐ Das untere Band von sec20 ist die LINIENNUMMER
+
+> **`sec20[Spalte·256 + Zeile] == n` mit 1 ≤ n ≤ 97 heisst: auf dieser Zelle
+> liegt das Gleis der Verkehrslinie mit dem Index `n − 1`.**
+
+Damit ist die Wertetafel von sec20 **lückenlos**:
+
+| Wert | bedeutet |
+|---|---|
+| 0 | gewöhnlicher Boden |
+| **1 … 80** | **Gleis der Linie `n−1`** (sec34 hat 80 Plätze → 80 Werte, geht auf) |
+| **98** | gesperrte Zelle (AW.4) |
+| **99** | **Türzelle eines Gebäudes** (AW.4) |
+| 100 + n | Brücke/Mole n (sec17) |
+| 200 + n | Rampe n (sec21) |
+
+Der Prüfer C `0x4CE6E0` (`cmp byte[…+0x542E18], 0x63; seta al`) trennt genau bei
+99: **alles ≤ 99 ist Boden/Gleis/Tür, alles > 99 ist Bauwerk.**
+
+**Der Beleg läuft über sec22** (die Gleiszellenliste, 5-B-Sätze: x, y, ·, ·, Linie):
+
+| Aussage | Treffer | Nullmodelle |
+|---|---|---|
+| Jede sec20-markierte Zelle steht in sec22 unter genau der Linie `Wert−1` | **7 872 / 7 872 = 100,00 %** | Linie `Wert`: **0,88 %** · `Wert−2`: **0 %** · zufällig: **1,96 %** |
+| Zahl der echten Linien je Datei == höchster Bandwert | NET03 **10/10**, NET02 **33/33**, NET08 **43/43** | — |
+| Höchster je beobachteter Wert | **43** — alle Plätze 60…79 haben `delka == 0` | — |
+
+⭐ **Die Enden bleiben frei, und zwar exakt:** über die 215 echten Linien tragen
+die **ersten zwei und die letzten zwei** Zellen jeder Route `sec20 == 0` —
+**430 von 430 = 100 %, keine Ausnahme.** Das ist die Andockstrecke vor dem
+Gebäude, und dieselbe Trimmung findet sich in sec35 (AW.5): beide Felder werden
+von derselben Routine geschrieben.
+
+⚠ **Wodurch der Fund blind ist:** die Marke *lesende* Seite wurde nicht
+gefunden. sec20 hat 96 Fundstellen in C; die vier benannten Prüfer testen auf
+`> 99`, `≥ 200`, `≥ 100` und `!= 0`. **Der Fund steht auf den Daten, nicht auf
+dem Kontrollfluss.**
+
+### AW.4 ⭐⭐ `sec20 == 99` ist die TÜRZELLE — 813/813
+
+Beide Sonderwerte werden an **je genau einer Stelle** geschrieben, beide im
+Gebäudetakt (C `0x43CA50`, Protokollmarken `doors`, `mines`, `mining`).
+
+**99 (`0x63`) — C `0x43CB12`:**
+```
+cl = Gebäude[+0x0A]                      ; ein Zustandszähler
+cmp cl, 0x63 ; jbe raus                  ; nur oberhalb 99
+... jeden zweiten Takt: cl++ ...
+cmp cl, 0xFA ; jne raus                  ; bei 250:
+Gebäude[+0x0A] = 1
+Zelle = ((Gebäude.x + [+0x35]) << 8) + Gebäude.y + [+0x36]
+sec6[Zelle]  = 0xFFFE                    ; Zelle FREIGEBEN
+sec20[Zelle] = 99
+```
+
+| Aussage | Treffer | Nullmodell |
+|---|---|---|
+| Jede `sec20 == 99`-Zelle liegt auf `(x + [+0x35], y + [+0x36])` eines Gebäudes | **813 / 813 = 100,0 %** | zufällige Zellen gleicher Anzahl: **0,12 %** |
+
+⭐ **Und die alte Notiz fügt sich:** »aus Geländeklasse 99 darf nicht geschossen
+werden« (C `0x40BB17`, einer der Auslieferungsunterschiede) heisst also
+wörtlich: **aus einer Toröffnung heraus wird nicht geschossen.**
+
+⚠⚠ **BERICHTIGUNG: sec3 ist `300 × 76 B OHNE KOPF`**, nicht »4 B Kopf +
+255 × 76«. `22 800 = 300 · 76`, geht auf. Basis `0xC06910 + i·76`:
+**x bei +0x00, y bei +0x02, Typ bei +0x04** (je als Byte gelesen),
+Zustandszähler **+0x0A**, Türversatz **+0x35/+0x36**, ein zweiter Versatz
+**+0x38/+0x39**. Die falsche Notiz kostet einen Satzversatz von 4 Byte **und**
+eine falsche Satzzahl.
+
+**98 (`0x62`) — C `0x43DE88`:**
+```
+Zelle = ((Gebäude[+0x38] + …) << 8) + Gebäude[+0x39] + …
+cmp word[Zelle*2 + sec6], 0x1F40 ; jbe raus   ; NUR wenn dort ein Landschaftsobjekt (>8000) steht
+sec20[Zelle] = 98
+sec6[Zelle]  = 0xFFFF                          ; Zelle SPERREN
+```
+Erreicht über die Sprungtafel C `0x43ECAC` mit Indexkarte `0x43ECD8`
+(`edx = Gebäudetyp − 1`) — und zwar **nur für Gebäudetyp 2, 3 und 4**.
+
+| Aussage | Treffer | Nullmodell |
+|---|---|---|
+| 98-Zellen, die zugleich Gleiszellen sind, haben `sec6 == 0xFFFF` | **1 600 / 1 600 = 100,0 %** | Anteil aller Gleiszellen mit `0xFFFF`: **16,6 %** |
+| Zellen mit Liniennummer haben `sec6 == 0xFFFE` (frei) | 7 870 / 7 872 = 99,97 % | — |
+
+→ **98 ist die Marke einer Zelle, die ein Betriebsgebäude (Typ 2/3/4) beim
+Ausbau von einem Landschaftsobjekt geräumt und dauerhaft gesperrt hat.** Wo die
+Zelle sonst die Liniennummer trüge, ersetzt 98 sie — »Gleis, aber gesperrt«,
+und liegt darum genau unter der reservierten 99 und über der grössten je
+vorkommenden Liniennummer (43).
+
+⚠ **Als Fehlschlag gemeldet, nicht als schwaches Ergebnis:** die Zuordnung
+98-Zelle → *welches* Gebäude gelang nicht. Die naheliegende Probe trifft zu
+77 %, aber das Nullmodell mit zufälligen Zellen trifft schon zu **24,5 %** —
+**kein Signal.**
+
+### AW.5 ⭐⭐ »42 von 215 Linien tragen kein Bit« — AUFGELÖST
+
+> **Die y-Halbzeile einer Linie steht NICHT in `sec34 +0x03` / `+0x05`. Dort
+> steht nur ihr NIEDERWERTIGES BYTE. Die vollen 16 Bit stehen in `sec122`**
+> (C `0xA66DD8`, 320 B = 80 Linien × 2 × u16; `y1` bei `4·Linie`, `y2` bei
+> `4·Linie+2`).
+
+Halbzeilen laufen bis `2·H`; bei H > 127 **überläuft das Byte**. Genau dafür
+gibt es sec122.
+
+**Beide Verfahren nebeneinander, gleicher Datensatz (13 `.DM`, 215 Linien):**
+
+| y-Quelle | Linien ohne ein einziges Bit | Laufpunkte mit gesetztem Bit |
+|---|---|---|
+| `sec34 +0x03` (ein Byte) | **34 von 215** | 3 616 / 6 036 = **59,9 %** |
+| **`sec122` (u16)** | **0 von 215** | 4 949 / 6 036 = **82,0 %** |
+
+⭐ **Und das Fehlstellenmuster ist perfekt, sobald y stimmt:**
+
+| Aussage | Treffer | Nullmodell |
+|---|---|---|
+| Fehlstellen je Linie == genau **(2 vorn, 3 hinten)** | **215 / 215 = 100 %** | ein anderes Paar: **0/215** |
+| Linien **ohne jede Lücke im Inneren** | 205 / 215 = 95,3 % | — |
+| Endpunkt der Route trifft `(x2, y2)` | 457 / 469; die 12 Fehlschläge sind **ausnahmslos `.CWM`**, die kein sec122 tragen | — |
+
+**Der zweite Teil des Widerspruchs schrumpft ebenfalls:** »40 % der gesetzten
+Bits gehören zu keiner Linie« wird mit sec122 zu **11 – 19 % je Datei**. Die 66
+übrigen Bits in `1.DM` (254 × 100, Halbzeilen 0…199) liegen bei Halbzeile
+**242 … 402** und bilden in ihren Abständen (7, 13, 7, 13 …) eine saubere
+Diagonale — **die Spur einer Linie aus einer grösseren Karte.**
+
+⚠ Das passt zu dem, was schon dasteht: **zu sec35 gibt es Test und Setzen, aber
+keinen Löscher.** Das Bitfeld sammelt an. **sec35 ist kein verlässlicher
+Zellenindex, sondern eine wachsende Spur; verbindlich sind sec22 und sec20.**
+
+⚠⚠ **BERICHTIGUNG AN AL.2:** »Strecke ab (+2,+3) endet auf (+4,+5)« ist
+unvollständig. Und »42 von 215 Linien tragen kein Bit« ist **erledigt: 0 von 215.**
+
+### AW.6 ⭐ sec112: die obere Hälfte ist ECHT — und diese EXE können sie nicht erzeugen
+
+**Alle Schleifen enden bei Satz 1000, in beiden Fassungen, ohne Ausnahme:**
+
+| Schleife | Schranke | C | F |
+|---|---|---|---|
+| Zuteiler | `cmp eax, Basis+6+36000` | `0x4AD8C7` | `0x4AD1F7` |
+| Aktualisierer | `cmp edi/esi, Basis+6+36000` | `0x42EBE8` | `0x42DDB0` |
+| dritte Schleife | `cmp si, 0x3E8` | `0x4AE4A2` | `0x4ADDD2` |
+
+Und die **Relokations-Vollerhebung über `0xA51110 … 0xA62A50`** findet oberhalb
+von Satz 0 **kein einziges weiteres Symbol** ausser der Schranke selbst.
+→ **Kein Befehlspfad der beiden ausgelieferten EXE kann Satz 1000…1999
+beschreiben.**
+
+**Was dort trotzdem steht:**
+
+| Datei | belegt unten | belegt oben |
+|---|---:|---:|
+| 13.DM | **1000 / 1000** | 419 |
+| 2.DM | **1000 / 1000** | 547 |
+| 6.DM | **1000 / 1000** | 1000 |
+| die übrigen 10 `.DM` | 20 … 868 | **0** |
+
+| Aussage | Treffer | Nullmodell |
+|---|---|---|
+| Die obere Hälfte ist auf **demselben 36-B-Raster** wohlgeformt (neun Feldproben) | **1 966 / 1 966 = 100,0 %** | dieselbe Probe **um 18 B phasenverschoben**: **14 / 1 965 = 0,7 %** |
+| Obere Hälfte belegt **nur**, wenn die untere randvoll ist | **3/3** und **10/10** | drei beliebige der 13 Dateien: **0,35 %** |
+
+→ Keine Trümmer eines Nachbarpuffers und keine Phasenverschiebung, sondern
+**richtige `fly_part`-Sätze**, fast alle mit Art 0 (»Platz frei«) — also
+**abgelaufene Teilchen**. Und sie treten genau dann auf, wenn der Zuteiler bei
+Platz 1000 hätte aufgeben müssen.
+
+⭐ **Schluss: diese drei Dateien wurden von einem Programm geschrieben, dessen
+Teilchenschranke bei 2000 lag** — dem Kartenwerkzeug oder einem
+Entwicklungsstand. Die 1000er-Schranke der Auslieferungen ist gegen die
+Felddeklaration (72 000 B, die »Wrong size of fly_part« ja prüft) **um die
+Hälfte zu klein.** Ein Deckel im Code, nicht im Datenformat.
+⚠ Auf einen dritten Verhaltensunterschied geprüft: **nein**, F hat dieselbe
+Schranke an denselben Stellen.
+
+**Für den Nachbau: 2 000 Plätze Speicher, 1 000 aktive Plätze, obere Hälfte beim
+Laden lesen und verwerfen.**
+
+⚠⚠ **UND EIN VORBEHALT, DER FÜR JEDE MESSUNG AN `.DM`-LAUFZEITABSCHNITTEN GILT:**
+die `.DM` sind offensichtlich **Momentaufnahmen aus laufenden Partien**, nicht
+saubere Anfangszustände. **1 000 fliegende Trümmer hat kein Missionsanfang.**
+
+### AW.7 ⚠ Was offen blieb, und wodurch das Verfahren blind ist
+
+* **sec67 bleibt ohne Zweck.** Belegt ist, dass niemand es anfasst — nicht,
+  wofür es gedacht war. Ein Negativbefund über Relokationen ist so hart, wie ein
+  Negativbefund werden kann; bewiesen ist er nicht (eine vollständig berechnete
+  Adresse bliebe unsichtbar).
+* **»sec77 hat keinen Leser« heisst »keinen über eine absolute Adresse«.**
+  sec57 (`0xB461A0`) schliesst lückenlos an; ein `mov edi, 0xB461A0` …
+  `byte[edi−8+p]` wäre unsichtbar. Alle sieben Fundstellen im Fenster ±64 B
+  wurden zerlegt: **alle greifen indiziert zu**, keine lädt eine Basis in ein
+  Register.
+* **Der Leser des sec20-Bandes fehlt** (siehe AW.3).
+* **98 ist mechanisch, nicht semantisch geklärt** (siehe AW.4).
+* ⚠ **`.CWM` haben kein sec122.** Für 23 der 36 Dateien ist die volle
+  y-Halbzeile im Format schlicht nicht da. **Alle Linienmessungen aus AW.5
+  stehen deshalb nur auf den 13 `.DM`**; AW.3 steht auf allen 36, weil sec22
+  keine Halbzeilen benutzt.
+* ⚠ **Die 13 `.DM` sind kein unabhängiger Datensatz.** `3/5/6/7/10.DM` sind
+  Abkömmlinge derselben Karte — »13 von 13« wiegt weniger, als es aussieht.
+  Die Kernaussagen stützen sich darum bewusst auf **zellweise** Zahlen
+  (7 872, 813, 430, 215) statt auf Dateizahlen.
+* ⚠ **Die Blockbefehlsprüfung löst nur 181 von 3 963 `rep` auf.** Für sec67,
+  sec77, sec34 und sec35 ergab sie »nicht abgedeckt«; für sec112 fand sie den
+  Nullsteller korrekt.
+
+### AW.8 Nebenbefund, nicht verfolgt
+
+`cwm_sections.py`: **sec89 und sec114 tragen beide `0x6786A8`** als Ziel — eines
+der beiden ist falsch.
+
+---
+
+## AX. ⭐⭐ DIE SECHS LÜCKEN VON AU.14, GESCHLOSSEN (21.08.2026)
+
+Alles unten steht in **beiden** EXE. Die Sprungtafeln wurden **aufgezählt**, nicht
+abgetastet — die Blindstelle aus AU.14 wurde also beachtet.
+
+### AX.0 Adressverzeichnis
+
+| was | C | F |
+|---|---|---|
+| **Takt 46 »KI baut ihre Fabriken und Minen aus«** | `0x4BF760` | `0x4BF210` |
+| dessen Sprungtafel (Ziele / Byteindex) | `0x4BF978` / `0x4BF988` | `0x4BF428` / `0x4BF438` |
+| **Techstufe am Missionsanfang setzen** | `0x4407C0` | `0x43F7D0` |
+| **Takt 48 »Teilespende«** | `0x4BE5C0` | `0x4BE080` |
+| Tafel 1 (Zählen) / Tafel 2 (Verteilen) | `0x4BE6E0` / `0x4BE708` | `0x4BE1A0` / `0x4BE1C8` |
+| 150er-Zähler (Tor für Takt 48) | `0x538BC0` | `0x537C00` |
+| **Auftragswahl Betriebsart 5** | `0x4BDCC0` | `0x4BD780` |
+| Gültigkeitstafel / Ausführungstafel (Art 1…4) | `0x4BE184` / `0x4BE194` | `0x4BDC44` / `0x4BDC54` |
+| ⭐ **Luftangriff der KI (Takt 8, Schritt 2)** — neu | `0x4BDB40` | `0x4BD600` |
+| Feindwahl dazu / Luftbefehl | `0x4BDA10` / `0x426020` | `0x4BD4D0` / `0x425200` |
+| `angreife(…)` → UKOL 4 · `fahre(…)` → UKOL 2 | `0x410220` · `0x40B070` | `0x410050` · `0x40AF60` |
+| **Gruppenfahrt / sec108** | `0x4BCF30` | `0x4BC9F0` |
+| Tafel »Ziel noch gültig« / »Endanflug« | `0x4BD7BC` / `0x4BD7CC` | `0x4BD27C` / `0x4BD28C` |
+| **Gruppe auflösen** | `0x4BCEA0` | `0x4BC960` |
+| Richtungstafel des Rückwärtslaufs | `0x4BCD6C` | `0x4BC82C` |
+| **sec55-Füller** / **sec56-Füller** | `0x4BA710` / `0x4BA7D0` | `0x4BA210` / `0x4BA2D0` |
+| Nachbartafel 8 × (dx, dy, **Teiler**) | `0x538BE0` | `0x537C18` |
+| ⭐ **Gebäudetyp-Namen, 20 B je Typ** | `0x4FDCB0` | `0x4FCCE8` |
+| Besitzer 11 setzen (Skript/Netz) / (Tod) | `0x41B194` / `0x4BAC59` | `0x41A290` / `0x4BA640` |
+| `obj_owner` (leerer Platz → **12**) | `0x4D0780` | `0x4D0330` |
+| ⭐ **Sektor-Ankerzelle (121 × x,y)** | `0x541F60` | `0x540FC0` |
+| Roboter **andocken** Basis / `Robot not found` | `0x43BFC0` / `0x43C120` | `0x43B130` / `0x43B2B0` |
+| Bahnstation andocken / `Robot not found 2` | `0x43C370` / `0x43C430` | `0x43B500` / `0x43B5C0` |
+| Depot andocken / `Robot not found 3` | `0x43C630` / `0x43C6F0` | `0x43B7C0` / `0x43B880` |
+
+**Puffer** (C = F + `0xFA0`): sec23 `0x878E58` · sec24 `0x87A2C0` · sec25
+`0x879F38` · sec28 `0x878AD0` · sec30 `0x879178` · sec53 `0x87B140`
+(Bündniszeile `+0x15` → `0x87B155`) · sec55 `0xB461C0` · sec56 `0xB3D390` ·
+sec60 `0xB400F0` · sec68 `0xB36BE0` · sec69 `0xBC5A78` · sec108 `0xB3CBD0` ·
+sec123 `0xB45EB0`.
+
+### AX.1 ⭐⭐ Takt 46 IST DER AUSBAU — und er trägt einen fehlenden `break`
+
+`0x4BF760`, **145/145 Befehle gleich**.
+
+```
+Obergrenze L = min(7, Techstufe >> 1) + 2      ; Techstufe = byte[0x503AF0 + 2·Mission]
+                                               ; bzw. byte[0x540EB8] im Gefecht
+für i = 0 … 254 über die Gebäudeplätze:
+   FABRIK (Typ 2,3,4): wenn L + (i mod 3) > sec24[cis].Stufe: Zähler(sec123[i])
+   MINE   (Typ 10,15): wenn L + (i mod 3) > sec28[cis].Stufe: Zähler(sec123[i])
+Zähler:  0 → 5 · 1 → AUSBAUEN, dann 0 · sonst → −1
+AUSBAUEN Fabrik: Stufe++ · Lager += 10 · zwei Felder je ×3/2
+AUSBAUEN Mine  : Stufe++ · Lager += 30 · zwei Felder je ×3/2
+```
+
+⭐ **sec123 (255 B) ist damit gelesen: ein Rückwärtszähler je Gebäudeplatz.**
+Sechs Besuche je Ausbaustufe → **300 Bilder je Stufe**.
+
+⭐ **Der Ausbau kostet nichts.** In der ganzen Funktion wird der Kontostand
+`0xA9C600` nie berührt. Der Mensch zahlt (`0x44AD8A`, `0x44AE9F`, `0x44BBAB`),
+**die KI nicht.**
+
+⭐ **Das Gegenstück:** `0x4407C0` (66/66 gleich), gerufen am Missionsanfang, setzt
+für **alle** Gebäude ohne Besitzerprüfung `Stufe = Techstufe>>1`,
+`Lager = (Techstufe+4)·10`. **Die KI darf also 2 bis 4 Stufen über den
+Missionsanfang hinaus ausbauen.**
+
+#### ⚠⚠ Der fehlende `break` — in BEIDEN Fassungen und in BEIDEN Funktionen
+
+Der Fabrikzweig endet **nicht** mit einem Sprung ans Schleifenende, sondern
+**fällt in den Minenzweig durch** (`0x4BF8A2`→`0x4BF8A9`). Der Minenzweig
+benutzt denselben `cis`-Index und arbeitet damit auf einem **fremden**
+sec28-Satz. Dieselbe Gestalt in `0x4407C0` (`0x440869`→`0x440870`) und in F.
+**Zwei Funktionen, zwei Fassungen, dieselbe Form: das ist ein fehlendes `break`
+im Quelltext, kein Lesefehler.**
+
+**Und die Wirkung ist nicht harmlos** — beide Zweige bedienen denselben Zähler:
+
+| Besuch | sec123 vorher | Fabrikzweig | Minenzweig | nachher |
+|---|---|---|---|---|
+| 1 | 0 | setzt 5 | 5 → 4 | 4 |
+| 2 | 4 | → 3 | 3 → 2 | 2 |
+| 3 | 2 | → 1 | **1 → Mine ausgebaut**, 0 | 0 |
+
+⭐ **Die Fabrik sieht die 1 nie.** Solange der gleichindizierte sec28-Satz noch
+Luft hat, wird **nur die Mine** ausgebaut; die Fabrik kommt erst dran, wenn der
+Minenzweig am Deckel abkürzt.
+
+| Aussage (13 `.DM`) | Treffer | Nullmodell |
+|---|---|---|
+| in 1.DM: `Stufe = min(7,t/2)+2 + (Platz mod 3)` für KI-Fabriken | **10/10** | ohne den `mod 3`-Term: **2/10** |
+| dasselbe für KI-Minen | **3/3** | — |
+| sec24-Satz **gleich** dem sec28-Satz an den 15 Fabrik-`cis` | **13/15** | die 2 Ausnahmen sind exakt die 2 `cis` mit einer **echten** Mine |
+| `sec28[+5] != 0` an genau den 15 Plätzen mit Mine **oder** Fabrik | **15/15** | ohne den Durchfall wären es nur die 5 Minen |
+| Fabriklager +**10** je Stufe | 15/15 | Faktor 20: 5/15 · Faktor 30: 5/15 |
+| Minenlager +**30** je Stufe | 15/15 | Faktor 10: 5/15 · Faktor 20: 5/15 |
+
+⭐ Und der Zähler belegt sich selbst: in 1.DM ist **genau ein** sec123-Byte ≠ 0 —
+`sec123[14] = 3`. Gebäude 14 ist eine **Mine**, die längst am Deckel steht. Sie
+kam dorthin **nicht durch ihren eigenen Zähler**, sondern durch den Durchfall
+der Fabrik auf Platz 17 (gleicher `cis`) — darum blieb ihr Zähler auf 3 stehen.
+
+### AX.2 ⭐⭐ Takt 48 IST EINE ROHSTOFFSPENDE
+
+`0x4BE5C0`, **79/79 gleich**.
+
+```
+wenn byte[0x538BC0] != 0: sofort zurück       ; das Tor
+Schleife 1 über die 255 Gebäude von p:
+   Typ 2 → a += 0x50 · Typ 3 → b += 0x50 · Typ 4 → c += 0x50 · Typ 10/15 → d += 0x50
+Schleife 2 über die 255 Gebäude von p:
+   Typ 1, 9, 16 → +0x2C += a ; +0x2E += b ; +0x30 += c     (die drei Teilelager)
+   Typ 2, 3, 4  → +0x32 += 2·d                             (Terranium)
+```
+
+⭐ **Jede Basis, jeder Flughafen und jede Werft-Station bekommt 80 Teile je
+Fabrik der passenden Art geschenkt; jede Fabrik 160 Terranium je Mine.** Keine
+Produktion, kein Transport, kein Preis. Die Feldzuordnung ist unabhängig belegt:
+`fill_resources` `0x419FE0` beschreibt dieselben Felder für dieselben Typen.
+
+**Das Tor:** `byte[0x538BC0]` hat genau zwei Schreiber, beide in `ai_tick`
+(`0x4BFBB2` `++`, `0x4BFBBB` bei ≥ 150 auf 0).
+⭐ **Die Spende fällt einmal je 150 × 50 = 7500 Bilder.**
+
+⚠⚠ **Der Sammler ist ein BYTE mit `add al, 0x50`.** Vier Fabriken einer Art
+ergeben 320 → **64**. In den Prüfdateien gibt es genau einen Fall: **4.DM,
+Spieler 1** hat 4 Waffen- und 4 Fahrwerkfabriken und bekommt **64 statt 320**,
+und mit 5 Minen **288 statt 800** Terranium.
+⭐ **Die vierte Fabrik macht den Spieler ärmer als die erste.**
+
+### AX.3 ⭐ Betriebsart 5: das Maximum statt der Division
+
+`0x4BDCC0`, **365/365 gleich** (die 11 scheinbaren Abweichungen sind
+Thunk-Adressen; alle elf lösen paarweise auf dieselbe Funktion auf).
+
+| | `target:` `0x4BECF0` | Betriebsart 5 `0x4BDCC0` |
+|---|---|---|
+| Auswahl | **kleinstes `po = pway / imp`** | ⭐ **grösstes `imp`** — kein Wegewert, keine Division |
+| Sektorraster | ja | **gar keins** |
+| Gruppe | bildet eine in sec68 | **keine** |
+| Wer marschiert | die Gruppenmitglieder | ⭐ **alle 1000 Einheitenplätze**, `sec60[u] = 10` für alle |
+| Protokoll | `po:` `imp:` `pway:` `r_best:` | **keine Marke** |
+
+⭐⭐ **Damit war unsere alte Regel nicht falsch, sondern an der falschen Stelle.**
+`AiMissionAttack` nahm das Maximum von `Priority` und schrieb `@0x4BDCC0`
+daneben — das ist **genau richtig für Betriebsart 5** und falsch für alle
+anderen. Der Umbau vom 21.08. hat den Normalfall ergänzt, nicht einen Irrtum
+ersetzt.
+
+| Art | Gültigkeitsprüfung (`0x4BE184`) | Marschbefehl (`0x4BE194`) |
+|---:|---|---|
+| 1 | `sec3[w].typ != 0` | `c == 0` → `fahre` an die Tür · `c != 0` → `angreife`, Ziel **`60000 + w`** |
+| 2 | `sec5[w]+0x09 != 0xFF` | `angreife`, Ziel **`w`**, Streuung `± rnd%10 − 4` |
+| **3** | `sec17[w]+0x12 != 0` | `angreife`, Ziel **`40100 + w`** |
+| **4** | Belegungskarte `sec6[(w<<8)+c] / 1000 != p` | `fahre` nach `(w ± rnd%3 − 1, c ± rnd%3 − 1)` |
+
+⚠⚠ **BERICHTIGUNG AN `CAMPAIGN_RE.md` §6 UND AN UNSEREM CODE:** dort stehen
+**Art 3 und Art 4 vertauscht** (»art 3 = Kartenzelle, art 4 ungelesen«). Die
+Sprungtafel sagt: **3 = sec17-Objekt, 4 = rohe Zelle** — genau wie AU.2. Und
+die Packung ist **`Spalte·256 + Zeile`**, nicht `Zeile·256 + Spalte`.
+
+⭐ **`40100 + n` ist der Griff auf ein sec17-Objekt**, unabhängig belegt im
+Einschlagcode: `0x4537F8` prüft `0x9CA4 ≤ x ≤ 0x9D06` (40100…40198) und rechnet
+mit `add bx, 0x635C` in den sec17-Index zurück — exakt die Umkehrung des
+`sub 0x635C` der KI. Damit gehört die Zeile in die Griff-Tafel neben `< 8000`
+(Einheit), `20000+` (Flugzeug), `50000+` (Wald), `60000+` (Gebäude), `61000+`
+(sec4-Objekt).
+
+⚠ **Ein zweiter fehlender `break`:** bei `0x4BDD7D` springt die Art-2-Prüfung
+mit `jne 0x4BDDB8` — und `0x4BDDB8` ist **der Rumpf von Art 3**. Eine *lebende*
+Einheit als Ziel wird also zusätzlich durch `byte[0xBFEA92 + 24·w] != 0`
+geschickt. sec17 hat 100 Sätze zu 24 B; ein Einheitenindex geht bis 7999 — die
+Sonde liest weit dahinter. Ist das Fremdbyte 0, wird das Ziel **gelöscht,
+obwohl die Einheit lebt**.
+⚠ **An den Daten nicht prüfbar:** alle **483** sec69-Einträge der 13 `.DM` haben
+Art 1; die einzige Art-2-Stelle des Feldzugs ist Mission 9 (`w = 6000`).
+
+#### ⭐ Nebenbefund: Takt 8 hat DREI Schritte, nicht einen
+
+`0x4BE2E0` ruft `0x4BDCC0`/`0x4BECF0`, dann **`0x4BDB40`**, dann `0x4BCF30`.
+`0x4BDB40` (95/95 gleich) war nirgends verzeichnet:
+
+> Für jeden **Flughafen** (Typ 9) des Spielers: zähle die belegten Plätze der
+> Wachliste sec27. **Bei mehr als 3** wähle über `0x4BDA10` einen zufälligen
+> **feindlichen** Spieler und darin ein Ziel, und starte **bis zu 3** Flugzeuge
+> mit Befehlsart **7** auf dessen Zelle (`0x426020`).
+
+**Das ist der Luftangriff der KI** — das Gegenstück zu `guard:` (AU.11), das nur
+abfängt.
+
+### AX.4 ⭐⭐ Die Gruppenfahrt und die sec108-Wegpunkte
+
+`0x4BCF30`, **656/656 Befehle**; die einzigen Abweichungen sind der schon in
+AU.8 gemeldete gleichbedeutende Vergleich und die Adresse des lokalen Spielers.
+
+**Wie ein Wegpunktsatz entsteht** (am Ende von `0x4BC920`):
+```
+i := 29 ; (cx,cy) := ZIEL-Sektor
+solange (cx,cy) != START-Sektor:
+    richtung := Vorgängerkarte[0xB36AA0 + 11·cx + cy]
+    sec108[+2 + 2i] := cx ; sec108[+3 + 2i] := cy
+    i-- ; wenn i == −1: ABBRUCH (Kopf bleibt ungeschrieben)
+    (cx,cy) := Nachbar in richtung          ; Tafel 0x4BCD6C, 4 Einträge
+sec108[+0] := i+1 ; sec108[+1] := 0x1D
+```
+⭐ **Der Satz wird RÜCKWÄRTS gefüllt: Platz 29 ist das Ziel, `+0` der erste
+Schritt.** ⚠ Ein Weg über 30 Sektoren bricht ab und lässt `+0`/`+1` unbeschrieben.
+
+**Wie eine Gruppe fährt:**
+1. **Aufräumen** — ein Mitglied fliegt aus sec68, wenn `faze != 0`, `UKOL > 45`
+   oder `sec60[u] != 10`; die Liste wird lückenlos zusammengeschoben.
+2. **Ziel noch da?** (Tafel `0x4BD7BC`) Art 1: Gebäude weg **oder schon uns** →
+   **Gruppe auflösen** (`0x4BCEA0`: `sec60[u] = 0`, `sec68[+0] = 0`).
+3. `sec108[+1] != 0` → **Wegpunktfahrt**, sonst **Endanflug**.
+
+```
+k := sec108[+0] ; (wx,wy) := sec108[+2+2k], sec108[+3+2k]
+Kasten:  lo_x … 24·wx + 30      ⚠ siehe unten
+         24·wy − 6 … 24·wy + 30
+drin := Zahl der Mitglieder im Kasten; die übrigen untätigen fahren zum Anker
+wenn (3·drin)/2 > Anzahl:                     ; also drin > 2/3 der Gruppe
+    sec108[+0]++ ; wenn == sec108[+1]: sec108[+1] := 0
+```
+
+⭐ **`0x541F60` / F `0x540FC0` ist die Sektor-Ankerzelle:** 121 × (Spalte, Zeile),
+Vorbelegung `0xFF` (`0x41BFD7`), gefüllt beim Kartenladen (`0x41C050`). Sie ist
+der Punkt, auf den ein Sektor-Wegpunkt tatsächlich zeigt.
+
+#### ⚠⚠ Der Kasten ist auf der X-Achse kaputt — in beiden Fassungen
+
+```
+C 0x4BD62B  … C6 44 24 15 06   ; lo_x := 6  (KONSTANTE)
+F 0x4BD0EB  … C6 44 24 15 06   ; byteweise gleich
+C 0x4BD644  … 8D 48 FA …       ; lo_y := 24·wy − 6
+```
+Die Y-Seite rechnet, die X-Seite schreibt die **Konstante 6**. Für jeden
+Wegpunkt mit `wx ≥ 1` lautet die X-Bedingung nur noch `RX > 6` — **der Kasten
+hat keine linke Kante**, die Gruppe rückt viel zu früh vor.
+
+⚠ Dazu ein Byteüberlauf: `24·10 + 30 = 270 → 14`. Ein Wegpunkt in Sektorspalte
+oder -zeile **10** ist nie erfüllbar, die Gruppe bleibt stehen. Erreichbar ist
+das: **5 der 36 Karten sind 254 Felder breit** (254/24 = 10,58).
+
+| Aussage (13 `.DM`) | Treffer | Nullmodell |
+|---|---|---|
+| belegte sec108-Sätze | 15 von 416 | — |
+| `+1 == 0x1D` | **15/15** | — |
+| lückenlose 4er-Nachbarkette vom laufenden Index bis 29 | **15/15** | für die 9-Punkt-Kette in 10.DM ≈ **1,4·10⁻¹²** |
+| Wegpunkte in Sektor 10 | **0 von 450** | der Überlauf bleibt in diesen Ständen folgenlos |
+| sec68-Gruppenzähler ≠ 0 | **0 von 416** | bestätigt AU.13 |
+
+### AX.5 ⭐⭐ `sec56 +0x02` ist die VERBÜNDETE Stärke — die alte Deutung gewinnt
+
+`0x4BA7D0`, **183/183 gleich**; davor `0x4BA710` (**54/54**):
+
+> **sec55** = Summe der **Trefferpunkte** (`+0x08`) aller Einheiten mit
+> `faze != 0xFF` **und Waffe `ZBRAN` (+0x0D) != 0**, abgelegt zellendur als
+> `sec55[8·(11sx+sy) + Spieler]`.
+
+```
+für jeden Sektor, für jeden Spieler q:
+    q == p                            → +0x00 += sec55
+    sonst byte[0x87B155 + 40p + q]!=0 → +0x02 += sec55
+    sonst                             → +0x04 += sec55
+und danach DASSELBE über die 8 Nachbarn, jeweils GETEILT durch den Teiler:
+    Tafel 0x538BE0:  (−1,0,3) (1,0,3) (0,−1,3) (0,1,3) (1,1,5) (1,−1,5) (−1,1,5) (−1,−1,5)
+```
+
+⭐ **`+0x02` ist entschieden.** Drei unabhängige Belege im selben Bild: AU.6
+(`get target in sector` **überspringt** genau solche Spieler), `0x4BDA10` (die
+Luft-Feindwahl sammelt genau die mit `== 0`), und die Daten
+(`sec53[40p+0x15+p] == 1` in **104/104** — man selbst ist immer Freund).
+
+⭐ **Und es ist mehr als eine Summe: sec56 `+0/+2/+4` ist eine gewichtete
+Nachbarschaftsglättung** — eigener Sektor voll, orthogonale Nachbarn ⅓,
+diagonale ⅕.
+
+| Feld (7623 Sektor-Spieler-Paare) | Formel trifft | trifft nicht |
+|---|---:|---:|
+| `+0x00` eigene Stärke | **7442** | 181 |
+| `+0x02` **verbündete** | **7400** | 223 |
+| `+0x04` feindliche | **6892** | 731 |
+
+**Nullmodell (die beiden vertauscht), nur auf den 2684 Zellen, wo sich die
+Deutungen unterscheiden:**
+
+| | richtig herum | vertauscht |
+|---|---:|---:|
+| `+0x02` | **2461 (91,7 %)** | 185 (6,9 %) |
+| `+0x04` | **1953 (72,8 %)** | 693 (25,8 %) |
+
+⭐ **Und der Rest erklärt sich:** **alle 1135 Abweichungen sind einseitig** — der
+gespeicherte Wert ist **immer kleiner** als die Vorhersage, nie grösser.
+Nullmodell bei Rauschen: 50/50, erwartet 568. Das ist genau das Bild eines
+Zeitversatzes: sec55 steht auf dem letzten Bild, sec56 auf dem letzten Takt 1
+(50 Bilder früher), und dazwischen sind Einheiten gestorben.
+
+### AX.6 ⭐⭐ Typ 11 ist das SEEDOCK, Besitzer 11 ist NIEMAND
+
+**Der Zufall ist wirklich einer** — die beiden Elfen stehen in getrennten
+Zahlenräumen.
+
+⭐ **Das Spiel nennt die Gebäudetypen selbst** (Tafel `0x4FDCB0`, 20 B je
+Eintrag, in beiden EXE wortgleich):
+
+| 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|
+| Basis | Waffen-Fabrik | Fahrwerk-Fabrik | Spezial-Fabrik | Depot | Bahnstation | Generator | Radarstellung |
+
+| 9 | 10 | **11** | 12 | 13 | 14 | 15 | 16 |
+|---|---|---|---|---|---|---|---|
+| Flughafen | Mine | **Seedock** | Feldbahnhof | Kraftwerk | Nachschub-Posten | Feld-Rohstoffmine | Werft-Station |
+
+⭐ **`AI: test of life` prüft damit die drei Zugänge zur Karte: Basis (Land),
+Flughafen (Luft), Seedock (See).** Kein Kuriosum, sondern eine vollständige
+Aufzählung. Passend dazu: sec29 (50 × 4) ist die Paarung **Seedock ↔
+Werft-Station**, und die Verträglichkeitstafel `0x4FDC00` hat für Zieltyp 11
+eine **leere** Zeile — zu einem Seedock liefert kein Roboter.
+
+**Besitzer 11:** `byte[sec3 + 76·i + 5]` hat sieben Schreibstellen; genau **zwei**
+schreiben eine 11, und beide schreiben zugleich `+0x41` — `0x41B194` (Spieler
+scheidet aus / verlässt das Netzspiel) und `0x4BAC59` (der Tod nach AU.7).
+
+| Besitzer | 0 | 1 | 2 | 3 | 4 | 5 | 6 | **11** | 255 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 13 `.DM` | 43 | 101 | 89 | 8 | 75 | 1 | — | **48** | 175 |
+| 23 `.CWM` | 20 | 60 | 29 | 3 | 5 | 1 | 1 | **428** | 278 |
+
+⭐ **In den Feldzugskarten ist 11 der HÄUFIGSTE Besitzer: 428 von 826.** Das sind
+Anfangszustände — dort ist noch niemand gestorben. **Besitzer 11 heisst also
+»herrenlos«**, und der Sterbefall benutzt dieselbe Zahl, um ein Erbe an
+niemanden zu geben. Passend: 8…10 kommt **nie** vor, und `obj_owner` gibt für
+einen **leeren Platz** die **12** zurück — die nie in einer Datei steht.
+Besitzer **255** trägt ausschliesslich Deko (**0** Fälle bei Typ 1…12).
+
+⚠ Und weil sec53 nur 8 × 40 B ist, kann Besitzer 11 **weder Freund noch Feind**
+von irgendwem sein.
+
+**Typ 11 gezählt:** 8 Seedocks in den 13 `.DM`, 13 in den 23 `.CWM` — davon
+**9 der 13 in den NET-Karten, und dort 9 von 9 mit Besitzer 11**, also zum
+Einnehmen ausgelegt.
+
+### AX.7 ⭐ `Robot not found` 1 / 2 / 3 — und ein Fehler, der in den Daten steht
+
+Zur Frage aus dem Auftrag: `meldung()` ist stumm, **kehrt aber zurück** und
+bricht nichts ab. ⭐ Das ändert hier nichts — an allen drei Stellen folgt
+unmittelbar der Funktionsabschluss. **Die Funktion tut in diesem Fall gar
+nichts, nicht wegen der Meldung, sondern weil der Rückgabepfad derselbe ist.**
+
+Alle drei sind **dieselbe Funktion in drei Ausführungen**: »nimm Roboter `r` aus
+der Andockliste des Gebäudes `c`«.
+
+| Marke | C | Liste | Satz | Gegenstück »andocken« |
+|---|---|---|---|---|
+| `Robot not found` | `0x43C120` | **sec23** (Basis) `+0x04` | 16 B | `0x43BFC0` |
+| `Robot not found 2` | `0x43C430` | **sec30** (Bahnstation) `+0x02` | 14 B | `0x43C370` |
+| `Robot not found 3` | `0x43C6F0` | **sec25** (Depot) `+0x02` | 14 B | `0x43C630` |
+
+⚠⚠ **Und hier steht die eigentliche Antwort auf »wann schlägt welche zu«:**
+
+```
+andocken   0x43BFC0: cmp esi, 6 · 0x43C370: cmp esi, 6 · 0x43C630: cmp esi, 6
+ablegen    0x43C120: cmp edi, 5 · 0x43C430: cmp esi, 5 · 0x43C6F0: cmp ecx, 5
+```
+
+⭐ **Der sechste angedockte Roboter kann nie wieder abgelegt werden** — jeder
+Versuch endet in `Robot not found` und **ohne Wirkung**. Der sec23-Satz ist 16 B
+(`+0x04…+0x0F` = **sechs** Wörter), also sind sechs Plätze richtig und die Fünf
+ist der Fehler. Unabhängige Gegenprobe: **Takt 4** (`0x4BBAC0`, AU.1) liest
+dieselbe Liste mit `cmp bp, 6`.
+
+**Und der Fall steht in den ausgelieferten Daten.** Von 36 Dateien sind nur drei
+Andocklisten überhaupt belegt:
+
+| Datei | Satz | Liste |
+|---|---|---|
+| 12.DM | 0 | 1086, 1087, FFFF … |
+| 13.DM | 1 | 1061 … 1064, FFFF, FFFF |
+| **2.DM** | **1** | **1091, 1005, 1007, 1119, 1138, 1006** ← **voll** |
+
+⭐ In 2.DM gehört Satz 1 zu Gebäudeplatz 4 (**Typ 1 Basis**, Besitzer 1,
+`cis` 1) — damit ist die Zuordnung `sec23-Index = cis` direkt belegt. Alle sechs
+Einheiten stehen auf **derselben Zelle (77,31)** mit `UKOL = 51` (im Gebäude):
+**6/6**; Nullmodell einer Zufallseinheit auf genau dieser Zelle: 6/8000. Und die
+sechste (Einheit **1006**) sitzt auf Platz 5 — dem Platz, den `Robot not found`
+nie ansieht.
+
+### AX.8 ⚠ Was offen blieb, und wodurch das Verfahren blind ist
+
+1. ⚠⚠ **sec123 gibt es nur in EINER Prüfdatei.** Der Lader kommt bei **12 von 13
+   `.DM`** nicht bis sec123 (3.–10.DM enden nach sec122, 2./11./12./13.DM nach
+   sec120) — und zwar mit `tail == 0`, die Datei ist **exakt zu Ende**. Nur
+   **1.DM** trägt alle 131 Abschnitte. **Alles über sec123 und über den
+   gespielten Zustand von sec24/sec28 hängt an einer Datei.** Ob die
+   Grössenliste für den Schwanz stimmt oder ob diese `.DM` schlicht kürzer sind,
+   ist **nicht** entschieden.
+2. ⚠ Die Deckel-Formel ist an 10 Fabriken und 3 Minen gemessen — **alle aus
+   1.DM**. Die zwölf übrigen sind unbespielte Anfangszustände, in denen Takt 46
+   nie lief.
+3. ⚠ **Die Art-2-Sonde von `0x4BDCC0` ist unmessbar** (483/483 sec69-Einträge
+   haben Art 1).
+4. ⚠ **Der X-Kasten-Fehler ist folgenlos in allen 450 gemessenen Wegpunkten.**
+   Gemeldet, weil er byteweise in beiden EXE steht und die Y-Seite unmittelbar
+   daneben es anders macht — **aber kein Datensatz zeigt ihn.**
+5. ⚠ »Kein Schreiber« bleibt unter dem Vorbehalt aus AU.14; `reloc_refs --block`
+   lief für diese Adressen **nicht**.
+6. ⚠ Die Füllung der Sektor-Ankertafel `0x541F60` ist ungelesen. Der Setzer
+   benutzt einen dreistufigen Index, der Leser nur `2·(11·wx+wy)`.
+7. ⚠ `0x426020` (Luftbefehl, Art 7) und `0x4BDA10` ab `0x4BDA8E` nur an der
+   Kante gelesen.
+8. ⚠ Der C/F-Vergleicher normiert Adressen über eine Liste erlaubter Abstände
+   und **kann eine echte Abweichung verschlucken**, wenn sie zufällig einen
+   dieser Abstände hat. Für die fünf Kernfunktionen wurden Sprungtafeln und
+   Thunkziele **einzeln aufgezählt**; für die Roboterroutinen **nicht**.
+9. ⚠ **Vier fehlende `break` auf einmal zu melden ist selbst verdächtig.** Jeder
+   einzelne ist nur deshalb belastbar, **weil er in C und F byteweise gleich ist
+   und weil die Nachbarzeile im selben Rumpf es anders macht.** Wo dieser zweite
+   Halt fehlte, wurde nichts gemeldet — ein fünfter Durchfall (in `0x4407C0`)
+   ist wirkungslos, weil beide Zweige dieselben Zahlen schreiben.

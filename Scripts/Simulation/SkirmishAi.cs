@@ -1160,7 +1160,7 @@ public partial class MapEntityLayer : Node2D
     //     +0x00  art      1..4, Sprungtabelle @0x4BE184
     //     +0x01  vorrang  die auswaehlende Routine nimmt nur Ziele darueber
     //     +0x02  wort     das Ziel selbst
-    //     +0x04  c        zweites Byte des Ziels (bei art 3 die Spalte)
+    //     +0x04  c        zweites Byte des Ziels (bei art 4 die ZEILE)
     //
     // Die auswaehlende Routine @0x4BDCC0 laeuft die 100 Plaetze ab und **loescht
     // einen Eintrag, sobald sein Ziel erledigt ist** — das ist die Abbruch-
@@ -1168,11 +1168,25 @@ public partial class MapEntityLayer : Node2D
     //
     //     art 1  Gebaeudeplatz `wort`   (76*wort + 0xC06914), weg wenn typ == 0
     //     art 2  Einheitenplatz `wort`  (78*wort + 0x6E26D1), weg wenn +0x09 == 0xFF
-    //     art 3  Kartenzelle `(wort<<8) + c` — die gepackte Zellnummer
-    //            row*256+col — in der Belegungskarte 0xBDEA80; weg, sobald der
-    //            Belegende dem Spieler SELBST gehoert (`/1000 == spieler`)
+    //     art 3  ⚠⚠ BERICHTIGT AM 21.08.2026 — ein sec17-OBJEKT, nicht die
+    //            Kartenzelle. Gueltig solange `sec17[wort]+0x12 != 0`; der
+    //            Marschbefehl greift es als Ziel `40100 + wort` an.
+    //            Unabhaengig belegt im Einschlagcode: 0x4537F8 prueft
+    //            `0x9CA4 <= x <= 0x9D06` (40100..40198) und rechnet mit
+    //            `add bx, 0x635C` in den sec17-Index zurueck — exakt die
+    //            Umkehrung des `sub 0x635C` der KI.
+    //     art 4  die ROHE KARTENZELLE `(wort<<8) + c` in der Belegungskarte
+    //            0xBDEA80; weg, sobald der Belegende dem Spieler SELBST
+    //            gehoert (`/1000 == spieler`).
     //
-    // ⚠ **Art 4 ist ungelesen** und wird darum nur vermerkt, nicht ausgefuehrt.
+    // ⚠⚠ Hier stand bis zum 21.08.2026 art 3 = Kartenzelle und »art 4 ist
+    // ungelesen«. Beides falsch, und beides stand auch so in CAMPAIGN_RE.md §6.
+    // Die Sprungtafel 0x4BE184 (Gueltigkeit) und 0x4BE194 (Ausfuehrung) sagen
+    // es anders herum. Siehe OFFENE_FRAGEN.md, AX.3.
+    //
+    // ⚠⚠ Und die Packung war ebenfalls falsch herum: der sec6-Index ist
+    // `Spalte*256 + Zeile`, also ist `wort` die SPALTE und `c` die ZEILE —
+    // nicht umgekehrt.
     private sealed class MissionTarget
     {
         public int Kind, Priority, Word, Second;
@@ -1193,8 +1207,9 @@ public partial class MapEntityLayer : Node2D
         }
         list.Add(new MissionTarget { Kind = kind, Priority = prio, Word = word, Second = second });
         GD.Print($"Missionsziel fuer Spieler {player}: Art {kind}, Vorrang {prio}, " +
-                 $"Ziel {word}" + (kind == 3 ? $" (Zelle {second},{word})" : "") +
-                 (kind is < 1 or > 3 ? "  ⚠ Art ungelesen — wird nicht ausgefuehrt" : ""));
+                 $"Ziel {word}" + (kind == 4 ? $" (Zelle {word},{second})" : "") +
+                 (kind == 3 ? "  ⚠ sec17-Objekt — wir fuehren sec17 noch nicht" : "") +
+                 (kind is < 1 or > 4 ? "  ⚠ Art unbekannt" : ""));
     }
 
     /// <summary>Wieviele Ziele ein Spieler noch offen hat — für den Prüfstand.</summary>
@@ -1218,9 +1233,16 @@ public partial class MapEntityLayer : Node2D
                     if (!_entities[i].IsBuilding && !_entities[i].Dead &&
                         _entities[i].Slot == t.Word) return i;
                 return -1;
-            case 3:                                   // Kartenzelle
+            case 3:                                   // sec17-Objekt
+                // ⚠ Wir fuehren sec17 (100 Saetze zu 24 B: Bruecken, Molen,
+                // Einzelobjekte) noch nicht als eigene Liste. Solange das so
+                // ist, kann diese Art nicht aufgeloest werden — und sie hier
+                // still als Kartenzelle zu behandeln waere genau der Fehler,
+                // der bis heute drinstand.
+                return -1;
+            case 4:                                   // die rohe Kartenzelle
             {
-                int col = t.Second, row = t.Word;
+                int col = t.Word, row = t.Second;     // Spalte*256 + Zeile
                 for (int i = 0; i < _entities.Count; i++)
                 {
                     var e = _entities[i];
@@ -1231,7 +1253,7 @@ public partial class MapEntityLayer : Node2D
                 return -1;
             }
             default:
-                return -1;                            // Art 4: ungelesen
+                return -1;
         }
     }
 
