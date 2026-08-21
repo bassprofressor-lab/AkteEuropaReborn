@@ -23477,8 +23477,12 @@ public partial class MapEntityLayer : Node2D
         _musicTick += dt;
         if (_musicTick >= 2f) { _musicTick = 0; Audio.MidiMusic.Poll(); }
 
-        // Der Wind — er bewegt heute nur die Fahne im Bedienfeld.
-        TickWind(dt);
+        // ⚠⚠ HIER STAND `TickWind(dt)` — der Wind lief im BILDLAUF. Das war
+        // richtig, solange er nur die Fahne bewegte; seit dem 21.08.2026 haengt
+        // das UEBERGREIFEN DES FEUERS an ihm, und damit ist er
+        // simulationsrelevant. Der Kommentar an TickWind hat genau davor
+        // gewarnt: »Wer das Feuer an den Wind haengt, MUSS den Takt vorher auf
+        // die Simulation umstellen.« Er steht jetzt in SimTick.
 
         _simAcc += dt;
         int steps = 0;
@@ -23540,6 +23544,11 @@ public partial class MapEntityLayer : Node2D
         // Was noch abzusetzen ist: EINES je Takt und Traeger. Siehe
         // Entity.UnloadRest — das Original fuehrt denselben Zaehler im Satz.
         FrachtAbsetzenTakt();
+        // Erst der Wind, dann der Brand: das Uebergreifen liest die Richtung,
+        // und beide muessen im SELBEN Takt stehen, sonst haengt die Ausbreitung
+        // wieder an der Bildrate.
+        TickWind(SimDt);
+        BrandTakt();
         // Und die Gegenrichtung: wer auf einer Ladezelle steht, geht an Bord.
         BeladeTakt();
 
@@ -24605,7 +24614,13 @@ public partial class MapEntityLayer : Node2D
     /// der Spieluhr und damit an der Bildrate — solange der Wind nur die Fahne
     /// bewegt, kann daraus kein Auseinanderlaufen des Spiels werden. ⚠ Wer das
     /// Feuer an den Wind haengt, MUSS den Takt vorher auf die Simulation
-    /// umstellen.</para></summary>
+    /// umstellen.</para>
+    ///
+    /// <para>⭐ <b>EINGELOEST am 21.08.2026.</b> Das Uebergreifen des Feuers
+    /// haengt seit heute an Richtung und Staerke — und diese Zeile hat den
+    /// Fehler gefangen, bevor er wirken konnte. <c>TickWind</c> laeuft jetzt
+    /// aus <c>SimTick</c> mit <c>SimDt</c>, unmittelbar vor
+    /// <c>BrandTakt</c>.</para></summary>
     private void TickWind(float dt)
     {
         if (WindDir < 0)

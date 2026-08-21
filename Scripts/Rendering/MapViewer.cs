@@ -519,6 +519,12 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_brandCheck)
+        {
+            GD.Print(_entities.BrandCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_repairCheck)
         {
             GD.Print(_entities.RepairCheck());
@@ -838,6 +844,7 @@ public partial class MapViewer : Node2D
     private bool _mineCheck;
     private bool _entladenCheck;
     private bool _beladenCheck;
+    private bool _brandCheck;
 
     /// <summary><c>--gruppen-check</c> — zehn Gruppen, Ausschliesslichkeit,
     /// vier Merkpunkte.</summary>
@@ -1395,6 +1402,7 @@ public partial class MapViewer : Node2D
             else if (a == "--mine-check") _mineCheck = true;
             else if (a == "--entladen-check") _entladenCheck = true;
             else if (a == "--beladen-check") _beladenCheck = true;
+            else if (a == "--brand-check") _brandCheck = true;
             else if (a == "--gruppen-check") _gruppenCheck = true;
             else if (a == "--market-check") _marketCheck = true;
             else if (a == "--sell-check") _sellCheck = true;

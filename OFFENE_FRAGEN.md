@@ -3274,8 +3274,13 @@ Schritt, Schluss bei 255 und die 19-zu-1-Regel stehen bei uns schon genau so.
 1. **Wir zünden Wald bei jedem Treffer an.** Das Original hat die **fünf
    Schadensbänder** oben — insbesondere löscht starker Schaden (≥ 70) den Wald
    *ohne* Feuer, und schwacher (≤ 12) tut gar nichts.
-2. **Das Übergreifen fehlt ganz.** Wind haben wir bereits (Richtung und Stärke,
-   `rand & 7` beim Missionsstart) — die Formel oben ist alles, was noch fehlt.
+2. ~~**Das Übergreifen fehlt ganz.**~~ — ⭐ **GEBAUT am 21.08.2026**
+   (`--brand-check`: mit dem Wind 234, dagegen 63; Gegenprobe ohne Wind flach).
+   ⚠ Dabei mussten **Brand und Wind aus dem Bildlauf in den Simulationstakt**
+   umziehen — der Brand hing im Zeichenweg und wäre kopflos nie gelaufen. Den
+   Wind hat ein Kommentar gerettet, den wir selbst an `TickWind` geschrieben
+   hatten: »Wer das Feuer an den Wind hängt, MUSS den Takt vorher auf die
+   Simulation umstellen.«
 
 ### Was offen bleibt
 

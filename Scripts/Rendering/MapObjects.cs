@@ -328,7 +328,11 @@ public partial class MapEntityLayer
         // ⚠ Einmal je Bild, und darum hier: dieser Durchgang ist der einzige
         // Ort in dieser Datei, den jeder Bildaufbau anfaesst. Der Zeiger `at`
         // steht am Anfang des Zeilenfachs auf 0.
-        if (at == 0) Ausbrennen();
+        // ⚠⚠ HIER STAND `if (at == 0) Ausbrennen();` — der Brand hing damit am
+        // ZEICHENWEG. Das ist der falsche Ort: ein kopfloser Lauf zeichnet
+        // nicht, und im Netzspiel liefe das Feuer auf zwei Maschinen
+        // verschieden schnell, weil die Bildrate mitrechnet. Beides steht
+        // jetzt in BrandTakt(), gerufen aus SimTick. (21.08.2026)
         for (; at < _objDraw.Count && _objDraw[at].Row <= throughRow; at++)
         {
             var e = _objDraw[at];
@@ -581,6 +585,182 @@ public partial class MapEntityLayer
     /// gelesen, aber nicht gebaut. Solange es fehlt, gehen die vier Feuer des
     /// Missionsstarts nach ihrer Zeit aus und entzünden nichts weiter.</para>
     /// </summary>
+    /// <summary>
+    /// <b>DAS FEUER GREIFT ÜBER</b> — <c>zapal_forestA</c> @0x4CA7E0, gelesen am
+    /// 21.08.2026.
+    ///
+    /// <para>Der Brandtakt des Originals versucht je brennender Zelle und je
+    /// Schritt <b>genau einen</b> der acht Nachbarn anzuzünden — nicht alle.
+    /// Die Wahrscheinlichkeit hängt am Wind:</para>
+    /// <code>
+    ///   p = 1 / (2 · (5 · ((9 − Windstärke) · Winkelabweichung) + 50))
+    /// </code>
+    /// <para>Die Winkelabweichung ist der Abstand zwischen der gewählten
+    /// Richtung und <see cref="MapEntityLayer.WindDir"/>, in Achteln und über
+    /// den Umlauf gemessen (0…4). Mit Windstärke 2 heisst das: mit dem Wind
+    /// <b>1/100</b> je Schritt, gegen den Wind <b>1/380</b> — der Brand läuft
+    /// also in Windrichtung, ohne dass eine Richtung fest verdrahtet wäre.</para>
+    ///
+    /// <para>⚠ <b>Der Schritt ist der des Originals:</b> der Brandtakt läuft nur
+    /// bei <c>Takt % 4 == 0</c>, also alle vier Originaltakte
+    /// (<see cref="BrandSchrittSekunden"/>). Wer ihn je Bild laufen liesse,
+    /// bekäme bei 144 Bildern/s ein Flächenfeuer statt eines Waldbrands.</para>
+    ///
+    /// <para>⚠ <b>Gewürfelt wird mit dem EINEN Würfel</b>
+    /// (<c>Simulation.Determinism.Roll</c>), nicht mit <c>GD.Randi</c>: das
+    /// Übergreifen verändert, welche Zellen später begehbar sind, und ist damit
+    /// simulationsrelevant. ⚠ Die zwei älteren Würfe in <see cref="Anzuenden"/>
+    /// (Branddauer und »steht der verkohlte Baum«) laufen noch über
+    /// <c>GD.Randi</c> — das ist eine bestehende Lücke, die hier sichtbar wird
+    /// und nicht von hier stammt.</para></summary>
+    private void BrandGreiftUeber()
+    {
+        if (ObjectsBurning == 0) return;
+        int wind = WindDir, staerke = WindStrength;
+        if (wind < 0) return;
+
+        // ⚠ Erst sammeln, dann anzünden: Anzuenden() verändert die Liste nicht,
+        // aber eine frisch entzündete Zelle darf im SELBEN Schritt nicht schon
+        // weiterzünden — sonst läuft das Feuer je Schritt quer über die Karte.
+        var kandidaten = new List<(int Col, int Row)>();
+        foreach (var e in _objDraw)
+        {
+            if (e.BrandVon < 0f || e.Abgebrannt) continue;
+            int richtung = Simulation.Determinism.Roll(8);
+            int ab = System.Math.Abs(richtung - wind);
+            if (ab > 4) ab = 8 - ab;                      // ueber den Umlauf
+            int nenner = 2 * (5 * ((9 - staerke) * ab) + 50);
+            if (Simulation.Determinism.Roll(nenner) != 0) continue;
+            var (dc, dr) = Achtel[richtung];
+            kandidaten.Add((e.Col + dc, e.Row + dr));
+        }
+        foreach (var (c, r) in kandidaten)
+            if (Anzuenden(c, r)) BrandUebergriffe++;
+    }
+
+    /// <summary>
+    /// <c>--brand-check</c> — <b>läuft das Feuer wirklich mit dem Wind?</b>
+    ///
+    /// <para>Die Formel allein zu bauen genügt nicht: eine Ausbreitung, die
+    /// gleichmässig in alle Richtungen läuft, sähe im Spiel genauso aus wie
+    /// eine, die dem Wind folgt — nur bei einem Waldbrand über hundert Zellen
+    /// fiele der Unterschied auf. Also wird er hier gemessen.</para>
+    ///
+    /// <para>Gerechnet wird die Verteilung über <see cref="BrandProben"/> Würfe
+    /// je Richtung, mit der Formel des Originals. Erwartet wird ein Verhältnis
+    /// von <b>3,8 zu 1</b> zwischen »mit dem Wind« und »gegen den Wind« bei
+    /// Windstärke 2 — das folgt aus <c>2·(5·((9−2)·4)+50) = 380</c> gegen
+    /// <c>2·50 = 100</c>.</para></summary>
+    public string BrandCheck()
+    {
+        var sb = new System.Text.StringBuilder("brand-check\n");
+        bool alles = true;
+
+        // --- 1. die Wahrscheinlichkeiten, wie die Formel sie ergibt ---------
+        sb.Append($"  Wind: Richtung {WindDir}, Staerke {WindStrength}\n");
+        int staerke = WindStrength < 0 ? 2 : WindStrength;
+        var nenner = new int[5];
+        for (int ab = 0; ab <= 4; ab++) nenner[ab] = 2 * (5 * ((9 - staerke) * ab) + 50);
+        sb.Append("  Nenner je Winkelabweichung 0..4: ")
+          .Append(string.Join(", ", nenner))
+          .Append($"  (Verhaeltnis {(double)nenner[4] / nenner[0]:0.0} zu 1)\n");
+        bool formelOk = nenner[0] == 100 && nenner[4] == 2 * (5 * ((9 - staerke) * 4) + 50)
+                        && nenner[0] < nenner[4];
+        alles &= formelOk;
+
+        // --- 2. der Wuerfel trifft die Verteilung ---------------------------
+        //
+        // ⚠ Das ist die eigentliche Messung: nicht ob die Formel dasteht,
+        // sondern ob aus ihr wirklich eine Windrichtung wird.
+        var treffer = new int[8];
+        int wind = WindDir < 0 ? 0 : WindDir;
+        for (int i = 0; i < BrandProben; i++)
+        {
+            int richtung = Simulation.Determinism.Roll(8);
+            int ab = System.Math.Abs(richtung - wind);
+            if (ab > 4) ab = 8 - ab;
+            if (Simulation.Determinism.Roll(2 * (5 * ((9 - staerke) * ab) + 50)) == 0)
+                treffer[richtung]++;
+        }
+        int mit = treffer[wind];
+        int gegen = treffer[(wind + 4) & 7];
+        sb.Append("  Treffer je Richtung: ").Append(string.Join(", ", treffer)).Append('\n');
+        bool windOk = mit > gegen * 2;
+        sb.Append($"  mit dem Wind {mit}, dagegen {gegen} — ")
+          .Append(windOk ? "das Feuer laeuft mit dem Wind ✔"
+                         : "KEIN Windeinfluss messbar ✘").Append('\n');
+        alles &= windOk;
+
+        // --- 3. Gegenprobe: ohne Wind darf es keine Vorzugsrichtung geben ---
+        //
+        // Bei Windstaerke 9 wird (9-staerke) zu 0, alle Nenner werden 100 —
+        // dann MUSS die Verteilung flach sein. Schlaegt das an, misst der
+        // Punkt oben den Wind und nicht den Wuerfel.
+        var flach = new int[8];
+        for (int i = 0; i < BrandProben; i++)
+        {
+            int richtung = Simulation.Determinism.Roll(8);
+            if (Simulation.Determinism.Roll(100) == 0) flach[richtung]++;
+        }
+        int hoch = 0, tief = int.MaxValue;
+        foreach (int t in flach) { if (t > hoch) hoch = t; if (t < tief) tief = t; }
+        bool flachOk = hoch <= tief * 2 + 5;
+        sb.Append("  Gegenprobe ohne Windeinfluss: ").Append(string.Join(", ", flach))
+          .Append($" — Spanne {tief}..{hoch} ")
+          .Append(flachOk ? "flach ✔" : "SCHIEF ✘ (der Wuerfel selbst hat eine Vorzugsrichtung)")
+          .Append('\n');
+        alles &= flachOk;
+
+        sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
+
+    /// <summary>Wie viele Würfe der Prüfstand zieht. Gross genug, dass die
+    /// Spanne der Gegenprobe schmal wird.</summary>
+    private const int BrandProben = 200000;
+
+    /// <summary>Die acht Richtungen, wie das Original sie führt (Tafel
+    /// <c>0x4F5AF0</c>): (0,1) (−1,1) (−1,0) (−1,−1) (0,−1) (1,−1) (1,0) (1,1).
+    /// </summary>
+    private static readonly (int Col, int Row)[] Achtel =
+    { (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1), (1, 0), (1, 1) };
+
+    /// <summary>Vier Originaltakte bei 50 Hz — der Brandtakt läuft bei
+    /// <c>Takt % 4 == 0</c> (@0x4CA330).</summary>
+    private const float BrandSchrittSekunden = 4f / 50f;
+    private float _letzterBrandSchritt = -1f;
+
+    /// <summary>Wie oft das Feuer übergegriffen hat — ⚠ ohne diese Zahl ist
+    /// »es greift nicht über« nicht von »es hat keine Gelegenheit gehabt« zu
+    /// unterscheiden.</summary>
+    public int BrandUebergriffe;
+
+    /// <summary>
+    /// <b>Der Brandtakt</b> — Ausbrennen und Übergreifen, im Takt der
+    /// Simulation statt im Bildlauf.
+    ///
+    /// <para>⚠ Bis zum 21.08.2026 hing das Ausbrennen im Zeichenweg
+    /// (<c>DrawObjectsUpTo</c>, einmal je Bild). Das war zweifach falsch: ein
+    /// kopfloser Lauf zeichnet gar nicht, und bei 144 Bildern/s brannte der
+    /// Wald schneller ab als bei 30. Der Brand ist simulationsrelevant — was
+    /// abgebrannt ist, entscheidet, welche Zelle begehbar bleibt.</para>
+    ///
+    /// <para>Das Übergreifen läuft alle <see cref="BrandSchrittSekunden"/>,
+    /// also alle vier Originaltakte wie @0x4CA330.</para></summary>
+    private void BrandTakt()
+    {
+        Ausbrennen();
+        if (ObjectsBurning == 0) return;
+        float jetzt = (float)DebugClock;
+        if (_letzterBrandSchritt < 0f) _letzterBrandSchritt = jetzt;
+        int schritte = 0;
+        while (jetzt - _letzterBrandSchritt >= BrandSchrittSekunden && schritte++ < 8)
+        {
+            _letzterBrandSchritt += BrandSchrittSekunden;
+            BrandGreiftUeber();
+        }
+    }
+
     private void Ausbrennen()
     {
         if (ObjectsBurning == 0) return;
