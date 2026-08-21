@@ -5849,6 +5849,204 @@
       }
      ]
     }
+   ],
+   "tore": [
+    {
+     "von": "0x49DB1F",
+     "bis": "0x49DB81",
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 21,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 21,
+       "b": 193,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ],
+     "_regeln": 2
+    },
+    {
+     "von": "0x49DB55",
+     "bis": "0x49DBB7",
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 22,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 22,
+       "b": 193,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ],
+     "_regeln": 2
+    },
+    {
+     "von": "0x49DB8B",
+     "bis": "0x49DBFB",
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 23,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 23,
+       "b": 193,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ],
+     "_regeln": 2
+    },
+    {
+     "von": "0x49DBC1",
+     "bis": "0x49DC3F",
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 21,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 21,
+       "b": 1,
+       "c": 108,
+       "kind": "unit_field",
+       "op": "<"
+      }
+     ],
+     "_regeln": 2
+    },
+    {
+     "von": "0x49DC05",
+     "bis": "0x49DC83",
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 22,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 22,
+       "b": 1,
+       "c": 108,
+       "kind": "unit_field",
+       "op": "<"
+      }
+     ],
+     "_regeln": 2
+    },
+    {
+     "von": "0x49DE1B",
+     "bis": "0x49DEA1",
+     "when": [
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 18,
+       "b": 12,
+       "kind": "obj_owner",
+       "op": "=="
+      }
+     ],
+     "_regeln": 2
+    },
+    {
+     "von": "0x49DEAF",
+     "bis": "0x49DF63",
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 193,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "!="
+      }
+     ],
+     "_regeln": 2
+    },
+    {
+     "von": "0x49DF22",
+     "bis": "0x49DFA2",
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 193,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "=="
+      },
+      {
+       "a": 7,
+       "b": 193,
+       "c": 65535,
+       "kind": "unit_index",
+       "op": "=="
+      }
+     ],
+     "_regeln": 2
+    }
    ]
   },
   "17": {
@@ -20979,6 +21177,169 @@
      177,
      5000
     ]
+   ],
+   "tore": [
+    {
+     "von": "0x4A3804",
+     "bis": "0x4A3898",
+     "when": [
+      {
+       "a": 10,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 11,
+       "b": 15,
+       "kind": "time_after",
+       "op": ">"
+      }
+     ],
+     "_regeln": 2
+    },
+    {
+     "von": "0x4A3926",
+     "bis": "0x4A3A41",
+     "when": [
+      {
+       "a": 20,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      }
+     ],
+     "_regeln": 13
+    },
+    {
+     "von": "0x4A3A4F",
+     "bis": "0x4A3B8F",
+     "when": [
+      {
+       "a": 19,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 25,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      }
+     ],
+     "_regeln": 3
+    },
+    {
+     "von": "0x4A3A9A",
+     "bis": "0x4A3B8F",
+     "when": [
+      {
+       "a": 20,
+       "b": 14,
+       "kind": "var",
+       "op": "=="
+      }
+     ],
+     "_regeln": 2
+    },
+    {
+     "von": "0x4A3AA8",
+     "bis": "0x4A3B8F",
+     "when": [
+      {
+       "a": 20,
+       "b": 14,
+       "kind": "var",
+       "op": "=="
+      }
+     ],
+     "_regeln": 2
+    },
+    {
+     "von": "0x4A3AE7",
+     "bis": "0x4A3B8F",
+     "when": [
+      {
+       "a": 20,
+       "b": 14,
+       "kind": "var",
+       "op": "=="
+      }
+     ],
+     "_regeln": 2
+    },
+    {
+     "von": "0x4A3B03",
+     "bis": "0x4A3B8F",
+     "when": [
+      {
+       "a": 20,
+       "b": 14,
+       "kind": "var",
+       "op": "=="
+      }
+     ],
+     "_regeln": 2
+    },
+    {
+     "von": "0x4A3D70",
+     "bis": "0x4A3DFA",
+     "when": [
+      {
+       "a": 40,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 42,
+       "b": 194,
+       "c": 0,
+       "kind": "unit_is_var",
+       "op": "=="
+      }
+     ],
+     "_regeln": 2
+    },
+    {
+     "von": "0x4A3F04",
+     "bis": "0x4A3FA2",
+     "when": [
+      {
+       "a": 50,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 51,
+       "b": 20,
+       "kind": "time_after",
+       "op": ">"
+      }
+     ],
+     "_regeln": 2
+    },
+    {
+     "von": "0x4A40D8",
+     "bis": "0x4A4168",
+     "when": [
+      {
+       "a": 60,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 61,
+       "b": 30,
+       "kind": "time_after",
+       "op": ">"
+      }
+     ],
+     "_regeln": 2
+    }
    ]
   },
   "3": {
@@ -28132,6 +28493,21 @@
       }
      ]
     }
+   ],
+   "tore": [
+    {
+     "von": "0x49AC5A",
+     "bis": "0x49ACDA",
+     "when": [
+      {
+       "a": 3000,
+       "b": 1,
+       "kind": "unit_energy",
+       "op": "<"
+      }
+     ],
+     "_regeln": 2
+    }
    ]
   },
   "8": {
@@ -29177,5 +29553,5 @@
    ]
   }
  },
- "_tore_note": "TORE: das Original ist geradliniger Code mit Spruengen, kein Satz gleichrangiger Regeln. Ein Tor ueberspringt einen ADRESSBEREICH. Wer die Regeln darin einzeln prueft, laesst sie jeden Takt feuern statt einmal je Runde — gemessen an Mission 26: 775 Verstaerkungen in 300 Takten statt 3. Die Bedingung eines Tores ist das `when` der ersten Regel im Bereich; sie wird NICHT neu gedeutet. Eingetragen ist nur, was beide GAME.EXE gleich liefern und was mehr als eine Regel umspannt."
+ "_tore_note": "TORE: das Original ist geradliniger Code mit Spruengen, kein Satz gleichrangiger Regeln. Ein Tor ueberspringt einen ADRESSBEREICH. Wer die Regeln darin einzeln prueft, laesst sie jeden Takt feuern statt einmal je Runde — gemessen an Mission 26: 775 Verstaerkungen in 300 Takten statt 3. Die Bedingung eines Tores ist das `when` der ersten Regel im Bereich; sie wird NICHT neu gedeutet. Eingetragen ist nur, was beide GAME.EXE gleich liefern und was mehr als eine Regel umspannt — wobei \"gleich\" seit dem 21.08.2026 ueber die umspannten REGELN geht und nicht mehr ueber die Byteweite des Sprungs."
 }
