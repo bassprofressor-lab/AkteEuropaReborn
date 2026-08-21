@@ -581,8 +581,22 @@ public partial class StartMenuPanel : Control
 
         // The version, bottom right under the window. OURS entirely — the 1997
         // menu shows no version anywhere. It reads `application/config/version`
-        // out of project.godot, which is the same string the installer script
-        // carries as AppVersion, so there is one place to change it.
+        // out of project.godot.
+        //
+        // ⚠⚠ 21.08.2026 — HIER STAND EINE FALSCHE BERUHIGUNG: »which is the
+        // same string the installer script carries as AppVersion, so there is
+        // one place to change it«. Es sind VIER Stellen, und sie sind
+        // auseinandergelaufen: beim Sprung auf 0.7.0 wurden AppVersion in der
+        // .iss und file_version/product_version in export_presets.cfg gesetzt —
+        // und ausgerechnet DIESE hier vergessen, also die EINZIGE, die der
+        // Spieler zu sehen bekommt. Gemeldet mit »im Menü steht immer noch die
+        // 0.6.0«.
+        //
+        // Ein Kommentar, der »es gibt nur eine Stelle« behauptet, ist schlimmer
+        // als gar keiner: er hält den Nächsten davon ab nachzusehen. Die vier
+        // Stellen werden jetzt von `packaging/pruefe_version.py` gegeneinander
+        // geprüft — eine Zusicherung, die nachrechnet, statt einer, die es
+        // behauptet.
         var ver = new Label
         {
             Text = "v" + VersionString,
