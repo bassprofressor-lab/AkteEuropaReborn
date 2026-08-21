@@ -2443,8 +2443,8 @@ liegen, aber in den zwei Bauten verschieden.
 | **sec18** | 18 000 | **6000 × 3 B** | die **brennenden Waldfelder**. »**hori forest / dohorel forest — sjizdnej / nesjizdnej**« (brennt / abgebrannt — befahrbar / nicht) |
 | **sec80** | 92 | **4 × 23 B** | die vier **Merkpunkte** (21 B Name, Spalte, Zeile, `0xFF` = leer). ✔ Deckt sich mit Abschnitt N unserer Lesung |
 | **sec55 / sec56** | 1 936 / 11 616 | ⚠ sec55 **zellendur** `8·Zelle + Spieler` (in Abschnitt AC berichtigt) / sec56 **8 × 121 × 12** | das **KI-Wichtigkeitsraster** (»imp«), je Spieler 11 × 11 Zellen — **dasselbe Raster wie die `AI*.CWI`** aus Abschnitt W |
-| **sec11 / 12 / 13** | 2 000 / 1 000 / 2 | 1000 × u16 / 1000 × u8 / Zähler | **eine Suchliste**. »**Search buffer is full!**«, »**Search: / typ: / Found**« |
-| **sec32** | 169 | **13 × 13** | Verbindungsmatrix der **13 bahnfähigen Gebäude**. »**Cannon build more 'rail-possible' buildings**« |
+| **sec11 / 12 / 13** | 2 000 / 1 000 / 2 | 1000 × u16 / 1000 × u8 / Zähler | **eine Suchliste**. ⚠ Die u16 sind **Einheitenplätze, keine Zellen** — in Abschnitt AD an den Daten berichtigt (968/968 lebende Plätze) |
+| **sec32** | 169 | **13 × 13** | ⚠ **nicht** die Verbindungsmatrix dieser Karte — in allen 14 Dateien byteidentisch (Abschnitt AD). Eine statische Typentafel |
 | **sec40** | 500 | 500 Belegt-Bytes | die Belegungsmarken der `ROB_PROD`-Tafel. »**WRONG ROB_PROD in PLACE!!!!**« |
 | **sec95** | 100 | 50 × u16 | parallel zu sec94 — Preis **oder** Restzeit, das ist noch offen |
 | **sec54** | 4 | Dword | der **laufende Taktwert**, gesetzt in derselben Uhrroutine wie der 250er-Vorzähler sec118 |
@@ -2457,7 +2457,16 @@ sec57 (KI-Kopfwerte je Spieler), sec71 (500 B am Hilfetextfenster —
 *vermutet*: welcher `HELPG`-Text schon gezeigt wurde), sec62 (1020 Dwords im
 Kampagnenzustand), sec131 (Zustand des Einheiten-Auswahlfensters).
 
-### ⭐ Und eine tote Tafel: sec101
+### ⚠⚠ ZURÜCKGEZOGEN: sec101 ist NICHT tot — siehe Abschnitt AD
+
+Der folgende Befund hat der Messung an echten Daten **nicht standgehalten** und
+bleibt nur als Beleg stehen. sec101 ist die **Sicherungskopie der ersten 200
+Entwürfe**: 1010 von 9200 Byte sind in allen 14 Dateien belegt, und eine
+`rep movsd`-Blockkopie (`ecx = 0x8FC`) schaufelt sec47 ↔ sec101. Der
+Adressabtast fand sie nicht, weil eine Blockkopie ihre Adressen in `esi`/`edi`
+lädt statt als Konstante. **»Kein Leser gefunden« heisst nicht »kein Leser«.**
+
+### ~~⭐ Und eine tote Tafel: sec101~~
 
 **9 200 Byte bei C `0xA9A210` — KEIN LESER.** Roh über das ganze `.text`: C = 9
 Treffer, F = 5. Die fünf in F sind Init, Lader, Speicherer und zweimal der
@@ -2847,4 +2856,125 @@ feindliche, `+6` Gebäude-Wichtigkeit, `+7` Kopie (»DEF:«), `+8`
   5×5-Umgebung sucht — nicht gedeutet.
 * ⚠ **Die zwei EXE sind nicht in allem gleich:** sec59 hat in C fünf
   Fundstellen, in F vier. Alle *berichteten* Abschnitte stimmen 1:1 überein.
+---
+
+## AD. ⭐ Der Messlauf — drei Deutungen widerlegt, darunter eine von heute (21.08.2026)
+
+Abschnitt Y hat rund zwanzig Abschnittsformen **am Code** abgeleitet, ohne eine
+einzige Prüfdatei zu öffnen. Dieser Lauf holt das nach — über **14 Dateien**
+(`game.007` plus `1…13.DM`), und er ist genau deshalb wertvoll: **drei
+Deutungen halten der Messung nicht stand.**
+
+### Die Eichung zuerst
+
+`sec81` (die zehn Gruppen) und `sec80` (die vier Merkpunkte) haben wir
+unabhängig gelesen — sie sind der Prüfstein für die Methode. Ergebnis: `sec81`
+**100 %** (32 belegte Wortplätze, 32/32 zeigen auf eine lebende Einheit oder ein
+lebendes Flugzeug; 1968/1968 freie exakt `0xFFFF`), `sec80` Form bestätigt (die
+`0xFF`-Paare liegen exakt bei 0x15, 0x2C, 0x43, 0x5A). **Die Methode trägt.**
+
+### Bestätigt
+
+| Abschnitt | Ergebnis |
+|---|---|
+| **sec15** (8000 × 50, Weg) | 1.DM **111/111** belegte Blöcke in lebenden Plätzen, **5550/5550** Bytes im Wertebereich {0…7, 0xFF} |
+| **sec48** (400 × 18) | Vorwärtszeiger **100 %**; ⭐ **der Rückzeiger gefunden: Satz `+0x0C` (u16) = der sec5-Platz der Einheit** — über *alle* 78 Versätze gesucht, `+0x40` gewinnt mit 19/20, der nächstbeste hat 3/20 |
+| **sec94** (50 × 78) | 18 belegt, Position/Besitzer/Typ je 18/18 — bei Schrittweite 80 fällt das auf 3 % |
+| **sec63** (8 × 50 × 3) | **100 %** der `0xFF` sitzen auf Tripel-Versatz 0; alle acht Schlangen sind ein lückenloser Präfix |
+| **sec18** (6000 × 3) | **564/564** und **1409/1409** Zellen auf der Karte; Schrittweite 2 oder 4 gibt nur 85 %. Die Zellen sind zu **99,6 %** Terrainklasse 2 (Karte: 56 %) — der »brennender Wald«-Deutung sehr zuträglich |
+| **sec98** (20 × 78) | `0xFF` genau bei 9 + 78k, 20 Stück, **alle Abstände exakt 78** |
+| **sec13/14** | tragen denselben Wert und treffen den Füllstand exakt (608 = 608, 968 = 968) |
+
+### ⚠ Drei Deutungen, die fallen
+
+**1. `sec11` ist KEINE Zellenliste — es ist eine Liste von Einheitenplätzen.**
+Der Kopf spricht für sich: `[1000, 3000, 3001, 3002, 1001, …]`. In `1.DM` sind
+**968 von 968** Einträgen ein *lebender* sec5-Platz (Zufallserwartung **1,59 %**).
+Die Koordinatendeutung scheitert. ⚠ **Und eine Warnung zur Methode:**
+`row·W + col` gibt 100 % — aber nur, weil bei 254 × 100 jeder u16 durchfällt.
+Das misst nichts.
+
+**2. `sec32` ist KEINE kartenabhängige Verbindungsmatrix.** Die Form 13 × 13
+steht (am Code belegt), aber die 169 Byte sind in **allen 14 Dateien
+byteidentisch** — und nur zu 62 % symmetrisch. Eine Matrix der bahnfähigen
+Gebäude *dieser Karte* kann das nicht sein. Es ist eine **statische
+Typentafel**; was sie bedeutet, sagen die Daten nicht, weil sie überall gleich
+ist.
+
+**3. ⚠⚠ `sec101` ist NICHT TOT — und diese Berichtigung trifft mich selbst.**
+In Abschnitt Y steht sie als »fünfte tote Tafel«, weil der Adressabtast keinen
+Leser fand. Die Daten sagen etwas anderes: **1010 von 9200 Byte ≠ 0 in allen 14
+Dateien**, und der Inhalt sind **200 Entwurfssätze zu 46 Byte** — dieselbe Form
+wie sec47, 73 davon mit Namen (»Chaingunner«, »Radar Scout«, »Pioneer«).
+
+Und es gibt sehr wohl Code: **`rep movsd` mit `ecx = 0x8FC`** (= 2300 Dwords =
+exakt 9200 B) kopiert **sec47 → sec101** (@`0x4189E3`, @`0x4D0104`) und
+**sec101 → sec47** (@`0x4D03E4`). ⭐ Das deckt sich mit Abschnitt AB, der
+denselben Befund von der anderen Seite fand: sec101 ist die **Sicherungskopie
+der ersten 200 Entwürfe** im Missionsübertrag.
+
+**Die Lehre:** ein Adressabtast findet `mov`-Formen mit Konstante — eine
+`rep movsd`-Blockkopie lädt die Adresse aber in `esi`/`edi`, oft aus einem
+Register. **»Kein Leser gefunden« heisst nicht »kein Leser«**, solange nur nach
+Zugriffen mit unmittelbarer Adresse gesucht wurde. Die anderen fünf toten
+Tafeln sind davon nicht berührt (bei ihnen wurde roh über das ganze `.text`
+gesucht), aber die Methode gehört ab jetzt mit dieser Einschränkung zitiert.
+
+### Die vier offenen Fragen
+
+**1. `sec89` und `sec114` sind byteidentisch** — 1200 Byte gegeneinander
+gehalten, in allen 14 Dateien **0 abweichende Byte**. Der Lader liest zweimal in
+denselben Puffer, und weil der Speicherer beide Male denselben Puffer schreibt,
+überschreibt sec114 sec89 mit **identischem Inhalt**. **Kein Datenverlust, ein
+reiner Doppeleintrag — die Datei trägt 1200 Byte umsonst.**
+
+**2. `sec95` ist ein PREIS, keine Restzeit.** Der Beweis ist die
+Reproduzierbarkeit: gruppiert man die 36 Marktposten beider Dateien nach dem
+Entwurfsschlüssel, sind **6 von 12 mehrfach besetzten Gruppen über beide
+Dateien hinweg aufs Byte gleich** — (4,41) → 262 viermal, (4,35) → 750,
+(9,37) → 487. **Ein Countdown kann in zwei unabhängigen Speicherständen nicht
+denselben Wert tragen.** Alle 36 Werte sind Vielfache von 7,5.
+⚠ Nicht gelungen: die Verbindung zu sec47 — eine erschöpfende Suche über 3510
+Feldpaare findet bestenfalls 2 von 34 Treffern. **Der Grundpreis steht nicht in
+sec47**, jedenfalls nicht so.
+
+**3. `sec9`/`sec10` sind kein zweites Koordinatenpaar, sondern die
+FEINSTELLUNG desselben.** sec9 bleibt in [0, 36] und ist in **14 von 14**
+Dateien durch 4 teilbar, sec10 in [0, 16] und durchweg gerade — unabhängig von
+der Kartengrösse. Der Code sagt warum: bei Unterlauf wird mit Divisor **40**
+(waagerecht) bzw. **20** (senkrecht) nach sec7/sec8 übergetragen. Also:
+**sec7/sec8 = Kameraecke in Kacheln, sec9/sec10 = der Pixelrest darin**,
+Scrollschritt **4 px waagerecht, 2 px senkrecht**. Nebenbei fällt die
+Fenstergrösse ab: **21 × 37 Kacheln** sichtbar.
+
+**4. `sec101`** — siehe oben.
+
+### ⚠ Eine Werkzeugfalle, gefunden und behoben
+
+Der Agent musste die Ladertafel gegen 87 Aufrufstellen nachprüfen, weil drei
+Adressen um einen Platz verschoben schienen. Ursache: **`SECT_DESTS` beginnt
+bei sec2**, richtig ist also `[i-2]` — so machen es `zz_load`, `zz_map`,
+`zz_scale` und `zz_show`. **`cwm_inventory.py` benutzte `[i-1]`** und lieferte
+für sec32 die Adresse von sec33. Behoben; unsere Tafel in Abschnitt Y war von
+Anfang an richtig.
+
+### ⚠ Und eine Warnung zur Messmethode selbst
+
+Bei `sec15` liefert der naheliegende Test »passt der Weg irgendwo auf die
+Karte« **100 % — aber das Zufalls-Nullmodell auch**. Er misst nichts. Was
+trägt, ist die **Glattheit**: Wendungen ≤ 45° zu **84,4 % / 98,4 %** gegen 37 %
+im Zufallsmodell. **Zu jeder Trefferquote gehört das Nullmodell**, sonst ist
+eine 100 % wertlos.
+
+### Was auch dieser Lauf nicht messen konnte
+
+* **sec80, sec91, sec98 inhaltlich** — 0 von 56 bzw. 0 von 14 000 bzw. 0 von
+  280 Plätzen sind in irgendeiner der 14 Dateien belegt. Die Formen stehen, die
+  Inhalte sagt keine Datei.
+* **sec32 inhaltlich** (überall gleich), der **Grundpreis zu sec95**, und der
+  genaue Partner von **sec40** (sec39 ist mit 87,6 % der beste von sechs
+  Kandidaten, aber keine exakte Belegt-Maske).
+* ⚠ **Alle Code-Belege dieses Laufs stammen aus der C-Fassung.** F wurde nur
+  für die PE-Struktur geöffnet. Nach Regel 1 ist das **kein abgeschlossener
+  Befund** — die Datenmessungen tragen, die Code-Zitate gehören gegengelesen.
 
