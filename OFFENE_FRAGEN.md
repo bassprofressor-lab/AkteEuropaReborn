@@ -5056,3 +5056,68 @@ AQ, eine Ebene tiefer.
 | AI: transport - no target found | `0x4BB7D0` | Abschnitt AF — **die erste** C/F-Differenz (sec59) |
 | Attack group not available | `0x4BC920` | Abschnitt Y, sec108 |
 | Wrong type of tr.unit | `0x4B92E0` | Abschnitt R, die verlegte Einheit |
+
+---
+
+## AR. Die Frage-Dialoge — ein Fenster, eine Unterart (21.08.2026, selbst gelesen)
+
+Aus den 61 verbliebenen benannten Funktionen das Bündel »Dialoge«. Sie sind
+**alle derselbe Bau**, und das ist der ganze Befund.
+
+### Der Bau
+
+```
+0x446270 (u. a.):
+  1. die Liste der offenen Fenster durchgehen (0x87AFF8, Anzahl 0x4FD64C),
+     je Eintrag 44324 Byte, Art bei +0x00 -> schon offen? dann nur nach vorn
+  2. sonst: Fenster anlegen  ->  0x401B40 -> 0x458150
+  3. UNTERART setzen:  word[Fenster + 0x8C3CD8] = n
+  4. registrieren      ->  0x401AF0 -> 0x441270
+```
+
+⭐ **`0x458150` legt einen Kasten fester Grösse an: 0x12C × 0x64 = 300 × 100
+Bildpunkte** (`mov word[…+0x8B903E], 0x12C` / `[…+0x8B9040], 0x64`).
+
+### ⭐ `0x8C3CD8` ist die UNTERART eines Fensters, nicht »die Kartenbetriebsart«
+
+Abschnitt AP hat das Feld als Betriebsart des **Kartenfensters** (0…5) gelesen.
+Es ist allgemeiner: **jede Fensterart deutet es für sich**. Bei der Karte ist es
+die Betriebsart, beim Frage-Dialog **welche Frage**:
+
+| Funktion C | Text bei | Unterart | Frage |
+|---|---|---:|---|
+| `0x446780` | `0x4FC988` | **0** | Spiel beenden? |
+| `0x446880` | `0x4FC9EC` | **1** | Einheitentyp löschen? |
+| `0x446370` | `0x4FC7F8` | **3** | Möchten Sie die Mission erneut starten? |
+| `0x446270` | `0x4FD0F4` | **5** | Möchten Sie die Mission beended? |
+| `0x4424A0` | `0x4FC4D8` | **0** | Geben Sie Ihren Namen ein |
+| `0x442590` | `0x4FC4D8` | **1** | derselbe Text, andere Unterart |
+
+⭐ **Die zwei Namensdialoge tragen denselben Text und verschiedene Unterarten** —
+die Unterart sagt also, **wofür** der Name ist. Das ist der Beleg dafür, dass das
+Feld die Absicht trägt und nicht bloss das Aussehen.
+
+⚠ Unterarten bis mindestens **10** kommen vor (`mov word[…+0x8C3CD8], 0xa`
+@`0x442318`). Die vollständige Zuordnung **Unterart → Wirkung beim »Ja«** ist
+**nicht** gelesen; sie sitzt im Befehlsbehandler und ist eine Sprungtafel weiter.
+
+### ⭐⭐ Und damit schliesst sich ein Kreis zur Kontexthilfe
+
+`0x401AF0 → 0x441270` ist die Funktion, die **jedes neu geöffnete Fenster
+registriert** — und genau sie ist der **Schreiber des Ereignisbytes**
+`byte[0x539930]`, an dem drei Tore der Kontexthilfe hängen (Abschnitt AE-2).
+
+Das erklärt, warum das Ereignis bei **jedem** Fenster fällt und nicht nur bei den
+drei, die ein Tor haben: es ist keine Sonderbehandlung, sondern die allgemeine
+Registrierung. ⭐ **Unser Nachbau setzt `CampaignHints.Ereignis` beim Öffnen des
+Gebäudefensters — das ist genau die richtige Stelle**, und jetzt ist belegt,
+warum.
+
+⚠ `0x41CDB0` (»Do you want to quit the game?«) folgt diesem Bau **nicht** — dort
+steht ein anderer Weg. Ungelesen.
+
+⚠ **Was mir dabei nicht gelungen ist:** die Wirkung der Unterarten beim »Ja«. Ich
+habe den Verbraucher gesucht (20 Fundstellen auf `0x8C3CD8`), aber die
+Lesestellen, die ich angesehen habe, sind alle die **Doppelöffnungs-Prüfung**
+(»ist ein Fenster dieser Art UND Unterart schon offen?«). Der eigentliche
+Verbraucher sitzt im Befehlsbehandler `0x4485D0` hinter einer Sprungtafel.
