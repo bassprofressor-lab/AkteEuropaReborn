@@ -33,9 +33,29 @@ public static class Settings
     /// <summary>
     /// <b>DIE FENSTERGRÖSSE</b> — 0 heisst »so lassen, wie es kommt«.
     ///
-    /// <para>⚠ <b>Das ist UNSERE Zutat</b>, so wie der Streckfaktor daneben:
-    /// das Original von 1997 lief in einer festen Auflösung (640×480) und kennt
-    /// keine Wahl. Gewünscht war sie trotzdem.</para>
+    /// <para>⚠⚠ <b>HIER STAND, DAS ORIGINAL KENNE KEINE WAHL. Das ist falsch.</b>
+    /// Am 21.08.2026 gelesen: es hat sehr wohl eine Auflösungswahl, und zwar
+    /// eine feste Tafel von <b>fünf</b> Modi bei C <c>0x538858</c> (je zwei
+    /// u16), gesetzt von <c>Set 1</c> (C <c>0x4B68A0</c> / F <c>0x4B61D0</c>)
+    /// und gespeichert als Feld 8 in <c>options.cfg</c>:</para>
+    /// <code>
+    ///   0  640 × 480      1  800 × 600      2  1024 × 768
+    ///   3  1280 × 1024    4  1600 × 1200        (immer 8 bit)
+    /// </code>
+    ///
+    /// <para>⭐ <b>Unsere 4:3-Stufen sind darum keine Erfindung mehr, sondern
+    /// die des Originals</b> — bis auf eine: wir hatten <b>1280×960</b>, das
+    /// Original hat <b>1280×1024</b>. Berichtigt.</para>
+    ///
+    /// <para>⚠ <b>Unsere Zutat bleiben die 16:9-Stufen</b> (1280×720 bis
+    /// 3840×2160). Die kannte 1997 niemand, und sie stehen ausdrücklich als
+    /// Zusatz da.</para>
+    ///
+    /// <para>⚠ Und ein Unterschied im Wesen: das Original setzt einen
+    /// <b>Vollbildmodus</b> über DirectDraw (<c>Setmode:</c> C <c>0x4B69E0</c>,
+    /// Rückfall auf 640×480×8 bei Fehlschlag). Unsere Wahl ist eine
+    /// FENSTERgrösse. Dieselbe Absicht, ein anderer Weg — das ist der Teil, der
+    /// wirklich unserer ist.</para>
     ///
     /// <para>⚠ Sie wirkt nur im <b>Fenster</b>. Im Vollbild bestimmt der
     /// Bildschirm die Auflösung, und Godot füllt ihn — eine hier eingestellte

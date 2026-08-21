@@ -5121,3 +5121,257 @@ habe den Verbraucher gesucht (20 Fundstellen auf `0x8C3CD8`), aber die
 Lesestellen, die ich angesehen habe, sind alle die **Doppelöffnungs-Prüfung**
 (»ist ein Fenster dieser Art UND Unterart schon offen?«). Der eigentliche
 Verbraucher sitzt im Befehlsbehandler `0x4485D0` hinter einer Sprungtafel.
+
+---
+
+## AS. ⭐⭐ `options.cfg` — die zwölf echten Einstellungen, und zwei Berichtigungen an uns (21.08.2026)
+
+Schreiber C `0x446F00` / F `0x445ED0` (`"wb"`), Leser C `0x447040` / F `0x446010`
+(`"rb"`): **zwölf `fwrite`/`fread` in fester Folge**. Die Summe der Breiten ist
+`4+4+4 + 8·1 + 4 = 24` — ⭐ **genau die Dateigrösse**. Keine Kennung, keine
+Version, keine Textform.
+
+| Vsz | Weite | C | Bedeutung |
+|---:|---:|---|---|
+| 0 | 4 | `0x500E10` | Lautstärke **Spiel** (0…255) |
+| 4 | 4 | `0x892128` | **Geschwindigkeit** |
+| 8 | 4 | `0x991818` | **Bildschirmmodus** |
+| 12 | 1 | `0x991708` | **Meldungen** EIN/AUS |
+| 13 | 1 | `0x9927C0` | **Autosichern**, Minuten (0 = AUS) |
+| 14 | 1 | `0x500E18` | **Hilfe-Fenster** EIN/AUS |
+| 15 | 1 | `0x8934C4` | **Hilfe-Sprache** EIN/AUS |
+| 16 | 1 | `0x8B8068` | ⭐ **Formation / Gruppe** |
+| 17 | 1 | `0x8B62A8` | **Pause bei Hilfe** EIN/AUS |
+| 18 | 1 | `0x8934B8` | **MIDI-Musik** EIN/AUS |
+| 19 | 1 | `0x8B7250` | **Scrollen** aktiv/passiv |
+| 20 | 4 | `0x500E14` | Lautstärke **Sprache** (0…255) |
+
+Die Beschriftungen stehen als Block beieinander (Dateiversatz `0x100140` ff.) und
+benennen die Schalter selbst: `Gruppe Standard` · `Formation Standard` ·
+`Hilfe-Sprache AUS/EIN` · `Hilfe-Fenster AUS/EIN` · `Autosichern ` + ` Min.` ·
+`Meldungen AUS/EIN` · **`Auflösung`** · **`Geschwindigkeit`** · `Scrollen AUS/EIN`.
+
+### ⭐⭐ BERICHTIGUNG 1 — das Original HAT eine Auflösungswahl
+
+Ich hatte am selben Tag beim Bau der Auflösungseinstellung geschrieben:
+*»das Original von 1997 lief in einer festen Auflösung (640×480) und kennt keine
+Wahl«*. **Das ist falsch.** Es gibt eine Modustafel bei C `0x538858` (je zwei
+u16), gesetzt von `Set 1` (C `0x4B68A0` / F `0x4B61D0`), gespeichert als Feld 8 —
+und im Einstellungsschirm steht wörtlich **»Auflösung«**:
+
+| Nr | 0 | 1 | 2 | 3 | 4 |
+|---|---|---|---|---|---|
+| | 640×480 | 800×600 | 1024×768 | **1280×1024** | 1600×1200 |
+
+Immer 8 bit. `Setmode:` (C `0x4B69E0`) setzt sie über DirectDraw und **fällt bei
+Fehlschlag auf 640×480×8 zurück**.
+
+→ **Unsere fünf 4:3-Stufen sind keine Erfindung, sondern die des Originals** —
+bis auf eine: wir hatten **1280×960**, das Original hat **1280×1024**.
+Berichtigt. ⚠ Unsere Zutat bleiben die 16:9-Stufen, und dass wir eine
+FENSTERgrösse setzen statt eines Vollbildmodus.
+
+⭐ Nebenbei fällt aus `Setmode:` das **Kachelmass** heraus: `0x5387C0 =
+Breite/40 + 1`, `0x5387C4 = Höhe/20 + 1` — **40 × 20**, wie überall sonst auch.
+
+### ⭐⭐ BERICHTIGUNG 2 — die Formationsfrage ist beantwortet, und zwar vom Original
+
+In `CommandBridge` steht seit Tagen »GELESEN, ABER NICHT GEBAUT« zur
+**Formationsverschiebung** beim Gruppenbefehl (das Original rechnet
+`Einheit.x − Mittelwert.x + Klick.x`, wir suchen freie Zellen im Ring), und die
+Frage »bauen wir das?« lag als **Entscheidung beim Spieler**.
+
+⭐ **Sie muss gar nicht entschieden werden: das Original stellt sie dem Spieler.**
+Feld 16 von `options.cfg` ist genau dieser Schalter, mit den zwei Beschriftungen
+
+> **`Gruppe Standard`** ↔ **`Formation Standard`**
+
+und dem Hilfetext **»Formation bei Gruppenbewegungen einstellen«** (Dateiversatz
+`0xF0BEE`).
+
+→ Zu bauen sind **beide** Verhalten plus der Schalter — nicht eines von beiden.
+⚠ **Welche Stellung welches Verhalten meint und was die Vorgabe ist, ist noch
+nicht gelesen.** Die Namen legen nahe: »Formation« behält die Aufstellung,
+»Gruppe« sammelt am Klickpunkt. Das ist eine **Vermutung aus dem Wortlaut**, kein
+Befund.
+
+### ⚠ Was uns fehlt und was wir zuviel haben
+
+**Fehlt:** Geschwindigkeit als *Einstellung* (bei uns nur Tasten), Autosichern,
+Hilfe-Fenster-Schalter, der Formation/Gruppe-Schalter, und die **zweite
+Lautstärke** — das Original trennt **Spiel** und **Sprache** (Klangnummern
+< 120 und 300…499 gegen 120…299 und ≥ 500).
+
+**Zuviel (unsere Zutaten):** `fps_limit`, `vsync`, `ui_scale`, `cursor_hints`,
+`pan_speed`, `skirmish_*`. Die dürfen bleiben — sie sind als Zutat gekennzeichnet.
+
+⚠ **Nicht in `options.cfg`, obwohl das Fenster sie anbietet:** »Online-Hilfe
+EIN/AUS« und »Karten-Scrollen EIN/AUS«. Die überleben den Programmlauf nicht.
+
+### ⭐ Und drei weitere Formate, die dabei abfielen
+
+* **`HELPG.PIC` = 36 × 3600 B, jedes Bild 60 × 60**, nicht 360 × 360 — die
+  Blitgeometrie sagt 60 Zeilen à 60 Byte. `HELPG.DAT` ist 4000 B = **1000 × u32**
+  (Bildnummer je Hilfetext, 0 = keins), und die 36 belegten Werte sind genau
+  1…36, jeder einmal.
+* **`ENCYCLOG.DAT` = 12 000 B = 3 × (1000 × u32)**: Textversatz, Bildnummer,
+  Textlänge. ⭐ Die Datei geht **restlos** auf: für alle 106 Einträge zeigt der
+  Versatz exakt hinter die Marke `#p<id>,`, und die Zwischenräume sind genau
+  diese Marken. **Keine unerklärten Bytes.**
+* **`PANEL.DTA` = 34 680 B = 204 × 170**, rohes 8-bit-Bild ohne Kopf, `0xFF` =
+  durchsichtig; beide Kantenlängen stehen als Sofortwerte im Code. Nullmodell:
+  203×170, 205×170, 204×169 und 204×171 gehen alle **nicht** auf.
+* ⚠ **`CW.TMP` (177 440 B) ist die Mitnahme der Konstruktionen:** vier Blöcke —
+  Fahrzeug-, Schiffs- und Flugzeugentwürfe plus die Bauteiltafel. Summe stimmt
+  aufs Byte, und Block 4 ist mit `PARTS.CWD` **byteweise identisch**.
+
+⚠ **Eine Kodierungsfalle:** `HELPG.TXT`, `BRIEFG.TXT` und `OBJECTG.TXT` sind
+**CP437**, `ENCYCLOG.TXT` dagegen **CP1252**. Ein gemeinsamer Decoder ist falsch.
+
+---
+
+## AT. ⭐⭐ SPIELSTART, KARTENLADEN UND DIE GRENZEN DES GEFECHTS (21.08.2026)
+
+16 benannte Startfunktionen gelesen, **alle Zahlen in beiden EXE geprüft**.
+Ergebnis vorweg: **keine einzige Grenze unterscheidet sich** — die Unterschiede
+sind Adressversätze. (Zur einen echten Ausnahme siehe AT.6.)
+
+### AT.1 ⭐⭐ Die wichtigste Einsicht: alle sieben Grenzmeldungen sind STUMM
+
+`meldung(text, zusatz)` — C `0x41CDB0` / F `0x41BF70`, **121 Aufrufer**:
+
+```
+mov  al, byte[0x4FA0C0]      ; der ENTWICKLERSCHALTER
+test al, al
+je   -> sofort zurück
+... MessageBoxA(hwnd, "Do you want to quit the game?", text + ": " + zusatz)
+```
+
+Die **einzige** Schreibstelle von `0x4FA0C0` im ganzen Bild ist der Umschalter
+hinter »Developers' cheats enabled/disabled« (C `0x43AF5A`).
+
+⭐ **Folge für den Nachbau:** »Too many players for this map«, »There is no place
+to appear«, »Cannot add more probr structures«, »Self check…«, »Out of map!«,
+»Selected level not found!« sind **Entwicklermeldungen**. Im Auslieferungszustand
+**sieht der Spieler nichts** — die Grenze wird trotzdem gezogen, und der Code
+läuft mit der abgeschnittenen Menge weiter. **Wer sie als Fehlerabbruch baut,
+weicht vom Original ab.**
+
+### AT.2 ⭐ Acht Spieler, fest verdrahtet — und die Karte sagt es im Kopf
+
+`cmp bl, 8` steht an **neun** Stellen in `spieler_verteilen` (C `0x41B310`);
+die Acht kommt aus **keiner** Tafel.
+⭐ Zweiter, unabhängiger Beleg: das Leeren eines Platzes räumt die Nummern
+`platz·1000 … +999` — **8 × 1000 = 8000**, genau die Grenze des imap-Bandes
+»< 8000 = Einheit«. Spielerzahl und imap-Bänder sind **dieselbe Entscheidung**.
+
+⚠ **Es gibt kein Startplatz-Objekt.** Ein Platz existiert genau dann, wenn dem
+Index `p` irgendeine Einheit **oder** ein Gebäude gehört.
+
+⭐⭐ **Und der 53-Byte-Kopf jeder Karte sagt die Spielerzahl vorweg**
+(Versatz 2). Nachgerechnet mit der Regel aus `0x41B250` über alle Karten:
+
+> **Kopfbyte 2 == Zahl der belegten Plätze: 36 von 36. Null Abweichungen.**
+
+| Karte | Plätze |
+|---|---|
+| NET01 · NET03 · NET08 | 4 |
+| NET02 | 6 |
+| **NET04 · NET05 · NET06 · NET07** | **8** |
+
+⚠ **Die Plätze müssen nicht lückenlos sein** — NET08 belegt `{0,1,3,4}`. Der
+Verteiler springt Lücken ausdrücklich über.
+
+⚠⚠ **Zweig B der Platzvergabe (Auslosung) hat KEINE Prüfung** — dort steht weder
+`cmp bl,8` noch die Meldung. Bei null freien Plätzen greift der Code auf
+Altbestand zu. **Für den Gefechtsmodus die gefährliche Stelle**; ob die
+Oberfläche vorher deckelt, ist ungelesen.
+
+### AT.3 ⭐ Die drei Gefechts-Einstellungen sind gefunden
+
+| Wert | C | Bereich |
+|---|---|---|
+| **Startgeld** | `word[0x5407A0]` | `0, 1000, … 10000`, dann zurück auf 0 |
+| **Technikstufe** | `byte[0x540EB8]` | **1…8**, dann zurück auf 1 |
+| **Platzvergabe** | `byte[0x540798]` | 0 = ausgelost · 1 = feste Reihenfolge |
+
+⭐ Das ist genau der Stoff für den späteren Punkt »Gefechtsmodus anpassen«.
+
+### AT.4 ⚠⚠ Ein belegter Fehler des Originals: drei Karten ohne Namen
+
+Die deutsche Namenstafel (`0x4F805B`, 21 B je Eintrag) führt
+`51 Sumpfschlacht · 52 Sandfalle · 53 Waldesrauschen · 54 Umkämpfte Inseln ·
+55 Flußgefechte` — und **56, 57, 58 sind leer**. Das sind **NET06, NET07 und
+NET08**. Die Gefechtskartenliste zeigt für sie einen leeren Namen, **in beiden
+Auslieferungen** — und ausgerechnet NET06/NET07 sind 8-Spieler-Karten.
+
+⚠ Zweiter Fund: `level_waehlen` durchsucht nur die **ersten 8** Plätze
+(`cmp cl, 8`), obwohl die Kartentafel **20** fasst.
+
+### AT.5 ⭐ Die Startfolge, und was Einzel- von Mehrspieler trennt
+
+| | `doInit` (Einzelspieler) | `netzstart` (Mehrspieler) |
+|---|---|---|
+| Spieler 0 | Art **0** (Mensch) | Art 0 (Gastgeber) |
+| Spieler 1…7 | Art **1** (Rechner) | Art **0xFF** (**leer**, warten auf Beitritt) |
+| Stelle (C) | `0x415BA5` | `0x4195A4` |
+| Bündnisdiagonale | — | `0x41952E` setzt `Matrix[i][i] = 1` |
+
+⭐ Aus `doInit` fällt nebenbei der Takt heraus: **`SetTimer(hwnd, 1, 0x14, 0)` =
+20 ms = 50 Hz** — zum dritten Mal unabhängig belegt.
+
+### AT.6 ⚠⚠ DER FÜNFTE UNTERSCHIED DER AUSLIEFERUNGEN — und er ist gross
+
+`gefecht_starten`: **C `0x41A150` ist 3171 Byte, F `0x419F90` nur 614.**
+
+Der Zuwachs ist ein **Sprungverteiler über die Technikstufe** (C `0x41A22B`,
+8 Fälle), der jedem der 8 Spieler eine **vorgefüllte Bauschlange** gibt
+(sec63). **F hat das nicht — F leert die Schlange stattdessen.**
+
+→ Im Gefecht startet man in C mit einer laufenden Produktion je nach
+Technikstufe, in F mit gar keiner. Das ist der **grösste** der bisher fünf
+belegten Unterschiede.
+
+### AT.7 ⭐ Die Selbstprüfung repariert
+
+`imap_selbstpruefung(id)` — C `0x404AC0`: geht die ganze Karte durch und
+setzt **jede Zelle, die noch diese Nummer trägt, auf `0xFFFE`** (frei). Auch mit
+ausgeschaltetem Entwicklerschalter — dann eben still.
+
+⚠ **Preis:** ein voller Durchlauf über bis zu 254 × 254 Zellen **pro entfernter
+Einheit**. Für den Nachbau ist die *Bedeutung* wertvoll, die *Umsetzung* nicht —
+ein Rückverweis Einheit → Zellen wäre dieselbe Prüfung in O(1).
+
+⭐ Nebenbei belegt: Breite `dword[0x542DC4]`, Höhe `dword[0x542DF8]`, imap-Index
+**`spalte·256 + zeile`** — und weil sec6 65 536 Wörter fasst, kann **keine Karte
+breiter oder höher als 254** sein (grösster gemessener Wert: 254 × 254).
+
+### AT.8 ⭐ »Freund oder Feind«, genau — und zwei Ecken
+
+```
+co <  8000   -> Matrix[cis/1000][co/1000]        ; Einheit
+co < 14000   -> pratelska_infa(cis, co - 10000)  ; Infanteriezelle
+sonst        -> "nothing", 0
+```
+
+⭐ Eine **Infanteriezelle gilt als befreundet, solange KEINER ihrer bis zu neun
+Insassen feindlich ist** — auch wenn sie leer ist.
+
+⚠⚠ **Alles ≥ 14000 ist NIE befreundet.** Wald, Gebäude und Einzelobjekte laufen
+in den `nothing`-Zweig. **Wer Gebäude über diese Funktion auf Bündnis prüft,
+bekommt im Original immer »Feind«.**
+
+### AT.9 »Out of map!« bricht nichts ab
+
+Die Zelle wird **übersprungen**, die Schleife läuft weiter. Kein Abbruch, kein
+Rückgabewert. ⚠ Der Zähler der Sichtzellen hat **keine obere Schranke**.
+
+⭐ Das dritte Byte je Sichtzelle ist eine fertige »hier darf ich hin«-Auskunft:
+frei = imap ist `0xFFFE` **oder** trägt eine Einheitennummer.
+
+### AT.10 ⚠ Ein neuer Datenpunkt zum `.data`-Versatz
+
+Der Zeichenkettenblock liegt **weiter auseinander als notiert**: `Out of map!`
+`0xFF8` · `Self check…` `0x1000` · `Too many players…` `0x1020` · `doInit 1`
+`0x1024`. Der Bereich ist also **`0xFF8…0x1024`**, nicht `0xF98…0x1004`.
+Die Zustandstafeln bleiben bei `0xFA0`.

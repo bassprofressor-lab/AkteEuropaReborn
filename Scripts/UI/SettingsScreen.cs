@@ -348,16 +348,21 @@ public partial class SettingsScreen : Control
     /// um es zurückzustellen. Darum wird gegen den <b>nutzbaren</b> Bereich
     /// geprüft (ohne Taskleiste), nicht gegen die rohe Bildschirmgrösse.</para>
     ///
-    /// <para>⚠ <b>Unsere Zutat, und das Seitenverhältnis ist der Grund für die
-    /// Auswahl:</b> das Original lief in 640×480 (4:3). Die Liste führt beides —
-    /// die 4:3-Stufen für alle, die es original mögen, und die 16:9-Stufen für
-    /// heutige Schirme.</para></summary>
+    /// <para>⭐ <b>Die fünf 4:3-Stufen sind die des ORIGINALS</b> — Modustafel
+    /// C <c>0x538858</c>, gesetzt von <c>Set 1</c>, gespeichert als Feld 8 in
+    /// <c>options.cfg</c>. ⚠ Hier stand, das Original habe keine Wahl gekannt;
+    /// das war falsch und ist am 21.08.2026 berichtigt.</para>
+    ///
+    /// <para>⚠ <b>Unsere Zutat sind die 16:9-Stufen</b> (1280×720 aufwärts) —
+    /// die kannte 1997 niemand.</para></summary>
     private static System.Collections.Generic.List<Vector2I> Aufloesungen()
     {
         var alle = new[]
         {
             new Vector2I(640, 480), new Vector2I(800, 600), new Vector2I(1024, 768),
-            new Vector2I(1280, 960), new Vector2I(1600, 1200),
+            // ⚠ 1280×1024, nicht 1280×960 — so steht es in der Modustafel des
+            // Originals (C 0x538858). Berichtigt am 21.08.2026.
+            new Vector2I(1280, 1024), new Vector2I(1600, 1200),
             new Vector2I(1280, 720), new Vector2I(1366, 768), new Vector2I(1600, 900),
             new Vector2I(1920, 1080), new Vector2I(2560, 1440), new Vector2I(3840, 2160),
         };
