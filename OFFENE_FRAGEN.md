@@ -2477,7 +2477,7 @@ liegen, aber in den zwei Bauten verschieden.
 | **sec72** | 1 000 | 500 × u16 | die **Missionsvariablen v[0…499]** — ✔ das kennen wir längst (`VAR_BASE = 0xBC5690`), es stand nur nicht in `GAMESTATE_RE.md` |
 
 **Erklärbar, aber nur angelesen:** sec60 (24 000, KI-Tabelle, 11 benannte
-Leser), sec108 (KI-**Angriffsgruppen**, »Attack group not available«), sec110 /
+Leser), ⚠ sec68, NICHT sec108 (KI-**Angriffsgruppen**, »Attack group not available«), sec110 /
 sec57 (KI-Kopfwerte je Spieler), sec71 (500 B am Hilfetextfenster —
 *vermutet*: welcher `HELPG`-Text schon gezeigt wurde), sec62 (1020 Dwords im
 Kampagnenzustand), sec131 (Zustand des Einheiten-Auswahlfensters).
@@ -5054,7 +5054,7 @@ AQ, eine Ebene tiefer.
 | hori strom | `0x4C9FC0` | AL.3, sec4 — der Takt der Einzelobjekte |
 | check_forest | `0x4CAB10` | Abschnitt AG, der Waldbrand |
 | AI: transport - no target found | `0x4BB7D0` | Abschnitt AF — **die erste** C/F-Differenz (sec59) |
-| Attack group not available | `0x4BC920` | Abschnitt Y, sec108 |
+| Attack group not available | `0x4BC920` | AU.3, sec68 (⚠ nicht sec108) |
 | Wrong type of tr.unit | `0x4B92E0` | Abschnitt R, die verlegte Einheit |
 
 ---
@@ -5375,3 +5375,362 @@ Der Zeichenkettenblock liegt **weiter auseinander als notiert**: `Out of map!`
 `0xFF8` · `Self check…` `0x1000` · `Too many players…` `0x1020` · `doInit 1`
 `0x1024`. Der Bereich ist also **`0xFF8…0x1024`**, nicht `0xF98…0x1004`.
 Die Zustandstafeln bleiben bei `0xFA0`.
+
+---
+
+## AU. ⭐⭐ DIE KI DES ORIGINALS, VOLLSTÄNDIG (21.08.2026)
+
+Neun benannte KI-Funktionen gelesen, aus **beiden** EXE, gemessen an **13 `.DM`**.
+⚠ Vorweg: **vier der neun sind gar keine KI** (AU.11).
+
+### AU.1 Der Takt: 20 Aufgaben auf 50 Bilder
+
+`ai_tick` (C `0x4BFB80` / F `0x4BF630`) läuft je Bild. `ph = sec54 % 50`.
+**Je Bild genau EINE Aufgabe — aber für alle acht Spieler.**
+
+Vorsperren in dieser Reihenfolge:
+1. `sec53[40p+0]`: `1` = Rechner · `0` = Mensch (nur wenn `byte[0x538BA8] != 0`) ·
+   sonst (`0xFF`) übersprungen
+2. `sec106[p] != 0` → **der ganze Zug fällt aus**
+3. `ph > 48` → nichts. **Takt 49 ist tot.**
+
+| Takt | C | Aufgabe |
+|---:|---|---|
+| 0 | `0x4BAB40` | **AI: test of life** |
+| 1 | `0x4BA710` + `0x4BA7D0` | Stärkekarte sec55 → Sektorwerte sec56 |
+| 2 | `0x4BB7D0` | **AI: transport** (Roboterlogistik) |
+| 4 | `0x4BBAC0` | Basis schickt ihre 6 angedockten Einheiten los (sec23) |
+| 5 | `0x4BB9A0` | **AI: production** (Bauschlange sec63) |
+| 7 | `0x4BC900` + `0x4BC540` | **Set imp cpu:** und der Angriffsdurchlauf |
+| 8 | `0x4BE2E0` | **target:** → Gruppen bilden und fahren |
+| 10 | `0x4BE330` | Infanteriedurchlauf |
+| 12 | `0x4BF150` | **Wachposten besetzen** (sec107) |
+| 14 | `0x4BFA30` | 1 von 10: Basis suchen (schreibt sec3) |
+| 16,20,24,28,32,36,40,44 | `0x4BF4E0` | `ai_units`, `k = 0…7`: jede untätige Einheit sucht sich selbst ein Ziel |
+| 46 | `0x4BF760` | schreibt sec24/28/123 — **ungelesen** |
+| 48 | `0x4BE5C0` | Gebäudepflege je Typ (Sprungtafel `0x4BE6E0`) |
+| die übrigen 29 | — | Leerlauf |
+
+⭐ **Die KI denkt nur in 21 von 50 Bildern.** In Mission 14 kommen die Takte 7 und
+8 sogar nur mit 1/5 Wahrscheinlichkeit — also **einmal pro 250 Bilder je Spieler**.
+
+### AU.2 ⭐ `target:` — die Auftragswahl ist eine DIVISION
+
+`target:` (C `0x4BECF0` / F `0x4BE7A0`) protokolliert je Kandidat
+`cx:` `cy:` `imp:` `pway:` **`po:`** `min:` — und
+
+> **`po = Wegkosten / Wichtigkeit`. Gewählt wird das KLEINSTE `po`.**
+
+Losgeschickt wird nur bei `r_best != 0xFF` **und** (`r_num > r_min` **oder**
+`sec61[p] == 5`). Die Gruppengrösse ist **`(3 · r_min) / 2`**, geklemmt auf 3…99.
+
+⚠ **Unser `SkirmishAi.cs` nimmt stattdessen das Maximum von `Priority` und kennt
+gar keinen Wegewert.** Das ist der grösste einzelne Abstand zum Original.
+
+**sec69** (8 × 100 × 6 B) ist die Auftragstafel:
+`+0` Art (0 leer · 1 Gebäude · 2 Einheit · **3 sec17-Objekt** · 4 rohe Zelle) ·
+`+1` `imp`, **nie 0** (sonst Abbruchfenster »IMP is 0!!!«) · `+2` Index/Spalte ·
+`+4` Zeile. **483 von 483** Einträgen zeigen auf ein bestehendes Gebäude
+(Nullmodell bei zufälligem Index: 80/483 = 17 %).
+
+### AU.3 ⭐ Die Gruppentafel ist sec68 — und eine Berichtigung
+
+**sec68 = 6464 B = 8 Spieler × 4 Gruppen × 202 B**, Index `202·(4p+g)`:
+`+0` Anzahl · `+1` Auftragsnummer · `+2…+0xC9` **100 Einheitennummern als Wörter**.
+
+⭐ **Höchstens 4 Gruppen à 100 Einheiten je Spieler.** Alle vier belegt →
+»Attack group not available«, Rückkehr ohne Wirkung.
+
+⚠ **Berichtigung zu Abschnitt Y:** dort stand »sec108 = Angriffsgruppen«. Falsch.
+**sec108** (1984 B = 32 × 62) trägt die **Wegpunkte** der Gruppen (`0x4BCF30`).
+
+Aufnahme: `faze == 0`, `CPU0` ist 1 oder 2, Antrieb ≠ `0xAB`, und im Sektor aus
+`CPU1` muss `sec56[+7] < sec56[+0x0A]` gelten. Dann `CPU0 = 10`,
+**`CPU1 = Gruppennummer`**, und `sec56[+0x0A]--`.
+Bei `sec110[p] == 0` gilt »**Take all**«: ohne Sektorprüfung, jede Einheit mit
+`faze==0`, `UKOL < 45`, `CPU0 < 5`.
+
+### AU.4 ⭐ Woher »freie Angreifer« kommt
+
+`Set imp cpu:` (C `0x4BBB80` / F `0x4BB640`) füllt je Sektor:
+`+6` Summe der `imp` der eigenen Gebäude (aus **sec62**) · `+7 = +6` (»DEF:«) ·
+**`+8 = min(100, 100·(+7) / pro_style[sec61[p]])`** (»DEF_robots:«) ·
+`+0x0A` = zugeordnete Einheiten.
+
+> **freie Angreifer = Summe über alle Sektoren mit `+8 < +0x0A` von `(+0x0A − +8)`.**
+
+Ist die Summe 0 → »**Not free attacker:**« (C `0x4BE790`), und `target:` bricht ab.
+
+**sec62 gemessen:** 324 gesetzte `imp`-Einträge, **322 (99,4 %)** auf ein Gebäude
+mit Typ ≠ 0, **316 (97,5 %)** auf ein **eigenes**. Werte 6 (311×), 4 (8×), 9 (3×),
+2 (2×). → sec62 ist die **Verteidigungswichtigkeit der eigenen Gebäude**.
+
+**`CPU1` als Sektor-Halbbytepaar, gemessen:** 655 Einheiten mit `CPU1 != 0`,
+davon **655 (100 %)** mit beiden Halbbytes ≤ 10.
+⭐ Nullmodell (beliebiges Byte): 47 %, erwartet 309. **Damit ist es belegt.**
+Bei `CPU0 == 2` (angekommen) nennt `CPU1` in **67 %** den eigenen Sektor;
+Nullmodell einer Zufallseinheit: **0,9 %**.
+
+⚠ **Berichtigung:** `CPU0 == 20` trifft **133 der 136 Roboter** und nur 3 andere
+Einheiten — der Wert ist der **Transportroboter-Zustand**, nicht »frisch produziert«.
+
+### AU.5 ⭐ `make robot z` / `make robot do` — »von« und »nach«
+
+Keine zwei Erzeuger. Beide schreiben einem **vorhandenen** freien Roboter eine
+Fahrstrecke in seinen **sec48**-Satz (400 × 18 B, Index = `sec5+0x40`).
+Tschechisch **`z`** = *von*, **`do`** = *nach*:
+
+| | `make robot z` (C `0x4BB570`) | `make robot do` (C `0x4BB6A0`) |
+|---|---|---|
+| sec48 `+0` **Quelle** | das übergebene Gebäude | zufällige eigene **Mine** (Typ 10/15) |
+| sec48 `+4` **Ziel** | zufällige eigene **Basis** (Typ 1/9) | das übergebene Gebäude |
+| gerufen bei | »one wheel less in **factory**« | »one wheel less in **mine**« |
+
+**Der Satz ist also: `+0…+3` = bis zu vier Abholorte, `+4` = der Ablieferort.**
+
+**Gemessen an 136 belegten Sätzen mit 123 Paaren:**
+
+| Lesart | Treffer |
+|---|---|
+| `+4` ist das **Ziel** (Verträglichkeitstafel `0x4FDC00` erfüllt) | **123 / 123 = 100 %** |
+| ⭐ **Nullmodell**: `+4` ist die Quelle (umgekehrt) | **0 / 123 = 0 %** |
+
+Die Paare sind ausschliesslich **Mine → Fabrik** (10→3, 10→2, 10→4, 15→2, 15→3)
+und **Fabrik → Basis/Flughafen** (2→1, 3→1, 3→9, 2→9, 4→1, 4→9) — die
+Rohstoffkette, genau wie `z`/`do` es sagen. Die Tafel `0x4FDC00` / F `0x4FCC38`
+(19 × 10 B, indiziert mit dem **Zieltyp**) sagt: zu Basis/Flughafen dürfen
+1,2,3,4,6,9,12,16; zu den Fabriken nur 10,6,12,15; **zu einer Mine gar nichts —
+eine Mine ist nie Ziel.**
+
+Zwei Nebenbelege, beide 100 %: **136/136** Rückzeiger `sec48+0x0C` = Einheitennummer;
+**136/136** Einheiten mit `top_spec == 0x47` haben einen belegten Satz
+(Nullmodell bei zufälliger Zuordnung: rund 9).
+
+Findet `0x4BAEB0` keinen freien Roboter: **`sec59[p] = 0`** — die Produktion geht aus.
+
+### AU.6 ⭐ `get target in sector` — die Ordnung ist die Einheitennummer
+
+`0x4BC3D0` / F `0x4BBE90`: läuft `si` von 0 bis 8000, **überspringt ganze
+Spielerblöcke** (`si += 1000`), für die `sec53[40p + 0x15 + q] != 0` (Freund oder
+man selbst), und nimmt den **ersten** Treffer mit `faze != 0xFF`, `RX/24 == sx`,
+`RY/24 == sy`, `+0x0A < 4` (Landeinheit, kein Schiff) und `UKOL < 45`.
+
+⭐ **Nicht der nächste, nicht der schwächste, nicht der wertvollste — der mit der
+kleinsten Einheitennummer.** Da die Nummer der Reihenfolge der Kartenanlage
+entspricht, greift die KI die Einheit an, die der **Kartenbauer zuerst gesetzt hat**.
+
+Der Aufrufer `0x4BC540` klappert je Sektor mit `sec56[+0x0A] > 0` die **9 Nachbarn**
+aus der Tafel `0x538C10` ab, in fester Reihenfolge:
+(0,0), (0,+1), (+1,0), (−1,0), (0,−1), (+1,+1), (−1,+1), (+1,−1), (−1,−1).
+Beim ersten Treffer läuft der Alarmruf (Klang `0x7A`) mit Zufalls-Sperrzeit
+4000…7000 — **ausser in Mission 14**.
+
+### AU.7 ⭐ `AI: test of life` — und wie ein Spieler stirbt
+
+`0x4BAB40` / F `0x4BA640`, 114/114 Befehle **gleich**. Drei Wege zum Weiterleben,
+jeder reicht: ein Gebäude mit Typ **1, 9 oder 11** · eine Einheit mit
+`faze != 0xFF` · ein Flugzeug (sec19) mit Typ ausser 0, 13, 14.
+
+**Fällt alles durch, sterben heisst genau drei Handgriffe:**
+`sec53[40p] = 0xFF` · **jedes** seiner 255 Gebäude bekommt bei `+5` *und* `+0x41`
+den Besitzer **11** · sein ganzes 11 × 11-Raster sec56 wird auf `+0/+2/+4` genullt.
+
+⭐ Gemessen: `sec53[40p]` hat nur drei Werte — `1` (50×), `0xFF` (41×), `0` (13×),
+und **die 13 Nullen liegen ausnahmslos auf Platz 0**. In jeder Kampagnenkarte ist
+Platz 0 der Mensch.
+
+### AU.8 ⭐⭐ DER SECHSTE AUSLIEFERUNGSUNTERSCHIED: `pro_style`
+
+In der Zeile, die `DEF_robots` ausrechnet:
+
+```
+C 0x4BBD11   movsx ecx, word ptr [ecx*2 + 0x538BC8]   ; ⭐ WORT
+F 0x4BB7D6   mov   cl,  byte ptr [edx   + 0x537C08]   ; ⭐ BYTE
+```
+
+| Betriebsart | 0 | 1 | 2 | 3 | **4** | 5 | 6 | 7 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| **C** (8 Wörter) | 1 | 30 | 50 | 100 | **400** | 255 | 0 | 0 |
+| **F** (8 Bytes) | 1 | 30 | 50 | 100 | **200** | 255 | 0 | 0 |
+
+`DEF_robots = min(100, 100·DEF / pro_style)` → in Betriebsart 4 hält **F doppelt
+so viele Verteidiger zurück wie C. C greift dort spürbar aggressiver an.**
+Der Grund für den Formatwechsel liegt offen: **400 passt nicht in ein Byte.**
+
+⭐ **Und der Fund erklärt sich selbst:** vor der Tafel beträgt der C−F-Abstand
+`0xFC0` (`0x538BC0`→`0x537C00`, `0x538BC8`→`0x537C08`), unmittelbar dahinter
+`0xFC8` (`sec61` `0x538BD8`→`0x537C10`). Die **8 Byte** Sprung sind exakt die
+8 Byte, um die die Tafel breiter geworden ist.
+
+⚠ **Eine Mine:** `pro_style[6]` und `[7]` sind **0**. Wäre `sec61[p]` 6 oder 7,
+teilt `Set imp cpu:` durch Null. Es geht nur gut, weil das Skript sie nie setzt.
+
+⭐ Gegenprobe zum bekannten sec59-Unterschied: nachgeprüft und bestätigt.
+`AI: transport` C 120 gegen F 109 Befehle; C setzt im Zweig »no target found«
+`sec59[p] = 1` @`0x4BB7FC`, F nicht. Da `make robot z/do` `sec59[p] = 0` schreiben,
+wenn kein freier Roboter da ist, bleibt **in F ein basisloser Spieler dauerhaft
+ohne Produktion**.
+
+`make robot z`, `make robot do` und `AI: test of life` sind Befehl für Befehl
+gleich (78/78, 77/77, 114/114). Der einzige weitere Fund im ganzen KI-Bereich ist
+in `0x4BCF30` ein `cmp dl,al; ja` gegen `cmp al,dl; jb` — **gleichbedeutend**.
+
+### AU.9 sec61 und sec106 — wer was sperrt
+
+**sec61 = die Betriebsart**, geschrieben an **genau einer** Stelle (C `0x4D1050`),
+gerufen 72×, davon 71× aus dem Kampagnenskript `0x487C40` »LEVEL0 A«. Reine
+Missionsvorgabe. Skriptwerte: 2, 3, 4, 5, 10. In den 13 `.DM`: 2 (92×), 3 (11×),
+5 (1×) — nie 10, nie 4.
+
+| sec61 | Wirkung |
+|---:|---|
+| `== 10` | ⭐ **Takte 2, 4, 5, 7, 8, 10, 12 fallen ganz aus** — kein Transport, keine Produktion, keine Wichtigkeitsrechnung, kein Angriff, keine Gruppen, keine Wachposten |
+| `== 5` | Takt 8 nimmt `0x4BDCC0` statt `target:`; und es wird trotz zu weniger freier Angreifer angegriffen, ohne die Gruppe auf 99 hochzusetzen |
+| sonst | **der Index in `pro_style`** — der einzige Zahlenhebel der Schwierigkeit |
+
+**sec106 = die Skriptsperre**, ebenfalls ein einziger Schreiber (C `0x4D09F0`),
+14×, nur aus `0x487C40`, fast immer Platz 7. In den Prüfdateien 101× `0`, **3× `1`**
+(1.DM, 2.DM, 11.DM, jeweils Platz 7). `!= 0` heisst: der ganze KI-Zug fällt aus
+(`0x4BFBFA`), seine Einheiten können nicht übernommen werden (`0x411351`,
+`0x4113C2`), Verbündete übergehen ihn (`0x42072C`, `0x420B60`).
+
+⭐ Das heisst **»dieser Spieler wird vom Missionsskript geführt«** — nicht
+»ausgeschieden«. Ausgeschieden ist `sec53[40p] == 0xFF`.
+
+### AU.10 ⚠ Ein Fehler im Original, in BEIDEN Fassungen
+
+`0x4BAFE0` / F `0x4BAAE0` (Minenwahl für `make robot do`) teilt die
+Gebäudekoordinaten **selbst durch 24** und übergibt sie dann an `0x4BAD20`,
+**das noch einmal durch 24 teilt**. `AI: transport` übergibt dieselben Werte roh.
+
+Die Daten entscheiden: über 13 `.DM` liegen **540 von 540** Gebäuden nach **einer**
+Division im 11 × 11-Raster; nach zweien ist der Sektor **immer (0,0)**.
+
+⭐ **Folge: `make robot do` prüft für jede Mine die Lohnendheit von Sektor (0,0)
+statt der ihren.** Der Fehler steht in C und in F.
+
+### AU.11 ⚠ Vier der neun sind keine KI
+
+| C / F | was es wirklich ist |
+|---|---|
+| **`sejmi 1`** `0x4B95D0` / `0x4B90D0` | ⭐ **Ein Bildschirmfoto.** Tschechisch *sejmi* = »nimm auf«. Nullt 64 KB, schreibt `D:\screen.bin`, baut auf dem Stapel einen BMP-Kopf (`0x436` = 54 + 1024 Palettenbytes) und schreibt `D:\mapa.bmp`. **Null Aufrufer, null Relokationen** — unerreichbarer Entwicklerrest. |
+| **`Unit missing`** `0x433C20` / `0x432D70` | Die **Truppverwaltung des Menschen**. sec16 = 4000 Trupps × 22 B (`+0` Anzahl, `+1…+3` Zelle, `+4…+0x15` neun Nummern). Fehlt die Einheit, wird sie aus **allen** 4000 gestrichen; leert sich ein Trupp, wird sein Kartenzeichen in sec6 gelöscht (`0xFFFE − n`). |
+| **`go in 1`** `0x4380F0` / `0x437250` | Der Knopf **»einsteigen«**; unterscheidet »inf in« von »robot in« über `sec5+0x0A == 1`. |
+| **`guard:`** `0x428940` / `0x427B30` | Die **Abfangjägerwache eines Flughafens**, gerufen aus dem Gebäudetakt »Bg:« `0x43CA50`, **nicht** aus `ai_tick`. Über `sec3+0x19` in die Flughafentafel **sec27** (50 × 52), Wachliste ab `+0x0B`. Sucht unter 200 Flugzeugen den nächsten Feind **in der Luft** und startet bei Quadratabstand < 3600 (= 60²) einen Jäger. |
+
+### AU.12 Was unser `SkirmishAi.cs` anders macht
+
+| | Original | `SkirmishAi.cs` (2413 Zeilen) |
+|---|---|---|
+| Takt | 50-Bilder-Rundlauf, 1 Aufgabe je Bild für alle 8 | Sekundentakt je Spieler |
+| **Auftragswahl** | **Minimum von `pway / imp`** | **Maximum von `Priority`**, kein Wegewert |
+| Angriffsfreigabe | nur wenn `r_num > r_min`, ausser `sec61 == 5` | nur `army.Count > guard` |
+| Gruppengrösse | `(3·r_min)/2`, geklemmt 3…99; bei `sec110 != 0 && sec61 != 5` auf **99** | fester Wellenwert je Schwierigkeit |
+| Gruppen | **4 × 100** je Spieler, sec68, Zustand in `CPU0`/`CPU1`, Wegpunkte in sec108 | **eine** unbegrenzte `Wave` |
+| **Sektorenraster** | sec55 → sec56, freie Angreifer als Überschuss **je Sektor** | **fehlt vollständig**, Einheiten sind eine globale Liste |
+| Schwierigkeit | **ein** Hebel: `pro_style[sec61]` aus dem Missionsskript | drei fest verdrahtete Stufen |
+| Wachposten | sec107, 10 je Spieler, Feldkoordinaten, Takt 12, `CPU0 = 5` | eigene Wachzahl, keine Posten |
+| **Logistik** | `rob_trans`: **Mine → Fabrik → Basis**; ohne Roboter steht die Produktion (sec59) | **fehlt**; `AiEmptyDepots` ist Erfindung |
+| Auftragsart 3 | **sec17-Objekt** (100 × 24 B) | dort die rohe Zelle — das ist Art **4** des Originals |
+| Lebendprüfung | drei Wege; beim Tod fallen alle Gebäude an Besitzer **11** | `AliveAsPlayer` |
+| Skriptsperren | `sec61==10`, `sec106!=0` | keine Entsprechung |
+
+Bereits übernommen sind `find_base`, `build_in_base`, `ai_production`, `ai_units`
+(`0x4BF4E0`) und `AddMissionTarget` samt der 100er-Grenze von sec69.
+
+### AU.13 ⚠ Wachposten und Gruppen sind reiner Laufzeitzustand
+
+**sec107 = 8 × 10 × 2 B** (Spalte, Zeile) in Feldkoordinaten. Ein Posten zählt,
+wenn er ≠ 0 ist und `sec20[Zeile·256 + Spalte] == 0`.
+
+⭐ **Nullmodell: in allen 13 `.DM` sind alle 1040 Posten-Bytepaare 0**, und alle
+416 Gruppenzähler (13 × 32) ebenfalls. Passend dazu kommt `CPU0 == 10` (in Gruppe)
+und `CPU0 == 5` (Wachposten) in **keiner** Prüfdatei vor. **Der Kartenbauer setzt
+beides nicht — es entsteht erst im Spiel.**
+
+### AU.14 Was offen bleibt — und wodurch das Verfahren blind ist
+
+**Ungelesen:** `0x4BF760` (Takt 46, schreibt sec24/28/123, Obergrenze aus
+`byte[0x503AF0 + 2·Missionsnummer]`) · `0x4BE5C0` (Takt 48, Sprungtafel `0x4BE6E0`
+über 12 Gebäudetypen) · `0x4BDCC0` (Sonderweg Betriebsart 5) · `0x4BCF30`
+(671 Befehle, Gruppenfahrt und sec108-Wegpunkte) · die Bedeutung von `sec56 +0x02`
+(unser Code sagt »zweiter Stärkeeimer«, die alte Deutung »verbündete« —
+**ungegengeprüft**) · `dword[0x539234]`, `byte[0x540EB8]`, `word[0xBCA0E0]` ·
+der **Gebäudetyp 11** (zählt als Leben und ist zugleich der Erbe der Toten).
+
+⚠ **Blindstellen des Verfahrens, ausdrücklich benannt:**
+* **Berechnete Adressen.** Alles hier stammt aus `[reg + Sockel]`; wer die Basis in
+  ein Register lädt und dann `[esi+4]` schreibt, taucht bei `reloc_refs` nur mit der
+  Basis auf. Die Negativbefunde »sec61 hat genau einen Schreiber« und »sec106 hat
+  genau einen« stehen unter diesem Vorbehalt.
+* **Indirekte Aufrufe.** `sejmi 1` hat null direkte Aufrufer *und* null
+  Relokationen — das schliesst eine Tabelle aus, aber keinen berechneten Sprung.
+* **Versetzter Strom.** Wo eine Sprungtafel direkt hinter dem `ret` liegt
+  (`0x4BECF0`, `0x4BE5C0`, `0x4BDCC0`, `0x4BF760`), wurden Daten als Code gesehen.
+  **Alle scheinbaren C/F-Unterschiede in diesen Nachläufen sind verworfen**, nicht
+  gemeldet — richtig so.
+* **Die Prüfdateien sind Anfangszustände.** Leere Tafeln (sec68, sec107) belegen
+  »reiner Laufzeitzustand«, sagen aber nichts über die Werte im Spiel. Alle Zahlen
+  zu `CPU0`, `sec56 +6…+0x0A` und `sec110` sind Momentaufnahmen des Kartenbauers.
+* **Die 23 `.CWM` tragen die KI-Abschnitte gar nicht** (sie laden nur sec1…38).
+  Jede Zahl oben stammt aus den 13 `.DM`; **für Gefechtskarten gibt es keinen
+  KI-Anfangszustand.**
+
+### AU.15 Adressverzeichnis
+
+| was | C | F |
+|---|---|---|
+| `ai_tick` »AI« / »AI end« | `0x4BFB80` | `0x4BF630` |
+| `AI: test of life` | `0x4BAB40` | `0x4BA640` |
+| `make robot z` | `0x4BB570` | `0x4BB070` |
+| `make robot do` | `0x4BB6A0` | `0x4BB1A0` |
+| `get target in sector` | `0x4BC3D0` | `0x4BBE90` |
+| `Not free attacker:` | `0x4BE790` | `0x4BE250` |
+| `guard:` (Luftwaffe) | `0x428940` | `0x427B30` |
+| `sejmi 1` (Bildschirmfoto) | `0x4B95D0` | `0x4B90D0` |
+| `Unit missing` (Trupps) | `0x433C20` | `0x432D70` |
+| `go in 1` (Knopf) | `0x4380F0` | `0x437250` |
+| `AI: transport` | `0x4BB7D0` | `0x4BB2D0` |
+| `AI: production` | `0x4BB9A0` | `0x4BB460` |
+| `AI: production in base` | `0x4BB1E0` | `0x4BACE0` |
+| `Set imp cpu:` / `Set imp:` | `0x4BBB80` | `0x4BB640` |
+| Angriffsdurchlauf je Sektor | `0x4BC540` | `0x4BC000` |
+| Hülle Takt 7 | `0x4BC900` | `0x4BC3C0` |
+| `Create group cpu:` / `Take all` | `0x4BC920` | `0x4BC3E0` |
+| `target:` / `po:` / `r_best:` | `0x4BECF0` | `0x4BE7A0` |
+| Sektor-Wegesuche (Kostenkarte) | `0x4BEA30` | `0x4BE4E0` |
+| Auftragswahl Betriebsart 5 | `0x4BDCC0` | `0x4BD780` |
+| Gruppen fahren / Wegpunkte | `0x4BCF30` | `0x4BC9F0` |
+| Wachposten besetzen (Takt 12) | `0x4BF150` | `0x4BEC00` |
+| Hülle Takt 8 | `0x4BE2E0` | `0x4BDDA0` |
+| Infanteriedurchlauf (Takt 10) | `0x4BE330` | `0x4BDDF0` |
+| Basis suchen (Takt 14) | `0x4BFA30` | `0x4BF4E0` |
+| `ai_units` (Takte 16…44) | `0x4BF4E0` | `0x4BEF90` |
+| Takt 46 (ungelesen) | `0x4BF760` | `0x4BF210` |
+| Gebäudepflege (Takt 48) | `0x4BE5C0` | `0x4BE080` |
+| Gebäudepflege bei `sec61==10` | `0x4BF3C0` | `0x4BEE70` |
+| Stärkekarte sec55 | `0x4BA710` | `0x4BA210` |
+| Sektorwerte sec56 | `0x4BA7D0` | `0x4BA2D0` |
+| Basis schickt Angedockte los | `0x4BBAC0` | `0x4BB580` |
+| freien Roboter suchen | `0x4BAEB0` | `0x4BA9B0` |
+| zufällige eigene **Basis** | `0x4BAF50` | `0x4BAA50` |
+| zufällige eigene **Mine** ⚠ Fehler | `0x4BAFE0` | `0x4BAAE0` |
+| »lohnt der Sektor« | `0x4BAD20` | `0x4BA820` |
+| `rob_trans`-Feld setzen | `0x4362E0` | `0x435440` |
+| Auftrag scharfschalten | `0x410870` | `0x4106A0` |
+| sec61-Setzer (Betriebsart) | `0x4D1050` | — |
+| sec106-Setzer (Skriptsperre) | `0x4D09F0` | — |
+| Kampagnenskript »LEVEL0 A« | `0x487C40` | — |
+
+**Tafeln:** Phasentafel `0x4BFEA4` · Sprungtafel `0x4BFE50` ·
+Verträglichkeit 19 × 10 `0x4FDC00` / F `0x4FCC38` · **`pro_style` `0x538BC8`
+(Wörter) / F `0x537C08` (Bytes)** · Nachbartafel 9 × (dx,dy) `0x538C10` ·
+Nachbargewicht `0x538BE4` · »KI übernimmt leere Plätze« `0x538BA8` ·
+Alarmruf-Sperrzeit `0x538BAC` · 150er-Zähler `0x538BC0` (⚠ **nicht** sec131) ·
+sec61 `0x538BD8` · Missionsnummer `0x539934` · `CPU0`-Sprungtafel `0x4BC214` ·
+Gebäudepflege-Sprungtafel `0x4BE6E0`.
+
+**Laufzeitpuffer ohne Abschnittsnummer** (`.bss`, C = F + `0xFA0`):
+Sektor-Kostenkarte `0xB45FB0` (121 × 4 B) · Vorgängerkarte `0xB36AA0` (121 B) ·
+Warteschlange `0xB38D50` (Sätze zu 16 B) · Freiliste `0xB38530` (Wörter) ·
+Zufallsliste `0xB38D00` (Bytes).
