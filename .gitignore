@@ -103,3 +103,7 @@ docs/**/*.import
 
 # Bildschirmfotos aus den Pruefstaenden — Belege fuer Meldungen, kein Quelltext.
 Bug Bilder/
+
+# Python-Zwischenstand der Packwerkzeuge
+__pycache__/
+*.pyc
