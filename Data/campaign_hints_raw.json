@@ -1,0 +1,270 @@
+{
+ "_note": "Der VORSPANN der Kampagne: 34 Einmal-Tore aus dem Block 0x497540..0x49814D. Wer eine Einheit anwaehlt, die ein bestimmtes Bauteil traegt, bekommt EINMAL in der ganzen Kampagne den Hilfetext dazu. Feld = Versatz im Einheitensatz (0x0D ZBRAN Waffe, 0x0E top_spec, 0x0F l_engine). Text = HELPG-Nummer; die Probe Text == var-300 haelt bei 32 von 34. NOCH NICHT GEBAUT - siehe OFFENE_FRAGEN.md Abschnitt AE.",
+ "_offen": "Fuenf Tore (372, 374, 375, 377, 381) pruefen etwas anderes als ein Bauteilbyte; ihre Bedingung fehlt.",
+ "tore": [
+  {
+   "var": 346,
+   "feld": null,
+   "werte": [
+    55
+   ],
+   "text": 67
+  },
+  {
+   "var": 347,
+   "feld": 14,
+   "werte": [
+    69
+   ],
+   "text": 19
+  },
+  {
+   "var": 348,
+   "feld": 13,
+   "werte": [
+    6,
+    7
+   ],
+   "text": 48
+  },
+  {
+   "var": 349,
+   "feld": 13,
+   "werte": [
+    8
+   ],
+   "text": 49
+  },
+  {
+   "var": 350,
+   "feld": 13,
+   "werte": [
+    9
+   ],
+   "text": 50
+  },
+  {
+   "var": 351,
+   "feld": 13,
+   "werte": [
+    14
+   ],
+   "text": 51
+  },
+  {
+   "var": 352,
+   "feld": 13,
+   "werte": [
+    15
+   ],
+   "text": 52
+  },
+  {
+   "var": 353,
+   "feld": 13,
+   "werte": [
+    16
+   ],
+   "text": 53
+  },
+  {
+   "var": 354,
+   "feld": 13,
+   "werte": [
+    18
+   ],
+   "text": 54
+  },
+  {
+   "var": 355,
+   "feld": 13,
+   "werte": [
+    19
+   ],
+   "text": 55
+  },
+  {
+   "var": 356,
+   "feld": 14,
+   "werte": [
+    65
+   ],
+   "text": 56
+  },
+  {
+   "var": 357,
+   "feld": 14,
+   "werte": [
+    66
+   ],
+   "text": 57
+  },
+  {
+   "var": 358,
+   "feld": 14,
+   "werte": [
+    68
+   ],
+   "text": 58
+  },
+  {
+   "var": 359,
+   "feld": 14,
+   "werte": [
+    70
+   ],
+   "text": 59
+  },
+  {
+   "var": 360,
+   "feld": 14,
+   "werte": [
+    72
+   ],
+   "text": 60
+  },
+  {
+   "var": 361,
+   "feld": 14,
+   "werte": [
+    73
+   ],
+   "text": 61
+  },
+  {
+   "var": 362,
+   "feld": 14,
+   "werte": [
+    74
+   ],
+   "text": 62
+  },
+  {
+   "var": 363,
+   "feld": 14,
+   "werte": [
+    75
+   ],
+   "text": 63
+  },
+  {
+   "var": 364,
+   "feld": 14,
+   "werte": [
+    76
+   ],
+   "text": 64
+  },
+  {
+   "var": 365,
+   "feld": 14,
+   "werte": [
+    77
+   ],
+   "text": 65
+  },
+  {
+   "var": 366,
+   "feld": 14,
+   "werte": [
+    78
+   ],
+   "text": 66
+  },
+  {
+   "var": 367,
+   "feld": 14,
+   "werte": [
+    79
+   ],
+   "text": 67
+  },
+  {
+   "var": 368,
+   "feld": 16,
+   "werte": [
+    83
+   ],
+   "text": 68
+  },
+  {
+   "var": 369,
+   "feld": 16,
+   "werte": [
+    84
+   ],
+   "text": 69
+  },
+  {
+   "var": 370,
+   "feld": 15,
+   "werte": [
+    171
+   ],
+   "text": 70
+  },
+  {
+   "var": 371,
+   "feld": 15,
+   "werte": [
+    19,
+    172
+   ],
+   "text": 71
+  },
+  {
+   "var": 372,
+   "feld": null,
+   "werte": [],
+   "text": 72
+  },
+  {
+   "var": 373,
+   "feld": null,
+   "werte": [
+    2
+   ],
+   "text": 73
+  },
+  {
+   "var": 374,
+   "feld": null,
+   "werte": [],
+   "text": 74
+  },
+  {
+   "var": 375,
+   "feld": null,
+   "werte": [],
+   "text": 75
+  },
+  {
+   "var": 376,
+   "feld": null,
+   "werte": [
+    5
+   ],
+   "text": 76
+  },
+  {
+   "var": 377,
+   "feld": null,
+   "werte": [],
+   "text": 77
+  },
+  {
+   "var": 378,
+   "feld": null,
+   "werte": [
+    18
+   ],
+   "text": 78
+  },
+  {
+   "var": 381,
+   "feld": null,
+   "werte": [],
+   "text": 81
+  }
+ ]
+}

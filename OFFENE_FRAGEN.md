@@ -2977,4 +2977,81 @@ eine 100 % wertlos.
 * ⚠ **Alle Code-Belege dieses Laufs stammen aus der C-Fassung.** F wurde nur
   für die PE-Struktur geöffnet. Nach Regel 1 ist das **kein abgeschlossener
   Befund** — die Datenmessungen tragen, die Code-Zitate gehören gegengelesen.
+---
+
+## AE. ⭐ Der Vorspann der Kampagne ist ein KONTEXTHILFE-System (21.08.2026)
+
+Abschnitt AB hatte den Block `0x497540…0x49814D` als »36 Einmal-Tore v[346]…v[381]
+für kampagnenweite Hinweisfenster« benannt. Jetzt ist er gelesen — es sind
+**34 Tore**, und sie tun etwas Bestimmteres, als es klang.
+
+### Was ein Tor ist
+
+Jedes der 34 ist derselbe Zwölfzeiler:
+
+```
+  if (v[n] != 0)                       raus      ; schon gezeigt
+  if (word[0x4FA0C8] >= 0x1F40)        raus      ; keine Einheit angewaehlt
+  eax = word[0x4FA0C8]                           ; die ANGEWAEHLTE Einheit
+  al  = byte[eax*78 + 0x6E26C8 + FELD]           ; eines ihrer Bauteilbytes
+  if (al != WERT)                      raus
+  v[n]++
+  show_text2(100, 200, TEXT, 0)
+```
+
+**Also: wer eine Einheit anwählt, die ein bestimmtes Bauteil trägt, bekommt
+einmal in der ganzen Kampagne den Hilfetext dazu.** Kein Skript, kein Auslöser
+in der Mission — es hängt allein daran, was man anklickt.
+
+⭐ **Die Selbstprobe:** `Text = v − 300` gilt für **32 von 34** Toren. Nur
+v[346]→67 und v[347]→19 fallen heraus. Das bestätigt die Auslesung.
+
+### Die 34 Tore
+
+| v[] | Feld | Wert | Text |
+|---:|---|---|---:|
+| 348…355 | **`+0x0D` `ZBRAN` (Waffe)** | 6/7, 8, 9, 14, 15, 16, 18, 19 | 48…55 |
+| 347, 356…367 | **`+0x0E` `top_spec` (Aufbauteil)** | 69, 65, 66, 68, 70, 72…79 | 19, 56…67 |
+| 370, 371 | **`+0x0F` `l_engine` (Antrieb)** | 171, 19/172 | 70, 71 |
+| 368, 369 | **`+0x10`** | 83, 84 | 68, 69 |
+| 346, 372…378, 381 | *anderes* | 55, 2, 5, 18, … | 67, 72…78, 81 |
+
+⚠ Bei **fünf** Toren (372, 374, 375, 377, 381) hat mein Ausleser keine
+Bedingung gefunden — sie prüfen etwas anderes als ein Bauteilbyte der
+angewählten Einheit. Das ist offen.
+
+### Warum es bei uns nie erscheinen konnte
+
+Zwei Gründe, und beide sind belegt:
+
+1. **Die 34 Regeln stehen in keiner unserer Missionen.** Der Vorspann ist ein
+   *gemeinsamer* Block vor den 33 Missionsblöcken; unser Regelleser nimmt sich
+   je Mission ihren eigenen Block und hat den Vorspann nie gesehen.
+2. **Und selbst mit den Regeln käme jedes Fenster in JEDER Mission wieder** —
+   denn v[346…381] liegen über 300, und genau die gehen im Original **in die
+   nächste Mission über** (Abschnitt AB). Unser `MissionScript._var` ist je
+   Mission neu.
+
+### Was ein Nachbau bräuchte
+
+* Die 34 Regeln als Daten (Feld, Wert, Textnummer) — die Auslesung steht oben,
+  fünf Bedingungen fehlen noch.
+* Den Übertrag von v[300…499] über den Missionswechsel, **oder** einen
+  gleichwertigen kampagnenweiten Merker. ⚠ Das Original hält beides getrennt:
+  die Variablen (sec72) *und* eine eigene Tafel »welcher Hilfetext wurde schon
+  gezeigt« (sec71, 500 Byte, 1 Byte je Textnummer).
+* Den Anschluss an unser Hilfefenster — das haben wir, samt der 132 Sachbilder
+  und dem gelesenen Weg vom Text zum Bild.
+
+⭐ **Die Felder haben wir alle schon**, und unsere Benennung ist dabei
+ausdrücklich richtig: `Entity.Weapon` hält den **Aufsatz `+0x0C` (`VRSEK`)**,
+nicht die Waffe — das steht so am Feld, und `TurretOf` bildet die Beziehung
+`ZBRAN = VRSEK − 20` bereits ab. Wer die Tore einbaut, muss also `Weapon − 20`
+gegen die `ZBRAN`-Werte halten, nicht `Weapon` selbst.
+
+### Nebenbefund
+
+`word[0x4FA0C8]` ist die **angewählte Einheit**, Schranke 8000. Dieselbe Zelle
+benutzt die Entwickler-Einblendung aus Abschnitt U, um die 37 Satzfelder
+anzuzeigen — sie ist also der allgemeine »worauf schaut der Spieler«-Zeiger.
 
