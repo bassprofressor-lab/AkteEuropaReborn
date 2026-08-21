@@ -4360,6 +4360,16 @@ Anim 19…24 → 1 Bild, 29…38 → 6, 200…204 → 8, 210…212 → 12, 240�
 | Kappe je Bildschirmzeile | `cmp bp,0x1F3` | `cmp ax,0x1F3` |
 | **zusätzliche Zeilenschranke** | **`cmp al,0x46 / jae überspringen`** | **fehlt** |
 
+⚠⚠ **BERICHTIGT am 21.08.2026 (BD.4): DAS IST KEIN EINZELUNTERSCHIED.**
+Eine rohe Bytesuche ueber das ganze `.text`, unabhaengig von jedem Zerleger und
+ueber drei Kodierungsformen, findet **22 Treffer in C und 0 in F** — alle
+zwischen `0x42E04A` und `0x43083C`, also **genau die 22 Einsortierfaelle der
+Zeichenliste**. C hat die Korbindex-Schranke an ALLEN 22 Stellen nachgetragen,
+F hat sie nirgends: eine **systematische Fehlerbehebung**, kein Einzelfall.
+⭐ Und die **70** ist nicht »Bildschirmzeilen«, sondern **70 Zeilenkoerbe der
+Zeichenliste** — ein Korb ist eine Kachelzeile (70 × 20 = 1400 ≥ 1200).
+⭐ Zwei unabhaengige Laeufe haben denselben Befund erhoben (BD.4 und BE.8).
+
 C weigert sich, ein Partikel für Bildschirmzeile ≥ 70 einzutragen; **F trägt es
 ein und schreibt über das Feldende hinaus.** C ist die gehärtete Fassung. Sonst
 ist die Kette befehlsgleich (Aktualisierer 524/524, Streuer 195/195). Das ist
@@ -7512,3 +7522,1434 @@ verworfen**.
    363 Stellen folgenlos — für `0x459B70`, `0x45B8A0` und `0x45CA30` mit
    »0 Rufern« wäre es genau die falsche Schlussfolgerung: **diese drei werden
    über die Verteilertafel erreicht.**
+
+---
+
+## BB. ⭐⭐⭐ DIE WEGSUCHE DES ORIGINALS (21.08.2026)
+
+**Die wichtigste offene Frage des Projekts ist beantwortet.** Unsere Navigation
+war von Anfang an **komplett eigene Erfindung**; sie kann jetzt durch das ersetzt
+werden, was hier steht.
+
+> ⭐⭐ **`0x4D1170` ist NICHT die Wegsuche — es ist der Bauer der
+> Passierbarkeitskarte mit 14 Bewegungsarten. Die eigentliche Wegsuche sind
+> `0x4D2580` / `0x4D2A10` / `0x4D2E40`, und sie ist eine reine
+> 8-Nachbar-BREITENSUCHE mit Wellenmarken — ohne Kostenfunktion, ohne
+> Heuristik, ohne Prioritätswarteschlange.**
+
+### BB.0 Adresstafel
+
+Alle F-Adressen wurden über **Bytefolgen mit maskierten Absolutadressen und
+rel32 gemessen**, nicht gerechnet. Prüfstein: das Werkzeug liefert für `Search:`
+von selbst C `0x4D3810` → F `0x4D33A0` — genau den Wert, der schon feststand.
+
+| Was | C | F |
+|---|---|---|
+| ⭐ **Passierbarkeitskarte bauen** (14 Arten) | `0x4D1170` | `0x4D0D20` |
+| dessen Sprungtafel, 14 Einträge | `0x4D1E7C` | `0x4D1A14` |
+| ⭐ **BFS für 1×1-Rümpfe** | `0x4D2580` | `0x4D2110` |
+| ⭐ **BFS für 2×2-Rümpfe** | `0x4D2A10` | `0x4D25A0` |
+| ⭐ **BFS für 4×4-Rümpfe** | `0x4D2E40` | `0x4D29D0` |
+| Nachbarprüfung 2×2 | `0x4D2370` | `0x4D1F00` |
+| Nachbarprüfung 4×4 | `0x4D23D0` | `0x4D1F60` |
+| Einreihen (2×2-Pfad) / (4×4-Pfad) | `0x4D2210` / `0x4D2280` | `0x4D1DA0` / `0x4D1E10` |
+| ⭐ **Vorgängersuche beim Rückverfolgen** | `0x4D2470` | `0x4D2000` |
+| `Search:` (Auftragsabarbeiter) | `0x4D3810` | `0x4D33A0` |
+| dessen Sprungtafel, 7 Einträge (`Art>>1`) | `0x4D463C` | `0x4D41CC` |
+| Auftrag ablegen (`Search buffer is full!`) | `0x4D32C0` | `0x4D2E50` |
+| ⭐ **Auftrag erteilen** | `0x40B070` | `0x40AF60` |
+| Unterklassentafel (gerade / ungerade Arten) | `0x40B1EC` / `0x40A208` | `0x40B0DC` / `0x40A148` |
+| ⭐ **Weg verbrauchen** (eine von vier Stellen) | `0x407C39` | `0x407B63` |
+| `Can_go(Einheit, Richtung)` | `0x404E80` | `0x404E60` |
+| Schritt ausführen | `0x4052D0` | `0x4052B0` |
+| Geländebyte lesen | `0x41D110` | `0x41C2D0` |
+| Kartengrenzen-Test | `0x41D1D0` | `0x41C390` |
+| ⭐ **Ringtafel nach Abstand erzeugen** | `0x438790` | `0x4378F0` |
+| Brückenplatz vergeben (100 × 24) | `0x4CC280` | `0x4CBE30` |
+| Brückenvorschau / als Probelauf | `0x4CCCB0` / `0x4CD900` | `0x4CC850` / `0x4CD4A0` |
+| ⚠ Filmabspieler (**kein Spielcode**) | `0x4D49F0` | `0x4D4580` |
+
+**Daten** — ⚠ die drei verschiedenen Abstände (`0xF98`, `0xFA0`, `0x1000`) sind
+genau der Grund, warum F-Adressen **gemessen** und nicht gerechnet werden dürfen:
+
+| Was | C | F | Δ |
+|---|---|---|---|
+| ⭐ **Passierbarkeitskarte** (256 × 256 B, Kladde) | `0xBCA0E8` | `0xBC9148` | `0xFA0` |
+| ⭐ **Wellen-Warteschlange** (≥ 5000 × 2 B) | `0xBC7830` | `0xBC6890` | `0xFA0` |
+| Schreibzeiger / Lesezeiger (u16) | `0xBC7828` / `0xBDA8B8` | `0xBC6888` / `0xBD9918` | `0xFA0` |
+| Wellengrenze (u16) / Wellenmarke (u8) | `0xBC7820` / `0xBDACA8` | `0xBC6880` / `0xBD9D08` | `0xFA0` |
+| Schrittzahl des letzten Weges (u16) | `0xBCA0E0` | `0xBC9140` | `0xFA0` |
+| eigene Einheitennummer während der Suche | `0xBC9F40` | `0xBC8FA0` | `0xFA0` |
+| ⭐ **Wegpuffer = sec14**, 8000 × 50 B | `0x7AEC38` | `0x7ADC98` | `0xFA0` |
+| ⭐ **Richtungstafel**, 8 × (i16, i16) | `0x4F5AF0` | `0x4F4AF0` | **`0x1000`** |
+| ⭐ **Umkehrtafel**, 8 Byte | `0x539B20` | `0x538B88` | **`0xF98`** |
+| Ringtafel nach Abstand (≤ 20000 × 2 B) | `0x79A008` | `0x799068` | `0xFA0` |
+| Radiusindex (127 × u16) / Radius-50-Grenze | `0x834A80` / `0x834AE4` | `0x833AE0` / `0x833B44` | `0xFA0` |
+| Rundungskonstante 0.5 (double) | `0x4F0268` | `0x4EF268` | `0x1000` |
+| Brückentafel (100 × 24) | `0xBFEA80` | `0xBFDAE0` | `0xFA0` |
+| Infanterie-Mehrfachzellen (4000 × 22) | `0x7847E8` | — | — |
+
+### BB.1 ⭐ Der Bauer der Passierbarkeitskarte — 14 Bewegungsarten
+
+`karte_bauen(u8 art, u8 spalte, u8 zeile)` — die Koordinaten sind die **eigene
+Position** der Einheit. Alle drei Rufer sind die drei BFS-Rümpfe.
+`cmp eax,0xD / ja ende / jmp [eax*4 + 0x4D1E7C]` — **eine Sprungtafel mit genau
+14 Einträgen**, in beiden Fassungen mit `[12] == [6]` und `[13] == [7]`.
+
+| Art | C-Rumpf | Regel je Zelle (sec6 = `word[0xBDEA80 + 2·(Sp·256+Ze)]`) |
+|---|---|---|
+| 0 | `0x4D118D` | **0** wenn `0xFFFE`, oder `<8000` ∧ Unterklasse 0, oder `10000…13999` ∧ `byte[Zellensatz+1]==0`; **1** wenn `0xFFFD`; sonst **2** |
+| 1 | `0x4D127C` | wie 0, danach 5×5-Kasten: `<14000` → **2** |
+| 2 | `0x4D1417` | **0** wenn `0xFFFE` ∨ `≥14000` ∨ `0xFFFD`; sonst **2** |
+| 3 | `0x4D1482` | wie 2, danach 5×5-Kasten: `8000…13999` ∧ ¬`0x433DF0(sec6−10000)` → **2** |
+| 4 | `0x4D15D5` | **1** = frei: Geländebyte 0 ∧ (`0xFFFE` ∨ eigene ∨ Unterklasse 0 ∨ Infanteriezelle mit `+1==0`); sonst **0** |
+| 5 | `0x4D16C0` | wie 4, danach 5×5-Kasten: `<14000` ∧ ≠ eigene → **0** |
+| 6 | `0x4D1886` | **1** = frei: Geländebyte 0 ∧ (**`0xFFFC`** ∨ (`<8000` ∧ Unterklasse ∈ {4,5})); sonst **0** |
+| 7 | `0x4D193C` | wie 6, danach Kasten [Sp−2…Sp+5] × [Ze−2…Ze+5]: `<8000` ∧ ≠ eigene → **0** |
+| 8 | `0x4D1ACC` | **0** wenn `0xFFFC` ∨ `0xFFFE` ∨ `<8000` ∨ (`0xFFFD` ∧ Geländebyte 0) ∨ Infanteriezelle mit `+1==0`; sonst **2** |
+| 9 | `0x4D1B94` | wie 8, danach 5×5-Kasten: `<14000` → **2** |
+| 10 | `0x4D1D07` | wie 2 |
+| 11 | `0x4D1D6C` | wie 10, danach 5×5-Kasten: `<14000` → **2** |
+| 12 | = `[6]` | dieselbe Karte wie 6, aber **4×4**-Suche |
+| 13 | = `[7]` | dieselbe Karte wie 7, aber **4×4**-Suche |
+
+**Drei Messlatten mit Nullmodell:**
+
+| Aussage | Treffer | Nullmodell |
+|---|---|---|
+| Gerade Art = blanke Karte, ungerade = blanke Karte **+ Nachbearbeitung im Kasten** | **6/6 Paare** | Vorzeichen zufällig: 1/2⁶ = **1,6 %** |
+| Alle 8 Arten der 1×1-Suche schreiben **0** für *frei*, alle 6 der 2×2/4×4-Suche **1** | **14/14** | 1/2¹⁴ = **0,006 %** |
+| Nur die Arten 4,5,6,7 (und 12,13) lesen `0xBC9F40`, die anderen acht nie — und `Search:` setzt es genau dann | **6 von 14** | zufällige Auswahl: 1/C(14,6) = **0,033 %** |
+
+⭐ **Und die Karte ist reine Kladde:** 44 Relokationsstellen auf `0xBCA0E8`
+(13 Schreiber, 31 Leser), **in F auf `0xBC9148` exakt dieselben 13/31**, alle in
+einem Fenster von rund 8 KB. Nullmodell (44 Stellen zufällig über 872 KB
+`.text`, alle im selben 8-KB-Fenster): **≈ 10⁻⁹¹**.
+Sie steht in **keinem** der 130 Abschnitte der Kartendatei — ebensowenig die
+Warteschlange und ihre vier Zeiger. **Jede Suche baut sie neu.** Das ist der
+wichtigste Freiheitsgrad für den Nachbau.
+
+⚠ **Ein neuer sec6-Wert:** Art 6/7 behandeln **`0xFFFC`** als befahrbar, und
+zwar zusammen mit Zellen, in denen eine Einheit der Unterklasse 4 oder 5 steht —
+das sind genau die Schiffsrümpfe. `GAMESTATE_RE.md:1994` führt `0xFFFC` bisher
+als »empty«. **Die Lesung »`0xFFFC` = Wasser« ist danach die weitaus
+wahrscheinlichste — aber sie ist NICHT gemessen** (siehe BB.7).
+
+### BB.2 ⭐⭐ Das Verfahren: Breitensuche mit Wellenmarken
+
+`suche(u16 einheit, u8 zielSp, u8 zielZe, u32 art) → 0/1`. Alle drei Rümpfe
+beginnen gleich:
+1. `karte_bauen(art, eigeneSpalte, eigeneZeile)`,
+2. **Kartenrand sperren** (Zeile 0, Zeile H−1, Spalte 0, Spalte B−1 auf **2**),
+3. Startzelle markieren: **8** bei `0x4D2580`, **7** bei den anderen.
+
+**Es gibt keine Kostenkarte, keine Heuristik, keine Prioritätswarteschlange.**
+Jeder Schritt kostet gleich viel, eine Diagonale genauso viel wie eine Gerade —
+die entstehende Metrik ist die **Chebyshev-Distanz**.
+
+Die Entfernung wird **nicht gespeichert, sondern in die Karte geschrieben**:
+jede erreichte Zelle bekommt die laufende **Wellenmarke**, die bei 8 (bzw. 9)
+beginnt, bei jedem Wellenwechsel um 1 steigt und nach 255 auf 8 zurückspringt —
+**248 unterscheidbare Wellen**. Der Wellenwechsel wird daran erkannt, dass der
+Lesezeiger die gemerkte **Wellengrenze** erreicht.
+
+**Erweiterungsregel 1×1 (`0x4D2580`), in genau dieser Reihenfolge:**
+```
+Diagonalen ZUERST — jede mit ZWEI Zusatzbedingungen:
+  (Sp−1,Ze+1)  wenn karte==0 ∧ karte[Sp−1,Ze]≤1 ∧ karte[Sp,Ze+1]≤1
+  (Sp−1,Ze−1)  wenn karte==0 ∧ karte[Sp,Ze−1]≤1 ∧ karte[Sp−1,Ze]≤1
+  (Sp+1,Ze−1)  wenn karte==0 ∧ karte[Sp+1,Ze]≤1 ∧ karte[Sp,Ze−1]≤1
+  (Sp+1,Ze+1)  wenn karte==0 ∧ karte[Sp,Ze+1]≤1 ∧ karte[Sp+1,Ze]≤1
+dann die Geraden — OHNE Zusatzbedingung:
+  (Sp,Ze+1) (Sp,Ze−1) (Sp+1,Ze) (Sp−1,Ze)   wenn karte==0
+```
+⭐ **Ecken werden nicht geschnitten:** jede Diagonale prüft genau die beiden
+anliegenden geraden Nachbarn. **8/8 Bedingungen haben diese Form**, keine
+Ausnahme. Nullmodell (jede Bedingung eine von 8 Nachbarzellen): 8⁻⁸ ≈ **6·10⁻⁸**.
+
+⚠ **Der Wert 1 ist »weich gesperrt«**: man darf nicht hinein, aber eine Diagonale
+daran vorbei ist erlaubt. **Nur 2 ist hart.**
+
+**2×2 und 4×4** (`0x4D2A10`, `0x4D2E40`) sind **byteweise identisch bis auf ein
+einziges Sprungziel** — den Aufruf der Nachbarprüfung. Sie nehmen eine Zelle,
+wenn `karte[c] == 1` **und** die ganze 2×2- bzw. 4×4-Fläche `≠ 0` ist.
+⚠ Diese beiden prüfen die Ecken **nicht** — die Rumpfbedingung ersetzt sie.
+
+**Die Grenzen, genau so, wie man sie bauen muss:**
+
+| Grösse | Wert | Fundstelle C |
+|---|---|---|
+| Ringlänge, 2×2/4×4-Pfad | **5000 Einträge** (`0x1388`) | `0x4D2B88`, `0x4D2247`, `0x4D22BB` |
+| Ringlänge, 1×1-Pfad | **4096 Einträge** (Bytemaske `and si,0x1FFF`) | `0x4D26BC`, `0x4D26EB` |
+| Weglänge im Puffer | **50 Schritte** (`0x32`) | `0x4D2840`, `0x4D2905`, `0x4D2CDC`, `0x4D2D34` |
+| Wellenmarken | **8 … 255** | `0x4D268B` |
+
+⚠⚠ **Zwei verschiedene Ringlängen auf demselben Puffer.** Der 1×1-Pfad maskiert
+Byteversätze mit `0x1FFF` (8192 Byte = 4096 Einträge), die anderen zählen
+Einträge und schlagen bei 5000 um. Der Puffer muss also **mindestens 10 000 Byte**
+gross sein; der 1×1-Pfad nutzt nur die ersten 8192. **In sich ist jede Variante
+widerspruchsfrei — wer nachbaut, darf das nicht vereinheitlichen.**
+
+**Abbruch:** Ziel erreicht → `karte[Ziel] = 5` · Warteschlange leer → raus, und
+wenn `karte[Ziel] != 5` → **Rückgabe 0 = kein Weg**. ⚠ Läuft der Ring über, holt
+der Schreibzeiger den Lesezeiger ein und die Suche meldet **fälschlich** »kein
+Weg«. Bei ≤ 254×254 ist die Front nie grösser als rund 1000 — praktisch
+unerreichbar, aber die Grenze darf nicht unterschritten werden.
+**Es gibt keinen Zeit- oder Knotenzähler.** Die Suche läuft in einem Zug durch.
+
+### BB.3 ⭐ Das Rückverfolgen und das Wegformat
+
+Von der Zielzelle rückwärts: gesucht wird der Nachbar mit der Wellenmarke
+`aktuell − 1`. Der 1×1-Pfad macht das inline, die anderen über `0x4D2470`:
+**erst die geraden Richtungen (0,2,4,6), dann die diagonalen (1,3,5,7).**
+
+⭐ **Richtungstafel `0x4F5AF0` / F `0x4F4AF0`** — in beiden Fassungen bitgleich:
+
+| i | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|---|
+| dSpalte | 0 | −1 | −1 | −1 | 0 | +1 | +1 | +1 |
+| dZeile | +1 | +1 | 0 | −1 | −1 | −1 | 0 | +1 |
+
+⭐ **Umkehrtafel `0x539B20` / F `0x538B88`** — `{4,5,6,7,0,1,2,3}`, also genau
+`i XOR 4`. Sie wandelt »Richtung zum Vorgänger« in »Fahrtrichtung«.
+
+⭐⭐ **Die Messlatte:** der 1×1-Pfad kennt die Umkehrtafel nicht, er schreibt die
+Ziffern direkt hin. Sind diese acht Inline-Konstanten genau `Index XOR 4`?
+
+| Versatz zum Vorgänger | (0,+1) | (0,−1) | (−1,0) | (+1,0) | (+1,+1) | (+1,−1) | (−1,−1) | (−1,+1) |
+|---|---|---|---|---|---|---|---|---|
+| Index in `0x4F5AF0` | 0 | 4 | 2 | 6 | 7 | 5 | 3 | 1 |
+| erwartet (`XOR 4`) | 4 | 0 | 6 | 2 | 3 | 1 | 7 | 5 |
+| **im Code (`0x4D28B8…`)** | **4** | **0** | **6** | **2** | **3** | **1** | **7** | **5** |
+
+**8/8 = 100 %.** Nullmodell (zufällige Permutation von 0…7): 1/8! = **0,0025 %**.
+
+**Wegpuffer:** `0x7AEC38 + 50·EinheitsNr`, ein Byte je Schritt, Index 0 = erster
+Schritt. Schrittzahl < 50 → an Index `schrittzahl` die **Endemarke `0xFF`**;
+länger → nur 0…49 geschrieben, **keine Endemarke**.
+
+⭐ **Unabhängige Bestätigung der 50:** `0x7AEC38` ist **sec14** mit Grösse
+`0x61A80 = 400 000 = 8000 × 50`. Die Zahl aus dem Code (`cmp …,0x32`) und die
+aus dem Dateiformat stimmen — **zwei völlig getrennte Quellen**.
+
+⚠ **Ein Schönheitsfehler, in BEIDEN Fassungen.** Vor der Rückverfolgungsschleife
+prüft der Umlauf richtig auf 7 (`cmp cl,7` @C `0x4D289E`), **in** der Schleife
+aber auf **3** (`cmp cl,3` @C `0x4D28AD`) — byteweise gleich in F. Fällt die
+Marke von 8 auf 7, greift der Umlauf nicht; vier Durchläufe lang findet die
+Nachbarsuche nichts. Feuert erst bei Wegen von mehr als 247 Wellen.
+**Für den Nachbau: den Umlauf bei 7 machen.** Der Unterschied ist in keinem
+Spielstand messbar. (Kein Fassungsunterschied — nach Regel 1 sauber.)
+
+### BB.4 ⭐⭐ Unterklasse → Auftragsart → Karte → Rumpfgrösse
+
+`0x40B070` schreibt in den Einheitensatz: `+0x18`/`+0x19` **Zielspalte/Zielzeile**,
+`+0x1A` **Schrittzeiger** (`0xFF` = kein Weg / fertig), `+0x0D` Suchmarke.
+Dann springt sie über `byte[Einheit+0x0A]` (die **Unterklasse**) in eine
+6-Eintrag-Tafel:
+
+| Unterklasse | Art (gerade) | Art (ungerade) |
+|---|---|---|
+| 0 | **0** | **1** |
+| 1 | **2** | **3** |
+| 2 | ⚠ **kein Auftrag** | ⚠ **kein Auftrag** |
+| 3 | **4** | **5** |
+| 4 | **6** | **7** |
+| 5 | **12** | **13** |
+
+⚠ **Beide Tafeln haben in F dasselbe Loch bei Unterklasse 2.**
+
+`Search:` liest je Takt einen Auftrag, verschiebt die Art (`byte[+0x0B] == 7` →
+`+8`; `== 0x11` → `+0xA`), und wählt dann den Rumpf:
+`Art < 4` → 1×1 · `Art < 8` → **2×2** · `Art < 0xC` → 1×1 · sonst → **4×4**.
+Bei 2×2 und 4×4 wird zusätzlich `word[0xBC9F40]` gesetzt.
+
+⭐⭐ **Die Messlatte, die alles zusammenbindet** — die Unterklasse bestimmt an
+**drei völlig getrennten Stellen** dieselbe Rumpfgrösse:
+
+| Unterklasse | Stempelcode `0x4110E3` | Auftragsart | Rumpfwahl in `Search:` | stimmt? |
+|---|---|---|---|---|
+| 0 | 1 Zelle | 0/1 | 1×1 | ✓ |
+| 1 | 1 Zelle (Mehrfachbelegung) | 2/3 | 1×1 | ✓ |
+| 2 | Fehlerzweig | **kein Auftrag** | — | ✓ |
+| 3 | 2×2 | 4/5 | 2×2 | ✓ |
+| 4 | 2×2 | 6/7 | 2×2 | ✓ |
+| 5 | 4×4 | 12/13 | 4×4 | ✓ |
+
+**6/6 = 100 %.** Nullmodell: 6!/(2!·2!) = 180 gleichwahrscheinliche Anordnungen
+→ **0,56 %**.
+
+⭐ Und die Karte passt dazu: Art 6/7 und 12/13 benutzen **dieselbe** Kartenregel
+(`[12]=[6]`, `[13]=[7]`), nämlich die, die genau Zellen mit Unterklasse 4 oder 5
+freigibt — **die Schiffe**. Art 2/3 (Infanterie) gibt alles ab 14000 frei: Wald,
+Gebäude, Objekte — **Infanterie darf hindurch.**
+
+### BB.5 ⭐ Wie der Weg abgefahren wird — und was bei mehr als 50 Schritten passiert
+
+Vier Stellen lesen den Wegpuffer (`0x407C50`, `0x407DF6`, `0x408B3D`,
+`0x409106`, Protokollmarken `move M` / `N` / `O` / `P`). Gelesen wurde
+`0x407C39` / F `0x407B63`:
+
+```
+bl = byte[Einheit+0x1A]                       Schrittzeiger
+if (bl == 0x32) {                             ⭐ 50 Schritte abgefahren
+      byte[Einheit+4] = 0xFF ; word[Einheit+6] = 0
+      0x40B070(Einheit, byte[+0x18], byte[+0x19], 0)   NEUEN AUFTRAG ERTEILEN
+      raus }
+al = byte[0x7AEC38 + 50·EinheitsNr + bl]
+if (al == 0xFF) {                             Weg zu Ende
+      byte[Einheit+4] = 0xFF ; word[Einheit+6] = 0
+      byte[Einheit+0x14] = 0 ; byte[Einheit+0x1A] = 0xFF
+      0x411670(Einheit)                       Ankunft melden
+      raus }
+if (Can_go(Einheit, al) && 0x4055D0(Einheit, al) == 2) {
+      byte[Einheit+4] = al                    ⭐ Fahrtrichtung 0..7
+      byte[Einheit+0x1A]++
+      0x4052D0(Einheit, al) }                 Schritt ausführen
+```
+
+⭐ **Damit ist beantwortet, was bei einem Weg über 50 Schritte passiert: das
+Original plant alle 50 Schritte NEU**, mit demselben Endziel aus `+0x18/+0x19`.
+Es gibt keinen längeren Weg im Speicher, und **es gibt keine Wegglättung**.
+
+**Wenn kein Weg gefunden wird:** es wird **nichts** in den Wegpuffer geschrieben,
+`+0x1A` bleibt `0xFF`, der Lesezeiger rückt vor, der Auftrag ist weg. **Es gibt
+keinen Wiederholungsmechanismus in `Search:`.**
+
+⭐ Ergänzung zum Auftragsring: `0x4D32C0` prüft vor dem Anhängen den **ganzen
+belegten Ring** auf die Einheitennummer; steht sie schon drin, wird nur die Art
+überschrieben — **eine Einheit kann nie zweimal im Ring stehen.**
+
+### BB.6 ⭐ Die Ersatzziel-Suche: eine Ringtafel nach EUKLIDISCHEM Abstand
+
+`0x438790` / F `0x4378F0` baut beim Start:
+```
+für r = 0 … 126:
+    Radiusindex[r] = laufender Zähler                (word[0x834A80 + 2r])
+    für dSpalte = −r … r, dZeile = −r … r:
+        wenn (int)(sqrt(dSp² + dZe²) + 0.5) == r:
+            Tafel[zähler++] = (i8 dZeile, i8 dSpalte)    (0x79A008)
+    Abbruch bei zähler == 20000
+```
+Die Rundungskonstante ist der `double 0.5` bei `0x4F0268` (gemessen).
+
+`Search:` liest `word[0x834AE4]` = `Radiusindex[50]` und läuft die Tafel von
+vorn durch, um zum belegten Ziel die **nächstgelegene freie Ersatzzelle** zu
+finden. ⭐ `0x834AE4 − 0x834A80 = 0x64 = 2·50` — **die 50 ist doppelt belegt.**
+
+⭐ **Für den Nachbau: ist das Ziel belegt, weicht das Original auf die nächste
+freie Zelle im Umkreis 50 aus, in aufsteigender EUKLIDISCHER Entfernung** —
+nicht in Chebyshev-Ringen. Das ist ein sichtbarer Verhaltensunterschied zu einer
+naiven Spiralsuche.
+
+### BB.7 ⚠⚠ Ein sauberer Negativbefund: drei der vier »grössten« gehören gar nicht zur Bewegung
+
+* **`0x4CC280`** (2076 B, 5 Rufer) — **Brückenplatz vergeben.** 100 Plätze zu
+  24 Byte bei `0xBFEA80` (= sec16, `0x960` = 2400 = 100·24), erster mit
+  `+0x12 == 0`. Kachelnummern mit ausgewürfelter Variante
+  (`Grundzahl·120 + (rand&1)·54 + …`). Deckt sich Wort für Wort mit der schon
+  dokumentierten Lesung — **unabhängig bestätigt, nichts Neues.**
+* **`0x4CCCB0`** (2512 B) — **Brückenvorschau.** Prüft ein **2×2-Fenster in
+  sec2** (`0xA3AEB0`, 257 × 257, Index `a·257+b` — ⚠ die krumme 257er-Rechnung
+  ist **kein Lesefehler**, sie steht so im Format), verlangt alle vier Werte
+  `≤ 1` und bildet einen 4-Bit-Code. ⭐ Nur die vier Codes **{3, 12, 10, 5}**
+  werden angenommen — genau die Muster, bei denen das 2×2-Fenster durch eine
+  **gerade Naht** zerfällt; der Index geht in eine 4-Wege-Sprungtafel
+  `0x4CD670` = die vier **Brückenrichtungen**.
+* **`0x4CD900`** (2840 B) — **dieselbe Funktion als zerstörungsfreier Probelauf**:
+  sichert die komplette Vorschauliste (`rep movsd`, 7200 Byte) auf den Stapel und
+  stellt sie bei jedem Misserfolg wieder her. Die Diff enthält ausser
+  Sprungzielen und Sicherungsblock **nur Registerumbenennungen**.
+* ⚠⚠ **`0x4D49F0` ist KEIN Spielcode**, sondern ein **Filmabspieler**: acht
+  numerierte Fehlerrückgaben, öffnet einen Datenstrom, fragt Breite/Höhe ab und
+  pumpt in einer Nachrichtenschleife (`PeekMessage`/`TranslateMessage`/
+  `DispatchMessage`) Bilder, bis `WM_QUIT` kommt. **Sie berührt weder die
+  Passierbarkeitskarte noch den Wegpuffer noch den Auftragsring.**
+  ⚠ Der Eindruck »die zweitwichtigste Funktion des Reviers« kam **allein aus der
+  Ruferzahl** — ein Beleg dafür, dass `--gross` einen Arbeitsplan liefert und
+  keine Bedeutung.
+
+### BB.8 ⚠ Was offen blieb, und wodurch das Verfahren blind ist
+
+1. ⚠⚠ **`0xFFFC` ist erschlossen, nicht gemessen.** Der Schluss »`0xFFFC` =
+   Wasser« kommt aus Art 6/7. **`GAMESTATE_RE.md:1994` nennt es »empty« — einer
+   der beiden Sätze ist falsch, und die Zahl fehlt.** Die richtige Messung wäre:
+   `sec6 == 0xFFFC` gegen `sec2 == 1` kreuzen, Trefferquote gegen das Nullmodell
+   »gleiche Randverteilung, zufällig gemischt«.
+2. ⚠ **Die Felder `+0`/`+1` im 22-Byte-Satz der Infanteriezellen (`0x7847E8`).**
+   Die Karte prüft `byte[Satz+1] == 0` als »begehbar«; `zz_deutung.py` deutet den
+   Satz als »col, row, 9 × u16«. **Wäre `+1` die Zeile, ergäbe der Test keinen
+   Sinn.** Eine der beiden Lesungen ist falsch — der Vergeber `0x433A50` wurde
+   nicht aufgemacht. **Der Nachbau darf sich auf diesen Test noch nicht stützen.**
+3. ⚠⚠ **Das Geländebyte `[0x677E20] + 4·(Zeile·Breite + Spalte) + 3`** (via
+   `0x41D110`), das die Arten 4…7 als hartes Sperrkriterium benutzen, ist nicht
+   identifiziert. **Beachte: dieses Feld ist zeilenweise mit Schrittweite =
+   Kartenbreite indiziert, NICHT mit dem imap-Index `Spalte·256+Zeile`. Wer die
+   beiden verwechselt, baut eine still verdrehte Karte.**
+4. ⚠ **Fünf der sieben Vorbereitungsstücke in `Search:`** (`0x4D3B88`,
+   `0x4D3C99`, `0x4D3D26`, `0x4D3DB3`, `0x4D4140` — rund 1600 Byte) sind
+   ungelesen. **Dort sitzt die Logik »wohin darf diese Einheit überhaupt gehen
+   wollen«, und ohne sie ist die Navigation nachbaubar, aber nicht deckungsgleich.**
+5. ⚠ **Ein möglicher Pufferüberlauf, nicht aufgelöst.** Bei `0x407C00` steht
+   `cmp bl, 0x32; jne`. Ist `bl` gleich `0xFF` — der Zustand nach einer
+   fehlgeschlagenen Suche —, greift der Vergleich nicht und der Code liest
+   `weg[0xFF]`, also **205 Byte über den 50-Byte-Satz hinaus**. Entweder gibt es
+   weiter oben eine Wache, oder das Original liest hier fremde Wegdaten.
+   Als **offen** gemeldet, nicht als Fund.
+6. ⚠ Die Passierbarkeitskarte wurde **ausschliesslich über die Relokationstafel**
+   gefunden; `--block` lief **nicht**. Der Satz »alle 44 Zugriffe liegen im
+   Wegkern« gilt nur für **relozierte** Zugriffe.
+7. ⚠ **Alle Zahlen stammen aus dem Code**, keine einzige aus einer laufenden
+   Partie. Die einzige unabhängige Bestätigung ist sec14 = 8000·50. **Es wurde
+   kein Weg gegen einen echten Spielstand nachgerechnet.**
+8. ⚠ Die F-Zuordnung von `0x4D2A10` und `0x4D2E40` war über Bytefolgen
+   **mehrdeutig** (die beiden sind Klone) und wurde über die aufgelösten
+   Thunkziele der Nachbarprüfung getrennt — belastbar, aber ein zweiter Schritt.
+9. ⚠⚠ **Der Kladdenspeicher steht in keinem Spielstand.** Umgekehrt heisst das:
+   **an dieser Maschine lässt sich über `.DM`/`.CWM` gar nichts nachmessen.** Wer
+   sie prüfen will, muss sie nachbauen und gegen den laufenden Prozess laufen
+   lassen.
+
+### BB.9 ⭐ Die Kurzanleitung zum Bauen
+
+```
+weg_suchen(einheit, zielSp, zielZe):
+    art = artTafel[unterklasse(einheit)]           # 0/2/4/6/12 (+1 = Nahbereich sperren)
+    if typ(einheit)==7:    art += 8
+    if typ(einheit)==0x11: art += 10
+    karte = baue_karte(art, spalte(einheit), zeile(einheit))   # 256x256 Byte, BB.1
+    karte[Rand] = 2
+    frei = 0 wenn art in {0,1,2,3,8,9,10,11} sonst 1
+    karte[start] = 8 wenn 1x1 sonst 7
+    warteschlange = [start]; marke = 9 wenn 1x1 sonst 8; schritte = 0
+    solange warteschlange nicht leer (hoechstens 5000 Eintraege):
+        wenn Wellengrenze erreicht: marke = 8 wenn marke==255 sonst marke+1; schritte++
+        c = pop()
+        wenn c == ziel: karte[c] = 5; break
+        fuer n in [4 Diagonalen, dann 4 Gerade]:            # die Reihenfolge zaehlt
+            1x1: nimm n, wenn karte[n]==0 und (bei Diagonalen) beide
+                 anliegenden Geraden <= 1
+            2x2: nimm n, wenn karte[n]==1 und die 2x2-Flaeche != 0
+            4x4: nimm n, wenn karte[n]==1 und die 4x4-Flaeche != 0
+            karte[n] = marke; push(n)
+    wenn karte[ziel] != 5: return KEIN_WEG          # nichts schreiben, Auftrag verfaellt
+    c = ziel; m = marke - 1 (Umlauf 7 -> 255)
+    weg[schritte] = 0xFF   falls schritte < 50
+    fuer k = schritte-1 abwaerts bis 0:
+        i = erster Index aus [0,2,4,6, dann 1,3,5,7] mit karte[c + versatz[i]] == m
+        wenn k < 50: weg[k] = i XOR 4
+        c = c + versatz[i];  m = m - 1 (Umlauf 7 -> 255)
+    return OK
+```
+Abfahren: Zeiger bei 0 beginnen, je Takt eine Ziffer, `0xFF` = angekommen, bei
+Zeiger == 50 **neu planen mit demselben Ziel**.
+
+---
+
+## BC. ⭐⭐ GRAFIK, PALETTE UND SPRITES (21.08.2026)
+
+### BC.0 Adresstafel
+
+| Name (neu vergeben) | C | F | Byte | Rufer |
+|---|---|---|---:|---:|
+| ⭐ `Check_pal` | `0x4B5310` | `0x4B4C40` | 2096 (Rumpf **1674**) | 3 |
+| `Schwarzpalette_erzeugen` | `0x4B5B40` | `0x4B5470` | 111 | 1 |
+| `Schwarzpalette_setzen` | `0x4B5BD0` | `0x4B5500` | 19 | 5 |
+| `palette_animieren` | `0x4B5BF0` | `0x4B5520` | — | 1 |
+| `Load_ppp` | `0x4B3F50` | `0x4B3880` | 180 | 1 |
+| `Save_ppp` | `0x4B4040` | `0x4B3970` | 153 | 2 |
+| ⭐ `Teilchen_bewegen` | `0x4ADB80` | `0x4AD4B0` | 2304 | 1 |
+| `Teilchen_Schleife` (0…999) | `0x4AE480` | `0x4ADDB0` | 64 | 1 |
+| `Teilchen_zuteilen` | `0x4AD8B0` | `0x4AD1E0` | 720 | 3 |
+| ⭐ `Bodenmarke_zuteilen` | `0x4AE4C0` | `0x4ADDF0` | 672 | **10** |
+| ⭐ `Hoehe_an_Unterposition` | `0x4B62B0` | `0x4B5BE0` | 1520 | 1 |
+| ⚠ dessen Sprungtafel (19 Einträge) | `0x4B6724` | `0x4B6054` | 76 | — |
+| `Flugzeug_Kamerafahrt?` | `0x4B4B90` | `0x4B44C0` | 976 | 1 |
+| `Kartenfenster_Rahmen` | `0x4B7ED0` | `0x4B7810` | 2560 | 9 |
+| ⭐ `Kartenfenster_Inhalt` | `0x4B88D0` | `0x4B8210` | 2048 | 1 |
+| ⭐ `Eckhoehe_max` | `0x4B7E70` | `0x4B77B0` | 96 | 2 |
+| `Kartenfenster_Hilfsmaler` | `0x4B7AC0` | `0x4B7400` | 816 | 1 |
+| ⭐⭐ `Bildschirmfoto_BMP` (**Taste F9**) | `0x4B9BB0` | `0x4B96B0` | 800 | 1 |
+| ⭐ `Naechster_freier_Fotoname` | `0x4B9A80` | `0x4B9580` | 242 | 1 |
+| `gelaende_typ(col,row)` = Byte `+3` | `0x41D110` | `0x41C2D0` | 28 | viele |
+| `gelaende_lage(col,row)` = Byte `+2` | `0x41D0E0` | `0x41C2A0` | 28 | viele |
+| `gelaende_wort_setzen` = Wort `+0` | `0x41D140` | `0x41C300` | 33 | viele |
+| `Laufwerksbuchstabe(cd)` | `0x43B580` | `0x43A6F0` | 370 | — |
+| Geländemaler (liest Schatten-Tafel) | `0x42C8C0` | `0x42BAA0` | 5280 / **5296** | 1 |
+| Hülle um `Kartenfenster_Inhalt` | `0x446CD0` | `0x445C90` | 272 / 288 | 1 |
+
+**Daten**
+
+| Bedeutung | C | F | Δ |
+|---|---|---|---|
+| `.pal`-Rohpalette 768 B | `0xB12FB0` | `0xB12010` | `0xFA0` |
+| ⭐ `.cws` **Schatten-Tafel** 256 B | `0xB135B0` | `0xB12610` | `0xFA0` |
+| ⚠ `.cwg` Aufhell-Tafel 256 B (**tot**) | `0xB136B8` | `0xB12718` | `0xFA0` |
+| `PALETTEENTRY`-Block (`0x404` B) | `0x538800` | `0x537840` | `0xFC0` |
+| ⭐ **6 Palettenobjekte** | `0x540750…0x540767` | `0x53F7B0…0x53F7C7` | `0xFA0` |
+| Schwarzpalette | `0x4F6F88` | `0x4F5F88` | `0x1000` |
+| Missionsnummer (Byte) | `0x4F6FC4` | `0x4F5FC0` | `0x1004` |
+| »Ohne CD«-Schalter (Byte) | `0x4F6F9C` | `0x4F5F98` | `0x1004` |
+| ⭐ Zoomtafel `{1,2,3}` | `0x538870` | `0x5378B0` | `0xFC0` |
+| ⭐ Geländetyp→Gruppe (19 B) | `0x5385F0` | `0x537630` | `0xFC0` |
+| ⭐ **Kartenfarbgruppen, Schritt 7** | `0x538608` | `0x537648` | `0xFC0` |
+| Landschaftsbyte | `0x6783E0` | `0x677440` | `0xFA0` |
+| ⭐ Zeiger auf Geländeraster (**4 B je Zelle**) | `0x677E20` | `0x676E80` | `0xFA0` |
+| ⭐ **Eckhöhengitter 257 × 257, 1 B** | `0xA3AEB0` | `0xA39F10` | `0xFA0` |
+| Bodenmarkenfeld, 6 B je Satz | `0xA62A50` | `0xA61AB0` | `0xFA0` |
+| Kartenmarkenzähler (Wort) | `0xB0D824` | `0xB0C884` | `0xFA0` |
+
+### BC.1 ⭐⭐ `Check_pal` — die Palettenlogik
+
+Baut aus dem Basisnamen + `itoa(Missionsnummer)` **drei** Dateinamen mit den
+Endungen `.pal`, `.cws`, `.cwg`. Liegt die erste nicht im Arbeitsverzeichnis,
+liefert `Laufwerksbuchstabe()` einen Buchstaben für `"X:\data\"`. Protokolliert
+je Datei `f OK`/`f wrong`, `g OK`/`g wrong`, `h OK`/`h wrong`.
+
+| Puffer | Datei | `fread` | Dateigrösse |
+|---|---|---|---|
+| `0xB12FB0` | `NN.PAL` | **8 B Kopf + `0x300` B** | **776** |
+| `0xB135B0` | `NN.CWS` | `0x100` B | **256** |
+| `0xB136B8` | `NN.CWG` | `0x100` B | **256** |
+
+> ⭐ **Nullmodell:** `8 + 0x300 = 776` — die `.PAL` geht **restlos** auf, und
+> `0x300 = 768 = 256 × 3` ist die einzige Zerlegung, die eine Palette ergibt.
+> **Kein Byte bleibt in irgendeiner der drei Dateien übrig.**
+
+Der Kopf der `.PAL` ist über alle 27 Dateien **konstant**
+(`08 03 00 00 23 B1 00 00` = Grösse 776 + Kennung `0xB123`) — also **keine
+Prüfsumme**, und er wird **nie ausgewertet**.
+
+⭐ **Volle 8 Bit, kein 6-Bit-VGA:** in `01.PAL` sind **496 von 768** Byte > 63.
+Und **Byte 0 = Rot**, zweifach belegt: `Check_pal` kopiert 0/1/2 nach
+`peRed/peGreen/peBlue`, der BMP-Schreiber gibt `pal[2],pal[1],pal[0]` in die
+`RGBQUAD`-Felder Blau/Grün/Rot.
+
+#### ⭐⭐ Wie die sechs Paletten entstehen — und was flimmert
+
+```
+if (dword[0x538800] == 0) dword[0x538800] = malloc(0x404);   // 256*4 + 4
+für n = 0..255:  tab[4n+0..2] = rgb[3n+0..2]                 // peFlags bleibt ungesetzt
+für jeden der 6 Steckplaetze 0x540750 … 0x540764:
+    if (*edi) Release(*edi);
+    IDirectDraw::CreatePalette(vtbl+0x14, DDPCAPS_8BIT=4, tab, edi, 0);
+    // danach Ringtausch ueber 0x3E0, 0x3E4, 0x3E8, 0x3EC, 0x3F0, 0x3F4
+```
+
+Der Ringtausch verschiebt **genau sechs** Einträge: **Palettenindex 248…253**.
+
+> ⭐⭐ **Nullmodell:** `(0x3F4−0x3E0)/4 + 1 = 6` und `(0x540768−0x540750)/4 = 6`
+> — **die Ringlänge ist gleich der Zahl der Palettenobjekte.** Palette *k* trägt
+> den um *k* Stellen gedrehten Ring; nach 6 Drehungen ist man wieder am Anfang.
+> Mit `palette_animieren` (Wechsel alle 4 Bilder, Zähler 0…23) ergibt das genau
+> **24 Bilder Umlauf. Die Kette schliesst sich ohne Rest.**
+
+**Gegenprobe an den Dateien:** die sechs Farben sind in `01.PAL`
+`(39,71,115) (43,79,119) (51,91,123) (43,83,119) (39,75,115) (35,67,111)` — eine
+**Dreieckswelle**: drei Stufen heller, drei dunkler, geschlossen. Genau die Form,
+die eine Ringdrehung zu einem **sprungfreien Flimmern** macht. In `01`, `13` und
+`90` byteweise identisch (blaues Wasser), in `40` dieselbe Form in Braun (Wüste).
+In **24 von 27** Dateien sind die sechs Farben paarweise verschieden.
+
+⚠ **Bei Misserfolg passiert NICHTS.** Ein `fopen`- oder `fread`-Fehlschlag wird
+nur protokolliert (`f wrong`, bzw. `posranej 1/2/5/6` — tschechisch, derb), und
+die Funktion läuft mit dem **alten Pufferinhalt** weiter und erzeugt trotzdem
+sechs Paletten. **Es gibt keinen Notausgang und keine Vorgabepalette.**
+
+⚠ **Eine Feinheit:** am Ende ruft `Check_pal` `Schwarzpalette_erzeugen`, und das
+**nullt denselben Puffer `0x538800`** — beim ersten Aufruf. **Wer den Puffer nach
+dem Laden ausliest, liest beim ersten Mal Schwarz.**
+
+> ⭐ **Nullmodell für die Missionsnummern:** `Check_pal` verzweigt bei `< 0x10`,
+> `< 0x28` und sonst. Vorhanden sind `01…15` (alle < 16), `21, 25, 26` (alle in
+> [16,40)) und `40…47, 90` (alle ≥ 40). **Keine einzige Datei fällt aus dem
+> Raster.** Die drei Zweige sind **CD 1 / CD 2 / Festplatte**.
+
+### BC.2 ⭐ `.CWS` ist der Schatten — `.CWG` ist TOT
+
+Beide sind Nachschlagetafeln Palettenindex → Palettenindex.
+
+**`.CWS` dunkelt ab.** Über `01`, `13`, `40`: 214–217 von 256 Einträgen werden
+dunkler, 0–3 heller, mittleres Helligkeitsverhältnis 0,82–0,85.
+**Nullmodell:** für jeden Faktor *k* von 0,40 bis 2,00 wurde die Tafel »nächster
+Index zu Farbe × k« gerechnet und gegen die echte gezählt. **Bestes k = 0,90 in
+allen drei Dateien**, 98–114 exakte Treffer von 256.
+⚠ **Der Faktor erklärt nur rund 40 %** — wer die Tafel nachbaut, **nehme sie aus
+den Dateien, statt sie zu rechnen.**
+
+**8 Lesestellen, in beiden EXE deckungsgleich:** C `0x42D39C`, `0x42D447`
+(Geländemaler), `0x4B82AD`, `0x4B82B3` (Kartenrahmen), `0x4B8C09`, `0x4B8C0F`,
+`0x4B8C30` (Kartenmaler).
+⭐ **Im Kartenmaler wird sie ZWEIMAL hintereinander angewandt**
+(`dl = cws[cws[dl]]`) — das ist der unerkundete Nebel; einmal für »bekannt, aber
+nicht gesehen«.
+
+⭐ **Sauberer Negativbefund zu `.CWG`:** die Vollerhebung über die
+Relokationstafel findet in **C wie in F genau eine Lesestelle — das `fread`
+selbst** — und einen Schreiber in einem Ladehelfer. **Kein Maler greift darauf
+zu.** Passend dazu **fehlt `90.CWG` ganz**, und niemand merkt es: `Check_pal`
+schreibt `h wrong` und läuft weiter.
+
+### BC.3 ⭐⭐ `Load_ppp` / `Save_ppp` — es gibt KEINE `.ppp`-Datei
+
+`ppp` ist **kein Dateiname und keine Endung**. Die Zeichenkette `".ppp"` kommt in
+**keiner** der beiden EXE vor (Vollerhebung, 0 Treffer); die einzigen
+`ppp`-Vorkommen sind die vier Protokollmarken. **Es ist ein Funktionsname, sonst
+nichts.**
+
+Die Datei heisst **`cw.tmp`** (`0x53859C` / F `0x5375DC`). Vier Blöcke am Stück:
+
+| Block | C | F | Länge |
+|---|---|---|---:|
+| 1 | `0x51CE20` | `0x51BE60` | `0x11F80` = 73 600 |
+| 2 | `0x52EDA0` | `0x52DDE0` | `0xD20` = 3 360 |
+| 3 | `0x51B020` | `0x51A060` | `0x1E00` = 7 680 |
+| 4 | `0x5045A0` | `0x5035E0` | `0x16A80` = **92 800** |
+
+> ⭐⭐ **Nullmodell:** 73 600 + 3 360 + 7 680 + 92 800 = **177 440** — exakt die
+> Grösse von `CW.TMP`. **Kein Kopf, kein Rest.** Und Block 4 hat exakt die Grösse
+> von `PARTS.CWD` (92 800 B), das im selben Verzeichnis mit derselben Zeitmarke
+> liegt.
+
+`Save_ppp` setzt `byte[0x4F8A38] = 1`; `Load_ppp` lädt **nur**, wenn das gesetzt
+ist **und** `word[0x539934] == 1`, und löscht es danach. Also ein **einmaliger
+Übergabespeicher** zwischen zwei Spielabschnitten — **kein Anwenderformat**.
+
+### BC.4 ⭐⭐ Das brauchbare Bildschirmfoto: Taste **F9**
+
+`0x4B9BB0` / F `0x4B96B0`. **Kein Entwicklerschalter, kein `D:\`, richtige
+Auflösung** — dem bekannten `0x418B00` in jeder Hinsicht überlegen.
+
+⭐ In **C** ist es Fall 35 der 40-Einträge-Tastentafel, in **F** Fall 43 der 48 —
+aber in **beiden** trägt die Bytetafel den Wert an Stelle **VK `0x78` = `VK_F9`**.
+**Die Tastenzuordnung ist versionsübergreifend dieselbe, nur die Fallnummerierung
+wurde umgestellt.**
+
+* `rep stosd` × `0x10D` + `stosw` = **1078 Byte** genullt.
+  > ⭐ `1078 = 0x436 = 14 + 40 + 1024` — Dateikopf + `BITMAPINFOHEADER` + 256 ×
+  > `RGBQUAD`.
+* Kopf: `'B','M'`, `bfSize = W·H + 0x436`, `bfOffBits = 0x436`, `biSize = 0x28`,
+  `biWidth = dword[0x5387C8]`, `biHeight = dword[0x5387CC]`, `biPlanes = 1`,
+  `biBitCount = 8`.
+* Palette: 256 Einträge aus `0xB12FB2` in Dreierschritten als
+  `RGBQUAD{Blau, Grün, Rot, 0}`. `(0xB132B2 − 0xB12FB2)/3 = 256`.
+* `Lock` (vtbl `+0x64`) auf der **Primärfläche**, `DDSURFACEDESC.dwSize = 0x6C =
+  108`, Wiederholung bei `DDERR_SURFACELOST`.
+* Bildzeilen **von unten nach oben** — die richtige BMP-Reihenfolge.
+
+**Der Dateiname** kommt aus `0x4B9A80`: probiert `screen1.bmp` … `screen99.bmp`
+(`cmp ebx,0x64`), öffnet jeden mit `"rb"`, und **der erste, der sich nicht öffnen
+lässt, wird angelegt.** Kein Pfad — Arbeitsverzeichnis.
+
+### BC.5 ⭐ Das Kartenfenster: die Farbwahl, mit dem schönsten Nullmodell des Laufs
+
+**Zoom:** Tafel `0x538870` = **`{1, 2, 3}`**, byteweise gleich in C und F; die
+Dreifachverzweigung schreibt 1×1, 2×2 bzw. 3×3 Bildpunkte je Zelle.
+
+```
+g = byte[gelaende_typ(col,row) + 0x5385F0]     // 0..2
+h = Eckhoehe_max(col,row)                       // 0..3
+if (h == 0) g = 0
+k = 3*(h + 4*byte[0x6783E0]) + g
+n = byte[0x538608 + 7*k]
+farbe = byte[0x538609 + 7*k + (rand() % n)]
+```
+
+Die Tafel ab `0x538608` ist **byteweise identisch in C und F**, Satzlänge **7**
+(1 Anzahl + 6 Farben):
+
+| k | h,g | n | Farben |
+|---:|---|---:|---|
+| 0 | 0,0 | 2 | 242 243 |
+| **1, 2** | 0,1 / 0,2 | **0** | — |
+| 3,4,5 | 1,* | 2 | 212 213 · 38 211 · 40 42 |
+| 6,7,8 | 2,* | 2 | 195 196 · 192 193 · 198 199 |
+| 9,10,11 | 3,* | 2 | 39 40 · 37 38 · 41 42 |
+| 12 | nächste Landschaft, h=0 | 2 | 242 243 |
+| **13, 14** | h=0, g≠0 | **0** | — |
+
+> ⭐⭐ **Das schönste Nullmodell des Laufs:** die Formel erzwingt `g = 0`, sobald
+> `h = 0`. Die Sätze `k = 1, 2` und `k = 13, 14` sind damit **unerreichbar** — und
+> **genau diese vier, und nur diese, stehen leer in der Datei.** Die Satzlänge 7
+> ist damit unabhängig belegt: bei jeder anderen Länge fielen die Nullsätze
+> woandershin.
+
+⭐ Und der Farbinhalt passt: `242…245` sind in `01.PAL` `(31,79,115) (23,71,107)
+(15,67,99) (7,59,87)` — tiefes Blau, **dieselbe Familie wie der Flimmerring
+248…253. Der Ring ist das Wasser.**
+
+⚠ `n` ist überall **2**, also werden je Satz nur die ersten zwei Farben gewürfelt;
+die dritte bis fünfte stehen **ungenutzt** in der Datei. Eine
+Zwei-Farben-Rasterung.
+
+**`Eckhoehe_max`** (`0x4B7E70`):
+`i = col·257 + row; max(g[i], g[i+1], g[i+257], g[i+258])` mit `g = 0xA3AEB0`.
+> ⭐ **Nullmodell:** `257 = 256 + 1`, und die vier Versätze `0, 1, 257, 258` sind
+> genau die **vier Ecken einer Kachel** in einem Eckgitter zu einer
+> 256×256-Kachelkarte. Damit ist `0xA3AEB0` das **Eckhöhengitter 257 × 257 zu je
+> einem Byte** — dieselbe 257er-Kantenlänge, die aus sec2 schon bekannt ist.
+
+### BC.6 ⭐ Die Höhe an einer Unterposition — 19 Geländeformen
+
+`0x4B62B0`, ein Rufer im Geländemaler. `typ = gelaende_typ(col,row)`, `> 0x12`
+→ 0, sonst Sprungtafel `0x4B6724` mit **19 Einträgen**.
+⚠ **Die Tafel liegt unmittelbar hinter einem `ret` und wurde AUFGEZÄHLT**, nicht
+abgetastet: `0x4B62DD, 62E5, 6301, 6321, 633E, 635A, 63A1, 63E6, 642E, 6472,
+64B9, 64FE, 6543, 6587, 65E6, 6652, 6687, 66BB, 66EF`.
+
+Die Fälle rechnen lineare Rampen: Fall 1 `h = unterX · 15 / 40`,
+Fall 2 `h = 15 − unterY · 15 / 20`.
+> ⭐ **Nullmodell:** 40 und 20 sind Kachelbreite und -höhe. Bei `unterX = 0`
+> liefert Fall 1 exakt 0, bei 40 exakt 15; Fall 2 spiegelbildlich über 20. **Die
+> Rampen schliessen an den Kachelrändern ohne Rest an — eine Höhenstufe ist
+> 15 Bildpunkte.**
+
+⭐ **Das Geländeraster:** alle drei Zugriffsfunktionen rechnen
+`i = row·dword[0x542DC4] + col` und greifen auf `dword[0x677E20] + i·4` zu.
+**4 Byte je Zelle**: Wort `+0` (geschrieben), Byte `+2` = Lage/Höhe, Byte `+3` =
+Geländetyp (19 Werte).
+
+### BC.7 Teilchen und Bodenmarken
+
+**`0x4ADB80`** ist der **Schritt eines Teilchens**, gerufen aus der Schleife
+`0x4AE480` (0…999), die wiederum aus der Marke `step:` in `Main_funct` kommt.
+Satzlänge 36, Basis `0xA51110`:
+
+| Versatz | Bedeutung |
+|---|---|
+| `+0x00` / `+0x01` | Spalte / Zeile |
+| `+0x02` / `+0x03` | Unterposition X (0…39) / Y (0…19), **vorzeichenbehaftet** |
+| `+0x06` | Zustand: 1 = fliegt, 2 = zweiter Zweig, 0 = frei |
+| `+0x0A` / `+0x0B` | Zielspalte / Zielzeile |
+| `+0x0C` / `+0x0D` | Ziel-Unterposition X / Y |
+| `+0x08` (Wort) | laufende Grösse, gegen `+0x0E` interpoliert |
+| `+0x10` | Teiler (Geschwindigkeit); 0 wird auf 1 gehoben |
+| `+0x14` / `+0x1C` | Gleitkomma: Zuwachs und Summierer |
+| `+0x20` (Wort) / `+0x22` | Winkel / Bildnummer |
+
+> ⭐ **Nullmodell:** `0x28 = 40` und `0x14 = 20` als Überlaufschwellen, mit
+> `jle 0x27` / `jle 0x13` — **die Kachel ist 40 × 20** und die Unterposition läuft
+> 0…39 / 0…19. Deckungsgleich mit den Kamera-Versätzen aus dem Spielstand und mit
+> den Rampenteilern in `0x4B62B0`.
+
+**`0x4AE4C0`** ist ein zweites, kleineres Feld: **Bodenmarken.** Basis
+`0xA62A50`, **Satzlänge 6**, **400 Sätze** (`cmp dx,0x190`), Notfall
+`rand()%400`. `+0` Spalte, `+1` Zeile, `+2` Wort = `gelaende_lage(col,row) · 15`,
+`+4` Belegtflagge, `+5` Lebensdauer (Vorgabe `0x32 = 50`).
+⭐ **Die 15 ist dieselbe Zahl wie die Höhenstufe** in `0x4B62B0` — zwei
+unabhängige Funktionen, ein Wert.
+Gegenprobe: **54 Relokationsverweise ins Fenster `+0…+0x20` in C, 54 in F**,
+Stelle für Stelle deckungsgleich (Abstand durchgehend `0x6D0`).
+
+### BC.8 ⚠⚠ ZWEI WERKZEUGFUNDE, DIE ÜBER DIESES REVIER HINAUSGEHEN
+
+1. ⚠⚠ **Die Weichentafel hat 1109 Einträge in C und 1107 in F — NICHT 1047.**
+   Ununterbrochene `E9 rel32`-Kette ab `0x401000`: C bis `0x4025A9`, F bis
+   `0x40259F`. Aufgefallen ist es, weil `0x4AE4C0` mit einem Fenster von 1047
+   Einträgen in F **0 Rufer** ergab und mit voller Kette **10** — genau der
+   Fehlermodus, vor dem die Regel warnt, **nur mit der falschen Zahl.**
+   **Wer die 1047 übernimmt, verliert in C 62 und in F 60 Weichen.**
+2. ⚠ **Die richtige Vollerhebung für Rufer ist die BYTESUCHE, nicht die
+   Zerlegung.** Ein Ruferzähler über einen zerlegten `.text`-Index verliert
+   Stellen. Der Zähler, der jedes `0xE8` im Rohbild prüft und das Ziel gegen
+   `{Funktion} ∪ {alle E9-Weichen darauf}` hält, liefert in C und F **dieselben
+   Zahlen für jede** der elf Revierfunktionen.
+
+### BC.9 ⚠ Was offen blieb, und wodurch das Verfahren blind ist
+
+* ⚠ **»Wie kommt ein Sprite mit Durchsichtigkeit auf den Schirm« wurde NICHT
+  bearbeitet** — der Weg führte über den Geländemaler `0x42C8C0` weiter ins
+  Revier des Fensterlaufs. **Dort wurde aufgehört.** Gesichert ist nur: der
+  Geländemaler dunkelt über `.CWS` ab und holt Höhen über `0x4B62B0`.
+* ⚠ **Der `.PAL`-Kopf `0xB123`** ist konstant, also keine Prüfsumme — aber *was*
+  er ist, sagt der Code nicht: er liest die 8 Byte und überschreibt sie sofort.
+* ⚠ **`peFlags`** wird von `Check_pal` **nie gesetzt** — es bleibt, was `malloc`
+  hinterlässt. Ob DirectDraw das stört, ist statisch nicht zu sagen.
+* ⚠ **Das Landschaftsbyte `0x6783E0`** hat 3 Lesestellen und **keinen** Schreiber
+  in der Relokationstafel. Ob es 0…1 oder weiter läuft, ist offen — und daran
+  hängt, ob die Kartenfarbtafel `h = 0…3` mit **zwei** Landschaften oder
+  `h = 0…4` mit **einer** beschreibt. **Beide Lesarten erklären die vier leeren
+  Sätze gleich gut**, sie liessen sich nicht auseinanderhalten.
+* ⚠ `.CWG` als »unbenutzt« stützt sich auf die Relokationstafel; **berechnete
+  Basen sieht sie nicht.** Das Fenster `+0…+0x100` wurde abgesucht, ein
+  Blockbefehl mit dieser Basis kommt nicht vor. Das fehlende `90.CWG` stützt den
+  Befund unabhängig.
+* ⚠ `0x4B7AC0` (Kartenfenster-Hilfsmaler) und `0x4B4B90` (vermutlich
+  Kamerazentrierung auf ein gewähltes Flugzeug, Satzlänge 68 = sec19) sind
+  **eingeordnet, nicht ausgedeutet.**
+* ⚠ **Grössenunterschied C 5280 / F 5296 beim Geländemaler** und **40 gegen 48
+  Fälle in der Tastentafel**: als **Beobachtung** gemeldet, **nicht als Befund** —
+  am Kontrollfluss nur teilweise erklärt.
+
+---
+
+## BD. ⭐⭐ DIE ZEICHENLISTE — und die Berichtigung eines unserer Unterschiede
+
+> **Die zwölf sind keine Zeichnerfamilie, sondern EINSORTIERER in eine
+> y-sortierte Zeichenliste** — je einer pro Objektgattung. Sie zeichnen nichts.
+> Sie gehen ihre Quelltafel ab, verwerfen alles Unsichtbare, rechnen Kachel- in
+> Bildpunktkoordinaten um und hängen einen **10-Byte-Eintrag** in den Korb der
+> Kachelzeile. Erst zwei andere Funktionen gehen die Körbe ab und zeichnen.
+> **Die Familie hat nicht zwölf, sondern 22 Fälle in 18 Funktionen**, und alle
+> hängen an einem einzigen Taktgeber.
+
+### BD.0 Der Rahmen
+
+| Was | C | F |
+|---|---|---|
+| **Taktgeber** `zeichenliste_aufbauen` | `0x430DC0` | `0x42FF00` |
+| Rahmenfunktion (äussere Ausgabeschleife) | `0x4B4150` | `0x4B3A80` |
+| **Eintragstafel** | `0xAB8068` | `0xAB70C8` |
+| **Zählertafel** (Korbfüllstände) | `0xAB93F0` | `0xAB8450` |
+| Ende der Zählertafel | `0xB0EBAC` | `0xB0DC0C` |
+| Sichtbarkeitskarte (sec49) | `0x678B58` | `0x677BB8` |
+| eigener Spieler | `0x4FA284` | `0x4F928C` |
+| Kamera-Kachel X / Y | `0x5387AC` / `0x5387B0` | `0x5377EC` / `0x5377F0` |
+| Feinversatz X / Y | `0x5387B8` / `0x5387BC` | `0x5377F8` / `0x5377FC` |
+| Sichtbreite / Sichthöhe in Kacheln | `0x5387C0` / `0x5387C4` | `0x537800` / `0x537804` |
+
+### BD.1 Die 18 Erzeuger — die Reihenfolge IST der Zeichenvorrang
+
+⭐ Wer früher einsortiert, wird früher gezeichnet und liegt **hinten**.
+
+| # | Art | C | F | Quelltafel C | Abschnitt | Satz | Sätze |
+|---:|---:|---|---|---|---|---:|---:|
+| 1 | 0,1,3,4,5 | `0x4300C0` | `0x42F230` | `0x6E26DC` | **sec5 Einheiten** | 78 | 8000 |
+| 2 | *(Sortierer Art 1)* | `0x430AE0` | `0x42FC20` | — | — | — | — |
+| 3 | 0x0E | `0x42FAA0` | `0x42EC20` | `0x77CAEA` | sec82 | 8 | 4000 |
+| 4 | 0x12 | `0x42F0C0` | `0x42E280` | `0x9C994D` | sec45 | 2 | 3000 |
+| 5 | 0x11 | `0x42EE10` | `0x42DFE0` | `0x9C6FBF` | sec41 | 10 | 1000 |
+| 6 | 0x1E | `0x42E340` | `0x42D510` | `0x6DDF78` | **sec19 Flugzeuge** | 68 | 200 |
+| 7 | 0x08 | `0x42E8D0` | `0x42DA80` | `0x8106C6` | sec42 | 10 | 2000 |
+| 8 | 0x09 | `0x42EC50` | `0x42DE20` | `0x884736` | **sec43 Geschosse** | 32 | 1000 |
+| 9 | 0x15 | `0x42EAB0` | `0x42DC70` | `0xA51116` | **sec112 Teilchen** | 36 | 1000 |
+| 10 | 0x0A | `0x42FCD0` | `0x42EE50` | `0xC06944` | **sec3 Gebäude** | 76 | 255 |
+| 11 | 0x14 | `0x42DF40` | `0x42D130` | `0xC2C222` | **sec22 Gleise** | 5 | 3000 |
+| 12 | 0x0D | `0x42E100` | `0x42D2E0` | `0xB975B0` | **sec44 Waggons** | ⚠ **−24** | 239 |
+| 13 | *(Sortierer Art 0x0D)* | `0x430C50` | `0x42FD90` | — | — | — | — |
+| 14 | 0x13 | `0x42FF00` | `0x42F080` | `0x9CB0BC` | sec39 | 13 | 20000 |
+| 15 | 0x19 | `0x42F690` | `0x42E830` | `0x677F34` | **sec86 Radare** | 6 | 200 |
+| 16 | 0x0F | `0x42F2B0` | `0x42E470` | `0x552E1C` | sec84 | 2 | 1500 |
+| 17 | 0x10 | `0x42F4A0` | `0x42E650` | `0x688B5C` | sec85 | 2 | 1500 |
+| 18 | 0x0B | `0x42E4D0` | `0x42D6A0` | `0xC03A32` | sec4 | 6 | ≤2000 |
+| 19 | 0x0C | `0x42E6D0` | `0x42D890` | `0xBFF3E0` | **sec18 Wald** | 3 | 6000 |
+| 20 | 0x28 | `0x42F830` | `0x42E9C0` | `0xB49E57` | sec89 | 32 | 20 |
+
+⭐ **Alle 18 Quelltafeln unterscheiden sich C−F um exakt `0xFA0`** — unabhängig
+aus der F-Zerlegung abgelesen, nicht gerechnet. Das bestätigt die Zuordnung.
+⚠ Art 0x0D läuft **rückwärts** durch die Tafel.
+
+### BD.2 Der Aufbau der Liste
+
+```
+Korb r  (r = 0 … 69):
+   0xAB8068 + r·5002 + n·10     Eintrag n   (n = 0 … 499)
+   0xAB93F0 + r·5002            u16 Fuellstand des Korbs
+```
+
+| Versatz | Breite | Inhalt | Belegt durch |
+|---|---|---|---|
+| `+0` | u8 | **Art** | 22 Schreibstellen, alle mit fester Zahl |
+| `+1` | — | ungenutzt | 0 Relokationstreffer |
+| `+2` | u16 | **Satznummer** in der Quelltafel | 53 Treffer |
+| `+4` | u8 | Zusatzbyte — **nur Art 0x13** | genau 2 Treffer |
+| `+5` | — | ungenutzt | 0 Treffer |
+| `+6` | u16 | **Bildpunkt-X** | 47 Treffer |
+| `+8` | u16 | **Bildpunkt-Y** | 51 Treffer |
+
+> ⭐ **Nullmodell für 5002:** `0xAB93F0 − 0xAB8068 = 0x1388 = 5000` legt den
+> Zähler ans Ende; der Eintragsschritt 10 folgt aus
+> `lea eax,[ebp+ebp*4]; lea eax,[ebx+eax*2]`; die Schranke `cmp …, 0x1F3` = 499
+> nennt die Kapazität. `500 × 10 + 2 = 5002`. **Von allen Teilerpaaren von 5002
+> (`2·2501`, `41·122`, `61·82`) ist keines mit einem 10-Byte-Eintrag verträglich.**
+>
+> ⭐ **Nullmodell für 70:** der Räumlauf läuft
+> `(0xB0EBAC − 0xAB93F0)/0x138A = 350140/5002 = 70` mal, **in F ebenso 70**.
+> Gesamtgrösse der Liste: **350 140 Byte**.
+
+**Der Rahmen ist in allen 22 Fällen wörtlich derselbe:**
+```
+1  Quelltafel laden, Laufindex = 0
+2  Aktivpruefung (byte==0 / byte==0xFF / word==0xFFFF — Fall fuer Fall verschieden)
+3  Sichtpruefung  byte[ x·256 + y + 0x678B58 ] == 0  ->  verwerfen
+4  Kachelkulling gegen KamKachelX/Y und Sichtbreite/-hoehe
+5  x_bp = (x − KamKachelX)·0x28 − FeinX          <- Kachel 40 breit
+   y_bp = (y − KamKachelY)·0x14 − FeinY          <- Kachel 20 hoch
+   feste Bildpunktversaetze abziehen (Fall fuer Fall)
+6  Korb r = (y − KamKachelY) + 2                 <- Art 0x1E: +3
+7  wenn Fuellstand[r] >= 499  ->  verwerfen
+8  ⭐ NUR IN C:  wenn r >= 70  ->  verwerfen
+9  Fuellstand[r]++, Eintrag schreiben
+```
+⭐ `imul …, 0x28` und `imul …, 0x14` kommen in **jedem** der 22 Fälle genau
+einmal vor. Damit ist das Kachelmass **40 × 20** unabhängig bestätigt — und zwar
+als **einzige** Umrechnung im ganzen Revier.
+⭐ **Nullmodell für die Sichtkarte:** `shl ebx, 8` (Spaltenschritt 256) und
+sec49-Grösse `0x10000 = 256²` — das einzige quadratische Mass, das aufgeht.
+
+### BD.3 ⭐⭐ Worin sich die 22 Fälle unterscheiden — und worin NICHT
+
+**Drei Achsen tragen:**
+1. **Nebelprüfung:** **0 Proben** bei Gebäuden (0x0A) und Gleisen (0x14) — die
+   sind dauerhaft sichtbar · **1 Probe** bei allen anderen · **4 Proben** bei 0x28.
+2. **Koordinatenbreite:** u8/u8 für alles bis 255 Kacheln; **u16/u16** nur bei
+   Gebäuden und Art 0x28.
+3. **Fester Bildpunktversatz** — der **Ankerpunkt des Sprites** relativ zur
+   Kachel, von 0 bis −0xF0. **Das ist die eigentliche Fallunterscheidung.**
+
+⚠⚠ **Was sich NICHT unterscheidet: Durchsichtigkeit, Spiegelung, Bildrandschnitt,
+Farbtiefe, Schattierung, Zeilenschritt — nichts davon kommt in diesen Funktionen
+vor.** Die Ausgangsvermutung war falsch: **das alles steckt im Zeichner, nicht im
+Einsortierer.**
+
+**Bemerkenswerte Einzelfälle:**
+* **0,1,3,4,5** — *eine* Quelle, fünf Arten: verzweigt nach `ukol`
+  (`cmp 0x32` / `cmp 0x64`).
+* **0x1E** — ⭐ **der einzige Fall mit Besitzerausnahme:** ist `byte[+1]` der
+  eigene Spieler, wird die Nebelprüfung übersprungen — **eigene Flugzeuge sieht
+  man immer.**
+* **0x09** und **0x15** — Flughöhe gedeckelt bei `cmp bx, 0x96` (150).
+* **0x28** — vier Nebelproben.
+  > ⭐ **Nullmodell:** `0x678F58 − 0x678B58 = 0x400 = 4 × 256` → **x + 4 Spalten**;
+  > `0x678B58 − 0x678B4E = 10` → **y − 10 Zeilen**. Beides deckt sich Byte für
+  > Byte mit `lea eax,[ebx+4]` und `lea eax,[ebp−0xA]` im selben Code. Das Objekt
+  > belegt **4 × 10 Kacheln = 160 × 200 Bildpunkte**, und `sub di, 0xF0` = −240 =
+  > −12 × 20 setzt den Anker zwölf Kachelzeilen darüber.
+
+### BD.4 ⚠⚠ DIE BERICHTIGUNG: `cmp al,0x46` ist KEIN Einzelunterschied
+
+Geprüft mit einer **rohen Bytesuche über das ganze `.text`**, unabhängig von
+jedem Zerleger, über drei Kodierungsformen:
+
+| | C | F |
+|---|---:|---:|
+| `cmp al, 0x46` + `jb/jae` | 4 | **0** |
+| `cmp r8, 0x46` + `jb/jae` | 17 | **0** |
+| `cmp byte[esp+n], 0x46` + `jb/jae` | 1 | **0** |
+| **Summe im ganzen Bild** | **22** | **0** |
+
+Alle 22 C-Treffer liegen zwischen `0x42E04A` und `0x43083C` — **genau die 22
+Einsortierfälle**: `0x42E04A · 0x42E27B · 0x42E432 · 0x42E604 · 0x42E7D9 ·
+0x42E9F1 · 0x42EBB0 · 0x42ED68 · 0x42EFDA · 0x42F1F3 · 0x42F3DF · 0x42F5CF ·
+0x42F785 · 0x42F9BF · 0x42FC01 · 0x42FE35 · 0x42FFEB · 0x43023D · 0x43041D ·
+0x430578 · 0x4306DA · 0x43083C`.
+
+> ⭐⭐ **Unsere bisherige Notiz »Teilchen-Bildschirmzeilen-Schranke `cmp al,0x46`
+> @C `0x42EBB0`« ist zu berichtigen.** Es ist **kein Einzelunterschied** und
+> **nichts Teilchen-Spezifisches: die spätere Auslieferung C hat die
+> Korbindex-Schranke an ALLEN 22 Stellen der Familie nachgetragen; F hat sie
+> nirgends.** Eine systematische Fehlerbehebung zwischen 16.09.1997 und
+> 22.01.1998 — **der eine belegte Unterschied im Revier, aber 22-fach.**
+
+Am Kontrollfluss erklärt: in F folgt auf `cmp ax, 0x1F3 / jge` unmittelbar der
+Schreibblock; in C stehen zwei Befehle dazwischen. **In F würde ein Korbindex
+≥ 70 hinter das Ende der Zählertafel schreiben.**
+
+⭐ **Und die 70 ist damit auch gedeutet:** nicht Bildschirmzeilen, sondern
+**70 Zeilenkörbe — ein Korb ist eine Kachelzeile.**
+> **Nullmodell:** 70 Körbe × 20 Bildpunkte = **1400 ≥ 1200**, der höchsten Zeile
+> der Auflösungstafel. Als *Bildschirm*zeilen gelesen wären 70 bei jeder
+> Auflösung sinnlos zu klein — **die Kachelzeilen-Lesart ist die einzige, die
+> aufgeht.**
+
+⚠ **Verworfene Scheinunterschiede (Regel 1 in Aktion):** die Besitzerprüfung bei
+Art 0x1E sah zuerst nach »C ja, F nein« aus — F prüft dieselbe Sache gegen
+`0x4F928C` statt `0x4FA284`, also `.data`-Verschiebung `0xFF8`. **Verworfen.**
+Ebenso alle Sichtkarten-, Kamera- und Tafeladressunterschiede (`0xFA0`).
+Die Funktionsgrössen weichen um −3 bis +11 Byte ab — **Registerneuzuteilung plus
+die 5 Byte der Schranke, keine belastbare Messlatte.**
+
+### BD.5 ⚠ `0x42F830` ist NICHT tot — und warum das Werkzeug es so sah
+
+| Prüfung | C | F |
+|---|---|---|
+| direkte `call` | **0** | 0 |
+| Relokationseinträge auf die Funktion | **0** | 0 |
+| Relokationseinträge auf ihren Thunk | **0** | 0 |
+| direkte `jmp` | **1** — aus dem Thunk | 1 |
+| `jmp` auf den Thunk | **1** — `0x430E35` | 1 — `0x42FF75` |
+
+⭐ **Der Taktgeber endet mit einem Schwanzruf** (`jmp`) — die Funktion ist der
+**zwanzigste und letzte Erzeuger**, in beiden Auslieferungen.
+⚠⚠ **Die »0 Rufer« waren ein Werkzeugartefakt: `funktionen.py --gross` zählt nur
+`call`, nicht `jmp`.**
+
+Und ihr Erzeugnis wird verbraucht: der Hauptzeichner verwirft Art 0x28
+(`cmp eax, 0x1E; ja`), aber **`0x42C7E0` / F `0x42B9C0` ist ein eigener Zeichner
+nur für Art 0x28**. Kein toter Rest.
+
+### BD.6 ⚠ Über den Einsortierern steht KEINE Sprungtafel
+
+Es ist eine **flache, fest verdrahtete Folge von 20 Aufrufen** im Taktgeber —
+daher genau ein Rufer je Funktion. **Die Sprungtafeln liegen darunter, auf der
+Verbraucherseite**, und es sind zwei:
+
+| Was | C | F | Grösse |
+|---|---|---|---:|
+| **Vorlaufzeichner** (Durchgang 1) | `0x42C8C0` | `0x42BAA0` | 5280 / 5296 |
+| ↳ Indextafel (30 B) / Zieltafel (13 Zeiger) | `0x42D7FC` / `0x42D7C8` | `0x42C9E0` / `0x42C9AC` | |
+| **Hauptzeichner** (Durchgang 2) | `0x429900` | `0x428AF0` | 12000 / 11984 |
+| ↳ Indextafel (31 B) / Zieltafel (16 Zeiger) | `0x42BC10` / `0x42BBD0` | `0x42ADFC` / `0x42ADBC` | |
+| **Sonderzeichner nur Art 0x28** | `0x42C7E0` | `0x42B9C0` | 224 |
+
+⭐ **Beide Indextafeln sind in C und F byteidentisch** (aufgezählt, nicht
+abgetastet):
+Haupt `[0,1,1,2,3,4,15,15,5,6,7,8,9,10,11,15,15,15,15,15,12,13,15,15,15,15,15,15,15,15,14]`
+Vorlauf `[0,0,12,12,12,12,12,12,1,12,12,12,2,12,3,4,5,6,7,8,9,12,12,12,10,12,12,12,12,11]`
+
+⭐ **Die Deckung ist lückenlos:** jede der 22 erzeugten Arten wird von genau
+einem der drei Zeichner behandelt. Die sieben Arten, die der Hauptzeichner
+verwirft, sind **exakt** die, die nur der Vorlauf hat.
+
+**Die äussere Schleife** (`0x4B4150`): Durchgang 1 ab Korb **2**
+(Zeiger `0xABBB04 = 0xAB93F0 + 2·5002` ✓), Durchgang 2 ab Korb **0**, beide bis
+Korb `Sichthöhe + 8`.
+
+⭐ **Zwei Sortierer** hängen zwischen den Erzeugern: `0x430AE0` sammelt in jedem
+Korb die Einträge mit **Art 1** und **blasensortiert sie nach Bildpunkt-Y**
+(ganze 10-Byte-Einträge werden getauscht); `0x430C50` dasselbe für **Art 0x0D**
+(Waggons). **Sonst gilt: Einfügereihenfolge = Zeichenreihenfolge.** Nur diese
+zwei Gattungen bekommen eine echte Tiefensortierung innerhalb der Zeile.
+
+### BD.7 Der Weg eines Sprites, bis zur Reviergrenze
+
+```
+Rahmen 0x4B4150
+  ├─ 0x430DC0  Koerbe raeumen (70x), dann 20 Erzeuger, letzter per jmp
+  ├─ 0x4B435E → 0x42C8C0   Durchgang 1, Koerbe 2 … Sichthoehe+8
+  ├─ 0x4B43F9 → 0x429900   Durchgang 2, Koerbe 0 … Sichthoehe+8
+  └─ 0x4B46EA → 0x42C7E0   Art 0x28
+```
+Der Zweig für Art 0x00 löst die Satznummer auf: `idiv 1000` trennt Spieler von
+Platz, `n·78 + 0x6E26C8` ist der Einheitensatz, und bei `+0x10 == 0x53/0x54`
+verzweigt er — ⭐ **das ist genau die bekannte Sonderbehandlung Spiegel/Illusion
+bei `0x4299B4`, jetzt in ihrem Zusammenhang.**
+
+| Kopierer (C) | Aufrufe Haupt | Aufrufe Vorlauf | Rolle |
+|---|---:|---:|---|
+| `0x4AC0A0` | 20 | 1 | **Sprite-Verteiler**: schaltet über `byte[0x504034]` und `byte[0x504038]` (0…3) auf vier Kopierer und addiert `word[0xA3AE88]`/`word[0xA3AE8C]` als Weltversatz |
+| `0x4ACCD0` | 20 | 6 | Kopierer |
+| `0x4AC5C0` | 14 | 2 | Kopierer (Grundfall) |
+| `0x4AC6D0` | 1 | 10 | Kopierer (Vorlauf-Hauptweg) |
+| `0x4AC450`, `0x4ACB90`, `0x4AC830`, `0x4AC040`, `0x4AC070` | | | weitere Kopierer |
+| `0x4B71F0`, `0x4B5CE0`, `0x4B62B0` | 8 | 3 | Hilfszeichner |
+
+⚠ **Hier endet das Revier.** Alle Aufrufe haben die Form `(bild, x, y)` bzw.
+`(bild, x, y, 0)`; der Einstieg ist `0x4AC0A0`, sein Modusschalter
+`byte[0x504034]`/`byte[0x504038]`.
+
+⭐ **Ein Hinweis zum Randschnitt:** die Erzeuger schneiden **nur grob in Kacheln**
+(±2 bzw. +5…+7 Kacheln Rand) und **lassen negative Bildpunktkoordinaten stehen** —
+`x_bp`/`y_bp` werden als **vorzeichenbehaftete** u16 eingetragen (`movsx` beim
+Lesen). **Der Feinschnitt muss also im Kopierer sitzen.**
+
+### BD.8 ⚠ Was offen blieb, und wodurch das Verfahren blind ist
+
+1. ⚠ **Sieben Arten haben keinen Namen** (0x08, 0x0B, 0x0E, 0x0F, 0x10, 0x11,
+   0x12, 0x13): Tafel, Satzgrösse, Anzahl und Zeichenzweig sind bekannt — **was
+   sie darstellen, nicht.**
+2. ⚠⚠ **Widerspruch bei `0xB49E50` (sec89).** Die Unterlagen führen die Tafel als
+   **Fähraufträge** (20 × 32, »More mer_ships needed«). Die Messung sagt: sie wird
+   als **sichtbares Objekt von 4 × 10 Kacheln mit u16-Koordinaten** gezeichnet,
+   mit eigenem Zeichner und 15 Bildpunkten Höhenstufung. **Beides kann stimmen
+   (ein Auftrag mit Position), muss aber nicht — hier wird sich nicht
+   festgelegt.**
+3. ⚠ **`byte[0x504034]` / `byte[0x504038]`** — der Modusschalter des
+   Sprite-Verteilers, zwei Bytes über vier Kopierwege. **Nicht gelesen.**
+4. ⚠ `word[0x7AEC30]` / `word[0x7AEC34]`, die der Einheiten-Erzeuger nebenbei
+   schreibt — unklar wozu. (⚠ Beachte: `0x7AEC38` ist der **Wegpuffer sec14** aus
+   BB — diese zwei Worte liegen **unmittelbar davor.**)
+5. ⚠⚠ **Wie `Sichthöhe` berechnet wird, ist ungelesen** — und daran hängt, ob die
+   F-Fassung tatsächlich überlaufen **kann** oder ob die Schranke reine Vorsorge
+   war. **Ohne diese Zahl ist »22-fache Fehlerbehebung« eine Beschreibung des
+   Codeunterschieds, kein Beweis eines behobenen Absturzes.**
+6. ⚠ **Berechnete Sprünge.** `call` und direkte `jmp` wurden aufgezählt und die
+   Relokationstafel abgefragt. Ein `jmp eax` taucht in keinem der drei auf.
+   »Jede Art hat genau einen Zeichner« gilt für die aufgezählten Wege.
+7. ⚠ **Die Feldaussagen »`+1` und `+5` ungenutzt« stützen sich auf
+   Relokationstreffer und sind eine UNTERGRENZE der Nutzung.** Im Hauptzeichner
+   wurden die Versätze von Hand nachgesehen; für die ungelesenen Zweige lässt es
+   sich nicht ausschliessen.
+8. ⚠ **Die Grössenvergleiche C/F sind Abstände bis zum nächsten Funktionsanfang,
+   nicht Codelängen** — sie enthalten `0xCC`-Polsterung und wurden nur berichtet,
+   nicht ausgewertet.
+9. ⚠ **Keine Laufzeitmessung.** Ob je ein Korb 499 Einträge erreicht, ob Art 0x28
+   im Spiel auftaucht, ob F je überläuft — dazu wird nichts gesagt.
+
+---
+
+## BE. ⭐⭐ DIE EINHEITEN- UND GEBÄUDESIMULATION (21.08.2026)
+
+### BE.0 Adresstafel
+
+| C | F | Byte | Rufer | Was sie ist |
+|---|---|---:|---:|---|
+| ⭐⭐ `0x40EC70` | `0x40EAA0` | 854 | 7 | **Infanterie-Schuss auslösen** (Sofortwirkung, kein Geschoss) |
+| ⭐ `0x434700` | `0x433840` | 2040 | 1 | **Auswahlrahmen einsammeln** |
+| `0x43BA30` | `0x43ABA0` | 832 | 1 | **Gebäude-Nebensatz anlegen** (Typ → sec23…sec31) |
+| `0x410940` | `0x410770` | 852 / **772** | 2 | **Roboter be-/entladen** (sec48) |
+| `0x441810` | `0x440810` | 742 | 1 | ⚠ 8 Bildbausteine fürs Fenster — **UI, keine Simulation** |
+| `0x4223A0` | `0x421560` | 633 | 1 | ⚠ alle Karten der Reihe nach laden — **Entwicklerprüflauf** |
+| `0x404170` | `0x404150` | 618 | ⚠ siehe BE.5 | **Dialogprozedur** der Mehrspieler-Sitzung |
+| `0x439D20` | `0x438E80` | 611 / 616 | 1 | **Gasabsauger** |
+| `0x421400` | `0x4205C0` | 595 | 2 | **Lagerstätten-Bauplatzprüfung** |
+| `0x433460` | `0x4325A0` | 598 | 1 | **Direktsteuerung** (Befehle 1/2/8) |
+| `0x42EE10` | `0x42DFE0` | 547 / 538 | 1 | ⚠ sec41 in die Zeichenliste — **Renderer** (siehe BD) |
+
+⚠ **Drei der elf gehören gar nicht ins Revier.** »Gross und wenig gerufen« ist
+kein Hinweis auf Simulation.
+
+**Hilfsfunktionen, unterwegs benannt:**
+
+| C | F | Byte | Rufer | Was |
+|---|---|---:|---:|---|
+| ⭐ `0x40F0A0` | `0x40EED0` | 1380 | 2 | **`Test shooting unit` / `ready to shoot` / `shoot end`** |
+| `0x40EAA0` | `0x40E8D0` | 368 | 3 | Weltkoordinaten einer Einheit, Verteiler über Gattung 0…5 |
+| `0x40F9B0` | `0x40F7E0` | 361 | 15 | Richtung von Einheit zu (x,y) |
+| `0x4338F0` | `0x432A30` | 274 | 2 | 8er-Richtung aus (dx,dy) |
+| `0x40FB80` | `0x40F9B0` | 210 | 1 | `atan2` → Richtungswinkel (x87) |
+| ⭐ `0x455320` | `0x453FC0` | 307 | 4 | **`Place laser:`** |
+| ⭐ `0x439410` | `0x438570` | 188 | **49** | **`Add gas` / `Error: too many gas`** |
+| `0x4396C0` | `0x438820` | 904 | 1 | Gaswolken-Takt |
+| `0x4344D0` | `0x433610` | 131 | 7 | Auswahlliste ergänzen |
+| `0x421200` | `0x4203C0` | 407 | 4 | Bauplatzprüfung nach Grundriss |
+| `0x4C91B0` | `0x4C8D60` | 856 | 3 | **Gebäude erschaffen** (ruft `0x43BA30`) |
+| ⭐ `0x406CD0` | `0x406CB0` | **13688 / 13504** | 1 | **`move units`** — der Einheitentakt |
+| `0x40C9A0` | `0x40C800` | 4100 / 4063 | **57** | `Zasah` (Treffer) |
+| `0x4047E0` | `0x4047C0` | 584 | **111** | Klang/Effekt auslösen |
+| `0x4B5CE0` | `0x4B5610` | 1184 | 21 | Höhenversatz für die Bildschirmlage |
+| `0x430E60` | `0x42FFA0` | 440 | 10 | Feinversatz innerhalb der Zelle |
+| `0x435BD0` | `0x434D10` | 448 | 13 | Zwischenposition aus `kolik` + Richtung |
+| `0x4C2190` | `0x4C1C50` | 111 | **116** | **Befehl absenden** |
+| `0x403DB0` | `0x403D90` | 29 | 1 | `DialogBoxParamA(…, 130, …, Thunk)` |
+
+**Daten** — ⚠ der `.data`-Abstand ist **nicht** konstant; jede F-Adresse wurde
+aus F-Code **gelesen**, nicht gerechnet:
+
+| Was | C | F | Δ | Form |
+|---|---|---|---:|---|
+| ⭐ sec48 **Umschlagsätze** | `0x77AC50` | `0x779CB0` | `0xFA0` | **400 × 18** |
+| ⭐ **Gaswolken** | `0x77CAE8` | `0x77BB48` | `0xFA0` | **4000 × 8** |
+| Gaswolkenzähler | `0x8106B8` | `0x80F718` | `0xFA0` | Wort |
+| sec38 Lagerstätten | `0x6783E8` | `0x677448` | `0xFA0` | 50 × 14 |
+| sec41 | `0x9C6FB8` | `0x9C6018` | `0xFA0` | 1000 × 10 |
+| Bauvorschau-Zellen / Anzahl | `0xA32188` / `0x502AD0` | `0xA311E8` / `0x501B10` | `0xFA0` / `0xFC0` | 3 B je Zelle |
+| ⭐ angewählte Einheit | `0x4FA0C8` | `0x4F90D0` | `0xFF8` | Wort; `<8000` Einheit, `10000` Gruppe |
+| Gruppenliste / -zahl | `0x833098` / `0x4FA278` | `0x8320F8` / `0x4F9280` | | |
+| ⭐ **Rahmen-Anker** | `0xA182E0/E4` | `0xA17340/44` | `0xFA0` | genau **2** Schreiber |
+| Mausposition | `0x502AA8/AC` | `0x501AE8/EC` | `0xFC0` | 40 Schreiber |
+| Warenannahme je Gebäudetyp | `0x4FACD0` | `0x4F9CD8` | | 4 B je Typ |
+| ⚠ ungeklärte Tafel | `0x591F00` | `0x590F60` | | Schritt 68 |
+
+### BE.1 ⭐⭐ Die Schussauslösung der Infanterie
+
+`f(word schuetze, word ziel_a, word ziel_b)`:
+`ziel_b == 0x7530` (30000) → `ziel_a` ist eine **Einheitennummer**;
+`ziel_b < 0x100` → `(ziel_a, ziel_b)` ist eine **Zelle**, das Opfer kommt aus der
+imap; sonst nichts.
+
+```
+0x40EC90  word[+0x32] != 0  ->  sofort raus          +0x32 = NACHLADEZAEHLER
+0x40ECAD  word[+0x32] := byte[+0x3D] + Zufall%3      +0x3D = NACHLADEZEIT
+0x40ECC4  byte[+0x47] := 0x0B   (Schussbild) ; byte[+0x11] := 0
+0x40ECD2  Verteiler ueber byte[+0x0D] (Waffe) im Bereich 0xBE..0xC7
+          Sprungtafel 0x40EFA4, Indexbyte 0x40EFBC = [0,1,2,5,3,5,5,5,5,4]
+          Klang: 0xBE->6, 0xBF->0x12, 0xC0->0x50, 0xC2->0x12, 0xC7->8
+          byte[+0x02] := Richtung zum Ziel
+0xBF oder 0xC2  ->  LASERSTRAHL (0x455320 »Place laser:«), Streuung
+                    Zufall%20 / Zufall%15
+sonst           ->  0x40C9A0 (Zasah), der gewoehnliche Treffer
+```
+
+⭐ Die Sprungtafel und **alle fünf Klangnummern sind in C und F Byte für Byte
+gleich**.
+
+**Rufer:** genau 7, alle in `0x40F0A0` (`Test shooting unit`), jeder unmittelbar
+vor einer `shoot end`-Marke. Das Tor dort ist `0x40F0CF`: `cmp word[+0x32], 0`.
+⭐ **Damit ist die Kette geschlossen:** Tor `+0x32 == 0` → Schuss →
+`+0x32 := +0x3D + Zufall%3` → Abzählen in `move units` bei `0x4074F4`.
+
+**Gemessen an 3154 lebenden Einheiten aus 36 Dateien:**
+
+| Behauptung | Messung | Nullmodell |
+|---|---|---|
+| Waffen `0xBE…0xC7` sind **Infanteriewaffen** | alle mit `+0x0D >= 0xBE` haben Gattung 1: **879/879 = 100 %** | Gattung 1 ist **29,2 %** aller Einheiten → 257 erwartet |
+| `+0x0B` ist der Waffenuntertyp | `+0x0D = 0xBE + (+0x0B)/2`: **879/879 = 100 %** | jede andere affine Zuordnung: **0/879** |
+| `+0x32` ist ein kurzer Zähler | `== 0` bei **2882/3154 = 91,4 %** | ein beliebiges Wortfeld wäre selten 0 |
+
+⚠ **`+0x3D` ist NICHT aus der Waffe ableitbar:** bei `+0x0B = 0` kommen {4, 5, 20}
+vor, bei `+0x0B = 2` die Werte {15, 20}. **Woher die Nachladezeit stammt, ist
+offen.**
+
+⭐ **Praktische Folge: das ist der Hebel fürs Infanteriegefecht.** Schaden sitzt
+in `Zasah`, **Feuerrate und Klang sitzen hier** — in zwei Bytes je Einheit und
+einer 10-Einträge-Tafel.
+
+### BE.2 ⭐ Der Auswahlrahmen
+
+Liest den Anker aus **`0xA182E0/E4`** (wo die Taste gedrückt wurde — genau **2
+Schreibstellen**, beide in der Fensterprozedur) und `0x502AA8/AC` (aktuelle
+Maus). Rufer `0x41415F`, beim Loslassen, wenn `dword[0x502AD4] == 4` und
+`dword[0x502ACC] == 0` (kein Bau-Modus).
+⭐ Dass es der **Rahmen** und nicht der Einzelklick ist, ist belegt: bei einem
+Klick wäre x1 == x2, und die Vergleiche sind **strikt**.
+
+Schleife über die **1000 Sätze des eigenen Spielers**. Filter: `+0x09 < 2`,
+`UKOL < 45`, `+0x0A <= 5`. Sprungtafel `0x434EE0`, 6 Einträge —
+⚠ **Gattung 2 lässt sich per Rahmen nie anwählen.**
+
+⭐ **`byte[+0x0E] == 0x47` (Fahrgestell 71) wird zurückgestellt:** solche
+Einheiten wandern in eine Nebenliste und werden **nur dann** angewählt, wenn im
+Rahmen **keine andere** Einheit lag. **Ein Rahmen bevorzugt Kampfeinheiten vor
+Transportrobotern.**
+
+> **Zahl:** Fahrgestell 0x47 kommt 136 mal vor; **125 (91,9 %) tragen `+0x40 != 0`**,
+> also einen sec48-Umschlagsatz. Umgekehrt sind von 157 Einheiten mit
+> `+0x40 != 0` **125 (79,6 %)** Fahrgestell 0x47.
+> **Nullmodell:** 0x47 ist 4,3 % aller Einheiten → bei Unabhängigkeit wären ~7
+> der 157 erwartet. ⭐ **Fahrgestell 71 = der Transport-/Umschlagroboter**, und
+> die Auswahlregel ist genau deshalb da.
+
+Zweite Schleife über **sec19** (200 × 68): Auswahlnummer **`20000 + i`**.
+Mehr als eine Auswahl → `word[0x4FA0C8] := 0x2710` (10000).
+
+### BE.3 ⭐ Der Gebäude-Nebensatz — neun Tafeln, alle mit 50 Plätzen
+
+`f(byte typ, word gebaeudenummer)` → Platznummer oder `0xFF`. Einziger Rufer:
+`0x4C93A5` in »Gebäude erschaffen«. Sprungtafel `0x43BD34`, 15 Einträge.
+
+| Typ | Tafel C | Abschnitt | Satz | Plätze |
+|---:|---|---|---:|---:|
+| 1 Basis | `0x878E58` | sec23 (800 B) | 16 | 50 |
+| 2/3/4 Fabriken | `0x87A2C0` | sec24 (700 B) | 14 | 50 |
+| 5 Depot | `0x879F38` | sec25 (700 B) | 14 | 50 |
+| 6/12 Bahnstation, Feldbahnhof | `0x879178` | sec30 (700 B) | 14 | 50 |
+| 7 Generator | `0x87A5A8` | sec26 (200 B) | 4 | 50 |
+| **8 Radar** | — | **keine** | — | — |
+| 9 Flughafen | `0x879438` | sec27 (2600 B) | 52 | 50 |
+| 10/15 Minen | `0x878AD0` | sec28 (900 B) | 18 | 50 |
+| 11 Seedock | `0x87A1F8` | sec29 (200 B) | 4 | 50 |
+| 13 Kraftwerk | `0x879E70` | sec31 (200 B) | 4 | 50 |
+| **14 Nachschub** | — | **keine** | — | — |
+
+> ⭐ **Nullmodell:** Satzlänge × 50 trifft die Abschnittsgrösse bei **9 von 9**
+> Tafeln exakt. Eine geratene Satzlänge zwischen 2 und 64 teilt 700 nur in etwa
+> 11 % der Fälle; **neunmal hintereinander ≈ 10⁻⁹**.
+
+⭐⭐ **Die Andocklisten sind damit aufgeklärt:** sec23 (Basis, 16 B) hat
+`word[+0x00]` Gebäudenummer, `byte[+0x02] = 0`, dann **`+0x04…+0x0F` = 12 Byte
+`0xFF` = sechs Plätze**; sec25 und sec30 (14 B) ebenso sechs Plätze.
+**Das ist die Datenstruktur zum bekannten Fehler »andocken zählt bis 6, ablegen
+bis 5« (AX.7).**
+
+⭐ Die Mine **nullt beim Anlegen auch das Teilelager des Gebäudes selbst**
+(`word[0xC0693C/3E/40/42 + 76·i] = 0`) — das bestätigt die Felder
+`+0x2C/+0x2E/+0x30/+0x32` aus AX.2 **unabhängig**.
+
+### BE.4 Die übrigen fünf
+
+**`0x410940` — Roboter be- und entladen.** Marke am ersten Rufer: **`trans A`**.
+`word[+0x40]` = `trans`, Satz `0x77AC50 + 18·trans` → **sec48 = 400 × 18**
+(`0x1C20` = 7200 = 400·18 ✓). Satz: `+0x00…+0x03` vier Warenarten (`0xFF` =
+keine), `+0x04` Gebäudenummer, `+0x05…+0x08` Stückzahlen, `+0x09` Ladung,
+`+0x0A` Fassungsvermögen, `+0x0C` Einheitennummer, `+0x0E` Merker, `+0x10`
+Umlaufzeiger 0…3. `+0x04 == gebaeude` → **abladen** ins Gebäudelager, sonst
+**aufladen** bis `+0x09 == +0x0A`.
+
+**`0x439D20` — der Gasabsauger.** Gerufen aus `move units`, **nur wenn
+`byte[+0x0E] == 0x42`** (Fahrgestell 66). Tor: es gibt Gaswolken **und**
+`(Takt + Einheit) % 4 == 0` → **die Einheit rechnet nur jeden 4. Takt**. Wolken
+näher als ±60 Welteinheiten werden **gelöscht**; die übrigen bekommen
+`byte[+0x06] := 12000/dx`, `byte[+0x07] := 12000/dy` — **die Wolke wird
+hingezogen**. Weltmassstab: **120 Welteinheiten je Zelle**.
+
+⚠ **`+0x40` wird hier als 0/1-Merker benutzt — dasselbe Feld, das in `0x410940`
+der sec48-Index ist und in `0x441810` als Bildnummer gelesen wird.** Zahl: von
+den 8 Einheiten mit Fahrgestell 0x42 hat **keine** `+0x40 != 0` (0/8) — der
+Konflikt tritt in den ausgelieferten Karten nicht auf, **ist aber im Code
+angelegt**.
+
+**`0x421400` — Lagerstätten-Bauplatzprüfung.** Rückgabe = **Lagerstättennummer +
+1**. Sucht in sec38 (50 × 14) einen Eintrag im 3×3-Fenster, stempelt die imap an
+der eigenen 2×2-Fläche vorübergehend frei, prüft **5 Spalten × 6 Zeilen**.
+⭐ Damit ist geklärt, **woher der Aufrufer die Lagerstättennummer erfährt**:
+aus dem Rückgabewert.
+⚠ **Negativbefund:** die Lagerstättentafel ist in **35 von 36** Prüfdateien
+vollständig leer; nur `8.DM` trägt einen Eintrag. **Lagerstätten entstehen zur
+Laufzeit, nicht beim Laden.**
+
+**`0x433460` — Direktsteuerung.** Sendet **Befehl 2** bei Richtungsänderung per
+Maus, **Befehl 1** bei Pfeiltaste, **Befehl 8** für sec19-Objekte.
+> **Zahl: 3/3.** Alle drei Absendestellen stehen wortgleich in der vorhandenen
+> `COMMAND_SENDERS.txt`. **Nullmodell:** die Datei nennt 94 Befehlsnummern an 140
+> Stellen — dass drei geratene Stellen exakt treffen, ist ausgeschlossen.
+
+**`0x4223A0` — Entwicklerprüflauf.** Baut `1.cwm` … `99.cwm`, dann
+`net1.cwm` … `net99.cwm`, prüft jeden auf Vorhandensein und lädt ihn.
+⭐ **Damit ist der vollständige Namensraum der Karten festgeschrieben: 1…99 und
+net1…net99.**
+
+### BE.5 ⚠⚠ »0 Rufer« war ein Werkzeugfehler — und er hätte die Fensterprozedur für tot erklärt
+
+| Prüfung | C `0x404170` | F `0x404150` |
+|---|---|---|
+| direkte `call`-Ziele | 0 | 0 |
+| Relokationseinträge mit der **Funktionsadresse** | 0 | 0 |
+| die vier Adressbytes irgendwo in der Datei | **0** | **0** |
+
+Nach dieser Tafel wäre sie unerreichbar. **Sie ist es nicht.** Der Weg führt über
+den **Thunk**: C `0x401541` → `0x404170`, und ein Relokationseintrag bei
+`0x403DB9` trägt **die Thunk-Adresse**. Die Stelle ist
+`DialogBoxParamA(hInst=0, Vorlage=130, Eltern, Prozedur=Thunk, 0)`, gerufen aus
+**`CWorms Player`**. `0x404170` ist eine `stdcall`-Prozedur mit `ret 0x10`, die
+auf `WM_INITDIALOG` und `WM_COMMAND` verzweigt — **die Dialogprozedur der
+Mehrspieler-Sitzungsauswahl.**
+
+⚠⚠ **Das ist die Thunk-Regel in neuer Gestalt.** Sie sagt »Thunks aufdröseln,
+sonst misst man 0 Rufer«. Sie gilt genauso für die **Adressübergabe**: der
+Thunkblock ist ein lückenloses Feld aus `E9`-Sprüngen **ohne `0xCC`-Polsterung**,
+also findet ihn keine Polsterungssuche; und wer nach der Adresse der *Funktion*
+sucht statt nach der des *Thunks*, findet nichts.
+
+**Die Volkszählung, korrekt gerechnet** (Thunkfeld vollständig aufgezählt:
+**C 1109, F 1107**; unerreichbar = weder gerufen, noch Thunk gerufen, noch
+Funktion oder Thunk in der Relokationstafel):
+
+| | Spielfunktionen (< `0x4D6000`, ohne Thunks) | unerreichbar |
+|---|---:|---:|
+| C | 1107 | **59 = 5,3 %** |
+| F | 1107 | **59 = 5,3 %** |
+
+⚠ Vorher waren es 66 in C. Die sieben Differenzfunktionen sind genau die, deren
+Adresse über einen Thunk genommen wird — **darunter `0x412E30`, die
+Fensterprozedur**, die ganz sicher läuft. **Wer die Thunks nicht aufzählt,
+erklärt die Fensterprozedur für tot.**
+
+### BE.6 ⭐ Der Einheitentakt, in seiner Reihenfolge
+
+`move units` = `0x406CD0`, **13688 Byte, ein Rufer, 111 eigene Protokollmarken**.
+
+```
+je Satz  edi = 0x6E26C8 + 78·i,  i = 0 … 7999
+  byte[+0x09] == 0xFF  ->  naechster Satz
+  "move unit: <i>" · "rnd X1" · "step: <Takt>"
+  UKOL entscheidet:
+     == 0x32 (50)   Tuerzelle: sec20 muss 0x63 sein, imap-Nachbar < 8000,
+                    Spieler aktiv — sonst STIRBT die Einheit
+     == 0x33 (51)   im Gebaeude: byte[+0x15] ist die GEBAEUDENUMMER;
+                    Besitzer und Typ muessen stimmen — sonst STIRBT die Einheit
+     == 0x64 (100)  eigener Zweig
+  "likvid typ:"  Verschrottung
+  Nachladezaehler: Gattung != 1 && +0x39==0 && +0x0D!=0 -> word[+0x32] := 10
+                   sonst  word[+0x32] > 0 -> dec      <-- hier laeuft die Infanterie ab
+  byte[+0x0E] == 0x42  ->  Gasabsauger
+  "move kolik:" · "on square" · "no fuel" · "move L".."move Q"  (Bewegung)
+  ->  "Test shooting unit"  ->  SCHUSS
+  "attack A".."attack G" · "stay A|B" · "check transporter"
+  "MINE A|B|C"  ->  Lagerstaettenpruefung
+  "trans A"  ->  BE-/ENTLADEN     ·  "wait A|B|C"  ->  BE-/ENTLADEN (zweiter Weg)
+"move units end"
+```
+
+⭐ **Die Reihenfolge:** Lebendprüfung → UKOL-Sonderfälle (mit **Todesfolge**) →
+Nachladezähler → Gas → Bewegung → **Schuss** → Standverhalten → Bau/Mine →
+Umschlag. **Der Schuss kommt NACH der Bewegung, das Nachladen davor — eine
+Einheit, die in diesem Takt fährt, kann im selben Takt schiessen.**
+
+⭐ Nebenbefund: **`byte[+0x15]` ist die Gebäudenummer, in der die Einheit
+steckt.** ⚠ Da es ein Byte ist, **können nur die Gebäude 0…255 von 300 Einheiten
+aufnehmen.**
+
+### BE.7 ⚠⚠ BERICHTIGUNG AN `GAMESTATE_RE.md` §2: sec5 hat KEIN Besitzerfeld
+
+Dort steht `+0x02 u8 owner (player 0–7)` und `+0x03 team/owner-dup`. **Das ist
+falsch.** Der Besitzer steckt **allein in der Satznummer** (`nummer / 1000`).
+
+**Gemessen über 3154 lebende Einheiten — alle 78 Feldversätze geprüft, ob sie
+`nummer/1000` sind:**
+
+| Feld | Treffer |
+|---|---|
+| `+0x15` (bester) | 1303/3154 = **41,3 %** |
+| `+0x2F` | 1247/3154 = 39,5 % |
+| **`+0x02`** | **638/3154 = 20,2 %** |
+| **`+0x03`** | **660/3154 = 20,9 %** |
+
+> **Nullmodell: ein echtes Besitzerfeld ergäbe 3154/3154 = 100 %.** Kein einziges
+> Feld kommt in die Nähe. Die 41 % bei `+0x15` erklären sich, weil
+> Blickrichtungen mit der Startseite korrelieren — Zufall wären 12,5 %.
+
+⭐ **Was `+0x02` und `+0x03` stattdessen sind: Richtungsfelder.**
+24 Schreibstellen für `+0x02`; geschriebene Sofortwerte sind `0`, `7`, `0x0F` —
+**nie ein Spielerindex**. Sechs davon schreiben unmittelbar den Rückgabewert
+einer Richtungsroutine. `+0x03` wird gegen die 8er-Richtung aus einem Mausdelta
+verglichen — es ist die **Sollrichtung**.
+Werteverteilung `+0x02`: **0…7 tragen 3132 von 3154 (99,3 %)**, 8…15 die
+restlichen 22 — eine 16er-Richtung, von der Bodeneinheiten fast nur die geraden
+acht benutzen.
+
+**Vier Felder bekommen einen Namen:**
+`+0x32` (Wort) = **Nachladezähler**, 0 = feuerbereit ·
+`+0x3D` (Byte) = **Nachladezeit** in Takten ·
+`+0x47` = **Bildphase** (beim Schuss `0x0B`) ·
+`+0x0B` = **Waffenuntertyp der Infanterie** (`+0x0D = 0xBE + (+0x0B)/2`, 879/879).
+
+### BE.8 ⭐ Ein ELFTER Auslieferungsunterschied — und eine Bestätigung des zehnten
+
+Alle elf Paare wurden **befehlsweise** verglichen (Mnemonik + Operanden, Adressen
+entfernt; zusätzlich **registerblind**).
+
+⚠ **Verworfen: 7 Fundstellen**, alle **Sprungtafeln hinter einem `ret`**
+(`0x40EFA4`, `0x43BD34`, `0x441A60`, `0x441AAC`, `0x434EE0`, `0x410C84`,
+`0x40EBF8`). Aufgezählt statt abgetastet stimmen sie **restlos** überein.
+⚠ Ebenfalls verworfen: `0x434700` (53 Blöcke) und `0x439D20` (7 Blöcke) — nach
+registerblindem Vergleich bleibt nur Registerzuteilung und umgedrehte
+Vergleiche. Vier weitere sind **byteweise identisch**.
+
+**⭐ Unterschied A — bestätigt den 22-fachen aus BD.4.** In `0x42EE10` hat C
+`cmp cl, 0x46 / jae`, F nicht — genau eine der 22 Stellen. **Zwei unabhängige
+Läufe, derselbe Befund.**
+> **Nullmodell:** die Zeichenliste hat in **beiden** Auslieferungen genau **70**
+> Zeilen, unabhängig aus der Nullungsschleife hergeleitet (`0x557BC / 0x138A = 70`
+> glatt, in C und F). Dass ein beliebiger Vergleichswert ausgerechnet diese Zahl
+> trifft, hat 1/256.
+
+**⭐⭐ Unterschied B — NEU, der elfte: `0x410940` hat in C drei Wächter, in F
+keinen** (+80 Byte):
+```
+C 0x41096E  cmp word[sec48+0x0C], dx   ; traegt der Umschlagsatz WIRKLICH diese Einheit?
+C 0x410994  cmp byte[sec48+0x0E], 0    ; Satz gueltig?
+C 0x4109A2  +0x00..+0x03 alle 0xFF ?   ; ueberhaupt eine Ware bestellt?
+```
+In F fehlen **alle drei**; die Funktion geht direkt in den Umschlag. Zusätzlich
+zieht C das Kopieren `word[+0x30] → word[+0x2E]` **hinter** die Wächter, während
+F es unbedingt macht.
+⭐ **Gegenprobe:** die beiden Rufstellen sind in C und F **befehlsgleich** — kein
+ausgleichender Test auf der Aufruferseite. **Der Unterschied ist echt und nicht
+verlagert.** Beides sind Härtungen in Richtung der **späteren** Fassung.
+
+### BE.9 ⚠ Was offen blieb, und wodurch das Verfahren blind ist
+
+1. ⚠ **Woher `+0x3D` (die Nachladezeit) kommt** — nicht aus Waffe oder Untertyp
+   ableitbar. Vermutlich eine Entwurfs- oder Forschungstafel, nicht gesucht.
+2. ⚠ **Die Tafel `0x591F00`** (Schritt 68), die `0x433460` für Befehl 8 abfragt:
+   **12 Lesestellen, 0 Relokations-Schreiber** — sie wird über einen Zeiger
+   gefüllt, und genau das findet die Relokationstafel nicht. `--block` lief nicht.
+3. ⚠ `byte[0x4FACD0]` (Warenannahme je Gebäudetyp) wurde **benutzt, nicht
+   ausgelesen**.
+4. ⚠ **Was sec41 (1000 × 10 B) enthält** — bekannt ist nur, dass es als
+   Elementart `0x11` gezeichnet wird und an der Sichtkarte hängt.
+5. ⚠ **`+0x40` ist DREIFACH belegt** (sec48-Index, Gas-Merker, Bildnummer).
+   Welche Regel auswählt, ist nicht gefunden; in den Prüfdaten tritt der Konflikt
+   nicht auf (0/8) — **das beweist aber nichts über den Code.**
+6. ⚠ **Berechnete Sprungziele** bleiben unsichtbar. Die 59 unerreichbaren
+   Funktionen sind »unerreichbar, **soweit aufzählbar**«.
+7. ⚠⚠ **Eine byteweise C/F-Maske allein taugt nicht für Regel 1.** Die erste
+   Maske meldete für `0x434700` **712** abweichende Bytes; der befehlsweise,
+   registerblinde Vergleich zeigte, dass **keiner davon Bedeutung trägt**.
+8. ⚠ **Ein einziger Rufer heisst nicht »unwichtig«.** `move units` (13 688 B) und
+   der Zeichenlisten-Taktgeber (122 B) haben je **einen** Rufer und sind das Herz
+   des Spiels. **Die Rufer-Spalte hat bei `0x434700` und `0x43BA30` fast in die
+   Irre geführt.**
+9. ⚠ **Keine Prüfstände.** Alle Zahlen stammen aus dem Abbild und den
+   Kartendateien, keine aus einem laufenden Spiel. Für die Taktreihenfolge wäre
+   das der nächste ehrliche Schritt.
