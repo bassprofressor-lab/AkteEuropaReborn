@@ -3313,3 +3313,621 @@ Schritt, Schluss bei 255 und die 19-zu-1-Regel stehen bei uns schon genau so.
 * `0xFFFD` in der Weltkarte (1070 abgebrannte Felder tragen es statt `0xFFFE`),
   und 32 der 108 brennenden Felder tragen noch eine lebende Waldkachel.
 
+
+---
+
+## AE-2. ⭐⭐ Der Vorspann ist VOLLSTÄNDIG gelesen — und ein Drittel unseres Baus war falsch (21.08.2026)
+
+Abschnitt AE hatte 25 der 34 Tore als »Bauteil der angewählten Einheit« gelesen
+und die übrigen neun als »ohne Bedingung« abgelegt. Beides war zu kurz gegriffen.
+Der Block ist jetzt **Befehl für Befehl** gelesen, in beiden Auslieferungen:
+C `0x497540…0x49814D`, **F `0x496E50…0x497A5E`**. Strukturvergleich **72 Zeilen,
+0 Unterschiede** — dieser Block ist in C und F derselbe.
+
+Versätze F→C an dieser Stelle: `.bss` +0xFA0, `.data` **+0xFF8** für `0x4F90D0` /
+`0x4F928C`, **+0xF98** für `0x538998` / `0x53899C`.
+
+### ⭐ Die Missionsschranke ist eine Zahl, keine Auslegung
+
+`cmp word[C 0x539934], 0x32; jge Ende` @C `0x497643` — der ganze Block läuft nur
+bei **Missionsnummer < 50**. `word[0x539934]` ist belegt als die Missionsnummer:
+es ist genau die Variable, aus der der Missionsverteiler unmittelbar hinter dem
+Block liest (`movsx eax,word[…]; cmp eax,0x22`).
+
+### Der Block prüft VIER Dinge
+
+| Art | Tore | woran |
+|---|---:|---|
+| `einheit_feld` | 26 | ein Satzfeld der ANGEWÄHLTEN Einheit |
+| `gebaeude_vorhanden` | 4 | `zaehle_gebaeude(typ, 0) != 0`, dazu eine Missionsschranke |
+| `fenster_geoeffnet` | 3 | `byte[C 0x539930]` == Fensterart, danach auf 0 zurück |
+| `flughafen_platz_belegt` | 1 | ein Flugzeug auf **Stellplatz 0** eines eigenen Flughafens |
+
+Neu belegte Sockel: `byte[C 0x539930 / F 0x538998]` = **Ereignisbyte**, die Art
+des zuletzt geöffneten Fensters (Schreiber C `0x441270`: `al = byte[44324·Fenster
++ 0x8B9038]`, ausser Art 3, der Karte). `C 0x401893 → 0x4CFA70` =
+`zaehle_gebaeude(typ, besitzer)` über die Gebäudetafel `0xC06914`, Schrittweite
+76, 255 Sätze.
+
+### Die neun
+
+| v[] | C | was wirklich geprüft wird | Text |
+|---:|---|---|---:|
+| 346 | `0x497D57` | `+0x43 == 55` — **rob_prod**, der Entwurfsplatz | 67 |
+| 372 | `0x497F02` | Mission > 16 **und** Typ 6 **oder** 12 → Bahnstation/Feldbahnhof | 72 |
+| 373 | `0x497F52` | Ereignisbyte == 2 → Fenster »Bahnhof«; setzt es danach auf 0 | 73 |
+| 374 | `0x497F86` | Mission > 12 **und** Typ 7 → Generator | 74 |
+| 375 | `0x497FC5` | Mission > 16 **und** Typ 9 → Flughafen | 75 |
+| 376 | `0x498004` | Ereignisbyte == 5 → Fenster »Hangar« | 76 |
+| 377 | `0x498038` | Mission > 12 **und** Typ 10 → Mine | 77 |
+| 378 | `0x498077` | Ereignisbyte == 18 → Fenster »Terranium-Mine« | 78 |
+| 381 | `0x4980AB` | v[375] muss gefeuert haben, dann: eigener Flughafen mit belegtem Platz 0 | 81 |
+
+⭐ **Die Gegenprobe an `HELPG.TXT` trägt jede einzelne Deutung — und sie war nicht
+Teil der Ableitung:** #72 »**Bahnstationen** bilden Kreuzungen von Bahnstrecken…«
+↔ Typ 6/12 · #74 »**Generatoren** fügen Ihrer Wirtschaft weitere Energie hinzu…«
+↔ Typ 7 · #75 »Im **Flughafen** können Sie Flugzeuge bauen…« ↔ Typ 9 · #76 »Im
+**Hangar** werden Flugzeuge automatisch repariert…« ↔ Fensterart 5 · #78 »Im
+**Mineninfofenster** finden sich Informationen über Lagerhaltung und Ausstoß…«
+↔ Fensterart 18.
+
+Die Form der drei neuen Arten, je einmal:
+
+```
+; v[374] — GEBAEUDE  (C 0x497F86)
+  cmp word[0xBC597C], 0        ; v[374], schon gezeigt?
+  cmp word[0x539934], 0x0C     ; Missionsnummer, > 12 verlangt
+  push 0 ; push 7 ; call 0x401893   ; zaehle_gebaeude(typ=7, besitzer=0)
+  test ax, ax ; je raus
+  inc word[0xBC597C] ; show_text2(100, 200, 74, 0)
+
+; v[378] — FENSTER  (C 0x498077)
+  mov al, byte[0x539930]       ; Art des zuletzt geoeffneten Fensters
+  cmp al, 0x12                 ; 18 = Terranium-Mine
+  show_text2(70, 150, 78, 0)   ; ANDERE Koordinaten
+  mov byte[0x539930], 0        ; Ereignis verbraucht
+
+; v[381] — FLUGHAFEN BELEGT  (C 0x4980AB)
+  cmp word[0xBC597E], 0        ; v[375] MUSS schon gefeuert haben
+  schleife (cl = 0..254):
+     ebx = 76*cl
+     byte[ebx + 0xC06914] == 9              ; typ 9 = Flughafen
+     byte[ebx + 0xC06915] == byte[0x4FA284] ; eigener
+     b = byte[ebx + 0xC06929]               ; +0x15 cis_typ
+     byte[52*b + 0x879443] != 0xFF          ; STELLPLATZ 0 belegt
+```
+
+`0x879443` ist **sec27, die Flughafentafel** (50 × 52, Sockel `0x879438`);
+`+0x0B` ist der **erste Stellplatz**, `0xFF` = frei. ⚠ Gelesen wird **nur Platz
+0**, nicht »irgendein Platz«.
+
+### ⚠⚠ Drei Fehler in den 25 schon gebauten Toren
+
+| Betrifft | stand da | ist |
+|---|---|---|
+| v[347], v[356…369] — **15 Tore** | nur `top_spec == Wert` | zusätzlich **`ZBRAN == 0`** davor (`test cl,cl; jne raus`) — **nur unbewaffnete Einheiten** |
+| **v[371]** | `feld 15, werte [19, 172]` | **`+0x0D != 19`** (Ausschluss) **und** `+0x0F == 172` — kein Oder |
+| Koordinaten | überall 100/200 | **v[373], 376, 378, 381** zeigen bei **70/150** |
+
+⚠ **Die Blockreihenfolge ist nicht die Variablenreihenfolge:** v[347] steht
+zwischen v[358] und v[359], v[346] zwischen v[367] und v[368]. Beide sind
+nachträglich eingeschoben — und genau sie sind die zwei Ausreisser der Probe
+`Text = v − 300`.
+
+### ⭐ Beide Ausreisser sind aufgelöst
+
+**v[346] → Text 67:** `Text = v − 300` scheitert nicht an der Auslesung, sondern
+daran, dass **eine Textnummer doppelt vergeben ist**. v[367] zeigt denselben Text
+67 über `top_spec == 79` (Komponentenzeile »Zielfokus«). Es gibt zwei Wege zum
+Fokussierer: die fertige Einheit »Target« (Entwurfsplatz 55, ab Zustand 30
+freigeschaltet) und die Ausrüstung »Zielfokus« an einer selbst entworfenen.
+HELPG #67: »@**Fokussierer** können in Feindgebiet eingeschleust und von
+Mittelstreckenraketen direkt angezielt werden.«
+
+**v[347] → Text 19:** richtig ausgelesen (`ZBRAN == 0` und `top_spec == 69` =
+»Fallenräumer«, `push 0x13`). ⚠ **HELPG #019 ist eine LEERE Marke** — die Zeile
+`#019` steht da, der Rumpf fehlt. Das Tor zeigt im Original ein leeres Fenster.
+
+⚠ **HELPG #081 gibt es gar nicht** — die erste Textgruppe endet bei #080.
+Gemessen nur an `F:\Akte Europa\HELPG.TXT`; die C-Auslieferung hier hat keine
+Datendateien, also ist das **ein halber Befund**.
+
+### ⚠ Ein Widerspruch im ORIGINAL, nicht bei uns
+
+v[372]/374/375/377 zählen Gebäude von **Besitzer 0** (feste Zahl), v[381]
+vergleicht gegen **`byte[0x4FA284]`** (den Betrachter). In der Kampagne ist beides
+dasselbe; im Gefecht wäre es das nicht — dort läuft der Block ohnehin nicht.
+
+### Was offen bleibt
+
+* **Warum v[377] (Mine, Typ 10) den FABRIK-Text #77 zeigt.** Der Code ist
+  eindeutig (`push 0xa`), die Absicht nicht.
+* Ob `rob_prod == 55` in einer Kampagnenkarte wirklich »Target« heisst. Der
+  Entwurfsplatz ist bewiesen; der *Name* stammt aus sec47 von `3.DM`. Eine
+  Kampagnen-`.CWM` endet nach Sektion 38 und trägt sec47 gar nicht.
+* Die drei **Fenster** (Bahnhof, Hangar, Terranium-Mine) gibt es im Nachbau
+  nicht; ihre Tore sind übergangen und **gezählt**.
+
+---
+
+## AE-3. ⭐⭐ `+0x43` ist der ENTWURFSPLATZ — und unsere Untermissionen sind richtig gebaut (21.08.2026)
+
+Unser Nachbau las `+0x43` als **Missionsmarke**, die Neulesung als **`rob_prod`**.
+Beides kann nicht stimmen. Entschieden am Code, in beiden EXE:
+
+⭐ **Es ist EIN Byte mit EINER Bedeutung, und das Programm benennt sie selbst.**
+`create_unit` (C `0x4B34E0`, F `0x4B2E10`) trägt in beiden Auslieferungen die
+Zeichenkette **»WRONG ROB_PROD in PLACE!!!!«** (C `0x538568`). Sie wird gemeldet,
+wenn `byte[46·(arg1 + 200·Spieler) + 0x51CE38]` null ist — wenn `arg1` also auf
+einen **leeren Entwurfsplatz** zeigt. Elf Befehle später:
+
+```
+004B3556  lea ecx, [ebp + eax*8]            ; arg1 + 200*Spieler
+004B3562  mov al, byte[ecx+esi + 0x51CE38]  ; = sec47-Zeile, Feld +0x18
+...
+004B366E  mov byte[esi + 0x6E270B], bl      ; DASSELBE arg1  ->  +0x43
+```
+
+**`create_unit` schreibt in `+0x43` genau die Zahl, mit der es vorher die
+Entwurfszeile aufgeschlagen hat.** F ist Zeile für Zeile dasselbe.
+
+⭐ **Und die gute Nachricht:** `find_unit` (C `0x4D0F20`, F `0x4D0AD0`) vergleicht
+**denselben Versatz** (`cmp byte[esi + 0x6E270B], cl`; `0x6E270B − 0x6E26C8 =
+0x43`). Unser `find_unit_with_mark` ist damit **richtig gebaut**, und die darauf
+gestützten Untermissionen stimmen. Falsch war nur der **Name** im Kommentar — eine
+Berichtigung vom 10.08.2026 war nie in den C#-Kommentar durchgereicht worden.
+
+**26 Stellen in C, 26 in F**, eins zu eins dieselben Funktionen: drei Schreiber,
+dreiundzwanzig Leser (darunter die Fenster Basis, Patrol-Boot, Depot und
+»Mitnehmbare Einheiten«, die Produktion, `change_owner` und das Tor v[346]).
+**Kein Schreiber im Kartenladeweg** — und das ist kein Loch: eine Karteneinheit
+kommt als ganzer 78-Byte-Satz herein, `+0x43` steht schon in der Datei.
+
+⚠ **NEU, und für den Nachbau wichtig: die Entwurfstafel hängt an der GATTUNG.**
+
+| Gattung | Tafel | Schrittweite | Plätze je Spieler | Index | belegt @ |
+|---|---|---:|---:|---|---|
+| Land | sec47 `0x51CE20` | 46 | **200** | `n + 200·Spieler` | `0x4B3556`, `0x4B18BB` |
+| Schiff | `0x52EDA0` | 42 | **10** | `n + 10·Spieler` | `0x4B2BB2` |
+
+Wer `Mark` gattungsblind gegen sec47 auflöst, liest bei Schiffen die falsche
+Zeile. Für v[346] folgenlos: 55 ist als Schiffsplatz nicht darstellbar.
+
+### ⭐ `VRSEK = ZBRAN + 20` — für die 19 Waffen richtig, als REGEL falsch
+
+Es ist kein Rechenweg, sondern ein **Nachschlag** in Spalte `+0x0D` der
+Bauteiltafel `0x5045A0` (@`0x4B21B6`):
+
+| Bauteilzeilen | `+0x0D` | Differenz |
+|---|---|---|
+| **1…19** (Kanone … M-Bombe, die echten Waffen) | 21…39 | **genau +20**, 19 von 19 |
+| **65…79** (Teleporter … Zielfokus, die Ausrüstungen) | 40…54, **nicht der Reihe nach** | −21 bis −27 |
+| 80…88 (Schild, Kamikaze, Spiegel …) | 0 | — |
+
+Unsere Tafel `EquipMountOrder` ist **exakt** diese Spalte — sie war richtig, sie
+ist jetzt auch **hergeleitet** statt abgeschrieben.
+
+⭐⭐ **Und der Punkt, der unseren eigenen Fehler am Code bestätigt: `ZBRAN` lässt
+sich aus `VRSEK` grundsätzlich nicht zurückrechnen.**
+
+```
+FAHRZEUG (Antrieb >= 150)              INFANTERIE (Antrieb < 150)
+  +0x0B SPODEK = Entwurf +0x2C           +0x0B SPODEK = 2*Waffe - 124
+  +0x0C VRSEK  = Entwurf +0x2D           +0x0C VRSEK  = 0        <-- fest null
+  Waffe >= 50 ? +0x0D=0, +0x0E=Waffe     Waffe > 192 ? +0x0D=0, +0x0E=Waffe
+              : +0x0D=Waffe, +0x0E=0                 : +0x0D=Waffe, +0x0E=0
+```
+
+(C `0x4B36E2…0x4B373C`, F `0x4B3012…0x4B306C`, Befehl für Befehl gleich.)
+**Es gibt keine Umkehrung, die 0 liefert** — und genau auf 0 prüfen fünfzehn Tore.
+Unsere Kontexthilfe rechnete `Weapon − 20` und machte damit die häufigste
+Bedingung des ganzen Blocks unerfüllbar. Sie liest jetzt die Rohbytes.
+
+### ⚠ Ein Nebenbefund, nicht verfolgt
+
+`MapEntityLayer.cs` begründete den Schiffs-Aufsatz mit »der Kampftakt @0x40DE1E
+prüft `test al,al` auf **+0x0C**«. Am Code steht dort **`+0x0D`**:
+
+```
+0040DDF0  mov al, byte[edi + 0x6E26D5]   ; +0x0D ZBRAN
+0040DDFE  mov cl, byte[edi + 0x6E26D4]   ; +0x0C -- nur gegen 0x26 (Flak) geprueft
+0040DE1E  test al, al                     ; al ist +0x0D, NICHT +0x0C
+```
+
+**Der Unbewaffnet-Schalter ist ZBRAN, nicht VRSEK** — und das passt zusammen:
+Infanterie hat `+0x0C == 0` und kämpft trotzdem. Der Schluss der Notiz (Schiffe
+brauchen einen Aufsatz) kann aus anderem Grund richtig bleiben; die zitierte
+Begründung zeigt aufs falsche Feld.
+
+---
+
+## AH. ⭐⭐ sec58 gelöst, sec32 hart belegt — und ein Werkzeugfehler, der unsere Negativbefunde betrifft (21.08.2026)
+
+### ⚠⚠ ZUERST DIE WARNUNG, denn sie betrifft alles davor
+
+Beide EXE tragen eine vollständige **Relokationstafel** — C 31 848, F 31 776
+Einträge, davon **31 650 / 31 578 im `.text`**. Jede absolute Adresse, die
+irgendwo im Bild als Konstante steht, ist damit **aufzählbar statt suchbar**.
+Das ersetzt den Adressabtast durch eine Vollerhebung.
+
+⚠⚠ **Und dabei ist herausgekommen: ein naiver Linearabtast des `.text` mit
+capstone bricht STILL AB** — C nach 78 845 Befehlen bei `0x42BC1D`, F schon nach
+16 622 bei `0x409FAE`. Das sind **4 % bzw. 18 %** des Abschnitts. Mit
+Resynchronisation (bei Fehlschlag ein Byte weiter) sind es **443 471 / 442 952**
+Befehle.
+
+**Wer so gesucht und nichts gefunden hat, hat nichts gesucht.** Jeder frühere
+»kein Treffer«-Befund, der auf einem Linearabtast beruht, steht auf Sand und
+gehört nachgelaufen. Das ist die zweite Falle dieser Art nach `sec101` (dort war
+es ein `rep movsd`, das die Adresse ins Register lud).
+
+### ⭐ sec58 (16 B, C `0xB38D40` / F `0xB37DA0`) ist der UMLAUFZEIGER der KI-Bauschlange
+
+**8 Spieler × 2 Byte.** Byte 0 = Lesezeiger 0…49 in die 50 Einträge lange
+Bauschlange dieses Spielers (**sec63**, 8 × 50 × 3 B, C `0xBC51D0`). Byte 1 wird
+von keinem Befehl angefasst.
+
+Sechs Fundstellen, in beiden EXE gleich (44/44 Befehle im Fenster ±16 B stimmen
+in Versatz, Mnemonik und Operandenform überein): Speicherer C `0x41D7D0`, Lader
+C `0x41E84A`, Neustart C `0x41EFC5`/`0x41EFCA`, **Lesen** C `0x4BB9DE`
+(`mov al,[ebx*2 + sec58]`), **Schreiben** C `0x4BBA79`.
+
+**Die Funktion, vom Spiel selbst benannt** — `ai_production`, C `0x4BB9A0` /
+F `0x4BB460`, in F befehlsgleich:
+
+```
+ai_production(byte spieler):
+    log("AI: production ", spieler)
+    wenn sec59[spieler] == 0:  log("AI: no production - no transport");  ret
+    z = sec58[2*spieler]
+    wenn z == 0xFF:            log("AI: no production - nothing to do "); ret
+    satz = &sec63[(50*spieler + z)*3]
+    wenn satz[0] == 0:  0x4BB1E0(satz[1], ...)   // "AI: production in base "
+    wenn satz[0] == 1:  0x4BB3D0(satz[1], ...)   // "Build in airp"
+    z = z + 1
+    wenn z > 49 ODER sec63[(50*spieler+z)*3] == 0xFF:  z = 0
+    sec58[2*spieler] = z
+```
+
+**Getaktet:** einziger Aufrufer ist der KI-Takt (C `0x4BFB80`, Protokollname
+»AI«), der über `Takt % 50` 20 Aufgaben auf 49 Plätze verteilt; die Produktion
+ist **Fall 4 = `Takt % 50 == 5`**. Also **ein Schlangeneintrag je Spieler alle
+50 Takte**.
+
+### ⭐ Die Gegenprobe MIT Nullmodell
+
+Die tragende Vorhersage aus dem Code: der Zeiger wird nur auf 0 oder auf einen
+Platz gesetzt, dessen Art-Byte ≠ `0xFF` ist — also `zeiger < Schlangenlänge`.
+
+| Prüfung | Treffer |
+|---|---|
+| **`zeiger < Schlangenlänge`, 14 × 8 Plätze** | **112/112 = 100 %** |
+| ungerade Bytes (hohes Byte) alle 0 | 112/112 = 100 % |
+| sec63-Art-Byte ∈ {0, 1, 0xFF} | 5 600/5 600 = 100 % |
+| Schlangen lückenlos (`0xFF` am Stück am Ende) | 112/112 = 100 % |
+
+**Die Nullmodelle** — Zeiger von Spieler p gegen die Schlange von Spieler p+k:
+
+| k | **0 (die Deutung)** | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|---|
+| Treffer | **100 %** | 41,2 % | 0 % | 29,4 % | 0 % | 17,6 % | 23,5 % | 5,9 % |
+
+Dazu: Schrittweite 1 statt 2 → **50 %**. Gleichverteilter Zufallszeiger → **21,5 %**.
+
+**Was in den Schlangen steht** (327 belegte Sätze): Art 0 → »AI: production in
+base« (Argumente 50…124, 282 Stück), Art 1 → »Build in airp« (Argumente 0/1/4,
+45 Stück), `0xFF` → Endmarke (5 273). Bodeneinheiten gegen Flugzeuge, sauber
+getrennt.
+
+### ⚠ Zwei Grenzen bei sec58 — und eine Falle für den Nachbau
+
+1. **Der `0xFF`-Zweig ist praktisch unerreichbar.** Der einzige Schreiber legt
+   nur 0…49 ab, und die Neustart-Nullung setzt **0**, nicht `0xFF`. In allen 14
+   Dateien: 0/112.
+2. ⚠⚠ **Frischstart aus `.CWM`:** `.CWM` lädt nur sec1…38, also weder sec58 noch
+   sec63. Beide werden genullt (sec63 per `rep stosd` über 1 200 B). Die
+   **richtige** Füllung mit der `0xFF`-Endmarke macht erst eine zweite Stelle:
+   8 × 50 mit Schrittweite 3, C `0x488305` (`eax`) / F `0x4869C5` (`ecx`).
+   **Wer im Nachbau nur nullt, bekommt 50 Sätze »Art 0, Argument 0« statt einer
+   leeren Schlange** — die KI baute dann endlos Einheit 0.
+
+**Nachbarn nebenbei:** sec59 (8 B, C `0xB46950`) = Transport vorhanden, je
+Spieler 1 Byte, sperrt die Produktion komplett. sec63 wird von »Cannot add new
+'vyroba'« (C `0x4CF640`) gefüllt, das den ersten `0xFF`-Platz von 50 sucht.
+
+### ⭐⭐ sec32 Zeile 9 und 10: der Negativbefund HÄLT — jetzt belegt statt vermutet
+
+Fünf voneinander unabhängige Wege, alle in **beiden** EXE:
+
+| Weg | C | F |
+|---|---|---|
+| Relokationen mit Wert im Fenster [Basis−64, Basis+233) | 75 | 75 |
+| davon im Puffer selbst [0, 169) | 52 | 52 |
+| **davon Schreibstellen** | **39** | **39** |
+| **betroffene Zeilen** | **{1,2,3,4,6,12}** | **{1,2,3,4,6,12}** |
+| **Schreibstellen in Zeile 9/10 (Versatz 117…142)** | **0** | **0** |
+| `rep stos`/`rep movs`, die den Puffer überlappen | 0 von 210 | 0 von 214 |
+| Zeigerschleifen mit bekanntem Ende, die überlappen | 0 von 169 | 0 von 173 |
+| **Relokationen, die die Initialisiereradresse tragen** | **0** | **0** |
+
+Der letzte Punkt schliesst die Hintertür, die bei totem Code immer offenbleibt:
+**die Adresse `0x4AFB20` / `0x4AF450` steht nirgends als Datum.** Ein indirekter
+Aufruf ist damit ausgeschlossen, nicht nur unwahrscheinlich.
+
+### ⭐ Der Beleg, der trägt: der tote Initialisierer trifft die Datei zu 100 % — ausser in Zeile 9 und 10
+
+Beide Initialisierer symbolisch ausgewertet (39 Schreibstellen, 0 unaufgelöst,
+**C und F erzeugen bitgleiches Ergebnis**) und gegen den Dateiinhalt gehalten:
+
+| Messung | Wert |
+|---|---|
+| **ausserhalb Zeile 9/10** | **143/143 Byte = 100 %** |
+| innerhalb Zeile 9/10 | 18/26 Byte = 69,2 % |
+| gesamt | 161/169 = 95,3 % |
+
+Der Initialisierer ist **kein Näherungswert, sondern eine exakte, aber
+unvollständige Fassung** derselben Tafel. Ihm fehlen genau zwei Zeilen.
+
+⭐ **Und Zeile 9 und 10 sind byteidentisch mit Zeile 2, 3 und 4** (`01 06 02 01`,
+die Fabrikzeile) — genau das, was jemand tut, der zwei Gebäudearten nachträgt: er
+kopiert die Fabrikzeile. Der Initialisierer ist schlicht der **ältere Stand**,
+11 Gebäudearten statt 13, und wurde nach dem Nachtragen nie wieder angefasst,
+weil er da längst tot war.
+
+### ⭐ Der Bestand ist 37 Dateien, nicht 14
+
+| Bestand | Dateien | sec32 byteidentisch |
+|---|---:|---|
+| `game.007` | 1 | (Bezug) |
+| `1.DM … 13.DM` | 13 | 13/13 |
+| **alle `.CWM` in `Assets/Legacy/LEVELS`** | **23** | **23/23** |
+| **gesamt** | **37** | **37/37 = 100 %** |
+
+`.CWM` lädt sec1…38, sec32 liegt also **im Kartenformat**. Damit ist die Frage
+beantwortet, soweit sie beantwortbar ist: **der Karteneditor**, und für jede
+ausgelieferte Karte gleich. Die Tafel ist keine Karteneigenschaft, sondern eine
+Konstante, die das Kartenformat mitschleppt.
+
+**Und die Zeilen 9/10 sind kein Randfall:** über 14 Dateien tragen **17 Flughäfen
+und 45 Minen** = **62 Gebäude** diese Zeilen. Ohne die 169 Byte aus der Datei
+bekämen sie alle null Andockpunkte — der Bahnbau fiele dort lautlos aus.
+
+### ⭐ Nebenbefund: 13 Zeilen sind exakt richtig
+
+`rail_register` (C `0x4B00A0`, »Cannon build more 'rail-possible' buildings«)
+prüft **`cmp dl, 0xC; ja → 0xFF`**. Arten > 12 — und davon gibt es bis Art 73 —
+fallen vorher heraus. Die Zeilenwahl ist `[ecx + ebx*4 + Basis]` mit `ebx = 3·Art`,
+also **13·Art**. Dazu aufgeschlossen: **sec33** (960 B, C `0xA8D508`) ist das
+Verzeichnis der bahnfähigen Gebäude, Sätze à 8 B, und die Suchschleife läuft nur
+bis `0xA8D64A` — **höchstens 40 Einträge**.
+
+### ⚠ C gegen F bei sec32 — eine ehrliche Abweichung
+
+Die 52 Verweise im Puffer sind in C und F **nicht in derselben Reihenfolge und
+nicht mit denselben Registern** codiert (vier Stellen, alle im Leser). **Die
+Rechnung ist dieselbe**; es ist Registerwahl und Befehlsanordnung des Übersetzers.
+Die 39 Schreibstellen und ihre Zeilen sind deckungsgleich.
+
+### Was offen bleibt
+
+* **Warum** der Initialisierer tot ist — dazu bräuchte es eine dritte, frühere
+  EXE. Aus C und F allein nicht zu holen.
+* Das **dritte Byte** jedes sec63-Satzes: wird geschrieben, ist aber in allen
+  327 belegten Sätzen **0**.
+* Ob die 22 Zeigerschleifen je EXE mit laufzeitabhängiger Schranke wirklich nie
+  so weit laufen — das ist ein **Reichweitenargument, kein Beweis**. Die drei
+  nächstgelegenen sind einzeln nachgeprüft und begrenzt.
+* sec106 (8 B) und sec61 (8 B) sperren die KI-Produktion je Spieler; beide nur
+  angelesen.
+
+---
+
+## AI. ⭐⭐ Der Nebel, die Lagentafel und `0xFFFD` — drei Rätsel, drei Zahlen (21.08.2026)
+
+Alles hier ist **in beiden ausgelieferten EXE gelesen**.
+
+### AI.1 ⭐⭐ `0x63` ist die TÜRZELLE eines Gebäudes — 322 von 322
+
+Im **Gebäudetakt** (C `0x43CA54`, F `0x43BAF4`; die Protokollmarke mitten in der
+Schleife ist `"Bg: "`) läuft eine Schleife über **sec3** = 300 Sätze zu 76 Byte:
+
+```
+  C 0x43CAA9   cmp cl, 0x63          ; cl = Satz[0x0A], nur wenn > 99
+  ...          jeder zweite Takt, cl++
+  C 0x43CACD   cmp cl, 0xFA          ; bei 250:
+               Satz[0x0A] = 1, und wenn Satz[0x34] != 0:
+  C 0x43CB08   mov word[Zelle*2 + sec6],  0xFFFE
+  C 0x43CB12   mov byte[Zelle   + sec20], 0x63
+      Zelle = (Satz[0x00] + Satz[0x35])*256 + (Satz[0x02] + Satz[0x36])
+```
+
+`Satz[0x34]` ist das **Türkennzeichen**, `Satz[0x35]/[0x36]` der **Türversatz**.
+
+| | Treffer |
+|---|---|
+| **`sec20[(sp+Satz[0x35])·256 + (ze+Satz[0x36])] == 99`** | **322 / 322 = 100 %** |
+| Nullmodell x/y vertauscht | 3 / 322 = 0,9 % |
+| Nullmodell Nachbarzelle (+1 Zeile) | 0 / 322 = 0,0 % |
+| Nullmodell Zufallszelle | 1 / 322 = 0,3 % |
+| Nullmodell **ohne** Türversatz (Ankerzelle) | 0 / 322 = 0,0 % |
+
+Und die **Anzahl** stimmt in **14 von 14** Dateien aufs Stück.
+
+⭐ **Wozu die Tür da ist: der Gebäudegriff steht EINE Zelle davor.**
+`sec6[Türzelle − 1] == 60000 + eigener sec3-Index` → **322/322 = 100 %**, alle
+drei Nullmodelle 0/322. Die Griffsäule ist 2 bis 4 Zellen tief — **darum ist der
+scheinbare Fehler um eins in den Lesern keiner**: wer bei `K` oder `K+1` eine Tür
+findet und dann `sec6[K−1]` holt, trifft beide Male dasselbe Gebäude.
+
+**Wer `0x63` liest**, beide EXE: der Nebelspeicher-Zeiger (C `0x432367`), dasselbe
+auf sec20 (C `0x432462`), `infantry` (C `0x406D57`), `move units end`
+(C `0x40BB2E`: 99 → `xor al,al; ret` — **die Tür ist unbetretbar**), `shoot end
+false` (C `0x4116DA`), `Unit missing` (C `0x433E21`) und `Destroy ramp`
+(C `0x4CE6EF`: `cmp …,0x63; seta al; ret` — ein Prädikat »liegt hier ein Bauwerk
+(>99)?«).
+
+### ⚠ Berichtigung: es gibt KEINE 5×5-Umgebung
+
+Die Notiz »Zustand 1 sucht `0x63` in seiner 5×5-Umgebung« ist **falsch**.
+C `0x4116DA` liest **einen** festen Versatz `+0x1FE` = 510 = `2·256 − 2`, also die
+Zelle **(Spalte + 2, Zeile − 2)**. Kein Schleifenkopf. Die Funktion (C `0x411670`)
+ist der **Einstieg in die Basis** — und damit ein **zweiter, unabhängiger Beleg**,
+dass 99 die Tür ist:
+
+```
+  Einheitensatz[0x0B] == 0x49  und  [0x0E] == 0x47
+  sec20[Zelle + 510] == 0x63              ; die Tuer liegt bei (Sp+2, Ze-2)
+  cx = sec6[Zelle + 509] ; cl -= 0x60     ; 60000+n -> Gebaeudeindex n
+  sec48[Satz[0x40]][0x0F] == n            ; ist das MEIN Transportziel?
+  sec3[n][0x04] == 1                      ; und ist es eine Basis?
+  -> Satz[0x14] = 0x19
+```
+
+### AI.2 ⭐⭐ `0x542E18` ist NICHT das Geländefeld — es ist sec20, die Lagentafel
+
+Drei unabhängige Belege: die Ladertafel (sec20, 65536 B, C `0x542E18` /
+F `0x541E78`; `push 0x542E18` @C `0x41E514` Lader und `0x41D4BA` Speicherer), der
+Entladebefehl C `0x4CF100`, und die Werte selbst.
+
+**Die vollständige Wertetafel von sec20** — 14 Dateien:
+
+| Wert | Stück | was es ist |
+|---:|---:|---|
+| **0** | 317 428 | nichts, gewöhnlicher Boden |
+| **1 … 34** | 3 574 | **nummerierte Linienzüge** — ⚠ ungeklärt, s. u. |
+| **98** | 1 102 | Einzelzellen; 90,5 % tragen `0xFFFF` (gesperrt) in sec6 |
+| **99** | 322 | **Türzelle eines Gebäudes** |
+| **100 + n** | 264 | **Brücke/Mole Nr. n aus sec17** |
+| **200 + n** | 12 | **Rampe Nr. n aus sec21** |
+
+**Brücke am Code:** C `0x41C5BB` liest sec20, rechnet `sub ax, 0x64` und ruft
+damit **`Erase bridge`** (C `0x4CB0A0`). Die 100 ist die Basis, kein Schwellwert.
+Gefundene Brückennummern mit belegtem sec17-Satz: **19/19 = 100 %**, Nullmodell
+(Index + 7) **0/19**.
+
+⚠ **Ein Muster, das nicht aufgelöst ist.** Das Niederband 1…34 und das Brückenband
+100+n schliessen sich in allen 14 Dateien **gegenseitig aus**. Die Zellen eines
+Niederband-Werts bilden eine durchgehende **diagonale Kette** quer über die Karte.
+Eine erschöpfende Suche über alle Abschnitte 2…122 mit jeder Schrittweite 1…79
+findet **keine** Tafel, deren Belegung dazu passt. **Ungeklärt.** Der Code kennt
+zwei Unterbänder: `1…59` und `60…98`.
+
+### ⭐ Wo das Gelände WIRKLICH steht
+
+* **sec1** — `W·H·4`, Zeiger `dword[0x677E20]`, **zeilenweise** mit Schrittweite
+  `dword[0x542DC4]` = W. `word[+0]` = Kachelcode, `byte[+3]` = Klassenbyte.
+  Holer C `0x41D090` (Kachel), C `0x41D110` (Klassenbyte), Setzer C `0x41D140`.
+* **sec6** — die *imap*, `spalte·256 + zeile`, u16:
+
+| Bereich | Stück | Bedeutung |
+|---|---:|---|
+| `0xFFFE` | 142 828 | frei |
+| `0xFFFC` | 81 655 | Wasser |
+| `0xFFFD` | 50 967 | rau |
+| `0xFFFF` | 3 934 | gesperrt |
+| `50000 + n` | 30 738 | Waldplatz n aus sec18 (96,8 % exakt) |
+| `60000 + n` | 9 924 | Gebäudeplatz n aus sec3 (300 Plätze) |
+| `< 8000` | 2 198 | Einheitenplatz |
+| `10000…13999` | 290 | Infanteriezelle |
+| `≥ 60300` | 842 | ⚠ noch unbenannt |
+
+⚠⚠ **Berichtigung an einer Zahl, die wir zitieren:** `0xEA60` ist **60000**, nicht
+50000. Der Bereichstest im Aufdecker (C `0x420253`) prüft also **60000…60299 =
+die 300 Gebäudeplätze**, nicht den Wald.
+
+### ⭐ Der Nebelspeicher merkt sich den LAGENWERT, nicht das Gelände
+
+**Alle** Schreiber von `0x689710`, beide EXE — jeder ist entweder eine Nullung
+oder eine wortwörtliche Kopie aus sec20: C `0x437F55` (Missionsanfang, 256×256 auf
+0), C `0x41FEE5` / `0x420035` / `0x4202C5` (`fog[Z] := sec20[Z]`), C `0x4D57B6`
+(Nullung über Register).
+
+⚠ **Die indirekten Wege sind geprüft** — »kein Leser gefunden« heisst nicht »kein
+Leser«: C `0x4B7FC0`, `0x4B8937` und `0x4D5796` laden die Adresse in ein Register;
+es sind die zwei Kartenzeichner und ein Löschlauf, keine weiteren Schreiber.
+
+**Damit ist »ist es derselbe 0x63?« beantwortet: ja, zwangsläufig** — der
+Nebelspeicher enthält nur Werte, die aus sec20 stammen. ⭐ Und die Übersichtskarte
+(C `0x4B822A`) benutzt ihn so: `0` → nichts, `1…59` → eine Farbe, `≥ 60` → eine
+andere.
+
+**`0x678B58` = sec50, der Takt-Nebel: BESTÄTIGT.** `rep stosd` C `0x4205BF`,
+`= 1` bei C `0x420268`/`0x42029A` (jetzt gesehen), `= 2` bei C `0x41FFE7`/`0x420013`
+— das ist der **SAUM**.
+
+⚠ **Ein Fehler im Original, in beiden Fassungen gleich:** `0x3FFF·4 + 2 + 1 =
+65535` — die Nullung ist **ein Byte zu kurz**. Das letzte Byte von sec50 wird nie
+geräumt. Folgenlos (die Karte ist höchstens 254 breit), aber es steht so da.
+
+### AI.3 ⭐⭐ `0xFFFD` ist »rau« — und die 1070 sind ein Trugbild des Prüfstands
+
+`Can_go` (C `0x4053B6`/`0x4053BD`) nimmt für Infanterie **`0xFFFE` und `0xFFFD`**
+als begehbar; alles andere fällt in den Objektzweig (»Infantry go on wrong
+square«). Das deckt sich mit unserer schon gebauten Lesung.
+
+**Alle `0xFFFD`-Schreiber** liegen unter genau zwei Marken: **`Erase bridge`**
+(C `0x4CB471`, `0x4CB47B`, `0x4CB7D5`, `0x4CB7DE`) und **`Destroy ramp`**
+(C `0x4CBB4A`). `Erase bridge` räumt einen 3×2-Abdruck: sec20 auf 0, das Deck auf
+`0xFFFD` (rau = Trümmer), die Reihe darüber/darunter auf `0xFFFC` (Wasser ist
+wieder da).
+
+⭐ **Der Waldbrand schreibt NIE `0xFFFD`:**
+
+| Ausgang | sec6 wird | Protokollmarke | C |
+|---|---|---|---|
+| ausgebrannt, 19/20 | **`0xFFFE`** | `"dohorel forest - sjizdnej"` | `0x4CA43E` |
+| ausgebrannt, 1/20 | **`0xFFFF`** | `"dohorel forest - nesjizdnej"` | `0x4CA47F` |
+| durch Schaden entfernt (`zrus`) | **`0xFFFE`** | — | `0x4CADDA` |
+
+⚠ **Und hier die Falle, vor der die Regel warnt:** der Adressabtast findet nur
+**zwei** Schreiber des sec18-Zustandsbytes (C `0x4CACAE`, `0x4CADD3`). Der dritte
+— C `0x4CA3A2` / F `0x4C9F52`, das Ausbrennen — schreibt über `byte[esi+1]` und
+taucht in **keinem** Adressabtast auf.
+
+**Die Messung: die 1070 sind reproduziert — und tragen nichts.**
+
+| Stichprobe | `0xFFFD` | `0xFFFC` |
+|---|---|---|
+| Zellen freier sec18-Sätze (n = 6097) | **17,5 %** | 0,1 % |
+| **Zufallszelle derselben Karten** | **16,7 %** | 25,3 % |
+| Nachbarzelle eines lebenden Waldes | 10,7 % | 0,0 % |
+
+17,5 % gegen 16,7 % — **kein Unterschied**. Dass die Stichprobe trotzdem nicht
+zufällig ist, zeigt dieselbe Tafel: Wasser ist bei Zufallszellen 25,3 %, an diesen
+Zellen 0,1 % (Wald wächst nicht auf Wasser). Der Vergleich trägt also — und er
+sagt: **`0xFFFD` enthält keinerlei Aussage über Brand.**
+
+⭐⭐ **Der harte Beleg: 49 nie gespielte `.CWM`** — Karten, auf denen kein
+Spieltakt gelaufen ist — zeigen dasselbe Bild (1220 × `0xFFFD`). **Die
+»abgebrannten Felder« sind gar keine.** Ein freigegebener sec18-Satz behält seine
+alten Koordinaten (`zrus` setzt nur `Zustand = 0`), und der Karteneditor hat beim
+Bauen Bäume gesetzt und wieder gelöscht.
+
+### Und die »32 von 108 brennenden Feldern mit lebender Waldkachel«
+
+**Alle 108 tragen eine Waldkachel** — und das ist richtig so. Die Kachel wird erst
+beim **Ende** getauscht (`10381 + ((alt−10381) mod 57 / 19)·19 + Klassenbyte`, in
+`zrus` und im Ausbrennen identisch), nie währenddessen. In sec6 tragen **108/108**
+brennende Felder ihren Waldgriff `50000+n` (Nullmodell x/y vertauscht: 27,8 %).
+
+### ⚠ Zwei Berichtigungen an unseren eigenen Notizen
+
+1. **»14 Spielstände lesen sich restlos in alle 131 Abschnitte« stimmt nicht.**
+   Alle 14 gehen restlos auf (Rest = 0 B), aber nur `game.007` und `1.DM` reichen
+   bis **sec131**. `3…10.DM` enden nach **sec122**, `2.DM`/`11…13.DM` nach
+   **sec120**. Es ist das ältere Dateiformat (die 08.07.1997-Fassung aus AG).
+2. Der Nebelzeichner prüft nicht den »rechten Nachbarn«, sondern `Index + 1` —
+   bei `spalte·256 + zeile` ist das die **nächste ZEILE**, nicht die nächste
+   Spalte.
+
+### Was ungeklärt bleibt
+
+* **Das Niederband 1…34 in sec20** — Form und Geometrie stehen, die zugehörige
+  Tafel nicht.
+* **`sec20 == 98`**: 1102 Einzelzellen, 90,5 % davon `0xFFFF` in sec6. Ein
+  sperrender Aufbau — welcher, sagt keine Datei.
+* **`sec6 ≥ 60300`**: 842 Zellen, keiner Tafel zugeordnet.
+* **Die weiche Nebelkante selbst.** Der Saum (`sec50 == 2`) ist noch nicht gegen
+  Bilddaten gemessen — das Bildschirmfoto aus Abschnitt A wird weiterhin
+  gebraucht.
+* Warum die Tür erst bei Zähler 250 gesetzt wird.
