@@ -73,7 +73,11 @@ public static class Settings
     /// für die die Bildbank nichts hergibt, bekommt weiter ihren Punkt. Ohne
     /// ihn wäre sie unsichtbar — und ein Fehler, den man nicht sieht, wird
     /// nicht gemeldet.</para></summary>
-    public static bool OwnerRing { get => B("owner_ring", false); set => Set("owner_ring", value); }
+    // ⚠ Hier stand OwnerRing (Schluessel "owner_ring"). Entfernt am
+    // 21.08.2026: eine Zutat ohne Fundstelle im Original. Der Schluessel darf
+    // in alten Einstellungsdateien stehenbleiben — er wird schlicht nicht mehr
+    // gelesen, und genau DAS ist der Unterschied zum blossen Umstellen des
+    // Standards, das die Altbestaende nicht erreicht hat.
 
     /// <summary>Nebel des Krieges. The original has the switch too — its
     /// exploration step @0x4205b0 checks <c>byte[0x4f8a3c]</c> and, when that is

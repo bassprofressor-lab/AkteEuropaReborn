@@ -112,8 +112,33 @@ public static class SoundBankPlayer
     /// <summary>Plays a slot. Silently does nothing when the slot is empty, the
     /// content has not been imported, or the volume is at zero — a missing sound
     /// must never be able to stop the game.</summary>
+    /// <summary>
+    /// ⚠⚠ <b>DER RIEGEL FÜRS MENÜ</b> — gemeldet am 21.08.2026: »im Hauptmenü
+    /// in der Demo ballert manchmal massiv ›Wählen Sie den Zielpunkt‹ als
+    /// Sound«.
+    ///
+    /// <para><b>Warum die vorhandene Sperre nicht gereicht hat, und das ist der
+    /// eigentliche Punkt:</b> die Kulisse stellte das OHR unendlich weit weg
+    /// (<see cref="ListenerCell"/>), damit die Dämpfung jeden Klang unter die
+    /// Hörschwelle drückt. Das wirkt aber nur auf <see cref="PlayAt"/> — auf
+    /// Klänge MIT Ort. Die Sprachmeldungen des Spiels laufen über
+    /// <see cref="Play"/>, ohne Ort, weil sie im Original als Meldung ans Ohr
+    /// des Spielers gehen und nicht von der Karte kommen. Sie liefen also
+    /// ungebremst weiter, während die Demo im Hintergrund Befehle gab.</para>
+    ///
+    /// <para>⚠ Eine Sperre, die nur einen der zwei Wege abdeckt, ist schlimmer
+    /// als keine: sie sieht im Code nach Vorsorge aus. Dieser Riegel sitzt
+    /// darum an der EINEN Stelle, durch die beide Wege müssen — <c>PlayAt</c>
+    /// ruft <c>Play</c>.</para></summary>
+    public static bool Suppressed;
+
+    /// <summary>Wie viele Klänge der Riegel abgefangen hat. ⚠ Ohne die Zahl ist
+    /// »es ist still« nicht von »es käme ohnehin nichts« zu unterscheiden.</summary>
+    public static int SuppressedCount { get; private set; }
+
     public static void Play(int slot, float volumeDb = 0f, float pan = 0f)
     {
+        if (Suppressed) { SuppressedCount++; return; }
         if (!UI.Settings.SoundOn) return;
         var stream = Stream(slot);
         if (stream == null) return;

@@ -1,4 +1,4 @@
-﻿namespace AkteEuropaReborn.UI;
+namespace AkteEuropaReborn.UI;
 
 using System.Collections.Generic;
 using Godot;
@@ -191,10 +191,20 @@ public partial class MenuBackdrop : CanvasLayer
         // Guertel, kein Heilmittel, und steht ausdruecklich als solcher da.
         HelpWindow.Suppressed = true;
 
-        // Kampfgeräusche aus der Kulisse gehören nicht ins Menü. Das Ohr wird
-        // so weit weg gestellt, dass die Dämpfung von @0x40495E jeden Klang
-        // unter DSBVOLUME_MIN drückt — SoundBankPlayer.PlayAt gibt dann auf,
-        // ohne einen Kanal anzufassen.
+        // ⚠⚠ 21.08.2026 — HIER STAND NUR DIE HALBE SPERRE, und das war der
+        // gemeldete Fehler: »im Hauptmenü in der Demo ballert manchmal massiv
+        // ›Wählen Sie den Zielpunkt‹ als Sound«.
+        //
+        // Das Ohr unendlich weit weg zu stellen drückt jeden Klang unter die
+        // Hörschwelle — aber NUR die mit Ort, also die über PlayAt. Die
+        // SPRACHMELDUNGEN laufen über Play, ohne Ort, weil sie im Original ans
+        // Ohr des Spielers gehen und nicht von der Karte kommen. Sie liefen
+        // ungebremst weiter, während die Demo im Hintergrund Befehle gab und
+        // Einheiten antworteten.
+        //
+        // Die Dämpfung bleibt (sie ist die des Originals, @0x40495E), aber der
+        // Riegel darüber ist neu und deckt BEIDE Wege ab.
+        Audio.SoundBankPlayer.Suppressed = true;
         Audio.SoundBankPlayer.ListenerCell = new Vector2(1e6f, 1e6f);
 
         _demos.AddRange(Available());
@@ -211,6 +221,14 @@ public partial class MenuBackdrop : CanvasLayer
     {
         Settings.FogSuppressed = false;
         HelpWindow.Suppressed = false;
+        // ⚠ Die Zahl gehoert gedruckt. Ohne sie ist »im Menue war es still«
+        // nicht von »es kam ohnehin nichts« zu unterscheiden — und genau das
+        // waere ein Riegel, den man nie beim Versagen erwischt.
+        if (Audio.SoundBankPlayer.SuppressedCount > 0)
+            GD.Print($"Menue: {Audio.SoundBankPlayer.SuppressedCount} Klaenge der Kulisse "
+                     + "abgefangen (Sprachmeldungen laufen ohne Ort und werden von der "
+                     + "Daempfung nicht erreicht)");
+        Audio.SoundBankPlayer.Suppressed = false;
         Audio.SoundBankPlayer.ListenerCell = new Vector2(float.NaN, float.NaN);
     }
 
@@ -228,14 +246,33 @@ public partial class MenuBackdrop : CanvasLayer
         if (IsInstanceValid(_sprite)) { _sprite.Texture = null; _sprite.QueueFree(); }
         Settings.FogSuppressed = false;
         HelpWindow.Suppressed = false;
+        // ⚠ Die Zahl gehoert gedruckt. Ohne sie ist »im Menue war es still«
+        // nicht von »es kam ohnehin nichts« zu unterscheiden — und genau das
+        // waere ein Riegel, den man nie beim Versagen erwischt.
+        if (Audio.SoundBankPlayer.SuppressedCount > 0)
+            GD.Print($"Menue: {Audio.SoundBankPlayer.SuppressedCount} Klaenge der Kulisse "
+                     + "abgefangen (Sprachmeldungen laufen ohne Ort und werden von der "
+                     + "Daempfung nicht erreicht)");
+        Audio.SoundBankPlayer.Suppressed = false;
         Audio.SoundBankPlayer.ListenerCell = new Vector2(float.NaN, float.NaN);
     }
 
     /// <summary>Das nächste Demo, wie es die Menüzeile tut: eins weiter, hinter
     /// dem letzten wieder von vorn.</summary>
+    private int _tonMerker;
+
     public void Next()
     {
         if (_demos.Count == 0) return;
+        // ⚠ Beim Wechsel mitzaehlen, nicht erst beim Verlassen: wer das Menue
+        // nie schliesst, saehe die Zahl sonst gar nicht — und genau der Fall
+        // (Menue laeuft lange, Demo gibt Befehle) ist der gemeldete.
+        if (Audio.SoundBankPlayer.SuppressedCount > _tonMerker)
+        {
+            GD.Print($"Menue: {Audio.SoundBankPlayer.SuppressedCount - _tonMerker} Klaenge "
+                     + $"der Demo abgefangen (insgesamt {Audio.SoundBankPlayer.SuppressedCount})");
+            _tonMerker = Audio.SoundBankPlayer.SuppressedCount;
+        }
         _at = (_at + 1) % _demos.Count;
         var (no, map) = _demos[_at];
         _left = Mathf.Max(MinSeconds, Ticks[no] / (float)Campaign.MissionScript.TicksPerSecond);

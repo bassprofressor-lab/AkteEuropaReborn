@@ -1,4 +1,4 @@
-﻿namespace AkteEuropaReborn.Rendering;
+namespace AkteEuropaReborn.Rendering;
 
 using System.Collections.Generic;
 using System.Linq;
@@ -27495,27 +27495,27 @@ public partial class MapEntityLayer : Node2D
             return;
         }
 
-        // Der Besitzerring und die Eingrabmarke liegen auf dem BODEN, also vor
-        // dem Rumpf — siehe die Begründung an ihrer alten Stelle.
+        // ⚠⚠ 21.08.2026 — DER BESITZERRING IST ENTFERNT, nicht nur
+        // abgeschaltet. Gemeldet: »die Kreise sind immer noch unter den
+        // Einheiten, das kann raus.«
         //
-        // ⚠⚠ 18.08.2026 — DER RING IST STANDARDMAESSIG AUS. Er ist unsere Zutat
-        // aus der Zeit, als es noch keine Bilder gab: damals war der farbige
-        // Punkt das Einzige, woran man sah, wo eine Einheit steht und wem sie
-        // gehoert. Fuer ihn gibt es KEINE Fundstelle im Original, und zwei
-        // Stellen in diesem Zeichner sagen das selbst (»Bedienhilfen und keine
-        // Weltobjekte« in BuildUnitDrawOrder, »nothing here comes from the
-        // original« bei DrawSelectionBrackets).
+        // ⭐ Das »immer noch« war der entscheidende Teil, und die Ursache lag
+        // NICHT im Code: am 18.08. wurde der Standard auf AUS gestellt, aber in
+        // der Einstellungsdatei des Spielers stand seit davor `owner_ring=true`
+        // — ein Standard aendert nichts an einem Wert, der schon gespeichert
+        // ist. Wer eine Zutat zurueckziehen will, muss sie ENTFERNEN oder den
+        // alten Wert ausdruecklich ueberschreiben; den Standard umzustellen
+        // erreicht genau die Leute nicht, die sie je gesehen haben.
         //
-        // Damit ist auch der alte Fehlerbericht »orange Ringe ohne Koerper«
-        // erklaert: kein Zeichenfehler, ein Ueberbleibsel. Gemessen mit
-        // `--ring-check` auf vier Karten (3000-4000 Takte, 13 bis 30
-        // Gefallene je Lauf): NULL Ringe ohne Rumpf — die sichtbaren Ringe
-        // gehoerten immer zu lebenden Einheiten.
+        // Der Ring war unsere Zutat aus der Zeit ohne Bilder und hatte keine
+        // Fundstelle im Original. Mit ihm geht der Schalter im
+        // Einstellungsschirm und die Eigenschaft Settings.OwnerRing.
         //
-        // Abgeschaltet und nicht geloescht: eine Abweichung, die man
-        // zuruecknehmen kann, ist besser als eine, die man wegwirft.
-        if (UI.Settings.OwnerRing)
-            DrawArc(e.Pos, 7f, 0, Mathf.Tau, 20, new Color(oc.R, oc.G, oc.B, 0.9f), 2f);
+        // ⚠ Der RUECKFALL bleibt: eine Einheit, fuer die die Bildbank nichts
+        // hergibt, bekommt weiter ihren Punkt (ganz unten in dieser Funktion).
+        // Ohne ihn waere sie unsichtbar, und ein Fehler, den man nicht sieht,
+        // wird nicht gemeldet. Das ist etwas anderes als ein Ring UNTER einem
+        // sichtbaren Rumpf.
         if (e.DugIn)
             DrawArc(e.Pos, 11f, Mathf.Pi * 0.15f, Mathf.Pi * 0.85f, 14,
                     new Color(0.75f, 0.55f, 0.25f, 0.95f), 3f);
