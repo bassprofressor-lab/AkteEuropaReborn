@@ -237,6 +237,28 @@ public sealed class MissionScript
     // ---- state ------------------------------------------------------------
 
     private readonly Script _script;
+    /// <summary>
+    /// <b>v[n] — die Wörter des Missionsblocks.</b>
+    ///
+    /// <para>⚠⚠ <b>DER MISSIONSWECHSEL NULLT NUR v[0…299]</b> — gelesen am
+    /// 21.08.2026 aus <c>0x4CFD80</c> (»saving global variables«, Schranke
+    /// <c>0x12C</c> = 300 bei <c>0x4D00D1</c>). <b>v[300…499] gehen in die
+    /// nächste Mission über</b>, zusammen mit dem Kontostand, der
+    /// Bauteiltafel, den Entwürfen und den Hilfetextmerkern — alle fünf über
+    /// dieselbe Schattenkopie (sec72→sec103, sec71→sec102,
+    /// Geld→sec104).</para>
+    ///
+    /// <para>⚠ <b>Bei uns ist dieses Feld je Mission neu.</b> Heute schadet das
+    /// nicht: unsere Regeln benutzen aus dem oberen Bereich nur v[301…305],
+    /// und die jeweils innerhalb EINER Mission (21, 24, 25). Wer aber den
+    /// gemeinsamen VORSPANN der Kampagne einbaut, muss das ändern — er sitzt
+    /// im Block <c>0x497540…0x49814D</c> und riegelt mit <b>36 Einmal-Toren
+    /// v[346]…v[381]</b> die kampagnenweiten Hinweisfenster ab. Ohne den
+    /// Übertrag käme jedes davon in JEDER Mission wieder.</para>
+    ///
+    /// <para>⚠ Diese 36 Regeln stehen bis heute in <b>keiner</b> unserer
+    /// Missionen — der Vorspann ist gar nicht eingelesen. Siehe
+    /// <c>OFFENE_FRAGEN.md</c> Abschnitt AB.</para></summary>
     private readonly int[] _var = new int[512];      // v[n], the block's own words
     private bool _ended;
 

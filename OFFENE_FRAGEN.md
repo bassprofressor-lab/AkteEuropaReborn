@@ -2442,7 +2442,7 @@ liegen, aber in den zwei Bauten verschieden.
 | **sec98** | 1 560 | **20 × 78 B** | wieder Einheitensätze — **Lagerbestand eines Gebäudes** (Depot/Hangar), 20 fertige Stück |
 | **sec18** | 18 000 | **6000 × 3 B** | die **brennenden Waldfelder**. »**hori forest / dohorel forest — sjizdnej / nesjizdnej**« (brennt / abgebrannt — befahrbar / nicht) |
 | **sec80** | 92 | **4 × 23 B** | die vier **Merkpunkte** (21 B Name, Spalte, Zeile, `0xFF` = leer). ✔ Deckt sich mit Abschnitt N unserer Lesung |
-| **sec55 / sec56** | 1 936 / 11 616 | **8 × 121 × 2** / **8 × 121 × 12** | das **KI-Wichtigkeitsraster** (»imp«), je Spieler 11 × 11 Zellen — **dasselbe Raster wie die `AI*.CWI`** aus Abschnitt W |
+| **sec55 / sec56** | 1 936 / 11 616 | ⚠ sec55 **zellendur** `8·Zelle + Spieler` (in Abschnitt AC berichtigt) / sec56 **8 × 121 × 12** | das **KI-Wichtigkeitsraster** (»imp«), je Spieler 11 × 11 Zellen — **dasselbe Raster wie die `AI*.CWI`** aus Abschnitt W |
 | **sec11 / 12 / 13** | 2 000 / 1 000 / 2 | 1000 × u16 / 1000 × u8 / Zähler | **eine Suchliste**. »**Search buffer is full!**«, »**Search: / typ: / Found**« |
 | **sec32** | 169 | **13 × 13** | Verbindungsmatrix der **13 bahnfähigen Gebäude**. »**Cannon build more 'rail-possible' buildings**« |
 | **sec40** | 500 | 500 Belegt-Bytes | die Belegungsmarken der `ROB_PROD`-Tafel. »**WRONG ROB_PROD in PLACE!!!!**« |
@@ -2641,4 +2641,210 @@ sec49 200×48.
   Umgekehrt gilt lückenlos: **keine** Einheit hält eine Gruppe ohne Flagge.
 * `game.007` hat **0** belegte sec42-Sätze; alle Wertebereiche dort stützen
   sich auf die 23 Sätze aus `1.DM`.
+---
+
+## AB. Der Kampagnenzustand — und wie eine Mission in die nächste übergeht (21.08.2026)
+
+### sec62 ist die `imp`-Tafel der Computerspieler — 8 × 255 × 2 B
+
+Nicht 1020 Dwords, wie die Grösse nahelegt: die Einheit sind **zwei Byte**,
+Satzindex `255·Spieler + Gebäude`. Belegt an der Füllschleife C
+`0x488347…0x4883B6` (`add eax, 0x1FE` = 510 = 255 × 2 je Spieler, `add eax, 2`
+je Gebäude) und zweifach gegengerechnet am Besitzerwechsel und am Leser.
+
+| Feld | Inhalt | gelesen? |
+|---|---|---|
+| **+0x00** | 6 = gehört mir · 4 = Besitzer 11 · 3 = Feind · 0 = leer/verbündet | ⚠ **NEIN — 0 Lesestellen in beiden EXE** |
+| **+0x01** | **`imp`** — die Wichtigkeit des Gebäudes | ja, genau **eine** Stelle |
+
+Der einzige Leser (C `0x4BBB80`) addiert `imp` in ein **11 × 11-Sektorenraster**
+und in die Spielersumme. **Das Spiel benennt das Feld selbst**: die zwei
+Protokollmarken dort sind »**Set imp:**« und »**Set imp cpu:**«.
+
+Geschrieben wird an **63 Stellen**: 39 im Missions-Aufbaublock, **24 in den
+Missionslogikblöcken** (M1, M3, M6, M7, M12, M13, M21, M24, M29, M30), Werte
+1…9 — fast durchweg unmittelbar neben `add_target`. **Die Mission trägt ein
+Ziel ein und hebt zugleich dessen Wichtigkeit.**
+
+⭐ **Die eine Zahl, die alles zusammenhält:** In `game.007` ist genau **ein**
+sec62-Byte gesetzt — Spieler 1, Gebäude 2, `imp = 9`. Und im Missionsblock 1
+steht genau ein Befehl dieser Art: `mov byte [0xBC43E3], 9`, Versatz `0x203` =
+Satz 257 = 255·1 + 2. **Die Datei bestätigt Adressrechnung und Deutung an einer
+einzigen Stelle.**
+
+### ⭐⭐ Der Missionswechsel: was übergeht und was nicht
+
+`0x4CFD80` (»**saving global variables**«, am Ende »**Mission reset**«) baut aus
+`Missionsnummer + 1` den Namen der nächsten Mission, **nullt v[0…299]**
+(Schranke `0x12C` bei `0x4D00D1`) und kopiert dann live → Schatten:
+
+| live | Schatten | Inhalt |
+|---|---|---|
+| `0x5045A0` | `0xA9C620` | die Bauteiltafel (sec46 → sec100) |
+| `0x51CE20` | `0xA9A210` | die Entwürfe (sec47 → **sec101**) |
+| `0x87AE00` | `0x87AC08` | die Hilfetextmerker (sec71 → sec102) |
+| `0xBC5690` | `0xBC3DF8` | **die Missionsvariablen (sec72 → sec103)** |
+| `0xA9C600` | `0xA9A1E0` | **das Geld** (→ sec104) |
+
+⚠ **Damit ist auch sec101 erklärt** — es ist die Schattenkopie der Entwürfe. Der
+Befund »tot, kein Leser« aus Abschnitt Y bleibt richtig für den *laufenden*
+Betrieb; gelesen wird sie nur von der Gegenrichtung `0x4D0290`.
+
+**Zwei Folgerungen mit Zahl:**
+
+1. ⭐ **v[300…499] gehen in die nächste Mission über, v[0…299] nicht.** Und
+   genau dort sitzt der gemeinsame **Vorspann** der Kampagne
+   (`0x497540…0x49814D`): **36 Einmal-Tore v[346]…v[381]**, je in der Form
+   `cmp word[v],0 / … show_text2 / inc word[v]` — die kampagnenweiten
+   Hinweisfenster.
+2. ⭐ **Das Geld wird mitgenommen** — die offene Frage aus `CAMPAIGN_RE` §4.
+   ✔ Das hatten wir am 11.08. schon gelesen und gebaut; neu ist der *Weg*
+   (dieselbe Schattenkopie).
+
+### ⚠ Was das für UNS heisst
+
+Unser `MissionScript._var` ist **je Mission neu**. Heute schadet das nicht:
+unsere Regeln benutzen aus dem oberen Bereich nur v[301…305], und die jeweils
+innerhalb *einer* Mission (21, 24, 25). **Aber die 36 Vorspann-Regeln stehen in
+keiner unserer Missionen** — der gemeinsame Vorspann ist nie eingelesen worden.
+Wer ihn einbaut, muss den Übertrag mitbauen, sonst käme jedes Hinweisfenster in
+**jeder** Mission wieder. Die Regel steht jetzt im Kopf von `_var`.
+
+### sec71 — die Vermutung stimmt, mit zwei Einschränkungen
+
+**500 Byte, ein Byte je Textnummer, 1 = schon gezeigt** (`show_text2`
+@`0x4432E0`, Merker gesetzt bei `0x443340`). Aber: **nur `show_text2` (105
+Aufrufstellen) fragt die Tafel** — `show_text` (**264** Aufrufstellen) rührt sie
+nicht an. Und der Nullsetzer läuft am Anfang des Missions-Aufbaublocks; die
+Merker gelten also **je Mission** und werden nur für den Übertrag im Schatten
+gehalten.
+
+In `game.007` stehen die Texte 1,2,3,4,5,6,10,11,12,13,18,20 auf 1 — **12 von
+16** `show_text2`-Fenstern der Mission.
+
+### Und zwei kleinere
+
+**sec78 = `terra_places`**, 50 × 6 B (»Cannot add more terra_places«):
+`+0` belegt, `+1` Spalte, `+2` Zeile, `+3` **nie beschrieben**, `+4` u16 Menge.
+
+**sec70 (8 B) ist TOT** — 5 Fundstellen in jeder Fassung, restlos: Speichern,
+Laden, zweimal Nullen, einmal Nullen im Aufbaublock. **Keine Lesestelle.** Die
+sechste tote Tafel.
+
+**Halbtot: sec62 Feld +0x00** — 1020 Byte, von genau einer Stelle geschrieben,
+von keiner gelesen. Die Basisadresse kommt in `.data`/`.rdata` **nullmal** vor,
+es gibt also auch keine Zeigertafel darauf.
+
+### Nebenbefund
+
+`ai_tick` prüft `byte[0x538BD8 + Spieler]`; **Wert 10 schaltet den `imp`-Zweig
+ab**. Das ist die bislang offene Byte-Tafel aus `0x4D1050`.
+
+---
+
+## AC. ⭐ Der KI-Zustand ist gelesen (21.08.2026)
+
+Damit ist die zweite Hälfte dessen erklärt, was Abschnitt W begonnen hat: die
+`AI*.CWI` liefern das **Sektornetz**, diese Abschnitte den **laufenden Zustand**
+darauf.
+
+### ⚠ Zuerst eine Berichtigung an meiner eigenen Vorgabe
+
+Ich hatte den Agenten mitgegeben, `game.007` und `1.DM` seien »die einzigen
+zwei Dateien mit allen 131 Abschnitten«. Für **131** stimmt das — aber
+**vierzehn** Dateien tragen alles bis sec110: `game.007` plus `1..13.DM`
+(121–131 Abschnitte). Alle Zahlen unten sind über diese **14** gezählt.
+
+⚠ Und: **keine der beiden GAME.EXE enthält einen Schreiber** für diese
+Abschnitte — nur die zwei Lader und die KI. Die Dateien stammen vom **Editor**.
+
+### sec60 — der KI-Zustand JE EINHEIT. 8000 × 3 B
+
+Nicht 8 × 3000, wie die Grösse nahelegt. Die Schrittweite steht am Leser
+(`mov cl, byte [eax+eax*2+0xB400F0]`) und ist **3**; der Index ist die
+**Einheitennummer**, dieselbe wie in sec5 (Schranke `cmp ax, 0x1F40` = 8000).
+Die 3000 sind **1000 Einheiten × 3 B** je Spielerblock (`imul ax, ax, 0x3E8`).
+
+⭐ **Die Felder benennen sich selbst** — die Debug-Überlagerung druckt
+»**CPU0:**« und »**CPU1:**«.
+
+| CPU0 | Bedeutung |
+|---|---|
+| 0 | frei — kommt in die Kandidatenliste |
+| 1 | Marsch in Sektor CPU1 befohlen |
+| 2 | im Sektor angekommen |
+| 3 | greift Ziel an; bleibt nur, solange \|Δsx\| ≤ 1 und \|Δsy\| ≤ 1 |
+| 5 | auf Wachposten CPU1 (0…9, Index in sec107) |
+| 10 | in Angriffsgruppe CPU1 (0…3) |
+| 20 | frisch produziert |
+
+**`+2` ist tot:** 0 Fundstellen in beiden EXE, und in allen 14 Dateien
+**8000/8000** Sätze mit `+2 = 0`. Es gibt auch kein »CPU2:« in der Anzeige.
+
+⭐ **CPU1 ist bei Zustand 1/2/3 der Sektor als NIBBLE-PAAR** — low = X, high = Y.
+Bewiesen doppelt: im Code (`dl = cl & 0xF` wird mit 11 multipliziert) **und in
+den Daten** — über 706 belegte Sätze **706 richtig / 0 verletzt**, die
+vertauschte Lesart **535 / 171**.
+
+### sec108 — der SEKTOR-WEG der Angriffsgruppe. 32 × 62 B
+
+8 Spieler × 4 Gruppen. `+0` laufender Wegpunkt, `+1` letzter Index (**immer
+0x1D = 29**; wird 0, wenn der Weg abgelaufen ist), `+2…+61` **30 Wegpunkte als
+(SektorX, SektorY)**, rückwärts gefüllt.
+
+Er entsteht aus der **Dijkstra-Vorgängertafel** — also genau aus dem Lauf, den
+Abschnitt W beschrieben hat. Der Leser rechnet `24·s − 6 … 24·s + 30` als
+Kasten; sind mehr als zwei Drittel der Gruppe darin, rückt der Wegpunkt vor.
+
+**16 belegte Sätze über 14 Dateien, und 16/16 sind lückenlose
+4er-Nachbarketten** von Sektorkoordinaten, alle endend auf Platz 29.
+
+### sec110 und sec57 — je 8 × 4 B
+
+**sec110 = die Summe der Gebäude-Wichtigkeit** je Spieler, aufsummiert aus
+sec62. **Nachgerechnet: für die Spieler 1…7 in allen 14 Dateien exakt gleich
+(98/98).** Spieler 0 weicht ab — erwartbar, der Zweig läuft nur für KI-Spieler.
+Benutzt als Torwächter »hat der Spieler noch eine Basis«.
+
+**sec57 = der Zeitstempel, ab wann der Spieler wieder bauen darf.** Gegen die
+Uhr (sec54); bei Erfolg `Uhr + 200`. ⭐ **Alle 18 belegten Werte über 14 Dateien
+sind ≡ 2 (mod 50)** — genau der Tickplatz, an dem der Bauzweig läuft.
+
+### ⚠ Eine Berichtigung an Abschnitt Y
+
+Dort steht sec55 als »8 × 121 × 2 B«. **Das ist verkehrt herum.** Der Schreiber
+rechnet `Spieler + 8·Zelle` — die Tafel ist **zellendur**, nicht spielerdur.
+In den Daten entschieden: zellendur **0–10** Abweichungen von 968, spielerdur
+**8–66**; in drei Dateien zellendur exakt 0.
+
+### sec56 — der Satz, nachgerechnet
+
+12 B je Sektor und Spieler: `+0` eigene Stärke, `+2` verbündete, `+4`
+feindliche, `+6` Gebäude-Wichtigkeit, `+7` Kopie (»DEF:«), `+8`
+»DEF_robots:«, `+0xA` Einheitenzahl. **`+9` ist tot** (0 Fundstellen, in allen
+14 Dateien durchgehend 0).
+
+⭐ **Die Formel `+8 = min(100, 100·(+7) / skala[pro_style])`** mit
+`skala = {1,30,50,100,400,255,0,0}` — **0 Abweichungen von 13 552 Zellen** über
+14 Dateien.
+
+### Wer welchen Index benutzt
+
+| Tafel | Index |
+|---|---|
+| sec56 | `121·Spieler + 11·sx + sy` — **spielerdur** |
+| sec55 | `2·(8·(11·sx+sy) + Spieler)` — ⚠ **zellendur** |
+| sec108 | `4·Spieler + Gruppe`, Wegpunkte als Sektorpaare |
+| sec60 `+1` | Sektor als **Nibble-Paar** (nur Zustand 1/2/3) |
+| sec68 | `4·Spieler + Gruppe` — **kein** Sektorindex |
+| sec107 | 8 × 10 Wachposten in **Feldkoordinaten**, kein Sektor |
+
+### Was offen bleibt
+
+* **sec58** (16 B) — zwei Fundstellen im Produktionszweig, Bedeutung offen.
+* **Zustand 20 → CPU1** ist undefiniert (beim Setzen nicht beschrieben).
+* Der Wert **0x63** im Lagenraster sec20, nach dem Zustand 1 in seiner
+  5×5-Umgebung sucht — nicht gedeutet.
+* ⚠ **Die zwei EXE sind nicht in allem gleich:** sec59 hat in C fünf
+  Fundstellen, in F vier. Alle *berichteten* Abschnitte stimmen 1:1 überein.
 
