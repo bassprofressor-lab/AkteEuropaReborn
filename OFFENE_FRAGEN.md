@@ -3160,4 +3160,128 @@ Er hat **keine Spielstandsdaten geöffnet** — alles oben ist reine EXE-Lesung.
 Die Datenaussage zu sec11 (968/968 lebende Plätze) stammt aus dem Messlauf
 (Abschnitt AD) und steht unabhängig davon. Und sec58/sec59 sind nur bis zur
 Funktionsebene gedeutet: was in sec63 genau steht, ist offen.
+---
+
+## AG. Der Preis, die Bahnandock-Tafel und der Waldbrand (21.08.2026)
+
+### ⭐ Der PREIS — gefunden, und auf 434 Marktposten aufs Byte nachgerechnet
+
+Der Vorgänger hatte erschöpfend gesucht und nichts gefunden. Der Grund: **die
+Baustoffkosten stehen in sec47 als BYTES an `+26/+27/+28`, nicht als u16** — ein
+Abtast über u16-Felder läuft daran vorbei.
+
+Die Kette (C `0x4C1194` → `0x451010`, F `0x4C0C55` → `0x44FCC0`):
+
+```
+wert(posten):
+  D = m[0x43]                        ; die Entwurfsnummer im Marktsatz
+  s = d[26] + d[27] + d[28]          ; die DREI Baustoffkosten des Entwurfs
+  v = (30 · s · m[0x08]) / d[30]     ; Zustand / Höchstzustand
+  p = TAFEL[erfahrungsband(m[0x28])] ; Faktor · 100
+  return (v · p) / 100
+preis = (wert · 25) / 10             ; ×2,5
+```
+
+Alle Teilungen sind `idiv`, also zur Null hin abgeschnitten.
+
+**Die Erfahrungstafel** (`0x4FA0E0` Bänder, `0x4FA0F0` Faktoren; ausgewertet in
+`0x43AAC0`, Fehlertext »Wrong experience level«):
+
+| Erfahrung | 0–5 | 6–20 | 21–40 | 41–75 | 76–110 | 111–170 | 171–254 | 255 |
+|---|---|---|---|---|---|---|---|---|
+| Faktor ×100 | 10 | 20 | 50 | 100 | 200 | 400 | 700 | 1000 |
+
+Bei einem frischen Posten ist `m[8] = d[30]` (beim Einstellen gesetzt), das
+Verhältnis also 1, und mit Erfahrungsband 0 bleibt **Preis = 7,5 · s** — genau
+die beobachteten »Vielfachen von 7,5«.
+
+**Gemessen: 27 Dateien, 434 Posten, jeder einzelne aufs Byte getroffen** — mit
+einer Abweichung, und die löst sich am Datum:
+
+| Dateien | Schlussfaktor | Treffer | Dateidatum |
+|---|---|---|---|
+| `game.007`, `1.DM` | **×2,5** | 34/34 | 04.08.1997 |
+| `2…13.DM` | **×1,5** | 400/400 | 08.07.1997 |
+
+⭐ **Der Aufschlag wurde zwischen dem 8. Juli und dem 4. August 1997 von 1,5 auf
+2,5 angehoben.** Beide ausgelieferten EXE tragen 2,5 — **für den Nachbau gilt
+2,5**. ⚠ Die ×1,5-Fassung steht in keiner der beiden EXE; der Beleg ist rein
+chronologisch.
+
+### ⭐ sec32 ist die BAHNANDOCK-Tafel — und echte Nutzdaten
+
+13 Zeilen à 13 Byte, **Zeile = Gebäudetyp**: `[0]` = Zahl der Andockpunkte
+(0…4), dann je Punkt `(dx, dy, Seite)`.
+
+| Zeile | Typ | Andockpunkte |
+|---|---|---|
+| 1 | Basis | 1 × (5,1,1) |
+| 2,3,4 | die drei Fabriken | 1 × (6,2,1) |
+| 6 | **Bahnstation** | 3 × (0,1,0) (0,2,0) (3,1,1) |
+| 9,10 | Flughafen, Mine | 1 × (6,2,1) |
+| 12 | **Feldbahnhof** | 4 × (0,1,0) (0,2,0) (2,1,1) (2,2,1) |
+| 0,5,7,8,11 | Depot, Generator, Radar, Seedock | **0 → keine Bahn** |
+
+Die Seite entscheidet über Richtungscode und Lage (`x−2` / Code 2 / Lage 1
+gegen `x+1` / Code 3 / Lage 0, @`0x4AFF03`). Zeilenbyte 0 = 0 heisst »dieser
+Typ kann keine Bahn« (`rail_register` @`0x4B00A0`).
+
+⭐ **Und die Kernfrage ist beantwortet: die Tafel wird beim Laden NICHT neu
+aufgebaut.** `0x4AFB20` ist kein Aufbau, sondern ein Konstanten-Initialisierer —
+und **toter Code**: ein Thunk existiert, aber **nichts im ganzen Bild ruft ihn
+auf**, in beiden Fassungen. Härter noch: die Zeilen **9 und 10** (Flughafen,
+Mine) stehen nicht einmal in diesem toten Initialisierer, und **kein einziger
+Befehl beschreibt sie**. Der Puffer liegt im `.bss`, ist also ohne Datei null.
+
+→ **Ohne die 169 Byte aus dem Spielstand funktioniert der Bahnbau für Flughafen
+und Mine überhaupt nicht.** Die »Verbindungsmatrix«-Deutung ist endgültig
+erledigt.
+
+### sec18 — (X, Y, Zustand), und es IST der Waldbrand
+
+Schrittweite 3 am Code belegt (`add esi,3` bis `0xC03A31` ab `0xBFF3E1` = exakt
+6000 Sätze). `+0` Spalte, `+1` Zeile, `+2` Zustand: **0 = frei, 1 = steht,
+2…255 = brennt**.
+
+⭐ **Die Gegenprobe MIT Nullmodell** — genau das, woran der vorige Lauf fast
+gescheitert wäre: die Weltkarte trägt für Waldfelder `50000 + Platznummer`.
+
+| Zustand | Treffer | |
+|---|---|---|
+| brennt (2…255) | **108/108 = 100 %** | |
+| steht (1) | 30 630/31 635 = 96,8 % | |
+| **Nullmodell (x/y vertauscht)** | **0,42 %** | ← der Vergleich, der es trägt |
+
+**Die Brandmechanik, vollständig:**
+
+* Takt nur bei `Takt % 4 == 0`; Zustand > 1 → +1; bei **255** ausgebrannt.
+* `zapal` setzt `rand()%150 + 2` → **Branddauer 416…1012 Takte**.
+* **Anzünden aus Schaden**, fünf Bänder (`0x40D638…0x40D727`): **≥ 70** → Wald
+  wird *ohne* Feuer gelöscht · **46…69** → immer Feuer · **23…45** → mit ¼ ·
+  **13…22** → mit ⅛ · **≤ 12** → nichts. Sonderfall: Einheitenart `+0x0D == 12`
+  setzt den Wert fest auf 60.
+* **Übergreifen** (`0x4CA7E0`, aus dem Brandtakt): **ein** zufälliger der acht
+  Nachbarn, Wahrscheinlichkeit
+  `1 / (2·(5·((9 − Windstärke) · Winkelabweichung) + 50))`.
+* **Was danach steht:** `rand()%20` — 19/20 »sjizdnej« (befahrbar), 1/20
+  »nesjizdnej« (dauerhaft blockiert).
+
+⭐ **Das bestätigt unseren Nachbau von aussen:** `rand()%150 + 2`, jeder vierte
+Schritt, Schluss bei 255 und die 19-zu-1-Regel stehen bei uns schon genau so.
+
+### ⚠ Zwei Lücken bei uns, jetzt benennbar
+
+1. **Wir zünden Wald bei jedem Treffer an.** Das Original hat die **fünf
+   Schadensbänder** oben — insbesondere löscht starker Schaden (≥ 70) den Wald
+   *ohne* Feuer, und schwacher (≤ 12) tut gar nichts.
+2. **Das Übergreifen fehlt ganz.** Wind haben wir bereits (Richtung und Stärke,
+   `rand & 7` beim Missionsstart) — die Formel oben ist alles, was noch fehlt.
+
+### Was offen bleibt
+
+* Warum `2…13.DM` mit ×1,5 gerechnet sind — der Faktor steht in keiner EXE.
+* Wer die sec32-Zeilen 9 und 10 je geschrieben hat: **kein Code in C oder F tut
+  es**, es kann nur der Editor gewesen sein.
+* `0xFFFD` in der Weltkarte (1070 abgebrannte Felder tragen es statt `0xFFFE`),
+  und 32 der 108 brennenden Felder tragen noch eine lebende Waldkachel.
 

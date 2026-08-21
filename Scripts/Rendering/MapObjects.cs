@@ -710,6 +710,20 @@ public partial class MapEntityLayer
             }
 
             // Ein WALD auf der Zelle faengt Feuer — das ist der ganze Punkt.
+            //
+            // ⚠⚠ ABER NICHT IMMER, und das ist seit dem 21.08.2026 gelesen.
+            // Das Original hat FUENF SCHADENSBAENDER (@0x40D638..0x40D727):
+            //   >= 70  der Wald wird OHNE Feuer geloescht ("zrus", 0x4CAD40)
+            //   46..69 immer Feuer            ("zapal A")
+            //   23..45 mit Wahrscheinlichkeit 1/4   ("zapal B")
+            //   13..22 mit 1/8                      ("zapal C")
+            //   <= 12  gar nichts
+            // Sonderfall: Einheitenart +0x0D == 12 setzt den Wert fest auf 60.
+            //
+            // Wir zuenden unbedingt an — das ist zu grosszuegig bei schwachem
+            // Schaden und zu zahm bei starkem (dort muesste der Wald ohne
+            // Feuer verschwinden). ⚠ NICHT GEBAUT; siehe OFFENE_FRAGEN.md
+            // Abschnitt AG, wo auch das fehlende UEBERGREIFEN steht.
             if (Anzuenden(c, r)) { brennt++; getroffen = true; }
 
             if (!getroffen) leer++;
