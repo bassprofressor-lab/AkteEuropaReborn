@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.UI;
+﻿namespace AkteEuropaReborn.UI;
 
 using System.Collections.Generic;
 using Godot;
@@ -192,6 +192,32 @@ public sealed partial class HelpWindow : PanelContainer
     /// sicher setzen können, solange der Regelleser ihn bei dieser Form noch
     /// nicht erkennt.</para></summary>
     private static readonly HashSet<int> Dismissed = new();
+
+    /// <summary>
+    /// ⭐ <b>Das ist sec71</b> — C <c>0x87AE00</c> / F <c>0x879E60</c>, 500 Byte,
+    /// ein Byte je Hilfetextnummer. Am 21.08.2026 in der Ladertafel
+    /// wiedergefunden: der Riegel ist <b>kein Laufzeitwert, sondern ein
+    /// Abschnitt des Spielstands</b> und geht darum mit in die Datei.
+    ///
+    /// <para>⚠ <b>Er überlebt aber KEINEN Missionswechsel</b>, und das war
+    /// eigens zu prüfen: der Kartenlader C <c>0x41E070</c> nullt ihn
+    /// (@0x41F060, <c>ecx = 0x7D</c> Dwords = genau 500 B) im selben Atemzug wie
+    /// <c>v[0…299]</c>. Eine <c>.CWM</c> trägt nur sec1…38, bringt sec71 also
+    /// nicht mit — die Merker bleiben null. Nur ein Spielstand füllt sie wieder.
+    /// <see cref="Forget"/> beim Missionsstart ist damit <b>richtig</b>, und das
+    /// ist geprüft und nicht angenommen.</para>
+    ///
+    /// <para>Die zwei weiteren Nullungen (C <c>0x437CB0</c>, gerufen aus
+    /// <c>0x44D0C1</c> und <c>0x487C49</c>) hängen an einem NEUEN SPIEL — die
+    /// erste löscht gleich danach die Entwurfsliste sec47, die zweite baut die
+    /// Diplomatie für acht Spieler auf.</para></summary>
+    public static IEnumerable<int> GezeigteTexte => Dismissed;
+
+    /// <summary>Aus dem Spielstand zurückholen.</summary>
+    public static void MerkeGezeigt(int id) => Dismissed.Add(id);
+
+    /// <summary>Wie viele Texte schon gezeigt wurden — für den Prüfstand.</summary>
+    public static int GezeigtCount => Dismissed.Count;
 
     /// <summary>Alles vergessen — beim Missionsstart und für einen Prüfstand,
     /// der nach einem Import neu laden will.</summary>
@@ -439,6 +465,18 @@ public sealed partial class HelpWindow : PanelContainer
         var w = new HelpWindow(id, paras, ox, oy);
         Layer(host).AddChild(w);
         Open.Add(w);
+        // ⭐⚠ 21.08.2026 — DER RIEGEL FÄLLT HIER, NICHT BEIM WEGKLICKEN.
+        //
+        // Der Klassenkopf fuehrte das als »nicht gemessen und darum nicht
+        // nachgebaut«. Jetzt ist es gemessen: show_text2 setzt
+        // byte[0x87AE00 + id] = 1 @C 0x443340 / F 0x442330 WAEHREND des
+        // Anzeigens — elf Befehle nachdem es geprueft hat, ob dort schon etwas
+        // steht. Der Spieler muss das Fenster nicht anfassen.
+        //
+        // ⚠ Der Unterschied faellt genau dann auf, wenn ein Fenster aufgeht und
+        // wieder verschwindet, OHNE weggeklickt zu werden — beim Missionsende
+        // etwa. Vorher kam es danach wieder, jetzt nicht mehr.
+        Dismissed.Add(id);
         Anhalten(host);
         return w;
     }

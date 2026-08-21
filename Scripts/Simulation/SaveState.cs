@@ -188,6 +188,22 @@ public partial class MapEntityLayer
         }
         w.Raw("hints_shown", hin.Append(']').ToString());
 
+        // ⭐ sec71 — welche HILFETEXTE schon gezeigt wurden. Im Original ist das
+        // ein eigener Abschnitt des Spielstands (C 0x87AE00, 500 B, ein Byte je
+        // Textnummer), kein Laufzeitwert; er MUSS also mit in die Datei.
+        // ⚠ Er ueberlebt keinen Missionswechsel — der Kartenlader nullt ihn —,
+        // aber er ueberlebt ein Speichern und Laden, und das tat er bei uns
+        // bisher nicht.
+        var htx = new System.Text.StringBuilder("[");
+        bool ersterText = true;
+        foreach (int id in UI.HelpWindow.GezeigteTexte)
+        {
+            if (!ersterText) htx.Append(',');
+            ersterText = false;
+            htx.Append(id);
+        }
+        w.Raw("help_texts_shown", htx.Append(']').ToString());
+
         w.ArrayStart("marks");
         for (int i = 0; i < Marks.Length; i++)
         {
@@ -353,6 +369,12 @@ public partial class MapEntityLayer
         if (root.TryGetValue("hints_shown", out var hsv) && hsv.VariantType == Variant.Type.Array)
             foreach (var q in hsv.AsGodotArray()) Campaign.CampaignHints.Merke(q.AsInt32());
 
+        // ⚠ KEIN Vergessen davor: HelpWindow.Forget() laeuft beim Missionsstart
+        // und hat die Tafel schon geleert — genau wie der Kartenlader des
+        // Originals. Hier wird sie aus der Datei wieder gefuellt.
+        if (root.TryGetValue("help_texts_shown", out var htv) && htv.VariantType == Variant.Type.Array)
+            foreach (var q in htv.AsGodotArray()) UI.HelpWindow.MerkeGezeigt(q.AsInt32());
+
         RailTransfersClear();
         if (root.TryGetValue("rail_transfers", out var rt) && rt.VariantType == Variant.Type.Array)
             foreach (var item in rt.AsGodotArray())
@@ -474,6 +496,10 @@ public partial class MapEntityLayer
 
             int hinweise = Campaign.CampaignHints.GezeigtCount, hpruef = 0;
             foreach (int v in Campaign.CampaignHints.Gezeigt) hpruef += v * 3 + 7;
+            // ⚠ Die blosse ANZAHL wuerde eine vertauschte Menge nicht bemerken:
+            // {48,72,19} und {1,2,3} sind beide "drei". Die Pruefzahl schon.
+            int tpruef = 0;
+            foreach (int id in UI.HelpWindow.GezeigteTexte) tpruef += id * 5 + 11;
 
             int fahrten = 0, fpruef = 0;
             foreach (var t in RailTransfers)
@@ -490,7 +516,9 @@ public partial class MapEntityLayer
                    $"Namen {gnamen}), {merk} Merkpunkte (Namen {mnamen}), " +
                    $"{fahrten} Bahnfahrten (Pruefzahl {fpruef}), " +
                    $"{anBord} an Bord (Pruefzahl {bpruef}), " +
-                   $"{hinweise} Kontexthilfen (Pruefzahl {hpruef})";
+                   $"{hinweise} Kontexthilfen (Pruefzahl {hpruef}), " +
+                   $"{UI.HelpWindow.GezeigtCount} gezeigte Hilfetexte " +
+                   $"(Pruefzahl {tpruef})";
         }
 
         // Ein Prueflauf, der nichts zu verlieren hat, kann nichts verlieren:
@@ -520,6 +548,16 @@ public partial class MapEntityLayer
             Campaign.CampaignHints.Merke(349);
             Campaign.CampaignHints.Merke(357);
             gelegt += " (zwei Kontexthilfen gelegt)";
+        }
+        // ⚠ Und dasselbe fuer sec71. "0 gezeigte Hilfetexte" vorher wie nachher
+        // waere gruen, egal was der Schreiber tut — ein Prueflauf, der nichts zu
+        // verlieren hat, kann nichts verlieren.
+        if (UI.HelpWindow.GezeigtCount == 0)
+        {
+            UI.HelpWindow.MerkeGezeigt(48);
+            UI.HelpWindow.MerkeGezeigt(72);
+            UI.HelpWindow.MerkeGezeigt(19);
+            gelegt += " (drei Hilfetexte gelegt)";
         }
         if (RailTransfers.Count == 0)
         {
