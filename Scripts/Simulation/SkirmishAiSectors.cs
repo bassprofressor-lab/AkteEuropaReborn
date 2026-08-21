@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Godot;
 
@@ -461,7 +461,22 @@ public partial class MapEntityLayer : Node2D
     private sealed class AiGruppe
     {
         public const int MaxEinheiten = 100;
-        public int Auftrag = -1;
+
+        /// <summary>
+        /// ⚠⚠ <b>HIER STAND EIN LISTENPLATZ, UND DAS WAR FALSCH.</b>
+        ///
+        /// <para>Im Original ist sec69 eine <b>feste Tafel mit 100 Plätzen</b>;
+        /// ein erledigter Auftrag wird <b>an Ort und Stelle geleert</b>, die
+        /// übrigen rücken NICHT nach. Ein gespeicherter Index bleibt darum
+        /// gültig.</para>
+        ///
+        /// <para>Unsere Zielliste ist dagegen eine <c>List&lt;&gt;</c>, aus der
+        /// <see cref="AiZielwahl"/> erledigte Einträge <b>herausnimmt</b> —
+        /// dabei rutschen alle dahinterliegenden eine Stelle vor. Ein
+        /// gemerkter Platz zeigte danach auf einen <b>fremden</b> Auftrag.
+        /// Wir merken uns darum den Auftrag selbst.</para>
+        /// </summary>
+        public MissionTarget? Auftrag;
         public readonly List<int> Einheiten = new();
     }
 
@@ -496,7 +511,7 @@ public partial class MapEntityLayer : Node2D
     /// Einheit mit <c>faze == 0</c>, <c>UKOL &lt; 45</c>, <c>CPU0 &lt; 5</c>.</para>
     /// </summary>
     /// <returns>Die Gruppennummer 0…3, oder -1 für »Attack group not available«.</returns>
-    private int AiGruppeBilden(int p, int auftrag, int po)
+    private int AiGruppeBilden(int p, MissionTarget auftrag, int po)
     {
         int frei = -1;
         for (int g = 0; g < 4; g++)
@@ -547,7 +562,7 @@ public partial class MapEntityLayer : Node2D
             if (s >= 0) r[s].Belegt--;
         }
 
-        if (gruppe.Einheiten.Count == 0) { gruppe.Auftrag = -1; return -1; }
+        if (gruppe.Einheiten.Count == 0) { AiGruppeAufloesen(p, frei); return -1; }
         return frei;
     }
 
@@ -560,10 +575,62 @@ public partial class MapEntityLayer : Node2D
         for (int g = 0; g < 4; g++)
         {
             var gruppe = _aiGruppen[p][g];
+            if (gruppe.Einheiten.Count == 0) continue;
+
+            // Schritt 1 des Originals: aufraeumen. Ein Mitglied fliegt raus,
+            // wenn es tot ist oder den Besitzer gewechselt hat.
             gruppe.Einheiten.RemoveAll(i =>
-                i >= _entities.Count || _entities[i].Dead || _entities[i].Owner != p);
-            if (gruppe.Einheiten.Count == 0) gruppe.Auftrag = -1;
+            {
+                bool weg = i >= _entities.Count || _entities[i].Dead ||
+                           _entities[i].Owner != p;
+                if (weg && i < _entities.Count) AiFreigeben(_entities[i]);
+                return weg;
+            });
+
+            // Schritt 2: ist das Ziel noch da? @0x4BCF30 mit der Tafel
+            // 0x4BD7BC. Art 1 loest die Gruppe auch dann auf, wenn das
+            // Gebaeude inzwischen UNS gehoert — nicht nur, wenn es weg ist.
+            if (gruppe.Auftrag == null || ResolveTarget(p, gruppe.Auftrag) < 0)
+            {
+                AiGruppeAufloesen(p, g);
+                continue;
+            }
+            if (gruppe.Einheiten.Count == 0) AiGruppeAufloesen(p, g);
         }
+    }
+
+    /// <summary>
+    /// <b>Eine Gruppe auflösen — <c>0x4BCEA0</c> / F <c>0x4BC960</c>.</b>
+    ///
+    /// <para>⚠⚠ <b>Diese Funktion fehlte, und ihr Fehlen liess den Gegner nach
+    /// wenigen Wellen erstarren.</b> <see cref="AiGruppeBilden"/> setzt jedem
+    /// Mitglied <c>CPU0 = 10</c>; gezählt werden in <see cref="AiSetImpCpu"/>
+    /// aber nur die Einheiten mit <c>CPU0</c> 1 oder 2. Wer nie zurückgesetzt
+    /// wird, fällt also dauerhaft aus der Rechnung — die Zahl der freien
+    /// Angreifer sank mit jeder Welle, bis gar nichts mehr losfuhr.</para>
+    ///
+    /// <para>Das Original macht es an drei Stellen: wenn das Ziel weg ist,
+    /// wenn es <b>uns</b> gehört, und wenn die Gruppe leer läuft. Es setzt dann
+    /// <c>sec60[u]+0 = 0</c> und <c>+1 = 0</c> für alle Mitglieder und
+    /// <c>sec68[+0] = 0</c>.</para>
+    /// </summary>
+    private void AiGruppeAufloesen(int p, int g)
+    {
+        var gruppe = _aiGruppen[p][g];
+        foreach (int i in gruppe.Einheiten)
+            if (i < _entities.Count) AiFreigeben(_entities[i]);
+        gruppe.Einheiten.Clear();
+        gruppe.Auftrag = null;
+    }
+
+    /// <summary>Eine Einheit aus ihrer Gruppe entlassen: <c>CPU0 = 0</c>,
+    /// <c>CPU1 = 0</c>. Danach nimmt <see cref="AiZustandVorlaeufig"/> sie beim
+    /// nächsten Zug wieder auf.</summary>
+    private static void AiFreigeben(Entity e)
+    {
+        if (e.AiCpu0 != 10) return;      // 3/5/20 bleiben, wie sie sind
+        e.AiCpu0 = 0;
+        e.AiCpu1 = 0;
     }
 
     /// <summary>Wieviele Gruppenplätze dieser Spieler noch frei hat — für den
@@ -704,7 +771,7 @@ public partial class MapEntityLayer : Node2D
         sb.Append($"     Wir folgen C (22.01.1998), der spaeteren Fassung.\n");
 
         // ---- 4. Die Gruppengrenze: 4 Plaetze, 100 Einheiten -----------------
-        for (int g = 0; g < 4; g++) { _aiGruppen[0][g].Einheiten.Clear(); _aiGruppen[0][g].Auftrag = -1; }
+        for (int g = 0; g < 4; g++) { _aiGruppen[0][g].Einheiten.Clear(); _aiGruppen[0][g].Auftrag = null; }
         int belegt = 0;
         for (int v = 0; v < 6; v++)
         {
@@ -721,7 +788,7 @@ public partial class MapEntityLayer : Node2D
                   $"{AiFreieGruppen(0)} frei  {(ok4 ? "ok" : "FEHLT")}\n");
         sb.Append($"     »Attack group not available« ist STUMM und kehrt ohne Wirkung " +
                   $"zurueck — die 5. Welle faellt ersatzlos aus.\n");
-        for (int g = 0; g < 4; g++) { _aiGruppen[0][g].Einheiten.Clear(); _aiGruppen[0][g].Auftrag = -1; }
+        for (int g = 0; g < 4; g++) { _aiGruppen[0][g].Einheiten.Clear(); _aiGruppen[0][g].Auftrag = null; }
 
         // ---- 5. Der Sektorindex klemmt auf echten Karten nie ----------------
         int geklemmt = 0;
@@ -750,6 +817,57 @@ public partial class MapEntityLayer : Node2D
                           $"groesster Ueberschuss in Sektor ({sx},{sy}), " +
                           $"Betriebsart={_aiSec61[p]}\n");
             }
+        }
+
+        // ---- 7. ⭐ GIBT DIE GRUPPE IHRE EINHEITEN WIEDER FREI? -------------
+        //
+        // ⚠⚠ Die Messlatte, die am 21.08.2026 GEFEHLT HAT — und deren Fehlen
+        // den Gegner nach wenigen Wellen erstarren liess. AiGruppeBilden setzt
+        // jedem Mitglied CPU0 = 10; gezaehlt werden in Set imp cpu: aber nur
+        // die mit CPU0 1 oder 2. Ohne Aufloesung fallen sie DAUERHAFT aus der
+        // Rechnung, die Zahl der freien Angreifer sinkt mit jeder Welle, und
+        // irgendwann faehrt gar nichts mehr los. Genau das sieht ein Spieler
+        // als »die Kampagne tut nichts mehr« — und KEINE der sechs Messlatten
+        // darueber haette es bemerkt.
+        int mitP = -1;
+        for (int q = 0; q < 8 && mitP < 0; q++)
+        {
+            AiZustandVorlaeufig(q);
+            AiStaerkeraster(q);
+            AiSetImpCpu(q);
+            if (AiFreieAngreifer(q, out _, out _) >= 3) mitP = q;
+        }
+        if (mitP >= 0)
+        {
+            int vorher = AiFreieAngreiferStand(mitP);
+            var ziel = new MissionTarget { Kind = 1, Priority = 6, Word = 0, Second = 0 };
+            int g = AiGruppeBilden(mitP, ziel, 2);
+            int inGruppe = g >= 0 ? _aiGruppen[mitP][g].Einheiten.Count : 0;
+            int auf10 = 0;
+            foreach (var e in _entities) if (e.Owner == mitP && e.AiCpu0 == 10) auf10++;
+
+            if (g >= 0) AiGruppeAufloesen(mitP, g);
+            int auf10danach = 0;
+            foreach (var e in _entities) if (e.Owner == mitP && e.AiCpu0 == 10) auf10danach++;
+            AiZustandVorlaeufig(mitP);
+            AiStaerkeraster(mitP);
+            AiSetImpCpu(mitP);
+            int nachher = AiFreieAngreiferStand(mitP);
+
+            bool ok7 = inGruppe > 0 && auf10 == inGruppe && auf10danach == 0 &&
+                       nachher == vorher;
+            alles &= ok7;
+            sb.Append($"  7. Gruppe bilden und aufloesen (P{mitP}): {inGruppe} Einheiten, " +
+                      $"{auf10} auf CPU0=10, danach {auf10danach}  {(ok7 ? "ok" : "FEHLT")}\n");
+            sb.Append($"     freie Angreifer {vorher} -> {nachher} (muss gleich sein)" +
+                      (nachher == vorher ? "" : "  ⚠ VERSICKERT") + "\n");
+            sb.Append($"     Nullmodell: OHNE Aufloesung stuenden hier {inGruppe} auf CPU0=10 " +
+                      $"und die freien Angreifer waeren um {inGruppe} gefallen.\n");
+        }
+        else
+        {
+            sb.Append("  7. Gruppenaufloesung: kein Spieler mit >= 3 freien Angreifern " +
+                      "auf dieser Karte — nicht gemessen\n");
         }
 
         sb.Append(alles ? "  ALLE MESSLATTEN GETROFFEN\n" : "  ⚠ MINDESTENS EINE MESSLATTE VERFEHLT\n");

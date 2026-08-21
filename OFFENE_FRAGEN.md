@@ -7038,3 +7038,79 @@ einem Schritt von **496 auf 521** gehoben und die Zahl der »benannt, aber nie
 erwähnt« von **27 auf 7** gesenkt.
 
 > ⭐ **Regel: Ein Laufbericht darf verdichtet werden, seine Adresstafel nicht.**
+
+---
+
+## AZ. ⚠⚠ GEMELDET AM 21.08.2026: IN DER KAMPAGNE GEHT EINIGES NICHT MEHR
+
+Wörtlich: »*seit wir mehr und mehr hier analysieren geht nämlich einiges nicht
+mehr in der kampagne. aber das ist nicht so schlimm. daher erst alles auslesen,
+einarbeiten und dann werde ich sauber testen*«.
+
+⭐ **Die Reihenfolge steht damit fest und ist nicht zu verhandeln:** erst das
+Lesen zu Ende, dann alles einarbeiten, **dann** prüft er. Ein Fehler, den man
+jetzt jagt, wird von der nächsten Erkenntnis ohnehin wieder verschoben.
+
+⚠ **Was ausdrücklich NICHT gilt:** dass hier nichts zu tun sei. Der Befund ist
+festgehalten, damit er beim Prüflauf nicht als neu behandelt wird — und damit
+niemand später denkt, die Kampagne sei die ganze Zeit heil gewesen.
+
+### AZ.1 Zwei Fehler desselben Tages, selbst gefunden und behoben
+
+Beim Nachsehen, ob der Umbau des Gegners vom 21.08. daran beteiligt ist, fielen
+**zwei eigene Fehler** auf. Beide stammen aus genau diesem Umbau:
+
+**1. ⚠⚠ Die Gruppen gaben ihre Einheiten nie wieder frei.**
+`AiGruppeBilden` setzt jedem Mitglied `CPU0 = 10`; gezählt werden in
+`Set imp cpu:` aber **nur** die Einheiten mit `CPU0` 1 oder 2. Wer nie
+zurückgesetzt wird, fällt **dauerhaft** aus der Rechnung — die Zahl der freien
+Angreifer sank mit jeder Welle, und irgendwann fuhr **gar nichts mehr los**.
+
+Das Original hat dafür `0x4BCEA0` / F `0x4BC960`, und es löst an **drei**
+Stellen auf: wenn das Ziel weg ist, wenn es **uns gehört**, und wenn die Gruppe
+leer läuft. Nachgebaut als `AiGruppeAufloesen`.
+
+⚠ Genau so sieht »die Kampagne tut nichts mehr« von aussen aus — und **keine der
+sechs Messlatten des `--sektor-check` hätte es bemerkt**, weil alle sechs
+Augenblicksaufnahmen sind und keine den Verlauf misst.
+
+**2. ⚠ Die Gruppe merkte sich einen Listenplatz statt des Auftrags.**
+Im Original ist sec69 eine **feste Tafel mit 100 Plätzen**; ein erledigter
+Auftrag wird **an Ort und Stelle geleert**, die übrigen rücken nicht nach — ein
+gespeicherter Index bleibt gültig. Unsere Zielliste ist eine `List<>`, aus der
+erledigte Einträge **herausgenommen** werden; dabei rutscht alles dahinter eine
+Stelle vor, und der gemerkte Platz zeigte auf einen **fremden** Auftrag.
+
+⭐ **Die Lehre ist allgemein:** eine feste Tafel mit Leerplätzen und eine
+mitwachsende Liste sind **nicht** dasselbe. Wo das Original einen Index
+speichert, darf unser Nachbau das nur, wenn er die Plätze auch stehenlässt.
+
+### AZ.2 ⭐ Die siebte Messlatte, die daraus entstanden ist
+
+`--sektor-check` misst jetzt zusätzlich **den Verlauf statt des Augenblicks**:
+
+```
+  7. Gruppe bilden und aufloesen (P0): 3 Einheiten, 3 auf CPU0=10, danach 0  ok
+     freie Angreifer 48 -> 48 (muss gleich sein)
+     Nullmodell: OHNE Aufloesung stuenden hier 3 auf CPU0=10
+     und die freien Angreifer waeren um 3 gefallen.
+```
+
+⭐ **Die Regel dahinter, und sie gilt über diesen Fall hinaus:** ein Prüfstand,
+der nur einen Zustand misst, findet keinen, der **versickert**. Wer einen
+Zähler hochsetzt, muss auch prüfen, dass ihn jemand wieder herunterholt — und
+zwar mit derselben Zahl vorher und nachher.
+
+### AZ.3 Was beim Prüflauf des Spielers gezielt anzusehen ist
+
+Ohne seine Beobachtungen ist das eine Liste von Verdachtsmomenten, keine
+Fehlerliste. In der Reihenfolge, in der die Änderungen die Kampagne berühren:
+
+| Was | seit | warum verdächtig |
+|---|---|---|
+| Missionsziele der Art **3** | 21.08. | galten bis dahin als Kartenzelle, sind aber **sec17-Objekte**; sie lösen jetzt bewusst zu **nichts** auf, statt eine falsche Zelle anzugreifen |
+| Zellziele (jetzt Art **4**) | 21.08. | Spalte und Zeile waren **vertauscht** |
+| Der Gegner in der Kampagne | 21.08. | ganz neue Auftragswahl (`po = Weg / Wichtigkeit`) und Gruppen mit harter Grenze 4 × 100 |
+| `sec62` fehlt im Ausleser | offen | dadurch `sec110 == 0`, und das kippt den Gegner in den **»Take all«**-Zweig (AV.18) |
+| Kontexthilfe | 20.08. | 34 Tore, Schranke `Missionsnummer < 50` |
+| Die Auflösungswahl | 21.08. | `1280×960` war unsere Erfindung, das Original hat `1280×1024` |

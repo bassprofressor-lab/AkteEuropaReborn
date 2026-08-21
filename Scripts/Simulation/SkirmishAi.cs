@@ -1298,10 +1298,16 @@ public partial class MapEntityLayer : Node2D
         // Betriebsart greift auch dann an, wenn zu wenige frei sind.
         if (!(freie > po || _aiSec61[a.Player] == 5)) return;
 
-        int ziel = ResolveTarget(a.Player, list[platz]);
+        var auftrag = list[platz];
+        int ziel = ResolveTarget(a.Player, auftrag);
         if (ziel < 0) return;
 
-        int g = AiGruppeBilden(a.Player, platz, po);
+        // ⚠ Der Gruppe wird der AUFTRAG mitgegeben, nicht sein Listenplatz:
+        // AiZielwahl nimmt erledigte Eintraege aus der Liste heraus, und dabei
+        // ruecken die dahinterliegenden vor. Im Original kann das nicht
+        // passieren — sec69 ist eine feste 100er-Tafel, in der ein erledigter
+        // Auftrag AN ORT UND STELLE geleert wird.
+        int g = AiGruppeBilden(a.Player, auftrag, po);
         if (g < 0) return;                         // »Attack group not available«
 
         // ⚠ UNSER Anteil bleibt das FAHREN. `0x4BCF30` (671 Befehle) und die
