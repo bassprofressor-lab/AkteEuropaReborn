@@ -172,6 +172,22 @@ public partial class MapEntityLayer
         }
         w.ArrayEnd();
 
+        // ---- die schon gezeigte KONTEXTHILFE --------------------------------
+        //
+        // ⚠ Kampagnenweit, nicht je Mission: im Original liegen die Merker in
+        // v[346…381], und v[300…499] gehen beim Missionswechsel MIT ueber
+        // (0x4CFD80 nullt nur v[0…299]). Ohne diese Zeilen kaeme jedes
+        // Hinweisfenster nach dem Laden wieder.
+        var hin = new System.Text.StringBuilder("[");
+        bool ersterHinweis = true;
+        foreach (int v in Campaign.CampaignHints.Gezeigt)
+        {
+            if (!ersterHinweis) hin.Append(',');
+            ersterHinweis = false;
+            hin.Append(v);
+        }
+        w.Raw("hints_shown", hin.Append(']').ToString());
+
         w.ArrayStart("marks");
         for (int i = 0; i < Marks.Length; i++)
         {
@@ -333,6 +349,10 @@ public partial class MapEntityLayer
                 }
             }
 
+        Campaign.CampaignHints.Vergiss();
+        if (root.TryGetValue("hints_shown", out var hsv) && hsv.VariantType == Variant.Type.Array)
+            foreach (var q in hsv.AsGodotArray()) Campaign.CampaignHints.Merke(q.AsInt32());
+
         RailTransfersClear();
         if (root.TryGetValue("rail_transfers", out var rt) && rt.VariantType == Variant.Type.Array)
             foreach (var item in rt.AsGodotArray())
@@ -452,6 +472,9 @@ public partial class MapEntityLayer
                 foreach (var u in kv.Value)
                 { anBord++; bpruef += (kv.Key + 1) * 31 + u.Slot * 3 + u.UnitType; }
 
+            int hinweise = Campaign.CampaignHints.GezeigtCount, hpruef = 0;
+            foreach (int v in Campaign.CampaignHints.Gezeigt) hpruef += v * 3 + 7;
+
             int fahrten = 0, fpruef = 0;
             foreach (var t in RailTransfers)
             {
@@ -466,7 +489,8 @@ public partial class MapEntityLayer
                    $"{gruppen} Gruppen mit {mitglieder} Mitgliedern (Zellen {gzellen}, " +
                    $"Namen {gnamen}), {merk} Merkpunkte (Namen {mnamen}), " +
                    $"{fahrten} Bahnfahrten (Pruefzahl {fpruef}), " +
-                   $"{anBord} an Bord (Pruefzahl {bpruef})";
+                   $"{anBord} an Bord (Pruefzahl {bpruef}), " +
+                   $"{hinweise} Kontexthilfen (Pruefzahl {hpruef})";
         }
 
         // Ein Prueflauf, der nichts zu verlieren hat, kann nichts verlieren:
@@ -490,6 +514,12 @@ public partial class MapEntityLayer
         {
             Marks[1].Col = 12; Marks[1].Row = 34; Marks[1].Name = "Merk Zwei";
             gelegt += " (Merkpunkt 2 gelegt)";
+        }
+        if (Campaign.CampaignHints.GezeigtCount == 0)
+        {
+            Campaign.CampaignHints.Merke(349);
+            Campaign.CampaignHints.Merke(357);
+            gelegt += " (zwei Kontexthilfen gelegt)";
         }
         if (RailTransfers.Count == 0)
         {

@@ -4399,6 +4399,154 @@ public partial class MapEntityLayer : Node2D
         // keiner der zwanzig Aufrufer daran denken muss.
         if (_sel.Count > 0) _selAir = -1;
         UpdatePanel();
+        KontexthilfePruefen();
+    }
+
+    /// <summary>
+    /// <b>DIE KONTEXTHILFE DER KAMPAGNE</b> — der Vorspann des Originals,
+    /// gebaut am 21.08.2026. Siehe <see cref="Campaign.CampaignHints"/>, dort
+    /// steht die ganze Herleitung.
+    ///
+    /// <para>Das Original prüft die 34 Tore gegen <c>word[0x4FA0C8]</c>, die
+    /// ANGEWÄHLTE Einheit. Bei uns ist das <c>_selected</c>, und darum hängt
+    /// die Prüfung hier: an der einen Stelle, die die Hauptauswahl setzt.</para>
+    ///
+    /// <para>⚠ <b>Nur in der Kampagne.</b> Der Block liegt vor den 33
+    /// Missionsblöcken und läuft im Gefecht nicht — die Trennachse des
+    /// Projekts gilt auch hier.</para>
+    ///
+    /// <para>⚠ <b>Und nur für EIGENE Einheiten.</b> Das Original kann gar nicht
+    /// anders: <c>0x4FA0C8</c> trägt nur, was der Spieler angewählt hat, und
+    /// anwählen kann er nur seine eigenen.</para></summary>
+    private void KontexthilfePruefen()
+    {
+        if (UI.SkirmishSetup.CampaignMission <= 0) return;      // s.o.
+        if (_selected < 0 || _selected >= _entities.Count) return;
+        var e = _entities[_selected];
+        if (e.Dead || e.IsBuilding || e.IsProp) return;
+        if (e.Owner != ViewPlayer) return;
+
+        // ⚠ ZBRAN ist +0x0D; unser Weapon hält den AUFSATZ +0x0C (VRSEK), und
+        // ZBRAN = VRSEK − 20. Siehe TurretOf, das dieselbe Beziehung
+        // andersherum abbildet.
+        int zbran = e.Weapon > 20 ? e.Weapon - 20 : -1;
+        var tor = Campaign.CampaignHints.Passend(zbran, e.Part, e.UnitType, e.Equipment);
+        if (tor == null) return;
+
+        // Die vier Zahlen des Originals: show_text2(100, 200, id, 0).
+        if (UI.HelpWindow.Show(this, tor.Text, 100, 200) == null) return;
+        Campaign.CampaignHints.Gefeuert(tor);
+        KontexthilfeGezeigt++;
+        GD.Print($"kontexthilfe: v[{tor.Var}] gefeuert — Feld +0x{tor.Feld:X2} = " +
+                 $"{(tor.Feld == 0x0D ? zbran : tor.Feld == 0x0E ? e.Part : tor.Feld == 0x0F ? e.UnitType : e.Equipment)}" +
+                 $", Hilfetext {tor.Text}");
+    }
+
+    /// <summary>Wie oft die Kontexthilfe gefeuert hat — für den Prüfstand.
+    /// </summary>
+    public int KontexthilfeGezeigt;
+
+    /// <summary>
+    /// <c>--hinweis-check</c> — <b>kommt die Kontexthilfe einmal, und dann nie
+    /// wieder?</b>
+    ///
+    /// <para>Das »und dann nie wieder« ist der ganze Punkt: ein Hinweisfenster,
+    /// das bei jeder Anwahl aufgeht, ist schlimmer als keines. Gemessen wird
+    /// darum nicht, DASS es erscheint, sondern dass die zweite Anwahl derselben
+    /// Einheit <b>schweigt</b>.</para>
+    ///
+    /// <para>⚠ Und die Gegenprobe dazu: eine Einheit mit einem Bauteil, für das
+    /// es <b>kein</b> Tor gibt, darf gar nichts auslösen — sonst hätte man eine
+    /// Fassung gemessen, die immer etwas zeigt.</para></summary>
+    public string HinweisCheck()
+    {
+        var sb = new System.Text.StringBuilder("hinweis-check\n");
+        bool alles = true;
+        var tore = Campaign.CampaignHints.Tore;
+        sb.Append($"  {tore.Count} von {Campaign.CampaignHints.ToreInDatei} Toren auswertbar ")
+          .Append($"({Campaign.CampaignHints.OhneBedingung} ohne Bedingung)\n");
+        if (tore.Count == 0)
+            return sb.Append("  ⚠ ABBRUCH: keine Tore geladen.\n  DURCHGEFALLEN").ToString();
+
+        // ⚠ Das Fenster haelt sonst das Spiel an und wartet auf einen Klick.
+        bool merkPause = UI.HelpWindow.PauseWhileOpen;
+        UI.HelpWindow.PauseWhileOpen = false;
+        Campaign.CampaignHints.Vergiss();
+
+        // Ein Tor mit Feld +0x0D nehmen und eine Einheit dafuer herrichten.
+        Campaign.CampaignHints.Tor? ziel = null;
+        foreach (var t in tore) if (t.Feld == 0x0D) { ziel = t; break; }
+        if (ziel == null)
+            return sb.Append("  ⚠ ABBRUCH: kein Tor auf die Waffe (+0x0D).\n  DURCHGEFALLEN").ToString();
+
+        int idx = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var q = _entities[i];
+            if (q.Dead || q.IsBuilding || q.IsProp) continue;
+            idx = i; break;
+        }
+        if (idx < 0)
+            return sb.Append("  ⚠ ABBRUCH: keine Einheit auf dieser Karte.\n  DURCHGEFALLEN").ToString();
+
+        var e = _entities[idx];
+        int merkWaffe = e.Weapon, merkBesitzer = e.Owner;
+        ViewPlayer = e.Owner;
+        e.Weapon = ziel.Werte[0] + 20;          // ZBRAN = VRSEK − 20
+        sb.Append($"  Tor v[{ziel.Var}]: Waffe {ziel.Werte[0]} → Hilfetext {ziel.Text}; ")
+          .Append($"Einheit {idx} hergerichtet\n");
+
+        // --- 1. die erste Anwahl zeigt ihn ---------------------------------
+        int vor = KontexthilfeGezeigt;
+        _sel.Clear(); _sel.Add(idx); SetPrimary();
+        bool erste = KontexthilfeGezeigt == vor + 1;
+        sb.Append($"  erste Anwahl: {KontexthilfeGezeigt - vor} Fenster ")
+          .Append(erste ? "✔" : "✘").Append('\n');
+        alles &= erste;
+
+        // --- 2. die zweite schweigt ----------------------------------------
+        UI.HelpWindow.CloseAll(); UI.HelpWindow.CommitClose();
+        int vor2 = KontexthilfeGezeigt;
+        _sel.Clear(); SetPrimary();
+        _sel.Add(idx); SetPrimary();
+        bool zweite = KontexthilfeGezeigt == vor2;
+        sb.Append($"  zweite Anwahl derselben Einheit: {KontexthilfeGezeigt - vor2} Fenster ")
+          .Append(zweite ? "✔ schweigt" : "✘ ES KOMMT WIEDER").Append('\n');
+        alles &= zweite;
+
+        // --- 3. Gegenprobe: ein Bauteil ohne Tor loest nichts aus -----------
+        UI.HelpWindow.CloseAll(); UI.HelpWindow.CommitClose();
+        int vor3 = KontexthilfeGezeigt;
+        e.Weapon = 20 + 250;                     // ZBRAN 250 — dafuer gibt es kein Tor
+        _sel.Clear(); SetPrimary();
+        _sel.Add(idx); SetPrimary();
+        bool stumm = KontexthilfeGezeigt == vor3;
+        sb.Append($"  Gegenprobe, Waffe 250 (kein Tor): {KontexthilfeGezeigt - vor3} Fenster ")
+          .Append(stumm ? "✔" : "✘ (es zeigt IMMER etwas)").Append('\n');
+        alles &= stumm;
+
+        // --- 4. und im Gefecht schweigt es ganz -----------------------------
+        UI.HelpWindow.CloseAll(); UI.HelpWindow.CommitClose();
+        Campaign.CampaignHints.Vergiss();
+        int merkMission = UI.SkirmishSetup.CampaignMission;
+        UI.SkirmishSetup.CampaignMission = 0;
+        int vor4 = KontexthilfeGezeigt;
+        e.Weapon = ziel.Werte[0] + 20;
+        _sel.Clear(); SetPrimary();
+        _sel.Add(idx); SetPrimary();
+        bool imGefecht = KontexthilfeGezeigt == vor4;
+        UI.SkirmishSetup.CampaignMission = merkMission;
+        sb.Append($"  im Gefecht (keine Kampagne): {KontexthilfeGezeigt - vor4} Fenster ")
+          .Append(imGefecht ? "✔ schweigt" : "✘").Append('\n');
+        alles &= imGefecht;
+
+        e.Weapon = merkWaffe; e.Owner = merkBesitzer;
+        UI.HelpWindow.CloseAll(); UI.HelpWindow.CommitClose();
+        UI.HelpWindow.PauseWhileOpen = merkPause;
+        Campaign.CampaignHints.Vergiss();
+
+        sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
     }
 
     /// <summary>Can the player pick this entity up and give it orders? Only his

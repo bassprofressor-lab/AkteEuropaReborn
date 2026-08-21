@@ -1,6 +1,6 @@
 {
- "_note": "Der VORSPANN der Kampagne: 34 Einmal-Tore aus dem Block 0x497540..0x49814D. Wer eine Einheit anwaehlt, die ein bestimmtes Bauteil traegt, bekommt EINMAL in der ganzen Kampagne den Hilfetext dazu. Feld = Versatz im Einheitensatz (0x0D ZBRAN Waffe, 0x0E top_spec, 0x0F l_engine). Text = HELPG-Nummer; die Probe Text == var-300 haelt bei 32 von 34. NOCH NICHT GEBAUT - siehe OFFENE_FRAGEN.md Abschnitt AE.",
- "_offen": "Fuenf Tore (372, 374, 375, 377, 381) pruefen etwas anderes als ein Bauteilbyte; ihre Bedingung fehlt.",
+ "_note": "Der VORSPANN der Kampagne: 34 Einmal-Tore aus dem Block 0x497540..0x49814D. Wer eine Einheit anwaehlt, die ein bestimmtes Bauteil traegt, bekommt EINMAL in der ganzen Kampagne den Hilfetext dazu. Feld = Versatz im Einheitensatz (0x0D ZBRAN Waffe, 0x0E top_spec, 0x0F l_engine). Text = HELPG-Nummer; die Probe Text == var-300 haelt bei 32 von 34. GEBAUT am 21.08.2026 (Campaign/CampaignHints.cs, --hinweis-check) - siehe OFFENE_FRAGEN.md Abschnitt AE.",
+ "_offen": "Neun der 34 Tore tragen keinen Satzversatz und sind damit nicht auswertbar (v[346], 372..378, 381); vier davon haben einen Wert, aber kein Feld. Sie pruefen etwas anderes als ein Bauteilbyte der angewaehlten Einheit. Die uebrigen 25 sind gebaut.",
  "tore": [
   {
    "var": 346,
