@@ -7,6 +7,262 @@ dem eigenen Rechner aus der eigenen Fassung des Spiels von 1997.
 *In English: [CHANGELOG.md](CHANGELOG.md). Ältere Fassungen als 0.5.0 sind
 bisher nur dort beschrieben.*
 
+## 0.7.0 — 21.08.2026
+
+### Auf einen Blick
+
+Diese Fassung ist ungewöhnlich: das meiste daran ist **Lesen**, nicht Bauen —
+und ein großer Teil davon sind **Berichtigungen an uns selbst**. Zwei
+Suchverfahren, auf denen ältere Befunde standen, haben sich als fehlerhaft
+erwiesen, und zwar gegenläufig. Was danach übrigblieb, steht hier.
+
+| | |
+|---|---|
+| ⚠ **Der Musikregler nahm alle Klänge mit.** | Ihn herunterzuziehen machte das ganze Spiel stumm. Ursache: der Weg darum herum stellte das MIDI-Gerät **systemweit** leiser. Entfernt — und beim Start wird der Schaden zurückgenommen. |
+| **Die Auflösung ist einstellbar.** | 4:3 und 16:9, gefiltert nach dem, was wirklich auf den Bildschirm passt. |
+| **Ein eigenes Programmsymbol.** | Sieben Größen, 16 bis 256 px. |
+| ⭐ **Das Feuer greift über.** | Ein Waldbrand läuft mit dem Wind — die Wahrscheinlichkeit hängt an Windrichtung und Windstärke, beides aus dem Original. |
+| **Wald brennt nicht mehr bei jedem Treffer.** | Fünf Schadensbänder: starker Schuss löscht ihn *ohne* Feuer, schwacher tut nichts. |
+| ⭐ **Die Kampagne hat eine Kontexthilfe.** | 34 Tore, die einmal in der ganzen Kampagne einen Hilfetext zeigen. Es gab sie im Original von Anfang an; wir hatten sie nie gesehen. |
+| **Hilfetexte kommen nur einmal — und bleiben es über den Spielstand.** | Der Riegel des Originals fällt beim *Anzeigen*, nicht beim Wegklicken. |
+| **Sechs Zufallswürfe hängen nicht mehr am globalen Würfel.** | Branddauer, Begehbarkeit nach dem Brand und vier in der Flugbahn — alles simulationsrelevant. |
+| ⚠ **Die zwei ausgelieferten `GAME.EXE` sind nicht dasselbe Programm.** | Ein Unterschied von einer Anweisung, mit Folgen für die KI. Unsere Grundregel »nur was beide hergeben« hat damit einen neuen Grund. |
+| ⭐ **Die KI-Dateien `AI*.CWI` sind gelesen.** | Der größte ungelesene Block des Projekts — kein Bauplan, sondern die strategische Wegekarte der KI. |
+| ⭐ **Die vollständige Ladertafel: alle 131 Abschnitte.** | Größe, Zieladresse und Deutung. Damit ist der Spielstand als Ganzes aufgeschlossen. |
+| ⭐ **Der Marktpreis ist gerechnet.** | 434 Marktposten in 27 Dateien, jeder aufs Byte. |
+| ⚠⚠ **Unser Suchverfahren war löchrig.** | Ein naiver Abtast des Programmbilds bricht *stillschweigend* nach 18 % ab; der rohe Byteabtast liefert umgekehrt Falschtreffer. Alle darauf gestützten »kein Treffer«-Befunde wurden nachgelaufen. |
+| ⭐ **Ein wirklich toter Abschnitt gefunden — und einer wiederbelebt.** | `sec36` wird geladen, gespeichert und nie angefasst. Dafür leben drei »tote« Mauszeiger doch. |
+
+### Was sich beim Spielen ändert
+
+- ⚠⚠ **Der Musikregler machte das ganze Spiel stumm.**
+
+  Gemeldet: »wenn man unter Ton MIDI-Musik herunterregelt, sind auch die
+  normalen Klänge weg. MIDI-Musik an/aus lässt sie dagegen hörbar.«
+
+  Genau dieser Unterschied entlarvt die Ursache. Der **Schalter** hält die Musik
+  an; der **Regler** rief `midiOutSetVolume(IntPtr.Zero, …)`. Die Null ist kein
+  Handle, sondern die **Gerätenummer 0** — und bei den üblichen Windows-Treibern
+  hängt das MIDI-Gerät am selben Ausgabepfad wie alles andere, was das Programm
+  spielt. Wer die Musik auf 20 % stellte, stellte die ganze Anwendung auf 20 %.
+
+  ⚠ Der Hinweis stand seit dem 10.08. als Warnung im Kommentar **darunter**
+  (»stellt bei manchen Treibern die Lautstärke geräteweit und über das Programm
+  hinaus«). Gemessen hat es erst ein Spieler. Eine Warnung, die man stehenlässt
+  statt ihr nachzugehen, verhindert nichts.
+
+  Der Aufruf ist ersatzlos entfernt. **0 % heißt stumm** — über denselben Weg,
+  den der Schalter nimmt und der nachweislich funktioniert.
+
+  ⚠ **Was das kostet, und es steht auch im Einstellungsschirm:** zwischen 1 und
+  100 regelt der Schieber nichts mehr. Windows' MIDI-Sequenzer kennt den
+  Lautstärkebefehl nicht (Rückgabe 261, »Unbekannter Befehl«). Stufenlos ginge
+  nur, wer das Abspielen selbst übernimmt (MIDI lesen, `midiOutShortMsg`, CC 7
+  je Kanal) statt MCI den Sequenzer führen zu lassen. Das ist **nicht gebaut**.
+
+  ⚠ **Und eine Schadensbehebung:** der alte Aufruf hat die Gerätelautstärke
+  systemweit verstellt, und dieser Wert überlebt das Beenden. Wer damals am
+  Regler war, hatte sein MIDI-Gerät womöglich seither leise. Beim Start wird es
+  jetzt **einmal auf voll zurückgesetzt**.
+
+- **Die Auflösung ist einstellbar** — neue Auswahl unter »Bild«: die
+  4:3-Stufen von 640×480 bis 1600×1200 und die 16:9-Stufen von 1280×720 bis
+  3840×2160.
+
+  ⚠ Gefiltert nach dem, was **wirklich** auf den Bildschirm passt, und zwar
+  gegen den *nutzbaren* Bereich geprüft, nicht gegen die rohe Bildschirmgröße.
+  Eine Liste, die 3840×2160 auf einem 1080p-Schirm anbietet, ist keine Auswahl,
+  sondern eine Falle: das Fenster wäre größer als der Bildschirm, und man käme
+  an die Einstellungen nicht mehr heran, um es zurückzustellen.
+
+  ⚠ Sie wirkt **nur im Fenster**. Im Vollbild bestimmt der Bildschirm die
+  Auflösung; die Auswahl wird dort gesperrt, statt so zu tun, als täte sie
+  etwas. Nach dem Ändern wird das Fenster mittig gesetzt.
+
+  ⚠ **Unsere Zutat**, so wie der Streckfaktor daneben: das Original von 1997
+  lief in einer festen Auflösung und kennt keine Wahl.
+
+- **Ein eigenes Programmsymbol**, sieben Größen von 16 bis 256 px. Motiv ist der
+  Sichtschlitz eines Kampfläufers, in den Farben des Spiels.
+
+  ⚠ Der erste Entwurf war ein Trapez und las sich als **Eimer**. Ein Symbol wird
+  nicht dadurch gut, dass die Bauteile stimmen — es muss auf den ersten Blick
+  das Richtige sein, und das sieht man erst am gerenderten Bild.
+
+  ⚠ **Unsere Zutat, vollständig:** das Original hat ein eigenes Symbol, das wir
+  **nicht** verwenden. Der Nachbau liefert grundsätzlich kein Byte des Originals
+  mit.
+
+- ⭐ **Das Feuer greift über.** Der Brandtakt des Originals versucht je
+  brennender Zelle und je Schritt **genau einen** der acht Nachbarn anzuzünden —
+  nicht alle. Die Wahrscheinlichkeit hängt am Wind:
+
+  ```
+  p = 1 / (2 · (5 · ((9 − Windstärke) · Winkelabweichung) + 50))
+  ```
+
+  Bei Windstärke 2 heißt das: mit dem Wind 1/100 je Schritt, gegen den Wind
+  1/380. Der Brand läuft also in Windrichtung, **ohne dass eine Richtung fest
+  verdrahtet wäre**.
+
+  ⚠ **Die Gegenprobe ist der Punkt**, auf den es ankommt: eine Ausbreitung, die
+  gleichmäßig in alle Richtungen läuft, sähe im Spiel genauso aus wie eine, die
+  dem Wind folgt. Gemessen wurden darum beide — mit Wind 234 zu 63 Treffer, ohne
+  Windeinfluss eine flache Spanne von 222 bis 264.
+
+  ⚠ Zwei Stellen mussten dafür umziehen: der Brand hing im **Zeichenweg** (ein
+  kopfloser Lauf zeichnet nicht — das Feuer wäre im Netzspiel stehengeblieben,
+  und bei 144 Bildern/s brannte der Wald schneller ab als bei 30), und der
+  **Wind** lief ebenfalls im Bildlauf. Gefangen hat das ein Kommentar, den wir
+  selbst an den Wind geschrieben hatten: *»Wer das Feuer an den Wind hängt, MUSS
+  den Takt vorher auf die Simulation umstellen.«*
+
+- **Wald brennt nicht mehr bei jedem Treffer.** Das Original hat fünf
+  Schadensbänder: **≥ 70** löscht den Wald *ohne* Feuer · **46–69** immer Feuer ·
+  **23–45** mit ¼ · **13–22** mit ⅛ · **≤ 12** gar nichts.
+
+  ⚠ Für den einzigen Weg, den wir heute haben, ändert sich nichts — der
+  Missionsstart schlägt mit Schaden 50 zu und fällt ins Band »immer Feuer«. Die
+  Bänder sind trotzdem gebaut, weil der nächste Aufrufer sie braucht statt sie
+  zu suchen.
+
+  ⚠ Und der neue Prüfstand hat den Fehler darin **im ersten Lauf** gefangen: ein
+  Schaden im Band 13–22 lief durch beide Würfe, ⅛ × ¼ = **1/32** statt ⅛. Im
+  Spiel wäre das nie aufgefallen — Wald, der »selten« brennt, sieht bei 1/32
+  nicht anders aus als bei ⅛.
+
+- ⭐ **Die Kampagne hat eine Kontexthilfe**, und wir hatten sie nie gesehen. Der
+  gemeinsame Vorspann der Kampagne ist ein Block von **34 Toren**: wählt der
+  Spieler eine Einheit an, die ein bestimmtes Bauteil trägt, geht **einmal in
+  der ganzen Kampagne** der zugehörige Hilfetext auf. Kein Missionsskript, kein
+  Auslöser in der Karte.
+
+  Der Block prüft **vier** verschiedene Dinge, nicht eines: ein Satzfeld der
+  angewählten Einheit (26 Tore), ob der Spieler ein bestimmtes **Gebäude**
+  besitzt (4), ob gerade ein bestimmtes **Fenster** geöffnet wurde (3), und ob
+  ein Flugzeug auf **Stellplatz 0** des eigenen Flughafens steht (1).
+
+  ⚠ »Nur in der Kampagne« ist keine Auslegung mehr, sondern eine Zahl: der Block
+  prüft selbst `Missionsnummer < 50`.
+
+  ⚠ **Drei davon fehlen bei uns** — die Fenster »Bahnhof«, »Hangar« und
+  »Terranium-Mine« gibt es im Nachbau nicht. Sie werden übergangen und
+  **gezählt**, nicht geraten.
+
+- **Hilfetexte kommen nur einmal, und das überlebt den Spielstand.** Der Riegel
+  des Originals fällt beim **Anzeigen**, nicht beim Wegklicken — der Spieler muss
+  das Fenster nicht anfassen. Und er ist ein eigener Abschnitt der
+  Spielstanddatei, ging bei uns aber nicht mit hinein: nach Speichern und Laden
+  kamen alle Hilfetexte wieder.
+
+  ⚠ Er überlebt allerdings **keinen Missionswechsel** — das war eigens zu prüfen,
+  weil eine naheliegende Vermutung das Gegenteil sagte. Der Kartenlader räumt ihn
+  im selben Atemzug wie die Missionsvariablen.
+
+- **Sechs Zufallswürfe hängen nicht mehr am globalen Würfel.** Die Branddauer und
+  »bleibt der verkohlte Baum stehen« entscheiden mittelbar über die
+  **Begehbarkeit** der Karte; die vier in der Flugbahn entscheiden mit, wo ein
+  Flugzeug schießt und wo es abgeschossen wird. Beides ist simulationsrelevant —
+  zwei Maschinen im Netzspiel wären auseinandergelaufen, und zwar lautlos.
+
+  ⚠ Übrig bleiben allein die vier Würfe im Klang (welche Stimmprobe, welche
+  Tonhöhe). Die dürfen bleiben, weil ein Klang den Spielzustand nicht verändert.
+
+### Was gelesen wurde
+
+- ⚠⚠ **Die zwei ausgelieferten `GAME.EXE` sind nicht dasselbe Programm.** Sie
+  unterscheiden sich in **einer Anweisung** mit Folgen: die spätere setzt ein
+  Merkerbyte, die frühere nicht — dort bleibt die Produktion der KI stehen, wenn
+  ein Transporter kein Ziel findet. Unsere Grundregel »es gilt nur, was **beide**
+  hergeben« war bisher eine Vorsichtsmaßnahme; jetzt hat sie einen belegten
+  Grund.
+
+- ⭐ **Die KI-Dateien `AI*.CWI` sind gelesen** — der größte ungelesene Block des
+  Projekts, 43 Dateien à 2968 Byte. Sie sind **keine** Bau- oder Wellensteuerung,
+  sondern die **strategische Wegekarte der KI**: ein 11×11-Sektorennetz über der
+  Karte, dessen Kanten von **Brücken** abhängen.
+
+- ⭐ **Die vollständige Ladertafel: alle 131 Abschnitte** mit Größe, Zieladresse
+  und Deutung. Damit ist der Spielstand als Ganzes aufgeschlossen — und mit ihm
+  eine Reihe Einzelfragen, die vorher nicht zu stellen waren.
+
+- ⭐ **Der Marktpreis ist gerechnet** und auf **434 Marktposten in 27 Dateien
+  aufs Byte** nachgeprüft. Ein Vorgänger hatte erschöpfend gesucht und nichts
+  gefunden; der Grund war, dass die drei Baustoffkosten als **Bytes** im Satz
+  stehen, nicht als Wort. Die eine Abweichung löst sich am **Datum**: der
+  Aufschlag wurde zwischen dem 8. Juli und dem 4. August 1997 von 1,5 auf 2,5
+  angehoben.
+
+- ⭐ Weiter gelesen und je mit Zahlen belegt: die **Bahnandock-Tafel** (`sec32`),
+  der **Waldbrand** (`sec18`), das **Gedächtnis des Nebels**, der
+  **Kampagnenübertrag** von einer Mission zur nächsten, der **KI-Zustand**, die
+  **Fahrspuren**, die **Türzelle** eines Gebäudes (322 von 322 Treffern, alle
+  vier Nullmodelle unter 1 %), der **Umlaufzeiger der KI-Bauschlange**
+  (`sec58`, 112 von 112) und der **Einmal-Riegel der Hilfetexte** (`sec71`).
+
+### ⚠ Berichtigungen an uns selbst
+
+Dieser Abschnitt ist neu, und er ist in dieser Fassung der längste. Er steht
+hier, weil ein Nachbau, der seine eigenen Irrtümer verschweigt, den nächsten
+Leser in dieselben schickt.
+
+- ⚠⚠ **Unser Suchverfahren war löchrig, und zwar in beide Richtungen.**
+
+  Ein naiver Linearabtast des Programmbilds **bricht stillschweigend ab** — in
+  der einen Auslieferung nach 18 % der Befehle, in der anderen nach 4 %. Es gibt
+  keinen Fehler, es kommen nur weniger Befehle. **Wer so gesucht und nichts
+  gefunden hat, hat nichts gesucht.** Der rohe Byteabtast liegt umgekehrt falsch:
+  er liefert Falschtreffer (bei einem Abschnitt meldete er 9 Fundstellen, wo es
+  5 sind).
+
+  Beide `GAME.EXE` tragen eine vollständige **Relokationstafel**. Damit ist jede
+  absolute Adresse **aufzählbar statt suchbar** — eine Vollerhebung statt eines
+  Abtasts. Alle 130 Abschnittspuffer wurden damit neu erhoben, und die
+  Negativbefunde, die die Vollerhebung nicht abdeckt, einzeln nachgelaufen.
+
+  ⚠ Und das neue Werkzeug hatte im ersten Anlauf **denselben Fehler**: es suchte
+  von der Fundstelle rückwärts nach einem Befehl. Der Selbsttest an einem
+  bekannten Fall zeigte, dass daraus aus einem *Schreiber* ein *Leser* wird.
+
+- ⭐ **Ein wirklich toter Abschnitt gefunden:** `sec36`, 10 500 Byte, wird
+  geladen, gespeichert und **nie angefasst** — zwei Verweise je Auslieferung,
+  beide Lader und Speicherer. Und über 13 von 13 Prüfdateien ist er **0 von
+  10 500 Byte ungleich null**.
+
+- ⭐⭐ **Und einer wiederbelebt: drei »tote« Mauszeiger leben.** Der alte Befund
+  lautete »vier Zeiger sind gefüllt, aber tot«. Drei davon werden sehr wohl
+  gezeichnet — nur nicht über den Zustandsautomaten, sondern direkt: die
+  **Klickmarkierung** auf der Karte und die zwei **Auswahlmarken** am Objekt. Nur
+  einer bleibt tot. Dieselbe Lehre ein zweites Mal: ein weiterer Zeiger steht
+  **nirgends als Konstante** im Programm, er wird gerechnet — ein Konstantenabtast
+  hätte auch ihn beerdigt.
+
+- ⚠ **Die Kontexthilfe war zu einem Drittel falsch gebaut**, nachdem wir sie am
+  selben Tag gebaut hatten. Fünfzehn Tore tragen eine Vorbedingung, die der
+  erste Ausleser verschluckt hatte; ein weiteres ist ein Ausschluss statt einer
+  Oder-Bedingung; vier zeigen an anderer Stelle. Und der schwerste Fehler war
+  unser eigener: wir **rechneten** ein Satzfeld aus einem anderen, statt das
+  Rohbyte zu nehmen — und diese Rechnung kann den Wert 0 gar nicht ausdrücken,
+  auf den genau diese fünfzehn Tore prüfen.
+
+- ⚠ Weiter berichtigt: die **Klangbilanz** (36 fehlen, nicht 44 — und eine
+  Nummer, die als »fehlend« geführt wurde, gibt es im Original gar nicht), eine
+  **Begründung, die aufs falsche Feld zeigte**, mehrere Kommentare, die gebaute
+  Arbeit weiterhin als Lücke führten, und zweimal eine **Zahl, die ich
+  übernommen statt nachgerechnet hatte**.
+
+### Bekannte Grenzen dieser Fassung
+
+- Der Musikregler regelt zwischen 1 und 100 nichts (siehe oben).
+- Drei der 34 Kontexthilfe-Tore hängen an Fenstern, die es im Nachbau noch nicht
+  gibt.
+- 36 Klänge des Originals sind aufgestellt, aber nicht gebaut; mehrere hängen an
+  Dingen, die es hier noch nicht gibt.
+- Die Formationsverschiebung beim Gruppenbefehl ist gelesen, aber bewusst nicht
+  gebaut — sie ändert das Gruppenverhalten spürbar.
+
+---
+
 ## 0.6.0 — 21.08.2026
 
 ### Auf einen Blick

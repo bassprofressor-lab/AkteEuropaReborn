@@ -6,6 +6,247 @@ your own copy of the 1997 game.
 
 *Auf Deutsch: [CHANGELOG.de.md](CHANGELOG.de.md).*
 
+## 0.7.0 — 2026-08-21
+
+### At a glance
+
+This release is unusual: most of it is **reading**, not building — and a large
+part of that is **corrections to ourselves**. Two search methods that older
+findings rested on turned out to be faulty, in opposite directions. What
+survived is written up here.
+
+| | |
+|---|---|
+| ⚠ **The music slider silenced everything.** | Pulling it down muted the whole game. Cause: the workaround lowered the MIDI device's volume **system-wide**. Removed — and the damage is undone at startup. |
+| **Resolution can be set.** | 4:3 and 16:9, filtered to what actually fits your screen. |
+| **A proper application icon.** | Seven sizes, 16 to 256 px. |
+| ⭐ **Fire spreads.** | A forest fire runs with the wind — the probability depends on wind direction and strength, both from the original. |
+| **Forest no longer catches from every hit.** | Five damage bands: a strong shot clears it *without* fire, a weak one does nothing. |
+| ⭐ **The campaign has context help.** | 34 gates that each show a help text once in the whole campaign. The original always had it; we had never seen it. |
+| **Help texts appear once — and stay that way across a save.** | The original's latch drops when the text is *shown*, not when it is dismissed. |
+| **Six random rolls no longer hang off the global die.** | Burn duration, passability after a fire, and four in flight paths — all simulation-relevant. |
+| ⚠ **The two shipped `GAME.EXE` are not the same program.** | A one-instruction difference, with consequences for the AI. Our ground rule — "only what both yield" — now has a measured reason. |
+| ⭐ **The AI files `AI*.CWI` are read.** | The largest unread block in the project — not a build plan, but the AI's strategic route map. |
+| ⭐ **The complete loader table: all 131 sections.** | Size, target address and meaning. The savegame is now open as a whole. |
+| ⭐ **The market price is computed.** | 434 market entries across 27 files, every one exact to the byte. |
+| ⚠⚠ **Our search method had holes.** | A naive sweep of the program image **stops silently** after 18 %; the raw byte scan produces false hits instead. Every "no match" finding that rested on them was re-run. |
+| ⭐ **One genuinely dead section found — and one revived.** | `sec36` is loaded, saved and never touched. Meanwhile three "dead" mouse cursors turn out to be alive. |
+
+### What changes when you play
+
+- ⚠⚠ **The music slider silenced the whole game.**
+
+  Reported: "turning MIDI music down under Sound also takes the normal sounds
+  away. The MIDI music on/off switch leaves them audible."
+
+  That difference is exactly what gives the cause away. The **switch** stops the
+  music; the **slider** called `midiOutSetVolume(IntPtr.Zero, …)`. The zero is
+  not a handle but **device number 0** — and on the usual Windows drivers the
+  MIDI device sits on the same output path as everything else the program plays.
+  Setting music to 20 % set the whole application to 20 %.
+
+  ⚠ The warning had been sitting in the comment **directly below** since 10 Aug
+  ("on some drivers this sets the device volume system-wide and beyond the
+  program"). It took a player to measure it. A warning you leave standing
+  instead of following up prevents nothing.
+
+  The call is gone with nothing in its place. **0 % means silence** — via the
+  same route the switch takes, which demonstrably works.
+
+  ⚠ **What that costs, and the settings screen says so too:** between 1 and 100
+  the slider no longer does anything. Windows' MIDI sequencer does not know the
+  volume command (return 261, "unknown command"). Continuous control would
+  require taking over playback ourselves (parse the MIDI file,
+  `midiOutShortMsg`, CC 7 per channel) instead of letting MCI drive the
+  sequencer. That is **not built**.
+
+  ⚠ **And a repair:** the old call changed the device volume system-wide, and
+  that value survives the program exiting. Anyone who used the slider may have
+  had their MIDI device quiet ever since. It is now **reset to full once** at
+  startup.
+
+- **Resolution can be set** — a new choice under "Bild": the 4:3 steps from
+  640×480 to 1600×1200 and the 16:9 steps from 1280×720 to 3840×2160.
+
+  ⚠ Filtered to what **actually** fits, checked against the *usable* area rather
+  than the raw screen size. A list offering 3840×2160 on a 1080p screen is not a
+  choice but a trap: the window would be larger than the screen, and you could
+  no longer reach the settings to put it back.
+
+  ⚠ It applies **in windowed mode only**. In fullscreen the screen decides; the
+  choice is disabled there rather than pretending to do something. The window is
+  centred after a change.
+
+  ⚠ **Ours, not the original's** — like the UI scale beside it. The 1997 game
+  ran at one fixed resolution and offers no choice.
+
+- **A proper application icon**, seven sizes from 16 to 256 px. The motif is a
+  walker's visor slit, in the game's own colours.
+
+  ⚠ The first draft was a trapezoid and read as a **bucket**. An icon does not
+  become good because the parts are correct — it has to be the right thing at a
+  glance, and you only see that in the rendered image.
+
+  ⚠ **Entirely ours:** the original has its own icon, which we do **not** use.
+  The rebuild ships no byte of the original.
+
+- ⭐ **Fire spreads.** The original's fire tick tries to ignite **exactly one**
+  of the eight neighbours per burning cell per step — not all of them. The
+  probability hangs on the wind:
+
+  ```
+  p = 1 / (2 · (5 · ((9 − wind strength) · angular deviation) + 50))
+  ```
+
+  At wind strength 2 that means 1/100 per step downwind and 1/380 upwind. The
+  fire runs with the wind **without any direction being hard-wired**.
+
+  ⚠ **The counter-check is the point:** a spread that runs evenly in all
+  directions would look exactly like one that follows the wind. So both were
+  measured — 234 hits to 63 with wind, and a flat span of 222 to 264 with the
+  wind term removed.
+
+  ⚠ Two things had to move for this: the fire was hanging in the **draw path**
+  (a headless run does not draw — the fire would have stood still in network
+  play, and at 144 fps the forest burned down faster than at 30), and the
+  **wind** was running on frame time too. That was caught by a comment we had
+  written to ourselves at the wind: *"anyone who hangs the fire on the wind MUST
+  move the tick onto the simulation first."*
+
+- **Forest no longer catches from every hit.** The original has five damage
+  bands: **≥ 70** clears the forest *without* fire · **46–69** always burns ·
+  **23–45** with ¼ · **13–22** with ⅛ · **≤ 12** nothing at all.
+
+  ⚠ Nothing changes for the one path we have today — the mission start strikes
+  with damage 50 and falls into "always burns". The bands are built anyway, so
+  the next caller finds them instead of searching for them.
+
+  ⚠ And the new test bench caught the bug in them **on the first run**: damage in
+  the 13–22 band fell through both rolls, ⅛ × ¼ = **1/32** instead of ⅛. In the
+  game that would never have shown — forest that burns "rarely" looks the same at
+  1/32 as at ⅛.
+
+- ⭐ **The campaign has context help**, and we had never seen it. The campaign's
+  shared prologue is a block of **34 gates**: select a unit carrying a given
+  component and the matching help text opens **once in the whole campaign**. No
+  mission script, no trigger in the map.
+
+  The block checks **four** different things, not one: a record field of the
+  selected unit (26 gates), whether the player owns a particular **building**
+  (4), whether a particular **window** was just opened (3), and whether an
+  aircraft stands on **slot 0** of the player's own airfield (1).
+
+  ⚠ "Campaign only" is no longer an interpretation but a number: the block
+  itself checks `mission number < 50`.
+
+  ⚠ **Three of them we cannot serve** — the "station", "hangar" and
+  "terranium mine" windows do not exist in the rebuild. They are skipped and
+  **counted**, not guessed.
+
+- **Help texts appear once, and that survives a save.** The original's latch
+  drops when the text is **shown**, not when it is dismissed — the player need
+  not touch the window. And it is a section of the savegame file, which ours was
+  not: after saving and loading, every help text came back.
+
+  ⚠ It does **not** survive a mission change, though — that had to be checked
+  specifically, because the obvious assumption said otherwise. The map loader
+  clears it in the same breath as the mission variables.
+
+- **Six random rolls no longer hang off the global die.** Burn duration and
+  "does the charred tree stay standing" decide, indirectly, which cells stay
+  **passable**; the four in flight paths help decide where an aircraft shoots and
+  where it gets shot down. Both are simulation-relevant — two machines in network
+  play would have diverged, silently.
+
+  ⚠ What remains are the four rolls in sound (which voice sample, which pitch).
+  Those may stay: a sound does not change game state.
+
+### What was read
+
+- ⚠⚠ **The two shipped `GAME.EXE` are not the same program.** They differ in
+  **one instruction**, with consequences: the later one sets a flag byte, the
+  earlier one does not — and there the AI's production stalls when a transport
+  finds no target. Our ground rule "only what **both** yield" used to be a
+  precaution; now it has a measured reason.
+
+- ⭐ **The AI files `AI*.CWI` are read** — the project's largest unread block,
+  43 files of 2968 bytes. They are **not** build or wave control but the AI's
+  **strategic route map**: an 11×11 sector grid over the map whose edges depend
+  on **bridges**.
+
+- ⭐ **The complete loader table: all 131 sections** with size, target address
+  and meaning. The savegame is now open as a whole — and with it a series of
+  individual questions that could not be asked before.
+
+- ⭐ **The market price is computed** and verified against **434 market entries
+  in 27 files, exact to the byte**. A predecessor had searched exhaustively and
+  found nothing; the reason was that the three material costs sit in the record
+  as **bytes**, not as a word. The single discrepancy resolves by **date**: the
+  markup was raised from 1.5 to 2.5 between 8 July and 4 August 1997.
+
+- ⭐ Also read, each backed by numbers: the **rail dock table** (`sec32`), the
+  **forest fire** (`sec18`), the **fog's memory**, the **campaign carry-over**
+  from one mission to the next, the **AI state**, the **tracks**, a building's
+  **door cell** (322 of 322 hits, all four null models under 1 %), the AI build
+  queue's **rotating pointer** (`sec58`, 112 of 112) and the **help-text latch**
+  (`sec71`).
+
+### ⚠ Corrections to ourselves
+
+This section is new, and in this release it is the longest. It is here because a
+rebuild that hides its own mistakes sends the next reader into them.
+
+- ⚠⚠ **Our search method had holes, in both directions.**
+
+  A naive linear sweep of the program image **stops silently** — after 18 % of
+  the instructions in one build, after 4 % in the other. There is no error, just
+  fewer instructions. **Anyone who searched that way and found nothing has
+  searched nothing.** The raw byte scan is wrong the other way: it produces false
+  hits (for one section it reported 9 sites where there are 5).
+
+  Both `GAME.EXE` carry a complete **relocation table**. That makes every
+  absolute address **enumerable rather than searchable** — a full census instead
+  of a sweep. All 130 section buffers were re-surveyed with it, and the negative
+  findings the census cannot cover were re-run one by one.
+
+  ⚠ And the new tool had **the same fault** on its first pass: it searched
+  backwards from the site for an instruction. A self-test on a known case showed
+  that this turns a *writer* into a *reader*.
+
+- ⭐ **One genuinely dead section found:** `sec36`, 10 500 bytes, is loaded,
+  saved and **never touched** — two references per build, both loader and saver.
+  And across 13 of 13 test files it is **0 of 10 500 bytes non-zero**.
+
+- ⭐⭐ **And one revived: three "dead" mouse cursors are alive.** The old finding
+  read "four cursors are filled but dead". Three of them are very much drawn —
+  just not through the state machine: the **click marker** on the map and the two
+  **selection marks** on an object. Only one stays dead. The same lesson a second
+  time: another cursor appears **nowhere as a constant** in the program, it is
+  computed — a constant scan would have buried that one too.
+
+- ⚠ **The context help was a third wrong** after we built it the same day.
+  Fifteen gates carry a precondition the first extractor had swallowed; another
+  is an exclusion rather than an OR; four display elsewhere. And the worst
+  mistake was our own: we **computed** one record field from another instead of
+  taking the raw byte — and that computation cannot express the value 0, which is
+  exactly what those fifteen gates test for.
+
+- ⚠ Also corrected: the **sound tally** (36 missing, not 44 — and one number
+  listed as "missing" does not exist in the original at all), a **rationale that
+  pointed at the wrong field**, several comments still listing finished work as a
+  gap, and twice a **number I had copied instead of recomputing**.
+
+### Known limits of this release
+
+- The music slider does nothing between 1 and 100 (see above).
+- Three of the 34 context-help gates depend on windows the rebuild does not have.
+- 36 of the original's sounds are catalogued but not built; several depend on
+  features not present here yet.
+- Formation offset on group orders is read but deliberately not built — it
+  changes group behaviour noticeably.
+
+---
+
 ## 0.6.0 — 2026-08-21
 
 ### At a glance
