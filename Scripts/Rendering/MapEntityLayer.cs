@@ -323,6 +323,14 @@ public partial class MapEntityLayer : Node2D
         /// <summary>Angesammelte Takte der MINE — sie foerdert nach einer
         /// eigenen Periodentafel, siehe <c>MinePeriod</c>.</summary>
         public int MineAccum;
+
+        /// <summary>Wieviele Stueck dieser Traeger noch abzusetzen hat, und
+        /// wohin. Das Original fuehrt beides im Satz: <c>byte[+0x38]</c> ist
+        /// die Stueckzahl (Befehl 18 setzt sie auf P5), <c>word[+0x36]</c> die
+        /// Zelle. Abgesetzt wird EINES je Takt — darum gibt es das Feld
+        /// ueberhaupt; alles auf einmal braeuchte keinen Zaehler.</summary>
+        public int UnloadRest;
+        public Vector2I UnloadCell;
         public List<int>? Hangar;           // sec19 slots parked here (Flughafen)
         public int HangarSize;              // sec27 +0x03, +2 per Erweiterung
         public int Shipyard = -1;           // Hafen (typ 11): the Schiffswerft
@@ -19412,6 +19420,18 @@ public partial class MapEntityLayer : Node2D
     /// Einheit entsteht.</para></summary>
     private readonly Dictionary<int, List<Entity>> _fracht = new();
 
+    /// <summary>Alle Ladung wegwerfen — der Spielstand baut sie neu auf.</summary>
+    public void FrachtZuruecksetzen() { _fracht.Clear(); _frachtPlaetze.Clear(); }
+
+    /// <summary>Eine Einheit an Bord nehmen — aus dem Spielstand.</summary>
+    public void FrachtAufnehmen(int carrierSlot, Entity u)
+    {
+        if (carrierSlot < 0) return;
+        if (!_fracht.TryGetValue(carrierSlot, out var l)) _fracht[carrierSlot] = l = new List<Entity>();
+        l.Add(u);
+        _frachtPlaetze[u.Slot] = carrierSlot;
+    }
+
     /// <summary>Was an Bord dieses Trägers steht (Platznummer).</summary>
     public IReadOnlyList<Entity> FrachtAnBord(int carrierSlot)
         => _fracht.TryGetValue(carrierSlot, out var l) ? l : System.Array.Empty<Entity>();
@@ -19433,6 +19453,117 @@ public partial class MapEntityLayer : Node2D
         // Die Karte zaehlt von hinten nach vorn — die Ladung soll aber in der
         // Reihenfolge der Karte herauskommen.
         foreach (var l in _fracht.Values) l.Reverse();
+    }
+
+    /// <summary>
+    /// <b>Die Ladung eines Trägers auf die Karte stellen.</b>
+    ///
+    /// <para>Die Einheiten sind längst gebaut (siehe <see cref="_fracht"/>) —
+    /// sie bekommen nur eine Zelle, ihren Grundriss und den Platz im
+    /// Bewegungsgitter, genau wie beim Kartenaufbau. Der Entlader des Originals
+    /// (<c>0x4CF240</c>) tut nichts anderes: er schreibt Spalte und Zeile in
+    /// den Satz und dreht die Einheit in die Richtung des Trägers.</para>
+    ///
+    /// <para>⚠ <b>Eine Zelle nimmt eine Einheit.</b> Ist die gerechnete besetzt,
+    /// wird ringsum die nächste freie gesucht — UNSERE Regel. Das Original hat
+    /// eigene Zweige dafür (»Wrong square to unload infantry« gegen »… robot«),
+    /// die sind als vorhanden gelesen, aber nicht in ihrer Regel.</para>
+    /// </summary>
+    /// <returns>wie viele Einheiten wirklich abgesetzt wurden.</returns>
+    public int FrachtAbsetzen(int carrierSlot, Vector2I ziel, int hoechstens = int.MaxValue)
+    {
+        if (!_fracht.TryGetValue(carrierSlot, out var ladung) || ladung.Count == 0) return 0;
+        int traeger = -1;
+        for (int i = 0; i < _entities.Count; i++)
+            if (_entities[i].Slot == carrierSlot) { traeger = i; break; }
+        int blick = traeger >= 0 ? _entities[traeger].Facing : DefaultFacing;
+
+        int gesetzt = 0;
+        for (int k = ladung.Count - 1; k >= 0 && gesetzt < hoechstens; k--)
+        {
+            var zelle = FreieZelleUm(ziel);
+            if (zelle == null) break;                 // kein Platz mehr
+            var u = ladung[k];
+            u.Col = zelle.Value.X;
+            u.Row = zelle.Value.Y;
+            u.Elev = ElevOf(u.Col, u.Row);
+            u.Facing = blick;                         // @0x4CF3C5: die Richtung des Traegers
+            u.Footprint = CellRect(_ox, _oy, u.Col, u.Row, u.Elev);
+            u.Pos = CellCenter(u.Col, u.Row);
+            u.Mobile = !u.IsBuilding;
+            _entities.Add(u);
+            _nav?.SetOccupant(u.Col, u.Row, _entities.Count - 1);
+            ladung.RemoveAt(k);
+            _frachtPlaetze.Remove(u.Slot);
+            gesetzt++;
+        }
+        if (ladung.Count == 0) _fracht.Remove(carrierSlot);
+        if (_anBord.TryGetValue(carrierSlot, out var alt))
+        {
+            alt.Clear();
+            if (_fracht.TryGetValue(carrierSlot, out var rest))
+                foreach (var q in rest) alt.Add(q.Slot);
+            if (alt.Count == 0) _anBord.Remove(carrierSlot);
+        }
+        return gesetzt;
+    }
+
+    /// <summary>
+    /// <b>Der Absetztakt: EINES je Takt und Träger.</b>
+    ///
+    /// <para>⚠ Das war zuerst ein Schwall — alle fünfzehn auf einmal. Gemessen
+    /// auf <c>map_05</c>: von fünfzehn fanden <b>fünf</b> Platz, der Rest fiel
+    /// unter den Tisch. Das Original kann das gar nicht so meinen, denn sein
+    /// Satz führt eine <b>Stückzahl</b> (<c>byte[+0x38]</c>, von Befehl 18 auf
+    /// P5 gesetzt) — einen Zähler braucht nur, wer nacheinander absetzt. Und
+    /// nacheinander löst auch das Platzproblem von selbst: wer schon
+    /// ausgestiegen ist, geht weiter.</para></summary>
+    private void FrachtAbsetzenTakt()
+    {
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.UnloadRest <= 0 || e.Dead) continue;
+            int n = FrachtAbsetzen(e.Slot, e.UnloadCell, 1);
+            if (n == 0)
+            {
+                // Kein Platz — nicht abbrechen, im nächsten Takt noch einmal.
+                // Ist die Ladung leer, ist der Auftrag ohnehin erledigt.
+                if (FrachtAnBord(e.Slot).Count == 0) e.UnloadRest = 0;
+                continue;
+            }
+            e.UnloadRest -= n;
+            Unloaded += n;
+            if (FrachtAnBord(e.Slot).Count == 0) e.UnloadRest = 0;
+        }
+    }
+
+    /// <summary>Wie weit um die gerechnete Zelle nach einem freien Platz
+    /// gesucht wird. ⚠ UNSERE Zahl, und sie ist gemessen statt geraten: mit
+    /// <b>3</b> fanden auf <c>map_05</c> nur <b>5 von 15</b> Infanteristen
+    /// Platz — eine Rampe liegt am Ufer, und ringsum ist Wasser. Mit
+    /// <b>6</b> gehen alle fünfzehn heraus. Im Original stellt sich die Frage
+    /// so nicht, weil die Abgesetzten weitergehen; bei uns stehen sie ohne
+    /// Auftrag da, bis der Spieler sie schickt.</summary>
+    private const int AbsetzUmkreis = 6;
+
+    /// <summary>Die gerechnete Zelle, oder die nächste freie ringsum. ⚠ UNSERE
+    /// Regel — siehe <see cref="FrachtAbsetzen"/>.</summary>
+    private Vector2I? FreieZelleUm(Vector2I mitte)
+    {
+        for (int r = 0; r <= AbsetzUmkreis; r++)
+            for (int dc = -r; dc <= r; dc++)
+                for (int dr = -r; dr <= r; dr++)
+                {
+                    if (Mathf.Max(Mathf.Abs(dc), Mathf.Abs(dr)) != r) continue;
+                    int c = mitte.X + dc, w = mitte.Y + dr;
+                    if (c < 0 || w < 0) continue;
+                    if (_nav == null) return new Vector2I(c, w);
+                    if (!_nav.InBounds(c, w) || !_nav.IsWalkable(c, w)) continue;
+                    if (_nav.OccupantAt(c, w) >= 0) continue;
+                    return new Vector2I(c, w);
+                }
+        return null;
     }
 
     private readonly Dictionary<int, List<int>> _anBord = new();
@@ -23171,6 +23302,10 @@ public partial class MapEntityLayer : Node2D
         // ANGEFASSTER EINHEIT hochläuft, bekommt kein Taktmuster, sondern eine
         // Reihenfolgeabhängigkeit — siehe die Warnung bei der Schiffsdrehung.
         _taktNr++;
+
+        // Was noch abzusetzen ist: EINES je Takt und Traeger. Siehe
+        // Entity.UnloadRest — das Original fuehrt denselben Zaehler im Satz.
+        FrachtAbsetzenTakt();
 
         // ⚠⚠ DIE KI GEHÖRT NACH VORN (20.08.2026) — Station **14** von rund
         // siebzig, und die Reihenfolge ist nicht geraten: das Original schreibt

@@ -53,13 +53,11 @@ public partial class MapEntityLayer
         for (int q = 0; q < stelleImStand.Length; q++) stelleImStand[q] = -1;
         int geschrieben = 0;
 
-        w.ArrayStart("entities");
-        for (int ei = 0; ei < _entities.Count; ei++)
+        // Ein Satz Felder, EINMAL — die Ladung an Bord wird mit denselben
+        // geschrieben. Zwei Schreibwege waeren zwei Wahrheiten darueber, was
+        // eine Einheit ausmacht.
+        void SchreibeEinheit(Entity e)
         {
-            var e = _entities[ei];
-            if (e.IsProp) continue;                 // scenery comes back from the map
-            stelleImStand[ei] = geschrieben++;
-            w.ItemStart();
             w.Num("slot", e.Slot).Num("col", e.Col).Num("row", e.Row);
             w.Num("owner", e.Owner).Num("team", e.Team);
             w.Num("unit_type", e.UnitType).Num("btype", e.BType);
@@ -81,8 +79,38 @@ public partial class MapEntityLayer
             w.Num("build_time", e.BuildTime).Num("build_index", e.BuildIndex);
             w.Num("shown_owner", e.ShownOwner);
             if (e.Name.Length > 0) w.Str("name", e.Name);
+        }
+
+        w.ArrayStart("entities");
+        for (int ei = 0; ei < _entities.Count; ei++)
+        {
+            var e = _entities[ei];
+            if (e.IsProp) continue;                 // scenery comes back from the map
+            stelleImStand[ei] = geschrieben++;
+            w.ItemStart();
+            SchreibeEinheit(e);
+            w.Num("unload_rest", e.UnloadRest)
+             .Num("unload_col", e.UnloadCell.X).Num("unload_row", e.UnloadCell.Y);
             w.ItemEnd();
         }
+        w.ArrayEnd();
+
+        // ---- die Ladung AN BORD --------------------------------------------
+        //
+        // ⚠ Sie steht nicht in `entities` — sie ist ja nicht auf der Karte.
+        // Ohne diese Zeilen waere die Ladung eines Frachters beim Speichern
+        // weg, und das waere heute der DRITTE Fall derselben Art (Merkpunkte,
+        // Bahnfahrten, Ladung). Wer etwas aus der Einheitenliste nimmt, muss
+        // es im Spielstand wiederfinden.
+        w.ArrayStart("cargo");
+        foreach (var kv in _fracht)
+            foreach (var u in kv.Value)
+            {
+                w.ItemStart();
+                w.Num("carrier", kv.Key);
+                SchreibeEinheit(u);
+                w.ItemEnd();
+            }
         w.ArrayEnd();
 
         // ---- die zehn GRUPPEN und die vier MERKPUNKTE -----------------------
@@ -218,14 +246,11 @@ public partial class MapEntityLayer
         // Stelle im Spielstand -> Listenstelle im Spiel, fuer die Gruppen unten.
         var listenstelle = new List<int>();
 
-        if (root.TryGetValue("entities", out var ev) && ev.VariantType == Variant.Type.Array)
-            foreach (var item in ev.AsGodotArray())
-            {
-                if (item.VariantType != Variant.Type.Dictionary) continue;
-                var d = item.AsGodotDictionary<string, Variant>();
-                int col = GetI(d, "col"), row = GetI(d, "row");
-                int el = ElevOf(col, row);
-                var e = new Entity
+        Entity BaueEinheit(GDict d)
+        {
+            int col = GetI(d, "col"), row = GetI(d, "row");
+            int el = ElevOf(col, row);
+            var e = new Entity
                 {
                     Slot = GetI(d, "slot", -1), Col = col, Row = row, Elev = el,
                     Owner = GetI(d, "owner", -1), Team = GetI(d, "team", -1),
@@ -254,9 +279,28 @@ public partial class MapEntityLayer
                     Mobile = !GetB(d, "building"),
                     Footprint = CellRect(_ox, _oy, col, row, el),
                 };
-                e.Pos = CellCenter(e.Col, e.Row);
+            e.Pos = CellCenter(e.Col, e.Row);
+            e.UnloadRest = GetI(d, "unload_rest");
+            e.UnloadCell = new Vector2I(GetI(d, "unload_col"), GetI(d, "unload_row"));
+            return e;
+        }
+
+        if (root.TryGetValue("entities", out var ev) && ev.VariantType == Variant.Type.Array)
+            foreach (var item in ev.AsGodotArray())
+            {
+                if (item.VariantType != Variant.Type.Dictionary) continue;
                 listenstelle.Add(_entities.Count);
-                _entities.Add(e);
+                _entities.Add(BaueEinheit(item.AsGodotDictionary<string, Variant>()));
+            }
+
+        // Die Ladung an Bord — dieselbe Bauzeile, nur ein anderer Platz.
+        FrachtZuruecksetzen();
+        if (root.TryGetValue("cargo", out var cgv) && cgv.VariantType == Variant.Type.Array)
+            foreach (var item in cgv.AsGodotArray())
+            {
+                if (item.VariantType != Variant.Type.Dictionary) continue;
+                var d = item.AsGodotDictionary<string, Variant>();
+                FrachtAufnehmen(GetI(d, "carrier", -1), BaueEinheit(d));
             }
 
         // ---- die Gruppen und die Merkpunkte zurueck --------------------------
@@ -401,6 +445,13 @@ public partial class MapEntityLayer
             // Die Bahnfahrten gehen ueber ihren Inhalt ein, nicht ueber die
             // Anzahl: eine Fahrt, die mit falschem Wegindex zurueckkaeme,
             // waere sonst nicht von der richtigen zu unterscheiden.
+            // Die Ladung an Bord geht ueber ihre Plaetze ein — sie steht nicht
+            // in _entities und faellt oben durch jede Zaehlung.
+            int anBord = 0, bpruef = 0;
+            foreach (var kv in _fracht)
+                foreach (var u in kv.Value)
+                { anBord++; bpruef += (kv.Key + 1) * 31 + u.Slot * 3 + u.UnitType; }
+
             int fahrten = 0, fpruef = 0;
             foreach (var t in RailTransfers)
             {
@@ -414,7 +465,8 @@ public partial class MapEntityLayer
                    $"Besitzer {own}, Zellen {cells}, Lager {stock}, Geld {money}, Nebel {fog}, " +
                    $"{gruppen} Gruppen mit {mitglieder} Mitgliedern (Zellen {gzellen}, " +
                    $"Namen {gnamen}), {merk} Merkpunkte (Namen {mnamen}), " +
-                   $"{fahrten} Bahnfahrten (Pruefzahl {fpruef})";
+                   $"{fahrten} Bahnfahrten (Pruefzahl {fpruef}), " +
+                   $"{anBord} an Bord (Pruefzahl {bpruef})";
         }
 
         // Ein Prueflauf, der nichts zu verlieren hat, kann nichts verlieren:

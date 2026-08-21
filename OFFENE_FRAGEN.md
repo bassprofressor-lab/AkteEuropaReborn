@@ -1681,9 +1681,46 @@ sie einbaut, misst sie vorher an einer Karte nach.
 `word[(spalte·256 + zeile)·2]`, und **`0xFFFC` heisst frei** (@0x4CF183).
 Danach fragt die Funktion, ob auf der Nachbarzelle abgesetzt werden kann.
 
+### ⭐ Das ENTLADEN ist gebaut (21.08.2026)
+
+**Befehl 18**, und die ganze Kette benennt sich selbst:
+
+| Stelle | was sie ist |
+|---|---|
+| `0x438870` | der Absender — »**Very unique error before unloading units**« |
+| `0x4CF100` | die Rampenprüfung, die die Zielzelle **zurückschreibt** |
+| `0x4C30C8` | der Behandler: Auftrag `0x10`, Zelle nach `+0x36`, Stückzahl nach `+0x38` |
+| `0x4CF240` | der Entlader — »Not unloaded unit found«, »Wrong square to unload infantry/robot« |
+
+Der Satz trägt **beide** Zellen: P2/P3 die gerechnete, P4 die angeklickte Rampe.
+Wir rechnen im Behandler neu und verwerfen, wenn es nicht übereinstimmt — über
+das Netz käme sonst eine beliebige Zelle herein.
+
+⭐ **Und die Stückzahl im Satz sagt, dass NACHEINANDER abgesetzt wird.** Der
+erste Anlauf setzte alle fünfzehn auf einmal ab; gemessen auf `map_05` fanden
+**5 von 15** Platz. Einen Zähler braucht nur, wer eines je Takt absetzt — und
+das löst das Platzproblem von selbst. Jetzt: **15 von 15 in 16 Takten.**
+
+**Was daran unser ist:** die Ladung kommt auf die gerechnete Zelle, und ist die
+besetzt, auf die nächste freie im Umkreis **6**. Die Zahl ist gemessen, nicht
+geraten (mit 3 blieben zehn Stück an Bord — eine Rampe liegt am Ufer). Das
+Original hat eigene Zweige für Infanterie und Fahrzeug; die sind als vorhanden
+gelesen, nicht in ihrer Regel.
+
+⚠ **Die Ladung wurde bis heute beim Laden weggeworfen** (`continue`). Sie läuft
+jetzt durch dieselbe Bauzeile wie jede andere Einheit und wird danach aus der
+Liste genommen — und sie steht im **Spielstand**, sonst wäre sie beim Speichern
+weg. Das wäre heute der dritte Fall derselben Art gewesen (Merkpunkte,
+Bahnfahrten, Ladung).
+
+⚠ **Eine Falle beim Prüfen, in neuem Gewand:** mit `--skirmish` dünnt
+`SkirmishAi` die Karte aus und setzte auf `map_05` genau die vier beladenen
+Frachter auf tot. Der Prüflauf hielt daraufhin ein Gebäude mit demselben Platz
+für einen Träger. Über `--campaign=N` steht die Karte, wie sie ist.
+
 ### Was damit noch fehlt
 
-Das Be- und Entladen selbst. Die Laderoutine `0x4CEE80` ist längst gelesen
+Das **Beladen** von Hand. Die Laderoutine `0x4CEE80` ist längst gelesen
 (Gewichte 5 je Fahrzeug / 1 je Infanterist, Deckel 15, Flugzeuge und Schiffe
 abgelehnt), die Rampendaten liegen auf **33 Karten** in der Meta (`ramps`, je
 Zelle mit Lagenbyte) — der alte Blocker »die Laufzeit kennt sec20 gar nicht«

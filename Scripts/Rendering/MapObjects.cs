@@ -125,6 +125,59 @@ public partial class MapEntityLayer
     public bool RampeEntladen(int col, int row)
         => _rampen.TryGetValue(col * 1024 + row, out int l) && l >= 200;
 
+    /// <summary>Die Kachelnummer je Rampenzelle — die Richtung steckt darin.
+    /// Siehe <see cref="RampenAbsetzZelle"/>.</summary>
+    private readonly Dictionary<int, int> _rampenKachel = new();
+
+    /// <summary>Die erste der acht Rampenkacheln — <c>0x29E3</c> = 10723, aus
+    /// dem Rampenschritt @0x4CF13A (<c>sub eax, 0x29E3</c>).
+    ///
+    /// <para><b>An unseren Karten nachgemessen (21.08.2026):</b> von 90 Zellen
+    /// mit Lagenbyte ≥ 200 tragen <b>69</b> eine Kachel aus 10723..10730. Die
+    /// 21 Ausnahmen liegen auf genau drei Karten (map_08, map_09, map_NET07);
+    /// dort steht die Marke, aber keine Rampenkachel. ⚠ Das ist <b>nicht
+    /// erklärt</b> — Karteileichen wie in sec37 wären plausibel, belegt ist es
+    /// nicht. Zum Vergleich: die Zellen mit 100..199 tragen eine ganz andere
+    /// Kachelfamilie (10001..10070), was die Trennung Brücke/Rampe
+    /// bestätigt.</para></summary>
+    public const int RampenKachelBasis = 10723;
+
+    /// <summary>Die Auswahltafel <c>0x539790</c> = <c>3, 0, 2, 1</c>, angesteuert
+    /// mit <c>((kachel − 10723) % 8) / 2</c>.</summary>
+    private static readonly int[] RampenAuswahl = { 3, 0, 2, 1 };
+
+    /// <summary>Die vier Zellenversätze aus <c>0x539798</c> (je 4 Byte:
+    /// <c>word</c> Spalte, <c>word</c> Zeile). ⚠ Ausgelesen, nicht in ihrer
+    /// Bedeutung nachgemessen — dass eine Zeilenversetzung von −2 zu einer
+    /// Rampe passt, ist plausibel, belegt ist es nicht.</summary>
+    private static readonly (int Col, int Row)[] RampenSchritt =
+        { (-1, -2), (-1, 1), (1, 0), (-2, 0) };
+
+    /// <summary>
+    /// <b>Wohin eine Rampe absetzt</b> — <c>0x4CF100</c>, Befehl für Befehl:
+    /// <code>
+    ///   cmp byte[0x542E18 + spalte*256 + zeile], 0xC8 ; jb raus
+    ///   kachel = word[imap + (zeile*breite + spalte)*4]      ; 0x41D090
+    ///   auswahl = byte[0x539790 + ((kachel − 0x29E3) % 8) / 2]
+    ///   spalte += word[0x539798 + auswahl*4]
+    ///   zeile  += word[0x53979A + auswahl*4]
+    /// </code>
+    /// <para>Die Funktion nimmt Spalte und Zeile <b>als Zeiger</b> und schreibt
+    /// die Zielzelle zurück — daran war zu erkennen, dass sie nicht nur prüft,
+    /// sondern rechnet.</para>
+    /// <para>Gibt <c>null</c>, wenn die Zelle keine Rampe ist oder ihre Kachel
+    /// nicht zu den acht gehört.</para></summary>
+    public Vector2I? RampenAbsetzZelle(int col, int row)
+    {
+        int schluessel = col * 1024 + row;
+        if (!_rampen.TryGetValue(schluessel, out int lage) || lage < 200) return null;
+        if (!_rampenKachel.TryGetValue(schluessel, out int kachel)) return null;
+        int g = kachel - RampenKachelBasis;
+        if (g is < 0 or > 7) return null;
+        var (dc, dr) = RampenSchritt[RampenAuswahl[g / 2]];
+        return new Vector2I(col + dc, row + dr);
+    }
+
     /// <summary>Wieviele Rampenzellen die Karte trägt — ⚠ ohne diese Zahl wäre
     /// »der Transport tut nichts« nicht von »die Karte hat keine Rampen« zu
     /// unterscheiden.</summary>
@@ -194,6 +247,20 @@ public partial class MapEntityLayer
                 if (item.VariantType != Variant.Type.Dictionary) continue;
                 var a2 = item.AsGodotDictionary<string, Variant>();
                 _rampen[GetI(a2, "col") * 1024 + GetI(a2, "row")] = GetI(a2, "lage");
+            }
+
+        // Die KACHELNUMMER der Rampenzellen — sie sagt, in welche Richtung
+        // abgesetzt wird (siehe RampenAbsetzZelle). Ein Durchgang, einmal beim
+        // Laden, und nur fuer Zellen, die ueberhaupt eine Rampe tragen.
+        _rampenKachel.Clear();
+        if (_rampen.Count > 0 && meta.TryGetValue("tiles", out var tkv)
+            && tkv.VariantType == Variant.Type.Array)
+            foreach (var item in tkv.AsGodotArray())
+            {
+                if (item.VariantType != Variant.Type.Dictionary) continue;
+                var t2 = item.AsGodotDictionary<string, Variant>();
+                int schluessel = GetI(t2, "col") * 1024 + GetI(t2, "row");
+                if (_rampen.ContainsKey(schluessel)) _rampenKachel[schluessel] = GetI(t2, "code");
             }
 
         if (!meta.TryGetValue("objects", out var ov) || ov.VariantType != Variant.Type.Array) return;

@@ -596,6 +596,7 @@ public partial class MapEntityLayer
         CommandOp.PlaceRadar => ApplyPlaceRadar(c),
         CommandOp.PlaceBuilding => ApplyPlaceBuilding(c),
         CommandOp.PlaceGenerator => ApplyPlaceBuilding(c),
+        CommandOp.Unload => ApplyUnload(c),
 
         // Die fünfzehn Gebäudebefehle — vier Tafeln, eine je Gebäudeart.
         // Siehe CommandOp und ApplyBuildingJob.
@@ -612,6 +613,207 @@ public partial class MapEntityLayer
 
         _ => false,
     };
+
+    /// <summary>
+    /// <c>--entladen-check</c> — <b>kommt die Ladung der Karte wirklich
+    /// heraus?</b>
+    ///
+    /// <para>Bis zum 21.08.2026 war das unmöglich: die Ladung wurde beim Laden
+    /// mit <c>continue</c> übersprungen. Geprüft wird darum von unten nach
+    /// oben:</para>
+    /// <list type="number">
+    /// <item>Die Karte hat Ladung, und sie ist als Einheit da (nicht nur als
+    /// Platznummer).</item>
+    /// <item>Die Rampe rechnet eine Zielzelle aus.</item>
+    /// <item>Der Satz wirkt <b>erst im nächsten Takt</b> und stellt die Ladung
+    /// dann auf die Karte.</item>
+    /// <item>⚠ Gegenprobe: derselbe Satz mit einer FREMDEN Zielzelle muss
+    /// verworfen werden — sonst wäre ein Satz aus dem Netz ein Weg, Ladung
+    /// irgendwohin zu stellen.</item>
+    /// </list></summary>
+    public string EntladenCheck()
+    {
+        var sb = new System.Text.StringBuilder("entladen-check\n");
+        bool alles = true;
+
+        int Leerlaufen()
+        {
+            for (int t = 0; t < 8; t++)
+            {
+                if (Commands.Pending == 0) return t;
+                CommandTick();
+            }
+            return 8;
+        }
+
+        // Einen beladenen Traeger suchen.
+        int traeger = -1, anBord = 0, tot = 0;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            int n = FrachtAnBord(_entities[i].Slot).Count;
+            if (n == 0) continue;
+            if (_entities[i].Dead) { tot++; continue; }
+            traeger = i; anBord = n; break;
+        }
+        // ⚠ ERKLAERT, damit niemand daran haengenbleibt: mit --skirmish duennt
+        // SkirmishAi die Karte aus (es behaelt nur wenige Einheiten je Spieler
+        // und setzt den Rest auf tot). Auf map_05 traf das GENAU die vier
+        // beladenen Frachter, und der Prueflauf sah dann ein Gebaeude mit
+        // demselben Platz fuer einen Traeger an. Ueber --campaign=N steht die
+        // Karte, wie sie ist. Das ist keine Eigenheit dieses Pruefstands,
+        // sondern der zweiten Falle aus der Arbeitsweise in neuem Gewand.
+        if (tot > 0)
+            sb.Append($"  ⚠ {tot} beladene Traeger sind als ZERSTOERT geladen — uebergangen. ")
+              .Append("Mit --skirmish duennt SkirmishAi die Karte aus; ")
+              .Append("fuer diesen Prueflauf --campaign=N nehmen.\n");
+        if (traeger < 0)
+            return sb.Append($"  ⚠ ABBRUCH: kein beladener Traeger auf dieser Karte ")
+                     .Append($"(Rampenzellen: {RampenZellen}).\n  DURCHGEFALLEN").ToString();
+
+        var t0 = _entities[traeger];
+        sb.Append($"  Traeger Platz {t0.Slot} auf ({t0.Col},{t0.Row}): {anBord} Stueck an Bord ")
+          .Append("— als Einheit gebaut, nicht nur als Platznummer ✔\n");
+
+        // Eine Rampenzelle mit gueltiger Kachel suchen.
+        int rc = -1, rr = -1;
+        Vector2I? ziel = null;
+        for (int c = 0; c < 400 && ziel == null; c++)
+            for (int r = 0; r < 400; r++)
+            {
+                var z = RampenAbsetzZelle(c, r);
+                if (z == null) continue;
+                rc = c; rr = r; ziel = z; break;
+            }
+        if (ziel == null)
+            return sb.Append($"  ⚠ ABBRUCH: keine Rampenzelle mit einer der acht Kacheln ")
+                     .Append($"{MapObjectsRampBasis()}..{MapObjectsRampBasis() + 7} ")
+                     .Append($"(Rampenzellen insgesamt: {RampenZellen}).\n  DURCHGEFALLEN").ToString();
+        sb.Append($"  Rampe ({rc},{rr}) setzt ab auf ({ziel.Value.X},{ziel.Value.Y})\n");
+
+        // --- absetzen ------------------------------------------------------
+        ViewPlayer = t0.Owner;
+        int vorher = _entities.Count, fertigVor = Unloaded;
+        int gemeldet = PostUnload(traeger, rc, rr);
+        bool sofortNichts = _entities.Count == vorher;
+        sb.Append($"  abgesetzt: {gemeldet} gemeldet" + (gemeldet < 0 ? $" [{UnloadNote}]" : "") +
+                  "; beim Absenden noch nichts auf der Karte: ")
+          .Append(sofortNichts ? "ja ✔" : "NEIN ✘").Append('\n');
+        alles &= gemeldet == anBord && sofortNichts;
+
+        // ⚠ SimTick, nicht CommandTick: abgesetzt wird EINES je Takt, und der
+        // Zaehler laeuft im Takt der Simulation. Ein Prueflauf, der nur den
+        // Befehlsring leerlaufen laesst, sieht genau eine Einheit.
+        int takte = 0;
+        while (takte < 400 && FrachtAnBord(t0.Slot).Count > 0) { SimTick(SimDt); takte++; }
+        int neu = _entities.Count - vorher;
+        bool draussen = neu == anBord && Unloaded == fertigVor + anBord;
+        sb.Append($"  nach {takte} Takten: {neu} Einheiten mehr auf der Karte ")
+          .Append($"(erwartet {anBord}), Ladung an Bord jetzt {FrachtAnBord(t0.Slot).Count} ")
+          .Append(draussen ? "✔" : "✘").Append('\n');
+        alles &= draussen;
+
+        // --- Gegenprobe: fremde Zielzelle ----------------------------------
+        int vor2 = _entities.Count;
+        PostRaw(CommandRecord.Make(CommandOp.Unload, (byte)ViewPlayer, (short)traeger,
+                                   (short)(ziel.Value.X + 5), (short)ziel.Value.Y,
+                                   (short)(rc * 256 + rr), 0));
+        Leerlaufen();
+        bool verworfen = _entities.Count == vor2;
+        sb.Append("  Gegenprobe — Satz mit fremder Zielzelle: ")
+          .Append(verworfen ? "verworfen ✔" : "AUSGEFUEHRT ✘").Append('\n');
+        alles &= verworfen;
+
+        sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
+
+    private static int MapObjectsRampBasis() => RampenKachelBasis;
+
+    // ==== ABSETZEN — Befehl 18 ==============================================
+
+    /// <summary>
+    /// <b>Die Ladung eines Trägers auf einer Rampe absetzen</b> — den Satz auf
+    /// den Weg bringen.
+    ///
+    /// <para>Gerechnet wird hier nur die Zielzelle (die Rampenprüfung des
+    /// Originals @0x4CF100 tut dasselbe im Absender); GEPRÜFT wird im
+    /// Behandler, denn was vom Absender kommt, ist keine Aussage über die
+    /// Wahrheit.</para></summary>
+    /// <returns>−1 wenn nichts abgesetzt wurde; der Grund steht dann in
+    /// <see cref="UnloadNote"/>.</returns>
+    public int PostUnload(int carrier, int rampCol, int rampRow)
+    {
+        UnloadNote = "";
+        if (carrier < 0 || carrier >= _entities.Count)
+        { UnloadNote = "kein Traeger gewaehlt"; return -1; }
+        var e = _entities[carrier];
+        if (e.Dead) { UnloadNote = "der Traeger ist zerstoert"; return -1; }
+        var ladung = FrachtAnBord(e.Slot);
+        if (ladung.Count == 0) { UnloadNote = "der Traeger ist leer"; return -1; }
+
+        var ziel = RampenAbsetzZelle(rampCol, rampRow);
+        if (ziel == null)
+        {
+            // Der Wortlaut des Originals, 0x4FAB24.
+            UnloadNote = "Very unique error before unloading units";
+            return -1;
+        }
+        short gepackt = (short)(rampCol * 256 + rampRow);
+        if (!Emit(CommandRecord.Make(CommandOp.Unload, (byte)ViewPlayer, (short)carrier,
+                                     (short)ziel.Value.X, (short)ziel.Value.Y,
+                                     gepackt, (short)(ladung.Count - 1))))
+        { UnloadNote = "der Befehl liess sich nicht absetzen"; return -1; }
+        return ladung.Count;
+    }
+
+    /// <summary>Warum das Absetzen nicht ging — ⚠ ein Aufrufer, der nur »ging
+    /// nicht« erfährt, kann dem Spieler nicht sagen, welches Glied fehlt.
+    /// </summary>
+    public string UnloadNote = "";
+
+    /// <summary>Wieviele Einheiten insgesamt abgesetzt wurden.</summary>
+    public int Unloaded;
+
+    /// <summary>
+    /// Aus einem Absetz-Satz Zustand machen: die Ladung steht auf der Karte.
+    ///
+    /// <para>⚠ <b>Der Behandler rechnet die Zielzelle NEU</b>, statt P2/P3 zu
+    /// glauben. Das Original prüft an dieser Stelle, dass der Träger wirklich
+    /// dort steht, wo der Absender ihn wähnte (@0x4C30E7 ff); bei uns käme über
+    /// das Netz sonst eine beliebige Zelle herein, und die Ladung stünde
+    /// irgendwo. Weicht die gerechnete von der gesendeten ab, wird der Satz
+    /// verworfen — nicht stillschweigend zurechtgebogen.</para>
+    ///
+    /// <para>⚠ <b>Was UNSER ist:</b> die Ladung kommt auf die EINE gerechnete
+    /// Zelle, und wenn dort schon jemand steht, wird eine freie Nachbarzelle
+    /// genommen. Das Original hat dafür eigene Zweige (»Wrong square to unload
+    /// infantry« gegen »… robot«, 0x4CF240) — die sind gelesen als vorhanden,
+    /// aber nicht in ihrer Regel. Hier steht darum die einfachste Fassung, und
+    /// sie steht als unsere da.</para></summary>
+    private bool ApplyUnload(in CommandRecord c)
+    {
+        int i = c.P1;
+        if (i < 0 || i >= _entities.Count) return false;
+        var e = _entities[i];
+        if (e.Dead) return false;
+        if (e.Owner != c.Player) return false;
+
+        int rampCol = (c.P4 >> 8) & 0xFF, rampRow = c.P4 & 0xFF;
+        var ziel = RampenAbsetzZelle(rampCol, rampRow);
+        if (ziel == null) return false;
+        if (ziel.Value.X != c.P2 || ziel.Value.Y != c.P3) return false;   // s.o.
+
+        var ladung = FrachtAnBord(e.Slot);
+        if (ladung.Count == 0) return false;
+
+        // ⚠ NICHT auf einmal: der Satz traegt eine Stueckzahl, und die braucht
+        // nur, wer nacheinander absetzt. Siehe FrachtAbsetzenTakt.
+        e.UnloadCell = ziel.Value;
+        e.UnloadRest = ladung.Count;
+        UpdatePanel();
+        QueueRedraw();
+        return true;
+    }
 
     // ==== die fünfzehn GEBÄUDEBEFEHLE ========================================
 

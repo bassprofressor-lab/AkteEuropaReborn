@@ -225,6 +225,30 @@ public static class CommandOp
     public const short PlaceGenerator = 21;
 
     /// <summary>
+    /// <b>18 = ABSETZEN.</b> P1 = Träger, P2/P3 = die ZIELZELLE, P4 = die
+    /// Rampenzelle (gepackt <c>spalte·256 + zeile</c>), P5 = Stückzahl − 1.
+    ///
+    /// <para><b>Der Absender</b> @0x438870 sagt seinen Namen selbst: schlägt die
+    /// Prüfung fehl, schreibt er »<b>Very unique error before unloading
+    /// units</b>« ins Protokoll (0x4FAB24). Vorher ruft er <c>0x4CF100</c> —
+    /// die Rampenprüfung, die Spalte und Zeile <b>als Zeiger</b> nimmt und die
+    /// Zielzelle zurückschreibt (siehe <c>MapObjects.RampenAbsetzZelle</c>).
+    /// Darum trägt der Satz BEIDE Zellen: P2/P3 sind die gerechnete, P4 die
+    /// Rampe, auf die geklickt wurde.</para>
+    ///
+    /// <para><b>Der Behandler</b> @0x4C30C8 prüft, dass der Träger wirklich
+    /// dort steht, wo der Absender ihn wähnte — <c>byte[ent+0x00] == P2</c>,
+    /// <c>byte[ent+0x01] == P3</c>, <c>byte[ent+0x04] == 0xFF</c> — und gibt
+    /// ihm dann <b>Auftrag 0x10</b> mit <c>word[ent+0x36] = P4</c> und
+    /// <c>byte[ent+0x38] = P5</c>. Ausgeführt wird er von <c>0x4CF240</c>, das
+    /// sich ebenfalls selbst benennt: »Not unloaded unit found«, »Wrong square
+    /// to unload infantry«, »Wrong square to unload robot«.</para>
+    ///
+    /// <para>⚠ <b>Wieder wird im BEHANDLER geprüft, nicht beim Absenden</b> —
+    /// dieselbe Regel wie bei Opcode 3 und den Gebäudebefehlen.</para></summary>
+    public const short Unload = 18;
+
+    /// <summary>
     /// <b>DIE FÜNFZEHN GEBÄUDEBEFEHLE — vier Tafeln, eine je Gebäudeart.</b>
     /// Gelesen am 21.08.2026, und die Zuordnung schliesst von beiden Seiten.
     ///
