@@ -3487,9 +3487,15 @@ public partial class MapEntityLayer : Node2D
     // ---- control groups -----------------------------------------------------
     private readonly Dictionary<int, List<int>> _groups = new();
 
-    /// <summary>Store the current selection as group n (slots, so the group
-    /// survives a re-load of the same map).</summary>
     /// <summary>Die Auswahl als Gruppe <paramref name="n"/> merken.
+    ///
+    /// <para>⚠ <b>Hier stand »slots, so the group survives a re-load«</b> — das
+    /// war schlicht falsch: gespeichert werden die LISTENSTELLEN in
+    /// <c>_entities</c>, nicht die Plätze. Über einen Spielstand hinweg tragen
+    /// sie darum nicht von selbst; wie es trotzdem geht, steht in
+    /// <c>SaveState.cs</c> bei »groups« (Stelle im geschriebenen Feld). Der
+    /// Platz taugt dafür nicht, weil eine frisch gebaute Einheit
+    /// <c>Slot = -1</c> trägt.</para>
     ///
     /// <para>⚠ <b>EINE EINHEIT GEHÖRT GENAU EINER GRUPPE</b> — gelesen am
     /// 20.08.2026 aus dem Speicherer <c>0x438F00</c>: er ersetzt die Gruppe
@@ -3501,11 +3507,12 @@ public partial class MapEntityLayer : Node2D
     /// 10 Sätze zu 422 Byte: 22 Byte Name + 200 Mitglieder als u16). Die
     /// Zifferntaste <b>0</b> ist die zehnte.</para>
     ///
-    /// <para>⚠ Der Gruppenname (22 Byte) ist noch nicht gebaut — im Original
-    /// tauft <c>Strg+Zahl</c> die Gruppe auf »Group N« und öffnet den Dialog,
-    /// gespeichert wird erst mit dem Knopf. Bei uns speichert
-    /// <c>Strg+Zahl</c> unmittelbar; das ist unsere Abkürzung, und sie steht
-    /// hier, statt still zu wirken.</para></summary>
+    /// <para>⚠ <b>Auch dieser Absatz war überholt.</b> Hier stand, der
+    /// Gruppenname sei »noch nicht gebaut« und <c>Strg+Zahl</c> speichere bei
+    /// uns unmittelbar. Beides gilt seit dem 20.08.2026 nicht mehr:
+    /// <c>Strg+Zahl</c> öffnet das Fenster (Öffner 0x442C70, <c>ZeigeGruppen</c>),
+    /// gespeichert wird erst mit dem Knopf — wie im Original —, und die Namen
+    /// stehen in <see cref="_groupNames"/>.</para></summary>
     public void StoreGroup(int n)
     {
         var g = new List<int>(_sel);

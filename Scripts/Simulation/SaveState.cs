@@ -46,10 +46,19 @@ public partial class MapEntityLayer
         for (int i = 0; i < _money.Length; i++) { w.ItemStart(); w.Num("v", _money[i]); w.ItemEnd(); }
         w.ArrayEnd();
 
+        // ⚠ Die Gruppen unten zeigen auf die STELLE IM SPIELSTAND, nicht auf
+        // die Listenstelle im Spiel und nicht auf den Platz. Der Grund steht
+        // bei "groups"; hier wird die Umrechnung nebenbei mitgeschrieben.
+        var stelleImStand = new int[_entities.Count];
+        for (int q = 0; q < stelleImStand.Length; q++) stelleImStand[q] = -1;
+        int geschrieben = 0;
+
         w.ArrayStart("entities");
-        foreach (var e in _entities)
+        for (int ei = 0; ei < _entities.Count; ei++)
         {
+            var e = _entities[ei];
             if (e.IsProp) continue;                 // scenery comes back from the map
+            stelleImStand[ei] = geschrieben++;
             w.ItemStart();
             w.Num("slot", e.Slot).Num("col", e.Col).Num("row", e.Row);
             w.Num("owner", e.Owner).Num("team", e.Team);
@@ -72,6 +81,55 @@ public partial class MapEntityLayer
             w.Num("build_time", e.BuildTime).Num("build_index", e.BuildIndex);
             w.Num("shown_owner", e.ShownOwner);
             if (e.Name.Length > 0) w.Str("name", e.Name);
+            w.ItemEnd();
+        }
+        w.ArrayEnd();
+
+        // ---- die zehn GRUPPEN und die vier MERKPUNKTE -----------------------
+        //
+        // Das Original speichert beide im Spielstand: sec81 traegt 10 Saetze zu
+        // 422 Byte (22 B Name + 200 Mitglieder als u16), sec80 vier Saetze zu
+        // 23 Byte (21 B Name + Spalte + Zeile). Wir taten es bis zum 21.08.2026
+        // nicht — schlimmer noch, ApplySaveState LEERTE die Gruppen und liess
+        // die Merkpunkte stehen, so dass sie nach dem Laden in die vorige Karte
+        // zeigten.
+        //
+        // ⚠ WORAUF EIN MITGLIED ZEIGT. Das Original schreibt Platznummern; das
+        // koennen wir nicht nachmachen, weil eine frisch GEBAUTE Einheit bei
+        // uns Slot = -1 traegt (siehe die Erzeuger um 0x13869/0x15246) — zehn
+        // gebaute Panzer haetten alle denselben "Platz". Darum steht hier die
+        // Stelle im geschriebenen Feld "entities". Die traegt so weit wie der
+        // Spielstand selbst: der Leser haengt die Einheiten in Dateireihenfolge
+        // an, also ist die n-te geschriebene Einheit nach dem Laden eindeutig
+        // wiederzufinden.
+        w.ArrayStart("groups");
+        foreach (var kv in _groups)
+        {
+            var mitglieder = new System.Text.StringBuilder("[");
+            bool ersteZahl = true;
+            foreach (int i in kv.Value)
+            {
+                if (i < 0 || i >= stelleImStand.Length || stelleImStand[i] < 0) continue;
+                if (!ersteZahl) mitglieder.Append(',');
+                ersteZahl = false;
+                mitglieder.Append(stelleImStand[i]);
+            }
+            mitglieder.Append(']');
+            w.ItemStart();
+            w.Num("n", kv.Key);
+            string gn = GroupName(kv.Key);
+            if (gn.Length > 0) w.Str("name", gn);
+            w.Raw("members", mitglieder.ToString());
+            w.ItemEnd();
+        }
+        w.ArrayEnd();
+
+        w.ArrayStart("marks");
+        for (int i = 0; i < Marks.Length; i++)
+        {
+            w.ItemStart();
+            w.Num("i", i).Num("col", Marks[i].Col).Num("row", Marks[i].Row);
+            if (Marks[i].Name.Length > 0) w.Str("name", Marks[i].Name);
             w.ItemEnd();
         }
         w.ArrayEnd();
@@ -131,6 +189,14 @@ public partial class MapEntityLayer
         _sel.Clear();
         _selected = -1;
         _groups.Clear();
+        _groupNames.Clear();
+        // ⚠ Die Merkpunkte MUESSEN mit weg. Bis zum 21.08.2026 standen sie
+        // hier nicht, ueberlebten also das Laden und zeigten auf Zellen der
+        // vorigen Karte — auf einer kleineren Karte sogar ausserhalb.
+        foreach (var mk in Marks) { mk.Col = mk.Row = -1; mk.Name = ""; }
+
+        // Stelle im Spielstand -> Listenstelle im Spiel, fuer die Gruppen unten.
+        var listenstelle = new List<int>();
 
         if (root.TryGetValue("entities", out var ev) && ev.VariantType == Variant.Type.Array)
             foreach (var item in ev.AsGodotArray())
@@ -169,7 +235,50 @@ public partial class MapEntityLayer
                     Footprint = CellRect(_ox, _oy, col, row, el),
                 };
                 e.Pos = CellCenter(e.Col, e.Row);
+                listenstelle.Add(_entities.Count);
                 _entities.Add(e);
+            }
+
+        // ---- die Gruppen und die Merkpunkte zurueck --------------------------
+        //
+        // ⚠ Eine Stelle, die es nicht mehr gibt, wird UEBERGANGEN statt auf 0
+        // abgebogen: ein Mitglied, das ins Leere zeigt, waere eine fremde
+        // Einheit in der Gruppe. Bleibt davon nichts uebrig, gibt es die
+        // Gruppe nicht — dieselbe Regel, die StoreGroup fuer die leere Auswahl
+        // anwendet.
+        if (root.TryGetValue("groups", out var gv) && gv.VariantType == Variant.Type.Array)
+            foreach (var item in gv.AsGodotArray())
+            {
+                if (item.VariantType != Variant.Type.Dictionary) continue;
+                var d = item.AsGodotDictionary<string, Variant>();
+                int n = GetI(d, "n", -1);
+                if (n < 0) continue;
+                var mit = new List<int>();
+                if (d.TryGetValue("members", out var mvv) && mvv.VariantType == Variant.Type.Array)
+                    foreach (var q in mvv.AsGodotArray())
+                    {
+                        int stelle = q.AsInt32();
+                        if (stelle >= 0 && stelle < listenstelle.Count) mit.Add(listenstelle[stelle]);
+                    }
+                if (mit.Count == 0) continue;
+                _groups[n] = mit;
+                if (d.TryGetValue("name", out var gnv))
+                {
+                    string gn = gnv.AsString();
+                    if (gn.Length > 0) _groupNames[n] = gn;
+                }
+            }
+
+        if (root.TryGetValue("marks", out var kv2) && kv2.VariantType == Variant.Type.Array)
+            foreach (var item in kv2.AsGodotArray())
+            {
+                if (item.VariantType != Variant.Type.Dictionary) continue;
+                var d = item.AsGodotDictionary<string, Variant>();
+                int i = GetI(d, "i", -1);
+                if (i < 0 || i >= Marks.Length) continue;
+                Marks[i].Col = GetI(d, "col", -1);
+                Marks[i].Row = GetI(d, "row", -1);
+                Marks[i].Name = d.TryGetValue("name", out var nv2) ? nv2.AsString() : "";
             }
 
         // the grid has to agree with the list again — the same routine a
@@ -228,8 +337,59 @@ public partial class MapEntityLayer
             int fog = 0;
             if (_fog != null)
                 for (int i = 0; i < _fog.CellCount; i++) fog += _fog.CellAt(i);
+
+            // ⚠ Die Gruppen gehen ueber die ZELLEN ihrer Mitglieder ein, nicht
+            // ueber deren Listenstellen: die Stellen duerfen sich beim Laden
+            // verschieben (Requisiten bleiben stehen, alles andere wird neu
+            // angehaengt), die Einheiten dahinter aber nicht.
+            int gruppen = 0, mitglieder = 0, gzellen = 0, gnamen = 0;
+            foreach (var kv in _groups)
+            {
+                gruppen++;
+                gnamen += GroupName(kv.Key).Length * (kv.Key + 1);
+                foreach (int i in kv.Value)
+                {
+                    if (i < 0 || i >= _entities.Count) continue;
+                    mitglieder++;
+                    gzellen += (_entities[i].Col * 7 + _entities[i].Row * 13) * (kv.Key + 1);
+                }
+            }
+            int merk = 0, mnamen = 0;
+            for (int i = 0; i < Marks.Length; i++)
+            {
+                if (Marks[i].Leer) continue;
+                merk++;
+                mnamen += Marks[i].Name.Length;
+                gzellen += (Marks[i].Col * 3 + Marks[i].Row * 5) * (i + 1);
+            }
+
             return $"{n} Einheiten ({buildings} Gebaeude, {dead} tot), HP {hp}, " +
-                   $"Besitzer {own}, Zellen {cells}, Lager {stock}, Geld {money}, Nebel {fog}";
+                   $"Besitzer {own}, Zellen {cells}, Lager {stock}, Geld {money}, Nebel {fog}, " +
+                   $"{gruppen} Gruppen mit {mitglieder} Mitgliedern (Zellen {gzellen}, " +
+                   $"Namen {gnamen}), {merk} Merkpunkte (Namen {mnamen})";
+        }
+
+        // Ein Prueflauf, der nichts zu verlieren hat, kann nichts verlieren:
+        // ohne Gruppe und ohne Merkpunkt waere die Zeile oben beidemal null
+        // und der Vergleich gruen, egal was der Schreiber tut. Also erst
+        // etwas hinlegen — aber nur, wenn nichts da ist.
+        string gelegt = "";
+        if (_groups.Count == 0)
+        {
+            var erste = new List<int>();
+            for (int i = 0; i < _entities.Count && erste.Count < 3; i++)
+                if (!_entities[i].IsProp && !_entities[i].Dead) erste.Add(i);
+            if (erste.Count > 0)
+            {
+                _groups[2] = erste;
+                _groupNames[2] = "Pruefgruppe";
+                gelegt = $" (Gruppe 2 mit {erste.Count} Einheiten gelegt)";
+            }
+        }
+        if (Marks[1].Leer)
+        {
+            Marks[1].Col = 12; Marks[1].Row = 34; Marks[1].Name = "Merk Zwei";
+            gelegt += " (Merkpunkt 2 gelegt)";
         }
 
         string before = Fingerprint();
@@ -241,7 +401,7 @@ public partial class MapEntityLayer
         ApplySaveState(root);
         string after = Fingerprint();
 
-        return "save-check:"
+        return "save-check:" + gelegt
              + $"\n   vorher : {before}"
              + $"\n   nachher: {after}"
              + $"\n   {(before == after ? "DECKUNGSGLEICH" : "WEICHT AB")}, "
