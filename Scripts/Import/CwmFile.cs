@@ -71,9 +71,15 @@ public sealed class CwmFile
     // Bis hierher war diese Klasse ein reiner Leser. Der Karteneditor braucht
     // die Gegenrichtung — aber NICHT bis zur Datei: eine `.CWM` zurueckzu-
     // schreiben ist weder noetig noch belegbar (der Kartendialog @0x4c8600 /
-    // @0x4c8640 hat null Aufrufer, und 5 der 37 Abschnitte — sec18, sec20,
-    // sec21, sec25, sec32 — sind in allen 23 gelieferten Karten belegt und
-    // ungelesen; was da hineingehoerte, weiss niemand).
+    // @0x4c8640 hat null Aufrufer, und mehrere der 37 Abschnitte sind in allen
+    // 23 gelieferten Karten belegt und ungelesen; was da hineingehoerte, weiss
+    // niemand).
+    //
+    // ⚠ 21.08.2026 — die Aufzaehlung hier nannte sec20 und sec21 als
+    // ungelesen. Das gilt nicht mehr: sec20 ist die ZEICHENLAGE je Zelle
+    // (100+n Bruecke aus sec17, 200+n Rampe aus sec21, gemessen 195 von 195),
+    // und im Spiel liegt sie bei 0x542E18, indiziert spalte*256 + zeile.
+    // Siehe OFFENE_FRAGEN.md Abschnitt N und S.
     //
     // Was reicht, ist eine CwmFile IM SPEICHER: dahinter haengt der ganze
     // vorhandene Schreibweg — `ContentBuilder.ExportMap` → `MapBaker.Bake` →

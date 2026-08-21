@@ -1597,3 +1597,67 @@ gemeldet:
 Und `--save-check` trägt die Fahrten mit: ohne das wäre eine verlegte Einheit
 beim Speichern **weg** — aus dem Quelldepot heraus, im Zieldepot noch nicht.
 Dieselbe Fehlerklasse wie bei den Merkpunkten, nur andersherum.
+
+---
+
+## S. Die Lagentafel im Spiel, und wo die Rampe wirklich zaehlt (21.08.2026)
+
+Auf dem Weg zum Be- und Entladen von Hand sind drei Adressen gefallen, die
+das Thema erst baubar machen.
+
+### ⭐ `0x542E18` ist sec20 im Arbeitsspeicher
+
+```
+  0x4CF100  (spalte*, zeile*, wert)
+    cx  = word[esi]                                  ; die Spalte
+    edx = cx << 8                                    ; spalte * 256
+    ax  = word[edi]                                  ; die Zeile
+    cmp byte[edx + ebx + 0x542E18], 0xC8             ; die LAGENTAFEL
+    jb  raus
+```
+
+Das ist **derselbe Index, den Abschnitt N gemessen hat** — `spalte·256 + zeile`,
+nicht andersherum. Dort war es aus den Dateien erschlossen; hier steht es im
+Code. Zwei unabhängige Seiten.
+
+### ⭐ Die Zellmarke fürs Absetzen ist ≥ 200, also die RAMPE — nicht die Brücke
+
+Hier stand (aus dem Recherchebericht): »Die »Rampe« ist keine Bauart, sondern
+eine Zellmarke (**≥100 zum Beladen, ≥200 zum Entladen**)«. Die erste Hälfte ist
+**falsch**. Die Prüfung ist ein einziges `cmp …, 0xC8; jb raus`: unter 200
+passiert gar nichts. Und 100+n ist nach Abschnitt N eine **Brücke/Mole** aus
+sec17, kein Ladeplatz. Es ist damit dieselbe Quelle, die schon einmal danebenlag
+(siehe »Eine Behauptung der Recherche, die ich WIDERLEGT habe«).
+
+### Der Rampenschritt
+
+Steht die Zelle auf ≥ 200, rechnet die Funktion eine Richtung aus
+(`0x4018C0`, dann `(winkel − 0x29E3) & 7`, halbiert, durch die Auswahltafel
+**`0x539790`** = `3, 0, 2, 1`) und holt sich daraus ein Zellenpaar aus
+**`0x539798`** (je 4 Byte: `word` Spaltenversatz, `word` Zeilenversatz):
+
+| Auswahl | (dSpalte, dZeile) |
+|---|---|
+| 0 | (−1, −2) |
+| 1 | (−1, 1) |
+| 2 | (1, 0) |
+| 3 | (−2, 0) |
+
+⚠ **Die vier Paare stehen hier als ROHWERTE.** Sie sind ausgelesen, aber ihre
+Bedeutung ist *nicht* nachgemessen — dass eine Zeilenversetzung von −2 zu einer
+Rampe passt, ist plausibel (Rampen überbrücken Höhen), belegt ist es nicht. Wer
+sie einbaut, misst sie vorher an einer Karte nach.
+
+### ⭐ `0xBDEA80` ist das Belegungsgitter
+
+`word[(spalte·256 + zeile)·2]`, und **`0xFFFC` heisst frei** (@0x4CF183).
+Danach fragt die Funktion, ob auf der Nachbarzelle abgesetzt werden kann.
+
+### Was damit noch fehlt
+
+Das Be- und Entladen selbst. Die Laderoutine `0x4CEE80` ist längst gelesen
+(Gewichte 5 je Fahrzeug / 1 je Infanterist, Deckel 15, Flugzeuge und Schiffe
+abgelehnt), die Rampendaten liegen auf **33 Karten** in der Meta (`ramps`, je
+Zelle mit Lagenbyte) — der alte Blocker »die Laufzeit kennt sec20 gar nicht«
+ist damit **weg**. Es fehlt die Bedienung: ein Auftrag »absetzen« und ein
+Auftrag »einsteigen«.
