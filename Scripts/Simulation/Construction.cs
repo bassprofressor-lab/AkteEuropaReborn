@@ -653,9 +653,15 @@ public partial class MapEntityLayer
                 // Kontostand einer erzeugten Karte 0 blieb: `Entity.Deposit`
                 // fing bei −1 an, der Förderschritt (`e.Deposit > 0`,
                 // UpdateEconomy) lief nie an. Hier werden darum zehn
-                // Wirtschaftstakte GEFAHREN und das Ergebnis gezählt — die
-                // Messlatte ist MineRate*10 = 50, und die kommt aus dem
-                // Vorkommen, nicht aus dem Nichts.
+                // Wirtschaftstakte GEFAHREN und das Ergebnis gezählt.
+                //
+                // ⚠ Die Messlatte war »MineRate*10 = 50«. Seit dem 21.08.2026
+                // fördert die Mine wie das Original: EIN Stück je Periode aus
+                // 0x4FACB8, auf Stufe 0 also je 85 Originaltakte. Zehn
+                // Wirtschaftstakte sind 160 Originaltakte und bringen damit
+                // ein bis zwei Stück statt fünfzig. Geprüft wird darum, was
+                // hier wirklich zu prüfen war: dass ÜBERHAUPT gefördert wird,
+                // also mehr als null.
                 if (bld != null && typ == TypeFieldMine)
                 {
                     int imBoden = bld.Deposit;
@@ -670,6 +676,9 @@ public partial class MapEntityLayer
                               $"{imBoden - bld.Deposit}, im Lager der Mine {bld.StockT}");
                     if (imBoden <= 0)
                         sb.Append("  ⚠ NICHTS IM BODEN — diese Mine bringt nichts ein");
+                    else if (imBoden - bld.Deposit <= 0)
+                        sb.Append("  ⚠ FOERDERT NICHT — im Boden liegt etwas, es kommt "
+                                + "aber nichts heraus");
                 }
             }
             sb.Append('\n');

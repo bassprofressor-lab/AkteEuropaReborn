@@ -1421,10 +1421,10 @@ läuft — nicht, dass die Sache stimmt.
 ### Noch offen
 
 * **32 Würfelzüge je Takt** — wir ziehen sie nicht (Lockstep).
-* **Fünfzehn Gebäudebefehle** (501…537) laufen in `CommandBridge` nicht;
-  Empfehlung des Fensterberichts: **ein** Fenster, aber mit einer Tabelle je
-  Gebäudeart — die Nummern unterscheiden sich, weil der Parameter
-  `byte[Gebäude+0x19]` die laufende Nummer *innerhalb der Art* ist.
+* ~~**Fünfzehn Gebäudebefehle** (501…537) laufen in `CommandBridge` nicht~~ —
+  ⭐ **GEBAUT am 21.08.2026**, und die Empfehlung des Fensterberichts war
+  richtig: es ist **eine Tafel je Gebäudeart**. Siehe den neuen Abschnitt
+  »P. Die fünfzehn Gebäudebefehle« weiter unten. Prüfstand `--gebaeude-check`.
 * ~~**Fensterart 24 und 25** (Lokator, Gruppieren) sind gelesen, aber nicht
   gebaut~~ — **gebaut am 20.08.2026** (`LocatorWindow.cs`, `GroupWindow.cs`),
   belegt mit `--gruppen-check`.
@@ -1434,3 +1434,93 @@ läuft — nicht, dass die Sache stimmt.
 * Zuarbeit des Spielers: ~~Nachfrist-Video~~ (**erledigt 21.08.2026**),
   **Diagonalkosten** im Gefecht, **Mündungsanker**, die **y-Halbierung** beim
   Einschlag, die zwei **Frachter in Mission 8**.
+
+---
+
+## P. Die fünfzehn Gebäudebefehle — vier Tafeln, vier Kartenabschnitte (21.08.2026)
+
+Alle fünfzehn sind derselbe Dreizeiler: Satzindex aus P1, Eigentümer gegen
+`byte[Gebäude+0x05]` aus P2, dann
+
+    byte[Tafel + Satz·Länge + 0x02] = ZUSTAND
+
+Die zwei bezahlten setzen zusätzlich `+0x06 = 0` (den Fortschritt) und ziehen
+den Preis von `dword[0xA9C600 + Spieler·4]` ab — dem Kontostand, also sec73.
+
+| Gebäudeart | Abschnitt | Tafel (C) | Satz | Befehle → Zustand |
+|---|---|---|---|---|
+| Fabrik 2,3,4 | sec24 | `0x87A2C0` | 50×14 | 509→3 510→4 519→2 511→0 |
+| Mine 10,15 | sec28 | `0x878AD0` | 50×18 | 515→3 516→4 522→2 517→0 |
+| Flughafen | sec27 | `0x879438` | 50×52 | 536→2 520→1 524→0 |
+| Basis | sec23 | `0x878E58` | 50×16 | 521→1 525→0 |
+
+⭐ **Die Zuordnung Tafel→Abschnitt musste nicht geraten werden** — sie stand
+schon im Baum: `Import/BuildingPatterns.cs` nennt sec24→`0x87A2C0` (50×14) und
+sec28→`0x878AD0` (50×18), `GAMESTATE_RE.md` nennt sec27→`0x879438` (50×52) und
+sec23→Basis (16 Byte). Neu ist nur, welcher **Befehl** welche Zahl schreibt.
+
+⭐ **Und die Zustandszahlen sind unsere eigenen.** 3/4 sind `FaExpand`/
+`FaProdUp`, 2 ist `FaRepair`, 1 ist `StRepair`, 0 ist `StAktiv` — alle vier
+standen seit Wochen so im Baum, gelesen aus den vier Fensterzeichnern. Zwei
+unabhängige Lesungen, dasselbe Ergebnis.
+
+**Welcher Ausbau welcher ist**, entscheidet der Preis: 509 nimmt
+`word[Satz+0x0A]`, 510 nimmt `word[Satz+0x0C]` (@0x44AD8A gegen @0x44AE9F) —
+und bei der Mine sind es `+0x0E`/`+0x10` (@0x44BBAB). Beide Paare hiessen bei
+uns schon `CostStore`/`CostProd`.
+
+### ⚠ 523 und 526 sind TOT
+
+Beide sind ein zweiter »zurück auf 0« für Fabrik bzw. Mine, beide haben einen
+vollständigen Behandler — und im ganzen Programm **keinen einzigen Absender**.
+Bytesuche nach `mov word[0xB8A3D8], imm16`: 35 der 37 Nummern aus Bereich B
+haben einen, diese zwei nicht. Dieselbe Sorte Fund wie die vier toten
+Mauszeiger.
+
+### ⚠ Die Basis kennt keinen Ausbaubefehl
+
+In ihre Tafel schreibt **kein** Befehl eine 2 oder 3, obwohl ihr Fenster
+»Status : vergrössern« und »forschen« anzeigt. Das ist gelesen, nicht
+übersehen — wie sie in diese Zustände kommt, ist **offen**.
+
+---
+
+## Q. Die Mine ist eine Fabrik zweiter Art (21.08.2026)
+
+Der ganze Baum prüfte `BType is 2 or 3 or 4` und liess die Mine damit die
+Basiszahlen tragen. Das Original sagt etwas anderes, und der Minentakt
+@0x43E5D4..0x43E6A7 ist jetzt Befehl für Befehl gelesen:
+
+    al  = byte[sec28 + 0x05]                 ; die Ausbaustufe
+    ecx = word[0x4FACB8 + al*2]              ; die PERIODE
+    if (Taktzaehler % ecx != 0) return       ; nur jeden n-ten Takt
+    ... der Foerderwurf (rand%100 gegen +0x03) ...
+    word[sec28 + 0x0C]--                     ; EINS aus dem Vorkommen
+    word[Gebaeude + 0x32]++                  ; EINS ins Lager
+    if (Lager == word[sec28 + 0x08]) Klang 0x80   ; voll
+
+Vier Befunde, und jeder änderte etwas:
+
+1. **Ein Stück je Periode**, nicht fünf je Takt. Hier stand bis heute »die
+   Menge (5 je Takt) bleibt unsere Setzung; gelesen ist der Wurf, nicht die
+   Schaufel«. Jetzt ist auch die Schaufel gelesen.
+2. Die **Periode hängt an der Ausbaustufe** — 85 Takte auf Stufe 0, zwei auf
+   Stufe 9 (Tafel `0x4FACB8`, zehn Einträge). Damit tut die
+   Produktionserweiterung der Mine überhaupt erst etwas; vorher war sie ein
+   **bezahlter Knopf ohne Wirkung**.
+3. Der Deckel ist der **eigene Lagerplatz** (sec28 `+0x08`), keine Konstante —
+   und der Lagerausbau hebt ihn um **30** (@0x43E7A3 `add word[+0x08], 0x1e`),
+   während die Fabrik nur **10** bekommt (@0x43E0F1). Zwei verschiedene Zahlen,
+   beide gelesen.
+4. Der **Wurf sitzt innerhalb** der Periodenprüfung, nicht davor: ein
+   misslungener Wurf verliert genau eine Gelegenheit, nicht einen ganzen
+   Gebäudetakt.
+
+⚠ **Das ist ein spürbarer Eingriff in die Wirtschaft.** Auf Stufe 0 fördert
+die Mine jetzt 16/85 statt 5 Stück je Gebäudetakt, also rund ein
+Sechsundzwanzigstel; über die Stufen holt sie es wieder ein (Stufe 8 liegt bei
+16/3). `--mine-check` druckt beide Zahlen.
+
+⚠ **Der Umzug musste am Stück geschehen.** Wer die Mine nur auf Zustand 2 hebt,
+ohne `StateName`, `PercentDone` und den Takthandler mitzuziehen, nimmt ihr die
+Reparatur ganz: sie stünde auf 2 und niemand führte sie aus. Beim Bau gemessen.

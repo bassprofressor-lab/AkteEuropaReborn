@@ -320,6 +320,9 @@ public partial class MapEntityLayer : Node2D
         public int UpgradeStep;             // sec24 +0x06, counts 0..100
         public int Ticks;                   // this building's own tick counter
         public int ProdAccum;               // ticks banked toward the next part
+        /// <summary>Angesammelte Takte der MINE — sie foerdert nach einer
+        /// eigenen Periodentafel, siehe <c>MinePeriod</c>.</summary>
+        public int MineAccum;
         public List<int>? Hangar;           // sec19 slots parked here (Flughafen)
         public int HangarSize;              // sec27 +0x03, +2 per Erweiterung
         public int Shipyard = -1;           // Hafen (typ 11): the Schiffswerft
@@ -11930,6 +11933,34 @@ public partial class MapEntityLayer : Node2D
     private static bool IsFactory(Entity e) => e.IsBuilding && (e.BType is 2 or 3 or 4);
 
     /// <summary>
+    /// <b>Trägt dieses Gebäude die FÜNF Zustandszahlen der Fabriktafel?</b>
+    /// — also 0 aktiv, 1 angehalten, 2 reparieren, 3 Lagerausbau,
+    /// 4 Produktionserweiterung.
+    ///
+    /// <para>⚠ <b>Die MINE gehört dazu, und das war bis zum 21.08.2026 nicht
+    /// so.</b> Der ganze Baum prüfte <c>BType is 2 or 3 or 4</c> und liess die
+    /// Mine damit die Basiszahlen tragen. Das Original sagt etwas anderes,
+    /// zweifach gelesen:</para>
+    /// <list type="bullet">
+    /// <item>Die vier Befehle der Minentafel (sec28, 0x878AD0) schreiben
+    /// dieselben Zahlen wie die der Fabriktafel: 515→3, 516→4, 522→2, 517→0.
+    /// Die Mine hat also BEIDE Ausbauten.</item>
+    /// <item>Und sie hat dafür eigene Preisfelder — <c>+0x0E</c> und
+    /// <c>+0x10</c>, spiegelbildlich zu <c>+0x0A</c>/<c>+0x0C</c> der Fabrik.
+    /// Unser Importer las die zwei schon, aus dem Missionsvorlauf @0x440887;
+    /// die Befehle 515/516 (@0x44BBAB) lesen genau dieselben zwei Felder.
+    /// Zwei unabhängige Seiten, dieselbe Deutung.</item>
+    /// </list>
+    /// <para>⚠ <c>IsFactory</c> heisst weiterhin »stellt Teile her« — eine
+    /// Mine tut das nicht, sie fördert. Die zwei Fragen sind verschieden, und
+    /// sie hier zu vermischen war der Fehler.</para></summary>
+    public static bool FactoryStates(Entity e) => e.BType is 2 or 3 or 4 or 10 or 15;
+
+    /// <summary>Ist das eine Mine (Art 10) oder eine Feld-Rohstoffmine (15)?
+    /// Beide teilen sich sec28.</summary>
+    public static bool IsMine(Entity e) => e.IsBuilding && e.BType is 10 or 15;
+
+    /// <summary>
     /// Wo EINHEITEN entstehen: in der BASIS (Gebäudetyp 1), und nirgends sonst.
     ///
     /// <para>⚠ 11.08.2026 — bis heute baute bei uns die FABRIK die Einheiten,
@@ -12266,7 +12297,10 @@ public partial class MapEntityLayer : Node2D
         {
             if (i < 0 || i >= _entities.Count) continue;
             var e = _entities[i];
-            if (!IsFactory(e) || e.Dead || e.Owner != ViewPlayer) continue;
+            // ⚠ FactoryStates, nicht IsFactory: die MINE hat beide Ausbauten
+            // (Befehle 515/516) und eigene Preisfelder. Mit IsFactory bot das
+            // Fenster ihr die zwei Knoepfe gar nicht erst an.
+            if (!e.IsBuilding || !FactoryStates(e) || e.Dead || e.Owner != ViewPlayer) continue;
             return (e.CostStore, e.CostProd, e.State == StAktiv);
         }
         return null;
@@ -12366,31 +12400,18 @@ public partial class MapEntityLayer : Node2D
     /// sec27/sec23); neu ist, welcher BEFEHL welche Zahl schreibt.</para></summary>
     public static int JobState(Entity e, BuildingJob job)
     {
-        bool fabrik = e.BType is 2 or 3 or 4;
         bool mine = e.BType is 10 or 15;
-        // ⚠⚠ HIER STEHT ABSICHTLICH NUR `fabrik`, UND DAS IST EIN OFFENER
-        // PUNKT, KEIN VERSEHEN. Nach dem Original müsste die MINE dieselben
-        // Zahlen tragen: Befehl 522 schreibt eine 2 in die Minentafel (sec28,
-        // 0x878AD0), 515/516 schreiben 3 und 4 — die Mine ist dort eine Fabrik
-        // zweiter Art, samt beider Ausbauten und einer eigenen
-        // Geschwindigkeitstafel (0x4FACB8, zehn Stufen).
-        //
-        // Bei uns rechnet aber der ganze Takt mit »Mine = 1«:
-        // <see cref="StateName"/>, <see cref="PercentDone"/> und vor allem der
-        // Takthandler (`bool fact = e.BType is 2 or 3 or 4`) prüfen alle nur
-        // die drei Fabriktypen. Wer die Mine hier auf 2 hebt, ohne die drei
-        // mitzuziehen, nimmt ihr die Reparatur ganz: sie stünde auf 2 und
-        // niemand führte sie aus. Gemessen beim Bau dieses Umbaus.
-        //
-        // Der Umzug ist die nächste Aufgabe und braucht einen eigenen
-        // Prüfstand. Bis dahin bleibt die Zahl, die der Rest des Programms
-        // versteht.
+        // ⚠ Die MINE trägt dieselben fünf Zahlen wie die Fabrik — siehe
+        // FactoryStates. Bis zum 21.08.2026 stand hier nur `fabrik`, und der
+        // Umzug musste am Stück geschehen: wer die Mine hier auf 2 hebt, ohne
+        // StateName, PercentDone und den Takthandler mitzuziehen, nimmt ihr
+        // die Reparatur ganz — sie stünde auf 2 und niemand führte sie aus.
         return job switch
         {
             BuildingJob.Idle => StAktiv,
-            BuildingJob.Repair => fabrik ? FaRepair : StRepair,
-            BuildingJob.ExpandStore => fabrik ? FaExpand : -1,
-            BuildingJob.ExpandProd => fabrik ? FaProdUp : -1,
+            BuildingJob.Repair => FactoryStates(e) ? FaRepair : StRepair,
+            BuildingJob.ExpandStore => FactoryStates(e) ? FaExpand : -1,
+            BuildingJob.ExpandProd => FactoryStates(e) ? FaProdUp : -1,
             _ => -1,
         };
     }
@@ -12493,9 +12514,9 @@ public partial class MapEntityLayer : Node2D
     public static int PercentDone(Entity e)
     {
         if (e.ResearchTech > 0) return e.ResearchDone * 100 / ResearchTotal;
-        if (e.BType is 2 or 3 or 4 && e.State is FaExpand or FaProdUp)
+        if (FactoryStates(e) && e.State is FaExpand or FaProdUp)
             return e.UpgradeStep * 100 / UpgradeSteps;
-        if (e.HpMax > 0 && e.State == (e.BType is 2 or 3 or 4 ? FaRepair : StRepair))
+        if (e.HpMax > 0 && e.State == (FactoryStates(e) ? FaRepair : StRepair))
             return e.Hp * 100 / e.HpMax;
         return -1;
     }
@@ -14632,6 +14653,126 @@ public partial class MapEntityLayer : Node2D
     public int RepairsStopped;
 
     /// <summary>
+    /// <c>--mine-check</c> — <b>ist die Mine eine Fabrik zweiter Art?</b>
+    ///
+    /// <para>Geprüft wird genau das, was am 21.08.2026 umgezogen ist, und
+    /// jedes Stück mit einer Zahl:</para>
+    /// <list type="number">
+    /// <item>Die Mine trägt die FÜNF Zustandszahlen (reparieren = 2, nicht 1)
+    /// — und der Takthandler führt sie auch aus.</item>
+    /// <item>Sie kennt BEIDE Ausbauten, mit ihren eigenen Preisen aus
+    /// sec28 +0x0E/+0x10.</item>
+    /// <item>Der Lagerausbau bringt ihr <b>30</b> Plätze, der Fabrik zehn.</item>
+    /// <item>Die Produktionserweiterung <b>wirkt</b>: die Förderperiode fällt
+    /// von 85 auf 58 Takte. Vorher war das ein bezahlter Knopf ohne
+    /// Wirkung.</item>
+    /// </list></summary>
+    public string MineCheck()
+    {
+        var sb = new System.Text.StringBuilder("mine-check\n");
+        bool alles = true;
+
+        int mi = -1;
+        for (int i = 0; i < _entities.Count; i++)
+            if (IsMine(_entities[i]) && !_entities[i].Dead) { mi = i; break; }
+        if (mi < 0)
+        {
+            var arten = new System.Collections.Generic.SortedDictionary<int, int>();
+            foreach (var q in _entities)
+                if (q.IsBuilding && !q.Dead)
+                { arten.TryGetValue(q.BType, out int k); arten[q.BType] = k + 1; }
+            sb.Append("  ⚠ ABBRUCH: keine Mine (Art 10 oder 15) auf dieser Karte. Arten:");
+            foreach (var kv in arten) sb.Append($" {kv.Key}x{kv.Value}");
+            return sb.Append("\n  DURCHGEFALLEN").ToString();
+        }
+
+        var m = _entities[mi];
+        int owner = Mathf.Clamp(m.Owner, 0, 7);
+        sb.Append($"  Mine {mi} (Art {m.BType}): Vorkommen {m.Deposit}, Lagerplatz {m.Capacity}, ")
+          .Append($"Stufe {m.ProdSpeed}, Preise {m.CostStore}/{m.CostProd}\n");
+
+        // --- 1. die Zustandszahlen ------------------------------------------
+        int rep = JobState(m, BuildingJob.Repair);
+        int aus = JobState(m, BuildingJob.ExpandStore);
+        int prod = JobState(m, BuildingJob.ExpandProd);
+        bool zahlenOk = rep == FaRepair && aus == FaExpand && prod == FaProdUp;
+        sb.Append($"  Zustandszahlen: reparieren {rep} (erwartet {FaRepair}), ")
+          .Append($"Lagerausbau {aus}, Prod.erw. {prod} ")
+          .Append(zahlenOk ? "✔" : "✘").Append('\n');
+        alles &= zahlenOk;
+
+        // Und der Takthandler muss sie AUSFUEHREN — sonst stuende sie auf 2
+        // und niemand reparierte. Genau die Falle, die diesen Umzug am
+        // Stueck erzwungen hat.
+        m.Hp = Mathf.Max(1, m.HpMax / 2);
+        m.State = rep;
+        int hpVorher = m.Hp;
+        for (int t = 0; t < 20; t++) { m.EconTimer = 0f; UpdateEconomy(mi, m, EconTick); }
+        bool repariert = m.Hp > hpVorher;
+        sb.Append($"  repariert wirklich: {hpVorher} → {m.Hp} ")
+          .Append(repariert ? "✔" : "✘ (Zustand gesetzt, aber niemand fuehrt ihn aus)")
+          .Append('\n');
+        alles &= repariert;
+
+        // --- 2. der Lagerausbau bringt 30 -----------------------------------
+        m.Hp = m.HpMax;
+        m.State = StAktiv;
+        _money[owner] = 999999;
+        int platzVorher = m.Capacity, preisVorher = m.CostStore;
+        bool nahmAn = GiveBuildingJob(mi, BuildingJob.ExpandStore);
+        for (int t = 0; t < 200 && m.State == FaExpand; t++)
+        { m.EconTimer = 0f; UpdateEconomy(mi, m, EconTick); }
+        int zuwachs = m.Capacity - platzVorher;
+        bool platzOk = nahmAn && zuwachs == 30 && m.CostStore == preisVorher * 3 / 2;
+        sb.Append($"  Lagerausbau: angenommen {(nahmAn ? "ja" : "NEIN")}, Plaetze +{zuwachs} ")
+          .Append($"(erwartet +30), Preis {preisVorher} → {m.CostStore} ")
+          .Append(platzOk ? "✔" : "✘").Append('\n');
+        alles &= platzOk;
+
+        // --- 3. die Produktionserweiterung WIRKT ----------------------------
+        int stufeVorher = m.ProdSpeed;
+        int periodeVorher = MinePeriod[Mathf.Clamp(stufeVorher, 0, MinePeriod.Length - 1)];
+        m.State = StAktiv;
+        GiveBuildingJob(mi, BuildingJob.ExpandProd);
+        for (int t = 0; t < 200 && m.State == FaProdUp; t++)
+        { m.EconTimer = 0f; UpdateEconomy(mi, m, EconTick); }
+        int periodeNachher = MinePeriod[Mathf.Clamp(m.ProdSpeed, 0, MinePeriod.Length - 1)];
+        bool schnellerOk = m.ProdSpeed == stufeVorher + 1 && periodeNachher < periodeVorher;
+        sb.Append($"  Prod.erw.: Stufe {stufeVorher} → {m.ProdSpeed}, ")
+          .Append($"Periode {periodeVorher} → {periodeNachher} Takte ")
+          .Append(schnellerOk ? "✔" : "✘ (bezahlter Knopf ohne Wirkung)").Append('\n');
+        alles &= schnellerOk;
+
+        // --- 4. und sie foerdert nach dieser Periode ------------------------
+        m.State = StAktiv;
+        m.Deposit = Mathf.Max(m.Deposit, 500);
+        m.Capacity = 100000;                 // der Deckel soll hier nicht stoeren
+        m.StockT = 0;
+        m.MineAccum = 0;
+        // ⚠ DEN FOERDERWURF AUSSCHALTEN. Sonst misst dieser Punkt den Wuerfel
+        // mit, und aus »11 statt 14« liesse sich nicht ablesen, ob die Periode
+        // falsch ist oder nur die Chance zugeschlagen hat. Der Wurf hat seinen
+        // eigenen Beleg (--econ-check); hier geht es um die PERIODE.
+        int effN = m.EffNum, effD = m.EffDen;
+        m.EffNum = m.EffDen = 1;
+        int vorrat = m.Deposit;
+        for (int t = 0; t < 10; t++) { m.EconTimer = 0f; UpdateEconomy(mi, m, EconTick); }
+        int gefoerdert = vorrat - m.Deposit;
+        m.EffNum = effN; m.EffDen = effD;
+        int erwartet = 10 * TickScale / periodeNachher;
+        bool foerdertOk = gefoerdert == erwartet;
+        sb.Append("  Foerderung in 10 Wirtschaftstakten (=160 Originaltakte, Wurf aus): ")
+          .Append($"{gefoerdert} Stueck, erwartet {erwartet} (=160/{periodeNachher}) ")
+          .Append(foerdertOk ? "✔" : "✘").Append('\n');
+        sb.Append($"     zum Vergleich: die alte Pauschale lieferte 50, und die ")
+          .Append($"Foerderchance dieser Mine ist {effN}/{effD}\n");
+        alles &= foerdertOk;
+
+        sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// <c>--repair-check</c> — <b>startet »Reparatur« sofort, und hält ein
     /// Reiterwechsel sie an?</b>
     ///
@@ -16410,7 +16551,7 @@ public partial class MapEntityLayer : Node2D
         // The factory panel labels its two jobs "Lagerausbau" (@0x501b30) and
         // "Produktionserweiterung" (@0x501b40); the short "vergroessern" is
         // what the Basis panel prints for its own state 2.
-        if (e.BType is 2 or 3 or 4)          // factories: sec24, five states
+        if (FactoryStates(e))     // Fabrik (sec24) und Mine (sec28): fuenf Zahlen
             return e.State switch
             {
                 0 => "aktiv", 1 => "angehalten", 2 => "reparieren",
@@ -16440,8 +16581,20 @@ public partial class MapEntityLayer : Node2D
     // against these very three stores.  See Simulation/DesignMath.cs.
     // The mining rate below is still OURS.
     private const float EconTick = 1f;       // seconds per tick — ours
-    private const int MineRate = 5;          // Terranium per tick a mine digs
-    private const int MineCap = 200;         // matches the deposit's +0x08
+    /// <summary>Die Periodentafel der MINE — <c>0x4FACB8</c>, zehn Eintraege,
+    /// eingesetzt mit der Ausbaustufe (sec28 +0x05) @0x43E5DA. Die Mine
+    /// foerdert genau EIN Stueck, wenn der Taktzaehler durch die Periode
+    /// teilbar ist. Die Fabrik hat ihre eigene Tafel (0x4FACA0, siehe
+    /// <see cref="ProdPeriod"/>) — die zwei sind verschieden und wurden hier
+    /// frueher zu einer Pauschale verschmolzen.</summary>
+    private static readonly int[] MinePeriod =
+        { 85, 58, 38, 25, 16, 11, 7, 5, 3, 2 };
+
+    /// <summary>Der Deckel des Minenlagers: ihr eigener Lagerplatz
+    /// (sec28 +0x08, @0x43E69E), den der Lagerausbau um 30 hebt. ⚠ Hier stand
+    /// die Konstante 200 — damit war der Lagerausbau der Mine wirkungslos.
+    /// Der Rueckfall gilt nur fuer Karten, die keinen Platz mitbringen.</summary>
+    private static int MineStoreCap(Entity e) => e.Capacity > 0 ? e.Capacity : 200;
 
     /// <summary>Ticks between two produced parts, by Produktionsgeschwindigkeit.
     /// Verbatim from GAME.EXE VA 0x4faca0 — a clean 2/3 series, so every
@@ -16453,7 +16606,10 @@ public partial class MapEntityLayer : Node2D
     // then Lagerplatz +10 or Produktionsgeschwindigkeit +1, and that job's
     // cost is multiplied by 3/2.  Repair adds 1 hp every 4th tick (@0x43e05c).
     private const int UpgradeSteps = 100, UpgradeTick = 5;
-    private const int CapacityGain = 10, RepairTick = 4;
+    /// <summary>Was ein Lagerausbau an Plaetzen bringt: die Fabrik zehn
+    /// (@0x43E0F1), die MINE dreissig (@0x43E7A3). Zwei verschiedene Zahlen,
+    /// beide gelesen.</summary>
+    private const int CapacityGain = 10, MineCapacityGain = 30, RepairTick = 4;
 
     // ⚠ 15.08.2026 — HIER STAND `private readonly RandomNumberGenerator _rng = new();`
     // und ist WEG. Godot keimt einen frisch angelegten RandomNumberGenerator
@@ -16772,36 +16928,77 @@ public partial class MapEntityLayer : Node2D
         RepairInDepot(e);
         SupplyPostService(e);
 
-        // mining: deposit -> the mine's own store
+        // ---- die FOERDERUNG: Vorkommen -> das eigene Lager der Mine --------
         //
-        // ⚠⚠ 18.08.2026, C10 — DIE FOERDERCHANCE FEHLTE. Die Mine schaufelte
-        // flach `MineRate` je Takt; das Original wuerfelt genauso wie die
-        // Fabrik, mit denselben zwei Bytes (@0x43E57F gegen @0x43DF82, sec28
-        // +0x03/+0x04). Ohne diesen Wurf bliebe der Strommangel bei Minen
-        // UNSICHTBAR — die Stromabrechnung schreibt ihre Wirkung genau nach
-        // EffNum, und niemand haette danach gefragt.
+        // ⭐ 21.08.2026 — DIE SCHAUFEL IST JETZT GELESEN. Hier stand »die
+        // MENGE (5 je Takt) bleibt unsere Setzung; gelesen ist der Wurf, nicht
+        // die Schaufel«. Der Minentakt @0x43E5D4..0x43E6A7 sagt es Befehl fuer
+        // Befehl:
         //
-        // ⚠ Die MENGE (5 je Takt) bleibt unsere Setzung, wie bisher. Gelesen
-        // ist der Wurf, nicht die Schaufel.
-        if (e.Deposit > 0 && e.StockT < MineCap && PowerRollPasses(e))
+        //     al  = byte[sec28 + 0x05]                 ; die Ausbaustufe
+        //     ecx = word[0x4FACB8 + al*2]              ; die PERIODE
+        //     if (Taktzaehler % ecx != 0) return       ; nur jeden n-ten Takt
+        //     ... der Foerderwurf (rand%100 gegen +0x03) ...
+        //     word[sec28 + 0x0C]--                     ; EINS aus dem Vorkommen
+        //     word[Gebaeude + 0x32]++                  ; EINS ins Lager
+        //     if (Lager == word[sec28 + 0x08]) Klang 0x80   ; voll
+        //
+        // Drei Befunde daraus, und jeder aendert etwas:
+        //
+        //  1. Es ist **ein** Stueck je Periode, nicht fuenf je Takt.
+        //  2. Die PERIODE haengt an der Ausbaustufe — 85 Takte auf Stufe 0,
+        //     zwei auf Stufe 9. Damit tut die Produktionserweiterung der Mine
+        //     ueberhaupt erst etwas; vorher war sie ein bezahlter Knopf ohne
+        //     Wirkung.
+        //  3. Der Deckel ist der EIGENE Lagerplatz (sec28 +0x08), nicht eine
+        //     Konstante — und der Lagerausbau hebt ihn um 30.
+        //
+        // ⚠ Das ist ein spuerbarer Eingriff in die Wirtschaft: auf Stufe 0
+        // foerdert die Mine jetzt 16/85 statt 5 Stueck je Gebaeudetakt, also
+        // rund ein Sechsundzwanzigstel. Sie holt es ueber die Stufen wieder
+        // ein (Stufe 8 liegt bei 16/3). Der Prueflauf --mine-check druckt
+        // beide Zahlen, damit die Aenderung eine Zahl hat und keinen Eindruck.
+        if (e.Deposit > 0)
         {
-            int take = Mathf.Min(MineRate, Mathf.Min(e.Deposit, MineCap - e.StockT));
-            e.Deposit -= take;
-            e.StockT += take;
+            e.MineAccum += TickScale;
+            int period = MinePeriod[Mathf.Clamp(e.ProdSpeed, 0, MinePeriod.Length - 1)];
+            while (e.MineAccum >= period)
+            {
+                e.MineAccum -= period;
+                if (e.Deposit <= 0 || e.StockT >= MineStoreCap(e)) break;
+                // ⚠ DER WURF GEHOERT HIER HINEIN, nicht vor die Schleife. Das
+                // Original prueft erst die Periode (@0x43E5EC) und wuerfelt
+                // DANN (@0x43E607) — ein misslungener Wurf verliert genau
+                // diese eine Gelegenheit. Vor der Schleife gewuerfelt haette
+                // ein einziger Fehlwurf alle Schritte eines Gebaeudetakts
+                // gekostet, und bei kurzen Perioden sind das mehrere.
+                if (!PowerRollPasses(e)) continue;
+                e.Deposit--;
+                e.StockT++;
+            }
         }
 
-        // the two state enums differ: a factory's 1 means "angehalten" and its
-        // repair sits at 2, while every other building repairs on 1
-        bool fact = e.BType is 2 or 3 or 4;
+        // Die Zustandszahlen: Fabrik UND Mine tragen die fuenf der sec24/sec28-
+        // Tafeln (repariert auf 2), jedes andere Gebaeude repariert auf 1.
+        bool fact = FactoryStates(e);
         int st = e.State;
         if (st == StAktiv) Produce(e);
         else if (st == (fact ? FaRepair : StRepair)) Repair(e);
         else if (fact && st == FaExpand)                     // Lagerausbau
         {
-            if (Advance(e)) { e.Capacity += CapacityGain; e.CostStore = e.CostStore * 3 / 2; }
+            // ⚠ Die Mine bekommt DREISSIG Plaetze, die Fabrik zehn — gelesen,
+            // nicht angeglichen: @0x43E0F1 `add word[+0x08], 0xa` fuer die
+            // Fabrik gegen @0x43E7A3 `add word[+0x08], 0x1e` fuer die Mine.
+            if (Advance(e))
+            {
+                e.Capacity += IsMine(e) ? MineCapacityGain : CapacityGain;
+                e.CostStore = e.CostStore * 3 / 2;
+            }
         }
         else if (fact && st == FaProdUp)                     // Produktionserweiterung
         {
+            // Beide zaehlen +0x05 hoch (@0x43E172 Fabrik, @0x43E846 Mine) und
+            // verdreifachhalbieren nur ihr EIGENES Preisfeld.
             if (Advance(e)) { e.ProdSpeed++; e.CostProd = e.CostProd * 3 / 2; }
         }
 

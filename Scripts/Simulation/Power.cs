@@ -62,10 +62,11 @@ using Godot;
 /// <c>EffNum</c> stand seit dem Laden der Karte still. Strommangel bremst
 /// damit <b>anteilig, er stoppt nicht</b> — genau wie im Original.</para>
 ///
-/// <para>⚠ <b>Was UNSER ist:</b> dass die Mine überhaupt eine Förderchance
-/// würfelt, war bei uns bisher nicht gebaut (<c>MineRate</c> lief flach); die
-/// Chance selbst ist gelesen (@0x43E57F benutzt dieselben zwei Bytes). Und die
-/// Förder<b>menge</b> von 5 je Takt bleibt unsere Setzung, wie bisher.</para>
+/// <para>Die Förderchance selbst ist gelesen (@0x43E57F benutzt dieselben zwei
+/// Bytes wie die Fabrik). ⚠ <b>Hier stand »die Fördermenge von 5 je Takt
+/// bleibt unsere Setzung«</b> — das gilt seit dem 21.08.2026 nicht mehr: der
+/// Minentakt ist ganz gelesen, sie fördert EIN Stück je Periode aus der
+/// Zehnerstufentafel 0x4FACB8. Siehe <c>MinePeriod</c>.</para>
 /// </summary>
 public partial class MapEntityLayer
 {
