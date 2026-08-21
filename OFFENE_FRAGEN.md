@@ -185,15 +185,40 @@ einer festen Nummer; **62 verschiedene Nummern**. Die vollständige Aufstellung
 mit Modus, Aufrufstellen und der Protokollmarke, die das Spiel selbst dazu
 druckt, liegt in `aekernel-tools/KLAENGE.md`.
 
-Gebaut ist davon bisher nur ein Teil. Sicher erkannt und **heute gebaut** ist
-der Befehlsklang (`0x429480`). Nicht gebaut sind unter anderem die
-Warnungen des Bauwesens (»Ihre Basis wird besetzt« — Nummern 123..134,
-Modus 0) und die Flugzeugmeldungen (Nummern 303/304/308/309, »air A:«/
-»air B (no fuel):«).
+⚠⚠ **21.08.2026 — NACHGEZÄHLT, und zwei Angaben hier waren falsch.**
 
-⚠ Die Zahl »44 fehlen« aus einem Zwischenstand ist zu hoch gegriffen: sie kam
-aus einem groben Abgleich, der unsere Konstanten per Muster suchte. Verlässlich
-ist die Aufstellung, nicht die Differenz.
+Hier stand, nicht gebaut seien »die Warnungen des Bauwesens — Nummern 123..134«
+und »die Flugzeugmeldungen 303/304/308/309«. Beides stimmt so nicht:
+
+* Von 123..134 sind **123, 124, 125, 127, 128, 129, 130, 131 und 132 gebaut**;
+  es fehlen nur **133, 134, 135**.
+* **309 gibt es im Klangvorrat gar nicht** — der Aufruf ist im Original selbst
+  stumm, wie 40, 307 und 399 auch. Es als »fehlend« zu führen, wäre ein
+  Fehler, den man nie bemerkte: man baute einen Klang, den das Original nie
+  spielt.
+
+**Die gemessene Zahl** — 62 Nummern im Verzeichnis, 4 davon im Original leer,
+**36 weder gebaut noch leer**:
+
+```
+2, 8, 36, 41, 42, 43, 44, 45, 47, 49, 50, 51, 52, 53, 55, 56, 57, 58,
+60, 72, 74, 75, 120, 122, 133, 134, 135, 139, 143, 300, 303, 304, 308,
+310, 600, 601
+```
+
+⚠ **600 und 601 stehen bewusst darin und bleiben ungebaut** — die Deutung
+»das ist der Bedienklick« ist am 19.08.2026 zurückgenommen worden (Begründung im
+Kopf von `GameSounds.cs`).
+
+⚠ Und die ältere Zahl »44 fehlen« war zu hoch gegriffen: sie kam aus einem
+groben Abgleich, der unsere Konstanten per Muster suchte. **36** ist gegen die
+Aufstellung UND gegen `GameSounds.cs` gerechnet, einschliesslich der Bänder
+150..253 und 400..410.
+
+Die 36 sind **nicht einfach nachzutragen**: jeder braucht die Stelle in
+UNSEREM Code, an der das Ereignis wirklich eintritt, und mehrere hängen an
+Dingen, die es bei uns noch nicht gibt (Werftfehler 133, Rampenfehler 42/43,
+Suchkopf 37). Ein Klang an der falschen Stelle ist schlimmer als keiner.
 
 
 ### Die Schriftfarben — die Tafel ist gelesen (19.08.2026)
