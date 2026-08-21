@@ -2974,7 +2974,11 @@ eine 100 % wertlos.
 * **sec32 inhaltlich** (überall gleich), der **Grundpreis zu sec95**, und der
   genaue Partner von **sec40** (sec39 ist mit 87,6 % der beste von sechs
   Kandidaten, aber keine exakte Belegt-Maske).
-* ⚠ **Alle Code-Belege dieses Laufs stammen aus der C-Fassung.** F wurde nur
+* ⭐ **NACHGETRAGEN:** dieser Vorbehalt ist eingelöst — alle fünf Punkte sind in
+Abschnitt AF gegen die F-Fassung gegengelesen und **bestätigt**. Dabei fiel der
+erste belegte **Verhaltensunterschied** zwischen den zwei Auslieferungen auf.
+
+⚠ **Alle Code-Belege dieses Laufs stammen aus der C-Fassung.** F wurde nur
   für die PE-Struktur geöffnet. Nach Regel 1 ist das **kein abgeschlossener
   Befund** — die Datenmessungen tragen, die Code-Zitate gehören gegengelesen.
 ---
@@ -3054,4 +3058,106 @@ gegen die `ZBRAN`-Werte halten, nicht `Weapon` selbst.
 `word[0x4FA0C8]` ist die **angewählte Einheit**, Schranke 8000. Dieselbe Zelle
 benutzt die Entwickler-Einblendung aus Abschnitt U, um die 37 Satzfelder
 anzuzeigen — sie ist also der allgemeine »worauf schaut der Spieler«-Zeiger.
+---
+
+## AF. ⭐⭐ Die zwei Auslieferungen sind NICHT dasselbe Programm (21.08.2026)
+
+Das Gegenlesen der C-Befunde in der F-Fassung hat alle fünf bestätigt — und
+dabei etwas gefunden, das eine **Grundannahme des Projekts berührt**.
+
+### Der Unterschied
+
+Beide Fassungen haben in der Transport-KI denselben Zweig »kein Ziel gefunden«.
+Aber:
+
+```
+C (22.01.1998)                          F (16.09.1997)
+  cmp al, 0xFF ; jne …                    cmp al, 0xFF ; jne …
+  push "AI: transport - no target found"  push "AI: transport - no target found"
+  call <Protokoll>                        call <Protokoll>
+  mov byte[ebx + 0xB46950], 1   ← nur C   pop esi
+  ret                                     ret
+```
+
+**Selbst nachgezählt und nachgelesen, beide Fassungen nebeneinander.** Die
+Stelle ist C `0x4BB7FC`; in F folgt auf denselben Protokollaufruf unmittelbar
+`pop esi`.
+
+### Was es bewirkt
+
+`sec59[Spieler]` (8 B, C `0xB46950`) ist die **Sperre für den
+Produktionsschritt** der KI: `if (sec59[p] == 0) → "AI: no production - no
+transport"` und Rückkehr. Geschrieben wird sie an vier Stellen, zwei davon auf 0.
+
+Findet die Transport-KI in einem Durchlauf **kein Ziel**, dann gilt:
+
+* **F (1997):** sec59 bleibt 0 → der nächste Schritt bricht ab. **Die Produktion
+  dieses Spielers steht in diesem Durchgang still.**
+* **C (1998):** sec59 wird trotzdem auf 1 gesetzt → **die Produktion läuft
+  weiter.**
+
+Das sieht nach einer **bewussten Nachbesserung** aus — eine Verklemmung der
+KI-Produktion, die in der späteren Auslieferung beseitigt wurde. Dafür spricht
+auch ein zweiter, kleinerer Unterschied an derselben Stelle: F löscht `ebx` vor
+der Zielsuche, C übergibt es mit undefinierten oberen Bytes.
+
+### ⚠⚠ Was das für unsere Regel 1 heisst
+
+Wir schreiben überall: **»Nur was BEIDE GAME.EXE liefern, gilt als gelesen.«**
+Die Regel bleibt richtig — aber ihre stillschweigende Begründung war, die zwei
+Bauten seien **dasselbe Programm** in zwei Übersetzungen. **Das stimmt nicht
+mehr.**
+
+Ab jetzt gilt die Regel in dieser Fassung: *eine Abweichung zwischen C und F ist
+zuerst ein Verdacht auf einen eigenen Lesefehler — aber sie kann auch ein
+**Befund** sein.* Wer eine findet, muss beide Stellen nebeneinander lesen und
+entscheiden, welches von beidem vorliegt. Es genügt nicht mehr, sie als
+Lesefehler abzutun.
+
+⭐ **Und für den Nachbau ist die Sache eindeutig:** unser Bestand ist die
+**C-Fassung**, und C ist die **spätere** (22.01.1998 gegen 16.09.1997). Wir
+folgen also der nachgebesserten Fassung — das ist die richtige Wahl, und sie
+ist jetzt begründet statt zufällig.
+
+### Was das Gegenlesen sonst bestätigt hat
+
+| Befund | Urteil | F-Adresse |
+|---|---|---|
+| sec48 `+0x0C` = der sec5-Platz | **bestätigt** | Schreiber F `0x43536B`, Leser F `0x4353E5` |
+| sec9/sec10 = Feinstellung (Divisor 40 / 20) | **bestätigt** | F `0x4B48AF`, `0x4B48F0` |
+| … der Abzug im Zeichencode (~30 Stellen) | **bestätigt** | F `0x42BDD0` |
+| … Fenstergrösse 21 × 37 Kacheln | **bestätigt** | F `0x4B9309`/`0x4B9318` |
+| sec101 = Sicherungskopie (`rep movsd`, `ecx = 0x8FC`) | **bestätigt**, dreimal in beiden | F `0x418823`, `0x4CFCB4`, `0x4CFF94` |
+| sec89/sec114 in denselben Puffer, auch beim SPEICHERN | **bestätigt** | F `0x41CBEB`/`0x41CDD7`, `0x41DC6F`/`0x41DE5B` |
+| sec11 = Einheitenplätze | **bestätigt** | F `0x4D2EAA`, Verbraucher F `0x4D33DF` |
+
+⭐ **Zwei Verschärfungen gegenüber dem C-Lauf:**
+
+1. **sec48 heisst `rob_trans`, und der Rückzeiger ist nicht erschlossen,
+   sondern vom Spiel selbst als Prüfbedingung ausgeschrieben** — der Leser
+   vergleicht `sec48[Einheit.+0x40].+0x0C` gegen die Einheitennummer und meldet
+   sonst »Transport check : wrong index of robot in 'rob_trans'«. Das ist
+   stärker als die Korrelation 19/20, mit der er gefunden wurde.
+2. **sec101 sichert nur EIN ACHTEL von sec47.** sec47 ist 73 600 B, kopiert
+   werden 9 200 — genau `1600 / 8 = 200` Entwürfe, also **der Block eines
+   Spielers**. Die Sicherung deckt nicht die ganze Entwurfstafel ab.
+
+### Und eine Berichtigung an der Fehlersuche selbst
+
+Der vorige Lauf hatte gemeldet, C `0x4BB861` sei die C-eigene Stelle. **Die
+Zählung stimmte (5 gegen 4), die Zuordnung nicht:** `0x4BB861` hat sehr wohl
+eine F-Entsprechung (`0x4BB32F`) — sie war nur über die Adresse nicht zu finden,
+weil C den Spielerwert über eine Stapelzelle führt und F in `ebx`. Gefunden
+wurde die richtige Stelle über den **Kontrollfluss**, nicht über die Adresse.
+
+⚠ **Die Lehre:** eine unterschiedliche *Anzahl* von Fundstellen sagt noch nicht,
+**welche** fehlt. Wer die Differenz über Adressen zuordnet, greift daneben,
+sobald die Übersetzer verschieden registriert haben.
+
+### Was auch dieser Lauf nicht geprüft hat
+
+Er hat **keine Spielstandsdaten geöffnet** — alles oben ist reine EXE-Lesung.
+Die Datenaussage zu sec11 (968/968 lebende Plätze) stammt aus dem Messlauf
+(Abschnitt AD) und steht unabhängig davon. Und sec58/sec59 sind nur bis zur
+Funktionsebene gedeutet: was in sec63 genau steht, ist offen.
 
