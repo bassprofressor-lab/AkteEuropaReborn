@@ -11195,7 +11195,7 @@ public partial class MapEntityLayer : Node2D
     {
         if (_designs == null) return 0;
         int n = 0;
-        foreach (int i in BuildableBy(e.BType)) if (CanAfford(e, _designs[i])) n++;
+        foreach (int i in BuildableFor(e.BType, e.Owner)) if (CanAfford(e, _designs[i])) n++;
         return n;
     }
 
@@ -12066,7 +12066,18 @@ public partial class MapEntityLayer : Node2D
     };
 
     /// <summary>Designs a given factory can build, best first.</summary>
-    private static List<int> BuildableBy(int bType)
+    private static List<int> BuildableBy(int bType) => BuildableFor(bType, -1);
+
+    /// <summary>Was diese Gebaeudeart bauen kann — fuer einen BESTIMMTEN
+    /// Spieler.
+    /// <para>⚠ Der Name ist nicht <c>BuildableBy</c>, weil
+    /// <c>Construction.BuildableBy(int, int)</c> in derselben partiellen Klasse
+    /// etwas voellig anderes bedeutet (welches Gebaeude ein Spezialteil setzen
+    /// darf). Zwei gleiche Namen mit zwei <c>int</c> waeren ein Wechselbalg.</para>
+    /// </summary>
+    /// <param name="owner">Wessen Forschungsstand gilt. -1 = der Spieler, dem
+    /// man zusieht (<c>_menuOwner</c>).</param>
+    private static List<int> BuildableFor(int bType, int owner)
     {
         var list = new List<int>();
         if (_designs == null) return list;
@@ -12078,7 +12089,8 @@ public partial class MapEntityLayer : Node2D
             // sonst baute die Waffen-Fabrik Ausruestungstraeger und der Reiter
             // haette keine Bedeutung mehr.
             bool unlocked = UI.SkirmishSetup.AllUnits || d.Available ||
-                            (d.Weapon >= 65 && d.Weapon <= 88 && _researchedStatic.Contains(d.Weapon));
+                            (d.Weapon >= 65 && d.Weapon <= 88 &&
+                             Researched(owner < 0 ? _menuOwner : owner).Contains(d.Weapon));
             if (unlocked && FitsFactory(d, bType)) list.Add(i);
         }
         if (list.Count == 0)                       // fall back to the whole roster
@@ -12763,7 +12775,41 @@ public partial class MapEntityLayer : Node2D
     private static Dictionary<int, string>? _techs;
     // static so the (static) build-menu filter can consult it — there is only
     // ever one entity layer
-    private static readonly HashSet<int> _researchedStatic = new();
+    /// <summary>
+    /// ⭐⭐ <b>Forschung ist SPIELERSACHE — je Spieler ein eigener Satz.</b>
+    /// Umgebaut am 22.08.2026 aus Anlass von OFFENE_FRAGEN <b>BN.1</b>.
+    ///
+    /// <para>Hier stand ein einziges <c>static HashSet</c> für <b>alle acht
+    /// Spieler</b>. Wer forschte, schaltete es damit für jeden frei — auch für
+    /// den Gegner. Das ist derselbe Fehler, den BN.1 an der Bauteiltafel des
+    /// Originals beschreibt (»das Original hält acht Kopien und lässt die
+    /// Forschung nur die eigene ändern«), nur an unserer Stelle: unsere
+    /// Forschung fasst die Bauteiltafel gar nicht an, sie setzt einen
+    /// Freigabemerker — und der war geteilt.</para>
+    ///
+    /// <para>⚠ <b>Die achtfache BAUTEILTAFEL ist damit NICHT gebaut</b>, und
+    /// mit Absicht nicht: <c>component_stats</c> ist bei uns rein lesend
+    /// (<c>UnitStatBook</c> zur Anzeige, <c>DesignMath</c> zum Rechnen),
+    /// <b>nichts schreibt sie zur Laufzeit</b>. Acht Kopien ohne Schreiber
+    /// wären totes Gerüst. Sie werden gebraucht, sobald die ECHTE Forschung
+    /// steht — die, die Bauteilwerte um Stufen verbessert (Abschnitt AN); bis
+    /// dahin ist der geteilte Merker der ganze Schaden, und der ist hier
+    /// behoben.</para>
+    ///
+    /// <para>⭐ Der Anfangsbestand ist für alle acht derselbe, und auch das ist
+    /// gelesen: das Original füllt Spieler 0 und kopiert siebenmal
+    /// (OFFENE_FRAGEN <b>BO</b>, Vorbelegung der Entwurfstafeln).</para>
+    /// </summary>
+    private static readonly HashSet<int>[] _researched =
+        { new(), new(), new(), new(), new(), new(), new(), new() };
+
+    /// <summary>Wessen Forschungsstand die Baumenüs zeigen — der Spieler, dem
+    /// man zusieht. ⚠ Ein Menü ohne Spieler gibt es nicht; vor diesem Umbau
+    /// hat die Frage nur niemand gestellt.</summary>
+    private static int _menuOwner;
+
+    private static HashSet<int> Researched(int player)
+        => _researched[Mathf.Clamp(player, 0, 7)];
     private readonly int[] _money = new int[8];
     private const int ResearchCost = 2000;      // ours — no per-tech price found
     private const int ResearchTotal = 5000;     // the "total" seen in CWM sec96
@@ -12796,18 +12842,23 @@ public partial class MapEntityLayer : Node2D
     /// own `enable` flag is the game's persistent research state.</summary>
     private void SeedResearch()
     {
-        _researchedStatic.Clear();
+        _menuOwner = ViewPlayer;
+        foreach (var satz in _researched) satz.Clear();
         if (_designs == null) return;
+        // Spieler 0 fuellen und siebenmal kopieren — die Reihenfolge des
+        // Originals (BO), nicht acht getrennte Ladelaeufe.
         foreach (var d in _designs)
-            if (d.Available && d.Weapon >= 65 && d.Weapon <= 88) _researchedStatic.Add(d.Weapon);
+            if (d.Available && d.Weapon >= 65 && d.Weapon <= 88) _researched[0].Add(d.Weapon);
+        for (int p = 1; p < 8; p++) _researched[p].UnionWith(_researched[0]);
     }
 
     /// <summary>Next technology this player has not got yet, or -1.</summary>
     private int NextTech()
     {
         if (_techs == null) return -1;
+        var meins = Researched(ViewPlayer);
         foreach (var kv in _techs)
-            if (!_researchedStatic.Contains(kv.Key)) return kv.Key;
+            if (!meins.Contains(kv.Key)) return kv.Key;
         return -1;
     }
 
@@ -12851,7 +12902,8 @@ public partial class MapEntityLayer : Node2D
         if (e.ResearchTech <= 0) return;
         e.ResearchDone += ResearchRate;
         if (e.ResearchDone < ResearchTotal) return;
-        _researchedStatic.Add(e.ResearchTech);
+        // ⭐ Nur der BESITZER des Labors bekommt die Technik — nicht alle acht.
+        Researched(e.Owner).Add(e.ResearchTech);
         _order = $"{_techs?.GetValueOrDefault(e.ResearchTech) ?? "?"} erforscht";
         // @0x4ab41b, in the routine that prints "Nachricht des FORSCHUNGSLABORS:"
         // and "Neue Waffe erfunden"
@@ -13243,7 +13295,7 @@ public partial class MapEntityLayer : Node2D
                 continue;
             }
             if (!IsUnitPlant(e)) continue;
-            var menu = BuildableBy(e.BType);
+            var menu = BuildableFor(e.BType, e.Owner);
             if (menu.Count == 0) continue;
             e.MenuIndex = (e.MenuIndex + 1) % menu.Count;
             n++;
@@ -13675,7 +13727,7 @@ public partial class MapEntityLayer : Node2D
                     }
                     else
                     {
-                        if (!IsUnitPlant(b) || BuildableBy(b.BType).Count == 0) continue;
+                        if (!IsUnitPlant(b) || BuildableFor(b.BType, b.Owner).Count == 0) continue;
                     }
                     b.Owner = b.Team = ViewPlayer;      // uebernommen, und es steht unten
                     b.StockW = b.StockF = b.StockS = 9999;
@@ -15212,7 +15264,7 @@ public partial class MapEntityLayer : Node2D
 
         if (IsUnitPlant(e) && _designs != null)
         {
-            var menu = BuildableBy(e.BType);
+            var menu = BuildableFor(e.BType, e.Owner);
             for (int i = 0; i < menu.Count; i++)
             {
                 var d = _designs[menu[i]];
@@ -15344,7 +15396,7 @@ public partial class MapEntityLayer : Node2D
         int pick = rows.FindIndex(r => r.Affordable);
         if (pick < 0) { _queueNote = "nichts bezahlbar in dieser Basis"; return; }
         _queuePick = pick;
-        var menu = BuildableBy(b.BType);
+        var menu = BuildableFor(b.BType, b.Owner);
         var d = _designs![menu[pick % menu.Count]];
         _queueCostW = d.CostW; _queueCostF = d.CostF; _queueCostS = d.CostS;
         _queueName = d.Name;
@@ -15703,6 +15755,56 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <summary>
+    /// <c>--forschung-check</c> — <b>bleibt eine Forschung bei dem, der sie
+    /// bezahlt hat?</b> (22.08.2026, aus Anlass von OFFENE_FRAGEN <b>BN.1</b>.)
+    ///
+    /// <para>Bis heute war <c>_researchedStatic</c> ein einziger Satz für alle
+    /// acht Spieler: wer forschte, schaltete es für jeden frei, auch für den
+    /// Gegner. Der Lauf misst beide Hälften — dass die eigene Technik ankommt
+    /// UND dass sie bei den anderen sieben <b>nicht</b> ankommt. Ohne die
+    /// zweite Hälfte hätte der alte Zustand genauso bestanden.</para>
+    /// </summary>
+    public string ForschungCheck()
+    {
+        var sb = new System.Text.StringBuilder("forschung-check\n");
+
+        // Anfangsbestand: alle acht gleich (Spieler 0 fuellen, siebenmal kopieren)
+        int n0 = Researched(0).Count;
+        bool gleichOk = true;
+        for (int p = 1; p < 8; p++) if (Researched(p).Count != n0) gleichOk = false;
+        sb.AppendLine($"  Anfangsbestand: alle acht Spieler {n0} Techniken: " +
+                      $"{(gleichOk ? "gleich, richtig" : "UNGLEICH")}");
+
+        // Eine Technik, die noch niemand hat
+        int tech = 9001;
+        while (Researched(0).Contains(tech)) tech++;
+
+        Researched(3).Add(tech);
+        bool angekommen = Researched(3).Contains(tech);
+        int fremde = 0;
+        for (int p = 0; p < 8; p++) if (p != 3 && Researched(p).Contains(tech)) fremde++;
+        sb.AppendLine($"  Spieler 3 erforscht {tech}: bei ihm {(angekommen ? "da" : "FEHLT")}, " +
+                      $"bei den anderen sieben {fremde}x da (erwartet 0): " +
+                      $"{(angekommen && fremde == 0 ? "getrennt, richtig" : "DURCHGESICKERT")}");
+
+        // Gegenprobe: ein zweiter Spieler stoert den ersten nicht
+        Researched(6).Add(tech);
+        bool beide = Researched(3).Contains(tech) && Researched(6).Contains(tech);
+        int rest = 0;
+        for (int p = 0; p < 8; p++) if (p != 3 && p != 6 && Researched(p).Contains(tech)) rest++;
+        sb.AppendLine($"  Spieler 6 dazu: beide haben sie {(beide ? "ja" : "NEIN")}, " +
+                      $"die restlichen sechs {rest}x (erwartet 0): " +
+                      $"{(beide && rest == 0 ? "richtig" : "FALSCH")}");
+
+        Researched(3).Remove(tech);
+        Researched(6).Remove(tech);
+
+        bool alles = gleichOk && angekommen && fremde == 0 && beide && rest == 0;
+        sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// <c>--reichweite-check</c> — <b>die drei Regeln der Reichweite, die am
     /// 22.08.2026 dazugekommen sind</b> (OFFENE_FRAGEN <b>BN.5.1</b>).
     ///
@@ -15848,7 +15950,7 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Name of what the selected factory would build next.</summary>
     private string MenuPick(Entity e)
     {
-        var menu = BuildableBy(e.BType);
+        var menu = BuildableFor(e.BType, e.Owner);
         if (_designs == null || menu.Count == 0) return "-";
         return $"{_designs[menu[e.MenuIndex % menu.Count]].Name} ({e.MenuIndex % menu.Count + 1}/{menu.Count})";
     }
@@ -17406,7 +17508,7 @@ public partial class MapEntityLayer : Node2D
         {
             var e = _entities[i];
             if (!IsUnitPlant(e) || e.Dead) continue;
-            var menu = BuildableBy(e.BType);
+            var menu = BuildableFor(e.BType, e.Owner);
             if (menu.Count == 0) { _order = "nichts baubar"; continue; }
             int pick = menu[e.MenuIndex % menu.Count];
             var chosen = _designs[pick];
@@ -22499,7 +22601,7 @@ public partial class MapEntityLayer : Node2D
     private static bool CanAffordMenuChoice(Entity e)
     {
         if (_designs == null) return false;
-        var menu = BuildableBy(e.BType);
+        var menu = BuildableFor(e.BType, e.Owner);
         if (menu.Count == 0) return false;
         return CanAfford(e, _designs[menu[e.MenuIndex % menu.Count]]);
     }
@@ -24067,7 +24169,7 @@ public partial class MapEntityLayer : Node2D
     {
         if (_buildWatch < 0 || _buildWatch >= _entities.Count) return "";
         var e = _entities[_buildWatch];
-        var menu = BuildableBy(e.BType);
+        var menu = BuildableFor(e.BType, e.Owner);
         string want = "keine Auswahl";
         if (menu.Count > 0 && _designs != null)
         {
@@ -24312,7 +24414,7 @@ public partial class MapEntityLayer : Node2D
         {
             var rb = _entities[_researchWatch];
             sb.Append($"research tech={rb.ResearchTech} done={rb.ResearchDone}/{ResearchTotal} " +
-                      $"known={_researchedStatic.Count} spezial-menu={BuildableBy(4).Count} " +
+                      $"known={Researched(ViewPlayer).Count} spezial-menu={BuildableBy(4).Count} " +
                       $"money={_money[Mathf.Clamp(rb.Owner, 0, 7)]} || ");
         }
         if (_stateWatch != null)
