@@ -12408,6 +12408,973 @@ waren es 0 von 3.
 
 ---
 
+## BL. Revier 4: 0x43AD00 … 0x442ED0
+
+62 Funktionen, 10 944 Byte. Gelesen am 22.08.2026.
+
+**Kurzfassung.** Das Revier ist zu zwei Dritteln die **Fenster-Bedienmaschine**
+(Öffnen, Suchen, Neuzeichnen, In-den-Schirm-Zwingen, Aufsetzen auf die
+DirectDraw-Oberfläche), zu einem Viertel sind es die **Ausführer der
+Gebäudebefehle** aus dem Befehlsbus, dazu drei kleinere Bündel: **das
+Cheat-System**, die **CD-Prüfung** und ein **PCX-Lader**.
+
+⭐⭐ **Zwei Funde, die über das Revier hinausgehen:**
+
+1. **`0x43C960` gibt es in F nicht** — vierfach belegt (Abschnitt 12). Damit
+   fehlt F ein ganzer Schritt der Gebäudeeroberung.
+2. Im selben Rufer (`0x43CA50`) sitzt ein **zweiter C-eigener Block**
+   (`0x43CFF5…0x43D04B`, 87 Byte), den `GAMESTATE_RE.md` als »both conditions
+   unidentified« führt — **beide Bedingungen sind jetzt benannt**, und der Block
+   fehlt in F ebenfalls.
+
+⭐ **Fünfte, unabhängige Stütze für den zehnten Unterschied (BA.8):**
+`0x441190` (Fenster in den Schirm zwingen) nimmt in C **drei** Fensterarten aus
+(9, 35, **48**), in F nur **zwei** (9, 35). Der fehlende Wert ist genau
+`0x30 = 48`.
+
+---
+
+### Adresstafel
+
+F durchweg mit `cfind.py` bestimmt und bei jedem strittigen Fall von Hand
+nachgelesen. ⚠ Die vier mit **(korr.)** markierten hat `cfind` falsch gepaart —
+die eingetragene F-Adresse ist von Hand belegt (Abschnitt 13.9).
+Die Ruferzahlen sind die **aufgelösten** (Stummel überspringend).
+
+| C | F | Byte | Rufer | Was sie ist |
+|---|---|---:|---:|---|
+| `0x43AD00` | `0x439E70` | 112 | 1 | ⭐ **Cheat »Waffen«**: +1000 auf `+0x28` aller eigenen Lagergebäude |
+| `0x43AD70` | `0x439EE0` | 112 | 1 | ⭐ **Cheat »Fahrwerke«**: +1000 auf `+0x2A` |
+| `0x43ADE0` | `0x439F50` | 112 | 1 | ⭐ **Cheat »Specials«**: +1000 auf `+0x2C` |
+| `0x43B080` | `0x43A1F0` | 240 | 1 | ⭐ **»Check Hopla«** — den Bildschirm um 180° drehen |
+| `0x43B170` | `0x43A2E0` | 32 | **0** | ⚠ ausgehöhlter Rumpf, gibt **immer 0** zurück; **kein Rufer** |
+| `0x43B350` | `0x43A4C0` | 160 | 1 | Mitnahmeliste `0x9937B8` → 20 Einheitensätze nach sec98 `0x81A410` |
+| `0x43B3F0` | `0x43A560` | 80 | 10 | `waffenfeld(entwurf)` — Entwurfstafel `0x5045BC` (58 B) → Waffentafel `0x4F98FC` (22 B) |
+| `0x43B440` | `0x43A5B0` | 320 | 11 | ⭐ **CD-Laufwerk suchen**: `d:`…`z:` nach `X:\cw.id`, Fund → `byte[0x7A4FE8]` |
+| `0x43B760` | `0x43A8D0` | 80 | 1 | `datei_vorhanden(name)` **(korr.)** |
+| `0x43B7B0` | `0x43A920` | 80 | 1 | `dateigroesse(name)` **(korr.)** |
+| `0x43B800` | `0x43A970` | 320 | **0** | ⭐ **PCX-Lader** (Kopf 128 B, RLE `0xC0`); **kein Rufer** |
+| `0x43B940` | `0x43AAB0` | 128 | 1 | `datei_ganz_lesen(name, puffer, laenge)` |
+| `0x43B9C0` | `0x43AB30` | 112 | **0** | Gebäude-Nebensätze (sec23/24/25/26/28/30/31) auf `0xFFFF`; **kein Rufer** |
+| `0x43C960` | ⚠ **fehlt** | 240 | 1 | ⭐⭐ **Eroberung: Ankerzelle räumen** — Abschnitt 12 |
+| `0x43F5F0` | `0x43E5F0` | 160 | 2 | `ist_2x2_wasser(spalte, zeile)` — imap `0xBDEA80`, Wert `0xFFFC` |
+| `0x43F690` | `0x43E690` | 160 | 2 | `ist_4x4_wasser(spalte, zeile)` |
+| `0x43F820` | `0x43E820` | 144 | 1 | **Befehl 509** Fabrik-Lagerausbau (Zustand 3, Preis sec24 `+0x0A`) |
+| `0x43F8B0` | `0x43E8B0` | 144 | 1 | **Befehl 510** Fabrik-Produktionsausbau (Zustand 4, Preis `+0x0C`) |
+| `0x43F940` | `0x43E940` | 112 | 1 | **Befehl 511** Fabrik-Reparatur **umschalten** 1↔0 |
+| `0x43F9B0` | `0x43E9B0` | 144 | 1 | **Befehl 536** Flughafen-Ausbau (Zustand 2, Preis sec27 `+0x06`) |
+| `0x43FA40` | `0x43EA40` | 128 | 1 | **Befehl 515** Minen-Lagerausbau (Zustand 3, Preis sec28 `+0x0E`) |
+| `0x43FAC0` | `0x43EAC0` | 128 | 1 | **Befehl 516** Minen-Produktionsausbau (Zustand 4, Preis `+0x10`) |
+| `0x43FB40` | `0x43EB40` | 96 | 1 | **Befehl 517** Minen-Reparatur **umschalten** 1↔0 |
+| `0x43FBA0` | `0x43EBA0` | 176 | 1 | **Befehl 519** Fabrik reparieren (Zustand 2, **−1/30 TP**) |
+| `0x43FC50` | `0x43EC50` | 192 | 1 | **Befehl 520** Flughafen reparieren (Zustand 1, **−1/30 TP**) |
+| `0x43FDC0` | `0x43EDC0` | 176 | 1 | **Befehl 522** Mine reparieren (Zustand 2, **−1/30 TP**) |
+| `0x43FE70` | `0x43EE70` | 80 | 1 | **Befehl 523** Fabrik → 0 — ⚠ **ohne Absender (tot)** |
+| `0x43FEC0` | `0x43EEC0` | 80 | 1 | **Befehl 524** Flughafen → 0 |
+| `0x43FF50` | `0x43EF50` | 64 | 1 | **Befehl 526** Mine → 0 — ⚠ **ohne Absender (tot)** |
+| `0x43FF90` | `0x43EF90` | 272 | 1 | ⭐ `freie_andockplaetze(gebaeude)` — 6er-Schlange in sec23/25/30 |
+| `0x4400A0` | `0x43F0B0` | 240 | 1 | `entfernung_tuer_zu_einheit(gebaeude, einheit)`, `(int)sqrt` |
+| `0x440190` | `0x43F1A0` | 224 | 2 | Gebäude aus allen 400 sec48-Umschlagsätzen streichen |
+| `0x440930` | `0x43F940` | 128 | 1 | Gebäudenamen `+0x17` = `"1 "` … `"256 "` (Missionsstart) |
+| `0x440DD0` | `0x43FDE0` | 192 | 2 | ⭐ **alle Fenster auf den Rückpuffer** |
+| `0x440E90` | `0x43FEA0` | 176 | 4 | ⭐ **alle Fenster auf die primäre Oberfläche** |
+| `0x440F40` | `0x43FF50` | 240 | 1 | ⭐ nur **Art 45 »Laden…«** direkt auf die primäre Oberfläche |
+| `0x441030` | `0x440040` | 240 | 1 | ⭐ nur **Art 47 »Synchronisieren…«** direkt auf die primäre Oberfläche |
+| `0x441120` | `0x440130` | 112 | **82** | ⭐ `bedienelement_greifen(fenster, element)` |
+| `0x441190` | `0x4401A0` | 224 | **52** | ⭐⭐ `fenster_in_den_schirm_zwingen(nr)` — **hier sitzt der C/F-Unterschied** |
+| `0x4412E0` | `0x4402E0` | 48 | **32** | ⭐ `fenster_neu_zeichnen(nr)` = Verteiler + Schirmzwang |
+| `0x441310` | `0x440310` | 128 | 1 | »gibt es Art 3 (Karte) mit Unterart n?« → 0/1 |
+| `0x441390` | `0x440390` | 144 | 1 | Art 3 mit Unterart n **schliessen** |
+| `0x441420` | `0x440420` | 144 | 4 | Geschwindigkeit → `dword[0x892128]`, Art 34 neu zeichnen |
+| `0x4414B0` | `0x4404B0` | 128 | 1 | Art 12 (CD-Spieler) neu zeichnen |
+| `0x441530` | `0x440530` | 192 | 1 | Art 46, `byte[+0x0C] = arg`, neu zeichnen |
+| `0x4415F0` | `0x4405F0` | 240 | 2 | ⭐ Art 9 nur bei **geänderter Auswahl** neu zeichnen (Merker `0x4FAEF0`) |
+| `0x4416E0` | `0x4406E0` | 128 | 1 | Art 16 neu zeichnen |
+| `0x441760` | `0x440760` | 176 | 1 | Art 12: `+0xACA8/+0xACAC/+0xACB0 = 0` |
+| `0x441BB0` | `0x440BB0` | 192 | 1 | **Art 43 öffnen** (Vollbild 640×480) + Bildschirmmodus 3 |
+| `0x441C70` | `0x440C60` | 144 | 2 | **Art 46 öffnen** (»Mission beendet«) |
+| `0x441D00` | `0x440CF0` | 128 | 1 | **Art 42 schliessen** (»Warten auf…«) |
+| `0x441D80` | `0x440D70` | 320 | 2 | **Art 42 öffnen**, mittig, y = Höhe/5 |
+| `0x441EC0` | `0x440EA0` | 272 | 1 | **Art 40 öffnen** (»Pause«), mittig, y = Höhe/5 |
+| `0x4421A0` | `0x441190` | 208 | 1 | **Art 38 öffnen** (Mitnahme) + Liste `0x9937B8` leeren |
+| `0x442270` | `0x441260` | 272 | 1 | **Art 36 / Unterart 10 öffnen** (Namenseingabe, 40 Zeichen) **(korr.)** |
+| `0x442380` | `0x441370` | 288 | 1 | **Art 36 / Unterart 2 öffnen**, »Wählen Sie einen Namen für dieses Teil«, 19 Zeichen |
+| `0x442670` | `0x441650` | 368 | 2 | **Art 37 öffnen** (Gefechtsvorbereitung) + Palette + Takt 0 |
+| `0x4427E0` | `0x4417C0` | 256 | 6 | **Art 35 öffnen** (Hauptmenü) — fest **x = 25**, y = Höhe − h − 20 |
+| `0x4428E0` | `0x4418C0` | 288 | 2 | ⭐ **die fünf Auflösungen prüfen** → `byte[0x9937E8 … +4]` |
+| `0x442A00` | `0x4419E0` | 304 | 3 | **Art 34 öffnen** (Einstellungen) |
+| `0x442E10` | `0x441E00` | 192 | 1 | **Art 27 öffnen** (Gebäudeliste) **(korr.)** |
+| `0x442ED0` | `0x441EB0` | 224 | 1 | ⚠ sucht **Art 23**, legt aber **Art 21** an — in beiden Bauten |
+
+---
+
+### 1. ⭐⭐ Das Cheat-System — fünfzehn Wörter, vier lebende Arme, drei Tastengriffe
+
+`0x43AD00`, `0x43AD70`, `0x43ADE0` sind dreimal derselbe Rumpf:
+
+```
+cheat_lager_fuellen(versatz):                  ; 0x28 / 0x2A / 0x2C
+    ich = byte[0x4FA284]
+    fuer k = 0 … 254:
+        satz = 0xC06914 + 76·k                 ; Schrittweite aus der lea-Kette:
+                                               ; ebx=k, ebp=9k, ebx=19k, eax=76k
+        wenn byte[satz+0x01] != ich: weiter     ; nicht meins
+        typ = byte[satz+0x00]
+        wenn typ nicht in {1, 9, 16}: weiter    ; Basis, Flughafen, Werft
+        word[satz + versatz] += 1000
+```
+
+⭐⭐ **Das Nullmodell liefert das Spiel selbst.** Die drei Rufer stehen im
+Tastenbehandler und geben je eine Meldung aus:
+
+| C | Feld | Meldung (C-Adresse) |
+|---|---|---|
+| `0x43AD00` | `+0x28` (`0xC0693C`) | »**Cheat: Waffen** hinzugefügt« `0x4FB2E0` |
+| `0x43AD70` | `+0x2A` (`0xC0693E`) | »**Cheat: Fahrwerke** hinzugefügt« `0x4FB344` |
+| `0x43ADE0` | `+0x2C` (`0xC06940`) | »**Cheat: Specials** hinzugefügt« `0x4FB3A8` |
+
+`GAMESTATE_RE.md` führt genau diese Zuordnung (`0x28→W, 0x2a→F, 0x2c→S`,
+gemessen ab `0xC06914`) seit Wochen als *erschlossen*. **Jetzt ist sie aus den
+Zeichenketten des Programms selbst belegt: 3 von 3.** Ein geratenes Tripel aus
+den vier Lagerfeldern (W/F/S/Terranium) trifft mit Wahrscheinlichkeit 1/24.
+
+#### 1.1 Wie man drankommt
+
+Der Erkenner ist `0x43AE50` (C) / `0x439FC0` (F), 67 Befehle, **normiert
+befehlsgleich**. Er hängt am Tastenbehandler und arbeitet eine Tafel ab:
+
+```
+wenn dword[0x539234] != 0 (Netzspiel):  sofort raus   ; ⭐ Cheats sind im Netz gesperrt
+taste nach Grossbuchstabe; nur A…Z und Leerzeichen zaehlen
+Tafel C 0x4FA100 / F 0x4F9108, Schrittweite 21:
+     +0x00…+0x13  das Wort   ·   +0x14  der Fortschrittszaehler
+fuer k = 0 … 14:
+    wenn Wort[k][zaehler[k]] == taste:  zaehler[k]++
+         wenn danach Wortende:  zaehler[k]=0 ; k-3 in 0…11 -> Sprungtafel 0x43AFD4
+    sonst zaehler[k] = 0   (bzw. 1, wenn die Taste der Wortanfang ist)
+```
+
+**Die fünfzehn Wörter, im Klartext aus `.data`** (⚠ Dateiversatz für `.data` ist
+`VA − 0x402200`, **nicht** `VA − 0x400C00` wie in `.text`):
+
+`IDKFA` · `GOBGAS` · `FIREBUG` · `HLAVOUDOLU` · `PROFIS` · `EIDOS` · `FANFAR` ·
+`TWISTER` · `GUNS` · `WHEELS` · `SPECIALS` · `COLUMBUS` · `ENABLEDEVEL` ·
+`ARMLEUCHTER` · `SETLOWRES`
+
+⭐ **Nur vier davon haben einen Arm.** Die Sprungtafel `0x43AFD4` deckt die
+Wörter 3…14; acht ihrer zwölf Einträge zeigen auf `0x43AFB9`, also auf »nichts«,
+und die Wörter 0…2 haben gar keinen Arm (`sub ecx,3` läuft unter null).
+
+| Wort | Arm | Wirkung |
+|---|---|---|
+| **`HLAVOUDOLU`** (tschech. »Kopf nach unten«) | `0x43AEE5` | `byte[0x4FA0D0] ^= 1`; beim Einschalten `malloc(B·H)` → `dword[0x4FA0D4]`, beim Ausschalten `free` |
+| **`ENABLEDEVEL`** | `0x43AF28` | `byte[0x4FA0C0]` umschalten, Meldung »Developers' cheats **enabled/disabled**« |
+| **`ARMLEUCHTER`** | `0x43AF61` | Meldung »**Pfuschmodus aktiviert**« (`0x4FD34C`), **`byte[0x4FA0C4] = 1`** |
+| **`SETLOWRES`** | `0x43AF84` | Bildschirmmodus 0 (640×480), `dword[0x991818]=0`, `byte[0x5385E4]=0` |
+
+⭐ `byte[0x4FA0C4]` hat **genau einen Schreiber im ganzen Programm**
+(`reloc_refs --addr`: 1 Schreiber `0x43AF78`, 8 Leser, alle im Tastenbehandler
+`0x412E30`). Es ist der Freigabeschalter der Tastencheats.
+
+#### 1.2 Welche Tasten
+
+Die Tastenverteilung ist `eax = VK − 9`, Schranke `0x88`, Indextafel `0x414644`
+(137 B) → Sprungtafel `0x4145A4` (40 Arme) (`0x412FD8…0x412FEE`).
+
+> **Nullmodell für »VK = Position + 9«, dreifach.** Arm 38 sitzt auf Position 136
+> → VK 145 = ROLLEN, und `OFFENE_FRAGEN` nennt `0x413E2E` bereits »Taste ROLLEN
+> (Bildschirmfoto)«. Arm 36 → Position 113 → VK 122 = **F11**, dort steht
+> `0x413DDC` = »Taste F11«. Arm 17 → Position 73 → VK 82 = **R**, dort steht
+> `0x413708` = »Taste Strg+R«. **3 von 3 vorhandenen Marken treffen.**
+
+Damit:
+
+| Arm | Taste | Rufstelle | Cheat |
+|---:|---|---|---|
+| 5 | **A** | `0x4131CC` | Specials |
+| 11 | **H** | `0x4135FE` | Fahrwerke |
+| 19 | **U** | `0x41386E` | Waffen |
+
+Alle drei prüfen davor `byte[0xA182F9]` **und** `byte[0xA182F8]`. Das
+Tastenzustandsfeld beginnt bei `0xA182E8`, also sind das **VK 17 = Strg** und
+**VK 16 = Umschalt**.
+
+⭐ **Der vollständige Griff: `ARMLEUCHTER` tippen, dann Strg+Umschalt+U /
+Strg+Umschalt+H / Strg+Umschalt+A.**
+
+#### 1.3 »Check Hopla« — der Bildschirm auf dem Kopf
+
+`0x43B080` heisst so, weil der einzige Rufer (`0x417E7F`, in der Zeichenschleife)
+unmittelbar davor die Protokollmarke `"Check Hopla"` (`0x4F7670`) setzt und
+`byte[0x4FA0D0]` prüft.
+
+```
+Lock(Rueckpuffer 0x540744)               ; Neuversuch bei DDERR_WASSTILLDRAWING (0x8876021C)
+n = dword[0x5387CC] · dword[0x5387C8]    ; Hoehe · Breite
+kopiere n/4 Dwords  Oberflaeche -> 0x4FA0D4
+fuer i = 0 … n-1:  Oberflaeche[i] = Puffer[n-1-i]
+Unlock
+```
+
+Punktspiegelung des ganzen Bildes. Der Puffer `dword[0x4FA0D4]` wird von
+`HLAVOUDOLU` angelegt und wieder freigegeben — beide Enden passen zusammen.
+
+⚠ Nachgerechnet: die zweite Schleife schreibt **in dieselbe Oberfläche zurück**,
+liest aber aus der Kopie. Das ist eine saubere 180°-Drehung, kein Halbbildfehler.
+
+---
+
+### 2. ⭐ Die CD-Prüfung: `X:\cw.id`
+
+`0x43B440` / F `0x43A5B0`, 96 Befehle, **normiert befehlsgleich**.
+
+```
+fuer laufwerk = 'd' … 'z':
+    pfad = "X:\"  mit  pfad[0] = laufwerk    ; Vorlage 0x4FAC94 = "X:\"
+    name = pfad + "cw.id"                     ; 0x4FAC8C = "cw.id"
+    wenn !datei_vorhanden(name): weiter
+    f = fopen(name, "rb"); fread(&c,1,1,f); fclose(f)
+    wenn c == arg1:  byte[0x7A4FE8] = laufwerk ; return 1
+return 0
+```
+
+⭐ Die Datei ist **ein Byte** lang und muss dem übergebenen Kennbyte gleichen —
+eine Datenträgerkennung, keine Prüfsumme. Elf Rufer, davon sechs in
+`0x418D05…0x418D79` (die Reihe der Kennbytes) und fünf in `0x43B580`, der
+Funktion mit »Drücken Sie Alt-F4 zum Beenden«.
+
+Die drei Helfer sind gewöhnliche CRT-Hüllen, in beiden Bauten gleich:
+`0x43B760` = `datei_vorhanden`, `0x43B7B0` = `dateigroesse`
+(fopen/fseek END/ftell), `0x43B940` = `datei_ganz_lesen(name, puffer, laenge)`.
+
+---
+
+### 3. ⭐ Der PCX-Lader — und drei tote Funktionen
+
+`0x43B800(dateiname, ziel, zeilenschritt)`:
+
+```
+wenn !datei_vorhanden: return 0
+n = dateigroesse ; roh = malloc(n) ; datei_ganz_lesen(name, roh, n)
+breite = word[roh+8] - word[roh+4] + 1
+hoehe  = word[roh+10] - word[roh+6] + 1
+gesamt = hoehe · zeilenschritt ;  i = 0x80 ;  v = 0
+solange v < gesamt:
+    a = roh[i++] ; anz = 1
+    wenn (a & 0xC0) == 0xC0:  anz = a & 0x3F ; a = roh[i++]
+    memset(ziel + v, a, anz) ; v += anz
+    wenn v % zeilenschritt == breite:      ; Zeile voll
+         v += zeilenschritt - breite
+free(roh) ; return 1
+```
+
+Kopf bei 128 Byte, Lauflängenmarke `0xC0` in den oberen zwei Bit, Bildgrenzen bei
+`+4/+6/+8/+10` — **das ist das PCX-Format, Merkmal für Merkmal.**
+⚠ Er ignoriert `bytesPerLine` (PCX `+0x42`) und nimmt den **Zielschritt** als
+Zeilenmass; bei ungerader Breite würde er verrutschen.
+
+#### 3.1 ⚠⚠ Negativbefund: drei Funktionen sind im ausgelieferten C-Bau tot
+
+Nach der Regel geprüft — nicht über den Linearabtast, sondern über `rufer.py`
+(relative `E8`/`E9`) **und** `reloc_refs.py --addr` (Zeiger und Sprungtafeln):
+
+| Funktion | `E8`/`E9`-Rufer | Relokationen darauf |
+|---|---:|---:|
+| `0x43B170` (Rumpf, gibt immer 0) | 0 | 0 |
+| `0x43B800` (PCX-Lader) | 0 | 0 |
+| `0x43B9C0` (Nebensätze auf `0xFFFF`) | 0 | 0 |
+| ihre Stummel `0x401488`, `0x40249B`, `0x4014F6` | 0 | 0 |
+
+⚠ **Die Stummel beweisen nichts** — MSVC legt bei `/INCREMENTAL` je Funktion
+einen an, auch für ungerufene. Gerufen wird keiner der drei.
+
+`0x43B170` ist zusätzlich innen leer: `if (arg > 0x41) return 0; else return 0;` —
+beide Zweige geben 0 zurück. Ein ausgehöhlter Rumpf, kein Zufallsfund.
+
+⭐ `0x43B9C0` ist trotzdem lehrreich: sie setzt in **sieben** Nebensatztafeln das
+erste Wort jedes der 50 Plätze auf `0xFFFF` —
+sec23 `0x878E58` (16 B) · sec24 `0x87A2C0` (14) · sec25 `0x879F38` (14) ·
+sec26 `0x87A5A8` (4) · sec28 `0x878AD0` (18) · sec30 `0x879178` (14) ·
+sec31 `0x879E70` (4). **Die Schleifenschranke `eax < 0x879178` mit Schritt 16
+ergibt genau 50 Durchgänge** (`0x320 / 0x10`), und alle sieben Schrittweiten
+treffen die Satzlängen der Tafel aus BE.3.
+⚠ **sec27 (Flughafen, 52 B) und sec29 (Seedock, 4 B) fehlen** — 7 von 9.
+
+---
+
+### 4. ⭐⭐ Die Ausführer der Gebäudebefehle — dreizehn Arme des Befehlsbusses
+
+`0x43F820 … 0x43FF50` sind dreizehn Funktionen desselben Baus, alle gerufen aus
+dem Verteiler bei `0x4C382D…0x4C3A52`. Die Befehlsnummer steht nicht im Code —
+sie steht in der **Sprungtafel bei `0x4C45F8`**:
+
+> ⭐⭐ **Nullmodell, unabhängig gewonnen.** Die Tafeleinträge, die auf die
+> dreizehn Arme zeigen, liegen bei `0x4C4DEC … 0x4C4E58`. Setzt man
+> `Befehl = (Eintragsadresse − 0x4C45F8)/4`, ergeben sich für die **neun**
+> Befehle, die Abschnitt P bereits verzeichnet, **9 von 9** dieselben Nummern
+> (509, 510, 511, 515, 516, 517, 519, 520, 522, 524, 536 — und 523/526 genau
+> dort, wo P »tot« vermerkt). Ein falscher Sockel würde alle neun gleichzeitig
+> verfehlen.
+
+#### 4.1 Der gemeinsame Bau
+
+```
+befehl(satznr, spieler):
+    geb = word[Tafel + Satzlaenge·satznr + 0x00]
+    wenn byte[0xC06914 + 76·geb + 0x01] != spieler: return    ; Eigentum
+    <Wirkung>
+```
+
+Die **bezahlten** fünf (509, 510, 515, 516, 536) hängen zusätzlich das Konto ein:
+
+```
+    konto = dword[0xA9C600 + 4·spieler]                       ; sec73
+    preis = (short) word[Satz + Preisversatz]
+    wenn preis > konto: return                                ; ⭐ still, ohne Meldung
+    byte[Satz+0x02] = zustand ; byte[Satz+0x06] = 0           ; Fortschritt zurueck
+    dword[0xA9C600 + 4·spieler] = konto − preis
+```
+
+| Befehl | C | Tafel | Zustand | Preis |
+|---:|---|---|---:|---|
+| 509 | `0x43F820` | sec24 (Fabrik) | 3 | `+0x0A` Lagerausbaukosten |
+| 510 | `0x43F8B0` | sec24 | 4 | `+0x0C` Produktionserweiterung |
+| 515 | `0x43FA40` | sec28 (Mine) | 3 | `+0x0E` |
+| 516 | `0x43FAC0` | sec28 | 4 | `+0x10` |
+| 536 | `0x43F9B0` | sec27 (Flughafen) | 2 | `+0x06`, Fortschritt bei `+0x08` |
+
+#### 4.2 ⚠⚠ Berichtigung: 511 und 517 sind **Umschalter**, nicht »→ 0«
+
+```
+0x43F940 (511) / 0x43FB40 (517):
+    wenn byte[Satz+0x02] == 1:  byte[Satz+0x02] = 0
+    sonst                        byte[Satz+0x02] = 1
+```
+
+Abschnitt P führt beide als »→ 0«. Das ist die halbe Wahrheit: aus **jedem
+anderen** Zustand springen sie auf **1** (`StRepair`). Nur 523/524/526
+(`0x43FE70`, `0x43FEC0`, `0x43FF50`) setzen bedingungslos 0.
+
+#### 4.3 ⭐⭐ Neu: der Reparaturbefehl **kostet Trefferpunkte**
+
+`0x43FBA0` (519, Fabrik), `0x43FC50` (520, Flughafen), `0x43FDC0` (522, Mine)
+sind dreimal derselbe Rumpf und zahlen **nicht** mit Geld:
+
+```
+hp = word[geb+0x02] ; hpmax = word[geb+0x12]
+wenn hp == hpmax: return                    ; nichts kaputt
+byte[Satz+0x02] = 2 (beim Flughafen 1)
+wenn hp > 50:
+    word[geb+0x02] = (29·hp) / 30           ; ⭐ 1/30 der TP GEHEN VERLOREN
+    0x4CBBF0(geb, 0)                        ; Schadensbild sofort neu
+```
+
+Der Faktor 29/30 ist aus der `lea`-Kette gerechnet, bevor irgendwo nachgeschlagen
+wurde: `eax = hp·8`, `eax −= hp` → `7·hp`, `lea eax,[hp + 7hp·4]` → `29·hp`,
+`idiv 30`. Die Felder `+0x02`/`+0x12` sind in `GAMESTATE_RE.md` §3.80 als
+hp/hp_max belegt.
+
+`0x4CBBF0` ist der Schadensstufenrechner:
+`stufe = (hpmax − hp) / (hpmax / byte[0xBB41A0 + 10·typ])`, und bei Änderung
+`byte[geb+0x06] = stufe` plus ein Ereignis über `0x4017EE`.
+
+⚠ **Deutung:** »Reparieren« reisst das Gebäude erst weiter auf und flickt es dann
+langsam (der Gebäudetakt `0x43E05C` gibt jeden 4. Takt einen Punkt zurück).
+Dass es so ist, steht dreimal wortgleich im Code. **Warum** das Spiel es tut,
+bleibt ungedeutet.
+
+---
+
+### 5. ⭐ `0x43FF90` — die Andockschlange hat sechs Plätze, und Typ 12 teilt sie mit Typ 6
+
+```
+freie_andockplaetze(gebaeude):
+    idx = byte[geb+0x15]                     ; cis_typ, die Nummer INNERHALB des Typs
+    typ = byte[geb+0x00]
+    wenn typ-1 > 11: return 0xFF
+    arm = byte[0x440058 + typ-1] ; jmp dword[0x440044 + 4·arm]
+    Arm 0 (Typ 1  Basis):        p = 0x878E5C + 16·idx      ; sec23 +0x04
+    Arm 1 (Typ 5  Depot):        p = 0x879F3A + 14·idx      ; sec25 +0x02
+    Arm 2 (Typ 6  Bahnstation):  p = 0x87917A + 14·idx      ; sec30 +0x02
+    Arm 3 (Typ 12 Feldbahnhof):  ⭐ DIESELBE Sprungadresse wie Arm 2
+    Arm 4 (alle uebrigen):       return 0xFF
+    zaehle n = 0…5, solange word[p + 2n] != 0xFFFF ;  return 6 − n
+```
+
+Die Indextafel `0x440058` lautet `00 04 04 04 01 02 04 04 04 04 04 03` — Typ 1→0,
+Typ 5→1, Typ 6→2, Typ 12→3, alles andere→4.
+
+⭐ Das bestätigt zwei Aussagen der bestehenden Doku unabhängig: BE.3 ordnet
+»6/12 Bahnstation, Feldbahnhof« derselben Tafel sec30 zu (**hier steht es im
+Kontrollfluss: Arm 2 und Arm 3 sind wörtlich dieselbe Adresse `0x440018`**), und
+Abschnitt AM nennt die Schlange »sechs Roboter« (**hier: `cmp ecx, 6`**).
+Neu ist, dass die **Basis** dieselbe Schlange hat, nur bei `+0x04`.
+
+⭐ **Ein kleiner Auslieferungsunterschied ohne Wirkung:** F gibt in Arm 4 vorher
+noch die Protokollzeile `"Wrong depo..."` (F `0x4F9F0C`) aus, C nicht. Nur
+Entwicklerprotokoll, kein Verhalten.
+
+---
+
+### 6. ⭐ `0x4400A0` — die Türzelle, und die Sonderbehandlung der Basis
+
+```
+entfernung(gebaeude, einheit):
+    wenn byte[geb+0x00] == 1:                      ; ⭐ Basis
+         zx = x + 2 ; zy = y + 4                   ; FEST
+    sonst
+         zx = x + byte[geb+0x31] ; zy = y + byte[geb+0x32]   ; Tuerversatz
+    dx = Einheit.RX − zx ; dy = Einheit.RY − zy
+    return (int) sqrt(dx² + dy²)
+```
+
+Abschnitt AI.1 hat den Türversatz als `Satz[0x35]/[0x36]` (Sockel `0xC06910`,
+also `+0x31/+0x32` ab `0xC06914`) belegt. **Hier steht er ein zweites Mal — und
+mit der Ausnahme, dass die Basis ihn nicht benutzt, sondern (2,4) fest.**
+
+---
+
+### 7. ⭐ `0x440190` — ein Gebäude aus allen Umschlagsätzen streichen
+
+```
+gebaeude_streichen(gebaeude):
+   fuer g = 0 … 399:                          ; sec48, 400 × 18 B, 0x77AC50
+       wenn byte[satz+0x0A] == 0: weiter       ; Fassungsvermoegen 0 = Satz unbenutzt
+       geaendert = 0
+       fuer j = 0…3:  wenn byte[satz+j] == gebaeude: byte[satz+j] = 0xFF ; geaendert = 1
+       wenn byte[satz+0x04] == gebaeude:
+            byte[satz+0x04] = 0xFF ; byte[satz+0x0E] = 0 ; geaendert = 1
+       wenn geaendert und byte[satz+0]+…+byte[satz+3] == 0x3FC:   ; alle vier 0xFF
+            byte[satz+0x0E] = 0                                    ; Satz ungueltig
+```
+
+Die Schrittweite 18 ist aus der `lea`-Kette gerechnet (`eax = 2·i`,
+`edi = eax + eax·8 = 18·i`) und trifft sec48 = 7200 = 400 × 18.
+`+0x00…+0x03` sind die vier **Quellen** (`zdroj0…3` aus dem Aufzeichner),
+`+0x04` das **Ziel**, `+0x0E` der Gültigkeitsmerker.
+
+Zwei Rufer: `0x43CD75` (bei der **Eroberung**) und `0x4C9A6C`.
+
+---
+
+### 8. ⭐⭐ Die Fenster-Bedienmaschine
+
+#### 8.1 Der Zugriffsweg auf einen Fenstersatz
+
+Alle Funktionen dieses Bündels beginnen mit derselben `lea`-Kette. Ausgerechnet:
+`ecx = k`, `ebx = 9k`, `eax = 81k`, `+k = 82k`, `·3 = 246k`, `k + 4·246k = 985k`,
+`·5 = 4925k`, `·9 = 44325k`, `−k` = **44324·k**.
+Das trifft die Satzlänge aus BA.4 genau. Sockel C `0x8B9038`, F `0x8B8098`.
+
+#### 8.2 ⭐⭐ `0x441190` — Fenster in den Schirm zwingen, **und der C/F-Unterschied**
+
+```
+in_den_schirm(nr):
+    art = byte[0x8B9038 + 44324·nr]
+    C:  wenn art in {9, 0x23, 0x30}:  return
+    F:  wenn art in {9, 0x23}:        return          ; ⚠ ohne 0x30
+    x = word[+0x02] ; y = word[+0x04] ; b = word[+0x06] ; h = word[+0x08]
+    wenn x < 0:                     word[+0x02] = 0
+    wenn x + b >= dword[0xB136B0]:  word[+0x02] = dword[0xB136B0] − b − 1
+    wenn y < 0:                     word[+0x04] = 0
+    wenn y + h >= dword[0x5387CC]:  word[+0x04] = dword[0x5387CC] − h − 1
+```
+
+C `0x4411B6/BA/BE`: `cmp al,9` · `cmp al,0x23` · `cmp al,0x30`.
+F `0x4401C6/CA`: `cmp al,9` · `cmp al,0x23` — **die dritte Prüfung fehlt.**
+
+⭐⭐ `0x30 = 48` ist **genau die Fensterart, die es in F nicht gibt** (BA.8: das
+zweite Hauptmenü mit »Enzyklopädie«). Das ist die **fünfte** unabhängige Zählung
+für den zehnten belegten Unterschied — neben Anlegerzahl, Rahmenzeichner-Rufern,
+Knopfroutine-Rufern und der Sprungtafel.
+
+⚠ **Methodische Warnung.** `cfind.py --diff` meldet hier »delete `cmp al,9`« —
+weil `difflib` bei drei gleichgeformten Paaren das **erste** wegwirft. Die
+Konstanten sagen etwas anderes: `9` und `0x23` stehen in beiden, `0x30` nur in C.
+**Die Blockstelle des Werkzeugs ist keine semantische Aussage.**
+
+⭐ Nebenbei: `dword[0xB136B0]` ist eine **zweite Kopie der Bildbreite**. Ihr
+einziger Schreiber ist `0x4B6B1C`, unmittelbar hinter
+`SetDisplayMode(breite, 480, 8)`, im selben Atemzug wie
+`dword[0x5387C8] = breite` (`0x4B6B16`). Die Fensterschicht liest `0xB136B0`,
+die Zeichenschicht `0x5387C8`; es ist derselbe Wert.
+
+#### 8.3 ⭐ Die vier Wege, Fenster auf den Schirm zu bringen
+
+Alle vier haben denselben Kopf: sofort raus, wenn `byte[0x4FD64C] == 0` **und**
+`byte[0x4FD644] == 0xFF`; dann `Lock` (Wiederholung bei `DDERR_WASSTILLDRAWING`),
+`dword[0x87B044] = desc.lpSurface`, zeichnen, `Unlock`.
+
+| C | Ziel | Umfang | Rufer |
+|---|---|---|---|
+| `0x440DD0` | **Rückpuffer** `0x540744` | alle Fenster **plus** `byte[0x4FD644]` | `0x416935`, `0x419307` |
+| `0x440E90` | **primäre Oberfläche** `0x540770` | alle Fenster (ohne `0x4FD644`) | `0x415240`, `0x4152F5`, `0x43B6A8`, `0x4C61F8` |
+| `0x440F40` | primäre Oberfläche | **nur Art 0x2D = 45** (»Laden…«) | `0x444128` |
+| `0x441030` | primäre Oberfläche | **nur Art 0x2F = 47** (»Synchronisieren…«) | `0x4442A8` |
+
+⭐⭐ **Damit ist erklärt, wozu Art 45 und Art 47 überhaupt da sind:** sie werden
+**unter Umgehung der Hauptschleife direkt auf den sichtbaren Bildschirm** gemalt,
+während das Spiel lädt bzw. auf den Netzabgleich wartet und gar nicht taktet.
+
+⭐ **Und `dword[0x87B044]` ist jetzt belegt.** BA.5 nennt es als Zielsockel von
+`0x4409E0` (`Ziel = dword[0x87B044] + y·dword[0x5387C8] + x`), ohne Schreiber.
+Die Schreiber sind genau diese vier Funktionen, und der Wert ist
+`DDSURFACEDESC.lpSurface` der gerade gesperrten Oberfläche.
+
+⭐ **Die Zeichenreihenfolge steht fest:**
+`for (i = anzahl; i > 0; i--) fenster_auf_schirm(byte[0x87AFF7 + i])` — also die
+Liste `0x87AFF8` **von hinten nach vorn**. `0x44FC20` (»nach vorn holen«) schiebt
+ein Fenster auf **Index 0**. **Index 0 ist das oberste Fenster.**
+
+#### 8.4 Die Fensterliste
+
+| Grösse | Bedeutung |
+|---|---|
+| `byte[0x87AFF8 + i]`, i = 0…n−1 | Liste der offenen Fenster, **0 = vorn** |
+| `byte[0x4FD64C]` | Anzahl |
+| `byte[0x4FD644]` | ⭐ das **Immer-oben-Fenster** (`0xFF` = keines) — nur `0x440DD0` malt es |
+| `word[0x4FD648]` / `word[0x87B050]` | gegriffenes Fenster / gegriffenes Bedienelement |
+| `word[0x87B054]`, `word[0x87AC00]` | zwei Zähler des Ziehvorgangs |
+
+`0x441120(fenster, element)` (82 Rufer, alle im Befehlsbehandler
+`0x448C…0x44DC`):
+
+```
+wenn word[0x4FD648] != 0xFFFF:
+     0x44FC90(altes_fenster, word[0x87B050])      ; alten Griff abschliessen
+     fensterverteiler(altes_fenster)              ; und neu malen
+word[0x87B050] = element ; word[0x4FD648] = fenster
+word[0x87B054] = 0 ; word[0x87AC00] = 0
+```
+
+`0x4412E0(nr)` (32 Rufer) ist der Standardgriff »neu zeichnen«:
+Fensterverteiler `0x487630` **und danach** `0x441190`.
+
+#### 8.5 ⭐ `0x441270` schliesst das Kontexthilfe-Ereignis — mit einer Ausnahme
+
+Abschnitt AR nennt `0x441270` als Registrierer und als Schreiber des
+Ereignisbytes `byte[0x539930]`. Vollständig gelesen:
+
+```
+registrieren(nr):
+    wenn nr == 0xFFFF: return
+    byte[0x87AFF8 + anzahl] = nr ; anzahl++      ; ⚠ ans ENDE, also nach HINTEN
+    byte[44324·nr + 0x8C3D5A] = 0                ; Fenstersatz +0xAD22
+    art = byte[44324·nr + 0x8B9038]
+    wenn art != 3:  byte[0x539930] = art         ; ⭐ Art 3 (Karte) loest NICHTS aus
+```
+
+⭐ **Zwei Berichtigungen zu AR:** das Kartenfenster ist ausgenommen, und die
+Registrierung legt das Fenster **hinten** ab — nach vorn kommt es erst durch
+`0x44FC20`, das die Öffner separat rufen (sonst die Meldung »Window up not
+found.«, `0x4FE8FC`).
+
+#### 8.6 Die Sucher und Auffrischer
+
+Alle nach demselben Muster: Liste `0x87AFF8` durchgehen, `byte[+0x00]` gegen eine
+feste Art prüfen.
+
+| C | Art | Wirkung |
+|---|---:|---|
+| `0x441310` | 3 | + Unterart `word[+0xACA0]`; gibt 1/0 zurück |
+| `0x441390` | 3 | + Unterart; **schliesst** (`0x4471A0`) |
+| `0x4414B0` | 12 | neu zeichnen |
+| `0x4416E0` | 16 | neu zeichnen |
+| `0x441420` | 34 | vorher `dword[0x892128] = byte[0x4FA23C] − 1` (Geschwindigkeitsregler) |
+| `0x441530` | 46 | `byte[+0x0C] = arg`, neu zeichnen, 1 zurück |
+| `0x441760` | 12 | `dword[+0xACA8] = +0xACAC = +0xACB0 = 0` |
+| `0x441D00` | 42 | **schliessen** |
+
+⭐ `0x4415F0` ist feiner gebaut — es zeichnet nur bei **wirklicher Änderung**:
+
+```
+s = word[0x4FA0C8]                              ; die Auswahl
+wenn s == 10000:                                ; keine/mehrere
+    wenn dword[0x502AD4] == 1:                  ; genau ein Objekt markiert
+         s = word[0x502AD8]
+         wenn s/1000 != byte[0x4FA284]: s = 10000    ; fremd -> nichts
+    sonst s = 10000
+wenn word[0x4FAEF0] != s:  Fenster Art 9 neu zeichnen
+word[0x4FAEF0] = s
+```
+
+`word[0x4FAEF0]` ist der **Gedächtniswert der zuletzt gezeigten Auswahl** — er
+hat sonst keinen Leser.
+
+#### 8.7 ⭐ Die Öffner — elf von zwölf stimmen mit BA.4 überein
+
+Jeder Öffner: Liste nach der Art durchsuchen, sonst Anleger rufen, `0x441270`
+registrieren, `0x44FC20` nach vorn.
+
+| C | Art gesucht | Anleger (BA.4) | Lage / Besonderheit |
+|---|---:|---|---|
+| `0x441BB0` | `0x2B` = 43 | `0x45BC10` (43, 640×480) | + `byte[0xA182D0]=0`, `byte[0x502AA0]=0`, Bildschirmmodus 3 |
+| `0x441C70` | `0x2E` = 46 | `0x45C8F0` (46, 120×100) | (0,0) |
+| `0x441D80` | `0x2A` = 42 | `0x45B9D0` (42, 300×160) | x mittig, **y = Höhe/5** |
+| `0x441EC0` | `0x28` = 40 | `0x45B770` (40, 180×60) | x mittig, **y = Höhe/5** |
+| `0x4421A0` | `0x26` = 38 | `0x45B4E0` (38, 600×420) | vorher Mitnahmeliste leeren |
+| `0x442270` | `0x24` = 36, Unterart 10 | `0x45B230` (36, 300×60) | Textfeld, 40 Zeichen |
+| `0x442380` | `0x24` = 36, Unterart 2 | `0x45B230` | »Wählen Sie einen Namen für dieses Teil«, 19 Zeichen |
+| `0x442670` | `0x25` = 37 | `0x45B3A0` (37, 600×420) | x und y mittig |
+| `0x4427E0` | `0x23` = 35 | `0x45B100` (35, 200×240) | **x = 25 fest**, y = Höhe − h − 20 |
+| `0x442A00` | `0x22` = 34 | `0x45A420` (34, 360×300) | x mittig, y = Höhe/5 |
+| `0x442E10` | `0x1B` = 27 | `0x459CB0` (27, 620×300) | — |
+| `0x442ED0` | `0x17` = 23 | `0x4598F0` (**21**, 220×100) | ⚠ passt nicht |
+
+> **Nullmodell:** gesuchte Art und die Art, die der Anleger einträgt, stimmen bei
+> **11 von 12** überein. Ein zufälliges Paaren aus 48 Arten träfe im Mittel
+> 0,25 mal.
+
+⚠ **Der eine Ausreisser, in beiden Bauten gleich:** `0x442ED0` sucht Art
+**`0x17` = 23** (Depot), ruft dann aber `0x4598F0` — und die schreibt
+`byte[+0x00] = 0x15 = 21` und 220 × 100. In F genauso (`0x441EED: cmp al,0x17`,
+Anleger `0x458590` schreibt ebenfalls `0x15`). Wirkung: **die
+Doppelöffnungsprüfung greift nie**, das Fenster entsteht bei jedem Klick neu.
+Ich melde das als **wahrscheinlichen Fehler des Originals**, nicht als Deutung.
+Der Rufer ist `0x437305` und übergibt eine Objektnummer aus `word[0x502AD8]`.
+
+#### 8.8 ⭐⭐ `0x4428E0` — fünf Auflösungen, und nur 8 Bit
+
+```
+liste = { 640×480, 800×600, 1024×768, 1280×1024, 1600×1200 }   ; auf dem Stapel
+dword[0x9937E8] = 0 ; byte[0x9937EC] = 0                       ; fuenf Merker loeschen
+0x4AD4F0(dword[0x540730])                                      ; EnumDisplayModes
+fuer m = 0 … dword[0xA50FD8]−1:                                ; Saetze zu 24 B ab 0xA509D8
+    fuer k = 0 … 4:
+        wenn breite[k] == dword[satz+0] und hoehe[k] == dword[satz+4]
+             und dword[satz+8] == 8:                           ; ⭐ 8 Bit je Punkt
+             byte[0x9937E8 + k] = 1
+```
+
+Die Stapelbelegung ist von Hand nachgerechnet (`sub esp,0x18` + vier `push`), die
+Schrittweite 24 aus `ebp = 3·i`, `edx = ebp·8`. Der Bereich `0xA509D8 … 0xA50FD8`
+fasst genau **64** Sätze. Gerufen aus dem Einstellungsfenster-Öffner `0x442A00`
+und aus `0x4B68A1`.
+
+---
+
+### 9. ⭐ `0x43B350` — die Mitnahme zwischen Missionen
+
+```
+fuer k = 0…19:  byte[0x81A410 + 78·k + 0x09] = 0xFF          ; alle 20 Plaetze leeren
+fuer k = 0…19:
+    n = word[0x9937B8 + 2·k]
+    wenn n == 0xFFFF: weiter
+    kopiere 78 Byte von 0x6E26C8 + 78·n  nach  0x81A410 + 78·k
+```
+
+Beide Schrittweiten (78) sind aus den `lea`-Ketten gerechnet, die Kopierlänge ist
+`rep movsd ×19 + movsw` = **78 Byte** — der Einheitensatz. Ziel ist **sec98**
+(1560 = 20 × 78, `0x81A410`), Quelle die Einheitentafel. `+0x09` = `faze`,
+`0xFF` = leerer Platz.
+
+Einziger Rufer: `0x4472E6`. Die Liste `word[0x9937B8]` ist dieselbe, die
+`0x4421A0` beim Öffnen des Mitnahmefensters (Art 38) leert — und die
+`OFFENE_FRAGEN` bereits als »Einheitenmitnahme, Liste `word[0x9937B8]`« führt.
+
+---
+
+### 10. `0x43B3F0` — Entwurf → Waffe
+
+```
+p = byte[0x4FA284]
+entwurf = 58·(arg + 200·p) + 0x5045BC       ; aus der lea-Kette: 29·(…)·2
+w = byte[entwurf + 0x00]
+return byte[0x4F98FC + 22·w + 0x01]
+```
+
+Schrittweite 58 für die Entwurfstafel, 200 Entwürfe je Spieler, Sockel
+`0x5045BC` (sec46 liegt bei `0x5045A0`, also `+0x1C`). Die Waffentafel
+`0x4F98FC` mit Schrittweite 22 ist aus BA.7 bekannt — **die gerechnete
+Schrittweite trifft die verzeichnete.**
+
+Zehn Rufer, alle in Fensterzeichnern (`0x468A30` Basis, `0x46D9B6` Erstellung,
+`0x483CEE` Mitnahme …) — die Funktion füllt die Zeilen »Nachladen / A/V /
+Geschw. / Sicht«.
+
+---
+
+### 11. `0x43F5F0` / `0x43F690` — Wasserprüfung 2×2 und 4×4
+
+```
+ist_wasser(spalte, zeile, kante):               ; kante = 2 bzw. 4
+    fuer z = zeile … zeile+kante−1:
+        fuer s = spalte … spalte+kante−1:
+            wenn word[0xBDEA80 + 2·(s·256 + z)] != 0xFFFC: return 0
+    return 1
+```
+
+`0xFFFC` = Wasser (Abschnitt AI, 81 655 Zellen). Beide werden nur von `0x43F730`
+gerufen, das an einem Gebäude nach einem **Liegeplatz** sucht: bei Art 4 ein
+2×2-Feld bei `(x−2, y+2)`, sonst ein 4×4-Feld bei `(x−4, y+1)`, und danach die
+anderen Seiten.
+
+---
+
+### 12. ⭐⭐ DER BEFUND: `0x43C960` gibt es in F nicht
+
+#### 12.1 Was sie tut
+
+```
+zelle_raeumen(gebaeudeplatz):                     ; C 0x43C960, 240 B
+    satz  = 0xC06910 + 76·platz
+    x     = word[satz+0x00] ; y = word[satz+0x02]      ; die ANKERZELLE
+    b     = byte[satz+0x05]                             ; der Besitzer
+    fuer k = 1000·b … 1000·b+999:
+        e = 0x6E26C8 + 78·k
+        wenn byte[e+0x09] == 0xFF: weiter               ; faze: leerer Platz
+        wenn byte[e+0x00] != x:    weiter               ; RX
+        wenn byte[e+0x01] != y:    weiter               ; RY
+        wenn byte[e+0x14] >= 0x2D: weiter               ; UKOL (Auftrag) < 45
+        0x410E60(k)                                     ; EINHEIT LOESCHEN
+        word[0xBDEA80 + 2·(x·256+y)] = 0xFFFE           ; Zelle FREI
+```
+
+`0x410E60` ist der Einheitenlöscher: Auswahlliste `0xA0A858` leeren,
+`word[e+0x24] = 10000`, Truppeintrag in `0xB4A0D0` streichen,
+`byte[e+0x09] = 0xFF`.
+
+**Gerufen genau einmal**, aus dem Eroberungsbehandler `0x43CA50`:
+
+```
+C 0x43CD02  al = byte[esp+0x18]                  ; der EINDRINGENDE Spieler
+C 0x43CD06  push ebx                             ; der Gebaeudeplatz
+C 0x43CD07  byte[satz+0x3C] = al
+C 0x43CD0D  call 0x401E24  ->  0x43C960          ; <<<< NUR IN C
+C 0x43CD12  movsx eax, word[satz+0x3A]
+```
+
+#### 12.2 Vier voneinander unabhängige Zählungen
+
+**(a) Fingerabdruck.** `cfind.py 0x43C960` → *KEINE ENTSPRECHUNG IN F, bester
+Rest 46 %*.
+
+**(b) Volkszählung der `0xFFFE`-Schreiber.** Rohe Bytesuche über beide `.text`
+(`66 c7 04 …` + Sockel + `fe ff`), Ziel C `0xBDEA80` / F `0xBDDAE0`:
+**C hat 27 Stellen, F hat 26.** Die 26 lassen sich der Reihe nach paaren; die
+eine übrige ist **`0x43CA02`, mitten in `0x43C960`**.
+
+**(c) Volkszählung der Schwelle `0x2D` auf dem Auftragsfeld.** Bytesuche nach
+»`al = byte[Einheit+0x14]` gefolgt von `cmp al,0x2D`«:
+C `0x412B8D, 0x412C7E, 0x431CEA, 0x431D5B, 0x43C9EB, 0x4BC49A, 0x4BF41B, 0x4D39A9`
+(**8**) gegen F `0x41295D, 0x412A4E, 0x430E2C, 0x430E9D, 0x4BBF5A, 0x4BEECB,
+0x4D3539` (**7**). **Sieben Paare, ein Rest — wieder `0x43C9EB` in `0x43C960`.**
+
+**(d) Die Rufstelle im F-Code.** Der Eroberungsbehandler ist C `0x43CA50` ↔
+F `0x43BAF0` (Kopf byteweise gleich, Versatz −0xF60). Die Stelle des Aufrufs ist
+über die eindeutige Bytefolge `mov byte[esi+…+0x3C], al` gefunden
+(C `0x43CD07`, F `0x43BDA6` — je **genau eine** Fundstelle je EXE). In F folgt
+darauf direkt `movsx ecx, word[esi+0xC059AE]`. **Kein Aufruf, keine Lücke.**
+
+⚠ Der Rest der beiden Funktionen ist an dieser Stelle nicht wortgleich (C hält
+den Eindringling im Feld `+0x3C` und liest ihn von dort zurück, F in einem
+Stapelplatz `[esp+0x2C]`). Das ist Registerzuteilung, kein Verhalten — es zeigt
+aber, dass die Stelle **neu übersetzt** wurde, nicht nachträglich gepatcht.
+
+#### 12.3 ⭐⭐ Der zweite C-eigene Block im selben Rufer
+
+Ein befehlsweiser, registerblinder Vergleich von C `0x43CB0C…0x43D290` gegen
+F `0x43BBAC…0x43C2B0` (137 gegen 130 Befehle) findet **genau zwei** Blöcke, die
+etwas tun. Der eine ist der Aufruf oben, der andere ist `0x43CFF5 … 0x43D04B`
+(87 Byte):
+
+```
+ebp = dword[0x539234]
+byte[satz+0x05] = eindringling                   ; der Eigentuemerwechsel
+byte[0xBC41E1 + 2·(255·alt + platz)] = 0
+wenn ebp != 0                                    ; ⭐ Netzspiel/Determinismus
+und byte[0x87B140 + 40·eindringling] == 1:       ; ⭐ sec53[40p] == 1 = RECHNER (KI)
+    fuer p = 0 … 254:
+        wenn byte[0xC06914 + 76·p + 0x00] == 1                ; Typ 1 = Basis
+        und  byte[0xC06914 + 76·p + 0x01] == eindringling:
+             word[… + 0x2A] += 100                            ; Fahrwerke
+             word[… + 0x2C] += 100                            ; Specials
+```
+
+F springt an dieser Stelle direkt weiter (`cmp dl,al; jne`).
+Bytesuche bestätigt: `+= 100` auf `+0x2A` bzw. `+0x2C` gibt es in C **je genau
+einmal** (`0x43D036`, `0x43D03E`) und in F **null mal**.
+
+⭐ `GAMESTATE_RE.md` §3.87 führt diesen Block bereits, mit dem Vermerk
+»**Both conditions unidentified** — documented, not implemented in the remake«.
+**Beide sind jetzt benannt:** `dword[0x539234]` ist der verzeichnete
+Netzspiel-/Determinismusschalter (Abschnitt AV), und `sec53[40·p + 0x00] == 1`
+heisst laut Abschnitt AT »**Rechner**« (0 = Mensch, 0xFF = ausgeschieden;
+gemessen 50×1, 41×0xFF, 13×0).
+
+⭐ Also: **erobert ein KI-Spieler im Netz-/Determinismusbetrieb ein Gebäude,
+bekommt jede seiner Basen +100 Fahrwerke und +100 Specials.** In F nicht.
+
+#### 12.4 ⚠ Die zwei krummen Adressen sind keine Funktionen
+
+Auftragsgemäss geprüft: `0x43D38C` und `0x43D57E` liefern bei `aere.py fs`
+**keinen Funktionsanfang** (das Werkzeug bricht mit `NoneType` ab), haben **null**
+`E8`/`E9`-Rufer, und ein Linearlauf ab `0x43CA50` trifft beide als
+**Befehlsanfänge innerhalb** des Eroberungsbehandlers:
+
+```
+0x43D387  jne 0x43d38c
+0x43D389  mov byte[edx], 3
+0x43D38C  add edx, 3                    <-- reines Sprungziel
+
+0x43D57A  jne 0x43d57e
+0x43D57C  mov byte[ecx], bl
+0x43D57E  cmp word[esp+0x18], 0x1F40    <-- reines Sprungziel
+```
+
+**Beide sind Sprungziele, kein Auslieferungsunterschied.** Der Verdacht der
+Vollerhebung war richtig begründet und ist damit erledigt. Dass `cfind` für sie
+»keine Entsprechung« meldet, liegt daran, dass ein Rumpfstück ab einem
+willkürlichen Sprungziel keinen stabilen Fingerabdruck hat.
+
+#### 12.5 Der Rest des Reviers ist in beiden Bauten gleich
+
+| Befund | Anzahl |
+|---|---:|
+| F-Partner **eindeutig**, normierte Rumpfform identisch | 35 |
+| F-Partner **mehrdeutig** (mehrere gleichgeformte Geschwister), von Hand geprüft | 16 |
+| F-Partner **ungenau**, von Hand nebeneinander gelesen | 10 |
+| **keine Entsprechung** | 1 (`0x43C960`) |
+
+Von den zehn »ungenauen« sind **acht reine Übersetzerwahl** —
+`cmp byte[ebx+SOCKEL], dl` gegen `mov al, byte[ebx+SOCKEL]; cmp al, K` (gleiche
+Konstanten 0x28/0x2A/0x2B/0x1B), `jb`/`ja` mit vertauschten Operanden, `lea`
+statt `add`, `push ebp` an anderer Stelle. Nach der Regel aus BA.2 werden sie
+**verworfen**. Die zwei mit Inhalt sind `0x441190` (Abschnitt 8.2, der zehnte
+Unterschied) und `0x43FF90` (F hat die Protokollzeile `"Wrong depo..."`, C nicht).
+
+---
+
+### 13. Berichtigungen an bestehenden Dokumenten
+
+1. ⚠⚠ **`OFFENE_FRAGEN.md`, Abschnitt P** — »511→0« und »517→0«.
+   Beide Behandler (`0x43F940`, `0x43FB40`) sind **Umschalter**: aus 1 wird 0,
+   aus **allem anderen** wird 1. Nur 523/524/526 setzen bedingungslos 0.
+2. ⚠⚠ **Abschnitt P** nennt für die Reparaturbefehle keinen Preis. Es gibt keinen
+   Geldpreis, sondern einen **Trefferpunktpreis: `hp := 29·hp/30`**, nur wenn
+   `hp > 50` (`0x43FBFE`, `0x43FCB6`, `0x43FE1F` — dreimal wortgleich), plus
+   sofortige Neuberechnung der Schadensstufe über `0x4CBBF0`.
+3. ⭐ **Abschnitt P** nennt die Behandler nicht bei Adresse. Sie stehen jetzt in
+   der Adresstafel oben, samt Befehlsnummer aus der Sprungtafel `0x4C45F8`.
+4. ⚠ **`GAMESTATE_RE.md` §3.87**, der Ablauf der Eroberung, lässt zwischen
+   `@0x43CD07 byte[+0x3c] = intruder` und `@0x43CD3F` einen Schritt aus:
+   den Aufruf **`0x43CD0D → 0x43C960`**. Nachzutragen.
+5. ⭐ **`GAMESTATE_RE.md` §3.87, `@0x43CFF5`:** »Both conditions unidentified« —
+   erledigt, siehe 12.3. Nachzutragen ist auch, dass **F diesen Block nicht hat**.
+6. ⚠ **`OFFENE_FRAGEN.md`, Abschnitt AR:** »`0x401AF0 → 0x441270` … Schreiber des
+   Ereignisbytes `byte[0x539930]`, das Ereignis fällt bei **jedem** Fenster«.
+   Es fällt bei **jedem ausser Art 3** (`0x4412BE: cmp al,3; je`).
+7. ⚠ **Abschnitt BA.5**, Fenstersatz: `+0x0C` ist dort »Fenstertext / Titel«.
+   Bei den Arten 21/23/46 steht dort ein **Wort mit einer Objektnummer**
+   (`0x459991` schreibt es aus dem dritten Argument, `0x442ED0` und `0x441530`
+   lesen bzw. schreiben es als Zahl). Das Feld ist überladen.
+8. ⭐ **Abschnitt BA.9**, `0x4409E0` »Fenster auf den Schirm«: der Zielsockel
+   `dword[0x87B044]` hat vier Schreiber — `0x440DD0`, `0x440E90`, `0x440F40`,
+   `0x441030` — und ist die gesperrte DirectDraw-Oberfläche.
+9. ⚠ **`cfind.py`** hat in diesem Revier **vier Paare falsch** gebildet, alle nach
+   demselben Muster: eine Familie fast gleichgeformter Geschwister.
+   Belegt korrigiert:
+
+   | C | cfind | richtig | Beleg |
+   |---|---|---|---|
+   | `0x43B760` | `0x4281C0` | **`0x43A8D0`** | wird von F `0x43A970` gerufen (Versatz 0xE90 wie die Nachbarn) |
+   | `0x43B7B0` | `0x428170` | **`0x43A920`** | dito |
+   | `0x442270` | `0x445300` | **`0x441260`** | enthält `word[+0xACA0] = 10`, F `0x441308` |
+   | `0x442E10` | `0x445AD0` | **`0x441E00`** | enthält `cmp al,0x1B`, F `0x441E37` |
+
+   ⚠ Und: `cfind --diff` legt bei mehreren gleichgeformten Prüfungen den
+   Unterschiedsblock auf die **erste**, nicht auf die inhaltlich richtige (8.2).
+10. ⚠ Der Dateiversatz für `.data` ist **`VA − 0x402200`** (C) bzw.
+    **`VA − 0x401E00`** (F), nicht der `.text`-Versatz `0x400C00`. Eine Bytesuche
+    in `.data` mit dem `.text`-Versatz liefert stillen Unsinn — mir ist genau das
+    beim ersten Griff auf die Cheat-Tafel passiert.
+11. ⭐ **Kein Unterschied, obwohl es so aussah:** Die Cheat-Worttafel hat in
+    **beiden** Bauten 15 Einträge, dieselben Wörter, dieselbe Schranke
+    (`cmp al,0x0F`) und dieselbe Armtafel mit denselben acht Leerarmen
+    (C `0x43AFD4`, F `0x43A144`). Auch die zehn Setzer der Fenster-Unterart
+    (`word[+0xACA0]`) stimmen 10 zu 10 in Wert und Reihenfolge.
+
+---
+
+### 14. Bauaufgaben, die daraus folgen
+
+1. ⭐ **Das Fenster wird in den Bildschirm gezwungen** (8.2) — mit den drei
+   Ausnahmen 9, 35, 48. Wer das nicht nachbaut, hat Fenster, die halb aus dem
+   Bild ragen; wer es für Art 9/35/48 auch tut, verschiebt Panel und Hauptmenü.
+2. ⭐ **Zeichenreihenfolge:** Liste von hinten nach vorn, Index 0 zuoberst;
+   »nach vorn holen« schiebt auf Index 0.
+3. ⭐ **»Laden…« (45) und »Synchronisieren…« (47) gehen direkt auf die primäre
+   Oberfläche**, nicht über den Rückpuffer. Ohne das bleibt der Bildschirm beim
+   Laden schwarz — genau die Klasse Fehler, die in AZ gemeldet ist.
+4. ⭐ **Das Immer-oben-Fenster `byte[0x4FD644]`** wird nur beim Rückpufferlauf
+   mitgemalt.
+5. ⭐ **Feste Lagen:** Hauptmenü (35) links unten bei x = 25, y = Höhe − h − 20.
+   »Warten auf…« (42), »Pause« (40), Einstellungen (34): x mittig,
+   **y = Höhe/5**. Gefechtsvorbereitung (37): beides mittig.
+6. ⭐ **Reparatur kostet 1/30 der Trefferpunkte** (4.3) — bei uns kostet sie nichts.
+7. ⭐ **Fabrik- und Minenreparatur sind Umschalter**, keine Ausschalter (4.2).
+8. ⭐ **Ausbau ohne Geld scheitert still** — kein Ton, keine Meldung, der Zustand
+   bleibt einfach stehen.
+9. ⭐ **Eroberung räumt die Ankerzelle** (12.1): alle Einheiten des alten
+   Besitzers, die auf der Ankerzelle stehen und `UKOL < 45` haben, werden
+   **gelöscht** und die imap-Zelle auf `0xFFFE` gesetzt. ⚠ Nur im C-Bau — für die
+   Kampagne (originalgetreu) ist C massgeblich.
+10. ⭐ **Der KI-Basisbonus** (12.3) — nur unter beiden Bedingungen, und nur in C.
+11. ⭐ **Das Cheat-System** (Abschnitt 1): 15 Wörter, davon vier wirksam, plus
+    Strg+Umschalt+U/H/A nach `ARMLEUCHTER`. **Im Netzspiel gesperrt.**
+    Für einen Wettkampfmodus (Abschnitt »Gefecht«) ist das die Vorlage.
+12. ⭐ **Auflösungen:** genau fünf werden angeboten, und **nur 8-Bit-Modi zählen**.
+13. ⭐ **Gebäudenamen:** `+0x17` trägt bei Missionsstart `"1 "` … `"256 "`
+    (`0x440930`, `_itoa` + angehängtes Leerzeichen aus `0x4FAEE0`), zusammen mit
+    `gebaeudename()` aus BA.9.
+14. ⭐ **Die Andockschlange hat sechs Plätze**, auch bei der Basis (sec23 `+0x04`),
+    und der Feldbahnhof (12) teilt sich die Tafel mit der Bahnstation (6).
+15. ⭐ **`0x440190`:** wird ein Gebäude erobert oder zerstört, muss es aus allen
+    400 sec48-Umschlagsätzen gestrichen werden.
+16. ⚠ **CD-Prüfung** `X:\cw.id` — für den Nachbau nur zu wissen, nicht zu bauen.
+
+---
+
+### 15. Was ungedeutet bleibt
+
+1. ⚠ **Warum »Reparieren« Trefferpunkte kostet.** Der Faktor (29/30) und die
+   Schwelle (50) sind sicher, dreimal wortgleich. Der Sinn ist geraten und wird
+   darum nicht behauptet.
+2. ⚠ **`0x442ED0`: Art 23 gesucht, Art 21 angelegt.** In beiden Bauten. Ich halte
+   es für einen Fehler des Originals, habe aber **kein Bild** dazu. Ungeprüft
+   bleibt, ob das kleine 220×100-Fenster beim wiederholten Klick sichtbar
+   mehrfach entsteht.
+3. ⚠ **`0x441530`** schreibt ein einzelnes **Byte** nach `+0x0C` des Fensters der
+   Art 46 (»Mission beendet«). Was der Zeichner daraus macht, ist nicht gelesen.
+4. ⚠ **`0x441760`** nullt drei Dwords bei `+0xACA8/+0xACAC/+0xACB0` im
+   CD-Spieler-Fenster (Art 12). Bedeutung unbekannt.
+5. ⚠ **`0x442670`** setzt bei `dword[0x539238] != 0` fünf Netzwerkschalter
+   (`word[0x5407A0]=0`, `byte[0x54079C]=0`, `byte[0x540798]=0`,
+   `byte[0x540B94]=0`, `byte[0x540EB8]=1`) und **`dword[0x4FA240] = 0`**
+   (Takte seit Missionsbeginn). Die fünf sind nicht weiterverfolgt.
+6. ⚠ **`0x4421A0`** ruft vor dem Anlegen `0x4C1720` und legt das Ergebnis in
+   `word[0x99170C]`. Nicht gelesen.
+7. ⚠ **`0x43B440`, das Kennbyte.** Sechs der elf Rufer (`0x418D05…0x418D79`)
+   übergeben je einen anderen Wert; welche Datenträger damit gemeint sind, ist
+   nicht nachgesehen.
+8. ⚠ **Warum drei Funktionen tot sind** (3.1). Dass sie es sind, ist sauber
+   belegt; ob **F** sie ruft, habe ich **nicht** geprüft — der Negativbefund gilt
+   nur für C.
+9. ⚠ **`0x441120`s Gegenstück `0x44FC90`** ist nur angelesen: es prüft
+   `word[0x87AC00] != 0` **und** `word[0x87B054] >= 4`, gibt dann Klang 0x133
+   aus und nullt `dword[+0xACA8]`. Die Bedeutung der zwei Zähler
+   (Ziehschwelle? Doppelklick?) ist **nicht** geklärt.
+10. ⚠ **`0x43C960` benutzt die Ankerzelle** (`+0x00/+0x02`), während die
+    Nachbarstelle im selben Behandler mit der **Türzelle** (Anker + `+0x31/+0x32`)
+    arbeitet. Ob das Absicht ist, sagt der Code nicht.
+11. ⚠ **Die drei toten Cheat-Wortgruppen.** `IDKFA`, `GOBGAS`, `FIREBUG`,
+    `PROFIS`, `EIDOS`, `FANFAR`, `TWISTER`, `GUNS`, `WHEELS`, `SPECIALS`,
+    `COLUMBUS` haben keinen Arm mehr. Dass `GUNS`/`WHEELS`/`SPECIALS` genau die
+    drei Tastencheats benennen, legt nahe, dass die Wirkung von der Worttafel auf
+    die Tasten umgezogen ist — **belegt ist nur, dass die Arme leer sind.**
+
+---
+
 ## BM. Revier 5: 0x442FB0 … 0x4505F0
 
 52 Funktionen, 10 944 Byte. **Das Revier ist die Fensterverwaltung des Spiels** —
@@ -16109,3 +17076,146 @@ die eingesetzte Fassung ist offenbar eingeschmolzen.
    eine der beiden Zahlen bedeutet etwas anderes. Nicht aufgelöst.
 8. ⚠ **Warum `0x4D3270` nicht ringfest ist** (Abschnitt 12.2). Als Verdacht
    gemeldet, nicht als Fund.
+
+---
+
+## BQ. ⭐⭐⭐ 100 % — und was die Zahl NICHT sagt (22.08.2026)
+
+```
+Funktionen (ohne Thunks)        1113
+davon bei uns erwaehnt          1113   (100.0 %)
+nach BYTES                   863,904 / 863,904   (100.0 %)
+benannt, aber NIE erwaehnt         0
+```
+
+**Jede Funktion des Spiels steht jetzt in unseren Unterlagen.** Am Morgen des
+22.08.2026 waren es 660 von 1107 (59,6 %); acht Leseagenten haben die restlichen
+442 Funktionen in Revieren von je rund 11 KB abgearbeitet (Abschnitte **BI**
+bis **BP**).
+
+### BQ.1 ⚠⚠ Die Quote ist eine OBERGRENZE, keine Verstehensquote
+
+Das steht seit jeher im Kopf von `funktionen.py`, und heute ist es wichtiger als
+je zuvor: **eine erwähnte Adresse ist nicht dasselbe wie eine verstandene
+Funktion.** Was 100 % wirklich heisst:
+
+* Es gibt **keine unbesehene Funktion mehr.** Jede wurde aufgemacht, ihre Rufer
+  bestimmt, und sie wurde einem Revier und einer Mechanik zugeordnet.
+* Es heisst **nicht**, dass jede erklärt ist. Die acht Berichte führen zusammen
+  **rund 130 ausdrücklich offene Punkte** — jeder in einem eigenen Abschnitt
+  »Was ungedeutet bleibt«, mit dem, was sicher ist, und dem, was fehlt.
+* Mehrere Funktionen sind als **tot** belegt (kein Rufer, kein Zeiger): unter
+  anderem `0x434120`, `0x434380`, `0x438A70`, `0x438D10` (ein reines `ret`),
+  `0x43B170`, `0x43B800`, `0x43B9C0`. »Gelesen« heisst hier »als tot
+  nachgewiesen«, und das ist ein Ergebnis, kein Ausfall.
+
+⭐ **Die ehrlichere Messlatte ab jetzt ist nicht mehr die Quote, sondern die
+Zahl der offenen Punkte.** Die Quote kann nicht mehr steigen.
+
+### BQ.2 Die Messlatte selbst wurde unterwegs berichtigt
+
+Die C-Laufzeitbibliothek beginnt bei **`0x4D6A00`**, nicht bei `0x4D6000` —
+dazwischen liegen **sechs Spielfunktionen** (2 416 Byte). Der Beleg ist nicht
+die Adresse, sondern der **Verweisinhalt**: von 37 relozierten `.data`-Verweisen
+dieser sechs zeigt jeder auf Spielstandsglobale aus der Ladertafel, keiner in
+die `.idata`; die sicheren CRT-Funktionen dahinter fassen keine davon an.
+1107 → **1113** Funktionen, 861 488 → **863 904** Byte. Siehe **BP**.
+
+⚠ **Eine Messlatte, die man selbst gesetzt hat, gehört mitgeprüft.** Diese hier
+war um sechs Funktionen zu kurz, und niemand hat es gemerkt, weil die Zahl
+»ab etwa 0x4D6000« plausibel aussah.
+
+### BQ.3 ⭐⭐ Der ZWÖLFTE Auslieferungsunterschied — und der zehnte wird anfassbar
+
+**Neu (BL): `0x43C960` gibt es in F nicht.** Sie löscht bei der Eroberung eines
+Gebäudes alle Einheiten des alten Besitzers, die auf der Ankerzelle stehen
+(Auftrag < 45), und gibt die Zelle frei. **Vierfach belegt**, und nur der erste
+Beleg kommt aus dem Werkzeug:
+
+1. `cfind` findet keinen Kandidaten (bester Rest 46 %).
+2. Volkszählung aller `0xFFFE`-Schreiber in die imap: **C 27, F 26** — der
+   Überschuss sitzt in `0x43C960`.
+3. Volkszählung »lies Einheit `+0x14`, `cmp al,0x2D`«: **C 8, F 7** — sieben
+   Paare, der Rest wieder `0x43C960`.
+4. An der Rufstelle (über eine EXE-weit eindeutige Bytefolge lokalisiert:
+   C `0x43CD07`, F `0x43BDA6`) läuft F ohne Aufruf weiter.
+
+**Und ein dreizehnter im selben Rufer** (`0x43CFF5…0x43D04B`, 87 B, in F nicht
+vorhanden): erobert ein **KI-Spieler** (`sec53[40p] == 1`) im
+**Netz-/Determinismusbetrieb** (`dword[0x539234]`), bekommt jede seiner Basen
+**+100 Fahrwerke und +100 Specials**. ⭐ `GAMESTATE_RE.md` §3.87 führt genau
+diesen Block mit »both conditions unidentified« — **beide sind jetzt benannt.**
+
+⭐⭐ **Der zehnte Unterschied ist zum ersten Mal ANFASSBAR** (BN). Bisher stützten
+ihn vier Zählungen; jetzt gibt es die Funktion, die in F fehlt:
+`cfind.py --diff 0x487630 0x485D00` zeigt genau **einen** abweichenden Block —
+den 48. Arm des Fensterverteilers, `call 0x480650`, das zweite Hauptmenü mit
+»Enzyklopädie«. Gegenproben: C `cmp eax,0x2F` gegen F `cmp eax,0x2E`,
+F-Sprungtafel 47 Einträge plus `CCCCCCCC`-Füllung.
+**Fünfte Stütze** aus BL: `0x441190` nimmt in C die Fensterarten 9, 35 **und 48**
+vom Bildschirmzwang aus, in F nur 9 und 35.
+
+### BQ.4 ⚠⚠ Was ich mir selbst nachweisen lassen musste
+
+Das Werkzeug `cfind.py` ist am Vormittag entstanden und hatte **fünf Fehler**,
+jeden hat ein Leseagent gefunden. Sie stehen hier, weil derselbe Fehler sonst
+wiederkommt:
+
+1. ⚠⚠ **Die Funktionsgrenzen waren falsch.** Die Anfangsliste enthält auch
+   Sprungziele **mitten in Funktionen**, und die erste Fassung nahm jeden
+   »Anfang« zugleich als **Ende** des vorigen. `0x444740` wurde so nach 226 von
+   593 Byte abgeschnitten. **So sind neun der 25 angeblichen
+   Auslieferungsunterschiede entstanden — allesamt Einbildung.**
+2. **Die Bibliotheksgrenze** (siehe BQ.2).
+3. **Die Ähnlichkeitszahl allein taugt nicht.** Für `0x41A150` schlug sie
+   `0x48631F` mit 60 % vor — falsch. Für `0x4AF1C0` meldet sie **74 %**, obwohl
+   C und F **dieselben 23 Befehle** enthalten und nur zwei Hälften umsortiert
+   sind. **Unter rund 40 Befehlen ist sie aussagelos.**
+4. ⚠ **Und die Gegenmassnahme war im ersten Anlauf zu scharf.** »Abstand
+   ungleich dem der Nachbarn → falscher Partner« brandmarkte `0x410940 →
+   0x410770`, das **bekannt richtige** Paar. Der `.text`-Abstand ist blockweise
+   konstant; an einer Blockgrenze weicht er regulär ab.
+5. **Der Abdruck liess die Operandenbreite fallen.** Darum bildete er
+   `0x41D0E0` (liest `byte[+2]`) und `0x41D110` (liest `word[+0]`) auf
+   **dieselbe** F-Funktion ab und widersprach Abschnitt BC. **BC hatte recht.**
+
+⭐⭐ **Und ein Verdacht von mir hat sich als falsch erwiesen.** In BH stand:
+»`0x4B6F60` trifft zu 89 %, das sind rund vierzehn abweichende Befehle — zu viel
+für Zufall. Verdacht auf einen zwölften Auslieferungsunterschied.« Abschnitt
+**BO** hat es von Hand geprüft: restlos Registerzuteilung, `jle` gegen `jge` mit
+vertauschten Operanden, und der »abweichende Schwanz« ist die **Sprungtafel
+hinter dem `ret`**. Zurückgezogen.
+⚠ **Die Rechnung stimmte, die Voraussetzung nicht.** Eine Zahl, die man nicht
+geeicht hat, ist keine Messung — sie sieht nur so aus.
+
+### BQ.5 Drei Fehler des Originals, alle in BEIDEN Bauten
+
+* ⭐ **Der Wind trägt einen Klammerfehler** (BJ, `0x422210`): die zwei Klemmen
+  für die **Stärke** schreiben die **Richtung** (`0x422277`, `0x422289`). Die
+  Stärke ist völlig ungeklemmt, die Richtung wird auf **9** gezwungen —
+  ausserhalb ihres eigenen Bereichs 0…7. Drei Leser nehmen sie ungemaskt, einer
+  in eine **8-Einträge**-Tafel. Die Nachbarzeile macht es richtig.
+* **Das Generatorfenster prüft auf ein offenes DEPOTfenster** (BM, `0x442FB0`:
+  öffnet Art 20, prüft Art 23). Zweimal auf einen Generator klicken erzeugt zwei
+  Fenster. F `0x441F90` hat dieselbe `cmp al, 0x17`.
+* **Fensterart 28 »Stromversorgung« ist unerreichbar** (BM) — der einzige Öffner
+  hat keinen Rufer und steht nirgends als Dword, in C wie in F.
+
+### BQ.6 Wie es weitergeht
+
+Die Leseaufgabe ist erledigt; damit rückt Punkt 2 der Reihenfolge nach vorn:
+**testen**, dann **Fehler beheben**, dann der **Gefechtsmodus**. Die acht
+Berichte führen zusammen rund **80 Bauaufgaben**. Vier, die herausragen:
+
+1. ⭐⭐ **Die Wegsuche ersetzen** (BB) — unsere Navigation ist komplett eigene
+   Erfindung, das Original ist eine reine 8-Nachbar-Breitensuche.
+2. ⭐⭐ **Die Bauteiltafel je Spieler** (BN) — unsere Forschung wirkt derzeit auf
+   **alle** Spieler.
+3. ⭐ **Der Angriffsbefehl als Busbefehl 11** (BK) — damit fällt unsere eigene
+   Nummer `OursAttack = 2001` weg und der Angriff wird gleichlauffähig.
+4. ⭐ **Die verlegte Einheit stirbt mit dem Zug** (BG) — bei uns überlebt sie.
+
+⚠ **Und der Befund des Spielers steht weiter offen:** »seit wir mehr und mehr
+hier analysieren geht nämlich einiges nicht mehr in der kampagne«. Abschnitt
+**AZ** ist beim Prüflauf vorzulegen. Die Leseaufgabe ist jetzt zu Ende — **die
+Reihenfolge sagt, dass er als nächstes prüft.**
