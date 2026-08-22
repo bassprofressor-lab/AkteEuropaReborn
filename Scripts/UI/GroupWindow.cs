@@ -90,10 +90,12 @@ public sealed partial class GroupWindow : PanelContainer
             // hat fuer alles ausserhalb 0x20..0x7A und fuer [ ] ^ keine Kachel.
             OnStore?.Invoke(i + 1, SkirmishSetup.FilterName(_name.Text));
             Refresh();
-            Hide();
+            WindowManager.Schliessen(WindowManager.ArtGruppen);
         };
-        _abrufen.Pressed += () => { int i = Gewaehlt(); if (i >= 0) { OnRecall?.Invoke(i + 1); Hide(); } };
-        _zu.Pressed += Hide;
+        _abrufen.Pressed += () => { int i = Gewaehlt(); if (i >= 0) { OnRecall?.Invoke(i + 1); WindowManager.Schliessen(WindowManager.ArtGruppen); } };
+        // ⭐ Ueber die Verwaltung zu, damit die Zublende ueber sechs
+        // Bilder laeuft (BM.10) statt hart zu verschwinden.
+        _zu.Pressed += () => WindowManager.Schliessen(WindowManager.ArtGruppen);
     }
 
     private int Gewaehlt()
@@ -119,6 +121,14 @@ public sealed partial class GroupWindow : PanelContainer
         if (i >= 0 && i < _liste.ItemCount) _liste.Select(i);
         NameNachziehen();
         if (_name.Text.Length == 0) _name.Text = $"Group {gruppe}";
+        // ⭐ Ueber die Fensterverwaltung (BM): sie sperrt das zweite
+        // Oeffnen, holt nach vorn und blendet ueber vier Bilder auf.
+        // ⚠ Ist es schon offen, tut ein zweiter Ruf NICHTS -- genau das ist
+        // die Doppeloeffnungssperre des Originals.
+        if (WindowManager.Offen(WindowManager.ArtGruppen) == null)
+            WindowManager.Oeffnen(WindowManager.ArtGruppen, this);
+        else
+            WindowManager.NachVorn(WindowManager.Offen(WindowManager.ArtGruppen));
         Show();
     }
 

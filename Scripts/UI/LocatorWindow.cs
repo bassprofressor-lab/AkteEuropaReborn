@@ -82,7 +82,7 @@ public sealed partial class LocatorWindow : PanelContainer
         senk.AddChild(reihe);
 
         _liste.ItemSelected += _ => NameNachziehen();
-        _hin.Pressed += () => { int i = Gewaehlt(); if (i >= 0) { OnLocate?.Invoke(i); Hide(); } };
+        _hin.Pressed += () => { int i = Gewaehlt(); if (i >= 0) { OnLocate?.Invoke(i); WindowManager.Schliessen(WindowManager.ArtMerkpunkte); } };
         _sichern.Pressed += () =>
         {
             int i = Gewaehlt();
@@ -92,7 +92,9 @@ public sealed partial class LocatorWindow : PanelContainer
             Refresh();
             Hide();                    // das Original schliesst nach beiden Knöpfen
         };
-        _zu.Pressed += Hide;
+        // ⭐ Ueber die Verwaltung zu, damit die Zublende ueber sechs
+        // Bilder laeuft (BM.10) statt hart zu verschwinden.
+        _zu.Pressed += () => WindowManager.Schliessen(WindowManager.ArtMerkpunkte);
     }
 
     private int Gewaehlt()
@@ -115,6 +117,14 @@ public sealed partial class LocatorWindow : PanelContainer
         Refresh();
         if (zeile >= 0 && zeile < _liste.ItemCount) _liste.Select(zeile);
         NameNachziehen();
+        // ⭐ Ueber die Fensterverwaltung (BM): sie sperrt das zweite
+        // Oeffnen, holt nach vorn und blendet ueber vier Bilder auf.
+        // ⚠ Ist es schon offen, tut ein zweiter Ruf NICHTS -- genau das ist
+        // die Doppeloeffnungssperre des Originals.
+        if (WindowManager.Offen(WindowManager.ArtMerkpunkte) == null)
+            WindowManager.Oeffnen(WindowManager.ArtMerkpunkte, this);
+        else
+            WindowManager.NachVorn(WindowManager.Offen(WindowManager.ArtMerkpunkte));
         Show();
     }
 

@@ -96,6 +96,11 @@ public static class LeaveToMenu
         // vergessen. Dieselbe Methode, die der Kartenlader beim Missionsstart
         // ruft — sie ist nicht neu, sie wurde auf diesem Weg nur nie erreicht.
         UI.HelpWindow.Forget();
+        // ⭐ Und die Fensterverwaltung (BM): sie fuehrt eine Liste ueber
+        // zwanzig Plaetze, und die haelt sonst Knoten der alten Karte fest.
+        // ⚠ Leeren() setzt auch die Blendenskalierung zurueck -- ohne das
+        // stuende ein wieder geoeffnetes Fenster als flacher Strich da.
+        UI.WindowManager.Leeren();
         // Der Bearbeitungsmodus: Schalter aus und Waechter weg. Die Karte im
         // Speicher BLEIBT — wer im Menue erneut »bearbeiten« drueckt, soll sie
         // noch vorfinden.

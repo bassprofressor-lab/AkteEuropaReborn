@@ -549,6 +549,12 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_fensterCheck)
+        {
+            GD.Print(UI.WindowManagerCheck.Lauf());
+            GetTree().Quit(0);
+            return;
+        }
         if (_forschungCheck)
         {
             GD.Print(_entities.ForschungCheck());
@@ -874,6 +880,10 @@ public partial class MapViewer : Node2D
     /// <summary><c>--forschung-check</c> — bleibt eine Forschung bei dem, der
     /// sie bezahlt hat?</summary>
     private bool _forschungCheck;
+
+    /// <summary><c>--fenster-check</c> — die sechs Regeln der
+    /// Fensterverwaltung.</summary>
+    private bool _fensterCheck;
 
     /// <summary><c>--takt-check</c> — 50 Hz, und macht die Geschwindigkeit
     /// wirklich mehr Takte?</summary>
@@ -1465,6 +1475,7 @@ public partial class MapViewer : Node2D
             else if (a == "--repair-check") _repairCheck = true;
             else if (a == "--reichweite-check") _reichweiteCheck = true;
             else if (a == "--forschung-check") _forschungCheck = true;
+            else if (a == "--fenster-check") _fensterCheck = true;
             else if (a == "--takt-check") _taktCheck = true;
             else if (a == "--gebaeude-check") _gebaeudeCheck = true;
             else if (a == "--mine-check") _mineCheck = true;

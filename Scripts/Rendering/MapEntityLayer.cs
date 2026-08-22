@@ -24723,6 +24723,11 @@ public partial class MapEntityLayer : Node2D
         // wieder an der Bildrate.
         TickWind(SimDt);
         BrandTakt();
+        // ⭐ Der Fenstertakt (BM.11, 0x4505F0 + 0x44FB10): die Blenden je Takt
+        // ein Bild, die Lebensdauer alle 20 Takte. ⚠ Er gehoert HIERHER und
+        // nicht in _Process: ein Meldungsfenster darf auf einem schnellen
+        // Rechner nicht kuerzer stehen als auf einem langsamen.
+        UI.WindowManager.Takt();
         // Und die Gegenrichtung: wer auf einer Ladezelle steht, geht an Bord.
         BeladeTakt();
         // ⭐ Der Vorspann der Kampagne. Er hängt NICHT allein an der Anwahl:
