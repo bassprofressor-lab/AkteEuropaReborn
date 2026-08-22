@@ -1376,6 +1376,10 @@ public partial class MapEntityLayer : Node2D
 
     // ---- Step E: navigation + commands ----
     private Simulation.NavGrid? _nav;
+
+    /// <summary>Das Gitter fuer die Pruefstaende. ⚠ Nur dafuer — die Simulation
+    /// greift es ueber <c>_nav</c> selbst.</summary>
+    public Simulation.NavGrid? NavForCheck() => _nav;
     private ImageTexture? _navTex;
     private Rect2 _navRect;
     private bool _showNav;

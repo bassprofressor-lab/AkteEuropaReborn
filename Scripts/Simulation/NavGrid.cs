@@ -648,6 +648,338 @@ public sealed class NavGrid
 
     // ---- pathfinding --------------------------------------------------------
 
+    // =====================================================================
+    //  DIE WEGSUCHE DES ORIGINALS
+    // =====================================================================
+
+    /// <summary>
+    /// ⭐⭐ <b>Die Richtungstafel des Originals</b>, <c>0x4F5AF0</c> / F
+    /// <c>0x4F4AF0</c> — <b>in beiden Fassungen bitgleich</b>.
+    ///
+    /// <code>
+    ///  i        0    1    2    3    4    5    6    7
+    ///  dSpalte  0   -1   -1   -1    0   +1   +1   +1
+    ///  dZeile  +1   +1    0   -1   -1   -1    0   +1
+    /// </code>
+    ///
+    /// <para>⭐ <b>Gerade Indizes sind die geraden Richtungen, ungerade die
+    /// Diagonalen</b> — das ist keine Deutung, es fällt aus der Tafel heraus
+    /// und trägt danach die ganze Suche: die Erweiterung nimmt erst die
+    /// ungeraden, das Rückverfolgen erst die geraden.</para>
+    ///
+    /// <para>⚠ Sie ist NICHT dieselbe wie <see cref="Dirs"/>. Die Reihenfolge
+    /// ist Teil des Verfahrens, nicht Geschmack: wer eine andere nimmt, bekommt
+    /// bei gleich langen Wegen einen anderen — und im Netzspiel zwei
+    /// verschiedene.</para>
+    /// </summary>
+    public static readonly Vector2I[] UrDirs =
+    {
+        new(0, 1), new(-1, 1), new(-1, 0), new(-1, -1),
+        new(0, -1), new(1, -1), new(1, 0), new(1, 1),
+    };
+
+    /// <summary>⭐ Die Erweiterungsreihenfolge: <b>erst die vier Diagonalen,
+    /// dann die vier Geraden</b> (BB.2). Genau diese Reihenfolge.</summary>
+    private static readonly int[] UrErweitern = { 1, 3, 5, 7, 0, 4, 6, 2 };
+
+    /// <summary>⭐ Die Rückverfolgungsreihenfolge: <b>erst die Geraden, dann die
+    /// Diagonalen</b> (BB.3). Andersherum als die Erweiterung — auch das steht
+    /// so da.</summary>
+    private static readonly int[] UrZurueck = { 0, 2, 4, 6, 1, 3, 5, 7 };
+
+    /// <summary>⭐ Der Wegpuffer des Originals fasst <b>50</b> Schritte
+    /// (<c>cmp …,0x32</c>). ⭐ Unabhängig bestätigt: <c>0x7AEC38</c> ist sec14
+    /// mit <c>0x61A80 = 400 000 = 8000 × 50</c> — die Zahl aus dem Code und die
+    /// aus dem Dateiformat stimmen überein, zwei völlig getrennte Quellen.</summary>
+    public const int UrWegLaenge = 50;
+
+    /// <summary>⭐ Die Ringlänge des 1×1-Pfades: <b>4096</b> Einträge
+    /// (Bytemaske <c>and si,0x1FFF</c> = 8192 Byte zu zwei).
+    /// ⚠ Die 2×2- und 4×4-Pfade nehmen <b>5000</b> auf demselben Puffer.
+    /// <b>In sich ist jede Variante widerspruchsfrei — wer nachbaut, darf das
+    /// nicht vereinheitlichen.</b></summary>
+    public const int UrRing1x1 = 4096, UrRingGross = 5000;
+
+    /// <summary>Wie viele Zellen die letzte Suche angefasst hat, wie viele
+    /// Wellen sie brauchte, und ob sie am Ring hängengeblieben ist — für den
+    /// Prüfstand.</summary>
+    public static int UrBesucht, UrWellen;
+    public static bool UrRingVoll;
+
+    /// <summary>
+    /// ⭐⭐ <b>Die Wegsuche des Originals</b> — eine reine 8-Nachbar-
+    /// <b>Breitensuche mit Wellenmarken</b> (OFFENE_FRAGEN <b>BB</b>,
+    /// <c>0x4D2580</c> für den 1×1-Rumpf).
+    ///
+    /// <para><b>Es gibt keine Kostenkarte, keine Heuristik, keine
+    /// Prioritätswarteschlange.</b> Jeder Schritt kostet gleich viel, eine
+    /// Diagonale genauso viel wie eine Gerade — die entstehende Metrik ist die
+    /// <b>Chebyshev-Distanz</b>. Unsere <see cref="FindPath"/> ist ein A* mit
+    /// Kosten und Schätzer und damit <b>komplett eigene Erfindung</b>.</para>
+    ///
+    /// <para><b>Die Entfernung wird nicht gespeichert, sondern in die Karte
+    /// geschrieben:</b> jede erreichte Zelle bekommt die laufende Wellenmarke,
+    /// die bei 9 beginnt, bei jedem Wellenwechsel um eins steigt und nach 255
+    /// auf 8 zurückspringt — <b>248 unterscheidbare Wellen</b>. Den
+    /// Wellenwechsel erkennt das Original daran, dass der Lesezeiger die
+    /// gemerkte Wellengrenze erreicht; hier steht dafür die Zahl der Einträge
+    /// der laufenden Welle, was dasselbe leistet.</para>
+    ///
+    /// <para>⭐⭐ <b>Ecken werden nicht geschnitten.</b> Jede Diagonale prüft
+    /// genau die beiden anliegenden geraden Nachbarn — <b>8 von 8</b>
+    /// Bedingungen haben diese Form, keine Ausnahme. Nullmodell (jede Bedingung
+    /// eine von acht Nachbarzellen): <c>8^-8</c>, rund <c>6e-8</c>.</para>
+    ///
+    /// <para>⚠ <b>Was hier UNSER bleibt: die Karte.</b> Das Original baut je
+    /// Suche eine eigene Passierbarkeitskarte aus sec6, mit <b>vierzehn</b>
+    /// Bewegungsarten und einem dreiwertigen Feld (0 frei, 1 <i>weich</i>
+    /// gesperrt, 2 hart). Wir nehmen <see cref="IsFree"/>, also zwei Werte.
+    /// <b>Der Unterschied ist der Wert 1:</b> dort darf man nicht hinein, aber
+    /// eine Diagonale daran vorbei ist erlaubt. Ohne ihn sind wir an solchen
+    /// Stellen etwas strenger als das Original. <b>Das VERFAHREN ist das des
+    /// Originals, die KARTE ist noch unsere.</b></para>
+    ///
+    /// <para>⚠ Ebenfalls nicht hier: der 50-Schritte-Puffer mit Neuplanung.
+    /// Das Original fährt höchstens 50 Ziffern ab und plant dann mit DEMSELBEN
+    /// Ziel neu — dadurch reagiert es unterwegs auf Änderungen. Wir geben den
+    /// ganzen Weg zurück; unser Verfolger hat keinen festen Puffer.
+    /// <see cref="UrWegLaenge"/> steht trotzdem hier, damit die Zahl nicht
+    /// verlorengeht.</para>
+    /// </summary>
+    public List<Vector2I>? FindPathUr(Vector2I start, Vector2I goal,
+                                      MoveClass mc = MoveClass.Vehicle, int mover = -1)
+    {
+        UrBesucht = 0; UrWellen = 0; UrRingVoll = false;
+        if (!InBounds(start.X, start.Y) || !InBounds(goal.X, goal.Y)) return null;
+        if (!IsFree(goal.X, goal.Y, mc, mover))
+        {
+            var ausweich = NearestFree(goal, mc, mover);
+            if (ausweich == null) return null;
+            goal = ausweich.Value;
+        }
+        if (start == goal) return new List<Vector2I>();
+
+        // ---- die Karte: 0 frei, 2 gesperrt ---------------------------------
+        int w = Width, h = Height;
+        var karte = new byte[w * h];
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                karte[y * w + x] = IsFree(x, y, mc, mover) ? (byte)0 : (byte)2;
+
+        // ⭐ Der Kartenrand wird gesperrt (Zeile 0, Zeile H-1, Spalte 0,
+        // Spalte B-1 auf 2). Damit braucht die innere Schleife KEINE
+        // Randpruefung -- genau darum tut das Original es.
+        for (int x = 0; x < w; x++) { karte[x] = 2; karte[(h - 1) * w + x] = 2; }
+        for (int y = 0; y < h; y++) { karte[y * w] = 2; karte[y * w + w - 1] = 2; }
+
+        int si = start.Y * w + start.X, zi = goal.Y * w + goal.X;
+        if (si == zi) return new List<Vector2I>();
+        if (karte[zi] == 2) return null;
+        karte[si] = 8;                       // Startmarke des 1x1-Pfades
+
+        var ring = new int[UrRing1x1];
+        int kopf = 0, schwanz = 0, drin = 0;
+        ring[schwanz++] = si; drin++;
+        int marke = 9, welleRest = 1, naechsteWelle = 0, schritte = 0;
+        bool gefunden = false;
+
+        while (drin > 0)
+        {
+            if (welleRest == 0)
+            {
+                // ⭐ Wellenwechsel: Marke eins hoch, Umlauf 255 -> 8.
+                marke = marke >= 255 ? 8 : marke + 1;
+                schritte++;
+                welleRest = naechsteWelle;
+                naechsteWelle = 0;
+                if (welleRest == 0) break;
+            }
+            int c = ring[kopf]; kopf = (kopf + 1) % UrRing1x1; drin--; welleRest--;
+            UrBesucht++;
+
+            if (c == zi) { karte[zi] = 5; gefunden = true; break; }
+
+            int cx = c % w, cy = c / w;
+            foreach (int i in UrErweitern)
+            {
+                var d = UrDirs[i];
+                int nx = cx + d.X, ny = cy + d.Y;
+                int n = ny * w + nx;
+                if (karte[n] != 0) continue;
+                if ((i & 1) != 0)
+                {
+                    // ⭐ Diagonale: BEIDE anliegenden Geraden muessen <= 1 sein.
+                    // Das sind genau (i-1) und (i+1) modulo 8 -- an allen vier
+                    // Diagonalen nachgerechnet, nicht angenommen.
+                    var a = UrDirs[(i + 7) & 7];
+                    var b = UrDirs[(i + 1) & 7];
+                    if (karte[(cy + a.Y) * w + cx + a.X] > 1) continue;
+                    if (karte[(cy + b.Y) * w + cx + b.X] > 1) continue;
+                }
+                karte[n] = (byte)marke;
+                if (drin >= UrRing1x1) { UrRingVoll = true; break; }
+                ring[schwanz] = n; schwanz = (schwanz + 1) % UrRing1x1;
+                drin++; naechsteWelle++;
+            }
+            if (UrRingVoll) break;
+        }
+
+        UrWellen = schritte;
+        if (!gefunden || karte[zi] != 5) return null;   // ⭐ nichts schreiben
+
+        // ---- zurueckverfolgen ----------------------------------------------
+        // Von der Zielzelle rueckwaerts den Nachbarn mit Marke-1 suchen,
+        // ERST die Geraden (0,2,4,6), dann die Diagonalen (1,3,5,7).
+        var rueck = new List<Vector2I>();
+        int cc = zi, m = marke == 8 ? 255 : marke - 1;
+        for (int k = schritte - 1; k >= 0; k--)
+        {
+            int gx = cc % w, gy = cc / w, gewaehlt = -1;
+            foreach (int i in UrZurueck)
+            {
+                var d = UrDirs[i];
+                int px = gx + d.X, py = gy + d.Y;
+                if (px < 0 || py < 0 || px >= w || py >= h) continue;
+                if (karte[py * w + px] != m) continue;
+                gewaehlt = i; break;
+            }
+            if (gewaehlt < 0) return null;
+            rueck.Add(new Vector2I(gx, gy));
+            var dd = UrDirs[gewaehlt];
+            cc = (gy + dd.Y) * w + gx + dd.X;
+            m = m == 8 ? 255 : m - 1;
+        }
+        rueck.Reverse();
+        return rueck;
+    }
+
+    /// <summary>
+    /// <c>--wegsuche-check</c> — <b>ist es wirklich die Breitensuche des
+    /// Originals?</b> (22.08.2026, OFFENE_FRAGEN <b>BB</b>.)
+    ///
+    /// <para>⚠ Gemessen wird nicht, DASS ein Weg herauskommt — das täte ein A*
+    /// auch. Gemessen werden die drei Eigenschaften, in denen sich die beiden
+    /// Verfahren <b>unterscheiden</b>: die Metrik, die Ecken und die
+    /// Richtungstafel. Ein Lauf, der nur »Weg gefunden« prüft, hätte den alten
+    /// Zustand genauso bestanden.</para>
+    /// </summary>
+    public string WegsucheCheck()
+    {
+        var sb = new System.Text.StringBuilder("wegsuche-check\n");
+        bool alles = true;
+        void Sag(string was, bool ok)
+        {
+            sb.Append($"  {was}: {(ok ? "richtig" : "FALSCH")}\n");
+            alles &= ok;
+        }
+
+        // 1. ⭐ DIE RICHTUNGSTAFEL, Ziffer fuer Ziffer gegen 0x4F5AF0.
+        int[] sollC = { 0, -1, -1, -1, 0, 1, 1, 1 };
+        int[] sollZ = { 1, 1, 0, -1, -1, -1, 0, 1 };
+        int tf = 0;
+        for (int i = 0; i < 8; i++)
+            if (UrDirs[i].X != sollC[i] || UrDirs[i].Y != sollZ[i]) tf++;
+        Sag($"Richtungstafel 0x4F5AF0: {8 - tf} von 8 Eintraegen treffen", tf == 0);
+
+        // ⭐ Gerade Indizes sind die Geraden, ungerade die Diagonalen -- die
+        // Eigenschaft, auf der die ganze Reihenfolge beruht.
+        bool parit = true;
+        for (int i = 0; i < 8; i++)
+        {
+            bool diag = UrDirs[i].X != 0 && UrDirs[i].Y != 0;
+            if (diag != ((i & 1) != 0)) parit = false;
+        }
+        Sag("gerade Indizes = gerade Richtungen, ungerade = Diagonalen", parit);
+
+        // ⭐ Die Umkehrtafel ist i XOR 4 -- 8/8 im Original, Nullmodell 1/8!.
+        bool xor4 = true;
+        for (int i = 0; i < 8; i++)
+        {
+            var g = UrDirs[i];
+            var r = UrDirs[i ^ 4];
+            if (r.X != -g.X || r.Y != -g.Y) xor4 = false;
+        }
+        Sag("Umkehrtafel 0x539B20 = i XOR 4 (Gegenrichtung)", xor4);
+
+        // 2. ⭐⭐ DIE METRIK IST CHEBYSHEV. Auf freier Flaeche kostet die
+        // Diagonale so viel wie die Gerade: ein Ziel (n,n) ist n Schritte weit,
+        // nicht 2n und nicht n*sqrt(2).
+        var frei = FreieProbezelle();
+        if (frei == null)
+        {
+            sb.Append("  ⚠ keine freie Probeflaeche auf dieser Karte gefunden\n");
+            return sb.Append("  NICHT GEMESSEN").ToString();
+        }
+        var a0 = frei.Value;
+        var b0 = new Vector2I(a0.X + 6, a0.Y + 6);
+        var diagWeg = InBounds(b0.X, b0.Y) ? FindPathUr(a0, b0) : null;
+        var gerWeg = InBounds(a0.X + 6, a0.Y) ? FindPathUr(a0, new Vector2I(a0.X + 6, a0.Y)) : null;
+        if (diagWeg != null && gerWeg != null)
+            Sag($"Chebyshev: schraeg 6 Zellen = {diagWeg.Count} Schritte, "
+                + $"gerade 6 Zellen = {gerWeg.Count} Schritte (erwartet gleich)",
+                diagWeg.Count == gerWeg.Count);
+        else
+            sb.Append("  ⚠ Metrik nicht gemessen — kein freier 6x6-Platz\n");
+
+        // 3. ⭐⭐ ECKEN WERDEN NICHT GESCHNITTEN. Jeder Schritt des Weges muss
+        // ein echter Nachbar sein, UND bei einer Diagonale muessen beide
+        // anliegenden Geraden frei sein.
+        int ecken = 0, schritte = 0;
+        if (diagWeg is { Count: > 1 })
+            for (int k = 1; k < diagWeg.Count; k++)
+            {
+                var v = diagWeg[k] - diagWeg[k - 1];
+                schritte++;
+                if (Math.Abs(v.X) > 1 || Math.Abs(v.Y) > 1) { ecken++; continue; }
+                if (v.X != 0 && v.Y != 0)
+                {
+                    bool f1 = IsFree(diagWeg[k - 1].X + v.X, diagWeg[k - 1].Y, MoveClass.Vehicle, -1);
+                    bool f2 = IsFree(diagWeg[k - 1].X, diagWeg[k - 1].Y + v.Y, MoveClass.Vehicle, -1);
+                    if (!f1 || !f2) ecken++;
+                }
+            }
+        Sag($"kein geschnittener Eck- oder Riesenschritt: {schritte} Schritte, "
+            + $"{ecken} Verstoesse", ecken == 0);
+
+        // 4. Die Grenzen als ZAHLEN -- sie sollen nicht stillschweigend
+        // vereinheitlicht werden.
+        Sag($"Ringlaenge 1x1 {UrRing1x1} und gross {UrRingGross} sind VERSCHIEDEN "
+            + "(im Original zwei Masse auf demselben Puffer)",
+            UrRing1x1 == 4096 && UrRingGross == 5000 && UrRing1x1 != UrRingGross);
+        Sag($"Wegpuffer {UrWegLaenge} Schritte (Code 0x32, sec14 = 8000 x 50)",
+            UrWegLaenge == 50);
+
+        // 5. Gegenprobe gegen unser A*: beide sollen dasselbe ERREICHEN, auch
+        // wenn der Weg ein anderer ist.
+        if (diagWeg != null)
+        {
+            var astern = FindPath(a0, b0);
+            Sag($"A* findet denselben Zielpunkt: Breitensuche {diagWeg.Count} "
+                + $"Schritte, A* {astern?.Count.ToString() ?? "KEINEN"}",
+                astern != null);
+        }
+
+        sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
+
+    /// <summary>Eine Zelle, um die herum 7x7 alles frei ist — Probeflaeche für
+    /// <see cref="WegsucheCheck"/>. ⚠ Ohne freie Flaeche misst der Lauf die
+    /// Karte statt das Verfahren.</summary>
+    private Vector2I? FreieProbezelle()
+    {
+        for (int y = 1; y < Height - 8; y++)
+            for (int x = 1; x < Width - 8; x++)
+            {
+                bool ok = true;
+                for (int dy = 0; dy <= 6 && ok; dy++)
+                    for (int dx = 0; dx <= 6 && ok; dx++)
+                        if (!IsFree(x + dx, y + dy, MoveClass.Vehicle, -1)) ok = false;
+                if (ok) return new Vector2I(x, y);
+            }
+        return null;
+    }
+
     private static readonly Vector2I[] Dirs =
     {
         new(1, 0), new(-1, 0), new(0, 1), new(0, -1),
@@ -704,9 +1036,35 @@ public sealed class NavGrid
     /// Returns the waypoint cells WITHOUT the start cell, or null if unreachable.
     /// If the goal itself is blocked/occupied, the nearest free cell is used.
     /// </summary>
+    /// <summary>
+    /// ⚠ <b>GEGENPROBE: den alten A* benutzen</b> statt der Breitensuche des
+    /// Originals. Nur <c>--alter-astern</c> setzt das.
+    ///
+    /// <para>Der A* war <b>komplett unsere Erfindung</b> — Kosten, Schätzer,
+    /// Prioritätswarteschlange, Steigungsaufschlag. Das Original hat nichts
+    /// davon (OFFENE_FRAGEN BB). Er bleibt erreichbar, weil ein Verfahren, das
+    /// man nicht mehr gegen sein Vorgängerverfahren halten kann, nicht mehr
+    /// nachprüfbar ist.</para>
+    /// </summary>
+    public static bool AlterAstern;
+
+    /// <summary>Wie oft seit dem Kartenstart welches Verfahren gelaufen ist —
+    /// für den Prüfstand.</summary>
+    public static int LaeufeUr, LaeufeAstern;
+
     public List<Vector2I>? FindPath(Vector2I start, Vector2I goal, MoveClass mc = MoveClass.Vehicle,
                                     int mover = -1, int maxNodes = 60000)
     {
+        // ⭐⭐ 22.08.2026 — DIE WEGSUCHE IST JETZT DIE DES ORIGINALS.
+        // Eine reine 8-Nachbar-Breitensuche mit Wellenmarken, ohne Kosten und
+        // ohne Schaetzer (BB). Was darunter liegt, war unsere Erfindung und ist
+        // hier nur noch die Gegenprobe.
+        if (!AlterAstern)
+        {
+            LaeufeUr++;
+            return FindPathUr(start, goal, mc, mover);
+        }
+        LaeufeAstern++;
         if (!InBounds(start.X, start.Y) || !InBounds(goal.X, goal.Y)) return null;
         if (!IsFree(goal.X, goal.Y, mc, mover))
         {
