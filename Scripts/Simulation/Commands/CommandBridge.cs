@@ -281,14 +281,22 @@ public partial class MapEntityLayer
     }
 
     /// <summary>
-    /// Ein Angriffsklick wird zu je einem Satz je Einheit.
+    /// Ein Angriffsklick wird zu je einem Satz je Einheit —
+    /// <b>Busbefehl 11</b>, der Angriffsbefehl des Originals.
     ///
-    /// <para>⚠ <b>UNSERE SETZUNG:</b> Opcode <see cref="CommandOp.OursAttack"/>
-    /// = 2001. Für einen Angriffsbefehl mit einer ZIELEINHEIT ist im Original
-    /// kein Behandler belegt; Opcode 1 sieht danach aus, trägt aber in P2 einen
-    /// Richtungswert aus der Tafel 0x4F4AF0 (@0x4326BD..0x4326F0) und ist damit
-    /// etwas anderes. Eine Deutung ohne Zahl wird nicht eingebaut (Regel 6),
-    /// also nimmt der Angriff bis auf Weiteres eine eigene Nummer über 1201.</para>
+    /// <para>⭐⭐ <b>Umgebaut am 22.08.2026.</b> Hier stand bis dahin die eigene
+    /// Nummer 2001 mit der Begründung, für einen Angriff mit ZIELEINHEIT sei
+    /// im Original kein Behandler belegt. Das ist widerlegt: Absender
+    /// <c>0x4353F0</c>, Behandler <c>0x4C2DDD</c> → <c>order()</c>. Die
+    /// Herleitung samt Griffraum steht bei <see cref="CommandOp.Attack"/>.</para>
+    ///
+    /// <para>⭐ <b>Und der Angriff formiert sich um das Ziel</b> (0x4353F0
+    /// Teil 2/3). Wir haben bisher alle Einheiten auf dieselbe Zelle geschickt;
+    /// das Original rechnet je Einheit
+    /// <c>eigenePosition + Zielposition − Schwerpunkt</c> — derselbe Ausdruck
+    /// wie beim Bewegungsbefehl (<c>0x4342D0</c>), nur mit der Zielzelle statt
+    /// der Klickzelle. Die Gruppe behält also ihre Aufstellung, statt sich auf
+    /// einem Punkt zu stapeln.</para>
     /// </summary>
     /// <returns>false, wenn der Klick kein Ziel getroffen hat — dann darf der
     /// Aufrufer daraus einen Bewegungsbefehl machen, genau wie heute.</returns>
@@ -299,14 +307,38 @@ public partial class MapEntityLayer
         var victim = _entities[hit];
         if (victim.IsProp || victim.Dead) return false;
 
+        // ---- Teil 1: das Ziel in UTOK_NA uebersetzen (0x4353F0 @0x435403 ff.)
+        // Ein Gebaeude bekommt 60000 + Platz, eine Einheit ihre eigene Nummer.
+        // ⚠ Die zwei anderen Baender des Griffraums (30000 + Spalte fuer eine
+        // blosse Bodenzelle, 40100..40249 fuer Bruecke/Rampe) sind hier NICHT
+        // erreichbar, weil Pick() nur Einheiten und Gebaeude trifft. Sie sind
+        // bei CommandOp.Attack dokumentiert und gehoeren zu dem Tag, an dem der
+        // Angriff auch auf leeres Gelaende gehen darf.
+        int utok = victim.IsBuilding ? 60000 + victim.Slot : hit;
+
+        // ---- Teil 2: der Schwerpunkt der Auswahl (0x4353F0, idiv-Summe) ----
+        int sx = 0, sy = 0, cnt = 0;
+        foreach (int i in _sel)
+        {
+            var e = _entities[i];
+            if (i == hit || !CanFight(e) || !IsHostile(e, victim)) continue;
+            sx += e.Col; sy += e.Row; cnt++;
+        }
+        if (cnt == 0) return false;
+        int mx = sx / cnt, my = sy / cnt;      // ganzzahlig, wie das Original
+
+        // ---- Teil 3: je Ausgewaehltem ein Satz -----------------------------
         int n = 0;
         foreach (int i in _sel)
         {
             var e = _entities[i];
             if (i == hit || !CanFight(e) || !IsHostile(e, victim)) continue;
-            var c = CommandRecord.Make(CommandOp.OursAttack, (byte)ViewPlayer,
-                                 (short)i, (short)hit, (short)(queue ? 1 : 0),
-                                 (short)victim.Col, (short)victim.Row);
+            int px = e.Col + victim.Col - mx;
+            int py = e.Row + victim.Row - my;
+            var c = CommandRecord.Make(CommandOp.Attack, (byte)ViewPlayer,
+                                 (short)i, (short)px, (short)py,
+                                 (short)utok, (short)victim.Row,
+                                 (short)(queue ? 1 : 0));
             if (Emit(c)) n++;
         }
         if (n == 0) return false;
@@ -590,7 +622,8 @@ public partial class MapEntityLayer
         CommandOp.OursAirMove => ApplyAirMove(c),
         _ when !Owns(c) => false,
         CommandOp.Move => ApplyMove(c),
-        CommandOp.OursAttack => ApplyAttack(c),
+        CommandOp.Attack => ApplyAttack(c),
+        CommandOp.OursAttack => ApplyAttack(c),   // ⚠ nur noch fuer alte Staende
         CommandOp.OursStop => ApplyStop(c),
         CommandOp.Sell => ApplySell(c),
         CommandOp.PlaceRadar => ApplyPlaceRadar(c),
@@ -1332,19 +1365,59 @@ public partial class MapEntityLayer
 
     /// <summary>2001, Angreifen (UNSERE SETZUNG). P1 = Einheit, P2 = Ziel,
     /// P3 = angereiht, P4/P5 = Zelle des Ziels beim Anreihen.</summary>
+    /// <summary>
+    /// <b>Busbefehl 11 ausführen.</b> Entspricht <c>0x4C2DDD</c> → <c>order()</c>.
+    ///
+    /// <para>⚠ Nimmt AUCH den ausgedienten Satz <see cref="CommandOp.OursAttack"/>
+    /// = 2001 an, damit vor dem 22.08.2026 geschriebene Spielstände und
+    /// Wiederholungen weiter laufen. Die zwei Sätze sind verschieden gebaut,
+    /// darum wird zuerst der Opcode gefragt und dann gedeutet — nicht
+    /// umgekehrt.</para>
+    /// </summary>
     private bool ApplyAttack(in CommandRecord c)
     {
-        int i = c.P1, hit = c.P2;
+        bool alt = c.Op == CommandOp.OursAttack;
+
+        int i = c.P1;
+        // Der neue Satz trägt das Ziel in P4 (UTOK_NA), der alte in P2.
+        int utok = alt ? c.P2 : c.P4;
+        bool queue = alt ? c.P3 != 0 : c[6] != 0;   // P6 hat keinen Namen, nur den Index
+
+        // ⚠ UTOK_NA entschlüsseln. 60000..60299 ist ein GEBÄUDE und wird über
+        // seinen Platz gesucht; alles unter 8000 ist eine Einheitennummer und
+        // bei uns unmittelbar der Listenplatz. Die zwei anderen Bänder
+        // (30000 + Spalte = Bodenzelle, 40100..40249 = Brücke/Rampe) setzt
+        // unser Absender nicht ab — siehe PostAttack —, also werden sie hier
+        // ausdrücklich abgewiesen statt stillschweigend als Index gedeutet.
+        int hit;
+        if (utok >= 60000 && utok < 60300)
+        {
+            hit = -1;
+            for (int k = 0; k < _entities.Count; k++)
+                if (_entities[k].IsBuilding && _entities[k].Slot == utok - 60000)
+                { hit = k; break; }
+        }
+        else if (utok >= 8000) return false;      // Bodenzelle/Brücke: noch nicht gebaut
+        else hit = utok;
+
         if (i < 0 || i >= _entities.Count || hit < 0 || hit >= _entities.Count) return false;
         var e = _entities[i];
         var victim = _entities[hit];
         if (i == hit || e.Dead || victim.Dead || victim.IsProp) return false;
         if (!CanFight(e) || !IsHostile(e, victim)) return false;
 
-        if (c.P3 != 0 && (e.Path != null || e.Orders.Count > 0))
+        // ⚠ Die zwei Wächter des Originals (@0x4C2DF5, @0x4C2E04): eine Einheit
+        // in UKOL 22 oder 23 — die Abwehrstellung im Auf- oder Abbau — nimmt
+        // KEINEN Angriffsbefehl an. Bei uns ist das DugIn.
+        if (e.DugIn) return false;
+
+        if (queue && (e.Path != null || e.Orders.Count > 0))
         {
             if (e.Orders.Count >= MaxOrders) return false;
-            e.Orders.Add(Order.Attack(new Vector2I(c.P4, c.P5), hit));
+            // Der neue Satz führt in P2/P3 die Zelle DIESER Einheit (Formation
+            // um das Ziel), der alte trug dort die Zielzelle in P4/P5.
+            var ziel = alt ? new Vector2I(c.P4, c.P5) : new Vector2I(c.P2, c.P3);
+            e.Orders.Add(Order.Attack(ziel, hit));
             return true;
         }
         e.Target = hit;

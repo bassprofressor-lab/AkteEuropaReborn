@@ -3516,9 +3516,27 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Wie weit die vier Spitzen von der Mitte stehen — am Bild
     /// ausgemessen, siehe <see cref="DrawSelectionBrackets"/>.</summary>
-    /// <summary>Der Lebensbalken über einer Einheit — am Original ausgemessen,
-    /// siehe die Stelle, die ihn zeichnet. 14 x 3 Punkte.</summary>
-    private const float BarW = 14f, BarH = 3f;
+    /// <summary>
+    /// ⭐⭐ <b>Der Lebensbalken — seit dem 22.08.2026 GELESEN statt ausgemessen</b>
+    /// (OFFENE_FRAGEN <b>BH</b>, Zeichner <c>0x4B6F60</c>, Rufer
+    /// <c>0x4B71F0</c>).
+    ///
+    /// <para>Hier stand »am Bild ausgemessen, 14 x 3 Punkte«. Der Zeichner sagt:
+    /// <b>Höhe 5</b>, und die <b>Breite ist nicht fest</b>, sondern
+    /// <c>HpMax/4 + 2</c> — eine zähe Einheit trägt einen längeren Balken.
+    /// ⭐ Die alte Messung ist damit bestätigt statt widerlegt: bei
+    /// <c>HpMax = 48</c> ergibt die Formel genau 14.</para>
+    ///
+    /// <para>Der Balken ist auf <c>x</c> <b>zentriert</b> (der Zeichner rechnet
+    /// <c>x -= breite/2</c>), und gezeichnet wird ein <b>Rechteckumriss</b>
+    /// plus Füllung, jede Zelle einzeln geklippt.</para>
+    /// </summary>
+    private const float BarH = 5f;
+
+    /// <summary>Die Balkenbreite aus den Trefferpunkten: <c>(HpMax &gt;&gt; 2) + 2</c>
+    /// (@0x4B724C). ⚠ Ganzzahlig — die Verschiebung ist im Original eine
+    /// <c>shr</c>, kein Bruch.</summary>
+    private static float BarWidthOf(int hpMax) => (hpMax >> 2) + 2;
 
     /// <summary>Der Teiler und die Hoehe des EINNAHMEBALKENS, beide gelesen:
     /// <c>idiv bx</c> mit <c>bx = 6</c> @0x4B7E1F und 0x4B7E2E, und
@@ -3530,10 +3548,33 @@ public partial class MapEntityLayer : Node2D
     /// dem Turm, nicht auf der Zellkante.</summary>
     private const float BarLift = 28f;
 
-    /// <summary>⚠ UNSERE SETZUNG: ab wann der Balken gelb wird. Das Original
-    /// hat zwei Farben (grün und gelb), das ist abgelesen — der SCHWELLWERT
-    /// nicht: zwei gelbe Beispiele auf einem Bild reichen dafür nicht.</summary>
-    private const float BarYellowBelow = 0.5f;
+    /// <summary>
+    /// ⭐⭐ <b>DREI Bänder, nicht zwei — und die Schwellen sind gelesen.</b>
+    /// Hier stand »⚠ UNSERE SETZUNG … das Original hat zwei Farben (grün und
+    /// gelb) … der Schwellwert ist nicht abgelesen«. Beides ist überholt
+    /// (22.08.2026, OFFENE_FRAGEN <b>BH.1</b> und <b>BO</b>).
+    ///
+    /// <para>Der Zeichner vergleicht <c>2·Füllung</c> und <c>4·Füllung</c>
+    /// gegen dieselbe Breite — die Schwellen sind also hart <b>½</b> und
+    /// <b>¼</b>. ⭐ Unsere alte Setzung 0,5 war damit <b>zur Hälfte richtig</b>:
+    /// die obere Schwelle stimmte, das dritte Band fehlte.</para>
+    ///
+    /// <para>Die Farben sind Palettenplätze aus <c>DATA/01.PAL</c>, geeicht an
+    /// zwei Vorbefunden (Platz 47 = <c>#13130F</c>; 248…253 sind das Blau-Band,
+    /// das <c>Check_pal</c> im Ring vertauscht):
+    /// <b>5 = <c>#67D75F</c></b> hellgrün ab ½,
+    /// <b>13 = <c>#F7FF0F</c></b> gelb zwischen ¼ und ½,
+    /// <b>9 = <c>#FF2B27</c></b> rot unter ¼.</para>
+    ///
+    /// <para>⚠ Die Platznummern sagen die Reihenfolge <b>nicht</b> von selbst:
+    /// 13 liegt zwischen 9 und 5, die Bänder nicht. Wer sie nach Nummer
+    /// sortiert, vertauscht gelb und rot.</para>
+    /// </summary>
+    private const float BarGreenFrom = 0.5f, BarYellowFrom = 0.25f;
+
+    private static readonly Color BarGreen = new("67D75F");
+    private static readonly Color BarYellow = new("F7FF0F");
+    private static readonly Color BarRed = new("FF2B27");
 
     private const float SelMarkRadius = 19f;
 
@@ -12969,16 +13010,41 @@ public partial class MapEntityLayer : Node2D
 
         if (job == BuildingJob.Idle)
         {
-            // ⚠⚠ NUR DIE REPARATUR WIRD ANGEHALTEN. Ein laufender Ausbau ist
-            // BEZAHLT; ihn mit abzuräumen hat schon einmal Geld verschluckt.
-            // Das Original setzt pauschal 0, aber unsere Zustände tragen mehr
-            // als das eine Byte — die Abweichung steht hier, statt still zu
-            // wirken.
-            if (e.State != JobState(e, BuildingJob.Repair)) return false;
-            e.State = StAktiv;
-            RepairsStopped++;
-            _order = "Reparatur angehalten";
-            return true;
+            // ⭐⭐ 22.08.2026 — 511 und 517 sind UMSCHALTER, nicht Ausschalter
+            // (OFFENE_FRAGEN BL.4.2). Hier stand »das Original setzt pauschal 0«,
+            // und Abschnitt P führte beide als »→ 0«. Das ist die halbe Wahrheit:
+            //
+            //     0x43F940 (511) / 0x43FB40 (517):
+            //         wenn byte[Satz+0x02] == 1:  byte[Satz+0x02] = 0
+            //         sonst                        byte[Satz+0x02] = 1
+            //
+            // Aus JEDEM anderen Zustand springen sie also auf 1 = reparieren.
+            // Nur 523/524/526 setzen bedingungslos 0.
+            int rep = JobState(e, BuildingJob.Repair);
+            if (e.State == rep)
+            {
+                e.State = StAktiv;
+                RepairsStopped++;
+                _order = "Reparatur angehalten";
+                return true;
+            }
+            // ⚠⚠ UND HIER BLEIBT UNSERE ABWEICHUNG STEHEN, jetzt mit besserem
+            // Grund. Der Umschalter des Originals wuerde aus einem LAUFENDEN,
+            // BEZAHLTEN Ausbau eine Reparatur machen und das Geld verschlucken —
+            // genau der Fehler, der schon einmal da war. Unsere Zustaende tragen
+            // mehr als das eine Byte des Originals, darum verweigern wir aus
+            // einem Ausbau heraus, statt still Geld zu vernichten.
+            if (e.State != StAktiv)
+            {
+                _order = "Gebaeude beschaeftigt";
+                Audio.GameSounds.Play(Audio.GameSounds.Refused);
+                return false;
+            }
+            // Aus »aktiv« heraus schaltet der Umschalter die Reparatur EIN —
+            // das ist die neu gelesene Haelfte, und sie geht denselben Weg wie
+            // ein Reparaturbefehl, damit die Trefferpunktkosten nicht umgangen
+            // werden koennen.
+            return GiveBuildingJob(idx, BuildingJob.Repair);
         }
 
         if (job == BuildingJob.Repair)
@@ -12991,6 +13057,32 @@ public partial class MapEntityLayer : Node2D
                 return false;
             }
             e.State = ziel;
+
+            // ⭐⭐ 22.08.2026 — DER REPARATURBEFEHL KOSTET TREFFERPUNKTE
+            // (OFFENE_FRAGEN BL.4.3). Bei uns kostete er gar nichts.
+            //
+            // 0x43FBA0 (519 Fabrik), 0x43FC50 (520 Flughafen) und 0x43FDC0
+            // (522 Mine) sind dreimal derselbe Rumpf und zahlen NICHT mit Geld:
+            //
+            //     wenn hp > 50:  hp = (29·hp) / 30
+            //
+            // ⭐ Der Faktor 29/30 ist aus der lea-Kette gerechnet, bevor
+            // irgendwo nachgeschlagen wurde: eax = hp·8, eax -= hp -> 7·hp,
+            // lea eax,[hp + 7hp·4] -> 29·hp, idiv 30. Und die Schranke 50 steht
+            // als Rohzahl daneben — unter 50 Trefferpunkten kostet es nichts.
+            //
+            // ⚠ Die DEUTUNG bleibt offen: »Reparieren« reisst das Gebaeude erst
+            // weiter auf und flickt es dann langsam (der Gebaeudetakt gibt jeden
+            // 4. Takt einen Punkt zurueck). DASS es so ist, steht dreimal
+            // wortgleich im Code. WARUM, wissen wir nicht — und das ist kein
+            // Grund, es wegzulassen.
+            // ⚠ Das Original ruft hier noch 0x4CBBF0, den Schadensstufenrechner,
+            // damit das Bild SOFORT nachzieht. Bei uns entfaellt das: unsere
+            // Schadensstufe ist kein gespeichertes Byte, sondern wird beim
+            // Zeichnen aus Hp/HpMax gerechnet (siehe die Formel weiter oben).
+            // Das Bild zieht also von selbst nach.
+            if (e.Hp > 50) e.Hp = 29 * e.Hp / 30;
+
             _order = "Status : reparieren";
             // Kein Klang: die Routine @0x43e196 spielt einen nach »mining 3«,
             // nach »enlarging« und nach »upgrading«, aber zwischen »repair« und
@@ -15489,8 +15581,46 @@ public partial class MapEntityLayer : Node2D
         }
         e.State = 0;
 
+        // 6. ⭐⭐ DER PREIS IN TREFFERPUNKTEN (22.08.2026, OFFENE_FRAGEN BL.4.3).
+        // Reparieren kostet kein Geld, sondern 1/30 der Trefferpunkte — und die
+        // Schranke ist 50: darunter kostet es nichts. Beide Zahlen werden
+        // gemessen, nicht nur die eine; ohne die Schranke faellt ein Fehler um
+        // eins nicht auf.
+        _sel.Clear(); _sel.Add(idx); _selected = idx;
+        e.Owner = e.Team = ViewPlayer;
+
+        e.Hp = 300; e.State = 0;
+        StartRepair();
+        int erwartet300 = 29 * 300 / 30;              // = 290
+        bool preisOk = e.Hp == erwartet300;
+        sb.AppendLine($"  Preis bei 300 TP: {e.Hp} (erwartet {erwartet300} = 29*300/30): " +
+                      $"{(preisOk ? "richtig" : "FALSCH")}");
+
+        e.Hp = 50; e.State = 0;
+        StartRepair();
+        bool schrankeOk = e.Hp == 50;                 // 50 ist NICHT > 50
+        sb.AppendLine($"  Schranke bei genau 50 TP: {e.Hp} (erwartet 50, kostet nichts): " +
+                      $"{(schrankeOk ? "richtig" : "FALSCH — die Schranke ist >, nicht >=")}");
+
+        e.Hp = 51; e.State = 0;
+        StartRepair();
+        bool schranke2Ok = e.Hp == 29 * 51 / 30;      // = 49
+        sb.AppendLine($"  eins darueber (51 TP): {e.Hp} (erwartet {29 * 51 / 30}): " +
+                      $"{(schranke2Ok ? "richtig" : "FALSCH")}");
+
+        // 7. ⭐ DER UMSCHALTER (BL.4.2). 511/517 schalten aus »aktiv« heraus die
+        // Reparatur EIN — bis zum 22.08.2026 taten sie nur das Gegenteil.
+        e.Hp = Mathf.Max(2, e.HpMax / 2); e.State = 0;
+        StopRepairFromPanel();
+        bool umschaltOk = e.State is FaRepair or StRepair;
+        sb.AppendLine($"  Umschalter aus »aktiv«: Zustand {e.State}: " +
+                      $"{(umschaltOk ? "schaltet EIN, richtig" : "bleibt aus — der Umschalter fehlt")}");
+        e.State = 0;
+
         _selected = merk;
-        sb.Append(heilOk && startOk && stopOk && fremdOk && zahlOk ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        bool alles = heilOk && startOk && stopOk && fremdOk && zahlOk
+                     && preisOk && schrankeOk && schranke2Ok && umschaltOk;
+        sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }
 
@@ -28040,12 +28170,18 @@ public partial class MapEntityLayer : Node2D
         // Videopunkte, im Spiel also rund **14 x 3**, mit einem dunklen Rand.
         // Er sitzt UEBER dem Fahrzeug, nicht auf seiner Zellkante.
         //
-        // ⚠ Die FARBEN sind ebenfalls abgelesen und keine Rampe: **gruen**, und
-        // bei Schaden **gelb** — auf dem Bild tragen zwei der sechs Einheiten
-        // einen gelben, teilweise gefuellten Balken. Unsere alte Rampe
-        // (rot->gruen ueber den Fuellstand) gibt es dort nicht.
-        // ⚠ Bei WELCHEM Anteil sie umschlaegt, ist NICHT abzulesen — zwei
-        // Beispiele reichen dafuer nicht. Die Haelfte ist gewaehlt.
+        // ⭐⭐ 22.08.2026 — HIER STAND EINE MESSUNG, JETZT STEHT DER CODE.
+        // Frueher: "die Farben sind abgelesen: gruen, und bei Schaden gelb —
+        // auf dem Bild tragen zwei der sechs Einheiten einen gelben Balken.
+        // Bei WELCHEM Anteil sie umschlaegt, ist NICHT abzulesen. Die Haelfte
+        // ist gewaehlt."
+        //
+        // Der Zeichner 0x4B6F60 ist gelesen (OFFENE_FRAGEN BH). Es sind DREI
+        // Baender, nicht zwei, die Schwellen sind hart 1/2 und 1/4, und die
+        // Breite waechst mit HpMax. Die geratene Haelfte war richtig — das
+        // dritte Band hatte auf dem Bild schlicht keine Einheit getragen.
+        // ⚠ Die Lehre: zwei Beispiele reichen nicht, um die ZAHL der Faelle
+        // festzustellen. Sie reichen nicht einmal, um sie zu erraten.
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
@@ -28053,12 +28189,17 @@ public partial class MapEntityLayer : Node2D
             bool sel = _sel.Contains(i);
             if (!sel && e.Hp >= e.HpMax) continue;
             float fr = Mathf.Clamp((float)e.Hp / e.HpMax, 0, 1);
-            var hb = e.Pos + new Vector2(-BarW / 2f, -BarLift);
-            DrawRect(new Rect2(hb - Vector2.One, new Vector2(BarW + 2, BarH + 2)),
+            // ⭐ Die Breite waechst mit HpMax (0x4B724C), sie ist nicht fest —
+            // und der Balken ist auf x ZENTRIERT (0x4B6F6D: x -= breite/2).
+            float bw = BarWidthOf(e.HpMax);
+            var hb = e.Pos + new Vector2(-bw / 2f, -BarLift);
+            DrawRect(new Rect2(hb - Vector2.One, new Vector2(bw + 2, BarH + 2)),
                      new Color(0, 0, 0, 0.75f));
-            DrawRect(new Rect2(hb, new Vector2(BarW * fr, BarH)),
-                     fr >= BarYellowBelow ? new Color(0.42f, 0.84f, 0.35f)
-                                          : new Color(0.95f, 0.95f, 0.18f));
+            // ⭐ Drei Baender mit den gelesenen Schwellen 1/2 und 1/4.
+            var farbe = fr >= BarGreenFrom ? BarGreen
+                      : fr >= BarYellowFrom ? BarYellow
+                      : BarRed;
+            DrawRect(new Rect2(hb, new Vector2(bw * fr, BarH)), farbe);
         }
 
         // ---- DER EINNAHMEBALKEN ueber einem Gebaeude ------------------------

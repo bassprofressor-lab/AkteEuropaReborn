@@ -220,6 +220,122 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Alle Sätze wegwerfen — der Spielstand baut sie neu auf.</summary>
     public void RailTransfersClear() => _railTransfers.Clear();
 
+    /// <summary>Wie viele Mitfahrer mit einem Zug untergegangen sind.</summary>
+    public int RailTransfersKilled;
+
+    /// <summary>
+    /// ⭐⭐ <b>Ein Gebäude verschwindet — was wird aus den Fahrten dorthin?</b>
+    /// <c>0x4CEC20(gebäudeplatz)</c>, gerufen aus <c>0x4C96D2</c>
+    /// (OFFENE_FRAGEN <b>BP.8</b>).
+    ///
+    /// <para>Das Original nimmt die Kennung des Gebäudes
+    /// (<c>byte[0xC06914 + 76·platz + 0x16]</c>; <c>0xFF</c> = keine, dann
+    /// passiert nichts), geht die <b>200 Fahrten</b> durch und trifft jede,
+    /// die gerade nicht fährt (<c>+0x2D == 0</c>) und deren <b>nächste
+    /// Station</b> (<c>+4 + +0x2C</c>) diese Kennung ist. Für jede solche:
+    /// <c>einheit_entfernen(word[f+2])</c>, dann <c>byte[f+0] = 0</c>.</para>
+    ///
+    /// <para>⚠ <b>Nur die WARTENDEN.</b> Ein Satz, der gerade auf einem Zug
+    /// sitzt (<c>+0x2D != 0</c>), wird hier übersprungen — den erwischt erst
+    /// die Zugexplosion, wenn die Linie zerfällt. Zwei verschiedene Wege für
+    /// zwei verschiedene Zustände, und beide sind gelesen.</para>
+    /// </summary>
+    /// <returns>Wie viele Fahrten daran gescheitert sind.</returns>
+    public int RailTransfersOnBuildingGone(int buildingSlot)
+    {
+        int node = NodeOfBuilding(buildingSlot);
+        if (node < 0) return 0;
+        int n = 0;
+        for (int i = _railTransfers.Count - 1; i >= 0; i--)
+        {
+            var t = _railTransfers[i];
+            if (t.Riding) continue;                       // +0x2D != 0
+            if (t.At < 0 || t.At >= t.Route.Length) continue;
+            if (t.Route[t.At] != node) continue;          // +4 + +0x2C
+            _railTransfers.RemoveAt(i);
+            n++;
+        }
+        if (n > 0)
+        {
+            RailTransfersLost += n;
+            GD.Print($"verlegen: Station {buildingSlot} ist weg — " +
+                     $"{n} wartende Fahrt(en) verloren");
+        }
+        return n;
+    }
+
+    /// <summary>
+    /// ⭐⭐ <b>DIE VERLEGTE EINHEIT STIRBT MIT DEM ZUG.</b> Gelesen am
+    /// 22.08.2026 (OFFENE_FRAGEN <b>BG.2</b>, Punkt 4 der Zugexplosion).
+    ///
+    /// <para><c>zug_vernichten</c> <c>0x4C7990</c> räumt am Ende die drei
+    /// Ladeplätze des Zuges (<c>+0x12</c>, <c>+0x14</c>, <c>+0x16</c> des
+    /// sec44-Waggonsatzes, <c>0xFFFF</c> = leer): für jeden belegten Platz
+    /// ruft es <c>einheit_entfernen</c> <c>0x410E60</c> auf die Einheit im
+    /// sec49-Satz und gibt dessen Platz frei
+    /// (<c>byte[0xBC0DD0 + 48·n] := 0</c>). <b>sec49 ist genau die Tafel der
+    /// Verlegungsfahrten</b>, die wir am 21.08.2026 gebaut haben — hier
+    /// schliesst sich der Kreis.</para>
+    ///
+    /// <para>Bei uns überlebte der Satz den Zug und hing danach an einer Fahrt,
+    /// die es nicht mehr gab.</para>
+    ///
+    /// <para>⚠ <b>Drei Plätze, nicht beliebig viele</b> — dieselbe Zahl wie
+    /// beim Zusteigen (<see cref="RailTransferSeats"/>), und sie steht an
+    /// beiden Stellen unabhängig im Code.</para>
+    /// </summary>
+    /// <returns>Wie viele Mitfahrer es erwischt hat.</returns>
+    public int RailTransfersKillOnLine(int lineSlot)
+    {
+        int n = 0;
+        for (int i = _railTransfers.Count - 1; i >= 0; i--)
+        {
+            var t = _railTransfers[i];
+            if (!t.Riding || t.Line != lineSlot) continue;
+            _railTransfers.RemoveAt(i);
+            n++;
+        }
+        RailTransfersKilled += n;
+        if (n > 0)
+            GD.Print($"verlegen: der Zug der Linie {lineSlot} ist weg — " +
+                     $"{n} verlegte Einheit(en) mit ihm");
+        return n;
+    }
+
+    /// <summary>
+    /// <b>Eine Verkehrslinie zerstören</b> — <c>0x4C7F70(linie)</c>
+    /// (OFFENE_FRAGEN <b>BO.3</b>). Sie räumt die Liniennummer aus den Knoten,
+    /// setzt <c>sec34[linie]+0x00 = 0xFF</c> (»Platz frei«) und ruft die
+    /// Zugexplosion <c>0x4C7990</c>.
+    ///
+    /// <para>⭐ <b>Damit ist auch geklärt, WOFÜR die Zugexplosion da ist:</b>
+    /// sie ist kein Kampfereignis, sondern die Folge davon, dass die Linie
+    /// unter dem Zug verschwindet.</para>
+    ///
+    /// <para>⚠⚠ <b>Zu unterscheiden vom zerschossenen Gleis.</b> Ein Treffer
+    /// auf die Strecke ruft <c>0x4C7F40</c> und setzt nur <c>Faze = 3</c> =
+    /// »ausser Betrieb« — <b>da explodiert nichts und niemand stirbt</b>. Erst
+    /// das Zerstören der Linie selbst tut das. Ich hatte das beim ersten Anlauf
+    /// verwechselt und wäre an der falschen Stelle eingestiegen.</para>
+    ///
+    /// <para>⚠ <b>Der AUSLÖSER ist unsere Folgerung, die WIRKUNG ist gelesen.</b>
+    /// Wer <c>0x4C7F70</c> ruft, ist nicht gelesen; belegt ist nur
+    /// <c>0x4B0130(knoten)</c> = »einen Bahnhof räumen«, das die Linien dieses
+    /// Knotens zerstört. Dass ein zerstörtes Endgebäude seinen Bahnhof räumt,
+    /// ist der naheliegende Schluss — aber ein Schluss.</para>
+    /// </summary>
+    public void RailLineDestroy(int lineSlot)
+    {
+        foreach (var l in _railLines)
+        {
+            if (l.Slot != lineSlot) continue;
+            RailTransfersKillOnLine(lineSlot);
+            for (int k = 0; k < 4; k++) l.Cargo[k] = 0;
+            RailClearWagons(l);
+            l.Travel = 0f;
+        }
+    }
+
     /// <summary>Einen Satz aus dem Spielstand zurückholen. ⚠ Ohne ihn wäre
     /// eine verlegte Einheit beim Speichern weg: aus dem Quelldepot heraus,
     /// im Zieldepot noch nicht.</summary>
@@ -263,11 +379,23 @@ public partial class MapEntityLayer : Node2D
     /// <b>Aussteigen</b> — Wegindex eins weiter; steht dort der Zielknoten, ist
     /// die Einheit da und geht ins Depot des Zielgebäudes.
     ///
-    /// <para>⚠ Steht das Zielgebäude nicht mehr, ist die Einheit <b>weg</b>.
-    /// Das ist UNSERE Setzung: das Original hält den Satz an einem
-    /// Gebäudeplatz, und was es bei dessen Verlust tut, ist nicht gelesen. Sie
-    /// still ins nächstbeste Depot zu legen wäre die schlechtere Erfindung —
-    /// darum wird sie gezählt und gemeldet.</para></summary>
+    /// <para>⭐⭐ <b>Steht das Zielgebäude nicht mehr, ist die Einheit weg —
+    /// und das ist seit dem 22.08.2026 GELESEN, nicht mehr unsere Setzung.</b>
+    /// Hier stand: »das Original hält den Satz an einem Gebäudeplatz, und was
+    /// es bei dessen Verlust tut, ist nicht gelesen«. Jetzt ist es gelesen:
+    /// <c>0x4CEC20(gebäudeplatz)</c> läuft, wenn ein Gebäude verschwindet
+    /// (gerufen aus <c>0x4C96D2</c>), geht alle 200 Fahrten durch und tut für
+    /// jede, deren nächstes Wegziel dieses Gebäude war, genau zwei Dinge:
+    /// <c>einheit_entfernen(word[f+2])</c> und <c>byte[f+0] = 0</c> — Einheit
+    /// löschen, Platz freigeben. Siehe OFFENE_FRAGEN <b>BP.8</b>.</para>
+    ///
+    /// <para>⚠ <b>Ein Unterschied bleibt und ist gewollt:</b> das Original
+    /// räumt <b>sofort beim Verschwinden</b> des Gebäudes auf
+    /// (<see cref="RailTransfersOnBuildingGone"/>), wir zusätzlich noch einmal
+    /// hier bei der Ankunft. Das ist ein Gürtel neben den Hosenträgern — die
+    /// Zählung <see cref="RailTransfersLost"/> darf deswegen nicht doppelt
+    /// zählen, und sie tut es nicht, weil der Satz beim ersten Mal aus der
+    /// Liste fliegt.</para></summary>
     private void RailTransferArrive(RailLine l, Entity ziel)
     {
         if (_railTransfers.Count == 0) return;
@@ -518,7 +646,26 @@ public partial class MapEntityLayer : Node2D
             // wie ein fremder Besitzer. Das Original prüft an dieser Stelle nur
             // den Besitzer — es räumt einen zerstörten Satz aber ohnehin weg,
             // und wir behalten ihn.
-            if (a == null || b == null || a.Dead || b.Dead) { l.Faze = 4; continue; }
+            //
+            // ⭐ 22.08.2026: und wer gerade AUF diesem Zug sass, geht mit unter.
+            // Das ist die gelesene Wirkung aus BG.2 — 0x4C7F70 zerstört die
+            // Linie und ruft die Zugexplosion, die ihre drei Ladeplätze räumt.
+            // Der Aufruf steht hier und nicht bei RailHit: ein zerschossenes
+            // GLEIS setzt nur Faze = 3 (»ausser Betrieb«), da stirbt niemand.
+            if (a == null || b == null || a.Dead || b.Dead)
+            {
+                if (l.Faze != 4)
+                {
+                    // Die Fahrenden gehen mit dem Zug unter (0x4C7990) …
+                    RailLineDestroy(l.Slot);
+                    // … und die WARTENDEN, deren Station gerade weggefallen
+                    // ist, raeumt 0x4CEC20 weg. Zwei Wege, zwei Zustaende.
+                    if (a is { Dead: true }) RailTransfersOnBuildingGone(a.Slot);
+                    if (b is { Dead: true }) RailTransfersOnBuildingGone(b.Slot);
+                }
+                l.Faze = 4;
+                continue;
+            }
 
             // faze 3 überspringt die Besitzerprüfung, faze 4 ist die tote Linie
             if (l.Faze == 4)

@@ -122,6 +122,70 @@ public static class CommandOp
     public const short Move = 3;
 
     /// <summary>
+    /// <b>11 = ANGREIFEN.</b> ⭐⭐ Gelesen am 22.08.2026 (OFFENE_FRAGEN BK.2);
+    /// bis dahin trug der Angriff bei uns die eigene Nummer 2001.
+    ///
+    /// <para><b>Der Absender</b> ist <c>0x4353F0(ziel)</c>, gerufen aus
+    /// <c>0x437060</c> @<c>0x43743B</c>. <b>Der Behandler</b> ist Eintrag 11
+    /// der Sprungtafel <c>0x4C4D54</c> → <c>0x4C2DDD</c>, und der reicht nach
+    /// zwei Wächtern (<c>UKOL 22</c> und <c>23</c> nehmen keinen Angriff an)
+    /// unverändert an <c>order()</c> <c>0x410220</c> durch — dieselbe Routine,
+    /// die <c>CAMPAIGN_RE.md</c> §10.2 längst vollständig liest.
+    /// <b>Busbefehl 11 ist also kein anderer Weg, sondern derselbe</b>, nur
+    /// über den Bus statt direkt.</para>
+    ///
+    /// <para><b>Der Satz:</b> <c>P1</c> = Einheit, <c>P2</c>/<c>P3</c> = die
+    /// Zelle, auf die diese eine Einheit fahren soll, <c>P4</c> =
+    /// <c>UTOK_NA</c> (das eigentliche Ziel, siehe unten), <c>P5</c> = die
+    /// Zeile, wenn das Ziel eine blosse Bodenzelle ist.</para>
+    ///
+    /// <para>⭐⭐ <b><c>UTOK_NA</c> — der Griffraum, und er ist jetzt
+    /// vollständig.</b> <c>CAMPAIGN_RE.md</c> stand mit »⚠ Ungelesen bleibt
+    /// <c>UTOK_NA</c>… kein Gegenbeispiel, also keine Deutung«; der Absender
+    /// nennt alle vier Bänder:</para>
+    /// <list type="table">
+    ///   <item><c>0 … 7999</c> — eine <b>Einheit</b> (@0x435403)</item>
+    ///   <item><c>30000 + Spalte</c>, dazu P5 = Zeile — eine blosse
+    ///         <b>Bodenzelle</b> (@0x435495)</item>
+    ///   <item><c>40100 … 40249</c> — <b>Brücke/Mole</b> (sec17) oder
+    ///         <b>Rampe</b> (sec21): der sec20-Wert plus 40 000 (@0x435487).
+    ///         Im Maschinencode steht <c>sub bx, 0x63C0</c>, was modulo 65536
+    ///         dasselbe ist wie <c>+ 40000</c>.</item>
+    ///   <item><c>60000 … 60299</c> — ein <b>Gebäude</b> (@0x435465)</item>
+    /// </list>
+    ///
+    /// <para>⭐⭐ <b>Die Gegenprobe schliesst auf die Zahl genau.</b> Der
+    /// Behandler <c>order()</c> übernimmt <c>arg4</c> nach <c>+0x38</c>
+    /// <b>nur, wenn arg3 in [30000, 30256) liegt</b> — und der Absender
+    /// schreibt für ein Bodenziel <c>P4 = Spalte + 30000</c> mit Spalte ≤ 255.
+    /// Das ist exakt dieses Fenster. Zwei Seiten, die nichts voneinander
+    /// wissen, und eine 256 breite Schranke, die auf den Wertebereich passt.
+    /// Damit ist nebenbei <c>+0x38</c> gedeutet: es ist die Zeile des
+    /// Bodenziels.</para>
+    ///
+    /// <para>⚠ <b>Eine Stelle des Originals ist unsauber, und wir bauen sie
+    /// NICHT nach.</b> Bei einem Nicht-Einheiten-Ziel springt <c>0x435401</c>
+    /// an dem Block vorbei, der die Zielkoordinaten füllt — die beiden
+    /// Stapelbytes bleiben <b>uninitialisiert</b> und gehen trotzdem in P2/P3
+    /// ein. Das schadet dort nichts, weil der Behandler sie nur durchreicht
+    /// und der Angriff über <c>UTOK_NA</c> läuft. Uninitialisierten Stapel
+    /// nachzubauen ist aber keine Originaltreue, sondern Unsinn: wir schreiben
+    /// dort die Zielzelle. ⚠ Das ist eine bewusste Abweichung und die einzige
+    /// in diesem Befehl.</para>
+    ///
+    /// <para>⚠ <b>P6 ist UNSERE ZUGABE</b> (»anreihen«), genau wie P4 beim
+    /// <see cref="Move"/>. Das Original kennt kein Anreihen von
+    /// Angriffsbefehlen.</para>
+    ///
+    /// <para>⭐ <b>Was der Umbau bringt:</b> unter 2001 ging der Angriff weder
+    /// in die Wiederholung (<see cref="ReplayBelow"/> = 800) noch über die
+    /// Leitung (<see cref="RelayUpTo"/> = 1000) — <see cref="GoesToReplay"/>
+    /// und <see cref="IsRelayed"/> sagten beide nein. Mit der 11 sagt beides
+    /// ja, und der Angriff ist <b>gleichlauffähig</b>.</para>
+    /// </summary>
+    public const short Attack = 11;
+
+    /// <summary>
     /// <b>508 = SCHIFF BAUEN.</b> P1 = Spieler, P2 = Entwurfsnummer, P3 =
     /// <c>cis_typ</c> des Hafens. Der Knopf @0x44A35C schreibt den Satz, der
     /// Behandler @0x4B2B20 sucht einen freien Platz und füllt die Einheit
@@ -336,8 +400,17 @@ public static class CommandOp
     /// </summary>
     public const short OursFirst = 2000;
 
-    /// <summary>⚠ UNSERE SETZUNG: P1 = Einheit, P2 = Zielnummer, P3 = 1 wenn
-    /// angereiht, P4/P5 = Zelle des Ziels beim Anreihen.</summary>
+    /// <summary>
+    /// ⚠⚠ <b>AUSGEDIENT seit dem 22.08.2026 — benutze <see cref="Attack"/>
+    /// = 11.</b> Der Angriff hat im Original eine Nummer, sie war nur nicht
+    /// gelesen; siehe die Herleitung bei <see cref="Attack"/>.
+    ///
+    /// <para>Die Nummer steht hier nur noch, damit <b>alte Spielstände und
+    /// Wiederholungen</b> weiter laufen: <c>CommandBridge</c> nimmt sie beim
+    /// Ausführen an und deutet ihren alten Satz (P1 = Einheit, P2 = Zielnummer,
+    /// P3 = anreihen, P4/P5 = Zielzelle). <b>Abgesetzt wird sie nirgends
+    /// mehr.</b> Wenn nichts Altes mehr geladen werden muss, kann sie
+    /// weg.</para></summary>
     public const short OursAttack = 2001;
 
     /// <summary>⚠ UNSERE SETZUNG: P1 = Einheit. »Anhalten« für eine Einheit.
@@ -393,7 +466,8 @@ public static class CommandOp
         PlaceBuilding => "Bauplatz setzen (Gebaeude-Techniker)",
         PlaceGenerator => "Bauplatz setzen (Generatorenbauer)",
         Seed => "Zufallskeim",
-        OursAttack => "Angreifen (unsere Setzung)",
+        Attack => "Angreifen",
+        OursAttack => "Angreifen (ausgediente eigene Nummer)",
         OursStop => "Anhalten (unsere Setzung)",
         _ when op >= UnitFirst && op <= UnitLast => "Einheitenbefehl (Bereich A, unbenannt)",
         _ when op >= BuildFirst && op <= BuildLast => "Bau/Kauf (Bereich B, unbenannt)",
