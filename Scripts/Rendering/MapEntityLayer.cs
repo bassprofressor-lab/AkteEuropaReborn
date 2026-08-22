@@ -4485,8 +4485,15 @@ public partial class MapEntityLayer : Node2D
         // aufgehen: das Aufmachen setzt das Ereignisbyte, und genau darauf
         // pruefen drei der 34 Tore. Andersherum kaeme der Hinweis erst beim
         // naechsten Anklicken — einen Klick zu spaet.
-        var fart = Fenstergebaeude() is { } fg ? FensterArtVon(fg) : null;
-        if (fart != null) OnBuildingWindow?.Invoke(fart.Value);
+        // ⭐ 22.08.2026 — mit dem GEBAEUDEPLATZ als Kennung. Gebaeudefenster
+        // sind OBJEKTfenster (BM.2): es gibt sie je Objekt einmal, nicht je Art
+        // einmal. Das Original vergleicht dafuer word[+0x0C] mit der Kennung,
+        // die der Anleger dort abgelegt hat (nachgesehen an 0x459851 fuer Art 20
+        // und 0x459E91 fuer Art 23).
+        var fg2 = Fenstergebaeude();
+        var fart = fg2 != null ? FensterArtVon(fg2) : null;
+        if (fart != null) OnBuildingWindow?.Invoke(fart.Value, fg2!.Slot,
+                                                  OriginalFensterArt(fg2.BType));
         KontexthilfePruefen();
     }
 
@@ -13337,6 +13344,44 @@ public partial class MapEntityLayer : Node2D
         };
     }
 
+    /// <summary>
+    /// ⭐⭐ <b>Die vollständige Tafel »Gebäudeart → Fensterart«</b> des Originals
+    /// (22.08.2026, OFFENE_FRAGEN <b>BM.3</b>).
+    ///
+    /// <para><c>0x43710B</c> liest das angewählte Objekt; ist es ≥ 60 000, ist
+    /// es ein Gebäude, und aus seiner Art wählt die <b>17-armige Sprungtafel
+    /// <c>0x4379F0</c></b> den Öffner. Hier stehen alle siebzehn Zeilen — auch
+    /// die, für die wir noch kein Fenster haben. ⚠ Eine Tafel, die nur die drei
+    /// gebauten Zeilen führt, sieht vollständig aus und ist es nicht.</para>
+    ///
+    /// <para>⭐ <b>Das Nullmodell kam von aussen:</b> Abschnitt AE-2 hatte aus
+    /// dem <i>Kampagnenvorspann</i> drei Ereignisbytes gedeutet (2 = Bahnhof,
+    /// 5 = Hangar, 18 = Mine) — alle drei fallen exakt mit dieser Tafel
+    /// zusammen, obwohl sie aus einem ganz anderen Teil des Programms stammen.</para>
+    ///
+    /// <para>⭐ Nebenertrag: Gebäudeart <b>5 = Depot</b>, <b>7 = Generator</b>,
+    /// <b>14 = Nachschubposten</b> — drei Arten, die <c>gebaeudename</c>
+    /// namenlos lässt und die hier zum ersten Mal einen Namen bekommen.</para>
+    /// </summary>
+    /// <returns>Die Fensterart des Originals, oder 0 wenn diese Gebäudeart
+    /// keines öffnet (Arten 8 und 16 — die Sprungtafel führt sie auf den
+    /// Leerarm <c>0x43798A</c>).</returns>
+    public static int OriginalFensterArt(int bType) => bType switch
+    {
+        1 => 6,               // Basis
+        2 or 3 or 4 => 8,     // Waffen-, Fahrwerk-, Spezialfabrik — EIN Fenster
+        5 => 23,              // Depot
+        6 or 12 => 2,         // Bahnhof und Feldbahnhof — EIN Fenster
+        7 => 20,              // Generator
+        9 => 5,               // Flughafen / Hangar
+        10 or 15 => 18,       // Rohstoff-Mine, beide Arten
+        11 => 11,             // Hafen / Werft
+        13 => 21,             // ⚠ ausserhalb des gelesenen Reviers
+        14 => 31,             // Nachschubposten
+        17 => 0,              // ⚠ Oeffner 0x443CF0, Fensterart ungelesen
+        _ => 0,               // 8 und 16 gehen auf den Leerarm
+    };
+
     /// <summary>Das angewaehlte Gebaeude, wenn es eines der drei ist und dem
     /// Betrachter gehoert. ⚠ Eigenes Gebaeude: das Original zeigt diese
     /// Fenster nur fuer eigene Bauten — sie enthalten Knoepfe.</summary>
@@ -13395,7 +13440,9 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Wird gerufen, sobald ein Gebaeude angewaehlt wird, fuer das es
     /// eines der drei Fenster gibt. Der Zeichner haengt sich hier ein.</summary>
-    public System.Action<UI.BuildingWindow.Art>? OnBuildingWindow;
+    /// <param>Die Fensterart unseres Zeichners, der GEBAEUDEPLATZ als Kennung,
+    /// und die Fensterart des ORIGINALS (fuer die Verwaltung).</param>
+    public System.Action<UI.BuildingWindow.Art, int, int>? OnBuildingWindow;
 
     private Entity? Producer()
     {

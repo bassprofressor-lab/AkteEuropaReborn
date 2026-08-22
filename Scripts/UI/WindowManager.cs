@@ -583,6 +583,32 @@ public static partial class WindowManagerCheck
         Sag($"Gegenprobe: Art 19 hat keine feste Lage -> bleibt ({fp.X:0},{fp.Y:0})",
             !angefasst && Mathf.Abs(fp.X - 111) < 0.5f && Mathf.Abs(fp.Y - 222) < 0.5f);
 
+        // 9. ⭐⭐ DIE TAFEL »GEBAEUDEART -> FENSTERART« (BM.3), alle 17 Zeilen.
+        // ⚠ Geprueft wird die GANZE Tafel, nicht die drei Zeilen, fuer die wir
+        // ein Fenster haben — eine Tafel, die nur die gebauten Zeilen fuehrt,
+        // sieht vollstaendig aus und ist es nicht.
+        (int Bau, int Fenster)[] tafel =
+        {
+            (1, 6), (2, 8), (3, 8), (4, 8), (5, 23), (6, 2), (7, 20), (8, 0),
+            (9, 5), (10, 18), (11, 11), (12, 2), (13, 21), (14, 31), (15, 18),
+            (16, 0), (17, 0),
+        };
+        int falsch = 0;
+        foreach (var (bau, soll) in tafel)
+            if (Rendering.MapEntityLayer.OriginalFensterArt(bau) != soll) falsch++;
+        Sag($"Tafel Gebaeudeart -> Fensterart: {tafel.Length - falsch} von "
+            + $"{tafel.Length} Zeilen treffen", falsch == 0);
+
+        // Gegenprobe: die zwei Leerarme geben WIRKLICH nichts, und die drei
+        // Paare teilen sich WIRKLICH ein Fenster.
+        bool paare = Rendering.MapEntityLayer.OriginalFensterArt(2)
+                  == Rendering.MapEntityLayer.OriginalFensterArt(4)
+                  && Rendering.MapEntityLayer.OriginalFensterArt(6)
+                  == Rendering.MapEntityLayer.OriginalFensterArt(12)
+                  && Rendering.MapEntityLayer.OriginalFensterArt(10)
+                  == Rendering.MapEntityLayer.OriginalFensterArt(15);
+        Sag("die drei Paare teilen sich je ein Fenster (2/3/4, 6/12, 10/15)", paare);
+
         WindowManager.Leeren();
         foreach (var knoten in muell) knoten.Free();
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");

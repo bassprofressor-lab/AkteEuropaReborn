@@ -3187,7 +3187,22 @@ public partial class MapViewer : Node2D
         // eine Mine ANHAELT, hat die Bytesuche in beiden EXE nicht gefunden —
         // genauso wenig wie den, der die Basis in "vergroessern" bringt. Der
         // Knopf steht darum gesperrt da und sagt es im Hinweistext.
-        _entities.OnBuildingWindow = art => _gebaeudeFenster.Open(art);
+        _entities.OnBuildingWindow = (art, platz, urArt) =>
+        {
+            // ⭐ Ueber die Fensterverwaltung (BM.2): je Gebaeude eines. Ein
+            // zweiter Klick auf DASSELBE Gebaeude tut nichts und holt es nur
+            // nach vorn; ein Klick auf ein anderes oeffnet ein eigenes.
+            // ⚠ Unser Zeichner kann derzeit nur EIN Gebaeudefenster zeigen —
+            // die Verwaltung fuehrt die Liste trotzdem richtig, damit der Tag,
+            // an dem er mehrere kann, keine zweite Baustelle wird.
+            int schluessel = urArt > 0 ? urArt : UI.WindowManager.UnsereErste + 2;
+            var offen = UI.WindowManager.Offen(schluessel, platz);
+            if (offen != null) { UI.WindowManager.NachVorn(offen); return; }
+            // Ein Fenster derselben Art fuer ein ANDERES Gebaeude weicht.
+            UI.WindowManager.Wegnehmen(UI.WindowManager.Offen(schluessel));
+            UI.WindowManager.Oeffnen(schluessel, _gebaeudeFenster, platz);
+            _gebaeudeFenster.Open(art);
+        };
         _baseWindow.Rows = _entities.BuildPanelRows;
         _baseWindow.TitleLine = _entities.BuildPanelTitle;
         // Name, Energie und Zustand des gewaehlten Gebaeudes — damit in der
