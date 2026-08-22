@@ -115,6 +115,82 @@ public static class WindowManager
     /// </summary>
     public static bool BleibtHinten(int art) => art is 1 or 2 or 44;
 
+    /// <summary>
+    /// ⭐⭐ <b>Ein Fenster in den Schirm zwingen</b> — <c>0x441190</c>
+    /// (OFFENE_FRAGEN <b>BL.8.2</b>), <b>52 Rufstellen</b>.
+    ///
+    /// <code>
+    /// wenn art in {9, 0x23, 0x30}:  nichts tun
+    /// wenn x &lt; 0:            x = 0
+    /// wenn x + b &gt;= breite:  x = breite − b − 1
+    /// wenn y &lt; 0:            y = 0
+    /// wenn y + h &gt;= hoehe:   y = hoehe − h − 1
+    /// </code>
+    ///
+    /// <para>⚠ Die drei Ausnahmen sind <b>9</b> (Bedienfeld), <b>35</b>
+    /// (Hauptmenü) und <b>48</b> (zweites Hauptmenü). Wer sie mitzwingt,
+    /// verschiebt Panel und Hauptmenü; wer den Zwang ganz weglässt, hat Fenster,
+    /// die halb aus dem Bild ragen.</para>
+    ///
+    /// <para>⭐⭐ <b>Und hier sitzt der zehnte Auslieferungsunterschied.</b>
+    /// C prüft <c>cmp al,0x30</c> (@0x4411BE), F nicht — <c>0x30 = 48</c> ist
+    /// genau die Fensterart, die es in F nicht gibt. Das ist die <b>fünfte</b>
+    /// unabhängige Zählung dafür, neben Anlegerzahl, Rahmenzeichner-Rufern,
+    /// Knopfroutine-Rufern und der Sprungtafel.</para>
+    ///
+    /// <para>⚠ <b>Methodische Warnung, hier gelernt:</b> <c>cfind.py --diff</c>
+    /// meldet an dieser Stelle »delete <c>cmp al,9</c>« — weil <c>difflib</c>
+    /// bei drei gleichgeformten Paaren das <b>erste</b> wegwirft. Die Konstanten
+    /// sagen etwas anderes: <c>9</c> und <c>0x23</c> stehen in beiden,
+    /// <c>0x30</c> nur in C. <b>Die Blockstelle eines Textvergleichs ist keine
+    /// inhaltliche Aussage.</b></para>
+    /// </summary>
+    public static bool ZwangAusgenommen(int art) => art is 9 or 35 or 48;
+
+    public static void InDenSchirm(Fenster? f, Vector2 schirm)
+    {
+        if (f?.Knoten is not Control c) return;
+        if (ZwangAusgenommen(f.Art)) return;
+        var p = c.Position;
+        var g = c.Size;
+        if (p.X < 0) p.X = 0;
+        if (p.X + g.X >= schirm.X) p.X = schirm.X - g.X - 1;
+        if (p.Y < 0) p.Y = 0;
+        if (p.Y + g.Y >= schirm.Y) p.Y = schirm.Y - g.Y - 1;
+        c.Position = p;
+    }
+
+    /// <summary>
+    /// ⭐ <b>Die festen Lagen</b> (OFFENE_FRAGEN <b>BL</b>, Anlegertafel).
+    /// Nicht jedes Fenster darf hin, wo es will:
+    /// <list type="bullet">
+    ///   <item><b>35</b> Hauptmenü: <c>x = 25</c> fest, <c>y = Höhe − h − 20</c>
+    ///   — links UNTEN.</item>
+    ///   <item><b>40</b> »Pause«, <b>42</b> »Warten auf…«, <b>34</b>
+    ///   Einstellungen: x mittig, <c>y = Höhe / 5</c>.</item>
+    ///   <item><b>37</b> Gefechtsvorbereitung: x und y mittig.</item>
+    ///   <item><b>46</b>: fest auf <c>(0,0)</c>.</item>
+    /// </list>
+    /// <para>⚠ <c>y = Höhe/5</c> ist keine Mitte und sieht auf einem hohen
+    /// Schirm auch nicht danach aus. Es steht so da, dreimal.</para>
+    /// </summary>
+    /// <returns>false, wenn diese Art keine feste Lage hat.</returns>
+    public static bool FesteLage(Fenster? f, Vector2 schirm)
+    {
+        if (f?.Knoten is not Control c) return false;
+        var g = c.Size;
+        switch (f.Art)
+        {
+            case 35: c.Position = new Vector2(25, schirm.Y - g.Y - 20); return true;
+            case 34:
+            case 40:
+            case 42: c.Position = new Vector2((schirm.X - g.X) / 2f, schirm.Y / 5f); return true;
+            case 37: c.Position = (schirm - g) / 2f; return true;
+            case 46: c.Position = Vector2.Zero; return true;
+            default: return false;
+        }
+    }
+
     public sealed class Fenster
     {
         /// <summary>Die Fensterart, <c>byte[+0x00]</c> im Original.</summary>
@@ -207,7 +283,18 @@ public static class WindowManager
         // 2. HINTEN in die Liste (0x441270).
         _liste.Add(f);
 
-        // 3. Und nach VORN holen — ausser den vier Arten, die es nicht tun.
+        // 3. Lage: erst die feste, wenn die Art eine hat, dann in den Schirm
+        //    zwingen (0x441190). ⚠ Die Reihenfolge ist die des Originals --
+        //    der Anleger setzt die Lage, DANACH kommt der Zwang. Andersherum
+        //    wuerde eine feste Lage den Zwang wieder aufheben.
+        var schirm = Schirmmass();
+        if (schirm.X > 0)
+        {
+            FesteLage(f, schirm);
+            InDenSchirm(f, schirm);
+        }
+
+        // 4. Und nach VORN holen — ausser den vier Arten, die es nicht tun.
         if (!BleibtHinten(art)) NachVorn(f);
 
         Blende(f);
@@ -266,6 +353,18 @@ public static class WindowManager
         if (f.Knoten is not Control c) return;
         c.Visible = false;
         c.Scale = Vector2.One;
+    }
+
+    /// <summary>Das Schirmmass. ⚠ Im Original sind es ZWEI Globale mit
+    /// demselben Wert: die Fensterschicht liest <c>dword[0xB136B0]</c>, die
+    /// Zeichenschicht <c>dword[0x5387C8]</c> — beide schreibt <c>0x4B6B1C</c>
+    /// unmittelbar hinter <c>SetDisplayMode</c>. Bei uns ist es der
+    /// Sichtbereich.</summary>
+    private static Vector2 Schirmmass()
+    {
+        var baum = (SceneTree?)Engine.GetMainLoop();
+        var sicht = baum?.Root?.GetViewport();
+        return sicht == null ? Vector2.Zero : sicht.GetVisibleRect().Size;
     }
 
     private static int _takt;
@@ -425,7 +524,67 @@ public static partial class WindowManagerCheck
             + $"{WindowManager.MaxFenster})",
             WindowManager.Anzahl == WindowManager.MaxFenster);
 
+        // 7. ⭐ DER BILDSCHIRMZWANG und seine drei Ausnahmen (BL.8.2).
         WindowManager.Leeren();
+        var schirm = new Godot.Vector2(640, 480);
+        // ⚠ Die Knoten dieses Laufs gehoeren freigegeben — sonst meldet Godot
+        // beim Beenden "RIDs of type CanvasItem were leaked", und eine solche
+        // Zeile im Protokoll gewoehnt man sich an, bis sie einmal echt ist.
+        var muell = new List<Godot.Control>();
+        Godot.Control Kn(float x, float y, float b, float h)
+        {
+            var c = new Godot.Control { Position = new Godot.Vector2(x, y) };
+            c.Size = new Godot.Vector2(b, h);
+            muell.Add(c);
+            return c;
+        }
+
+        var raus = WindowManager.Oeffnen(19, Kn(600, 460, 200, 100));
+        WindowManager.InDenSchirm(raus, schirm);
+        var pos = ((Godot.Control)raus!.Knoten!).Position;
+        Sag($"Art 19 bei (600,460) mit 200x100 -> ({pos.X:0},{pos.Y:0}), "
+            + "erwartet (439,379)",
+            Mathf.Abs(pos.X - 439) < 0.5f && Mathf.Abs(pos.Y - 379) < 0.5f);
+
+        foreach (int art in new[] { 9, 35, 48 })
+        {
+            WindowManager.Leeren();
+            var frei = WindowManager.Oeffnen(art, Kn(600, 460, 200, 100));
+            ((Godot.Control)frei!.Knoten!).Position = new Godot.Vector2(600, 460);
+            WindowManager.InDenSchirm(frei, schirm);
+            var q = ((Godot.Control)frei.Knoten!).Position;
+            Sag($"Art {art} ist ausgenommen -> bleibt bei ({q.X:0},{q.Y:0})",
+                Mathf.Abs(q.X - 600) < 0.5f && Mathf.Abs(q.Y - 460) < 0.5f);
+        }
+
+        // 8. ⭐ DIE FESTEN LAGEN
+        WindowManager.Leeren();
+        var haupt = WindowManager.Oeffnen(35, Kn(0, 0, 200, 240));
+        WindowManager.FesteLage(haupt, schirm);
+        var hp = ((Godot.Control)haupt!.Knoten!).Position;
+        Sag($"Hauptmenue (35) -> ({hp.X:0},{hp.Y:0}), erwartet (25,220) "
+            + "= x fest 25, y = 480-240-20",
+            Mathf.Abs(hp.X - 25) < 0.5f && Mathf.Abs(hp.Y - 220) < 0.5f);
+
+        WindowManager.Leeren();
+        var pause = WindowManager.Oeffnen(40, Kn(0, 0, 180, 60));
+        WindowManager.FesteLage(pause, schirm);
+        var pp = ((Godot.Control)pause!.Knoten!).Position;
+        Sag($"Pause (40) -> ({pp.X:0},{pp.Y:0}), erwartet (230,96) "
+            + "= x mittig, y = Hoehe/5",
+            Mathf.Abs(pp.X - 230) < 0.5f && Mathf.Abs(pp.Y - 96) < 0.5f);
+
+        // Gegenprobe: eine Art OHNE feste Lage wird nicht angefasst
+        WindowManager.Leeren();
+        var frei2 = WindowManager.Oeffnen(19, Kn(111, 222, 50, 50));
+        ((Godot.Control)frei2!.Knoten!).Position = new Godot.Vector2(111, 222);
+        bool angefasst = WindowManager.FesteLage(frei2, schirm);
+        var fp = ((Godot.Control)frei2.Knoten!).Position;
+        Sag($"Gegenprobe: Art 19 hat keine feste Lage -> bleibt ({fp.X:0},{fp.Y:0})",
+            !angefasst && Mathf.Abs(fp.X - 111) < 0.5f && Mathf.Abs(fp.Y - 222) < 0.5f);
+
+        WindowManager.Leeren();
+        foreach (var knoten in muell) knoten.Free();
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }
