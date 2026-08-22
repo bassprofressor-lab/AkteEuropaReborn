@@ -8968,14 +8968,18 @@ nirgends bei uns stand (`funktionen.py --liste`): `0x4557A0`, Marke
 
 | C | F | Byte | Rufer | Was sie ist |
 |---|---|---:|---:|---|
-| ⭐ `0x4557A0` | — | 161 | 1 (`0x415A21` über Thunk `0x401983`) | **HELPG.DAT + ENCYCLOG.DAT laden**, beim Programmstart |
-| ⭐⭐ `0x455870` | — | 787 | 3 (`0x44BAFB`, `0x44CD89`, `0x44DBC4`, alle über Thunk `0x40173A`) | **die Freischalttafel der Enzyklopädie füllen** |
+| ⭐ `0x4557A0` | ⭐ `0x454440` | 161 | 1 (`0x415A21` über Thunk `0x401983`) | **HELPG.DAT + ENCYCLOG.DAT laden**, beim Programmstart |
+| ⭐⭐ `0x455870` | ⭐ `0x454510` | 787 | 3 (`0x44BAFB`, `0x44CD89`, `0x44DBC4`, alle über Thunk `0x40173A`) | **die Freischalttafel der Enzyklopädie füllen** |
 | `0x44C51B` | — | — | — | Enzyklopädie **eine Seite zurück** |
 | `0x44C5A0` | — | — | — | Enzyklopädie **eine Seite vor** |
 
-⚠ Die F-Adressen sind **nicht** nachgeschlagen — dieser Abschnitt ist an C
-gelesen. Nach Regel »nur was BEIDE liefern, gilt als gelesen« ist er damit
-**ein Befund unter Vorbehalt**, kein abgeschlossener.
+⭐ **Nachgetragen am 22.08.2026: die zwei F-Adressen stehen, und zwar BELEGT
+statt gerechnet.** Beide meldet `aekernel-tools/cfind.py` als **eindeutig** —
+der Rumpf ist Befehl für Befehl gleich, und es gibt in F genau **eine** Funktion
+dieser Form. Damit ist der Vorbehalt für diesen Abschnitt **aufgehoben**: die
+Enzyklopädie schaltet in beiden Auslieferungen gleich frei.
+⚠ Der `.text`-Abstand ist hier **`−0x1360`** und hat mit dem `.data`-Abstand
+`0xFA0` nichts zu tun. **Wer F-Adressen rechnet, rechnet falsch.**
 
 ### BF.1 Der Lader `0x4557A0`
 
@@ -9122,14 +9126,28 @@ Angesetzt an der **grössten ungelesenen Funktion** des Programms (`0x4C7990`,
 
 ### BG.0 Adresstafel
 
-| C | Byte | Was |
-|---|---:|---|
-| ⭐⭐ `0x4C7990` | 1456 | **den Zug vernichten** — Animationen, Trümmer, Ladung, Räumen |
-| `0x435A40` | 171 | **einen sec42-Satz anlegen** (laufende Animation) |
-| `0x4AD520` | — | `fly_part` — der Trümmerstreuer (sec112, AL.1) |
-| `0x41D0E0` | 28 | `terrain_at` = Höhenbyte der Zelle (schon gelesen, BC) |
-| `0x410E60` | — | **die Einheit entfernen** (schon gelesen) |
-| `0x4D6C70` | — | MSVC-`rand()` (schon gelesen, über Thunk `0x4010BE`→`0x43B750`) |
+| C | F | Byte | Was |
+|---|---|---:|---|
+| ⭐⭐ `0x4C7990` | ⚠ `0x4C7540` | 1456 | **den Zug vernichten** — Animationen, Trümmer, Ladung, Räumen |
+| `0x435A40` | ⭐ `0x434B80` | 171 | **einen sec42-Satz anlegen** (laufende Animation) |
+| `0x4AD520` | ⭐ `0x4ACE50` | — | `fly_part` — der Trümmerstreuer (sec112, AL.1) |
+| `0x41D0E0` | ⚠ strittig | 28 | `terrain_at` = Höhenbyte der Zelle (schon gelesen, BC) |
+| `0x410E60` | ⭐ `0x410C30` | — | **die Einheit entfernen** (schon gelesen) |
+| `0x4D6C70` | — | — | MSVC-`rand()` (schon gelesen, über Thunk `0x4010BE`→`0x43B750`) |
+
+⭐ **F nachgetragen am 22.08.2026** mit `aekernel-tools/cfind.py`. Die drei
+Helfer sind **eindeutig** — Befehl für Befehl gleich.
+⚠⚠ **`0x4C7990` selbst ist es NICHT.** Der beste F-Kandidat `0x4C7540` trifft zu
+**99 %**, nicht zu 100. Das ist zu wenig für »gleich« und zu viel für »eine
+andere Funktion«. **Der Vorbehalt für diesen Abschnitt bleibt stehen** — er hat
+jetzt aber eine Adresse: die zwei Fassungen der Zugvernichtung gehören
+nebeneinander gelesen. ⚠ Gegenrede, die zuerst auszuräumen ist: bricht die
+Zerlegung im Rest der Funktion ab, weicht der Schwanz zufällig ab, und die 99 %
+wären ein Werkzeugartefakt.
+⚠ **`0x41D0E0` (`terrain_at`) ist ein eigener Streitfall.** `cfind` meldet drei
+gleich geformte F-Kandidaten und wählt `0x41C250`; in Abschnitt **BC** steht
+dagegen `0x41C2A0`. **Einer von beiden ist falsch**, und bei einer der
+meistgerufenen Funktionen des Spiels ist das keine Kleinigkeit. Offen.
 
 **Rufer** (alle über Thunk `0x401D34`): `0x4B0F6C`, `0x4C73A9`, `0x4C7FB7`.
 
@@ -9251,12 +9269,33 @@ Zeichenfläche des Originals mit aufgedeckt.
 
 ### BH.0 Adresstafel
 
-| C | Byte | Rufer | Was |
-|---|---:|---:|---|
-| ⭐ `0x4B6F60` | 656 | 17 | **einen Balken zeichnen** (Rahmen + Füllung) |
-| ⭐ `0x4B71F0` | — | — | **alle Balken einer Einheit** — Verteiler über die Gattung |
-| ⭐ `0x4AC000` | 42 | — | **die Zeichenfläche setzen** (3 Schreibstellen, sonst nur Leser) |
-| `0x4B9400`± | — | — | der **Ladebalken** eines Umschlagsatzes (sec48) |
+| C | F | Byte | Rufer | Was |
+|---|---|---:|---:|---|
+| ⭐ `0x4B6F60` | ⚠⚠ `0x4B6890` | 656 | 17 | **einen Balken zeichnen** (Rahmen + Füllung) |
+| ⭐ `0x4B71F0` | ⚠ `0x4B6B20` | — | — | **alle Balken einer Einheit** — Verteiler über die Gattung |
+| ⭐ `0x4AC000` | ⭐ `0x4AB930` | 42 | — | **die Zeichenfläche setzen** (3 Schreibstellen, sonst nur Leser) |
+| `0x4B9400`± | — | — | — | der **Ladebalken** eines Umschlagsatzes (sec48) |
+
+⭐ **F nachgetragen am 22.08.2026** mit `aekernel-tools/cfind.py`. `0x4AC000` ist
+**eindeutig** — die Zeichenfläche wird in beiden Bauten gleich gesetzt, und
+damit steht der Kniff mit der vorverschobenen Basis für beide.
+
+⚠⚠ **Die zwei Balkenfunktionen weichen dagegen ab, und die eine deutlich.**
+`0x4B71F0` trifft zu 96 %, **`0x4B6F60` nur zu 89 %** — bei 127 Befehlen sind
+das rund **vierzehn abweichende Befehle**. Zu viel für Zufall.
+**Verdacht auf einen zwölften Auslieferungsunterschied, ausgerechnet an den
+Balken, die der Spieler ständig sieht.** Der Vorbehalt bleibt stehen, bis beide
+Fassungen nebeneinander gelesen sind.
+⚠ Gegenrede zuerst ausräumen: bricht die Zerlegung im Rest ab, weicht der
+Schwanz zufällig ab, und 89 % wären ein Werkzeugartefakt.
+
+⭐ **Nebenbefund aus derselben Erhebung: der `.text`-Abstand ist REGIONAL.**
+An zwölf Paaren gemessen: `−0x1D0` bei `0x40Exxx`, `−0x230` bei `0x410xxx`,
+`−0xEC0` bei `0x43xxxx`, `−0x1360` bei `0x455xxx`, `−0x6D0` bei
+`0x4Axxxx…0x4Bxxxx`, `−0x540` bei `0x4C1xxx`, `−0x450` bei `0x4C7xxx…0x4C9xxx`.
+**Es gibt keinen einen Abstand.** Damit ist auch begründet, warum die alte
+Handarbeit »Basis + 0xFA0« zweimal danebenlag: `0xFA0` ist der `.data`-Abstand
+und im `.text` schlicht falsch.
 
 **Zeichenfläche** — die drei Globalen, bisher nirgends bei uns:
 
