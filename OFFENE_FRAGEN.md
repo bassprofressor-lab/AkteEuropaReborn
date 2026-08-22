@@ -8301,7 +8301,7 @@ Stelle für Stelle deckungsgleich (Abstand durchgehend `0x6D0`).
 | **Eintragstafel** | `0xAB8068` | `0xAB70C8` |
 | **Zählertafel** (Korbfüllstände) | `0xAB93F0` | `0xAB8450` |
 | Ende der Zählertafel | `0xB0EBAC` | `0xB0DC0C` |
-| Sichtbarkeitskarte (sec49) | `0x678B58` | `0x677BB8` |
+| Sichtbarkeitskarte (**sec50**) | `0x678B58` | `0x677BB8` |   ⚠ hier stand »sec49«, berichtigt 22.08.2026 (BG.5)
 | eigener Spieler | `0x4FA284` | `0x4F928C` |
 | Kamera-Kachel X / Y | `0x5387AC` / `0x5387B0` | `0x5377EC` / `0x5377F0` |
 | Feinversatz X / Y | `0x5387B8` / `0x5387BC` | `0x5377F8` / `0x5377FC` |
@@ -8384,7 +8384,9 @@ Korb r  (r = 0 … 69):
 einmal vor. Damit ist das Kachelmass **40 × 20** unabhängig bestätigt — und zwar
 als **einzige** Umrechnung im ganzen Revier.
 ⭐ **Nullmodell für die Sichtkarte:** `shl ebx, 8` (Spaltenschritt 256) und
-sec49-Grösse `0x10000 = 256²` — das einzige quadratische Mass, das aufgeht.
+sec50-Grösse `0x10000 = 256²` — das einzige quadratische Mass, das aufgeht.
+⚠ Hier stand »sec49«; das ist `0xBC0DD0` (9 600 B, die Verlegungsfahrten). Die
+**Zahl** 65 536 war richtig, die **Nummer** nicht — berichtigt 22.08.2026, BG.5.
 
 ### BD.3 ⭐⭐ Worin sich die 22 Fälle unterscheiden — und worin NICHT
 
@@ -8953,3 +8955,424 @@ verlagert.** Beides sind Härtungen in Richtung der **späteren** Fassung.
 9. ⚠ **Keine Prüfstände.** Alle Zahlen stammen aus dem Abbild und den
    Kartendateien, keine aus einem laufenden Spiel. Für die Taktreihenfolge wäre
    das der nächste ehrliche Schritt.
+
+---
+
+## BF. ⭐⭐ DIE ENZYKLOPÄDIE IST FREISCHALTBAR — und wir haben davon nichts (22.08.2026)
+
+Angesetzt an der **einen** Funktion, die das Spiel selbst benennt und die
+nirgends bei uns stand (`funktionen.py --liste`): `0x4557A0`, Marke
+**`HELPG.DAT`**. Sie hat einen zweiten Teil mitgebracht, der grösser ist als sie.
+
+### BF.0 Adresstafel
+
+| C | F | Byte | Rufer | Was sie ist |
+|---|---|---:|---:|---|
+| ⭐ `0x4557A0` | — | 161 | 1 (`0x415A21` über Thunk `0x401983`) | **HELPG.DAT + ENCYCLOG.DAT laden**, beim Programmstart |
+| ⭐⭐ `0x455870` | — | 787 | 3 (`0x44BAFB`, `0x44CD89`, `0x44DBC4`, alle über Thunk `0x40173A`) | **die Freischalttafel der Enzyklopädie füllen** |
+| `0x44C51B` | — | — | — | Enzyklopädie **eine Seite zurück** |
+| `0x44C5A0` | — | — | — | Enzyklopädie **eine Seite vor** |
+
+⚠ Die F-Adressen sind **nicht** nachgeschlagen — dieser Abschnitt ist an C
+gelesen. Nach Regel »nur was BEIDE liefern, gilt als gelesen« ist er damit
+**ein Befund unter Vorbehalt**, kein abgeschlossener.
+
+### BF.1 Der Lader `0x4557A0`
+
+Drei Bibliotheksfunktionen, aus der Ruf-Form eindeutig: `0x4D7040` = `fopen`,
+`0x4D73C0` = `fread`, `0x4D6D90` = `fclose`.
+
+```
+fopen("HELPG.DAT", "rb+")        -> fread(0x8B62B0, 1, 0xFA0)   ; 4000 B
+                                    fclose
+fopen("ENCYCLOG.DAT", "rb+")     -> fread(0x8B8070, 1, 0xFA0)   ; A Textversatz
+                                    fread(0x991820, 1, 0xFA0)   ; C Bildnummer
+                                    fread(0x9927C8, 1, 0xFA0)   ; B Anzahl Bytes
+                                    fclose
+memset(0x8934F0, 0, 250 dword)   ; 1000 Byte
+```
+
+⭐ **Neu daran ist die REIHENFOLGE in der Datei.** Wir haben die drei Tafeln in
+AT/AS nach ihrer Adresse als A/B/C benannt; in `ENCYCLOG.DAT` stehen sie als
+**A (Textversatz), C (Bildnummer), B (Anzahl Bytes)**. Wer die Datei nach
+unserer Buchstabenfolge liest, vertauscht Bildnummer und Länge.
+
+⚠ **Der Modus ist `"rb+"`, geschrieben wird hier aber nichts.** Entweder gibt es
+einen Schreiber anderswo, oder das `+` ist folgenlos. Nicht nachgesehen.
+
+### BF.2 ⭐⭐ `0x8934F0` ist die Freischalttafel der Enzyklopädie
+
+**1000 Byte, ein Byte je Enzyklopädieseite** — genau die 1000 Einträge der drei
+`ENCYCLOG.DAT`-Tafeln. `0 = gesperrt`, `≠0 = sichtbar`.
+
+Belegt durch die Blätterfunktionen, die als einzige beide ein Muster zeigen:
+
+```
+0x44C51B   zurueck:  bx-- ; wenn bx == -1  -> bx = 999
+0x44C5A0   vor:      bx++ ; wenn bx == 1000 -> bx = 1
+           beide:    solange byte[0x8934F0 + bx] == 0, weiter blaettern
+```
+
+⭐ Die `999`/`1000` sind der Beleg für die Länge — sie stehen als Rohzahlen
+(`0x3E7`, `0x3E8`) im Code, unabhängig von der Dateigrösse.
+⚠ **Und eine Unsymmetrie des Originals:** rückwärts wird auf **999**
+umgebrochen, vorwärts auf **1**, nicht auf 0. **Seite 0 ist vorwärts nicht
+erreichbar.** Das ist kein Lesefehler, es sind zwei verschiedene Rohzahlen.
+
+Dritter Leser: `0x47DAF6`, in der Aufbereitung einer Seitenliste — dieselbe
+Prüfung `== 0 → überspringen`.
+
+### BF.3 ⭐⭐ Woher die Freischaltung kommt: aus den vier Entwurfstafeln
+
+`0x455870(int mit_technik)` baut zuerst eine **83 Byte lange Kennungstafel auf
+dem Stapel** auf und schreibt sie dann durch fünf Schleifen nach `0x8934F0`.
+Der Spieler ist `byte[0x4FA284]` (der eigene).
+
+| Seiten | Quelltafel | Abschnitt | Schritt | Block je Spieler | Kennungen |
+|---:|---|---|---:|---:|---|
+| **20…77** | `0x5045A0` | sec46 **Bauteile** | **58** | 200 | `0xA0…0xAF`, `1…0x13`, `0x41…0x4F`, `0x51…0x58` |
+| **78…80** | `0x51B020` | sec120 **Flugzeuge** | **48** | 20 | 0, 1, 4 |
+| **82…84** | `0x51B020` | sec120 **Flugzeuge** | **48** | 20 | 5, 6, 2 |
+| **85…94** | `0x52EDA0` | sec119 **Schiffe** | **42** | 10 | 0,1,2,3,4,5,6,7,9,8 |
+| **96…102** | `0x51CE20` | sec47 **Entwürfe** | **46** | 200 | 0x32…0x38 (50…56) |
+
+Genommen wird jeweils **Byte 0 des Satzes** und unverändert nach
+`byte[0x8934F0 + seite]` gelegt.
+
+⭐⭐ **Der Beleg, und er ist vierfach.** Die vier Schrittweiten stehen nirgends
+als Zahl im Code — sie sind aus den `lea`-Ketten gerechnet
+(`29·x·2 = 58`, `16·x·3 = 48`, `21·x·2 = 42`, `(45+1)·x = 46`), **bevor** die
+Ladertafel aufgeschlagen wurde. Alle vier treffen den dort verzeichneten
+Abschnitt genau: sec46 = 58, sec120 = 48, sec119 = 42, sec47 = 46.
+**Nullmodell:** vier freie Schrittweiten träfen zufällig mit rund `4/256` je
+Tafel, zusammen etwa `6·10⁻⁸`. Dazu kommen die Blockgrössen (200/20/10/200), die
+`92800/58/8 = 200`, `7680/48/8 = 20`, `3360/42/8 = 10`, `73600/46/8 = 200`
+ebenfalls alle vier bestätigen.
+
+⭐ **Die zweite Gegenprobe steckt in den Lücken.** Die Kennungstafel trägt an
+genau zwei Stellen `0xFF` — und genau diese zwei Seiten, **81 und 95**, lassen
+die Schleifen aus. Ein Trennzeichen, das dort steht, wo aufgehört wird, ist
+kein Zufall.
+⭐ Und die **zehn** Schiffe der Tafel `0x52EDA0` (AC.?, »Zehn Schiffsarten«)
+sind hier zehn Seiten — die Zahl kommt aus zwei unabhängigen Richtungen.
+
+**Fest verdrahtet, ohne Quelltafel:**
+
+```
+0x8934F1 .. 0x8934FC  := 1     Seiten  1…12 immer sichtbar
+0x8934F3, 0x8934F7    := 0     ⚠ Seiten 3 und 7 davon wieder AUSGENOMMEN
+0x893586 .. 0x893592  := 1     Seiten 150…162 immer sichtbar
+```
+
+**Und der Schalter:** ist das Argument 0, werden die Seiten **20…80 und 82…102**
+stumpf auf 0 gesetzt — die ganze Technik bleibt gesperrt.
+
+⭐ **Die drei Rufer sind nachgesehen, und sie stehen 2:1:**
+
+| Rufstelle | Argument | daneben |
+|---|---:|---|
+| `0x44BAF9` | **0** | nichts — ein blosses `push 0; call` |
+| `0x44CD6F` | **1** | `dword[eax + 0x8C3CF0] := 1` |
+| `0x44DBAA` | **1** | `dword[eax + 0x8C3CF0] := 1` — **befehlsgleich mit dem vorigen** |
+
+Damit ist der Schalter belegt: **es gibt beide Betriebsarten**, und die zwei
+freischaltenden Stellen sind bis aufs Byte dieselbe Vorbereitung. ⚠ **Welcher
+Schirm welcher ist, ist damit noch nicht gesagt** — nur, dass die Unterscheidung
+existiert und nicht von mir hineingedeutet ist. Ein Anhaltspunkt: `0x44BBAB`
+liegt zwischen den Rufern und ist bei uns schon als »der Mensch zahlt« gelesen
+(AW), das Revier `0x44B…0x44D` ist also der **Bau- und Kaufschirm**.
+
+### BF.4 Was das für uns heisst
+
+`Scripts/UI/EncyclopediaScreen.cs` zeigt **alle 106 Seiten immer**, blättert
+nicht seitenweise, und kennt keine Freischaltung. Das ist kein Fehler, den
+jemand meldet — aber es ist ein **Stück Spiel, das wir nicht haben**: im
+Original wächst die Enzyklopädie mit der Forschung mit.
+
+⚠ **Nicht sofort baubar.** Unsere Seiten sind aus `ENCYCLOG.TXT` durchnummeriert
+(1…106), die Tafel hier ist über 1000 Plätze gestreut. Die Brücke ist Tafel A
+(`0x8B8070`, Textversatz in `ENCYCLOG.TXT`): Seite *n* des Originals ist unsere
+Seite mit demselben Byteversatz. **Das ist der erste Schritt, wenn es gebaut
+wird.**
+
+⚠ **Nebenbefund, eine Berichtigung an uns:** der Klassenkommentar in
+`EncyclopediaScreen.cs` sagt »`ENCYCLOG.PIC` ist ungelesen«. Das stimmt seit dem
+21.08. nicht mehr (96 Bilder à 60×60, AT); `ContentBuilder` benutzt die Datei
+längst für den Technikkasten. **Wieder ein Kommentar, der das Gegenteil des
+Standes behauptet** — dritter Fall dieser Art.
+
+### BF.5 Was offen bleibt
+
+1. ⚠ **Welcher der drei Rufer welcher Schirm ist.** Dass es zwei Betriebsarten
+   gibt, ist belegt (BF.3); die Zuordnung Schirm ↔ Betriebsart nicht.
+2. ⚠ **Byte 0 eines Bauteil-/Entwurfssatzes** wird hier als »verfügbar« benutzt.
+   Was es sonst noch bedeutet, ist nicht nachgeschlagen.
+3. ⚠ **Die F-Fassung** ist an keiner der vier Adressen gegengelesen.
+4. ⚠ **Wer `HELPG.DAT`/`ENCYCLOG.DAT` schreibt** (der Modus `"rb+"` legt nahe,
+   dass es jemanden gibt).
+5. ⚠ **Seiten 103…149 und 163…999** kommen in keiner Schleife vor. Entweder
+   leer, oder es gibt einen sechsten Füller, den ich nicht gesehen habe.
+
+---
+
+## BG. ⭐⭐ DIE ZUGEXPLOSION — und sec44 hat vier Waggonblöcke (22.08.2026)
+
+Angesetzt an der **grössten ungelesenen Funktion** des Programms (`0x4C7990`,
+1456 Byte, 4 Rufer). Sie ist `zug_vernichten(byte zug, byte staerke)`.
+
+### BG.0 Adresstafel
+
+| C | Byte | Was |
+|---|---:|---|
+| ⭐⭐ `0x4C7990` | 1456 | **den Zug vernichten** — Animationen, Trümmer, Ladung, Räumen |
+| `0x435A40` | 171 | **einen sec42-Satz anlegen** (laufende Animation) |
+| `0x4AD520` | — | `fly_part` — der Trümmerstreuer (sec112, AL.1) |
+| `0x41D0E0` | 28 | `terrain_at` = Höhenbyte der Zelle (schon gelesen, BC) |
+| `0x410E60` | — | **die Einheit entfernen** (schon gelesen) |
+| `0x4D6C70` | — | MSVC-`rand()` (schon gelesen, über Thunk `0x4010BE`→`0x43B750`) |
+
+**Rufer** (alle über Thunk `0x401D34`): `0x4B0F6C`, `0x4C73A9`, `0x4C7FB7`.
+
+### BG.1 ⭐⭐ sec44 ist 4 Waggonblöcke × 60 Züge × 24 Byte
+
+Bisher stand bei uns nur »240 Sätze zu 24«. Die Funktion greift **vier** feste
+Basen mit demselben Index an:
+
+| Block | Adresse | Abstand |
+|---:|---|---:|
+| 0 | `0xB95F48` | — |
+| 1 | `0xB964E8` | `0x5A0` = **60 × 24** |
+| 2 | `0xB96A88` | `0xB40` = **120 × 24** |
+| 3 | `0xB97028` | `0x10E0` = **180 × 24** |
+
+⭐ **Also 60 Züge zu je 4 Waggons**, nicht 240 gleichrangige Sätze.
+⭐ **Gegenprobe aus einem Rufer:** `0x4C739C` rechnet `byte[esp+0x1C] % 60`,
+bevor es hier hereingeht. Die **60** steht dort als Rohzahl (`mov cl, 0x3C`) —
+zwei unabhängige Stellen, dieselbe Zahl.
+
+**Felder, die hier gebraucht werden:**
+
+| Versatz | Was |
+|---:|---|
+| `+0x00` | **Spalte** — und zugleich der Belegtmerker: `== 0` heisst »gibt es nicht« |
+| `+0x01` | **Zeile** |
+| `+0x12`, `+0x14`, `+0x16` | **drei Ladeplätze**, je ein Wort, `0xFFFF` = leer |
+
+### BG.2 Der Ablauf
+
+```
+zug_vernichten(zug, staerke):
+  wenn byte[Block0 + 24·zug] == 0 -> raus            (kein Zug)
+
+  1) fuer jeden der 4 Bloecke:
+       art  = 510 + rand()%9
+       hoehe = terrain_at(spalte, zeile)
+       y     = hoehe·15 + 20
+       sec42_anlegen(spalte, zeile, 0, y, art)       (0x435A40)
+
+  2) staerke mal:
+       fuer jeden der 4 Bloecke:  fly_part(spalte, zeile, 0, y, art=1, mass=8)
+       fuer jeden der 4 Bloecke:  fly_part(spalte, zeile, 0, y, art=0, mass=6)
+
+  3) byte[Block0..3 + 24·zug] := 0                   (der Zug ist weg)
+
+  4) fuer i = 0..2:
+       n = word[Block0 + 24·zug + 0x12 + 2·i]
+       wenn n != 0xFFFF:
+         einheit_entfernen(word[0xBC0DD0 + 48·n + 2])   (0x410E60)
+         byte[0xBC0DD0 + 48·n] := 0                     (Platz frei)
+```
+
+⭐ **Punkt 4 schliesst den Kreis zu Abschnitt R.** `0xBC0DD0` ist **sec49**, 200
+Sätze zu 48, `+0x00 == 0` = freier Platz — genau die Tafel der **verlegten
+Einheiten**, die wir am 21.08. gebaut haben. Hier steht, was das Original tut,
+wenn der Zug unter ihnen zerschossen wird: **die verlegte Einheit stirbt mit.**
+⚠ **Das haben wir nicht gebaut.** Unsere Verlegungsfahrt überlebt den Zug — sie
+hängt dann an einem Zug, den es nicht mehr gibt. Erste Bauaufgabe aus diesem
+Abschnitt.
+
+### BG.3 `0x435A40` — wie eine Animation entsteht
+
+`sec42_anlegen(spalte, zeile, a2, y, art)` schreibt einen 10-Byte-Satz nach
+`0x8106C0` (sec42, 2000 × 10 — die laufenden Animationen, AA):
+
+```
++0 Spalte   +1 Zeile   +2 a2   +3 0   +4..5 y   +6..7 art (0xFFFF = frei)   +8 0
+```
+
+Drei Eigenheiten des Originals, alle drei mit Rohzahl belegt:
+
+* ⚠ **`art > 999` → die Funktion tut gar nichts** und kehrt zurück (`cmp si,
+  0x3E7; jg`). Kein Fehler, keine Meldung.
+* ⭐ **`art == 309` wird zu `310 + rand()%6`** — eine Animation, die sich selbst
+  auswürfelt. Die einzige Art mit dieser Sonderbehandlung.
+* ⭐⭐ **Ist kein Platz frei, nimmt das Original einen ZUFÄLLIGEN** (`rand()%2000`)
+  und überschreibt ihn. Nicht den ältesten, nicht den ersten — einen gewürfelten.
+  ⚠ Das ist ein Verhalten, das man nie nachbaut, wenn man es nicht liest.
+
+### BG.4 Der Höhenversatz `hoehe·15 + 20`
+
+Dieselbe Formel wie in `0x4528EF`/`0x435BD0` (offene Frage 4 im Abschnitt der
+y-Halbierung), hier aber **unverkürzt**: `imul cl` mit `cl = 15`, dann `+20`.
+⚠ Das ist ein **dritter** Belegort für die senkrechte Umrechnung und gehört
+gegen die beiden anderen gehalten, wenn der Spieler das Bildschirmfoto vom
+Geschoss über der Steigung liefert.
+
+### BG.5 ⚠ Eine Berichtigung an uns: sec49 ≠ Sichtbarkeitskarte
+
+Abschnitt **BD** führt `0x678B58` zweimal als »Sichtbarkeitskarte (sec49)«.
+Nach der Ladertafel (Abschnitt Y, aus Lader UND Speicherer beider EXE, 0
+Abweichungen) ist `0x678B58` = **sec50**, 65 536 Byte. **sec49 ist
+`0xBC0DD0`**, 9 600 Byte — die Verlegungsfahrten dieses Abschnitts.
+⭐ BDs eigene Begründung verrät den Dreher: sie rechnet mit `0x10000 = 256²`,
+und 65 536 ist die Grösse von sec50. **Die Zahl war richtig, die Nummer nicht.**
+Unten berichtigt.
+
+### BG.6 Was offen bleibt
+
+1. ⚠ **Die drei Rufer** sind nur an ihrer Rufstelle angesehen, nicht gelesen.
+   `0x4C7FB7` setzt vorher `byte[0xA89220 + 214·n + 213] := 0xFF` — nebenbei
+   fällt damit ab, dass **sec34 = 80 Sätze zu 214** ist (17 120 / 214 = 80).
+   Nicht weiterverfolgt.
+2. ⚠ **Was `staerke` steuert** ausser der Zahl der Trümmerrunden — und woher die
+   Rufer sie nehmen.
+3. ⚠ **Die Bedeutung von `a2 = 0`** im sec42-Satz (Feld `+2`).
+4. ⚠ **Kein Klang.** Ein Zug explodiert lautlos, soweit diese Funktion reicht.
+   Der Klang müsste beim Rufer sitzen — nicht nachgesehen.
+5. ⚠ **F ist nicht gegengelesen.** Wie BF ein Befund unter Vorbehalt.
+
+---
+
+## BH. ⭐⭐ DIE BALKEN ÜBER DEN EINHEITEN — und die Zeichenfläche (22.08.2026)
+
+Angesetzt an `0x4B6F60` (656 Byte, **17 Rufer** — die meistgerufene ungelesene
+Funktion). Sie ist der **Balkenzeichner**, und der Weg dorthin hat die
+Zeichenfläche des Originals mit aufgedeckt.
+
+### BH.0 Adresstafel
+
+| C | Byte | Rufer | Was |
+|---|---:|---:|---|
+| ⭐ `0x4B6F60` | 656 | 17 | **einen Balken zeichnen** (Rahmen + Füllung) |
+| ⭐ `0x4B71F0` | — | — | **alle Balken einer Einheit** — Verteiler über die Gattung |
+| ⭐ `0x4AC000` | 42 | — | **die Zeichenfläche setzen** (3 Schreibstellen, sonst nur Leser) |
+| `0x4B9400`± | — | — | der **Ladebalken** eines Umschlagsatzes (sec48) |
+
+**Zeichenfläche** — die drei Globalen, bisher nirgends bei uns:
+
+| Adresse | Was | Leser |
+|---|---|---:|
+| `0xA3AE98` | die **echte** Basis | |
+| `0xA3AE7C` | **Zeilenschritt** (Breite in Byte) | 105 im Fenster gesamt |
+| `0xA3AE80` | **Höhe** in Zeilen | |
+| ⭐ `0xA3AE84` | **`Basis − 256·Zeilenschritt`** | |
+
+⭐⭐ **`0xA3AE84` ist eine vorverschobene Basis, und das erklärt einen Kniff.**
+Der Zeichner rechnet `(y + 256)·Zeilenschritt + 0xA3AE84` — dadurch darf `y` bis
+**−256** laufen, ohne dass irgendwo ein Vorzeichen geprüft wird. Belegt durch
+beide Stellen zugleich: `0x4AC01E` legt die Verschiebung an (`shl edx, 8`),
+`0x4B6F86` nimmt sie mit `lea ecx, [esi + 0x100]` wieder heraus.
+⚠ **Nur drei Schreibstellen, alle in `0x4AC000`** — wer die Fläche wechselt,
+geht durch diese eine Tür.
+
+### BH.1 `0x4B6F60(x, y, breite, hoehe, fuellung, wert)`
+
+```
+x -= breite/2                        ⭐ der Balken ist auf x ZENTRIERT
+rahmenfarbe = (wert / 1000)·4 + 4    (16-Bit-Division, vorzeichenlos)
+Rechteck-UMRISS in rahmenfarbe:      obere und untere Zeile, dann linke und
+                                     rechte Spalte, jede Zelle einzeln geklippt
+breite -= 2
+fuellfarbe nach byte[0xA31A88] (1…4, Sprungtafel 0x4B715C)
+```
+
+**Die Klippung ist zellenweise, nicht als Rechteckschnitt** — jedes einzelne
+Byte prüft `0 ≤ x < Zeilenschritt` und `0 ≤ y < Höhe`. Langsam, aber es kann
+nicht danebenschreiben.
+
+⭐ **Betriebsart 1 — die Schwellen des Gesundheitsbalkens:**
+
+| Bedingung | Farbe |
+|---|---:|
+| `2·fuellung ≥ breite` (≥ 50 %) | **5** |
+| `4·fuellung < breite` (< 25 %) | **9** |
+| sonst (25…50 %) | **13** |
+
+⚠ Welche Farbe welche ist, steht hier **nicht** — das sind Palettenplätze, und
+die Palette ist nicht mitgelesen. Die **Schwellen** ½ und ¼ sind dagegen hart:
+`shl eax,1` und `shl eax,2` gegen dieselbe Breite.
+⚠ Der `setl/dec/and 4/add 9`-Griff ist eine sprungfreie Auswahl zwischen 9 und
+13 — leicht falsch herum zu lesen. Ich habe ihn zweimal gerechnet.
+
+### BH.2 ⭐⭐ Die Rahmenfarbe ist die SPIELERFARBE
+
+`0x4B71F0(word einheit)` ist der Rufer und übergibt als `wert` **die
+Einheitennummer selbst**. Und:
+
+* `einheit ≥ 8000` → die Funktion tut nichts (`cmp si, 0x1F40`)
+* der Satz liegt bei `0x6E26C8 + 78·einheit` (26·3 = **78**, aus der `lea`-Kette)
+
+⭐ **8000 = 8 Spieler × 1000 Einheiten**, also ist `einheit / 1000` **die
+Spielernummer**, und `farbe = 4 + 4·spieler` gibt acht Plätze im Abstand 4.
+**Nullmodell:** wäre `wert` irgendetwas anderes, stünde dort eine Division durch
+1000 ohne Sinn — und die Schranke 8000 und der Teiler 1000 stehen als zwei
+unabhängige Rohzahlen im Code.
+⭐ **Gegenprobe von aussen:** die Satzgrösse **78** ist an keiner Stelle dieses
+Reviers hingeschrieben; sec94 (50 × 78) und sec98 (20 × 78) nennen sie
+unabhängig.
+
+Der Verteiler geht über `byte[+0x0A]` (die Gattung, 0…5) auf die Sprungtafel
+`0x4B78BC`; darüber `ja 0x4B78B5` für alles ≥ 6.
+
+**Was der Arm für Gattung 0 übergibt** (`0x4B722F`):
+
+| Argument | Wert |
+|---|---|
+| x, y | Bildschirmlage **+ 20** |
+| breite | `(byte[+0x29] >> 2) + 2` — **HpMax** |
+| hoehe | **5** |
+| fuellung | `byte[+0x08] >> 2` — **Hp** |
+| wert | die Einheitennummer |
+
+⭐ **Das bestätigt `ENTITY_FELDER.md` von einer zweiten Seite.** Dort stehen
+`+0x08 = Hp` und `+0x29 = HpMax` aus dem **Aufzeichner** des Originals; hier
+kommen sie aus dem **Zeichner**. Zwei unabhängige Quellen, dieselben zwei
+Versätze.
+⭐ Und die Balkenbreite ist **nicht fest**: sie wächst mit HpMax
+(`HpMax/4 + 2` Punkte). Eine zähe Einheit trägt einen längeren Balken.
+
+Der ganze Arm hängt an `byte[0xA31A88] == 1`.
+
+### BH.3 ⭐ `0xA31A88` ist eine Betriebsart, kein blosser Schalter
+
+18 Leser, **4 Schreiber**: `0x412FFC` (aus `al`) und `0x413009` (auf 0) — das ist
+die Bedienung; und dann das Paar `0x4B941A` / `0x4B9455`:
+
+```
+bl := byte[0xA31A88]          ; alten Wert merken
+byte[0xA31A88] := 4           ; Betriebsart 4 erzwingen
+balken_zeichnen(...)
+byte[0xA31A88] := bl          ; zuruecksetzen
+```
+
+⭐ Das Original benutzt die Globale hier als **Parameter**, nicht als
+Einstellung. Der Balken daneben zeichnet einen **Umschlagsatz** (sec48,
+`0x77AC50`, 400 × 18): Einheitenfeld `+0x40` ist der Satzindex, Balkenlänge aus
+Feld `+9`, Breite aus `+10 + 1`, Höhe 5.
+⚠ **Wer Betriebsart 1…4 als reine Nutzereinstellung nachbaut, bekommt den
+Ladebalken in der falschen Farbe.**
+
+### BH.4 Was offen bleibt
+
+1. ⚠ **Die Betriebsarten 2, 3 und 4** sind nicht gelesen — nur, dass es sie gibt
+   und wo die Sprungtafel steht (`0x4B715C`).
+2. ⚠ **Die Farbplätze 5 / 9 / 13** sind Zahlen, keine Farben. Gegen die Palette
+   halten (BC), dann steht es fest.
+3. ⚠ **Die fünf anderen Gattungsarme** (`0x4B78BC`) — nur der für Gattung 0 ist
+   gelesen. 17 Rufstellen heisst: mehrere Balken je Einheit.
+4. ⚠ **Wo `byte[0xA31A88]` in der Bedienung sitzt** (`0x412FFC`) und ob es in
+   `options.cfg` steht (AS nennt zwölf Einstellungen, diese ist nicht darunter).
+5. ⚠ **F ist nicht gegengelesen** — wie BF und BG ein Befund unter Vorbehalt.
+6. ⚠ **Bei uns gibt es davon nichts Nachprüfbares.** Ob unsere Balken zentriert
+   sind, mit HpMax wachsen und bei ½/¼ umschlagen, ist nicht nachgesehen —
+   das ist die Bauaufgabe aus diesem Abschnitt.

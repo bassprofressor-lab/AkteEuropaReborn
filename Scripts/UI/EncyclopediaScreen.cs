@@ -21,9 +21,20 @@ using Godot;
 /// VERWEISE sind dagegen die des Originals (<c>#rN</c>) und werden zu Knöpfen —
 /// eine Enzyklopädie ohne ihre Querverweise wäre eine Textdatei.</para>
 ///
-/// <para>⚠ <b>Kein Bild.</b> Die Seiten tragen eine Bildnummer, aber
-/// <c>ENCYCLOG.PIC</c> ist ungelesen (siehe Exporter). Lieber eine ehrliche
-/// Lücke als ein geratenes Bild.</para>
+/// <para>⚠ <b>Kein Bild — aber nicht mehr aus Unwissen.</b> Die Seiten tragen
+/// eine Bildnummer, und <c>ENCYCLOG.PIC</c> ist seit dem 21.08.2026 gelesen:
+/// 345 600 / 3600 = <b>96 Bilder à 60×60</b>, Rest 0 (OFFENE_FRAGEN Abschnitt
+/// AT). <see cref="Import.MissionTechExporter"/> benutzt die Datei bereits für
+/// den Technikkasten des Briefings. Hier fehlt sie noch — das ist Arbeit, kein
+/// Rätsel. (Der Kommentar sagte bis zum 22.08.2026 das Gegenteil.)</para>
+///
+/// <para>⚠ <b>Und was hier ganz fehlt: die Freischaltung.</b> Das Original
+/// blendet Seiten aus, deren Technik der Spieler nicht hat —
+/// <c>byte[0x8934F0 + seite]</c>, gefüllt aus Byte 0 der vier Entwurfstafeln
+/// (sec46/47/119/120), und die Blätterknöpfe überspringen die Nullen. Wir
+/// zeigen immer alles. Siehe OFFENE_FRAGEN Abschnitt <b>BF</b>; die Brücke von
+/// unserer Seitenzählung zur Seitennummer des Originals wäre der Byteversatz in
+/// <c>ENCYCLOG.TXT</c>.</para>
 ///
 /// <para>⚠ Der Rahmen ist der von <see cref="SettingsScreen"/> und nicht der von
 /// <see cref="LoadGameScreen"/>: voller Rechteckanker MIT Rändern, darin ein
