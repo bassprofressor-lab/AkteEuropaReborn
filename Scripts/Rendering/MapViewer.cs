@@ -549,6 +549,12 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_reichweiteCheck)
+        {
+            GD.Print(_entities.ReichweiteCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_mitnahmeCheck)
         {
             GD.Print(_entities.MitnahmeCheck(UI.SkirmishSetup.CampaignMission));
@@ -854,6 +860,10 @@ public partial class MapViewer : Node2D
     /// <summary><c>--repair-check</c> — startet der Knopf sofort, haelt ein
     /// Reiterwechsel an?</summary>
     private bool _repairCheck;
+
+    /// <summary><c>--reichweite-check</c> — die Metrik ist nicht rund, Gattung 4
+    /// hat feste 16 Zellen, und die Mindestreichweite sperrt weiter.</summary>
+    private bool _reichweiteCheck;
 
     /// <summary><c>--takt-check</c> — 50 Hz, und macht die Geschwindigkeit
     /// wirklich mehr Takte?</summary>
@@ -1443,6 +1453,7 @@ public partial class MapViewer : Node2D
             else if (a == "--mitnahme-check") _mitnahmeCheck = true;
             else if (a == "--vars-check") _varsCheck = true;
             else if (a == "--repair-check") _repairCheck = true;
+            else if (a == "--reichweite-check") _reichweiteCheck = true;
             else if (a == "--takt-check") _taktCheck = true;
             else if (a == "--gebaeude-check") _gebaeudeCheck = true;
             else if (a == "--mine-check") _mineCheck = true;

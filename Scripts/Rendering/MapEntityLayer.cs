@@ -7808,7 +7808,43 @@ public partial class MapEntityLayer : Node2D
     /// `range_raw / 10` — only stands in where a unit carries no such value.
     /// </summary>
     private static float RangeOf(Entity e)
-        => e.Range > 0 ? e.Range : WeaponOf(e.Weapon).RangeTiles;
+    {
+        // ⭐⭐ 22.08.2026 — DIE GATTUNG ENTSCHEIDET MIT (OFFENE_FRAGEN BN.5.1,
+        // hoechstreichweite() 0x454200 / F 0x452EB0):
+        //
+        //     nach Gattung byte[u+0x0A]:
+        //         0,1,5 -> byte[u+0x2B] · 40      (der eigene Wert)
+        //         4     -> 640                    ⭐ Schiffe, FEST = 16 Zellen
+        //         2,3   -> 0                      (schiesst nie)
+        //
+        // ⭐ Die Probe, dass die Zuordnung richtig herum ist, liefert die
+        // Schwesterfunktion: fuer einen ungueltigen Index gibt sie
+        // Hoechstreichweite 0 UND Mindestreichweite 30 000 — komplementaer,
+        // also »kann nie schiessen«. Zwei Zahlen, die nur zusammen Sinn ergeben.
+        // ⚠⚠ GATTUNG 3 IST HIER MIT ABSICHT NICHT DABEI, und der Grund ist
+        // gemessen. Die Tafel sagt fuer 3 ebenfalls 0. In unseren Karten stehen
+        // aber ZEHN Einheiten der Gattung 3 — map_25, map_32 (drei), map_33 und
+        // fuenf Gefechtskarten —, und alle zehn sind dieselbe schwere Kanone:
+        // Waffe 139, Angriff 30, Reichweite 15, 255 Trefferpunkte. Eine Waffe
+        // mit Angriff 30 und Reichweite 15, die nie schiessen kann, ist keine
+        // plausible Lesart.
+        //
+        // Die Aufloesung steht wahrscheinlich in Abschnitt AP: Fensterart 3 ist
+        // die »Raketen-Einsatzplanung« mit Mindestreichweite und 13x13-Zielsuche.
+        // Gattung 3 feuert dann NICHT von selbst, sondern nur, wo der Spieler
+        // einen Schlag plant — und genau darum gibt die Direktfeuer-Reichweite
+        // 0 zurueck. Das ist eine Deutung ohne Zahl, also wird sie nicht gebaut.
+        //
+        // Bis die Einsatzplanung steht, waere »Reichweite 0« kein Nachbau,
+        // sondern ein Ausfall: zehn schwere Kanonen ohne Ersatzmechanik.
+        // ⭐ Eingetragen als Bauaufgabe; hier bleibt es beim eigenen Wert.
+        switch (e.GameUnitType)
+        {
+            case 4:  return 16f;              // 640 Feinschritte / 40 = 16 Zellen
+            case 2:  return 0f;               // keine bewaffnete in unseren Karten
+        }
+        return e.Range > 0 ? e.Range : WeaponOf(e.Weapon).RangeTiles;
+    }
 
     /// <summary>GEGENPROBE: die Mindestreichweite nicht beachten, also der
     /// Stand vor dem 15.08.2026. Nur <c>--no-min-range</c> setzt das.</summary>
@@ -7818,7 +7854,22 @@ public partial class MapEntityLayer : Node2D
     /// siehe <see cref="Entity.RangeMin"/>. Ohne Wert 0, dann gilt keine
     /// Untergrenze. ⚠ Die Tabelle springt hier NICHT ein: eine erfundene
     /// Mindestreichweite waere schlimmer als keine.</summary>
-    private static float RangeMinOf(Entity e) => NoMinRange ? 0f : e.RangeMin;
+    private static float RangeMinOf(Entity e)
+    {
+        if (NoMinRange) return 0f;
+        // mindestreichweite() 0x454280 / F 0x452F30, nach derselben Gattung:
+        //     0,1,4,5 -> byte[u+0x2A] · 40
+        //     2       -> 30000        (»kann nie schiessen«, s. RangeOf)
+        //     3       -> 0
+        // ⚠ Gattung 3 hat KEINE Untergrenze, obwohl sie auch keine Obergrenze
+        // hat — die zwei Tafeln sind nicht spiegelbildlich, und wer sie
+        // spiegelt, baut fuer Gattung 3 eine Sperre ein, die es nicht gibt.
+        if (e.GameUnitType == 2) return 30000f;
+        // ⚠ Gattung 3 bleibt auch hier beim eigenen Wert — siehe die
+        // Begruendung in RangeOf. Ihre zehn Vertreter tragen ohnehin
+        // Mindestreichweite 0.
+        return e.RangeMin;
+    }
 
     /// <summary>Ist das Ziel im Schussfeld — nicht zu weit UND nicht zu nah?
     /// Beides in EINER Frage, damit die zwei Bedingungen nicht auseinander
@@ -8346,8 +8397,35 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <summary>Cell distance (Chebyshev-ish, in tiles) between two entities.</summary>
+    /// <summary>
+    /// ⭐⭐ <b>Die Entfernung, die über Reichweiten entscheidet — und sie ist
+    /// NICHT rund.</b> Gelesen am 22.08.2026 (OFFENE_FRAGEN <b>BN.5.1</b>,
+    /// <c>0x453990</c>).
+    ///
+    /// <para>Hier stand bis heute schlicht <c>new Vector2(dCol, dRow).Length()</c>,
+    /// und daneben in <see cref="Entity.RangeMin"/> die ehrliche Warnung:
+    /// »<b>ungeprüft ist, ob das Original euklidisch misst wie wir</b>, denn die
+    /// isometrische Zelle ist 40 breit und nur etwa 20 hoch«. Jetzt ist es
+    /// geprüft, und die Warnung hatte recht.</para>
+    ///
+    /// <para>Das Original rechnet in <b>Feinschritten</b>:
+    /// <c>dx = (zielX − x)·40 − feinX</c>, <c>dy = (zielY − y)·20 − feinY</c>,
+    /// dann <c>sqrt(dx² + dy²)</c>. <b>40 Unterschritte je Zelle in x, 20 in
+    /// y</b> — das ist die isometrische Halbierung, und sie steckt damit auch
+    /// in der Reichweite.</para>
+    ///
+    /// <para>⚠ <b>Was das im Spiel heisst:</b> das Schussfeld ist eine
+    /// <b>Ellipse</b>, keine Kreisscheibe. Ein Ziel zwei Zeilen entfernt ist
+    /// so weit wie eines eine Spalte entfernt. Wer rund misst, lässt Einheiten
+    /// nach Norden und Süden zu kurz schiessen — auf dem Schirm sieht die
+    /// Reichweite dann verbeult aus, obwohl die Zahlen stimmen.</para>
+    ///
+    /// <para>⚠ Die Feinstellung innerhalb der Zelle (<c>KOLIK</c>/<c>POHYB</c>)
+    /// lassen wir weg: unsere Einheiten stehen auf Zellmitten. Sie würde die
+    /// Entfernung um weniger als eine halbe Zelle verschieben.</para>
+    /// </summary>
     private static float CellDistance(Entity a, Entity b)
-        => new Vector2(a.Col - b.Col, a.Row - b.Row).Length();
+        => new Vector2(a.Col - b.Col, (a.Row - b.Row) * 0.5f).Length();
 
     /// <summary>
     /// Attack order: every selected unit that carries a weapon engages the
@@ -15620,6 +15698,85 @@ public partial class MapEntityLayer : Node2D
         _selected = merk;
         bool alles = heilOk && startOk && stopOk && fremdOk && zahlOk
                      && preisOk && schrankeOk && schranke2Ok && umschaltOk;
+        sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// <c>--reichweite-check</c> — <b>die drei Regeln der Reichweite, die am
+    /// 22.08.2026 dazugekommen sind</b> (OFFENE_FRAGEN <b>BN.5.1</b>).
+    ///
+    /// <para>Gemessen wird jede einzeln, und zu jeder die Gegenprobe — sonst
+    /// sagt ein »bestanden« nichts:</para>
+    /// <list type="number">
+    /// <item><b>Die Entfernung ist nicht rund.</b> Das Original rechnet x mal
+    /// 40 und y mal 20 Feinschritte; in Zellen heisst das, die Zeilen zählen
+    /// halb. Ein Ziel zwei Zeilen entfernt muss also so weit sein wie eines
+    /// eine Spalte entfernt.</item>
+    /// <item><b>Gattung 4 hat feste 16 Zellen</b>, egal was im Satz steht —
+    /// die Gegenprobe setzt einen abweichenden eigenen Wert und schaut, dass
+    /// er ignoriert wird.</item>
+    /// <item><b>Die Mindestreichweite sperrt weiter</b> — sie darf durch den
+    /// Umbau nicht verlorengegangen sein.</item>
+    /// </list>
+    /// </summary>
+    public string ReichweiteCheck()
+    {
+        var sb = new System.Text.StringBuilder("reichweite-check\n");
+
+        var a = new Entity { Col = 10, Row = 10 };
+        var b = new Entity { Col = 10, Row = 10 };
+
+        // 1. die Metrik: zwei Zeilen sollen wie eine Spalte zaehlen
+        b.Col = 11; b.Row = 10;
+        float eineSpalte = CellDistance(a, b);
+        b.Col = 10; b.Row = 12;
+        float zweiZeilen = CellDistance(a, b);
+        bool metrikOk = Mathf.Abs(eineSpalte - zweiZeilen) < 0.001f;
+        sb.AppendLine($"  eine Spalte = {eineSpalte:0.000}, zwei Zeilen = {zweiZeilen:0.000}: " +
+                      $"{(metrikOk ? "gleich weit, richtig" : "UNGLEICH — die Zeilen zaehlen nicht halb")}");
+
+        // Gegenprobe: EINE Zeile darf NICHT so weit sein wie eine Spalte,
+        // sonst waere die Metrik rund geblieben und Punkt 1 ein Zufall.
+        b.Col = 10; b.Row = 11;
+        float eineZeile = CellDistance(a, b);
+        bool gegenOk = eineZeile < eineSpalte - 0.001f;
+        sb.AppendLine($"  Gegenprobe: eine Zeile = {eineZeile:0.000} < eine Spalte {eineSpalte:0.000}: " +
+                      $"{(gegenOk ? "richtig" : "GLEICH — die Metrik ist noch rund")}");
+
+        // 2. Gattung 4 = feste 16 Zellen, der eigene Wert wird ignoriert
+        var schiff = new Entity { GameUnitType = 4, Range = 3, Weapon = 0 };
+        bool schiffOk = Mathf.Abs(RangeOf(schiff) - 16f) < 0.001f;
+        sb.AppendLine($"  Gattung 4 mit eigenem Wert 3: Reichweite {RangeOf(schiff):0.#} " +
+                      $"(erwartet 16): {(schiffOk ? "fest, richtig" : "FALSCH")}");
+
+        var land = new Entity { GameUnitType = 0, Range = 3, Weapon = 0 };
+        bool landOk = Mathf.Abs(RangeOf(land) - 3f) < 0.001f;
+        sb.AppendLine($"  Gegenprobe Gattung 0 mit Wert 3: Reichweite {RangeOf(land):0.#} " +
+                      $"(erwartet 3): {(landOk ? "eigener Wert, richtig" : "FALSCH")}");
+
+        // 3. die Mindestreichweite sperrt weiter
+        var mörser = new Entity { GameUnitType = 0, Range = 12, RangeMin = 5, Weapon = 0 };
+        bool zuNah = !InFiringWindow(mörser, 3f);
+        bool passt = InFiringWindow(mörser, 8f);
+        bool zuWeit = !InFiringWindow(mörser, 20f);
+        sb.AppendLine($"  Mindestreichweite 5..12: bei 3 {(zuNah ? "sperrt" : "SCHIESST")}, " +
+                      $"bei 8 {(passt ? "schiesst" : "SPERRT")}, " +
+                      $"bei 20 {(zuWeit ? "sperrt" : "SCHIESST")}: " +
+                      $"{(zuNah && passt && zuWeit ? "richtig" : "FALSCH")}");
+
+        // 4. ⚠ Und die Zahl, die uns davon abgehalten hat, Gattung 3 zu sperren.
+        int g3 = 0, g3bewaffnet = 0;
+        foreach (var e in _entities)
+        {
+            if (e.GameUnitType != 3) continue;
+            g3++;
+            if (e.Range > 0) g3bewaffnet++;
+        }
+        sb.AppendLine($"  Gattung 3 auf dieser Karte: {g3} Stueck, davon {g3bewaffnet} " +
+                      $"mit Reichweite — sie behalten sie (siehe RangeOf)");
+
+        bool alles = metrikOk && gegenOk && schiffOk && landOk && zuNah && passt && zuWeit;
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }
