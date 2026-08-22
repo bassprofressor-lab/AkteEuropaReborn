@@ -25762,9 +25762,11 @@ public partial class MapEntityLayer : Node2D
     /// <c>rand mod 3 - 1</c> auf die Richtung, mit Umlauf 7↔0
     /// (@0x422225..0x42225B).</para>
     ///
-    /// <para>⚠ <b>WIE OFT der Zufallsgang laeuft, ist NICHT gelesen</b>: die
-    /// Funktion hat keinen eigenen Aufrufer, sie haengt in einem groesseren
-    /// Rumpf. <see cref="WindDriftSeconds"/> ist darum UNSERE Zahl.</para>
+    /// <para>⭐⭐ <b>WIE OFT der Zufallsgang laeuft, ist seit dem 22.08.2026
+    /// GELESEN</b> — hier stand »ist NICHT gelesen: die Funktion hat keinen
+    /// eigenen Aufrufer«. Sie hat einen: <c>0x422210</c> laeuft aus der
+    /// Hauptschleife und schaltet selbst auf
+    /// <c>dword[0x4FA240] % 2000 == 1111</c>. Siehe <see cref="WindDriftTicks"/>.</para>
     ///
     /// <para>⚠ Nebenbefund am Original: bei den Grenzen der STAERKE schreibt es
     /// zweimal in die RICHTUNG statt in die Staerke (@0x422277 setzt
@@ -25779,14 +25781,31 @@ public partial class MapEntityLayer : Node2D
     /// ⚠ Hier stand »wird nur gefuehrt, nicht benutzt«.</summary>
     public int WindStrength { get; private set; } = 2;
 
-    /// <summary>⚠ UNSERE ZAHL: alle zwei Sekunden ein Schritt des
-    /// Zufallsgangs. Zwei Sekunden sind nicht frei gewaehlt, sondern der einzige
-    /// Takt dieser Groessenordnung, den das Spiel nachweislich hat — der
-    /// Blocktakt der Missionslogik (100 Takte bei 50 Hz, siehe
-    /// <see cref="Campaign.MissionScript.BlockPeriod"/>). Bis der echte Takt
-    /// gelesen ist, ist das die ehrlichste Annaeherung.</summary>
-    private const float WindDriftSeconds = 2f;
-    private float _windTick;
+    /// <summary>
+    /// ⭐⭐ <b>Der echte Takt des Windes — gelesen am 22.08.2026</b>
+    /// (OFFENE_FRAGEN <b>BJ.8</b>, <c>0x422210</c>).
+    ///
+    /// <para>Hier stand <c>WindDriftSeconds = 2f</c> mit dem ehrlichen Vermerk
+    /// »⚠ UNSERE ZAHL … bis der echte Takt gelesen ist, ist das die ehrlichste
+    /// Annaeherung«. Der echte Takt ist:</para>
+    /// <code>wenn dword[0x4FA240] % 2000 == 1111:  einen Schritt gehen</code>
+    /// <para>Also <b>alle 2000 Takte</b> — bei 50 Takten/s rund <b>40 Sekunden</b>,
+    /// nicht zwei. ⚠ Unser Wind drehte sich <b>zwanzigmal zu schnell</b>, und
+    /// weil das Feuer seit dem 21.08. an ihm hängt, war das kein reines
+    /// Anzeigeproblem: ein Waldbrand folgte einer Fahne, die ständig herumfuhr,
+    /// statt einer, die vierzig Sekunden steht.</para>
+    ///
+    /// <para>⭐ <b>Und der Takt hängt jetzt am TAKTZÄHLER, nicht an der Uhr.</b>
+    /// Direkt darüber stand die Warnung: »der TAKT haengt allerdings an der
+    /// Spieluhr und damit an der Bildrate … ⚠ Wer das Feuer an den Wind haengt,
+    /// MUSS den Takt vorher auf die Simulation umstellen«. Das Feuer wurde am
+    /// 21.08. angehängt — die Umstellung ist hiermit nachgeholt.</para>
+    ///
+    /// <para>⚠ Die <b>1111</b> ist kein Schönheitswert: sie sorgt dafür, dass
+    /// der Windschritt in keinen der anderen Taktreste fällt (Strom
+    /// <c>% 50 == 13</c>, Markt <c>% 100 == 77</c>).</para>
+    /// </summary>
+    private const long WindDriftTicks = 2000, WindDriftRest = 1111;
 
     /// <summary>Den Wind setzen und weiterdrehen.
     ///
@@ -25812,9 +25831,8 @@ public partial class MapEntityLayer : Node2D
                      "(Original @0x41A185: rand & 7)");
             return;
         }
-        _windTick += dt;
-        if (_windTick < WindDriftSeconds) return;
-        _windTick = 0;
+        // ⭐ Der gelesene Takt: alle 2000 Takte, auf dem Rest 1111.
+        if (_taktNr % WindDriftTicks != WindDriftRest) return;
         // `rand mod 3 - 1` -> -1, 0, +1, mit Umlauf 7<->0 (@0x422232..0x42225B)
         WindDir = (WindDir + Simulation.Determinism.Roll(3) - 1 + 8) % 8;
         int s = WindStrength + Simulation.Determinism.Roll(3) - 1;
