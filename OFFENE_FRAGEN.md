@@ -9280,14 +9280,25 @@ Zeichenfläche des Originals mit aufgedeckt.
 **eindeutig** — die Zeichenfläche wird in beiden Bauten gleich gesetzt, und
 damit steht der Kniff mit der vorverschobenen Basis für beide.
 
-⚠⚠ **Die zwei Balkenfunktionen weichen dagegen ab, und die eine deutlich.**
-`0x4B71F0` trifft zu 96 %, **`0x4B6F60` nur zu 89 %** — bei 127 Befehlen sind
-das rund **vierzehn abweichende Befehle**. Zu viel für Zufall.
-**Verdacht auf einen zwölften Auslieferungsunterschied, ausgerechnet an den
-Balken, die der Spieler ständig sieht.** Der Vorbehalt bleibt stehen, bis beide
-Fassungen nebeneinander gelesen sind.
-⚠ Gegenrede zuerst ausräumen: bricht die Zerlegung im Rest ab, weicht der
-Schwanz zufällig ab, und 89 % wären ein Werkzeugartefakt.
+~~⚠⚠ Die zwei Balkenfunktionen weichen ab — Verdacht auf einen zwölften
+Auslieferungsunterschied.~~ **ZURÜCKGEZOGEN am 22.08.2026, noch am selben Tag.**
+
+⭐ **Es gibt ihn nicht.** Abschnitt **BO** hat alle drei Anker von Hand
+nebeneinandergelegt. Die Abweichung ist restlos Übersetzerrauschen:
+Registerzuteilung, `jle` gegen `jge` mit vertauschten Operanden, `test/jl`
+gegen `dec/js` — und der »abweichende Schwanz« ist die **Sprungtafel hinter dem
+`ret`**, die gar kein Code ist. Keine andere Konstante, kein zusätzlicher
+Wächter. **Der Vorbehalt für diesen Abschnitt fällt.**
+
+⚠⚠ **Und das ist eine Lehre über die Zahl, nicht über die Balken.** Ich habe aus
+»89 % bei 127 Befehlen sind rund vierzehn abweichende Befehle« einen Verdacht
+gebaut. Die Rechnung stimmte; die **Voraussetzung** stimmte nicht — die
+Prozentzahl misst gar keine bedeutungstragenden Unterschiede. Als Gegenbeispiel
+notiert: `cfind` meldet für `0x4AF1C0` **74 %**, obwohl C und F **dieselben 23
+Befehle** enthalten und nur zwei unabhängige Hälften umsortiert sind.
+⭐ **Regel daraus:** unter rund 40 Befehlen ist die Ähnlichkeitszahl aussagelos,
+und über 40 sagt sie nur, dass sich etwas lohnt anzusehen — **nie, was es ist.**
+Das entscheidet `--diff` und ein Augenpaar.
 
 ⭐ **Nebenbefund aus derselben Erhebung: der `.text`-Abstand ist REGIONAL.**
 An zwölf Paaren gemessen: `−0x1D0` bei `0x40Exxx`, `−0x230` bei `0x410xxx`,
@@ -9337,9 +9348,26 @@ nicht danebenschreiben.
 | `4·fuellung < breite` (< 25 %) | **9** |
 | sonst (25…50 %) | **13** |
 
-⚠ Welche Farbe welche ist, steht hier **nicht** — das sind Palettenplätze, und
-die Palette ist nicht mitgelesen. Die **Schwellen** ½ und ¼ sind dagegen hart:
-`shl eax,1` und `shl eax,2` gegen dieselbe Breite.
+⭐⭐ **Die Farben sind aufgelöst** (22.08.2026, Abschnitt **BO**). Die richtige
+Palette ist `DATA/01.PAL`, geeicht an zwei Vorbefunden (Platz 47 = `#13130F` wie
+in Abschnitt A, und 248…253 sind genau das Blau-Band, das `Check_pal` im Ring
+vertauscht). Sie ist in **Viererblöcken ab Platz 1** aufgebaut:
+
+| Platz | Farbe | wann |
+|---:|---|---|
+| **5** | `#67D75F` hellgrün | ≥ 50 % |
+| **13** | `#F7FF0F` gelb | 25…50 % |
+| **9** | `#FF2B27` rot | < 25 % |
+
+**Grün, gelb, rot in absteigender Gesundheit** — die Reihenfolge, die man
+erwartet, aber die Platznummern sagen sie nicht von selbst (13 liegt zwischen 9
+und 5, die Bänder nicht).
+⭐ Und **BH.2 fällt damit mit**: `4 + 4·spieler` trifft genau den **dunkelsten
+Platz jedes Viererblocks**. Spieler 0 blau, 1 grün, 2 rot, 3 gelb, 4 orange,
+5 grau, 6 magenta, 7 cyan.
+
+Die **Schwellen** ½ und ¼ sind hart: `shl eax,1` und `shl eax,2` gegen dieselbe
+Breite.
 ⚠ Der `setl/dec/and 4/add 9`-Griff ist eine sprungfreie Auswahl zwischen 9 und
 13 — leicht falsch herum zu lesen. Ich habe ihn zweimal gerechnet.
 
@@ -9409,8 +9437,16 @@ Ladebalken in der falschen Farbe.**
    halten (BC), dann steht es fest.
 3. ⚠ **Die fünf anderen Gattungsarme** (`0x4B78BC`) — nur der für Gattung 0 ist
    gelesen. 17 Rufstellen heisst: mehrere Balken je Einheit.
-4. ⚠ **Wo `byte[0xA31A88]` in der Bedienung sitzt** (`0x412FFC`) und ob es in
-   `options.cfg` steht (AS nennt zwölf Einstellungen, diese ist nicht darunter).
+4. ~~⚠ Wo `byte[0xA31A88]` in der Bedienung sitzt und ob es in `options.cfg`
+   steht.~~ ⭐ **BEANTWORTET (BO): es ist die TAB-TASTE.** Der Schreiber
+   `0x412FF5` sitzt im Arm der `WM_KEYDOWN`-Sprungtafel für **`VK_TAB` (0x09)**
+   und zykelt `0 → 1 → 2 → 3 → 0`. In F identisch (`0x412DC5`, 22 Fundstellen
+   deckungsgleich). **Keine `options.cfg`-Einstellung** — die Vermutung war
+   falsch.
+   ⚠ Zwei Folgen, die vorher niemand sehen konnte: **Betriebsart 4** (der
+   Ladebalken) ist über die Tastatur **unerreichbar**, und **Stellung 0** landet
+   im Vorgabearm, dessen »Farbe« das niederwertige Byte von
+   `Zeilenschritt·(Höhe−1)` ist — bei Zeilenschritt 640 also 0 oder 128.
 5. ⚠ **F ist nicht gegengelesen** — wie BF und BG ein Befund unter Vorbehalt.
 6. ⚠ **Bei uns gibt es davon nichts Nachprüfbares.** Ob unsere Balken zentriert
    sind, mit HpMax wachsen und bei ½/¼ umschlagen, ist nicht nachgesehen —
