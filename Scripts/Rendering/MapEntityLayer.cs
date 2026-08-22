@@ -7707,6 +7707,29 @@ public partial class MapEntityLayer : Node2D
            : ExtraTypeName(type) ?? $"Typ {type}";
 
     /// <summary>
+    /// ⭐ <b>Der Name EINES Gebäudes</b> — Typname plus laufende Nummer
+    /// (22.08.2026, OFFENE_FRAGEN <b>BL.13</b>).
+    ///
+    /// <para>Das Original setzt beim Missionsstart in <c>+0x17</c> jedes
+    /// Gebäudes eine Zeichenkette <c>"1 "</c> … <c>"256 "</c>
+    /// (<c>0x440930</c>: <c>_itoa</c> plus ein angehängtes Leerzeichen aus
+    /// <c>0x4FAEE0</c>), und <c>gebaeudename()</c> <c>0x459110</c> liefert dazu
+    /// den TYPnamen, ebenfalls mit einem Leerzeichen am Ende — »Bahnhof «,
+    /// »Rohstoff-Mine «, »Basis «. Zusammen ergibt das den Fenstertitel.</para>
+    ///
+    /// <para>⚠ Die Nummer ist <b>1-basiert</b> und zählt GEBÄUDEPLÄTZE, nicht
+    /// Gebäude eines Typs: es gibt genau eine »Basis 7«, egal wie viele Basen
+    /// auf der Karte stehen. Wer je Typ durchnummeriert, bekommt zwei Gebäude
+    /// mit demselben Namen.</para>
+    ///
+    /// <para>⚠ Das angehängte Leerzeichen des Originals lassen wir weg — es ist
+    /// ein Satzzeichen der Bildschirmausgabe von 1997, kein Teil des Namens.</para>
+    /// </summary>
+    public static string BuildingName(Entity e)
+        => e.IsBuilding ? $"{BuildingTypeName(e.BType)} {e.Slot + 1}"
+                        : BuildingTypeName(e.BType);
+
+    /// <summary>
     /// Namen für Gebäudetypen, die <c>building_types.json</c> nicht führt.
     ///
     /// <para>⚠ Die Namenstabelle des Originals (@0x4fdcc4) hat <b>16</b>
@@ -13249,8 +13272,27 @@ public partial class MapEntityLayer : Node2D
         int cost = lager ? e.CostStore : e.CostProd;
         if (_money[owner] < cost)
         {
-            _order = "Sie haben nicht genug Geld";   // der Wortlaut des Spiels
-            Audio.GameSounds.Play(Audio.GameSounds.Refused);
+            // ⭐⭐ 22.08.2026 — DER AUSBAU SCHEITERT STILL (OFFENE_FRAGEN BL.4.1).
+            // Hier stand eine Meldung UND ein Ablehnungsklang. Der gemeinsame
+            // Rumpf der fuenf bezahlten Befehle (509, 510, 515, 516, 536) tut
+            // an dieser Stelle nichts weiter als:
+            //
+            //     wenn preis > konto: return
+            //
+            // Kein Ton, keine Meldung, kein Zustandswechsel. Der Spieler drueckt,
+            // und es passiert schlicht nichts.
+            //
+            // ⚠ Der Wortlaut "Sie haben nicht genug Geld" ist NICHT erfunden --
+            // er steht im Spiel. Nur nicht HIER: er gehoert einem anderen Weg
+            // (dem Kauf), und ihn an dieser Stelle zu zeigen war unsere Zutat.
+            //
+            // ⚠ Und das ist unbequem: ein stiller Fehlschlag liest sich wie ein
+            // Fehler. Die Kampagne bleibt trotzdem originalgetreu -- fuer den
+            // Gefechtsmodus waere eine Meldung ein guter Kandidat fuer eine
+            // BEWUSSTE Abweichung. Damit ein Pruefer nicht raetselt, steht der
+            // Grund im Protokoll, nicht auf dem Schirm.
+            GD.Print($"ausbau: Spieler {owner} fehlen {cost - _money[owner]} $ — "
+                     + "das Original meldet das NICHT (BL.4.1), also wir auch nicht");
             return false;
         }
         _money[owner] -= cost;

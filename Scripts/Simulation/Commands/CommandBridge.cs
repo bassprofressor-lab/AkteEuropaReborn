@@ -405,7 +405,7 @@ public partial class MapEntityLayer
             // von 39), Kraftwerk (0 in 262) und Radarstellung haben im ORIGINAL
             // keine Tür. Der Spieler soll das erfahren, statt auf eine Einheit
             // zu warten, die nie ankommt.
-            _order = $"{BuildingTypeName(b.BType)} hat keine Tuer — nicht einnehmbar" +
+            _order = $"{BuildingName(b)} hat keine Tuer — nicht einnehmbar" +
                      (b.BType == 11 ? " (der Hafen wechselt MIT seiner Werft-Station)" : "");
             return true;
         }
@@ -437,7 +437,7 @@ public partial class MapEntityLayer
         if (n == 0) { _order = "keine Einheit gewaehlt, die fahren kann"; return true; }
         AddOrderMark(b.Pos, attack: false);
         _order = $"Einnehmen: {n} Einheit(en) faehrt zur Tuer von " +
-                 $"{BuildingTypeName(b.BType)} (Besitzer {b.Owner})";
+                 $"{BuildingName(b)} (Besitzer {b.Owner})";
         UpdatePanel();
         QueueRedraw();
         return true;
