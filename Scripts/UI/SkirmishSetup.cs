@@ -148,6 +148,32 @@ public static class SkirmishSetup
     public static int NextStartMoney(int now) => now >= 10000 ? 0 : now + 1000;
 
     /// <summary>
+    /// ⭐ <b>Der Namensfilter des Originals</b> (22.08.2026, OFFENE_FRAGEN
+    /// <b>BN.12</b>): erlaubt sind nur die Zeichen <c>0x20 … 0x7A</c>, und
+    /// davon NICHT <c>[</c>, <c>]</c> und <c>^</c>.
+    ///
+    /// <para>⚠ Der Grund ist die Spielschrift, nicht die Höflichkeit: die drei
+    /// Ausnahmen und alles ab <c>0x7B</c> haben in <c>FONT.CWD</c> keine
+    /// Kachel. Ein Name mit einem davon würde als Lücke oder als fremdes
+    /// Zeichen erscheinen.</para>
+    ///
+    /// <para>⚠ Umlaute fallen damit ebenfalls weg — das ist keine Härte von
+    /// uns, sondern die Schrift von 1997. Wer das ändert, weicht ab.</para>
+    /// </summary>
+    public static string FilterName(string roh)
+    {
+        if (string.IsNullOrEmpty(roh)) return "";
+        var sb = new System.Text.StringBuilder(roh.Length);
+        foreach (char c in roh)
+        {
+            if (c < 0x20 || c > 0x7A) continue;
+            if (c is '[' or ']' or '^') continue;
+            sb.Append(c);
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// <b>»Alle Einheiten« — und damit auch LUFTEINHEITEN.</b>
     ///
     /// <para>⚠ <b>UNSERE OPTION</b>, und sie steht hier, weil das Original für

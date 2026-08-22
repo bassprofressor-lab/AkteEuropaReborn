@@ -6618,6 +6618,16 @@ public partial class MapEntityLayer : Node2D
         sb.Append($"\n   Schwenkregler: {busse} von {Audio.SoundBankPlayer.Voices} Kanaelen " +
                   "haben einen eigenen Bus mit AudioEffectPanner" +
                   (busse == 0 ? " — NICHT ANGESCHLOSSEN, es wird gerechnet und nicht geschwenkt" : ""));
+
+        // ⭐ DER RING (22.08.2026, OFFENE_FRAGEN BO.8). 20 Kanaele, und der 21.
+        // gleichzeitige Klang wirft den AELTESTEN weg statt selbst auszufallen.
+        // Gemessen wird die Verdraengung, nicht die Kanalzahl — die stand schon
+        // oben, und sie allein haette den alten Zustand (»21. faellt aus«)
+        // genauso bestanden.
+        sb.Append($"\n   Ring: {Audio.SoundBankPlayer.Voices} Kanaele " +
+                  $"(gelesen: 0xB4BE40..0xB4BE8F, 80 Byte zu vier), " +
+                  $"bisher {Audio.SoundBankPlayer.Verdraengt} Verdraengungen — " +
+                  "der 21. Klang wirft den aeltesten weg, er faellt nicht aus");
         return sb.ToString();
     }
 

@@ -38,15 +38,61 @@ public static class MidiMusic
 
     private const string Alias = "aer_music";
 
-    /// <summary>Windows, and the content folder holds at least one .mid.</summary>
+    /// <summary>
+    /// Windows, und es sind <b>genug</b> Stücke da.
+    ///
+    /// <para>⭐⭐ 22.08.2026 — <b>»genug« heisst MINDESTENS DREI</b>, und das ist
+    /// gelesen (OFFENE_FRAGEN <b>BP.9.2</b>, Zähler <c>0x4D5240</c>):
+    /// <c>byte[0xBDEA78] = (Anzahl &gt; 2)</c>, und ist es das nicht, setzt das
+    /// Original <c>byte[0x8934B8] = 0</c> — die schon bekannte Einstellung
+    /// Nr. 18 »MIDI-Musik EIN/AUS«. <b>Zwei Stücke schalten die Musik also
+    /// ab</b>, sie werden nicht etwa abwechselnd gespielt.</para>
+    ///
+    /// <para>⚠ Hier stand vorher »holds at least one .mid«. Mit genau einem
+    /// oder zwei Stücken spielten wir Musik, wo das Original schweigt.</para>
+    /// </summary>
     public static bool Available =>
-        OperatingSystem.IsWindows() && FileAccess.FileExists(Core.Content.Path("Sound/0.mid"));
+        OperatingSystem.IsWindows() && TrackCount > 2;
 
     /// <summary>What is playing, or -1.</summary>
     public static int Track { get; private set; } = -1;
 
-    /// <summary>How many pieces the game ships: 0.MID .. 5.MID.</summary>
-    public const int TrackCount = 6;
+    /// <summary>
+    /// ⭐ <b>Wie viele Stücke da sind — gezählt, nicht angenommen</b>
+    /// (<c>0x4D5240</c>): <c>0.mid</c>, <c>1.mid</c>, … <b>bis zur ersten
+    /// Lücke</b>, höchstens 200. Hier stand fest <c>6</c>.
+    ///
+    /// <para>⚠ Die Zählung bricht bei der ersten fehlenden Datei ab — wer
+    /// <c>0,1,2,4</c> hat, hat für das Spiel <b>drei</b> Stücke, nicht vier.
+    /// Das ist keine Nachlässigkeit des Originals, sondern die Bedingung, unter
+    /// der die Zufallswahl unten überhaupt lückenlos ziehen kann.</para>
+    /// </summary>
+    public static int TrackCount
+    {
+        get
+        {
+            if (_trackCount >= 0) return _trackCount;
+            int n = 0;
+            while (n < 200 && FileAccess.FileExists(Core.Content.Path($"Sound/{n}.mid"))) n++;
+            _trackCount = n;
+            return n;
+        }
+    }
+
+    private static int _trackCount = -1;
+
+    /// <summary>⚠ Der Würfel der MUSIK, nicht der Simulation. Er darf ihn nicht
+    /// anfassen: das Original nimmt hier MSVC-<c>rand()</c>, und ein Netzspiel
+    /// liefe auseinander, wenn die Musik am Spielwürfel dreht.</summary>
+    private static readonly System.Random _wuerfel = new();
+
+    /// <summary>
+    /// ⭐ Ein zufälliges Folgestück — <c>rand() % (Anzahl − 1) + 1</c>.
+    /// <b>Stück 0 wird nie gezogen</b>; es ist im Original für einen festen
+    /// Zweck reserviert (bei uns: das Menü).
+    /// </summary>
+    private static int ZufallsStueck()
+        => TrackCount <= 1 ? 0 : _wuerfel.Next(TrackCount - 1) + 1;
 
     /// <summary>
     /// Start the music for a mission, and keep it going.
@@ -80,7 +126,11 @@ public static class MidiMusic
         var sb = new StringBuilder(64);
         if (MciSendString($"status {Alias} mode", sb, sb.Capacity, IntPtr.Zero) != 0) return;
         if (sb.ToString().Trim() != "stopped") return;
-        Play(TrackCount <= 1 ? 0 : 1 + (Track % (TrackCount - 1)));
+        // ⭐ 22.08.2026 — das Folgestueck ist ZUFAELLIG, nicht das naechste.
+        // 0x4D55C0 faengt MM_MCINOTIFY ab und ruft play(rand()%(Anzahl-1)+1).
+        // Wir haben bisher der Reihe nach gespielt; das ist nach dem dritten
+        // Durchlauf hoerbar.
+        Play(ZufallsStueck());
     }
 
     /// <summary>The last MCI return code and its own message — kept so a failure

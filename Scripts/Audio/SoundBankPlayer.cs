@@ -43,9 +43,33 @@ public static class SoundBankPlayer
     private static readonly List<AudioStreamPlayer> _pool = new();
     private static bool _loaded;
 
-    /// <summary>How many players may sound at once. Ours — the original has its
-    /// own channel table (0x833a16, 10 x 200) which has not been read.</summary>
-    public const int Voices = 12;
+    /// <summary>
+    /// ⭐⭐ <b>Wie viele Klänge gleichzeitig laufen dürfen — jetzt GELESEN, nicht
+    /// mehr unsere Setzung.</b> (22.08.2026, OFFENE_FRAGEN <b>BO.8</b>.)
+    ///
+    /// <para>Hier stand <c>12</c> mit dem Vermerk »ours — the original has its
+    /// own channel table (0x833a16, 10 x 200) which has not been read«. ⚠ Die
+    /// Tafel war ausserdem die falsche: <c>0x833A16</c> ist die Gruppentafel,
+    /// nicht der Klangring.</para>
+    ///
+    /// <para>Der Ring liegt bei <c>0xB4BE40 … 0xB4BE8F</c> — 80 Byte zu je vier,
+    /// also <b>20 Kanäle</b> —, sein Ringzeiger ist <c>dword[0x5391F8]</c>, und
+    /// der Abspieler <c>0x4C1C90</c> macht genau drei Dinge: den alten Kanal
+    /// <c>Release</c>, <c>DuplicateSoundBuffer</c> der Vorlage hinein,
+    /// Ringzeiger weiter. <b>Der 21. gleichzeitige Klang wirft also den ältesten
+    /// weg</b>, er wird nicht etwa verschluckt.</para>
+    ///
+    /// <para>⭐ Dass es <c>IDirectSoundBuffer</c> ist und nicht irgendein
+    /// Zeigerfeld, hat ein Nullmodell entschieden: der benutzte Versatz
+    /// <c>+0x48</c> ist dort <c>Stop</c> (der 18. Eintrag), in
+    /// <c>IDirectDrawSurface</c> dagegen <c>GetOverlayPosition</c> — was auf
+    /// einem Feld von tausend Zeigern keinen Sinn ergibt.</para>
+    ///
+    /// <para>⚠ <b>Die fünf gesonderten Kanäle</b> (<c>0xB4BE1C … 0xB4BE43</c>)
+    /// sind hier NICHT mitgezählt. Wofür sie da sind, ist ungelesen; sie
+    /// dazuzurechnen wäre geraten.</para>
+    /// </summary>
+    public const int Voices = 20;
 
     /// <summary>True once sounds.json was found and read.</summary>
     public static bool Ready { get; private set; }
@@ -396,11 +420,42 @@ public static class SoundBankPlayer
         _voice = null;
     }
 
+    /// <summary>Der Ringzeiger des Originals, <c>dword[0x5391F8]</c>.</summary>
+    private static int _ring;
+
+    /// <summary>Wie oft ein laufender Klang für einen neuen weichen musste —
+    /// für den Prüfstand.</summary>
+    public static int Verdraengt;
+
+    /// <summary>
+    /// Einen Kanal besorgen.
+    ///
+    /// <para>⭐⭐ <b>22.08.2026 — der 21. Klang wirft den ÄLTESTEN weg, er wird
+    /// nicht verschluckt.</b> Hier stand vorher <c>return NewVoice()</c>, und
+    /// <c>NewVoice</c> gibt bei vollem Feld <c>null</c> zurück: der neue Klang
+    /// fiel dann einfach aus. Das Original tut das Gegenteil —
+    /// <c>0x4C1C90</c> macht den Kanal am Ringzeiger frei (<c>Release</c>),
+    /// legt den neuen hinein und zählt den Zeiger weiter. In einem Gefecht
+    /// hört man also immer das NEUESTE, nicht die ersten zwanzig.</para>
+    ///
+    /// <para>⚠ Der Unterschied fällt erst bei Gedränge auf, und dann fällt er
+    /// stark auf: bei uns verstummte das Spiel unter Last, statt umzuschichten.</para>
+    /// </summary>
     private static AudioStreamPlayer? Free()
     {
         if (!EnsureHost()) return null;
         foreach (var p in _pool) if (!p.Playing) return p;
-        return NewVoice();
+        var neu = NewVoice();
+        if (neu != null) return neu;
+
+        // Alle Kanäle belegt: der am Ringzeiger muss weichen.
+        if (_pool.Count == 0) return null;
+        _ring %= _pool.Count;
+        var alt = _pool[_ring];
+        _ring = (_ring + 1) % _pool.Count;
+        alt.Stop();
+        Verdraengt++;
+        return alt;
     }
 
     private static bool EnsureHost()

@@ -86,7 +86,9 @@ public sealed partial class GroupWindow : PanelContainer
         {
             int i = Gewaehlt();
             if (i < 0) return;
-            OnStore?.Invoke(i + 1, _name.Text);
+            // ⭐ Der Namensfilter des Originals (BN.12) — die Spielschrift
+            // hat fuer alles ausserhalb 0x20..0x7A und fuer [ ] ^ keine Kachel.
+            OnStore?.Invoke(i + 1, SkirmishSetup.FilterName(_name.Text));
             Refresh();
             Hide();
         };

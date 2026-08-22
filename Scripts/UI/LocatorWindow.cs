@@ -87,7 +87,8 @@ public sealed partial class LocatorWindow : PanelContainer
         {
             int i = Gewaehlt();
             if (i < 0) return;
-            OnSave?.Invoke(i, _name.Text);
+            // ⭐ Namensfilter wie bei den Gruppen — siehe SkirmishSetup.FilterName.
+            OnSave?.Invoke(i, SkirmishSetup.FilterName(_name.Text));
             Refresh();
             Hide();                    // das Original schliesst nach beiden Knöpfen
         };
