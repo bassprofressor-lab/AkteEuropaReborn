@@ -17252,3 +17252,164 @@ Berichte führen zusammen rund **80 Bauaufgaben**. Vier, die herausragen:
 hier analysieren geht nämlich einiges nicht mehr in der kampagne«. Abschnitt
 **AZ** ist beim Prüflauf vorzulegen. Die Leseaufgabe ist jetzt zu Ende — **die
 Reihenfolge sagt, dass er als nächstes prüft.**
+
+---
+
+## BR. ⭐⭐⭐ SEIN ERSTER PRUEFLAUF (23.08.2026) — Kampagne 1
+
+Sieben Meldungen. **Die Bilanz ist wichtiger als die Liste**, weil sie seine
+Frage beantwortet (»wenn wir doch alles ausgelesen haben, warum ist dann so viel
+verschoben?«):
+
+| | Zahl |
+|---|---|
+| echte Fehler von uns | **3** |
+| originalgetreu, nur ungewohnt | **1** (der Hafen) |
+| gar kein Fehler im Code | **1** (`cursor_hints=false` in seiner `settings.cfg`) |
+| Folge eines anderen Fehlers | **1** (die 50 $) |
+| noch offen | **1** (Kampagnen-KI) |
+
+Dazu **einer, den er nicht gemeldet hat und den ich beim Nachsehen fand**: die
+Wegsuche sperrte stehende Einheiten (BR.5).
+
+### BR.1 Der schwarze Bildschirm — `is not Control` ist keine Pruefung
+
+`ChangeSceneToFile` gibt die alte Szene frei; `MainMenu._Ready` raeumt danach
+als ERSTE Anweisung die Fensterverwaltung ab — auf toten Knoten. Ein
+freigegebenes Godot-Objekt behaelt im C#-Umschlag seinen TYP, der
+Mustervergleich gelingt, der Feldzugriff wirft. `_Ready` starb in Zeile eins.
+
+Sechs Stellen (`InDenSchirm`, `FesteLage`, `Treffer`, `Fertig`, `Blende`,
+`Zeichenfolge`), jetzt ein Waechter `Lebend()` mit `IsInstanceValid`.
+`--fenster-check` Messung 19/20, Nullmodell: »is Control« sagt bei einem
+freigegebenen Knoten **True**, `IsInstanceValid` sagt **False**.
+
+### BR.2 Die Wegsuche sprang — eine Welle zu frueh
+
+Waehrend die Welle der Entfernung d abgeraeumt wird, steht `marke` auf 9+d, die
+Zellen dieser Welle tragen 8+d, der Vorgaenger 7+d. Der Rueckverfolger begann
+bei `marke-1` = 8+D, also auf der **Zielwelle selbst**.
+
+```
+map_01, (4,39) -> (4,35)
+  falsch:  2,38  2,37     (4,39) auf (2,38) sind ZWEI Spalten
+  richtig: 3,38  2,37     identisch mit dem alten A*
+```
+
+Das ist zugleich sein »Springen/Beamen«: die Zellen des Weges sind nicht mehr
+benachbart.
+
+### BR.3 ⚠⚠ Warum `--wegsuche-check` das nicht sah — ZWEI Gruende
+
+1. Er prueft den Weg nur gegen SICH SELBST (ab Zelle 2). Der Bruch lag zwischen
+   START und erster Zelle. Die gelieferte Kette war in sich stimmig.
+2. **Er hat seit jeher nur DREI seiner Messungen ausgefuehrt.** Die Probeflaeche
+   war auf feste 7x7 freie Zellen verdrahtet — die gibt es weder auf map_01
+   noch auf der Gefechtskarte. Der Lauf meldete »NICHT GEMESSEN« und ging
+   durch; die drei, die liefen, pruefen nur Tafeln, also gerade nicht die Suche.
+
+Beides behoben. Neue Messungen: »erster Schritt liegt neben dem Start«,
+»letzte Zelle IST das Ziel«, und dasselbe ueber den laengsten Weg der Karte.
+»Nicht gemessen« ist jetzt DURCHGEFALLEN.
+
+### BR.4 Die 50 $ der Nebenmission — kein eigener Fehler
+
+Die drei Geldregeln (@0x4988A8 / @0x4988D7 / @0x498905) sind richtig gelesen und
+richtig gebaut: je 50 $, wenn `units(Klasse 3, Spieler 1)` von 3 auf 2, 1, 0
+faellt. map_01 gibt Spieler 1 genau drei Klasse-3-Saetze (unit_type 153,
+game_unit_type 4). **Alle drei setzen `v15` voraus**, und `v15` setzt einzig
+@0x49885C: `unit_pos(0, +1) < 20` — der Startpanzer muss Zeile 20 erreichen.
+Wegen BR.2 kam er nicht hoch.
+⚠ **Er muss bestaetigen, dass die Kette jetzt laeuft.**
+
+### BR.5 ⭐⭐ Stehende Einheiten sperrten die PLANUNG (von mir gefunden)
+
+Tafel BB.1, Art 0: eine Zelle mit einer Einheit (`10000..13999`) ist fuer den
+Kartenbauer **0 = frei**; nur Festes (`>= 14000`) sperrt. Das Original plant
+DURCH und wartet erst beim Fahren (`Can_go` = 1). Wir bauten die Suchkarte aus
+`IsFree` und sperrten damit jede besetzte Zelle hart.
+
+`--nav-flut` auf map_01: **921** Zellen erreichbar, aber nur **334**, wenn man
+die Karte so ansieht wie die Wegsuche. **587 Zellen gaben die stehenden
+Einheiten weg.**
+
+⚠⚠ Das war am 16.08.2026 schon einmal gebaut und am selben Tag zurueckgezogen
+(map_NET07: 17 statt 32 angekommen). Zwei Dinge sind anders: damals war es
+ERSCHLOSSEN, heute GELESEN — und damals fehlte die zweite Haelfte, der
+**50-Schritte-Puffer mit Neuplanung** (sec14, 8000 x 50). Ohne ihn bleibt ein
+Weg durch einen Pulk fuer immer ein Weg durch einen Pulk.
+⭐ Darum beide zusammen gebaut, jede mit eigenem Schalter.
+
+#### BR.5a ⚠⚠ DAS ERGEBNIS: die Karte kommt NICHT rein, der Puffer bleibt
+
+Gemessen auf **map_04** — 96 eigene Einheiten dicht gepackt auf 8x14 Zellen,
+Gegner 40 Zeilen entfernt, Kampagnenkarte (die KI marschiert nicht), Ziel
+(12,40), 120 s. Vier Laeufe unter gleichen Bedingungen:
+
+| Variante | Fortschritt oe | gefahrene Zellen | angekommen | tot |
+|---|---:|---:|---:|---:|
+| alte Karte, kein Puffer | 2,6 | 2901 | 5 | 43 |
+| **nur die neue Karte** | 1,6 | **260** | 0 | 3 |
+| **nur der 50er-Puffer** | **6,0** | **3055** | **13** | 35 |
+| beides zusammen | 1,6 | 260 | 0 | 3 |
+
+**260 gefahrene Zellen statt 2901.** Bei 44 fahrenden Einheiten sind das rund
+6 Zellen in 120 s statt 62 — sie kriechen. Der Grund ist genau der, den der
+Rueckzieher vom 16.08.2026 genannt hat: plant man DURCH einen Pulk hindurch,
+fuehrt fast jeder Weg sofort durch einen Nachbarn, und dort wartet die Einheit
+(`Can_go` = 1) auf eine, die selbst wartet.
+
+⚠⚠ **UND EINE EIGENE FEHLDEUTUNG, die hier festgehalten gehoert:** die
+niedrige Totenzahl (3 statt 43) hatte ich zuerst als BELEG fuer die neue Karte
+gelesen. Sie ist das Gegenteil — wer sich nicht bewegt, kommt nicht in
+Reichweite der Gegner. Aufgedeckt hat das erst die neue Fortschrittszahl.
+
+⭐ **Die Messgroesse war der eigentliche Gegner.** »Angekommen« ist eine
+Schwelle (`d <= 1`) und springt erst im letzten Augenblick; wer nach der Messzeit
+noch faehrt, zaehlt darin wie einer, der nie losgefahren ist — **und ein Toter
+zaehlt genauso**. Der `--stuck-check` fuehrt jetzt zusaetzlich den
+**Fortschritt** (Startentfernung minus Restentfernung, stetig, kann NEGATIV
+werden) und die **gefahrenen Zellen**. Ohne die beiden Zahlen haette ich die
+Verschlechterung nicht gesehen — so wie sie am 16.08. niemand gesehen hat.
+
+**Stand:** `--neue-pfadkarte` ist **standardmaessig AUS**, der 50er-Puffer ist
+AN (Gegenprobe `--kein-wegpuffer`).
+
+**Was fehlt, und es ist damit benannt:** im Original bleibt ein wartender Fahrer
+nicht ewig stehen. Solange bei uns weder ein **Ausweichen des Blockierers** noch
+eine **Neuplanung des Wartenden** gebaut ist, ist »durch den Pulk planen« nur
+eine andere Art steckenzubleiben. Erst mit diesem dritten Stueck ist die Karte
+wieder zu versuchen — der Schalter steht dafuer bereit.
+
+### BR.6 Der Hafen ist ORIGINALGETREU
+
+»Schlachtschiff und Kreuzer spawnen im Hafengebaeude, ich kann sie nicht
+anwaehlen.« Bei verstellter Ausfahrt bleibt das Schiff im Dock stehen und
+wartet (@0x409CF2/@0x409CF7 ziehen die Spalte direkt um 2 bzw. 4 zurueck); der
+Notnagel »irgendeine freie Zelle suchen« wurde bewusst entfernt. Er hat es
+selbst geloest, indem er die zwei leichten Kreuzer wegfuhr.
+→ **Frage an ihn: soll das GEFECHT eine Meldung bekommen?** Die Kampagne bleibt
+still. Derselbe Fall wie der stille Ausbau (BL.4.1).
+
+### BR.7 ⭐ Der Angriffszeiger — kein Fehler im Code
+
+»Das originale Angriffsicon ist auch nicht mehr da.« Die 104 Zeigerbilder sind
+vollstaendig da und werden geladen. In **seiner** `settings.cfg` steht
+`cursor_hints=false`; `UpdateCursor` steigt damit sofort aus und setzt den
+Systempfeil.
+
+⚠ Der Schalter heisst im Einstellungsschirm »**Zeiger zeigt an, was ein Klick
+tut**«. Das liest sich wie eine Hilfefunktion — nicht wie »die Mauszeiger des
+Originals ueberhaupt«. **Wer ihn ausschaltet, verliert das Fadenkreuz mit den
+vier roten Dreiecken und weiss nicht, warum.**
+→ **Vorschlag an ihn: Beschriftung aendern** (etwa »Original-Mauszeiger
+(Fadenkreuz, Hand, Pfeile)«), oder den Schalter ganz streichen. Seine
+Entscheidung, weil es Oberflaeche ist.
+
+### BR.8 ⚠ NOCH OFFEN: die Kampagnen-KI greift nicht an
+
+»zumindest je nach event/kartenbereich«. Der Sichtringdurchlauf `AiSweep`
+(← `ai_units` @0x4BF4E0) LAEUFT in der Kampagne, und zwar vor der
+Kampagnensperre `AiGesperrt`. Warum er stumm bleibt, ist **noch nicht
+gemessen**. Verdacht steht in AZ.3: `sec62` fehlt im Ausleser, dadurch
+`sec110 == 0`.

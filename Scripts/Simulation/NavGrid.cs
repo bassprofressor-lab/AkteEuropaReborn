@@ -207,6 +207,72 @@ public sealed class NavGrid
         => Ask(c, r, mc, mover) == Step.Free;
 
     /// <summary>
+    /// ⭐⭐ <b>WIE DIE WEGSUCHE DIE KARTE SIEHT</b> — und das ist NICHT
+    /// <see cref="IsFree"/>.
+    ///
+    /// <para><b>Gelesen, Tafel BB.1, Bewegungsart 0</b> (<c>0x4D118D</c>, das
+    /// 1×1-Bodenfahrzeug). Der Kartenbauer schreibt je Zelle:</para>
+    /// <code>
+    ///   0 (frei)     wenn 0xFFFE                    leeres Gelaende
+    ///                oder &lt;8000 und Unterklasse 0    eine Infanteriezelle
+    ///                oder 10000..13999 mit +1 == 0  EINE EINHEIT STEHT DA
+    ///   1 (weich)    wenn 0xFFFD                    rau
+    ///   2 (hart)     sonst — darunter >= 14000      Gebaeude, Festes
+    /// </code>
+    ///
+    /// <para>⭐ <b>Die Zeile, um die es geht, ist die dritte:</b> eine Zelle mit
+    /// einer EINHEIT darin ist für die Planung <b>frei</b>. Das Original plant
+    /// mitten durch stehende Einheiten hindurch und wartet erst beim FAHREN —
+    /// dort antwortet <c>Can_go</c> mit 1 (<see cref="Step.GiveWay"/>), und der
+    /// Fahrer behält seinen Weg und lässt den anderen vorbei. Nur Festes sperrt
+    /// schon die Planung.</para>
+    ///
+    /// <para>⚠⚠ <b>Warum das bis zum 23.08.2026 falsch war und was es kostete:</b>
+    /// wir haben die Suchkarte aus <see cref="IsFree"/> gebaut, und das sperrt
+    /// jede besetzte Zelle hart. Gemessen mit <c>--nav-flut</c> auf map_01:
+    /// vom Startpanzer aus sind <b>921</b> Zellen erreichbar, aber nur
+    /// <b>334</b>, wenn man die Karte so ansieht wie die Wegsuche. <b>587
+    /// Zellen — zwei Drittel — gaben die stehenden Einheiten weg.</b> Bei einem
+    /// Gruppenbefehl sperren sich die eigenen Einheiten dadurch gegenseitig die
+    /// Wege.</para>
+    ///
+    /// <para>⚠⚠ <b>UND DAS HIER IST DER ZWEITE ANLAUF.</b> Am 16.08.2026 stand
+    /// schon einmal <c>Ask(...) != Blocked</c> in <c>CanStep</c>, und es wurde
+    /// am selben Tag zurückgezogen: gemessen auf map_NET07 kamen <b>17 statt
+    /// 32</b> Einheiten an. Die Wege liefen durch die Pulks, und die Einheiten
+    /// standen wartend darin. Zwei Dinge sind seither anders:
+    /// <list type="number">
+    ///   <item>Damals war es <b>erschlossen</b> (»das Original fährt hin und
+    ///   wartet«), heute ist es <b>gelesen</b> — Tafel BB.1 oben, aus dem
+    ///   Kartenbauer selbst.</item>
+    ///   <item>Damals fehlte die andere Hälfte. Das Original plant nicht nur
+    ///   durch, es plant auch alle <see cref="UrWegLaenge"/> Schritte NEU. Ohne
+    ///   die Neuplanung bleibt ein Weg durch einen Pulk für immer ein Weg durch
+    ///   einen Pulk. <b>Beides zusammen oder gar nicht.</b></item>
+    /// </list></para>
+    ///
+    /// <para>⚠ <see cref="IsFree"/> bleibt, wo es hingehört: beim SCHRITT.
+    /// Planen und fahren sind zwei verschiedene Fragen, und das war der ganze
+    /// Denkfehler.</para>
+    /// </summary>
+    public bool PfadOffen(int c, int r, MoveClass mc = MoveClass.Vehicle, int mover = -1)
+    {
+        int side = HullOf(mover);
+        for (int dy = 0; dy < side; dy++)
+            for (int dx = 0; dx < side; dx++)
+            {
+                int cc = c + dx, rr = r + dy;
+                if (!CanEnter(cc, rr, mc)) return false;
+                int i = Idx(cc, rr);
+                if (_occupant[i] < 0 || _occupant[i] == mover) continue;
+                // ⭐ Nur Festes sperrt (>= 14000). Eine bewegliche Einheit ist
+                // fuer die PLANUNG frei — sie faehrt weiter.
+                if (_immobile[i]) return false;
+            }
+        return true;
+    }
+
+    /// <summary>
     /// DIE DREI ANTWORTEN DES ORIGINALS. <c>Can_go</c> gibt kein ja/nein zurück,
     /// sondern <b>0 nein · 1 ja, aber jemand muss ausweichen · 2 frei</b> — und
     /// der Unterschied zwischen 0 und 1 ist der ganze Fehler B2.
@@ -739,12 +805,18 @@ public sealed class NavGrid
     /// Stellen etwas strenger als das Original. <b>Das VERFAHREN ist das des
     /// Originals, die KARTE ist noch unsere.</b></para>
     ///
-    /// <para>⚠ Ebenfalls nicht hier: der 50-Schritte-Puffer mit Neuplanung.
-    /// Das Original fährt höchstens 50 Ziffern ab und plant dann mit DEMSELBEN
-    /// Ziel neu — dadurch reagiert es unterwegs auf Änderungen. Wir geben den
-    /// ganzen Weg zurück; unser Verfolger hat keinen festen Puffer.
-    /// <see cref="UrWegLaenge"/> steht trotzdem hier, damit die Zahl nicht
-    /// verlorengeht.</para>
+    /// <para>⭐⭐ <b>23.08.2026 — DER 50-SCHRITTE-PUFFER IST JETZT DA.</b> Hier
+    /// stand »ebenfalls nicht hier«. Das Original fährt höchstens
+    /// <see cref="UrWegLaenge"/> Ziffern ab (sec14, 8000 × 50) und plant dann
+    /// mit DEMSELBEN Ziel neu — dadurch reagiert es unterwegs auf Änderungen.
+    /// Der Weg wird darum abgeschnitten, und
+    /// <c>MapEntityLayer</c> setzt am abgeschnittenen Ende die Neuplanung an
+    /// statt »angekommen« zu melden.</para>
+    ///
+    /// <para>⭐ <b>Und er gehört zum zweiten Stück:</b> die Suchkarte sperrt
+    /// keine beweglichen Einheiten mehr (<see cref="PfadOffen"/>). Beides
+    /// einzeln ist schlechter als keines von beiden — genau daran ist der
+    /// Versuch vom 16.08.2026 gescheitert.</para>
     /// </summary>
     public List<Vector2I>? FindPathUr(Vector2I start, Vector2I goal,
                                       MoveClass mc = MoveClass.Vehicle, int mover = -1)
@@ -764,7 +836,12 @@ public sealed class NavGrid
         var karte = new byte[w * h];
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++)
-                karte[y * w + x] = IsFree(x, y, mc, mover) ? (byte)0 : (byte)2;
+                // ⭐⭐ 23.08.2026 — PfadOffen statt IsFree: bewegliche Einheiten
+                // sperren die PLANUNG nicht mehr, nur Festes tut es (BB.1,
+                // Art 0). Siehe den Kopf von PfadOffen fuer die Messung und
+                // fuer den zurueckgezogenen ersten Anlauf vom 16.08.2026.
+                karte[y * w + x] = (NeuePfadkarte ? PfadOffen(x, y, mc, mover)
+                                                 : IsFree(x, y, mc, mover)) ? (byte)0 : (byte)2;
 
         // ⭐ Der Kartenrand wird gesperrt (Zeile 0, Zeile H-1, Spalte 0,
         // Spalte B-1 auf 2). Damit braucht die innere Schleife KEINE
@@ -875,8 +952,27 @@ public sealed class NavGrid
             m = Runter(m);
         }
         rueck.Reverse();
+
+        // ⭐⭐ DER 50-SCHRITTE-PUFFER (sec14, 8000 x 50 Byte). Das Original
+        // faehrt hoechstens so viele Ziffern ab und plant dann mit DEMSELBEN
+        // Ziel neu. Genau daran haengt, dass ein Weg durch einen Pulk nicht
+        // fuer immer ein Weg durch einen Pulk bleibt -- siehe PfadOffen.
+        // ⚠ Die Neuplanung selbst sitzt nicht hier, sondern beim Verfolger:
+        // MapEntityLayer erkennt einen ABGESCHNITTENEN Weg daran, dass er
+        // genau UrWegLaenge lang ist, und setzt dann neu an, statt
+        // »angekommen« zu melden.
+        if (!KeinWegpuffer && rueck.Count > UrWegLaenge)
+        {
+            UrAbgeschnitten++;
+            rueck.RemoveRange(UrWegLaenge, rueck.Count - UrWegLaenge);
+        }
         return rueck;
     }
+
+    /// <summary>Wie oft ein Weg am 50-Schritte-Puffer abgeschnitten wurde.
+    /// ⚠ Ohne diese Zahl ist »die Neuplanung laeuft« nicht von »sie kam nie
+    /// dran« zu unterscheiden (Arbeitsweise 33).</summary>
+    public static int UrAbgeschnitten;
 
     /// <summary>
     /// <c>--wegsuche-check</c> — <b>ist es wirklich die Breitensuche des
@@ -1182,6 +1278,51 @@ public sealed class NavGrid
     /// nachprüfbar ist.</para>
     /// </summary>
     public static bool AlterAstern;
+
+    /// <summary>
+    /// <c>--neue-pfadkarte</c>: die Suchkarte aus <see cref="PfadOffen"/> statt
+    /// aus <see cref="IsFree"/> bauen — stehende Einheiten sperren die PLANUNG
+    /// dann nicht mehr, so wie Tafel BB.1 es fuer Art 0 beschreibt.
+    ///
+    /// <para>⚠⚠ <b>STANDARD IST AUS, und das ist eine GEMESSENE Entscheidung
+    /// vom 23.08.2026 — zum zweiten Mal.</b> Die Lesung stimmt; der Nachbau ist
+    /// trotzdem schlechter, solange ihm das Gegenstueck fehlt. Gemessen auf
+    /// map_04 (96 Einheiten dicht gepackt auf 8x14 Zellen, Ziel (12,40),
+    /// 120 s):</para>
+    ///
+    /// <code>
+    ///                  Fortschritt  gefahrene Zellen  angekommen  tot
+    ///   alte Karte          2,6           2901            5        43
+    ///   NEUE Karte          1,6            260            0         3
+    ///   nur 50er-Puffer     6,0           3055           13        35
+    ///   beides zusammen     1,6            260            0         3
+    /// </code>
+    ///
+    /// <para><b>260 Zellen statt 2901</b> — bei 44 fahrenden Einheiten sind das
+    /// rund 6 Zellen in 120 s statt 62. Sie kriechen. Der Grund ist derselbe,
+    /// den der Rueckzieher vom 16.08.2026 genannt hat: plant man durch einen
+    /// Pulk hindurch, fuehrt fast jeder Weg sofort durch einen Nachbarn, und
+    /// dort wartet die Einheit (<see cref="Step.GiveWay"/>) auf eine, die
+    /// selbst wartet.</para>
+    ///
+    /// <para>⚠ <b>Und die niedrige Totenzahl ist KEIN Erfolg, sondern dieselbe
+    /// Ursache:</b> wer sich nicht bewegt, kommt nicht in Reichweite. Sie war
+    /// beim ersten Hinsehen als Beleg gelesen worden — die Fortschrittszahl hat
+    /// das widerlegt.</para>
+    ///
+    /// <para>⭐ <b>Was fehlt, ist benannt:</b> im Original bleibt ein wartender
+    /// Fahrer nicht ewig stehen. Solange bei uns weder ein AUSWEICHEN des
+    /// Blockierers noch eine Neuplanung des Wartenden gebaut ist, ist »durch
+    /// den Pulk planen« nur eine andere Art steckenzubleiben. Der Schalter
+    /// bleibt, damit die naechste Haelfte dagegen gemessen werden kann.</para>
+    /// </summary>
+    public static bool NeuePfadkarte;
+
+    /// <summary>GEGENPROBE <c>--kein-wegpuffer</c>: den 50-Schritte-Puffer
+    /// abschalten und wieder den ganzen Weg zurueckgeben. Die beiden Haelften
+    /// muessen sich EINZELN messen lassen — sonst ist nicht zu zeigen, dass
+    /// erst ihr ZUSAMMENSPIEL traegt.</summary>
+    public static bool KeinWegpuffer;
 
     /// <summary>Wie oft seit dem Kartenstart welches Verfahren gelaufen ist —
     /// für den Prüfstand.</summary>

@@ -1492,6 +1492,10 @@ public partial class MapViewer : Node2D
             else if (a == "--wegsuche-check") _wegsucheCheck = true;
             // ⚠ GEGENPROBE: der alte A*, siehe NavGrid.AlterAstern.
             else if (a == "--alter-astern") Simulation.NavGrid.AlterAstern = true;
+            // ⚠ GEGENPROBEN zu den zwei Haelften vom 23.08.2026 — einzeln,
+            // damit sich zeigen laesst, dass erst ihr ZUSAMMENSPIEL traegt.
+            else if (a == "--neue-pfadkarte") Simulation.NavGrid.NeuePfadkarte = true;
+            else if (a == "--kein-wegpuffer") Simulation.NavGrid.KeinWegpuffer = true;
             else if (a == "--takt-check") _taktCheck = true;
             else if (a == "--gebaeude-check") _gebaeudeCheck = true;
             else if (a == "--mine-check") _mineCheck = true;

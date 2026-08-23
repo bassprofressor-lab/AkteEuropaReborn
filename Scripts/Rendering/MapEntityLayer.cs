@@ -6507,6 +6507,36 @@ public partial class MapEntityLayer : Node2D
             int detour = net <= 0 ? cells * 10 : cells * 10 / net;
             if (cells >= 20 && detour > worst) { worst = detour; worstK = k; }
         }
+        // ⭐⭐ 23.08.2026 — DIE FRAGE, DIE KEINE DER ZAHLEN OBEN BEANTWORTET:
+        // sind sie ihrem Ziel NAEHER gekommen?
+        //
+        // ⚠ »angekommen« ist eine Schwelle (d <= 1) und springt erst im letzten
+        // Augenblick von 0 auf 1. Wer nach der Messzeit noch faehrt, zaehlt wie
+        // einer, der nie losgefahren ist — und ein TOTER zaehlt genauso. Genau
+        // daran ist am 16.08.2026 eine richtige Aenderung gescheitert: gemessen
+        // wurde »32 angekommen vorher, 17 danach«, und niemand hat gefragt, was
+        // aus den uebrigen 23 wurde.
+        //
+        // Der Fortschritt je Einheit ist Startentfernung minus Restentfernung.
+        // Er ist stetig, er braucht keine Schwelle, und er kann NEGATIV sein —
+        // wer sich vom Ziel entfernt, faellt hier auf, statt in »faehrt« zu
+        // verschwinden.
+        int lebend = 0, fortSum = 0, restSum = 0, vorwaerts = 0, rueckwaerts = 0;
+        for (int k = 0; k < _stuckGroup.Count; k++)
+        {
+            var e = _entities[_stuckGroup[k]];
+            if (e.Dead) continue;
+            lebend++;
+            var ziel = _stuckTo[k];
+            int rest = Mathf.Max(Mathf.Abs(e.Col - ziel.X), Mathf.Abs(e.Row - ziel.Y));
+            int start = Mathf.Max(Mathf.Abs(_stuckFrom[k].X - ziel.X),
+                                  Mathf.Abs(_stuckFrom[k].Y - ziel.Y));
+            int fort = start - rest;
+            fortSum += fort; restSum += rest;
+            if (fort > 0) vorwaerts++;
+            else if (fort < 0) rueckwaerts++;
+        }
+
         int stuck = stranded + never;
         var sb = new System.Text.StringBuilder();
         sb.Append($"stuck-check{(BlockOld ? " (GEGENPROBE =alt)" : "")}: " +
@@ -6514,9 +6544,19 @@ public partial class MapEntityLayer : Node2D
                   $"{driving} faehrt, {waiting} wartet (Weg da), {dead} tot, " +
                   $"{dry} ohne Sprit stehengeblieben, " +
                   $"{fremd} anderer Antrieb (Ziel nicht fuer sie), " +
-                  $"[{_retried}x zweiter Versuch geholfen] " +
+                  $"[{_retried}x zweiter Versuch geholfen, " +
+                  // ⭐ Die zwei Zahlen des 23.08.2026. Ohne sie ist »die
+                  // Neuplanung laeuft« nicht von »sie kam nie dran« zu
+                  // unterscheiden, und ein gruener Lauf belegt dann nichts.
+                  $"{Simulation.NavGrid.UrAbgeschnitten}x Weg am 50er-Puffer " +
+                  $"abgeschnitten, {WegFortgesetzt}x fortgesetzt] " +
                   $"{stuck} STEHT OHNE WEG ({stranded} unterwegs liegengeblieben, " +
                   $"{never} nie losgefahren)");
+        if (lebend > 0)
+            sb.Append($"\n   ⭐ Fortschritt: {lebend} leben, im Mittel "
+                    + $"{fortSum * 10 / lebend / 10.0:0.0} Zellen naeher am Ziel "
+                    + $"(Rest im Mittel {restSum * 10 / lebend / 10.0:0.0}); "
+                    + $"{vorwaerts} vorwaerts, {rueckwaerts} RUECKWAERTS");
         foreach (string x in strandedEx) sb.Append($"\n      ! {x}");
         if (drove > 0)
         {
@@ -6872,27 +6912,34 @@ public partial class MapEntityLayer : Node2D
                 int nx = c.X + d.X, ny = c.Y + d.Y;
                 if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
                 if (erreicht2[ny * w + nx]) continue;
-                if (!_nav.IsFree(nx, ny, mc)) continue;
+                if (!_nav.PfadOffen(nx, ny, mc)) continue;
                 if (d.X != 0 && d.Y != 0
-                    && (!_nav.IsFree(c.X + d.X, c.Y, mc)
-                     || !_nav.IsFree(c.X, c.Y + d.Y, mc))) continue;
+                    && (!_nav.PfadOffen(c.X + d.X, c.Y, mc)
+                     || !_nav.PfadOffen(c.X, c.Y + d.Y, mc))) continue;
                 erreicht2[ny * w + nx] = true;
                 stapel2.Add(new Vector2I(nx, ny));
             }
         }
-        int offen2 = 0, freiZellen = 0;
+        int offen2 = 0, freiZellen = 0, hartFrei = 0;
         for (int i = 0; i < w * h; i++) if (erreicht2[i]) offen2++;
         for (int r = 0; r < h; r++)
             for (int c = 0; c < w; c++)
-                if (_nav.IsFree(c, r, mc)) freiZellen++;
+            {
+                if (_nav.PfadOffen(c, r, mc)) freiZellen++;
+                if (_nav.IsFree(c, r, mc)) hartFrei++;
+            }
 
         GD.Print($"nav-flut {mc} von ({start.X},{start.Y}): {offen} von {befahrbar} "
                + $"befahrbaren Zellen erreichbar ({(befahrbar > 0 ? 100.0 * offen / befahrbar : 0):0.0} %), "
                + $"Kasten Spalte {minC}..{maxC}, Zeile {minR}..{maxR}");
         GD.Print($"   Karte {w}x{h}: frei {frei}, rau {rau}, Wasser {wasser}, gesperrt {sperr}");
-        GD.Print($"   ⭐ so wie die WEGSUCHE sie sieht (IsFree, Einheiten sperren): "
+        GD.Print($"   ⭐ mit PfadOffen (nur Festes sperrt) -- NUR mit --neue-pfadkarte die Sicht der Suche: "
                + $"{offen2} von {freiZellen} erreichbar — "
-               + $"{offen - offen2} Zellen geben die stehenden Einheiten weg");
+               + $"{offen - offen2} Zellen gehen gegenueber dem blossen Gelaende verloren");
+        // ⚠ Die alte Sicht als GEGENPROBE stehenlassen: ohne sie ist nicht zu
+        // sehen, was die Umstellung vom 23.08.2026 gebracht hat.
+        GD.Print($"   so wie die WEGSUCHE sie WIRKLICH sieht (IsFree, jede besetzte Zelle sperrt): "
+               + $"{hartFrei} Zellen ueberhaupt frei");
         GD.Print(bild.ToString());
     }
 
@@ -25307,12 +25354,36 @@ public partial class MapEntityLayer : Node2D
                 }
                 if (e.PathIdx >= e.Path.Count)
                 {
+                    // ⭐⭐ 23.08.2026 — WAR DER WEG ABGESCHNITTEN ODER ZU ENDE?
+                    //
+                    // Das Original fuehrt je Einheit einen Wegpuffer von genau
+                    // 50 Ziffern (sec14, 8000 x 50) und plant mit DEMSELBEN
+                    // Ziel neu, sobald er leer ist. Ein Weg, der genau
+                    // UrWegLaenge lang ist, wurde also abgeschnitten — und
+                    // dann ist die Einheit NICHT angekommen.
+                    //
+                    // ⚠ Die Erkennung haengt bewusst an der Laenge und nicht an
+                    // »Zelle != Ziel«: das Ziel kann von NearestFree verlegt
+                    // worden sein, und dann erreicht die Einheit es nie genau.
+                    // Wer darauf neu plant, plant ewig. Ein abgeschnittener Weg
+                    // dagegen hat die Einheit garantiert 50 Zellen weit
+                    // gebracht — der Fortschritt ist gesichert.
+                    bool abgeschnitten = e.Path.Count >= Simulation.NavGrid.UrWegLaenge
+                                      && (e.Goal.X != e.Col || e.Goal.Y != e.Row);
                     e.Path = null;
                     // Angekommen heisst stehen, und beim Stehen schreibt das
                     // Original »kolik = 0« (@0x407af2). StepCost = 0 sagt dem
                     // naechsten Schrittanfang, dass er neu bei null anfaengt.
                     e.StepCost = 0; e.Progress = 0;
-                    NextQueued(i, e);      // one waypoint done: take the next order
+                    if (abgeschnitten)
+                    {
+                        // RetryPath nimmt ihn im naechsten Takt und plant vom
+                        // JETZIGEN Feld aus weiter — das ist die Stelle, an der
+                        // das Original unterwegs auf Aenderungen reagiert.
+                        e.RetryIn = 1;
+                        WegFortgesetzt++;
+                    }
+                    else NextQueued(i, e); // one waypoint done: take the next order
                 }
                 // One unit of fuel per SQUARE ENTERED — confirmed: the move
                 // code prints "on square" (@0x4f6ba4) and then decrements
@@ -25422,6 +25493,14 @@ public partial class MapEntityLayer : Node2D
     /// Pruefstand, damit ein gruenes Ergebnis belegt, dass er ueberhaupt
     /// gehandelt hat (Arbeitsweise 33).</summary>
     private int _retried;
+
+    /// <summary>⭐ Wie oft ein am 50-Schritte-Puffer abgeschnittener Weg
+    /// FORTGESETZT wurde, statt als »angekommen« zu gelten. ⚠ Ohne diese Zahl
+    /// ist »die Neuplanung laeuft« nicht von »sie kam nie dran« zu
+    /// unterscheiden — und genau das ist der Unterschied zwischen einer
+    /// Einheit, die weiterfaehrt, und einer, die auf halbem Weg stehenbleibt
+    /// und meint, sie sei da.</summary>
+    public static int WegFortgesetzt;
 
     private static int GetI(GDict d, string k, int def = 0)
         => d.TryGetValue(k, out var v) && v.VariantType != Variant.Type.Nil ? v.AsInt32() : def;
