@@ -6128,6 +6128,12 @@ public partial class MapEntityLayer : Node2D
     private Vector2 _drehVorPos;
     private int _drehVorFacing = -1;
     private int _drehTakte, _drehBewegt, _drehWechsel, _drehPasst, _drehDaneben, _drehMaxAbw;
+
+    /// <summary>Ist das beobachtete Schiff unterwegs untergegangen? ⚠ Im
+    /// Gefecht schiesst die KI darauf, und dann endet die Beobachtung. Das
+    /// gehört in die Ausgabe: »nicht gestartet« wäre eine falsche Auskunft über
+    /// eine echte Messung.</summary>
+    private bool _drehTot;
     private int _drehStufen = 8;
 
     public string SchiffDrehStart()
@@ -6181,6 +6187,7 @@ public partial class MapEntityLayer : Node2D
         s.Block = BlockEnter + Simulation.Determinism.Roll(BlockEnterSpread);
         _drehVorPos = s.Pos; _drehVorFacing = s.Facing;
         _drehTakte = _drehBewegt = _drehWechsel = _drehPasst = _drehDaneben = _drehMaxAbw = 0;
+        _drehTot = false;
         _drehOn = true;
         return $"schiffdreh-check: Rumpf {s.UnitType} (Gattung {s.GameUnitType}, "
              + $"{_drehStufen} Blickrichtungen) von ({s.Col},{s.Row}) nach {ziel.Value}, "
@@ -6192,7 +6199,7 @@ public partial class MapEntityLayer : Node2D
     {
         if (!_drehOn || _drehSchiff < 0 || _drehSchiff >= _entities.Count) return;
         var s = _entities[_drehSchiff];
-        if (s.Dead) { _drehOn = false; return; }
+        if (s.Dead) { _drehTot = true; return; }
         _drehTakte++;
         var d = s.Pos - _drehVorPos;
         if (s.Facing != _drehVorFacing) _drehWechsel++;
@@ -6215,9 +6222,12 @@ public partial class MapEntityLayer : Node2D
         if (!_drehOn) return "schiffdreh-check: nicht gestartet";
         if (_drehBewegt == 0)
             return "schiffdreh-check: das Schiff hat sich KEINEN EINZIGEN Takt bewegt — "
-                 + "jede Aussage über seine Blickrichtung waere erfunden";
+                 + "jede Aussage über seine Blickrichtung waere erfunden"
+                 + (_drehTot ? " (es wurde abgeschossen, bevor es losfuhr)" : "");
         var sb = new System.Text.StringBuilder("schiffdreh-check\n");
-        sb.Append($"  {_drehTakte} Takte beobachtet, davon {_drehBewegt} mit Bewegung\n");
+        sb.Append($"  {_drehTakte} Takte beobachtet, davon {_drehBewegt} mit Bewegung"
+                + (_drehTot ? "  ⚠ das Schiff wurde unterwegs abgeschossen — die "
+                            + "Beobachtung endet dort" : "") + "\n");
         sb.Append($"  Blickwechsel: {_drehWechsel}"
                 + (_drehWechsel == 0 ? "  ⚠⚠ es dreht sich NIE" : "") + "\n");
         sb.Append($"  Blick passt zur Fahrtrichtung: {_drehPasst} von {_drehBewegt} "
