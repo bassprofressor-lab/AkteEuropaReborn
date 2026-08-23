@@ -8111,7 +8111,27 @@ public partial class MapEntityLayer : Node2D
             case 4:  return 16f;              // 640 Feinschritte / 40 = 16 Zellen
             case 2:  return 0f;               // keine bewaffnete in unseren Karten
         }
-        return e.Range > 0 ? e.Range : WeaponOf(e.Weapon).RangeTiles;
+        // ⚠⚠ 23.08.2026 — DER RUECKFALL AUF UNSERE WAFFENTAFEL IST WEG.
+        //
+        // Gemeldet: »die Einheit Minelayer schiesst irgendwas auf sehr hohe
+        // Distanz, was keinen Sinn macht, weil er ja ein Minenleger ist.«
+        //
+        // Hier stand `e.Range > 0 ? e.Range : WeaponOf(e.Weapon).RangeTiles` —
+        // wer keinen eigenen Wert hatte, bekam einen aus UNSERER Tafel. Das
+        // Original kennt diesen Rueckfall nicht: `hoechstreichweite()`
+        // (0x454200 / F 0x452EB0) rechnet `byte[u+0x2B] · 40`, und 0 heisst 0.
+        // Eine Einheit ohne eigene Reichweite schiesst NIE.
+        //
+        // ⭐ Wie viele das sind, ist ausgezaehlt und nicht geschaetzt: ueber alle
+        // Karten tragen **459 von 4833** Einheitensaetzen eine Waffennummer bei
+        // Reichweite 0, davon **314 auch Angriff 0**. Der Minenleger ist einer
+        // davon — er hat ein Aufbauteil, aber keine Waffenwerte.
+        //
+        // ⚠ Der Rueckfall war nicht noetig: erzeugte Einheiten bekommen ihre
+        // Reichweite aus dem Entwurf (`range_raw`), nicht von hier.
+        return WaffentafelRueckfall && e.Range <= 0
+             ? WeaponOf(e.Weapon).RangeTiles
+             : e.Range;
     }
 
     /// <summary>GEGENPROBE: die Mindestreichweite nicht beachten, also der
@@ -8145,6 +8165,14 @@ public partial class MapEntityLayer : Node2D
     /// 22 Byte auseinander, gegen dieselbe Entfernung).</summary>
     private static bool InFiringWindow(Entity e, float dist)
         => dist <= RangeOf(e) && dist >= RangeMinOf(e);
+
+    /// <summary>GEGENPROBE <c>--waffentafel-rueckfall</c>: eine Einheit ohne
+    /// eigene Reichweite bekommt wieder eine aus UNSERER Waffentafel — der
+    /// Stand vor dem 23.08.2026. ⚠ Das Original kennt diesen Rueckfall nicht.
+    /// Der Schalter steht hier, damit sich zeigen laesst, WAS er bewirkt hat:
+    /// 459 von 4833 Einheitensaetzen tragen eine Waffennummer bei Reichweite 0.
+    /// </summary>
+    public static bool WaffentafelRueckfall;
 
     /// <summary>Wie oft ein Ziel fallengelassen wurde, weil es zu NAH war.</summary>
     public int MinRangeBlocked;
@@ -16205,7 +16233,54 @@ public partial class MapEntityLayer : Node2D
         sb.AppendLine($"  Gattung 3 auf dieser Karte: {g3} Stueck, davon {g3bewaffnet} " +
                       $"mit Reichweite — sie behalten sie (siehe RangeOf)");
 
-        bool alles = metrikOk && gegenOk && schiffOk && landOk && zuNah && passt && zuWeit;
+        // ⭐⭐ 23.08.2026 — WER KEINEN EIGENEN WERT HAT, SCHIESST NICHT.
+        //
+        // Gemeldet: »die Einheit Minelayer schiesst irgendwas auf sehr hohe
+        // Distanz«. Der Minenleger traegt ein Aufbauteil, aber keine
+        // Waffenwerte — und unser Rueckfall auf die eigene Waffentafel gab ihm
+        // trotzdem eine Reichweite. Das Original rechnet `byte[u+0x2B] · 40`,
+        // ohne jeden Rueckfall.
+        //
+        // ⭐ Das Nullmodell ist der Schalter selbst: mit
+        // --waffentafel-rueckfall bekommt dieselbe Einheit wieder eine
+        // Reichweite. Ohne diese zweite Haelfte hiesse »Reichweite 0« nur,
+        // dass die Einheit keine Waffe hat.
+        // ⚠ Die Waffennummer fuer die Probe wird GESUCHT, nicht geraten: sie
+        // muss eine sein, fuer die der Rueckfall wirklich etwas liefert.
+        // Der erste Anlauf nahm 46 — ein Ausruestungsaufsatz (40..54), fuer den
+        // WeaponOf ohnehin 0/0 gibt. Das Nullmodell sagte damit nichts, und die
+        // Messung haette »richtig« gemeldet, ohne etwas zu pruefen.
+        int probeWaffe = -1;
+        for (int w = 1; w < 256 && probeWaffe < 0; w++)
+            if (WeaponOf(w).RangeTiles > 0f) probeWaffe = w;
+        var ohneWert = new Entity { GameUnitType = 0, Range = 0, Weapon = probeWaffe > 0 ? probeWaffe : 46 };
+        float mitRueckfall, ohneRueckfall;
+        bool merk = WaffentafelRueckfall;
+        WaffentafelRueckfall = false; ohneRueckfall = RangeOf(ohneWert);
+        WaffentafelRueckfall = true;  mitRueckfall  = RangeOf(ohneWert);
+        WaffentafelRueckfall = merk;
+        bool stumm = ohneRueckfall <= 0f;
+        sb.AppendLine($"  Waffe {probeWaffe} ohne eigenen Wert: Reichweite "
+                    + $"{ohneRueckfall:0.#} (erwartet 0): {(stumm ? "schweigt, richtig" : "FALSCH")}");
+        sb.AppendLine($"    Nullmodell mit --waffentafel-rueckfall: {mitRueckfall:0.#} "
+                    + $"— {(mitRueckfall > 0f ? "die alte Fassung haette geschossen" : "⚠ der Schalter tut nichts, die Messung sagt nichts")}");
+
+        // ⚠ Und die Zahl, um die es geht, aus DIESER Karte statt aus dem
+        // Gedaechtnis: wie viele Saetze traegen eine Waffe ohne Reichweite?
+        int mitWaffeOhneWert = 0, davonOhneAngriff = 0;
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Dead) continue;
+            if (e.Weapon == 0 || e.Range > 0) continue;
+            mitWaffeOhneWert++;
+            if (e.Attack <= 0) davonOhneAngriff++;
+        }
+        sb.AppendLine($"  auf dieser Karte: {mitWaffeOhneWert} Einheiten mit Waffennummer "
+                    + $"aber ohne Reichweite ({davonOhneAngriff} davon auch ohne Angriff) "
+                    + "— sie schweigen jetzt");
+
+        bool alles = metrikOk && gegenOk && schiffOk && landOk && zuNah && passt && zuWeit
+                  && stumm && mitRueckfall > 0f;
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }

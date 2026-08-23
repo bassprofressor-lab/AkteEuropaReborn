@@ -1430,6 +1430,7 @@ public partial class MapViewer : Node2D
             // B8-Gegenprobe: die Startbasen NICHT zuteilen (Stand vor dem
             // 15.08.2026). Muss auf einer Eroberungskarte einen Unterschied
             // machen, sonst hat die Zuteilung nichts getan.
+            else if (a == "--waffentafel-rueckfall") MapEntityLayer.WaffentafelRueckfall = true;
             else if (a == "--no-min-range") MapEntityLayer.NoMinRange = true;
             else if (a == "--no-start-base") MapEntityLayer.NoStartBase = true;
             else if (a == "--leave-check") _leaveCheck = true;
