@@ -6333,6 +6333,39 @@ public partial class MapEntityLayer : Node2D
         return reach;
     }
 
+    /// <summary>
+    /// <c>--umbefehl=&lt;sekunden&gt;,&lt;c&gt;,&lt;r&gt;</c> — <b>der Befehl
+    /// MITTEN IM SCHRITT</b> (23.08.2026).
+    ///
+    /// <para>⚠ Gemeldet als »wenn man Einheiten nach links schickt und dann
+    /// sofort nach rechts, sieht das aus als wuerden die springen«. Kein
+    /// bestehender Pruefstand loest den Fall aus: alle befehlen EINMAL, und
+    /// jede spaetere Neuplanung setzt an, wenn die Einheit gerade auf einer
+    /// Zellmitte steht — dort gibt es nichts zu springen.</para>
+    ///
+    /// <para>⭐ Der Fall braucht genau eines: einen zweiten Befehl, waehrend die
+    /// Einheiten zwischen zwei Zellen sind. Zusammen mit dem Sprungwaechter ist
+    /// er damit messbar statt nur beschreibbar.</para>
+    /// </summary>
+    public string UmbefehlGo(int c, int r)
+    {
+        if (_nav == null || _stuckGroup.Count == 0) return "umbefehl: keine Gruppe";
+        int unterwegs = 0;
+        foreach (int i in _stuckGroup)
+        {
+            var e = _entities[i];
+            if (e.Dead) continue;
+            if (!e.Pos.IsEqualApprox(BodyCenterAt(e, e.Col, e.Row))) unterwegs++;
+        }
+        _sel.Clear();
+        foreach (int i in _stuckGroup) if (!_entities[i].Dead) _sel.Add(i);
+        IssueMove(CellCenter(c, r));
+        for (int k = 0; k < _stuckGroup.Count; k++)
+            if (k < _stuckTo.Count) _stuckTo[k] = _entities[_stuckGroup[k]].Goal;
+        return $"umbefehl: {_sel.Count} Einheiten auf ({c},{r}) umbefohlen — "
+             + $"{unterwegs} davon standen ZWISCHEN zwei Zellen (nur die koennen springen)";
+    }
+
     public string StuckCheckStart()
     {
         if (_nav == null) return "stuck-check: kein Gitter";
@@ -6552,6 +6585,10 @@ public partial class MapEntityLayer : Node2D
                   $"abgeschnitten, {WegFortgesetzt}x fortgesetzt] " +
                   $"{stuck} STEHT OHNE WEG ({stranded} unterwegs liegengeblieben, " +
                   $"{never} nie losgefahren)");
+        sb.Append($"\n   ⭐ Sprungwaechter: weitester Satz in EINEM Takt "
+                + $"{SprungMax:0.00} Zellen (slot {SprungSlot}), "
+                + $"{SprungZahl} Takte ueber einer ganzen Zelle; "
+                + $"{SchrittAbgebrochen}x Schritt mitten drin neu angesetzt");
         if (lebend > 0)
             sb.Append($"\n   ⭐ Fortschritt: {lebend} leben, im Mittel "
                     + $"{fortSum * 10 / lebend / 10.0:0.0} Zellen naeher am Ziel "
@@ -25136,6 +25173,35 @@ public partial class MapEntityLayer : Node2D
             if (eb.IsBuilding) UpdateProduction(i, eb, dt);
         }
 
+        // ⭐⭐ DER SPRUNGWAECHTER (23.08.2026).
+        //
+        // ⚠ Er ist aus dem gemeldeten »Springen/Beamen« entstanden, und aus dem
+        // Umstand, dass ich es beim ersten Mal in der WEGSUCHE gesucht habe.
+        // Dort war zwar auch ein Fehler, aber nicht dieser — und ohne eine Zahl
+        // war das nicht zu unterscheiden.
+        //
+        // Gemessen wird das EINZIGE, was den Fall eindeutig macht: wie weit sich
+        // eine Einheit in EINEM Takt bewegt hat, in Zellen. Ein ordentlicher
+        // Schritt bleibt weit unter 1; alles ab etwa 1 ist ein Sprung, ganz
+        // gleich, welcher Teil des Programms ihn verursacht hat.
+        //
+        // ⚠ Der Waechter kennt die Ursache NICHT und soll sie nicht kennen —
+        // genau darum faellt ihm auch ein Sprung auf, den ich nicht vermutet
+        // haette.
+        for (int i = 0; i < _entities.Count && _sprungWacht != null; i++)
+        {
+            var es = _entities[i];
+            if (es.IsProp || es.Dead || es.IsBuilding) continue;
+            if (_sprungWacht.TryGetValue(i, out var vor))
+            {
+                float dz = Mathf.Max(Mathf.Abs(es.Pos.X - vor.X) / TileW,
+                                     Mathf.Abs(es.Pos.Y - vor.Y) / TileH);
+                if (dz > SprungMax) { SprungMax = dz; SprungSlot = es.Slot; }
+                if (dz >= 1f) SprungZahl++;
+            }
+            _sprungWacht[i] = es.Pos;
+        }
+
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
@@ -25182,8 +25248,50 @@ public partial class MapEntityLayer : Node2D
                 // jeder Schritt einzeln auf ganze Takte aufrundete. Genullt wird
                 // nur, wo die Einheit vorher STAND (StepCost == 0), so wie das
                 // Original beim Anhalten »kolik = 0« schreibt (@0x407af2).
-                e.StepFrom = BodyCenterAt(e, e.Col, e.Row);
-                if (e.StepCost <= 0) e.Progress = 0;
+                //
+                // ⚠⚠ 23.08.2026 — HIER SASS DAS »SPRINGEN/BEAMEN«, und NICHT in
+                // der Wegsuche. Gemeldet: »wenn man Einheiten nach links
+                // schickt und dann sofort nach rechts, sieht das aus als
+                // wuerden die springen ein paar felder«. Der Fehler ueberlebte
+                // die Behebung des Rueckverfolgers, weil er woanders wohnt.
+                //
+                // Der Ablauf: die Einheit faehrt von A nach B und ist bei 60 %.
+                // Col/Row stehen noch auf A, Pos liegt zwischen A und B,
+                // Progress bei 0,6·StepCost. Jetzt kommt ein neuer Befehl. Jede
+                // Stelle, die einen Weg setzt, nullt `Reserved` — aber NICHT
+                // `Progress`, denn `StepCost > 0` heisst hier »der vorige
+                // Schritt lief noch«. Im naechsten Takt rechnet die Zeile
+                // darunter dann
+                //
+                //     Pos = Mitte(A).Lerp(Mitte(C), 0,6)
+                //
+                // und setzt die Einheit in EINEM Bild auf 60 % des NEUEN Weges,
+                // waehrend sie koerperlich 60 % in die Gegenrichtung unterwegs
+                // war. Bei einer Kehrtwende sind das gut zwei Zellen.
+                //
+                // ⭐ Unterschieden wird an der LAGE, nicht an einem Merker: nach
+                // einem ordentlich beendeten Schritt steht die Einheit GENAU auf
+                // der Zellmitte (`e.Pos = dest`), nach einem abgebrochenen nicht.
+                // BodyCenterAt haengt allein an der Zelle — kein Zustand der
+                // Einheit geht ein —, also ist der Vergleich verlaesslich.
+                //
+                // ⚠ Der UEBERSCHUSS bleibt, wo er hingehoert: beim ordentlich
+                // beendeten Schritt. Das Original zieht dort `2·kosten − 1` ab
+                // und laesst den Rest stehen (@0x4079a4); wer ihn hier
+                // wegwirft, rundet jeden Schritt einzeln auf ganze Takte auf und
+                // bekommt 1,45 statt 1,50 — das hat der Prueflauf schon einmal
+                // gefangen.
+                var mitte = BodyCenterAt(e, e.Col, e.Row);
+                bool abgebrochen = e.StepCost > 0 && !e.Pos.IsEqualApprox(mitte);
+                if (e.StepCost <= 0 || abgebrochen)
+                {
+                    // Frischer Anlauf: von dort, wo sie WIRKLICH steht, und ohne
+                    // geerbten Fortschritt.
+                    e.StepFrom = e.Pos;
+                    e.Progress = 0;
+                    if (abgebrochen) SchrittAbgebrochen++;
+                }
+                else e.StepFrom = mitte;
                 e.StepCost = Simulation.NavGrid.StepCostMilli(new Vector2I(e.Col, e.Row), next);
             }
 
@@ -25493,6 +25601,23 @@ public partial class MapEntityLayer : Node2D
     /// Pruefstand, damit ein gruenes Ergebnis belegt, dass er ueberhaupt
     /// gehandelt hat (Arbeitsweise 33).</summary>
     private int _retried;
+
+    /// <summary>Die letzte Lage jeder Einheit, fuer den Sprungwaechter.</summary>
+    private readonly Dictionary<int, Vector2> _sprungWacht = new();
+
+    /// <summary>Der weiteste Satz, den irgendeine Einheit in EINEM Takt gemacht
+    /// hat, in Zellen — und wer es war. ⚠ Ein ordentlicher Schritt bleibt weit
+    /// unter 1.</summary>
+    public static float SprungMax;
+
+    /// <summary>Wie viele Taktschritte ueber eine ganze Zelle hinausgingen.</summary>
+    public static int SprungZahl, SprungSlot = -1;
+
+    /// <summary>⭐ Wie oft ein Schritt MITTEN DRIN abgebrochen und neu angesetzt
+    /// wurde (neuer Befehl waehrend der Fahrt). ⚠ Ohne diese Zahl ist nicht zu
+    /// belegen, dass der Fall im Prueflauf ueberhaupt vorkam — und ein Fehler,
+    /// den der Prueflauf nie ausloest, gilt gruen (Arbeitsweise 33).</summary>
+    public static int SchrittAbgebrochen;
 
     /// <summary>⭐ Wie oft ein am 50-Schritte-Puffer abgeschnittener Weg
     /// FORTGESETZT wurde, statt als »angekommen« zu gelten. ⚠ Ohne diese Zahl

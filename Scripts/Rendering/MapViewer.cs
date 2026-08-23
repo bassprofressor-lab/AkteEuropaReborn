@@ -1403,6 +1403,15 @@ public partial class MapViewer : Node2D
             // gehoeren nie in denselben Zaehler (Arbeitsweise I).
             else if (a == "--speed-check") { _speedCheck = true; _stuckCheck = true; }
             else if (a == "--stuck-check") _stuckCheck = true;
+            // ⭐ Der zweite Befehl MITTEN IM SCHRITT — siehe
+            // MapEntityLayer.UmbefehlGo. Ohne ihn loest kein Prueflauf
+            // das gemeldete Springen ueberhaupt aus.
+            else if (a.StartsWith("--umbefehl="))
+            {
+                var q = a["--umbefehl=".Length..].Split(',');
+                if (q.Length >= 3) { _umbefehlAfter = q[0].ToFloat();
+                                     _umbefehlC = q[1].ToInt(); _umbefehlR = q[2].ToInt(); }
+            }
             else if (a == "--stuck-check=alt")
             { _stuckCheck = true; MapEntityLayer.BlockOld = true; }
             // --stuck-check=<c>,<r>[,alt] — ein AUSDRUECKLICHES Ziel, damit die
@@ -1734,6 +1743,8 @@ public partial class MapViewer : Node2D
     private int _filmRunde;
     private bool _leaveCheck;
     private bool _stuckCheck;
+    private float _umbefehlAfter = -1f;
+    private int _umbefehlC, _umbefehlR;
     private bool _speedCheck;
     private float _scriptCheck;
     private float _payCheck;
@@ -1899,6 +1910,15 @@ public partial class MapViewer : Node2D
             {
                 _supplyPeriodLeft = _supplyPeriod;
                 GD.Print($"[{Mathf.RoundToInt(_supplyElapsed)}s] supply: {_entities.NetworkLine()}");
+            }
+        }
+        if (_umbefehlAfter > 0f)
+        {
+            _umbefehlAfter -= (float)delta;
+            if (_umbefehlAfter <= 0f)
+            {
+                _umbefehlAfter = -1f;
+                GD.Print(_entities.UmbefehlGo(_umbefehlC, _umbefehlR));
             }
         }
         if (_shipCheckAfter > 0f)
