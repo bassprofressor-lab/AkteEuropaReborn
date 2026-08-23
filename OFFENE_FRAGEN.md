@@ -17535,3 +17535,59 @@ gezaehlt und war **nie gedruckt**. `RulesFired == 0` sieht genau so aus wie
 echten Lauf kombiniert wird — `TickCheck` haengt seine Zaehler erst an und ruft
 dann `Advance(N − bereits gelaufene Takte)`, also null Takte. Ich habe mich
 zweimal darauf gestuetzt.
+
+### BR.12 ⭐⭐⭐ DER BLOCK IST GELESEN: es ist ein VERTEILER, kein Tor
+
+Gelesen in **beiden** Auslieferungen, befehlsgleich — C @0x498452, F @0x497D5C.
+Die Form ist in beiden dieselbe (`aekernel-tools/adis.py`, Fingerabdruck
+»`cmp eax,0xa` gefolgt von `movsx eax,word[imm32]`«: **genau eine** Stelle je
+EXE):
+
+```
+        cmp   eax, 0xa
+        jle   ENDE            ; ← DAS EINZIGE ECHTE TOR: Takt > 10
+        movsx eax, word [var0]
+        test  eax, eax
+        je    ARM1            ; var0 == 0  -> springt VORWAERTS IN den Bereich
+        cmp   eax, 0x32
+        je    ARM2            ; var0 == 50 -> springt VORWAERTS IN den Bereich
+        cmp   word [var0], 0x32
+        jge   ENDE
+        inc   word [var0]     ; die Regel, der die vier Bedingungen gehoeren
+        jmp   ENDE
+ARM1:   show_text(350,250,1) ; var0 = 1
+ARM2:   wenn window_open(1) zu: close_texts; show_text(370,270,2); var0 = 51
+```
+
+⭐⭐ **DIE REGEL, DIE DARAUS FOLGT, UND SIE GILT FUER ALLE 33 MISSIONEN:**
+
+> **Ein bedingter Sprung, dessen Ziel INNERHALB des Bereichs liegt, ist ein
+> VERTEILERARM — kein Tor. Nur ein Sprung ans Bereichsende sperrt.**
+
+Alle drei Tore von Mission 1 fallen darunter: zwei springen unmittelbar auf die
+Regeln 1 und 2, und das dritte (`jge ENDE`) ueberspringt Regeln, die ueberhaupt
+nur ueber diese Sprünge erreichbar sind. Der Leser hat die Regeln RICHTIG
+erkannt und dieselbe Vergleichskette ZUSAETZLICH als Tor verbucht.
+
+**Die Bilanz ueber die Missionen** (60 s, frischer Spielstand, ohne Zutun):
+
+```
+M1:  0 Regeln gefeuert, 33000x ein Tor zu     tot
+M10: 0                   3000x               tot
+M16: 0                  24000x               tot
+M19: 0                  15000x               tot
+M15: 0                      0x               andere Ursache
+M3:  12054               9049x               lebt
+```
+
+⚠⚠ **UND DAS IST DIE ANTWORT AUF SEINE FRAGE »das muessen wir besser
+hinbekommen«.** Der stehende Prueflauf ueber alle 33 Missionen lautet:
+
+    fuer m in 1..33: --campaign=$m --no-briefing --tick-check=60
+    -> 33 von 33 »ohne Zutun«
+
+**Er misst, dass NICHTS geschieht.** Eine Mission, deren Skript vollstaendig tot
+ist, besteht ihn makellos — sie ist ja besonders ruhig. Der Prueflauf war die
+ganze Zeit gruen, waehrend vier Missionen stillstanden.
+⭐ Ab jetzt gehoert `RulesFired` und `GatesClosed` in dieselbe Zeile, und der
+Lauf muss verlangen, dass eine Mission ihre Regeln auch WIRKLICH feuert.
