@@ -6110,6 +6110,129 @@ public partial class MapEntityLayer : Node2D
     /// andere Zahlen liefern — sonst misst der Pruefstand nicht, was er zu
     /// messen behauptet.</para>
     /// </summary>
+    // ================= der Drehprüfstand der Schiffe =========================
+    //
+    // ⚠⚠ Gemeldet, mehrfach und zuletzt am 23.08.2026: »Boote fahren strange,
+    // wie sliden, zeigen nicht die Front in Fahrtrichtung, ein Drehen bemerke
+    // ich auch nicht.«
+    //
+    // ⚠ Ich habe zweimal geantwortet, die Werte sähen richtig aus — 16
+    // Blickrichtungen, `DirToFacing` sauber, die Bremse gelesen. Das ist keine
+    // Messung, das ist ein Blick in den Quelltext. Gemessen war die Drehung
+    // eines FAHRENDEN Schiffes nie.
+    //
+    // Hier wird sie es. Je Takt: wohin fährt es wirklich (aus der Lageänderung,
+    // nicht aus dem Weg), wohin schaut es, und passt beides zusammen.
+    private bool _drehOn;
+    private int _drehSchiff = -1;
+    private Vector2 _drehVorPos;
+    private int _drehVorFacing = -1;
+    private int _drehTakte, _drehBewegt, _drehWechsel, _drehPasst, _drehDaneben, _drehMaxAbw;
+    private int _drehStufen = 8;
+
+    public string SchiffDrehStart()
+    {
+        if (_nav == null) return "schiffdreh-check: kein Gitter";
+        _drehSchiff = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || !e.Mobile) continue;
+            if (e.GameUnitType is not (4 or 5)) continue;
+            _drehSchiff = i; break;
+        }
+        if (_drehSchiff < 0) return "schiffdreh-check: kein Schiff auf dieser Karte";
+
+        var s = _entities[_drehSchiff];
+        _drehStufen = FacingsOf(s.UnitType);
+        // ⭐ Ein Ziel, das eine GROSSE Drehung erzwingt: die am weitesten
+        // entfernte Wasserzelle, die das Schiff erreichen kann. Ein Ziel
+        // geradeaus misst nur Geradeausfahrt.
+        // ⚠ Die weiteste FREIE Zelle ist nicht die weiteste ERREICHBARE — der
+        // erste Anlauf nahm sie und bekam »kein Weg«. Also geflutet: das Ziel
+        // ist die zuletzt erreichte Zelle, und damit die entfernteste.
+        Vector2I? ziel = null;
+        {
+            var gesehen = new bool[_nav.Width * _nav.Height];
+            var welle = new List<Vector2I> { new(s.Col, s.Row) };
+            gesehen[s.Row * _nav.Width + s.Col] = true;
+            for (int i = 0; i < welle.Count; i++)
+            {
+                var cc = welle[i];
+                ziel = cc;
+                foreach (var d in Simulation.NavGrid.UrDirs)
+                {
+                    int nx = cc.X + d.X, ny = cc.Y + d.Y;
+                    if (nx < 0 || ny < 0 || nx >= _nav.Width || ny >= _nav.Height) continue;
+                    if (gesehen[ny * _nav.Width + nx]) continue;
+                    if (!_nav.IsFree(nx, ny, s.Move, _drehSchiff)) continue;
+                    gesehen[ny * _nav.Width + nx] = true;
+                    welle.Add(new Vector2I(nx, ny));
+                }
+            }
+            if (welle.Count < 8) return $"schiffdreh-check: von ({s.Col},{s.Row}) aus sind nur "
+                                      + $"{welle.Count} Zellen erreichbar — zu wenig zum Messen";
+        }
+        if (ziel == null) return "schiffdreh-check: kein erreichbares Wasserziel";
+        var weg = _nav.FindPath(new Vector2I(s.Col, s.Row), ziel.Value, s.Move, _drehSchiff);
+        if (weg == null || weg.Count == 0)
+            return $"schiffdreh-check: kein Weg von ({s.Col},{s.Row}) nach {ziel.Value}";
+        s.Path = weg; s.PathIdx = 0; s.Goal = ziel.Value; s.Reserved = null;
+        s.Block = BlockEnter + Simulation.Determinism.Roll(BlockEnterSpread);
+        _drehVorPos = s.Pos; _drehVorFacing = s.Facing;
+        _drehTakte = _drehBewegt = _drehWechsel = _drehPasst = _drehDaneben = _drehMaxAbw = 0;
+        _drehOn = true;
+        return $"schiffdreh-check: Rumpf {s.UnitType} (Gattung {s.GameUnitType}, "
+             + $"{_drehStufen} Blickrichtungen) von ({s.Col},{s.Row}) nach {ziel.Value}, "
+             + $"{weg.Count} Zellen; Blick zu Beginn {s.Facing}";
+    }
+
+    /// <summary>Eine Probe je Takt — gerufen aus der Fahrschleife.</summary>
+    private void SchiffDrehTakt()
+    {
+        if (!_drehOn || _drehSchiff < 0 || _drehSchiff >= _entities.Count) return;
+        var s = _entities[_drehSchiff];
+        if (s.Dead) { _drehOn = false; return; }
+        _drehTakte++;
+        var d = s.Pos - _drehVorPos;
+        if (s.Facing != _drehVorFacing) _drehWechsel++;
+        // ⚠ Nur Takte, in denen es sich WIRKLICH bewegt hat, sagen etwas über
+        // die Blickrichtung. Ein stehendes Schiff hat keine Fahrtrichtung, und
+        // eine erfundene wäre schlimmer als keine.
+        if (d.LengthSquared() > 0.000001f)
+        {
+            _drehBewegt++;
+            int will = DirToFacing(d, _drehStufen);
+            int ab = Mathf.Abs(((s.Facing - will) % _drehStufen + _drehStufen) % _drehStufen);
+            ab = Mathf.Min(ab, _drehStufen - ab);          // kürzester Weg um den Kreis
+            if (ab == 0) _drehPasst++; else { _drehDaneben++; if (ab > _drehMaxAbw) _drehMaxAbw = ab; }
+        }
+        _drehVorPos = s.Pos; _drehVorFacing = s.Facing;
+    }
+
+    public string SchiffDrehLine()
+    {
+        if (!_drehOn) return "schiffdreh-check: nicht gestartet";
+        if (_drehBewegt == 0)
+            return "schiffdreh-check: das Schiff hat sich KEINEN EINZIGEN Takt bewegt — "
+                 + "jede Aussage über seine Blickrichtung waere erfunden";
+        var sb = new System.Text.StringBuilder("schiffdreh-check\n");
+        sb.Append($"  {_drehTakte} Takte beobachtet, davon {_drehBewegt} mit Bewegung\n");
+        sb.Append($"  Blickwechsel: {_drehWechsel}"
+                + (_drehWechsel == 0 ? "  ⚠⚠ es dreht sich NIE" : "") + "\n");
+        sb.Append($"  Blick passt zur Fahrtrichtung: {_drehPasst} von {_drehBewegt} "
+                + $"({100.0 * _drehPasst / _drehBewegt:0.0} %), daneben {_drehDaneben}, "
+                + $"groesste Abweichung {_drehMaxAbw} von {_drehStufen} Stufen\n");
+        // ⭐ Die Messlatte ist NICHT »100 %«: das Original dreht erst und faehrt
+        // dann, aber unsere Lageaenderung wird im SELBEN Takt gemessen, in dem
+        // die Stufe wechselt. Ein paar Takte Rueckstand sind richtig. Was NICHT
+        // richtig ist: nie drehen, oder dauerhaft quer stehen.
+        bool ok = _drehWechsel > 0 && _drehMaxAbw <= 2 && _drehPasst * 2 >= _drehBewegt;
+        sb.Append(ok ? "  BESTANDEN — es dreht, und die Nase zeigt mit"
+                     : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
+
     private bool _speedOn;
     private readonly Dictionary<int, int> _spdTicks = new();
     // (Bodenart, schraeg) -> (Schritte, Summe Takte×Geschwindigkeit, Summe Takte)
@@ -25420,6 +25543,8 @@ public partial class MapEntityLayer : Node2D
             _sprungWacht[i] = es.Pos;
         }
 
+        SchiffDrehTakt();
+
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
@@ -25950,8 +26075,31 @@ public partial class MapEntityLayer : Node2D
             // ABGELESEN und nicht an der Typnummer erraten: der Bildersatz und
             // die Drehung muessen aus derselben Quelle kommen, sonst dreht die
             // Einheit in Stufen, die es als Bild nicht gibt.
-            if (u.TryGetValue("n_facings", out var nv) && nv.VariantType == Variant.Type.Int)
-                _unitFacings[ut] = (int)nv;
+            // ⚠⚠ 23.08.2026 — HIER STAND `nv.VariantType == Variant.Type.Int`,
+            // UND DIESE BEDINGUNG TRIFFT NIE ZU.
+            //
+            // Godots JSON-Leser gibt JEDE Zahl als `Float` zurueck, auch eine
+            // ganze. Die Pruefung war also immer falsch, `_unitFacings` blieb
+            // leer, und `FacingsOf` fiel auf seinen Rueckfallwert 8 zurueck.
+            // Damit drehte JEDES SCHIFF in 45-Grad-Stufen und benutzte acht
+            // seiner SECHZEHN Bilder — genau die Regression, die am 19.08.2026
+            // schon einmal behoben war.
+            //
+            // ⭐ Gemessen mit --schiffdreh-check, das ist der Beleg:
+            //     vorher:  Rumpf 153 (Gattung 4, 8 Blickrichtungen)
+            //     nachher: Rumpf 153 (Gattung 4, 16 Blickrichtungen)
+            // Die Mechanik war die ganze Zeit richtig (Blick passt zur
+            // Fahrtrichtung, 1168 von 1168 bewegten Takten) — nur zu grob.
+            //
+            // ⚠ Die Lehre: eine Typpruefung auf einer JSON-Zahl ist eine
+            // Falle. `AsInt32()` nimmt beide Formen und ist das, was hier
+            // gemeint war.
+            if (u.TryGetValue("n_facings", out var nv)
+                && nv.VariantType is Variant.Type.Int or Variant.Type.Float)
+            {
+                int n = nv.AsInt32();
+                if (n > 0) _unitFacings[ut] = n;
+            }
             if (!u.TryGetValue("facings", out var fv) || fv.VariantType != Variant.Type.Dictionary)
                 continue;
             var fac = new Dictionary<int, (int, int, int)>();

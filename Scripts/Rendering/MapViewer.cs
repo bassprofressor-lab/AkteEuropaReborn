@@ -424,6 +424,7 @@ public partial class MapViewer : Node2D
         }
         // ⚠ KEIN Quit hier: dieser Pruefstand braucht die Zeit danach. Der
         // Befehl geht jetzt raus, gezaehlt wird beim --quit-after.
+        if (_drehCheck) GD.Print(_entities.SchiffDrehStart());
         if (_speedCheck) GD.Print(_entities.SpeedCheckStart());
         else if (_stuckCheck) GD.Print(_entities.StuckCheckStart());
         if (_depotCheck)
@@ -1137,6 +1138,7 @@ public partial class MapViewer : Node2D
             else if (a == "--demo-queue") { _demo = true; _demoQueue = true; }
             else if (a == "--demo-ai") { _demo = true; _demoAi = true; }
             else if (a == "--sieg-check") _siegCheck = true;
+            else if (a == "--schiffdreh-check") _drehCheck = true;
             else if (a == "--nebenmission-check") _nebenCheck = true;
             else if (a.StartsWith("--script-check")) _scriptCheck = 15f;
             // --pay-check[=sek]: die Geldregeln der Mission einmal ausloesen,
@@ -1759,6 +1761,7 @@ public partial class MapViewer : Node2D
     private bool _leaveCheck;
     private bool _stuckCheck;
     private bool _siegCheck;
+    private bool _drehCheck;
     private bool _nebenCheck;
     private float _umbefehlAfter = -1f;
     private int _umbefehlC, _umbefehlR;
@@ -2191,6 +2194,12 @@ public partial class MapViewer : Node2D
             // unterscheiden. Siehe MapEntityLayer.AirDrift (Fehler D6).
             GD.Print(_entities.AirDriftLine());
             GD.Print(_entities.RangeWatchLine());
+            if (_drehCheck)
+            {
+                GD.Print(_entities.SchiffDrehLine());
+                GetTree().Quit(0);
+                return;
+            }
             if (_speedCheck)
             {
                 GD.Print(_entities.SpeedCheckLine());
