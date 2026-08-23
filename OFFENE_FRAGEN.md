@@ -17413,3 +17413,37 @@ Entscheidung, weil es Oberflaeche ist.
 Kampagnensperre `AiGesperrt`. Warum er stumm bleibt, ist **noch nicht
 gemessen**. Verdacht steht in AZ.3: `sec62` fehlt im Ausleser, dadurch
 `sec110 == 0`.
+
+### BR.9 ⭐⭐ Der »Minenleger« schiesst — und das ist GELESEN, nicht erfunden
+
+Gemeldet: »die Einheit Minelayer schiesst irgendwas auf sehr hohe Distanz, was
+keinen Sinn macht, weil er ja ein Minenleger ist«. Nachgefragt: **die KI hatte
+ihn auf net02 im Gefecht GEBAUT** — er kam also nicht von der Karte.
+
+Der erste Verdacht war ein erfundener Rueckfall, und einer steckte auch dahinter
+(siehe den Commit »Wer keinen eigenen Reichweitenwert hat, schiesst nicht
+mehr«). Er ist es aber NICHT. Die Bauteiltafel des Originals fuehrt:
+
+```
+weapons.json 35: {"name": "Minenleger", "row": 15, "kind": "weapon",
+                  "damage": 100, "range_raw": 80, "range_tiles": 8}
+```
+
+Der Entwurf `MineLayer` (sec47) traegt `weapon: 15` — und Zeile 15 der
+Waffenspalte IST dieser Eintrag. **Der Minenleger ist im Original eine Waffe
+mit Schaden 100 und acht Zellen Reichweite.**
+
+⚠ **Die Frage ist damit eine andere geworden: was TUT sein Schuss?** Eine Mine
+zu legen ist im Original vermutlich als Geschoss gebaut — bei uns fehlt die
+Minenmechanik ganz (`--mine-check` prueft die ROHSTOFFmine, nicht die Landmine).
+Also feuert er bei uns als gewoehnliches Geschuetz mit 100 Schaden.
+
+⚠ Und zur »sehr hohen Distanz«: acht Zellen sind nicht viel — aber die
+Reichweite misst seit dem 22.08. **elliptisch** (x·40, y·20). Acht Zellen weit
+heisst waagerecht acht Spalten, senkrecht aber **sechzehn Zeilen**. Von oben
+gesehen sieht das nach viel mehr aus, als die Zahl sagt.
+
+**Zu entscheiden:** die Landmine als Teilsystem bauen (Geschoss legt Mine statt
+Schaden), oder den Minenleger bis dahin stummschalten. ⭐ Das Erste ist der
+Nachbau, das Zweite ein Notbehelf — und ein Notbehelf, der still bleibt, ist
+genau die Sorte, die spaeter niemand mehr findet.
