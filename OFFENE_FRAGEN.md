@@ -17629,3 +17629,42 @@ coverage` zaehlt sie heute als verdrahtet mit.
 **Zu tun:** warum `inc word ptr [0xbc5690]` am Rumpfanfang verlorengeht. Regel 5
 @0x4A2330 traegt ihr `inc(0)` sehr wohl — der Unterschied zwischen den beiden
 Stellen ist der Hebel.
+
+### BR.13a ⚠⚠ BR.13 IST ZURÜCKGEZOGEN — es ging keine Wirkung verloren
+
+Ich hatte gemeldet, der Regelleser verliere Wirkungen: M26 Regel 3 ohne ihr
+`inc(0)`, Regel 4 mit leerer Wirkung. **Beides ist falsch.**
+
+Die Umformung am Ende von `mission_logic` macht aus »Bedingung `var(a)==0` +
+Wirkung `inc(a)`« die Form **`once: a`** — und die ist **rechnerisch
+gleichwertig**: `MissionScript.Tick` überspringt die Regel bei `_var[a] != 0`
+und zählt nach dem Feuern `_var[a]++`. Genau das, was `inc` täte.
+
+Nachgezählt: **18 Regeln** haben eine Bedingung und leere Wirkung — und
+**alle 18 haben `once` gesetzt**. Es gibt keine einzige mit leerer Wirkung OHNE
+Riegel. Der Leser verliert hier nichts.
+
+⚠⚠ **UND DIE ZWEITE BERICHTIGUNG, die schwerer wiegt:** meine Liste »zehn tote
+Missionen« war zur Hälfte ein Messfehler. Der Prüflauf lief **60 Sekunden ohne
+Zutun** — M26 Regel 0 verlangt aber `game_time > 1 Minute`, und Regel 3 will
+ein Gebäude, das gerade eingenommen wird. Mit **240 s** gemessen:
+
+```
+M29:  0 -> 5503 Regeln     war nie kaputt
+M19:  0 -> 2      M20: 0 -> 2      M26: 0 -> 1      M32: 0 -> 2
+M10, M15, M16, M23:  weiterhin 0, und KEIN Tor schliesst
+```
+
+**Von zehn bleiben vier**, und bei denen liegt es nicht an den Toren. Der eine
+echte Fall war M1 (33000 geschlossene Tore, am Block bestätigt) — und der ist
+behoben.
+
+⭐ **Die Lehre, und sie ist teuer erkauft:** ich war dabei, an **106 Stellen**
+über 33 Missionen den Riegel »zurückzubauen« — für einen Fehler, den es nicht
+gibt. Die Wirkung wäre danach DOPPELT gezählt worden. Dass der Spieler
+ausdrücklich gefragt hat »ist die Wirkung korrekt, nicht dass man wieder in eine
+neue Falle tappt«, hat das verhindert.
+
+⭐ **Was als Prüfung bleibt und wirklich etwas fängt:** eine Regel mit Bedingung,
+leerer Wirkung UND **ohne** `once` wäre ein echter Verlust. Heute gibt es davon
+**null** — und genau das ist die Zahl, die ein Prüfstand führen muss.
