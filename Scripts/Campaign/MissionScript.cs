@@ -1035,6 +1035,47 @@ public sealed class MissionScript
     /// Sollwert nachrechnen muss.</summary>
     public int VarAt(int n) => n >= 0 && n < _var.Length ? _var[n] : 0;
 
+    /// <summary>
+    /// ⭐⭐ Jede ENDREGEL mit ihrem Zustand, Glied für Glied (23.08.2026).
+    ///
+    /// <para>⚠ Entstanden aus »ich kann die Kampagne 1 nicht gewinnen«. Der
+    /// <c>--sieg-check</c> konnte zeigen, DASS nichts geschieht — nicht,
+    /// WORAN es liegt. <c>--script-check</c> hilft dort nicht: er ERZWINGT die
+    /// Bedingung und beweist damit nur, dass die Regel funktioniert, wenn sie
+    /// wahr ist. Die Frage ist, warum sie nicht wahr wird.</para>
+    ///
+    /// <para>⭐ Dieselbe Bauart wie <see cref="WhyNotStock"/>, und aus demselben
+    /// Grund: ein Prüfstand, der schweigt, muss sagen, WELCHES Glied nicht
+    /// schliesst. Die Sperre steht mit dabei — ein `once`, das schon zu ist,
+    /// sieht von aussen genau wie eine nicht erfüllte Bedingung aus.</para>
+    /// </summary>
+    public string WhyNotEnd()
+    {
+        var sb = new System.Text.StringBuilder();
+        int n = 0;
+        foreach (var r in _script.Rules)
+        {
+            bool endet = false;
+            int wie = -1;
+            foreach (var a in r.Then)
+                if (a.Kind == "end") { endet = true; wie = a.A; }
+            if (!endet) continue;
+            n++;
+            sb.Append($"\n      Endregel @0x{r.At:X} ({(wie != 0 ? "SIEG" : "Niederlage")}): ");
+            sb.Append(r.Once >= 0
+                      ? $"Sperre v[{r.Once}]={VarAt(r.Once)}"
+                        + $"{(VarAt(r.Once) != 0 ? " ZU ⚠" : " offen")}"
+                        + $"{(r.Once >= _var.Length ? " (ausserhalb, wird nicht geprueft)" : "")} | "
+                      : "keine Sperre | ");
+            sb.Append(r.EveryTick ? "jeden Takt | " : "nur im vollen Durchlauf | ");
+            foreach (var c in r.When)
+                sb.Append($"{Show(c)} {(TestReal(c) ? "JA" : "NEIN ⚠")} · ");
+            foreach (var c in r.Any)
+                sb.Append($"ODER {Show(c)} {(TestReal(c) ? "JA" : "NEIN")} · ");
+        }
+        return n == 0 ? "\n      (keine Endregel in dieser Mission)" : sb.ToString();
+    }
+
     /// <summary>Jede bestueckende Regel mit ihrem Zustand, Glied fuer Glied.
     /// ⚠ Ein Pruefstand, der schweigt, muss sagen, WELCHES Glied nicht
     /// schliesst — sonst ist eine Kette, die nicht zumacht, nicht von einer zu
@@ -2555,6 +2596,25 @@ public sealed class MissionScript
                 // offen ist — siehe TickGrace. Bis zum 18.08.2026 tat er das,
                 // und damit fehlte genau das Fenster, das der Spieler
                 // photographiert hat.
+                // ⭐⭐ 23.08.2026 — LÄUFT SCHON EINE NACHFRIST, tut ein zweiter
+                // Sieg NICHTS.
+                //
+                // ⚠⚠ Vorher hing das an einem RIEGEL, den das Werkzeug erfunden
+                // hatte: `once: 300` an jeder der 33 Siegregeln. Das belegt eine
+                // MISSIONSVARIABLE — und die werden zwischen Missionen
+                // übertragen (@0x4D0126 sichert 250 Doppelwörter ab v0,
+                // @0x4D0406 holt sie zurück). Sobald EINE Mission gewonnen war,
+                // stand v300 auf 1 und wanderte in jede weitere. Danach war
+                // KEINE Mission mehr zu gewinnen — gemeldet als »ich kann die
+                // Kampagne 1 aktuell nicht gewinnen«, gemessen mit
+                // <c>--sieg-check</c>: »Sperre v[300]=1 ZU | units(Kl1,P1)==0 JA«.
+                //
+                // ⭐ Im Original ist der Riegel keine Variable: Mission 1 prüft
+                // `mov eax,[0x502988] / test eax,eax / jne raus` (@0x4989A9) —
+                // eine globale Laufzeitfahne ausserhalb des Variablenpools, die
+                // jede Mission frisch beginnt. Genau das ist diese Zeile: was
+                // der Riegel wirklich schützen musste, war die Nachfrist.
+                if (a.A != 0 && Grace >= 0) break;
                 if (a.A != 0 && Grace < 0 && OpenObjectives() > 0)
                 {
                     Grace = GraceSteps;

@@ -10975,6 +10975,68 @@ public partial class MapEntityLayer : Node2D
     /// die erste Zeile des zugehoerigen Hilfetexts. Ohne sie sieht der Spieler
     /// nicht, dass eine Untermission laeuft — und schon gar nicht, dass er sie
     /// erfuellt hat.</summary>
+    /// <summary>
+    /// <c>--sieg-check</c> — <b>der Endzustand des Spielers, nachgestellt</b>
+    /// (23.08.2026).
+    ///
+    /// <para>⚠ Gemeldet: »ich kann die Kampagne 1 aktuell nicht gewinnen«, und
+    /// auf Nachfrage: »es waren keine Einheiten mehr sichtbar«. Kein Prüfstand
+    /// konnte das beantworten — <c>--script-check</c> ERZWINGT die Bedingung
+    /// und beweist damit nur, dass die Regel funktioniert, wenn sie wahr ist.
+    /// Die Frage ist aber, ob sie wahr WIRD.</para>
+    ///
+    /// <para>Dieser Lauf tötet alles, was die Siegregel zählt, und sieht dann
+    /// nach: geht der Zähler auf null, feuert die Regel, endet die Mission?
+    /// Jede Zwischenstufe steht in der Ausgabe, damit ein »nein« sagt, WO es
+    /// hakt.</para>
+    /// </summary>
+    public string SiegCheck()
+    {
+        if (_mscript == null) MissionScriptTick(0.001f);
+        if (_mscript == null) return "sieg-check: kein Skript";
+        var sb = new System.Text.StringBuilder("sieg-check\n");
+
+        int vorher = 0;
+        foreach (var e in _entities)
+            if (!e.IsBuilding && !e.IsProp && !e.Dead && e.Owner == 1
+                && e.GameUnitType is 0 or 3) vorher++;
+        sb.Append($"  Klasse 1 von Spieler 1 vorher: {vorher}\n");
+
+        int getoetet = 0;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != 1) continue;
+            if (e.GameUnitType is not (0 or 3)) continue;
+            e.Hp = 0; e.Dead = true; e.DeadTime = 0; e.Path = null; e.Target = -1;
+            _nav?.ClearOccupant(e.Col, e.Row, i);
+            getoetet++;
+        }
+        int nachher = 0;
+        foreach (var e in _entities)
+            if (!e.IsBuilding && !e.IsProp && !e.Dead && e.Owner == 1
+                && e.GameUnitType is 0 or 3) nachher++;
+        sb.Append($"  {getoetet} getoetet -> Zaehler steht auf {nachher}\n");
+
+        // ⚠ Die Untermissionen: DAS ist die zweite Haelfte der Frage. Ein Sieg
+        // zaehlt nicht, solange eine offen ist (@ end-Wirkung, Nachfrist).
+        int offen = _mscript.OpenObjectives();
+        sb.Append($"  offene Untermissionen: {offen}"
+                + (offen > 0 ? "  ⚠ ein Sieg loest nur die NACHFRIST aus" : "") + "\n");
+
+        // Volle Blockdurchlaeufe, damit auch die Regeln hinter dem Tor drankommen.
+        long t0 = _mscript.Ticks;
+        _mscript.Advance(600);
+        sb.Append($"  {_mscript.Ticks - t0} Takte weiter: Ende={_mscript.Ended}, "
+                + $"Nachfrist={_mscript.Grace}, offene Untermissionen="
+                + $"{_mscript.OpenObjectives()}\n");
+        sb.AppendLine("  ⭐ warum nicht:" + _mscript.WhyNotEnd());
+        bool ok = nachher == 0 && (_mscript.Ended || _mscript.Grace >= 0);
+        sb.Append(ok ? "  BESTANDEN — die Siegregel greift"
+                     : "  DURCHGEFALLEN — der Zaehler ist null und nichts geschieht");
+        return sb.ToString();
+    }
+
     public string MissionObjectiveLine()
     {
         if (_mscript == null) return "";
