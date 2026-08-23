@@ -17447,3 +17447,46 @@ gesehen sieht das nach viel mehr aus, als die Zahl sagt.
 Schaden), oder den Minenleger bis dahin stummschalten. ⭐ Das Erste ist der
 Nachbau, das Zweite ein Notbehelf — und ein Notbehelf, der still bleibt, ist
 genau die Sorte, die spaeter niemand mehr findet.
+
+### BR.10 ⭐⭐ Seine Frage nach Spieler 0 hat die ÜBERNAHME aufgedeckt
+
+Gefragt: »ist das überhaupt abhängig vom Startpanzer, weil man ja in Kampagne 1
+nach der Brücke die Neutralen zu seinen macht — zählen die da etwa nicht dazu?«
+
+**Für die Bedingung selbst: nein.** `mission_logic.py` deutet hier nichts, es
+rechnet: `(addr − ENT_BASE) / 78` → **Satz 0, Feld +1**. Das Original liest
+buchstäblich das Zeilenbyte von Einheitensatz 0. Kein Durchlauf, keine
+Spielerabfrage.
+
+⚠⚠ **ABER: DAS ORIGINAL VERSCHIEBT DEN SATZ BEI DER ÜBERNAHME, UND WIR NICHT.**
+
+Gelesen (06.08.2026, im Archiv, nicht in dieser Datei — deshalb hier nachgetragen):
+
+* `takeover_scan` @0x411270 findet den Nachbarn und ruft
+* `add_change_owner` @0x410F40 — Warteschlange, 1000 × 4 B bei `0x53c938`
+  (u16 Platz, u8 Spieler, 0xFFFF = frei), Fehlertext »Too many change owners«
+* **Der Abarbeiter @0x411000** läuft jeden Takt: sucht **im 1000er-Block des
+  NEUEN Spielers einen freien Platz** (`+0x09 == 0xFF`), **kopiert den ganzen
+  78-Byte-Satz** hinüber, **gibt den alten frei** und stempelt die imap neu.
+
+Unser `Takeover.Join` setzt `Owner` und `Team` — mehr nicht. Der Kommentar
+darüber sagt sogar »before the record moves«, und genau das Verschieben fehlt.
+
+**Was daran hängt:**
+
+1. Der Besitzer ist im Original `slot / 1000`. Nach einer Übernahme stimmt das
+   bei uns nicht mehr — eine Einheit des Spielers 0 trägt weiter Platz 7003.
+2. `ai_units(spieler, block)` läuft über den 1000er-Block des Spielers. Im
+   Original sind übernommene Einheiten darin, bei uns nicht.
+3. ⭐⭐ **Und der Fall, der Kampagne 1 betrifft:** stirbt der Startpanzer, wird
+   Satz 0 im Original **frei** (`+0x09 = 0xFF`) — und die nächste übernommene
+   Einheit bekommt genau diesen Platz. `unit_pos(0, +1)` liest dann IHRE Zeile,
+   und die Kette kann weiterlaufen. Bei uns ist Satz 0 danach für immer weg,
+   und die Nebenmission ist tot.
+
+⭐ **Damit ist seine Frage beantwortet und zugleich nicht:** die Neutralen zählen
+für die Bedingung nicht — **es sei denn**, sie sind in Satz 0 nachgerückt. Genau
+das kann unsere Fassung nicht.
+
+**Zu bauen:** die Warteschlange und der Abarbeiter, mit freier Platzsuche im
+Zielblock, Satzkopie, Freigabe des alten Platzes und imap-Neustempelung.
