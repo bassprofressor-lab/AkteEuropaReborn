@@ -6757,6 +6757,146 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <summary>
+    /// <c>--nav-flut=c,r[,klasse]</c> — <b>wohin kommt diese Einheit
+    /// ueberhaupt?</b> (23.08.2026)
+    ///
+    /// <para>⚠ Entstanden aus der Meldung »ich bekomme gar nicht alle Einheiten
+    /// bis zu den 3 Schiffen gefahren«. <see cref="NavProbe"/> beantwortet
+    /// immer nur EIN Ziel und sagt dann »KEIN WEG« — und daraus ist nicht zu
+    /// erkennen, ob das Ziel schlecht gewaehlt war, ob das Gitter falsch ist
+    /// oder ob die Karte wirklich zerfaellt. Diese Flut beantwortet die Frage
+    /// in einem Lauf: sie faerbt jede erreichbare Zelle und druckt die Karte.</para>
+    ///
+    /// <para>⭐ Der Ausdruck ist Absicht: <c>.</c> frei, <c>~</c> rau,
+    /// <c>≈</c> Wasser, <c>#</c> gesperrt — und ein <b>Grossbuchstabe</b>
+    /// (<c>O</c>) fuer jede Zelle, die von hier aus erreichbar ist. Eine Zahl
+    /// allein (»1211 frei«) haette nicht gezeigt, dass die freie Flaeche in
+    /// mehrere Inseln zerfaellt; das Bild zeigt es sofort.</para>
+    /// </summary>
+    public void NavFlut(string spec)
+    {
+        if (_nav == null) { GD.Print("nav-flut: kein Gitter"); return; }
+        var p = spec.Split(',');
+        if (p.Length < 2) { GD.Print("nav-flut: c,r[,klasse]"); return; }
+        var start = new Vector2I(p[0].ToInt(), p[1].ToInt());
+        var mc = p.Length > 2
+            ? System.Enum.Parse<Simulation.NavGrid.MoveClass>(p[2], true)
+            : Simulation.NavGrid.MoveClass.Vehicle;
+
+        int w = _nav.Width, h = _nav.Height;
+        var erreicht = new bool[w * h];
+        var stapel = new List<Vector2I>();
+        if (_nav.IsWalkable(start.X, start.Y, mc))
+        {
+            erreicht[start.Y * w + start.X] = true;
+            stapel.Add(start);
+        }
+        // ⚠ Reine Gelaendeflut: Einheiten bleiben aussen vor. Wer sie mitzaehlt,
+        // misst den Augenblick und nicht die Karte — eine Einheit faehrt weg,
+        // eine Sperre bleibt.
+        for (int i = 0; i < stapel.Count; i++)
+        {
+            var c = stapel[i];
+            foreach (var d in Simulation.NavGrid.UrDirs)
+            {
+                int nx = c.X + d.X, ny = c.Y + d.Y;
+                if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                if (erreicht[ny * w + nx]) continue;
+                if (!_nav.IsWalkable(nx, ny, mc)) continue;
+                // Ecken werden nicht geschnitten — dieselbe Regel wie in der Suche.
+                if (d.X != 0 && d.Y != 0
+                    && (!_nav.IsWalkable(c.X + d.X, c.Y, mc)
+                     || !_nav.IsWalkable(c.X, c.Y + d.Y, mc))) continue;
+                erreicht[ny * w + nx] = true;
+                stapel.Add(new Vector2I(nx, ny));
+            }
+        }
+
+        int frei = 0, rau = 0, wasser = 0, sperr = 0, offen = 0;
+        int minC = w, maxC = -1, minR = h, maxR = -1;
+        var bild = new System.Text.StringBuilder();
+        for (int r = 0; r < h; r++)
+        {
+            bild.Append($"{r,3} ");
+            for (int c = 0; c < w; c++)
+            {
+                var g = _nav.GroundAt(c, r);
+                switch (g)
+                {
+                    case Simulation.NavGrid.Ground.Free: frei++; break;
+                    case Simulation.NavGrid.Ground.Rough: rau++; break;
+                    case Simulation.NavGrid.Ground.Water: wasser++; break;
+                    default: sperr++; break;
+                }
+                bool ok = erreicht[r * w + c];
+                if (ok)
+                {
+                    offen++;
+                    if (c < minC) minC = c;
+                    if (c > maxC) maxC = c;
+                    if (r < minR) minR = r;
+                    if (r > maxR) maxR = r;
+                }
+                bild.Append(ok ? 'O' : g switch
+                {
+                    Simulation.NavGrid.Ground.Free => '.',
+                    Simulation.NavGrid.Ground.Rough => '~',
+                    Simulation.NavGrid.Ground.Water => ':',
+                    _ => '#',
+                });
+            }
+            bild.Append('\n');
+        }
+        int befahrbar = 0;
+        for (int r = 0; r < h; r++)
+            for (int c = 0; c < w; c++)
+                if (_nav.IsWalkable(c, r, mc)) befahrbar++;
+
+        // ⭐⭐ DIE ZWEITE FLUT, und sie ist der eigentliche Grund fuer diesen
+        // Pruefstand: dieselbe Rechnung, aber mit `IsFree` statt `IsWalkable` —
+        // also so, wie die WEGSUCHE die Karte sieht, mit stehenden Einheiten
+        // als Sperre. Die Differenz der beiden Zahlen ist genau das, was uns
+        // die eigenen Einheiten kosten.
+        var erreicht2 = new bool[w * h];
+        var stapel2 = new List<Vector2I>();
+        // ⚠ Die Startzelle wird bedingungslos gesetzt — genau wie in
+        // FindPathUr, wo `karte[si] = 8` die eigene Belegung ueberschreibt.
+        // Sonst misst man nur, dass die Einheit auf sich selber steht.
+        erreicht2[start.Y * w + start.X] = true;
+        stapel2.Add(start);
+        for (int i = 0; i < stapel2.Count; i++)
+        {
+            var c = stapel2[i];
+            foreach (var d in Simulation.NavGrid.UrDirs)
+            {
+                int nx = c.X + d.X, ny = c.Y + d.Y;
+                if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                if (erreicht2[ny * w + nx]) continue;
+                if (!_nav.IsFree(nx, ny, mc)) continue;
+                if (d.X != 0 && d.Y != 0
+                    && (!_nav.IsFree(c.X + d.X, c.Y, mc)
+                     || !_nav.IsFree(c.X, c.Y + d.Y, mc))) continue;
+                erreicht2[ny * w + nx] = true;
+                stapel2.Add(new Vector2I(nx, ny));
+            }
+        }
+        int offen2 = 0, freiZellen = 0;
+        for (int i = 0; i < w * h; i++) if (erreicht2[i]) offen2++;
+        for (int r = 0; r < h; r++)
+            for (int c = 0; c < w; c++)
+                if (_nav.IsFree(c, r, mc)) freiZellen++;
+
+        GD.Print($"nav-flut {mc} von ({start.X},{start.Y}): {offen} von {befahrbar} "
+               + $"befahrbaren Zellen erreichbar ({(befahrbar > 0 ? 100.0 * offen / befahrbar : 0):0.0} %), "
+               + $"Kasten Spalte {minC}..{maxC}, Zeile {minR}..{maxR}");
+        GD.Print($"   Karte {w}x{h}: frei {frei}, rau {rau}, Wasser {wasser}, gesperrt {sperr}");
+        GD.Print($"   ⭐ so wie die WEGSUCHE sie sieht (IsFree, Einheiten sperren): "
+               + $"{offen2} von {freiZellen} erreichbar — "
+               + $"{offen - offen2} Zellen geben die stehenden Einheiten weg");
+        GD.Print(bild.ToString());
+    }
+
+    /// <summary>
     /// Harness: ask the grid for a route and report it, cell by cell, together
     /// with the ground class of every step. Used to show that a vehicle really
     /// crosses a bridge and really refuses the water beside it — a script cannot

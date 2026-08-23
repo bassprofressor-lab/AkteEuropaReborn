@@ -830,8 +830,33 @@ public sealed class NavGrid
         // ---- zurueckverfolgen ----------------------------------------------
         // Von der Zielzelle rueckwaerts den Nachbarn mit Marke-1 suchen,
         // ERST die Geraden (0,2,4,6), dann die Diagonalen (1,3,5,7).
+        //
+        // ⚠⚠ HIER SASS DER FEHLER (gemeldet 23.08.2026: »die Wegfuehrung ist
+        // katastrophal« und »Einheiten springen ein paar Felder«).
+        //
+        // Die Wellenmarken laufen so: waehrend die Welle der Entfernung d
+        // ABGERAEUMT wird, steht `marke` auf 9+d, und die Zellen dieser Welle
+        // tragen 8+d (sie bekamen ihre Marke, als 9+(d-1) galt). Wird die
+        // Zielzelle aufgesammelt, ist also
+        //
+        //      marke     = 9+D        (der Zaehler, eine Welle VORAUS)
+        //      Zielwelle = 8+D        (die Zellen neben dem Ziel)
+        //      Vorgaenger= 7+D        (die Welle, aus der das Ziel kam)
+        //
+        // Gesucht ist der VORGAENGER, also 7+D = marke-2. Hier stand marke-1,
+        // und das ist die Marke der Zielwelle SELBST: der Rueckweg wechselte
+        // damit auf eine Nachbarzelle GLEICHER Entfernung statt auf die
+        // vorherige. Jeder weitere Schritt blieb um eine Welle verschoben.
+        //
+        // ⭐ Wie es sich zeigt: die Zellen des zurueckgegebenen Weges sind nicht
+        // mehr benachbart. Gemessen auf map_01, (4,39) -> (4,35):
+        //      falsch: 2,38  2,37     — (4,39) auf (2,38) ist ZWEI Spalten weit
+        //      richtig: 3,38  2,37    — und genau das liefert auch der alte A*
+        // Eine Einheit, die einer solchen Liste folgt, setzt sichtbar ueber
+        // Felder hinweg. Das ist das gemeldete »Springen/Beamen«.
         var rueck = new List<Vector2I>();
-        int cc = zi, m = marke == 8 ? 255 : marke - 1;
+        static int Runter(int v) => v == 8 ? 255 : v - 1;
+        int cc = zi, m = Runter(Runter(marke));
         for (int k = schritte - 1; k >= 0; k--)
         {
             int gx = cc % w, gy = cc / w, gewaehlt = -1;
@@ -847,7 +872,7 @@ public sealed class NavGrid
             rueck.Add(new Vector2I(gx, gy));
             var dd = UrDirs[gewaehlt];
             cc = (gy + dd.Y) * w + gx + dd.X;
-            m = m == 8 ? 255 : m - 1;
+            m = Runter(m);
         }
         rueck.Reverse();
         return rueck;
@@ -904,22 +929,27 @@ public sealed class NavGrid
         // 2. ⭐⭐ DIE METRIK IST CHEBYSHEV. Auf freier Flaeche kostet die
         // Diagonale so viel wie die Gerade: ein Ziel (n,n) ist n Schritte weit,
         // nicht 2n und nicht n*sqrt(2).
-        var frei = FreieProbezelle();
+        var frei = FreieProbeflaeche(out int kante);
         if (frei == null)
         {
             sb.Append("  ⚠ keine freie Probeflaeche auf dieser Karte gefunden\n");
-            return sb.Append("  NICHT GEMESSEN").ToString();
+            // ⚠ »Nicht gemessen« ist NICHT gruen. Bis zum 23.08.2026 ging der
+            // Lauf hier mit drei von zehn Messungen durch, und die drei pruefen
+            // nur Tafeln — also gerade nicht die Suche.
+            return sb.Append("  DURCHGEFALLEN (nicht gemessen ist nicht bestanden)").ToString();
         }
+        sb.Append($"  Probeflaeche: {kante}x{kante} frei ab {frei.Value}\n");
         var a0 = frei.Value;
-        var b0 = new Vector2I(a0.X + 6, a0.Y + 6);
+        var b0 = new Vector2I(a0.X + kante, a0.Y + kante);
         var diagWeg = InBounds(b0.X, b0.Y) ? FindPathUr(a0, b0) : null;
-        var gerWeg = InBounds(a0.X + 6, a0.Y) ? FindPathUr(a0, new Vector2I(a0.X + 6, a0.Y)) : null;
+        var gerWeg = InBounds(a0.X + kante, a0.Y) ? FindPathUr(a0, new Vector2I(a0.X + kante, a0.Y)) : null;
         if (diagWeg != null && gerWeg != null)
-            Sag($"Chebyshev: schraeg 6 Zellen = {diagWeg.Count} Schritte, "
-                + $"gerade 6 Zellen = {gerWeg.Count} Schritte (erwartet gleich)",
+            Sag($"Chebyshev: schraeg {kante} Zellen = {diagWeg.Count} Schritte, "
+                + $"gerade {kante} Zellen = {gerWeg.Count} Schritte (erwartet gleich)",
                 diagWeg.Count == gerWeg.Count);
         else
-            sb.Append("  ⚠ Metrik nicht gemessen — kein freier 6x6-Platz\n");
+            Sag($"Metrik: schraeg {(diagWeg == null ? "KEIN WEG" : "ok")}, gerade "
+                + $"{(gerWeg == null ? "KEIN WEG" : "ok")} - beide muessen liefern", false);
 
         // 3. ⭐⭐ ECKEN WERDEN NICHT GESCHNITTEN. Jeder Schritt des Weges muss
         // ein echter Nachbar sein, UND bei einer Diagonale muessen beide
@@ -940,6 +970,58 @@ public sealed class NavGrid
             }
         Sag($"kein geschnittener Eck- oder Riesenschritt: {schritte} Schritte, "
             + $"{ecken} Verstoesse", ecken == 0);
+
+        // 3b. ⭐⭐ DER ERSTE SCHRITT GEHT VOM START AUS — und das ist die Messung,
+        // die am 23.08.2026 gefehlt hat.
+        //
+        // ⚠⚠ Der Rueckverfolger begann bei der falschen Wellenmarke (marke-1
+        // statt marke-2, siehe FindPathUr). Der gelieferte Weg war dadurch in
+        // sich SELBST noch stimmig — aufeinanderfolgende Zellen blieben
+        // benachbart, Messung 3 oben blieb gruen —, aber er begann eine Welle
+        // zu frueh und damit NEBEN dem Start. Gemessen auf map_01:
+        //     (4,39) -> (4,35) lieferte »2,38 2,37«, und (4,39) auf (2,38)
+        //     sind ZWEI Spalten.
+        // Von aussen ist das der gemeldete Sprung: die Einheit setzt beim
+        // Losfahren ueber ein paar Felder.
+        //
+        // ⭐ Die Lehre, und sie gilt ueber diesen Fall hinaus: ein Weg wurde nur
+        // gegen SICH SELBST geprueft, nie gegen seine beiden ENDEN. Eine Kette,
+        // die in sich stimmt, kann trotzdem woanders anfangen.
+        if (diagWeg is { Count: > 0 })
+        {
+            var d0 = diagWeg[0] - a0;
+            bool ersterSchritt = Math.Abs(d0.X) <= 1 && Math.Abs(d0.Y) <= 1 && d0 != Vector2I.Zero;
+            bool letzterTrifft = diagWeg[^1] == b0;
+            Sag($"erster Schritt liegt neben dem Start: {a0} -> {diagWeg[0]} "
+                + $"(Versatz {d0.X},{d0.Y})", ersterSchritt);
+            Sag($"letzte Zelle IST das Ziel: {diagWeg[^1]} gegen {b0}", letzterTrifft);
+        }
+
+        // 3c. ⭐ Und dasselbe ueber einen LANGEN Weg, quer ueber die Karte —
+        // ein kurzer Weg kann eine Verschiebung um eine Welle zufaellig
+        // ueberdecken, ein langer nicht.
+        {
+            var weit = WeitesteFreieZelle(a0);
+            var langWeg = weit == null ? null : FindPathUr(a0, weit.Value);
+            if (langWeg is not { Count: > 2 })
+                Sag($"langer Weg von {a0}: weiteste Zelle "
+                    + $"{(weit == null ? "KEINE" : weit.Value.ToString())}, Weg "
+                    + $"{(langWeg == null ? "KEINER" : langWeg.Count + " Zellen")} "
+                    + "- zu kurz zum Messen", false);
+            else
+            {
+                int bruch = 0;
+                var vor = a0;
+                foreach (var z in langWeg)
+                {
+                    var v = z - vor;
+                    if (Math.Abs(v.X) > 1 || Math.Abs(v.Y) > 1 || v == Vector2I.Zero) bruch++;
+                    vor = z;
+                }
+                Sag($"langer Weg {a0} -> {weit!.Value}: {langWeg.Count} Zellen, "
+                    + $"{bruch} Bruchstellen (Start mitgerechnet)", bruch == 0);
+            }
+        }
 
         // 4. Die Grenzen als ZAHLEN -- sie sollen nicht stillschweigend
         // vereinheitlicht werden.
@@ -966,18 +1048,71 @@ public sealed class NavGrid
     /// <summary>Eine Zelle, um die herum 7x7 alles frei ist — Probeflaeche für
     /// <see cref="WegsucheCheck"/>. ⚠ Ohne freie Flaeche misst der Lauf die
     /// Karte statt das Verfahren.</summary>
-    private Vector2I? FreieProbezelle()
+    private Vector2I? FreieProbezelle() => FreieProbeflaeche(out _);
+
+    /// <summary>
+    /// Die obere linke Ecke des groessten freien Quadrats, das diese Karte
+    /// hergibt, und dessen Kantenlaenge in <paramref name="kante"/>.
+    ///
+    /// <para>⚠⚠ 23.08.2026 — VORHER STAND HIER EINE FESTE 7×7, UND DAS HAT DEN
+    /// HALBEN PRUEFSTAND STILLGELEGT. Weder map_01 noch die Gefechtskarte haben
+    /// irgendwo sieben mal sieben freie Zellen am Stueck; der Lauf meldete
+    /// »keine freie Probeflaeche gefunden — NICHT GEMESSEN« und ging mit drei
+    /// von acht Messungen durch. Die drei, die liefen, pruefen nur Tafeln —
+    /// also gerade NICHT die Suche. Der Fehler im Rueckverfolger konnte hier
+    /// gar nicht auffallen.</para>
+    ///
+    /// <para>⭐ Die Lehre: ein Pruefstand, der »nicht gemessen« sagt, ist nicht
+    /// gruen. Er darf sich seine Probe suchen, aber er darf nicht schweigen —
+    /// die benutzte Kantenlaenge steht jetzt in der Ausgabe.</para>
+    /// </summary>
+    private Vector2I? FreieProbeflaeche(out int kante)
     {
-        for (int y = 1; y < Height - 8; y++)
-            for (int x = 1; x < Width - 8; x++)
-            {
-                bool ok = true;
-                for (int dy = 0; dy <= 6 && ok; dy++)
-                    for (int dx = 0; dx <= 6 && ok; dx++)
-                        if (!IsFree(x + dx, y + dy, MoveClass.Vehicle, -1)) ok = false;
-                if (ok) return new Vector2I(x, y);
-            }
+        for (kante = 6; kante >= 2; kante--)
+            for (int y = 1; y < Height - kante - 1; y++)
+                for (int x = 1; x < Width - kante - 1; x++)
+                {
+                    bool ok = true;
+                    for (int dy = 0; dy <= kante && ok; dy++)
+                        for (int dx = 0; dx <= kante && ok; dx++)
+                            if (!IsFree(x + dx, y + dy, MoveClass.Vehicle, -1)) ok = false;
+                    if (ok) return new Vector2I(x, y);
+                }
+        kante = 0;
         return null;
+    }
+
+    /// <summary>Die von <paramref name="von"/> aus am weitesten entfernte
+    /// ERREICHBARE freie Zelle — der laengste Weg, den diese Karte hergibt.
+    /// ⚠ Sie wird geflutet und nicht geschaetzt: die Zelle mit dem groessten
+    /// Luftabstand ist oft gar nicht erreichbar, und dann misst man nichts.</summary>
+    private Vector2I? WeitesteFreieZelle(Vector2I von)
+    {
+        var gesehen = new bool[Width * Height];
+        var welle = new List<Vector2I> { von };
+        gesehen[von.Y * Width + von.X] = true;
+        Vector2I letzte = von;
+        for (int i = 0; i < welle.Count; i++)
+        {
+            var c = welle[i];
+            letzte = c;
+            foreach (var d in UrDirs)
+            {
+                int nx = c.X + d.X, ny = c.Y + d.Y;
+                if (!InBounds(nx, ny) || gesehen[ny * Width + nx]) continue;
+                if (!IsFree(nx, ny, MoveClass.Vehicle, -1)) continue;
+                // ⚠ DIESELBE ECKENREGEL WIE DIE SUCHE. Ohne sie erklaert die
+                // Flut Zellen fuer erreichbar, an die die Suche nie kommt —
+                // und die Messung wirft der Suche einen Fehler vor, den die
+                // Messung selbst gemacht hat.
+                if (d.X != 0 && d.Y != 0
+                    && (!IsFree(c.X + d.X, c.Y, MoveClass.Vehicle, -1)
+                     || !IsFree(c.X, c.Y + d.Y, MoveClass.Vehicle, -1))) continue;
+                gesehen[ny * Width + nx] = true;
+                welle.Add(new Vector2I(nx, ny));
+            }
+        }
+        return letzte == von ? null : letzte;
     }
 
     private static readonly Vector2I[] Dirs =

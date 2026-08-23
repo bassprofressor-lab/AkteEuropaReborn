@@ -402,6 +402,7 @@ public partial class MapViewer : Node2D
         if (_navOverlay) _entities.ToggleNav();
         if (_buildingOverlay) _entities.ToggleBuildings();
         if (_railOverlay) _entities.ToggleRail();
+        if (_navFlut.Length > 0) { _entities.NavFlut(_navFlut); GetTree().Quit(0); return; }
         if (_navProbe.Length > 0) { _entities.NavProbe(_navProbe); GetTree().Quit(0); return; }
         if (_groundCheck)
         {
@@ -806,6 +807,7 @@ public partial class MapViewer : Node2D
     /// print it. A script cannot drive a tank over a bridge by hand, so the
     /// route is quoted instead of looked at.</summary>
     private string _navProbe = "";
+    private string _navFlut = "";
 
     /// <summary>`--ground-check` — hold the walk grid against the baked picture.</summary>
     private bool _groundCheck;
@@ -1347,6 +1349,7 @@ public partial class MapViewer : Node2D
             else if (a.StartsWith("--fight-dist=")) { _demo = true; _demoFight = true; _fightDist = a[13..].ToFloat(); }
             else if (a == "--nav") _navOverlay = true;
             else if (a.StartsWith("--nav-probe=")) _navProbe = a["--nav-probe=".Length..];
+            else if (a.StartsWith("--nav-flut=")) _navFlut = a["--nav-flut=".Length..];
             else if (a == "--ground-check") _groundCheck = true;
             else if (a == "--build-check") _buildCheck = true;
             else if (a == "--crush-check") _crushCheck = true;
