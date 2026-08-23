@@ -20,6 +20,14 @@ Aufruf:
 """
 import io, os, re, sys
 
+# ⚠ Die Windows-Konsole faehrt cp1252. Ohne diese zwei Zeilen stirbt das
+# Skript beim Drucken des Hakens — also ausgerechnet im ERFOLGSZWEIG — und
+# meldet Rueckgabe 1, obwohl alle vier Stellen uebereinstimmen. Ein Pruefer,
+# der bei Erfolg »Fehler« sagt, ist schlimmer als keiner.
+for strom in (sys.stdout, sys.stderr):
+    if hasattr(strom, "reconfigure"):
+        strom.reconfigure(encoding="utf-8", errors="replace")
+
 WURZEL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # (Datei, Beschreibung, Suchmuster) — die Gruppe 1 ist die Versionsangabe.
