@@ -10976,6 +10976,87 @@ public partial class MapEntityLayer : Node2D
     /// nicht, dass eine Untermission laeuft — und schon gar nicht, dass er sie
     /// erfuellt hat.</summary>
     /// <summary>
+    /// <c>--nebenmission-check</c> — <b>die 50 $ von Kampagne 1, Schritt für
+    /// Schritt</b> (23.08.2026).
+    ///
+    /// <para>⚠ Gemeldet, jetzt zum dritten Mal: »ich bekomme keine 50 $ pro
+    /// zerstörtem Schiff«. Zweimal habe ich stattdessen über den Spielverlauf
+    /// spekuliert — das war falsch und hat nichts gebracht. Diese Messung
+    /// braucht weder seinen Spielstand noch die Wegsuche: sie setzt den
+    /// Startpanzer auf Zeile 19, lässt das Skript laufen, und versenkt dann die
+    /// drei Schiffe EINZELN. Nach jedem Schritt steht da, was geschehen ist.</para>
+    ///
+    /// <para>Die Kette im Original (@0x498849 ff., beide EXE gleich):</para>
+    /// <code>
+    ///   byte[0x6E26C9] &lt; 20   -> close_texts; v39++; show_text(110); v15++
+    ///   v15==1 und Klasse3(P1)==2 -> v15++; money(50)
+    ///   v15==2 und Klasse3(P1)==1 -> v15++; money(50)
+    ///   v15==3 und Klasse3(P1)==0 -> v15++; money(50)
+    /// </code>
+    /// </summary>
+    public string NebenmissionCheck()
+    {
+        if (_mscript == null) MissionScriptTick(0.001f);
+        if (_mscript == null) return "nebenmission-check: kein Skript";
+        var sb = new System.Text.StringBuilder("nebenmission-check\n");
+
+        int geld = 0;
+        var vorher = _mscript.AddMoney;
+        _mscript.AddMoney = (b, p) => { geld += b; vorher?.Invoke(b, p); };
+        int texte = 0;
+        var vorherText = _mscript.ShowText;
+        _mscript.ShowText = (id, art, x, y) => { texte++; vorherText?.Invoke(id, art, x, y); };
+
+        int panzer = -1;
+        for (int i = 0; i < _entities.Count; i++)
+            if (!_entities[i].IsBuilding && !_entities[i].IsProp && _entities[i].Slot == 0)
+            { panzer = i; break; }
+        if (panzer < 0) return sb.Append("  kein Einheitensatz 0 — die Kette kann nie anlaufen").ToString();
+
+        var p0 = _entities[panzer];
+        sb.Append($"  Satz 0: Rumpf {p0.UnitType}, Besitzer {p0.Owner}, "
+                + $"steht auf Zeile {p0.Row}\n");
+        sb.Append($"  v15 vorher {_mscript.VarAt(15)}, v39 (Riegel) {_mscript.VarAt(39)}, "
+                + $"Klasse 3 von Spieler 1: {UnitClassCount(3, 1)}\n");
+
+        // ⭐ Der Panzer wird GESETZT, nicht gefahren: die Wegsuche ist hier nicht
+        // die Frage, und ein Fahrversuch wuerde sie zur Frage machen.
+        _nav?.ClearOccupant(p0.Col, p0.Row, panzer);
+        p0.Row = 19;
+        p0.Pos = BodyCenterAt(p0, p0.Col, p0.Row);
+        _nav?.SetOccupant(p0.Col, p0.Row, panzer);
+        _mscript.Advance(300);
+        sb.Append($"  Panzer auf Zeile 19 gesetzt -> v15={_mscript.VarAt(15)}, "
+                + $"v39={_mscript.VarAt(39)}, {texte} Texte, ${geld}"
+                + (_mscript.VarAt(15) == 1 ? "  ✔ die Kette ist scharf"
+                                           : "  ⚠ die Kette laeuft NICHT an") + "\n");
+
+        // Jetzt die drei Schiffe, EINZELN — genau die Reihenfolge, die die
+        // Kette verlangt (2 uebrig, dann 1, dann 0).
+        for (int runde = 1; runde <= 3; runde++)
+        {
+            int opfer = -1;
+            for (int i = 0; i < _entities.Count; i++)
+            {
+                var e = _entities[i];
+                if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != 1) continue;
+                if (e.GameUnitType is not (4 or 5)) continue;
+                opfer = i; break;
+            }
+            if (opfer < 0) break;
+            int vorGeld = geld;
+            _entities[opfer].Hp = 0; _entities[opfer].Dead = true;
+            _mscript.Advance(300);
+            sb.Append($"  Schiff {runde} versenkt -> Klasse 3 = {UnitClassCount(3, 1)}, "
+                    + $"v15={_mscript.VarAt(15)}, ${geld - vorGeld} dazu"
+                    + (geld - vorGeld == 50 ? "  ✔" : "  ⚠") + "\n");
+        }
+        sb.Append($"  zusammen ${geld} (erwartet $150)\n");
+        sb.Append(geld == 150 ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// <c>--sieg-check</c> — <b>der Endzustand des Spielers, nachgestellt</b>
     /// (23.08.2026).
     ///

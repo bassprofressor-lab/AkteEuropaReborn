@@ -1165,7 +1165,25 @@ public sealed class MissionScript
         // DANACH läuft der Init-Arm der Mission und setzt seine eigenen Werte
         // darüber. Andersherum würde die Mission ihre Setzungen wieder
         // verlieren. Siehe Campaign.CampaignManager.CarriedVars.
-        if (CarryVarsActive)
+        // ⚠⚠ 23.08.2026 — VOR MISSION 1 GIBT ES KEINE VORMISSION.
+        //
+        // Der Übertrag ist richtig gelesen und bleibt: das Original holt am
+        // Missionsanfang 250 Doppelwörter aus dem Zwischenspeicher zurück
+        // (@0x4D0406). Aber dieser Speicher liegt im ARBEITSSPEICHER und wird
+        // beim Start eines neuen Durchlaufs nicht gefüllt — es gibt nichts, was
+        // vor der ersten Mission gespeichert worden wäre.
+        //
+        // Bei uns steht er in `campaign.cfg` und überlebt damit alles. Wer
+        // Mission 1 erneut anfing, bekam die ENDWERTE seines vorigen Durchgangs
+        // zurück: `15:5` (die Geldkette der Nebenmission ist durch), `39:1`
+        // (ihr Auslöser verriegelt), `300:1` (der Sieg verriegelt). Gemeldet als
+        // »ich bekomme keine 50 $« und »ich kann Kampagne 1 nicht gewinnen« —
+        // gemessen mit `--nebenmission-check`: »v15 vorher 5, v39 1«, noch bevor
+        // die Mission den ersten Takt gelaufen war.
+        //
+        // ⭐ Die erste Mission fängt darum immer bei null an. Das ist keine
+        // eigene Mechanik, sondern das Fehlen einer: es gibt keine Vormission.
+        if (CarryVarsActive && s.Mission > 1)
             foreach (var kv in CampaignManager.CarriedVars)
                 if (kv.Key >= 0 && kv.Key < _var.Length) _var[kv.Key] = kv.Value;
         foreach (var kv in s.Init)

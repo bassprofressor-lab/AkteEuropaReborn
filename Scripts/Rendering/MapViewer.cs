@@ -741,6 +741,12 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_nebenCheck)
+        {
+            GD.Print(_entities.NebenmissionCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_siegCheck)
         {
             GD.Print(_entities.SiegCheck());
@@ -1131,6 +1137,7 @@ public partial class MapViewer : Node2D
             else if (a == "--demo-queue") { _demo = true; _demoQueue = true; }
             else if (a == "--demo-ai") { _demo = true; _demoAi = true; }
             else if (a == "--sieg-check") _siegCheck = true;
+            else if (a == "--nebenmission-check") _nebenCheck = true;
             else if (a.StartsWith("--script-check")) _scriptCheck = 15f;
             // --pay-check[=sek]: die Geldregeln der Mission einmal ausloesen,
             // damit sich der Fall »Nebenmission GEMACHT« fahren laesst. Siehe
@@ -1752,6 +1759,7 @@ public partial class MapViewer : Node2D
     private bool _leaveCheck;
     private bool _stuckCheck;
     private bool _siegCheck;
+    private bool _nebenCheck;
     private float _umbefehlAfter = -1f;
     private int _umbefehlC, _umbefehlR;
     private bool _speedCheck;

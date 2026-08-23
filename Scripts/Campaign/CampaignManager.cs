@@ -473,6 +473,19 @@ public static class CampaignManager
         using var c = new ConfigFile();
         c.Load(SavePath);
         if (c.HasSection("mission_balance")) c.EraseSection("mission_balance");
+        // ⚠⚠ 23.08.2026 — UND DIE VARIABLEN. Hier fehlten sie, und das hat
+        // Kampagne 1 unspielbar gemacht.
+        //
+        // Sein Spielstand nach `--fresh-campaign`:
+        //   completed=0
+        //   vars="0:51 1:2 2:30 3:60 10:1 11:51 12:1 13:1 15:5 39:1 ... 300:1"
+        //
+        // `completed` und `balance` waren zurueckgesetzt, die VARIABLEN nicht.
+        // 15:5 heisst »die Geldkette der Nebenmission ist durch«, 39:1 »ihr
+        // Ausloeser ist verriegelt«, 300:1 »der Sieg ist verriegelt«. Ein
+        // frischer Durchlauf begann also mit den Endwerten des vorigen.
+        // Gemeldet als »ich bekomme keine 50 $« und »ich kann nicht gewinnen«.
+        c.SetValue("campaign", "vars", "");
         c.Save(SavePath);
     }
 
