@@ -147,10 +147,37 @@ public static class WindowManager
     /// </summary>
     public static bool ZwangAusgenommen(int art) => art is 9 or 35 or 48;
 
+    /// <summary>
+    /// <b>Der Knoten eines Fensters — aber nur, wenn er noch lebt.</b>
+    ///
+    /// <para>⚠⚠ GEMELDET AM 23.08.2026: »wenn ich ein Gefecht verlasse, bleibt
+    /// der Bildschirm schwarz und ich komme nicht mehr ins Hauptmenue«.
+    /// Die Ursache sass hier. <c>ChangeSceneToFile</c> gibt die alte Szene
+    /// frei — samt aller Fensterknoten. Erst DANACH laeuft
+    /// <c>MainMenu._Ready</c>, und dessen erste Anweisung ist
+    /// <c>LeaveToMenu.Tidy</c> → <see cref="Leeren"/> → <see cref="Fertig"/>.
+    /// Dort stand <c>if (f.Knoten is not Control c) return;</c> — und genau
+    /// das greift bei einem freigegebenen Godot-Objekt NICHT: der C#-Umschlag
+    /// behaelt seinen Typ, der Mustervergleich gelingt, und der Zugriff auf
+    /// <c>c.Visible</c> wirft. <c>_Ready</c> starb in Zeile eins, das Menue
+    /// wurde nie gebaut.</para>
+    ///
+    /// <para>⚠ »<c>is not Control</c>« sieht wie eine Pruefung aus und ist
+    /// keine. Wer einen Godot-Knoten ueber einen Szenenwechsel hinweg
+    /// aufbewahrt, braucht <c>IsInstanceValid</c> — der Typ sagt nichts
+    /// darueber, ob das Objekt dahinter noch da ist.</para>
+    ///
+    /// <para>⚠ Warum <c>--fenster-check</c> mit seinen 18 Messungen gruen war:
+    /// er lief nie mit OFFENEN Fenstern durch einen Szenenwechsel. Leere
+    /// Liste, <see cref="Leeren"/> tut nichts. Messung 19 schliesst das.</para>
+    /// </summary>
+    private static Control? Lebend(Fenster? f)
+        => f?.Knoten is Control c && GodotObject.IsInstanceValid(c) ? c : null;
+
     public static void InDenSchirm(Fenster? f, Vector2 schirm)
     {
-        if (f?.Knoten is not Control c) return;
-        if (ZwangAusgenommen(f.Art)) return;
+        if (Lebend(f) is not Control c) return;
+        if (ZwangAusgenommen(f!.Art)) return;
         var p = c.Position;
         var g = c.Size;
         if (p.X < 0) p.X = 0;
@@ -177,9 +204,9 @@ public static class WindowManager
     /// <returns>false, wenn diese Art keine feste Lage hat.</returns>
     public static bool FesteLage(Fenster? f, Vector2 schirm)
     {
-        if (f?.Knoten is not Control c) return false;
+        if (Lebend(f) is not Control c) return false;
         var g = c.Size;
-        switch (f.Art)
+        switch (f!.Art)
         {
             case 35: c.Position = new Vector2(25, schirm.Y - g.Y - 20); return true;
             case 34:
@@ -317,7 +344,7 @@ public static class WindowManager
     {
         foreach (var f in _liste)
         {
-            if (f.Knoten is not Control c || !c.Visible) continue;
+            if (Lebend(f) is not Control c || !c.Visible) continue;
             if (!c.GetGlobalRect().HasPoint(punkt)) continue;
             NachVorn(f);
             return f;
@@ -350,7 +377,7 @@ public static class WindowManager
     /// Fenster als flacher Strich da — die Skalierung ueberlebt das Verstecken.</summary>
     private static void Fertig(Fenster f)
     {
-        if (f.Knoten is not Control c) return;
+        if (Lebend(f) is not Control c) return;
         c.Visible = false;
         c.Scale = Vector2.One;
     }
@@ -413,7 +440,7 @@ public static class WindowManager
     /// </summary>
     private static void Blende(Fenster f)
     {
-        if (f.Knoten is not Control c) return;
+        if (Lebend(f) is not Control c) return;
         float anteil = f.ZuBild >= 0
             ? 1f - Mathf.Clamp(f.ZuBild / (float)BilderZu, 0f, 1f)
             : Mathf.Clamp(f.AufBild / (float)BilderAuf, 0f, 1f);
@@ -437,7 +464,7 @@ public static class WindowManager
     {
         for (int i = _liste.Count - 1, k = 0; i >= 0; i--, k++)
         {
-            if (_liste[i].Knoten is not Node n) continue;
+            if (_liste[i].Knoten is not Node n || !GodotObject.IsInstanceValid(n)) continue;
             var eltern = n.GetParent();
             if (eltern != null && eltern.GetChildCount() > k) eltern.MoveChild(n, k);
         }
@@ -608,6 +635,51 @@ public static partial class WindowManagerCheck
                   && Rendering.MapEntityLayer.OriginalFensterArt(10)
                   == Rendering.MapEntityLayer.OriginalFensterArt(15);
         Sag("die drei Paare teilen sich je ein Fenster (2/3/4, 6/12, 10/15)", paare);
+
+        // 10. ⭐⭐ MESSUNG 19 — DER SZENENWECHSEL MIT OFFENEN FENSTERN
+        //
+        // ⚠⚠ Gemeldet am 23.08.2026: »wenn ich ein Gefecht verlasse, bleibt der
+        // Bildschirm schwarz und ich komme nicht mehr ins Hauptmenue«.
+        // ChangeSceneToFile gibt die alte Szene frei; MainMenu._Ready ruft
+        // danach als ERSTE Anweisung ueber LeaveToMenu.Tidy die Leeren() hier.
+        // Die Fensterknoten sind zu diesem Zeitpunkt tot. Die alte Fassung warf,
+        // _Ready starb in Zeile eins, das Menue wurde nie gebaut.
+        //
+        // ⚠ Die 18 Messungen davor waren gruen und BLIEBEN es — sie laufen alle
+        // mit lebenden Knoten. Eine Verwaltung, die nur im Normalfall geprueft
+        // wird, ist im Ausnahmefall ungeprueft.
+        WindowManager.Leeren();
+        var tot1 = new Godot.Control();
+        var tot2 = new Godot.Control();
+        WindowManager.Oeffnen(19, tot1);
+        WindowManager.Oeffnen(23, tot2);
+        int vorher = WindowManager.Anzahl;
+        var t1 = WindowManager.Offen(19);
+        tot1.Free();
+        tot2.Free();
+
+        // ⭐ DAS NULLMODELL, und es ist die eigentliche Lehre: der
+        // Mustervergleich »is Control« gelingt beim freigegebenen Knoten
+        // WEITER — der C#-Umschlag behaelt seinen Typ. Nur IsInstanceValid
+        // sieht den Unterschied. Genau darauf ist die alte Fassung
+        // hereingefallen: sie sah wie eine Pruefung aus und war keine.
+        bool typPasstNoch = t1!.Knoten is Godot.Control;
+        bool lebtNoch = Godot.GodotObject.IsInstanceValid(t1.Knoten);
+        Sag($"Nullmodell: freigegebener Knoten -> »is Control« sagt {typPasstNoch}, "
+            + $"IsInstanceValid sagt {lebtNoch} (erwartet true / false)",
+            typPasstNoch && !lebtNoch);
+
+        bool geworfen = false;
+        try { WindowManager.Leeren(); }
+        catch (System.Exception e)
+        {
+            geworfen = true;
+            sb.AppendLine($"     ⚠ geworfen: {e.GetType().Name}");
+        }
+        Sag($"Leeren() mit {vorher} offenen, freigegebenen Fenstern -> "
+            + $"{(geworfen ? "GEWORFEN — das ist der schwarze Bildschirm" : "ueberlebt")}, "
+            + $"offen danach {WindowManager.Anzahl}",
+            !geworfen && WindowManager.Anzahl == 0);
 
         WindowManager.Leeren();
         foreach (var knoten in muell) knoten.Free();
