@@ -26812,6 +26812,97 @@ public partial class MapEntityLayer : Node2D
     /// keiner der 44 Karten vorkommen (15 „Minenleger", 18 „Flak-Geschütz",
     /// 77 „Antiradar" und sieben weitere). Ein Entwurf damit hatte ein
     /// unsichtbares Geschütz.</para></summary>
+    /// <summary>
+    /// <c>--turmblick-check</c> — <b>hat JEDE Rumpfrichtung ein Turmbild?</b>
+    /// (23.08.2026)
+    ///
+    /// <para>⚠ Gemeldet: »je nach Ausrichtung sieht man die Waffe oben drauf und
+    /// manchmal eben nicht«. <c>--waffensitz-check</c> konnte das nicht finden:
+    /// er misst, was auf der KARTE steht, und dort stand genau ein Schiff, mit
+    /// Blick 1 und ohne Waffe. Ein Prüfstand, der nur die Karte abfragt, prüft
+    /// die Karte und nicht die Regel.</para>
+    ///
+    /// <para>Dieser hier geht die Rümpfe der Reihe nach durch und fragt JEDE
+    /// ihrer Blickrichtungen ab — bei einem Schiff also alle sechzehn. Das
+    /// Nullmodell steht daneben: mit der ROHEN Rumpfrichtung, so wie es vor der
+    /// Behebung war.</para>
+    /// </summary>
+    public string TurmBlickCheck()
+    {
+        var sb = new System.Text.StringBuilder("turmblick-check\n");
+        LoadUnitIndex();
+        // Eine Waffe, die es als Turmsatz wirklich gibt — gesucht, nicht geraten.
+        int waffe = -1;
+        for (int w = 1; w < 120 && waffe < 0; w++)
+            if (GetTurretTexture(w, 0) != null) waffe = w;
+        if (waffe < 0) return sb.Append("  kein einziger Turmsatz geladen — nicht gemessen").ToString();
+        sb.Append($"  Probeturm: Bauteil {waffe} ({TurmBilder} Bilder erwartet)\n");
+
+        int rumpfe = 0, luecken = 0, luecken_roh = 0;
+        var betroffen = new List<int>();
+        foreach (var kv in _unitFacings)
+        {
+            int ut = kv.Key, stufen = kv.Value;
+            if (stufen <= TurmBilder) continue;      // acht Stufen sind nie das Problem
+            rumpfe++;
+            int fehltHier = 0, fehltRoh = 0;
+            for (int f = 0; f < stufen; f++)
+            {
+                if (GetTurretTexture(waffe, TurmBlick(ut, f)) == null) fehltHier++;
+                if (GetTurretTexture(waffe, f) == null) fehltRoh++;
+            }
+            luecken += fehltHier; luecken_roh += fehltRoh;
+            if (fehltHier > 0) betroffen.Add(ut);
+        }
+        if (rumpfe == 0)
+            return sb.Append("  kein Rumpf mit mehr als acht Blickrichtungen — nicht gemessen").ToString();
+
+        sb.Append($"  {rumpfe} Ruempfe mit mehr als {TurmBilder} Blickrichtungen "
+                + $"(die Schiffe 150..158)\n");
+        sb.Append($"  ohne Turmbild: {luecken}"
+                + (luecken == 0 ? "  ✔ jede Rumpfrichtung findet ihren Turm"
+                                : $"  ⚠ betroffen: {string.Join(",", betroffen)}") + "\n");
+        sb.Append($"  Nullmodell mit der ROHEN Rumpfrichtung: {luecken_roh} ohne Turmbild"
+                + (luecken_roh > 0 ? "  — so sah es vor der Behebung aus"
+                                   : "  ⚠ der Schalter tut nichts, die Messung sagt nichts") + "\n");
+        sb.Append(luecken == 0 && luecken_roh > 0 ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
+
+    /// <summary>⭐ Wie viele Bilder ein TURM hat. Ausgezählt, nicht gesetzt:
+    /// alle 30 Turmsätze in <c>Units/turret/</c> haben genau acht PNG.</summary>
+    public const int TurmBilder = 8;
+
+    /// <summary>
+    /// ⭐⭐ <b>Die Blickrichtung, in der der TURM gesucht wird</b> (23.08.2026).
+    ///
+    /// <para>⚠⚠ Gemeldet: »nehmen wir den Leichten Kreuzer — je nach Ausrichtung
+    /// sieht man die Waffe oben drauf und manchmal eben nicht«. Ein sehr guter
+    /// Hinweis, und er zeigte auf eine Behebung von zwei Stunden vorher.</para>
+    ///
+    /// <para>Seit <c>FacingsOf</c> die sechzehn Stufen der SCHIFFE wirklich
+    /// liefert (vorher fiel es still auf acht zurück), läuft <c>e.Facing</c>
+    /// bei den neun Schiffsrümpfen 150…158 von 0 bis 15. Der Turm hat aber nur
+    /// acht Bilder — bei jeder Stufe ab 8 fand die Suche keines, und die Waffe
+    /// verschwand. Genau auf der halben Kompassrose.</para>
+    ///
+    /// <para>⭐ <c>AimFacing</c> selbst war nie das Problem: es steht immer in
+    /// ACHTELN (<c>raw[0x03] &amp; 7</c> beim Einlesen, und der 8er-Zweig von
+    /// <see cref="DirToFacing(Vector2)"/> beim Zielen). Falsch war allein der
+    /// RÜCKFALL auf die Rumpfrichtung, wenn kein Ziel da ist.</para>
+    ///
+    /// <para>⚠ Umgerechnet wird nur nach unten, und nur wenn der Rumpf feiner
+    /// ist als der Turm. Ein Landfahrzeug (acht Stufen) geht unverändert
+    /// durch.</para>
+    /// </summary>
+    public static int TurmBlick(int unitType, int aim)
+    {
+        int stufen = FacingsOf(unitType);
+        return stufen > TurmBilder ? aim * TurmBilder / stufen : aim;
+    }
+
+    private static int TurmBlick(Entity e, int aim) => TurmBlick(e.UnitType, aim);
+
     private Texture2D? GetTurretTexture(int weapon, int facing, int slope = 0)
     {
         if (weapon == 0) return null;
@@ -27148,7 +27239,8 @@ public partial class MapEntityLayer : Node2D
                          ? $"({m[0].X},{m[0].Y})" : "KEINER";
             var off = TurretOffset(e.UnitType, e.Col, e.Row);
             var hull = GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e.Col, e.Row));
-            var turr = GetTurretTexture(e.Weapon, e.Facing, SlopeClassOf(e.Col, e.Row));
+            var turr = GetTurretTexture(e.Weapon, TurmBlick(e, e.Facing),
+                                        SlopeClassOf(e.Col, e.Row));
             var hr = UsedRect(hull);
             var tr = UsedRect(turr);
             sb.Append($"   {e.UnitType}/Bauteil {comp} Var {e.ShipVariant} Waffe {e.Weapon}")
@@ -29129,7 +29221,10 @@ public partial class MapEntityLayer : Node2D
 
             if (_drawSprites)
             {
-                int aim = e.AimFacing >= 0 ? e.AimFacing : e.Facing;
+                // ⚠ Der Turm hat acht Bilder, der Schiffsrumpf sechzehn —
+                // siehe TurmBlick. Ohne die Umrechnung fehlt die Waffe auf
+                // der halben Kompassrose.
+                int aim = TurmBlick(e, e.AimFacing >= 0 ? e.AimFacing : e.Facing);
                 // foot soldiers come from their own bank in ROBO.CWR and share
                 // the vehicles' 64x56 canvas, so the same anchor applies
                 if (e.Infantry >= 0)
