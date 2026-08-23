@@ -7125,6 +7125,39 @@ Fehlerliste. In der Reihenfolge, in der die Änderungen die Kampagne berühren:
 | Kontexthilfe | 20.08. | 34 Tore, Schranke `Missionsnummer < 50` |
 | Die Auflösungswahl | 21.08. | `1280×960` war unsere Erfindung, das Original hat `1280×1024` |
 
+### AZ.4 ⚠⚠ Die Liste ist am 22.08.2026 viel länger geworden
+
+An diesem Tag sind **19 Bauaufgaben** eingegangen (15 Commits, alles lokal).
+Sechs davon ändern etwas, das der Spieler **unmittelbar sieht** — sie gehören
+darum in dieselbe Verdachtsliste. Wieder gilt: **keine Fehlerliste.** Jede
+dieser Änderungen ist am Original gelesen; verdächtig sind sie nur, weil sie
+das gewohnte Bild verschieben.
+
+| Was | warum es auffällt | Beleg |
+|---|---|---|
+| **Die Wegsuche ist eine andere** | reine 8-Nachbar-Breitensuche mit Wellenmarken statt A*; **Chebyshev**, also kostet eine Diagonale **nicht mehr** als eine Gerade. Einheiten fahren sichtbar andere Wege, Ecken werden nicht mehr geschnitten | BB, `--wegsuche-check`, Rückfall `--alter-astern` |
+| **Der Gesundheitsbalken** | drei Farbbänder statt zwei (Schwellen ½ und ¼) und die Länge wächst mit `HpMax` | Bauaufgabe 1–5 |
+| **Reparieren kostet jetzt Trefferpunkte** | **1/30** je Schritt — vorher war Reparieren umsonst | Bauaufgabe 6er-Block |
+| **Der Ausbau ohne Geld sagt gar nichts** | kein Ton, keine Meldung — originalgetreu (BL.4.1, dreimal wortgleich im Code). ⚠ **Das liest sich wie ein Fehler und ist eine offene Frage an ihn** | BL.4.1 |
+| **Fenster blenden auf und zu** | 4 Bilder auf, 6 zu; dasselbe Fenster lässt sich **nicht mehr doppelt** öffnen; feste Lagen; Platz 0 ist oben | BA, `--fenster-check` (18 Messungen) |
+| **Der Wind dreht sich zwanzigmal langsamer** | 2000 **Takte** statt 2 Sekunden, und am Takt statt an der Bildrate — damit läuft auch der **Waldbrand** anders | Bauaufgabe 12, `--brand-check` |
+
+Dazu vier Änderungen, die weniger sichtbar sind, aber dieselbe Wirkung haben
+können, wenn etwas daneben liegt:
+
+* **Der Angriff ist Busbefehl 11** statt unserer Nummer 2001 — er geht damit
+  erstmals in die **Wiederholung** und über die **Leitung** (Netzbetrieb).
+* **Die Reichweite misst nicht rund** (x·40, y·20) — das Schussfeld ist eine
+  **Ellipse**; Schiffe (Gattung 4) haben feste 16 Zellen. Wer bisher aus einer
+  bestimmten Entfernung traf, trifft je nach **Richtung** nicht mehr.
+* **Forschung ist Spielersache** — ein Satz je Spieler statt einem für alle
+  acht. In der Kampagne heisst das: der Gegner erbt nichts mehr von uns.
+* **Die verlegte Einheit stirbt mit dem Zug**, und der Zug nimmt seine Ladung
+  mit.
+
+⭐ **Beim Prüfen hilft die Reihenfolge dieser Tabelle**: was oben steht, sieht
+man in der ersten Minute einer Mission; was unten steht, erst im Gefecht.
+
 ---
 
 ## BA. ⭐⭐ DIE FENSTER- UND ZEICHENMASCHINE (21.08.2026)

@@ -107,3 +107,7 @@ Bug Bilder/
 # Python-Zwischenstand der Packwerkzeuge
 __pycache__/
 *.pyc
+
+# Rohberichte der acht Leseagenten (22.08.2026). Ihr Inhalt steht vollstaendig
+# in OFFENE_FRAGEN.md, Abschnitte BI...BQ — nur die zaehlt.
+berichte/
