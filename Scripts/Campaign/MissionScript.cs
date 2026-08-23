@@ -3074,7 +3074,14 @@ public sealed class MissionScript
                $", Blockdurchlaeufe {BlockRuns}/{wantRuns}" +
                (BlockRuns == wantRuns ? "" : " ⚠") +
                $", Tor 0x{_script.Gate:X}" + (_script.Gate == 0 ? " ⚠ FEHLT" : "") +
-               $", {fast}/{_script.Rules.Count} Regeln jeden Takt";
+               $", {fast}/{_script.Rules.Count} Regeln jeden Takt" +
+               // ⚠⚠ 23.08.2026 — DIESE ZAHL WURDE SEIT JEHER GEZAEHLT UND NIE
+               // GEDRUCKT. Sie ist die einzige, an der ein ZUGESPERRTER Bereich
+               // zu erkennen ist: RulesFired = 0 sieht genau so aus wie »die
+               // Mission hat nichts zu tun«. Mission 1 feuert in 300 s KEINE
+               // einzige Regel, und ohne diese Zahl war nicht zu sehen, dass
+               // ihre ersten drei hinter einem geschlossenen Tor liegen.
+               $", {RulesFired} Regeln gefeuert, {GatesClosed}x ein Tor zu";
     }
 
     public string Coverage(out int rules, out int blocked)

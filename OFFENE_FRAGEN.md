@@ -17490,3 +17490,48 @@ das kann unsere Fassung nicht.
 
 **Zu bauen:** die Warteschlange und der Abarbeiter, mit freier Platzsuche im
 Zielblock, Satzkopie, Freigabe des alten Platzes und imap-Neustempelung.
+
+### BR.11 ⚠⚠⚠ MISSION 1 FEUERT KEINE EINZIGE REGEL — die Tore sind verklemmt
+
+Gesucht wurde, warum die 50 $ ausbleiben. Gefunden wurde etwas viel Groesseres.
+
+```
+tick-check: Mission 1 nach 60,0 s ohne Zutun — Takt 3000/3000,
+Blockdurchlaeufe 30/30, 0 Regeln gefeuert, 33000x ein Tor zu
+```
+
+**Null Regeln.** Nicht die Geldkette, nicht die siebzehn Tutorialtexte
+(@0x49844D..0x4989E9 ruft show_text/show_text2 SIEBZEHNMAL), nichts. Das Skript
+LAEUFT — 3000 Takte, 30 Blockdurchlaeufe —, aber jeder Durchlauf prallt ab.
+
+**Die Verklemmung, an den Daten:**
+
+```
+Tor 0x498457..0x4984CD   WENN ticks>10 & var0!=0 & var0!=50 & var0<50
+```
+
+Die Regeln 0 (@0x498471), 1 (@0x49847A) und 2 (@0x4984A9) liegen ALLE in
+diesem Bereich. Und **Regel 1 ist genau die, die `var0` von 0 auf 1 setzt** —
+sie zeigt den ersten Tutorialtext. Das Tor verlangt aber `var0 != 0`, um den
+Bereich zu betreten. Das Tor braucht also, was nur hinter ihm gesetzt wird.
+
+**Der Verdacht, und er ist noch nicht belegt:** die drei Tore
+(0x498457..0x4984CD, 0x498467..0x49849B, 0x498471..0x4984CD) tragen ALLE
+dieselben vier Bedingungen — und dieselben vier stehen noch einmal als `when`
+der Regel 0. Das sieht danach aus, als haette `mission_logic.py` **eine einzige
+Vergleichskette doppelt verbucht**: einmal als Bedingung der Regel 0 und einmal
+als Tor mit dem Sprungziel der ganzen Kette. Dann waere `bis` zu weit gefasst
+und schluckt die zwei Regeln dahinter.
+
+⚠ Ob das so ist, entscheidet nur der Block selbst. **Zu tun: 0x498457..0x4984CD
+in BEIDEN GAME.EXE befehlsweise lesen und die Sprungziele nachtragen** — nicht
+die Heuristik im Leser zurechtbiegen.
+
+⚠⚠ **Und warum das monatelang niemand sah:** `GatesClosed` wird seit jeher
+gezaehlt und war **nie gedruckt**. `RulesFired == 0` sieht genau so aus wie
+»die Mission hat gerade nichts zu tun«. Die Zahl steht jetzt in `TickLine`.
+⭐ Dazu ein zweiter Prueffehler am selben Tag: die Zeile »ausgeloest: 0 Texte,
+0 Geldbuchungen« misst NICHTS, wenn `--tick-check=N` mit einem gleich langen
+echten Lauf kombiniert wird — `TickCheck` haengt seine Zaehler erst an und ruft
+dann `Advance(N − bereits gelaufene Takte)`, also null Takte. Ich habe mich
+zweimal darauf gestuetzt.
