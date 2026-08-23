@@ -17591,3 +17591,41 @@ ist, besteht ihn makellos — sie ist ja besonders ruhig. Der Prueflauf war die
 ganze Zeit gruen, waehrend vier Missionen stillstanden.
 ⭐ Ab jetzt gehoert `RulesFired` und `GatesClosed` in dieselbe Zeile, und der
 Lauf muss verlangen, dass eine Mission ihre Regeln auch WIRKLICH feuert.
+
+### BR.13 ⭐⭐ M26 ist NICHT an den Toren tot — der Regelleser verliert WIRKUNGEN
+
+Nach der Torberichtigung feuerte M26 weiter null Regeln. Der Block gelesen
+(C, 0x4A2157..0x4A2513, 956 B):
+
+```
+0x4A2257  cmp [v0],0 / jne raus         ; v0 == 0
+0x4A2261  mov al,[0xC06D2C] / cmp al,3  ; Gebaeudefeld == 3
+0x4A226E  [0xC06D28] / 3  cmp [0xC06D2A] / jge raus
+0x4A2282  inc [v0]                      ; <-- DER ANLASSER
+0x4A2289  show_text(361)
+0x4A22A2  cmp [v0],1 / jne 0x4A23F6     ; das ECHTE Tor
+0x4A22B0  cmp [v2],0 / jne 0x4A2322
+0x4A22BA  inc [v2]                      ; Rumpf der naechsten Regel
+```
+
+Unsere gelesene Fassung:
+
+```
+3 @0x4A2282  WENN store(13,60,3,==) & capture_frac(13,3,>)
+             DANN text(361)                  <-- inc(0) FEHLT, var0==0 FEHLT
+4 @0x4A22BA  WENN var(0)==1
+             DANN (leer)                     <-- der ganze Rumpf FEHLT
+```
+
+**Zwei Regeln haben ihre Wirkung verloren, und eine davon ist der einzige
+Anlasser der Kette.** Ohne `inc(0)` bleibt `v0` auf 0; das Tor bei 0x4A22A2
+verlangt `v0 == 1` und oeffnet nie. Die Torlogik ist hier IN ORDNUNG — der
+Fehler sitzt eine Ebene tiefer.
+
+⭐ **Eine Regel mit Bedingung und LEERER Wirkung ist ein Alarmzeichen und kein
+Normalfall.** Der Leser sollte sie melden statt sie zu schreiben; `--script-
+coverage` zaehlt sie heute als verdrahtet mit.
+
+**Zu tun:** warum `inc word ptr [0xbc5690]` am Rumpfanfang verlorengeht. Regel 5
+@0x4A2330 traegt ihr `inc(0)` sehr wohl — der Unterschied zwischen den beiden
+Stellen ist der Hebel.
