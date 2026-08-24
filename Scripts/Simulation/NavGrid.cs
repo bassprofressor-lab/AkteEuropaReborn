@@ -161,7 +161,15 @@ public sealed class NavGrid
 
     /// <summary>Alle Ruempfe vergessen — gehoert zu <see cref="ClearOccupants"/>,
     /// sonst traegt ein neu geladenes Spiel die Ruempfe des alten.</summary>
-    public void ClearHulls() => _hull.Clear();
+    public void ClearHulls()
+    {
+        _hull.Clear();
+        // ⚠ Die Ankerbuchhaltung geht MIT: sie fuehrt Einheitennummern, und die
+        // sind auf der naechsten Karte andere. Ein stehengebliebener Anker
+        // waere ein Phantom, das keiner Einheit mehr gehoert.
+        _anker.Clear();
+        _stempelArt.Clear();
+    }
 
     /// <summary>Terrain a move class may stand on, ignoring occupants. This IS
     /// the table Can_go implements; the hover line's flag test is its own
@@ -324,8 +332,24 @@ public sealed class NavGrid
     /// gehört hierher.</para>
     /// </summary>
     public Step Ask(int c, int r, MoveClass mc = MoveClass.Vehicle, int mover = -1)
+        => AskRumpf(c, r, mc, mover, HullOf(mover));
+
+    /// <summary>
+    /// ⭐ Wie <see cref="Ask"/>, aber mit der Kantenlaenge als ARGUMENT.
+    ///
+    /// <para>⚠⚠ 24.08.2026 — herausgezogen, weil ein Pruefstand daran
+    /// gescheitert ist. Er wollte wissen, ob eine Zelle einen 4x4-Rumpf traegt,
+    /// und rief dafuer <see cref="IsFree"/> in einer eigenen 4x4-Schleife.
+    /// <see cref="IsFree"/> prueft aber SELBST den ganzen Rumpf — die Frage lief
+    /// damit ueber 7x7 Zellen und war fuer jedes Schiff »gesperrt«.
+    /// ⭐ Die Lehre: wer den Rumpf nur INNEN kennt, verfuehrt jeden Aufrufer,
+    /// ihn AUSSEN noch einmal zu nehmen. Also gibt es jetzt eine Stelle, die ihn
+    /// entgegennimmt, und eine, die ihn nachschlaegt — und keinen Grund mehr,
+    /// selbst zu schleifen.</para>
+    /// </summary>
+    public Step AskRumpf(int c, int r, MoveClass mc, int mover, int side)
     {
-        int side = HullOf(mover);
+        if (side < 1) side = 1;
         bool giveWay = false;
         for (int dy = 0; dy < side; dy++)
             for (int dx = 0; dx < side; dx++)
@@ -343,6 +367,70 @@ public sealed class NavGrid
                 giveWay = true;                        // eine Einheit — die fährt weiter
             }
         return giveWay ? Step.GiveWay : Step.Free;
+    }
+
+    /// <summary>
+    /// ⭐ <b>WARUM geht dieser Schritt nicht?</b> — dieselbe Schleife wie
+    /// <see cref="Ask"/>, aber sie nennt die ZELLE und den GRUND statt nur
+    /// »gesperrt«.
+    ///
+    /// <para>⚠ 24.08.2026, aus der Meldung »als würde da was blockieren«. Genau
+    /// das ist der Satz, den <see cref="Ask"/> nicht beantworten kann: es gibt
+    /// drei Gründe (Gelände, ein festes Etwas, eine Einheit) und bei einem
+    /// 4×4-Rumpf sechzehn Zellen, in denen sie stecken können. Ohne Zelle und
+    /// Grund bleibt nur Raten.</para>
+    ///
+    /// <para>⚠ Diese Fassung MUSS Zeichen für Zeichen dieselbe Schleife sein
+    /// wie <see cref="Ask"/>. Eine Diagnose, die anders prüft als der
+    /// Entscheider, beschreibt einen anderen Fall.</para>
+    /// </summary>
+    public string WarumGesperrt(int c, int r, MoveClass mc, int mover)
+        => WarumGesperrt(c, r, mc, mover, HullOf(mover));
+
+    public string WarumGesperrt(int c, int r, MoveClass mc, int mover, int side)
+    {
+        if (side < 1) side = 1;
+        var einheiten = new List<string>();
+        for (int dy = 0; dy < side; dy++)
+            for (int dx = 0; dx < side; dx++)
+            {
+                int cc = c + dx, rr = r + dy;
+                if (!InBounds(cc, rr)) return $"({cc},{rr}) liegt ausserhalb der Karte";
+                if (!CanEnter(cc, rr, mc))
+                    return $"({cc},{rr}) ist {GroundWord(cc, rr)} — {mc} darf da nicht hin";
+                int i = Idx(cc, rr);
+                if (_occupant[i] < 0 || _occupant[i] == mover) continue;
+                if (_crushable[i]) continue;
+                if (_immobile[i])
+                    return $"({cc},{rr}) haelt etwas FESTES (Nr. {_occupant[i]}) — das weicht nicht aus";
+                einheiten.Add($"({cc},{rr}) Nr. {_occupant[i]}");
+            }
+        if (einheiten.Count > 0)
+            return "eine EINHEIT steht im Weg (die faehrt weiter): " + string.Join(", ", einheiten);
+        return "frei";
+    }
+
+    /// <summary>Das Bodenwort einer Zelle, fuer Diagnosezeilen.</summary>
+    public string GroundWord(int c, int r) => !InBounds(c, r) ? "ausserhalb"
+        : (Ground)_ground[Idx(c, r)] switch
+        {
+            Ground.Free => "Land",
+            Ground.Rough => "rau",
+            Ground.Water => "Wasser",
+            _ => "gesperrt",
+        };
+
+    /// <summary>Jede Zelle, in der ein Stempel steht: <c>(Spalte, Zeile,
+    /// Einheitennummer, ist_fest)</c>. Nur fuer Pruefstaende — siehe den
+    /// Belegungsabgleich in <c>MapEntityLayer.BelegungCheck</c>.</summary>
+    public IEnumerable<(int C, int R, int Ent, bool Fest)> BelegteZellen()
+    {
+        for (int r = 0; r < Height; r++)
+            for (int c = 0; c < Width; c++)
+            {
+                int i = Idx(c, r);
+                if (_occupant[i] >= 0) yield return (c, r, _occupant[i], _immobile[i]);
+            }
     }
 
     /// <summary>Die Rohstoffvorkommen, die DIE KARTE mitbringt —
@@ -648,6 +736,19 @@ public sealed class NavGrid
     public void SetOccupant(int c, int r, int entity, bool crushable = false,
                              bool immobile = false)
     {
+        if (entity >= 0)
+        {
+            _stempelArt[entity] = (crushable, immobile);
+            if (!_anker.TryGetValue(entity, out var l)) _anker[entity] = l = new List<Vector2I>();
+            var a = new Vector2I(c, r);
+            if (!l.Contains(a)) l.Add(a);
+        }
+        Stempeln(c, r, entity, crushable, immobile);
+    }
+
+    /// <summary>Die reine Schreibbewegung — ohne Buchhaltung.</summary>
+    private void Stempeln(int c, int r, int entity, bool crushable, bool immobile)
+    {
         int side = HullOf(entity);
         for (int dy = 0; dy < side; dy++)
             for (int dx = 0; dx < side; dx++)
@@ -660,6 +761,60 @@ public sealed class NavGrid
             }
     }
 
+    /// <summary>
+    /// ⭐⭐ <b>WELCHE ANKER EINE EINHEIT GERADE HAELT</b> — und warum das Gitter
+    /// das wissen muss (24.08.2026).
+    ///
+    /// <para>⚠⚠ Gemeldet: »die grossen 2 Boote lassen sich nicht nach unten
+    /// fahren« und »der kleine Kreuzer kann nicht mehr unterhalb vom Hafen
+    /// langfahren, als würde da was blockieren«. Gemessen mit dem
+    /// Belegungsabgleich: ein 4×4-Schiff, das <b>19 Zellen gefahren</b> ist,
+    /// belegte danach <b>keine einzige Zelle</b> — 24 Löcher, 0 Phantome.</para>
+    ///
+    /// <para><b>Die Ursache ist die Ueberlappung der zwei Anker.</b> Während
+    /// eines Schrittes hält eine Einheit ihre Zelle UND die vorgemerkte. Bei
+    /// einem 1×1 sind das zwei getrennte Zellen; bei einem 4×4, der einen
+    /// Schritt weit auseinanderliegt, <b>teilen sich die beiden Anker zwölf von
+    /// sechzehn Zellen</b>. Und <see cref="ClearOccupant"/> löschte alles, was
+    /// die eigene Nummer trug — also auch die zwölf, die der ANDERE Anker
+    /// gerade braucht. Nach dem ersten Schritt blieben vier Zellen, nach dem
+    /// zweiten keine.</para>
+    ///
+    /// <para>⭐ <b>Warum die Buchhaltung hierher gehört und nicht zu den
+    /// Aufrufern:</b> es gibt elf Stempel- und fünfzehn Löschstellen, und
+    /// achtundzwanzig Stellen setzen eine Vormerkung zurück. Ein »nach dem
+    /// Löschen bitte neu stempeln« an jeder davon wäre genau die Regel in
+    /// achtundzwanzig Kopien, deren erste vergessene Kopie der nächste Fehler
+    /// ist — dieselbe Falle wie bei <see cref="SetHull"/> selbst, und dieselbe
+    /// wie bei den sechzehn Blickrichtungen der Schiffe zwei Tage vorher.</para>
+    ///
+    /// <para>⚠ Was das NICHT heilt: eine Stelle, die <c>Reserved = null</c>
+    /// setzt, ohne den Stempel zu löschen. Dann bleibt ein Anker in dieser
+    /// Liste stehen, den die Einheit nicht mehr anfahren will — ein Phantom.
+    /// Das ist eine eigene Fehlerklasse, und der Belegungsabgleich zählt sie
+    /// getrennt.</para>
+    /// </summary>
+    private readonly Dictionary<int, List<Vector2I>> _anker = new();
+
+    /// <summary>⭐ <c>--alt-stempel</c>: das Neustempeln abschalten und damit den
+    /// Stand vor dem 24.08.2026 wiederherstellen. <b>Die Gegenprobe zum
+    /// Belegungsabgleich</b> — mit diesem Schalter MUSS er durchfallen, sonst
+    /// misst er nicht, was er zu messen behauptet (Arbeitsweise: eine Messlatte,
+    /// die nicht reissen kann, ist keine).</summary>
+    public static bool AltStempel;
+
+    /// <summary>Mit welchen Merkmalen eine Einheit gestempelt wurde, damit ein
+    /// Neustempeln sie nicht verliert.</summary>
+    private readonly Dictionary<int, (bool Crush, bool Immobile)> _stempelArt = new();
+
+    /// <summary>Wer in dieser EINEN Zelle steht, ohne Rumpfschleife — fuer den
+    /// Belegungsabgleich. −1 heisst leer.</summary>
+    public int BesetztVon(int c, int r) => InBounds(c, r) ? _occupant[Idx(c, r)] : -1;
+
+    /// <summary>Die Anker einer Einheit — fuer den Belegungsabgleich.</summary>
+    public IReadOnlyList<Vector2I> AnkerVon(int entity)
+        => _anker.TryGetValue(entity, out var l) ? l : System.Array.Empty<Vector2I>();
+
     /// <summary>Dieselbe Flaeche wieder freigeben. ⚠ Der Anker muss derselbe
     /// sein, mit dem gestempelt wurde — waehrend eines Schrittes haelt eine
     /// Einheit zwei Anker (den alten und den vorgemerkten), und beide werden
@@ -667,6 +822,12 @@ public sealed class NavGrid
     public void ClearOccupant(int c, int r, int entity)
     {
         int side = HullOf(entity);
+        // Diesen Anker gibt die Einheit auf.
+        if (_anker.TryGetValue(entity, out var l))
+        {
+            l.Remove(new Vector2I(c, r));
+            if (l.Count == 0) _anker.Remove(entity);
+        }
         for (int dy = 0; dy < side; dy++)
             for (int dx = 0; dx < side; dx++)
             {
@@ -677,6 +838,13 @@ public sealed class NavGrid
                 _crushable[i] = false;
                 _immobile[i] = false;
             }
+        // ⭐⭐ UND WIEDER STEMPELN, WAS SIE NOCH HAELT — siehe die Herleitung
+        // bei _anker. Ohne diese drei Zeilen radiert der aufgegebene Anker die
+        // Zellen des behaltenen mit weg, weil beide dieselbe Nummer tragen.
+        if (AltStempel) return;
+        if (!_anker.TryGetValue(entity, out var rest)) return;
+        var art = _stempelArt.TryGetValue(entity, out var v) ? v : (false, false);
+        foreach (var a in rest) Stempeln(a.X, a.Y, entity, art.Item1, art.Item2);
     }
 
     /// <summary>Cell counts per ground class, for the HUD / debug overlay.</summary>

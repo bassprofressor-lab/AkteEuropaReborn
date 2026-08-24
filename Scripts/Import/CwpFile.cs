@@ -241,6 +241,42 @@ public sealed class CwpFile : IBuildingPatterns
 
     public bool HasAnimations => _animOff >= 0;
 
+    // ---- die ARTTAFEL der zerstoerbaren Kartenobjekte ----------------------
+    //
+    // ⭐⭐⭐ 24.08.2026 — Block 0x2b des Anhangs, 1600 Byte, den unser Leser bis
+    // heute nur in seiner Groessenrechnung mitgezaehlt hat.
+    //
+    // `Check_cwp` laedt ihn nach 0xBB3B60 (@0x4C8F17, `cmp eax, 0x640`), und
+    // von dort liest ihn das Brandwesen der zerstoerbaren Objekte:
+    //
+    //     byte[art*8 + 0xBB3B60]  Verhaltensklasse 0/1/2   @0x4C9FEC
+    //     word[art*8 + 0xBB3B62]  Grundkachel              @0x4CA593 / @0x4CA76A
+    //
+    // Auf die Grundkachel rechnet das Original **+10001 = brennt** (@0x4CA59B)
+    // und **+10002 = zerstoert** (@0x4CA772). 1600 / 8 = 200 Arten; ueber alle
+    // 36 Karten kommen 126 verschiedene vor.
+    //
+    // ⚠ Die Tafel steckt in der KACHELDATEI, ist also je Tileset eine andere —
+    // dieselbe Artnummer bedeutet auf zwei Tilesets nicht dasselbe.
+
+    /// <summary>200 Arten à 8 Byte — Block 0x2b hinter den Zellanimationen.</summary>
+    public const int ObjTypeCount = 200, ObjTypeStride = 8;
+
+    private int ObjTypeOff => _animOff < 0 ? -1 : _animOff + AnimRowCount * AnimRowStride;
+
+    /// <summary>Ist die Arttafel da?</summary>
+    public bool HasObjTypes
+        => ObjTypeOff >= 0 && ObjTypeOff + ObjTypeCount * ObjTypeStride <= _d.Length;
+
+    /// <summary>Verhaltensklasse und Grundkachel einer Objektart, oder
+    /// <c>(-1, -1)</c>.</summary>
+    public (int Klasse, int Grundkachel) ObjType(int art)
+    {
+        if (!HasObjTypes || art < 0 || art >= ObjTypeCount) return (-1, -1);
+        int at = ObjTypeOff + art * ObjTypeStride;
+        return (_d[at], BitConverter.ToUInt16(_d, at + 2));
+    }
+
     public CellAnim GetAnimRow(int row)
     {
         if (!HasAnimations || (uint)row >= AnimRowCount) return default;

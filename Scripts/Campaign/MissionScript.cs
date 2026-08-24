@@ -881,6 +881,10 @@ public sealed class MissionScript
     /// Pruefstand.</summary>
     public int GatesClosed;
 
+    /// <summary>Wieviele Regeln dieses Skript ueberhaupt hat — fuer das
+    /// Erwartungsblatt, ohne `_script` nach aussen zu geben.</summary>
+    public int RuleCountOrZero() => _script?.Rules?.Count ?? 0;
+
     public int RulesFired { get; private set; }
 
     /// <summary>Wieviele Einsetzungen (<c>place_unit</c>) dieses Skript
@@ -2399,10 +2403,17 @@ public sealed class MissionScript
             case "close_texts":
                 CloseTexts?.Invoke();
                 break;
-            // bus_cmd(11, einheit, ukol, x, y) — der Befehl, mit dem eine
-            // Mission ihre eigenen Einheiten losschickt. ukol 4 ist Angriff.
-            // In Mission 1 sind das die Plätze 1000..1003, also die ersten vier
-            // Einheiten von Spieler 1: drei Infanteristen und ein MG-Fahrzeug.
+            // bus_cmd(11, einheit, CX, CY, utok_na) — der Befehl, mit dem eine
+            // Mission ihre eigenen Einheiten losschickt. In Mission 1 sind das
+            // die Plätze 1000..1003, also die ersten vier Einheiten von
+            // Spieler 1: drei Infanteristen und ein MG-Fahrzeug.
+            //
+            // ⚠⚠ 24.08.2026 — hier stand `(einheit, ukol, x, y)` mit »ukol 4
+            // ist Angriff«. Das dritte Argument gibt es nicht: der Behandler
+            // @0x4C2E2D reicht die Felder unveraendert an `order` @0x410220
+            // weiter, und das ist dieselbe Routine wie bei `order_at`. Die 4
+            // war die SPALTE. Die volle Herleitung steht bei der Zuweisung von
+            // OrderUnit in MapEntityLayer.
             case "order":
                 OrderUnit?.Invoke(a.A, a.B, a.C, a.D);
                 break;

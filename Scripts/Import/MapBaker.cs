@@ -95,16 +95,58 @@ public sealed class MapBaker
     /// NOT match is reported as <see cref="MissedBuildingCells"/> — if a reading
     /// were wrong, that number would not be zero.</para>
     /// </summary>
+    /// <summary>
+    /// ⭐⭐⭐ 24.08.2026 — <b>DIE KULISSENBAUTEN GEHOEREN IN DIE AUFRAGENDE
+    /// SCHICHT, NICHT INS GELAENDEBILD.</b>
+    ///
+    /// <para>Gemeldet: »ich sehe schon Gebaeude im Fog of War trotzdem«, und
+    /// belegt mit einem Bild aus dem Let's Play (8:53): im unerkundeten Gebiet
+    /// ist NICHTS als der blanke Boden — kein Baum, keine Kiste, keine Fabrik,
+    /// nur ein Kran statt zwei.</para>
+    ///
+    /// <para>Der Nebelriegel an den Gebaeudesaetzen half nicht, und die Messung
+    /// sagte warum: <c>fog-verborgen: 4 von 4 Gebaeuden</c> — sie WAREN
+    /// verborgen, das Bauwerk stand trotzdem da. Es steckt im gebackenen
+    /// Kartenbild, weil <c>b.IsBuilt == 0</c> hier bisher schlicht uebersprungen
+    /// wurde und die Zellen damit ganz normal ins Gelaende geblittet
+    /// wurden.</para>
+    ///
+    /// <para>Ein solcher Bau ist aber kein Boden: er ragt auf, verdeckt
+    /// Einheiten und muss im Nebel verschwinden koennen. Er kommt darum in die
+    /// zweite Ebene, wie ein Baum. <see cref="Kulisse"/> haelt seine
+    /// Zellen.</para>
+    /// </summary>
+    private bool[] Kulisse = System.Array.Empty<bool>();
+
     private bool[] BuildingCells(ushort[] code)
     {
         int w = Width, h = Height;
         var claimed = new bool[w * h];
+        Kulisse = new bool[w * h];
         BuildingCellsSkipped = MissedBuildingCells = 0;
         if (!_tiles.HasBuildings) return claimed;
 
         foreach (var b in CwmData.Buildings(_map))
         {
-            if (b.IsBuilt == 0) continue;                 // scenery / script slot
+            // ⚠ Kulisse (IsBuilt == 0) wird NICHT beansprucht — der Zeichner
+            // stellt sie nicht her —, aber ihre Zellen werden gemerkt, damit
+            // der Backofen sie in die zweite Ebene legt statt ins Gelaende.
+            if (b.IsBuilt == 0)
+            {
+                var kt = _tiles.GetBuildingType(b.Type);
+                if (kt.IsEmpty) continue;
+                for (int x = 0; x < CwpFile.PatternWidth; x++)
+                    for (int y = 0; y < CwpFile.PatternHeight; y++)
+                    {
+                        int t = _tiles.PatternTile(kt.FirstPattern, x, y);
+                        if (t == 0) continue;
+                        int c = b.Col + x, r = b.Row + y;
+                        if (c < 0 || c >= w || r < 0 || r >= h) continue;
+                        int i = r * w + c;
+                        if (code[i] == t + CwpFile.ObjectCodeBase) Kulisse[i] = true;
+                    }
+                continue;
+            }
             var bt = _tiles.GetBuildingType(b.Type);
             if (bt.IsEmpty) continue;
             for (int x = 0; x < CwpFile.PatternWidth; x++)
@@ -300,9 +342,24 @@ public sealed class MapBaker
     /// <c>Asche</c> und <c>AX/AY</c> sind dasselbe für die Kachel, die
     /// ÜBRIGBLEIBT, wenn das Feuer aus ist (Stumpf bzw. blanker Boden).</para>
     /// </summary>
+    /// <para>⭐⭐ 24.08.2026 — <c>Imap</c> und <c>Code</c> kamen dazu. Das
+    /// Original fuehrt zerstoerbare Kartenobjekte in einer EIGENEN Brandliste
+    /// (0xC03A30, 6 Byte je Eintrag) mit einer ART, und die Art entscheidet
+    /// ueber die Verhaltensklasse (Arttafel 0xBB3B60) und ueber die
+    /// Ersatzkachel: <b>Grundkachel + 10001 = brennt</b>, <b>+ 10002 =
+    /// zerstoert</b>. Unser Objektsatz trug bisher nur Lage und Bilder — damit
+    /// war das ganze Teilsystem nicht baubar (siehe
+    /// Rendering/BrennendeObjekte.cs).
+    ///
+    /// <para><c>Imap</c> ist der rohe Belegungswert aus Sektion 6: 50000..55999
+    /// Wald, 61000..63999 zerstoerbares Objekt — daraus faellt die Art. <c>Code</c>
+    /// ist die Kachelnummer derselben Zelle, auf die das Original die
+    /// +10001/+10002 rechnet.</para></summary>
     public readonly List<(int Col, int Row, int X, int Y, int W, int H,
                           int Kohle, int KX, int KY,
-                          int Asche, int AX, int AY)> Objects = new();
+                          int Asche, int AX, int AY,
+                          int Imap, int Code, int Art,
+                          int Klasse, int Basis)> Objects = new();
 
     /// <summary>
     /// <b>DER STREIFEN MIT DEN VERKOHLTEN BÄUMEN.</b>
@@ -542,6 +599,13 @@ public sealed class MapBaker
                     // Mal auffaellt, wird gezaehlt und gesagt.
                     int lage = MapForest.Lage(_map, c, r);
                     if (imap == 0xFFFF && lage >= 100) LagenZellen++;
+                    // ⚠ 24.08.2026 — hier stand `|| Kulisse[i]`, damit
+                    // Kulissenbauten in die zweite Ebene wandern und im Nebel
+                    // verschwinden koennen. Zurueckgenommen am selben Abend:
+                    // unter ihren Zellen liegt kein gemalter Boden (siehe
+                    // Durchgang A/B), also blieb ein Loch. Die Zellenliste
+                    // `Kulisse` bleibt stehen — sie ist richtig gelesen und die
+                    // halbe Arbeit fuer den Tag, an dem der Boden da ist.
                     if (sp != null && MapForest.ImZeilenfach(imap, lage))
                     {
                         BlitTo(_objects ??= new byte[PixelW * PixelH * 4], sp, c, r, elev[i]);
@@ -573,9 +637,69 @@ public sealed class MapBaker
                                      + BlitAnchor + kohleSpr[asche].YOff;
                             }
                         }
+                        // ⭐⭐⭐ 24.08.2026 — DIE ZWEI ERSATZBILDER EINES
+                        // ZERSTOERBAREN OBJEKTS, nach demselben Muster wie beim
+                        // Wald. Das Original tauscht die Kachel:
+                        //   Grundkachel + 10001 = brennt      (@0x4CA59B)
+                        //   Grundkachel + 10002 = zerstoert   (@0x4CA772)
+                        // und weil `code = 10000 + Grundkachel` ist (an allen
+                        // fuenf Objekten von map_01 nachgeprueft), sind das
+                        // schlicht die beiden NAECHSTEN Kachelcodes.
+                        //
+                        // ⚠ Sie gehen in dieselben Felder wie beim Wald
+                        // (burnt/ash): der Zeichner kann dann beides gleich
+                        // behandeln. Unterschieden wird ueber `imap`, nicht
+                        // ueber »hat eine verkohlte Kachel«.
+                        if (imap >= 61000 && imap < 64000)
+                        {
+                            kohle = Streifenplatz(code[i] + 1);
+                            asche = Streifenplatz(code[i] + 2);
+                            if (kohle >= 0)
+                            {
+                                kx = c * TileW;
+                                ky = OriginY + r * TileH - elev[i] * ElevStep
+                                     + BlitAnchor + kohleSpr[kohle].YOff;
+                            }
+                            if (asche >= 0)
+                            {
+                                ax = c * TileW;
+                                ay = OriginY + r * TileH - elev[i] * ElevStep
+                                     + BlitAnchor + kohleSpr[asche].YOff;
+                            }
+                        }
+
+                        // ⭐⭐⭐ 24.08.2026 — DIE ART EINES ZERSTOERBAREN OBJEKTS.
+                        //
+                        // Der Belegungswert eines solchen Objekts ist
+                        // 61000 + INDEX in eine eigene Liste; das Original haelt
+                        // sie bei 0xC03A30, 6 Byte je Eintrag, rund 2000 Plaetze
+                        // (0xC03A30…0xC06912, Anzahl @0x41F2E1). Und das ist
+                        // SEKTION 4 der Kartendatei: 0x2EE0 = 12000 Byte
+                        // = 2000 x 6, byteweise dieselbe Groesse.
+                        //
+                        // Der Eintrag: +0 Spalte, +1 Zeile, +2 ART, +3 Zustand.
+                        // Die ART ist die Zeile in der Arttafel 0xBB3B60 und
+                        // entscheidet ueber Verhaltensklasse und Grundkachel —
+                        // siehe Rendering/BrennendeObjekte.cs.
+                        int art = -1;
+                        if (imap >= 61000 && imap < 64000)
+                        {
+                            var s4 = _map.Sec(4);
+                            int k = (imap - 61000) * 6;
+                            if (s4 != null && k + 3 < s4.Length) art = s4[k + 2];
+                        }
+                        // ⭐ Und gleich aufgeloest: Verhaltensklasse und
+                        // Grundkachel stehen in der Arttafel der KACHELDATEI
+                        // (CwpFile.ObjType). Sie hier nachzuschlagen erspart es,
+                        // die Tafel je Tileset in die Laufzeit zu schleppen —
+                        // und sie ist je Tileset eine andere, waere dort also
+                        // ein zweiter Zuordnungskreis.
+                        int klasse = -1, grundkachel = -1;
+                        if (art >= 0) (klasse, grundkachel) = _tiles.ObjType(art);
                         Objects.Add((c, r, c * TileW,
                                      OriginY + r * TileH - elev[i] * ElevStep + BlitAnchor + sp.YOff,
-                                     sp.W, sp.H, kohle, kx, ky, asche, ax, ay));
+                                     sp.W, sp.H, kohle, kx, ky, asche, ax, ay,
+                                     imap, code[i], art, klasse, grundkachel));
                         continue;
                     }
                     Blit(sp, c, r, elev[i]);

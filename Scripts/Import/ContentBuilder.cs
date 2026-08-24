@@ -1461,6 +1461,18 @@ public sealed class ContentBuilder
                 // Und die Kachel, die uebrigbleibt, wenn das Feuer aus ist.
                 if (o.Asche >= 0)
                     sb.Append($",\"ash\":{o.Asche},\"ax\":{o.AX},\"ay\":{o.AY}");
+                // ⭐ 24.08.2026 — die ART. Roher Belegungswert (Sektion 6) und
+                // Kachelnummer derselben Zelle. Ohne sie war das Brandwesen der
+                // zerstoerbaren Objekte nicht baubar; siehe MapBaker.Objects
+                // und Rendering/BrennendeObjekte.cs.
+                sb.Append($",\"imap\":{o.Imap},\"code\":{o.Code}");
+                if (o.Art >= 0)
+                {
+                    sb.Append($",\"art\":{o.Art}");
+                    // Verhaltensklasse (0/1/2) und Grundkachel aus der Arttafel
+                    // der Kacheldatei; brennt = Basis+10001, zerstoert = +10002.
+                    if (o.Klasse >= 0) sb.Append($",\"klasse\":{o.Klasse},\"basis\":{o.Basis}");
+                }
                 sb.Append('}');
             }
             sb.Append("],");

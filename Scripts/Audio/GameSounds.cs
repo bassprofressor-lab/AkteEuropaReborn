@@ -92,10 +92,65 @@ public static class GameSounds
 
     // ---- combat ------------------------------------------------------------
 
-    /// <summary>Infantry hit and destroyed — @0x40d37c, in the hit routine that
-    /// prints "Zasah" (Czech for hit) and, right before this call,
-    /// "Hit to exploding infantry!!!".</summary>
-    public const int InfantryDies = 131;
+    /// <summary>
+    /// ⚠⚠ <b>BERICHTIGT AM 24.08.2026 — 131 IST DIE GEBAEUDEANSAGE.</b>
+    ///
+    /// <para>Hier stand <c>InfantryDies = 131</c> mit der Aufrufstelle
+    /// @0x40d37c. Die Stelle war richtig gelesen, die Zuordnung nicht: der
+    /// Block darum rechnet gar nicht mit einer Einheit, sondern mit einem
+    /// GEBAEUDE.</para>
+    /// <code>
+    ///   0x40D352  mov cl, byte[ebp + 0xC06915]   ; Gebaeudesatz +0x01 = Eigner
+    ///   0x40D358  cmp cl, byte[0x4FA284]         ; ... nur MEIN Gebaeude
+    ///   0x40D360  call rand / idiv 100 / jne     ; eine Ansage auf HUNDERT Treffer
+    ///   0x40D377  push 0x83                      ; Klang 131
+    ///   0x40D38B  mov word[ebp + 0xC06916], ax   ; Gebaeudesatz +0x02 = Trefferpunkte
+    /// </code>
+    ///
+    /// <para>⭐ Umgestossen hat es der Spieler, indem er einfach hinhoerte:
+    /// »wenn ich ein Cyborg töte kommt der Sound *ein Gebäude wird angegriffen*«.
+    /// Genau das ist es — und die Messung vom 20.08. hatte es schon halb
+    /// gesagt (131 ist ein gesprochener Satz aus dem Ansagenblock 120..143,
+    /// Stimmhaftigkeit 0,81), nur der INHALT war ungelesen. Er hat ihn
+    /// vorgelesen.</para>
+    ///
+    /// <para>⚠ Die Drosselung gehoert dazu: <b>1 von 100</b> Treffern, und nur
+    /// auf Gebaeude des eigenen Spielers. Ohne sie waere die Stimme eine
+    /// Dauerschleife.</para>
+    /// </summary>
+    public const int BuildingUnderAttack = 131;
+
+    /// <summary>
+    /// <b>Der Sterbeklang eines Fusssoldaten — DREI Stuecke, zufaellig
+    /// gewaehlt.</b>
+    ///
+    /// <para>Gelesen bei @0x406E48, im Anschluss an die Fallanimation:</para>
+    /// <code>
+    ///   0x40B723  mov byte[e+0x11], 0      ; ANIM_SPODEK zurueck
+    ///   0x40B72A  mov byte[e+0x47], 0x0C   ; Bildblock 12 — das UMFALLEN
+    ///   0x40B73A  rand &amp; 3 + 8            ; +0x1C = Dauer, 8..11 Takte
+    ///   ---- und wenn dieser Zaehler abgelaufen ist: ----
+    ///   0x406E32  cmp byte[e+0x47], 0x0C   ; steht er im Fallblock?
+    ///   0x406E41  dec byte[e+0x1C]         ; Takt fuer Takt
+    ///   0x406E4D  rand % 3 + 0x4D          ; ⭐ Klang 77, 78 ODER 79
+    ///   0x406E5F  call &lt;Klang&gt;
+    /// </code>
+    ///
+    /// <para>Der Klasse-1-Zweig (<c>byte[e+0x0a] == 1</c>) ist die Infanterie —
+    /// dasselbe Feld, an dem auch <c>ai_units</c> seine Klassen trennt. Es ist
+    /// der EINZIGE Klangaufruf der ganzen Todesroutine.</para>
+    ///
+    /// <para>⚠ Das Original spielt ihn am ENDE des Umfallens, nicht im Moment
+    /// des Treffers. Siehe die Aufrufstelle in <c>MapEntityLayer.Kill</c> fuer
+    /// das, was wir daraus gemacht haben.</para>
+    /// </summary>
+    public static readonly int[] InfantryDiesBank = { 77, 78, 79 };
+
+    /// <summary>Eines der drei, wie das Original waehlt: <c>rand() % 3</c>.
+    /// ⚠ Ueber den Wuerfel der SIMULATION, nicht ueber ein eigenes
+    /// <c>System.Random</c> — sonst reisst der Determinismus an der Naht.</summary>
+    public static int InfantryDiesPick()
+        => InfantryDiesBank[Simulation.Determinism.Roll(InfantryDiesBank.Length)];
 
     /// <summary>A target was acquired — @0x411ab0 in the seeker function
     /// @0x4119d0, whose own trace lines are "Check seeker" and

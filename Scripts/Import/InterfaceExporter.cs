@@ -340,6 +340,53 @@ public sealed class InterfaceExporter
         // getroffenen Sache in den Effektaufruf —  ist die einzige
         // kleine Zahl im ganzen Rumpf.
         ("fire", 82),
+        // ⭐⭐ 24.08.2026 — DIE TRUEMMER. Gemeldet: »wenn Einheiten zerstört
+        // werden, fliegen die Teile des Fahrzeugs etwas herum, passiert bei uns
+        // auch nicht«.
+        //
+        // Die Todesroutine des Originals wirft sie in ZWEI Schleifen
+        // (@0x40B61D und @0x40B662), gleich hinter der Explosion:
+        //
+        //   rand()%10 + 10  Stueck  Sorte 0, Streuung 3
+        //   rand()%6  +  5  Stueck  Sorte 1, Streuung 5
+        //
+        // und der Teilchenmacher @0x4AD520 waehlt daraus die Bildfolge:
+        //
+        //   Sorte 0 -> rand()%6  + 19      Sorte 1 -> rand()%10 + 29
+        //
+        // ⭐ Dass das stimmt, sagt ANIM.CWA selbst: es gibt GENAU sechs Folgen
+        // 19..24 (je EIN Bild, 2..3 Bildpunkte hoch — Splitter) und GENAU zehn
+        // Folgen 29..38 (je SECHS Bilder, 4..10 hoch — taumelnde Brocken). Die
+        // Modulo-Zahlen des Originals treffen die vorhandenen Folgen auf den
+        // Punkt; das ist der Beleg, nicht die Vermutung.
+        //
+        // (Sorte 2 -> rand()%5 + 200, acht Bilder, 16..25 hoch. Die wirft der
+        // Fahrzeugtod NICHT — sie steht bei den Aufrufern in 0x4AExxx. Deshalb
+        // hier NICHT ausgegeben: was nichts anfordert, braucht kein Bild.)
+        ("splitter0", 19), ("splitter1", 20), ("splitter2", 21),
+        ("splitter3", 22), ("splitter4", 23), ("splitter5", 24),
+        ("brocken0", 29), ("brocken1", 30), ("brocken2", 31), ("brocken3", 32),
+        ("brocken4", 33), ("brocken5", 34), ("brocken6", 35), ("brocken7", 36),
+        ("brocken8", 37), ("brocken9", 38),
+        // ⚠ DER SCHWEIF eines fliegenden Brockens. Der Truemmertakt @0x4ADD75
+        // legt ihn zu je einem Drittel der Takte an: `rand()%3 + 0xF0`, also
+        // Folge 240, 241 oder 242. Welcher Schweif es ist, entscheidet die
+        // BILDFOLGE des Teils selbst (@0x4AD9AC): unter 25 gar keiner, ab 25
+        // Rauch, ab 39 Feuer (210..212, das trifft die Truemmer nicht).
+        // Ohne ihn fliegen die Brocken nackt — und genau das war zu sehen.
+        ("rauch0", 240), ("rauch1", 241), ("rauch2", 242),
+        // ⭐⭐ 24.08.2026 — DIE EIGENTLICHE EXPLOSION eines Fahrzeugs.
+        // Gemeldet: »es fehlt noch die Explosion an sich«.
+        //
+        // Die Todesroutine wirft @0x40B5E7 `rand()%9 + 0x1FE`, also Folge
+        // 510..518 — und ANIM.CWA hat dort GENAU NEUN Folgen zu je 17..24
+        // Bildern, 44..71 Bildpunkte hoch. Unser "explosion" ist Folge 48:
+        // SIEBEN Bilder, 8..13 hoch. Wir haben also ein Fuenkchen gemalt, wo
+        // das Original einen Feuerball zeigt. (Folge 48 bleibt, sie ist
+        // anderswo im Gebrauch und ausserdem das Raketen-Muendungsfeuer.)
+        ("sprengung0", 510), ("sprengung1", 511), ("sprengung2", 512),
+        ("sprengung3", 513), ("sprengung4", 514), ("sprengung5", 515),
+        ("sprengung6", 516), ("sprengung7", 517), ("sprengung8", 518),
         // The BUILDING DOORS, and this one is not our choice — the game says so.
         // The draw code @0x42B338 computes `tile*4 + word[0x7a44fe] + phase`,
         // and 0x7a44fe is the `first frame` field of ANIM.CWA sequence 301

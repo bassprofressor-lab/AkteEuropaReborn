@@ -152,20 +152,60 @@ public sealed class UnitsExporter
             var flat = FlatOffset(ut);
             bool newHull = !hulls.ContainsKey(ut);
             bool newTurret = weap > 0 && !turrets.Contains(weap);
-            for (int f = 0; f < CwrFile.Facings; f++)
+            // ⚠⚠ 24.08.2026 — HIER STAND `CwrFile.Facings`, ALSO ACHT, UND ZWAR
+            // AUCH FUER SCHIFFE. Gemeldet: »beim nach rechts fahren muesste die
+            // Bootsspitze nach rechts schauen, aber das Schiff zeigt permanent
+            // nach unten; beim nach links bekommt er das hin.«
+            //
+            // Der Grund fuer die Seitigkeit steht in der Rechnung: mit sechzehn
+            // Stufen ist LINKS die Nummer 4 und RECHTS die Nummer 12
+            // (DirToFacing: 0 unten, 4 links, 8 oben, 12 rechts). Die halbe
+            // Kompassrose 0..7 hatte ihr Bild, 8..15 hatte keines — und
+            // GetHullTexture faellt bei einem fehlenden Bild auf f0 zurueck.
+            // f0 ist der Bug nach UNTEN. Also: links richtig, rechts und oben
+            // »permanent nach unten«, und zwar nicht wackelig, sondern stabil
+            // falsch.
+            //
+            // ⭐ Die 16 waren am 19.08. an DREI Stellen nachgetragen worden —
+            // WriteChassis (Units/<ut>/), WriteAllParts (part/) und
+            // FacingsOf — aber NICHT hier, und `hull/` ist genau der Satz, den
+            // der Zeichner ZUERST nimmt. Die anderen drei Saetze lagen die
+            // ganze Zeit vollstaendig daneben und wurden nie gelesen.
+            int nf = FacingsOfPart(prop);
+            // ⚠ Der TURM behaelt seine acht Bilder (MapEntityLayer.TurmBilder,
+            // an allen 30 Turmsaetzen ausgezaehlt) und bekommt darum seine
+            // EIGENE Schleife. In der Rumpfschleife mit sechzehn Stufen
+            // bekaeme sonst jede Turmnummer zwei Durchlaeufe, und f1 wuerde mit
+            // dem Bild von f0 ueberschrieben.
+            if (newTurret)
+            {
+                for (int f = 0; f < CwrFile.Facings; f++)
+                    Save($"turret/{weap}/f{f}.png", Stack(f, weap));
+                // ⭐⭐ 24.08.2026 — DIE ZWEITE POSE EINES TURMS, bis heute nur
+                // unter part/ und damit nie gezeichnet. Sieben Türme haben
+                // eine; siehe LadeGruppe fuer die Frage, welche davon die
+                // GELADENE ist.
+                for (int g = 1; g < _cwr.PartGroups(weap); g++)
+                    for (int f = 0; f < CwrFile.Facings; f++)
+                        Save($"turret/{weap}/g{g}/f{f}.png", StackPose(f, g, weap));
+                LadeGruppeMessen(weap);
+            }
+            if (newHull) EigeneMontage(ut, prop, nf);
+            for (int f = 0; f < nf; f++)
             {
                 var hull = Stack(f, prop);
-                Image? turret = weap > 0 ? Stack(f, weap) : null;
-                Save($"composed/{key}/f{f}.png", Compose(hull, turret, flat));
                 if (newHull) Save($"hull/{ut}/f{f}.png", hull);
-                if (newTurret && turret != null) Save($"turret/{weap}/f{f}.png", turret);
+                // Dieselbe Umrechnung wie MapEntityLayer.TurmBlick: nur nach
+                // unten, und nur wenn der Rumpf feiner ist als der Turm.
+                Image? turret = weap > 0 ? Stack(TurretFacing(f, nf), weap) : null;
+                Save($"composed/{key}/f{f}.png", Compose(hull, turret, flat));
             }
             // The other pose groups of the chassis, where it owns any. Group 0
             // keeps its old file name so nothing that already reads these has
             // to change; 1..n-1 go into g<n>/ beside it.
             if (newHull)
                 for (int g = 1; g < _cwr.PartGroups(prop); g++)
-                    for (int f = 0; f < CwrFile.Facings; f++)
+                    for (int f = 0; f < nf; f++)
                         Save($"hull/{ut}/g{g}/f{f}.png", StackPose(f, g, prop));
 
             // ⚠ 15.08.2026 — DIE HANGPOSEN, bis heute nicht exportiert.
@@ -175,7 +215,21 @@ public sealed class UnitsExporter
             // gewählt, dass nichts, was die alten Dateien liest, sich ändern
             // muss — eine Einheit ohne Hangbild fällt einfach auf das flache
             // zurück.
-            if (newHull)
+            //
+            // ⚠ 24.08.2026 — EIN SCHIFF HAT KEINE HANGPOSE, und was hier fuer
+            // eines geschrieben wurde, war falsch beschriftet. Ein Schiffsteil
+            // traegt seine sechzehn Richtungen in EINER Gruppe; der Block ist
+            // in `PartFrame` ein Versatz von `blk·8`, und damit landet Block 1
+            // auf den Richtungen 8..15 desselben Teils und Block 2 schon in den
+            // Bildern des NACHBARteils. Unter hull/15x/s1..s4 lagen also acht
+            // Nachbarrichtungen unter dem Namen einer Neigung.
+            //
+            // Gelesen wird das nie (Wasser hat Hangklasse 0, und ohne Bild
+            // faellt der Zeichner ohnehin auf das flache zurueck) — aber ein
+            // Bild, das nur deshalb nicht schadet, weil es keiner ansieht, ist
+            // kein Nachbau. ⚠ Alte Ordner aus fruehreren Ausgaben bleiben
+            // liegen; sie werden von hier nicht geloescht.
+            if (newHull && !CwrFile.IsShipPart(prop))
                 for (int k = 1; k < SlopeClasses; k++)
                 {
                     int blk = SlopeBlockOf(k);
@@ -243,10 +297,18 @@ public sealed class UnitsExporter
             if (hulls.ContainsKey(ut)) continue;
             int prop = ComponentOf(ut);
             if (prop <= 0 || _cwr.PartBase(prop) < 0) continue;
+            // ⚠⚠ 24.08.2026 — auch hier stand die feste Acht, siehe die
+            // Herleitung an der ersten Schleife. Durch DIESE Schleife kommen
+            // die drei Schiffe, die auf keiner Karte stehen (154 U-Boot,
+            // 155 Treibstoff-, 156 Munitionstender) — sie waeren nach einer
+            // Behebung allein oben weiter halb blind gewesen.
+            int nf = FacingsOfPart(prop);
+            EigeneMontage(ut, prop, nf);
             for (int g = 0; g < _cwr.PartGroups(prop); g++)
-                for (int f = 0; f < CwrFile.Facings; f++)
+                for (int f = 0; f < nf; f++)
                     Save(g == 0 ? $"hull/{ut}/f{f}.png" : $"hull/{ut}/g{g}/f{f}.png",
                          StackPose(f, g, prop));
+            if (CwrFile.IsShipPart(prop)) { hulls[ut] = NameOf(ut); Hulls++; continue; }
             for (int k = 1; k < SlopeClasses; k++)
             {
                 int blk = SlopeBlockOf(k);
@@ -705,6 +767,12 @@ public sealed class UnitsExporter
         sb.Append("takes mount[k] outright (@0x42a099), on the tilted path the average ");
         sb.Append("(mount[0]+mount[k])/2 (@0x429CCB); k = the tile's flag byte, 0 above 4. ");
         sb.Append("`slope_blocks` is the frame block a tilted unit is drawn from (@0x429B05). ");
+        sb.Append("mount_facings_unser: UNSERE eigenen Montagepunkte je Blickrichtung, ");
+        sb.Append("nur fuer die Ruempfe, fuer die das ORIGINAL KEINEN nennt (Bauteil ");
+        sb.Append("100/101 = Rumpf 157/158; alles andere faellt @0x42ADCE in `Wrong chassis ");
+        sb.Append("of ship`). Geeicht an den drei Ruempfen, die es nennt: Mitte des ");
+        sb.Append("Rumpf-Umrisses + (-25,-53), Streuung 1,2 bzw. 2,1 px. Siehe ");
+        sb.Append("UnitsExporter.MontageEichung. ");
         sb.Append("Since 15.08.2026 the exporter writes them: class 0 is the flat picture and ");
         sb.Append("keeps its old name, classes 1..4 sit in s<k>/ beside it (and under g<n>/ for ");
         sb.Append("the other pose groups). The class is the tile's FLAG byte, >4 counts as 0\",");
@@ -740,6 +808,16 @@ public sealed class UnitsExporter
                     sb.Append(k > 0 ? "," : "").Append($"[{m[k].X},{m[k].Y}]");
                 sb.Append(']');
             }
+            // ⭐ UNSERE Montagepunkte je Blickrichtung, nur wo das Original
+            // schweigt — siehe MontageEichung. Sie stehen unter einem EIGENEN
+            // Namen, damit nie jemand sie fuer gelesene haelt.
+            else if (_mountFacings.TryGetValue(kv.Key, out var mf))
+            {
+                sb.Append(",\"mount_facings_unser\":[");
+                for (int k = 0; k < mf.Length; k++)
+                    sb.Append(k > 0 ? "," : "").Append($"[{mf[k].X},{mf[k].Y}]");
+                sb.Append(']');
+            }
             sb.Append('}');
         }
         sb.Append("},\"turrets\":{");
@@ -748,7 +826,11 @@ public sealed class UnitsExporter
         {
             if (!first) sb.Append(',');
             first = false;
-            sb.Append($"\"{t}\":{{\"component\":{t}}}");
+            sb.Append($"\"{t}\":{{\"component\":{t}");
+            // ⭐ UNSERE Zuordnung, nicht die des Originals — siehe LadeSchwelle.
+            if (_ladeGruppe.TryGetValue(t, out int lg))
+                sb.Append($",\"lade_gruppe_unser\":{lg}");
+            sb.Append('}');
         }
         sb.Append("}}");
         File.WriteAllText(_dst + "/parts_index.json", sb.ToString(), new UTF8Encoding(false));
@@ -778,6 +860,27 @@ public sealed class UnitsExporter
     /// <summary>The components of one facing, drawn in the order the game draws
     /// them. A component of 0 or one the bank has no frames for is simply not
     /// there, which is a normal case, not an error.</summary>
+    /// <summary>
+    /// <b>Wieviele Blickrichtungen dieses Teil hat</b> — sechzehn bei den
+    /// Schiffsteilen, acht sonst.
+    ///
+    /// <para>⚠ 24.08.2026. Die Zahl stand bis heute an vier Stellen einzeln:
+    /// <see cref="WriteChassis"/> und <see cref="WriteAllParts"/> rechneten sie
+    /// (beide am 19.08. nachgetragen), die zwei Rumpfschleifen in
+    /// <see cref="Run"/> nicht — und die schreiben <c>hull/</c>, den Satz, den
+    /// der Zeichner ZUERST nimmt. Vier Kopien einer Regel, von denen zwei
+    /// nachgezogen wurden: darum steht sie jetzt einmal hier.</para>
+    /// </summary>
+    private static int FacingsOfPart(int comp)
+        => CwrFile.IsShipPart(comp) ? CwrFile.ShipFacings : CwrFile.Facings;
+
+    /// <summary>Die Turmnummer zu einer Rumpfrichtung. Ein Turmsatz hat immer
+    /// acht Bilder, ein Schiffsrumpf sechzehn — dieselbe Rechnung wie
+    /// <c>MapEntityLayer.TurmBlick</c>, damit das zusammengesetzte Bild und der
+    /// getrennt gezeichnete Turm nicht auseinanderlaufen.</summary>
+    private static int TurretFacing(int facing, int hullFacings)
+        => hullFacings > CwrFile.Facings ? facing * CwrFile.Facings / hullFacings : facing;
+
     private Image Stack(int facing, params int[] components)
         => StackPose(facing, 0, components);
 
@@ -1011,7 +1114,211 @@ public sealed class UnitsExporter
     private Vector2I FlatOffset(int unitType)
     {
         var m = Mount(unitType);
-        return m == null ? Vector2I.Zero : new Vector2I(m[0].X, m[0].Y);
+        if (m != null) return new Vector2I(m[0].X, m[0].Y);
+        return _mountFacings.TryGetValue(unitType, out var mf) && mf.Length > 0
+            ? mf[0] : Vector2I.Zero;
+    }
+
+    /// <summary>
+    /// ⭐⭐ <b>MONTAGEPUNKTE FÜR DIE ZWEI GROSSEN SCHIFFE — und die sind UNSERE
+    /// Zahlen</b> (24.08.2026).
+    ///
+    /// <para>⚠⚠ <b>Das Original hat für diese zwei keinen.</b> Sein
+    /// Schiffszeichner holt den Versatz @<c>0x42ADB7..0x42ADF3</c> aus einer
+    /// Weiche mit genau drei Fällen — Bauteil <c>0x46</c>→15, <c>0x47</c>→2,
+    /// <c>0x48</c>→12, also die Rümpfe 150/151/152. Bauteil <b>100 und 101</b>
+    /// (Schlachtschiff 157 und Kreuzer 158) fallen @0x42ADCE in
+    /// <c>printf("Wrong chassis of ship")</c> und lesen danach eine
+    /// Stack-Zelle, die nie geschrieben wird. Das Original zeigt dort selbst
+    /// Müll, und Müll ist nicht nachbaubar.</para>
+    ///
+    /// <para>Am 13.08.2026 standen deshalb zwei Wege zur Wahl, und der Spieler
+    /// nahm »keine Waffe zeichnen«. <b>Am 24.08.2026 hat er das umgedreht:</b>
+    /// »der Kreuzer hat eine Ballistische Rakete standard und das
+    /// Schlachtschiff einen Raketenwerfer, die musst du drauf bauen«. Also der
+    /// andere Weg — eigene Montagepunkte, je Blickrichtung.</para>
+    ///
+    /// <para><b>Und sie sind GEEICHT, nicht geraten.</b> Für die drei Rümpfe,
+    /// die das Original nennt, gilt gemessen über alle acht Blickrichtungen:
+    /// <c>Montagepunkt = Mitte des Rumpf-Umrisses + (−25, −53)</c>. Die drei
+    /// Rümpfe liefern −25,4 / −26,1 / −23,3 in x und −50,3 / −54,8 / −54,5 in
+    /// y — <b>Streuung 1,2 bzw. 2,1 px</b>. Dieselbe Formel auf die zwei grossen
+    /// Rümpfe angewandt, liegt der Sockel in <b>32 von 32</b> Blickrichtungen
+    /// INNERHALB des Rumpfbildes.</para>
+    ///
+    /// <para>⚠ Zwei Dinge, die dazugehören:
+    /// <list type="bullet">
+    /// <item>Ein <b>proportionales</b> Modell (Hub als Anteil der Rumpfhöhe)
+    /// passte auf die kleinen Rümpfe etwas besser und extrapolierte
+    /// <b>unsinnig</b> — für den 122 px hohen Schlachtschiffrumpf sagte es
+    /// Montagepunkt y = <b>−154</b>. Ein Modell, das auf den Eichdaten gut
+    /// aussieht und ausserhalb absurd wird, ist kein Modell. Genommen wurde das
+    /// konstante.</item>
+    /// <item>Die Rümpfe, für die das Original einen Montagepunkt NENNT, rühren
+    /// wir nicht an — <see cref="Mount"/> hat Vorrang. Diese Formel greift nur,
+    /// wo das Original schweigt.</item>
+    /// </list></para>
+    /// </summary>
+    /// <para>⚠⚠ <b>NACHTRAG 24.08.2026 — DER SCHATTEN GEHÖRT NICHT ZUM
+    /// SCHIFF.</b> Gemeldet: »beim Schlachtschiff ist der Waffenturm nicht ganz
+    /// mittig, leicht rechts, wenn das Schiff nach Norden schaut«.</para>
+    ///
+    /// <para>Das Rumpfbild enthält den Schlagschatten als undurchsichtige,
+    /// fast schwarze Fläche — beim Schlachtschiff <b>1666 von 5060 Pixeln, also
+    /// ein Drittel</b>, und alle auf einer Seite. Die Mitte des Umrisses lag
+    /// dadurch <b>10 px zu weit rechts</b>. Beim Kreuzer sind es nur 306 Pixel
+    /// und 2 px — genau darum fiel es nur beim Schlachtschiff auf.</para>
+    ///
+    /// <para>Der Schatten wird jetzt ausgenommen, und die Eichung ist damit neu
+    /// gerechnet: <b>(−24, −52)</b> statt (−25, −53), Streuung 1,4 bzw. 2,8 px
+    /// über dieselben 24 Messungen. ⚠ Die Eichrümpfe haben selbst kaum Schatten,
+    /// die Konstante ändert sich deshalb nur um 1 px — <b>die Wirkung liegt
+    /// ganz bei den Rümpfen, auf die sie angewandt wird.</b></para>
+    private static readonly Vector2I MontageEichung = new(-24, -52);
+
+    /// <summary>Ab welcher Summe aus R+G+B ein Pixel als SCHATTEN gilt und
+    /// nicht mehr zum Schiff. ⚠ Unsere Schwelle, an den Bildern abgelesen:
+    /// die Schattenflächen sind fast schwarz, der dunkelste Rumpfton liegt
+    /// deutlich darüber.</summary>
+    private const int SchattenSchwelle = 60;
+
+    /// <summary>Je Rumpftyp die Montagepunkte je Blickrichtung — nur für die
+    /// Rümpfe, für die <see cref="Mount"/> nichts hergibt.</summary>
+    private readonly Dictionary<int, Vector2I[]> _mountFacings = new();
+
+    /// <summary>
+    /// ⭐⭐⭐ <b>WELCHE POSE EINES TURMS DIE GELADENE IST</b> — und warum das
+    /// eine gemessene Zahl braucht und keine Annahme (24.08.2026).
+    ///
+    /// <para>⚠⚠ Gemeldet: »die ballistische Rakete als Grafik seh ich nicht auf
+    /// dem Waffenträger beim Kreuzer«. Das Bild GIBT es: Teil 28 hat eine
+    /// zweite Gruppe, und dort liegt die goldene Rakete auf der Rampe.</para>
+    ///
+    /// <para>⚠ <b>Das Original zeichnet sie nie.</b> Im ganzen Zeichenbereich
+    /// (0x4299A0…0x42B200) steht <b>genau EIN</b> <c>imul ax, ax, 0x30</c> — die
+    /// Gruppenbreite 48 —, und der hängt an <c>+0x11 ANIM_SPODEK</c>, dem
+    /// <b>Unterteil</b>. Daneben 22 Lesungen von <c>+0x03</c> (Turmdrehung) und
+    /// 10 von <c>+0x0C</c> (Turmteil), aber kein Gruppenterm für den Turm.
+    /// <b>Was hier passiert, ist also UNSERE Abweichung</b> — der Spieler hat
+    /// sie am 24.08.2026 gewählt: »nach Munition, geladen solange ammo &gt; 0«.
+    /// </para>
+    ///
+    /// <para>⚠⚠ <b>Und »Gruppe 1 = geladen« wäre falsch gewesen.</b> Angesehen:
+    /// bei Turm 26 und 27 trägt <b>Gruppe 0</b> die grünen Gefechtsköpfe und
+    /// Gruppe 1 nicht; bei Turm 46 ist Gruppe 1 der <i>geöffnete</i> Kasten und
+    /// hat nur <b>6 von 8</b> Richtungen. Nachgezählt (undurchsichtige Pixel
+    /// ohne Schatten, über alle acht Richtungen):</para>
+    /// <code>
+    ///   Turm 26  +5,1 %   27  −1,9 %   28  +18,8 %   35  −0,5 %
+    ///        36  +3,4 %   46 −25,3 %   50   +1,7 %
+    /// </code>
+    /// <para>Fünf der sieben liegen im Rauschen — das sind Posenvarianten, kein
+    /// Ladezustand. <b>Nur Turm 28 hat ein echtes Paar</b>, und das ist genau
+    /// der Werfer des Kreuzers.</para>
+    ///
+    /// <para>Die Schranke ist darum eng und steht hier: die zweite Gruppe gilt
+    /// als GELADEN, wenn sie <b>alle acht Richtungen</b> hat und
+    /// <b>mindestens ein Zehntel mehr Material</b> trägt. Heute erfüllt das
+    /// genau ein Turm. ⚠ Die zehn Prozent sind UNSERE Schwelle; sie steht hier
+    /// als Zahl, damit man sie ändern kann, statt sie zu suchen.</para>
+    /// </summary>
+    private const float LadeSchwelle = 0.10f;
+
+    /// <summary>Turmteil -> die Gruppe, die als GELADEN gilt. Fehlt der Eintrag,
+    /// hat der Turm kein Ladepaar und bleibt immer auf Gruppe 0.</summary>
+    private readonly Dictionary<int, int> _ladeGruppe = new();
+
+    /// <summary>Wieviele undurchsichtige Pixel ein Bild hat — ohne den
+    /// Schlagschatten, sonst misst man die Sonne mit.</summary>
+    private static int MaterialPixel(Image img)
+    {
+        int n = 0;
+        for (int y = 0; y < img.GetHeight(); y++)
+            for (int x = 0; x < img.GetWidth(); x++)
+            {
+                var c = img.GetPixel(x, y);
+                if (c.A > 0.5f && (c.R + c.G + c.B) * 255f >= SchattenSchwelle) n++;
+            }
+        return n;
+    }
+
+    private void LadeGruppeMessen(int weap)
+    {
+        if (_cwr.PartGroups(weap) < 2) return;
+        int g0 = 0, g1 = 0, richtungen = 0;
+        for (int f = 0; f < CwrFile.Facings; f++)
+        {
+            int fr0 = _cwr.PartFrame(weap, f, 0, 0), fr1 = _cwr.PartFrame(weap, f, 0, 1);
+            if (fr0 < 0 || _cwr.DecodeFrame(fr0) == null) continue;
+            g0 += MaterialPixel(StackPose(f, 0, weap));
+            if (fr1 < 0 || _cwr.DecodeFrame(fr1) == null) continue;
+            richtungen++;
+            g1 += MaterialPixel(StackPose(f, 1, weap));
+        }
+        // ⚠ Beide Schranken, nicht eine: ein Satz mit Loechern (Turm 46 hat nur
+        // sechs Richtungen) waere in zwei Blickrichtungen unsichtbar.
+        if (richtungen < CwrFile.Facings) return;
+        if (g0 <= 0 || g1 - g0 < g0 * LadeSchwelle) return;
+        _ladeGruppe[weap] = 1;
+    }
+
+    /// <summary>Wieviele Montagepunkte selbst gerechnet wurden. Gehört in die
+    /// Ausgabe: eine eigene Zahl, die niemand sieht, wird zur »gelesenen«.
+    /// </summary>
+    public int EigeneMontagepunkte;
+
+    /// <summary>Die Mitte des sichtbaren Umrisses eines Bildes, oder
+    /// <c>null</c>, wenn es leer ist.</summary>
+    private static Vector2I? UmrissMitte(Image img)
+    {
+        // ⚠ Zweimal messen: einmal ohne den Schatten (das ist die Antwort) und
+        // einmal mit ihm (das ist der Rueckfall). Siehe MontageEichung.
+        var ohne = Umriss(img, true);
+        var mit = Umriss(img, false);
+        if (ohne == null) return mit?.Mitte;
+        // Ein Bild, das fast ganz dunkel IST, waere durch die Schwelle
+        // zerschnitten — dann zaehlt der volle Umriss. Die Grenze ist unsere.
+        return ohne.Value.Anteil < 0.3f ? mit?.Mitte : ohne.Value.Mitte;
+    }
+
+    private static (Vector2I Mitte, float Anteil)? Umriss(Image img, bool ohneSchatten)
+    {
+        int x0 = int.MaxValue, y0 = int.MaxValue, x1 = -1, y1 = -1;
+        int genommen = 0, gesamt = 0;
+        for (int y = 0; y < img.GetHeight(); y++)
+            for (int x = 0; x < img.GetWidth(); x++)
+            {
+                var c = img.GetPixel(x, y);
+                if (c.A <= 0.5f) continue;
+                gesamt++;
+                if (ohneSchatten
+                    && (c.R + c.G + c.B) * 255f < SchattenSchwelle) continue;
+                genommen++;
+                if (x < x0) x0 = x;
+                if (x > x1) x1 = x;
+                if (y < y0) y0 = y;
+                if (y > y1) y1 = y;
+            }
+        return x1 < 0
+            ? null
+            : (new Vector2I((x0 + x1) / 2, (y0 + y1) / 2),
+               gesamt == 0 ? 0f : genommen / (float)gesamt);
+    }
+
+    /// <summary>Die Montagepunkte eines Rumpfes selbst rechnen — siehe
+    /// <see cref="MontageEichung"/>.</summary>
+    private void EigeneMontage(int ut, int prop, int nf)
+    {
+        if (Mount(ut) != null) return;                   // das Original hat einen
+        if (!CwrFile.IsShipPart(prop)) return;           // nur die Schiffe
+        var pts = new Vector2I[nf];
+        for (int f = 0; f < nf; f++)
+        {
+            var mitte = UmrissMitte(Stack(f, prop));
+            pts[f] = (mitte ?? Vector2I.Zero) + MontageEichung;
+        }
+        _mountFacings[ut] = pts;
+        EigeneMontagepunkte += nf;
     }
 
     /// <summary>Hull with the turret at the offset the game gives it on flat

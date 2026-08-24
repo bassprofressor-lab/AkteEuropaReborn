@@ -283,6 +283,60 @@ public static class Settings
 
     /// <summary>The effect volume as Godot wants it. 0 becomes silence rather
     /// than -inf arithmetic.</summary>
+    /// <summary>
+    /// ⭐⭐ 24.08.2026 — <b>DIE LAUTSTAERKEKURVE DES ORIGINALS</b>, gelesen am
+    /// Ende von <c>play_sound</c> @0x4049A8..0x404A08.
+    ///
+    /// <para>Gemeldet: »ich bin mir echt unsicher ob unsere Kanone den richtigen
+    /// Schuss Sound hat, ist ziemlich laut«. Der KLANGPLATZ war richtig — die
+    /// Kette Bauteil 21 → ZBRAN 1 → Tafelzeile 1 → Geschossart 0 → Klang 0 ist
+    /// Byte fuer Byte die des Originals (@0x40C4CF). Zu laut war das ABSPIELEN.
+    /// </para>
+    ///
+    /// <code>
+    ///   0x4049BC  eax = dword[0x500E10] &lt;&lt; 4     ; Effekteregler (0..255) mal 16
+    ///   0x4049DE  fsqrt / fsqrt                 ; VIERTE Wurzel
+    ///   0x4049E2  call __ftol                   ; und die SCHNEIDET AB
+    ///   0x4049E9  eax = daempfung + 10000
+    ///   0x4049EF  ecx = v &lt;&lt; 5
+    ///   0x4049F3  eax = eax * ecx / 255 - 10000  ; Hundertstel-Dezibel
+    /// </code>
+    ///
+    /// <para>Bei vollem Regler ist <c>v = ⌊(255·16)^¼⌋ = ⌊7,992⌋ = 7</c>, also
+    /// <c>v·32 = 224</c> — und schon bei <b>Abstand null</b> kommt
+    /// <c>10000·224/255 − 10000 = −1216</c> heraus, also <b>−12,2 dB</b>. Das
+    /// Original spielt nie auf Vollausschlag. Wir lagen bei −1,9 dB: rund
+    /// <b>zehn Dezibel zu laut</b>, das Vierfache an Amplitude.</para>
+    ///
+    /// <para>⚠ Die vierte Wurzel macht den Regler grob — <c>v</c> kennt nur die
+    /// Werte 0..7, und alles ab Reglerstellung 59 % ergibt dieselbe 7. Das ist
+    /// die Kurve des Originals und keine Ungenauigkeit unserer Umsetzung.</para>
+    ///
+    /// <para>⚠ <b>Zwei Regler, wir haben einen.</b> Das Original waehlt nach
+    /// KLANGPLATZ: Plaetze unter 120 und 300..499 nehmen den Effekteregler
+    /// [0x500E10], die Plaetze 120..299 und ab 500 den Sprachregler [0x500E14].
+    /// Wir haben nur <see cref="SfxVolume"/> und benutzen ihn fuer beide —
+    /// gesagt, statt stillschweigend gleichgesetzt.</para>
+    /// </summary>
+    /// <param name="attenDb">Die Entfernungsdaempfung in Dezibel (≤ 0), also
+    /// <c>SoundBankPlayer.DistanceDb</c>. Ohne Ort ist sie 0.</param>
+    public static float MixDb(float attenDb)
+    {
+        int atten = (int)(attenDb * 100f);
+        if (atten < -10000) atten = -10000;
+        if (atten > 0) atten = 0;
+        int regler = System.Math.Clamp(SfxVolume, 0, 100) * 255 / 100;
+        // ⚠ __ftol schneidet ab, es rundet NICHT — und genau daran haengt hier
+        // alles: 7,992 wird zu 7, nicht zu 8. Mit 8 gaebe die Rechnung
+        // Vollausschlag und der ganze Sockel verschwaende.
+        int v = (int)System.Math.Sqrt(System.Math.Sqrt(regler * 16.0));
+        int hundertstel = (atten + 10000) * (v << 5) / 255 - 10000;
+        return hundertstel / 100f;
+    }
+
+    /// <summary>⚠ Die alte, lineare Umrechnung. Sie wird von den
+    /// Klangwegen nicht mehr benutzt (siehe <see cref="MixDb"/>) und steht nur
+    /// noch fuer die Anzeige im Pausenmenue.</summary>
     public static float SfxVolumeDb =>
         SfxVolume <= 0 ? -80f : (float)(20.0 * System.Math.Log10(SfxVolume / 100.0));
 

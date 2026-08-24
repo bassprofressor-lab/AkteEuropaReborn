@@ -528,6 +528,7 @@ public partial class MapEntityLayer : Node2D
         public int RetryIn;
         public Vector2I? Reserved;       // cell currently being driven into
 
+
         /// <summary>Der Zaehler <b>»kolik«</b>, Satzfeld <b>+0x06</b> — wie weit
         /// die Einheit in ihrem laufenden Schritt ist, in Tausendsteln eines
         /// Originaltakt-Schrittes. Waechst je Takt um die Geschwindigkeit
@@ -1101,6 +1102,10 @@ public partial class MapEntityLayer : Node2D
         public float FrameTime;
         public bool Hold;                // freeze on the last frame (scorch mark)
         public int Variant;              // wreck only: which rubble picture (0..2)
+        // ⭐ 24.08.2026 — Bildpunkte je Sekunde, mit denen die Wolke TREIBT.
+        // Nur der Schadensqualm setzt das: Modus 2 der Teilchenablage schiebt
+        // seine Wolken mit dem Wind (@0x4ADE26). Alles andere bleibt stehen.
+        public Vector2 Drift;
     }
 
     /// <summary>
@@ -1795,6 +1800,18 @@ public partial class MapEntityLayer : Node2D
         if (!FogActive) return "fog: abgeschaltet";
         var (u, s, w) = _fog.Counts();
         int all = u + s + w;
+        // ⭐ 24.08.2026 — und was der Nebel gerade VERBIRGT. Gemeldet: »ich
+        // sehe immer noch Gebaeude«. Ohne diese Zahl ist »der Riegel greift
+        // nicht« nicht von »die Sachen kommen aus dem gebackenen Bild« zu
+        // unterscheiden.
+        int gebAus = 0, gebGes = 0, einhAus = 0;
+        foreach (var e in _entities)
+        {
+            if (e.IsProp || e.Dead) continue;
+            if (e.IsBuilding) { gebGes++; if (ImNebelVerborgen(e)) gebAus++; }
+            else if (ImNebelVerborgen(e)) einhAus++;
+        }
+        GD.Print($"fog-verborgen: {gebAus} von {gebGes} Gebaeuden, {einhAus} Einheiten");
         return $"fog: {w} beobachtet, {s} erkundet, {u} unbekannt von {all} Feldern " +
                $"({100f * w / all:0.0}% / {100f * s / all:0.0}% / {100f * u / all:0.0}%)";
     }
@@ -5049,7 +5066,31 @@ public partial class MapEntityLayer : Node2D
     private void SpeakHit(Entity victim)
     {
         if (!UI.Settings.Announcements) return;
-        if (victim.IsBuilding || victim.IsProp || victim.Chassis < 0) return;
+        if (victim.IsProp) return;
+
+        // ⭐ 24.08.2026 — »EIN GEBAEUDE WIRD ANGEGRIFFEN« (Klang 131).
+        //
+        // Diese Zeile fehlte ganz: die Routine liess Gebaeude bisher wortlos
+        // durch. Aufgefallen ist es von der anderen Seite — der Spieler hoerte
+        // den Satz beim Toeten eines Cyborgs, weil 131 dort faelschlich als
+        // Sterbeklang hing (siehe Kill). Das Original spielt ihn hier:
+        //
+        //   0x40D352  cmp byte[Gebaeude+0x01], byte[0x4FA284]  ; nur MEINS
+        //   0x40D360  rand() % 100 == 0                        ; 1 von 100
+        //   0x40D377  push 0x83 -> Klang 131, Modus 0 (ohne Ort)
+        //
+        // ⚠ Die Drosselung ist die des Originals und KEINE Zeitsperre: es ist
+        // der Wuerfel, nicht die Uhr. Darum steht sie vor dem Tor `_hitVoiceAt`
+        // der Einheiten und nicht darin.
+        if (victim.IsBuilding)
+        {
+            if (victim.Owner != ViewPlayer) return;
+            if (Simulation.Determinism.Roll(100) == 0)
+                Audio.SoundBankPlayer.Play(Audio.GameSounds.BuildingUnderAttack);
+            return;
+        }
+
+        if (victim.Chassis < 0) return;
         if (victim.Owner != ViewPlayer) return;      // ours: only our own report
         float now = _clock;
         if (now < _hitVoiceAt) return;
@@ -6899,7 +6940,7 @@ public partial class MapEntityLayer : Node2D
                   $"HP {e.Hp}\n");
 
         // and the two gates the draw loop puts in front of it
-        bool fogGate = FogActive && e.Owner != ViewPlayer && !e.IsBuilding && !Watched(e.Col, e.Row);
+        bool fogGate = ImNebelVerborgen(e);
         sb.Append($"   Zeichen-Tore: _drawSprites={_drawSprites}, " +
                   $"Nebel blockt={(fogGate ? "JA — wird gar nicht gezeichnet" : "nein")}, " +
                   $"Infantry={e.Infantry} (>=0 noetig)");
@@ -8310,6 +8351,49 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Wie oft ein Ziel fallengelassen wurde, weil es zu NAH war.</summary>
     public int MinRangeBlocked;
 
+    /// <summary>⭐⭐ 24.08.2026 — DIE ZWEI STUMMEN AUSGAENGE DER VERFOLGUNG.
+    ///
+    /// <para>Er meldete einen Cyborg, der vor der Bruecke steht und nichts tut,
+    /// waehrend zwei andere Cyborgs und ein MG-Fahrzeug angreifen. Das
+    /// Missionsskript befiehlt in Regel 6 <b>alle vier</b> (Plaetze 1000..1003,
+    /// <c>ukol 4</c>) — gemessen, alle vier Befehle gehen raus. Einer laeuft
+    /// trotzdem nicht.</para>
+    ///
+    /// <para>Dazwischen liegt der Verfolgungszweig, und er hat drei Ausgaenge,
+    /// die <c>Target = -1</c> setzen. Einer davon zaehlte
+    /// (<see cref="MinRangeBlocked"/>), die anderen beiden — kein freies
+    /// Zielfeld, kein Weg — schwiegen. ⚠ Und ein geloeschtes Ziel ist
+    /// endgueltig: die KI-Streife holt die Einheit nicht wieder, denn ihr Ring
+    /// reicht nur <c>Sicht+1</c> weit (bei Infanterie <b>4 Felder</b>, gemessen),
+    /// und der Spieler steht viel weiter weg. Die Einheit steht damit fuer
+    /// immer.</para>
+    ///
+    /// <para>Arbeitsweise 30: ein Zweig, der still aufgibt, sieht im Protokoll
+    /// aus wie einer, der nie betreten wurde.</para>
+    /// </summary>
+    public int ChaseNoGoal, ChaseNoPath;
+
+    /// <summary>Welche Einheiten es getroffen hat — hoechstens acht, mit Platz
+    /// und Feld, damit die Meldung auf den Bildschirm zeigt statt zu zaehlen.</summary>
+    public readonly List<string> ChaseLost = new();
+
+    private void ChaseGiveUp(int i, Entity e, string warum)
+    {
+        if (warum == "kein Zielfeld") ChaseNoGoal++; else ChaseNoPath++;
+        if (ChaseLost.Count < 8)
+            ChaseLost.Add($"#{i} Platz {e.Slot} (P{e.Owner}) bei ({e.Col},{e.Row}): {warum}");
+        e.Target = -1;
+    }
+
+    /// <summary>Die Zeile dazu — sie gehoert in jeden Lauf, nicht in einen
+    /// eigenen Pruefstand: sie kostet nichts und beantwortet genau die Frage
+    /// »warum steht der da«.</summary>
+    public string ChaseWatchLine()
+        => ChaseNoGoal + ChaseNoPath == 0
+            ? "verfolgung: kein Ziel wegen fehlendem Weg fallengelassen"
+            : $"verfolgung: {ChaseNoGoal}x kein freies Zielfeld, {ChaseNoPath}x kein Weg — "
+              + string.Join("; ", ChaseLost);
+
     /// <summary>
     /// Was diese Karte an Reichweiten mitbringt — und ob die Mindestreichweite
     /// hier ueberhaupt etwas tun KANN.
@@ -8837,24 +8921,52 @@ public partial class MapEntityLayer : Node2D
     /// isometrische Zelle ist 40 breit und nur etwa 20 hoch«. Jetzt ist es
     /// geprüft, und die Warnung hatte recht.</para>
     ///
-    /// <para>Das Original rechnet in <b>Feinschritten</b>:
-    /// <c>dx = (zielX − x)·40 − feinX</c>, <c>dy = (zielY − y)·20 − feinY</c>,
-    /// dann <c>sqrt(dx² + dy²)</c>. <b>40 Unterschritte je Zelle in x, 20 in
-    /// y</b> — das ist die isometrische Halbierung, und sie steckt damit auch
-    /// in der Reichweite.</para>
+    /// <para>⚠⚠ <b>ZURUECKGENOMMEN AM 24.08.2026 — DIE ROUTINE WAR RICHTIG
+    /// GELESEN UND FUER DEN FALSCHEN ZWECK GENOMMEN.</b></para>
     ///
-    /// <para>⚠ <b>Was das im Spiel heisst:</b> das Schussfeld ist eine
-    /// <b>Ellipse</b>, keine Kreisscheibe. Ein Ziel zwei Zeilen entfernt ist
-    /// so weit wie eines eine Spalte entfernt. Wer rund misst, lässt Einheiten
-    /// nach Norden und Süden zu kurz schiessen — auf dem Schirm sieht die
-    /// Reichweite dann verbeult aus, obwohl die Zahlen stimmen.</para>
+    /// <para>Hier stand: »Das Original rechnet <c>dx = Δx·40</c>,
+    /// <c>dy = Δy·20</c> — das ist die isometrische Halbierung, und sie steckt
+    /// damit auch in der Reichweite«, belegt mit 0x453990. Die Rechnung dort
+    /// stimmt, aber 0x453990 ist der <b>Bildschirmlagen-Helfer</b> (er ruft den
+    /// Umrechner 0x40155F und wird vom GESCHOSSFLUG benutzt, @0x40FF40,
+    /// @0x4543D6, @0x4544A2). Er entscheidet nichts ueber Reichweiten.</para>
+    ///
+    /// <para><b>Die Schussentscheidung rechnet anders</b>, und sie ist die, um
+    /// die es geht (@0x40BEA8…0x40BF77):</para>
+    /// <code>
+    ///   0x40BEAB  imul ax, ax, 0x28     ; Anteil 1 = Δ · 40
+    ///   0x40BEE0  imul ax, ax, 0x28     ; Anteil 2 = Δ · 40   ⭐ AUCH 40
+    ///   0x40BEFE  fild / fsqrt          ; dist = sqrt(a² + b²)
+    ///   0x40BF6F  ecx = byte[+0x2B]·40  ; die Reichweite
+    ///   0x40BF77  jl 0x40C5BE           ; dist groesser -> kein Schuss
+    /// </code>
+    ///
+    /// <para><b>Beide Achsen mit 40.</b> Das Schussfeld ist also eine
+    /// KREISSCHEIBE in Zellen, keine Ellipse — der Faktor kuerzt sich gegen die
+    /// Reichweite weg, und es bleibt der schlichte Zellabstand.</para>
+    ///
+    /// <para>⚠⚠ <b>Was die Halbierung angerichtet hat</b>, und es war kein
+    /// Schoenheitsfehler: ein Ziel acht Zeilen entfernt zaehlte als vier
+    /// Zellen. Eine Einheit mit Reichweite 4 schoss senkrecht also <b>doppelt
+    /// so weit</b>, wie sie durfte — und weiter, als der Nebel aufdeckt (der
+    /// Sichtstempel @0x4200C0 arbeitet in ZELLEN, <c>Zeile ± Radius</c>).
+    /// Gemeldet als »die Einheit ist noch garnicht sichtbar und trotzdem wird
+    /// angegriffen«; der Spieler hat den Zusammenhang selbst benannt: »entweder
+    /// sehen wir zu wenig oder wir schiessen weiter als in Wirklichkeit«. Es
+    /// war das Zweite.</para>
+    ///
+    /// <para>⭐ Nebenbefund derselben Lesung, NICHT gebaut: der Sichtradius des
+    /// Originals ist <c>Gelaendehoehe + Sicht − 1</c> (@0x4207AF…0x4207CF), auf
+    /// 19 geklemmt. Wir nehmen die blosse Sicht. Auf ebenem Boden decken wir
+    /// damit eine Zelle MEHR auf als das Original, auf einem Huegel deutlich
+    /// weniger.</para>
     ///
     /// <para>⚠ Die Feinstellung innerhalb der Zelle (<c>KOLIK</c>/<c>POHYB</c>)
     /// lassen wir weg: unsere Einheiten stehen auf Zellmitten. Sie würde die
     /// Entfernung um weniger als eine halbe Zelle verschieben.</para>
     /// </summary>
     private static float CellDistance(Entity a, Entity b)
-        => new Vector2(a.Col - b.Col, (a.Row - b.Row) * 0.5f).Length();
+        => new Vector2(a.Col - b.Col, a.Row - b.Row).Length();
 
     /// <summary>
     /// Attack order: every selected unit that carries a weapon engages the
@@ -8970,6 +9082,10 @@ public partial class MapEntityLayer : Node2D
                 if (e.AmmoMax > 0 && !(CheatAmmo && Cheated(e)))
                     e.Ammo--;                    // one round per shot (@0x40c587)
                 DebugShots++;
+                // ⚠ 24.08.2026 — HIER STAND EIN ABZWEIG FUER DEN MINENLEGER,
+                // und der war eine Abweichung. Das Original haengt das Legen
+                // NICHT am Gefecht, sondern an einem Minenfeld-Auftrag, den
+                // nichts im Programm je setzt. Siehe Simulation/Minen.cs.
                 Fire(i, e, e.Target, t, w);
             }
             return;
@@ -8991,9 +9107,9 @@ public partial class MapEntityLayer : Node2D
         if (e.Path == null && _nav != null)
         {
             var goal = _nav.NearestFree(new Vector2I(t.Col, t.Row), e.Move, i);
-            if (goal == null) { e.Target = -1; return; }
+            if (goal == null) { ChaseGiveUp(i, e, "kein Zielfeld"); return; }
             var path = _nav.FindPath(new Vector2I(e.Col, e.Row), goal.Value, e.Move, i);
-            if (path == null || path.Count == 0) { e.Target = -1; return; }
+            if (path == null || path.Count == 0) { ChaseGiveUp(i, e, "kein Weg"); return; }
             e.Path = path;
             e.PathIdx = 0;
             e.Goal = goal.Value;
@@ -9070,13 +9186,104 @@ public partial class MapEntityLayer : Node2D
     /// Balken hängen daran, und die Fläche aus der imap ist die Aussage der
     /// KARTE darüber, wo das Schiff steht). Verschoben wird nur, was man
     /// SIEHT.</para></summary>
+    /// <para>⭐⭐⭐ <b>NACHTRAG 24.08.2026 — DIE RECHNUNG WAR IMMER NOCH EINE
+    /// ANDERE ALS DIE DES ZEICHNERS.</b> Gemeldet: »der Abschuss der Rakete
+    /// kommt von ausserhalb des Schiffs, anstatt von der Mitte wo die Waffe
+    /// sitzt«.</para>
+    ///
+    /// <para>Hier stand <c>e.Pos + TurretOffset(...)</c>. Gezeichnet wird der
+    /// Turm aber bei <c>picC − ComposedAnchor + TurretOffset(...)</c>, und
+    /// <c>picC</c> ist <see cref="PictureAnchor"/>. Zwischen beiden liegen der
+    /// halbe Grundriss UND der Leinwandanker (30, 55) — beim
+    /// 2×2-Patrouillenboot schon 22 px, gemessen mit
+    /// <c>--schiff-waffe-check</c>: sichtbarer Rumpf bis x = 5368, Mündung bei
+    /// x = 5390.</para>
+    ///
+    /// <para>⚠⚠ Beim Kreuzer wurde daraus ein Sprung über das halbe Schiff: mit
+    /// den neuen Montagepunkten je Blickrichtung ist <c>TurretOffset</c> ein
+    /// Punkt IN DER LEINWAND (rund (71, 7)) und kein kleiner Versatz mehr. Als
+    /// Delta auf <c>e.Pos</c> gelesen, schiesst das Schiff 71 px neben sich ins
+    /// Wasser. <b>Die Behebung an den Montagepunkten hat den alten Fehler hier
+    /// von »klein und unauffällig« auf »offensichtlich« vergrössert</b> — was
+    /// ihn endlich sichtbar gemacht hat.</para>
+    ///
+    /// <para>Jetzt rechnet diese Stelle <b>Zeichen für Zeichen wie der
+    /// Zeichner</b> und legt den Ursprung auf die Mitte des sichtbaren
+    /// TURMBILDES. ⚠ Der Rückfall ist so gewählt, dass sich für alles ohne
+    /// Turmbild nichts ändert: <see cref="TurmBildMitte"/> gibt dann
+    /// <c>ComposedAnchor</c> zurück, und die Formel fällt für ein 1×1 auf
+    /// <c>e.Pos + TurretOffset</c> zusammen — den alten Wert.</para>
     private Vector2 ShotOrigin(Entity e)
-        => e.Pos + TurretOffset(e.UnitType, e.Col, e.Row);
+    {
+        int aim = TurmRichtung(e);
+        return PictureAnchor(e) - ComposedAnchor
+             + TurretOffset(e.UnitType, e.Col, e.Row, e.Facing)
+             + TurmBildMitte(e.Weapon, aim, TurmLadePose(e));
+    }
+
+    /// <summary>Wo in seiner eigenen Leinwand ein TURMBILD wirklich sitzt — die
+    /// Mitte seiner undurchsichtigen Fläche. An den PIXELN gemessen und
+    /// gemerkt, nicht gerechnet: die Turmbilder sitzen nicht in der Mitte ihrer
+    /// 64×56-Leinwand, und wer das annimmt, verschiebt jeden Schuss.
+    /// <para>⚠ Ohne Turmbild kommt <c>ComposedAnchor</c> zurück — dann hebt sich
+    /// der Anker in <see cref="ShotOrigin"/> heraus und es bleibt beim alten
+    /// Verhalten.</para></summary>
+    private Vector2 TurmBildMitte(int weapon, int facing, int gruppe = 0)
+    {
+        // ⚠ Die Gruppe gehoert in den Schluessel UND in die Suche: die geladene
+        // Pose ist ein anderes Bild, also liegt ihre Mitte woanders. Ein
+        // Zwischenspeicher, der sie verwechselt, verschiebt den Schuss genau
+        // dann, wenn das Schiff schiesst.
+        var key = (weapon * 8 + gruppe, facing);
+        if (_turmMitte.TryGetValue(key, out var c)) return c;
+        var mitte = ComposedAnchor;
+        var tex = weapon > 0 ? GetTurretTexture(weapon, facing, 0, gruppe) : null;
+        if (tex != null)
+        {
+            var img = tex.GetImage();
+            int x0 = int.MaxValue, y0 = int.MaxValue, x1 = -1, y1 = -1;
+            for (int y = 0; y < img.GetHeight(); y++)
+                for (int x = 0; x < img.GetWidth(); x++)
+                {
+                    if (img.GetPixel(x, y).A <= 0.5f) continue;
+                    if (x < x0) x0 = x;
+                    if (x > x1) x1 = x;
+                    if (y < y0) y0 = y;
+                    if (y > y1) y1 = y;
+                }
+            if (x1 >= 0) mitte = new Vector2((x0 + x1) / 2f, (y0 + y1) / 2f);
+        }
+        _turmMitte[key] = mitte;
+        return mitte;
+    }
+
+    private readonly Dictionary<(int, int), Vector2> _turmMitte = new();
 
     /// <summary>Wohin ein Schuss zielt — aus demselben Grund der BILDpunkt des
     /// Ziels. Ein Einschlag zwei Felder neben dem getroffenen Schiff wäre
     /// derselbe Fehler noch einmal, nur am anderen Ende.</summary>
-    private static Vector2 ShotAim(Entity e) => e.Pos - new Vector2(0, 6);
+    /// <summary>
+    /// ⭐⭐ 24.08.2026 — <b>WOHIN EIN SCHUSS ZIELT.</b>
+    ///
+    /// <para>Hier stand <c>e.Pos − (0, 6)</c>, also der BODENPUNKT der
+    /// Ankerzelle, um sechs Bildpunkte angehoben. Gemeldet: »wir treffen wohl
+    /// gemerkt auch immer am Ende anstatt die Mitte bei den Fahrzeugen«.</para>
+    ///
+    /// <para>Die Zahl dazu lag längst gemessen vor und ich habe sie erst jetzt
+    /// benutzt: <c>--stempel-check</c> nennt zwischen <c>Pos</c> und der
+    /// sichtbaren Bildfläche senkrecht im Mittel <b>19,5</b> Bildpunkte, und
+    /// <c>--auswahl-check</c> misst für <see cref="AuswahlMitte"/> auf
+    /// derselben Karte |dx| 1,6 / |dy| 0,3 gegen |dx| 6,2 / |dy| 9,0 für den
+    /// angehobenen Bodenpunkt. Die sechs waren also rund vierzehn zu wenig —
+    /// der Einschlag sass am unteren, hinteren Ende des Fahrzeugs.</para>
+    ///
+    /// <para>⚠ Es ist DERSELBE Punkt, an dem der Auswahlkranz hängt und an dem
+    /// seit heute der Schadensqualm aufsteigt. Das ist in dieser Sitzung der
+    /// vierte Fall derselben Sorte (Mündung, Wrack, Qualm, jetzt der
+    /// Einschlag): <b>wer etwas aufs Bild setzt, braucht den Punkt des Bildes
+    /// und nicht den des Bodens.</b></para>
+    /// </summary>
+    private Vector2 ShotAim(Entity e) => AuswahlMitte(e);
 
     private void Fire(int si, Entity shooter, int vi, Entity victim,
                       (string Name, int Damage, float RangeTiles) w)
@@ -9263,7 +9470,7 @@ public partial class MapEntityLayer : Node2D
         }
 
         // Die Leuchtspur beginnt an der Muendung, nicht am Rumpf.
-        _tracers.Add((shooter.Pos + TurretOffset(shooter.UnitType, shooter.Col, shooter.Row)
+        _tracers.Add((shooter.Pos + TurretOffset(shooter.UnitType, shooter.Col, shooter.Row, shooter.Facing)
                       + dir * MuzzleReach,
                       victim.Pos - new Vector2(0, 6), 0.10f));
         // ⚠ OFFEN, ausdruecklich: ob das Original bei DIREKTEM Beschuss einen
@@ -9506,13 +9713,45 @@ public partial class MapEntityLayer : Node2D
             // with the hit report read as "a building is under attack".
             // The falling-over frames were already running underneath it.
             //
-            // the original's own sound for this: @0x40d37c, in the hit routine
-            // right after it prints "Hit to exploding infantry!!!"
-            Audio.GameSounds.PlayAt(Audio.GameSounds.InfantryDies, victim.Col, victim.Row);
+            // ⚠⚠ 24.08.2026 — HIER STAND DER FALSCHE KLANG, und er war eine
+            // ANSAGE. Gemeldet: »wenn ich ein Cyborg töte kommt der Sound *ein
+            // Gebäude wird angegriffen*«. Genau so war es: 131 gehoert zur
+            // Gebaeudeschadensroutine (@0x40D352, Gebaeudesatz +0x01/+0x02, und
+            // dort nur bei 1 von 100 Treffern). Die volle Herleitung und der
+            // richtige Klang stehen bei Audio.GameSounds.InfantryDiesBank.
+            //
+            // ⚠ EINE ABWEICHUNG, offen benannt: das Original spielt ihn am ENDE
+            // des Umfallens (Bildblock 12 laeuft 8..11 Takte, @0x40B73A, und
+            // erst wenn der Zaehler +0x1C leer ist, kommt @0x406E4D). Wir haben
+            // fuer die Fallbilder keinen eigenen Zaehler, also klingt es beim
+            // Treffer. Zu frueh, aber nicht falsch gewaehlt.
+            Audio.GameSounds.PlayAt(Audio.GameSounds.InfantryDiesPick(),
+                                    victim.Col, victim.Row);
             return;
         }
-        _effects.Add(new Effect { Pos = victim.Pos - new Vector2(0, 6),
-                                  Kind = "explosion", FrameTime = 0.06f });
+        // ⭐⭐ 24.08.2026 — DIE RICHTIGE EXPLOSION. Hier stand "explosion",
+        // also ANIM-Folge 48: sieben Bilder, 8..13 Bildpunkte hoch. Das
+        // Original wirft beim Fahrzeugtod @0x40B5E7 `rand()%9 + 510`, und die
+        // neun Folgen 510..518 haben 17..24 Bilder bei 44..71 Bildpunkten.
+        // Gemeldet als »es fehlt noch die Explosion an sich« — sie fehlte
+        // nicht, sie war nur um ein Vielfaches zu klein.
+        //
+        // ⚠ Nur der Fahrzeugzweig bekommt sie: Fusssoldaten sind oben schon
+        // heraus, und fuer Schiffe/Flugzeuge verzweigt das Original woanders
+        // hin (Sprungtafel 0x40B858).
+        _effects.Add(new Effect
+        {
+            Pos = victim.Pos - new Vector2(0, 6),
+            Kind = victim.GameUnitType == 0
+                 ? "sprengung" + Simulation.Determinism.Roll(9)
+                 : "explosion",
+            FrameTime = 0.04f,
+        });
+
+        // ⭐ 24.08.2026 — und gleich dahinter die TRUEMMER, genau in dieser
+        // Reihenfolge: das Original wirft sie unmittelbar nach dem
+        // Explosionsbild (@0x40B615 -> @0x40B61D). Siehe Simulation/Truemmer.cs.
+        TruemmerWerfen(victim);
         // ⚠⚠ 19.08.2026 — EIN SCHIFF HINTERLAESST KEIN WRACK.
         //
         // Die Todesroutine des Originals (»likvid typ:« @0x406F1B) verzweigt
@@ -9574,7 +9813,7 @@ public partial class MapEntityLayer : Node2D
             {
                 var t = _entities[p.Target];
                 if (t.Dead || t.IsProp) p.Target = -1;
-                else p.Aim = t.Pos - new Vector2(0, 6);
+                else p.Aim = ShotAim(t);   // dieselbe Bildmitte wie beim Abschuss
             }
 
             Vector2 d = p.Aim - p.Pos;
@@ -9736,6 +9975,7 @@ public partial class MapEntityLayer : Node2D
         {
             var fx = _effects[i];
             fx.Time += dt;
+            if (fx.Drift != Vector2.Zero) fx.Pos += fx.Drift * dt;
             var frames = EffectFrames(fx.Kind);
             if (frames.Count == 0) { _effects.RemoveAt(i); continue; }
             if (fx.Time >= frames.Count * fx.FrameTime && !fx.Hold) _effects.RemoveAt(i);
@@ -9747,6 +9987,8 @@ public partial class MapEntityLayer : Node2D
             tr.T -= dt;
             if (tr.T <= 0) _tracers.RemoveAt(i); else _tracers[i] = tr;
         }
+        TruemmerTakt(dt);
+        SchadensQualmTakt(dt);
     }
 
     /// <param name="ground">true = the effects that stay on the ground (wrecks,
@@ -9774,6 +10016,10 @@ public partial class MapEntityLayer : Node2D
                 if (tex != null) DrawTexture(tex, p.Pos - tex.GetSize() / 2f
                                                   - new Vector2(0, BogenHoehe(p)));
             }
+
+        // Die Truemmer fliegen ueber dem Boden, also im selben Durchgang wie
+        // Explosion und Muendungsfeuer.
+        if (!ground) TruemmerZeichnen();
 
         foreach (var fx in _effects)
         {
@@ -9992,51 +10238,6 @@ public partial class MapEntityLayer : Node2D
     /// Angriff auf den Spieler — bis das Feld gelesen ist, ist der nächste Feind
     /// die ehrlichere Näherung als eine Zelle, die wir nicht verstehen.</para>
     /// </summary>
-    private void MissionOrder(int slot, int ukol, int x, int y)
-    {
-        int idx = -1;
-        for (int i = 0; i < _entities.Count; i++)
-            if (!_entities[i].IsBuilding && !_entities[i].Dead && _entities[i].Slot == slot)
-            { idx = i; break; }
-        if (idx < 0)
-        {
-            GD.PrintErr($"Missionsbefehl: Einheitenplatz {slot} ist leer");
-            return;
-        }
-        if (ukol != 4)
-        {
-            GD.PrintErr($"Missionsbefehl ukol={ukol} auf Platz {slot} — ungelesen, " +
-                        "es geschieht nichts");
-            return;
-        }
-        var me = _entities[idx];
-        // ⚠ Zielwahl: das Original gibt (x, y) mit, wir suchen einen Gegner —
-        // und »der naechste« nahm auch NEUTRALE und einander. Gemeldet: »1x
-        // Infanterie und das MG greifen einen anderen Infanteristen an«.
-        // Gemeint ist der Spieler: die vier kommen dem Spieler entgegen.
-        // Darum erst unter SEINEN Einheiten suchen, und nur wenn er keine mehr
-        // hat, unter den uebrigen Feinden.
-        int best = -1;
-        float bestD = float.MaxValue;
-        for (int pass = 0; pass < 2 && best < 0; pass++)
-        for (int i = 0; i < _entities.Count; i++)
-        {
-            var o = _entities[i];
-            if (o.IsProp || o.Dead || i == idx) continue;
-            if (o.IsBuilding && o.BType >= 17) continue;
-            if (o.Owner is < 0 or > 7) continue;
-            if (Allied(o.Owner, me.Owner)) continue;
-            if (pass == 0 && o.Owner != ViewPlayer) continue;
-            float d0 = me.Pos.DistanceSquaredTo(o.Pos);
-            if (d0 < bestD) { bestD = d0; best = i; }
-        }
-        if (best < 0) { GD.Print($"Missionsbefehl: Platz {slot} findet kein Ziel"); return; }
-        me.Target = best;
-        me.Ordered = true;
-        GD.Print($"Missionsbefehl: Einheit {slot} (Spieler {me.Owner}) greift " +
-                 $"{_entities[best].Name} an  [Original: ukol 4 nach ({x},{y})]");
-    }
-
     /// <summary>
     /// `--terra-check` — die Rohstoffvorkommen dieser Mission und die Frage,
     /// ob auf ihnen eine Feld-Rohstoffmine STEHEN KANN.
@@ -10537,14 +10738,59 @@ public partial class MapEntityLayer : Node2D
                 // Haelt dieser Spieler die Bahnverbindung? Siehe
                 // MissionScript.RailLinkHeld — Mission 21 fragt neun davon.
                 _mscript.RailLinkHeld = RailLinkHeld;
-                // terrain_at(x, y) — das Gelaendebyte der Zelle. Unser Gitter
-                // fuehrt es als `Ground`; die Zahlen sind dieselbe Ordnung
-                // (frei/grob/wasser/gesperrt), aber ⚠ ob 4 im Original genau
-                // unsere 4 ist, ist UNGEPRUEFT — Mission 1 fragt `> 4`.
+                // ⭐⭐⭐ 24.08.2026 — GELESEN, und es war die falsche Groesse.
+                //
+                // ⚠⚠ Hier stand die BODENKLASSE (`Ground`: frei/grob/wasser/
+                // gesperrt = 0..3) mit dem eigenen Vermerk »ob 4 im Original
+                // genau unsere 4 ist, ist UNGEPRUEFT«. Eine Klasse, die bei 3
+                // endet, kann die einzige Frage der Kampagne — Mission 1 fragt
+                // `> 4` — NIE mit ja beantworten. Das Hilfefenster »Ist eine
+                // Einheit auf einem Huegel…« (#20) konnte darum nie erscheinen.
+                // Gemeldet aus dem Let's Play: »das Popup am Berg fehlt«.
+                //
+                // ⭐ Das Original rechnet @0x41D0E0 (Thunk 0x401AAF):
+                //     Index = Zeile · Kartenbreite + Spalte
+                //     al    = byte[Kachelkarte[0x677E20] + Index·4 + 2]
+                // Der Kachelsatz ist VIER Byte, und Feld +2 ist die HOEHE —
+                // bei uns `elev`. Auf map_01 laeuft sie von 0 bis 7, und
+                // 366 Zellen liegen ueber 4 (Spalten 0..40, Zeilen 49..71).
+                // Der Startplatz des Panzers (4,39) hat 0; die Bedingung
+                // greift also erst auf dem Huegel, genau wie im Video.
+                //
+                // ⚠ Es gibt in der GANZEN Kampagne nur diese eine
+                // Gelaendebedingung (nachgezaehlt ueber alle 751 Regeln) —
+                // die Aenderung kann nichts anderes treffen.
                 _mscript.TerrainAt = (x, y) =>
-                    _nav != null && _nav.InBounds(x, y) ? (int)_nav.GroundAt(x, y) : -1;
-                // bus_cmd(11, einheit, ukol, x, y) — ukol 4 ist Angriff.
-                _mscript.OrderUnit = MissionOrder;
+                    _nav != null && _nav.InBounds(x, y) ? ElevOf(x, y) : -1;
+                // ⚠⚠ BERICHTIGT AM 24.08.2026 — HIER STAND EIN ARGUMENT ZU VIEL.
+                //
+                // Bis heute hiess es hier `bus_cmd(11, einheit, ukol, x, y) —
+                // ukol 4 ist Angriff`, und der Behandler suchte darum den
+                // NAECHSTEN GEGNER, statt die mitgegebene Zelle anzufahren. Der
+                // Befehl hat aber gar kein ukol:
+                //
+                //     0x4985C4  push 0 / push 0x27 / push 4 / push 0x3e8
+                //     0x4D0990  bus_cmd 11: [+2]=4, [+4]=0x27, [+6]=0
+                //     0x4C2E2D  call order(einheit, cx, cy, utok_na, extra)
+                //
+                // Also cx = 4, cy = 39, utok_na = 0 — und `order` @0x410220 ist
+                // dieselbe Routine, die `order_at` benutzt. Die 4 war die
+                // SPALTE, nicht der Auftrag.
+                //
+                // ⭐ Umgestossen hat es die Karte selbst: der Spieler hat auf
+                // map_01 genau EINE Einheit, Platz 0, und die steht auf
+                // **(4, 39)**. Mission 3 schickt ihre eine Einheit nach
+                // (37, 38) — dort waere »ukol 37« blanker Unsinn gewesen.
+                //
+                // ⚠ Was der Fehler ANRICHTETE, und warum er auffiel: Mission 1
+                // befiehlt in Regel 6 alle VIER Einheiten von Spieler 1. Drei
+                // fanden zufaellig einen Weg zum naechsten Gegner; die vierte
+                // (Platz 1003 bei (35,56)) fand keinen, liess ihr Ziel
+                // fallen — und blieb fuer immer stehen, weil die KI-Streife nur
+                // `Sicht+1` weit sieht (bei Infanterie VIER Felder, gemessen).
+                // Gemeldet als »dort steht ein Cyborg vor der Bruecke und macht
+                // nix«. Siehe ChaseWatchLine.
+                _mscript.OrderUnit = MissionOrderAt;
                 // BEWEGEN (Befehl 3 des Originals) — dieselbe Bahn wie
                 // `order_at`, das vierte Argument gibt es hier nicht.
                 _mscript.MoveUnit = (slot, x, y) => MissionOrderAt(slot, x, y, -1);
@@ -16460,22 +16706,36 @@ public partial class MapEntityLayer : Node2D
         var a = new Entity { Col = 10, Row = 10 };
         var b = new Entity { Col = 10, Row = 10 };
 
-        // 1. die Metrik: zwei Zeilen sollen wie eine Spalte zaehlen
+        // ⚠⚠ 24.08.2026 — DIESER PRUEFSTAND HAT DEN FEHLER FESTGESCHRIEBEN.
+        //
+        // Hier stand: »zwei Zeilen sollen wie eine Spalte zaehlen«, samt
+        // Gegenprobe, dass EINE Zeile naeher sein muss als eine Spalte. Beide
+        // Behauptungen kamen aus einer Lesung von 0x453990 — und die Routine
+        // ist der BILDSCHIRMLAGEN-Helfer des Geschossflugs, nicht die
+        // Schussentscheidung. Die rechnet @0x40BEAB und @0x40BEE0 BEIDE Achsen
+        // mit 40.
+        //
+        // ⭐ Ein Pruefstand, der eine falsche Lesung bestaetigt, ist schlimmer
+        // als keiner: er haette jeden, der die Metrik berichtigt, mit einem
+        // roten »FALSCH« zurueckgeschickt. Er prueft jetzt das Gegenteil, mit
+        // den Adressen daneben.
+        //
+        // 1. die Metrik: eine Zeile ist genauso weit wie eine Spalte
         b.Col = 11; b.Row = 10;
         float eineSpalte = CellDistance(a, b);
-        b.Col = 10; b.Row = 12;
-        float zweiZeilen = CellDistance(a, b);
-        bool metrikOk = Mathf.Abs(eineSpalte - zweiZeilen) < 0.001f;
-        sb.AppendLine($"  eine Spalte = {eineSpalte:0.000}, zwei Zeilen = {zweiZeilen:0.000}: " +
-                      $"{(metrikOk ? "gleich weit, richtig" : "UNGLEICH — die Zeilen zaehlen nicht halb")}");
-
-        // Gegenprobe: EINE Zeile darf NICHT so weit sein wie eine Spalte,
-        // sonst waere die Metrik rund geblieben und Punkt 1 ein Zufall.
         b.Col = 10; b.Row = 11;
         float eineZeile = CellDistance(a, b);
-        bool gegenOk = eineZeile < eineSpalte - 0.001f;
-        sb.AppendLine($"  Gegenprobe: eine Zeile = {eineZeile:0.000} < eine Spalte {eineSpalte:0.000}: " +
-                      $"{(gegenOk ? "richtig" : "GLEICH — die Metrik ist noch rund")}");
+        bool metrikOk = Mathf.Abs(eineSpalte - eineZeile) < 0.001f;
+        sb.AppendLine($"  eine Spalte = {eineSpalte:0.000}, eine Zeile = {eineZeile:0.000}: " +
+                      $"{(metrikOk ? "gleich weit, richtig (beide Achsen x40 @0x40BEAB/@0x40BEE0)" : "UNGLEICH — die Zeile zaehlt noch halb")}");
+
+        // Gegenprobe: zwei Zeilen muessen WEITER sein als eine Spalte, sonst
+        // waere die Halbierung noch drin und Punkt 1 ein Zufall.
+        b.Col = 10; b.Row = 12;
+        float zweiZeilen = CellDistance(a, b);
+        bool gegenOk = zweiZeilen > eineSpalte + 0.001f;
+        sb.AppendLine($"  Gegenprobe: zwei Zeilen = {zweiZeilen:0.000} > eine Spalte {eineSpalte:0.000}: " +
+                      $"{(gegenOk ? "richtig" : "NICHT WEITER — die Halbierung ist noch da")}");
 
         // 2. Gattung 4 = feste 16 Zellen, der eigene Wert wird ignoriert
         var schiff = new Entity { GameUnitType = 4, Range = 3, Weapon = 0 };
@@ -22334,6 +22594,26 @@ public partial class MapEntityLayer : Node2D
                    && gebaeude[gi].Row + BuildingDrawRowFor(gebaeude[gi]) <= r)
             {
                 var b = gebaeude[gi++];
+                // ⭐⭐ 24.08.2026 — EIN GEBAEUDE IM UNERKUNDETEN NEBEL WIRD NICHT
+                // GEZEICHNET.
+                //
+                // Gemeldet: »ich sehe schon Gebaeude im Fog of War trotzdem. Im
+                // Original sieht man sie erst, wenn man wirklich hinfaehrt —
+                // dort sieht man sozusagen im Fog of War nur die Landschaft.«
+                //
+                // ⭐ Dieselbe Aussage stand seit dem 18.08. im Kopf von
+                // FogSeen/FogUnseen, aus seiner eigenen Beobachtung am Original:
+                // »Was der Nebel verbirgt, sind die EINHEITEN UND GEBAEUDE,
+                // nicht das Gelaende«. Der Satz war da — nur die Folge daraus
+                // war nie gezogen worden. Der Nebel dunkelt bei uns beide
+                // Zustaende gleich (FogDim 0,5), und ein Gebaeude schien
+                // darunter durch.
+                //
+                // ⚠ Nur der Zustand UNSEEN verbirgt. Wer einmal dort war,
+                // erinnert das Gebaeude — das ist der Sinn des dritten
+                // Zustands, und es deckt sich mit »man sieht sie, wenn man
+                // hinfaehrt«.
+                if (FogActive && _fog != null && !_fog.IsSeen(b.Col, b.Row)) continue;
                 if (_drawSprites && Patterns != null)
                 {
                     DrawBuildingBody(b);
@@ -22346,10 +22626,13 @@ public partial class MapEntityLayer : Node2D
             // (4) ZULETZT die aufragenden Kacheln dieser Zeile. Das ist der
             // ganze Unterschied: hier lagen sie bisher VOR den Einheiten.
             DrawObjectsUpTo(r, ref oi);
-            // (5) und ganz zum Schluss die FLAMMEN dieser Zeile — das Original
-            // reiht sie in das Fach der naechsten Zeile ein (`inc bx`
-            // @0x42E6FC), sie liegen damit ueber allen Kacheln ihrer eigenen
-            // Zeile. Siehe MapObjects.FlammenZeichnen.
+            // (5) und ganz zum Schluss die FLAMMEN — und zwar die der VORIGEN
+            // Zeile. Das Original reiht sie in das Fach der NAECHSTEN Zeile ein
+            // (`inc bx` @0x42E6FC), sie liegen damit ueber den aufragenden
+            // Kacheln der Zeile UNTER ihnen. ⚠ Bis zum 24.08.2026 stand hier
+            // »ueber allen Kacheln ihrer eigenen Zeile« — das war eine Zeile zu
+            // frueh, und der Baum darunter hat die Flamme halb zugemalt.
+            // Siehe MapObjects.FlammenZeichnen.
             FlammenZeichnen();
         }
 
@@ -22363,9 +22646,11 @@ public partial class MapEntityLayer : Node2D
         DrawObjectsUpTo(int.MaxValue, ref oi);
         DrawUnitsUpTo(int.MaxValue, ref ui);
         // ⚠ Auch der Nachzuegler-Durchgang braucht seinen Flammenabschluss —
-        // sonst blieben die Flammen der letzten Zeile vorgemerkt liegen und
-        // wuerden im naechsten Bild doppelt gezeichnet.
-        FlammenZeichnen();
+        // sonst blieben die Flammen der letzten Zeilen vorgemerkt liegen und
+        // wuerden im naechsten Bild doppelt gezeichnet. ⚠ Seit dem 24.08. sind
+        // es ZWEI Faecher (die Flamme haengt eine Zeile nach), darum
+        // FlammenAbschluss statt FlammenZeichnen.
+        FlammenAbschluss();
     }
 
     /// <summary>
@@ -22406,7 +22691,7 @@ public partial class MapEntityLayer : Node2D
     private void BuildUnitDrawOrder()
     {
         _unitDraw.Clear();
-        if (NoUnitOcclusion) return;
+        _leichenDraw.Clear();
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
@@ -22414,18 +22699,58 @@ public partial class MapEntityLayer : Node2D
             // ⚠ Dieselbe Nebelprüfung wie in der Einheitenschleife. Stünde sie
             // nur dort, zeichnete dieser Durchgang fremde Einheiten durch den
             // Nebel — ein Fehler, den man erst im Spiel sieht.
-            if (FogActive && e.Owner != ViewPlayer && !Watched(e.Col, e.Row)) continue;
-            if (e.Dead && e.Infantry < 0) continue;      // Wracks macht DrawEffects
+            if (ImNebelVerborgen(e)) continue;
+
+            // ⚠⚠ 24.08.2026 — DIE LEICHEN GEHOEREN AUF DEN BODEN.
+            //
+            // Gemeldet, gleich nach der Wrackbehebung desselben Tages: »die
+            // Cyborg-Leichen Sprites liegen auch noch über aktiven/lebenden
+            // Einheiten. Von den Fahrzeugen das passt schon«.
+            //
+            // Ein gefallener Fusssoldat lief bis hierher im ZEILENDURCHGANG
+            // mit, also gemeinsam mit allem Lebenden. Damit entschied allein
+            // seine Zeile, ob er unter oder über einer Einheit liegt — und lag
+            // er eine Zeile weiter vorn, malte er sie zu. Ein Koerper auf dem
+            // Boden darf aber gar nichts Lebendes verdecken, so wie das Wrack
+            // eines Fahrzeugs es auch nicht darf.
+            //
+            // ⚠ Nach vorn SORTIEREN geht nicht: DrawUnitsUpTo laeuft
+            // `while (Row < row)` und setzt eine nach Zeilen geordnete Liste
+            // voraus. Die Leichen brauchen darum einen eigenen Durchgang —
+            // denselben Platz, den die Wracks schon haben.
+            if (e.Dead)
+            {
+                if (e.Infantry >= 0) _leichenDraw.Add(i);   // Wracks macht DrawEffects
+                continue;
+            }
+            if (NoUnitOcclusion) continue;
             _unitDraw.Add(i);
         }
-        _unitDraw.Sort((x, y) =>
+        _unitDraw.Sort(NachZeile);
+        _leichenDraw.Sort(NachZeile);
+
+        int NachZeile(int x, int y)
         {
             var a = _entities[x]; var b = _entities[y];
             return a.Row != b.Row ? a.Row - b.Row : a.Col - b.Col;
-        });
+        }
+    }
+
+    /// <summary>Die gefallenen Fusssoldaten, in einem eigenen Durchgang vor
+    /// allem Lebenden — siehe <see cref="BuildUnitDrawOrder"/>.</summary>
+    private void DrawLeichen()
+    {
+        // ⚠ Die Liste wird HIER gebaut und nicht auf die in
+        // DrawRailAndBuildings gewartet: dieser Durchgang laeuft VOR jenem, und
+        // eine Liste aus dem vorigen Bild waere um genau die Leiche zu spaet,
+        // die gerade gefallen ist. Der Bau ist wiederholbar (er leert zuerst),
+        // also schadet der zweite Aufruf nichts.
+        BuildUnitDrawOrder();
+        foreach (int i in _leichenDraw) DrawUnitBody(_entities[i]);
     }
 
     private readonly List<int> _unitDraw = new();
+    private readonly List<int> _leichenDraw = new();
 
     /// <summary><c>--behind-check</c> — eine Einheit HINTER ein Gebäude stellen
     /// und die Kamera daraufsetzen, damit der Bildvergleich den Fall überhaupt
@@ -25553,6 +25878,11 @@ public partial class MapEntityLayer : Node2D
             _sprungWacht[i] = es.Pos;
         }
 
+        // ⚠ »Mines and traps« (@0x4216F0) steht in der Hauptschleife VOR
+        // »Buildings« (@0x416690) und »Movement« (@0x4166BB) — die
+        // Protokollnamen der Bloecke sagen die Reihenfolge.
+        MinenTakt();
+
         SchiffDrehTakt();
 
         for (int i = 0; i < _entities.Count; i++)
@@ -26763,9 +27093,26 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Was der letzte Bilddurchgang an Hangposen und Schatten gestellt
     /// hat — damit »die Hangposen sind da« nicht wieder nur eine Behauptung
     /// ist.</summary>
+    /// <summary>Wie oft ein Rumpf sein Richtungsbild nicht gefunden hat und
+    /// statt dessen die <b>Nummer 0</b> bekam — also den Blick nach unten. Soll
+    /// 0 sein; jeder Wert darueber ist ein Satz mit Loechern. Siehe
+    /// <see cref="GetHullTexture"/> und <c>--rumpfblick-check</c>.</summary>
+    public static int HullFacing0Fallback;
+
+    /// <summary>WELCHE (Rumpftyp, Richtung) es waren — eine Zahl allein sagt
+    /// nicht, wo das Loch sitzt.</summary>
+    public static readonly HashSet<(int, int)> HullFacing0Cases = new();
+
     public string DebugSpriteInfo()
         => $"Hangposen {SlopeDrawn} gezeichnet, {SlopeFallback} mangels Bild flach" +
-           $"; Gleisschatten {RailShadowsDrawn}";
+           $"; Gleisschatten {RailShadowsDrawn}" +
+           (HullFacing0Fallback > 0
+                ? $"; ⚠ {HullFacing0Fallback}x Rumpf auf Blick 0 zurueckgefallen "
+                  + $"({HullFacing0Cases.Count} Faelle: "
+                  + string.Join(" ", System.Linq.Enumerable.Select(
+                        System.Linq.Enumerable.Take(HullFacing0Cases, 8),
+                        c => $"{c.Item1}/f{c.Item2}")) + ")"
+                : "");
 
     private Texture2D? GetHullTexture(int unitType, int facing, int pose = 0, int slope = 0)
     {
@@ -26777,11 +27124,32 @@ public partial class MapEntityLayer : Node2D
             if (s != null) { SlopeDrawn++; return s; }
             SlopeFallback++;
         }
-        var t = LoadUnitPart("hull", dir, facing)
-                ?? (facing != 0 ? LoadUnitPart("hull", dir, 0) : null)
-                // a pose the export does not carry falls back to group 0 rather
-                // than making the unit disappear
-                ?? (pose > 0 ? GetHullTexture(unitType, facing, 0, slope) : null);
+        var t = LoadUnitPart("hull", dir, facing);
+        if (t == null && facing != 0)
+        {
+            // ⚠⚠ 24.08.2026 — DIESER RUECKFALL HAT EINEN FEHLER VIER TAGE LANG
+            // GETRAGEN, und zwar still.
+            //
+            // Er nimmt bei einem fehlenden Richtungsbild die Nummer 0, und die
+            // Nummer 0 ist bei jedem Satz »Blick nach UNTEN«. Solange
+            // hull/150..158 nur f0..f7 enthielt (UnitsExporter.FacingsOfPart),
+            // hiess das: die linke Halbrose fuhr richtig, die rechte zeigte
+            // stur nach unten. Gemeldet genau so — »beim nach links bekommt er
+            // das komischerweise hin«.
+            //
+            // ⭐ Der Rueckfall bleibt: ein Bild ist besser als eine unsichtbare
+            // Einheit. Aber er ZAEHLT jetzt. Ein Rueckfall, der niemandem
+            // auffaellt, ist kein Rueckfall, sondern ein verstecktes Ergebnis —
+            // und diese Zahl gehoert in DebugSpriteInfo und in
+            // --rumpfblick-check.
+            t = LoadUnitPart("hull", dir, 0);
+            // Gezaehlt wird der Rueckfall, der WIRKLICH ein Bild gestellt hat —
+            // wo auch f0 fehlt, faellt es weiter durch und ist ein anderer Fall.
+            if (t != null) { HullFacing0Fallback++; HullFacing0Cases.Add((unitType, facing)); }
+        }
+        // a pose the export does not carry falls back to group 0 rather
+        // than making the unit disappear
+        t ??= pose > 0 ? GetHullTexture(unitType, facing, 0, slope) : null;
         if (t != null) return t;
         // ... und zuletzt die ganze Bank unter der Bauteilnummer, siehe
         // GetTurretTexture.
@@ -26794,6 +27162,16 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>unit_type -> Bauteilnummer, aus <c>parts_index.json</c>.</summary>
     private static readonly Dictionary<int, int> _hullComponent = new();
+
+    /// <summary>Turmteil -> die Gruppe, die als GELADEN gilt, aus
+    /// <c>parts_index.json</c>. Fehlt der Eintrag, kennt dieser Turm kein
+    /// Ladepaar. Siehe <c>Import.UnitsExporter.LadeSchwelle</c>.</summary>
+    private static readonly Dictionary<int, int> _ladeGruppe = new();
+
+    /// <summary>Rumpftyp -> Montagepunkt JE BLICKRICHTUNG, und zwar UNSERE.
+    /// Nur belegt fuer die Ruempfe, fuer die das Original keinen nennt —
+    /// siehe <c>Import.UnitsExporter.MontageEichung</c>.</summary>
+    private static readonly Dictionary<int, Vector2I[]> _mountF = new();
 
     /// <summary>Equipment rows 65..88 of the stats table, read out of a .DM's
     /// own copy (sec46). Only the ones that occur on placed units are listed;
@@ -26879,6 +27257,92 @@ public partial class MapEntityLayer : Node2D
         return sb.ToString();
     }
 
+    /// <summary>
+    /// ⭐⭐ <c>--rumpfblick-check</c> — <b>hat JEDE Rumpfrichtung ein
+    /// RUMPFbild?</b> (24.08.2026)
+    ///
+    /// <para>⚠⚠ Gemeldet: »beim nach rechts fahren muesste die Bootsspitze nach
+    /// rechts schauen, aber das Schiff zeigt permanent nach unten; beim nach
+    /// links bekommt er das komischerweise hin.«</para>
+    ///
+    /// <para>⚠ <b>Warum kein bestehender Pruefstand das gesehen hat</b>, und das
+    /// ist die eigentliche Lehre: <c>--turmblick-check</c> stellte genau diese
+    /// Frage — aber nur fuer den TURM. <c>--schiffdreh-check</c> mass die
+    /// Blickrichtung und meldete 1168 von 1168 Takten richtig, und er hatte
+    /// recht: <c>e.Facing</c> stand die ganze Zeit auf 12 fuer »rechts«.
+    /// <c>--schiffbild-check</c> fragte, ob ein Schiff UEBERHAUPT ein Bild hat —
+    /// hatte es, naemlich f0. Drei Prueflaeufe, drei Male »bestanden«, und
+    /// dazwischen die Luecke: <b>niemand hat gefragt, ob das Bild zur Richtung
+    /// gehoert, die es zeigt.</b></para>
+    ///
+    /// <para><b>Was hier gemessen wird.</b> Fuer jeden Rumpftyp aus
+    /// <c>units_index.json</c> und jede seiner Richtungen: gibt es
+    /// <c>hull/&lt;ut&gt;/f&lt;n&gt;.png</c>? Der Zeichner nimmt diesen Satz
+    /// ZUERST (siehe <see cref="GetHullTexture"/>), also entscheidet er, und
+    /// nicht der vollstaendige Satz daneben.</para>
+    ///
+    /// <para>⭐ <b>Die Gegenprobe steht daneben und kommt aus einer ANDEREN
+    /// Quelle:</b> derselbe Rumpf im Fahrgestellsatz <c>Units/&lt;ut&gt;/</c>,
+    /// den <c>UnitsExporter.WriteChassis</c> schreibt. Beide muessen dieselbe
+    /// Zahl tragen. Am 24.08. sagte der Index 16, der Fahrgestellsatz hatte 16
+    /// und <c>hull/</c> hatte 8 — die Abweichung ZWISCHEN zwei Quellen ist der
+    /// Befund, den eine einzelne Quelle nicht hergeben kann.</para>
+    ///
+    /// <para>⚠ Was dieser Pruefstand NICHT sieht: ob das Bild f12 wirklich nach
+    /// rechts zeigt. Das ist ein Blick, kein Zaehler — nachgesehen wurde es an
+    /// den ausgegebenen Bildern von Rumpf 151 (f0 unten, f4 links, f8 oben,
+    /// f12 rechts, der Bug wandert Bild fuer Bild weiter).</para>
+    /// </summary>
+    public string RumpfBlickCheck()
+    {
+        var sb = new System.Text.StringBuilder("rumpfblick-check\n");
+        LoadUnitIndex();
+        if (_unitFacings.Count == 0)
+            return sb.Append("  units_index.json traegt kein n_facings — nicht gemessen").ToString();
+
+        int typen = 0, luecken = 0, bankLuecken = 0;
+        var betroffen = new List<string>();
+        foreach (var kv in _unitFacings)
+        {
+            int ut = kv.Key, stufen = kv.Value;
+            if (LoadUnitPart("hull", ut.ToString(), 0) == null) continue;   // kein hull/-Satz
+            typen++;
+            int fehlt = 0, fehltBank = 0;
+            for (int f = 0; f < stufen; f++)
+            {
+                if (LoadUnitPart("hull", ut.ToString(), f) == null) fehlt++;
+                if (GetUnitTexture(ut, f) == null) fehltBank++;
+            }
+            luecken += fehlt; bankLuecken += fehltBank;
+            if (fehlt > 0) betroffen.Add($"{ut} ({stufen - fehlt}/{stufen})");
+        }
+
+        sb.Append($"  {typen} Ruempfe mit hull/-Satz geprueft\n");
+        sb.Append($"  ohne Rumpfbild: {luecken}"
+                + (luecken == 0 ? "  ✔ jede Richtung findet ihr eigenes Bild"
+                                : $"  ⚠⚠ betroffen: {string.Join(", ", betroffen)}") + "\n");
+        sb.Append($"  Gegenprobe Fahrgestellsatz Units/<ut>/: {bankLuecken} Luecken"
+                + (luecken > 0 && bankLuecken == 0
+                    ? "  — der VOLLE Satz liegt daneben, hull/ ist der halbe"
+                    : "") + "\n");
+        sb.Append($"  Rueckfaelle auf Blick 0 im letzten Lauf: {HullFacing0Fallback}\n");
+        // ⚠ Die Messlatte: NULL Luecken in hull/. Und der Pruefstand muss
+        // scheitern KOENNEN — wenn er keinen einzigen Rumpf mit mehr als acht
+        // Stufen findet, hat er die Klasse Fehler, um die es geht, nicht im
+        // Blick und sagt darum nichts.
+        int feine = 0;
+        foreach (var kv in _unitFacings) if (kv.Value > CwrFile8) feine++;
+        sb.Append($"  darunter {feine} Ruempfe mit mehr als acht Stufen"
+                + (feine == 0 ? "  ⚠ ohne die sagt diese Messung nichts" : "") + "\n");
+        sb.Append(luecken == 0 && feine > 0 ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
+
+    /// <summary>Die acht, gegen die »mehr als acht« gemessen wird — dieselbe
+    /// Zahl wie <c>Import.CwrFile.Facings</c>, hier benannt, damit im
+    /// Pruefstand keine nackte 8 steht.</summary>
+    private const int CwrFile8 = Import.CwrFile.Facings;
+
     /// <summary>⭐ Wie viele Bilder ein TURM hat. Ausgezählt, nicht gesetzt:
     /// alle 30 Turmsätze in <c>Units/turret/</c> haben genau acht PNG.</summary>
     public const int TurmBilder = 8;
@@ -26913,9 +27377,67 @@ public partial class MapEntityLayer : Node2D
 
     private static int TurmBlick(Entity e, int aim) => TurmBlick(e.UnitType, aim);
 
-    private Texture2D? GetTurretTexture(int weapon, int facing, int slope = 0)
+    /// <summary>
+    /// ⭐⭐ <b>IN WELCHE RICHTUNG DER TURM GEZEICHNET WIRD — immer in
+    /// ACHTELN</b> (24.08.2026).
+    ///
+    /// <para>⚠⚠ Gemeldet: »die Tuerme schauen bei den Schiffen immer woanders
+    /// hin, die Raketen fliegen aber korrekt«. Genau diese Trennung ist der
+    /// Fingerzeig: der SCHUSS nimmt die Zielrichtung, das BILD nahm eine
+    /// andere.</para>
+    ///
+    /// <para>An beiden Stellen stand
+    /// <c>TurmBlick(e, e.AimFacing >= 0 ? e.AimFacing : e.Facing)</c>. Der
+    /// Rueckfall <c>e.Facing</c> ist die RUMPFrichtung und bei einem Schiff in
+    /// Sechzehnteln — der muss halbiert werden. <c>AimFacing</c> steht aber
+    /// <b>immer schon in Achteln</b> (<c>raw[0x03] &amp; 7</c> beim Einlesen,
+    /// und der 8er-Zweig von <see cref="DirToFacing(Vector2)"/> beim Zielen).
+    /// Es wurde also ein zweites Mal halbiert: <b>ein zielendes Schiff zeigte
+    /// den Turm auf der halben Richtung</b> — bei Zielrichtung 6 (rechts) stand
+    /// der Turm auf 3 (oben-links).</para>
+    ///
+    /// <para>⚠ Der Kommentar bei <see cref="TurmBlick"/> hatte es sogar
+    /// richtig stehen: »Falsch war allein der RUECKFALL auf die
+    /// Rumpfrichtung«. Umgesetzt wurde trotzdem die Umrechnung fuer BEIDE. Ein
+    /// richtiger Satz im Kommentar ist keine richtige Zeile im Code.</para>
+    /// </summary>
+    /// <summary>
+    /// ⭐⭐ <b>ZEIGT DIESER TURM SEINE RAKETE?</b> — <c>1</c> für die geladene
+    /// Pose, <c>0</c> für die leere (24.08.2026).
+    ///
+    /// <para>⚠ <b>Das ist UNSERE Regel, und sie ist es zweifach.</b> Das
+    /// Original zeichnet für einen Turm überhaupt nie eine Gruppe (im ganzen
+    /// Zeichenbereich gibt es genau ein <c>imul ax,ax,0x30</c>, und das gehört
+    /// dem Unterteil). Und dass die zweite Pose der GELADENE Werfer ist, ist an
+    /// den Bildern gemessen, nicht gelesen — siehe
+    /// <c>Import.UnitsExporter.LadeSchwelle</c>. Gewählt hat es der Spieler am
+    /// 24.08.2026: »nach Munition, geladen solange ammo &gt; 0«.</para>
+    ///
+    /// <para>⚠ Eine Einheit OHNE Munitionsführung (<c>AmmoMax</c> 0) gilt als
+    /// geladen. Sonst stünde ein Werfer, der nie schiesst und nie nachlädt,
+    /// für immer leer da — das wäre eine Aussage, die niemand gemeint hat.</para>
+    /// </summary>
+    private static int TurmLadePose(Entity e)
+        => _ladeGruppe.TryGetValue(e.Weapon, out int g) && (e.AmmoMax <= 0 || e.Ammo > 0)
+            ? g : 0;
+
+    private static int TurmRichtung(Entity e)
+        => e.AimFacing >= 0
+            ? ((e.AimFacing % TurmBilder) + TurmBilder) % TurmBilder
+            : TurmBlick(e, e.Facing);
+
+    private Texture2D? GetTurretTexture(int weapon, int facing, int slope = 0, int gruppe = 0)
     {
         if (weapon == 0) return null;
+        // ⭐⭐ 24.08.2026 — DIE GELADENE POSE. Sie geht VOR allem anderen, faellt
+        // aber sofort auf die alte Suche zurueck, wenn es sie nicht gibt: nur
+        // ein Turm von dreissig hat ueberhaupt eine (siehe LadeGruppe).
+        if (gruppe > 0)
+        {
+            var l = (slope > 0 ? LoadUnitPart("turret", $"{weapon}/g{gruppe}/s{slope}", facing) : null)
+                    ?? LoadUnitPart("turret", $"{weapon}/g{gruppe}", facing);
+            if (l != null) return l;
+        }
         if (slope > 0)
         {
             var s = LoadUnitPart("turret", $"{weapon}/s{slope}", facing);
@@ -27126,12 +27648,34 @@ public partial class MapEntityLayer : Node2D
     /// Vorher lag sie 60 px links des Schiffes im leeren Wasser. Mündungsfeuer
     /// und Leuchtspur sitzen damit auf dem Schiff, ohne dass an ihnen eine Zeile
     /// geändert wurde.</para></summary>
-    private static bool HullCarriesItsOwnGun(int unitType) =>
-        unitType is 157 or 158;
+    /// <para>⭐⭐ <b>NACHTRAG 24.08.2026 — DER SPIELER HAT DIESE ENTSCHEIDUNG
+    /// UMGEDREHT.</b> Wörtlich: »der Kreuzer hat eine Ballistische Rakete
+    /// standard und das Schlachtschiff einen Raketenwerfer, die musst du drauf
+    /// bauen«. Damit ist der zweite der zwei Wege gewählt, die oben stehen:
+    /// <b>eigene Montagepunkte</b>. Sie liegen jetzt je Blickrichtung in
+    /// <c>parts_index.json</c> unter dem Namen <c>mount_facings_unser</c> und
+    /// sind an den drei Rümpfen geeicht, für die das Original einen nennt —
+    /// siehe <c>Import.UnitsExporter.MontageEichung</c>.</para>
+    ///
+    /// <para>⚠ Die Begründung oben bleibt richtig und wird NICHT
+    /// zurückgezogen: das Original hat für Bauteil 100/101 keinen Wert, und
+    /// die Zahlen, die dort jetzt stehen, sind unsere. Was sich geändert hat,
+    /// ist nicht der Befund, sondern die Entscheidung darüber.</para>
+    ///
+    /// <para>Diese Weiche gibt darum seit dem 24.08.2026 <c>false</c> zurück.
+    /// Sie bleibt als Schalter stehen, weil sie die einzige Stelle ist, an der
+    /// die Entscheidung hängt.</para>
+    private static bool HullCarriesItsOwnGun(int unitType) => false;
 
-    private Vector2 TurretOffset(int unitType, int col, int row)
+    private Vector2 TurretOffset(int unitType, int col, int row, int facing = -1)
     {
         LoadMounts();
+        // ⭐⭐ 24.08.2026 — UNSERE Montagepunkte je Blickrichtung gehen VOR dem
+        // Nichts, aber NICHT vor dem Original: `_mountF` ist nur fuer die zwei
+        // Ruempfe belegt, fuer die die Weiche @0x42ADB7 keinen Fall hat.
+        // Ein Rumpf, den das Original nennt, kommt hier gar nicht an.
+        if (facing >= 0 && _mountF.TryGetValue(unitType, out var mf) && mf.Length > 0)
+            return mf[((facing % mf.Length) + mf.Length) % mf.Length];
         if (_mount == null || !_mount.TryGetValue(unitType, out var m)) return Vector2.Zero;
         int k = _flagLookup != null && _flagLookup.TryGetValue((col, row), out int fl) && fl <= 4 ? fl : 0;
         if (k >= m.Length) k = 0;
@@ -27157,6 +27701,13 @@ public partial class MapEntityLayer : Node2D
                 foreach (var v in sb.EnumerateArray()) l.Add(v.GetInt32());
                 if (l.Count > 0) _slopeBlockTable = l.ToArray();
             }
+            if (doc.RootElement.TryGetProperty("turrets", out var tg))
+                foreach (var it in tg.EnumerateObject())
+                {
+                    if (!int.TryParse(it.Name, out int w)) continue;
+                    if (it.Value.TryGetProperty("lade_gruppe_unser", out var lv))
+                        _ladeGruppe[w] = lv.GetInt32();
+                }
             if (!doc.RootElement.TryGetProperty("hulls", out var group)) return;
             foreach (var item in group.EnumerateObject())
             {
@@ -27167,6 +27718,25 @@ public partial class MapEntityLayer : Node2D
                 // ganze Bank unter part/ zurueckfallen kann.
                 if (item.Value.TryGetProperty("component", out var cv))
                     _hullComponent[ut] = cv.GetInt32();
+                // ⭐ UNSERE Montagepunkte je Blickrichtung — nur fuer die zwei
+                // grossen Schiffsruempfe, fuer die das Original keinen nennt.
+                // Der Name sagt, dass sie unsere sind; siehe
+                // Import.UnitsExporter.MontageEichung.
+                if (item.Value.TryGetProperty("mount_facings_unser", out var mfa)
+                    && mfa.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    var mf = new List<Vector2I>();
+                    foreach (var p2 in mfa.EnumerateArray())
+                    {
+                        if (p2.ValueKind != System.Text.Json.JsonValueKind.Array) continue;
+                        var e2 = p2.EnumerateArray().GetEnumerator();
+                        if (!e2.MoveNext()) continue;
+                        int mx = e2.Current.GetInt32();
+                        if (!e2.MoveNext()) continue;
+                        mf.Add(new Vector2I(mx, e2.Current.GetInt32()));
+                    }
+                    if (mf.Count > 0) _mountF[ut] = mf.ToArray();
+                }
                 if (!item.Value.TryGetProperty("mount", out var arr)) continue;
                 var row = new List<Vector2I>();
                 foreach (var p in arr.EnumerateArray())
@@ -27247,7 +27817,7 @@ public partial class MapEntityLayer : Node2D
                        && _flagLookup.TryGetValue((e.Col, e.Row), out int fl) && fl <= 4 ? fl : 0;
             string mnt = _mount != null && _mount.TryGetValue(e.UnitType, out var m)
                          ? $"({m[0].X},{m[0].Y})" : "KEINER";
-            var off = TurretOffset(e.UnitType, e.Col, e.Row);
+            var off = TurretOffset(e.UnitType, e.Col, e.Row, e.Facing);
             var hull = GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e.Col, e.Row));
             var turr = GetTurretTexture(e.Weapon, TurmBlick(e, e.Facing),
                                         SlopeClassOf(e.Col, e.Row));
@@ -27309,16 +27879,69 @@ public partial class MapEntityLayer : Node2D
     /// as a live unit won the pick and swallowed the click. A body is scenery: it
     /// is drawn, and that is all.</para>
     /// </summary>
+    /// <summary>
+    /// ⭐⭐ 24.08.2026 — <b>WAS IM NEBEL LIEGT, IST NICHT ANFASSBAR.</b>
+    ///
+    /// <para>Gemeldet: »ich bekomm das Angreifen-Symbol wenn ich über den
+    /// verdeckten Bereich vom Fog of War gehe, wenn dort tatsächlich eine
+    /// Einheit ist, auch wenn ich sie noch garnicht aufgedeckt habe«.</para>
+    ///
+    /// <para>Diese eine Zeile fehlte, und sie hing an DREI Wegen zugleich:
+    /// <see cref="CursorHintAt"/> (der Zeiger), <see cref="SelectAt"/> (das
+    /// Anwaehlen) und <see cref="IssueAttack"/> (der Angriffsbefehl). Man konnte
+    /// also nicht nur SEHEN, dass dort etwas steht — man konnte es auch
+    /// anklicken und beschiessen lassen.</para>
+    ///
+    /// <para>⚠ Dasselbe Muster wie der Lebensbalken vom selben Tag: die
+    /// Nebelpruefung war an den Zeichenwegen gebaut und an den BEDIENwegen
+    /// vergessen. Die Pruefung ist Wort fuer Wort dieselbe — <b>ein Gebaeude
+    /// bleibt ausgenommen</b>, weil es Teil des gebackenen Bildes ist und nicht
+    /// weglaeuft (und weil <c>PickCheck</c> genau die anklickt).</para>
+    /// </summary>
+    /// <summary>GEGENPROBE <c>--pick-ohne-nebel</c>: der Stand vor dem
+    /// 24.08.2026, als man durch den Nebel klicken konnte. ⚠ Nur zum Messen —
+    /// ohne diesen Schalter waere nicht zu belegen, dass die Nebelpruefung
+    /// wirklich diejenige ist, die etwas aendert.</summary>
+    public static bool PickOhneNebel;
+
+    /// <summary>
+    /// ⭐⭐ 24.08.2026 — <b>DIE EINE NEBELFRAGE FUER ALLES, WAS AUF DER KARTE
+    /// STEHT.</b>
+    ///
+    /// <para>Sie stand bisher viermal fast gleich im Code (Rumpf, Balken,
+    /// Bedienhilfen, Pick), und jedes Mal mit <c>!e.IsBuilding</c> — ein
+    /// Gebaeude war ausgenommen, weil es »Teil des gebackenen Bildes« sei. Das
+    /// stimmte nicht: Gebaeude werden von DrawBuildingBody gezeichnet, und
+    /// damit schienen sie im unerkundeten Nebel durch (gemeldet am
+    /// 24.08.2026).</para>
+    ///
+    /// <para>Jetzt eine Regel: <b>fremd und nie gesehen</b> heisst verborgen.
+    /// Fuer bewegliche Sachen zaehlt zusaetzlich, ob die Zelle GERADE
+    /// beobachtet wird — ein Panzer faehrt weg, ein Gebaeude nicht.</para>
+    /// </summary>
+    private bool ImNebelVerborgen(Entity e)
+    {
+        if (!FogActive || e.Owner == ViewPlayer) return false;
+        if (e.IsBuilding) return _fog != null && !_fog.IsSeen(e.Col, e.Row);
+        return !Watched(e.Col, e.Row);
+    }
+
     private int Pick(Vector2 p)
     {
         int best = -1, bestRow = int.MinValue;
         for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.Dead) continue;
+            // Im Nebel liegt nichts Anfassbares — siehe Kopfkommentar.
+            if (!PickOhneNebel && ImNebelVerborgen(e)) continue;
             // NoStructure: der Satz existiert fuer die Skripte, aber nicht auf
             // dem Bildschirm — er darf sich auch nicht anwaehlen lassen.
             // ⚠ Ausser dem HANDELSPOSTEN, siehe Anfassbar().
-            if (!_entities[i].Dead && (!_entities[i].NoStructure || Anfassbar(_entities[i])) &&
-                BodyRect(_entities[i]).HasPoint(p) && _entities[i].Row > bestRow)
-            { best = i; bestRow = _entities[i].Row; }
+            if (e.NoStructure && !Anfassbar(e)) continue;
+            if (!BodyRect(e).HasPoint(p) || e.Row <= bestRow) continue;
+            best = i; bestRow = e.Row;
+        }
         return best;
     }
 
@@ -28978,6 +29601,7 @@ public partial class MapEntityLayer : Node2D
         // the build-site preview, under the sprites so units stay readable
         DrawBuildPreview();
 
+
         // planned routes of the selected units, drawn under the sprites
         foreach (int i in _sel)
         {
@@ -29035,10 +29659,33 @@ public partial class MapEntityLayer : Node2D
         // Gleisstuecke uebermalt, die davor gehoeren — genau die gemeldete
         // Stelle. Siehe DrawBuildingGround.
         DrawBuildingGround();
-        DrawRailAndBuildings();
+        // ⭐ 24.08.2026 — und die ausgebrannten Waldzellen: Stumpf und blanke
+        // Erde sind BODEN. Siehe MapObjects.AbgebrannteZeichnen.
+        AbgebrannteZeichnen();
 
-        // burnt-out wrecks stay on the ground, under everything alive
+        // ⚠⚠ 24.08.2026 — DAS WRACK LAG OBEN. Gemeldet: »die Grafik die kommt
+        // wenn eine Einheit zerstört wurde, ist wie als würde sie eine Einheit
+        // die darauf steht leicht verdecken, die müsste ja aber unter der
+        // Einheit sein«.
+        //
+        // ⭐ Und der Kopfkommentar von DrawEffects sagte die ganze Zeit das
+        // Richtige — »they are drawn BEFORE the units so the living drive over
+        // them«. Nur die AUFRUFSTELLE hielt sich nicht daran: seit die Rümpfe
+        // im zeilenweisen Durchgang von DrawRailAndBuildings laufen (C23),
+        // stand dieser Aufruf DAHINTER und hat jedes Wrack über die Einheit
+        // gemalt, die darauf steht. Der Kommentar hat den Fehler nicht
+        // verhindert, weil er an der falschen Datei stand.
+        //
+        // Reihenfolge jetzt: Gebäudeboden (Kartenzellen) → Wracks und
+        // Brandflecken → Gleise, Gebäude und Rümpfe → alles Lebende.
+        // Explosionen und Mündungsfeuer bleiben oben (ground: false).
         DrawEffects(ground: true);
+
+        // ⭐ 24.08.2026 — und gleich dahinter die gefallenen Fusssoldaten, aus
+        // demselben Grund: was auf dem Boden liegt, verdeckt nichts Lebendes.
+        DrawLeichen();
+
+        DrawRailAndBuildings();
         DrawRangeRings();
 
         // entities: real unit sprites (ROBO.CWR) when available, else owner dots.
@@ -29057,7 +29704,7 @@ public partial class MapEntityLayer : Node2D
             // is actually watching. A BUILDING that has once been seen keeps
             // standing — it is part of the baked picture anyway, and a base does
             // not walk away while nobody looks.
-            if (FogActive && e.Owner != ViewPlayer && !e.IsBuilding && !Watched(e.Col, e.Row))
+            if (ImNebelVerborgen(e))
                 continue;
 
             // ⚠ 17.08.2026 — HIER STAND DIE LEICHE EIN ZWEITES MAL, und zwar mit
@@ -29199,7 +29846,7 @@ public partial class MapEntityLayer : Node2D
                 // RICHTUNG ausgewichen statt auf das Stehbild zurückzufallen.
                 // Siehe InfCorpseFacing — das ist die zweite Gestalt von C13.
                 var body = GetInfantryTexture(e.Infantry, InfDrawFacing(e), InfBlock(e));
-                if (body != null) DrawTexture(body, picC - ComposedAnchor);
+                if (body != null) DrawTexture(Parteifarbe(body, e.Owner), picC - ComposedAnchor);
             }
             return;
         }
@@ -29234,13 +29881,56 @@ public partial class MapEntityLayer : Node2D
                 // ⚠ Der Turm hat acht Bilder, der Schiffsrumpf sechzehn —
                 // siehe TurmBlick. Ohne die Umrechnung fehlt die Waffe auf
                 // der halben Kompassrose.
-                int aim = TurmBlick(e, e.AimFacing >= 0 ? e.AimFacing : e.Facing);
+                int aim = TurmRichtung(e);
                 // foot soldiers come from their own bank in ROBO.CWR and share
                 // the vehicles' 64x56 canvas, so the same anchor applies
                 if (e.Infantry >= 0)
                 {
-                    var foot = GetInfantryTexture(e.Infantry, e.Facing, InfBlock(e));
-                    if (foot != null) { DrawTexture(foot, picC - ComposedAnchor); return; }
+                    // ⭐⭐⭐ 24.08.2026 — DER CYBORG, DER IM BODEN VERSCHWINDET.
+                    //
+                    // Gemeldet, fuenfmal, und ich habe viermal am falschen Ende
+                    // gesucht (Zeilenverzug der Flamme, Nebelschicht,
+                    // Gelaendehoehe im Fach, Boden ausgebrannter Zellen). Der
+                    // Satz, der es geloest hat, war: »da sieht man nur den
+                    // Lebensbalken vom Cyborg aber den Cyborg nicht«.
+                    //
+                    // Denn dann verdeckt ihn gar nichts. Hier stand:
+                    //
+                    //     var foot = GetInfantryTexture(e.Infantry, e.Facing, InfBlock(e));
+                    //     if (foot != null) { DrawTexture(...); return; }
+                    //
+                    // Fehlt das Bild, faellt der Zweig durch — und die
+                    // Rumpfzweige darunter finden fuer einen Fusssoldaten
+                    // nichts. Es wird also NICHTS gezeichnet, waehrend der
+                    // Lebensbalken aus der spaeteren Schleife stehen bleibt.
+                    //
+                    // ⚠⚠ Und die Ausweichregel gab es schon — nur eine Zeile
+                    // weiter oben und nur fuer LEICHEN: »fuer 22 von 192
+                    // (Satz, Richtung) gibt es kein Leichenbild, und dann wird
+                    // die RICHTUNG ausgewichen«. Fuer den LEBENDEN Soldaten
+                    // fehlte sie. Darum verschwand er nur KURZ: in der einen
+                    // Laufrichtung, fuer die sein Satz kein Bild hat.
+                    //
+                    // Ausgewichen wird in derselben Reihenfolge wie bei C13:
+                    // erst die Nachbarrichtung, dann das Stehbild. Beides ist
+                    // ein vorhandenes Bild desselben Soldaten — geraten wird
+                    // nichts.
+                    int blk = InfBlock(e);
+                    var foot = GetInfantryTexture(e.Infantry, e.Facing, blk);
+                    if (foot == null)
+                    {
+                        InfBildFehlt++;
+                        if (InfBildFaelle.Count < 8)
+                            InfBildFaelle.Add($"Satz {e.Infantry} Richtung {e.Facing} Block {blk}");
+                        for (int d = 1; d <= 4 && foot == null; d++)
+                        {
+                            foot = GetInfantryTexture(e.Infantry, (e.Facing + d) & 7, blk)
+                                ?? GetInfantryTexture(e.Infantry, (e.Facing - d + 8) & 7, blk);
+                        }
+                        foot ??= GetInfantryTexture(e.Infantry, e.Facing, InfIdleBlock);
+                        if (foot != null) InfBildErsetzt++;
+                    }
+                    if (foot != null) { DrawTexture(Parteifarbe(foot, e.Owner), picC - ComposedAnchor); return; }
                 }
                 // hull + separately aimed turret (preferred)
                 // ⚠ Die Hangklasse gilt fuer BEIDE. Der Turmsitz wurde schon
@@ -29252,24 +29942,24 @@ public partial class MapEntityLayer : Node2D
                 // sonst nichts.
                 if (GetauchtesBoot(e) is { } getaucht)
                 {
-                    DrawTexture(getaucht, picC - ComposedAnchor);
+                    DrawTexture(Parteifarbe(getaucht, e.Owner), picC - ComposedAnchor);
                     return;
                 }
                 var hull = GetHullTexture(e.UnitType, e.Facing, PoseOf(e), slope);
                 if (hull != null)
                 {
-                    DrawTexture(hull, picC - ComposedAnchor);
-                    var turret = GetTurretTexture(e.Weapon, aim, slope);
+                    DrawTexture(Parteifarbe(hull, e.Owner), picC - ComposedAnchor);
+                    var turret = GetTurretTexture(e.Weapon, aim, slope, TurmLadePose(e));
                     if (turret != null && !HullCarriesItsOwnGun(e.UnitType))
-                        DrawTexture(turret, picC - ComposedAnchor
-                                            + TurretOffset(e.UnitType, e.Col, e.Row));
+                        DrawTexture(Parteifarbe(turret, e.Owner), picC - ComposedAnchor
+                                            + TurretOffset(e.UnitType, e.Col, e.Row, e.Facing));
                     return;
                 }
                 var composed = GetComposedTexture(e.Combo, e.Facing);
                 if (composed != null)
                 {
                     // fixed 64x56 canvas, anchored at the unit's ground-center
-                    DrawTexture(composed, picC - ComposedAnchor);
+                    DrawTexture(Parteifarbe(composed, e.Owner), picC - ComposedAnchor);
                     return;
                 }
                 // bare chassis (e.g. a freshly produced design) — the turret is
@@ -29277,10 +29967,10 @@ public partial class MapEntityLayer : Node2D
                 var bare = GetUnitTexture(e.UnitType, e.Facing);
                 if (bare != null)
                 {
-                    DrawTexture(bare, new Vector2(picC.X - bare.GetWidth() / 2f,
+                    DrawTexture(Parteifarbe(bare, e.Owner), new Vector2(picC.X - bare.GetWidth() / 2f,
                                                   picC.Y - bare.GetHeight()));
                     var turret2 = GetTurretTexture(e.Weapon, aim);
-                    if (turret2 != null) DrawTexture(turret2, picC - ComposedAnchor);
+                    if (turret2 != null) DrawTexture(Parteifarbe(turret2, e.Owner), picC - ComposedAnchor);
                     return;
                 }
             }
@@ -29386,6 +30076,20 @@ public partial class MapEntityLayer : Node2D
         {
             var e = _entities[i];
             if (e.IsProp || e.Dead || e.HpMax <= 0) continue;
+            // ⭐⭐ 24.08.2026 — DER NEBEL GILT AUCH FUER DEN BALKEN.
+            //
+            // Gemeldet mit Bild: ein roter Lebensbalken auf dem Wasser, ohne
+            // Einheit darunter — »die Einheit ist noch garnicht sichtbar und
+            // trotzdem wird angegriffen«. Der Balken war das, was es sichtbar
+            // gemacht hat: diese Schleife hatte als einzige der drei
+            // Einheitenschleifen KEINE Nebelpruefung, waehrend der Rumpf
+            // (BuildUnitDrawOrder) und die Bedienhilfen sie laengst haben.
+            //
+            // Damit verriet jeder beschaedigte Gegner auf der ganzen Karte
+            // seine Lage. ⚠ Dieselbe Pruefung wie dort, Wort fuer Wort — ein
+            // Gebaeude bleibt ausgenommen, weil es Teil des gebackenen Bildes
+            // ist und nicht weglaeuft.
+            if (ImNebelVerborgen(e)) continue;
             bool sel = _sel.Contains(i);
             if (!sel && e.Hp >= e.HpMax) continue;
             float fr = Mathf.Clamp((float)e.Hp / e.HpMax, 0, 1);
@@ -29464,7 +30168,7 @@ public partial class MapEntityLayer : Node2D
             }
             DrawColoredPolygon(sh, new Color(0, 0, 0, 0.32f));
             var tex = GetAirframeTexture(s.Kind, s.Facing);
-            if (tex != null) DrawTexture(tex, air - ComposedAnchor);
+            if (tex != null) DrawTexture(Parteifarbe(tex, s.Owner), air - ComposedAnchor);
             else DrawDiamond(air, 8f, new Color(0.1f, 0.9f, 0.95f));
 
             // ⚠ DIE UEBERLAGERUNG ZUR BLICKRICHTUNG (--air-facing-check).
@@ -29659,6 +30363,7 @@ public partial class MapEntityLayer : Node2D
 
         // muzzle flashes, explosions and tracers (ANIM.CWA)
         DrawEffects(ground: false);
+        FlammenGanzOben();          // nur mit --flammen-oben, siehe MapObjects
         DrawOrderMarks();
         DrawCaptureBars();
 

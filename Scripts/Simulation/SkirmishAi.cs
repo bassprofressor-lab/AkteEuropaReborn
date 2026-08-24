@@ -1043,6 +1043,62 @@ public partial class MapEntityLayer : Node2D
             $"{a.MovedInf.Count}/{InfantryOf(a.Player)}"));
     }
 
+    /// <summary>⭐⭐ 24.08.2026 — WARUM SCHICKT DIE STREIFE NIEMANDEN LOS?
+    ///
+    /// <para>Er meldete: »dort steht ein Cyborg vor der Bruecke und macht nix,
+    /// im Original kommt er auch den Berg hochgelaufen und greift an« — und
+    /// dazu, dass zwei andere Cyborgs und ein MG-Fahrzeug sehr wohl angreifen.
+    /// Also kein Schalter, der die ganze KI abwuergt, sondern eine einzelne
+    /// Einheit, die liegen bleibt.</para>
+    ///
+    /// <para>Die Streifenzeile sagte dazu nur <c>im Ring 1294 Einheiten,
+    /// 0 feindlich</c> — sie zaehlt, was sie GESEHEN hat, aber nicht, was
+    /// AUSSERHALB des Rings stand. Genau das ist hier die Frage: liegt es an
+    /// der Entfernung oder an der Feindpruefung? Diese Zeile beantwortet sie,
+    /// indem sie fuer jede untaetige Einheit den NAECHSTEN Feind auf der
+    /// ganzen Karte nennt — ohne Ring, ohne Klassenschwelle.</para>
+    ///
+    /// <para>⚠ Sie misst nur; sie aendert nichts. Ist der naechste Feind weiter
+    /// weg als <c>Sicht+1</c>, dann ist unser Ring nicht kaputt, sondern zu
+    /// klein — und die Antwort steht im Original, nicht hier.</para>
+    /// </summary>
+    public string AiSichtLine()
+    {
+        if (!_aiOn || _nav == null) return "";
+        var zeilen = new List<string>();
+        foreach (var a in _ai)
+        {
+            foreach (int ui in ArmyOf(a.Player))
+            {
+                var e = _entities[ui];
+                if (e.Dead || e.IsBuilding || !e.Mobile) continue;
+                int nah = -1; double nd = double.MaxValue;
+                for (int oi = 0; oi < _entities.Count; oi++)
+                {
+                    var o = _entities[oi];
+                    if (o.Dead || o.IsProp || o.IsBuilding) continue;
+                    if (!AiHostile(a.Player, o.Owner)) continue;
+                    double dx = o.Col - e.Col, dy = o.Row - e.Row;
+                    double d = System.Math.Sqrt(dx * dx + dy * dy);
+                    if (d < nd) { nd = d; nah = oi; }
+                }
+                int near = e.Range > 0 ? e.Range : Mathf.RoundToInt(RangeOf(e));
+                int far = e.Sight > near ? e.Sight : near + AiSightPad;
+                string urteil = nah < 0 ? "KEIN Feind auf der Karte"
+                    : nd <= near ? "in SCHUSSWEITE — der Takt ist zustaendig, nicht die Streife"
+                    : nd <= far + 1 ? "IM RING — die Streife MUESSTE ihn schicken"
+                    : $"AUSSERHALB des Rings (Sicht+1 = {far + 1})";
+                zeilen.Add($"  P{a.Player} #{ui} typ{e.GameUnitType} bei ({e.Col},{e.Row}) "
+                         + $"Reichweite {near}, Sicht {e.Sight}"
+                         + (nah < 0 ? "" : $", naechster Feind #{nah} (P{_entities[nah].Owner}) "
+                                          + $"bei ({_entities[nah].Col},{_entities[nah].Row}) "
+                                          + $"Abstand {nd:0.0}")
+                         + $" -> {urteil}");
+            }
+        }
+        return zeilen.Count == 0 ? "" : "KI-Sicht:\n" + string.Join("\n", zeilen);
+    }
+
     // ---- the loop ---------------------------------------------------------
 
     private void UpdateAi(float dt)

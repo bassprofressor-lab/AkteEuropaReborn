@@ -425,6 +425,9 @@ public partial class MapViewer : Node2D
         // ⚠ KEIN Quit hier: dieser Pruefstand braucht die Zeit danach. Der
         // Befehl geht jetzt raus, gezaehlt wird beim --quit-after.
         if (_drehCheck) GD.Print(_entities.SchiffDrehStart());
+        // Ebenfalls ohne Quit: die drei Schiffe bekommen ihren Auftrag hier,
+        // gefahren wird bis zum --quit-after. Siehe SchiffStauCheck.cs.
+        if (_stauCheck) GD.Print(_entities.SchiffStauStart());
         if (_speedCheck) GD.Print(_entities.SpeedCheckStart());
         else if (_stuckCheck) GD.Print(_entities.StuckCheckStart());
         if (_depotCheck)
@@ -675,6 +678,11 @@ public partial class MapViewer : Node2D
         if (_tutorialCheck)
         {
             GD.Print(_entities.TutorialCheck());
+            // ⚠ Der ANDERE Tutorialpruefstand nennt je Fensterregel, WARUM sie
+            // nicht feuern kann — er war nie verdrahtet. Ein Pruefstand, den
+            // kein Schalter erreicht, gibt es nicht. Er haengt HIER, weil an
+            // dieser Stelle das Missionsskript schon steht.
+            if (_hilfeCheck) GD.Print(_entities.HilfeCheckLine());
             // Mit `--shot` bleibt der Lauf stehen, damit das letzte Fenster auch
             // im Bild landet; ohne ist der Pruefstand fertig.
             if (_shotPath.Length == 0) { GetTree().Quit(0); return; }
@@ -751,6 +759,18 @@ public partial class MapViewer : Node2D
         if (_turmCheck)
         {
             GD.Print(_entities.TurmBlickCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_minenCheck)
+        {
+            GD.Print(_entities.MinenCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_rumpfCheck)
+        {
+            GD.Print(_entities.RumpfBlickCheck());
             GetTree().Quit(0);
             return;
         }
@@ -871,6 +891,7 @@ public partial class MapViewer : Node2D
     private int _portraitFrames;
     private bool _soundCheck;
     private bool _tutorialCheck;
+    private bool _hilfeCheck;
     private bool _coverageCheck;
     private bool _depotCheck;
     /// <summary><c>--overdraw-check</c> — welche Gebäudekachel übermalt welche
@@ -1145,7 +1166,14 @@ public partial class MapViewer : Node2D
             else if (a == "--demo-ai") { _demo = true; _demoAi = true; }
             else if (a == "--sieg-check") _siegCheck = true;
             else if (a == "--turmblick-check") _turmCheck = true;
+            else if (a == "--rumpfblick-check") _rumpfCheck = true;
             else if (a == "--schiffdreh-check") _drehCheck = true;
+            else if (a == "--schiffstau-check") _stauCheck = true;
+            else if (a == "--belegung-check") _belegCheck = true;
+            else if (a == "--minen-check") _minenCheck = true;
+            else if (a == "--erwartung") _erwartung = true;
+            else if (a == "--minen-ohne-tor") MapEntityLayer.MinenTor = false;
+            else if (a == "--alt-stempel") Simulation.NavGrid.AltStempel = true;
             else if (a == "--nebenmission-check") _nebenCheck = true;
             else if (a.StartsWith("--script-check")) _scriptCheck = 15f;
             // --pay-check[=sek]: die Geldregeln der Mission einmal ausloesen,
@@ -1160,6 +1188,23 @@ public partial class MapViewer : Node2D
                 _tickCheck = a.Contains('=') ? a[(a.IndexOf('=') + 1)..].ToFloat() : 10f;
             else if (a == "--verdeck-check") _verdeckCheck = true;
             else if (a == "--auswahl-check") _auswahlCheck = true;
+            else if (a == "--flammen-oben") MapEntityLayer.FlammenOben = true;
+            // ⚠ NUR FUER BILDVERGLEICHE: ohne die Hilfefenster sind zwei Laeufe
+            // ueberhaupt vergleichbar. Sie standen im ersten Vergleich an
+            // verschiedenen Stellen und haben die halbe Differenz erzeugt.
+            else if (a == "--keine-hilfe") UI.HelpWindow.Suppressed = true;
+            else if (a == "--flammen-phase0") MapEntityLayer.FlammenPhase0 = true;
+            // ⚠ NUR ZUM MESSEN: ohne Nebel wird JEDE Flamme gezeichnet. Sonst
+            // prueft ein kopfloser Lauf nur, was der Nebel ohnehin verbirgt —
+            // der Einwand des Spielers am 24.08.: »dein Test ist sinnfrei, weil
+            // das Gebiet noch nicht aufgedeckt ist«.
+            else if (a == "--kein-nebel") UI.Settings.FogSuppressed = true;
+            else if (a == "--pick-ohne-nebel") MapEntityLayer.PickOhneNebel = true;
+            // ⚠ Gegenprobe zur Parteifarbe: stellt den Stand vor dem 24.08.
+            // wieder her, in dem JEDE Einheit in der Farbe des Besitzers 0
+            // gezeichnet wurde. Siehe Parteifarbe.cs.
+            else if (a == "--keine-parteifarbe") MapEntityLayer.KeineParteifarbe = true;
+            else if (a.StartsWith("--flammen-verzug=")) MapEntityLayer.FlammenVerzug = a["--flammen-verzug=".Length..].ToInt();
             else if (a == "--befehl-check") _befehlCheck = true;
             else if (a == "--schiffbild-check") _schiffBildCheck = true;
             else if (a == "--einschlag-check") _einschlagCheck = true;
@@ -1596,6 +1641,7 @@ public partial class MapViewer : Node2D
             { _depotFlow = true; MapEntityLayer.DepotFlowDock = true; }
             else if (a == "--sound-check") _soundCheck = true;
             else if (a == "--tutorial-check") _tutorialCheck = true;
+            else if (a == "--hilfe-check") _hilfeCheck = true;
             else if (a == "--script-coverage") _coverageCheck = true;
             else if (a == "--depot-check") _depotCheck = true;
             else if (a == "--infdeath-check") _infDeathCheck = true;
@@ -1769,7 +1815,13 @@ public partial class MapViewer : Node2D
     private bool _stuckCheck;
     private bool _siegCheck;
     private bool _turmCheck;
+    private bool _rumpfCheck;
     private bool _drehCheck;
+    private bool _stauCheck;
+    private bool _belegCheck;
+    private bool _minenCheck;
+    private bool _erwartung;
+    private int _erwartungWartet;
     private bool _nebenCheck;
     private float _umbefehlAfter = -1f;
     private int _umbefehlC, _umbefehlR;
@@ -2172,6 +2224,17 @@ public partial class MapViewer : Node2D
             if (ai.Length > 0) GD.Print(ai);
             string plan = _entities.AiPlanLine();
             if (plan.Length > 0) GD.Print(plan);
+            string sicht = _entities.AiSichtLine();
+            if (sicht.Length > 0) GD.Print(sicht);
+            GD.Print(_entities.ChaseWatchLine());
+            GD.Print(_entities.TruemmerWatchLine());
+            GD.Print(_entities.QualmWatchLine());
+            GD.Print(_entities.BrandWatchLine());
+            GD.Print(_entities.ObjektBrandLine());
+            GD.Print(_entities.ParteifarbeLine());
+            GD.Print(_entities.VerdeckStelle());
+            GD.Print(_entities.InfBildLine());
+            GD.Print(_entities.VerdeckEinheitLine());
             string ms = _entities.MissionScriptLine();
             if (ms.Length > 0) GD.Print(ms);
             string sw = _entities.ShipWatchLine();
@@ -2202,6 +2265,14 @@ public partial class MapViewer : Node2D
             // unterscheiden. Siehe MapEntityLayer.AirDrift (Fehler D6).
             GD.Print(_entities.AirDriftLine());
             GD.Print(_entities.RangeWatchLine());
+            if (_belegCheck) GD.Print(_entities.BelegungCheckLine());
+            if (_stauCheck)
+            {
+                GD.Print(_entities.SchiffStauLine());
+                GetTree().Quit(0);
+                return;
+            }
+            if (_belegCheck) { GetTree().Quit(0); return; }
             if (_drehCheck)
             {
                 GD.Print(_entities.SchiffDrehLine());
@@ -3952,6 +4023,19 @@ public partial class MapViewer : Node2D
 
     public override void _Process(double delta)
     {
+        // ⚠ Das Erwartungsblatt erst im ERSTEN BILD, nicht beim Aufbau: beim
+        // Aufbau ist das Missionsskript noch nicht geladen, und das Blatt
+        // meldete »Mission -1, kein Skript«. Ein Blatt, das seine eigene
+        // Datenlage nicht kennt, stellt keine pruefbare Behauptung auf.
+        // ⚠ Warten, bis das Missionsskript da ist — aber hoechstens 120 Bilder,
+        // sonst verschwiegen wir das Blatt, wenn ein Skript fehlt. Ein
+        // Pruefstand, der bei fehlenden Daten SCHWEIGT, ist der schlimmste.
+        if (_erwartung && (_entities.ErwartungBereit() || ++_erwartungWartet > 120))
+        {
+            _erwartung = false;
+            GD.Print(_entities.ErwartungsBlatt());
+        }
+
         // ⚠ Die Leiste ZUERST: QuitIfDue() schreibt die Prüfzeilen, und
         // `--hud-check` fragt die Leiste. Stand der Aufruf danach, meldete die
         // erste Zeile jedes Laufs »nichts zu zeigen«, obwohl es etwas zu zeigen

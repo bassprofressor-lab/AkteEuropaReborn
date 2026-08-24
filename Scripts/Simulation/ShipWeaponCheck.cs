@@ -40,6 +40,9 @@ public partial class MapEntityLayer
         var sb = new System.Text.StringBuilder("schiff-waffe-check\n");
 
         int n = 0, ohneAufsatz = 0;
+        // ⚠⚠ 24.08.2026 — `schlimmst` wurde berechnet und NIE BENUTZT: der
+        // Pruefstand hatte gar kein Urteil. Jetzt traegt es bis zur
+        // Schlusszeile durch. Eine Zahl ohne Urteil ist eine Notiz.
         float schlimmst = 0f;
         for (int i = 0; i < _entities.Count && n < 12; i++)
         {
@@ -108,6 +111,27 @@ public partial class MapEntityLayer
             sb.AppendLine($"    Pos liegt auf dem Rumpf: {(posDrauf ? "JA" : "⚠ NEIN")}   " +
                           $"Bildanker liegt darauf: {(ankerDrauf ? "JA" : "nein")}");
             if (!posDrauf) schlimmst = Mathf.Max(schlimmst, 1f);
+
+            // ⚠⚠ 24.08.2026 — DIESE ZEILE HAT GEFEHLT, UND SIE IST DIE FRAGE,
+            // DIE DER PRUEFSTAND IM NAMEN TRAEGT.
+            //
+            // Er rechnete die Muendung aus, druckte sie — und urteilte dann
+            // ueber `Pos`. Damit bestand er, waehrend die Muendung schon beim
+            // 2x2-Patrouillenboot 22 px NEBEN dem Rumpfbild lag (sichtbar bis
+            // x = 5368, Muendung bei x = 5390). Der gemeldete Fehler stand
+            // die ganze Zeit in seiner eigenen Ausgabe.
+            //
+            // ⭐ Die Lehre: eine Zahl AUSGEBEN ist nicht dasselbe wie sie zu
+            // PRUEFEN. Was ein Pruefstand druckt und was er beurteilt, muessen
+            // dieselben Groessen sein — sonst liest sie niemand.
+            bool muendungDrauf = sicht.HasPoint(muendung);
+            float wieWeit = muendungDrauf ? 0f
+                : Mathf.Max(Mathf.Max(sicht.Position.X - muendung.X, muendung.X - sicht.End.X),
+                            Mathf.Max(sicht.Position.Y - muendung.Y, muendung.Y - sicht.End.Y));
+            sb.AppendLine($"    ⭐ MUENDUNG liegt auf dem Rumpf: "
+                        + (muendungDrauf ? "JA" : $"⚠⚠ NEIN, {wieWeit:0} px daneben "
+                                                + $"({wieWeit / TileW:0.00} Felder)"));
+            if (!muendungDrauf) schlimmst = Mathf.Max(schlimmst, 1f + wieWeit / TileW);
         }
 
         if (n == 0) { sb.Append("  KEIN URTEIL: kein Schiff auf dieser Karte"); GD.Print(sb); return; }
@@ -128,7 +152,12 @@ public partial class MapEntityLayer
             if (Mathf.Max(1, e.FootW) < 2 && Mathf.Max(1, e.FootH) < 2) continue;
             gross = i; break;
         }
-        if (gross < 0) { sb.Append("  (kein mehrzelliges Schiff fuer die Fahrprobe)"); GD.Print(sb); return; }
+        if (gross < 0)
+        {
+            sb.AppendLine("  (kein mehrzelliges Schiff fuer die Fahrprobe)");
+            sb.Append(Urteil(schlimmst));
+            GD.Print(sb); return;
+        }
 
         var g = _entities[gross];
         g.Owner = g.Team = g.ShownOwner = ViewPlayer;     // damit der Befehl angenommen wird
@@ -145,12 +174,23 @@ public partial class MapEntityLayer
         sb.AppendLine($"    Fahrbefehl 3 Zellen nach rechts: {saetze} Satz/Saetze");
         if (saetze == 0) { sb.Append("    KEIN URTEIL: der Befehl kam nicht durch"); GD.Print(sb); return; }
         _schiffLog = sb;
+        _schiffSchlimmst = schlimmst;
         _schiffSim = DebugTicks;
         _schiffStufe = 1;
     }
 
     private int _schiffIdx = -1, _schiffStufe;
     private Vector2 _schiffPos0;
+    private float _schiffSchlimmst;
+
+    /// <summary>Die Messlatte: JEDE Muendung liegt auf ihrem Rumpfbild.
+    /// ⚠ Es gibt keinen halben Erfolg — ein Schiff, das neben sich ins
+    /// Wasser schiesst, ist genau die Meldung.</summary>
+    private static string Urteil(float schlimmst)
+        => schlimmst <= 0f
+            ? "  BESTANDEN — jede Muendung liegt auf ihrem Rumpfbild"
+            : $"  DURCHGEFALLEN — schlimmster Fall {schlimmst - 1f:0.00} Felder neben dem Rumpf";
+
     private long _schiffSim;
     private System.Text.StringBuilder? _schiffLog;
 
@@ -170,9 +210,10 @@ public partial class MapEntityLayer
         // eine Abweichung von der Zellmitte richtig. Gemessen wird deshalb gegen
         // BodyCenter DERSELBEN Zelle, und toleriert wird ein Schritt.
         bool ok = ab < 1.0f;
-        sb.Append($"    Abweichung Pos gegen BodyCenter: {ab:0.00} Felder " +
+        sb.AppendLine($"    Abweichung Pos gegen BodyCenter: {ab:0.00} Felder " +
                   (ok ? "— in Ordnung" : "— ⚠ FEHLER: das Schiff und sein Bild stehen auseinander"));
-        GD.Print(sb);
+        if (!ok) _schiffSchlimmst = Mathf.Max(_schiffSchlimmst, 1f);
+        sb.Append(Urteil(_schiffSchlimmst));
         GD.Print(sb);
     }
 }

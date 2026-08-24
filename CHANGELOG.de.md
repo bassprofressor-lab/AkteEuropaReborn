@@ -296,6 +296,159 @@ Abend des 21.08. und gehören in die nächste Fassung.
   Einheitentakt.
 - ⚠ Von **einem** belegten Unterschied der zwei Auslieferungen sind es jetzt
   **elf** — und einer der elf war falsch beschrieben.
+- ⚠⚠ **Schiffe zeigten beim Fahren nach rechts nach unten** (24.08.). Der
+  Bildersatz `hull/`, den der Zeichner zuerst nimmt, hatte für die neun
+  Schiffsrümpfe nur **acht** der sechzehn Richtungen. Die 16 waren am 19.08. an
+  drei anderen Stellen nachgetragen worden, hier nicht — und bei einem fehlenden
+  Richtungsbild fällt der Zeichner still auf die **Nummer 0** zurück, und die
+  heißt bei jedem Satz »Blick nach unten«. Darum fuhr die linke Halbrose
+  richtig (links ist die 4) und die rechte zeigte stur nach unten (rechts ist
+  die 12).
+- ⭐ Ein neuer Prüfstand `--rumpfblick-check`: hat **jede** Rumpfrichtung ihr
+  eigenes Bild? Die Gegenprobe kommt aus einer **zweiten Quelle** — demselben
+  Rumpf im Fahrgestellsatz. Am 24.08. sagten Index und Fahrgestellsatz 16 und
+  `hull/` sagte 8; die Abweichung **zwischen** zwei Quellen ist der Befund.
+  Dazu zählt der Zeichner jetzt mit, wie oft er auf Blick 0 zurückgefallen ist —
+  ein stiller Rückfall hatte den Fehler vier Tage getragen.
+- ⚠⚠ **Ein gefahrenes Schiff belegte seine Zellen nicht mehr** (24.08.). Ein
+  4×4-Rumpf hielt nach der Fahrt **4 von 16** Zellen, nach zwei Schritten
+  gar keine. Ursache: während eines Schrittes hält eine Einheit **zwei Anker**
+  (ihre Zelle und die vorgemerkte), und bei einem 4×4 teilen die beiden sich
+  **zwölf von sechzehn** Zellen — das Löschen des aufgegebenen Ankers radierte
+  die des behaltenen mit weg, weil beide dieselbe Nummer tragen. Die
+  Buchhaltung sitzt jetzt im `NavGrid` selbst, nicht in seinen 28 Aufrufern.
+- ⭐ Zwei neue Prüfstände dazu: `--belegung-check` (der **Belegungsabgleich** —
+  Phantome, Löcher, Überdeckungen; gilt auf jeder Karte und in jedem Takt) und
+  `--schiffstau-check` (drei Schiffe auf die gelesenen Dockausfahrten, dann nach
+  unten), plus die Gegenprobe `--alt-stempel`, die den alten Stand
+  wiederherstellt: 24 Löcher gegen 0. Und `NavGrid.WarumGesperrt` nennt bei
+  einem verweigerten Schritt **Zelle und Grund** statt nur »gesperrt«.
+- ⭐⭐ **Schlachtschiff und Kreuzer tragen ihre Waffe wieder** (24.08.) —
+  Rumpf 157 den Schweren Raketenwerfer, Rumpf 158 die Mittelstreckenrakete.
+  Am 13.08. war entschieden worden, bei diesen zwei Rümpfen **gar keine** Waffe
+  zu zeichnen, weil das Original für ihre Bauteile 100/101 keinen Montagepunkt
+  hat (die Weiche @0x42ADB7 kennt nur 0x46/0x47/0x48, alles andere fällt in
+  `Wrong chassis of ship` und liest eine nie beschriebene Stack-Zelle). Der
+  Spieler hat die Entscheidung umgedreht, also greift jetzt der andere der zwei
+  Wege: **eigene Montagepunkte, je Blickrichtung**. Sie sind an den drei
+  Rümpfen geeicht, für die das Original einen nennt — `Mitte des Rumpf-Umrisses
+  + (−25, −53)`, Streuung 1,2 bzw. 2,1 px — und liegen damit in **32 von 32**
+  Blickrichtungen auf dem Schiff. Sie stehen in `parts_index.json` unter dem
+  Namen `mount_facings_unser`, damit sie nie jemand für gelesene hält.
+- ⭐ `--schiffstau-check` sagt jetzt je Hafen, **wie breit die Fahrrinne
+  darunter ist** (»grösster Rumpf, der unterhalb durchkommt«) statt nur ja/nein.
+- ⚠⚠ **Der Schuss verliess das Schiff neben dem Schiff** (24.08.). Der
+  Mündungspunkt stand auf `Pos + Turmversatz`, gezeichnet wird der Turm aber auf
+  `Bildanker − Leinwandanker + Turmversatz`. Beim 2×2-Patrouillenboot waren das
+  22 px, beim Kreuzer — seit die Montagepunkte je Blickrichtung dazukamen —
+  über 70. Jetzt rechnet die Stelle **Zeichen für Zeichen wie der Zeichner**
+  und legt den Ursprung auf die Mitte des sichtbaren Turmbildes.
+- ⚠⚠ **`--schiff-waffe-check` hatte gar kein Urteil.** Er rechnete die Mündung
+  aus, druckte sie — und beurteilte dann `Pos`. Der gemeldete Fehler stand die
+  ganze Zeit in seiner eigenen Ausgabe. Jetzt prüft er die **Mündung** und sagt
+  BESTANDEN/DURCHGEFALLEN samt Abstand in Feldern.
+- ⚠⚠ **Der Turm eines zielenden Schiffes zeigte auf die halbe Richtung**
+  (24.08.). `AimFacing` steht immer schon in Achteln, wurde für Schiffe aber ein
+  zweites Mal halbiert — bei Zielrichtung 6 (rechts) stand der Turm auf 3
+  (oben-links). Nur der **Rückfall** auf die Rumpfrichtung braucht die
+  Umrechnung; im Kommentar stand das seit dem 23.08. sogar richtig, im Code
+  nicht.
+- ⚠ **Der Schatten gehört nicht zum Schiff** (24.08.). Die Montagepunkte kamen
+  aus der Mitte des Rumpf-Umrisses — und beim Schlachtschiff sind **1666 von
+  5060 Pixeln** Schlagschatten, alle auf einer Seite. Der Turm saß dadurch 10 px
+  zu weit rechts (beim Kreuzer nur 2 px, darum fiel es nur dort auf). Der
+  Schatten wird jetzt ausgenommen, die Eichung ist auf **(−24, −52)** neu
+  gerechnet.
+- ⭐⭐⭐ **DIE LANDMINE IST GEBAUT** (24.08.) — »Mines and traps« des Originals,
+  und der Minenleger legt statt zu schiessen. Alles Wesentliche ist gelesen:
+  der eigene Taktblock **@0x4216F0** (die Hauptschleife nennt ihn selbst, vor
+  »Buildings« und »Movement«), das Feld von **500 Plätzen zu 6 Byte ab
+  0x552E18**, das Legen **@0x421940** (nur auf eine leere Zelle oder unter eine
+  Einheit; sonst »Too many mines«), der Schuss des Legers **@0x4087D0**
+  (Nachladezähler, Klang 28/29, Munition −1) und das Auslösen: eine Einheit auf
+  der Zelle, **kein Freund** (Diplomatietafel 0x87B155), nicht die Ausnahme
+  (+0x0E = 0x44) — dann **50 Schaden**. Die 50 sind gerechnet, nicht geschätzt:
+  die Trefferroutine liest die Kennung 40000+D, und die Legestelle übergibt
+  0x9C72 = 40050.
+  ⚠ **Zwei Felder des Originals sind TOT** (+0x02, +0x03: gewürfelt und nie
+  gelesen — je eine Fundstelle im ganzen `.text` gegen zehn für das
+  Belegt-Byte); sie sind bewusst **nicht** nachgebaut.
+  ⚠ **Ein Tor ist erschlossen, nicht gelesen:** das Original verlangt
+  `word[+0x06] < 0`. Gebaut ist »die Einheit ist in Bewegung«;
+  `--minen-ohne-tor` nimmt es weg und `--minen-check` fällt damit durch.
+  ⚠ Die **Falle** (zweites Feld @0x688B58) ist gelesen, aber nicht gebaut.
+- ⭐⭐ **Und ein Befehl dazu: »Mine legen« (Auftrag 10), Umschalt+M.** Die
+  Mechanik allein half nichts — »ich weiss nicht mal wie ich eine Mine legen
+  soll«. Die Nummer ist belegt: die Befehlsnamen stehen ab **0x4FD660** im
+  **30-Byte-Raster**, und unsere seit langem eingetragenen `OrdDigIn = 7`,
+  `OrdDigOut = 8` und `OrdStop = 26` treffen darauf »Eingraben«, »Ausgraben« und
+  »Anhalten« — drei unabhängige Treffer, also ist **10 = »Mine legen«**
+  (zwischen »Gas ausspucken« 9 und »Falle legen« 11).
+  Umschalt+M, dann eine Zelle anklicken; Rechtsklick bricht ab. Ist die Zelle
+  ausser Reichweite, fährt der Leger hin — ⚠ **das und die Taste sind unsere
+  Zutat**, wie das Original den Befehl entgegennimmt, ist nicht gelesen.
+  ⚠ Ebenfalls unsere Zutat: die **eigenen** Minen sind als kleiner Punkt zu
+  sehen (fremde nicht). Ob das Original eine liegende Mine zeichnet, ist offen.
+- ⭐ Neuer Prüfstand `--minen-check` mit sechs Messungen: legen · stehende
+  Einheit löst nicht aus · fahrende verliert genau 50 · die **eigene** Mine tut
+  nichts (und der Freundzähler muss gegriffen haben — 0 Schaden allein beweist
+  nichts) · bei 500 ist Schluss · und der **Befehl** legt wirklich eine (die Mechanik zu
+  messen und den Weg dahin nicht, war genau die Lücke).
+- ⭐⭐ **Der Kreuzer trägt seine ballistische Rakete sichtbar** (24.08.), und
+  zwar **solange er Munition hat**. Bauteil 28 hat eine zweite Pose mit der
+  Rakete auf der Rampe; das Original zeigt sie nie (im ganzen Zeichenbereich
+  gibt es genau ein `imul ax,ax,0x30`, und das gehört dem Unterteil), also ist
+  das eine **bewusste Abweichung** auf Wunsch des Spielers.
+  ⚠ »Zweite Gruppe = geladen« wäre falsch gewesen: bei Turm 26 und 27 trägt
+  Gruppe 0 die Gefechtsköpfe, und bei Turm 46 hat die zweite Pose nur **6 von 8**
+  Richtungen. Nachgezählt über alle sieben Türme mit zwei Posen liegt der
+  Unterschied fünfmal im Rauschen (0,5–5 %); **nur Turm 28 hat ein echtes Paar**
+  (+18,8 %). Die Schranke steht als Zahl im Quelltext: alle acht Richtungen und
+  mindestens ein Zehntel mehr Material. Heute erfüllt das genau ein Turm.
+
+#### Abend des 24.08. — ein Prüflauf auf Mission 1, und alles hier kommt daher
+
+- ⭐⭐⭐ **Die Parteifarbe.** Einheiten tragen jetzt die Farbe ihres Besitzers:
+  **blau für den Spieler, cyan für die neutralen**, dazwischen grün, rot, gelb,
+  orange, weiss, magenta. Die Regel steht Wort für Wort im Blitter @0x4AC450:
+  `Ziel = ((Quelle − 1) >> 1) + 4·Besitzer + 1` für die Quellindizes 1…8 — acht
+  Malstufen im Bild werden vier Palettenstufen, und der Besitzer verschiebt um
+  vier. Der Besitzer ist dabei keine eigene Zahl, er **ist** der Tausenderblock
+  des Platzes im Einheitenfeld.
+  ⚠ Es gibt **fünf** Blitter dieser Familie, und der naheliegende (@0x4AC2F0,
+  Schritt acht ohne Halbierung) ist **toter Code**: welcher läuft, entscheidet
+  `byte[0x504034]`, und das steht fest auf 1.
+  ⚠⚠ **Gebäude bleiben vorerst ungefärbt** — sie werden aus einem gemeinsamen
+  Kachelatlas gestempelt, und ein Atlas je Besitzer wäre der falsche Preis für
+  0,45 % Bandpunkte.
+- ⭐⭐ **Trümmer, Explosion und Schadensqualm.** Zerstörte Fahrzeuge werfen Teile
+  (ballistisch, mit Rauchschweif), zeigen die Explosionsfolge 510…518, und
+  beschädigte Fahrzeuge qualmen **am Geschützturm** — mehr Qualm je mehr
+  Schaden, bis zur Reparatur.
+- ⭐ **Der Cyborg tut wieder etwas**: sein Missionsbefehl war falsch gelesen (die
+  4 war die Spalte, nicht die Aufgabe). Und er **verschwindet nicht mehr im
+  Boden** — fehlte das Bild einer Laufrichtung, wurde gar nichts gezeichnet,
+  während der Lebensbalken stehenblieb.
+- ⭐ **Klang:** der Infanterietod klingt nicht mehr wie »ein Gebäude wird
+  angegriffen« (77/78/79 statt 131), die Gesamtlautstärke folgt jetzt der Kurve
+  des Originals, und zu den Tutorialfenstern **spricht wieder die Frauenstimme**
+  (Sprachplatz = Textnummer + 1000).
+- ⭐ **Nebel:** Gebäude, Lebensbalken und der Angriffszeiger halten sich jetzt an
+  den Nebel — vorher konnte man auf eine Einheit zielen, die man nie aufgedeckt
+  hatte.
+- ⚠ **Die Reichweite war isometrisch halbiert** — zwei Zeilen zählten wie eine
+  Spalte. Deshalb wurde aus Entfernungen geschossen, die es nicht gibt. Der
+  Prüfstand hatte den Fehler **festgeschrieben** und musste mit korrigiert
+  werden.
+- ⭐ Wracks und Leichen liegen wieder **unter** den lebenden Einheiten; die
+  50-$-Meldung hält das Spiel nicht mehr an; das Feuer breitet sich viermal so
+  schnell aus wie bisher (zwei von drei Aufrufern waren übersehen); die
+  zerstörbaren Kartenobjekte brennen und stecken den Wald an.
+- ⚠ **Bewusste Abweichung: die Flamme.** Sie hängt jetzt **vier** Zeilen nach
+  statt einer, weil sie 79 Bildpunkte hoch ist und eine Zeile 20 — gemessen:
+  Verzug 2 verdeckt 1478 Punkte, Verzug 3 noch 44, Verzug 4 keinen. Das
+  Original schneidet die untere Flammenhälfte an; wir tauschen das gegen eine
+  ganze Flamme. `--flammen-verzug=1` stellt das Original her.
 
 ---
 

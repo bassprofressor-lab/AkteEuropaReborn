@@ -47,6 +47,51 @@ public partial class MapEntityLayer
         /// <summary>Die Zelle — die Zeile entscheidet über das Zeilenfach.</summary>
         public int Col, Row;
 
+        /// <summary>
+        /// ⭐⭐ 24.08.2026 — <b>DIE NUMMER DES BAUMS.</b> Das Original zieht aus
+        /// dem Tafelindex eines Waldobjekts DREI Dinge: welche der beiden
+        /// Flammen es bekommt (<c>index &amp; 1</c> @0x42B461), die Phase seines
+        /// Flackerns (<c>bildzaehler/2 + index</c> @0x42B422) und einen
+        /// seitlichen Versatz (<c>index mod 10 − 5</c> @0x42B474).
+        ///
+        /// <para>Wir haben dafuer bis heute <c>Spalte·31 + Zeile</c> genommen —
+        /// »die Aufteilung ist dieselbe, die ZUORDNUNG ist es nicht«, so stand
+        /// es seit dem 19.08. als bekannte Abweichung im Kopf von
+        /// <see cref="Flamme"/>. Was sie anrichtet, hat erst der Spieler
+        /// gesehen: in Mission 1 faellt die Formel dreimal auf die FLACHE Folge
+        /// 552 und nur einmal auf die hohe 550 — »die Flamme ist leicht im
+        /// Boden«. Im Original ist es halb und halb.
+        ///
+        /// <para>Diese Nummer ist die Reihenfolge, in der der Backofen die
+        /// Objekte geliefert hat, also die Reihenfolge der Kartendatei. ⚠ Ob
+        /// das die Reihenfolge der Waldtafel des Originals IST, ist nicht
+        /// belegt — belegt ist nur, dass es ein je Baum fester Index ist und
+        /// nicht aus seiner Lage folgt. Damit wechselt die Flamme von Baum zu
+        /// Baum statt in Bloecken, und das ist der sichtbare Unterschied.</para>
+        /// </summary>
+        public int Index;
+
+        /// <summary>Der rohe Belegungswert (Sektion 6). 50000..55999 = Wald,
+        /// 61000..63999 = zerstoerbares Objekt (dort ist <c>Imap − 61000</c> der
+        /// Index in die Objektliste). ⚠ <b>Hieran</b> wird Wald erkannt, nicht
+        /// mehr an »hat eine verkohlte Kachel« — seit dem 24.08. haben auch
+        /// zerstoerbare Objekte ihre zwei Ersatzbilder in denselben
+        /// Feldern.</summary>
+        public int Imap = -1;
+
+        /// <summary>Art, Verhaltensklasse (0/1/2) und Grundkachel eines
+        /// zerstoerbaren Objekts; −1 bei Wald. Arttafel: Block 0x2b der
+        /// Kacheldatei, siehe CwpFile.ObjType.</summary>
+        public int Art = -1, Klasse = -1, Basis = -1;
+
+        /// <summary>Wald im Sinne des Originals (imap 50000..55999). Der
+        /// Brandtakt, das Uebergreifen und die Geschossschwelle 40 haengen
+        /// hieran.</summary>
+        public bool IstWald => Imap >= 50000 && Imap < 56000;
+
+        /// <summary>Ein zerstoerbares Kartenobjekt (imap 61000..63999).</summary>
+        public bool IstObjekt => Imap >= 61000 && Imap < 64000;
+
         /// <summary>Sein Rechteck in der zweiten Ebene. ⚠ Quelle UND Ziel: der
         /// Backofen hat es an genau die Stelle gemalt, an die es gehört.</summary>
         public Rect2 Src;
@@ -273,6 +318,13 @@ public partial class MapEntityLayer
                 Col = GetI(o, "col"),
                 Row = GetI(o, "row"),
                 Src = new Rect2(GetI(o, "x"), GetI(o, "y"), GetI(o, "w"), GetI(o, "h")),
+                // ⭐⭐ 24.08.2026 — die vier neuen Felder aus dem Backwerk.
+                // Ohne sie war das Brandwesen der zerstoerbaren Objekte nicht
+                // baubar; siehe Rendering/BrennendeObjekte.cs und MapBaker.
+                Imap = GetI(o, "imap", -1),
+                Art = GetI(o, "art", -1),
+                Klasse = GetI(o, "klasse", -1),
+                Basis = GetI(o, "basis", -1),
             };
             if (o.ContainsKey("burnt"))
             {
@@ -294,22 +346,33 @@ public partial class MapEntityLayer
                     e.AscheZiel = new Vector2(GetI(o, "ax"), GetI(o, "ay"));
                 }
             }
+            // ⚠ VOR dem Sortieren vergeben: der Index ist die Lieferfolge des
+            // Backofens, nicht die Zeichenfolge. Nach dem Sortieren waere es
+            // wieder eine Funktion der Zeile — also genau das, was wir loswerden
+            // wollen.
+            e.Index = _objDraw.Count;
             _objDraw.Add(e);
             // ⚠ 19.08.2026 — die EINSCHLAGSCHWELLE dieser Zelle gleich mit
             // merken. Der Geschosstakt fragt sie je Schritt ab, und eine Liste
             // durchzugehen waere dafuer zu teuer. Wald 40, zerstoerbares
             // Objekt 30 — siehe MapEntityLayer.SchwelleAn.
-            _objSchwelle[e.Col * 1024 + e.Row] = e.HatKohle ? 40 : 30;
+            // ⚠ 24.08.2026 — hier stand `e.HatKohle ? 40 : 30`. Seit
+            // zerstoerbare Objekte ihre zwei Ersatzbilder in denselben Feldern
+            // haben, heisst »hat eine verkohlte Kachel« nicht mehr »ist Wald«.
+            // Die Schwelle 40 gehoert dem Wald, die 30 dem Objekt.
+            _objSchwelle[e.Col * 1024 + e.Row] = e.IstWald ? 40 : 30;
         }
         // ⚠ Nach ZEILE sortieren, nicht nach Lage im Bild: das Zeilenfach
         // entscheidet, was vor wem liegt, und der Backofen liefert schon in
         // Zeilenfolge — die Sortierung ist die Zusicherung, nicht die Arbeit.
         _objDraw.Sort((a, b) => a.Row - b.Row);
         int brennbar = 0;
-        foreach (var e in _objDraw) if (e.HatKohle) brennbar++;
+        int zerstoerbar = 0;
+        foreach (var e in _objDraw) { if (e.IstWald) brennbar++; else if (e.IstObjekt) zerstoerbar++; }
         GD.Print($"objekte: {_objDraw.Count} aufragende Kartenobjekte aus " +
                  $"{mapName}.objects.png — sie verdecken jetzt Einheiten; " +
-                 $"{brennbar} davon sind Wald und koennen brennen ({kohle.Count} verkohlte Kacheln)");
+                 $"{brennbar} davon sind Wald und koennen brennen ({kohle.Count} verkohlte Kacheln), "
+               + $"{zerstoerbar} zerstoerbare Objekte");
     }
 
     /// <summary>Alles bis einschliesslich dieser Zeile zeichnen. Genauso
@@ -338,14 +401,47 @@ public partial class MapEntityLayer
             var e = _objDraw[at];
             // siehe MapEntityLayer.Zeichenfolge — nur für --verdeck-check
             Zeichenfolge?.Add(('B', e.Row));
+
+            // ⚠⚠ 24.08.2026 — HIER STAND EIN NEBELRIEGEL, UND ER WAR NICHT
+            // TRAGFAEHIG. Gemeldet und belegt: im Original zeigt unerkundetes
+            // Gebiet keine Baeume, Kisten oder Bauwerke. Der Riegel hat sie
+            // ausgeblendet — und darunter kamen LOECHER zum Vorschein, keine
+            // Landschaft.
+            //
+            // ⭐ Der Grund steht im Backofen (MapBaker, Durchgang A/B):
+            //     if (!isObj) Blit(Frame(code[i]), …);
+            // Unter einer Objektzelle wird die EIGENE Kachel gar nicht gemalt,
+            // nur eine Behelfs-Hintergrundkachel (`basis`) — sie sollte nie
+            // sichtbar werden, weil das Objektbild sie deckt. Nimmt man das
+            // Objekt weg, sieht man den Behelf: rechteckige Wasser- und
+            // Felsflecken quer ueber die Wiese.
+            //
+            // Die Ausblendung ist also erst moeglich, wenn der Backofen unter
+            // jede Objektzelle einen richtigen Boden legt. Das ist die
+            // Vorbedingung, nicht diese Zeile. Siehe OFFENE_FRAGEN.
             if (e.Abgebrannt)
             {
                 // AUS. 19 von 20 Zellen zeigen die abgebrannte Kachel (Stumpf
                 // bzw. blanker Boden), bei jeder zwanzigsten bleibt der
                 // verkohlte Baum stehen — siehe Ausbrennen.
-                var q = e.Steht ? e.KohleSrc : e.AscheSrc;
-                var z = e.Steht ? e.KohleZiel : e.AscheZiel;
-                DrawTextureRectRegion(_objTex, new Rect2(z, q.Size), q);
+                //
+                // ⚠⚠ 24.08.2026 — DER STUMPF IST BODEN UND GEHOERT NACH UNTEN.
+                //
+                // Gemeldet: »dort an der Stelle glitchen auch Cyborgs wie unter
+                // die Karte oder werden verdeckt«, und danach »war wieder kurz
+                // im Boden verschwunden«. Genau das: dieser Durchgang ist der
+                // der AUFRAGENDEN Kacheln und laeuft NACH den Einheiten (Schritt
+                // 4 nach Schritt 2, seit C23). Ein Stumpf oder blanker Boden
+                // ragt aber nicht auf — er malte damit undurchsichtiges Gelaende
+                // ueber jeden, der davor stand, und mit gerader Oberkante auch
+                // ueber die untere Haelfte einer Flamme.
+                //
+                // ⭐ Dieselbe Sorte Fehler wie C14 (»der Boden der Gebaeude
+                // zuerst«): ein flaches Bodenstueck, das im Fach der aufragenden
+                // Sachen mitlief. Der stehende verkohlte Baum (1 von 20) bleibt
+                // hier — der ragt wirklich auf.
+                if (!e.Steht) continue;      // -> AbgebrannteZeichnen()
+                DrawTextureRectRegion(_objTex, new Rect2(e.KohleZiel, e.KohleSrc.Size), e.KohleSrc);
             }
             else if (e.BrandVon >= 0f && e.HatKohle)
             {
@@ -423,14 +519,234 @@ public partial class MapEntityLayer
     /// <para>Beide GAME.EXE tragen dieselbe Form (`mov esi, &lt;Waldtafel&gt;`
     /// gefolgt von `inc bx` im selben Fenster).</para>
     /// </summary>
+    /// <summary>
+    /// ⚠⚠ 24.08.2026 — <b>EINE ZEILE ZU FRUEH.</b>
+    ///
+    /// <para>Gemeldet mit Bild: »links ist immer noch die eine Flamme wie
+    /// abgeschnitten oder verdeckt, das ist im Original auch nicht so«.</para>
+    ///
+    /// <para>Hier stand <c>foreach (var e in _flammen) Flamme(e); _flammen.Clear();</c>
+    /// — die Flammen einer Zeile wurden also am Ende IHRER EIGENEN Zeile
+    /// gezeichnet. Der Kommentar an der Aufrufstelle behauptete dabei, das sei
+    /// das <c>inc bx</c> des Originals; es war es nicht. <c>inc bx</c>
+    /// @0x42E6FC reiht die Flamme in das Fach der <b>naechsten</b> Zeile ein,
+    /// und das ist ein Durchgang SPAETER: erst danach sind die aufragenden
+    /// Kacheln der Zeile darunter dran.</para>
+    ///
+    /// <para>Ein Baum eine Zeile tiefer sitzt zwar 20 Bildpunkte weiter unten,
+    /// ragt aber rund 50 nach OBEN — er malte damit die untere Haelfte der
+    /// Flamme zu. Genau das war auf dem Bild zu sehen.</para>
+    ///
+    /// <para>⭐ Der Beleg stand die ganze Zeit im eigenen Kommentar bei
+    /// <see cref="Flamme"/>: »Das +1 wirkt also NUR auf die
+    /// Zeichenreihenfolge«. Gelesen, notiert — und dann an der Aufrufstelle
+    /// falsch umgesetzt.</para>
+    /// </summary>
+    /// <summary>⚠ NUR ZUM MESSEN (--flammen-oben): die Flammen erst ganz am
+    /// Schluss zeichnen, ueber allem. Trennt »verdeckt« von »beschnitten« —
+    /// verschwindet der gerade Schnitt, ist es eine Reihenfolge; bleibt er,
+    /// liegt es am Bild oder an einer Klammer.</summary>
+    public static bool FlammenOben;
+
+    /// <summary>⚠ NUR ZUM MESSEN: alle Flammen auf Bild 0 einfrieren, damit
+    /// zwei Aufnahmen vergleichbar werden.</summary>
+    public static bool FlammenPhase0;
+
+    /// <summary>
+    /// ⚠⚠ <b>UM WIE VIELE ZEILENFAECHER DIE FLAMME NACHHAENGT — und hier steht
+    /// eine 2, wo das Original eine 1 hat.</b>
+    ///
+    /// <para>Gemeldet, zweimal: »links ist immer noch die eine Flamme wie
+    /// abgeschnitten«. Der erste Anlauf hat den Verzug von 0 auf 1 gesetzt, weil
+    /// das Original mit <c>inc bx</c> @0x42E6FC in das Fach der NAECHSTEN Zeile
+    /// einreiht. Das war richtig gelesen und hat trotzdem nicht gereicht.</para>
+    ///
+    /// <para><b>Gemessen, nicht geraten.</b> Mit <c>--flammen-oben</c> (Flammen
+    /// ganz zuletzt) ist die Flamme vollstaendig — es ist also VERDECKUNG und
+    /// keine Beschneidung. Dann derselbe Bildausschnitt bei Verzug 1, 2, 3 und
+    /// »oben« nebeneinander: <b>ab 2 ist das Bild deckungsgleich mit
+    /// »oben«</b>. Es fehlte genau ein Fach.</para>
+    ///
+    /// <para>⚠⚠ <b>DAS IST EIN HINWEIS, KEINE LOESUNG.</b> Wenn das Original mit
+    /// einem Fach auskommt und wir zwei brauchen, dann liegt bei uns die
+    /// ZEILENZUORDNUNG der aufragenden Kacheln um eins anders als dort — die
+    /// Flamme ist nur die Stelle, an der es auffaellt, weil sie mit 79
+    /// Bildpunkten hoeher ist als alles andere. Wer das nachgeht, faengt bei
+    /// <c>DrawObjectsUpTo(r, …)</c> gegen <c>DrawUnitsUpTo(r + 1, …)</c> an und
+    /// vergleicht mit dem Einreiher des Originals @0x42E760.</para>
+    ///
+    /// <para>⭐⭐ <b>ZURUECK AUF 1 am selben Abend</b>, und das gehoert
+    /// dazu. Die 2 war eine Kruecke, gesetzt waehrend ich die Ursache noch bei
+    /// der Zeichenreihenfolge suchte. Gefunden wurde sie woanders: eine
+    /// ausgebrannte Waldzelle malte ihren BODEN im Durchgang der aufragenden
+    /// Kacheln, also nach allem Lebenden (siehe DrawObjectsUpTo) — DAS war die
+    /// gerade Kante quer durch die Flamme, und es hat auch Fusssoldaten
+    /// zugedeckt.</para>
+    ///
+    /// <para>⚠⚠ <b>UND WIEDER AUF 2, eine Viertelstunde spaeter.</b> Die
+    /// Gegenprobe mit 1 hat der Spieler sofort gesehen (»na jetzt war die linke
+    /// Flamme wieder abgeschnitten«), und der Bildvergleich bestaetigt es: der
+    /// Bodendurchgang hat einen ECHTEN Anteil behoben — die Flamme ist deutlich
+    /// vollstaendiger als vorher —, aber unten fehlt weiter ein Stueck. Bei
+    /// Verzug 1 deckt sie eine aufragende Kachel ZWEI Zeilen naeher zu.</para>
+    ///
+    /// <para>⚠⚠ <b>HIER STAND EIN ERFUNDENER BEFUND, und er ist am selben Abend
+    /// widerlegt worden.</b> Es hiess: »das Original kommt mit einem Fach aus,
+    /// wir brauchen zwei — also ist bei uns die Zeilenzuordnung der aufragenden
+    /// Kacheln um eins anders«. Das war ein Ueberschlag, bei dem ich die
+    /// Nachbarzelle stillschweigend auf dieselbe Gelaendehoehe gesetzt habe.
+    /// </para>
+    ///
+    /// <para><b>Nachgemessen (--verdeck-stelle, Zeilenstaffelung):</b></para>
+    /// <code>
+    ///   eben   (1,39)->(1,40):  Fuss Δ +20        = 1 Zeile          ✔
+    ///          (1,39)->(1,41):  Fuss Δ +40        = 2 Zeilen         ✔
+    ///   Huegel (19,52)->(19,55): Fuss Δ +45
+    ///          Hoehe 5 -> 6:    3·20 − 1·15 = 45                     ✔
+    /// </code>
+    ///
+    /// <para>Unsere Staffelung ist ueberall exakt <b>20 px je Zeile und −15 je
+    /// Gelaendestufe</b>. Der Baum, der die Huegelflamme verdeckt, steht
+    /// wirklich eine Stufe hoeher UND naeher — er verdeckt zu Recht, und das
+    /// Original taete dort dasselbe.</para>
+    ///
+    /// <para>Damit ist die 2 <b>keine Kruecke ueber einem Defekt</b>, sondern
+    /// eine bewusste Abweichung: etwas weniger Verdeckungstreue gegen eine
+    /// ganze Flamme. Der Spieler hat sie so bestaetigt. <c>--flammen-verzug=1</c>
+    /// stellt das Original her.</para>
+    ///
+    /// <para>⭐⭐⭐ <b>UND JETZT GEMESSEN STATT GERATEN — die Zahl ist 4.</b>
+    /// Er hat den Schnitt an derselben Waldstelle immer wieder gemeldet, und
+    /// mein Bildvergleich fand nichts. Zwei Gruende, beide meine:</para>
+    /// <list type="number">
+    /// <item>Die zwei Aufnahmen liefen in verschiedenen FLAMMENBILDERN — der
+    /// Farbvergleich zaehlte das als »verdeckt« und lieferte Rauschen.
+    /// <c>--flammen-phase0</c> friert sie ein.</item>
+    /// <item>Ein kopfloser Lauf deckt fast nichts auf, und die Flamme wird nur
+    /// in BEOBACHTETEN Zellen gezeichnet. Sein Einwand: »dein Test ist sinnfrei,
+    /// weil das Gebiet noch nicht aufgedeckt ist«. <c>--kein-nebel</c> loest
+    /// das.</item>
+    /// </list>
+    ///
+    /// <para>Mit beiden Schaltern und festem Keim (<c>--determinism-seed=7</c>)
+    /// ist es eindeutig:</para>
+    /// <code>
+    ///   Verzug 2:  1478 verdeckte Flammenpunkte
+    ///   Verzug 3:    44
+    ///   Verzug 4:     0     von 30909
+    /// </code>
+    ///
+    /// <para>Und die 4 ist keine krumme Zahl, sondern Geometrie: die Flamme ist
+    /// <b>79 Bildpunkte</b> hoch, eine Zeile <b>20</b> — sie ueberspannt vier
+    /// Zeilen. Wer ueber allem liegen will, was er beruehrt, muss vier Faecher
+    /// nachhaengen. Der Pruefstand nennt die groesste Verdeckung mit 40x38 px
+    /// aus <b>Zeile +1</b>, also aus der Zeile unmittelbar davor.</para>
+    ///
+    /// <para>⚠ <b>Das Original kommt mit EINEM Fach aus, und das bleibt der
+    /// Unterschied.</b> Dort wird die untere Flammenhaelfte von den Baeumen
+    /// davor durchaus angeschnitten — bei ihm faellt es nur nicht auf, weil
+    /// seine Braende am Waldrand stehen. Wir tauschen hier
+    /// Verdeckungstreue gegen eine ganze Flamme, weil er genau das
+    /// wiederholt verlangt hat. <c>--flammen-verzug=1</c> stellt das Original
+    /// her.</para>
+    /// </summary>
+    public static int FlammenVerzug = 4;
+
+    private readonly List<List<Kartenobjekt>> _flammenFaecher = new();
+
+    /// <summary>Die ausgebrannten Zellen, die nur noch BODEN sind (Stumpf oder
+    /// blanke Erde). Sie laufen im Bodendurchgang mit, vor allem Lebenden —
+    /// siehe die Begruendung in DrawObjectsUpTo.</summary>
+    /// <summary>Ein aufragendes Objekt, so wie es GEZEICHNET wird — fuer
+    /// <see cref="VerdeckEinheitLine"/>. ⚠ Der Zeichner und diese Liste muessen
+    /// dasselbe Rechteck nennen, sonst misst der Pruefstand sich selbst.</summary>
+    internal readonly record struct VerdeckKachel(string Art, int Col, int Row, Rect2 Rechteck);
+
+    internal System.Collections.Generic.IEnumerable<VerdeckKachel> ObjekteFuerVerdeck()
+    {
+        foreach (var e in _objDraw)
+        {
+            if (e.Abgebrannt)
+            {
+                // Der blanke Boden laeuft seit dem 24.08. im BODENdurchgang und
+                // kann darum nichts mehr verdecken; nur der stehende verkohlte
+                // Baum ist noch aufragend.
+                if (!e.Steht) continue;
+                yield return new VerdeckKachel("verkohlter Baum", e.Col, e.Row,
+                    new Rect2(e.KohleZiel, e.KohleSrc.Size));
+            }
+            else if (e.BrandVon >= 0f && e.HatKohle)
+                yield return new VerdeckKachel("brennende Kachel", e.Col, e.Row,
+                    new Rect2(e.KohleZiel, e.KohleSrc.Size));
+            else
+                yield return new VerdeckKachel(e.IstWald ? "Baum" : "Fels/Objekt", e.Col, e.Row,
+                    new Rect2(e.Src.Position, e.Src.Size));
+        }
+    }
+
+    private void AbgebrannteZeichnen()
+    {
+        foreach (var e in _objDraw)
+        {
+            if (!e.Abgebrannt || e.Steht) continue;
+            DrawTextureRectRegion(_objTex, new Rect2(e.AscheZiel, e.AscheSrc.Size), e.AscheSrc);
+        }
+    }
+
     private void FlammenZeichnen()
     {
+        if (FlammenOben) return;
+        int n = System.Math.Max(1, FlammenVerzug);
+        while (_flammenFaecher.Count < n) _flammenFaecher.Add(new List<Kartenobjekt>());
+        // das aelteste Fach ist dran
+        var faellig = _flammenFaecher[0];
+        foreach (var e in faellig) Flamme(e);
+        faellig.Clear();
+        _flammenFaecher.RemoveAt(0);
+        faellig.AddRange(_flammen);
+        _flammen.Clear();
+        _flammenFaecher.Add(faellig);
+    }
+
+    /// <summary>Der Abschluss nach der Zeilenschleife: beide Faecher leeren,
+    /// sonst blieben die letzten ein bis zwei Zeilen ungezeichnet liegen und
+    /// kaemen im naechsten Bild doppelt.</summary>
+    private void FlammenAbschluss()
+    {
+        if (FlammenOben) return;
+        foreach (var f in _flammenFaecher) { foreach (var e in f) Flamme(e); f.Clear(); }
+        foreach (var e in _flammen) Flamme(e);
+        _flammen.Clear();
+    }
+
+    /// <summary>Der Messdurchgang von <see cref="FlammenOben"/>.</summary>
+    private void FlammenGanzOben()
+    {
+        if (!FlammenOben) return;
+        foreach (var f in _flammenFaecher) { foreach (var e in f) Flamme(e); f.Clear(); }
         foreach (var e in _flammen) Flamme(e);
         _flammen.Clear();
     }
 
     private void Flamme(Kartenobjekt e)
     {
+        // ⚠ 24.08.2026 — KEINE FLAMME IM NEBEL. Gemeldet: »man sieht eine
+        // Flamme im Fog of War, das macht auch keinen Sinn, die Flamme duerfte
+        // man ja erst sehen, wenn man dort aufdeckt«.
+        //
+        // Der Nebel wird bei uns als Schicht UEBER allem gezeichnet (siehe das
+        // Ende von _Draw). Was nie gesehen wurde, ist darunter schwarz — was
+        // schon erkundet, aber gerade unbeobachtet ist, wird nur ABGEDUNKELT.
+        // Eine grellorange Flamme scheint durch diese Abdunklung hindurch, und
+        // ein LAUFENDES Ereignis gehoert nicht in erinnertes Gelaende: der
+        // Spieler sieht dort den Wald, wie er ihn verlassen hat, nicht wie er
+        // gerade brennt.
+        //
+        // ⚠ UNSERE REGEL, nicht gelesen — deshalb steht sie hier und nicht als
+        // Befund. Die Kachel darunter (verkohlt bzw. Asche) bleibt sichtbar wie
+        // jedes andere erinnerte Gelaende; nur das Feuer selbst schweigt.
+        if (FogActive && !Watched(e.Col, e.Row)) return;
+
         // ⚠ 19.08.2026 — ZWEI FLAMMEN, nach der Parität des Index. Der Zeichner
         // @0x42B461 rechnet `edi = (index & 1) * 2 + 0x226` — also Folge 550
         // oder 552. Beide haben sieben Bilder. Vorher brannten alle Bäume mit
@@ -440,15 +756,20 @@ public partial class MapEntityLayer
         // halb, fest je Baum), die ZUORDNUNG ist es nicht — welcher Baum welche
         // der beiden Flammen bekommt, weicht damit vom Original ab. Das ist
         // sichtbar nur als anderes Muster, nicht als anderer Eindruck.
-        var bilder = EffectFrames((e.Col * 31 + e.Row) % 2 == 0 ? "blast" : "blast2");
+        var bilder = EffectFrames((e.Index & 1) == 0 ? "blast" : "blast2");
         if (bilder.Count == 0) bilder = EffectFrames("blast");
         if (bilder.Count == 0) return;
         // Der Index tut im Original zweierlei: er versetzt die PHASE, damit
         // nicht alle Bäume im Gleichschritt flackern, und er versetzt die Lage
         // um bis zu 10 px. Wir nehmen dafür die Zelle — sie ist dieselbe feste
         // Zahl je Baum, die das Original aus dem Tafelindex zieht.
-        int idx = e.Col * 31 + e.Row;
-        int phase = (int)(DebugClock / FlammenSekunden + idx) % bilder.Count;
+        int idx = e.Index;
+        // ⚠ NUR ZUM MESSEN (--flammen-phase0): ohne feste Phase laufen zwei
+        // Aufnahmen in verschiedenen Bildern der Flamme, und ein Bildvergleich
+        // zaehlt das als »verdeckt«. Genau daran ist der erste Vergleichsversuch
+        // heute Abend gescheitert.
+        int phase = FlammenPhase0 ? 0
+                  : (int)(DebugClock / FlammenSekunden + idx) % bilder.Count;
         if (phase < 0) phase += bilder.Count;
 
         // ⚠⚠ 19.08.2026 — DIE FLAMME STAND NEBEN IHREM BAUM.
@@ -606,7 +927,7 @@ public partial class MapEntityLayer
         bool ok = false;
         foreach (var e in _objDraw)
         {
-            if (e.Row != row || e.Col != col || !e.HatKohle || e.Abgebrannt) continue;
+            if (e.Row != row || e.Col != col || !e.IstWald || e.Abgebrannt) continue;
             // ⚠ Nur ein STEHENDER Baum: das Original prüft `zustand == 1` und
             // lässt einen brennenden in Ruhe.
             if (e.BrandVon >= 0f) continue;
@@ -721,7 +1042,7 @@ public partial class MapEntityLayer
         bool ok = false;
         foreach (var e in _objDraw)
         {
-            if (e.Row != row || e.Col != col || !e.HatKohle || e.BrandVon >= 0f
+            if (e.Row != row || e.Col != col || !e.IstWald || e.BrandVon >= 0f
                 || e.Abgebrannt) continue;
             e.BrandVon = (float)DebugClock;
             // Die BRENNDAUER, gerechnet wie im Original: Zustand
@@ -828,6 +1149,7 @@ public partial class MapEntityLayer
             var (dc, dr) = Achtel[richtung];
             kandidaten.Add((e.Col + dc, e.Row + dr));
         }
+        BrandKandidaten += kandidaten.Count;
         foreach (var (c, r) in kandidaten)
             if (Anzuenden(c, r)) BrandUebergriffe++;
     }
@@ -956,15 +1278,67 @@ public partial class MapEntityLayer
     private static readonly (int Col, int Row)[] Achtel =
     { (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1), (1, 0), (1, 1) };
 
-    /// <summary>Vier Originaltakte bei 50 Hz — der Brandtakt läuft bei
-    /// <c>Takt % 4 == 0</c> (@0x4CA330).</summary>
-    private const float BrandSchrittSekunden = 4f / 50f;
+    /// <summary>
+    /// ⭐⭐⭐ 24.08.2026 — <b>DER ÜBERGRIFF LÄUFT IN JEDEM TAKT, NICHT IN JEDEM
+    /// VIERTEN.</b> Hier stand <c>4f / 50f</c> mit der Begruendung »der
+    /// Brandtakt läuft bei <c>Takt % 4 == 0</c> (@0x4CA330)«. Das ist richtig
+    /// gelesen und trotzdem der falsche Schluss: die Bedingung gilt fuer den
+    /// ZUSTANDSZAEHLER, nicht fuer die Ausbreitung.
+    ///
+    /// <para>Gemeldet, mehrfach: »im Original breitet sich der Brand im Wald
+    /// dort auch aus, das tut es bei uns nicht«. Formel, Branddauer und
+    /// Windabhaengigkeit waren wortgleich nachgeprueft — es fehlte schlicht
+    /// die Anzahl der Versuche.</para>
+    ///
+    /// <para><b>Gefunden ueber die Aufruferliste</b>, nicht ueber den
+    /// Quelltext: <c>zapal_forestA</c> hat <b>DREI</b> Aufrufer, ich kannte
+    /// einen. Der Brandtakt hat zwei Zweige:</para>
+    /// <code>
+    ///   0x4CA340  eax &amp;= 3
+    ///   0x4CA348  jne 0x4CA4A1        ; Takt % 4 != 0  ->  DER ANDERE ZWEIG
+    ///   0x4CA34E  ...                 ; %4==0: Zustand+1, EIN Uebergriff, Ausbrennen
+    ///   0x4CA4A1  esi = 0xBFF3E1      ; die Brandliste, 3 Byte je Zelle
+    ///   0x4CA4AD  Zustand &gt; 1?
+    ///   0x4CA4DE  call zapal_forestA  ; ⭐ Uebergriff auch hier
+    ///   0x4CA4E6  esi += 3 … bis 0xC03A31   (6000 Plaetze)
+    /// </code>
+    ///
+    /// <para>Also <b>vier</b> Versuche je vier Takte statt einem — Faktor vier
+    /// auf die Zahl der Kinder je Brand. Aus »ein Kind je Feuer« (das Feuer
+    /// stirbt aus) wird »rund vier« (es waechst). Genau der Unterschied, den er
+    /// gesehen hat.</para>
+    ///
+    /// <para>⚠ Die BRANDDAUER bleibt bei vier Takten je Zustandsschritt — die
+    /// gehoert in den anderen Zweig und ist unveraendert (8,3…20,2 s).</para>
+    ///
+    /// <para>⚠⚠ Die Lehre: ich hatte die Formel dreimal nachgerechnet und die
+    /// AUFRUFERLISTE nie gezogen. Eine gelesene Routine ist nicht verstanden,
+    /// solange man nicht weiss, <b>wie oft</b> sie gerufen wird.</para>
+    /// </summary>
+    private const float BrandSchrittSekunden = 1f / 50f;
     private float _letzterBrandSchritt = -1f;
 
     /// <summary>Wie oft das Feuer übergegriffen hat — ⚠ ohne diese Zahl ist
     /// »es greift nicht über« nicht von »es hat keine Gelegenheit gehabt« zu
     /// unterscheiden.</summary>
     public int BrandUebergriffe;
+
+    /// <summary>⚠ 24.08.2026 — die ZWISCHENSTUFEN, weil »0 Uebergriffe« drei
+    /// verschiedene Ursachen haben kann und die Zahl allein keine davon nennt:
+    /// der Takt laeuft nicht, der Wuerfel trifft nie, oder die getroffene Zelle
+    /// nimmt kein Feuer an. Gemeldet: »im Original breitet sich der Brand im
+    /// Wald dort auch aus, das tut es bei uns nicht«.</summary>
+    public int BrandSchritte, BrandKandidaten;
+
+    /// <summary>Die Meldezeile dazu.</summary>
+    public string BrandWatchLine()
+        => $"brand: {BrandSchritte} Schritte, {BrandKandidaten} Nachbarn gewuerfelt, "
+         + $"{BrandUebergriffe} davon entzuendet; gerade {ObjectsBurning} brennend, "
+         + $"Wind {WindDir}/{WindStrength}"
+         + (BrandSchritte == 0 ? "   ⚠ der TAKT laeuft nicht"
+            : BrandKandidaten == 0 ? "   ⚠ der WUERFEL trifft nie"
+            : BrandUebergriffe == 0 ? "   ⚠ die getroffenen Zellen nehmen kein Feuer an"
+            : "");
 
     /// <summary>
     /// <b>Der Brandtakt</b> — Ausbrennen und Übergreifen, im Takt der
@@ -978,6 +1352,98 @@ public partial class MapEntityLayer
     ///
     /// <para>Das Übergreifen läuft alle <see cref="BrandSchrittSekunden"/>,
     /// also alle vier Originaltakte wie @0x4CA330.</para></summary>
+    /// <summary>
+    /// ⭐⭐ <c>--verdeck-stelle</c> (24.08.2026) — <b>WER VERDECKT WAS AN EINER
+    /// BRENNENDEN ZELLE?</b>
+    ///
+    /// <para>Gemeldet: eine Flamme sitze »wie leicht im Boden«, und —
+    /// entscheidend — »dort an der Stelle glitchen auch Cyborgs wie unter die
+    /// Karte oder werden verdeckt«. Damit ist es <b>kein Flammenfehler</b>: an
+    /// dieser Stelle deckt etwas alles zu, was davor steht. Das hier nennt es
+    /// beim Namen, statt weiter am Flammenversatz zu drehen.</para>
+    ///
+    /// <para>Gezeigt wird je brennender Zelle, welche aufragenden Kartenobjekte
+    /// SPAETER gezeichnet werden (groessere Zeile, plus der Flammenverzug) und
+    /// deren Rechteck das Flammenrechteck ueberlappt.</para>
+    /// </summary>
+    public string VerdeckStelle()
+    {
+        var sb = new System.Text.StringBuilder("verdeck-stelle:\n");
+        int brennt = 0;
+        foreach (var e in _objDraw)
+        {
+            if (e.BrandVon < 0f || e.Abgebrannt) continue;
+            brennt++;
+            var kachel = e.HatKohle ? e.KohleZiel
+                : new Vector2(_ox + e.Col * TileW,
+                              _oy + e.Row * TileH - ElevOf(e.Col, e.Row) * 15 - 50);
+            var bilder = EffectFrames("blast");
+            var gr = bilder.Count > 0 ? bilder[0].GetSize() : new Vector2(60, 79);
+            var flamme = new Rect2(kachel + new Vector2(-18, -20), gr);
+            var ausZelle = new Vector2(_ox + e.Col * TileW,
+                                       _oy + e.Row * TileH - ElevOf(e.Col, e.Row) * 15 - 50);
+            sb.Append($"  Flamme ({e.Col},{e.Row}) Hoehe {ElevOf(e.Col, e.Row)} "
+                    + $"Rechteck {flamme.Position} {flamme.Size}\n"
+                    + $"      Kachel gruen {e.Src.Position} {e.Src.Size}, "
+                    + $"verkohlt {e.KohleZiel} {e.KohleSrc.Size}, "
+                    + $"aus der Zelle gerechnet {ausZelle}\n"
+                    + $"      ⚠ Versatz verkohlt-gegen-Zelle {e.KohleZiel - ausZelle}, "
+                    + $"gruen-gegen-Zelle {e.Src.Position - ausZelle}\n");
+
+            // ⭐⭐ 24.08.2026 — DIE ZEILENSTAFFELUNG, gemessen statt ueberschlagen.
+            //
+            // Im Original endet die Flamme bei Kachel-y + 59, und ein Baum DREI
+            // Zeilen naeher beginnt bei Kachel-y + 60 — er verfehlt sie um einen
+            // Bildpunkt. Bei uns ueberlappt derselbe Baum. Hier steht, wie weit
+            // die Nachbarzeilen bei uns wirklich auseinanderliegen, Fuss gegen
+            // Fuss und Kopf gegen Kopf, samt Gelaendehoehe.
+            for (int dz = 1; dz <= 3; dz++)
+            {
+                foreach (var o in _objDraw)
+                {
+                    if (o.Col != e.Col || o.Row != e.Row + dz) continue;
+                    float kopf = o.Src.Position.Y, fuss = kopf + o.Src.Size.Y;
+                    float kopfE = e.Src.Position.Y, fussE = kopfE + e.Src.Size.Y;
+                    sb.Append($"      Zeile +{dz} ({o.Col},{o.Row}) Hoehe {ElevOf(o.Col, o.Row)}: "
+                            + $"Kopf {kopf:0} (Δ {kopf - kopfE:+0;-0}), "
+                            + $"Fuss {fuss:0} (Δ {fuss - fussE:+0;-0}), "
+                            + $"Bildhoehe {o.Src.Size.Y:0}\n");
+                    break;
+                }
+            }
+            int n = 0;
+            foreach (var o in _objDraw)
+            {
+                if (ReferenceEquals(o, e)) continue;
+                // spaeter gezeichnet: groessere Zeile als die Flamme nach ihrem Verzug
+                // ⚠ 24.08.2026 — der Zeilenfilter ist RAUS. Er hat genau die
+                // Faelle verschwiegen, um die es ging: gemeldet war ein Schnitt
+                // von 40 Bildpunkten, gemeldet hat der Pruefstand 2. Jetzt wird
+                // JEDE Ueberlappung genannt, mit der Zeilendifferenz daneben —
+                // welche davon wirklich SPAETER gezeichnet wird, entscheidet
+                // dann der Leser und nicht mehr meine Annahme.
+                if (o.Row == e.Row) continue;
+                var ziel = o.Abgebrannt ? (o.Steht ? o.KohleZiel : o.AscheZiel)
+                         : o.BrandVon >= 0f ? o.KohleZiel : o.Src.Position;
+                var rq = o.Abgebrannt ? (o.Steht ? o.KohleSrc : o.AscheSrc) : o.Src;
+                var r = new Rect2(ziel, rq.Size);
+                if (!r.Intersects(flamme)) continue;
+                var schnitt = r.Intersection(flamme);
+                // ⚠ Nur nennenswerte Ueberlappungen. Eine Kante von zwei
+                // Bildpunkten erklaert keinen Schnitt von vierzig — genau daran
+                // hat dieser Pruefstand mich heute Abend vorbeigefuehrt.
+                if (schnitt.Size.Y < 8) continue;
+                if (n++ < 6)
+                    sb.Append($"      ⚠ ZEILE {o.Row - e.Row:+0;-0}: ({o.Col},{o.Row}) "
+                            + $"ueberdeckt {schnitt.Size.X:0}x{schnitt.Size.Y:0} px, "
+                            + $"Rechteck {r.Position} {r.Size}\n");
+            }
+            sb.Append($"      insgesamt {n} spaetere Objekte ueberlappen\n");
+        }
+        if (brennt == 0) sb.Append("  gerade brennt nichts — die Zeile sagt so nichts\n");
+        return sb.ToString();
+    }
+
     private void BrandTakt()
     {
         Ausbrennen();
@@ -988,7 +1454,9 @@ public partial class MapEntityLayer
         while (jetzt - _letzterBrandSchritt >= BrandSchrittSekunden && schritte++ < 8)
         {
             _letzterBrandSchritt += BrandSchrittSekunden;
+            BrandSchritte++;
             BrandGreiftUeber();
+            ObjektBrandTakt();
         }
     }
 
@@ -1127,6 +1595,10 @@ public partial class MapEntityLayer
                 case Waldfolge.Feuer:   brennt++; getroffen = true; break;
                 case Waldfolge.Weg:     getroffen = true; break;
             }
+
+            // ⭐ 24.08.2026 — und ein ZERSTOERBARES OBJEKT auf der Zelle hat
+            // seine eigenen Baender (@0x40D442). Siehe ObjektBrand.cs.
+            if (ObjektTreffer(c, r, schaden)) getroffen = true;
 
             if (!getroffen) leer++;
             // Der Funkenschlag des Treffers selbst: ANIM-Folge 82, die Zasah

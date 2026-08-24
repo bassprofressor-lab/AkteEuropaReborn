@@ -393,7 +393,27 @@ public sealed partial class HelpWindow : PanelContainer
         if (!PauseWhileOpen || !PauseErlaubt()) return;
         var tree = host.GetTree();
         if (tree == null) return;
-        bool willst = Open.Count > 0;
+
+        // ⭐⭐ 24.08.2026 — NUR ECHTE HILFEFENSTER HALTEN AN.
+        //
+        // Gemeldet: »wenn man die Meldung mit den 50$ bekommt, pausiert das
+        // Spiel. Bei diesen Meldungen im Original pausiert es nicht, man klickt
+        // eben nur das Fenster weg«.
+        //
+        // Er hat recht, und der Grund steht in der Bauart: ein Hilfefenster
+        // kommt aus HELPG.DAT und hat dort ACHT Bytes im Satz — eines davon ist
+        // die Pausenfahne (welches, ist ungelesen, siehe PauseWhileOpen). Die
+        // Geldmeldung dagegen ist ein zur LAUFZEIT gebauter String
+        // (»Einkommen: N«, @0x4C3AD4 setzt ihn aus dem Text 0x4FB6C8 und der
+        // Zahl zusammen). Sie hat gar keinen Satz und kann darum auch keine
+        // Pausenfahne tragen.
+        //
+        // ⚠ Solche Fenster tragen bei uns <c>Id == -1</c> (ShowText). Sie
+        // zaehlen hier nicht mit — ein Hilfefenster haelt weiter an, eine
+        // Laufzeitmeldung nicht.
+        bool willst = false;
+        foreach (var w in Open)
+            if (w.Id >= 0) { willst = true; break; }
         if (willst) { _hatAngehalten = true; tree.Paused = true; }
         else if (_hatAngehalten) { _hatAngehalten = false; tree.Paused = false; }
     }
@@ -456,6 +476,46 @@ public sealed partial class HelpWindow : PanelContainer
     /// unterscheiden.</summary>
     public static int SuppressedCount { get; private set; }
 
+    /// <summary>
+    /// ⭐⭐⭐ 24.08.2026 — <b>DIE STIMME ZUM HILFEFENSTER.</b>
+    ///
+    /// <para>Gemeldet: »am Anfang bei den Tutorial-Popups spricht normalerweise
+    /// eine Frau dazu, also eine Voice-Datei vermutlich«.</para>
+    ///
+    /// <para><b>Gelesen</b>, und zwar in <c>show_text2</c> selbst — derselben
+    /// Routine, deren Riegel wir am 21.08. schon nachgebaut haben (@0x443340
+    /// setzt <c>byte[0x87AE00 + id] = 1</c>). Elf Befehle davor:</para>
+    /// <code>
+    ///   0x44330C  al = byte[0x8934C4]      ; Schalter: Sprache an?
+    ///   0x443313  je  raus
+    ///   0x443315  ax = si                  ; die TEXTNUMMER
+    ///   0x44331A  add ax, 0x3E8            ; + 1000
+    ///   0x443323  call &lt;Klang&gt;, Modus 0
+    /// </code>
+    /// <para>Und ein zweites Mal @0x44358E mit der Grenze: <c>cmp si, 0x226</c>
+    /// — unter <b>550</b> gilt <c>+1000</c>, darueber die Nummer selbst.</para>
+    ///
+    /// <para>⭐ <b>Die Probe an der Klangbank:</b> von unseren 267 Hilfetexten
+    /// (Nummern 1…533) haben <b>224</b> einen Klang auf <c>1000 + Nummer</c>,
+    /// und umgekehrt hat in 1001…1533 nur ein einziger Klang keinen Text. Das
+    /// ist keine Zuordnung, die zufaellig passt.</para>
+    ///
+    /// <para>⚠ Ueber <see cref="Audio.SoundBankPlayer.PlayVoice"/>, nicht ueber den
+    /// Kanalvorrat: die Stuecke laufen 4 bis 29 Sekunden, und im Vorrat
+    /// schnitte sie die naechste Explosion ab. Ein zweites Fenster loest das
+    /// erste ab — dasselbe, was der Vorspann tut.</para>
+    ///
+    /// <para>⚠ Der Schalter <c>byte[0x8934C4]</c> ist bei uns
+    /// <see cref="Settings.Announcements"/>. Dass es DERSELBE ist, ist nicht
+    /// gelesen — es ist der einzige Sprachschalter, den wir haben.</para>
+    /// </summary>
+    private static void Stimme(int id)
+    {
+        if (!Settings.Announcements || id < 0) return;
+        int platz = id < 550 ? id + 1000 : id;
+        Audio.SoundBankPlayer.PlayVoice(platz);
+    }
+
     public static HelpWindow? Show(Node host, int id, int ox, int oy)
     {
         if (Suppressed) { SuppressedCount++; return null; }
@@ -487,6 +547,7 @@ public sealed partial class HelpWindow : PanelContainer
         // wieder verschwindet, OHNE weggeklickt zu werden — beim Missionsende
         // etwa. Vorher kam es danach wieder, jetzt nicht mehr.
         Dismissed.Add(id);
+        Stimme(id);
         Anhalten(host);
         return w;
     }

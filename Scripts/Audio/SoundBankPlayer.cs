@@ -169,7 +169,11 @@ public static class SoundBankPlayer
         var p = Free();
         if (p == null) return;
         p.Stream = stream;
-        p.VolumeDb = volumeDb + UI.Settings.SfxVolumeDb;
+        // ⭐ 24.08.2026 — die Lautstaerkekurve des Originals, nicht mehr
+        // Regler-Dezibel obendrauf. `volumeDb` ist ab hier die
+        // ENTFERNUNGSDAEMPFUNG; was daraus wird, rechnet Settings.MixDb
+        // (@0x4049A8..0x404A08). Wir lagen rund zehn Dezibel zu laut.
+        p.VolumeDb = UI.Settings.MixDb(volumeDb);
         SetPan(p, pan);
         p.Play();
     }
@@ -385,7 +389,7 @@ public static class SoundBankPlayer
             MixRate = rate,
             Stereo = false,
         };
-        p.VolumeDb = volumeDb + UI.Settings.SfxVolumeDb;   // wie in Play()
+        p.VolumeDb = UI.Settings.MixDb(volumeDb);   // wie in Play()
         p.Play();
         return p;
     }
@@ -405,7 +409,7 @@ public static class SoundBankPlayer
         if (tree?.Root == null) return false;
         _voice = new AudioStreamPlayer { Bus = "Master", Stream = stream };
         tree.Root.AddChild(_voice);
-        _voice.VolumeDb = volumeDb + UI.Settings.SfxVolumeDb;
+        _voice.VolumeDb = UI.Settings.MixDb(volumeDb);
         _voice.Play();
         return true;
     }
