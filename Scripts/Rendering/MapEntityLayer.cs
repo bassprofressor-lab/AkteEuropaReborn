@@ -15069,6 +15069,49 @@ public partial class MapEntityLayer : Node2D
         }
 
 
+        // ---- IST DIE SCHATTENKACHEL BEFAHRBAR? -----------------------------
+        // Gefragt am 26.08.2026: "koennen wir ausschliessen, dass diese Kachel
+        // nicht befahrbar ist?" Eine beilaeufige Beobachtung aus einer Spur
+        // taugt dafuer nicht - hier wird es GEFRAGT, und zwar auf allen drei
+        // Ebenen, auf denen es scheitern koennte: Bodenklasse, Begehbarkeit,
+        // und ob die WEGSUCHE wirklich hinfuehrt.
+        if (_nav != null && Patterns != null)
+        {
+            var btp = Patterns.GetBuildingType(b.BType);
+            var anim2 = BuildingAnimCells(b);
+            for (int dx = 0; dx < Import.CwpFile.PatternWidth; dx++)
+            {
+                int cd = BuildingCellTile(btp.FirstPattern, 0, dx, 0, anim2);
+                if (cd == 0 || !Patterns.TryGetTile(cd, out _)) continue;
+                int c = b.Col + dx, r = b.Row;
+                bool koerper = IstKoerperzelle(c, r);
+                bool begehbar = _nav.IsWalkable(c, r, Simulation.NavGrid.MoveClass.Vehicle);
+                bool frei = _nav.IsFree(c, r, Simulation.NavGrid.MoveClass.Vehicle, -1);
+                // Weg von einer Zelle, die sicher frei ist: zwei Spalten rechts.
+                var von = new Vector2I(c + 2, r);
+                var weg = _nav.FindPath(von, new Vector2I(c, r),
+                                        Simulation.NavGrid.MoveClass.Vehicle, -1);
+                sb.Append($"  SCHATTENKACHEL ({c},{r}): Boden {_nav.GroundAt(c, r)}, "
+                        + $"Rumpf {(koerper ? "JA" : "nein")}, begehbar {(begehbar ? "ja" : "NEIN")}, "
+                        + $"frei {(frei ? "ja" : "NEIN")}, Weg von ({von.X},{von.Y}): "
+                        + (weg == null || weg.Count == 0 ? "KEINER" : $"{weg.Count} Schritte")
+                        + "\n");
+            }
+            // Nullmodell: eine RUMPFZELLE darf all das NICHT koennen. Ohne sie
+            // hiesse "befahrbar" nur, dass die Frage immer ja sagt.
+            int kc2 = b.Col + 1, kr2 = b.Row + 1;
+            var wegK = _nav.FindPath(new Vector2I(kc2 + 3, kr2), new Vector2I(kc2, kr2),
+                                     Simulation.NavGrid.MoveClass.Vehicle, -1);
+            sb.Append($"  Nullmodell Rumpfzelle ({kc2},{kr2}): Rumpf "
+                    + $"{(IstKoerperzelle(kc2, kr2) ? "JA" : "nein")}, begehbar "
+                    + $"{(_nav.IsWalkable(kc2, kr2, Simulation.NavGrid.MoveClass.Vehicle) ? "JA - FALSCH" : "nein (richtig)")}, "
+                    + $"Weg dorthin: {(wegK == null || wegK.Count == 0 ? "KEINER" : $"{wegK.Count} Schritte, endet auf ({wegK[wegK.Count - 1].X},{wegK[wegK.Count - 1].Y})")}"
+                    + (wegK != null && wegK.Count > 0
+                       && wegK[wegK.Count - 1].X == kc2 && wegK[wegK.Count - 1].Y == kr2
+                       ? "   ⚠⚠ DER WEG ENDET IN DER GESPERRTEN ZELLE"
+                       : "   (haelt davor - richtig)") + "\n");
+        }
+
         sb.Append($"  Summe: {bedienbar} von {(b.FootW + 2) * (b.FootH + 2)} Zellen betanken, "
                 + $"{befahrbar} sind befahrbar\n");
         // Nullmodell: eine Zelle WEIT weg darf niemals betanken. Ohne sie
