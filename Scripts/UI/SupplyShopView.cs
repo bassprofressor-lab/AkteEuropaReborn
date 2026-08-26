@@ -155,6 +155,17 @@ public sealed partial class SupplyShopView : Control
         => new(x * Scale, y * Scale,
                wTiles * WindowChrome.Cell * Scale, WindowChrome.Cell * Scale);
 
+    /// <summary>Das Feld eines Kaufknopfes in EIGENEN Punkten — dieselbe
+    /// Rechnung, die <see cref="Hit"/> benutzt.
+    ///
+    /// <para>⚠ Es gibt sie fuer den Pruefstand, und zwar ueber
+    /// <see cref="Box"/> statt ueber eine zweite Rechnung: ein Pruefstand, der
+    /// sich die Knopflage selbst ausrechnet, trifft immer — auch dann, wenn der
+    /// Zeichner woanders malt.</para></summary>
+    public Rect2 Knopffeld(int i)
+        => i >= 0 && i < ColumnX.Length ? Box(ColumnX[i], ButtonY, ButtonTiles)
+                                        : new Rect2();
+
     /// <summary>Welcher Knopf liegt unter dem Zeiger? 0/1 Spalte, 2 Kreuz,
     /// -1 keiner.</summary>
     private int Hit(Vector2 p)
@@ -165,8 +176,25 @@ public sealed partial class SupplyShopView : Control
         return -1;
     }
 
+    /// <summary>Wieviele Mausereignisse dieses Fenster ueberhaupt GESEHEN hat,
+    /// und welcher Knopf zuletzt getroffen wurde. ⚠ Nur fuer den Pruefstand —
+    /// ohne diese zwei Zahlen laesst sich "der Klick kauft nicht" nicht von
+    /// "der Klick kommt gar nicht an" unterscheiden, und das sind zwei ganz
+    /// verschiedene Fehler.</summary>
+    public int GesehenKlicks { get; private set; }
+    public int LetzterTreffer { get; private set; } = -99;
+    public Vector2 LetzterPunkt { get; private set; } = new(-1, -1);
+    public Rect2 LetzterKasten { get; private set; }
+
     public override void _GuiInput(InputEvent @event)
     {
+        if (@event is InputEventMouseButton) GesehenKlicks++;
+        if (WindowManager.KlickProtokoll && @event is InputEventMouseButton pb
+            && pb.ButtonIndex == MouseButton.Left)
+            GD.Print($"klick-log: POSTEN sieht {(pb.Pressed ? "DRUCK " : "LOS   ")} "
+                   + $"oertlich {pb.Position} | Fenster global {GetGlobalRect()} "
+                   + $"| Skala {Scale} | Knopf0 {Knopffeld(0)} Knopf1 {Knopffeld(1)} "
+                   + $"| Treffer {Hit(pb.Position)}");
         if (@event is not InputEventMouseButton mb
             || mb.ButtonIndex != MouseButton.Left) return;
         var s = _stand;
@@ -181,6 +209,9 @@ public sealed partial class SupplyShopView : Control
         }
 
         int auf = Hit(mb.Position);
+        LetzterTreffer = auf;
+        LetzterPunkt = mb.Position;
+        LetzterKasten = Knopffeld(0);
         int war = _held;
         _held = -1;
         QueueRedraw();

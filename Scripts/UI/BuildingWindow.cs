@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.UI;
+﻿namespace AkteEuropaReborn.UI;
 
 using System.Collections.Generic;
 using Godot;
@@ -232,6 +232,26 @@ public sealed partial class BuildingWindow : PanelContainer
 
         _knoepfe.AddThemeConstantOverride("separation", 8);
         senk.AddChild(_knoepfe);
+    }
+
+    /// <summary>Wo der Kaufknopf einer Spalte auf dem SCHIRM liegt — fuer den
+    /// Pruefstand, der einen echten Mausklick dorthin schickt. Null, wenn
+    /// dieses Fenster gerade nicht der Nachschubposten mit Originalgrafik ist.
+    /// </summary>
+    /// <summary>Was der Nachschubposten von den Mausereignissen mitbekommen
+    /// hat — fuer den Pruefstand.</summary>
+    public string KlickZeile()
+        => _posten == null ? "kein Postenkind"
+         : $"gesehene Mausereignisse {_posten.GesehenKlicks}, "
+         + $"letzter Treffer {_posten.LetzterTreffer} (-1 = daneben, -99 = nie gefragt), "
+         + $"gerechnet mit Punkt {_posten.LetzterPunkt} gegen Knopffeld {_posten.LetzterKasten}";
+
+    public Rect2? KaufknopfAufDemSchirm(int spalte)
+    {
+        if (_posten == null || !_posten.Visible) return null;
+        var f = _posten.Knopffeld(spalte);
+        if (f.Size.X <= 0) return null;
+        return new Rect2(_posten.GlobalPosition + f.Position, f.Size);
     }
 
     /// <summary>Zumachen — ueber die Fensterverwaltung, nicht per blossem

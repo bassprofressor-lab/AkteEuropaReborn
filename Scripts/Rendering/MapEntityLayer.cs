@@ -2487,8 +2487,30 @@ public partial class MapEntityLayer : Node2D
     /// treffen aus genau diesem Grund nicht und nicht mehr wegen des
     /// Grundrisses.</para>
     /// </summary>
+    /// <summary>
+    /// <b>Die Zellen, die ein Gebaeude als RUMPF belegt</b> - Belegung
+    /// 60000..60299 in der Karte (sec6).
+    ///
+    /// <para>Sie entscheiden, welche Musterkachel in ihrer eigenen Zeile
+    /// aufragt und welche Boden ist; die Herleitung steht bei der Fuellstelle
+    /// in <see cref="DropSteppingFootprints"/>.</para>
+    ///
+    /// <para>⚠ Gebaeude ueberlappen sich nicht, darum genuegt EINE Menge ohne
+    /// Zuordnung zum Platz.</para>
+    /// </summary>
+    private readonly HashSet<(int Col, int Row)> _koerperZelle = new();
+
+    /// <summary>Wieviele Koerperzellen die Karte hergegeben hat - fuer den
+    /// Pruefstand, damit "0 aufragende Kacheln" nicht mit "die Karte hatte
+    /// keine" verwechselt wird.</summary>
+    public int KoerperZellen => _koerperZelle.Count;
+
+    /// <summary>Ist diese Zelle Gebaeuderumpf?</summary>
+    public bool IstKoerperzelle(int col, int row) => _koerperZelle.Contains((col, row));
+
     private void DropSteppingFootprints(GDict root)
     {
+        _koerperZelle.Clear();
         if (!root.TryGetValue("spatial", out var sv) ||
             sv.VariantType != Variant.Type.Dictionary) return;
         var sp = sv.AsGodotDictionary<string, Variant>();
@@ -2505,6 +2527,24 @@ public partial class MapEntityLayer : Node2D
             if (item.VariantType != Variant.Type.Dictionary) continue;
             var c = item.AsGodotDictionary<string, Variant>();
             int v = GetI(c, "value", -1);
+            // GG 26.08.2026 - DIE KOERPERZELLEN DES GEBAEUDES, aus derselben
+            // Belegungskarte. Das Original unterscheidet an GENAU dieser Zahl,
+            // ob eine Gebaeudekachel Gelaende ist oder aufragt:
+            //   * 60000+n  -> der Rumpf. Der verzahnte Durchgang @0x4B446C
+            //                 nimmt 50000..63999, malt sie also in IHRER Zeile
+            //                 und damit ueber alles, was in derselben Zeile
+            //                 schon steht.
+            //   * 65534    -> Plattform, Vorplatz, Schotter. Der flache
+            //                 Durchgang @0x4B41EB ueberspringt zwar alles ab
+            //                 14000, aber 0xFFFC..0xFFFE sind ausdruecklich
+            //                 ausgenommen - diese Zellen sind BODEN.
+            // Genau daran ist unsere alte Trennung nach der KACHELHOEHE
+            // (FlachBisPx) gescheitert: sie ist eine Naeherung an die falsche
+            // Groesse. Belegt am Nachschubposten von map_02: 60000 steht nur
+            // auf (13..16,19), (13..15,20), (13..14,21); die ganze Plattform
+            // traegt 65534.
+            if (v is >= 60000 and <= 60299)
+                _koerperZelle.Add((GetI(c, "col"), GetI(c, "row")));
             if (v is < 0 or >= 8000) continue;         // kein Einheitensteckplatz
             if (!cells.TryGetValue(v, out var l)) cells[v] = l = new List<(int, int)>();
             l.Add((GetI(c, "col"), GetI(c, "row")));
@@ -5619,7 +5659,20 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Die Kacheln eines Gebäudes stempeln — <paramref name="flach"/>
     /// wählt die Gruppe: <c>true</c> nur den Boden, <c>false</c> nur das
     /// Aufragende, <c>null</c> alles (das ist <c>--boden-alt</c>).</summary>
-    private void DrawBuildingTiles(Entity e, bool? flach)
+    /// <summary><c>--gebaeude-block</c> - der Stand von vor dem 26.08.2026:
+    /// das ganze Gebaeude in EINEM Fach (Zeile+3 bzw. Tuerzeile), und die
+    /// Trennung Boden/aufragend nach der KACHELHOEHE.
+    ///
+    /// <para>Messgeraet, keine Einstellung - damit sich das Vorher aus einem
+    /// LAUF holen laesst und nicht aus einer Nebenrechnung.</para></summary>
+    public static bool GebaeudeBlock;
+
+    /// <summary>Wieviele Koerperkacheln der zeilenweise Durchgang gezeichnet
+    /// hat. ⚠ Ohne diese Zahl waere "kein Unterschied im Bild" nicht von "der
+    /// Durchgang lief gar nicht" zu unterscheiden (Regel 32/33).</summary>
+    public int KoerperKachelnGezeichnet;
+
+    private void DrawBuildingTiles(Entity e, bool? flach, int? nurZeile = null)
     {
         if (!_drawSprites || Patterns == null || e.IsProp) return;
         var tex = PatternTexture();
@@ -5656,9 +5709,17 @@ public partial class MapEntityLayer : Node2D
                 {
                     int code = BuildingCellTile(first, k, dx, dy, anim);
                     if (code == 0 || !Patterns.TryGetTile(code, out var t)) continue;
-                    if (flach.HasValue && (t.H <= FlachBisPx) != flach.Value) continue;
-                    if (flach == true) BuildingGroundDrawn++;
                     int c = e.Col + dx, r = e.Row + dy;
+                    // GG 26.08.2026 - DIE TRENNUNG KOMMT AUS DER BELEGUNG,
+                    // NICHT AUS DER KACHELHOEHE. Herleitung bei _koerperZelle.
+                    // --gebaeude-block haelt die alte Hoehenschwelle fest.
+                    bool koerper = GebaeudeBlock
+                                 ? t.H > FlachBisPx
+                                 : _koerperZelle.Contains((c, r));
+                    if (flach.HasValue && koerper == flach.Value) continue;
+                    if (nurZeile.HasValue && r != nurZeile.Value) continue;
+                    if (flach == true) BuildingGroundDrawn++;
+                    else if (nurZeile.HasValue) KoerperKachelnGezeichnet++;
                     float sx = _ox + c * Import.MapBaker.TileW;
                     float sy = _oy + r * Import.MapBaker.TileH
                              - ElevOf(c, r) * Import.MapBaker.ElevStep
@@ -14873,6 +14934,195 @@ public partial class MapEntityLayer : Node2D
         GiveBuildingJob(_entities.IndexOf(e), BuildingJob.Repair);
     }
 
+    // ======================================================================
+    //  NAEHTE FUER --kaufweg-check (26.08.2026)
+    //  Sie geben nichts frei, was der Pruefstand sich selbst ausrechnen
+    //  koennte -- sie geben genau die Zahlen, die der Spieler LIEST, und den
+    //  Anwahlweg, den ein KLICK nimmt.
+    // ======================================================================
+
+    /// <summary>
+    /// <b>--plattform-check</b> - DIE PLATTFORM DES NACHSCHUBPOSTENS (26.08.2026).
+    ///
+    /// <para>Gemeldet: "die Einheit, die auf die Plattform des Nachschubpostens
+    /// faehrt, wird nicht mehr aufgetankt" und "das Gebaeude hat rechts eine
+    /// Kachel, die Einheiten verdeckt". Beides steht am selben Grundriss.</para>
+    ///
+    /// <para>Der Lauf legt je Zelle des Grundrisses (und einen Ring darum)
+    /// nebeneinander, was die beteiligten Stellen ueber sie sagen: der Boden
+    /// aus dem Bewegungsgitter, wer sie besetzt, ob eine Einheit dort ueberhaupt
+    /// hinfahren KANN - und ob <see cref="SupplyPostService"/> eine Einheit dort
+    /// BEDIENEN wuerde.</para>
+    ///
+    /// <para>! Es wird nicht gelesen, sondern PROBIERT: auf jede Zelle kommt
+    /// eine Messeinheit mit leerem Tank, dann laeuft der Dienst. Eine Regel,
+    /// die man nur liest, ist eine Vermutung - und genau an dieser Stelle hat
+    /// ein gelesener Kommentar heute schon einmal in die Irre gefuehrt.</para>
+    /// </summary>
+    public string PlattformCheck()
+    {
+        var sb = new System.Text.StringBuilder("posten-check\n");
+        int idx = PostenIndex();
+        if (idx < 0) return sb.Append("  kein Nachschubposten auf dieser Karte\n").ToString();
+        var b = _entities[idx];
+        var dz = PostenDienstzelle(b);
+        sb.Append($"  BEDIENTE ZELLE: ({dz.Col},{dz.Row})"
+                + (PostenAnker ? "   [--posten-anker: der alte Stand, die Ankerzelle]"
+                   : $"   = Anker + ({PostenDienstX},{PostenDienstY}), aus 0xBDF086 - 0xBDEA80 = 771 Zellen")
+                + "\n");
+        sb.Append($"  Posten Platz {b.Slot}, Typ {b.BType}, Anker ({b.Col},{b.Row}), "
+                + $"Grundriss {b.FootW}x{b.FootH}, Besitzer {b.Owner}\n");
+
+        var probe = new Entity
+        {
+            Col = -1, Row = -1, HpMax = 100, Hp = 100,
+            Fuel = 0, FuelMax = 400, Ammo = 0, AmmoMax = 10, Owner = 0,
+        };
+        _entities.Add(probe);
+
+        sb.Append("  Zelle       Boden      besetzt  befahrbar  betankt?\n");
+        int bedienbar = 0, befahrbar = 0;
+        for (int dr = -1; dr <= b.FootH; dr++)
+            for (int dc = -1; dc <= b.FootW; dc++)
+            {
+                int c = b.Col + dc, r = b.Row + dr;
+                string boden = _nav != null ? _nav.GroundAt(c, r).ToString() : "?";
+                int wer = _nav != null ? _nav.BesetztVon(c, r) : -1;
+                bool fahr = _nav != null && _nav.IsWalkable(c, r);
+                if (fahr) befahrbar++;
+
+                probe.Col = c; probe.Row = r; probe.Fuel = 0; probe.Ammo = 0;
+                SupplyPostService(b);
+                bool bedient = probe.Fuel == probe.FuelMax;
+                if (bedient) bedienbar++;
+
+                sb.Append($"  ({c,3},{r,3})   {boden,-9}  {wer,7}  {(fahr ? "ja" : "nein"),9}  "
+                        + $"{(bedient ? "JA" : "nein"),8}"
+                        + (dc == 0 && dr == 0 ? "   <- ANKER" : "") + "\n");
+            }
+        _entities.Remove(probe);
+
+        // ---- DAS MUSTER: wo sitzt die Plattform? --------------------------
+        // Der Zeichner teilt die Kacheln bei FlachBisPx: was flacher ist, geht
+        // VOR die Einheiten (Boden), was hoeher ist, DANACH (aufragend, kann
+        // verdecken). Genau diese Trennung entscheidet beide Meldungen -
+        // "Plattform tankt nicht" und "Kachel verdeckt Einheiten".
+        if (Patterns != null)
+        {
+            var bt = Patterns.GetBuildingType(b.BType);
+            sb.Append($"@  Muster des Typs {b.BType}: erstes Muster {bt.FirstPattern}, "
+                    + $"Raster {Import.CwpFile.PatternWidth}x{Import.CwpFile.PatternHeight}\n");
+            sb.Append("  (f = flach <= 25 px, H = aufragend, . = leer)   Spalte ->\n");
+            var anim = BuildingAnimCells(b);
+            for (int dy = 0; dy < Import.CwpFile.PatternHeight; dy++)
+            {
+                sb.Append($"   Zeile {b.Row + dy,3}: ");
+                for (int dx = 0; dx < Import.CwpFile.PatternWidth; dx++)
+                {
+                    int code2 = BuildingCellTile(bt.FirstPattern, 0, dx, dy, anim);
+                    if (code2 == 0 || !Patterns.TryGetTile(code2, out var t)) { sb.Append("  .  "); continue; }
+                    sb.Append(t.H <= FlachBisPx ? $" f{t.H,2} " : $" H{t.H,2} ");
+                }
+                sb.Append("\n");
+            }
+            sb.Append("   Spalten:      ");
+            for (int dx = 0; dx < Import.CwpFile.PatternWidth; dx++) sb.Append($" {b.Col + dx,3} ");
+            sb.Append("\n");
+
+            // GG 26.08.2026 - DIE ZWEI TRENNUNGEN NEBENEINANDER.
+            // ALT: Kachelhoehe > FlachBisPx (unsere Naeherung).
+            // NEU: Belegung 60000..60299 aus der Karte (die Groesse, an der
+            //      das Original selbst trennt).
+            // Die Zahl, auf die es ankommt, ist WIEVIELE KACHELN DIE GRUPPE
+            // WECHSELN - ohne sie waere "sieht besser aus" nicht pruefbar.
+            int wechsel = 0, kNeu = 0, hAlt = 0, kachelZahl = 0;
+            for (int dy = 0; dy < Import.CwpFile.PatternHeight; dy++)
+                for (int dx = 0; dx < Import.CwpFile.PatternWidth; dx++)
+                {
+                    int cd = BuildingCellTile(bt.FirstPattern, 0, dx, dy, anim);
+                    if (cd == 0 || !Patterns.TryGetTile(cd, out var t2)) continue;
+                    kachelZahl++;
+                    bool altAufragend = t2.H > FlachBisPx;
+                    bool neuKoerper = IstKoerperzelle(b.Col + dx, b.Row + dy);
+                    if (altAufragend) hAlt++;
+                    if (neuKoerper) kNeu++;
+                    if (altAufragend != neuKoerper) wechsel++;
+                }
+            // Die Kachel oben rechts, nach der er gefragt hat: Code und Lage
+            // im Kachelbogen, damit man sie WIRKLICH ansehen kann.
+            for (int dy = 0; dy < Import.CwpFile.PatternHeight; dy++)
+                for (int dx = 0; dx < Import.CwpFile.PatternWidth; dx++)
+                {
+                    int cd = BuildingCellTile(bt.FirstPattern, 0, dx, dy, anim);
+                    if (cd == 0 || !Patterns.TryGetTile(cd, out var t3)) continue;
+                    if (dy != 0) continue;                   // nur die oberste Musterzeile
+                    sb.Append($"  OBERSTE ZEILE: Zelle ({b.Col + dx},{b.Row + dy}) "
+                            + $"Kachel {cd}, Bogen ({t3.X},{t3.Y}) {t3.W}x{t3.H}, YOff {t3.YOff}\n");
+                }
+            sb.Append($"  {kachelZahl} Kacheln: ALT {hAlt} aufragend (Hoehe > {FlachBisPx} px), "
+                    + $"NEU {kNeu} Rumpf (Belegung 60000+n), WECHSELN {wechsel}\n");
+            sb.Append($"  Koerperzellen der ganzen Karte: {KoerperZellen}"
+                    + (KoerperZellen == 0
+                       ? "   ⚠⚠ KEINE - dann faellt die neue Trennung auf 'alles Boden' zurueck "
+                         + "und der Umbau waere unbemerkt wirkungslos"
+                       : "") + "\n");
+        }
+
+
+        sb.Append($"  Summe: {bedienbar} von {(b.FootW + 2) * (b.FootH + 2)} Zellen betanken, "
+                + $"{befahrbar} sind befahrbar\n");
+        // Nullmodell: eine Zelle WEIT weg darf niemals betanken. Ohne sie
+        // koennte "betankt JA" auch heissen, dass der Dienst blind zuschlaegt.
+        var fern = new Entity { Col = b.Col + 20, Row = b.Row + 20, HpMax = 100, Hp = 100,
+                                Fuel = 0, FuelMax = 400, Owner = 0 };
+        _entities.Add(fern);
+        SupplyPostService(b);
+        sb.Append($"  Nullmodell: Einheit 20 Zellen daneben -> Sprit {fern.Fuel} "
+                + $"(soll 0 bleiben)\n");
+        _entities.Remove(fern);
+        return sb.ToString();
+    }
+
+    /// <summary><c>--zell-spur</c> - jede Sekunde die Zelle der gewaehlten
+    /// Einheit. Nur fuer den Plattform-Test vom 26.08.2026.</summary>
+    public static bool ZellSpur;
+
+    /// <summary>Der erste Nachschubposten der Karte, oder -1.</summary>
+    public int PostenIndex()
+    {
+        for (int i = 0; i < _entities.Count; i++)
+            if (IsSupplyDepot(_entities[i]) && !_entities[i].Dead) return i;
+        return -1;
+    }
+
+    /// <summary>Anwaehlen auf dem Weg des KLICKS, samt Fensteroeffnung.
+    /// ⚠ Nicht `_selected = i` allein: der Klick raeumt die Auswahl, setzt den
+    /// Hauptmann und ruft dann <see cref="Gebaeudefenster"/>. Genau diese
+    /// Reihenfolge hat schon einmal einen Fehler versteckt.</summary>
+    public void PostenAnwaehlenWieKlick(int idx)
+    {
+        _sel.Clear();
+        _sel.Add(idx);
+        _selected = idx;
+        SetPrimary();
+        Gebaeudefenster();
+    }
+
+    /// <summary>Der Kontostand, den das Fenster zeigt.</summary>
+    public int GeldImFenster => Money(ViewPlayer);
+
+    /// <summary>Wieviele Flugzeuge/Helis unterwegs sind.</summary>
+    public int FlugzeugZahl => _special.Count;
+
+    /// <summary>Welche Entitaet gerade angewaehlt ist (Index, nicht Platz).
+    /// ⚠ Daran haengt <see cref="Fenstergebaeude"/> und damit, ob das Fenster
+    /// beim naechsten Refresh ueberhaupt noch etwas anzuzeigen hat.</summary>
+    public int AngewaehlterIndex => _selected;
+
+    /// <summary>Was das Fenster beim naechsten Refresh vorfaende: null heisst
+    /// ZU.</summary>
+    public bool FensterHaetteInhalt => BuildingWindowData() != null;
+
     /// <summary>Wird gerufen, sobald ein Gebaeude angewaehlt wird, fuer das es
     /// eines der drei Fenster gibt. Der Zeichner haengt sich hier ein.</summary>
     /// <param>Die Fensterart unseres Zeichners, der GEBAEUDEPLATZ als Kennung,
@@ -19501,18 +19751,70 @@ public partial class MapEntityLayer : Node2D
     /// +0x04 to read 0xFF, a state byte we do not model; everything else is
     /// exactly what the handler does. The post has no owner (all 63 of them
     /// carry owner 255), so it serves anyone.</summary>
+    /// <summary>
+    /// GG 26.08.2026 - DIE BEDIENTE ZELLE IST (Spalte+3, Zeile+3), NICHT DER ANKER.
+    ///
+    /// <para>Gemeldet: "die Einheit, die auf die Plattform faehrt, wird nicht
+    /// mehr aufgetankt". Vier Messungen sagten uebereinstimmend, das Original
+    /// bediene die Satzzelle - und alle vier hingen an DEMSELBEN Lesefehler
+    /// von mir.</para>
+    ///
+    /// <code>
+    /// 0x43E872  eax = dword[esp+0x30]*256 + dword[esp+0x28]   ; Satz.Spalte, Satz.Zeile
+    /// 0x43E886  ax  = word[eax*2 + 0xBDF086]                  ; <-- HIER
+    /// </code>
+    ///
+    /// <para>Ich hatte <c>0xBDF086</c> fuer die Basis der Belegungskarte
+    /// gehalten. Die Basis ist <c>0xBDEA80</c> - belegt an zwei anderen
+    /// Lesestellen derselben Karte (<c>0x43D3DD</c> im Tuercode,
+    /// <c>0x4128D3</c> im Nachschubheli). Der Abstand steckt also IM
+    /// ADRESSAUSDRUCK und nicht im Befehlsstrom:</para>
+    ///
+    /// <code>
+    ///   0xBDF086 - 0xBDEA80 = 0x606 = 1542 Byte = 771 Zellen
+    ///   771 = 3*256 + 3   ->   Spalte + 3, Zeile + 3
+    /// </code>
+    ///
+    /// <para>Auf map_02 ist das <b>(15,21)</b> - die Plattform. ⭐ Unabhaengig
+    /// bestaetigt aus einer ganz anderen Lesung: die <b>Ausloesezelle von
+    /// Text 15</b> (der Hinweistext des Postens) ist dieselbe (15,21). Zwei
+    /// Wege, eine Zelle.</para>
+    ///
+    /// <para>Was der Handler dann tut, ist unveraendert und war nie strittig:
+    /// <c>word[+0x2e] = word[+0x30]</c> und <c>byte[+0x39] = byte[+0x3a]</c> -
+    /// Tank und Munition in einem Zug voll. Das Original verlangt zusaetzlich
+    /// <c>byte[+0x04] == 0xFF</c>, ein Zustandsbyte, das wir nicht fuehren.</para>
+    ///
+    /// <para>Gegenprobe: <c>--posten-anker</c> stellt die alte Zelle wieder her.
+    /// </para>
+    /// </summary>
     private void SupplyPostService(Entity post)
     {
         if (post.BType != 14 || post.Dead) return;
+        var (sc, sr) = PostenDienstzelle(post);
         foreach (var e in _entities)
         {
             if (e.IsBuilding || e.IsProp || e.Dead || e.HpMax <= 0) continue;
-            if (e.Col != post.Col || e.Row != post.Row) continue;
+            if (e.Col != sc || e.Row != sr) continue;
             if (e.Fuel < e.FuelMax || (e.AmmoMax > 0 && e.Ammo < e.AmmoMax)) SupplyPostRuns++;
             e.Fuel = e.FuelMax;                       // +0x2e = +0x30
             if (e.AmmoMax > 0) e.Ammo = e.AmmoMax;    // +0x39 = +0x3a
         }
     }
+
+    /// <summary>Die Zelle, die ein Nachschubposten bedient - siehe
+    /// <see cref="SupplyPostService"/>.</summary>
+    public (int Col, int Row) PostenDienstzelle(Entity post)
+        => PostenAnker ? (post.Col, post.Row)
+                       : (post.Col + PostenDienstX, post.Row + PostenDienstY);
+
+    /// <summary>Der Versatz aus dem Adressausdruck <c>0xBDF086</c> gegen die
+    /// Kartenbasis <c>0xBDEA80</c>: 771 Zellen = 3 Spalten und 3 Zeilen.</summary>
+    public const int PostenDienstX = 3, PostenDienstY = 3;
+
+    /// <summary><c>--posten-anker</c> - der Stand von vor dem 26.08.2026: der
+    /// Posten bedient seine Ankerzelle. Messgeraet, keine Einstellung.</summary>
+    public static bool PostenAnker;
 
     /// <summary>How often a Nachschub-Posten serviced somebody (harness).</summary>
     public int SupplyPostRuns;
@@ -23529,9 +23831,22 @@ public partial class MapEntityLayer : Node2D
                     // Schatten, Rampe. Sie sind BODEN und können nichts
                     // verdecken, was auf ihnen steht; wir malen sie aber als
                     // Sprite im Fach des ganzen Gebäudes.
-                    if (kc.H > FlachBisPx) continue;              // aufragend: darf verdecken
-                    aussen++;
                     int c = b.Col + dx, r = b.Row + dy;
+                    // GG 26.08.2026 - DIESER PRUEFSTAND MASS BIS HEUTE DIE
+                    // FALSCHE GROESSE. Hier stand `kc.H > FlachBisPx` - die
+                    // Kachelhoehe. Das Original trennt an der BELEGUNG
+                    // (60000+n = Rumpf), siehe SupplyPostService-Nachbarschaft
+                    // und _koerperZelle. Ein Pruefstand, der die abgeloeste
+                    // Regel misst, meldet weiter Zahlen zu einem Bild, das es
+                    // nicht mehr gibt.
+                    bool koerper = GebaeudeBlock ? kc.H > FlachBisPx
+                                                 : IstKoerperzelle(c, r);
+                    if (koerper) continue;                       // Rumpf: darf verdecken
+                    aussen++;
+                    // ⚠ Und der zweite Teil gilt nur noch mit --gebaeude-block:
+                    // seit dem Umbau kommt JEDE Koerperkachel in die Zeile
+                    // IHRER Zelle, nicht ins Fach des ganzen Gebaeudes.
+                    if (!GebaeudeBlock) continue;
                     // Was auf (c,r) steht, kommt ins Fach r. Uebermalt wird es,
                     // wenn das Gebaeude ein SPAETERES Fach hat.
                     if (r >= fach) continue;
@@ -23765,6 +24080,23 @@ public partial class MapEntityLayer : Node2D
         foreach (var b in BuildingsBackToFront())
             letzteZeile = Mathf.Max(letzteZeile, b.Row + BuildingDrawRowFor(b));
         var gebaeude = BuildingsBackToFront();
+        // GG 26.08.2026 - WELCHES GEBAEUDE HAT KACHELN IN WELCHER ZEILE.
+        // Das Original sortiert jede Gebaeudekachel ueber ihre eigene Zelle
+        // ein (verzahnter Durchgang @0x4B446C, Belegungen 50000..63999); der
+        // Fach-Eintrag Art 10 traegt nur den Energiebalken (@0x4B7848, ein
+        // Rechteckrahmen in der Parteifarbe) und die Tueren (@0x42B338, ein
+        // Einzelbild je Tuer auf ihrer eigenen Zelle). Wir hatten stattdessen
+        // das GANZE Gebaeude in EINEM Fach - darum konnte es gegenueber einer
+        // Einheit nur ganz davor oder ganz dahinter liegen, nie teils/teils.
+        var koerperZeile = new List<Entity>[letzteZeile + 2];
+        if (!GebaeudeBlock)
+            foreach (var b in gebaeude)
+                for (int dy = 0; dy < Import.CwpFile.PatternHeight; dy++)
+                {
+                    int rr = b.Row + dy;
+                    if (rr < 0 || rr >= koerperZeile.Length) continue;
+                    (koerperZeile[rr] ??= new List<Entity>()).Add(b);
+                }
         int gi = 0;
         for (int r = 0; r <= letzteZeile; r++)
         {
@@ -23801,13 +24133,30 @@ public partial class MapEntityLayer : Node2D
                 if (FogActive && _fog != null && !_fog.IsSeen(b.Col, b.Row)) continue;
                 if (_drawSprites && Patterns != null)
                 {
-                    DrawBuildingBody(b);
+                    // ⚠ Der KOERPER kommt seit dem 26.08. zeilenweise (siehe
+                    // koerperZeile weiter oben); im Fach bleiben nur die
+                    // Tueren, wie im Original.
+                    if (GebaeudeBlock) DrawBuildingBody(b);
                     // ⚠ Die TÜREN gehören zum Gebäude und damit in SEIN Fach —
                     // Fehler D4. Das Original malt sie im selben Zeichenaufruf
                     // gleich hinter dem Körper (@0x42B259 ff.).
                     if (!TuerenSpaet) DrawBuildingDoors(b);
                 }
             }
+            // (3b) DIE KOERPERKACHELN DIESER ZEILE. Sie sind im Original
+            // gewoehnliche Kartenzellen und werden mit den uebrigen Zellen
+            // dieser Zeile gezeichnet - also NACH den Einheiten derselben
+            // Zeile und VOR denen der naechsten.
+            if (!GebaeudeBlock && _drawSprites && Patterns != null
+                && r < koerperZeile.Length && koerperZeile[r] != null)
+                foreach (var b in koerperZeile[r])
+                {
+                    // Dieselbe Nebelregel wie im Fach: was nie aufgedeckt war,
+                    // wird nicht gezeichnet.
+                    if (FogActive && _fog != null && !_fog.IsSeen(b.Col, b.Row)) continue;
+                    DrawBuildingTiles(b, flach: false, nurZeile: r);
+                }
+
             // (4) ZULETZT die aufragenden Kacheln dieser Zeile. Das ist der
             // ganze Unterschied: hier lagen sie bisher VOR den Einheiten.
             DrawObjectsUpTo(r, ref oi);
@@ -26872,6 +27221,24 @@ public partial class MapEntityLayer : Node2D
         //
         // Die Pruefung ist drei Vergleiche gross und laeuft ohnehin nur fuer
         // die EINE angewaehlte Einheit.
+        // --zell-spur: wo steht die gewaehlte Einheit, und was macht ihr Tank?
+        // Es gibt sie fuer EINEN Test: das Original betankt Typ 14 auf der
+        // Zelle Satz.col/Satz.row (0x43DC34 -> Arm 7 -> 0x43E872, Versaetze der
+        // Typtafel sind fuer Typ 14 beide 0). Ob diese Zelle bei uns unter der
+        // sichtbaren Plattform liegt, sagt kein Pruefstand - nur ein Blick auf
+        // die Zelle, auf der die Einheit wirklich steht.
+        if (ZellSpur && _selected >= 0 && _selected < _entities.Count
+            && _taktNr % SimHz == 0)
+        {
+            var z = _entities[_selected];
+            int pi = PostenIndex();
+            string post = pi >= 0
+                ? $"Posten-Anker ({_entities[pi].Col},{_entities[pi].Row})" : "kein Posten";
+            GD.Print($"zell-spur: Einheit auf ({z.Col},{z.Row})  Sprit {z.Fuel}/{z.FuelMax}"
+                   + $"  Muni {z.Ammo}/{z.AmmoMax}  {post}"
+                   + (pi >= 0 && z.Col == _entities[pi].Col && z.Row == _entities[pi].Row
+                      ? "   <<< AUF DEM ANKER" : ""));
+        }
         bool werteNeu = PanelWerteGeaendert();
         if (moved || _effects.Count > 0 || _tracers.Count > 0 || _shots.Count > 0)
         {

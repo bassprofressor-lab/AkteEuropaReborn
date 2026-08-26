@@ -354,6 +354,16 @@ public static class WindowManager
     /// </summary>
     public static System.Func<Vector2>? Mausquelle;
 
+    /// <summary>
+    /// <c>--klick-log</c> — <b>jeder linke Mausklick mit seinen Koordinaten.</b>
+    ///
+    /// <para>⚠ Es gibt ihn, weil vier Anlaeufe am 26.08.2026 gezeigt haben, dass
+    /// ein NACHGESTELLTER Klick nicht dasselbe ist wie der Klick des Spielers:
+    /// mein Pruefstand kauft, seiner nicht. Wo die zwei auseinanderlaufen, sagt
+    /// kein Nachbau, sondern nur seine eigene Sitzung.</para>
+    /// </summary>
+    public static bool KlickProtokoll;
+
     public static void InDenSchirm(Fenster? f, Vector2 schirm)
     {
         if (Lebend(f) is not Control c) return;

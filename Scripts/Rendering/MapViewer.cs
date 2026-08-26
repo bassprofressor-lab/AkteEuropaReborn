@@ -566,6 +566,23 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_plattformCheck)
+        {
+            GD.Print(_entities.PlattformCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_kaufwegCheck)
+        {
+            // GG NICHT hier ausgeben. Der erste Anlauf tat es, und der Lauf hat
+            //    sich damit selbst belogen: ein Godot-Container legt seine
+            //    Kinder erst im naechsten Bild. `_posten` sass darum noch bei
+            //    (0, 99.9) statt beim Fensterursprung, der Pruefstand klickte
+            //    ins Leere und meldete "der Knopf wird nicht getroffen".
+            //    Ein Pruefstand, der VOR dem Aufbau misst, misst den Aufbau.
+            _ = KaufwegLauf();
+            return;
+        }
         if (_forschungCheck)
         {
             GD.Print(_entities.ForschungCheck());
@@ -932,6 +949,162 @@ public partial class MapViewer : Node2D
     /// <summary><c>--fenster-check</c> — die sechs Regeln der
     /// Fensterverwaltung.</summary>
     private bool _fensterCheck;
+    private bool _kaufwegCheck;
+    private bool _plattformCheck;
+
+    /// <summary>
+    /// <b><c>--kaufweg-check</c> — DER KAUF UEBER DEN KLICKWEG</b> (26.08.2026).
+    ///
+    /// <para>Gemeldet: »wenn man auf Kaufen drueckt, schliesst sich das Fenster,
+    /// und kein Heli spawnt.«</para>
+    ///
+    /// <para>⚠⚠ <b>Warum es diesen zweiten Pruefstand gibt, obwohl
+    /// <c>--depot-check</c> gruen ist:</b> der ruft <c>Kaufen.Invoke()</c>
+    /// DIREKT. Genau diese Abkuerzung hat am 11.08.2026 schon einmal denselben
+    /// Fehler versteckt — der Kommentar an <c>ProduceFromSelection</c> sagt es
+    /// woertlich. Ein Knopf ist aber nicht sein Rueckruf: dazwischen liegen
+    /// Trefferpruefung, <c>MouseFilter</c>, <c>AcceptEvent</c> und die Frage,
+    /// ob der Klick DANACH noch auf der Karte landet und dort die Anwahl
+    /// umsetzt.</para>
+    ///
+    /// <para>Darum schickt dieser Lauf ein <b>echtes</b>
+    /// <c>InputEventMouseButton</c> ueber <c>Viewport.PushInput</c> auf die
+    /// Mitte des Kaufknopfes — Druecken und Loslassen, wie eine Hand — und
+    /// misst danach die vier Zahlen, die der Spieler sieht: Kontostand,
+    /// Flugzeuge, Anwahl und ob das Fenster noch steht.</para>
+    ///
+    /// <para>⚠ Die Knopflage rechnet der Pruefstand NICHT selbst aus, sondern
+    /// holt sie ueber <c>BuildingWindow.KaufknopfAufDemSchirm</c> aus derselben
+    /// <c>Box</c>, die auch die Trefferpruefung benutzt. Sonst traefe er immer,
+    /// auch wenn der Zeichner woanders malt.</para>
+    /// </summary>
+    /// <summary>Erst ein paar Bilder laufen lassen, DANN messen - siehe die
+    /// Warnung an der Rufstelle.</summary>
+    private async System.Threading.Tasks.Task KaufwegLauf()
+    {
+        for (int i = 0; i < 5; i++)
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GD.Print(await KaufwegCheck());
+        GetTree().Quit(0);
+    }
+
+    private async System.Threading.Tasks.Task<string> KaufwegCheck()
+    {
+        var sb = new System.Text.StringBuilder("kaufweg-check\n");
+        int idx = _entities.PostenIndex();
+        if (idx < 0) return sb.Append("  kein Nachschubposten auf dieser Karte\n").ToString();
+
+        // GG WIEDERHOLBAR MACHEN. AnDieMaus setzt das Fenster an den ECHTEN
+        //    Zeiger - und der steht bei jedem Lauf woanders. Der Pruefstand
+        //    meldete darum jedesmal andere Zahlen, und zweimal lag der
+        //    Nullmodell-Punkt sogar ausserhalb des Fensters. Ein Lauf, der sich
+        //    nicht wiederholt, ist keine Messung.
+        UI.WindowManager.Mausquelle = () => new Vector2(400, 300);
+        _entities.PostenAnwaehlenWieKlick(idx);
+        sb.Append($"  Posten angewaehlt: Index {_entities.AngewaehlterIndex}, "
+                + $"Fenster haette Inhalt: {_entities.FensterHaetteInhalt}\n");
+
+        if (_gebaeudeFenster == null) return sb.Append("  kein Gebaeudefenster gebaut\n").ToString();
+
+        // GG 26.08.2026 - DIE AUFBLENDE ZU ENDE DREHEN, sonst misst der Lauf
+        // ein zusammengedruecktes Fenster. `Blende` setzt waehrend des
+        // Aufgehens `Scale.y = AufBild/4` (mindestens 0.001), und Godot rechnet
+        // die Skalierung in die TREFFERPRUEFUNG mit ein: bei 0.001 ist der
+        // Knopf 0,04 Punkte hoch, jeder Klick geht daneben und landet auf der
+        // Karte. Der erste Anlauf meldete daraufhin "der Knopf wird nicht
+        // getroffen" - und das war MEIN Pruefstand, nicht das Spiel.
+        // Der Takt kommt im Spiel aus SimTick; hier von Hand.
+        for (int t = 0; t <= UI.WindowManager.BilderAuf + 1; t++) UI.WindowManager.Takt();
+        for (int i = 0; i < 2; i++)
+            await System.Threading.Tasks.Task.Yield();
+        sb.Append($"  Fenster sichtbar: {_gebaeudeFenster.Visible}, Lage "
+                + $"{_gebaeudeFenster.Position}, Mass {_gebaeudeFenster.Size}\n");
+
+        var feld = _gebaeudeFenster.KaufknopfAufDemSchirm(0);
+        if (feld == null)
+            return sb.Append("  KEIN KAUFKNOPF — das Fenster zeigt nicht die "
+                           + "Originalgrafik (WINDOWS.CWW nicht eingelesen?)\n").ToString();
+        var mitte = feld.Value.Position + feld.Value.Size / 2f;
+        // GG 26.08.2026 - PushInput WILL FENSTERPUNKTE, KEINE LEINWANDPUNKTE.
+        //    Das Spiel laeuft mit Streckmodus "CanvasItems": die Leinwand ist
+        //    1600x900, das Fenster ist groesser, dazwischen steht ein Faktor.
+        //    Der erste Anlauf schob die Leinwandpunkte roh hinein; die
+        //    Trefferpruefung des Postens rechnete daraufhin mit (33.8, 50.5)
+        //    statt (120, 120), meldete "daneben", und der Klick fiel auf die
+        //    Karte durch - wo er die Anwahl raeumte und das Fenster zumachte.
+        //    Das sah dem gemeldeten Fehler zum Verwechseln aehnlich UND WAR
+        //    MEINER. Der Faktor wird jetzt gemessen und mitgedruckt.
+        var leinwand = GetViewport().GetVisibleRect().Size;
+        var fenstermass = (Vector2)GetWindow().Size;
+        var faktor = new Vector2(fenstermass.X / leinwand.X, fenstermass.Y / leinwand.Y);
+        var schirmpunkt = mitte * faktor;
+        sb.Append($"  Leinwand {leinwand}, Fenster {fenstermass}, Faktor {faktor}"
+                + $" -> Klickpunkt im Fenster {schirmpunkt}\n");
+        sb.Append($"  Kaufknopf 0 auf dem Schirm: {feld.Value} -> Klick auf {mitte}\n");
+
+        // GG Erst pruefen, ob mein Ereignis ueberhaupt im richtigen Raum liegt.
+        //    Ein Klick, der daneben geht, weil der PRUEFSTAND die Punkte falsch
+        //    rechnet, sieht genauso aus wie ein Fenster, das keine Klicks
+        //    annimmt. Godot sagt es selbst: wer haengt unter dem Zeiger?
+        GetViewport().PushInput(new InputEventMouseMotion
+        {
+            Position = schirmpunkt, GlobalPosition = schirmpunkt,
+        });
+        var drunter = GetViewport().GuiGetHoveredControl();
+        int geldVor = _entities.GeldImFenster;
+        int fliegtVor = _entities.FlugzeugZahl;
+        int wahlVor = _entities.AngewaehlterIndex;
+
+        void Klick(bool runter)
+        {
+            var ev = new InputEventMouseButton
+            {
+                ButtonIndex = MouseButton.Left,
+                Pressed = runter,
+                Position = schirmpunkt,
+                GlobalPosition = schirmpunkt,
+            };
+            GetViewport().PushInput(ev);
+        }
+        // GG Eine Hand BEWEGT die Maus, bevor sie klickt. Godot fuehrt einen
+        //    Zeigerstand; ein Knopfereignis ohne vorherige Bewegung fand im
+        //    ersten Anlauf keinen Control und fiel auf die Karte durch.
+        GetViewport().PushInput(new InputEventMouseMotion { Position = schirmpunkt, GlobalPosition = schirmpunkt });
+        Klick(true);
+        Klick(false);
+
+        sb.Append("  Fenster sagt: " + _gebaeudeFenster.KlickZeile() + "\n");
+        sb.Append($"  NACH DEM KLICK: Kontostand {geldVor} -> {_entities.GeldImFenster}"
+                + $" (erwartet -150), Flugzeuge {fliegtVor} -> {_entities.FlugzeugZahl}"
+                + $" (erwartet +1)\n");
+        sb.Append($"                  Anwahl {wahlVor} -> {_entities.AngewaehlterIndex}"
+                + $"{(wahlVor == _entities.AngewaehlterIndex ? "" : "   ⚠⚠ DIE ANWAHL IST WEG")}"
+                + $", Fenster haette Inhalt: {_entities.FensterHaetteInhalt}"
+                + $", sichtbar: {_gebaeudeFenster.Visible}\n");
+
+        bool gekauft = _entities.GeldImFenster == geldVor - 150
+                    && _entities.FlugzeugZahl == fliegtVor + 1;
+        bool offen = _gebaeudeFenster.Visible && _entities.FensterHaetteInhalt;
+        sb.Append($"  ERGEBNIS: gekauft {(gekauft ? "JA" : "NEIN")}, "
+                + $"Fenster bleibt offen {(offen ? "JA" : "NEIN")}\n");
+
+        // Nullmodell: ein Klick DANEBEN (unter den Knopf, noch im Fenster) darf
+        // NICHTS kaufen. Ohne ihn wuerde die Messung oben auch dann gruen sein,
+        // wenn jeder beliebige Klick im Fenster kauft.
+        int geld2 = _entities.GeldImFenster, flieg2 = _entities.FlugzeugZahl;
+        var daneben = new Vector2(mitte.X, feld.Value.Position.Y - 8) * faktor;
+        foreach (bool runter in new[] { true, false })
+            GetViewport().PushInput(new InputEventMouseButton
+            {
+                ButtonIndex = MouseButton.Left, Pressed = runter,
+                Position = daneben, GlobalPosition = daneben,
+            });
+        sb.Append($"  Nullmodell: Klick daneben {daneben} -> Kontostand {geld2} -> "
+                + $"{_entities.GeldImFenster}, Flugzeuge {flieg2} -> {_entities.FlugzeugZahl}"
+                + $" (beides soll gleich bleiben)\n");
+        return sb.ToString();
+    }
+
 
     /// <summary><c>--wegsuche-check</c> — ist es wirklich die Breitensuche des
     /// Originals?</summary>
@@ -1573,6 +1746,12 @@ public partial class MapViewer : Node2D
             else if (a == "--reichweite-check") _reichweiteCheck = true;
             else if (a == "--forschung-check") _forschungCheck = true;
             else if (a == "--fenster-check") _fensterCheck = true;
+            else if (a == "--kaufweg-check") _kaufwegCheck = true;
+            else if (a == "--plattform-check") _plattformCheck = true;
+            else if (a == "--klick-log") UI.WindowManager.KlickProtokoll = true;
+            else if (a == "--zell-spur") MapEntityLayer.ZellSpur = true;
+            else if (a == "--gebaeude-block") MapEntityLayer.GebaeudeBlock = true;
+            else if (a == "--posten-anker") MapEntityLayer.PostenAnker = true;
             else if (a == "--wegsuche-check") _wegsucheCheck = true;
             // ⚠ GEGENPROBE: der alte A*, siehe NavGrid.AlterAstern.
             else if (a == "--alter-astern") Simulation.NavGrid.AlterAstern = true;
@@ -4135,6 +4314,18 @@ public partial class MapViewer : Node2D
     {
         if (@event is InputEventMouseButton mb)
         {
+            // --klick-log: WER hat den Klick bekommen? Kommt er hier an, hat ihn
+            // KEIN Fenster genommen -- und dann raeumt die Karte gleich die
+            // Anwahl, was das Gebaeudefenster zumacht.
+            if (UI.WindowManager.KlickProtokoll && mb.ButtonIndex == MouseButton.Left)
+            {
+                var drunter = GetViewport().GuiGetHoveredControl();
+                GD.Print($"klick-log: KARTE bekommt {(mb.Pressed ? "DRUCK " : "LOS   ")} "
+                       + $"bei {mb.Position} (global {GetGlobalMousePosition()}) | "
+                       + $"unter dem Zeiger: {(drunter == null ? "NICHTS" : drunter.Name + " " + drunter.GetType().Name)} | "
+                       + $"Gebaeudefenster {(_gebaeudeFenster == null ? "fehlt" : (_gebaeudeFenster.Visible ? "offen " + _gebaeudeFenster.GetGlobalRect() : "zu"))} | "
+                       + $"Leinwand {GetViewport().GetVisibleRect().Size} Fenster {GetWindow().Size}");
+            }
             switch (mb.ButtonIndex)
             {
                 case MouseButton.Left:
