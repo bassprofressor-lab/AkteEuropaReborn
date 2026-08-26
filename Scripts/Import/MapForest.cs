@@ -305,9 +305,16 @@ public static class MapForest
         if (!imBereich)
         {
             if (imap != 0xFFFF) return false;
-            // 0xFFFF zaehlt nur, wenn das Lagenbyte es sagt — und ohne Sektion
-            // 20 (lage == 0) waere das JEDE freie Zelle. Deshalb hier ≥ 100.
-            return lage >= 100;
+            // ⚠⚠ 25.08.2026 - hier stand `return lage >= 100;`, was die 636
+            // Bruecken-, Molen- und Rampenzellen ins Zeilenfach holte. Sie
+            // werden seit heute FLACH ins Kartenbild gemalt (MapBaker, Suche
+            // nach `befahrbar`) - ein zweites Mal aufragend waere dieselbe
+            // Kachel doppelt, und zwar UEBER jeder Einheit, die darauf faehrt.
+            //
+            // ⚠ Der erste Anlauf an diesem Tag hat NUR das hier geaendert und
+            // das flache Malen vergessen. Ergebnis: Bruecke ohne Gelaender und
+            // ohne Fluss darunter. Die zwei Stellen gehoeren zusammen.
+            return false;
         }
         return lage == 0 || lage >= 100;
     }

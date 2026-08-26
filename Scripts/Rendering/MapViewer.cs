@@ -1171,7 +1171,13 @@ public partial class MapViewer : Node2D
             else if (a == "--schiffstau-check") _stauCheck = true;
             else if (a == "--belegung-check") _belegCheck = true;
             else if (a == "--minen-check") _minenCheck = true;
-            else if (a == "--erwartung") _erwartung = true;
+            // Auch die =-Form annehmen. spielen.cmd nennt in seiner Hilfe `--erwartung=18`,
+            // und ein Gleichheitsvergleich hat die still verschluckt: kein Blatt, keine Meldung,
+            // kein Hinweis worauf es lag. Die Missionsnummer steht ohnehin im Skript.
+            else if (a == "--erwartung" || a.StartsWith("--erwartung=")) _erwartung = true;
+            else if (a == "--klang-log") Audio.SoundBankPlayer.LogKlaenge = true;
+            else if (a.StartsWith("--sprit-check")) _spritCheck = true;
+            else if (a == "--front-check") _frontCheck = true;
             else if (a == "--minen-ohne-tor") MapEntityLayer.MinenTor = false;
             else if (a == "--alt-stempel") Simulation.NavGrid.AltStempel = true;
             else if (a == "--nebenmission-check") _nebenCheck = true;
@@ -1820,6 +1826,20 @@ public partial class MapViewer : Node2D
     private bool _stauCheck;
     private bool _belegCheck;
     private bool _minenCheck;
+    /// <summary><c>--sprit-check</c>: schickt alle eigenen fahrenden Einheiten
+    /// quer ueber die Karte, damit sich messen laesst, OB der Spritabzug beim
+    /// Zellwechsel greift. Ohne Befehl faehrt auf einer Kampagnenkarte niemand
+    /// (die KI marschiert dort nicht), und ein Lauf ohne Fahrt belegt nichts.</summary>
+    /// <summary><c>--front-check</c>: stellt eine Einheit auf die TUERZELLE eines
+    /// Gebaeudes und sagt, ob sie davor oder dahinter gezeichnet wird.
+    /// ⚠ 25.08.2026: die Methode gab es seit dem 16.08., ein Schalter erreichte
+    /// sie nie - dasselbe Muster wie damals bei --hilfe-check. Gemeldet wurde
+    /// »die neutralen Gebaeude verdecken keine Einheiten«.</summary>
+    private bool _frontCheck;
+
+    private bool _spritCheck;
+    private bool _spritGestartet;
+
     private bool _erwartung;
     private int _erwartungWartet;
     private bool _nebenCheck;
@@ -2232,6 +2252,7 @@ public partial class MapViewer : Node2D
             GD.Print(_entities.BrandWatchLine());
             GD.Print(_entities.ObjektBrandLine());
             GD.Print(_entities.ParteifarbeLine());
+            GD.Print(_entities.SpritLine());
             GD.Print(_entities.VerdeckStelle());
             GD.Print(_entities.InfBildLine());
             GD.Print(_entities.VerdeckEinheitLine());
@@ -3345,8 +3366,16 @@ public partial class MapViewer : Node2D
             if (offen != null) { UI.WindowManager.NachVorn(offen); return; }
             // Ein Fenster derselben Art fuer ein ANDERES Gebaeude weicht.
             UI.WindowManager.Wegnehmen(UI.WindowManager.Offen(schluessel));
-            UI.WindowManager.Oeffnen(schluessel, _gebaeudeFenster, platz);
+            var f = UI.WindowManager.Oeffnen(schluessel, _gebaeudeFenster, platz);
             _gebaeudeFenster.Open(art);
+            // ⭐⭐ 26.08.2026 — DIE LAGE. Gemeldet: »unseres oeffnet oben links,
+            // im Original neben dem Gebaeude«. Das Original setzt sie auf
+            // MAUS-3 und zwingt sie dann in den Schirm; die ganze Herleitung
+            // steht in WindowManager.AnDieMaus.
+            // ⚠ NACH `Open`, nicht davor: `Open` ruft `Refresh`, und erst dort
+            // bekommt das Fenster seine Groesse. Der Zwang in den Schirm
+            // rechnet mit ihr.
+            UI.WindowManager.AnDieMaus(f);
         };
         _baseWindow.Rows = _entities.BuildPanelRows;
         _baseWindow.TitleLine = _entities.BuildPanelTitle;
@@ -4034,6 +4063,18 @@ public partial class MapViewer : Node2D
         {
             _erwartung = false;
             GD.Print(_entities.ErwartungsBlatt());
+        }
+
+        if (_frontCheck && _entities.ErwartungBereit())
+        {
+            _frontCheck = false;
+            _entities.FrontCheckSetup();   // die Zeile sagt alles; die Kamera bleibt, wo sie ist
+        }
+
+        if (_spritCheck && !_spritGestartet && _entities.ErwartungBereit())
+        {
+            _spritGestartet = true;
+            GD.Print(_entities.SpritCheckStart());
         }
 
         // ⚠ Die Leiste ZUERST: QuitIfDue() schreibt die Prüfzeilen, und

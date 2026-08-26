@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.UI;
+﻿namespace AkteEuropaReborn.UI;
 
 using System.Collections.Generic;
 using Godot;
@@ -88,7 +88,44 @@ public static class WindowManager
     /// eigene.</para>
     /// </summary>
     public const int UnsereErste = 100;
-    public const int ArtGruppen = 100, ArtMerkpunkte = 101;
+
+    /// <summary>
+    /// ⭐⭐ <b>25.08.2026 — DIESE ZWEI SIND KEINE EIGENEN NUMMERN MEHR.</b>
+    ///
+    /// <para>Hier stand <c>ArtGruppen = 100, ArtMerkpunkte = 101</c> mit der
+    /// Begründung, ihre Fensterart sei ungelesen. Das ist seit dem 20.08.2026
+    /// überholt: <c>aekernel-tools/FENSTER_RE.md</c> führt den <b>ganzen</b>
+    /// Fensterverteiler <c>0x487630</c> mit allen 48 Armen, und dort stehen
+    /// <b>24 = Lokator</b> (<c>0x47A740</c>, 736 B, »Lokator - Lokalisieren -
+    /// Sichern«) und <b>25 = Gruppieren</b> (<c>0x47AAE0</c>, 740 B,
+    /// »Gruppieren - Gruppe speichern«). Die Klassenköpfe von
+    /// <see cref="LocatorWindow"/> und <see cref="GroupWindow"/> nennen genau
+    /// diese zwei Zahlen seit demselben Tag — nur die Verwaltung wusste noch
+    /// nichts davon. Die Tastentafel <c>0x487A10</c> (Revier 6, §3.1) nennt sie
+    /// ein zweites Mal und unabhängig: 24 und 25 sind zwei der sechs
+    /// Fensterarten mit EINGABEFELD, und beide Fenster haben bei uns genau
+    /// so eines (das Namensfeld).</para>
+    ///
+    /// <para>⚠ <b>Warum das jetzt trägt und vorher nicht:</b> seit
+    /// <see cref="Oeffnen"/> das Ereignisbyte setzt, ist die Fensterart eine
+    /// ZAHL, die in die Missionsskripte geht. Mit 100/101 hätte das
+    /// Ereignisbyte Werte angenommen, die das Original nie erzeugt — und die
+    /// Regeln, die auf <c>event == 24</c> (Missionen 1, 2, 3) und
+    /// <c>event == 25</c> (Missionen 1, 2) warten, hätten weiter gewartet.</para>
+    ///
+    /// <para>⭐ <b>Das Nullmodell steht in unseren eigenen Daten.</b>
+    /// <c>Data/mission_scripts.json</c> führt über alle 33 Missionen
+    /// <b>elf verschiedene</b> Ereigniswerte: 1, 6, 7, 8, 11, 16, 24, 25, 29,
+    /// 31, 33. <b>Alle elf sind Fensterarten aus der Tafel des Verteilers,
+    /// keine liegt über 48.</b> Das Ereignisbyte ist ein Byte (0…255); wären
+    /// die Werte freie Nummern, wären elf Treffer im Bereich 1…48 mit
+    /// <c>(48/256)^11 ≈ 3·10⁻⁹</c> zu erwarten.</para>
+    /// </summary>
+    public const int ArtGruppen = 25, ArtMerkpunkte = 24;
+
+    /// <summary>⚠ Fensterart <b>3</b> ist die KARTE — die einzige Art, die das
+    /// Ereignisbyte NICHT setzt. Siehe <see cref="Oeffnen"/>.</summary>
+    public const int ArtKarte = 3;
 
     /// <summary>⭐ Vier Bilder auf (BM.10, <c>word[0x87B054] &lt; 4</c>).</summary>
     public const int BilderAuf = 4;
@@ -103,6 +140,58 @@ public static class WindowManager
     /// <summary>⭐ Die Lebensdauer wird alle 20 Takte um eins gezählt
     /// (<c>word[0x4FA248] % 20 == 0</c>).</summary>
     public const int StandzeitTakte = 20;
+
+    // ---- ⭐⭐ DAS EREIGNISBYTE byte[C 0x539930] -------------------------------
+    //
+    // Einziger Setzer im ganzen Programm ist 0x4412C2
+    // (`mov byte ptr [0x539930], al`), und er sitzt in 0x441270 — genau der
+    // Funktion, die ein geöffnetes Fenster hinten in die Reihenfolgeliste
+    // einträgt, also in Oeffnen() hier unten. Der Wert ist die FENSTERART
+    // (`al = byte[44324·Fenster + 0x8B9038]`).
+    //
+    // ⭐ Vollerhebung über die Relokationstafel: 69 Verweise auf 0x539930,
+    // 0 unklar; die F-Fassung ist befehlsgleich.
+    //
+    // ⚠ DIE EINE AUSNAHME IST DIE KARTE: `cmp al,3 / je` @0x4412C0 springt
+    // über den Schreiber hinweg. Wer sie mitsetzte, machte aus jedem Blick auf
+    // die Karte ein Ereignis — und die Karte geht in der Kampagne ständig auf.
+    //
+    // ⚠ Es ist ein EREIGNIS, kein Zustand: der Block, der es liest, nullt es
+    // (`mov byte [0x539930], 0` @0x49867D). Hier wird es darum nur GESETZT;
+    // das Zurücksetzen bleibt bei den Lesern.
+    //
+    // ⚠ ZWEI LESER, EIN BYTE — und das ist unsere Abweichung, sie steht hier,
+    // damit sie zu sehen ist. Bei uns ist das eine Byte des Originals auf zwei
+    // Felder aufgeteilt: Campaign.CampaignHints.Ereignis für den
+    // Kampagnenvorspann und Campaign.MissionScript.LastEvent für die
+    // Missionsskripte. Im Original verbraucht der ERSTE Leser das Byte dem
+    // zweiten vor der Nase weg; bei uns können beide feuern. Solange beide
+    // dieselbe Zahl vom selben Setzer bekommen, ist das der ganze Unterschied.
+
+    /// <summary>Der Haken, über den das Ereignisbyte an das laufende
+    /// Missionsskript geht. <c>Rendering.MapEntityLayer</c> hängt ihn ein,
+    /// sobald das Skript steht — die Fensterverwaltung kennt das Skript nicht
+    /// und soll es auch nicht kennen. <see cref="Leeren"/> nimmt ihn wieder
+    /// weg, sonst hält ein statisches Feld die alte Karte über den
+    /// Szenenwechsel hinweg fest.</summary>
+    public static System.Action<int>? Ereignismelder;
+
+    /// <summary>Wie oft das Ereignisbyte gesetzt wurde und was zuletzt darin
+    /// stand. ⚠ Ohne den ZÄHLER ist »das Fenster hat nichts gesetzt« nicht von
+    /// »es hat 0 gesetzt« zu unterscheiden — und genau diese zwei Fälle sind
+    /// beim Ereignisbyte der Unterschied zwischen einer stummen Regel und einer
+    /// richtig wartenden.</summary>
+    public static int EreignisGesetzt, EreignisZuletzt;
+
+    /// <summary>Das Ereignis absetzen. Beide Empfänger bekommen dieselbe Zahl
+    /// aus derselben Hand — siehe den Block darüber.</summary>
+    private static void Ereignis(int art)
+    {
+        EreignisGesetzt++;
+        EreignisZuletzt = art;
+        Campaign.CampaignHints.Ereignis = art;
+        Ereignismelder?.Invoke(art);
+    }
 
     /// <summary>
     /// Die vier Arten, die <c>0x44FC20</c> NICHT rufen und darum liegen
@@ -174,12 +263,108 @@ public static class WindowManager
     private static Control? Lebend(Fenster? f)
         => f?.Knoten is Control c && GodotObject.IsInstanceValid(c) ? c : null;
 
+    /// <summary>
+    /// ⭐⭐ <b>WO EIN FENSTER AUFGEHT: AN DER MAUS, DREI PUNKTE NACH LINKS OBEN.</b>
+    /// Gelesen am 26.08.2026 auf die Meldung »unseres öffnet oben links, im
+    /// Original neben dem Gebäude«.
+    ///
+    /// <para><b>Die Kette, ganz durchgelesen</b> — am Beispiel des
+    /// Nachschubpostens:</para>
+    /// <code>
+    /// 0x437315  Arm 14 des Klickverteilers 0x4379F0
+    ///           mov  word[0x502AD8], bx          ; die angeklickte Kennung
+    ///           mov  eax, [0x502AAC] ; sub ax,3  ; MAUS-Y − 3   -> push
+    ///           mov  eax, [0x502AA8] ; sub ax,3  ; MAUS-X − 3   -> push
+    ///           call 0x443090                    ; Oeffner der Fensterart 31
+    /// 0x4430D7  der Oeffner reicht x/y durch  ->  0x45ABE0 (Anleger)
+    /// 0x45AC5C  word[+0x02] = x ; word[+0x04] = y
+    /// 0x443134  danach:  0x441190  =  InDenSchirm
+    /// </code>
+    ///
+    /// <para><b>Dass 0x502AA8/0x502AAC die MAUS sind, ist belegt und nicht
+    /// vermutet:</b> geschrieben werden sie in der Fensterbotschaft
+    /// <c>@0x414021</c> aus <c>LOWORD/HIWORD(lParam)</c> — die Form eines
+    /// <c>WM_MOUSEMOVE</c> — und <c>@0x414397</c> setzt sie neben einem Ruf über
+    /// <c>[0xC657FC]</c> auf <c>(300, 200)</c> zurück. Die Relokationstafel
+    /// führt für das Paar <b>239 Verweise, 0 unklar</b>.</para>
+    ///
+    /// <para>⭐ <b>Und es ist die Regel des ganzen Programms, keine Einzelstelle:</b>
+    /// die Bytefolge <c>A1 &lt;Maus-X&gt; / 66 2D 03 00 / 50</c> (»lies Maus-X,
+    /// ziehe 3 ab, schiebe auf den Stapel«) steht <b>60 mal</b> im <c>.text</c> —
+    /// und in der F-Fassung, auf deren eigener Maus-Adresse
+    /// <c>0x501AE8</c>, <b>ebenfalls genau 60 mal</b>. Zwei Bauten, dieselbe
+    /// Zahl.</para>
+    ///
+    /// <para>⚠ <b>Die Ausnahmen sind vollständig aufgezählt</b>, nicht
+    /// gemutmasst: neun Öffner überschreiben die übergebene Lage gleich wieder
+    /// mit einer festen (mittig, <c>Höhe/5</c>, <c>Höhe−200</c>, <c>x=25</c>).
+    /// Sie stehen in <see cref="FesteLage"/> und sind über die Schreiber auf
+    /// <c>word[0x8B903A]</c> ausserhalb der 44 Anleger gefunden — eine
+    /// Vollerhebung über die Relokationstafel, kein Abtast.</para>
+    ///
+    /// <para>⚠ <b>UNSERE SETZUNG sind die drei Punkte.</b> Sie stehen im
+    /// Original in dessen eigenen Bildpunkten (640 x 480); wir rechnen sie
+    /// NICHT auf unseren Schirm hoch. Der Versatz entscheidet nur, ob der
+    /// Zeiger knapp INNERHALB der ersten Rahmenkachel sitzt, und das tut er
+    /// bei uns auch ungerechnet. Wer ihn skaliert, ändert am Bild nichts und
+    /// hätte eine Zahl mehr zu begründen.</para>
+    ///
+    /// <para>⚠ <b>Erst rufen, wenn die GRÖSSE steht.</b> Der Zwang in den
+    /// Schirm rechnet mit Breite und Höhe; ein Godot-Knoten, der gerade erst
+    /// sichtbar wurde, trägt die noch nicht. Darum ruft
+    /// <c>MapViewer.OnBuildingWindow</c> diese Methode NACH
+    /// <c>BuildingWindow.Open</c> und nicht davor.</para>
+    /// </summary>
+    /// <returns>false, wenn das Fenster eine feste Lage hat oder tot ist —
+    /// dann wurde nichts angefasst.</returns>
+    public static bool AnDieMaus(Fenster? f)
+    {
+        if (Lebend(f) is not Control c) return false;
+        var schirm = Schirmmass();
+        if (schirm.X <= 0) return false;
+        // Eine feste Lage schlägt die Maus — im Original überschreibt der
+        // Öffner die übergebene Lage, bei uns tut es dieselbe Tafel.
+        if (FesteLage(f, schirm)) { InDenSchirm(f, schirm); return false; }
+        // ⚠ `GetGlobalMousePosition` und NICHT `GetViewport().GetMousePosition()`:
+        //   das Spiel laeuft im Streckmodus »CanvasItems« (Settings.cs meldet
+        //   ihn beim Start), und dort sind Fensterpunkte und Leinwandpunkte
+        //   nicht dasselbe. `Control.Position` zaehlt in der Leinwand seiner
+        //   CanvasLayer -- die Maus muss in derselben Rechnung stehen, sonst
+        //   sitzt das Fenster auf einem gestreckten Schirm daneben, und zwar
+        //   umso weiter, je weiter rechts unten geklickt wurde.
+        var maus = Mausquelle?.Invoke() ?? c.GetGlobalMousePosition();
+        c.Position = maus - new Vector2(MausVersatz, MausVersatz);
+        InDenSchirm(f, schirm);
+        return true;
+    }
+
+    /// <summary>Die drei Punkte aus <c>sub ax, 3</c> — siehe
+    /// <see cref="AnDieMaus"/>.</summary>
+    public const int MausVersatz = 3;
+
+    /// <summary>
+    /// Woher <see cref="AnDieMaus"/> den Zeigerstand nimmt. Im Spiel null —
+    /// dann fragt sie den Sichtbereich.
+    ///
+    /// <para>⚠ Diese Naht gibt es allein für den Prüfstand, und sie hat einen
+    /// Grund: einen Mauszeiger kann ein kopfloser Lauf nicht setzen
+    /// (<c>Input.WarpMouse</c> braucht ein Fenster). Ohne sie müsste der
+    /// Prüfstand die gemessene Lage selbst hinschreiben — und prüfte damit
+    /// seine eigene Rechnung statt der von <see cref="AnDieMaus"/>.</para>
+    /// </summary>
+    public static System.Func<Vector2>? Mausquelle;
+
     public static void InDenSchirm(Fenster? f, Vector2 schirm)
     {
         if (Lebend(f) is not Control c) return;
         if (ZwangAusgenommen(f!.Art)) return;
         var p = c.Position;
-        var g = c.Size;
+        // ⚠ Ein frisch sichtbar gemachter Knoten trägt seine Größe noch nicht
+        // in `Size`, sondern erst in `CustomMinimumSize`. Mit `Size` allein
+        // zwänge der Zwang gegen eine Null-Größe und liesse das Fenster stehen,
+        // wo es steht — der Fehler wäre nur bei kleinen Schirmen zu sehen.
+        var g = new Vector2(Mathf.Max(c.Size.X, c.CustomMinimumSize.X),
+                            Mathf.Max(c.Size.Y, c.CustomMinimumSize.Y));
         if (p.X < 0) p.X = 0;
         if (p.X + g.X >= schirm.X) p.X = schirm.X - g.X - 1;
         if (p.Y < 0) p.Y = 0;
@@ -263,7 +448,14 @@ public static class WindowManager
         _liste.Clear();
         Abgewiesen = 0;
         VonSelbstZu = 0;
+        EreignisGesetzt = 0;
+        EreignisZuletzt = 0;
         _takt = 0;
+        // ⚠ Der Haken geht MIT. Er hält eine Methode der alten Kartenebene
+        // fest; bliebe er stehen, zeigte ein statisches Feld über den
+        // Szenenwechsel hinweg auf eine freigegebene Szene — dieselbe Falle wie
+        // bei den Knoten, siehe <see cref="Lebend"/>.
+        Ereignismelder = null;
     }
 
     /// <summary>Ist ein Fenster dieser Art (und Kennung) schon offen?
@@ -309,6 +501,15 @@ public static class WindowManager
 
         // 2. HINTEN in die Liste (0x441270).
         _liste.Add(f);
+
+        // 2b. ⭐⭐ UND DAS EREIGNISBYTE — DIESELBE FUNKTION, 0x4412C2.
+        //     Es steht hier und nicht bei den Zeichnern, weil es im Original
+        //     auch hier steht: EIN Setzer für alle 69 Fundstellen. Und es steht
+        //     hinter der Doppelöffnungssperre, weil der Setzer im Original
+        //     hinter dem Eintragen sitzt: ein Fenster, das schon offen ist,
+        //     wird gar nicht erst eingetragen und setzt darum auch nichts.
+        //     Die Ausnahme ist die Karte (Art 3, `cmp al,3 / je` @0x4412C0).
+        if (art != ArtKarte) Ereignis(art);
 
         // 3. Lage: erst die feste, wenn die Art eine hat, dann in den Schirm
         //    zwingen (0x441190). ⚠ Die Reihenfolge ist die des Originals --
@@ -387,10 +588,24 @@ public static class WindowManager
     /// Zeichenschicht <c>dword[0x5387C8]</c> — beide schreibt <c>0x4B6B1C</c>
     /// unmittelbar hinter <c>SetDisplayMode</c>. Bei uns ist es der
     /// Sichtbereich.</summary>
-    private static Vector2 Schirmmass()
+    /// <summary>⚠ Öffentlich, damit der Prüfstand gegen DIESELBE Zahl rechnet,
+    /// mit der <see cref="AnDieMaus"/> zwingt. Ein Prüfstand, der sich sein
+    /// eigenes Schirmmass setzt, misst seine eigene Annahme.</summary>
+    public static Vector2 Schirmmass()
     {
         var baum = (SceneTree?)Engine.GetMainLoop();
         var sicht = baum?.Root?.GetViewport();
+        // ⚠⚠ 26.08.2026, GEMESSEN statt geglaubt: ein KOPFLOSER Lauf meldet
+        // hier NICHT (0,0), sondern ein QUADRAT — Sonde: sichtrect=(1600,1600),
+        // waehrend project.godot 1600x900 sagt und Settings.cs »Schirm 0x0«
+        // meldet. Drei Stellen, drei Zahlen.
+        // ⭐ Fuer den Nachbau heisst das: jede Lage, die ein kopfloser
+        // Pruefstand misst, haengt an DIESER Zahl und nicht an der des
+        // Spielers. Darum nennt --fenster-check sie in seiner Zeile mit; eine
+        // Lage ohne ihr Schirmmass ist eine Zahl ohne Herkunft.
+        // Ein Rueckfall auf project.godot stand hier kurz und ist wieder weg:
+        // er waere nie gelaufen, und ein Zweig, den nichts betritt, ist eine
+        // Behauptung.
         return sicht == null ? Vector2.Zero : sicht.GetVisibleRect().Size;
     }
 
@@ -484,6 +699,12 @@ public static partial class WindowManagerCheck
     public static string Lauf()
     {
         var sb = new System.Text.StringBuilder("fenster-check\n");
+        // ⚠ Der Lauf ÖFFNET Fenster, und Oeffnen setzt seit dem 25.08.2026 das
+        // Ereignisbyte. Ein Prüfstand, der dabei den Spielzustand verändert,
+        // misst beim nächsten Mal sich selbst — darum wird beides gesichert und
+        // am Ende zurückgelegt.
+        var merkeMelder = WindowManager.Ereignismelder;
+        int merkeEreignis = Campaign.CampaignHints.Ereignis;
         WindowManager.Leeren();
         bool alles = true;
         void Sag(string was, bool ok)
@@ -584,6 +805,70 @@ public static partial class WindowManagerCheck
                 Mathf.Abs(q.X - 600) < 0.5f && Mathf.Abs(q.Y - 460) < 0.5f);
         }
 
+        // 7b. ⭐⭐ WO EIN FENSTER AUFGEHT: MAUS-3 (26.08.2026, siehe AnDieMaus).
+        //     Gemessen wird die Rechnung der Verwaltung, nicht eine eigene:
+        //     die Maus kommt aus der Naht `Mausquelle`, die Lage aus dem
+        //     Knoten, den `AnDieMaus` angefasst hat.
+        WindowManager.Leeren();
+        var merkeMaus = WindowManager.Mausquelle;
+        WindowManager.Mausquelle = () => new Godot.Vector2(200, 150);
+        var beiMaus = WindowManager.Oeffnen(31, Kn(0, 0, 260, 100));
+        bool angefasstMaus = WindowManager.AnDieMaus(beiMaus);
+        var mp = ((Godot.Control)beiMaus!.Knoten!).Position;
+        Sag($"Art 31, Maus (200,150) -> ({mp.X:0},{mp.Y:0}), erwartet (197,147)",
+            angefasstMaus && Mathf.Abs(mp.X - 197) < 0.5f && Mathf.Abs(mp.Y - 147) < 0.5f);
+
+        // Gegenprobe A — das NULLMODELL: ohne AnDieMaus bleibt das Fenster
+        // liegen, wo der Knoten steht. Genau das war der gemeldete Fehler
+        // (»oeffnet oben links«), und ohne diese Messung wuerde die obere
+        // durchgehen, selbst wenn AnDieMaus gar nichts taete.
+        WindowManager.Leeren();
+        var ohne = WindowManager.Oeffnen(31, Kn(0, 0, 260, 100));
+        var op = ((Godot.Control)ohne!.Knoten!).Position;
+        Sag($"Nullmodell: ohne AnDieMaus bleibt Art 31 bei ({op.X:0},{op.Y:0}), "
+            + "erwartet (0,0)",
+            Mathf.Abs(op.X) < 0.5f && Mathf.Abs(op.Y) < 0.5f);
+
+        // Gegenprobe B — der Zwang greift auch hier: eine Maus am rechten
+        // unteren Rand darf das Fenster nicht aus dem Bild schieben.
+        // ⚠ Die Maus muss an den ECHTEN Rand, nicht an den von (640,480):
+        //   AnDieMaus zwingt gegen Schirmmass(), und im ersten Anlauf stand
+        //   hier (630,470). Auf einem 1600x900-Schirm ragt dort nichts heraus,
+        //   der Zwang hatte nichts zu tun, und die Messung prueft nichts.
+        var sm = WindowManager.Schirmmass();
+        WindowManager.Leeren();
+        WindowManager.Mausquelle = () => sm - new Godot.Vector2(10, 10);
+        var eck = WindowManager.Oeffnen(31, Kn(0, 0, 260, 100));
+        WindowManager.AnDieMaus(eck);
+        var ep = ((Godot.Control)eck!.Knoten!).Position;
+        bool eckOk = Mathf.Abs(ep.X - (sm.X - 260 - 1)) < 0.5f
+                  && Mathf.Abs(ep.Y - (sm.Y - 100 - 1)) < 0.5f;
+        Sag($"Art 31, Maus ({sm.X - 10:0},{sm.Y - 10:0}) auf Schirm {sm.X:0}x{sm.Y:0} "
+            + $"-> ({ep.X:0},{ep.Y:0}), erwartet ({sm.X - 261:0},{sm.Y - 101:0}) "
+            + "— in den Schirm gezwungen",
+            eckOk);
+
+        // Gegenprobe C — eine Art mit FESTER Lage laesst sich von der Maus
+        // nicht bewegen. Art 37 ist mittig (0x44276C), Maus hin oder her.
+        // ⚠ Das Mass des Knotens steht MIT in der Zeile: die Lage rechnet sich
+        //   aus ihm, und eine Lage ohne ihr Mass ist eine Zahl ohne Herkunft.
+        WindowManager.Leeren();
+        WindowManager.Mausquelle = () => new Godot.Vector2(10, 10);
+        var festKn = Kn(0, 0, 200, 100);
+        var fest = WindowManager.Oeffnen(37, festKn);
+        bool angefasstFest = WindowManager.AnDieMaus(fest);
+        var festP = festKn.Position;
+        var festG = new Godot.Vector2(Mathf.Max(festKn.Size.X, festKn.CustomMinimumSize.X),
+                                      Mathf.Max(festKn.Size.Y, festKn.CustomMinimumSize.Y));
+        var festSoll = (sm - festG) / 2f;
+        Sag($"Art 37 (Mass {festG.X:0}x{festG.Y:0}) hat feste Lage -> "
+            + $"({festP.X:0},{festP.Y:0}) statt (7,7), erwartet mittig "
+            + $"({festSoll.X:0},{festSoll.Y:0}); AnDieMaus meldet "
+            + (angefasstFest ? "ANGEFASST" : "nicht angefasst"),
+            !angefasstFest && Mathf.Abs(festP.X - festSoll.X) < 0.5f
+                           && Mathf.Abs(festP.Y - festSoll.Y) < 0.5f);
+        WindowManager.Mausquelle = merkeMaus;
+
         // 8. ⭐ DIE FESTEN LAGEN
         WindowManager.Leeren();
         var haupt = WindowManager.Oeffnen(35, Kn(0, 0, 200, 240));
@@ -681,8 +966,57 @@ public static partial class WindowManagerCheck
             + $"offen danach {WindowManager.Anzahl}",
             !geworfen && WindowManager.Anzahl == 0);
 
+        // 11. ⭐⭐ DAS EREIGNISBYTE (0x441270 / 0x4412C2) UND SEINE AUSNAHME.
+        //
+        // ⚠ Zwei Messungen, weil eine allein nichts trennt: dass eine Zahl
+        // ankommt, sagt noch nicht, dass sie von DIESEM Fenster kommt — und
+        // dass die Karte nichts setzt, sagt nichts, wenn nie etwas gesetzt
+        // wird. Erst zusammen zeigen sie den `cmp al,3 / je` @0x4412C0.
+        WindowManager.Leeren();
+        int gesehen = -1;
+        WindowManager.Ereignismelder = a => gesehen = a;
+        Campaign.CampaignHints.Ereignis = 0;
+
+        WindowManager.Oeffnen(31, null);
+        Sag($"Art 31 geoeffnet -> Ereignisbyte {WindowManager.EreignisZuletzt}, "
+            + $"Kontexthilfe {Campaign.CampaignHints.Ereignis}, Skript {gesehen} "
+            + "(erwartet 31/31/31)",
+            WindowManager.EreignisZuletzt == 31
+            && Campaign.CampaignHints.Ereignis == 31 && gesehen == 31);
+
+        // Die KARTE setzt nichts — alle drei Werte müssen auf 31 stehenbleiben.
+        int vorKarte = WindowManager.EreignisGesetzt;
+        WindowManager.Oeffnen(WindowManager.ArtKarte, null);
+        Sag($"Karte (Art 3) dazu -> Ereignisbyte bleibt {WindowManager.EreignisZuletzt}, "
+            + $"Setzungen {vorKarte} -> {WindowManager.EreignisGesetzt} (erwartet 31 "
+            + "und keine neue Setzung)",
+            WindowManager.EreignisZuletzt == 31 && gesehen == 31
+            && WindowManager.EreignisGesetzt == vorKarte
+            && WindowManager.Offen(WindowManager.ArtKarte) != null);
+
+        // Und die Doppelöffnungssperre setzt auch nichts: ein Fenster, das
+        // schon offen ist, wird gar nicht erst eingetragen.
+        int vorZweit = WindowManager.EreignisGesetzt;
+        WindowManager.Oeffnen(31, null);
+        Sag($"Art 31 ein zweites Mal -> Setzungen {vorZweit} -> "
+            + $"{WindowManager.EreignisGesetzt} (erwartet unveraendert)",
+            WindowManager.EreignisGesetzt == vorZweit);
+
+        // 12. ⭐ DIE ZWEI FENSTERARTEN, DIE AM 25.08.2026 RICHTIGGESTELLT WURDEN.
+        // ⚠ Geprüft wird die SCHRANKE, nicht die Zahl allein: eine Fensterart
+        // des Originals liegt in 1..48. Mit den alten 100/101 hätte das
+        // Ereignisbyte Werte angenommen, die es im Original nicht gibt.
+        Sag($"Gruppieren = Art {WindowManager.ArtGruppen}, Lokator = Art "
+            + $"{WindowManager.ArtMerkpunkte} (erwartet 25/24, beide in 1..48)",
+            WindowManager.ArtGruppen == 25 && WindowManager.ArtMerkpunkte == 24
+            && WindowManager.ArtGruppen is > 0 and <= 48
+            && WindowManager.ArtMerkpunkte is > 0 and <= 48);
+
         WindowManager.Leeren();
         foreach (var knoten in muell) knoten.Free();
+        // Zurücklegen, was der Lauf sich geliehen hat.
+        WindowManager.Ereignismelder = merkeMelder;
+        Campaign.CampaignHints.Ereignis = merkeEreignis;
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }

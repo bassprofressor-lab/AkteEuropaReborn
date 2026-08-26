@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Campaign;
+﻿namespace AkteEuropaReborn.Campaign;
 
 using System.Collections.Generic;
 using Godot;
@@ -223,6 +223,23 @@ public static class CampaignManager
     public static void NoteStartBalance(int mission, int value)
     {
         if (mission <= 0 || StartBalanceOf(mission) >= 0) return;
+        // ⚠⚠ 25.08.2026 - NUR WAS IM KAMPAGNENFLUSS ERREICHT WURDE.
+        //
+        // Gemeldet: »ich habe kein Startgeld bei Mission 2, um Helikopter zu
+        // kaufen«. Im Spielstand stand `2=0`, obwohl `completed=1` und
+        // `balance=470` - und weil ein gemerkter Eintrag Vorrang hat, kam der
+        // Zweig »noch nicht geschafft -> laufender Stand« nie zum Zug.
+        //
+        // Die 0 stammte aus einem DIREKTSPRUNG (`spielen 2`, und heute aus rund
+        // einem Dutzend kopfloser Pruefläufe): dort ist der laufende Stand 0,
+        // weil Mission 1 in diesem Durchgang nie gespielt wurde. Gemerkt werden
+        // darf aber nur ein Anfangsstand, der wirklich einer ist - also der
+        // einer Mission, die man im Fluss erreicht (die naechste nach der
+        // letzten geschafften) oder einer bereits geschafften.
+        //
+        // Ohne diesen Riegel vergiftet jeder Sprung die Tabelle dauerhaft: der
+        // Eintrag wird per Bauart nie ueberschrieben.
+        if (mission > Completed + 1) return;
         using var c = new ConfigFile();
         c.Load(SavePath);
         c.SetValue("mission_balance", mission.ToString(), value);

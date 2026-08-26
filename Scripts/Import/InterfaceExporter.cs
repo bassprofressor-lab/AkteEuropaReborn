@@ -298,6 +298,171 @@ public sealed class InterfaceExporter
         File.WriteAllText($"{_ui}/windvane_index.json", sb.ToString(), new UTF8Encoding(false));
     }
 
+    // ---- WINDOWS.CWW: DIE FENSTERMOEBEL DES ORIGINALS -----------------------
+
+    /// <summary>
+    /// <b>Die Bausteine, aus denen das Original JEDES Fenster zusammensetzt</b>
+    /// — 314 Kacheln zu 20x20 aus <c>WINDOWS.CWW</c>. Geschrieben am
+    /// 25.08.2026, nachdem der Spieler gemeldet hatte: »Du hast wie ein eigenes
+    /// Kaufmenü gebaut, das hat nichts mit dem Original zu tun.« Er hatte recht,
+    /// und die Grafiken lagen die ganze Zeit in derselben Datei, aus der wir
+    /// bisher nur die acht Bilder der Windfahne genommen haben.
+    ///
+    /// <para><b>Der Bestand.</b> <c>0x455D50</c> liest <c>windows.cww</c> am
+    /// Stück nach <c>0x8938D8</c> (<c>fread(…, 1, 0x21BB0, f)</c> — 0x21BB0 =
+    /// 138160 = die Dateigröße auf das Byte). Der Blitter <c>0x455DB0</c>
+    /// rechnet die Satzadresse als <b>440·Nummer</b> (<c>lea</c>-Kette
+    /// @0x455DB9..0x455DCF), zählt <b>20 Zeilen</b> (<c>mov dword[esp+0xc],
+    /// 0x14</c> @0x455DC3) und nimmt je Zeile <c>[+0] Startspalte</c>,
+    /// <c>[+1] Länge</c>, danach die Bildpunkte ab <c>+2</c>, Schrittweite
+    /// <c>0x16 = 22</c>. 138160 / 440 = <b>314 Sätze, Rest 0</b>.</para>
+    ///
+    /// <para>⚠ <b>Der Blitter kennt KEINE Durchsichtigkeit</b> — er kopiert
+    /// genau <c>Länge</c> Bytes ab <c>Startspalte</c> und rührt den Rest der
+    /// Zeile nicht an. Was ausserhalb der Spanne steht, ist also nicht
+    /// »schwarz«, sondern <b>gar nicht gezeichnet</b>; hier wird es
+    /// durchsichtig geschrieben. (Gegenprobe: in der ganzen Datei kommt
+    /// innerhalb der Spannen kein einziger Wert 0xFF vor — höchster Index 250 —
+    /// es gibt also auch keinen Durchsichtigkeitsschlüssel, der uns entgehen
+    /// könnte.)</para>
+    ///
+    /// <para><b>Welche Kachel wofür.</b> Aus dem Fensterrahmen-Zeichner
+    /// <c>0x455E50</c> (den JEDER der 48 Fensterzeichner als erstes ruft;
+    /// Art 31 @0x47D39D über den Sprung <c>0x40116D</c>) und dem
+    /// Knopf-Zeichner <c>0x456670</c> (Sprung <c>0x401820</c>). Beide würfeln
+    /// ihre Auswahl, aber mit <b>gesetztem Startwert</b>, sind also
+    /// wiederholbar:</para>
+    /// <list type="table">
+    /// <item><term>0..2</term><description>linker Rand, <c>rand()%3</c>,
+    /// @0x455ED6 — Zeilen 1..H-2</description></item>
+    /// <item><term>6..8</term><description>rechter Rand, @0x455EF8</description></item>
+    /// <item><term>3..5</term><description>Oberkante OHNE Titelleiste,
+    /// @0x45603E</description></item>
+    /// <item><term>9..11</term><description>Unterkante, @0x456097</description></item>
+    /// <item><term>12</term><description>Ecke oben links ohne Titelleiste,
+    /// @0x456002</description></item>
+    /// <item><term>13</term><description><b>das Schliesskreuz</b>, @0x4561AF,
+    /// fest auf (W-1, 0)</description></item>
+    /// <item><term>14</term><description>Ecke unten rechts, @0x456108
+    /// (bzw. <b>297</b>, wenn der achte Übergabewert gesetzt ist)</description></item>
+    /// <item><term>15</term><description>Ecke unten links, @0x4561CC</description></item>
+    /// <item><term>16..24</term><description><b>die Innenfläche</b>,
+    /// <c>rand()%9</c>, @0x456165 — neun Musterungen, daher die »feine
+    /// Struktur«</description></item>
+    /// <item><term>25..30</term><description>Knopf links, <c>0x19 + Zustand +
+    /// 2·(rand()%3)</c>, @0x4566CA</description></item>
+    /// <item><term>31..36</term><description>Knopf Mitte, <c>0x1F + …</c>,
+    /// @0x45674E</description></item>
+    /// <item><term>37..42</term><description>Knopf rechts, <c>0x25 + …</c>,
+    /// @0x45670E</description></item>
+    /// <item><term>43..45</term><description>Titelleiste links, @0x455FB1</description></item>
+    /// <item><term>46..48</term><description>Titelleiste Mitte, @0x455F84</description></item>
+    /// <item><term>49..51</term><description>Titelleiste rechts (Spalte W-2),
+    /// @0x455FE7</description></item>
+    /// <item><term>261..268</term><description>die Windfahne, siehe
+    /// <see cref="WriteWindVane"/></description></item>
+    /// </list>
+    ///
+    /// <para><b>Die Startwerte des Würfels</b> stehen im Zeichner selbst:
+    /// <c>srand(W)</c> @0x455E61 vor den Seitenrändern, <c>srand(W+5)</c>
+    /// @0x455F21 vor Titelleiste, Unterkante und Innenfläche, <c>srand(W+10)</c>
+    /// @0x456192 vor Kreuz und linker unterer Ecke, am Ende
+    /// <c>srand(time(0))</c> @0x4561DF. Beim Knopf ist es <c>srand(x·y)</c>
+    /// @0x45668C. W ist die Fensterbreite in KACHELN. Ein Fenster sieht also
+    /// bei jedem Öffnen gleich aus, und zwei gleich breite Fenster tragen
+    /// dasselbe Muster — was am Bildschirmfoto des Spielers nachzusehen ist.
+    /// ⚠ Der Würfel ist der von Microsoft (<c>seed = seed·214013 + 2531011</c>,
+    /// Rückgabe <c>(seed &gt;&gt; 16) &amp; 0x7FFF</c>); ein anderer gäbe eine
+    /// andere, aber genauso stimmige Musterung — siehe
+    /// <see cref="AkteEuropaReborn.UI.WindowChrome"/>.</para>
+    ///
+    /// <para><b>Die Fenstergrösse gehört zur Fensterart</b>, nicht zum
+    /// Zeichner: jede Art hat einen eigenen Öffner, der <c>word[+6]</c> und
+    /// <c>word[+8]</c> des Fenstersatzes mit festen Zahlen belegt (Satzweite
+    /// 44324 ab 0x8B9038). Art 31 = <b>260 x 100 = 13 x 5 Kacheln</b>
+    /// (@0x45AC59). Gegenprobe an einer Zahl, die schon vorher stand: Art 35,
+    /// das Startmenü, ist 200 x 240 = 10 x 12 — und die neun Menüeinträge des
+    /// Originals sind 160 breit bei x+20 und stehen bis y+200. Passt.</para>
+    ///
+    /// <para>⚠ <b>Dass +6 die BREITE ist und +8 die HÖHE</b>, ist nicht
+    /// geraten: die Routine, die ein Fenster auf den Bildschirm bringt
+    /// (<c>0x4409E0</c>), kopiert <c>word[+8]</c>-mal je <c>word[+6]</c> Bytes
+    /// und rückt dabei um die Bildschirmzeilenbreite <c>0x5387C8</c> vor
+    /// (@0x440A68..0x440A8C). +6 ist also zugleich die Zeilenbreite der
+    /// Fensterfläche.</para>
+    /// </summary>
+    public const int ChromeAtlasCols = 20;
+
+    /// <summary>Wieviele Kacheln geschrieben wurden (314) und wieviele
+    /// Bildpunkte davon überhaupt belegt sind — die Zahl, an der eine
+    /// verrutschte Satzweite sofort auffiele.</summary>
+    public int ChromeTiles { get; private set; }
+    public int ChromePixels { get; private set; }
+
+    public void WriteWindowChrome(byte[] cww)
+    {
+        Directory.CreateDirectory(_ui);
+        int n = cww.Length / CwwStride;
+        if (n <= 0)
+            throw new InvalidDataException(
+                $"WINDOWS.CWW ist {cww.Length} Bytes — kein einziger Satz zu {CwwStride}");
+        int rows = (n + ChromeAtlasCols - 1) / ChromeAtlasCols;
+        var img = Image.CreateEmpty(ChromeAtlasCols * VaneW, rows * VaneH, false,
+                                    Image.Format.Rgba8);
+        img.Fill(new Color(0, 0, 0, 0));
+        for (int t = 0; t < n; t++)
+        {
+            int ox = t % ChromeAtlasCols * VaneW, oy = t / ChromeAtlasCols * VaneH;
+            for (int y = 0; y < CwwRows; y++)
+            {
+                int row = t * CwwStride + y * CwwRow;
+                if (row + CwwRow > cww.Length) break;
+                int x0 = cww[row], len = cww[row + 1];
+                for (int i = 0; i < len; i++)
+                {
+                    int x = x0 + i;
+                    // Die Zeile trägt 20 Bildpunkte; alles darüber wäre schon
+                    // der Kopf der nächsten Zeile.
+                    if (x >= CwwRow - 2) break;
+                    byte v = cww[row + 2 + x];
+                    img.SetPixel(ox + x, oy + y,
+                                 Color.Color8(_pal.R[v], _pal.G[v], _pal.B[v], 255));
+                    ChromePixels++;
+                }
+            }
+            ChromeTiles++;
+        }
+        img.SavePng($"{_ui}/window_chrome.png");
+
+        var sb = new StringBuilder();
+        sb.Append("{\"source\":\"WINDOWS.CWW\",\"loader\":\"0x455D50\",");
+        sb.Append("\"blitter\":\"0x455DB0\",\"frame_drawer\":\"0x455E50\",");
+        sb.Append("\"button_drawer\":\"0x456670\",");
+        sb.Append($"\"record_stride\":{CwwStride},\"rows\":{CwwRows},");
+        sb.Append($"\"row_stride\":{CwwRow},\"cell\":[{VaneW},{VaneH}],");
+        sb.Append("\"row\":\"[startspalte][laenge][20 punkte]\",");
+        sb.Append($"\"tiles\":{ChromeTiles},\"opaque_pixels\":{ChromePixels},");
+        sb.Append($"\"atlas\":[{ChromeAtlasCols},{rows}],");
+        sb.Append("\"atlas_layout\":\"kachel n bei (n%20*20, n/20*20)\",");
+        sb.Append("\"roles\":{\"left\":[0,3],\"top_plain\":[3,3],\"right\":[6,3],");
+        sb.Append("\"bottom\":[9,3],\"corner_tl_plain\":[12,1],\"close\":[13,1],");
+        sb.Append("\"corner_br\":[14,1],\"corner_bl\":[15,1],\"fill\":[16,9],");
+        sb.Append("\"button_left\":[25,6],\"button_mid\":[31,6],\"button_right\":[37,6],");
+        sb.Append("\"title_left\":[43,3],\"title_mid\":[46,3],\"title_right\":[49,3],");
+        sb.Append("\"windvane\":[261,8],\"corner_br_alt\":[297,1]},");
+        sb.Append("\"seeds\":{\"edges\":\"srand(W)\",\"title_fill\":\"srand(W+5)\",");
+        sb.Append("\"close_corner\":\"srand(W+10)\",\"button\":\"srand(x*y)\"},");
+        sb.Append("\"window_sizes_px\":{\"31\":[260,100],\"35\":[200,240],");
+        sb.Append("\"2\":[300,280],\"5\":[360,340],\"6\":[360,340],\"18\":[260,240]},");
+        sb.Append("\"window_size_evidence\":\"je Fensterart ein Oeffner, der ");
+        sb.Append("word[+6]=Breite und word[+8]=Hoehe fest belegt; Art 31 @0x45AC59\",");
+        sb.Append("\"transparent\":\"ausserhalb [startspalte, +laenge)\",");
+        sb.Append("\"palette\":\"DATA/01.PAL (unskaliert) — die Fensterrampe 0x28..0x2F ");
+        sb.Append("ist in ALLEN 27 Paletten der Installation byteweise gleich\"}");
+        File.WriteAllText($"{_ui}/window_chrome_index.json", sb.ToString(),
+                          new UTF8Encoding(false));
+    }
+
     // ---- ANIM.CWA -----------------------------------------------------------
 
     /// <summary>The sequences picked off the 141-sequence contact sheet. Which

@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Campaign;
+﻿namespace AkteEuropaReborn.Campaign;
 
 using System;
 using System.Collections.Generic;
@@ -499,6 +499,15 @@ public sealed class MissionScript
             bool oder = !HasOr(r) || AnyTrue(r);
             foreach (var c in r.Any)
                 teile.Add("ODER " + Show(c) + (Test(c) ? "=ja" : "=NEIN"));
+            // ⚠⚠ 25.08.2026 — DIE GRUPPEN HABEN HIER GEFEHLT. `AnyTrue` hat sie
+            // von Anfang an mitgerechnet, gedruckt wurden sie nie: eine Regel
+            // mit leerem `when` und gefuellten Gruppen stand als »(ohne
+            // Bedingung)« da, also genau als das, wovor der Kopf von
+            // Rule.AnyGroups warnt. Aufgefallen an M2s Siegregel, die seit
+            // heute zwei Gruppen hat (0x4993B4).
+            for (int gi = 0; gi < r.AnyGroups.Count; gi++)
+                foreach (var c in r.AnyGroups[gi])
+                    teile.Add($"ODER-GRUPPE{gi} " + Show(c) + (Test(c) ? "=ja" : "=NEIN"));
             bool feuert = !zu && alle && oder;
             if (!feuert && !zu) offen++;
             var wirkt = new List<string>();
@@ -1187,9 +1196,21 @@ public sealed class MissionScript
         //
         // ⭐ Die erste Mission fängt darum immer bei null an. Das ist keine
         // eigene Mechanik, sondern das Fehlen einer: es gibt keine Vormission.
+        // ⚠⚠ 25.08.2026 - NUR v[300...499], WIE OBEN GELESEN.
+        //
+        // Hier stand `kv.Key >= 0`, also wurde ALLES uebernommen, was der
+        // Spielstand trug. Die Schranke steht seit dem 21.08. im Kopf dieses
+        // Feldes: @0x4CFD80 nullt v[0...299] beim Missionswechsel (Schranke
+        // 0x12C = 300 bei @0x4D00D1), nur v[300...499] gehen ueber.
+        //
+        // Gemeldet als »kein einziges Popup in Kampagne 2«: der Spielstand trug
+        // `vars="0:51 1:2 2:30 3:60 ..."` aus Mission 1, und weil `once` genau
+        // diese Woerter als Riegel liest, standen ELF Regeln der Mission 2 vom
+        // ersten Takt an auf RIEGEL - gemessen mit --rule-check. Die Kette
+        // konnte nie anlaufen.
         if (CarryVarsActive && s.Mission > 1)
             foreach (var kv in CampaignManager.CarriedVars)
-                if (kv.Key >= 0 && kv.Key < _var.Length) _var[kv.Key] = kv.Value;
+                if (kv.Key >= 300 && kv.Key < _var.Length) _var[kv.Key] = kv.Value;
         foreach (var kv in s.Init)
             if (kv.Key >= 0 && kv.Key < _var.Length) _var[kv.Key] = kv.Value;
     }
@@ -1638,6 +1659,40 @@ public sealed class MissionScript
     /// else comes back -1 rather than a guess.</summary>
     public Func<int, int, int>? UnitField;           // index, offset -> byte
 
+    /// <summary>
+    /// <b>EIN BYTE EINES EINHEITENSATZES SCHREIBEN</b> — das Gegenstueck zu
+    /// <see cref="UnitField"/>, und bis zum 25.08.2026 gab es das gar nicht.
+    ///
+    /// <para>Mission 2 @0x4991A4 haelt die sieben Angreifer nachgeladen. Das
+    /// Original schreibt es als Schleife ueber die Plaetze 4000..4006:</para>
+    /// <code>
+    ///   0x4991A4  cmp   word[0xBC571C], 0        ; v[70] != 0
+    ///   0x4991AC  je    0x4991D6
+    ///   0x4991B2  mov   cl, dl                   ; dl = 0..6
+    ///   0x4991B8  ... ecx = 26*(4000+i) ...      ; lea-Kette
+    ///   0x4991C0  cmp   dl, 7
+    ///   0x4991C3  mov   bl, byte[ecx+ecx*2+0x72E9C2]   ; +0x3A Munition VOLL
+    ///   0x4991CD  mov   byte[ecx+ecx*2+0x72E9C1], bl   ; +0x39 Munition
+    /// </code>
+    /// <para>Nachgerechnet, nicht geraten:
+    /// <c>0x6E26C8 + 78·4000 + 0x39 = 0x72E9C1</c> — die Basis der
+    /// Einheitentafel, die Schrittweite 78 und der Platz 4000 gehen genau
+    /// auf.</para>
+    ///
+    /// <para>⚠ Der Haken ist absichtlich das KLEINSTE, was die Wirkung braucht:
+    /// ein Byte schreiben. Dass hier ein Feld aus einem ANDEREN Feld kommt
+    /// (<c>+0x39 = +0x3A</c>), steht in der Wirkung <c>set_unit_field</c> und
+    /// nicht im Haken — sonst haette der Haken eine Rechenvorschrift, die das
+    /// Original an dieser Stelle gar nicht kennt.</para>
+    ///
+    /// <para>⚠ <b>OFFEN — DIESER HAKEN HAENGT NOCH NICHT.</b> Die Zuweisung
+    /// gehoert nach <c>Scripts/Rendering/MapEntityLayer.cs</c> neben
+    /// <c>_mscript.UnitField = …</c>; dort fehlt ausserdem die Antwort auf
+    /// +0x39 und +0x3A (der Ausleser beantwortet heute nur +0x00, +0x01, +0x08,
+    /// +0x09, +0x0A, +0x29 und +0x2E). Bis dahin meldet
+    /// <c>--script-coverage</c> die Regel als BLOCKIERT.</para></summary>
+    public Action<int, int, int>? SetUnitField;      // platz, feld, wert
+
     /// <summary>A word out of one building record (255 x 76 @0xc06914). Only
     /// the four stores are answered: +0x28 Waffen, +0x2a Fahrwerk, +0x2c
     /// Spezial parts and +0x2e raw Terranium (GAMESTATE_RE 3.82). Mission 5
@@ -1743,6 +1798,44 @@ public sealed class MissionScript
     /// Siehe <c>MissionFireAt</c> für die Beweiskette und für das, was dabei
     /// unsere Setzung bleibt.</summary>
     public Action<int, int, int>? FireAt;            // einheit, x, y
+
+    /// <summary>
+    /// <b>EINE ZELLE ANSCHLAGEN — OHNE SCHUETZEN.</b>
+    ///
+    /// <para>⚠⚠ <b>DAS IST NICHT <see cref="FireAt"/></b>, und der Unterschied
+    /// ist keine Feinheit. <c>fire_at</c> geht ueber <c>0x4017B7 → 0x4D0AD0</c>
+    /// und braucht eine lebende Einheit: der Rumpf verzweigt ueber deren WAFFE
+    /// (+0x0D), bricht bei Munition 0 ab (@0x40BB44) und verbraucht einen
+    /// Schuss. Mission 2 @0x499026 hat aber gar keinen Schuetzen — sie ruft
+    /// <c>0x401217 → Zasah</c> (0x40C9A0) DIREKT:</para>
+    /// <code>
+    ///   0x499034  mov   dword[0x53C930], 0xD      ; Spalte 13
+    ///   0x49903E  mov   dword[0x53C934], 0x11     ; Zeile 17
+    ///   0x499048  mov   ax, word[0xBE04A2]        ; das imap-Wort der Zelle
+    ///   0x49904E  push  eax                       ; = das OPFER
+    ///   0x49904F  push  0x9C72                    ; 40050 = der ANGREIFER
+    ///   0x499054  call  0x401217                  ; Zasah
+    /// </code>
+    /// <para>0x9C72 = 40050 ist genau die Zahl, die schon bei den SETUP-Treffern
+    /// steht (siehe <see cref="Script.Treffer"/>): Zasah behandelt
+    /// 40000..40999 als reine SCHADENSZAHL (@0x40CC8B <c>add ax, 0x63C0</c>),
+    /// der Schaden ist also <b>50</b> — dieselbe Konstante, die die Engine als
+    /// <c>SetupSchaden</c> fuehrt. Diese Wirkung ist deshalb ein
+    /// <b>SETUP-Treffer zur Laufzeit</b> und nichts anderes.</para>
+    ///
+    /// <para>Einen Schuetzen zu erfinden, nur um <c>fire_at</c> benutzen zu
+    /// koennen, waere eine eigene Setzung: es haenge dann an Leben und Munition
+    /// einer Einheit, von der das Original nichts weiss. Darum eine eigene
+    /// Wirkungsart.</para>
+    ///
+    /// <para>⚠ <b>OFFEN — DIESER HAKEN HAENGT NOCH NICHT.</b> Was er tun muss,
+    /// steht fertig in <c>Scripts/Rendering/MapObjects.ApplyMissionHits</c>
+    /// (dieselbe Routine, die die Startbraende macht); es fehlt allein die
+    /// Zuweisung in <c>MapEntityLayer</c> neben
+    /// <c>_mscript.FireAt = MissionFireAt;</c>. Bis dahin meldet
+    /// <c>--script-coverage</c> die Regel als BLOCKIERT — genau dafuer gibt es
+    /// die Zahl.</para></summary>
+    public Action<int, int>? HitCell;                // spalte, zeile
 
     public Func<int, int>? KillCount;                // spieler -> ausgeschaltet
     public Func<int, int>? LossCount;                // spieler -> Verluste
@@ -2116,6 +2209,33 @@ public sealed class MissionScript
     /// Wahrheitstafel gefahren, ohne die Welt anzufassen.</summary>
     private Dictionary<Cond, bool>? _vorgabe;
 
+    /// <summary>Wieviele der Plaetze 0..a−1 erfuellen <c>Feld+b op c</c>? Der
+    /// Rumpf des Suchlaufs <c>unit_field_any</c> — als ZAHL und nicht als
+    /// ja/nein, damit der Pruefstand sagen kann, ob null Treffer heisst »keine
+    /// Einheit passt« oder »kein Platz war ueberhaupt lesbar«.</summary>
+    private int UnitFieldAnyTreffer(Cond c)
+    {
+        if (UnitField == null || c.A <= 0) return 0;
+        int n = 0;
+        for (int i = 0; i < c.A; i++)
+        {
+            int w = UnitField(i, c.B);
+            if (w >= 0 && Cmp(w, c.Op, c.C)) n++;
+        }
+        return n;
+    }
+
+    /// <summary>Wieviele der Plaetze 0..a−1 antworten ueberhaupt? Siehe
+    /// <see cref="UnitFieldAnyTreffer"/>: ohne diese zweite Zahl ist ein
+    /// stummer Haken von einem leeren Ergebnis nicht zu unterscheiden.</summary>
+    private int UnitFieldAnyLesbar(Cond c)
+    {
+        if (UnitField == null || c.A <= 0) return 0;
+        int n = 0;
+        for (int i = 0; i < c.A; i++) if (UnitField(i, c.B) >= 0) n++;
+        return n;
+    }
+
     private bool Test(Cond c)
     {
         if (_vorgabe != null && _vorgabe.TryGetValue(c, out bool vor)) return vor;
@@ -2220,6 +2340,48 @@ public sealed class MissionScript
         "unit_field" => UnitField != null && c.A >= 0 && c.A < _var.Length &&
                         UnitField(_var[c.A], c.B) >= 0 &&
                         Cmp(UnitField(_var[c.A], c.B), c.Op, c.C),
+        // Feld +b des Einheitensatzes auf Platz a - der Platz DIREKT, nicht
+        // ueber v[a] wie bei `unit_field`. Gebraucht fuer abgerollte Schleifen
+        // ueber die ersten Plaetze: Mission 2 @0x498A10 laeuft bl = 0..9 und
+        // prueft je Platz +0x09 != 0xFF (belegt), +0x0A == 0 (Gattung) und
+        // +0x2E == 0 (Tank leer), um Hilfetext #14 zu zeigen.
+        // ⚠ Ein leerer Platz liefert -1 und damit FALSCH - das ist genau das
+        // `je` ueber den Schleifenrumpf im Original, keine eigene Setzung.
+        "unit_field_at" => UnitField != null && UnitField(c.A, c.B) >= 0 &&
+                           Cmp(UnitField(c.A, c.B), c.Op, c.C),
+
+        // ---- 25.08.2026: DER SUCHLAUF ------------------------------------
+        //
+        // <c>unit_field_any(a = Plaetze 0..a-1, b = Feld, c = Wert)</c> — GIBT ES
+        // UNTER DEN ERSTEN a PLAETZEN EINE EINHEIT, DEREN FELD +b den Wert c
+        // hat? Das ist NICHT <c>unit_field_at</c>: dort steht der Platz fest,
+        // hier wird gesucht.
+        //
+        // Gelesen aus Mission 2 @0x498C70 (25.08.2026, mit adis.py
+        // gegengeprueft). Das Original schreibt den Suchlauf als Schleife:
+        //
+        //     0x498C70  cmp   word[0xBC56BC], 1        ; v[22] == 1
+        //     0x498C78  jne   0x498CC4
+        //     0x498C7A  xor   ax, ax                   ; ax = 0
+        //     0x498C7D  mov   ebx, 0x32                ; der gesuchte Wert 50
+        //     0x498C82  ... ecx = 26*ax ...            ; lea-Kette
+        //     0x498C95  cmp   byte[ecx+ecx*2+0x6E26DC], bl   ; 78*ax + 0x6E26DC
+        //     0x498C9C  je    0x498CA8                 ; GEFUNDEN
+        //     0x498C9E  inc   ax
+        //     0x498CA0  cmp   ax, 0x64                 ; 100 Plaetze
+        //     0x498CA4  jb    0x498C82
+        //
+        // ⚠ Die Feldnummer ist nachgerechnet und nicht geraten:
+        // 0x6E26DC − 0x6E26C8 (Basis der Einheitentafel) = <b>+0x14</b>, und
+        // <c>ecx + ecx*2</c> auf ecx = 26·ax ist <b>78·ax</b> — die
+        // Schrittweite eines Einheitensatzes.
+        //
+        // ⚠⚠ EIN LEERER PLATZ (Haken antwortet −1) ZAEHLT NICHT ALS TREFFER.
+        // Dieselbe Setzung wie bei <c>unit_field_at</c> daroben, und aus
+        // demselben Grund: −1 heisst »unbekannt«, und unbekannt darf keine
+        // Bedingung erfuellen. Bei <c>== 50</c> macht es ohnehin keinen
+        // Unterschied, bei <c>!=</c> oder <c>&lt;</c> schon.
+        "unit_field_any" => UnitFieldAnyTreffer(c) > 0,
 
         // ---- 11.08.2026: die Glieder des tutorialartigen Ablaufs -----------
         //
@@ -2449,6 +2611,31 @@ public sealed class MissionScript
             case "fire_at":
                 FireAt?.Invoke(a.A, a.B, a.C);
                 break;
+            // hit_cell(a = Spalte, b = Zeile) — ein Treffer OHNE Schuetzen,
+            // Angreifer 40050 = Schaden 50. Siehe HitCell; das ist NICHT
+            // fire_at.
+            case "hit_cell":
+                HitCell?.Invoke(a.A, a.B);
+                break;
+            // set_unit_field(a = Platz, b = Zielfeld, c = QUELLfeld):
+            //     Einheit[a].Feld+b = Einheit[a].Feld+c
+            //
+            // ⚠ c ist ein FELD und keine Zahl. Das Original schreibt an dieser
+            // Stelle nirgends eine Konstante in einen Einheitensatz, sondern
+            // immer ein Feld aus demselben Satz (M2: `+0x39 = +0x3A`, also
+            // Munition = Munition voll). Eine Form mit Konstante waere darum
+            // erfunden; wenn sie einmal gebraucht wird, bekommt sie eine eigene
+            // Art und ihre eigene Fundstelle.
+            //
+            // ⚠ Ein unlesbares Quellfeld (−1) schreibt NICHTS. Dieselbe Regel
+            // wie bei den Bedingungen: unbekannt ist nicht 0.
+            case "set_unit_field":
+                if (SetUnitField != null && UnitField != null)
+                {
+                    int quelle = UnitField(a.A, a.C);
+                    if (quelle >= 0) SetUnitField(a.A, a.B, quelle);
+                }
+                break;
             // place_unit(entwurf, spalte, zeile, spieler) @0x4D0810 — siehe
             // PlaceUnit. Gezaehlt wird, WIEVIELE eine Mission auslöst: die
             // gelesene Zahl je Mission ist die Messlatte (M2 7, M3 4, M5 2,
@@ -2544,6 +2731,37 @@ public sealed class MissionScript
             case "stock":
                 if (SetStoreField != null && !StockOld)
                     SetStoreField(a.A, a.B, StockWert(a));
+                break;
+            // Lager b des Gebaeudesatzes a UM den Betrag ERHOEHEN — dasselbe
+            // wie `stock`, nur mit `+=` statt `=`.
+            //
+            // ⚠ 25.08.2026. Bis heute konnte `stock` nur SETZEN, und damit
+            // fehlten Mission 2 zwei Nachfuellungen: @0x4992CA
+            // `add word[0xC069D4], 0x12` / `add word[0xC069D6], 0xD` und
+            // @0x499321 dasselbe fuer 0xC06988 / 0xC0698A. Das Original
+            // schreibt dort ADD und nicht MOV — wer es als `stock` eintruege,
+            // machte aus einem Aufschlag eine feste Zahl und loeschte den
+            // vorhandenen Bestand.
+            //
+            // Der Betrag kommt aus derselben Rechnung wie bei `stock`
+            // (siehe StockWert): mit c = −1 ist es schlicht d.
+            //
+            // ⚠ Ein unlesbares Lager (−1: kein solches Gebaeude auf dieser
+            // Karte) wird NICHT beschrieben. −1 + 18 waere 17 und saehe aus wie
+            // ein Ergebnis.
+            //
+            // ⚠ NICHT in StockSites: `--stock-check` rechnet seinen Sollwert
+            // ABSOLUT (`neu == soll`), und ein Aufschlag hat keinen absoluten
+            // Sollwert, sondern einen relativen. Wer diese Stellen dort
+            // mitzaehlte, bekaeme lauter falsche »daneben«. Der Pruefstand
+            // braucht dafuer einen eigenen Zweig; solange es ihn nicht gibt,
+            // ist die Luecke lieber sichtbar als falsch gefuellt.
+            case "stock_add":
+                if (SetStoreField != null && StoreField != null && !StockOld)
+                {
+                    int alt = StoreField(a.A, a.B);
+                    if (alt >= 0) SetStoreField(a.A, a.B, alt + StockWert(a));
+                }
                 break;
             // space_in(a=spieler, b=x, c=y, typen) — die Verstaerkung startet
             // ausserhalb der Karte und braucht ihre Anflugzeit, wie im Original
@@ -2889,6 +3107,12 @@ public sealed class MissionScript
         "var_vs_store" => $"v[{c.A}]={Var(c.A)}{c.Op}Lager({c.B},+0x{c.C:X})=" +
                           (StoreField != null ? StoreField(c.B, c.C) : -1),
         "unit_field" => $"Einheit v[{c.A}]={Var(c.A)} Feld+{c.B}{c.Op}{c.C}",
+        "unit_field_at" => $"Einheit auf Platz {c.A} Feld+{c.B:X}{c.Op}{c.C}",
+        // ⚠ Mit BEIDEN Zahlen. »0 Treffer« allein liesse offen, ob keine
+        // Einheit passt oder ob der Haken das Feld gar nicht beantwortet.
+        "unit_field_any" => $"eine der Einheiten 0..{c.A - 1} Feld+{c.B:X}{c.Op}{c.C}" +
+                            $" ({UnitFieldAnyTreffer(c)} Treffer, " +
+                            $"{UnitFieldAnyLesbar(c)}/{c.A} Plaetze antworten)",
         "unit_index" => $"find_unit(P{c.A},Marke{c.B}){c.Op}{c.C}",
         "unit_index_var" => $"find_unit(P{c.A},Marke{c.B}){c.Op}v[{c.C}]={Var(c.C)}",
         "unit_is_var" => $"Einheit v[{c.A}]={Var(c.A)} hat Marke {c.B}{c.Op}{c.C}",
@@ -3079,7 +3303,7 @@ public sealed class MissionScript
         "bridge" => BridgeUsed != null,
         "store" or "capture_frac" => StoreField != null,
         "unit_alive" => UnitAlive != null,
-        "unit_energy" => UnitField != null,
+        "unit_energy" or "unit_field_at" or "unit_field_any" => UnitField != null,
         "var_vs_kills" => KillCount != null,
         "terrain" => TerrainAt != null,
         "terrain_unit" => TerrainAt != null && UnitField != null,
@@ -3100,6 +3324,7 @@ public sealed class MissionScript
         "set_store" => StoreField != null,
         "set_imap" => ImapAt != null,
         "stock" => SetStoreField != null,
+        "stock_add" => SetStoreField != null && StoreField != null,
         "set_units" => UnitCount != null,
         "space_in" => SpaceInSpawn != null,
         "place_unit" => PlaceUnit != null,
@@ -3111,6 +3336,8 @@ public sealed class MissionScript
         "move" or "move_var" => MoveUnit != null,
         "set_ai" => SetAi != null,
         "fire_at" => FireAt != null,
+        "hit_cell" => HitCell != null,
+        "set_unit_field" => SetUnitField != null && UnitField != null,
         "add_target" => AddTarget != null,
         "remove_unit" or "remove_unit_var" => RemoveUnit != null,
         "sell_unit" or "sell_unit_var" => SellUnit != null,
@@ -3138,6 +3365,9 @@ public sealed class MissionScript
             foreach (var c in r.Any)
                 if (c.Kind == "imap")
                     seen.Add($"ODER (Sp{c.A},Z{c.C}) ist {ImapAt(c.A, c.C)}, verlangt {c.Op} {c.B}");
+            foreach (var g in r.AnyGroups) foreach (var c in g)
+                if (c.Kind == "imap")
+                    seen.Add($"ODER-GRUPPE (Sp{c.A},Z{c.C}) ist {ImapAt(c.A, c.C)}, verlangt {c.Op} {c.B}");
         }
         return seen.Count == 0 ? "" : "imap: " + string.Join(" | ", seen);
     }
@@ -3184,6 +3414,11 @@ public sealed class MissionScript
             foreach (var c in r.When)
                 if (!Hooked(c)) { missing[c.Kind + "?"] = missing.GetValueOrDefault(c.Kind + "?") + 1; bad = true; }
             foreach (var c in r.Any)
+                if (!Hooked(c)) { missing[c.Kind + "?"] = missing.GetValueOrDefault(c.Kind + "?") + 1; bad = true; }
+            // ⚠ Dieselbe Luecke wie in RuleCheck: ein Glied in einer ODER-GRUPPE
+            // ohne Haken waere still FALSCH gewesen, und die Regel haette
+            // trotzdem als »ausfuehrbar« gezaehlt.
+            foreach (var g in r.AnyGroups) foreach (var c in g)
                 if (!Hooked(c)) { missing[c.Kind + "?"] = missing.GetValueOrDefault(c.Kind + "?") + 1; bad = true; }
             foreach (var a in r.Then)
                 if (!Hooked(a)) { missing[a.Kind + "!"] = missing.GetValueOrDefault(a.Kind + "!") + 1; bad = true; }

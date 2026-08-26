@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Audio;
+﻿namespace AkteEuropaReborn.Audio;
 
 using System;
 using System.Collections.Generic;
@@ -160,8 +160,36 @@ public static class SoundBankPlayer
     /// »es ist still« nicht von »es käme ohnehin nichts« zu unterscheiden.</summary>
     public static int SuppressedCount { get; private set; }
 
+    /// <summary>
+    /// <c>--klang-log</c> — schreibt jeden angestossenen Klang und jede Stimme
+    /// mit ihrer Nummer mit, und zaehlt dabei WIEDERHOLUNGEN.
+    ///
+    /// <para>Gebaut am 25.08.2026 auf die Meldung »irgendeine Stimme im Loop,
+    /// das klingt furchtbar, wie als wenn ein PC sich aufhaengt«. Der Loop war
+    /// kopflos nicht nachzustellen: im Startzustand feuert keine Fensterregel,
+    /// und derselbe Hilfetext kann sich nach <c>Dismissed</c> gar nicht zweimal
+    /// ansagen. Ohne Mitschnitt bleibt nur Raten, WELCHE Nummer es ist.</para>
+    ///
+    /// <para>Die Zaehlung ist der Punkt, nicht die Zeile: ein Klang, der in
+    /// einer Schleife haengt, faellt an seiner Wiederholungszahl auf, waehrend
+    /// tausend Einzelzeilen nur den Mitschnitt zumuellen. Ab der zehnten
+    /// Wiederholung meldet er sich einmal je Zehnerschritt.</para>
+    /// </summary>
+    public static bool LogKlaenge;
+    private static readonly Dictionary<int, int> _klangZaehler = new();
+
+    private static void Mitschnitt(int slot, string art)
+    {
+        if (!LogKlaenge) return;
+        _klangZaehler.TryGetValue(slot, out int n);
+        _klangZaehler[slot] = ++n;
+        if (n < 10 || n % 10 == 0)
+            GD.Print($"klang: {art} {slot}" + (n > 1 ? $"  (x{n})" : ""));
+    }
+
     public static void Play(int slot, float volumeDb = 0f, float pan = 0f)
     {
+        Mitschnitt(slot, "Klang");
         if (Suppressed) { SuppressedCount++; return; }
         if (!UI.Settings.SoundOn) return;
         var stream = Stream(slot);
@@ -401,6 +429,7 @@ public static class SoundBankPlayer
     /// the next explosion would take.</summary>
     public static bool PlayVoice(int slot, float volumeDb = 0f)
     {
+        Mitschnitt(slot, "STIMME");
         StopVoice();
         if (!UI.Settings.SoundOn) return false;
         var stream = Stream(slot);

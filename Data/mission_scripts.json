@@ -7444,6 +7444,486 @@
      ]
     },
     {
+     "_abgerollt": "Schleife 0x498A0E..0x498A65, Durchlauf 0",
+     "_at": "0x498A10",
+     "_gelesen": "25.08.2026 aus der Meldung »das kommt bei uns nicht«. Der Ausleser kannte die Bedingungsform nicht und hat die ganze Schleife uebersprungen; show_text2(20,150,14) @0x498A51 ist die EINZIGE Stelle im Programm, die Text 14 zeigt. Merker word[0xBC5694] = v[2] nach v[n]=word[0xBC5690+2n].",
+     "once": 2,
+     "then": [
+      {
+       "_at": "0x498A41",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498A51",
+       "a": 14,
+       "b": 2,
+       "c": 20,
+       "d": 150,
+       "kind": "text"
+      },
+      {
+       "_at": "0x498A56",
+       "a": 2,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 0,
+       "b": 9,
+       "c": 255,
+       "kind": "unit_field_at",
+       "op": "!="
+      },
+      {
+       "a": 0,
+       "b": 10,
+       "c": 0,
+       "kind": "unit_field_at",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 46,
+       "c": 0,
+       "kind": "unit_field_at",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x498A0E..0x498A65, Durchlauf 1",
+     "_at": "0x498A11",
+     "_gelesen": "25.08.2026 aus der Meldung »das kommt bei uns nicht«. Der Ausleser kannte die Bedingungsform nicht und hat die ganze Schleife uebersprungen; show_text2(20,150,14) @0x498A51 ist die EINZIGE Stelle im Programm, die Text 14 zeigt. Merker word[0xBC5694] = v[2] nach v[n]=word[0xBC5690+2n].",
+     "once": 2,
+     "then": [
+      {
+       "_at": "0x498A41",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498A51",
+       "a": 14,
+       "b": 2,
+       "c": 20,
+       "d": 150,
+       "kind": "text"
+      },
+      {
+       "_at": "0x498A56",
+       "a": 2,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 1,
+       "b": 9,
+       "c": 255,
+       "kind": "unit_field_at",
+       "op": "!="
+      },
+      {
+       "a": 1,
+       "b": 10,
+       "c": 0,
+       "kind": "unit_field_at",
+       "op": "=="
+      },
+      {
+       "a": 1,
+       "b": 46,
+       "c": 0,
+       "kind": "unit_field_at",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x498A0E..0x498A65, Durchlauf 2",
+     "_at": "0x498A12",
+     "_gelesen": "25.08.2026 aus der Meldung »das kommt bei uns nicht«. Der Ausleser kannte die Bedingungsform nicht und hat die ganze Schleife uebersprungen; show_text2(20,150,14) @0x498A51 ist die EINZIGE Stelle im Programm, die Text 14 zeigt. Merker word[0xBC5694] = v[2] nach v[n]=word[0xBC5690+2n].",
+     "once": 2,
+     "then": [
+      {
+       "_at": "0x498A41",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498A51",
+       "a": 14,
+       "b": 2,
+       "c": 20,
+       "d": 150,
+       "kind": "text"
+      },
+      {
+       "_at": "0x498A56",
+       "a": 2,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 2,
+       "b": 9,
+       "c": 255,
+       "kind": "unit_field_at",
+       "op": "!="
+      },
+      {
+       "a": 2,
+       "b": 10,
+       "c": 0,
+       "kind": "unit_field_at",
+       "op": "=="
+      },
+      {
+       "a": 2,
+       "b": 46,
+       "c": 0,
+       "kind": "unit_field_at",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x498A0E..0x498A65, Durchlauf 3",
+     "_at": "0x498A13",
+     "_gelesen": "25.08.2026 aus der Meldung »das kommt bei uns nicht«. Der Ausleser kannte die Bedingungsform nicht und hat die ganze Schleife uebersprungen; show_text2(20,150,14) @0x498A51 ist die EINZIGE Stelle im Programm, die Text 14 zeigt. Merker word[0xBC5694] = v[2] nach v[n]=word[0xBC5690+2n].",
+     "once": 2,
+     "then": [
+      {
+       "_at": "0x498A41",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498A51",
+       "a": 14,
+       "b": 2,
+       "c": 20,
+       "d": 150,
+       "kind": "text"
+      },
+      {
+       "_at": "0x498A56",
+       "a": 2,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 3,
+       "b": 9,
+       "c": 255,
+       "kind": "unit_field_at",
+       "op": "!="
+      },
+      {
+       "a": 3,
+       "b": 10,
+       "c": 0,
+       "kind": "unit_field_at",
+       "op": "=="
+      },
+      {
+       "a": 3,
+       "b": 46,
+       "c": 0,
+       "kind": "unit_field_at",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x498A0E..0x498A65, Durchlauf 4",
+     "_at": "0x498A14",
+     "_gelesen": "25.08.2026 aus der Meldung »das kommt bei uns nicht«. Der Ausleser kannte die Bedingungsform nicht und hat die ganze Schleife uebersprungen; show_text2(20,150,14) @0x498A51 ist die EINZIGE Stelle im Programm, die Text 14 zeigt. Merker word[0xBC5694] = v[2] nach v[n]=word[0xBC5690+2n].",
+     "once": 2,
+     "then": [
+      {
+       "_at": "0x498A41",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498A51",
+       "a": 14,
+       "b": 2,
+       "c": 20,
+       "d": 150,
+       "kind": "text"
+      },
+      {
+       "_at": "0x498A56",
+       "a": 2,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 4,
+       "b": 9,
+       "c": 255,
+       "kind": "unit_field_at",
+       "op": "!="
+      },
+      {
+       "a": 4,
+       "b": 10,
+       "c": 0,
+       "kind": "unit_field_at",
+       "op": "=="
+      },
+      {
+       "a": 4,
+       "b": 46,
+       "c": 0,
+       "kind": "unit_field_at",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x498A0E..0x498A65, Durchlauf 5",
+     "_at": "0x498A15",
+     "_gelesen": "25.08.2026 aus der Meldung »das kommt bei uns nicht«. Der Ausleser kannte die Bedingungsform nicht und hat die ganze Schleife uebersprungen; show_text2(20,150,14) @0x498A51 ist die EINZIGE Stelle im Programm, die Text 14 zeigt. Merker word[0xBC5694] = v[2] nach v[n]=word[0xBC5690+2n].",
+     "once": 2,
+     "then": [
+      {
+       "_at": "0x498A41",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498A51",
+       "a": 14,
+       "b": 2,
+       "c": 20,
+       "d": 150,
+       "kind": "text"
+      },
+      {
+       "_at": "0x498A56",
+       "a": 2,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 5,
+       "b": 9,
+       "c": 255,
+       "kind": "unit_field_at",
+       "op": "!="
+      },
+      {
+       "a": 5,
+       "b": 10,
+       "c": 0,
+       "kind": "unit_field_at",
+       "op": "=="
+      },
+      {
+       "a": 5,
+       "b": 46,
+       "c": 0,
+       "kind": "unit_field_at",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x498A0E..0x498A65, Durchlauf 6",
+     "_at": "0x498A16",
+     "_gelesen": "25.08.2026 aus der Meldung »das kommt bei uns nicht«. Der Ausleser kannte die Bedingungsform nicht und hat die ganze Schleife uebersprungen; show_text2(20,150,14) @0x498A51 ist die EINZIGE Stelle im Programm, die Text 14 zeigt. Merker word[0xBC5694] = v[2] nach v[n]=word[0xBC5690+2n].",
+     "once": 2,
+     "then": [
+      {
+       "_at": "0x498A41",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498A51",
+       "a": 14,
+       "b": 2,
+       "c": 20,
+       "d": 150,
+       "kind": "text"
+      },
+      {
+       "_at": "0x498A56",
+       "a": 2,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 6,
+       "b": 9,
+       "c": 255,
+       "kind": "unit_field_at",
+       "op": "!="
+      },
+      {
+       "a": 6,
+       "b": 10,
+       "c": 0,
+       "kind": "unit_field_at",
+       "op": "=="
+      },
+      {
+       "a": 6,
+       "b": 46,
+       "c": 0,
+       "kind": "unit_field_at",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x498A0E..0x498A65, Durchlauf 7",
+     "_at": "0x498A17",
+     "_gelesen": "25.08.2026 aus der Meldung »das kommt bei uns nicht«. Der Ausleser kannte die Bedingungsform nicht und hat die ganze Schleife uebersprungen; show_text2(20,150,14) @0x498A51 ist die EINZIGE Stelle im Programm, die Text 14 zeigt. Merker word[0xBC5694] = v[2] nach v[n]=word[0xBC5690+2n].",
+     "once": 2,
+     "then": [
+      {
+       "_at": "0x498A41",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498A51",
+       "a": 14,
+       "b": 2,
+       "c": 20,
+       "d": 150,
+       "kind": "text"
+      },
+      {
+       "_at": "0x498A56",
+       "a": 2,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 7,
+       "b": 9,
+       "c": 255,
+       "kind": "unit_field_at",
+       "op": "!="
+      },
+      {
+       "a": 7,
+       "b": 10,
+       "c": 0,
+       "kind": "unit_field_at",
+       "op": "=="
+      },
+      {
+       "a": 7,
+       "b": 46,
+       "c": 0,
+       "kind": "unit_field_at",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x498A0E..0x498A65, Durchlauf 8",
+     "_at": "0x498A18",
+     "_gelesen": "25.08.2026 aus der Meldung »das kommt bei uns nicht«. Der Ausleser kannte die Bedingungsform nicht und hat die ganze Schleife uebersprungen; show_text2(20,150,14) @0x498A51 ist die EINZIGE Stelle im Programm, die Text 14 zeigt. Merker word[0xBC5694] = v[2] nach v[n]=word[0xBC5690+2n].",
+     "once": 2,
+     "then": [
+      {
+       "_at": "0x498A41",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498A51",
+       "a": 14,
+       "b": 2,
+       "c": 20,
+       "d": 150,
+       "kind": "text"
+      },
+      {
+       "_at": "0x498A56",
+       "a": 2,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 8,
+       "b": 9,
+       "c": 255,
+       "kind": "unit_field_at",
+       "op": "!="
+      },
+      {
+       "a": 8,
+       "b": 10,
+       "c": 0,
+       "kind": "unit_field_at",
+       "op": "=="
+      },
+      {
+       "a": 8,
+       "b": 46,
+       "c": 0,
+       "kind": "unit_field_at",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_abgerollt": "Schleife 0x498A0E..0x498A65, Durchlauf 9",
+     "_at": "0x498A19",
+     "_gelesen": "25.08.2026 aus der Meldung »das kommt bei uns nicht«. Der Ausleser kannte die Bedingungsform nicht und hat die ganze Schleife uebersprungen; show_text2(20,150,14) @0x498A51 ist die EINZIGE Stelle im Programm, die Text 14 zeigt. Merker word[0xBC5694] = v[2] nach v[n]=word[0xBC5690+2n].",
+     "once": 2,
+     "then": [
+      {
+       "_at": "0x498A41",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498A51",
+       "a": 14,
+       "b": 2,
+       "c": 20,
+       "d": 150,
+       "kind": "text"
+      },
+      {
+       "_at": "0x498A56",
+       "a": 2,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "a": 9,
+       "b": 9,
+       "c": 255,
+       "kind": "unit_field_at",
+       "op": "!="
+      },
+      {
+       "a": 9,
+       "b": 10,
+       "c": 0,
+       "kind": "unit_field_at",
+       "op": "=="
+      },
+      {
+       "a": 9,
+       "b": 46,
+       "c": 0,
+       "kind": "unit_field_at",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x498A7C",
      "_tut_ausserdem": "close_message_windows show_text2",
      "once": 3,
@@ -7566,6 +8046,14 @@
      ],
      "when": [
       {
+       "_at": "0x498B0C",
+       "a": 5,
+       "b": 1,
+       "kind": "var",
+       "op": "==",
+       "_gelesen": "25.08.2026: Vorbedingung der ganzen Schleife @0x498B0C (cmp word[0xBC569A],1 / jne). Der Ausleser hatte sie verschluckt, darum kam der Besetzen-Hinweis schon bei 00:18 statt nach Text 17. v[5] setzt R14 (Text 17) - also erst wenn der Helikopter fliegt."
+      },
+      {
        "a": 0,
        "b": 20,
        "c": 0,
@@ -7592,6 +8080,14 @@
       }
      ],
      "when": [
+      {
+       "_at": "0x498B0C",
+       "a": 5,
+       "b": 1,
+       "kind": "var",
+       "op": "==",
+       "_gelesen": "25.08.2026: Vorbedingung der ganzen Schleife @0x498B0C (cmp word[0xBC569A],1 / jne). Der Ausleser hatte sie verschluckt, darum kam der Besetzen-Hinweis schon bei 00:18 statt nach Text 17. v[5] setzt R14 (Text 17) - also erst wenn der Helikopter fliegt."
+      },
       {
        "a": 1,
        "b": 20,
@@ -7620,6 +8116,14 @@
      ],
      "when": [
       {
+       "_at": "0x498B0C",
+       "a": 5,
+       "b": 1,
+       "kind": "var",
+       "op": "==",
+       "_gelesen": "25.08.2026: Vorbedingung der ganzen Schleife @0x498B0C (cmp word[0xBC569A],1 / jne). Der Ausleser hatte sie verschluckt, darum kam der Besetzen-Hinweis schon bei 00:18 statt nach Text 17. v[5] setzt R14 (Text 17) - also erst wenn der Helikopter fliegt."
+      },
+      {
        "a": 2,
        "b": 20,
        "c": 0,
@@ -7646,6 +8150,14 @@
       }
      ],
      "when": [
+      {
+       "_at": "0x498B0C",
+       "a": 5,
+       "b": 1,
+       "kind": "var",
+       "op": "==",
+       "_gelesen": "25.08.2026: Vorbedingung der ganzen Schleife @0x498B0C (cmp word[0xBC569A],1 / jne). Der Ausleser hatte sie verschluckt, darum kam der Besetzen-Hinweis schon bei 00:18 statt nach Text 17. v[5] setzt R14 (Text 17) - also erst wenn der Helikopter fliegt."
+      },
       {
        "a": 3,
        "b": 20,
@@ -7674,6 +8186,14 @@
      ],
      "when": [
       {
+       "_at": "0x498B0C",
+       "a": 5,
+       "b": 1,
+       "kind": "var",
+       "op": "==",
+       "_gelesen": "25.08.2026: Vorbedingung der ganzen Schleife @0x498B0C (cmp word[0xBC569A],1 / jne). Der Ausleser hatte sie verschluckt, darum kam der Besetzen-Hinweis schon bei 00:18 statt nach Text 17. v[5] setzt R14 (Text 17) - also erst wenn der Helikopter fliegt."
+      },
+      {
        "a": 4,
        "b": 20,
        "c": 0,
@@ -7700,6 +8220,14 @@
       }
      ],
      "when": [
+      {
+       "_at": "0x498B0C",
+       "a": 5,
+       "b": 1,
+       "kind": "var",
+       "op": "==",
+       "_gelesen": "25.08.2026: Vorbedingung der ganzen Schleife @0x498B0C (cmp word[0xBC569A],1 / jne). Der Ausleser hatte sie verschluckt, darum kam der Besetzen-Hinweis schon bei 00:18 statt nach Text 17. v[5] setzt R14 (Text 17) - also erst wenn der Helikopter fliegt."
+      },
       {
        "a": 5,
        "b": 20,
@@ -7728,6 +8256,14 @@
      ],
      "when": [
       {
+       "_at": "0x498B0C",
+       "a": 5,
+       "b": 1,
+       "kind": "var",
+       "op": "==",
+       "_gelesen": "25.08.2026: Vorbedingung der ganzen Schleife @0x498B0C (cmp word[0xBC569A],1 / jne). Der Ausleser hatte sie verschluckt, darum kam der Besetzen-Hinweis schon bei 00:18 statt nach Text 17. v[5] setzt R14 (Text 17) - also erst wenn der Helikopter fliegt."
+      },
+      {
        "a": 6,
        "b": 20,
        "c": 0,
@@ -7754,6 +8290,14 @@
       }
      ],
      "when": [
+      {
+       "_at": "0x498B0C",
+       "a": 5,
+       "b": 1,
+       "kind": "var",
+       "op": "==",
+       "_gelesen": "25.08.2026: Vorbedingung der ganzen Schleife @0x498B0C (cmp word[0xBC569A],1 / jne). Der Ausleser hatte sie verschluckt, darum kam der Besetzen-Hinweis schon bei 00:18 statt nach Text 17. v[5] setzt R14 (Text 17) - also erst wenn der Helikopter fliegt."
+      },
       {
        "a": 7,
        "b": 20,
@@ -7782,6 +8326,14 @@
      ],
      "when": [
       {
+       "_at": "0x498B0C",
+       "a": 5,
+       "b": 1,
+       "kind": "var",
+       "op": "==",
+       "_gelesen": "25.08.2026: Vorbedingung der ganzen Schleife @0x498B0C (cmp word[0xBC569A],1 / jne). Der Ausleser hatte sie verschluckt, darum kam der Besetzen-Hinweis schon bei 00:18 statt nach Text 17. v[5] setzt R14 (Text 17) - also erst wenn der Helikopter fliegt."
+      },
+      {
        "a": 8,
        "b": 20,
        "c": 0,
@@ -7808,6 +8360,14 @@
       }
      ],
      "when": [
+      {
+       "_at": "0x498B0C",
+       "a": 5,
+       "b": 1,
+       "kind": "var",
+       "op": "==",
+       "_gelesen": "25.08.2026: Vorbedingung der ganzen Schleife @0x498B0C (cmp word[0xBC569A],1 / jne). Der Ausleser hatte sie verschluckt, darum kam der Besetzen-Hinweis schon bei 00:18 statt nach Text 17. v[5] setzt R14 (Text 17) - also erst wenn der Helikopter fliegt."
+      },
       {
        "a": 9,
        "b": 20,
@@ -7984,6 +8544,48 @@
       {
        "b": 6,
        "kind": "event",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x498C70",
+     "_gelesen": "25.08.2026: Text 25 fehlte GANZ. 0x498C70 cmp word[0xBC56BC],1 (= v[22], denn (0xBC56BC-0xBC5690)/2 = 22) / jne 0x498CC4; dann ein SUCHLAUF ax=0..99 ueber die Einheitentafel: 0x498C7D mov ebx,0x32 (der gesuchte Wert 50), 0x498C95 cmp byte[ecx+ecx*2+0x6E26DC],bl mit ecx = 26*ax, also Adresse 0x6E26DC + 78*ax = Basis 0x6E26C8 + 78*ax + 0x14. Bei Treffer: 0x498CA8 close_message_windows, 0x498CB5 show_text2 mit push 0/push 0x19/push 0x64/push 0x64 = (x=100, y=100, id=25), 0x498CBA inc word[0xBC56BC] = inc v[22]. Der Riegel ist also ein AUSDRUECKLICHES inc und KEIN once - v[22] muss genau 1 sein, nicht 0; R28 @0x498C17 hebt es dorthin.",
+     "_tut_ausserdem": "close_message_windows show_text2",
+     "then": [
+      {
+       "_at": "0x498CA8",
+       "kind": "close_texts"
+      },
+      {
+       "_at": "0x498CB5",
+       "a": 25,
+       "b": 2,
+       "c": 100,
+       "d": 100,
+       "kind": "text"
+      },
+      {
+       "_at": "0x498CBA",
+       "a": 22,
+       "kind": "inc"
+      }
+     ],
+     "when": [
+      {
+       "_at": "0x498C70",
+       "a": 22,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "_at": "0x498C95",
+       "_gelesen": "⚠ NEUE Bedingungsart. `unit_field_at` prueft EINEN festen Platz; hier wird unter den Plaetzen 0..99 GESUCHT. a = Zahl der Plaetze (0x64), b = Feld (0x14 = 20), c = Wert (0x32 = 50).",
+       "a": 100,
+       "b": 20,
+       "c": 50,
+       "kind": "unit_field_any",
        "op": "=="
       }
      ]
@@ -8392,6 +8994,64 @@
      ]
     },
     {
+     "_at": "0x499026",
+     "_gelesen": "25.08.2026: sechs Treffer, die die Mission selbst austeilt - fehlten ganz. 0x499026 cmp word[0xBC571C],0x64 / jne 0x499121, also v[70]==100 (denn (0xBC571C-0xBC5690)/2 = 70). Danach sechsmal dieselbe Form: dword[0x53C930]=Spalte, dword[0x53C934]=Zeile, dann call 0x401217 (Zasah @0x40C9A0) mit dem imap-Wort der Zelle als OPFER und 0x9C72 = 40050 als ANGREIFER. Vollstaendig zerlegt mit capstone ueber 0x499034..0x499121; die sechs Zellen sind (13,17) (12,37) (19,31) (19,15) (7,47) (10,38) - bei (19,31) und (19,15) steht die Spalte in esi (mov esi,0x13 @0x49906D).",
+     "_nicht_fire_at": "⚠ Das ist NICHT unser `fire_at`. Das geht ueber 0x4017B7 -> 0x4D0AD0 und braucht einen lebenden Schuetzen mit Waffe und Munition; hier gibt es keinen. 40050 ist bei Zasah eine reine Schadenszahl (Schaden = 40050 - 40000 = 50), also derselbe Weg wie die SETUP-Treffer. Darum die eigene Wirkungsart `hit_cell`. ⚠⚠ OFFEN: der Haken MissionScript.HitCell ist noch nicht zugewiesen - die Zeile gehoert nach Scripts/Rendering/MapEntityLayer.cs neben `_mscript.FireAt = MissionFireAt;` und muss auf MapObjects.ApplyMissionHits zeigen. Bis dahin meldet --script-coverage diese Regel als blockiert.",
+     "then": [
+      {
+       "_at": "0x499054",
+       "_zelle": "imap-Wort 0xBE04A2: (0xBE04A2 - 0xBDEA80)/2 = 3345 = 13*256 + 17",
+       "a": 13,
+       "b": 17,
+       "kind": "hit_cell"
+      },
+      {
+       "_at": "0x499081",
+       "_zelle": "imap-Wort 0xBE02CA: (0xBE02CA - 0xBDEA80)/2 = 3109 = 12*256 + 37",
+       "a": 12,
+       "b": 37,
+       "kind": "hit_cell"
+      },
+      {
+       "_at": "0x4990A5",
+       "_zelle": "imap-Wort 0xBE10BE: (0xBE10BE - 0xBDEA80)/2 = 4895 = 19*256 + 31",
+       "a": 19,
+       "b": 31,
+       "kind": "hit_cell"
+      },
+      {
+       "_at": "0x4990C9",
+       "_zelle": "imap-Wort 0xBE109E: (0xBE109E - 0xBDEA80)/2 = 4879 = 19*256 + 15",
+       "a": 19,
+       "b": 15,
+       "kind": "hit_cell"
+      },
+      {
+       "_at": "0x4990F1",
+       "_zelle": "imap-Wort 0xBDF8DE: (0xBDF8DE - 0xBDEA80)/2 = 1839 = 7*256 + 47",
+       "a": 7,
+       "b": 47,
+       "kind": "hit_cell"
+      },
+      {
+       "_at": "0x499119",
+       "_zelle": "imap-Wort 0xBDFECC: (0xBDFECC - 0xBDEA80)/2 = 2598 = 10*256 + 38",
+       "a": 10,
+       "b": 38,
+       "kind": "hit_cell"
+      }
+     ],
+     "when": [
+      {
+       "_at": "0x499026",
+       "a": 70,
+       "b": 100,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49912B",
      "_tut_ausserdem": "show_text",
      "then": [
@@ -8468,6 +9128,79 @@
        "b": 50,
        "kind": "var",
        "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x4991A4",
+     "_gelesen": "25.08.2026: die Munition der sieben Angreifer - fehlte ganz, weil es die Wirkungsart `set_unit_field` bei uns nicht gab. 0x4991A4 cmp word[0xBC571C],0 / je 0x4991D6, also v[70]!=0. Danach eine Schleife dl = 0..6 (cmp dl,7 @0x4991C0) ueber die Plaetze 4000..4006: 0x4991C3 mov bl,byte[ecx+ecx*2+0x72E9C2] und 0x4991CD mov byte[ecx+ecx*2+0x72E9C1],bl, also Feld +0x39 = Feld +0x3A (Munition = Munition voll). Nachgerechnet: 0x6E26C8 + 78*4000 + 0x39 = 0x72E9C1. Hier abgerollt wie die Schleifen 0x498A0E und 0x498B18.",
+     "_takt": "⚠ Die Regel steht HINTER dem Tor (0x4991A4 > 0x499197), laeuft also alle 100 Takte und nicht jeden Takt - das entscheidet Rule.EveryTick aus _at und gate, nicht diese Zeile.",
+     "_offen": "⚠⚠ Der Haken MissionScript.SetUnitField ist noch nicht zugewiesen, und der Ausleser MissionScript.UnitField beantwortet weder +0x39 noch +0x3A. Beides gehoert nach Scripts/Rendering/MapEntityLayer.cs. Bis dahin meldet --script-coverage diese Regel als blockiert.",
+     "then": [
+      {
+       "_at": "0x4991CD",
+       "_platz": "0x6E26C8 + 78*4000 + 0x39 = 0x72E9C1",
+       "a": 4000,
+       "b": 57,
+       "c": 58,
+       "kind": "set_unit_field"
+      },
+      {
+       "_at": "0x4991CD",
+       "_platz": "0x6E26C8 + 78*4001 + 0x39 = 0x72EA0F",
+       "a": 4001,
+       "b": 57,
+       "c": 58,
+       "kind": "set_unit_field"
+      },
+      {
+       "_at": "0x4991CD",
+       "_platz": "0x6E26C8 + 78*4002 + 0x39 = 0x72EA5D",
+       "a": 4002,
+       "b": 57,
+       "c": 58,
+       "kind": "set_unit_field"
+      },
+      {
+       "_at": "0x4991CD",
+       "_platz": "0x6E26C8 + 78*4003 + 0x39 = 0x72EAAB",
+       "a": 4003,
+       "b": 57,
+       "c": 58,
+       "kind": "set_unit_field"
+      },
+      {
+       "_at": "0x4991CD",
+       "_platz": "0x6E26C8 + 78*4004 + 0x39 = 0x72EAF9",
+       "a": 4004,
+       "b": 57,
+       "c": 58,
+       "kind": "set_unit_field"
+      },
+      {
+       "_at": "0x4991CD",
+       "_platz": "0x6E26C8 + 78*4005 + 0x39 = 0x72EB47",
+       "a": 4005,
+       "b": 57,
+       "c": 58,
+       "kind": "set_unit_field"
+      },
+      {
+       "_at": "0x4991CD",
+       "_platz": "0x6E26C8 + 78*4006 + 0x39 = 0x72EB95",
+       "a": 4006,
+       "b": 57,
+       "c": 58,
+       "kind": "set_unit_field"
+      }
+     ],
+     "when": [
+      {
+       "_at": "0x4991A4",
+       "a": 70,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
       }
      ]
     },
@@ -8589,6 +9322,138 @@
      ]
     },
     {
+     "_at": "0x4992CA",
+     "_gelesen": "25.08.2026: erste Lager-Nachfuellung, fehlte ganz - die Wirkung ist ein += und `stock` konnte nur setzen. 0x4992CA cmp word[0xBC571C],0 / je 0x499321 (v[70]!=0); 0x4992D8 g_robot_class_count(1,2) cmp ax,3 jge (also <3); 0x4992EA g_robot_class_count(1,0) cmp ax,5 jle (also >5); 0x4992F8 cmp word[0xBE68F2],0x3E7 jbe (imap(63,57)>999, denn (0xBE68F2-0xBDEA80)/2 = 16185 = 63*256+57); 0x499305 obj_owner(2) test al,al je (also !=0). Wirkung: 0x499311 add word[0xC069D4],0x12 und 0x499319 add word[0xC069D6],0xD. Satz und Feld nachgerechnet gegen 0xC06914 + 76*n: 0xC069D4 - 0xC06914 - 76*2 = 0x28 = 40, 0xC069D6 = 42.",
+     "then": [
+      {
+       "_at": "0x499311",
+       "a": 2,
+       "b": 40,
+       "c": -1,
+       "d": 18,
+       "e": 0,
+       "f": 0,
+       "kind": "stock_add"
+      },
+      {
+       "_at": "0x499319",
+       "a": 2,
+       "b": 42,
+       "c": -1,
+       "d": 13,
+       "e": 0,
+       "f": 0,
+       "kind": "stock_add"
+      }
+     ],
+     "when": [
+      {
+       "_at": "0x4992CA",
+       "a": 70,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "_at": "0x4992D8",
+       "a": 1,
+       "b": 2,
+       "c": 3,
+       "kind": "units",
+       "op": "<"
+      },
+      {
+       "_at": "0x4992EA",
+       "a": 1,
+       "b": 0,
+       "c": 5,
+       "kind": "units",
+       "op": ">"
+      },
+      {
+       "_at": "0x4992F8",
+       "a": 63,
+       "b": 999,
+       "c": 57,
+       "kind": "imap",
+       "op": ">"
+      },
+      {
+       "_at": "0x499305",
+       "a": 2,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x499321",
+     "_gelesen": "25.08.2026: zweite Lager-Nachfuellung, gleiche Form. 0x499321 cmp word[0xBC5696],3 / jne 0x499378 (v[3]==3, denn (0xBC5696-0xBC5690)/2 = 3); 0x49932F g_robot_class_count(1,1) cmp ax,2 jge (also <2); 0x499341 g_robot_class_count(1,0) cmp ax,5 jle (also >5); 0x49934F cmp word[0xBE688E],0x3E7 jbe (imap(63,7)>999, denn (0xBE688E-0xBDEA80)/2 = 16135 = 63*256+7); 0x49935C obj_owner(1) test al,al je (also !=0). Wirkung: 0x499368 add word[0xC06988],0x12 und add word[0xC0698A],0xD. Satz 1: 0xC06988 - 0xC06914 - 76*1 = 0x28 = 40, 0xC0698A = 42.",
+     "then": [
+      {
+       "_at": "0x499368",
+       "a": 1,
+       "b": 40,
+       "c": -1,
+       "d": 18,
+       "e": 0,
+       "f": 0,
+       "kind": "stock_add"
+      },
+      {
+       "_at": "0x499370",
+       "a": 1,
+       "b": 42,
+       "c": -1,
+       "d": 13,
+       "e": 0,
+       "f": 0,
+       "kind": "stock_add"
+      }
+     ],
+     "when": [
+      {
+       "_at": "0x499321",
+       "a": 3,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "_at": "0x49932F",
+       "a": 1,
+       "b": 1,
+       "c": 2,
+       "kind": "units",
+       "op": "<"
+      },
+      {
+       "_at": "0x499341",
+       "a": 1,
+       "b": 0,
+       "c": 5,
+       "kind": "units",
+       "op": ">"
+      },
+      {
+       "_at": "0x49934F",
+       "a": 63,
+       "b": 999,
+       "c": 7,
+       "kind": "imap",
+       "op": ">"
+      },
+      {
+       "_at": "0x49935C",
+       "a": 1,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "!="
+      }
+     ]
+    },
+    {
      "_at": "0x49938B",
      "_tut_ausserdem": "show_text bus_cmd",
      "once": 40,
@@ -8600,6 +9465,13 @@
        "c": 330,
        "d": 180,
        "kind": "text"
+      },
+      {
+       "_at": "0x4993A5",
+       "_gelesen": "25.08.2026: 0x4993A1 push 0 / 0x4993A3 push -0x14 / 0x4993A5 call 0x401F64 = money(-20, 0). Die Wirkung fehlte; die Regel zeigte nur Text 121. Der Riegel ist inc word[0xBC56E0] @0x4993AA = v[40], den setzt die Maschine selbst (once: 40) - KEIN zusaetzliches inc.",
+       "a": -20,
+       "b": 0,
+       "kind": "money"
       }
      ],
      "when": [
@@ -8612,21 +9484,46 @@
      ]
     },
     {
+     "_at": "0x4993B4",
+     "_gelesen": "25.08.2026: die Siegregel hatte nur EINEN ihrer zwei Wege. Gegengeprueft mit adis.py: 0x4993B4 push 1/push 0/call 0x401AFA = g_robot_class_count(0,1); test ax,ax; jne 0x4993D6 -- 0x4993C5 g_robot_class_count(0,2); test ax,ax; je 0x4993E8 SIEG -- 0x4993D6 push 0/push 1/call 0x401893 = count_buildings(1,0); cmp ax,2; jne 0x4993ED, sonst faellt es auf 0x4993E8. Also ODER aus ZWEI UND-GRUPPEN, nicht aus zwei Gliedern: darum `any_groups` und nicht `any`. `when` bleibt leer -- das ist NICHT bedingungslos, siehe Rule.AnyGroups.",
+     "any_groups": [
+      [
+       {
+        "_at": "0x4993B8",
+        "a": 0,
+        "b": 1,
+        "c": 0,
+        "kind": "units",
+        "op": "=="
+       },
+       {
+        "_at": "0x4993C9",
+        "a": 0,
+        "b": 2,
+        "c": 0,
+        "kind": "units",
+        "op": "=="
+       }
+      ],
+      [
+       {
+        "_at": "0x4993DA",
+        "_gelesen": "⚠ `objects` und NICHT `buildings`: count_buildings(typ, spieler) @0x4CFA70 heisst im Regelleser OBJECTS und wird als `objects` geschrieben (mission_logic.py Zeile 200 und 2020). `buildings` waere g_buildings_count @0x4CFB10, eine ANDERE Funktion. Die Zeile stand vorher genau so in der Datei und bleibt unveraendert - nur ihr Platz wechselt von `when` in die zweite ODER-GRUPPE.",
+        "a": 1,
+        "b": 0,
+        "c": 2,
+        "kind": "objects",
+        "op": "=="
+       }
+      ]
+     ],
      "then": [
       {
        "a": 1,
        "kind": "end"
       }
      ],
-     "when": [
-      {
-       "a": 1,
-       "b": 0,
-       "c": 2,
-       "kind": "objects",
-       "op": "=="
-      }
-     ]
+     "when": []
     },
     {
      "_at": "0x4993FE",

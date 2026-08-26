@@ -10,7 +10,7 @@ rem
 rem  Aufruf:
 rem     spielen                 Hauptmenue
 rem     spielen 18              Kampagnenmission 18 direkt
-rem     spielen 18 --no-briefing --erwartung=18
+rem     spielen 18 --no-briefing --erwartung
 rem                             Mission 18 ohne Vorspann, Erwartungsblatt zuerst
 rem     spielen 0 --map=map_NET02
 rem                             Gefecht/Karte statt Kampagne
@@ -39,5 +39,9 @@ goto weiter
 
 :starten
 echo [2/2] starten: %ARGS%
-"%GODOT%" --path "%PROJ%" -- %ARGS%
+rem  ACHTUNG: %~dp0 endet auf einem Backslash, und in "%PROJ%" escapet der das
+rem  schliessende Anfuehrungszeichen -- Godot bekam Pfad UND Argumente als EIN Wort
+rem  und brach mit "Invalid project path specified" ab. %PROJ:~0,-1% schneidet ihn ab.
+rem  Der Bau weiter oben braucht ihn dagegen, darum bleibt PROJ selbst unveraendert.
+"%GODOT%" --path "%PROJ:~0,-1%" -- %ARGS%
 endlocal

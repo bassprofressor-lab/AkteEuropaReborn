@@ -1263,6 +1263,11 @@ public partial class MapEntityLayer : Node2D
         public Rect2 Footprint;
     }
 
+    /// <summary>Wieviele eigene Einheiten seit Missionsbeginn trockengefallen
+    /// sind — die Zahl, an der sich pruefen laesst, ob der Spritabzug greift
+    /// und ob Hilfetext #14 kommen KANN.</summary>
+    public int OhneSpritGemeldet;
+
     private const int TileW = 40;
     private const int TileH = 20;
 
@@ -2012,21 +2017,22 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     private void PlacePanelBars(Rect2 box)
     {
+        // ⚠ ZUERST, nicht zuletzt: SetzeBalkenLaenge liest diesen Kasten.
+        _panelBarBox = box;
         bool echt = _panelScale > 0f;
         for (int i = 0; i < 3; i++)
         {
             if (_barBack[i] == null) continue;
             Vector2 at;
-            Vector2 hintergrund, fuellung;
             if (echt)
             {
                 at = _panelOrigin + (Vector2)(PanelBarFrameAt[i] + Vector2I.One) * _panelScale;
-                hintergrund = new Vector2(PanelBarFrameW, PanelBarFrameH) * _panelScale;
-                fuellung = new Vector2(PanelBarFillW, PanelBarFillH) * _panelScale;
                 _barBack[i].Position = _panelOrigin + (Vector2)PanelBarFrameAt[i] * _panelScale;
-                _barBack[i].Size = hintergrund;
+                _barBack[i].Size = new Vector2(PanelBarFrameW, PanelBarFrameH) * _panelScale;
                 _barFill[i].Position = at;
-                _barFill[i].Size = fuellung;
+                // ⚠⚠ HIER STAND `_barFill[i].Size = fuellung`, also die VOLLE
+                // Laenge. Siehe _barAnteil - das war der gemeldete Tankfehler.
+                SetzeBalkenLaenge(i, lage: true);
                 if (_barIcon[i] != null)
                 {
                     var t = _barIcon[i]!.Texture;
@@ -2040,10 +2046,89 @@ public partial class MapEntityLayer : Node2D
             _barBack[i].Position = at - Vector2.One;
             _barBack[i].Size = new Vector2(box.Size.X * BarWidthFrac + 2, BarHeightPx + 2);
             _barFill[i].Position = at;
-            _barFill[i].Size = new Vector2(box.Size.X * BarWidthFrac, BarHeightPx);
+            // ⚠⚠ Und hier stand die volle Breite des Rueckfalls - derselbe
+            // Fehler im zweiten Zweig.
+            SetzeBalkenLaenge(i, lage: true);
         }
-        _panelBarBox = box;
     }
+
+    /// <summary>
+    /// ⚠⚠ <b>26.08.2026 - DIE ZWEI SCHREIBER EINES BALKENS.</b>
+    ///
+    /// <para><b>Gemeldet</b> (25.08.2026): »Klicke ich auf die Einheit, ist der
+    /// Sprit voll. Fahre ich sie wohin, ist er eben nur so voll bzw. etwas
+    /// leerer, wie ich vorher draufgefahren bin. Bleibt die Einheit stehen und
+    /// ich klicke sie wieder an, zeigt sie wieder voll, aber sobald ich sie
+    /// wieder bewege, ist der Stand wieder niedriger. Sobald ein Helikopter sie
+    /// betankt, ist alles korrekt.«</para>
+    ///
+    /// <para><b>Und es war NICHT der Sprit.</b> Der Zustand ist gemessen sauber:
+    /// <c>--tank-check</c> und <c>--sprit-wacht</c> zeigen über beide
+    /// Befehlswege (alter Direktweg <c>IssueMove</c> UND Befehlsring
+    /// <c>PostMove</c>) 400/400 am Posten, 1,00 Sprit je betretener Zelle und
+    /// keinen einzigen unerklärten Schreibzugriff auf <c>Fuel</c>. Zwei Kopien
+    /// gab es trotzdem - nur nicht vom Tank, sondern <b>von der LÄNGE DES
+    /// BALKENS</b>:</para>
+    /// <list type="number">
+    ///   <item><see cref="ShowPanelBars"/> schreibt die Länge als DATUM:
+    ///     <c>38·ist/voll</c>, wie der Zeichner des Originals
+    ///     (0x470D25..0x470D37).</item>
+    ///   <item><see cref="PlacePanelBars"/> schrieb die Länge als LAGE - und
+    ///     zwar immer <c>PanelBarFillW</c>, also <b>voll</b>.</item>
+    /// </list>
+    ///
+    /// <para><b>Warum ausgerechnet beim Anklicken.</b> <c>PlacePanelBars</c>
+    /// hängt an <c>SetPanelBox</c> hängt an <c>MapViewer.PlacePanel()</c>, und
+    /// das ruft <c>UpdatePanelPortrait</c> <b>jedes Mal, wenn das Einheitenbild
+    /// seine Sichtbarkeit wechselt</b> - also genau beim Anwählen einer
+    /// Einheit. Die Reihenfolge im Klick ist
+    /// <c>SelectAt -&gt; SetPrimary -&gt; UpdatePanel -&gt; ShowPanelBars</c>
+    /// (richtige Länge), danach <c>UpdatePanelPortrait -&gt; PlacePanel -&gt;
+    /// PlacePanelBars</c> (voll). <b>Der Zweite gewinnt.</b> Sobald sich etwas
+    /// bewegt, ruft <c>_Process</c> wieder <c>UpdatePanel</c> - und der Balken
+    /// fällt auf den wahren Wert zurück. Genau das hat der Spieler
+    /// beschrieben.</para>
+    ///
+    /// <para><b>Warum es nur beim Sprit auffiel.</b> Hülle und Munition stehen
+    /// in Mission 2 ohnehin auf 100 %; der einzige Balken, der wirklich niedrig
+    /// steht, ist der Tank (Füllung 5..22 von 300..440, also 1..6 %). Und
+    /// darum »sobald ein Helikopter sie betankt, ist alles korrekt«: dann IST
+    /// der Tank voll, und beide Schreiber schreiben dasselbe.</para>
+    ///
+    /// <para><b>Die Kur:</b> die Länge hat genau EINEN Schreiber. Der Anteil
+    /// wird hier gemerkt; <c>PlacePanelBars</c> setzt nur noch Lage und Rahmen
+    /// und trägt den gemerkten Anteil wieder ein.</para></summary>
+    private readonly float[] _barAnteil = { 0f, 0f, 0f };
+
+    /// <summary><c>--balken-alt</c> - DIE GEGENPROBE. Damit schreibt
+    /// <see cref="PlacePanelBars"/> wieder die volle Länge, also der Stand vom
+    /// 25.08.2026. Ohne sie wäre »behoben« nur eine Behauptung: der Prüflauf
+    /// muss den Fehler auch HERSTELLEN können (Arbeitsweise 32).</summary>
+    public static bool BalkenAlt;
+
+    /// <summary>Die Länge EINES Balkens aus dem gemerkten Anteil - die einzige
+    /// Stelle, die <c>_barFill[i].Size</c> setzt.
+    /// <paramref name="lage"/> sagt, ob der Aufruf aus dem LAGE-Weg kommt
+    /// (<see cref="PlacePanelBars"/>); nur dort greift die Gegenprobe.</summary>
+    private void SetzeBalkenLaenge(int i, bool lage = false)
+    {
+        if (_barFill[i] == null) return;
+        float anteil = lage && BalkenAlt ? 1f : _barAnteil[i];
+        _barFill[i].Size = _panelScale > 0f
+            ? new Vector2(PanelBarFillW * _panelScale * anteil,
+                          PanelBarFillH * _panelScale)
+            : new Vector2(_panelBarBox.Size.X * BarWidthFrac * anteil, BarHeightPx);
+    }
+
+    /// <summary>Wie lang der Balken JETZT ist, in Bildpunkten - was der Spieler
+    /// sieht. Für die Prüfstände; sie dürfen den Zustand nicht raten.</summary>
+    public float BalkenLaenge(int i)
+        => i >= 0 && i < 3 && _barFill[i] != null ? _barFill[i].Size.X : -1f;
+
+    /// <summary>Die volle Länge eines Balkens - der Nenner der Prüfung.</summary>
+    public float BalkenVoll()
+        => _panelScale > 0f ? PanelBarFillW * _panelScale
+                            : _panelBarBox.Size.X * BarWidthFrac;
 
     private Vector2 _panelOrigin;
     private float _panelScale;
@@ -2077,10 +2162,13 @@ public partial class MapEntityLayer : Node2D
             // Die Länge ist im Original `38*ist/voll` bei fester Höhe 4
             // (0x470D25..0x470D37). Mit der gemessenen Lage rechnen wir genauso;
             // ohne sie bleibt der alte Bruchteil.
-            _barFill[i].Size = _panelScale > 0f
-                ? new Vector2(PanelBarFillW * _panelScale * anteil[i],
-                              PanelBarFillH * _panelScale)
-                : new Vector2(_panelBarBox.Size.X * BarWidthFrac * anteil[i], BarHeightPx);
+            //
+            // ⚠⚠ 26.08.2026 - der Anteil wird GEMERKT, gesetzt wird er von
+            // SetzeBalkenLaenge. Siehe _barAnteil: PlacePanelBars hat die Länge
+            // bis heute mit »voll« ueberschrieben, und das war der gemeldete
+            // Tankfehler.
+            _barAnteil[i] = anteil[i];
+            SetzeBalkenLaenge(i);
         }
     }
 
@@ -2609,6 +2697,10 @@ public partial class MapEntityLayer : Node2D
         // Zelle (5,11), was fuer aufgestellte Einheiten unmoeglich ist. Wer sie
         // trotzdem aufstellt, bekommt einen Stapel Geister neben dem Schiff.
         // Herleitung und Messung: CwmExtra.TransportLoads.
+        // sec17 - die Bruecken der Karte. Muss VOR dem Missionsaufbau stehen:
+        // die Bedingung `bridge` des Skripts fragt sie schon im ersten Takt.
+        LiesBruecken(root);
+
         _karteTerra.Clear();
         if (root.TryGetValue("terra_places", out var tqv) && tqv.VariantType == Variant.Type.Array)
             foreach (var item in tqv.AsGodotArray())
@@ -4034,6 +4126,17 @@ public partial class MapEntityLayer : Node2D
                 !(e.IsBuilding ? _fog!.IsSeen(e.Col, e.Row) : _fog!.IsWatched(e.Col, e.Row)))
             { _dotsHidden++; continue; }
             if (e.Owner == ViewPlayer) _dotsMine++; else _dotsForeign++;
+            // ⚠ 25.08.2026, auf seine Ansage: ein HERRENLOSES Gebaeude bekommt
+            // keinen Gebaeudepunkt. »die neutralen Gebaeude haben bei uns auf
+            // der Minikarte so ein Quadrat, das brauchen wir ja gar nicht« -
+            // aktuell trifft es nur den Nachschubposten (Besitzer 255).
+            // Der Punkt selbst bleibt, nur die groessere Gebaeudeform faellt weg.
+            // ⚠ 25.08.2026, zweite Fassung auf seine Ansage: ein HERRENLOSES
+            // Gebaeude gehoert gar nicht auf die Uebersichtskarte. Erst hatte
+            // ich nur den groesseren Gebaeudepunkt weggenommen - »die Gebaeude
+            // haben wieder kleine Kacheln auf der Minimap, das muss nicht sein«.
+            // Betrifft aktuell nur den Nachschubposten (Besitzer 255).
+            if (e.IsBuilding && (e.Owner < 0 || e.Owner > 7)) continue;
             list.Add((e.Pos, e.Owner, e.IsBuilding));
         }
 
@@ -4511,11 +4614,41 @@ public partial class MapEntityLayer : Node2D
         // einmal. Das Original vergleicht dafuer word[+0x0C] mit der Kennung,
         // die der Anleger dort abgelegt hat (nachgesehen an 0x459851 fuer Art 20
         // und 0x459E91 fuer Art 23).
+        Gebaeudefenster();
+        KontexthilfePruefen();
+    }
+
+    /// <summary>
+    /// Das Fenster zum angewählten Gebäude aufmachen, wenn es eines gibt.
+    ///
+    /// <para>⚠⚠ <b>25.08.2026 — WARUM DAS EINE EIGENE METHODE IST.</b> Der
+    /// Block stand nur in <see cref="SetPrimary"/>, und <c>SetPrimary</c> läuft
+    /// beim Anklicken eines FREMDEN oder HERRENLOSEN Bauwerks mit LEERER
+    /// Auswahl: <see cref="SelectAt"/> räumt <c>_sel</c>, ruft
+    /// <c>SetPrimary()</c> — und setzt <c>_selected = hit</c> erst DANACH
+    /// (»look, do not touch«). Zu dem Zeitpunkt, an dem der Block lief, war
+    /// also noch gar nichts angewählt.
+    ///
+    /// <para>Für Bahnhof, Flughafen und Mine fiel das nie auf — die zeigt
+    /// <see cref="Fenstergebaeude"/> ohnehin nur für den EIGENEN Spieler. Der
+    /// Nachschubposten gehört aber niemandem (63 von 63 auf 26 Karten mit
+    /// Besitzer 255), also ist er NIE »commandable«, und sein Fenster wäre
+    /// mit einem Klick nicht zu öffnen gewesen. Der Prüfstand hätte es nicht
+    /// gesehen: er setzt die Auswahl selbst und trifft damit den anderen
+    /// Zweig — genau die Abkürzung, vor der der Kopf von
+    /// <c>DepotCheck</c> schon einmal warnt.</para>
+    ///
+    /// <para>⚠ Das Original prüft an dieser Stelle keinen Besitzer: der
+    /// Klickverteiler <c>0x4379F0</c> nimmt die Art des angewählten Objekts
+    /// (<c>0x43710B</c>: ≥ 60000 heißt Gebäude) und springt in die Tafel, und
+    /// der Kaufblock <c>0x44C2B9</c> prüft in beiden Zweigen nur den
+    /// Kontostand.</para></summary>
+    private void Gebaeudefenster()
+    {
         var fg2 = Fenstergebaeude();
         var fart = fg2 != null ? FensterArtVon(fg2) : null;
         if (fart != null) OnBuildingWindow?.Invoke(fart.Value, fg2!.Slot,
                                                   OriginalFensterArt(fg2.BType));
-        KontexthilfePruefen();
     }
 
     /// <summary>
@@ -5001,7 +5134,18 @@ public partial class MapEntityLayer : Node2D
             else _sel.Add(hit);
         }
         SetPrimary();
-        if (!mine && hit >= 0) { _selected = hit; UpdatePanel(); }   // look, do not touch
+        if (!mine && hit >= 0)
+        {
+            _selected = hit;                                        // look, do not touch
+            UpdatePanel();
+            // ⭐ UND ERST JETZT das Gebäudefenster: `_selected` steht eine Zeile
+            // weiter oben zum ersten Mal. Siehe Gebaeudefenster() — ohne diese
+            // Zeile war das Fenster des herrenlosen Nachschubpostens (Art 31)
+            // mit der Maus nicht zu öffnen, und damit fiel das Ereignisbyte 31
+            // im Spiel nie.
+            Gebaeudefenster();
+            KontexthilfePruefen();
+        }
         SpeakSelected(hit);
         QueueRedraw();
     }
@@ -10397,6 +10541,34 @@ public partial class MapEntityLayer : Node2D
     /// Original es im Behandler tut (@0x4C2324). Ein Skript, das mitten im Takt
     /// schreibt, wäre genau die Naht, an der der Determinismus reisst.</para>
     /// </summary>
+    /// <summary>
+    /// <c>set_unit_field</c> — ein Byte des Einheitensatzes setzen. Gebraucht von
+    /// Mission 2 @0x4991A4, die damit die Munition ihrer sieben Angreifer
+    /// auffuellt (<c>+0x39 = +0x3A</c> fuer die Plaetze 4000..4006).
+    ///
+    /// <para>⚠ Bewusst klein gehalten: nur die Felder, die wir wirklich fuehren.
+    /// Ein unbekanntes Feld wird GEMELDET statt still verschluckt — eine Regel,
+    /// die ins Leere schreibt, faellt sonst nie auf.</para>
+    /// </summary>
+    private void MissionSetUnitField(int slot, int feld, int wert)
+    {
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.Dead || e.Slot != slot) continue;
+            switch (feld)
+            {
+                case 0x39: e.Ammo = wert; return;
+                case 0x3a: e.AmmoMax = wert; return;
+                case 0x2e: e.Fuel = wert; return;
+                case 0x08: e.Hp = wert; return;
+                default:
+                    GD.PrintErr($"set_unit_field: Feld +0x{feld:X} fuehren wir nicht " +
+                                $"(Platz {slot}, Wert {wert}) — Wirkung faellt aus");
+                    return;
+            }
+        }
+    }
+
     private void MissionOrderAt(int slot, int cx, int cy, int utokNa)
     {
         int idx = -1;
@@ -10515,20 +10687,16 @@ public partial class MapEntityLayer : Node2D
                 _mscript.FindPart = FindUnitWithPart;
                 // AUSGESCHALTET und VERLUSTE je Spieler — dieselben Zaehler,
                 // die schon der Abschlussbericht zeigt (BuildEndReport).
-                // ⚠ GEBAUTE Brücken kennt dieses Spiel (noch) NICHT. Unsere
-                // Brücken sind Gelände; das Original führt daneben eine Tafel
-                // von 100 Plätzen für WÄHREND DES SPIELS gebaute Brücken, und
-                // die ist in allen Kampagnenkarten beim Start LEER.
+                // sec17 — die Brücken, die von Anfang an auf der Karte stehen.
+                // Herleitung, Satzform und die Messung: Simulation/Bruecken.cs.
                 //
-                // Solange wir nicht bauen können, ist »Platz frei« immer wahr
-                // — und genau das ist auch im Original der Zustand, bis der
-                // Spieler die erste Brücke baut. Die vier Regeln, die daran
-                // hängen (M2 und M3), zeigen einen HINWEIS, solange die Brücke
-                // fehlt; sie verhalten sich damit wie das Original.
-                //
-                // ⚠ Wer hier das Brückenbauen nachrüstet, MUSS diesen Haken
-                // mitnehmen, sonst bleiben die Hinweise für immer stehen.
-                _mscript.BridgeUsed = _ => 0;
+                // ⚠⚠ Hier stand bis zum 25.08.2026 ein konstantes `_ => 0` mit der
+                // Begründung, sec17 sei eine Tafel für WAEHREND DES SPIELS gebaute
+                // Brücken und beim Start immer leer. Beides war falsch: sec17 trägt
+                // 110 Bauwerke auf 21 Karten, map_02 hat zwei davon, und weil ein
+                // leerer Platz 0 meldet, feuerte die Regel `bridge` bei JEDEM
+                // Missionsstart — Text 121 samt Pionier und -20$ bei Takt 0.
+                _mscript.BridgeUsed = BrueckeFeld0;
                 // Lebt der Einheitensatz? Im Original `+0x09 != 0xFF`.
                 _mscript.UnitAlive = index =>
                 {
@@ -10591,6 +10759,30 @@ public partial class MapEntityLayer : Node2D
                                 // ganz oben in dieser Datei.
                                 0x08 => e.Hp,
                                 0x29 => e.HpMax,
+                                // +0x09 BESITZER und +0x2E SPRIT kamen am
+                                // 25.08. dazu: die Schleife @0x498A10 der
+                                // Mission 2 prueft beide, um Hilfetext #14
+                                // (»Kein Sprit ... Nachschubstuetzpunkt«) zu
+                                // zeigen. +0x2E ist der TANK, nicht das Leben
+                                // - die alte Beschriftung »hp« steckt nur noch
+                                // im Exportschluessel, siehe oben in dieser
+                                // Datei und GAMESTATE_RE.md 3.94.
+                                0x09 => e.Owner,
+                                0x2e => e.Fuel,
+                                // ⭐ 25.08.2026 - Munition und ihr Hoechstwert:
+                                // M2 @0x4991A4 fuellt damit die Angreifer auf
+                                // (+0x39 = +0x3A, Plaetze 4000..4006).
+                                0x39 => e.Ammo,
+                                0x3a => e.AmmoMax,
+                                // ⚠⚠ +0x14 (UKOL, der Auftragscode) fehlt hier mit
+                                // Absicht: WIR FUEHREN IHN NICHT. `Order`/`Order2`
+                                // sind +0x10/+0x11 der FLUGZEUGE, etwas anderes.
+                                // Zwei Regeln haengen daran und bleiben darum
+                                // stumm: der Suchlauf zu Hilfetext 25 (M2
+                                // @0x498C95, sucht Auftrag 50 unter 100 Plaetzen)
+                                // und die vorhandene sel_field-Regel 31.
+                                // Eine Zahl zu erfinden waere schlimmer als die
+                                // Luecke - dann faenden die Regeln das Falsche.
                                 _ => -1,
                             };
                     return -1;
@@ -10735,6 +10927,27 @@ public partial class MapEntityLayer : Node2D
                     return false;
                 };
                 _mscript.MoneyOf = Money;
+                // ⭐⭐ DAS EREIGNISBYTE byte[C 0x539930] — hier wird es
+                // eingehängt, gesetzt wird es in UI.WindowManager.Oeffnen
+                // (dem Gegenstück zu 0x441270, dessen 0x4412C2 der EINZIGE
+                // Setzer im ganzen Programm ist: 69 Verweise über die
+                // Relokationstafel, 0 unklar).
+                //
+                // ⚠ Die Bedingung `event == n` war bis heute UNERFÜLLBAR: die
+                // einzige Stelle, die LastEvent je beschrieben hat, sass im
+                // Prüfstand --tutorial-check (`_mscript.LastEvent = 1`), also
+                // gar nicht im Spiel. Über alle 33 Missionen hängen daran
+                // 30 Regeln mit elf verschiedenen Werten (1, 6, 7, 8, 11, 16,
+                // 24, 25, 29, 31, 33) — keine einzige konnte feuern.
+                //
+                // ⚠ Der Haken fängt das Skript in einer eigenen Veränderlichen
+                // ein, NICHT über `_mscript`: das Feld wechselt beim
+                // Missionswechsel, und ein Haken, der auf ein anderes Skript
+                // zeigt als das, für das er gesetzt wurde, ist schlimmer als
+                // keiner. WindowManager.Leeren() nimmt ihn beim Kartenwechsel
+                // wieder weg.
+                var skript = _mscript;
+                UI.WindowManager.Ereignismelder = art => skript.LastEvent = art;
                 // Haelt dieser Spieler die Bahnverbindung? Siehe
                 // MissionScript.RailLinkHeld — Mission 21 fragt neun davon.
                 _mscript.RailLinkHeld = RailLinkHeld;
@@ -10796,6 +11009,20 @@ public partial class MapEntityLayer : Node2D
                 _mscript.MoveUnit = (slot, x, y) => MissionOrderAt(slot, x, y, -1);
                 // FEUERN AUF EINE ZELLE — siehe MissionFireAt.
                 _mscript.FireAt = MissionFireAt;
+                // ⭐ 25.08.2026 - die zwei Haken zu den Wirkungsarten, die aus dem
+                // Auslesen von Mission 2 kamen. Beide Routinen lagen fertig da,
+                // nur die Zuweisung fehlte (`script-coverage: 2 blockiert`).
+                //
+                // hit_cell: die Mission teilt SELBST Schaden aus (M2 @0x499026,
+                // sechs Zellen). ⚠ NICHT ueber fire_at - das geht ueber die
+                // Waffe, braucht Munition und einen Schuetzen, den die Mission
+                // an der Stelle gar nicht hat. Angreifer 40050 ist dort eine
+                // reine Schadenszahl.
+                _mscript.HitCell = (sp, ze) => ApplyMissionHits(new[] { (sp, ze) });
+                // set_unit_field: ein Byte des Einheitensatzes aus einem ANDEREN
+                // Feld desselben Satzes. M2 @0x4991A4 fuellt so die Munition der
+                // sieben Angreifer auf (+0x39 = +0x3A, Plaetze 4000..4006).
+                _mscript.SetUnitField = MissionSetUnitField;
                 // ⚠ DEN KI-MODUS KOENNEN WIR NICHT SETZEN. Die Kampagne hat
                 // bei uns keine KI, die man je Spieler an- und abschalten
                 // koennte (`SkirmishAi` gehoert zum GEFECHT, und Kampagne und
@@ -10877,6 +11104,31 @@ public partial class MapEntityLayer : Node2D
         // Was der Takt vorgemerkt hat, jetzt wegraeumen: ein Fenster, das
         // dieselbe Regel gleich wieder oeffnet, bleibt dabei stehen.
         UI.HelpWindow.CommitClose();
+        PostenCheckVielleicht();
+    }
+
+    /// <summary>Der Prüfstand <c>--posten-check</c> liest sich selbst aus der
+    /// Befehlszeile — dasselbe Muster wie <c>MissionScript.BankVielleicht</c>,
+    /// die zentrale Schalterschleife gehört einer anderen Datei.
+    ///
+    /// <para>⚠ <b>NICHT im ersten Takt.</b> Der Lauf braucht die Karte, die
+    /// Flugzeugvorlagen und das Missionsskript; im Takt 0 steht davon nichts,
+    /// und ein Prüfstand, der zu früh misst, meldet »kein Posten« und sieht
+    /// damit genau wie ein kaputter Bauweg aus.</para></summary>
+    private bool _postenGelaufen;
+
+    private int _postenTakte;
+
+    private void PostenCheckVielleicht()
+    {
+        if (_postenGelaufen) return;
+        bool an = false;
+        foreach (string a in Core.CommandLine.Args)
+            if (a == "--posten-check") an = true;
+        if (!an) { _postenGelaufen = true; return; }
+        if (++_postenTakte < 60) return;      // gut eine Sekunde Spielzeit
+        _postenGelaufen = true;
+        GD.Print(PostenCheck());
     }
 
     /// <summary>
@@ -11614,6 +11866,51 @@ public partial class MapEntityLayer : Node2D
         sb.Append($"\n   Menue: {menu.Count} Eintraege");
         foreach (var d in menu) sb.Append($" [{d.Name} Art {d.Kind} ${HeliPrice}]");
         sb.Append($"\n   Bau-Panel: {BuildPanelTitle()} / {BuildPanelRows().Count} Zeilen");
+        // GG 26.08.2026 - DAS BAUPANEL DARF AM POSTEN NICHT AUFGEHEN.
+        // Gemeldet: "unser eigenes Baupanel erscheint weiter neben dem neuen
+        // Fenster". Das Original zeigt am Gebaeudetyp 14 NUR Fensterart 31
+        // (Klickverteiler 0x4379F0, Arm 14 -> 0x443090 -> Anleger 0x45ABE0).
+        // ! Gemessen werden ZWEI Sachen, und die zweite ist die wichtige:
+        //   1. die ANZEIGE ist aus  (BuildPanelWanted == false)
+        //   2. die LOGIK lebt weiter (Producer() != null, Zeilen > 0) --
+        //      an ihr haengt der Kaufweg (BuildPanelPick), und wer sie mit
+        //      abschaltet, nimmt dem Spieler die Helis weg.
+        // Ohne Messung 2 waere ein `Producer() => null` gruen durchgegangen.
+        sb.Append($"\n   Baupanel-Anzeige am Posten: {(BuildPanelWanted ? "AN - FALSCH" : "aus (richtig)")}"
+                + $", Logik dahinter: Producer {(Producer() != null ? "da" : "WEG - FALSCH")}"
+                + $", {BuildPanelRows().Count} Zeilen");
+        // Nullmodell: ein ECHTES Bauwerk desselben Spielers muss die Anzeige
+        // weiterhin anschalten -- sonst misst die Zeile darueber nur, dass
+        // BuildPanelWanted immer falsch ist.
+        {
+            int merkeAuswahl = _selected;
+            int bauwerk = -1;
+            // ! Gesucht wird ein Bauwerk, das AUCH IM ALTEN ZUSTAND ein Panel
+            //   bekommen haette -- also eines, fuer das Producer() etwas
+            //   liefert. Der erste Anlauf nahm einfach das erste eigene
+            //   Gebaeude und traf auf Kampagne 10 ein "Depot" (Typ 5), das gar
+            //   kein Produzent ist: der Nullmodell-Zweig meldete FALSCH, und
+            //   falsch war der PRUEFSTAND. Ein Nullmodell, das die falsche
+            //   Vergleichsgruppe waehlt, misst nichts.
+            for (int i = 0; i < _entities.Count; i++)
+            {
+                var k = _entities[i];
+                if (!k.IsBuilding || k.IsProp || k.Dead) continue;
+                if (IsSupplyDepot(k)) continue;
+                _selected = i;
+                if (Producer() != null) { bauwerk = i; break; }
+            }
+            if (bauwerk < 0)
+                sb.Append("\n   Nullmodell: kein Bauwerk mit Bauliste auf der Karte - NICHT GEMESSEN");
+            else
+            {
+                _selected = bauwerk;
+                sb.Append($"\n   Nullmodell: {BuildingTypeName(_entities[bauwerk].BType)} (Typ "
+                        + $"{_entities[bauwerk].BType}) -> Anzeige "
+                        + $"{(BuildPanelWanted ? "an (richtig)" : "AUS - FALSCH")}");
+            }
+            _selected = merkeAuswahl;
+        }
         if (menu.Count == 0)
             return sb.Append("\n   NICHTS KAUFBAR — die Entwuerfe 13/14 sind fuer " +
                              $"Spieler {e.Owner} nicht freigegeben").ToString();
@@ -11643,6 +11940,231 @@ public partial class MapEntityLayer : Node2D
             sb.Append($"\n   neuer Heli: {a.Name}, Art {a.Kind}, Ladung {a.Cargo}, " +
                       $"geparkt {a.Stored} (soll false sein — Art 13/14 fliegen sofort)");
         }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// ⭐⭐ <c>--posten-check</c> — <b>DER NACHSCHUBPOSTEN UND SEIN
+    /// EREIGNISBYTE</b>, von der Anwahl bis zum Hilfetext (25.08.2026).
+    ///
+    /// <para><b>Die Latte ist gelesen und liegt fest:</b> Mission 2 hängt an
+    /// <c>@0x498AAB</c> eine Regel mit zwei Gliedern — <c>var[3] == 1</c> und
+    /// <c>Ereignis == 31</c> — und zeigt dann Hilfetext <b>16</b>. Fensterart
+    /// 31 ist das »Angebot des Nachschubpostens«. Es gibt in der ganzen
+    /// Kampagne <b>genau eine</b> Regel, die auf 31 prüft, und genau eine
+    /// Stelle, die Text 16 zeigt.</para>
+    ///
+    /// <para>⚠ <b>Das Nullmodell läuft mit, es wird nicht behauptet:</b> der
+    /// erste Abschnitt lässt das Skript zwei Sekunden OHNE das Fenster laufen.
+    /// Bleibt das Ereignis dabei auf 0 und der Text aus, ist der zweite
+    /// Abschnitt eine Messung; fällt der Text schon hier, misst der Lauf etwas
+    /// anderes.</para>
+    ///
+    /// <para>⚠ <b>Was er ANFASST</b>, und es steht hier, weil es nicht
+    /// unsichtbar bleiben darf: um das zweite Glied <c>var[3] == 1</c>
+    /// herzustellen, verschiebt der Lauf EINE eigene Einheit auf die Zelle
+    /// (63,7). Das ist kein Kniff, sondern die Bedingung von Regel 25
+    /// (<c>@0x498B64</c>, <c>imap(63,7) &lt; 1000</c>), die im Spiel
+    /// <c>v[3]</c> von 0 auf 1 zählt — der Lauf stellt sie HER, statt die
+    /// Veränderliche zu setzen. Hätte er sie gesetzt, prüfte er die Zahl und
+    /// nicht die Mechanik.</para>
+    ///
+    /// <para>⚠ Er geht über den KLICKWEG (<c>SetPrimary</c> →
+    /// <c>OnBuildingWindow</c> → <c>WindowManager.Oeffnen</c>), nicht über
+    /// <c>BuildingWindow.Open</c> direkt. Genau an dieser Abkürzung ist
+    /// <c>--depot-check</c> schon zweimal vorbeigelaufen.</para>
+    /// </summary>
+    public string PostenCheck()
+    {
+        var sb = new System.Text.StringBuilder("posten-check\n");
+        if (_mscript == null) MissionScriptTick(0.001f);
+        if (_airDesigns == null || _airDesigns.Count == 0) FillCampaignAirDesigns();
+
+        // Die Texte MITSCHREIBEN statt sie zu ersetzen: der alte Haken zeigt
+        // das Fenster, und ohne ihn misst der Lauf einen anderen Weg als das
+        // Spiel.
+        var texte = new List<int>();
+        System.Action<int, int, int, int>? alterText = null;
+        if (_mscript != null)
+        {
+            alterText = _mscript.ShowText;
+            _mscript.ShowText = (id, art, x, y) =>
+            { texte.Add(id); alterText?.Invoke(id, art, x, y); };
+        }
+
+        string RegelZeile(string at)
+        {
+            if (_mscript == null) return "(kein Skript)";
+            var zeilen = _mscript.RuleCheck().Split('\n');
+            for (int i = 0; i < zeilen.Length; i++)
+                if (zeilen[i].Contains(at))
+                    return zeilen[i].Trim()
+                         + (i + 1 < zeilen.Length ? "   " + zeilen[i + 1].Trim() : "");
+            return $"Regel {at} nicht im Skript";
+        }
+
+        // ---- 1. Was auf der Karte steht ------------------------------------
+        int idx = -1, posten = 0;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            if (!IsSupplyDepot(_entities[i]) || _entities[i].Dead) continue;
+            posten++;
+            if (idx < 0) idx = i;
+        }
+        sb.Append($"   Mission {UI.SkirmishSetup.CampaignMission}, {posten} Nachschubposten " +
+                  $"(Gebaeudeart {SupplyDepotType} -> Fensterart " +
+                  $"{OriginalFensterArt(SupplyDepotType)})\n");
+        if (idx < 0)
+        {
+            if (_mscript != null && alterText != null) _mscript.ShowText = alterText;
+            return sb.Append("   KEIN POSTEN AUF DIESER KARTE — nichts zu messen " +
+                             "(gemeint ist --campaign=2)").ToString();
+        }
+        var e = _entities[idx];
+        int wer = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
+        sb.Append($"   Posten: Platz {e.Slot} auf ({e.Col},{e.Row}), Besitzer {e.Owner} " +
+                  $"({(e.Owner == ViewPlayer ? "eigener" : "HERRENLOS/fremd")}), " +
+                  $"Kontostand ${_money[wer]}\n");
+
+        // ---- 2. NULLMODELL: zwei Sekunden ohne das Fenster -----------------
+        int textVor = texte.Count;
+        _mscript?.Advance(2 * Campaign.MissionScript.TicksPerSecond);
+        var ohne = texte.GetRange(textVor, texte.Count - textVor);
+        sb.Append($"   NULLMODELL (2 s ohne Fenster): Ereignis " +
+                  $"{_mscript?.LastEvent ?? -1}, Fenster offen {UI.WindowManager.Anzahl}, " +
+                  $"Setzungen {UI.WindowManager.EreignisGesetzt}, Texte " +
+                  $"{(ohne.Count == 0 ? "keine" : string.Join(",", ohne))}, " +
+                  $"Text 16 {(ohne.Contains(16) ? "GEKOMMEN — dann misst der Lauf etwas anderes" : "nicht gekommen")}\n");
+        sb.Append($"     Regel @0x498AAB: {RegelZeile("0x498AAB")}\n");
+
+        // ---- 3. Das zweite Glied HERSTELLEN: v[3] == 1 ----------------------
+        int v3 = _mscript?.VarAt(3) ?? -1;
+        if (v3 != 1 && _mscript != null && _nav != null && _nav.InBounds(63, 7))
+        {
+            int u = -1;
+            for (int i = 0; i < _entities.Count; i++)
+            {
+                var q = _entities[i];
+                if (!q.IsBuilding && !q.IsProp && !q.Dead && q.Owner == ViewPlayer)
+                { u = i; break; }
+            }
+            if (u >= 0)
+            {
+                var q = _entities[u];
+                sb.Append($"   v[3] steht auf {v3} — Einheit Platz {q.Slot} von " +
+                          $"({q.Col},{q.Row}) auf (63,7) gestellt, das ist die " +
+                          "Bedingung von Regel 25 @0x498B64\n");
+                _nav.SetOccupant(q.Col, q.Row, -1);
+                q.Col = 63; q.Row = 7;
+                _nav.SetOccupant(63, 7, u);
+                _mscript.Advance(2 * Campaign.MissionScript.TicksPerSecond);
+            }
+            else sb.Append("   v[3] nicht herstellbar: keine eigene Einheit auf der Karte\n");
+            v3 = _mscript.VarAt(3);
+        }
+        sb.Append($"   v[3] = {v3} (die Regel verlangt 1)\n");
+
+        // ---- 4. DER KLICK, und zwar der ECHTE ------------------------------
+        //
+        // ⚠⚠ ÜBER SelectAt, NICHT über `_sel.Add(idx); SetPrimary();`. Genau
+        // dieser Unterschied hat den Fehler versteckt, der am 25.08.2026
+        // gefunden wurde: bei einem HERRENLOSEN Bauwerk ist `mine == false`,
+        // SelectAt räumt die Auswahl, ruft SetPrimary mit LEEREM `_sel` und
+        // setzt `_selected` erst danach (»look, do not touch«). Ein Prüfstand,
+        // der die Auswahl selbst setzt, trifft den anderen Zweig und sieht
+        // nichts.
+        _sel.Clear();
+        _selected = -1;
+        SetPrimary();
+        int gesetztVor = UI.WindowManager.EreignisGesetzt;
+        // ⚠ ZWEI Zutaten des Prüfstands, und beide sind benannt:
+        //   1. Der Klick geht auf die MITTE des Rumpfrechtecks, weil `Pick`
+        //      genau dieses Rechteck prüft (`BodyRect(e).HasPoint(p)`);
+        //      `e.Pos` ist der Ankerpunkt und liegt nicht darin.
+        //   2. `PickOhneNebel`, weil ein kopfloser Lauf nach einer Sekunde die
+        //      halbe Karte noch nicht erkundet hat und im Nebel nichts
+        //      anfassbar ist. Das ist eine Eigenschaft des LAUFS, nicht des
+        //      Fensters — im Spiel steht der Spieler vor dem Posten.
+        bool nebelVor = PickOhneNebel;
+        PickOhneNebel = true;
+        SelectAt(BodyRect(e).GetCenter());
+        PickOhneNebel = nebelVor;
+        sb.Append($"   MAUSKLICK auf ({e.Col},{e.Row}): angewaehlt " +
+                  $"{(_selected >= 0 && _selected < _entities.Count ? $"Platz {_entities[_selected].Slot} (Art {_entities[_selected].BType})" : "NICHTS")}\n");
+        var fenster = UI.WindowManager.Offen(OriginalFensterArt(SupplyDepotType), e.Slot);
+        sb.Append($"   KLICK auf Platz {e.Slot}: Fenster Art " +
+                  $"{OriginalFensterArt(SupplyDepotType)} " +
+                  $"{(fenster != null ? "offen" : "NICHT OFFEN")}, " +
+                  $"Setzungen {gesetztVor} -> {UI.WindowManager.EreignisGesetzt}, " +
+                  $"Ereignis {_mscript?.LastEvent ?? -1} " +
+                  $"(Kontexthilfe {Campaign.CampaignHints.Ereignis})\n");
+        if (fenster?.Knoten is UI.BuildingWindow bw)
+            sb.Append("     " + bw.WatchLine() + "\n");
+        var stand = BuildingWindowData();
+        if (stand == null)
+            sb.Append("     BuildingWindowData: NULL — das Fenster haette nichts zu zeigen\n");
+        else
+        {
+            sb.Append($"     Angebote {stand.Angebote.Count}:");
+            foreach (var a in stand.Angebote)
+                sb.Append($" [{a.Name} ${a.Preis} {(a.Bezahlbar ? "bezahlbar" : "zu teuer")} " +
+                          $"Quelle {a.PreisQuelle}]");
+            sb.Append($"   Kontostand ${stand.Geld}\n");
+        }
+
+        // ---- 5. Feuert die Regel? ------------------------------------------
+        int textVor2 = texte.Count, feuerVor = _mscript?.RulesFired ?? 0;
+        _mscript?.Advance(2 * Campaign.MissionScript.TicksPerSecond);
+        var neu = texte.GetRange(textVor2, texte.Count - textVor2);
+        sb.Append($"   NACH DEM OEFFNEN (2 s): Regeln gefeuert " +
+                  $"{(_mscript?.RulesFired ?? 0) - feuerVor}, Texte " +
+                  $"{(neu.Count == 0 ? "keine" : string.Join(",", neu))}, " +
+                  $"Text 16 {(neu.Contains(16) ? "GEKOMMEN" : "NICHT gekommen")}, " +
+                  $"Ereignis danach {_mscript?.LastEvent ?? -1} (0 = verbraucht)\n");
+        sb.Append($"     Regel @0x498AAB: {RegelZeile("0x498AAB")}\n");
+
+        // ---- 6. Der KAUF, ueber den Knopf des Fensters ---------------------
+        // ⚠ Beide Richtungen. Ein Kauf, der nur GELINGEN kann, prueft nichts:
+        // er sieht genauso aus wie einer, der den Kontostand gar nicht liest.
+        var probe = BuildingWindowData();
+        if (probe != null && probe.Angebote.Count > 0 && probe.Angebote[0].Kaufen != null)
+        {
+            int merke = _money[wer];
+            _money[wer] = HeliPrice - 1;
+            int fliegtVor = _special.Count;
+            BuildingWindowData()!.Angebote[0].Kaufen!.Invoke();
+            sb.Append($"   KAUF mit ${HeliPrice - 1}: Flugzeuge {fliegtVor} -> " +
+                      $"{_special.Count} " +
+                      $"{(_special.Count > fliegtVor ? "GEKAUFT — falsch!" : "abgelehnt")} " +
+                      $"({_order})\n");
+
+            _money[wer] = merke < HeliPrice ? HeliPrice * 2 : merke;
+            int geldVor = _money[wer];
+            fliegtVor = _special.Count;
+            BuildingWindowData()!.Angebote[0].Kaufen!.Invoke();
+            sb.Append($"   KAUF mit ${geldVor}: Flugzeuge {fliegtVor} -> {_special.Count} " +
+                      $"{(_special.Count > fliegtVor ? "gekauft" : "ABGELEHNT — falsch!")}, " +
+                      $"Kontostand ${geldVor} -> ${_money[wer]} " +
+                      $"(-{geldVor - _money[wer]}, erwartet -{HeliPrice})\n");
+            if (_special.Count > fliegtVor)
+            {
+                var a = _special[^1];
+                sb.Append($"     neuer Heli: {a.Name}, Art {a.Kind}, Ladung {a.Cargo}, " +
+                          $"geparkt {a.Stored} (soll false sein — Art 13/14 fliegen sofort)\n");
+            }
+        }
+        else sb.Append("   KAUF nicht gemessen: kein Angebot mit Kaufweg\n");
+
+        // ---- 7. GEGENPROBE: die KARTE setzt nichts -------------------------
+        int vorKarte = UI.WindowManager.EreignisGesetzt;
+        UI.WindowManager.Oeffnen(UI.WindowManager.ArtKarte, null);
+        sb.Append($"   GEGENPROBE Karte (Art {UI.WindowManager.ArtKarte}): Setzungen " +
+                  $"{vorKarte} -> {UI.WindowManager.EreignisGesetzt} " +
+                  $"(erwartet unveraendert, `cmp al,3 / je` @0x4412C0), Ereignis " +
+                  $"{_mscript?.LastEvent ?? -1}");
+        UI.WindowManager.Schliessen(UI.WindowManager.ArtKarte);
+
+        if (_mscript != null && alterText != null) _mscript.ShowText = alterText;
         return sb.ToString();
     }
 
@@ -14160,6 +14682,12 @@ public partial class MapEntityLayer : Node2D
             6 or 12 => UI.BuildingWindow.Art.Bahnhof,
             9 => UI.BuildingWindow.Art.Flughafen,
             10 or 15 => UI.BuildingWindow.Art.Mine,
+            // ⭐ 25.08.2026 — DER NACHSCHUBPOSTEN. Die Zeile steht schon seit
+            // dem 22.08. in OriginalFensterArt (14 -> 31, Arm 0x437315 ->
+            // Öffner 0x443090), nur hatten wir keinen Zeichner dazu. Jetzt gibt
+            // es einen, und die zwei Tafeln sagen dasselbe — nachgeprüft in
+            // --fenster-check, Messung 9.
+            SupplyDepotType => UI.BuildingWindow.Art.Nachschubposten,
             _ => null,
         };
     }
@@ -14209,7 +14737,22 @@ public partial class MapEntityLayer : Node2D
     {
         if (_selected < 0 || _selected >= _entities.Count) return null;
         var e = _entities[_selected];
-        if (e.Owner != ViewPlayer) return null;
+        // ⭐⭐ 25.08.2026 — DIE AUSNAHME FÜR DEN NACHSCHUBPOSTEN, und sie ist
+        // dieselbe, die `Producer()` seit dem 17.08. trägt (dort steht die
+        // ausführliche Begründung).
+        //
+        // Der Posten gehört auf map_02 NIEMANDEM (Besitzer 255 — über alle
+        // 26 Karten sind es 63 von 63 Nachschubposten mit owner 255,
+        // GAMESTATE_RE.md 3.92), und er wird auch nicht eingenommen: man fährt
+        // auf ihn drauf. Mit der Besitzerprüfung hätte sein Fenster nie
+        // aufgehen können — und damit auch das Ereignisbyte 31 nie fallen, an
+        // dem Mission 2 ihren Hilfetext 16 hängt.
+        //
+        // ⚠ Das ist keine Auslegung: der Klickblock des Originals @0x44C2B9
+        // prüft in BEIDEN Zweigen (0x44C2CF / 0x44C37C) NUR
+        // `cmp dword [ecx*4 + 0xA9C600], eax` — den Kontostand. Kein Besitzer,
+        // kein Hangar, keine Teile.
+        if (e.Owner != ViewPlayer && !IsSupplyDepot(e)) return null;
         return FensterArtVon(e) == null ? null : e;
     }
 
@@ -14237,7 +14780,79 @@ public partial class MapEntityLayer : Node2D
         if (e.Hangar != null)
             foreach (int slot in e.Hangar)
                 st.Hangar.Add($"Flugzeug {slot}");
+        if (IsSupplyDepot(e)) FuelleAngebot(e, st);
         return st;
+    }
+
+    /// <summary>
+    /// ⭐⭐ <b>DAS ANGEBOT DES NACHSCHUBPOSTENS</b> — die zwei Spalten des
+    /// Fensters Art 31 (25.08.2026).
+    ///
+    /// <para><b>Was gelesen ist und was nicht, Zeile für Zeile:</b></para>
+    /// <list type="bullet">
+    ///   <item><b>Zwei Angebote, nicht mehr und nicht weniger.</b> Der Zeichner
+    ///   <c>0x47D340</c> trägt »Treibstoff-Heli.« und »Munitions-Heli.«, der
+    ///   Klickblock <c>0x44C2B9</c> hat genau zwei Tasten (<c>0x44C2CF</c> und
+    ///   <c>0x44C37C</c>). Bei uns sind das die Vorlagen mit <c>Kind</c> 13 und
+    ///   14 — dieselbe Zahl, die <c>spawn_aircraft</c> als »parkt nie«
+    ///   auszeichnet (<c>+0x31 = 0xFF</c>), und dieselbe, die
+    ///   <c>g_robot_class_count</c> Klasse 4 ausdrücklich AUSSCHLIESST
+    ///   (@0x4CF920: <c>kind ∉ {0, 13, 14}</c>).</item>
+    ///   <item><b>Der PREIS ist gelesen</b>, und zwar zweimal: die Globalen
+    ///   <c>word[0x52FAC0]</c> (Sprit) und <c>word[0x52FAC4]</c> (Munition),
+    ///   beide <b>150</b>, gedruckt @0x47D429 hinter der Zeichenkette
+    ///   »Kostet : $« (0x5021C8). Gegenprobe in der F-Fassung: dieselben zwei
+    ///   Werte liegen dort auf <c>0x52EB00</c> und sind ebenfalls 150 —
+    ///   11 von 11 Fundstellen in beiden Fassungen eindeutig.
+    ///   ⚠ <b>Zwei Globale, ein Wert:</b> das Original FÜHRT zwei getrennte
+    ///   Preise, sie stehen heute nur zufällig gleich. Darum trägt jede Spalte
+    ///   ihre eigene Adresse in <c>PreisQuelle</c> und nicht eine gemeinsame
+    ///   »150«.</item>
+    ///   <item>⚠ <b>Der Preis kommt NICHT aus aircraft.json</b>, und das ist
+    ///   kein Versehen: die Vorlagentabelle trägt an <c>+0x1F/+0x20/+0x21</c>
+    ///   einen Preis in TEILEN (Sprit- und Munitionsheli je <c>0/30/40</c>),
+    ///   und das ist der Preis am FLUGHAFEN. Der Posten zahlt Geld, der
+    ///   Flughafen zahlt Teile — beides zu verlangen hiesse doppelt zahlen
+    ///   (Fehler C12, 17.08.2026).</item>
+    ///   <item>⚠ <b>Kein Freigabe-Byte.</b> Der Zwei-Tasten-Dialog ist keine
+    ///   Entwurfsliste; er prüft in beiden Zweigen nur den Kontostand. Auf
+    ///   Kampagne 2 ist für Spieler 0 kein einziger Flugzeugentwurf
+    ///   freigegeben — mit Freigabeprüfung bliebe das Fenster leer.</item>
+    /// </list>
+    ///
+    /// <para>⚠ <b>Der Kaufweg ist der VORHANDENE</b>, nicht ein neuer: der
+    /// Knopf ruft <see cref="BuildPanelPick"/> mit derselben Zeilennummer, die
+    /// auch <see cref="BuildPanelRows"/> vergibt — also durch
+    /// <c>ProduceFromSelection</c> und <c>BuyAircraft</c>, wo der Kontostand
+    /// geprüft, abgebucht und der Heli über <c>SpawnSupplyHeli</c> angelegt
+    /// wird. Ein zweiter Kaufweg wäre ein zweiter Satz Wahrheiten über den
+    /// Preis, und genau daran ist der Flughafen schon einmal gescheitert.</para>
+    /// </summary>
+    private void FuelleAngebot(Entity e, UI.BuildingWindow.Stand st)
+    {
+        var menu = AirMenu(e);
+        int who = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
+        st.Geld = _money[who];
+        for (int i = 0; i < menu.Count; i++)
+        {
+            var d = menu[i];
+            int k = i;                       // ⚠ die Zeilennummer FESTHALTEN
+            st.Angebote.Add(new UI.BuildingWindow.Angebot
+            {
+                Name = d.Name,
+                Preis = HeliPrice,
+                Bezahlbar = _money[who] >= HeliPrice,
+                // Kind 13 = Sprit -> 0x52FAC0, Kind 14 = Munition -> 0x52FAC4.
+                // Die Zuordnung kommt aus der Nutzlast (106 Treibstoffheli,
+                // 107 Munitionheli) und aus AIR_RE.md, wo 13/14 die
+                // Nachschubhelis sind.
+                PreisQuelle = d.Kind == 13 ? "word[0x52FAC0] = 150"
+                            : d.Kind == 14 ? "word[0x52FAC4] = 150"
+                            : $"UNGEKLAERT — Kind {d.Kind} ist keiner der zwei "
+                              + "Nachschubhelis, der Preis ist geraten",
+                Kaufen = () => BuildPanelPick(k),
+            });
+        }
     }
 
     /// <summary>»Start« — zurueck auf aktiv. ⭐ Das ist ein GELESENER Befehl:
@@ -14466,7 +15081,50 @@ public partial class MapEntityLayer : Node2D
         return true;
     }
 
-    public bool BuildPanelWanted => Producer() != null;
+    /// <summary>
+    /// <b>Soll UNSER Baufenster aufgehen?</b>
+    ///
+    /// <para>⚠⚠ <b>26.08.2026 — DER NACHSCHUBPOSTEN IST HIER RAUS.</b> Gemeldet:
+    /// »unser eigenes Baupanel erscheint weiter neben dem neuen Fenster«. Das
+    /// Original tut das nicht, und zwar nachweislich: der Klickverteiler
+    /// <c>0x4370BF</c> nimmt die angeklickte Kennung (<c>word[0x502AD8]</c>,
+    /// ab 60000 ein Gebäude), rechnet sie mit <c>+0x15A0</c> auf den
+    /// Gebäudeplatz zurück (60000 + 5536 = 65536, im Wort also 0), liest
+    /// <c>byte[0xC06914 + 76·Platz]</c> = den <b>Gebäudetyp</b> und springt in
+    /// die Tafel <c>0x4379F0</c>. Sie hat <b>17 Arme, einen je Typ</b>, und
+    /// jeder öffnet <b>genau ein</b> Fenster:</para>
+    ///
+    /// <code>
+    /// Typ  1 -> Fensterart  6 (Basis)      Typ 10,15 -> 18 (Terranium-Mine)
+    /// Typ  2,3,4 -> 8 (Fabrik)             Typ 11 -> 11 (Werft)
+    /// Typ  5 -> 23                         Typ 12 ->  2 (Bahnhof)
+    /// Typ  6 ->  2 (Bahnhof)               Typ 13 -> 21
+    /// Typ  7 -> 20                         Typ 14 -> 31 (NACHSCHUBPOSTEN)
+    /// Typ  9 ->  5 (Flughafen)             Typ 17 -> 33 (Bestellfenster)
+    /// Typ  8, 16 -> KEIN Fenster
+    /// </code>
+    ///
+    /// <para>Das Basisfenster ist <b>Art 6</b> und hängt an <b>Typ 1</b>. Wer
+    /// den Posten anklickt, bekommt im Original <b>nur</b> Art 31 — unser
+    /// Baufenster daneben ist eine Zutat.</para>
+    ///
+    /// <para>⚠⚠ <b>Warum die Änderung HIER steht und nicht in
+    /// <see cref="Producer"/>:</b> am Producer hängt der KAUFWEG.
+    /// <c>BuildPanelPick</c> beginnt mit <c>var e = Producer();</c>, und die
+    /// zwei Kaufknöpfe des Postens rufen genau das (siehe
+    /// <c>FuelleAngebot</c>). Wer den Posten aus <c>Producer()</c> nähme,
+    /// nähme dem Spieler die Helis weg — <b>die Anzeige gehört abgeschaltet,
+    /// nicht die Logik.</b></para>
+    ///
+    /// <para>⚠ <b>Der MARKT (Typ 17) bleibt drin, mit Absicht.</b> Auch er
+    /// bekäme im Original ein eigenes Fenster (Art 33, Bestellfenster) statt
+    /// unseres Baufensters — nur haben wir Art 33 nicht gebaut, und unser
+    /// Baufenster ist dort der einzige Weg zur Ware. Ihn jetzt mit
+    /// abzuschalten hiesse, eine laufende Sache gegen nichts zu tauschen.
+    /// <b>Der Markt ist damit ein bekannter, benannter Rest — keine
+    /// Auslassung.</b></para>
+    /// </summary>
+    public bool BuildPanelWanted => Producer() is { } p && !IsSupplyDepot(p);
 
     /// <summary>Harness only: the factory <c>--demo-buildpanel</c> is waiting on.
     /// The click happens through the panel the moment a line can be paid for, so
@@ -18859,6 +19517,525 @@ public partial class MapEntityLayer : Node2D
     /// <summary>How often a Nachschub-Posten serviced somebody (harness).</summary>
     public int SupplyPostRuns;
 
+    // ======================================================================
+    //  --tank-check — DER PRUEFSTAND ZUM NACHSCHUB-POSTEN
+    // ======================================================================
+    //
+    // Gemeldet am 25.08.2026: »Mit der Einheit, mit der ich auf den
+    // Nachschubposten fahre, wird wie kurz aufgetankt, fahre ich herunter, ist
+    // er wieder fast leer.«
+    //
+    // Aus einem Bild ist das nicht zu entscheiden (Arbeitsweise 22): der Balken
+    // sagt nicht, OB aufgetankt wurde, WIE LANGE der Wert haelt und WIE SCHNELL
+    // er wieder faellt. Genau diese drei Zahlen holt dieser Prueflauf.
+    //
+    // Ablauf, in drei Abschnitten:
+    //   0  HINFAHRT   — eine eigene fahrende Einheit mit gemessenem Tankstand
+    //                   faehrt auf die Zelle des Postens.
+    //   1  AUF DEM POSTEN — zwei Sekunden stehenbleiben, damit mehrere
+    //                   Wirtschaftstakte des Postens vorbeikommen.
+    //   2  ABFAHRT    — zwoelf Zellen weit wegfahren.
+    // Protokolliert wird bei jedem Zellwechsel und bei jeder Tankaenderung:
+    //
+    //     Takt   Zelle    Sprit/Tank   SupplyPostRuns
+    //
+    // NULLMODELL: das Original zieht bei @0x407AA7 genau EINS je betretener
+    // Zelle ab. Kommt am Ende ein anderer Wert als 1,00 je Zelle heraus, zieht
+    // unser Bau zuviel — und dann ist nicht der Posten schuld, sondern der
+    // Verbrauch.
+
+    /// <summary>Ist <c>--tank-check</c> gesetzt? -1 = noch nicht nachgesehen,
+    /// 0 = aus, 1 = an.</summary>
+    private int _tankAn = -1;
+
+    /// <summary>0 = Hinfahrt, 1 = auf dem Posten, 2 = Abfahrt, 9 = fertig.</summary>
+    private int _tankPhase;
+    private int _tankIdx = -1;
+    private Entity? _tankPost;
+    private int _tankLastCol = -1, _tankLastRow = -1, _tankLastFuel = -1;
+    private int _tankZeilen;
+    private int _tankStartTakt, _tankPostTakt;
+    private int _tankFuelHinStart, _tankZellenHin;
+    private int _tankFuelAmPosten, _tankFuelAbfahrt;
+    private int _tankZellenWeg, _tankPostRunsBeiAnkunft;
+
+    /// <summary>⭐ 25.08.2026 — DIE GEMELDETE KETTE, Schritt für Schritt.
+    ///
+    /// <para>Gemeldet: »Klicke ich auf die Einheit, ist der Sprit voll. Fahre
+    /// ich sie wohin, ist er eben nur so voll ... wie ich vorher draufgefahren
+    /// bin. ... Sobald ein Helikopter sie betankt, ist alles korrekt. Das
+    /// passiert nur mit der Einheit, die auf das Pad des Nachschubdepots
+    /// fährt.«</para>
+    ///
+    /// <para>Der alte Prüflauf fuhr über <see cref="IssueMove"/> — den ALTEN
+    /// DIREKTWEG. Der Spieler klickt aber, und ein Klick geht seit dem
+    /// 22.08.2026 über den BEFEHLSRING (<c>PostMove</c> -&gt; <c>ApplyMove</c>,
+    /// wirksam erst am nächsten Taktanfang). Zwei Wege, ein Zustand: solange
+    /// nur der eine gemessen wird, ist die Meldung nicht nachstellbar. Der
+    /// Prüflauf nimmt darum jetzt den Weg des Spielers, und
+    /// <c>--tank-check-alt</c> holt den alten zum Vergleich zurück.</para>
+    ///
+    /// <para>Gemessen wird an genau den vier Stellen der Meldung:
+    /// <c>NACH DEM TANKEN</c>, <c>BEI DER ANWAHL</c> (der Klick, samt
+    /// <c>UpdatePanel</c> — das ist es, was der Spieler LIEST),
+    /// <c>DIREKT NACH DEM BEFEHL</c> und <c>NACH DEM ERSTEN ZELLWECHSEL</c>.
+    /// Dazwischen läuft eine Spur je Takt, damit ein Sprung nicht zwischen zwei
+    /// Zeilen verschwindet.</para></summary>
+    private bool _tankAltWeg;
+
+    /// <summary>Solange &gt; 0: JEDEN Takt eine Zeile, nicht nur bei Änderungen.
+    /// Ein Wert, der einen Takt lang falsch ist und im nächsten wieder stimmt,
+    /// fällt sonst durch das Raster.</summary>
+    private int _tankSpurTakte;
+
+    /// <summary>Die vier Werte der gemeldeten Kette.</summary>
+    private int _tankNachTanken = -1, _tankBeiAnwahl = -1,
+                _tankNachBefehl = -1, _tankNachErsterZelle = -1;
+
+    /// <summary>Was der Panel-Balken zeigen WUERDE — Ist/Voll, wie
+    /// <see cref="ShowPanelBars"/> es rechnet. Der Spieler liest den Balken,
+    /// nicht die Zahl; ein Prüfstand, der nur die Zahl protokolliert, misst
+    /// nicht das Gemeldete.</summary>
+    private static string TankBalken(Entity e)
+        => e.FuelMax > 0 ? $"{100 * e.Fuel / e.FuelMax,3}%" : "  -";
+
+    /// <summary><c>--tank-check=&lt;n&gt;</c> setzt den Starttank der Messeinheit
+    /// auf n statt auf »reichlich genug«. Damit laesst sich der NULLDURCHGANG
+    /// erzwingen — der Zweig, in dem der Abzug die Einheit anhaelt.</summary>
+    private int _tankStartSprit;
+
+    /// <summary>Eine Protokollzeile des Prueflaufs — immer dieselbe Form, damit
+    /// sich zwei Laeufe nebeneinanderlegen lassen.</summary>
+    private void TankLog(Entity e, string was)
+    {
+        if (_tankZeilen++ > 1200) return;            // Ueberlaufbremse
+        // ⭐ Der BALKEN steht mit dabei: der Spieler liest ihn, nicht die Zahl.
+        GD.Print($"tank-check: Takt {_taktNr,6}  Zelle ({e.Col,3},{e.Row,3})  " +
+                 $"Sprit {e.Fuel,4}/{e.FuelMax,-4} Balken {TankBalken(e)} " +
+                 $"posten={SupplyPostRuns,3}  {was}");
+    }
+
+    // ======================================================================
+    //  --sprit-wacht — DIE SPRITWACHT
+    // ======================================================================
+    //
+    // ⭐ 25.08.2026, gebaut fuer die Meldung »klicke ich sie an, ist der Sprit
+    // voll; fahre ich sie, ist er wieder so niedrig wie vorher«.
+    //
+    // Der gerichtete Prueflauf (--tank-check) misst EINE Einheit auf EINEM Weg.
+    // Diese Wacht misst ALLE: sie merkt sich je Einheit Sprit und Zelle vom
+    // Taktende und vergleicht im naechsten Takt. Gemeldet wird JEDE Aenderung,
+    // die das Nullmodell nicht erklaert.
+    //
+    // NULLMODELL (was erlaubt ist, und nur das):
+    //   * -1 zusammen mit einem ZELLWECHSEL   — der Abzug @0x407AA7
+    //   * Sprung auf FuelMax auf der Zelle eines Nachschub-Postens (BType 14)
+    //   * Sprung auf FuelMax durch einen Versorgungsheli (Art 13)
+    // Alles andere ist ein zweiter Schreiber — genau das, wonach gesucht wird.
+    private bool _spritWachtAn;
+    private int _spritWachtGeprueft = -1;
+    private readonly System.Collections.Generic.Dictionary<int, (int Fuel, int Col, int Row)> _spritWacht = new();
+    private int _spritWachtZeilen;
+
+    /// <summary>Steht auf dieser Zelle ein Nachschub-Posten (BType 14)?</summary>
+    private bool PostenAufZelle(int col, int row)
+    {
+        foreach (var b in _entities)
+            if (b.IsBuilding && !b.Dead && b.BType == 14 && b.Col == col && b.Row == row)
+                return true;
+        return false;
+    }
+
+    private void SpritWachtTakt()
+    {
+        if (_spritWachtGeprueft < 0)
+        {
+            _spritWachtGeprueft = 0;
+            foreach (string a in OS.GetCmdlineUserArgs())
+                if (a == "--sprit-wacht") _spritWachtAn = true;
+        }
+        if (!_spritWachtAn || _spritWachtZeilen > 300) return;
+
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || e.FuelMax <= 0) continue;
+            int key = e.Slot;
+            if (!_spritWacht.TryGetValue(key, out var vor))
+            { _spritWacht[key] = (e.Fuel, e.Col, e.Row); continue; }
+            _spritWacht[key] = (e.Fuel, e.Col, e.Row);
+            if (e.Fuel == vor.Fuel) continue;
+
+            bool zellwechsel = e.Col != vor.Col || e.Row != vor.Row;
+            int diff = e.Fuel - vor.Fuel;
+            string urteil;
+            if (diff == -1 && zellwechsel) continue;                    // der Abzug, erklaert
+            else if (e.Fuel == e.FuelMax && PostenAufZelle(e.Col, e.Row))
+                urteil = "Nachschub-Posten (erklaert)";
+            else if (e.Fuel == e.FuelMax)
+                urteil = "voll getankt OHNE Posten unter der Einheit — Heli oder ⚠ ZWEITER SCHREIBER";
+            else
+                urteil = $"⚠⚠ UNERKLAERT: {diff:+0;-0} ohne Zellwechsel"
+                       + (zellwechsel ? " (mit Zellwechsel, aber nicht -1)" : "");
+            _spritWachtZeilen++;
+            GD.Print($"sprit-wacht: Takt {_taktNr,6}  Platz {e.Slot,5} Spieler {e.Owner}  " +
+                     $"({vor.Col,3},{vor.Row,3})->({e.Col,3},{e.Row,3})  " +
+                     $"Sprit {vor.Fuel,4} -> {e.Fuel,4} / {e.FuelMax}  {urteil}");
+        }
+    }
+
+    // ======================================================================
+    //  --balken-check - DER PRUEFSTAND ZUM BEDIENBLOCK
+    // ======================================================================
+    //
+    // ⭐⭐ 26.08.2026. --tank-check misst den ZUSTAND und sagt: der Tank ist in
+    // Ordnung. Der Spieler liest aber nicht den Zustand, sondern den BALKEN -
+    // und der hatte zwei Schreiber (siehe _barAnteil). Dieser Prueflauf misst
+    // deshalb, was der Spieler SIEHT: die Laenge des Spritbalkens in
+    // Bildpunkten, an genau den drei Stellen der gemeldeten Kette.
+    //
+    // Die Kette, so wie sie beim Anklicken einer Einheit ablaeuft:
+    //   1  SelectAt -> SetPrimary -> UpdatePanel -> ShowPanelBars
+    //      => die Laenge als DATUM (38 * ist/voll)
+    //   2  UpdatePanelPortrait -> MapViewer.PlacePanel -> SetPanelBox
+    //      -> PlacePanelBars
+    //      => bis zum 25.08. die Laenge als LAGE, und zwar VOLL
+    //   3  _Process sieht `moved` -> UpdatePanel -> ShowPanelBars
+    //      => wieder das Datum
+    //
+    // NULLMODELL: Schritt 2 ist eine LAGE-Rechnung. Er darf die Laenge NICHT
+    // aendern. Kommt nach Schritt 2 etwas anderes heraus als nach Schritt 1,
+    // ist das der Fehler - unabhaengig davon, welcher der beiden Werte
+    // "richtiger" aussieht.
+    //
+    // GEGENPROBE: --balken-alt stellt den Stand vom 25.08. wieder her. Der
+    // Prueflauf muss den Fehler herstellen koennen, sonst ist "behoben" nur
+    // eine Behauptung.
+    private int _balkenAn = -1;
+
+    private void BalkenCheckTakt()
+    {
+        if (_balkenAn != -1) return;
+        _balkenAn = 0;
+        foreach (string a in OS.GetCmdlineUserArgs())
+        {
+            if (a == "--balken-check") _balkenAn = 1;
+            if (a == "--balken-alt") BalkenAlt = true;
+        }
+        if (_balkenAn == 0) return;
+        if (_taktNr < SimHz) { _balkenAn = -1; return; }   // eine Sekunde Anlauf
+
+        int idx = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var c = _entities[i];
+            if (c.IsBuilding || c.IsProp || c.Dead || !c.Mobile) continue;
+            if (c.Owner != 0 || c.FuelMax <= 0) continue;
+            idx = i; break;
+        }
+        if (idx < 0) { GD.Print("balken-check: keine eigene Einheit mit Tank"); return; }
+        var e = _entities[idx];
+
+        // ⚠ Der Stand wird GESETZT, nicht abgewartet: gemessen werden soll die
+        // Anzeige, nicht die Wegsuche. 13 von 400 ist die Startfuellung der
+        // zweiten Einheit der Mission 2 - genau der Fall, in dem der Fehler
+        // sichtbar ist.
+        e.Fuel = Mathf.Min(13, e.FuelMax);
+
+        // Die Blockecke des Spielers, wenn MapViewer sie schon gesetzt hat;
+        // sonst dieselbe Rechnung mit Vergroesserung 2 wie dort.
+        var kasten = _panelBarBox.Size.X > 0 ? _panelBarBox : new Rect2(16, 86, 306, 188);
+        var ecke = _panelOrigin;
+        float gross = _panelScale > 0f ? _panelScale : 2f;
+
+        GD.Print($"balken-check: Einheit Platz {e.Slot}, Sprit {e.Fuel}/{e.FuelMax} " +
+                 $"= {100.0 * e.Fuel / e.FuelMax:0.0} %   " +
+                 $"(Gegenprobe --balken-alt: {(BalkenAlt ? "AN" : "aus")})");
+
+        _sel.Clear(); _sel.Add(idx); SetPrimary(); UpdatePanel();
+        float voll = BalkenVoll();
+        float s1 = BalkenLaenge(1);
+
+        SetPanelBox(kasten, ecke, gross);          // = MapViewer.PlacePanel()
+        float s2 = BalkenLaenge(1);
+
+        UpdatePanel();                             // = _Process, sobald etwas faehrt
+        float s3 = BalkenLaenge(1);
+
+        string P(float x) => voll > 0 ? $"{x,6:0.0} px = {100 * x / voll,5:0.0} %" : $"{x,6:0.0} px";
+        GD.Print($"balken-check: voller Balken {voll:0.0} px, " +
+                 $"erwartet {voll * e.Fuel / e.FuelMax:0.0} px");
+        GD.Print($"balken-check: 1) ANWAHL   (ShowPanelBars, das Datum)      {P(s1)}");
+        GD.Print($"balken-check: 2) LAGE     (PlacePanelBars ueber PlacePanel) {P(s2)}");
+        GD.Print($"balken-check: 3) BEWEGUNG (ShowPanelBars, wie _Process)   {P(s3)}");
+        bool ok = Mathf.Abs(s2 - s1) < 0.01f && Mathf.Abs(s3 - s1) < 0.01f;
+        GD.Print(ok
+            ? "balken-check: BESTANDEN - die Lage-Rechnung aendert die Laenge nicht"
+            : $"balken-check: DURCHGEFALLEN - Schritt 2 schreibt die Laenge um " +
+              $"({s1:0.0} -> {s2:0.0} px). Das ist der gemeldete Tankfehler: " +
+              "beim Anklicken voll, sobald etwas faehrt wieder niedrig.");
+        GD.Print("balken-check: NULLMODELL: eine LAGE-Rechnung darf einen WERT nie aendern.");
+    }
+
+    /// <summary>Der Prueflauf, einmal je Simulationstakt.</summary>
+    private void TankCheckTakt()
+    {
+        if (_tankAn == 0 || _tankPhase == 9) return;
+        if (_tankAn < 0)
+        {
+            _tankAn = 0;
+            foreach (string a in OS.GetCmdlineUserArgs())
+                if (a == "--tank-check" || a.StartsWith("--tank-check="))
+                {
+                    _tankAn = 1;
+                    if (a.Contains('=')) _tankStartSprit = (int)a[(a.IndexOf('=') + 1)..].ToFloat();
+                }
+                // ⭐ 25.08.2026: der Weg des SPIELERS ist jetzt die Vorgabe
+                // (Befehlsring). --tank-check-alt holt den alten Direktweg
+                // (IssueMove) zurueck — die beiden nebeneinander sind der
+                // Vergleich, den die Meldung verlangt.
+                else if (a == "--tank-check-alt") _tankAltWeg = true;
+            if (_tankAn == 0) return;
+        }
+        // Eine Sekunde Anlauf: das Missionsskript setzt im ersten Takt noch
+        // Einheiten um, und ein Prueflauf, der VOR dem Aufbau misst, misst den
+        // Aufbau statt der Sache.
+        if (_taktNr < SimHz) return;
+
+        // ---- Aufbau ------------------------------------------------------
+        if (_tankIdx < 0)
+        {
+            var post = _entities.Find(x => x.IsBuilding && x.BType == 14 && !x.Dead);
+            if (post == null)
+            {
+                GD.Print("tank-check: kein Nachschub-Posten auf dieser Karte — nicht messbar");
+                _tankPhase = 9; return;
+            }
+            _tankPost = post;
+            // ⚠ ERST NACHSEHEN, OB DIE POSTENZELLE UEBERHAUPT BEFAHRBAR IST.
+            // IssueMove sucht sich bei einer gesperrten Zelle die naechste
+            // FREIE — und dann steht die Einheit NEBEN dem Posten und wird nie
+            // bedient. Ein Prueflauf, der das nicht mitmisst, haelt das
+            // Ausweichen fuer eine Ankunft.
+            if (_nav != null)
+            {
+                var sb = new System.Text.StringBuilder();
+                for (int r = post.Row - 2; r <= post.Row + 2; r++)
+                {
+                    sb.Append($"tank-check: Zeile {r,3}  ");
+                    for (int c = post.Col - 2; c <= post.Col + 2; c++)
+                        sb.Append($"({c},{r}) {_nav.GroundAt(c, r)}/" +
+                                  $"{(_nav.IsFree(c, r, Simulation.NavGrid.MoveClass.Vehicle, -1) ? "frei" : "BELEGT")}  ");
+                    sb.Append('\n');
+                }
+                GD.Print(sb.ToString().TrimEnd());
+            }
+            var cands = new List<int>();
+            for (int i = 0; i < _entities.Count; i++)
+            {
+                var c = _entities[i];
+                if (c.IsBuilding || c.IsProp || c.Dead || !c.Mobile) continue;
+                if (c.Owner != 0 || c.FuelMax <= 0) continue;
+                cands.Add(i);
+            }
+            cands.Sort((x, y) => _entities[x].Pos.DistanceTo(post.Pos)
+                                 .CompareTo(_entities[y].Pos.DistanceTo(post.Pos)));
+            foreach (int i in cands)
+            {
+                var c = _entities[i];
+                // ⚠ Der Tank wird fuer die WEGVERGABE kurz vollgemacht: IssueMove
+                // weist eine trockene Einheit ab (»kein Sprit«), und die sechs
+                // Einheiten der Mission 2 starten mit 5..22 Sprit. Ohne das
+                // misst der Prueflauf nur die eigene Abweisung.
+                int merk = c.Fuel;
+                c.Fuel = c.FuelMax;
+                _sel.Clear(); _sel.Add(i); SetPrimary();
+                // ⚠ NICHT post.Pos: CellAt(post.Pos) landete gemessen auf
+                // (15,21) statt auf (12,18) — der Ankerpunkt eines Gebaeudes
+                // traegt den Hoehenversatz mit. Gezielt wird auf die ZELLE.
+                IssueMove(CellCenter(post.Col, post.Row));
+                if (c.Path == null) { c.Fuel = merk; continue; }
+                _tankIdx = i;
+                // Genug fuer die Hinfahrt, aber nicht voll — sonst waere am
+                // Posten nichts nachzufuellen und der Zaehler bliebe stumm.
+                c.Fuel = _tankStartSprit > 0
+                    ? Mathf.Min(c.FuelMax, _tankStartSprit)
+                    : Mathf.Min(c.FuelMax, c.Path.Count * 4 + 12);
+                _tankFuelHinStart = c.Fuel;
+                _tankStartTakt = _taktNr;
+                _tankLastCol = c.Col; _tankLastRow = c.Row; _tankLastFuel = c.Fuel;
+                GD.Print($"tank-check: Posten »{post.Name}« BType {post.BType} auf " +
+                         $"({post.Col},{post.Row}), Besitzer {post.Owner}");
+                GD.Print($"tank-check: Messeinheit Platz {c.Slot} auf ({c.Col},{c.Row}), " +
+                         $"Tank {c.Fuel}/{c.FuelMax}, Weg {c.Path.Count} Schritte, " +
+                         $"Ziel ({c.Goal.X},{c.Goal.Y})" +
+                         (c.Goal.X == post.Col && c.Goal.Y == post.Row
+                              ? " = Postenzelle"
+                              : " ⚠ NICHT die Postenzelle"));
+                GD.Print("tank-check: Takt      Zelle       Sprit/Tank  posten");
+                TankLog(c, "Abfahrt");
+                break;
+            }
+            if (_tankIdx < 0)
+            {
+                GD.Print("tank-check: keine eigene fahrende Einheit erreicht den Posten");
+                _tankPhase = 9; return;
+            }
+            return;
+        }
+
+        var e = _entities[_tankIdx];
+        var p = _tankPost!;
+        if (e.Dead) { GD.Print("tank-check: die Messeinheit ist tot — Abbruch"); _tankPhase = 9; return; }
+
+        bool neueZelle = e.Col != _tankLastCol || e.Row != _tankLastRow;
+        if (neueZelle && _tankPhase == 0) _tankZellenHin++;
+        if (neueZelle && _tankPhase == 2) _tankZellenWeg++;
+        // ⭐ Die SPUR JE TAKT im heiklen Fenster: ein Wert, der einen Takt
+        // lang kippt und im naechsten wieder stimmt, faellt zwischen zwei
+        // Aenderungszeilen durch.
+        if (_tankSpurTakte > 0)
+        {
+            _tankSpurTakte--;
+            TankLog(e, $"Spur (Weg {(e.Path == null ? "-" : $"{e.PathIdx}/{e.Path.Count}")})");
+            _tankLastCol = e.Col; _tankLastRow = e.Row; _tankLastFuel = e.Fuel;
+        }
+        else if (neueZelle || e.Fuel != _tankLastFuel)
+        {
+            TankLog(e, neueZelle
+                ? (_tankPhase == 2 ? $"Zelle {_tankZellenWeg} nach dem Posten"
+                                   : $"Zelle {_tankZellenHin} der Hinfahrt")
+                : "nur der Tank hat sich geaendert");
+            _tankLastCol = e.Col; _tankLastRow = e.Row; _tankLastFuel = e.Fuel;
+        }
+        // Der ERSTE Zellwechsel nach dem Befehl — die vierte Stelle der Kette.
+        if (neueZelle && _tankPhase == 2 && _tankNachErsterZelle < 0)
+        {
+            _tankNachErsterZelle = e.Fuel;
+            GD.Print($"tank-check: KETTE 4/4  nach dem ERSTEN ZELLWECHSEL: " +
+                     $"Sprit {e.Fuel}/{e.FuelMax} (Balken {TankBalken(e)})");
+        }
+
+        switch (_tankPhase)
+        {
+            case 0:
+                if (e.Col == p.Col && e.Row == p.Row)
+                {
+                    _tankPhase = 1;
+                    _tankPostTakt = _taktNr;
+                    _tankFuelAmPosten = e.Fuel;
+                    _tankPostRunsBeiAnkunft = SupplyPostRuns;
+                    GD.Print($"tank-check: ANGEKOMMEN auf dem Posten nach " +
+                             $"{_taktNr - _tankStartTakt} Takten und {_tankZellenHin} Zellen, " +
+                             $"Tank {e.Fuel}/{e.FuelMax}");
+                }
+                else if (_taktNr - _tankStartTakt > 60 * SimHz)
+                {
+                    GD.Print($"tank-check: die Messeinheit kommt nicht an (steht auf " +
+                             $"({e.Col},{e.Row}), Ziel ({e.Goal.X},{e.Goal.Y}), " +
+                             $"Sprit {e.Fuel}/{e.FuelMax}) — Abbruch");
+                    _tankPhase = 9;
+                }
+                break;
+
+            case 1:
+                // zwei Sekunden stehen lassen: der Posten arbeitet auf seinem
+                // eigenen Wirtschaftstakt, nicht auf jedem Simulationstakt.
+                if (_taktNr - _tankPostTakt < 2 * SimHz) break;
+                _tankFuelAbfahrt = e.Fuel;
+                _tankNachTanken = e.Fuel;
+                GD.Print($"tank-check: KETTE 1/4  NACH DEM TANKEN (zwei Sekunden " +
+                         $"stehengeblieben): Sprit {e.Fuel}/{e.FuelMax} " +
+                         $"(Balken {TankBalken(e)}), " +
+                         $"{SupplyPostRuns - _tankPostRunsBeiAnkunft} Postenlaeufe");
+
+                // ---- KETTE 2/4: DER KLICK AUF DIE EINHEIT --------------------
+                // Genau das, was ein Mausklick tut: Auswahl setzen, Erstwahl
+                // bestimmen, Anzeige nachziehen. UpdatePanel ist die Stelle, an
+                // der ShowPanelBars den Balken rechnet — was der Spieler LIEST,
+                // entsteht hier und nirgends sonst.
+                _sel.Clear(); _sel.Add(_tankIdx); SetPrimary(); UpdatePanel();
+                _tankBeiAnwahl = e.Fuel;
+                GD.Print($"tank-check: KETTE 2/4  BEI DER ANWAHL (Klick): " +
+                         $"Sprit {e.Fuel}/{e.FuelMax} (Balken {TankBalken(e)})" +
+                         (_tankBeiAnwahl == _tankNachTanken ? "" : "  ⚠ ANDERS ALS NACH DEM TANKEN"));
+
+                // ---- KETTE 3/4: DER FAHRBEFEHL ------------------------------
+                // ⚠⚠ ueber den BEFEHLSRING, so wie der Klick des Spielers seit
+                // dem 22.08.2026 laeuft (PostMove -> Ring -> ApplyMove am
+                // naechsten Taktanfang). Der alte Direktweg IssueMove umgeht
+                // den Ring — und genau deshalb hat der Pruefstand die Meldung
+                // bis heute nicht nachgestellt.
+                {
+                    bool los = false;
+                    int[] dcx = { 12, -12, 0, 0, 9, -9, 9, -9 };
+                    int[] dcy = { 0, 0, 12, -12, 9, 9, -9, -9 };
+                    for (int k = 0; k < dcx.Length && !los; k++)
+                    {
+                        _sel.Clear(); _sel.Add(_tankIdx); SetPrimary();
+                        if (_tankAltWeg)
+                        {
+                            IssueMove(CellCenter(p.Col + dcx[k], p.Row + dcy[k]));
+                            los = e.Path != null;
+                        }
+                        else
+                        {
+                            los = PostMove(CellCenter(p.Col + dcx[k], p.Row + dcy[k])) > 0;
+                        }
+                    }
+                    if (!los)
+                    {
+                        GD.Print("tank-check: die Messeinheit kommt vom Posten nicht weg — Abbruch");
+                        _tankPhase = 9; break;
+                    }
+                }
+                _tankNachBefehl = e.Fuel;
+                GD.Print($"tank-check: KETTE 3/4  DIREKT NACH DEM BEFEHL " +
+                         $"({(_tankAltWeg ? "IssueMove, alter Direktweg" : "PostMove, Befehlsring — der Weg des Spielers")}): " +
+                         $"Sprit {e.Fuel}/{e.FuelMax} (Balken {TankBalken(e)})" +
+                         (_tankNachBefehl == _tankBeiAnwahl ? "" : "  ⚠ ANDERS ALS BEI DER ANWAHL"));
+                // Zwei Sekunden Spur je Takt: der Sprung, wenn es einen gibt,
+                // liegt zwischen dem Befehl und dem ersten Zellwechsel.
+                _tankSpurTakte = 2 * SimHz;
+                _tankPhase = 2;
+                _tankZellenWeg = 0;
+                _tankPostTakt = _taktNr;
+                GD.Print($"tank-check: ABFAHRT vom Posten mit Tank {e.Fuel}/{e.FuelMax}");
+                break;
+
+            case 2:
+                if (_tankZellenWeg < 12 && e.Path != null
+                    && _taktNr - _tankPostTakt <= 60 * SimHz) break;
+                int hinSprit = _tankFuelHinStart - _tankFuelAmPosten;
+                int wegSprit = _tankFuelAbfahrt - e.Fuel;
+                GD.Print("tank-check: ================= ERGEBNIS =================");
+                GD.Print($"tank-check: HINFAHRT  {_tankZellenHin} Zellen, {hinSprit} Sprit" +
+                         (_tankZellenHin > 0
+                              ? $"  ->  {(double)hinSprit / _tankZellenHin:0.00} je Zelle"
+                              : ""));
+                GD.Print($"tank-check: AM POSTEN {_tankFuelAmPosten} -> {_tankFuelAbfahrt} " +
+                         $"von {e.FuelMax}, " +
+                         $"{SupplyPostRuns - _tankPostRunsBeiAnkunft} Postenlaeufe in zwei Sekunden");
+                GD.Print($"tank-check: ABFAHRT   {_tankZellenWeg} Zellen, {wegSprit} Sprit" +
+                         (_tankZellenWeg > 0
+                              ? $"  ->  {(double)wegSprit / _tankZellenWeg:0.00} je Zelle"
+                              : ""));
+                GD.Print($"tank-check: KETTE   nach dem Tanken {_tankNachTanken}" +
+                         $"  ->  bei der Anwahl {_tankBeiAnwahl}" +
+                         $"  ->  direkt nach dem Befehl {_tankNachBefehl}" +
+                         $"  ->  nach der ersten Zelle {_tankNachErsterZelle}" +
+                         $"   (Tank {e.FuelMax})");
+                GD.Print("tank-check: NULLMODELL 1: das Original (@0x407AA7) zieht genau " +
+                         "1,00 je betretener Zelle ab. Alles darueber ist unser Fehler.");
+                GD.Print("tank-check: NULLMODELL 2: die vier Werte der Kette duerfen sich " +
+                         "nur um die gefahrenen Zellen unterscheiden — die ersten drei " +
+                         "gar nicht, denn dazwischen faehrt niemand.");
+                GD.Print("tank-check: ==============================================");
+                _tankPhase = 9;
+                break;
+        }
+    }
+
     /// <summary>
     /// DER EIGENE STARTPLATZ, einmal genommen und dann fest (B7).
     ///
@@ -21472,7 +22649,15 @@ public partial class MapEntityLayer : Node2D
     /// (siehe <see cref="PasstAnBord"/>) — an denen ist nichts geraten.</para>
     /// </summary>
     /// <returns>der Trägerplatz, oder −1; der Grund steht in <c>_order</c>.</returns>
-    public int BeladeVersuch(int idx)
+    /// <param name="melden">Darf die Zurueckweisung KLINGEN? Nur fuer einen
+    /// ausdruecklichen Auftrag. ⚠ 25.08.2026, von ihm gemeldet: »irgendeine
+    /// Stimme im Loop, das klingt furchtbar« - der Klang stand unbedingt hier
+    /// drin, und der EINZIGE Aufrufer im Spiel ist <see cref="BeladeTakt"/>,
+    /// der jeden Takt jede stehende Einheit auf einer Ladezelle durchprobiert.
+    /// Steht dort eine ohne Traeger in der Naehe, meldete das Spiel 50 Mal je
+    /// Sekunde »abgewiesen« - gemessen mit --klang-log: Klang 140 x2050.
+    /// Zurueckgewiesen wird weiter, nur eben still.</param>
+    public int BeladeVersuch(int idx, bool melden = true)
     {
         if (idx < 0 || idx >= _entities.Count) { _order = "keine Einheit"; return -1; }
         var u = _entities[idx];
@@ -21500,7 +22685,7 @@ public partial class MapEntityLayer : Node2D
         {
             _order = letzterGrund;
             BeladenAbgewiesen++;
-            Audio.GameSounds.Play(Audio.GameSounds.Refused);
+            if (melden) Audio.GameSounds.Play(Audio.GameSounds.Refused);
             return -1;
         }
 
@@ -21541,7 +22726,7 @@ public partial class MapEntityLayer : Node2D
             if (u.Path != null || u.Orders.Count > 0) continue;      // faehrt noch
             if (BeladeGewicht(u) < 0) continue;                      // kann gar nicht
             if (!RampeBeladen(u.Col, u.Row)) continue;
-            if (BeladeVersuch(i) >= 0) return;                       // s.o.
+            if (BeladeVersuch(i, melden: false) >= 0) return;         // s.o., und STILL
         }
     }
 
@@ -24832,7 +26017,10 @@ public partial class MapEntityLayer : Node2D
             {
                 int wi = _entities.IndexOf(w);
                 _sel.Clear(); _sel.Add(wi); SetPrimary();
-                IssueMove(post.Pos);
+                // ⚠ NICHT post.Pos — siehe --tank-check: CellAt(post.Pos) liegt
+                // drei Zellen neben (post.Col, post.Row), und der Posten bedient
+                // nur, wer GENAU auf seiner Zelle steht.
+                IssueMove(CellCenter(post.Col, post.Row));
                 if (w.Path == null) continue;                  // unreachable
                 if (w.Path.Count < bestLen) { bestLen = w.Path.Count; best = w; }
                 w.Path = null;
@@ -24840,7 +26028,7 @@ public partial class MapEntityLayer : Node2D
             if (best == null) continue;
             int bi = _entities.IndexOf(best);
             _sel.Clear(); _sel.Add(bi); SetPrimary();
-            IssueMove(post.Pos);
+            IssueMove(CellCenter(post.Col, post.Row));   // die ZELLE, nicht der Anker
             best.Fuel = Mathf.Max(1, best.FuelMax * 40 / 100);  // give it a reason to go
             if (best.AmmoMax > 0) best.Ammo = best.AmmoMax * 30 / 100;
             if (!focus.Contains(best)) focus.Add(best);
@@ -25672,11 +26860,41 @@ public partial class MapEntityLayer : Node2D
         if (steps >= SimMaxCatchUp && _simAcc >= SimDt) { _simAcc = 0f; SimCatchUpDropped++; }
         SimStepsLastFrame = steps;
 
+        // ⚠⚠ 26.08.2026 - DER ZWEITE HALBE FEHLER DERSELBEN MELDUNG.
+        //
+        // Hier stand nur `if (moved || ...)`. Der Bedienblock wurde also nur
+        // nachgezogen, wenn sich etwas BEWEGT hat. Eine Einheit, die auf dem
+        // Nachschub-Posten STEHT und dort jede Sekunde vollgetankt wird
+        // (SupplyPostService, EconTick = 1 s), aendert ihren Wert, ohne dass
+        // sich irgendetwas bewegt - und der Balken blieb auf dem alten Stand,
+        // bis zufaellig etwas anderes fuhr. Genau die Haelfte der Meldung, in
+        // der »stehen« und »anklicken« vorkommen.
+        //
+        // Die Pruefung ist drei Vergleiche gross und laeuft ohnehin nur fuer
+        // die EINE angewaehlte Einheit.
+        bool werteNeu = PanelWerteGeaendert();
         if (moved || _effects.Count > 0 || _tracers.Count > 0 || _shots.Count > 0)
         {
             QueueRedraw();
             if (_selected >= 0) UpdatePanel();
         }
+        else if (werteNeu) UpdatePanel();
+    }
+
+    /// <summary>Haben sich Huelle, Sprit oder Munition der ANGEWAEHLTEN Einheit
+    /// seit dem letzten Bild geaendert? Merkt sich die drei Werte mit.</summary>
+    private int _panelWer = -1, _panelHp = -1, _panelFuel = -1, _panelAmmo = -1;
+
+    private bool PanelWerteGeaendert()
+    {
+        if (_selected < 0 || _selected >= _entities.Count)
+        { _panelWer = -1; return false; }
+        var e = _entities[_selected];
+        if (_panelWer == _selected && _panelHp == e.Hp
+            && _panelFuel == e.Fuel && _panelAmmo == e.Ammo) return false;
+        _panelWer = _selected; _panelHp = e.Hp;
+        _panelFuel = e.Fuel; _panelAmmo = e.Ammo;
+        return true;
     }
 
     /// <summary>Ein Simulationstakt — alles, was den Zustand anfasst. Gibt
@@ -26137,6 +27355,60 @@ public partial class MapEntityLayer : Node2D
                 // @0x407aa4 Ablage in +0x1c, @0x407aa7 der Sprit bei +0x2e).
                 // Siehe BlockedStep.
                 e.Block = BlockEnter + Simulation.Determinism.Roll(BlockEnterSpread);
+                // ⭐⭐ 25.08.2026 — UND DER SPRIT. Der Kommentar darueber nennt
+                // @0x407aa7 seit jeher als die Stelle »unmittelbar nach« dem
+                // Geduldszaehler — gebaut war sie nie. Bodenfahrzeuge fuhren
+                // damit unbegrenzt weit.
+                //
+                // Gemeldet als: »kein einziges Popup in Kampagne 2«. Das erste
+                // Fenster der Mission haengt genau daran: @0x498A37 zeigt
+                // Hilfetext #14 (»Kein Sprit … Nachschubstuetzpunkt«), sobald
+                // eine eigene Einheit der Gattung 0 auf +0x2E == 0 steht. Die
+                // sieben Einheiten starten mit 5..200 Sprit, sechs davon sind
+                // nach wenigen Zellen leer — im Original lange vor der Bruecke.
+                //
+                // Das Original (@0x407AA7): lesen, bei <= 0 nichts tun, sonst
+                // genau EINS abziehen und beim Nulldurchgang melden. Ein Schritt
+                // ist eine Zelle, und darum steht der Abzug hier und nicht im
+                // Takt — ein Tank von 300..440 ist in Zellen gemessen.
+                if (e.Fuel > 0 && !(CheatFuel && Cheated(e)))
+                {
+                    e.Fuel--;
+                    // @0x407AB6 `jne` — die Meldung kommt NUR beim Uebergang auf
+                    // 0, nicht bei jedem weiteren Schritt einer leeren Einheit.
+                    if (e.Fuel == 0)
+                    {
+                        OhneSpritGemeldet++;
+                        // @0x407AB8: sie bleibt stehen — sofort und vollstaendig.
+                        //
+                        // ⚠⚠ 25.08.2026, GEMESSEN. Hier stand nur
+                        // `e.Path = null`, und zwei Zeilen weiter unten liest die
+                        // Ankunftsbehandlung `e.Path.Count`. Beim Nulldurchgang
+                        // warf das eine NullReferenceException mitten aus dem
+                        // Takt heraus — alles, was in SimTick NACH der Bewegung
+                        // steht (RetryPath, Geschosse, Flugzeuge, Nebel,
+                        // Missionsskript), fiel in diesem Takt aus, und die
+                        // Einheiten hinter dieser in der Liste fuhren nicht.
+                        //
+                        // Belegt mit `--tank-check=7`: Sprit 7 -> 5 -> 3 -> 1 -> 0
+                        // und im selben Augenblick
+                        //     ERROR: System.NullReferenceException
+                        // Auf Kampagne 2 trifft das den Spieler sofort: sechs
+                        // seiner sieben Einheiten starten mit 5..22 Sprit.
+                        //
+                        // Das Anhalten selbst ist genau das, was der geloeschte
+                        // Zwilling weiter unten tat: Weg weg, »kolik = 0«
+                        // (@0x407af2), kein Ziel mehr, und die Meldezeile.
+                        e.Path = null;
+                        e.StepCost = 0; e.Progress = 0;
+                        e.Target = -1;
+                        _order = $"slot {e.Slot}: kein Sprit";
+                        // ⚠ Und RAUS aus der Ankunftsbehandlung: »der Weg ist
+                        // zu Ende« gilt einer Einheit nicht mehr, die gerade
+                        // liegengeblieben ist.
+                        continue;
+                    }
+                }
                 if (_stuckOn && _stuckTrail.TryGetValue(i, out var trail))
                 {
                     _stuckCells[i] = _stuckCells.GetValueOrDefault(i) + 1;
@@ -26176,20 +27448,32 @@ public partial class MapEntityLayer : Node2D
                     }
                     else NextQueued(i, e); // one waypoint done: take the next order
                 }
-                // One unit of fuel per SQUARE ENTERED — confirmed: the move
-                // code prints "on square" (@0x4f6ba4) and then decrements
-                // +0x2e (@0x407aa7); at zero it prints "no fuel" and stops the
-                // unit where it stands. The three equipment types that branch
-                // off first (0x44 Mine Remover, 0x45 Trap Remover, 0xc1) rejoin
-                // the same path, so they pay too.
-                if (CheatFuel && Cheated(e)) { }   // Tank bleibt voll
-                else if (e.FuelMax > 0 && e.Fuel > 0 && --e.Fuel == 0)
-                {
-                    e.Path = null;
-                    e.StepCost = 0; e.Progress = 0;   // »no fuel« @0x407af2: kolik = 0
-                    e.Target = -1;
-                    _order = $"slot {e.Slot}: kein Sprit";
-                }
+                // ⭐⭐ 25.08.2026 — HIER STAND DER ZWEITE SPRITABZUG, und er ist
+                // ERSATZLOS GESTRICHEN. Gemeldet als: »Mit der Einheit, mit der
+                // ich auf den Nachschubposten fahre, wird wie kurz aufgetankt,
+                // fahre ich herunter, ist er wieder fast leer.«
+                //
+                // Es waren ZWEI Abzuege im selben `if (arrived)`-Block: der
+                // heute an der Stelle des Originals (@0x407AA7, unmittelbar
+                // hinter dem Geduldszaehler) gebaute — und dieser hier, der
+                // schon vorher stand. Beide liefen bei JEDEM Zellwechsel, also
+                // zwei Einheiten Sprit je betretener Zelle.
+                //
+                // GEMESSEN mit --tank-check auf Kampagne 2, Platz 3, Tank 400:
+                //   vorher   Hinfahrt 32 Zellen, 64 Sprit  ->  2,00 je Zelle
+                //            Abfahrt  12 Zellen, 24 Sprit  ->  2,00 je Zelle
+                //   nachher  Hinfahrt 32 Zellen, 32 Sprit  ->  1,00 je Zelle
+                //            Abfahrt  12 Zellen, 12 Sprit  ->  1,00 je Zelle
+                // NULLMODELL: das Original zieht bei @0x407AA7 genau EINS ab
+                // (lesen, bei <= 0 nichts, sonst `dec`) — 1,00 je Zelle.
+                //
+                // ⚠ Der Posten selbst war NIE schuld: derselbe Prueflauf zeigt
+                // 76 -> 400/400 auf der Postenzelle (12,18), und der Wert HAELT
+                // (400 -> 398 -> 396 ... beim Wegfahren). Aufgetankt wurde also
+                // richtig; es lief nur doppelt so schnell wieder weg.
+                //
+                // Der verbliebene Abzug steht oben, an der Stelle des Originals,
+                // und traegt dessen Meldung beim Nulldurchgang.
             }
         }
 
@@ -26224,6 +27508,11 @@ public partial class MapEntityLayer : Node2D
 
         if (_orderMarks.Count > 0) { UpdateOrderMarks(dt); QueueRedraw(); }   // 'marks'
 
+        // Der Pruefstand zum Nachschub-Posten (--tank-check) — er MISST nur
+        // und greift ohne den Schalter nirgends ein.
+        TankCheckTakt();
+        SpritWachtTakt();
+        BalkenCheckTakt();
         MissionScriptTick(dt);
         return moved;
     }

@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Rendering;
+﻿namespace AkteEuropaReborn.Rendering;
 
 using Godot;
 using System.Collections.Generic;
@@ -140,7 +140,15 @@ public partial class MapEntityLayer
     private static Texture2D? Parteifarbe(Texture2D? tex, int besitzer)
     {
         if (tex == null || KeineParteifarbe) return tex;
-        if (besitzer <= 0 || besitzer >= Parteien) return tex;   // 255 = herrenlos
+        // ⚠⚠ 25.08.2026, von ihm gemeldet: »im original haben die Einheiten die
+        // Blaue Farbe und nicht Gruen wie wir«. Hier stand `besitzer <= 0`, also
+        // »Besitzer 0 braucht keine Umfaerbung« - eine Abkuerzung, die nur
+        // stimmt, wenn die Rohbilder schon blau sind. GEMESSEN ueber zwoelf
+        // Ruempfe (f0.png): 136 blaue gegen 336 GRUENE Bandpunkte, und die
+        // Ruempfe 12, 144 und 145 haben gar keine blauen. Der Spieler blieb
+        // damit gruen. Das Original nimmt Besitzer 0 nicht aus - seine Rechnung
+        // (Quelle-1)>>1 + 4*Besitzer ergibt fuer 0 genau die blaue Vierergruppe.
+        if (besitzer < 0 || besitzer >= Parteien) return tex;    // 255 = herrenlos
 
         var key = (tex.GetRid().Id, besitzer);
         if (_parteiTex.TryGetValue(key, out var fertig)) return fertig;
@@ -183,6 +191,46 @@ public partial class MapEntityLayer
         }
         _parteiTex[key] = aus;
         return aus;
+    }
+
+    /// <summary><c>--sprit-check</c>: jede eigene fahrende Einheit bekommt einen
+    /// echten Fahrbefehl ueber den Befehlsring (denselben Weg wie ein
+    /// Missionsbefehl), quer ueber die Karte. Danach sagt <see cref="SpritLine"/>,
+    /// wieviel Sprit sie unterwegs gelassen haben.</summary>
+    public string SpritCheckStart()
+    {
+        int n = 0;
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || !e.Mobile || e.Owner != 0) continue;
+            // Quer ueber die Karte: weit genug, dass ein Tank von 5 sicher leer
+            // wird, und in eine Richtung, die von der Startecke wegfuehrt.
+            int zx = System.Math.Min(e.Col + 40, (_nav?.Width  ?? 70) - 2);
+            int zy = System.Math.Min(e.Row + 40, (_nav?.Height ?? 80) - 2);
+            sb.Append($" | Platz {e.Slot} ({e.Col},{e.Row}) Sprit {e.Fuel}/{e.FuelMax} -> ({zx},{zy})");
+            MissionOrderAt(e.Slot, zx, zy, -1);
+            n++;
+        }
+        return $"sprit-check: {n} eigene Einheiten losgeschickt" + sb;
+    }
+
+    /// <summary>Was der Spritabzug getan hat — die Zahl, die belegt, dass er
+    /// ueberhaupt greift (25.08.2026, siehe den Abzug bei PathIdx++).</summary>
+    public string SpritLine()
+    {
+        int leer = 0, faehrt = 0; long summe = 0, voll = 0;
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || !e.Mobile || e.Dead) continue;
+            faehrt++; summe += e.Fuel; voll += e.FuelMax;
+            if (e.Fuel <= 0) leer++;
+        }
+        return $"sprit: {faehrt} fahrende Einheiten, {summe} von {voll} Sprit "
+             + (voll > 0 ? $"({100.0 * summe / voll:F0}%)" : "")
+             + $", {leer} stehen trocken; {OhneSpritGemeldet} sind waehrend des Laufs leergefahren"
+             + (OhneSpritGemeldet == 0 ? "   ⚠ 0 = der Abzug greift nicht oder es fuhr niemand" : "");
     }
 
     /// <summary>Die Meldezeile für <c>--quit-after</c>.</summary>

@@ -219,6 +219,14 @@ public sealed class ContentBuilder
                 // Stellungen aus WINDOWS.CWW, siehe WriteWindVane.
                 var cww = Asset("WINDOWS.CWW");
                 if (cww != null) ui.WriteWindVane(cww);
+                // ⭐ 25.08.2026 — DIE FENSTERMOEBEL. Dieselbe Datei traegt die
+                // 314 Kacheln zu 20x20, aus denen das Original JEDES seiner 48
+                // Fenster zusammensetzt: Raender, Titelleiste, Innenflaeche,
+                // Schliesskreuz und die Knopfgesichter. Siehe
+                // InterfaceExporter.WriteWindowChrome — bis heute haben wir aus
+                // WINDOWS.CWW nur die acht Bilder der Windfahne genommen und
+                // die Fenster selbst aus Godot-Bausteinen gebaut.
+                if (cww != null) ui.WriteWindowChrome(cww);
                 if (anim != null) ui.WriteEffects(AnimFile.FromBytes(anim), _exe);
                 // Die SACHBILDER zu Hilfe und Enzyklopaedie. Die Texte hatten
                 // wir laengst, die Bilder lagen ungenutzt. Sie liegen NICHT
@@ -236,6 +244,8 @@ public sealed class ContentBuilder
                 Say($"Oberflaeche: {ui.Fonts} Schriften mit {ui.Glyphs} Glyphen, " +
                     $"Panel {(panel != null ? "ja" : "nein")}, " +
                     $"Windfahne {ui.VaneFrames} Bilder, " +
+                    $"Fenstermoebel {ui.ChromeTiles} Kacheln " +
+                    $"({ui.ChromePixels} belegte Punkte), " +
                     $"{ui.Effects} Effekte mit {ui.EffectFrames} Bildern");
             }
         }
@@ -1166,6 +1176,10 @@ public sealed class ContentBuilder
             // Oberflaeche und soll ohne vollen Neuimport nachziehbar sein.
             var cww = Asset("WINDOWS.CWW");
             if (cww != null) ui.WriteWindVane(cww);
+            // Die Fenstermoebel haengen am selben Weg wie die Windfahne: sie
+            // kommen aus derselben Datei und sollen ohne vollen Neuimport
+            // nachziehbar sein.
+            if (cww != null) ui.WriteWindowChrome(cww);
             // Die Mauszeiger haengen ebenfalls hier dran: sie sind Oberflaeche,
             // stecken aber im Anhang von ROBO.CWR. Siehe CwrFile.Cursors.
             byte[]? roboCur = Asset("ROBO.CWR");
@@ -1182,7 +1196,9 @@ public sealed class ContentBuilder
             }
             else Say("⚠ HELPG.PIC/ENCYCLOG.PIC nicht gefunden — sie liegen neben der GAME.EXE");
             Say($"{ui.Effects} Effekte mit {ui.EffectFrames} Bildern, " +
-                $"Windfahne {ui.VaneFrames} Bilder");
+                $"Windfahne {ui.VaneFrames} Bilder, " +
+                $"Fenstermoebel {ui.ChromeTiles} Kacheln " +
+                $"({ui.ChromePixels} belegte Punkte)");
             return ui.Effects > 0;
         }
         catch (Exception e) { Say(e.Message); return false; }

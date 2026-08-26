@@ -62,6 +62,11 @@ public sealed class MapBaker
     /// Meldung, damit ein Neubacken sichtbar macht, ob die Regel greift.
     /// </summary>
     public int LagenZellen;
+
+    /// <summary>Wieviele Zellen FLACH gemalt wurden, weil sie ein befahrbares
+    /// Bauwerk tragen (Bruecke/Mole/Rampe). Die Zahl belegt, dass die Regel
+    /// greift - steht sie auf 0, ist Sektion 20 nicht da.</summary>
+    public int BefahrbarFlach;
     public int OriginY { get; private set; }
 
     public MapBaker(CwmFile map, CwpFile tiles, PalFile pal)
@@ -118,11 +123,26 @@ public sealed class MapBaker
     /// </summary>
     private bool[] Kulisse = System.Array.Empty<bool>();
 
+    /// <summary>Je Kulissenzelle die VORDERSTE Zeile ihres Bauwerks, sonst -1.
+    ///
+    /// <para>⚠⚠ 25.08.2026, gemeldet als »da gibt es wieder ein Kaestchen an dem
+    /// Gebaeudetyp, der Einheiten verdeckt«. Eine Kulisse kam kachelweise ins
+    /// Zeilenfach IHRER EIGENEN Zelle - das Hallendach ragt aber ueber mehrere
+    /// Zellen nach oben, seine oberen Kacheln landeten in weit hinteren Faechern
+    /// und uebermalten alles, was davor stand. Ein echtes Gebaeude macht es
+    /// anders: es kommt als GANZES ins Fach seiner Tuerzeile
+    /// (MapEntityLayer.BuildingDrawRowFor). Fuer eine Kulisse gibt es keine
+    /// Tuer, also nimmt sie ihre vorderste Grundrisszeile - dasselbe
+    /// Ergebnis.</para></summary>
+    private int[] KulisseFach = System.Array.Empty<int>();
+
     private bool[] BuildingCells(ushort[] code)
     {
         int w = Width, h = Height;
         var claimed = new bool[w * h];
         Kulisse = new bool[w * h];
+        KulisseFach = new int[w * h];
+        for (int i = 0; i < KulisseFach.Length; i++) KulisseFach[i] = -1;
         BuildingCellsSkipped = MissedBuildingCells = 0;
         if (!_tiles.HasBuildings) return claimed;
 
@@ -145,6 +165,25 @@ public sealed class MapBaker
                         int i = r * w + c;
                         if (code[i] == t + CwpFile.ObjectCodeBase) Kulisse[i] = true;
                     }
+                // Die vorderste Zeile dieses Bauwerks - erst jetzt bekannt,
+                // darum ein zweiter Durchgang ueber dieselben Zellen.
+                int vorn = -1;
+                for (int x = 0; x < CwpFile.PatternWidth; x++)
+                    for (int y = 0; y < CwpFile.PatternHeight; y++)
+                    {
+                        int c2 = b.Col + x, r2 = b.Row + y;
+                        if (c2 < 0 || c2 >= w || r2 < 0 || r2 >= h) continue;
+                        if (Kulisse[r2 * w + c2] && r2 > vorn) vorn = r2;
+                    }
+                if (vorn >= 0)
+                    for (int x = 0; x < CwpFile.PatternWidth; x++)
+                        for (int y = 0; y < CwpFile.PatternHeight; y++)
+                        {
+                            int c2 = b.Col + x, r2 = b.Row + y;
+                            if (c2 < 0 || c2 >= w || r2 < 0 || r2 >= h) continue;
+                            int i2 = r2 * w + c2;
+                            if (Kulisse[i2]) KulisseFach[i2] = vorn;
+                        }
                 continue;
             }
             var bt = _tiles.GetBuildingType(b.Type);
@@ -475,11 +514,35 @@ public sealed class MapBaker
             int i = holes.Dequeue();
             if (grid[i] >= 0) continue;
             int c = i % w, r = i / w, found = -1;
-            for (int k = 0; k < 8 && found < 0; k++)
+            // ⭐ 25.08.2026 - DIE MEHRHEIT DER NACHBARN, nicht der erste.
+            //
+            // Hier stand »nimm den ersten Nachbarn, der schon Boden hat«, und
+            // die Reihenfolge ist fest (rechts, links, unten, oben, dann die
+            // Diagonalen). Unter einer Halle auf einem BETONplatz griff damit
+            // regelmaessig das Gras vom Rand: gemeldet als Flickenteppich, wo
+            // Beton liegen muesste, sichtbar sobald die Kulissenbauten in die
+            // zweite Ebene wandern. Dieselbe Ursache wie beim fehlenden Fluss
+            // unter der Bruecke - eine geratene Fuellung.
+            //
+            // Die Mehrheit ist keine Messung des Originals, sondern die bessere
+            // Schaetzung: eine 3x2-Halle hat rundum Beton und nur an einer Ecke
+            // Gras. Bei Gleichstand gewinnt der erste - das ist der alte Weg.
+            var stimmen = new Dictionary<int, int>();
+            for (int k = 0; k < 8; k++)
             {
                 int nc = c + dc[k], nr = r + dr[k];
                 if (nc < 0 || nc >= w || nr < 0 || nr >= h) continue;
-                if (grid[nr * w + nc] >= 0) found = grid[nr * w + nc];
+                int v = grid[nr * w + nc];
+                if (v < 0) continue;
+                stimmen[v] = stimmen.GetValueOrDefault(v) + 1;
+                if (found < 0) found = v;
+            }
+            if (stimmen.Count > 1)
+            {
+                int best = found, bestN = 0;
+                foreach (var kv in stimmen)
+                    if (kv.Value > bestN) { bestN = kv.Value; best = kv.Key; }
+                found = best;
             }
             if (found < 0) holes.Enqueue(i);
             else grid[i] = found;
@@ -529,10 +592,25 @@ public sealed class MapBaker
             {
                 int i = r * w + c;
                 bool isObj = code[i] >= GroundMax;
+                // ⚠⚠ 25.08.2026 - BEFAHRBARE BAUWERKE WERDEN FLACH GEMALT.
+                // Gemeldet: unter unserer Bruecke fehlte der FLUSS, darunter lag
+                // Gras/Stein. Der Grund: eine Objektzelle bekommt hier nie ihre
+                // eigene Kachel, sondern nur die `basis`-Fuellung - und die ist
+                // eine FLUTFUELLUNG von den acht Nachbarn (BuildBase). Ueber
+                // Wasser greift sie das Ufer.
+                //
+                // Eine Bruecke/Mole (Lagenbyte 100+n) oder Rampe (200+n) ist
+                // aber kein Baum, hinter dem man steht, sondern etwas, worauf
+                // man FAEHRT. Ihre Kachel gehoert ins Kartenbild - dann steht
+                // das Wasser darunter wie im Original, das Gelaender ragt wie
+                // gehabt in die Zeile darueber, und eine Einheit darauf wird
+                // danach gezeichnet statt darunter zu verschwinden.
+                bool befahrbar = MapForest.Lage(_map, c, r) >= 100;
+                if (befahrbar) BefahrbarFlach++;
                 int b = basis != null ? basis[i] : -1;
                 bool ownIsFull = !isObj && Frame(code[i])?.Full == true;
                 if (b >= 0 && !ownIsFull) Blit(Frame(b), c, r, elev[i]);
-                if (!isObj) Blit(Frame(code[i]), c, r, elev[i]);
+                if (!isObj || befahrbar) Blit(Frame(code[i]), c, r, elev[i]);
             }
 
         // pass C — objects, back to front. Buildings are left out: they are
@@ -606,7 +684,15 @@ public sealed class MapBaker
                     // Durchgang A/B), also blieb ein Loch. Die Zellenliste
                     // `Kulisse` bleibt stehen — sie ist richtig gelesen und die
                     // halbe Arbeit fuer den Tag, an dem der Boden da ist.
-                    if (sp != null && MapForest.ImZeilenfach(imap, lage))
+                    // ⭐ 25.08.2026 - DIE KULISSENBAUTEN WIEDER DAZU.
+                    // Gemeldet: »die neutralen Gebaeude verdecken keine
+                    // Einheiten, Einheiten scheinen durch«. Eine Kulisse
+                    // (IsBuilt == 0) ist kein Boden: sie ragt auf und muss
+                    // verdecken. Der Versuch vom 24.08. wurde zurueckgenommen,
+                    // weil unter ihren Zellen kein Boden gemalt war - und genau
+                    // dieser Boden kommt heute aus demselben Durchgang, der die
+                    // Bruecken flach malt. Wird an dieser Karte nachgemessen.
+                    if (sp != null && (MapForest.ImZeilenfach(imap, lage) || Kulisse[i]))
                     {
                         BlitTo(_objects ??= new byte[PixelW * PixelH * 4], sp, c, r, elev[i]);
 
@@ -696,6 +782,19 @@ public sealed class MapBaker
                         // ein zweiter Zuordnungskreis.
                         int klasse = -1, grundkachel = -1;
                         if (art >= 0) (klasse, grundkachel) = _tiles.ObjType(art);
+                        // ⚠ Das FACH (zweites Feld) ist fuer eine Kulisse die
+                        // vorderste Zeile ihres Bauwerks, die ZEICHENPOSITION
+                        // (Y darunter) bleibt die der Kachel.
+                        // ⚠⚠ 25.08.2026 ZURUECKGENOMMEN: hier stand kurzzeitig das
+                        // Fach der vordersten Bauwerkszeile (KulisseFach). Der
+                        // Gedanke war, es wie ein echtes Gebaeude zu behandeln -
+                        // aber ein Gebaeude ist EIN Bild in EINEM Fach, eine
+                        // Kulisse sind EINZELKACHELN. Alle ins vorderste Fach zu
+                        // legen laesst sie SPAETER zeichnen und damit MEHR
+                        // uebermalen: der gemeldete Panzer war danach ganz weg
+                        // statt halb. KulisseFach bleibt berechnet stehen - es
+                        // wird gebraucht, sobald die Kacheln als ein
+                        // zusammenhaengendes Bild gezeichnet werden.
                         Objects.Add((c, r, c * TileW,
                                      OriginY + r * TileH - elev[i] * ElevStep + BlitAnchor + sp.YOff,
                                      sp.W, sp.H, kohle, kx, ky, asche, ax, ay,
