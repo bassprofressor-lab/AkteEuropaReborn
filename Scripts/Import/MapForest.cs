@@ -286,6 +286,56 @@ public static class MapForest
     /// der 0xFFFF-Fall bleibt aus. Eine Karte ohne Sektion 20 sieht damit aus
     /// wie bisher, statt still anders zu werden.</para>
     /// </summary>
+    /// <summary>
+    /// <b>ZEICHNET DER FLACHE DURCHGANG DIESE ZELLE?</b> - @0x4B4262, Befehl
+    /// fuer Befehl gelesen (26.08.2026):
+    ///
+    /// <code>
+    ///   cmp ax, 0x36B0 (14000)   jb  -> zeichnen
+    ///   cmp ax, 0xFFFC           jb  -> Lagenbyte pruefen
+    ///   cmp ax, 0xFFFE           jbe -> zeichnen
+    ///   al = byte[zelle + 0x542E18]        ; Lagenbyte
+    ///     al == 0                    -> UEBERSPRINGEN   (@0x4B427C)
+    ///     al >= 0x63 (99)            -> UEBERSPRINGEN   (@0x4B4280)
+    ///     sonst                      -> zeichnen
+    /// </code>
+    ///
+    /// <para>⭐⭐ <b>Zusammen mit <see cref="ImZeilenfach"/> ist das eine
+    /// UEBERSCHNEIDUNGSFREIE Teilung, und zwar an der BELEGUNG:</b></para>
+    /// <list type="bullet">
+    ///   <item><b>Fahrbahn einer Bruecke</b> = <c>0xFFFE</c> -> hier gezeichnet
+    ///     (Boden), vom verzahnten Durchgang uebersprungen.</item>
+    ///   <item><b>Gelaender</b> = <c>0xFFFF</c> mit Lagenbyte >= 100 -> hier
+    ///     uebersprungen, vom verzahnten Durchgang in SEINER ZEILE gezeichnet
+    ///     und darf damit verdecken.</item>
+    /// </list>
+    ///
+    /// <para>⚠⚠ <b>Warum es diese Methode gibt.</b> Am 25.08.2026 wurde
+    /// gemeldet, die Bruecke ueberdecke Einheiten und habe keinen Fluss
+    /// darunter. Die Behebung malte daraufhin ALLES mit Lagenbyte >= 100 flach
+    /// - Fahrbahn UND Gelaender - mit der Begruendung, ein zweites Mal
+    /// aufragend waere dieselbe Kachel doppelt. <b>Die Sorge war unbegruendet:
+    /// das Original schliesst die Dopplung ueber die BELEGUNG aus, nicht ueber
+    /// einen Verzicht.</b> Ergebnis war ein Gelaender, das nicht mehr aufragt -
+    /// von ihm am 26.08. gefunden, mit dem entscheidenden Hinweis: <i>"existiert
+    /// ja nur bei der waagerechten Bruecke, nicht bei den senkrechten"</i>.
+    /// Genau so muss es aussehen: bei der waagerechten liegen die Gelaender
+    /// eine Zeile ueber und unter der Fahrbahn, bei der senkrechten links und
+    /// rechts in DENSELBEN Zeilen - dort kann eine Zeilensortierung nichts
+    /// aendern.</para>
+    ///
+    /// <para>Belegt an map_02: Bruecke Lagenbyte 101, Fahrbahn Zeile 23
+    /// (Belegung 0xFFFE), Gelaender Zeilen 22 und 24 (Belegung 0xFFFF).</para>
+    /// </summary>
+    public static bool ImFlachenDurchgang(int imap, int lage)
+    {
+        if (imap < 0) return true;              // keine Belegungskarte: wie bisher
+        if (imap < 14000) return true;
+        if (imap >= 0xFFFC && imap <= 0xFFFE) return true;
+        if (lage == 0) return false;
+        return lage < 99;                       // @0x4B4280: >= 99 uebersprungen
+    }
+
     public static bool ImZeilenfach(int imap, int lage = 0)
     {
         // ⚠⚠ 19.08.2026, BERICHTIGUNG NOCH AM SELBEN ABEND. Der erste Anlauf
@@ -305,16 +355,16 @@ public static class MapForest
         if (!imBereich)
         {
             if (imap != 0xFFFF) return false;
-            // ⚠⚠ 25.08.2026 - hier stand `return lage >= 100;`, was die 636
-            // Bruecken-, Molen- und Rampenzellen ins Zeilenfach holte. Sie
-            // werden seit heute FLACH ins Kartenbild gemalt (MapBaker, Suche
-            // nach `befahrbar`) - ein zweites Mal aufragend waere dieselbe
-            // Kachel doppelt, und zwar UEBER jeder Einheit, die darauf faehrt.
-            //
-            // ⚠ Der erste Anlauf an diesem Tag hat NUR das hier geaendert und
-            // das flache Malen vergessen. Ergebnis: Bruecke ohne Gelaender und
-            // ohne Fluss darunter. Die zwei Stellen gehoeren zusammen.
-            return false;
+            // ⚠⚠ 26.08.2026 - ZURUECKGENOMMEN. Hier stand seit dem 25.08.
+            // `return false;` mit der Begruendung, die Zelle werde ja flach
+            // gemalt und waere sonst doppelt. Das Original macht es anders:
+            // der flache Durchgang UEBERSPRINGT 0xFFFF mit Lagenbyte >= 99
+            // (@0x4B4280), der verzahnte NIMMT es (@0x4B447A). Die Teilung ist
+            // ueberschneidungsfrei, und zwar an der Belegung - siehe
+            // ImFlachenDurchgang. Mit `false` ragte das GELAENDER nicht mehr
+            // auf; gefunden hat es der Spieler daran, dass es nur die
+            // waagerechte Bruecke betrifft.
+            return lage == 0 || lage >= 100;
         }
         return lage == 0 || lage >= 100;
     }

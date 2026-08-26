@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Rendering;
+﻿namespace AkteEuropaReborn.Rendering;
 
 using System.Collections.Generic;
 using Godot;
@@ -165,6 +165,22 @@ public partial class MapEntityLayer
             if (e.FuelMax > 0 && e.Fuel <= 0) continue;   // ein trockener Panzer fährt nicht
 
             Vector2I goal = PickGoalCell(i, e, cell.Value, taken);
+            // --klick-log: WAS WIRD AUS DEM KLICK? Zwischen der Zelle unter dem
+            // Zeiger und dem Fahrbefehl sitzt PickGoalCell. Solange nicht im
+            // Protokoll steht, welche Zelle wirklich zum Ziel wird, laesst sich
+            // "ich komme dort nicht drauf" nicht von "mein Klick meinte eine
+            // andere Zelle" unterscheiden - und das sind zwei verschiedene
+            // Fehler.
+            if (UI.WindowManager.KlickProtokoll)
+                GD.Print($"klick-log: FAHRBEFEHL Einheit {i} auf ({e.Col},{e.Row}): "
+                       + $"geklickt ({cell.Value.X},{cell.Value.Y}), Ziel "
+                       + (goal.X < 0 ? "KEINES - nichts frei im Umkreis 8"
+                          : $"({goal.X},{goal.Y})"
+                            + (goal.X == cell.Value.X && goal.Y == cell.Value.Y
+                               ? "  = die geklickte Zelle"
+                               : "  ⚠ AUSGEWICHEN, die geklickte Zelle war nicht frei"))
+                       + $" | geklickte Zelle frei: {_nav.IsFree(cell.Value.X, cell.Value.Y, e.Move, i)}"
+                       + $", Bewegungsart {e.Move}");
             if (goal.X < 0) continue;
             taken.Add(goal);
 

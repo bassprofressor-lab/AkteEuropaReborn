@@ -67,6 +67,12 @@ public sealed class MapBaker
     /// Bauwerk tragen (Bruecke/Mole/Rampe). Die Zahl belegt, dass die Regel
     /// greift - steht sie auf 0, ist Sektion 20 nicht da.</summary>
     public int BefahrbarFlach;
+
+    /// <summary>Wieviele Zellen als GELAENDER erkannt wurden (imap 0xFFFF mit
+    /// Lagenbyte >= 100) und damit ins Zeilenfach gehoeren statt flach gebacken
+    /// zu werden. ⚠ Steht sie auf 0, waehrend BefahrbarFlach > 0 ist, dann
+    /// fehlt der Bruecke ihr Gelaender - genau der Fehler vom 25.08.</summary>
+    public int GelaenderAufragend;
     public int OriginY { get; private set; }
 
     public MapBaker(CwmFile map, CwpFile tiles, PalFile pal)
@@ -605,8 +611,20 @@ public sealed class MapBaker
                 // das Wasser darunter wie im Original, das Gelaender ragt wie
                 // gehabt in die Zeile darueber, und eine Einheit darauf wird
                 // danach gezeichnet statt darunter zu verschwinden.
-                bool befahrbar = MapForest.Lage(_map, c, r) >= 100;
+                // GG 26.08.2026 - DIE TRENNUNG KOMMT AUS DER BELEGUNG.
+                // Hier stand `Lage(...) >= 100`, also das Lagenbyte - damit
+                // wurden Fahrbahn UND Gelaender flach gebacken, und das
+                // Gelaender ragte nicht mehr auf. Das Original entscheidet am
+                // imap: 0xFFFE (Fahrbahn) kommt in den flachen Durchgang,
+                // 0xFFFF (Gelaender) mit Lagenbyte >= 99 wird dort
+                // uebersprungen und gehoert ins Zeilenfach.
+                // Herleitung Befehl fuer Befehl: MapForest.ImFlachenDurchgang.
+                int imapC = MapForest.Imap(_map, c, r);
+                int lageC = MapForest.Lage(_map, c, r);
+                bool befahrbar = MapForest.ImFlachenDurchgang(imapC, lageC)
+                                 && lageC >= 100;
                 if (befahrbar) BefahrbarFlach++;
+                if (imapC == 0xFFFF && lageC >= 100) GelaenderAufragend++;
                 int b = basis != null ? basis[i] : -1;
                 bool ownIsFull = !isObj && Frame(code[i])?.Full == true;
                 if (b >= 0 && !ownIsFull) Blit(Frame(b), c, r, elev[i]);
