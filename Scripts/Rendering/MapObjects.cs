@@ -726,7 +726,13 @@ public partial class MapEntityLayer
                     new Rect2(e.KohleZiel, e.KohleSrc.Size));
             else
                 yield return new VerdeckKachel(e.IstWald ? "Baum" : "Fels/Objekt", e.Col, e.Row,
-                    new Rect2(e.Src.Position, e.Src.Size));
+                    // ⚠ 27.08.2026 — Ziel, NICHT Src.Position. Seit die Quelle
+                    //   aus dem Streifen kommt (siehe MapBaker.Objects), ist
+                    //   Src.Position eine STREIFEN-Koordinate. Dieser Pruefstand
+                    //   sucht Ueberschneidungen auf der KARTE und haette ab
+                    //   sofort nie wieder eine gefunden — stille falsche
+                    //   Negative, genau das, wovor sein eigener Kopf warnt.
+                    new Rect2(e.Ziel, e.Src.Size));
         }
     }
 
@@ -1430,11 +1436,11 @@ public partial class MapEntityLayer
                                        _oy + e.Row * TileH - ElevOf(e.Col, e.Row) * 15 - 50);
             sb.Append($"  Flamme ({e.Col},{e.Row}) Hoehe {ElevOf(e.Col, e.Row)} "
                     + $"Rechteck {flamme.Position} {flamme.Size}\n"
-                    + $"      Kachel gruen {e.Src.Position} {e.Src.Size}, "
+                    + $"      Kachel gruen {e.Ziel} {e.Src.Size}, "
                     + $"verkohlt {e.KohleZiel} {e.KohleSrc.Size}, "
                     + $"aus der Zelle gerechnet {ausZelle}\n"
                     + $"      ⚠ Versatz verkohlt-gegen-Zelle {e.KohleZiel - ausZelle}, "
-                    + $"gruen-gegen-Zelle {e.Src.Position - ausZelle}\n");
+                    + $"gruen-gegen-Zelle {e.Ziel - ausZelle}\n");
 
             // ⭐⭐ 24.08.2026 — DIE ZEILENSTAFFELUNG, gemessen statt ueberschlagen.
             //
@@ -1448,8 +1454,8 @@ public partial class MapEntityLayer
                 foreach (var o in _objDraw)
                 {
                     if (o.Col != e.Col || o.Row != e.Row + dz) continue;
-                    float kopf = o.Src.Position.Y, fuss = kopf + o.Src.Size.Y;
-                    float kopfE = e.Src.Position.Y, fussE = kopfE + e.Src.Size.Y;
+                    float kopf = o.Ziel.Y, fuss = kopf + o.Src.Size.Y;
+                    float kopfE = e.Ziel.Y, fussE = kopfE + e.Src.Size.Y;
                     sb.Append($"      Zeile +{dz} ({o.Col},{o.Row}) Hoehe {ElevOf(o.Col, o.Row)}: "
                             + $"Kopf {kopf:0} (Δ {kopf - kopfE:+0;-0}), "
                             + $"Fuss {fuss:0} (Δ {fuss - fussE:+0;-0}), "
@@ -1470,7 +1476,7 @@ public partial class MapEntityLayer
                 // dann der Leser und nicht mehr meine Annahme.
                 if (o.Row == e.Row) continue;
                 var ziel = o.Abgebrannt ? (o.Steht ? o.KohleZiel : o.AscheZiel)
-                         : o.BrandVon >= 0f ? o.KohleZiel : o.Src.Position;
+                         : o.BrandVon >= 0f ? o.KohleZiel : o.Ziel;
                 var rq = o.Abgebrannt ? (o.Steht ? o.KohleSrc : o.AscheSrc) : o.Src;
                 var r = new Rect2(ziel, rq.Size);
                 if (!r.Intersects(flamme)) continue;
