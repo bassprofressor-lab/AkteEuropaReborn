@@ -41,6 +41,18 @@ public partial class MapEntityLayer
 {
     private Texture2D? _objTex;
 
+    /// <summary><c>--objekt-rechteck</c> — der Stand von vor dem 27.08.2026:
+    /// die aufragende Kachel wird als RECHTECK aus dem zusammengesetzten Bild
+    /// geschnitten und an dieselbe Stelle gemalt. Wo sich zwei solche Kacheln
+    /// ueberlappen, nimmt sie die Nachbarin mit. Siehe MapBaker.Objects.</summary>
+    public static bool ObjektRechteck;
+
+    /// <summary>Wieviele aufragende Objekte KEINEN eigenen Streifenplatz haben —
+    /// eine alte Karte aus einem Bake vor dem 27.08.2026. Dann faellt der
+    /// Zeichner auf das Rechteck zurueck, und der Fehler ist wieder da; darum
+    /// wird es gezaehlt und gesagt statt still hingenommen.</summary>
+    public int ObjektOhneBild;
+
     /// <summary>Ein aufragendes Objekt, so wie der Zeichner es braucht.</summary>
     private sealed class Kartenobjekt
     {
@@ -95,6 +107,17 @@ public partial class MapEntityLayer
         /// <summary>Sein Rechteck in der zweiten Ebene. ⚠ Quelle UND Ziel: der
         /// Backofen hat es an genau die Stelle gemalt, an die es gehört.</summary>
         public Rect2 Src;
+
+        /// <summary>⭐⭐ 27.08.2026 — WOHIN die Kachel gehört. Bis heute war das
+        /// dieselbe Stelle wie <see cref="Src"/>: der Zeichner schnitt ein
+        /// Rechteck aus dem zusammengesetzten Bild und malte es an genau die
+        /// Stelle zurück, aus der es kam. Sobald sich zwei aufragende Kacheln
+        /// überlappen, nimmt dieses Rechteck fremde Bildpunkte mit und malt sie
+        /// ein zweites Mal — nach den Einheiten dazwischen. Genau daran wurden
+        /// auf der Brücke von map_02 die Fahrzeuge abgeschnitten (acht Zeilen
+        /// Überlappung, gemessen; siehe MapBaker.Objects).
+        /// Jetzt kommt die Quelle aus dem Streifen und das Ziel von hier.</summary>
+        public Vector2 Ziel;
 
         /// <summary>Die VERKOHLTE Fassung im Streifen, oder ein leeres Rechteck,
         /// wenn die Zelle kein Wald ist. Sie hat ein eigenes Ziel, weil der
@@ -308,6 +331,7 @@ public partial class MapEntityLayer
                 if (_rampen.ContainsKey(schluessel)) _rampenKachel[schluessel] = GetI(t2, "code");
             }
 
+        ObjektOhneBild = 0;
         if (!meta.TryGetValue("objects", out var ov) || ov.VariantType != Variant.Type.Array) return;
         foreach (var item in ov.AsGodotArray())
         {
@@ -318,6 +342,7 @@ public partial class MapEntityLayer
                 Col = GetI(o, "col"),
                 Row = GetI(o, "row"),
                 Src = new Rect2(GetI(o, "x"), GetI(o, "y"), GetI(o, "w"), GetI(o, "h")),
+                Ziel = new Vector2(GetI(o, "x"), GetI(o, "y")),
                 // ⭐⭐ 24.08.2026 — die vier neuen Felder aus dem Backwerk.
                 // Ohne sie war das Brandwesen der zerstoerbaren Objekte nicht
                 // baubar; siehe Rendering/BrennendeObjekte.cs und MapBaker.
@@ -326,6 +351,23 @@ public partial class MapEntityLayer
                 Klasse = GetI(o, "klasse", -1),
                 Basis = GetI(o, "basis", -1),
             };
+            // ⭐⭐⭐ 27.08.2026 — DIE QUELLE KOMMT AUS DEM STREIFEN.
+            // Bis heute war sie das Rechteck im zusammengesetzten Bild, und
+            // dort ueberlappen sich benachbarte aufragende Kacheln: das
+            // Rechteck der einen nahm Bildpunkte der anderen mit und malte sie
+            // ein zweites Mal, NACH den Einheiten dazwischen. Auf der Bruecke
+            // von map_02 sind das acht voll deckende Zeilen, und genau die
+            // haben die Fahrzeuge abgeschnitten. Gemessen: Gelaender Zeile 22
+            // liegt bei y 587..624, Zeile 24 bei 617..664.
+            // ⚠ Rueckfall --objekt-rechteck stellt den alten Weg her.
+            if (!ObjektRechteck && o.ContainsKey("bild"))
+            {
+                int k = GetI(o, "bild");
+                if (k >= 0 && k < kohle.Count) e.Src = kohle[k];
+                else ObjektOhneBild++;
+            }
+            else if (!ObjektRechteck) ObjektOhneBild++;
+
             if (o.ContainsKey("burnt"))
             {
                 int k = GetI(o, "burnt");
@@ -366,6 +408,10 @@ public partial class MapEntityLayer
         // entscheidet, was vor wem liegt, und der Backofen liefert schon in
         // Zeilenfolge — die Sortierung ist die Zusicherung, nicht die Arbeit.
         _objDraw.Sort((a, b) => a.Row - b.Row);
+        if (ObjektOhneBild > 0)
+            GD.PushWarning($"objekte: {ObjektOhneBild} aufragende Kacheln ohne eigenen "
+                         + "Streifenplatz — diese Karte ist vor dem 27.08.2026 gebacken. "
+                         + "Sie schneiden wieder Einheiten ab; --reexport-maps behebt es.");
         int brennbar = 0;
         int zerstoerbar = 0;
         foreach (var e in _objDraw) { if (e.IstWald) brennbar++; else if (e.IstObjekt) zerstoerbar++; }
@@ -455,7 +501,7 @@ public partial class MapEntityLayer
             }
             else
             {
-                DrawTextureRectRegion(_objTex, new Rect2(e.Src.Position, e.Src.Size), e.Src);
+                DrawTextureRectRegion(_objTex, new Rect2(e.Ziel, e.Src.Size), e.Src);
             }
             ObjectsDrawn++;
         }

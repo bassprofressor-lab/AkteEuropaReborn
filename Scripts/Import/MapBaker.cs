@@ -400,11 +400,43 @@ public sealed class MapBaker
     /// Wald, 61000..63999 zerstoerbares Objekt — daraus faellt die Art. <c>Code</c>
     /// ist die Kachelnummer derselben Zelle, auf die das Original die
     /// +10001/+10002 rechnet.</para></summary>
+    /// <summary>
+    /// <b>⭐⭐⭐ 27.08.2026 — <c>Eigen</c> ist neu, und es behebt den
+    /// Brueckenfehler.</b>
+    ///
+    /// <para><c>X/Y/W/H</c> ist die Stelle im zusammengesetzten Bild
+    /// <c>&lt;karte&gt;.objects.png</c> — und der Zeichner hat von dort ein
+    /// RECHTECK ausgeschnitten und an dieselbe Stelle gemalt. Das geht schief,
+    /// sobald sich zwei aufragende Kacheln ueberlappen: das Rechteck der einen
+    /// enthaelt dann Bildpunkte der anderen und malt sie ein ZWEITES Mal — zu
+    /// einem spaeteren Zeitpunkt, naemlich nach den Einheiten dazwischen.</para>
+    ///
+    /// <para><b>Gemessen an map_02, der gemeldeten Bruecke:</b> das Gelaender
+    /// der Zeile 22 liegt bei y 587…624 (h 38), das der Zeile 24 bei y 617…664
+    /// (h 48) — <b>acht Zeilen Ueberlappung</b>. Genau diese acht Zeilen sind
+    /// im Bake in allen drei Zellen <b>40 von 40 Bildpunkten voll deckend</b>,
+    /// ab der neunten faellt es auf 4/12/4 — das sind erst die echten Streben.
+    /// Der volle Block ist die Unterkante der Zeile-22-Kachel, im Original
+    /// laengst gemalt, bei uns mit dem Zeile-24-Rechteck ueber die Fahrzeuge
+    /// der Zeile 23 gelegt. Sein Bild: »Beide Fahrzeuge werden teilweise von
+    /// der Brueckenstrasse verdeckt.«</para>
+    ///
+    /// <para>⚠ Die ZEICHENREIHENFOLGE war nie der Fehler — sie stimmt mit dem
+    /// verzahnten Durchgang <c>@0x4B43BB</c> ueberein (je Zeile erst die
+    /// Einheiten, dann die aufragenden Kacheln). Falsch war die
+    /// ZUGEHOERIGKEIT der Bildpunkte.</para>
+    ///
+    /// <para><c>Eigen</c> ist darum der Platz der EIGENEN Kachel im Streifen
+    /// (<see cref="BurntAtlas"/>), genau wie <c>Kohle</c> und <c>Asche</c> es
+    /// laengst sind: Quelle aus dem Streifen, Ziel an der Zelle. Damit kann
+    /// kein fremder Bildpunkt mehr mitkommen. Rueckfall:
+    /// <c>--objekt-rechteck</c>.</para>
+    /// </summary>
     public readonly List<(int Col, int Row, int X, int Y, int W, int H,
                           int Kohle, int KX, int KY,
                           int Asche, int AX, int AY,
                           int Imap, int Code, int Art,
-                          int Klasse, int Basis)> Objects = new();
+                          int Klasse, int Basis, int Eigen)> Objects = new();
 
     /// <summary>
     /// <b>DER STREIFEN MIT DEN VERKOHLTEN BÄUMEN.</b>
@@ -813,10 +845,15 @@ public sealed class MapBaker
                         // statt halb. KulisseFach bleibt berechnet stehen - es
                         // wird gebraucht, sobald die Kacheln als ein
                         // zusammenhaengendes Bild gezeichnet werden.
+                        // ⭐ Die EIGENE Kachel in denselben Streifen — siehe
+                        // den Kopf von Objects. Ohne sie schneidet der Zeichner
+                        // ein Rechteck aus dem zusammengesetzten Bild und nimmt
+                        // die Nachbarkachel mit.
+                        int eigen = Streifenplatz(code[i]);
                         Objects.Add((c, r, c * TileW,
                                      OriginY + r * TileH - elev[i] * ElevStep + BlitAnchor + sp.YOff,
                                      sp.W, sp.H, kohle, kx, ky, asche, ax, ay,
-                                     imap, code[i], art, klasse, grundkachel));
+                                     imap, code[i], art, klasse, grundkachel, eigen));
                         continue;
                     }
                     Blit(sp, c, r, elev[i]);

@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Import;
+﻿namespace AkteEuropaReborn.Import;
 
 using System;
 using System.Collections.Generic;
@@ -1470,6 +1470,11 @@ public sealed class ContentBuilder
                 if (i > 0) sb.Append(',');
                 sb.Append($"{{\"col\":{o.Col},\"row\":{o.Row},\"x\":{o.X},\"y\":{o.Y},");
                 sb.Append($"\"w\":{o.W},\"h\":{o.H}");
+                // ⭐ 27.08.2026 — der Platz der EIGENEN Kachel im Streifen.
+                // Ohne ihn schneidet der Zeichner ein Rechteck aus dem
+                // zusammengesetzten Bild und nimmt die Nachbarkachel mit;
+                // Herleitung und Messung im Kopf von MapBaker.Objects.
+                if (o.Eigen >= 0) sb.Append($",\"bild\":{o.Eigen}");
                 // Der Platz der VERKOHLTEN Fassung im Streifen und wohin sie
                 // gehoert. Fehlt, wenn die Zelle kein Wald ist.
                 if (o.Kohle >= 0)

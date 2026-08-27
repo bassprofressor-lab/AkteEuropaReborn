@@ -29081,6 +29081,32 @@ public partial class MapEntityLayer : Node2D
     /// einem Schalter und nicht im Weg: <c>--anker-neu</c>. Sie verschiebt
     /// JEDE Einheit im Spiel, das gehört vor sein Auge.</para>
     /// </summary>
+    /// <summary>
+    /// <c>--anker-neu</c> — der aus dem Original GERECHNETE Anker (24, 45).
+    ///
+    /// <para>Die Rechnung: das Original blittet den Rumpf auf
+    /// <c>Kachel-Blitpunkt + (0, +15)</c> (@0x4301D1 <c>sub si,0x23</c> gegen
+    /// @0x4B42DF <c>sub ebp,0x32</c>, dazu @0x430212 <c>add si,0xa</c> und der
+    /// Abzug des Feinversatzes), beide Blitter (<c>0x4AC2F0</c> Einheit,
+    /// <c>0x4AC1B0</c> Kachel) schlagen <c>byte[Sprite+1]</c> gleich auf, und
+    /// <see cref="Import.CwrFile.FacingImage"/> setzt das Bild mit
+    /// <c>cy = YOffset + y</c> auf die Leinwand. Daraus folgt (24, 45).</para>
+    ///
+    /// <para>⚠⚠ <b>UND ES IST TROTZDEM FALSCH — zweimal am Bild geprueft.</b>
+    /// Am 27.08. zuerst mit dem alten Kachelschneiden (Fahrzeuge versanken
+    /// fast ganz), dann noch einmal mit dem berichtigten Schneiden: die
+    /// Fahrzeuge sitzen 10 Punkte zu tief und verschwinden hinter den
+    /// Bogenstreben. Die Vermutung, beide Berichtigungen muessten zusammen
+    /// fallen, ist damit <b>widerlegt</b> — das Kachelschneiden allein war der
+    /// Fehler.</para>
+    ///
+    /// <para>Die Rechnung bleibt als Schalter stehen, weil sie sauber
+    /// hergeleitet ist und eine der Verknuepfungen nachweislich nicht stimmt.
+    /// Verdacht: unsere ZUSAMMENGESETZTEN Bilder (Rumpf + Turm auf eine
+    /// gemeinsame Leinwand) nehmen nicht denselben Ursprung wie
+    /// <c>CwrFile.FacingImage</c>. Das ist der naechste Griff, wenn jemand ihn
+    /// braucht — nicht der Weg zur Bruecke.</para>
+    /// </summary>
     public static bool AnkerNeu;
 
     private static Vector2 ComposedAnchor => AnkerNeu ? new Vector2(24, 45) : new Vector2(30, 55);
