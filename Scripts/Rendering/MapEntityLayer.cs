@@ -3594,6 +3594,25 @@ public partial class MapEntityLayer : Node2D
 
     private int ElevOf(int col, int row) => _elevLookup.TryGetValue((col, row), out var e) ? e : 0;
 
+    /// <summary>Die SCHRÄGENART einer Zelle — Feld +3 des Kachelsatzes,
+    /// <c>@0x41D110</c>. Wir führen sie seit jeher als »flag« mit; was sie
+    /// bedeutet, steht in <see cref="Simulation.Hang"/>.
+    ///
+    /// <para>⚠ Nicht mit <see cref="SlopeClassOf"/> verwechseln: das ist
+    /// DASSELBE Byte, aber auf 0…4 gestutzt, weil es dort die HANGPOSE des
+    /// Rumpfbildes wählt (@0x429AD5). Für die Anhebung zählen alle 19 Arten.
+    /// Wie das Original aus 19 Arten 5 Posen macht, ist noch nicht gelesen.</para></summary>
+    private int HangArt(int col, int row)
+        => _flagLookup != null && _flagLookup.TryGetValue((col, row), out int f) ? f : 0;
+
+    /// <summary>Die Anhebung einer Einheit auf dieser Zelle in Bildpunkten —
+    /// <c>Höhe*15</c> UND der Schrägenanteil, siehe <see cref="Simulation.Hang"/>.
+    /// <paramref name="feinX"/>/<paramref name="feinY"/> ohne Angabe: die
+    /// Zellmitte (20, 10), also der Fall einer stehenden Einheit.</summary>
+    private int HubOf(int col, int row, int feinX = Simulation.Hang.MitteX,
+                                        int feinY = Simulation.Hang.MitteY)
+        => Simulation.Hang.Hub(ElevOf(col, row), HangArt(col, row), feinX, feinY);
+
     // ---- selection and order feedback ---------------------------------------
 
     /// <summary>
@@ -4273,10 +4292,22 @@ public partial class MapEntityLayer : Node2D
                _oy + p.Y * TileH - ElevOf(Mathf.RoundToInt(p.X), Mathf.RoundToInt(p.Y)) * 15
                    + TileH / 2f);
 
-    /// <summary>Ground point (map pixels) at the center of a cell.</summary>
+    /// <summary>Ground point (map pixels) at the center of a cell.
+    ///
+    /// <para>⭐⭐ 27.08.2026 — die Anhebung ist NICHT <c>Höhe*15</c>, sondern
+    /// <c>Höhe*15 + Schrägenanteil(Art, Feinversatz)</c>, und für eine stehende
+    /// Einheit ist der Feinversatz die Zellmitte (20, 10), nicht null. Auf
+    /// einer Schräge trägt der Anteil bis zu 16 Bildpunkte — mehr als eine
+    /// ganze Höhenstufe. Gelesen @0x4B5CE0/@0x4B611F, ausgeschrieben in
+    /// <see cref="Simulation.Hang"/>; Rückfall <c>--kein-hang</c>.</para>
+    ///
+    /// <para>⚠ Das gilt für EINHEITEN, nicht für das Gelände: die Kachel trägt
+    /// ihre Schräge im Bild, ihr Zeichenpunkt bleibt <c>Höhe*15</c>. Darum ist
+    /// hier geändert und nicht in <c>MapBaker</c> oder in <c>CellAt</c>.</para>
+    /// </summary>
     private Vector2 CellCenter(int col, int row)
         => new(_ox + col * TileW + TileW / 2f,
-               _oy + row * TileH - ElevOf(col, row) * 15 + TileH / 2f);
+               _oy + row * TileH - HubOf(col, row) + TileH / 2f);
 
     /// <summary>
     /// Where a unit STANDS: the middle of its BODY, not of its anchor cell. The
@@ -14959,6 +14990,113 @@ public partial class MapEntityLayer : Node2D
     /// die man nur liest, ist eine Vermutung - und genau an dieser Stelle hat
     /// ein gelesener Kommentar heute schon einmal in die Irre gefuehrt.</para>
     /// </summary>
+    /// <summary>
+    /// <b>--hang-check</b> — DIE SCHRÄGENANHEBUNG (27.08.2026).
+    ///
+    /// <para>Gemeldet: auf der AUFFAHRT einer Brücke sitzt das Fahrzeug zu tief
+    /// und verschwindet hinter dem Geländer, auf der Fahrbahnmitte steht es
+    /// richtig. Gelesen: das Original hebt eine Einheit auf einer Schräge
+    /// stufenlos an, siehe <see cref="Simulation.Hang"/>.</para>
+    ///
+    /// <para>Der Lauf misst DREI Dinge, und die dritte ist die eigentliche:</para>
+    /// <list type="number">
+    /// <item>die 19 Arten mit ihrem Wert für eine STEHENDE Einheit, und wie
+    /// weit jede Art über ihre Zelle hinweg trägt (kleinster und grösster
+    /// Wert über alle 41×21 Feinstellungen);</item>
+    /// <item>wieviele Zellen DIESER Karte sich gegen das Nullmodell
+    /// (<c>--kein-hang</c>, also <c>Höhe*15</c>) überhaupt ändern und um
+    /// wieviel — eine Änderung, die nichts bewegt, wäre keine;</item>
+    /// <item>⭐ die STETIGKEIT an den Zellgrenzen. Wenn die 19 Formeln richtig
+    /// gelesen sind, muss der Boden am rechten Rand einer Zelle so hoch liegen
+    /// wie am linken Rand ihres Nachbarn — sonst hätte das Gelände Stufen, wo
+    /// keine sind. Das prüft niemandes Meinung, sondern die Lesung selbst, und
+    /// es braucht weder den Spieler noch einen Spielstand.</item>
+    /// </list>
+    /// </summary>
+    public string HangCheck()
+    {
+        var sb = new System.Text.StringBuilder("hang-check\n");
+        sb.Append($"  Karte {_mission}, {_elevLookup.Count} Zellen mit Höhe, "
+                + $"Schrägenarten aus {(_flagLookup != null ? "flag" : "NICHTS — _flagLookup ist leer")}\n");
+        sb.Append($"  Rückfallschalter --kein-hang: {(Simulation.Hang.Aus ? "AN" : "aus")}\n\n");
+
+        // ---- 1. die 19 Arten ------------------------------------------------
+        sb.Append("  Art  stehend(20,10)   über die ganze Zelle\n");
+        for (int a = 0; a < Simulation.Hang.Arten; a++)
+        {
+            int lo = int.MaxValue, hi = int.MinValue;
+            for (int fx = 0; fx <= Simulation.Hang.Breite; fx++)
+                for (int fy = 0; fy <= Simulation.Hang.Hoehe; fy++)
+                {
+                    int v = Simulation.Hang.Versatz(a, fx, fy);
+                    if (v < lo) lo = v;
+                    if (v > hi) hi = v;
+                }
+            sb.Append($"  {a,3}  {Simulation.Hang.Versatz(a, Simulation.Hang.MitteX, Simulation.Hang.MitteY),13}"
+                    + $"   {lo,3} … {hi,3}\n");
+        }
+
+        // ---- 2. was sich auf DIESER Karte ändert ----------------------------
+        int geaendert = 0, gesamt = 0, groesste = 0;
+        var histo = new System.Collections.Generic.SortedDictionary<int, int>();
+        foreach (var ((c, r), el) in _elevLookup)
+        {
+            gesamt++;
+            int neu = Simulation.Hang.Hub(el, HangArt(c, r),
+                                          Simulation.Hang.MitteX, Simulation.Hang.MitteY);
+            int alt = el * Simulation.Hang.Stufe & 0xFF;
+            int d = neu - alt;
+            if (d == 0) continue;
+            geaendert++;
+            if (System.Math.Abs(d) > System.Math.Abs(groesste)) groesste = d;
+            histo.TryGetValue(d, out int n); histo[d] = n + 1;
+        }
+        sb.Append($"\n  gegen --kein-hang: {geaendert} von {gesamt} Zellen ändern sich, "
+                + $"grösster Unterschied {groesste:+#;-#;0} Bildpunkte\n  Verteilung: ");
+        foreach (var (d, n) in histo) sb.Append($"{d:+#;-#;0}:{n}  ");
+        sb.Append('\n');
+
+        // ---- 3. STETIGKEIT an den Zellgrenzen --------------------------------
+        // Der Boden am rechten Rand einer Zelle (Feinversatz x=40) und der am
+        // linken Rand ihres rechten Nachbarn (x=0) sind DERSELBE Ort. Ebenso
+        // unten (y=20) und oben beim unteren Nachbarn (y=0). Passen sie nicht
+        // zusammen, ist entweder die Lesung falsch oder die Karte hat dort eine
+        // echte Geländekante.
+        int paareX = 0, sprungX = 0, maxX = 0;
+        int paareY = 0, sprungY = 0, maxY = 0;
+        foreach (var ((c, r), el) in _elevLookup)
+        {
+            if (_elevLookup.TryGetValue((c + 1, r), out int elR))
+            {
+                paareX++;
+                int a = Simulation.Hang.Hub(el, HangArt(c, r), Simulation.Hang.Breite, Simulation.Hang.MitteY);
+                int b = Simulation.Hang.Hub(elR, HangArt(c + 1, r), 0, Simulation.Hang.MitteY);
+                int d = System.Math.Abs(a - b);
+                if (d != 0) { sprungX++; if (d > maxX) maxX = d; }
+            }
+            if (_elevLookup.TryGetValue((c, r + 1), out int elU))
+            {
+                paareY++;
+                // ⚠ NICHT vertauschen: der Feinversatz y wächst NACH OBEN
+                // (@0x43020B `sub si, FeinY`, und Richtung 4 der Tafel 0x4F5AF0
+                // ist Zeile−1 und liefert +Zähler/8). Die gemeinsame Kante ist
+                // also der UNTERE Rand von Zeile r — dort ist fy = 0 — und der
+                // OBERE Rand von Zeile r+1, wo fy = 20 ist.
+                int a = Simulation.Hang.Hub(el, HangArt(c, r), Simulation.Hang.MitteX, 0);
+                int b = Simulation.Hang.Hub(elU, HangArt(c, r + 1), Simulation.Hang.MitteX, Simulation.Hang.Hoehe);
+                int d = System.Math.Abs(a - b);
+                if (d != 0) { sprungY++; if (d > maxY) maxY = d; }
+            }
+        }
+        sb.Append($"\n  STETIGKEIT waagerecht: {paareX - sprungX} von {paareX} Nachbarpaaren passen, "
+                + $"grösster Sprung {maxX} Bildpunkte\n");
+        sb.Append($"  STETIGKEIT senkrecht:  {paareY - sprungY} von {paareY} Nachbarpaaren passen, "
+                + $"grösster Sprung {maxY} Bildpunkte\n");
+        sb.Append("  ⚠ NULLMODELL: mit --kein-hang muss dieselbe Zeile SCHLECHTER ausfallen —\n"
+                + "    sonst misst der Prüfstand die Schrägenrechnung gar nicht.\n");
+        return sb.ToString();
+    }
+
     public string PlattformCheck()
     {
         var sb = new System.Text.StringBuilder("posten-check\n");

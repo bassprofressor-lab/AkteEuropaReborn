@@ -572,6 +572,12 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_hangCheck)
+        {
+            GD.Print(_entities.HangCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_kaufwegCheck)
         {
             // GG NICHT hier ausgeben. Der erste Anlauf tat es, und der Lauf hat
@@ -951,6 +957,7 @@ public partial class MapViewer : Node2D
     private bool _fensterCheck;
     private bool _kaufwegCheck;
     private bool _plattformCheck;
+    private bool _hangCheck;
 
     /// <summary>
     /// <b><c>--kaufweg-check</c> — DER KAUF UEBER DEN KLICKWEG</b> (26.08.2026).
@@ -1748,6 +1755,9 @@ public partial class MapViewer : Node2D
             else if (a == "--fenster-check") _fensterCheck = true;
             else if (a == "--kaufweg-check") _kaufwegCheck = true;
             else if (a == "--plattform-check") _plattformCheck = true;
+            else if (a == "--hang-check") _hangCheck = true;
+            // GEGENPROBE zur Schraegenanhebung vom 27.08.2026, siehe Simulation.Hang.
+            else if (a == "--kein-hang") Simulation.Hang.Aus = true;
             else if (a == "--klick-log") UI.WindowManager.KlickProtokoll = true;
             else if (a == "--zell-spur") MapEntityLayer.ZellSpur = true;
             else if (a == "--gebaeude-block") MapEntityLayer.GebaeudeBlock = true;
