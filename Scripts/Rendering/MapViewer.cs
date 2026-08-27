@@ -208,6 +208,12 @@ public partial class MapViewer : Node2D
 
     public override void _Ready()
     {
+        // ⚠ 27.08.2026 — WER ZWEI FENSTER NEBENEINANDER VERGLEICHT, muss sie
+        // auseinanderhalten koennen. Ein Rueckfallschalter, dem man das Fenster
+        // nicht ansieht, macht aus einer Gegenprobe ein Ratespiel.
+        if (Simulation.Hang.Aus && !DisplayServer.GetName().Contains("headless"))
+            DisplayServer.WindowSetTitle("Akte Europa Reborn — ALTER STAND (--kein-hang)");
+
         _sprite = new Sprite2D { Centered = false, TextureFilter = TextureFilterEnum.Nearest };
         AddChild(_sprite);
 
@@ -1758,6 +1764,8 @@ public partial class MapViewer : Node2D
             else if (a == "--hang-check") _hangCheck = true;
             // GEGENPROBE zur Schraegenanhebung vom 27.08.2026, siehe Simulation.Hang.
             else if (a == "--kein-hang") Simulation.Hang.Aus = true;
+            else if (a.StartsWith("--hang-mal=")) Simulation.Hang.Faktor = a["--hang-mal=".Length..].ToInt();
+            else if (a.StartsWith("--bruecke-lage=")) MapEntityLayer.BrueckeShotLage = a["--bruecke-lage=".Length..].ToInt();
             else if (a == "--klick-log") UI.WindowManager.KlickProtokoll = true;
             else if (a == "--zell-spur") MapEntityLayer.ZellSpur = true;
             else if (a == "--gebaeude-block") MapEntityLayer.GebaeudeBlock = true;
@@ -1882,6 +1890,12 @@ public partial class MapViewer : Node2D
                     ? a["--select-building=".Length..].ToInt() : 0;
             }
         }
+        // ⚠ ERST HIER, nicht in _Ready: dort steht die Zeile VOR dem
+        //   Auswerten der Schalter und meldete »Faktor 1«, waehrend
+        //   gerechnet wurde mit 6. Ein Pruefausdruck, der vor seinem
+        //   Gegenstand laeuft, misst den Zustand davor.
+        GD.Print($"Hang: {(Simulation.Hang.Aus ? "AUS (--kein-hang)" : "an")}"
+               + $", Faktor {Simulation.Hang.Faktor}");
     }
 
     /// <summary>
@@ -2768,6 +2782,16 @@ public partial class MapViewer : Node2D
             // ⚠ Das Schiff, das IM DOCK wartet. Ohne diesen Griff zeigt jedes
             // Bild ein leeres Hafenbecken — der Gegenstand steht nur ein paar
             // Sekunden dort.
+            // ⚠ Die BRUECKE mit Fahrzeugen darauf — der gemeldete Fall vom
+            // 27.08.2026. Ohne Griff zeigt jedes Bild eine leere Bruecke.
+            else if (_shotWhen == "bruecke")
+            {
+                var at = _entities.BrueckeShotSetup();
+                if (at == null) return;
+                _camera.Position = _entities.RailCellPoint(at.Value.X, at.Value.Y);
+                ClampCamera();
+                GD.Print($"MapViewer: --shot-when=bruecke ausgeloest — Mitte ({at.Value.X},{at.Value.Y})");
+            }
             else if (_shotWhen == "dock")
             {
                 var at = _entities.DockShotSetup();

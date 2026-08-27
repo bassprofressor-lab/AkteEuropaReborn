@@ -74,6 +74,25 @@ public static class Hang
     public static bool Aus;
 
     /// <summary>
+    /// <c>--hang-mal=&lt;n&gt;</c> — <b>ein Diagnoseschalter, kein Spielwert.</b>
+    /// Er vervielfacht den Schrägenanteil.
+    ///
+    /// <para>⚠ 27.08.2026 gebaut, nachdem der Spieler den neuen und den alten
+    /// Stand nebeneinander laufen liess und meldete: »beide identisch«. Meine
+    /// eigene Messung sagte, auf derselben Zelle bewegt sich die Einheit um
+    /// 7 Bildpunkte. Eine der beiden Aussagen ist falsch, und 7 Bildpunkte sind
+    /// zu wenig, um das mit blossem Auge zu entscheiden.</para>
+    ///
+    /// <para><b>Wozu:</b> mit <c>--hang-mal=6</c> wären es 42 statt 7. Bleibt das
+    /// Bild dann immer noch stehen, ist die Rechnung nicht das Problem, sondern
+    /// der Weg von der Rechnung zum Bildschirm — und das ist eine ganz andere
+    /// Suche. Ein Unterschied, den man nicht sehen kann, taugt nicht als
+    /// Gegenprobe; er muss laut genug sein, dass sein AUSBLEIBEN etwas
+    /// beweist.</para>
+    /// </summary>
+    public static int Faktor = 1;
+
+    /// <summary>
     /// <b>Die Anhebung einer Einheit in Bildpunkten</b> — <c>@0x4B611F…0x4B6133</c>
     /// samt der Maske des Rufers.
     ///
@@ -87,7 +106,7 @@ public static class Hang
     /// </summary>
     public static int Hub(int hoehe, int art, int feinX, int feinY)
         => Aus ? hoehe * Stufe & 0xFF
-               : hoehe * Stufe + Versatz(art, feinX, feinY) & 0xFF;
+               : hoehe * Stufe + Versatz(art, feinX, feinY) * Faktor & 0xFF;
 
     /// <summary>Die Anhebung einer STEHENDEN Einheit — Feinversatz (20, 10).</summary>
     public static int HubStehend(int hoehe, int art) => Hub(hoehe, art, MitteX, MitteY);

@@ -19493,6 +19493,63 @@ public partial class MapEntityLayer : Node2D
     /// genau die Sorte Aussage, die nur ein Bild trägt (Regel 17).</para>
     /// <para>Zusammen mit <c>--dock-check</c> zu benutzen: der baut das Schiff
     /// und laesst es warten.</para></summary>
+    /// <summary>
+    /// <b>--shot-when=bruecke</b> — eigene Fahrzeuge auf JEDE Fahrbahnzelle der
+    /// Brücke stellen und die Kamera dorthin. Ohne diesen Griff zeigt jedes Bild
+    /// eine leere Brücke und beweist gar nichts.
+    ///
+    /// <para>Gebaut am 27.08.2026, nachdem zwei Anläufe gegen die gemeldete
+    /// Brückenstelle nichts gebessert haben und ich beide Male aus Zahlen
+    /// geschlossen habe, statt anzusehen, was gezeichnet wird.</para>
+    /// </summary>
+    /// <summary><c>--bruecke-lage=&lt;n&gt;</c> — welches Bauwerk fotografiert wird.
+    /// −1 heisst: das mit der höchsten Lage.</summary>
+    public static int BrueckeShotLage = -1;
+
+    public Vector2I? BrueckeShotSetup()
+    {
+        if (_rampen.Count == 0 || _nav == null) return null;
+        // Die FAHRBAHN: unter den Rampenzellen die befahrbaren. Das Geländer
+        // ist gesperrt, also fällt es von selbst heraus.
+        // ⚠ Eine Karte kann MEHRERE Bauwerke tragen — map_02 hat die Bogenbrücke
+        // (Lage 101) und eine Mole (Lage 100). Gemeldet war die BRUECKE, also
+        // wird die mit der höchsten Lage genommen; BrueckeShotLage stellt um.
+        int wahl = BrueckeShotLage;
+        if (wahl < 0)
+            foreach (var (_, lage) in _rampen) if (lage > wahl) wahl = lage;
+        var fahrbahn = new System.Collections.Generic.List<Vector2I>();
+        foreach (var (schluessel, lage) in _rampen)
+        {
+            if (lage != wahl) continue;
+            var z = new Vector2I(schluessel / 1024, schluessel % 1024);
+            if (_nav.IsWalkable(z.X, z.Y)) fahrbahn.Add(z);
+        }
+        if (fahrbahn.Count == 0) return null;
+        fahrbahn.Sort((a, b) => a.Y != b.Y ? a.Y - b.Y : a.X - b.X);
+        GD.Print($"bruecke-shot: Lage {wahl}, {fahrbahn.Count} Fahrbahnzellen");
+
+        // So viele eigene Fahrzeuge, wie es Fahrbahnzellen gibt, dorthin setzen.
+        int k = 0;
+        for (int i = 0; i < _entities.Count && k < fahrbahn.Count; i++)
+        {
+            var u = _entities[i];
+            if (u.Dead || u.IsProp || u.IsBuilding || !u.Mobile || u.Owner != ViewPlayer) continue;
+            _nav.ClearOccupant(u.Col, u.Row, i);
+            u.Col = fahrbahn[k].X; u.Row = fahrbahn[k].Y;
+            u.Elev = ElevOf(u.Col, u.Row);
+            u.Pos = BodyCenterAt(u, u.Col, u.Row);
+            u.Footprint = CellRect(_ox, _oy, u.Col, u.Row, u.Elev);
+            u.Reserved = null; u.StepCost = 0; u.Progress = 0; u.Path = null;
+            GD.Print($"bruecke-shot: {u.Name} auf ({u.Col},{u.Row}) — Hoehe {u.Elev}, "
+                   + $"Art {HangArt(u.Col, u.Row)}, Anhebung {HubOf(u.Col, u.Row)} "
+                   + $"(ALT {u.Elev * Simulation.Hang.Stufe}), Pos {u.Pos}");
+            k++;
+        }
+        if (k == 0) { GD.Print("bruecke-shot: keine eigene fahrbare Einheit gefunden"); return null; }
+        QueueRedraw();
+        return fahrbahn[fahrbahn.Count / 2];
+    }
+
     public Vector2I? DockShotSetup()
     {
         for (int i = 0; i < _entities.Count; i++)

@@ -29,13 +29,33 @@ if errorlevel 1 (
   exit /b 1
 )
 
-set ARGS=
-if not "%~1"=="" if not "%~1"=="0" set ARGS=--campaign=%~1
-:weiter
-shift
-if "%~1"=="" goto starten
-set ARGS=%ARGS% %~1
-goto weiter
+rem  ****************************************************************
+rem  ** 27.08.2026 -- HIER GINGEN SCHALTER MIT `=` VERLOREN.       **
+rem  ****************************************************************
+rem  Der alte Weg war eine shift-Schleife ueber %~1. cmd.exe zerlegt
+rem  seine Parameter aber AM GLEICHHEITSZEICHEN: aus `--hang-mal=6`
+rem  wurden zwei Woerter, `--hang-mal` und `6`, und im Spiel griff
+rem  keins von beiden. Der Schalter war da, er kam nur nie an.
+rem
+rem  Gekostet hat das einen halben Abend: der Spieler testete dreimal
+rem  einen Diagnoseschalter, der gar nicht wirkte, und meldete
+rem  jedesmal voellig zu Recht "hat sich nix geaendert".
+rem
+rem  %* bleibt dagegen unzerlegt. Also wird daraus das ERSTE Wort
+rem  (die Missionsnummer) herausgeschnitten und der Rest woertlich
+rem  weitergereicht.
+rem
+rem  ! Betrifft JEDEN Schalter mit `=`, nicht nur diesen einen --
+rem    also auch --tick-check=60, --map=..., --shot=..., --select=...
+setlocal EnableDelayedExpansion
+set "ALLE=%*"
+set "ARGS="
+set "REST=%*"
+if not "%~1"=="" (
+  if not "%~1"=="0" set "ARGS=--campaign=%~1"
+  set "REST=!ALLE:*%~1=!"
+)
+set "ARGS=!ARGS! !REST!"
 
 :starten
 echo [2/2] starten: %ARGS%
@@ -43,5 +63,5 @@ rem  ACHTUNG: %~dp0 endet auf einem Backslash, und in "%PROJ%" escapet der das
 rem  schliessende Anfuehrungszeichen -- Godot bekam Pfad UND Argumente als EIN Wort
 rem  und brach mit "Invalid project path specified" ab. %PROJ:~0,-1% schneidet ihn ab.
 rem  Der Bau weiter oben braucht ihn dagegen, darum bleibt PROJ selbst unveraendert.
-"%GODOT%" --path "%PROJ:~0,-1%" -- %ARGS%
+"%GODOT%" --path "%PROJ:~0,-1%" -- !ARGS!
 endlocal
