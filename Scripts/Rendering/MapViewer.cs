@@ -1764,6 +1764,7 @@ public partial class MapViewer : Node2D
             else if (a == "--hang-check") _hangCheck = true;
             // GEGENPROBE zur Schraegenanhebung vom 27.08.2026, siehe Simulation.Hang.
             else if (a == "--kein-hang") Simulation.Hang.Aus = true;
+            else if (a == "--anker-neu") MapEntityLayer.AnkerNeu = true;
             else if (a.StartsWith("--hang-mal=")) Simulation.Hang.Faktor = a["--hang-mal=".Length..].ToInt();
             else if (a.StartsWith("--bruecke-lage=")) MapEntityLayer.BrueckeShotLage = a["--bruecke-lage=".Length..].ToInt();
             else if (a == "--klick-log") UI.WindowManager.KlickProtokoll = true;

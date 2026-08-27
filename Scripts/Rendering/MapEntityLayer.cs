@@ -29053,7 +29053,37 @@ public partial class MapEntityLayer : Node2D
     private readonly Dictionary<(string, int), Texture2D?> _composedTex = new();
     // Measured from the composed sprites: chassis ground-center sits at canvas
     // (30, 55) across all facings (bottom-y std 0.4px) -> pin it to the cell center.
-    private static readonly Vector2 ComposedAnchor = new(30, 55);
+    /// <summary>
+    /// <b>⭐⭐ 27.08.2026 — GEMESSEN statt geschätzt: das Original sagt (24, 45).</b>
+    ///
+    /// <para>Die (30, 55) waren »tuned in the preview« und nie gegen das
+    /// Original gerechnet. Die Kette, Befehl für Befehl:</para>
+    /// <code>
+    ///   Rumpf-Blit  @0x4301B6..0x430212 / @0x429C88:
+    ///       x = Spalte*40 − camX + FeinX − 20        (FeinX 20 -> +0)
+    ///       y = Zeile*20  − camY − 0x23 − Hub − FeinY + 0xa   (FeinY 10 -> −35)
+    ///   Kachel-Blit @0x4B42D5..0x4B42E5 (und @0x4B4587):
+    ///       x = Spalte*40 − camX
+    ///       y = Zeile*20  − camY − 0x32 − Hoehe*15
+    ///   =>  Einheit = Kachel + (0, +15)
+    /// </code>
+    /// <para>Beide Blitter (<c>0x4AC2F0</c> Einheit, <c>0x4AC1B0</c> Kachel)
+    /// schlagen <c>byte[Sprite+1]</c> gleich auf, und
+    /// <see cref="Import.CwrFile.FacingImage"/> setzt das Bild mit
+    /// <c>cy = YOffset + y</c> auf die Leinwand — <b>unsere Leinwandzeile 0 IST
+    /// die Blit-Lage des Originals</b>, Leinwandspalte <c>CanvasXPad</c>=4 die
+    /// Blit-Spalte. Mit <c>Pos = Zellmitte</c> ergibt (30,55) ein
+    /// <c>Kachel + (−6, +5)</c>: <b>6 Punkte zu weit links, 10 zu hoch.</b></para>
+    ///
+    /// <para>⚠ <b>Das erklärt den gemeldeten Brückenfehler NICHT</b> — es macht
+    /// ihn rechnerisch schlimmer, weil ein tiefer sitzendes Fahrzeug weiter
+    /// hinter der Geländerkachel verschwindet. Darum steht die Messung auf
+    /// einem Schalter und nicht im Weg: <c>--anker-neu</c>. Sie verschiebt
+    /// JEDE Einheit im Spiel, das gehört vor sein Auge.</para>
+    /// </summary>
+    public static bool AnkerNeu;
+
+    private static Vector2 ComposedAnchor => AnkerNeu ? new Vector2(24, 45) : new Vector2(30, 55);
 
     private Texture2D? GetComposedTexture(string combo, int facing)
         => LoadUnitPart("composed", combo, facing);
