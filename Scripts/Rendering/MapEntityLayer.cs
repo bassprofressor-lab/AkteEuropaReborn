@@ -4364,6 +4364,56 @@ public partial class MapEntityLayer : Node2D
         => CellCenter(col, row) + new Vector2((Mathf.Max(1, e.FootW) - 1) * TileW / 2f,
                                               (Mathf.Max(1, e.FootH) - 1) * TileH / 2f);
 
+    /// <summary>
+    /// <b>DIE HÖHE EINER FAHRENDEN EINHEIT — die zweite Hälfte der
+    /// Schrägenrechnung</b> (27.08.2026).
+    ///
+    /// <para>⚠⚠ Gemeldet, nachdem nur die stehende Hälfte gebaut war: »der
+    /// bruecken bug ist immer noch da, und jetzt sieht man die einheiten nicht
+    /// mehr durchs brueckengelaender«. **Beides dasselbe.** Die Brücke auf
+    /// map_02 (Zeilen 22…24, Spalten 5…7) sieht so aus:</para>
+    /// <code>
+    ///   (5,23) Auffahrt   Hoehe 0  Art 1   fx*15/40      steigt 0 -> 15
+    ///   (6,23) Fahrbahn   Hoehe 1  Art 0   eben          15
+    ///   (7,23) Abfahrt    Hoehe 0  Art 3   15 - fx*15/40 faellt 15 -> 0
+    /// </code>
+    /// <para><b>Die Auffahrt ist eine Rampe INNERHALB EINER ZELLE.</b> Ein fester
+    /// Wert für die Zellmitte (hier 7) hilft dort nichts: er lässt die Einheit
+    /// am Anfang der Rampe 7 Bildpunkte zu hoch stehen — hoch genug, um hinter
+    /// dem aufragenden Geländer zu verschwinden — und am Ende 8 zu tief.</para>
+    ///
+    /// <para>Das Original führt darum einen FEINVERSATZ mit (@0x430E60) und
+    /// wertet die Formel laufend aus. Die Zelle wechselt auf halbem Weg, der
+    /// Feinversatz läuft von der Mitte (20, 10) zur Kante und auf der anderen
+    /// Seite von der Gegenkante zurück zur Mitte. ⚠ x wächst nach RECHTS,
+    /// <b>y nach OBEN</b> (@0x43020B <c>sub si, FeinY</c>).</para>
+    ///
+    /// <para>⭐ Auf ebenem Gelände ist das Ergebnis <b>Zeichen für Zeichen</b>
+    /// die alte lineare Zwischenlage — nachgerechnet: beide Hälften liefern
+    /// <c>_oy + Zeile*20 + 10 + 20t − Hub</c>. Die Änderung kann also nur dort
+    /// etwas bewegen, wo wirklich eine Schräge liegt.</para>
+    /// </summary>
+    private float FahrtY(Entity e, Vector2I ziel, float t)
+    {
+        int dc = ziel.X - e.Col, dr = ziel.Y - e.Row;
+        bool erste = t <= 0.5f;                 // erste Hälfte: noch die alte Zelle
+        float tt = erste ? t : t - 1f;
+        int c = erste ? e.Col : ziel.X;
+        int r = erste ? e.Row : ziel.Y;
+        float fx = Simulation.Hang.MitteX + dc * Simulation.Hang.Breite * tt;
+        float fy = Simulation.Hang.MitteY - dr * Simulation.Hang.Hoehe * tt;
+        // ⚠ Ganzzahlig wird NUR die Schrägenformel gefüttert — das Original
+        // rechnet in Bildschirmpunkten, unsere Lage ist Fliesskomma. Wer auch
+        // den geometrischen Anteil rundet, wackelt auf EBENEM Gelände um bis zu
+        // einen halben Bildpunkt gegen die alte Zwischenlage; genau das hat der
+        // Prüfstand (Abschnitt 5) beim ersten Anlauf gemeldet.
+        return _oy + r * TileH + TileH / 2f
+             + (Mathf.Max(1, e.FootH) - 1) * TileH / 2f      // wie BodyCenterAt
+             - (fy - Simulation.Hang.MitteY)                 // der Feinversatz wächst nach oben
+             - Simulation.Hang.Hub(ElevOf(c, r), HangArt(c, r),
+                                   Mathf.RoundToInt(fx), Mathf.RoundToInt(fy));
+    }
+
     /// <summary>Current body rect of an entity — follows it while it drives, and
     /// is as big as the unit really is. A ship covers 2x2 cells (the imap says
     /// so, see CwmData.UnitFootprints); giving it a one-cell box made it hard to
@@ -15094,6 +15144,74 @@ public partial class MapEntityLayer : Node2D
                 + $"grösster Sprung {maxY} Bildpunkte\n");
         sb.Append("  ⚠ NULLMODELL: mit --kein-hang muss dieselbe Zeile SCHLECHTER ausfallen —\n"
                 + "    sonst misst der Prüfstand die Schrägenrechnung gar nicht.\n");
+
+        // ---- 4. DIE FAHRT ueber eine Rampe -----------------------------------
+        // Die Brueckenauffahrt ist eine Rampe INNERHALB einer Zelle. Ein Wert
+        // fuer die Zellmitte reicht dort nicht; hier steht, was eine Einheit
+        // beim Ueberfahren wirklich an Anhebung bekommt.
+        var probe = new Entity { Col = 1, Row = 1, FootW = 1, FootH = 1 };
+        if (_rampen.Count == 0)
+            sb.Append("\n  FAHRT: diese Karte hat keine Rampen-/Brueckenzellen (Sektion 20).\n");
+        else
+        {
+            // Die BRUECKE dieser Karte, Zelle fuer Zelle abgefahren. Genau das
+            // war die Meldung, und genau hier muss es stetig von 0 auf die
+            // Fahrbahnhoehe steigen und wieder herunter.
+            var zellen = new System.Collections.Generic.List<(int C, int R, int Lage)>();
+            foreach (var (schluessel, lage) in _rampen)
+                zellen.Add((schluessel / 1024, schluessel % 1024, lage));
+            zellen.Sort((x, y) => x.Lage != y.Lage ? x.Lage - y.Lage
+                                : x.R != y.R ? x.R - y.R : x.C - y.C);
+            sb.Append($"\n  FAHRT ueber die {zellen.Count} Bruecken-/Rampenzellen dieser Karte\n"
+                    + "  (Anhebung in Bildpunkten bei 0/25/50/75/100 % der Zelle; ALT = --kein-hang)\n");
+            sb.Append("   Lage  Zelle      Hoehe Art   nach OSTEN            nach SUEDEN           ALT\n");
+            foreach (var (c, r, lage) in zellen)
+            {
+                string Zug(int dc, int dr)
+                {
+                    var teile = new System.Collections.Generic.List<string>();
+                    for (int k = 0; k <= 4; k++)
+                    {
+                        float tt = k / 4f - 0.5f;      // von der einen Kante zur anderen
+                        int fx = Mathf.RoundToInt(Simulation.Hang.MitteX + dc * Simulation.Hang.Breite * tt);
+                        int fy = Mathf.RoundToInt(Simulation.Hang.MitteY - dr * Simulation.Hang.Hoehe * tt);
+                        teile.Add($"{Simulation.Hang.Hub(ElevOf(c, r), HangArt(c, r), fx, fy),3}");
+                    }
+                    return string.Join(" ", teile);
+                }
+                sb.Append($"   {lage,4}  ({c,3},{r,3})  {ElevOf(c, r),5} {HangArt(c, r),3}   "
+                        + $"{Zug(1, 0)}   {Zug(0, 1)}   {ElevOf(c, r) * Simulation.Hang.Stufe,3}\n");
+            }
+        }
+
+        // ---- 5. AUF EBENEM GELAENDE darf sich NICHTS aendern -----------------
+        // Der schaerfste Riegel gegen einen Rueckschritt: wo keine Schraege
+        // liegt, muss die neue Rechnung Zeichen fuer Zeichen die alte lineare
+        // Zwischenlage liefern. Gemessen, nicht behauptet.
+        float groessteAbweichung = 0f; int ebenePaare = 0;
+        foreach (var ((c, r), _) in _elevLookup)
+        {
+            foreach (var (dc, dr) in new[] { (1, 0), (0, 1) })
+            {
+                int c2 = c + dc, r2 = r + dr;
+                if (!_elevLookup.ContainsKey((c2, r2))) continue;
+                if (HangArt(c, r) != 0 || HangArt(c2, r2) != 0) continue;
+                if (ElevOf(c, r) != ElevOf(c2, r2)) continue;
+                ebenePaare++;
+                probe.Col = c; probe.Row = r;
+                var ziel = new Vector2I(c2, r2);
+                float yA = BodyCenterAt(probe, c, r).Y, yB = BodyCenterAt(probe, c2, r2).Y;
+                for (int k = 1; k < 8; k++)
+                {
+                    float t = k / 8f;
+                    float ab = Mathf.Abs(FahrtY(probe, ziel, t) - Mathf.Lerp(yA, yB, t));
+                    if (ab > groessteAbweichung) groessteAbweichung = ab;
+                }
+            }
+        }
+        sb.Append($"\n  EBENES GELAENDE: {ebenePaare} Nachbarpaare ohne Schräge, "
+                + $"grösste Abweichung der Fahrt gegen die alte lineare Zwischenlage "
+                + $"{groessteAbweichung:0.###} Bildpunkte (erwartet 0)\n");
         return sb.ToString();
     }
 
@@ -27879,7 +27997,25 @@ public partial class MapEntityLayer : Node2D
                 int full = e.StepCost * SimHz;
                 arrived = e.Progress >= full;
                 if (!arrived)
-                    e.Pos = e.StepFrom.Lerp(dest, e.Progress / (float)full);
+                {
+                    float tf = e.Progress / (float)full;
+                    e.Pos = e.StepFrom.Lerp(dest, tf);
+                    // ⭐⭐ 27.08.2026 — DIE SCHRAEGE UNTERWEGS. Die lineare
+                    // Zwischenlage zieht zwischen zwei ZELLMITTEN; das Original
+                    // wertet die Schrägenformel laufend auf der eigenen Zelle
+                    // aus. Auf einer Rampe (Brückenauffahrt!) sind das zwei
+                    // verschiedene Dinge, sonst dasselbe — siehe FahrtY.
+                    //
+                    // Angebracht wird der UNTERSCHIED, nicht der Wert: nach
+                    // einem abgebrochenen Schritt beginnt `StepFrom` nicht auf
+                    // einer Zellmitte, und diese Sonderbehandlung (der Fehler
+                    // »Springen/Beamen« vom 23.08.) darf nicht verlorengehen.
+                    if (!Simulation.Hang.Aus)
+                    {
+                        float gerade = Mathf.Lerp(BodyCenterAt(e, e.Col, e.Row).Y, dest.Y, tf);
+                        e.Pos = new Vector2(e.Pos.X, e.Pos.Y + (FahrtY(e, target, tf) - gerade));
+                    }
+                }
             }
 
             if (arrived)
