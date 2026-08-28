@@ -47,6 +47,20 @@ public partial class MapEntityLayer
     /// ueberlappen, nimmt sie die Nachbarin mit. Siehe MapBaker.Objects.</summary>
     public static bool ObjektRechteck;
 
+    /// <summary><c>--nebel-objekte-alt</c> — der Stand von vor dem 28.08.2026:
+    /// aufragende Objekte sind auch im NIE ERKUNDETEN Gebiet zu sehen, nur
+    /// verdunkelt. Das Original zeigt dort statt des Objekts den
+    /// synthetisierten Boden — nicht, weil es das Objekt ausblendet, sondern
+    /// weil in seiner BEKANNTEN Kachelkarte gar kein Objekt steht
+    /// (<c>0x41FAE0</c>). Siehe MapBaker.SyntheseKachel.</summary>
+    public static bool NebelObjekteAlt;
+
+    /// <summary>Wieviele Objekte im letzten Bild durch ihren Boden ersetzt
+    /// wurden, und wie oft dafür kein Boden vorlag. Die zweite Zahl ist die
+    /// wichtige: ohne Boden bliebe ein Loch, und genau daran ist der Versuch
+    /// vom 24.08.2026 gescheitert.</summary>
+    public int NebelBodenGezeichnet, NebelBodenFehlt;
+
     /// <summary>Wieviele aufragende Objekte KEINEN eigenen Streifenplatz haben —
     /// eine alte Karte aus einem Bake vor dem 27.08.2026. Dann faellt der
     /// Zeichner auf das Rechteck zurueck, und der Fehler ist wieder da; darum
@@ -118,6 +132,13 @@ public partial class MapEntityLayer
         /// Überlappung, gemessen; siehe MapBaker.Objects).
         /// Jetzt kommt die Quelle aus dem Streifen und das Ziel von hier.</summary>
         public Vector2 Ziel;
+
+        /// <summary>Der SYNTHETISIERTE Boden dieser Zelle im Streifen — was das
+        /// Original zeigt, solange die Zelle nicht erkundet ist (bekannte Karte
+        /// <c>0x5539D0</c>, gefüllt von <c>0x41FAE0</c>). Leer, wenn die
+        /// Variantentafel für diese Zelle nichts hergibt.</summary>
+        public Rect2 BodenSrc;
+        public bool HatBoden;
 
         /// <summary>Die VERKOHLTE Fassung im Streifen, oder ein leeres Rechteck,
         /// wenn die Zelle kein Wald ist. Sie hat ein eigenes Ziel, weil der
@@ -368,6 +389,12 @@ public partial class MapEntityLayer
             }
             else if (!ObjektRechteck) ObjektOhneBild++;
 
+            if (o.ContainsKey("boden"))
+            {
+                int kb = GetI(o, "boden");
+                if (kb >= 0 && kb < kohle.Count) { e.HatBoden = true; e.BodenSrc = kohle[kb]; }
+            }
+
             if (o.ContainsKey("burnt"))
             {
                 int k = GetI(o, "burnt");
@@ -501,6 +528,27 @@ public partial class MapEntityLayer
             }
             else
             {
+// ⭐⭐⭐ 28.08.2026 — IM NIE ERKUNDETEN GEBIET STEHT DER BODEN,
+                // NICHT DAS OBJEKT. Das Original blendet nichts aus: seine
+                // BEKANNTE Kachelkarte (0x5539D0) trägt dort von vornherein
+                // eine synthetisierte Bodenkachel, und der Zeichner liest nur
+                // sie. Aufgedeckt wird die wahre Kachel hineinkopiert
+                // (@0x41FFC8 / @0x420245) — darum bleibt ein einmal gesehener
+                // Baum sichtbar, auch wenn der Nebel zurückkommt.
+                // Genau das beschreibt der Spieler, und sein Let's-Play-Bild
+                // zeigt es: Brücke (Lage >= 100, wahre Kachel von Anfang an)
+                // sichtbar, Bäume nicht.
+                if (!NebelObjekteAlt && FogActive && _fog != null
+                    && !_fog.IsSeen(e.Col, e.Row))
+                {
+                    if (e.HatBoden)
+                    {
+                        DrawTextureRectRegion(_objTex, new Rect2(e.Ziel, e.BodenSrc.Size), e.BodenSrc);
+                        NebelBodenGezeichnet++;
+                    }
+                    else NebelBodenFehlt++;
+                    continue;
+                }
                 DrawTextureRectRegion(_objTex, new Rect2(e.Ziel, e.Src.Size), e.Src);
             }
             ObjectsDrawn++;

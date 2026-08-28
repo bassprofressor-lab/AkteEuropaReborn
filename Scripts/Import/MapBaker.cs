@@ -288,6 +288,75 @@ public sealed class MapBaker
         return s;
     }
 
+    /// <summary>
+    /// <b>⭐⭐⭐ DIE BODENSYNTHESE DES ORIGINALS</b> — <c>0x41FA10</c>, die Kachel,
+    /// die das Original in seine BEKANNTE Karte schreibt, solange eine Zelle
+    /// nicht erkundet ist.
+    ///
+    /// <para>Das Original führt zwei Kachelkarten: die WAHRE (<c>0x677E20</c>,
+    /// aus sec1) und die BEKANNTE (<c>0x5539D0</c> = sec51, 256×256 Wörter,
+    /// spaltenweise) — und <b>der Zeichner liest nur die bekannte</b>
+    /// (<c>0x401410</c> → <c>0x41D0C0</c>). Beim Missionsstart füllt
+    /// <c>0x41FAE0</c> sie: Lagenbyte &lt; 100 → diese Synthese, sonst die wahre
+    /// Kachel. Ein unerkundeter Waldeintrag ist dort schlicht <b>Gras</b> — darum
+    /// braucht der Zeichner gar keinen Sichttest, und darum ist die BRÜCKE
+    /// (Lage 101) im Nebel sichtbar, ein Baum aber nicht. Beides genau so auf
+    /// seinem Let's-Play-Standbild.</para>
+    ///
+    /// <para><b>Die Rechnung, ganz gelesen</b> (<c>0x401631</c> → <c>0x4ACDE0</c>):</para>
+    /// <code>
+    ///   idx = Spalte*257 + Zeile                 ; das KNOTENgitter = sec2
+    ///   a=Ecke[idx]  b=Ecke[idx+257]  c=Ecke[idx+1]  d=Ecke[idx+258]
+    ///   m = min(a,b,c,d)                         ; die Geländeklasse
+    ///   Muster = 1000(a−m) + 100(b−m) + 10(c−m) + (d−m)
+    ///   M      = Index von Muster in der 16er-Tafel (@0x4F89F8)
+    ///   Index  = 19 * (15*(m + (M!=0 ? 4 : 0)) + M) + Schrägenart
+    ///   Satz   = CwpFile.Bodenvariante(Index)
+    ///   Kachel = Basis + (Zufall mod Anzahl);  Anzahl 0 → nichts
+    /// </code>
+    ///
+    /// <para>⚠ Die Ecken sitzen im KNOTENgitter, nicht zellweise: sec2 ist
+    /// <b>257×257</b> Byte (0x10201), nicht Breite×Höhe.</para>
+    ///
+    /// <para><b>Gegengeprobt, bevor eine Zeile Zeichner angefasst wurde:</b> auf
+    /// einer Zelle ohne Objekt und mit Lage &lt; 100 ist die bekannte Karte
+    /// gleich der wahren, die Synthese MUSS also im Variantenbereich der echten
+    /// Kachel landen. Über alle gelieferten Karten und <b>20 Kachelsätze:
+    /// 426.827 richtig, 36 daneben — 99,992 %</b> (map_02 allein 4030/4030).
+    /// ⚠ Die 36 (1 auf map_01, 35 auf NET05) sind noch nicht eingeordnet.</para>
+    ///
+    /// <para>⚠ Der Zufall ist hier an die ZELLE gebunden, nicht an einen Lauf:
+    /// ein Backofen muss zweimal dasselbe Bild liefern, sonst ist kein
+    /// Bildvergleich mehr möglich.</para>
+    /// </summary>
+    private static readonly int[] Eckenmuster =
+        { 0, 101, 11, 1010, 1100, 1, 10, 1000, 100, 111, 1011, 1110, 1101, 110, 1001, 1111 };
+
+    /// <summary>Wieviele Zellen eine Synthese bekommen haben und wie oft die
+    /// Tafel nichts hergab. Ohne die zweite Zahl sähe ein leerer Boden aus wie
+    /// ein richtiger.</summary>
+    public int SyntheseZellen, SyntheseLeer;
+
+    private int SyntheseKachel(int col, int row)
+    {
+        var kn = _map.Sec(2);
+        if (kn == null || kn.Length < 257 * 257) return -1;
+        int i = col * 257 + row;
+        if (i + 258 >= kn.Length) return -1;
+        int a = kn[i], b = kn[i + 257], c = kn[i + 1], d = kn[i + 258];
+        int m = Math.Min(Math.Min(a, b), Math.Min(c, d));
+        int muster = 1000 * (a - m) + 100 * (b - m) + 10 * (c - m) + (d - m);
+        int mi = Array.IndexOf(Eckenmuster, muster);
+        if (mi < 0) mi = 16;
+        int idx = 19 * (15 * (m + (mi != 0 ? 4 : 0)) + mi) + _map.FlagAt(col, row);
+        var (basis, anzahl) = _tiles.Bodenvariante(idx);
+        if (anzahl <= 0) { SyntheseLeer++; return -1; }
+        SyntheseZellen++;
+        // ⚠ zellgebunden, damit derselbe Backofen zweimal dasselbe Bild liefert
+        int wurf = (col * 73856093 ^ row * 19349663) & 0x7FFFFFFF;
+        return basis + wurf % anzahl;
+    }
+
     private Sprite? ObjectSprite(int code)
     {
         if (_object.TryGetValue(code, out var s)) return s;
@@ -446,7 +515,7 @@ public sealed class MapBaker
                           int Kohle, int KX, int KY,
                           int Asche, int AX, int AY,
                           int Imap, int Code, int Art,
-                          int Klasse, int Basis, int Eigen)> Objects = new();
+                          int Klasse, int Basis, int Eigen, int Boden)> Objects = new();
 
     /// <summary>
     /// <b>DER STREIFEN MIT DEN VERKOHLTEN BÄUMEN.</b>
@@ -900,10 +969,18 @@ public sealed class MapBaker
                         // ein Rechteck aus dem zusammengesetzten Bild und nimmt
                         // die Nachbarkachel mit.
                         int eigen = Streifenplatz(code[i]);
+                        // ⭐⭐⭐ 28.08.2026 — DER BODEN UNTER DEM OBJEKT, so wie ihn
+                        // das Original in seine BEKANNTE Karte schreibt, solange
+                        // die Zelle nicht erkundet ist. Siehe SyntheseKachel.
+                        // Damit kann der Zeichner ein Objekt im Nebel WEGLASSEN,
+                        // ohne ein Loch zu hinterlassen — genau die Vorbedingung,
+                        // an der die Ausblendung am 24.08.2026 gescheitert ist.
+                        int syn = SyntheseKachel(c, r);
+                        int boden = syn >= 0 ? Streifenplatz(syn) : -1;
                         Objects.Add((c, r, c * TileW,
                                      OriginY + r * TileH - elev[i] * ElevStep + BlitAnchor + sp.YOff,
                                      sp.W, sp.H, kohle, kx, ky, asche, ax, ay,
-                                     imap, code[i], art, klasse, grundkachel, eigen));
+                                     imap, code[i], art, klasse, grundkachel, eigen, boden));
                         continue;
                     }
                     Blit(sp, c, r, elev[i]);

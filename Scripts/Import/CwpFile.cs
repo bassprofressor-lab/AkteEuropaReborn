@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Import;
+﻿namespace AkteEuropaReborn.Import;
 
 using System;
 using System.IO;
@@ -72,6 +72,31 @@ public sealed class CwpFile : IBuildingPatterns
     // Measured, not assumed: over all 23 shipped .CWP the sum
     //   12 + 0x23a0 + frames*4 + objects*4 + blob + 1000+72000+3600+1600+5000+2+5000
     // hits the file length EXACTLY, 23 of 23.
+    /// <summary>
+    /// <b>⭐⭐⭐ DIE VARIANTENTAFEL DER BODENSYNTHESE</b> — der Aux-Block ab
+    /// Offset <c>0x0c</c>, den <c>0x4C8DAD</c> nach <c>0xBAA800</c> liest.
+    ///
+    /// <para>2280 Sätze zu vier Byte: <c>word</c> Grundkachel, <c>byte[+2]</c>
+    /// Variantenzahl, <c>byte[+3]</c> ungedeutet. <b>2280 = 8 · 15 · 19</b> —
+    /// Geländeklasse × Eckenmuster × Schrägenart, und genau so wird der Index
+    /// gerechnet (siehe <c>MapBaker.SyntheseKachel</c>). Dass die drei
+    /// Dimensionen die Tafelgrösse auf den Satz genau ausfüllen, ist die erste
+    /// Bestätigung der Formel; die zweite steht im Kopf von
+    /// <c>SyntheseKachel</c>.</para>
+    ///
+    /// <para>Der Block lag seit jeher in <see cref="AuxSize"/> — gelesen, aber
+    /// nie gedeutet.</para></summary>
+    public const int BodenSatzCount = 2280;
+
+    /// <summary>Ein Satz der Variantentafel: Grundkachel und wieviele
+    /// Varianten darauf folgen. Anzahl 0 heisst »hier gibt es nichts«.</summary>
+    public (int Basis, int Anzahl) Bodenvariante(int index)
+    {
+        if (index < 0 || index >= BodenSatzCount) return (0, 0);
+        int o = 0x0c + index * 4;
+        return (BitConverter.ToUInt16(_d, o), _d[o + 2]);
+    }
+
     public const int BuildingTypeCount = 100, BuildingTypeStride = 10;
     public const int PatternCount = 400, PatternStride = 180;
 

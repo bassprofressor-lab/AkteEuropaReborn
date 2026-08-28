@@ -808,7 +808,8 @@ public sealed class ContentBuilder
                 lagenZellen += baker.LagenZellen;
                 Say($"{outName}: {img.GetWidth()}x{img.GetHeight()}, " +
                     $"{baker.Objects.Count} aufragende Objekte in die zweite Ebene, "
-                  + $"{baker.ObjektbodenFlach} Objektzellen mit eigenem Boden");
+                  + $"{baker.ObjektbodenFlach} Objektzellen mit eigenem Boden, "
+                  + $"{baker.SyntheseZellen} Nebelboeden synthetisiert ({baker.SyntheseLeer} ohne Tafeleintrag)");
             }
             catch (Exception e) { failed++; Say($"{outName}: {e.Message}"); }
         }
@@ -1476,6 +1477,9 @@ public sealed class ContentBuilder
                 // zusammengesetzten Bild und nimmt die Nachbarkachel mit;
                 // Herleitung und Messung im Kopf von MapBaker.Objects.
                 if (o.Eigen >= 0) sb.Append($",\"bild\":{o.Eigen}");
+                // ⭐ Der synthetisierte Boden dieser Zelle im selben Streifen —
+                // was das Original zeigt, solange die Zelle nicht erkundet ist.
+                if (o.Boden >= 0) sb.Append($",\"boden\":{o.Boden}");
                 // Der Platz der VERKOHLTEN Fassung im Streifen und wohin sie
                 // gehoert. Fehlt, wenn die Zelle kein Wald ist.
                 if (o.Kohle >= 0)
