@@ -41,6 +41,14 @@ public partial class MapEntityLayer
 {
     private Texture2D? _objTex;
 
+    /// <summary>Die zweite Ebene als Bild, fuer die Uebersichtskarte.
+    ///
+    /// <para>⚠ Sie ist HOEHER als die Karte: unten haengt der Streifen mit den
+    /// verkohlten Baeumen an (MapBaker.BurntAtlas). Wer sie flaechig zeichnet,
+    /// muss auf <see cref="MapPixelSize"/> zuschneiden, sonst klebt der
+    /// Streifen mit im Bild.</para></summary>
+    public Texture2D? ObjektEbene => _objTex;
+
     /// <summary><c>--objekt-rechteck</c> — der Stand von vor dem 27.08.2026:
     /// die aufragende Kachel wird als RECHTECK aus dem zusammengesetzten Bild
     /// geschnitten und an dieselbe Stelle gemalt. Wo sich zwei solche Kacheln

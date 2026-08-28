@@ -42,6 +42,60 @@ public partial class Minimap : Control
     private Func<Texture2D?>? _fog;
 
     /// <summary>
+    /// ⭐⭐⭐ 28.08.2026 — <b>DIE OBJEKTEBENE GEHOERT MIT IN DIE UEBERSICHT.</b>
+    ///
+    /// <para>Gemeldet: »einerseits war die stadt korrekt, aber da wo neutrale
+    /// gebaeude stehen, waren die schattierungen in der minimap«. Die Ursache
+    /// lag nicht hier und nicht im Backofen, sondern dazwischen: eine
+    /// KULISSENZELLE traegt im Gitter den Gebaeudekachelcode selbst, damit ist
+    /// sie eine Objektzelle, faellt in <c>MapBaker</c> weder in den flachen
+    /// noch in den eigenen Durchgang — und ins Kartenbild wird dort NICHTS
+    /// gemalt. Stehen bleibt die <c>BuildBase</c>-Flutfuellung, unsere
+    /// Erfindung aus den acht Nachbarn.</para>
+    ///
+    /// <para>Auf dem Schlachtfeld sieht man das nie: die Kulissenkachel liegt
+    /// als zweite Ebene darueber und deckt. Die Uebersicht bekam bisher nur
+    /// <c>map_XX.png</c> — dort lag die Flutfuellung blank. Gemessen als
+    /// Fleckkontrast gegen den Umgebungsring: 11,7 unter Spielergebaeuden,
+    /// 13,1 unter gebauten neutralen (beides Nullmodellniveau 10,1), aber
+    /// <b>30,2 unter Kulissenbauten</b>, 45 % davon ueber dem Nullmodell-P95.
+    /// Genau »da wo neutrale gebaeude stehen«.</para>
+    ///
+    /// <para>⚠⚠ <b>Warum die Behebung NICHT im Backofen sitzt.</b> Der
+    /// naheliegende Griff waere, die Kulissenkachel flach ins Kartenbild
+    /// mitzubacken. Das ist genau die Aenderung, die am 24.08. gemeldet und
+    /// zurueckgenommen wurde: »ich sehe schon Gebaeude im Fog of War
+    /// trotzdem«. Das Kartenbild sieht man immer; was im Nebel verschwinden
+    /// koennen muss, darf nicht darin liegen. Der Dreck wird darum dort
+    /// zugedeckt, wo er sichtbar ist.</para>
+    ///
+    /// <para>Im Original stellt sich die Frage gar nicht: es kennt kein
+    /// zusammengesetztes Bodenbild, sondern malt jedes Bild neu aus der
+    /// bekannten Karte (<c>0x401410</c> je Zelle). An einer Kulissenzelle malt
+    /// es genau EINE Kachel — die Kulissenkachel selbst, ueber den
+    /// Gebaeudezweig des verzahnten Durchgangs (<c>0x4B44C6</c>: ausserhalb
+    /// [60000,60300) normaler Draw; <c>IsBuilt == 0</c> springt auf denselben
+    /// normalen Draw <c>0x4B4587</c>). Und sie deckt: ueber alle 41 Karten
+    /// decken <b>6.550 von 6.611</b> Kulissenzellen (99,1 %) ihre 40x20-Box zu
+    /// 100 %; nach Vereinigung mit den Nachbarkacheln bleiben 29 Zellen mit
+    /// zusammen 88 Streupunkten, an denen auch das Original zeigt, was gerade
+    /// dasteht.</para>
+    ///
+    /// <para>Die Ebene liegt UNTER dem Nebel, wie auf dem Schlachtfeld: was
+    /// nicht erkundet ist, deckt der Nebel danach wieder zu. Rueckfall
+    /// <c>--uebersicht-ohne-objekte</c>.</para></summary>
+    private Func<Texture2D?>? _objekte;
+
+    /// <summary><c>--uebersicht-ohne-objekte</c> — der Stand von vor dem
+    /// 28.08.2026: die Uebersicht zeigt nur das Kartenbild.</summary>
+    public static bool OhneObjektebene;
+
+    /// <summary>Wie oft die Objektebene wirklich in die Uebersicht gezeichnet
+    /// wurde. ⚠ Eigene Zahl neben <see cref="Repaints"/>: eine Ebene, die nie
+    /// ankommt, sieht sonst genauso aus wie eine, die nichts aendert.</summary>
+    public int ObjektebeneGezeichnet;
+
+    /// <summary>
     /// DER EIGENE STARTPLATZ, in Kartenbildpunkten — oder null.
     ///
     /// <para>Gewuenscht als B7: »Bei Gefecht Startplatz wuerde ich gerne sehen
@@ -67,8 +121,10 @@ public partial class Minimap : Control
     public void Setup(Texture2D terrain, Vector2 mapPixels,
                       Func<List<(Vector2 Pos, int Owner, bool Building)>> dots,
                       Func<Rect2> view, Func<List<Alarm>> alarms, Action<Vector2> jump,
-                      Func<Texture2D?>? fog = null, Func<Vector2?>? home = null)
+                      Func<Texture2D?>? fog = null, Func<Vector2?>? home = null,
+                      Func<Texture2D?>? objekte = null)
     {
+        _objekte = objekte;
         _home = home;
         _terrain = terrain;
         _mapPixels = mapPixels;
@@ -143,6 +199,21 @@ public partial class Minimap : Control
         var full = new Rect2(Vector2.Zero, Size);
 
         DrawTextureRect(_terrain, full, false, new Color(0.75f, 0.78f, 0.8f));
+
+        // Die zweite Ebene darueber, in derselben Graustufung: sie traegt die
+        // Kulissenbauten, die im Kartenbild nur ihre Flutfuellung
+        // zuruecklassen. Herleitung und Messung bei _objekte.
+        //
+        // ⚠ Auf die Kartengroesse zuschneiden — unten an der Ebene haengt der
+        // Streifen mit den verkohlten Baeumen (MapBaker.BurntAtlas), der sonst
+        // in die Uebersicht gestaucht wird.
+        var obj = OhneObjektebene ? null : _objekte?.Invoke();
+        if (obj != null && _mapPixels.X > 0 && _mapPixels.Y > 0)
+        {
+            DrawTextureRectRegion(obj, full, new Rect2(Vector2.Zero, _mapPixels),
+                                  new Color(0.75f, 0.78f, 0.8f));
+            ObjektebeneGezeichnet++;
+        }
 
         // The fog, over the terrain but UNDER the dots and the frame: what one
         // remembers of the ground is dimmed, what one is watching right now

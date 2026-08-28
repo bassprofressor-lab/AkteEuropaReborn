@@ -41,6 +41,17 @@ public sealed class MapBaker
     /// ihre eigene Kachel. Siehe die Begruendung im Durchgang A/B.</summary>
     public static bool KeinObjektboden;
 
+    /// <summary><c>--kohle-aus-code</c> — der Stand von vor dem 28.08.2026:
+    /// verkohlte und abgebrannte Kachel eines zerstoerbaren Objekts als
+    /// <c>code+1</c>/<c>code+2</c> statt aus der Arttafel.</summary>
+    public static bool KohleAusCode;
+
+    /// <summary>Zerstoerbare Objekte, bei denen die Arttafel eine ANDERE
+    /// Brandkachel liefert als der Zellcode. ⚠ Eigene Zahl: ueber alle Karten
+    /// muessen es genau 20 sein, alle auf map_16 — bleibt sie 0, ist die
+    /// Aenderung wirkungslos durchgelaufen.</summary>
+    public int KohleAusArttafel;
+
     /// <summary><c>--synthese-hintergrund</c> — die Bodensynthese auch als
     /// HINTERGRUND jeder Zelle statt der Flutfuellung <c>BuildBase</c>.
     /// ⚠⚠ AUS, und das ist gemessen: 994 Zellen auf map_02 bekommen ihre wahre
@@ -1016,23 +1027,6 @@ public sealed class MapBaker
                         // (burnt/ash): der Zeichner kann dann beides gleich
                         // behandeln. Unterschieden wird ueber `imap`, nicht
                         // ueber »hat eine verkohlte Kachel«.
-                        if (imap >= 61000 && imap < 64000)
-                        {
-                            kohle = Streifenplatz(code[i] + 1);
-                            asche = Streifenplatz(code[i] + 2);
-                            if (kohle >= 0)
-                            {
-                                kx = c * TileW;
-                                ky = OriginY + r * TileH - elev[i] * ElevStep
-                                     + BlitAnchor + kohleSpr[kohle].YOff;
-                            }
-                            if (asche >= 0)
-                            {
-                                ax = c * TileW;
-                                ay = OriginY + r * TileH - elev[i] * ElevStep
-                                     + BlitAnchor + kohleSpr[asche].YOff;
-                            }
-                        }
 
                         // ⭐⭐⭐ 24.08.2026 — DIE ART EINES ZERSTOERBAREN OBJEKTS.
                         //
@@ -1062,6 +1056,57 @@ public sealed class MapBaker
                         // ein zweiter Zuordnungskreis.
                         int klasse = -1, grundkachel = -1;
                         if (art >= 0) (klasse, grundkachel) = _tiles.ObjType(art);
+                        // ⭐⭐⭐ 28.08.2026 — KOHLE UND ASCHE KOMMEN AUS DER
+                        // ARTTAFEL, NICHT AUS DEM ZELLCODE.
+                        //
+                        // Hier stand `code[i] + 1` und `code[i] + 2`, begruendet mit
+                        // »code = 10000 + Grundkachel, an den fuenf Objekten von map_01
+                        // nachgeprueft«. Das war eine STICHPROBE, und sie hat die
+                        // Ausnahme nicht getroffen.
+                        //
+                        // Das Original rechnet ZUSTANDSUNABHAENGIG aus der Arttafel, an
+                        // zwei Stellen woertlich:
+                        //     0x4CA593  mov ax, word ptr [eax*8 + 0xBB3B62]
+                        //     0x4CA59B  add ax, 0x2711        ; +10001 brennt
+                        //     0x4CA76A  mov ax, word ptr [eax*8 + 0xBB3B62]
+                        //     0x4CA772  add ax, 0x2712        ; +10002 Asche
+                        // `eax` ist dabei das ARTBYTE des Objektsatzes
+                        // (byte[esi + 0xC03A32]), nicht der Code der Zelle.
+                        //
+                        // GEMESSEN ueber alle Kartendateien: 2.426 von 2.446 Objektzellen
+                        // stimmen ohnehin ueberein, 20 nicht — alle auf 16.CWM, alle um
+                        // genau +1: die Karte legt dort schon die »brennt«-Kachel als
+                        // Zustand 0 hin. Bei uns zeigte ein angezuendetes Objekt dieser 20
+                        // sofort das Zerstoert-Bild und als Asche eine familienfremde
+                        // Kachel. Nullmodell: bei 3.583 verschiedenen Objektcodes traefe
+                        // der Zufall zu 0,03 %.
+                        //
+                        // ⚠ Der Block steht JETZT hinter der Artaufloesung — vorher
+                        // stand er davor und `grundkachel` gab es hier noch nicht.
+                        // ⚠ Faellt die Arttafel aus, bleibt es beim alten Weg: eine Karte
+                        // ohne Arttafel soll nicht schlechter dastehen als vorher.
+                        // Rueckfall: --kohle-aus-code.
+                        if (imap >= 61000 && imap < 64000)
+                        {
+                            int brandbasis = (!KohleAusCode && grundkachel >= 0)
+                                ? grundkachel + CwpFile.ObjectCodeBase
+                                : code[i];
+                            if (brandbasis != code[i]) KohleAusArttafel++;
+                            kohle = Streifenplatz(brandbasis + 1);
+                            asche = Streifenplatz(brandbasis + 2);
+                            if (kohle >= 0)
+                            {
+                                kx = c * TileW;
+                                ky = OriginY + r * TileH - elev[i] * ElevStep
+                                     + BlitAnchor + kohleSpr[kohle].YOff;
+                            }
+                            if (asche >= 0)
+                            {
+                                ax = c * TileW;
+                                ay = OriginY + r * TileH - elev[i] * ElevStep
+                                     + BlitAnchor + kohleSpr[asche].YOff;
+                            }
+                        }
                         // ⚠ Das FACH (zweites Feld) ist fuer eine Kulisse die
                         // vorderste Zeile ihres Bauwerks, die ZEICHENPOSITION
                         // (Y darunter) bleibt die der Kachel.

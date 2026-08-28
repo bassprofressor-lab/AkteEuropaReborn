@@ -2508,9 +2508,45 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Ist diese Zelle Gebaeuderumpf?</summary>
     public bool IstKoerperzelle(int col, int row) => _koerperZelle.Contains((col, row));
 
+    /// <summary><c>--koerper-alt</c> — der Stand von vor dem 28.08.2026: jede
+    /// Gebaeudezelle ist Rumpf, das Lagenbyte wird nicht gefragt.</summary>
+    public static bool KoerperAlt;
+
+    /// <summary>Wie viele Gebaeudezellen ueber das Lagenbyte vom Rumpf in den
+    /// Boden gewechselt sind. ⚠ Eigene Zahl, damit eine wirkungslose Aenderung
+    /// nicht als Erfolg durchgeht — auf NET02 muessen es genau 42 sein.</summary>
+    public int FlachbauZellen { get; private set; }
+
     private void DropSteppingFootprints(GDict root)
     {
         _koerperZelle.Clear();
+        FlachbauZellen = 0;
+
+        // ⭐⭐ 28.08.2026 — GEBAEUDEZELLEN MIT LAGE 1..98 SIND BODEN.
+        //
+        // Das Original entscheidet zweimal: der flache Durchgang @0x4B4274
+        // MALT Lage 1..98, der verzahnte @0x4B448F UEBERSPRINGT 1..99. Eine
+        // solche Zelle liegt also unter allem, statt in ihrer Zeile ueber den
+        // Einheiten. Wir haben _koerperZelle bisher allein aus der Belegung
+        // gebaut und diese Zellen damit zu Rumpf gemacht, der Einheiten
+        // verdeckt.
+        //
+        // 216 Zellen ueber alle Kartendateien, alle mit exakt Lage 98 (der
+        // Wert des Gebaeudebaus @0x43DE88), auf sieben Netzkarten.
+        // Die Liste kommt aus dem Export, weil das Lagenbyte (Sektion 20) zur
+        // Laufzeit nicht vorliegt — siehe ContentBuilder, "flat_buildings".
+        // ⚠ Eine Karte aus einem aelteren Import hat den Schluessel nicht;
+        // dann bleibt es beim alten Verhalten, statt dass etwas kaputtgeht.
+        var flachbau = new HashSet<(int, int)>();
+        if (!KoerperAlt && root.TryGetValue("flat_buildings", out var fbv) &&
+            fbv.VariantType == Variant.Type.Array)
+            foreach (var item in fbv.AsGodotArray())
+            {
+                if (item.VariantType != Variant.Type.Dictionary) continue;
+                var fc = item.AsGodotDictionary<string, Variant>();
+                flachbau.Add((GetI(fc, "col"), GetI(fc, "row")));
+            }
+
         if (!root.TryGetValue("spatial", out var sv) ||
             sv.VariantType != Variant.Type.Dictionary) return;
         var sp = sv.AsGodotDictionary<string, Variant>();
@@ -2543,8 +2579,13 @@ public partial class MapEntityLayer : Node2D
             // Groesse. Belegt am Nachschubposten von map_02: 60000 steht nur
             // auf (13..16,19), (13..15,20), (13..14,21); die ganze Plattform
             // traegt 65534.
+            //   * Lage 1..98 -> trotz 60000+n BODEN, siehe flachbau oben.
             if (v is >= 60000 and <= 60299)
-                _koerperZelle.Add((GetI(c, "col"), GetI(c, "row")));
+            {
+                var zelle = (GetI(c, "col"), GetI(c, "row"));
+                if (flachbau.Contains(zelle)) FlachbauZellen++;
+                else _koerperZelle.Add(zelle);
+            }
             if (v is < 0 or >= 8000) continue;         // kein Einheitensteckplatz
             if (!cells.TryGetValue(v, out var l)) cells[v] = l = new List<(int, int)>();
             l.Add((GetI(c, "col"), GetI(c, "row")));
@@ -15322,6 +15363,10 @@ public partial class MapEntityLayer : Node2D
                        ? "   ⚠⚠ KEINE - dann faellt die neue Trennung auf 'alles Boden' zurueck "
                          + "und der Umbau waere unbemerkt wirkungslos"
                        : "") + "\n");
+            // Die Gegenprobe zur Lagenbyte-Ausnahme vom 28.08.: auf NET02
+            // muessen es genau 42 sein, auf map_01..15 keine einzige.
+            sb.Append($"  davon ueber Lage 1..98 in den Boden: {FlachbauZellen}"
+                    + (KoerperAlt ? "   (--koerper-alt: Ausnahme AUS)" : "") + "\n");
         }
 
 

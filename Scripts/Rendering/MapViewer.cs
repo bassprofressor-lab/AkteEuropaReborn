@@ -1768,6 +1768,7 @@ public partial class MapViewer : Node2D
             else if (a == "--objekt-rechteck") MapEntityLayer.ObjektRechteck = true;
             else if (a == "--nebel-objekte-alt") MapEntityLayer.NebelObjekteAlt = true;
             else if (a == "--kein-objektboden") Import.MapBaker.KeinObjektboden = true;
+            else if (a == "--kohle-aus-code") Import.MapBaker.KohleAusCode = true;
             else if (a.StartsWith("--hang-mal=")) Simulation.Hang.Faktor = a["--hang-mal=".Length..].ToInt();
             else if (a.StartsWith("--bruecke-lage=")) MapEntityLayer.BrueckeShotLage = a["--bruecke-lage=".Length..].ToInt();
             else if (a == "--klick-log") UI.WindowManager.KlickProtokoll = true;
@@ -1802,6 +1803,8 @@ public partial class MapViewer : Node2D
             else if (a == "--nebel-alt") MapEntityLayer.FogDimOld = true;
             else if (a == "--keine-objekt-verdeckung")
                 MapEntityLayer.NoObjectOcclusion = true;
+            else if (a == "--uebersicht-ohne-objekte") Minimap.OhneObjektebene = true;
+            else if (a == "--koerper-alt") MapEntityLayer.KoerperAlt = true;
             else if (a == "--mechaniker-check") _mechCheckFlag = true;
             else if (a == "--flug-check") _flugCheckFlag = true;
             else if (a == "--schiff-waffe-check") _schiffCheckFlag = true;
@@ -3463,7 +3466,10 @@ public partial class MapViewer : Node2D
             // ruft sie, nur dieser eine tat es nicht.
             world => { _camera.Position = world; ClampCamera(); },
             _entities.FogTexture,
-            _entities.MinimapHome);
+            _entities.MinimapHome,
+            // Die Objektebene gehoert mit in die Uebersicht - sonst liegt unter
+            // jedem Kulissenbau die blanke Flutfuellung. Herleitung: Minimap._objekte.
+            () => _entities.ObjektEbene);
         PlaceMinimap();
         GetViewport().SizeChanged += PlaceMinimap;
     }

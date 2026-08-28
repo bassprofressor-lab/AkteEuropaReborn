@@ -810,7 +810,10 @@ public sealed class ContentBuilder
                     $"{baker.Objects.Count} aufragende Objekte in die zweite Ebene, "
                   + $"{baker.ObjektbodenFlach} Objektzellen mit eigenem Boden, "
                   + $"{baker.SyntheseZellen} Nebelboeden synthetisiert ({baker.SyntheseLeer} ohne Tafeleintrag), "
-                  + $"{baker.SyntheseBoden} Hintergrund, {baker.NebelBoden.Count} Nebeldecke");
+                  + $"{baker.SyntheseBoden} Hintergrund, {baker.NebelBoden.Count} Nebeldecke"
+                  // Die Gegenprobe zur Arttafel-Aenderung vom 28.08.:
+                  // ueber alle Karten genau 20, alle auf map_16.
+                  + $", {baker.KohleAusArttafel} Brandkacheln aus der Arttafel");
             }
             catch (Exception e) { failed++; Say($"{outName}: {e.Message}"); }
         }
@@ -1455,6 +1458,46 @@ public sealed class ContentBuilder
                 sb.Append("\"ramps_note\":\"Rampenzellen aus Sektion 20 (im Original ");
                 sb.Append("0x542E18): >= 100 zum Beladen, >= 200 zum Entladen.\",");
                 sb.Append("\"ramps\":[").Append(rampen).Append("],");
+            }
+        }
+        // ⭐⭐ 28.08.2026 — DIE FLACHEN GEBAEUDEZELLEN.
+        //
+        // Eine Gebaeudezelle (Belegung 60000..60299) ist bei uns bisher immer
+        // Rumpf gewesen: _koerperZelle wird allein aus der Belegung gebaut. Das
+        // Original entscheidet aber ZWEIMAL — an der Belegung UND am Lagenbyte:
+        //   flacher Durchgang   @0x4B4274: Lage 1..98 -> MALEN
+        //   verzahnter Durchgang @0x4B448F: Lage 1..99 -> UEBERSPRINGEN
+        // Solche Zellen liegen im Original also UNTER allem, statt in ihrer
+        // Zeile ueber den Einheiten.
+        //
+        // Gezaehlt ueber alle Kartendateien: 216 Zellen, und ALLE tragen exakt
+        // Lage 98 - der Wert, den der Gebaeudebau @0x43DE88 schreibt. Sie
+        // stehen auf sieben Netzkarten (NET01 12, NET02 42, NET03 24, NET04 42,
+        // NET05 30, NET06 48, NET08 18), Codes 11372..11810.
+        //
+        // ⚠ Die Zahl je Karte gehoert in den Bericht, damit eine wirkungslose
+        // Aenderung nicht als Erfolg durchgeht - dieselbe Bauart wie beim
+        // Objektboden vom selben Tag.
+        {
+            var flach = new System.Text.StringBuilder();
+            int nf = 0;
+            for (int c = 0; c < b.Width; c++)
+                for (int r = 0; r < b.Height; r++)
+                {
+                    int imap = MapForest.Imap(m, c, r);
+                    if (imap is < 60000 or > 60299) continue;
+                    int lage = MapForest.Lage(m, c, r);
+                    if (lage is < 1 or > 98) continue;
+                    if (nf++ > 0) flach.Append(',');
+                    flach.Append($"{{\"col\":{c},\"row\":{r},\"lage\":{lage}}}");
+                }
+            if (nf > 0)
+            {
+                sb.Append("\"flat_buildings_note\":\"Gebaeudezellen mit Lagenbyte ");
+                sb.Append("1..98: das Original malt sie im FLACHEN Durchgang ");
+                sb.Append("(@0x4B4274) und ueberspringt sie im verzahnten ");
+                sb.Append("(@0x4B448F) - sie sind Boden, nicht Rumpf.\",");
+                sb.Append("\"flat_buildings\":[").Append(flach).Append("],");
             }
         }
         if (b.Objects.Count > 0)
