@@ -344,6 +344,30 @@ public sealed class MapBaker
     /// ein richtiger.</summary>
     public int SyntheseZellen, SyntheseLeer, SyntheseBoden;
 
+    /// <summary>
+    /// <b>⭐⭐⭐ DIE NEBELDECKE — Zellen, deren WAHRE Kachel nicht die ist, die das
+    /// Original im unerkundeten Gebiet zeigt.</b>
+    ///
+    /// <para>Gemeldet, nachdem Objekte und Gebäude im Nebel richtig
+    /// verschwanden: es blieben »füllstellen« stehen — auf seinem Bild liest
+    /// man den ganzen Grundriss der Gegnerbasis an ihren Betonplatten und
+    /// Strassen ab. Der Grund: unser Kartenbild trägt die WAHRE Kachel, das
+    /// Original zeigt bis zum Aufdecken die synthetisierte.</para>
+    ///
+    /// <para>Gemessen an map_02: von 5427 Zellen (ohne Lagenbyte ≥ 100) liegen
+    /// <b>4030</b> in der Variantenfamilie ihrer Synthese — dort sieht man
+    /// keinen Unterschied — und <b>1397</b> weichen ab. Sie tragen allesamt
+    /// Codes ≥ 10000, also Bodendekor aus der dir2-Bank: genau die Platten und
+    /// Wege. Nur diese Zellen brauchen eine Decke.</para>
+    ///
+    /// <para>⚠ Zellen mit Lagenbyte ≥ 100 bleiben aussen vor — das Original
+    /// schreibt für sie von Anfang an die wahre Kachel in die bekannte Karte
+    /// (@0x41FB28), und darum ist die BRÜCKE im Nebel zu sehen.</para>
+    ///
+    /// <para>Je Eintrag: die Zelle, wohin die Kachel gehört, und ihr Platz im
+    /// Streifen (<see cref="BurntAtlas"/>).</para></summary>
+    public readonly List<(int Col, int Row, int X, int Y, int Slot)> NebelBoden = new();
+
     private int SyntheseKachel(int col, int row)
     {
         var kn = _map.Sec(2);
@@ -710,6 +734,45 @@ public sealed class MapBaker
                     for (int lvl = 0; lvl <= elev[i]; lvl++) Blit(s, c, r, lvl);
                 }
 
+        // ⚠ 28.08.2026 NACH VORN GEZOGEN: der Streifen wird schon im
+        //   Durchgang A/B gebraucht (die NEBELDECKE, siehe NebelBoden).
+        //   Die Reihenfolge im Streifen aendert sich dadurch nicht --
+        //   Streifenplatz vergibt die Plaetze in Aufrufreihenfolge, und
+        //   die Gegenprobe ist die Zahl der Eintraege je Karte.
+        var kohleSlot = new Dictionary<int, int>();
+        var kohleSpr = new List<Sprite>();
+
+        // ⚠⚠ 28.08.2026 NACH VORN: die Clear-Aufrufe standen hinter Durchgang
+        //   A/B, und seit die NEBELDECKE dort schon Streifenplaetze vergibt,
+        //   loeschten sie genau die Eintraege wieder, die eben angelegt
+        //   worden waren — `kohleSlot` behielt die Nummern, `BurntAtlas` war
+        //   leer. Sichtbar wurde es daran, dass `boden` aus dem JSON
+        //   verschwand, OHNE dass eine Zahl im Bericht sich ruehrte.
+        Objects.Clear();
+        BurntAtlas.Clear();
+        NebelBoden.Clear();
+
+        // Eine Ersatzkachel in den Streifen legen — oder ihren Platz
+        // wiederfinden, denn dieselben paar Codes kommen tausendfach vor.
+        // −1, wenn der Kachelsatz sie nicht hat; dann bleibt der Baum eben
+        // stehen, statt dass ein Loch entsteht.
+        int Streifenplatz(int tileCode)
+        {
+            if (kohleSlot.TryGetValue(tileCode, out int slot)) return slot;
+            // ⚠ Die Bildbank waehlt der CODE, wie im Original @0x4B428F:
+            //   unter 10000 die Bodenbank, darueber die Objektbank. Vorher
+            //   stand hier nur ObjectSprite — damit lieferte jede
+            //   SYNTHETISIERTE Bodenkachel unter 10000 stillschweigend -1.
+            var ks = tileCode >= CwpFile.ObjectCodeBase ? ObjectSprite(tileCode)
+                                                        : Frame(tileCode);
+            if (ks == null) return -1;
+            slot = kohleSpr.Count;
+            kohleSlot[tileCode] = slot;
+            kohleSpr.Add(ks);
+            BurntAtlas.Add((tileCode, 0, 0, ks.W, ks.H, ks.YOff));
+            return slot;
+        }
+
         // passes A and B — backdrop, then the cell's own detail
         for (int r = 0; r < h; r++)
             for (int c = 0; c < w; c++)
@@ -798,6 +861,22 @@ public sealed class MapBaker
                 bool ownIsFull = !isObj && Frame(code[i])?.Full == true;
                 if (b >= 0 && !ownIsFull)
                     Blit(b >= CwpFile.ObjectCodeBase ? ObjectSprite(b) : Frame(b), c, r, elev[i]);
+                // ⭐⭐⭐ DIE NEBELDECKE. Weicht die wahre Kachel von der Synthese
+                // ab, muss der Zeichner im unerkundeten Gebiet die Synthese
+                // zeigen — siehe den Kopf von NebelBoden.
+                if (syntheseB >= 0 && !KeinObjektboden && lageC < 100)
+                {
+                    var sy = syntheseB >= CwpFile.ObjectCodeBase
+                             ? ObjectSprite(syntheseB) : Frame(syntheseB);
+                    if (sy != null && syntheseB != code[i])
+                    {
+                        int slot = Streifenplatz(syntheseB);
+                        if (slot >= 0)
+                            NebelBoden.Add((c, r, c * TileW,
+                                OriginY + r * TileH - elev[i] * ElevStep + BlitAnchor + sy.YOff,
+                                slot));
+                    }
+                }
                 if (!isObj) Blit(Frame(code[i]), c, r, elev[i]);
                 else if (befahrbar || eigenFlach)
                 {
@@ -828,30 +907,10 @@ public sealed class MapBaker
         // ⚠ Ein WALD kann brennen, und Brennen ist im Original ein
         // Kacheltausch. Darum wandert jede Waldzelle zusaetzlich mit ihrer
         // VERKOHLTEN Fassung in den Streifen — siehe BurntAtlas.
-        Objects.Clear();
-        BurntAtlas.Clear();
         _burnt = null; _burntH = 0;
         var isBuilding = BuildingCells(code);
         // Kachelcode der verkohlten Fassung -> Platz im Streifen. Hoechstens 57
         // je Karte, darum eine kleine Tafel und kein Bild je Zelle.
-        var kohleSlot = new Dictionary<int, int>();
-        var kohleSpr = new List<Sprite>();
-
-        // Eine Ersatzkachel in den Streifen legen — oder ihren Platz
-        // wiederfinden, denn dieselben paar Codes kommen tausendfach vor.
-        // −1, wenn der Kachelsatz sie nicht hat; dann bleibt der Baum eben
-        // stehen, statt dass ein Loch entsteht.
-        int Streifenplatz(int tileCode)
-        {
-            if (kohleSlot.TryGetValue(tileCode, out int slot)) return slot;
-            var ks = ObjectSprite(tileCode);
-            if (ks == null) return -1;
-            slot = kohleSpr.Count;
-            kohleSlot[tileCode] = slot;
-            kohleSpr.Add(ks);
-            BurntAtlas.Add((tileCode, 0, 0, ks.W, ks.H, ks.YOff));
-            return slot;
-        }
         if (objects)
             for (int r = 0; r < h; r++)
                 for (int c = 0; c < w; c++)

@@ -61,6 +61,48 @@ public partial class MapEntityLayer
     /// vom 24.08.2026 gescheitert.</summary>
     public int NebelBodenGezeichnet, NebelBodenFehlt;
 
+    /// <summary>Die NEBELDECKE: je Zelle, deren wahre Kachel von der
+    /// synthetisierten abweicht, wohin sie gehört und ihr Platz im Streifen.
+    /// Siehe MapBaker.NebelBoden.</summary>
+    private readonly List<(int Col, int Row, Vector2 Ziel, Rect2 Src)> _nebelDecke = new();
+
+    /// <summary>Wieviele Deckkacheln im letzten Bild gemalt wurden.</summary>
+    public int NebelDeckeGezeichnet;
+
+    private void LiesNebeldecke(GDict meta, List<Rect2> kohle)
+    {
+        _nebelDecke.Clear();
+        if (!meta.TryGetValue("nebelboden", out var nv) || nv.VariantType != Variant.Type.Array) return;
+        foreach (var item in nv.AsGodotArray())
+        {
+            if (item.VariantType != Variant.Type.Dictionary) continue;
+            var o = item.AsGodotDictionary<string, Variant>();
+            int k = GetI(o, "slot", -1);
+            if (k < 0 || k >= kohle.Count) continue;
+            _nebelDecke.Add((GetI(o, "col"), GetI(o, "row"),
+                             new Vector2(GetI(o, "x"), GetI(o, "y")), kohle[k]));
+        }
+        GD.Print($"nebeldecke: {_nebelDecke.Count} Zellen, deren wahre Kachel im "
+               + "unerkundeten Gebiet durch die synthetisierte ersetzt wird");
+    }
+
+    /// <summary>Die Nebeldecke malen — Boden, also VOR allem anderen.
+    /// ⚠ Nur wo der Nebel wirklich an ist und die Zelle nie gesehen wurde;
+    /// eine einmal aufgedeckte Zelle behält ihre wahre Kachel, genau wie im
+    /// Original (dort wird sie beim Aufdecken in die bekannte Karte kopiert,
+    /// @0x41FFC8 / @0x420245).</summary>
+    private void NebeldeckeZeichnen()
+    {
+        NebelDeckeGezeichnet = 0;
+        if (_objTex == null || NebelObjekteAlt || !FogActive || _fog == null) return;
+        foreach (var e in _nebelDecke)
+        {
+            if (_fog.IsSeen(e.Col, e.Row)) continue;
+            DrawTextureRectRegion(_objTex, new Rect2(e.Ziel, e.Src.Size), e.Src);
+            NebelDeckeGezeichnet++;
+        }
+    }
+
     /// <summary>Wieviele aufragende Objekte KEINEN eigenen Streifenplatz haben —
     /// eine alte Karte aus einem Bake vor dem 27.08.2026. Dann faellt der
     /// Zeichner auf das Rechteck zurueck, und der Fehler ist wieder da; darum
@@ -352,6 +394,7 @@ public partial class MapEntityLayer
                 if (_rampen.ContainsKey(schluessel)) _rampenKachel[schluessel] = GetI(t2, "code");
             }
 
+        LiesNebeldecke(meta, kohle);
         ObjektOhneBild = 0;
         if (!meta.TryGetValue("objects", out var ov) || ov.VariantType != Variant.Type.Array) return;
         foreach (var item in ov.AsGodotArray())

@@ -24453,6 +24453,13 @@ public partial class MapEntityLayer : Node2D
                     if (rr < 0 || rr >= koerperZeile.Length) continue;
                     (koerperZeile[rr] ??= new List<Entity>()).Add(b);
                 }
+        // ⭐⭐⭐ 28.08.2026 — DIE NEBELDECKE, und sie gehoert GANZ NACH UNTEN.
+        //   Sie ist BODEN: die Kachel, die das Original im unerkundeten
+        //   Gebiet zeigt, statt der wahren. Ohne sie liest man Strassen und
+        //   Bauplatten der Gegnerbasis im Nebel ab — von ihm gemeldet mit
+        //   »leere felder die nicht sauber sind«, mit zwei Bildern belegt.
+        NebeldeckeZeichnen();
+
         int gi = 0;
         for (int r = 0; r <= letzteZeile; r++)
         {

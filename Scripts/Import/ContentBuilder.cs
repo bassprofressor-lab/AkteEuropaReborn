@@ -810,7 +810,7 @@ public sealed class ContentBuilder
                     $"{baker.Objects.Count} aufragende Objekte in die zweite Ebene, "
                   + $"{baker.ObjektbodenFlach} Objektzellen mit eigenem Boden, "
                   + $"{baker.SyntheseZellen} Nebelboeden synthetisiert ({baker.SyntheseLeer} ohne Tafeleintrag), "
-                  + $"{baker.SyntheseBoden} Zellen mit synthetisiertem Hintergrund");
+                  + $"{baker.SyntheseBoden} Hintergrund, {baker.NebelBoden.Count} Nebeldecke");
             }
             catch (Exception e) { failed++; Say($"{outName}: {e.Message}"); }
         }
@@ -1501,6 +1501,24 @@ public sealed class ContentBuilder
                     if (o.Klasse >= 0) sb.Append($",\"klasse\":{o.Klasse},\"basis\":{o.Basis}");
                 }
                 sb.Append('}');
+            }
+            sb.Append("],");
+        }
+
+        // ⭐⭐ DIE NEBELDECKE: Zellen, deren wahre Kachel nicht die ist, die das
+        // Original im unerkundeten Gebiet zeigt. Siehe MapBaker.NebelBoden.
+        if (b.NebelBoden.Count > 0)
+        {
+            sb.Append("\"nebelboden_note\":\"Zellen, deren WAHRE Kachel von der ");
+            sb.Append("synthetisierten abweicht (0x41FA10). Der Zeichner malt hier die ");
+            sb.Append("Synthese, solange die Zelle nicht erkundet ist - sonst liest man ");
+            sb.Append("Strassen und Bauplatten im Nebel ab.\",");
+            sb.Append("\"nebelboden\":[");
+            for (int i = 0; i < b.NebelBoden.Count; i++)
+            {
+                var o = b.NebelBoden[i];
+                if (i > 0) sb.Append(',');
+                sb.Append($"{{\"col\":{o.Col},\"row\":{o.Row},\"x\":{o.X},\"y\":{o.Y},\"slot\":{o.Slot}}}");
             }
             sb.Append("],");
         }
