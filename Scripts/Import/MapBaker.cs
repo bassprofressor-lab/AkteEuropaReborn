@@ -41,12 +41,14 @@ public sealed class MapBaker
     /// ihre eigene Kachel. Siehe die Begruendung im Durchgang A/B.</summary>
     public static bool KeinObjektboden;
 
-    /// <summary><c>--flutfuellung</c> — der Stand von vor dem 28.08.2026: als
-    /// Hintergrund einer Zelle dient die geratene Flutfuellung aus den acht
-    /// Nachbarn (<c>BuildBase</c>) statt der Bodensynthese des Originals.
-    /// ⚠ Sie war der Grund, warum unter einem ausgeblendeten Gebaeude
-    /// »leere felder die nicht sauber sind« standen.</summary>
-    public static bool Flutfuellung;
+    /// <summary><c>--synthese-hintergrund</c> — die Bodensynthese auch als
+    /// HINTERGRUND jeder Zelle statt der Flutfuellung <c>BuildBase</c>.
+    /// ⚠⚠ AUS, und das ist gemessen: 994 Zellen auf map_02 bekommen ihre wahre
+    /// Kachel nie gemalt (Gebaeude, Wald), und dort waere der Hintergrund das
+    /// Einzige, was man sieht — die Stadt bekaeme Fels statt Strasse. Was der
+    /// Schalter erreichen sollte, macht die NEBELDECKE, und die wirkt nur im
+    /// Nebel.</summary>
+    public static bool SyntheseHintergrund;
 
     /// <summary>Wieviele Zellen ihre EIGENE Objektkachel flach bekommen haben,
     /// die vorher nur die Flutfuellung sahen. 0 hiesse: die Aenderung greift
@@ -855,7 +857,26 @@ public sealed class MapBaker
                 // erst beim Zeichnen.
                 //
                 // Rueckfall: --flutfuellung (der Stand von vor dem 28.08.2026).
-                int syntheseB = Flutfuellung ? -1 : SyntheseKachel(c, r);
+                // ⚠⚠ 28.08.2026 ZURUECKGENOMMEN, am selben Tag, an dem sie kam.
+                //   Der Hintergrund ist wieder `basis`; die Synthese steht nur
+                //   noch fuer die NEBELDECKE bereit (`--synthese-hintergrund`
+                //   schaltet sie zurueck ein).
+                //
+                //   Gemeldet: »die stadt in kampagne 2 hast du zu felsgrafik
+                //   gemacht als boden anstatt strasse/beton«. Nachgemessen:
+                //   994 Zellen auf map_02 tragen einen Objektcode und bekommen
+                //   ihre WAHRE Kachel nie gemalt — darunter die Gebaeudezellen
+                //   der Stadt (Belegung 60001..60009). Der Hintergrund ist dort
+                //   das Einzige, was zu sehen ist, und die Synthese liefert dort
+                //   Fels statt der Strasse.
+                //
+                //   ⭐ Sie war ohnehin ueberfluessig geworden: was sie erreichen
+                //   sollte — sauberer Boden unter einem im Nebel ausgeblendeten
+                //   Gebaeude — macht seit 7868aa8 die NEBELDECKE, und die wirkt
+                //   NUR im Nebel und nur auf gemessenen Zellen. Ein Eingriff ins
+                //   Kartenbild, den man auch bei vollem Licht sieht, war der
+                //   falsche Ort.
+                int syntheseB = SyntheseHintergrund ? SyntheseKachel(c, r) : -1;
                 if (syntheseB >= 0) SyntheseBoden++;
                 int b = syntheseB >= 0 ? syntheseB : (basis != null ? basis[i] : -1);
                 bool ownIsFull = !isObj && Frame(code[i])?.Full == true;
@@ -864,13 +885,16 @@ public sealed class MapBaker
                 // ⭐⭐⭐ DIE NEBELDECKE. Weicht die wahre Kachel von der Synthese
                 // ab, muss der Zeichner im unerkundeten Gebiet die Synthese
                 // zeigen — siehe den Kopf von NebelBoden.
-                if (syntheseB >= 0 && !KeinObjektboden && lageC < 100)
+                // ⚠ Die NEBELDECKE haengt NICHT am Hintergrundschalter — sie
+                //   rechnet ihre Synthese selbst.
+                int syntheseD = KeinObjektboden ? -1 : SyntheseKachel(c, r);
+                if (syntheseD >= 0 && lageC < 100)
                 {
-                    var sy = syntheseB >= CwpFile.ObjectCodeBase
-                             ? ObjectSprite(syntheseB) : Frame(syntheseB);
-                    if (sy != null && syntheseB != code[i])
+                    var sy = syntheseD >= CwpFile.ObjectCodeBase
+                             ? ObjectSprite(syntheseD) : Frame(syntheseD);
+                    if (sy != null && syntheseD != code[i])
                     {
-                        int slot = Streifenplatz(syntheseB);
+                        int slot = Streifenplatz(syntheseD);
                         if (slot >= 0)
                             NebelBoden.Add((c, r, c * TileW,
                                 OriginY + r * TileH - elev[i] * ElevStep + BlitAnchor + sy.YOff,
