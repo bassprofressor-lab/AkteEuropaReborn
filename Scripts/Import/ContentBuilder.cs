@@ -809,7 +809,8 @@ public sealed class ContentBuilder
                 Say($"{outName}: {img.GetWidth()}x{img.GetHeight()}, " +
                     $"{baker.Objects.Count} aufragende Objekte in die zweite Ebene, "
                   + $"{baker.ObjektbodenFlach} Objektzellen mit eigenem Boden, "
-                  + $"{baker.SyntheseZellen} Nebelboeden synthetisiert ({baker.SyntheseLeer} ohne Tafeleintrag)");
+                  + $"{baker.SyntheseZellen} Nebelboeden synthetisiert ({baker.SyntheseLeer} ohne Tafeleintrag), "
+                  + $"{baker.SyntheseBoden} Zellen mit synthetisiertem Hintergrund");
             }
             catch (Exception e) { failed++; Say($"{outName}: {e.Message}"); }
         }

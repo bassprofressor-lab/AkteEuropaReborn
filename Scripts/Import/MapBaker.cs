@@ -41,6 +41,13 @@ public sealed class MapBaker
     /// ihre eigene Kachel. Siehe die Begruendung im Durchgang A/B.</summary>
     public static bool KeinObjektboden;
 
+    /// <summary><c>--flutfuellung</c> — der Stand von vor dem 28.08.2026: als
+    /// Hintergrund einer Zelle dient die geratene Flutfuellung aus den acht
+    /// Nachbarn (<c>BuildBase</c>) statt der Bodensynthese des Originals.
+    /// ⚠ Sie war der Grund, warum unter einem ausgeblendeten Gebaeude
+    /// »leere felder die nicht sauber sind« standen.</summary>
+    public static bool Flutfuellung;
+
     /// <summary>Wieviele Zellen ihre EIGENE Objektkachel flach bekommen haben,
     /// die vorher nur die Flutfuellung sahen. 0 hiesse: die Aenderung greift
     /// nicht.</summary>
@@ -335,7 +342,7 @@ public sealed class MapBaker
     /// <summary>Wieviele Zellen eine Synthese bekommen haben und wie oft die
     /// Tafel nichts hergab. Ohne die zweite Zahl sähe ein leerer Boden aus wie
     /// ein richtiger.</summary>
-    public int SyntheseZellen, SyntheseLeer;
+    public int SyntheseZellen, SyntheseLeer, SyntheseBoden;
 
     private int SyntheseKachel(int col, int row)
     {
@@ -767,9 +774,30 @@ public sealed class MapBaker
                 // Rueckfall: --kein-objektboden.
                 bool eigenFlach = !KeinObjektboden
                                   && MapForest.ImFlachenDurchgang(imapC, lageC);
-                int b = basis != null ? basis[i] : -1;
+                // ⭐⭐⭐ 28.08.2026 — DER HINTERGRUND IST DIE SYNTHESE, NICHT
+                // UNSERE FLUTFUELLUNG.
+                //
+                // Gemeldet, nachdem die Objekte im Nebel richtig verschwanden:
+                // »man sieht die gebaeude nicht, aber leere felder die nicht
+                // sauber sind«. Genau so: unter einem ausgeblendeten Gebaeude
+                // lag weiter `basis` — die Flutfuellung aus den acht Nachbarn
+                // (BuildBase), unsere Erfindung. Sie ist der Behelf, den die
+                // Bodensynthese des Originals ersetzt: 0x41FAE0 schreibt fuer
+                // JEDE Zelle mit Lagenbyte < 100 die synthetisierte Kachel in
+                // die bekannte Karte, ganz gleich was darauf steht.
+                //
+                // ⚠ Fuer eine Zelle, die ihr Objekt/Gebaeude spaeter ohnehin
+                // deckt, ist das folgenlos — sichtbar wird es genau dann, wenn
+                // etwas WEGGELASSEN wird. Darum ist es hier richtig und nicht
+                // erst beim Zeichnen.
+                //
+                // Rueckfall: --flutfuellung (der Stand von vor dem 28.08.2026).
+                int syntheseB = Flutfuellung ? -1 : SyntheseKachel(c, r);
+                if (syntheseB >= 0) SyntheseBoden++;
+                int b = syntheseB >= 0 ? syntheseB : (basis != null ? basis[i] : -1);
                 bool ownIsFull = !isObj && Frame(code[i])?.Full == true;
-                if (b >= 0 && !ownIsFull) Blit(Frame(b), c, r, elev[i]);
+                if (b >= 0 && !ownIsFull)
+                    Blit(b >= CwpFile.ObjectCodeBase ? ObjectSprite(b) : Frame(b), c, r, elev[i]);
                 if (!isObj) Blit(Frame(code[i]), c, r, elev[i]);
                 else if (befahrbar || eigenFlach)
                 {

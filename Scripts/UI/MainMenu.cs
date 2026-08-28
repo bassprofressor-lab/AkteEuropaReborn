@@ -909,6 +909,7 @@ public partial class MainMenu : Control
                 return;
             }
             else if (a == "--kein-objektboden") Import.MapBaker.KeinObjektboden = true;
+            else if (a == "--flutfuellung") Import.MapBaker.Flutfuellung = true;
             else if (a.StartsWith("--reexport-maps="))
             {
                 // nur die Kartenbilder samt zweiter Ebene — siehe
