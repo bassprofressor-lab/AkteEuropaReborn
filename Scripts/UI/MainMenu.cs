@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.UI;
+﻿namespace AkteEuropaReborn.UI;
 
 using System.Collections.Generic;
 using Godot;
@@ -908,6 +908,7 @@ public partial class MainMenu : Control
                 GetTree().Quit(ok ? 0 : 1);
                 return;
             }
+            else if (a == "--kein-objektboden") Import.MapBaker.KeinObjektboden = true;
             else if (a.StartsWith("--reexport-maps="))
             {
                 // nur die Kartenbilder samt zweiter Ebene — siehe

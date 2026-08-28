@@ -35,6 +35,16 @@ using Godot;
 public sealed class MapBaker
 {
     public const int TileW = 40, TileH = 20, ElevStep = 15, GroundMax = 1666;
+
+    /// <summary><c>--kein-objektboden</c> — der Stand von vor dem 28.08.2026:
+    /// eine Objektzelle bekommt flach nur die <c>basis</c>-Flutfuellung, nicht
+    /// ihre eigene Kachel. Siehe die Begruendung im Durchgang A/B.</summary>
+    public static bool KeinObjektboden;
+
+    /// <summary>Wieviele Zellen ihre EIGENE Objektkachel flach bekommen haben,
+    /// die vorher nur die Flutfuellung sahen. 0 hiesse: die Aenderung greift
+    /// nicht.</summary>
+    public int ObjektbodenFlach;
     public const int BlitAnchor = -50;
 
     private readonly CwmFile _map;
@@ -657,10 +667,50 @@ public sealed class MapBaker
                                  && lageC >= 100;
                 if (befahrbar) BefahrbarFlach++;
                 if (imapC == 0xFFFF && lageC >= 100) GelaenderAufragend++;
+                // ⭐⭐⭐ 28.08.2026 — DAS ORIGINAL MALT DIE EIGENE KACHEL,
+                // AUCH WENN SIE EINE OBJEKTKACHEL IST.
+                //
+                // Durchgang 1 des Originals (@0x4B41EB) holt den Kachelcode mit
+                // `0x401410` = `word[0x5539D0 + (spalte*256+zeile)*2]` — der
+                // Laufzeit-Codetafel aus sec1 word[+0] — und malt ihn, sobald
+                // die Durchgangsbedingung greift. OB der Code eine Objektkachel
+                // ist, fragt es dabei NICHT; es waehlt nur die Bildbank:
+                //     @0x4B428F  cmp ax, 0x2710 ; jge  -> dir2, sonst dir1
+                // Genau diese Grenze ist unser CwpFile.ObjectCodeBase.
+                //
+                // Wir haben stattdessen `!isObj` verlangt und einer Objektzelle
+                // nur die `basis`-Fuellung gegeben — eine FLUTFUELLUNG aus den
+                // acht Nachbarn (BuildBase), also eine Erfindung. Was das
+                // anrichtet, steht seit dem 24.08. in MapObjects: nimmt man das
+                // Objekt weg, kommen »rechteckige Wasser- und Felsflecken quer
+                // ueber die Wiese« zum Vorschein. Genau darum liess sich das
+                // Ausblenden von Objekten im unerkundeten Nebel nicht bauen.
+                //
+                // GEMESSEN, vor dem Bau: Zellen, die das Original flach malt und
+                // wir nicht — map_01 11, map_02 497, map_03 50, map_04 110,
+                // map_05 72. Fast alle `imap 0xFFFE, Lage 0`.
+                //
+                // ⚠ Fuer WALDzellen (Lage 0, imap 50000..) greift die Bedingung
+                // NICHT — dort malt auch das Original flach nichts, die
+                // aufragende Kachel bringt ihren Boden selbst mit. Die
+                // basis-Fuellung bleibt dort als Untergrund noetig.
+                //
+                // Rueckfall: --kein-objektboden.
+                bool eigenFlach = !KeinObjektboden
+                                  && MapForest.ImFlachenDurchgang(imapC, lageC);
                 int b = basis != null ? basis[i] : -1;
                 bool ownIsFull = !isObj && Frame(code[i])?.Full == true;
                 if (b >= 0 && !ownIsFull) Blit(Frame(b), c, r, elev[i]);
-                if (!isObj || befahrbar) Blit(Frame(code[i]), c, r, elev[i]);
+                if (!isObj) Blit(Frame(code[i]), c, r, elev[i]);
+                else if (befahrbar || eigenFlach)
+                {
+                    // ⚠ Die Bildbank waehlt der CODE, nicht die Frage, ob die
+                    // Zelle befahrbar ist — wie im Original @0x4B428F.
+                    Blit(code[i] >= CwpFile.ObjectCodeBase
+                             ? ObjectSprite(code[i]) : Frame(code[i]),
+                         c, r, elev[i]);
+                    if (eigenFlach && !befahrbar) ObjektbodenFlach++;
+                }
             }
 
         // pass C — objects, back to front. Buildings are left out: they are

@@ -807,7 +807,8 @@ public sealed class ContentBuilder
                 if (baker.Objects.Count > 0) { mitEbene++; objZellen += baker.Objects.Count; }
                 lagenZellen += baker.LagenZellen;
                 Say($"{outName}: {img.GetWidth()}x{img.GetHeight()}, " +
-                    $"{baker.Objects.Count} aufragende Objekte in die zweite Ebene");
+                    $"{baker.Objects.Count} aufragende Objekte in die zweite Ebene, "
+                  + $"{baker.ObjektbodenFlach} Objektzellen mit eigenem Boden");
             }
             catch (Exception e) { failed++; Say($"{outName}: {e.Message}"); }
         }
