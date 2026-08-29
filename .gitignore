@@ -111,3 +111,8 @@ __pycache__/
 # Rohberichte der acht Leseagenten (22.08.2026). Ihr Inhalt steht vollstaendig
 # in OFFENE_FRAGEN.md, Abschnitte BI...BQ — nur die zaehlt.
 berichte/
+
+# Claude Code: die geteilte Projektkonfiguration gehoert ins Repo -- .claude/settings.json
+# traegt die OpenWolf-Hooks und kommt seit 1.24.0 ohne absolute Pfade aus, gilt also auf
+# jedem Rechner. Nur die persoenlichen Overrides DIESER Maschine bleiben draussen.
+.claude/settings.local.json
