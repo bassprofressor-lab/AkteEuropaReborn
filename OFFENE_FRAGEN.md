@@ -18132,3 +18132,93 @@ Unsere Punkte (`MinimapDots`) liegen darüber und leuchten weiter durch; das ist
 die Entsprechung des Merkbits. Gegenprobe `--minikarte-nebel-einmal`.
 Gemessen: `minimap: 47 Neuzeichnungen, 94 davon mit Nebelschicht` — genau
 doppelt.
+
+---
+
+## BV. ⭐⭐⭐ DIE ZWEITE ZIELQUELLE DER KI — `get target in sector` (30.08.2026)
+
+Auf sein »ja geh das an«: die acht Stationen der KI-Runde durchgegangen.
+`aekernel-tools/ai_tick.py` legt sie vollständig offen (Schleife `0x4BFB80`,
+Phasentafel `0x4BFEA4`, Sprungtafel `0x4BFE50`, **20 echte Ziele, 29 Leerlauf**):
+
+| Takt | Ziel | Routine | wie das Spiel es selbst nennt |
+|---:|---:|---|---|
+| 0 | 0 | `0x4BAB40` | »AI: test of life« |
+| 1 | 1 | `0x4BA710`+`0x4BA7D0` | die Stärkekarte |
+| 2 | 2 | `0x4BB7D0` | »AI: transport« |
+| 4 | 3 | `0x4BBAC0` | »Set imp cpu:«, »pro_style:«, Basis schickt Angedockte los |
+| 5 | 4 | `0x4BB9A0` | »AI: production« |
+| **7** | **5** | **`0x4BC900`** | **»Create group cpu:«, »Add to group«, »Take all«, »Enough units«** |
+| **8** | **6** | **`0x4BE2E0`** | **»target:«, »po:«, »r_best:« — die EINZIGE Station, die Busbefehle schickt** |
+| 10 | 7 | `0x4BE330` | dieselbe Familie |
+| 12,14,46 | 8,9,18 | `0x4BF150`, `0x4BFA30`, `0x4BF760` | Schiffe und Markt |
+| 16…44 | 10…17 | `0x4BF4E0` | `ai_units`, **achtmal je Runde** |
+| 48 | 19 | `0x4BE5C0` | dieselbe Familie wie Ziel 6 |
+
+### BV.1 ⚠⚠ BERICHTIGUNG MEINES EIGENEN NEGATIVBEFUNDES (BT.5)
+
+Dort steht: die Zielliste `sec69` wird **nur** von `add_target` gefüllt — und
+daraus hatte ich geschlossen, ein Computerspieler ohne Skriptziel habe keinen
+Angriff. **Der erste Teil stimmt, der Schluss war falsch.** Es gibt eine
+**zweite Zielquelle**, und sie hängt an einer anderen Station:
+
+```
+0x4BFB80  ai_tick
+  Takt 7 -> 0x4BC900  »Create group cpu:«        die GRUPPENBILDUNG
+             -> 0x4BC540
+                -> 0x4BC3D0  »get target in sector«     ← ohne sec69
+  Takt 8 -> 0x4BE2E0  »target: po: r_best:«      die Zielwahl AUS sec69
+```
+
+Die Rufkette ist einzeln nachgegangen (jeder Rufer über einen byteweisen
+`E8`-Abtast, keine Lücke): `0x4BC3D0` ← `0x4BC6FD` in `0x4BC540` ← `0x4BC90F`
+in `0x4BC900` ← `0x4BFCE5` in `ai_tick`.
+
+**Die Gruppenbildung sucht sich ihr Ziel also SELBST.** Gelesen an
+`0x4BC691..0x4BC70E`: Sektorsatz `0xB400F0` (3 Byte je Sektor), Sektorkante
+`div 0x18` = **24 Zellen**, Sektorzustand muss in **1..2** liegen, und die
+eigene Einheit muss **im selben Sektor** stehen.
+
+⭐⭐ **24 Zellen statt der 3 des Sichtrings** — genau der Unterschied zwischen
+»sie kommen mir entgegen« und »sie reagieren erst, wenn ich draufstehe«. Das
+ist seine Meldung.
+
+### BV.2 Gebaut — und es war eine reine VERDRAHTUNG
+
+`AiZielImSektor` (der Nachbau von `0x4BC3D0`) stand seit dem 21.08. in
+`SkirmishAiSectors.cs` — **und wurde von niemandem gerufen**, weil
+`AiMissionAttack` bei leerer Skriptliste sofort aussteigt. Jetzt geht der
+Kampagnenzweig bei leerer Liste in `AiSektorAngriff`.
+
+⚠ **Ein eigener Fehler dabei, und er wäre stumm geblieben:** der erste Bau rief
+`AiStaerkeraster`, aber **nicht `AiSetImpCpu`** — und `AiFreieAngreifer` rechnet
+`Belegt − DefRobots`. Der Messlauf meldete **0 Sektorangriffe**, mit und ohne
+Schalter dieselbe Zahl. Erst die einzeln gezählten AUSGÄNGE haben es gezeigt.
+**Regel bestätigt: jeder Ausgang eines Prüfstands gehört einzeln gezählt.**
+
+**Gemessen, mit `--ki-probe` (Spieler in den Sektor gestellt):**
+`Sektor: 20 Versuche, 0 gesperrt, 0x keine freien, 16x kein Ziel, 1 ANGRIFFE`
+
+**Kontrolle ohne Zutun** — die KI rennt NICHT ab Sekunde 0 los:
+
+| Mission | Ergebnis |
+|---|---|
+| M2 | 27 Versuche, **27x kein Ziel, 0 Angriffe** (beide Gegner) |
+| M11 | 27 Versuche, 5x keine freien, 22x kein Ziel, **0 Angriffe** |
+| **M1** | Spieler 2: 14 Versuche, **1 ANGRIFF** ⚠ |
+
+⚠ **M1 verhält sich damit anders als bisher.** Das ist die Tutorialmission, in
+der am 11.08. gemeldet wurde »in Mission 1 fährt alles irgendwohin«. Es ist
+jetzt **ein** gezielter Angriff statt einer Welle aus 19 von 21 Einheiten —
+und es könnte genau der alte Fall sein (»dort steht ein Cyborg vor der Brücke
+und macht nix, im Original kommt er auch den Berg hochgelaufen und greift an«).
+**Das gehört von ihm nachgetestet.** Rückfall `--kein-sektorangriff`.
+
+### BV.3 ⚠ Was UNSER ist und ungelesen bleibt
+
+* Das Tor **Sektorzustand in 1..2** (`byte[0xB400F0 + 3n]`) — nicht gelesen,
+  nicht nachgebaut.
+* Die **Gruppengrösse** (»Enough units« / »Take all« @0x4BC900) — nicht gelesen.
+  Wir schicken die freien Angreifer DIESES Sektors.
+* Die Stationen `0x4BE330` (Takt 10) und `0x4BE5C0` (Takt 48) tragen dieselben
+  Protokollzeilen wie `0x4BE2E0` und sind nicht einzeln gelesen.

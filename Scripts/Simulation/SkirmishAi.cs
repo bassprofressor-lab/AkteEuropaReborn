@@ -106,6 +106,13 @@ public partial class MapEntityLayer : Node2D
         public int Block;
         public int Looked, Sent;                   // fuer die Statuszeile
         public int SawAny, SawFoe, SawClass;       // Belegung im Ring / feindlich / Klasse passt
+        /// <summary>Wie oft der SEKTORANGRIFF gefeuert hat — die Zahl, an der
+        /// seine Meldung »sie treffen mich nicht in der Stadt« haengt.
+        /// Siehe AiSektorAngriff.</summary>
+        public int SektorAngriffe;
+        /// <summary>Die AUSGAENGE des Sektorangriffs, jeder einzeln — ohne sie
+        /// ist »0 Angriffe« nicht von »nie versucht« zu unterscheiden.</summary>
+        public int SektorVersuche, SektorGesperrt, SektorKeineFreien, SektorKeinZiel;
         public readonly HashSet<string> ClassSeen = new();
 
         /// <summary>Welche INFANTERIE (typ +0x0a == 1) je einen Befehl bekommen
@@ -1039,6 +1046,9 @@ public partial class MapEntityLayer : Node2D
             $"P{a.Player} {a.Sent} losgeschickt, {a.Looked} untaetige angesehen " +
             $"(Armee {ArmyOf(a.Player).Count}), im Ring {a.SawAny} Einheiten, " +
             $"{a.SawFoe} feindlich, {a.SawClass} in der eigenen Klasse " +
+            $"| Sektor: {a.SektorVersuche} Versuche, {a.SektorGesperrt} gesperrt, " +
+            $"{a.SektorKeineFreien}x keine freien, {a.SektorKeinZiel}x kein Ziel, " +
+            $"{a.SektorAngriffe} ANGRIFFE " +
             $"[{string.Join(" ", a.ClassSeen)}]; Infanterie bewegt " +
             $"{a.MovedInf.Count}/{InfantryOf(a.Player)}"));
     }
@@ -1321,7 +1331,41 @@ public partial class MapEntityLayer : Node2D
     private void AiMissionAttack(AiPlayer a, int waveSize, int guard)
     {
         var list = _missionTargets[a.Player];
-        if (list.Count == 0) return;
+        // ⭐⭐⭐ 30.08.2026 — EINE LEERE SKRIPTLISTE IST NICHT DAS ENDE.
+        //
+        // Gemeldet: »es muessten die einheiten von der oberen rechten basis
+        // schon auf mich in der stadt treffen — der kampf kommt nur zustande,
+        // weil ich da hin fahr«. Hier stand `if (list.Count == 0) return;`,
+        // und damit tat ein Computerspieler in einer Mission ohne
+        // `add_target` ueberhaupt nichts.
+        //
+        // ⚠⚠ **BERICHTIGUNG meines eigenen Negativbefundes vom selben Tag**
+        // (OFFENE_FRAGEN BT.5): ich hatte gezeigt, dass die Zielliste sec69
+        // (0xBC5A78) NUR von `add_target` gefuellt wird, und daraus geschlossen,
+        // ein Computerspieler habe ohne Skriptziel keinen Angriff. Der erste
+        // Teil stimmt, der Schluss war falsch — **es gibt eine ZWEITE
+        // Zielquelle**, und sie haengt an einer anderen Station der KI-Runde:
+        //
+        //     0x4BFB80  ai_tick
+        //       Takt 7 -> 0x4BC900  »Create group cpu:«   die GRUPPENBILDUNG
+        //                  -> 0x4BC540
+        //                     -> 0x4BC3D0  »get target in sector«
+        //       Takt 8 -> 0x4BE2E0  »target: po: r_best:«  die Zielwahl aus sec69
+        //
+        // Die Gruppenbildung sucht sich ihr Ziel also SELBST, im eigenen
+        // Sektor, ohne jede Skriptvorgabe. Gelesen an 0x4BC691..0x4BC70E:
+        // Sektorsatz 0xB400F0 (3 Byte je Sektor), Sektorkante `div 0x18` = 24
+        // Zellen, und die eigene Einheit muss im selben Sektor stehen.
+        // ⭐ **24 Zellen statt der 3 des Sichtrings** — genau der Unterschied
+        // zwischen »sie kommen mir entgegen« und »sie reagieren erst, wenn ich
+        // draufstehe«.
+        //
+        // ⚠ UNGELESEN und darum NICHT nachgebaut: das Tor `byte[0xB400F0+3n]
+        // in 1..2` (der Sektorzustand) und die Gruppengroesse aus
+        // »Enough units« / »Take all« @0x4BC900. Wir schicken statt dessen die
+        // freien Angreifer DIESES Sektors — unsere Setzung, siehe
+        // AiSektorAngriff.
+        if (list.Count == 0) { AiSektorAngriff(a); return; }
 
         // ⭐ NEU AM 21.08.2026 — die Auftragswahl ist jetzt die des Originals.
         //
@@ -2198,6 +2242,67 @@ public partial class MapEntityLayer : Node2D
     /// Original den ERSTEN Treffer der entfernungssortierten Liste nimmt, nehmen
     /// wir den naechstgelegenen.
     /// </summary>
+    /// <summary>
+    /// <b>DER SEKTORANGRIFF</b> — <c>get target in sector</c> als Zielquelle,
+    /// wenn die Mission keine Zielliste mitbringt.
+    ///
+    /// <para>Die Kette des Originals steht im Kopf von
+    /// <see cref="AiMissionAttack"/>. Was hier gebaut ist, ist ihr Kern:
+    /// <b>steht im Sektor eines eigenen freien Angreifers ein Gegner, wird er
+    /// angegriffen</b> — und ein Sektor ist 24 Zellen breit, nicht drei.</para>
+    ///
+    /// <para><b>⚠ UNSERE SETZUNGEN, benannt:</b> das Tor <c>Sektorzustand in
+    /// 1..2</c> (<c>byte[0xB400F0 + 3n]</c>) ist ungelesen und fehlt hier; die
+    /// Gruppengrösse des Originals (»Enough units« / »Take all« @0x4BC900) ist
+    /// ebenfalls ungelesen, wir schicken die freien Angreifer DIESES Sektors.
+    /// Beides ist gekapselt, damit eine spätere Lesung nur diese Methode
+    /// ändert. <c>--kein-sektorangriff</c> nimmt sie ganz zurück.</para>
+    /// </summary>
+    private void AiSektorAngriff(AiPlayer a)
+    {
+        if (KeinSektorangriff || _nav == null) return;
+        a.SektorVersuche++;
+        if (AiGesperrt(a.Player)) { a.SektorGesperrt++; return; }
+
+        AiGruppenPflegen(a.Player);
+        AiZustandVorlaeufig(a.Player);
+        AiStaerkeraster(a.Player);
+        // ⚠ Die Verteidigerquote MUSS mitlaufen — `AiFreieAngreifer` rechnet
+        // `Belegt - DefRobots`, und ohne diesen Ruf steht DefRobots auf dem
+        // Wert des letzten Denk-Taktes. Beim ersten Messlauf fehlte er, und
+        // der Prueflauf meldete stumm 0 Sektorangriffe.
+        AiSetImpCpu(a.Player);
+
+        int freie = AiFreieAngreifer(a.Player, out int sx, out int sy);
+        if (freie == 0) { a.SektorKeineFreien++; return; }   // »Not free attacker:«
+
+        int ziel = AiZielImSektor(a.Player, sx, sy);
+        if (ziel < 0) { a.SektorKeinZiel++; return; }        // r_best == 0xFF
+
+        // Die freien Angreifer, die in DIESEM Sektor stehen — das ist der
+        // Personenkreis, den 0x4BC540 durchgeht (die Einheit muss im selben
+        // Sektor stehen, @0x4BC6C6/@0x4BC6E4).
+        int los = 0;
+        a.Wave.Clear();
+        foreach (int ui in ArmyOf(a.Player))
+        {
+            var e = _entities[ui];
+            if (e.DugIn || ui == a.Grabber) continue;
+            if (e.Path != null || e.Target >= 0 || e.Orders.Count > 0) continue;
+            var (ex, ey) = AiSektorVon(e.Col, e.Row);
+            if (ex != sx || ey != sy) continue;
+            a.Wave.Add(ui);
+            AiSend(ui, ziel);
+            los++;
+        }
+        if (los > 0) { a.Waves++; a.SektorAngriffe++; }
+    }
+
+    /// <summary><c>--kein-sektorangriff</c> — der Stand von vor dem 30.08.2026:
+    /// ein Computerspieler ohne Skript-Zielliste tut in der Kampagne nichts.
+    /// </summary>
+    public static bool KeinSektorangriff;
+
     private int AiRingTarget(AiPlayer a, int ui, Entity e)
     {
         int near = e.Range > 0 ? e.Range : Mathf.RoundToInt(RangeOf(e));

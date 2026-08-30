@@ -1793,6 +1793,8 @@ public partial class MapViewer : Node2D
             else if (a == "--ki-probe") _kiProbe = true;
             // Gegenprobe zur doppelten Abdunklung der Uebersicht, siehe Minimap.
             else if (a == "--minikarte-nebel-einmal") Minimap.NebelEinmal = true;
+            // Gegenprobe zum SEKTORANGRIFF, siehe SkirmishAi.AiSektorAngriff.
+            else if (a == "--kein-sektorangriff") MapEntityLayer.KeinSektorangriff = true;
             else if (a == "--wegsuche-check") _wegsucheCheck = true;
             // ⚠ GEGENPROBE: der alte A*, siehe NavGrid.AlterAstern.
             else if (a == "--alter-astern") Simulation.NavGrid.AlterAstern = true;
