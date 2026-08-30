@@ -1796,6 +1796,7 @@ public partial class MapViewer : Node2D
             else if (a == "--minikarte-nebel-zweimal") Minimap.NebelZweimal = true;
             // Gegenprobe zum SEKTORANGRIFF, siehe SkirmishAi.AiSektorAngriff.
             else if (a == "--kein-sektorangriff") MapEntityLayer.KeinSektorangriff = true;
+            else if (a == "--kein-ausweichen") MapEntityLayer.KeinAusweichen = true;
             // --boden-um=<spalte>,<zeile> — die Bodenauskunft, siehe
             // Simulation/BodenAuskunft.cs
             else if (a.StartsWith("--boden-um="))
@@ -2484,6 +2485,8 @@ public partial class MapViewer : Node2D
             // hineinsollte? Siehe Simulation/Einfahrt.cs.
             string bo = _entities.BodenAuskunft();
             if (bo.Length > 0) GD.Print(bo);
+            string aw = _entities.AusweichLine();
+            if (aw.Length > 0) GD.Print(aw);
             string ein = _entities.EinfahrtLine();
             if (ein.Length > 0) GD.Print(ein);
             // ⭐ 30.08.2026 — was die Objektebene im Nebel gezeigt hat.

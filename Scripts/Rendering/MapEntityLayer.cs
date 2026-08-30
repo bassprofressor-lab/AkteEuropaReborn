@@ -766,6 +766,10 @@ public partial class MapEntityLayer : Node2D
         /// Siehe Simulation/Einfahrt.cs.</summary>
         public int Ukol;
 
+        /// <summary>Die Richtung, aus der gefragt wurde — <c>AKCE</c> (+0x15)
+        /// beim Ausweichauftrag. Siehe Simulation/Ausweichen.cs.</summary>
+        public int AusweichRichtung;
+
         /// <summary>In welchem Gebäude diese Einheit untergestellt ist,
         /// <c>null</c> = auf der Karte. Die Gegenrichtung zu
         /// <see cref="Garage"/>.</summary>
@@ -5594,9 +5598,38 @@ public partial class MapEntityLayer : Node2D
         }
         if (step == Simulation.NavGrid.Step.GiveWay)
         {
-            // Der Wurf zieht zwei nebeneinander wartende Einheiten auseinander;
-            // ohne ihn planen beide im selben Takt neu und stossen wieder
-            // zusammen. Das ist der Grund, warum das Original hier wuerfelt.
+            // ⭐⭐⭐ 30.08.2026 — ZUERST DEN BLOCKIERER FRAGEN.
+            //
+            // Hier stand nur der Wurf und `Repath`, also: der FAHRER plant neu.
+            // Das Original tut das Gegenteil — `Can_go` @0x4055D0 ruft an
+            // 21 Stellen »geh mir aus dem Weg« @0x404D20 und fragt DIE EINHEIT
+            // IM WEG, ob sie zur Seite geht. Sagt sie ja, setzt sie sich
+            // UKOL := 3 und faehrt im naechsten Takt einen Schritt seitlich.
+            //
+            // Dass dieses dritte Stueck fehlte, ist der Grund, warum die
+            // gelesene Suchkarte des Originals am 23.08. wieder ausgebaut wurde
+            // (»der Nachbau ist schlechter, solange ihm das dritte Stueck
+            // fehlt«). Siehe Simulation/Ausweichen.cs.
+            // Die versperrte Zelle ist der naechste Schritt des Weges, und die
+            // Richtung dorthin ist ihr Versatz — als Index in dieselbe
+            // Richtungstafel 0x4F5AF0, die das Original benutzt.
+            if (e.Path is { Count: > 0 } && e.PathIdx < e.Path.Count && _nav != null)
+            {
+                var naechste = e.Path[e.PathIdx];
+                int dx = Mathf.Sign(naechste.X - e.Col), dy = Mathf.Sign(naechste.Y - e.Row);
+                int richtung = -1;
+                for (int k = 0; k < 8; k++)
+                    if (Simulation.NavGrid.UrDirs[k].X == dx
+                     && Simulation.NavGrid.UrDirs[k].Y == dy) { richtung = k; break; }
+                int wer = _nav.OccupantAt(naechste.X, naechste.Y);
+                if (richtung >= 0 && wer >= 0 && wer != i
+                    && AusweichenAnfragen(wer, richtung))
+                    return;                   // er geht zur Seite — Weg behalten
+            }
+
+            // Er weicht nicht aus: der alte Weg. Der Wurf zieht zwei nebeneinander
+            // wartende Einheiten auseinander; ohne ihn planen beide im selben Takt
+            // neu und stossen wieder zusammen.
             if (Simulation.Determinism.Roll(GiveWayOdds) != 0) return;
             Repath(i, e);
             return;
@@ -27966,6 +27999,9 @@ public partial class MapEntityLayer : Node2D
         // gehört es hierher und nicht in die Wirtschaft — siehe
         // Simulation/Einfahrt.cs.
         TorTakt();
+        // ⭐ Und wer zur Seite gebeten wurde, geht zur Seite — der ukol-3-Arm
+        // @0x408E45. Siehe Simulation/Ausweichen.cs.
+        AusweichTakt();
         // ⭐ Der Vorspann der Kampagne. Er hängt NICHT allein an der Anwahl:
         // neun seiner Tore prüfen den Baustand, ein geöffnetes Fenster oder
         // die Missionsnummer, und keines davon ändert sich beim Anklicken.

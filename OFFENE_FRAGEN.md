@@ -18491,3 +18491,74 @@ ausweichen« —, und das Original fährt dort hin und wartet. Für unsere Planu
 ist sie eine Wand.** Die Kur wäre, beim PLANEN durch GiveWay-Zellen zu gehen und
 erst beim FAHREN zu warten; das ist ein Eingriff in den Lockstep-Pfad und
 gehört in einen eigenen Durchgang.
+
+---
+
+## BY. ⭐⭐ DAS DRITTE STÜCK DER WEGPLANUNG — gelesen, gebaut, und es reicht NICHT (30.08.2026)
+
+Der offene Punkt aus BX.3 und aus dem Einchecker vom 23.08.: die Suchkarte des
+Originals ist richtig gelesen (eine Zelle mit einer Einheit ist für die Planung
+**frei**), aber unser Nachbau war damit *schlechter* — »solange ihm das dritte
+Stück fehlt: ein wartender Fahrer muss ausweichen oder neu planen«.
+
+### BY.1 Die Kette ist jetzt ganz gelesen
+
+```
+1. Fahrer trifft besetzte Zelle    -> Can_go @0x4055D0 gibt 1
+2. Can_go ruft »geh mir aus dem Weg« @0x404D20   (21 der 22 Rufer)
+3. Der Blockierer setzt UKOL := 3, AKCE := Richtung und meldet 1
+4. Der ukol-3-Arm @0x408E45 faehrt ihn EINEN Schritt zur Seite
+5. Der Fahrer kommt durch
+```
+
+**@0x404D20** stand seit dem 21.08. in `berichte/revier1.md` §6 vollständig da —
+mit der 2-%-Verweigerung (`rand()%50 == 13`) **vor** allem anderen, mit
+`Gattung > 2 -> nie`, `UKOL 4 (Angriff) -> nie`, und der Zeile, um die es geht:
+`UKOL := 3 ; AKCE := Richtung`.
+
+**Der ukol-3-Arm @0x408E45** ist neu gelesen: drei Versuche, je Versuch der
+Kandidat `(rand() + versuch) % 3` aus der Tafel **`0x4F5B10`** (drei Byte je
+Richtung), die Zelle muss frei sein (`imap == 0xFFFE`) und ihr Lagenbyte
+ungleich 99. Die Tafel, aus der EXE gelesen — das Muster ist **seitwärts**:
+
+```
+akce 0 (Sued) -> 2 6 0 (West, Ost, Sued)      akce 4 (Nord) -> 2 6 4
+akce 1        -> 2 0 0                        akce 5        -> 4 6 6
+akce 2 (West) -> 4 0 2 (Nord, Sued, West)     akce 6 (Ost)  -> 0 4 6
+akce 3        -> 2 4 4                        akce 7        -> 6 0 6
+```
+
+### BY.2 Gebaut — und der Blockierer wird jetzt gefragt
+
+`Simulation/Ausweichen.cs`. Vorher tat unser `GiveWay`-Zweig das Gegenteil des
+Originals: er würfelte und plante den **Fahrer** neu; **der Blockierer wurde nie
+gefragt**. Rückfall `--kein-ausweichen`, Meldezeile `ausweichen:`.
+
+### BY.3 ⚠⚠ UND ES REICHT NICHT — gemessen, map_DM_4, 48 Einheiten, Keim 7
+
+| | auf dem Ziel | tot | ohne Weg | Fortschritt | gefahren |
+|---|---:|---:|---:|---:|---:|
+| alte Karte, **ohne** Ausweichen | 21 | 20 | 1 | 41,7 | 1572 |
+| alte Karte, **mit** Ausweichen | 22 | 19 | 1 | 41,2 | 1598 |
+| **neue** Karte, mit Ausweichen | **0** | 32 | 1 | **22,3** | 815 |
+
+* Auf der **alten** Karte liegt der Unterschied **im Rauschen** — erwartbar,
+  denn dort wird eine besetzte Zelle gar nicht erst beplant, der `GiveWay`-Fall
+  ist selten der Engpass.
+* Auf der **neuen** Karte bleibt es **deutlich schlechter**: 0 angekommen statt
+  22, Fortschritt 22,3 statt 41,2. **Das dritte Stück allein löst es nicht.**
+
+⭐ **Und die Zahl, die es erklärt:** `373979 gefragt, 314451 zugesagt, **34
+Schritte getan**`. Fast jede Zusage ist der Zweig »fährt schon« — der
+Blockierer sagt zu, tut aber nichts, weil er ohnehin unterwegs ist. Wirklich
+ausgewichen wird kaum.
+
+**Also bleibt `--neue-pfadkarte` AUS.** Die Lesung stimmt weiterhin; was fehlt,
+ist noch etwas anderes als das Ausweichen. Der nächste Verdächtige ist die
+Reihenfolge: im Original läuft `Can_go` **während der Fahrt**, und der Fahrer
+behält seinen Weg; bei uns entscheidet die Planung im Voraus über eine Karte,
+die einen Augenblick später nicht mehr stimmt.
+
+⚠ **Das Ausweichen bleibt trotzdem an**: es ist die gelesene Mechanik, es
+verschlechtert nichts, und es ist die Voraussetzung für jeden weiteren Anlauf
+auf die Suchkarte.
