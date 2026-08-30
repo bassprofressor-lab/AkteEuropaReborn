@@ -27902,6 +27902,7 @@ public partial class MapEntityLayer : Node2D
         PollBuildPanelDemo();
         PollDepotFlow();
         PollEinfahrt();
+        PollKiProbe(dt);
         PollSellCheck();
         PollShopCheck();
         PollBuyCheck();

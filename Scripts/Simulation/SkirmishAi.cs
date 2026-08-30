@@ -2451,6 +2451,9 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Hostility by player number — the same alliance matrix the
     /// entity test uses, without needing an entity of one's own.</summary>
+    /// <summary>Bruecke fuer den Pruefstand --ki-probe, siehe KiProbe.cs.</summary>
+    public static bool AiHostileFor(int me, int other) => AiHostile(me, other);
+
     private static bool AiHostile(int me, int other)
     {
         if (me is < 0 or > 7 || other is < 0 or > 7) return false;

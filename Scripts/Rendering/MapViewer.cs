@@ -450,6 +450,7 @@ public partial class MapViewer : Node2D
         }
         if (_depotFlow) _entities.DepotFlowStart();
         if (_einfahrtCheck) _entities.EinfahrtCheckStart();
+        if (_kiProbe) _entities.KiProbeStart();
         if (_sellCheck) _entities.SellCheckStart();
         if (_shopCheckFlag) _entities.ShopCheckStart();
         if (_buyCheckFlag) _entities.BuyCheckStart();
@@ -1206,6 +1207,10 @@ public partial class MapViewer : Node2D
     /// <summary><c>--einfahrt-check</c> — anhalten, Tor, drin, wieder heraus.
     /// Siehe Simulation/Einfahrt.cs.</summary>
     private bool _einfahrtCheck;
+
+    /// <summary><c>--ki-probe</c> — reagiert die Streife aus der Naehe?
+    /// Siehe Simulation/KiProbe.cs.</summary>
+    private bool _kiProbe;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
     /// seines Gleises? Siehe <c>MapEntityLayer.WagonFacingCheck</c>.</summary>
     private bool _wagonFacingCheck;
@@ -1783,6 +1788,9 @@ public partial class MapViewer : Node2D
             // ⚠ GEGENPROBE zur EINFAHRT vom 30.08.2026, siehe Simulation/Einfahrt.cs
             else if (a == "--keine-einfahrt") MapEntityLayer.KeineEinfahrt = true;
             else if (a == "--einfahrt-check") _einfahrtCheck = true;
+            // --ki-probe: eine eigene Einheit neben die naechste Gegnereinheit
+            // stellen und nachsehen, ob die Streife sie aufnimmt. Siehe KiProbe.cs.
+            else if (a == "--ki-probe") _kiProbe = true;
             else if (a == "--wegsuche-check") _wegsucheCheck = true;
             // ⚠ GEGENPROBE: der alte A*, siehe NavGrid.AlterAstern.
             else if (a == "--alter-astern") Simulation.NavGrid.AlterAstern = true;

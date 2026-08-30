@@ -18001,3 +18001,62 @@ Sichtring, und dessen Radius ist bei diesen Einheiten **3 Zellen**.
 Satz:** »von der oberen rechten generischen basis, **die man später einnimmt**«.
 Das sind die sieben Angreifer aus R38 — und die kamen bis heute nie, weil die
 Wegsuche abstürzte (BT.3). **Der Nachtest ist: die Basis einnehmen.**
+
+### BT.8 ⭐⭐ ZWEI EREIGNISSE, NICHT EINS — und die Streife ist intakt
+
+Er hat präzisiert: »**es müssten die einheiten von der oberen rechten basis
+schon auf mich in der stadt treffen. nach der einnahme kommen andere gegner von
+irgendwo her und greifen mich richtung versorgungsposten an.**«
+
+**Ereignis 2 ist damit auf die Zelle bestätigt.** Der Nachschubposten steht auf
+**(12,18)**; die sieben `order_at`-Ziele aus R38 sind (16,20), (14,22), (12,21),
+(16,18), (17,23) — **alle im Umkreis von vier Zellen darum**. »Nach der
+Einnahme, Richtung Versorgungsposten« ist R38, wörtlich. Das war der abgestürzte
+Fall aus BT.3 und ist behoben.
+
+**Ereignis 1 ist der Sichtring, und er funktioniert.** Neuer Prüfstand
+`--ki-probe` (Simulation/KiProbe.cs): er stellt eine eigene Einheit zwei Zellen
+neben die nächste Gegnereinheit — denn »0 losgeschickt« aus einem Lauf, in dem
+nie ein Gegner in den Ring kam, ist kein Befund (Regel 33). Auf Mission 2:
+
+```
+ki-probe: eigene Einheit auf (51,8) gestellt, 2,2 Zellen neben P1 Platz 1000
+          auf (52,10) — dessen Reichweite 2, Sicht 3
+ki-probe: nach 8 s — P1 Platz 1000 REAGIERT (Ziel 0)
+KI-Streife: P1 4 losgeschickt, 4 feindlich, 4 in der eigenen Klasse;
+            Infanterie bewegt 3/7     (Armee 13 -> 11, sie kaempfen)
+```
+
+⚠ Damit ist auch zurückgenommen, was die »0 feindlich« über vier Missionen
+nahegelegt hatten: **der Bündnisfilter ist in Ordnung.**
+
+**Und die Metrik des Rings ist jetzt GELESEN statt gesetzt.** Der Erbauer beider
+Ringtafeln ist `@0x438790` — die einzige Schreibstelle für `T` (`0x834A80`,
+@0x4387A0) und `OFF` (`0x79A008`, @0x4387FE):
+
+```
+si = 0
+fuer radius = 0 .. 126:
+    T[radius] = si
+    fuer dy = -radius .. radius:
+        fuer dx = -radius .. radius:
+            wenn round(sqrt(dx*dx + dy*dy) + K) == radius:      ; K = qword[0x4F0268]
+                OFF[si++] = (dx, dy)
+```
+
+⭐ **Der Index IST der Radius in Zellen, und die Metrik ist der gerundete
+euklidische Abstand.** Beides stand in `AiRingTarget` als »UNSERE SETZUNG« und
+ist damit belegt. ⚠ Ein Unterschied bleibt: das Original nimmt den Ring
+`round(d) == r`, also `d` in `[r−0.5, r+0.5)`; wir nehmen `(r, r+1]`. Eine halbe
+Zelle nach aussen versetzt — gemessen nicht, nur gelesen.
+
+**Die Sichtweiten auf map_02 sind klein und roh aus dem Kartensatz** (`+0x2c`):
+Infanterie (typ 148) **3**, typ 161 **4**, typ 163 **5**, typ 164 **4**. Die
+zehn Fusssoldaten des Spielers 1 reichen also drei Zellen weit.
+
+⚠ **Offen, und nur von IHM zu beantworten:** kommen sie im Original schon aus
+GRÖSSERER Entfernung entgegen? Die westlichsten Einheiten des Spielers 1 stehen
+auf (49,7)/(50,7), die Stadt reicht bis Spalte 49 — wer in die Stadt fährt,
+kommt ihnen also auf wenige Zellen nahe, und dann greifen sie an. Erwartet er
+mehr als das, ist der Sichtring nicht die ganze Wahrheit, und dann sind die
+übrigen Stationen der KI-Runde (`0x4BBD0A..0x4BFC58`) durchzugehen.
