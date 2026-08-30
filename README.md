@@ -68,6 +68,53 @@ and defence, range, reload time, speed, fuel and ammunition all come from the
 game's records rather than from guessed constants. Where something could not be
 recovered, the code says so — every assumption of our own is marked as such.
 
+## Road to 0.7.0
+
+**0.7.0 ships when every one of the 33 campaign missions has been played
+through individually and found clean.** Not before.
+
+The reason is a lesson this project paid dearly for: **a single mission played
+attentively found more defects than a hundred automated harnesses combined.**
+Mission 1 alone produced over twenty findings in one evening — from faction
+colours through missing debris and explosions to units sinking into the ground.
+A harness measures what you asked it to measure; a person at the screen also
+sees what nobody thought to ask about.
+
+### How it works
+
+For each mission, in order:
+
+1. **Play it**, with an expectation sheet next to you, generated from the
+   extracted mission script — which help windows should appear, which
+   sub-missions exist, what the victory condition actually requires.
+2. **Report every discrepancy**, however small: a sound in the wrong place, a
+   tile that looks wrong under fog, an enemy that never comes.
+3. **Read the original, do not guess.** Every fix carries the address in
+   `GAME.EXE` it came from — and wherever we had to decide something ourselves,
+   the code says so in as many words.
+4. **Measure, do not assert.** Every fix comes with a number and a null model,
+   and every switch with a counter-test that restores the previous behaviour.
+5. **Only then the next mission.**
+
+### Where to watch the progress
+
+Everything found and fixed goes into **[CHANGELOG.md](CHANGELOG.md)**; whatever
+stays open or needs input goes into **[OFFENE_FRAGEN.md](OFFENE_FRAGEN.md)**
+(German) — including the cases where an earlier explanation of ours turned out
+to be wrong. Both are kept as we go, not written afterwards.
+
+⭐ **Where we stand:** missions 1 and 2 have been played through several times;
+mission 2 became completable for the first time on 2026-08-30. Those two
+missions alone account for more than forty documented fixes — among them the
+bridge railing under fog, the seven attackers that never arrived because the
+pathfinder crashed, and a group move order that left a unit with no goal and no
+retry.
+
+**Contributions are explicitly welcome.** If you play a mission and something
+feels different from the original, please say so on
+**[Discord](https://discord.gg/MVMfRWrMKv)** — especially if it seems like a
+small thing. That is exactly what progress hangs on.
+
 ## What is next
 
 - Online multiplayer (LAN lockstep already runs)

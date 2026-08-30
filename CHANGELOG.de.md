@@ -7,7 +7,145 @@ dem eigenen Rechner aus der eigenen Fassung des Spiels von 1997.
 *In English: [CHANGELOG.md](CHANGELOG.md). Ältere Fassungen als 0.5.0 sind
 bisher nur dort beschrieben.*
 
-## 0.7.0 — 21.08.2026
+## 0.7.0 — in Arbeit
+
+> ⚠ **Noch nicht veröffentlicht.** 0.7.0 kommt heraus, wenn jede der 33
+> Kampagnenmissionen einzeln durchgespielt und für sauber befunden ist — siehe
+> **Road to 0.7.0** in der [README](README.de.md). Der Abschnitt unten wächst
+> mit jeder gespielten Mission weiter.
+
+## Der Prüflauf durch die Kampagne (22.08. – 30.08.2026)
+
+### Auf einen Blick
+
+Der 22.08. hat eine Schwelle gebracht: **100,0 % — jede der 1113 Funktionen des
+Originals steht in unseren Unterlagen.** Aus dieser Lesung sind an einem Tag
+neunzehn Bauaufgaben gefallen, darunter die **Wegsuche des Originals** (unsere
+Navigation war bis dahin komplett eigene Erfindung).
+
+Seitdem läuft der eigentliche Prüflauf: **eine Mission spielen, jede
+Unstimmigkeit melden, im Original nachlesen, beheben, messen.** Mission 1 und 2
+sind mehrfach durch; **Mission 2 lässt sich seit dem 30.08. zum ersten Mal
+abschliessen.**
+
+| | |
+|---|---|
+| ⭐⭐⭐ **Die Wegsuche ist die des Originals.** | Bis zum 22.08. war unsere Navigation Eigenbau. Jetzt ist sie gelesen — samt 50er-Wegpuffer, Ringlängen und Nachbarreihenfolge. |
+| ⭐⭐ **Mission 1 feuerte KEINE EINZIGE REGEL.** | Ihr Block hat einen *Verteiler*, kein Tor — der Regelleser kannte die Form nicht. Nach der Behebung: 0 → 90 Regeln. |
+| ⚠⚠ **Nach dem ersten Sieg war die ganze Kampagne ungewinnbar.** | Ein von uns erfundener Riegel. Dazu: Kampagne 1 begann mit den Endwerten des vorigen Durchgangs. |
+| ⭐ **Mission 2 ist spielbar — und abschliessbar.** | Fenster aus `WINDOWS.CWW`, Gebäude kachelweise einsortiert, der Nachschubposten tankt auf seiner Plattform. |
+| ⭐⭐ **Die sieben Angreifer der Mission 2 kommen.** | Sie wurden gesetzt und bekamen ihren Befehl — und die Wegsuche stürzte ab, weil zwei von ihnen auf Zeile 0 stehen, dem versiegelten Kartenrand. |
+| ⭐ **Einheiten stellen sich in Basis und Depot unter.** | Torautomat, sechs Plätze, Reparatur — und damit feuert Hilfetext 25, der seit jeher stumm war. |
+| ⭐ **Brücken, Rampen und Schrägen.** | Das Geländer ragt wieder auf, die Auffahrt ist eine Rampe *innerhalb* einer Zelle, und im Nebel zeigt die Brücke ihre eigene Kachel statt einer erfundenen. |
+| ⭐ **Der Boden unter Objekten kommt aus dem Original.** | Bisher stand dort eine Flutfüllung — sichtbar als rechteckige Wasser- und Felsflecken, sobald ein Baum wegfiel. |
+| ⭐ **Die Übersichtskarte zeigt im Nebel nichts mehr.** | Das Original hat dort kein Gedächtnis; wir hatten ein Bild. |
+| ⭐⭐ **Die KI greift wieder an.** | Sie hat eine *zweite* Zielquelle, die wir übersehen hatten: die Gruppenbildung sucht sich ihr Ziel selbst, im eigenen 24er-Sektor. |
+| ⚠ **Ein Gruppenbefehl liess Einheiten ohne alles stehen.** | Wer keine freie Zielzelle fand, bekam kein Ziel, keinen Merker, keinen zweiten Versuch. |
+| ⚠⚠ **Mehrere Berichtigungen an uns selbst.** | Sie stehen unten mit Namen — sie sind mehr wert als die Behebungen. |
+
+### Was sich beim Spielen ändert
+
+- ⭐⭐⭐ **Die Wegsuche des Originals** (22.08.). Gelesen sind der 50er-Wegpuffer,
+  die zwei Ringlängen auf demselben Speicher, die Nachbarreihenfolge (vier
+  Gerade vor vier Schräge) und die Metrik. ⚠ Danach musste zweimal
+  nachgebessert werden: der Rückverfolger begann eine Welle zu früh, und das
+  gemeldete „Springen" sass gar nicht in der Wegsuche, sondern darin, dass ein
+  Schritt seinen Fortschritt erbte.
+
+- ⭐⭐ **Mission 1 feuerte keine einzige Regel** (23.08.). Gemeldet als „in der
+  Kampagne geht einiges nicht mehr". Ihr Block ist anders gebaut als alle
+  anderen: er hat einen **Verteiler**, kein Tor, und unser Leser kannte die Form
+  nicht. Nach der Behebung: **0 → 90 Regeln**.
+
+- ⚠⚠ **Nach dem ersten Sieg war die ganze Kampagne ungewinnbar** (23.08.) — ein
+  Riegel, den wir selbst erfunden hatten. Im selben Zug: **Kampagne 1 begann mit
+  den Endwerten des vorigen Durchgangs.**
+
+- ⭐ **Der Prüflauf durch Mission 1** (24.08.) brachte an einem Abend über zwanzig
+  Befunde: die **Parteifarbe** (Besitzer 0 blau, 7 cyan), fehlende **Trümmer**
+  und **Explosionen**, qualmende Geschütztürme bei Schaden, Wrackbilder über
+  lebenden Einheiten, ein Cyborg, der auf den falschen Befehl hörte, der falsche
+  Todesklang, eine 50-$-Meldung, die das Spiel anhielt, Angriffe auf verdeckte
+  Einheiten, Gebäude im Nebel und die fehlende Frauenstimme zu den
+  Tutorialfenstern.
+
+- ⭐ **Mission 2 ist spielbar** (26.–27.08.): die Fenster kommen aus
+  `WINDOWS.CWW`, Gebäude werden kachelweise einsortiert statt als Block, und der
+  Nachschubposten bedient die **Plattform** statt seiner Ankerzelle.
+
+- ⭐ **Brücken, Rampen und Schrägen** (26.–28.08.). Das **Geländer** ragt wieder
+  auf — die Teilung kommt aus der Belegung, nicht aus einem Verzicht. Die
+  **Auffahrt** ist eine Rampe *innerhalb* einer Zelle und hebt Einheiten
+  stufenlos an (19 Arten). Der **Brückenfehler** kam daher, dass die Kachel als
+  Rechteck aus dem Bild geschnitten wurde.
+
+- ⭐ **Der Boden unter einem Objekt** (28.08.). Eine Objektzelle bekommt ihre
+  **eigene** Kachel als Boden; bisher stand dort eine Flutfüllung, die als
+  rechteckiger Fleck sichtbar wurde, sobald ein Baum wegfiel. Dazu die
+  **Nebeldecke**: im unerkundeten Gebiet steht die synthetisierte Kachel des
+  Originals. ⚠ Ein erster Anlauf, den *Hintergrund* pauschal zu synthetisieren,
+  wurde noch am selben Tag zurückgenommen — die Stadt bekam damit Fels.
+
+- ⭐ **Die Minikarte zeigt die Objektebene** (28.08.), womit die Schattierungen
+  an neutralen Zivilgebäuden verschwinden. Die Wurzel war nicht die Minikarte,
+  sondern der Boden darunter.
+
+- ⭐ **Einheiten stellen sich unter** (30.08.). Eine eigene Einheit auf der
+  Türzelle von **Basis, Depot, Bahnhof oder Feldbahnhof** fährt hinein: Tor auf,
+  sechs Plätze, drinnen wird repariert, „Aussenden" gibt denselben Satz zurück.
+  Damit feuert **Hilfetext 25**, der seit jeher stumm war. ⚠ Getankt wird
+  drinnen *nicht* — der Hilfetext verspricht es, das Programm tut es nicht, und
+  wir folgen dem Programm.
+
+- ⭐⭐ **Die sieben Angreifer der Mission 2** (30.08.). Nimmt man die obere rechte
+  Basis ein, setzt das Skript sieben Einheiten und schickt sie zum
+  Nachschubposten. Sie kamen nie: **die Wegsuche stürzte ab**, weil zwei von
+  ihnen auf Zeile 0 gesetzt werden — dem Kartenrand, den die Suche versiegelt,
+  während die Startmarke das Siegel wieder aufbricht.
+
+- ⭐⭐ **Die KI greift wieder an** (30.08.). Sie hat eine **zweite** Zielquelle,
+  die wir übersehen hatten: nicht die Zielliste des Skripts, sondern die
+  **Gruppenbildung**, die sich ihr Ziel selbst im eigenen 24-Zellen-Sektor
+  sucht. Bei uns war die Routine dafür gebaut — und wurde von niemandem
+  gerufen.
+
+- ⚠ **Ein Gruppenbefehl liess Einheiten ohne alles stehen** (30.08.). Wer beim
+  Rechtsklick auf eine Gruppe keine freie Zielzelle im Umkreis fand, bekam kein
+  Ziel, keinen Merker und keinen zweiten Versuch. Das Original prüft die
+  Befahrbarkeit des Ziels **überhaupt nicht** und fährt immer los.
+
+- ⭐ **Das Brückengeländer im Nebel** (30.08.). Ab Lagenbyte 100 zeigt das
+  Original die *wahre* Kachel, darunter eine synthetisierte. Wir hatten dem
+  Geländer die Synthese übergestülpt — sichtbar nur an den **waagerechten**
+  Brücken, denn nur die haben ein Geländer.
+
+- ⭐ **Die Übersichtskarte im Nebel** (30.08.). Sie bekommt eine eigene
+  Nebelschicht: im nie erkundeten Gebiet undurchsichtig. Das Original malt dort
+  je Zelle aus seinem Gedächtnis, und darin steht kein Gebäude — wir hatten ein
+  Bild ohne Gedächtnis.
+
+### Berichtigungen an uns selbst
+
+Sie stehen hier, weil sie mehr wert sind als die Behebungen:
+
+- ⚠⚠ **Eine Adressvollerhebung sieht den Zeigerschreiber nicht.** „Vier
+  Schreiber" eines Feldes waren in Wahrheit **sieben** — drei bilden die Adresse
+  erst per `lea` und sind für jede Suche nach der Konstanten unsichtbar.
+- ⚠⚠ **Eine unveränderte Messzahl ist ein Befund, kein Rauschen.** Eine Behebung
+  lieferte dreimal exakt dieselben Zahlen wie vorher. Das hiess nicht
+  „Messfehler", sondern „die Änderung berührt den gemessenen Weg gar nicht".
+- ⚠ **Ein Nullmodell aus einer Befehlsfolge muss die Reihenfolge innerhalb eines
+  Durchgangs mitrechnen.** Unseres sagte sieben Takte und lag um einen daneben.
+- ⚠ **„Befehl gegeben" und „unterwegs" sind zwei Zahlen.** Ein Prüfstand meldete
+  ein sauberes 7/7, während der Spieler sieben Einheiten stehen sah. Beides
+  stimmte.
+- ⚠ **Die Helligkeit war das Symptom, nicht die Ursache.** Die erste Behebung an
+  der Übersichtskarte dunkelte stärker ab; richtig war, dort *nichts* zu zeigen.
+- ⚠ **Ein Negativbefund war zu weit gezogen.** Dass die Zielliste der KI nur vom
+  Missionsskript gefüllt wird, stimmt — der Schluss „also greift sie ohne Skript
+  nicht an" war falsch.
+
+## 0.7.0 — Stand 21.08.2026
 
 ### Auf einen Blick
 

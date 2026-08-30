@@ -71,6 +71,56 @@ Munition stammen aus den Sätzen des Spiels und nicht aus geratenen Konstanten.
 Wo etwas nicht zu bergen war, sagt der Code das — jede eigene Setzung ist als
 solche gekennzeichnet.
 
+## Road to 0.7.0
+
+**0.7.0 kommt heraus, wenn jede der 33 Kampagnenmissionen einzeln durchgespielt
+und für sauber befunden ist.** Nicht früher.
+
+Der Grund ist eine Erfahrung aus diesem Projekt, und sie war teuer: **eine
+einzige aufmerksam gespielte Mission hat mehr Fehler gefunden als über hundert
+automatische Prüfstände zusammen.** Mission 1 allein brachte an einem Abend
+über zwanzig Befunde — von der Parteifarbe über fehlende Trümmer und Explosionen
+bis zu Einheiten, die im Boden verschwanden. Prüfstände messen, was man sie zu
+messen gebeten hat; ein Mensch am Bildschirm sieht auch das, wonach niemand
+gefragt hat.
+
+### Wie das abläuft
+
+Für jede Mission, der Reihe nach:
+
+1. **Spielen**, mit einem Erwartungsblatt aus dem ausgelesenen Missionsskript
+   daneben — welche Hilfefenster kommen sollten, welche Untermissionen es gibt,
+   was die Siegbedingung wirklich verlangt.
+2. **Jede Unstimmigkeit melden**, auch die kleinste: ein Geräusch am falschen
+   Ort, eine Kachel, die im Nebel nicht stimmt, ein Gegner, der nicht kommt.
+3. **Im Original nachlesen**, nicht raten. Jede Behebung bekommt die Adresse in
+   `GAME.EXE`, an der sie steht — und wo wir etwas selbst gesetzt haben, ist es
+   im Code als *unsere Setzung* markiert.
+4. **Messen statt behaupten.** Zu jeder Behebung gehört eine Zahl und ein
+   Nullmodell, und zu jedem Schalter eine Gegenprobe, die den alten Zustand
+   wiederherstellt.
+5. **Erst dann die nächste Mission.**
+
+### Woran man den Fortschritt sieht
+
+Was dabei gefunden und behoben wird, steht vollständig in
+**[CHANGELOG.de.md](CHANGELOG.de.md)**; was offen bleibt oder eine Zuarbeit
+braucht, in **[OFFENE_FRAGEN.md](OFFENE_FRAGEN.md)** — samt der Fälle, in denen
+sich eine frühere Erklärung von uns als falsch herausgestellt hat. Beides wird
+mitgeführt, nicht nachträglich geschrieben.
+
+⭐ **Stand heute:** Mission 1 und 2 sind mehrfach durchgespielt; Mission 2 ist
+seit dem 30.08.2026 zum ersten Mal abschliessbar. Aus diesen zwei Missionen
+allein stammen mehr als vierzig belegte Behebungen — darunter das
+Brückengeländer im Nebel, die sieben Angreifer, die wegen eines Absturzes in
+der Wegsuche nie kamen, und ein Gruppenbefehl, der eine Einheit ohne Ziel und
+ohne zweiten Versuch stehenliess.
+
+**Mitmachen ist ausdrücklich erwünscht.** Wer eine Mission spielt und etwas
+bemerkt, das sich im Original anders anfühlt, sollte es auf
+**[Discord](https://discord.gg/MVMfRWrMKv)** sagen — auch und gerade, wenn es
+sich um eine Kleinigkeit handelt. Genau daran hängt der Fortschritt.
+
 ## Was als Nächstes kommt
 
 - Mehrspieler über das Netz (im LAN läuft der Lockstep bereits)

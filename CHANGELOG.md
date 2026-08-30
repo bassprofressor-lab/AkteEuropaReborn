@@ -6,7 +6,61 @@ your own copy of the 1997 game.
 
 *Auf Deutsch: [CHANGELOG.de.md](CHANGELOG.de.md).*
 
-## 0.7.0 — 2026-08-21
+## 0.7.0 — in progress
+
+> ⚠ **Not released yet.** 0.7.0 ships once every one of the 33 campaign missions
+> has been played through individually and found clean — see **Road to 0.7.0**
+> in the [README](README.md). The section below grows with every mission played.
+
+## Playing through the campaign (2026-08-22 to 2026-08-30)
+
+### At a glance
+
+August 22nd crossed a threshold: **100.0 % — every one of the original's 1113
+functions is now documented.** Nineteen build tasks fell out of that reading in
+a single day, among them the **original's pathfinder** (our navigation had been
+entirely our own invention until then).
+
+Since then the actual play-through has been running: **play a mission, report
+every discrepancy, read the original, fix, measure.** Missions 1 and 2 have been
+played several times; **mission 2 became completable for the first time on
+August 30th.**
+
+| | |
+|---|---|
+| ⭐⭐⭐ **The pathfinder is the original's.** | Until Aug 22nd our navigation was homegrown. It is now read — buffer of 50, both ring lengths, neighbour order. |
+| ⭐⭐ **Mission 1 fired NOT A SINGLE RULE.** | Its block has a *dispatcher*, not a gate — our rule reader did not know the shape. After the fix: 0 → 90 rules. |
+| ⚠⚠ **After the first victory the whole campaign was unwinnable.** | A latch we had invented ourselves. Also: campaign 1 started with the previous run's end values. |
+| ⭐ **Mission 2 is playable — and completable.** | Windows from `WINDOWS.CWW`, buildings filed tile by tile, and the supply post serves its platform. |
+| ⭐⭐ **Mission 2's seven attackers arrive.** | They were placed and given their orders — and the pathfinder crashed, because two of them stand on row 0, the sealed map edge. |
+| ⭐ **Units park inside a base or depot.** | Gate state machine, six slots, repair — and with it help text 25 fires, which had always been silent. |
+| ⭐ **Bridges, ramps and slopes.** | The railing rises again, the approach is a ramp *inside* one cell, and under fog a bridge shows its own tile instead of an invented one. |
+| ⭐ **The ground under objects comes from the original.** | It used to be a flood fill — visible as rectangular water and rock patches the moment a tree was removed. |
+| ⭐ **The overview map shows nothing under fog.** | The original has no memory there; we had a picture. |
+| ⭐⭐ **The AI attacks again.** | It has a *second* target source we had missed: group forming picks its own target inside its own 24-cell sector. |
+| ⚠ **A group move order left units with nothing.** | Whoever found no free goal cell got no goal, no marker and no retry. |
+| ⚠⚠ **Several corrections to ourselves.** | They are listed below by name — they are worth more than the fixes. |
+
+### Corrections to ourselves
+
+- ⚠⚠ **A census over addresses does not see the pointer writer.** "Four writers"
+  of one field were in fact **seven** — three form the address with `lea` first
+  and are invisible to any search for the constant.
+- ⚠⚠ **An unchanged measurement is a finding, not noise.** One fix produced
+  exactly the same three numbers as before. That did not mean "measurement
+  error", it meant "the change does not touch the path being measured".
+- ⚠ **A null model derived from an instruction sequence has to account for the
+  order within one pass.** Ours said seven ticks and was off by one.
+- ⚠ **"Order given" and "under way" are two different numbers.** A harness
+  reported a clean 7/7 while the player watched seven units stand still. Both
+  were true.
+- ⚠ **Brightness was the symptom, not the cause.** The first fix to the overview
+  map darkened it further; the right answer was to show *nothing* there.
+- ⚠ **A negative finding was drawn too wide.** That the AI's target list is only
+  filled by the mission script is true — the conclusion "so it does not attack
+  without a script" was wrong.
+
+## 0.7.0 — as of 2026-08-21
 
 ### At a glance
 
