@@ -18371,3 +18371,37 @@ am Fahrwerk liegen** — im Original nicht und bei uns nicht. Was übrig bleibt:
 
 **Was fehlt, ist die STELLE.** Mit Karte und ungefährer Zelle lässt sich in
 einem Zug sagen, welche imap-Klasse dort steht und welche Höhenstufe.
+
+### BW.6 ⭐⭐⭐ DIE STELLE IST GEMESSEN — und es war Punkt 1
+
+Er nannte sie: »in Kampagne 1 ist es merkbar bei dem oberen Schiff der 3 Stück«.
+Auf map_01 stehen genau drei Schiffe (P1, typ 153, Gattung 4, Fahrwerk 73):
+**(14,17)** und **(17,18)** unten, **(21,7)** oben. Neuer Prüfstand
+`--boden-um=21,7,6`:
+
+```
+       15 16 17 18 19 20 21 22 23 24 25 26 27
+  r1     #  #  #  #  #  .  r  r  w  w  w  w  w
+  r5     #  .  #  #  .  r  r  w  w  w  w  r  r
+  r7     .  .  #  #  #  # [w  w  w  w  r  .  .
+  r8     .  #  .  .  .  r  w  w  w  r  r  .  #
+  r9     .  .  .  .  .  r  w  w  w  r  r  r  r
+  r10    .  .  .  #  .  r  r  w  r  r  r  .  r
+  Hoehe 0..1; 14 Zellen mit Kachelflagge != 0
+```
+
+⭐⭐ **Der ganze Uferstreifen westlich des Schiffs ist `r` — rau, imap `0xFFFD`.**
+Und rau heisst: **Walker und Infanterie ja, Rad UND Kette nein.** Beide.
+
+**Damit ist es Punkt 1 aus BW.5, und beides ist richtig:** `.` und `r` liegen
+dort Zelle an Zelle nebeneinander (Zeile 8: Spalte 19 frei, Spalte 20 rau). Wer
+mit einem Fahrzeug an einer Stelle hinkommt und an der Nachbarstelle nicht, sieht
+einen Fahrwerksunterschied, wo eine **Bodenklassengrenze** ist.
+
+⚠ Und die zweite Möglichkeit ist ausgeschlossen: **Höhe 0..1** im ganzen Feld,
+`MaxClimb = 3` wird nirgends erreicht. Unsere Setzung schlägt hier nicht zu.
+
+**Neu dafür: `--boden-um=<spalte>,<zeile>[,<weite>]`** (`Simulation/
+BodenAuskunft.cs`) — Bodenklasse, Höhenspanne, Kachelflaggen und wer dort steht,
+mit Gattung, Fahrwerk und Bewegungsklasse. Die Frage »kann diese Einheit hier
+hin, und wenn nein warum nicht« kam zum dritten Mal; jetzt ist sie ein Aufruf.
