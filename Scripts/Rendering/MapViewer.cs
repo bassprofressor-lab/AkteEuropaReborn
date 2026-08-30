@@ -449,6 +449,7 @@ public partial class MapViewer : Node2D
             return;
         }
         if (_depotFlow) _entities.DepotFlowStart();
+        if (_einfahrtCheck) _entities.EinfahrtCheckStart();
         if (_sellCheck) _entities.SellCheckStart();
         if (_shopCheckFlag) _entities.ShopCheckStart();
         if (_buyCheckFlag) _entities.BuyCheckStart();
@@ -1201,6 +1202,10 @@ public partial class MapViewer : Node2D
     private int _ringCheckTicks;
     /// <summary><c>--depot-flow</c> — bestellen, im Depot liegen, aussenden.</summary>
     private bool _depotFlow;
+
+    /// <summary><c>--einfahrt-check</c> — anhalten, Tor, drin, wieder heraus.
+    /// Siehe Simulation/Einfahrt.cs.</summary>
+    private bool _einfahrtCheck;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
     /// seines Gleises? Siehe <c>MapEntityLayer.WagonFacingCheck</c>.</summary>
     private bool _wagonFacingCheck;
@@ -1775,6 +1780,9 @@ public partial class MapViewer : Node2D
             else if (a == "--zell-spur") MapEntityLayer.ZellSpur = true;
             else if (a == "--gebaeude-block") MapEntityLayer.GebaeudeBlock = true;
             else if (a == "--posten-anker") MapEntityLayer.PostenAnker = true;
+            // ⚠ GEGENPROBE zur EINFAHRT vom 30.08.2026, siehe Simulation/Einfahrt.cs
+            else if (a == "--keine-einfahrt") MapEntityLayer.KeineEinfahrt = true;
+            else if (a == "--einfahrt-check") _einfahrtCheck = true;
             else if (a == "--wegsuche-check") _wegsucheCheck = true;
             // ⚠ GEGENPROBE: der alte A*, siehe NavGrid.AlterAstern.
             else if (a == "--alter-astern") Simulation.NavGrid.AlterAstern = true;
@@ -2446,6 +2454,12 @@ public partial class MapViewer : Node2D
         if (_upTime >= _quitAfter)
         {
             GD.Print($"MapViewer: --quit-after {_quitAfter:0.0}s erreicht");
+            // ⭐ Die EINFAHRT, seit dem 30.08.2026. Sie steht hier und nicht in
+            // einem eigenen Prüfstand, weil die interessante Zahl die im
+            // NORMALEN Lauf ist: fährt von selbst etwas hinein, das nicht
+            // hineinsollte? Siehe Simulation/Einfahrt.cs.
+            string ein = _entities.EinfahrtLine();
+            if (ein.Length > 0) GD.Print(ein);
             string q = _entities.QueueWatchLine();
             if (q.Length > 0) GD.Print(q);
             string b = _entities.BuildWatchLine();

@@ -17668,3 +17668,147 @@ neue Falle tappt«, hat das verhindert.
 ⭐ **Was als Prüfung bleibt und wirklich etwas fängt:** eine Regel mit Bedingung,
 leerer Wirkung UND **ohne** `once` wäre ein echter Verlust. Heute gibt es davon
 **null** — und genau das ist die Zahl, die ein Prüfstand führen muss.
+
+---
+
+## BS. ⭐⭐⭐ DIE EINFAHRT — Text 25 hing nicht an einem FELD, sondern an einer MECHANIK (30.08.2026)
+
+**Der Anlass** war die alte Notiz »Text 25 bleibt stumm: sein Suchlauf fragt
+Feld +0x14 (UKOL) ab — das führen wir nicht«, und daneben die Einschätzung vom
+28.08., »es genügt, den Zustand *gerade eingefahren* (50) am Andockereignis zu
+setzen«. ⚠⚠ **Beides war zu kurz gesprungen.** Es gab bei uns gar kein
+Andockereignis, und der Zwischenzustand 48 fehlte in der Lesung.
+
+### BS.1 Die Vollerhebung der UKOL-Schreiber
+
+Gesucht mit drei voneinander unabhängigen Verfahren über das ganze `.text`,
+**nicht** mit einem Linearabtast (siehe die Regel dazu):
+
+| Form | wie gesucht | Treffer |
+|---|---|---|
+| `mov byte [reg+0x14], imm8` | Bytemuster `C6 4X 14 ii` | 27 |
+| `mov byte [78·n + 0x6E26DC], …` | Roh-Xref auf die Konstante `0x6E26DC` | 44 Schreiber, 130 Leser, 6 `cmp` |
+| über einen ZEIGER | `lea reg, [… + 0x6E26DC]` | **4** |
+
+⚠⚠ **Die vierte Zeile ist der Punkt.** Die Notiz vom 28.08. nannte **vier**
+Schreiber der 50 — es sind **sieben**. Drei davon (`0x43D657`, `0x43D8DE`,
+`0x43DB03`) schreiben über `ebp`, nachdem die Adresse per `lea` gebildet wurde,
+und sind für jede Adressvollerhebung unsichtbar. Das ist dieselbe Falle wie
+`byte[esi+1]` beim sec18-Zustandsbyte, nur in der Zeigerform.
+⭐ Es gibt **kein** Lesen-Ändern-Schreiben auf UKOL: 0 `inc`/`add`/`or`. Der
+Bestand ist damit vollständig.
+
+### BS.2 Das Auftragsband ist eine Sprungtafel mit 21 belegten Werten
+
+`@0x407F10`: `ukol = byte[+0x14]`, `<= 0x38`, Index `byte[0x40A130 + ukol]`,
+Sprung `dword[0x40A0D8 + 4·k]`.
+
+```
+Arm  0..20 :  ukol 0,1,2,3,4,15,16,17,20,21,22,23,24,25,30,49,51,52,53,54,56
+Arm  21    :  alle uebrigen 36 Werte -> 0x409EEE (nichts tun)
+```
+
+⭐ **UKOL 50 hat KEINEN Arm.** Das passt genau zu seiner Bedeutung: wer
+untergestellt ist, wird nicht angefasst.
+
+### BS.3 Was UKOL 1 wirklich ist — die HANDSTEUERUNG, nicht ein Fahrbefehl
+
+`UKOL := 1` hat **genau einen** Schreiber: `@0x4C294B`, zusammen mit
+`AKCE (+0x15) := 0xFF`. Die umgebende Funktion `0x4C2280` steht in
+`berichte/revier1.md` seit langem als **»Hand control«**. Und Hilfetext #009
+lautet wörtlich »Im @Handsteuerungsmodus kontrollieren Sie die gewählte Einheit
+mit den @Tastaturpfeilen … @ESC Taste oder @Rechte @Maus @Taste«.
+
+→ **Die beiden `sel_field`-Regeln (M1 R12, M2 R32) fragen auf UKOL == 1 und
+bleiben stumm, weil wir die Handsteuerung nicht haben.** Über alle 751
+Kampagnenregeln gezählt sind es genau diese zwei; kein Missionsziel, keine
+Endregel, kein Klang hängt daran. **Nicht gebaut, weil nicht gemeldet.**
+
+⚠ Zurückgezogen: der Linearabtast hatte `0x429A76` als Schreiber der 1 gemeldet.
+Das ist `mov byte [esp+0x14], 1` — ein Stapelplatz, kein Feld.
+
+### BS.4 Die Einfahrt, vollständig gelesen — und GEBAUT
+
+Alles im Gebäudetakt `0x43CA50`. Die Herleitung samt Adressen steht im Kopf von
+`Scripts/Simulation/Einfahrt.cs`; hier nur das Gerüst:
+
+* **Vier Arten nehmen auf** (Indextafel `0x43ECA0`, Sprungtafel `0x43EC8C`,
+  Inhalt `00 04 04 04 01 02 04 04 04 04 04 03`): **Typ 1 Basis, 5 Depot,
+  6 Bahnhof, 12 Feldbahnhof** — Arm 2 und 3 sind wörtlich dieselbe Adresse.
+  ⭐ Genau die zwei, die Text #25 beim Namen nennt, plus die zwei Bahnhöfe.
+* **Das Tor ist ein Zustandsautomat** im dritten Byte jedes Türsatzes
+  (`+0x35` Spalte, `+0x36` Zeile, `+0x37` Zustand, Schrittweite 3, Anzahl
+  `+0x34`): `0 → 129 → 130 → 131 → 132 → 3 → 2 → 1 → 0`.
+* **Angemeldet** wird an Tür 0 (`@0x43D5AF`): steht dort eine Einheit mit
+  `UKOL == 0`, wird `UKOL := 48`.
+* **Eingefahren** wird bei `UKOL == 48` UND `Torzustand == 1` (`@0x43D60E`):
+  imap-Zelle auf `0xFFFE`, `andocken(cis_typ, id)`, `UKOL := 50`.
+* **Sechs Plätze**, dieselbe Liste, aus der »Aussenden« holt.
+* **Herausfahren** `@0x410420` setzt zuerst `UKOL := 51` und stellt die Einheit
+  auf DIESELBE Türzelle.
+* **Der Dienst im Gebäude** `@0x43E9C5` fasst je Platz genau `byte[+0x08]` gegen
+  `byte[+0x29]` an: **ein Trefferpunkt je Takt**.
+
+⚠⚠ **EIN WIDERSPRUCH ZWISCHEN TEXT UND PROGRAMM, und er bleibt stehen:** Text
+#25 verspricht »werden automatisch aufgetankt und aufmunitioniert«. Der
+Dienstblock rührt **weder Sprit (+0x2e) noch Munition (+0x39)** an, an keinem
+seiner drei Arme (Typ 1, 5, 9). Getankt wird nur am **Nachschubposten** (Typ 14,
+`@0x43E872`, `word[+0x2e] = word[+0x30]`, `byte[+0x39] = byte[+0x3a]`), und den
+haben wir. **Wir folgen dem Programm.**
+
+### BS.5 Die abgeleitete Zahl, und warum sie SECHS ist und nicht sieben
+
+Die Reihenfolge innerhalb eines Taktes entscheidet: Schritt 1 schreibt den neuen
+Zustand, Schritt 4 liest ihn im selben Durchgang wieder. Solange eine Einheit
+mit UKOL 48 davorsteht, ist die **132 in keinem Takt sichtbar** — 131 wird zu
+132 und im selben Takt zu 3.
+
+```
+Takt 1: 0 -> 129     Takt 4: 131 -> 132 -> 3
+Takt 2: 129 -> 130   Takt 5: 3 -> 2
+Takt 3: 130 -> 131   Takt 6: 2 -> 1   -> EINFAHRT
+```
+
+⚠ Mein erstes Nullmodell sagte **7** und war falsch — es zählte einen Takt, in
+dem das Tor auf 132 stehenbleibt. Den gibt es nicht. `--einfahrt-check` misst
+die Zahl gegen die Ableitung, nicht gegen den Lauf.
+
+### BS.6 Was daran UNSERES ist, und die drei Messungen dahinter
+
+1. **UKOL 0 ist abgeleitet** (`Path == null && Orders.Count == 0`), weil wir nur
+   drei der 56 Werte führen. Ohne das würde eine Einheit, die über die Türzelle
+   nur hindurchfährt, verschluckt; im Original trägt sie dabei UKOL 2.
+2. **Der Besitzerabgleich ist unserer.** Der Arm der Basis hat keinen — der
+   zweite Zweig derselben Funktion (`0x43D6C0..0x43D71F`) sehr wohl. Ohne ihn
+   verschwände eine feindliche Einheit, die zum Besetzen an der Tür steht, in
+   der Basis.
+3. **Die Überlaufregel ist NICHT nachgebaut.** `0x43BFC0` ruft bei sechs
+   belegten Plätzen `0x410E60`, den **Einheitenlöscher** — wer in eine volle
+   Basis fährt, ist im Original weg. Bei uns bleibt sie stehen und der Fall wird
+   gezählt. **Eine Zeile, falls es zurück soll.**
+
+⭐⭐ **Und ein Befund aus dem Messen, den kein Lesen geliefert hätte:** ohne den
+Zustand 51 schaukeln sich Aussenden und Einfahren auf. Gemessen auf Kampagne
+10/23/26 in vierzig Sekunden **214 / 490 / 214** Einfahrten statt keiner.
+⚠ Ein Riegel von EINEM Takt half nicht — die drei Zahlen kamen Zeichen für
+Zeichen wieder heraus. Der Zustand endet nicht nach einer Zeit, sondern an einem
+**Ort**: erst wenn die Einheit die Türzelle verlassen hat. Danach: **0 / 0 / 0**.
+
+### BS.7 Nebenbei behoben: ein Feldverwechsler in `RepairInDepot`
+
+Dort stand `foreach (int slot in b.Depot)` und darunter `e.Slot != slot`. In
+`Depot` liegen aber **Entwurfsnummern**, `e.Slot` ist eine **Platznummer**. Die
+Schleife hat also irgendeine Einheit draussen auf dem Feld repariert, deren
+Platznummer zufällig gleich einer Entwurfsnummer war. Seit es echte Sätze im
+Gebäude gibt (`Entity.Garage`), läuft sie über die.
+
+### BS.8 Was offen bleibt
+
+* **Die Handsteuerung** (UKOL 1) — siehe BS.3. Nicht gebaut.
+* **Verwerten und Verlegen** einer hereingefahrenen Einheit: beide brauchen die
+  Rückabbildung Satz → Entwurf, die es für ein von der Karte gefahrenes Stück
+  nicht gibt. Der Knopf sagt es jetzt, statt stumm nichts zu tun.
+* **Ob ein FEINDLICHER Andockversuch im Original wirklich durchgeht** — der
+  fehlende Besitzerabgleich in Arm 0 ist gelesen, aber nicht erklärt.
+* **Die KI kennt die Garage nur zum Leeren.** Sie stellt nichts absichtlich
+  unter.

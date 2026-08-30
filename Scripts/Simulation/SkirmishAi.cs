@@ -1734,6 +1734,19 @@ public partial class MapEntityLayer : Node2D
                 if (!SendOutOfDepot(b, 0)) { AiDepotStuck++; break; }
                 AiDepotSent++;
             }
+            // ⭐ 30.08.2026 — und dasselbe fuer die HEREINGEFAHRENEN. Ohne
+            // diese Schleife waere die Einfahrt fuer die KI eine Falle: eine
+            // ihrer Einheiten, die still an der eigenen Basistuer steht, faehrt
+            // hinein und kaeme nie wieder heraus, weil nur das Bedienfeld des
+            // Spielers »Aussenden« kennt. Gemessen ist der Fall: auf Kampagne
+            // 10/23/26 gingen im ersten Lauf 2 bis 5 Einheiten der Gegner von
+            // selbst hinein. Siehe Simulation/Einfahrt.cs.
+            wache = 0;
+            while (b.Garage.Count > 0 && wache++ < DepotSlots)
+            {
+                if (!AusfahrenAusGarage(b, 0)) { AiDepotStuck++; break; }
+                AiDepotSent++;
+            }
         }
     }
 

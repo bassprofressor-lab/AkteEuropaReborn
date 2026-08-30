@@ -745,6 +745,32 @@ public partial class MapEntityLayer : Node2D
         /// schliessen sich nicht aus.</para></summary>
         public readonly List<int> Depot = new();
 
+        /// <summary><b>Die EINGEFAHRENEN Einheiten dieses Gebäudes</b> — echte
+        /// Sätze, keine Entwurfsnummern. Sie teilen sich die sechs Plätze mit
+        /// <see cref="Depot"/>, denn im Original ist es EINE Liste von
+        /// Einheitennummern (<c>word[0x878E5C + 16·idx]</c>). Siehe
+        /// Simulation/Einfahrt.cs.</summary>
+        public readonly List<Entity> Garage = new();
+
+        /// <summary><b>Der Torzustand je Tür</b> — das dritte Byte jedes
+        /// Türsatzes, Satz <c>+0x37</c> aufwärts in Dreierschritten. 0 = zu,
+        /// 129…132 = öffnet, 132 = offen, 3…1 = schliesst. Siehe
+        /// Simulation/Einfahrt.cs; die Liste wächst beim ersten Takt auf
+        /// <see cref="DoorCells"/>.Count.</summary>
+        public readonly List<int> TorZustand = new();
+
+        /// <summary><b>UKOL, Satz +0x14</b> — der Auftragszustand. ⚠ Wir führen
+        /// von den 56 Werten des Originals nur drei: 0 (frei), 48 (an der Tür
+        /// angemeldet) und 50 (untergestellt). Alles andere bleibt 0. Daran
+        /// hängt Hilfetext #25, und daran hängt das Zeichnertor @0x4300E2.
+        /// Siehe Simulation/Einfahrt.cs.</summary>
+        public int Ukol;
+
+        /// <summary>In welchem Gebäude diese Einheit untergestellt ist,
+        /// <c>null</c> = auf der Karte. Die Gegenrichtung zu
+        /// <see cref="Garage"/>.</summary>
+        public Entity? InGebaeude;
+
         public int MenuIndex;            // pick in this factory's own menu
                                          // (auto-acquired targets are never chased)
         public float Cooldown;           // seconds until the weapon can fire again
@@ -8787,7 +8813,11 @@ public partial class MapEntityLayer : Node2D
         // durch. Massgeblich ist die Waffenfahne +0x0d (siehe Entity.Armed).
         // Wo die Rohbytes fehlen (gebaute Einheiten, aeltere Ausfuhren), bleibt
         // die abgeleitete Spanne: die Aufsaetze 40..54 sind die Ausruestung.
-        => !e.IsProp && !e.Dead && e.Weapon != 0 && e.HpMax > 0 &&
+        // ⭐ 30.08.2026 — und wer UNTERGESTELLT ist, schiesst nicht. Das
+        // Original braucht die Zeile nicht: UKOL 50 hat in der Auftragstafel
+        // 0x40A0D8 gar keinen Arm, die Einheit wird also nie angefasst. Bei
+        // uns ist es dieses Tor, siehe Simulation/Einfahrt.cs.
+        => !e.IsProp && !e.Dead && !Untergestellt(e) && e.Weapon != 0 && e.HpMax > 0 &&
            (e.Armed || !IsEquipmentMount(e.Weapon));
 
     /// <summary>Aufsaetze 40..54 sind AUSRUESTUNG, keine Waffen — die Abbildung
@@ -9039,6 +9069,11 @@ public partial class MapEntityLayer : Node2D
     private bool IsHostile(Entity a, Entity b)
     {
         if (b.IsProp || b.Dead || b.HpMax <= 0) return false;
+        // ⭐ »Basen, ebenso wie Depots, bieten auch Schutz fuer die
+        // untergestellten Einheiten« (Hilfetext #25). Im Original steht der
+        // Satz im Feld: die Einheit ist aus der Belegungskarte heraus
+        // (@0x43D63E schreibt 0xFFFE) und darum fuer jede Zielsuche fort.
+        if (Untergestellt(b)) return false;
         if (a.Owner is < 0 or > 7 || b.Owner is < 0 or > 7) return false;
         if (_standby[a.Owner] || _standby[b.Owner]) return false;
         return _haveAllies ? !_allied[a.Owner, b.Owner] : b.Owner != a.Owner;
@@ -10957,15 +10992,26 @@ public partial class MapEntityLayer : Node2D
                                 // (+0x39 = +0x3A, Plaetze 4000..4006).
                                 0x39 => e.Ammo,
                                 0x3a => e.AmmoMax,
-                                // ⚠⚠ +0x14 (UKOL, der Auftragscode) fehlt hier mit
-                                // Absicht: WIR FUEHREN IHN NICHT. `Order`/`Order2`
-                                // sind +0x10/+0x11 der FLUGZEUGE, etwas anderes.
-                                // Zwei Regeln haengen daran und bleiben darum
-                                // stumm: der Suchlauf zu Hilfetext 25 (M2
-                                // @0x498C95, sucht Auftrag 50 unter 100 Plaetzen)
-                                // und die vorhandene sel_field-Regel 31.
+                                // ⭐⭐ 30.08.2026 — +0x14 (UKOL) ist da, aber nur
+                                // in drei Werten: 0 frei, 48 an der Tuer
+                                // angemeldet, 50 untergestellt. Siehe
+                                // Simulation/Einfahrt.cs und Entity.Ukol.
+                                //
+                                // Damit feuert der Suchlauf zu Hilfetext 25 (M2
+                                // @0x498C95, sucht Auftrag 50 unter 100
+                                // Plaetzen): »Einheiten im Basis Depot werden
+                                // automatisch aufgetankt ...«.
+                                //
+                                // ⚠ NICHT davon abgedeckt: die beiden
+                                // sel_field-Regeln (M1 R12, M2 R32) fragen auf
+                                // UKOL == 1, und 1 ist die HANDSTEUERUNG
+                                // (einziger Schreiber @0x4C294B, im
+                                // Hand-control-Block 0x4C2280). Den Modus gibt
+                                // es bei uns nicht; die zwei Regeln bleiben
+                                // stumm, und das steht in OFFENE_FRAGEN.
                                 // Eine Zahl zu erfinden waere schlimmer als die
                                 // Luecke - dann faenden die Regeln das Falsche.
+                                0x14 => e.Ukol,
                                 _ => -1,
                             };
                     return -1;
@@ -17124,6 +17170,18 @@ public partial class MapEntityLayer : Node2D
             }
             return rows;
         }
+        // ⭐ 30.08.2026 — ZUERST die EINGEFAHRENEN. Sie stehen vorn, weil ihr
+        // Platz im Original derselbe ist (eine Liste, sechs Worte) und weil
+        // `SendOutFromPanel` die Zeilennummer genau so wieder aufteilt: alles
+        // unter `Garage.Count` ist ein echter Satz, alles darüber eine
+        // Entwurfsnummer. Die zweite Spalte trägt hier das LEBEN und keinen
+        // Preis — eine untergestellte Einheit ist nicht gekauft, sie ist
+        // hereingefahren, und was man von ihr wissen will, ist ihr Zustand.
+        foreach (var u in e.Garage)
+            rows.Add(new UI.BuildPanel.Row(
+                EinheitenWort(u), $"{u.Hp}/{u.HpMax}", true, false,
+                u.Infantry >= 0 ? UI.PortraitBank.PictureOfInfantry(u.Infantry) : 0));
+
         if (_designs == null) return rows;
         for (int k = 0; k < e.Depot.Count; k++)
         {
@@ -17169,6 +17227,11 @@ public partial class MapEntityLayer : Node2D
             return;
         }
 
+        // ⭐ 30.08.2026 — die Zeilen der EINGEFAHRENEN stehen vorn (DepotRows).
+        // Eine von ihnen kommt mit ihrem eigenen Satz heraus, eine
+        // Entwurfsnummer wird erst zur Einheit — zwei verschiedene Wege.
+        if (k >= 0 && k < e.Garage.Count) { AusfahrenAusGarage(e, k); return; }
+        k -= e.Garage.Count;
         if (e.Depot.Count == 0) { _order = "das Depot ist leer"; return; }
         SendOutOfDepot(e, k);
         UpdatePanel();
@@ -17222,6 +17285,15 @@ public partial class MapEntityLayer : Node2D
             _order = "der Flughafen hat kein Depot zum Verwerten";
             return;
         }
+        // ⚠ 30.08.2026 — eine EINGEFAHRENE Einheit lässt sich (noch) nicht
+        // verwerten. Das Original könnte es: `0x4B28E0` rechnet den
+        // Bauteilpreis mit `100·Leben/LebenMax` herunter, und genau dafür stand
+        // der Vorbehalt oben (»sobald das Depot echte Sätze führt«). Was fehlt,
+        // ist die Rückabbildung Satz → Entwurf; ein GEFAHRENES Stück von der
+        // Karte hat keine Entwurfsnummer. Lieber sagen als raten.
+        if (k >= 0 && k < e.Garage.Count)
+        { _order = "eine hereingefahrene Einheit laesst sich hier nicht verwerten"; return; }
+        k -= e.Garage.Count;
         if (e.Depot.Count == 0) { _order = "das Depot ist leer"; return; }
         if (k < 0 || k >= e.Depot.Count) { _order = "nichts gewaehlt"; return; }
         LoadDesigns();
@@ -17263,6 +17335,11 @@ public partial class MapEntityLayer : Node2D
         if (e == null) { _order = "kein Gebaeude gewaehlt"; return; }
         if (e.Hangar is { Count: > 0 })
         { _order = "der Flughafen transportiert nicht ueber die Bahn"; return; }
+        // ⚠ Wie beim Verwerten: die Bahn verlegt eine ENTWURFSNUMMER
+        // (RailFreight.cs, `ziel.Depot.Add(t.Design)`), keinen Satz.
+        if (k >= 0 && k < e.Garage.Count)
+        { _order = "eine hereingefahrene Einheit laesst sich hier nicht verlegen"; return; }
+        k -= e.Garage.Count;
         if (e.Depot.Count == 0) { _order = "das Depot ist leer"; return; }
         if (k < 0 || k >= e.Depot.Count) { _order = "nichts gewaehlt"; return; }
         if (_railNodes.Count == 0)
@@ -19940,17 +20017,23 @@ public partial class MapEntityLayer : Node2D
     /// unter ihrem Höchstwert ist«) sind gelesen.</para></summary>
     private void RepairInDepot(Entity b)
     {
-        if (!b.IsBuilding || b.Dead || b.Depot.Count == 0) return;
+        if (!b.IsBuilding || b.Dead || b.Garage.Count == 0) return;
         if (b.BType is not (1 or 5 or 9)) return;        // Basis, Depot, Flughafen
-        foreach (int slot in b.Depot)
-            foreach (var e in _entities)
-            {
-                if (e.IsBuilding || e.IsProp || e.Dead || e.Slot != slot) continue;
-                if (e.HpMax <= 0 || e.Hp >= e.HpMax) break;
-                e.Hp = Mathf.Min(e.Hp + TickScale / DepotRepairTick, e.HpMax);
-                DepotRepairs++;
-                break;
-            }
+        // ⚠⚠ 30.08.2026 BERICHTIGT — hier stand `foreach (int slot in b.Depot)`
+        // und darunter `e.Slot != slot`. Das war ein Feldverwechsler: in
+        // `Depot` liegen ENTWURFSNUMMERN (siehe SendOutOfDepot), `e.Slot` ist
+        // die Platznummer einer Einheit. Die Schleife hat also irgendeine
+        // Einheit repariert, deren Platznummer zufällig gleich einer
+        // Entwurfsnummer war — draussen auf dem Feld, umsonst und ungefragt.
+        // Aufgefallen beim Bau der EINFAHRT, nicht gemeldet.
+        // ⭐ Seitdem gibt es echte Sätze im Gebäude: `Garage`. Ein frisch
+        // PRODUZIERTES Stück (Depot) hat volles Leben und braucht nichts.
+        foreach (var e in b.Garage)
+        {
+            if (e.Dead || e.HpMax <= 0 || e.Hp >= e.HpMax) continue;
+            e.Hp = Mathf.Min(e.Hp + TickScale / DepotRepairTick, e.HpMax);
+            DepotRepairs++;
+        }
     }
 
     /// <summary>Wie oft ein Fahrzeug im Gebäude einen Trefferpunkt bekommen
@@ -24666,6 +24749,10 @@ public partial class MapEntityLayer : Node2D
                 continue;
             }
             if (NoUnitOcclusion) continue;
+            // ⭐ Wer untergestellt ist, wird nicht gezeichnet. Das ist das
+            // Zeichnertor des Originals @0x4300E2 (UKOL 50..99 kommt nicht
+            // durch) — siehe Simulation/Einfahrt.cs.
+            if (Untergestellt(e)) continue;
             _unitDraw.Add(i);
         }
         _unitDraw.Sort(NachZeile);
@@ -25699,7 +25786,10 @@ public partial class MapEntityLayer : Node2D
         // Das Original legt eine fertige Einheit in das Depot ihres Gebäudes
         // und stellt sie erst auf den Knopf »Aussenden« hin ins Feld. Siehe
         // Entity.Depot für die gelesenen Fundstellen.
-        if (e.Depot.Count >= DepotSlots)
+        // ⚠ 30.08.2026 — der Deckel zählt BEIDE: die produzierten Stücke und
+        // die hereingefahrenen Sätze. Im Original ist es eine einzige Liste von
+        // sechs Einheitennummern, also gibt es auch nur einen Deckel.
+        if (GarageBelegt(e) >= DepotSlots)
         {
             // Voll: die Fertigstellung WARTET, sie verfällt nicht. Bezahlt ist
             // längst, und eine verfallene Bestellung wäre ein echter Verlust —
@@ -25791,6 +25881,20 @@ public partial class MapEntityLayer : Node2D
             AmmoMax = ammo, Ammo = ammo,
             Range = d.Range, Sight = d.Sight, Reload = d.Reload, Speed = d.Speed,
             Facing = DefaultFacing, Mobile = true,
+            // ⭐ 30.08.2026 — sie VERLÄSST GERADE das Gebäude, UKOL 51. Das
+            // Original setzt es an genau dieser Stelle: die Aufstellroutine
+            // @0x4B1840 ruft »Einheit verlässt das Gebäude« @0x410420, und
+            // deren erste Zuweisung ist `byte[+0x14] := 0x33`.
+            // ⚠ Ohne das fährt ein frisch ausgesandtes Stück auf der Türzelle
+            // sofort wieder in die Basis hinein (die Einfahrt braucht UKOL 0),
+            // und Aussenden und Einfahren schaukeln sich auf. Siehe
+            // Simulation/Einfahrt.cs, UkolVerlaesst.
+            Ukol = UkolVerlaesst,
+            // ⚠ Und WOHER sie kommt — der Zustand 51 endet nicht nach einer
+            // Zeit, sondern sobald sie die Türzelle DIESES Gebäudes verlassen
+            // hat. Ohne diesen Verweis wäre der Riegel einen Takt lang, und
+            // ein Takt genügt nicht (gemessen). Siehe TorTakt.
+            InGebaeude = e,
             // ⚠ CORRECTED 07.08.2026 — this was hard-wired to Vehicle, so a
             // unit off the line walked over the same ground as a wheeled one no
             // matter what it stood on. A LEGGED chassis (0x11) and a HOVER (7)
@@ -27716,6 +27820,11 @@ public partial class MapEntityLayer : Node2D
         UI.WindowManager.Takt();
         // Und die Gegenrichtung: wer auf einer Ladezelle steht, geht an Bord.
         BeladeTakt();
+        // ⭐ Dasselbe eine Tür weiter: wer auf der Türzelle einer eigenen Basis
+        // steht, stellt sich unter. Das Tor zählt in ORIGINALTAKTEN, darum
+        // gehört es hierher und nicht in die Wirtschaft — siehe
+        // Simulation/Einfahrt.cs.
+        TorTakt();
         // ⭐ Der Vorspann der Kampagne. Er hängt NICHT allein an der Anwahl:
         // neun seiner Tore prüfen den Baustand, ein geöffnetes Fenster oder
         // die Missionsnummer, und keines davon ändert sich beim Anklicken.
@@ -27769,6 +27878,7 @@ public partial class MapEntityLayer : Node2D
 
         PollBuildPanelDemo();
         PollDepotFlow();
+        PollEinfahrt();
         PollSellCheck();
         PollShopCheck();
         PollBuyCheck();
@@ -30071,6 +30181,10 @@ public partial class MapEntityLayer : Node2D
         {
             var e = _entities[i];
             if (e.Dead) continue;
+            // Wer im Gebäude steht, ist nicht auf dem Schirm und darf sich
+            // darum auch nicht anwählen lassen — dasselbe Tor wie beim
+            // Zeichnen, siehe Simulation/Einfahrt.cs.
+            if (Untergestellt(e)) continue;
             // Im Nebel liegt nichts Anfassbares — siehe Kopfkommentar.
             if (!PickOhneNebel && ImNebelVerborgen(e)) continue;
             // NoStructure: der Satz existiert fuer die Skripte, aber nicht auf
