@@ -17898,3 +17898,54 @@ Spalte **69** ist auf einer 70er-Karte `w − 1` — die versiegelte Randspalte.
 Kartenrand ist unerreichbar.** Ob das Original das auch so hält, ist NICHT
 gelesen; hier steht nur, dass es unabhängig von BT.3 ist und dass der Prüfstand
 es seit jeher meldet.
+
+### BT.5 ⚠ MISSION 2 SCHICKT NIEMANDEN — der Negativbefund, mit Zahlen
+
+Nachdem er »nein, die basis hatte ich noch nicht eingenommen« gesagt hat, ist
+R38 nicht der Mechanismus. Gesucht wurde darum nach jedem anderen. Vollerhebung
+über den ganzen Kampagnenbereich `0x498000..0x4A5600`, jedes `E8` aufgelöst,
+jeder Treffer einer Missionsspanne zugeordnet (kein einziger fiel heraus):
+
+| Routine | Aufrufe | in den Missionen |
+|---|---:|---|
+| `add_target` `0x4CF700` | 45 | 9, 11, 13, 15, 16, 18, 19, 20, 21, 24, 26, 28, 30, 31 |
+| **KI-Flaggentafel** `0x4D1050` | 20 | 12, 15, 18, 20, 24, 25, 27, 28, 31 |
+| `order`-Geschwister `0x40FC90` | 19 | 17, 28 |
+| Flaggentafel 2 `0x4D0970` | 1 | 12 |
+
+**Mission 2 kommt in keiner Zeile vor.** Ihr Skript schickt die vierzehn
+Einheiten des Spielers 1 also nicht los, und es stellt auch keine KI-Betriebsart
+um.
+
+⭐ **Und die Lücke des Auslesers ist damit LOKALISIERT.** Im JSON stehen 34
+`add_target`, im Original sind es 45 — die Differenz von 11 deckt sich mit der
+alten Zählung, und jetzt ist auch bekannt, WO: **M11 +1, M18 +3, M21 +1,
+M24 +4, M26 +1, M31 +1**. Das sind genau die elf.
+
+### BT.6 Was von seiner Beobachtung bleibt — und die Frage dazu
+
+Der Einheitendurchlauf `ai_units` @0x4BF4E0 ist gebaut (`AiSweep` +
+`AiRingTarget`) und läuft in der Kampagne. Gemessen auf Mission 2 nach 60 s:
+
+```
+KI-Streife: P1 0 losgeschickt, 420 untaetige angesehen (Armee 14),
+            im Ring 846 Einheiten, 0 feindlich
+KI-Sicht:   P1 #7 typ1 bei (52,10) Reichweite 2, Sicht 3,
+            naechster Feind #3 (P0) bei (5,6) Abstand 47,2
+            -> AUSSERHALB des Rings (Sicht+1 = 4)
+```
+
+Die Sicht **3** ist keine Setzung: sie ist `byte[+0x2c]` des Satzes, dasselbe
+Feld, aus dem der Nebel seinen Aufdeckradius nimmt (`FogGrid.Update`, Ringtafel
+aus `ExeTables.SightCircleTable`). Bei einem Abstand von 47 Zellen tut das
+Original an dieser Stelle also ebenfalls nichts.
+
+⚠ **Offen, und nur von IHM zu beantworten:** wie NAH war er, als er den Angriff
+erwartet hat? Stand er innerhalb weniger Zellen und es geschah trotzdem nichts,
+ist es unser Fehler und mit `--campaign=2` nachstellbar. War er weit weg, dann
+gibt es in Mission 2 keinen gelesenen Mechanismus, der die vierzehn losschickt —
+und dann fehlt uns einer, den das Original woanders hat.
+⚠ **Nicht behauptet:** die »0 feindlich« über vier Missionen sind KEIN Beleg für
+einen kaputten Bündnisfilter. `SawAny` zählt auch die eigenen Nachbarn, und in
+einem kopflosen Lauf bewegt sich niemand auf den Gegner zu. Der Befund ist
+»nicht gemessen«, nicht »nicht vorhanden«.
