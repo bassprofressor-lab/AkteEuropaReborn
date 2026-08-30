@@ -18794,3 +18794,86 @@ Last — die durchlässige Karte erzeugt weit mehr Wegsuchen.
 
 ⚠ **Nichts an der Bewegung ist damit heute entschieden.** Der heutige Stand
 (`ALT`: 21 ans Ziel) bleibt der einzige, der reproduzierbar gemessen ist.
+
+---
+
+## CA. ⭐⭐⭐ DER ABSTURZ IST VERSTANDEN — aber NICHT behoben (31.08.2026)
+
+Zweiter Fable-Lauf, voller Bericht in **`berichte/absturz-fable.md`** (9 Dumps
+analysiert). Hier steht, was daran für uns zählt und was ich selbst nachgemessen
+habe.
+
+### CA.1 Die Ursache
+
+Ein **Rennen in Godots C#-Interop-Buchführung**: der Hauptfaden trägt ein
+(`DisposablesTracker.RegisterDisposable` → `ConcurrentDictionary.TryAdd`),
+während der Finalizer-Faden zeitgleich austrägt (`TryRemove`). Belegt mit neun
+Dumps, darunter einer, in dem `verifyheap` an einer lebenden `WeakReference`
+**exakt 8 genullte Methodentafel-Bytes** fand.
+
+⭐ **Der fehlerhafte Schreiber sitzt in der GodotSharp-Glue bzw. der Laufzeit,
+nicht bei uns** — im ganzen `Scripts/`-Baum gibt es kein `unsafe`. Was WIR
+beitragen, ist der **Allokationssturm** beim Kartenladen: `LiesNebeldecke`
+(`MapObjects.cs:110 ff.`, 34.468 Zellen) und `ApplyTerrain`
+(`NavGrid.cs:672 ff.`).
+
+### CA.2 ⚠⚠ Die zwei Sätze, die unsere Woche betreffen
+
+1. **Der Absturz ist ÄLTER als der 30.08.** — WER-Dump vom 24.08., ein
+   Kommentar in `NavGrid.cs:583–587`, und eine Präzedenzbehebung vom 12.08.
+   **Meine Verdächtigen des Tages — Nahsperre, Ausweichen, Einfahrt, die
+   Randprüfung — sind entlastet.**
+2. **Nur Prüfstands- und Editorläufe sind betroffen.** Der Editor-Host rollt per
+   `GodotPlugins.runtimeconfig.json` (`LatestMajor`) auf **.NET 10.0.10**; der
+   Export pinnt sich selbst per `AkteEuropaReborn.runtimeconfig.json`
+   (`LatestMinor`) auf **8.0.29**. **Spieler sind nicht betroffen — wir sind es.**
+
+### CA.3 Die Zahlen, und warum keine Behebung trägt
+
+Seine Serien, je 10 Läufe:
+
+| Bedingung | Abstürze |
+|---|---:|
+| Grundlinie | **7/10** |
+| .NET 8 gepinnt (`DOTNET_ROLL_FORWARD=LatestPatch`) | **1/10** |
+| `DOTNET_GCDynamicAdaptationMode=0` | 5/10 — fällt durch |
+| **ohne `--neue-pfadkarte`** | **7/10** |
+| Code-Härtung Stufe 1 | 3/10 |
+| Härtung Stufe 1+2 | 5/10 |
+
+⚠⚠ **Die vierte Zeile ist die folgenreichste: der Schalter war nie der Treiber.**
+Damit standen **alle** Messungen dieser Woche auf einem Prüfstand, der in rund
+zwei von drei Läufen stirbt — auch die ohne `--neue-pfadkarte`, auf die sich die
+Entscheidungen vom 23.08. und vom 30.08. stützen.
+
+⭐ **Und die Härtung trocknet es nicht aus.** Sein eigener Befund: der Sturm
+wandert zur nächsten ungehärteten Ladeschleife (`LoadObjectLayer`,
+`MapObjects.cs:507`).
+
+### CA.4 Meine Nachmessung — und sie fällt schwächer aus
+
+Sechs Läufe je Seite bei 60 s, **auf dem Baum MIT seiner Härtung**:
+
+```
+ohne DOTNET_ROLL_FORWARD : 3 von 6 sauber
+mit  LatestPatch         : 4 von 6 sauber
+```
+
+⚠ **Das ist Rauschen.** Sein 7/10 → 1/10 hat er ohne die Härtung gemessen,
+meines mit — die zwei Zahlen messen nicht dasselbe. **Die Kombination aus
+Pinning und Härtung ist damit weiterhin ungemessen**, und sie ist genau der
+Zustand, in dem der Baum jetzt ist.
+
+### CA.5 Was daraus folgt
+
+* Die **Härtung bleibt** (Bau grün, Verhalten nachweislich unverändert:
+  identische `nebeldecke:`- und `stuck-check:`-Zeilen).
+* `DOTNET_ROLL_FORWARD=LatestPatch` gehört vor jeden Messlauf — ⚠ mit dem
+  ausdrücklichen Vermerk, dass **ich** seine Wirkung nicht bestätigen konnte.
+* ⚠⚠ **An der Bewegung bleibt alles offen.** Drei Entscheidungen — 23.08. gegen
+  die neue Suchkarte, 30.08. gegen das Warten, 30.08. gegen das Ausweichen —
+  stehen auf Zahlen aus einem sterbenden Prüfstand und sind **neu zu messen**,
+  sobald er trocken ist.
+* Offen laut Bericht: 5 von 6 F-Dumps unanalysiert, die Export-Dumps vom 17.08.
+  ununtersucht, und als struktureller Ausblick `entities.json` ohne
+  Godot-Variants zu lesen.

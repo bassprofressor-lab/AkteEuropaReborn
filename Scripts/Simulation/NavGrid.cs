@@ -643,25 +643,35 @@ public sealed class NavGrid
         // verschiebt die Speicherbereinigung um genau so viel, dass das Rennen
         // anders ausgeht. `using` gibt jede Kachel sofort wieder frei; der
         // Tracker bleibt klein und das Rennen faellt aus.
+        // ⭐ 31.08.2026 — NACHTRAG zur Messung vom 12.08.: das `using` unten
+        // nahm nur Kachel-Dictionary und -Variant; die SCHLUESSEL blieben.
+        // Auf der ungetypten Sammlung verpackt JEDER TryGetValue-Aufruf den
+        // C#-String erst in eine frische String-Variant samt Disposer — bei
+        // sechs Zugriffen je Kachel war DAS der groessere Teil des Sturms
+        // (Beleg: berichte/absturz-fable.md, Serie E in LiesNebeldecke, wo
+        // dieselben Dumps genau in den Schluessel-Zeilen sitzen). Einmal
+        // verpacken, wiederverwenden.
+        using Variant kCol = "col", kRow = "row", kElev = "elev",
+                      kFlag = "flag", kObject = "object", kCode = "code";
         foreach (var item in tv.AsGodotArray())
         {
             if (item.VariantType != Variant.Type.Dictionary) continue;
             // Die UNGETYPTE Sammlung, weil nur die IDisposable ist —
             // Dictionary<string,Variant> laesst sich nicht freigeben.
             using var t = item.AsGodotDictionary();
-            int c = GetV(t, "col"), r = GetV(t, "row");
+            int c = GetV(t, kCol), r = GetV(t, kRow);
             if (!g.InBounds(c, r)) continue;
             int i = g.Idx(c, r);
-            g._elev[i] = (byte)Mathf.Clamp(GetV(t, "elev"), 0, 255);
-            g._flag[i] = (byte)Mathf.Clamp(GetV(t, "flag"), 0, 255);
+            g._elev[i] = (byte)Mathf.Clamp(GetV(t, kElev), 0, 255);
+            g._flag[i] = (byte)Mathf.Clamp(GetV(t, kFlag), 0, 255);
 
             // fallback only, for content imported before the terrain block: the
             // tile code says water, an object cell is assumed to block. Both
             // are superseded the moment ApplyTerrain runs — and the second of
             // them is exactly the assumption that made bridges impassable.
-            bool isObject = t.TryGetValue("object", out var ob) && ob.AsBool();
+            bool isObject = t.TryGetValue(kObject, out var ob) && ob.AsBool();
             g._ground[i] = isObject ? (byte)Ground.Blocked
-                         : GetV(t, "code", 9999) <= WaterCodeMax ? (byte)Ground.Water
+                         : GetV(t, kCode, 9999) <= WaterCodeMax ? (byte)Ground.Water
                          : (byte)Ground.Free;
         }
         return g;
@@ -677,10 +687,19 @@ public sealed class NavGrid
             return;
 
         int at = 0, total = w * h;
-        foreach (var pair in rv.AsGodotArray())
+        // ⭐ 31.08.2026 — ABSTURZBEHEBUNG wie in Build (12.08.) und
+        // LiesNebeldecke (berichte/absturz-fable.md): der WER-Dump vom
+        // 30.08. 20:09 sitzt mit dem Hauptfaden GENAU hier (AsGodotArray ->
+        // DisposablesTracker.RegisterDisposable -> TryAdd, Segfault),
+        // waehrend der Finalizer-Faden austraegt. Jedes RLE-Paar ist ein
+        // Godot-Array samt tragender Variant — beide sofort freigeben statt
+        // dem Finalizer ueberlassen.
+        using var laeufe = rv.AsGodotArray();
+        foreach (var pair in laeufe)
         {
+            using var _ = pair;
             if (pair.VariantType != Variant.Type.Array) continue;
-            var p = pair.AsGodotArray();
+            using var p = pair.AsGodotArray();
             if (p.Count < 2) continue;
             byte v = (byte)Mathf.Clamp(p[0].AsInt32(), 0, 3);
             int run = p[1].AsInt32();
@@ -699,7 +718,7 @@ public sealed class NavGrid
 
     /// <summary>Wie <see cref="GetI"/>, aber auf der ungetypten Sammlung —
     /// siehe das <c>using</c> in <see cref="Build"/>.</summary>
-    private static int GetV(Godot.Collections.Dictionary d, string k, int def = 0)
+    private static int GetV(Godot.Collections.Dictionary d, Variant k, int def = 0)
         => d.TryGetValue(k, out var v) && v.VariantType != Variant.Type.Nil ? v.AsInt32() : def;
 
     private static string GetS(GDict d, string k, string def = "")

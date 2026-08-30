@@ -111,14 +111,36 @@ public partial class MapEntityLayer
     {
         _nebelDecke.Clear();
         if (!meta.TryGetValue("nebelboden", out var nv) || nv.VariantType != Variant.Type.Array) return;
-        foreach (var item in nv.AsGodotArray())
+        // ⭐ 31.08.2026 — ABSTURZBEHEBUNG, siehe berichte/absturz-fable.md.
+        // Dieselbe Krankheit wie am 12.08. in NavGrid.Build (dort steht die
+        // lange Fassung des Kommentars): je Zelle ein Godot-Dictionary samt
+        // Variant, alles dem Finalizer ueberlassen — bei 34 468 Zellen
+        // (map_DM_4) traegt der Finalizer-Faden pausenlos aus Godots
+        // DisposablesTracker aus, waehrend diese Schleife eintraegt, und
+        // dieses Rennen toetete 7 von 10 kopflosen Laeufen (Internal CLR
+        // error 0x80131506 bzw. »Disposable not registered«; alle vier
+        // Heap-Dumps vom 30.08. zeigen den Hauptfaden in DIESER Schleife).
+        // `using` gibt beides sofort frei — das UNGETYPTE Dictionary, weil
+        // nur das IDisposable ist.
+        // ⭐ Nachtrag, gleicher Tag: die SCHLUESSEL sind der groessere Teil des
+        // Sturms — auf der ungetypten Sammlung verpackt JEDER TryGetValue-
+        // Aufruf den C#-String erst in eine frische String-Variant samt
+        // Disposer (Serie E: immer noch 3/10 Abstuerze, alle drei Dumps in
+        // ebendieser Zeile). Einmal verpacken, wiederverwenden; je Zelle
+        // bleiben dann nur int-Variants, und die tragen keinen Disposer.
+        using Variant kSlot = "slot", kCol = "col", kRow = "row", kX = "x", kY = "y";
+        static int Lies(Godot.Collections.Dictionary d, Variant k, int def = 0)
+            => d.TryGetValue(k, out var v) && v.VariantType != Variant.Type.Nil ? v.AsInt32() : def;
+        using var zellen = nv.AsGodotArray();
+        foreach (var item in zellen)
         {
+            using var _ = item;
             if (item.VariantType != Variant.Type.Dictionary) continue;
-            var o = item.AsGodotDictionary<string, Variant>();
-            int k = GetI(o, "slot", -1);
+            using var o = item.AsGodotDictionary();
+            int k = Lies(o, kSlot, -1);
             if (k < 0 || k >= kohle.Count) continue;
-            _nebelDecke.Add((GetI(o, "col"), GetI(o, "row"),
-                             new Vector2(GetI(o, "x"), GetI(o, "y")), kohle[k]));
+            _nebelDecke.Add((Lies(o, kCol), Lies(o, kRow),
+                             new Vector2(Lies(o, kX), Lies(o, kY)), kohle[k]));
         }
         GD.Print($"nebeldecke: {_nebelDecke.Count} Zellen, deren wahre Kachel im "
                + "unerkundeten Gebiet durch die synthetisierte ersetzt wird");
