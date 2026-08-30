@@ -17949,3 +17949,55 @@ und dann fehlt uns einer, den das Original woanders hat.
 einen kaputten Bündnisfilter. `SawAny` zählt auch die eigenen Nachbarn, und in
 einem kopflosen Lauf bewegt sich niemand auf den Gegner zu. Der Befund ist
 »nicht gemessen«, nicht »nicht vorhanden«.
+
+### BT.7 ⭐⭐⭐ SEINE VERMUTUNG WAR RICHTIG GESTELLT — und sie ist jetzt AUSGEMESSEN
+
+Er warf ein: »vielleicht sind es ja keine KI-Thematiken, sondern rein
+Skript/Feld/Ereignisse, die es auslösen, dass Gegner gezielt losfahren.« Genau
+so herum gefragt, ist es entscheidbar. Zwei Vollerhebungen:
+
+**(1) Jede Fahr-Grundform über den ganzen Kampagnenbereich** `0x498000..0x4A5600`,
+jedes `E8` aufgelöst:
+
+| Routine | Rufe in der GANZEN Kampagne | Missionen |
+|---|---:|---|
+| `order_at` `0x410220` | **7** | **nur Mission 2** (= die sieben aus R38) |
+| `fahre` (UKOL 2) `0x40B070` | 3 | nur Mission 7 |
+| `move units` `0x40AFE0` | **0** | — |
+| `order`-Geschwister `0x40FC90` | 19 | 17, 28 |
+
+⭐ Ein skriptgesteuertes Losfahren gibt es in der ganzen Kampagne an **29
+Stellen**, und die sieben von Mission 2 sind genau die aus R38 — die erst nach
+der Einnahme feuert. **Einen zweiten Skriptweg hat Mission 2 nicht.**
+
+⚠ Und die Gegenprobe zur Methode: die Lücken zwischen den gelesenen
+Missionsspannen sind zusammen nur **1634 Byte** über 23 Stellen, und darin liegt
+**ein einziger** dieser Aufrufe (ein `space_in` bei `0x4A35B4`). Der Ausleser
+hat hier also nichts Wesentliches übersprungen.
+
+**(2) Wer füllt die Zielliste der KI?** `sec69` `0xBC5A78` (100 Einträge je
+Spieler, 6 Byte) — 20 Rohtreffer im `.text`, aufgelöst:
+
+```
+SCHREIBER, die eine NULL schreiben (= erledigten Auftrag loeschen), alle im KI-Bereich:
+  0x4BDD5B  0x4BDD7F  0x4BDDAF  0x4BDDCC  0x4BEE15  0x4BEE6A  0x4BEEA1
+SCHREIBER, der einen WERT eintraegt:
+  0x4CF753   <- und das ist add_target selbst (0x4CF700)
+Leser: 12, alle im KI-Bereich.
+```
+
+⭐⭐ **Die KI trägt sich ihre Ziele NICHT selbst ein — sie löscht nur erledigte.
+Genau ein einziger Nicht-Null-Schreiber, und der ist das Missionsskript.**
+Ohne `add_target` hat ein Computerspieler in der Kampagne kein Angriffsziel.
+Damit ist die Bauentscheidung vom 11.08.2026 (»auf einer Kampagnenkarte
+marschiert niemand von selbst«) zum ersten Mal an der ZIELLISTE belegt und nicht
+nur an `ai_units`.
+
+**Fazit für Mission 2, abschliessend gemessen:** es gibt im Original keinen
+Mechanismus, der die vierzehn Einheiten des Spielers 1 losschickt — ausser dem
+Sichtring, und dessen Radius ist bei diesen Einheiten **3 Zellen**.
+
+⭐ **Die wahrscheinlichste Auflösung seiner Meldung steht in seinem eigenen
+Satz:** »von der oberen rechten generischen basis, **die man später einnimmt**«.
+Das sind die sieben Angreifer aus R38 — und die kamen bis heute nie, weil die
+Wegsuche abstürzte (BT.3). **Der Nachtest ist: die Basis einnehmen.**
