@@ -1824,6 +1824,89 @@ public partial class MapEntityLayer : Node2D
         return _fogTex;
     }
 
+    private ImageTexture? _fogTexUebersicht;
+    private int _fogUebersichtDrawn = -1;
+    private byte[] _fogUebersichtPixel = System.Array.Empty<byte>();
+
+    /// <summary>
+    /// <b>DIE NEBELSCHICHT DER UEBERSICHTSKARTE — eine eigene, und warum.</b>
+    ///
+    /// <para>⚠⚠ 30.08.2026, <b>zweite Behebung an derselben Meldung, und die
+    /// erste war die falsche.</b> Er meldete zweimal, die Uebersicht zeige
+    /// neutrale Gebaeude im unerkundeten Gebiet (»die krane und diese komische
+    /// inaktive basis die noch im bau ist als grafik«). Der erste Versuch hat
+    /// die Schicht ein zweites Mal gezeichnet — 75 % statt 50 % — und damit das
+    /// SYMPTOM behandelt.</para>
+    ///
+    /// <para><b>Der Unterschied ist nicht die Helligkeit, sondern WAS gezeigt
+    /// wird.</b> Das Original malt die Uebersicht nicht aus einem verkleinerten
+    /// Bild, sondern je Zelle aus seinen GEDAECHTNISgittern (sec52
+    /// <c>0xC0C220</c>, sec50 <c>0x678B58</c>, Lagen <c>0x689710</c>) — und im
+    /// nie erkundeten Gebiet steht dort <b>kein Gebaeudecode</b>, also kommt der
+    /// Gebaeudezweig <c>@0x4B8164</c> gar nicht erst dran. Man sieht dort
+    /// Bodenfarbe, zweimal durch die Schattentafel, und <b>kein Objekt</b>.</para>
+    ///
+    /// <para>Bei uns ist die Objektebene ein BILD ueber die ganze Karte; sie
+    /// kennt kein Gedaechtnis. Was sie zeigt, laesst sich nur ueber die
+    /// Nebelschicht zurueckhalten — und die des Schlachtfelds darf das nicht,
+    /// denn dort gilt seine Ansage vom 18.08. (»die ganze Karte ist sichtbar,
+    /// jedoch mit einem leichten Nebel bedeckt«). Also bekommt die Uebersicht
+    /// ihre eigene: <b>beobachtet klar, gesehen leicht getruebt wie bisher,
+    /// NIE GESEHEN undurchsichtig.</b></para>
+    ///
+    /// <para>⚠ <b>UNSERE ABWEICHUNG, benannt:</b> das Original zeigt im
+    /// Unerkundeten dunklen BODEN, wir zeigen nichts. Ein zellweiser
+    /// Uebersichtsmaler (rund 150 Zeilen, siehe OFFENE_FRAGEN) koennte es
+    /// genau; bis dahin ist »nichts« naeher an seiner Meldung als »ein
+    /// abgedunkelter Kran«. <c>--uebersicht-nebel-wie-karte</c> stellt den
+    /// alten Zustand her.</para>
+    ///
+    /// <para>⚠ EIN Texel je Zelle, nicht vier: die Uebersicht hat rund einen
+    /// Bildpunkt je Zelle, ein Saum innerhalb der Zelle ist dort nicht
+    /// sichtbar. Das spart die vier Megabyte der grossen Karte.</para>
+    /// </summary>
+    public Texture2D? FogTextureUebersicht()
+    {
+        if (!FogActive || _fog == null) return null;
+        if (UebersichtNebelWieKarte) return FogTexture();
+        if (_fogTexUebersicht != null && _fogUebersichtDrawn == _fog.Version)
+            return _fogTexUebersicht;
+
+        int w = _fog.Width, h = _fog.Height;
+        if (_fogUebersichtPixel.Length != w * h * 4) _fogUebersichtPixel = new byte[w * h * 4];
+        for (int r = 0; r < h; r++)
+            for (int c = 0; c < w; c++)
+            {
+                byte zustand = _fog.At(c, r);
+                float a2 = zustand switch
+                {
+                    Simulation.FogGrid.Watched => 0f,
+                    Simulation.FogGrid.Seen => FogSeen.A,
+                    _ => 1f,                       // nie gesehen: undurchsichtig
+                };
+                int p = (r * w + c) * 4;
+                _fogUebersichtPixel[p] = FogR;
+                _fogUebersichtPixel[p + 1] = FogG;
+                _fogUebersichtPixel[p + 2] = FogB;
+                _fogUebersichtPixel[p + 3] = (byte)(a2 * 255f);
+            }
+        var img = Image.CreateFromData(w, h, false, Image.Format.Rgba8, _fogUebersichtPixel);
+        if (_fogTexUebersicht == null) _fogTexUebersicht = ImageTexture.CreateFromImage(img);
+        else _fogTexUebersicht.Update(img);
+        _fogUebersichtDrawn = _fog.Version;
+        UebersichtNebelNeu++;
+        return _fogTexUebersicht;
+    }
+
+    /// <summary>Wie oft die eigene Nebelschicht der Uebersicht neu gebaut wurde
+    /// — sie haengt an <c>FogGrid.Version</c>, nicht an der Bildrate.</summary>
+    public int UebersichtNebelNeu;
+
+    /// <summary><c>--uebersicht-nebel-wie-karte</c> — der Stand von vor dem
+    /// 30.08.2026: die Uebersicht benutzt die Nebelschicht des Schlachtfelds.
+    /// </summary>
+    public static bool UebersichtNebelWieKarte;
+
     /// <summary>For a scripted run, which cannot look at the screen.</summary>
     public string FogWatchLine()
     {

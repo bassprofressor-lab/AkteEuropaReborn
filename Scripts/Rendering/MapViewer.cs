@@ -1793,8 +1793,11 @@ public partial class MapViewer : Node2D
             else if (a == "--ki-probe") _kiProbe = true;
             // Gegenprobe zur doppelten Abdunklung der Uebersicht, siehe Minimap.
             else if (a == "--minikarte-nebel-einmal") Minimap.NebelEinmal = true;
+            else if (a == "--minikarte-nebel-zweimal") Minimap.NebelZweimal = true;
             // Gegenprobe zum SEKTORANGRIFF, siehe SkirmishAi.AiSektorAngriff.
             else if (a == "--kein-sektorangriff") MapEntityLayer.KeinSektorangriff = true;
+            else if (a == "--uebersicht-nebel-wie-karte")
+                MapEntityLayer.UebersichtNebelWieKarte = true;
             else if (a == "--wegsuche-check") _wegsucheCheck = true;
             // ⚠ GEGENPROBE: der alte A*, siehe NavGrid.AlterAstern.
             else if (a == "--alter-astern") Simulation.NavGrid.AlterAstern = true;
@@ -3495,7 +3498,10 @@ public partial class MapViewer : Node2D
             // andere Weg (Tasten, rechte Maustaste ziehen, Sprung nach Hause)
             // ruft sie, nur dieser eine tat es nicht.
             world => { _camera.Position = world; ClampCamera(); },
-            _entities.FogTexture,
+            // ⚠ Die UEBERSICHT hat ihre eigene Nebelschicht — im nie
+            // erkundeten Gebiet undurchsichtig, damit die Objektebene dort
+            // nichts zeigt. Herleitung bei FogTextureUebersicht.
+            _entities.FogTextureUebersicht,
             _entities.MinimapHome,
             // Die Objektebene gehoert mit in die Uebersicht - sonst liegt unter
             // jedem Kulissenbau die blanke Flutfuellung. Herleitung: Minimap._objekte.

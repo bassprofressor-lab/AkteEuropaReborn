@@ -94,6 +94,10 @@ public partial class Minimap : Control
     /// 30.08.2026: die Uebersicht dunkelt so stark ab wie das Schlachtfeld.</summary>
     public static bool NebelEinmal;
 
+    /// <summary><c>--minikarte-nebel-zweimal</c> — die Schicht ein zweites
+    /// Mal, der Versuch vom 30.08.2026 mittags. Er hat nicht gereicht.</summary>
+    public static bool NebelZweimal;
+
     /// <summary>Wie oft die Objektebene wirklich in die Uebersicht gezeichnet
     /// wurde. ⚠ Eigene Zahl neben <see cref="Repaints"/>: eine Ebene, die nie
     /// ankommt, sieht sonst genauso aus wie eine, die nichts aendert.</summary>
@@ -264,7 +268,18 @@ public partial class Minimap : Control
             // FogDim dreht, dreht die Uebersicht mit. Unsere Punkte
             // (MinimapDots) liegen darueber und leuchten weiter durch; das ist
             // die Entsprechung des Merkbits.
-            if (!NebelEinmal) { DrawTextureRect(fog, full, false); FogDrawn++; }
+            // ⚠⚠ 30.08.2026 ZURUECKGENOMMEN: hier stand ein zweites
+            // DrawTextureRect derselben Schicht ("zweimal durch die
+            // Schattentafel", @0x4B82A7). Die Lesung stimmt, die Behebung
+            // nicht — er meldete danach dieselben Kulissen wieder
+            // ("in Kampagne1 sind auch noch die neutralen gebaeude im fog
+            // of war geprinted"). Der Unterschied ist nicht die
+            // HELLIGKEIT, sondern WAS gezeigt wird: das Original hat im
+            // Unerkundeten kein Gedaechtnis und malt dort gar kein Objekt.
+            // Das leistet jetzt die eigene Nebelschicht der Uebersicht,
+            // siehe MapEntityLayer.FogTextureUebersicht. Der Schalter
+            // --minikarte-nebel-einmal bleibt als Gegenprobe stehen.
+            if (NebelZweimal) { DrawTextureRect(fog, full, false); FogDrawn++; }
         }
 
         DrawRect(full, new Color(0.55f, 0.58f, 0.6f), false, 1);

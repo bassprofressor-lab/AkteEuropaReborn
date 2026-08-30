@@ -18222,3 +18222,56 @@ und macht nix, im Original kommt er auch den Berg hochgelaufen und greift an«).
   Wir schicken die freien Angreifer DIESES Sektors.
 * Die Stationen `0x4BE330` (Takt 10) und `0x4BE5C0` (Takt 48) tragen dieselben
   Protokollzeilen wie `0x4BE2E0` und sind nicht einzeln gelesen.
+
+### BV.4 ⚠⚠ DIE ÜBERSICHT BRAUCHT EINE EIGENE NEBELSCHICHT — meine erste Behebung war die falsche
+
+Er meldete nach Kampagne 1 zum **zweiten Mal**: »die neutralen Gebäude im Fog of
+War geprinted, wie die Krane und diese komische inaktive Basis, die noch im Bau
+ist, als Grafik«.
+
+**Auf dem SCHLACHTFELD ist es richtig** — gemessen auf map_01: alle 60
+Kulissenzellen der Objektebene tragen einen Nebelboden, der Lauf meldet
+`nebel-objekte: … 280435 synthetisierter Boden, 0 ohne beides`.
+⚠ Und die Brückenbehebung ist nicht die Ursache: die 10 Lage-100-Zellen auf
+map_01 sind Geländer (imap 0xFFFF), **alle 60 Kulissen haben Lage 0**.
+
+**Der Fehler war meine Behebung von mittags** (BU.3): die Nebelschicht ein
+zweites Mal zu zeichnen behandelt die HELLIGKEIT. Der Unterschied ist aber, **was
+gezeigt wird**: das Original malt die Übersicht je Zelle aus seinen
+GEDÄCHTNISgittern, und im nie erkundeten Gebiet steht dort **kein Gebäudecode** —
+der Gebäudezweig `@0x4B8164` kommt gar nicht erst dran. Man sieht Bodenfarbe,
+zweimal abgedunkelt, und **kein Objekt**.
+
+Bei uns ist die Objektebene ein BILD ohne Gedächtnis. Also bekommt die Übersicht
+eine **eigene Nebelschicht** (`FogTextureUebersicht`): beobachtet klar, gesehen
+leicht getrübt wie bisher, **nie gesehen undurchsichtig**. Ein Texel je Zelle
+statt vier — die Übersicht hat rund einen Bildpunkt je Zelle.
+⚠ **UNSERE Abweichung:** das Original zeigt dort dunklen BODEN, wir zeigen
+nichts. Ein zellweiser Übersichtsmaler (~150 Zeilen) könnte es genau.
+Rückfall `--uebersicht-nebel-wie-karte`; der Versuch von mittags steht als
+`--minikarte-nebel-zweimal` noch daneben.
+
+### BV.5 ⚠ OFFEN: »Ketten können nicht am Ufer fahren, Reifen und 6×6 schon«
+
+**Gelesen, und das Original macht diesen Unterschied nicht.** `Can_go`
+`@0x4055D0` liest `byte[+0x0A]` — die **Gattung**, nicht das Fahrwerk
+(`0x40561A`). Zensus über alle 54 Karten (4833 Sätze):
+
+```
+Gattung 0 : 3515  typen 160..174   ALLE Fahrwerke zusammen (Ketten, Reifen, 6x6)
+Gattung 1 : 1092  typen 148,149    Personen
+Gattung 3 :   10  typ 138          Sonderfall, nicht eingeordnet
+Gattung 4 :  178  typen 150..153   Schiffe
+Gattung 5 :   38  typen 157,158    Schiffe
+```
+
+⭐ **Ketten und Reifen sind beide Gattung 0** — im Original befahren sie
+dieselben Zellen. Und bei uns ebenso: `NavGrid.ClassOf` kennt nur
+`Vehicle/Walker/Hover/Ship`, alle Radfahrwerke fallen auf `Vehicle`.
+
+⚠⚠ **Damit ist seine Beobachtung UNGEKLÄRT, nicht widerlegt.** Wenn er den
+Unterschied wirklich sieht, kommt er woanders her — Rumpfgrösse, die Steigung
+(`MaxClimb = 3`, ausdrücklich UNSERE Setzung: »the original has no such test in
+Can_go«), oder die Wegsuche. **Was fehlt, ist ein Prüfstand: dieselbe Uferzelle,
+drei Einheiten mit verschiedenen Fahrwerken, wer kommt hin.** Ohne den ist jede
+Erklärung geraten.
