@@ -69,6 +69,36 @@ public partial class MapEntityLayer
     /// vom 24.08.2026 gescheitert.</summary>
     public int NebelBodenGezeichnet, NebelBodenFehlt;
 
+    /// <summary>Wie oft im Nebel die WAHRE Kachel statt der Synthese stand
+    /// (Lage >= 100, praktisch das Brueckengelaender). ⚠ Ohne diese Zahl ist
+    /// »die Bruecke ist im Nebel jetzt richtig« eine Behauptung.</summary>
+    public int NebelWahreKachel;
+
+    /// <summary>Wieviele Objekte ein Lagenbyte MITBRINGEN. 0 heisst: diese
+    /// Karte ist vor dem 30.08.2026 gebacken.</summary>
+    public int LageImBild;
+
+    /// <summary>Was die Objektebene im unerkundeten Gebiet gezeigt hat.
+    /// ⚠ Die Zeile ist der Beleg, dass die Bruecke im Nebel wirklich ihre
+    /// eigene Kachel bekommt und nicht die Synthese — ohne sie waere
+    /// »jetzt stimmt sie« eine Behauptung. Leer, solange nichts im Nebel
+    /// gezeichnet wurde.</summary>
+    public string NebelObjektLine()
+    {
+        int summe = NebelWahreKachel + NebelBodenGezeichnet + NebelBodenFehlt;
+        if (summe == 0) return "";
+        // ⚠ Die drei Zaehler zaehlen ZEICHNUNGEN, nicht Objekte — jedes Bild
+        // erhoeht sie neu. Die Zahl, die man vergleichen will, ist daneben: wie
+        // viele der geladenen Objekte ueberhaupt in den neuen Zweig fallen.
+        int hoch = 0;
+        foreach (var o in _objDraw) if (o.WahreKachelImNebel) hoch++;
+        return $"nebel-objekte: {hoch} von {_objDraw.Count} Objekten haben Lage >= 100 "
+             + $"(Bruecken und Rampen) und zeigen im Nebel ihre WAHRE Kachel; "
+             + $"{LageImBild} bringen ueberhaupt ein Lagenbyte mit. "
+             + $"Zeichnungen im Nebel: {NebelWahreKachel} wahre Kachel, "
+             + $"{NebelBodenGezeichnet} synthetisierter Boden, {NebelBodenFehlt} ohne beides";
+    }
+
     /// <summary>Die NEBELDECKE: je Zelle, deren wahre Kachel von der
     /// synthetisierten abweicht, wohin sie gehört und ihr Platz im Streifen.
     /// Siehe MapBaker.NebelBoden.</summary>
@@ -167,6 +197,49 @@ public partial class MapEntityLayer
 
         /// <summary>Ein zerstoerbares Kartenobjekt (imap 61000..63999).</summary>
         public bool IstObjekt => Imap >= 61000 && Imap < 64000;
+
+        /// <summary>
+        /// <b>Das LAGENBYTE der Zelle</b> (Sektion 20), und im Nebel die
+        /// entscheidende Zahl. ⭐ <b>Ab 100 zeigt das Original die WAHRE Kachel,
+        /// darunter eine synthetisierte</b> — siehe <see cref="ImNebel"/>.
+        /// </summary>
+        public int Lage;
+
+        /// <summary>
+        /// <b>WAS IM UNERKUNDETEN GEBIET AN DIESER STELLE STEHT.</b>
+        ///
+        /// <para>⭐⭐⭐ 30.08.2026, gemeldet: »die Brücke oben links (die
+        /// waagerechte) ist im Fog of War bei uns noch komisch dargestellt,
+        /// erst wenn sie aufgedeckt wird, ist sie korrekt. Im Original sieht
+        /// man die Brücke im Fog of War (natürlich verdunkelt).«</para>
+        ///
+        /// <para><b>Gelesen, und es steht in fünf Befehlen.</b> Das Original
+        /// füllt seine BEKANNTE Kachelkarte <c>0x5539D0</c> einmal beim Start
+        /// (<c>@0x41FAE0</c>), Zelle für Zelle:</para>
+        /// <code>
+        ///   cl = byte[spalte + 256·zeile + 0x542E18]     ; die LAGENKARTE
+        ///   cmp cl, 0x64                                 ; 100
+        ///   jae  -> 0x41D090   die WAHRE Kachel  (word[0x677E20 + 4·index])
+        ///   sonst-> 0x41FA10   die SYNTHESE
+        /// </code>
+        ///
+        /// <para><b>Damit ist seine Meldung erklärt, und zwar genau in ihrer
+        /// Einschränkung auf die WAAGERECHTE Brücke.</b> Eine Brücke zerfällt
+        /// bei uns in zwei Teile (siehe <c>MapForest.ImFlachenDurchgang</c>):
+        /// die <b>Fahrbahn</b> trägt Belegung <c>0xFFFE</c> und liegt im
+        /// Kartenbild — die Nebeldecke lässt sie schon seit <c>7868aa8</c> in
+        /// Ruhe (<c>lageC &lt; 100</c>). Das <b>Geländer</b> trägt
+        /// <c>0xFFFF</c> mit Lagenbyte 101 und liegt in DIESER Ebene — und hier
+        /// bekam es im Nebel die Synthese übergestülpt. Ein Geländer haben nur
+        /// die waagerechten Brücken; bei den senkrechten liegt es in denselben
+        /// Zeilen wie die Fahrbahn und wird gar nicht erst eingereiht.
+        /// <b>Genau die Hälfte, die er sieht, war die falsche.</b></para>
+        ///
+        /// <para>⚠ Für Wald und Kisten (Lage 0) bleibt es beim synthetisierten
+        /// Boden — das ist dieselbe Lesung, nur der andere Zweig, und sein
+        /// Let's-Play-Bild zeigt beides nebeneinander: Brücke sichtbar, Bäume
+        /// nicht.</para></summary>
+        public bool WahreKachelImNebel => Lage >= 100;
 
         /// <summary>Sein Rechteck in der zweiten Ebene. ⚠ Quelle UND Ziel: der
         /// Backofen hat es an genau die Stelle gemalt, an die es gehört.</summary>
@@ -440,6 +513,12 @@ public partial class MapEntityLayer
             }
             else if (!ObjektRechteck) ObjektOhneBild++;
 
+            // ⚠ Fehlt der Schluessel, ist die Karte vor dem 30.08.2026
+            // gebacken — dann steht hier 0 und der Nebel malt wie bisher die
+            // Synthese. Das wird unten gezaehlt und GESAGT: genau so ein
+            // stiller Rueckfall auf eine alte Backung ist schon zweimal als
+            // »die Aenderung wirkt nicht« gemeldet worden.
+            if (o.ContainsKey("lage")) { e.Lage = GetI(o, "lage"); LageImBild++; }
             if (o.ContainsKey("boden"))
             {
                 int kb = GetI(o, "boden");
@@ -486,6 +565,11 @@ public partial class MapEntityLayer
         // entscheidet, was vor wem liegt, und der Backofen liefert schon in
         // Zeilenfolge — die Sortierung ist die Zusicherung, nicht die Arbeit.
         _objDraw.Sort((a, b) => a.Row - b.Row);
+        if (_objDraw.Count > 0 && LageImBild == 0)
+            GD.PushWarning("objekte: kein Lagenbyte in der zweiten Ebene — diese Karte "
+                         + "ist vor dem 30.08.2026 gebacken. Das Brueckengelaender zeigt "
+                         + "im Nebel darum weiter die synthetisierte Kachel statt seiner "
+                         + "eigenen; --reexport-maps behebt es.");
         if (ObjektOhneBild > 0)
             GD.PushWarning($"objekte: {ObjektOhneBild} aufragende Kacheln ohne eigenen "
                          + "Streifenplatz — diese Karte ist vor dem 27.08.2026 gebacken. "
@@ -592,6 +676,16 @@ public partial class MapEntityLayer
                 if (!NebelObjekteAlt && FogActive && _fog != null
                     && !_fog.IsSeen(e.Col, e.Row))
                 {
+                    // ⭐⭐⭐ 30.08.2026 — AB LAGE 100 DIE WAHRE KACHEL. Das ist
+                    // das Brückengeländer: die Herleitung steht bei
+                    // Kartenobjekt.WahreKachelImNebel, die Schwelle ist
+                    // wörtlich `cmp cl, 0x64` @0x41FAE0.
+                    if (e.WahreKachelImNebel)
+                    {
+                        DrawTextureRectRegion(_objTex, new Rect2(e.Ziel, e.Src.Size), e.Src);
+                        NebelWahreKachel++;
+                        continue;
+                    }
                     if (e.HatBoden)
                     {
                         DrawTextureRectRegion(_objTex, new Rect2(e.Ziel, e.BodenSrc.Size), e.BodenSrc);

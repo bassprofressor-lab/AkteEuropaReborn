@@ -559,7 +559,7 @@ public sealed class MapBaker
                           int Kohle, int KX, int KY,
                           int Asche, int AX, int AY,
                           int Imap, int Code, int Art,
-                          int Klasse, int Basis, int Eigen, int Boden)> Objects = new();
+                          int Klasse, int Basis, int Eigen, int Boden, int Lage)> Objects = new();
 
     /// <summary>
     /// <b>DER STREIFEN MIT DEN VERKOHLTEN BÄUMEN.</b>
@@ -1136,7 +1136,14 @@ public sealed class MapBaker
                         Objects.Add((c, r, c * TileW,
                                      OriginY + r * TileH - elev[i] * ElevStep + BlitAnchor + sp.YOff,
                                      sp.W, sp.H, kohle, kx, ky, asche, ax, ay,
-                                     imap, code[i], art, klasse, grundkachel, eigen, boden));
+                                     imap, code[i], art, klasse, grundkachel, eigen, boden,
+                                     // ⭐⭐⭐ 30.08.2026 — DAS LAGENBYTE MUSS MIT.
+                                     // Der Zeichner braucht es fuer den Nebel: das
+                                     // Original entscheidet beim Fuellen seiner BEKANNTEN
+                                     // Kachelkarte @0x41FAE0 an genau diesem Byte
+                                     // (`cmp cl, 0x64`), ob eine Zelle die SYNTHESE oder
+                                     // ihre WAHRE Kachel bekommt. Siehe MapObjects.
+                                     lage));
                         continue;
                     }
                     Blit(sp, c, r, elev[i]);

@@ -1524,6 +1524,10 @@ public sealed class ContentBuilder
                 // ⭐ Der synthetisierte Boden dieser Zelle im selben Streifen —
                 // was das Original zeigt, solange die Zelle nicht erkundet ist.
                 if (o.Boden >= 0) sb.Append($",\"boden\":{o.Boden}");
+                // ⭐ Das LAGENBYTE der Zelle (Sektion 20). Der Zeichner
+                // entscheidet damit im Nebel zwischen Synthese und wahrer
+                // Kachel — dieselbe Schwelle 100 wie @0x41FAE0.
+                sb.Append($",\"lage\":{o.Lage}");
                 // Der Platz der VERKOHLTEN Fassung im Streifen und wohin sie
                 // gehoert. Fehlt, wenn die Zelle kein Wald ist.
                 if (o.Kohle >= 0)

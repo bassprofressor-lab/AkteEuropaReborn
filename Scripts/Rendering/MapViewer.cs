@@ -2460,6 +2460,10 @@ public partial class MapViewer : Node2D
             // hineinsollte? Siehe Simulation/Einfahrt.cs.
             string ein = _entities.EinfahrtLine();
             if (ein.Length > 0) GD.Print(ein);
+            // ⭐ 30.08.2026 — was die Objektebene im Nebel gezeigt hat.
+            // Siehe MapObjects.NebelObjektLine (das Brueckengelaender).
+            string no = _entities.NebelObjektLine();
+            if (no.Length > 0) GD.Print(no);
             string q = _entities.QueueWatchLine();
             if (q.Length > 0) GD.Print(q);
             string b = _entities.BuildWatchLine();
