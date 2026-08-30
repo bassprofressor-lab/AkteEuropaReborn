@@ -18275,3 +18275,99 @@ Unterschied wirklich sieht, kommt er woanders her — Rumpfgrösse, die Steigung
 Can_go«), oder die Wegsuche. **Was fehlt, ist ein Prüfstand: dieselbe Uferzelle,
 drei Einheiten mit verschiedenen Fahrwerken, wer kommt hin.** Ohne den ist jede
 Erklärung geraten.
+
+---
+
+## BW. ⭐⭐⭐ DIE FAHRWERKE UND DER UNTERGRUND — vollständig gelesen (30.08.2026)
+
+Auf seinen Auftrag »schau ob du im Original was zu den verschiedenen Fahrwerken
+findest, und wie die sich je nach Untergrund auswirken, ich will dass wir hier
+alles richtig machen«.
+
+### BW.1 `Can_go` ist eine Sprungtafel über die GATTUNG (+0x0A)
+
+`@0x405689`: `eax = byte[+0x0A]`, `cmp eax,5`, `jmp [eax*4 + 0x40678C]`.
+
+| Gattung | Arm | was |
+|---:|---|---|
+| 0 | `0x4056B9` | **Bodenfahrzeuge** |
+| 1 | `0x406178` | Personen |
+| 2 | `0x40569D` | **Fehlerausgang** (Protokoll + `return 0`) |
+| 3 | `0x406419` | eigener Zweig — nur **10 Sätze** auf allen Karten (typ 138) |
+| 4 | `0x406669` | Schiff 4×4 |
+| 5 | `0x40671B` | Schiff, gross |
+
+### BW.2 Und ERST DARIN verzweigt es auf das FAHRWERK (+0x0B) — genau zweimal
+
+```
+Gattung 0:
+  0x4056B9   al = byte[+0x0B]           ; das FAHRWERK
+  0x4056BF   cmp al, 7   ; jne 0x405973 ->  HOVER
+  0x405975   cmp al, 0x11; jne 0x405BD7 ->  WALKER (17)
+                                        ->  0x405BD7 = ALLES ANDERE
+```
+
+⭐⭐ **Das Original kennt beim Fahren genau DREI Fahrwerksklassen: Hover (7),
+Walker (17), und alles übrige.** Zensus über alle 54 Karten (4833 Sätze):
+Gattung 0 trägt die Fahrwerke **0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 14, 16, 17** —
+vierzehn Werte, von denen `Can_go` genau zwei gesondert behandelt.
+
+⭐ **Ketten, Reifen und 6×6 sind alle »alles andere« und damit IDENTISCH.**
+Unsere `NavGrid.ClassOf` macht genau dieselbe Dreiteilung
+(`ChassisHover = 7`, `ChassisWalker = 0x11`) — **das ist schon richtig.**
+
+### BW.3 Der Untergrund: drei imap-Klassen, und jede Klasse darf andere
+
+```
+Rad/Kette  @0x405CD8   cmp di, 0xFFFE ; jne ... ; return 2
+                       -> NUR 0xFFFE ist frei
+Walker     @0x405A07   cmp eax,0xFFFD ; jl raus ; cmp eax,0xFFFE ; jle frei
+                       -> 0xFFFD UND 0xFFFE
+Hover      @0x405769   0xFFFC -> 0x4057A8 , 0xFFFE -> 0x4057A8 (GLEICH),
+                       0xFFFD -> 0x4057B5 (eigener Weg)
+```
+
+| imap | was | wer darf |
+|---|---|---|
+| `0xFFFE` | normaler Boden (270.990 Zellen) | **alle** |
+| `0xFFFD` | rau (84.807) | Walker und Infanterie — **Rad/Kette NICHT** |
+| `0xFFFC` | Wasser (88.229) | Schiffe und Hover |
+
+⚠ **Das steht in `NavGrid.cs` Zeile 22–24 schon genau so** und ist damit
+unabhängig bestätigt.
+
+### BW.4 Was das Fahrwerk SONST noch bewirkt — Vollerhebung
+
+Alle **52 Fundstellen** von `+0x0B` (`0x6E26D3`) aufgelöst: **11 Schreiber,
+41 Leser.** Die Leser, die etwas mit dem Fahrwerk VERGLEICHEN:
+
+* `0x4056B9` — `Can_go`, `cmp 7` (siehe oben)
+* `0x405975` — `Can_go`, `cmp 0x11`
+* `0x40B2FE` — **der FAHRKLANG**: `(Fahrwerk >> 1) − 1` indiziert die
+  Sprungtafel `0x40B364` (11 Arme) auf die Klänge **196, 208, 220, 231, 242,
+  252, 296**, dazu `rand() % 1..2` für die Variante.
+* `0x4331E0` — dieselbe Indexform in der Anwahl
+* `0x404F8B`, `0x4CF3C5`, `0x4C153A` — `cmp 9` · `0x410E9B`, `0x41168A` —
+  `cmp 0x49` · `0x441885` — `cmp 0x16` · `0x4D3A03` — `cmp 7`
+* Der grosse Rest (`0x429xxx`, `0x42Axxx`, `0x4B1xxx`, `0x4B3xxx`) ist
+  Bildauswahl und Aufstellung.
+
+⭐⭐ **Es gibt KEINE Geländekosten- oder Geschwindigkeitstafel je Fahrwerk.**
+Der Untergrund entscheidet nur über JA/NEIN, nicht über schneller/langsamer.
+
+### BW.5 ⚠ Damit widerspricht der Befund seiner Beobachtung
+
+»Ketten können gar nicht am Ufer fahren, aber 6×6 und Reifen schon« kann **nicht
+am Fahrwerk liegen** — im Original nicht und bei uns nicht. Was übrig bleibt:
+
+1. Das »Ufer« ist teils `0xFFFD` (rau) und teils `0xFFFE`, und die Reifen kamen
+   auf eine `0xFFFE`-Zelle, die Ketten auf eine `0xFFFD`. **Dann ist beides
+   richtig** und es sieht nur nach einem Fahrwerksunterschied aus.
+2. ⚠ **`NavGrid.MaxClimb = 3`** — die Steigungsgrenze ist ausdrücklich UNSERE
+   Setzung (»the original has no such test in Can_go«). Sie sperrt
+   fahrwerkunabhängig, aber je nach Anfahrtsrichtung verschieden.
+3. Die Rumpfgrösse — hängt an der Gattung, ist für alle Gattung-0-Fahrwerke
+   gleich.
+
+**Was fehlt, ist die STELLE.** Mit Karte und ungefährer Zelle lässt sich in
+einem Zug sagen, welche imap-Klasse dort steht und welche Höhenstufe.
