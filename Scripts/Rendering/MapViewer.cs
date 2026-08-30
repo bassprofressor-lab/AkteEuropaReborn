@@ -1796,7 +1796,7 @@ public partial class MapViewer : Node2D
             else if (a == "--minikarte-nebel-zweimal") Minimap.NebelZweimal = true;
             // Gegenprobe zum SEKTORANGRIFF, siehe SkirmishAi.AiSektorAngriff.
             else if (a == "--kein-sektorangriff") MapEntityLayer.KeinSektorangriff = true;
-            else if (a == "--kein-ausweichen") MapEntityLayer.KeinAusweichen = true;
+            else if (a == "--ausweichen") MapEntityLayer.AusweichenAn = true;
             else if (a == "--giveway-warten") MapEntityLayer.GiveWayWarten = true;
             // --boden-um=<spalte>,<zeile> — die Bodenauskunft, siehe
             // Simulation/BodenAuskunft.cs

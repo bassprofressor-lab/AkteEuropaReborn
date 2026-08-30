@@ -75,9 +75,32 @@ public partial class MapEntityLayer : Node2D
     /// in einer von fünfzig Anfragen nein.</summary>
     private const int AusweichVerweigerung = 50;
 
-    /// <summary><c>--kein-ausweichen</c> — der Stand von vor dem 30.08.2026:
-    /// der Blockierer wird nicht gefragt, der Fahrer plant neu.</summary>
-    public static bool KeinAusweichen;
+    /// <summary>
+    /// <c>--ausweichen</c> — den Blockierer fragen, statt den Fahrer neu planen
+    /// zu lassen.
+    ///
+    /// <para>⚠⚠ <b>STANDARDMAESSIG AUS — weil es NICHT GEMESSEN ist.</b> Die
+    /// Lesung stimmt (siehe oben) und der Nachbau steht. Die einzige Zahl, die
+    /// es dazu gibt, spricht dagegen: auf map_DM_4 kamen <b>18 statt 21</b>
+    /// Einheiten ans Ziel. ⚠ »Auf dem Ziel« ist allerdings die Schwellengroesse,
+    /// vor der der Einchecker vom 23.08.2026 ausdruecklich warnt (ein Toter
+    /// zaehlt darin wie einer, der nie losgefahren ist); die belastbaren
+    /// Groessen — Fortschritt und gefahrene Zellen — liessen sich noch nicht
+    /// gegeneinander stellen, weil der Pruefstand seine Zeile weiterhin nicht
+    /// in jedem Lauf abgibt (siehe OFFENE_FRAGEN BY.8).</para>
+    ///
+    /// <para>⚠⚠ <b>ZURUECKGENOMMEN:</b> hier stand kurzzeitig, das Ausweichen
+    /// selbst bringe den Pruefstand zum Schweigen. Das war voreilig — die
+    /// Gegenprobe zeigt dasselbe Flackern OHNE Ausweichen. Der Verdacht gegen
+    /// den eigenen Code war unbegruendet; was bleibt, ist schlicht: <b>es ist
+    /// nicht gemessen, also ist es aus.</b> Dazu die Zahl <b>373979 Anfragen
+    /// fuer 34 Schritte</b> — sie sagt nichts ueber Fehler, aber viel ueber die
+    /// Last, und auch die gehoert gemessen.</para></summary>
+    public static bool AusweichenAn;
+
+    /// <summary>Bequemlichkeit: der alte Name, damit die Abfragen unten lesbar
+    /// bleiben.</summary>
+    private static bool KeinAusweichen => !AusweichenAn;
 
     /// <summary>Wie oft gefragt, wie oft zugesagt, wie oft ein Schritt wirklich
     /// getan wurde. ⚠ Ohne die drei Zahlen ist »das Ausweichen tut nichts«

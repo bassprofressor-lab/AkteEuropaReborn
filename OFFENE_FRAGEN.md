@@ -18654,3 +18654,31 @@ Schwellengröße, vor der der Einchecker vom 23.08. ausdrücklich warnt — die
 belastbaren Grössen sind **Fortschritt** und **gefahrene Zellen**, und die sind
 hier noch nicht gegeneinander gestellt. **Das ist das Nächste**, und erst danach
 gehört entschieden, ob das Ausweichen anbleibt.
+
+### BY.8 ⚠ DER PRÜFSTAND IST BESSER, ABER NOCH NICHT DICHT
+
+Die periodische Meldung (BY.6) hat es deutlich verbessert — aus 0/1/0 wurde
+1/1/1 in einer Serie und 0/1/1 in einer anderen. **Aber er schweigt weiterhin
+in einzelnen Läufen**, und zwar auch im Standardfall ohne jede Änderung.
+
+⚠⚠ **Zurückgenommen:** ich hatte das kurzzeitig dem *Ausweichen* angelastet —
+mit eingeschaltetem Ausweichen kam keine Meldung. Die Gegenprobe zeigt
+dasselbe Flackern **ohne** Ausweichen. Der Verdacht gegen den eigenen Code war
+voreilig, und er stand schon im Kommentar; er ist dort berichtigt.
+
+⭐ Auffällig ist, dass es meist der **erste Lauf nach einem Neubau** trifft. Das
+wäre eine Erklärung (Assembly laden, Import), aber sie ist **nicht gemessen** —
+und genau darum steht sie hier als Verdacht und nicht als Befund.
+
+**Damit bleibt offen, und in dieser Reihenfolge:**
+1. **Warum schweigt der Prüfstand noch?** Erst danach ist hier überhaupt etwas
+   zu entscheiden.
+2. **Fortschritt und gefahrene Zellen** für Ausweichen an/aus gegeneinander —
+   die Zahl »18 statt 21 auf dem Ziel« ist die Schwellengrösse, vor der der
+   23.08. warnt, und taugt allein nicht.
+3. **Die Last:** 373979 Anfragen für 34 Schritte in 120 s. Das sagt nichts über
+   Fehler, aber viel über den Preis.
+
+⭐ **Das Ausweichen ist bis dahin AUS** (`--ausweichen` schaltet es ein), und der
+Grund ist ausdrücklich *nicht* ein Verdacht gegen den Code, sondern: **es ist
+nicht gemessen.**
