@@ -5538,6 +5538,23 @@ public partial class MapEntityLayer : Node2D
     private const int GiveWayOdds = 60;
 
     /// <summary>
+    /// <c>--giveway-warten</c> — vor einer besetzten Zelle WARTEN statt neu zu
+    /// planen, so wie der ukol-2-Arm des Originals <c>@0x408ABC</c> es tut.
+    ///
+    /// <para>⚠⚠ <b>Standardmaessig AUS, und der Grund ist der Pruefstand.</b> Die
+    /// Lesung ist eindeutig: das Original haelt seinen Weg und probiert
+    /// denselben Schritt im naechsten Takt wieder; neu geplant wird nur am Ende
+    /// des 50er-Puffers. Nur laesst sich die Wirkung derzeit nicht messen —
+    /// <c>--stuck-check</c> auf map_DM_4 druckt seine Schlusszeile nur
+    /// manchmal, dreimal derselbe Lauf gab 0 / 1 / 0 Ausgaben. Bis das behoben
+    /// ist, waere ein Umschalten eine Behauptung.</para></summary>
+    public static bool GiveWayWarten;
+
+    /// <summary>Wie oft vor einer besetzten Zelle GEWARTET wurde, statt neu
+    /// zu planen — die Zahl, an der die Umstellung haengt.</summary>
+    public int GiveWayGewartet;
+
+    /// <summary>
     /// DER WEG IST VERSPERRT — was das Original dann tut, und was wir bis zum
     /// 15.08.2026 stattdessen taten.
     ///
@@ -5627,9 +5644,41 @@ public partial class MapEntityLayer : Node2D
                     return;                   // er geht zur Seite — Weg behalten
             }
 
-            // Er weicht nicht aus: der alte Weg. Der Wurf zieht zwei nebeneinander
-            // wartende Einheiten auseinander; ohne ihn planen beide im selben Takt
-            // neu und stossen wieder zusammen.
+            // ⭐⭐⭐ 30.08.2026, ZWEITER TEIL — UND DANN WARTEN, NICHT NEU PLANEN.
+            //
+            // Hier stand `Roll(GiveWayOdds)` und `Repath`. Der ukol-2-Arm des
+            // Originals @0x408ABC macht es anders, und das ist der eigentliche
+            // Unterschied in der ganzen Bewegung:
+            //
+            //   +0x1A == 0xFF   -> kein Weg, UKOL := 0
+            //   +0x1A == 50     -> der Wegpuffer ist zu Ende, NEU PLANEN
+            //   sonst: richtung = Wegpuffer[0x7AEC38 + … + 0x1A]
+            //          0x404E80(einheit, richtung)   »kann ich diesen Schritt?«
+            //          NEIN -> RAUS. Der Takt endet, Weg und Zeiger BLEIBEN.
+            //          JA   -> Schritt tun, Zeiger weiter
+            //
+            // ⭐ Das Original plant bei einer Blockade ÜBERHAUPT NICHT NEU. Es
+            // haelt den Weg stur und probiert denselben Schritt im naechsten
+            // Takt wieder — und weil `Can_go` dabei jedes Mal erneut »geh mir
+            // aus dem Weg« ruft, wird der Blockierer bei JEDEM Versuch neu
+            // gebeten. Neu geplant wird nur am Ende des 50er-Puffers.
+            //
+            // ⚠ Genau daran lag es, dass die gelesene Suchkarte bei uns kroch:
+            // wir planten bei jeder Blockade neu, und mit einer durchlaessigen
+            // Karte findet die Neuplanung sofort wieder einen Weg durch den
+            // Pulk — eine Schleife aus Neuplanungen statt einer Wartezeit.
+            //
+            // Rueckfall `--giveway-repath` stellt das Neuplanen wieder her.
+            // ⚠⚠ STANDARDMAESSIG AUS — und der Grund ist der Pruefstand, nicht
+            // die Lesung. `--stuck-check` auf map_DM_4 druckt seine Schlusszeile
+            // nur MANCHMAL: dreimal derselbe Lauf im ALTEN Stand, mit festem
+            // Wuerfelkeim, gab 0 / 1 / 0 Ausgaben. Damit ist dort nichts zu
+            // messen — weder diese Umstellung noch die vom 23.08.
+            //
+            // Die Lesung oben stimmt und bleibt stehen. Die UMSTELLUNG bleibt
+            // unbelegt, bis der Pruefstand verlaesslich ist, und darum haengt
+            // sie hinter `--giveway-warten` statt zu wirken.
+            if (GiveWayWarten) { GiveWayGewartet++; return; }
             if (Simulation.Determinism.Roll(GiveWayOdds) != 0) return;
             Repath(i, e);
             return;

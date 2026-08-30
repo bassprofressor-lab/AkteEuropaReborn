@@ -18562,3 +18562,55 @@ die einen Augenblick später nicht mehr stimmt.
 ⚠ **Das Ausweichen bleibt trotzdem an**: es ist die gelesene Mechanik, es
 verschlechtert nichts, und es ist die Voraussetzung für jeden weiteren Anlauf
 auf die Suchkarte.
+
+### BY.4 ⭐⭐⭐ DER EIGENTLICHE UNTERSCHIED: DAS ORIGINAL PLANT NICHT NEU
+
+Der ukol-2-Arm **`@0x408ABC`**, gelesen:
+
+```
++0x1A (DALSI_SMER) == 0xFF  -> kein Weg, UKOL := 0
++0x1A == 50                 -> der 50er-Wegpuffer ist zu Ende, NEU PLANEN
+sonst:
+    richtung = byte[0x7AEC38 + 50*einheit + 0x1A]   ; sec14, RICHTUNGEN, keine Zellen
+    wenn byte == 0xFF: UKOL := 0 ; +0x1A := 0xFF    ; Wegende
+    0x404E80(einheit, richtung)     »kann ich diesen Schritt?«
+    NEIN -> RAUS. Der Takt endet, Weg und Zeiger BLEIBEN.
+    JA   -> Schritt tun
+```
+
+⭐⭐ **Bei einer Blockade plant das Original ÜBERHAUPT NICHT NEU.** Es hält den
+Weg stur und probiert denselben Schritt im nächsten Takt wieder — und weil
+`Can_go` dabei jedes Mal erneut »geh mir aus dem Weg« ruft, wird der Blockierer
+bei **jedem** Versuch neu gebeten. Neu geplant wird nur am Ende des Puffers.
+
+⚠ Das erklärt, warum die gelesene Suchkarte bei uns kroch: wir planen bei jeder
+Blockade neu, und mit einer durchlässigen Karte findet die Neuplanung sofort
+wieder einen Weg durch den Pulk — eine Schleife aus Neuplanungen statt einer
+Wartezeit.
+
+### BY.5 ⚠⚠ UND WARUM ES TROTZDEM NICHT UMGESTELLT IST: DER PRÜFSTAND IST UNZUVERLÄSSIG
+
+Der Vergleich sollte vier Läufe gegeneinander stellen. Alle vier blieben stumm.
+Die Gegenprobe zeigt, dass es **nicht** an der Änderung liegt:
+
+```
+ALTER Stand (--kein-ausweichen --giveway-repath), fester Keim 7,
+dreimal DERSELBE Lauf auf map_DM_4:   0 / 1 / 0 Ausgaben
+```
+
+**`--stuck-check` druckt seine Schlusszeile nur manchmal.** Damit ist dort
+nichts zu messen — weder diese Umstellung noch die vom 23.08., auf der die
+Entscheidung gegen die neue Suchkarte beruht.
+
+⭐ **Das ist der wertvollste Befund dieses Durchgangs**, und er wirft ein Licht
+zurück: die Zahlentafel vom 23.08. (»260 gefahrene Zellen statt 2901«) stammt
+aus demselben Prüfstand. Ob sie hält, ist damit offen.
+
+**Also:**
+* Die Umstellung hängt hinter **`--giveway-warten`** und ist AUS. Die Lesung
+  steht, die Wirkung ist unbelegt.
+* Das **Ausweichen bleibt an** — es verschlechtert nichts (BY.3) und ist die
+  gelesene Mechanik.
+* ⚠ **Der nächste Schritt an dieser Sache ist NICHT die Wegsuche, sondern der
+  Prüfstand.** Erst wenn `--stuck-check` reproduzierbar ist, lässt sich hier
+  überhaupt etwas entscheiden.

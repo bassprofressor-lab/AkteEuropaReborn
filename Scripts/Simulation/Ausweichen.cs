@@ -1,4 +1,4 @@
-using Godot;
+﻿using Godot;
 
 namespace AkteEuropaReborn.Rendering;
 
@@ -182,5 +182,6 @@ public partial class MapEntityLayer : Node2D
     public string AusweichLine()
         => AusweichGefragt == 0 ? ""
          : $"ausweichen: {AusweichGefragt} gefragt, {AusweichZugesagt} zugesagt, "
-         + $"{AusweichSchritte} Schritte getan, {AusweichEng}x war es rundum zu";
+         + $"{AusweichSchritte} Schritte getan, {AusweichEng}x war es rundum zu; "
+         + $"{GiveWayGewartet}x vor einer besetzten Zelle GEWARTET statt neu geplant";
 }
