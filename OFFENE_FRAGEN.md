@@ -18682,3 +18682,79 @@ und genau darum steht sie hier als Verdacht und nicht als Befund.
 ⭐ **Das Ausweichen ist bis dahin AUS** (`--ausweichen` schaltet es ein), und der
 Grund ist ausdrücklich *nicht* ein Verdacht gegen den Code, sondern: **es ist
 nicht gemessen.**
+
+---
+
+## BZ. ⭐⭐⭐ DER FABLE-LAUF ÜBER DIE BEWEGUNG (30.08.2026) — und drei Nachprüfungen
+
+Auf seine Ansage »nutze gerne Fable dazu, der noch mal alles am Original prüft
+und dann unseres dagegen«. Der volle Bericht liegt in
+**`berichte/bewegung-fable.md`**. Hier steht, was daran nachgeprüft ist und was
+es für uns bedeutet.
+
+### BZ.1 ⚠⚠ BY.4 IST FALSCH — das Original plant sehr wohl neu
+
+Ich hatte geschrieben: »Bei einer Blockade plant das Original ÜBERHAUPT NICHT
+NEU.« **Das stimmt nicht.** Es plant neu, aber **verzögert und über den
+Auftragsring**, mit Geduld:
+
+* hartes Hindernis: `+0x1C` = 40…59 Takte (`@0x408BC8`)
+* Einheit im Weg: p = 1/60 je Takt (`@0x408D90`)
+
+Und meine Lesung des ukol-2-Arms war unvollständig: `+0x1A == 0xFF → UKOL := 0`
+gilt **nur bei `AKCE != 0`**. Mit `AKCE == 0` — und genau das setzt `fahre`
+`@0x40B188` — **wartet die Einheit**, auch für immer, wenn die Suche scheiterte.
+⭐ Der AKCE-Test steht in meiner eigenen Zerlegung (`@0x408AD3`); ich habe ihn
+beim Zusammenfassen übersehen.
+
+### BZ.2 ⭐⭐⭐ DIE UNGERADE AUFTRAGSART — nah eine Wand, fern durchsichtig
+
+**Von mir nachgelesen und wörtlich bestätigt** (`@0x4D1363…0x4D140A`):
+
+```
+Kasten von (pos-2) bis (pos+2) in BEIDEN Achsen  =  5 x 5
+   ebp = &imap[0xBDEA80 + 2*index]
+   edi = &suchkarte[0xBCA0E8 + index]
+   cmp word[ebp], 0x36B0        ; 14000
+   jae  ueberspringen
+   mov  byte[edi], 2            ; HART GESPERRT
+```
+
+⭐⭐ **Im 5×5-Kasten um die eigene Position ist jede Zelle mit einer Einheit hart
+gesperrt — überall sonst ist der Pulk durchsichtig.** Das ist die Auflösung des
+scheinbaren Widerspruchs, an dem wir seit dem 23.08. hängen: die Suchkarte des
+Originals ist *nicht* pauschal durchlässig. **Fern durchsichtig, nah eine Wand.**
+Umgeschaltet wird über die Tafeln `0x40A208`/`0x40A220` (gerade/ungerade
+Auftragsart).
+
+### BZ.3 ⭐⭐ DIE SUCHE IST SERIALISIERT — ein Auftrag je 20-ms-Takt
+
+`Search @0x4D3810` hat **genau einen Rufer** — von mir mit einem byteweisen
+`E8`-Abtast über das ganze `.text` nachgezählt: **`0x416242`**, und der steht
+unmittelbar vor `move units @0x4166BB`. Bearbeitet wird **ein Auftrag je Takt**,
+fahrende Einheiten haben Vorrang, stehende laufen FIFO.
+
+⭐ **48 gleichzeitige Befehle sind damit über rund eine Sekunde gestaffelt**, und
+jede spätere Suche sieht eine Welt, in der sich die früheren schon bewegt haben.
+Wir planen alle im selben Takt (`MapEntityLayer.cs:7870`, `CommandBridge.cs:1347`,
+`Repath` :5695).
+
+### BZ.4 Die Antwort auf »warum wird unser Nachbau schlechter«
+
+Drei Gegengewichte fehlen, nicht eines:
+
+1. **Die ungerade Neuplan-Karte** (BZ.2) — der 5×5-Nahbereich als Wand.
+2. **Die Serialisierung** (BZ.3) — eine Suche je Takt statt aller auf einmal.
+3. **Das Aufgeben**: »Ziel belegt und Abstand < 3 → fertig« (`@0x408D05…0x408D3C`),
+   das Pulks auflöst, wo unser `RetryPath` ewig nachschiebt.
+
+**Kandidat 1 ist die Lücke im engeren Sinn.** ⚠ Alle drei sind noch NICHT
+gebaut, und keine der drei Zahlen ist bei uns nachgemessen.
+
+### BZ.5 Was von diesem Lauf nachgeprüft ist
+
+Nach der Regel »den Befund eines Leseagenten an der teuersten Stelle nachlesen«
+habe ich drei Stellen selbst geöffnet, und **alle drei halten**: der einzige
+Rufer von `0x4D3810`, der 5×5-Kasten, und die harte Sperre darin. Die
+Geduldswerte (`@0x408BC8`, `@0x408D90`) und das Aufgeben (`@0x408D05`) sind
+**nicht** von mir nachgelesen.
