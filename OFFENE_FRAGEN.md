@@ -18614,3 +18614,43 @@ aus demselben Prüfstand. Ob sie hält, ist damit offen.
 * ⚠ **Der nächste Schritt an dieser Sache ist NICHT die Wegsuche, sondern der
   Prüfstand.** Erst wenn `--stuck-check` reproduzierbar ist, lässt sich hier
   überhaupt etwas entscheiden.
+
+### BY.6 ⭐⭐⭐ DER PRÜFSTAND IST REPARIERT — und die Zahlen sagen etwas anderes als erhofft
+
+**Die Ursache war der Beendigungsweg.** Die Schlusszeile stand in **einer von 77**
+`Quit`-Stellen — der des `--quit-after`-Zählers. Endet der Lauf anders (das
+Gefecht ist entschieden, oder der Prozess stirbt am Godot-Finalizer
+»Disposable not registered«, dessen Zeitpunkt am GC hängt), fiel sie aus.
+
+Zwei Anläufe reichten nicht: `_ExitTree` (0/1/1) und ein eigener Zähler kurz vor
+dem Ende (0/1/1). ⭐ **Erst die Umkehrung trägt: der Prüfstand meldet jetzt alle
+zehn Sekunden mit Zeitstempel, und die LETZTE Meldung gilt.** Damit hängt die
+Messung nicht mehr daran, ob der Lauf sauber zu Ende kommt — und man sieht
+zusätzlich den Verlauf statt nur des Endstands.
+
+**Gegenprobe:** dreimal derselbe Lauf, vorher 0/1/0 Ausgaben, jetzt dreimal
+**Zeichen für Zeichen dieselbe Zeile**.
+
+### BY.7 Und damit die Messung, die neun Tage nicht möglich war
+
+map_DM_4, 48 Einheiten, fester Würfelkeim 7, Stand bei 50 s:
+
+| | auf dem Ziel | tot | ohne Weg |
+|---|---:|---:|---:|
+| **ALT (Stand seit 23.08.)** | **21** | 20 | 1 |
+| nur Ausweichen | 18 | 18 | 2 |
+| Ausweichen + Warten | **9** | 18 | 1 |
+| nur neue Suchkarte | **0** | 13 | 0 |
+
+⭐⭐ **Die Entscheidung vom 23.08. ist bestätigt**, jetzt mit einem
+reproduzierbaren Prüfstand: die neue Suchkarte bringt **null** ans Ziel. Und
+meine Umstellung »warten statt neu planen« ist **belegt schlechter** (21 → 9) —
+sie bleibt zu Recht hinter `--giveway-warten` und aus.
+
+⚠⚠ **Aber ein neuer offener Punkt fällt dabei ab: das AUSWEICHEN misst sich
+schlechter** (21 → 18 auf dem Ziel). Mit dem kaputten Prüfstand sah es nach
+»im Rauschen« aus; das war es nicht. ⚠ »Auf dem Ziel« ist allerdings die
+Schwellengröße, vor der der Einchecker vom 23.08. ausdrücklich warnt — die
+belastbaren Grössen sind **Fortschritt** und **gefahrene Zellen**, und die sind
+hier noch nicht gegeneinander gestellt. **Das ist das Nächste**, und erst danach
+gehört entschieden, ob das Ausweichen anbleibt.

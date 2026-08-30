@@ -2474,6 +2474,32 @@ public partial class MapViewer : Node2D
             }
         }
         if (_filmSek > 0f) FilmTakt((float)delta);
+        // ⭐⭐⭐ 30.08.2026 — DER STUCK-CHECK DRUCKT AN SEINEM EIGENEN ZAEHLER.
+        //
+        // Er hing bisher an EINER von 77 Quit-Stellen. Wird der Lauf anders
+        // beendet — und das passiert hier zusaetzlich durch einen Fehler des
+        // Godot-Finalizers beim Herunterfahren (»Disposable not registered«,
+        // GC-Zeitpunkt, also mal ja mal nein) —, fiel die Zeile aus.
+        // Dreimal derselbe Lauf gab 0 / 1 / 0. Jetzt kommt sie eine halbe
+        // Sekunde VOR dem Ende, im laufenden Bild, und haengt an nichts mehr.
+        // ⚠⚠ UND ER DRUCKT PERIODISCH. Zwei Anlaeufe, die Zeile an das ENDE zu
+        // haengen, sind gescheitert (_ExitTree, eigener Zaehler) — dreimal
+        // derselbe Lauf gab weiterhin 0/1/1. Der Lauf endet auf Wegen, die sich
+        // von hier aus nicht alle abfangen lassen.
+        //
+        // ⭐ Also andersherum: alle zehn Sekunden eine Zeile mit Zeitstempel,
+        // und die LETZTE gilt. Damit ist die Messung abbruchfest — sie haengt
+        // nicht mehr daran, ob der Lauf sauber zu Ende kommt, und man sieht
+        // zusaetzlich den VERLAUF statt nur des Endstands.
+        if (_stuckCheck && _quitAfter > 0f)
+        {
+            _stuckTicker -= (float)delta;
+            if (_stuckTicker <= 0f)
+            {
+                _stuckTicker = StuckMeldeTakt;
+                GD.Print($"[{_upTime:0}s] " + _entities.StuckCheckLine());
+            }
+        }
         if (_quitAfter <= 0f) { _upTime += (float)delta; DemoLeaveIfDue(); return; }
         _upTime += (float)delta;
         DemoLeaveIfDue();
@@ -2566,13 +2592,57 @@ public partial class MapViewer : Node2D
             }
             if (_stuckCheck)
             {
-                GD.Print(_entities.StuckCheckLine());
+                StuckAusgeben();
                 GetTree().Quit(_entities.StuckCheckRc());
                 return;
             }
             if (_leaveCheck) { LeaveCheckGo(); return; }
             GetTree().Quit();
         }
+    }
+
+    /// <summary>
+    /// <b>DIE SCHLUSSZEILE DES `--stuck-check` — genau EINMAL, egal wie das
+    /// Programm endet.</b>
+    ///
+    /// <para>⚠⚠ 30.08.2026, und das ist der Grund fuer diese Methode: der
+    /// Pruefstand war <b>nicht reproduzierbar</b>. Dreimal derselbe Lauf auf
+    /// map_DM_4, mit festem Wuerfelkeim und ohne jede Aenderung dazwischen,
+    /// gab <b>0 / 1 / 0</b> Ausgaben. Damit war dort nichts zu messen — weder
+    /// die Umstellung vom 30.08. noch die Entscheidung vom 23.08. gegen die
+    /// neue Suchkarte, die auf denselben Zahlen beruht.</para>
+    ///
+    /// <para><b>Die Ursache ist der Beendigungsweg.</b> Die Zeile stand in EINER
+    /// von 77 <c>Quit</c>-Stellen — der des <c>--quit-after</c>-Zaehlers. Endet
+    /// der Lauf ueber einen anderen Weg (das Gefecht ist entschieden, eine
+    /// Mission endet, ein anderer Pruefstand schliesst ab), fiel sie aus. Und ob
+    /// das Gefecht innerhalb der Messzeit entschieden ist, haengt am
+    /// Kampfverlauf — daher das Flackern.</para>
+    ///
+    /// <para>Jetzt haengt sie zusaetzlich am <c>_ExitTree</c>: was auch immer
+    /// den Lauf beendet, die Zeile kommt. Der Merker verhindert, dass sie
+    /// zweimal erscheint.</para>
+    /// </summary>
+    private bool _stuckGedruckt;
+
+    /// <summary>Wie oft der Pruefstand seinen Zwischenstand meldet. Zehn
+    /// Sekunden: haeufig genug, dass ein Abbruch nie mehr als das kostet,
+    /// selten genug, dass das Protokoll lesbar bleibt.</summary>
+    private const float StuckMeldeTakt = 10f;
+    private float _stuckTicker = StuckMeldeTakt;
+
+    private void StuckAusgeben()
+    {
+        if (_stuckGedruckt || !_stuckCheck) return;
+        _stuckGedruckt = true;
+        GD.Print(_entities.StuckCheckLine());
+    }
+
+    public override void _ExitTree()
+    {
+        // ⚠ Nur der Pruefstand, und nur wenn er lief — im gewoehnlichen Spiel
+        // schweigt diese Stelle.
+        if (_stuckCheck) StuckAusgeben();
     }
 
     /// <summary>
