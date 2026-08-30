@@ -18060,3 +18060,75 @@ auf (49,7)/(50,7), die Stadt reicht bis Spalte 49 — wer in die Stadt fährt,
 kommt ihnen also auf wenige Zellen nahe, und dann greifen sie an. Erwartet er
 mehr als das, ist der Sichtring nicht die ganze Wahrheit, und dann sind die
 übrigen Stationen der KI-Runde (`0x4BBD0A..0x4BFC58`) durchzugehen.
+
+---
+
+## BU. ⭐⭐ SEIN PRÜFLAUF NACH DEN BEHEBUNGEN (30.08.2026, abends)
+
+**Bestätigt:** »Die Brücke passt jetzt auf map_02.« · »Die 7 Gegner kommen,
+sobald ich an der unteren Brücke bin, und greifen beim Nachschubposten an.« ·
+»Die Untermission hat damit funktioniert, weil diese auf die 7 Einheiten bezogen
+ist.« ⭐ **Und: »Interessant war, dass ich jetzt damit das erste Mal Kampagne 2
+abschliessen konnte.«**
+
+### BU.1 Seine Frage: darf die Mission enden, bevor die zweite Basis fällt?
+
+**Ja.** Mission 2 hat **zwei** Siegwege, und die Siegregel (R50 @0x4993B4) ist
+kein bedingungsloses `end` — sie trägt zwei ODER-verknüpfte UND-Gruppen
+(`any_groups`), am 25.08. mit `adis.py` gegengeprüft:
+
+```
+Weg A   units(Klasse 0, Spieler 1) == 0  UND  units(Klasse 0, Spieler 2) == 0
+Weg B   objects(Typ 1, Spieler 0) == 2          (= BEIDE Basen besitzen)
+```
+
+Gezählt auf map_02 (`+0x0a`, die Klasse): **Klasse 0 = Fahrzeuge — P1 hat 4,
+P2 hat 12. Klasse 1 = Personen — P1 10, P2 14.** Weg A verlangt also die
+**16 gegnerischen FAHRZEUGE**, und die 24 Fusssoldaten zählen nicht mit.
+
+⭐ Er hat Weg A genommen. Die zweite Basis ist der ALTERNATIVE Weg, kein
+Pflichtziel — das Ende war korrekt.
+
+### BU.2 ⚠ WAS OFFEN BLEIBT: sie kommen ihm nicht entgegen
+
+»Nur die ersten Gegner von der Krumlov-Basis treffen nicht auf mich in der
+Stadt, der Kampf kommt nur zustande, weil ich da hin fahr.«
+
+Das deckt sich mit der Messung aus BT.8: die Streife reagiert, aber erst auf
+**3 Zellen** (Infanterie) bzw. 4–5 (Fahrzeuge), und diese Zahlen sind roh aus
+`+0x2c` des Kartensatzes. Ein Entgegenkommen über Entfernung gibt es bei uns
+nicht — und in `ai_units` @0x4BF4E0 auch im Original nicht.
+⚠ **Damit ist belegt, dass `ai_units` NICHT die ganze Wahrheit ist.** Von den
+acht Stationen der KI-Runde ist bisher nur diese eine gelesen; die übrigen
+liegen in `0x4BBD0A..0x4BFC58`. **Das ist der nächste Griff an dieser Sache.**
+
+### BU.3 Die Übersichtskarte dunkelt ZWEIMAL ab — behoben
+
+»Die Minikarte zeigt noch die neutralen Gebäude an im Fog of War (wenn noch
+nicht erkundet).«
+
+Das schien seiner Ansage vom 18.08. zu widersprechen (»die ganze Karte ist
+sichtbar, jedoch mit einem leichten Nebel bedeckt«), aus der `FogDim = 0,50`
+kommt. **Beide Aussagen stimmen — das Original behandelt die zwei Orte
+verschieden**, und das steht im Übersichtsmaler:
+
+```
+0x4B8296  ecx = Nebelbyte dieser Zelle
+0x4B829A  cmp byte[ecx], 0 ; jne   -> erkundet, KEINE Abdunklung
+0x4B829F  al = Merkbit [esp+0x2c] ; jne -> KEINE Abdunklung
+0x4B82A7  cl = tab[dl] ; dl = tab[cl]   <- ZWEIMAL durch 0xB135B0
+```
+
+⭐ **Und das Merkbit setzen NUR die drei Gebäudezweige mit `Built != 0`**
+(@0x4B81C1, @0x4B81D7, @0x4B81E8). Der Zweig für eine **KULISSE**
+(`byte[+0x18] == 0` — genau die neutralen Zivilbauten) setzt es **nicht**
+(@0x4B81F9 schreibt nur die Festfarbe 42). Ein echtes Gebäude leuchtet also auch
+im Nebel durch, eine Kulisse wird abgedunkelt wie der Boden.
+
+**Umgesetzt wörtlich: dieselbe Nebelschicht ein zweites Mal.** Zwei Durchgänge
+mit derselben Deckkraft ergeben `1-(1-a)²`, bei FogDim 0,50 also 75 % statt
+50 % — **keine neue Zahl**, und wer an `FogDim` dreht, dreht die Übersicht mit.
+Unsere Punkte (`MinimapDots`) liegen darüber und leuchten weiter durch; das ist
+die Entsprechung des Merkbits. Gegenprobe `--minikarte-nebel-einmal`.
+Gemessen: `minimap: 47 Neuzeichnungen, 94 davon mit Nebelschicht` — genau
+doppelt.

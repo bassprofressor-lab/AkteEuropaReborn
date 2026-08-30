@@ -1791,6 +1791,8 @@ public partial class MapViewer : Node2D
             // --ki-probe: eine eigene Einheit neben die naechste Gegnereinheit
             // stellen und nachsehen, ob die Streife sie aufnimmt. Siehe KiProbe.cs.
             else if (a == "--ki-probe") _kiProbe = true;
+            // Gegenprobe zur doppelten Abdunklung der Uebersicht, siehe Minimap.
+            else if (a == "--minikarte-nebel-einmal") Minimap.NebelEinmal = true;
             else if (a == "--wegsuche-check") _wegsucheCheck = true;
             // ⚠ GEGENPROBE: der alte A*, siehe NavGrid.AlterAstern.
             else if (a == "--alter-astern") Simulation.NavGrid.AlterAstern = true;

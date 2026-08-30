@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Rendering;
+﻿namespace AkteEuropaReborn.Rendering;
 
 using System;
 using System.Collections.Generic;
@@ -89,6 +89,10 @@ public partial class Minimap : Control
     /// <summary><c>--uebersicht-ohne-objekte</c> — der Stand von vor dem
     /// 28.08.2026: die Uebersicht zeigt nur das Kartenbild.</summary>
     public static bool OhneObjektebene;
+
+    /// <summary><c>--minikarte-nebel-einmal</c> — der Stand von vor dem
+    /// 30.08.2026: die Uebersicht dunkelt so stark ab wie das Schlachtfeld.</summary>
+    public static bool NebelEinmal;
 
     /// <summary>Wie oft die Objektebene wirklich in die Uebersicht gezeichnet
     /// wurde. ⚠ Eigene Zahl neben <see cref="Repaints"/>: eine Ebene, die nie
@@ -229,6 +233,38 @@ public partial class Minimap : Control
         {
             DrawTextureRect(fog, full, false);
             FogDrawn++;
+            // ⭐⭐⭐ 30.08.2026 — DIE UEBERSICHT DUNKELT ZWEIMAL AB, DAS
+            // SCHLACHTFELD EINMAL. Gemeldet: »die Minikarte zeigt noch die
+            // neutralen Gebaeude an im Fog of War (wenn noch nicht
+            // erkundet)«.
+            //
+            // Das schien im Widerspruch zu seiner Ansage vom 18.08. zu stehen
+            // (»die ganze Karte ist sichtbar, jedoch mit einem leichten Nebel
+            // bedeckt«), aus der MapEntityLayer.FogDim = 0,50 kommt. Beide
+            // Aussagen stimmen — das Original behandelt die zwei Orte
+            // verschieden, und das steht im Uebersichtsmaler:
+            //
+            //   0x4B8296  ecx = Nebelbyte dieser Zelle
+            //   0x4B829A  cmp byte[ecx], 0 ; jne  -> erkundet, KEINE Abdunklung
+            //   0x4B829F  al = Merkbit [esp+0x2c] ; jne -> KEINE Abdunklung
+            //   0x4B82A7  cl = tab[dl] ; dl = tab[cl]     <- ZWEIMAL durch die
+            //             CWS-Schattentafel 0xB135B0
+            //
+            // ⭐ Und das Merkbit setzen NUR die drei Gebaeudezweige mit
+            // `Built != 0` (@0x4B81C1, @0x4B81D7, @0x4B81E8). Der Zweig fuer
+            // eine KULISSE — `byte[+0x18] == 0`, also genau die neutralen
+            // Zivilbauten — setzt es NICHT (@0x4B81F9 schreibt nur die
+            // Festfarbe 42). Ein echtes Gebaeude leuchtet also auch im Nebel
+            // durch, eine Kulisse wird abgedunkelt wie der Boden. Genau das
+            // beschreibt er.
+            //
+            // ⭐ Umgesetzt wird es woertlich: dieselbe Schicht ein zweites Mal.
+            // Zwei Durchgaenge mit derselben Deckkraft ergeben 1-(1-a)^2, bei
+            // FogDim 0,50 also 75 % statt 50 % — KEINE neue Zahl, und wer an
+            // FogDim dreht, dreht die Uebersicht mit. Unsere Punkte
+            // (MinimapDots) liegen darueber und leuchten weiter durch; das ist
+            // die Entsprechung des Merkbits.
+            if (!NebelEinmal) { DrawTextureRect(fog, full, false); FogDrawn++; }
         }
 
         DrawRect(full, new Color(0.55f, 0.58f, 0.6f), false, 1);
