@@ -1045,10 +1045,35 @@ public sealed class NavGrid
             if (c == zi) { karte[zi] = 5; gefunden = true; break; }
 
             int cx = c % w, cy = c / w;
+            // ⭐⭐⭐ 30.08.2026 — DER START DARF AM RAND STEHEN, UND DANN IST DAS
+            // SIEGEL OFFEN.
+            //
+            // Gemeldet: »in Kampagne2 müssten mich die einheiten der oberen
+            // rechten basis von alleine angreifen«. Sie kommen nicht — und der
+            // Grund ist nicht das Missionsskript, sondern DIESE Schleife.
+            //
+            // Der Rand wird oben auf 2 gesetzt, damit hier keine Randprüfung
+            // nötig ist. Zwei Zeilen weiter steht aber `karte[si] = 8`, und das
+            // überschreibt die 2, wenn die Einheit SELBST am Rand steht. Wird
+            // diese Zelle dann aufgeklappt, rechnet `ny * w + nx` mit ny = -1
+            // oder nx = -1 — IndexOutOfRangeException, mitten im Befehlstakt,
+            // und der ganze Takt bricht ab.
+            //
+            // Genau das trifft Mission 2: Regel 38 setzt sieben Angreifer, und
+            // zwei davon auf ZEILE 0 (`place_unit(85, 33, 0, 4)` @0x498F04 und
+            // `(85, 34, 0, 4)` @0x498F14). Die Einsetzung gelingt, der Befehl
+            // wird gegeben — und die Wegsuche stürzt ab, bevor einer losfährt.
+            //
+            // ⚠ Die Prüfung kostet nichts im Regelfall: NUR der Startknoten kann
+            // am Rand liegen, jede andere offene Zelle ist von der Versiegelung
+            // umschlossen. Darum steht sie hinter `amRand` und nicht in der
+            // inneren Schleife.
+            bool amRand = cx == 0 || cy == 0 || cx == w - 1 || cy == h - 1;
             foreach (int i in UrErweitern)
             {
                 var d = UrDirs[i];
                 int nx = cx + d.X, ny = cy + d.Y;
+                if (amRand && (nx < 0 || ny < 0 || nx >= w || ny >= h)) continue;
                 int n = ny * w + nx;
                 if (karte[n] != 0) continue;
                 if ((i & 1) != 0)

@@ -17812,3 +17812,89 @@ Gebäude gibt (`Entity.Garage`), läuft sie über die.
   fehlende Besitzerabgleich in Arm 0 ist gelesen, aber nicht erklärt.
 * **Die KI kennt die Garage nur zum Leeren.** Sie stellt nichts absichtlich
   unter.
+
+---
+
+## BT. ⭐⭐⭐ DIE SIEBEN ANGREIFER DER MISSION 2 — der Fehler lag in der WEGSUCHE (30.08.2026)
+
+**Gemeldet:** »In Kampagne2 müssten mich die einheiten der oberen rechten basis
+von alleine angreifen / mir entgegenkommen von der oberen rechten generischen
+basis, die man später einnimmt.«
+
+⭐ Das ist der offene Punkt 7 des Abschnitts oben (»**R37/R38** (sieben
+Angreifer) ist korrekt gelesen, aber sie kommen nicht — die Kette davor muss
+erst durchlaufen«). **Die Erklärung dort war falsch.** Die Kette läuft; die
+Wegsuche stürzte ab.
+
+### BT.1 Was die Regel ist
+
+`map_02` trägt die Basis **»Krumlov« auf (59,4), Gebäudeplatz 1, Besitzer 1** —
+auf einer 70×80-Karte die obere rechte. **R38 @0x498EEC**:
+
+* Auslöser (`any`): `obj_owner(1) == 0` **ODER** `obj_owner(2) == 0` — also
+  sobald **du** einen der beiden Basisplätze besitzt. Genau sein »die man
+  später einnimmt«.
+* Wirkung: **7× `place_unit`** (Entwürfe 85/85/85/86/86/86/60 auf (32,8),
+  (33,0), (34,0), (35,8), (30,2), (35,3), (32,7), Spieler 4) und **7×
+  `order_at`** für die Plätze 4000…4006 auf (16,20), (14,22), (12,21), (16,18),
+  (17,23) … — die obere LINKE Ecke, wo der Spieler steht.
+
+### BT.2 Die Messung
+
+`--place-check` auf Mission 2, ohne Zutun: `traegt 7 Einsetzungen und 7 Befehle;
+ausgeloest 0 / 0` — richtig, denn die Bedingung ist nicht erfüllt.
+Mit `--place-force` (die Bedingung wird hergestellt):
+
+```
+place-check: M2 traegt 7 Einsetzungen und 7 Befehle; ausgeloest 7 / 7
+Entwurf 85: 12 -> 15,  86: 5 -> 8,  60: 0 -> 1      (= genau 7 neue Saetze)
+ERROR: System.IndexOutOfRangeException
+   at NavGrid.FindPathUr (NavGrid.cs:1053)
+   at MapEntityLayer.ApplyMove (CommandBridge.cs:1347)
+```
+
+**Die Regel feuert vollständig. Die Wegsuche stürzt ab, und mit ihr der ganze
+Befehlstakt — keiner der sieben fährt los.**
+
+### BT.3 Die Ursache: der versiegelte Rand, von innen aufgebrochen
+
+`FindPathUr` sperrt Zeile 0, Zeile h−1, Spalte 0 und Spalte w−1 auf 2, **damit
+die innere Schleife keine Randprüfung braucht** — genau darum tut das Original
+es auch. Zwei Zeilen weiter steht aber:
+
+```csharp
+karte[si] = 8;          // Startmarke
+```
+
+und das **überschreibt die 2, wenn die Einheit selbst am Rand steht**. Wird
+diese Zelle aufgeklappt, rechnet `n = ny * w + nx` mit `ny = -1` — Absturz.
+
+⭐ **Und M2 setzt zwei der sieben Angreifer auf ZEILE 0** (`place_unit(85, 33,
+0, 4)` @0x498F04 und `(85, 34, 0, 4)` @0x498F14). Der Fehler brauchte also eine
+Einheit am äussersten Kartenrand und ist darum nie aufgefallen.
+
+**Behoben** mit einer Randprüfung, die nur greift, wenn die aufgeklappte Zelle
+selbst am Rand liegt — und das kann **nur der Startknoten** sein, jede andere
+offene Zelle ist von der Versiegelung umschlossen. Der Regelfall kostet nichts.
+
+Danach: `befehligt: 7 von 7 Saetzen da, 7 unterwegs, 0 stehen`.
+Neu dafür: `MissionScript.OrderSites()` und die Zeile »befehligt:« im
+`--place-check` — **»Befehl gegeben« und »unterwegs« sind zwei Zahlen**, und
+genau dazwischen lag der Fehler. Der alte Prüfstand sah ein sauberes 7/7,
+während der Spieler sieben Einheiten sah, die stehenblieben.
+
+### BT.4 ⚠ Was OFFEN bleibt — dasselbe Siegel von der anderen Seite
+
+`--wegsuche-check` fällt an einem Punkt durch, und zwar **schon vor dieser
+Behebung** (mit `git stash` auf `NavGrid.cs` nachgemessen, Wort für Wort
+dieselbe Zeile):
+
+```
+langer Weg von (27, 13): weiteste Zelle (69, 54), Weg KEINER - zu kurz zum Messen: FALSCH
+```
+
+Spalte **69** ist auf einer 70er-Karte `w − 1` — die versiegelte Randspalte.
+`if (karte[zi] == 2) return null;` gibt darum keinen Weg. **Ein ZIEL am
+Kartenrand ist unerreichbar.** Ob das Original das auch so hält, ist NICHT
+gelesen; hier steht nur, dass es unabhängig von BT.3 ist und dass der Prüfstand
+es seit jeher meldet.

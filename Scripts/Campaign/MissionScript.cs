@@ -1125,6 +1125,20 @@ public sealed class MissionScript
         return list;
     }
 
+    /// <summary>Die Ziele der <c>order_at</c>-Befehle: Platz, Spalte, Zeile.
+    /// ⚠ Der Pruefstand braucht sie, um nachzusehen, ob die befehligte
+    /// Einheit hinterher WIRKLICH faehrt — »Befehl gegeben« und »faehrt« sind
+    /// zwei verschiedene Zahlen, und genau dazwischen lag der Fehler vom
+    /// 30.08.2026 (die Wegsuche stuerzte am Kartenrand ab).</summary>
+    public List<(int Slot, int Col, int Row)> OrderSites()
+    {
+        var list = new List<(int, int, int)>();
+        foreach (var r in _script.Rules)
+            foreach (var a in r.Then)
+                if (a.Kind == "order_at") list.Add((a.A, a.B, a.C));
+        return list;
+    }
+
     /// <summary>
     /// ⚠⚠ <b>DER VARIABLENÜBERTRAG IST GEBAUT, ABER ABGESCHALTET</b> —
     /// 20.08.2026, und der Grund gehört hierher, nicht in eine Fussnote.

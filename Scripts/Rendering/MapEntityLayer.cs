@@ -12432,6 +12432,29 @@ public partial class MapEntityLayer : Node2D
                   $"und {befehle} Befehle; ausgeloest {_mscript.Placements} / " +
                   $"{_mscript.OrdersGiven}");
 
+        // ⭐⭐ 30.08.2026 — UND OB SIE AUCH FAHREN. »Befehl gegeben« und
+        // »unterwegs« sind zwei Zahlen, und genau dazwischen lag der gemeldete
+        // Fehler: die sieben Angreifer der Mission 2 bekamen ihren Befehl, und
+        // die Wegsuche stuerzte am Kartenrand ab (NavGrid.FindPathUr). Ohne
+        // diese Zeile sah der Pruefstand ein sauberes 7/7 und der Spieler
+        // sieben Einheiten, die stehenblieben.
+        var ziele = _mscript.OrderSites();
+        if (ziele.Count > 0)
+        {
+            int da = 0, faehrt = 0, steht = 0;
+            foreach (var (slot, _, _) in ziele)
+            {
+                var u = _entities.Find(x => x.Slot == slot && !x.IsBuilding
+                                         && !x.IsProp && !x.Dead);
+                if (u == null) continue;
+                da++;
+                if (u.Path is { Count: > 0 } || u.Orders.Count > 0) faehrt++; else steht++;
+            }
+            sb.Append("\n   befehligt: " + $"{da} von {ziele.Count} Saetzen da, "
+                    + $"{faehrt} unterwegs, {steht} stehen "
+                    + $"(erwartet: alle unterwegs)");
+        }
+
         // Die getragenen Stellen gegen den Kartenrahmen und die beiden Bereiche.
         int drin = 0, raus = 0, sp = 0, ent = 0;
         var schlecht = new List<string>();
