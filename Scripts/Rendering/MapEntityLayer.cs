@@ -5694,7 +5694,15 @@ public partial class MapEntityLayer : Node2D
     /// <c>e.Path = null</c>, das die Einheit endgueltig stillegte.</summary>
     private void Repath(int i, Entity e)
     {
-        var p = _nav.FindPath(new Vector2I(e.Col, e.Row), e.Goal, e.Move, i);
+        // ⭐⭐⭐ 30.08.2026 — die NEUPLANUNG bekommt die NAHSPERRE. Das
+        // Original hat dafuer eine eigene Auftragsart (die »ungerade«, Tafeln
+        // 0x40A208/0x40A220): dieselbe durchlaessige Suchkarte, aber der
+        // 5x5-Kasten um die eigene Position ist darin hart gesperrt
+        // (@0x4D1363..0x4D140A). Wer nach einer Blockade neu plant, soll um den
+        // oertlichen Knoten HERUM statt wieder mitten hindurch.
+        // ⚠ Der ERSTE Befehl bekommt sie nicht — das ist die gerade Art.
+        var p = _nav.FindPath(new Vector2I(e.Col, e.Row), e.Goal, e.Move, i,
+                              nahsperre: true);
         if (p != null && p.Count > 0) { e.Path = p; e.PathIdx = 0; }
     }
 

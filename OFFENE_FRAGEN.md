@@ -18758,3 +18758,39 @@ habe ich drei Stellen selbst geöffnet, und **alle drei halten**: der einzige
 Rufer von `0x4D3810`, der 5×5-Kasten, und die harte Sperre darin. Die
 Geduldswerte (`@0x408BC8`, `@0x408D90`) und das Aufgeben (`@0x408D05`) sind
 **nicht** von mir nachgelesen.
+
+### BZ.6 ⭐ DIE NAHSPERRE IST GEBAUT — und der Prüfstand STÜRZT AB
+
+**Gebaut** (`NavGrid.FindPathUr`, Parameter `nahsperre`): die Neuplanung nach
+einer Blockade (`MapEntityLayer.Repath`) bekommt dieselbe durchlässige Karte,
+aber der 5×5-Kasten um die eigene Position ist darin hart gesperrt — der
+Nachbau von `@0x4D1363…0x4D140A`. Der erste Befehl bekommt sie nicht (das ist
+die gerade Auftragsart). Gegenprobe `--keine-nahsperre`.
+
+⚠⚠ **Und dabei ist die Ursache der Prüfstandsflackerei aufgetaucht:**
+
+```
+Fatal error.
+Internal CLR error. (0x80131506)
+Segmentation fault
+```
+
+**Der Godot-.NET-Prozess stürzt hart ab** — dann fehlt jede Ausgabe, auch die
+periodische. Das erklärt lückenlos, was uns den Abend gekostet hat: die 0/1/0,
+die 0/1/1, das Schweigen einzelner Läufe. Es war nie das Ausweichen und nie der
+Beendigungsweg allein.
+
+⭐ **Und er trifft die durchlässige Karte besonders:** beide Läufe mit
+`--neue-pfadkarte` blieben stumm, der ohne sie lieferte sauber. Das passt zur
+Last — die durchlässige Karte erzeugt weit mehr Wegsuchen.
+
+**Damit ist die Reihenfolge klar, und sie hat sich umgedreht:**
+1. ⚠⚠ **Den Absturz finden.** Ohne ihn ist an der Bewegung nichts zu messen,
+   und drei Entscheidungen (23.08. gegen die neue Karte, 30.08. gegen das
+   Warten, 30.08. gegen das Ausweichen) stehen auf Zahlen aus einem Prüfstand,
+   der abstürzt.
+2. Erst dann die Nahsperre gegen `--keine-nahsperre` messen.
+3. Dann Serialisierung und Aufgeben (BZ.4, Punkt 2 und 3).
+
+⚠ **Nichts an der Bewegung ist damit heute entschieden.** Der heutige Stand
+(`ALT`: 21 ans Ziel) bleibt der einzige, der reproduzierbar gemessen ist.

@@ -987,7 +987,8 @@ public sealed class NavGrid
     /// Versuch vom 16.08.2026 gescheitert.</para>
     /// </summary>
     public List<Vector2I>? FindPathUr(Vector2I start, Vector2I goal,
-                                      MoveClass mc = MoveClass.Vehicle, int mover = -1)
+                                      MoveClass mc = MoveClass.Vehicle, int mover = -1,
+                                      bool nahsperre = false)
     {
         UrBesucht = 0; UrWellen = 0; UrRingVoll = false;
         if (!InBounds(start.X, start.Y) || !InBounds(goal.X, goal.Y)) return null;
@@ -1010,6 +1011,37 @@ public sealed class NavGrid
                 // fuer den zurueckgezogenen ersten Anlauf vom 16.08.2026.
                 karte[y * w + x] = (NeuePfadkarte ? PfadOffen(x, y, mc, mover)
                                                  : IsFree(x, y, mc, mover)) ? (byte)0 : (byte)2;
+
+        // ⭐⭐⭐ 30.08.2026 — DIE NAHSPERRE. Der zweite Kartenaufbau des
+        // Originals (die »ungerade« Auftragsart, Tafeln 0x40A208/0x40A220)
+        // nimmt DIESELBE durchlaessige Karte, sperrt darin aber den
+        // 5x5-Kasten um die eigene Position hart. Woertlich gelesen und
+        // nachgeprueft @0x4D1363..0x4D140A:
+        //
+        //     Kasten von (pos-2) bis (pos+2) in BEIDEN Achsen
+        //         ebp = &imap[0xBDEA80 + 2*index]
+        //         edi = &suchkarte[0xBCA0E8 + index]
+        //         cmp word[ebp], 0x36B0        ; 14000
+        //         jae  ueberspringen
+        //         mov  byte[edi], 2            ; HART GESPERRT
+        //
+        // ⭐ Das ist die Aufloesung des Widerspruchs, an dem der 23.08. haengen
+        // blieb: die Suchkarte des Originals ist NICHT pauschal durchlaessig.
+        // FERN durchsichtig, NAH eine Wand. Wer neu plant, muss um den
+        // oertlichen Knoten herum statt mitten hindurch — und genau das fehlte,
+        // als »nur die neue Karte« gemessen 260 statt 2901 Zellen fuhr.
+        //
+        // ⚠ Sie gilt nur fuer die NEUPLANUNG (nahsperre == true), nicht fuer
+        // den ersten Befehl. Das ist die Unterscheidung gerade/ungerade.
+        if (nahsperre && !KeineNahsperre)
+        {
+            int c0 = Math.Max(0, start.X - 2), c1 = Math.Min(w - 1, start.X + 2);
+            int r0 = Math.Max(0, start.Y - 2), r1 = Math.Min(h - 1, start.Y + 2);
+            for (int y = r0; y <= r1; y++)
+                for (int x = c0; x <= c1; x++)
+                    if (_occupant[Idx(x, y)] >= 0) karte[y * w + x] = 2;
+            NahsperreLaeufe++;
+        }
 
         // ⭐ Der Kartenrand wird gesperrt (Zeile 0, Zeile H-1, Spalte 0,
         // Spalte B-1 auf 2). Damit braucht die innere Schleife KEINE
@@ -1521,8 +1553,17 @@ public sealed class NavGrid
     /// für den Prüfstand.</summary>
     public static int LaeufeUr, LaeufeAstern;
 
+    /// <summary>Wie oft die Nahsperre gebaut wurde — siehe FindPathUr.</summary>
+    public int NahsperreLaeufe;
+
+    /// <summary>GEGENPROBE <c>--keine-nahsperre</c>: die Neuplanung ohne den
+    /// 5x5-Nahbereich. Ohne diesen Schalter liesse sich nicht zeigen, ob die
+    /// Nahsperre die durchlaessige Karte wirklich traegt.</summary>
+    public static bool KeineNahsperre;
+
     public List<Vector2I>? FindPath(Vector2I start, Vector2I goal, MoveClass mc = MoveClass.Vehicle,
-                                    int mover = -1, int maxNodes = 60000)
+                                    int mover = -1, int maxNodes = 60000,
+                                    bool nahsperre = false)
     {
         // ⭐⭐ 22.08.2026 — DIE WEGSUCHE IST JETZT DIE DES ORIGINALS.
         // Eine reine 8-Nachbar-Breitensuche mit Wellenmarken, ohne Kosten und
@@ -1531,7 +1572,7 @@ public sealed class NavGrid
         if (!AlterAstern)
         {
             LaeufeUr++;
-            return FindPathUr(start, goal, mc, mover);
+            return FindPathUr(start, goal, mc, mover, nahsperre);
         }
         LaeufeAstern++;
         if (!InBounds(start.X, start.Y) || !InBounds(goal.X, goal.Y)) return null;
