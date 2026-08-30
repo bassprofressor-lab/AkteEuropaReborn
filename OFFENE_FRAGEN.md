@@ -18405,3 +18405,89 @@ einen Fahrwerksunterschied, wo eine **Bodenklassengrenze** ist.
 BodenAuskunft.cs`) — Bodenklasse, Höhenspanne, Kachelflaggen und wer dort steht,
 mit Gattung, Fahrwerk und Bewegungsklasse. Die Frage »kann diese Einheit hier
 hin, und wenn nein warum nicht« kam zum dritten Mal; jetzt ist sie ein Aufruf.
+
+---
+
+## BX. ⭐⭐⭐ DER GRUPPENBEFEHL — sein Verdacht war richtig (30.08.2026)
+
+»Komisch, dass Reifen bei mir drauf kam, aber Kette nicht — bzw. wollte Kette
+einfach da nicht hinfahren. Ich weiss nicht, ob das noch ein Bug ist vom
+Wegpunkte anfahren bzw. wenn Gruppe gewählt ist und alle dann zu Punkt x fahren
+sollen.«
+
+### BX.1 Was das Original beim Fahrbefehl tut — und was es NICHT tut
+
+`fahre` **`0x40B070`** (Thunk `0x4021A8`), vollständig gelesen:
+
+```
+   faze (+0x09) == 1            -> RAUS, kein Befehl
+   UKOL (+0x14) == 0x16 / 0x17  -> RAUS   (Abwehrstellung im Auf-/Abbau)
+   UKOL == 1                    -> RAUS   ⭐ HANDSTEUERUNG nimmt keinen Fahrbefehl
+   x,y auf 1..Kartenrand geklemmt
+   word[+0x36] := 0xFFFF        ; Zieleinheit loeschen
+   byte[+0x14] := 2             ; UKOL := fahre
+   byte[+0x18] := x  ;  byte[+0x19] := y      ; CX / CY
+   byte[+0x15] := 0             ; AKCE
+   jmp [Gattung*4 + 0x40B1EC]   ; je Gattung die Wegsuche anstossen
+```
+
+⭐⭐ **Es prüft die Befahrbarkeit des Ziels ÜBERHAUPT NICHT.** Ziel setzen,
+losfahren, und ob die Einheit ankommt, entscheidet sich unterwegs.
+
+Und wer unterwegs nicht weiterkommt, bekommt den **Streufahrbefehl**
+`0x40AFE0` — 144 Byte, ganz gelesen:
+
+```
+streufahrt(einheit):
+    y = zeile  + 5 - rand()%3       ; immer 3..5 Zeilen weiter SUEDLICH
+    x = spalte + 2 - rand()%5       ; -2 .. +2 seitlich
+    fahre(einheit, x, y, 0)
+```
+
+Gerufen aus fünf Stellen: `0x409BFF`, `0x409C72`, `0x409EE6` (im Auftragsband —
+darunter der Arm von **UKOL 51**, »verlässt das Gebäude«) und zweimal aus dem
+Gebäudetakt `0x43E2CC`/`0x43E404`.
+⭐ Damit ist nebenbei belegt, was unser `StepOutOfDoor` nachbaut: das Original
+schiebt eine ausfahrende Einheit mit genau diesem Streubefehl von der Tür weg,
+und der feste Südversatz passt zur Türlage.
+
+### BX.2 Der Fehler bei uns, und er war die DRITTE Stelle derselben Sorte
+
+Im Gruppenbefehl (`MapEntityLayer`, Rechtsklick auf N gewählte Einheiten):
+
+```csharp
+Vector2I? goal = null;
+for (int rad = 0; rad <= 8 && goal == null; rad++)      // Suchradius 8
+    ... if (taken.Contains(c)) continue;                // Zelle schon vergeben
+        if (_nav.IsFree(c.X, c.Y, e.Move, i)) goal = c;
+if (goal == null) { failed++; continue; }               // ⚠ GAR NICHTS
+```
+
+**Wer hier keine Zielzelle fand, bekam kein Ziel, keinen Merker, keinen zweiten
+Versuch — und stand bis zum Missionsende.** Das ist dieselbe Sorte wie B2 und
+wie der Zweig direkt darunter (`path == null`), die beide längst behoben sind;
+diese dritte war übrig.
+
+⭐ **Und sie erklärt seine Beobachtung genau.** Klickt man an ein Ufer, dessen
+Umgebung **rau** ist (`0xFFFD`, für Rad UND Kette gesperrt — siehe BW), findet
+die erste Einheit noch eine freie Zelle, die zweite muss weiter aussen suchen
+(`taken`), und irgendwann findet eine im Radius 8 nichts mehr. **Welche es
+trifft, hängt an der Reihenfolge in `_sel`, nicht am Fahrwerk** — darum sah es
+aus wie ein Unterschied zwischen Kette und Reifen.
+
+**Behoben** wie im Zweig darunter: Ziel behalten, `RetryIn` setzen. ⭐ Der zweite
+Versuch ist dabei besser als der erste, denn `RetryPath` geht über `FindPath`,
+und das weicht selbst auf `NearestFree` mit **Radius 12** aus.
+
+Gemessen auf map_DM_4 (48 Einheiten): `[4x zweiter Versuch geholfen]`.
+
+### BX.3 ⚠ Was DAVON UNBERÜHRT offen bleibt
+
+Auf map_DM_4 stehen weiterhin **6 von 48** ohne Weg (2 unterwegs
+liegengeblieben, 4 nie losgefahren). Die Ursache steht seit dem 16.08. im Code
+und ist eine andere: **`FindPath` plant mit `IsFree`, und das ist `Can_go == 2`.
+Eine Zelle mit einer anderen EINHEIT ist `Can_go == 1` — »ja, aber jemand muss
+ausweichen« —, und das Original fährt dort hin und wartet. Für unsere Planung
+ist sie eine Wand.** Die Kur wäre, beim PLANEN durch GiveWay-Zellen zu gehen und
+erst beim FAHREN zu warten; das ist ein Eingriff in den Lockstep-Pfad und
+gehört in einen eigenen Durchgang.

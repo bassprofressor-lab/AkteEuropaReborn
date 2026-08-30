@@ -7748,7 +7748,42 @@ public partial class MapEntityLayer : Node2D
                         if (taken.Contains(c)) continue;
                         if (_nav.IsFree(c.X, c.Y, e.Move, i)) goal = c;
                     }
-            if (goal == null) { failed++; continue; }
+            if (goal == null)
+            {
+                // ⚠⚠ 30.08.2026 — HIER STAND `failed++; continue;` OHNE ZIEL UND
+                // OHNE MERKER, und das ist die DRITTE Stelle derselben Sorte
+                // nach B2 und der Schwester darunter.
+                //
+                // Gemeldet: »komisch dass Reifen bei mir drauf kam, aber Kette
+                // nicht — bzw. wollte Kette einfach da nicht hinfahren«, mit dem
+                // Verdacht auf den Gruppenbefehl. Der Verdacht war richtig.
+                //
+                // Die Zielsuche oben laeuft nur bis Radius 8 und ueberspringt
+                // jede Zelle, die eine ANDERE Einheit desselben Befehls schon
+                // belegt (`taken`). Klickt man an ein Ufer, dessen Umgebung
+                // RAU ist (imap 0xFFFD, fuer Rad und Kette gesperrt), findet die
+                // erste Einheit noch eine freie Zelle, die zweite muss weiter
+                // aussen suchen — und irgendwann findet eine im Radius 8 nichts
+                // mehr. Die stand dann bis zum Missionsende. WELCHE es trifft,
+                // haengt an der Reihenfolge in `_sel`, nicht am Fahrwerk; darum
+                // sah es aus wie ein Unterschied zwischen Kette und Reifen.
+                //
+                // ⭐ Das Original kennt dieses »gar nichts« nicht: `fahre`
+                // @0x40B070 prueft die Befahrbarkeit des Ziels UEBERHAUPT NICHT.
+                // Es setzt UKOL := 2 und CX/CY (@0x40B168..0x40B179) und faehrt
+                // los; ob die Einheit ankommt, entscheidet sich unterwegs, und
+                // wer nicht weiterkommt, bekommt den STREUFAHRBEFEHL
+                // @0x40AFE0 (Ziel: Spalte +2-rand()%5, Zeile +5-rand()%3).
+                //
+                // Wir behalten darum das Ziel und versuchen es erneut — genau
+                // wie im Zweig darunter. ⭐ Und der zweite Versuch ist besser als
+                // dieser erste: `RetryPath` geht ueber `FindPath`, und das weicht
+                // selbst auf `NearestFree` mit Radius 12 aus.
+                e.Goal = cell.Value;
+                e.RetryIn = RetryOff ? 0 : RetryTicks;
+                failed++;
+                continue;
+            }
 
             var path = _nav.FindPath(new Vector2I(e.Col, e.Row), goal.Value, e.Move, i);
             // ⚠⚠ OFFEN, gemessen am 16.08.2026 — DIE SCHWESTER VON B2.
