@@ -19522,3 +19522,215 @@ Ohne die Aufschluesselung (`zielfrei / zieleinheit / zuweit`) waere daraus
 - Die Wirkung zusammen mit der Serialisierung. Beide greifen an derselben
   Stelle an, und CC.2 hat gezeigt, dass Stuecke der Bewegung sich nicht
   addieren.
+
+
+## CI — NACHTRAG ZU CG: das Aufgeben ist jetzt in BEIDEN Fassungen gelesen (31.08.2026)
+
+CG und CH standen auf der C-Fassung allein. Nach der stehenden Regel — *nur was
+BEIDE `GAME.EXE` liefern, gilt als gelesen* — war der Befund damit unfertig.
+Nachgeholt mit `cfind.py` und einer byteweisen Suche ohne die absoluten Adressen:
+
+```
+C  0x408D05  33c0 8a4718 33c9 c1e008 8a4f19 03c1 b9401f0000 66390c45 [80eabd00] 731e 66394f36 7618
+F  0x408C29  33c0 8a4718 33c9 c1e008 8a4f19 03c1 b9401f0000 66390c45 [e0dabd00] 731e 66394f36 7618
+C  0x408D29  53 e8[rel] 83c404 663d0300 7d09 c6471400 e9[rel]
+F  0x408C4D  53 e8[rel] 83c404 663d0300 7d09 c6471400 e9[rel]
+```
+
+Der einzige Unterschied ist die **imap-Basis** (C `0xBDEA80`, F `0xBDDAE0`) und
+die zwei Sprungweiten. Gleich sind: beide Sprungrichtungen (`73 1e` = `jae`
+ueber das Aufgeben hinweg, `76 18` = `jbe`), die Grenze `0x1F40`, die Felder
+`+0x18/+0x19/+0x36/+0x14` und die Schwelle `cmp ax, 3`.
+
+⭐ Damit ist auch die Berichtigung aus CG.3 (CD.3 stand verkehrt herum) in
+beiden Auslieferungen belegt, nicht nur in einer.
+
+⚠ **Was dieser Nachtrag ueber den Tag sagt:** die C/F-Regel steht in
+`memory/akte-europa-0-7-0.md`, und diese Datei lag der Sitzung nicht vor — das
+Projektgedaechtnis hing noch am alten Arbeitsverzeichnis (bug-011). Dieselbe
+Luecke hat an diesem Tag die falsche Godot-Fassung, den Aufruf ohne
+`--skirmish`, den ueberschriebenen Spielstand (bug-010) und einen
+capstone-Linearabtast statt `reloc_refs.py` verursacht.
+
+
+## CJ — DIE SERIALISIERUNG IST GELESEN (31.08.2026) — BZ.3 haelt, samt Vorrang
+
+BZ.3 war der letzte Befund aus zweiter Hand: nachgeprueft war nur, dass
+`Search @0x4D3810` genau einen Rufer hat; die Reihenfolge »Fahrende vor
+Stehenden, FIFO« stand ungelesen da. Jetzt ist sie gelesen — in BEIDEN
+Fassungen.
+
+### CJ.1 — Die Rufer, in C und F
+
+⚠ Beide Ziele haengen an Linker-Thunks, ein Abtast auf den Funktionsanfang
+findet also NICHTS (dieselbe Falle wie CD.1). Ueber die Thunks:
+
+```
+              Search              Auftragsring
+   C   Thunk  0x401DDE            0x401726
+       Rufer  0x416242  (EINER)   23 Stellen
+   F   Thunk  0x401DD9            0x401721
+       Rufer  0x416082  (EINER)   23 Stellen
+```
+
+Der eine Rufer steht im Haupttakt, und das Original benennt die Phasen selbst
+(Zeichenketten `0x4F7CC4`ff): `… rnd f · Search · Trains · Transported ·
+Check selected · Power end`. **Ein Aufruf je Takt, ohne Argumente.**
+
+### CJ.2 — ⭐⭐⭐ Was `Search` je Takt tut
+
+```
+   Ring 1000 Plaetze (di = 0x3E8)
+     Eintrag i:  Einheit  word[0xBDA0E8 + 2i]   Code  byte[0xBDA8C0 + i]
+   Lesezeiger word[0x539B14]   Schreibzeiger word[0x539B10]
+   gleich -> sofort zurueck (nichts zu tun)
+
+   Ab dem Lesezeiger vorwaerts bis zum Schreibzeiger:
+     byte[0x87B140 + 40*(einheit/1000)] != 0  -> ueberspringen
+     Code == 0xFF                             -> ueberspringen
+     ⭐ byte[einheit + 0x04] != 0xFF           -> DIESEN nehmen
+        (+0x04 ist POHYB — die Fahrtrichtung; 0xFF heisst STEHT)
+     sonst weiter, Umlauf bei 1000 -> 0
+
+   Keinen gefunden -> den Eintrag am LESEZEIGER nehmen (strenges FIFO)
+   Danach GENAU EINEN bearbeiten, Lesezeiger weiterruecken, zurueck
+```
+
+⭐ **Damit ist der Vorrang gelesen und nicht mehr geraten:** die Schleife sucht
+die erste Einheit, die WIRKLICH FAEHRT, und zieht sie vor; findet sie keine,
+bleibt es beim aeltesten Auftrag. `einheit/1000` ist die Spielernummer —
+dieselbe Rechnung wie in der Buendnispruefung (CE.3).
+
+### CJ.3 — In beiden Fassungen, byteweise
+
+`0x4D3846`ff (C) gegen `0x4D33D6`ff (F), 0x84 Byte nebeneinander: **vier**
+Abweichungen, alle erklaert.
+
+```
+   Ring         C 0xBDA0E8   F 0xBD9148
+   Codes        C 0xBDA8C0   F 0xBD9920
+   Spielertafel C 0x87B140   F 0x87A1A0
+   Einheit+4    C 0x6E26CC   F 0x6E172C
+   cmp word[esp+0x12], si   gegen   cmp si, word[esp+0x12]
+       ^ 0x39 gegen 0x3b — dieselbe Pruefung, vertauschte Operanden.
+         Kein Auslieferungsunterschied, eine Kodierungsvariante.
+```
+
+Alles andere ist Byte fuer Byte gleich, die Sprungweiten eingeschlossen.
+
+### CJ.4 — Der Bauauftrag
+
+1. Eine Wegsuche **je Takt**, nicht alle im selben.
+2. Der Ring haelt 1000 Auftraege; unser `Repath`/`RetryPath` schiebt heute
+   sofort. Aus »sofort suchen« wird »in den Ring legen«.
+3. Der Vorrang ist **nicht** »zuletzt befohlen«, sondern **»faehrt schon«**
+   (`+0x04 != 0xFF`). Wer das mit »hat einen Weg« nachbaut, baut etwas
+   anderes: eine Einheit kann einen Weg haben und trotzdem stehen.
+4. Gegenprobe-Schalter, Tafel wie CC.1, Keime 7/11/23/41.
+
+### CJ.5 — Was NICHT gelesen ist
+
+- `byte[0x87B140 + 40*spieler]` — die Bedingung, die einen ganzen Spieler
+  ueberspringt. Die Tafel ist dieselbe wie `neutok` (`0x87B155` = +0x15), also
+  eine andere Spalte desselben Satzes. Bedeutung offen.
+- Was der Code (1/3/5/7/0xD) im Ring bewirkt — er wird hier nur auf `0xFF`
+  geprueft, nicht ausgewertet.
+- Der Rumpf der Suche ab `0x4D3963` (er setzt `byte[einheit+0x15] = 1` und
+  liest das Zielfeld `+0x18/+0x19`).
+
+
+## CK — DER SPIELLAUF DURCH KAMPAGNE 3 (31.08.2026) — drei Meldungen
+
+Erster Spiellauf auf map_03 »Wood raiders«, exportierte Fassung (.NET 8.0.29),
+Stand `21b4b9a`. Gemeldet vom Spieler, gegen sein Let's Play verglichen.
+
+### CK.1 — ⚠ Vor der Bruecke greifen NICHT ALLE an
+
+»die ersten gegner greifen mich vor der bruecke an, das ist korrekt. aber
+irgendwie nicht alle wie im letsplay.« Die erste Basis wird danach korrekt
+eingenommen. **Nicht untersucht.**
+
+### CK.2 — ⚠⚠ Nach der Bruecke stehen die Gegner still
+
+»in richtung 2te basis muesste ich von den gegner nach der bruecke angegriffen
+werden, die generischen einheiten stehen aber bloss still da vor ihrer basis.«
+
+⚠ **Verdacht, nicht Befund:** wir stellen auf Kampagnenkarten ausdruecklich
+keine Angriffswellen (`SkirmishAi.cs:433` — »das Original marschiert auf einer
+Kampagnenkarte nicht«). Wenn dort trotzdem angegriffen wird, ist entweder diese
+Setzung zu breit, oder das Missionsskript soll die Einheiten losschicken und
+tut es bei uns nicht. Beides ist schon einmal aufgetreten (»Mission 2 schickt
+niemanden los«). **Erst lesen, welche Quelle Mission 3 benutzt.**
+
+### CK.3 — ⭐ DIE BAEUME: es gibt KEINE Angriffstaste im Original
+
+Um zur Nebenmission (Forscher) zu kommen, muessen Baeume zerstoert werden;
+Vermutung des Spielers war eine Taste dafuer. **Vollerhebung der Tastatur
+sagt: nein.**
+
+Die Kette ist gelesen (@0x412FD8ff, in beiden Bauten):
+```
+   eax = vk - 9 ; > 0x88 -> verwerfen
+   cl  = byte[0x414644 + eax]        Tastenindextafel, 137 Byte
+   jmp dword[0x4145A4 + cl*4]        Sprungtafel, 40 Arme
+```
+Beide Tafeln ausgelesen — **39 belegte Arme**, und keiner setzt einen
+Angriffsmodus:
+
+```
+   CHEAT-gesperrt (Tor byte[0x4FA0C4]), 9 Tasten:
+      A F G H S U W X Y      z.B. U »Cheat: Waffen hinzugefuegt«,
+                                  H »Cheat: Fahrwerke hinzugefuegt«
+   Entwickler (nur nach ENABLEDEVEL):
+      Z -> Opcode 976 (Aufzeichnen)   K -> Feldeinblendung   P -> Opcode 993
+   Spiel:
+      TAB Anzeigeart (Ringschalter 0..3)   0-9 Gruppen
+      ENTER ESC LEER B C E I J M R V F2 F3 F5..F9 F11 F12 Num*+-/ ROLLEN
+      -> allesamt Fenster-/Oberflaechenfunktionen (0x44xxxx), keine Befehlsart
+```
+
+⚠ **Was daraus NICHT folgt:** dass man im Original keine Baeume zerstoeren
+kann. Nur, dass es **nicht ueber die Tastatur** geht. Offen bleibt der Weg —
+Bedienfeldknopf, rechte Maustaste, oder ein Zielen auf das Objekt selbst.
+
+⭐ **Und hier gilt der Merksatz aus dem Gedaechtnis:** der Spieler hat ein
+Let's Play und kann nachsehen. **Fragen kostet weniger als raten.** Die Frage
+lautet: *wie genau werden dort die Baeume zerstoert — was klickt er, und ist
+vorher etwas angewaehlt?*
+
+### CK.4 — Nebenbei: die Tastentafel ist jetzt vollstaendig erhoben
+
+Sie stand bisher nur fuer TAB in den Notizen (Abschnitt 10). Die Vollerhebung
+oben ist billig zu wiederholen: beide Tafeln liegen bei `0x414644` (137 Byte)
+und `0x4145A4` (40 dwords).
+
+### CK.5 — ⚠⚠ BERICHTIGUNG ZU CK.3, NOCH AM SELBEN ABEND
+
+Der Spieler hat im Let's Play nachgesehen: **es wird sehr wohl eine Taste
+gedrueckt.** Der Mauszeiger wechselt dabei vom Wege- auf das Angriffssymbol,
+und danach schiesst die Auswahl auf das anvisierte Ziel — auf einen Baum, und
+nach seiner Beschreibung auch auf leeren Boden. Das ist **Angriff auf Boden /
+erzwungenes Feuer**.
+
+**Warum CK.3 daran vorbeigeht, und das ist der lehrreiche Teil:** ich habe die
+`WM_KEYDOWN`-Sprungtafel vollstaendig erhoben — und eine **gehaltene** Taste
+hat dort gar keinen Arm. Sie wird zur Klickzeit aus der
+**Tastenzustandstafel `0xA182E8`** gelesen, die die Fensterprozedur bei
+`0x412FD2` fuellt. Diese Tafel stand die ganze Zeit sichtbar da: JEDER
+Tastenarm, den ich disassembliert habe, beginnt mit `mov al, byte[0xA182F9]`.
+
+⭐ **Der Merksatz:** eine Vollerhebung belegt nur, was sie erheben KANN. »Kein
+Arm in der Sprungtafel setzt einen Angriffsmodus« ist wahr und war trotzdem die
+falsche Antwort auf »gibt es eine Angriffstaste«, weil die Frage zwei Wege
+kennt und die Erhebung nur einen sah. **Zu jedem Negativbefund gehoert der Satz
+dazu, welchen Weg er NICHT abdeckt.**
+
+⭐⭐ Und die Regel aus dem Gedaechtnis hat wieder getragen: *er hat ein Let's
+Play und kann nachsehen — fragen kostet weniger als raten.* Eine Frage hat hier
+einen falschen Negativbefund in einer Antwort umgedreht.
+
+**Offen und an den Leseagenten uebergeben:** welche Taste (Strg/Umschalt/Alt),
+wer `0xA182E8` in der Zeigerbehandlung liest, welcher Zeigerindex das
+Angriffssymbol ist, und — fuer den Nachbau entscheidend — ob der Angriffsbefehl
+dann mit einer **Zelle** statt einer Zieleinheit abgesetzt wird. Unser
+Nachbau kennt nur Einheiten als Ziel.
