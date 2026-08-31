@@ -3,7 +3,7 @@ namespace AkteEuropaReborn.UI;
 using System.Collections.Generic;
 using Godot;
 using AkteEuropaReborn.Rendering;
-using GDict = Godot.Collections.Dictionary<string, Godot.Variant>;
+using JObj = System.Text.Json.Nodes.JsonObject;
 
 /// <summary>
 /// Das laufende Spiel hinter dem Startmenü — der »Attract-Modus« von 1997.
@@ -435,15 +435,10 @@ public partial class MenuBackdrop : CanvasLayer
         GD.Print($"Menü: Demo {map} läuft ({_anchors.Count} Basen, Blick von Platz {seen})");
     }
 
-    private static GDict LoadMeta(string name)
-    {
-        string p = Core.Content.Path($"Maps/{name}.json");
-        if (!FileAccess.FileExists(p)) return new GDict();
-        using var f = FileAccess.Open(p, FileAccess.ModeFlags.Read);
-        if (f == null) return new GDict();
-        var json = new Json();
-        if (json.Parse(f.GetAsText()) != Error.Ok || json.Data.VariantType != Variant.Type.Dictionary)
-            return new GDict();
-        return json.Data.AsGodotDictionary<string, Variant>();
-    }
+    // ⭐ 31.08.2026 — System.Text.Json statt Godot-Json, wie in
+    // MapViewer.LoadMeta: die Kulisse laedt VOLLE Karten durch
+    // MapEntityLayer.Load, und der alte Weg fuetterte den DisposablesTracker
+    // (siehe Core.JsonMeta und berichte/sturm-fable.md).
+    private static JObj LoadMeta(string name)
+        => AkteEuropaReborn.Core.JsonMeta.Lies(Core.Content.Path($"Maps/{name}.json"));
 }

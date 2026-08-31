@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using Godot;
-using GDict = Godot.Collections.Dictionary<string, Godot.Variant>;
+using System.Text.Json.Nodes;
+using JObj = System.Text.Json.Nodes.JsonObject;
 
 namespace AkteEuropaReborn.Rendering;
 
@@ -76,15 +77,14 @@ public partial class MapEntityLayer
     /// <c>slot/col/row/dir/len/hp</c>); gelesen hat sie zur Laufzeit bis zum
     /// 25.08.2026 <b>niemand</b>.
     /// </summary>
-    private void LiesBruecken(GDict root)
+    private void LiesBruecken(JObj root)
     {
         _karteBruecken.Clear();
-        if (!root.TryGetValue("bridges", out var bv) || bv.VariantType != Variant.Type.Array)
+        if (root["bridges"] is not JsonArray bv)
             return;
-        foreach (var item in bv.AsGodotArray())
+        foreach (var item in bv)
         {
-            if (item.VariantType != Variant.Type.Dictionary) continue;
-            var b = item.AsGodotDictionary<string, Variant>();
+            if (item is not JObj b) continue;
             int slot = GetI(b, "slot", -1);
             if (slot < 0) continue;
             _karteBruecken[slot] = (GetI(b, "col"), GetI(b, "row"), GetI(b, "hp"));

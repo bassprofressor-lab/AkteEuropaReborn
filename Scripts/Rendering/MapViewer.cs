@@ -1,7 +1,7 @@
 ﻿namespace AkteEuropaReborn.Rendering;
 
 using Godot;
-using GDict = Godot.Collections.Dictionary<string, Godot.Variant>;
+using JObj = System.Text.Json.Nodes.JsonObject;
 
 /// <summary>
 /// Standalone viewer for the baked legacy campaign maps (see Assets/Legacy/Maps).
@@ -4260,30 +4260,21 @@ public partial class MapViewer : Node2D
         GD.Print($"MapViewer: loaded {name} ({tex.GetWidth()}x{tex.GetHeight()})");
     }
 
-    private static GDict LoadMeta(string name)
+    // ⭐ 31.08.2026 — System.Text.Json statt Godot-Json: das Kartenmeta traegt
+    // auf map_DM_4 rund 81 000 Unterwoerterbuecher, und jeder Godot-seitige
+    // Zugriff darauf fuetterte den DisposablesTracker (7/10 Abstuerze, siehe
+    // Core.JsonMeta und berichte/sturm-fable.md). JsonObject kennt keinen
+    // Finalizer — es gibt nichts mehr zu verwalten.
+    private static JObj LoadMeta(string name)
+        => Core.JsonMeta.Lies(MapFile(name + ".json"));
+
+    private void UpdateHud(string name, Vector2 size, JObj meta)
     {
-        string jsonPath = MapFile(name + ".json");
-        if (!FileAccess.FileExists(jsonPath))
-            return new GDict();
-
-        using var f = FileAccess.Open(jsonPath, FileAccess.ModeFlags.Read);
-        if (f == null)
-            return new GDict();
-
-        var json = new Json();
-        if (json.Parse(f.GetAsText()) != Error.Ok || json.Data.VariantType != Variant.Type.Dictionary)
-            return new GDict();
-
-        return json.Data.AsGodotDictionary<string, Variant>();
-    }
-
-    private void UpdateHud(string name, Vector2 size, GDict meta)
-    {
-        string mission = meta.TryGetValue("mission", out var m) ? m.AsString() : "?";
-        string dims = meta.TryGetValue("width", out var w) && meta.TryGetValue("height", out var h)
-            ? $"{w.AsInt32()}x{h.AsInt32()} tiles"
+        string mission = Core.JsonMeta.GetS(meta, "mission", "?");
+        string dims = meta.ContainsKey("width") && meta.ContainsKey("height")
+            ? $"{Core.JsonMeta.GetI(meta, "width")}x{Core.JsonMeta.GetI(meta, "height")} tiles"
             : "?";
-        string tileset = meta.TryGetValue("tileset", out var ts) ? ts.AsString() : "?";
+        string tileset = Core.JsonMeta.GetS(meta, "tileset", "?");
 
         // ⚠ 14.08.2026 — DIE ZWEI TECHNISCHEN ZEILEN SIND IM SPIEL WEG.
         //

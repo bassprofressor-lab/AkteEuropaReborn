@@ -3,7 +3,8 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using GDict = Godot.Collections.Dictionary<string, Godot.Variant>;
+using System.Text.Json.Nodes;
+using JObj = System.Text.Json.Nodes.JsonObject;
 
 /// <summary>
 /// Walkability grid + A* over a legacy CWM map.
@@ -568,7 +569,7 @@ public sealed class NavGrid
     /// the baked map. The ground starts as a fallback read of the tile codes and
     /// is replaced by <see cref="ApplyTerrain"/> as soon as the map's own
     /// terrain block is there.</summary>
-    public static NavGrid Build(GDict meta)
+    public static NavGrid Build(JObj meta)
     {
         // ⚠ DER FRÜHESTE PUNKT, AN DEN DIESE SITZUNG HERANKOMMT.
         //
@@ -603,13 +604,13 @@ public sealed class NavGrid
         // deren Feld-Rohstoffmine sonst 0 Bauplätze hätte. Geschrieben von
         // Import.ContentBuilder.MapMeta aus Import.CwmFile.Terra, gelegt von
         // Editor.MapDeposits — und dort steht auch die Messlatte.
-        if (meta.TryGetValue("terra", out var terra) && terra.VariantType == Variant.Type.Array)
-            foreach (var e in terra.AsGodotArray())
+        if (meta["terra"] is JsonArray terra)
+            foreach (var e in terra)
             {
-                if (e.VariantType != Variant.Type.Array) continue;
-                var q = e.AsGodotArray();
+                if (e is not JsonArray q) continue;
                 if (q.Count < 3) continue;
-                g.Deposits.Add((q[0].AsInt32(), q[1].AsInt32(), q[2].AsInt32()));
+                g.Deposits.Add((Core.JsonMeta.AsI(q[0]), Core.JsonMeta.AsI(q[1]),
+                                Core.JsonMeta.AsI(q[2])));
             }
 
         if (g.Width <= 0 || g.Height <= 0) { g.Width = g.Height = 0; return g; }
@@ -623,55 +624,36 @@ public sealed class NavGrid
         g._immobile = new bool[n];
         Array.Fill(g._occupant, -1);
 
-        if (!meta.TryGetValue("tiles", out var tv) || tv.VariantType != Variant.Type.Array)
+        if (meta["tiles"] is not JsonArray tv)
             return g;
 
-        // ⚠ `using` — GEMESSEN am 12.08.2026, und es ist kein Schoenheitsfehler.
-        //
-        // Jede dieser Kacheln legt ein Godot.Collections.Dictionary an, und
-        // jedes davon traegt sich in Godots DisposablesTracker ein. Auf
-        // map_NET07 sind das rund 32 000 Eintraege, die alle bis zur naechsten
-        // Speicherbereinigung liegenbleiben — und dann raeumt der
-        // Finalisierer-Faden sie ab, waehrend die Schleife noch neue eintraegt.
-        // Der Tracker haelt das nicht aus: der Lauf endete mit »Fatal error.
-        // Internal CLR error. (0x80131506) at
-        // Godot.DisposablesTracker.RegisterDisposable«, mitten im Kartenladen.
-        //
-        // Das Tueckische daran war, dass es an der BEFEHLSZEILE haengt: mit
-        // einem zusaetzlichen, voellig wirkungslosen Schalter (--zz) stuerzte
-        // derselbe Lauf jedes Mal ab, ohne ihn nie — ein zusaetzliches Wort
-        // verschiebt die Speicherbereinigung um genau so viel, dass das Rennen
-        // anders ausgeht. `using` gibt jede Kachel sofort wieder frei; der
-        // Tracker bleibt klein und das Rennen faellt aus.
-        // ⭐ 31.08.2026 — NACHTRAG zur Messung vom 12.08.: das `using` unten
-        // nahm nur Kachel-Dictionary und -Variant; die SCHLUESSEL blieben.
-        // Auf der ungetypten Sammlung verpackt JEDER TryGetValue-Aufruf den
-        // C#-String erst in eine frische String-Variant samt Disposer — bei
-        // sechs Zugriffen je Kachel war DAS der groessere Teil des Sturms
-        // (Beleg: berichte/absturz-fable.md, Serie E in LiesNebeldecke, wo
-        // dieselben Dumps genau in den Schluessel-Zeilen sitzen). Einmal
-        // verpacken, wiederverwenden.
-        using Variant kCol = "col", kRow = "row", kElev = "elev",
-                      kFlag = "flag", kObject = "object", kCode = "code";
-        foreach (var item in tv.AsGodotArray())
+        // ⚠ HIER STAND DIE KACHELSCHLEIFE UEBER GODOT-DICTIONARIES — samt der
+        // Messung vom 12.08.2026 (»Internal CLR error (0x80131506) in
+        // DisposablesTracker.RegisterDisposable«, ~32 000 Eintraege auf
+        // map_NET07, kippbar durch einen wirkungslosen Schalter --zz) und den
+        // zwei `using`-Haertungen (Kachel-Objekte am 12.08., vorgezogene
+        // Schluessel-Variants am 31.08.). Beide Haertungen haben das Rennen
+        // Hauptfaden-`TryAdd` gegen Finalizer-`TryRemove` nur VERSCHOBEN
+        // (gemessen 7/10 -> 3/10 bzw. 5/10, berichte/absturz-fable.md).
+        // ⭐ 31.08.2026 — seit die Karte per System.Text.Json ankommt (siehe
+        // Core.JsonMeta), ist die Schleife reine .NET-Arbeit: kein Variant,
+        // kein Disposer, kein Tracker-Eintrag mehr, je Kachel wie insgesamt.
+        foreach (var item in tv)
         {
-            if (item.VariantType != Variant.Type.Dictionary) continue;
-            // Die UNGETYPTE Sammlung, weil nur die IDisposable ist —
-            // Dictionary<string,Variant> laesst sich nicht freigeben.
-            using var t = item.AsGodotDictionary();
-            int c = GetV(t, kCol), r = GetV(t, kRow);
+            if (item is not JObj t) continue;
+            int c = Core.JsonMeta.GetI(t, "col"), r = Core.JsonMeta.GetI(t, "row");
             if (!g.InBounds(c, r)) continue;
             int i = g.Idx(c, r);
-            g._elev[i] = (byte)Mathf.Clamp(GetV(t, kElev), 0, 255);
-            g._flag[i] = (byte)Mathf.Clamp(GetV(t, kFlag), 0, 255);
+            g._elev[i] = (byte)Mathf.Clamp(Core.JsonMeta.GetI(t, "elev"), 0, 255);
+            g._flag[i] = (byte)Mathf.Clamp(Core.JsonMeta.GetI(t, "flag"), 0, 255);
 
             // fallback only, for content imported before the terrain block: the
             // tile code says water, an object cell is assumed to block. Both
             // are superseded the moment ApplyTerrain runs — and the second of
             // them is exactly the assumption that made bridges impassable.
-            bool isObject = t.TryGetValue(kObject, out var ob) && ob.AsBool();
+            bool isObject = Core.JsonMeta.GetB(t, "object");
             g._ground[i] = isObject ? (byte)Ground.Blocked
-                         : GetV(t, kCode, 9999) <= WaterCodeMax ? (byte)Ground.Water
+                         : Core.JsonMeta.GetI(t, "code", 9999) <= WaterCodeMax ? (byte)Ground.Water
                          : (byte)Ground.Free;
         }
         return g;
@@ -679,30 +661,26 @@ public sealed class NavGrid
 
     /// <summary>Lay the map's own passability (entities.json `terrain`, run
     /// length encoded row major) over the fallback. This is the authority.</summary>
-    public void ApplyTerrain(GDict terrain)
+    public void ApplyTerrain(JObj terrain)
     {
         int w = GetI(terrain, "width"), h = GetI(terrain, "height");
-        if (w <= 0 || h <= 0 ||
-            !terrain.TryGetValue("rle", out var rv) || rv.VariantType != Variant.Type.Array)
+        if (w <= 0 || h <= 0 || terrain["rle"] is not JsonArray laeufe)
             return;
 
         int at = 0, total = w * h;
-        // ⭐ 31.08.2026 — ABSTURZBEHEBUNG wie in Build (12.08.) und
-        // LiesNebeldecke (berichte/absturz-fable.md): der WER-Dump vom
-        // 30.08. 20:09 sitzt mit dem Hauptfaden GENAU hier (AsGodotArray ->
+        // ⭐ 31.08.2026 — ABSTURZBEHEBUNG AN DER WURZEL: der WER-Dump vom
+        // 30.08. 20:09 sass mit dem Hauptfaden GENAU hier (AsGodotArray ->
         // DisposablesTracker.RegisterDisposable -> TryAdd, Segfault),
-        // waehrend der Finalizer-Faden austraegt. Jedes RLE-Paar ist ein
-        // Godot-Array samt tragender Variant — beide sofort freigeben statt
-        // dem Finalizer ueberlassen.
-        using var laeufe = rv.AsGodotArray();
+        // waehrend der Finalizer-Faden austrug. Erst kam `using` je RLE-Paar
+        // (verschob das Rennen nur), jetzt kommt das terrain-Objekt per
+        // System.Text.Json (Core.JsonMeta) — hier entsteht kein einziges
+        // Godot-Objekt mehr.
         foreach (var pair in laeufe)
         {
-            using var _ = pair;
-            if (pair.VariantType != Variant.Type.Array) continue;
-            using var p = pair.AsGodotArray();
+            if (pair is not JsonArray p) continue;
             if (p.Count < 2) continue;
-            byte v = (byte)Mathf.Clamp(p[0].AsInt32(), 0, 3);
-            int run = p[1].AsInt32();
+            byte v = (byte)Mathf.Clamp(Core.JsonMeta.AsI(p[0]), 0, 3);
+            int run = Core.JsonMeta.AsI(p[1]);
             for (int k = 0; k < run && at < total; k++, at++)
             {
                 int col = at % w, row = at / w;
@@ -713,16 +691,9 @@ public sealed class NavGrid
         HasTerrain = at >= total;
     }
 
-    private static int GetI(GDict d, string k, int def = 0)
-        => d.TryGetValue(k, out var v) && v.VariantType != Variant.Type.Nil ? v.AsInt32() : def;
+    private static int GetI(JObj d, string k, int def = 0) => Core.JsonMeta.GetI(d, k, def);
 
-    /// <summary>Wie <see cref="GetI"/>, aber auf der ungetypten Sammlung —
-    /// siehe das <c>using</c> in <see cref="Build"/>.</summary>
-    private static int GetV(Godot.Collections.Dictionary d, Variant k, int def = 0)
-        => d.TryGetValue(k, out var v) && v.VariantType != Variant.Type.Nil ? v.AsInt32() : def;
-
-    private static string GetS(GDict d, string k, string def = "")
-        => d.TryGetValue(k, out var v) && v.VariantType != Variant.Type.Nil ? v.AsString() : def;
+    private static string GetS(JObj d, string k, string def = "") => Core.JsonMeta.GetS(d, k, def);
 
     // ---- dynamic occupancy --------------------------------------------------
 

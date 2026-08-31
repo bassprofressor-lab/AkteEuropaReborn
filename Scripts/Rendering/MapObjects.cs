@@ -2,7 +2,8 @@
 
 using System.Collections.Generic;
 using Godot;
-using GDict = Godot.Collections.Dictionary<string, Godot.Variant>;
+using System.Text.Json.Nodes;
+using JObj = System.Text.Json.Nodes.JsonObject;
 
 /// <summary>
 /// <b>AUFRAGENDE KARTENOBJEKTE — Bäume, Masten, Felsen — UND IHR FEUER.</b>
@@ -107,40 +108,27 @@ public partial class MapEntityLayer
     /// <summary>Wieviele Deckkacheln im letzten Bild gemalt wurden.</summary>
     public int NebelDeckeGezeichnet;
 
-    private void LiesNebeldecke(GDict meta, List<Rect2> kohle)
+    private void LiesNebeldecke(JObj meta, List<Rect2> kohle)
     {
         _nebelDecke.Clear();
-        if (!meta.TryGetValue("nebelboden", out var nv) || nv.VariantType != Variant.Type.Array) return;
-        // ⭐ 31.08.2026 — ABSTURZBEHEBUNG, siehe berichte/absturz-fable.md.
-        // Dieselbe Krankheit wie am 12.08. in NavGrid.Build (dort steht die
-        // lange Fassung des Kommentars): je Zelle ein Godot-Dictionary samt
-        // Variant, alles dem Finalizer ueberlassen — bei 34 468 Zellen
-        // (map_DM_4) traegt der Finalizer-Faden pausenlos aus Godots
-        // DisposablesTracker aus, waehrend diese Schleife eintraegt, und
-        // dieses Rennen toetete 7 von 10 kopflosen Laeufen (Internal CLR
-        // error 0x80131506 bzw. »Disposable not registered«; alle vier
-        // Heap-Dumps vom 30.08. zeigen den Hauptfaden in DIESER Schleife).
-        // `using` gibt beides sofort frei — das UNGETYPTE Dictionary, weil
-        // nur das IDisposable ist.
-        // ⭐ Nachtrag, gleicher Tag: die SCHLUESSEL sind der groessere Teil des
-        // Sturms — auf der ungetypten Sammlung verpackt JEDER TryGetValue-
-        // Aufruf den C#-String erst in eine frische String-Variant samt
-        // Disposer (Serie E: immer noch 3/10 Abstuerze, alle drei Dumps in
-        // ebendieser Zeile). Einmal verpacken, wiederverwenden; je Zelle
-        // bleiben dann nur int-Variants, und die tragen keinen Disposer.
-        using Variant kSlot = "slot", kCol = "col", kRow = "row", kX = "x", kY = "y";
-        static int Lies(Godot.Collections.Dictionary d, Variant k, int def = 0)
-            => d.TryGetValue(k, out var v) && v.VariantType != Variant.Type.Nil ? v.AsInt32() : def;
-        using var zellen = nv.AsGodotArray();
+        if (meta["nebelboden"] is not JsonArray zellen) return;
+        // ⭐ 31.08.2026 — ABSTURZBEHEBUNG AN DER WURZEL, siehe
+        // berichte/absturz-fable.md und berichte/sturm-fable.md. Diese
+        // Schleife (34 468 Zellen auf map_DM_4) hat mit je Zelle einem
+        // Godot-Dictionary samt Variants 7 von 10 kopflose Laeufe getoetet
+        // (Rennen im DisposablesTracker: Hauptfaden traegt ein, Finalizer-
+        // Faden traegt aus; alle vier Heap-Dumps vom 30.08. sassen HIER).
+        // Zwei `using`-Haertungen (Objekte, dann vorgezogene Schluessel-
+        // Variants) haben es nur auf 3/10 bzw. 5/10 gedrueckt — der Sturm
+        // wanderte zur naechsten Schleife. Seit die Meta per System.Text.Json
+        // ankommt (Core.JsonMeta), entsteht hier KEIN Godot-Objekt mehr.
         foreach (var item in zellen)
         {
-            using var _ = item;
-            if (item.VariantType != Variant.Type.Dictionary) continue;
-            using var o = item.AsGodotDictionary();
-            int k = Lies(o, kSlot, -1);
+            if (item is not JObj o) continue;
+            int k = GetI(o, "slot", -1);
             if (k < 0 || k >= kohle.Count) continue;
-            _nebelDecke.Add((Lies(o, kCol), Lies(o, kRow),
-                             new Vector2(Lies(o, kX), Lies(o, kY)), kohle[k]));
+            _nebelDecke.Add((GetI(o, "col"), GetI(o, "row"),
+                             new Vector2(GetI(o, "x"), GetI(o, "y")), kohle[k]));
         }
         GD.Print($"nebeldecke: {_nebelDecke.Count} Zellen, deren wahre Kachel im "
                + "unerkundeten Gebiet durch die synthetisierte ersetzt wird");
@@ -435,7 +423,7 @@ public partial class MapEntityLayer
     public static bool NoObjectOcclusion;
 
     /// <summary>Die zweite Ebene und ihre Rechtecke aus der Meta holen.</summary>
-    private void LoadObjectLayer(GDict meta, string mapName)
+    private void LoadObjectLayer(JObj meta, string mapName)
     {
         _objTex = null;
         _objDraw.Clear();
@@ -458,11 +446,10 @@ public partial class MapEntityLayer
         // Ebene an (MapBaker.BurntAtlas). Eine Karte aus einem älteren Import
         // hat ihn nicht — dann brennt eben nichts, statt dass etwas kaputtgeht.
         var kohle = new List<Rect2>();
-        if (meta.TryGetValue("burnt", out var bv) && bv.VariantType == Variant.Type.Array)
-            foreach (var item in bv.AsGodotArray())
+        if (meta["burnt"] is JsonArray bv)
+            foreach (var item in bv)
             {
-                if (item.VariantType != Variant.Type.Dictionary) continue;
-                var a = item.AsGodotDictionary<string, Variant>();
+                if (item is not JObj a) continue;
                 kohle.Add(new Rect2(GetI(a, "x"), GetI(a, "y"), GetI(a, "w"), GetI(a, "h")));
             }
 
@@ -475,11 +462,10 @@ public partial class MapEntityLayer
         // bleibt die Liste leer, und der Transport sagt es, statt still nichts
         // zu tun.
         _rampen.Clear();
-        if (meta.TryGetValue("ramps", out var rv) && rv.VariantType == Variant.Type.Array)
-            foreach (var item in rv.AsGodotArray())
+        if (meta["ramps"] is JsonArray rv)
+            foreach (var item in rv)
             {
-                if (item.VariantType != Variant.Type.Dictionary) continue;
-                var a2 = item.AsGodotDictionary<string, Variant>();
+                if (item is not JObj a2) continue;
                 _rampen[GetI(a2, "col") * 1024 + GetI(a2, "row")] = GetI(a2, "lage");
             }
 
@@ -487,23 +473,20 @@ public partial class MapEntityLayer
         // abgesetzt wird (siehe RampenAbsetzZelle). Ein Durchgang, einmal beim
         // Laden, und nur fuer Zellen, die ueberhaupt eine Rampe tragen.
         _rampenKachel.Clear();
-        if (_rampen.Count > 0 && meta.TryGetValue("tiles", out var tkv)
-            && tkv.VariantType == Variant.Type.Array)
-            foreach (var item in tkv.AsGodotArray())
+        if (_rampen.Count > 0 && meta["tiles"] is JsonArray tkv)
+            foreach (var item in tkv)
             {
-                if (item.VariantType != Variant.Type.Dictionary) continue;
-                var t2 = item.AsGodotDictionary<string, Variant>();
+                if (item is not JObj t2) continue;
                 int schluessel = GetI(t2, "col") * 1024 + GetI(t2, "row");
                 if (_rampen.ContainsKey(schluessel)) _rampenKachel[schluessel] = GetI(t2, "code");
             }
 
         LiesNebeldecke(meta, kohle);
         ObjektOhneBild = 0;
-        if (!meta.TryGetValue("objects", out var ov) || ov.VariantType != Variant.Type.Array) return;
-        foreach (var item in ov.AsGodotArray())
+        if (meta["objects"] is not JsonArray ov) return;
+        foreach (var item in ov)
         {
-            if (item.VariantType != Variant.Type.Dictionary) continue;
-            var o = item.AsGodotDictionary<string, Variant>();
+            if (item is not JObj o) continue;
             var e = new Kartenobjekt
             {
                 Col = GetI(o, "col"),

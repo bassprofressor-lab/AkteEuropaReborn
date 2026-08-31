@@ -3,7 +3,9 @@
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
+using System.Text.Json.Nodes;
 using GDict = Godot.Collections.Dictionary<string, Godot.Variant>;
+using JObj = System.Text.Json.Nodes.JsonObject;
 
 /// <summary>
 /// Interactive overlay of a map's GAME ENTITIES (bases/units/defenses with owner
@@ -2296,13 +2298,12 @@ public partial class MapEntityLayer : Node2D
     /// one would put it at a different height than the baked ones.</summary>
     private int _originY;
 
-    private void LoadPatterns(GDict meta)
+    private void LoadPatterns(JObj meta)
     {
         Patterns = null;
-        _originY = meta.TryGetValue("origin_y", out var oyv) &&
-                   oyv.VariantType != Variant.Type.Nil ? oyv.AsInt32() : 0;
-        if (!meta.TryGetValue("tileset", out var tv)) return;
-        int ts = tv.AsInt32();
+        _originY = GetI(meta, "origin_y");
+        if (!meta.ContainsKey("tileset")) return;
+        int ts = GetI(meta, "tileset");
         string path = Core.Content.Path($"Buildings/tileset_{ts:00}.json");
         if (!FileAccess.FileExists(path)) return;
         using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
@@ -2330,7 +2331,7 @@ public partial class MapEntityLayer : Node2D
         Patterns.LoadAtlas(tjson.Data.AsGodotDictionary(), atlas);
     }
 
-    public void Load(string name, GDict meta)
+    public void Load(string name, JObj meta)
     {
         // Eine neue Karte, ein neuer Satz Meldungen: was der Spieler in der
         // VORIGEN Mission weggeklickt hat, darf die naechste nicht stummschalten.
@@ -2389,18 +2390,15 @@ public partial class MapEntityLayer : Node2D
         int ox = 0, oy = TileOrigin(meta, out bool fromTiles) + GroundLift;
         if (!fromTiles)
         {
-            if (meta.TryGetValue("origin", out var origin) &&
-                origin.VariantType == Variant.Type.Array)
+            if (meta["origin"] is JsonArray oa)
             {
-                var oa = origin.AsGodotArray();
-                if (oa.Count >= 2) { ox = oa[0].AsInt32(); oy = oa[1].AsInt32(); }
+                if (oa.Count >= 2) { ox = Core.JsonMeta.AsI(oa[0]); oy = Core.JsonMeta.AsI(oa[1]); }
             }
-            else if (meta.TryGetValue("origin_y", out var oyv) &&
-                     oyv.VariantType != Variant.Type.Nil)
-                oy = oyv.AsInt32();
+            else if (meta.ContainsKey("origin_y") && meta["origin_y"] != null)
+                oy = GetI(meta, "origin_y");
         }
         _ox = ox; _oy = oy;
-        _mission = (meta.TryGetValue("mission", out var mv) ? mv.AsString() : name).ToUpper();
+        _mission = GetS(meta, "mission", name).ToUpper();
 
         // The music. It was exported and playable all along, but nothing ever
         // started it outside the sound probe — which is why the game was
@@ -2443,15 +2441,14 @@ public partial class MapEntityLayer : Node2D
     /// carries the `sy` it was drawn at, so `sy - (row*TileH - elev*ElevStep)`
     /// is the origin and it is the same for every tile of a map. Returns 0 with
     /// <paramref name="ok"/> false when the metadata has no tiles to ask.</summary>
-    private static int TileOrigin(GDict meta, out bool ok)
+    private static int TileOrigin(JObj meta, out bool ok)
     {
         ok = false;
-        if (!meta.TryGetValue("tiles", out var tv) || tv.VariantType != Variant.Type.Array)
+        if (meta["tiles"] is not JsonArray tv)
             return 0;
-        foreach (var item in tv.AsGodotArray())
+        foreach (var item in tv)
         {
-            if (item.VariantType != Variant.Type.Dictionary) continue;
-            var t = item.AsGodotDictionary<string, Variant>();
+            if (item is not JObj t) continue;
             if (!t.ContainsKey("sy")) return 0;              // an older bake
             ok = true;
             return GetI(t, "sy") - (GetI(t, "row") * TileH - GetI(t, "elev", 0) * 15);
@@ -2459,24 +2456,23 @@ public partial class MapEntityLayer : Node2D
         return 0;
     }
 
-    private static Dictionary<(int, int), int> BuildElevLookup(GDict meta)
+    private static Dictionary<(int, int), int> BuildElevLookup(JObj meta)
         => TileField(meta, "elev");
 
     /// <summary>The tile's FLAG byte per cell — the fourth byte of the map
     /// record, which the game reads through 0x41d110 as the slope class a
     /// turret is mounted by.</summary>
-    private static Dictionary<(int, int), int> BuildFlagLookup(GDict meta)
+    private static Dictionary<(int, int), int> BuildFlagLookup(JObj meta)
         => TileField(meta, "flag");
 
-    private static Dictionary<(int, int), int> TileField(GDict meta, string field)
+    private static Dictionary<(int, int), int> TileField(JObj meta, string field)
     {
         var map = new Dictionary<(int, int), int>();
-        if (meta.TryGetValue("tiles", out var tv) && tv.VariantType == Variant.Type.Array)
+        if (meta["tiles"] is JsonArray tv)
         {
-            foreach (var item in tv.AsGodotArray())
+            foreach (var item in tv)
             {
-                if (item.VariantType != Variant.Type.Dictionary) continue;
-                var t = item.AsGodotDictionary<string, Variant>();
+                if (item is not JObj t) continue;
                 map[(GetI(t, "col"), GetI(t, "row"))] = GetI(t, field, 0);
             }
         }
@@ -2630,7 +2626,7 @@ public partial class MapEntityLayer : Node2D
     /// nicht als Erfolg durchgeht — auf NET02 muessen es genau 42 sein.</summary>
     public int FlachbauZellen { get; private set; }
 
-    private void DropSteppingFootprints(GDict root)
+    private void DropSteppingFootprints(JObj root)
     {
         _koerperZelle.Clear();
         FlachbauZellen = 0;
@@ -2651,30 +2647,24 @@ public partial class MapEntityLayer : Node2D
         // ⚠ Eine Karte aus einem aelteren Import hat den Schluessel nicht;
         // dann bleibt es beim alten Verhalten, statt dass etwas kaputtgeht.
         var flachbau = new HashSet<(int, int)>();
-        if (!KoerperAlt && root.TryGetValue("flat_buildings", out var fbv) &&
-            fbv.VariantType == Variant.Type.Array)
-            foreach (var item in fbv.AsGodotArray())
+        if (!KoerperAlt && root["flat_buildings"] is JsonArray fbv)
+            foreach (var item in fbv)
             {
-                if (item.VariantType != Variant.Type.Dictionary) continue;
-                var fc = item.AsGodotDictionary<string, Variant>();
+                if (item is not JObj fc) continue;
                 flachbau.Add((GetI(fc, "col"), GetI(fc, "row")));
             }
 
-        if (!root.TryGetValue("spatial", out var sv) ||
-            sv.VariantType != Variant.Type.Dictionary) return;
-        var sp = sv.AsGodotDictionary<string, Variant>();
-        if (!sp.TryGetValue("nonempty", out var nv) ||
-            nv.VariantType != Variant.Type.Array) return;
+        if (root["spatial"] is not JObj sp) return;
+        if (sp["nonempty"] is not JsonArray nv) return;
 
         // Die Zellen je Steckplatz, AUS der Belegungskarte gelesen statt aus
         // FootW/FootH zurückgerechnet. ⚠ Die imap selbst ist SPALTENWEISE
         // (Spalte*256 + Zeile) — hier stehen Spalte und Zeile schon getrennt,
         // der Export hat das Umrechnen erledigt (CwmData.Spatial).
         var cells = new Dictionary<int, List<(int Col, int Row)>>();
-        foreach (var item in nv.AsGodotArray())
+        foreach (var item in nv)
         {
-            if (item.VariantType != Variant.Type.Dictionary) continue;
-            var c = item.AsGodotDictionary<string, Variant>();
+            if (item is not JObj c) continue;
             int v = GetI(c, "value", -1);
             // GG 26.08.2026 - DIE KOERPERZELLEN DES GEBAEUDES, aus derselben
             // Belegungskarte. Das Original unterscheidet an GENAU dieser Zahl,
@@ -2877,10 +2867,13 @@ public partial class MapEntityLayer : Node2D
         GD.Print($"entities: {path}");
         using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
         if (f == null) return false;
-        var json = new Json();
-        if (json.Parse(f.GetAsText()) != Error.Ok || json.Data.VariantType != Variant.Type.Dictionary)
-            return false;
-        var root = json.Data.AsGodotDictionary<string, Variant>();
+        // ⭐ 31.08.2026 — System.Text.Json statt Godot-Json (Core.JsonMeta):
+        // dieselbe Absturzwurzel wie beim Kartenmeta, siehe LiesNebeldecke und
+        // berichte/sturm-fable.md. Jede der Schleifen hier unten lief je Satz
+        // ueber ein Godot-Dictionary; der F-Dump vom 31.08. sass in
+        // LoadObjectLayer, die naechste Schleife waere diese gewesen.
+        var root = Core.JsonMeta.Parse(f.GetAsText());
+        if (root.Count == 0) return false;
 
         // ====================================================================
         //  sec37 — WER SCHON AN BORD IST
@@ -2896,11 +2889,10 @@ public partial class MapEntityLayer : Node2D
         LiesBruecken(root);
 
         _karteTerra.Clear();
-        if (root.TryGetValue("terra_places", out var tqv) && tqv.VariantType == Variant.Type.Array)
-            foreach (var item in tqv.AsGodotArray())
+        if (root["terra_places"] is JsonArray tqv)
+            foreach (var item in tqv)
             {
-                if (item.VariantType != Variant.Type.Dictionary) continue;
-                var q = item.AsGodotDictionary<string, Variant>();
+                if (item is not JObj q) continue;
                 _karteTerra.Add((GetI(q, "col"), GetI(q, "row"), GetI(q, "amount")));
             }
 
@@ -2910,21 +2902,20 @@ public partial class MapEntityLayer : Node2D
         TransportSaetze = 0;
         FrachtUebersprungen = 0;
         FrachtDoppelt = 0;
-        if (root.TryGetValue("transports", out var tpv) && tpv.VariantType == Variant.Type.Array)
-            foreach (var item in tpv.AsGodotArray())
+        if (root["transports"] is JsonArray tpv)
+            foreach (var item in tpv)
             {
-                if (item.VariantType != Variant.Type.Dictionary) continue;
-                var td = item.AsGodotDictionary<string, Variant>();
+                if (item is not JObj td) continue;
                 int carrier = GetI(td, "carrier", -1);
                 if (carrier < 0) continue;
                 TransportSaetze++;
                 _bordDeckel[carrier] = GetI(td, "cap");
-                if (!td.TryGetValue("cargo", out var cv) || cv.VariantType != Variant.Type.Array)
+                if (td["cargo"] is not JsonArray cv)
                     continue;
                 var liste = new List<int>();
-                foreach (var g in cv.AsGodotArray())
+                foreach (var g in cv)
                 {
-                    int slot = g.AsInt32();
+                    int slot = Core.JsonMeta.AsI(g);
                     // ⚠ ZWEI Saetze koennen dieselbe Einheit beanspruchen.
                     // GEMESSEN auf 08.CWM: Satz 7 (Traeger 1, Rumpf 73) traegt
                     // den lueckenlosen Lauf 15..29 und ist damit bis auf den
@@ -2956,15 +2947,14 @@ public partial class MapEntityLayer : Node2D
                 if (liste.Count > 0) _anBord[carrier] = liste;
             }
 
-        if (root.TryGetValue("entities", out var ev) && ev.VariantType == Variant.Type.Array)
+        if (root["entities"] is JsonArray ev)
         {
-            foreach (var item in ev.AsGodotArray())
+            foreach (var item in ev)
             {
-                if (item.VariantType != Variant.Type.Dictionary) continue;
-                var e = item.AsGodotDictionary<string, Variant>();
+                if (item is not JObj e) continue;
                 int col = GetI(e, "col"), row = GetI(e, "row");
                 int el = elev.TryGetValue((col, row), out var ee) ? ee : 0;
-                string raw = e.TryGetValue("raw", out var rv) ? rv.AsString() : "";
+                string raw = GetS(e, "raw");
                 bool haveRaw = raw.Length >= 0x3a * 2;
                 // CORRECTED: +0x02 is the FACING, already 0..7 — the infantry
                 // draw @0x42a89c adds it straight to `base + block*8`, and the
@@ -3141,12 +3131,11 @@ public partial class MapEntityLayer : Node2D
             FrachtAusListeNehmen();
         }
 
-        if (root.TryGetValue("markers", out var mv) && mv.VariantType == Variant.Type.Array)
+        if (root["markers"] is JsonArray mv)
         {
-            foreach (var item in mv.AsGodotArray())
+            foreach (var item in mv)
             {
-                if (item.VariantType != Variant.Type.Dictionary) continue;
-                var mk = item.AsGodotDictionary<string, Variant>();
+                if (item is not JObj mk) continue;
                 int col = GetI(mk, "col"), row = GetI(mk, "row");
                 int el = elev.TryGetValue((col, row), out var ee) ? ee : 0;
                 _markers.Add(new Marker { Col = col, Row = row, Type = GetI(mk, "type", -1),
@@ -3154,12 +3143,11 @@ public partial class MapEntityLayer : Node2D
             }
         }
 
-        if (root.TryGetValue("buildings", out var bdv) && bdv.VariantType == Variant.Type.Array)
+        if (root["buildings"] is JsonArray bdv)
         {
-            foreach (var item in bdv.AsGodotArray())
+            foreach (var item in bdv)
             {
-                if (item.VariantType != Variant.Type.Dictionary) continue;
-                var bd = item.AsGodotDictionary<string, Variant>();
+                if (item is not JObj bd) continue;
                 int col = GetI(bd, "col"), row = GetI(bd, "row");
                 int el = elev.TryGetValue((col, row), out var ee) ? ee : 0;
                 int owner = GetI(bd, "owner", 255);
@@ -3200,22 +3188,19 @@ public partial class MapEntityLayer : Node2D
                     // ch, a Spezial-Fabrik only sp, and the Basis all three
                     StockW = GetI(bd, "w"), StockF = GetI(bd, "ch"), StockS = GetI(bd, "sp"),
                     StockT = GetI(bd, "terranium"),
-                    Name = bd.TryGetValue("name", out var nv) ? nv.AsString() : "",
+                    Name = GetS(bd, "name"),
                     HangarSize = GetI(bd, "hangar_size"),
                     Shipyard = GetI(bd, "shipyard", -1),
-                    Hangar = bd.TryGetValue("hangar", out var hgv) &&
-                             hgv.VariantType == Variant.Type.Array
+                    Hangar = bd["hangar"] is JsonArray hgv
                         ? new List<int>(System.Linq.Enumerable.Select(
-                              hgv.AsGodotArray(), v => v.AsInt32()))
+                              hgv, v => Core.JsonMeta.AsI(v)))
                         : null,
                     Footprint = CellRect(ox, oy, col, row, el),
                 };
-                if (bd.TryGetValue("door_cells", out var dcv) &&
-                    dcv.VariantType == Variant.Type.Array)
-                    foreach (var dv in dcv.AsGodotArray())
+                if (bd["door_cells"] is JsonArray dcv)
+                    foreach (var dv in dcv)
                     {
-                        if (dv.VariantType != Variant.Type.Dictionary) continue;
-                        var dd = dv.AsGodotDictionary<string, Variant>();
+                        if (dv is not JObj dd) continue;
                         bld.DoorCells.Add((GetI(dd, "col"), GetI(dd, "row")));
                     }
                 else if (bld.Doors > 0)
@@ -3259,27 +3244,25 @@ public partial class MapEntityLayer : Node2D
         _players.Clear();
         _haveAllies = false;
         _allied = new bool[8, 8];
-        if (root.TryGetValue("players", out var plv) && plv.VariantType == Variant.Type.Array)
-            foreach (var item in plv.AsGodotArray())
+        if (root["players"] is JsonArray plv)
+            foreach (var item in plv)
             {
-                if (item.VariantType != Variant.Type.Dictionary) continue;
-                var pd = item.AsGodotDictionary<string, Variant>();
+                if (item is not JObj pd) continue;
                 int pi = GetI(pd, "player", -1);
                 if (pi is < 0 or > 7) continue;
                 _players.Add(new Player
                 {
                     Index = pi, Flag = GetI(pd, "flag"),
-                    Name = pd.TryGetValue("name", out var pn) ? pn.AsString() : "",
-                    Comment = pd.TryGetValue("comment", out var pc) ? pc.AsString() : "",
-                    Human = pd.TryGetValue("human", out var ph) && ph.AsBool(),
-                    Beaten = pd.TryGetValue("beaten", out var pb) && pb.AsBool(),
+                    Name = GetS(pd, "name"),
+                    Comment = GetS(pd, "comment"),
+                    Human = GetB(pd, "human"),
+                    Beaten = GetB(pd, "beaten"),
                     Kills = GetI(pd, "kills"), Losses = GetI(pd, "losses"),
                 });
-                if (!pd.TryGetValue("allies", out var av) ||
-                    av.VariantType != Variant.Type.Array) continue;
-                foreach (var a in av.AsGodotArray())
+                if (pd["allies"] is not JsonArray av) continue;
+                foreach (var a in av)
                 {
-                    int q = a.AsInt32();
+                    int q = Core.JsonMeta.AsI(a);
                     if (q is >= 0 and <= 7) { _allied[pi, q] = true; _haveAllies = true; }
                 }
             }
@@ -3316,25 +3299,24 @@ public partial class MapEntityLayer : Node2D
         // sec22 — DIE STRECKE, wie die Karte sie selbst fuehrt. Muss VOR den
         // Linien gelesen werden: RailAdoptCells() setzt daraus die Zellenketten,
         // und die Schleife darunter baut sie nur noch dort, wo sec22 nichts hat.
-        if (root.TryGetValue("rail_cells", out var rcv) && rcv.VariantType == Variant.Type.Array)
-            foreach (var item in rcv.AsGodotArray())
+        if (root["rail_cells"] is JsonArray rcv)
+            foreach (var item in rcv)
             {
-                if (item.VariantType != Variant.Type.Array) continue;
-                var q = item.AsGodotArray();
+                if (item is not JsonArray q) continue;
                 if (q.Count < 5) continue;
                 _railCells.Add(new RailCell
                 {
-                    Index = q[0].AsInt32(), Col = q[1].AsInt32(), Row = q[2].AsInt32(),
-                    Frame = q[3].AsInt32(), Line = q[4].AsInt32(),
-                    Hp = q.Count > 5 ? q[5].AsInt32() : 150,
+                    Index = Core.JsonMeta.AsI(q[0]), Col = Core.JsonMeta.AsI(q[1]),
+                    Row = Core.JsonMeta.AsI(q[2]),
+                    Frame = Core.JsonMeta.AsI(q[3]), Line = Core.JsonMeta.AsI(q[4]),
+                    Hp = q.Count > 5 ? Core.JsonMeta.AsI(q[5]) : 150,
                 });
             }
         var node2bld = new Dictionary<int, int>();
-        if (root.TryGetValue("rail_nodes", out var rnv) && rnv.VariantType == Variant.Type.Array)
-            foreach (var item in rnv.AsGodotArray())
+        if (root["rail_nodes"] is JsonArray rnv)
+            foreach (var item in rnv)
             {
-                if (item.VariantType != Variant.Type.Dictionary) continue;
-                var nd = item.AsGodotDictionary<string, Variant>();
+                if (item is not JObj nd) continue;
                 int nr = GetI(nd, "node", -1);
                 node2bld[nr] = GetI(nd, "building", -1);
                 // ⚠ Die Knotentafel wurde hier bisher WEGGEWORFEN — nur
@@ -3344,12 +3326,11 @@ public partial class MapEntityLayer : Node2D
                 if (nr >= 0)
                 {
                     var lk4 = new int[4] { -1, -1, -1, -1 };
-                    if (nd.TryGetValue("links", out var lv) &&
-                        lv.VariantType == Variant.Type.Array)
+                    if (nd["links"] is JsonArray lv)
                     {
                         int k = 0;
-                        foreach (var q in lv.AsGodotArray())
-                        { if (k >= 4) break; lk4[k++] = q.AsInt32(); }
+                        foreach (var q in lv)
+                        { if (k >= 4) break; lk4[k++] = Core.JsonMeta.AsI(q); }
                     }
                     _railNodes[nr] = new Simulation.RailNetwork.Node
                     {
@@ -3366,11 +3347,10 @@ public partial class MapEntityLayer : Node2D
                     };
                 }
             }
-        if (root.TryGetValue("links", out var lkv) && lkv.VariantType == Variant.Type.Array)
-            foreach (var item in lkv.AsGodotArray())
+        if (root["links"] is JsonArray lkv)
+            foreach (var item in lkv)
             {
-                if (item.VariantType != Variant.Type.Dictionary) continue;
-                var lk = item.AsGodotDictionary<string, Variant>();
+                if (item is not JObj lk) continue;
                 // Which buildings a line joins. The sec33 node (bud1/bud2) says
                 // so directly and is right: checked against the route end points
                 // it names the same building in 164 of 164 cases where both are
@@ -3386,15 +3366,15 @@ public partial class MapEntityLayer : Node2D
                 // lattice, exported as (col,row) points. Walking them lands on
                 // the stored end point for every line in every file, so this is
                 // the track the game itself draws — not a straight connection.
-                if (lk.TryGetValue("route", out var rtv) && rtv.VariantType == Variant.Type.Array)
+                if (lk["route"] is JsonArray rtv)
                 {
                     var pts = new List<Vector2>();
-                    foreach (var pv in rtv.AsGodotArray())
+                    foreach (var pv in rtv)
                     {
-                        if (pv.VariantType != Variant.Type.Array) continue;
-                        var p = pv.AsGodotArray();
+                        if (pv is not JsonArray p) continue;
                         if (p.Count < 2) continue;
-                        pts.Add(new Vector2((float)p[0].AsDouble(), (float)p[1].AsDouble()));
+                        pts.Add(new Vector2((float)Core.JsonMeta.AsD(p[0]),
+                                            (float)Core.JsonMeta.AsD(p[1])));
                     }
                     if (pts.Count > 1) _railRoutes.Add(pts);
                     // keep the route under its line number as well — a train
@@ -3404,9 +3384,8 @@ public partial class MapEntityLayer : Node2D
                     {
                         _lineRoute[lineNo] = pts;
                         var pcs = new List<int>();
-                        if (lk.TryGetValue("pieces", out var pcv) &&
-                            pcv.VariantType == Variant.Type.Array)
-                            foreach (var q in pcv.AsGodotArray()) pcs.Add(q.AsInt32());
+                        if (lk["pieces"] is JsonArray pcv)
+                            foreach (var q in pcv) pcs.Add(Core.JsonMeta.AsI(q));
                         _linePiece[lineNo] = pcs;
                         // Die Route auf halben Zeilen ist NICHT die Strecke —
                         // ein Gleisbild ist eine ganze Zelle. Siehe RailBuildCells.
@@ -3456,18 +3435,17 @@ public partial class MapEntityLayer : Node2D
         // sec120: what each player may build in the air, with the game's own
         // English names (Shark Fighter, Whale Bomber, Duck Spy, Fuel Heli …)
         _airDesigns = null;
-        if (root.TryGetValue("air_designs", out var adv) && adv.VariantType == Variant.Type.Array)
+        if (root["air_designs"] is JsonArray adv)
         {
             _airDesigns = new List<AirDesign>();
-            foreach (var item in adv.AsGodotArray())
+            foreach (var item in adv)
             {
-                if (item.VariantType != Variant.Type.Dictionary) continue;
-                var ad = item.AsGodotDictionary<string, Variant>();
+                if (item is not JObj ad) continue;
                 _airDesigns.Add(new AirDesign
                 {
                     Player = GetI(ad, "player", -1),
                     Enable = GetI(ad, "enable") != 0,
-                    Name = ad.TryGetValue("name", out var anv) ? anv.AsString() : "",
+                    Name = GetS(ad, "name"),
                     Speed = GetI(ad, "speed"), Hp = GetI(ad, "hp"),
                     Payload = GetI(ad, "payload"), Airframe = GetI(ad, "airframe"),
                     Attack = GetI(ad, "attack"), Defence = GetI(ad, "defence"),
@@ -3489,17 +3467,16 @@ public partial class MapEntityLayer : Node2D
         // (Ammo / Fuel).  A crate always lies on the map; an aircraft sits at
         // (0,0) exactly while it is parked inside a hangar.
         _special.Clear();
-        if (root.TryGetValue("special", out var spv) && spv.VariantType == Variant.Type.Array)
-            foreach (var item in spv.AsGodotArray())
+        if (root["special"] is JsonArray spv)
+            foreach (var item in spv)
             {
-                if (item.VariantType != Variant.Type.Dictionary) continue;
-                var sp2 = item.AsGodotDictionary<string, Variant>();
+                if (item is not JObj sp2) continue;
                 int col = GetI(sp2, "col"), row = GetI(sp2, "row");
                 int el = elev.TryGetValue((col, row), out var se) ? se : 0;
                 var sp = new Special
                 {
                     Slot = GetI(sp2, "slot", -1), Col = col, Row = row, Kind = GetI(sp2, "kind"),
-                    Name = sp2.TryGetValue("name", out var sn) ? sn.AsString() : "",
+                    Name = GetS(sp2, "name"),
                     Stored = col == 0 && row == 0,
                     Speed = GetI(sp2, "speed"),
                     Hp = GetI(sp2, "hp"), HpMax = GetI(sp2, "hp_max"),
@@ -3541,12 +3518,10 @@ public partial class MapEntityLayer : Node2D
         _origAcc = 0; _origTicks = 0;
         SoldUnits = 0; SoldMoney = 0; SellNote = "";
         ShipLeftDock = 0; ShipWaitingInDock = 0;
-        if (root.TryGetValue("market", out var mkv) &&
-            mkv.VariantType == Variant.Type.Array)
-            foreach (var item in mkv.AsGodotArray())
+        if (root["market"] is JsonArray mkv)
+            foreach (var item in mkv)
             {
-                if (item.VariantType != Variant.Type.Dictionary) continue;
-                var mo = item.AsGodotDictionary<string, Variant>();
+                if (item is not JObj mo) continue;
                 _market.Add(new MarketOffer
                 {
                     Slot = GetI(mo, "slot"), Price = GetI(mo, "price"),
@@ -3590,18 +3565,17 @@ public partial class MapEntityLayer : Node2D
 
         // Terranium deposits (sec28): each record names the building that sits
         // on it and how much raw material is left
-        if (root.TryGetValue("money", out var mnv) && mnv.VariantType == Variant.Type.Array)
+        if (root["money"] is JsonArray ma)
         {
-            var ma = mnv.AsGodotArray();
-            for (int i = 0; i < _money.Length && i < ma.Count; i++) _money[i] = ma[i].AsInt32();
+            for (int i = 0; i < _money.Length && i < ma.Count; i++)
+                _money[i] = Core.JsonMeta.AsI(ma[i]);
         }
 
-        if (root.TryGetValue("deposits", out var dpv) && dpv.VariantType == Variant.Type.Array)
+        if (root["deposits"] is JsonArray dpv)
         {
-            foreach (var item in dpv.AsGodotArray())
+            foreach (var item in dpv)
             {
-                if (item.VariantType != Variant.Type.Dictionary) continue;
-                var dp = item.AsGodotDictionary<string, Variant>();
+                if (item is not JObj dp) continue;
                 int slot = GetI(dp, "building", -1);
                 var be = _entities.Find(x => x.IsBuilding && x.Slot == slot);
                 if (be == null) continue;
@@ -3616,12 +3590,11 @@ public partial class MapEntityLayer : Node2D
         // building that decides the mission for that player, and `destroyed`
         // records that it has already fallen.
         for (int p = 0; p < 8; p++) _objectives[p].Clear();
-        if (root.TryGetValue("targets", out var tgv) && tgv.VariantType == Variant.Type.Array)
+        if (root["targets"] is JsonArray tgv)
         {
-            foreach (var item in tgv.AsGodotArray())
+            foreach (var item in tgv)
             {
-                if (item.VariantType != Variant.Type.Dictionary) continue;
-                var tg = item.AsGodotDictionary<string, Variant>();
+                if (item is not JObj tg) continue;
                 int slot = GetI(tg, "building", -1);
                 int pl = GetI(tg, "player", -1);
                 if (pl is >= 0 and <= 7 && slot >= 0) _objectives[pl].Add(slot);
@@ -3635,12 +3608,12 @@ public partial class MapEntityLayer : Node2D
         // passability: Can_go @0x4055D0 never reads it, and taking it for one
         // is what let land units drive into the sea (on NET07 its class 0 covers
         // 7115 cells where the water is 6452).
-        if (root.TryGetValue("zones", out var zv) && zv.VariantType == Variant.Type.Dictionary)
-            BuildZoneTexture(zv.AsGodotDictionary<string, Variant>(), ox, oy);
+        if (root["zones"] is JObj zv)
+            BuildZoneTexture(zv, ox, oy);
 
         // the map's own passability, straight off the imap (sec6)
-        if (root.TryGetValue("terrain", out var tev) && tev.VariantType == Variant.Type.Dictionary)
-            _nav?.ApplyTerrain(tev.AsGodotDictionary<string, Variant>());
+        if (root["terrain"] is JObj tev)
+            _nav?.ApplyTerrain(tev);
         else
             GD.PrintErr($"{name}: der Spielstand kennt noch keine Passierbarkeit — die Karte " +
                         "laeuft auf dem alten Kachelcode-Notbehelf (Bruecken sperren, Wasser " +
@@ -3662,13 +3635,11 @@ public partial class MapEntityLayer : Node2D
         return _entities.Count > 0 || _markers.Count > 0;
     }
 
-    private void BuildZoneTexture(GDict zones, int ox, int oy)
+    private void BuildZoneTexture(JObj zones, int ox, int oy)
     {
         int w = GetI(zones, "width"), h = GetI(zones, "height");
-        if (w <= 0 || h <= 0 ||
-            !zones.TryGetValue("grid", out var gv) || gv.VariantType != Variant.Type.Array)
+        if (w <= 0 || h <= 0 || zones["grid"] is not JsonArray rows)
             return;
-        var rows = gv.AsGodotArray();
         var img = Image.CreateEmpty(w, h, false, Image.Format.Rgba8);
         // ⚠ 13.08.2026 — DIE WERTE WERDEN JETZT BEHALTEN, nicht nur eingefaerbt.
         // sec2 ist die Tafel, an der `corners_carry` @0x4211A0 den BAUPLATZ
@@ -3679,11 +3650,10 @@ public partial class MapEntityLayer : Node2D
         _zoneH = h;
         for (int r = 0; r < h && r < rows.Count; r++)
         {
-            if (rows[r].VariantType != Variant.Type.Array) continue;
-            var cells = rows[r].AsGodotArray();
+            if (rows[r] is not JsonArray cells) continue;
             for (int c = 0; c < w && c < cells.Count; c++)
             {
-                int z = cells[c].AsInt32();
+                int z = Core.JsonMeta.AsI(cells[c]);
                 _zone[r, c] = (byte)Mathf.Clamp(z, 0, 255);
                 img.SetPixel(c, r, z >= 0 && z < ZoneColors.Length ? ZoneColors[z] : ZoneColors[0]);
             }
@@ -3721,15 +3691,14 @@ public partial class MapEntityLayer : Node2D
     private byte[,]? _zone;
     private int _zoneW, _zoneH;
 
-    private void LoadPropsFallback(GDict meta, int ox, int oy)
+    private void LoadPropsFallback(JObj meta, int ox, int oy)
     {
-        if (!meta.TryGetValue("tiles", out var tv) || tv.VariantType != Variant.Type.Array)
+        if (meta["tiles"] is not JsonArray tv)
             return;
-        foreach (var item in tv.AsGodotArray())
+        foreach (var item in tv)
         {
-            if (item.VariantType != Variant.Type.Dictionary) continue;
-            var t = item.AsGodotDictionary<string, Variant>();
-            if (!(t.TryGetValue("object", out var ob) && ob.AsBool())) continue;
+            if (item is not JObj t) continue;
+            if (!GetB(t, "object")) continue;
             int col = GetI(t, "col"), row = GetI(t, "row"), el = GetI(t, "elev", 0);
             _entities.Add(new Entity
             {
@@ -21686,15 +21655,14 @@ public partial class MapEntityLayer : Node2D
         return t;
     }
 
-    private void LoadWagons(GDict root)
+    private void LoadWagons(JObj root)
     {
         _wagons.Clear();
-        if (!root.TryGetValue("trains", out var tv) || tv.VariantType != Variant.Type.Array)
+        if (root["trains"] is not JsonArray tv)
             return;
-        foreach (var item in tv.AsGodotArray())
+        foreach (var item in tv)
         {
-            if (item.VariantType != Variant.Type.Dictionary) continue;
-            var w = item.AsGodotDictionary<string, Variant>();
+            if (item is not JObj w) continue;
             int col = GetI(w, "col"), yh = GetI(w, "y_half");
             if (col == 0 && yh == 0) continue;            // empty wagon slot
             _wagons.Add(new Wagon
@@ -28739,6 +28707,12 @@ public partial class MapEntityLayer : Node2D
 
     private static int GetI(GDict d, string k, int def = 0)
         => d.TryGetValue(k, out var v) && v.VariantType != Variant.Type.Nil ? v.AsInt32() : def;
+
+    // ⭐ 31.08.2026 — dieselben Griffe fuer die per System.Text.Json gelesenen
+    // Kartendateien (map_*.json / map_*.entities.json), siehe Core.JsonMeta.
+    private static int GetI(JObj d, string k, int def = 0) => Core.JsonMeta.GetI(d, k, def);
+    private static string GetS(JObj d, string k, string def = "") => Core.JsonMeta.GetS(d, k, def);
+    private static bool GetB(JObj d, string k) => Core.JsonMeta.GetB(d, k);
 
     /// <summary>Value of the byte at record offset i, read from a hex string.</summary>
     private static int HexByte(string hex, int i)

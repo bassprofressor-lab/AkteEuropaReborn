@@ -18877,3 +18877,74 @@ Zustand, in dem der Baum jetzt ist.
 * Offen laut Bericht: 5 von 6 F-Dumps unanalysiert, die Export-Dumps vom 17.08.
   ununtersucht, und als struktureller Ausblick `entities.json` ohne
   Godot-Variants zu lesen.
+
+---
+
+## CB. ⭐⭐⭐ DER PRÜFSTAND IST TROCKEN — der Allokationssturm ist abgestellt (31.08.2026)
+
+Dritter Fable-Lauf, Bericht in **`berichte\sturm-fable.md`**. Er hat getan, was
+sein eigener Ausblick vom Vortag verlangte: **die Karten-JSON wird nicht mehr
+über Godots `Json`/`Variant` gelesen, sondern über `System.Text.Json`.**
+
+### CB.1 Warum das die Wurzel ist
+
+Jede Godot-`Variant`, jedes `Dictionary` und `Array` wird beim
+`DisposablesTracker` an- und wieder abgemeldet — und **genau in dieser
+Buchführung liegt das Rennen** (CA.1). Die `using`-Härtungen räumten auf, was
+entsteht; dieser Griff lässt nichts entstehen. **Rund 81.000 Godot-Dictionaries
+je Kartenladung fallen ersatzlos weg.**
+
+Neuer Leser: `Scripts/Core/JsonMeta.cs`, der Godots Semantik nachbaut
+(Fliesskomma-Abschnitt, Zahl→Text, Zahl≠0→wahr). ⚠ Mit BOM-Abschneider — ohne
+den gäbe es einen stillen Totalausfall.
+
+### CB.2 Die Zahlen
+
+| | Abstürze |
+|---|---:|
+| Grundlinie 30.08. (ohne Härtung) | 7/10 |
+| mit Härtung, Serie F | 5/10 |
+| meine Messung in der Nacht | 3/6 |
+| **nach dem Umbau (Fable)** | **0/20** |
+| **nach dem Umbau (von mir nachgemessen)** | **0/6** |
+
+⭐ **28 saubere Läufe in Folge.** Sein Nullmodell ist gestaffelt und ehrlich
+gerechnet: gegen die Tagesgrundlinie allein P ≈ 12 % (nicht beweisend), gegen
+den Zwei-Tage-Stand des gehärteten Codes (9/30) **P ≈ 8·10⁻⁴**.
+
+⚠ Und er benennt selbst, dass seine Tagesgrundlinie mit 1/10 auffällig gut war
+gegen 5/10 am Vortag bei gleichem Code — **der Prüfstand streut tageweise**.
+Darum hat er 20 statt 10 Läufe gefahren. Das ist der richtige Schluss aus einer
+unbequemen Zahl.
+
+### CB.3 Verhaltensgleichheit — die Bedingung, ohne die alles wertlos wäre
+
+Die vier Pflichtzeilen sind in **allen 22 Läufen** zeichengleich mit der
+Grundlinie, und in meinen sechs ebenfalls:
+
+```
+nebeldecke: 34468 Zellen
+objekte: 5055 …
+nav 200x200 frei 16331 / grob 4105 / wasser 13438 / gesperrt 6126
+stuck-check: …
+```
+
+⭐ Strenger noch: von 225 Protokollzeilen sind 132 schon innerhalb der
+Grundlinie stabil — **der Umbau trifft alle 132.** Die übrigen 93 streuten
+bereits vorher (wanduhrgestempelte Momentaufnahmen, KI-Zähler).
+
+### CB.4 ⭐⭐ WAS DAS FÜR DIE BEWEGUNG HEISST
+
+**Der Engpass ist weg.** Damit sind die drei Entscheidungen, die auf einem
+sterbenden Prüfstand standen, **jetzt endlich messbar**:
+
+1. die neue Suchkarte (verworfen am 23.08.),
+2. »warten statt neu planen« (verworfen am 30.08., hinter `--giveway-warten`),
+3. das Ausweichen (aus, hinter `--ausweichen`),
+
+dazu die **Nahsperre** (`--keine-nahsperre`), die gebaut und nie bewertet ist.
+**Das ist der nächste Griff, und erst jetzt hat er eine Grundlage.**
+
+⚠ Offen laut Bericht: Restrate ≤ ~14 % (95-%-Schranke aus 0/20), der
+Glue-Schreiber selbst ist unberührt, 15 kleine Katalog-JSONs sind nicht
+umgestellt, und gemessen wurde nur auf map_DM_4.
