@@ -452,6 +452,7 @@ public partial class MapViewer : Node2D
         if (_einfahrtCheck) _entities.EinfahrtCheckStart();
         if (_kiProbe) _entities.KiProbeStart();
         if (_ausweichProbe) _entities.AusweichProbeStart();
+        if (_aufgebenProbe) _entities.AufgebenProbeStart();
         if (_sellCheck) _entities.SellCheckStart();
         if (_shopCheckFlag) _entities.ShopCheckStart();
         if (_buyCheckFlag) _entities.BuyCheckStart();
@@ -1217,6 +1218,9 @@ public partial class MapViewer : Node2D
     /// oder nicht? Der Pruefstand zur Buendnispruefung aus <c>0x4054D0</c>;
     /// siehe Simulation/AusweichProbe.cs.</summary>
     private bool _ausweichProbe;
+    /// <summary><c>--aufgeben-probe</c> — gibt er auf, wenn das Ziel belegt
+    /// ist, und nur dann? Siehe Simulation/AufgebenProbe.cs.</summary>
+    private bool _aufgebenProbe;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
     /// seines Gleises? Siehe <c>MapEntityLayer.WagonFacingCheck</c>.</summary>
     private bool _wagonFacingCheck;
@@ -1798,12 +1802,19 @@ public partial class MapViewer : Node2D
             // stellen und nachsehen, ob die Streife sie aufnimmt. Siehe KiProbe.cs.
             else if (a == "--ki-probe") _kiProbe = true;
             else if (a == "--ausweich-probe") _ausweichProbe = true;
+            else if (a == "--aufgeben-probe") _aufgebenProbe = true;
+            else if (a.StartsWith("--aufgeben-probe="))
+            {
+                _aufgebenProbe = true;
+                MapEntityLayer.AgZielBelegt = a["--aufgeben-probe=".Length..] != "frei";
+            }
             // Gegenprobe zur doppelten Abdunklung der Uebersicht, siehe Minimap.
             else if (a == "--minikarte-nebel-einmal") Minimap.NebelEinmal = true;
             else if (a == "--minikarte-nebel-zweimal") Minimap.NebelZweimal = true;
             // Gegenprobe zum SEKTORANGRIFF, siehe SkirmishAi.AiSektorAngriff.
             else if (a == "--kein-sektorangriff") MapEntityLayer.KeinSektorangriff = true;
             else if (a == "--kein-ausweichen") MapEntityLayer.AusweichenAn = false;
+            else if (a == "--kein-aufgeben") MapEntityLayer.AufgebenAn = false;
             else if (a == "--keine-nahsperre") Simulation.NavGrid.KeineNahsperre = true;
             else if (a == "--giveway-warten") MapEntityLayer.GiveWayWarten = true;
             // --boden-um=<spalte>,<zeile> — die Bodenauskunft, siehe
@@ -2522,6 +2533,9 @@ public partial class MapViewer : Node2D
             if (bo.Length > 0) GD.Print(bo);
             string aw = _entities.AusweichLine();
             if (aw.Length > 0) GD.Print(aw);
+            // ⭐ 31.08.2026 — das Aufgeben @0x408D05, siehe Simulation/Aufgeben.cs.
+            string ag = _entities.AufgebenLine();
+            if (ag.Length > 0) GD.Print(ag);
             string ein = _entities.EinfahrtLine();
             if (ein.Length > 0) GD.Print(ein);
             // ⭐ 30.08.2026 — was die Objektebene im Nebel gezeigt hat.

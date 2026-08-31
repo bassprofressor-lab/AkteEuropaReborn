@@ -5637,6 +5637,10 @@ public partial class MapEntityLayer : Node2D
                         if (--e.Block > 0) return;
                         e.Block = BlockRearm
                                 + Simulation.Determinism.Roll(BlockRearmSpread);
+                        // ⭐ 31.08.2026 — »stay move I« @0x408CF6: erst die
+                        // Frage, ob wir nah genug sind, DANN erst neu planen.
+                        // Siehe Simulation/Aufgeben.cs.
+                        if (AufgebenWeilNahGenug(i, e)) return;
                         Repath(i, e);
                         return;
                     }
@@ -5685,6 +5689,9 @@ public partial class MapEntityLayer : Node2D
         }
         if (--e.Block > 0) return;
         e.Block = BlockRearm + Simulation.Determinism.Roll(BlockRearmSpread);
+        // ⭐ 31.08.2026 — dieselbe Stelle wie oben, hier fuer den Fall, dass
+        // gar nicht erst gefragt wurde (Wand, Feind, kein Ausweichen).
+        if (AufgebenWeilNahGenug(i, e)) return;
         Repath(i, e);
     }
 
@@ -28114,6 +28121,7 @@ public partial class MapEntityLayer : Node2D
         PollEinfahrt();
         PollKiProbe(dt);
         PollAusweichProbe(dt);
+        PollAufgebenProbe(dt);
         PollSellCheck();
         PollShopCheck();
         PollBuyCheck();

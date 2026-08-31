@@ -19290,3 +19290,235 @@ genau wie `0x4054D0` es vorschreibt.
 **Damit ist CE.6 erledigt.** Die Buendnispruefung ist gelesen, gebaut **und
 gemessen**: *man bittet nur Verbuendete zur Seite; um einen Feind plant man
 herum.*
+
+
+## CG — DAS AUFGEBEN IST GELESEN — und CD.3 hatte es VERKEHRT HERUM (31.08.2026)
+
+BZ.5 hielt `@0x408D05` als *nicht selbst nachgelesen* fest, CD.3 gab es aus
+zweiter Hand wieder. Jetzt ist es aus der EXE gelesen — und die Bedingung
+stand in beiden Notizen falsch bzw. unvollständig.
+
+### CG.1 — ⭐ Das Original benennt seine Zweige SELBST
+
+Der Fahrer ruft an jedem Verzweigungspunkt `0x41F9F0` (Thunk `0x4016A9`) mit
+einer Zeichenkette. Das ist die Debug-Ausgabe des ursprünglichen Entwicklers,
+und sie ist eine fertige Landkarte:
+
+```
+  0x408AC1  stay move A     +0x1A == 0xFF  -> Ende oder UKOL := 0
+  0x408B04  stay move B     +0x1A == 0x32  -> Weg voll (50) -> neu planen (Code 0)
+  0x408B28  stay move C     Wegbyte == 0xFF -> UKOL := 0, +0x1A := 0xFF
+  0x408B61  stay move D     Richtung geprüft, dann Can_go @0x408B88
+  0x408BAD  stay move G     Can_go = 0 (NEIN)   -> Geduld +0x1C herunter
+  0x408CE4  stay move H     Sonderfall Gattung 0x47 -> Streuung, raus
+  0x408CF8  stay move I     ⭐ DAS AUFGEBEN, dann neu planen (Tafel 0x40A208)
+  0x408D6F  stay move J     nach dem Neuplanen raus
+  0x408D83  stay move E     Can_go = 1 (ZUGESAGT) -> rand()%60
+  0x408DAA  stay move F     der 1/60-Treffer -> neu planen (Tafel 0x40A220)
+  0x408E1E  stay move K     Can_go = 2 (FREI)  -> Schritt ausführen
+  0x408E47  stay move L
+  0x408F51  stay move M:
+  0x409070  stay attack A/B/C  @0x40909F, 0x4090C8
+```
+
+⭐ **Merksatz:** in dieser EXE stehen an jedem Verzweigungspunkt der Bewegung
+Debug-Zeichenketten mit dem Namen des Zweigs. Eine Zeichenketten-Vollerhebung
+über `0x4F68C0…0x4F69C4` liefert die Verzweigungslandkarte in einem Lauf —
+billiger als jedes Disassemblieren.
+
+### CG.2 — Der Block, Byte für Byte
+
+```
+  0x408D05  xor eax,eax
+  0x408D07  mov al, [edi+0x18]           ; CX  = Ziel-Spalte
+  0x408D0C  shl eax, 8
+  0x408D0F  mov cl, [edi+0x19]           ; CY  = Ziel-Zeile
+  0x408D12  add eax, ecx                 ; idx = CX*256 + CY
+  0x408D14  mov ecx, 0x1F40              ; 8000
+  0x408D19  cmp word [eax*2+0xBDEA80], cx   ; imap[Zielzelle]
+  0x408D21  jae  0x408D41                ; >= 8000  -> NICHT aufgeben
+  0x408D23  cmp word [edi+0x36], cx      ; Zieleinheit
+  0x408D27  jbe  0x408D41                ; <= 8000  -> NICHT aufgeben
+  0x408D29  push ebx ; call 0x410D70     ; Luftlinie zum Zielfeld
+  0x408D32  cmp ax, 3
+  0x408D36  jge  0x408D41                ; >= 3     -> NICHT aufgeben
+  0x408D38  mov byte [edi+0x14], 0       ; UKOL := 0   ⭐ AUFGEBEN
+  0x408D3C  jmp  0x409EEE                ; raus
+```
+
+### CG.3 — ⚠⚠ CD.3 stand VERKEHRT HERUM
+
+CD.3 schrieb: *»wenn dort **keine** Einheit steht (`>= 0x1F40`) … wird
+`UKOL := 0` gesetzt«*. Der Sprung `jae 0x408D41` tut das **Gegenteil**: bei
+`>= 0x1F40` wird das Aufgeben **übersprungen**. Aufgegeben wird nur bei
+`imap < 8000`, und das ist laut CE.3 genau **ein Fahrzeug auf der Zielzelle**.
+
+**BZ.4 Nr. 3 hatte es richtig** (»Ziel belegt und Abstand < 3 → fertig«), die
+Nachlesung in CD.3 hat es beim Abschreiben gedreht. Das ist der teuerste
+Fehlertyp dieses Baums: eine Bedingung, die gebaut worden wäre, hätte in
+jedem Lauf das Gegenteil getan — Einheiten hätten aufgegeben, sobald das Ziel
+**frei** ist.
+
+### CG.4 — Und eine dritte Bedingung fehlte ganz
+
+`cmp word [edi+0x36], 0x1F40 / jbe` steht in keiner der beiden Notizen.
+`+0x36` ist die **Zieleinheit** — BX.1 hat sie schon gelesen: der Fahrbefehl
+setzt `word[+0x36] := 0xFFFF` (»Zieleinheit löschen«). Werte `< 8000` sind ein
+Einheitenindex (8000 Sätze zu 78 ab `0x6E26C8`), alles darüber heißt *keine*.
+
+⭐ **Aufgegeben wird also nur bei einem reinen Fahrbefehl.** Wer einer Einheit
+folgt oder sie angreift, gibt nicht auf, egal wie nah er ist. Das ist genau
+die Unterscheidung, die unserem `RetryPath` fehlt.
+
+### CG.5 — Die Stelle im Ablauf, und sie ist NICHT jeder Takt
+
+Der Block hängt **allein** im Absage-Zweig (`Can_go = 0`), und dort erst
+**hinter** der Geduld:
+
+```
+  Can_go = 0 -> Geduld +0x1C--  ; != 0 -> raus (warten)
+                Geduld := 40 + rand()%20
+                Gattung 0x47? -> Streuung (H), raus
+                stay move I: AUFGEBEN?  ja -> UKOL := 0, raus
+                                        nein -> neu planen (Tafel 0x40A208)
+```
+
+⚠ **Der Zugesagt-Zweig (`Can_go = 1`, `stay move E/F`) hat das Aufgeben
+NICHT.** Dort steht nur `rand()%60` und danach direkt die zweite
+Gattungstafel. Wer eine Zusage bekommt, gibt nie auf.
+
+Damit wird die Prüfung im Mittel **alle 40–59 Takte** ausgeführt, nicht jeden
+Takt. Wer sie bei uns in den Takt hängt, baut etwas anderes als das Original.
+
+### CG.6 — Was der Bauauftrag daraus ist
+
+1. Nur im Absage-Zweig, nur nach Ablauf der Geduld, **vor** dem Neuplanen.
+2. Alle drei Bedingungen, und `imap` in der **richtigen** Richtung:
+   `imap[Ziel] < 8000` **und** `Zieleinheit >= 8000` **und** `Luftlinie < 3`.
+3. Wirkung ist `UKOL := 0` allein — **`+0x1A` wird NICHT auf 0xFF gesetzt**
+   (anders als in Zweig C `@0x408B4F`).
+4. Gegenprobe-Schalter `--kein-aufgeben`, Messung gegen die Tafel aus CC.1
+   mit den Keimen 7 / 11 / 23 / 41.
+
+### CG.7 — Was hier NICHT gelesen ist
+
+- `0x40B070` (die Streuung im Zweig H, Gattung `0x47`) — nur als Ziel erkannt.
+- Die Gattungstafeln `0x40A208` / `0x40A220` schieben Codes 1/3/5/7/0xD; was
+  der Code in `0x4D32C0` bewirkt, ist weiter ungelesen.
+- `stay move L / M:` und die Angriffszweige.
+
+
+## CH — DAS AUFGEBEN IST GEBAUT UND GEMESSEN (31.08.2026)
+
+CG hat es gelesen. Hier steht, was der Einbau tut — und was er *nicht* tut.
+
+### CH.1 — Der Einbau
+
+`Simulation/Aufgeben.cs`, gerufen an den zwei Stellen in `BlockedStep`, die
+dem Absage-Zweig entsprechen: **nach** Ablauf der Geduld, **vor** dem
+Neuplanen. Alle drei Bedingungen, `imap` in der Richtung aus CG.2. Gegenprobe
+`--kein-aufgeben`.
+
+⚠ **Eine notwendige Abweichung.** Das Original setzt `UKOL := 0` und laesst
+den Wegpuffer stehen, weil sein Fahrarm ohnehin nur bei `UKOL == 2` laeuft.
+Unser Fahrer hat dieses Tor nicht — bei uns **ist** `e.Path != null` das Tor.
+Ein blosses `e.Ukol = UkolFrei` taete hier gar nichts. Die WIRKUNG von
+`UKOL := 0` ist »der Fahrauftrag ist zu Ende«, und das ist bei uns wortgleich
+die Ankunftsbehandlung am Wegende.
+
+⚠ Die Pruefung laeuft auch unter `--kein-aufgeben` mit, nur ihre Wirkung
+nicht. Sonst meldet die Gegenprobe gar keine Zahl, und dann ist »aendert
+nichts« nicht von »kam nie vor« zu unterscheiden (CF.3).
+
+### CH.2 — Die Tafel, vier Keime, map_DM_4, 60 s
+
+```
+   Keim        AN                        AUS                    aufgegeben
+          Ziel Fortschr. gefahren   Ziel Fortschr. gefahren
+     7      21    39,9     1722       21    38,6     1722           1
+    11      22    40,1     1868       22    40,1     1866           1
+    23      22    42,4     1727       22    42,4     1727           3
+    41      19    41,6     1634       21    41,2     1668           5
+  Mittel  21,00   41,0    1737,8     21,50  40,6    1745,8
+```
+
+**Es aendert so gut wie nichts.** Drei Keime gleich, einer (41) zwei Einheiten
+schlechter. Und der Grund steht in der letzten Spalte: in 60 s loest es ein
+bis fuenf Mal aus. Die Meldezeile sagt, warum — Keim 7:
+`22x geprueft, 1x aufgegeben; abgelehnt weil 13x kein Fahrzeug auf dem Ziel,
+6x Zieleinheit gesetzt, 2x weiter als 3 Zellen`.
+
+⭐ **Der Fall ist selten, weil der Weg dorthin selten ist.** Das Aufgeben
+haengt hinter der Geduld im ABSAGE-Zweig; die meisten Blockaden bei uns sind
+Zusagen (`6289 gefragt, 5470 zugesagt`) und gehen in den 1/60-Zweig, der das
+Aufgeben gar nicht kennt.
+
+⚠ **Und die zwei Einheiten bei Keim 41 sind kein Schaden, sondern die
+Messlatte.** `--stuck-check` zaehlt »angekommen« als `d <= 1`; wer bei
+Entfernung 2 aufgibt, faellt in `STEHT OHNE WEG`. Genau das soll das Original
+tun — der Pulk loest sich auf, statt sich festzufahren. Der Zaehler bestraft
+also das gewuenschte Verhalten.
+
+### CH.3 — ⭐⭐⭐ `--aufgeben-probe`: die Bedingung, die CD.3 gedreht hatte
+
+Die Tafel kann die Richtung der imap-Bedingung nicht pruefen — dafuer loest
+es zu selten aus. Also derselbe Griff wie bei CF: den Fall stellen.
+
+**Zwei Laeufe, ein Aufbau.** Derselbe Fahrer (Platz 39 auf (48,95)), derselbe
+Feind (Platz 1002 auf (47,96)), dasselbe Zielfeld (46,93). Einziger
+Unterschied: steht dort ein Fahrzeug oder nicht.
+
+```
+   Keim   --aufgeben-probe=belegt              --aufgeben-probe=frei
+     7    geprueft +2, AUFGEGEBEN +1, Weg WEG  geprueft +2, aufgegeben +0, zielfrei +2
+    23    geprueft +2, AUFGEGEBEN +1, Weg WEG  geprueft +2, aufgegeben +0, zielfrei +2
+    41    geprueft +2, AUFGEGEBEN +1, Weg WEG  geprueft +2, aufgegeben +0, zielfrei +2
+```
+
+Drei von drei, in beide Richtungen. Im freien Fall faehrt der Fahrer sein
+Ziel an und **kommt an** (die Diagnosezeile zeigt (48,95) → (46,95) → (46,93));
+sein Weg ist danach auch weg, aber aus dem anderen Grund.
+
+⭐ **Unter CD.3s Lesung waere es genau andersherum ausgegangen.** Damit ist
+die Berichtigung aus CG.3 nicht nur gelesen, sondern gemessen.
+
+⚠ **Was die drei Keime NICHT sind: drei unabhaengige Stichproben.** Die Probe
+greift zu fester Zeit in einen deterministischen Anfang, darum ist der Aufbau
+in allen drei Laeufen bis auf die Zelle identisch. Der Wuerfelkeim wirkt sich
+erst spaeter aus. Die Zahl belegt die RICHTUNG der Bedingung, nicht ihre
+Haeufigkeit.
+
+### CH.4 — Drei Fehlschlaege beim Bau der Probe, und jeder sah wie ein Befund aus
+
+```
+  1. Fall »belegt« suchte eine BEREITS belegte Zelle in Abstand 2 -> die gibt
+     es fast nie, die Probe meldete »entfaellt«, ohne je gemessen zu haben.
+  2. Der zweite Fall bekam einen ZWEITEN Fahrer -> der war gar nicht blockiert
+     (`geprueft +0`). Nichts gemessen, nicht einmal etwas Falsches.
+  3. ⭐ Das auf dem Zielfeld geparkte Fahrzeug FAEHRT WIEDER WEG — es gehoert
+     zur Pruefgruppe und plant von selbst neu. Die Pruefung meldete dann
+     `zielfrei`, obwohl der Aufbau »belegt« hiess. Der Blockierer muss in
+     JEDEM Takt zurueckgesetzt werden (`AgHalten`).
+```
+
+Punkt 3 ist der lehrreiche: **ein gestellter Aufbau haelt nicht von selbst.**
+Ohne die Aufschluesselung (`zielfrei / zieleinheit / zuweit`) waere daraus
+»das Aufgeben greift nicht« geworden — ein Befund aus einem kaputten Aufbau.
+
+### CH.5 — Was daraus folgt
+
+- Das Aufgeben ist **gelesen, gebaut, in der Richtung gemessen** und in der
+  Tafel **nicht schaedlich**. Es bleibt an, wie das Ausweichen: es entscheidet
+  die Treue, nicht der Nutzen (CE.5).
+- ⚠ Es ist **nicht** das Gegengewicht, auf das BZ.4 gehofft hatte. Pulks loest
+  es nicht auf, weil es dafuer viel zu selten dran kommt.
+- Damit bleibt von BZ.4 die **Serialisierung** (BZ.3) als einzige ungebaute —
+  und nach dieser Messung als einzige, von der noch etwas zu erwarten ist.
+
+### CH.6 — Was hier NICHT gemessen ist
+
+- Die Haeufigkeit auf einer anderen Karte. map_DM_4 ist eine Pulk-Karte; auf
+  einer Kampagnenkarte mit engen Zufahrten koennte der Fall haeufiger sein.
+- Die Wirkung zusammen mit der Serialisierung. Beide greifen an derselben
+  Stelle an, und CC.2 hat gezeigt, dass Stuecke der Bewegung sich nicht
+  addieren.
