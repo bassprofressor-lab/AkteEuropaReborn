@@ -1,0 +1,6 @@
+# Windows-Stapeldateien brauchen CRLF.
+# ⚠ 31.08.2026: spielen.cmd lag mit reinen LF im Baum. cmd.exe verschluckt dann
+# pro Zeile die ersten zwei Zeichen (@echo->cho, dotnet->tnet, setlocal->tlocal)
+# und meldet "BAU FEHLGESCHLAGEN", ohne dass am Bau etwas fehlt. Siehe bug-014.
+*.cmd text eol=crlf
+*.bat text eol=crlf
