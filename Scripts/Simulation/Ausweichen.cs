@@ -79,23 +79,46 @@ public partial class MapEntityLayer : Node2D
     /// <c>--ausweichen</c> — den Blockierer fragen, statt den Fahrer neu planen
     /// zu lassen.
     ///
-    /// <para>⚠⚠ <b>STANDARDMAESSIG AUS — weil es NICHT GEMESSEN ist.</b> Die
-    /// Lesung stimmt (siehe oben) und der Nachbau steht. Die einzige Zahl, die
-    /// es dazu gibt, spricht dagegen: auf map_DM_4 kamen <b>18 statt 21</b>
-    /// Einheiten ans Ziel. ⚠ »Auf dem Ziel« ist allerdings die Schwellengroesse,
-    /// vor der der Einchecker vom 23.08.2026 ausdruecklich warnt (ein Toter
-    /// zaehlt darin wie einer, der nie losgefahren ist); die belastbaren
-    /// Groessen — Fortschritt und gefahrene Zellen — liessen sich noch nicht
-    /// gegeneinander stellen, weil der Pruefstand seine Zeile weiterhin nicht
-    /// in jedem Lauf abgibt (siehe OFFENE_FRAGEN BY.8).</para>
+    /// <para>⚠⚠ <b>STANDARDMAESSIG AUS — und seit dem 31.08.2026 ist das
+    /// GEMESSEN, nicht mehr blosse Vorsicht.</b> Vier Keime auf map_DM_4, 60 s,
+    /// auf dem trockengelegten Pruefstand (kein Absturz in 10 Laeufen):</para>
+    /// <code>
+    ///   Keim   ohne Ausweichen          mit Ausweichen
+    ///    7     Ziel 21  Fort 41,7  1572   Ziel 19  Fort 40,8  1567
+    ///   11     Ziel 19  Fort 40,5  1914   Ziel 18  Fort 39,3  1543
+    ///   23     Ziel 17  Fort 39,3  1650   Ziel 19  Fort 40,5  1545
+    ///   41     Ziel 20  Fort 41,7  1652   Ziel 21  Fort 41,0  1502
+    ///   ---------------------------------------------------------
+    ///   Mittel Ziel 19,25 Fort 40,8 1697   Ziel 19,25 Fort 40,4 1539
+    /// </code>
     ///
-    /// <para>⚠⚠ <b>ZURUECKGENOMMEN:</b> hier stand kurzzeitig, das Ausweichen
-    /// selbst bringe den Pruefstand zum Schweigen. Das war voreilig — die
-    /// Gegenprobe zeigt dasselbe Flackern OHNE Ausweichen. Der Verdacht gegen
-    /// den eigenen Code war unbegruendet; was bleibt, ist schlicht: <b>es ist
-    /// nicht gemessen, also ist es aus.</b> Dazu die Zahl <b>373979 Anfragen
-    /// fuer 34 Schritte</b> — sie sagt nichts ueber Fehler, aber viel ueber die
-    /// Last, und auch die gehoert gemessen.</para></summary>
+    /// <para><b>Der Zielerfolg ist auf die Nachkommastelle gleich</b> (19,25 zu
+    /// 19,25) — daran haette man es nicht entschieden, und die »18 statt 21«
+    /// vom 30.08. waren tatsaechlich nur die Streuung der Schwellengroesse, vor
+    /// der der Einchecker vom 23.08. gewarnt hat. Entschieden hat die
+    /// <b>Fahrleistung: 1697 gegen 1539 Zellen, und in 4 von 4 Laeufen in
+    /// dieselbe Richtung</b>. Vier von vier ist kein Rauschen.</para>
+    ///
+    /// <para>⭐ <b>Und die Lastzahl sagt, WARUM — sie ist der eigentliche
+    /// Befund.</b> Im Lauf mit Keim 41: <b>26886 gefragt, 24340 zugesagt,
+    /// 26 Schritte getan</b>. Auf jeden echten Ausweichschritt kommen
+    /// <b>tausend Zusagen</b>. Die kommen fast alle aus dem Zweig »faehrt schon
+    /// / dreht schon« weiter oben — der sagt dem Fahrer nicht <i>ich gehe dir
+    /// aus dem Weg</i>, sondern <i>warte, ich bin gleich weg</i>. <b>Unser
+    /// Ausweichen ist im Betrieb zu 99,9 % nicht Ausweichen, sondern Warten</b>
+    /// — und Warten ist als eigene Konfiguration gemessen der schlechteste Bau
+    /// von allen (Ziel 4, Fortschritt 20,2 gegen 21 und 41,7).</para>
+    ///
+    /// <para>⚠ <b>Was das NICHT heisst.</b> Es heisst nicht, dass die Lesung
+    /// falsch ist — sie steht oben und ist mehrfach nachgelesen. Das Original
+    /// gibt an dieser Stelle dieselbe Zusage (<c>POHYB != 0xFF -> ja</c>). Die
+    /// offene Frage sitzt <b>beim AUFRUFER</b>: was macht der Fahrer des
+    /// Originals mit der 1 aus <c>Can_go</c>, wenn der Blockierer nur »ich fahre
+    /// schon« gesagt hat? Wartet er wirklich, oder hat er dort eine Geduld, die
+    /// unser Fahrer nicht hat? <b>Bevor der Schalter an darf, muss der
+    /// Rueckgabeweg von <c>Can_go</c> @0x4055D0 beim Aufrufer gelesen werden</b>
+    /// — nicht gemessen, gelesen. Bis dahin: die Mechanik steht gebaut und
+    /// abgeschaltet da, mit ihren Zahlen daneben.</para></summary>
     public static bool AusweichenAn;
 
     /// <summary>Bequemlichkeit: der alte Name, damit die Abfragen unten lesbar

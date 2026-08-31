@@ -18948,3 +18948,102 @@ dazu die **Nahsperre** (`--keine-nahsperre`), die gebaut und nie bewertet ist.
 ⚠ Offen laut Bericht: Restrate ≤ ~14 % (95-%-Schranke aus 0/20), der
 Glue-Schreiber selbst ist unberührt, 15 kleine Katalog-JSONs sind nicht
 umgestellt, und gemessen wurde nur auf map_DM_4.
+
+
+## CC — DIE VIER DURCHGEMESSEN (31.08.2026)
+
+Der Pruefstand ist seit dem Allokationssturm-Fix (`a779ed5`) trocken. Damit
+waren die drei Entscheidungen, die auf einem sterbenden Pruefstand standen,
+zum ersten Mal wirklich messbar — plus die Nahsperre, die gebaut und nie
+bewertet war. `map_DM_4`, `--determinism-seed=7`, 60 s, **kein Absturz in
+16 Laeufen**.
+
+### CC.1 — Die Tafel
+
+```
+                                       Ziel  tot  ohneWeg  Fortschritt  gefahren
+A  ALT (Bezug)                          21    20     1        41,7        1572
+B  durchlaessige Karte OHNE Nahsperre     0    16     5        17,6         712
+C  durchlaessige Karte MIT  Nahsperre     0    22     4        24,0        1739
+D  Ausweichen                           19    19     1        40,8        1567
+E  Warten statt neu planen               4    20     1        20,2         743
+F  durchlaessig + Nahsperre + Ausweichen  0    25     4        21,5         963
+```
+
+### CC.2 — Die neue Suchkarte bleibt verworfen, und jetzt sauber
+
+B, C und F bringen **null** Einheiten ans Ziel. Das war am 23.08. schon die
+Lesung, aber die Zahl von damals stammte vom flackernden Pruefstand. Sie
+haelt. Die durchlaessige Karte ohne ein funktionierendes drittes Stueck ist
+nicht »etwas schlechter«, sie ist **kaputt**.
+
+### CC.3 — ⭐ Die Nahsperre ist BELEGT — sie reicht nur nicht
+
+Der Vergleich B gegen C ist der einzige, der die Nahsperre isoliert:
+
+```
+   Fortschritt  17,6 -> 24,0   (+36 %)
+   gefahren      712 -> 1739   (+144 %)
+```
+
+Die Lesung des 5x5-Kastens `@0x4D1363` und des harten `mov byte[edi], 2` war
+also **richtig**, und der Nachbau tut, was er soll: er macht die durchlaessige
+Karte in der Naehe wieder dicht und loest damit die Verklemmung, in der jeder
+auf jeden wartet. Nur reicht das nicht, um die Karte insgesamt zu retten
+(0 ans Ziel bleibt 0). **Die Nahsperre bleibt eingebaut** — im ALT-Pfad ist
+sie ohnehin wirkungslos, weil `IsFree` besetzte Zellen bereits sperrt; sie
+kostet dort nur den Zaehler. `--keine-nahsperre` bleibt als Gegenprobe.
+
+### CC.4 — ⚠ Das Ausweichen bleibt aus — aus einem NEUEN Grund
+
+Ein Lauf sagte 19 gegen 21 und haette »schadet ein bisschen« geheissen.
+Vier Keime sagen etwas anderes:
+
+```
+   Keim   ohne                    mit
+    7     21  41,7  1572          19  40,8  1567
+   11     19  40,5  1914          18  39,3  1543
+   23     17  39,3  1650          19  40,5  1545
+   41     20  41,7  1652          21  41,0  1502
+   Mittel 19,25  40,8  1697       19,25  40,4  1539
+```
+
+**Der Zielerfolg ist auf die Nachkommastelle gleich.** Die »18 statt 21« vom
+30.08. waren die Streuung der Schwellengroesse, vor der der Einchecker vom
+23.08. gewarnt hat — die Warnung war berechtigt, und ich haette am 30.08.
+beinahe auf ihrer Grundlage entschieden. Entschieden hat die **Fahrleistung:
+1697 gegen 1539, in 4 von 4 Laeufen in dieselbe Richtung.**
+
+**⭐ Der eigentliche Befund steht aber in der Lastzahl:** *26886 gefragt,
+24340 zugesagt, 26 Schritte getan.* Auf jeden echten Ausweichschritt kommen
+**tausend Zusagen**, und die kommen aus dem Zweig »faehrt schon / dreht
+schon«. Der sagt dem Fahrer nicht *ich gehe weg*, sondern *warte*. **Unser
+Ausweichen ist im Betrieb zu 99,9 % gar kein Ausweichen, sondern Warten** —
+und Warten ist als Konfiguration E gemessen der schlechteste Bau der Tafel.
+D ist also nicht »die Ausweichmechanik«, sondern »E in klein«, und dass es
+nur 4 % kostet statt 50 %, liegt allein daran, dass die Zusage seltener
+greift.
+
+**⚠ Was daraus NICHT folgt:** dass die Lesung falsch ist. Sie ist mehrfach
+nachgelesen, und das Original gibt an derselben Stelle dieselbe Zusage
+(`POHYB != 0xFF -> ja`). Die offene Frage sitzt **beim AUFRUFER**: was macht
+der Fahrer des Originals mit der 1 aus `Can_go`, wenn der Blockierer nur
+»ich fahre schon« gemeldet hat? Wartet er, oder hat er dort eine Geduld
+(+0x1C!), die unser Fahrer nicht hat? → **Naechster Griff: den Rueckgabeweg
+von `Can_go` @0x4055D0 beim Aufrufer LESEN**, nicht messen. Die Antwort
+entscheidet, ob das Ausweichen jemals an darf.
+
+### CC.5 — »Warten statt neu planen« bleibt verworfen
+
+E: 4 ans Ziel, Fortschritt 20,2 gegen 41,7. Das ist die deutlichste Zahl der
+Tafel. Bestaetigt vom 30.08.
+
+### CC.6 — Was der Tag methodisch gekostet hat
+
+Zwei Konfigurationen (die Suchkarte, das Warten) haben die Messung nur
+bestaetigt — die Entscheidungen waren richtig. Bei der dritten haette der
+Einzellauf zum richtigen Ergebnis aus dem **falschen Grund** gefuehrt, und die
+Begruendung waere in der Datei stehen geblieben. Der Merksatz dazu ist nicht
+neu, aber er hat heute wieder getragen: **eine Schwellengroesse entscheidet
+nichts; und wenn zwei Konfigurationen gleich gut aussehen, sagt die Lastzahl,
+ob sie dasselbe tun.**
