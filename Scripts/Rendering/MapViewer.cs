@@ -453,6 +453,7 @@ public partial class MapViewer : Node2D
         if (_kiProbe) _entities.KiProbeStart();
         if (_ausweichProbe) _entities.AusweichProbeStart();
         if (_aufgebenProbe) _entities.AufgebenProbeStart();
+        if (_bodenangriffProbe) _entities.BodenangriffProbeStart();
         if (_sellCheck) _entities.SellCheckStart();
         if (_shopCheckFlag) _entities.ShopCheckStart();
         if (_buyCheckFlag) _entities.BuyCheckStart();
@@ -1221,6 +1222,9 @@ public partial class MapViewer : Node2D
     /// <summary><c>--aufgeben-probe</c> — gibt er auf, wenn das Ziel belegt
     /// ist, und nur dann? Siehe Simulation/AufgebenProbe.cs.</summary>
     private bool _aufgebenProbe;
+    /// <summary><c>--bodenangriff-probe</c> — schiesst sie auf einen Baum?
+    /// Siehe Simulation/BodenangriffProbe.cs.</summary>
+    private bool _bodenangriffProbe;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
     /// seines Gleises? Siehe <c>MapEntityLayer.WagonFacingCheck</c>.</summary>
     private bool _wagonFacingCheck;
@@ -1803,6 +1807,7 @@ public partial class MapViewer : Node2D
             else if (a == "--ki-probe") _kiProbe = true;
             else if (a == "--ausweich-probe") _ausweichProbe = true;
             else if (a == "--aufgeben-probe") _aufgebenProbe = true;
+            else if (a == "--bodenangriff-probe") _bodenangriffProbe = true;
             else if (a.StartsWith("--aufgeben-probe="))
             {
                 _aufgebenProbe = true;
@@ -1815,6 +1820,8 @@ public partial class MapViewer : Node2D
             else if (a == "--kein-sektorangriff") MapEntityLayer.KeinSektorangriff = true;
             else if (a == "--kein-ausweichen") MapEntityLayer.AusweichenAn = false;
             else if (a == "--kein-aufgeben") MapEntityLayer.AufgebenAn = false;
+            else if (a == "--kein-bodenangriff") MapEntityLayer.BodenangriffAn = false;
+            else if (a == "--kein-zellschaden") MapEntityLayer.ZellSchadenAn = false;
             else if (a == "--keine-nahsperre") Simulation.NavGrid.KeineNahsperre = true;
             else if (a == "--giveway-warten") MapEntityLayer.GiveWayWarten = true;
             // --boden-um=<spalte>,<zeile> — die Bodenauskunft, siehe
@@ -2536,6 +2543,8 @@ public partial class MapViewer : Node2D
             // ⭐ 31.08.2026 — das Aufgeben @0x408D05, siehe Simulation/Aufgeben.cs.
             string ag = _entities.AufgebenLine();
             if (ag.Length > 0) GD.Print(ag);
+            string bg = _entities.BodenangriffLine();
+            if (bg.Length > 0) GD.Print(bg);
             string ein = _entities.EinfahrtLine();
             if (ein.Length > 0) GD.Print(ein);
             // ⭐ 30.08.2026 — was die Objektebene im Nebel gezeigt hat.
@@ -4613,7 +4622,13 @@ public partial class MapViewer : Node2D
                             }
                             if (mb.CtrlPressed)
                             {
-                                if (!_entities.PostCapture(GetGlobalMousePosition(), mb.ShiftPressed))
+                                // ⚠ Reihenfolge mit Bedacht: EINNEHMEN behaelt
+                                // den Vortritt (Fehler C9/C11 vom 17.08.2026),
+                                // danach der BODENANGRIFF des Originals
+                                // (@0x437417, UTOK_NA = 30000 + Spalte). Wer
+                                // gar nicht schiessen kann, faehrt hin.
+                                if (!_entities.PostCapture(GetGlobalMousePosition(), mb.ShiftPressed)
+                                 && !_entities.PostAttackGround(GetGlobalMousePosition(), mb.ShiftPressed))
                                     _entities.PostMove(GetGlobalMousePosition(), mb.ShiftPressed);
                             }
                             else if (!_entities.PostAttack(GetGlobalMousePosition(), mb.ShiftPressed))
@@ -4983,7 +4998,12 @@ public partial class MapViewer : Node2D
             }
             return;
         }
-        var hint = _entities.CursorHintAt(mapPos);
+        // ⭐ 31.08.2026 — STRG MACHT DEN ANGRIFFSZEIGER, wie im Original
+        // (@0x43201A: Strg gehalten UND Auswahl nicht leer -> Zeigerart 2,
+        // OHNE jede Pruefung des Ziels). Siehe Simulation/Bodenangriff.cs.
+        var hint = Input.IsKeyPressed(Key.Ctrl) && _entities.HasSelection
+                 ? MapEntityLayer.Hint.Enemy
+                 : _entities.CursorHintAt(mapPos);
         if (UI.GameCursors.Available)
         {
             UI.GameCursors.Use(hint switch

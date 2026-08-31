@@ -19734,3 +19734,72 @@ wer `0xA182E8` in der Zeigerbehandlung liest, welcher Zeigerindex das
 Angriffssymbol ist, und — fuer den Nachbau entscheidend — ob der Angriffsbefehl
 dann mit einer **Zelle** statt einer Zieleinheit abgesetzt wird. Unser
 Nachbau kennt nur Einheiten als Ziel.
+
+
+## CL — DER ANGRIFF AUF EINE ZELLE IST GEBAUT (31.08.2026)
+
+Nach dem Fable-Leselauf (`berichte/kampagne3-fable.md`, Teil 2) und der
+Berichtigung CK.5. Die erste Sequenz habe ich selbst nachgelesen, bevor gebaut
+wurde:
+
+```
+   0x43201A   al = byte[0xA182F9]                 ; STRG gehalten?
+   0x43201F   nein                       -> Zeigerart 0
+   0x432023   word[0x4FA0C8] == 0xFFFF   -> Zeigerart 0   ; nichts angewaehlt
+   0x43202E   dword[0x502AD4] := 2                ; ANGRIFFSZEIGER
+```
+**Ohne jede Pruefung des Ziels** — darum geht es auch auf leeren Boden.
+
+### CL.1 — Was gebaut ist
+
+- `Simulation/Bodenangriff.cs`: `Entity.AngriffsZelle`, der Kampfarm dazu
+  (in Reichweite feuern, sonst hinfahren), der Schuss auf einen Zielpunkt
+  ohne Zieleinheit (`Projectile.Target = -1`), und die Wirkung am Boden.
+- Ueber den **Bus**, nicht daneben: `PostAttackGround` setzt Busbefehl 11 mit
+  `UTOK_NA = 30000 + Spalte` ab, Zeile in P5; `ApplyAttack` nimmt das Band
+  jetzt an, statt es abzuweisen. Genau die Stelle, die der Kommentar in
+  `PostAttack` seit dem 22.08. offenliess.
+- Der **Einschlag** trifft jetzt die Zelle: Wald und zerstoerbare Objekte
+  bekommen ihre schon gelesenen Baender. ⚠ Das gilt fuer JEDEN Einschlag —
+  im Original macht `Zasah` die Baender an der getroffenen Zelle, gleich woher
+  der Schuss kam, ein danebengegangener Schuss zuendet also auch Wald an.
+- Zeiger: Strg + Auswahl -> Angriffssymbol.
+- Gegenproben `--kein-bodenangriff`, `--kein-zellschaden`.
+
+### CL.2 — ⚠ Unsere Abweichung, und sie ist bewusst
+
+Im Original erscheint der Angriffszeiger bei gehaltenem Strg IMMER. Bei uns
+ist Strg seit dem 17.08.2026 mit **einnehmen** belegt (Fehler C9/C11: sonst
+gewinnt bei einem feindlichen Gebaeude immer der Angriff und die Tuerzelle ist
+nie erreichbar). Damit der behobene Fehler nicht wieder aufgeht, hat das
+Einnehmen **Vortritt**: Strg auf ein einnehmbares Gebaeude nimmt ein, Strg auf
+alles andere greift die Zelle an. Die Abweichung sitzt genau dort, wo unsere
+eigene Erfindung ohnehin schon sass.
+
+### CL.3 — Gemessen, `--bodenangriff-probe`
+
+Der Fall haengt an einem Klick des Spielers und ist im kopflosen Lauf sonst
+nicht zu bekommen. Die Probe stellt ihn: eigene Einheit anwaehlen, naechste
+Waldzelle nehmen, Befehl ueber den Bus absetzen.
+
+```
+   Kampagne 3, Keim 7:
+   AUFBAU   Platz 1 (6x6 Reifen) auf (42,4), Waldzelle (45,1), Abstand 3
+   ERGEBNIS befohlen +1, Schuesse +14, Wald angezuendet +1, Wald weg +0
+```
+Der Schuetze fuhr von (42,4) auf (43,3) in Reichweite — der Fahrweg zum
+Bodenziel greift also mit — und feuerte 14mal auf die Zelle. Dass erst der
+zweite Schuss zuendet, passt zu den Baendern: der Schaden dieser Waffe liegt
+unter 46, dort wird gewuerfelt.
+
+### CL.4 — Was NICHT gebaut/gelesen ist
+
+- Die **Abbruchbedingung** des Originals (ungelesen). Bei uns hoert eine
+  Einheit auf, wenn auf der Zelle nichts Beschaedigbares mehr steht — unsere
+  Setzung.
+- Das **Zeigerbild**: welche Zeigerart im Original welches Bild zeichnet, ist
+  ungelesen; wir nehmen unser vorhandenes Angriffssymbol.
+- Das Band **40100…40249** (Bruecke/Rampe) weist `ApplyAttack` weiter ab.
+- Der **Knopf** im Bedienfeld, der laut Bericht denselben Merker bewaffnet
+  (`0x448785`, Knopfcodes 0/28/31), ist nicht verdrahtet — bei uns geht es
+  nur ueber Strg.

@@ -366,6 +366,42 @@ public partial class MapEntityLayer
     }
 
     /// <summary>
+    /// <b>ANGRIFF AUF EINE ZELLE</b> — Busbefehl 11 mit <c>UTOK_NA</c> aus dem
+    /// Band <c>30000 + Spalte</c>, die Zeile daneben. Das ist der Fall, den der
+    /// Kommentar in <see cref="PostAttack"/> seit dem 22.08.2026 als »gehoert
+    /// zu dem Tag, an dem der Angriff auch auf leeres Gelaende darf«
+    /// offenliess. Siehe Simulation/Bodenangriff.cs.
+    ///
+    /// <para>⚠ Anders als <see cref="PostAttack"/> fragt das Original hier
+    /// NICHTS: kein Ziel, keine Feindschaft, keine Pruefung. Wer schiessen
+    /// kann, schiesst.</para>
+    /// </summary>
+    public bool PostAttackGround(Vector2 mapPos, bool queue = false)
+    {
+        if (!BodenangriffAn) return false;
+        if (CellAt(mapPos) is not { } z) return false;
+
+        int utok = UtokBodenzelle + z.X;
+        int n = 0;
+        foreach (int i in _sel)
+        {
+            var e = _entities[i];
+            if (e.Dead || !CanFight(e) || e.DugIn) continue;
+            var c = CommandRecord.Make(CommandOp.Attack, (byte)ViewPlayer,
+                                 (short)i, (short)e.Col, (short)e.Row,
+                                 (short)utok, (short)z.Y,
+                                 (short)(queue ? 1 : 0));
+            if (Emit(c)) n++;
+        }
+        if (n == 0) return false;
+        AddOrderMark(ZellMitte(z.X, z.Y), attack: true);
+        _order = $"Bodenangriff auf ({z.X},{z.Y}): {n} Satz/Sätze";
+        UpdatePanel();
+        QueueRedraw();
+        return true;
+    }
+
+    /// <summary>
     /// <b>»EINNEHMEN« — Strg+Rechtsklick auf ein Gebäude.</b> Die Antwort auf
     /// die Fehler C9 und C11 (17.08.2026).
     ///
@@ -1413,7 +1449,23 @@ public partial class MapEntityLayer
                 if (_entities[k].IsBuilding && _entities[k].Slot == utok - 60000)
                 { hit = k; break; }
         }
-        else if (utok >= 8000) return false;      // Bodenzelle/Brücke: noch nicht gebaut
+        else if (utok >= UtokBodenzelle && utok < UtokBodenzelle + 256)
+        {
+            // ⭐ 31.08.2026 — DIE BODENZELLE. 30000 + Spalte, Zeile in P5.
+            // Sie hat keinen Getroffenen, also endet die Behandlung hier.
+            if (i < 0 || i >= _entities.Count) return false;
+            var ziel = _entities[i];
+            if (ziel.Dead || !CanFight(ziel) || ziel.DugIn) return false;
+            ziel.AngriffsZelle = new Vector2I(utok - UtokBodenzelle, c.P5);
+            ziel.Target = -1;
+            ziel.Ordered = true;
+            ziel.Path = null;
+            ziel.Reserved = null;
+            if (!queue) ziel.Orders.Clear();
+            BodenBefohlen++;
+            return true;
+        }
+        else if (utok >= 8000) return false;      // Bruecke/Rampe: noch nicht gebaut
         else hit = utok;
 
         if (i < 0 || i >= _entities.Count || hit < 0 || hit >= _entities.Count) return false;

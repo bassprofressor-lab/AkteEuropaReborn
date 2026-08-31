@@ -637,6 +637,11 @@ public partial class MapEntityLayer : Node2D
         // ---- combat state (Step B) ----
         public int AimFacing = -1;       // turret facing (-1 = follow the hull)
         public int Target = -1;          // entity index being attacked, -1 = none
+
+        /// <summary><b>Das Bodenziel</b> — die Zelle aus dem UTOK_NA-Band
+        /// 30000+Spalte, wenn der Angriff keiner Einheit gilt. Siehe
+        /// Simulation/Bodenangriff.cs.</summary>
+        public Vector2I? AngriffsZelle;
         public bool Ordered;             // true = the player ordered this attack
         public bool DugIn;               // "Eingraben" — holds position, harder to kill
 
@@ -9622,7 +9627,13 @@ public partial class MapEntityLayer : Node2D
     private void UpdateCombat(int i, Entity e, float dt)
     {
         if (e.Cooldown > 0) e.Cooldown -= dt;
-        if (e.Target < 0) { e.AimFacing = -1; return; }   // turret returns to the hull
+        // ⭐ 31.08.2026 — OHNE ZIELEINHEIT kann trotzdem ein BODENZIEL
+        // anliegen (Strg-Angriff auf eine Zelle). Siehe Bodenangriff.cs.
+        if (e.Target < 0)
+        {
+            if (BodenKampf(i, e, dt)) return;
+            e.AimFacing = -1; return;                     // turret returns to the hull
+        }
 
         var t = _entities[e.Target];
         if (t.Dead || t.IsProp) { e.Target = -1; return; }
@@ -10490,6 +10501,11 @@ public partial class MapEntityLayer : Node2D
                 // Einschlagsroutine des Originals @0x40D799 laeuft ueber alle
                 // 3000 Gleisplaetze und vergleicht genau diese Zelle.
                 RailHit(Mathf.RoundToInt(ic.X), Mathf.RoundToInt(ic.Y), p.Damage);
+                // ⭐ 31.08.2026 — und was SONST auf der Zelle steht: Wald und
+                // zerstoerbare Objekte. Im Original macht Zasah die Baender an
+                // der getroffenen Zelle, gleich woher der Schuss kam — ein
+                // danebengegangener Schuss zuendet also auch Wald an.
+                ZellWirkung(Mathf.RoundToInt(ic.X), Mathf.RoundToInt(ic.Y), p.Damage);
             }
             else Audio.GameSounds.Explosion();
             if (p.Target >= 0 && p.Target < _entities.Count)
@@ -28122,6 +28138,7 @@ public partial class MapEntityLayer : Node2D
         PollKiProbe(dt);
         PollAusweichProbe(dt);
         PollAufgebenProbe(dt);
+        PollBodenangriffProbe(dt);
         PollSellCheck();
         PollShopCheck();
         PollBuyCheck();
