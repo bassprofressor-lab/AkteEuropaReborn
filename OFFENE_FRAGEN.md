@@ -19132,3 +19132,90 @@ Wahrheit Warten« war richtig, aber der Grund liegt nicht im Zweig
 
 Erst wenn 1 und 2 stehen, darf `--ausweichen` erneut gemessen werden — und
 dann gegen dieselbe Tafel wie in CC.1, mit denselben vier Keimen.
+
+
+## CE — DER KURZSCHLUSS IST WEG, DAS AUSWEICHEN IST AN (31.08.2026)
+
+### CE.1 — ⚠ Zuerst: mein Bauauftrag CD.5 war zur Haelfte falsch
+
+CD.5 verlangte, den 1/60-Ausstieg und den Geduldszaehler zu bauen. **Beide
+standen seit dem 15.08.2026 fertig im Baum**, und zwar richtig:
+`GiveWayOdds = 60`, `BlockRearm = 40`, `BlockRearmSpread = 20`, und die
+Aufzaehlung `Step { Blocked = 0, GiveWay = 1, Free = 2 }` ist Can_gos
+Rueckgabe eins zu eins. Ich hatte gestern nur den Ausweich-Teil angesehen und
+daraus geschlossen, der Rest fehle. **Wer eine Luecke meldet, muss erst die
+Stelle lesen, an der sie sitzen wuerde.**
+
+### CE.2 — ⭐⭐⭐ Der wirkliche Fehler: ein `return` zu frueh
+
+```csharp
+if (... AusweichenAnfragen(wer, richtung))
+    return;                          // <-- sprang heraus
+if (Roll(GiveWayOdds) != 0) return;  // <-- der Ausstieg, unerreichbar
+```
+
+Der Einbau vom 30.08. hat den vorhandenen Ausstieg **kurzgeschlossen**. Bei
+einer Zusage — und das waren *24340 von 26886* — kam der 1/60-Wurf nie zum
+Zug. Darum wartete unser Fahrer unbegrenzt, und darum kostete das Ausweichen
+9 % Fahrleistung.
+
+**Im Original ist die Reihenfolge umgekehrt.** `0x404D20` sitzt INNERHALB von
+`Can_go`, und die Antwort **erzeugt** den Rueckgabewert (`@0x405BB0`:
+`cmp eax,1 / sbb eax,eax / inc eax`). Sie **waehlt** damit zwischen den beiden
+Ausstiegen — JA fuehrt in den 1/60-Zweig, NEIN in den Geduldszweig. Sie
+ersetzt keinen von beiden. Genau so steht es jetzt bei uns.
+
+### CE.3 — Dazu die Buendnispruefung aus `0x4054D0`
+
+`0x4054D0` ist der Test, den `Can_go` VOR der Anfrage macht:
+
+```
+   imap < 8000     -> neutok[fahrer/1000][ziel/1000]      Buendnismatrix 0x87B155
+   imap < 14000    -> pratelska_infa 0x433FE0             Infanteriezelle
+   sonst           -> 0                                   nie fragen
+```
+
+Gibt er 0, kehrt `Can_go` mit 0 zurueck, **ohne 0x404D20 auch nur zu rufen**.
+⭐ **Man bittet nur Verbuendete zur Seite; um einen Feind plant man herum.**
+Das fehlte uns — wir haben jeden gefragt.
+
+⚠ Nebenbei berichtigt: **10000–13999 sind INFANTERIEZELLEN, nicht Gebaeude**
+(sec16, 4000 Saetze zu 22 bei 0x7847E8). `0x433FE0` heisst im Spiel selbst
+`pratelska_infa`; die beiden anderen Rufe aus Can_go, `prejet` @0x412980 und
+@0x412A50, gehoeren zur selben Familie.
+
+### CE.4 — Die Messung, und was sie NICHT sagt
+
+Elf Keime, map_DM_4, 60 s:
+
+```
+             Ziel (Mittel)     gefahren (Mittel)
+   ohne          19,82              1708
+   mit           20,82              1717
+   Differenzen:  0 +3 +5 +1 +4 +4 -4 -3 +2 -1 0
+                 -> Mittel +1,0 , Streuung +-2,9 , t ~ 1,1
+```
+
+**Sechs besser, zwei gleich, drei schlechter — das ist NICHT gesichert.**
+
+⚠ Die ersten vier Keime hatten +2,25 gezeigt und sahen nach einem klaren
+Gewinn aus. Es waren genau die vier, an denen gebaut wurde. **Ueberanpassung
+an den eigenen Pruefsatz**, und zwar am selben Tag, an dem CC.6 diese Lehre
+aufgeschrieben hat. → [[akte-europa-arbeitsweise]].
+
+### CE.5 — Warum es trotzdem an ist
+
+Weil die Zahl nichts mehr **dagegen** sagt. Das Ausweichen war schaedlich
+(−9 % Fahrleistung, 4 von 4 gleichgerichtet) und ist jetzt neutral. Damit
+entscheidet nicht der Nutzen, sondern die **Treue**: die Mechanik ist gelesen
+(`0x404D20`, Tafel `0x4F5B10`), sie ist nachweislich nicht mehr schaedlich,
+und die Kampagne soll das Original sein. Waere sie messbar schlechter,
+bliebe sie aus. Gegenprobe: `--kein-ausweichen`.
+
+### CE.6 — ⚠ Was offen bleibt
+
+**Die Buendnispruefung ist gebaut, aber nicht erprobt.** In allen elf Laeufen
+meldete der Zaehler `feind 0` — auf map_DM_4 kam nie ein Gegner in den Weg.
+Der ganze gemessene Unterschied stammt also allein aus CE.2. Fuer CE.3 fehlt
+eine Karte, auf der sich die Fronten mischen. Bis dahin gilt sie als gelesen
+und gebaut, **nicht als gemessen**.

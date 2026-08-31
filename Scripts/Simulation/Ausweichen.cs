@@ -76,93 +76,47 @@ public partial class MapEntityLayer : Node2D
     private const int AusweichVerweigerung = 50;
 
     /// <summary>
-    /// <c>--ausweichen</c> — den Blockierer fragen, statt den Fahrer neu planen
-    /// zu lassen.
+    /// <c>--kein-ausweichen</c> — die Gegenprobe. Der Bau selbst ist seit dem
+    /// 31.08.2026 <b>an</b>.
     ///
-    /// <para>⚠⚠ <b>STANDARDMAESSIG AUS — und seit dem 31.08.2026 ist das
-    /// GEMESSEN, nicht mehr blosse Vorsicht.</b> Vier Keime auf map_DM_4, 60 s,
-    /// auf dem trockengelegten Pruefstand (kein Absturz in 10 Laeufen):</para>
+    /// <para><b>Die Geschichte in drei Messungen</b>, alle auf map_DM_4, 60 s,
+    /// auf dem trockengelegten Pruefstand:</para>
     /// <code>
-    ///   Keim   ohne Ausweichen          mit Ausweichen
-    ///    7     Ziel 21  Fort 41,7  1572   Ziel 19  Fort 40,8  1567
-    ///   11     Ziel 19  Fort 40,5  1914   Ziel 18  Fort 39,3  1543
-    ///   23     Ziel 17  Fort 39,3  1650   Ziel 19  Fort 40,5  1545
-    ///   41     Ziel 20  Fort 41,7  1652   Ziel 21  Fort 41,0  1502
-    ///   ---------------------------------------------------------
-    ///   Mittel Ziel 19,25 Fort 40,8 1697   Ziel 19,25 Fort 40,4 1539
+    ///   30.08.  ein Lauf              19 gegen 21 ans Ziel   -> "schadet"
+    ///   31.08.  vier Keime            19,25 gegen 19,25 ans Ziel,
+    ///                                 aber 1697 gegen 1539 gefahren, 4 von 4
+    ///                                 gleichgerichtet         -> AUS
+    ///   31.08.  nach dem Fix unten,
+    ///           elf Keime             19,82 gegen 20,82 ans Ziel (+1,0),
+    ///                                 1708 gegen 1717 gefahren -> NEUTRAL
     /// </code>
     ///
-    /// <para><b>Der Zielerfolg ist auf die Nachkommastelle gleich</b> (19,25 zu
-    /// 19,25) — daran haette man es nicht entschieden, und die »18 statt 21«
-    /// vom 30.08. waren tatsaechlich nur die Streuung der Schwellengroesse, vor
-    /// der der Einchecker vom 23.08. gewarnt hat. Entschieden hat die
-    /// <b>Fahrleistung: 1697 gegen 1539 Zellen, und in 4 von 4 Laeufen in
-    /// dieselbe Richtung</b>. Vier von vier ist kein Rauschen.</para>
+    /// <para>⚠ <b>Die mittlere Zeile war der Fehler, und er lag NICHT in der
+    /// Lesung.</b> Der Aufrufer <c>@0x408B88</c> hat zwei Ausstiege, und beide
+    /// stehen bei uns seit dem 15.08. korrekt gebaut da (<c>GiveWayOdds = 60</c>
+    /// und <c>BlockRearm = 40 / Spread = 20</c>). Der Einbau vom 30.08. hat den
+    /// ersten davon <b>kurzgeschlossen</b>: bei einer Zusage sprang er mit einem
+    /// blanken <c>return</c> heraus und uebersprang den 1/60-Wurf. Aus 24340
+    /// Zusagen wurden 24340 Dauerblockaden. Im Original ERZEUGT die Antwort den
+    /// Rueckgabewert (<c>@0x405BB0</c>: <c>cmp eax,1 / sbb eax,eax / inc eax</c>)
+    /// und WAEHLT damit zwischen den beiden Ausstiegen — sie ersetzt keinen.</para>
     ///
-    /// <para>⭐ <b>Und die Lastzahl sagt, WARUM — sie ist der eigentliche
-    /// Befund.</b> Im Lauf mit Keim 41: <b>26886 gefragt, 24340 zugesagt,
-    /// 26 Schritte getan</b>. Auf jeden echten Ausweichschritt kommen
-    /// <b>tausend Zusagen</b>. Die kommen fast alle aus dem Zweig »faehrt schon
-    /// / dreht schon« weiter oben — der sagt dem Fahrer nicht <i>ich gehe dir
-    /// aus dem Weg</i>, sondern <i>warte, ich bin gleich weg</i>. <b>Unser
-    /// Ausweichen ist im Betrieb zu 99,9 % nicht Ausweichen, sondern Warten</b>
-    /// — und Warten ist als eigene Konfiguration gemessen der schlechteste Bau
-    /// von allen (Ziel 4, Fortschritt 20,2 gegen 21 und 41,7).</para>
+    /// <para>⚠⚠ <b>Warum es trotzdem an ist, obwohl die Zahl nichts sagt.</b>
+    /// Über elf Keime sind es +1,0 Einheiten ans Ziel bei einer Streuung der
+    /// Differenzen von ±2,9 — also <b>nicht gesichert</b> (sechs besser, zwei
+    /// gleich, drei schlechter). Die ersten vier Keime hatten +2,25 gezeigt; das
+    /// war Ueberanpassung an genau die Keime, an denen gebaut wurde. <b>Es ist
+    /// also nicht der Nutzen, der entscheidet, sondern die Treue:</b> die
+    /// Mechanik ist gelesen (<c>0x404D20</c>, Tafel <c>0x4F5B10</c>), sie ist
+    /// nachweislich nicht mehr schaedlich, und die Kampagne soll das Original
+    /// sein. Waere sie messbar schlechter, bliebe sie aus.</para>
     ///
-    /// <para>⭐⭐⭐ <b>31.08.2026 — DER AUFRUFER IST GELESEN, UND ER HAT ZWEI
-    /// AUSSTIEGE, DIE UNS BEIDE FEHLEN.</b> Alle Rufe auf <c>Can_go</c> laufen
-    /// ueber den Linker-Thunk <c>0x4018FC</c> (eine Adressvollerhebung auf
-    /// <c>0x4055D0</c> findet genau EINEN Rufer — den Thunk; die fuenf echten
-    /// haengen an ihm). Der Fahrer ist <c>@0x408B88</c>, und er verzweigt
-    /// <b>dreifach</b>, nicht zweifach:</para>
-    /// <code>
-    ///   0x408B90  test eax, eax
-    ///   0x408B92  je   0x408BAB      ; 0
-    ///   0x408B94  cmp  eax, 1
-    ///   0x408B97  je   0x408D81      ; 1
-    ///   0x408B9D  cmp  eax, 2
-    ///   0x408BA0  je   0x408E1C      ; 2
-    /// </code>
-    ///
-    /// <para><b>Was die drei Werte sind</b> — abgelesen am Rueckgabepunkt des
-    /// Rad-/Kettenarms <c>@0x405B7C…0x405BBD</c> (Hover-Arm <c>@0x405897</c>
-    /// gegengeprueft, gleiches Muster):</para>
-    /// <code>
-    ///   imap 0xFFFE oder 0xFFFD          -> mov eax, 2
-    ///   sonst: 0x4054D0 gibt 0           -> xor eax, eax        (gar nicht erst gefragt)
-    ///   sonst: 0x404D20 fragen, dann
-    ///          cmp eax,1 / sbb eax,eax / inc eax
-    ///                       NEIN(0) -> 0 ; JA(>=1) -> 1
-    /// </code>
-    ///
-    /// <para><b>Und was der Fahrer damit tut:</b></para>
-    /// <code>
-    ///   2 = frei          @0x408E1C  POHYB := Richtung ; DALSI_SMER++ ; Schritt
-    ///   1 = ZUGESAGT      @0x408D81  rand() % 60 != 0 -> raus (warten)
-    ///                                sonst: Gattungstafel 0x40A220 -> NEU PLANEN
-    ///   0 = NEIN/hart zu  @0x408BAB  Geduld(+0x1C)-- ; != 0 -> raus (warten)
-    ///                                sonst Geduld := 40 + rand()%20
-    ///                                dann Gattungstafel 0x40A208 -> NEU PLANEN
-    /// </code>
-    /// <para>(Beide Gattungstafeln fuehren ueber <c>0x401726</c> auf
-    /// <c>0x4D32C0</c> — dasselbe Revier wie <c>0x4D1363</c> und
-    /// <c>0x4D3810</c>, also die Wegsuche.)</para>
-    ///
-    /// <para>⭐ <b>Damit ist die Messung oben erklaert und die Lesung
-    /// gerettet.</b> Das Original wartet an dieser Stelle <b>nie unbegrenzt</b>:
-    /// bei einer Zusage wuerfelt es jeden Takt <b>1/60</b> auf Neuplanung, bei
-    /// einer Absage laeuft ein <b>harter Zaehler von 40–59 Takten</b>. <b>Unser
-    /// Nachbau hat keins von beidem</b> — er wartet ewig, und darum sind aus
-    /// 24340 Zusagen 24340 Dauerblockaden geworden. Nicht die Mechanik ist
-    /// falsch, sondern ihr <b>fehlender Ausstieg</b>.</para>
-    ///
-    /// <para>⚠ <b>Was noch fehlt, bevor der Schalter an darf</b> (Bauauftrag,
-    /// nicht Forschung): (a) der 1/60-Ausstieg im Zugesagt-Fall, (b) der
-    /// Geduldszaehler <c>+0x1C</c> im Absage-Fall statt unseres sofortigen
-    /// Neuplanens, (c) <c>0x4054D0</c> ist noch nicht gelesen — es entscheidet,
-    /// wann gar nicht erst gefragt wird. Bis das steht, bleibt der Schalter
-    /// aus.</para></summary>
-    public static bool AusweichenAn;
+    /// <para>⚠ <b>Ungemessen bleibt die Buendnispruefung</b>
+    /// (<see cref="NeutokErlaubtFragen"/>, aus <c>0x4054D0</c>): auf map_DM_4
+    /// meldete sie in allen elf Laeufen <c>feind 0</c> — es kam nie ein Gegner
+    /// in den Weg. Sie ist gebaut und belegt, aber <b>nicht erprobt</b>. Eine
+    /// Karte, auf der sich die Fronten mischen, muesste das nachholen.</para></summary>
+    public static bool AusweichenAn = true;
 
     /// <summary>Bequemlichkeit: der alte Name, damit die Abfragen unten lesbar
     /// bleiben.</summary>
@@ -173,6 +127,30 @@ public partial class MapEntityLayer : Node2D
     /// nicht von »es wurde nie gefragt« zu unterscheiden.</summary>
     public int AusweichGefragt, AusweichZugesagt, AusweichSchritte, AusweichEng;
 
+    /// <summary>Wie oft gar nicht erst gefragt wurde, weil der Blockierer kein
+    /// Verbuendeter ist — der Nachbau von <c>0x4054D0</c>. ⚠ Ohne diese Zahl
+    /// ist »die Buendnispruefung greift« nicht von »es gab nie einen Feind im
+    /// Weg« zu unterscheiden.</summary>
+    public int AusweichFeind;
+
+    /// <summary>
+    /// <b>Der Nachbau von <c>neutok[a][b] != 0</c></b> — der Buendnismatrix
+    /// <c>0x87B155 + a*40 + b</c>, die <c>set_relation</c> @0x4CF6D0 symmetrisch
+    /// beschreibt. Ab Werk steht dort nur die Diagonale: jeder ist jedem
+    /// feindlich, bis ein Missionsskript Frieden macht.
+    ///
+    /// <para>⚠ UNSERE Entsprechung ist <c>_allied</c>; sie kommt aus derselben
+    /// Sektion (sec53) und ist damit dieselbe Tafel. Der Unterschied zu
+    /// <see cref="IsHostile"/> ist Absicht: dort haengen noch Sonderfaelle mit
+    /// dran (Untergestellte, Standby), die an DIESER Stelle im Original nicht
+    /// gefragt werden.</para></summary>
+    private bool NeutokErlaubtFragen(Entity fahrer, Entity block)
+    {
+        if (fahrer.Owner is < 0 or > 7 || block.Owner is < 0 or > 7) return false;
+        return _haveAllies ? _allied[fahrer.Owner, block.Owner]
+                           : block.Owner == fahrer.Owner;
+    }
+
     /// <summary>
     /// <b>Den Blockierer fragen</b> — der Nachbau von <c>0x404D20</c>.
     /// </summary>
@@ -181,12 +159,27 @@ public partial class MapEntityLayer : Node2D
     /// Richtungstafel <c>0x4F5AF0</c>. Sie wird zu <c>AKCE</c>.</param>
     /// <returns>true, wenn der Blockierer ausweicht oder ohnehin gleich
     /// weiterfährt.</returns>
-    private bool AusweichenAnfragen(int blockIdx, int richtung)
+    private bool AusweichenAnfragen(int fahrerIdx, int blockIdx, int richtung)
     {
         if (KeinAusweichen) return false;
         if (blockIdx < 0 || blockIdx >= _entities.Count) return false;
+        if (fahrerIdx < 0 || fahrerIdx >= _entities.Count) return false;
         var b = _entities[blockIdx];
         if (b.Dead || b.IsBuilding || b.IsProp) return false;
+
+        // ⭐⭐⭐ 31.08.2026 — MAN BITTET NUR VERBUENDETE. Gelesen in
+        // 0x4054D0, dem Test, den Can_go VOR der Anfrage macht:
+        //
+        //   imap < 8000     -> neutok[fahrer/1000][ziel/1000]   (Buendnismatrix)
+        //   imap < 14000    -> pratelska_infa 0x433FE0          (Infanteriezelle)
+        //   sonst           -> 0                                (nie fragen)
+        //
+        // Gibt dieser Test 0, kehrt Can_go mit 0 zurueck, OHNE 0x404D20 auch
+        // nur zu rufen — und beim Aufrufer greift dann der Geduldszweig statt
+        // des 1/60-Wurfs. Einen Feind bittet man nicht zur Seite, man plant um
+        // ihn herum. ⚠ Das fehlte uns: wir haben JEDEN gefragt.
+        if (!NeutokErlaubtFragen(_entities[fahrerIdx], b)) { AusweichFeind++; return false; }
+
         AusweichGefragt++;
 
         // ⚠ Die Verweigerung steht VOR allem anderen — genau wie im Original.
@@ -269,8 +262,9 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Die Meldezeile. Leer, solange niemand gefragt hat.</summary>
     public string AusweichLine()
-        => AusweichGefragt == 0 ? ""
+        => AusweichGefragt == 0 && AusweichFeind == 0 ? ""
          : $"ausweichen: {AusweichGefragt} gefragt, {AusweichZugesagt} zugesagt, "
-         + $"{AusweichSchritte} Schritte getan, {AusweichEng}x war es rundum zu; "
+         + $"{AusweichSchritte} Schritte getan, {AusweichEng}x war es rundum zu, "
+         + $"{AusweichFeind}x GAR NICHT gefragt (kein Verbuendeter); "
          + $"{GiveWayGewartet}x vor einer besetzten Zelle GEWARTET statt neu geplant";
 }

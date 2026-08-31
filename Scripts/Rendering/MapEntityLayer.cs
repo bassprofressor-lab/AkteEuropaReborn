@@ -5608,9 +5608,40 @@ public partial class MapEntityLayer : Node2D
                     if (Simulation.NavGrid.UrDirs[k].X == dx
                      && Simulation.NavGrid.UrDirs[k].Y == dy) { richtung = k; break; }
                 int wer = _nav.OccupantAt(naechste.X, naechste.Y);
-                if (richtung >= 0 && wer >= 0 && wer != i
-                    && AusweichenAnfragen(wer, richtung))
-                    return;                   // er geht zur Seite — Weg behalten
+                if (AusweichenAn && richtung >= 0 && wer >= 0 && wer != i)
+                {
+                    // ⭐⭐⭐ 31.08.2026 — DIE ANTWORT ERZEUGT DIE RUECKGABE,
+                    // SIE ERSETZT SIE NICHT.
+                    //
+                    // Hier stand ein blankes `return`, sobald der Blockierer
+                    // zusagte. Das war der Fehler: es sprang aus der Funktion
+                    // und uebersprang damit den 1/60-Wurf weiter unten — den
+                    // Ausstieg, der seit dem 15.08. korrekt gebaut dasteht.
+                    // Gemessen am 31.08.: 24340 Zusagen auf 26 Schritte, also
+                    // 24340 Dauerblockaden, und 9 % Fahrleistung weniger.
+                    //
+                    // Im Original ist die Reihenfolge eine andere. Die Anfrage
+                    // @0x404D20 sitzt INNERHALB von Can_go @0x4055D0, und ihre
+                    // Antwort BILDET den Rueckgabewert (@0x405BB0):
+                    //
+                    //   cmp eax,1 / sbb eax,eax / inc eax
+                    //        JA (>=1) -> Can_go gibt 1 -> und DANN der 1/60-Wurf
+                    //        NEIN (0) -> Can_go gibt 0 -> und DANN die Geduld
+                    //
+                    // Die Anfrage ersetzt also keinen der beiden Ausstiege, sie
+                    // WAEHLT zwischen ihnen. Genau das steht jetzt hier.
+                    if (!AusweichenAnfragen(i, wer, richtung))
+                    {
+                        // NEIN -> Can_go haette 0 gegeben. Das ist der
+                        // Geduldszweig @0x408BAB, nicht der 1/60-Zweig.
+                        if (--e.Block > 0) return;
+                        e.Block = BlockRearm
+                                + Simulation.Determinism.Roll(BlockRearmSpread);
+                        Repath(i, e);
+                        return;
+                    }
+                    // JA -> Can_go gibt 1. Weiter zum Wurf unten, NICHT `return`.
+                }
             }
 
             // ⭐⭐⭐ 30.08.2026, ZWEITER TEIL — UND DANN WARTEN, NICHT NEU PLANEN.
