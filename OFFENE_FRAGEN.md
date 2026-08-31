@@ -19047,3 +19047,88 @@ Begruendung waere in der Datei stehen geblieben. Der Merksatz dazu ist nicht
 neu, aber er hat heute wieder getragen: **eine Schwellengroesse entscheidet
 nichts; und wenn zwei Konfigurationen gleich gut aussehen, sagt die Lastzahl,
 ob sie dasselbe tun.**
+
+
+## CD — DER AUFRUFER VON `Can_go` IST GELESEN (31.08.2026)
+
+CC.4 endete mit einer Frage, und sie ist beantwortet. **Das Ausweichen war
+nicht falsch gelesen — ihm fehlt der AUSSTIEG.**
+
+### CD.1 — ⚠ Erst die Falle: der Linker-Thunk
+
+`rufer.py 0x4055D0` findet **einen** Rufer: `0x4018FC`, und das ist ein
+`jmp`. Es ist die JMP-Tafel des inkrementellen Linkers; jeder echte Aufruf
+geht dort durch. Die fuenf wirklichen Rufer haengen an `0x4018FC`:
+
+```
+  00407CA7   00407E4C   00408A6C   00408B88   0040915D
+```
+
+Das ist dieselbe Falle wie der `lea`-Zeigerschreiber vom 30.08., nur eine
+Etage tiefer: **eine Adressvollerhebung auf einen Funktionsanfang findet in
+dieser EXE die Aufrufer NICHT.** Sie findet den Thunk. → Regel in
+[[akte-europa-arbeitsweise]].
+
+### CD.2 — `Can_go` gibt DREI Werte zurueck, nicht zwei
+
+Abgelesen am Rueckgabepunkt des Rad-/Kettenarms `@0x405B7C…0x405BBD`;
+der Hover-Arm `@0x405897` wurde gegengeprueft und hat dasselbe Muster:
+
+```
+   imap 0xFFFE (frei) oder 0xFFFD (rau)   -> mov eax, 2
+   sonst 0x4054D0 gibt 0                  -> xor eax, eax     (gar nicht gefragt)
+   sonst 0x404D20 fragen, dann:
+        cmp eax,1 / sbb eax,eax / inc eax
+             → NEIN (0)  ergibt 0
+             → JA  (>=1) ergibt 1
+```
+
+### CD.3 — ⭐⭐⭐ Und was der Fahrer `@0x408B88` damit tut
+
+```
+   2 = frei       @0x408E1C  POHYB := Richtung ; DALSI_SMER++ ; Schritt ausfuehren
+   1 = ZUGESAGT   @0x408D81  rand() % 60 != 0  -> raus, also WARTEN
+                             sonst: Gattungstafel 0x40A220 -> NEU PLANEN
+   0 = NEIN       @0x408BAB  Geduld (+0x1C) -- ; != 0 -> raus, also WARTEN
+                             sonst: Geduld := 40 + rand()%20
+                                    Gattungstafel 0x40A208 -> NEU PLANEN
+```
+
+Beide Gattungstafeln schieben einen Code (1/3/5/7/0xD) und rufen ueber den
+Thunk `0x401726` auf **`0x4D32C0`** — dasselbe Revier wie `0x4D1363` (der
+5x5-Kasten) und `0x4D3810`. Es ist die Wegsuche. **»Neu planen« ist damit
+belegt und nicht mehr geraten.**
+
+Im Null-Zweig steht zusaetzlich ein Abbruch: `@0x408D07` wird aus CX/CY
+(+0x18/+0x19) der imap-Index gebildet, und wenn dort **keine** Einheit steht
+(`>= 0x1F40`) und der Abstand (`0x410D70`) unter 3 liegt, wird
+`UKOL := 0` gesetzt — der Fahrer **gibt auf, weil er nah genug ist**.
+
+### CD.4 — ⭐ Was das fuer CC.4 heisst
+
+**Das Original wartet an dieser Stelle NIE unbegrenzt.** Bei einer Zusage
+wuerfelt es jeden Takt 1/60 auf Neuplanung (Erwartungswert ~60 Takte), bei
+einer Absage laeuft ein harter Zaehler von 40–59 Takten. **Unser Nachbau hat
+keins von beidem.** Er wartet ewig, sobald der Blockierer zusagt — und darum
+sind aus *24340 Zusagen* ebenso viele Dauerblockaden geworden, und darum
+kostete das Ausweichen 9 % Fahrleistung.
+
+**Nicht die Mechanik ist falsch, sondern ihr fehlender Ausstieg.** Die
+Messung von CC.4 bleibt gueltig; ihre Deutung »unser Ausweichen ist in
+Wahrheit Warten« war richtig, aber der Grund liegt nicht im Zweig
+»faehrt schon«, sondern darin, dass **wir das Warten nie beenden**.
+
+### CD.5 — Der Bauauftrag (nicht mehr Forschung)
+
+1. **Der 1/60-Ausstieg** im Zugesagt-Fall — je Takt eine Chance auf
+   Neuplanung.
+2. **Der Geduldszaehler `+0x1C`** im Absage-Fall: herunterzaehlen, bei 0 auf
+   40 + rand()%20 setzen und *dann erst* neu planen. Wir planen heute
+   **sofort** neu — das ist die Berichtigung zu BY.4, jetzt mit der Zahl
+   dahinter.
+3. ⚠ **`0x4054D0` ist noch nicht gelesen.** Es entscheidet, wann gar nicht
+   erst gefragt wird (Rueckgabe 0 ohne Anfrage). Ohne das ist Punkt 2 nur
+   halb belegt.
+
+Erst wenn 1 und 2 stehen, darf `--ausweichen` erneut gemessen werden — und
+dann gegen dieselbe Tafel wie in CC.1, mit denselben vier Keimen.

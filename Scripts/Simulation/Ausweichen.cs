@@ -109,16 +109,59 @@ public partial class MapEntityLayer : Node2D
     /// — und Warten ist als eigene Konfiguration gemessen der schlechteste Bau
     /// von allen (Ziel 4, Fortschritt 20,2 gegen 21 und 41,7).</para>
     ///
-    /// <para>⚠ <b>Was das NICHT heisst.</b> Es heisst nicht, dass die Lesung
-    /// falsch ist — sie steht oben und ist mehrfach nachgelesen. Das Original
-    /// gibt an dieser Stelle dieselbe Zusage (<c>POHYB != 0xFF -> ja</c>). Die
-    /// offene Frage sitzt <b>beim AUFRUFER</b>: was macht der Fahrer des
-    /// Originals mit der 1 aus <c>Can_go</c>, wenn der Blockierer nur »ich fahre
-    /// schon« gesagt hat? Wartet er wirklich, oder hat er dort eine Geduld, die
-    /// unser Fahrer nicht hat? <b>Bevor der Schalter an darf, muss der
-    /// Rueckgabeweg von <c>Can_go</c> @0x4055D0 beim Aufrufer gelesen werden</b>
-    /// — nicht gemessen, gelesen. Bis dahin: die Mechanik steht gebaut und
-    /// abgeschaltet da, mit ihren Zahlen daneben.</para></summary>
+    /// <para>⭐⭐⭐ <b>31.08.2026 — DER AUFRUFER IST GELESEN, UND ER HAT ZWEI
+    /// AUSSTIEGE, DIE UNS BEIDE FEHLEN.</b> Alle Rufe auf <c>Can_go</c> laufen
+    /// ueber den Linker-Thunk <c>0x4018FC</c> (eine Adressvollerhebung auf
+    /// <c>0x4055D0</c> findet genau EINEN Rufer — den Thunk; die fuenf echten
+    /// haengen an ihm). Der Fahrer ist <c>@0x408B88</c>, und er verzweigt
+    /// <b>dreifach</b>, nicht zweifach:</para>
+    /// <code>
+    ///   0x408B90  test eax, eax
+    ///   0x408B92  je   0x408BAB      ; 0
+    ///   0x408B94  cmp  eax, 1
+    ///   0x408B97  je   0x408D81      ; 1
+    ///   0x408B9D  cmp  eax, 2
+    ///   0x408BA0  je   0x408E1C      ; 2
+    /// </code>
+    ///
+    /// <para><b>Was die drei Werte sind</b> — abgelesen am Rueckgabepunkt des
+    /// Rad-/Kettenarms <c>@0x405B7C…0x405BBD</c> (Hover-Arm <c>@0x405897</c>
+    /// gegengeprueft, gleiches Muster):</para>
+    /// <code>
+    ///   imap 0xFFFE oder 0xFFFD          -> mov eax, 2
+    ///   sonst: 0x4054D0 gibt 0           -> xor eax, eax        (gar nicht erst gefragt)
+    ///   sonst: 0x404D20 fragen, dann
+    ///          cmp eax,1 / sbb eax,eax / inc eax
+    ///                       NEIN(0) -> 0 ; JA(>=1) -> 1
+    /// </code>
+    ///
+    /// <para><b>Und was der Fahrer damit tut:</b></para>
+    /// <code>
+    ///   2 = frei          @0x408E1C  POHYB := Richtung ; DALSI_SMER++ ; Schritt
+    ///   1 = ZUGESAGT      @0x408D81  rand() % 60 != 0 -> raus (warten)
+    ///                                sonst: Gattungstafel 0x40A220 -> NEU PLANEN
+    ///   0 = NEIN/hart zu  @0x408BAB  Geduld(+0x1C)-- ; != 0 -> raus (warten)
+    ///                                sonst Geduld := 40 + rand()%20
+    ///                                dann Gattungstafel 0x40A208 -> NEU PLANEN
+    /// </code>
+    /// <para>(Beide Gattungstafeln fuehren ueber <c>0x401726</c> auf
+    /// <c>0x4D32C0</c> — dasselbe Revier wie <c>0x4D1363</c> und
+    /// <c>0x4D3810</c>, also die Wegsuche.)</para>
+    ///
+    /// <para>⭐ <b>Damit ist die Messung oben erklaert und die Lesung
+    /// gerettet.</b> Das Original wartet an dieser Stelle <b>nie unbegrenzt</b>:
+    /// bei einer Zusage wuerfelt es jeden Takt <b>1/60</b> auf Neuplanung, bei
+    /// einer Absage laeuft ein <b>harter Zaehler von 40–59 Takten</b>. <b>Unser
+    /// Nachbau hat keins von beidem</b> — er wartet ewig, und darum sind aus
+    /// 24340 Zusagen 24340 Dauerblockaden geworden. Nicht die Mechanik ist
+    /// falsch, sondern ihr <b>fehlender Ausstieg</b>.</para>
+    ///
+    /// <para>⚠ <b>Was noch fehlt, bevor der Schalter an darf</b> (Bauauftrag,
+    /// nicht Forschung): (a) der 1/60-Ausstieg im Zugesagt-Fall, (b) der
+    /// Geduldszaehler <c>+0x1C</c> im Absage-Fall statt unseres sofortigen
+    /// Neuplanens, (c) <c>0x4054D0</c> ist noch nicht gelesen — es entscheidet,
+    /// wann gar nicht erst gefragt wird. Bis das steht, bleibt der Schalter
+    /// aus.</para></summary>
     public static bool AusweichenAn;
 
     /// <summary>Bequemlichkeit: der alte Name, damit die Abfragen unten lesbar
