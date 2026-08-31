@@ -451,6 +451,7 @@ public partial class MapViewer : Node2D
         if (_depotFlow) _entities.DepotFlowStart();
         if (_einfahrtCheck) _entities.EinfahrtCheckStart();
         if (_kiProbe) _entities.KiProbeStart();
+        if (_ausweichProbe) _entities.AusweichProbeStart();
         if (_sellCheck) _entities.SellCheckStart();
         if (_shopCheckFlag) _entities.ShopCheckStart();
         if (_buyCheckFlag) _entities.BuyCheckStart();
@@ -1211,6 +1212,11 @@ public partial class MapViewer : Node2D
     /// <summary><c>--ki-probe</c> — reagiert die Streife aus der Naehe?
     /// Siehe Simulation/KiProbe.cs.</summary>
     private bool _kiProbe;
+
+    /// <summary><c>--ausweich-probe</c> — wird ein Feind zur Seite gebeten
+    /// oder nicht? Der Pruefstand zur Buendnispruefung aus <c>0x4054D0</c>;
+    /// siehe Simulation/AusweichProbe.cs.</summary>
+    private bool _ausweichProbe;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
     /// seines Gleises? Siehe <c>MapEntityLayer.WagonFacingCheck</c>.</summary>
     private bool _wagonFacingCheck;
@@ -1791,6 +1797,7 @@ public partial class MapViewer : Node2D
             // --ki-probe: eine eigene Einheit neben die naechste Gegnereinheit
             // stellen und nachsehen, ob die Streife sie aufnimmt. Siehe KiProbe.cs.
             else if (a == "--ki-probe") _kiProbe = true;
+            else if (a == "--ausweich-probe") _ausweichProbe = true;
             // Gegenprobe zur doppelten Abdunklung der Uebersicht, siehe Minimap.
             else if (a == "--minikarte-nebel-einmal") Minimap.NebelEinmal = true;
             else if (a == "--minikarte-nebel-zweimal") Minimap.NebelZweimal = true;

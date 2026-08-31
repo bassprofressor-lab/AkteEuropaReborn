@@ -19219,3 +19219,74 @@ meldete der Zaehler `feind 0` — auf map_DM_4 kam nie ein Gegner in den Weg.
 Der ganze gemessene Unterschied stammt also allein aus CE.2. Fuer CE.3 fehlt
 eine Karte, auf der sich die Fronten mischen. Bis dahin gilt sie als gelesen
 und gebaut, **nicht als gemessen**.
+
+
+## CF — DIE BUENDNISPRUEFUNG IST GEMESSEN (31.08.2026)
+
+CE.6 liess sie als *gelesen und gebaut, nicht gemessen* stehen: in elf Laeufen
+meldete der Zaehler `feind 0`, weil auf map_DM_4 nie ein Gegner in den Weg kam.
+**Der Pruefstand enthielt den Gegenstand nicht** — dieselbe Lage wie
+seinerzeit bei `--ki-probe`.
+
+### CF.1 — Erst der billige Versuch, und warum er nicht trug
+
+Kampagne 1/2/5 mit `--stuck-check`: Kampagne 2 befiehlt **7 Einheiten, von
+denen 6 ohne Sprit stehenbleiben**, und `feind` blieb 0. Die Kampagnenkarten
+liefern den Fall nicht von selbst. (Nebenbei: `--campaign=N` muss **hinter**
+das `--`, sonst schluckt Godot es und das Spiel bleibt im Menue stehen.)
+
+### CF.2 — `--ausweich-probe`, und drei Fehlversuche auf dem Weg dorthin
+
+Der Pruefstand stellt einen Blockierer **auf die naechste Zelle eines
+fahrenden Weges** und sieht nach, ob gefragt wird. Bis er das konnte, waren
+drei Anlaeufe noetig — **jeder davon haette als Befund ueber die
+Buendnispruefung durchgehen koennen**:
+
+```
+  1. Goal/Path/PathIdx von Hand gesetzt   -> Fahrer stand 3 s auf PathIdx 0/16
+     Ein selbstgesetzter Weg macht eine Einheit nicht fahrend.
+  2. EINE Einheit per IssueMove befehligt -> Weg 12, dann Weg 0, kein Schritt
+     Auf map_DM_4 steht der eigene Pulk so dicht, dass eine einzelne Einheit
+     nicht herauskommt (dieselbe Falle, vor der StuckCheckStart seit dem
+     16.08.2026 warnt).
+  3. Erst Blockierer, dann Ziel            -> nie eine Blockade
+     Die Wegsuche plant um besetzte Zellen herum. Der Weg muss ZUERST stehen.
+```
+
+Getragen hat erst: **`StuckCheckStart()` aufrufen** (alle 48 fahren), warten,
+bis eine Einheit **wirklich** faehrt (`PathIdx > 0`), und ihr dann den
+Blockierer vorsetzen.
+
+### CF.3 — ⚠ Die erste Messlatte war unbrauchbar
+
+Sie lautete: *Feind im Weg → `AusweichFeind` steigt, `AusweichGefragt` bleibt
+stehen.* Der zweite Teil ist nicht messbar. Die Zaehler sind **global**, und
+im Aufbau fahren 48 Einheiten, die einander dauernd blockieren — im Feindfall
+liefen 443 bis 700 Anfragen mit, die mit dem gestellten Feind nichts zu tun
+hatten.
+
+**Nicht die Messlatte nachtraeglich passend machen, sondern sagen, warum sie
+falsch war:** sie verlangte von einer globalen Zahl eine oertliche Aussage.
+Tragfaehig ist allein der KONTRAST in `AusweichFeind`.
+
+### CF.4 — ⭐⭐⭐ Das Ergebnis
+
+```
+   Keim    Feind im Weg         Eigener im Weg
+     7     feind +20            feind +0   (bei 339 Anfragen)
+    23     feind +28            feind +0   (bei 430 Anfragen)
+    41     feind +27            feind +0   (bei 351 Anfragen)
+```
+
+Drei von drei. **Im Freundfall exakt NULL Ablehnungen bei 339–430 Anfragen**,
+im Feindfall 20 bis 28. Das Nullmodell lag schon vor: elf Laeufe ohne
+gestellten Feind, `feind 0`.
+
+⭐ **Und die Diagnosezeile belegt den zweiten Teil der Lesung mit:**
+`Block 19 -> 15 -> 26`. Der Geduldszaehler `+0x1C` laeuft, der Feindfall geht
+also wirklich in den Geduldszweig `@0x408BAB` und nicht in den 1/60-Zweig —
+genau wie `0x4054D0` es vorschreibt.
+
+**Damit ist CE.6 erledigt.** Die Buendnispruefung ist gelesen, gebaut **und
+gemessen**: *man bittet nur Verbuendete zur Seite; um einen Feind plant man
+herum.*
