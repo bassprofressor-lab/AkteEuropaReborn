@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Import;
+﻿namespace AkteEuropaReborn.Import;
 
 using System;
 using System.Collections.Generic;
@@ -174,6 +174,7 @@ public sealed class CatalogueExporter
         WriteWeapons(say);
         WriteResearch(say);
         WriteComponentStats(say);
+        WriteUpgradeTable(say);
         WriteDiplomacy(say);
         WriteResources(say);
         WriteMissionPlans(say);
@@ -484,6 +485,7 @@ public sealed class CatalogueExporter
     }
 
     public int ComponentRows;
+    public int UpgradeRowsWritten;
 
     /// <summary>The stats array as raw rows, counted from the ARRAY base
     /// (0x5045a0) rather than from record 0.
@@ -523,6 +525,53 @@ public sealed class CatalogueExporter
         sb.Append("}}");
         File.WriteAllText(_dst + "/component_stats.json", sb.ToString(), new UTF8Encoding(false));
         say?.Invoke($"Bauteil-Stats: {ComponentRows} Zeilen");
+    }
+
+    /// <summary>
+    /// ⭐ <b>Die Aufwertungstafel <c>0x5035F0</c></b> — 50 Zeilen zu 24 Byte.
+    /// Sie sagt, WIEVIEL eine Forschung an einem Bauteil verbessert, und ohne
+    /// sie ist die Aufwertung nicht zu bauen, ohne Zahlen zu erfinden.
+    ///
+    /// <para>Gelesen am 03.09.2026 (<c>berichte/aufwertung-lesung.md</c>).
+    /// Belegt sind <b>35</b> Zeilen: Waffen <c>0x01…0x13</c>, Fahrwerke
+    /// <c>0xA0…0xAF</c> — dieselbe Menge, die <c>OFFENE_FRAGEN.md</c> Abschnitt
+    /// AN als »die 35 Bauteile der Aufwertungstafel« führt. Nullmodell für die
+    /// Ausrichtung: <c>+0x01</c> ergibt über die belegten Zeilen lückenlos
+    /// <c>0x01…0x13</c> und <c>0xA0…0xAF</c>; bei falscher Schrittweite wäre
+    /// das Rauschen.</para>
+    ///
+    /// <para>⚠ <c>+0x02</c> wird MITEXPORTIERT, ist aber ein <b>Laufzeitfeld</b>
+    /// (<c>0x4AAA20</c> würfelt es). In der Datei steht überall 0; wer den Wert
+    /// als Wähler benutzt, baut den Fehlschluss »der Tank wächst nie« ein.
+    /// </para></summary>
+    private void WriteUpgradeTable(Action<string>? say)
+    {
+        if (_exe == null) return;
+        var sb = new StringBuilder(1 << 13);
+        sb.Append("{\"_note\":\"upgrade table from GAME.EXE @VA 0x5035f0, ");
+        sb.Append($"stride {ExeTables.UpgradeStride}, {ExeTables.UpgradeRows} rows; ");
+        sb.Append("+0x01 component, +0x04 value at level 9 (u16), +0x06/+0x07/+0x09 ");
+        sb.Append("chassis deltas, +0x08/+0x0a/+0x0c weapon deltas, +0x0e THE FUEL TANK ");
+        sb.Append("(u16, chassis, roll 2 only), +0x10/+0x12/+0x14 negated deltas. ");
+        sb.Append("+0x02 is a RUNTIME field: 0x4aaa20 rolls it (rand and 3) to pick which ");
+        sb.Append("property improves - the zeroes in this file mean nothing.\",");
+        sb.Append($"\"stride\":{ExeTables.UpgradeStride},\"rows\":{{");
+        bool first = true;
+        for (int row = 0; row < ExeTables.UpgradeRows; row++)
+        {
+            var r = _exe.UpgradeRow(row);
+            if (r.Length != ExeTables.UpgradeStride) continue;
+            if (CwmExtra.AllZero(r, 0, r.Length)) continue;
+            if (!first) sb.Append(',');
+            first = false;
+            sb.Append($"\"{row}\":\"{Hex(r, 0, r.Length)}\"");
+            UpgradeRowsWritten++;
+        }
+        sb.Append("}}");
+        File.WriteAllText(_dst + "/upgrade_table.json", sb.ToString(), new UTF8Encoding(false));
+        say?.Invoke($"Aufwertungstafel: {UpgradeRowsWritten} belegte Zeilen" +
+                    (UpgradeRowsWritten == 35 ? " (erwartet 35)"
+                                              : $"   ⚠ ERWARTET 35, nicht {UpgradeRowsWritten}"));
     }
 
     // ---- sec47: the design list --------------------------------------------

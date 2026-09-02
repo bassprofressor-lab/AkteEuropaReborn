@@ -33,6 +33,20 @@ public sealed class ExeTables
     /// counted from here.</summary>
     public const uint StatsArrayBase = 0x5045a0;
 
+    /// <summary>⭐ <b>Die Aufwertungstafel</b> — 50 Zeilen zu 24 Byte, davon 35
+    /// belegt (Waffen <c>0x01…0x13</c>, Fahrwerke <c>0xA0…0xAF</c>). Gelesen am
+    /// 03.09.2026, siehe <c>berichte/aufwertung-lesung.md</c>.
+    ///
+    /// <para>Sie sagt, WIEVIEL eine Forschung verbessert. <c>+0x01</c> ist das
+    /// Bauteil, <c>+0x04</c> der Endwert auf Stufe 9, und <c>+0x02</c> ist
+    /// ⚠ ein <b>Laufzeitfeld</b>: <c>0x4AAA20</c> würfelt dort
+    /// <c>Zufall &amp; 3</c> und wählt damit, WELCHE Eigenschaft wächst. In der
+    /// ausgelieferten Datei steht es überall auf 0 — daraus zu schliessen, es
+    /// werde immer derselbe Arm genommen, wäre falsch.</para></summary>
+    public const uint UpgradeTable = 0x5035f0;
+    public const int UpgradeStride = 24;
+    public const int UpgradeRows = 50;
+
     /// <summary>Ten buildable ship designs, 42 bytes each (SHIP_PROD).</summary>
     public const uint ShipDesigns = 0x52eda0;
     public const int ShipStride = 42;
@@ -902,6 +916,17 @@ public sealed class ExeTables
     {
         if (row < 0 || row >= 200) return Array.Empty<byte>();
         return Read((uint)(StatsBase - (StatsRecord0 - StatsArrayBase) + row * StatsStride), StatsStride);
+    }
+
+    /// <summary>Eine Zeile der Aufwertungstafel, siehe <see cref="UpgradeTable"/>.
+    /// ⚠ Dieselbe Verschiebung wie bei den Bauteilen: liegt die EXE relokiert,
+    /// wandert die Tafel mit, und <c>StatsBase - StatsRecord0</c> ist der
+    /// gemessene Versatz.</summary>
+    public byte[] UpgradeRow(int row)
+    {
+        if (row < 0 || row >= UpgradeRows) return Array.Empty<byte>();
+        uint versatz = StatsBase - StatsRecord0;
+        return Read((uint)(UpgradeTable + versatz + row * UpgradeStride), UpgradeStride);
     }
 
     // ---- the two string tables ---------------------------------------------

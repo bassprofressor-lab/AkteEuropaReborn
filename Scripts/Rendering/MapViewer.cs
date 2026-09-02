@@ -1396,6 +1396,9 @@ public partial class MapViewer : Node2D
             // Probe misst beides. Siehe Simulation/BefehlsklangProbe.cs.
             else if (a == "--befehlsklang-weg-alt") MapEntityLayer.BefehlsklangWegAlt = true;
             else if (a == "--befehlsklang-probe") _befehlsklangProbe = true;
+            else if (a == "--aufwertung-probe") _aufwertungProbe = true;
+            else if (a == "--aufwertung-alt") MapEntityLayer.AufwertungAlt = true;
+            else if (a == "--aufwertung-immer-tank") MapEntityLayer.AufwertungImmerTank = true;
             else if (a == "--minen-check") _minenCheck = true;
             // Auch die =-Form annehmen. spielen.cmd nennt in seiner Hilfe `--erwartung=18`,
             // und ein Gleichheitsvergleich hat die still verschluckt: kein Blatt, keine Meldung,
@@ -2137,6 +2140,10 @@ public partial class MapViewer : Node2D
     /// Rechtsklicks — und zaehlt, ob dabei der Befehlsklang faellt. Siehe
     /// Simulation/BefehlsklangProbe.cs.</summary>
     private bool _befehlsklangProbe;
+    /// <summary><c>--aufwertung-probe</c>: wertet ein Fahrwerk auf und sagt,
+    /// ob der Tank waechst und ob der Wurf wirklich streut. Siehe
+    /// Simulation/AufwertungProbe.cs.</summary>
+    private bool _aufwertungProbe;
     private bool _befehlsklangGestartet;
     private bool _minenCheck;
     /// <summary><c>--sprit-check</c>: schickt alle eigenen fahrenden Einheiten
@@ -2648,6 +2655,7 @@ public partial class MapViewer : Node2D
             if (_beschussCheck) GD.Print(_entities.BeschussCheckLine());
             if (_forscherProbe) GD.Print(_entities.ForscherProbeLine());
             if (_befehlsklangProbe) GD.Print(_entities.BefehlsklangProbeLine());
+            if (_aufwertungProbe) GD.Print(_entities.AufwertungProbeLine());
             if (_stauCheck)
             {
                 GD.Print(_entities.SchiffStauLine());
@@ -2658,6 +2666,7 @@ public partial class MapViewer : Node2D
             if (_beschussCheck) { GetTree().Quit(_entities.BeschussCheckRc()); return; }
             if (_forscherProbe) { GetTree().Quit(0); return; }
             if (_befehlsklangProbe) { GetTree().Quit(_entities.BefehlsklangProbeRc()); return; }
+            if (_aufwertungProbe) { GetTree().Quit(_entities.AufwertungProbeRc()); return; }
             if (_drehCheck)
             {
                 GD.Print(_entities.SchiffDrehLine());

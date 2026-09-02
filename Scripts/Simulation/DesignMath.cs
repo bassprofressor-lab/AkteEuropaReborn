@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Simulation;
+﻿namespace AkteEuropaReborn.Simulation;
 
 using System;
 using System.Collections.Generic;
@@ -213,6 +213,19 @@ public static class DesignMath
     /// <summary>Feeds the table straight in — used by the importer's self test,
     /// which has the rows in hand and no user:// copy to read.</summary>
     public static void Use(Dictionary<int, byte[]> rows) => _rows = rows;
+
+    /// <summary>Die GRUNDzeile eines Bauteils, so wie sie aus der EXE kommt.
+    ///
+    /// <para>⚠ Das ist der Anfangszustand, NICHT der geltende: sobald ein
+    /// Spieler forscht, hat jeder Spieler seine eigene Zeile. Die geltende
+    /// liefert <c>MapEntityLayer.BauteilFuer(spieler, bauteil)</c>; siehe
+    /// Simulation/Aufwertung.cs und den Kopf dieser Datei zur
+    /// Acht-Bloecke-Form des Originals.</para></summary>
+    public static byte[]? GrundZeile(int row)
+    {
+        Load();
+        return _rows != null && _rows.TryGetValue(row, out var r) ? r : null;
+    }
 
     private static byte[] FromHex(string s)
     {
