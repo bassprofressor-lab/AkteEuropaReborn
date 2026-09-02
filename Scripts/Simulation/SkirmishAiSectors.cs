@@ -158,12 +158,37 @@ public partial class MapEntityLayer : Node2D
     /// Die Sektorwerte <c>+0</c> / <c>+2</c> / <c>+4</c> neu bilden —
     /// <c>0x4BA710</c> + <c>0x4BA7D0</c>.
     ///
-    /// <para>⚠ <b>UNSERE Stärkeformel.</b> Dass es drei Eimer sind (eigene,
-    /// verbündete, feindliche Stärke) steht fest; <b>womit</b> das Original eine
-    /// Einheit gewichtet, ist nicht gelesen — <c>0x4BA710</c> haben wir nur als
-    /// Ein- und Ausgang. Wir zählen darum schlicht die kampffähigen Einheiten.
-    /// Das ist eine Setzung, keine Wiederherstellung, und sie ist hier so
-    /// gekapselt, dass eine spätere Lesung nur diese eine Zeile ändert.</para>
+    /// <para>⭐⭐ <b>01.09.2026 — DIE STÄRKEFORMEL IST GELESEN, sie war eine
+    /// Setzung.</b> Hier stand <c>wert = 1</c> (»wir zählen die kampffähigen
+    /// Einheiten«) mit dem Eingeständnis, <c>0x4BA710</c> sei nur als Ein- und
+    /// Ausgang bekannt. Jetzt ist die Funktion Befehl für Befehl gelesen:</para>
+    ///
+    /// <code>
+    ///   0x4BA71B  rep stosd  0xB461C0, 0x1E4 dwords     ; das Rohraster nullen
+    ///   0x4BA725  fuer alle 8000 Einheitenplaetze cx:
+    ///   0x4BA732    dl = byte[+0x09]  (faze)   == 0xFF -> weiter
+    ///   0x4BA741    al = byte[+0x0D]  (Waffe)  == 0    -> weiter
+    ///   0x4BA751    sx = byte[+0x00] / 24 ,  sy = byte[+0x01] / 24
+    ///   0x4BA77E    spieler = cx / 1000
+    ///   0x4BA787    ax = byte[+0x08]                    ; ENERGIE = Trefferpunkte
+    ///   0x4BA792    word[0xB461C0 + 2·(8·(11·sx + sy) + spieler)] += ax
+    /// </code>
+    ///
+    /// <para><b>Stärke ist also die Summe der TREFFERPUNKTE aller bewaffneten
+    /// Einheiten im Sektor</b> — nicht ihre Zahl. Der Feldname stammt aus dem
+    /// Spiel selbst (der Dump <c>@0x413743</c> druckt <c>energie:</c> für
+    /// <c>+0x08</c>). <c>0x4BA7D0</c> verteilt das Rohraster danach nur noch
+    /// nach der Bündnisspalte auf <c>+0</c> / <c>+2</c> / <c>+4</c>.</para>
+    ///
+    /// <para><b>Vollerhebung</b> über die Relokationstafel (Fenster
+    /// <c>0xB461C0 + 3872</c>): <b>genau EIN Schreiber</b> (<c>0x4BA792</c>),
+    /// 14 Leser, 0 unklar. Es gibt keine zweite Quelle.</para>
+    ///
+    /// <para>⚠ Zwei Unterschiede bleiben, beide benannt: das Original prüft
+    /// <b>nicht</b> auf Beweglichkeit (ein Geschützturm ist dort ein GEBÄUDE und
+    /// steht in einer anderen Tafel, bei uns nicht), und es zählt über alle acht
+    /// Spielerblöcke, auch über tote Plätze — <c>faze == 0xFF</c> ist unser
+    /// <c>Dead</c>. <c>--staerke-alt</c> stellt die alte Zählung wieder her.</para>
     /// </summary>
     private void AiStaerkeraster(int p)
     {
@@ -178,12 +203,13 @@ public partial class MapEntityLayer : Node2D
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
-            if (e.IsBuilding || e.IsProp || e.Dead || !e.Mobile) continue;
-            if (!CanFight(e)) continue;
+            if (e.IsBuilding || e.IsProp || e.Dead) continue;
+            if (StaerkeAlt && !e.Mobile) continue;
+            if (!CanFight(e)) continue;                 // byte[+0x0D] != 0
 
             var (sx, sy) = AiSektorVon(e.Col, e.Row);
             int s = SektorIndex(sx, sy);
-            int wert = 1;                       // ⚠ UNSERE Setzung, siehe oben
+            int wert = StaerkeAlt ? 1 : e.Hp;           // byte[+0x08], »energie«
 
             if (e.Owner == p) r[s].Eigen += wert;
             else if (AiVerbuendet(p, e.Owner)) r[s].Verbuendet += wert;
@@ -191,15 +217,67 @@ public partial class MapEntityLayer : Node2D
         }
     }
 
+    /// <summary><c>--staerke-alt</c> — die Gegenprobe zur gelesenen
+    /// Stärkeformel: eine Einheit zählt wieder als 1 statt mit ihren
+    /// Trefferpunkten. Nur damit ist zu messen, ob die Formel überhaupt etwas
+    /// ändert (sie ändert die SCHWELLE nicht — <c>&gt; 0</c> bleibt
+    /// <c>&gt; 0</c> —, wohl aber jede Rechnung, die die Zahl weiterverwendet).
+    /// </summary>
+    public static bool StaerkeAlt;
+
     /// <summary>Die Bündniszeile <c>sec53[40·p + 0x15 + q]</c>. Ein Spieler ist
-    /// sich immer selbst freund; alles andere kommt aus der Diplomatie, die wir
-    /// im Gefecht noch nicht führen — bis dahin ist jeder Fremde ein Feind, und
-    /// das ist die Voreinstellung des Originals für ein Gefecht ohne Bündnisse
-    /// (<c>netzstart</c> setzt nur die Diagonale, <c>0x41952E</c>).</summary>
-    private bool AiVerbuendet(int p, int q) => p == q || AiMannschaft(p) == AiMannschaft(q);
+    /// sich immer selbst freund; alles andere kommt aus der Diplomatie.
+    ///
+    /// <para>⚠⚠ <b>02.09.2026 — HIER STAND EINE MANNSCHAFT STATT DER
+    /// DIPLOMATIE, UND DAS WAR DER FEHLER.</b> Gemeldet aus einem Spiellauf
+    /// der Kampagne 3: »ich höre fremde Einheiten im Fog of War kämpfen, als
+    /// würde sich die KI selber beballern« — und auf Nachfrage: »doch, habe es
+    /// live gesehen wie die sich beschießen«.</para>
+    ///
+    /// <para>Und genau so war es. Die Zeile lautete
+    /// <c>p == q || AiMannschaft(p) == AiMannschaft(q)</c>, und
+    /// <c>AiMannschaft(p)</c> gab <c>p</c> zurück — jeder war seine eigene
+    /// Mannschaft, also war JEDER FREMDE EIN FEIND. In Mission 3 sind die
+    /// Spieler 1, 2, 5 und 6 aber <b>alle untereinander verbündet</b>
+    /// (<c>campaign_diplomacy.json</c> aus <c>mission_init</c> @0x487c40).
+    /// Der Sektorlauf zählte die Einheiten des Verbündeten also als
+    /// <c>Feind</c>, <see cref="AiZielImSektor"/> gab eine davon als Ziel
+    /// heraus, und <c>AiSend</c> setzte <c>Ordered = true</c> — ein BEFOHLENER
+    /// Angriff, der die Bündnisprüfung von <c>IsHostile</c> gar nicht mehr
+    /// passiert.</para>
+    ///
+    /// <para><b>Gemessen</b> (<c>--beschuss-check</c>, Kampagne 3, 120 s,
+    /// Keim 7): <b>188 von 468 Schuss</b> gingen auf einen Verbündeten, davon
+    /// 177 von Spieler 5 auf Spieler 1. Nullmodell: bei intakter Prüfung darf
+    /// dort <b>0</b> stehen — die Diplomatie erlaubt nur die Paare mit
+    /// Spieler 0.</para>
+    ///
+    /// <para>⭐ Die Behebung bringt uns NÄHER ans Original, nicht weiter weg:
+    /// das Original liest an dieser Stelle die Bündniszeile
+    /// <c>sec53[40·p + 0x15 + q]</c> und überspringt ganze Spielerblöcke
+    /// (<c>si += 1000</c>). <see cref="AiHostile"/> liest genau diese Matrix.
+    /// Im GEFECHT ohne Bündnisse ändert sich nichts: dort ist
+    /// <c>_haveAllies</c> falsch und <c>AiHostile</c> fällt selbst auf
+    /// <c>q != p</c> zurück — die Voreinstellung des Originals für ein Gefecht
+    /// ohne Bündnisse (<c>netzstart</c> setzt nur die Diagonale,
+    /// <c>0x41952E</c>).</para>
+    ///
+    /// <para>Gegenprobe <c>--sektor-buendnis-alt</c> stellt den Stand vom
+    /// 01.09.2026 wieder her.</para></summary>
+    private bool AiVerbuendet(int p, int q)
+        => SektorBuendnisAlt
+            ? p == q || AiMannschaft(p) == AiMannschaft(q)
+            : p == q || !AiHostile(p, q);
+
+    /// <summary><c>--sektor-buendnis-alt</c> — die Gegenprobe: der Sektorlauf
+    /// fragt wieder die Mannschaft statt der Diplomatie, und damit ist in der
+    /// Kampagne wieder jeder Fremde ein Feind (Stand bis zum 02.09.2026).
+    /// </summary>
+    public static bool SektorBuendnisAlt;
 
     /// <summary>Die Mannschaft eines Platzes. Ohne Bündnissystem ist jeder seine
-    /// eigene — dann fällt <see cref="AiVerbuendet"/> auf <c>p == q</c> zurück.</summary>
+    /// eigene — dann fällt <see cref="AiVerbuendet"/> auf <c>p == q</c> zurück.
+    /// ⚠ Nur noch unter <see cref="SektorBuendnisAlt"/> in Gebrauch.</summary>
     private static int AiMannschaft(int p) => p;
 
     // ---- Takt 7: »Set imp cpu:« --------------------------------------------
@@ -256,19 +334,36 @@ public partial class MapEntityLayer : Node2D
             r[s].DefRobots = stil <= 0 ? 0 : Math.Min(100, 100 * r[s].Def / stil);
         }
 
-        // Schritt 4 — die zugeordneten Einheiten.
+        // Schritt 4 — die zugeordneten Einheiten. ⭐ Seit dem 01.09.2026 macht
+        // das die ZUSTANDSMASCHINE selbst, in demselben Durchlauf wie das
+        // Original (die Modi 1 und 2 zaehlen sich dort an ZWEI verschiedenen
+        // Sektoren: 1 am zugewiesenen, 2 am eigenen Standort). Nur die alte
+        // Bruecke braucht den getrennten Zaehllauf.
+        if (SektormaschineAlt) { AiZustandVorlaeufig(p); AiBelegtZaehlen(p); }
+    }
+
+    /// <summary>Der alte Schritt 4 — <b>ohne</b> die Unterscheidung zwischen
+    /// zugewiesenem Sektor (Modus 1) und Standortsektor (Modus 2). Läuft nur
+    /// noch unter <c>--sektormaschine-alt</c>.</summary>
+    private void AiBelegtZaehlen(int p)
+    {
+        var r = _aiRaster[p];
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
             if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != p || !e.Mobile) continue;
             if (e.AiCpu0 is 1 or 2)
-            {
-                int s = SektorIndex(Math.Clamp(e.AiCpu1 & 0x0F, 0, SektorKante - 1),
-                                    Math.Clamp((e.AiCpu1 >> 4) & 0x0F, 0, SektorKante - 1));
-                r[s].Belegt++;
-            }
+                r[AiSektorAus(e.AiCpu1)].Belegt++;
         }
     }
+
+    /// <summary>Das Halbbytepaar <c>CPU1</c> als Sektorplatz — <c>low = sx</c>,
+    /// <c>high = sy</c>. Das Original packt es an <c>0x4BC133</c> gleich beim
+    /// Suchen (<c>cx += 0x10</c> je Zeile), und darum passen 11 Sektoren in ein
+    /// Halbbyte.</summary>
+    private static int AiSektorAus(int cpu1)
+        => SektorIndex(Math.Clamp(cpu1 & 0x0F, 0, SektorKante - 1),
+                       Math.Clamp((cpu1 >> 4) & 0x0F, 0, SektorKante - 1));
 
     /// <summary>
     /// Die <c>imp</c>-Zahl eines Gebäudes — <c>sec62</c>, 8 × 255 × 2 B.
@@ -284,6 +379,27 @@ public partial class MapEntityLayer : Node2D
     /// Fällen ausmacht — <b>6</b> — für jedes eigene Gebäude, und lassen
     /// <see cref="AiImpTafel"/> ihn überschreiben, sobald eine Mission ihn
     /// mitbringt.</para>
+    ///
+    /// <para>⭐⭐ <b>01.09.2026 — die 6 ist nicht mehr geraten, das SPIEL schreibt
+    /// sie.</b> Vollerhebung über das Fenster <c>0xBC41E0 + 4080</c>: 74
+    /// Relokationen, und unter den Schreibern stehen zwei ausserhalb jedes
+    /// Missionsblocks —</para>
+    ///
+    /// <code>
+    ///   0x43CF75  byte[0xBC41E1 + 2·(255·ALTbesitzer + platz)] := 0
+    ///   0x43CF8D  byte[0xBC41E1 + 2·(255·NEUbesitzer + platz)] := 6   ; Besitzwechsel
+    ///   0x43D177  byte[0xBC41E1 + 2·(255·besitzer   + platz)] := 6   ; Anlage
+    /// </code>
+    ///
+    /// <para>Ein Gebäude bekommt seine <c>imp</c> also beim Aufstellen und beim
+    /// Übernehmen — <b>6</b>, ohne Umweg über die Karte. Die Missionsblöcke
+    /// (<c>0x488ADD</c>, <c>0x48934C</c>, <c>0x4896CA</c>, …) schreiben danach
+    /// nur einzelne Plätze um. <b>Damit gilt die 6 auch in der Kampagne</b>, und
+    /// die Zeile <c>InCampaign ? 0 : 6</c> war falsch: mit ihr hat in einer
+    /// Mission KEIN Sektor Bedarf, und die Zuweisung aus
+    /// <see cref="AiZustandsmaschine"/> findet nie einen Zielsektor.</para>
+    ///
+    /// <para><c>--imp-alt</c> stellt die alte Zeile wieder her.</para>
     /// </summary>
     private int AiImpVon(Entity e)
     {
@@ -291,8 +407,12 @@ public partial class MapEntityLayer : Node2D
         var tafel = _aiImp[e.Owner];
         if (tafel != null && e.Slot >= 0 && e.Slot < tafel.Length && tafel[e.Slot] != 0)
             return tafel[e.Slot];
-        return InCampaign ? 0 : 6;
+        return ImpAlt && InCampaign ? 0 : 6;
     }
+
+    /// <summary><c>--imp-alt</c> — die Gegenprobe: in der Kampagne wieder gar
+    /// kein Bedarf, wie bis zum 31.08.2026.</summary>
+    public static bool ImpAlt;
 
     private readonly int[]?[] _aiImp = new int[8][];
 
@@ -641,6 +761,286 @@ public partial class MapEntityLayer : Node2D
         int n = 0;
         for (int g = 0; g < 4; g++) if (_aiGruppen[player][g].Einheiten.Count == 0) n++;
         return n;
+    }
+
+    // ---- Takt 7, zweite Haelfte: die Zustandsmaschine je Einheit ------------
+
+    /// <summary>
+    /// ⭐⭐⭐ <b>DIE ZUSTANDSMASCHINE JE EINHEIT</b> — die zweite Hälfte von
+    /// <c>0x4BBB80</c> (Schleife <c>0x4BBDD2…0x4BC0BA</c>, Sprungtafel
+    /// <c>0x4BC214</c> = <c>0x4BBE10</c> / <c>0x4BBE3A</c> / <c>0x4BBFBA</c> /
+    /// <c>0x4BC029</c>, aus der Datei gelesen), samt der Zuweisung
+    /// <c>0x4BC0C0…0x4BC208</c>. Nachgelesen am 01.09.2026, Befehl für Befehl.
+    ///
+    /// <para><b>⚠⚠ BERICHTIGUNG von BV.1/BV.3:</b> <c>0xB400F0</c> ist keine
+    /// Sektortafel, sondern eine <b>Einheitentafel</b> — <c>3 Byte je
+    /// Einheitenplatz</c>, adressiert <c>lea ecx,[ecx+ecx*2+0xB400F0]</c>
+    /// (<c>@0x4BC691</c>). <c>+0</c> ist der MODUS, <c>+1</c> das Halbbytepaar
+    /// des zugewiesenen Sektors. Das »Tor Sektorzustand 1..2« aus BV.3 ist in
+    /// Wahrheit »Einheiten-Modus ∈ {1, 2}«.</para>
+    ///
+    /// <para>Die vier Arme, wörtlich:</para>
+    /// <list type="bullet">
+    ///   <item><b>0 — frei</b> (<c>0x4BBE10</c>): steht die Einheit
+    ///   (<c>UKOL == 0</c>), kommt ihr Platz in die Kandidatenliste
+    ///   <c>0xB38530</c>.</item>
+    ///   <item><b>1 — zugewiesen, marschiert</b> (<c>0x4BBE3A</c>): zählt sich
+    ///   in <c>+0x0A</c> ihres <b>zugewiesenen</b> Sektors. Steht sie, wird das
+    ///   5×5-Feld um sie nach einer Zelle mit <b>Lage 99</b> abgesucht; gefunden
+    ///   → nochmals <c>fahre</c> auf eine Zufallszelle des Sektors, sonst
+    ///   <b>Modus := 2</b>.</item>
+    ///   <item><b>2 — abrufbereit</b> (<c>0x4BBFBA</c>): zählt sich in
+    ///   <c>+0x0A</c> ihres <b>Standort</b>sektors; mit
+    ///   <c>rand() % 200 == 111</c> fällt sie auf Modus 0 zurück.</item>
+    ///   <item><b>3 — im Angriff</b> (<c>0x4BC029</c>): <c>UKOL == 0</c> →
+    ///   Modus 0. Sonst die <b>Leine</b>: mehr als EIN Sektor je Achse vom
+    ///   zugewiesenen weg → <c>UKOL := 0</c> UND Modus := 0, der Angriff bricht
+    ///   ab (<c>0x4BC093…0x4BC09E</c>).</item>
+    /// </list>
+    ///
+    /// <para><b>Die Zuweisung:</b> höchstens <b>5</b> Kandidaten je Durchlauf
+    /// (<c>cmp word[esp+0x10], 5</c> @<c>0x4BC0C0</c>); bester Sektor ist das
+    /// <b>Minimum von <c>100·belegt / bedarf</c></b> über alle Sektoren mit
+    /// Bedarf &gt; 0 (Startwert 9999, <b>strikt</b> kleiner gewinnt, sonst der
+    /// erste); jeder Kandidat bekommt Modus 1, das Halbbytepaar und ein
+    /// <c>fahre</c> auf <c>(sx·24 + rand%14 + 5, sy·24 + rand%14 + 5)</c>.</para>
+    ///
+    /// <para><b>⭐ Das ist die gemeldete Lage</b> (bug-012): die Einheiten laufen
+    /// zu den Sektoren ihrer eigenen Gebäude, stellen sich dort auf
+    /// Zufallszellen und bleiben in Modus 2 stehen — bis
+    /// <see cref="AiGruppenangriff"/> in einem der neun Nachbarsektoren
+    /// Feindstärke sieht. Das »Stehen vor der Basis« ist kein Fehler, es ist
+    /// der Wartezustand des Originals.</para>
+    ///
+    /// <para><b>⚠ UNSERE SETZUNGEN, benannt:</b></para>
+    /// <list type="number">
+    ///   <item><b><c>UKOL == 0</c></b> heisst bei uns »kein Weg, kein Ziel,
+    ///   keine Befehlsliste« — unser <see cref="Entity.Ukol"/> führt nur die
+    ///   drei Werte der Einfahrt (0/48/50) und taugt dafür nicht.</item>
+    ///   <item><b>Der 5×5-Griff nach Lage 99 ist NICHT gebaut</b>: die
+    ///   Lagenkarte (<c>0x542E18</c>, .CWM-Sektion 20) liegt zur Laufzeit gar
+    ///   nicht vor. Wir nehmen immer den anderen Ausgang (Modus := 2). Wirkung:
+    ///   eine Einheit, die neben einer Lage-99-Zelle steht, fährt nicht noch
+    ///   einmal weiter. <b>Was Lage 99 markiert, ist inzwischen halb gelesen</b>
+    ///   — genau EIN Schreiber (<c>0x43CB12</c>) setzt sie, in der Gebäudeuhr,
+    ///   zusammen mit <c>imap := 0xFFFE</c> auf der Zelle
+    ///   <c>(spalte + b[+0x35], zeile + b[+0x36])</c> und <c>b[+0x0A] := 1</c>:
+    ///   das sieht nach der TORZELLE eines Gebäudes aus, und der Arm hiesse
+    ///   dann »geh dem Tor aus dem Weg«. ⚠ Deutung, nicht belegt.</item>
+    /// </list>
+    ///
+    /// <para><c>--sektormaschine-alt</c> stellt den Stand vom 31.08.2026 wieder
+    /// her (die Brücke <see cref="AiZustandVorlaeufig"/> plus der
+    /// Ein-Sektor-Angriff).</para>
+    /// </summary>
+    private void AiZustandsmaschine(AiPlayer a)
+    {
+        int p = a.Player;
+        var r = _aiRaster[p];
+        _aiKandidaten.Clear();
+
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != p) continue;
+
+            switch (e.AiCpu0)
+            {
+                // ---- 0: frei ------------------------------------- 0x4BBE10 --
+                case 0:
+                    if (AiSteht(e)) _aiKandidaten.Add(i);
+                    break;
+
+                // ---- 1: zugewiesen, marschiert ------------------- 0x4BBE3A --
+                case 1:
+                    r[AiSektorAus(e.AiCpu1)].Belegt++;
+                    if (!AiSteht(e)) break;
+                    // ⚠ hier faellt der Lage-99-Griff aus, siehe oben.
+                    e.AiCpu0 = 2;
+                    a.SmBereit++;
+                    break;
+
+                // ---- 2: abrufbereit ------------------------------ 0x4BBFBA --
+                case 2:
+                {
+                    var (cx, cy) = AiSektorVon(e.Col, e.Row);
+                    r[SektorIndex(cx, cy)].Belegt++;
+                    if (a.Roll(200) == 111)          // rand() % 200 == 0x6F
+                    {
+                        e.AiCpu0 = 0;
+                        e.AiCpu1 = 0;
+                        a.SmAbkuehlung++;
+                    }
+                    break;
+                }
+
+                // ---- 3: im Angriff ------------------------------- 0x4BC029 --
+                case 3:
+                {
+                    if (AiSteht(e)) { e.AiCpu0 = 0; e.AiCpu1 = 0; a.SmFertig++; break; }
+                    var (cx, cy) = AiSektorVon(e.Col, e.Row);
+                    int ax = e.AiCpu1 & 0x0F, ay = (e.AiCpu1 >> 4) & 0x0F;
+                    if (Math.Abs(ax - cx) > 1 || Math.Abs(ay - cy) > 1)
+                    {
+                        AiAnhalten(i, e);            // UKOL := 0
+                        e.AiCpu0 = 0;
+                        e.AiCpu1 = 0;
+                        a.SmLeine++;
+                    }
+                    break;
+                }
+            }
+        }
+
+        // ---- die Zuweisung ------------------------------- 0x4BC0C0..0x4BC208
+        int n = Math.Min(_aiKandidaten.Count, 5);
+        if (n == 0) return;
+
+        int paar = -1, min = 9999;                    // di := 0x270F
+        for (int sx = 0; sx < SektorKante; sx++)
+            for (int sy = 0; sy < SektorKante; sy++)
+            {
+                var s = r[SektorIndex(sx, sy)];
+                if (s.Def == 0) continue;             // Bedarf 0 -> kein Sektor
+                int po = 100 * s.Belegt / s.Def;
+                if (po >= min) continue;              // cmp ax, di / jge
+                min = po;
+                paar = (sy << 4) | sx;
+            }
+        if (paar < 0) { a.SmKeinSektor++; return; }
+
+        int zx = paar & 0x0F, zy = (paar >> 4) & 0x0F;
+        for (int k = 0; k < n; k++)
+        {
+            var e = _entities[_aiKandidaten[k]];
+            e.AiCpu0 = 1;
+            e.AiCpu1 = paar;
+            a.SmZuweisungen++;
+            AiWalkTo(_aiKandidaten[k],
+                     new Vector2I(zx * SektorFeld + a.Roll(14) + 5,
+                                  zy * SektorFeld + a.Roll(14) + 5));
+        }
+    }
+
+    private readonly List<int> _aiKandidaten = new();
+
+    /// <summary><b>UNSERE Lesart von <c>UKOL == 0</c></b> — »die Einheit steht
+    /// und hat nichts vor«. Dieselbe Prüfung, die der Sektorangriff seit dem
+    /// 30.08.2026 benutzt; sie steht hier EINMAL, damit eine spätere, echte
+    /// UKOL-Führung nur diese Zeile trifft.
+    ///
+    /// <para>⚠⚠ <b>01.09.2026 — UND <c>Ukol</c> SELBST GEHÖRT DAZU.</b>
+    /// Gemeldet: »Einheiten die im Depot sind, sind am Anfang wie
+    /// Geistereinheiten, die ich dann aus der Basis rausfahren sehe — also
+    /// diese Wegpunkte, aber da ist gar keine Einheit«. Und genau so war es:
+    /// eine untergestellte Einheit hat weder Weg noch Ziel noch Befehlsliste,
+    /// stand also in der Kandidatenliste, bekam einen Sektor zugewiesen und
+    /// fuhr los — unsichtbar, denn das Zeichnertor hängt an
+    /// <c>UKOL == 0x32</c> (@0x4300E2).</para>
+    ///
+    /// <para><b>Das Original hat diesen Fehler nicht</b>, und zwar mit genau
+    /// der Bedingung, die hier fehlte: der Modus-0-Arm fragt <c>UKOL == 0</c>,
+    /// und eine untergestellte Einheit trägt dort <b>0x32</b> (@0x43D657), eine
+    /// an der Tür angemeldete 0x30, eine ausfahrende 0x33. Unsere drei
+    /// Einfahrt-Werte sind damit dieselbe Sperre wie im Original.</para></summary>
+    private static bool AiSteht(Entity e)
+        => e.Ukol == 0 && e.Path == null && e.Target < 0 && e.Orders.Count == 0;
+
+    /// <summary><c>UKOL := 0</c> — die Leine des Modus 3 bricht den Auftrag ab
+    /// (<c>0x4BC097</c>), sie schickt die Einheit NICHT zurück.</summary>
+    private void AiAnhalten(int idx, Entity e)
+    {
+        e.Path = null;
+        e.Target = -1;
+        e.Orders.Clear();
+        e.Ordered = false;
+        // ⚠⚠ Und die Vormerkung MIT — sonst bleibt die vorgemerkte Zelle fuer
+        // immer belegt. Siehe AiVormerkungLoesen; die Leine schlug in 60 s
+        // Kampagne 3 zehnmal zu, das waeren zehn Phantome je Minute.
+        AiVormerkungLoesen(idx, e);
+    }
+
+    // ---- Takt 7, dritte Haelfte: der Gruppenangriff -------------------------
+
+    /// <summary>
+    /// ⭐⭐⭐ <b>DER GRUPPENANGRIFF</b> — <c>0x4BC540</c> (F <c>0x4BC000</c>),
+    /// vollständig zerlegt am 01.09.2026. <c>0x4BC900</c> (Takt 7) ist nur der
+    /// Rahmen: erst <c>0x4BBB80</c> (Bedarf + Zustandsmaschine), dann diese
+    /// Funktion.
+    ///
+    /// <code>
+    ///   fuer sx = 0…10, sy = 0…10:
+    ///       wenn belegt[sx,sy] &lt;= 0: naechster Sektor        ; word +0x0A @0x4BC5B1
+    ///       fuer n = 0…8:                                      ; Tafel 0x538C10
+    ///           (nx,ny) = (sx,sy) + Δ[n];  ausserhalb 0…10 -> weiter
+    ///           wenn feind[nx,ny] == 0: weiter                 ; word +0x04 @0x4BC629
+    ///           ziel = get_target_in_sector(p, nx, ny)         ; 0x4BC3D0
+    ///           wenn ziel == 0xFFFF: weiter
+    ///           fuer jede EIGENE Einheit im Sektor (sx,sy) mit
+    ///               faze != 0xFF, Waffe (+0x0D) != 0, +0x0F != 0xAB,
+    ///               Modus ∈ {1,2}, x/24 == sx, y/24 == sy:
+    ///                   order(einheit, ziel)                   ; UKOL 4
+    ///                   Modus := 3                             ; @0x4BC7EB
+    /// </code>
+    ///
+    /// <para><b>⭐ Das ist die Antwort auf die Streifenfrage</b> und auf
+    /// bug-013: es gibt keine Streife. Es gibt den Sichtring (3…5 Zellen) und
+    /// dieses Raster — <b>Sektorkante 24 Zellen, neun Nachbarn, also bis rund 48
+    /// Zellen weit</b>. Und es erklärt »vor der Brücke greifen nicht alle an«:
+    /// losgeschickt werden nur die abrufbereiten Einheiten <b>DES EINEN
+    /// Sektors</b>, in dem der Feind gesehen wird. Einheiten des Nachbarsektors
+    /// bleiben stehen, bis IHR Sektor Feindstärke sieht — das kommt also auch im
+    /// Original vor.</para>
+    ///
+    /// <para>⚠ Das Ziel wird <b>einmal je (Sektor, Nachbar)</b> geholt, nicht je
+    /// Einheit (Merker <c>byte[esp+0x13]</c>, gesetzt @<c>0x4BC638</c>, gelöscht
+    /// @<c>0x4BC7BE</c>) — die ganze Gruppe greift also DASSELBE Ziel an.</para>
+    ///
+    /// <para>⚠ <b>NICHT gebaut:</b> der Alarmklang 0x7A für den Menschen
+    /// (<c>0x4BC753…0x4BC7B7</c>: nur wenn <c>word[0xBCA0E0] &lt; 50</c>, der
+    /// Abklingzähler <c>word[0x538BAC]</c> auf 0 steht, <c>word[0x539934] !=
+    /// 14</c> und die Bündnisspalte 0 ist; danach Abklingzeit
+    /// <c>rand%3000 + 4000</c>), und das <c>+0x0F != 0xAB</c>-Tor, dessen
+    /// Bedeutung ungelesen ist.</para>
+    /// </summary>
+    private void AiGruppenangriff(AiPlayer a)
+    {
+        int p = a.Player;
+        var r = _aiRaster[p];
+
+        for (int sx = 0; sx < SektorKante; sx++)
+            for (int sy = 0; sy < SektorKante; sy++)
+            {
+                if (r[SektorIndex(sx, sy)].Belegt <= 0) continue;
+
+                for (int n = 0; n < AiNachbarn.Length; n++)
+                {
+                    int nx = sx + AiNachbarn[n].dx, ny = sy + AiNachbarn[n].dy;
+                    if (nx < 0 || nx >= SektorKante || ny < 0 || ny >= SektorKante) continue;
+                    if (r[SektorIndex(nx, ny)].Feind == 0) continue;
+
+                    a.SektorVersuche++;
+                    int ziel = AiZielImSektor(p, nx, ny);
+                    if (ziel < 0) { a.SektorKeinZiel++; continue; }
+
+                    int los = 0;
+                    for (int i = 0; i < _entities.Count; i++)
+                    {
+                        var e = _entities[i];
+                        if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != p) continue;
+                        if (!CanFight(e)) continue;              // +0x0D != 0
+                        if (e.AiCpu0 is not (1 or 2)) continue;  // das Modus-Tor
+                        var (ex, ey) = AiSektorVon(e.Col, e.Row);
+                        if (ex != sx || ey != sy) continue;
+
+                        AiSend(i, ziel);
+                        e.AiCpu0 = 3;
+                        a.Wave.Add(i);
+                        los++;
+                    }
+                    if (los > 0) { a.Waves++; a.SektorAngriffe++; a.TargetIdx = ziel; }
+                }
+            }
     }
 
     // ---- get target in sector ----------------------------------------------

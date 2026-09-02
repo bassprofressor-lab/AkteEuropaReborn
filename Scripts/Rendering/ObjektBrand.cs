@@ -115,6 +115,7 @@ public partial class MapEntityLayer
         e.Abgebrannt = true;
         e.Steht = false;
         ObjZerstoert++;
+        ZelleNachBrandFreigeben(e);
         GD.Print($"objekt: ({e.Col},{e.Row}) Art {e.Art} zerstoert (Kachel {e.Basis + 10002})");
     }
 

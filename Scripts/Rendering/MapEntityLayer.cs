@@ -5433,19 +5433,179 @@ public partial class MapEntityLayer : Node2D
     /// Auswahl. Ein Chor von zwölf Panzern wäre nicht bloß laut, er wäre
     /// falsch.</para>
     /// </summary>
-    private void SpeakOrdered()
+    private void SpeakOrdered(bool angriff = true)
     {
-        if (!UI.Settings.Announcements) return;
-        if (_selected < 0 || _selected >= _entities.Count) return;
-        var e = _entities[_selected];
-        if (e.IsProp || e.Dead || e.Owner != ViewPlayer) return;
-        // Ein Gebäude oder Flugzeugplatz sagt seine eine Zeile (0x4294B9);
-        // eine Einheit würfelt (0x4294C7 ff.).
-        int s = e.IsBuilding || e.Chassis < 0
-            ? Audio.GameSounds.OrderVoiceBuilding
-            : Audio.GameSounds.OrderVoice(e.GameUnitType, e.Chassis, e.Field28);
-        if (s >= 0) Audio.SoundBankPlayer.Play(s);
+        // ⭐⭐ 03.09.2026 — GEZAEHLT, und zwar an JEDEM Ausstieg. Der Klang ist
+        // dreimal still durchgerutscht (19.08., 02.09., 02.09. abends), und
+        // `--befehl-check` hat jedes Mal »bestanden« gemeldet, weil er nur
+        // fragte, ob ein Platz in der Bank liegt — nicht, ob diese Routine beim
+        // Befehl ueberhaupt GERUFEN wird. Sie wurde es nicht: alle drei Rufer
+        // sassen in IssueMove/IssueAttack, dem alten Direktweg, und der Klick
+        // des Spielers laeuft seit dem 22.08.2026 ueber PostMove/PostAttack.
+        // Seither steht der Aufruf in den ABSENDERN (CommandBridge.cs), und
+        // `--befehlsklang-probe` setzt einen echten Befehl ab und liest diese
+        // Zaehler. Jeder Ausstieg nennt seinen Grund — sonst ist »0 gespielt«
+        // von »Ansagen aus« nicht zu unterscheiden.
+        int art = angriff ? 1 : 0;
+        BefehlsklangGerufen[art]++;
+        if (!UI.Settings.Announcements) { BefehlsklangStumm(art, "Ansagen ausgeschaltet"); return; }
+        int idx = BefehlsklangAlt ? _selected : SprecherDerAuswahl();
+        if (idx < 0 || idx >= _entities.Count) { BefehlsklangStumm(art, "kein Sprecher (Auswahl leer oder Wichtigkeit 0)"); return; }
+        var e = _entities[idx];
+        if (e.IsProp || e.Dead || e.Owner != ViewPlayer) { BefehlsklangStumm(art, "Sprecher tot oder fremd"); return; }
+
+        // ⭐⭐⭐ 02.09.2026 — DER BEFEHLSKLANG IST DER ANGRIFFSKLANG.
+        //
+        // Gelesen im Fable-Lauf »Klaenge« (`berichte/klaenge-fable.md`): die
+        // VIER Rufer von 0x429480 liegen ALLE im Arm der Zeigerart 2 = ANGRIFF
+        // (Tafel 0x437994, Eintrag 2 -> 0x437417; Zustand 2 kommt von Strg
+        // @0x43202E oder von einem Feind unter dem Zeiger @0x432886).
+        //
+        // Der FAHRbefehl laeuft ganz woanders: Zeigerart 0/3, Busbefehl 3,
+        // ueber 0x437980 — und ruft dort den ANWAEHLklang 0x429290 (@0x437985,
+        // dessen einziger Rufer). Die Einheit sagt beim Fahren also dieselbe
+        // Zeile wie beim Anklicken.
+        //
+        // ⚠ Wir haben das am 19.08.2026 falsch herum gebaut, und zwar aus einer
+        // richtigen Beobachtung (»die sagen was, wenn man sie wohin bewegt«)
+        // mit der falschen Zeile dahinter: 154 statt 152. Die Meldung stimmte,
+        // die Zuordnung nicht.
+        //
+        // ⚠ Zeigerarten 5/6 senden Busbefehl 3 GANZ OHNE Klang; das ist hier
+        // nicht nachgebaut, weil wir diese Zeigerarten nicht führen.
+        int s;
+        if (angriff || BefehlsklangAlt)
+            // Ein Gebäude oder Flugzeugplatz sagt seine eine Zeile (0x4294B9);
+            // eine Einheit würfelt (0x4294C7 ff.).
+            s = e.IsBuilding || e.Chassis < 0
+                ? Audio.GameSounds.OrderVoiceBuilding
+                : Audio.GameSounds.OrderVoice(e.GameUnitType, e.Chassis, e.Field28);
+        else
+            s = e.IsBuilding || e.Chassis < 0
+                ? -1                       // ein Gebaeude bekommt keinen Fahrbefehl
+                : Audio.GameSounds.Voice(e.GameUnitType, e.Chassis, e.Field28);
+        if (s < 0) { BefehlsklangStumm(art, "kein Platz (Voice/OrderVoice gibt -1)"); return; }
+        BefehlsklangGespielt[art]++;
+        Audio.SoundBankPlayer.Play(s);
     }
+
+    /// <summary>Wie oft <see cref="SpeakOrdered"/> gerufen wurde — [0] beim
+    /// FAHREN, [1] beim ANGRIFF. Zaehlt am Eingang, vor jeder Schranke.</summary>
+    public readonly int[] BefehlsklangGerufen = new int[2];
+
+    /// <summary>Wie oft dabei wirklich ein Klang an die Bank ging, [0] Fahren,
+    /// [1] Angriff. ⭐ NULLMODELL: ein Befehl an eine Auswahl von N Einheiten
+    /// muss hier genau <b>1</b> eintragen — nicht 0 (der Weg ruft nicht) und
+    /// nicht N (jede Einheit spricht; das Original laesst nur das wichtigste
+    /// Mitglied sprechen, <c>0x429220</c>).</summary>
+    public readonly int[] BefehlsklangGespielt = new int[2];
+
+    /// <summary>Warum ein Aufruf NICHT gespielt hat, je Grund gezaehlt — die
+    /// Aufschluesselung, ohne die »0 gespielt« nichts sagt.</summary>
+    public readonly Dictionary<string, int> BefehlsklangStummGrund = new();
+
+    private void BefehlsklangStumm(int art, string grund)
+    {
+        string k = (art == 1 ? "Angriff: " : "Fahren: ") + grund;
+        BefehlsklangStummGrund[k] = BefehlsklangStummGrund.TryGetValue(k, out int n) ? n + 1 : 1;
+    }
+
+    /// <summary><c>--befehlsklang-weg-alt</c> — die Gegenprobe zum Umzug des
+    /// Klangs vom 03.09.2026: der Befehlsklang haengt wieder NUR am alten
+    /// Direktweg <see cref="IssueMove"/>/<see cref="IssueAttack"/>, und die
+    /// Absender <c>PostMove</c>/<c>PostAttack</c>/<c>PostAttackGround</c>/
+    /// <c>PostCapture</c> schweigen. Das ist der Stand vom 22.08. bis zum
+    /// 03.09.2026 — der, in dem der Spieler beim Fahrbefehl »immer noch nix
+    /// gehoert« hat, weil sein Klick diesen Direktweg gar nicht nimmt.
+    ///
+    /// <para>⚠ Genau EINER der beiden Wege spricht, nie beide: sonst kaeme der
+    /// Klang doppelt, wo ein Pruefstand (<c>--befehl-check</c> faehrt A ueber
+    /// PostMove und B ueber IssueMove im selben Prozess) beide Wege
+    /// nacheinander nimmt.</para></summary>
+    public static bool BefehlsklangWegAlt;
+
+    /// <summary>
+    /// ⭐ <b>WER von der Auswahl spricht — <c>0x429220</c> / <c>0x4291A0</c>.</b>
+    ///
+    /// <para>Nicht die führende Einheit, sondern die <b>wichtigste</b>. Das
+    /// Original liest den Anwählgriff <c>word[0x4FA0C8]</c>; steht dort eine
+    /// Gruppe (0x2710), holt <c>0x429220</c> das Mitglied mit der grössten
+    /// Wichtigkeit:</para>
+    ///
+    /// <code>
+    ///   wichtig(e) = [20, 2, 0, 100, 10, 10][Gattung]
+    ///              + 8 * (Fahrwerk == 1 oder 3)
+    ///              + Rang (+0x28)
+    /// </code>
+    ///
+    /// <para>Gleichstand → das ERSTE Mitglied; sind alle 0, schweigt die
+    /// Auswahl ganz. ⚠ Damit spricht immer <b>dieselbe</b> Einheit einer
+    /// Auswahl, nicht eine wechselnde — und Gattung 2 (Wert 0) schweigt für
+    /// sich allein.</para>
+    ///
+    /// <para>⚠ <b>UNSERE Setzung:</b> welche Fahrwerksnummern »1 oder 3« bei
+    /// uns sind, ist aus <see cref="Entity.Chassis"/> genommen; die Tafel des
+    /// Originals steht in <c>0x4291A0</c> und ist nicht Feld für Feld
+    /// abgeglichen. Rückfall <see cref="BefehlsklangAlt"/>.</para>
+    /// </summary>
+    private int SprecherDerAuswahl()
+    {
+        int[] proGattung = { 20, 2, 0, 100, 10, 10 };
+        int best = -1, bestWert = 0;
+        foreach (int i in _sel)
+        {
+            if (i < 0 || i >= _entities.Count) continue;
+            var e = _entities[i];
+            if (e.IsProp || e.Dead || e.Owner != ViewPlayer) continue;
+            int g = e.GameUnitType;
+            int wert = (g >= 0 && g < proGattung.Length ? proGattung[g] : 0)
+                     + (e.Chassis is 1 or 3 ? 8 : 0)
+                     + e.Field28;
+            if (wert > bestWert) { bestWert = wert; best = i; }
+        }
+        // Alle 0 -> das Original schweigt (0x429220 gibt 0xFFFF zurueck). Eine
+        // EINZELNE Einheit geht nicht ueber diesen Weg — dort steht der Griff
+        // direkt im Anwaehlwort, darum der Rueckfall auf _selected.
+        return best >= 0 ? best : (_sel.Count > 1 ? -1 : _selected);
+    }
+
+    /// <summary><c>--befehlsklang-alt</c> — die Gegenprobe: der Fahrbefehl
+    /// spielt wieder die BEFEHLszeile (154) statt der Anwählzeile (152), und es
+    /// spricht wieder die führende statt der wichtigsten Einheit. Stand vom
+    /// 19.08. bis zum 02.09.2026.</summary>
+    public static bool BefehlsklangAlt;
+
+    /// <summary><b>»Kein Sprit« — die Einheit meldet sich beim Trockenlaufen</b>
+    /// (<c>0x4296E0</c>, gerufen aus <c>0x407AB9</c>).
+    ///
+    /// <para>⚠ Nur für EIGENE Einheiten: das Original spielt hier zwar ohne
+    /// Besitzerprüfung, aber sein Rufer sitzt in <c>move units</c> hinter dem
+    /// Spritabzug, und Sprit zieht es jeder Einheit ab — auch der des Gegners.
+    /// Modus 1 dämpft mit der Entfernung, ein Gegner am anderen Kartenende ist
+    /// also ohnehin still. ⭐ Die Besitzerprüfung hier ist damit <b>UNSERE
+    /// Setzung</b>, und der Gegenschalter <see cref="SpritklangFuerAlle"/>
+    /// nimmt sie weg — sonst liesse sich nicht messen, ob sie überhaupt einen
+    /// Unterschied macht.</para>
+    ///
+    /// <para>Zählt <see cref="SpritklangGespielt"/> mit, damit ein Prüflauf
+    /// sagen kann, ob der Klang wirklich fiel und nicht bloss der Zähler.</para>
+    /// </summary>
+    private void SpeakNoFuel(Entity e)
+    {
+        SpritklangGespielt++;
+        if (!UI.Settings.Announcements) return;
+        if (!SpritklangFuerAlle && e.Owner != ViewPlayer) return;
+        int s = Audio.GameSounds.NoFuelVoice(e.GameUnitType, e.Field28);
+        // ⚠ PlayAt, nicht Play: Modus 1 des Originals ist ORTSGEBUNDEN.
+        if (s >= 0) Audio.GameSounds.PlayAt(s, e.Col, e.Row);
+    }
+
+    /// <summary><c>--spritklang-fuer-alle</c> — die Gegenprobe: auch eine
+    /// fremde Einheit meldet ihr Trockenlaufen.</summary>
+    public static bool SpritklangFuerAlle;
+
+    /// <summary>Wie oft die »kein Sprit«-Meldung ausgelöst wurde.</summary>
+    public int SpritklangGespielt;
 
     /// <summary>When the clock may next carry a hit line. The original keeps one
     /// such gate for the whole game (0x4f5aec against the clock 0x4fa240), not
@@ -7817,7 +7977,15 @@ public partial class MapEntityLayer : Node2D
                 // ruft den Befehlsklang an VIER Stellen (0x437458, 0x43746A,
                 // 0x437581, 0x4375A8), und keine davon fragt, ob der Befehl
                 // angereiht wurde.
-                SpeakOrdered();
+                //
+                // ⚠⚠ 03.09.2026 — UND DIESER WEG IST NICHT DER DES SPIELERS.
+                // Sein Klick laeuft seit dem 22.08.2026 ueber PostMove -> Ring
+                // -> ApplyMove; IssueMove rufen nur noch Pruefstaende und
+                // Vorfuehrungen. Der Klang steht deshalb jetzt im ABSENDER
+                // (CommandBridge.PostMove) und hier nur noch unter dem
+                // Gegenschalter — sonst spraeche ein Prueflauf, der beide Wege
+                // faehrt, zweimal.
+                if (BefehlsklangWegAlt) SpeakOrdered(angriff: false);   // Fahrbefehl -> ANWAEHLzeile (0x437985)
                 _order = $"angereiht -> ({cell.Value.X},{cell.Value.Y}): {q} Einheit(en)";
                 UpdatePanel();
                 QueueRedraw();
@@ -7936,7 +8104,9 @@ public partial class MapEntityLayer : Node2D
         if (ordered > 0)
         {
             AddOrderMark(CellCenter(cell.Value.X, cell.Value.Y), attack: false);
-            SpeakOrdered();
+            // ⚠ 03.09.2026 — nur noch im Gegenschalter, siehe den Zweig oben
+            // und CommandBridge.PostMove: der Spielerklick kommt hier nie an.
+            if (BefehlsklangWegAlt) SpeakOrdered(angriff: false);   // Fahrbefehl -> ANWAEHLzeile (0x437985)
         }
         _order = ordered > 0
             ? $"move -> ({cell.Value.X},{cell.Value.Y}): {ordered} unit(s)" +
@@ -9586,7 +9756,13 @@ public partial class MapEntityLayer : Node2D
         }
         if (n == 0) return false;
         AddOrderMark(victim.Pos, attack: true);
-        SpeakOrdered();
+        // ⚠ 03.09.2026 — nur noch im Gegenschalter: der Angriffsklick des
+        // Spielers laeuft ueber CommandBridge.PostAttack, nicht hierher. Der
+        // Klang stand hier seit dem 19.08.2026 und war fuer den Spieler ebenso
+        // still wie der Fahrklang — er haette den Unterschied zwischen den
+        // beiden Saetzen also gar nicht hoeren KOENNEN (bug-027 war insofern
+        // richtig gedeutet und trotzdem nicht die Ursache).
+        if (BefehlsklangWegAlt) SpeakOrdered(angriff: true);   // Angriff -> BEFEHLszeile (0x429480)
         _order = $"attack -> slot {victim.Slot} ({LabelOf(victim.UnitType)}): {n} unit(s)";
         UpdatePanel();
         QueueRedraw();
@@ -9603,7 +9779,27 @@ public partial class MapEntityLayer : Node2D
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
-            if (!CanFight(e) || e.Target >= 0 || e.Path != null) continue;
+            if (!CanFight(e) || e.Target >= 0) continue;
+            // ⭐⭐⭐ 01.09.2026 — EINE FAHRENDE EINHEIT NIMMT SEHR WOHL EIN ZIEL AUF.
+            //
+            // Hier stand `|| e.Path != null`: wer faehrt, sieht nichts. Gemeldet:
+            // »wenn Gegner auf mich zugefahren kommen, fahren die an mir vorbei
+            // und ich muss die erst teils verfolgen«. Jetzt gelesen (Fable-Lauf
+            // »Zielaufnahme«, Frage 2, von mir nachgelesen @0x409FB8):
+            //
+            //     al = byte[+0x14]            ; UKOL
+            //     test eax, eax   je  weiter  ; 0 = frei
+            //     cmp  eax, 2     jl  raus    ; 1 faellt durch
+            //     cmp  eax, 4     jg  raus    ; 5.. faellt durch
+            //     -> die Schiessuhr laeuft fuer UKOL 0, 2, 3 und 4
+            //
+            // UKOL 2 ist FAHREN. Das Original schiesst also im Fahren, und es
+            // haelt dafuer nicht an: im ganzen Schusspfad steht kein Schreiber
+            // auf UKOL/POHYB (Vollerhebung ueber die Relokationstafel).
+            //
+            // ⚠ AUSNAHME INFANTERIE: sie schiesst nur im Stand
+            // (`POHYB == 0xFF && OTACIM == 0`), eigene Schiessuhr @0x40F0A0.
+            if (e.Path != null && (KeinFeuerImFahren || e.Infantry >= 0)) continue;
             float range = RangeOf(e);
             int best = -1;
             float bestDist = range;
@@ -9612,6 +9808,31 @@ public partial class MapEntityLayer : Node2D
                 if (i == j) continue;
                 var t = _entities[j];
                 if (!IsHostile(e, t)) continue;
+                // ⭐⭐⭐ 01.09.2026 — EIN GEBAEUDE IST KEIN SELBSTGEWAEHLTES ZIEL.
+                //
+                // Gemeldet: »Raketenwerfer-Einheiten schiessen auch einfach auf
+                // eine Basis drauf los von alleine, ohne dass ich das angeordnet
+                // habe«. Und genau so war es: hier fehlte der Filter, und ein
+                // Raketenwerfer reicht 8 bis 9 Zellen weit (ein MG nur 5) — er
+                // ist die einzige Einheit, die von ihrem Standplatz aus eine
+                // Basis ueberhaupt erreicht.
+                //
+                // Gelesen (Fable-Lauf »Zielaufnahme«, Frage 1, von mir
+                // nachgelesen @0x40E0F5): die Schiessuhr nimmt Einheiten
+                // (Griff < 8000) und Infanteriezellen (10000..13999) von selbst.
+                // Ein GEBAEUDE (60000..60299) steht hinter einem doppelten Tor:
+                //
+                //     al = byte[+0x14]              ; UKOL
+                //     cmp al, 4        jne raus     ; nur ein ANGRIFFSBEFEHL
+                //     cmp si, 0xEA60   jb  raus     ; 60000
+                //     cmp si, 0xEB8C   jae raus     ; 60300
+                //     cmp word[+0x36], si  jne raus ; und GENAU das befohlene Ziel
+                //
+                // Ein Gebaeude wird also nur beschossen, wenn der Spieler es
+                // ausdruecklich befohlen hat — nie von selbst. Der befohlene
+                // Angriff geht bei uns weiterhin durch: er setzt `Ordered`.
+                // Gegenprobe `--auto-gebaeudeziel`.
+                if (!AutoGebaeudeziel && t.IsBuilding) continue;
                 float d = CellDistance(e, t);
                 // ⚠ Ein Ziel, das UNTER der Mindestreichweite liegt, ist kein
                 // Ziel: die Einheit wuerde es sich merken und dann nie
@@ -9622,6 +9843,16 @@ public partial class MapEntityLayer : Node2D
             if (best >= 0) { e.Target = best; e.Ordered = false; }
         }
     }
+
+    /// <summary><c>--auto-gebaeudeziel</c> — die Gegenprobe: ein Gebaeude darf
+    /// wieder von selbst aufs Korn genommen werden, wie bis zum 01.09.2026.
+    /// </summary>
+    public static bool AutoGebaeudeziel;
+
+    /// <summary><c>--kein-feuer-im-fahren</c> — die Gegenprobe: nur untaetige
+    /// Einheiten nehmen Ziele auf, und wer feuert, haelt an (Stand bis zum
+    /// 01.09.2026).</summary>
+    public static bool KeinFeuerImFahren;
 
     /// <summary>Drive at / shoot at the current target. Called once per frame.</summary>
     private void UpdateCombat(int i, Entity e, float dt)
@@ -9658,12 +9889,29 @@ public partial class MapEntityLayer : Node2D
             // bleibt stehen und der Wiederholungsversuch (Entity.RetryIn) nimmt
             // ihn wieder auf, sobald kein Ziel mehr da ist. Gegenprobe
             // `--no-path-retry` nimmt beides weg.
-            if (e.Path != null && !RetryOff &&
-                (e.Goal.X != e.Col || e.Goal.Y != e.Row)) e.RetryIn = RetryTicks;
-            e.Path = null;                      // in range: hold position and fire
-            // a turreted unit keeps its hull heading and only swings the weapon;
-            // one without a turret has to turn its whole body
-            if (e.Weapon == 0) e.Facing = e.AimFacing;
+            // ⭐⭐⭐ 01.09.2026 — UND DAS GEFECHT FRISST DEN FAHRBEFEHL NICHT MEHR.
+            // Der Absatz darueber nannte es ausdruecklich UNSERE Setzung (»ob
+            // das Original nach dem Gefecht weiterfaehrt, ist NICHT gelesen«).
+            // Jetzt ist es gelesen: die Schiessuhr schreibt weder UKOL noch
+            // POHYB — sie fuehrt nur das Rohr nach. Ein Ziel, das die Einheit
+            // sich unterwegs SELBST genommen hat, haelt sie also nicht an.
+            // ⚠ Ein BEFOHLENER Angriff haelt weiter an: dort faehrt das
+            // Original auf das Ziel zu und beendet den Auftrag erst bei der
+            // Ankunft (`ukol := 0` @0x407C6C) — eine andere Form als unsere
+            // Verfolgung, und die ruehre ich ohne eigene Lesung nicht an.
+            // ⚠ Und ohne Turm (`Weapon == 0`) muss der ganze Rumpf drehen; das
+            // geht im Fahren nicht, also schiesst so eine Einheit nur im Stand.
+            bool imFahren = !KeinFeuerImFahren && !e.Ordered
+                            && e.Path != null && e.Infantry < 0 && e.Weapon != 0;
+            if (!imFahren)
+            {
+                if (e.Path != null && !RetryOff &&
+                    (e.Goal.X != e.Col || e.Goal.Y != e.Row)) e.RetryIn = RetryTicks;
+                e.Path = null;                  // in range: hold position and fire
+                // a turreted unit keeps its hull heading and only swings the weapon;
+                // one without a turret has to turn its whole body
+                if (e.Weapon == 0) e.Facing = e.AimFacing;
+            }
             if (e.Cooldown <= 0 && HasAmmo(e))
             {
                 e.Cooldown = ReloadOf(e);
@@ -9880,6 +10128,10 @@ public partial class MapEntityLayer : Node2D
         // siehe InfBlock. Etwas laenger als eine Nachladezeit, damit die Pose
         // waehrend eines Feuerstosses nicht flackert.
         shooter.FireUntil = _clock + FirePoseSeconds;
+        // `--beschuss-check`: hier, am Ende der Kette, faellt der Schuss
+        // wirklich — nicht dort, wo die Buendnisfrage haette gestellt werden
+        // muessen. Siehe Simulation/BeschussCheck.cs.
+        BeschussZaehlen(shooter, victim);
         Vector2 dir = (victim.Pos - shooter.Pos).Normalized();
         // ⚠ 11.08.2026 — der Muendungsfeuerball (ANIM.CWA-Folge 232) wurde fuer
         // JEDE Waffe gleich gesetzt: gemeldet als »der Feuerball, der bei einer
@@ -25370,6 +25622,13 @@ public partial class MapEntityLayer : Node2D
         }
         sb.AppendLine($"befehl-check: {eigene} eigene Einheiten, {proTyp.Count} Bauarten");
         sb.AppendLine($"   Ansagen eingeschaltet: {(UI.Settings.Announcements ? "ja" : "NEIN — dann ist alles still")}");
+        // ⚠⚠ 03.09.2026 — DIESE TAFEL PRUEFT NICHT, OB DER KLANG BEIM BEFEHL
+        // FAELLT. Sie prueft Platz und Bank, und hat dreimal »bestanden«
+        // gemeldet, waehrend SpeakOrdered beim Spielerklick nie gerufen wurde
+        // (die Rufer sassen im Direktweg IssueMove, der Klick nimmt PostMove).
+        // Ob der Klang faellt, misst `--befehlsklang-probe`.
+        sb.AppendLine("   ⚠ ob der Klang beim BEFEHL wirklich faellt, sagt diese Tafel NICHT — " +
+                      "dafuer --befehlsklang-probe (echter Fahr- und Angriffsbefehl ueber PostMove/PostAttack)");
         int stumm = 0, ohneKlang = 0;
         foreach (var kv in proTyp)
         {
@@ -25384,6 +25643,65 @@ public partial class MapEntityLayer : Node2D
         sb.AppendLine(stumm == 0 && ohneKlang == 0
             ? "   bestanden — jede Bauart hat einen Befehlsklang, und er liegt in der Bank."
             : $"   ⚠ {stumm} Einheiten ohne Platz, {ohneKlang} mit Platz aber ohne Klang.");
+
+        // ⭐⭐ 02.09.2026 — UND JETZT DIE ZUORDNUNG SELBST. Gemeldet nach dem
+        // Umbau: »ich hoere nichts vom soundbefehl umbau«. Die Tafel darueber
+        // prueft nur den ANGRIFFSklang und haette auch dann »bestanden«
+        // gemeldet, wenn der FAHRzweig gar keinen Klang mehr waehlt. Ein
+        // Pruefstand, der die geaenderte Stelle nicht anfasst, bestaetigt die
+        // Aenderung nicht — er bestaetigt nur, dass daneben alles heil ist.
+        sb.AppendLine("   Welcher KLANGSATZ bei welchem Befehl (Umbau vom 02.09.):");
+        // ⚠ 02.09.2026 — die erste Fassung druckte je EINEN Wurf und behauptete
+        // daneben, »anwaehlen« und »FAHREN« muessten DIESELBE Zahl sein. Beides
+        // war falsch: `Voice` und `OrderVoice` WUERFELN (Di + Roll(DiCount),
+        // und zu einem Drittel stattdessen Bp + Roll(3)). Ein Wurf ist nicht
+        // reproduzierbar, und zwei Wuerfe aus demselben Satz sind fast nie
+        // gleich. Darum hier der ganze SATZ, durch Wiederholung erhoben.
+        var gesehen = new HashSet<(int, int)>();
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != ViewPlayer) continue;
+            if (!gesehen.Add((e.GameUnitType, e.Chassis))) continue;
+
+            var wurf = new System.Random(12345);
+            var anwahl = new SortedSet<int>();
+            var fahrt = new SortedSet<int>();
+            var angriff = new SortedSet<int>();
+            for (int k = 0; k < 3000; k++)
+            {
+                anwahl.Add(Audio.GameSounds.Voice(e.GameUnitType, e.Chassis, e.Field28, wurf));
+                angriff.Add(Audio.GameSounds.OrderVoice(e.GameUnitType, e.Chassis, e.Field28, wurf));
+                fahrt.Add(BefehlsklangAlt
+                    ? Audio.GameSounds.OrderVoice(e.GameUnitType, e.Chassis, e.Field28, wurf)
+                    : Audio.GameSounds.Voice(e.GameUnitType, e.Chassis, e.Field28, wurf));
+            }
+            string Satz(SortedSet<int> m)
+            {
+                var teile = new List<string>();
+                foreach (int x in m)
+                    teile.Add(x < 0 ? "stumm"
+                            : Audio.SoundBankPlayer.Stream(x) != null ? x.ToString() : x + "!");
+                return string.Join(",", teile);
+            }
+            var nurAngriff = new SortedSet<int>(angriff); nurAngriff.ExceptWith(fahrt);
+            var gemeinsam = new SortedSet<int>(angriff); gemeinsam.IntersectWith(fahrt);
+            int[] proGattung = { 20, 2, 0, 100, 10, 10 };
+            int g = e.GameUnitType;
+            int wichtig = (g >= 0 && g < proGattung.Length ? proGattung[g] : 0)
+                        + (e.Chassis is 1 or 3 ? 8 : 0) + e.Field28;
+            sb.AppendLine($"   Gattung {g,2} Fahrwerk {e.Chassis,2}  (Wichtigkeit {wichtig})");
+            sb.AppendLine($"      anwaehlen + FAHREN: {Satz(anwahl)}");
+            sb.AppendLine($"      ANGREIFEN:          {Satz(angriff)}");
+            sb.AppendLine($"      nur beim Angriff: {(nurAngriff.Count == 0 ? "KEINER" : Satz(nurAngriff))}" +
+                          $"   |   in beiden: {(gemeinsam.Count == 0 ? "keiner" : Satz(gemeinsam))}");
+        }
+        sb.AppendLine("   ⭐ ERWARTET (0x437985 ruft 0x429290, der Angriffsarm ruft 0x429480):");
+        sb.AppendLine("     »anwaehlen + FAHREN« und »ANGREIFEN« sind ZWEI SAETZE, die einander");
+        sb.AppendLine("     UEBERLAPPEN — beim Original ebenso. Ein »!« heisst: Platz ohne Klang.");
+        sb.AppendLine("   ⚠⚠ DARUM IST DER UMBAU IM SPIEL KAUM ZU HOEREN, und das ist kein Fehler:");
+        sb.AppendLine("     die Saetze trennen sich nur in wenigen Klaengen, und der gemeinsame Teil");
+        sb.AppendLine("     kommt bei BEIDEN Befehlen. Wer den Unterschied pruefen will, hoert auf");
+        sb.AppendLine("     die Klaenge unter »nur beim Angriff« — und vergleicht mit --befehlsklang-alt.");
         return sb.ToString();
     }
 
@@ -28566,6 +28884,25 @@ public partial class MapEntityLayer : Node2D
                         e.StepCost = 0; e.Progress = 0;
                         e.Target = -1;
                         _order = $"slot {e.Slot}: kein Sprit";
+                        // ⭐⭐ 02.09.2026 — UND SIE SAGT ES. Gemeldet: »ich stand
+                        // kurz vor dem Forscher, die erste Einheit hatte kein
+                        // Sprit mehr, ist damit liegen geblieben und blockierte
+                        // meine anderen Fahrzeuge, weil der Weg natuerlich sehr
+                        // schmal ist«. Das Anhalten war richtig; die WARNUNG
+                        // fehlte, und ohne sie merkt man es erst am Stau.
+                        //
+                        // Gelesen (Fable-Lauf »Sprit«, Abschnitt 5): der einzige
+                        // Rufer von 0x4296E0 ist 0x407AB9 — genau hier, genau
+                        // beim Nulldurchgang. Nummer nach Gattung/Erfahrung,
+                        // Modus 1 (an der Einheit, also gedaempft).
+                        SpeakNoFuel(e);
+                        // Und in die Ereignisleiste, wie »unter Beschuss«: das
+                        // Hinweisfenster des Originals (Hilfetext #14,
+                        // @0x4989EA, Riegel word[0xBC5694]) kommt nur EINMAL je
+                        // Spiel — die zweite trockene Einheit meldet sich dann
+                        // gar nicht mehr, und das ist genau der Fall, den er
+                        // erlebt hat.
+                        NoteEvent(e, "kein Sprit");
                         // ⚠ Und RAUS aus der Ankunftsbehandlung: »der Weg ist
                         // zu Ende« gilt einer Einheit nicht mehr, die gerade
                         // liegengeblieben ist.

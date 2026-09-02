@@ -108,9 +108,41 @@ public partial class MapEntityLayer
     /// <summary>Wieviele Deckkacheln im letzten Bild gemalt wurden.</summary>
     public int NebelDeckeGezeichnet;
 
+    /// <summary>Welche Zellen die Nebeldecke abdeckt — damit der Objektzeichner
+    /// weiss, wo er den Boden NICHT ein zweites Mal malen muss. Siehe
+    /// <see cref="NebelBodenDoppelt"/>.</summary>
+    private readonly HashSet<(int, int)> _nebelDeckeZellen = new();
+
+    /// <summary>
+    /// ⚠⚠ <b>01.09.2026 — WIE OFT DER OBJEKTZEICHNER DEN BODEN EIN ZWEITES MAL
+    /// GEMALT HAETTE, und zwar an der falschen Stelle.</b>
+    ///
+    /// <para>Gemeldet: »Bäume werden wie kästchenweise aufgedeckt aus dem fog of
+    /// war, sieht komisch aus«. Der Grund steht in den zwei Ankern:</para>
+    ///
+    /// <code>
+    ///   Nebeldecke   y = OriginY + r·TileH − elev·ElevStep + BlitAnchor + sy.YOff
+    ///   Objekt       y = OriginY + r·TileH − elev·ElevStep + BlitAnchor + sp.YOff
+    /// </code>
+    ///
+    /// <para><c>sy</c> ist die BODENkachel (40 × 20, <c>YOff</c> ≈ 0),
+    /// <c>sp</c> das aufragende OBJEKT (ein Baum, <c>YOff</c> stark negativ).
+    /// Der Objektzweig malte die Bodenkachel an <c>e.Ziel</c> — also am Anker
+    /// des BAUMES, um dessen ganze Hoehe zu weit oben. Ein 40 × 20 grosses
+    /// Bodenrechteck schwebte in der Baumkrone; beim Aufdecken verschwand es
+    /// und der Baum erschien. <b>Das sind die Kästchen.</b></para>
+    ///
+    /// <para>Die richtige Deckung macht die <b>Nebeldecke</b> laengst, und zwar
+    /// mit dem richtigen Anker (<c>7868aa8</c>). Der Objektzweig ueberspringt
+    /// den Boden darum, wo sie greift, und zaehlt die Faelle. Bleibt die Zahl
+    /// bei 0, war der zweite Anstrich reiner Schaden.</para>
+    /// </summary>
+    public int NebelBodenDoppelt;
+
     private void LiesNebeldecke(JObj meta, List<Rect2> kohle)
     {
         _nebelDecke.Clear();
+        _nebelDeckeZellen.Clear();
         if (meta["nebelboden"] is not JsonArray zellen) return;
         // ⭐ 31.08.2026 — ABSTURZBEHEBUNG AN DER WURZEL, siehe
         // berichte/absturz-fable.md und berichte/sturm-fable.md. Diese
@@ -129,6 +161,7 @@ public partial class MapEntityLayer
             if (k < 0 || k >= kohle.Count) continue;
             _nebelDecke.Add((GetI(o, "col"), GetI(o, "row"),
                              new Vector2(GetI(o, "x"), GetI(o, "y")), kohle[k]));
+            _nebelDeckeZellen.Add((GetI(o, "col"), GetI(o, "row")));
         }
         GD.Print($"nebeldecke: {_nebelDecke.Count} Zellen, deren wahre Kachel im "
                + "unerkundeten Gebiet durch die synthetisierte ersetzt wird");
@@ -691,6 +724,13 @@ public partial class MapEntityLayer
                         NebelWahreKachel++;
                         continue;
                     }
+                    // ⚠⚠ 01.09.2026 — NICHT ein zweites Mal, und schon gar
+                    // nicht am Anker des Baumes. Siehe NebelBodenDoppelt.
+                    if (_nebelDeckeZellen.Contains((e.Col, e.Row)))
+                    {
+                        NebelBodenDoppelt++;
+                        continue;
+                    }
                     if (e.HatBoden)
                     {
                         DrawTextureRectRegion(_objTex, new Rect2(e.Ziel, e.BodenSrc.Size), e.BodenSrc);
@@ -1184,6 +1224,7 @@ public partial class MapEntityLayer
             e.Abgebrannt = true;
             e.Steht = false;
             ok = true;
+            ZelleNachBrandFreigeben(e);
             GD.Print($"wald: ({col},{row}) durch starken Schaden geloescht — "
                      + "OHNE Feuer (zrus, imap 0xFFFE)");
         }
@@ -1710,6 +1751,32 @@ public partial class MapEntityLayer
         }
     }
 
+    /// <summary>
+    /// ⭐⭐⭐ <b>DIE ZELLE DEM WEGEGITTER ZURUECKGEBEN</b> — 01.09.2026, aus
+    /// seiner Meldung »selbst wenn ich den Wald zerstoere, koennen die
+    /// Einheiten dort nicht langfahren; im Original geht das«.
+    ///
+    /// <para>Ein abgebranntes Objekt OHNE stehenden Rest ist im Original eine
+    /// freie Zelle (Belegungskarte <c>0xFFFE</c>); nur der eine von zwanzig
+    /// Baeumen, der als verkohlter Stamm stehen bleibt, sperrt weiter
+    /// (<c>0xFFFF</c>). Bis heute hat das niemand dem Wegegitter gesagt — die
+    /// ganze Objektebene hatte keinen einzigen <c>_nav</c>-Zugriff.</para>
+    ///
+    /// <para>Siehe <see cref="Simulation.NavGrid.ZelleFreigeben"/>, dort steht
+    /// die Herleitung und die benannte Setzung. Gegenprobe
+    /// <c>--wald-bleibt-sperre</c>.</para>
+    /// </summary>
+    private void ZelleNachBrandFreigeben(Kartenobjekt e)
+    {
+        if (e.Steht) return;                  // verkohlter Stamm: bleibt Sperre
+        if (_nav != null && _nav.ZelleFreigeben(e.Col, e.Row)) ZellenFreigegeben++;
+    }
+
+    /// <summary>Wieviele Zellen der Brand dem Wegegitter zurueckgegeben hat.
+    /// ⚠ Ohne die Zahl ist »der Weg ist frei« nicht von »es hat nie gebrannt«
+    /// zu unterscheiden.</summary>
+    public int ZellenFreigegeben;
+
     private void Ausbrennen()
     {
         if (ObjectsBurning == 0) return;
@@ -1720,6 +1787,7 @@ public partial class MapEntityLayer
             if (jetzt - e.BrandVon < e.BrandDauer) continue;
             e.Abgebrannt = true;
             ObjectsBurning--;
+            ZelleNachBrandFreigeben(e);
             // ⚠ Regel 33: ohne diese Zeile ist »das Feuer ist aus« nicht von
             // »es hat nie gebrannt« zu unterscheiden. Es sind wenige Zellen.
             GD.Print($"wald: ({e.Col},{e.Row}) nach {e.BrandDauer:0.0}s Spielzeit abgebrannt — "

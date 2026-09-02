@@ -230,6 +230,13 @@ public partial class MapEntityLayer
         return $"sprit: {faehrt} fahrende Einheiten, {summe} von {voll} Sprit "
              + (voll > 0 ? $"({100.0 * summe / voll:F0}%)" : "")
              + $", {leer} stehen trocken; {OhneSpritGemeldet} sind waehrend des Laufs leergefahren"
+             + $"; {SpritklangGespielt}x hat eine Einheit »kein Sprit« gemeldet"
+             + $"; {KeinWegGemeldet}x fiel ein Fahrbefehl mangels Weg aus"
+             + (SpritklangGespielt == 0 && OhneSpritGemeldet > 0
+                  ? "   ⚠⚠ leergefahren, aber KEINE Meldung — der Klang faellt nicht"
+                  : SpritklangGespielt != OhneSpritGemeldet && OhneSpritGemeldet > 0
+                      ? "   ⚠ Meldungen und Nulldurchgaenge weichen ab"
+                      : "")
              + (OhneSpritGemeldet == 0 ? "   ⚠ 0 = der Abzug greift nicht oder es fuhr niemand" : "");
     }
 

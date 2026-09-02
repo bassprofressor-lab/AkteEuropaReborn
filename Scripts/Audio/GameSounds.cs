@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Audio;
+﻿namespace AkteEuropaReborn.Audio;
 
 using System.Collections.Generic;
 using System.Text.Json;
@@ -587,6 +587,41 @@ public static class GameSounds
             default: return 182;
         }
     }
+
+    /// <summary><b>»Kein Sprit« — die Meldung beim Trockenlaufen,
+    /// <c>0x4296E0</c>.</b>
+    ///
+    /// <para>⚠ 02.09.2026, gemeldet aus Kampagne 3: »ich stand kurz vor dem
+    /// Forscher, die erste Einheit hatte kein Sprit mehr, ist damit
+    /// liegen geblieben und blockierte meine anderen Fahrzeuge, weil der Weg
+    /// natürlich sehr schmal ist«. Wir hielten beim Nulldurchgang schon
+    /// richtig an — aber wir SAGTEN es nicht. Das Original tut es.</para>
+    ///
+    /// <para>Gelesen im Fable-Lauf »Sprit« (<c>berichte/sprit-fable.md</c>,
+    /// Abschnitt 5): der einzige Rufer ist <c>0x407AB9</c>, unmittelbar hinter
+    /// dem Spritabzug, und er kommt <b>nur beim Nulldurchgang</b>
+    /// (<c>0x407AB6 jne</c>) — nicht bei jedem weiteren Schritt einer leeren
+    /// Einheit. Danach die Protokollmarke <c>no fuel</c>.</para>
+    ///
+    /// <code>
+    ///   Gattung 0: exp(+0x28) &lt;= 50 -> 160 ; > 50 -> 173   0x42971E..0x429726
+    ///   Gattung 3:                        -> 173             0x42972C
+    ///   sonst:                            -> 180             0x429718
+    /// </code>
+    ///
+    /// <para>⚠ <b>Modus 1</b> — an der Einheit, also mit Entfernungsdämpfung,
+    /// anders als der Trefferklang (Modus 0). Eine Einheit, die weit weg
+    /// trockenfällt, ist demnach leise; das ist die Setzung des Originals und
+    /// nicht unsere. Und ⚠ es gibt <b>keine Sperruhr</b>: fallen fünf
+    /// Einheiten gleichzeitig trocken, sprechen fünf. Der Nulldurchgang ist
+    /// je Einheit einmalig, das trägt die Beschränkung von allein.</para>
+    /// </summary>
+    public static int NoFuelVoice(int subclass, int field28) => subclass switch
+    {
+        0 => field28 > 50 ? 173 : 160,
+        3 => 173,
+        _ => 180,
+    };
 
     /// <summary>How long the hit line stays quiet, in seconds. The COUNT is the
     /// game's — 250 plus a throw of 100 on the clock at 0x4fa240 — and only the

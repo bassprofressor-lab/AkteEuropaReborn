@@ -19803,3 +19803,221 @@ unter 46, dort wird gewuerfelt.
 - Der **Knopf** im Bedienfeld, der laut Bericht denselben Merker bewaffnet
   (`0x448785`, Knopfcodes 0/28/31), ist nicht verdrahtet — bei uns geht es
   nur ueber Strg.
+
+## CM — DIE SEKTORMASCHINE IST NACHGELESEN UND GEBAUT (01.09.2026)
+
+Auftrag aus STATUS: **den Befund des Leseagenten an der teuersten Stelle
+nachlesen, bevor gebaut wird** (Bericht `berichte/kampagne3-fable.md`, Teil 1.2
+bis 1.4 — »NICHT von mir nachgelesen«). Genau daran hing bei CD.3 eine
+verkehrt herum gebaute Bedingung (bug-004). Nachgelesen ist jetzt alles, Befehl
+fuer Befehl, in der Leitfassung C; Werkzeuge `disx2.py` und `reloc_refs.py`.
+
+### CM.1 — Was der Bericht richtig hatte
+
+* Sektorsatz `0xB3D390 + 12·((11·p + sx)·11 + sy)`, Kante 24 Zellen, 11×11 je
+  Spieler — die Adressrechnung `@0x4BBBA2…0x4BBBD8` gerechnet und aufgegangen.
+* Die vier Arme der Zustandsmaschine, die Sprungtafel `0x4BC214` (aus der Datei:
+  `0x4BBE10 / 0x4BBE3A / 0x4BBFBA / 0x4BC029`), das Halbbytepaar `+1`, die
+  Hoechstzahl **5**, das Minimum von `100·belegt/bedarf`, die Zufallszelle
+  `sx·24 + rand%14 + 5`, die Abkuehlung `rand%200 == 111`, die Leine »mehr als
+  EIN Sektor«, und im Gruppenangriff `0x4BC540` die neun Nachbarn aus
+  `0x538C10`, das Modus-Tor 1..2 und `Modus := 3` ueber den gemerkten Zeiger
+  `@0x4BC7EB`.
+* `0xB400F0` ist eine **Einheiten**tafel, nicht die Sektortafel (BV.1/BV.3
+  bleiben damit berichtigt).
+
+### CM.2 — Vier Berichtigungen am Bericht
+
+1. **Das Nullen am Anfang** trifft NICHT `+0x02…+0x0B`, sondern nur `+0x06`,
+   `+0x07`, `+0x08` und das Wort `+0x0A` (`@0x4BBBDF…0x4BBBF1`). Das ist kein
+   Kleinkram: waeren `+0x02`/`+0x04` mitgenullt, waere die Feindstaerke aus
+   Takt 1 jedes Mal geloescht und der Gruppenangriff koennte nie ausloesen.
+2. **Modus 1 → Modus 2 ist BEDINGUNGSLOS** (`@0x4BBF16`, vor dem Sprung). Der
+   Bericht schrieb »sofern `+0x0F != 0xAB`«. Das `0xAB`-Tor haengt in Wahrheit
+   an einem zusaetzlichen Ruf `0x40192E → 0x43A8D0`, und der laeuft, wenn
+   `+0x0F == 0xAB` IST (`jne` springt darueber hinweg).
+3. **Die Abkuehlung in Modus 2 hat dasselbe Tor**, und dort steht es wirklich:
+   `+0x0F == 0xAB` faellt NICHT auf Modus 0 zurueck (`@0x4BC014`).
+4. Das Ziel wird **einmal je (Sektor, Nachbar)** geholt, nicht je Einheit
+   (Merker `byte[esp+0x13]`, gesetzt `@0x4BC638`, geloescht `@0x4BC7BE`) — die
+   ganze Gruppe greift dasselbe Ziel an.
+
+### CM.3 ⭐⭐ — Die Staerkeformel ist gelesen: es sind TREFFERPUNKTE
+
+Der Bericht liess `0xB461C0` offen (»mutmasslich `0x4BA710`«). Vollerhebung
+ueber das Fenster `0xB461C0 + 3872`: **genau EIN Schreiber**, 14 Leser, 0
+unklar. `0x4BA710` ist es, und sie sagt:
+
+```
+   rep stosd 0xB461C0, 0x1E4 dwords            ; 1936 Woerter = 121·8
+   fuer alle 8000 Plaetze cx:
+      byte[+0x09] (faze) == 0xFF -> weiter
+      byte[+0x0D] (Waffe) == 0   -> weiter
+      raster[8·(11·(x/24) + y/24) + cx/1000] += byte[+0x08]   ; ENERGIE
+```
+
+**Staerke = Summe der Trefferpunkte aller bewaffneten Einheiten im Sektor**,
+nicht ihre Zahl. Der Feldname stammt aus dem Spiel selbst (`energie:` im Dump
+`@0x413743`). `0x4BA7D0` verteilt das Rohraster danach nur noch nach der
+Buendnisspalte auf `+0x00` / `+0x02` / `+0x04`.
+
+### CM.4 ⭐⭐ — Die `imp`-Zahl 6 ist gelesen, und unsere Kampagnenzeile war falsch
+
+Vollerhebung `0xBC41E0 + 4080`: neben den Missionsbloecken (`0x488ADD`,
+`0x48934C`, `0x4896CA`, …) schreiben **zwei Stellen ausserhalb jedes Skripts**:
+
+```
+   0x43CF75   byte[0xBC41E1 + 2·(255·ALTbesitzer + platz)] := 0
+   0x43CF8D   byte[0xBC41E1 + 2·(255·NEUbesitzer + platz)] := 6   ; Besitzwechsel
+   0x43D177   byte[0xBC41E1 + 2·(255·besitzer    + platz)] := 6   ; Anlage
+```
+
+Ein Gebaeude bekommt seine `imp` also beim **Aufstellen** und beim
+**Uebernehmen** — 6, ohne Umweg ueber die Karte. Damit ist die Vermutung von
+BT (»6 in 311 von 324 Faellen, also nehmen wir 6«) belegt, **und unsere Zeile
+`InCampaign ? 0 : 6` war ein Fehler**: mit ihr hat in einer Mission kein Sektor
+Bedarf, die Zuweisung findet nie einen Zielsektor, und die ganze Maschine
+laeuft leer. Gegenschalter `--imp-alt`.
+
+### CM.5 — Was Lage 99 markiert (halb gelesen)
+
+Der Modus-1-Arm sucht im 5×5-Feld eine Zelle mit Lagenbyte **99**
+(`cmp cl, 0x63 / je @0x4BBED9`). Vollerhebung ueber `0x542E18`: **genau ein
+Schreiber der 99**, `0x43CB12`, in der Gebaeudeuhr — er setzt zusammen
+`imap := 0xFFFE` auf der Zelle `(spalte + b[+0x35], zeile + b[+0x36])`,
+`b[+0x0A] := 1` und eben Lage 99. Das sieht nach der **Torzelle** eines
+Gebaeudes aus, der Arm hiesse dann »geh dem Tor aus dem Weg«.
+⚠ **Deutung, nicht belegt** — die Gebaeudefelder `+0x34…+0x36` sind ungelesen.
+
+### CM.6 — Gebaut
+
+`Scripts/Simulation/SkirmishAiSectors.cs`: `AiZustandsmaschine` (die vier Arme
+plus Zuweisung) und `AiGruppenangriff` (`0x4BC540`, alle 121 Sektoren × 9
+Nachbarn). `AiStaerkeraster` zaehlt jetzt Trefferpunkte, `AiImpVon` gibt auch in
+der Kampagne 6. Die Bruecke `AiZustandVorlaeufig` und der alte
+Ein-Sektor-Angriff stehen nur noch unter `--sektormaschine-alt`.
+
+**Nicht gebaut, benannt:** der 5×5-Griff nach Lage 99 (die Lagenkarte liegt zur
+Laufzeit gar nicht vor — wir nehmen immer den anderen Ausgang, Modus := 2), der
+Alarmklang 0x7A fuer den Menschen samt Abklingzaehler, und das `0xAB`-Tor.
+`UKOL == 0` ist bei uns »kein Weg, kein Ziel, keine Befehlsliste« — unser `Ukol`
+fuehrt nur die drei Werte der Einfahrt.
+
+### CM.7 — Gemessen: Kampagne 3, 60 s kopflos, drei Keime
+
+Zahl der Sektorangriffe ueber alle vier Computerspieler:
+
+```
+   Keim      neu    --sektormaschine-alt
+     7        26            2
+    11        16            2
+    23        20            2
+```
+
+Und die Ausgaenge einzeln (Keim 7): P1 36 zugewiesen / 11 Angriffe, P5 42/13,
+P2 10/2 — **P6 40x »kein Sektor«**, und das ist richtig so: Spieler 6 hat auf
+map_03 kein Gebaeude, also nirgends Bedarf. Der alte Bau meldete dagegen 40 von
+40 Versuchen »kein Ziel«: er sah immer nur den EINEN Sektor mit dem groessten
+Ueberschuss und dort stand nichts.
+
+⚠ Der Nachtest im SPIEL steht aus (bug-012, bug-013): stehen die Gegner nach
+der Bruecke noch immer still, und greifen jetzt mehr an als vorher?
+
+## CN — WORAUF EINE EINHEIT VON SELBST SCHIESST (offen, 01.09.2026)
+
+**Gemeldet:** »Raketenwerfer-Einheiten schiessen auch einfach auf eine Basis
+drauf los von alleine, ohne dass ich das angeordnet habe.«
+
+**Der Befund bei uns:** `MapEntityLayer.AutoAcquire` nimmt fuer jede
+kampffaehige, untaetige Einheit das naechste feindliche Ziel in Waffenreichweite.
+`IsHostile` schliesst Kulisse, Tote, Untergestellte und Verbuendete aus —
+**Gebaeude aber nicht**. Ein Raketenwerfer in Reichweite einer feindlichen Basis
+nimmt sie also von selbst aufs Korn. Der Schuetze selbst wird ebenfalls nicht
+gefiltert: ein bewaffnetes GEBAEUDE sucht sich hier auch Ziele.
+
+**Was dagegen spricht, dass das Original das tut** — beide *gelesenen*
+Zielsuchen schliessen Gebaeude aus:
+
+* `ai_units` @0x4BF4E0 (der Sichtring): `v >= 8000` heisst »kein Eintrag der
+  Einheitentafel« und faellt durch (so auch in `AiRingTarget` nachgebaut).
+* `get_target_in_sector` @0x4BC3D0: verlangt **Gattung (+0x0A) < 4** — Gebaeude
+  sind kein Gruppenziel (Bericht 1.4).
+
+⚠ **Beides sind KI-Wege.** Die selbsttaetige Zielaufnahme einer Einheit des
+MENSCHEN sitzt in der Einheitenuhr, und die ist an dieser Stelle **nicht
+gelesen**. Darum ist hier nichts geaendert: ein Gebaeudefilter waere eine
+Setzung, und die Regel lautet, im Original zu suchen statt selbst zu basteln.
+
+**Bauauftrag fuer den naechsten Lesegang:** die Zielaufnahme in der Einheitenuhr
+suchen (Kandidaten in der Nachbarschaft von `0x40BF7F`, wo die Mindestreichweite
+geprueft wird) und die zwei Fragen beantworten:
+1. Nimmt eine untaetige Einheit von selbst ein GEBAEUDE aufs Korn?
+2. Nimmt eine FAHRENDE Einheit unterwegs ein Ziel auf? (Bei uns nicht —
+   `AutoAcquire` ueberspringt jeden mit `e.Path != null`; daran haengt seine
+   zweite Meldung »die fahren an mir vorbei«.)
+
+### CN.2 — DIE ANTWORT (Fable-Leselauf 01.09.2026, von mir nachgelesen)
+
+Bericht: `berichte/zielaufnahme-fable.md`. Die Schiessuhr sitzt in der
+Einheitenuhr, nicht in der KI: Fahrzeuge `0x40DDB0` (einziger Rufer
+`move units` @`0x409FD3`), Infanterie `0x40F0A0`. Sie laeuft fuer **jeden**
+Spieler.
+
+**Nachgelesen habe ich die drei teuersten Stellen selbst, alle drei halten:**
+
+**1. Gebaeude sind KEIN selbstgewaehltes Ziel** — `@0x40E0F5`, woertlich:
+
+```
+   al = byte[+0x14]            ; UKOL
+   cmp al, 4       jne raus    ; nur ein ANGRIFFSBEFEHL
+   cmp si, 0xEA60  jb  raus    ; 60000
+   cmp si, 0xEB8C  jae raus    ; 60300  -> Griffband der Gebaeude
+   cmp word[+0x36], si  jne raus  ; und GENAU das befohlene Ziel
+```
+
+Von selbst nimmt die Uhr nur **Einheiten** (Griff < 8000) und
+**Infanteriezellen** (10000…13999). Dasselbe Tor steht zwei Befehle hoeher
+noch einmal (`@0x40E0CB`) fuer den anderen Zweig.
+
+**2. Es wird IM FAHREN geschossen** — `@0x409FB8`, woertlich:
+
+```
+   al = byte[+0x14]
+   test eax, eax   je  weiter  ; UKOL 0
+   cmp  eax, 2     jl  raus    ; 1 faellt durch
+   cmp  eax, 4     jg  raus    ; 5.. faellt durch
+```
+
+Also **UKOL 0, 2, 3 und 4** — und 2 ist FAHREN. Der Schusspfad schreibt weder
+UKOL noch POHYB (Vollerhebung), die Fahrt wird also nicht unterbrochen; nur das
+Rohr wird nachgefuehrt. ⚠ **Infanterie schiesst nur im Stand**
+(`POHYB == 0xFF && OTACIM == 0`).
+
+**3. Der Zellangriff endet nicht an der leeren Zelle** — `@0x407C6C`:
+laeuft der Weg aus (Wegpuffer `0x7AEC38` liefert 0xFF), setzt das Original
+`byte[+0x04] := 0xFF`, `word[+0x06] := 0`, **`byte[+0x14] := 0`** (UKOL) und
+`byte[+0x1A] := 0xFF`. Die **Ankunft** beendet den Auftrag. Das Schussziel
+raeumen sonst nur: ein fehlschlagender **Probeschuss** (`0x4543C0` →
+`0x453AA0`, stiller Testflug auf Geschossplatz 1000), **Munition 0**
+(`+0x39` Munition, `+0x3A` Hoechstwert — Neufund) oder ein **neuer Befehl**.
+**Kein Zellen-leer-Test, kein Schusszaehler.**
+
+**Gebaut daraus** (`MapEntityLayer.AutoAcquire` / `UpdateCombat`):
+* Gebaeude fallen aus der selbsttaetigen Zielaufnahme heraus — der BEFOHLENE
+  Angriff geht weiter durch (`Ordered`). Gegenprobe `--auto-gebaeudeziel`.
+* Eine fahrende Einheit nimmt Ziele auf und **haelt zum Feuern nicht mehr an**.
+  Gegenprobe `--kein-feuer-im-fahren`. ⚠ Ausgenommen Infanterie (nur im Stand)
+  und Einheiten ohne Turm (`Weapon == 0`, der ganze Rumpf muesste drehen —
+  unsere Setzung).
+* ⚠ **Nicht angefasst:** der BEFOHLENE Angriff haelt weiterhin an, wenn das
+  Ziel in Reichweite ist. Das Original faehrt statt dessen auf das Ziel zu und
+  beendet den Auftrag bei der Ankunft; das ist eine andere Form als unsere
+  Verfolgung, und sie umzubauen braucht eine eigene Lesung.
+
+**Gemessen** (Kampagne 3, 90 s, Keim 7): Restarmeen der vier Computerspieler
+zusammen **44** gegen **38** mit `--kein-feuer-im-fahren`; Phantome in beiden
+Faellen 0.
+
+**Offen aus dem Bericht:** ZBRAN 8/9, der Verfolger `0x40FC90` (nur angelesen),
+der Schuetzenpfad bewaffneter GEBAEUDE. ⚠ Und eine Berichtigung des Agenten an
+BA.7: `0x453AA0` ist der **Probeschuss**, nicht der scharfe Schuss.

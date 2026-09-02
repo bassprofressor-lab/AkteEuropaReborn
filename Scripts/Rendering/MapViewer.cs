@@ -1380,6 +1380,22 @@ public partial class MapViewer : Node2D
             else if (a == "--schiffdreh-check") _drehCheck = true;
             else if (a == "--schiffstau-check") _stauCheck = true;
             else if (a == "--belegung-check") _belegCheck = true;
+            else if (a == "--beschuss-check") _beschussCheck = true;
+            else if (a == "--forscher-probe") _forscherProbe = true;
+            else if (a.StartsWith("--forscher-probe="))
+            {
+                _forscherProbe = true;
+                if (int.TryParse(a[17..], out int ft))
+                    MapEntityLayer.ForscherTank = ft;
+            }
+            else if (a == "--spritklang-fuer-alle") MapEntityLayer.SpritklangFuerAlle = true;
+            else if (a == "--befehlsklang-alt") MapEntityLayer.BefehlsklangAlt = true;
+            // 03.09.2026 — der Klang sitzt im ABSENDER (PostMove/PostAttack);
+            // --befehlsklang-weg-alt haengt ihn wieder an den Direktweg
+            // IssueMove/IssueAttack, den der Spielerklick nicht nimmt. Die
+            // Probe misst beides. Siehe Simulation/BefehlsklangProbe.cs.
+            else if (a == "--befehlsklang-weg-alt") MapEntityLayer.BefehlsklangWegAlt = true;
+            else if (a == "--befehlsklang-probe") _befehlsklangProbe = true;
             else if (a == "--minen-check") _minenCheck = true;
             // Auch die =-Form annehmen. spielen.cmd nennt in seiner Hilfe `--erwartung=18`,
             // und ein Gleichheitsvergleich hat die still verschluckt: kein Blatt, keine Meldung,
@@ -1818,6 +1834,16 @@ public partial class MapViewer : Node2D
             else if (a == "--minikarte-nebel-zweimal") Minimap.NebelZweimal = true;
             // Gegenprobe zum SEKTORANGRIFF, siehe SkirmishAi.AiSektorAngriff.
             else if (a == "--kein-sektorangriff") MapEntityLayer.KeinSektorangriff = true;
+            // Die drei Gegenproben zur Sektormaschine vom 01.09.2026, siehe
+            // Simulation/SkirmishAiSectors.cs.
+            else if (a == "--sektormaschine-alt") MapEntityLayer.SektormaschineAlt = true;
+            else if (a == "--sektor-buendnis-alt") MapEntityLayer.SektorBuendnisAlt = true;
+            // Die zwei Gegenproben zur gelesenen Zielaufnahme (CN, 01.09.2026).
+            else if (a == "--auto-gebaeudeziel") MapEntityLayer.AutoGebaeudeziel = true;
+            else if (a == "--wald-bleibt-sperre") Simulation.NavGrid.WaldBleibtSperre = true;
+            else if (a == "--kein-feuer-im-fahren") MapEntityLayer.KeinFeuerImFahren = true;
+            else if (a == "--staerke-alt") MapEntityLayer.StaerkeAlt = true;
+            else if (a == "--imp-alt") MapEntityLayer.ImpAlt = true;
             else if (a == "--kein-ausweichen") MapEntityLayer.AusweichenAn = false;
             else if (a == "--kein-aufgeben") MapEntityLayer.AufgebenAn = false;
             else if (a == "--kein-bodenangriff") MapEntityLayer.BodenangriffAn = false;
@@ -2095,6 +2121,23 @@ public partial class MapViewer : Node2D
     private bool _drehCheck;
     private bool _stauCheck;
     private bool _belegCheck;
+    /// <summary><c>--beschuss-check</c>: zaehlt jeden gefallenen Schuss nach
+    /// dem Paar (Schuetze, Getroffener) und wirft am Ende aus, ob ein
+    /// VERBUENDETER beschossen wurde. Siehe Simulation/BeschussCheck.cs.
+    /// </summary>
+    private bool _beschussCheck;
+    /// <summary><c>--forscher-probe</c>: schickt jede eigene fahrende Einheit
+    /// zum FORSCHER (der Einheit des neutralen Spielers 7) und misst
+    /// Luftlinie, gefahrene Zellen und Sprit nebeneinander. Siehe
+    /// Simulation/ForscherProbe.cs.</summary>
+    private bool _forscherProbe;
+    private bool _forscherGestartet;
+    /// <summary><c>--befehlsklang-probe</c>: setzt einen ECHTEN Fahr- und
+    /// Angriffsbefehl ueber PostMove/PostAttack ab — den Weg des
+    /// Rechtsklicks — und zaehlt, ob dabei der Befehlsklang faellt. Siehe
+    /// Simulation/BefehlsklangProbe.cs.</summary>
+    private bool _befehlsklangProbe;
+    private bool _befehlsklangGestartet;
     private bool _minenCheck;
     /// <summary><c>--sprit-check</c>: schickt alle eigenen fahrenden Einheiten
     /// quer ueber die Karte, damit sich messen laesst, OB der Spritabzug beim
@@ -2602,6 +2645,9 @@ public partial class MapViewer : Node2D
             GD.Print(_entities.AirDriftLine());
             GD.Print(_entities.RangeWatchLine());
             if (_belegCheck) GD.Print(_entities.BelegungCheckLine());
+            if (_beschussCheck) GD.Print(_entities.BeschussCheckLine());
+            if (_forscherProbe) GD.Print(_entities.ForscherProbeLine());
+            if (_befehlsklangProbe) GD.Print(_entities.BefehlsklangProbeLine());
             if (_stauCheck)
             {
                 GD.Print(_entities.SchiffStauLine());
@@ -2609,6 +2655,9 @@ public partial class MapViewer : Node2D
                 return;
             }
             if (_belegCheck) { GetTree().Quit(0); return; }
+            if (_beschussCheck) { GetTree().Quit(_entities.BeschussCheckRc()); return; }
+            if (_forscherProbe) { GetTree().Quit(0); return; }
+            if (_befehlsklangProbe) { GetTree().Quit(_entities.BefehlsklangProbeRc()); return; }
             if (_drehCheck)
             {
                 GD.Print(_entities.SchiffDrehLine());
@@ -4442,6 +4491,20 @@ public partial class MapViewer : Node2D
             _spritGestartet = true;
             GD.Print(_entities.SpritCheckStart());
         }
+
+        if (_forscherProbe && !_forscherGestartet && _entities.ErwartungBereit())
+        {
+            _forscherGestartet = true;
+            GD.Print(_entities.ForscherProbeStart());
+        }
+        if (_forscherGestartet) _entities.ForscherProbeTick();
+
+        if (_befehlsklangProbe && !_befehlsklangGestartet && _entities.ErwartungBereit())
+        {
+            _befehlsklangGestartet = true;
+            GD.Print(_entities.BefehlsklangProbeStart());
+        }
+        if (_befehlsklangGestartet) _entities.BefehlsklangProbeTick();
 
         // ⚠ Die Leiste ZUERST: QuitIfDue() schreibt die Prüfzeilen, und
         // `--hud-check` fragt die Leiste. Stand der Aufruf danach, meldete die

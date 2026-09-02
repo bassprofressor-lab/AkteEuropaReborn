@@ -717,6 +717,46 @@ public sealed class NavGrid
             _ground[Idx(c, r)] = (byte)Ground.Free;
     }
 
+    /// <summary>
+    /// ⭐⭐⭐ <b>EIN ABGEBRANNTER BAUM SPERRT NICHT MEHR</b> — 01.09.2026.
+    ///
+    /// <para>Gemeldet: »selbst wenn ich den Wald zerstöre, um mir den Weg
+    /// freizuschiessen, können die Einheiten dort nicht langfahren, um zur
+    /// Nebenmission zu kommen. Im Original geht das.«</para>
+    ///
+    /// <para><b>Und er hat recht — die Objektebene hat das Wegegitter nie
+    /// angefasst.</b> In <c>MapObjects.cs</c> stand kein einziger
+    /// <c>_nav</c>-Zugriff; die Meldezeile des Ausbrennens behauptet seit jeher
+    /// »Stumpf, Zelle wieder frei (imap 0xFFFE)«, und genau das war die einzige
+    /// Stelle, an der es stand. Die Sperre kommt aus <see cref="ApplyTerrain"/>
+    /// und wurde beim Laden EINMAL gesetzt.</para>
+    ///
+    /// <para>Im Original ist die Sperre die <b>Belegungskarte</b>
+    /// (<c>0xBDEA80</c>): ein Waldeintrag liegt im Band 50000…55999, und beim
+    /// Abbrennen wird die Zelle auf <c>0xFFFE</c> (frei) gesetzt — ausser bei
+    /// dem einen von zwanzig Bäumen, der als verkohlter Stamm STEHEN bleibt
+    /// (<c>0xFFFF</c>). Genau diese Unterscheidung führen wir schon:
+    /// <c>Kartenobjekt.Steht</c>.</para>
+    ///
+    /// <para>⚠ <b>UNSERE Setzung ist die Klasse danach:</b> wir setzen
+    /// <see cref="Ground.Free"/>. Welche Geländeklasse unter dem Baum lag,
+    /// wissen wir zur Laufzeit nicht mehr — das Gitter trägt dort seit dem
+    /// Laden die Sperre. <c>--wald-bleibt-sperre</c> nimmt die Freigabe ganz
+    /// zurück.</para>
+    /// </summary>
+    /// <returns>true, wenn diese Zelle wirklich gesperrt war.</returns>
+    public bool ZelleFreigeben(int c, int r)
+    {
+        if (WaldBleibtSperre || !InBounds(c, r)) return false;
+        if ((Ground)_ground[Idx(c, r)] != Ground.Blocked) return false;
+        _ground[Idx(c, r)] = (byte)Ground.Free;
+        return true;
+    }
+
+    /// <summary><c>--wald-bleibt-sperre</c> — die Gegenprobe: ein abgebrannter
+    /// Baum sperrt weiter, wie bis zum 01.09.2026.</summary>
+    public static bool WaldBleibtSperre;
+
     /// <summary><paramref name="crushable"/> marks a foot soldier: they are
     /// driven through or run over, never blocked against (see
     /// <see cref="IsFree"/>).</summary>

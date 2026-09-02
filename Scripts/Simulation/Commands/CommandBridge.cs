@@ -193,7 +193,42 @@ public partial class MapEntityLayer
         // Die Rückmeldung an den Spieler ist ANZEIGE und darf sofort kommen —
         // sie berührt den Zustand nicht. Der Befehl selbst wirkt erst im
         // nächsten Takt; genau diese Trennung ist der ganze Umbau.
-        if (n > 0) AddOrderMark(CellCenter(cell.Value.X, cell.Value.Y), attack: false);
+        if (n > 0)
+        {
+            AddOrderMark(CellCenter(cell.Value.X, cell.Value.Y), attack: false);
+            // ⭐⭐ 03.09.2026 — DER BEFEHLSKLANG GEHOERT HIERHER, IN DEN ABSENDER.
+            //
+            // Gemeldet, zum dritten Mal: »hab immer noch nix gehoert« beim
+            // Fahrbefehl. Ursache: alle drei Rufer von SpeakOrdered sassen im
+            // Direktweg IssueMove/IssueAttack (MapEntityLayer.cs), und den
+            // nimmt der Klick des Spielers seit dem 22.08.2026 nicht mehr —
+            // MapViewer ruft PostMove (:4674/:4677), und der Behandler ApplyMove
+            // baut den Rumpf von IssueMove nach, ohne den Klang. Derselbe
+            // Fehlertyp wie der RetryIn-Fall vom 18.08.2026 (siehe ApplyMove),
+            // ein zweites Mal.
+            //
+            // ⭐ WARUM BEIM ABSENDEN und nicht beim Anwenden (ApplyMove):
+            //  1. So tut es das ORIGINAL. Der Anwaehlklang 0x429290 wird aus der
+            //     EINGABEROUTINE gerufen (@0x437985, Zeigerart 0/3, Busbefehl 3),
+            //     also VOR post() @0x4C1C50 — nicht aus dem Busbehandler
+            //     0x4C2324. Der Klang haengt am Klick, nicht an der Ausfuehrung.
+            //  2. ApplyMove laeuft EINMAL JE EINHEIT (der Ring traegt einen Satz
+            //     je Einheit, wie im Original @0x4342E9). Dort muesste man mit
+            //     einer Sperre je Befehlsstapel dafuer sorgen, dass von zwoelf
+            //     Saetzen nur einer spricht — hier ist der Klick von Natur aus
+            //     EIN Ereignis, und SprecherDerAuswahl (0x429220) sucht das
+            //     wichtigste Mitglied der Auswahl, die es im Behandler gar nicht
+            //     mehr gibt.
+            //  3. Im Netzspiel laeuft der Absender nur auf der Maschine mit dem
+            //     Klick. Beim Anwenden spraeche jede Maschine zu jedem fremden
+            //     Befehl. Und der Klangwurf (GameSounds.Voice) zieht aus
+            //     GD.Randi(), nicht aus dem Strom der Simulation — er kann den
+            //     Lockstep hier nicht anfassen.
+            // Der Gegenschalter --befehlsklang-weg-alt haengt den Klang wieder an
+            // den Direktweg (und nimmt ihn hier weg) — dann ist der Spielerklick
+            // wieder still, messbar mit --befehlsklang-probe.
+            if (!BefehlsklangWegAlt) SpeakOrdered(angriff: false);   // Fahrbefehl -> ANWAEHLzeile (0x437985)
+        }
         _order = n > 0
             ? $"Befehl abgesetzt -> ({cell.Value.X},{cell.Value.Y}): {n} Satz/Sätze"
             : "kein Befehl abgesetzt";
@@ -359,6 +394,11 @@ public partial class MapEntityLayer
         }
         if (n == 0) return false;
         AddOrderMark(victim.Pos, attack: true);
+        // ⭐ 03.09.2026 — der ANGRIFFSklang 0x429480, einmal je Klick, aus dem
+        // Absender; Begruendung bei PostMove. Die vier Rufer des Originals
+        // (0x437458, 0x43746A, 0x437581, 0x4375A8) liegen alle im Arm der
+        // Zeigerart 2 der Eingaberoutine, also ebenfalls vor post().
+        if (!BefehlsklangWegAlt) SpeakOrdered(angriff: true);
         _order = $"Angriffsbefehl abgesetzt -> Slot {victim.Slot}: {n} Satz/Sätze";
         UpdatePanel();
         QueueRedraw();
@@ -395,6 +435,9 @@ public partial class MapEntityLayer
         }
         if (n == 0) return false;
         AddOrderMark(ZellMitte(z.X, z.Y), attack: true);
+        // ⭐ 03.09.2026 — auch der Bodenangriff ist Zeigerart 2 (@0x437417),
+        // also der ANGRIFFSklang. Begruendung fuer den Ort bei PostMove.
+        if (!BefehlsklangWegAlt) SpeakOrdered(angriff: true);
         _order = $"Bodenangriff auf ({z.X},{z.Y}): {n} Satz/Sätze";
         UpdatePanel();
         QueueRedraw();
@@ -488,6 +531,13 @@ public partial class MapEntityLayer
         }
         if (n == 0) { _order = "keine Einheit gewaehlt, die fahren kann"; return true; }
         AddOrderMark(b.Pos, attack: false);
+        // ⚠ UNSERE SETZUNG (03.09.2026): das Einnehmen gibt es im Original nicht,
+        // aber die GESTE gibt es — Strg + Klick auf ein Gebaeude ist dort
+        // Zeigerart 2, und die spielt den ANGRIFFSklang 0x429480. Wir machen
+        // aus dem Klick einen Fahrbefehl zur Tuer, lassen die Einheit aber
+        // sagen, was sie im Original bei dieser Geste sagt. Ort: Absender, wie
+        // bei PostMove begruendet.
+        if (!BefehlsklangWegAlt) SpeakOrdered(angriff: true);
         _order = $"Einnehmen: {n} Einheit(en) faehrt zur Tuer von " +
                  $"{BuildingName(b)} (Besitzer {b.Owner})";
         UpdatePanel();
@@ -666,7 +716,26 @@ public partial class MapEntityLayer
     /// Verteiler springt für jeden Wert ausserhalb der drei Bereiche auf
     /// dieselbe Fehlermarke (@0x4C4847), und die schaltet nur weiter.</para>
     /// </summary>
-    public bool ApplyCommand(in CommandRecord c) => c.Op switch
+    public bool ApplyCommand(in CommandRecord c)
+    {
+        bool ok = ApplyCommandInner(c);
+        // ⭐ 03.09.2026 — je Art zaehlen, was WIRKLICH angenommen wurde.
+        // `--befehlsklang-probe` stellt diese Zahl neben die Klangzaehler:
+        // »n Saetze angewendet, 1 Klang« ist das Nullmodell, »0 angewendet«
+        // hiesse, der Befehl kam gar nicht an und der Klang belegt nichts.
+        if (ok)
+        {
+            if (c.Op == CommandOp.Move) BefehleAngewendet[0]++;
+            else if (c.Op is CommandOp.Attack or CommandOp.OursAttack) BefehleAngewendet[1]++;
+        }
+        return ok;
+    }
+
+    /// <summary>Wie viele Saetze der Behandler angenommen hat — [0] Fahren
+    /// (Opcode 3), [1] Angriff (Busbefehl 11, auch der alte 2001).</summary>
+    public readonly int[] BefehleAngewendet = new int[2];
+
+    private bool ApplyCommandInner(in CommandRecord c) => c.Op switch
     {
         // ⚠ VOR der Owns-Schranke: bei diesem Befehl ist P1 ein
         // FLUGZEUG-Steckplatz, keine Einheitennummer. Owns() würde
@@ -1350,6 +1419,13 @@ public partial class MapEntityLayer
     /// Wiederholung, aus dem Netz oder von einer anderen Kartengrösse kann
     /// damit nichts umwerfen.</para>
     /// </summary>
+    /// <summary>Wie oft ein Fahrbefehl an einer fehlenden Wegverbindung
+    /// gescheitert ist. ⚠ Diese Zahl gehoert in jede Spritmessung: ein
+    /// Befehl, der nie ankommt, sieht im Spiel aus wie eine Einheit, die
+    /// nicht will — und der Spieler faehrt dann von Hand Umwege, bis der
+    /// Tank leer ist.</summary>
+    public int KeinWegGemeldet;
+
     private bool ApplyMove(in CommandRecord c)
     {
         if (_nav == null) return false;
@@ -1395,6 +1471,27 @@ public partial class MapEntityLayer
             // eingekeilte Einheit stand damit bis zum Missionsende.
             e.Goal = goal;
             e.RetryIn = RetryOff ? 0 : RetryTicks;
+            // ⭐⭐ 02.09.2026 — UND ES WIRD GESAGT. Gemeldet: »ich kann in
+            // Kampagne 3 nicht mehr dahin zurueckfahren wo ich gestartet bin«.
+            //
+            // Der Befehl verschwand hier LAUTLOS: kein Text, kein Ereignis,
+            // keine Zahl. Ein »es gibt keinen Weg« sah damit im Spiel genauso
+            // aus wie ein »die Einheit will nicht«, und beim Pruefen (siehe
+            // ForscherProbe) genauso wie ein »der Sprit ist alle«. Drei
+            // verschiedene Ursachen, ein einziges Bild.
+            //
+            // ⚠ Warum es ueberhaupt passiert: unsere Suchkarte kommt aus
+            // `IsFree`, und das ist `Ask(...) == Step.Free` — eine Zelle mit
+            // einer EINHEIT darin gibt `GiveWay` und gilt als gesperrt. Auf
+            // einem einzelligen Weg genuegt damit eine liegengebliebene
+            // Einheit, um alles dahinter abzuschneiden. Das ist die bekannte
+            // Abweichung von Tafel BB.1 (dort ist eine Einheit fuer die
+            // PLANUNG frei); `--neue-pfadkarte` ist der Gegenversuch und steht
+            // aus gemessenen Gruenden AUS (siehe NavGrid.NeuePfadkarte).
+            // Solange das so bleibt, ist die Meldung das Mindeste.
+            KeinWegGemeldet++;
+            _order = $"slot {e.Slot}: kein Weg nach ({x},{y})";
+            NoteEvent(e, "kein Weg");
             return false;
         }
         e.Path = path;

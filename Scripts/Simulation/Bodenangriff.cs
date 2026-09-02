@@ -97,6 +97,7 @@ public partial class MapEntityLayer : Node2D
                 e.Cooldown = ReloadOf(e);
                 if (e.AmmoMax > 0 && !(CheatAmmo && Cheated(e))) e.Ammo--;
                 DebugShots++; BodenSchuesse++;
+                BeschussZelleZaehlen();          // `--beschuss-check`
                 BodenSchuss(i, e, z, mitte, w.Damage);
             }
             return true;
@@ -220,8 +221,25 @@ public partial class MapEntityLayer : Node2D
         return false;
     }
 
-    /// <summary>Steht auf der Zelle ein zerstoerbares Objekt?</summary>
-    private bool IstObjektZelle(int col, int row) => ObjektAn(col, row) != null;
+    /// <summary>Steht auf der Zelle ein zerstoerbares Objekt?
+    ///
+    /// <para>⚠⚠ <b>01.09.2026 — hier fehlte <c>Abgebrannt</c>, und das war der
+    /// Grund fuer »wenn ich Einheiten mit Strg befehle wohin zu schiessen,
+    /// brechen sie das nicht mehr ab«.</b> Der Waldzweig eine Zeile darueber
+    /// fragt <c>!o.Abgebrannt</c>, dieser fragte gar nichts: ein
+    /// heruntergebranntes Objekt blieb fuer <see cref="ZelleHatZiel"/> ein
+    /// Ziel, und <see cref="ObjektTreffer"/> gibt fuer dasselbe Objekt
+    /// <c>false</c> zurueck. Die Einheit schoss also weiter auf etwas, an dem
+    /// sie nichts mehr aendern konnte — bis in alle Ewigkeit.</para>
+    ///
+    /// <para>⚠ Die Abbruchbedingung des Originals bleibt ungelesen; das hier
+    /// ist weiterhin UNSERE Setzung, jetzt aber wenigstens dieselbe wie beim
+    /// Wald.</para></summary>
+    private bool IstObjektZelle(int col, int row)
+    {
+        var o = ObjektAn(col, row);
+        return o != null && !o.Abgebrannt;
+    }
 
     /// <summary>Was der Zellschaden bewirkt hat — Wald angezuendet, Wald weg,
     /// Objekt getroffen.</summary>
@@ -233,5 +251,9 @@ public partial class MapEntityLayer : Node2D
          : $"bodenangriff: {BodenBefohlen}x befohlen, {BodenSchuesse} Schuesse, "
          + $"{BodenFertig}x mangels Ziel beendet; Wirkung am Boden: "
          + $"{BodenWaldFeuer}x Wald angezuendet, {BodenWaldWeg}x Wald sofort weg, "
-         + $"{BodenObjekt}x Objekt getroffen";
+         + $"{BodenObjekt}x Objekt getroffen; "
+         // ⭐ 01.09.2026 — und die Zahl, an der seine Meldung haengt: wieviele
+         // Zellen der Brand dem WEGEGITTER zurueckgegeben hat. Siehe
+         // NavGrid.ZelleFreigeben.
+         + $"{ZellenFreigegeben} Zellen wieder befahrbar";
 }

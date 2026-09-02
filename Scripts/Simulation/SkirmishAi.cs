@@ -113,6 +113,11 @@ public partial class MapEntityLayer : Node2D
         /// <summary>Die AUSGAENGE des Sektorangriffs, jeder einzeln — ohne sie
         /// ist »0 Angriffe« nicht von »nie versucht« zu unterscheiden.</summary>
         public int SektorVersuche, SektorGesperrt, SektorKeineFreien, SektorKeinZiel;
+        /// <summary>Die AUSGAENGE der Zustandsmaschine (0x4BBB80, zweite
+        /// Haelfte), jeder einzeln — ohne sie ist »die KI steht« nicht von »sie
+        /// weist niemanden zu« zu unterscheiden. Siehe AiZustandsmaschine.
+        /// </summary>
+        public int SmZuweisungen, SmBereit, SmAbkuehlung, SmLeine, SmFertig, SmKeinSektor;
         public readonly HashSet<string> ClassSeen = new();
 
         /// <summary>Welche INFANTERIE (typ +0x0a == 1) je einen Befehl bekommen
@@ -431,7 +436,9 @@ public partial class MapEntityLayer : Node2D
                  (mates.Count > 0 ? $"; verbuendet {string.Join(",", mates)}" : "") +
                  (standby.Count > 0 ? $"; unbeteiligt {string.Join(",", standby)}" : "") +
                  $" ({level}); keine Angriffswellen, kein Gebaeudegreifer " +
-                 "(das Original marschiert auf einer Kampagnenkarte nicht) — " +
+                 "(beides ist UNSER Zusatz und hat im Original keine " +
+                 "Entsprechung; die Sektormaschine 0x4BBB80/0x4BC540 laeuft " +
+                 "sehr wohl, siehe AiZustandsmaschine) — " +
                  string.Join(" ", System.Array.ConvertAll(live.ToArray(),
                      p => $"P{p}:{ArmyOf(p).Count}E")) +
                  (read
@@ -1049,6 +1056,9 @@ public partial class MapEntityLayer : Node2D
             $"| Sektor: {a.SektorVersuche} Versuche, {a.SektorGesperrt} gesperrt, " +
             $"{a.SektorKeineFreien}x keine freien, {a.SektorKeinZiel}x kein Ziel, " +
             $"{a.SektorAngriffe} ANGRIFFE " +
+            $"| Maschine: {a.SmZuweisungen} zugewiesen, {a.SmBereit}x bereit, " +
+            $"{a.SmAbkuehlung}x abgekuehlt, {a.SmLeine}x Leine, {a.SmFertig}x fertig, " +
+            $"{a.SmKeinSektor}x kein Sektor " +
             $"[{string.Join(" ", a.ClassSeen)}]; Infanterie bewegt " +
             $"{a.MovedInf.Count}/{InfantryOf(a.Player)}"));
     }
@@ -1384,9 +1394,14 @@ public partial class MapEntityLayer : Node2D
         if (AiGesperrt(a.Player)) return;          // sec106: das Skript fuehrt ihn
 
         AiGruppenPflegen(a.Player);
-        AiZustandVorlaeufig(a.Player);
         AiStaerkeraster(a.Player);
         AiSetImpCpu(a.Player);
+        // ⭐ 01.09.2026 — auch der Skriptweg laeuft ueber die gelesene
+        // Zustandsmaschine: im Original steht sie in 0x4BBB80, und Takt 7 ruft
+        // sie fuer JEDEN Computerspieler, ob die Mission Ziele setzt oder
+        // nicht. (Unter --sektormaschine-alt springt AiSetImpCpu weiterhin auf
+        // die alte Bruecke.)
+        if (!SektormaschineAlt) AiZustandsmaschine(a);
 
         int freie = AiFreieAngreifer(a.Player, out int sx, out int sy);
         if (freie == 0) return;                    // »Not free attacker:«
@@ -2257,15 +2272,41 @@ public partial class MapEntityLayer : Node2D
     /// ebenfalls ungelesen, wir schicken die freien Angreifer DIESES Sektors.
     /// Beides ist gekapselt, damit eine spätere Lesung nur diese Methode
     /// ändert. <c>--kein-sektorangriff</c> nimmt sie ganz zurück.</para>
+    ///
+    /// <para>⭐⭐⭐ <b>01.09.2026 — BEIDE SETZUNGEN SIND ABGELÖST</b>, und beide
+    /// sahen anders aus als gedacht: <c>0xB400F0</c> ist eine
+    /// <b>Einheiten</b>tafel, das Tor also der Einheiten-MODUS (siehe
+    /// <see cref="AiZustandsmaschine"/>) — und eine »Gruppengrösse« gibt es an
+    /// dieser Station gar nicht: <c>0x4BC540</c> schickt <b>alle</b>
+    /// abrufbereiten Einheiten des Sektors los. Die Klemme 3…99 aus
+    /// <c>0x4BC920</c> gehört zur Takt-8-Station mit den sec69-Zielen, nicht
+    /// hierher. <c>--sektormaschine-alt</c> stellt den Absatz darüber wieder
+    /// her.</para>
     /// </summary>
     private void AiSektorAngriff(AiPlayer a)
     {
         if (KeinSektorangriff || _nav == null) return;
-        a.SektorVersuche++;
         if (AiGesperrt(a.Player)) { a.SektorGesperrt++; return; }
 
+        // ⭐⭐⭐ 01.09.2026 — DIE GELESENE KETTE, Takt 7 des Originals:
+        //     0x4BC900  ->  0x4BBB80   Bedarf + Zustandsmaschine je Einheit
+        //               ->  0x4BC540   der Gruppenangriff ueber alle Sektoren
+        // Beides steht jetzt in SkirmishAiSectors.cs, Befehl fuer Befehl
+        // nachgelesen. Was hier bis zum 31.08. stand, war eine Bruecke: EIN
+        // Sektor, alle freien Angreifer darin, kein Modus-Tor.
+        if (!SektormaschineAlt)
+        {
+            AiGruppenPflegen(a.Player);
+            AiStaerkeraster(a.Player);
+            AiSetImpCpu(a.Player);
+            AiZustandsmaschine(a);
+            a.Wave.Clear();
+            AiGruppenangriff(a);
+            return;
+        }
+
+        a.SektorVersuche++;
         AiGruppenPflegen(a.Player);
-        AiZustandVorlaeufig(a.Player);
         AiStaerkeraster(a.Player);
         // ⚠ Die Verteidigerquote MUSS mitlaufen — `AiFreieAngreifer` rechnet
         // `Belegt - DefRobots`, und ohne diesen Ruf steht DefRobots auf dem
@@ -2302,6 +2343,13 @@ public partial class MapEntityLayer : Node2D
     /// ein Computerspieler ohne Skript-Zielliste tut in der Kampagne nichts.
     /// </summary>
     public static bool KeinSektorangriff;
+
+    /// <summary><c>--sektormaschine-alt</c> — der Stand vom 31.08.2026: die
+    /// Brücke <see cref="AiZustandVorlaeufig"/> statt der Zustandsmaschine
+    /// <c>0x4BBB80</c>, und der Ein-Sektor-Angriff statt <c>0x4BC540</c>. Die
+    /// Gegenprobe zu allem, was am 01.09.2026 gelesen und gebaut wurde.
+    /// </summary>
+    public static bool SektormaschineAlt;
 
     private int AiRingTarget(AiPlayer a, int ui, Entity e)
     {
@@ -2459,7 +2507,7 @@ public partial class MapEntityLayer : Node2D
         e.Path = path;
         e.PathIdx = 0;
         e.Goal = goal.Value;
-        e.Reserved = null;
+        AiVormerkungLoesen(idx, e);      // ⚠⚠ NICHT blosses `= null`, siehe dort
         e.WaitTime = 0;
         e.Target = -1;
         e.Ordered = true;
@@ -2559,6 +2607,13 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Bruecke fuer den Pruefstand --ki-probe, siehe KiProbe.cs.</summary>
     public static bool AiHostileFor(int me, int other) => AiHostile(me, other);
 
+    /// <summary>Wie oft der Riegel in <see cref="AiSend"/> einen Angriff auf
+    /// einen Verbuendeten abgewehrt hat. Steht diese Zahl nach der Behebung
+    /// vom 02.09.2026 noch ueber 0, hat ein Rufer weiterhin ein falsches Ziel
+    /// ausgesucht — dann ist die URSACHE nicht behoben, nur der Schuss.
+    /// </summary>
+    public int AiSendFreundAbgewehrt { get; private set; }
+
     private static bool AiHostile(int me, int other)
     {
         if (me is < 0 or > 7 || other is < 0 or > 7) return false;
@@ -2580,6 +2635,16 @@ public partial class MapEntityLayer : Node2D
         // heraus gerufen; steht die Regel nur in `ArmyOf`, faellt sie beim
         // naechsten neuen Aufrufer wieder auf.
         if (AiUnarmed(e)) return;
+        // ⚠⚠ 02.09.2026 — DRITTER RIEGEL: KEIN ANGRIFF AUF EINEN VERBUENDETEN.
+        //
+        // `AiSend` setzt `Ordered = true`, und ein BEFOHLENER Angriff kommt an
+        // `IsHostile` gar nicht mehr vorbei — die Bruecke, ueber die 188 von
+        // 468 Schuessen in Kampagne 3 auf einen Verbuendeten gingen (die
+        // Ursache lag in `AiVerbuendet`, siehe dort). Die Ursache ist behoben;
+        // dieser Riegel steht aus demselben Grund wie der von `AiUnarmed` eine
+        // Zeile darueber: `AiSend` hat SECHS Rufer, und eine Regel, die nur
+        // beim Rufer steht, faellt beim naechsten neuen Rufer wieder auf.
+        if (!AiHostile(e.Owner, t.Owner)) { AiSendFreundAbgewehrt++; return; }
 
         if (CanFight(e) && CellDistance(e, t) <= WeaponOf(e.Weapon).RangeTiles)
         {
@@ -2596,10 +2661,42 @@ public partial class MapEntityLayer : Node2D
         e.Path = path;
         e.PathIdx = 0;
         e.Goal = goal.Value;
-        e.Reserved = null;
+        AiVormerkungLoesen(idx, e);      // ⚠⚠ NICHT blosses `= null`, siehe dort
         e.WaitTime = 0;
         e.Target = target;
         e.Ordered = true;
+    }
+
+    /// <summary>
+    /// ⚠⚠ <b>EINE VORMERKUNG WIRD NICHT DURCH <c>= null</c> AUFGEGEBEN — sie
+    /// muss aus dem Belegungsgitter GELÖSCHT werden.</b>
+    ///
+    /// <para>Gemeldet am 01.09.2026: »ich kann nicht mehr über die Brücke
+    /// fahren, als wären die Zellen blockiert«. Der Belegungsabgleich sagt
+    /// warum — nach 90 s Kampagne 3 standen <b>7 Phantome</b> auf der Karte,
+    /// drei davon mit dem Vermerk »die Einheit ist tot oder gibt es nicht«.</para>
+    ///
+    /// <para><b>Die Kette:</b> <see cref="AiSend"/> und <see cref="AiWalkTo"/>
+    /// setzten <c>Reserved = null</c>, ohne den Stempel der vorgemerkten Zelle
+    /// zu löschen. Die Zelle blieb belegt, die Einheit wusste nichts mehr
+    /// davon — und starb sie später, konnte auch <c>Kill</c> den Stempel nicht
+    /// mehr finden (es räumt <c>Reserved</c>, und das war schon <c>null</c>).
+    /// <b>Genau diese Fehlerklasse steht seit dem 24.08.2026 als offene Warnung
+    /// bei <c>NavGrid._anker</c>:</b> »Was das NICHT heilt: eine Stelle, die
+    /// <c>Reserved = null</c> setzt, ohne den Stempel zu löschen.«</para>
+    ///
+    /// <para><b>Warum es erst jetzt auffällt:</b> vor dem 01.09. schickte die
+    /// Kampagnen-KI 2 Angriffe je 60 s los, jetzt 16 bis 26 — dieselbe Zeile,
+    /// zehnmal so oft gelaufen. Gemessen: 7 Phantome neu gegen <b>0</b> unter
+    /// <c>--sektormaschine-alt</c>. Auf einer Brücke genügt EIN Phantom.</para>
+    ///
+    /// <para>Das richtige Muster stand längst da, in
+    /// <c>CommandBridge.cs:590</c>.</para>
+    /// </summary>
+    private void AiVormerkungLoesen(int idx, Entity e)
+    {
+        if (e.Reserved is { } rc) _nav?.ClearOccupant(rc.X, rc.Y, idx);
+        e.Reserved = null;
     }
 
     /// <summary>Preview harness: let the computer play both sides for a while
