@@ -308,7 +308,11 @@ public sealed partial class DesignWindow : PanelContainer
         int weapon = Screen.CurrentWeapon?.Id ?? 0;
         int prop = Screen.CurrentPropulsion?.Id ?? 0;
         int equip = Screen.CurrentEquipment?.Id ?? 0;
-        var d = Simulation.DesignMath.Compute(weapon, prop, equip);
+        // 03.09.2026: aus dem Bauteilblock des MENSCHEN gerechnet — der
+        // Entwurfsschirm des Originals ruft 0x4B1FB0(platz, spieler) @0x4B25A5,
+        // und der Spieler ist byte[0x4FA284], bei uns SkirmishSetup.Human. Ohne
+        // das zeigte die Vorschau nach einer Tank-Aufwertung den alten Sprit.
+        var d = Simulation.DesignMath.Compute(weapon, prop, equip, UI.SkirmishSetup.Human);
 
         // Die Vorschau: Fahrwerk unten, Aufbauteil oben, gleicher Ursprung —
         // die Reihenfolge des Originals, siehe PortraitBank.

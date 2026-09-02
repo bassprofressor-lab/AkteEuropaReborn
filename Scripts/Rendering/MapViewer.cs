@@ -1399,6 +1399,10 @@ public partial class MapViewer : Node2D
             else if (a == "--aufwertung-probe") _aufwertungProbe = true;
             else if (a == "--aufwertung-alt") MapEntityLayer.AufwertungAlt = true;
             else if (a == "--aufwertung-immer-tank") MapEntityLayer.AufwertungImmerTank = true;
+            // 03.09.2026 — Gegenschalter zur Entwurfsrechnung je Spieler: die
+            // Fertigung rechnet wieder aus der EINEN Grundtafel, ein Neubau
+            // bekommt den alten Tank. Siehe Simulation/DesignMath.cs.
+            else if (a == "--entwuerfe-global-alt") Simulation.DesignMath.EntwuerfeGlobalAlt = true;
             else if (a == "--minen-check") _minenCheck = true;
             // Auch die =-Form annehmen. spielen.cmd nennt in seiner Hilfe `--erwartung=18`,
             // und ein Gleichheitsvergleich hat die still verschluckt: kein Blatt, keine Meldung,

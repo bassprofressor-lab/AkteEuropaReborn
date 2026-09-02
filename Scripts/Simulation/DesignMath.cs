@@ -11,8 +11,38 @@ using Godot;
 /// A sec47 record (46 bytes) carries only three chosen components — weapon at
 /// +0x17, propulsion at +0x18, equipment at +0x19 — and the whole tail from
 /// +0x1a is DERIVED from them. The routine looks each component up in the
-/// 58-byte stats array at 0x5045a0 (indexed by the bare component number) and
-/// writes fifteen fields:
+/// 58-byte stats array at 0x5045a0 and writes fifteen fields:
+///
+/// <para>⚠⚠ <b>BERICHTIGT 03.09.2026 — die Bauteiltafel wird MIT dem
+/// SPIELERBLOCK indiziert, nicht »by the bare component number«.</b> Nachgelesen
+/// in <c>0x4B1FB0(entwurf, spieler)</c>, Bericht
+/// <c>berichte/entwurfsrechnung-fable.md</c>: <c>ebp = 200·spieler</c>
+/// (<c>lea ecx,[eax+eax*4]; lea edx,[ecx+ecx*4]; lea ebp,[edx*8]</c>,
+/// 0x4B1FBD…0x4B1FC9), und vor JEDER der drei Bauteilsuchen steht
+/// <c>add eax/ebx, ebp</c> (0x4B200A Waffe, 0x4B2032 Fahrwerk, 0x4B205A
+/// Ausrüstung), erst dann ×29 und ×2 = ×58. Die Zeile ist also
+/// <c>0x5045A0 + 58·(Bauteil + 200·Spieler)</c> — derselbe Block, den die
+/// Aufwertung (<c>0x4AAA80</c>) beschreibt. Ein Entwurf ist darum JE SPIELER
+/// verschieden, sobald ein Spieler geforscht hat. ⭐ Nullmodell: ohne den
+/// Spielerblock gäbe es für die drei Bauteilsuchen keine Addition von
+/// <c>ebp</c>; sie steht dreimal da, und derselbe <c>ebp</c> indiziert auch
+/// die Entwurfstafel (<c>0x4B1FD0 add ecx, ebp</c>, dann ×46 → sec47
+/// <c>0x51CE20 + 46·(Entwurf + 200·Spieler)</c>).</para>
+///
+/// <para>⭐ <b>Wie das hier abgebildet ist</b> (unsere Setzung, gewählt am
+/// 03.09.2026): <see cref="Compute"/> hat einen OPTIONALEN Spielerparameter.
+/// Ohne ihn (oder mit <c>--entwuerfe-global-alt</c>) rechnet es wie bisher aus
+/// der EINEN Grundtafel — das ist der EXE-Block 0, und vor der ersten
+/// Aufwertung sind alle acht Blöcke Kopien davon (<c>rep movsd</c> @0x4B22ED),
+/// so dass beide Wege bis dahin dasselbe liefern. MIT Spieler holt es die
+/// Zeilen über den <see cref="SpielerZeile"/>-Nachschlager, den
+/// <c>MapEntityLayer</c> auf <c>BauteilFuer(spieler, bauteil)</c> setzt.
+/// Warum so und nicht als Instanz oder mit einem Tafelparameter an jedem Rufer:
+/// diese Klasse hat zehn Rufer (Entwurfsschirm, Fertigung, Verstärkung,
+/// Importer-Selbsttest, Statistikbuch, Klangwahl), und der Selbsttest hat die
+/// Zeilen selbst in der Hand (<see cref="Use"/>), ohne eine Karte. Ein
+/// Vorgabeparameter lässt alle stehen; nur die Stellen, an denen ein
+/// Spieler wirklich bekannt ist, reichen ihn durch.</para>
 ///
 /// <code>
 ///   +0x1a  = stats[weapon]  [0x20]            * f      price, weapon parts
@@ -25,7 +55,7 @@ using Godot;
 ///   +0x22  = sum of [0x16]   (u16)
 ///   +0x24  = sum of [0x14]   (u16)
 ///   +0x26  = sum of [0x11]
-///   +0x28  = sum of [0x1a]   (u16)            — hit points
+///   +0x28  = sum of [0x1a]   (u16)            — the FUEL TANK, see Derived.Fuel
 ///   +0x2a  = 1 when weapon == 8, else sum of [0x18]
 ///   +0x2b  = sum of [0x1e]
 ///   +0x2c  = stats[prop]  [0x0d]              — the chassis' component id
@@ -36,6 +66,22 @@ using Godot;
 /// otherwise — <c>cmp al,0x41 / sete dl / inc dl</c> — and "sum" means the three
 /// chosen components added together. Every addition is 8-bit except the three
 /// u16 fields, so the wrap-around is kept here rather than tidied away.
+///
+/// <para>⚠ <b>Zu +0x28, weil es hier einmal »hit points« hiess:</b> das war der
+/// Stand vom Juli, als stats +0x1a noch <c>hp_max</c> genannt wurde
+/// (<c>UNIT_STATS_RE.md</c>: »fuel tank (long read as hp_max)«, berichtigt
+/// 26.07.2026). Belegt ist der TANK dreifach: (1) der Aufsteller @0x4B1BFE
+/// liest <c>word [edx+0x51CE48]</c> (= Entwurf +0x28) und schreibt es nach
+/// Einheit +0x2E und +0x30, den Vorrat, den der Fahrer @0x407AA7 je Zelle um 1
+/// senkt bis »no fuel«; (2) die Aufwertung addiert @0x4AAB66 den TANK-Zuwachs
+/// der Aufwertungstafel (<c>Zeile+0x0E</c>, z. B. 40 für Fahrwerk 0xA3) auf
+/// Bauteil +0x1A, und 0x4B216F…0x4B217D summiert genau dieses Feld nach +0x28;
+/// (3) in der Tafel tragen von 101 Bauteilen NUR die 16 Fahrwerke (160…175)
+/// und die 10 Rümpfe 150…159 ein +0x1A ≠ 0 — kein Gewehr hat Lebenspunkte.
+/// Die Lebenspunkte sind +0x1e (Summe der +0x0e), siehe <see cref="Derived.Hp"/>.
+/// <c>reloc_refs --addr 0x51CE48</c>: 1 Schreiber (0x4B2187, diese Routine),
+/// 6 Leser — 0x4B1BFE Aufsteller, 0x4B3BF7/0x4B3C05 das Nachziehen lebender
+/// Einheiten (0x4B3AF0), 0x4B3796, 0x469BEA, 0x4C10D9.</para>
 ///
 /// <para><b>The three prices are proven, not inferred.</b> The production button
 /// @0x44a6eb compares them one after another against three consecutive u16
@@ -248,6 +294,56 @@ public static class DesignMath
         return off + 1 < r.Length ? r[off] | (r[off + 1] << 8) : 0;
     }
 
+    // ---- die Tafel JE SPIELER ----------------------------------------------
+
+    /// <summary>⭐ Der Nachschlager für die Bauteilzeile EINES SPIELERS —
+    /// <c>(spieler, bauteil) → 58 Byte</c>, das Gegenstück zu
+    /// <c>0x5045A0 + 58·(Bauteil + 200·Spieler)</c>. <c>MapEntityLayer</c>
+    /// setzt ihn auf <c>BauteilFuer</c>, sobald es seine acht Blöcke anlegt
+    /// (Simulation/Aufwertung.cs, <c>BauteileVorbereiten</c>).
+    ///
+    /// <para>Warum ein Delegat und keine Tafel hier drin: die acht Blöcke sind
+    /// Missionszustand und gehören der Karte (ein neuer <c>MapEntityLayer</c>
+    /// je Mission); diese Klasse ist statisch und überlebt den Kartenwechsel —
+    /// eine hier gehaltene Kopie hätte die Aufwertungen der letzten Mission in
+    /// die nächste getragen, genau der Fehler, den <c>_designsMission</c> im
+    /// Entwurfslader schon einmal abfangen musste.</para>
+    ///
+    /// <para>Solange er null ist, rechnet <see cref="Compute"/> aus der
+    /// Grundtafel — vor der ersten Aufwertung ist das derselbe Wert.</para>
+    /// </summary>
+    public static Func<int, int, byte[]?>? SpielerZeile;
+
+    /// <summary><c>--entwuerfe-global-alt</c> — der Gegenschalter zum Umbau vom
+    /// 03.09.2026: die Entwurfsrechnung nimmt wieder für JEDEN Spieler die eine
+    /// Grundtafel. Das ist der Stand davor, in dem eine Aufwertung lebende
+    /// Einheiten traf, ein NEUBAU aber den alten Tank bekam. Die
+    /// <c>--aufwertung-probe</c> misst beide Stände nebeneinander.</summary>
+    public static bool EntwuerfeGlobalAlt;
+
+    /// <summary>Die Zeile, aus der <see cref="Compute"/> für diesen Spieler
+    /// liest: mit Spieler und Nachschlager dessen Block, sonst die Grundtafel.
+    /// <c>row &lt;= 0</c> ist wie in <see cref="B(int,int)"/> »kein Bauteil«.</summary>
+    private static byte[]? Zeile(int row, int spieler)
+    {
+        if (row <= 0) return null;
+        if (spieler >= 0 && !EntwuerfeGlobalAlt && SpielerZeile != null)
+            return SpielerZeile(spieler, row);
+        return _rows != null && _rows.TryGetValue(row, out var r) ? r : null;
+    }
+
+    private static int B(int row, int off, int spieler)
+    {
+        var r = Zeile(row, spieler);
+        return r != null && off < r.Length ? r[off] : 0;
+    }
+
+    private static int U16(int row, int off, int spieler)
+    {
+        var r = Zeile(row, spieler);
+        return r != null && off + 1 < r.Length ? r[off] | (r[off + 1] << 8) : 0;
+    }
+
     /// <summary>The sound class of a component — stats <b>+0x1c</b>.
     ///
     /// The shooting code @0x40c4c0 reads exactly this byte
@@ -278,8 +374,17 @@ public static class DesignMath
 
     // ---- the routine --------------------------------------------------------
 
-    /// <summary>The tail of a design record, exactly as @0x4b1fb0 writes it.</summary>
-    public static Derived Compute(int weapon, int propulsion, int equipment)
+    /// <summary>The tail of a design record, exactly as @0x4b1fb0 writes it.
+    ///
+    /// <para><paramref name="spieler"/> — seit dem 03.09.2026: der Spieler,
+    /// aus dessen Bauteilblock gerechnet wird (das zweite Argument von
+    /// <c>0x4B1FB0</c>, <c>ebp = 200·spieler</c>). <b>−1 (Vorgabe) = die
+    /// Grundtafel</b>, das bisherige Verhalten; so bleiben Selbsttest,
+    /// Statistikbuch und der Lader von sec47 unverändert — dort gibt es keinen
+    /// Spieler, und vor der ersten Aufwertung liefern beide Wege dasselbe.
+    /// Die Fertigung (<c>SendOutOfDepot</c>, <c>SpawnReinforcement</c>) und
+    /// der Entwurfsschirm reichen ihren Spieler durch.</para></summary>
+    public static Derived Compute(int weapon, int propulsion, int equipment, int spieler = -1)
     {
         var t = new byte[0x2e - 0x1a];          // +0x1a .. +0x2d
         void Put(int off, int v) => t[off - 0x1a] = (byte)(v & 0xff);
@@ -290,24 +395,27 @@ public static class DesignMath
         }
 
         int f = weapon == 0x41 ? 2 : 1;          // the Teleporter costs double
-        int Sum(int off) => B(propulsion, off) + B(equipment, off) + B(weapon, off);
+        int p = spieler;
+        int Sum(int off) => B(propulsion, off, p) + B(equipment, off, p) + B(weapon, off, p);
 
-        Put(0x1a, B(weapon, 0x20) * f);
-        Put(0x1b, B(propulsion, 0x21) * f);
-        Put(0x1c, ((B(equipment, 0x22) + B(weapon, 0x22)) & 0xff) * f);
+        Put(0x1a, B(weapon, 0x20, p) * f);                       // 0x4B2016 [ecx=Waffe]
+        Put(0x1b, B(propulsion, 0x21, p) * f);                   // 0x4B203E [edi=Fahrwerk]
+        Put(0x1c, ((B(equipment, 0x22, p) + B(weapon, 0x22, p)) & 0xff) * f);  // 0x4B206E/0x4B2079
         Put(0x1d, Sum(0x10));
         Put(0x1e, Sum(0x0e));
         Put(0x1f, Sum(0x12));
         Put(0x20, Sum(0x13));
-        if (propulsion > 0x96 && weapon > 0x31) Put(0x1f, 0);
-        PutW(0x22, U16(equipment, 0x16) + U16(propulsion, 0x16) + U16(weapon, 0x16));
-        PutW(0x24, U16(equipment, 0x14) + U16(propulsion, 0x14) + U16(weapon, 0x14));
+        if (propulsion > 0x96 && weapon > 0x31) Put(0x1f, 0);   // 0x4B2104..0x4B2110
+        PutW(0x22, U16(equipment, 0x16, p) + U16(propulsion, 0x16, p) + U16(weapon, 0x16, p));
+        PutW(0x24, U16(equipment, 0x14, p) + U16(propulsion, 0x14, p) + U16(weapon, 0x14, p));
         Put(0x26, Sum(0x11));
-        PutW(0x28, U16(equipment, 0x1a) + U16(propulsion, 0x1a) + U16(weapon, 0x1a));
+        // ⭐ DER TANK: 0x4B216F mov ax,[ebp+0x5045BA]; add ax,[edi+…]; add ax,[ecx+…]
+        // — Ausrüstung + Fahrwerk + Waffe, als WORT, nach Entwurf +0x28 (0x4B2187).
+        PutW(0x28, U16(equipment, 0x1a, p) + U16(propulsion, 0x1a, p) + U16(weapon, 0x1a, p));
         Put(0x2a, weapon == 8 ? 1 : Sum(0x18));
         Put(0x2b, Sum(0x1e));
-        Put(0x2c, B(propulsion, 0x0d));
-        Put(0x2d, B(weapon, 0x0d));
+        Put(0x2c, B(propulsion, 0x0d, p));
+        Put(0x2d, B(weapon, 0x0d, p));
         return new Derived(t);
     }
 

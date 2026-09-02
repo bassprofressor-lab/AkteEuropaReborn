@@ -1996,6 +1996,13 @@ public partial class MapEntityLayer : Node2D
         LoadBuildingNames();
         LoadOrders();
         LoadDesigns();
+        // 03.09.2026: die Entwurfsrechnung liest die Bauteile JE SPIELER aus
+        // dieser Ebene (0x4B1FB0, Spielerblock). Hier gesetzt und nicht nur beim
+        // ersten BauteilFuer, weil der Nachschlager STATISCH ist: nach einem
+        // Kartenwechsel zeigte er sonst bis zur ersten Aufwertung noch auf die
+        // alte Ebene, und der Entwurfsschirm haette die Bloecke der vorigen
+        // Mission gelesen. Siehe Simulation/Aufwertung.cs.
+        Simulation.DesignMath.SpielerZeile = BauteilFuer;
         LoadTechs();
         var layer = new CanvasLayer { Layer = 3 };   // above the panel frame (2)
         AddChild(layer);
@@ -26410,7 +26417,10 @@ public partial class MapEntityLayer : Node2D
         if (_nav == null || _designs == null) return false;
         if (k < 0 || k >= e.Depot.Count) return false;
 
-        var d = _designs[e.Depot[k] % _designs.Count];
+        // 03.09.2026: der Entwurf, wie er für den BESITZER gilt — nach seinen
+        // Aufwertungen (0x4B1FB0 rechnet je Spielerblock). Siehe
+        // Simulation/Aufwertung.cs, EntwurfFuer; Rueckfall --entwuerfe-global-alt.
+        var d = EntwurfFuer(e.Owner, _designs[e.Depot[k] % _designs.Count]);
         var cell = SpawnCellFor(e);
         if (cell == null)
         {
@@ -26614,6 +26624,9 @@ public partial class MapEntityLayer : Node2D
                         $"(sec47 {raw}) steht nicht in unit_designs.json");
             return -1;
         }
+        // 03.09.2026: nach den Aufwertungen DIESES Spielers gerechnet — siehe
+        // Simulation/Aufwertung.cs, EntwurfFuer; Rueckfall --entwuerfe-global-alt.
+        d = EntwurfFuer(player, d);
         var move = Simulation.NavGrid.ClassOf(-1, d.Derived.ChassisComponent);
         var cell = _nav.NearestFree(new Vector2I(col, row), move);
         if (cell == null)

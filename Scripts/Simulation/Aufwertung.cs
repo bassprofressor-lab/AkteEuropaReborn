@@ -116,6 +116,64 @@ public partial class MapEntityLayer : Node2D
             for (int b = 0; b < 200; b++)
                 _bauteile[p][b] = GrundBauteil(b) is { } g ? (byte[])g.Clone() : new byte[58];
         }
+        // ⭐ 03.09.2026 — ab jetzt rechnet die Entwurfsrechnung aus DIESEN
+        // Blöcken, wenn sie einen Spieler kennt (0x4B1FB0 indiziert die
+        // Bauteiltafel mit 200·Spieler, siehe den Kopf von DesignMath). Der
+        // Nachschlager wird schon in _Ready gesetzt (MapEntityLayer.cs) — er ist
+        // statisch, und nach einem Kartenwechsel dürfte er nicht auf die alte
+        // Ebene zeigen; hier noch einmal, damit eine Ebene ohne _Ready (Probe,
+        // Test) dieselbe Zusage hat.
+        Simulation.DesignMath.SpielerZeile = BauteilFuer;
+    }
+
+    // ---- die Entwürfe, JE SPIELER --------------------------------------------
+
+    /// <summary>Die neu gerechneten Entwurfsschwänze je Spieler, nach der
+    /// Bauteilwahl <c>(Waffe, Fahrwerk, Ausrüstung)</c> — das Ergebnis von
+    /// <c>0x4B1FB0</c> hängt nur an diesen dreien und am Spielerblock, nicht am
+    /// Platz. Darum der Dreierschlüssel und nicht der Platz: unsere eigenen
+    /// Entwürfe tragen alle Platz −1 (<c>AcceptDesign</c>), und ein
+    /// Platzschlüssel würde sie zusammenwerfen.
+    ///
+    /// <para>Null, solange der Spieler nie aufgewertet hat — dann gilt für ihn
+    /// der Grundentwurf aus sec47 unverändert, so wie im Original alle acht
+    /// Blöcke beim Start Kopien sind (<c>0x4B23C0</c>: erst <c>0x4B22E0</c>
+    /// kopiert, dann <c>0x4B24B0</c> rechnet alle 1600 neu).</para></summary>
+    private Dictionary<(int Waffe, int Fahrwerk, int Ausruestung), Simulation.DesignMath.Derived>?[]
+        _entwuerfeJeSpieler = new Dictionary<(int, int, int), Simulation.DesignMath.Derived>?[8];
+
+    /// <summary>Wie oft <see cref="EntwuerfeNachziehen"/> lief und wie viele
+    /// Entwürfe es dabei gerechnet hat — für die Probe.</summary>
+    public int EntwuerfeNachgezogen, EntwuerfeGerechnet;
+
+    /// <summary>
+    /// ⭐ <b>Der Entwurf, wie er für DIESEN Spieler gilt.</b> Die Fertigung
+    /// (<c>SendOutOfDepot</c>, <c>SpawnReinforcement</c>) fragt hier, bevor sie
+    /// den Tank, die Munition und die Werte in die neue Einheit schreibt — das
+    /// Gegenstück zum Aufsteller <c>0x4B1840</c>, der @0x4B1BFE aus
+    /// <c>sec47[Entwurf + 200·Spieler]</c> liest, nicht aus Block 0.
+    ///
+    /// <para>Gibt den Entwurf unverändert zurück, wenn der Spieler nie
+    /// aufgewertet hat oder <c>--entwuerfe-global-alt</c> steht. Sonst den
+    /// Schwanz aus <see cref="_entwuerfeJeSpieler"/>; fehlt die Bauteilwahl
+    /// dort (ein Entwurf, der NACH dem letzten Nachziehen angelegt wurde), wird
+    /// sie jetzt gerechnet und eingetragen — das Original hätte ihn schon beim
+    /// Anlegen aus dem Spielerblock gerechnet (<c>0x4B2510</c> ruft
+    /// <c>0x4B1FB0(platz, spieler)</c> @0x4B25A5).</para></summary>
+    private Design EntwurfFuer(int spieler, Design d)
+    {
+        if (Simulation.DesignMath.EntwuerfeGlobalAlt) return d;
+        if (spieler is < 0 or > 7) return d;
+        var tafel = _entwuerfeJeSpieler[spieler];
+        if (tafel == null) return d;
+        var k = (d.Weapon, d.Propulsion, d.Equip);
+        if (!tafel.TryGetValue(k, out var der))
+        {
+            der = Simulation.DesignMath.Compute(d.Weapon, d.Propulsion, d.Equip, spieler);
+            tafel[k] = der;
+            EntwuerfeGerechnet++;
+        }
+        return new Design(d.Name, d.Propulsion, d.Equip, d.Weapon, d.Available, d.Slot, der);
     }
 
     /// <summary>Der Grundstand eines Bauteils aus <c>component_stats.json</c>
@@ -299,12 +357,51 @@ public partial class MapEntityLayer : Node2D
         }
     }
 
-    /// <summary><c>0x4B24B0</c> → <c>0x4B1FB0</c>: alle Entwürfe des Spielers
-    /// neu rechnen. ⚠ Bei uns ist das bislang ein Platzhalter — unsere
-    /// Entwurfsrechnung (<c>DesignMath</c>) zieht ihre Bauteilzahlen noch aus
-    /// der EINEN Tafel, nicht aus <see cref="_bauteile"/>. Solange das so ist,
-    /// wirkt eine Aufwertung auf LEBENDE Einheiten (die Zeile darüber), aber
-    /// noch nicht auf NEUBAUTEN. Das ist die nächste Bauaufgabe und
-    /// ausdrücklich noch nicht erledigt.</summary>
-    private void EntwuerfeNachziehen(int spieler) { _ = spieler; }
+    /// <summary>
+    /// ⭐ <c>0x4B24B0</c> → <c>0x4B1FB0</c>: die Entwürfe des Spielers neu
+    /// rechnen, aus SEINEM Bauteilblock. Gefüllt am 03.09.2026; bis dahin war
+    /// das ein Platzhalter, und ein Neubau bekam den alten Tank.
+    ///
+    /// <code>
+    ///   0x4B24B0:                                   ; kein Argument
+    ///       für spieler = 0..7:                     ; ebx, 0x4B24CA cmp ebx, 8
+    ///           für entwurf = 1..199:               ; esi, 0x4B24C1 cmp esi, 0xC8
+    ///               0x4B1FB0(entwurf, spieler)      ; über Thunk 0x402540
+    /// </code>
+    ///
+    /// <para>⚠ <b>Zwei Abweichungen, beide mit Absicht:</b></para>
+    /// <list type="number">
+    ///   <item>Das Original rechnet ALLE ACHT Spieler; wir nur den, dessen
+    ///   Block sich geändert hat. Die anderen sieben Blöcke sind unberührt,
+    ///   also käme für sie dasselbe heraus wie beim Start — und der Start ist
+    ///   bei uns der rohe sec47-Schwanz, den <c>--selftest-designs</c> für alle
+    ///   586 benannten Entwürfe als rechengleich belegt. Wer die sieben trotzdem
+    ///   neu rechnete, ersetzte belegte Zahlen durch dieselben Zahlen.</item>
+    ///   <item>Das Original schreibt in die Entwurfstafel (sec47); wir halten
+    ///   die Ergebnisse daneben (<see cref="_entwuerfeJeSpieler"/>) und lassen
+    ///   die statische Bauliste <c>_designs</c> in Ruhe. Grund: die Bauliste
+    ///   überlebt den Kartenwechsel, die Aufwertungen dürfen es nicht.</item>
+    /// </list>
+    ///
+    /// <para>Gerechnet werden die Bauteilwahlen aller Entwürfe der Bauliste und
+    /// des Spielerblocks in <c>_designBySlot</c> (Platz <c>200·spieler …
+    /// 200·spieler+199</c>, das ist das <c>entwurf + 200·spieler</c> von
+    /// <c>0x4B1FD0</c>).</para></summary>
+    private void EntwuerfeNachziehen(int spieler)
+    {
+        if (spieler is < 0 or > 7) return;
+        var tafel = new Dictionary<(int, int, int), Simulation.DesignMath.Derived>();
+        void Rechne(Design d)
+        {
+            var k = (d.Weapon, d.Propulsion, d.Equip);
+            if (tafel.ContainsKey(k)) return;
+            tafel[k] = Simulation.DesignMath.Compute(d.Weapon, d.Propulsion, d.Equip, spieler);
+            EntwuerfeGerechnet++;
+        }
+        if (_designs != null) foreach (var d in _designs) Rechne(d);
+        foreach (var kv in _designBySlot)
+            if (kv.Key / DesignsPerPlayer == spieler) Rechne(kv.Value);
+        _entwuerfeJeSpieler[spieler] = tafel;
+        EntwuerfeNachgezogen++;
+    }
 }
