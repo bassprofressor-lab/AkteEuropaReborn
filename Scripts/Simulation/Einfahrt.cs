@@ -110,6 +110,15 @@ namespace AkteEuropaReborn.Rendering;
 /// </summary>
 public partial class MapEntityLayer : Node2D
 {
+    /// <summary>GEGENPROBE <c>--garage-tankt-nicht</c>: der Stand bis zum
+    /// 03.09.2026 — eine ausgesandte Einheit kommt mit dem Tank heraus, mit dem
+    /// sie hineingefahren ist. Siehe <see cref="AusfahrenAusGarage"/>.</summary>
+    public static bool GarageTanktNicht;
+
+    /// <summary>Wie oft eine ausgesandte Einheit betankt wurde — damit die
+    /// Zeile es zeigt und nicht nur der Quelltext es behauptet.</summary>
+    public int GarageGetankt;
+
     // ---- UKOL, Feld +0x14 ------------------------------------------------
     /// <summary>UKOL 0 — kein Auftrag.</summary>
     public const int UkolFrei = 0;
@@ -357,6 +366,45 @@ public partial class MapEntityLayer : Node2D
         u.Pos = BodyCenterAt(u, u.Col, u.Row);
         u.Footprint = CellRect(_ox, _oy, u.Col, u.Row, u.Elev);
         u.Target = -1; u.Path = null; u.Goal = new Vector2I(u.Col, u.Row);
+
+        // ⭐⭐ 03.09.2026 — WER HERAUSFAEHRT, KOMMT VOLL HERAUS. Seine Frage aus
+        // dem Spiellauf Kampagne 3: »Kann es sein, dass eine Basis nicht nur
+        // heilt, sondern auch auftankt/aufmunitioniert?«
+        //
+        // Fast. Eine Basis tankt NICHT, solange die Einheit drinsteht — der
+        // Gebaeudedienst `@0x43E9C5` geht ueber die sechs Plaetze und fasst nur
+        // `+0x08` gegen `+0x29` an, einen Trefferpunkt je Takt. Und ein Gebaeude
+        // fuellt bei Nachbarn nur die MUNITION (`0x412720`, `+0x39` gegen
+        // `+0x3A`, nur eigene Einheiten, ein Schuss je Takt).
+        //
+        // Aber das AUSFAHREN tankt, und zwar randvoll. Es steht am Ende
+        // derselben Funktion, aus der wir oben schon `UKOL := 51` genommen
+        // haben — `0x410420`:
+        //
+        //   0x410441  mov byte [edx+0x6E26DC], 0x33   ; +0x14 := 51, haben wir
+        //   0x4104AF  mov bx,  word [edx+0x6E26F8]    ; +0x30, der Tank VOLL
+        //   0x4104B6  mov word [edx+0x6E26F6], bx     ; +0x2E := +0x30
+        //   0x4104CE  mov cl,  byte [edx+0x6E2702]    ; +0x3A, Munition VOLL
+        //   0x4104D4  mov byte [edx+0x6E2701], cl     ; +0x39 := +0x3A
+        //   0x4104DA  ret
+        //
+        // Drei Rufer ueber den Stummel `0x4010E1`: `0x4B1E1C` (Neubau),
+        // `0x4BBB37` (die KI) und `0x4C37B5` (der Befehlsbus, also »Aussenden«).
+        // Ein Neubau kommt bei uns ohnehin voll heraus; gefehlt hat es genau
+        // hier, bei der EINGEFAHRENEN Einheit, die zurueckkommt.
+        //
+        // ⭐ Damit ist auch sein Sprit-Aerger von Kampagne 3 erklaert: hat man
+        // eine Basis, faehrt man hinein und wieder heraus und ist voll. Ohne
+        // diese zwei Zeilen war das bei uns unmoeglich.
+        //
+        // Gegenschalter: --garage-tankt-nicht.
+        if (!GarageTanktNicht)
+        {
+            if (u.FuelMax > 0 && u.Fuel < u.FuelMax) GarageGetankt++;
+            u.Fuel = u.FuelMax;                        // +0x2E := +0x30
+            if (u.AmmoMax > 0) u.Ammo = u.AmmoMax;     // +0x39 := +0x3A
+        }
+
         int ui = _entities.IndexOf(u);
         if (ui >= 0)
         {
@@ -528,10 +576,20 @@ public partial class MapEntityLayer : Node2D
                 var geb = _entities[_einfahrtBau];
                 var e = _entities[_einfahrtEinheit];
                 int hp = e.Hp;
+                // ⭐ 03.09.2026 — SPRIT UND MUNITION MITMESSEN. Ohne diese zwei
+                // Zahlen ist »wer herausfaehrt, kommt voll heraus« (0x4104B6 /
+                // 0x4104D4) eine Behauptung. Erst leeren, dann aussenden.
+                e.Fuel = e.FuelMax > 0 ? e.FuelMax / 4 : 0;
+                if (e.AmmoMax > 0) e.Ammo = 0;
+                int sprit = e.Fuel, muni = e.Ammo;
                 bool raus = AusfahrenAusGarage(geb, 0);
                 GD.Print($"einfahrt-check: Aussenden {(raus ? "OK" : "GESCHEITERT")} — "
                        + $"derselbe Satz {(_entities[_einfahrtEinheit] == e ? "JA" : "NEIN")}, "
-                       + $"Leben {hp} -> {e.Hp}, UKOL {e.Ukol} "
+                       + $"Leben {hp} -> {e.Hp}, "
+                       + $"SPRIT {sprit}/{e.FuelMax} -> {e.Fuel}/{e.FuelMax}, "
+                       + $"MUNITION {muni}/{e.AmmoMax} -> {e.Ammo}/{e.AmmoMax}"
+                       + (GarageTanktNicht ? " [--garage-tankt-nicht]" : "") + ", "
+                       + $"UKOL {e.Ukol} "
                        + $"(erwartet {UkolVerlaesst} = verlaesst gerade), "
                        + $"Schlange {GarageBelegt(geb)}/{DepotSlots}");
                 _einfahrtCheck = -1;
