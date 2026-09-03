@@ -1313,6 +1313,7 @@ public partial class MapViewer : Node2D
                 if (q.Length >= 2) _tourZoom = Mathf.Max(0.2f, q[1].ToFloat());
             }
             else if (a == "--dreh-alt") MapEntityLayer.DrehAlt = true;
+            else if (a == "--blick-aus-bildpunkten") MapEntityLayer.BlickAusBildpunkten = true;
             else if (a.StartsWith("--shot-when="))
             {
                 var q = a["--shot-when=".Length..].Split(',');
@@ -1382,6 +1383,7 @@ public partial class MapViewer : Node2D
             else if (a == "--belegung-check") _belegCheck = true;
             else if (a == "--beschuss-check") _beschussCheck = true;
             else if (a == "--forscher-probe") _forscherProbe = true;
+            else if (a == "--rampen-probe") _rampenProbe = true;
             else if (a.StartsWith("--forscher-probe="))
             {
                 _forscherProbe = true;
@@ -1852,6 +1854,7 @@ public partial class MapViewer : Node2D
             else if (a == "--staerke-alt") MapEntityLayer.StaerkeAlt = true;
             else if (a == "--imp-alt") MapEntityLayer.ImpAlt = true;
             else if (a == "--kein-ausweichen") MapEntityLayer.AusweichenAn = false;
+            else if (a == "--ausweichen-springt") MapEntityLayer.AusweichenSpringt = true;
             else if (a == "--kein-aufgeben") MapEntityLayer.AufgebenAn = false;
             else if (a == "--kein-bodenangriff") MapEntityLayer.BodenangriffAn = false;
             else if (a == "--kein-zellschaden") MapEntityLayer.ZellSchadenAn = false;
@@ -2139,6 +2142,11 @@ public partial class MapViewer : Node2D
     /// Simulation/ForscherProbe.cs.</summary>
     private bool _forscherProbe;
     private bool _forscherGestartet;
+
+    /// <summary><c>--rampen-probe</c>: dreht sich eine Einheit auf der
+    /// Brueckenrampe im Kreis? Siehe Simulation/RampenProbe.cs.</summary>
+    private bool _rampenProbe;
+    private bool _rampenGestartet;
     /// <summary><c>--befehlsklang-probe</c>: setzt einen ECHTEN Fahr- und
     /// Angriffsbefehl ueber PostMove/PostAttack ab — den Weg des
     /// Rechtsklicks — und zaehlt, ob dabei der Befehlsklang faellt. Siehe
@@ -2658,6 +2666,7 @@ public partial class MapViewer : Node2D
             if (_belegCheck) GD.Print(_entities.BelegungCheckLine());
             if (_beschussCheck) GD.Print(_entities.BeschussCheckLine());
             if (_forscherProbe) GD.Print(_entities.ForscherProbeLine());
+            if (_rampenProbe) GD.Print(_entities.RampenProbeLine());
             if (_befehlsklangProbe) GD.Print(_entities.BefehlsklangProbeLine());
             if (_aufwertungProbe) GD.Print(_entities.AufwertungProbeLine());
             if (_stauCheck)
@@ -2669,6 +2678,7 @@ public partial class MapViewer : Node2D
             if (_belegCheck) { GetTree().Quit(0); return; }
             if (_beschussCheck) { GetTree().Quit(_entities.BeschussCheckRc()); return; }
             if (_forscherProbe) { GetTree().Quit(0); return; }
+            if (_rampenProbe) { GetTree().Quit(_entities.RampenProbeRc()); return; }
             if (_befehlsklangProbe) { GetTree().Quit(_entities.BefehlsklangProbeRc()); return; }
             if (_aufwertungProbe) { GetTree().Quit(_entities.AufwertungProbeRc()); return; }
             if (_drehCheck)
@@ -4511,6 +4521,13 @@ public partial class MapViewer : Node2D
             GD.Print(_entities.ForscherProbeStart());
         }
         if (_forscherGestartet) _entities.ForscherProbeTick();
+
+        if (_rampenProbe && !_rampenGestartet && _entities.ErwartungBereit())
+        {
+            _rampenGestartet = true;
+            GD.Print(_entities.RampenProbeStart());
+        }
+        if (_rampenGestartet) _entities.RampenProbeTick();
 
         if (_befehlsklangProbe && !_befehlsklangGestartet && _entities.ErwartungBereit())
         {

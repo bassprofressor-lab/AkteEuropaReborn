@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Godot;
 
 namespace AkteEuropaReborn.Rendering;
@@ -163,7 +163,7 @@ public partial class MapEntityLayer : Node2D
         e.WaitTime = 0;
         _tookOver++;
 
-        string what = LabelOf(e.UnitType);
+        string what = LabelOf(e);
         string line = $"{what} uebergelaufen";
         _order = line;
         NoteEvent(e, line);
@@ -247,7 +247,7 @@ public partial class MapEntityLayer : Node2D
         IssueMove(CellCenter(cell.X, cell.Y));
         var u2 = _entities[mine];
         GD.Print($"demo-takeover: Platz {u2.Slot} (Spieler {u2.Owner}) faehrt {bestD:0.0} " +
-                 $"Felder zu {LabelOf(goal.UnitType)} (Platz {goal.Slot}, Spieler " +
+                 $"Felder zu {LabelOf(goal)} (Platz {goal.Slot}, Spieler " +
                  $"{goal.Owner}, GameUnitType {goal.GameUnitType} -> " +
                  $"{(goal.GameUnitType >= TakeoverWideSubclass ? "4x4" : "3x3")}) " +
                  $"bei ({goal.Col},{goal.Row}) — Ziel ({cell.X},{cell.Y})");

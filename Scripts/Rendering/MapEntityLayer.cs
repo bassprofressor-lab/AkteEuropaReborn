@@ -7468,6 +7468,7 @@ public partial class MapEntityLayer : Node2D
                 + $"{SprungMax:0.00} Zellen (slot {SprungSlot}), "
                 + $"{SprungZahl} Takte ueber einer ganzen Zelle; "
                 + $"{SchrittAbgebrochen}x Schritt mitten drin neu angesetzt");
+        foreach (var fall in SprungFaelle) sb.Append($"\n      SPRUNG  {fall}");
         if (lebend > 0)
             sb.Append($"\n   ⭐ Fortschritt: {lebend} leben, im Mittel "
                     + $"{fortSum * 10 / lebend / 10.0:0.0} Zellen naeher am Ziel "
@@ -16636,6 +16637,13 @@ public partial class MapEntityLayer : Node2D
     /// <summary>GEGENPROBE <c>--dreh-alt</c>: der Stand vor dem 17.08.2026 —
     /// die Blickrichtung klappt sofort auf die Fahrtrichtung um.</summary>
     public static bool DrehAlt;
+
+    /// <summary>GEGENPROBE <c>--blick-aus-bildpunkten</c>: der Stand vor dem
+    /// 03.09.2026 — die Blickrichtung kommt aus <c>dest − Pos</c> im Bildraum
+    /// und traegt damit die Schrägenanhebung mit. Sichtbar wird der
+    /// Unterschied NUR auf einer Rampe; siehe Simulation/RampenProbe.cs und
+    /// den Kommentar am Rechenort.</summary>
+    public static bool BlickAusBildpunkten;
 
     /// <summary>Wieviele Takte insgesamt mit Drehen statt Fahren vergangen
     /// sind. Steht in der Sichtzeile, damit »es dreht« nicht nur eine
@@ -28562,14 +28570,38 @@ public partial class MapEntityLayer : Node2D
         {
             var es = _entities[i];
             if (es.IsProp || es.Dead || es.IsBuilding) continue;
-            if (_sprungWacht.TryGetValue(i, out var vor))
+            if (_sprungWacht.TryGetValue(i, out var vor) && vor.Slot == es.Slot)
             {
-                float dz = Mathf.Max(Mathf.Abs(es.Pos.X - vor.X) / TileW,
-                                     Mathf.Abs(es.Pos.Y - vor.Y) / TileH);
+                float dz = Mathf.Max(Mathf.Abs(es.Pos.X - vor.Pos.X) / TileW,
+                                     Mathf.Abs(es.Pos.Y - vor.Pos.Y) / TileH);
                 if (dz > SprungMax) { SprungMax = dz; SprungSlot = es.Slot; }
-                if (dz >= 1f) SprungZahl++;
+                if (dz >= 1f)
+                {
+                    SprungZahl++;
+                    // ⭐⭐ 03.09.2026 — DIE ERSTEN ACHT SPRUENGE IM KLARTEXT.
+                    // Gemeldet (01.09. und wieder am 03.09.): »Einheiten
+                    // teleportieren«. Die Zahl allein sagt nur DASS es passiert;
+                    // sie sagt nicht, WAS die Einheit dabei tat, und genau das
+                    // trennt die Faelle: ein abgebrochener Schritt sieht anders
+                    // aus als ein Umsetzen durch eine andere Stelle des
+                    // Programms (Depot, Ueberfahren, Verstaerkung).
+                    //
+                    // ⚠ Zugleich ist hier ein FALSCHER Treffer abgestellt: der
+                    // Waechter merkte sich die Lage unter dem LISTENINDEX. Faellt
+                    // eine Einheit aus der Liste oder kommt eine dazu, zeigt
+                    // derselbe Index auf eine andere Einheit, und ihr Abstand
+                    // zur vorigen wurde als »Sprung« gezaehlt. Jetzt steht die
+                    // Satznummer daneben und der Vergleich faellt sonst aus.
+                    if (SprungFaelle.Count < 8)
+                        SprungFaelle.Add(
+                            $"Platz {es.Slot} \"{LabelOf(es)}\" {dz:0.00} Zellen: " +
+                            $"({vor.Col},{vor.Row}) -> ({es.Col},{es.Row}), " +
+                            $"Weg {(es.Path == null ? "keiner" : $"{es.PathIdx}/{es.Path.Count}")}, " +
+                            $"Reserviert {(es.Reserved.HasValue ? $"({es.Reserved.Value.X},{es.Reserved.Value.Y})" : "-")}, " +
+                            $"Schritt {es.Progress}/{es.StepCost}");
+                }
             }
-            _sprungWacht[i] = es.Pos;
+            _sprungWacht[i] = (es.Slot, es.Pos, es.Col, es.Row);
         }
 
         // ⚠ »Mines and traps« (@0x4216F0) steht in der Hauptschleife VOR
@@ -28714,7 +28746,48 @@ public partial class MapEntityLayer : Node2D
                 // 21 von 213 Schiffen tragen dort einen Wert ueber 7, von 4592
                 // Landeinheiten keine einzige.
                 int stufen = FacingsOf(e.UnitType);
-                int will = DirToFacing(d, stufen);
+                // ⭐⭐ 03.09.2026 — DIE BLICKRICHTUNG KOMMT AUS DEM ZELLSCHRITT,
+                // NICHT AUS DEM BILDPUNKTABSTAND. Gemeldet: »Einheiten die eine
+                // Bruecke ueberfahren machen dort kurz wie einen Threesixty …
+                // immer nur beim Auffahren bzw. Abfahren«.
+                //
+                // Das Original rechnet es an @0x434300, und die Zeilen sagen es
+                // selbst:
+                //
+                //   cl  = byte[78*i + 0x6E26C8]      die eigene SPALTE (+0x00)
+                //   bl  = byte[78*i + 0x6E26C9]      die eigene ZEILE  (+0x01)
+                //   eax = Zielspalte - cl            dSpalte
+                //   ecx = Zielzeile  - bl            dZeile
+                //   eax = dSpalte * 40               <- genau unser TileW
+                //   ecx = dZeile   * 20              <- genau unser TileH
+                //   beide 0 -> byte[+0x03], die ALTE Richtung bleibt stehen
+                //   sonst    -> @0x401415, Winkel zu Blickrichtung
+                //
+                // ⚠ Kein Hoehenglied. Die Anhebung (Simulation.Hang) ist eine
+                // Sache der ZEICHNUNG; sie darf die Fahrtrichtung nicht anfassen.
+                //
+                // Wir nahmen bisher `dest - Pos`, und da steckt sie drin — sowohl
+                // ueber die Zellmitte (HubOf in BodyCenterAt) als auch ueber den
+                // laufenden Feinversatz (FahrtY in Pos). Auf einer Rampe steht
+                // das Verhaeltnis dann bei 15/40 = 0,375, und die Grenze zwischen
+                // »rechts« und »unten-rechts« liegt bei tan 22,5° = 0,414: die
+                // Richtung kippte im Rundungsrauschen hin und her.
+                //
+                // ⭐ AUF EBENEM GELAENDE AENDERT SICH NICHTS, und das ist keine
+                // Hoffnung, sondern Arithmetik: dort ist `dest - Pos` gleich
+                // (1-t)·(dSpalte·40, dZeile·20) — dieselbe RICHTUNG, nur kuerzer.
+                // Gemessen mit --rampen-probe: 4 Richtungswechsel vorher, 0
+                // nachher; das Nullmodell --kein-hang hatte schon vorher 0.
+                //
+                // Gegenschalter: --blick-aus-bildpunkten.
+                Vector2 blickD = BlickAusBildpunkten
+                    ? d
+                    : new Vector2((target.X - e.Col) * TileW, (target.Y - e.Row) * TileH);
+                // @0x434342: steht das Ziel auf der eigenen Zelle, bleibt die
+                // alte Richtung — nicht die Vorgaberichtung, die DirToFacing
+                // fuer den Nullvektor liefert.
+                int will = blickD.LengthSquared() < 0.0001f
+                    ? e.Facing : DirToFacing(blickD, stufen);
                 if (DrehAlt) e.Facing = will;
                 else if (e.Facing != will)
                 {
@@ -29087,8 +29160,13 @@ public partial class MapEntityLayer : Node2D
     /// gehandelt hat (Arbeitsweise 33).</summary>
     private int _retried;
 
-    /// <summary>Die letzte Lage jeder Einheit, fuer den Sprungwaechter.</summary>
-    private readonly Dictionary<int, Vector2> _sprungWacht = new();
+    /// <summary>Die letzte Lage jeder Einheit, fuer den Sprungwaechter — MIT
+    /// ihrer Satznummer, damit ein wiederverwendeter Listenindex nicht als
+    /// Sprung durchgeht.</summary>
+    private readonly Dictionary<int, (int Slot, Vector2 Pos, int Col, int Row)> _sprungWacht = new();
+
+    /// <summary>Die ersten acht Spruenge im Klartext — siehe den Waechter.</summary>
+    public static readonly System.Collections.Generic.List<string> SprungFaelle = new();
 
     /// <summary>Der weiteste Satz, den irgendeine Einheit in EINEM Takt gemacht
     /// hat, in Zellen — und wer es war. ⚠ Ein ordentlicher Schritt bleibt weit
@@ -29168,6 +29246,37 @@ public partial class MapEntityLayer : Node2D
             return !string.IsNullOrEmpty(e.Name) ? e.Name
                  : !string.IsNullOrEmpty(e.Tier) ? e.Tier : "?";
         return "?";
+    }
+
+    /// <summary>
+    /// <b>Der Name, der ueber einer EINHEIT stehen soll.</b> — <see cref="LabelOf(int)"/>
+    /// nimmt den Namen des <b>Rumpfes</b> aus der Bauteiltafel, und fuer alles,
+    /// was faehrt, ist das richtig. Fuer einen FUSSSOLDATEN ist es falsch:
+    /// sein <c>unit_type</c> ist das Infanterie-FAHRWERK (148 »Leichter«,
+    /// 149 »Schwerer«), und die zwoelf Entwuerfe darauf heissen anders.
+    ///
+    /// <para>⚠ 03.09.2026, aus seinem Spiellauf Kampagne 3 gemeldet: »Der
+    /// Forscher heisst im Original Scientist, bei uns Leichter«. Genau dieser
+    /// Fall — der Scientist ist Entwurf 11 auf Fahrwerk 148, und die Tafel gab
+    /// den Fahrwerksnamen zurueck. Betroffen war JEDER Fusssoldat, nicht nur
+    /// dieser eine: alle zwoelf Entwuerfe zeigten »Leichter« oder »Schwerer«.
+    /// (bug-030)</para>
+    ///
+    /// <para>Die Reihenfolge: ein EIGENER Name gewinnt (<see cref="Entity.Name"/>
+    /// traegt den Gebaeudenamen und den einer mitgenommenen Einheit), dann der
+    /// Infanterie-Entwurf aus <c>infantry.json</c>, zuletzt der Rumpf.</para>
+    /// </summary>
+    private static string LabelOf(Entity e)
+    {
+        if (e.Name.Length > 0) return e.Name;
+        if (e.Infantry >= 0)
+        {
+            LoadInfantryDesigns();
+            if (_infDesigns != null && _infDesigns.TryGetValue(e.Infantry, out var d) &&
+                d.Name.Length > 0)
+                return d.Name;
+        }
+        return LabelOf(e.UnitType);
     }
 
     /// <summary>Human-readable imap ground class (Can_go @0x4055D0).</summary>
@@ -32415,7 +32524,7 @@ public partial class MapEntityLayer : Node2D
             // Balken allein zu wenig ist — das Spiel haelt die Einheit dann an
             // (@0x407ab8), und das gehoert gesagt.
             _panel.Text =
-                $"{(e.Name.Length > 0 ? e.Name : LabelOf(e.UnitType)).ToUpper()}\n" +
+                $"{LabelOf(e).ToUpper()}\n" +
                 (warn == st ? "" : warn);
             ShowPanelBars(e);
         }
@@ -32444,7 +32553,7 @@ public partial class MapEntityLayer : Node2D
             };
             _panel.Text =
                 $"◈ ENTITY slot {e.Slot}   cell ({e.Col},{e.Row})  elev {e.Elev}\n" +
-                $"   unit_type {e.UnitType} ({LabelOf(e.UnitType)})   facing {e.Facing}\n" +
+                $"   unit_type {e.UnitType} ({LabelOf(e)})   facing {e.Facing}\n" +
                 $"   equip {e.Equipment} ({EquipName(e.Equipment)})   weapon: {weapon}" +
                 (e.AmmoMax > 0 ? $"   ammo {e.Ammo}/{e.AmmoMax}" : "") +
                 $"   energie {e.Hp}/{e.HpMax}   sprit {e.Fuel}/{e.FuelMax}   A/V {e.Attack}/{e.Defence}\n" +

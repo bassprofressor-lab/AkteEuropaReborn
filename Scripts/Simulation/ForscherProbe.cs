@@ -1,4 +1,4 @@
-using Godot;
+﻿using Godot;
 
 namespace AkteEuropaReborn.Rendering;
 
@@ -102,6 +102,24 @@ public partial class MapEntityLayer : Node2D
 
         var sb = new System.Text.StringBuilder(
             $"forscher-probe: Forscher auf ({z.Col},{z.Row})\n");
+
+        // ⚠ 03.09.2026, aus seinem Spiellauf: »nur dass bei uns 2 dort stehen,
+        // im LetsPlay nur einer«. Darum zaehlt die Probe jetzt ALLE Einheiten
+        // des neutralen Spielers 7 auf, mit Satznummer, Zelle und NAMEN — die
+        // Satznummer ist die Zahl, mit der das Missionsskript sie anspricht
+        // (`sell_unit(7000)` @0x499BD0 meint Block 7, Platz 0), und der Name
+        // sagt, ob die Anzeige den Entwurf trifft oder das Fahrwerk (bug-030).
+        int neutral = 0;
+        var zeilen = new System.Collections.Generic.List<string>();
+        foreach (var u in _entities)
+        {
+            if (u.IsBuilding || u.IsProp || u.Dead || u.Owner != 7) continue;
+            neutral++;
+            zeilen.Add($"      Platz {u.Slot} ({u.Col},{u.Row}) \"{LabelOf(u)}\" " +
+                       $"unit_type {u.UnitType} Satz {u.Infantry}");
+        }
+        sb.Append($"   Spieler 7 (neutral) hat {neutral} Einheit(en):\n");
+        foreach (var zl in zeilen) sb.Append(zl).Append('\n');
 
         // ⚠ ERST die Erreichbarkeit, DANN der Befehl. Der erste Bau fragte in
         // der falschen Reihenfolge und schickte sechs Einheiten auf ein Ziel,

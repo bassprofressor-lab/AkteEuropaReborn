@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Godot;
 
 namespace AkteEuropaReborn.Rendering;
@@ -328,7 +328,7 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Wie eine untergestellte Einheit in der Depotliste heisst.</summary>
     private string EinheitenWort(Entity u)
-        => u.Name.Length > 0 ? u.Name : LabelOf(u.UnitType);
+        => LabelOf(u);
 
     /// <summary>
     /// <b>»Aussenden« fuer eine EINGEFAHRENE Einheit</b> — sie kommt mit ihrem

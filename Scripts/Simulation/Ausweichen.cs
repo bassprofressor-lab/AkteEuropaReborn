@@ -118,6 +118,12 @@ public partial class MapEntityLayer : Node2D
     /// Karte, auf der sich die Fronten mischen, muesste das nachholen.</para></summary>
     public static bool AusweichenAn = true;
 
+    /// <summary>GEGENPROBE <c>--ausweichen-springt</c>: der Stand bis zum
+    /// 03.09.2026 — der Ausweichschritt SETZT die Einheit um, statt sie zu
+    /// fahren. Das war der gemeldete »Teleport«; siehe den Rechenort und den
+    /// Sprungwaechter in MapEntityLayer.</summary>
+    public static bool AusweichenSpringt;
+
     /// <summary>Bequemlichkeit: der alte Name, damit die Abfragen unten lesbar
     /// bleiben.</summary>
     private static bool KeinAusweichen => !AusweichenAn;
@@ -243,15 +249,55 @@ public partial class MapEntityLayer : Node2D
                 // dieser Stelle nicht tut (es kennt hier nur die eine Zelle).
                 if (!_nav.IsFree(c, w, e.Move, i)) continue;
 
-                _nav.ClearOccupant(e.Col, e.Row, i);
                 if (e.Reserved is { } rc) _nav.ClearOccupant(rc.X, rc.Y, i);
                 e.Reserved = null;
-                e.Col = c; e.Row = w;
-                e.Elev = ElevOf(c, w);
-                e.Pos = BodyCenterAt(e, c, w);
-                e.Footprint = CellRect(_ox, _oy, c, w, e.Elev);
-                e.Facing = idx;
-                _nav.SetOccupant(c, w, i, e.Infantry >= 0);
+
+                if (AusweichenSpringt)
+                {
+                    // GEGENPROBE --ausweichen-springt: der Stand bis zum
+                    // 03.09.2026 — die Einheit wird UMGESETZT.
+                    _nav.ClearOccupant(e.Col, e.Row, i);
+                    e.Col = c; e.Row = w;
+                    e.Elev = ElevOf(c, w);
+                    e.Pos = BodyCenterAt(e, c, w);
+                    e.Footprint = CellRect(_ox, _oy, c, w, e.Elev);
+                    e.Facing = idx;
+                    _nav.SetOccupant(c, w, i, e.Infantry >= 0);
+                }
+                else
+                {
+                    // ⭐⭐ 03.09.2026 — DER AUSWEICHSCHRITT WIRD GEFAHREN, NICHT
+                    // GESPRUNGEN. Gemeldet (01.09. und wieder am 03.09.):
+                    // »Einheiten teleportieren«. Der Sprungwaechter hat es
+                    // gezeigt: eine ganze Zelle in EINEM Takt, und dabei
+                    // »Weg keiner, Reserviert -, Schritt 0/0« — also niemand,
+                    // der faehrt. Das war genau diese Stelle.
+                    //
+                    // Das Original @0x408E45 macht es anders, und die drei
+                    // Zeilen am Ende des Armes sagen es:
+                    //
+                    //   0x408F22  call 0x4013C5 -> 0x404E80   erst DREHEN; ist
+                    //                                         er nicht fertig,
+                    //                                         geschieht in
+                    //                                         diesem Takt gar
+                    //                                         nichts
+                    //   0x408F42  mov byte [edi+4], al        POHYB := Richtung
+                    //   0x408F46  call 0x401235 -> 0x4052D0   stempelt die
+                    //                                         ZIELZELLE in die
+                    //                                         imap (@0x405355
+                    //                                         mov word[edx], di)
+                    //
+                    // ⭐ @0x4052D0 fasst +0x00 und +0x01 — Spalte und Zeile —
+                    // NICHT an. Die Einheit steht also weiter auf ihrer Zelle
+                    // und wird vom gewoehnlichen Fahrer hinuebergefahren, mit
+                    // Drehung und mit `kolik`. Bei uns ist das ein Weg von
+                    // GENAU EINEM Schritt; Vormerkung, Drehung und Fortschritt
+                    // macht dann der Fahrer, wie bei jedem anderen Schritt auch.
+                    e.Path = new System.Collections.Generic.List<Vector2I> { new(c, w) };
+                    e.PathIdx = 0;
+                    e.Goal = new Vector2I(c, w);
+                    e.StepCost = 0;          // frischer Anlauf, kein geerbter Rest
+                }
                 AusweichSchritte++;
                 getan = true;
             }
