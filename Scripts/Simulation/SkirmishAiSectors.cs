@@ -1033,6 +1033,18 @@ public partial class MapEntityLayer : Node2D
                         var (ex, ey) = AiSektorVon(e.Col, e.Row);
                         if (ex != sx || ey != sy) continue;
 
+                        // ⭐ Die WEITE mitschreiben, bevor die Einheit losfaehrt
+                        // — siehe AiPlayer.SektorWeiteste. Gemessen wird in
+                        // Zellen, Schachbrettabstand (dieselbe Groesse, in der
+                        // die Sektorkante 24 zaehlt).
+                        if (ziel >= 0 && ziel < _entities.Count)
+                        {
+                            var z = _entities[ziel];
+                            int weit = Math.Max(Math.Abs(e.Col - z.Col), Math.Abs(e.Row - z.Row));
+                            if (weit > a.SektorWeiteste) a.SektorWeiteste = weit;
+                            a.SektorWeitenSumme += weit;
+                            a.SektorWeitenZahl++;
+                        }
                         AiSend(i, ziel);
                         e.AiCpu0 = 3;
                         a.Wave.Add(i);

@@ -113,6 +113,21 @@ public partial class MapEntityLayer : Node2D
         /// <summary>Die AUSGAENGE des Sektorangriffs, jeder einzeln — ohne sie
         /// ist »0 Angriffe« nicht von »nie versucht« zu unterscheiden.</summary>
         public int SektorVersuche, SektorGesperrt, SektorKeineFreien, SektorKeinZiel;
+
+        /// <summary>⭐ 03.09.2026 — WIE WEIT schickt die Sektormaschine ihre
+        /// Einheiten? Gemeldet aus seinem Spiellauf Kampagne 3: »der letzte
+        /// Gegner von unten rechts greift mich schon beim vorletzten an, er
+        /// kommt also wohin gefahren, wo er es im Original nicht tut«.
+        /// <para>Ohne Zahl ist das nicht zu entscheiden. Aus der Lesung
+        /// (<c>0x4BC540</c>, Sektorkante 24, neun Nachbarn) folgt eine
+        /// Reichweite von rund 24 bis 48 Zellen, im schlimmsten Fall — Einheit
+        /// in der einen Ecke ihres Sektors, Ziel in der fernen Ecke eines
+        /// Diagonalnachbarn — knapp 68. Ein Wert deutlich darueber ist ein
+        /// Fehler, ein Wert darunter ist originalgetreu und sein Eindruck
+        /// betrifft dann die HAEUFIGKEIT, nicht die Weite.</para></summary>
+        public int SektorWeiteste;
+        public long SektorWeitenSumme;
+        public int SektorWeitenZahl;
         /// <summary>Die AUSGAENGE der Zustandsmaschine (0x4BBB80, zweite
         /// Haelfte), jeder einzeln — ohne sie ist »die KI steht« nicht von »sie
         /// weist niemanden zu« zu unterscheiden. Siehe AiZustandsmaschine.
@@ -1056,6 +1071,11 @@ public partial class MapEntityLayer : Node2D
             $"| Sektor: {a.SektorVersuche} Versuche, {a.SektorGesperrt} gesperrt, " +
             $"{a.SektorKeineFreien}x keine freien, {a.SektorKeinZiel}x kein Ziel, " +
             $"{a.SektorAngriffe} ANGRIFFE " +
+            (a.SektorWeitenZahl > 0
+                ? $"(Weite: weiteste {a.SektorWeiteste}, Mittel " +
+                  $"{a.SektorWeitenSumme / a.SektorWeitenZahl} Zellen; aus der Lesung " +
+                  $"erwartet 24..48, aeusserstenfalls 68) "
+                : "") +
             $"| Maschine: {a.SmZuweisungen} zugewiesen, {a.SmBereit}x bereit, " +
             $"{a.SmAbkuehlung}x abgekuehlt, {a.SmLeine}x Leine, {a.SmFertig}x fertig, " +
             $"{a.SmKeinSektor}x kein Sektor " +
