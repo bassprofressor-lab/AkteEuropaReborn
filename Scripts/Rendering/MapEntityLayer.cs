@@ -12922,6 +12922,11 @@ public partial class MapEntityLayer : Node2D
         sb.Append($"place-check: M{_mscript.Mission} traegt {tragen} Einsetzungen " +
                   $"und {befehle} Befehle; ausgeloest {_mscript.Placements} / " +
                   $"{_mscript.OrdersGiven}");
+        // ⚠ Die SETZUNG sichtbar machen: eine unterdrueckte Platzierung darf
+        // nicht still bleiben. Siehe MissionScript.PlaceUnitAusnahmen.
+        if (_mscript.PlacementsUnterdrueckt > 0)
+            sb.Append($"; ⚠ {_mscript.PlacementsUnterdrueckt} SETZUNG unterdrueckt " +
+                      "(--place-unit-treu hebt sie auf)");
 
         // ⭐⭐ 30.08.2026 — UND OB SIE AUCH FAHREN. »Befehl gegeben« und
         // »unterwegs« sind zwei Zahlen, und genau dazwischen lag der gemeldete

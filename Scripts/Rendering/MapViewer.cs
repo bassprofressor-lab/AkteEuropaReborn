@@ -1384,6 +1384,7 @@ public partial class MapViewer : Node2D
             else if (a == "--beschuss-check") _beschussCheck = true;
             else if (a == "--forscher-probe") _forscherProbe = true;
             else if (a == "--rampen-probe") _rampenProbe = true;
+            else if (a == "--place-unit-treu") Campaign.MissionScript.PlaceUnitTreu = true;
             else if (a.StartsWith("--forscher-probe="))
             {
                 _forscherProbe = true;

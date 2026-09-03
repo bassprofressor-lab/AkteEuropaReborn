@@ -2165,6 +2165,7 @@ public sealed class MissionScript
             if (HasOr(r) && !AnyTrue(r)) continue;
 
             _ruleNo = ri;
+            _ruleAt = r.At;
             if (Fired.Count < FiredMax)
             {
                 var what = new List<string>();
@@ -2204,6 +2205,88 @@ public sealed class MissionScript
     /// <summary>Welche Regel gerade laeuft — nur fuer die Protokollzeile beim
     /// Klang, damit ein gemeldetes Geraeusch eine Adresse bekommt.</summary>
     private int _ruleNo = -1;
+
+    /// <summary>Die Adresse der gerade feuernden Regel im Original — fuer
+    /// <see cref="PlaceUnitUnterdrueckt"/>. −1, solange keine feuert.</summary>
+    private int _ruleAt = -1;
+
+    /// <summary>
+    /// ⚠⚠ <b>EINE EIGENE SETZUNG — kein gelesener Befehl.</b>
+    ///
+    /// <para><b>Der Fall.</b> Mission 3 setzt bei <c>@0x499939</c> einen zweiten
+    /// »Scientist«: <c>place_unit(193, 124, 18, 7)</c>, Bedingung nur
+    /// <c>v[55] == 0</c>. Die Karte <c>03.CWM</c> traegt aber bereits einen auf
+    /// <b>(125,18)</b> als Platz <b>7000</b>. Der Spieler hat am 03.09.2026 im
+    /// Spiel nachgesehen: <i>»es ist nur ein forscher und er steht auf der
+    /// rechten zelle«</i> — also der aus der KARTE.</para>
+    ///
+    /// <para><b>Warum das Original den zweiten nicht anlegt, ist NICHT
+    /// gefunden.</b> Nachgelesen und ausgeschlossen (Langfassung:
+    /// <c>berichte/forscher-fable.md</c>, dazu STATUS CQ.1):</para>
+    /// <list type="bullet">
+    ///   <item>Platzkapazitaet — <c>create_unit @0x4B34E0</c> sucht in
+    ///   <c>[7000, 8000)</c> den ersten Satz mit <c>+0x09 == 0xFF</c>; 7001 ist
+    ///   frei (Abbruch erst bei <c>@0x4B352A cmp esi, 0xFFFFFC18</c>).</item>
+    ///   <item><c>@0x4B3562</c> liest <c>byte[0x51CE38 + 46·(Entwurf +
+    ///   Spieler·200)]</c>. Tafelbasis ist <b>0x51CE20</b>, das Feld also
+    ///   <c>+0x18</c> = das FAHRWERK; Scientist hat 148. Und der
+    ///   <c>.CWM</c>-Pfad fuellt die Tafel selbst, indem er Besitzer 0 auf 1–7
+    ///   kopiert (<c>0x41F1E6 → 0x487C40 → 0x4B23C0</c>).</item>
+    ///   <item>Freizellensuche <c>@0x4C13E0</c> verlangt <c>imap == 0xFFFE</c>
+    ///   und Lagenbyte <c>== 0</c>; in <c>03.CWM</c> ist (124,18) beides. Die
+    ///   Spirale <c>0x79A008</c> beginnt bei (0,0), nimmt die Zelle also
+    ///   selbst.</item>
+    ///   <item><c>v[55]</c> ist 0 — der <c>.CWM</c>-Pfad loescht den
+    ///   Variablenpool (<c>@0x41F071 rep stosd</c>, v[0..299]), und kein Block
+    ///   vor Mission 3 schreibt nach <c>0xBC56FE</c>.</item>
+    ///   <item>Der »Riegel« <c>@0x499922</c> (<c>[0x502988]</c>) ist TOT: vier
+    ///   Nullbytes zwischen den Zeichenketten »Mission beendet« (0x502974) und
+    ///   »LEVEL0  C« (0x50298C), kein Schreiber im ganzen <c>.text</c>, kein
+    ///   Ladeziel einer Kartensektion. Der Block dahinter laeuft also bei JEDEM
+    ///   Aufruf. ⚠ Damit ist auch unser 100-Takt-Modell
+    ///   (<see cref="Script.Gate"/>) eine Setzung und keine Lesung.</item>
+    ///   <item>Der vermutete Aufrufer <c>0x416884</c> ist eine Sackgasse:
+    ///   <c>0x40169F → 0x497540</c> beginnt mit <c>mov al, byte[0x4FA0C0];
+    ///   test al,al; je</c> — der DEBUGschalter.</item>
+    /// </list>
+    ///
+    /// <para><b>Warum wir trotzdem unterdruecken.</b> Nicht nur wegen der
+    /// Beobachtung: das Skript selbst verlangt es. Regel 29 <c>@0x499BD0</c>
+    /// verkauft genau <c>sell_unit(7000)</c>, und Regel 30 <c>@0x499BFC</c>
+    /// zahlt die 300 Geld erst, wenn <c>unit_index(7, 193) == 0xFFFF</c> —
+    /// Spieler 7 also KEINEN Scientist mehr hat. Mit zweien kann diese
+    /// Belohnung nie fallen. Beobachtung und Skriptlogik sagen dasselbe; nur
+    /// der Weg dorthin fehlt.</para>
+    ///
+    /// <para>⚠ Die Ausnahme haengt an der ADRESSE der Regel, nicht am Entwurf
+    /// und nicht am Spieler — sie kann also nichts anderes treffen. Mission 28
+    /// setzt ihre drei Wissenschaftler ueber eigene Regeln und bleibt
+    /// unberuehrt.</para>
+    ///
+    /// <para>Gegenschalter <c>--place-unit-treu</c> stellt den Buchstaben der
+    /// EXE wieder her — dann stehen wieder zwei da.</para>
+    /// </summary>
+    private static readonly (int Mission, int At)[] PlaceUnitAusnahmen =
+    {
+        (3, 0x499939),   // place_unit(193, 124, 18, 7) — der zweite Forscher
+    };
+
+    /// <summary><c>--place-unit-treu</c>: die Ausnahmetafel ausschalten und dem
+    /// Buchstaben der EXE folgen. Siehe <see cref="PlaceUnitAusnahmen"/>.</summary>
+    public static bool PlaceUnitTreu;
+
+    /// <summary>Wie oft eine Platzierung wegen <see cref="PlaceUnitAusnahmen"/>
+    /// unterblieben ist — damit die Setzung in der Tafel sichtbar wird und
+    /// nicht still wirkt.</summary>
+    public int PlacementsUnterdrueckt;
+
+    private static bool PlaceUnitUnterdrueckt(int mission, int at)
+    {
+        if (PlaceUnitTreu || at <= 0) return false;
+        foreach (var (m, a) in PlaceUnitAusnahmen)
+            if (m == mission && a == at) return true;
+        return false;
+    }
 
     private bool Cmp(int lhs, string op, int rhs) => op switch
     {
@@ -2656,6 +2739,11 @@ public sealed class MissionScript
             // M11 1, M14 3, M18 3 — 20 von 60 Aufrufstellen sind heute in
             // Regeln eintragbar).
             case "place_unit":
+                if (PlaceUnitUnterdrueckt(_script.Mission, _ruleAt))
+                {
+                    PlacementsUnterdrueckt++;
+                    break;
+                }
                 Placements++;
                 // ⚠ Der Rueckgabewert wird gehalten, auch wenn ihn heute noch
                 // keine Regel abholt: sobald `v[a] = place_unit(...)` im
