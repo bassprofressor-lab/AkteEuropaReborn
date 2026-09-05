@@ -20103,6 +20103,31 @@ Namen) auf alle acht und rechnet nach (`0x4B24B0` → `0x4B1FB0`).
 ⭐⭐ **Die Zahl:** der Nachbau »EXE-Block 0 → `+00 := 0` für 50…199 → ×8 →
 Entwurfsrechnung« trifft den echten Spielstand `F:\Akte Europa\game.007` in
 **1600 von 1600** Sätzen; `unit_designs.json` trifft **64 von 586**.
-Bauteile stimmen (73/73), Namen nur 9 von 73 — im Baumenü steht darum
-»CHAINGUNNER« statt »L-INFANTERIE«. Der Bauauftrag steht im Bericht;
-**noch nicht ausgeführt.**
+Bauteile stimmen (73/73), Namen nur 9 von 73 — im Baumenü stand darum
+»CHAINGUNNER« statt »L-INFANTERIE«.
+
+### CT.6 ✅ UMGESTELLT (05.09.2026, bug-057)
+
+`CatalogueExporter.WriteDesignsFromExe` liest jetzt 200 × 46 B ab `0x51CE20`
+über die PE-Tafel, cp437, und schreibt alle acht Besitzerblöcke
+(74 × 8 = **592 Sätze**, Schlüssel `Platz + 200·Spieler`). ⭐ **Ohne `raw`:**
+die fünfzehn Rechenfelder sind in der EXE 0, und `DesignMath` rechnet sie je
+Spieler — dieselbe Reihenfolge, die das Original nach dem Kopieren fährt.
+
+⭐ **Selbst gemessen** gegen `F:\Akte Europa\game.007` (nur gelesen):
+**592 von 592** belegten Sätzen gleich in Name + Waffe + Fahrwerk + Rumpf;
+die alte Tafel traf **72 von 592**. Die Namen sind jetzt die deutschen der
+Auslieferung — »Forscher« statt »Scientist«, »Maschinengewehr« statt
+»Chaingun Tank«. Verfügbare Entwürfe 9 → 33; kein Fahrplaneintrag und keine
+Karte verweist auf einen Platz, den die EXE-Tafel nicht hat (geprüft für
+M3/M10/M25/M33: keine Meldung »steht nicht in unit_designs.json«).
+
+⚠ **Zwei Dinge, die dabei aufgefallen sind:**
+* `--selftest-designs` meldete danach »0 von 0 exakt gerechnet« und gab **grün**
+  zurück — der Test vergleicht gegen den Rohschwanz, und den gibt es nicht mehr.
+  Die alte Ausfuhr bleibt als **Prüfmuster** `unit_designs_ref.json` liegen
+  (586/586 exakt), und `ok == 0` meldet jetzt ausdrücklich »NICHTS GEPRÜFT«
+  (bug-058).
+* **SETZUNG beim Merker `+0x00`:** wir geben die 34 Einsen der EXE aus. Das
+  Original nullt sie beim Missionsstart (`0x4B23F3`) und lässt das Skript
+  verteilen; ohne Entwurfsschirm bliebe bei uns sonst fast nichts zu bauen.

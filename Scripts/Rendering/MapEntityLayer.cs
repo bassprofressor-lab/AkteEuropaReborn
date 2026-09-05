@@ -14243,9 +14243,15 @@ public partial class MapEntityLayer : Node2D
             }
             int slot = int.TryParse(kv.Key, out int sl) ? sl : -1;
             int weapon = GetI(d, "weapon", 0), equip = GetI(d, "body", 0);
-            // The record carries its own derived tail; use it rather than
-            // recomputing, so a design out of the game's data keeps the game's
-            // own numbers even where our table is short a component row.
+            // Traegt der Satz einen eigenen Schwanz, gilt der — sonst rechnen
+            // wir ihn.
+            //
+            // ⚠ 05.09.2026: seit die Tafel aus GAME.EXE kommt, traegt KEIN Satz
+            // mehr einen Schwanz. In der EXE sind die fuenfzehn Felder alle 0,
+            // und genau das tut das Original auch: es kopiert den Block und
+            // laesst 0x4B24B0 -> 0x4B1FB0 nachrechnen. Der Zweig bleibt stehen,
+            // weil eine Karte oder ein Spielstand ihn wieder fuellen kann —
+            // gerechnet wird jetzt der Regelfall, nicht die Ausnahme.
             string raw = d.TryGetValue("raw", out var rw) ? rw.AsString() : "";
             var derived = raw.Length >= 0x2e * 2
                 ? Simulation.DesignMath.FromRecordHex(raw)

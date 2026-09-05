@@ -1339,7 +1339,22 @@ public static class ImportSelfTest
     /// that derivation over the components alone and holds the result against
     /// the bytes the game stored — all fifteen fields, every record. It is the
     /// check that says whether a design the player draws up gets the price and
-    /// the hit points the game would have given it.</summary>
+    /// the hit points the game would have given it.
+    ///
+    /// <para>⚠⚠ <b>05.09.2026 — dieser Test hätte seinen Gegenstand fast
+    /// verloren.</b> Seit die Entwurfstafel aus GAME.EXE kommt, trägt
+    /// <c>unit_designs.json</c> <b>keinen Rohsatz</b> mehr: in der EXE sind die
+    /// fünfzehn Felder alle 0, sie entstehen erst zur Laufzeit. Der Test lief
+    /// danach durch und meldete »0 von 0« — grün, und ohne irgendetwas geprüft
+    /// zu haben.</para>
+    ///
+    /// <para>⭐ Darum liegt daneben <c>unit_designs_ref.json</c>: die alte
+    /// Ausfuhr aus <c>3.DM</c>, die als <b>Prüfmuster</b> weiterlebt. Ihre
+    /// Bauteilnummern sind richtig (73 von 73 gleich der EXE) und ihr Schwanz
+    /// ist von einem echten Spielstand gerechnet — genau das, wogegen sich
+    /// unsere Rechnung messen lassen muss. Die SPIELdaten kommen aus der EXE,
+    /// die PRÜFdaten aus dem Spielstand; wer beides aus derselben Quelle nimmt,
+    /// prüft nur sich selbst.</para></summary>
     public static int RunDesigns()
     {
         Simulation.DesignMath.Load();
@@ -1349,7 +1364,15 @@ public static class ImportSelfTest
             return 1;
         }
 
-        string path = Core.Content.Path("Maps/unit_designs.json");
+        // Erst das Prüfmuster, dann die Spieltafel — nur das Muster trägt noch
+        // Rohsätze (siehe oben).
+        string path = Core.Content.Path("Maps/unit_designs_ref.json");
+        bool muster = Godot.FileAccess.FileExists(path);
+        if (!muster) path = Core.Content.Path("Maps/unit_designs.json");
+        GD.Print(muster
+            ? "selftest-designs: Pruefmuster unit_designs_ref.json (Rohsaetze aus 3.DM)"
+            : "selftest-designs: ⚠ kein Pruefmuster — unit_designs.json aus der EXE " +
+              "traegt KEINE Rohsaetze, der Test kann so nichts belegen");
         if (!Godot.FileAccess.FileExists(path))
         {
             GD.PrintErr("selftest-designs: Maps/unit_designs.json fehlt");
@@ -1394,6 +1417,12 @@ public static class ImportSelfTest
             GD.PrintErr($"   +0x{kv.Key:x2}: {kv.Value} abweichend");
         GD.Print($"selftest-designs: {ok} von {ok + bad} Entwuerfen exakt gerechnet, " +
                  $"{bad} abweichend" + (skipped > 0 ? $", {skipped} ohne Rohsatz" : ""));
+        // ⚠ `ok > 0` ist der Riegel gegen den gruenen Test ohne Gegenstand:
+        // fehlt das Pruefmuster, sind alle Saetze »ohne Rohsatz«, und ein
+        // bestandener Lauf ueber null Faelle waere die schlimmste Auskunft.
+        if (ok == 0)
+            GD.PrintErr("selftest-designs: ⚠⚠ NICHTS GEPRUEFT — kein Satz mit Rohschwanz " +
+                        "dabei. Fehlt Maps/unit_designs_ref.json?");
         return bad == 0 && ok > 0 ? 0 : 1;
     }
 

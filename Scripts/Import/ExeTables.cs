@@ -72,6 +72,33 @@ public sealed class ExeTables
     public const uint InventionPrices = 0x503b38;
     public const int InventionCount = 3;
 
+    /// <summary>⭐⭐ <b>Die ENTWURFSTAFEL der Auslieferung — <c>0x51CE20</c>,
+    /// 200 Sätze à 46 B (Besitzer 0 von acht Blöcken).</b>
+    ///
+    /// <para>Gelesen am 05.09.2026 (<c>berichte/entwurfstafel-fable.md</c>) und
+    /// selbst nachgezählt: <b>74 belegte Sätze</b>, 1022 Bytes ≠ 0, Namen in
+    /// <b>cp437 und auf deutsch</b> (»L-Infanterie«, »Pionier«, »Forscher«).
+    /// Die 15 Rechenfelder <c>+1A…+2D</c> sind <b>alle 0</b> — sie entstehen
+    /// erst zur Laufzeit aus <c>0x4B1FB0</c>. In Bestand F (<c>0x51BE60</c>) ist
+    /// die Tafel byteweise dieselbe (200/200).</para>
+    ///
+    /// <para>⭐ <b>Warum das die richtige Quelle ist</b> und nicht ein
+    /// Spielstand: der <c>.CWM</c>-Lader überspringt sec47 (<c>0x41E6AC</c>) und
+    /// repliziert stattdessen diesen Block auf die Besitzer 1–7
+    /// (<c>0x4B22E0</c>, <c>rep movsd</c>), dann rechnet <c>0x4B24B0</c> alle
+    /// 1600 Sätze neu. Gemessen gegen den echten Spielstand
+    /// <c>F:\Akte Europa\game.007</c>: dieser Weg trifft <b>1600 von 1600</b>
+    /// Sätzen, die alte Ausfuhr aus <c>3.DM</c> nur <b>64 von 586</b>.</para>
+    ///
+    /// <para>⚠ <c>+0x00</c> (»verfügbar«) trägt hier 34 Einsen, alle auf Plätzen
+    /// ≥ 50. Der Missionsstart <c>0x4B23F3</c> nullt genau diesen Bereich wieder
+    /// — im Original ist der Merker also totes Datenmaterial, und was wirklich
+    /// verfügbar ist, verteilt das Missionsskript. Siehe den Kopf von
+    /// <c>WriteDesignsFromExe</c>, wo das entschieden wird.</para></summary>
+    public const uint DesignTable = 0x51ce20;
+    public const int DesignRecord = 46;
+    public const int DesignsPerBlock = 200;
+
     /// <summary>Ten buildable ship designs, 42 bytes each (SHIP_PROD).</summary>
     public const uint ShipDesigns = 0x52eda0;
     public const int ShipStride = 42;
@@ -941,6 +968,15 @@ public sealed class ExeTables
     {
         if (row < 0 || row >= 200) return Array.Empty<byte>();
         return Read((uint)(StatsBase - (StatsRecord0 - StatsArrayBase) + row * StatsStride), StatsStride);
+    }
+
+    /// <summary>Ein Satz der Entwurfstafel, siehe <see cref="DesignTable"/>.
+    /// Leer, wenn die Tafel nicht im Bild liegt.</summary>
+    public byte[] DesignRow(int slot)
+    {
+        if (slot < 0 || slot >= DesignsPerBlock) return Array.Empty<byte>();
+        uint versatz = StatsBase - StatsRecord0;
+        return Read((uint)(DesignTable + versatz + slot * DesignRecord), DesignRecord);
     }
 
     /// <summary>Die Missionsleiter der Forschung, siehe <see cref="PriceLadder"/>.

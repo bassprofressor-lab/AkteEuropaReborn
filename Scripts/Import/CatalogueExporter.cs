@@ -12,8 +12,16 @@ using System.Text;
 ///
 /// Where each comes from:
 ///
-///   unit_designs.json    CWM sec47, 1600 x 46 — only a .DM carries it, the
-///                        campaign levels stop at section 39
+///   unit_designs.json    GAME.EXE .data @0x51ce20, 200 x 46, replicated to the
+///                        eight owner blocks — ⚠ NOT from a .DM any more
+///                        (05.09.2026): the .CWM loader skips sec47 and the exe
+///                        replicates its own default, and only that reproduces
+///                        a real savefile (1600/1600 against game.007, where the
+///                        old export from 3.DM hit 64 of 586)
+///   unit_designs_ref.json  the OLD export from 3.DM, kept as the test fixture
+///                        for --selftest-designs: it is the only table left that
+///                        carries a real derived tail to check our arithmetic
+///                        against
 ///   orders.json          GAME.EXE, 40 x 30, latin-1
 ///   building_types.json  GAME.EXE, 16 x 20, cp437, plus the doors and the
 ///                        counts aggregated over every map's sec3
@@ -151,7 +159,10 @@ public sealed class CatalogueExporter
     public void Run(Tally tally, IEnumerable<CwmFile> maps, Action<string>? say = null)
     {
         Directory.CreateDirectory(_dst);
-        WriteDesigns(maps, tally, say);
+        // ⚠ Die Entwurfsliste steht NICHT mehr hier: sie kommt seit dem
+        // 05.09.2026 aus GAME.EXE und braucht keine Karte mehr (siehe
+        // WriteDesignsFromExe, das in RunExeOnly haengt). `maps` bleibt im
+        // Aufruf, weil die Zaehlwege darunter es brauchen.
         WriteBuildingTypes(tally, say);
         WriteCatalogue(tally, say);
         RunExeOnly(say);
@@ -170,6 +181,7 @@ public sealed class CatalogueExporter
     public void RunExeOnly(Action<string>? say = null)
     {
         Directory.CreateDirectory(_dst);
+        WriteDesignsFromExe(say);
         WriteOrders(say);
         WriteWeapons(say);
         WriteResearch(say);
@@ -640,60 +652,99 @@ public sealed class CatalogueExporter
 
     private readonly Dictionary<int, (string Name, int Weapon, int Propulsion, int Body)> _designs = new();
 
-    /// <summary>sec47 — 1600 records of 46 (dest 0x51ce20): +0x02 name,
-    /// +0x17 weapon, +0x18 propulsion, +0x19 body. The offsets were pinned by
-    /// the designs whose name spells its own components out
-    /// ("H-Cannon-81-165").
+    /// <summary>
+    /// ⭐⭐ <b>Die Entwurfstafel — aus GAME.EXE, nicht aus einem Spielstand.</b>
     ///
-    /// Only a .DM carries the section, and the saved missions do not all hold
-    /// the same number of designs, so the fullest list wins rather than the
-    /// first — the Python export picked 3.DM by hand for the same reason.
-    /// </summary>
-    private void WriteDesigns(IEnumerable<CwmFile> maps, Tally tally, Action<string>? say)
+    /// <para><b>Umgestellt am 05.09.2026</b> nach
+    /// <c>berichte/entwurfstafel-fable.md</c>. Bis dahin kam
+    /// <c>unit_designs.json</c> aus <c>sec47</c> der <b>fülligsten .DM</b>, und
+    /// das war in der Praxis <c>3.DM</c> — ein <b>ENTWICKLER-Spielstand</b>
+    /// (»Chanel Tunnel«, Missionsnummer 25), nicht Mission 3. Der Fehler fiel
+    /// nicht auf, weil die drei Bauteilnummern stimmten (73/73) und die
+    /// Simulation nur die braucht; falsch waren die <b>NAMEN</b> (nur 9 von 73
+    /// gleich), die Merker (27 abweichend) und der Bestand (2 fremde Sätze, 1
+    /// fehlender). Im Baumenü stand darum »CHAINGUNNER« statt »L-INFANTERIE«
+    /// und »Scientist« statt »Forscher«.</para>
+    ///
+    /// <para><b>Was das Original tut:</b> der <c>.CWM</c>-Lader liest sec47 gar
+    /// nicht (<c>0x41E6AC</c> springt darüber hinweg), sondern repliziert den
+    /// <c>.data</c>-Block des Besitzers 0 (<c>0x51CE20</c>, 200 × 46 B) auf die
+    /// Besitzer 1–7 (<c>0x4B22E0</c>, <c>rep movsd</c>) und rechnet dann alle
+    /// 1600 Sätze neu (<c>0x4B24B0</c> → <c>0x4B1FB0</c>).</para>
+    ///
+    /// <para>⭐ <b>Die Zahl, die den Umbau rechtfertigt:</b> gegen den echten
+    /// Spielstand <c>game.007</c> trifft dieser Weg <b>1600 von 1600</b> Sätze
+    /// byteweise; die alte Ausfuhr aus <c>3.DM</c> trifft <b>64 von 586</b>.</para>
+    ///
+    /// <para><b>Drei Entscheidungen, die hier fallen:</b></para>
+    /// <list type="number">
+    ///   <item><b>Kein <c>raw</c>.</b> Die 15 Rechenfelder <c>+0x1A…+0x2D</c>
+    ///   sind in der EXE alle 0; sie roh auszugeben hiesse, Preis, Tank und
+    ///   Panzerung als Null zu exportieren — <c>LoadDesigns</c> nimmt
+    ///   <c>raw</c>, sobald es 46 B lang ist. Ohne <c>raw</c> rechnet
+    ///   <see cref="Simulation.DesignMath"/> sie, und zwar je Spieler: dieselbe
+    ///   Rechnung, die das Original nach dem Kopieren laufen lässt.</item>
+    ///   <item><b>Alle acht Blöcke</b>, Schlüssel <c>Platz + 200·Spieler</c> —
+    ///   <c>space_in</c> und der Aufsteller adressieren so.</item>
+    ///   <item>⚠ <b>Der Merker <c>+0x00</c> bleibt, wie die EXE ihn hat</b>
+    ///   (34 Einsen, alle auf Plätzen ≥ 50), und das ist eine <b>SETZUNG</b>.
+    ///   Das Original nullt genau diesen Bereich beim Missionsstart wieder
+    ///   (<c>0x4B23F3</c>) und lässt das Missionsskript verteilen. Wir haben
+    ///   aber <b>keinen Entwurfsschirm</b>: wer den Merker streng nimmt, lässt
+    ///   eine Kampagnenfabrik mit einer Handvoll Entwürfe stehen und nennt das
+    ///   Treue. Die Ausfuhr trägt darum die echten Bytes.</item>
+    /// </list></summary>
+    private void WriteDesignsFromExe(Action<string>? say)
     {
-        CwmFile? src = null;
-        byte[]? s47 = null;
-        int best = -1;
-        foreach (var m in maps)
-        {
-            var s = m.Sec(47);
-            if (s == null || s.Length < DesignStride) continue;
-            int named = 0;
-            for (int i = 0; (i + 1) * DesignStride <= s.Length; i++)
-                if (Cp437.GetString(s, i * DesignStride + 2, 20).Length > 0) named++;
-            if (named > best) { best = named; src = m; s47 = s; }
-        }
-        if (s47 == null)
-        {
-            say?.Invoke("Designliste: keine Karte mit sec47 dabei (nur .DM tragen sie)");
-            return;
-        }
-
+        if (_exe == null) return;
         var sb = new StringBuilder(1 << 18);
-        sb.Append($"{{\"_note\":\"unit designs from CWM sec47 (1600 x 46) of {Esc(src!.Stem)}\",");
-        sb.Append("\"_fields\":\"name +0x02, weapon +0x17, propulsion +0x18, body +0x19\",");
-        sb.Append("\"_choice\":\"the list belongs to a saved game, so the saves differ; ");
-        sb.Append("the fullest one is taken — OUR choice, not a rule from the data\",");
+        sb.Append("{\"_note\":\"unit designs from GAME.EXE .data @VA 0x51ce20 (owner-0 ");
+        sb.Append("default, 200 x 46), replicated to all eight owner blocks as 0x4b22e0 does; ");
+        sb.Append("key = slot + 200*player\",");
+        sb.Append("\"_fields\":\"name +0x02 (cp437), weapon +0x17, propulsion +0x18, ");
+        sb.Append("body +0x19\",");
+        sb.Append("\"_tail\":\"the 15 derived fields +0x1a..+0x2d are ZERO in the exe - ");
+        sb.Append("they are computed at load time by 0x4b1fb0, so no raw record is written here ");
+        sb.Append("and DesignMath computes them per player\",");
+        sb.Append("\"_flags\":\"+0x00 is written as the exe has it (34 ones, all slots ");
+        sb.Append(">= 50). The original clears 50..199 at mission start (0x4b23f3) and lets the ");
+        sb.Append("mission script hand them back - OUR CHOICE to keep them, because the remake ");
+        sb.Append("has no design screen\",");
+        sb.Append("\"_measured\":\"this table reproduces game.007 sec47 in 1600 of 1600 ");
+        sb.Append("records; the previous export from 3.DM hit 64 of 586 (05.09.2026)\",");
         sb.Append("\"designs\":{");
+
         bool first = true;
-        for (int i = 0; (i + 1) * DesignStride <= s47.Length; i++)
+        int belegt = 0, nichtnull = 0;
+        for (int slot = 0; slot < ExeTables.DesignsPerBlock; slot++)
         {
-            int o = i * DesignStride;
-            if (CwmExtra.AllZero(s47, o, DesignStride)) continue;
-            string nm = Cp437.GetString(s47, o + 2, 20);
+            var r = _exe.DesignRow(slot);
+            if (r.Length != ExeTables.DesignRecord) continue;
+            if (CwmExtra.AllZero(r, 0, r.Length)) continue;
+            foreach (byte b in r) if (b != 0) nichtnull++;
+            string nm = Cp437.GetString(r, 2, 20);
             if (nm.Length == 0) continue;
-            int weap = s47[o + 0x17], prop = s47[o + 0x18], body = s47[o + 0x19];
-            _designs[i] = (nm, weap, prop, body);
-            if (!first) sb.Append(',');
-            first = false;
-            sb.Append($"\"{i}\":{{\"name\":\"{Esc(nm)}\",\"weapon\":{weap},");
-            sb.Append($"\"propulsion\":{prop},\"body\":{body},");
-            sb.Append($"\"flags\":[{s47[o]},{s47[o + 1]}],\"raw\":\"{Hex(s47, o, DesignStride)}\"}}");
-            Designs++;
+            belegt++;
+            int weap = r[0x17], prop = r[0x18], body = r[0x19];
+            _designs[slot] = (nm, weap, prop, body);
+            for (int spieler = 0; spieler < 8; spieler++)
+            {
+                if (!first) sb.Append(',');
+                first = false;
+                sb.Append($"\"{slot + spieler * ExeTables.DesignsPerBlock}\":");
+                sb.Append($"{{\"name\":\"{Esc(nm)}\",\"weapon\":{weap},");
+                sb.Append($"\"propulsion\":{prop},\"body\":{body},");
+                sb.Append($"\"flags\":[{r[0]},{r[1]}]}}");
+                Designs++;
+            }
         }
         sb.Append("}}");
         File.WriteAllText(_dst + "/unit_designs.json", sb.ToString(), new UTF8Encoding(false));
-        say?.Invoke($"Designliste: {Designs} Entwuerfe aus {src.Stem}");
+        say?.Invoke($"Designliste: {belegt} Entwuerfe aus GAME.EXE x 8 Bloecke = {Designs} Saetze" +
+                    (belegt == 74 ? " (erwartet 74)"
+                                  : $"   ⚠ ERWARTET 74 belegte Saetze, nicht {belegt}") +
+                    (nichtnull == 1022 ? ", 1022 Bytes ungleich 0 (erwartet)"
+                                       : $"   ⚠ {nichtnull} Bytes ungleich 0, erwartet 1022"));
         WriteInfantry(say);
     }
 
