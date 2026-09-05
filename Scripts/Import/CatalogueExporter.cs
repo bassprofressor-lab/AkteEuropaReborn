@@ -175,6 +175,7 @@ public sealed class CatalogueExporter
         WriteResearch(say);
         WriteComponentStats(say);
         WriteUpgradeTable(say);
+        WriteResearchLadder(say);
         WriteDiplomacy(say);
         WriteResources(say);
         WriteMissionPlans(say);
@@ -486,6 +487,7 @@ public sealed class CatalogueExporter
 
     public int ComponentRows;
     public int UpgradeRowsWritten;
+    public int ResearchLadderRows;
 
     /// <summary>The stats array as raw rows, counted from the ARRAY base
     /// (0x5045a0) rather than from record 0.
@@ -544,6 +546,66 @@ public sealed class CatalogueExporter
     /// (<c>0x4AAA20</c> würfelt es). In der Datei steht überall 0; wer den Wert
     /// als Wähler benutzt, baut den Fehlschluss »der Tank wächst nie« ein.
     /// </para></summary>
+    /// <summary>
+    /// ⭐⭐ <b>Die Preisleiter der Forschung — <c>research_ladder.json</c>.</b>
+    ///
+    /// <para>Gelesen am 05.09.2026 (<c>berichte/forschung-fable.md</c>
+    /// Abschnitt 5) und vor dem Export selbst nachgeschlagen: 35 Wörter ab
+    /// <c>0x503AA8</c>, 100, 100, 105, 110, 115, 120, 130 … 1000, 1500, 1000 —
+    /// eine steigende Leiter, die zur Missionsnummer passt und zu nichts sonst.
+    /// Dahinter, bei <c>0x503B38</c>, die drei festen Erfindungspreise
+    /// 500 / 2000 / 5000.</para>
+    ///
+    /// <para>Die Formel, für die das gebraucht wird (<c>0x4AA5F8…0x4AA752</c>):
+    /// <code>
+    ///   Grund = LEITER[Missionsnummer]                      ; 100…1500
+    ///   Wert  = Bauteil[Bauteil &gt;= 0xA0 ? +0x21 : +0x20]     ; vorzeichenlos
+    ///   Preis = 3.2^(Bauteil+0x24 − Grund/100 + 1) · 2.3^Stufe · (Wert/2) · 10
+    ///   Preis = min(Preis, 30000), mindestens 1
+    /// </code>
+    /// ⭐ <b>Und der Preis IST die Dauer</b>: der Laufsatz zählt einen Punkt je
+    /// Simulationstakt, bis er den Preis erreicht (<c>0x4AB5A5</c>). 224 $ sind
+    /// 224 Takte.</para>
+    ///
+    /// <para>⚠ <b>Was hier NICHT drinsteht</b>, obwohl es dazugehört: die
+    /// Schranke, die entscheidet, welche Bauteile ein Spieler überhaupt besitzt
+    /// (<c>byte[0x540EB8]</c>, gelesen in <c>0x419CB0</c>). Sie ist eine eigene
+    /// Zahl mit eigenen Schreibern und gehört nicht in diese Datei — die
+    /// Preisleiter hat im ganzen Programm <b>genau einen</b> Leser
+    /// (<c>0x4AA618</c>), sie ist nur der Preis.</para></summary>
+    private void WriteResearchLadder(Action<string>? say)
+    {
+        if (_exe == null) return;
+        var leiter = _exe.ResearchLadder();
+        var erfindung = _exe.InventionCosts();
+        if (leiter.Length == 0)
+        {
+            say?.Invoke("Preisleiter: ⚠ 0x503aa8 liegt nicht im Bild — nicht geschrieben");
+            return;
+        }
+        var sb = new StringBuilder(1 << 12);
+        sb.Append("{\"_note\":\"research price ladder from GAME.EXE @VA 0x503aa8, ");
+        sb.Append($"{ExeTables.PriceLadderRows} u16 indexed BY MISSION NUMBER; ");
+        sb.Append("invention prices @VA 0x503b38. price = pow(3.2, tech - ladder/100 + 1) ");
+        sb.Append("* pow(2.3, level) * (value/2) * 10, capped at 30000, min 1 - and the ");
+        sb.Append("price IS the duration: one point per simulation tick (0x4ab5a5).\",");
+        sb.Append("\"_read\":\"berichte/forschung-fable.md section 5, verified against the exe\",");
+        sb.Append("\"ladder\":[");
+        for (int i = 0; i < leiter.Length; i++) sb.Append(i > 0 ? "," : "").Append(leiter[i]);
+        sb.Append("],\"invention_prices\":[");
+        for (int i = 0; i < erfindung.Length; i++) sb.Append(i > 0 ? "," : "").Append(erfindung[i]);
+        sb.Append("],\"invention_names\":[\"Kleine Forschung\",\"Mittlere Forschung\",");
+        sb.Append("\"Große Forschung\"],");
+        sb.Append("\"base\":3.2,\"per_level\":2.3,\"value_scale\":10,\"cap\":30000,\"floor\":1,");
+        sb.Append("\"max_level\":9}");
+        File.WriteAllText(_dst + "/research_ladder.json", sb.ToString(), new UTF8Encoding(false));
+        ResearchLadderRows = leiter.Length;
+        say?.Invoke($"Preisleiter: {leiter.Length} Missionsstufen {leiter[0]}…{leiter[^1]}" +
+                    (leiter.Length == 35 && leiter[0] == 100 && leiter[33] == 1500
+                        ? " (erwartet 35, 100…1500)"
+                        : "   ⚠ ERWARTET 35 Zeilen, 100 am Anfang, 1500 bei 33"));
+    }
+
     private void WriteUpgradeTable(Action<string>? say)
     {
         if (_exe == null) return;

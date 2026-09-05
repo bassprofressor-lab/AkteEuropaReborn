@@ -1401,6 +1401,9 @@ public partial class MapViewer : Node2D
             else if (a == "--befehlsklang-weg-alt") MapEntityLayer.BefehlsklangWegAlt = true;
             else if (a == "--befehlsklang-probe") _befehlsklangProbe = true;
             else if (a == "--aufwertung-probe") _aufwertungProbe = true;
+            else if (a == "--forschung-alt") MapEntityLayer.ForschungAlt = true;
+            else if (a == "--forschung-besitz-alt") MapEntityLayer.ForschungBesitzAlt = true;
+            else if (a == "--forschung-probe") _forschungProbe = true;
             else if (a == "--aufwertung-alt") MapEntityLayer.AufwertungAlt = true;
             else if (a == "--aufwertung-immer-tank") MapEntityLayer.AufwertungImmerTank = true;
             // 03.09.2026 — Gegenschalter zur Entwurfsrechnung je Spieler: die
@@ -2158,6 +2161,10 @@ public partial class MapViewer : Node2D
     /// ob der Tank waechst und ob der Wurf wirklich streut. Siehe
     /// Simulation/AufwertungProbe.cs.</summary>
     private bool _aufwertungProbe;
+    /// <summary><c>--forschung-probe</c>: kauft an einer echten Basis eine
+    /// echte Forschung und misst Preis, Dauer und Wirkung. Siehe
+    /// Simulation/ForschungProbe.cs.</summary>
+    private bool _forschungProbe;
     private bool _befehlsklangGestartet;
     private bool _minenCheck;
     /// <summary><c>--sprit-check</c>: schickt alle eigenen fahrenden Einheiten
@@ -2671,6 +2678,7 @@ public partial class MapViewer : Node2D
             if (_rampenProbe) GD.Print(_entities.RampenProbeLine());
             if (_befehlsklangProbe) GD.Print(_entities.BefehlsklangProbeLine());
             if (_aufwertungProbe) GD.Print(_entities.AufwertungProbeLine());
+            if (_forschungProbe) GD.Print(_entities.ForschungProbeLine());
             if (_stauCheck)
             {
                 GD.Print(_entities.SchiffStauLine());
@@ -2683,6 +2691,7 @@ public partial class MapViewer : Node2D
             if (_rampenProbe) { GetTree().Quit(_entities.RampenProbeRc()); return; }
             if (_befehlsklangProbe) { GetTree().Quit(_entities.BefehlsklangProbeRc()); return; }
             if (_aufwertungProbe) { GetTree().Quit(_entities.AufwertungProbeRc()); return; }
+            if (_forschungProbe) { GetTree().Quit(_entities.ForschungProbeRc()); return; }
             if (_drehCheck)
             {
                 GD.Print(_entities.SchiffDrehLine());
@@ -3843,8 +3852,9 @@ public partial class MapViewer : Node2D
         // waren über die Oberflaeche schlicht nicht zu finden; das Fenster hat
         // stattdessen »noch nicht angeschlossen« behauptet, was fuer die
         // MECHANIK falsch war und nur fuer den REITER stimmte.
-        _baseWindow.ResearchNote = _entities.ResearchNote;
-        _baseWindow.OnResearch = () => _entities.ResearchFromPanel();
+        _baseWindow.ResearchNote = _entities.ForschungNote;
+        _baseWindow.ResearchRows = _entities.ForschungZeilen;
+        _baseWindow.OnResearch = zeile => _entities.ForschungAusPanel(zeile);
         _baseWindow.RepairNote = _entities.RepairNote;
         _baseWindow.OnRepair = () => _entities.PostRepairFromPanel();
         _baseWindow.OnRepairStop = () => _entities.PostStopRepairFromPanel();
@@ -4188,6 +4198,12 @@ public partial class MapViewer : Node2D
     {
         if (_ended || _endBanner == null || _endWindow == null) return;
         _ended = true;
+        // ⭐ »Alle abfeuern« — 0x4AB950. Was noch laeuft, wird beim
+        // Missionsende SOFORT fertig, ohne Meldung und ohne Klang: der Spieler
+        // hat bezahlt, und das Original verschenkt ihm den Rest der Dauer.
+        // ⚠ Hier und nicht im Skript: die Mission endet auch ohne Skript
+        // (Gefecht), und dies ist die eine Stelle, durch die beide gehen.
+        _entities.ForschungMissionsende();
         // `close_message_windows()` @0x447560 — was noch offen ist, raeumt das
         // Original vor einem neuen Fenster weg, und die Abrechnung ist das
         // letzte Fenster der Mission.
@@ -4854,7 +4870,10 @@ public partial class MapViewer : Node2D
                 case Key.I: _hidePanelList = !_hidePanelList; UpdateProductionPanel(); break;
                 // Q legt die Rohstoffleiste weg — siehe BuildResourceBar.
                 case Key.Q: _hideResourceBar = !_hideResourceBar; UpdateResourceBar(); break;
-                case Key.O: _entities.StartResearch(); break;
+                // ⭐ Taste O — jetzt die erste Zeile des Angebots. Das
+                // Original kennt die Taste nicht; sie bleibt als Abkuerzung,
+                // damit der Weg ohne Fenster nicht verschwindet.
+                case Key.O: _entities.ForschungAusPanel(0); break;
                 case Key.K: _entities.StartRepair(); break;
                 case Key.L: _entities.ToggleRail(); break;
                 // ⚠ DIE SPIELGESCHWINDIGKEIT, 1…3 wie im Original — die

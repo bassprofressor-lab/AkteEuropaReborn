@@ -20021,3 +20021,88 @@ Faellen 0.
 **Offen aus dem Bericht:** ZBRAN 8/9, der Verfolger `0x40FC90` (nur angelesen),
 der Schuetzenpfad bewaffneter GEBAEUDE. ⚠ Und eine Berichtigung des Agenten an
 BA.7: `0x453AA0` ist der **Probeschuss**, nicht der scharfe Schuss.
+
+---
+
+## CT. ⭐⭐⭐ DIE FORSCHUNG IST GEBAUT — und AN.3 war falsch begründet (05.09.2026)
+
+Zwei Fable-Leseläufe (`berichte/forschung-fable.md` mit Nachtrag 11,
+`berichte/entwurfstafel-fable.md`), die tragenden Stellen selbst nachgeschlagen.
+
+### CT.1 Was gelesen und selbst nachgeprüft ist
+
+* ⭐⭐ **Der Laufsatz hängt an der BASIS.** `0x44A8AF mov ax, word[edx+0x8B9044]`
+  ist das ERSTE Argument an `0x4AB830`/`0x4AABD0`; das Fensterfeld wird in
+  `0x446000` aus dem angeklickten Objekt `word[0x502AD8]` gefüllt (`0x437151`
+  `mov word[0x502ad8], bx`, dann `push ebx` als erstes Argument — selbst
+  disassembliert). Der Spieler steht getrennt in `+0x0D`; der Takt vergleicht ihn
+  bei `0x4AB674` mit `byte[0x4FA284]`. **Damit ist AN.3 richtig gezählt und
+  falsch begründet:** nicht »eine Forschung je Spieler«, sondern **eine je
+  Basis**, zehn im ganzen Spiel.
+* **Der Takt** `0x4AB580`: `+0x04` steigt um 1 (`0x4AB5A5`), Vergleich gegen
+  `+0x02` — ⭐ **der Preis IST die Dauer**, 50 Punkte je Sekunde.
+* **Das Angebot** `0x4AA950` (selbst gelesen): 100 Marken nullen, drei
+  Erfindungen, dann für `z = 1…49` der Aufwertungstafel jede Zeile mit
+  `Zeile+0x00 != 0`, `sec46[ich][b]+0x00 != 0` und `+0x01 < 9`. Kein Zufall.
+* **Der Preis** (`0x4AA5F8…0x4AA752`), Leiter `0x503AA8` = 35 Wörter 100…1500
+  (ausgelesen), Erfindungen fest 500/2000/5000 (`0x503B38`, ausgelesen):
+  `p = 3.2^(Techstufe − Grund·0,01 + 1) · 2,3^Stufe · (Wert/2) · 10`, Deckel
+  30 000, Boden 1.
+
+### CT.2 ⭐⭐ Der Besitzmerker — die Frage, die den Bauauftrag entschied
+
+Der Missionsstart `0x4B23C0` nullt `sec46+0x00` für **alle** 200 Zeilen mit
+`+0x24 != 10`, und **keine** Zeile der Auslieferung hat Techstufe 10 (ausgezählt:
+1…8; nur erfundene Waffen bekommen 10, `0x4AB1B6`). `game.007` (Mission 1)
+bestätigt es: Kanone, S.Kanone, M-Gewehr tragen dort `+0x00 = 0`.
+
+⭐ **Der Verteiler ist das MISSIONSSKRIPT** (`set_part`, `0x4D0520`, 1037 Rufe),
+das NACH dem Nullen läuft; `0x437F10` kopiert danach Spieler 0 auf 1…7.
+`0x419CB0` mit der Technikstufe `byte[0x540EB8]` gehört zum **Gefecht** — sein
+einziger Rufer liegt in `gefecht_starten` `0x41A150`, und in der Kampagne
+schreibt `0x540EB8` niemand.
+
+⭐ **Zwei unabhängige Lesungen treffen sich:** der Leselauf nennt aus den
+EXE-Skriptblöcken für Mission 2 Kanone, M-Gewehr, Reifen (211/150/150 $) und für
+Mission 3 zusätzlich die 6x6-Reifen; unsere seit dem 10.08. exportierte
+`campaign.json` liefert im Spiel **genau dasselbe** (`--forschung-probe`:
+M1 0 · M2 3 zu 211/150/150 $ · M3 4 · M10 5 Bauteile).
+
+### CT.3 Was gebaut ist
+
+`Scripts/Simulation/Forschung.cs` (neu), `Aufwertung.cs` getrennt in
+`AngebotRechnen` (die Vorschau, mit dem Arm, der schon feststeht — AN.4) und
+`AufwertungSchreiben` (`0x4AAA80`, mit dem Wächter). Dazu `research_ladder.json`
++ `CatalogueExporter.WriteResearchLadder`, der Reiter »Forschung« im Basisfenster
+mit echter Angebotsliste, `--forschung-probe`, und die Gegenschalter
+`--forschung-alt` (die alte, freischaltende Forschung) und
+`--forschung-besitz-alt` (Besitz aus `PARTS.CWD` statt aus dem Fahrplan).
+
+**Gemessen** (`--forschung-probe`): Preise Kanone 199 / M-Gewehr 142 /
+Reifen 142 / S.Kanone 1093 $ = die vier gelesenen Zahlen · 160 $ = 160 Takte ·
+Reifen-Tank 440 → 484 · zwei Käufe an derselben Basis = 1 Abbruch.
+
+### CT.4 ⚠ Was NICHT gebaut ist
+
+1. **Die Erfindung** (Busbefehl 532, 40 Rezepte `0x502B00`) — damit ist in
+   Mission 1 gar nichts zu forschen, und das ist originalgetreu, aber unvollständig.
+2. **Der Spielstand**: sec96/sec97 werden nicht gesichert.
+3. ⚠ **Die Vorzeichen-Falle bei Waffen-Arm 2** (Bericht Abschnitt 6): das
+   Original schickt `a…e` als Bytes durch den Bus und subtrahiert bei `+0x1E`
+   `256 − Z+0x10`. Wir rechnen vorzeichenbehaftet. Gelesen, nicht gemessen.
+4. **Die KI erbt nicht** (`0x437CD0`) — die Schraube `PARTS.CWD[11601]` steht
+   auf 0, der Mechanismus schläft im Original selbst.
+
+### CT.5 ⚠⚠ DIE ENTWURFSTAFEL — gelesen, gemessen, NICHT umgestellt
+
+`Assets/Legacy/Maps/unit_designs.json` stammt aus `3.DM`, einem
+**Entwickler-Spielstand**. Das Original repliziert bei jeder `.CWM` den
+EXE-Vorgabeblock von Besitzer 0 (`0x51CE20`, 74 belegte Sätze, **deutsche**
+Namen) auf alle acht und rechnet nach (`0x4B24B0` → `0x4B1FB0`).
+
+⭐⭐ **Die Zahl:** der Nachbau »EXE-Block 0 → `+00 := 0` für 50…199 → ×8 →
+Entwurfsrechnung« trifft den echten Spielstand `F:\Akte Europa\game.007` in
+**1600 von 1600** Sätzen; `unit_designs.json` trifft **64 von 586**.
+Bauteile stimmen (73/73), Namen nur 9 von 73 — im Baumenü steht darum
+»CHAINGUNNER« statt »L-INFANTERIE«. Der Bauauftrag steht im Bericht;
+**noch nicht ausgeführt.**

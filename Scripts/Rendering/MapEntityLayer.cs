@@ -14987,6 +14987,8 @@ public partial class MapEntityLayer : Node2D
 
     private void UpdateResearch(Entity e)
     {
+        if (!ForschungAlt) return;          // ⭐ 05.09.2026: die gelesene Forschung
+                                           // taktet in ForschungTick(), 50/s
         if (e.ResearchTech <= 0) return;
         e.ResearchDone += ResearchRate;
         if (e.ResearchDone < ResearchTotal) return;
@@ -15008,7 +15010,7 @@ public partial class MapEntityLayer : Node2D
     /// das. Die Mechanik selbst ist alt; neu ist allein, dass sie sich zeigt.
     /// Der Text nennt Kosten, Fortschritt und das nächste Vorhaben, damit der
     /// Reiter auch dann etwas sagt, wenn gerade nichts läuft.</para></summary>
-    public string ResearchNote()
+    public string ResearchNoteAlt()
     {
         var e = Producer();
         if (e == null) return "Forschung — kein Gebäude gewählt.";

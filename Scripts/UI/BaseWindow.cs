@@ -123,7 +123,16 @@ public sealed partial class BaseWindow : PanelContainer
     /// 17.08.2026 war dieser Reiter leer und sagte »noch nicht angeschlossen«,
     /// obwohl die Mechanik seit langem auf Taste O lag — siehe Fehler C2.</summary>
     public Func<string>? ResearchNote;
-    public Action? OnResearch;
+    /// <summary>»Forschen« — die gewählte Angebotszeile kaufen.
+    /// ⭐ 05.09.2026: der Knopf bekommt die ZEILE mit. Im Original ist das
+    /// derselbe Weg — <c>0x44A871</c> liest <c>word[Fenster+0x8B9052] − 1000</c>
+    /// (den zuletzt gedrückten Listenknopf) und übergibt ihn an den
+    /// Bezahlknopf. Vorher rief dieser Knopf eine Forschung ohne Wahl.</summary>
+    public Action<int>? OnResearch;
+
+    /// <summary>Die Angebotsliste des Forschungsreiters —
+    /// <c>MapEntityLayer.ForschungZeilen</c>, gebaut wie <c>0x4AA950</c>.</summary>
+    public Func<List<BuildPanel.Row>>? ResearchRows;
 
     /// <summary>Reiter »Reparatur«, dasselbe für <c>StartRepair</c> (Taste K).
     /// ⚠ Es gibt dafür KEINE Einheit und braucht auch keine: das Gebäude
@@ -401,7 +410,7 @@ public sealed partial class BaseWindow : PanelContainer
             switch (_tab)
             {
                 case 0: OnSendOut?.Invoke(_sheet.Selected); break;
-                case 2: OnResearch?.Invoke(); break;
+                case 2: OnResearch?.Invoke(_sheet.Selected); break;
                 case 3: OnRepair?.Invoke(); break;
                 default:
                     if (_sheet.Selected >= 0) Produce?.Invoke(_sheet.Selected);
@@ -560,6 +569,7 @@ public sealed partial class BaseWindow : PanelContainer
         {
             1 => Rows?.Invoke() ?? new List<BuildPanel.Row>(),
             0 => DepotRows?.Invoke() ?? new List<BuildPanel.Row>(),
+            2 => ResearchRows?.Invoke() ?? new List<BuildPanel.Row>(),
             _ => new List<BuildPanel.Row>(),
         };
         _sheet.Note = _tab switch
@@ -591,7 +601,8 @@ public sealed partial class BaseWindow : PanelContainer
         { 0 => "Aussenden", 2 => "Forschen", 3 => "Reparieren", _ => "Produzieren" };
         _make.Disabled = _tab switch
         {
-            2 => OnResearch == null,
+            2 => OnResearch == null || _sheet.Selected < 0 ||
+                 _sheet.Selected >= rows.Count || !rows[_sheet.Selected].Affordable,
             3 => OnRepair == null,
             // Im Depot gibt es nichts zu bezahlen — nur etwas zu waehlen.
             0 => OnSendOut == null || _sheet.Selected < 0 ||

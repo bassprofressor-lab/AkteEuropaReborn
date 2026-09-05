@@ -171,6 +171,11 @@ public partial class MapEntityLayer
             _origAcc -= SimHz;
             _origTicks++;
             MarketTradeTickOnce();
+            // ⭐ 05.09.2026 — DIE FORSCHUNG. 0x4AB580 haengt ohne Bedingung im
+            // Haupttakt des Originals: ein Punkt je Takt, und der PREIS ist die
+            // Dauer (0x4AB5A5). Darum hier und nicht im Wirtschaftstakt der
+            // Gebaeude, der viel langsamer laeuft.
+            ForschungTick();
             // Auftrag 52, der Auslauf aus dem Dock — @0x409C8E prüft
             // `[0x4FA240] % 20 == 11`, also eine feste Phase, nicht »irgendwann
             // in zwanzig Takten«.

@@ -47,6 +47,31 @@ public sealed class ExeTables
     public const int UpgradeStride = 24;
     public const int UpgradeRows = 50;
 
+    /// <summary>⭐⭐ <b>Die Missionsleiter der FORSCHUNG — 35 Wörter ab
+    /// <c>0x503AA8</c>, 100…1500.</b>
+    ///
+    /// <para>Gelesen am 05.09.2026 (<c>berichte/forschung-fable.md</c>
+    /// Abschnitt 5) und hier nachgeschlagen: die Werte steigen 100, 100, 105,
+    /// 110, 115, 120, 130 … 1000, 1500, 1000. Sie sind der <b>Grundpreis</b> der
+    /// Preisformel und damit die einzige Stelle, an der die MISSION mitredet:
+    /// <c>3.2^(Technikstufe − Grundpreis/100 + 1)</c> — die Techstufe schliesst
+    /// das Tor, die Missionsleiter öffnet es wieder.</para>
+    ///
+    /// <para>⭐ <b>Genau EIN Leser im ganzen Programm</b>
+    /// (<c>reloc_refs --range 0x503AA8 70</c>: <c>0x4AA618</c>, in der
+    /// Preisrechnung). Die Leiter ist also die Preisleiter und sonst nichts —
+    /// insbesondere ist sie <b>nicht</b> die Schranke, die entscheidet, welche
+    /// Bauteile ein Spieler besitzt (das ist <c>byte[0x540EB8]</c>).</para>
+    /// </summary>
+    public const uint PriceLadder = 0x503aa8;
+    public const int PriceLadderRows = 35;
+
+    /// <summary>Die drei Erfindungspreise ab <c>0x503B38</c>: 500 / 2000 / 5000 —
+    /// »Kleine«, »Mittlere«, »Große Forschung«. Nachgeschlagen; feste Zahlen,
+    /// keine Formel (<c>0x4AA890</c> trägt sie unverändert ins Angebot).</summary>
+    public const uint InventionPrices = 0x503b38;
+    public const int InventionCount = 3;
+
     /// <summary>Ten buildable ship designs, 42 bytes each (SHIP_PROD).</summary>
     public const uint ShipDesigns = 0x52eda0;
     public const int ShipStride = 42;
@@ -916,6 +941,30 @@ public sealed class ExeTables
     {
         if (row < 0 || row >= 200) return Array.Empty<byte>();
         return Read((uint)(StatsBase - (StatsRecord0 - StatsArrayBase) + row * StatsStride), StatsStride);
+    }
+
+    /// <summary>Die Missionsleiter der Forschung, siehe <see cref="PriceLadder"/>.
+    /// Leer, wenn die Tafel nicht im Bild liegt — dann rechnet niemand einen
+    /// Preis, statt einen zu erfinden.</summary>
+    public int[] ResearchLadder()
+    {
+        uint versatz = StatsBase - StatsRecord0;
+        var b = Read(PriceLadder + versatz, PriceLadderRows * 2);
+        if (b.Length < PriceLadderRows * 2) return Array.Empty<int>();
+        var v = new int[PriceLadderRows];
+        for (int i = 0; i < PriceLadderRows; i++) v[i] = b[2 * i] | (b[2 * i + 1] << 8);
+        return v;
+    }
+
+    /// <summary>Die drei Erfindungspreise, siehe <see cref="InventionPrices"/>.</summary>
+    public int[] InventionCosts()
+    {
+        uint versatz = StatsBase - StatsRecord0;
+        var b = Read(InventionPrices + versatz, InventionCount * 2);
+        if (b.Length < InventionCount * 2) return Array.Empty<int>();
+        var v = new int[InventionCount];
+        for (int i = 0; i < InventionCount; i++) v[i] = b[2 * i] | (b[2 * i + 1] << 8);
+        return v;
     }
 
     /// <summary>Eine Zeile der Aufwertungstafel, siehe <see cref="UpgradeTable"/>.

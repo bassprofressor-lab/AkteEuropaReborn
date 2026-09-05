@@ -245,70 +245,164 @@ public partial class MapEntityLayer : Node2D
     public int Aufwerten(int spieler, int bauteil)
     {
         if (AufwertungAlt) return -1;
-        if (spieler is < 0 or > 7 || bauteil is < 0 or >= 200) return -1;
+        // ⚠ DER PRÜFSTANDSWEG, und er würfelt VOR dem Anwenden. Das Original
+        // dreht die Reihenfolge um: das ANGEBOT rechnet aus dem Arm, der schon
+        // in der Zeile steht (`+0x02`), und `0x4AAA20` würfelt erst beim
+        // Anwenden den Arm der NÄCHSTEN Stufe (AN.4 — »das Angebot zeigt darum
+        // eine ehrliche Vorschau«). Über viele Aufwertungen ist die Verteilung
+        // dieselbe, die VORSCHAU aber nicht; wer sie braucht, geht über
+        // <see cref="AngebotRechnen"/> und <see cref="AufwertungSchreiben"/>,
+        // die die Forschung benutzt. Hier bleibt die alte Reihenfolge stehen,
+        // damit die Messung vom 03.09. (400 Aufwertungen, 113/96/84/108) sich
+        // weiter auf dieselbe Kette bezieht.
+        // ⚠ ERST prüfen, DANN würfeln — in dieser Reihenfolge und nicht
+        // umgekehrt. Ein Wurf, der auf eine ungültige Aufwertung fällt, wäre
+        // aus der deterministischen Kette gezogen und würde sie verschieben:
+        // die Wurfverteilung der Probe kam nach dem Umbau vom 05.09. als
+        // 113/111/95/86 statt 113/96/84/108 heraus, weil die 400er-Schleife
+        // nach Stufe 9 weiterwürfelte. Dieselbe Verteilung, andere Kette —
+        // und eine andere Kette macht jede frühere Messung unvergleichbar.
+        if (!AufwertungMoeglich(spieler, bauteil)) return -1;
+        int wurf = AufwertungImmerTank ? 2 : Simulation.Determinism.Roll(4);
+        var w = AngebotRechnen(spieler, bauteil, wurf);
+        if (!w.Gueltig) return -1;
+        AufwertungWurf[wurf]++;
+        if (wurf == 2 && w.Fahrwerk) AufwertungTank++;
+        return AufwertungSchreiben(spieler, w) ? wurf : -1;
+    }
+
+    /// <summary>Gibt es zu diesem Bauteil überhaupt eine Aufwertung, und steht
+    /// sie noch unter Stufe 9? Dieselben zwei Fragen, die das Angebot stellt
+    /// (<c>0x4AA9D2</c>/<c>0x4AA9DC</c>) — hier getrennt, damit
+    /// <see cref="Aufwerten"/> sie VOR dem Wurf stellen kann.</summary>
+    private bool AufwertungMoeglich(int spieler, int bauteil)
+    {
+        if (spieler is < 0 or > 7 || bauteil is < 0 or >= 200) return false;
+        AufwertungTafelLaden();
+        BauteileVorbereiten();
+        if (_aufwertungTafel == null || !_aufwertungTafel.ContainsKey(bauteil))
+        {
+            AufwertungOhneZeile++;
+            return false;
+        }
+        var c = _bauteile![spieler][bauteil];
+        return c.Length >= 58 && c[0x01] < 9;
+    }
+
+    /// <summary>
+    /// ⭐⭐ <b>Was eine Aufwertung brächte — die Rechnung des ANGEBOTS
+    /// (<c>0x4AA360</c>), ohne irgendetwas zu ändern.</b>
+    ///
+    /// <para>Das Original rechnet die sechs Zuwächse beim Bauen der
+    /// Angebotstafel aus und legt sie in den 50-Byte-Satz; der Laufsatz trägt
+    /// sie dann bis zum Abschluss mit, und <c>0x4AAA80</c> schreibt genau diese
+    /// Zahlen. Darum ist das hier eine eigene Funktion und keine Kopie im
+    /// Forschungsteil: <b>eine</b> Arithmetik, zwei Aufrufer.</para>
+    ///
+    /// <para>Nur EIN Arm ist besetzt — welcher, sagt <paramref name="wurf"/>
+    /// (im Original das Laufzeitfeld <c>Zeile+0x02</c>). <c>D0</c> und
+    /// <c>A</c> wachsen immer.</para></summary>
+    public AufwertungWerte AngebotRechnen(int spieler, int bauteil, int wurf)
+    {
+        if (spieler is < 0 or > 7 || bauteil is < 0 or >= 200)
+            return default;
         AufwertungTafelLaden();
         BauteileVorbereiten();
         if (_aufwertungTafel == null ||
             !_aufwertungTafel.TryGetValue(bauteil, out var z))
-        {
             // 'for_vyv not found!' @0x4AAA3E — das Original bricht hier ab.
-            AufwertungOhneZeile++;
-            return -1;
-        }
+            // (Gezählt wird in AufwertungMoeglich, sonst zählte derselbe Fall
+            //  auf dem Prüfstandsweg doppelt.)
+            return default;
         var c = _bauteile![spieler][bauteil];
-        if (c.Length < 58) return -1;
+        if (c.Length < 58) return default;
 
         int stufe = c[0x01];
-        if (stufe >= 9) return -1;              // 0x4AAA8E: schon auf dieser Stufe
+        if (stufe >= 9) return default;         // 0x4AAA8E: schon auf dieser Stufe
         int rest = 9 - stufe;                   // ⭐ der Teiler des Originals
-
-        // ⭐ DER WURF. 0x4AAA20: `al = 0x4C5B30() & 3`. Der deterministische
-        // Zufall des Originals, darum Determinism.Roll und nicht GD.Randi.
-        int wurf = AufwertungImmerTank ? 2 : Simulation.Determinism.Roll(4);
-        AufwertungWurf[wurf]++;
-
+        wurf &= 3;
         bool fahrwerk = bauteil >= 0xA0;        // `setae` auf >= 0xA0, 0x4AA3CB
 
         // Immer: +0x0E waechst um seinen Anteil am Rest bis zum Endwert.
-        int endwert = W(z, 0x04);
-        Add16(c, 0x0E, (endwert - W(c, 0x0E)) / rest);
-
+        int d0 = (W(z, 0x04) - W(c, 0x0E)) / rest;
+        // Immer, aber SETZEND (mov): Fahrwerk +0x13, Waffe +0x12.
+        int a = fahrwerk ? (z[0x09] - (sbyte)c[0x13]) / rest
+                         : (z[0x08] - (sbyte)c[0x12]) / rest;
+        int b = 0, cc = 0, d = 0, e = 0;
         if (fahrwerk)
-        {
-            // Immer: +0x13 wird GESETZT (mov @0x4AAB43), nicht addiert.
-            c[0x13] = (byte)Clamp8((z[0x09] - (sbyte)c[0x13]) / rest);
             switch (wurf)
             {
-                case 0: c[0x10] = (byte)Clamp8(c[0x10] + z[0x06]); break;   // add @0x4AAB49
-                case 1: c[0x11] = (byte)Clamp8(z[0x07]); break;             // mov @0x4AAB60
-                case 2:                                                     // ⭐ DER TANK
-                    Add16(c, 0x1A, W(z, 0x0E));                             // add @0x4AAB66
-                    AufwertungTank++;
-                    break;
-                case 3: c[0x21] = (byte)Clamp8(c[0x21] - W(z, 0x14)); break; // add e, e = −Zeile+0x14
+                case 0: b = z[0x06]; break;              // add @0x4AAB49
+                case 1: cc = z[0x07]; break;             // mov @0x4AAB60
+                case 2: d = W(z, 0x0E); break;           // ⭐ DER TANK, add @0x4AAB66
+                case 3: e = -W(z, 0x14); break;
             }
+        else
+            switch (wurf)
+            {
+                case 0: b = W(z, 0x0A); break;           // add @0x4AAB00
+                case 1: cc = W(z, 0x0C); break;          // add @0x4AAB14
+                case 2: d = -W(z, 0x10); break;          // sub @0x4AAB24
+                case 3: e = -W(z, 0x12); break;
+            }
+        return new AufwertungWerte(bauteil, fahrwerk, stufe, wurf,
+                                   d0, a, b, cc, d, e, true);
+    }
+
+    /// <summary>Die sechs Zuwächse einer Aufwertung, wie das Angebot sie zeigt
+    /// und der Laufsatz sie bis zum Abschluss trägt. <c>Stufe</c> ist die
+    /// Stufe VOR der Aufwertung.</summary>
+    public readonly record struct AufwertungWerte(int Bauteil, bool Fahrwerk, int Stufe,
+                                                  int Wurf, int D0, int A, int B, int C,
+                                                  int D, int E, bool Gueltig);
+
+    /// <summary>
+    /// ⭐⭐ <b>Die Aufwertung anwenden — <c>0x4AAA80</c>.</b> Schreibt die
+    /// gerechneten Zahlen in die Bauteilzeile des Spielers, hebt die Stufe und
+    /// zieht Entwürfe und lebende Einheiten nach.
+    ///
+    /// <para>⭐ <b>Der Wächter des Originals bleibt drin</b> (<c>0x4AAAAE</c>:
+    /// nur, wenn die verzeichnete Stufe noch unter der neuen liegt). Er ist der
+    /// Grund, warum zwei Abschlüsse desselben Vorhabens nicht zweimal
+    /// wirken.</para></summary>
+    public bool AufwertungSchreiben(int spieler, AufwertungWerte w)
+    {
+        if (!w.Gueltig || spieler is < 0 or > 7) return false;
+        BauteileVorbereiten();
+        var c = _bauteile![spieler][w.Bauteil];
+        if (c.Length < 58) return false;
+        if (c[0x01] >= w.Stufe + 1) return false;      // Wächter @0x4AAAAE
+
+        Add16(c, 0x0E, w.D0);
+        if (w.Fahrwerk)
+        {
+            c[0x13] = (byte)Clamp8(w.A);               // mov @0x4AAB43
+            c[0x10] = (byte)Clamp8(c[0x10] + w.B);     // add @0x4AAB49
+            // ⚠ Arm 1 SETZT (mov @0x4AAB60) — auch auf 0. Darum am Wurf
+            // entschieden und nicht daran, ob der Wert 0 ist: eine Zeile mit
+            // `+0x07 == 0` würde das Feld sonst stehen lassen statt es zu
+            // nullen, und das wäre eine andere Zahl als im Original.
+            if (w.Wurf == 1) c[0x11] = (byte)Clamp8(w.C);
+            Add16(c, 0x1A, w.D);                       // add @0x4AAB66 ⭐ TANK
+            c[0x21] = (byte)Clamp8(c[0x21] + w.E);
         }
         else
         {
-            // Waffe: +0x12 wird gesetzt (mov @0x4AAAFA).
-            c[0x12] = (byte)Clamp8((z[0x08] - (sbyte)c[0x12]) / rest);
-            switch (wurf)
-            {
-                case 0: Add16(c, 0x14, W(z, 0x0A)); break;    // add @0x4AAB00
-                case 1: Add16(c, 0x18, W(z, 0x0C)); break;    // add @0x4AAB14
-                case 2: Add16(c, 0x1E, -W(z, 0x10)); break;   // sub @0x4AAB24
-                case 3: c[0x20] = (byte)Clamp8(c[0x20] - W(z, 0x12)); break;
-            }
+            c[0x12] = (byte)Clamp8(w.A);               // mov @0x4AAAFA
+            Add16(c, 0x14, w.B);
+            Add16(c, 0x18, w.C);
+            Add16(c, 0x1E, w.D);
+            c[0x20] = (byte)Clamp8(c[0x20] + w.E);
         }
 
-        c[0x01] = (byte)(stufe + 1);            // mov @0x4AAACA
+        c[0x01] = (byte)(w.Stufe + 1);                 // mov @0x4AAACA
         AufwertungAngewandt++;
 
         // 0x4B24B0 und 0x4B3CD0: Entwuerfe neu rechnen, dann die lebenden
         // Einheiten nachziehen.
         EntwuerfeNachziehen(spieler);
         EinheitenNachziehen(spieler);
-        return wurf;
+        return true;
     }
 
     private static int W(byte[] b, int at) => at + 1 < b.Length ? b[at] | (b[at + 1] << 8) : 0;
