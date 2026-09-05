@@ -14394,6 +14394,7 @@ public partial class MapEntityLayer : Node2D
     public void ToggleDesigner()
     {
         LoadDesignParts();
+        ErfundeneWaffenNachtragen();
         Designer.Toggle();
         UpdatePanel();
         QueueRedraw();

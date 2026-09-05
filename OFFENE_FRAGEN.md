@@ -20084,8 +20084,7 @@ Reifen-Tank 440 → 484 · zwei Käufe an derselben Basis = 1 Abbruch.
 
 ### CT.4 ⚠ Was NICHT gebaut ist
 
-1. **Die Erfindung** (Busbefehl 532, 40 Rezepte `0x502B00`) — damit ist in
-   Mission 1 gar nichts zu forschen, und das ist originalgetreu, aber unvollständig.
+1. ✅ **Die Erfindung — gebaut am 05.09.**, siehe CT.7.
 2. **Der Spielstand**: sec96/sec97 werden nicht gesichert.
 3. ⚠ **Die Vorzeichen-Falle bei Waffen-Arm 2** (Bericht Abschnitt 6): das
    Original schickt `a…e` als Bytes durch den Bus und subtrahiert bei `+0x1E`
@@ -20131,3 +20130,57 @@ M3/M10/M25/M33: keine Meldung »steht nicht in unit_designs.json«).
 * **SETZUNG beim Merker `+0x00`:** wir geben die 34 Einsen der EXE aus. Das
   Original nullt sie beim Missionsstart (`0x4B23F3`) und lässt das Skript
   verteilen; ohne Entwurfsschirm bliebe bei uns sonst fast nichts zu bauen.
+
+
+### CT.7 ✅ DIE ERFINDUNG IST GEBAUT (05.09.2026, bug-061)
+
+Gelesen: `berichte/erfindung-fable.md`. **Selbst nachgerechnet, bevor daraus Code
+wurde** — erst in Python gegen die Spielstände, dann im C#.
+
+**Der Ablauf** (`0x4AAF00`, Busbefehl 532):
+
+```
+srand(Losnummer)                                   ⭐ MSVC, nicht 0x4C5B30
+h  = Techstufe(0x503AF0[Mission]) + Sockel[i] + rand % Spanne[i]   ; (1,6) (2,12) (3,18)
+h1 = rand % h  (≤9) ; h2 = rand % (h−h1)  (≤9) ; h3 = Rest − h2 + h1/3
+h1 = 2·h1/3    ; Ausgleichsschleife, bis h3 ≤ 9
+r1..r3 = rand % 4 + 4·h_k     ; die WERTrezepte      r4 = rand % 40  ; Name/Bild
+neue Zeile = erste freie 1…49 mit +0x0D == 0, dann +0x00=1, +0x01=9, +0x24=10
+```
+
+⭐⭐ **DER PRÜFSTAND, und er ist so gut wie sie werden.** `4.DM`, `5.DM` und
+`7.DM` tragen in Bauteilzeile 20 eine **erfundene** Waffe namens »Hiff-64«. Aus
+**Losnummer 0, Index 2, Techstufe 5** fallen **58 von 58 Byte** heraus — in allen
+drei Dateien. Und der Name erklärt sich mit: die angehängten Ziffern sind
+**h1 = 6** und **h3 = 4**.
+
+⚠ **Zwei Schrulligkeiten gehören dazu**, sonst trifft es nicht:
+* das Preisfeld `+0x20` zählt **Rezept 3 doppelt** (`0x4AB383` nimmt
+  `ecx = [esp+0x14]`, und das ist R3, nicht R4);
+* die obere Reichweite wird auf `max(+0x14, +0x16 + 3)` nachkorrigiert.
+
+⚠ **Eine Falle des Originals, als SETZUNG umgangen** (bug-062): bei Budget
+`h ≥ 28` bleiben `h1 = h2 = 9`, die Ausgleichsschleife dreht 10 000-mal leer, und
+`r3 ≥ 40` liest **hinter der Rezepttafel** in der Aufwertungstafel. Wir deckeln
+`h` auf 27 und zählen es. Betroffen wären die Missionen mit Techstufe 8/9.
+
+⚠ **Der Würfel ist NICHT unser Netzzufall**, sondern MSVC-`rand` mit
+`srand(Losnummer)`. Im Original setzt das nebenbei den globalen Spielzufall
+zurück; das bauen wir **nicht** nach (eigener Generator) — sonst zerschlüge jede
+Erfindung den Gleichlauf.
+
+**Gebaut:** `Scripts/Simulation/Erfindung.cs`, `ErfindungProbe.cs`
+(`--erfindung-probe`), die drei Angebotszeilen 500/2000/5000 im Basisfenster,
+`weapon_recipes.json` (40 × 70 B, 160 Namen) und die Techstufenleiter samt
+Budgets in `research_ladder.json`. Die erfundene Waffe wird im Entwurfsschirm
+nachgetragen (Techstufe 10 ist ihre Kennung). Gegenschalter `--keine-erfindung`.
+
+**Gemessen:** Kampagne 3 bietet jetzt **7 Zeilen** — drei Erfindungen plus die
+vier Bauteile, die das Missionsskript freigegeben hat; das ist die Form des
+Originals. Durchstich: 500 $ = 500 Takte, neue Waffe in Zeile 21, im
+Entwurfsschirm wählbar.
+
+⭐ **Von ihm aus dem Spiel:** »In Kampagne 1 kann man nicht forschen, da man
+keine Basis einnehmen kann — das geht erst ab Kampagne 2.« Das deckt sich mit
+dem Code (Missionsblock 1 hat keinen `set_part`-Ruf) und schließt CT.2 von der
+Spielseite.

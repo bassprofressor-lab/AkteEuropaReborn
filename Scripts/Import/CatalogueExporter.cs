@@ -188,6 +188,7 @@ public sealed class CatalogueExporter
         WriteComponentStats(say);
         WriteUpgradeTable(say);
         WriteResearchLadder(say);
+        WriteWeaponRecipes(say);
         WriteDiplomacy(say);
         WriteResources(say);
         WriteMissionPlans(say);
@@ -585,11 +586,67 @@ public sealed class CatalogueExporter
     /// Zahl mit eigenen Schreibern und gehört nicht in diese Datei — die
     /// Preisleiter hat im ganzen Programm <b>genau einen</b> Leser
     /// (<c>0x4AA618</c>), sie ist nur der Preis.</para></summary>
+    /// <summary>
+    /// ⭐⭐ <b>Die 40 Waffenrezepte der ERFINDUNG — <c>weapon_recipes.json</c>.</b>
+    ///
+    /// <para>Tafel <c>0x502B00</c>, 40 × 70 B (siehe
+    /// <see cref="ExeTables.RecipeTable"/>). Aus dreien davon mischt
+    /// <c>0x4AAF00</c> eine neue Waffe, wenn eine Erfindung fertig wird.</para>
+    ///
+    /// <para>⭐ <b>Ausrichtungsprobe, auf das Byte:</b> 40 × 70 = 2800, und
+    /// <c>0x502B00 + 0xAF0</c> ist genau <c>0x5035F0</c> — der Anfang der
+    /// Aufwertungstafel. Die Tafel passt lückenlos zwischen zwei bekannte.</para>
+    ///
+    /// <para>⚠ Ausgeführt werden die <b>rohen</b> 26 Zahlenbytes und die vier
+    /// Namen. Was die Zahlen bedeuten, gehört in den Leselauf zur Erfindung —
+    /// sie hier zu benennen hiesse, eine Deutung zu exportieren, die noch
+    /// niemand belegt hat.</para></summary>
+    private void WriteWeaponRecipes(Action<string>? say)
+    {
+        if (_exe == null) return;
+        var sb = new StringBuilder(1 << 14);
+        sb.Append("{\"_note\":\"the 40 weapon recipes an INVENTION mixes from, ");
+        sb.Append("GAME.EXE .data @VA 0x502b00, 70 bytes each: 26 bytes of numbers then ");
+        sb.Append("four 11-byte names (+0x1a, +0x25, +0x30, +0x3b) = 160 names in all\",");
+        sb.Append("\"_alignment\":\"40 x 70 = 2800, and 0x502b00 + 0xaf0 = 0x5035f0 = ");
+        sb.Append("the upgrade table - the recipes fit between two known tables to the byte\",");
+        sb.Append("\"_open\":\"what the 26 number bytes mean is NOT decided here; they ");
+        sb.Append("are exported raw so the port has them once 0x4aaf00 is read\",");
+        sb.Append($"\"stride\":{ExeTables.RecipeStride},\"recipes\":{{");
+        bool first = true;
+        int n = 0, namen = 0;
+        for (int row = 0; row < ExeTables.RecipeRows; row++)
+        {
+            var r = _exe.RecipeRow(row);
+            if (r.Length != ExeTables.RecipeStride) continue;
+            if (CwmExtra.AllZero(r, 0, r.Length)) continue;
+            if (!first) sb.Append(',');
+            first = false;
+            sb.Append($"\"{row}\":{{\"names\":[");
+            for (int k = 0; k < ExeTables.RecipeNames; k++)
+            {
+                string nm = Cp437.GetString(r, ExeTables.RecipeNameAt + k * ExeTables.RecipeNameLen,
+                                            ExeTables.RecipeNameLen);
+                if (nm.Length > 0) namen++;
+                sb.Append(k > 0 ? "," : "").Append($"\"{Esc(nm)}\"");
+            }
+            sb.Append($"],\"raw\":\"{Hex(r, 0, r.Length)}\"}}");
+            n++;
+        }
+        sb.Append("}}");
+        File.WriteAllText(_dst + "/weapon_recipes.json", sb.ToString(), new UTF8Encoding(false));
+        say?.Invoke($"Waffenrezepte: {n} Rezepte, {namen} Namen" +
+                    (n == 40 && namen == 160 ? " (erwartet 40 und 160)"
+                                             : "   ⚠ ERWARTET 40 Rezepte und 160 Namen"));
+    }
+
     private void WriteResearchLadder(Action<string>? say)
     {
         if (_exe == null) return;
         var leiter = _exe.ResearchLadder();
         var erfindung = _exe.InventionCosts();
+        var techleiter = _exe.TechLadderRows();
+        var budgets = _exe.InventionBudgets();
         if (leiter.Length == 0)
         {
             say?.Invoke("Preisleiter: ⚠ 0x503aa8 liegt nicht im Bild — nicht geschrieben");
@@ -609,6 +666,22 @@ public sealed class CatalogueExporter
         sb.Append("],\"invention_names\":[\"Kleine Forschung\",\"Mittlere Forschung\",");
         sb.Append("\"Große Forschung\"],");
         sb.Append("\"base\":3.2,\"per_level\":2.3,\"value_scale\":10,\"cap\":30000,\"floor\":1,");
+        // ⭐ 05.09.2026 — die zweite Leiter, 72 Byte hinter der ersten: sie gibt
+        // nicht den PREIS, sondern die TECHNIKSTUFE der Mission, aus der die
+        // Erfindung ihr Budget zieht (h = tech + sockel + rand % spanne).
+        // Zwei Leitern, zwei Bedeutungen — sie zu verwechseln waere teuer.
+        sb.Append("\"_tech_ladder\":\"GAME.EXE @VA 0x503af0, 35 u16 by mission number: the ");
+        sb.Append("TECHNOLOGY level an invention budgets from - NOT the price ladder 72 bytes ");
+        sb.Append("earlier. In a skirmish byte[0x540eb8] takes its place\",");
+        sb.Append("\"tech_ladder\":[");
+        for (int i = 0; i < techleiter.Length; i++)
+            sb.Append(i > 0 ? "," : "").Append(techleiter[i]);
+        sb.Append("],\"_invention_budget\":\"GAME.EXE @VA 0x503b80, (base, span) per offer: ");
+        sb.Append("h = tech + base + rand() % span (0x4aaf1a / 0x4aaf53)\",");
+        sb.Append("\"invention_budget\":[");
+        for (int i = 0; i < budgets.Length; i++)
+            sb.Append(i > 0 ? "," : "").Append($"[{budgets[i].Sockel},{budgets[i].Spanne}]");
+        sb.Append("],");
         sb.Append("\"max_level\":9}");
         File.WriteAllText(_dst + "/research_ladder.json", sb.ToString(), new UTF8Encoding(false));
         ResearchLadderRows = leiter.Length;

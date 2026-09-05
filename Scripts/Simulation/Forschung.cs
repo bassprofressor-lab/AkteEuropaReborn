@@ -32,20 +32,20 @@ namespace AkteEuropaReborn.Rendering;
 /// berichtigt sich AN.3: nicht »eine Forschung je Spieler«, sondern <b>eine je
 /// Basis</b>, zehn im ganzen Spiel. Wer zwei Basen hat, forscht zweimal.</para>
 ///
-/// <para>⚠ <b>Eine Frage ist offen und steht als Schalter im Code</b>: welche
-/// Bauteile ein Spieler überhaupt BESITZT (<c>+0x00</c> der Bauteilzeile). Der
-/// Missionsstart <c>0x4B23C0</c> nullt den Merker für jede Zeile mit
-/// <c>+0x24 != 10</c> — und <b>keine</b> Zeile der Auslieferung hat Techstufe
-/// 10 (ausgezählt: die Stufen laufen 1…8; nur ERFUNDENE Waffen bekommen 10,
-/// <c>0x4AB1B6</c>). Ein echter Spielstand bestätigt das: <c>game.007</c>
-/// (Mission 1) trägt bei Kanone, S.Kanone und M-Gewehr <c>+0x00 = 0</c>. Der
-/// einzige Verteiler, den ich finde, ist <c>0x419CB0</c> mit der Schranke
-/// <c>byte[0x540EB8]</c>; woher die in der KAMPAGNE kommt, ist ungelesen.
-/// Solange das so ist, bleibt der Besitz bei uns so, wie <c>PARTS.CWD</c> ihn
-/// liefert (jede benannte Zeile besessen), und
-/// <c>--forschung-missionsstart-treu</c> baut den Nulllauf des Originals nach —
-/// dann ist die Aufwertung in der Kampagne <b>gar nicht</b> erreichbar. Beide
-/// Richtungen sind messbar; die Vorgabe ist die, die etwas zu sehen gibt.</para>
+/// <para>⭐⭐ <b>Wer ein Bauteil besitzt, sagt das MISSIONSSKRIPT</b> — die Frage,
+/// die den ganzen Bauauftrag entschieden hat. Der Missionsstart
+/// <c>0x4B23C0</c> nullt <c>sec46+0x00</c> für jede Zeile mit
+/// <c>+0x24 != 10</c>, und <b>keine</b> Zeile der Auslieferung hat Techstufe 10
+/// (nur erfundene Waffen bekommen sie, <c>0x4AB1B6</c>); danach verteilt der
+/// Missionsblock mit <c>set_part</c> (<c>0x4D0520</c>, 1037 Rufe) — er ist der
+/// letzte Schreiber. <c>0x419CB0</c> mit der Schranke <c>byte[0x540EB8]</c>
+/// gehört zum GEFECHT und läuft in der Kampagne nie.
+/// Siehe <see cref="ForschungBesitzt"/>, wo das steht.</para>
+///
+/// <para>⭐ <b>Von ihm aus dem Spiel bestätigt:</b> »In Kampagne 1 kann man
+/// nicht forschen, da man keine Basis einnehmen kann — das geht erst ab
+/// Kampagne 2.« Genau dazu passt der Code: Missionsblock 1 hat keinen
+/// <c>set_part</c>-Ruf. Zwei Wege, ein Ergebnis.</para>
 /// </summary>
 public partial class MapEntityLayer : Node2D
 {
@@ -96,7 +96,25 @@ public partial class MapEntityLayer : Node2D
         public int Fortschritt;              // +0x04
         public int Spieler;                  // +0x0D
         public AufwertungWerte Werte;        // +0x06…+0x0C, +0x0E
+
+        /// <summary>⭐ Der zweite Zweig: eine ERFINDUNG statt einer Aufwertung.
+        /// Im Original steckt beides in derselben Marke <c>+0x01</c> — ein
+        /// Bauteil unter 200, oder <c>200 + i</c> für die drei Erfindungen
+        /// (die Weiche im Takt ist <c>+0x06 &lt; 200</c>, <c>0x4AB5C1</c>).
+        /// Bei uns zwei Felder statt einer überladenen Zahl; die Grenze 200
+        /// bleibt trotzdem stehen, weil der Spielstand sie so sichert.</summary>
+        public bool Erfindung;
+        public int ErfindungIndex;           // 0…2, im Original Marke 200+i
     }
+
+    /// <summary>
+    /// ⭐ <b>Die Losnummer — sec97, <c>0xA3A9C8</c>.</b> Aus ihr würfelt die
+    /// Erfindung ihr Budget und ihre drei Rezepte; der Takt schreibt sie nach
+    /// jedem Abschluss fort. Sie liegt neben den zehn Laufsätzen im Spielstand,
+    /// ist also <b>gemeinsamer</b> Zustand und nicht der Zufall eines Rechners —
+    /// darum ein eigenes Feld und kein Griff in <c>Determinism</c>.
+    /// </summary>
+    private int _forschungLos;
 
     private readonly ForschungLauf[] _forschung = new ForschungLauf[ForschungPlaetze];
 
@@ -111,7 +129,9 @@ public partial class MapEntityLayer : Node2D
     /// wird nach jedem Klick neu gebaut und <b>nicht</b> gesichert.</summary>
     public readonly record struct ForschungAngebot(int Bauteil, string Name, int Preis,
                                                    int Stufe, bool Fahrwerk, int Wurf,
-                                                   AufwertungWerte Werte);
+                                                   AufwertungWerte Werte,
+                                                   bool Erfindung = false,
+                                                   int ErfindungIndex = -1);
 
     /// <summary>⭐ <b>Der vorgewürfelte Arm der NÄCHSTEN Stufe</b>, je
     /// Aufwertungszeile — im Original das Laufzeitfeld <c>Zeile+0x02</c>, das
@@ -143,6 +163,19 @@ public partial class MapEntityLayer : Node2D
     {
         var raus = new List<ForschungAngebot>();
         if (ForschungAlt || spieler is < 0 or > 7) return raus;
+
+        // ⭐ Die drei ERFINDUNGEN stehen vorn — 0x4AA950 fuellt die Saetze 0…2,
+        // bevor es ueber die Aufwertungstafel geht. Feste Preise 500/2000/5000,
+        // unabhaengig von Mission und Stufe.
+        if (!KeineErfindung && Rezepte.Count > 0)
+            for (int i = 0; i < 3; i++)
+            {
+                int p = ErfindungPreis(i);
+                if (p <= 0) continue;
+                raus.Add(new ForschungAngebot(-1, ErfindungAngebotName(i), p,
+                                              0, false, 0, default, true, i));
+            }
+
         AufwertungTafelLaden();
         if (_aufwertungTafel == null) return raus;
         var bauteile = new List<int>(_aufwertungTafel.Keys);
@@ -376,11 +409,15 @@ public partial class MapEntityLayer : Node2D
             Fortschritt = 0,
             Spieler = spieler,
             Werte = a.Werte,
+            Erfindung = a.Erfindung,
+            ErfindungIndex = a.ErfindungIndex,
         };
         _money[spieler] -= a.Preis;                  // Befehl 528: sofort und ganz
         ForschungGekauft++;
         basis.State = StResearch;                    // »Status : forschen«
-        _order = $"Forschung: {a.Name} auf Stufe {a.Stufe + 1} — ${a.Preis}";
+        _order = a.Erfindung
+            ? $"Forschung: {a.Name} — ${a.Preis}"
+            : $"Forschung: {a.Name} auf Stufe {a.Stufe + 1} — ${a.Preis}";
         UpdatePanel();
         QueueRedraw();
         return true;
@@ -416,6 +453,9 @@ public partial class MapEntityLayer : Node2D
     {
         var l = _forschung[i];
         _forschung[i].Belegt = false;
+        // Die Weiche des Originals (0x4AB5C1: `cmp al, 0xC8`): unter 200 eine
+        // Aufwertung (Busbefehl 531), darüber eine Erfindung (532).
+        if (l.Erfindung) { ErfindungAbschluss(l, melden); return; }
         if (!AufwertungSchreiben(l.Spieler, l.Werte)) return;
         ForschungFertig++;
 
@@ -468,6 +508,18 @@ public partial class MapEntityLayer : Node2D
         if (ForschungLaeuft(e) != null) return raus;     // 0x46B575: statt der Liste der Fortschritt
         foreach (var a in ForschungAngebote(spieler))
         {
+            if (a.Erfindung)
+            {
+                // ⚠ Die Vorschau des Originals ist ein PLATZHALTER: 0x4AA890
+                // schreibt nur »Kleine/Mittlere/Große Forschung« und den Preis,
+                // nicht die Waffe, die kommt. Wir sagen dasselbe — was
+                // herauskommt, haengt an der Losnummer und steht erst beim
+                // Abschluss fest.
+                raus.Add(new UI.BuildPanel.Row(
+                    $"{a.Name} — eine neue Waffe erfinden",
+                    $"${a.Preis}", _money[spieler] >= a.Preis, false));
+                continue;
+            }
             // Der Arm ist die ehrliche Vorschau des Originals: was diese Stufe
             // ausser dem Hauptwert verbessert, steht schon fest.
             string was = a.Fahrwerk

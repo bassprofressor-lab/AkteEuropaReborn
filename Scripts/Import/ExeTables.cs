@@ -66,6 +66,43 @@ public sealed class ExeTables
     public const uint PriceLadder = 0x503aa8;
     public const int PriceLadderRows = 35;
 
+    /// <summary>⭐ <b>Die TECHSTUFENLEITER der Erfindung — <c>0x503AF0</c>, 35
+    /// Wörter, 1…9.</b> ⚠ Nicht zu verwechseln mit der Preisleiter 72 Byte
+    /// davor: die eine gibt den Grundpreis (100…1500), die andere die
+    /// Technikstufe der Mission, aus der die Erfindung ihr Budget bezieht
+    /// (<c>h = tech + Sockel + rand % Spanne</c>, <c>0x4AAF53</c>). Im Gefecht
+    /// steht an ihrer Stelle <c>byte[0x540EB8]</c>, die eingestellte
+    /// Technikstufe.</summary>
+    public const uint TechLadder = 0x503af0;
+
+    /// <summary>Die drei Budgets der Erfindung — <c>0x503B80</c>, je zwei Byte
+    /// (Sockel, Spanne): <b>(1,6) / (2,12) / (3,18)</b>, ausgelesen. Daraus
+    /// wird das Budget der Kleinen, Mittleren und Großen Forschung.</summary>
+    public const uint InventionBudget = 0x503b80;
+
+    /// <summary>⭐⭐ <b>Die 40 WAFFENREZEPTE der Erfindung — <c>0x502B00</c>,
+    /// je 70 Byte.</b>
+    ///
+    /// <para>Aus ihnen mischt <c>0x4AAF00</c> eine neue Waffe, wenn eine
+    /// Erfindung fertig wird (<c>OFFENE_FRAGEN.md</c> AN.5). Der Satz ist
+    /// zweigeteilt: <b>26 Byte Zahlen</b>, dann <b>vier Namen à 11 Byte</b>
+    /// (<c>+0x1A</c>, <c>+0x25</c>, <c>+0x30</c>, <c>+0x3B</c>) — 40 × 4 =
+    /// <b>160 Namen</b>, darunter »Acider«, »Kyzz-«, »Hiff-«, »Raptor«.</para>
+    ///
+    /// <para>⭐ <b>Die Ausrichtungsprobe geht auf das Byte genau auf:</b>
+    /// 40 × 70 = 2800, und <c>0x502B00 + 0xAF0 = 0x5035F0</c> — dort beginnt die
+    /// Aufwertungstafel. Eine falsche Schrittweite würde die Tafel entweder
+    /// überlaufen lassen oder eine Lücke stehen lassen; hier passt sie
+    /// lückenlos zwischen zwei bekannte Tafeln.</para>
+    ///
+    /// <para>⚠ Die Deutung der 26 Zahlenbytes ist Sache des Leselaufs zur
+    /// Erfindung; hier werden sie <b>roh</b> ausgeführt, damit der Nachbau sie
+    /// hat, sobald der Mischalgorithmus steht.</para></summary>
+    public const uint RecipeTable = 0x502b00;
+    public const int RecipeStride = 70;
+    public const int RecipeRows = 40;
+    public const int RecipeNameAt = 26, RecipeNameLen = 11, RecipeNames = 4;
+
     /// <summary>Die drei Erfindungspreise ab <c>0x503B38</c>: 500 / 2000 / 5000 —
     /// »Kleine«, »Mittlere«, »Große Forschung«. Nachgeschlagen; feste Zahlen,
     /// keine Formel (<c>0x4AA890</c> trägt sie unverändert ins Angebot).</summary>
@@ -970,6 +1007,14 @@ public sealed class ExeTables
         return Read((uint)(StatsBase - (StatsRecord0 - StatsArrayBase) + row * StatsStride), StatsStride);
     }
 
+    /// <summary>Ein Waffenrezept, siehe <see cref="RecipeTable"/>.</summary>
+    public byte[] RecipeRow(int row)
+    {
+        if (row < 0 || row >= RecipeRows) return Array.Empty<byte>();
+        uint versatz = StatsBase - StatsRecord0;
+        return Read((uint)(RecipeTable + versatz + row * RecipeStride), RecipeStride);
+    }
+
     /// <summary>Ein Satz der Entwurfstafel, siehe <see cref="DesignTable"/>.
     /// Leer, wenn die Tafel nicht im Bild liegt.</summary>
     public byte[] DesignRow(int slot)
@@ -989,6 +1034,29 @@ public sealed class ExeTables
         if (b.Length < PriceLadderRows * 2) return Array.Empty<int>();
         var v = new int[PriceLadderRows];
         for (int i = 0; i < PriceLadderRows; i++) v[i] = b[2 * i] | (b[2 * i + 1] << 8);
+        return v;
+    }
+
+    /// <summary>Die Techstufenleiter, siehe <see cref="TechLadder"/>.</summary>
+    public int[] TechLadderRows()
+    {
+        uint versatz = StatsBase - StatsRecord0;
+        var b = Read(TechLadder + versatz, PriceLadderRows * 2);
+        if (b.Length < PriceLadderRows * 2) return Array.Empty<int>();
+        var v = new int[PriceLadderRows];
+        for (int i = 0; i < PriceLadderRows; i++) v[i] = b[2 * i] | (b[2 * i + 1] << 8);
+        return v;
+    }
+
+    /// <summary>Die drei Budgets (Sockel, Spanne), siehe
+    /// <see cref="InventionBudget"/>.</summary>
+    public (int Sockel, int Spanne)[] InventionBudgets()
+    {
+        uint versatz = StatsBase - StatsRecord0;
+        var b = Read(InventionBudget + versatz, InventionCount * 2);
+        if (b.Length < InventionCount * 2) return Array.Empty<(int, int)>();
+        var v = new (int, int)[InventionCount];
+        for (int i = 0; i < InventionCount; i++) v[i] = (b[2 * i], b[2 * i + 1]);
         return v;
     }
 

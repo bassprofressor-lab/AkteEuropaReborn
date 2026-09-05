@@ -1404,6 +1404,8 @@ public partial class MapViewer : Node2D
             else if (a == "--forschung-alt") MapEntityLayer.ForschungAlt = true;
             else if (a == "--forschung-besitz-alt") MapEntityLayer.ForschungBesitzAlt = true;
             else if (a == "--forschung-probe") _forschungProbe = true;
+            else if (a == "--erfindung-probe") _erfindungProbe = true;
+            else if (a == "--keine-erfindung") MapEntityLayer.KeineErfindung = true;
             else if (a == "--aufwertung-alt") MapEntityLayer.AufwertungAlt = true;
             else if (a == "--aufwertung-immer-tank") MapEntityLayer.AufwertungImmerTank = true;
             // 03.09.2026 — Gegenschalter zur Entwurfsrechnung je Spieler: die
@@ -2165,6 +2167,9 @@ public partial class MapViewer : Node2D
     /// echte Forschung und misst Preis, Dauer und Wirkung. Siehe
     /// Simulation/ForschungProbe.cs.</summary>
     private bool _forschungProbe;
+    /// <summary><c>--erfindung-probe</c>: faellt »Hiff-64« aus Losnummer 0
+    /// heraus? Siehe Simulation/ErfindungProbe.cs.</summary>
+    private bool _erfindungProbe;
     private bool _befehlsklangGestartet;
     private bool _minenCheck;
     /// <summary><c>--sprit-check</c>: schickt alle eigenen fahrenden Einheiten
@@ -2679,6 +2684,7 @@ public partial class MapViewer : Node2D
             if (_befehlsklangProbe) GD.Print(_entities.BefehlsklangProbeLine());
             if (_aufwertungProbe) GD.Print(_entities.AufwertungProbeLine());
             if (_forschungProbe) GD.Print(_entities.ForschungProbeLine());
+            if (_erfindungProbe) GD.Print(_entities.ErfindungProbeLine());
             if (_stauCheck)
             {
                 GD.Print(_entities.SchiffStauLine());
@@ -2692,6 +2698,7 @@ public partial class MapViewer : Node2D
             if (_befehlsklangProbe) { GetTree().Quit(_entities.BefehlsklangProbeRc()); return; }
             if (_aufwertungProbe) { GetTree().Quit(_entities.AufwertungProbeRc()); return; }
             if (_forschungProbe) { GetTree().Quit(_entities.ForschungProbeRc()); return; }
+            if (_erfindungProbe) { GetTree().Quit(_entities.ErfindungProbeRc()); return; }
             if (_drehCheck)
             {
                 GD.Print(_entities.SchiffDrehLine());
