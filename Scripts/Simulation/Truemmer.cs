@@ -97,6 +97,9 @@ public partial class MapEntityLayer
 
     private readonly List<Truemmer> _truemmer = new();
 
+    /// <summary>Wie viele Teile gerade fliegen — fuer den Pruefstand.</summary>
+    public int TruemmerZahl => _truemmer.Count;
+
     /// <summary>Die Hoehe eines Endes: <c>Gelaende · 15</c> @0x4AD6BB.</summary>
     private const int TruemmerHoehe = 15;
 

@@ -574,11 +574,19 @@ public partial class MapEntityLayer : Node2D
             var b = _entities[gi2];
             int erwartet = Mathf.Max(1, b.FootW) * Mathf.Max(1, b.FootH) / 2;
             int ex = GebaeudeSprengbilder, sp = GebaeudeSprengungen;
+            int tr = TruemmerZahl;
             Kill(gi2, b);
-            int neu = GebaeudeSprengbilder - ex;
+            int neu = GebaeudeSprengbilder - ex, splitter = TruemmerZahl - tr;
             bildOk = GebaeudeSprengungen == sp + 1 && neu == erwartet;
+            // ⚠ Und die SPLITTER daneben: sie kommen aus ANIM 200..204 und
+            // erscheinen erst, seit die fuenf Folgen ausgegeben sind. Ohne
+            // diese Zahl waere »die Bilder sind da« nicht von »sie werden
+            // geworfen« zu unterscheiden — die Falle des ganzen Tages.
+            bildOk &= splitter == erwartet;
             sb.AppendLine($"  Tod eines Kraftwerks ({b.FootW}x{b.FootH}): {neu} Explosionen "
-                        + $"(erwartet {erwartet} = Zellen/2): {(bildOk ? "richtig" : "FALSCH")}");
+                        + $"(erwartet {erwartet} = Zellen/2), {splitter} Splitter "
+                        + $"(ANIM 200..204, erwartet {erwartet}): "
+                        + $"{(bildOk ? "richtig" : "FALSCH")}");
         }
         else sb.AppendLine("  kein zweites Kraftwerk mehr — das Bild ist ungeprueft");
 
