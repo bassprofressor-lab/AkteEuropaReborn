@@ -176,9 +176,60 @@ public sealed class NavGrid
     /// the table Can_go implements; the hover line's flag test is its own
     /// (@0x4057b5 calls the tile-flag accessor @0x41d110 and lets it pass only
     /// when the byte is 0).</summary>
+    /// <summary>
+    /// <b>DIE GESPERRTEN TUERZELLEN</b> — <c>0xFFFF</c> des Originals,
+    /// gestempelt <c>@0x43CC29</c>.
+    ///
+    /// <para>Gelesen am 06.09.2026 auf seine Meldung »solange ein Gebaeude noch
+    /// im fremden Besitz ist, kann man noch nicht in die Tuer einfahren«. Der
+    /// Einnahme-Arm des Gebaeudetakts liest den Beleger der Zelle VOR der Tuer
+    /// und stempelt die Tuer, wenn dort ein Fremder steht:</para>
+    /// <code>
+    ///   ecx = 2*(Spalte*256 + Zeile)                  ; die TUERzelle
+    ///   ax  = word[0xBDEA82 + ecx]                    ; = Zelle (Spalte, Zeile+1)
+    ///   cmp ax, 0x1F40 / jae raus                     ; keine Einheit -> nichts
+    ///   ax /= 1000                                    ; die 1000er-Stelle IST der Besitzer
+    ///   al  = byte[0xC06915 + 76*id]                  ; der Besitzer des GEBAEUDES
+    ///   cmp / je raus                                 ; gleich -> nichts
+    ///   word[0xBDEA80 + ecx] := 0xFFFF                ; ⭐ die TUER wird gesperrt
+    /// </code>
+    /// <para>⭐ Die beiden Basen liegen zwei auseinander, und die Schrittweite
+    /// je Zelle ist ebenfalls zwei — <c>+2</c> ist also nicht eine zweite
+    /// Ebene, sondern die naechste ZEILE. Genau das ist die Mechanik: sobald
+    /// ein Fremder VOR der Tuer steht, ist die Tuer dicht, und er kann nie auf
+    /// sie treten. Ein Besitzertest in der Wegsuche waere unsere Erfindung
+    /// gewesen — <c>Can_go 0x4055D0</c> hat keinen.</para>
+    ///
+    /// <para>⚠ Der Vergleich ist ein reiner BYTEVERGLEICH ohne Buendnistest:
+    /// ein Verbuendeter sperrt genauso. So steht es da.</para>
+    /// </summary>
+    private readonly HashSet<int> _tuerSperre = new();
+
+    /// <summary><c>--tuersperre-alt</c> — der Stand vor dem 06.09.2026: die
+    /// Tuer eines fremden Gebaeudes ist freies Gelaende.</summary>
+    public static bool TuersperreAlt;
+
+    /// <summary>Wie viele Tuerzellen gerade gesperrt sind.</summary>
+    public int TuerGesperrt => _tuerSperre.Count;
+
+    /// <summary>Eine Tuerzelle sperren oder freigeben. Gibt zurueck, ob sich
+    /// etwas geaendert hat.</summary>
+    public bool TuerSperre(int c, int r, bool zu)
+    {
+        if (!InBounds(c, r)) return false;
+        return zu ? _tuerSperre.Add(Idx(c, r)) : _tuerSperre.Remove(Idx(c, r));
+    }
+
+    /// <summary>Ist diese Zelle gerade als Tuer gesperrt?</summary>
+    public bool IstTuerGesperrt(int c, int r)
+        => !TuersperreAlt && InBounds(c, r) && _tuerSperre.Contains(Idx(c, r));
+
     public bool CanEnter(int c, int r, MoveClass mc)
     {
         if (!InBounds(c, r)) return false;
+        // ⭐ 0xFFFF faellt ueber 0x4054D0 auf 0 — eine harte Sperre, vor jeder
+        // Gelaendefrage. Siehe _tuerSperre.
+        if (!TuersperreAlt && _tuerSperre.Contains(Idx(c, r))) return false;
         return (Ground)_ground[Idx(c, r)] switch
         {
             Ground.Free => mc != MoveClass.Ship,

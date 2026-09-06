@@ -28660,6 +28660,7 @@ public partial class MapEntityLayer : Node2D
 
         PollBuildPanelDemo();
         PollDepotFlow();
+        TuersperreTakt();
         PollEinfahrt();
         PollKiProbe(dt);
         PollAusweichProbe(dt);
