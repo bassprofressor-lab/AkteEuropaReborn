@@ -594,4 +594,67 @@ public partial class MapEntityLayer : Node2D
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }
+
+    /// <summary>
+    /// <c>--anker-probe</c> — <b>sitzt ein Fusssoldat auf demselben Anker wie
+    /// ein Fahrzeug?</b> (06.09.2026, zu bug-075.)
+    ///
+    /// <para>Seine Meldung: »wenn bei uns Infanterie ueber eine Bruecke laeuft,
+    /// sieht das (bei einer waagerechten Bruecke) aus, als wuerden sie auf dem
+    /// hinteren Gelaender laufen«. Gezeichnet wird ueberall
+    /// <c>PictureAnchor(e) - ComposedAnchor</c>, und <c>ComposedAnchor</c> ist
+    /// eine FESTE Zahl (30, 55). Stimmt sie fuer das Fahrzeugbild und nicht
+    /// fuer das Fusssoldatenbild, sitzt der Soldat zu weit oben.</para>
+    ///
+    /// <para>⚠ Gemessen wird nicht der Eindruck, sondern der Abstand zwischen
+    /// dem Anker und den FUESSEN — also der Unterkante der sichtbaren Flaeche.
+    /// Bei einer Einheit, die auf dem Boden steht, muessen die beiden
+    /// zusammenfallen; die Zahl sagt, um wie viele Punkte sie es nicht
+    /// tun.</para></summary>
+    public string AnkerProbe()
+    {
+        var sb = new System.Text.StringBuilder("anker-probe\n");
+        sb.AppendLine($"  ComposedAnchor = ({AnkerBezug.X:0}, {AnkerBezug.Y:0})"
+                    + $"  (--anker-neu: {(AnkerNeu ? "an" : "aus")})");
+
+        void Miss(string was, Texture2D? tex)
+        {
+            if (tex == null) { sb.AppendLine($"  {was}: kein Bild"); return; }
+            var img = tex.GetImage();
+            if (img == null) { sb.AppendLine($"  {was}: kein Bild"); return; }
+            int x0 = int.MaxValue, y0 = int.MaxValue, x1 = -1, y1 = -1;
+            for (int y = 0; y < img.GetHeight(); y++)
+                for (int x = 0; x < img.GetWidth(); x++)
+                    if (img.GetPixel(x, y).A > 0.3f)
+                    {
+                        if (x < x0) x0 = x; if (x > x1) x1 = x;
+                        if (y < y0) y0 = y; if (y > y1) y1 = y;
+                    }
+            if (x1 < 0) { sb.AppendLine($"  {was}: Bild ist leer"); return; }
+            float fussX = (x0 + x1) / 2f, fussY = y1;
+            sb.AppendLine($"  {was}: Leinwand {img.GetWidth()}x{img.GetHeight()}, "
+                        + $"sichtbar ({x0},{y0})..({x1},{y1}), Fuesse ({fussX:0.0},{fussY:0}) "
+                        + $"-> Abstand zum Anker ({fussX - AnkerBezug.X:+0.0;-0.0}, {fussY - AnkerBezug.Y:+0;-0})");
+        }
+
+        int inf = -1, veh = -1;
+        for (int k = 0; k < _entities.Count; k++)
+        {
+            var u = _entities[k];
+            if (u.IsBuilding || u.IsProp || u.Dead) continue;
+            if (inf < 0 && u.Infantry >= 0) inf = k;
+            if (veh < 0 && u.Infantry < 0 && u.UnitType >= 0) veh = k;
+        }
+        if (inf >= 0) Miss("Fusssoldat", GetInfantryTexture(_entities[inf].Infantry,
+                                                            _entities[inf].Facing, InfBlock(_entities[inf])));
+        else sb.AppendLine("  keine Infanterie auf dieser Karte");
+        if (veh >= 0) Miss("Fahrzeug  ", GetHullTexture(_entities[veh].UnitType, _entities[veh].Facing,
+                                                        PoseOf(_entities[veh]),
+                                                        SlopeClassOf(_entities[veh].Col, _entities[veh].Row)));
+        else sb.AppendLine("  kein Fahrzeug auf dieser Karte");
+
+        sb.Append("  ⚠ Der Lauf URTEILT nicht — er legt die zwei Zahlen nebeneinander. "
+                + "Sind die Abstaende gleich, ist der Anker nicht die Ursache.");
+        return sb.ToString();
+    }
 }

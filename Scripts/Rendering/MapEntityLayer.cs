@@ -30313,6 +30313,10 @@ public partial class MapEntityLayer : Node2D
 
     private static Vector2 ComposedAnchor => AnkerNeu ? new Vector2(24, 45) : new Vector2(30, 55);
 
+    /// <summary>Derselbe Anker, oeffentlich fuer den Pruefstand
+    /// (<c>--anker-probe</c>).</summary>
+    public static Vector2 AnkerBezug => ComposedAnchor;
+
     private Texture2D? GetComposedTexture(string combo, int facing)
         => LoadUnitPart("composed", combo, facing);
 

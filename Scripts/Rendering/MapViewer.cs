@@ -1408,6 +1408,7 @@ public partial class MapViewer : Node2D
             else if (a == "--tuersperre-probe") _tuersperreProbe = true;
             else if (a == "--angriff-probe") _angriffProbe = true;
             else if (a == "--fussvolk-probe") _fussvolkProbe = true;
+            else if (a == "--anker-probe") _ankerProbe = true;
             else if (a == "--skripttreffer-probe") _skripttrefferProbe = true;
             else if (a == "--bomben-log") MapEntityLayer.BombenLog = true;
             else if (a == "--gebaeudesprengung-aus") MapEntityLayer.GebaeudeSprengungAus = true;
@@ -2715,6 +2716,7 @@ public partial class MapViewer : Node2D
             if (_tuersperreProbe) GD.Print(_entities.TuersperreProbe());
             if (_angriffProbe) GD.Print(_entities.AngriffProbe());
             if (_fussvolkProbe) GD.Print(_entities.FussvolkProbe());
+            if (_ankerProbe) GD.Print(_entities.AnkerProbe());
             if (_skripttrefferProbe) GD.Print(_entities.SkripttrefferProbe());
             if (_einfahrzeigerProbe) GD.Print(_entities.EinfahrzeigerProbe());
             if (_panelknoepfeProbe) GD.Print(PanelknoepfeProbe());
@@ -3863,6 +3865,7 @@ public partial class MapViewer : Node2D
     private bool _tuersperreProbe;
     private bool _angriffProbe;
     private bool _fussvolkProbe;
+    private bool _ankerProbe;
     private bool _skripttrefferProbe;
     private bool _einfahrzeigerProbe;
     private bool _panelknoepfeProbe;
