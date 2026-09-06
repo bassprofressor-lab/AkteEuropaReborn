@@ -32548,6 +32548,130 @@ public partial class MapEntityLayer : Node2D
                $"MUNITION {(muN > 0 ? muS / muN : 0)}%  WENIG {wenig}";
     }
 
+    /// <summary>
+    /// <b>Zeigt der Bedienblock bei ausgewaehlter Gruppe gerade eine
+    /// ueberfahrene Einheit?</b> Gibt ihren Listenplatz oder -1.
+    ///
+    /// <para>Die drei Tore des Originals (@0x4700B6), in derselben Reihenfolge:
+    /// eine GRUPPE ist gewaehlt, der Zeiger steht auf etwas (Modus 1), und das
+    /// Ueberfahrene gehoert dem BETRACHTER. Das dritte Tor rechnet dort
+    /// <c>Nummer / 1000 == byte[0x4FA284]</c> — die 1000er-Stelle einer
+    /// Objektnummer IST der Besitzer; bei uns steht der Besitzer im Satz, das
+    /// ist dieselbe Aussage auf kuerzerem Weg.</para>
+    ///
+    /// <para>⚠ Ein GEBAEUDE faellt bei uns heraus, und das ist gelesen: der
+    /// Arm laesst nur Nummern unter 0x1F40 (8000) in den Einheitenzweig, und
+    /// der Bedienblock kennt Gebaeude im Anwaehlgriff ueberhaupt nicht
+    /// (<see cref="PanelPortraitInfo"/>).</para>
+    /// </summary>
+    private int GruppeZeigtUeberfahrene()
+    {
+        if (GruppenzeigerAlt) return -1;
+        if (_hovered < 0 || _hovered >= _entities.Count) return -1;
+        var u = _entities[_hovered];
+        if (u.Dead || u.IsProp || u.IsBuilding) return -1;
+        return u.Owner == ViewPlayer ? _hovered : -1;
+    }
+
+    /// <summary><c>--gruppenzeiger-alt</c> — der Stand vor dem 06.09.2026: bei
+    /// einer Gruppe steht immer das Gruppenfeld da, auch wenn die Maus auf
+    /// einer eigenen Einheit liegt.</summary>
+    public static bool GruppenzeigerAlt;
+
+    /// <summary>Wie oft der Bedienblock statt des Gruppenfeldes eine
+    /// ueberfahrene Einheit gezeigt hat — fuer den Pruefstand.</summary>
+    public int GruppenzeigerGezeigt;
+
+    /// <summary>
+    /// <c>--gruppenzeiger-probe</c> — <b>zeigt der Bedienblock bei einer
+    /// Gruppe die ueberfahrene Einheit?</b> (06.09.2026, zu @0x4700B6.)
+    ///
+    /// <para>Gemessen werden BEIDE Zustaende und die drei Tore einzeln. Nur
+    /// »er zeigt die Einheit« waere keine Messung: es muss auch dabei bleiben,
+    /// dass ohne Zeiger, ueber einem FREMDEN und ueber einem GEBAEUDE das
+    /// Gruppenfeld stehen bleibt — sonst haette der Zweig einfach immer
+    /// gewonnen.</para></summary>
+    public string GruppenzeigerProbe()
+    {
+        var sb = new System.Text.StringBuilder("gruppenzeiger-probe\n");
+        var eigene = new List<int>();
+        for (int i = 0; i < _entities.Count && eigene.Count < 2; i++)
+        {
+            var u = _entities[i];
+            if (!u.Dead && !u.IsProp && !u.IsBuilding && u.Owner == ViewPlayer) eigene.Add(i);
+        }
+        if (eigene.Count < 2)
+            return sb.Append("  weniger als zwei eigene Einheiten auf dieser Karte").ToString();
+
+        int merkSel = _selected, merkHov = _hovered;
+        _sel.Clear(); foreach (int q in eigene) _sel.Add(q); _selected = eigene[0];
+
+        string Text(int hover)
+        {
+            _hovered = hover;
+            UpdatePanel();
+            return _panel.Text.Split('\n')[0];
+        }
+
+        // 1. ohne Zeiger -> das Gruppenfeld
+        string ohne = Text(-1);
+        bool ohneOk = ohne.StartsWith("GRUPPE");
+        sb.AppendLine($"  Zeiger auf nichts: erste Zeile »{ohne}«: " +
+                      $"{(ohneOk ? "Gruppenfeld, richtig" : "FALSCH")}");
+
+        // 2. ueber der EIGENEN Einheit -> diese Einheit
+        int vor = GruppenzeigerGezeigt;
+        string drauf = Text(eigene[1]);
+        bool draufOk = !drauf.StartsWith("GRUPPE") && GruppenzeigerGezeigt == vor + 1;
+        sb.AppendLine($"  Zeiger auf eigener Einheit: »{drauf}«, umgeschaltet " +
+                      $"{GruppenzeigerGezeigt - vor}x (erwartet 1): " +
+                      $"{(draufOk ? "zeigt die Einheit, richtig" : "FALSCH")}");
+
+        // 3. Gegenprobe FREMD: der Besitzer ist das dritte Tor
+        var fremd = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var u = _entities[i];
+            if (!u.Dead && !u.IsProp && !u.IsBuilding && u.Owner != ViewPlayer) { fremd = i; break; }
+        }
+        bool fremdOk = true;
+        if (fremd >= 0)
+        {
+            string f = Text(fremd);
+            fremdOk = f.StartsWith("GRUPPE");
+            sb.AppendLine($"  Zeiger auf FREMDER Einheit: »{f}«: " +
+                          $"{(fremdOk ? "bleibt Gruppenfeld, richtig" : "ZEIGT SIE — falsch")}");
+        }
+        else sb.AppendLine("  keine fremde Einheit auf dieser Karte — Tor 3 ungeprueft");
+
+        // 4. Gegenprobe GEBAEUDE: der Arm nimmt nur Nummern < 8000
+        int geb = -1;
+        for (int i = 0; i < _entities.Count; i++)
+            if (_entities[i].IsBuilding && !_entities[i].Dead) { geb = i; break; }
+        bool gebOk = true;
+        if (geb >= 0)
+        {
+            string g = Text(geb);
+            gebOk = g.StartsWith("GRUPPE");
+            sb.AppendLine($"  Zeiger auf einem GEBAEUDE: »{g}«: " +
+                          $"{(gebOk ? "bleibt Gruppenfeld, richtig" : "ZEIGT ES — falsch")}");
+        }
+        else sb.AppendLine("  kein Gebaeude auf dieser Karte — Tor 4 ungeprueft");
+
+        // 5. und der Gegenschalter muss ALLES zurueckdrehen
+        GruppenzeigerAlt = true;
+        string alt = Text(eigene[1]);
+        GruppenzeigerAlt = false;
+        bool altOk = alt.StartsWith("GRUPPE");
+        sb.AppendLine($"  mit --gruppenzeiger-alt ueber eigener Einheit: »{alt}«: " +
+                      $"{(altOk ? "wieder Gruppenfeld, richtig" : "SCHALTER WIRKT NICHT")}");
+
+        _selected = merkSel; _hovered = merkHov;
+        bool alles = ohneOk && draufOk && fremdOk && gebOk && altOk;
+        sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
+
     private void UpdatePanel()
     {
         // Ein angewaehltes FLUGZEUG: Name, Art, Huelle, Munition und Sprit —
@@ -32575,14 +32699,50 @@ public partial class MapEntityLayer : Node2D
         }
         // Mehr als eine Einheit gewaehlt: das Original zeigt dann NICHT die
         // erste, sondern das Gruppenfeld - siehe GroupPanelText.
+        int zeigeIdx = _selected;
         if (_sel.Count > 1)
         {
-            _panel.Visible = _panelTextOn;
-            _panel.Text = GroupPanelText();
-            ShowPanelBars(null);
-            return;
+            // ⭐⭐ 06.09.2026 — ABER NUR, SOLANGE DIE MAUS AUF NICHTS EIGENEM
+            // STEHT. Gemeldet: »unten links, wo Gruppe und Einheiten 5 steht,
+            // im Original steht mehr, wenn man eine Gruppe ausgewaehlt hat«.
+            //
+            // Gelesen @0x4700B6, gleich am Kopf des Bedienblockzeichners:
+            //
+            //     cx = word[0x4FA0C8]              ; der Auswahlgriff
+            //     cmp cx, 0x2710                   ; 10000 = GRUPPE
+            //     jne weiter
+            //       cmp dword[0x502AD4], 1         ; Zeigermodus 1
+            //       jne weiter
+            //         di = word[0x502AD8]          ; das Objekt unterm Zeiger
+            //         ax = di / 1000               ; die 1000er-Stelle IST der Besitzer
+            //         dl = byte[0x4FA284]          ; der Betrachter
+            //         cmp ax, dx
+            //         jne weiter
+            //           cx = di                    ; ⭐ DIESE Einheit wird gezeigt
+            //     weiter:
+            //     mov word[0x4FA0C8], cx           ; und der Griff wird zurueckgeschrieben
+            //
+            // Das Gruppenfeld ist also nicht »mehr Text«, sondern ein zweiter
+            // ZUSTAND: faehrt er mit der Maus ueber eine eigene Einheit, zeigt
+            // der Block sie mit allem, was eine Einheit dort hat.
+            //
+            // ⚠ Den Ruecksschreiber des Griffs bauen wir NICHT nach — bei uns
+            // haengt an `_selected` der Befehlsweg, und ein Zeiger, der die
+            // Auswahl umschreibt, waere ein Nebeneffekt des ZEICHNENS.
+            // Angezeigt wird die ueberfahrene Einheit, ausgewaehlt bleibt die
+            // Gruppe. Das ist eine ausgewiesene Abweichung.
+            int unterZeiger = GruppeZeigtUeberfahrene();
+            if (unterZeiger < 0)
+            {
+                _panel.Visible = _panelTextOn;
+                _panel.Text = GroupPanelText();
+                ShowPanelBars(null);
+                return;
+            }
+            zeigeIdx = unterZeiger;
+            GruppenzeigerGezeigt++;
         }
-        var e = _entities[_selected];
+        var e = _entities[zeigeIdx];
         _panel.Visible = _panelTextOn;
         if (e.IsProp)
         {

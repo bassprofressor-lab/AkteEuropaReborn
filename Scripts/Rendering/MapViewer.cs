@@ -1404,6 +1404,7 @@ public partial class MapViewer : Node2D
             else if (a == "--forschung-alt") MapEntityLayer.ForschungAlt = true;
             else if (a == "--forschung-besitz-alt") MapEntityLayer.ForschungBesitzAlt = true;
             else if (a == "--forschung-probe") _forschungProbe = true;
+            else if (a == "--gruppenzeiger-probe") _gruppenzeigerProbe = true;
             else if (a == "--erfindung-probe") _erfindungProbe = true;
             else if (a == "--keine-erfindung") MapEntityLayer.KeineErfindung = true;
             // 06.09.2026 — Gegenschalter zum Leerlaufbefehl: der Umschalter
@@ -1412,6 +1413,9 @@ public partial class MapViewer : Node2D
             // 06.09.2026 — Gegenschalter zum Fensterklang: 0x133 kommt wieder
             // beim AUFGEHEN statt beim Seitenwechsel. Siehe UI/WindowManager.cs.
             else if (a == "--fensterklang-alt") UI.WindowManager.FensterklangAlt = true;
+            // 06.09.2026 — Gegenschalter zum Gruppenzeiger: der Bedienblock
+            // zeigt bei einer Gruppe wieder immer das Gruppenfeld.
+            else if (a == "--gruppenzeiger-alt") MapEntityLayer.GruppenzeigerAlt = true;
             else if (a == "--leerlauf-alt") MapEntityLayer.LeerlaufAlt = true;
             else if (a == "--aufwertung-alt") MapEntityLayer.AufwertungAlt = true;
             else if (a == "--aufwertung-immer-tank") MapEntityLayer.AufwertungImmerTank = true;
@@ -2691,6 +2695,7 @@ public partial class MapViewer : Node2D
             if (_befehlsklangProbe) GD.Print(_entities.BefehlsklangProbeLine());
             if (_aufwertungProbe) GD.Print(_entities.AufwertungProbeLine());
             if (_forschungProbe) GD.Print(_entities.ForschungProbeLine());
+            if (_gruppenzeigerProbe) GD.Print(_entities.GruppenzeigerProbe());
             if (_erfindungProbe) GD.Print(_entities.ErfindungProbeLine());
             if (_stauCheck)
             {
@@ -3794,6 +3799,8 @@ public partial class MapViewer : Node2D
     /// <para>Die alte Liste (UI/BuildPanel.cs) wird nicht mehr gezeigt. Die
     /// Datei bleibt, weil <c>MapEntityLayer.BuildPanelRows()</c> ihren
     /// <c>Row</c>-Satz als Schnittstelle benutzt.</para></summary>
+    private bool _gruppenzeigerProbe;
+
     private UI.BaseWindow? _baseWindow;
 
     /// <summary>Bahnhof, Flughafen und Terranium-Mine — die drei Fenster,
