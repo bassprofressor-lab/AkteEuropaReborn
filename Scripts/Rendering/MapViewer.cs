@@ -1406,6 +1406,10 @@ public partial class MapViewer : Node2D
             else if (a == "--forschung-probe") _forschungProbe = true;
             else if (a == "--erfindung-probe") _erfindungProbe = true;
             else if (a == "--keine-erfindung") MapEntityLayer.KeineErfindung = true;
+            // 06.09.2026 — Gegenschalter zum Leerlaufbefehl: der Umschalter
+            // gilt wieder fuer alle vier Gebaeudearten, und ein abgewiesener
+            // Gebaeudeauftrag spielt wieder die Sprachzeile 140.
+            else if (a == "--leerlauf-alt") MapEntityLayer.LeerlaufAlt = true;
             else if (a == "--aufwertung-alt") MapEntityLayer.AufwertungAlt = true;
             else if (a == "--aufwertung-immer-tank") MapEntityLayer.AufwertungImmerTank = true;
             // 03.09.2026 — Gegenschalter zur Entwurfsrechnung je Spieler: die

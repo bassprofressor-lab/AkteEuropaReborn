@@ -15247,6 +15247,25 @@ public partial class MapEntityLayer : Node2D
             //
             // Aus JEDEM anderen Zustand springen sie also auf 1 = reparieren.
             // Nur 523/524/526 setzen bedingungslos 0.
+            // ⭐⭐ 06.09.2026 — UND DER UMSCHALTER GILT NUR FUER DIESE ZWEI.
+            // Gemeldet: »Druecke ich im Basen Menu Depot, Produktion, Forschung
+            // oder Reperatur, kommt immer die Stimme«. Drei Behandler selbst
+            // nachgeschlagen, jeder bis zum ret:
+            //
+            //   0x43F940 (511 Fabrik), 0x43FB40 (517 Mine) — Eigentuemerprobe,
+            //       dann  cmp byte,1  ->  0   sonst  ->  1.   UMSCHALTER.
+            //   0x43FF10 (525 Basis)  — Eigentuemerprobe, dann
+            //       mov byte[edx + 0x878E5A], 0   und ret. VIERZEHN Befehle,
+            //       kein zweiter Zweig, kein Klang.
+            //
+            // Die Basis kennt den Umschalter also gar nicht. Bei uns lief sie
+            // trotzdem hinein: Zustand »aktiv« -> Rueckruf auf Repair -> das
+            // Gebaeude ist unbeschaedigt -> abgewiesen MIT KLANG. Damit spielte
+            // JEDER Reiterklick eine Sprachzeile — und auf einer BESCHAEDIGTEN
+            // Basis haette derselbe Klick eine Reparatur angefangen, die nach
+            // 0x43FD10 ein Dreissigstel der Trefferpunkte kostet.
+            bool umschalter = LeerlaufIstUmschalter(e);
+
             int rep = JobState(e, BuildingJob.Repair);
             if (e.State == rep)
             {
@@ -15264,9 +15283,20 @@ public partial class MapEntityLayer : Node2D
             if (e.State != StAktiv)
             {
                 _order = "Gebaeude beschaeftigt";
-                Audio.GameSounds.Play(Audio.GameSounds.Refused);
+                Ablehnklang();
                 return false;
             }
+
+            // ⭐ Die Basis und der Flughafen sind hier FERTIG: 525 schreibt die
+            // 0, die ohnehin schon dasteht. Kein Zustandswechsel, kein Klang,
+            // und vor allem kein Rueckruf auf die Reparatur.
+            if (!umschalter && !LeerlaufAlt)
+            {
+                _order = "Status : aktiv";
+                LeerlaufBedingungslos++;
+                return true;
+            }
+
             // Aus »aktiv« heraus schaltet der Umschalter die Reparatur EIN —
             // das ist die neu gelesene Haelfte, und sie geht denselben Weg wie
             // ein Reparaturbefehl, damit die Trefferpunktkosten nicht umgangen
@@ -15279,8 +15309,11 @@ public partial class MapEntityLayer : Node2D
             if (e.HpMax <= 0) return false;
             if (e.Hp >= e.HpMax)
             {
+                // 0x43FD10 vergleicht +0x16 gegen +0x26 und springt bei
+                // Gleichstand auf das ret — still, ohne einen einzigen
+                // Klangaufruf im ganzen Behandler.
                 _order = "unbeschaedigt";
-                Audio.GameSounds.Play(Audio.GameSounds.Refused);
+                Ablehnklang();
                 return false;
             }
             e.State = ziel;
@@ -18254,6 +18287,70 @@ public partial class MapEntityLayer : Node2D
     public int RepairsStopped;
 
     /// <summary>
+    /// <c>--leerlauf-alt</c> — der Stand vor dem 06.09.2026 zurueck: der
+    /// Umschalter gilt fuer ALLE vier Gebaeudearten, und ein abgewiesener
+    /// Gebaeudeauftrag spielt wieder <see cref="Audio.GameSounds.Refused"/>.
+    ///
+    /// <para>Er gehoert hierher, weil die Behebung zwei Dinge auf einmal
+    /// aendert — den Zweig UND den Klang. Ohne den Gegenschalter waere nicht
+    /// zu messen, welches von beiden gewirkt hat.</para></summary>
+    public static bool LeerlaufAlt;
+
+    /// <summary>Wie oft der Leerlaufbefehl einer Basis oder eines Flughafens
+    /// bedingungslos durchgelaufen ist (525/524), statt in den Umschalter zu
+    /// fallen. ⚠ Ohne die Zahl ist »der Klang ist weg« nicht von »der Reiter
+    /// tut gar nichts mehr« zu unterscheiden.</summary>
+    public int LeerlaufBedingungslos;
+
+    /// <summary>Wie oft ein Ablehnklang UNTERDRUECKT wurde. Dieselbe
+    /// Begruendung wie bei <see cref="BefehlsklangGespielt"/>: ein Zaehler an
+    /// der Stelle, an der etwas NICHT mehr passiert, ist der einzige Weg,
+    /// »still« von »wird gar nicht mehr gerufen« zu trennen.</summary>
+    public int AblehnklangUnterdrueckt;
+
+    /// <summary>
+    /// Der Ablehnklang eines Gebaeudeauftrags — <b>und warum er weg ist</b>.
+    ///
+    /// <para><see cref="Audio.GameSounds.Refused"/> (140) ist die Zeile
+    /// »Sie besitzen nicht genuegend Einzelteile« aus dem Ersatzteil- und
+    /// Hangarfenster (<c>@0x44b6e9</c>, <c>@0x448961</c>). In den
+    /// Gebaeudebefehlen steht sie NICHT: 0x43FF10, 0x43F940, 0x43FB40 und
+    /// 0x43FD10 enthalten zusammen keinen einzigen Klangaufruf. Wir hatten sie
+    /// dort selbst hingeschrieben.</para>
+    ///
+    /// <para>⚠ Das ist zum dritten Mal dieselbe Fehlerklasse — eine
+    /// SPRACHZEILE an einem Menueklick (Klang 600 am Startmenue, Klang 140
+    /// jede Sekunde am Gebaeudetakt, und jetzt der Reiter). Sie faellt immer
+    /// erst dem Spieler auf, weil ein Klang im Pruefstand niemanden stoert.
+    /// </para></summary>
+    /// <summary>Ist der Leerlaufbefehl dieser Gebaeudeart ein UMSCHALTER?
+    /// Ja fuer 511 (Fabrik, <c>0x43F940</c>) und 517 (Mine, <c>0x43FB40</c>) —
+    /// beide vergleichen das Zustandsbyte gegen 1 und schreiben sonst 1. Nein
+    /// fuer 525 (Basis, <c>0x43FF10</c>) und 524 (Flughafen), die das Byte
+    /// bedingungslos auf 0 setzen.</summary>
+    private static bool LeerlaufIstUmschalter(Entity e)
+        => BuildingOpFor(e, BuildingJob.Idle)
+           is Simulation.Commands.CommandOp.FactoryIdle
+           or Simulation.Commands.CommandOp.MineIdle;
+
+    /// <summary>Wie oft der Ablehnklang wirklich GESPIELT wurde. ⚠ Der
+    /// Zaehler daneben allein reicht nicht: »unterdrueckt 0x« heisst entweder
+    /// »es faellt keiner mehr an« (richtig) oder »er wird gespielt« (der
+    /// Fehler). Erst beide Zahlen nebeneinander trennen die zwei.</summary>
+    public int AblehnklangGespielt;
+
+    private void Ablehnklang()
+    {
+        if (LeerlaufAlt)
+        {
+            AblehnklangGespielt++;
+            Audio.GameSounds.Play(Audio.GameSounds.Refused);
+            return;
+        }
+        AblehnklangUnterdrueckt++;
+    }
+
+    /// <summary>
     /// <c>--mine-check</c> — <b>ist die Mine eine Fabrik zweiter Art?</b>
     ///
     /// <para>Geprüft wird genau das, was am 21.08.2026 umgezogen ist, und
@@ -18479,18 +18576,57 @@ public partial class MapEntityLayer : Node2D
         sb.AppendLine($"  eins darueber (51 TP): {e.Hp} (erwartet {29 * 51 / 30}): " +
                       $"{(schranke2Ok ? "richtig" : "FALSCH")}");
 
-        // 7. ⭐ DER UMSCHALTER (BL.4.2). 511/517 schalten aus »aktiv« heraus die
-        // Reparatur EIN — bis zum 22.08.2026 taten sie nur das Gegenteil.
+        // 7. ⭐ DER UMSCHALTER (BL.4.2) — ABER NUR FUER FABRIK UND MINE.
+        //
+        // ⚠ 06.09.2026: dieser Punkt hat bis heute die falsche Frage gestellt.
+        // Er nahm das ERSTE Gebaeude der Karte und verlangte von ihm den
+        // Umschalter — gleich welcher Art. 511 (Fabrik) und 517 (Mine) sind
+        // welche, 525 (Basis) und 524 (Flughafen) sind KEINE; der Punkt haette
+        // auf einer Karte, deren erstes Gebaeude eine Basis ist, den Fehler
+        // gerade festgeschrieben. Jetzt fragt er nach der Art.
+        bool istUmschalter = LeerlaufIstUmschalter(e);
         e.Hp = Mathf.Max(2, e.HpMax / 2); e.State = 0;
         StopRepairFromPanel();
-        bool umschaltOk = e.State is FaRepair or StRepair;
-        sb.AppendLine($"  Umschalter aus »aktiv«: Zustand {e.State}: " +
-                      $"{(umschaltOk ? "schaltet EIN, richtig" : "bleibt aus — der Umschalter fehlt")}");
+        bool umschaltOk = istUmschalter
+            ? e.State is FaRepair or StRepair
+            : e.State == StAktiv;
+        sb.AppendLine($"  Leerlauf aus »aktiv«, Gebaeudeart {e.BType} " +
+                      $"(Befehl {BuildingOpFor(e, BuildingJob.Idle)}, " +
+                      $"{(istUmschalter ? "Umschalter" : "bedingungslos")}): " +
+                      $"Zustand {e.State} (erwartet " +
+                      $"{(istUmschalter ? "reparieren" : StAktiv.ToString())}): " +
+                      $"{(umschaltOk ? "richtig" : "FALSCH")}");
+        e.State = 0;
+
+        // 8. ⭐⭐ UND DER KLANG — der eigentliche Anlass (06.09.2026).
+        //
+        // Seine Meldung: »Druecke ich im Basen Menu Depot, Produktion,
+        // Forschung oder Reperatur, kommt immer die Stimme«. Der Reiterklick
+        // setzt 525 ab; eine unbeschaedigte, aktive Basis lief damit in den
+        // Umschalter, von dort in die Reparatur, und die wies MIT KLANG ab.
+        //
+        // ⚠ Gemessen wird der Zaehler, nicht der Eindruck: »es ist still« und
+        // »die Stelle wird gar nicht mehr erreicht« klingen gleich. Darum
+        // zaehlt der Lauf beides — dass der Leerlauf durchgeht UND dass dabei
+        // kein Klang mehr unterdrueckt werden MUSS, weil gar keiner anfaellt.
+        int lbVor = LeerlaufBedingungslos, akVor = AblehnklangUnterdrueckt;
+        int agVor = AblehnklangGespielt;
+        e.Hp = e.HpMax; e.State = StAktiv;
+        StopRepairFromPanel();
+        int lb = LeerlaufBedingungslos - lbVor, ak = AblehnklangUnterdrueckt - akVor;
+        int ag = AblehnklangGespielt - agVor;
+        bool klangOk = ag == 0 && (istUmschalter
+            ? ak == 1 && e.State == StAktiv          // Umschalter -> Repair -> heil -> still
+            : lb == 1 && ak == 0);                   // 525 -> fertig, ohne jede Ablehnung
+        sb.AppendLine($"  Reiterklick auf heiler, aktiver {(istUmschalter ? "Fabrik/Mine" : "Basis")}: " +
+                      $"bedingungslos {lb}x, Ablehnklang GESPIELT {ag}x (erwartet 0), " +
+                      $"unterdrueckt {ak}x, Zustand {e.State}: " +
+                      $"{(klangOk ? "still, richtig" : "FALSCH")}");
         e.State = 0;
 
         _selected = merk;
         bool alles = heilOk && startOk && stopOk && fremdOk && zahlOk
-                     && preisOk && schrankeOk && schranke2Ok && umschaltOk;
+                     && preisOk && schrankeOk && schranke2Ok && umschaltOk && klangOk;
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }
