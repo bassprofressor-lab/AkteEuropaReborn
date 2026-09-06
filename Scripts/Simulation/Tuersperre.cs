@@ -525,7 +525,26 @@ public partial class MapEntityLayer : Node2D
         sb.AppendLine($"  bis zur Zerstoerung: {treffer} Treffer, tot {kw.Dead}: "
                     + $"{(totOk ? "faellt, richtig" : "FAELLT NIE — genau seine Meldung")}");
 
-        bool alles = findenOk && bandOk && totOk;
+        // 4. ⭐⭐ UND DIE DAUERREGEL SELBST (06.09.2026). Sie hat in der
+        // Skriptausfuhr gefehlt: --bomben-log zeigte v5 = 700 bei nur VIER
+        // Trefferrufen. Jetzt steht sie drin (@0x499D9B, v5 > 350, fuenf
+        // hit_cell), und der Lauf prueft, dass sie auch FEUERT — Regel
+        // vorhanden ist nicht Regel wirksam.
+        bool regelOk = true, feuertOk = true;
+        if (_mscript != null)
+        {
+            _mscript.SetVarFuerProbe(5, 400);          // in die Dauerphase
+            int vor = SkripttrefferRufe;
+            for (int t = 0; t < 5; t++) _mscript.Tick(1.0 / 50.0);
+            int gefallen = SkripttrefferRufe - vor;
+            feuertOk = gefallen >= 5;
+            sb.AppendLine($"  v5 auf 400 gesetzt, fuenf Takte: {gefallen} Trefferrufe "
+                        + $"(erwartet mindestens 5 — fuenf Zellen je Takt): "
+                        + $"{(feuertOk ? "die Dauerregel feuert, richtig" : "SIE FEUERT NICHT")}");
+        }
+        else sb.AppendLine("  kein Missionsskript — die Dauerregel ist ungeprueft");
+
+        bool alles = findenOk && bandOk && totOk && regelOk && feuertOk;
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }

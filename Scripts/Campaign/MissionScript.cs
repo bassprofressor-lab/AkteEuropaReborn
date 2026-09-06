@@ -3240,6 +3240,14 @@ public sealed class MissionScript
     /// </summary>
     public int Var(int n) => n >= 0 && n < _var.Length ? _var[n] : -1;
 
+    /// <summary>Eine Skriptvariable von aussen setzen — <b>nur fuer
+    /// Pruefstaende</b>. ⚠ Gebaut am 06.09.2026, damit ein Lauf die
+    /// Dauerbombardierung der Mission 4 erreichen kann, ohne dass erst ein
+    /// Kraftwerk von Hand zerstoert werden muss. Im Spiel ruft das
+    /// niemand.</summary>
+    public void SetVarFuerProbe(int n, int wert)
+    { if (n >= 0 && n < _var.Length) _var[n] = wert; }
+
     /// <summary>For the harness: what the script is doing right now.</summary>
     /// <summary>Die Missionsziele, wie der Block sie fuehrt.
     ///

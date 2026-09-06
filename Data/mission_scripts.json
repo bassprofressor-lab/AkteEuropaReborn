@@ -24972,6 +24972,55 @@
      ]
     },
     {
+     "_at": "0x499D9B",
+     "_note": "DIE DAUERBOMBARDIERUNG DER KRAFTWERKE — sie hat bis zum 06.09.2026 in dieser Ausfuhr GEFEHLT. Gemeldet: »nachdem ersten zerstoerten kraftwerk kommt eine meldung das bomben auf die kraftwerke geworfen werden ... aber die kraftwerke werden dadurch nicht zerstoert«, und nachgereicht »es gab schaden, aber der war nur minimal«. Gemessen mit --bomben-log: v5 laeuft bis 700, es fielen aber nur VIER Trefferrufe — die vier fire_at-Regeln (v5 == 200/210/250/280). Diese Regel hier fehlte, und mit ihr die ganze Dauerphase. Selbst nachgeschlagen: @0x499D9B »cmp word[0xBC569A], 0x15E; jle 0x499E6B« — also v5 > 350 — dann FUENF Rufe von 0x401217 mit »push 0x9C72« (= 40050, Angreifer -> Schaden 50) und dem imap-Wort der jeweiligen Zelle. Die fuenf Zellen sind zurueckgerechnet und stimmen mit den Werten ueberein, die das Skript daneben in dword[0x53C930]/[0x53C934] setzt. ⚠ Die Regel liegt VOR dem Riegelzugriff @0x499E6C und laeuft darum JEDEN Takt, nicht alle 100 — sie traegt deshalb kein block_gate.",
+     "when": [
+      {
+       "a": 5,
+       "b": 350,
+       "kind": "var",
+       "op": ">"
+      }
+     ],
+     "then": [
+      {
+       "_at": "0x499DCF",
+       "_zelle": "imap-Wort 0xBDEEE6: (0xBDEEE6 - 0xBDEA80)/2 = 563 = 2*256 + 51",
+       "a": 2,
+       "b": 51,
+       "kind": "hit_cell"
+      },
+      {
+       "_at": "0x499DF3",
+       "_zelle": "imap-Wort 0xBDF8E0: (0xBDF8E0 - 0xBDEA80)/2 = 1840 = 7*256 + 48",
+       "a": 7,
+       "b": 48,
+       "kind": "hit_cell"
+      },
+      {
+       "_at": "0x499E17",
+       "_zelle": "imap-Wort 0xBDF8F2: (0xBDF8F2 - 0xBDEA80)/2 = 1849 = 7*256 + 57",
+       "a": 7,
+       "b": 57,
+       "kind": "hit_cell"
+      },
+      {
+       "_at": "0x499E3F",
+       "_zelle": "imap-Wort 0xBDF0F8: (0xBDF0F8 - 0xBDEA80)/2 = 828 = 3*256 + 60",
+       "a": 3,
+       "b": 60,
+       "kind": "hit_cell"
+      },
+      {
+       "_at": "0x499E63",
+       "_zelle": "imap-Wort 0xBDF8FE: (0xBDF8FE - 0xBDEA80)/2 = 1855 = 7*256 + 63",
+       "a": 7,
+       "b": 63,
+       "kind": "hit_cell"
+      }
+     ]
+    },
+    {
      "_at": "0x499E9B",
      "_tut_ausserdem": "show_text",
      "once": 6,
