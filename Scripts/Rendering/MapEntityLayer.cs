@@ -3191,7 +3191,36 @@ public partial class MapEntityLayer : Node2D
                 // 0xFF marks the "InitN" script placeholders. Players are 0..7;
                 // owner 11 is by far the most common (477 buildings across all
                 // files) and is not a player slot — neutral/civilian structures.
-                bool real = owner != 255;
+                // ⚠⚠ 06.09.2026 — HIER STAND `bool real = owner != 255;`, UND
+                // DAS HAT KAMPAGNE 4 GESPERRT.
+                //
+                // Seine Meldung: »ich kann in kampagne4 nicht die kraftwerke
+                // angreifen, auch nicht wenn ich strg druecke. aber das ist
+                // genau das ziel in kampagne 4.« Die Spur lief ueber drei
+                // Stationen — der Angriffsbefehl wurde abgewiesen, weil das
+                // Ziel `HpMax 0` trug, und diese Null kommt von hier: Besitzer
+                // 255 galt pauschal als »InitN-Platzhalter«, und ein
+                // Platzhalter bekommt keine Energie.
+                //
+                // ⭐ GEMESSEN ueber alle 33 Kampagnenkarten, 986 Gebaeude mit
+                // Besitzer 255:
+                //
+                //   built = 1 : NUR Gebaeudeart 13 (Kraftwerk, 262x) und 14
+                //               (124x)  -> 386 echte herrenlose Bauten
+                //   built = 0 : Arten 17, 46, 21, 27, 44, 0, 58 ...
+                //               -> 600 Platzhalter
+                //
+                // `built` trennt die zwei Sorten also restlos, und die
+                // Platzhalter tragen ausserdem Arten weit ausserhalb 1..16.
+                // Ein Kraftwerk mit 1000/1000 Energie und `built = 1` ist kein
+                // Platzhalter.
+                //
+                // ⚠ Der Besitzer bleibt trotzdem -1: 255 ist kein Spielerplatz.
+                // Herrenlos und unzerstoerbar sind zwei verschiedene Dinge, und
+                // wir hatten sie in EINEM Merker zusammengezogen.
+                bool spieler = owner != 255;
+                bool platzhalter = !spieler && GetI(bd, "built", 0) <= 0;
+                bool real = !platzhalter;
                 // hp and hp_max now come out of the record itself (+0x02 / +0x12,
                 // proven by the repair handler @0x43e070) instead of our table
                 int hpMax = GetI(bd, "hp_max", 0);
@@ -3201,7 +3230,7 @@ public partial class MapEntityLayer : Node2D
                 var bld = new Entity
                 {
                     Slot = GetI(bd, "slot", -1), Col = col, Row = row,
-                    Owner = real ? owner : -1, Team = real ? owner : -1,
+                    Owner = spieler ? owner : -1, Team = spieler ? owner : -1,
                     UnitType = -1, Attack = -1, Elev = el,
                     Hp = hp, HpMax = hpMax,
                     State = GetI(bd, "state"),
@@ -3216,7 +3245,7 @@ public partial class MapEntityLayer : Node2D
                     // the capture fields; content exported before 2026-08-06
                     // carries no door, and CaptureDoorsMissing counts that
                     Built = GetI(bd, "built"), Doors = GetI(bd, "doors"),
-                    ShownOwner = real ? owner : -1,
+                    ShownOwner = spieler ? owner : -1,
                     // w/ch/sp are the stored Waffen / Fahrwerk / Spezial parts —
                     // a Waffen-Fabrik only ever fills w, a Fahrwerk-Fabrik only
                     // ch, a Spezial-Fabrik only sp, and the Basis all three
@@ -9537,6 +9566,64 @@ public partial class MapEntityLayer : Node2D
         }
         return false;
     }
+
+    /// <summary>
+    /// <b>Ist das ein gueltiges Ziel fuer einen BEFOHLENEN Angriff?</b>
+    ///
+    /// <para>⚠⚠ 06.09.2026, und es hat Kampagne 4 gesperrt. Seine Meldung: »ich
+    /// kann in kampagne4 nicht die kraftwerke angreifen, auch nicht wenn ich
+    /// strg druecke. aber das ist genau das ziel in kampagne 4.«</para>
+    ///
+    /// <para><b>Die Zahl dazu:</b> die fuenf Kraftwerke auf <c>map_04</c>
+    /// (Gebaeudeart 13) tragen Besitzer <b>255</b> — sie sind herrenlos. Und
+    /// <see cref="IsHostile"/> hat die Zeile
+    /// <c>if (a.Owner is &lt; 0 or &gt; 7 || b.Owner is &lt; 0 or &gt; 7) return false;</c>,
+    /// die es als Schutz fuer die Buendnistafel gibt. 255 ist groesser als 7,
+    /// also war jedes herrenlose Gebaeude unangreifbar.</para>
+    ///
+    /// <para><b>Und das Original fragt hier gar nichts.</b> Die Zielueber-
+    /// setzung <c>0x4353F0</c> nimmt, was unter dem Zeiger liegt: eine Nummer
+    /// unter 8000 ist die Einheit selbst (<c>@0x435433</c>), 60000..60299 ist
+    /// ein Gebaeude (<c>@0x435465</c>), dann Bruecke/Rampe, sonst die blosse
+    /// Bodenzelle. Die zwei Bytes, die sie aus dem Einheitensatz liest
+    /// (<c>@0x435419</c>, <c>@0x435427</c>), werden nur ABGELEGT — kein Sprung
+    /// haengt daran. Ein Abtast ueber <c>0x4353F0..0x4354D0</c> findet keinen
+    /// Zugriff auf Buendnis- oder Spielertafel.</para>
+    ///
+    /// <para>⚠ <b>Wo die Feindfrage im Original wirklich sitzt:</b> in der
+    /// ZEIGERWAHL. Zeigerart 2 (Angriff) faellt, wenn ein Feind unter dem
+    /// Zeiger steht (<c>@0x432886</c>) oder Strg gehalten wird
+    /// (<c>@0x43202E</c>). Ist der Befehl einmal abgesetzt, wird nicht mehr
+    /// gefragt. Darum bleibt die Pruefung bei uns hier — nur laesst sie
+    /// HERRENLOSE Ziele jetzt durch, so wie unser Mauszeiger es ohnehin schon
+    /// tat (<see cref="CursorHintAt"/> gibt fuer alles, was nicht dem
+    /// Betrachter gehoert, <c>Hint.Enemy</c>).</para>
+    ///
+    /// <para>Gegenschalter <c>--angriff-nur-feinde</c>.</para>
+    /// </summary>
+    private bool IstAngriffsziel(Entity a, Entity b)
+    {
+        if (AngriffNurFeinde) return IsHostile(a, b);
+        if (b.IsProp || b.Dead || b.HpMax <= 0) return false;
+        if (Untergestellt(b)) return false;
+        // ⭐ HERRENLOS (255 und alles ausserhalb 0..7) ist ein Ziel. Nur der
+        // Angreifer selbst muss ein gueltiger Spieler sein, sonst gibt es die
+        // Buendnisfrage gar nicht.
+        if (b.Owner is < 0 or > 7) return true;
+        if (a.Owner is < 0 or > 7) return false;
+        if (_standby[a.Owner] || _standby[b.Owner]) return false;
+        return _haveAllies ? !_allied[a.Owner, b.Owner] : b.Owner != a.Owner;
+    }
+
+    /// <summary><c>--angriff-nur-feinde</c> — der Stand vor dem 06.09.2026:
+    /// der befohlene Angriff verlangt wieder ein feindliches Ziel, und
+    /// herrenlose Gebaeude sind damit unangreifbar.</summary>
+    public static bool AngriffNurFeinde;
+
+    /// <summary>Wie viele Angriffsbefehle auf ein HERRENLOSES Ziel gingen —
+    /// fuer den Pruefstand. ⚠ Ohne die Zahl ist »es geht jetzt« nicht von »der
+    /// Zweig wird nie erreicht« zu unterscheiden.</summary>
+    public int AngriffAufHerrenlos;
 
     private bool IsHostile(Entity a, Entity b)
     {

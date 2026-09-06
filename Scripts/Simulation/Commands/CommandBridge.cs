@@ -372,7 +372,7 @@ public partial class MapEntityLayer
         foreach (int i in _sel)
         {
             var e = _entities[i];
-            if (i == hit || !CanFight(e) || !IsHostile(e, victim)) continue;
+            if (i == hit || !CanFight(e) || !IstAngriffsziel(e, victim)) continue;
             sx += e.Col; sy += e.Row; cnt++;
         }
         if (cnt == 0) return false;
@@ -383,7 +383,7 @@ public partial class MapEntityLayer
         foreach (int i in _sel)
         {
             var e = _entities[i];
-            if (i == hit || !CanFight(e) || !IsHostile(e, victim)) continue;
+            if (i == hit || !CanFight(e) || !IstAngriffsziel(e, victim)) continue;
             int px = e.Col + victim.Col - mx;
             int py = e.Row + victim.Row - my;
             var c = CommandRecord.Make(CommandOp.Attack, (byte)ViewPlayer,
@@ -393,6 +393,7 @@ public partial class MapEntityLayer
             if (Emit(c)) n++;
         }
         if (n == 0) return false;
+        if (victim.Owner is < 0 or > 7) AngriffAufHerrenlos++;
         AddOrderMark(victim.Pos, attack: true);
         // ⭐ 03.09.2026 — der ANGRIFFSklang 0x429480, einmal je Klick, aus dem
         // Absender; Begruendung bei PostMove. Die vier Rufer des Originals

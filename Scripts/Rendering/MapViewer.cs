@@ -1406,6 +1406,8 @@ public partial class MapViewer : Node2D
             else if (a == "--forschung-probe") _forschungProbe = true;
             else if (a == "--gruppenzeiger-probe") _gruppenzeigerProbe = true;
             else if (a == "--tuersperre-probe") _tuersperreProbe = true;
+            else if (a == "--angriff-probe") _angriffProbe = true;
+            else if (a == "--angriff-nur-feinde") MapEntityLayer.AngriffNurFeinde = true;
             else if (a == "--einfahrzeiger-probe") _einfahrzeigerProbe = true;
             else if (a == "--panelknoepfe-alt") PanelknoepfeAlt = true;
             else if (a == "--panelknopf-log") PanelknopfLog = true;
@@ -2706,6 +2708,7 @@ public partial class MapViewer : Node2D
             if (_forschungProbe) GD.Print(_entities.ForschungProbeLine());
             if (_gruppenzeigerProbe) GD.Print(_entities.GruppenzeigerProbe());
             if (_tuersperreProbe) GD.Print(_entities.TuersperreProbe());
+            if (_angriffProbe) GD.Print(_entities.AngriffProbe());
             if (_einfahrzeigerProbe) GD.Print(_entities.EinfahrzeigerProbe());
             if (_panelknoepfeProbe) GD.Print(PanelknoepfeProbe());
             if (_einfahrtFremdProbe) GD.Print(_entities.EinfahrtFremdProbe());
@@ -3851,6 +3854,7 @@ public partial class MapViewer : Node2D
     /// <c>Row</c>-Satz als Schnittstelle benutzt.</para></summary>
     private bool _gruppenzeigerProbe;
     private bool _tuersperreProbe;
+    private bool _angriffProbe;
     private bool _einfahrzeigerProbe;
     private bool _panelknoepfeProbe;
     private bool _einfahrtFremdProbe;

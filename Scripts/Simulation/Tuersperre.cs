@@ -267,4 +267,108 @@ public partial class MapEntityLayer : Node2D
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }
+
+    /// <summary>
+    /// <c>--angriff-probe</c> — <b>laesst sich ein HERRENLOSES Gebaeude
+    /// angreifen?</b> (06.09.2026, aus der Missionssperre in Kampagne 4.)
+    ///
+    /// <para>⚠ Beide Richtungen und der Gegenschalter: das herrenlose Ziel muss
+    /// gehen, ein EIGENES muss weiter abgewiesen werden, und
+    /// <c>--angriff-nur-feinde</c> muss den alten Stand zurueckbringen. Ohne
+    /// die zweite Haelfte waere ein Bau gruen, der einfach jedes Ziel
+    /// durchlaesst.</para></summary>
+    public string AngriffProbe()
+    {
+        var sb = new System.Text.StringBuilder("angriff-probe\n");
+
+        int gi = -1, ei = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var b = _entities[i];
+            if (!b.IsBuilding || b.IsProp || b.Dead) continue;
+            if (gi < 0 && (b.Owner is < 0 or > 7)) gi = i;
+            if (ei < 0 && b.Owner == ViewPlayer) ei = i;
+        }
+        if (gi < 0) return sb.Append("  kein herrenloses Gebaeude auf dieser Karte").ToString();
+
+        int ui = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var u = _entities[i];
+            if (u.IsBuilding || u.IsProp || u.Dead) continue;
+            u.Owner = u.Team = ViewPlayer;
+            if (CanFight(u)) { ui = i; break; }
+        }
+        if (ui < 0) return sb.Append("  keine eigene Einheit, die schiessen kann").ToString();
+
+        _sel.Clear(); _sel.Add(ui); _selected = ui;
+        // ⚠ OHNE NEBEL greifen: ein kopfloser Lauf hat nach acht Sekunden die
+        // halbe Karte noch nicht erkundet, und im Nebel trifft `Pick` nichts.
+        // Das ist eine Eigenschaft des LAUFS, nicht des Angriffs — derselbe
+        // Hinweis steht schon beim Gebaeudefenster-Lauf.
+        bool nebelVor = PickOhneNebel;
+        PickOhneNebel = true;
+        var ziel = _entities[gi];
+        sb.AppendLine($"  Ziel: {BuildingTypeName(ziel.BType)} Platz {ziel.Slot}, Besitzer {ziel.Owner}");
+
+        // ⚠ AUF DIE MITTE DES RUMPFRECHTECKS, nicht auf die Zellmitte: Pick
+        // prueft `BodyRect(e).HasPoint(p)`, und der Ankerpunkt eines Gebaeudes
+        // liegt nicht darin. Derselbe Hinweis steht schon beim
+        // Gebaeudefenster-Lauf — ich bin trotzdem hineingelaufen, und der Lauf
+        // meldete »ABGEWIESEN«, obwohl der Bau stimmte.
+        // ⚠ Erst fragen, WO es scheitert, statt zu raten. Drei Tore, drei Zahlen.
+        var punkt = BodyRect(ziel).GetCenter();
+        int getroffen = Pick(punkt);
+        var w = _entities[ui];
+        sb.AppendLine($"  Tore: Pick bei ({punkt.X:0},{punkt.Y:0}) -> {getroffen} "
+                    + $"(Ziel waere {gi}), CanFight {CanFight(w)}, "
+                    + $"IstAngriffsziel {(getroffen >= 0 ? IstAngriffsziel(w, _entities[getroffen]).ToString() : "-")}, "
+                    + $"Auswahl {_sel.Count}, Angreifer P{w.Owner}");
+        sb.AppendLine($"  Ziel im einzelnen: IsProp {ziel.IsProp}, Dead {ziel.Dead}, "
+                    + $"HpMax {ziel.HpMax}, Untergestellt {Untergestellt(ziel)}, "
+                    + $"Ukol {ziel.Ukol}, Owner {ziel.Owner}, "
+                    + $"AngriffNurFeinde {AngriffNurFeinde}");
+
+        int vor = AngriffAufHerrenlos;
+        bool herrenlos = PostAttack(BodyRect(ziel).GetCenter());
+        bool herrenlosOk = herrenlos && AngriffAufHerrenlos == vor + 1;
+        sb.AppendLine($"  Angriffsbefehl auf das herrenlose Gebaeude: "
+                    + $"{(herrenlos ? "abgesetzt" : "ABGEWIESEN")}, gezaehlt "
+                    + $"{AngriffAufHerrenlos - vor}x: {(herrenlosOk ? "richtig" : "FALSCH")}");
+
+        bool eigenOk = true;
+        if (ei >= 0)
+        {
+            var mein = _entities[ei];
+            bool eigen = PostAttack(BodyRect(mein).GetCenter());
+            eigenOk = !eigen;
+            sb.AppendLine($"  Gegenprobe, EIGENES Gebaeude (Platz {mein.Slot}, P{mein.Owner}): "
+                        + $"{(eigen ? "ABGESETZT — falsch" : "abgewiesen, richtig")}");
+        }
+        else sb.AppendLine("  kein eigenes Gebaeude auf dieser Karte — Gegenprobe entfaellt");
+
+        AngriffNurFeinde = true;
+        bool alt = PostAttack(BodyRect(ziel).GetCenter());
+        AngriffNurFeinde = false;
+        bool altOk = !alt;
+        sb.AppendLine($"  mit --angriff-nur-feinde: {(alt ? "geht trotzdem — SCHALTER WIRKT NICHT" : "wieder abgewiesen, richtig")}");
+
+        // ⚠ Und die andere Seite: die PLATZHALTER muessen weiter ohne Energie
+        // bleiben. Ohne diese Zeile waere ein Bau gruen, der einfach jedem
+        // Besitzer-255-Satz Energie gibt — auch den 600 InitN-Platzhaltern.
+        int echt = 0, leer = 0;
+        foreach (var b in _entities)
+        {
+            if (!b.IsBuilding || b.IsProp) continue;
+            if (b.Owner >= 0) continue;
+            if (b.HpMax > 0) echt++; else leer++;
+        }
+        sb.AppendLine($"  herrenlose Gebaeude auf dieser Karte: {echt} mit Energie, "
+                    + $"{leer} ohne (Platzhalter)");
+
+        PickOhneNebel = nebelVor;
+        bool alles = herrenlosOk && eigenOk && altOk;
+        sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
 }
