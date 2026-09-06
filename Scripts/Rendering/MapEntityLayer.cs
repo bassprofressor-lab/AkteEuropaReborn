@@ -4150,6 +4150,42 @@ public partial class MapEntityLayer : Node2D
     public string GroupName(int n)
         => _groupNames.TryGetValue(n, out var s) ? s : "";
 
+    /// <summary>Welche Gruppe zuletzt ABGERUFEN wurde, oder -1. Siehe
+    /// <see cref="GruppeDerAuswahl"/>.</summary>
+    private int _abgerufeneGruppe = -1;
+
+    /// <summary>
+    /// <b>Welche Gruppe zeigt der Bedienblock gerade?</b> Nummer 1..10 oder -1.
+    ///
+    /// <para>Das Original hat dafuer ein Register und liest es mit
+    /// <c>0x40142E</c>; gibt es <c>0xFF</c>, zeichnet der Gruppenzweig die
+    /// Vorlage <c>0x501D3C</c> (»Gruppe «), sonst den Namen aus der
+    /// Gruppentafel <c>0x833A00</c>, Schrittweite 422 — beides gelesen am
+    /// 06.09.2026 @<c>0x4705FF..0x470642</c>.</para>
+    ///
+    /// <para>⚠ <b>UNSERE Umsetzung, und sie ist bewusst anders.</b> Wir merken
+    /// uns beim Abrufen die Nummer, pruefen sie aber beim ANZEIGEN gegen die
+    /// laufende Auswahl: nur wenn diese noch genau aus den lebenden Mitgliedern
+    /// der Gruppe besteht, gilt der Name. Der Grund ist handfest — die Auswahl
+    /// aendert sich an einem Dutzend Stellen (Rahmen, Klick, Nachschieben,
+    /// Tote), und ein Merker, der an jeder davon zurueckgesetzt werden muesste,
+    /// waere genau die Art Merker, die man irgendwann an einer Stelle vergisst.
+    /// Diese Pruefung kann nicht veralten.</para>
+    /// </summary>
+    private int GruppeDerAuswahl()
+    {
+        int n = _abgerufeneGruppe;
+        if (n < 0 || !_groups.TryGetValue(n, out var g)) return -1;
+        int lebend = 0;
+        foreach (int i in g)
+        {
+            if (i < 0 || i >= _entities.Count || _entities[i].Dead) continue;
+            if (!_sel.Contains(i)) return -1;      // einer fehlt -> nicht mehr die Gruppe
+            lebend++;
+        }
+        return lebend == _sel.Count && lebend > 0 ? n : -1;
+    }
+
     /// <summary>Eine Gruppe umbenennen. ⚠ Das Original tauft sie bei
     /// <c>Strg+Zahl</c> auf <b>»Group N«</b> und lässt den Namen dann tippen;
     /// ein leerer Name wird beim Sichern zu <b>»NONAME«</b> — dieselben zwei
@@ -4246,6 +4282,7 @@ public partial class MapEntityLayer : Node2D
             if (i >= 0 && i < _entities.Count && !_entities[i].Dead) _sel.Add(i);
         if (_sel.Count == 0) { _groups.Remove(n); _order = $"Gruppe {n} ist gefallen"; }
         else _order = $"Gruppe {n}: {_sel.Count} Einheiten";
+        _abgerufeneGruppe = _sel.Count > 0 ? n : -1;
         SetPrimary();
         UpdatePanel();
         QueueRedraw();
@@ -32672,7 +32709,14 @@ public partial class MapEntityLayer : Node2D
             }
         }
         if (langsam == int.MaxValue) langsam = 0;
-        return "GRUPPE\n" +
+        // ⭐ 06.09.2026 — der NAME der Gruppe, wenn es einer ist. Das Original
+        // holt die Nummer mit 0x40142E und den Namen aus der Gruppentafel
+        // 0x833A00 (@0x4705FF..0x470642); ohne Nummer (0xFF) nimmt es die
+        // Vorlage 0x501D3C, »Gruppe «.
+        int gnr = GruppeDerAuswahl();
+        string kopf = gnr >= 0 && GroupName(gnr).Length > 0
+                    ? GroupName(gnr).ToUpper() : "GRUPPE";
+        return kopf + "\n" +
                $"EINHEITEN {n}\n" +
                $"GESCHW. {langsam}/{schnell}\n" +
                $"ZUSTAND {(hpN > 0 ? hpS / hpN : 0)}%  SCHLECHT {schlecht}\n" +
@@ -32727,7 +32771,11 @@ public partial class MapEntityLayer : Node2D
     {
         var sb = new System.Text.StringBuilder("gruppenzeiger-probe\n");
         var eigene = new List<int>();
-        for (int i = 0; i < _entities.Count && eigene.Count < 2; i++)
+        // ⚠ DREI, nicht zwei: die Gegenprobe zum Gruppennamen braucht eine
+        // Einheit, die NICHT in der Gruppe ist. Eine wegzunehmen taugt nicht —
+        // dann steht nur noch eine da, das Gruppenfeld weicht ohnehin dem
+        // Einheitenfeld, und der Punkt praefte etwas anderes als gemeint.
+        for (int i = 0; i < _entities.Count && eigene.Count < 3; i++)
         {
             var u = _entities[i];
             if (!u.Dead && !u.IsProp && !u.IsBuilding && u.Owner == ViewPlayer) eigene.Add(i);
@@ -32752,6 +32800,17 @@ public partial class MapEntityLayer : Node2D
         }
         UpdatePanel();                 // ein Ausgangsstand, damit der erste
                                        // HoverWechsel etwas zu aendern hat
+
+        // ⚠ Fuer die Punkte, in denen sich die AUSWAHL aendert und nicht der
+        // Zeiger: dort ruft auch das Spiel UpdatePanel (RecallGroup tut es
+        // selbst). Text(-1) zweimal hintereinander wuerde dagegen den ZWEITEN
+        // Aufruf verschlucken, weil HoverWechsel bei gleichem Zeiger sofort
+        // zurueckkehrt — und der Lauf laese einen alten Stand ab.
+        string TextNachAuswahl()
+        {
+            UpdatePanel();
+            return _panel.Text.Split('\n')[0];
+        }
 
         // 1. ohne Zeiger -> das Gruppenfeld
         string ohne = Text(-1);
@@ -32798,12 +32857,48 @@ public partial class MapEntityLayer : Node2D
         }
         else sb.AppendLine("  kein Gebaeude auf dieser Karte — Tor 4 ungeprueft");
 
+        // 4b. ⭐ DER GRUPPENNAME (06.09.2026). Das Original zeigt den Namen aus
+        // der Gruppentafel 0x833A00 und nur ohne Nummer die Vorlage »Gruppe «.
+        // ⚠ Beide Richtungen: der Name muss kommen UND wieder verschwinden,
+        // sobald die Auswahl nicht mehr die Gruppe ist. Sonst waere ein Merker,
+        // der nie zurueckgesetzt wird, gruen.
+        // ⚠ Die Gruppe bekommt NUR die ersten zwei — sonst waere die dritte
+        // Einheit schon Mitglied, und die Gegenprobe unten koennte gar nichts
+        // mehr aendern. (Genau daran ist der erste Anlauf gescheitert: der Lauf
+        // meldete »DER NAME BLEIBT«, und schuld war sein eigener Aufbau.)
+        _sel.Clear(); _sel.Add(eigene[0]); _sel.Add(eigene[1]);
+        StoreGroup(4);
+        RenameGroup(4, "Sturmtrupp");
+        RecallGroup(4);
+        string mitName = TextNachAuswahl();
+        bool nameOk = mitName == "STURMTRUPP";
+        sb.AppendLine($"  Gruppe 4 »Sturmtrupp« abgerufen: »{mitName}«: " +
+                      $"{(nameOk ? "der Name steht da, richtig" : "FALSCH")}");
+
+        bool zurueckOk = true;
+        if (eigene.Count >= 3)
+        {
+            _sel.Add(eigene[2]);                   // eine dazu, die NICHT dazugehoert
+            string ohneName = TextNachAuswahl();
+            zurueckOk = ohneName.StartsWith("GRUPPE");
+            sb.AppendLine($"  eine fremde Einheit dazugewaehlt: »{ohneName}«: " +
+                          $"{(zurueckOk ? "wieder »Gruppe«, richtig" : "DER NAME BLEIBT — falsch")}");
+            _sel.Remove(eigene[2]);
+        }
+        else sb.AppendLine("  nur zwei eigene Einheiten — die Gegenprobe zum Namen entfaellt");
+
         // 5. und der Gegenschalter muss ALLES zurueckdrehen
         GruppenzeigerAlt = true;
         string alt = Text(eigene[1]);
         GruppenzeigerAlt = false;
-        bool altOk = alt.StartsWith("GRUPPE");
-        sb.AppendLine($"  mit --gruppenzeiger-alt ueber eigener Einheit: »{alt}«: " +
+        // ⚠ Der Vergleich geht gegen den KOPF der Gruppe, nicht gegen das Wort
+        // »GRUPPE«: seit dem Gruppennamen steht dort ggf. »STURMTRUPP«, und ein
+        // Lauf, der auf das Wort prueft, wuerde an der eigenen Behebung
+        // scheitern statt am Fehler.
+        string kopfJetzt = GroupPanelText().Split('\n')[0];
+        bool altOk = alt == kopfJetzt;
+        sb.AppendLine($"  mit --gruppenzeiger-alt ueber eigener Einheit: »{alt}« " +
+                      $"(erwartet der Gruppenkopf »{kopfJetzt}«): " +
                       $"{(altOk ? "wieder Gruppenfeld, richtig" : "SCHALTER WIRKT NICHT")}");
 
         // 6. ⭐⭐ UND OB DER TEXT UEBERHAUPT INS FELD PASST.
@@ -32829,7 +32924,8 @@ public partial class MapEntityLayer : Node2D
                       $"{(passtOk ? "passt, richtig" : "ZU KLEIN — der Text wird abgeschnitten")}");
 
         _selected = merkSel; _hovered = merkHov;
-        bool alles = ohneOk && draufOk && fremdOk && gebOk && altOk && passtOk;
+        bool alles = ohneOk && draufOk && fremdOk && gebOk && altOk && passtOk
+                     && nameOk && zurueckOk;
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }
