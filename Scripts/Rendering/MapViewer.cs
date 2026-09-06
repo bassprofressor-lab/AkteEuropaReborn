@@ -1409,6 +1409,7 @@ public partial class MapViewer : Node2D
             else if (a == "--angriff-probe") _angriffProbe = true;
             else if (a == "--fussvolk-probe") _fussvolkProbe = true;
             else if (a == "--skripttreffer-probe") _skripttrefferProbe = true;
+            else if (a == "--bomben-log") MapEntityLayer.BombenLog = true;
             else if (a == "--angriff-nur-feinde") MapEntityLayer.AngriffNurFeinde = true;
             else if (a == "--fussvolk-alt") Simulation.NavGrid.FussvolkAlt = true;
             else if (a == "--einfahrzeiger-probe") _einfahrzeigerProbe = true;

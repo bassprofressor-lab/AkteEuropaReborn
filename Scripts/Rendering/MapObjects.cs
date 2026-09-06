@@ -1921,6 +1921,7 @@ public partial class MapEntityLayer
             if (GebaeudeAufZelle(c, r) is var bi and >= 0)
             {
                 var b = _entities[bi];
+                SkripttrefferRufe++;
                 int treffer = SkripttrefferSchaden(schaden);
                 if (treffer >= b.Hp) { Kill(bi, b); gebaeudeTot++; }
                 else b.Hp -= treffer;
@@ -2008,6 +2009,12 @@ public partial class MapEntityLayer
     /// mit der 8 des Kraftwerks: der Treffer macht 33..41 statt 29..37, ein
     /// Kraftwerk faellt nach etwa 27 statt 30 Treffern. Die Zahl gehoert in die
     /// naechste Ausfuhr.</para></summary>
+    /// <summary>Wie oft ein Skripttreffer ein GEBAEUDE erwischt hat. ⚠ Fuer
+    /// den Mitschnitt <c>--bomben-log</c>: seine Meldung »es gab schaden, aber
+    /// der war nur minimal« ist erst zu beantworten, wenn die ZAHL der Rufe
+    /// neben dem Zaehler des Skripts steht.</summary>
+    public int SkripttrefferRufe;
+
     private static int SkripttrefferSchaden(int angriff)
     {
         const int Zweitwert = 0;

@@ -67,6 +67,40 @@ public partial class MapEntityLayer : Node2D
     public int TuerFreiFlanken;
 
     /// <summary>
+    /// <c>--bomben-log</c> — je Sekunde eine Zeile mit den Zaehlern des
+    /// Missionsskripts, den Trefferrufen und der Energie der Kraftwerke.
+    ///
+    /// <para>Gebaut am 06.09.2026 auf seine Meldung »also es gab schaden an den
+    /// kraftwerken, aber der war nur minimal«. Der Leselauf sagt: bei den
+    /// Zaehlerstaenden 200/210/250/280 feuern vier Bomber EINZELN, und erst ab
+    /// <b>ueber 350</b> fallen JEDEN Takt fuenf Treffer. »Minimal« passt genau
+    /// auf die erste Welle — die Frage ist also, ob der Zaehler ueberhaupt
+    /// steigt. ⚠ Raten hat heute dreimal Zeit gekostet; eine Zahl beantwortet
+    /// es in einem Blick.</para></summary>
+    private void PollBombenLog()
+    {
+        if (!BombenLog || _mscript == null) return;
+        if (++_bombenUhr % 50 != 0) return;            // 50 Takte = eine Sekunde
+        var sb = new System.Text.StringBuilder("bomben: ");
+        for (int v = 0; v < 8; v++) sb.Append($"v{v}={_mscript.Var(v)} ");
+        sb.Append($"| Trefferrufe {SkripttrefferRufe} | Kraftwerke ");
+        int n = 0;
+        foreach (var b in _entities)
+        {
+            if (!b.IsBuilding || b.IsProp || b.BType != 13) continue;
+            sb.Append(b.Dead ? "TOT " : $"{b.Hp}/{b.HpMax} ");
+            n++;
+        }
+        if (n == 0) sb.Append("(keine)");
+        GD.Print(sb.ToString());
+    }
+
+    private int _bombenUhr;
+
+    /// <summary><c>--bomben-log</c> — siehe <see cref="PollBombenLog"/>.</summary>
+    public static bool BombenLog;
+
+    /// <summary>
     /// Der Einnahme-Arm, soweit er die TUER betrifft (<c>@0x43CBEF..0x43CC29</c>).
     ///
     /// <para>Läuft je Takt über alle gebauten Gebäude mit Tür. Steht auf der
