@@ -2104,6 +2104,28 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Wie hoch der Namensstreifen oben im Feld ist.</summary>
     private const float PanelTitleH = 34f;
 
+    /// <summary>Das vertiefte Anzeigefeld des Bedienblocks, wie es
+    /// <see cref="SetPanelBox(Rect2)"/> zuletzt bekommen hat. Gebraucht, weil
+    /// der Text je nach Auswahl den STREIFEN oder das GANZE Feld belegt —
+    /// siehe die Warnung dort.</summary>
+    private Rect2 _panelBox;
+
+    /// <summary>Steht der Text gerade auf voller Feldhoehe? Nur, damit die
+    /// Groesse nicht in jedem Takt neu gesetzt wird.</summary>
+    private bool _panelVoll;
+
+    /// <summary>Den Text auf Streifen- oder Feldhoehe stellen. <paramref
+    /// name="voll"/> gilt fuer das Gruppenfeld, siehe
+    /// <see cref="SetPanelBox(Rect2)"/>.</summary>
+    private void PanelHoehe(bool voll)
+    {
+        if (voll == _panelVoll || _panelBox.Size.X <= 0) return;
+        _panelVoll = voll;
+        _panel.Size = new Vector2(_panelBox.Size.X - 8,
+                                  voll ? Mathf.Max(PanelTitleH, _panelBox.Size.Y - 6)
+                                       : PanelTitleH);
+    }
+
     private const float BarLeftFrac = 0.44f, BarWidthFrac = 0.40f,
                         BarTopFrac = 0.30f, BarGapFrac = 0.24f, BarHeightPx = 10f;
 
@@ -8261,6 +8283,21 @@ public partial class MapEntityLayer : Node2D
         // ⚠ Nur ein STREIFEN oben, nicht das ganze Feld: darunter stehen das
         // Einheitenbild und die drei Balken. Vorher nahm der Text die volle
         // Hoehe und schob eine Warnung mitten ins Bild.
+        //
+        // ⚠⚠ 06.09.2026 — ABER NICHT BEI EINER GRUPPE, und DAS war seine
+        // Meldung. »Unten links, wo Gruppe und Einheiten 5 steht, im Original
+        // steht mehr«: die sechs Zeilen des Gruppenfeldes werden bei uns seit
+        // jeher GERECHNET, aber dieser Streifen ist 34 Punkte hoch und
+        // `ClipText` schneidet nach der zweiten Zeile ab. Genau »Gruppe« und
+        // »Einheiten 5« passen hinein — Wort fuer Wort das, was er gesehen hat.
+        // Zustand, Sprit und Munition lagen darunter und wurden weggeschnitten.
+        //
+        // Bei einer Gruppe darf der Text das ganze Feld haben, und das ist
+        // ausdruecklich TREU: der Gruppenzweig des Originals (0x47067A..
+        // 0x470AB1) ruft den Bildzeichner 0x4508A0 gar nicht — es gibt dort
+        // kein Einheitenbild, das der Text verdecken koennte, und die sechs
+        // Zeilen stehen bei y = 45/58/71/84/97 ueber das ganze Feld verteilt.
+        _panelBox = box;
         _panel.Size = new Vector2(box.Size.X - 8, PanelTitleH);
         _panel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         _panel.ClipText = true;
@@ -31186,7 +31223,28 @@ public partial class MapEntityLayer : Node2D
         _hovered = h;
         if (_sel.Count > 1) UpdatePanel();
         QueueRedraw();
+
+        // ⚠ 06.09.2026 — DER MITSCHNITT, weil zweimal hintereinander »im Spiel
+        // aendert sich nichts« kam, waehrend der Pruefstand gruen war. Er
+        // druckt jede Zeigerbewegung mit ALLEN Groessen, an denen der Zweig
+        // haengt — Auswahlzahl, Platz, Besitzer, und die Zeile, die danach im
+        // Block steht. Raten ist an dieser Stelle zu teuer geworden.
+        if (GruppenzeigerLog)
+        {
+            var u = h >= 0 && h < _entities.Count ? _entities[h] : null;
+            GD.Print($"gruppenzeiger: Platz {h} " +
+                     (u == null ? "(nichts)"
+                      : $"({(u.IsBuilding ? "Gebaeude" : u.IsProp ? "Kulisse" : "Einheit")} " +
+                        $"P{u.Owner}{(u.Dead ? " TOT" : "")})") +
+                     $", Auswahl {_sel.Count}, Betrachter P{ViewPlayer}" +
+                     $", umgeschaltet {GruppenzeigerGezeigt}x" +
+                     $", Blockzeile »{_panel.Text.Split('\n')[0]}«");
+        }
     }
+
+    /// <summary><c>--gruppenzeiger-log</c> — jede Zeigerbewegung mitschreiben,
+    /// samt der Zeile, die danach im Bedienblock steht.</summary>
+    public static bool GruppenzeigerLog;
 
     /// <summary>What a click at this spot would mean. OURS — the original had
     /// one pointer for everything; this is the modern convenience the player
@@ -32698,8 +32756,30 @@ public partial class MapEntityLayer : Node2D
         sb.AppendLine($"  mit --gruppenzeiger-alt ueber eigener Einheit: »{alt}«: " +
                       $"{(altOk ? "wieder Gruppenfeld, richtig" : "SCHALTER WIRKT NICHT")}");
 
+        // 6. ⭐⭐ UND OB DER TEXT UEBERHAUPT INS FELD PASST.
+        //
+        // ⚠⚠ Das ist der Punkt, an dem der 06.09. zweimal schiefgegangen ist.
+        // Der Lauf war gruen, im Spiel stand unveraendert »Gruppe / Einheiten
+        // 5« — weil der Textstreifen 34 Punkte hoch ist und `ClipText` nach der
+        // zweiten Zeile abschneidet. Die sechs Zeilen wurden gerechnet und
+        // weggeschnitten. »Der Text ist gesetzt« und »der Text ist zu sehen«
+        // sind zwei verschiedene Aussagen — dieselbe Lehre wie beim leeren
+        // Klangplatz 307 heute frueh.
+        Text(-1);
+        float hoeheGruppe = _panel.Size.Y;
+        int zeilen = _panel.Text.Split('\n').Length;
+        Text(eigene[1]);
+        float hoeheEinheit = _panel.Size.Y;
+        // Godots Zeilenhoehe haengt an der Schrift; gepruefft wird darum nicht
+        // eine feste Zahl, sondern dass das Feld fuer die Zeilen REICHT.
+        bool passtOk = hoeheGruppe > PanelTitleH && hoeheGruppe >= zeilen * 12f
+                       && hoeheEinheit <= PanelTitleH + 0.5f;
+        sb.AppendLine($"  Feldhoehe: Gruppe {hoeheGruppe:0} Punkte fuer {zeilen} Zeilen, " +
+                      $"Einheit {hoeheEinheit:0} (Streifen {PanelTitleH:0}): " +
+                      $"{(passtOk ? "passt, richtig" : "ZU KLEIN — der Text wird abgeschnitten")}");
+
         _selected = merkSel; _hovered = merkHov;
-        bool alles = ohneOk && draufOk && fremdOk && gebOk && altOk;
+        bool alles = ohneOk && draufOk && fremdOk && gebOk && altOk && passtOk;
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }
@@ -32713,6 +32793,7 @@ public partial class MapEntityLayer : Node2D
         {
             var a = _special[_selAir];
             _panel.Visible = _panelTextOn;
+            PanelHoehe(false);
             _panel.Text =
                 $"{(a.Name.Length > 0 ? a.Name : a.TypeName).ToUpper()}\n" +
                 $"{a.KindName.ToUpper()}\n" +
@@ -32725,6 +32806,7 @@ public partial class MapEntityLayer : Node2D
         if (_selected < 0)
         {
             _panel.Visible = _panelTextOn;
+            PanelHoehe(false);
             _panel.Text = MissionSummaryText();
             ShowPanelBars(null);
             return;
@@ -32767,6 +32849,7 @@ public partial class MapEntityLayer : Node2D
             if (unterZeiger < 0)
             {
                 _panel.Visible = _panelTextOn;
+                PanelHoehe(true);                  // sechs Zeilen, kein Bild
                 _panel.Text = GroupPanelText();
                 ShowPanelBars(null);
                 return;
@@ -32776,6 +32859,7 @@ public partial class MapEntityLayer : Node2D
         }
         var e = _entities[zeigeIdx];
         _panel.Visible = _panelTextOn;
+        PanelHoehe(false);
         if (e.IsProp)
         {
             _panel.Text = $"PROP {e.UnitType}\nZELLE {e.Col},{e.Row}\nHOEHE {e.Elev}";

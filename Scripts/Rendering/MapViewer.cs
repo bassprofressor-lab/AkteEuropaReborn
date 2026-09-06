@@ -1405,6 +1405,7 @@ public partial class MapViewer : Node2D
             else if (a == "--forschung-besitz-alt") MapEntityLayer.ForschungBesitzAlt = true;
             else if (a == "--forschung-probe") _forschungProbe = true;
             else if (a == "--gruppenzeiger-probe") _gruppenzeigerProbe = true;
+            else if (a == "--gruppenzeiger-log") MapEntityLayer.GruppenzeigerLog = true;
             else if (a == "--einfahrt-fremd-probe") _einfahrtFremdProbe = true;
             else if (a == "--erfindung-probe") _erfindungProbe = true;
             else if (a == "--keine-erfindung") MapEntityLayer.KeineErfindung = true;
