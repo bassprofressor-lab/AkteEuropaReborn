@@ -1953,7 +1953,23 @@ public partial class MapEntityLayer
             // Funke ist die Anzeige eines Treffers IM AUGENBLICK; wer ihn beim
             // Start zeigt, behauptet, es werde gerade geschossen.
             // Bei `fire_at` (ein Schuss WAEHREND der Mission) bleibt er.
-            if (funken)
+            // ⚠⚠ 06.09.2026 — UND NUR, WENN WIRKLICH ETWAS GETROFFEN WURDE.
+            //
+            // Seine Meldung: »dieser explosions ball der bomben bleibt bestehen,
+            // wenn das kraftwerk zerstoert ist«. Hier stand der Funke
+            // BEDINGUNGSLOS: `getroffen` wurde gesetzt, aber nur gezaehlt. Die
+            // Dauerregel der Mission 4 feuert fuenfmal je Takt weiter, auch
+            // wenn das Kraftwerk laengst tot ist — also fiel fuenfzigmal je
+            // Sekunde ein Funke auf dieselbe Zelle, und das sieht aus wie ein
+            // stehender Ball.
+            //
+            // ⭐ Im Original kann das nicht passieren: der Funke sitzt IM
+            // Opferzweig von Zasah (@0x40CB07, `push 0x52`), und ein totes
+            // Gebaeude ist keiner — nach 0x4C95E0 stehen seine imap-Zellen auf
+            // 0xFFFF, Zasah findet dort niemanden mehr und schlaegt auch keinen
+            // Funken. Der Funke ist die Anzeige EINES TREFFERS, nicht die eines
+            // Wurfs.
+            if (funken && getroffen)
                 _effects.Add(new Effect
                 {
                     Pos = CellCenter(c, r),

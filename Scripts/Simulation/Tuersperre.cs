@@ -544,7 +544,19 @@ public partial class MapEntityLayer : Node2D
         }
         else sb.AppendLine("  kein Missionsskript — die Dauerregel ist ungeprueft");
 
-        bool alles = findenOk && bandOk && totOk && regelOk && feuertOk;
+        // 5. ⭐ DER FUNKE HAENGT AM TREFFER, nicht am Wurf (06.09.2026).
+        // Seine Meldung: »der explosions ball bleibt bestehen, wenn das
+        // kraftwerk zerstoert ist«. Auf eine leere Zelle darf kein Funke
+        // fallen — sonst steht er dort fuer immer, weil die Dauerregel
+        // weiterfeuert.
+        int fx = _effects.Count;
+        ApplyMissionHits(new[] { (1, 1) });          // eine garantiert leere Zelle
+        int leerFunken = _effects.Count - fx;
+        bool funkeOk = leerFunken == 0;
+        sb.AppendLine($"  Treffer auf eine leere Zelle: {leerFunken} Funken "
+                    + $"(erwartet 0): {(funkeOk ? "richtig" : "FALSCH — der Ball bleibt stehen")}");
+
+        bool alles = findenOk && bandOk && totOk && regelOk && feuertOk && funkeOk;
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }
