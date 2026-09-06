@@ -593,6 +593,47 @@ public static class WindowManager
         c.Scale = Vector2.One;
     }
 
+    /// <summary>
+    /// <c>--fensterklang-alt</c> — der Stand vor dem 06.09.2026 zurueck: 0x133
+    /// kommt wieder beim AUFGEHEN und nicht beim Abraeumen. ⚠ Der
+    /// Gegenschalter ist hier besonders wichtig, weil die Behebung auf einer
+    /// BERICHTIGUNG einer aelteren Lesung steht — wer sie umstoesst, muss den
+    /// alten Stand wieder herstellen koennen.</summary>
+    public static bool FensterklangAlt;
+
+    /// <summary>Wie oft der Seitenklang gespielt wurde, und wie oft er
+    /// unterdrueckt wurde, weil die Seite noch gar nicht offen war. ⚠ Beide
+    /// Zahlen, aus demselben Grund wie ueberall: »still« und »wird nie
+    /// gerufen« klingen gleich.</summary>
+    public static int SeitenklangGespielt, SeitenklangStumm;
+
+    /// <summary>
+    /// <b>Der Klang beim SEITENWECHSEL</b> — <c>0x133</c> aus <c>@0x44FCBB</c>,
+    /// gespielt vom Abraeumer <c>0x44FC90</c>, gerufen unter anderem aus dem
+    /// Seitenwechsler <c>0x441120</c> (siehe <see cref="Blende"/>).
+    ///
+    /// <para><b>Die zwei Bedingungen des Originals</b> stehen bei
+    /// <c>@0x44FC90</c>: <c>word[0x87AC00] != 0</c> und
+    /// <c>word[0x87B054] &gt;= 4</c>. Die zweite ist die Blendzahl der Seite,
+    /// die abgeraeumt wird, und <c>BilderAuf</c> ist bei uns dieselbe 4 — der
+    /// Klang kommt also nur, wenn die alte Seite wirklich schon OFFEN war.
+    /// Eine Seite, die noch am Aufgehen ist, geht still weg.</para>
+    ///
+    /// <para>⚠ <b>Was UNSERES bleibt:</b> das Basisfenster laeuft bei uns gar
+    /// nicht ueber diese Liste (<c>MapViewer</c> setzt <c>Visible</c> von
+    /// Hand), darum nimmt <see cref="Seitenklang"/> den Fall ohne Fenstersatz
+    /// mit. Wer das Fenster eines Tages richtig anmeldet, kann den Zweig
+    /// wieder herausnehmen.</para>
+    /// </summary>
+    public static void Seitenklang(Fenster? f = null)
+    {
+        // f == null: der Rufer fuehrt seine Seite selbst (das Basisfenster).
+        bool offen = f == null || (f.ZuBild < 0 && f.AufBild < 0);
+        if (!offen) { SeitenklangStumm++; return; }
+        SeitenklangGespielt++;
+        Audio.SoundBankPlayer.Play(KlangAuf);
+    }
+
     /// <summary>Das Schirmmass. ⚠ Im Original sind es ZWEI Globale mit
     /// demselben Wert: die Fensterschicht liest <c>dword[0xB136B0]</c>, die
     /// Zeichenschicht <c>dword[0x5387C8]</c> — beide schreibt <c>0x4B6B1C</c>
@@ -674,12 +715,37 @@ public static class WindowManager
         c.Scale = new Vector2(1f, Mathf.Max(anteil, 0.001f));
         c.Visible = anteil > 0.001f;
 
-        // ⭐ Der Klang kommt beim AUFGEHEN, und zwar wenn die Blende fertig ist
-        // (0x44FC90 malt erst bei >= 4 und spielt dann 0x133).
+        // ⭐⭐ 06.09.2026 — DER KLANG KOMMT NICHT BEIM AUFGEHEN.
+        //
+        // Hier stand »0x44FC90 malt erst bei >= 4 und spielt dann 0x133«. Der
+        // Satz hat die Routine falsch benannt. Ganz gelesen ist 0x44FC90 das
+        // ABRAEUMEN einer Dialogseite: sie spielt oben 0x133 (unter zwei
+        // Bedingungen), raeumt danach den Tafeleintrag ab, ruft den Schliesser
+        // und setzt zum Schluss `word[0x4FD648] = 0xFFFF` — den Griff der
+        // laufenden Seite auf »keine«.
+        //
+        // Und ihre drei Rufer sagen, WANN das geschieht. Einer davon ist
+        // 0x441120, der SEITENWECHSEL:
+        //
+        //     ax = word[0x4FD648]                 ; die laufende Seite
+        //     if ax != 0xFFFF:
+        //         call 0x44FC90                   ; ← die alte abraeumen, mit Klang
+        //         call 0x40204A                   ; und freigeben
+        //     word[0x4FD648] = <neue Seite>
+        //     word[0x87B054] = 0                  ; die Blendzahl faengt neu an
+        //
+        // Aus dem Basisfenster wird 0x441120 SIEBENMAL gerufen. Damit ist
+        // seine Meldung vom 06.09.2026 erklaert — »es gibt bei den 4 Punkten
+        // wie eine Art Click Sound« —, und die andere Haelfte auch: beim
+        // blossen AUFGEHEN spielt das Original gar nichts, und er hoert
+        // deshalb zu Recht nichts.
+        //
+        // ⚠ Der Klang steht jetzt in <see cref="SeitenklangFuer"/>; hier bleibt
+        // nur das Ende der Blende. Gegenschalter --fensterklang-alt.
         if (f.ZuBild < 0 && f.AufBild == BilderAuf)
         {
             f.AufBild = -1;                    // offen, nicht mehr am Aufgehen
-            Audio.SoundBankPlayer.Play(KlangAuf);
+            if (FensterklangAlt) Audio.SoundBankPlayer.Play(KlangAuf);
         }
     }
 
@@ -774,6 +840,32 @@ public static partial class WindowManagerCheck
             + $"nach 40 + Zublende {(jetztWeg ? "weg" : "NOCH DA")}; "
             + $"Standzeit 0 {(ewigDa ? "bleibt" : "IST WEG")}",
             ewig != null && kurz != null && nochDa && jetztWeg && ewigDa);
+
+        // 5b. ⭐⭐ DER FENSTERKLANG SITZT AM SEITENWECHSEL, NICHT AM AUFGEHEN.
+        //
+        // Seine Meldung vom 06.09.2026: »nein da kommt kein sound beim fenster
+        // oeffnen ... Es gibt tatsaechlich bei den 4 Punkten wie eine Art Click
+        // Sound«. Beides stimmt, und beides folgt aus derselben Lesung:
+        // 0x44FC90 ist der ABRAEUMER einer Dialogseite — sie spielt oben 0x133
+        // und endet auf `word[0x4FD648] = 0xFFFF`. Der Seitenwechsler 0x441120
+        // ruft sie mit der ALTEN Seite, und aus dem Basisfenster wird er
+        // siebenmal gerufen.
+        //
+        // ⚠ Beide Zahlen gehoeren gemessen. Nur »beim Aufgehen 0x« hiesse
+        // genauso gut, dass der Klang gar nicht mehr existiert.
+        WindowManager.Leeren();
+        var knoten5b = new Godot.Control();
+        int klangVor = Audio.SoundBankPlayer.Gezaehlt(WindowManager.KlangAuf);
+        var auf5b = WindowManager.Oeffnen(19, knoten5b);
+        for (int t = 0; t <= WindowManager.BilderAuf + 1; t++) WindowManager.Takt();
+        int beimAufgehen = Audio.SoundBankPlayer.Gezaehlt(WindowManager.KlangAuf) - klangVor;
+        WindowManager.Seitenklang(auf5b);
+        int beimWechsel = Audio.SoundBankPlayer.Gezaehlt(WindowManager.KlangAuf)
+                          - klangVor - beimAufgehen;
+        Sag($"Klang {WindowManager.KlangAuf}: beim Aufgehen {beimAufgehen}x (erwartet 0), "
+            + $"beim Seitenwechsel {beimWechsel}x (erwartet 1)",
+            beimAufgehen == 0 && beimWechsel == 1);
+        knoten5b.QueueFree();
 
         // 6. Zwanzig Plaetze
         WindowManager.Leeren();

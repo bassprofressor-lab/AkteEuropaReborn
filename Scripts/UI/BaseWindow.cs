@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.UI;
+﻿namespace AkteEuropaReborn.UI;
 
 using System;
 using System.Collections.Generic;
@@ -511,6 +511,22 @@ public sealed partial class BaseWindow : PanelContainer
     /// </summary>
     private void SetTab(int which)
     {
+        // ⭐⭐ 06.09.2026 — DER KLICK. Seine Meldung: »Es gibt tatsaechlich bei
+        // den 4 Punkten wie eine Art Click Sound (Depot, Produktion,
+        // Forschung, Reparatur)«.
+        //
+        // Es ist derselbe Klang 0x133, den wir bisher falsch beim AUFGEHEN
+        // eines Fensters gespielt haben. Im Original raeumt der Seitenwechsler
+        // 0x441120 die laufende Seite ueber 0x44FC90 ab, und DIE spielt ihn —
+        // aus dem Basisfenster wird 0x441120 siebenmal gerufen. Begruendung in
+        // WindowManager.Seitenklang.
+        //
+        // ⚠ Nur bei sichtbarem Fenster: das Original gibt den Klang nur, wenn
+        // die abgeraeumte Seite schon offen war (word[0x87B054] >= 4).
+        // ⚠ Der VIERTE Knopf ist Reparatur und wechselt gar keine Seite; dass
+        // auch er klickt, steht auf SEINER Meldung, nicht auf einer Lesung.
+        if (Visible) WindowManager.Seitenklang();
+
         // Der vierte »Reiter« ist der Reparaturknopf: anstossen und den
         // ANGEZEIGTEN Reiter lassen, wo er war.
         if (which == RepairTab)

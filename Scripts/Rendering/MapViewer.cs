@@ -1409,6 +1409,9 @@ public partial class MapViewer : Node2D
             // 06.09.2026 — Gegenschalter zum Leerlaufbefehl: der Umschalter
             // gilt wieder fuer alle vier Gebaeudearten, und ein abgewiesener
             // Gebaeudeauftrag spielt wieder die Sprachzeile 140.
+            // 06.09.2026 — Gegenschalter zum Fensterklang: 0x133 kommt wieder
+            // beim AUFGEHEN statt beim Seitenwechsel. Siehe UI/WindowManager.cs.
+            else if (a == "--fensterklang-alt") UI.WindowManager.FensterklangAlt = true;
             else if (a == "--leerlauf-alt") MapEntityLayer.LeerlaufAlt = true;
             else if (a == "--aufwertung-alt") MapEntityLayer.AufwertungAlt = true;
             else if (a == "--aufwertung-immer-tank") MapEntityLayer.AufwertungImmerTank = true;

@@ -180,12 +180,21 @@ public static class SoundBankPlayer
 
     private static void Mitschnitt(int slot, string art)
     {
-        if (!LogKlaenge) return;
+        // ⚠ 06.09.2026 — GEZAEHLT WIRD IMMER, gedruckt nur mit --klang-log.
+        // Vorher stand `if (!LogKlaenge) return;` GANZ oben, und damit konnte
+        // ein Pruefstand nie fragen, wie oft ein Klang gefallen ist, ohne den
+        // Mitschnitt anzuwerfen. Zaehlen kostet einen Woerterbuchzugriff.
         _klangZaehler.TryGetValue(slot, out int n);
         _klangZaehler[slot] = ++n;
+        if (!LogKlaenge) return;
         if (n < 10 || n % 10 == 0)
             GD.Print($"klang: {art} {slot}" + (n > 1 ? $"  (x{n})" : ""));
     }
+
+    /// <summary>Wie oft dieser Platz angestossen wurde — fuer Pruefstaende, die
+    /// »hat es geklungen« als ZAHL brauchen und nicht als Eindruck.</summary>
+    public static int Gezaehlt(int slot)
+        => _klangZaehler.TryGetValue(slot, out int n) ? n : 0;
 
     public static void Play(int slot, float volumeDb = 0f, float pan = 0f)
     {
