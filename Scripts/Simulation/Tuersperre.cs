@@ -657,4 +657,60 @@ public partial class MapEntityLayer : Node2D
                 + "Sind die Abstaende gleich, ist der Anker nicht die Ursache.");
         return sb.ToString();
     }
+
+    /// <summary>
+    /// <c>--zielzelle-probe</c> — <b>trifft jede der fuenf Bombenzellen das
+    /// RICHTIGE Kraftwerk?</b> (06.09.2026, zu bug-082.)
+    ///
+    /// <para>Seine Beobachtung: »scheinbar beschaedigen die Splitter auch
+    /// andere Gebaeude«. Die Splitter tun es nicht — ihr Takt bewegt sie nur
+    /// und setzt Rauch, er teilt keinen Schaden aus. Der Verdacht faellt damit
+    /// auf MEINEN heutigen Bau: <c>GebaeudeAufZelle</c> nimmt das ERSTE
+    /// Gebaeude, dessen Fussabdruckrechteck die Zelle enthaelt. Ueberlappen
+    /// zwei Rechtecke, oder ist unser Rechteck groesser als das echte Muster,
+    /// dann kassiert der falsche Nachbar den Treffer.</para>
+    ///
+    /// <para>Der Massstab ist die Karte selbst: in <c>sec6</c> traegt jede
+    /// Fussabdruckzelle den Griff <c>60000 + Platz</c>. Der Lauf vergleicht
+    /// unsere Zuordnung mit der, die dort steht.</para></summary>
+    public string ZielzelleProbe()
+    {
+        var sb = new System.Text.StringBuilder("zielzelle-probe\n");
+        var zellen = new (int C, int R, int Platz)[]
+            { (2, 51, 0), (7, 48, 1), (7, 57, 2), (3, 60, 3), (7, 63, 4) };
+        bool alles = true;
+        foreach (var (c, r, platz) in zellen)
+        {
+            int i = GebaeudeAufZelle(c, r);
+            int gefunden = i >= 0 ? _entities[i].Slot : -1;
+            bool ok = gefunden == platz;
+            alles &= ok;
+            sb.AppendLine($"  Zelle ({c,2},{r,2}): unser Fussabdruck findet Platz {gefunden,2}, "
+                        + $"die Karte sagt {platz}: {(ok ? "richtig" : "FALSCHES GEBAEUDE")}");
+        }
+
+        // Gegenprobe: ueberlappen sich zwei Fussabdruecke ueberhaupt?
+        int ueberlappt = 0;
+        for (int a = 0; a < _entities.Count; a++)
+        {
+            var A = _entities[a];
+            if (!A.IsBuilding || A.IsProp || A.Dead) continue;
+            for (int b = a + 1; b < _entities.Count; b++)
+            {
+                var B = _entities[b];
+                if (!B.IsBuilding || B.IsProp || B.Dead) continue;
+                bool frei = A.Col + Mathf.Max(1, A.FootW) <= B.Col
+                         || B.Col + Mathf.Max(1, B.FootW) <= A.Col
+                         || A.Row + Mathf.Max(1, A.FootH) <= B.Row
+                         || B.Row + Mathf.Max(1, B.FootH) <= A.Row;
+                if (!frei) ueberlappt++;
+            }
+        }
+        sb.AppendLine($"  ueberlappende Fussabdruecke auf dieser Karte: {ueberlappt} "
+                    + $"(erwartet 0): {(ueberlappt == 0 ? "richtig" : "DA GREIFT EINER IN DEN ANDEREN")}");
+        alles &= ueberlappt == 0;
+
+        sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
 }
