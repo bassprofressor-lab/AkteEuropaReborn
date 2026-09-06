@@ -1887,7 +1887,7 @@ public partial class MapEntityLayer
                                  bool funken = true, int schaden = SetupSchaden)
     {
         if (zellen.Count == 0) return;
-        int einheiten = 0, brennt = 0, leer = 0;
+        int einheiten = 0, brennt = 0, leer = 0, gebaeude = 0, gebaeudeTot = 0;
         foreach (var (c, r) in zellen)
         {
             bool getroffen = false;
@@ -1904,6 +1904,27 @@ public partial class MapEntityLayer
                 e.Hp = Mathf.Max(1, e.Hp / 2);
                 einheiten++; getroffen = true;
                 break;
+            }
+
+            // ⭐⭐ 06.09.2026 — UND EIN GEBAEUDE. Seine Meldung aus Kampagne 4:
+            // »nachdem ersten zerstoerten kraftwerk kommt eine meldung, dass
+            // bomben auf die kraftwerke geworfen werden ... aber die kraftwerke
+            // werden dadurch nicht zerstoert«.
+            //
+            // ⚠ Die Schleife darueber sucht ueber `Col`/`Row` — das ist der
+            // ANKER. Ein Gebaeude belegt aber ein Rechteck, und in `04.CWM`
+            // liegen die fuenf Skriptzellen ALLE ausserhalb des Ankers:
+            // an den Ankern steht in der imap 0xFFFE, auf den Skriptzellen
+            // (2,51) (7,48) (7,57) (3,60) (7,63) dagegen genau 60000..60004.
+            // Selbst nachgemessen an sec6 von 04.CWM. Mit der Ankersuche
+            // konnte also NIE ein Kraftwerk getroffen werden.
+            if (GebaeudeAufZelle(c, r) is var bi and >= 0)
+            {
+                var b = _entities[bi];
+                int treffer = SkripttrefferSchaden(schaden);
+                if (treffer >= b.Hp) { Kill(bi, b); gebaeudeTot++; }
+                else b.Hp -= treffer;
+                gebaeude++; getroffen = true;
             }
 
             // Ein WALD auf der Zelle faengt Feuer — aber nicht immer, und
@@ -1939,7 +1960,62 @@ public partial class MapEntityLayer
                 });
         }
         GD.Print($"treffer: {zellen.Count} Zellen aus dem SETUP-Block getroffen — " +
-                 $"{einheiten} Einheiten, {brennt} Waldzellen angezuendet, {leer} leer " +
+                 $"{einheiten} Einheiten, {gebaeude} Gebaeude ({gebaeudeTot} zerstoert), " +
+                 $"{brennt} Waldzellen angezuendet, {leer} leer " +
                  "(Zasah @0x40C9A0 -> zapal A @0x4CAC50, Kachel +285)");
+    }
+
+    /// <summary>Welches GEBAEUDE deckt diese Zelle ab? Listenplatz oder -1.
+    ///
+    /// <para>⚠ Nicht der Anker, sondern das ganze Rechteck: im Original traegt
+    /// JEDE Fussabdruckzelle in der imap den Griff <c>60000 + Platz</c>, der
+    /// Anker dagegen nicht. Gemessen an <c>04.CWM</c>: die fuenf Kraftwerke
+    /// haben auf ihren Ankern <c>0xFFFE</c>, und die fuenf Zellen, auf die das
+    /// Missionsskript zielt, tragen genau <c>60000..60004</c>.</para></summary>
+    private int GebaeudeAufZelle(int c, int r)
+    {
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var b = _entities[i];
+            if (!b.IsBuilding || b.IsProp || b.Dead) continue;
+            int w = Mathf.Max(1, b.FootW), h = Mathf.Max(1, b.FootH);
+            if (c >= b.Col && c < b.Col + w && r >= b.Row && r < b.Row + h) return i;
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// <b>Was ein Skripttreffer einem Gebaeude antut</b> — die Formel aus
+    /// <c>Zasah</c>, <c>@0x40D2BC..0x40D31A</c>, selbst nachgeschlagen:
+    /// <code>
+    ///   eax = Zweitwert + 30
+    ///   eax = eax * Angriff / 40
+    ///   eax = eax - rand()%5 + rand()%5
+    ///   eax = eax - (30 * Panzerung) / 50
+    ///   unter 1  ->  rand()%10 % 7
+    /// </code>
+    ///
+    /// <para>Der »Angreifer« eines Skripttreffers liegt im Band
+    /// <c>40000..41000</c> (<c>@0x40CC8B</c>): der Angriff ist <c>n - 40000</c>
+    /// — gerechnet als <c>ax + 0x63C0</c>, was im 16-Bit-Wort ueberlaeuft — und
+    /// der Zweitwert ist <b>0</b> (<c>@0x40CC9D</c>). Fuer 40050 also Angriff
+    /// <b>50</b>, Zweitwert 0.</para>
+    ///
+    /// <para>⚠ <b>UNSERE LUECKE, benannt:</b> die PANZERUNG ist das Feld
+    /// <c>+0x04</c> des 76er-Gebaeudesatzes (Datei <c>+0x08</c>), und unsere
+    /// Kartenausfuhr traegt es nicht — im Satz eines Kraftwerks stehen nur
+    /// <c>w</c>, <c>ch</c>, <c>sp</c>, alle 0. Wir rechnen darum mit 0 statt
+    /// mit der 8 des Kraftwerks: der Treffer macht 33..41 statt 29..37, ein
+    /// Kraftwerk faellt nach etwa 27 statt 30 Treffern. Die Zahl gehoert in die
+    /// naechste Ausfuhr.</para></summary>
+    private static int SkripttrefferSchaden(int angriff)
+    {
+        const int Zweitwert = 0;
+        const int Panzerung = 0;                 // s.o. — noch nicht ausgefuehrt
+        int s = (Zweitwert + 30) * angriff / 40;
+        s = s - Simulation.Determinism.Roll(5) + Simulation.Determinism.Roll(5);
+        s -= 30 * Panzerung / 50;
+        if (s < 1) s = Simulation.Determinism.Roll(10) % 7;
+        return s;
     }
 }

@@ -443,4 +443,56 @@ public partial class MapEntityLayer : Node2D
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }
+
+    /// <summary>
+    /// <c>--skripttreffer-probe</c> — <b>trifft ein Skripttreffer ein
+    /// Kraftwerk, und faellt es irgendwann?</b> (06.09.2026, zu bug-078.)
+    ///
+    /// <para>⚠ Drei Fragen, nicht eine: findet der Treffer das Gebaeude auf
+    /// einer FUSSABDRUCKZELLE (nicht am Anker), liegt der Schaden im gelesenen
+    /// Band, und geht die Energie irgendwann auf null. Der alte Bau scheiterte
+    /// an allen dreien: er suchte am Anker, halbierte statt zu subtrahieren,
+    /// und <c>max(1, hp/2)</c> konnte nie toeten.</para></summary>
+    public string SkripttrefferProbe()
+    {
+        var sb = new System.Text.StringBuilder("skripttreffer-probe\n");
+        int gi = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var b = _entities[i];
+            if (b.IsBuilding && !b.IsProp && !b.Dead && b.BType == 13) { gi = i; break; }
+        }
+        if (gi < 0) return sb.Append("  kein Kraftwerk auf dieser Karte").ToString();
+
+        var kw = _entities[gi];
+        sb.AppendLine($"  Kraftwerk Platz {kw.Slot}, Anker ({kw.Col},{kw.Row}), "
+                    + $"Fussabdruck {kw.FootW}x{kw.FootH}, Energie {kw.Hp}/{kw.HpMax}");
+
+        // 1. eine Zelle im Fussabdruck, die NICHT der Anker ist
+        int zc = kw.Col + Mathf.Max(1, kw.FootW) / 2, zr = kw.Row + Mathf.Max(1, kw.FootH) / 2;
+        int gefunden = GebaeudeAufZelle(zc, zr);
+        bool findenOk = gefunden == gi && (zc != kw.Col || zr != kw.Row);
+        sb.AppendLine($"  Zelle ({zc},{zr}) — nicht der Anker — findet Gebaeude {gefunden} "
+                    + $"(erwartet {gi}): {(findenOk ? "richtig" : "FALSCH")}");
+
+        // 2. ein einzelner Treffer: der Schaden muss im gelesenen Band liegen
+        int vorher = kw.Hp;
+        ApplyMissionHits(new[] { (zc, zr) }, funken: false);
+        int schaden = vorher - kw.Hp;
+        bool bandOk = schaden >= 33 - 4 && schaden <= 33 + 8;
+        sb.AppendLine($"  ein Treffer: {vorher} -> {kw.Hp}, also {schaden} Schaden "
+                    + $"(gelesen 30*50/40 = 37 +-rand%5, ohne die noch fehlende Panzerung): "
+                    + $"{(bandOk ? "im Band, richtig" : "AUSSERHALB")}");
+
+        // 3. und es faellt: der alte Bau konnte das nie (max(1, hp/2))
+        int treffer = 1;
+        while (!kw.Dead && treffer < 200) { ApplyMissionHits(new[] { (zc, zr) }, funken: false); treffer++; }
+        bool totOk = kw.Dead;
+        sb.AppendLine($"  bis zur Zerstoerung: {treffer} Treffer, tot {kw.Dead}: "
+                    + $"{(totOk ? "faellt, richtig" : "FAELLT NIE — genau seine Meldung")}");
+
+        bool alles = findenOk && bandOk && totOk;
+        sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
 }
