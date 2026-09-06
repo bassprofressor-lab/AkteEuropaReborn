@@ -1405,6 +1405,7 @@ public partial class MapViewer : Node2D
             else if (a == "--forschung-besitz-alt") MapEntityLayer.ForschungBesitzAlt = true;
             else if (a == "--forschung-probe") _forschungProbe = true;
             else if (a == "--gruppenzeiger-probe") _gruppenzeigerProbe = true;
+            else if (a == "--einfahrt-fremd-probe") _einfahrtFremdProbe = true;
             else if (a == "--erfindung-probe") _erfindungProbe = true;
             else if (a == "--keine-erfindung") MapEntityLayer.KeineErfindung = true;
             // 06.09.2026 — Gegenschalter zum Leerlaufbefehl: der Umschalter
@@ -2696,6 +2697,7 @@ public partial class MapViewer : Node2D
             if (_aufwertungProbe) GD.Print(_entities.AufwertungProbeLine());
             if (_forschungProbe) GD.Print(_entities.ForschungProbeLine());
             if (_gruppenzeigerProbe) GD.Print(_entities.GruppenzeigerProbe());
+            if (_einfahrtFremdProbe) GD.Print(_entities.EinfahrtFremdProbe());
             if (_erfindungProbe) GD.Print(_entities.ErfindungProbeLine());
             if (_stauCheck)
             {
@@ -3800,6 +3802,7 @@ public partial class MapViewer : Node2D
     /// Datei bleibt, weil <c>MapEntityLayer.BuildPanelRows()</c> ihren
     /// <c>Row</c>-Satz als Schnittstelle benutzt.</para></summary>
     private bool _gruppenzeigerProbe;
+    private bool _einfahrtFremdProbe;
 
     private UI.BaseWindow? _baseWindow;
 
