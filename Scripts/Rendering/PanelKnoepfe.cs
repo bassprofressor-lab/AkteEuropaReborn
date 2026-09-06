@@ -1,4 +1,4 @@
-using Godot;
+﻿using Godot;
 
 namespace AkteEuropaReborn.Rendering;
 
@@ -32,7 +32,10 @@ namespace AkteEuropaReborn.Rendering;
 /// Öffner:</para>
 /// <list type="number">
 /// <item>Feld 1 (80, 1) → <c>0x444740</c> — die <b>Einsatzkarte</b>, Fensterart
-/// <b>3</b>.</item>
+/// <b>3</b>. ⭐ Von ihm am Original bestätigt: »das rechte den oberen 3en hat
+/// die Minimap angezeigt oder ausgeschaltet« — und das rechte der drei oberen
+/// ist genau dieses Feld (x = 80; die anderen liegen bei 41 und 2). Bei uns
+/// schaltet es die Übersichtskarte um, siehe <c>PanelfeldOeffnen</c>.</item>
 /// <item>Feld 2 (41, 1) → <c>0x442C70</c> — <b>Gruppieren</b>, Art <b>25</b>.</item>
 /// <item>Feld 3 (2, 1) → <c>0x442D40</c> — der <b>Lokator</b>, Art <b>24</b>.</item>
 /// <item>Feld 4 (167, 107) → <c>0x443C40</c> — das <b>Spielmenü</b>, Art
@@ -75,7 +78,7 @@ public partial class MapViewer
     /// wie die Trefferprüfung sie abfragt — sie gibt 1, 2, 3, 4 zurück.</summary>
     public static readonly Panelfeld[] Panelfelder =
     {
-        new(0x50, 1, 0x20, 0x20, UI.WindowManager.ArtKarte,      "Einsatzkarte"),
+        new(0x50, 1, 0x20, 0x20, UI.WindowManager.ArtKarte,      "Uebersichtskarte"),
         new(0x29, 1, 0x20, 0x20, UI.WindowManager.ArtGruppen,    "Gruppieren"),
         new(0x02, 1, 0x20, 0x20, UI.WindowManager.ArtMerkpunkte, "Lokator"),
         new(0xA7, 0x6B, 0x23, 0x21, ArtSpielmenue,               "Spielmenue"),
@@ -183,24 +186,29 @@ public partial class MapViewer
         return sb.ToString();
     }
 
-    /// <summary>Wie oft Feld 1 gedrückt wurde, ohne dass etwas passieren
-    /// konnte. ⚠ Der Zähler ist der Punkt: ein Knopf, der still nichts tut,
-    /// sieht aus wie ein Knopf, der nicht gedrückt wurde.</summary>
-    public int PanelfeldOhneZiel;
-
     private void PanelfeldOeffnen(int f)
     {
         switch (f)
         {
             case 0:
-                // ⚠ DIE EINSATZKARTE HABEN WIR NICHT. Das Original öffnet hier
-                // Fensterart 3 (Öffner 0x444740); bei uns gibt es dafür nur die
-                // Minikarte im Block, kein eigenes Fenster. Der Knopf ist also
-                // gelesen, verdrahtet und ZIELLOS — das wird gesagt und
-                // gezählt, statt still nichts zu tun.
-                PanelfeldOhneZiel++;
-                GD.Print("panelknopf: Einsatzkarte (Fensterart 3, Oeffner 0x444740) "
-                       + "ist bei uns nicht gebaut — der Knopf bleibt ohne Ziel");
+                // ⭐⭐ 06.09.2026 — SEINE BEOBACHTUNG AM ORIGINAL, und sie deckt
+                // sich mit der Lesung: »das rechte den oberen 3en hat die
+                // Minimap angezeigt oder ausgeschaltet«. Das rechte der drei
+                // oberen Felder ist genau dieses hier (x = 0x50 = 80, die
+                // anderen zwei liegen bei 41 und 2), und der Öffner dahinter
+                // ist 0x444740 — die EINSATZKARTE, Fensterart 3.
+                //
+                // ⚠ UNSERE ERSETZUNG: ein eigenes Kartenfenster haben wir
+                // nicht, wohl aber die Übersichtskarte im Block. Der Knopf
+                // schaltet sie also um — dieselbe Wirkung, die er beschreibt,
+                // auf unserem Mittel.
+                //
+                // ⚠ Und ein Unterschied, der benannt gehört: der gelesene
+                // Öffner holt ein schon offenes Fenster nur NACH VORN, er
+                // schliesst es nicht. Dass es ein Umschalter ist, steht auf
+                // SEINER Beobachtung, nicht auf der Lesung.
+                _showMinimap = !_showMinimap;
+                if (_minimap != null) _minimap.Visible = _showMinimap;
                 break;
             case 1: ZeigeGruppen(-1); break;
             case 2: ZeigeLokator(-1); break;
