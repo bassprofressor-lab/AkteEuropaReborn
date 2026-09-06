@@ -30317,6 +30317,68 @@ public partial class MapEntityLayer : Node2D
     /// (<c>--anker-probe</c>).</summary>
     public static Vector2 AnkerBezug => ComposedAnchor;
 
+    /// <summary>
+    /// <b>Wie tief ein FUSSSOLDAT unter dem Fahrzeuganker sitzt.</b>
+    ///
+    /// <para>⚠⚠ 06.09.2026, seine Meldung: »wenn bei uns Infanterie ueber eine
+    /// Bruecke laeuft, sieht das (bei einer waagerechten Bruecke) aus, als
+    /// wuerden sie auf dem hinteren Gelaender laufen«.</para>
+    ///
+    /// <para><b>Erst gemessen</b> (<c>--anker-probe</c>): beide Bilder liegen
+    /// auf derselben Leinwand 64x56, der Anker ist (30, 55). Beim FAHRZEUG
+    /// endet die sichtbare Flaeche genau bei y = 55 — der Anker sitzt auf den
+    /// Raedern. Beim FUSSSOLDATEN endet sie bei y = 30, also <b>25 Punkte
+    /// darueber</b>.</para>
+    ///
+    /// <para><b>Dann gelesen</b>, und das entscheidet die Richtung. Der
+    /// Zeichner verzweigt nach der Klasse <c>+0x0A</c>
+    /// (<c>@0x43012B cmp eax,5</c>, <c>@0x430134 jmp dword[0x4308C0 + eax*4]</c>);
+    /// Klasse 0 geht auf den Fahrzeugarm, Klasse 1 auf einen EIGENEN
+    /// Infanteriearm bei <c>0x4302A0</c>. Beide rechnen den senkrechten Term
+    /// gleich und ziehen dann VERSCHIEDEN viel ab:</para>
+    /// <code>
+    ///   Fahrzeug   @0x4301C6  si = 20*Zeile - [0x5387BC] ;  @0x4301D1 sub si, 0x23   (-35)
+    ///   Infanterie @0x43031A  di = 20*Zeile - [0x5387BC] ;  @0x430332 sub di, 0x18   (-24)
+    /// </code>
+    /// <para>⭐ Elf Punkte Unterschied, und zwar NACH UNTEN: das Original
+    /// zeichnet einen Fusssoldaten <b>tiefer</b> als ein Fahrzeug auf derselben
+    /// Zelle. Bei uns sass er 25 Punkte hoeher — die Richtung stimmte also
+    /// nicht einmal.</para>
+    ///
+    /// <para>Der Versatz wird darum je Bild aus seiner eigenen Unterkante
+    /// gerechnet: die Fuesse kommen auf die Ankerzeile und dann noch
+    /// <see cref="FussTiefer"/> Punkte darunter. ⚠ Das ist die UMSETZUNG,
+    /// nicht die Lesung: gelesen sind die zwei Konstanten, nicht die Art, wie
+    /// unsere Leinwand dazu passt. Gegenschalter
+    /// <c>--fussanker-alt</c>.</para></summary>
+    public const int FussTiefer = 11;                 // 0x23 - 0x18
+
+    /// <summary><c>--fussanker-alt</c> — der Stand vor dem 06.09.2026: der
+    /// Fusssoldat haengt am selben Anker wie ein Fahrzeug.</summary>
+    public static bool FussankerAlt;
+
+    private readonly Dictionary<ulong, Vector2> _fussVersatz = new();
+
+    /// <summary>Derselbe Versatz, oeffentlich fuer <c>--anker-probe</c>.</summary>
+    public Vector2 FussVersatzFuerProbe(Texture2D tex) => FussVersatz(tex);
+
+    private Vector2 FussVersatz(Texture2D tex)
+    {
+        if (FussankerAlt) return Vector2.Zero;
+        ulong key = tex.GetRid().Id;
+        if (_fussVersatz.TryGetValue(key, out var v)) return v;
+        var img = tex.GetImage();
+        int unten = -1;
+        if (img != null)
+            for (int y = img.GetHeight() - 1; y >= 0 && unten < 0; y--)
+                for (int x = 0; x < img.GetWidth(); x++)
+                    if (img.GetPixel(x, y).A > 0.3f) { unten = y; break; }
+        v = unten < 0 ? Vector2.Zero
+                      : new Vector2(0, ComposedAnchor.Y - unten + FussTiefer);
+        _fussVersatz[key] = v;
+        return v;
+    }
+
     private Texture2D? GetComposedTexture(string combo, int facing)
         => LoadUnitPart("composed", combo, facing);
 
@@ -33573,7 +33635,9 @@ public partial class MapEntityLayer : Node2D
                         foot ??= GetInfantryTexture(e.Infantry, e.Facing, InfIdleBlock);
                         if (foot != null) InfBildErsetzt++;
                     }
-                    if (foot != null) { DrawTexture(Parteifarbe(foot, e.Owner), picC - ComposedAnchor); return; }
+                    if (foot != null)
+                    { DrawTexture(Parteifarbe(foot, e.Owner),
+                                  picC - ComposedAnchor + FussVersatz(foot)); return; }
                 }
                 // hull + separately aimed turret (preferred)
                 // ⚠ Die Hangklasse gilt fuer BEIDE. Der Turmsitz wurde schon

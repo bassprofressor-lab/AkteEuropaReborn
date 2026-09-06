@@ -653,8 +653,27 @@ public partial class MapEntityLayer : Node2D
                                                         SlopeClassOf(_entities[veh].Col, _entities[veh].Row)));
         else sb.AppendLine("  kein Fahrzeug auf dieser Karte");
 
-        sb.Append("  ⚠ Der Lauf URTEILT nicht — er legt die zwei Zahlen nebeneinander. "
-                + "Sind die Abstaende gleich, ist der Anker nicht die Ursache.");
+        // ⭐ 06.09.2026 — und was der neue Versatz daraus macht. Gelesen ist
+        // der Unterschied der zwei Zeichenarme: Fahrzeug `sub si, 0x23`
+        // (@0x4301D1), Infanterie `sub di, 0x18` (@0x430332) — elf Punkte
+        // TIEFER. Der Lauf prueft, dass die Fuesse danach genau dort landen.
+        if (inf >= 0)
+        {
+            var t = GetInfantryTexture(_entities[inf].Infantry, _entities[inf].Facing,
+                                       InfBlock(_entities[inf]));
+            if (t != null)
+            {
+                var v = FussVersatzFuerProbe(t);
+                bool ok = Mathf.IsEqualApprox(v.Y, AnkerBezug.Y - 30 + FussTiefer);
+                sb.AppendLine($"  Fussversatz: {v.Y:0} Punkte nach unten "
+                            + $"(Anker {AnkerBezug.Y:0} - Unterkante 30 + {FussTiefer} gelesen): "
+                            + $"{(ok ? "richtig" : "FALSCH")}");
+                sb.AppendLine($"  mit --fussanker-alt waere er 0 — dann sitzt der Soldat wieder "
+                            + $"25 Punkte ueber den Raedern eines Fahrzeugs.");
+            }
+        }
+        sb.Append("  ⚠ Der Lauf URTEILT NICHT ueber das Bild — er zeigt die Zahlen. "
+                + "Ob es im Spiel richtig aussieht, sagt nur sein Auge.");
         return sb.ToString();
     }
 
