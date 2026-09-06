@@ -526,8 +526,16 @@ public sealed class InterfaceExporter
         // Punkt; das ist der Beleg, nicht die Vermutung.
         //
         // (Sorte 2 -> rand()%5 + 200, acht Bilder, 16..25 hoch. Die wirft der
-        // Fahrzeugtod NICHT — sie steht bei den Aufrufern in 0x4AExxx. Deshalb
-        // hier NICHT ausgegeben: was nichts anfordert, braucht kein Bild.)
+        // Fahrzeugtod NICHT — sie steht bei den Aufrufern in 0x4AExxx.)
+        //
+        // ⭐ 06.09.2026 — UND JETZT FORDERT SIE DOCH JEMAND AN. Der Satz oben
+        // schloss mit »was nichts anfordert, braucht kein Bild«, und das war
+        // richtig, solange nur der Fahrzeugtod gebaut war. Seit heute wirft
+        // auch der GEBAEUDETOD: jeder seiner n/2 Braende wirft neben der
+        // Explosion einen Splitter dieser Sorte, `rand()%5 + 200` mit Streuung
+        // 12 (@0x4AE6C9). Gemeldet als »fehlen nur noch die splitter«.
+        ("bausplitter0", 200), ("bausplitter1", 201), ("bausplitter2", 202),
+        ("bausplitter3", 203), ("bausplitter4", 204),
         ("splitter0", 19), ("splitter1", 20), ("splitter2", 21),
         ("splitter3", 22), ("splitter4", 23), ("splitter5", 24),
         ("brocken0", 29), ("brocken1", 30), ("brocken2", 31), ("brocken3", 32),

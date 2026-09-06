@@ -201,6 +201,14 @@ public partial class MapEntityLayer
                 Kind = "sprengung" + Simulation.Determinism.Roll(9),   // ANIM 510..518
                 FrameTime = 0.04f,
             });
+
+            // ⭐ 06.09.2026 — und je Brand EIN Splitter, `rand()%5 + 200` mit
+            // Streuung 12 (@0x4AE6C9). Eine andere Sorte als die
+            // Fahrzeugsplitter (19..24/29..38), darum eine eigene Folge.
+            // ⚠ Wirft nichts, solange die fuenf Folgen 200..204 nicht
+            // ausgegeben sind — `EinTeil` steigt bei einer leeren Bildfolge
+            // aus. Das ist Absicht: lieber kein Splitter als ein falscher.
+            EinTeil(new Entity { Col = c, Row = r }, sorte: 2, streuung: 12);
         }
         GebaeudeSprengungen++;
         GebaeudeSprengbilder += n;
@@ -224,8 +232,11 @@ public partial class MapEntityLayer
     {
         // Die Bildfolge, und mit ihr Schweif und Tempo (@0x4AD9AC).
         int seq = sorte == 0 ? 19 + Simulation.Determinism.Roll(6)
+                : sorte == 2 ? 200 + Simulation.Determinism.Roll(5)      // Gebaeude
                              : 29 + Simulation.Determinism.Roll(10);
-        string folge = sorte == 0 ? "splitter" + (seq - 19) : "brocken" + (seq - 29);
+        string folge = sorte == 0 ? "splitter" + (seq - 19)
+                     : sorte == 2 ? "bausplitter" + (seq - 200)
+                     : "brocken" + (seq - 29);
         var bilder = EffectFrames(folge);
         if (bilder.Count == 0) return;      // nicht ausgegeben -> nichts werfen
 
