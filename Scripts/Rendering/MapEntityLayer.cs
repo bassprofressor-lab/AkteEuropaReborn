@@ -8267,7 +8267,7 @@ public partial class MapEntityLayer : Node2D
             // the target may have died while the unit was driving; in that case
             // skip straight on to whatever was queued behind it
             if (next.Target < _entities.Count && !_entities[next.Target].Dead &&
-                CanFight(e) && IsHostile(e, _entities[next.Target]))
+                CanFight(e) && IstAngriffsziel(e, _entities[next.Target]))   // auch herrenlos
             {
                 e.Target = next.Target;
                 e.Ordered = true;

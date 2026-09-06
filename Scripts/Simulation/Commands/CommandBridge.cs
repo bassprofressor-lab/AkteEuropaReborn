@@ -1530,7 +1530,28 @@ public partial class MapEntityLayer
 
         int i = c.P1;
         // Der neue Satz trägt das Ziel in P4 (UTOK_NA), der alte in P2.
-        int utok = alt ? c.P2 : c.P4;
+        // ⚠⚠ 06.09.2026 — ALS VORZEICHENLOS LESEN, SONST IST JEDES GEBAEUDE
+        // UNANGREIFBAR.
+        //
+        // Die Satzfelder sind `short`. Der Griff eines Gebaeudes ist
+        // 60000 + Platz und passt da nicht hinein: `(short)60000` ist
+        // **-5536**. Der Behandler pruefte dann `utok >= 60000` (nein),
+        // `>= 30000` (nein), `>= 8000` (nein) und nahm den Rest als
+        // LISTENINDEX — also -5536, und wies ihn als »Index« ab.
+        //
+        // Gefunden ueber seine Meldung »kann immer noch nicht die kraftwerke
+        // angreifen, die einheiten schiessen einfach nicht drauf«, nachdem der
+        // Absender das Ziel laengst durchliess. Der Pruefstand hat es erst
+        // gezeigt, als er DURCH DEN BEHANDLER ging und jeder Ausstieg seinen
+        // Grund nannte: »abgewiesen weil: Index (i 0, hit -5536, n 118)«.
+        //
+        // ⚠⚠ Das betrifft NICHT nur herrenlose Gebaeude — auf diesem Weg war
+        // ueberhaupt noch nie ein Gebaeude angreifbar, auch kein feindliches.
+        // Das Original fuehrt UTOK_NA in `word[0xB8A3E6]`, also ebenfalls 16
+        // Bit, liest es aber vorzeichenlos (`movzx`); die 60000 ist dort ganz
+        // regulaer. Wir speichern dieselben 16 Bit und muessen sie nur genauso
+        // lesen.
+        int utok = (alt ? c.P2 : c.P4) & 0xFFFF;
         bool queue = alt ? c.P3 != 0 : c[6] != 0;   // P6 hat keinen Namen, nur den Index
 
         // ⚠ UTOK_NA entschlüsseln. 60000..60299 ist ein GEBÄUDE und wird über
@@ -1566,16 +1587,29 @@ public partial class MapEntityLayer
         else if (utok >= 8000) return false;      // Bruecke/Rampe: noch nicht gebaut
         else hit = utok;
 
-        if (i < 0 || i >= _entities.Count || hit < 0 || hit >= _entities.Count) return false;
+        if (i < 0 || i >= _entities.Count || hit < 0 || hit >= _entities.Count)
+        { AngriffAbgewiesen = $"Index (i {i}, hit {hit}, n {_entities.Count})"; return false; }
         var e = _entities[i];
         var victim = _entities[hit];
-        if (i == hit || e.Dead || victim.Dead || victim.IsProp) return false;
-        if (!CanFight(e) || !IsHostile(e, victim)) return false;
+        if (i == hit || e.Dead || victim.Dead || victim.IsProp)
+        { AngriffAbgewiesen = "selbes Ziel, tot oder Kulisse"; return false; }
+        // ⚠⚠ 06.09.2026 — HIER STAND DIE ZWEITE SPERRE, und sie hat die
+        // erste Behebung wirkungslos gemacht. Der Absender liess das
+        // herrenlose Kraftwerk durch, der BEHANDLER wies es wieder ab —
+        // seine Meldung: »kann immer noch nicht die kraftwerke angreifen,
+        // die einheiten schiessen einfach nicht drauf«. Der Befehl kam an
+        // und wurde still verworfen, also blieb `Target` leer und die
+        // Schiessuhr hatte nichts zu tun.
+        // ⭐ Lehre: eine Pruefung, die an ZWEI Stellen steht, muss an beiden
+        // geaendert werden — und der Pruefstand muss durch den Behandler
+        // gehen, nicht nur durch den Absender.
+        if (!CanFight(e) || !IstAngriffsziel(e, victim))
+        { AngriffAbgewiesen = $"CanFight {CanFight(e)}, IstAngriffsziel {IstAngriffsziel(e, victim)}"; return false; }
 
         // ⚠ Die zwei Wächter des Originals (@0x4C2DF5, @0x4C2E04): eine Einheit
         // in UKOL 22 oder 23 — die Abwehrstellung im Auf- oder Abbau — nimmt
         // KEINEN Angriffsbefehl an. Bei uns ist das DugIn.
-        if (e.DugIn) return false;
+        if (e.DugIn) { AngriffAbgewiesen = "eingegraben (UKOL 22/23)"; return false; }
 
         if (queue && (e.Path != null || e.Orders.Count > 0))
         {
@@ -1593,6 +1627,13 @@ public partial class MapEntityLayer
         e.Orders.Clear();
         return true;
     }
+
+    /// <summary>Warum der letzte Angriffsbefehl abgewiesen wurde — leer, wenn
+    /// er durchging. ⚠ 06.09.2026 gebaut: der Behandler hatte VIER stille
+    /// Ausstiege, und »der Befehl kam nicht an« sagte nicht, an welchem. Genau
+    /// dieselbe Regel wie beim Befehlsklang: jeder Ausstieg nennt seinen
+    /// Grund.</summary>
+    public string AngriffAbgewiesen = "";
 
     /// <summary>2002, Anhalten (UNSERE SETZUNG). P1 = Einheit.</summary>
     private bool ApplyStop(in CommandRecord c)

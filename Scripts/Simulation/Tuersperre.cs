@@ -336,6 +336,22 @@ public partial class MapEntityLayer : Node2D
                     + $"{(herrenlos ? "abgesetzt" : "ABGEWIESEN")}, gezaehlt "
                     + $"{AngriffAufHerrenlos - vor}x: {(herrenlosOk ? "richtig" : "FALSCH")}");
 
+        // ⭐⭐ UND JETZT DURCH DEN BEHANDLER. Genau hier ist der erste Anlauf
+        // gescheitert: der Absender liess das Ziel durch, der Behandler wies es
+        // wieder ab, und der Lauf war trotzdem gruen, weil er nur den Absender
+        // gefragt hatte. »Der Befehl ist abgesetzt« ist nicht »die Einheit hat
+        // ein Ziel«.
+        int offenVor = Commands.Pending, angewVor = BefehleAngewendet[1];
+        int takte = 0;
+        for (int t = 0; t < 8 && Commands.Pending > 0; t++) { CommandTick(); takte++; }
+        sb.AppendLine($"  Ring: offen vor {offenVor}, nach {Commands.Pending}, "
+                    + $"{takte} Takte, angewendet {BefehleAngewendet[1] - angewVor}"
+                    + (AngriffAbgewiesen.Length > 0 ? $", abgewiesen weil: {AngriffAbgewiesen}" : ""));
+        bool zielGesetzt = w.Target == gi && w.Ordered;
+        sb.AppendLine($"  nach dem Behandler: Ziel der Einheit = {w.Target} "
+                    + $"(erwartet {gi}), Ordered {w.Ordered}: "
+                    + $"{(zielGesetzt ? "angekommen, richtig" : "NICHT ANGEKOMMEN — der Behandler wirft ihn weg")}");
+
         bool eigenOk = true;
         if (ei >= 0)
         {
@@ -367,7 +383,7 @@ public partial class MapEntityLayer : Node2D
                     + $"{leer} ohne (Platzhalter)");
 
         PickOhneNebel = nebelVor;
-        bool alles = herrenlosOk && eigenOk && altOk;
+        bool alles = herrenlosOk && zielGesetzt && eigenOk && altOk;
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }
