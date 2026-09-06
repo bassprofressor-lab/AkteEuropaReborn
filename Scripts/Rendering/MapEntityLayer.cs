@@ -31158,10 +31158,34 @@ public partial class MapEntityLayer : Node2D
                          new Vector2(TileW, TileH));
     }
 
-    public void HoverAt(Vector2 mapPos)
+    public void HoverAt(Vector2 mapPos) => HoverWechsel(Pick(mapPos));
+
+    /// <summary>
+    /// Die Maus steht ueber etwas anderem als eben noch.
+    ///
+    /// <para>⚠⚠ <b>06.09.2026 — HIER FEHLTE DER NACHZUG DES BEDIENBLOCKS.</b>
+    /// Seine Meldung auf die frisch gebaute Gruppenanzeige: »an der
+    /// Gruppenanzeige hat sich nichts veraendert«. Und so war es: die
+    /// Umschaltung (<see cref="GruppeZeigtUeberfahrene"/>) sass richtig in
+    /// <see cref="UpdatePanel"/>, aber <c>HoverAt</c> hat <c>UpdatePanel</c>
+    /// nie gerufen — nur <c>QueueRedraw</c>. Der Text des Blocks wurde also
+    /// erst beim naechsten KLICK neu gebaut, und beim blossen Fahren mit der
+    /// Maus nie.</para>
+    ///
+    /// <para>⚠ Und der Pruefstand hat es nicht gefangen, weil er
+    /// <c>_hovered</c> selbst gesetzt und <c>UpdatePanel</c> selbst gerufen
+    /// hat — er ist am echten Weg VORBEIGELAUFEN. Dieselbe Falle wie beim
+    /// Befehlsklang am 03.09. Darum geht er jetzt durch diese Methode.</para>
+    ///
+    /// <para>Nachgezogen wird nur bei einer GRUPPE: nur dort haengt der Inhalt
+    /// des Blocks ueberhaupt an der Maus.</para>
+    /// </summary>
+    private void HoverWechsel(int h)
     {
-        int h = Pick(mapPos);
-        if (h != _hovered) { _hovered = h; QueueRedraw(); }
+        if (h == _hovered) return;
+        _hovered = h;
+        if (_sel.Count > 1) UpdatePanel();
+        QueueRedraw();
     }
 
     /// <summary>What a click at this spot would mean. OURS — the original had
@@ -32606,12 +32630,20 @@ public partial class MapEntityLayer : Node2D
         int merkSel = _selected, merkHov = _hovered;
         _sel.Clear(); foreach (int q in eigene) _sel.Add(q); _selected = eigene[0];
 
+        // ⚠⚠ 06.09.2026 — HIER STAND `_hovered = hover; UpdatePanel();`, und
+        // genau daran ist der erste Anlauf gescheitert. Der Lauf war gruen, im
+        // Spiel aenderte sich nichts: er hat den Zeiger selbst gesetzt und den
+        // Nachzug selbst gerufen — also den WEG uebersprungen, auf dem der
+        // Fehler sass (HoverAt rief UpdatePanel nie). Ein Pruefstand, der den
+        // echten Weg umgeht, prueft sich selbst. Jetzt geht er durch
+        // HoverWechsel, dieselbe Methode, die auch die Maus benutzt.
         string Text(int hover)
         {
-            _hovered = hover;
-            UpdatePanel();
+            HoverWechsel(hover);
             return _panel.Text.Split('\n')[0];
         }
+        UpdatePanel();                 // ein Ausgangsstand, damit der erste
+                                       // HoverWechsel etwas zu aendern hat
 
         // 1. ohne Zeiger -> das Gruppenfeld
         string ohne = Text(-1);
