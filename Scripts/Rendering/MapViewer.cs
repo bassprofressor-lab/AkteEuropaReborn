@@ -1408,6 +1408,7 @@ public partial class MapViewer : Node2D
             else if (a == "--tuersperre-probe") _tuersperreProbe = true;
             else if (a == "--einfahrzeiger-probe") _einfahrzeigerProbe = true;
             else if (a == "--panelknoepfe-alt") PanelknoepfeAlt = true;
+            else if (a == "--panelknopf-log") PanelknopfLog = true;
             else if (a == "--panelknoepfe-probe") _panelknoepfeProbe = true;
             else if (a == "--einfahrzeiger-alt") MapEntityLayer.EinfahrzeigerAlt = true;
             else if (a == "--tuersperre-alt") Simulation.NavGrid.TuersperreAlt = true;
@@ -3783,7 +3784,26 @@ public partial class MapViewer : Node2D
     {
         if (e is not InputEventMouseButton mb || !mb.Pressed) return;
         if (mb.ButtonIndex != MouseButton.Left) return;
-        if (PanelKlick(mb.Position / PanelScale)) _panelSprite?.AcceptEvent();
+        // ⚠⚠ 06.09.2026 — HIER STAND `mb.Position / PanelScale`, UND DAS WAR
+        // EINE VERGROESSERUNG ZU VIEL.
+        //
+        // Godot rechnet den Punkt in `_GuiInput` bereits in die LOKALEN
+        // Koordinaten des Knotens um, und die sind wegen `Scale = PanelScale`
+        // schon Blockpunkte. Wer danach nochmal teilt, halbiert sie ein
+        // zweites Mal — jeder Klick rutschte damit ein Feld nach links.
+        //
+        // Er hat es genau so gemeldet: »wenn ich auf die Minimap-Schachtel
+        // druecke kommt Gruppieren, die 2 linkeren davon verweisen jeweils auf
+        // den Lokator, und das rechte unten ist nach wie vor ohne Funktion«.
+        // Und im Mitschnitt stand zu einem Klick auf das RECHTE Feld (Block-x
+        // ~86) die Zahl 42,9 — die Haelfte, Ziffer fuer Ziffer.
+        //
+        // ⚠ Der Pruefstand konnte das nicht fangen: er fuettert Blockpunkte
+        // direkt in `PanelfeldAn` und laeuft an dieser Umrechnung VORBEI. Genau
+        // dieselbe Falle wie beim Gruppenzeiger heute frueh. Er misst darum
+        // jetzt die Knotengroesse mit — ist sie 204x170, sind lokale Punkte
+        // Blockpunkte, und dann darf hier nicht geteilt werden.
+        if (PanelKlick(mb.Position)) _panelSprite?.AcceptEvent();
     }
 
     private TextureRect? _panelSprite;

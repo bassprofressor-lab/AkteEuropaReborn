@@ -123,12 +123,28 @@ public partial class MapViewer
     public bool PanelKlick(Vector2 lokal)
     {
         int f = PanelfeldAn(lokal);
+        if (PanelknopfLog)
+            GD.Print($"panelknopf: Klick bei ({lokal.X:0.0},{lokal.Y:0.0}) im Block -> "
+                   + (f < 0 ? "KEIN Feld" : $"Feld {f + 1} »{Panelfelder[f].Name}«"));
         if (f < 0) return false;
         PanelfeldGedrueckt[f]++;
         UI.WindowManager.Elementklang();
         PanelfeldOeffnen(f);
+        if (PanelknopfLog)
+            GD.Print($"panelknopf: danach — Uebersichtskarte {(_showMinimap ? "an" : "aus")}"
+                   + $" (Knoten {(_minimap == null ? "FEHLT" : "da")}, sichtbar "
+                   + $"{(_minimap?.Visible == true ? "ja" : "nein")}), "
+                   + $"Pausemenue {(_pause == null ? "zu" : "offen")}, "
+                   + $"Gruppenfenster {(_groupWin?.Visible == true ? "offen" : "zu")}, "
+                   + $"Lokator {(_locator?.Visible == true ? "offen" : "zu")}");
         return true;
     }
+
+    /// <summary><c>--panelknopf-log</c> — jeden Klick auf den Bedienblock
+    /// mitschreiben, samt dem Zustand DANACH. ⚠ Gebaut, weil er gemeldet hat,
+    /// dass zwei der vier Felder nichts tun, und der Pruefstand nur die
+    /// TREFFER misst, nicht die Wirkung.</summary>
+    public static bool PanelknopfLog;
 
     /// <summary>
     /// <c>--panelknoepfe-probe</c> — <b>treffen die vier Rechtecke, und tut
@@ -181,6 +197,23 @@ public partial class MapViewer
         alles &= altOk;
         sb.AppendLine($"  mit --panelknoepfe-alt: {(aus < 0 ? "kein Knopf" : $"Feld {aus + 1}")}: "
                     + $"{(altOk ? "richtig" : "SCHALTER WIRKT NICHT")}");
+
+        // Gegenprobe 4: ⚠⚠ DIE UMRECHNUNG, an der der erste Bau gescheitert
+        // ist. Der Lauf fuettert Blockpunkte direkt in PanelfeldAn und laeuft
+        // damit an PanelEingabe vorbei — er kann also nicht sehen, ob der
+        // KLICK richtig umgerechnet wird. Was er sehen kann, ist die
+        // Invariante dahinter: Godot gibt in _GuiInput lokale Punkte, und die
+        // sind genau dann Blockpunkte, wenn der Knoten sein unvergroessertes
+        // Mass traegt (204x170) und die Vergroesserung ueber Scale kommt. Ist
+        // das so, darf in PanelEingabe nicht noch einmal geteilt werden.
+        var mass = _panelSprite?.Size ?? Vector2.Zero;
+        var tex = _panelSprite?.Texture?.GetSize() ?? Vector2.Zero;
+        bool massOk = tex.X > 0 && Mathf.IsEqualApprox(mass.X, tex.X)
+                                && Mathf.IsEqualApprox(mass.Y, tex.Y);
+        alles &= massOk;
+        sb.AppendLine($"  Knotenmass {mass.X:0}x{mass.Y:0} gegen Blockmass {tex.X:0}x{tex.Y:0} "
+                    + $"(Vergroesserung {PanelScale:0.##} steckt in Scale): "
+                    + $"{(massOk ? "lokale Punkte SIND Blockpunkte, richtig" : "ABWEICHEND — dann rechnet PanelEingabe falsch")}");
 
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
