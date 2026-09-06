@@ -1406,6 +1406,8 @@ public partial class MapViewer : Node2D
             else if (a == "--forschung-probe") _forschungProbe = true;
             else if (a == "--gruppenzeiger-probe") _gruppenzeigerProbe = true;
             else if (a == "--tuersperre-probe") _tuersperreProbe = true;
+            else if (a == "--einfahrzeiger-probe") _einfahrzeigerProbe = true;
+            else if (a == "--einfahrzeiger-alt") MapEntityLayer.EinfahrzeigerAlt = true;
             else if (a == "--tuersperre-alt") Simulation.NavGrid.TuersperreAlt = true;
             else if (a == "--gruppenzeiger-log") MapEntityLayer.GruppenzeigerLog = true;
             else if (a == "--einfahrt-fremd-probe") _einfahrtFremdProbe = true;
@@ -2701,6 +2703,7 @@ public partial class MapViewer : Node2D
             if (_forschungProbe) GD.Print(_entities.ForschungProbeLine());
             if (_gruppenzeigerProbe) GD.Print(_entities.GruppenzeigerProbe());
             if (_tuersperreProbe) GD.Print(_entities.TuersperreProbe());
+            if (_einfahrzeigerProbe) GD.Print(_entities.EinfahrzeigerProbe());
             if (_einfahrtFremdProbe) GD.Print(_entities.EinfahrtFremdProbe());
             if (_erfindungProbe) GD.Print(_entities.ErfindungProbeLine());
             if (_stauCheck)
@@ -3807,6 +3810,7 @@ public partial class MapViewer : Node2D
     /// <c>Row</c>-Satz als Schnittstelle benutzt.</para></summary>
     private bool _gruppenzeigerProbe;
     private bool _tuersperreProbe;
+    private bool _einfahrzeigerProbe;
     private bool _einfahrtFremdProbe;
 
     private UI.BaseWindow? _baseWindow;
@@ -5152,6 +5156,9 @@ public partial class MapViewer : Node2D
             UI.GameCursors.Use(hint switch
             {
                 MapEntityLayer.Hint.Enemy => UI.GameCursors.Attack,
+                // ⭐ 06.09.2026 — Zeigerart 5 des Originals (@0x4323E6) zeigt
+                // Zeigerbild 11. Siehe MapEntityLayer.CursorHintAt.
+                MapEntityLayer.Hint.Einfahrt => UI.GameCursors.Einfahrt,
                 MapEntityLayer.Hint.OwnFoot => UI.GameCursors.Foot,
                 MapEntityLayer.Hint.Own => UI.GameCursors.Select,
                 _ => UI.GameCursors.Arrow,
@@ -5162,6 +5169,7 @@ public partial class MapViewer : Node2D
         {
             MapEntityLayer.Hint.Enemy => Input.CursorShape.Cross,
             MapEntityLayer.Hint.Own or MapEntityLayer.Hint.OwnFoot
+                or MapEntityLayer.Hint.Einfahrt
                 => Input.CursorShape.PointingHand,
             _ => Input.CursorShape.Arrow,
         };

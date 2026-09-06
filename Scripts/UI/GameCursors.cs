@@ -47,6 +47,23 @@ public static class GameCursors
     /// Originals, siehe Klassenkopf.</summary>
     public const int Arrow = 0, Select = 1, Attack = 2, Foot = 5;
 
+    /// <summary>
+    /// <b>Der EINFAHRZEIGER, Bild 11.</b> Gemeldet am 06.09.2026: »es gibt ein
+    /// Icon, aehnlich wie das Angreifen Icon, wenn man Einheiten auf die Tuer
+    /// einfahren laesst ins Depot, das fehlt bei uns noch«.
+    ///
+    /// <para>Das Original setzt dafuer die ZEIGERART 5 (<c>dword[0x502AD4] :=
+    /// 5</c> @<c>0x4323E6</c>), und zwar nur, wenn das Gebaeude dem Betrachter
+    /// gehoert (<c>byte[0x7AD495 + 4*i]</c> gegen <c>byte[0x4FA284]</c>,
+    /// @<c>0x432398</c>) und seine Art ueber die Tafel <c>0x432A7C</c> auf
+    /// einen der drei Einfahr-Arme faellt — die Arten <b>1, 5, 6, 12</b>.</para>
+    ///
+    /// <para>⚠ <b>Nicht mit <see cref="Foot"/> verwechseln.</b> Die 5 dort ist
+    /// eine Zeiger-TYPnummer INNERHALB der Zeigerart 1; die 5 hier ist die
+    /// Zeiger-ART selbst. Zwei verschiedene Zahlenreihen, und sie treffen sich
+    /// unglücklicherweise auf derselben Ziffer.</para></summary>
+    public const int Einfahrt = 11;
+
     /// <summary>⚠ UNSERE ZAHL: wie lange ein Bild der Folge steht. Das Original
     /// zählt die Phase, nennt aber keinen Takt.</summary>
     public const float FrameSeconds = 0.10f;
@@ -102,6 +119,15 @@ public static class GameCursors
         GD.Print(Bank.Count > 0
             ? $"Mauszeiger: {Bank.Count} Arten geladen (Angriff={(Bank.ContainsKey(Attack) ? Bank[Attack].Length + " Bilder" : "FEHLT")})"
             : "Mauszeiger: keine Bilder gefunden - Systemzeiger bleiben");
+    }
+
+    /// <summary>Hat die Bank ueberhaupt ein Bild fuer diese Art? ⚠ Fuer
+    /// Pruefstaende: ein fehlendes Bild faellt still auf den Systempfeil
+    /// zurueck und sieht aus wie »nie gebaut«.</summary>
+    public static bool HatBild(int art)
+    {
+        Load();
+        return Bank.TryGetValue(art, out var b) && b.Length > 0;
     }
 
     private static int _shownType = -1, _shownFrame = -1;

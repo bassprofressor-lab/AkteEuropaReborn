@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Godot;
 
 namespace AkteEuropaReborn.Rendering;
@@ -200,6 +200,70 @@ public partial class MapEntityLayer : Node2D
         _nav.TuerSperre(tc, tr, false);
 
         bool alles = zuFremd && !schrittFremd && !zuEigen && schrittEigen && wiederAuf && altOffen;
+        sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// <c>--einfahrzeiger-probe</c> — <b>zeigt die Maus ueber der Tuer den
+    /// Einfahrzeiger?</b> (06.09.2026, zu <c>@0x4323E6</c>.)
+    ///
+    /// <para>⚠ Und, weil mich das heute zweimal erwischt hat: der Lauf fragt
+    /// AUCH, ob es das Zeigerbild ueberhaupt gibt. Ein Hinweis, der auf ein
+    /// fehlendes Bild zeigt, faellt still auf den Systempfeil zurueck — das
+    /// saehe genauso aus wie »nie gebaut«.</para></summary>
+    public string EinfahrzeigerProbe()
+    {
+        var sb = new System.Text.StringBuilder("einfahrzeiger-probe\n");
+
+        int bi = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var b = _entities[i];
+            if (!b.IsBuilding || b.IsProp || b.Dead) continue;
+            if (b.Built == 0 || b.DoorCells.Count == 0 || !GarageTyp(b.BType)) continue;
+            bi = i; break;
+        }
+        if (bi < 0) return sb.Append("  kein Gebaeude mit Tor (Art 1/5/6/12) auf dieser Karte").ToString();
+
+        var geb = _entities[bi];
+        int merkO = geb.Owner;
+        geb.Owner = ViewPlayer;
+
+        var tuer = CellCenter(geb.Col + geb.DoorCol, geb.Row + geb.DoorRow);
+        var koerper = CellCenter(geb.Col, geb.Row);
+
+        var aufTuer = CursorHintAt(tuer);
+        bool tuerOk = aufTuer == Hint.Einfahrt;
+        sb.AppendLine($"  eigenes Tor (Art {geb.BType}), Maus auf der Tuerzelle: "
+                    + $"{aufTuer}: {(tuerOk ? "Einfahrzeiger, richtig" : "FALSCH")}");
+
+        var aufKoerper = CursorHintAt(koerper);
+        bool koerperOk = aufKoerper != Hint.Einfahrt;
+        sb.AppendLine($"  dasselbe Gebaeude, Maus auf dem Koerper: {aufKoerper}: "
+                    + $"{(koerperOk ? "kein Einfahrzeiger, richtig" : "FALSCH")}");
+
+        geb.Owner = ViewPlayer == 0 ? 1 : 0;
+        var fremd = CursorHintAt(tuer);
+        bool fremdOk = fremd != Hint.Einfahrt;
+        sb.AppendLine($"  dieselbe Tuer, Gebaeude jetzt FREMD: {fremd}: "
+                    + $"{(fremdOk ? "kein Einfahrzeiger, richtig" : "FALSCH")}");
+
+        geb.Owner = ViewPlayer;
+        EinfahrzeigerAlt = true;
+        var alt = CursorHintAt(tuer);
+        EinfahrzeigerAlt = false;
+        bool altOk = alt != Hint.Einfahrt;
+        sb.AppendLine($"  mit --einfahrzeiger-alt: {alt}: "
+                    + $"{(altOk ? "richtig" : "SCHALTER WIRKT NICHT")}");
+
+        // ⚠ und ob das Bild ueberhaupt da ist
+        bool bild = UI.GameCursors.HatBild(UI.GameCursors.Einfahrt);
+        sb.AppendLine($"  Zeigerbild {UI.GameCursors.Einfahrt} in der Bank: "
+                    + $"{(bild ? "da" : "FEHLT — es faellt still auf den Systempfeil zurueck")}");
+
+        geb.Owner = merkO;
+        bool alles = tuerOk && koerperOk && fremdOk && altOk && bild;
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }

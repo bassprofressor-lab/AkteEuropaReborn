@@ -31254,7 +31254,7 @@ public partial class MapEntityLayer : Node2D
     /// dabei, weil das Original bei eigener INFANTERIE einen anderen Zeiger
     /// nimmt als bei allem anderen Eigenen — siehe
     /// <see cref="UI.GameCursors"/>.</summary>
-    public enum Hint { Ground, Own, OwnFoot, Enemy }
+    public enum Hint { Ground, Own, OwnFoot, Enemy, Einfahrt }
 
     /// <summary>Reads the cursor hint for a map position: something hostile
     /// under the pointer while one has a selection means the click attacks,
@@ -31269,9 +31269,58 @@ public partial class MapEntityLayer : Node2D
         // rechnet aus dem Klassenbyte +0x0A eine 5 fuer Klasse 1 und sonst eine
         // 1 — Gebaeude und Flugzeugplaetze bekommen dieselbe 1 wie ein Panzer.
         if (e.Owner == ViewPlayer)
+        {
+            // ⭐⭐ 06.09.2026 — DER EINFAHRZEIGER, seine Meldung vom selben Tag:
+            // »es gibt ein Icon, aehnlich wie das Angreifen Icon, wenn man
+            // Einheiten auf die Tuer einfahren laesst ins Depot, das fehlt bei
+            // uns noch«.
+            //
+            // Selbst nachgeschlagen, @0x432398 ff.:
+            //
+            //   bl = byte[0x4FA284]                 ; der Betrachter
+            //   cl = byte[0x7AD495 + 4*i]           ; Besitzer des Gebaeudes
+            //   cmp cl, bl / jne 0x4323F5           ; fremd -> der EINNAHMEzweig
+            //   cl = byte[0x7AD494 + 4*i]           ; die Gebaeudeart
+            //   dec ecx / cmp ecx, 0xB / ja 0x4323C8
+            //   al = byte[0x432A7C + ecx]           ; Armindex
+            //   jmp dword[0x432A6C + 4*eax]
+            //   @0x4323E6  dword[0x502AD4] := 5     ; ZEIGERART 5 = einfahren
+            //
+            // ⭐ Die Tafel `0x432A7C` selbst gelesen: [0,3,3,3,1,1,3,3,3,3,3,2],
+            // und von den vier Sprungzielen fuehren 0, 1 und 2 alle auf
+            // 0x4323E6, nur Arm 3 auf den gewoehnlichen Zeiger. Damit bekommen
+            // die Gebaeudearten **1, 5, 6 und 12** den Einfahrzeiger — genau
+            // die vier, die `Einfahrt.GarageTyp` schon fuehrt. Zwei
+            // unabhaengige Lesungen treffen sich.
+            //
+            // ⚠ UNSERE EINGRENZUNG: wir geben ihn nur ueber der TUERZELLE. Der
+            // Bericht nennt »Tuer oder die Zelle dahinter«; welcher Bereich zu
+            // @0x4323E6 fuehrt, ist NICHT nachgeschlagen, und die engere
+            // Aussage ist die, die ich belegen kann.
+            if (e.IsBuilding && !EinfahrzeigerAlt && Einfahrt_GarageTyp(e)
+                && AufDerTuerzelle(e, mapPos))
+                return Hint.Einfahrt;
             return !e.IsBuilding && e.GameUnitType == 1 ? Hint.OwnFoot : Hint.Own;
+        }
         return _sel.Count > 0 ? Hint.Enemy : Hint.Ground;
     }
+
+    /// <summary>Die vier Gebaeudearten mit Tor — Tafel <c>0x432A7C</c>, und
+    /// dieselbe Menge, die <see cref="GarageTyp"/> aus dem Einfahrweg
+    /// fuehrt.</summary>
+    private static bool Einfahrt_GarageTyp(Entity b)
+        => b.Built != 0 && b.DoorCells.Count > 0 && GarageTyp(b.BType);
+
+    /// <summary>Steht die Maus auf der Tuerzelle dieses Gebaeudes?</summary>
+    private bool AufDerTuerzelle(Entity b, Vector2 mapPos)
+    {
+        if (CellAt(mapPos) is not { } z) return false;
+        return z.X == b.Col + b.DoorCol && z.Y == b.Row + b.DoorRow;
+    }
+
+    /// <summary><c>--einfahrzeiger-alt</c> — kein eigener Zeiger ueber der
+    /// Tuer, wie bis zum 06.09.2026.</summary>
+    public static bool EinfahrzeigerAlt;
 
     public void ToggleDots() { _showDots = !_showDots; QueueRedraw(); }
 
