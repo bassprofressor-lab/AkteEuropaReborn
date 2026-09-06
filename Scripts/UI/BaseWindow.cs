@@ -525,7 +525,7 @@ public sealed partial class BaseWindow : PanelContainer
         // die abgeraeumte Seite schon offen war (word[0x87B054] >= 4).
         // ⚠ Der VIERTE Knopf ist Reparatur und wechselt gar keine Seite; dass
         // auch er klickt, steht auf SEINER Meldung, nicht auf einer Lesung.
-        if (Visible) WindowManager.Seitenklang();
+        if (Visible) WindowManager.Elementklang();
 
         // Der vierte »Reiter« ist der Reparaturknopf: anstossen und den
         // ANGEZEIGTEN Reiter lassen, wo er war.

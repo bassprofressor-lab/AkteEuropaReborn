@@ -634,6 +634,52 @@ public static class WindowManager
         Audio.SoundBankPlayer.Play(KlangAuf);
     }
 
+    /// <summary>
+    /// <b>DER KLICK — Klang 306 (<c>0x132</c>), 0,032 Sekunden.</b>
+    ///
+    /// <para>Gemeldet am 06.09.2026: »Es gibt tatsaechlich bei den 4 Punkten wie
+    /// eine Art Click Sound«. Danach von mir zuerst auf 307 gelegt — und er
+    /// meldete zu Recht »ich hoere keinen sound«. ⚠ Der Ruf fiel, 13x im
+    /// Mitschnitt; <b>Platz 307 ist in SOUNDS.CWN LEER</b> (Versatz 0,
+    /// Laenge 0), also spielte er nichts.</para>
+    ///
+    /// <para><b>Der Klick ist die Nummer daneben.</b> <c>0x4485D0</c> — der
+    /// Behandler eines Fensterelements — spielt als ERSTES, noch vor jeder
+    /// Verzweigung:</para>
+    /// <code>
+    ///   0x4485D0  ax = word[0x4FD650]        ; das gedrueckte Element
+    ///   0x4485E2  bp = word[0x4FD654]
+    ///   0x448603  push 0x132                 ; = 306
+    ///   0x448608  call play_sound
+    /// </code>
+    /// <para>Dieselbe 306 noch zweimal: <c>@0x4142FA</c> und <c>@0x44D8B9</c>.
+    /// In der Bank ist sie <b>0,032 s</b> lang — das ist ein Klick und nichts
+    /// sonst; alle anderen Klaenge an den 111 Rufstellen von
+    /// <c>play_sound</c> sind laenger.</para>
+    ///
+    /// <para>⚠⚠ <b>Und damit ist auch 307 erklaert</b>, ohne dass die Lesung von
+    /// <c>0x44FC90</c> falsch waere: die Routine spielt wirklich <c>0x133</c>,
+    /// aber dieser Platz hat in dieser Auslieferung kein Muster. Der Ruf ist im
+    /// ORIGINAL tot. Wir bilden ihn nach — er bleibt still, so wie beim
+    /// Spieler.</para>
+    ///
+    /// <para>⚠ <b>Was UNSERES bleibt:</b> das Original spielt den Klick fuer
+    /// JEDES Fensterelement. Bei uns haengt er bisher nur an den vier Reitern
+    /// des Basisfensters, weil nur die gemeldet sind — die uebrigen Knoepfe
+    /// sind keine »Fensterelemente« in diesem Sinn, solange sie nicht ueber
+    /// denselben Weg laufen.</para>
+    /// </summary>
+    public const int KlangElement = 306;
+
+    /// <summary>Wie oft der Elementklick gespielt wurde.</summary>
+    public static int ElementklangGespielt;
+
+    public static void Elementklang()
+    {
+        ElementklangGespielt++;
+        Audio.SoundBankPlayer.Play(KlangElement);
+    }
+
     /// <summary>Das Schirmmass. ⚠ Im Original sind es ZWEI Globale mit
     /// demselben Wert: die Fensterschicht liest <c>dword[0xB136B0]</c>, die
     /// Zeichenschicht <c>dword[0x5387C8]</c> — beide schreibt <c>0x4B6B1C</c>
@@ -866,6 +912,20 @@ public static partial class WindowManagerCheck
             + $"beim Seitenwechsel {beimWechsel}x (erwartet 1)",
             beimAufgehen == 0 && beimWechsel == 1);
         knoten5b.QueueFree();
+
+        // 5c. ⭐⭐ UND OB DER KLANG UEBERHAUPT EINEN KLANG HAT.
+        //
+        // ⚠ Das ist der Punkt, an dem der 06.09. schiefgegangen ist: der Ruf
+        // fiel dreizehnmal, und der Spieler hoerte trotzdem nichts, weil Platz
+        // 307 in SOUNDS.CWN LEER ist. »Wird gerufen« und »klingt« sind zwei
+        // verschiedene Fragen, und der Pruefstand hatte nur die erste gestellt.
+        var bank = Audio.SoundBankPlayer.Index;
+        bool hat306 = bank.ContainsKey(WindowManager.KlangElement);
+        bool hat307 = bank.ContainsKey(WindowManager.KlangAuf);
+        double s306 = hat306 ? bank[WindowManager.KlangElement].Seconds : 0;
+        Sag($"Bank: Klick {WindowManager.KlangElement} {(hat306 ? $"da ({s306:0.000}s)" : "FEHLT")}, "
+            + $"{WindowManager.KlangAuf} {(hat307 ? "DA — dann stimmt die Lesung nicht" : "leer, wie im Original")}",
+            hat306 && s306 < 0.2 && !hat307);
 
         // 6. Zwanzig Plaetze
         WindowManager.Leeren();
