@@ -14,6 +14,118 @@ bisher nur dort beschrieben.*
 > **Road to 0.7.0** in der [README](README.de.md). Der Abschnitt unten wächst
 > mit jeder gespielten Mission weiter.
 
+## Der Prüflauf durch Kampagne 3 (01.09. – 06.09.2026)
+
+### Auf einen Blick
+
+Der Prüflauf geht weiter, jetzt in **Kampagne 3** — und sie ist mehrfach
+durchgespielt. Der Ablauf bleibt derselbe: eine Mission spielen, jede
+Unstimmigkeit melden, im Original nachlesen, beheben, messen. Neu ist, wie viel
+davon aus **Klängen und Anzeigen** kam: sechs Meldungen dieser Woche hat kein
+Prüfstand gefangen, sondern das Auge oder das Ohr des Spielers.
+
+| | |
+|---|---|
+| ⭐⭐⭐ **Die Kampagnen-KI ist die des Originals.** | Zustandsmaschine je Einheit, Gruppenangriff über 121 Sektoren, Stärke als Summe der Trefferpunkte. Gemessen: 26/16/20 Angriffe gegen vorher 2/2/2. |
+| ⭐⭐ **Die KI beschoss sich selbst.** | 188 von 468 Schuss gingen auf Verbündete, weil die Bündnisprüfung eine *Mannschaft* fragte statt der Diplomatie. Jetzt 0 von 468. |
+| ⭐⭐ **Die Forschung ist gebaut.** | Ein Spieler hat genau eine Forschung, sie hängt an der **Basis**, und **der Preis IST die Dauer**. Dazu die **Erfindung**: aus einer Losnummer fällt eine neue Waffe, Byte für Byte dieselbe wie im Original. |
+| ⭐⭐ **Die Entwurfstafel kommt aus der EXE — und heisst deutsch.** | 592 von 592 Sätzen gleich; die alte Ausfuhr traf 72. »Forscher« statt »Scientist«, verfügbare Entwürfe 9 → 33. |
+| ⭐⭐ **Wer aus einem Gebäude fährt, kommt VOLL heraus.** | Tank und Munition randvoll — das stand am Ende derselben Funktion, aus der wir schon den halben Anfang hatten. |
+| ⭐ **Niemand fährt mehr in ein fremdes Gebäude.** | Steht ein Fremder vor der Tür, stempelt der Gebäudetakt die Türzelle zu. Kein Besitzertest in der Wegsuche — den hätten wir erfinden müssen. |
+| ⭐ **Der Bedienblock unten links kann wieder alles.** | Die vier Kästchen sind vier **Knöpfe** (Übersichtskarte, Gruppieren, Lokator, Spielmenü), das Gruppenfeld zeigt seine sechs Zeilen statt zwei, und über einer eigenen Einheit zeigt es diese Einheit. |
+| ⚠⚠ **Vier Meldungen in Folge, die kein Prüfstand fand.** | Eine Sprachzeile an jedem Reiter des Basisfensters, ein Klick auf einem **leeren** Bankplatz, ein Text, der abgeschnitten wurde, und ein Prüfstand, der am echten Weg vorbeilief. Alle vier stehen unten. |
+
+### Was sich beim Spielen ändert
+
+**Die Gegner spielen.** Die Zustandsmaschine der Kampagnen-KI und ihr
+Gruppenangriff sind gelesen und gebaut — vier Modi je Einheit, 121 Sektoren mit
+je neun Nachbarn, und die Stärke eines Sektors ist die Summe der Trefferpunkte
+seiner bewaffneten Einheiten. Dabei sind vier Fehler herausgefallen, die vorher
+nie sichtbar waren, weil die KI zu selten fuhr: eine **blockierte Brücke**
+(sieben Phantomsperren je 90 Sekunden, jetzt null), **Geistereinheiten aus dem
+Depot**, ein **Angriffsbefehl, der nicht abbrach**, und **Bäume, die im Nebel
+kästchenweise** aufblitzten.
+
+**Und sie schiessen aufeinander — nicht mehr.** In Mission 3 sind vier Spieler
+untereinander verbündet; unsere Bündnisprüfung fragte die falsche Tafel und
+zählte sie als Feind. Ein befohlener Angriff passiert die Feindprüfung nicht
+mehr, also flogen die Schüsse. Gemessen über 120 Sekunden: vorher 188 von 468
+Schuss auf Verbündete, nachher **null**.
+
+**Der Sprit.** Der Verbrauch war richtig (ein Punkt je betretener Zelle, gerade
+wie diagonal), es fehlte die **Meldung beim Trockenlaufen** — im Original ein
+Klang samt einmaligem Hinweisfenster. Dazu die Tank-Aufwertung, und die
+Entdeckung, dass eine Basis zwar beim Drinstehen nicht auftankt, das
+**Herausfahren** aber Tank und Munition randvoll macht.
+
+**Die Forschung.** Ein Spieler hat genau eine Forschung, sie hängt an der
+gewählten **Basis**, und der Preis ist zugleich die Dauer: 199 Geld sind 199
+Takte. Danach ein Klang und die Zeile »Nachricht des FORSCHUNGSLABORS«; eine
+zweite Forschung an derselben Basis bricht die erste ab. Dazu die **Erfindung**:
+für 500, 2000 oder 5000 entsteht eine Waffe mit einem Fantasienamen, die im
+Entwurfsschirm wählbar ist — aus derselben Losnummer fällt bei uns dieselbe
+Waffe heraus wie im Original, geprüft an allen 58 Byte ihres Satzes.
+
+**Die Namen sind deutsch.** Die Entwurfstafel kommt jetzt aus `GAME.EXE` statt
+aus einem Entwickler-Spielstand: 592 von 592 belegten Sätzen stimmen mit der
+Auslieferung überein, wo die alte Ausfuhr 72 traf. Damit heissen die Einheiten
+wieder wie 1997, und im Baumenü stehen 33 statt 9 Entwürfe.
+
+**Der Bedienblock unten links.** Die vier kleinen Kästchen darum herum sind
+keine Anzeigen, sondern **Knöpfe**: Übersichtskarte, Gruppieren, Lokator und das
+Spielmenü. Das Gruppenfeld zeigt wieder alle sechs Zeilen (Einheiten,
+Geschwindigkeit, Zustand, Sprit, Munition, jeweils mit der Zahl der schlecht
+dastehenden) und den **Namen** der Gruppe; und fährt die Maus dabei über eine
+eigene Einheit, zeigt der Block diese Einheit — ein zweiter Zustand, den wir gar
+nicht kannten.
+
+**Kleinigkeiten, die auffallen.** Ein Fusssoldat heisst nicht mehr »Leichter«.
+Einheiten drehen auf einer Rampe nicht mehr im Kreis. Sie springen nicht mehr
+über eine ganze Zelle, wenn sie einander ausweichen. Abgebrannter Wald ist
+wieder befahrbar. Fahrende Einheiten feuern im Fahren und halten nicht mehr an;
+auf ein **Gebäude** schiessen sie nur noch auf Befehl. Über der Tür eines
+eigenen Gebäudes steht ein eigener Mauszeiger. Und die vier Reiter des
+Basisfensters klicken, statt einen Satz zu sprechen.
+
+### Berichtigungen an uns selbst
+
+Sie sind wie immer der wertvollere Teil.
+
+* ⚠⚠ **Eine Routine nach ihrem ersten Befehl zu benennen, ist keine Lesung.** Im
+  Baum stand seit Wochen »der Klang kommt beim Aufgehen eines Fensters«. Liest
+  man die Routine bis zum Ende, **räumt sie eine Dialogseite ab** — der Klang
+  gehört zum Seitenwechsel. Beim blossen Aufgehen spielt das Original gar
+  nichts.
+* ⚠⚠ **»Der Ruf fällt« ist nicht »es klingt«.** Der Klick auf den vier Reitern
+  lag danach auf einem Klangplatz, der in der Klangbank des Originals **leer**
+  ist — der Aufruf fiel dreizehnmal, zu hören war nichts. Der richtige Klick ist
+  die Nummer daneben, 0,032 Sekunden lang. Unsere Prüfstände fragen jetzt auch,
+  ob ein Platz überhaupt ein Muster hat.
+* ⚠⚠ **»Gesetzt« ist nicht »sichtbar«.** Das Gruppenfeld rechnete seine sechs
+  Zeilen seit jeher — nur ist der Textstreifen 34 Punkte hoch und schneidet nach
+  der zweiten ab. Genau »Gruppe« und »Einheiten 5« passten hinein, also
+  buchstäblich das, was gemeldet wurde. Prüfstände messen bei einer Anzeige
+  jetzt auch die **Geometrie**.
+* ⚠⚠ **Dreimal an einem Tag lief ein Prüfstand am echten Weg vorbei.** Einmal
+  setzte er den Mauszeiger selbst und rief die Anzeige selbst — also genau die
+  zwei Schritte, zwischen denen der Fehler sass. Einmal fütterte er Punkte
+  direkt in eine Trefferprüfung und übersprang die Umrechnung, in der der Fehler
+  sass. Regel daraus: ein Prüfstand muss durch **dieselbe** Methode gehen wie
+  die Hand des Spielers — oder die Invariante messen, die dazwischen gilt.
+* ⚠ **Ein Ablehnungsklang, den wir selbst erfunden hatten.** Die vier
+  Gebäudebefehle des Originals enthalten zusammen keinen einzigen Klangaufruf;
+  die Sprachzeile an den Reitern stand nur bei uns. Dahinter steckte ein zweiter
+  Fehler: der Leerlaufbefehl ist **nicht** für alle Gebäudearten ein Umschalter,
+  und eine beschädigte Basis hätte durch einen Reiterklick eine Reparatur
+  begonnen, die Trefferpunkte kostet.
+* ⚠ **Der Bedienblock war unvollständig gelesen.** Ein linearer Durchlauf fand
+  37 Zeichenaufrufe, ein roher Abtast findet **72**. Ein linearer Lauf ist eine
+  Untergrenze, nie ein Beweis für Abwesenheit — in den verschluckten 35 stand
+  der ganze Gruppenzweig.
+* ⚠ **`N.DM` ist nicht Mission N.** Die `.DM` sind Entwickler-Spielstände; die
+  Kampagne liegt in den `.CWM`. Eine Tabelle, die wir aus einem `.DM` exportiert
+  hatten, war damit die falsche — sie kommt jetzt aus der EXE.
+
 ## Der Prüflauf durch die Kampagne (22.08. – 30.08.2026)
 
 ### Auf einen Blick
