@@ -1407,6 +1407,8 @@ public partial class MapViewer : Node2D
             else if (a == "--gruppenzeiger-probe") _gruppenzeigerProbe = true;
             else if (a == "--tuersperre-probe") _tuersperreProbe = true;
             else if (a == "--einfahrzeiger-probe") _einfahrzeigerProbe = true;
+            else if (a == "--panelknoepfe-alt") PanelknoepfeAlt = true;
+            else if (a == "--panelknoepfe-probe") _panelknoepfeProbe = true;
             else if (a == "--einfahrzeiger-alt") MapEntityLayer.EinfahrzeigerAlt = true;
             else if (a == "--tuersperre-alt") Simulation.NavGrid.TuersperreAlt = true;
             else if (a == "--gruppenzeiger-log") MapEntityLayer.GruppenzeigerLog = true;
@@ -2704,6 +2706,7 @@ public partial class MapViewer : Node2D
             if (_gruppenzeigerProbe) GD.Print(_entities.GruppenzeigerProbe());
             if (_tuersperreProbe) GD.Print(_entities.TuersperreProbe());
             if (_einfahrzeigerProbe) GD.Print(_entities.EinfahrzeigerProbe());
+            if (_panelknoepfeProbe) GD.Print(PanelknoepfeProbe());
             if (_einfahrtFremdProbe) GD.Print(_entities.EinfahrtFremdProbe());
             if (_erfindungProbe) GD.Print(_entities.ErfindungProbeLine());
             if (_stauCheck)
@@ -3143,6 +3146,13 @@ public partial class MapViewer : Node2D
             StretchMode = TextureRect.StretchModeEnum.Keep,
             Scale = new Vector2(PanelScale, PanelScale),
         };
+        // ⭐ 06.09.2026 — DIE VIER KNOEPFE. Siehe Rendering/PanelKnoepfe.cs.
+        // ⚠ Der Block faengt den Klick jetzt ab (MouseFilter = Stop). Vorher
+        // fiel er durch auf die Karte, und man konnte durch den Bedienblock
+        // hindurch Einheiten anwaehlen — im Original ist er ein FENSTER und tut
+        // das nicht.
+        _panelSprite.MouseFilter = Control.MouseFilterEnum.Stop;
+        _panelSprite.GuiInput += PanelEingabe;
         _panelLayer.AddChild(_panelSprite);
         BuildPanelClock();
         BuildPanelPortrait();
@@ -3765,6 +3775,17 @@ public partial class MapViewer : Node2D
     }
 
     private CanvasLayer? _panelLayer;
+    /// <summary>Ein Klick auf den Bedienblock — die vier Felder aus
+    /// <see cref="Panelfelder"/>. Der Punkt wird durch die Vergroesserung
+    /// geteilt, damit er im 204x170-Block liegt, in dem die Rechtecke des
+    /// Originals stehen.</summary>
+    private void PanelEingabe(InputEvent e)
+    {
+        if (e is not InputEventMouseButton mb || !mb.Pressed) return;
+        if (mb.ButtonIndex != MouseButton.Left) return;
+        if (PanelKlick(mb.Position / PanelScale)) _panelSprite?.AcceptEvent();
+    }
+
     private TextureRect? _panelSprite;
     private const int PanelScale = 2;
     // recessed display box inside panel.png, from panel_index.json
@@ -3811,6 +3832,7 @@ public partial class MapViewer : Node2D
     private bool _gruppenzeigerProbe;
     private bool _tuersperreProbe;
     private bool _einfahrzeigerProbe;
+    private bool _panelknoepfeProbe;
     private bool _einfahrtFremdProbe;
 
     private UI.BaseWindow? _baseWindow;
