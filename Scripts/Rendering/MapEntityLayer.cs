@@ -10693,6 +10693,8 @@ public partial class MapEntityLayer : Node2D
     private void Kill(int vi, Entity victim, int by = -1)
     {
         NoteKill(victim, by);
+        // ⭐ 06.09.2026 — ein GEBAEUDE geht mit Bild. Siehe GebaeudeSprengen.
+        if (victim.IsBuilding && !victim.IsProp && !victim.Dead) GebaeudeSprengen(victim);
         victim.Hp = 0;
         victim.Dead = true;
         victim.DeadTime = 0;

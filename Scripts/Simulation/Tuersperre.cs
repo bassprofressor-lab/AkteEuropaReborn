@@ -556,7 +556,33 @@ public partial class MapEntityLayer : Node2D
         sb.AppendLine($"  Treffer auf eine leere Zelle: {leerFunken} Funken "
                     + $"(erwartet 0): {(funkeOk ? "richtig" : "FALSCH — der Ball bleibt stehen")}");
 
-        bool alles = findenOk && bandOk && totOk && regelOk && feuertOk && funkeOk;
+        // 6. ⭐ UND DAS BILD DAZU (06.09.2026). Seine Meldung: »im original ist
+        // die massive zerstoerung von gebaeuden drin«. Gelesen @0x4C9B8B:
+        // n/2 Braende auf zufaelligen Zellen, je einer wirft ANIM 510..518.
+        // ⚠ Gemessen wird die ZAHL, nicht der Eindruck — und die Gegenprobe
+        // mit dem Schalter, damit »es explodiert« nicht auch dann gruen ist,
+        // wenn die Effekte von woanders kommen.
+        int gi2 = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var b = _entities[i];
+            if (b.IsBuilding && !b.IsProp && !b.Dead && b.BType == 13) { gi2 = i; break; }
+        }
+        bool bildOk = true;
+        if (gi2 >= 0)
+        {
+            var b = _entities[gi2];
+            int erwartet = Mathf.Max(1, b.FootW) * Mathf.Max(1, b.FootH) / 2;
+            int ex = GebaeudeSprengbilder, sp = GebaeudeSprengungen;
+            Kill(gi2, b);
+            int neu = GebaeudeSprengbilder - ex;
+            bildOk = GebaeudeSprengungen == sp + 1 && neu == erwartet;
+            sb.AppendLine($"  Tod eines Kraftwerks ({b.FootW}x{b.FootH}): {neu} Explosionen "
+                        + $"(erwartet {erwartet} = Zellen/2): {(bildOk ? "richtig" : "FALSCH")}");
+        }
+        else sb.AppendLine("  kein zweites Kraftwerk mehr — das Bild ist ungeprueft");
+
+        bool alles = findenOk && bandOk && totOk && regelOk && feuertOk && funkeOk && bildOk;
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }

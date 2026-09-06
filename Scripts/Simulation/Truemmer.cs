@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Rendering;
+﻿namespace AkteEuropaReborn.Rendering;
 
 using System.Collections.Generic;
 using Godot;
@@ -147,6 +147,78 @@ public partial class MapEntityLayer
         n = Simulation.Determinism.Roll(6) + 5;
         for (int k = 0; k < n; k++) EinTeil(opfer, sorte: 1, streuung: 5);
     }
+
+    /// <summary>
+    /// <b>DER TOD EINES GEBAEUDES</b> — die »massive Zerstoerung«, die er am
+    /// 06.09.2026 vermisst hat: »im original ist die massive zerstoerung von
+    /// gebaeuden drin (Explosionen, Splitter wie wenn wir einen Panzer
+    /// zerstoeren), das fehlt noch«.
+    ///
+    /// <para><b>Gelesen</b> (Bericht <c>berichte/gebaeudetod-fable.md</c>, die
+    /// zwei tragenden Stellen selbst nachgeschlagen): der Tod ist der
+    /// Sonderfall »Stufe == letzte« in <c>0x4C95E0</c>, und ganz am Ende
+    /// zuendet er <b>n/2 Braende</b> auf zufaelligen Zellen des Gebaeudebildes:
+    /// <c>@0x4C9B8B mov al, [esp+0x20]; shr al, 1</c> — also die HAELFTE der
+    /// belegten Musterzellen —, dann je Brand ein Ruf von <c>0x40136B</c> mit
+    /// einer zufaellig gezogenen Zelle (<c>@0x4C9B8F..0x4C9BBE</c>).</para>
+    ///
+    /// <para>Jeder Brand (<c>0x4AE4C0</c>) wirft eine <b>Explosion</b>:
+    /// <c>@0x4AE672 ecx = 9; idiv ecx; @0x4AE679 add dx, 0x1FE</c> — also
+    /// <b>ANIM 510..518</b>, genau die Folge, die auch der Fahrzeugtod nimmt
+    /// (<c>@0x40B5F6</c>). Ein Gebaeude bekommt davon also <b>n/2 statt einer</b>,
+    /// verteilt ueber seinen Fussabdruck.</para>
+    ///
+    /// <para>⚠ <b>Drei benannte Luecken</b>, damit niemand mehr vermutet, als
+    /// dasteht:</para>
+    /// <list type="bullet">
+    /// <item>Der <b>Splitter</b> je Brand ist im Original <c>ANIM 200..204</c>
+    /// mit Streuung 12 (<c>@0x4AE6C9</c>) — eine andere Folge als die
+    /// Fahrzeugsplitter 19..24/29..38, die wir ausgegeben haben. Wir werfen
+    /// darum vorerst keinen.</item>
+    /// <item>Das <b>Nachbrennen</b> (<c>0x4AE760</c>: Folgeexplosionen, Rauch,
+    /// Flammen ueber rund 1470 Takte) ist nicht gebaut.</item>
+    /// <item>Der Klang <b>135</b> beim Tod (<c>@0x4C9924</c>) ist laut
+    /// Klangbank eine 1,36 s lange SPRACHZEILE, keine Explosion — er gehoert
+    /// zur Meldung, nicht zum Bild, und ist hier nicht gesetzt.</item>
+    /// </list>
+    ///
+    /// <para>⚠ <b>UNSERE Naeherung:</b> das Original zaehlt die belegten Zellen
+    /// des MUSTERS, wir nehmen das Fussabdruckrechteck. Auf einem vollen
+    /// Rechteck ist das dasselbe; bei einem Muster mit Loechern zuenden wir ein
+    /// paar Braende zu viel.</para></summary>
+    private void GebaeudeSprengen(Entity b)
+    {
+        if (!b.IsBuilding || GebaeudeSprengungAus) return;
+        int w = Mathf.Max(1, b.FootW), h = Mathf.Max(1, b.FootH);
+        int n = w * h / 2;                       // @0x4C9B8B: shr al, 1
+        for (int k = 0; k < n; k++)
+        {
+            int c = b.Col + Simulation.Determinism.Roll(w);
+            int r = b.Row + Simulation.Determinism.Roll(h);
+            _effects.Add(new Effect
+            {
+                Pos = CellCenter(c, r) - new Vector2(0, 6),
+                Kind = "sprengung" + Simulation.Determinism.Roll(9),   // ANIM 510..518
+                FrameTime = 0.04f,
+            });
+        }
+        GebaeudeSprengungen++;
+        GebaeudeSprengbilder += n;
+    }
+
+    /// <summary>Wie viele Gebaeude in diesem Lauf gesprengt wurden — fuer den
+    /// Pruefstand.</summary>
+    public int GebaeudeSprengungen;
+
+    /// <summary>Und wie viele Explosionsbilder dabei geworfen wurden. ⚠ Der
+    /// Pruefstand muss DIESE Zahl lesen, nicht die Laenge der Effektliste:
+    /// beim Tod entstehen auch andere Effekte, und der erste Anlauf zaehlte
+    /// 17 statt 15, weil er alles mitzaehlte.</summary>
+    public int GebaeudeSprengbilder;
+
+    /// <summary><c>--gebaeudesprengung-aus</c> — der Stand vor dem 06.09.2026:
+    /// ein Gebaeude verschwindet ohne Bild.</summary>
+    public static bool GebaeudeSprengungAus;
 
     private void EinTeil(Entity opfer, int sorte, int streuung)
     {
