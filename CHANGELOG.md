@@ -12,6 +12,110 @@ your own copy of the 1997 game.
 > has been played through individually and found clean — see **Road to 0.7.0**
 > in the [README](README.md). The section below grows with every mission played.
 
+## Playing through campaign 3 (2026-09-01 to 2026-09-06)
+
+### At a glance
+
+The playthrough continues, now in **campaign 3** — finished several times over.
+The loop is unchanged: play a mission, report every discrepancy, read the
+original, fix it, measure it. What is new is how much of it came from **sounds
+and readouts**: six reports this week were caught by the player's eye or ear,
+not by a test harness.
+
+| | |
+|---|---|
+| ⭐⭐⭐ **The campaign AI is the original's.** | A per-unit state machine, group attacks across 121 sectors, sector strength as the sum of hit points. Measured: 26/16/20 attacks against 2/2/2 before. |
+| ⭐⭐ **The AI was shooting itself.** | 188 of 468 shots went at allies, because the alliance check asked a *team* table instead of diplomacy. Now 0 of 468. |
+| ⭐⭐ **Research is built.** | A player has exactly one research project, it belongs to the **base**, and **the price IS the duration**. Plus **invention**: from a seed number a new weapon falls out, byte for byte the same one the original produces. |
+| ⭐⭐ **The design table now comes from the EXE — with German names.** | 592 of 592 records match the shipped game; the old export matched 72. Available designs 9 → 33. |
+| ⭐⭐ **Driving out of a building fills you up.** | Fuel and ammo to the brim — it sits at the end of the very function whose first half we already had. |
+| ⭐ **Nobody drives into a building they do not own.** | While a stranger stands in front of the door, the building tick stamps the door cell shut. No owner test in pathfinding — that one we would have had to invent. |
+| ⭐ **The bottom-left panel does everything again.** | The four little boxes are four **buttons** (overview map, groups, locator, game menu), the group readout shows its six lines instead of two, and hovering one of your own units shows that unit. |
+| ⚠⚠ **Four reports in a row that no harness caught.** | A spoken line on every tab of the base window, a click sitting on an **empty** sound slot, text that was clipped away, and a harness that walked around the real code path. All four are below. |
+
+### What changes while playing
+
+**The enemies play.** The campaign AI's state machine and its group attack are
+read and built — four modes per unit, 121 sectors with nine neighbours each, and
+a sector's strength is the sum of the hit points of its armed units. Four bugs
+fell out of that work which had never been visible before, simply because the AI
+drove too rarely: a **blocked bridge** (seven phantom reservations per 90
+seconds, now zero), **ghost units leaving the depot**, an **attack order that
+never ended**, and **trees flashing box by box in the fog**.
+
+**And they shoot each other — not any more.** In mission 3 four players are
+allied; our alliance check asked the wrong table and counted them as hostile. An
+*ordered* attack does not pass the hostility check again, so the shots flew.
+Measured over 120 seconds: 188 of 468 shots at allies before, **zero** after.
+
+**Fuel.** Consumption was right all along (one point per cell entered, straight
+or diagonal); what was missing was the **message when a unit runs dry** — in the
+original a sound plus a one-time hint window. Along with it the fuel upgrade,
+and the discovery that a base does not refuel a unit parked inside, but
+**driving out** fills both fuel and ammo to the brim.
+
+**Research.** A player has exactly one research project, it belongs to the
+selected **base**, and its price is also its duration: 199 credits are 199
+ticks. Then a sound and the line "message from the RESEARCH LAB"; a second
+project at the same base cancels the first. Plus **invention**: for 500, 2000 or
+5000 you get a weapon with an invented name, selectable in the design screen —
+and from the same seed our build produces the same weapon the original does,
+verified across all 58 bytes of its record.
+
+**The names are German again.** The design table now comes from `GAME.EXE`
+instead of a developer save: 592 of 592 occupied records match the shipped game,
+where the old export matched 72. Units are named as they were in 1997, and the
+build menu offers 33 designs instead of 9.
+
+**The bottom-left panel.** The four little boxes around it are not readouts but
+**buttons**: overview map, groups, locator and the game menu. The group readout
+shows all six of its lines again (units, speed, condition, fuel, ammo, each with
+the count of those in a bad way) and the group's **name**; and while a group is
+selected, moving the mouse over one of your own units shows that unit instead —
+a second state we did not know existed.
+
+**Small things you notice.** A foot soldier is no longer called "Light". Units
+no longer spin on a ramp. They no longer jump a whole cell when getting out of
+each other's way. Burnt-out forest is drivable again. Moving units fire on the
+move instead of stopping; at a **building** they only fire when ordered to. Over
+the door of one of your own buildings there is a dedicated mouse cursor. And the
+four tabs of the base window click instead of speaking a sentence.
+
+### Corrections to ourselves
+
+As always, the more valuable half.
+
+* ⚠⚠ **Naming a routine after its first instruction is not a reading.** For
+  weeks the tree said "the sound comes when a window opens". Read to its end,
+  that routine **tears down a dialog page** — the sound belongs to the page
+  switch. On opening alone the original plays nothing at all.
+* ⚠⚠ **"The call fires" is not "it sounds".** The click on the four tabs then
+  landed on a sound slot that is **empty** in the original's sound bank — the
+  call fired thirteen times and nothing was audible. The real click is the
+  number next to it, 0.032 seconds long. Our harnesses now also ask whether a
+  slot holds a sample at all.
+* ⚠⚠ **"Set" is not "visible".** The group readout had been computing its six
+  lines all along — but the text strip is 34 points tall and clips after the
+  second line. Exactly "Group" and "Units 5" fit into it, which is literally
+  what was reported. Harnesses now measure a readout's **geometry** too.
+* ⚠⚠ **Three times in one day a harness walked around the real path.** Once it
+  set the mouse hover itself and refreshed the readout itself — precisely the
+  two steps the bug sat between. Once it fed points straight into a hit test and
+  skipped the coordinate conversion the bug sat in. The rule that came out of
+  it: a harness must go through the **same** method the player's hand does — or
+  measure the invariant that holds in between.
+* ⚠ **A refusal sound we had invented ourselves.** The original's four building
+  commands contain not one sound call between them; the spoken line on the tabs
+  existed only in our build. Behind it sat a second bug: the idle command is
+  **not** a toggle for every building type, and a damaged base would have
+  started a repair — which costs hit points — from a mere tab click.
+* ⚠ **The panel drawer had been read incompletely.** A linear pass found 37 draw
+  calls; a raw scan finds **72**. A linear pass is a lower bound, never proof of
+  absence — the whole group branch sat in the 35 it swallowed.
+* ⚠ **`N.DM` is not mission N.** The `.DM` files are developer saves; the
+  campaign lives in the `.CWM` files. A table we had exported from a `.DM` was
+  therefore the wrong one — it now comes from the EXE.
+
 ## Playing through the campaign (2026-08-22 to 2026-08-30)
 
 ### At a glance
