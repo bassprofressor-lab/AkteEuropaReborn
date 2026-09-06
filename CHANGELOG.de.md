@@ -14,6 +14,82 @@ bisher nur dort beschrieben.*
 > **Road to 0.7.0** in der [README](README.de.md). Der Abschnitt unten wächst
 > mit jeder gespielten Mission weiter.
 
+## Der Prüflauf durch Kampagne 4 (06.09.2026)
+
+### Auf einen Blick
+
+Kampagne 3 ist durch, Kampagne 4 (»Sabotage«) hat denselben Abend noch zehn
+Meldungen gebracht — **neun behoben, eine als »kein Fehler« gemessen**. Zwei
+davon waren keine Schönheitsfehler, sondern haben die Mission blockiert.
+
+| | |
+|---|---|
+| ⚠⚠ **`(short)60000` ist `-5536` — es war noch nie ein Gebäude angreifbar.** | Der Zielgriff eines Gebäudes ist `60000 + Platz` und passte nicht in unser Satzfeld. Der Behandler deutete den Rest als Listenindex und warf den Befehl still weg. Betraf **jede** Mission, nicht nur diese. |
+| ⚠⚠ **Herrenlose Gebäude waren unzerstörbar.** | Besitzer 255 galt pauschal als Platzhalter und bekam keine Energie. Gemessen über alle 33 Karten: von 986 solchen Sätzen sind **386 echte Bauten** — Kraftwerke und Speicher, oft das Missionsziel. |
+| ⭐⭐ **Infanterie geht über rauen Boden, nicht durchs Wasser.** | `Can_go` verzweigt **zuerst nach der Klasse**, erst im Fahrzeugarm nach dem Fahrwerk. Der »Walker« des Originals ist ein Fahrzeug; das Fußvolk hat einen eigenen Arm und nimmt raue Zellen. |
+| ⭐⭐ **Die Bombardierung der Kraftwerke wirkt.** | Drei Lücken auf einmal: der Treffer suchte am Anker statt am Fußabdruck, der Schaden konnte gar nicht töten, und die **Dauerregel fehlte ganz** in unserer Skriptausfuhr. |
+| ⭐ **Ein Gebäude geht mit Bild.** | Beim Tod wirft das Original **n/2 Explosionen** über den Fußabdruck — dieselbe Folge wie beim Fahrzeugtod, nur vielfach —, dazu je einen Splitter aus einer eigenen Bildfolge. |
+| ⭐ **Fußsoldaten standen 25 Punkte zu hoch.** | Auf einer Brücke sah es aus, als liefen sie auf dem hinteren Geländer. Auch der **Zeichner** verzweigt nach der Klasse, und der Infanteriearm setzt sie elf Punkte **tiefer** als ein Fahrzeug. |
+| ⚠ **Eine Berichtigung an einer eigenen Lesung.** | Der Riegel des Missionsblocks galt uns seit dem Morgen als »tot«. Er ist es nicht — es gibt einen Schreiber und 34 Leser. |
+
+### Was sich beim Spielen ändert
+
+**Die Kraftwerke lassen sich angreifen.** Das war die Missionssperre, und sie
+hatte zwei Ursachen übereinander. Die eine ist der Zielgriff, der nicht in ein
+16-Bit-Feld passte — das Original führt ihn dort ebenfalls, liest ihn aber
+vorzeichenlos, und genau das taten wir nicht. Die andere: unser Kartenlader
+hielt jedes Gebäude ohne Spieler für einen Skriptplatzhalter und gab ihm keine
+Energie. Beides ist zu, und der Unterschied ist nicht klein — auf diesem Weg war
+bis heute **überhaupt kein Gebäude** angreifbar, auch kein feindliches.
+
+**Die Infanterie kommt über den Fluss.** Genauer: über die rauen Ufer daneben,
+die ein Rad- oder Kettenfahrzeug nicht nehmen kann. Wasser bleibt auch für sie
+gesperrt — es sah nur so aus, weil der »kleine Fluss« der Karte aus vier
+einzelnen Wasserzellen auf einer Diagonale besteht und ringsum rauer Boden
+liegt. Bei uns fuhr das Fußvolk wie ein Fahrzeug und kam deshalb gar nicht
+hindurch. Damit ist der Weg wieder offen, auf den diese Mission gebaut ist.
+
+**Die Bombardierung.** Nach dem ersten zerstörten Kraftwerk meldet die Mission
+Bomberangriffe — bei uns kam die Meldung, aber kaum Schaden. Dahinter lagen drei
+Fehler: der Skripttreffer suchte sein Ziel an der **Ankerzelle** eines Gebäudes
+statt in seinem Fußabdruck (und traf es deshalb nie), der Schaden halbierte die
+Hülle statt zu subtrahieren (und konnte damit nie töten), und die eigentliche
+**Dauerregel fehlte in unserer Skriptausfuhr überhaupt**. Jetzt fällt jedes
+Kraftwerk wie im Original in wenigen Sekunden.
+
+**Und es kracht dabei.** Ein sterbendes Gebäude wirft jetzt Explosionen und
+Splitter über seinen Fußabdruck statt einfach zu verschwinden. Der stehende
+Explosionsball, der nach der Zerstörung liegenblieb, ist ebenfalls weg — der
+Funke gehört zum Treffer, nicht zum Wurf.
+
+**Fußsoldaten stehen richtig.** Vorher wurden sie 25 Punkte zu hoch gezeichnet;
+auf einer waagerechten Brücke liefen sie dadurch optisch auf dem hinteren
+Geländer.
+
+### Berichtigungen an uns selbst
+
+* ⚠⚠ **»Der Riegel ist tot« stimmte nicht.** Am Morgen stand im Baum, der
+  Taktriegel des Missionsblocks habe keinen Schreiber und unser 100-Takt-Modell
+  sei darum nur eine Setzung. Ein roher Abtast findet **35 Fundstellen** — einen
+  Schreiber und 34 Leser, einen je Missionsblock. Die vier Nullbytes an der
+  Adresse waren der Anfangswert im Datenteil, kein Beweis für Abwesenheit.
+* ⚠⚠ **Ein Prüfstand, der nur den Absender fragt, ist kein Beleg.** Er meldete
+  »Angriffsbefehl abgesetzt: richtig«, während im Spiel nichts geschah — der
+  Behandler warf den Satz still weg. Zwischen »abgesetzt« und »wirkt« liegt der
+  Befehlsring; der Lauf muss ihn leeren und danach den Zustand der Einheit
+  lesen. Und jeder stille Ausstieg des Behandlers nennt jetzt seinen Grund.
+* ⚠ **»Der Walker« ist ein Fahrzeug.** An diesem Namen sind wir hängengeblieben:
+  das Fahrwerk `0x11` heisst so, das Fußvolk trägt Fahrwerk 0 und eine eigene
+  Klasse. Wer nach dem Fahrwerk einsortiert, macht aus jedem Soldaten ein
+  Fahrzeug.
+* ⚠ **Was nichts anfordert, braucht kein Bild — bis es doch jemand anfordert.**
+  Fünf Bildfolgen waren mit genau dieser Begründung nicht ausgegeben. Seit der
+  Gebäudetod sie wirft, sind sie drin.
+* ⚠ **Eine Vergrößerung zu viel.** Die vier Knöpfe am Bedienblock trafen
+  daneben, weil der Klickpunkt zweimal durch denselben Faktor geteilt wurde.
+  Der Prüfstand konnte es nicht sehen — er fütterte seine Punkte direkt in die
+  Trefferprüfung und lief an der Umrechnung vorbei.
+
 ## Der Prüflauf durch Kampagne 3 (01.09. – 06.09.2026)
 
 ### Auf einen Blick

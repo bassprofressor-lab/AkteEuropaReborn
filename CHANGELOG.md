@@ -12,6 +12,80 @@ your own copy of the 1997 game.
 > has been played through individually and found clean — see **Road to 0.7.0**
 > in the [README](README.md). The section below grows with every mission played.
 
+## Playing through campaign 4 (2026-09-06)
+
+### At a glance
+
+Campaign 3 is done; campaign 4 ("Sabotage") produced ten more reports the same
+evening — **nine fixed, one measured and found to be no bug at all**. Two of them
+were not cosmetic: they blocked the mission outright.
+
+| | |
+|---|---|
+| ⚠⚠ **`(short)60000` is `-5536` — no building was ever attackable.** | A building's target handle is `60000 + slot` and did not fit our record field. The handler read the remainder as a list index and dropped the order silently. This affected **every** mission, not just this one. |
+| ⚠⚠ **Unowned buildings were indestructible.** | Owner 255 was treated wholesale as a script placeholder and got no hit points. Measured across all 33 maps: of 986 such records, **386 are real structures** — power plants and depots, often the mission objective. |
+| ⭐⭐ **Infantry walks over rough ground, not through water.** | `Can_go` branches **on the class first**, and only inside the vehicle arm on the chassis. The original's "walker" is a vehicle; foot soldiers have an arm of their own and accept rough cells. |
+| ⭐⭐ **The bombing of the power plants works.** | Three gaps at once: the hit looked for its target at a building's anchor instead of its footprint, the damage could never kill, and the **continuous rule was missing entirely** from our script export. |
+| ⭐ **A building now dies with a picture.** | On death the original throws **n/2 explosions** across the footprint — the same sequence as a vehicle death, only many times over — plus one splinter each from a sequence of its own. |
+| ⭐ **Foot soldiers stood 25 pixels too high.** | On a bridge they appeared to walk on the far railing. The **drawer** also branches on the class, and the infantry arm places them eleven pixels **lower** than a vehicle. |
+| ⚠ **One correction to a reading of our own.** | Since that morning the tree held that the mission block's tick gate was "dead". It is not — there is a writer and 34 readers. |
+
+### What changes while playing
+
+**The power plants can be attacked.** That was the mission blocker, and it had
+two causes stacked on top of each other. One is the target handle that did not
+fit a 16-bit field — the original keeps it in 16 bits too, but reads it
+*unsigned*, and that is exactly what we failed to do. The other: our map loader
+took every building without a player to be a script placeholder and gave it no
+hit points. Both are closed, and the difference is not small — along this path
+**no building at all** was attackable until today, hostile ones included.
+
+**Infantry gets across the river.** More precisely: across the rough banks
+beside it, which no wheeled or tracked vehicle can use. Water stays closed to
+them as well — it only looked otherwise because the map's "little river" is four
+isolated water cells on a diagonal with rough ground all around. In our build
+foot soldiers moved like vehicles and so could not get through at all. The route
+this mission is built around is open again.
+
+**The bombing.** After the first power plant falls, the mission announces air
+raids — the message arrived, the damage barely did. Three bugs sat behind it:
+the script hit looked for its target at a building's **anchor cell** rather than
+its footprint (and so never found it), the damage halved the hull instead of
+subtracting (and so could never kill), and the actual **continuous rule was
+missing from our script export altogether**. Now each plant falls in seconds,
+the way the original intends.
+
+**And it makes a mess.** A dying building now throws explosions and splinters
+across its footprint instead of simply vanishing. The explosion ball that used
+to hang in the air after the plant was gone is fixed too — the spark belongs to
+the hit, not to the throw.
+
+**Foot soldiers stand where they should.** They used to be drawn 25 pixels too
+high, which on a horizontal bridge put them visually on the far railing.
+
+### Corrections to ourselves
+
+* ⚠⚠ **"The gate is dead" was wrong.** That morning the tree claimed the mission
+  block's tick gate had no writer, and that our 100-tick model was therefore an
+  assumption. A raw scan finds **35 references** — one writer and 34 readers, one
+  per mission block. The four zero bytes at that address were the initial value
+  in the data segment, not proof of absence.
+* ⚠⚠ **A harness that only asks the sender proves nothing.** It reported "attack
+  order issued: correct" while nothing happened in the game — the handler was
+  dropping the record silently. Between "issued" and "takes effect" sits the
+  command ring; the harness has to drain it and then read the unit's state. And
+  every silent exit in the handler now names its reason.
+* ⚠ **The "walker" is a vehicle.** We got stuck on the name: chassis `0x11` is
+  called that, while foot soldiers carry chassis 0 and a class of their own.
+  Sort by chassis and every soldier becomes a vehicle.
+* ⚠ **What nothing asks for needs no picture — until something asks.** Five
+  animation sequences had been left out of the export for exactly that reason.
+  Now that the building death throws them, they are in.
+* ⚠ **One scaling too many.** The four buttons on the control panel missed,
+  because the click point was divided by the same factor twice. The harness
+  could not see it — it fed its points straight into the hit test and walked
+  around the conversion.
+
 ## Playing through campaign 3 (2026-09-01 to 2026-09-06)
 
 ### At a glance
