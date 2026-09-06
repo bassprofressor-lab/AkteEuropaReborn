@@ -387,4 +387,60 @@ public partial class MapEntityLayer : Node2D
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }
+
+    /// <summary>
+    /// <c>--fussvolk-probe</c> — <b>kommt die Infanterie ueber den rauen Boden
+    /// bis zu den Kraftwerken?</b> (06.09.2026, zu bug-074.)
+    ///
+    /// <para>⚠ Beide Richtungen: das Fussvolk muss RAU duerfen, ein FAHRZEUG
+    /// weiterhin nicht, und WASSER bleibt fuer beide gesperrt — der
+    /// Infanteriearm @0x4061B5 nimmt nur 0xFFFD und 0xFFFE. Ohne die zwei
+    /// Gegenproben waere ein Bau gruen, der einfach alles durchlaesst.</para>
+    /// </summary>
+    public string FussvolkProbe()
+    {
+        var sb = new System.Text.StringBuilder("fussvolk-probe\n");
+        if (_nav == null) return sb.Append("  keine Karte").ToString();
+        // 1. die drei Bodenarten, je Fortbewegungsart
+        int rauF = 0, rauV = 0, wasF = 0, freiF = 0;
+        for (int c = 0; c < _nav.Width; c++)
+            for (int r = 0; r < _nav.Height; r++)
+            {
+                bool f = _nav.CanEnter(c, r, Simulation.NavGrid.MoveClass.Walker);
+                bool v = _nav.CanEnter(c, r, Simulation.NavGrid.MoveClass.Vehicle);
+                var g = _nav.GroundAt(c, r);
+                if (g == Simulation.NavGrid.Ground.Rough) { if (f) rauF++; if (v) rauV++; }
+                else if (g == Simulation.NavGrid.Ground.Water) { if (f) wasF++; }
+                else if (g == Simulation.NavGrid.Ground.Free && f) freiF++;
+            }
+        bool rauOk = rauF > 0 && rauV == 0;
+        sb.AppendLine($"  rauer Boden: fuer Fussvolk {rauF} Zellen offen, fuer Fahrzeuge {rauV}: "
+                    + $"{(rauOk ? "richtig" : "FALSCH")}");
+        bool wasOk = wasF == 0;
+        sb.AppendLine($"  Wasser fuer Fussvolk: {wasF} Zellen offen (erwartet 0, "
+                    + $"@0x4061B5 nimmt nur 0xFFFD/0xFFFE): {(wasOk ? "richtig" : "FALSCH")}");
+        sb.AppendLine($"  freier Boden fuer Fussvolk: {freiF} Zellen");
+
+        // 2. die Einstufung selbst: eine Infanterieeinheit MUSS Walker sein
+        int inf = -1;
+        for (int k = 0; k < _entities.Count; k++)
+        {
+            var u = _entities[k];
+            if (u.IsBuilding || u.IsProp || u.Dead) continue;
+            if (u.GameUnitType == Simulation.NavGrid.ArtInfanterie) { inf = k; break; }
+        }
+        bool artOk = true;
+        if (inf >= 0)
+        {
+            var u = _entities[inf];
+            artOk = u.Move == Simulation.NavGrid.MoveClass.Walker;
+            sb.AppendLine($"  Infanterie (Platz {inf}, +0x0a {u.GameUnitType}, Fahrwerk {u.Chassis}): "
+                        + $"eingestuft als {u.Move}: {(artOk ? "richtig" : "FALSCH — sie faehrt wie ein Fahrzeug")}");
+        }
+        else sb.AppendLine("  keine Infanterie auf dieser Karte — Einstufung ungeprueft");
+
+        bool alles = rauOk && wasOk && artOk;
+        sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
 }

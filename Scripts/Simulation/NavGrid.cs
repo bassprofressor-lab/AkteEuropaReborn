@@ -64,12 +64,74 @@ public sealed class NavGrid
     /// @0x40671b) — both test the imap for 0xFFFC and nothing else.</summary>
     public static bool ArtIsShip(int art) => art is 4 or 5;
 
-    /// <summary>The move class of a unit, the way Can_go picks its branch.</summary>
+    /// <summary>
+    /// <b>Die Fortbewegungsart, so wie <c>Can_go</c> ihren Zweig waehlt.</b>
+    ///
+    /// <para>⚠⚠ 06.09.2026 — HIER FEHLTE DIE INFANTERIE, und das hat den
+    /// Missionsweg der Kampagne 4 gekostet. Seine Meldung: »im Original kann
+    /// Infanterie ueber schmales Wasser gehen, geht bei uns nicht«, dazu die
+    /// Begruendung, warum es zaehlt: »der einfachste und schnellste weg ist,
+    /// die infanterie ueber den fluss zu bringen und die kraftwerke zu
+    /// zerlegen«.</para>
+    ///
+    /// <para><b>Can_go verzweigt ZUERST nach der Klasse <c>+0x0a</c></b>, und
+    /// erst im Fahrzeugarm nach dem Fahrwerk. Selbst nachgeschlagen:</para>
+    /// <code>
+    ///   @0x40568B  al = byte[0x6E26D2 + 78*id]     ; das Klassenbyte +0x0A
+    ///   @0x405691  cmp eax, 5 / ja  Fehlerausgang
+    ///   @0x405696  jmp dword[0x40678C + eax*4]
+    ///
+    ///   Tafel 0x40678C:  0 -> 0x4056B9  Fahrzeug (dort erst Fahrwerk 7/0x11)
+    ///                    1 -> 0x406178  INFANTERIE
+    ///                    2 -> 0x40569D  Fehler
+    ///                    3 -> 0x406419  'MM'
+    ///                    4 -> 0x406669  Schiff 2x1
+    ///                    5 -> 0x40671B  Schiff 4x4
+    /// </code>
+    ///
+    /// <para><b>Und der Infanteriearm nimmt RAUEN Boden</b> — ebenfalls selbst
+    /// nachgeschlagen:</para>
+    /// <code>
+    ///   @0x4061AD  di = word[0xBDEA80 + 2*Zelle]
+    ///   @0x4061B5  cmp di, 0xFFFD / je erlaubt      ; RAU
+    ///   @0x4061BC  cmp di, 0xFFFE / je erlaubt      ; frei
+    ///   @0x4061C3  ax = di - 10000                  ; sonst die Infanteriezelle
+    /// </code>
+    ///
+    /// <para>⭐ Das erklaert seine Beobachtung, und zwar anders als gedacht:
+    /// der »kleine Fluss« in <c>04.CWM</c> (Zeilen 27..31, Spalten 0..4) sind
+    /// nur VIER Zellen mit <c>0xFFFC</c> auf einer Diagonale — ringsum liegt
+    /// <c>0xFFFD</c>, rauer Boden. Die Infanterie laeuft also nicht durchs
+    /// Wasser, sondern ueber die rauen Ufer, die ein Rad- oder Kettenfahrzeug
+    /// nicht nehmen kann (»normal chassis« nimmt nur <c>0xFFFE</c>,
+    /// <c>@0x405CD8</c>). Wasser <c>0xFFFC</c> ist auch fuer Fussvolk
+    /// gesperrt.</para>
+    ///
+    /// <para>⚠ <b>Unser Fehler war die Reihenfolge:</b> wir haben nach dem
+    /// FAHRWERK entschieden, und Infanterie traegt Fahrwerk 0 — sie wurde
+    /// damit ein Fahrzeug und durfte nicht auf rauen Boden. Gemessen ueber
+    /// <c>04.CWM</c>: 91 Saetze mit <c>+0x0a == 1</c> tragen Fahrwerk 0 und
+    /// Einheitenart 148; Fahrwerk <c>0x11</c> kommt ueberhaupt nur bei
+    /// <c>+0x0a == 0</c> vor. <b>Der »Walker« ist ein Fahrzeug, nicht die
+    /// Infanterie.</b></para>
+    ///
+    /// <para>Gegenschalter <c>--fussvolk-alt</c>.</para>
+    /// </summary>
     public static MoveClass ClassOf(int art, int chassis)
         => ArtIsShip(art) ? MoveClass.Ship
+         : art == ArtInfanterie && !FussvolkAlt ? MoveClass.Walker
          : chassis == ChassisHover ? MoveClass.Hover
          : chassis == ChassisWalker ? MoveClass.Walker
          : MoveClass.Vehicle;
+
+    /// <summary>Klassenbyte <c>+0x0a == 1</c> — der Infanteriearm
+    /// <c>@0x406178</c> von <c>Can_go</c>.</summary>
+    public const int ArtInfanterie = 1;
+
+    /// <summary><c>--fussvolk-alt</c> — der Stand vor dem 06.09.2026: die
+    /// Fortbewegungsart haengt allein am Fahrwerk, Infanterie faehrt also wie
+    /// ein Fahrzeug und kommt nicht auf rauen Boden.</summary>
+    public static bool FussvolkAlt;
 
     /// <summary>Ground tile codes 0..7 are the animated water cycle. Only used
     /// when a map was exported before the terrain block existed.</summary>
