@@ -33,6 +33,37 @@ public static class CwmData
         /// the map's script placeholders and scenery records.</summary>
         public int IsBuilt;
 
+        /// <summary>Record +0x08 — die <b>PANZERUNG</b> des Gebäudes, das Feld,
+        /// mit dem der Gebäudearm der Trefferrechnung den Schaden mindert:
+        /// <c>Schaden = ((Zweitwert + 30) · Angriff) / 40 ± rand%5
+        /// − (30 · Panzerung) / 50</c> (<c>Zasah</c>, <c>@0x40D2BC..0x40D31A</c>).
+        /// <para>⚠ <b>BERICHTIGUNG an einer Lesung des Baums (07.09.2026):</b>
+        /// im cerebrum stand »Laufzeit +0x04, Datei +0x08«, also ein Versatz von
+        /// −4 zwischen Tafel und Datei. Der Kopf des Gebäudearms sagt etwas
+        /// anderes — er holt die drei Felder ohne jeden Versatz:
+        /// <code>
+        ///   @0x40D292  dl = byte[0xC0691A + 76·Platz]   ; +0x0A Schadensstufe
+        ///              cmp dl, 0x64 / jae raus          ; ab 100 kein Treffer
+        ///   @0x40D2A9  ax = word[0xC06918 + 76·Platz]   ; +0x08 PANZERUNG
+        ///   @0x40D2B0  cx = word[0xC06916 + 76·Platz]   ; +0x06 Energie
+        /// </code>
+        /// <c>0xC06910</c> ist also Satzanfang UND Dateianfang. Das stützt die
+        /// Messung von zwei Seiten: +0x0A ist über dieselben 684 Sätze konstant
+        /// <b>1</b> — genau die Stufe »intakt«.</para>
+        ///
+        /// <para>⭐ GEMESSEN 2026-09-07 über alle 23 Karten: 684 Sätze mit
+        /// <c>built = 1</c> und Art 1..16, und +0x08 ist <b>restlos konstant je
+        /// Art</b>, kein einziger Ausreißer — Basis 10, die drei Fabriken 8,
+        /// Kaserne und Mine 7, Kraftwerk (13) <b>8</b>, Art 14 zwölf, Art 15
+        /// nur 4. Ein Wert, der über 684 Sätze allein von der Art abhängt, ist
+        /// eine Eigenschaft der Art, keine Stellung des einzelnen Baus.</para>
+        ///
+        /// <para>⚠ Ausfuhren vor dem 07.09.2026 tragen das Feld nicht; dort
+        /// bleibt es 0 und der Schaden fällt um <c>30·Panzerung/50</c> zu hoch
+        /// aus (beim Kraftwerk um 4 von 37). <c>--reexport-entities</c> schreibt
+        /// sie neu.</para></summary>
+        public int Armor;
+
         /// <summary>The doors, as cell offsets from <see cref="Col"/>/<see
         /// cref="Row"/>. <see cref="Doors"/> of them, <b>three bytes each from
         /// +0x35</b>: column offset, row offset, and a state byte.
@@ -225,6 +256,7 @@ public static class CwmData
                 // three bytes each; see Building.DoorCells.
                 Doors = s3[k + 0x34],
                 IsBuilt = s3[k + 0x18],
+                Armor = s3[k + 0x08],
                 Ident = s3[k + 0x41],
             };
             // the doors, three bytes each from +0x35 (see Building.DoorCells)

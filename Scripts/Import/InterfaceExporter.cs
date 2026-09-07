@@ -548,6 +548,21 @@ public sealed class InterfaceExporter
         // Rauch, ab 39 Feuer (210..212, das trifft die Truemmer nicht).
         // Ohne ihn fliegen die Brocken nackt — und genau das war zu sehen.
         ("rauch0", 240), ("rauch1", 241), ("rauch2", 242),
+        // ⭐⭐ 07.09.2026 — DIE DREI FOLGEN DES BRANDTICKERS `0x4AE760`.
+        // Seine Meldung: »ich sehe auch noch kein rauch waehrend des
+        // beschusses an den kraftwerken«. Ein beschaedigtes Gebaeude brennt im
+        // Original auf jeder Zelle seiner neuen Schadensstufe (Flag 1 aus
+        // Zasah @0x40D389 -> Stufenrechner 0x4CBBF0 -> 0x4C95E0 @0x4C9860),
+        // und der Ticker wirft dazu je nach `rand()%15`:
+        //   == 1     ANIM 510..518 (sprengung, da)  @0x4AE8DD
+        //   == 2,3   ANIM 310..315                  @0x4AE985
+        //   0,4,5,6  ANIM 230..233                  @0x4AE7FC
+        // und ab Alter 11 nur noch 210..212 (1 von 50) und 240..242 (Rauch).
+        // Die drei hier waren die einzigen, die noch fehlten.
+        ("flamme0", 310), ("flamme1", 311), ("flamme2", 312),
+        ("flamme3", 313), ("flamme4", 314), ("flamme5", 315),
+        ("glut0", 230), ("glut1", 231), ("glut2", 232), ("glut3", 233),
+        ("feuerstoss0", 210), ("feuerstoss1", 211), ("feuerstoss2", 212),
         // ⭐⭐ 24.08.2026 — DIE EIGENTLICHE EXPLOSION eines Fahrzeugs.
         // Gemeldet: »es fehlt noch die Explosion an sich«.
         //

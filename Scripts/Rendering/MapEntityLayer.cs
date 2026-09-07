@@ -371,6 +371,19 @@ public partial class MapEntityLayer : Node2D
                                             // (typ 16) sec29 pairs it with
         // ---- being taken (see Simulation/Capture.cs for the whole reading) ----
         public int Built;                   // record +0x18, "is a real building"
+        /// <summary>Satz +0x08 — die PANZERUNG eines Gebaeudes, die der
+        /// Gebaeudearm der Trefferrechnung mit <c>30·Panzerung/50</c> vom
+        /// Schaden abzieht (<c>Zasah @0x40D2BC..0x40D31A</c>). Konstant je Art
+        /// ueber 684 gemessene Saetze (Kraftwerk 8, Basis 10); ⚠ 0 bei jeder
+        /// Ausfuhr vor dem 07.09.2026 — siehe Import/CwmData.Building.Armor.
+        /// Einheiten fuehren ihre Deckung stattdessen in <c>Defence</c>.</summary>
+        public int Armor;
+
+        /// <summary>Die SCHADENSSTUFE eines Gebaeudes (+0x0A), so wie sie beim
+        /// letzten Blick war. Aendert sie sich, brennt das Gebaeude auf jeder
+        /// Zelle — siehe Simulation/Gebaeudebrand.cs. 0 heisst »noch nie
+        /// angesehen« und zuendet darum nichts.</summary>
+        public int Schadensstufe;
         public int Doors;                   // record +0x34, the door count 0/1/2
         /// <summary>The doors as cell offsets, three bytes each from +0x35 in
         /// the record. Door 0 first — that is the one the original's capture
@@ -3225,6 +3238,10 @@ public partial class MapEntityLayer : Node2D
                 // proven by the repair handler @0x43e070) instead of our table
                 int hpMax = GetI(bd, "hp_max", 0);
                 if (hpMax <= 0) hpMax = BuildingHp(btype);
+                // die Panzerung (+0x08). Fehlt sie in der Ausfuhr, wird das
+                // GEZAEHLT und nicht stumm als 0 verrechnet — siehe PanzerungFehlt
+                bool hatPanzerung = bd.ContainsKey("armor");
+                if (!hatPanzerung) PanzerungFehlt++;
                 int hp = real ? GetI(bd, "hp", hpMax) : 0;
                 if (!real) hpMax = 0;
                 var bld = new Entity
@@ -3245,6 +3262,9 @@ public partial class MapEntityLayer : Node2D
                     // the capture fields; content exported before 2026-08-06
                     // carries no door, and CaptureDoorsMissing counts that
                     Built = GetI(bd, "built"), Doors = GetI(bd, "doors"),
+                    // +0x08 die Panzerung; fehlt in Ausfuhren vor dem
+                    // 07.09.2026 und ist dann 0 (PanzerungFehlt zaehlt das)
+                    Armor = PanzerungAlt || !hatPanzerung ? 0 : GetI(bd, "armor"),
                     ShownOwner = spieler ? owner : -1,
                     // w/ch/sp are the stored Waffen / Fahrwerk / Spezial parts —
                     // a Waffen-Fabrik only ever fills w, a Fahrwerk-Fabrik only
@@ -3902,9 +3922,74 @@ public partial class MapEntityLayer : Node2D
     private const int CaptureBarDiv = 6;
     private const float CaptureBarH = 8f;
 
-    /// <summary>Wie weit über dem Bodenpunkt er sitzt. Am Bild sitzt er über
-    /// dem Turm, nicht auf der Zellkante.</summary>
+    /// <summary>Wie weit über dem Bodenpunkt er sitzt — <b>die eingemessene
+    /// Zahl von früher</b>, jetzt nur noch der Rückfall für
+    /// <c>--balken-alt</c>. Gelesen wird die Höhe seit dem 07.09.2026, siehe
+    /// <see cref="BalkenHub"/>.</summary>
     private const float BarLift = 28f;
+
+    /// <summary><c>--balkenhoehe-alt</c> — der Stand vor dem 07.09.2026: der
+    /// Balken sitzt für JEDE Einheit <see cref="BarLift"/> über dem Bodenpunkt,
+    /// ohne den eigenen Arm des Fußvolks.
+    ///
+    /// <para>⚠ Eigener Schalter, NICHT <c>--balken-alt</c> — der steht seit dem
+    /// 22.08.2026 für die Balken<b>länge</b>. Ein Schalter, der zwei Dinge
+    /// zugleich umlegt, macht jede A/B-Messung wertlos.</para></summary>
+    public static bool BalkenhoeheAlt;
+
+    /// <summary>Der senkrechte Versatz des Balkens von der Oberkante der
+    /// Bildleinwand, je Klasse gelesen: Fahrzeug <c>+0x14</c> (@0x4B7269),
+    /// Fußvolk <c>+0x0A</c> (@0x4B7361).</summary>
+    private const float BarYFahrzeug = 20f, BarYFussvolk = 10f;
+
+    /// <summary>
+    /// <b>WIE HOCH ÜBER DER EINHEIT DER BALKEN SITZT</b> — seit dem 07.09.2026
+    /// gelesen statt eingemessen.
+    ///
+    /// <para>⚠ <b>Seine Meldung:</b> »jetzt der lebensbalken, der sitzt noch zu
+    /// hoch«. Dieselbe Wurzel wie bug-084: der Fußsoldat wird seit bug-075 um
+    /// <see cref="FussVersatz"/> tiefer gezeichnet, der Balken hing aber an
+    /// einer festen Höhe über dem Bodenpunkt.</para>
+    ///
+    /// <para><b>Und das Original hat auch hier einen eigenen Arm fürs
+    /// Fußvolk.</b> Der Balkenrufer <c>0x4B71F0</c> verzweigt als ERSTES nach
+    /// dem Klassenbyte <c>+0x0A</c> (<c>byte[0x6E26D2 + 78·Griff]</c>,
+    /// Sprungtafel <c>0x4B78BC</c>, sechs Arme: 0 Fahrzeug → <c>0x4B722F</c>,
+    /// 1 Fußvolk → <c>0x4B732D</c>, 2 → nichts, 3/4/5 → eigene) — dieselbe
+    /// Weiche wie <c>Can_go</c> und der Zeichner:</para>
+    /// <code>
+    ///   Fahrzeug   @0x4B724A push 5   Höhe    @0x4B7264/@0x4B726E  x,y je +0x14
+    ///   Fussvolk   @0x4B734C push 4   Höhe    @0x4B7366 x +0x0A,  @0x4B7370 y +0x0C
+    /// </code>
+    /// <para>Der Bezug ist derselbe Bildpunkt, an dem auch das Sprite hängt:
+    /// der Balkenruf (<c>@0x42AAC9</c>) steht drei Befehle hinter dem Blit der
+    /// Auswahlmarkierung (<c>@0x42AA88</c>) im selben Block, und
+    /// <c>0x4B6F60</c> weist die Argumente aus (<c>arg1 -= arg3/2</c> ist das
+    /// bekannte »auf x zentriert«, also arg1 = x, arg3 = Breite).</para>
+    ///
+    /// <para>⚠ <b>WAAGERECHT bleibt es bei unserer Zentrierung.</b> Die
+    /// gelesenen x-Versätze (20 bzw. 12) beziehen sich auf die Leinwand des
+    /// Originals; unsere ist eine eigene Konstruktion mit Mitte 30, und ein
+    /// Balken 10 Punkte links der Mitte wäre keine Treue, sondern ein
+    /// Übertragungsfehler. Senkrecht ist gelesen, waagerecht ist unseres.</para>
+    /// </summary>
+    /// <summary>Dieselbe Hoehe, oeffentlich fuer <c>--anker-probe</c>.</summary>
+    public float BalkenHubFuerProbe(Entity e) => BalkenHub(e);
+
+    private float BalkenHub(Entity e)
+    {
+        if (BalkenhoeheAlt) return BarLift;
+        // Das Fussvolk haengt tiefer in der Leinwand — derselbe Versatz, den
+        // auch Bild und Auswahlmarkierung nehmen (bug-084).
+        float fuss = 0f;
+        if (e.Infantry >= 0)
+        {
+            var tex = AuswahlBild(e);
+            if (tex != null) fuss = FussVersatz(tex).Y;
+        }
+        float arm = e.Infantry >= 0 ? BarYFussvolk : BarYFahrzeug;
+        return ComposedAnchor.Y - fuss - arm;
+    }
 
     /// <summary>
     /// ⭐⭐ <b>DREI Bänder, nicht zwei — und die Schwellen sind gelesen.</b>
@@ -4687,7 +4772,21 @@ public partial class MapEntityLayer : Node2D
         // Ohne Bild bleibt es beim Bodenpunkt samt gemessenem Hub — dort ist der
         // Rueckfall ohnehin nur ein Punkt, und der sitzt auf Pos.
         if (tex == null) return e.Pos - new Vector2(0, SelMarkLift);
-        return PictureAnchor(e) - ComposedAnchor + KoerperMitte(tex);
+        // ⚠⚠ 07.09.2026, seine Meldung: »ich sehe die Einheitenumrandungen bei
+        // der Infanterie ... sitzt nicht mehr genau auf der Infanterie seit
+        // unserem Brueckenfix«. Genau so ist es, und es ist eine Folge von
+        // bug-075: der Fusssoldat wird seither um FussVersatz TIEFER gezeichnet
+        // (@33686, `picC - ComposedAnchor + FussVersatz(foot)`), die Markierung
+        // hing aber weiter am alten Anker. Sie muss denselben Weg gehen wie das
+        // Bild, an dem sie haengt — im Original blittet 0x42AA88 sie auf
+        // DENSELBEN Zeichenpunkt wie das Einheitenbild.
+        //
+        // ⚠ Nur fuer Fussvolk: FussVersatz rechnet aus der Unterkante des
+        // Bildes und ergaebe fuer eine Fahrzeugleinwand eine falsche Zahl.
+        // Dieselbe Bedingung wie im Zeichner (e.Infantry >= 0), und dieselbe
+        // Textur — AuswahlBild holt fuer Fussvolk GetInfantryTexture.
+        var fuss = e.Infantry >= 0 ? FussVersatz(tex) : Vector2.Zero;
+        return PictureAnchor(e) - ComposedAnchor + fuss + KoerperMitte(tex);
     }
 
     /// <summary>Das Rumpfbauteil des U-Boots — <c>SPODEK</c> 74.</summary>
@@ -10578,11 +10677,25 @@ public partial class MapEntityLayer : Node2D
     /// Elevation sits inside the subtracted term: high ground protects. The
     /// constants (30, 40, 50, the /5, the doubled elevation, both die rolls and
     /// the small-value clamp) are read straight off @0x40cdc4..0x40ceaf.
-    /// Buildings have no such pair of ratings, so a shot at a structure keeps
-    /// using the weapon table's damage.</summary>
+    /// ⚠ BERICHTIGT 07.09.2026: hier stand »Buildings have no such pair of
+    /// ratings, so a shot at a structure keeps using the weapon table's
+    /// damage«. Das war eine Setzung, und der Gebaeudearm widerlegt sie — er
+    /// rechnet sehr wohl, nur mit der PANZERUNG (+0x08) statt mit Rang und
+    /// Deckung. Ein Schuss auf ein Gebaeude geht deshalb jetzt durch
+    /// <see cref="MapObjects.GebaeudeSchaden"/>, dieselbe Fassung, die auch der
+    /// Skripttreffer nimmt. Alter Stand: <c>--panzerung-alt</c>.</summary>
     private int ShotDamage(Entity? shooter, Entity victim, int weaponDamage)
     {
-        if (shooter == null || victim.IsBuilding || shooter.Attack <= 0) return weaponDamage;
+        if (shooter == null || shooter.Attack <= 0) return weaponDamage;
+        // Der Gebaeudearm @0x40D269 haengt am Griffband des OPFERS, nicht am
+        // Angreifer: [esp+0x18] ist der Rang des Schuetzen (byte[S+0x28]),
+        // [esp+0x1a] sein Angriff samt eigener Hoehe (@0x40CB91).
+        if (victim.IsBuilding)
+            return PanzerungAlt
+                ? weaponDamage
+                : GebaeudeSchaden(shooter.Rating28,
+                                  shooter.Attack + 2 * ElevOf(shooter.Col, shooter.Row),
+                                  victim.Armor);
         // ⚠ BERICHTIGT 14.08.2026 — drei Abweichungen, alle aus dem Rumpf gelesen.
         //
         // Das Original baut beide Seiten SYMMETRISCH, und jede Seite nimmt die
@@ -10635,6 +10748,9 @@ public partial class MapEntityLayer : Node2D
     private static int ShotCore(Entity shooter, Entity victim, int elevS, int elevV)
     {
         int offence = (shooter.Rating28 + 30) * (shooter.Attack + 2 * elevS) / 40;
+        // ⚠ Nur der EINHEITENARM (@0x40CE5B). Ein Gebaeude kommt hier gar nicht
+        // an: es hat einen eigenen Arm mit eigener Verteidigungsseite und
+        // eigener Untergrenze — siehe MapObjects.GebaeudeSchaden.
         int defence = (30 + victim.Rating28 / 5) * (victim.Defence + 2 * elevV) / 50;
         return offence - defence;
     }
@@ -10667,6 +10783,12 @@ public partial class MapEntityLayer : Node2D
         bool lethal = !victim.IsBuilding && damage >= victim.Hp && damage > 0;
         victim.Hp -= victim.DugIn ? Mathf.RoundToInt(damage * DugInDamageFactor) : damage;
         if (lethal) victim.Hp = 0;
+
+        // ⭐ 07.09.2026 — und ein GEBAEUDE prueft danach seine Schadensstufe:
+        // steigt sie, brennt es (Zasah @0x40D389 reicht Flag 1 an den
+        // Stufenrechner 0x4CBBF0 durch). Seine Meldung: »ich sehe auch noch
+        // kein rauch waehrend des beschusses an den kraftwerken«.
+        if (victim.IsBuilding) GebaeudeStufeNachziehen(victim);
 
         NoteEvent(victim, victim.Hp > 0 ? "unter Beschuss" : "verloren");
         SpeakHit(victim);
@@ -30357,6 +30479,21 @@ public partial class MapEntityLayer : Node2D
     /// Fusssoldat haengt am selben Anker wie ein Fahrzeug.</summary>
     public static bool FussankerAlt;
 
+    /// <summary><c>--panzerung-alt</c> — der Stand vor dem 07.09.2026: ein
+    /// Gebaeude hat KEINE Panzerung, jeder Treffer trifft es um
+    /// <c>30·Panzerung/50</c> zu hart (beim Kraftwerk um 4 von 37).</summary>
+    public static bool PanzerungAlt;
+
+    /// <summary>Wieviele Gebaeude ohne <c>armor</c>-Feld geladen wurden.
+    ///
+    /// <para>⚠ Regel: eine Zahl, die den Unterschied zwischen »die Panzerung
+    /// ist 0« und »das Feld fehlt in dieser Ausfuhr« sichtbar macht. Eine
+    /// Ausfuhr vor dem 07.09.2026 kennt <c>armor</c> nicht, und dann rechnet
+    /// das Spiel stumm weiter wie vorher — genau die Sorte stiller Rückfall,
+    /// die hier schon mehrfach Stunden gekostet hat. <c>--reexport-entities</c>
+    /// schreibt die Karten neu.</para></summary>
+    public static int PanzerungFehlt;
+
     private readonly Dictionary<ulong, Vector2> _fussVersatz = new();
 
     /// <summary>Derselbe Versatz, oeffentlich fuer <c>--anker-probe</c>.</summary>
@@ -33803,7 +33940,7 @@ public partial class MapEntityLayer : Node2D
             // ⭐ Die Breite waechst mit HpMax (0x4B724C), sie ist nicht fest —
             // und der Balken ist auf x ZENTRIERT (0x4B6F6D: x -= breite/2).
             float bw = BarWidthOf(e.HpMax);
-            var hb = e.Pos + new Vector2(-bw / 2f, -BarLift);
+            var hb = e.Pos + new Vector2(-bw / 2f, -BalkenHub(e));
             DrawRect(new Rect2(hb - Vector2.One, new Vector2(bw + 2, BarH + 2)),
                      new Color(0, 0, 0, 0.75f));
             // ⭐ Drei Baender mit den gelesenen Schwellen 1/2 und 1/4.
@@ -33849,7 +33986,7 @@ public partial class MapEntityLayer : Node2D
                 continue;
             float breite = e.CaptureTotal / (float)CaptureBarDiv + 2f;
             float voll = Mathf.Min(breite, e.CaptureProgress / (float)CaptureBarDiv);
-            var cb = e.Pos + new Vector2(-breite / 2f, -BarLift - CaptureBarH - 3f);
+            var cb = e.Pos + new Vector2(-breite / 2f, -BalkenHub(e) - CaptureBarH - 3f);
             DrawRect(new Rect2(cb - Vector2.One, new Vector2(breite + 2, CaptureBarH + 2)),
                      new Color(0, 0, 0, 0.75f));
             DrawRect(new Rect2(cb, new Vector2(breite, CaptureBarH)),

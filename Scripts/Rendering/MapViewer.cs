@@ -1416,6 +1416,10 @@ public partial class MapViewer : Node2D
             else if (a == "--angriff-nur-feinde") MapEntityLayer.AngriffNurFeinde = true;
             else if (a == "--fussvolk-alt") Simulation.NavGrid.FussvolkAlt = true;
             else if (a == "--fussanker-alt") MapEntityLayer.FussankerAlt = true;
+            else if (a == "--panzerung-alt") MapEntityLayer.PanzerungAlt = true;
+            else if (a == "--balkenhoehe-alt") MapEntityLayer.BalkenhoeheAlt = true;
+            else if (a == "--gebaeudebrand-aus") MapEntityLayer.GebaeudebrandAus = true;
+            else if (a == "--gebaeudebrand-probe") _gebaeudebrandProbe = true;
             else if (a == "--einfahrzeiger-probe") _einfahrzeigerProbe = true;
             else if (a == "--panelknoepfe-alt") PanelknoepfeAlt = true;
             else if (a == "--panelknopf-log") PanelknopfLog = true;
@@ -2193,6 +2197,7 @@ public partial class MapViewer : Node2D
     /// ob der Tank waechst und ob der Wurf wirklich streut. Siehe
     /// Simulation/AufwertungProbe.cs.</summary>
     private bool _aufwertungProbe;
+    private bool _gebaeudebrandProbe;
     /// <summary><c>--forschung-probe</c>: kauft an einer echten Basis eine
     /// echte Forschung und misst Preis, Dauer und Wirkung. Siehe
     /// Simulation/ForschungProbe.cs.</summary>
@@ -2721,6 +2726,7 @@ public partial class MapViewer : Node2D
             if (_ankerProbe) GD.Print(_entities.AnkerProbe());
             if (_zielzelleProbe) GD.Print(_entities.ZielzelleProbe());
             if (_skripttrefferProbe) GD.Print(_entities.SkripttrefferProbe());
+            if (_gebaeudebrandProbe) GD.Print(_entities.GebaeudebrandProbe());
             if (_einfahrzeigerProbe) GD.Print(_entities.EinfahrzeigerProbe());
             if (_panelknoepfeProbe) GD.Print(PanelknoepfeProbe());
             if (_einfahrtFremdProbe) GD.Print(_entities.EinfahrtFremdProbe());
@@ -2737,6 +2743,7 @@ public partial class MapViewer : Node2D
             if (_rampenProbe) { GetTree().Quit(_entities.RampenProbeRc()); return; }
             if (_befehlsklangProbe) { GetTree().Quit(_entities.BefehlsklangProbeRc()); return; }
             if (_aufwertungProbe) { GetTree().Quit(_entities.AufwertungProbeRc()); return; }
+            if (_gebaeudebrandProbe) { GetTree().Quit(_entities.GebaeudebrandProbeRc()); return; }
             if (_forschungProbe) { GetTree().Quit(_entities.ForschungProbeRc()); return; }
             if (_erfindungProbe) { GetTree().Quit(_entities.ErfindungProbeRc()); return; }
             if (_drehCheck)

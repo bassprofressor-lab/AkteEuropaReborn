@@ -1922,9 +1922,9 @@ public partial class MapEntityLayer
             {
                 var b = _entities[bi];
                 SkripttrefferRufe++;
-                int treffer = SkripttrefferSchaden(schaden);
+                int treffer = SkripttrefferSchaden(schaden, b.Armor);
                 if (treffer >= b.Hp) { Kill(bi, b); gebaeudeTot++; }
-                else b.Hp -= treffer;
+                else { b.Hp -= treffer; GebaeudeStufeNachziehen(b); }
                 gebaeude++; getroffen = true;
             }
 
@@ -2018,26 +2018,64 @@ public partial class MapEntityLayer
     /// der Zweitwert ist <b>0</b> (<c>@0x40CC9D</c>). Fuer 40050 also Angriff
     /// <b>50</b>, Zweitwert 0.</para>
     ///
-    /// <para>⚠ <b>UNSERE LUECKE, benannt:</b> die PANZERUNG ist das Feld
-    /// <c>+0x04</c> des 76er-Gebaeudesatzes (Datei <c>+0x08</c>), und unsere
-    /// Kartenausfuhr traegt es nicht — im Satz eines Kraftwerks stehen nur
-    /// <c>w</c>, <c>ch</c>, <c>sp</c>, alle 0. Wir rechnen darum mit 0 statt
-    /// mit der 8 des Kraftwerks: der Treffer macht 33..41 statt 29..37, ein
-    /// Kraftwerk faellt nach etwa 27 statt 30 Treffern. Die Zahl gehoert in die
-    /// naechste Ausfuhr.</para></summary>
+    /// <para>⭐ <b>07.09.2026 — DIE LUECKE IST ZU.</b> Die PANZERUNG ist das
+    /// Feld <c>+0x04</c> des 76er-Gebaeudesatzes zur Laufzeit (Datei
+    /// <c>+0x08</c>), und sie steht jetzt in der Kartenausfuhr. Gemessen ueber
+    /// alle 23 Karten: 684 Saetze mit <c>built = 1</c> und Art 1..16, +0x08
+    /// <b>restlos konstant je Art</b>, kein Ausreisser — Kraftwerk (Art 13)
+    /// <b>8</b>, Basis 10, Fabriken 8, Kaserne und Mine 7, Art 14 zwoelf, Art
+    /// 15 nur 4.</para>
+    ///
+    /// <para>Fuer das Kraftwerk heisst das <c>30·8/50 = 4</c> weniger Schaden
+    /// je Treffer: 29..37 statt 33..41, und es faellt nach etwa 30 statt 27
+    /// Treffern. Gegenschalter <c>--panzerung-alt</c>; eine Ausfuhr ohne das
+    /// Feld zaehlt <see cref="MapEntityLayer.PanzerungFehlt"/> hoch, statt
+    /// stumm mit 0 weiterzurechnen.</para></summary>
     /// <summary>Wie oft ein Skripttreffer ein GEBAEUDE erwischt hat. ⚠ Fuer
     /// den Mitschnitt <c>--bomben-log</c>: seine Meldung »es gab schaden, aber
     /// der war nur minimal« ist erst zu beantworten, wenn die ZAHL der Rufe
     /// neben dem Zaehler des Skripts steht.</summary>
     public int SkripttrefferRufe;
 
-    private static int SkripttrefferSchaden(int angriff)
+    private static int SkripttrefferSchaden(int angriff, int panzerung)
+        => GebaeudeSchaden(0, angriff, panzerung);
+
+    /// <summary>
+    /// <b>Was ein Treffer einem GEBAEUDE antut</b> — der Gebaeudearm von
+    /// <c>Zasah</c>, <c>@0x40D269..0x40D346</c>, ganz gelesen.
+    ///
+    /// <para>⭐ <b>07.09.2026 — EINE FASSUNG FUER BEIDE WEGE.</b> Der Arm haengt
+    /// am Griffband des OPFERS (<c>cmp di, 0xEA60 / cmp di, 0xEB8C</c>
+    /// @<c>0x40D269</c>), nicht an der Art des Angreifers: ob der Treffer aus
+    /// dem Missionsskript kommt oder aus dem Rohr eines Panzers, ist ihm
+    /// gleich. Vorher hatten wir zwei verschiedene Antworten darauf — der
+    /// Skripttreffer rechnete, und ein Schuss nahm einfach den Waffenwert.</para>
+    ///
+    /// <code>
+    ///   @0x40D2BC  s = (Zweitwert + 30) * Angriff / 40
+    ///   @0x40D2DD  s = s - rand%5 + rand%5
+    ///   @0x40D30A  s = s - 30 * Panzerung / 50
+    ///   @0x40D324  s &lt; 1  ->  s = rand%10 % 7          (0..6)
+    ///   @0x40D346  s &gt;= Energie  ->  Tod, sonst Energie -= s
+    /// </code>
+    ///
+    /// <para>⚠ <b>Der Unterschied zum Einheitenarm ist nicht nur die
+    /// Verteidigungsseite.</b> Die Untergrenze ist eine andere: eine Einheit
+    /// bekommt bei <c>&lt;= -2</c> glatt 0 und sonst <c>rand%10/3</c> (0..3),
+    /// ein Gebaeude dagegen IMMER <c>rand%10 % 7</c> (0..6) — es gibt keinen
+    /// Schuss, der einem Gebaeude sicher nichts tut. Und die Hoehe steht im
+    /// Gebaeudearm nirgends; sie geht nur ueber den Angriff des Schuetzen ein
+    /// (<c>[esp+0x1a]</c> aus <c>@0x40CB9B</c>).</para>
+    ///
+    /// <para>Der Zweitwert ist <c>[esp+0x18]</c> — beim Schuss der Rang des
+    /// Schuetzen (<c>byte[S+0x28]</c> @<c>0x40CBA0</c>), beim Skripttreffer 0
+    /// (@<c>0x40CC9D</c>). Gegenschalter <c>--panzerung-alt</c>.</para></summary>
+    internal static int GebaeudeSchaden(int zweitwert, int angriff, int panzerung)
     {
-        const int Zweitwert = 0;
-        const int Panzerung = 0;                 // s.o. — noch nicht ausgefuehrt
-        int s = (Zweitwert + 30) * angriff / 40;
+        if (MapEntityLayer.PanzerungAlt) panzerung = 0;
+        int s = (zweitwert + 30) * angriff / 40;
         s = s - Simulation.Determinism.Roll(5) + Simulation.Determinism.Roll(5);
-        s -= 30 * Panzerung / 50;
+        s -= 30 * panzerung / 50;
         if (s < 1) s = Simulation.Determinism.Roll(10) % 7;
         return s;
     }

@@ -509,14 +509,100 @@ public partial class MapEntityLayer : Node2D
         sb.AppendLine($"  Zelle ({zc},{zr}) — nicht der Anker — findet Gebaeude {gefunden} "
                     + $"(erwartet {gi}): {(findenOk ? "richtig" : "FALSCH")}");
 
-        // 2. ein einzelner Treffer: der Schaden muss im gelesenen Band liegen
+        // 1b. ⭐ 07.09.2026 — DIE PANZERUNG (+0x08) IST DA. Erst die Frage, ob
+        // sie ueberhaupt aus der Karte kommt: eine Ausfuhr vor diesem Tag hat
+        // das Feld nicht, und dann rechnet alles stumm mit 0 weiter. Genau die
+        // Sorte stiller Rueckfall, die hier schon Stunden gekostet hat.
+        int panzErwartet = PanzerungAlt ? 0 : 8;
+        bool panzOk = kw.Armor == panzErwartet && PanzerungFehlt == 0;
+        sb.AppendLine($"  Panzerung des Kraftwerks: {kw.Armor} (erwartet {panzErwartet}"
+                    + (PanzerungAlt ? ", --panzerung-alt" : ", gemessen ueber 684 Saetze")
+                    + $"), Gebaeude ohne das Feld in dieser Ausfuhr: {PanzerungFehlt}: "
+                    + (panzOk ? "richtig"
+                             : PanzerungFehlt > 0
+                                 ? "FALSCH — die Ausfuhr ist aelter als der 07.09.2026, "
+                                   + "--reexport-entities=<Ordner mit LEVELS> schreibt sie neu"
+                                 : "FALSCH"));
+
+        // 2a. ⭐ UND DER DIREKTE BESCHUSS (07.09.2026). Die Panzerung gilt im
+        // Original fuer JEDEN Treffer auf ein Gebaeude, nicht nur fuer den
+        // Skripttreffer — der Gebaeudearm haengt am Griffband des OPFERS
+        // (@0x40D269, 0xEA60..0xEB8C), nicht an der Art des Angreifers.
+        //
+        // ⚠ Gemessen wird der UNTERSCHIED ueber viele Schuesse, nicht ein
+        // einzelner Wurf: der Abzug ist 30*8/50 = 4 und liegt damit INNERHALB
+        // des Wurfs (+-4). Ein Einzelschuss koennte den Unterschied also gar
+        // nicht zeigen. Und gemessen wird ueber ApplyHit, den echten Weg —
+        // eine Probe, die ShotCore selbst ausrechnet, prueft nur sich selbst.
+        bool beschussOk = true;
+        {
+            int kw2 = -1, sch = -1;
+            for (int i = 0; i < _entities.Count; i++)
+            {
+                var e = _entities[i];
+                if (kw2 < 0 && i != gi && e.IsBuilding && !e.IsProp && !e.Dead && e.BType == 13) kw2 = i;
+                if (sch < 0 && !e.IsBuilding && !e.IsProp && !e.Dead && e.Attack > 0) sch = i;
+            }
+            if (kw2 < 0 || sch < 0)
+                sb.AppendLine("  direkter Beschuss: kein zweites Kraftwerk oder kein Schuetze — UNGEPRUEFT");
+            else
+            {
+                const int Schuesse = 20;
+                // ⚠ MESSWERKZEUG, keine Nachbildung: der Angriff des Schuetzen
+                // wird fuer die Messung hochgesetzt. Bei kleinem Angriff faellt
+                // der Kern unter 1, und dann greift die Untergrenze
+                // `rand%10 % 7` — die kennt die Panzerung nicht, der Abzug
+                // waere unsichtbar und der Lauf wuerde »wirkt nicht« melden,
+                // obwohl alles richtig ist. Ab Angriff 12 traegt die Rechnung.
+                const int Messangriff = 40;
+                var z = _entities[kw2];
+                var s = _entities[sch];
+                int echterAngriff = s.Attack;
+                s.Attack = Messangriff;
+                int SummeMitPanzerung(int panzer)
+                {
+                    int merk = z.Armor;
+                    z.Armor = panzer;
+                    z.Hp = z.HpMax; z.Dead = false;
+                    int v = z.Hp;
+                    for (int t = 0; t < Schuesse && !z.Dead; t++) ApplyHit(sch, kw2, z, s.Attack);
+                    z.Armor = merk;
+                    return v - z.Hp;
+                }
+                int panzerung = z.Armor;
+                int mit = SummeMitPanzerung(panzerung), ohne = SummeMitPanzerung(0);
+                s.Attack = echterAngriff;
+                z.Hp = z.HpMax; z.Dead = false;
+                // Erwartung: 20 * 30*8/50 = 80 weniger Schaden. Der Wurf
+                // (rand%5 - rand%5) mittelt sich heraus, streut aber — darum
+                // ein Band statt einer Gleichheit. ⭐ NULLMODELL: waere die
+                // Panzerung wirkungslos (oder der Schuss ginge wie frueher am
+                // Gebaeudearm vorbei), laege der Unterschied bei 0.
+                // ⚠ die Rundung sitzt IM Schuss: 30*8/50 ist 4, nicht 4,8 —
+                // erst vervielfachen und dann teilen waere 96 statt 80.
+                int erwartet = Schuesse * (30 * panzerung / 50);
+                int diff = ohne - mit;
+                beschussOk = panzerung == 0 ? diff == 0 : diff >= erwartet - 30 && diff <= erwartet + 30;
+                sb.AppendLine($"  direkter Beschuss, {Schuesse} Schuesse auf Kraftwerk {z.Slot} "
+                            + $"(Messangriff {Messangriff}, echt {echterAngriff}): mit Panzerung "
+                            + $"{mit} Schaden, ohne {ohne}, Unterschied {diff} (erwartet {erwartet} "
+                            + $"= {Schuesse}*(30*{panzerung}/50)): "
+                            + (beschussOk ? "der Gebaeudearm greift auch beim Schuss, richtig"
+                                          : "FALSCH — ein Schuss geht am Gebaeudearm vorbei"));
+            }
+        }
+
+        // 2. ein einzelner Treffer: der Schaden muss im gelesenen Band liegen.
+        // Der Kern ist (0+30)*50/40 = 37, davon geht 30*Panzerung/50 ab, und
+        // darum liegt der Wurf +-4 (rand%5 - rand%5) darum herum.
+        int kern = (0 + 30) * SetupSchaden / 40 - 30 * kw.Armor / 50;
         int vorher = kw.Hp;
         ApplyMissionHits(new[] { (zc, zr) }, funken: false);
         int schaden = vorher - kw.Hp;
-        bool bandOk = schaden >= 33 - 4 && schaden <= 33 + 8;
+        bool bandOk = schaden >= kern - 4 && schaden <= kern + 4;
         sb.AppendLine($"  ein Treffer: {vorher} -> {kw.Hp}, also {schaden} Schaden "
-                    + $"(gelesen 30*50/40 = 37 +-rand%5, ohne die noch fehlende Panzerung): "
-                    + $"{(bandOk ? "im Band, richtig" : "AUSSERHALB")}");
+                    + $"(gelesen 30*{SetupSchaden}/40 = 37 minus 30*{kw.Armor}/50 "
+                    + $"= {kern}, +-rand%5): {(bandOk ? "im Band, richtig" : "AUSSERHALB")}");
 
         // 3. und es faellt: der alte Bau konnte das nie (max(1, hp/2))
         int treffer = 1;
@@ -590,7 +676,8 @@ public partial class MapEntityLayer : Node2D
         }
         else sb.AppendLine("  kein zweites Kraftwerk mehr — das Bild ist ungeprueft");
 
-        bool alles = findenOk && bandOk && totOk && regelOk && feuertOk && funkeOk && bildOk;
+        bool alles = findenOk && panzOk && beschussOk && bandOk && totOk
+                  && regelOk && feuertOk && funkeOk && bildOk;
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }
@@ -670,6 +757,61 @@ public partial class MapEntityLayer : Node2D
                             + $"{(ok ? "richtig" : "FALSCH")}");
                 sb.AppendLine($"  mit --fussanker-alt waere er 0 — dann sitzt der Soldat wieder "
                             + $"25 Punkte ueber den Raedern eines Fahrzeugs.");
+
+                // ⭐⭐ 07.09.2026 — UND WANDERT DIE AUSWAHLMARKIERUNG MIT?
+                // Seine Meldung: »die Einheitenumrandung bei der Infanterie
+                // sitzt nicht mehr genau auf der Infanterie seit unserem
+                // Brueckenfix«. Sie hing weiter am alten Anker, waehrend das
+                // Bild um FussVersatz nach unten gerueckt war.
+                //
+                // ⚠ Gemessen wird die KOPPLUNG, nicht die Formel: der
+                // Unterschied zwischen jetzt und dem Stand vor bug-075
+                // (--fussanker-alt) muss GENAU der Fussversatz sein — dieselbe
+                // Zahl, die auch der Zeichner nimmt. Eine Probe, die den
+                // Markierungspunkt selbst nachrechnet, wuerde nur sich selbst
+                // pruefen.
+                var eInf = _entities[inf];
+                var mitteNeu = AuswahlMitte(eInf);
+                bool merk = FussankerAlt;
+                FussankerAlt = true;
+                var mitteAlt = AuswahlMitte(eInf);
+                FussankerAlt = merk;
+                float wanderung = mitteNeu.Y - mitteAlt.Y;
+                bool folgtOk = Mathf.IsEqualApprox(wanderung, v.Y);
+                sb.AppendLine($"  Auswahlmarkierung: sie ist um {wanderung:0.0} Punkte "
+                            + $"mitgewandert (Bild: {v.Y:0.0}): "
+                            + (folgtOk ? "haengt am Bild, richtig"
+                                       : "FALSCH — sie haengt noch am alten Anker"));
+                // Und die Gegenprobe am FAHRZEUG: dort darf sich nichts
+                // bewegen, sonst haetten wir den Versatz zu breit gestreut.
+                if (veh >= 0)
+                {
+                    var eVeh = _entities[veh];
+                    var vNeu = AuswahlMitte(eVeh);
+                    FussankerAlt = true;
+                    var vAlt = AuswahlMitte(eVeh);
+                    FussankerAlt = merk;
+                    bool fzOk = Mathf.IsEqualApprox(vNeu.Y, vAlt.Y);
+                    sb.AppendLine($"  Gegenprobe Fahrzeug: Markierung bewegt sich um "
+                                + $"{vNeu.Y - vAlt.Y:0.0} (erwartet 0): "
+                                + (fzOk ? "richtig" : "FALSCH — der Fussversatz greift zu weit"));
+
+                    // ⭐ 07.09.2026 — UND DER LEBENSBALKEN, seine zweite
+                    // Meldung (»der sitzt noch zu hoch«). Gelesen sind die zwei
+                    // Arme des Balkenrufers: Fahrzeug +0x14, Fussvolk +0x0A von
+                    // der Oberkante der Leinwand. Bei uns also
+                    // ComposedAnchor.Y - Fussversatz - Arm.
+                    float hubVeh = BalkenHubFuerProbe(eVeh), hubInf = BalkenHubFuerProbe(eInf);
+                    float sollVeh = AnkerBezug.Y - 20f, sollInf = AnkerBezug.Y - v.Y - 10f;
+                    bool hubOk = Mathf.IsEqualApprox(hubVeh, sollVeh)
+                              && Mathf.IsEqualApprox(hubInf, sollInf);
+                    sb.AppendLine($"  Lebensbalken ueber dem Bodenpunkt: Fahrzeug {hubVeh:0.0} "
+                                + $"(erwartet {sollVeh:0.0} = Anker - 0x14), Fussvolk {hubInf:0.0} "
+                                + $"(erwartet {sollInf:0.0} = Anker - Fussversatz - 0x0A): "
+                                + (hubOk ? "richtig" : "FALSCH"));
+                    sb.AppendLine($"  ... vorher sass er fuer BEIDE auf 28 (--balkenhoehe-alt), "
+                                + $"beim Fussvolk also {28f - hubInf:0.0} Punkte zu hoch.");
+                }
             }
         }
         sb.Append("  ⚠ Der Lauf URTEILT NICHT ueber das Bild — er zeigt die Zahlen. "

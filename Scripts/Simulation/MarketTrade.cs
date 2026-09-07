@@ -189,6 +189,15 @@ public partial class MapEntityLayer
             // keiner Modulo-Bedingung, er läuft, sobald der Fahrauftrag zu
             // Ende ist. Siehe Simulation/BuildOrders.cs.
             BuildArrivalTick();
+            // ⚠⚠ 07.09.2026 — DER BRANDTICKER GEHOERT HIERHER, nicht in den
+            // Bildtakt. Er stand zuerst neben TuersperreTakt(), also bei 60 Hz
+            // statt 50 — und mein eigener Kommentar dort behauptete »im
+            // ORIGINALTAKT«. Wirkung: die Braende alterten ein Fuenftel zu
+            // schnell (kuerzerer Rauch) und wuerfelten ein Fuenftel zu oft
+            // (mehr Explosionen). Genau seine Meldung »die explosionen scheinen
+            // mir zu viel und man sieht kein rauch«. Der Ruf des Originals
+            // @0x4165C1 sitzt im Haupttakt, zwischen zwei Zeitmessungen.
+            GebaeudebrandTakt();
         }
     }
 

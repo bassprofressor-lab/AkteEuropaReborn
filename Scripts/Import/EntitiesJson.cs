@@ -182,6 +182,9 @@ public static class EntitiesJson
             // "is a real building" flag +0x18, the capture block's other gate
             w.Num("door_col", b.DoorCol).Num("door_row", b.DoorRow);
             w.Num("built", b.IsBuilt);
+            // +0x08, die Panzerung des Gebaeudearms der Trefferrechnung —
+            // konstant je Art ueber 684 Saetze, siehe CwmData.Building.Armor
+            w.Num("armor", b.Armor);
             if (b.DoorCells.Count > 0)
             {
                 w.Key("door_cells").Arr();
