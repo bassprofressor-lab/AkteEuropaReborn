@@ -165,6 +165,168 @@ public partial class MapEntityLayer : Node2D
         sb.Append($"   {_rampenSpur.Count} Einträge, {wechsel} Richtungswechsel " +
                   $"({wechselAufRampe} davon auf einer Schrägenzelle), " +
                   $"grösster Sprung {groesster} Stufen\n");
+        // ⭐⭐ 07.09.2026 — UND KANN MAN DORT ENTLADEN? Seine Meldung: »ich
+        // kann garnicht meine Schiffe entladen an den Rampen«. Die Mechanik war
+        // gebaut, nur loeste sie niemand aus. Gemessen wird der ECHTE Weg —
+        // dieselbe Funktion, die der Mauszeiger fragt — und beide Richtungen:
+        // ohne beladenen Traeger darf der Zeiger NICHT anspringen.
+        int rc2 = -1, rr2 = -1;
+        for (int c = 0; c < 400 && rc2 < 0; c++)
+            for (int r = 0; r < 400; r++)
+                if (RampenAbsetzZelle(c, r) != null) { rc2 = c; rr2 = r; break; }
+        if (rc2 >= 0)
+        {
+            int tr = -1;
+            for (int i = 0; i < _entities.Count; i++)
+            {
+                var t = _entities[i];
+                if (!t.IsBuilding && !t.IsProp && !t.Dead && IstTraeger(t)
+                    && FrachtAnBord(t.Slot).Count > 0) { tr = i; break; }
+            }
+            var mitte = CellCenter(rc2, rr2);
+            _sel.Clear();
+            var ohne = CursorHintAt(mitte);
+            if (tr >= 0) { ViewPlayer = _entities[tr].Owner; _sel.Add(tr); }
+            var mit = CursorHintAt(mitte);
+            _sel.Clear();
+            bool zeigerOk = tr < 0 || (mit == Hint.Entladen && ohne != Hint.Entladen);
+            // ⭐⭐ 08.09.2026 — GIBT ES EINEN LIEGEPLATZ? Seine Meldung nach
+            // dem ersten Bau: »entladen kann ich nicht mehr« und »die Boote tun
+            // sich sehr schwer beim Fahren«. Der Klick schickte den Traeger auf
+            // die RAMPE — die ist Land, dorthin kann ein Schiff nie, und die
+            // Wegsuche rechnete endlos an einem unerreichbaren Ziel.
+            if (tr >= 0)
+            {
+                var absetzZelle = RampenAbsetzZelle(rc2, rr2);
+                var lp = absetzZelle == null ? null : LiegeplatzAnFuerProbe(_entities[tr], absetzZelle.Value);
+                bool lpOk = lp != null;
+                sb.Append($"   Liegeplatz zur Rampe ({rc2},{rr2}), Absetzzelle "
+                        + $"({absetzZelle?.X},{absetzZelle?.Y}): "
+                        + (lpOk ? $"({lp!.Value.X},{lp.Value.Y}) — dort traegt das Wasser "
+                                  + $"das ganze Schiff, und von dort liegt es an: richtig"
+                                : "KEINER GEFUNDEN — der Traeger kaeme nie an")
+                        + System.Environment.NewLine);
+            }
+
+            // ⭐⭐ 08.09.2026 — DIE GANZE KETTE, so wie der Spieler sie geht:
+            // Traeger an den Liegeplatz, Befehl absetzen, Takte laufen lassen.
+            // Seine Meldung: »kann immer noch keine einheiten absetzen«, obwohl
+            // die Boote genau neben der Rampe stehen. Ein Lauf, der nur
+            // FrachtAbsetzen direkt ruft, haette das nie gefunden — er umgeht
+            // Befehl und Takt.
+            if (tr >= 0)
+            {
+                var azelle = RampenAbsetzZelle(rc2, rr2);
+                var lp2 = azelle == null ? null : LiegeplatzAnFuerProbe(_entities[tr], azelle.Value);
+                if (lp2 != null)
+                {
+                    var t2 = _entities[tr];
+                    t2.Col = lp2.Value.X; t2.Row = lp2.Value.Y;
+                    t2.Pos = CellCenter(t2.Col, t2.Row);
+                    int vorLadung = FrachtAnBord(t2.Slot).Count;
+                    int rc = PostUnload(tr, rc2, rr2);
+                    // ⚠⚠ DER RING. Ein Befehl WIRKT erst, wenn der Behandler
+                    // ihn aus dem Ring genommen hat — genau die Falle, die im
+                    // cerebrum steht (»ein Pruefstand, der nur den ABSENDER
+                    // fragt, ist kein Beleg«). Ohne diese Zeile stand hier
+                    // »Auftrag 0«, und das war der Pruefstand, nicht das Spiel.
+                    CommandTick();
+                    // ⚠⚠ DER BELADE-TAKT MUSS MITLAUFEN. Ohne ihn ging dieser
+                    // Lauf gruen durch, waehrend im Spiel gar nichts von Bord
+                    // kam: der Ausgestiegene wurde sofort wieder eingeladen
+                    // (--entlade-log, »1 Stueck, noch 14 an Bord«, hundertfach).
+                    // Ein Pruefstand, der nur die halbe Kette laufen laesst,
+                    // misst die andere Haelfte nicht.
+                    int takte = 0;
+                    while (takte < 60 && FrachtAnBord(t2.Slot).Count > vorLadung - 3)
+                    { FrachtAbsetzenTaktFuerProbe(); BeladeTaktFuerProbe(); takte++; }
+                    int nachLadung = FrachtAnBord(t2.Slot).Count;
+                    bool ketteOk = rc >= 0 && nachLadung <= vorLadung - 3;
+                    sb.Append($"   GANZE KETTE: Befehl {(rc >= 0 ? "angenommen" : "abgewiesen: " + UnloadNote)}, "
+                            + $"Traeger auf ({t2.Col},{t2.Row}), Auftrag {t2.UnloadRest}, "
+                            + $"Ladung {vorLadung} -> {nachLadung} nach {takte} Takten "
+                            + $"(weggefahren {AbgesetztWeggeschickt}, gesperrt {AbgesetztGesperrt}): "
+                            + (ketteOk ? "richtig" : "FALSCH — es kommt nichts von Bord")
+                            + System.Environment.NewLine);
+                }
+            }
+
+            // ⭐⭐ 07.09.2026 — UND WAS KANN DIE AUSGESETZTE EINHEIT? Seine
+            // Meldung: »Die entladene Infanterie konnte nicht schiessen, als
+            // haette sie keine Munition«, und »die entladenen Fahrzeuge wurden
+            // erst ohne Waffenturm angezeigt«. Beides ist am Zustand des
+            // Ausgestiegenen zu messen, nicht am Auge.
+            if (tr >= 0)
+            {
+                var tE = _entities[tr];
+                var warSchon = new System.Collections.Generic.HashSet<int>();
+                foreach (var q in _entities) warSchon.Add(q.Slot);
+                tE.Col = rc2; tE.Row = rr2; tE.Pos = CellCenter(rc2, rr2);
+                int raus = FrachtAbsetzen(tE.Slot, new Vector2I(rc2, rr2), 2);
+                int gemessen = 0;
+                foreach (var q in _entities)
+                {
+                    if (warSchon.Contains(q.Slot) || gemessen >= 2) continue;
+                    gemessen++;
+                    sb.Append($"   ausgesetzt: Platz {q.Slot} \"{q.Name}\" Munition {q.Ammo}/{q.AmmoMax}, "
+                            + $"Angriff {q.Attack}, Reichweite {q.Range}, Ziel {q.Target}, "
+                            + $"Blick {q.Facing}/Turm {q.AimFacing}, beweglich {q.Mobile}, "
+                            + $"Waffe {q.Weapon}, Waffenfahne {q.Armed}, kampffaehig {CanFightFuerProbe(q)}"
+                            + (q.Ammo <= 0 && q.AmmoMax > 0 ? "  ⚠ OHNE MUNITION" : "")
+                            + (q.AimFacing < 0 ? "  ⚠ KEINE TURMRICHTUNG" : "")
+                            + (q.Path != null ? $"  faehrt noch ({q.Path.Count} Schritte)" : "  steht")
+                            + System.Environment.NewLine);
+                }
+                // ⚠ Und die TRAGWEITE: gilt das nur fuer Ausgesetzte oder fuer
+                // JEDE Infanterie? Ohne diese Zahl haelt man einen alten
+                // Grundfehler fuer eine Folge des Ausladens.
+                int inf = 0, infKampf = 0, fz = 0, fzKampf = 0;
+                foreach (var q in _entities)
+                {
+                    if (q.IsBuilding || q.IsProp || q.Dead) continue;
+                    if (q.Infantry >= 0) { inf++; if (CanFightFuerProbe(q)) infKampf++; }
+                    else if (q.GameUnitType == 0) { fz++; if (CanFightFuerProbe(q)) fzKampf++; }
+                }
+                // ⚠⚠ 08.09.2026 — UND SCHIESST SIE AUCH? »kampffaehig« ist nur
+                // die halbe Frage: ein Fusssoldat schiesst NUR IM STAND
+                // (@0x40F0A0), und wer einen Weg hat, feuert nie. Nach dem
+                // Absetzen faehrt er absichtlich vom Ufer weg — der Weg muss
+                // also auch WIEDER ENDEN. Gemessen wird darum ueber Takte.
+                // ⚠ Nur die AUSGESETZTEN zaehlen: die uebrige Infanterie der
+                // Karte laeuft ohnehin herum, und ihre Wege sagen hier nichts.
+                var frisch = new System.Collections.Generic.List<int>();
+                foreach (var q in _entities)
+                    if (!warSchon.Contains(q.Slot) && q.Infantry >= 0) frisch.Add(q.Slot);
+                for (int t = 0; t < 200; t++) MoveTickFuerProbe(1f / 50f);
+                int mitWeg = 0, ohneWeg = 0;
+                foreach (var q in _entities)
+                {
+                    if (!frisch.Contains(q.Slot) || q.Dead) continue;
+                    if (q.Path != null) mitWeg++; else ohneWeg++;
+                }
+                sb.Append($"   die AUSGESETZTEN nach 200 Takten (4 s): {ohneWeg} stehen "
+                        + $"(koennen feuern), {mitWeg} faehrt noch"
+                        + (mitWeg > 0 ? "  ⚠ wer ewig faehrt, schiesst nie" : "  — richtig")
+                        + System.Environment.NewLine);
+
+                sb.Append($"   kampffaehig auf der ganzen Karte: Fussvolk {infKampf}/{inf}, "
+                        + $"Fahrzeuge {fzKampf}/{fz}"
+                        + (inf > 0 && infKampf == 0 ? "  ⚠⚠ KEIN EINZIGER Fusssoldat kann schiessen"
+                                                    : "")
+                        + System.Environment.NewLine);
+
+                if (raus == 0)
+                    sb.Append("   ausgesetzt: NICHTS — die Absetzzelle nahm niemanden auf"
+                            + System.Environment.NewLine);
+            }
+
+            sb.Append($"   Entladezeiger auf der Rampe ({rc2},{rr2}): ohne Auswahl {ohne}, "
+                    + $"mit beladenem Traeger {mit}: "
+                    + (tr < 0 ? "kein beladener Traeger — UNGEPRUEFT" 
+                              : zeigerOk ? "richtig" : "FALSCH")
+                    + System.Environment.NewLine);
+        }
+
         sb.Append("   ⭐ Erwartet auf einer GERADEN Fahrt über eine Rampe: 0 Wechsel.\n" +
                   "     Ein »Threesixty« sind mindestens 4 Wechsel auf derselben Zelle.\n" +
                   "   ⚠ NULLMODELL: derselbe Lauf mit --kein-hang. Sind die Zahlen dort\n" +

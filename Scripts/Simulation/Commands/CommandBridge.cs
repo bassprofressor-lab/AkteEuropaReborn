@@ -1032,6 +1032,129 @@ public partial class MapEntityLayer
     /// Wahrheit.</para></summary>
     /// <returns>−1 wenn nichts abgesetzt wurde; der Grund steht dann in
     /// <see cref="UnloadNote"/>.</returns>
+    /// <summary>
+    /// ⭐⭐ <b>DER RECHTSKLICK AUF EINE RAMPE</b> — 07.09.2026.
+    ///
+    /// <para><b>Seine Meldung:</b> »ich kann garnicht meine Schiffe entladen an
+    /// den Rampen, über den Rampen kommt da so ein Entlade Icon und wenn man es
+    /// mit rechter Maustaste befähigt, werden dort die Einheiten
+    /// entladen«.</para>
+    ///
+    /// <para>Die MECHANIK war gebaut und geprüft (<see cref="PostUnload"/>,
+    /// <see cref="RampenAbsetzZelle"/>, <c>--rampen-probe</c>) — nur konnte sie
+    /// niemand auslösen: der Rechtsklick kannte den Fall nicht. Das Original
+    /// hat dafür einen eigenen Zeiger (Cursor 12, <c>@0x432771</c>) und
+    /// Befehl 18 (<c>@0x4388BD</c>), siehe
+    /// <c>berichte/transportladung-fable.md</c>.</para>
+    ///
+    /// <para>⚠ Genommen wird der erste BELADENE Träger der Auswahl. Hat der
+    /// Spieler mehrere gewählt, setzen sie nacheinander ab — jeder auf dieselbe
+    /// Rampe, so wie sie auch nacheinander anlegen würden.</para></summary>
+    public bool PostUnloadKlick(Vector2 mapPos, bool queue = false)
+    {
+        if (CellAt(mapPos) is not { } z)
+        { if (EntladeLog) GD.Print("entlade: Klick ausserhalb der Karte"); return false; }
+        if (RampenAbsetzZelle(z.X, z.Y) == null)
+        {
+            if (EntladeLog)
+                GD.Print($"entlade: Klick auf ({z.X},{z.Y}) — KEINE Rampenzelle, "
+                       + "der Klick geht an Fahren/Angreifen weiter");
+            return false;
+        }
+
+        int n = 0;
+        foreach (int i in _sel)
+        {
+            if (i < 0 || i >= _entities.Count) continue;
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != ViewPlayer) continue;
+            if (!IstTraeger(e) || FrachtAnBord(e.Slot).Count == 0)
+            {
+                if (EntladeLog)
+                    GD.Print($"entlade: Platz {e.Slot} uebersprungen — Traeger {IstTraeger(e)}, "
+                           + $"an Bord {FrachtAnBord(e.Slot).Count}");
+                continue;
+            }
+            if (PostUnload(i, z.X, z.Y) < 0)
+            {
+                if (EntladeLog) GD.Print($"entlade: PostUnload abgewiesen — {UnloadNote}");
+                continue;
+            }
+            n++;
+            // ⚠⚠ BERICHTIGT NOCH AM SELBEN ABEND. Hier stand
+            // `PostMoveOne(i, CellCenter(z.X, z.Y))` — also »fahr auf die
+            // RAMPE«. Eine Rampe ist Land: ein Schiff kann dort nie hin. Seine
+            // Meldung kam sofort: »entladen kann ich nicht mehr« und »die Boote
+            // tun sich sehr schwer beim Fahren, teils massive Umwege ... oder
+            // koennen ewig nicht fahren«. Das war die Wegsuche, die zu einem
+            // unerreichbaren Ziel immer wieder neu rechnet.
+            //
+            // Der Traeger muss ans WASSER neben die Rampe. Gesucht wird die
+            // naechste Zelle, die sein ganzes Rechteck traegt und von der aus
+            // er die Absetzzelle beruehrt.
+            if (!AbsetzenAusDerFerne)
+            {
+                var absetz = RampenAbsetzZelle(z.X, z.Y);
+                var liege = absetz == null ? null : LiegeplatzAn(e, absetz.Value);
+                bool gefahren = liege != null
+                             && PostMoveOne(i, CellCenter(liege.Value.X, liege.Value.Y), queue);
+                if (liege == null) UnloadNote = "kein Liegeplatz an dieser Rampe";
+                if (EntladeLog)
+                    GD.Print($"entlade: Platz {e.Slot} auf ({e.Col},{e.Row}) -> Rampe ({z.X},{z.Y}), "
+                           + $"Absetzzelle ({absetz?.X},{absetz?.Y}), Liegeplatz "
+                           + $"({liege?.X},{liege?.Y}), Fahrbefehl {(gefahren ? "raus" : "NICHT abgesetzt")}, "
+                           + $"liegt schon an: {LiegtAnFuerProbe(e, absetz ?? z)}");
+            }
+        }
+        if (n > 0) _order = $"absetzen an der Rampe ({z.X},{z.Y})";
+        return n > 0;
+    }
+
+    /// <summary>
+    /// <b>Wo ein Traeger anlegen kann, um an dieser Zelle abzusetzen.</b>
+    ///
+    /// <para>Gesucht wird ringweise um die Absetzzelle die naechste Stelle, an
+    /// der das GANZE Rechteck des Traegers steht (ein Schiff ist 2x2) und die
+    /// nah genug an der Absetzzelle liegt. ⚠ UNSERES: das Original schickt den
+    /// Traeger nicht selbst zur Rampe, der Spieler faehrt ihn hin. Ohne diese
+    /// Suche waere unser Klick aber wirkungslos, seit der Takt das Anlegen
+    /// verlangt.</para></summary>
+    /// <summary>Dieselbe Suche, fuer den Pruefstand.</summary>
+    public Vector2I? LiegeplatzAnFuerProbe(Entity t, Vector2I z) => LiegeplatzAn(t, z);
+
+    private Vector2I? LiegeplatzAn(Entity traeger, Vector2I absetz)
+    {
+        if (_nav == null) return null;
+        int seite = Mathf.Max(1, traeger.FootW);
+        var klasse = NavGrid.MoveClass.Ship;
+        for (int ring = 1; ring <= 4; ring++)
+            for (int dx = -ring; dx <= ring; dx++)
+                for (int dy = -ring; dy <= ring; dy++)
+                {
+                    if (Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dy)) != ring) continue;
+                    int c = absetz.X + dx, r = absetz.Y + dy;
+                    // ⚠⚠ 08.09.2026 — HIER STAND NUR `CanEnter`, ALSO NUR DAS
+                    // GELAENDE. Damit bekam JEDES Schiff denselben Liegeplatz,
+                    // und wer als zweiter kam, fand ihn besetzt: `PostMoveOne`
+                    // gab false zurueck, der Fahrbefehl ging nie raus, und der
+                    // Absetzauftrag stand still. Der Mitschnitt zeigte es
+                    // dreifach: »Liegeplatz (44,37), Fahrbefehl NICHT
+                    // abgesetzt« fuer die Plaetze 1, 2 und 0 — und dann
+                    // »Platz 1 auf (46,43) liegt NICHT an (44,38) — 11351x
+                    // verschoben«.
+                    //
+                    // Gefragt wird jetzt dasselbe wie beim Fahren: ist der
+                    // Platz FREI (der Traeger selbst zaehlt nicht mit)?
+                    int wer = _entities.IndexOf(traeger);
+                    if (!_nav.IsFree(c, r, klasse, wer)) continue;
+                    // Von dort aus muss die Absetzzelle in Reichweite liegen —
+                    // dieselbe Naehe, die FrachtAbsetzenTakt verlangt.
+                    var probe = new Entity { Col = c, Row = r, FootW = seite, FootH = seite };
+                    if (LiegtAnFuerProbe(probe, absetz)) return new Vector2I(c, r);
+                }
+        return null;
+    }
+
     public int PostUnload(int carrier, int rampCol, int rampRow)
     {
         UnloadNote = "";

@@ -750,10 +750,16 @@ public partial class MapEntityLayer : Node2D
                                        InfBlock(_entities[inf]));
             if (t != null)
             {
-                var v = FussVersatzFuerProbe(t);
+                // ⚠ Gemessen wird der Wert, den die EINHEIT nimmt — seit dem
+                // 07.09.2026 der des Stehbildes, nicht der des gerade
+                // gezeigten Blocks (siehe FussVersatzFuer). Wer hier den rohen
+                // Blockwert prueft, misst etwas, das das Spiel nicht benutzt.
+                var v = FussVersatzFuerEinheitProbe(_entities[inf]);
+                var rohBlock = FussVersatzFuerProbe(t);
                 bool ok = Mathf.IsEqualApprox(v.Y, AnkerBezug.Y - 30 + FussTiefer);
                 sb.AppendLine($"  Fussversatz: {v.Y:0} Punkte nach unten "
-                            + $"(Anker {AnkerBezug.Y:0} - Unterkante 30 + {FussTiefer} gelesen): "
+                            + $"(Anker {AnkerBezug.Y:0} - Unterkante des STEHBILDES 30 + "
+                            + $"{FussTiefer} gelesen; der gerade gezeigte Block gaebe {rohBlock.Y:0}): "
                             + $"{(ok ? "richtig" : "FALSCH")}");
                 sb.AppendLine($"  mit --fussanker-alt waere er 0 — dann sitzt der Soldat wieder "
                             + $"25 Punkte ueber den Raedern eines Fahrzeugs.");
@@ -809,7 +815,31 @@ public partial class MapEntityLayer : Node2D
                                 + $"(erwartet {sollVeh:0.0} = Anker - 0x14), Fussvolk {hubInf:0.0} "
                                 + $"(erwartet {sollInf:0.0} = Anker - Fussversatz - 0x0A): "
                                 + (hubOk ? "richtig" : "FALSCH"));
-                    sb.AppendLine($"  ... vorher sass er fuer BEIDE auf 28 (--balkenhoehe-alt), "
+                    // ⭐⭐ 07.09.2026 — SITZT JEDER BILDBLOCK AUF DEMSELBEN ANKER?
+                // Seine Meldung: »wenn die infanterie stirbt, dann wie ein paar
+                // einheiten wieder hoeher anstatt wo sie stand«. Der Versatz
+                // wurde je BILD aus dessen Unterkante gerechnet, und ein
+                // Sterbebild hat eine andere Silhouette. Gemessen wird die
+                // SPANNE ueber Lauf-, Steh- und Sterbebloecke: sie muss 0 sein.
+                float minV = float.MaxValue, maxV = float.MinValue;
+                string schlimmster = "";
+                foreach (int blk in new[] { 0, 1, 2, 3, 4, 5, 6, 7, 11, 12, 13, 14 })
+                {
+                    var bt = GetInfantryTexture(eInf.Infantry, eInf.Facing, blk);
+                    if (bt == null) continue;
+                    float roh = FussVersatzFuerProbe(bt).Y;
+                    if (roh < minV) minV = roh;
+                    if (roh > maxV) { maxV = roh; schlimmster = blk >= 12 ? $"Block {blk} (Sterben)" : $"Block {blk}"; }
+                }
+                float spanne = maxV - minV;
+                float jetzt = FussVersatzFuerEinheitProbe(eInf).Y;
+                bool blockOk = Mathf.IsEqualApprox(jetzt, v.Y) && spanne > 0;
+                sb.AppendLine($"  Bildbloecke: der ROHE Versatz schwankt um {spanne:0.0} Punkte "
+                            + $"({minV:0}..{maxV:0}, am weitesten {schlimmster}) — genau das liess die "
+                            + $"Leiche springen. Genommen wird jetzt fuer JEDEN Block der Wert des "
+                            + $"Stehbildes: {jetzt:0.0}: {(blockOk ? "richtig" : "FALSCH")}");
+
+                sb.AppendLine($"  ... vorher sass er fuer BEIDE auf 28 (--balkenhoehe-alt), "
                                 + $"beim Fussvolk also {28f - hubInf:0.0} Punkte zu hoch.");
                 }
             }

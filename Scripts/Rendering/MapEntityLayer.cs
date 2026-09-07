@@ -522,6 +522,11 @@ public partial class MapEntityLayer : Node2D
         public int PathIdx;
         public Vector2I Goal;            // final target cell (for re-pathing)
 
+        /// <summary>Bis wann diese Einheit NICHT wieder aufgenommen wird —
+        /// gesetzt fuer einen frisch Ausgestiegenen, der nirgends hin kann.
+        /// ⚠ UNSERES; das Original schickt ihn stattdessen weg.</summary>
+        public float NichtBeladenBis;
+
         /// <summary>Takte bis zum naechsten Versuch, einen Weg zu
         /// <see cref="Goal"/> zu finden — 0 heisst »kein Versuch offen«.
         ///
@@ -3312,16 +3317,23 @@ public partial class MapEntityLayer : Node2D
         // foot soldiers: the map file carries no hp and no weapon for them, so
         // both come from the design their sprite set points at
         LoadInfantryDesigns();
-        foreach (var e in _entities)
-        {
-            if (e.Infantry < 0 || _infDesigns == null) continue;
-            // their life is `energie` out of the record like every other unit
-            // (15..35 for the two size classes) — the invented 60/90 is gone
-            if (e.HpMax <= 0) { e.HpMax = e.UnitType == 149 ? InfHpHeavy : InfHpLight; e.Hp = e.HpMax; }
-            e.Mobile = true;
-            if (_infDesigns.TryGetValue(e.Infantry, out var des) && des.Damage > 0)
-                e.Weapon = InfCompBase + des.WeaponRow;
-        }
+        foreach (var e in _entities) InfanterieNachziehen(e);
+        // ⚠⚠ 07.09.2026 — UND DIE LADUNG. Seine Meldung: »Die entladene
+        // Infanterie konnte nicht schiessen, als haette sie keine Munition«.
+        //
+        // Die Munition war es nicht (Fussvolk traegt auf allen Karten 0/0) —
+        // es war die WAFFE. Ein Fusssoldat bekommt sie hier, aus seinem
+        // Entwurf, denn die Kartendatei fuehrt fuer ihn keine (+0x0C ist 0 bei
+        // allen 27 Fusssoldaten der Karte 5). Die Ladung steht zu diesem
+        // Zeitpunkt aber nicht mehr in `_entities`: `FrachtAusListeNehmen`
+        // hat sie ~140 Zeilen weiter oben herausgenommen. Sie kam damit ohne
+        // Waffe an Land, und `CanFight` verlangt `Weapon != 0`.
+        //
+        // ⭐ Gemessen mit --rampen-probe: von 14 Fusssoldaten auf map_05 waren
+        // 12 kampffaehig — genau die zwoelf, die nie an Bord waren; die zwei
+        // ausgesetzten nicht. Jetzt bekommt die Ladung dieselbe Nachbereitung.
+        foreach (var liste in _fracht.Values)
+            foreach (var e in liste) InfanterieNachziehen(e);
 
         // sec53: the player table and its alliance matrix
         _players.Clear();
@@ -3973,6 +3985,105 @@ public partial class MapEntityLayer : Node2D
     /// Balken 10 Punkte links der Mitte wäre keine Treue, sondern ein
     /// Übertragungsfehler. Senkrecht ist gelesen, waagerecht ist unseres.</para>
     /// </summary>
+    /// <summary>
+    /// ⭐⭐ <b>DER LADUNGSBALKEN</b> — was ein Transporter geladen hat, über
+    /// seinem Lebensbalken. Gelesen am 07.09.2026
+    /// (<c>berichte/transportladung-fable.md</c>, Zeichner <c>0x4B90D0</c>,
+    /// Überlagerung <c>0x42AEA0</c>).
+    ///
+    /// <para><b>Seine Meldung:</b> »Im original haben die Schiffe Ladung, die
+    /// man als Balken über der Lebensanzeige hat, verschiedene Farben,
+    /// anscheinend je nachdem was geladen ist (Infanterie oder
+    /// Fahrzeuge)«.</para>
+    ///
+    /// <para><b>Und genau so steht es da.</b> Der Balken ist KEIN Teil des
+    /// Lebensbalken-Zeichners <c>0x4B71F0</c>, sondern ein eigener Aufruf:
+    /// <c>@0x42AEA0</c> prüft <c>+0x0B == 0x49</c> (73, der Träger) und ruft
+    /// <c>0x4B92E0(einheit, x+30, y+6)</c>, das die Ladung nach Art zählt und
+    /// an <c>0x4B90D0</c> weiterreicht:</para>
+    /// <code>
+    ///   Rahmen         32 x 6 Bildpunkte, Palettenplatz 0xFE
+    ///   je FAHRZEUG    10 Bildpunkte,     Palettenplatz 0x28
+    ///   je FUSSSOLDAT   2 Bildpunkte,     Palettenplatz 0x97
+    ///   nur wenn ueberhaupt etwas geladen ist
+    /// </code>
+    /// <para>Die drei Farben aus <c>DATA/01.PAL</c> (8 Byte Kopf, dann RGB):
+    /// 0xFE = (235,231,231) fast weiß · 0x28 = (127,115,115) grau ·
+    /// 0x97 = (243,150,35) orange. Die Rechnung passt auch zur Ladungsgrenze:
+    /// 15 Punkte Last, ein Fahrzeug kostet 5, ein Fußsoldat 1 — bei 32 Punkten
+    /// Breite füllen drei Fahrzeuge (30) oder fünfzehn Soldaten (30) den Balken
+    /// fast genau aus.</para>
+    ///
+    /// <para>⚠ Der senkrechte Abstand ist <b>gelesen</b>: im Original sitzt die
+    /// Ladung bei <c>y+6</c> und das Leben bei <c>y+15</c>, also neun Punkte
+    /// höher. Die waagerechte Lage bleibt UNSERE Zentrierung, aus demselben
+    /// Grund wie beim Lebensbalken (siehe <see cref="BalkenHub"/>).</para>
+    ///
+    /// <para>Gegenschalter <c>--ladungsbalken-aus</c>.</para></summary>
+    private void LadungsbalkenZeichnen(Entity e)
+    {
+        if (LadungsbalkenAus) return;
+        // ⚠⚠ 07.09.2026, noch am selben Abend berichtigt. Seine Meldung: »wenn
+        // man da lang faehrt, werden wie Lebensbalken eines Gebaeudes angezeigt
+        // oder so, keine Ahnung was das ist«.
+        //
+        // Das war DIESER Balken, ueber den Skriptplaetzen und Gebaeuden des
+        // Gegners. Der Grund ist ein Nummernkreis: `_fracht` ist nach dem
+        // EINHEITEN-Platz benannt, und Gebaeude zaehlen getrennt. Auf map_05
+        // tragen die Basis und die zwei Fabriken die Plaetze 0, 1 und 2 —
+        // dieselben Zahlen wie die drei beladenen Frachter. Ein Gebaeude bekam
+        // damit den Ladungsbalken eines Schiffes.
+        //
+        // ⭐ Zwei Tore, nicht eines: kein Gebaeude (der Nummernkreis), und nur
+        // ein TRAEGER (+0x0B == 73). Das zweite kostet nichts und macht den
+        // Balken unabhaengig davon, wie die Plaetze irgendwann einmal gezaehlt
+        // werden.
+        if (e.IsBuilding || e.IsProp || !IstTraeger(e)) return;
+        if (!_fracht.TryGetValue(e.Slot, out var last) || last.Count == 0) return;
+
+        int fahrzeuge = 0, fussvolk = 0;
+        foreach (var u in last) { if (u.Infantry >= 0) fussvolk++; else fahrzeuge++; }
+        int punkte = fahrzeuge * LadungProFahrzeug + fussvolk * LadungProFussvolk;
+        if (punkte <= 0) return;
+
+        var pos = e.Pos + new Vector2(-LadungBreite / 2f, -(BalkenHub(e) + LadungUeberLeben));
+        DrawRect(new Rect2(pos - Vector2.One, new Vector2(LadungBreite + 2, LadungHoehe + 2)),
+                 new Color(0, 0, 0, 0.75f));
+        DrawRect(new Rect2(pos, new Vector2(LadungBreite, LadungHoehe)), LadungRahmen);
+
+        // ⚠ Die zwei Sorten stehen NEBENEINANDER, nicht uebereinander: der
+        // Zeichner faehrt einen Zaehler ueber dieselbe Zeile. Fahrzeuge zuerst,
+        // so wie 0x4B90D0 sie abarbeitet.
+        float x = 0;
+        if (fahrzeuge > 0)
+        {
+            float w = Mathf.Min(LadungBreite - x, fahrzeuge * LadungProFahrzeug);
+            DrawRect(new Rect2(pos + new Vector2(x, 0), new Vector2(w, LadungHoehe)), LadungFahrzeug);
+            x += w;
+        }
+        if (fussvolk > 0 && x < LadungBreite)
+        {
+            float w = Mathf.Min(LadungBreite - x, fussvolk * LadungProFussvolk);
+            DrawRect(new Rect2(pos + new Vector2(x, 0), new Vector2(w, LadungHoehe)), LadungFussvolk);
+        }
+    }
+
+    /// <summary><c>--ladungsbalken-aus</c> — der Stand vor dem 07.09.2026: ein
+    /// beladener Transporter zeigt nicht, was er traegt.</summary>
+    public static bool LadungsbalkenAus;
+
+    /// <summary>Die gelesenen Masse und Farben des Ladungsbalkens
+    /// (<c>0x4B90D0</c>); die Farben sind die Palettenplaetze 0xFE, 0x28 und
+    /// 0x97 aus <c>DATA/01.PAL</c>.</summary>
+    private const float LadungBreite = 32f, LadungHoehe = 6f;
+    private const int LadungProFahrzeug = 10, LadungProFussvolk = 2;
+    /// <summary>Neun Punkte ueber dem Lebensbalken — im Original y+6 gegen
+    /// y+15.</summary>
+    private const float LadungUeberLeben = 9f;
+    private static readonly Color LadungRahmen   = Color.Color8(235, 231, 231);
+    private static readonly Color LadungFahrzeug = Color.Color8(127, 115, 115);
+    private static readonly Color LadungFussvolk = Color.Color8(243, 150, 35);
+
     /// <summary>Dieselbe Hoehe, oeffentlich fuer <c>--anker-probe</c>.</summary>
     public float BalkenHubFuerProbe(Entity e) => BalkenHub(e);
 
@@ -3981,12 +4092,7 @@ public partial class MapEntityLayer : Node2D
         if (BalkenhoeheAlt) return BarLift;
         // Das Fussvolk haengt tiefer in der Leinwand — derselbe Versatz, den
         // auch Bild und Auswahlmarkierung nehmen (bug-084).
-        float fuss = 0f;
-        if (e.Infantry >= 0)
-        {
-            var tex = AuswahlBild(e);
-            if (tex != null) fuss = FussVersatz(tex).Y;
-        }
+        float fuss = FussVersatzFuer(e).Y;
         float arm = e.Infantry >= 0 ? BarYFussvolk : BarYFahrzeug;
         return ComposedAnchor.Y - fuss - arm;
     }
@@ -4482,10 +4588,20 @@ public partial class MapEntityLayer : Node2D
     /// things always; someone else's UNIT only while it is being watched; a
     /// BUILDING once the cell has been seen, because a base does not walk away
     /// while nobody looks.</summary>
+    /// <summary><c>--skriptplaetze-auf-minikarte</c> — der Stand vor dem
+    /// 07.09.2026: Saetze ohne Bauwerk bekommen auch auf der Uebersichtskarte
+    /// einen Gebaeudepunkt.</summary>
+    public static bool SkriptplaetzeAufMinikarte;
+
+    /// <summary>Wieviele Punkte die Uebersichtskarte weggelassen hat, weil
+    /// dahinter kein Bauwerk steht. ⚠ Ohne die Zahl waere »da ist nichts mehr«
+    /// nicht von »die Karte hat gar keine« zu unterscheiden.</summary>
+    public int _dotsSkript;
+
     public List<(Vector2 Pos, int Owner, bool Building)> MinimapDots()
     {
         var list = new List<(Vector2, int, bool)>(_entities.Count);
-        _dotsMine = _dotsForeign = _dotsHidden = 0;
+        _dotsMine = _dotsForeign = _dotsHidden = _dotsSkript = 0;
         foreach (var e in _entities)
         {
             if (e.IsProp || e.Dead) continue;
@@ -4504,6 +4620,26 @@ public partial class MapEntityLayer : Node2D
             // haben wieder kleine Kacheln auf der Minimap, das muss nicht sein«.
             // Betrifft aktuell nur den Nachschubposten (Besitzer 255).
             if (e.IsBuilding && (e.Owner < 0 || e.Owner > 7)) continue;
+            // ⭐⭐ 07.09.2026 — UND EIN SKRIPTPLATZ IST KEIN GEBAEUDE.
+            //
+            // Seine Meldung: »Mir werden mehrere Rote Kaestchen auf dem Wasser
+            // (MiniMap) angezeigt ... Im Original ist da nichts«, und auf
+            // Nachfrage: »nicht da, wo meine Schiffe spawnen. Mehr so mittig
+            // (oberhalb sowie unterhalb) auf der Karte, scheinbar gezielt im
+            // Wasser.«
+            //
+            // Genau das steht in 05.CWM: fuenf Saetze der Gebaeudeart 0 mit
+            // Besitzer 1 (dem roten Gegner), Namen »Rome«/»ome«, alle in
+            // SPALTE 22 — der Mitte der 50 Zellen breiten Karte — auf den
+            // Zeilen 0, 11, 48, 57 und 66, vier davon im Wasser. Art 0 ist
+            // keine Gebaeudeart (die Namenstafel ist 1-basiert), sondern ein
+            // Platz, den nur das Missionsskript braucht.
+            //
+            // <see cref="Entity.NoStructure"/> gibt es dafuer laengst, und der
+            // Zeichner, die Auswahl und der Klick achten darauf — die
+            // Uebersichtskarte war die einzige Stelle, die es nicht tat.
+            // Gegenschalter --skriptplaetze-auf-minikarte.
+            if (e.NoStructure && !SkriptplaetzeAufMinikarte) { _dotsSkript++; continue; }
             list.Add((e.Pos, e.Owner, e.IsBuilding));
         }
 
@@ -4541,7 +4677,9 @@ public partial class MapEntityLayer : Node2D
                $"{(m == null ? "-" : m.ViewMoves.ToString())} Kamerabewegungen, " +
                $"{(m == null ? "-" : m.FogDrawn.ToString())} davon mit Nebelschicht; " +
                $"Punkte {_dotsMine} eigene, {_dotsForeign} fremde sichtbar, " +
-               $"{_dotsHidden} vom Nebel verdeckt (Nebel {(FogActive ? "an" : "aus")}, " +
+               $"{_dotsHidden} vom Nebel verdeckt, {_dotsSkript} Skriptplaetze " +
+               $"weggelassen{(SkriptplaetzeAufMinikarte ? " (--skriptplaetze-auf-minikarte: KEINE)" : "")}" +
+               $" (Nebel {(FogActive ? "an" : "aus")}, " +
                $"Spieler {ViewPlayer}, lebend " +
                string.Join("/", System.Array.ConvertAll(alive, x => x.ToString())) + ")";
     }
@@ -4785,7 +4923,7 @@ public partial class MapEntityLayer : Node2D
         // Bildes und ergaebe fuer eine Fahrzeugleinwand eine falsche Zahl.
         // Dieselbe Bedingung wie im Zeichner (e.Infantry >= 0), und dieselbe
         // Textur — AuswahlBild holt fuer Fussvolk GetInfantryTexture.
-        var fuss = e.Infantry >= 0 ? FussVersatz(tex) : Vector2.Zero;
+        var fuss = FussVersatzFuer(e);
         return PictureAnchor(e) - ComposedAnchor + fuss + KoerperMitte(tex);
     }
 
@@ -9204,40 +9342,61 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     private static float RangeOf(Entity e)
     {
-        // ⭐⭐ 22.08.2026 — DIE GATTUNG ENTSCHEIDET MIT (OFFENE_FRAGEN BN.5.1,
-        // hoechstreichweite() 0x454200 / F 0x452EB0):
+        // ⭐⭐ DIE GATTUNG ENTSCHEIDET MIT (hoechstreichweite() 0x454200 /
+        // F 0x452EB0). ⚠⚠ BERICHTIGT AM 07.09.2026 — die Zuordnung stand hier
+        // VERTAUSCHT, und seine Meldung hat es aufgedeckt: »also die schiffe
+        // scheinen eine viel zu hohe Angriffsreichweite zu haben. Das ist im
+        // original nicht so.«
         //
-        //     nach Gattung byte[u+0x0A]:
-        //         0,1,5 -> byte[u+0x2B] · 40      (der eigene Wert)
-        //         4     -> 640                    ⭐ Schiffe, FEST = 16 Zellen
-        //         2,3   -> 0                      (schiesst nie)
+        // Die Sprungtafel `0x45424C` ist jetzt roh gelesen, Eintrag fuer
+        // Eintrag, statt aus dem Verhalten geschlossen:
         //
-        // ⭐ Die Probe, dass die Zuordnung richtig herum ist, liefert die
-        // Schwesterfunktion: fuer einen ungueltigen Index gibt sie
-        // Hoechstreichweite 0 UND Mindestreichweite 30 000 — komplementaer,
-        // also »kann nie schiessen«. Zwei Zahlen, die nur zusammen Sinn ergeben.
-        // ⚠⚠ GATTUNG 3 IST HIER MIT ABSICHT NICHT DABEI, und der Grund ist
-        // gemessen. Die Tafel sagt fuer 3 ebenfalls 0. In unseren Karten stehen
-        // aber ZEHN Einheiten der Gattung 3 — map_25, map_32 (drei), map_33 und
-        // fuenf Gefechtskarten —, und alle zehn sind dieselbe schwere Kanone:
-        // Waffe 139, Angriff 30, Reichweite 15, 255 Trefferpunkte. Eine Waffe
-        // mit Angriff 30 und Reichweite 15, die nie schiessen kann, ist keine
-        // plausible Lesart.
+        //     Gattung 0 -> 0x454230   byte[+0x2B] * 40   (der eigene Wert)
+        //     Gattung 1 -> 0x454230   dito
+        //     Gattung 2 -> 0x454245   0                  (schiesst nie)
+        //     Gattung 3 -> 0x454240   FEST 640 = 16 Zellen
+        //     Gattung 4 -> 0x454230   der eigene Wert    ⭐ SCHIFFE
+        //     Gattung 5 -> 0x454230   dito
         //
-        // Die Aufloesung steht wahrscheinlich in Abschnitt AP: Fensterart 3 ist
-        // die »Raketen-Einsatzplanung« mit Mindestreichweite und 13x13-Zielsuche.
-        // Gattung 3 feuert dann NICHT von selbst, sondern nur, wo der Spieler
-        // einen Schlag plant — und genau darum gibt die Direktfeuer-Reichweite
-        // 0 zurueck. Das ist eine Deutung ohne Zahl, also wird sie nicht gebaut.
+        // Hier stand »4 -> 640 (Schiffe, FEST)« und »2,3 -> 0«. Damit schoss
+        // jedes Schiff 16 Zellen weit, statt der 2 des Patrol-Boots oder der 7
+        // des L.Kreuzers — und die Schiffe tragen ihren Wert sehr wohl, der
+        // Bauhandler setzt `Range = d.Range2` aus dem Entwurf.
         //
-        // Bis die Einsatzplanung steht, waere »Reichweite 0« kein Nachbau,
-        // sondern ein Ausfall: zehn schwere Kanonen ohne Ersatzmechanik.
-        // ⭐ Eingetragen als Bauaufgabe; hier bleibt es beim eigenen Wert.
+        // ⭐ Und die Berichtigung loest ein Raetsel, das im alten Kommentar
+        // ueber zwei Wochen offenstand: dort wurde ausgefuehrt, warum die zehn
+        // Einheiten der GATTUNG 3 unmoeglich »nie schiessen« koennen (alle
+        // dieselbe schwere Kanone, Waffe 139, Angriff 30, Reichweite 15), und
+        // eine Einsatzplanung als Erklaerung vermutet. Es war schlicht die
+        // vertauschte Zeile: Gattung 3 bekommt die feste 16-Zellen-Reichweite,
+        // was zu einer schweren Kanone genau passt. Die Vermutung ist damit
+        // erledigt, nicht bestaetigt.
+        //
+        // ⚠ Die MINDESTreichweite war richtig zugeordnet und bleibt, wie sie
+        // ist (Tafel 0x4542CC selbst gelesen: 0,1,4,5 -> byte[+0x2A]*40 @0x4542B0;
+        // 2 -> 0x7530 = 30000 @0x4542C4; 3 -> 0 @0x4542C0). Die zwei Tafeln
+        // sind also NICHT spiegelbildlich: Gattung 3 hat eine feste Obergrenze
+        // und keine Untergrenze.
+        //
+        // Gegenschalter --reichweite-alt.
         switch (e.GameUnitType)
         {
-            case 4:  return 16f;              // 640 Feinschritte / 40 = 16 Zellen
-            case 2:  return 0f;               // keine bewaffnete in unseren Karten
+            case 3:  return ReichweiteAlt ? RangeOfEigen(e) : 16f;   // 640 / 40
+            case 4:  return ReichweiteAlt ? 16f : RangeOfEigen(e);   // SCHIFFE
+            case 2:  return 0f;
         }
+        return RangeOfEigen(e);
+    }
+
+    /// <summary><c>--reichweite-alt</c> — der Stand vor dem 07.09.2026: die
+    /// feste 640 hing an Gattung 4 statt an Gattung 3, ein Schiff schoss also
+    /// 16 Zellen weit.</summary>
+    public static bool ReichweiteAlt;
+
+    /// <summary>Der eigene Wert der Einheit, <c>byte[+0x2B] · 40</c> — in
+    /// Zellen, so wie wir Entfernungen fuehren.</summary>
+    private static float RangeOfEigen(Entity e)
+    {
         // ⚠⚠ 23.08.2026 — DER RUECKFALL AUF UNSERE WAFFENTAFEL IST WEG.
         //
         // Gemeldet: »die Einheit Minelayer schiesst irgendwas auf sehr hohe
@@ -9368,9 +9527,30 @@ public partial class MapEntityLayer : Node2D
             if (e.Range <= 0) noRange++;
             if (e.RangeMin > 0) { withMin++; minSum += e.RangeMin; seen.TryGetValue(e.RangeMin, out int c); seen[e.RangeMin] = c + 1; }
         }
+        // ⭐ 07.09.2026 — DIE REICHWEITE JE GATTUNG, auf seine Meldung »die
+        // schiffe scheinen eine viel zu hohe Angriffsreichweite zu haben«.
+        // Ohne diese Aufschluesselung war der vertauschte Tafeleintrag nicht zu
+        // sehen: die Gesamtzahl der bewaffneten Einheiten aendert sich dadurch
+        // NICHT, nur ihre Reichweite. ⚠ Eine Zahl je Gattung, dazu die
+        // Gegenrechnung mit --reichweite-alt.
+        var jeGattung = new SortedDictionary<int, (int N, float Summe, float Max)>();
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Dead) continue;
+            float r = RangeOf(e);
+            jeGattung.TryGetValue(e.GameUnitType, out var v);
+            jeGattung[e.GameUnitType] = (v.N + 1, v.Summe + r, Mathf.Max(v.Max, r));
+        }
+        string gat = string.Join(" · ", System.Linq.Enumerable.Select(jeGattung,
+            kv => $"Gattung {kv.Key}: {kv.Value.N}x, Reichweite im Mittel " +
+                  $"{kv.Value.Summe / Mathf.Max(1, kv.Value.N):0.0}, hoechstens {kv.Value.Max:0}"));
+
         string sp = seen.Count == 0 ? "keine" :
             string.Join(", ", System.Linq.Enumerable.Select(seen, kv => $"{kv.Key}x{kv.Value}"));
-        return $"reichweite: {armed} bewaffnete Einheiten, {noRange} davon ohne eigenen Wert " +
+        return $"reichweite je Gattung ({(ReichweiteAlt ? "--reichweite-alt: die feste 640 " +
+                   "haengt an Gattung 4" : "Tafel 0x45424C: die feste 640 haengt an Gattung 3")}): " +
+               gat + System.Environment.NewLine +
+               $"reichweite: {armed} bewaffnete Einheiten, {noRange} davon ohne eigenen Wert " +
                $"(unsere Tabelle springt ein), {withMin} mit Mindestreichweite [{sp}]" +
                (NoMinRange ? " — GEGENPROBE --no-min-range: sie wird NICHT beachtet" : "") +
                $"; Ziele wegen zu geringer Entfernung fallengelassen: {MinRangeBlocked}" +
@@ -9407,6 +9587,9 @@ public partial class MapEntityLayer : Node2D
     // Entities with hp_max 0 (unit_types 148/149, the "Leichter"/"Schwerer" size
     // classes) are scenery markers, not combatants — they neither shoot nor can
     // be shot at.
+    /// <summary>Dieselbe Frage, oeffentlich fuer die Pruefstaende.</summary>
+    public static bool CanFightFuerProbe(Entity e) => CanFight(e);
+
     private static bool CanFight(Entity e)
         // ⚠ 11.08.2026 — hier stand nur `e.Weapon != 0`, und e.Weapon ist der
         // AUFSATZ. Ein Baufahrzeug traegt Aufsatz 47 oder 48 und kam damit
@@ -19947,6 +20130,12 @@ public partial class MapEntityLayer : Node2D
     /// Quelle statt einer Konstante neben einem Feld.</para></summary>
     private static int CampaignTechLevel => AirProbeTechstandard;
 
+    /// <summary>Rumpf -> Entwurfsname, aus der Schiffstafel gefuellt. ⚠ Statisch,
+    /// weil <see cref="LabelOf(Entity)"/> es ist; gesetzt in
+    /// <see cref="LoadShipDesigns"/>. Doppelte Ruempfe (151) behalten den
+    /// ERSTEN Namen — siehe die Begruendung dort.</summary>
+    private static readonly Dictionary<int, string> _schiffsnamen = new();
+
     private List<ShipDesign>? _shipDesigns;   // this map's own sec119 table
     private string _shipSource = "";          // where the list came from
     private const float ShipSeconds = 8f;     // OURS
@@ -19987,6 +20176,10 @@ public partial class MapEntityLayer : Node2D
         if (arr == null) return;
 
         _shipDesigns = new List<ShipDesign>();
+        // ⭐ 07.09.2026 — die Namenstafel Rumpf -> Entwurf, fuer LabelOf.
+        // Sie wird JE KARTE neu gefuellt, denn eine Karte kann eine eigene
+        // sec119-Liste mitbringen; der erste Eintrag je Rumpf gewinnt.
+        _schiffsnamen.Clear();
         foreach (var item in arr)
         {
             if (item.VariantType != Variant.Type.Dictionary) continue;
@@ -20012,6 +20205,9 @@ public partial class MapEntityLayer : Node2D
                 Tech = GetI(d, "tech"),
             });
         }
+        foreach (var d in _shipDesigns)
+            if (d.Name.Length > 0 && !_schiffsnamen.ContainsKey(d.Chassis))
+                _schiffsnamen[d.Chassis] = d.Name;
         // A map without its own sec119 runs on the exe's default table, whose
         // enable bytes are all zero because the campaign never got that far.
         if (_shipSource == "GAME.EXE")
@@ -24345,8 +24541,51 @@ public partial class MapEntityLayer : Node2D
     /// <c>cmp al, 0x0E; jbe</c>) — also fünfzehn. Gemischt ist erlaubt, und
     /// dann trägt ein Frachter zum Beispiel zwei Fahrzeuge und vier Mann.
     /// </summary>
+    /// <summary>
+    /// ⭐⭐ <b>WER UEBERHAUPT TRAGEN DARF</b> — Satzfeld <c>+0x0B == 0x49</c>
+    /// (73), also <see cref="Entity.Chassis"/>.
+    ///
+    /// <para><b>Seine Meldung vom 07.09.2026:</b> »Die KI scheint ein Vehicle
+    /// auf ein Patrol Boot geladen zu haben, das dürfte garnicht gehen oder?«
+    /// — richtig, das darf nicht gehen. Wir hatten gar kein Trägerkriterium:
+    /// <see cref="BeladeVersuch"/> nahm JEDE eigene Einheit in der Nähe, und
+    /// <see cref="PasstAnBord"/> fragte nur nach Gewicht und Last.</para>
+    ///
+    /// <para><b>Das Original prüft an sechs Stellen dasselbe Byte</b>
+    /// (<c>0x410E9B</c>, <c>0x411689</c>, <c>0x42AEA0</c>, <c>0x43207D</c>,
+    /// <c>0x4326BF</c>, <c>0x4B2E95</c>; siehe
+    /// <c>berichte/transportladung-fable.md</c>) — <b>nicht</b> die Gattung.
+    /// ⭐ In den Daten von 05.CWM bestätigt: die vier Träger aus sec37 tragen
+    /// alle <c>+0x0B = 73</c>, das Patrol-Boot 70 und die Küstenwache 72. Nur
+    /// der FRACHTER trägt also, und das ist genau eine Rumpfnummer.</para>
+    ///
+    /// <para>⚠ Der Entwurfs-»Transporter« ist damit NICHT gemeint: das ist ein
+    /// MATERIALtransporter (Ausrüstung <c>+0x0E == 0x47</c>, Auftrag 25) und
+    /// nimmt keine Einheiten auf. Gegenschalter <c>--jeder-traegt</c>.</para>
+    /// </summary>
+    public const int TraegerRumpf = 0x49;
+
+    /// <summary><c>--jeder-traegt</c> — der Stand vor dem 07.09.2026: jede
+    /// Einheit konnte Fracht aufnehmen, auch ein Patrol-Boot.</summary>
+    public static bool JederTraegt;
+
+    /// <summary>Wie oft ein Nicht-Träger als Ladeziel abgewiesen wurde.</summary>
+    public int TraegerAbgewiesen;
+
+    public bool IstTraeger(Entity e) => JederTraegt || e.Chassis == TraegerRumpf;
+
     public bool PasstAnBord(int carrierSlot, Entity u, out string grund)
     {
+        // ⚠ Zuerst die Frage, OB das ein Traeger ist — vor Gewicht und Last.
+        // Das Original stellt sie schon beim Zeiger (@0x43207D), also lange
+        // bevor es ums Passen geht.
+        var traeger = _entities.Find(x => x.Slot == carrierSlot && !x.IsBuilding && !x.IsProp);
+        if (traeger != null && !IstTraeger(traeger))
+        {
+            TraegerAbgewiesen++;
+            grund = $"kein Traeger (Rumpf {traeger.Chassis}, noetig {TraegerRumpf})";
+            return false;
+        }
         int w = BeladeGewicht(u);
         if (w < 0)
         {
@@ -24419,6 +24658,8 @@ public partial class MapEntityLayer : Node2D
             if (!_bordDeckel.ContainsKey(q.Slot) && FrachtAnBord(q.Slot).Count == 0) continue;
             int dist = Mathf.Max(Mathf.Abs(q.Col - u.Col), Mathf.Abs(q.Row - u.Row));
             if (dist > BeladeReichweite || dist >= besteEntfernung) continue;
+            // ⭐ 07.09.2026 — kein Traeger, keine Frage nach Platz (s.o.).
+            if (!IstTraeger(q)) { letzterGrund = "das traegt nichts"; continue; }
             if (!PasstAnBord(q.Slot, u, out string grund)) { letzterGrund = grund; continue; }
             besterSlot = q.Slot; besteEntfernung = dist;
         }
@@ -24458,6 +24699,9 @@ public partial class MapEntityLayer : Node2D
     /// <para>⚠ <b>Nur wer nichts mehr vorhat.</b> Eine Einheit, die gerade
     /// über die Ladezelle FÄHRT, soll nicht ungefragt einsteigen — sonst
     /// verschluckt eine Mole jeden, der daran vorbeikommt.</para></summary>
+    /// <summary>Ein Takt des Beladens, fuer den Pruefstand.</summary>
+    public void BeladeTaktFuerProbe() => BeladeTakt();
+
     private void BeladeTakt()
     {
         for (int i = _entities.Count - 1; i >= 0; i--)
@@ -24465,6 +24709,9 @@ public partial class MapEntityLayer : Node2D
             var u = _entities[i];
             if (u.Dead || u.IsBuilding || u.IsProp || !u.Mobile) continue;
             if (u.Path != null || u.Orders.Count > 0) continue;      // faehrt noch
+            // ⭐ 08.09.2026 — wer eben erst ausgestiegen ist, wird nicht sofort
+            // wieder aufgenommen (siehe WegVomUfer).
+            if (u.NichtBeladenBis > _clock) continue;
             if (BeladeGewicht(u) < 0) continue;                      // kann gar nicht
             if (!RampeBeladen(u.Col, u.Row)) continue;
             if (BeladeVersuch(i, melden: false) >= 0) return;         // s.o., und STILL
@@ -24514,6 +24761,22 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Die frisch gebaute Ladung aus der Einheitenliste nehmen. Läuft
     /// einmal, direkt nach dem Aufbau.</summary>
+    /// <summary>Was ein Fusssoldat aus seinem ENTWURF bekommt — die
+    /// Kartendatei fuehrt fuer ihn weder Trefferpunkte noch Waffe.
+    ///
+    /// <para>⚠ Muss fuer die LADUNG genauso laufen wie fuer die Einheiten auf
+    /// dem Feld; siehe die Begruendung an der Aufrufstelle.</para></summary>
+    private void InfanterieNachziehen(Entity e)
+    {
+        if (e.Infantry < 0 || _infDesigns == null) return;
+        // their life is `energie` out of the record like every other unit
+        // (15..35 for the two size classes) — the invented 60/90 is gone
+        if (e.HpMax <= 0) { e.HpMax = e.UnitType == 149 ? InfHpHeavy : InfHpLight; e.Hp = e.HpMax; }
+        e.Mobile = true;
+        if (_infDesigns.TryGetValue(e.Infantry, out var des) && des.Damage > 0)
+            e.Weapon = InfCompBase + des.WeaponRow;
+    }
+
     private void FrachtAusListeNehmen()
     {
         _fracht.Clear();
@@ -24564,11 +24827,40 @@ public partial class MapEntityLayer : Node2D
             u.Row = zelle.Value.Y;
             u.Elev = ElevOf(u.Col, u.Row);
             u.Facing = blick;                         // @0x4CF3C5: die Richtung des Traegers
+            // ⚠⚠ 07.09.2026 — DER TURM STAND NICHT MIT AUF. Seine Meldung:
+            // »Die entladenen Fahrzeuge wurden erst ohne Waffenturm angezeigt,
+            // erst nach Bewegung erschien dieser.« Der Rumpf bekam hier seine
+            // Blickrichtung, die TURMrichtung nicht — und der Zeichner malt
+            // den Turm nach `AimFacing`. Stand dort ein Wert, den es fuer
+            // dieses Bauteil nicht gibt, fiel der Turm aus, bis die erste
+            // Bewegung ihn neu setzte.
+            u.AimFacing = blick;
+            // Und ein frisch Ausgestiegener hat kein Ziel und keinen Auftrag —
+            // er kommt aus dem Bauch des Schiffes, nicht aus einem Gefecht.
+            u.Target = -1;
+            u.Ordered = false;
             u.Footprint = CellRect(_ox, _oy, u.Col, u.Row, u.Elev);
             u.Pos = CellCenter(u.Col, u.Row);
             u.Mobile = !u.IsBuilding;
             _entities.Add(u);
             _nav?.SetOccupant(u.Col, u.Row, _entities.Count - 1);
+
+            // ⭐⭐ 08.09.2026 — UND SOFORT WEG VOM UFER. Ohne das hier laedt der
+            // BELADE-TAKT den Ausgestiegenen im naechsten Augenblick wieder ein:
+            // er steht auf einer Ladezelle neben dem Traeger, faehrt nicht, und
+            // `BeladeTakt` nimmt genau so einen.
+            //
+            // ⚠⚠ Genau das war seine Meldung »kann immer noch keine einheiten
+            // absetzen«. Der Mitschnitt --entlade-log zeigte den Kreislauf in
+            // einer Zeile, hundertfach: »setzt ab bei (44,38): 1 Stueck, noch 14
+            // an Bord« — immer wieder dieselbe 14.
+            //
+            // ⭐ Das Original tut dasselbe und aus demselben Grund: der
+            // Ausgestiegene bekommt sofort einen Fahrauftrag WEG VOM UFER
+            // (Tafel 0x5397B8, siehe berichte/transportladung-fable.md).
+            // ⚠ Die Tafel selbst ist nicht gelesen — wir nehmen die Richtung
+            // vom Traeger fort, also genau die, in die er ausgestiegen ist.
+            WegVomUfer(_entities.Count - 1, u, traeger >= 0 ? _entities[traeger] : null);
             ladung.RemoveAt(k);
             _frachtPlaetze.Remove(u.Slot);
             gesetzt++;
@@ -24594,13 +24886,77 @@ public partial class MapEntityLayer : Node2D
     /// P5 gesetzt) — einen Zähler braucht nur, wer nacheinander absetzt. Und
     /// nacheinander löst auch das Platzproblem von selbst: wer schon
     /// ausgestiegen ist, geht weiter.</para></summary>
+    /// <summary>Liegt der Träger an dieser Zelle? Sein ganzes Rechteck zählt:
+    /// ein 2x2-Schiff berührt die Zelle auch mit seiner hinteren Ecke.</summary>
+    /// <summary>Dieselbe Frage, fuer den Absender und die Pruefstaende.</summary>
+    public bool LiegtAnFuerProbe(Entity e, Vector2I zelle) => LiegtAn(e, zelle);
+
+    private bool LiegtAn(Entity e, Vector2I zelle)
+    {
+        int seite = Mathf.Max(1, e.FootW);
+        int dx = zelle.X < e.Col ? e.Col - zelle.X
+               : zelle.X >= e.Col + seite ? zelle.X - (e.Col + seite - 1) : 0;
+        int dy = zelle.Y < e.Row ? e.Row - zelle.Y
+               : zelle.Y >= e.Row + seite ? zelle.Y - (e.Row + seite - 1) : 0;
+        return Mathf.Max(dx, dy) <= AbsetzNaehe;
+    }
+
+    /// <summary>Wie nah der Träger an der Absetzzelle liegen muss. 1 = Kante an
+    /// Kante. ⚠ UNSERE Zahl, aus der gelesenen Einsteigebedingung übernommen.</summary>
+    private const int AbsetzNaehe = 1;
+
+    /// <summary><c>--absetzen-aus-der-ferne</c> — der Stand vor dem 07.09.2026:
+    /// ein Träger setzt ab, wo immer er schwimmt.</summary>
+    public static bool AbsetzenAusDerFerne;
+
+    /// <summary><c>--entlade-log</c> — jeder Entladeklick und jeder
+    /// Absetztakt schreibt eine Zeile. ⚠ Gebaut am 08.09.2026, weil die
+    /// Kette im Pruefstand geht und im Spiel nicht: er klickt, ich lese die
+    /// Zahlen — das hat hier schon mehrfach in einem Zug geklaert, was
+    /// sonst drei Rateversuche gekostet haette.</summary>
+    public static bool EntladeLog;
+
+    /// <summary>Wie oft ein Absetzen verschoben wurde, weil der Träger noch
+    /// nicht anlag. ⚠ Ohne die Zahl ist »er lädt nicht ab« nicht von »er hat
+    /// den Befehl nie bekommen« zu unterscheiden.</summary>
+    public int AbsetzenZuWeit;
+
+    /// <summary>Ein Takt des Absetzens, fuer den Pruefstand.</summary>
+    public void FrachtAbsetzenTaktFuerProbe() => FrachtAbsetzenTakt();
+
     private void FrachtAbsetzenTakt()
     {
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
             if (e.UnloadRest <= 0 || e.Dead) continue;
+
+            // ⚠⚠ 07.09.2026 — ERST ANLEGEN, DANN ABSETZEN. Seine Meldung: »Das
+            // Entladen der Schiffe ging über relativ große Distanz anstatt
+            // direkt an der Rampe zu stehen.« Hier stand nichts dergleichen:
+            // sobald der Befehl da war, purzelte die Ladung an der Rampe
+            // heraus, egal wo der Träger schwamm.
+            //
+            // ⚠ UNSERE SETZUNG, und zwar eine begründete: für das EINSTEIGEN
+            // ist die Bedingung gelesen — eine der vier KANTENNACHBARZELLEN muss
+            // den Trägergriff tragen (@0x4091E3, siehe
+            // berichte/transportladung-fable.md). Für das Aussteigen ist sie
+            // NICHT gelesen; wir nehmen dieselbe Nähe, weil eine Rampe im
+            // Original angefahren wird und ein Schiff, das mitten auf See
+            // ablädt, in keiner Lesart vorkommt.
+            if (!AbsetzenAusDerFerne && !LiegtAn(e, e.UnloadCell))
+            {
+                AbsetzenZuWeit++;
+                if (EntladeLog && (AbsetzenZuWeit % 50) == 1)
+                    GD.Print($"entlade: Platz {e.Slot} auf ({e.Col},{e.Row}) liegt NICHT an "
+                           + $"({e.UnloadCell.X},{e.UnloadCell.Y}) — {AbsetzenZuWeit}x verschoben");
+                continue;                       // der Auftrag bleibt stehen
+            }
+
             int n = FrachtAbsetzen(e.Slot, e.UnloadCell, 1);
+            if (EntladeLog)
+                GD.Print($"entlade: Platz {e.Slot} setzt ab bei ({e.UnloadCell.X},{e.UnloadCell.Y}): "
+                       + $"{n} Stueck, noch {FrachtAnBord(e.Slot).Count} an Bord");
             if (n == 0)
             {
                 // Kein Platz — nicht abbrechen, im nächsten Takt noch einmal.
@@ -24613,6 +24969,60 @@ public partial class MapEntityLayer : Node2D
             if (FrachtAnBord(e.Slot).Count == 0) e.UnloadRest = 0;
         }
     }
+
+    /// <summary>
+    /// <b>Den Ausgestiegenen einen Schritt vom Träger wegschicken.</b>
+    ///
+    /// <para>⚠ UNSERE Umsetzung einer gelesenen Absicht: das Original gibt ihm
+    /// einen Fahrauftrag aus der Tafel <c>0x5397B8</c> (@<c>0x4CF240</c>); die
+    /// Tafel ist nicht gelesen, die Richtung nehmen wir vom Träger fort.</para>
+    ///
+    /// <para>Ohne das steigt er aus und sofort wieder ein — er steht ja auf
+    /// einer Ladezelle direkt neben dem Schiff.</para></summary>
+    private void WegVomUfer(int idx, Entity u, Entity? traeger)
+    {
+        if (_nav == null || traeger == null) return;
+        int dx = Mathf.Sign(u.Col - traeger.Col), dy = Mathf.Sign(u.Row - traeger.Row);
+        if (dx == 0 && dy == 0) dx = 1;
+        for (int schritt = 2; schritt >= 1; schritt--)
+        {
+            int c = u.Col + dx * schritt, r = u.Row + dy * schritt;
+            if (!_nav.InBounds(c, r) || !_nav.CanEnter(c, r, u.Move)) continue;
+            if (_nav.OccupantAt(c, r) >= 0) continue;
+            var weg = _nav.FindPath(new Vector2I(u.Col, u.Row), new Vector2I(c, r), u.Move, idx);
+            if (weg == null || weg.Count == 0) continue;
+            // ⚠⚠ 08.09.2026 — DIESELBEN FELDER WIE EIN ECHTER FAHRBEFEHL.
+            // Zuerst standen hier nur Path/PathIdx/Goal; ein Weg ohne
+            // `Block` (die Geduld) gibt beim ersten versperrten Takt auf, und
+            // ohne `Reserved`/`WaitTime`/`RetryIn` traegt die Einheit Reste
+            // ihres vorigen Zustands mit. Ein halb gesetzter Weg ist schlimmer
+            // als keiner: solange `Path != null` steht, schiesst ein
+            // Fusssoldat NICHT (@0x40F0A0, nur im Stand) — genau seine
+            // Meldung »Infanterie kann immer noch nicht schiessen«.
+            u.Path = weg;
+            u.PathIdx = 0;
+            u.Goal = new Vector2I(c, r);
+            u.RetryIn = 0;
+            u.Reserved = null;
+            u.WaitTime = 0;
+            u.Block = BlockEnter + Simulation.Determinism.Roll(BlockEnterSpread);
+            AbgesetztWeggeschickt++;
+            return;
+        }
+        // Kein Platz zum Ausweichen — dann bleibt er stehen. ⚠ Damit ihn der
+        // Belade-Takt trotzdem nicht sofort wieder aufnimmt, bekommt er eine
+        // kurze Sperre; sonst steht die Ladung in einer engen Bucht fest.
+        u.NichtBeladenBis = _clock + AbsetzSperreSekunden;
+        AbgesetztGesperrt++;
+    }
+
+    /// <summary>Wie lange ein frisch Ausgestiegener nicht wieder aufgenommen
+    /// wird, wenn er nirgends hin kann. ⚠ UNSERE Zahl.</summary>
+    private const float AbsetzSperreSekunden = 3f;
+
+    /// <summary>Zwei Zahlen fuer den Mitschnitt: wie oft der Ausgestiegene
+    /// weggefahren ist und wie oft er nur gesperrt werden konnte.</summary>
+    public int AbgesetztWeggeschickt, AbgesetztGesperrt;
 
     /// <summary>Wie weit um die gerechnete Zelle nach einem freien Platz
     /// gesucht wird. ⚠ UNSERE Zahl, und sie ist gemessen statt geraten: mit
@@ -26275,6 +26685,50 @@ public partial class MapEntityLayer : Node2D
         foreach (var kv in _anBord) fracht += kv.Value.Count;
         sb.AppendLine($"transport-check: {TransportSaetze} Saetze in der Karte, " +
                       $"{_anBord.Count} davon beladen, {fracht} Einheiten an Bord");
+        // ⭐ 07.09.2026 — was der LADUNGSBALKEN daraus macht (gelesen
+        // @0x4B90D0: 32x6, 10 Punkte je Fahrzeug, 2 je Fussvolk).
+        foreach (var kv in _fracht)
+        {
+            int fz = 0, fv = 0;
+            foreach (var u in kv.Value) { if (u.Infantry >= 0) fv++; else fz++; }
+            int px = fz * LadungProFahrzeug + fv * LadungProFussvolk;
+            sb.AppendLine($"   Ladungsbalken Traeger {kv.Key}: {fz} Fahrzeuge + {fv} Fussvolk "
+                        + $"= {px} von {LadungBreite:0} Punkten"
+                        + (px > LadungBreite ? "  ⚠ laeuft ueber den Rahmen" : "")
+                        + (LadungsbalkenAus ? "  (--ladungsbalken-aus: nicht gezeichnet)" : ""));
+        }
+        // ⭐ 07.09.2026 — wer auf dieser Karte ueberhaupt tragen darf.
+        int traeger = 0, nichtTraeger = 0;
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Dead || e.GameUnitType is not (4 or 5)) continue;
+            if (IstTraeger(e)) traeger++; else nichtTraeger++;
+        }
+        // ⭐ 08.09.2026 — WARUM SETZT ER NICHT AB? Seine Meldung: »kann immer
+        // noch keine einheiten absetzen«, obwohl »die boote stehen genau neben
+        // der rampe«. Also den Zustand JEDES Auftrags zeigen, statt zu raten.
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Dead || e.UnloadRest <= 0) continue;
+            bool liegt = LiegtAnFuerProbe(e, e.UnloadCell);
+            int frei = 0;
+            for (int dc = -2; dc <= 2; dc++)
+                for (int dr = -2; dr <= 2; dr++)
+                {
+                    int c = e.UnloadCell.X + dc, r = e.UnloadCell.Y + dr;
+                    if (_nav != null && _nav.InBounds(c, r) && _nav.IsWalkable(c, r)
+                        && _nav.OccupantAt(c, r) < 0) frei++;
+                }
+            sb.AppendLine($"   Auftrag: Traeger {e.Slot} auf ({e.Col},{e.Row}) {e.FootW}x{e.FootH}, "
+                        + $"Absetzzelle ({e.UnloadCell.X},{e.UnloadCell.Y}), noch {e.UnloadRest} Stueck, "
+                        + $"liegt an: {liegt}, freie Plaetze im Umkreis 2: {frei}"
+                        + (!liegt ? "  ⚠ ZU WEIT" : frei == 0 ? "  ⚠ KEIN PLATZ AN LAND" : ""));
+        }
+        sb.AppendLine($"   Absetzen verschoben, weil nicht angelegt: {AbsetzenZuWeit}x");
+
+        sb.AppendLine($"   Traeger (+0x0B == {TraegerRumpf}): {traeger} von {traeger + nichtTraeger} "
+                    + $"Schiffen; {TraegerAbgewiesen}x wurde ein Nicht-Traeger als Ladeziel abgewiesen"
+                    + (JederTraegt ? "  (--jeder-traegt: die Schranke ist AUS)" : ""));
         sb.AppendLine($"   nicht aufgestellt (weil an Bord): {FrachtUebersprungen}" +
                       (FrachtUebersprungen == fracht
                            ? "  — deckt sich"
@@ -28805,6 +29259,11 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Ein Simulationstakt — alles, was den Zustand anfasst. Gibt
     /// zurück, ob sich etwas bewegt hat (nur fürs Neuzeichnen).</summary>
+    /// <summary>Ein ganzer Simulationstakt, fuer die Pruefstaende. ⚠ Der
+    /// ECHTE Weg — wer nur einzelne Takte ruft, misst die halbe Kette
+    /// (siehe bug-101).</summary>
+    public void MoveTickFuerProbe(float dt) => SimTick(dt);
+
     private bool SimTick(float dt)
     {
         // DER TAKTANFANG: alles, was für diesen Takt fällig ist, wirkt hier —
@@ -29706,6 +30165,28 @@ public partial class MapEntityLayer : Node2D
     private static string LabelOf(Entity e)
     {
         if (e.Name.Length > 0) return e.Name;
+        // ⭐ 07.09.2026 — UND EIN SCHIFF HEISST NACH SEINEM ENTWURF, nicht nach
+        // seinem Rumpf. Seine Meldung: »Alle meine Schiffe heisen Fortified
+        // anstatt Frachter, Kuestenwache usw.«
+        //
+        // Genau derselbe Fall wie bug-030 beim Fusssoldaten: der `unit_type`
+        // einer Karteneinheit ist das FAHRWERK bzw. hier der RUMPF, und der
+        // Einheitenkatalog kennt fuer die Schiffsruempfe gar keinen Namen —
+        // 150, 152 und 153 tragen dort `name: ""` und nur die Stufe
+        // `tier: "fortified"`, und die hat LabelOf(int) ersatzweise gezeigt.
+        //
+        // Die Namen stehen in der Schiffstafel (ships.json, GAME.EXE
+        // 0x52EDA0), nach Rumpf: 150 Patrol-Boot · 151 L.Kreuzer ODER
+        // Flak-Barkasse · 152 Kuestenwache · 153 Frachter · 154 U-Boot ·
+        // 155 Treibstofftender · 156 Munitiontender · 157 Schlachtshiff ·
+        // 158 Kreuzer.
+        //
+        // ⚠ Rumpf 151 traegt ZWEI Entwuerfe (L.Kreuzer und Flak-Barkasse), und
+        // die Karteneinheit fuehrt keine Waffennummer, mit der sie zu trennen
+        // waeren. Genommen wird der erste — das ist eine SETZUNG, und sie
+        // betrifft genau diesen einen Rumpf.
+        if (e.GameUnitType is 4 or 5 && _schiffsnamen.TryGetValue(e.UnitType, out var sn))
+            return sn;
         if (e.Infantry >= 0)
         {
             LoadInfantryDesigns();
@@ -30498,6 +30979,41 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Derselbe Versatz, oeffentlich fuer <c>--anker-probe</c>.</summary>
     public Vector2 FussVersatzFuerProbe(Texture2D tex) => FussVersatz(tex);
+
+    /// <summary>Der Wert, den die Einheit wirklich nimmt — fuer <c>--anker-probe</c>.</summary>
+    public Vector2 FussVersatzFuerEinheitProbe(Entity e) => FussVersatzFuer(e);
+
+    /// <summary>
+    /// ⚠⚠ <b>DER VERSATZ GEHOERT ZUR EINHEIT, NICHT ZUM EINZELBILD</b>
+    /// (berichtigt 07.09.2026).
+    ///
+    /// <para><b>Seine Meldung:</b> »wenn die Infanterie stirbt, dann wie ein
+    /// paar Einheiten wieder höher anstatt wo sie stand«. Genau das musste
+    /// passieren: <see cref="FussVersatz"/> rechnet aus der UNTERKANTE des
+    /// übergebenen Bildes, und ein Sterbebild hat eine andere Silhouette als
+    /// ein stehender Soldat — der liegende Körper reicht weiter nach unten,
+    /// also fiel der Versatz kleiner aus und die Leiche sprang nach oben.</para>
+    ///
+    /// <para>⭐ Das Original hat dieses Problem nicht: dort ist der Versatz eine
+    /// FESTE Zahl je Klasse (<c>sub di, 0x18</c> @0x430332 gegen
+    /// <c>sub si, 0x23</c> @0x4301D1), die kein Bild ansieht. Unsere
+    /// bildweise Rechnung war die Umsetzung — sie steht auch so im Kommentar
+    /// von <see cref="FussTiefer"/> —, und sie hat genau hier ihren Preis
+    /// gezeigt.</para>
+    ///
+    /// <para>Deshalb wird der Versatz jetzt einmal am <b>Stehbild</b>
+    /// (<see cref="InfIdleBlock"/>) derselben Blickrichtung genommen und für
+    /// alle Blöcke dieser Einheit verwendet: Laufen, Stehen, Umfallen und
+    /// Liegen sitzen damit auf demselben Anker. ⚠ Die Blickrichtung bleibt
+    /// drin, weil unsere acht Bilder verschieden hohe Silhouetten haben; das
+    /// Stehbild ist für jede Richtung lückenlos vorhanden (gemessen, siehe
+    /// InfBlock).</para></summary>
+    private Vector2 FussVersatzFuer(Entity e)
+    {
+        if (FussankerAlt || e.Infantry < 0) return Vector2.Zero;
+        var steh = GetInfantryTexture(e.Infantry, e.Facing, InfIdleBlock);
+        return steh != null ? FussVersatz(steh) : Vector2.Zero;
+    }
 
     private Vector2 FussVersatz(Texture2D tex)
     {
@@ -31584,13 +32100,33 @@ public partial class MapEntityLayer : Node2D
     /// dabei, weil das Original bei eigener INFANTERIE einen anderen Zeiger
     /// nimmt als bei allem anderen Eigenen — siehe
     /// <see cref="UI.GameCursors"/>.</summary>
-    public enum Hint { Ground, Own, OwnFoot, Enemy, Einfahrt }
+    public enum Hint { Ground, Own, OwnFoot, Enemy, Einfahrt, Entladen }
 
     /// <summary>Reads the cursor hint for a map position: something hostile
     /// under the pointer while one has a selection means the click attacks,
     /// one's own thing means it selects, anything else is open ground.</summary>
     public Hint CursorHintAt(Vector2 mapPos)
     {
+        // ⭐⭐ 07.09.2026 — DER ENTLADEZEIGER ueber einer RAMPE, auf seine
+        // Meldung »ueber den Rampen kommt da so ein Entlade Icon und wenn man
+        // es mit rechter Maustaste befaehigt, werden dort die Einheiten
+        // entladen«. Im Original ist das Zeiger 12 (@0x432771).
+        //
+        // ⚠ Er steht GANZ VORN, vor Pick(): eine Rampe ist Gelaende, keine
+        // Einheit — wer erst nach einem Getroffenen fragt, kommt hier nie an.
+        // Bedingung wie im Absender: ein eigener, BELADENER Traeger ist
+        // gewaehlt, und unter der Maus liegt eine gueltige Absetzzelle.
+        if (!EntladezeigerAus && _sel.Count > 0 && CellAt(mapPos) is { } rz
+            && RampenAbsetzZelle(rz.X, rz.Y) != null)
+            foreach (int k in _sel)
+                if (k >= 0 && k < _entities.Count)
+                {
+                    var t = _entities[k];
+                    if (!t.IsBuilding && !t.IsProp && !t.Dead && t.Owner == ViewPlayer
+                        && IstTraeger(t) && FrachtAnBord(t.Slot).Count > 0)
+                        return Hint.Entladen;
+                }
+
         int i = Pick(mapPos);
         if (i < 0 || i >= _entities.Count) return Hint.Ground;
         var e = _entities[i];
@@ -31651,6 +32187,11 @@ public partial class MapEntityLayer : Node2D
     /// <summary><c>--einfahrzeiger-alt</c> — kein eigener Zeiger ueber der
     /// Tuer, wie bis zum 06.09.2026.</summary>
     public static bool EinfahrzeigerAlt;
+
+    /// <summary><c>--entladezeiger-aus</c> — der Stand vor dem 07.09.2026: ueber
+    /// einer Rampe gibt es keinen eigenen Zeiger, und der Rechtsklick dort
+    /// bedeutet »fahren«.</summary>
+    public static bool EntladezeigerAus;
 
     public void ToggleDots() { _showDots = !_showDots; QueueRedraw(); }
 
@@ -33774,7 +34315,7 @@ public partial class MapEntityLayer : Node2D
                     }
                     if (foot != null)
                     { DrawTexture(Parteifarbe(foot, e.Owner),
-                                  picC - ComposedAnchor + FussVersatz(foot)); return; }
+                                  picC - ComposedAnchor + FussVersatzFuer(e)); return; }
                 }
                 // hull + separately aimed turret (preferred)
                 // ⚠ Die Hangklasse gilt fuer BEIDE. Der Turmsitz wurde schon
@@ -33934,6 +34475,12 @@ public partial class MapEntityLayer : Node2D
             // Gebaeude bleibt ausgenommen, weil es Teil des gebackenen Bildes
             // ist und nicht weglaeuft.
             if (ImNebelVerborgen(e)) continue;
+            // ⭐ Der LADUNGSBALKEN haengt NICHT an Auswahl oder Schaden: das
+            // Original zeichnet ihn in jedem Anzeigemodus und fuer jeden
+            // Besitzer, sobald etwas geladen ist (@0x42AEA0). Darum steht er
+            // VOR dem Ausstieg fuer unbeschaedigte, nicht angewaehlte Einheiten.
+            LadungsbalkenZeichnen(e);
+
             bool sel = _sel.Contains(i);
             if (!sel && e.Hp >= e.HpMax) continue;
             float fr = Mathf.Clamp((float)e.Hp / e.HpMax, 0, 1);

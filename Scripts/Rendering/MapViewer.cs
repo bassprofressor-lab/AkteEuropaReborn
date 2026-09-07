@@ -1419,7 +1419,16 @@ public partial class MapViewer : Node2D
             else if (a == "--panzerung-alt") MapEntityLayer.PanzerungAlt = true;
             else if (a == "--balkenhoehe-alt") MapEntityLayer.BalkenhoeheAlt = true;
             else if (a == "--gebaeudebrand-aus") MapEntityLayer.GebaeudebrandAus = true;
+            else if (a == "--reichweite-alt") MapEntityLayer.ReichweiteAlt = true;
+            else if (a == "--ki-freibau") MapEntityLayer.KiFreibau = true;
+            else if (a == "--ladungsbalken-aus") MapEntityLayer.LadungsbalkenAus = true;
+            else if (a == "--skriptplaetze-auf-minikarte") MapEntityLayer.SkriptplaetzeAufMinikarte = true;
+            else if (a == "--jeder-traegt") MapEntityLayer.JederTraegt = true;
+            else if (a == "--entladezeiger-aus") MapEntityLayer.EntladezeigerAus = true;
+            else if (a == "--absetzen-aus-der-ferne") MapEntityLayer.AbsetzenAusDerFerne = true;
+            else if (a == "--entlade-log") MapEntityLayer.EntladeLog = true;
             else if (a == "--gebaeudebrand-probe") _gebaeudebrandProbe = true;
+            else if (a == "--schiffstart-probe") _schiffstartProbe = true;
             else if (a == "--einfahrzeiger-probe") _einfahrzeigerProbe = true;
             else if (a == "--panelknoepfe-alt") PanelknoepfeAlt = true;
             else if (a == "--panelknopf-log") PanelknopfLog = true;
@@ -2198,6 +2207,7 @@ public partial class MapViewer : Node2D
     /// Simulation/AufwertungProbe.cs.</summary>
     private bool _aufwertungProbe;
     private bool _gebaeudebrandProbe;
+    private bool _schiffstartProbe;
     /// <summary><c>--forschung-probe</c>: kauft an einer echten Basis eine
     /// echte Forschung und misst Preis, Dauer und Wirkung. Siehe
     /// Simulation/ForschungProbe.cs.</summary>
@@ -2727,6 +2737,7 @@ public partial class MapViewer : Node2D
             if (_zielzelleProbe) GD.Print(_entities.ZielzelleProbe());
             if (_skripttrefferProbe) GD.Print(_entities.SkripttrefferProbe());
             if (_gebaeudebrandProbe) GD.Print(_entities.GebaeudebrandProbe());
+            if (_schiffstartProbe) GD.Print(_entities.SchiffStartProbe());
             if (_einfahrzeigerProbe) GD.Print(_entities.EinfahrzeigerProbe());
             if (_panelknoepfeProbe) GD.Print(PanelknoepfeProbe());
             if (_einfahrtFremdProbe) GD.Print(_entities.EinfahrtFremdProbe());
@@ -2744,6 +2755,7 @@ public partial class MapViewer : Node2D
             if (_befehlsklangProbe) { GetTree().Quit(_entities.BefehlsklangProbeRc()); return; }
             if (_aufwertungProbe) { GetTree().Quit(_entities.AufwertungProbeRc()); return; }
             if (_gebaeudebrandProbe) { GetTree().Quit(_entities.GebaeudebrandProbeRc()); return; }
+            if (_schiffstartProbe) { GetTree().Quit(_entities.SchiffStartProbeRc()); return; }
             if (_forschungProbe) { GetTree().Quit(_entities.ForschungProbeRc()); return; }
             if (_erfindungProbe) { GetTree().Quit(_entities.ErfindungProbeRc()); return; }
             if (_drehCheck)
@@ -4844,7 +4856,11 @@ public partial class MapViewer : Node2D
                                  && !_entities.PostAttackGround(GetGlobalMousePosition(), mb.ShiftPressed))
                                     _entities.PostMove(GetGlobalMousePosition(), mb.ShiftPressed);
                             }
-                            else if (!_entities.PostAttack(GetGlobalMousePosition(), mb.ShiftPressed))
+                            // ⭐ 07.09.2026 — ABSETZEN geht vor Angriff und Fahrt:
+                            // auf einer Rampe mit beladenem Traeger meint der
+                            // Rechtsklick nichts anderes (seine Meldung C).
+                            else if (!_entities.PostUnloadKlick(GetGlobalMousePosition(), mb.ShiftPressed)
+                                  && !_entities.PostAttack(GetGlobalMousePosition(), mb.ShiftPressed))
                                 _entities.PostMove(GetGlobalMousePosition(), mb.ShiftPressed);
                         }
                         _rightDown = false;
@@ -5228,6 +5244,9 @@ public partial class MapViewer : Node2D
                 // ⭐ 06.09.2026 — Zeigerart 5 des Originals (@0x4323E6) zeigt
                 // Zeigerbild 11. Siehe MapEntityLayer.CursorHintAt.
                 MapEntityLayer.Hint.Einfahrt => UI.GameCursors.Einfahrt,
+                // ⭐ 07.09.2026 — Zeiger 12 des Originals (@0x432771) ueber
+                // einer Rampe, wenn ein beladener Traeger gewaehlt ist.
+                MapEntityLayer.Hint.Entladen => UI.GameCursors.Entladen,
                 MapEntityLayer.Hint.OwnFoot => UI.GameCursors.Foot,
                 MapEntityLayer.Hint.Own => UI.GameCursors.Select,
                 _ => UI.GameCursors.Arrow,
@@ -5238,7 +5257,7 @@ public partial class MapViewer : Node2D
         {
             MapEntityLayer.Hint.Enemy => Input.CursorShape.Cross,
             MapEntityLayer.Hint.Own or MapEntityLayer.Hint.OwnFoot
-                or MapEntityLayer.Hint.Einfahrt
+                or MapEntityLayer.Hint.Einfahrt or MapEntityLayer.Hint.Entladen
                 => Input.CursorShape.PointingHand,
             _ => Input.CursorShape.Arrow,
         };

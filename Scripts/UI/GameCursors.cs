@@ -64,6 +64,31 @@ public static class GameCursors
     /// unglücklicherweise auf derselben Ziffer.</para></summary>
     public const int Einfahrt = 11;
 
+    /// <summary>
+    /// Der ENTLADEZEIGER ueber einer Rampe — <b>Bild 16</b>.
+    ///
+    /// <para>⚠⚠ BERICHTIGT am 07.09.2026, noch am selben Abend. Hier stand
+    /// <c>= 12</c>, und seine Meldung war sofort da: »Das Entladen Icon sieht
+    /// aus wie ein Fahrzeugteil, anstatt das originale entladen schiffs
+    /// icon«. Der Fehler ist genau der, vor dem der Kommentar bei
+    /// <see cref="Einfahrt"/> warnt: <c>@0x432771</c> setzt die ZEIGERART
+    /// (<c>dword[0x502AD4] := 0xC</c>), nicht die Bildnummer.</para>
+    ///
+    /// <para>⭐ Die Umrechnung steht in <c>0x4A9AB0</c>, Sprungtafel
+    /// <c>0x4A9BEC</c> — jetzt roh gelesen statt erschlossen:</para>
+    /// <code>
+    ///   Modus  5 -> 0x4A9B85  mov dl, 0x0B   Bild 11   (einfahren)
+    ///   Modus  6 -> 0x4A9B89  mov dl, 0x0A   Bild 10
+    ///   Modus  8 -> 0x4A9B8D  mov dl, 0x0C   Bild 12   ← das war zu sehen
+    ///   Modus  9 -> 0x4A9B91  mov dl, 0x0D   Bild 13
+    ///   Modus 11 -> 0x4A9B95  mov dl, 0x0B   Bild 11
+    ///   Modus 12 -> 0x4A9B99  mov dl, 0x10   Bild 16   ← ENTLADEN
+    /// </code>
+    /// <para>Dass Modus 5 auf Bild 11 fuehrt, ist die Gegenprobe: genau die
+    /// Zahl, die der Einfahrzeiger seit dem 06.09. traegt und die im Spiel
+    /// bestaetigt ist.</para></summary>
+    public const int Entladen = 16;
+
     /// <summary>⚠ UNSERE ZAHL: wie lange ein Bild der Folge steht. Das Original
     /// zählt die Phase, nennt aber keinen Takt.</summary>
     public const float FrameSeconds = 0.10f;

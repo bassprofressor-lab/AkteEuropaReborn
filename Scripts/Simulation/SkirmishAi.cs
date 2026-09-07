@@ -206,6 +206,16 @@ public partial class MapEntityLayer : Node2D
         }
     }
 
+    /// <summary><c>--ki-freibau</c> — der Stand vor dem 07.09.2026: die KI
+    /// waehlt auch in der Kampagne frei aus der Entwurfsliste, wenn die Mission
+    /// ihr kein Bauprogramm gibt.</summary>
+    public static bool KiFreibau;
+
+    /// <summary>Wie oft ein Bau unterblieben ist, weil die Mission kein
+    /// Programm hat. ⚠ Ohne diese Zahl ist »die KI baut nichts mehr« nicht von
+    /// »die KI kommt gar nicht bis zur Bauentscheidung« zu unterscheiden.</summary>
+    public static int AiKampagneStumm;
+
     private readonly List<AiPlayer> _ai = new();
     private bool _aiOn;
 
@@ -1018,7 +1028,13 @@ public partial class MapEntityLayer : Node2D
         {
             if (a.Plan == null)
             {
-                parts.Add($"P{a.Player} ohne Programm ({AiBaseCount(a.Player)} Basen)");
+                parts.Add($"P{a.Player} ohne Programm ({AiBaseCount(a.Player)} Basen)" +
+                          (UI.SkirmishSetup.CampaignMission > 0
+                              ? KiFreibau
+                                  ? " — --ki-freibau: baut trotzdem frei"
+                                  : $" — Kampagne: baut NICHTS ({AiKampagneStumm}x unterbunden), "
+                                    + "so wie das Original (10 der 33 Missionen haben kein Programm)"
+                              : " — Gefecht: waehlt frei, unsere Zutat"));
                 continue;
             }
             int air = a.Plan.Count(l => l.Kind == 1);
@@ -1575,6 +1591,33 @@ public partial class MapEntityLayer : Node2D
         bool planned = a.Plan is { Count: > 0 };
         if (planned) AiProducePlanStep(a);
 
+        // ⭐⭐ 07.09.2026 — IN DER KAMPAGNE BAUT DIE KI NUR AUS DEM PROGRAMM.
+        //
+        // Seine Meldung: »Die Gegner KI scheint einheiten zu Bauen oder zu
+        // nutzen, die im Original nicht da sind« — auf der Insel mit den
+        // Fabriken in Mission 5 Schneegelaender-Einheiten und einen Medium
+        // Rocket Launcher auf Roller-Chassis. Und seine Einordnung dazu: »die
+        // KI hat das Bauprogramm aus dem Skirmish Modus genommen, das macht
+        // aber in der Kampagne kein Sinn«.
+        //
+        // ⭐ GEZAEHLT in mission_plans.json (aus GAME.EXE, dispatch @0x494274,
+        // add_vyroba @0x4CF640): von den 33 Kampagnenmissionen haben **23** ein
+        // Bauprogramm und **zehn** keines — 1, 5, 8, 9, 18, 29, 30, 31, 32, 33.
+        // In diesen zehn baut der Gegner im Original NICHTS nach; Mission 5,
+        // in der die Meldung entstand, ist eine davon.
+        //
+        // Die freie Wahl aus 33 Entwuerfen ist unsere Zutat fuer das GEFECHT
+        // (siehe den Kommentar unten und ApplyCampaignDesigns: uns fehlt der
+        // Entwurfsschirm, darum ist die Entwurfsliste beim Spieler bewusst
+        // breit). In der Kampagne gilt die Praemisse »= Original«, und dort
+        // waehlt keine Basis selbst.
+        //
+        // ⚠ Das ist eine spuerbare Aenderung: in den zehn genannten Missionen
+        // kommt vom Gegner kein Nachschub mehr. Gegenschalter --ki-freibau.
+        bool kampagne = UI.SkirmishSetup.CampaignMission > 0;
+        bool stumm = kampagne && !planned && !KiFreibau;
+        if (stumm) AiKampagneStumm++;
+
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
@@ -1589,8 +1632,9 @@ public partial class MapEntityLayer : Node2D
             // MapEntityLayer.IsUnitPlant fuer die Belege.
             if (IsUnitPlant(e) && e.BuildTime <= 0f && _designs != null && _designs.Count > 0)
             {
-                // with a programme the bases do not choose at all
-                if (planned) continue;
+                // with a programme the bases do not choose at all — und in der
+                // Kampagne auch ohne Programm nicht (s.o.)
+                if (planned || stumm) continue;
                 var menu = BuildableBy(e.BType);
                 if (menu.Count > 0)
                 {

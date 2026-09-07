@@ -185,8 +185,26 @@ public partial class MapEntityLayer : Node2D
         => owner == 11 ? "NEUTRAL" : owner < 0 ? "-" : "SPIELER " + owner;
 
     /// <summary>Can this building be taken at all — the original's two gates.</summary>
+    /// <summary>
+    /// Was sich einnehmen lässt.
+    ///
+    /// <para>⚠⚠ 08.09.2026 — <c>!b.NoStructure</c> ERGÄNZT, auf seinen
+    /// Bildschirmschuss: »da ist im Wasser wie ein Gebäude, das man sogar
+    /// einnehmen kann, das ist im Original nicht dort«. Zu sehen war der breite
+    /// blau-rote Einnahmebalken mitten auf dem Meer.</para>
+    ///
+    /// <para>Es sind die SKRIPTPLÄTZE: Sätze der Gebäudeart 0 (und anderer Arten
+    /// über 16), die nur das Missionsskript braucht. Sie tragen <c>built = 1</c>
+    /// und eine Türzahl, kamen damit durch beide Tore und waren einnehmbar.
+    /// ⭐ GEZÄHLT über alle Karten: <b>51 solcher Sätze auf 9 Karten</b>, auf
+    /// map_05 drei davon im Wasser (22,48), (22,57), (22,66).</para>
+    ///
+    /// <para><see cref="Entity.NoStructure"/> gibt es dafür längst — Zeichner,
+    /// Auswahl, Anklicken und (seit bug-092) die Übersichtskarte achten darauf.
+    /// Die Einnahme war die letzte Stelle, die es nicht tat.</para></summary>
     private static bool Capturable(Entity b)
-        => b.IsBuilding && !b.IsProp && !b.Dead && b.Built != 0 && b.Doors != 0;
+        => b.IsBuilding && !b.IsProp && !b.Dead && !b.NoStructure
+        && b.Built != 0 && b.Doors != 0;
 
     /// <summary>Door 0 — the one the capture block uses — and the tile the
     /// original actually looks at, one row further south.</summary>

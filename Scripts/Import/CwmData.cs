@@ -566,6 +566,15 @@ public static class CwmData
     /// it. The occupant does — a ship stands on water, everything else on free
     /// ground. It is a handful of cells per map (map_01: 30 of 3024) and the
     /// count is reported as <see cref="TerrainGrid.Inferred"/>.
+    ///
+    /// <para>⚠ <b>Wer dort steht, wird ueber die ZELLE gesucht, nicht ueber den
+    /// Griff</b> (berichtigt 07.09.2026). Auf der Zelle eines BELADENEN
+    /// Transporters steht der Griff seines Passagiers — das Original raeumt die
+    /// alte Zelle eines Eingestiegenen nicht auf. Wer den Griff befragt, bekommt
+    /// das Fahrzeug an Bord zur Antwort und legt das Schiff auf Land; auf
+    /// 05.CWM traf das drei von vier Frachtern. Und der Grundriss kommt aus der
+    /// GATTUNG, nicht aus dem Gitter: dort steht bei genau diesen Schiffen nur
+    /// eine Zelle.</para>
     /// </summary>
     public static TerrainGrid Terrain(CwmFile m, List<Entity> entities)
     {
@@ -574,10 +583,45 @@ public static class CwmData
         if (s == null || m.Width <= 0 || m.Height <= 0) return g;
         int n = s.Length / 2;
 
-        // which slots are naval — the original asks entity +0x0a (our GameUnitType),
-        // case 4 of the jump table @0x40678c, whose only terrain test is 0xFFFC
-        var naval = new HashSet<int>();
-        foreach (var e in entities) if (e.GameUnitType is 4 or 5) naval.Add(e.Slot);
+        // ⚠⚠ BERICHTIGT 07.09.2026 — HIER STAND `naval.Add(e.Slot)`, UND DER
+        // VERGLEICH LIEF GEGEN DEN ROHEN IMAP-WERT.
+        //
+        // ⚠ Und die erste Erklaerung dafuer war FALSCH und ist hier gestanden:
+        // »Griff != Slot«. Das stimmt nicht — der Griff IST der Slot. Was
+        // wirklich passiert, sagt der Leselauf zur Transportladung
+        // (berichte/transportladung-fable.md): auf der Zelle des Frachters
+        // steht in der imap der Griff seines PASSAGIERS, denn das Original
+        // raeumt beim Einsteigen die alte Zelle des Eingestiegenen nicht auf.
+        // Auf 05.CWM tragen die Zellen der drei beladenen Frachter die Griffe
+        // 26, 24 und 28 — und das sind genau die drei Fahrzeuge, die laut
+        // sec37 in ihnen sitzen (Traeger 1 -> 21,22,26 · 2 -> 23,24,25 ·
+        // 27 -> 28,29,30).
+        //
+        // Der alte Code fragte also die richtige Zahl, aber die falsche
+        // EINHEIT: den Passagier (ein Fahrzeug, also kein Wasser) statt den
+        // Traeger. Seine Meldung: »von meinen 4 Start-Transportern kann ich nur
+        // 1nen Bewegen« — der vierte ist unbeladen, seine Zelle traegt keinen
+        // fremden Griff.
+        //
+        // ⭐ Die POSITION entscheidet das eindeutig: wo ein Schiff steht, ist
+        // Wasser, egal wer dort sonst noch gestempelt ist.
+        var navalZelle = new HashSet<int>();
+        foreach (var e in entities)
+        {
+            if (e.GameUnitType is not (4 or 5)) continue;
+            // ⚠ NICHT e.FootW: der kommt aus dem Gitter, und genau bei den
+            // Schiffen, um die es hier geht, steht dort nur EINE Zelle — weil
+            // die imap ihren PASSAGIER stempelt statt sie selbst (das Original
+            // raeumt die Zelle eines Eingestiegenen nicht auf, siehe
+            // berichte/transportladung-fable.md). Wer den Gitterabdruck nimmt,
+            // korrigiert genau die Zelle, die schon falsch ist, und laesst die
+            // drei anderen auf Land. Die GATTUNG weiss es: 4 heisst 2x2,
+            // 5 heisst 4x4 (NavGrid.HullSide, aus Can_go gelesen).
+            int seite = e.GameUnitType == 5 ? 4 : 2;
+            for (int dc = 0; dc < seite; dc++)
+                for (int dr = 0; dr < seite; dr++)
+                    navalZelle.Add((e.Col + dc) * 256 + (e.Row + dr));
+        }
 
         g.Cells = new byte[m.Width * m.Height];
         var unknown = new HashSet<int>();
@@ -590,7 +634,7 @@ public static class CwmData
                 if (v == 0xFFFE) gr = Ground.Free;
                 else if (v == 0xFFFD) gr = Ground.Rough;
                 else if (v == 0xFFFC) gr = Ground.Water;
-                else if (v < 8000) { gr = naval.Contains(v) ? Ground.Water : Ground.Free; g.Inferred++; }
+                else if (v < 8000) { gr = navalZelle.Contains(i) ? Ground.Water : Ground.Free; g.Inferred++; }
                 else if (v is >= 10000 and < 14000) { gr = Ground.Free; g.Inferred++; }
                 else { gr = Ground.Blocked; if (v is not 0xFFFF && v < 50000) unknown.Add(v); }
                 g.Cells[row * m.Width + col] = (byte)gr;
