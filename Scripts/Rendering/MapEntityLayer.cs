@@ -2303,6 +2303,66 @@ public partial class MapEntityLayer : Node2D
         => _panelScale > 0f ? PanelBarFillW * _panelScale
                             : _panelBarBox.Size.X * BarWidthFrac;
 
+    /// <summary>
+    /// <b><c>--fussbalken-check</c> — welche Balken bekommt wer?</b>
+    ///
+    /// <para>Zu seiner Meldung »Infanterie hat nur eine Lebensanzeige und keine
+    /// Sprit/Munitionsanzeige im Original«. Die Frage laesst sich nicht durch
+    /// Hinsehen im kopflosen Lauf beantworten — also wird
+    /// <see cref="ShowPanelBars"/> selbst gerufen (nicht nachgebaut) und
+    /// hinterher abgelesen, was SICHTBAR ist.</para>
+    ///
+    /// <para>⚠ Die Messlatte braucht BEIDE Seiten: ein Fusssoldat mit einem
+    /// Balken UND ein Fahrzeug mit dreien. Nur »Infanterie hat einen« koennte
+    /// auch heissen, dass die Zeile fuer alle kaputt ist.</para></summary>
+    public string FussbalkenCheck()
+    {
+        Entity? fuss = null, fahrzeug = null;
+        foreach (var e in _entities)
+        {
+            if (e.Dead || e.IsProp || e.IsBuilding) continue;
+            if (e.Infantry >= 0) fuss ??= e;
+            else if (e.GameUnitType == 0) fahrzeug ??= e;
+        }
+        if (_barBack[0] == null)
+            return "fussbalken-check: ⚠ keine Balkenknoten in diesem Lauf — "
+                 + "der Bedienblock ist nicht gebaut, die Probe misst NICHTS";
+        if (fuss == null || fahrzeug == null)
+            return $"fussbalken-check: ⚠ nicht stellbar — Fussvolk {(fuss != null)}, "
+                 + $"Fahrzeug {(fahrzeug != null)}";
+
+        bool vorher = _compactPanel;
+        _compactPanel = true;                 // die Balken gibt es nur dort
+        string Lesen(Entity e)
+        {
+            ShowPanelBars(e);
+            string t = "";
+            for (int i = 0; i < 3; i++)
+                t += (i > 0 ? " " : "") + new[] { "Huelle", "Sprit", "Munition" }[i]
+                   + (_barBack[i].Visible ? "=an" : "=AUS")
+                   + (_barIcon[i] != null ? _barIcon[i]!.Visible ? "(Symbol an)" : "(Symbol aus)" : "");
+            return t;
+        }
+        string zF = Lesen(fuss), zV = Lesen(fahrzeug);
+        ShowPanelBars(null);
+        _compactPanel = vorher;
+
+        int nF = 0;
+        for (int i = 0; i < 3; i++) if (zF.Contains(new[] { "Huelle=an", "Sprit=an", "Munition=an" }[i])) nF++;
+        return $"fussbalken-check: Fussvolk Platz {fuss.Slot} \"{LabelOf(fuss)}\" "
+             + $"(Sprit {fuss.Fuel}/{fuss.FuelMax}, Munition {fuss.Ammo}/{fuss.AmmoMax}): {zF}\n"
+             + $"                  Fahrzeug Platz {fahrzeug.Slot} \"{LabelOf(fahrzeug)}\" "
+             + $"(Sprit {fahrzeug.Fuel}/{fahrzeug.FuelMax}, Munition {fahrzeug.Ammo}/{fahrzeug.AmmoMax}): {zV}\n"
+             + "   ERWARTET: Fussvolk NUR die Huelle, Fahrzeug alle drei -> "
+             + (nF == 1 && zV.Contains("Sprit=an") && zV.Contains("Munition=an")
+                ? "WIE ERWARTET" : "NICHT wie erwartet");
+    }
+
+    /// <summary><c>--fussbalken-alt</c> — die Gegenprobe: das Fussvolk bekommt
+    /// wieder alle drei Zeilen, also auch die zwei leeren fuer Sprit und
+    /// Munition (Stand bis zum 08.09.2026).</summary>
+    public static bool FussbalkenAlt;
+
     private Vector2 _panelOrigin;
     private float _panelScale;
 
@@ -2315,12 +2375,31 @@ public partial class MapEntityLayer : Node2D
     private void ShowPanelBars(Entity? e)
     {
         bool an = e != null && _compactPanel;
+        // ⚠⚠ 08.09.2026, seine Meldung: »unter munition/sprit wird eine komische
+        // grafik angezeigt. Infanterie hat ausserdem nur eine Lebensanzeige und
+        // keine Sprit/Munitionsanzeige im Original.«
+        //
+        // Ein Fusssoldat traegt weder Tank noch Magazin (Sprit 0/0, Munition
+        // 0/0). Bei uns standen trotzdem alle drei Zeilen da: zwei LEERE Balken
+        // mit ihren Symbolen (Kanister und Patronen) — die »komische Grafik«.
+        // Der Kommentar an dieser Stelle begruendete den leeren Balken sogar
+        // ausdruecklich (»voll hiesse randvoll, und das waere eine
+        // Falschaussage«) — richtig gedacht, nur eine Zeile zu spaet: die
+        // Zeile gehoert fuer ihn gar nicht hin.
+        //
+        // ⚠ Das ist SEINE Beobachtung am Original, nicht gelesener Code. Sie
+        // passt aber in die Reihe: Bewegung, Zeichner, Lebensbalken und
+        // Zielwahl verzweigen alle zuerst nach dem Klassenbyte +0x0A, und die
+        // Anzeige des Bedienblocks wird die fuenfte solche Stelle sein.
+        // Gegenschalter --fussbalken-alt.
+        bool nurLeben = e != null && e.Infantry >= 0 && !FussbalkenAlt;
         for (int i = 0; i < 3; i++)
         {
             if (_barBack[i] == null) continue;
-            _barBack[i].Visible = an;
-            _barFill[i].Visible = an;
-            if (_barIcon[i] != null) _barIcon[i]!.Visible = an;
+            bool zeigen = an && !(nurLeben && i > 0);
+            _barBack[i].Visible = zeigen;
+            _barFill[i].Visible = zeigen;
+            if (_barIcon[i] != null) _barIcon[i]!.Visible = zeigen;
         }
         if (!an || e == null) return;
         float[] anteil =
@@ -2331,6 +2410,7 @@ public partial class MapEntityLayer : Node2D
         };
         for (int i = 0; i < 3; i++)
         {
+            if (nurLeben && i > 0) continue;         // Fussvolk: nur die Huelle
             if (_barIcon[i] != null) _barIcon[i]!.Visible = true;
             // Die Länge ist im Original `38*ist/voll` bei fester Höhe 4
             // (0x470D25..0x470D37). Mit der gemessenen Lage rechnen wir genauso;
@@ -10420,6 +10500,11 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     public static bool AutoGebaeudeziel;
 
+    /// <summary><c>--fussrichtung-alt</c> — die Gegenprobe: ein Fusssoldat
+    /// behaelt beim Feuern die Richtung, in die er zuletzt gelaufen ist (Stand
+    /// bis zum 08.09.2026).</summary>
+    public static bool FussrichtungAlt;
+
     /// <summary><c>--kein-feuer-im-fahren</c> — die Gegenprobe: nur untaetige
     /// Einheiten nehmen Ziele auf, und wer feuert, haelt an (Stand bis zum
     /// 01.09.2026).</summary>
@@ -10485,7 +10570,30 @@ public partial class MapEntityLayer : Node2D
                 e.Path = null;                  // in range: hold position and fire
                 // a turreted unit keeps its hull heading and only swings the weapon;
                 // one without a turret has to turn its whole body
-                if (e.Weapon == 0) e.Facing = e.AimFacing;
+                //
+                // ⚠⚠ 08.09.2026, seine Meldung: »Infanterie schiesst richtung
+                // links, aber der gegner ist hinter denen (rechts), das sieht
+                // komisch aus«. Und so war es: ein Fusssoldat traegt einen
+                // AUFSATZ (Waffe 390), fiel damit durch die Frage
+                // `e.Weapon == 0` und behielt die Richtung, in die er zuletzt
+                // GELAUFEN war — waehrend die Schusspose (Block 9/10) mit genau
+                // dieser Richtung gezeichnet wird.
+                //
+                // ⭐ Ein Fusssoldat HAT keinen Turm: der Zeichner nimmt fuer ihn
+                // eine einzige Richtung (`GetInfantryTexture(satz, e.Facing,
+                // block)`), es gibt kein zweites Bild fuer das Rohr. Der Koerper
+                // ist die Waffe, also muss er sich drehen. Dazu passt die
+                // Bedingung der Infanterie-Schiessuhr des Originals
+                // (@0x40F0A0): sie feuert nur bei `POHYB == 0xFF` UND
+                // `OTACIM == 0` — »steht« und »dreht sich gerade NICHT«. Ein
+                // Feld fuers Drehen gibt es also, und es steht dem Schuss im
+                // Weg, bis die Drehung fertig ist.
+                //
+                // ⚠ UNSERE Setzung bleibt die GESCHWINDIGKEIT: wir drehen
+                // sofort, das Original zaehlt OTACIM herunter. Gegenschalter
+                // --fussrichtung-alt.
+                if (e.Weapon == 0 || (e.Infantry >= 0 && !FussrichtungAlt))
+                    e.Facing = e.AimFacing;
             }
             if (Schussgruende)
                 e.Schussgrund = e.Cooldown > 0

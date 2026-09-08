@@ -327,6 +327,14 @@ public partial class MapEntityLayer : Node2D
                 {
                     _fspTicker = 3f;
                     var v0 = _entities[_fspOpfer];
+                    // ⭐ 08.09.2026 — DIE BLICKRICHTUNG GEHOERT IN DIE ZEILE.
+                    // Seine Meldung »schiesst nach links, der Gegner steht
+                    // rechts« ist genau dieser Vergleich: die Richtung, in der
+                    // der Soldat GEZEICHNET wird, gegen die Richtung zum Ziel.
+                    var vz = _entities[_fspOpfer];
+                    int soll = DirToFacing(vz.Pos - d0.Pos);
+                    GD.Print($"   [b] Blick {d0.Facing}, Zielrichtung {soll}, Turm {d0.AimFacing}"
+                           + $" -> {(d0.Facing == soll ? "passt" : "PASST NICHT")}");
                     GD.Print($"   [t] ({d0.Col},{d0.Row}) {(d0.Dead ? "GEFALLEN " : "")}"
                            + $"TP {d0.Hp}/{d0.HpMax} Ziel {d0.Target} befohlen {d0.Ordered} "
                            + $"Weg {(d0.Path == null ? "keiner" : $"{d0.PathIdx}/{d0.Path.Count}")} "
