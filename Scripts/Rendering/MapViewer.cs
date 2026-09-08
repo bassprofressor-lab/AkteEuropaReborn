@@ -456,6 +456,7 @@ public partial class MapViewer : Node2D
         if (_bodenangriffProbe) _entities.BodenangriffProbeStart();
         if (_fussSchussProbe) _entities.FussSchussProbeStart();
         if (_entladeSchussProbe) _entities.EntladeSchussProbeStart();
+        if (_schiffAbstandProbe) _entities.SchiffAbstandProbeStart();
         if (_sellCheck) _entities.SellCheckStart();
         if (_shopCheckFlag) _entities.ShopCheckStart();
         if (_buyCheckFlag) _entities.BuyCheckStart();
@@ -1233,6 +1234,9 @@ public partial class MapViewer : Node2D
     /// <summary><c>--entladeschuss-probe</c> - derselbe Fall mit einem Soldaten,
     /// der aus einem SCHIFF kommt. Siehe Simulation/FussSchussProbe.cs.</summary>
     private bool _entladeSchussProbe;
+    /// <summary><c>--schiffabstand-probe</c> — kommen zwei Schiffe Kante an
+    /// Kante? Siehe Simulation/SchiffAbstandProbe.cs.</summary>
+    private bool _schiffAbstandProbe;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
     /// seines Gleises? Siehe <c>MapEntityLayer.WagonFacingCheck</c>.</summary>
     private bool _wagonFacingCheck;
@@ -1896,6 +1900,7 @@ public partial class MapViewer : Node2D
             else if (a == "--bodenangriff-probe") _bodenangriffProbe = true;
             else if (a == "--fussschuss-probe") _fussSchussProbe = true;
             else if (a == "--entladeschuss-probe") _entladeSchussProbe = true;
+            else if (a == "--schiffabstand-probe") _schiffAbstandProbe = true;
             else if (a == "--entladeklasse-alt") MapEntityLayer.EntladeklasseAlt = true;
             else if (a == "--gegner-nicht-stellen") MapEntityLayer.GegnerNichtStellen = true;
             else if (a == "--schiffe-als-opfer") MapEntityLayer.SchiffeAlsOpfer = true;
