@@ -454,6 +454,8 @@ public partial class MapViewer : Node2D
         if (_ausweichProbe) _entities.AusweichProbeStart();
         if (_aufgebenProbe) _entities.AufgebenProbeStart();
         if (_bodenangriffProbe) _entities.BodenangriffProbeStart();
+        if (_fussSchussProbe) _entities.FussSchussProbeStart();
+        if (_entladeSchussProbe) _entities.EntladeSchussProbeStart();
         if (_sellCheck) _entities.SellCheckStart();
         if (_shopCheckFlag) _entities.ShopCheckStart();
         if (_buyCheckFlag) _entities.BuyCheckStart();
@@ -1225,6 +1227,12 @@ public partial class MapViewer : Node2D
     /// <summary><c>--bodenangriff-probe</c> — schiesst sie auf einen Baum?
     /// Siehe Simulation/BodenangriffProbe.cs.</summary>
     private bool _bodenangriffProbe;
+    /// <summary><c>--fussschuss-probe</c> — schiesst ein Fusssoldat ueberhaupt,
+    /// befohlen und von selbst? Siehe Simulation/FussSchussProbe.cs.</summary>
+    private bool _fussSchussProbe;
+    /// <summary><c>--entladeschuss-probe</c> - derselbe Fall mit einem Soldaten,
+    /// der aus einem SCHIFF kommt. Siehe Simulation/FussSchussProbe.cs.</summary>
+    private bool _entladeSchussProbe;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
     /// seines Gleises? Siehe <c>MapEntityLayer.WagonFacingCheck</c>.</summary>
     private bool _wagonFacingCheck;
@@ -1427,6 +1435,9 @@ public partial class MapViewer : Node2D
             else if (a == "--entladezeiger-aus") MapEntityLayer.EntladezeigerAus = true;
             else if (a == "--absetzen-aus-der-ferne") MapEntityLayer.AbsetzenAusDerFerne = true;
             else if (a == "--entlade-log") MapEntityLayer.EntladeLog = true;
+            else if (a == "--schuss-log") MapEntityLayer.SchussLog = true;
+            else if (a == "--schuss-log-alle")
+            { MapEntityLayer.SchussLog = true; MapEntityLayer.SchussLogAlle = true; }
             else if (a == "--gebaeudebrand-probe") _gebaeudebrandProbe = true;
             else if (a == "--schiffstart-probe") _schiffstartProbe = true;
             else if (a == "--einfahrzeiger-probe") _einfahrzeigerProbe = true;
@@ -1883,6 +1894,11 @@ public partial class MapViewer : Node2D
             else if (a == "--ausweich-probe") _ausweichProbe = true;
             else if (a == "--aufgeben-probe") _aufgebenProbe = true;
             else if (a == "--bodenangriff-probe") _bodenangriffProbe = true;
+            else if (a == "--fussschuss-probe") _fussSchussProbe = true;
+            else if (a == "--entladeschuss-probe") _entladeSchussProbe = true;
+            else if (a == "--entladeklasse-alt") MapEntityLayer.EntladeklasseAlt = true;
+            else if (a == "--gegner-nicht-stellen") MapEntityLayer.GegnerNichtStellen = true;
+            else if (a == "--schiffe-als-opfer") MapEntityLayer.SchiffeAlsOpfer = true;
             else if (a.StartsWith("--aufgeben-probe="))
             {
                 _aufgebenProbe = true;

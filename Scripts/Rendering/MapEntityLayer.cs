@@ -811,6 +811,12 @@ public partial class MapEntityLayer : Node2D
         public int Reload;
         public bool Dead;
         public float DeadTime;           // seconds since destruction (wreck anim)
+
+        /// <summary>WARUM diese Einheit gerade nicht schiesst — gesetzt an den
+        /// Stellen, an denen der Schuss tatsaechlich ausfaellt, und nur wenn
+        /// <c>--schuss-log</c> laeuft. ⚠ Kein Zustand der Simulation: nichts
+        /// liest dieses Feld ausser dem Mitschnitt.</summary>
+        public string Schussgrund = "";
     }
 
     /// <summary>
@@ -5099,6 +5105,46 @@ public partial class MapEntityLayer : Node2D
         => e.Pos - new Vector2((Mathf.Max(1, e.FootW) - 1) * TileW / 2f,
                                (Mathf.Max(1, e.FootH) - 1) * TileH / 2f);
 
+    /// <summary>
+    /// <b>Welche Bewegungsklasse diese Einheit hat</b> — die erste Weiche von
+    /// <c>Can_go</c> (@0x405696, Tafel 0x40678C): erst das Klassenbyte +0x0A,
+    /// dann das Fahrwerk +0x0B.
+    ///
+    /// <para>⚠⚠ 08.09.2026 — DIESE ZEILEN STANDEN NUR IM KARTENAUFBAU, und
+    /// damit hatte <b>jede Einheit, die aus einem Schiff kommt, die Klasse
+    /// Vehicle</b>: <see cref="FrachtAusListeNehmen"/> nimmt die Ladung aus der
+    /// Liste, BEVOR <see cref="InitEntityMovement"/> laeuft, und
+    /// <see cref="FrachtAbsetzen"/> setzte Lage, Grundriss und Blickrichtung von
+    /// Hand — die Klasse aber nicht. Ein ausgestiegener Fusssoldat lief also
+    /// nach Fahrzeugregeln.</para>
+    ///
+    /// <para><b>Seine Meldung dazu</b> (bug-105): »infanterie schiesst aber
+    /// immer noch nicht … das ist nur bei der Infanterie, die aus den Schiffen
+    /// entladen wurden. In Kampagne 4, wo man mit dieser spawnt, war das
+    /// Problem nicht.« Genau diese Aufteilung: auf der Karte gesetzte
+    /// Infanterie geht durch <c>InitEntityMovement</c>, ausgestiegene nicht.
+    /// Gemessen mit <c>--entladeschuss-probe</c>: derselbe Entwurf, dieselbe
+    /// Waffe, dieselbe Reichweite — nur <c>Klasse Vehicle</c> gegen
+    /// <c>Klasse Walker</c>.</para>
+    ///
+    /// <para>⭐ Deshalb steht die Wahl jetzt an EINER Stelle. Genau daran ist am
+    /// 06.09.2026 schon einmal eine Behebung gescheitert (die Angriffssperre
+    /// stand an zwei Stellen, und nur eine wurde geaendert).</para>
+    ///
+    /// <para>Gegenschalter <c>--entladeklasse-alt</c>.</para></summary>
+    private void BewegungsklasseSetzen(Entity e)
+        => e.Move = e.GameUnitType >= 0
+            ? Simulation.NavGrid.ClassOf(e.GameUnitType, e.Chassis)
+            : NavalTypes.Contains(e.UnitType)
+                ? Simulation.NavGrid.MoveClass.Ship
+                : Simulation.NavGrid.MoveClass.Vehicle;
+
+    /// <summary><c>--entladeklasse-alt</c> — der Stand vor dem 08.09.2026: wer
+    /// aus einem Schiff steigt, behaelt die Klasse <c>Vehicle</c>. ⚠ Damit
+    /// kommt ausgestiegene Infanterie nicht ueber rauen Boden — und weil ein
+    /// Fusssoldat nur IM STAND schiesst, feuert sie dann auch nicht.</summary>
+    public static bool EntladeklasseAlt;
+
     /// <summary>Place every entity on its cell and claim that cell on the grid.</summary>
     private void InitEntityMovement()
     {
@@ -5111,11 +5157,7 @@ public partial class MapEntityLayer : Node2D
             // A unit that came off a map carries both; one that was BUILT has no
             // record behind it, so the hull number decides — that is the older
             // NavalTypes reading, kept exactly where it is still the only source.
-            e.Move = e.GameUnitType >= 0
-                ? Simulation.NavGrid.ClassOf(e.GameUnitType, e.Chassis)
-                : NavalTypes.Contains(e.UnitType)
-                    ? Simulation.NavGrid.MoveClass.Ship
-                    : Simulation.NavGrid.MoveClass.Vehicle;
+            BewegungsklasseSetzen(e);
             e.Path = null;
             e.Reserved = null;
             // A Nachschub-Posten is driven ONTO: its tick @0x43e872 looks up
@@ -9494,6 +9536,7 @@ public partial class MapEntityLayer : Node2D
         if (warum == "kein Zielfeld") ChaseNoGoal++; else ChaseNoPath++;
         if (ChaseLost.Count < 8)
             ChaseLost.Add($"#{i} Platz {e.Slot} (P{e.Owner}) bei ({e.Col},{e.Row}): {warum}");
+        if (Schussgruende) e.Schussgrund = $"Verfolgung aufgegeben: {warum}";
         e.Target = -1;
     }
 
@@ -10230,7 +10273,14 @@ public partial class MapEntityLayer : Node2D
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
-            if (!CanFight(e) || e.Target >= 0) continue;
+            if (!CanFight(e))
+            {
+                if (Schussgruende && !e.Dead && !e.IsProp && !e.IsBuilding)
+                    e.Schussgrund = $"nicht kampffaehig (Aufsatz {e.Weapon}, Waffenfahne {e.Armed}, "
+                                  + $"HpMax {e.HpMax}, untergestellt {Untergestellt(e)})";
+                continue;
+            }
+            if (e.Target >= 0) continue;        // hat eins — der Grund faellt in UpdateCombat
             // ⭐⭐⭐ 01.09.2026 — EINE FAHRENDE EINHEIT NIMMT SEHR WOHL EIN ZIEL AUF.
             //
             // Hier stand `|| e.Path != null`: wer faehrt, sieht nichts. Gemeldet:
@@ -10250,7 +10300,13 @@ public partial class MapEntityLayer : Node2D
             //
             // ⚠ AUSNAHME INFANTERIE: sie schiesst nur im Stand
             // (`POHYB == 0xFF && OTACIM == 0`), eigene Schiessuhr @0x40F0A0.
-            if (e.Path != null && (KeinFeuerImFahren || e.Infantry >= 0)) continue;
+            if (e.Path != null && (KeinFeuerImFahren || e.Infantry >= 0))
+            {
+                if (Schussgruende)
+                    e.Schussgrund = $"faehrt noch (Schritt {e.PathIdx}/{e.Path.Count}, "
+                                  + $"Ziel ({e.Goal.X},{e.Goal.Y})) — Infanterie schiesst nur im Stand";
+                continue;
+            }
             float range = RangeOf(e);
             int best = -1;
             float bestDist = range;
@@ -10292,7 +10348,71 @@ public partial class MapEntityLayer : Node2D
                 if (d <= bestDist) { bestDist = d; best = j; }
             }
             if (best >= 0) { e.Target = best; e.Ordered = false; }
+            else if (Schussgruende)
+            {
+                // ⚠ Zwei sehr verschiedene Faelle, und ohne die Zahl sind sie nicht
+                // zu trennen: gar kein Feind auf der Karte, oder einer ausser Reichweite.
+                float naechster = float.MaxValue; int naechsterSlot = -1;
+                for (int j = 0; j < _entities.Count; j++)
+                {
+                    if (i == j) continue;
+                    var t2 = _entities[j];
+                    if (!IsHostile(e, t2)) continue;
+                    float d2 = CellDistance(e, t2);
+                    if (d2 < naechster) { naechster = d2; naechsterSlot = t2.Slot; }
+                }
+                e.Schussgrund = naechsterSlot < 0
+                    ? $"kein Feind auf der Karte (Reichweite {range:0.0})"
+                    : $"kein Ziel im Ring: naechster Feind Platz {naechsterSlot} in "
+                    + $"{naechster:0.0} Zellen, Reichweite {range:0.0}, "
+                    + $"Mindestreichweite {RangeMinOf(e):0.0}";
+            }
         }
+    }
+
+    /// <summary><c>--schuss-log</c> — je Sekunde EINE Zeile fuer jede Einheit, die
+    /// nicht schiesst, mit dem GRUND an der Stelle, an der der Schuss
+    /// tatsaechlich ausfaellt. ⚠ Gebaut am 08.09.2026 fuer bug-105 (»infanterie
+    /// schiesst aber immer noch nicht«), nachdem drei Vermutungen — Waffe,
+    /// Munition, Fahrbefehl — nacheinander widerlegt waren, ohne dass etwas
+    /// besser wurde. Derselbe Weg wie bei <c>--entlade-log</c>: er klickt, ich
+    /// lese die Zahlen.</summary>
+    public static bool SchussLog;
+
+    /// <summary>Ob der GRUND ueberhaupt mitgeschrieben wird. ⚠ Getrennt vom
+    /// Mitschnitt, weil auch <c>--fussschuss-probe</c> ihn braucht, ohne je
+    /// Sekunde 30 Zeilen zu drucken.</summary>
+    public static bool Schussgruende;
+
+    /// <summary><c>--schuss-log-alle</c> — nicht nur das Fussvolk, sondern jede
+    /// Einheit mitschreiben.</summary>
+    public static bool SchussLogAlle;
+
+    private float _schussLogTimer;
+
+    /// <summary>Der Mitschnitt selbst: eine Zeile je Einheit und Sekunde.</summary>
+    private void SchussLogTakt(float dt)
+    {
+        if (!SchussLog) return;
+        Schussgruende = true;
+        _schussLogTimer -= dt;
+        if (_schussLogTimer > 0f) return;
+        _schussLogTimer = 1f;
+
+        int stumm = 0, schiesst = 0;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.Dead || e.IsProp || e.IsBuilding) continue;
+            if (!SchussLogAlle && e.Infantry < 0) continue;
+            if (e.Schussgrund.StartsWith("SCHUSS")) schiesst++; else stumm++;
+            GD.Print($"schuss: Platz {e.Slot} Sp{e.Owner} \"{LabelOf(e.UnitType)}\" "
+                   + $"({e.Col},{e.Row}) Ziel {e.Target} cd {e.Cooldown:0.00} "
+                   + $"Mun {e.Ammo}/{e.AmmoMax}: "
+                   + (e.Schussgrund.Length > 0 ? e.Schussgrund : "— gar nicht gefragt —"));
+        }
+        GD.Print($"schuss: {schiesst} feuernd, {stumm} stumm (Takt {DebugTicks}, "
+               + $"Schuesse gesamt {DebugShots})");
     }
 
     /// <summary><c>--auto-gebaeudeziel</c> — die Gegenprobe: ein Gebaeude darf
@@ -10318,7 +10438,11 @@ public partial class MapEntityLayer : Node2D
         }
 
         var t = _entities[e.Target];
-        if (t.Dead || t.IsProp) { e.Target = -1; return; }
+        if (t.Dead || t.IsProp)
+        {
+            if (Schussgruende) e.Schussgrund = "Ziel ist tot oder Kulisse";
+            e.Target = -1; return;
+        }
 
         var w = WeaponOf(e.Weapon);
         float dist = CellDistance(e, t);
@@ -10363,6 +10487,12 @@ public partial class MapEntityLayer : Node2D
                 // one without a turret has to turn its whole body
                 if (e.Weapon == 0) e.Facing = e.AimFacing;
             }
+            if (Schussgruende)
+                e.Schussgrund = e.Cooldown > 0
+                    ? $"nachladen ({e.Cooldown:0.00}s, Ziel Platz {t.Slot} in {dist:0.0} Zellen)"
+                    : !HasAmmo(e)
+                    ? $"keine Munition ({e.Ammo}/{e.AmmoMax})"
+                    : $"SCHUSS auf Platz {t.Slot} in {dist:0.0} Zellen";
             if (e.Cooldown <= 0 && HasAmmo(e))
             {
                 e.Cooldown = ReloadOf(e);
@@ -10384,11 +10514,23 @@ public partial class MapEntityLayer : Node2D
         // das Original springt an derselben Stelle aus der Schussentscheidung
         // heraus (@0x40bf8d `jg 0x40c5be`, dieselbe Marke wie bei »zu weit«).
         // Wegzufahren waere unsere Erfindung; das Original tut es nicht.
-        if (dist < RangeMinOf(e)) { e.Target = -1; MinRangeBlocked++; return; }
+        if (dist < RangeMinOf(e))
+        {
+            if (Schussgruende)
+                e.Schussgrund = $"Ziel zu NAH ({dist:0.0} < Mindestreichweite {RangeMinOf(e):0.0})";
+            e.Target = -1; MinRangeBlocked++; return;
+        }
 
         // only a player-ordered attack chases; a target picked up automatically
         // is simply dropped when it leaves the firing envelope
-        if (!e.Ordered || !e.Mobile) { e.Target = -1; return; }
+        if (!e.Ordered || !e.Mobile)
+        {
+            if (Schussgruende)
+                e.Schussgrund = $"Ziel Platz {t.Slot} zu WEIT ({dist:0.0} > Reichweite "
+                              + $"{RangeOf(e):0.0}) und wird nicht verfolgt "
+                              + $"(befohlen {e.Ordered}, beweglich {e.Mobile})";
+            e.Target = -1; return;
+        }
 
         // out of range: walk towards the target, re-pathing when it moves away
         if (e.Path == null && _nav != null)
@@ -10579,6 +10721,7 @@ public partial class MapEntityLayer : Node2D
         // siehe InfBlock. Etwas laenger als eine Nachladezeit, damit die Pose
         // waehrend eines Feuerstosses nicht flackert.
         shooter.FireUntil = _clock + FirePoseSeconds;
+        if (si == _fspSchuetze) FussSchuesse++;      // siehe FussSchussProbe.cs
         // `--beschuss-check`: hier, am Ende der Kette, faellt der Schuss
         // wirklich — nicht dort, wo die Buendnisfrage haette gestellt werden
         // muessen. Siehe Simulation/BeschussCheck.cs.
@@ -24842,8 +24985,18 @@ public partial class MapEntityLayer : Node2D
             u.Footprint = CellRect(_ox, _oy, u.Col, u.Row, u.Elev);
             u.Pos = CellCenter(u.Col, u.Row);
             u.Mobile = !u.IsBuilding;
+            // ⚠⚠ 08.09.2026 — UND DIE BEWEGUNGSKLASSE, siehe
+            // BewegungsklasseSetzen. Ohne diese Zeile lief jeder Ausgestiegene
+            // nach FAHRZEUGregeln: die Ladung ist aus der Liste heraus, bevor
+            // InitEntityMovement laeuft, und traegt darum noch den Vorgabewert.
+            if (!EntladeklasseAlt) BewegungsklasseSetzen(u);
             _entities.Add(u);
-            _nav?.SetOccupant(u.Col, u.Row, _entities.Count - 1);
+            // Der RUMPF gehoert vor den Stempel — dieselbe Reihenfolge wie im
+            // Kartenaufbau (ein Schiff belegt 2x2 bzw. 4x4).
+            if (!EntladeklasseAlt)
+                _nav?.SetHull(_entities.Count - 1,
+                              Simulation.NavGrid.HullSide(u.GameUnitType));
+            _nav?.SetOccupant(u.Col, u.Row, _entities.Count - 1, u.Infantry >= 0);
 
             // ⭐⭐ 08.09.2026 — UND SOFORT WEG VOM UFER. Ohne das hier laedt der
             // BELADE-TAKT den Ausgestiegenen im naechsten Augenblick wieder ein:
@@ -29354,6 +29507,10 @@ public partial class MapEntityLayer : Node2D
         _acquireTimer -= dt;
         if (_acquireTimer <= 0f) { _acquireTimer = 0.4f; AutoAcquire(); }
 
+        // ⚠ NACH der Zielaufnahme und VOR der naechsten — der Grund, den die
+        // Zeile nennt, ist damit der aus diesem Takt.
+        SchussLogTakt(dt);
+
         // neutral units join whoever drives up to them — see Simulation/Takeover.cs
         _takeoverTimer -= dt;
         if (_takeoverTimer <= 0f) { _takeoverTimer = TakeoverEverySec; TakeoverTick(); }
@@ -29374,6 +29531,7 @@ public partial class MapEntityLayer : Node2D
         PollAusweichProbe(dt);
         PollAufgebenProbe(dt);
         PollBodenangriffProbe(dt);
+        PollFussSchussProbe(dt);
         PollSellCheck();
         PollShopCheck();
         PollBuyCheck();
