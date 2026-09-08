@@ -462,6 +462,7 @@ public partial class MapViewer : Node2D
         if (_schiffKonvoiProbe) _entities.SchiffKonvoiProbeStart();
         if (_gruppenangriffProbe) _entities.GruppenangriffProbeStart();
         if (_routenfensterProbe) _entities.RoutenfensterProbeStart();
+        if (_namenCheck) GD.Print(_entities.NamenCheck());
         if (_sellCheck) _entities.SellCheckStart();
         if (_shopCheckFlag) _entities.ShopCheckStart();
         if (_buyCheckFlag) _entities.BuyCheckStart();
@@ -1256,6 +1257,9 @@ public partial class MapViewer : Node2D
     /// <summary><c>--routenfenster-probe</c> — kann der Spieler eine Route
     /// setzen? Siehe Simulation/RoutenfensterProbe.cs.</summary>
     private bool _routenfensterProbe;
+    /// <summary><c>--namen-check</c> — wie heissen die Einheiten dieser Karte?
+    /// </summary>
+    private bool _namenCheck;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
     /// seines Gleises? Siehe <c>MapEntityLayer.WagonFacingCheck</c>.</summary>
     private bool _wagonFacingCheck;
@@ -1935,6 +1939,8 @@ public partial class MapViewer : Node2D
             else if (a == "--schiffkonvoi-probe") _schiffKonvoiProbe = true;
             else if (a == "--gruppenangriff-probe") _gruppenangriffProbe = true;
             else if (a == "--routenfenster-probe") _routenfensterProbe = true;
+            else if (a == "--namen-check") _namenCheck = true;
+            else if (a == "--fahrzeugname-alt") MapEntityLayer.FahrzeugnameAlt = true;
             else if (a == "--keine-transportrouten") MapEntityLayer.KeineTransportrouten = true;
             else if (a == "--entladeklasse-alt") MapEntityLayer.EntladeklasseAlt = true;
             else if (a == "--gegner-nicht-stellen") MapEntityLayer.GegnerNichtStellen = true;
@@ -4068,6 +4074,21 @@ public partial class MapViewer : Node2D
         _orderBar = new UI.UnitOrderBar { Visible = false };
         layer.AddChild(_orderBar);
 
+        // ⭐ 08.09.2026 — DAS EINHEITENMENUE (Fensterart 1), mit den Kacheln
+        // des Originals. Siehe UI/UnitMenuWindow.cs und
+        // Simulation/Einheitenmenue.cs.
+        _unitMenu = new UI.UnitMenuWindow { Visible = false };
+        layer.AddChild(_unitMenu);
+        _unitMenu.OnClose = () => _unitMenu!.Visible = false;
+        _unitMenu.OnCode = code =>
+        {
+            _unitMenu!.Visible = false;
+            string sagt = _entities.MenueAktion(code);
+            if (sagt.Length > 0) _entities.SellNote = sagt;
+            UpdateUnitOrderBar();
+            UpdateRouteWindow();
+        };
+
         _routeWindow = new UI.RouteWindow { Visible = false };
         layer.AddChild(_routeWindow);
         _routeWindow.Inhalt = () => _entities.RouteAnzeige();
@@ -4122,6 +4143,28 @@ public partial class MapViewer : Node2D
     /// <summary>Das Routenfenster (Fensterart 16) — siehe UI/RouteWindow.cs.
     /// </summary>
     private UI.RouteWindow? _routeWindow;
+
+    /// <summary>Das Einheitenmenue (Fensterart 1) — siehe
+    /// UI/UnitMenuWindow.cs.</summary>
+    private UI.UnitMenuWindow? _unitMenu;
+
+    /// <summary>Das Menue aufmachen, dort wo die Maus steht — <c>0x444490</c>
+    /// bekommt <c>mx, my</c>. ⚠ Der Oeffner des Originals ist der DOPPELKLICK
+    /// (WM_LBUTTONDBLCLK 0x203 -> 0x4141B4) bzw. die Leertaste; die rechte
+    /// Taste scrollt dort die Karte (0x414328).</summary>
+    private void OeffneEinheitenmenue(Vector2 schirmPos)
+    {
+        if (_unitMenu == null || _entities == null) return;
+        int idx = _entities.MenueEinheit();
+        if (idx < 0) return;
+        _unitMenu.Codes = _entities.MenueCodes(idx);
+        bool etwas = false;
+        foreach (int c in _unitMenu.Codes) if (c >= 0) etwas = true;
+        if (!etwas) return;
+        _unitMenu.Visible = true;
+        _unitMenu.PlaceAt(schirmPos);
+        _unitMenu.QueueRedraw();
+    }
 
     /// <summary>Das Routenfenster aufmachen. ⚠ Es HAELT DIE ROUTE AN, so wie
     /// das Original (Netzbefehl 514 beim Oeffnen, 0x4489C3).</summary>
@@ -4868,17 +4911,14 @@ public partial class MapViewer : Node2D
                         // Setzmodus eine Zeile weiter unten: sonst waehlte der
                         // Klick eine Einheit an und das Fenster bliebe leer.
                         // ⭐ DER DOPPELKLICK ist der Oeffner des Originals
-                        // (WM_LBUTTONDBLCLK 0x203 -> 0x4141B4 -> 0x444490).
-                        // Dort oeffnet er das Sechs-Symbole-Menue; bei uns
-                        // fuehrt er direkt zum Routenfenster, weil das Menue
-                        // nur diesen einen Eintrag haette, den wir schon
-                        // koennen. ⚠ Die LEERTASTE bleibt unberuehrt: sie
-                        // springt bei uns zur Auswahl, und das ist eine
-                        // gewachsene Bedienung.
-                        if (mb.DoubleClick && _entities.RouteWahlModus == 0
-                            && _entities.RouteKnopfSichtbar())
+                        // (WM_LBUTTONDBLCLK 0x203 -> 0x4141B4 -> 0x444490): er
+                        // oeffnet das EINHEITENMENUE der Art 1, und dessen
+                        // Eintrag 0x10 fuehrt zum Routenfenster.
+                        // ⚠ Die LEERTASTE bleibt unberuehrt: sie springt bei
+                        // uns zur Auswahl, und das ist gewachsene Bedienung.
+                        if (mb.DoubleClick && _entities.RouteWahlModus == 0)
                         {
-                            OeffneRoutenfenster();
+                            OeffneEinheitenmenue(mb.Position);
                             _leftDown = false; _boxSelect = false;
                             _entities.SetBand(null);
                             UpdateUnitOrderBar();

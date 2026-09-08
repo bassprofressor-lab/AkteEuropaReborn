@@ -30631,7 +30631,64 @@ public partial class MapEntityLayer : Node2D
                 d.Name.Length > 0)
                 return d.Name;
         }
+        // ⭐⭐ 08.09.2026 — UND EIN FAHRZEUG HEISST NACH SEINEM ENTWURF, nicht
+        // nach seinem FAHRWERK. Seine Meldung: »die einheit heisst Reifen
+        // anstatt Transporter«.
+        //
+        // Das ist zum DRITTEN Mal derselbe Fall: bug-030 beim Fusssoldaten,
+        // bug-088 beim Schiff, und jetzt beim Fahrzeug. Der `unit_type` einer
+        // Karteneinheit ist das FAHRWERK (»Reifen«, »6x6 Reifen«, »Ketten«) —
+        // benannt wird eine Einheit im Original aber nach dem, was sie TRAEGT.
+        // Genau darum heisst der MG-Panzer in unseren eigenen Tafeln seit dem
+        // 05.09. »Maschinengewehr« und nicht »Chaingun Tank«.
+        //
+        // <see cref="MountName"/> beantwortet das schon laenge fuer den
+        // Bedienblock: eine Waffe gibt ihren Namen, ein Ausruestungsaufsatz die
+        // Bauteilzeile (46 -> 71 »Transporter«, 43 -> 70 »Mechaniker«, …). Sie
+        // wurde hier nur nie gefragt.
+        //
+        // ⚠ Faellt sie auf eine NUMMER zurueck (»BAUTEIL 51/ZEILE 0/AUSR. 0«),
+        // bleibt der Fahrwerkname stehen: eine Nummer ist kein Name, und der
+        // alte Text ist immerhin lesbar. Gegenschalter --fahrzeugname-alt.
+        if (!FahrzeugnameAlt && !e.IsBuilding && !e.IsProp && e.Weapon != 0)
+        {
+            string mn = MountName(e);
+            if (mn.Length > 0 && !mn.StartsWith("BAUTEIL") && mn != "UNBEWAFFNET"
+                && mn != "?" && mn != "keine")
+                return mn;
+        }
         return LabelOf(e.UnitType);
+    }
+
+    /// <summary><c>--fahrzeugname-alt</c> — die Gegenprobe: eine Einheit heisst
+    /// wieder nach ihrem FAHRWERK (»Reifen«), wie bis zum 08.09.2026.</summary>
+    public static bool FahrzeugnameAlt;
+
+    /// <summary>
+    /// <c>--namen-check</c> — <b>wie heissen die Einheiten dieser Karte?</b>
+    ///
+    /// <para>⚠ Die Messlatte zu seiner Meldung »die einheit heisst Reifen
+    /// anstatt Transporter«. Sie zeigt BEIDE Namen nebeneinander, sonst waere
+    /// nicht zu sehen, was sich geaendert hat — und sie zaehlt, wie viele
+    /// ueberhaupt betroffen sind.</para>
+    /// </summary>
+    public string NamenCheck()
+    {
+        var sb = new System.Text.StringBuilder("namen-check\n");
+        int anders = 0, gleich = 0, gezeigt = 0;
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Dead) continue;
+            string alt = e.Name.Length > 0 ? e.Name : LabelOf(e.UnitType);
+            string neu = LabelOf(e);
+            if (alt == neu) { gleich++; continue; }
+            anders++;
+            if (gezeigt++ < 8)
+                sb.Append($"  Platz {e.Slot}: Fahrwerk {e.UnitType} »{alt}« -> »{neu}« "
+                        + $"(Aufsatz {e.Weapon}, Bauteilzeile {e.Part})\n");
+        }
+        sb.Append($"  {anders} Einheiten heissen jetzt anders, {gleich} unveraendert");
+        return sb.ToString();
     }
 
     /// <summary>Human-readable imap ground class (Can_go @0x4055D0).</summary>
