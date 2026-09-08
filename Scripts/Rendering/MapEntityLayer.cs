@@ -16990,6 +16990,22 @@ public partial class MapEntityLayer : Node2D
     /// ⚠ Nicht `_selected = i` allein: der Klick raeumt die Auswahl, setzt den
     /// Hauptmann und ruft dann <see cref="Gebaeudefenster"/>. Genau diese
     /// Reihenfolge hat schon einmal einen Fehler versteckt.</summary>
+    /// <summary>Die erste eigene Terranium-Mine (Gebäudeart 10 oder 15), oder
+    /// −1. ⚠ Der Fensterweg zeigt nur EIGENE Gebäude (siehe
+    /// <c>Fenstergebaeude</c>), also sucht der Prüfstand auch nur solche —
+    /// sonst misst er einen Zweig, den der Spieler nie erreicht.</summary>
+    public int MinenIndex()
+    {
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var b = _entities[i];
+            if (!b.IsBuilding || b.IsProp || b.Dead || b.NoStructure) continue;
+            if (b.Owner != ViewPlayer) continue;
+            if (b.BType is 10 or 15) return i;
+        }
+        return -1;
+    }
+
     public void PostenAnwaehlenWieKlick(int idx)
     {
         _sel.Clear();

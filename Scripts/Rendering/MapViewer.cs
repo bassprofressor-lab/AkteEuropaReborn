@@ -588,6 +588,7 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_minenfensterCheck) { _ = MinenfensterLauf(); return; }
         if (_plattformCheck)
         {
             GD.Print(_entities.PlattformCheck());
@@ -977,6 +978,10 @@ public partial class MapViewer : Node2D
     /// <summary><c>--fenster-check</c> — die sechs Regeln der
     /// Fensterverwaltung.</summary>
     private bool _fensterCheck;
+
+    /// <summary><c>--minenfenster-check</c> — siehe
+    /// <see cref="MinenfensterCheck"/>.</summary>
+    private bool _minenfensterCheck;
     private bool _kaufwegCheck;
     private bool _plattformCheck;
     private bool _hangCheck;
@@ -1009,6 +1014,74 @@ public partial class MapViewer : Node2D
     /// </summary>
     /// <summary>Erst ein paar Bilder laufen lassen, DANN messen - siehe die
     /// Warnung an der Rufstelle.</summary>
+    /// <summary>
+    /// <c>--minenfenster-check</c> — <b>oeffnet das Fenster der eigenen Mine
+    /// und sagt, WOMIT es gezeichnet wird.</b> (08.09.2026, zu seiner Meldung
+    /// »die mine hat ein eigenes tolles gebäudemenu, wir nutzen dort wieder
+    /// unser eigenbau«.)
+    ///
+    /// <para>Er geht denselben Weg wie ein Klick
+    /// (<c>PostenAnwaehlenWieKlick</c> → <c>Gebaeudefenster</c> →
+    /// <c>OnBuildingWindow</c> → Fensterverwaltung) und liest danach das
+    /// Fenster selbst ab — Groesse, Knopfzahl und den Zeichner. ⚠ Die
+    /// Aufblende wird von Hand zu Ende gedreht, sonst misst der Lauf ein
+    /// zusammengedruecktes Fenster (dieselbe Falle wie bei
+    /// <c>--kaufweg-check</c>).</para>
+    ///
+    /// <para>Das Nullmodell ist <c>--minenfenster-alt</c>: damit MUSS in der
+    /// Zeile »Godot-Moebel« stehen und das Mass ein anderes sein.</para>
+    /// </summary>
+    private async System.Threading.Tasks.Task MinenfensterLauf()
+    {
+        for (int i = 0; i < 5; i++)
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var sb = new System.Text.StringBuilder("minenfenster-check\n");
+        int idx = _entities.MinenIndex();
+        if (idx < 0)
+            sb.Append("  keine eigene Mine auf dieser Karte — ungeprueft\n  DURCHGEFALLEN");
+        else
+        {
+            UI.WindowManager.Mausquelle = () => new Vector2(400, 300);
+            _entities.PostenAnwaehlenWieKlick(idx);
+            for (int t = 0; t <= UI.WindowManager.BilderAuf + 1; t++) UI.WindowManager.Takt();
+            for (int i = 0; i < 2; i++) await System.Threading.Tasks.Task.Yield();
+
+            var f = _gebaeudeFenster;
+            if (f == null) sb.Append("  kein Gebaeudefenster gebaut\n  DURCHGEFALLEN");
+            else
+            {
+                sb.Append($"  {f.WatchLine()}\n");
+                sb.Append($"  sichtbar {f.Visible}, Mass {f.Size} "
+                        + $"(erwartet {UI.MineView.WTiles * UI.WindowChrome.Cell * UI.MineView.Scale}"
+                        + $"x{UI.MineView.HTiles * UI.WindowChrome.Cell * UI.MineView.Scale} "
+                        + "= 13x12 Kacheln, die 260x240 aus 0x4595BF/0x4595C8)\n");
+                var k = f.MinenknopfAufDemSchirm(2);
+                sb.Append($"  Knopf 3 (Start/Anhalten) auf dem Schirm: "
+                        + $"{(k == null ? "NICHT DA" : k.Value.ToString())}\n");
+                bool alt = UI.BuildingWindow.MinenfensterAlt;
+                bool ok = f.Visible && (alt ? !f.ZeigtOriginalMine
+                                            : f.ZeigtOriginalMine && k != null);
+                if (alt)
+                    sb.Append("  ⚠ NULLMODELL --minenfenster-alt: hier MUSS "
+                            + "»Godot-Moebel« stehen\n");
+                sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN");
+            }
+        }
+        GD.Print(sb.ToString());
+        // ⚠ Ein Bild, wenn eines bestellt ist: die Zeile oben sagt, WOMIT
+        // gezeichnet wird, aber nicht, WIE es aussieht. Beides zusammen ist
+        // die Messung.
+        if (_shotPath.Length > 0)
+        {
+            for (int i = 0; i < 3; i++)
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            var bild = GetViewport().GetTexture().GetImage();
+            bild.SavePng(_shotPath);
+            GD.Print($"minenfenster-check: Bild nach {_shotPath}");
+        }
+        GetTree().Quit(0);
+    }
+
     private async System.Threading.Tasks.Task KaufwegLauf()
     {
         for (int i = 0; i < 5; i++)
@@ -1521,6 +1594,8 @@ public partial class MapViewer : Node2D
             else if (a == "--einnahmeklick-alt") MapEntityLayer.EinnahmeklickAlt = true;
             else if (a == "--tuerlos-alt") MapEntityLayer.TuerlosAlt = true;
             else if (a == "--neutralklick-alt") MapEntityLayer.NeutralklickAlt = true;
+            else if (a == "--minenfenster-alt") UI.BuildingWindow.MinenfensterAlt = true;
+            else if (a == "--minenfenster-check") _minenfensterCheck = true;
             else if (a == "--rau-ist-hart") Simulation.NavGrid.RauIstHart = true;
             else if (a == "--fussanker-alt") MapEntityLayer.FussankerAlt = true;
             else if (a == "--panzerung-alt") MapEntityLayer.PanzerungAlt = true;

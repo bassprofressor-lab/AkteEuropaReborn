@@ -157,6 +157,24 @@ public sealed partial class BuildingWindow : PanelContainer
     public System.Action? OnStop;
     public System.Action? OnRepair;
 
+    /// <summary><c>--minenfenster-alt</c> — der Stand vor dem 08.09.2026: die
+    /// Mine bekommt wieder unsere Godot-Moebel statt der Kacheln aus
+    /// WINDOWS.CWW.</summary>
+    public static bool MinenfensterAlt;
+
+    /// <summary><b>Zeichnet die Mine gerade mit den Kacheln des Originals?</b>
+    /// ⚠ Ohne diese Auskunft waere »das Minenfenster ist gebaut« eine
+    /// Behauptung: das Fenster faellt auf die Godot-Moebel zurueck, wenn
+    /// WINDOWS.CWW nicht eingelesen ist, und das saehe von aussen genauso aus
+    /// wie ein nicht gebautes Fenster.</summary>
+    public bool ZeigtOriginalMine { get; private set; }
+
+    /// <summary>Das Feld des Knopfes <paramref name="k"/> (0..3) auf dem
+    /// SCHIRM — fuer den Pruefstand, damit er dieselbe Trefferpruefung fragt,
+    /// die auch der Klick benutzt.</summary>
+    public Rect2? MinenknopfAufDemSchirm(int k)
+        => _mine != null && _mine.Visible ? _mine.KnopfFeld(k) : null;
+
     private Art _art = Art.Bahnhof;
 
     /// <summary>Die Kennung, unter der das Fenster in der Verwaltung steht
@@ -177,6 +195,12 @@ public sealed partial class BuildingWindow : PanelContainer
     /// <c>_Ready</c> nicht lief; unbrauchbar (und damit uebersprungen), solange
     /// der Spieler seine Inhalte nicht eingelesen hat.</summary>
     private SupplyShopView? _posten;
+
+    /// <summary>⭐ Fensterart 18 mit den Moebeln des Originals — dieselbe
+    /// Bauart wie <see cref="_posten"/>, auf seine Meldung vom 08.09.2026:
+    /// »die mine hat ein eigenes tolles gebäudemenu, wir nutzen dort wieder
+    /// unser eigenbau«. Siehe <see cref="MineView"/>.</summary>
+    private MineView? _mine;
 
     private readonly VBoxContainer _mitte = new();
     private readonly HBoxContainer _knoepfe = new();
@@ -205,6 +229,16 @@ public sealed partial class BuildingWindow : PanelContainer
         _posten.OnClose = Schliessen;
         _posten.OnChanged = Refresh;
         AddChild(_posten);
+
+        // ⭐⭐ 08.09.2026 — DIE MINE BEKOMMT DIE MOEBEL DES ORIGINALS.
+        // Fensterart 18, Anleger 0x459530, Zeichner 0x474220; alle Masse und
+        // Zeilen sind dort abgelesen, siehe MineView.
+        _mine = new MineView { Visible = false };
+        _mine.OnClose = Schliessen;
+        _mine.OnStart = () => { OnStart?.Invoke(); Refresh(); };
+        _mine.OnStop = () => { OnStop?.Invoke(); Refresh(); };
+        _mine.OnRepair = () => { OnRepair?.Invoke(); Refresh(); };
+        AddChild(_mine);
 
         var kopf = new HBoxContainer();
         _titel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
@@ -332,8 +366,25 @@ public sealed partial class BuildingWindow : PanelContainer
         // Fenster auf die alte Darstellung zurueck, statt leer zu bleiben.
         bool original = _art == Art.Nachschubposten && _posten != null
                         && SupplyShopView.Usable;
+        // ⭐ 08.09.2026 — und dasselbe fuer die MINE (Fensterart 18).
+        bool mineOriginal = _art == Art.Mine && _mine != null && MineView.Usable
+                            && !MinenfensterAlt;
         if (_posten != null) _posten.Visible = original;
-        _senk.Visible = !original;
+        if (_mine != null) _mine.Visible = mineOriginal;
+        _senk.Visible = !original && !mineOriginal;
+        if (mineOriginal)
+        {
+            AddThemeStyleboxOverride("panel", new StyleBoxEmpty());
+            CustomMinimumSize = new Vector2(
+                MineView.WTiles * WindowChrome.Cell * MineView.Scale,
+                MineView.HTiles * WindowChrome.Cell * MineView.Scale);
+            Size = CustomMinimumSize;
+            _mine!.Zeige(s);
+            ZeigtOriginalMine = true;
+            _titel.Text = "Terranium-Mine " + s.Name;
+            _knopfZahl = _mine.Buttons;
+            return;
+        }
         if (original)
         {
             // Der Godot-Rahmen muss weg, sonst steht er hinter dem des
@@ -348,6 +399,7 @@ public sealed partial class BuildingWindow : PanelContainer
             _knopfZahl = System.Math.Min(s.Angebote.Count, 2);
             return;
         }
+        ZeigtOriginalMine = false;
         RemoveThemeStyleboxOverride("panel");
         CustomMinimumSize = new Vector2(320, 200);
 
@@ -502,6 +554,9 @@ public sealed partial class BuildingWindow : PanelContainer
         => $"gebaeude-fenster: {(Visible ? "offen" : "zu")}, Art {(int)_art} "
          + $"({_art}), Kennung {_kennung}, Titel \"{_titel.Text}\", "
          + $"{_knoepfe.GetChildCount() + _knopfZahl} Knoepfe, "
+         + (_art == Art.Mine
+                ? $"Zeichner {(ZeigtOriginalMine ? "ORIGINALKACHELN" : "Godot-Moebel")}, "
+                : "")
          + $"Ereignisbyte {Campaign.CampaignHints.Ereignis} "
          + $"(Verwaltung zuletzt {WindowManager.EreignisZuletzt}, "
          + $"{WindowManager.EreignisGesetzt} Setzungen)";
