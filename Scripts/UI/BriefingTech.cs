@@ -227,6 +227,10 @@ public partial class BriefingScreen
             if (a.StartsWith("--tech-export=")) quelle = a["--tech-export=".Length..];
             else if (a.StartsWith("--tech-check=")) { pruefen = true; quelle = a["--tech-check=".Length..]; }
             else if (a == "--tech-check") pruefen = true;
+            // ⭐ 08.09.2026 — der Gegenschalter zur Bildnummer: zurueck auf die
+            // Zahl hinter dem Komma in ENCYCLOG.TXT. Dann steht in Mission 6
+            // wieder das U-Boot, das er gemeldet hat.
+            else if (a == "--technikbild-alt") Import.MissionTechExporter.BildnummerAusText = true;
             else if (a.StartsWith("--briefing-shot=")) schuss = a;
         }
         if (quelle.Length > 0)
@@ -303,6 +307,21 @@ public partial class BriefingScreen
         {
             GD.PrintErr("tech-check: Mission 1 hat einen Eintrag — im Original ist ihr " +
                         "Kasten LEER (Bug Bilder/kampagnen preview original.png)");
+            rc |= 1;
+        }
+        // ⚠⚠ Die dritte Gegenprobe, aus seiner Meldung vom 08.09.2026: Mission 6
+        // kuendigt »Leichte Infanterie« an, und deren Bild ist der Soldat mit
+        // dem Maschinengewehr — laufende Seitenmarke 77, NICHT die 70 aus dem
+        // Text (das ist das U-Boot). Siehe MissionTechExporter.PicturesOfPages.
+        var m6 = Import.MissionTechTable.Of(6);
+        if (m6 == null || m6.Count == 0 || m6[0].Name != "Leichte Infanterie" ||
+            (m6[0].Picture != 77 && !Import.MissionTechExporter.BildnummerAusText))
+        {
+            GD.PrintErr("tech-check: Mission 6 fuehrt »" +
+                        (m6 != null && m6.Count > 0
+                             ? $"{m6[0].Name}« mit Bild {m6[0].Picture}"
+                             : "nichts«") +
+                        " statt »Leichte Infanterie« mit Bild 77");
             rc |= 1;
         }
         var m2 = Import.MissionTechTable.Of(2);

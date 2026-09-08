@@ -74,9 +74,10 @@ using System.Text;
 /// <see cref="EncyclopediaExporter"/> offengelassen hat: 345.600 Byte sind
 /// <b>96 Bilder zu 60×60</b> (3.600 Byte), nicht 24 zu 120×120 — die
 /// Sprungrechnung <c>3600·(Bild−1)</c> im Zeichner sagt beides, Größe und
-/// Anzahl. Die Bildnummer steht in ENCYCLOG.TXT hinter dem Komma der
-/// Seitenmarke (<c>#p36,17</c>), und das Wort in unserer Tafel ist die
-/// SEITENnummer.</para>
+/// Anzahl. Das Wort in unserer Tafel ist die SEITENnummer, und ENCYCLOG.TXT
+/// führt von der Seite zum Bild — aber ⚠ <b>über die REIHENFOLGE der
+/// Seitenmarken, nicht über die Zahl hinter dem Komma</b>; siehe
+/// <see cref="PicturesOfPages"/>, das war der Fehler vom 08.09.2026.</para>
 /// </summary>
 public sealed class MissionTechExporter
 {
@@ -127,9 +128,22 @@ public sealed class MissionTechExporter
         public int Page;
 
         /// <summary>Die Bildnummer in ENCYCLOG.PIC, 1-basiert; 0 = keines.
-        /// Aus ENCYCLOG.TXT, <c>#p&lt;Seite&gt;,&lt;Bild&gt;</c>.</summary>
+        /// ⚠ Das ist die LAUFENDE NUMMER der Seitenmarke, nicht die Zahl hinter
+        /// dem Komma — siehe <see cref="PicturesOfPages"/>.</summary>
         public int Picture;
+
+        /// <summary>Die Zahl, die in ENCYCLOG.TXT hinter dem Komma steht. Sie
+        /// wird NICHT zum Springen benutzt und steht nur als Beleg in der JSON;
+        /// bis zur Seite 69 ist sie mit <see cref="Picture"/> gleich, danach
+        /// laeuft sie auseinander.</summary>
+        public int PictureTxt;
     }
+
+    /// <summary><b>Gegenschalter</b> zu der Messung vom 08.09.2026:
+    /// <c>--technikbild-alt</c> nimmt wieder die Zahl hinter dem Komma als
+    /// Bildnummer. Dann zeigt Mission 6 wie vorher ein U-Boot statt der
+    /// Leichten Infanterie — das ist der Zweck, es muss vergleichbar bleiben.</summary>
+    public static bool BildnummerAusText;
 
     // ---- die PE-Häppchen ----------------------------------------------------
 
@@ -284,13 +298,73 @@ public sealed class MissionTechExporter
     // ---- ENCYCLOG.TXT: Seite -> Bildnummer -----------------------------------
 
     /// <summary>
-    /// Die Seitenmarken von ENCYCLOG.TXT, <c>#p&lt;Seite&gt;,&lt;Bild&gt;</c>.
-    /// ⚠ Latin-1 wie die Tafel selbst, siehe <see cref="EncyclopediaExporter"/>.
-    /// Die Bildnummer darf fehlen (<c>#p1,</c>), dann ist sie 0.
+    /// Die Seitenmarken von ENCYCLOG.TXT, <c>#p&lt;Seite&gt;,&lt;Bild&gt;</c>, als
+    /// <b>Seite → Bild in ENCYCLOG.PIC</b>.
+    ///
+    /// <para>⚠⚠⚠ <b>08.09.2026 — und die Zahl hinter dem Komma ist NICHT das
+    /// Bild.</b> Seine Meldung: »bei uns zeigt es uboot an, im original leichte
+    /// infanterie zu kampagne6 unter neue technologien«. Der Name stimmte, die
+    /// Seite stimmte, das Bild war ein U-Boot.</para>
+    ///
+    /// <para><b>Was die Zahl hinter dem Komma wirklich ist:</b> eine
+    /// redaktionelle Nummer, die die Datei gar nicht adressieren KANN. Sie
+    /// vergibt 54 zweimal (Seiten 80 und 81), laesst 51 und 55 aus, springt
+    /// fuer die Seiten 70…77 auf 87…94 und geht bis <b>97</b> — ENCYCLOG.PIC
+    /// hat aber nur <b>96</b> Bilder (345.600 / 3.600). Eine Nummer, die ueber
+    /// das Ende hinauszeigt und Doppel enthaelt, ist kein Index.</para>
+    ///
+    /// <para><b>Was es ist:</b> die <b>laufende Nummer der Seitenmarke</b> unter
+    /// denen, die ueberhaupt ein Bild fuehren. Davon gibt es <b>96</b> — genau
+    /// so viele, wie ENCYCLOG.PIC Bilder hat. Bis Seite 69 faellt sie mit der
+    /// Textzahl zusammen (Seite 20 → 1), danach nicht mehr.</para>
+    ///
+    /// <para><b>Nachgesehen, nicht geschlossen</b> — die Bilder wurden mit der
+    /// Palette DATA/01.PAL ausgepackt und angeschaut:</para>
+    /// <list type="bullet">
+    ///   <item>Seite 60 »Mechaniker« → laufend 41: das Bild mit dem
+    ///   Schraubenschluessel.</item>
+    ///   <item>Seite 89 »U-Boot« → laufend 70: das Torpedoboot, das bei uns
+    ///   faelschlich in Mission 6 stand.</item>
+    ///   <item>Seite 96 »Leichte Infanterie« → laufend 77: der Soldat mit dem
+    ///   Maschinengewehr.</item>
+    ///   <item>Seiten 150/151 »Basis«/»Fabrik« → laufend 84/85: die zwei
+    ///   Gebaeudebilder, mit denen die Gebaeudereihe anfaengt.</item>
+    ///   <item>Seiten 78…88 (Flugzeuge, Hubschrauber, Schiffe) → laufend
+    ///   59…69: genau in dieser Reihenfolge Flugzeuge, Hubschrauber, Schiffe.</item>
+    /// </list>
+    ///
+    /// <para>⚠ Latin-1 wie die Tafel selbst, siehe
+    /// <see cref="EncyclopediaExporter"/>. Eine Marke ohne Zahl
+    /// (<c>#p1,</c>) fuehrt kein Bild und zaehlt NICHT mit — daher kommen die
+    /// 96 heraus und nicht die 107 Marken der Datei.</para>
     /// </summary>
     public static Dictionary<int, int> PicturesOfPages(byte[] encyclogTxt)
     {
         var map = new Dictionary<int, int>();
+        int lfd = 0;
+        foreach (var (page, pic) in Marks(encyclogTxt))
+        {
+            if (pic <= 0) continue;                 // diese Seite fuehrt kein Bild
+            lfd++;
+            map[page] = BildnummerAusText ? pic : lfd;
+        }
+        return map;
+    }
+
+    /// <summary>Die Zahlen, wie sie im Text stehen — nur als Beleg fuer die
+    /// JSON, damit nachprüfbar bleibt, was dort steht und was wir daraus
+    /// machen.</summary>
+    public static Dictionary<int, int> TextPicturesOfPages(byte[] encyclogTxt)
+    {
+        var map = new Dictionary<int, int>();
+        foreach (var (page, pic) in Marks(encyclogTxt)) map[page] = pic;
+        return map;
+    }
+
+    /// <summary>Die Seitenmarken in DATEIREIHENFOLGE — auf die Reihenfolge
+    /// kommt es an, sie ist die Bildnummer.</summary>
+    private static IEnumerable<(int Page, int Pic)> Marks(byte[] encyclogTxt)
+    {
         foreach (string line in Encoding.Latin1.GetString(encyclogTxt)
                      .Replace("\r\n", "\n").Replace('\r', '\n').Split('\n'))
         {
@@ -301,19 +375,20 @@ public sealed class MissionTechExporter
             if (!int.TryParse(numTxt, out int page)) continue;
             int pic = 0;
             if (comma >= 0) int.TryParse(rest[(comma + 1)..].Trim(), out pic);
-            map[page] = pic;
+            yield return (page, pic);
         }
-        return map;
     }
 
     /// <summary>Die Bildnummern in die gelesene Zuordnung eintragen.</summary>
-    public static int ApplyPictures(Dictionary<int, List<Tech>> all, Dictionary<int, int> pages)
+    public static int ApplyPictures(Dictionary<int, List<Tech>> all, Dictionary<int, int> pages,
+                                    Dictionary<int, int>? textPages = null)
     {
         int with = 0;
         foreach (var kv in all)
             foreach (var t in kv.Value)
             {
                 t.Picture = pages.TryGetValue(t.Page, out int p) ? p : 0;
+                t.PictureTxt = textPages != null && textPages.TryGetValue(t.Page, out int q) ? q : 0;
                 if (t.Picture > 0) with++;
             }
         return with;
@@ -352,7 +427,8 @@ public sealed class MissionTechExporter
         }
         var all = ex.Read();
         var pages = PicturesOfPages(encyclogTxt);
-        int withPic = ApplyPictures(all, pages);
+        var textPages = TextPicturesOfPages(encyclogTxt);
+        int withPic = ApplyPictures(all, pages, textPages);
 
         int filled = 0, entries = 0;
         var used = new SortedSet<int>();
@@ -386,8 +462,25 @@ public sealed class MissionTechExporter
                 img.SavePng($"{dst}/{PicDir}/p{n:00}.png");
                 written++;
             }
+            // ⚠ 08.09.2026 — WAS NICHT MEHR GEBRAUCHT WIRD, MUSS WEG. Als die
+            // Bildnummer sich aenderte, blieben die alten pNN.png liegen; eine
+            // spaetere falsche Nummer haette dann still ein altes Bild
+            // gefunden statt zu fehlen. Geloescht wird ausschliesslich, was
+            // dieser Ordner selbst traegt und was jetzt keiner mehr ruft.
+            int entfernt = 0;
+            foreach (string alt in Directory.GetFiles($"{dst}/{PicDir}", "p*.png"))
+            {
+                string name = Path.GetFileNameWithoutExtension(alt);
+                if (!int.TryParse(name[1..], out int n2) || used.Contains(n2)) continue;
+                File.Delete(alt);
+                entfernt++;
+            }
+            if (entfernt > 0)
+                say?.Invoke($"mission-tech: {entfernt} nicht mehr gebrauchte Bilder entfernt");
+
             File.WriteAllText($"{dst}/{PicDir}_index.json",
                 "{\"_note\":\"ENCYCLOG.PIC, 60x60 rohe Palettenindizes je Bild, " +
+                "die Nummer ist die LAUFENDE Seitenmarke mit Bild aus ENCYCLOG.TXT, " +
                 "Sprungweite 3600*(Bild-1) — abgezaehlt am Zeichner 0x486B7C/0x486BEE; " +
                 "Palette DATA/01.PAL wie der Briefinghintergrund\"," +
                 $"\"width\":{PicW},\"height\":{PicH}," +
@@ -395,16 +488,28 @@ public sealed class MissionTechExporter
                 new UTF8Encoding(false));
         }
 
+        // ⚠ Die Probe auf die Bildnummer: so viele Seitenmarken mit Bild, wie
+        // ENCYCLOG.PIC Bilder hat — genau darauf ruht die laufende Nummer.
+        // Stimmt das nicht, ist die Regel falsch und es wird gesagt.
+        int marken = pages.Count, bank = encyclogPic != null ? encyclogPic.Length / PicBytes : 0;
+        if (bank > 0 && marken != bank)
+            say?.Invoke($"mission-tech: ⚠ {marken} Seitenmarken mit Bild, aber {bank} Bilder " +
+                        "in ENCYCLOG.PIC — die laufende Nummer trifft dann nicht");
+
         say?.Invoke($"mission-tech: Tafel @0x{ex.TableVa:x}, {entries} Eintraege in " +
                     $"{filled} von {Missions} Missionen, {withPic} mit Bild, " +
-                    $"{written} Bilder geschrieben");
+                    $"{written} Bilder geschrieben; {marken} Seitenmarken mit Bild " +
+                    $"gegen {bank} Bilder in der Bank");
         return filled;
     }
 
     private static string ToJson(Dictionary<int, List<Tech>> all, uint va, bool tailEmpty)
     {
         var sb = new StringBuilder();
-        sb.Append("{\"_note\":\"Was eine Kampagnenmission im Briefingkasten »neue technologien« " +
+        sb.Append("{\"_pictures\":\"picture = LAUFENDE Nummer der Seitenmarke in ENCYCLOG.TXT " +
+                  "unter denen mit Bild (96 Marken, 96 Bilder); pic_txt = die Zahl hinter dem Komma, " +
+                  "die NICHT adressiert (Doppel 54, Luecken 51/55, Hoechstwert 97 > 96 Bilder).\",");
+        sb.Append("\"_note\":\"Was eine Kampagnenmission im Briefingkasten »neue technologien« " +
                   "ankuendigt. Aus der Tafel in GAME.EXE, gefunden ueber die Form; ihre Adresse " +
                   "steht in _table nur als Beleg. Abgeleitete Metadaten, kein Originalinhalt.\",");
         sb.Append("\"_source\":\"Zeichner der Fensterart 43 @0x486480, Block 0x486AFA..0x486C92; " +
@@ -427,7 +532,8 @@ public sealed class MissionTechExporter
             {
                 if (i > 0) sb.Append(',');
                 sb.Append($"{{\"name\":\"{Esc(list[i].Name)}\",\"page\":{list[i].Page}," +
-                          $"\"picture\":{list[i].Picture}}}");
+                          $"\"picture\":{list[i].Picture}," +
+                          $"\"pic_txt\":{list[i].PictureTxt}}}");
             }
             sb.Append(']');
         }
