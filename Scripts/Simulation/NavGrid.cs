@@ -302,6 +302,31 @@ public sealed class NavGrid
         };
     }
 
+    /// <summary>
+    /// <b><c>imap[c,r] &gt;= 0xFFFE</c></b> — steht hier NICHTS?
+    ///
+    /// <para>⚠⚠ 08.09.2026, aus dem Ausgangsarm des Transporters
+    /// (<c>0x409D57</c>). Die Bedingung des Originals lautet woertlich
+    /// <c>imap &gt;= 0xFFFE</c>, und das ist etwas anderes als
+    /// <see cref="CanEnter"/>: <b>0xFFFF, die harte Tuersperre, ist darin
+    /// enthalten</b>. Eine geschlossene Tuer haelt den Wagen also NICHT im
+    /// Gebaeude fest — nur eine Einheit oder ein Bauwerk tut das.</para>
+    ///
+    /// <para>Ohne diese Unterscheidung stand ein Wagen ewig in der Fabrik:
+    /// gemessen 4884 vergebliche Versuche in 120 Sekunden, jedes Mal
+    /// »(50,203) ist gesperrt — Vehicle darf da nicht hin«. Die Zelle war die
+    /// zweite TUER, und die ist genau dann gesperrt, wenn sie zu ist.</para>
+    /// </summary>
+    public bool ImapFrei(int c, int r)
+        => InBounds(c, r) && _occupant[Idx(c, r)] < 0;
+
+    /// <summary>Die zweite Frage desselben Arms: <c>imap[c, r] == 0xFFFE</c> —
+    /// die Zelle ist WIRKLICH frei, also befahrbar und unbesetzt. Das Original
+    /// stellt sie fuer die Zelle UNTER dem Ausgang, damit der Wagen auch
+    /// wegfahren kann.</summary>
+    public bool ImapGanzFrei(int c, int r, MoveClass mc)
+        => InBounds(c, r) && _occupant[Idx(c, r)] < 0 && CanEnter(c, r, mc);
+
     /// <summary>Kept under its old name because half the caller set asks it this
     /// way; it is <see cref="CanEnter"/>.</summary>
     public bool IsWalkable(int c, int r, MoveClass mc = MoveClass.Vehicle) => CanEnter(c, r, mc);

@@ -2562,6 +2562,10 @@ public partial class MapEntityLayer : Node2D
         _navTex = _nav.BuildDebugTexture();
         SeedResearch();
         InitEntityMovement();
+        // ⭐ 08.09.2026 — jeder Transporter bekommt seinen Umschlagsatz. Das
+        // Original legt ihn beim ERZEUGEN an (0x436190); eine Karteneinheit ist
+        // beim Laden schon da. Siehe Simulation/Transportroute.cs.
+        RoutenAufbauen();
 
         QueueRedraw();
         UpdatePanel();
@@ -29641,6 +29645,7 @@ public partial class MapEntityLayer : Node2D
         PollBodenangriffProbe(dt);
         PollFussSchussProbe(dt);
         PollSchiffAbstandProbe(dt);
+        PollTransportrouteProbe(dt);
         PollSellCheck();
         PollShopCheck();
         PollBuyCheck();

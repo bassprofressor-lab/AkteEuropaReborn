@@ -189,6 +189,11 @@ public partial class MapEntityLayer
             // keiner Modulo-Bedingung, er läuft, sobald der Fahrauftrag zu
             // Ende ist. Siehe Simulation/BuildOrders.cs.
             BuildArrivalTick();
+            // ⭐ 08.09.2026 — UND DER TRANSPORTER haengt in DEMSELBEN
+            // Leerlaufverteiler: Tafel 0x40A16C, Arm 0x47 -> 0x407F67, genau
+            // neben dem Bauauftrag (0x48/0x4A). Siehe
+            // Simulation/Transportroute.cs.
+            TransportrouteTakt();
             // ⚠⚠ 07.09.2026 — DER BRANDTICKER GEHOERT HIERHER, nicht in den
             // Bildtakt. Er stand zuerst neben TuersperreTakt(), also bei 60 Hz
             // statt 50 — und mein eigener Kommentar dort behauptete »im

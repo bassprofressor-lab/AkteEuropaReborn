@@ -1238,6 +1238,14 @@ public partial class MapEntityLayer : Node2D
             // Aufgabenwahl (@0x4BFBFA).
             if (AiGesperrt(a.Player)) continue;
 
+            // ⭐ 08.09.2026 — DIE MATERIALROUTEN. Im Original haengt
+            // 0x4BB7D0(spieler) in der Sektormaschine (Takt-Platz 2,
+            // 0x4BFC55), also INNERHALB des KI-Zugs, der fuer einen vom Skript
+            // gefuehrten Spieler ganz ausfaellt (@0x4BFBFA) — darum steht der
+            // Ruf hinter der Sperre und nicht davor.
+            // Siehe Simulation/Transportroute.cs.
+            KiTransportrouten(a.Player);
+
             if (!InCampaign)
             {
                 AiGrab(a);

@@ -458,6 +458,7 @@ public partial class MapViewer : Node2D
         if (_entladeSchussProbe) _entities.EntladeSchussProbeStart();
         if (_schiffAbstandProbe) _entities.SchiffAbstandProbeStart();
         if (_fussbalkenCheck) GD.Print(_entities.FussbalkenCheck());
+        if (_transportrouteProbe) _entities.TransportrouteProbeStart();
         if (_sellCheck) _entities.SellCheckStart();
         if (_shopCheckFlag) _entities.ShopCheckStart();
         if (_buyCheckFlag) _entities.BuyCheckStart();
@@ -1240,6 +1241,9 @@ public partial class MapViewer : Node2D
     private bool _schiffAbstandProbe;
     /// <summary><c>--fussbalken-check</c> — welche Balken bekommt wer?</summary>
     private bool _fussbalkenCheck;
+    /// <summary><c>--transportroute-probe</c> — pendelt der Wagen wirklich?
+    /// Siehe Simulation/TransportrouteProbe.cs.</summary>
+    private bool _transportrouteProbe;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
     /// seines Gleises? Siehe <c>MapEntityLayer.WagonFacingCheck</c>.</summary>
     private bool _wagonFacingCheck;
@@ -1907,6 +1911,8 @@ public partial class MapViewer : Node2D
             else if (a == "--fussrichtung-alt") MapEntityLayer.FussrichtungAlt = true;
             else if (a == "--fussbalken-alt") MapEntityLayer.FussbalkenAlt = true;
             else if (a == "--fussbalken-check") _fussbalkenCheck = true;
+            else if (a == "--transportroute-probe") _transportrouteProbe = true;
+            else if (a == "--keine-transportrouten") MapEntityLayer.KeineTransportrouten = true;
             else if (a == "--entladeklasse-alt") MapEntityLayer.EntladeklasseAlt = true;
             else if (a == "--gegner-nicht-stellen") MapEntityLayer.GegnerNichtStellen = true;
             else if (a == "--schiffe-als-opfer") MapEntityLayer.SchiffeAlsOpfer = true;

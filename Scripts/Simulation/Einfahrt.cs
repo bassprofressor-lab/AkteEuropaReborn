@@ -296,6 +296,14 @@ public partial class MapEntityLayer : Node2D
                     u.Ukol = UkolAngemeldet;                 // @0x43D5AF
 
                 if (!GarageTyp(b.BType)) continue;
+                // ⚠ 08.09.2026 — EIN WAGEN MIT LAUFENDER MATERIALROUTE WIRD
+                // NICHT UNTERGESTELLT. Er meldet sich an derselben Tuer an
+                // (UKOL 48), meint damit aber »ich will umladen«, nicht »ich
+                // will hinein«. Der Fable-Bericht sagt ausdruecklich, welcher
+                // der beiden Takte im Original zuerst laeuft, sei NICHT
+                // gelesen — also entscheiden WIR es hier, sichtbar:
+                // die Route hat Vorrang. Siehe Simulation/Transportroute.cs.
+                if (RouteVon(u) is { Gestartet: true }) continue;
                 if (u.Ukol != UkolAngemeldet || z != TorEinfahrt) continue;
                 if (u.Owner != b.Owner) continue;            // ⚠ UNSER Tor
                 Einfahren(b, occ, u);
