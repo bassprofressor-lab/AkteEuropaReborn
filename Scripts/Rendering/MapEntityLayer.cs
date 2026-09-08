@@ -32836,6 +32836,23 @@ public partial class MapEntityLayer : Node2D
     public bool EinnahmezeigerHier(Vector2 mapPos)
         => !GebaeudezeigerAlt && !EinnahmeklickAlt && CursorHintAt(mapPos) == Hint.Einnahme;
 
+    /// <summary><b>Steht hier der NEUTRALE Zeiger?</b> — dann bedeutet der
+    /// einfache Rechtsklick nicht »angreifen«.
+    ///
+    /// <para>⚠ 08.09.2026, seine Meldung: »wenn ich normalen wegpunkt auf das
+    /// Nachschubdepot lege, und da erscheint kein Attack Icon, ballern die
+    /// trotzdem drauf los«. Ein herrenloses Gebaeude bekommt im Original
+    /// Zeigerart 1 (@0x43253A), kein Fadenkreuz. ⚠ Der Angriff bleibt
+    /// erreichbar — Strg greift weiter alles an, und darum ist das hier keine
+    /// Sperre, sondern nur die Bedeutung des einfachen Klicks.</para></summary>
+    public bool NeutralzeigerHier(Vector2 mapPos)
+        => !GebaeudezeigerAlt && !NeutralklickAlt && CursorHintAt(mapPos) == Hint.Neutral;
+
+    /// <summary><c>--neutralklick-alt</c> — der Stand vor dem 08.09.2026: auch
+    /// ein herrenloses Gebaeude wird vom einfachen Rechtsklick angegriffen,
+    /// obwohl kein Angriffszeiger darueber steht.</summary>
+    public static bool NeutralklickAlt;
+
     /// <summary><c>--einnahmeklick-alt</c> — der Stand vor dem 08.09.2026: der
     /// Rechtsklick auf die Tuer bedeutet Angriff, Einnehmen geht nur mit
     /// Strg.</summary>

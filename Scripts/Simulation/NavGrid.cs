@@ -1225,10 +1225,45 @@ public sealed class NavGrid
                 // sperren die PLANUNG nicht mehr, nur Festes tut es (BB.1,
                 // Art 0). Siehe den Kopf von PfadOffen fuer die Messung und
                 // fuer den zurueckgezogenen ersten Anlauf vom 16.08.2026.
-                karte[y * w + x] = (mc == MoveClass.Ship
-                                     ? SchiffPfadOffen(x, y, mover)
-                                     : NeuePfadkarte ? PfadOffen(x, y, mc, mover)
-                                                     : IsFree(x, y, mc, mover)) ? (byte)0 : (byte)2;
+            {
+                bool offen = mc == MoveClass.Ship
+                           ? SchiffPfadOffen(x, y, mover)
+                           : NeuePfadkarte ? PfadOffen(x, y, mc, mover)
+                                           : IsFree(x, y, mc, mover);
+                // ⭐⭐⭐ 08.09.2026 — DIE 1 HAT GEFEHLT, UND SIE IST DER
+                // UNTERSCHIED ZWISCHEN »kommt hin« UND »kommt nicht hin«.
+                //
+                // Seine Meldung: »im Original faehrt tatsaechlich ein
+                // Reifenfahrzeug zur Mine, bei uns kommt dort gar kein Fahrzeug
+                // lang«.
+                //
+                // Der Kartenbauer des Originals @0x4D118D schreibt DREI Werte,
+                // woertlich gelesen:
+                //     0x4D11BF  cmp di, 0xFFFE / je  -> byte := 0   frei
+                //     0x4D1216  cmp di, 0xFFFD / je  -> byte := 1   WEICH (rau)
+                //     0x4D1242                          byte := 2   hart
+                // Wir haben nur 0 und 2 geschrieben — rau wurde HART.
+                //
+                // Das faellt erst an der Diagonalen auf: die Suche laesst einen
+                // Schraegschritt nur zu, wenn BEIDE anliegenden Geraden <= 1
+                // sind. Neben rauem Boden darf man also um die Ecke, neben
+                // einem Felsen oder Gebaeude nicht. Mit unserer 2 war jede Ecke
+                // neben rauem Boden dicht.
+                //
+                // GEMESSEN an map_06 (Flutfuellung vom Start (6,5) aus, fuer
+                // ein FAHRZEUG): mit der harten Ecke 3123 Zellen und KEINE
+                // einzige bei der Mine (52,3); ohne sie 3326 Zellen und 49 bei
+                // der Mine. Das sind die 203 Zellen, die dieser eine Bytewert
+                // kostet — und genau der Weg, den er im Original gefahren ist.
+                //
+                // ⚠ Nur fuer den Landweg: Schiffe haben ihren eigenen
+                // Kartenbauer (0x4D35C0/0x4D3700), und dort gibt es kein
+                // 0xFFFD. Gegenschalter --rau-ist-hart.
+                karte[y * w + x] = offen ? (byte)0
+                                 : !RauIstHart && mc != MoveClass.Ship
+                                   && (Ground)_ground[Idx(x, y)] == Ground.Rough ? (byte)1
+                                 : (byte)2;
+            }
 
         // ⭐⭐⭐ 30.08.2026 — DIE NAHSPERRE. Der zweite Kartenaufbau des
         // Originals (die »ungerade« Auftragsart, Tafeln 0x40A208/0x40A220)
@@ -1694,6 +1729,12 @@ public sealed class NavGrid
     };
 
     /// <summary>Can <paramref name="mover"/> step from a to b (adjacent cells)?</summary>
+    /// <summary><c>--rau-ist-hart</c> — der Stand vor dem 08.09.2026: rauer
+    /// Boden steht in der Suchkarte als <b>2 (hart)</b> statt als
+    /// <b>1 (weich)</b>, und damit ist jede Diagonale neben rauem Boden
+    /// gesperrt. Siehe den Kartenbau in <see cref="FindPathUr"/>.</summary>
+    public static bool RauIstHart;
+
     /// <summary>GEGENPROBE <c>--no-climb-limit</c>: die Steiglimite abschalten.
     /// <see cref="MaxClimb"/> ist ausdruecklich UNSERE Setzung — »the original
     /// has no such test in Can_go« —, und am 16.08.2026 fiel auf, dass sie auf

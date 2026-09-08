@@ -152,16 +152,19 @@ public partial class MapEntityLayer
             var anker = MitteVon(ohneTuer.Col, ohneTuer.Row);
             bool zeigtEin = EinnahmezeigerHier(anker);
             bool schluckt = PostCapture(anker);
-            // ⚠ Und die andere Haelfte der Frage: kommt der Bodenangriff, den
-            // der Strg-Zweig danach versucht, ueberhaupt an? Ohne diese Zeile
-            // waere »PostCapture sagt false« nur die halbe Auskunft.
-            bool schiesst = !schluckt && PostAttackGround(anker);
-            tuerlosOk = !zeigtEin && !schluckt && schiesst;
+            // ⚠ Und die andere Haelfte der Frage: was macht der Strg-Zweig
+            // danach? Seit dem 08.09.2026 versucht er ERST das Ziel
+            // (PostAttack, wie die Zieluebersetzung @0x4353F0) und erst dann
+            // die Zelle. Ein Bodenangriff tut einem Gebaeude naemlich nichts —
+            // er kennt nur Wald, Objekte und Einheiten. Gemessen wird die neue
+            // Reihenfolge, sonst misst der Pruefstand den alten Fehler.
+            bool zielt = !schluckt && PostAttack(anker);
+            tuerlosOk = !zeigtEin && !schluckt && zielt;
             sb.AppendLine($"  tuerloses Gebaeude {ohneTuer.Slot} (Art {ohneTuer.BType}): "
                         + $"Einnahmezeiger {(zeigtEin ? "JA (falsch)" : "nein")}, "
                         + $"PostCapture schluckt den Klick "
                         + $"{(schluckt ? "JA (falsch — Strg kann dann nicht schiessen)" : "nein")}, "
-                        + $"Bodenangriff nimmt an {(schiesst ? "ja" : "NEIN")} — »{_order}«");
+                        + $"Angriffsbefehl nimmt an {(zielt ? "ja" : "NEIN")} — »{_order}«");
         }
 
         _sel.Clear(); foreach (int k in merken) _sel.Add(k);

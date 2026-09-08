@@ -1520,6 +1520,8 @@ public partial class MapViewer : Node2D
             else if (a == "--gebaeudezeiger-alt") MapEntityLayer.GebaeudezeigerAlt = true;
             else if (a == "--einnahmeklick-alt") MapEntityLayer.EinnahmeklickAlt = true;
             else if (a == "--tuerlos-alt") MapEntityLayer.TuerlosAlt = true;
+            else if (a == "--neutralklick-alt") MapEntityLayer.NeutralklickAlt = true;
+            else if (a == "--rau-ist-hart") Simulation.NavGrid.RauIstHart = true;
             else if (a == "--fussanker-alt") MapEntityLayer.FussankerAlt = true;
             else if (a == "--panzerung-alt") MapEntityLayer.PanzerungAlt = true;
             else if (a == "--balkenhoehe-alt") MapEntityLayer.BalkenhoeheAlt = true;
@@ -5193,7 +5195,26 @@ public partial class MapViewer : Node2D
                                 // danach der BODENANGRIFF des Originals
                                 // (@0x437417, UTOK_NA = 30000 + Spalte). Wer
                                 // gar nicht schiessen kann, faehrt hin.
+                                // ⭐⭐ 08.09.2026 — ERST DAS ZIEL, DANN DIE
+                                // ZELLE. Seine Meldung: »ich kann mit Strg
+                                // immer noch nicht Kraftwerke angreifen«.
+                                //
+                                // Die Zieluebersetzung des Originals
+                                // (`UTOK_NA` @0x4353F0) nimmt, was unter dem
+                                // Zeiger LIEGT: unter 8000 die Einheit selbst
+                                // (@0x435433), 60000..60299 ein GEBAEUDE
+                                // (@0x435465), dann Bruecke/Rampe, und erst
+                                // sonst die blosse Bodenzelle. Der Bodenangriff
+                                // ist der LETZTE Zweig, nicht der erste.
+                                //
+                                // Bei uns stand er vor PostAttack und griff die
+                                // Zelle unter dem Gebaeude an — und ein
+                                // Bodenangriff tut einem GEBAEUDE nichts (er
+                                // kennt nur Wald, Objekte und Einheiten). Strg
+                                // auf ein Kraftwerk hiess damit: Befehl
+                                // angenommen, Wirkung keine.
                                 if (!_entities.PostCapture(GetGlobalMousePosition(), mb.ShiftPressed)
+                                 && !_entities.PostAttack(GetGlobalMousePosition(), mb.ShiftPressed)
                                  && !_entities.PostAttackGround(GetGlobalMousePosition(), mb.ShiftPressed))
                                     _entities.PostMove(GetGlobalMousePosition(), mb.ShiftPressed);
                             }
@@ -5225,11 +5246,23 @@ public partial class MapViewer : Node2D
                             // ⭐ 07.09.2026 — ABSETZEN geht vor Angriff und Fahrt:
                             // auf einer Rampe mit beladenem Traeger meint der
                             // Rechtsklick nichts anderes (seine Meldung C).
+                            // ⭐⭐ 08.09.2026 — UND WO KEIN ANGRIFFSZEIGER
+                            // STEHT, GREIFT DER EINFACHE KLICK AUCH NICHT AN.
+                            // Seine Meldung: »wenn ich normalen wegpunkt auf
+                            // das Nachschubdepot lege, und da erscheint kein
+                            // Attack Icon, ballern die trotzdem drauf los«.
+                            //
+                            // Ein herrenloses Gebaeude bekommt im Original
+                            // Zeigerart 1 (@0x43253A) — kein Fadenkreuz, also
+                            // auch kein Angriff. Der Befehl bleibt erreichbar:
+                            // Strg greift weiter alles an.
                             else if (!(_entities.EinnahmezeigerHier(GetGlobalMousePosition())
                                        && _entities.PostCapture(GetGlobalMousePosition(),
                                                                 mb.ShiftPressed))
                                   && !_entities.PostUnloadKlick(GetGlobalMousePosition(), mb.ShiftPressed)
-                                  && !_entities.PostAttack(GetGlobalMousePosition(), mb.ShiftPressed))
+                                  && !(!_entities.NeutralzeigerHier(GetGlobalMousePosition())
+                                       && _entities.PostAttack(GetGlobalMousePosition(),
+                                                               mb.ShiftPressed)))
                                 _entities.PostMove(GetGlobalMousePosition(), mb.ShiftPressed);
                         }
                         _rightDown = false;
