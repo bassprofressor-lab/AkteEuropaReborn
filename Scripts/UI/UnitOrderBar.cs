@@ -49,6 +49,15 @@ public sealed partial class UnitOrderBar : PanelContainer
     /// <summary>»Anhalten« — dieselbe Stelle wie Taste X.</summary>
     public Action? OnStop;
 
+    /// <summary>Traegt die Auswahl einen MATERIALTRANSPORTER? Dann steht hier
+    /// »Transportzyklus« — im Original der Eintrag <c>0x10</c> des
+    /// Sechs-Symbole-Menues (Fensterart 1), das wir nicht haben. Siehe
+    /// Simulation/TransportrouteFenster.cs.</summary>
+    public Func<bool>? RouteChoice;
+
+    /// <summary>Das Routenfenster oeffnen (Fensterart 16).</summary>
+    public Action? OnRoute;
+
     /// <summary>Wieviele Radarmasten die gewählte Einheit noch hat —
     /// <c>null</c> blendet den Knopf aus. ⚠ Der Knopf steht NUR bei einer
     /// Einheit mit dem Radarstab-Ausleger (Bauteil 75); im Original ist genau
@@ -77,6 +86,7 @@ public sealed partial class UnitOrderBar : PanelContainer
     public Func<string>? Note;
 
     private readonly Button _sell = new(), _dig = new(), _stop = new(), _radar = new();
+    private readonly Button _route = new();
     private readonly Label _note = new();
     private readonly ConfirmDialog _ask = new();
 
@@ -108,6 +118,11 @@ public sealed partial class UnitOrderBar : PanelContainer
         _dig.Pressed += () => OnDigIn?.Invoke();
         _stop.Pressed += () => OnStop?.Invoke();
         _radar.Pressed += () => OnPlaceRadar?.Invoke();
+        _route.Text = "Transportzyklus";
+        _route.TooltipText = "Transportzyklus einstellen";   // Hilfezeile 0x4FD660 + 30*0x10
+        _route.Visible = false;
+        _route.Pressed += () => OnRoute?.Invoke();
+        row.AddChild(_route);
         row.AddChild(_sell);
         row.AddChild(_radar);
         // Die drei Bauknöpfe stehen NEBEN dem Radarknopf, weil sie im Original
@@ -171,6 +186,8 @@ public sealed partial class UnitOrderBar : PanelContainer
         int? rad = RadarCharges?.Invoke();
         _radar.Visible = rad is > 0;
         if (rad is > 0) _radar.Text = $"{_radarWord} ({rad})";
+
+        _route.Visible = RouteChoice?.Invoke() ?? false;
 
         var bc = BuildChoices?.Invoke() ?? Array.Empty<(int, string)>();
         for (int k = 0; k < _build.Length; k++)

@@ -461,6 +461,7 @@ public partial class MapViewer : Node2D
         if (_transportrouteProbe) _entities.TransportrouteProbeStart();
         if (_schiffKonvoiProbe) _entities.SchiffKonvoiProbeStart();
         if (_gruppenangriffProbe) _entities.GruppenangriffProbeStart();
+        if (_routenfensterProbe) _entities.RoutenfensterProbeStart();
         if (_sellCheck) _entities.SellCheckStart();
         if (_shopCheckFlag) _entities.ShopCheckStart();
         if (_buyCheckFlag) _entities.BuyCheckStart();
@@ -1252,6 +1253,9 @@ public partial class MapViewer : Node2D
     /// <summary><c>--gruppenangriff-probe</c> — greift eine Gruppe ein Boot an,
     /// oder nur die vorderen? Siehe Simulation/GruppenangriffProbe.cs.</summary>
     private bool _gruppenangriffProbe;
+    /// <summary><c>--routenfenster-probe</c> — kann der Spieler eine Route
+    /// setzen? Siehe Simulation/RoutenfensterProbe.cs.</summary>
+    private bool _routenfensterProbe;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
     /// seines Gleises? Siehe <c>MapEntityLayer.WagonFacingCheck</c>.</summary>
     private bool _wagonFacingCheck;
@@ -1930,6 +1934,7 @@ public partial class MapViewer : Node2D
             else if (a == "--transportroute-probe") _transportrouteProbe = true;
             else if (a == "--schiffkonvoi-probe") _schiffKonvoiProbe = true;
             else if (a == "--gruppenangriff-probe") _gruppenangriffProbe = true;
+            else if (a == "--routenfenster-probe") _routenfensterProbe = true;
             else if (a == "--keine-transportrouten") MapEntityLayer.KeineTransportrouten = true;
             else if (a == "--entladeklasse-alt") MapEntityLayer.EntladeklasseAlt = true;
             else if (a == "--gegner-nicht-stellen") MapEntityLayer.GegnerNichtStellen = true;
@@ -4062,6 +4067,16 @@ public partial class MapViewer : Node2D
         // spielt: das Fenster bedient ein Gebaeude, die Leiste eine Einheit.
         _orderBar = new UI.UnitOrderBar { Visible = false };
         layer.AddChild(_orderBar);
+
+        _routeWindow = new UI.RouteWindow { Visible = false };
+        layer.AddChild(_routeWindow);
+        _routeWindow.Inhalt = () => _entities.RouteAnzeige();
+        _routeWindow.Modus = () => _entities.RouteWahlModus;
+        _routeWindow.Note = () => _entities.RouteNote;
+        _routeWindow.OnModus = m => _entities.RouteModusSetzen(m);
+        _routeWindow.OnLeeren = () => _entities.RouteLeeren();
+        _routeWindow.OnStart = () => _entities.RouteStartKnopf();
+        _routeWindow.OnClose = () => _entities.RouteFensterSchliessen();
         _orderBar.SetWords(MapEntityLayer.OrderWord(MapEntityLayer.OrderSell),
                            MapEntityLayer.OrderWord(7) + "/" + MapEntityLayer.OrderWord(8),
                            MapEntityLayer.OrderWord(26),
@@ -4085,6 +4100,14 @@ public partial class MapViewer : Node2D
         _orderBar.OnBuildOrder = order => _entities.BeginPlacementFromPanel(order);
         _orderBar.OnDigIn = () => _entities.ToggleDigIn();
         _orderBar.OnStop = () => _entities.StopSelected();
+        // ⭐ 08.09.2026 — DER TRANSPORTZYKLUS. Im Original fuehrt der Weg ueber
+        // das Sechs-Symbole-Menue (Fensterart 1, Doppelklick oder Leertaste),
+        // dessen Eintrag 0x10 »Transportzyklus einstellen« heisst. Das Menue
+        // haben wir nicht; der Knopf steht darum hier — dieselbe Entscheidung
+        // wie bei »Verkaufen« und »Radar setzen«, siehe UI/UnitOrderBar.cs.
+        // ⚠ Die LEERTASTE des Originals oeffnet es zusaetzlich (0x413069).
+        _orderBar.RouteChoice = () => _entities.RouteKnopfSichtbar();
+        _orderBar.OnRoute = OeffneRoutenfenster;
         // ⚠ Im Setzmodus hat die Bauzeile Vorrang: sie sagt, worauf gewartet
         // wird. Sonst stuende dort weiter die letzte Verkaufsmeldung, und der
         // Spieler saehe nicht, dass sein Klick jetzt etwas anderes bedeutet.
@@ -4095,6 +4118,33 @@ public partial class MapViewer : Node2D
     /// <summary>Die Befehlsleiste der gewählten Einheit — siehe
     /// UI/UnitOrderBar.cs.</summary>
     private UI.UnitOrderBar? _orderBar;
+
+    /// <summary>Das Routenfenster (Fensterart 16) — siehe UI/RouteWindow.cs.
+    /// </summary>
+    private UI.RouteWindow? _routeWindow;
+
+    /// <summary>Das Routenfenster aufmachen. ⚠ Es HAELT DIE ROUTE AN, so wie
+    /// das Original (Netzbefehl 514 beim Oeffnen, 0x4489C3).</summary>
+    private void OeffneRoutenfenster()
+    {
+        if (_entities == null || _routeWindow == null) return;
+        if (!_entities.RouteFensterOeffnen()) return;
+        _routeWindow.Visible = true;
+        _routeWindow.Refresh();
+        _routeWindow.PlaceBottomLeft();
+    }
+
+    private void UpdateRouteWindow()
+    {
+        if (_routeWindow == null || _entities == null) return;
+        bool want = _entities.RouteFensterWagen >= 0;
+        if (want != _routeWindow.Visible)
+        {
+            _routeWindow.Visible = want;
+            if (want) _routeWindow.PlaceBottomLeft();
+        }
+        if (want) _routeWindow.Refresh();
+    }
 
     /// <summary>Sie steht da, sobald eine eigene, bewegliche Einheit gewählt
     /// ist, und geht weg, wenn die Auswahl weg ist.</summary>
@@ -4727,6 +4777,7 @@ public partial class MapViewer : Node2D
         QuitIfDue(delta);
         UpdateProductionPanel();
         UpdateUnitOrderBar();
+        UpdateRouteWindow();
         UpdateDesignWindow();
         UpdatePanelClock();
         UpdatePanelPortrait();
@@ -4809,7 +4860,33 @@ public partial class MapViewer : Node2D
                         // danach. Ohne diese Weiche waere der Setzmodus ein
                         // Knopf, der nichts bewirkt: der Klick ginge in die
                         // Auswahl und der Bauauftrag verfiele.
-                        if (_leftDown && !_boxSelect && _entities.PlacementMode != 0 &&
+                        // ⭐ 08.09.2026 — SOLANGE DAS ROUTENFENSTER OFFEN IST,
+                        // MEINT DER KLICK EIN GEBAEUDE. Im Original geschieht
+                        // das auf der Planungskarte (Art 3, Betriebsart 4,
+                        // Klickarm 0x4495BD); wir haben die nicht, also gilt es
+                        // auf der Hauptkarte. Der Vorrang ist derselbe wie beim
+                        // Setzmodus eine Zeile weiter unten: sonst waehlte der
+                        // Klick eine Einheit an und das Fenster bliebe leer.
+                        // ⭐ DER DOPPELKLICK ist der Oeffner des Originals
+                        // (WM_LBUTTONDBLCLK 0x203 -> 0x4141B4 -> 0x444490).
+                        // Dort oeffnet er das Sechs-Symbole-Menue; bei uns
+                        // fuehrt er direkt zum Routenfenster, weil das Menue
+                        // nur diesen einen Eintrag haette, den wir schon
+                        // koennen. ⚠ Die LEERTASTE bleibt unberuehrt: sie
+                        // springt bei uns zur Auswahl, und das ist eine
+                        // gewachsene Bedienung.
+                        if (mb.DoubleClick && _entities.RouteWahlModus == 0
+                            && _entities.RouteKnopfSichtbar())
+                        {
+                            OeffneRoutenfenster();
+                            _leftDown = false; _boxSelect = false;
+                            _entities.SetBand(null);
+                            UpdateUnitOrderBar();
+                            break;
+                        }
+                        if (_leftDown && !_boxSelect && _entities.RouteWahlModus != 0)
+                            _entities.RouteKlickAufGebaeude(GetGlobalMousePosition());
+                        else if (_leftDown && !_boxSelect && _entities.PlacementMode != 0 &&
                             _entities.CellAt(GetGlobalMousePosition()) is { } bc)
                             _entities.PlacementClick(bc.X, bc.Y);
                         else if (_leftDown && _boxSelect)

@@ -29769,6 +29769,7 @@ public partial class MapEntityLayer : Node2D
         PollTransportrouteProbe(dt);
         PollSchiffKonvoiProbe(dt);
         PollGruppenangriffProbe(dt);
+        PollRoutenfensterProbe(dt);
         PollSellCheck();
         PollShopCheck();
         PollBuyCheck();
