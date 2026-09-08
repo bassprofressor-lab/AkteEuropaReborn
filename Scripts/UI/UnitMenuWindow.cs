@@ -60,23 +60,14 @@ public sealed partial class UnitMenuWindow : Control
     /// </summary>
     public int[] Codes = { -1, -1, -1, -1, -1, -1, -1, -1 };
 
-    /// <summary>Was ein Code bedeutet — die Wörter der Befehlsliste des
-    /// Originals (<c>0x4FD660</c>, 30-Byte-Raster).</summary>
-    public static string CodeWort(int code) => code switch
-    {
-        0 => "Angreifen",
-        1 => "Bewegen",
-        2 => "Beschuetzen",
-        3 => "Selbstzerstoerung",
-        4 => "Verkaufen",
-        5 => "Handsteuerung",
-        6 => "Einheiteninformation",
-        7 => "Eingraben",
-        8 => "Ausgraben",
-        0x10 => "Transportzyklus einstellen",
-        0x1A => "Anhalten",
-        _ => $"Befehl {code}",
-    };
+    /// <summary>Was ein Code bedeutet. ⚠ Die Wörter kommen NICHT von uns: es
+    /// sind die Zeilen der Befehlsliste <c>0x4FD660</c>, die der Import nach
+    /// <c>Maps/orders.json</c> schreibt. Gesetzt wird der Haken von aussen
+    /// (<c>MapViewer</c>), damit diese Datei nichts von der Simulation weiss.
+    /// </summary>
+    public static System.Func<int, string>? Wort;
+
+    public static string CodeWort(int code) => Wort?.Invoke(code) ?? $"Befehl {code}";
 
     /// <summary>Der Druck auf ein Symbol — der Parameter ist der Aktionscode.
     /// </summary>

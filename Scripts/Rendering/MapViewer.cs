@@ -463,6 +463,7 @@ public partial class MapViewer : Node2D
         if (_gruppenangriffProbe) _entities.GruppenangriffProbeStart();
         if (_routenfensterProbe) _entities.RoutenfensterProbeStart();
         if (_namenCheck) GD.Print(_entities.NamenCheck());
+        if (_menueCheck) GD.Print(_entities.EinheitenmenueCheck());
         if (_sellCheck) _entities.SellCheckStart();
         if (_shopCheckFlag) _entities.ShopCheckStart();
         if (_buyCheckFlag) _entities.BuyCheckStart();
@@ -1260,6 +1261,9 @@ public partial class MapViewer : Node2D
     /// <summary><c>--namen-check</c> — wie heissen die Einheiten dieser Karte?
     /// </summary>
     private bool _namenCheck;
+    /// <summary><c>--einheitenmenue-check</c> — steht im Menue, was vorher in
+    /// der Leiste stand?</summary>
+    private bool _menueCheck;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
     /// seines Gleises? Siehe <c>MapEntityLayer.WagonFacingCheck</c>.</summary>
     private bool _wagonFacingCheck;
@@ -1940,7 +1944,9 @@ public partial class MapViewer : Node2D
             else if (a == "--gruppenangriff-probe") _gruppenangriffProbe = true;
             else if (a == "--routenfenster-probe") _routenfensterProbe = true;
             else if (a == "--namen-check") _namenCheck = true;
+            else if (a == "--einheitenmenue-check") _menueCheck = true;
             else if (a == "--fahrzeugname-alt") MapEntityLayer.FahrzeugnameAlt = true;
+            else if (a == "--befehlsleiste-alt") BefehlsleisteAlt = true;
             else if (a == "--keine-transportrouten") MapEntityLayer.KeineTransportrouten = true;
             else if (a == "--entladeklasse-alt") MapEntityLayer.EntladeklasseAlt = true;
             else if (a == "--gegner-nicht-stellen") MapEntityLayer.GegnerNichtStellen = true;
@@ -4080,11 +4086,16 @@ public partial class MapViewer : Node2D
         _unitMenu = new UI.UnitMenuWindow { Visible = false };
         layer.AddChild(_unitMenu);
         _unitMenu.OnClose = () => _unitMenu!.Visible = false;
+        UI.UnitMenuWindow.Wort = MapEntityLayer.OrderWord;
         _unitMenu.OnCode = code =>
         {
             _unitMenu!.Visible = false;
+            // ⚠ Die Rueckmeldung geht in den BEDIENBLOCK, nicht mehr in die
+            // Leiste: seit sie weg ist, ist das die einzige Zeile, die der
+            // Spieler ohnehin liest. Im Original steht dafuer die Hilfezeile
+            // des Blocks (0x447A63).
             string sagt = _entities.MenueAktion(code);
-            if (sagt.Length > 0) _entities.SellNote = sagt;
+            if (sagt.Length > 0) _entities.Say(sagt);
             UpdateUnitOrderBar();
             UpdateRouteWindow();
         };
@@ -4148,6 +4159,11 @@ public partial class MapViewer : Node2D
     /// UI/UnitMenuWindow.cs.</summary>
     private UI.UnitMenuWindow? _unitMenu;
 
+    /// <summary><c>--befehlsleiste-alt</c> — die Gegenprobe: die eigene
+    /// Befehlsleiste unten mittig kommt zurueck, wie bis zum 08.09.2026.
+    /// ⚠ Sie ist zugleich der Rueckfall, wenn der Kachelbogen fehlt.</summary>
+    public static bool BefehlsleisteAlt;
+
     /// <summary>Das Menue aufmachen, dort wo die Maus steht — <c>0x444490</c>
     /// bekommt <c>mx, my</c>. ⚠ Der Oeffner des Originals ist der DOPPELKLICK
     /// (WM_LBUTTONDBLCLK 0x203 -> 0x4141B4) bzw. die Leertaste; die rechte
@@ -4194,9 +4210,24 @@ public partial class MapViewer : Node2D
     private void UpdateUnitOrderBar()
     {
         if (_orderBar == null || _entities == null) return;
-        bool want = _entities.SellChoiceOfSelection() != null
+        // ⭐⭐ 08.09.2026 — DIE LEISTE IST ABGELOEST. Seine Ansage: »bau alles
+        // nach original mit dem Doppelklick, anstatt unsere Anzeige die unten
+        // mittig ist«. Alles, was sie konnte (Verkaufen, Radar setzen, Depot,
+        // Feldmine, Generator, Ein-/Ausgraben, Anhalten, Transportzyklus),
+        // steht jetzt im Einheitenmenue der Fensterart 1 — mit den Symbolen
+        // und den Woertern des Originals.
+        //
+        // ⚠ Sie bleibt im Quelltext und kommt mit --befehlsleiste-alt zurueck:
+        // sie ist der einzige Weg, der ohne Kacheln auskommt, und wenn der
+        // Kachelbogen einmal fehlt, waere sonst gar nichts erreichbar.
+        // ⚠ UND DER RUECKFALL: fehlt der Kachelbogen, gibt es kein Menue — dann
+        // muss die Leiste da sein, sonst waere kein einziger dieser Befehle
+        // erreichbar. Genau diese Falle hat am 25.08. schon einmal zugeschlagen
+        // (SupplyShopView.Usable).
+        bool want = (BefehlsleisteAlt || !UI.UnitMenuWindow.Usable)
+                 && (_entities.SellChoiceOfSelection() != null
                  || _entities.RadarChoiceOfSelection() != null
-                 || _entities.BuildChoicesOfSelection().Count > 0;
+                 || _entities.BuildChoicesOfSelection().Count > 0);
         if (want != _orderBar.Visible)
         {
             _orderBar.Visible = want;
