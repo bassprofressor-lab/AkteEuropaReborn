@@ -402,6 +402,54 @@ public sealed class NavGrid
     /// Planen und fahren sind zwei verschiedene Fragen, und das war der ganze
     /// Denkfehler.</para>
     /// </summary>
+    /// <summary>
+    /// <b>WIE DER WEGSUCHER EIN SCHIFF SIEHT</b> — <c>0x4D35C0</c> (2x2) und
+    /// <c>0x4D3700</c> (4x4): eine Zelle zaehlt als befahrbar, wenn dort
+    /// <c>0xFFFC</c> (Wasser) steht <b>oder eine Einheit der Klasse 4</b>. Das
+    /// Raster <c>0x4D1886</c> setzt fuer die Klassen 4 und 5 die 1 — <b>fremde
+    /// Schiffe sind fuer die PLANUNG durchlaessig</b> (Fable-Bericht 4b).
+    ///
+    /// <para>⚠⚠ 08.09.2026, seine Meldung: »gerade wenn ich einheiten angreife
+    /// wollen manche einfach nicht, gerade wenn ich eine gruppe kommandiere.
+    /// dann muss ich die einzeln auswaehlen … sehr muehsam.« Genau das erzeugt
+    /// eine Planungskarte, in der jedes eigene Schiff eine Wand ist: der
+    /// Vorderste findet seinen Weg, die Hinteren finden KEINEN — einzeln
+    /// angeklickt geht es, weil dann niemand im Weg steht. Gemessen mit
+    /// <c>--gruppenangriff-probe</c>: 216 Fehlversuche »kein Weg« in
+    /// 30 Sekunden.</para>
+    ///
+    /// <para>⭐ Das ist NICHT die grosse Umstellung von <c>--neue-pfadkarte</c>
+    /// (die gilt fuer alle und wurde als schlechter gemessen). Hier geht es nur
+    /// um Schiffe, und fuer die ist die Durchlaessigkeit gelesen, nicht
+    /// geschlossen. ⚠ Das Warten bleibt beim SCHRITT: dort fragt weiter
+    /// <see cref="Ask"/>, und ein besetztes Rechteck ist dort gesperrt.</para>
+    ///
+    /// <para>Gegenschalter <c>--schiffe-planen-nicht-durch</c>.</para>
+    /// </summary>
+    public bool SchiffPfadOffen(int c, int r, int mover)
+    {
+        int side = HullOf(mover);
+        for (int dy = 0; dy < side; dy++)
+            for (int dx = 0; dx < side; dx++)
+            {
+                int cc = c + dx, rr = r + dy;
+                if (!CanEnter(cc, rr, MoveClass.Ship)) return false;
+                int i = Idx(cc, rr);
+                if (_occupant[i] < 0 || _occupant[i] == mover) continue;
+                if (_immobile[i]) return false;
+                // Nur ein anderes SCHIFF ist durchlaessig — ein Landfahrzeug
+                // kann auf einer Wasserzelle ohnehin nicht stehen, aber die
+                // Frage bleibt so eng, wie sie gelesen ist.
+                if (!SchiffePlanenDurch) return false;
+                if (HullOf(_occupant[i]) < 2) return false;
+            }
+        return true;
+    }
+
+    /// <summary><c>--schiffe-planen-nicht-durch</c> — die Gegenprobe: fremde
+    /// Schiffe sperren die Planung wieder, wie bis zum 08.09.2026.</summary>
+    public static bool SchiffePlanenDurch = true;
+
     public bool PfadOffen(int c, int r, MoveClass mc = MoveClass.Vehicle, int mover = -1)
     {
         int side = HullOf(mover);
@@ -1177,8 +1225,10 @@ public sealed class NavGrid
                 // sperren die PLANUNG nicht mehr, nur Festes tut es (BB.1,
                 // Art 0). Siehe den Kopf von PfadOffen fuer die Messung und
                 // fuer den zurueckgezogenen ersten Anlauf vom 16.08.2026.
-                karte[y * w + x] = (NeuePfadkarte ? PfadOffen(x, y, mc, mover)
-                                                 : IsFree(x, y, mc, mover)) ? (byte)0 : (byte)2;
+                karte[y * w + x] = (mc == MoveClass.Ship
+                                     ? SchiffPfadOffen(x, y, mover)
+                                     : NeuePfadkarte ? PfadOffen(x, y, mc, mover)
+                                                     : IsFree(x, y, mc, mover)) ? (byte)0 : (byte)2;
 
         // ⭐⭐⭐ 30.08.2026 — DIE NAHSPERRE. Der zweite Kartenaufbau des
         // Originals (die »ungerade« Auftragsart, Tafeln 0x40A208/0x40A220)
@@ -1216,6 +1266,39 @@ public sealed class NavGrid
         // Randpruefung -- genau darum tut das Original es.
         for (int x = 0; x < w; x++) { karte[x] = 2; karte[(h - 1) * w + x] = 2; }
         for (int y = 0; y < h; y++) { karte[y * w] = 2; karte[y * w + w - 1] = 2; }
+
+        // ⚠⚠⚠ 08.09.2026 — EIN ZIEL AUF DEM KARTENRAND IST UNERREICHBAR, UND
+        // ZWAR STILL. Zwei Zeilen weiter oben wird der Rand hart auf 2 gesetzt,
+        // damit die innere Schleife ohne Randpruefung auskommt — genau so macht
+        // es das Original. Nur: die ZIELWAHL wusste nichts davon.
+        // `karte[zi] == 2` gab dann `null`, der Rufer meldete »kein Weg«, und
+        // der Auftrag war weg.
+        //
+        // Gefunden ueber seine Meldung »gerade wenn ich einheiten angreife
+        // wollen manche einfach nicht, gerade wenn ich eine gruppe kommandiere«.
+        // Gemessen mit --gruppenangriff-probe auf map_05: acht Schiffe bekommen
+        // den Befehl, ALLE acht behalten ihn, und alle acht melden 30 Sekunden
+        // lang »kein Weg« — auch das, welches DREI Zellen neben dem Zielfeld
+        // liegt. Das Zielfeld war (16,0): Zeile 0, also Rand. Die Planungskarte
+        // dazwischen ist vollstaendig offen, gedruckt Zelle fuer Zelle.
+        //
+        // ⭐ Es trifft nicht nur Schiffe und nicht nur den Angriff: JEDER
+        // Fahrbefehl auf den aeussersten Ring lief so ins Leere. Auf einer
+        // Wasserkarte faellt es am meisten auf, weil die Boote dort am Rand
+        // liegen.
+        //
+        // Die Behebung ist die kleinstmoegliche: das Ziel wird um eine Zelle
+        // nach innen geholt, und von dort aus die naechste freie gesucht.
+        // Gegenschalter --randziel-alt.
+        if (!RandzielAlt && (goal.X == 0 || goal.Y == 0 || goal.X == w - 1 || goal.Y == h - 1))
+        {
+            var innen = new Vector2I(Math.Clamp(goal.X, 1, w - 2), Math.Clamp(goal.Y, 1, h - 2));
+            var ersatz = IsFree(innen.X, innen.Y, mc, mover)
+                       ? innen : NearestFree(innen, mc, mover);
+            if (ersatz == null) return null;
+            goal = ersatz.Value;
+            RandzielVerlegt++;
+        }
 
         int si = start.Y * w + start.X, zi = goal.Y * w + goal.X;
         if (si == zi) return new List<Vector2I>();
@@ -1711,6 +1794,16 @@ public sealed class NavGrid
     /// </summary>
     public static bool NeuePfadkarte;
 
+    /// <summary><c>--randziel-alt</c> — die Gegenprobe: ein Ziel auf dem
+    /// aeussersten Ring wird wieder genommen, wie es ist. ⚠ Dann meldet die
+    /// Wegsuche dafuer »kein Weg«, still und endgueltig.</summary>
+    public static bool RandzielAlt;
+
+    /// <summary>Wie oft ein Ziel vom Rand nach innen geholt wurde. ⚠ Ohne die
+    /// Zahl ist »es geht jetzt« nicht von »der Zweig wird nie erreicht« zu
+    /// unterscheiden.</summary>
+    public static int RandzielVerlegt;
+
     /// <summary>GEGENPROBE <c>--kein-wegpuffer</c>: den 50-Schritte-Puffer
     /// abschalten und wieder den ganzen Weg zurueckgeben. Die beiden Haelften
     /// muessen sich EINZELN messen lassen — sonst ist nicht zu zeigen, dass
@@ -1826,13 +1919,21 @@ public sealed class NavGrid
     public Vector2I? NearestFree(Vector2I around, MoveClass mc = MoveClass.Vehicle,
                                  int mover = -1, int maxRadius = 12)
     {
-        if (IsFree(around.X, around.Y, mc, mover)) return around;
+        // ⚠ 08.09.2026 — KEINE ZELLE AUF DEM VERSIEGELTEN RAND. Die Wegsuche
+        // sperrt ihn hart (siehe FindPathUr); ein Zielfeld von dort ist
+        // unerreichbar, und der Rufer haette nur »kein Weg« gehoert. Wer den
+        // Rand als Ziel BRAUCHT, fragt IsFree selbst.
+        bool AmRand(int c, int r) => !RandzielAlt
+            && (c <= 0 || r <= 0 || c >= Width - 1 || r >= Height - 1);
+
+        if (!AmRand(around.X, around.Y) && IsFree(around.X, around.Y, mc, mover)) return around;
         for (int rad = 1; rad <= maxRadius; rad++)
             for (int dy = -rad; dy <= rad; dy++)
                 for (int dx = -rad; dx <= rad; dx++)
                 {
                     if (Math.Max(Math.Abs(dx), Math.Abs(dy)) != rad) continue;
                     int c = around.X + dx, r = around.Y + dy;
+                    if (AmRand(c, r)) continue;
                     if (IsFree(c, r, mc, mover)) return new Vector2I(c, r);
                 }
         return null;

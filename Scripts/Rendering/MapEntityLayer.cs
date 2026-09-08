@@ -546,6 +546,11 @@ public partial class MapEntityLayer : Node2D
         /// <para>⚠ In TAKTEN, nicht in Sekunden — der Zaehler liegt im
         /// Lockstep-Pfad.</para></summary>
         public int RetryIn;
+
+        /// <summary>Wieviele Takte ein BEFOHLENER Angriff noch wartet, bevor er
+        /// die Wegsuche zum Ziel erneut versucht. ⚠ Ohne diese Bremse wuerde
+        /// ein Verband die Wegsuche sechzigmal je Sekunde fragen.</summary>
+        public int ChaseRetry;
         public Vector2I? Reserved;       // cell currently being driven into
 
 
@@ -9642,6 +9647,16 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Wie oft ein Ziel fallengelassen wurde, weil es zu NAH war.</summary>
     public int MinRangeBlocked;
 
+    /// <summary><c>--verfolgung-aufgeben-alt</c> — die Gegenprobe: ein
+    /// befohlener Angriff laesst sein Ziel wieder fallen, sobald die Verfolgung
+    /// einmal keinen Weg findet (Stand bis zum 08.09.2026).</summary>
+    public static bool VerfolgungAufgebenAlt;
+
+    /// <summary>Wie oft ein befohlener Angriff seinen Auftrag BEHALTEN hat,
+    /// statt ihn fallenzulassen. ⚠ Ohne die Zahl ist »es geht jetzt« nicht von
+    /// »der Zweig wird nie erreicht« zu unterscheiden.</summary>
+    public int ChaseGeduldet;
+
     /// <summary>⭐⭐ 24.08.2026 — DIE ZWEI STUMMEN AUSGAENGE DER VERFOLGUNG.
     ///
     /// <para>Er meldete einen Cyborg, der vor der Bruecke steht und nichts tut,
@@ -9673,7 +9688,39 @@ public partial class MapEntityLayer : Node2D
         if (warum == "kein Zielfeld") ChaseNoGoal++; else ChaseNoPath++;
         if (ChaseLost.Count < 8)
             ChaseLost.Add($"#{i} Platz {e.Slot} (P{e.Owner}) bei ({e.Col},{e.Row}): {warum}");
-        if (Schussgruende) e.Schussgrund = $"Verfolgung aufgegeben: {warum}";
+        // ⭐⭐⭐ 08.09.2026 — EIN BEFOHLENER ANGRIFF WIRD NICHT STILL
+        // FALLENGELASSEN.
+        //
+        // Seine Meldung: »gerade wenn ich einheiten angreife wollen manche
+        // einfach nicht, gerade wenn ich eine gruppe kommandiere. dann muss ich
+        // die einzeln auswaehlen, das er sich mal bemueht das boot anzugreifen,
+        // sehr muehsam«. Genau das steht hier: findet die Verfolgung in DIESEM
+        // Augenblick kein freies Zielfeld oder keinen Weg, war das Ziel weg —
+        // endgueltig, ohne Ton. Bei einer GRUPPE trifft es die hinteren
+        // zuverlaessig: die vorderen belegen die Zellen um das Opfer, und
+        // `NearestFree` findet fuer den Rest nichts. Einzeln angeklickt geht es,
+        // weil dann Platz ist — genau sein Bild.
+        //
+        // Das Original laesst den Auftrag stehen: der befohlene Angriff ist
+        // UKOL 4, und beendet wird er erst bei der ANKUNFT (`ukol := 0`
+        // @0x407C6C). Also behaelt ein befohlener Angriff sein Ziel und
+        // versucht es eine Sekunde spaeter wieder — dieselbe Kur wie beim
+        // Fahrbefehl (siehe Entity.RetryIn und RetryPath).
+        //
+        // ⚠ Ein SELBST aufgenommenes Ziel faellt weiter weg: das ist kein
+        // Auftrag, sondern eine Gelegenheit, und die Schiessuhr nimmt sich die
+        // naechste von selbst wieder.
+        // Gegenschalter --verfolgung-aufgeben-alt.
+        if (Schussgruende)
+            e.Schussgrund = e.Ordered && !VerfolgungAufgebenAlt
+                ? $"Verfolgung stockt ({warum}) — Auftrag bleibt, neuer Versuch in einer Sekunde"
+                : $"Verfolgung aufgegeben: {warum}";
+        if (e.Ordered && !VerfolgungAufgebenAlt)
+        {
+            e.ChaseRetry = RetryTicks;
+            ChaseGeduldet++;
+            return;
+        }
         e.Target = -1;
     }
 
@@ -10718,6 +10765,7 @@ public partial class MapEntityLayer : Node2D
         }
 
         // out of range: walk towards the target, re-pathing when it moves away
+        if (e.Path == null && e.ChaseRetry > 0) { e.ChaseRetry--; return; }
         if (e.Path == null && _nav != null)
         {
             var goal = _nav.NearestFree(new Vector2I(t.Col, t.Row), e.Move, i);
@@ -29720,6 +29768,7 @@ public partial class MapEntityLayer : Node2D
         PollSchiffAbstandProbe(dt);
         PollTransportrouteProbe(dt);
         PollSchiffKonvoiProbe(dt);
+        PollGruppenangriffProbe(dt);
         PollSellCheck();
         PollShopCheck();
         PollBuyCheck();

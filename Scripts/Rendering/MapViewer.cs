@@ -460,6 +460,7 @@ public partial class MapViewer : Node2D
         if (_fussbalkenCheck) GD.Print(_entities.FussbalkenCheck());
         if (_transportrouteProbe) _entities.TransportrouteProbeStart();
         if (_schiffKonvoiProbe) _entities.SchiffKonvoiProbeStart();
+        if (_gruppenangriffProbe) _entities.GruppenangriffProbeStart();
         if (_sellCheck) _entities.SellCheckStart();
         if (_shopCheckFlag) _entities.ShopCheckStart();
         if (_buyCheckFlag) _entities.BuyCheckStart();
@@ -1248,6 +1249,9 @@ public partial class MapViewer : Node2D
     /// <summary><c>--schiffkonvoi-probe</c> — kommen mehrere Schiffe zusammen
     /// ans Ziel? Siehe Simulation/SchiffKonvoiProbe.cs.</summary>
     private bool _schiffKonvoiProbe;
+    /// <summary><c>--gruppenangriff-probe</c> — greift eine Gruppe ein Boot an,
+    /// oder nur die vorderen? Siehe Simulation/GruppenangriffProbe.cs.</summary>
+    private bool _gruppenangriffProbe;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
     /// seines Gleises? Siehe <c>MapEntityLayer.WagonFacingCheck</c>.</summary>
     private bool _wagonFacingCheck;
@@ -1454,6 +1458,9 @@ public partial class MapViewer : Node2D
             else if (a == "--schiff-log") MapEntityLayer.SchiffLog = true;
             else if (a == "--schiffe-weichen-aus") MapEntityLayer.SchiffeWeichenAus = true;
             else if (a == "--schiffe-reservieren") MapEntityLayer.SchiffeReservieren = true;
+            else if (a == "--verfolgung-aufgeben-alt") MapEntityLayer.VerfolgungAufgebenAlt = true;
+            else if (a == "--schiffe-planen-nicht-durch") Simulation.NavGrid.SchiffePlanenDurch = false;
+            else if (a == "--randziel-alt") Simulation.NavGrid.RandzielAlt = true;
             else if (a == "--schiff-log-alle")
             { MapEntityLayer.SchiffLog = true; MapEntityLayer.SchiffLogAlle = true; }
             else if (a == "--schuss-log-alle")
@@ -1922,6 +1929,7 @@ public partial class MapViewer : Node2D
             else if (a == "--fussbalken-check") _fussbalkenCheck = true;
             else if (a == "--transportroute-probe") _transportrouteProbe = true;
             else if (a == "--schiffkonvoi-probe") _schiffKonvoiProbe = true;
+            else if (a == "--gruppenangriff-probe") _gruppenangriffProbe = true;
             else if (a == "--keine-transportrouten") MapEntityLayer.KeineTransportrouten = true;
             else if (a == "--entladeklasse-alt") MapEntityLayer.EntladeklasseAlt = true;
             else if (a == "--gegner-nicht-stellen") MapEntityLayer.GegnerNichtStellen = true;
