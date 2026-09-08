@@ -1264,6 +1264,61 @@ public partial class MapViewer : Node2D
     /// <summary><c>--einheitenmenue-check</c> — steht im Menue, was vorher in
     /// der Leiste stand?</summary>
     private bool _menueCheck;
+
+    /// <summary><c>--doppelklick-check</c> — geht das Menue beim DOPPELKLICK
+    /// wirklich auf?</summary>
+    private bool _doppelklickCheck;
+    private bool _doppelklickGelaufen;
+    private float _doppelklickUhr;
+
+    /// <summary>
+    /// <b><c>--doppelklick-check</c> — der Weg vom Doppelklick zum Menü.</b>
+    ///
+    /// <para>⚠⚠ 08.09.2026, aus seiner Meldung »doppelklick geht bei keiner
+    /// einheit«. Die Abfrage stand im LOSLASSEN, und Godot setzt
+    /// <c>DoubleClick</c> auf dem zweiten DRUCK — sie hat nie gefeuert. Kein
+    /// Prüfstand konnte das sehen: alle fassen die Simulation an, keiner die
+    /// EINGABE.</para>
+    ///
+    /// <para>Also schickt dieser hier einen <b>echten</b>
+    /// <see cref="InputEventMouseButton"/> mit gesetzter Doppelklickfahne durch
+    /// dieselbe Kette, die auch die Maus nimmt
+    /// (<c>Viewport.PushInput</c>) — und sieht danach nach, ob das Fenster
+    /// offen ist.</para>
+    /// </summary>
+    private void DoppelklickCheck()
+    {
+        var sb = new System.Text.StringBuilder("doppelklick-check\n");
+        int idx = _entities.ErsteEigeneEinheit();
+        if (idx < 0 || _unitMenu == null)
+        {
+            GD.Print(sb.Append("  keine eigene Einheit oder kein Menue — nicht stellbar")
+                       .ToString());
+            return;
+        }
+        _entities.WaehleFuerProbe(idx);
+        bool vorher = _unitMenu.Visible;
+
+        var e = new InputEventMouseButton
+        {
+            ButtonIndex = MouseButton.Left,
+            Pressed = true,
+            DoubleClick = true,
+            Position = GetViewportRect().Size * 0.5f,
+        };
+        GetViewport().PushInput(e);
+
+        bool offen = _unitMenu.Visible;
+        int belegt = 0;
+        foreach (int c in _unitMenu.Codes) if (c >= 0) belegt++;
+        sb.Append($"  Einheit {idx} gewaehlt, Menue vorher {(vorher ? "offen" : "zu")}, "
+                + $"nach dem Doppelklick {(offen ? "OFFEN" : "ZU")}, {belegt} Symbole\n");
+        sb.Append(offen && belegt > 0
+                  ? "  WIE ERWARTET — der Doppelklick oeffnet das Menue"
+                  : "  NICHT wie erwartet — der Doppelklick kommt nicht an");
+        GD.Print(sb.ToString());
+        if (offen) _unitMenu.Visible = false;
+    }
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
     /// seines Gleises? Siehe <c>MapEntityLayer.WagonFacingCheck</c>.</summary>
     private bool _wagonFacingCheck;
@@ -1945,6 +2000,7 @@ public partial class MapViewer : Node2D
             else if (a == "--routenfenster-probe") _routenfensterProbe = true;
             else if (a == "--namen-check") _namenCheck = true;
             else if (a == "--einheitenmenue-check") _menueCheck = true;
+            else if (a == "--doppelklick-check") _doppelklickCheck = true;
             else if (a == "--fahrzeugname-alt") MapEntityLayer.FahrzeugnameAlt = true;
             else if (a == "--befehlsleiste-alt") BefehlsleisteAlt = true;
             else if (a == "--keine-transportrouten") MapEntityLayer.KeineTransportrouten = true;
@@ -4852,6 +4908,14 @@ public partial class MapViewer : Node2D
         UpdateProductionPanel();
         UpdateUnitOrderBar();
         UpdateRouteWindow();
+        // ⚠ NICHT an ErwartungBereit haengen: das ist das MISSIONSSKRIPT,
+        // und im Gefecht gibt es keins — der Pruefstand lief dort nie an.
+        // Eine Frist tut es, die Karte steht laengst.
+        if (_doppelklickCheck && !_doppelklickGelaufen)
+        {
+            _doppelklickUhr += (float)delta;
+            if (_doppelklickUhr > 4f) { _doppelklickGelaufen = true; DoppelklickCheck(); }
+        }
         UpdateDesignWindow();
         UpdatePanelClock();
         UpdatePanelPortrait();
@@ -4919,6 +4983,30 @@ public partial class MapViewer : Node2D
                 case MouseButton.Left:
                     if (mb.Pressed)
                     {
+                        // ⭐ DER DOPPELKLICK ist der Oeffner des Originals
+                        // (WM_LBUTTONDBLCLK 0x203 -> 0x4141B4 -> 0x444490): er
+                        // oeffnet das EINHEITENMENUE der Fensterart 1.
+                        //
+                        // ⚠⚠ 08.09.2026, VON IHM GEMELDET: »doppelklick geht bei
+                        // keiner einheit«. Die Abfrage stand im LOSLASSEN — und
+                        // Godot setzt `DoubleClick` auf dem zweiten DRUCK, beim
+                        // Loslassen ist die Fahne wieder falsch. Sie hat also
+                        // nie gefeuert, und weil bis dahin der Knopf in der
+                        // Befehlsleiste danebenstand, ist es niemandem
+                        // aufgefallen. ⭐ Eine Bedienung, die es NUR auf einem
+                        // zweiten Weg gibt, prueft sich nicht selbst.
+                        //
+                        // ⚠ Die LEERTASTE bleibt unberuehrt: sie springt bei uns
+                        // zur Auswahl, und das ist gewachsene Bedienung.
+                        if (mb.DoubleClick && _entities.RouteWahlModus == 0
+                            && _entities.PlacementMode == 0)
+                        {
+                            OeffneEinheitenmenue(mb.Position);
+                            _leftDown = false;
+                            _boxSelect = false;
+                            _entities.SetBand(null);
+                            break;
+                        }
                         _leftDown = true;
                         _boxSelect = false;
                         _leftStart = mb.Position;
@@ -4941,20 +5029,6 @@ public partial class MapViewer : Node2D
                         // auf der Hauptkarte. Der Vorrang ist derselbe wie beim
                         // Setzmodus eine Zeile weiter unten: sonst waehlte der
                         // Klick eine Einheit an und das Fenster bliebe leer.
-                        // ⭐ DER DOPPELKLICK ist der Oeffner des Originals
-                        // (WM_LBUTTONDBLCLK 0x203 -> 0x4141B4 -> 0x444490): er
-                        // oeffnet das EINHEITENMENUE der Art 1, und dessen
-                        // Eintrag 0x10 fuehrt zum Routenfenster.
-                        // ⚠ Die LEERTASTE bleibt unberuehrt: sie springt bei
-                        // uns zur Auswahl, und das ist gewachsene Bedienung.
-                        if (mb.DoubleClick && _entities.RouteWahlModus == 0)
-                        {
-                            OeffneEinheitenmenue(mb.Position);
-                            _leftDown = false; _boxSelect = false;
-                            _entities.SetBand(null);
-                            UpdateUnitOrderBar();
-                            break;
-                        }
                         if (_leftDown && !_boxSelect && _entities.RouteWahlModus != 0)
                             _entities.RouteKlickAufGebaeude(GetGlobalMousePosition());
                         else if (_leftDown && !_boxSelect && _entities.PlacementMode != 0 &&

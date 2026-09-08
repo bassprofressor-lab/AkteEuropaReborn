@@ -74,6 +74,29 @@ public partial class MapEntityLayer : Node2D
         return -1;
     }
 
+    /// <summary>Eine Einheit anwaehlen — fuer die Pruefstaende, die keinen
+    /// Mausklick haben.</summary>
+    public bool WaehleFuerProbe(int idx)
+    {
+        if (idx < 0 || idx >= _entities.Count) return false;
+        _sel.Clear(); _sel.Add(idx); SetPrimary();
+        return true;
+    }
+
+    /// <summary>Die erste eigene, bewegliche Einheit — fuer die
+    /// Pruefstaende.</summary>
+    public int ErsteEigeneEinheit()
+    {
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.Dead || e.IsBuilding || e.IsProp) continue;
+            if (e.Owner != ViewPlayer || !e.Mobile) continue;
+            return i;
+        }
+        return -1;
+    }
+
     /// <summary>Die acht Codes für diese Einheit, −1 = leerer Platz.</summary>
     public int[] MenueCodes(int idx)
     {
