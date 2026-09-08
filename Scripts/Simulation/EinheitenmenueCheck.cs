@@ -40,7 +40,15 @@ public partial class MapEntityLayer : Node2D
             if (!leer) mitMenue++;
 
             var fehlt = new System.Collections.Generic.List<string>();
-            if (SellChoiceOfSelection() != null && !hat(CodeVerkaufen)) fehlt.Add("Verkaufen");
+            // ⚠⚠ 08.09.2026 — DIE ERWARTUNG IST NACHGEZOGEN, und das gehoert
+            // gesagt: sie war nach UNSERER Leiste gebaut, nicht nach dem
+            // Original. Die Tafel 0x441810 gibt »Verkaufen« nur einem FAHRZEUG
+            // (+0x0A == 0) und »Anhalten« nur einer UNBEWAFFNETEN Einheit
+            // (+0x0D == 0) — ein bewaffneter Panzer hat im Menue des Originals
+            // kein »Anhalten«. Wer die alte Erwartung stehen laesst, misst
+            // seine eigene Leiste und nennt das Original einen Fehler.
+            if (e.GameUnitType == 0 && SellChoiceOfSelection() != null
+                && !hat(CodeVerkaufen)) fehlt.Add("Verkaufen");
             if (RadarChoiceOfSelection() != null && !hat(CodeRadar)) fehlt.Add("Radar setzen");
             foreach (var b in BuildChoicesOfSelection())
             {
@@ -50,7 +58,8 @@ public partial class MapEntityLayer : Node2D
                 if (c >= 0 && !hat(c)) fehlt.Add(b.Word);
             }
             if (IstTransporter(e) && !hat(CodeTransportzyklus)) fehlt.Add("Transportzyklus");
-            if (e.Mobile && !hat(CodeAnhalten)) fehlt.Add("Anhalten");
+            if (e.Mobile && e.Comp0D == 0 && e.Comp0F != 0xAB && !hat(CodeAnhalten))
+                fehlt.Add("Anhalten");
 
             if (fehlt.Count == 0) continue;
             luecken++;

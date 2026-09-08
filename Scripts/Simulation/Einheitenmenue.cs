@@ -123,19 +123,25 @@ public partial class MapEntityLayer : Node2D
             c[2] = e.Comp0F == 0xAB ? (e.DugIn ? CodeAusgraben : CodeEingraben)
                  : e.Comp0D == 0 ? CodeAnhalten : CodeBeschuetzen;
         }
-        // ⚠ UNSER Zusatz an c4: das Original hat dort nur die zwei Faelle
-        // +0x10 ∈ {0x53, 0x54}, die es bei uns nicht gibt — und ohne ihn waere
-        // »Anhalten« fuer ein bewaffnetes Fahrzeug ueberhaupt nicht mehr
-        // erreichbar, seit die Befehlsleiste weg ist. Der Platz bleibt sonst
-        // leer, also kostet es nichts.
-        if (c[2] != CodeAnhalten && e.Mobile) c[3] = CodeAnhalten;
+        // ⚠⚠ 08.09.2026 — HIER STAND EIN SYMBOL ZUVIEL, UND ES WAR MEINES.
+        // Seine Meldung: »das menu zeigt mir je nach einheit ein oder zwei
+        // Icons zuviel an in der Box? Ich weiss nicht was da richtig ist«.
+        // An Platz 4 hatte ich »Anhalten« nachgetragen, weil es nach dem
+        // Abschalten der Befehlsleiste sonst nicht mehr erreichbar gewesen
+        // waere. Das Original hat dort NUR die zwei Faelle +0x10 in {0x53,
+        // 0x54}, die es bei uns nicht gibt — der Platz bleibt also LEER.
+        // ⭐ Ein bewaffnetes Fahrzeug hat im Original kein »Anhalten« im
+        // Menue; bei uns steht es weiter auf der Taste X.
         // c5: Selbstzerstoerung nur oberhalb von 15 % Huelle.
         if (e.HpMax > 0 && e.Hp * 100 / e.HpMax > 15) c[4] = CodeSelbstzerstoerung;
         c[5] = CodeInfo;                                // Einheiteninformation
         if (e.GameUnitType != 1) c[6] = CodeHandsteuerung;
-        // c8: Verkaufen — im Original hinter byte[0x504598]; bei uns hinter der
-        // Frage, ob es hier ueberhaupt etwas zu verkaufen GIBT.
-        if (SellChoiceOfSelection() != null) c[7] = CodeVerkaufen;
+        // c8: Verkaufen — die Tafel sagt »nur wenn byte[0x504598] != 0 UND
+        // +0x0A == 0«. Die Globale kennen wir nicht, die Gattung schon: nur
+        // ein FAHRZEUG (Gattung 0) bekommt den Eintrag. Dazu unsere Frage, ob
+        // es hier ueberhaupt etwas zu verkaufen gibt.
+        if (e.GameUnitType == 0 && SellChoiceOfSelection() != null)
+            c[7] = CodeVerkaufen;
         return c;
     }
 

@@ -2003,6 +2003,7 @@ public partial class MapViewer : Node2D
             else if (a == "--doppelklick-check") _doppelklickCheck = true;
             else if (a == "--fahrzeugname-alt") MapEntityLayer.FahrzeugnameAlt = true;
             else if (a == "--befehlsleiste-alt") BefehlsleisteAlt = true;
+            else if (a == "--gruppenfenster-alt") GruppenfensterAlt = true;
             else if (a == "--keine-transportrouten") MapEntityLayer.KeineTransportrouten = true;
             else if (a == "--entladeklasse-alt") MapEntityLayer.EntladeklasseAlt = true;
             else if (a == "--gegner-nicht-stellen") MapEntityLayer.GegnerNichtStellen = true;
@@ -5390,17 +5391,57 @@ public partial class MapViewer : Node2D
     }
 
     private UI.GroupWindow? _groupWin;
+    private UI.GroupWindowChrome? _groupChrome;
     private CanvasLayer? _groupLayer;
+
+    /// <summary><c>--gruppenfenster-alt</c> — die Gegenprobe: das alte, selbst
+    /// gebaute Gruppenfenster statt der Kacheln des Originals. ⚠ Es ist
+    /// zugleich der Rueckfall, wenn der Kachelbogen fehlt.</summary>
+    public static bool GruppenfensterAlt;
 
     /// <summary>Das Gruppenfenster aufmachen, Zeile vorgewählt — das tut
     /// <c>Strg+Zahl</c> im Original (Öffner 0x442C70). Gespeichert wird erst
     /// mit dem Knopf.</summary>
     private void ZeigeGruppen(int gruppe)
     {
+        // ⭐⭐ 08.09.2026 — MIT DEN KACHELN DES ORIGINALS. Seine Meldung: »bei
+        // gruppe taucht immer noch unser eigener fensteraufbau auf«. Siehe
+        // UI/GroupWindowChrome.cs; der alte Aufbau bleibt als Rueckfall.
+        if (!GruppenfensterAlt && UI.GroupWindowChrome.Usable)
+        {
+            if (_groupChrome == null)
+            {
+                _groupLayer ??= new CanvasLayer { Layer = 94 };
+                if (_groupLayer.GetParent() == null) AddChild(_groupLayer);
+                _groupChrome = new UI.GroupWindowChrome
+                { ProcessMode = ProcessModeEnum.Always, Visible = false };
+                _groupLayer.AddChild(_groupChrome);
+                _groupChrome.Rows = () =>
+                {
+                    var l = new System.Collections.Generic.List<(string, int)>();
+                    for (int g = 1; g <= MapEntityLayer.GroupCount; g++)
+                        l.Add((_entities.GroupName(g), _entities.GroupSize(g)));
+                    return l;
+                };
+                _groupChrome.OnStore = (g, name) =>
+                {
+                    _entities.StoreGroup(g);
+                    _entities.RenameGroup(g, name);
+                };
+                _groupChrome.OnRecall = g =>
+                {
+                    if (_entities.RecallGroup(g)) JumpToSelection();
+                };
+                _groupChrome.OnClose = () => _groupChrome!.Visible = false;
+            }
+            _groupChrome.Open(gruppe);
+            return;
+        }
+
         if (_groupWin == null)
         {
-            _groupLayer = new CanvasLayer { Layer = 94 };
-            AddChild(_groupLayer);
+            _groupLayer ??= new CanvasLayer { Layer = 94 };
+            if (_groupLayer.GetParent() == null) AddChild(_groupLayer);
             _groupWin = new UI.GroupWindow { ProcessMode = ProcessModeEnum.Always };
             _groupLayer.AddChild(_groupWin);
             _groupWin.Rows = () =>

@@ -92,6 +92,19 @@ public sealed partial class UnitMenuWindow : Control
         if (WindowChrome.Atlas == null) return;
         WindowChrome.Paint(this, WTiles, HTiles, Scale);
 
+        // ⭐ 08.09.2026, sein Hinweis »ich glaube sogar, das dieses Einheiten
+        // Menu oben noch eine Bezeichnung hatte« — er hat recht, und es steht
+        // im Bericht: der Zeichner 0x463D60 setzt den Rahmen mit dem Wort
+        // »Menü« (Zeichenkette 0x5016A4). Der Titelbalken war da, das Wort
+        // fehlte. Die Stelle (10,2) ist die des Lokators, der einzigen
+        // Fensterart, deren Titelpunkt gelesen ist — bei uns dieselbe.
+        var f = WindowChrome.LegacyFont;
+        if (f != null)
+            DrawString(f, new Vector2(10 * Scale,
+                                      2 * Scale + f.GetAscent(WindowChrome.FontCell * Scale)),
+                       "Menue", HorizontalAlignment.Left, -1,
+                       WindowChrome.FontCell * Scale, WindowChrome.TitleColour);
+
         for (int i = 0; i < Slots.Length; i++)
         {
             int c = i < Codes.Length ? Codes[i] : -1;
@@ -129,6 +142,31 @@ public sealed partial class UnitMenuWindow : Control
         return el >= 1 && el <= 8 ? el : 0;
     }
 
+    /// <summary>Ob das Fenster gerade am Zeiger haengt. ⚠ Der
+    /// FENSTERKOERPER (Treffer 0) ist im Original der ZIEHGRIFF — die
+    /// Trefferprüfung der Art 16 sagt es woertlich (»sonst 0 (ziehen)«), und
+    /// die Art 1 hat denselben Ausgang. Seine Bitte: »schau mal ob man im
+    /// original das fenster anpacken konnte und wohin schieben konnte«.</summary>
+    private bool _zieht;
+
+    /// <summary>Das Ziehen laeuft ueber <c>_Input</c>, damit der Zeiger den
+    /// Fensterrand verlassen darf, ohne dass das Fenster steckenbleibt.</summary>
+    public override void _Input(InputEvent @event)
+    {
+        if (!_zieht) return;
+        if (@event is InputEventMouseMotion mm)
+        {
+            Position += mm.Relative;
+            var vp = GetViewportRect().Size;
+            Position = new Vector2(Mathf.Clamp(Position.X, 0, Mathf.Max(0, vp.X - Size.X)),
+                                   Mathf.Clamp(Position.Y, 0, Mathf.Max(0, vp.Y - Size.Y)));
+            AcceptEvent();
+        }
+        else if (@event is InputEventMouseButton up
+                 && up.ButtonIndex == MouseButton.Left && !up.Pressed)
+        { _zieht = false; AcceptEvent(); }
+    }
+
     public override void _GuiInput(InputEvent @event)
     {
         if (@event is not InputEventMouseButton mb || mb.ButtonIndex != MouseButton.Left)
@@ -138,9 +176,11 @@ public sealed partial class UnitMenuWindow : Control
             int t = Hit(mb.Position);
             _held = t >= 1 && t <= 8 && Codes[t - 1] >= 0 ? t - 1 : -1;
             QueueRedraw();
+            if (t == 0) { _zieht = true; AcceptEvent(); return; }
             if (t != 0) AcceptEvent();
             return;
         }
+        if (_zieht) { _zieht = false; AcceptEvent(); return; }
         int hit = Hit(mb.Position);
         _held = -1;
         QueueRedraw();

@@ -123,6 +123,26 @@ public sealed partial class RouteWindow : Control
         return 0;
     }
 
+    /// <summary>Ziehen am Fensterkoerper — die Trefferprüfung <c>0x45EF48</c>
+    /// sagt es woertlich: »sonst 0 (ziehen)«.</summary>
+    private bool _zieht;
+
+    public override void _Input(InputEvent @event)
+    {
+        if (!_zieht) return;
+        if (@event is InputEventMouseMotion mm)
+        {
+            Position += mm.Relative;
+            var vp = GetViewportRect().Size;
+            Position = new Vector2(Mathf.Clamp(Position.X, 0, Mathf.Max(0, vp.X - Size.X)),
+                                   Mathf.Clamp(Position.Y, 0, Mathf.Max(0, vp.Y - Size.Y)));
+            AcceptEvent();
+        }
+        else if (@event is InputEventMouseButton up
+                 && up.ButtonIndex == MouseButton.Left && !up.Pressed)
+        { _zieht = false; AcceptEvent(); }
+    }
+
     public override void _GuiInput(InputEvent @event)
     {
         if (@event is not InputEventMouseButton mb || mb.ButtonIndex != MouseButton.Left)
@@ -132,9 +152,11 @@ public sealed partial class RouteWindow : Control
             int t = Hit(mb.Position);
             _held = t >= 1 ? t - 1 : -1;
             QueueRedraw();
+            if (t == 0) { _zieht = true; AcceptEvent(); return; }
             if (t != 0) AcceptEvent();
             return;
         }
+        if (_zieht) { _zieht = false; AcceptEvent(); return; }
         int hit = Hit(mb.Position);
         _held = -1;
         QueueRedraw();
