@@ -116,9 +116,10 @@ public partial class MapEntityLayer : Node2D
     /// kein Wagen pendelt, die KI legt keine Routen an.</summary>
     public static bool KeineTransportrouten;
 
-    /// <summary>Die Saetze, ueber den PLATZ der Einheit — im Original der
-    /// Zeiger <c>+0x40</c> in die Tafel sec48.</summary>
-    private readonly Dictionary<int, Transportroute> _routen = new();
+    /// <summary>Alle Saetze — zum Zaehlen und fuer die 400er-Grenze. Der Satz
+    /// EINER Einheit haengt an ihr selbst (<see cref="Entity.Route"/>), so wie
+    /// im Original an <c>+0x40</c>.</summary>
+    private readonly List<Transportroute> _routen = new();
 
     /// <summary>Wieviel schon umgeschlagen wurde, je Ware — fuer die Probe.
     /// ⚠ Ohne die Zahl ist »die Route laeuft« nicht von »der Wagen faehrt im
@@ -142,11 +143,10 @@ public partial class MapEntityLayer : Node2D
         => !e.IsBuilding && !e.IsProp && e.Part == TransporterTeil;
 
     /// <summary>Der Satz dieser Einheit, oder <c>null</c>.</summary>
-    public Transportroute? RouteVon(Entity e)
-        => _routen.TryGetValue(e.Slot, out var r) ? r : null;
+    public Transportroute? RouteVon(Entity e) => e.Route as Transportroute;
 
     /// <summary>Fuer die Pruefstaende.</summary>
-    public IReadOnlyDictionary<int, Transportroute> RoutenFuerProbe => _routen;
+    public IReadOnlyList<Transportroute> RoutenFuerProbe => _routen;
 
     /// <summary>
     /// <b>Einen Satz anlegen</b> — <c>0x436190</c>. Der erste freie Satz wird
@@ -155,16 +155,21 @@ public partial class MapEntityLayer : Node2D
     public Transportroute? RouteAnlegen(Entity e)
     {
         if (KeineTransportrouten || !IstTransporter(e)) return null;
-        if (_routen.TryGetValue(e.Slot, out var da)) return da;
+        if (e.Route is Transportroute da) return da;
         if (_routen.Count >= RouteSaetze) return null;
         var r = new Transportroute { Einheit = e.Slot };
-        _routen[e.Slot] = r;
+        e.Route = r;
+        _routen.Add(r);
         RouteAngelegt++;
         return r;
     }
 
     /// <summary>Den Satz freigeben — <c>0x436260</c>.</summary>
-    public void RouteFreigeben(Entity e) => _routen.Remove(e.Slot);
+    public void RouteFreigeben(Entity e)
+    {
+        if (e.Route is Transportroute r) _routen.Remove(r);
+        e.Route = null;
+    }
 
     /// <summary>Nach dem Kartenaufbau: jeder Transporter bekommt seinen Satz.
     /// ⚠ Das Original legt ihn beim ERZEUGEN an; eine Karteneinheit ist beim
@@ -410,8 +415,12 @@ public partial class MapEntityLayer : Node2D
                                 + $"({t.X},{t.Y}): "
                                 + (!_nav.ImapFrei(t.X, t.Y)
                                    ? $"da steht Nr. {_nav.BesetztVon(t.X, t.Y)}"
-                                   : $"die Zelle darunter ({t.X},{t.Y + 1}) ist nicht frei — "
-                                     + _nav.WarumGesperrt(t.X, t.Y + 1, u.Move, i));
+                                   : $"die Zelle darunter ({t.X},{t.Y + 1}) ist nicht frei: "
+                                     + (_nav.BesetztVon(t.X, t.Y + 1) >= 0
+                                        ? $"da steht Nr. {_nav.BesetztVon(t.X, t.Y + 1)}"
+                                          + " (auch ein Fusssoldat zaehlt hier — das Original"
+                                          + " verlangt imap == 0xFFFE)"
+                                        : _nav.WarumGesperrt(t.X, t.Y + 1, u.Move, i)));
                         }
                         break;
                     }
@@ -590,12 +599,11 @@ public partial class MapEntityLayer : Node2D
     /// Quelle? <c>0x4BADB0</c>.</summary>
     private bool KiRouteMitQuelle(int spieler, int gebaeude)
     {
-        foreach (var kv in _routen)
+        foreach (var e in _entities)
         {
-            if (!kv.Value.Gestartet) continue;
-            var u = EinheitPlatz(kv.Key);
-            if (u == null || u.Owner != spieler) continue;
-            foreach (int q in kv.Value.Quelle) if (q == gebaeude) return true;
+            if (e.Route is not Transportroute r || !r.Gestartet) continue;
+            if (e.Owner != spieler) continue;
+            foreach (int q in r.Quelle) if (q == gebaeude) return true;
         }
         return false;
     }
@@ -603,12 +611,11 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Dasselbe fuer das Ziel — <c>0x4BAE40</c>.</summary>
     private bool KiRouteMitZiel(int spieler, int gebaeude)
     {
-        foreach (var kv in _routen)
+        foreach (var e in _entities)
         {
-            if (!kv.Value.Gestartet) continue;
-            var u = EinheitPlatz(kv.Key);
-            if (u == null || u.Owner != spieler) continue;
-            if (kv.Value.Ziel == gebaeude) return true;
+            if (e.Route is not Transportroute r || !r.Gestartet) continue;
+            if (e.Owner != spieler) continue;
+            if (r.Ziel == gebaeude) return true;
         }
         return false;
     }
@@ -636,12 +643,91 @@ public partial class MapEntityLayer : Node2D
         return -1;
     }
 
+    /// <summary>
+    /// <b>KEIN FREIER WAGEN? DANN BAUT DIE KI EINEN.</b> — <c>0x4BB1E0</c>
+    /// (»AI: production in base«), Entwurf <c>0x538BB0[p]</c>, danach
+    /// <c>0xB461A0[p] := takt + 200</c>.
+    ///
+    /// <para>⚠⚠ 08.09.2026, seine Meldung: »das einzige was ich vermisste, im
+    /// original hat die gegner KI auch transporter fahren zwischen den
+    /// gebaeuden, die man dann zerstoert, bevor man seine eigenen transporten
+    /// bauen muss«. Und er hat recht: bei uns fuhr in der KAMPAGNE nie einer,
+    /// denn <b>auf keiner der 33 Kampagnenkarten steht ein Transporter</b> —
+    /// sie stehen nur auf den elf Gefechtskarten. Im Original laesst die
+    /// Sektormaschine sich einen BAUEN, sobald keiner frei ist; genau dieser
+    /// Rueckfall fehlte.</para>
+    ///
+    /// <para>⚠ Der Bau geht durch dieselbe Tuer wie das Bauprogramm der
+    /// Mission (Kosten pruefen, bezahlen, <c>BuildTime</c> setzen) — er ist
+    /// KEIN zweiter, stiller Weg an der Wirtschaft vorbei. Und er haengt nicht
+    /// am Missionsprogramm: <c>0x4BB1E0</c> wird aus der Sektormaschine
+    /// gerufen, nicht aus <c>ai_production</c>. Damit widerspricht er bug-090
+    /// nicht.</para>
+    ///
+    /// <para>⚠ <b>UNSERE Setzung:</b> welcher Entwurf. Die Tafel
+    /// <c>0x538BB0</c> (ein Entwurf je Spieler) ist nicht gelesen; wir nehmen
+    /// den ersten verfuegbaren mit der Bauteilzeile <b>71</b> — das IST der
+    /// Transporter (siehe <see cref="PartNameDe"/>, und der Turmaufsatz 0x2E
+    /// bildet auf dieselbe Zeile ab).</para>
+    /// </summary>
+    private void KiTransporterBauen(int spieler)
+    {
+        if (_designs == null) return;
+        if (_routeBausperre.TryGetValue(spieler, out int bis) && _origTicks < bis)
+        { RouteBauGesperrt++; return; }                     // »no time to make new one«
+
+        int bi = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var b0 = _entities[i];
+            if (!b0.IsBuilding || b0.IsProp || b0.Dead) continue;
+            if (b0.Owner != spieler || b0.BType != 1) continue;
+            if (b0.BuildTime > 0f) continue;                // die Basis baut schon
+            bi = i; break;
+        }
+        if (bi < 0) return;
+        var b = _entities[bi];
+
+        int pick = -1;
+        for (int k = 0; k < _designs.Count; k++)
+            if (_designs[k].Weapon == TransporterZeile) { pick = k; break; }
+        if (pick < 0) { RouteKeinEntwurf++; return; }
+
+        var d = _designs[pick];
+        if (!CanAfford(b, d)) { RouteZuArm++; return; }
+        PayFor(b, d);
+        b.BuildIndex = pick;
+        b.BuildTime = BuildSeconds;
+        _routeBausperre[spieler] = _origTicks + RouteBausperreTakte;
+        RouteWagenBestellt++;
+    }
+
+    /// <summary>Die Bauteilzeile des Transporters — <see cref="PartNameDe"/>
+    /// nennt 71 »Transporter«, und der Turmaufsatz <c>0x2E</c> bildet auf
+    /// dieselbe Zeile ab.</summary>
+    public const int TransporterZeile = 71;
+
+    /// <summary>200 Takte Sperre nach einer Bestellung (<c>0x4BB82B</c>).</summary>
+    public const int RouteBausperreTakte = 200;
+
+    private readonly System.Collections.Generic.Dictionary<int, int> _routeBausperre = new();
+
+    /// <summary>Wie oft die KI einen Wagen bestellt hat — und warum nicht.
+    /// ⚠ Ohne die vier Zahlen ist »es faehrt keiner« nicht von »sie hat es nie
+    /// versucht« zu unterscheiden.</summary>
+    public int RouteWagenBestellt, RouteBauGesperrt, RouteKeinEntwurf, RouteZuArm;
+
     /// <summary>Fächer setzen (<c>0x4362E0</c>) und starten
     /// (<c>0x410870</c>).</summary>
     private void KiRouteAnlegen(int spieler, int ziel, int quelle)
     {
         int idx = KiRouteWagen(spieler);
-        if (idx < 0) return;                     // kein freier Wagen — s.o.
+        if (idx < 0)
+        {
+            // ⭐ 08.09.2026 — kein freier Wagen: dann einen BAUEN LASSEN.
+            KiTransporterBauen(spieler);
+            return;
+        }
         var u = _entities[idx];
         var r = RouteVon(u);
         if (r == null) return;
@@ -678,13 +764,15 @@ public partial class MapEntityLayer : Node2D
     public string RouteWatchLine()
     {
         int laufend = 0;
-        foreach (var kv in _routen) if (kv.Value.Gestartet) laufend++;
+        foreach (var r in _routen) if (r.Gestartet) laufend++;
         return $"transportroute: {_routen.Count} Saetze, {laufend} laufend, "
              + $"{RouteKiRouten} von der KI angelegt, {RouteFahrten} Fahrten; "
              + $"geladen W{RouteGeladen[0]} F{RouteGeladen[1]} S{RouteGeladen[2]} "
              + $"T{RouteGeladen[3]}, abgeladen W{RouteAbgeladen[0]} F{RouteAbgeladen[1]} "
              + $"S{RouteAbgeladen[2]} T{RouteAbgeladen[3]}"
              + (RouteOhneWeg > 0 ? $"; {RouteOhneWeg}x kein Weg" : "")
+             + $"; KI bestellte {RouteWagenBestellt} Wagen ({RouteBauGesperrt}x Sperre, "
+             + $"{RouteKeinEntwurf}x kein Entwurf, {RouteZuArm}x zu arm)"
              + (RouteAusgangGesperrt > 0
                 ? $"; ⚠ {RouteAusgangGesperrt}x kam ein Wagen nicht aus dem Gebaeude — "
                   + RouteAusgangGrund

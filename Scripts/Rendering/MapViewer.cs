@@ -2816,6 +2816,11 @@ public partial class MapViewer : Node2D
             if (sicht.Length > 0) GD.Print(sicht);
             GD.Print(_entities.ChaseWatchLine());
             GD.Print(_entities.TruemmerWatchLine());
+            // ⭐ 08.09.2026 — die Materialrouten gehoeren in jeden Lauf: ohne die
+            // Zeile ist »es faehrt kein Transporter« nicht von »die KI hat es nie
+            // versucht« zu unterscheiden. Siehe Simulation/Transportroute.cs.
+            GD.Print(_entities.RouteWatchLine());
+            GD.Print(_entities.MerkerWatchLine());
             GD.Print(_entities.QualmWatchLine());
             GD.Print(_entities.BrandWatchLine());
             GD.Print(_entities.ObjektBrandLine());

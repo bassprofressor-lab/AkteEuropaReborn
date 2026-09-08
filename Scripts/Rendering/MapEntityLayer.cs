@@ -817,6 +817,17 @@ public partial class MapEntityLayer : Node2D
         public bool Dead;
         public float DeadTime;           // seconds since destruction (wreck anim)
 
+        /// <summary>Der Umschlagsatz dieser Einheit — im Original der Zeiger
+        /// <c>+0x40</c> in die Tafel sec48 (<c>0x436227</c>).
+        ///
+        /// <para>⚠⚠ 08.09.2026 — er stand vorher in einer Tafel NACH DEM PLATZ,
+        /// und das war falsch: eine GEBAUTE Einheit hat Platz −1, also teilten
+        /// sich alle gebauten Wagen denselben Eintrag. Gemessen auf Kampagne 5:
+        /// die KI liess 21 Transporter bauen und aussenden, und es gab trotzdem
+        /// nur EINEN Satz. Das Original haengt ihn an die Einheit; jetzt wir
+        /// auch.</para></summary>
+        public object? Route;
+
         /// <summary>WARUM diese Einheit gerade nicht vorankommt — gesetzt an
         /// den Stellen, an denen der Schritt ausfaellt, und nur waehrend
         /// <c>--schiff-log</c> laeuft. Siehe Simulation/SchiffLog.cs.</summary>
