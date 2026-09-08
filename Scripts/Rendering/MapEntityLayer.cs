@@ -32848,6 +32848,14 @@ public partial class MapEntityLayer : Node2D
     {
         if (b.Owner == ViewPlayer || b.Owner is < 0 or > 7) return false;
         if (ViewPlayer is < 0 or > 7) return false;
+        // ⚠⚠ 08.09.2026 — OHNE TUER GIBT ES DIE MARKE NICHT. Die 0x63 in
+        // 0x542E18 schreibt der Bauabschluss @0x43CB12 aus den TUERFELDERN des
+        // Gebaeudesatzes; ein Bauwerk ohne Tuer (Kraftwerk 0 von 262, Seedock
+        // 0 von 39, Radarstellung) hat sie nirgends. Ohne diese Zeile haette
+        // die ANKERZELLE eines tuerlosen Gebaeudes den Einnahmezeiger bekommen
+        // — DoorCol/DoorRow stehen dort auf 0,0 — und der Klick darauf haette
+        // eingenommen statt geschossen.
+        if (b.Built == 0 || b.Doors == 0) return false;
         if (_haveAllies && _allied[ViewPlayer, b.Owner]) return false;
         if (!AufDerTuerOderDarunter(b, mapPos)) return false;
         foreach (int k in _sel)

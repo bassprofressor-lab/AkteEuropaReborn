@@ -1519,6 +1519,7 @@ public partial class MapViewer : Node2D
             else if (a == "--verstaerkungsklasse-alt") MapEntityLayer.VerstaerkungsklasseAlt = true;
             else if (a == "--gebaeudezeiger-alt") MapEntityLayer.GebaeudezeigerAlt = true;
             else if (a == "--einnahmeklick-alt") MapEntityLayer.EinnahmeklickAlt = true;
+            else if (a == "--tuerlos-alt") MapEntityLayer.TuerlosAlt = true;
             else if (a == "--fussanker-alt") MapEntityLayer.FussankerAlt = true;
             else if (a == "--panzerung-alt") MapEntityLayer.PanzerungAlt = true;
             else if (a == "--balkenhoehe-alt") MapEntityLayer.BalkenhoeheAlt = true;

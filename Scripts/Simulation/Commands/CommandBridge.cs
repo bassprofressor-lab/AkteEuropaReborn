@@ -493,6 +493,12 @@ public partial class MapEntityLayer
     /// </summary>
     /// <returns>false, wenn dort kein einnehmbares fremdes Gebäude steht —
     /// dann darf der Aufrufer weitermachen wie bisher.</returns>
+    /// <summary><c>--tuerlos-alt</c> — der Stand vor dem 08.09.2026: ein
+    /// Gebaeude ohne Tuer beantwortet den Einnahmeversuch mit »erledigt« und
+    /// schluckt damit den Strg-Klick, statt ihn an den Bodenangriff
+    /// weiterzureichen.</summary>
+    public static bool TuerlosAlt;
+
     public bool PostCapture(Vector2 mapPos, bool queue = false)
     {
         int hit = Pick(mapPos);
@@ -509,7 +515,21 @@ public partial class MapEntityLayer
             // zu warten, die nie ankommt.
             _order = $"{BuildingName(b)} hat keine Tuer — nicht einnehmbar" +
                      (b.BType == 11 ? " (der Hafen wechselt MIT seiner Werft-Station)" : "");
-            return true;
+            // ⚠⚠⚠ 08.09.2026 — HIER STAND `return true`, UND DAS HAT DEN KLICK
+            // GESCHLUCKT. Seine Meldung: »wenn ich Strg druecke, was ja attack
+            // bewirkt, kann ich nicht mehr auf Kraftwerke schiessen«.
+            //
+            // Der Strg-Zweig lautet
+            //     if (!PostCapture(...) && !PostAttackGround(...)) PostMove(...)
+            // — ein `true` heisst dort »erledigt«, und der Bodenangriff kam nie
+            // dran. Ein Kraftwerk hat KEINE Tuer (0 von 262 Saetzen), also lief
+            // jeder Strg-Klick darauf in diese Auskunft und sonst nichts.
+            //
+            // ⭐ Die Auskunft bleibt stehen, die Antwort wird `false`: wer
+            // nicht eingenommen werden kann, darf beschossen werden. Ueber-
+            // schreibt der Bodenangriff die Meldung, ist das richtig so — dann
+            // ist ja etwas passiert. Gegenschalter --tuerlos-alt.
+            return TuerlosAlt;
         }
 
         // Die nächstgelegene Türzelle zu der Einheit, die am nächsten steht.

@@ -78,8 +78,14 @@ public partial class MapEntityLayer
                         + $"Tuer {hTuer}, Mitte {hMitte}");
             if (art == "fremd")
             {
-                fremdTuer++;
-                if (hTuer != Hint.Einnahme) fremdTuerFalsch++;
+                // ⚠ Nur ein Gebaeude MIT Tuer traegt die Marke 0x63 — ein
+                // tuerloses (Kraftwerk, Seedock, Radarstellung) darf den
+                // Einnahmezeiger gar nicht bekommen, siehe EinnahmezeigerGilt.
+                if (b.Doors != 0 && b.Built != 0)
+                {
+                    fremdTuer++;
+                    if (hTuer != Hint.Einnahme) fremdTuerFalsch++;
+                }
                 fremdMitte++;
                 if (hMitte != Hint.Enemy) fremdMitteFalsch++;
             }
@@ -121,6 +127,43 @@ public partial class MapEntityLayer
                         + $"— »{_order}«");
         }
 
+        // ---- 5) UND DAS TUERLOSE GEBAEUDE ------------------------------
+        // ⚠⚠ Seine Meldung vom 08.09.2026: »wenn ich Strg druecke, was ja
+        // attack bewirkt, kann ich nicht mehr auf Kraftwerke schiessen«. Der
+        // Strg-Zweig lautet `if (!PostCapture && !PostAttackGround) PostMove`,
+        // und PostCapture gab fuer ein tuerloses Gebaeude `true` zurueck — der
+        // Bodenangriff kam nie dran. Gemessen wird genau das: PostCapture MUSS
+        // hier `false` sagen, und der Einnahmezeiger darf nicht erscheinen.
+        bool tuerlosOk = true;
+        Entity? ohneTuer = null;
+        foreach (var b in _entities)
+        {
+            if (!b.IsBuilding || b.IsProp || b.Dead) continue;
+            if (b.Owner == ViewPlayer || b.Doors != 0) continue;
+            // ⭐ Am liebsten das KRAFTWERK (Art 13) — das ist das Gebaeude aus
+            // seiner Meldung. Sonst irgendeines ohne Tuer.
+            if (ohneTuer == null || b.BType == 13) ohneTuer = b;
+            if (b.BType == 13) break;
+        }
+        if (ohneTuer == null)
+            sb.AppendLine("  kein fremdes Gebaeude OHNE Tuer — ungeprueft");
+        else
+        {
+            var anker = MitteVon(ohneTuer.Col, ohneTuer.Row);
+            bool zeigtEin = EinnahmezeigerHier(anker);
+            bool schluckt = PostCapture(anker);
+            // ⚠ Und die andere Haelfte der Frage: kommt der Bodenangriff, den
+            // der Strg-Zweig danach versucht, ueberhaupt an? Ohne diese Zeile
+            // waere »PostCapture sagt false« nur die halbe Auskunft.
+            bool schiesst = !schluckt && PostAttackGround(anker);
+            tuerlosOk = !zeigtEin && !schluckt && schiesst;
+            sb.AppendLine($"  tuerloses Gebaeude {ohneTuer.Slot} (Art {ohneTuer.BType}): "
+                        + $"Einnahmezeiger {(zeigtEin ? "JA (falsch)" : "nein")}, "
+                        + $"PostCapture schluckt den Klick "
+                        + $"{(schluckt ? "JA (falsch — Strg kann dann nicht schiessen)" : "nein")}, "
+                        + $"Bodenangriff nimmt an {(schiesst ? "ja" : "NEIN")} — »{_order}«");
+        }
+
         _sel.Clear(); foreach (int k in merken) _sel.Add(k);
         PickOhneNebel = nebelVor;
 
@@ -135,7 +178,7 @@ public partial class MapEntityLayer
                         + "durchfallen, sonst misst der Pruefstand nichts");
 
         bool alles = fremdTuerFalsch == 0 && fremdMitteFalsch == 0 && herrenlosFalsch == 0
-                  && klickOk && (fremdTuer > 0 || herrenlos > 0);
+                  && klickOk && tuerlosOk && (fremdTuer > 0 || herrenlos > 0);
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }
