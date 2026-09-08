@@ -448,7 +448,17 @@ public partial class MapEntityLayer
             int seite = _nav.HullOf(i);
             if (seite > 1) mitRumpf++;
             var anker = new List<Vector2I> { new(e.Col, e.Row) };
-            if (e.Reserved is { } rv) anker.Add(rv);
+            // ⚠⚠ 08.09.2026 — EIN SCHIFF HAT NUR EINEN ANKER. Seit die
+            // Zielzelle fuer Schiffe nicht mehr vorgemerkt wird (gelesen:
+            // 0x4052D0 kehrt fuer Klasse 4 und 5 sofort zurueck), waere die
+            // zweite Lage hier eine Deckung, die es gar nicht geben SOLL — der
+            // Abgleich meldete prompt fuenf »Loecher«. Das Modell des
+            // Waechters muss dem Bau folgen, sonst misst er den Waechter.
+            // ⭐ Fuer alles andere und im Gegenschalter --schiffe-reservieren
+            // bleibt die zweite Lage drin; genau dort faengt der Abgleich seit
+            // dem 24.08. die liegengebliebenen Stempel.
+            bool einAnker = e.Move == Simulation.NavGrid.MoveClass.Ship && !SchiffeReservieren;
+            if (e.Reserved is { } rv && !einAnker) anker.Add(rv);
             foreach (var a in anker)
                 for (int dy = 0; dy < seite; dy++)
                     for (int dx = 0; dx < seite; dx++)

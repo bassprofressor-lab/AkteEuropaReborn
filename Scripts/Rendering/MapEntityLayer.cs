@@ -812,6 +812,11 @@ public partial class MapEntityLayer : Node2D
         public bool Dead;
         public float DeadTime;           // seconds since destruction (wreck anim)
 
+        /// <summary>WARUM diese Einheit gerade nicht vorankommt — gesetzt an
+        /// den Stellen, an denen der Schritt ausfaellt, und nur waehrend
+        /// <c>--schiff-log</c> laeuft. Siehe Simulation/SchiffLog.cs.</summary>
+        public string Fahrgrund = "";
+
         /// <summary>WARUM diese Einheit gerade nicht schiesst — gesetzt an den
         /// Stellen, an denen der Schuss tatsaechlich ausfaellt, und nur wenn
         /// <c>--schuss-log</c> laeuft. ⚠ Kein Zustand der Simulation: nichts
@@ -6205,6 +6210,44 @@ public partial class MapEntityLayer : Node2D
             }
             return;
         }
+        SchiffBlockiert++;
+        // ⭐⭐⭐ 08.09.2026 — EIN SCHIFF BITTET NIEMANDEN, AUSZUWEICHEN.
+        //
+        // Seine Meldung: »die Schiffsnavigation ist aktuell ein Krampf«.
+        // Gemessen mit dem neuen --schiff-log auf Kampagne 5: in 60 Sekunden
+        // 1662 blockierte Schritte, 27 Neuplanungen — und die zwei haeufigsten
+        // Gruende sind »Nr. N weicht NICHT aus« und »jemand im Weg, der
+        // ausweichen will — ich warte«.
+        //
+        // Und genau diesen Zweig gibt es fuer Schiffe im Original NICHT.
+        // `Can_go` gibt fuer die Klassen 4 und 5 nur 0 oder 2 zurueck
+        // (0x4066A4/0x40670E, 0x406781/0x406774); der Arm »1 = jemand muss
+        // ausweichen« (0x408D81, 0x4091A6) wird fuer ein Schiff nie erreicht.
+        // Der Fable-Leselauf sagt es woertlich: »Es gibt keinen
+        // Schiffs-Ausweichcode« (berichte/schiffsbewegung-fable.md, 3).
+        //
+        // Ein blockiertes Schiff geht darum in den GEDULDSZWEIG: es haelt
+        // seinen Weg, probiert denselben Schritt wieder und plant erst am Ende
+        // seiner Geduld neu — dieselbe Behandlung wie eine Wand.
+        //
+        // Gegenschalter --schiffe-weichen-aus stellt den Stand bis zum
+        // 08.09.2026 wieder her.
+        if (step == Simulation.NavGrid.Step.GiveWay
+            && e.Move == Simulation.NavGrid.MoveClass.Ship && !SchiffeWeichenAus)
+        {
+            SchiffOhneAusweichen++;
+            if (e.Path is { Count: > 0 } && e.PathIdx < e.Path.Count && _nav != null)
+            {
+                var nz2 = e.Path[e.PathIdx];
+                Fahrgrund(e, $"({nz2.X},{nz2.Y}) ist besetzt — ein Schiff bittet nicht um "
+                           + $"Platz, es wartet (Geduld {e.Block})");
+            }
+            if (--e.Block > 0) return;
+            e.Block = BlockRearm + Simulation.Determinism.Roll(BlockRearmSpread);
+            if (AufgebenWeilNahGenug(i, e)) return;
+            Repath(i, e);
+            return;
+        }
         if (step == Simulation.NavGrid.Step.GiveWay)
         {
             // ⭐⭐⭐ 30.08.2026 — ZUERST DEN BLOCKIERER FRAGEN.
@@ -6257,6 +6300,8 @@ public partial class MapEntityLayer : Node2D
                     {
                         // NEIN -> Can_go haette 0 gegeben. Das ist der
                         // Geduldszweig @0x408BAB, nicht der 1/60-Zweig.
+                        Fahrgrund(e, $"Nr. {wer} auf ({naechste.X},{naechste.Y}) weicht NICHT "
+                                   + $"aus — Geduld {e.Block}");
                         if (--e.Block > 0) return;
                         e.Block = BlockRearm
                                 + Simulation.Determinism.Roll(BlockRearmSpread);
@@ -6306,9 +6351,16 @@ public partial class MapEntityLayer : Node2D
             // unbelegt, bis der Pruefstand verlaesslich ist, und darum haengt
             // sie hinter `--giveway-warten` statt zu wirken.
             if (GiveWayWarten) { GiveWayGewartet++; return; }
-            if (Simulation.Determinism.Roll(GiveWayOdds) != 0) return;
+            if (Simulation.Determinism.Roll(GiveWayOdds) != 0)
+            { Fahrgrund(e, "jemand im Weg, der ausweichen will — ich warte"); return; }
             Repath(i, e);
             return;
+        }
+        if (e.Path is { Count: > 0 } && e.PathIdx < e.Path.Count && _nav != null)
+        {
+            var nz = e.Path[e.PathIdx];
+            Fahrgrund(e, $"Schritt nach ({nz.X},{nz.Y}) GESPERRT — "
+                       + _nav.WarumGesperrt(nz.X, nz.Y, e.Move, i) + $", Geduld {e.Block}");
         }
         if (--e.Block > 0) return;
         e.Block = BlockRearm + Simulation.Determinism.Roll(BlockRearmSpread);
@@ -6324,6 +6376,7 @@ public partial class MapEntityLayer : Node2D
     /// <c>e.Path = null</c>, das die Einheit endgueltig stillegte.</summary>
     private void Repath(int i, Entity e)
     {
+        SchiffNeugeplant++;
         // ⭐⭐⭐ 30.08.2026 — die NEUPLANUNG bekommt die NAHSPERRE. Das
         // Original hat dafuer eine eigene Auftragsart (die »ungerade«, Tafeln
         // 0x40A208/0x40A220): dieselbe durchlaessige Suchkarte, aber der
@@ -10508,6 +10561,26 @@ public partial class MapEntityLayer : Node2D
     /// behaelt beim Feuern die Richtung, in die er zuletzt gelaufen ist (Stand
     /// bis zum 08.09.2026).</summary>
     public static bool FussrichtungAlt;
+
+    /// <summary><c>--schiffe-reservieren</c> — die Gegenprobe: ein fahrendes
+    /// Schiff belegt wieder seine Zielzelle mit, wie bis zum 08.09.2026.
+    /// ⚠ Das Original tut das nicht.</summary>
+    public static bool SchiffeReservieren;
+
+    /// <summary>Wie oft ein Schiff einen Schritt OHNE Vormerkung begonnen hat.
+    /// ⚠ Ohne die Zahl ist »die Umstellung wirkt« nicht von »der Zweig wird nie
+    /// erreicht« zu unterscheiden.</summary>
+    public int SchiffOhneVormerkung;
+
+    /// <summary><c>--schiffe-weichen-aus</c> — die Gegenprobe: ein blockiertes
+    /// Schiff bittet die Einheit im Weg wieder um Platz, wie bis zum
+    /// 08.09.2026. ⚠ Das Original kennt das nicht.</summary>
+    public static bool SchiffeWeichenAus;
+
+    /// <summary>Wie oft ein Schiff in den Geduldszweig ging, statt um Platz zu
+    /// bitten. ⚠ Ohne die Zahl ist »die Umstellung wirkt« nicht von »der Zweig
+    /// wird nie erreicht« zu unterscheiden.</summary>
+    public int SchiffOhneAusweichen;
 
     /// <summary><c>--kein-feuer-im-fahren</c> — die Gegenprobe: nur untaetige
     /// Einheiten nehmen Ziele auf, und wer feuert, haelt an (Stand bis zum
@@ -29646,6 +29719,7 @@ public partial class MapEntityLayer : Node2D
         PollFussSchussProbe(dt);
         PollSchiffAbstandProbe(dt);
         PollTransportrouteProbe(dt);
+        PollSchiffKonvoiProbe(dt);
         PollSellCheck();
         PollShopCheck();
         PollBuyCheck();
@@ -29778,6 +29852,7 @@ public partial class MapEntityLayer : Node2D
         MinenTakt();
 
         SchiffDrehTakt();
+        SchiffLogTakt(dt);
 
         for (int i = 0; i < _entities.Count; i++)
         {
@@ -29809,7 +29884,35 @@ public partial class MapEntityLayer : Node2D
                 int foot = _nav.CrushableAt(next.X, next.Y, i);
                 if (foot >= 0) RunOverFoot(i, e, foot);
 
-                _nav.SetOccupant(next.X, next.Y, i, e.Infantry >= 0);
+                // ⭐⭐⭐ 08.09.2026 — EIN SCHIFF MERKT SEINE ZIELZELLE NICHT VOR.
+                //
+                // Der Fable-Leselauf sagt es doppelt: die Schrittfunktion
+                // 0x4052D0 kehrt fuer alles ausser den Klassen 0 und 1 SOFORT
+                // zurueck (@0x405325) — fuer ein Schiff aendert sich beim
+                // Schrittbeginn nur die Richtung (+0x04) und ein Zaehler
+                // (+0x1A), kein einziges imap-Feld. Und der Zellenwechsel
+                // raeumt erst das ALTE Rechteck und stempelt dann das neue
+                // (@0x40785B / @0x4079E8): waehrend der Fahrt traegt die imap
+                // NUR die alte Lage. Zwei Schiffe koennen darum voruebergehend
+                // in ueberlappende Rechtecke laufen — »das ist kein
+                // Nachbaufehler, das ist das Original«
+                // (berichte/schiffsbewegung-fable.md, 2).
+                //
+                // Bei uns hielt ein fahrendes Schiff ZWEI Anker: seinen und den
+                // vorgemerkten. Ein 2x2 belegte damit bis zu SECHS Zellen statt
+                // vier — und ein Verband stand sich dauernd selbst im Weg.
+                // Seine Meldung: »die Schiffsnavigation ist aktuell ein
+                // Krampf«.
+                //
+                // ⚠ Die Vormerkung als FELD bleibt: sie ist bei uns das Ziel
+                // des laufenden Schrittes, nicht nur eine Belegung. Nur der
+                // STEMPEL faellt weg — und dafuer wird beim Ankommen gestempelt
+                // (siehe dort). Gegenschalter --schiffe-reservieren.
+                bool schiffOhneVormerkung =
+                    e.Move == Simulation.NavGrid.MoveClass.Ship && !SchiffeReservieren;
+                if (!schiffOhneVormerkung)
+                    _nav.SetOccupant(next.X, next.Y, i, e.Infantry >= 0);
+                else SchiffOhneVormerkung++;
                 e.Reserved = next;
                 e.WaitTime = 0;
                 // Ein neuer Schritt faengt an. Der Ausgangspunkt ist die
@@ -30079,6 +30182,11 @@ public partial class MapEntityLayer : Node2D
                 e.Pos = dest;
                 e.Col = target.X;
                 e.Row = target.Y;
+                // ⭐ Wer nicht vorgemerkt hat, stempelt JETZT — das ist die
+                // zweite Haelfte von @0x40785B/@0x4079E8: erst das alte
+                // Rechteck raeumen, dann das neue setzen.
+                if (e.Move == Simulation.NavGrid.MoveClass.Ship && !SchiffeReservieren)
+                    _nav.SetOccupant(e.Col, e.Row, i, e.Infantry >= 0);
                 e.Elev = ElevOf(e.Col, e.Row);
                 e.Footprint = CellRect(_ox, _oy, e.Col, e.Row, e.Elev);
                 e.Reserved = null;

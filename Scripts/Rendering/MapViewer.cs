@@ -459,6 +459,7 @@ public partial class MapViewer : Node2D
         if (_schiffAbstandProbe) _entities.SchiffAbstandProbeStart();
         if (_fussbalkenCheck) GD.Print(_entities.FussbalkenCheck());
         if (_transportrouteProbe) _entities.TransportrouteProbeStart();
+        if (_schiffKonvoiProbe) _entities.SchiffKonvoiProbeStart();
         if (_sellCheck) _entities.SellCheckStart();
         if (_shopCheckFlag) _entities.ShopCheckStart();
         if (_buyCheckFlag) _entities.BuyCheckStart();
@@ -1244,6 +1245,9 @@ public partial class MapViewer : Node2D
     /// <summary><c>--transportroute-probe</c> — pendelt der Wagen wirklich?
     /// Siehe Simulation/TransportrouteProbe.cs.</summary>
     private bool _transportrouteProbe;
+    /// <summary><c>--schiffkonvoi-probe</c> — kommen mehrere Schiffe zusammen
+    /// ans Ziel? Siehe Simulation/SchiffKonvoiProbe.cs.</summary>
+    private bool _schiffKonvoiProbe;
     /// <summary><c>--wagon-facing-check</c> — zeigt jeder Waggon in die Richtung
     /// seines Gleises? Siehe <c>MapEntityLayer.WagonFacingCheck</c>.</summary>
     private bool _wagonFacingCheck;
@@ -1447,6 +1451,11 @@ public partial class MapViewer : Node2D
             else if (a == "--absetzen-aus-der-ferne") MapEntityLayer.AbsetzenAusDerFerne = true;
             else if (a == "--entlade-log") MapEntityLayer.EntladeLog = true;
             else if (a == "--schuss-log") MapEntityLayer.SchussLog = true;
+            else if (a == "--schiff-log") MapEntityLayer.SchiffLog = true;
+            else if (a == "--schiffe-weichen-aus") MapEntityLayer.SchiffeWeichenAus = true;
+            else if (a == "--schiffe-reservieren") MapEntityLayer.SchiffeReservieren = true;
+            else if (a == "--schiff-log-alle")
+            { MapEntityLayer.SchiffLog = true; MapEntityLayer.SchiffLogAlle = true; }
             else if (a == "--schuss-log-alle")
             { MapEntityLayer.SchussLog = true; MapEntityLayer.SchussLogAlle = true; }
             else if (a == "--gebaeudebrand-probe") _gebaeudebrandProbe = true;
@@ -1912,6 +1921,7 @@ public partial class MapViewer : Node2D
             else if (a == "--fussbalken-alt") MapEntityLayer.FussbalkenAlt = true;
             else if (a == "--fussbalken-check") _fussbalkenCheck = true;
             else if (a == "--transportroute-probe") _transportrouteProbe = true;
+            else if (a == "--schiffkonvoi-probe") _schiffKonvoiProbe = true;
             else if (a == "--keine-transportrouten") MapEntityLayer.KeineTransportrouten = true;
             else if (a == "--entladeklasse-alt") MapEntityLayer.EntladeklasseAlt = true;
             else if (a == "--gegner-nicht-stellen") MapEntityLayer.GegnerNichtStellen = true;

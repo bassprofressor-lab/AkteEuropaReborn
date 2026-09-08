@@ -136,6 +136,7 @@ public partial class MapEntityLayer : Node2D
         //
         // Die WIRKUNG von UKOL := 0 ist »der Fahrauftrag ist zu Ende«, und das
         // ist bei uns wortgleich die Ankunftsbehandlung am Wegende.
+        SchiffAufgegeben++;
         e.Ukol = UkolFrei;
         e.Path = null;
         e.StepCost = 0; e.Progress = 0;
