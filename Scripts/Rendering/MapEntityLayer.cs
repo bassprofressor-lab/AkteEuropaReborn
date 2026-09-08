@@ -30223,6 +30223,13 @@ public partial class MapEntityLayer : Node2D
 
             if (arrived)
             {
+                // ⚠ 08.09.2026 — DEN GRUND LOESCHEN, WENN DER SCHRITT GELINGT.
+                // Er blieb bisher stehen, und im Mitschnitt sah ein Schiff, das
+                // laengst am Ziel war, noch aus wie eines, das seit Minuten
+                // wartet: in seinem Lauf zaehlte ich »198 Sekunden wartend« fuer
+                // ein Boot, das auf seiner Zielzelle stand. Eine Zeile, die den
+                // alten Grund weitertraegt, luegt.
+                if (Fahrgruende) e.Fahrgrund = "";
                 SpeedCheckStep(i, e, target);   // VOR dem Fortschreiben: er braucht die alte Zelle
                 // Den Ueberschuss mitnehmen statt ihn wegzuwerfen — das ist das
                 // `si − (2·kosten − 1)` des Originals (@0x40799d/@0x4079a4).
