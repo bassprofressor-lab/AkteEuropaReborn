@@ -1518,6 +1518,7 @@ public partial class MapViewer : Node2D
             else if (a == "--fussvolk-alt") Simulation.NavGrid.FussvolkAlt = true;
             else if (a == "--verstaerkungsklasse-alt") MapEntityLayer.VerstaerkungsklasseAlt = true;
             else if (a == "--gebaeudezeiger-alt") MapEntityLayer.GebaeudezeigerAlt = true;
+            else if (a == "--einnahmeklick-alt") MapEntityLayer.EinnahmeklickAlt = true;
             else if (a == "--fussanker-alt") MapEntityLayer.FussankerAlt = true;
             else if (a == "--panzerung-alt") MapEntityLayer.PanzerungAlt = true;
             else if (a == "--balkenhoehe-alt") MapEntityLayer.BalkenhoeheAlt = true;
@@ -5195,10 +5196,38 @@ public partial class MapViewer : Node2D
                                  && !_entities.PostAttackGround(GetGlobalMousePosition(), mb.ShiftPressed))
                                     _entities.PostMove(GetGlobalMousePosition(), mb.ShiftPressed);
                             }
+                            // ⭐⭐⭐ 08.09.2026 — WO DER EINNAHMEZEIGER STEHT,
+                            // NIMMT DER KLICK EIN. Seine Meldung: »das einnahme
+                            // icon fuehrt aber nicht zur einnahme, sondern die
+                            // sagen angriff, schiessen aber nicht«.
+                            //
+                            // ⭐ Und damit faellt der Einwand, der bei
+                            // PostCapture seit dem 17.08.2026 stand (»eine
+                            // Weiche, die das fuer den Spieler entscheidet,
+                            // laege in der Haelfte der Faelle falsch«): DAS
+                            // ORIGINAL HAT DIESE WEICHE SELBST, und sie ist die
+                            // ZELLE. Auf der Tuerzelle steht Zeigerart 6
+                            // (@0x4323F5), auf dem Rest des Gebaeudes Art 10 —
+                            // also Einnehmen dort, Angriff hier. Der Spieler
+                            // zielt sie mit der Maus, und er sieht vorher, was
+                            // er bekommt. Strg bleibt, wo es war.
+                            //
+                            // ⚠ Dass 0x63 in 0x542E18 wirklich die TUERZELLE
+                            // ist, steht im Bauabschluss selbst: @0x43CB08
+                            // schreibt `word[0xBDEA80 + 2*Zelle] := 0xFFFE` und
+                            // gleich darauf @0x43CB12 `byte[0x542E18 + Zelle]
+                            // := 0x63` — dieselbe Zelle, aus den Tuerfeldern
+                            // des Gebaeudesatzes gerechnet.
+                            //
+                            // Gegenschalter --einnahmeklick-alt.
+                            //
                             // ⭐ 07.09.2026 — ABSETZEN geht vor Angriff und Fahrt:
                             // auf einer Rampe mit beladenem Traeger meint der
                             // Rechtsklick nichts anderes (seine Meldung C).
-                            else if (!_entities.PostUnloadKlick(GetGlobalMousePosition(), mb.ShiftPressed)
+                            else if (!(_entities.EinnahmezeigerHier(GetGlobalMousePosition())
+                                       && _entities.PostCapture(GetGlobalMousePosition(),
+                                                                mb.ShiftPressed))
+                                  && !_entities.PostUnloadKlick(GetGlobalMousePosition(), mb.ShiftPressed)
                                   && !_entities.PostAttack(GetGlobalMousePosition(), mb.ShiftPressed))
                                 _entities.PostMove(GetGlobalMousePosition(), mb.ShiftPressed);
                         }

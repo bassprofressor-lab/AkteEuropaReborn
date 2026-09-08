@@ -32826,6 +32826,21 @@ public partial class MapEntityLayer : Node2D
     /// Tuer und auch ueber einem herrenlosen.</summary>
     public static bool GebaeudezeigerAlt;
 
+    /// <summary><b>Steht hier der Einnahmezeiger?</b> — die Frage, die der
+    /// KLICKWEG stellt, damit Bild und Klick dasselbe bedeuten.
+    ///
+    /// <para>⚠⚠ 08.09.2026, seine Meldung: »das einnahme icon fuehrt aber nicht
+    /// zur einnahme, sondern die sagen angriff, schiessen aber nicht«. Der
+    /// Zeiger war gebaut, der Klick nicht — ein Bild, das etwas verspricht, was
+    /// der Klick nicht tut, ist schlimmer als gar keins.</para></summary>
+    public bool EinnahmezeigerHier(Vector2 mapPos)
+        => !GebaeudezeigerAlt && !EinnahmeklickAlt && CursorHintAt(mapPos) == Hint.Einnahme;
+
+    /// <summary><c>--einnahmeklick-alt</c> — der Stand vor dem 08.09.2026: der
+    /// Rechtsklick auf die Tuer bedeutet Angriff, Einnehmen geht nur mit
+    /// Strg.</summary>
+    public static bool EinnahmeklickAlt;
+
     /// <summary>Die drei Bedingungen des Einnahmezweigs @0x4323F5 — fremd und
     /// nicht verbuendet, ein FAHRZEUG (Klassenbyte +0x0A == 0) gewaehlt, und
     /// die Maus auf der Tuermarke.</summary>

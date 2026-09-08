@@ -466,12 +466,18 @@ public partial class MapEntityLayer
     /// einem NEUTRALEN Gebäude (Besitzer 11) greift niemand an, deshalb ging es
     /// dort und nur dort. Genau das beschreiben beide Meldungen.</para>
     ///
-    /// <para>⚠ <b>Warum eine eigene Taste und nicht »Rechtsklick nimmt ein«:</b>
-    /// beides ist gewollt. Wer eine Werft nicht braucht, schiesst sie kaputt;
-    /// wer sie will, nimmt sie ein. Eine Weiche, die das für den Spieler
-    /// entscheidet, läge in der Hälfte der Fälle falsch — und sie wäre
-    /// gefährlich: eine Einheit, die statt zu schiessen an die Tür fährt,
-    /// verliert ein Gefecht.</para>
+    /// <para>⚠ <b>ÜBERHOLT am 08.09.2026 — und zwar von einer Lesung.</b> Hier
+    /// stand: »Warum eine eigene Taste und nicht ›Rechtsklick nimmt ein‹: eine
+    /// Weiche, die das für den Spieler entscheidet, läge in der Hälfte der
+    /// Fälle falsch.« <b>Das Original hat diese Weiche selbst, und sie ist die
+    /// ZELLE:</b> auf der Türzelle setzt <c>@0x4323F5</c> Zeigerart 6
+    /// (Einnahme, Bild 10), auf dem Rest des Gebäudes gibt <c>@0x4328A1</c>
+    /// Art 10, die auf das Angriffsbild fällt. Der Spieler zielt mit der Maus
+    /// und sieht vorher, was er bekommt. Seit dem 08.09. nimmt der gewöhnliche
+    /// Rechtsklick DORT ein (MapViewer, <c>EinnahmezeigerHier</c>);
+    /// <b>Strg bleibt, wo es war</b> — es nimmt von jeder Stelle des Gebäudes
+    /// ein und bleibt damit der Weg für den, der die Tür nicht treffen
+    /// will.</para>
     ///
     /// <para>⚠ <b>Es ist KEIN neuer Befehlssatz.</b> Einnehmen heisst im
     /// Original wie bei uns nur »auf der Türzelle stehen«; der Behandler dafür

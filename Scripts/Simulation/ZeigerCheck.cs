@@ -90,6 +90,37 @@ public partial class MapEntityLayer
             }
         }
 
+        // ---- 4) UND WAS DER KLICK DARAUS MACHT -------------------------
+        // ⚠⚠ Seine Meldung vom 08.09.2026: »das einnahme icon fuehrt aber nicht
+        // zur einnahme, sondern die sagen angriff, schiessen aber nicht«. Ein
+        // Bild, das etwas verspricht, was der Klick nicht tut, ist schlimmer
+        // als gar keins — also wird der KLICKWEG hier mitgemessen, nicht nur
+        // das Bild. ⚠ Der Aufruf setzt wirklich einen Befehl ab; das ist der
+        // Zweck (der Pruefstand darf die Frage nicht nachbauen), macht ihn aber
+        // zu einem Eingriff und nicht zu einer blossen Ablesung.
+        bool klickOk = true;
+        Entity? probe = null;
+        foreach (var b in _entities)
+        {
+            if (!b.IsBuilding || b.IsProp || b.Dead) continue;
+            if (b.Owner == ViewPlayer || b.Owner is < 0 or > 7) continue;
+            if (b.Doors == 0 || b.Built == 0) continue;
+            probe = b; break;
+        }
+        if (probe == null)
+            sb.AppendLine("  kein fremdes Gebaeude mit Tuer — der Klickweg bleibt ungeprueft");
+        else
+        {
+            var tuer = MitteVon(probe.Col + probe.DoorCol, probe.Row + probe.DoorRow);
+            bool zeigt = EinnahmezeigerHier(tuer);
+            bool nimmt = zeigt && PostCapture(tuer);
+            klickOk = zeigt && nimmt;
+            sb.AppendLine($"  Klick auf die Tuer von Gebaeude {probe.Slot}: "
+                        + $"Zeiger sagt einnehmen {(zeigt ? "ja" : "NEIN")}, "
+                        + $"PostCapture nimmt an {(nimmt ? "ja" : "NEIN")} "
+                        + $"— »{_order}«");
+        }
+
         _sel.Clear(); foreach (int k in merken) _sel.Add(k);
         PickOhneNebel = nebelVor;
 
@@ -104,7 +135,7 @@ public partial class MapEntityLayer
                         + "durchfallen, sonst misst der Pruefstand nichts");
 
         bool alles = fremdTuerFalsch == 0 && fremdMitteFalsch == 0 && herrenlosFalsch == 0
-                  && (fremdTuer > 0 || herrenlos > 0);
+                  && klickOk && (fremdTuer > 0 || herrenlos > 0);
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }
