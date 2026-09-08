@@ -473,9 +473,80 @@ public partial class MapEntityLayer : Node2D
         }
         else sb.AppendLine("  keine Infanterie auf dieser Karte — Einstufung ungeprueft");
 
-        bool alles = rauOk && wasOk && artOk;
+        // 3. ⭐⭐ 08.09.2026 — UND DIE EINHEIT, DIE DAS SKRIPT SETZT. Seine
+        // Meldung zur Nebenmission der Kampagne 6: die vier Infanteristen und
+        // der Forscher kommen nicht zur Mine. Die Karteneinstufung oben war
+        // richtig; falsch war die der GESETZTEN Einheit. Gemessen wird ueber
+        // dieselbe Tuer, durch die `space_in` geht (SpawnReinforcement), nicht
+        // ueber eine nachgebaute Regel.
+        bool setzOk = true;
+        int typInf = InfanterieEntwurfFuerProbe();
+        if (typInf < 0) sb.AppendLine("  kein Infanterieentwurf fuer Spieler 0 — Setzweg ungeprueft");
+        else
+        {
+            var frei = ErsteFreieZelleFuerProbe();
+            if (frei == null)
+            {
+                sb.AppendLine("  keine freie Zelle fuer die Setzprobe");
+                setzOk = false;
+            }
+            else
+            {
+                // ⚠ SpawnReinforcement gibt den SATZ zurueck, nicht die
+                // Listenstelle — `_entities[satz]` waere eine fremde Einheit
+                // gewesen, und die Probe haette IHRE Klasse gemeldet. Genau
+                // dieser Griff hat hier einmal einen Fehlalarm erzeugt.
+                int satz = SpawnReinforcement(typInf, frei.Value.X, frei.Value.Y, 0);
+                int idx = -1;
+                for (int k = 0; k < _entities.Count; k++)
+                    if (_entities[k].Slot == satz && !_entities[k].IsBuilding
+                        && !_entities[k].IsProp) { idx = k; break; }
+                if (satz < 0 || idx < 0)
+                { sb.AppendLine("  space_in hat nichts gesetzt"); setzOk = false; }
+                else
+                {
+                    var u = _entities[idx];
+                    setzOk = u.Move == Simulation.NavGrid.MoveClass.Walker;
+                    sb.AppendLine($"  vom Skript gesetzte Infanterie (Entwurf {typInf}, "
+                                + $"Fahrwerk {u.UnitType}, +0x0a {u.GameUnitType}): "
+                                + $"eingestuft als {u.Move}: "
+                                + (setzOk ? "richtig"
+                                          : "FALSCH — sie faehrt wie ein Fahrzeug und kommt "
+                                          + "nicht ueber rauen Boden"));
+                    // ⚠ Die Probe raeumt hinter sich auf: die gesetzte Einheit
+                    // ist ein Messgeraet, kein Spielzustand.
+                    _nav.ClearOccupant(u.Col, u.Row, idx);
+                    u.Dead = true; u.Hp = 0; u.Mobile = false;
+                }
+            }
+        }
+
+        bool alles = rauOk && wasOk && artOk && setzOk;
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
+    }
+
+    /// <summary>Ein Entwurf des Spielers 0, dessen Fahrwerk Infanterie ist
+    /// (148/149) — die sec47-Zeile, wie <c>space_in</c> sie nennt. −1, wenn
+    /// keiner da ist; dann sagt die Probe das, statt zu bestehen.</summary>
+    private int InfanterieEntwurfFuerProbe()
+    {
+        LoadDesigns();
+        for (int typ = 0; typ < 200; typ++)
+            if (_designBySlot.TryGetValue(typ, out var d) && d.Propulsion is 148 or 149)
+                return typ;
+        return -1;
+    }
+
+    /// <summary>Eine freie Zelle irgendwo auf der Karte, fuer die Setzprobe.</summary>
+    private Godot.Vector2I? ErsteFreieZelleFuerProbe()
+    {
+        if (_nav == null) return null;
+        for (int r = 0; r < _nav.Height; r++)
+            for (int c = 0; c < _nav.Width; c++)
+                if (_nav.IsFree(c, r, Simulation.NavGrid.MoveClass.Vehicle))
+                    return new Godot.Vector2I(c, r);
+        return null;
     }
 
     /// <summary>

@@ -1508,6 +1508,7 @@ public partial class MapViewer : Node2D
             else if (a == "--tuersperre-probe") _tuersperreProbe = true;
             else if (a == "--angriff-probe") _angriffProbe = true;
             else if (a == "--fussvolk-probe") _fussvolkProbe = true;
+            else if (a == "--zeiger-check") _zeigerCheck = true;
             else if (a == "--anker-probe") _ankerProbe = true;
             else if (a == "--zielzelle-probe") _zielzelleProbe = true;
             else if (a == "--skripttreffer-probe") _skripttrefferProbe = true;
@@ -1515,6 +1516,8 @@ public partial class MapViewer : Node2D
             else if (a == "--gebaeudesprengung-aus") MapEntityLayer.GebaeudeSprengungAus = true;
             else if (a == "--angriff-nur-feinde") MapEntityLayer.AngriffNurFeinde = true;
             else if (a == "--fussvolk-alt") Simulation.NavGrid.FussvolkAlt = true;
+            else if (a == "--verstaerkungsklasse-alt") MapEntityLayer.VerstaerkungsklasseAlt = true;
+            else if (a == "--gebaeudezeiger-alt") MapEntityLayer.GebaeudezeigerAlt = true;
             else if (a == "--fussanker-alt") MapEntityLayer.FussankerAlt = true;
             else if (a == "--panzerung-alt") MapEntityLayer.PanzerungAlt = true;
             else if (a == "--balkenhoehe-alt") MapEntityLayer.BalkenhoeheAlt = true;
@@ -2870,6 +2873,7 @@ public partial class MapViewer : Node2D
             if (_tuersperreProbe) GD.Print(_entities.TuersperreProbe());
             if (_angriffProbe) GD.Print(_entities.AngriffProbe());
             if (_fussvolkProbe) GD.Print(_entities.FussvolkProbe());
+            if (_zeigerCheck) GD.Print(_entities.ZeigerCheckLine());
             if (_ankerProbe) GD.Print(_entities.AnkerProbe());
             if (_zielzelleProbe) GD.Print(_entities.ZielzelleProbe());
             if (_skripttrefferProbe) GD.Print(_entities.SkripttrefferProbe());
@@ -4024,6 +4028,10 @@ public partial class MapViewer : Node2D
     private bool _tuersperreProbe;
     private bool _angriffProbe;
     private bool _fussvolkProbe;
+
+    /// <summary><c>--zeiger-check</c> — welches Zeigerbild ueber welchem
+    /// Gebaeude steht; siehe Simulation/ZeigerCheck.cs.</summary>
+    private bool _zeigerCheck;
     private bool _ankerProbe;
     private bool _zielzelleProbe;
     private bool _skripttrefferProbe;
@@ -5618,6 +5626,12 @@ public partial class MapViewer : Node2D
                 // ⭐ 07.09.2026 — Zeiger 12 des Originals (@0x432771) ueber
                 // einer Rampe, wenn ein beladener Traeger gewaehlt ist.
                 MapEntityLayer.Hint.Entladen => UI.GameCursors.Entladen,
+                // ⭐ 08.09.2026 — Zeigerart 6 des Originals (@0x432478) auf der
+                // Tuerzelle eines fremden Gebaeudes zeigt Zeigerbild 10.
+                MapEntityLayer.Hint.Einnahme => UI.GameCursors.Einnahme,
+                // ⭐ Ein herrenloses Gebaeude bekommt Zeigerart 1 (@0x43253A),
+                // also dasselbe Bild wie etwas Eigenes — kein Fadenkreuz.
+                MapEntityLayer.Hint.Neutral => UI.GameCursors.Select,
                 MapEntityLayer.Hint.OwnFoot => UI.GameCursors.Foot,
                 MapEntityLayer.Hint.Own => UI.GameCursors.Select,
                 _ => UI.GameCursors.Arrow,
@@ -5629,6 +5643,7 @@ public partial class MapViewer : Node2D
             MapEntityLayer.Hint.Enemy => Input.CursorShape.Cross,
             MapEntityLayer.Hint.Own or MapEntityLayer.Hint.OwnFoot
                 or MapEntityLayer.Hint.Einfahrt or MapEntityLayer.Hint.Entladen
+                or MapEntityLayer.Hint.Einnahme or MapEntityLayer.Hint.Neutral
                 => Input.CursorShape.PointingHand,
             _ => Input.CursorShape.Arrow,
         };

@@ -5237,6 +5237,48 @@ public partial class MapEntityLayer : Node2D
     /// stand an zwei Stellen, und nur eine wurde geaendert).</para>
     ///
     /// <para>Gegenschalter <c>--entladeklasse-alt</c>.</para></summary>
+    /// <summary>
+    /// <b>DIE FORTBEWEGUNGSART EINER EINHEIT, DIE NICHT VON DER KARTE KOMMT</b>
+    /// — gebaut, gekauft oder vom Missionsskript gesetzt.
+    ///
+    /// <para>⚠⚠⚠ 08.09.2026, seine Meldung zur Nebenmission der Kampagne 6:
+    /// »bei der letzten untermission mit der Mine bekomme ich die 4
+    /// infanteristen und den forscher einfach nicht zur mine gelaufen. im
+    /// original laufen die bisschen dort ueber das huegel/steile gelaende,
+    /// unsere stoppen schon vor dem kleinen weg«.</para>
+    ///
+    /// <para>An allen drei Erzeugerstellen stand <c>ClassOf(-1, Fahrwerk)</c>.
+    /// Die <b>−1</b> ist die Klasse <c>+0x0a</c>, und <c>Can_go</c> verzweigt
+    /// ZUERST nach ihr (Tafel 0x40678C): mit −1 wird der Infanteriearm
+    /// @0x406178 nie erreicht, und jede gesetzte Einheit faehrt nach
+    /// FAHRZEUGregeln. Rauer Boden (<c>0xFFFD</c>) ist damit gesperrt.</para>
+    ///
+    /// <para><b>Gemessen an der Karte selbst</b> (map_06, Geländeausfuhr,
+    /// Flutfüllung vom Startpunkt (6,5) aus): für ein Fahrzeug sind
+    /// <b>3.123</b> Zellen erreichbar und <b>keine einzige</b> davon liegt bei
+    /// der Mine (52,3); für Fussvolk sind es <b>6.040</b> Zellen, darunter
+    /// <b>67</b> im Kasten um die Mine. Der Weg dorthin fuehrt ausschliesslich
+    /// ueber rauen Boden — genau das »huegel/steile gelaende«, das er
+    /// beschreibt.</para>
+    ///
+    /// <para>⭐ Die Klasse steckt schon im Satz: <see cref="TypeOfChassis"/>
+    /// gibt fuer Fahrwerk 148/149 die <b>1</b> (Infanterie) und fuer 150…158
+    /// die 4 bzw. 5 (Schiff) — dieselbe Zahl, die auch
+    /// <c>GameUnitType</c> an dieser Stelle bereits bekommt. Es fehlte nur,
+    /// sie AUCH fuer die Fortbewegungsart zu benutzen.</para>
+    ///
+    /// <para>Gegenschalter <c>--verstaerkungsklasse-alt</c>.</para>
+    /// </summary>
+    private static Simulation.NavGrid.MoveClass BewegungsklasseFuer(int propulsion, int chassis)
+        => Simulation.NavGrid.ClassOf(VerstaerkungsklasseAlt ? -1 : TypeOfChassis(propulsion),
+                                      chassis);
+
+    /// <summary><c>--verstaerkungsklasse-alt</c> — der Stand vor dem
+    /// 08.09.2026: eine gebaute, gekaufte oder vom Skript gesetzte Einheit
+    /// bekommt ihre Fortbewegungsart allein aus dem FAHRWERK, faehrt also auch
+    /// als Infanterist wie ein Fahrzeug und kommt nicht auf rauen Boden.</summary>
+    public static bool VerstaerkungsklasseAlt;
+
     private void BewegungsklasseSetzen(Entity e)
         => e.Move = e.GameUnitType >= 0
             ? Simulation.NavGrid.ClassOf(e.GameUnitType, e.Chassis)
@@ -18503,7 +18545,10 @@ public partial class MapEntityLayer : Node2D
             Rating28 = o.Experience,
             Chassis = d?.Derived.ChassisComponent ?? 0,
             GameUnitType = TypeOfChassis(o.UnitType > 0 ? o.UnitType : d?.Propulsion ?? 160),
-            Move = Simulation.NavGrid.ClassOf(-1, d?.Derived.ChassisComponent ?? 0),
+            // ⭐ 08.09.2026 — ueber die KLASSE, nicht nur das Fahrwerk;
+            // siehe BewegungsklasseFuer.
+            Move = BewegungsklasseFuer(o.UnitType > 0 ? o.UnitType : d?.Propulsion ?? 160,
+                                       d?.Derived.ChassisComponent ?? 0),
             Footprint = CellRect(_ox, _oy, at.X, at.Y, ElevOf(at.X, at.Y)),
         };
         if (d is { } d2 && InfantryFor(d2.Weapon, out int inf, out int iw))
@@ -27827,7 +27872,9 @@ public partial class MapEntityLayer : Node2D
             // singles out Ship, so the class barely touches how fast a unit
             // moves. The report "the AI's spiders move far too fast" is NOT
             // explained by it — see the handoff.
-            Move = Simulation.NavGrid.ClassOf(-1, d.Derived.ChassisComponent),
+            // ⭐ 08.09.2026 — siehe BewegungsklasseFuer: die -1 hier hat
+            // gebaute Infanterie zu Fahrzeugen gemacht.
+            Move = BewegungsklasseFuer(d.Propulsion, d.Derived.ChassisComponent),
             Footprint = CellRect(_ox, _oy, cell.Value.X, cell.Value.Y, ElevOf(cell.Value.X, cell.Value.Y)),
         };
         // Ein Fussoldat traegt seine Waffe aus infantry.json, nicht aus
@@ -27968,7 +28015,12 @@ public partial class MapEntityLayer : Node2D
         // 03.09.2026: nach den Aufwertungen DIESES Spielers gerechnet — siehe
         // Simulation/Aufwertung.cs, EntwurfFuer; Rueckfall --entwuerfe-global-alt.
         d = EntwurfFuer(player, d);
-        var move = Simulation.NavGrid.ClassOf(-1, d.Derived.ChassisComponent);
+        // ⭐⭐ 08.09.2026 — DAS IST DIE STELLE AUS SEINER MELDUNG. `space_in`
+        // setzt die vier Infanteristen und den Forscher der Nebenmission; mit
+        // der -1 waren sie Fahrzeuge und kamen nicht ueber den rauen Boden zur
+        // Mine. ⚠ Die Klasse wird HIER schon gebraucht, vor dem Satz: sie
+        // entscheidet auch, welchen freien Platz NearestFree ueberhaupt sucht.
+        var move = BewegungsklasseFuer(d.Propulsion, d.Derived.ChassisComponent);
         var cell = _nav.NearestFree(new Vector2I(col, row), move);
         if (cell == null)
         {
@@ -32652,7 +32704,7 @@ public partial class MapEntityLayer : Node2D
     /// dabei, weil das Original bei eigener INFANTERIE einen anderen Zeiger
     /// nimmt als bei allem anderen Eigenen — siehe
     /// <see cref="UI.GameCursors"/>.</summary>
-    public enum Hint { Ground, Own, OwnFoot, Enemy, Einfahrt, Entladen }
+    public enum Hint { Ground, Own, OwnFoot, Enemy, Einfahrt, Entladen, Einnahme, Neutral }
 
     /// <summary>Reads the cursor hint for a map position: something hostile
     /// under the pointer while one has a selection means the click attacks,
@@ -32720,7 +32772,88 @@ public partial class MapEntityLayer : Node2D
                 return Hint.Einfahrt;
             return !e.IsBuilding && e.GameUnitType == 1 ? Hint.OwnFoot : Hint.Own;
         }
+
+        // ⭐⭐⭐ 08.09.2026 — DER EINNAHMEZEIGER UND DAS HERRENLOSE GEBAEUDE.
+        //
+        // Seine zwei Meldungen: »was mich stoert, ist ein angriff icon ueber
+        // dem nachschubposten … das scheint mir ja eher eine neutrale
+        // einheit/gebaeude zu sein« und »es gibt sogar ein 'Einnahme Icon'
+        // fuer Gebaeude. Bei uns ist auch auf Gebaeuden wie Basis/Fabriken
+        // immer zuerst das Attack Icon.«
+        //
+        // Beides steht in der Zeigerwahl @0x4321xx..0x432940, und die ist jetzt
+        // gelesen. Drei Aussagen daraus:
+        //
+        //   1. @0x4323F5 — DER EINNAHMEZWEIG, und er kommt VOR allem anderen:
+        //        cl = byte[Besitzer + 40*Betrachter + 0x87B155]   ; Buendnisbyte
+        //        test cl,cl / jne  -> raus                        ; verbuendet: nichts
+        //        cmp word[0x4FA0C8], 8000 / jb  -> es ist eine EINHEIT
+        //          bl = byte[0x6E26D2 + 78*Einheit]               ; Klassenbyte +0x0A
+        //          test bl,bl / je  -> weiter                     ; NUR Klasse 0 (Fahrzeug)
+        //        dl = byte[0x542E18 + Zelle] ; cmp dl,0x63 / je   ; die TUERMARKE 99
+        //        cl = byte[0x542E19 + Zelle] ; cmp cl,0x63 / jne -> raus
+        //        dword[0x502AD4] := 6                             ; ZEIGERART 6
+        //      und Zeigerart 6 zeigt ueber die Tafel @0x4A9BEC das
+        //      ZEIGERBILD 10 (@0x4A9B89 `mov dl,0xA`) — ein eigenes Bild, nicht
+        //      das Fadenkreuz. Genau das »Einnahme Icon«, das er beschreibt.
+        //
+        //   2. @0x4328A1 — das FREMDE Gebaeude bekommt Zeigerart **10**, und
+        //      die faellt in der Tafel mit 2 und 7 auf `mov dl,2` zusammen:
+        //      ueber einem fremden Gebaeude ist das Angriffsbild richtig. Nur
+        //      eben NICHT auf der Tuerzelle, denn dort steht die 6 schon.
+        //
+        //   3. @0x4324ED — ein HERRENLOSES Gebaeude (Besitzer 255) bekommt
+        //      Zeigerart **1**, nicht 2: der Zweig prueft `cmp cl,0xff` und
+        //      laesst danach die Gebaeudeart 13 (Kraftwerk) durch. Ein Besitzer
+        //      255 hat gar keine Zeile in der Buendnistafel — die 40-Byte-Saetze
+        //      reichen nur bis Spieler 7.
+        //
+        // ⚠ Das aendert NUR das Bild. Der Angriffsbefehl auf ein herrenloses
+        // Gebaeude bleibt moeglich (IstAngriffsziel, 06.09.2026) — er hatte die
+        // herrenlosen Kraftwerke ausdruecklich zerlegen wollen.
+        //
+        // Gegenschalter --gebaeudezeiger-alt.
+        if (e.IsBuilding && !GebaeudezeigerAlt)
+        {
+            if (EinnahmezeigerGilt(e, mapPos)) return Hint.Einnahme;
+            if (e.Owner is < 0 or > 7) return Hint.Neutral;
+        }
         return _sel.Count > 0 ? Hint.Enemy : Hint.Ground;
+    }
+
+    /// <summary><c>--gebaeudezeiger-alt</c> — der Stand vor dem 08.09.2026:
+    /// ueber JEDEM fremden Gebaeude steht das Angriffsbild, auch ueber der
+    /// Tuer und auch ueber einem herrenlosen.</summary>
+    public static bool GebaeudezeigerAlt;
+
+    /// <summary>Die drei Bedingungen des Einnahmezweigs @0x4323F5 — fremd und
+    /// nicht verbuendet, ein FAHRZEUG (Klassenbyte +0x0A == 0) gewaehlt, und
+    /// die Maus auf der Tuermarke.</summary>
+    private bool EinnahmezeigerGilt(Entity b, Vector2 mapPos)
+    {
+        if (b.Owner == ViewPlayer || b.Owner is < 0 or > 7) return false;
+        if (ViewPlayer is < 0 or > 7) return false;
+        if (_haveAllies && _allied[ViewPlayer, b.Owner]) return false;
+        if (!AufDerTuerOderDarunter(b, mapPos)) return false;
+        foreach (int k in _sel)
+            if (k >= 0 && k < _entities.Count)
+            {
+                var t = _entities[k];
+                if (!t.IsBuilding && !t.IsProp && !t.Dead && t.Owner == ViewPlayer
+                    && t.GameUnitType == 0) return true;
+            }
+        return false;
+    }
+
+    /// <summary>Die Tuerzelle oder die Zelle darunter — <c>0x542E18</c> und
+    /// <c>0x542E19</c> liegen eine ZEILE auseinander (die Tafel ist
+    /// spaltenweise mit Schrittweite 1 je Zeile adressiert,
+    /// <c>Spalte&lt;&lt;8 + Zeile</c>).</summary>
+    private bool AufDerTuerOderDarunter(Entity b, Vector2 mapPos)
+    {
+        if (CellAt(mapPos) is not { } z) return false;
+        int tc = b.Col + b.DoorCol, tr = b.Row + b.DoorRow;
+        return z.X == tc && (z.Y == tr || z.Y == tr + 1);
     }
 
     /// <summary>Die vier Gebaeudearten mit Tor — Tafel <c>0x432A7C</c>, und

@@ -64,6 +64,13 @@ public static class GameCursors
     /// unglücklicherweise auf derselben Ziffer.</para></summary>
     public const int Einfahrt = 11;
 
+    /// <summary><b>Der EINNAHMEZEIGER</b> — Zeigerart 6 des Originals
+    /// (<c>@0x432478</c>) fuehrt ueber die Tafel <c>@0x4A9BEC</c> auf
+    /// <c>@0x4A9B89 mov dl,0xA</c>, also auf <b>Zeigerbild 10</b>.
+    /// Gemeldet am 08.09.2026: »es gibt sogar ein Einnahme Icon fuer
+    /// Gebaeude«.</summary>
+    public const int Einnahme = 10;
+
     /// <summary>
     /// Der ENTLADEZEIGER ueber einer Rampe — <b>Bild 16</b>.
     ///
