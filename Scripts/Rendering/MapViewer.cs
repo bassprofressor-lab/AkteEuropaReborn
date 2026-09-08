@@ -464,6 +464,7 @@ public partial class MapViewer : Node2D
         if (_routenfensterProbe) _entities.RoutenfensterProbeStart();
         if (_namenCheck) GD.Print(_entities.NamenCheck());
         if (_menueCheck) GD.Print(_entities.EinheitenmenueCheck());
+        if (_merkerProbe) GD.Print(_entities.ZeigermerkerProbe());
         if (_sellCheck) _entities.SellCheckStart();
         if (_shopCheckFlag) _entities.ShopCheckStart();
         if (_buyCheckFlag) _entities.BuyCheckStart();
@@ -1265,10 +1266,15 @@ public partial class MapViewer : Node2D
     /// der Leiste stand?</summary>
     private bool _menueCheck;
 
+    /// <summary><c>--zeigermerker-probe</c> — tun die fuenf Symbole etwas?
+    /// </summary>
+    private bool _merkerProbe;
+
     /// <summary><c>--doppelklick-check</c> — geht das Menue beim DOPPELKLICK
     /// wirklich auf?</summary>
     private bool _doppelklickCheck;
     private bool _doppelklickGelaufen;
+    private float _handUhr;
     private float _doppelklickUhr;
 
     /// <summary>
@@ -2000,6 +2006,7 @@ public partial class MapViewer : Node2D
             else if (a == "--routenfenster-probe") _routenfensterProbe = true;
             else if (a == "--namen-check") _namenCheck = true;
             else if (a == "--einheitenmenue-check") _menueCheck = true;
+            else if (a == "--zeigermerker-probe") _merkerProbe = true;
             else if (a == "--doppelklick-check") _doppelklickCheck = true;
             else if (a == "--fahrzeugname-alt") MapEntityLayer.FahrzeugnameAlt = true;
             else if (a == "--befehlsleiste-alt") BefehlsleisteAlt = true;
@@ -4950,6 +4957,31 @@ public partial class MapViewer : Node2D
                 ShowEnd(true, "MISSION ERFUELLT (--end-window)", record: false);
         }
 
+        // ⭐ 08.09.2026 — DIE HANDSTEUERUNG hat Vorrang vor der Kamera. Im
+        // Original schickt 0x433460 je Pfeiltaste Befehl 1 an die gesteuerte
+        // Einheit; solange sie laeuft, gehoeren die Pfeile ihr und nicht dem
+        // Ausschnitt. Siehe Simulation/Zeigermerker.cs.
+        if (_entities != null && _entities.HandsteuerungIdx >= 0)
+        {
+            _handUhr -= (float)delta;
+            if (_handUhr <= 0f)
+            {
+                int hx = 0, hy = 0;
+                if (Input.IsKeyPressed(Key.Left)) hx -= 1;
+                if (Input.IsKeyPressed(Key.Right)) hx += 1;
+                if (Input.IsKeyPressed(Key.Up)) hy -= 1;
+                if (Input.IsKeyPressed(Key.Down)) hy += 1;
+                if (hx != 0 || hy != 0)
+                {
+                    // ⚠ Eine Zelle je Viertelsekunde: schneller waere ein
+                    // Fahrbefehl je Bild, und die Wegsuche liefe heiss.
+                    _handUhr = 0.25f;
+                    _entities.HandsteuerungSchritt(hx, hy);
+                }
+            }
+            return;
+        }
+
         // keyboard camera panning (left mouse is the selection box now)
         var dir = Vector2.Zero;
         if (Input.IsKeyPressed(Key.Left) || Input.IsKeyPressed(Key.A)) dir.X -= 1;
@@ -5030,7 +5062,17 @@ public partial class MapViewer : Node2D
                         // auf der Hauptkarte. Der Vorrang ist derselbe wie beim
                         // Setzmodus eine Zeile weiter unten: sonst waehlte der
                         // Klick eine Einheit an und das Fenster bliebe leer.
-                        if (_leftDown && !_boxSelect && _entities.RouteWahlModus != 0)
+                        // ⭐ 08.09.2026 — DER ZEIGERMERKER wird beim Klick
+                        // VERBRAUCHT (@0x437567). Er geht vor, sonst waehlte der
+                        // Klick eine Einheit an und der Menuedruck verfiele.
+                        // Siehe Simulation/Zeigermerker.cs.
+                        if (_leftDown && !_boxSelect && _entities.Zeigermerker >= 0
+                            && _entities.MerkerKlick(GetGlobalMousePosition()))
+                        {
+                            if (_entities.ZeigerNote.Length > 0)
+                                _entities.Say(_entities.ZeigerNote);
+                        }
+                        else if (_leftDown && !_boxSelect && _entities.RouteWahlModus != 0)
                             _entities.RouteKlickAufGebaeude(GetGlobalMousePosition());
                         else if (_leftDown && !_boxSelect && _entities.PlacementMode != 0 &&
                             _entities.CellAt(GetGlobalMousePosition()) is { } bc)
@@ -5065,6 +5107,16 @@ public partial class MapViewer : Node2D
                         // hat für den Abbruch keinen gelesenen Weg); ohne sie
                         // säße der Spieler in einem Modus fest, den nur ein
                         // gültiger Bauplatz wieder beendet.
+                        // ⚠ Ein Rechtsklick bricht auch den Zeigermerker ab —
+                        // unsere Zutat, wie beim Setzmodus: das Original hat
+                        // fuer den Abbruch keinen gelesenen Weg.
+                        if (_rightDown && !_rightDrag && _entities.Zeigermerker >= 0)
+                        {
+                            _entities.MerkerAbbrechen();
+                            _entities.Say(_entities.ZeigerNote);
+                            _rightDown = false; _rightDrag = false;
+                            break;
+                        }
                         if (_rightDown && !_rightDrag && _entities.PlacementMode != 0)
                         {
                             _entities.CancelPlacement();

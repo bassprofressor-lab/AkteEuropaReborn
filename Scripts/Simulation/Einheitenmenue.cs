@@ -186,11 +186,25 @@ public partial class MapEntityLayer : Node2D
                 return BuildOrderNote.Length > 0 ? BuildOrderNote : "";
             case CodeInfo:
                 return "Die Werte stehen im Bedienblock links unten.";
+
+            // ---- die ZEIGERMERKER, siehe Simulation/Zeigermerker.cs ------
+            case CodeAngreifen:
+            case CodeBewegen:
+                return MerkerSetzen(code);
+            case CodeSelbstzerstoerung:
+                return SelbstzerstoerungAusfuehren();
+            case CodeHandsteuerung:
+                return HandsteuerungUmschalten();
+            case CodeBeschuetzen:
+                // ⚠ Merker A loest im naechsten Takt BEFEHL 12 auf der
+                // gewaehlten Einheit aus (revier3 §3.2). Was 12 TUT, ist
+                // nicht gelesen — und eine erfundene Wirkung waere schlimmer
+                // als keine. Der Merker ist gebaut, die Wirkung fehlt.
+                return "»Beschuetzen« ist Befehl 12, und dessen Behandler ist "
+                     + "nicht gelesen — hier passiert darum (noch) nichts.";
+
             default:
-                // ⚠ Ehrlich statt still: das sind die Zeigermerker des
-                // Originals, und den Modus gibt es bei uns nicht.
-                return $"»{MenueWort(code)}« ist noch nicht gebaut "
-                     + "(im Original ein Zeigermodus).";
+                return $"»{MenueWort(code)}« ist noch nicht gebaut.";
         }
     }
 }
