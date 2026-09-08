@@ -424,7 +424,7 @@ public partial class MapEntityLayer
 
         // Was jede lebende, bewegliche Einheit DECKT — Zelle und Vormerkung.
         var deckung = new Dictionary<(int, int), List<int>>();
-        int mitRumpf = 0, fussvolk = 0;
+        int mitRumpf = 0, fussvolk = 0, drinnen = 0;
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
@@ -445,6 +445,13 @@ public partial class MapEntityLayer
             // damit die Ausnahme sichtbar bleibt und nicht zur stillen Luecke
             // wird.
             if (e.Infantry >= 0) { fussvolk++; continue; }
+            // ⚠⚠ 08.09.2026 — WER IM GEBAEUDE STEHT, DECKT NICHTS. Ein
+            // Transporter im Umschlag (UKOL 54) ist aus dem Gitter genommen und
+            // traegt seine alte Lage nur noch als Erinnerung; ohne diese Zeile
+            // meldete der Abgleich ihn als »Loch« — gemessen auf Kampagne 5,
+            // (38,10). Dasselbe gilt fuer eine untergestellte Einheit; die fiel
+            // bisher nur nicht auf, weil sie auf der Tuerzelle steht.
+            if (Untergestellt(e) || e.Ukol == UkolImGebaeude) { drinnen++; continue; }
             int seite = _nav.HullOf(i);
             if (seite > 1) mitRumpf++;
             var anker = new List<Vector2I> { new(e.Col, e.Row) };
@@ -507,7 +514,7 @@ public partial class MapEntityLayer
         var sb = new System.Text.StringBuilder($"  belegungsabgleich ({wann})\n");
         sb.Append($"    {deckung.Count} gedeckte Zellen von {mitRumpf} Einheiten mit "
                 + $"Rumpf > 1, {fest} Zellen von Festem und {fussvolk} Fusssoldaten "
-                + "(beides nicht bewertet)\n");
+                + $"und {drinnen} im Gebaeude (nicht bewertet)\n");
         sb.Append($"    Phantome (gestempelt, niemand deckt): {phantome.Count}"
                 + (phantome.Count > 0 ? "  ⚠⚠ " + Kurz(phantome) : "  ✔") + "\n");
         sb.Append($"    Loecher (gedeckt, kein Stempel): {loecher.Count}"

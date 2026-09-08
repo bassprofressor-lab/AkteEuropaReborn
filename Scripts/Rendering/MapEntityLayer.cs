@@ -11912,6 +11912,44 @@ public partial class MapEntityLayer : Node2D
     // absetzt. Sie stehen hier und nicht in `MissionScript`, weil dort keine
     // Entitaeten liegen — das Skript kennt nur Zahlen.
 
+    /// <summary>
+    /// <b>DER NAECHSTE FREIE PLATZ IM BLOCK DIESES SPIELERS</b> —
+    /// <c>spieler*1000 + k</c>.
+    ///
+    /// <para>⚠⚠⚠ 08.09.2026, und es ist der Fehler des Tages. Seine Meldung:
+    /// »ich sehe die transporter vom gegner, aber die scheinen die
+    /// missionsskripte auszuloesen«. Und genau so war es: eine GEBAUTE Einheit
+    /// bekam <c>Slot = -1</c>, und der Missionshaken <see cref="MapEntityLayer"/>
+    /// beantwortet <c>imap(spalte, zeile)</c> mit genau diesem Platz. Die
+    /// Griffrechnung des Originals ist <c>1000*spieler + k</c>, also heisst
+    /// <c>&lt; 1000</c> »hier steht eine Einheit von Spieler 0«.
+    /// <b>−1 ist kleiner als 1000.</b></para>
+    ///
+    /// <para>Gemessen auf Kampagne 5, 150 s, A/B mit
+    /// <c>--keine-transportrouten</c>: MIT den neuen KI-Wagen feuern die
+    /// Missionstexte <b>32, 33 und 34</b> (Regeln 1..3, Bedingung
+    /// <c>imap(35,29) &lt; 1000</c> usw.), OHNE sie feuert keiner davon. Die
+    /// Texte gehoeren zum Vorruecken des SPIELERS — ein Wagen des Gegners hat
+    /// sie ausgeloest.</para>
+    ///
+    /// <para>⭐ Der Platz ist im Original kein Schmuck: der Besitzer wird aus
+    /// ihm ABGELEITET (<c>slot/1000</c>), das Skript spricht Einheiten darueber
+    /// an, und die Belegungskarte gibt ihn zurueck. Wer eine Einheit ohne Platz
+    /// auf die Karte stellt, stellt eine Einheit von Spieler 0 dorthin.</para>
+    /// </summary>
+    private int NaechsterFreierPlatz(int owner)
+    {
+        if (owner is < 0 or > 7) return -1;
+        int basis = owner * 1000;
+        var belegt = new HashSet<int>();
+        foreach (var q in _entities)
+            if (!q.IsBuilding && !q.IsProp && q.Slot >= basis && q.Slot < basis + 1000)
+                belegt.Add(q.Slot);
+        for (int k = 0; k < 1000; k++)
+            if (!belegt.Contains(basis + k)) return basis + k;
+        return -1;                      // 1000 Einheiten: dann gibt es keinen
+    }
+
     /// <summary>Kontostand eines Spielers. `get_money(spieler)` @0x4CF5E0 liest
     /// `dword[0xA9C600 + 4*spieler]`; hier ist es <c>_money</c>.</summary>
     private int Money(int player) => player is >= 0 and <= 7 ? _money[player] : 0;
@@ -12631,6 +12669,11 @@ public partial class MapEntityLayer : Node2D
                     int occ = _nav.OccupantAt(col, row);
                     if (occ < 0 || occ >= _entities.Count) return 0xFFFE;
                     var e = _entities[occ];
+                    // ⚠ Ein Platz unter 0 ist KEIN Spieler 0. Seit dem
+                    // 08.09.2026 bekommt jede erzeugte Einheit einen echten
+                    // Platz (NaechsterFreierPlatz); sollte doch einmal keiner
+                    // da sein, meldet die Zelle lieber FREI als »Spieler 0«.
+                    if (e.Slot < 0) return 0xFFFE;
                     return e.IsBuilding ? 8000 + e.Slot : e.Slot;
                 };
                 // ⚠ add_target ist die ZIELLISTE DES COMPUTERSPIELERS, kein
@@ -18442,7 +18485,9 @@ public partial class MapEntityLayer : Node2D
         int hp = o.Energie > 0 ? o.Energie : 100;
         var u = new Entity
         {
-            Slot = -1, Col = at.X, Row = at.Y, Owner = owner, Team = owner,
+            // ⭐ 08.09.2026 — MIT PLATZ, siehe NaechsterFreierPlatz.
+            Slot = NaechsterFreierPlatz(owner), Col = at.X, Row = at.Y,
+            Owner = owner, Team = owner,
             UnitType = o.UnitType > 0 ? o.UnitType : d?.Propulsion ?? 160,
             Name = d is { Name.Length: > 0 } dn ? dn.Name : $"Entwurf {o.Design}",
             Hp = hp, HpMax = hp, Attack = o.Attack, Defence = o.Defence,
@@ -20818,7 +20863,8 @@ public partial class MapEntityLayer : Node2D
         var cell = (Vector2I?)start;
         var u = new Entity
         {
-            Slot = -1, Col = cell.Value.X, Row = cell.Value.Y,
+            Slot = NaechsterFreierPlatz(dock.Owner),
+            Col = cell.Value.X, Row = cell.Value.Y,
             Owner = dock.Owner, Team = dock.Team, UnitType = d.Chassis,
             // @0x4B2B20 schreibt +0x18 des Entwurfs nach +0x0d der Einheit —
             // ohne das hat ein vom Stapel gelaufenes Schiff kein Bild, und die
@@ -27738,7 +27784,8 @@ public partial class MapEntityLayer : Node2D
             : _ammoCap.TryGetValue(TurretOf(d.Weapon), out var cap) ? cap : 0;
         var u = new Entity
         {
-            Slot = -1, Col = cell.Value.X, Row = cell.Value.Y,
+            Slot = NaechsterFreierPlatz(e.Owner),
+            Col = cell.Value.X, Row = cell.Value.Y,
             Owner = e.Owner, Team = e.Team, UnitType = d.Propulsion,
             Hp = hp, HpMax = hp, Elev = ElevOf(cell.Value.X, cell.Value.Y),
             Name = d.Name, Equipment = d.Equip, Weapon = TurretOf(d.Weapon),
