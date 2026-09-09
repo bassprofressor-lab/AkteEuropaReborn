@@ -365,6 +365,39 @@ public partial class MapEntityLayer
             Footprint = CellRect(_ox, _oy, col, row, _nav.ElevAt(col, row)),
         };
 
+        // ⭐⭐ 09.09.2026 — DER STROMBEDARF EINES NEUBAUS.
+        //
+        // Gefunden beim Lesen der Meldung »Nicht genug Energie« (bug-144, die
+        // sich als RICHTIG erwies) — und dabei fiel dieser hier auf: ein
+        // SELBSTGEBAUTES Werk bekam gar keinen Bedarf und blieb auf der Vorgabe
+        // 1/1, waehrend eine Anlage AUS DER KARTE ihre Werte aus sec24/sec28
+        // mitbringt (CwmData: +0x03 -> EffNum, +0x04 -> EffDen, +0x05 ->
+        // ProdSpeed). Das Original schreibt sie beim Neubau ausdruecklich hin:
+        //
+        //   Fabrik (Satz 0x87A2C0, Schritt 14):
+        //     0x43BAC6  byte[+0x02] = 0        ; Zustand
+        //     0x43BACD  byte[+0x03] = 0x18     ; 24  wirksam
+        //     0x43BAD4  byte[+0x04] = 0x1F     ; 31  Bedarf
+        //     0x43BADB  byte[+0x05] = 5        ; Tempo
+        //   Mine (Satz 0x878AD0, Schritt 18):
+        //     0x43BC69  byte[+0x02] = 0
+        //     0x43BC6F  byte[+0x03] = 0x18     ; 24
+        //     0x43BC76  byte[+0x04] = 0x1C     ; 28
+        //
+        // ⚠ Es sind ZWEI Wirkungen, nicht eine: der Bedarf geht in die
+        // Stromabrechnung (0x440270), und das Verhaeltnis wirksam/Bedarf ist
+        // zugleich die BREMSE des Fertigungsschritts (`rand()%100 > pct`
+        // @0x43DF33). Mit 1/1 lief ein eigenes Werk also immer auf 100 % und
+        // zaehlte fuer den Strom fast gar nicht.
+        if (!NeubaustromAlt)
+            switch (typ)
+            {
+                case 2 or 3 or 4:                       // Waffen/Fahrwerk/Spezial
+                    bld.EffNum = 24; bld.EffDen = 31; bld.ProdSpeed = 5; break;
+                case 10 or 15:                          // Mine, Feld-Rohstoffmine
+                    bld.EffNum = 24; bld.EffDen = 28; break;
+            }
+
         // Eine neu gebaute Feld-Rohstoffmine bekommt, was IM BODEN liegt — die
         // `menge` aus `add_terra_place(spalte, zeile, menge)`. Sie stand bisher
         // nur in der Bauplatzprüfung; der Förderschritt (`e.Deposit > 0`) lief
@@ -685,4 +718,9 @@ public partial class MapEntityLayer
         }
         return sb.ToString().TrimEnd();
     }
+    /// <summary><c>--neubaustrom-alt</c> — der Stand vor dem 09.09.2026: ein
+    /// selbstgebautes Werk bekommt keinen Strombedarf und bleibt auf 1/1.
+    /// Der Gegenschalter zu der Behebung in <c>PlaceBuilding</c>.</summary>
+    public static bool NeubaustromAlt;
+
 }

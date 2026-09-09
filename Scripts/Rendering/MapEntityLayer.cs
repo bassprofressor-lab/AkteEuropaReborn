@@ -10589,18 +10589,25 @@ public partial class MapEntityLayer : Node2D
             {
                 // ⚠ Zwei sehr verschiedene Faelle, und ohne die Zahl sind sie nicht
                 // zu trennen: gar kein Feind auf der Karte, oder einer ausser Reichweite.
-                float naechster = float.MaxValue; int naechsterSlot = -1;
+                float naechster = float.MaxValue; int naechsterSlot = -1, naechsterSp = -1;
                 for (int j = 0; j < _entities.Count; j++)
                 {
                     if (i == j) continue;
                     var t2 = _entities[j];
                     if (!IsHostile(e, t2)) continue;
                     float d2 = CellDistance(e, t2);
-                    if (d2 < naechster) { naechster = d2; naechsterSlot = t2.Slot; }
+                    // ⚠ 09.09.2026 — den BESITZER mitschreiben. Ohne ihn nennt
+                    // die Zeile nur einen Platz, und ein Platz ohne Spieler ist
+                    // nicht zu deuten: seine Frage »bekriegt sich die KI
+                    // selber?« war aus dieser Zeile schlicht nicht zu
+                    // beantworten.
+                    if (d2 < naechster)
+                    { naechster = d2; naechsterSlot = t2.Slot; naechsterSp = t2.Owner; }
                 }
                 e.Schussgrund = naechsterSlot < 0
                     ? $"kein Feind auf der Karte (Reichweite {range:0.0})"
-                    : $"kein Ziel im Ring: naechster Feind Platz {naechsterSlot} in "
+                    : $"kein Ziel im Ring: naechster Feind Platz {naechsterSlot} "
+                    + $"(Sp{naechsterSp}) in "
                     + $"{naechster:0.0} Zellen, Reichweite {range:0.0}, "
                     + $"Mindestreichweite {RangeMinOf(e):0.0}";
             }
@@ -16513,6 +16520,269 @@ public partial class MapEntityLayer : Node2D
         if (IsSupplyDepot(e)) FuelleAngebot(e, st);
         return st;
     }
+
+    /// <summary>
+    /// <b>Die Zeilen der GEBÄUDELISTE</b> (Fensterart 27), in der Ordnung und
+    /// mit dem Filter des Originals — siehe <see cref="UI.BuildingListView"/>.
+    ///
+    /// <para><b>Der Filter steht @0x47BBF2…0x47BC12</b> und ist wörtlich
+    /// übernommen: eine Gebäudeart kommt in die Liste, wenn sie <b>nicht</b> 0,
+    /// 8, 11, 13 oder 14 ist und <b>≤ 16</b> — und wenn das Gebäude dem
+    /// Betrachter gehört. ⚠ Art 11 (Hafen) fällt heraus, obwohl der Namensgeber
+    /// <c>0x459110</c> ein Präfix für sie führt: das Original zeigt sie nicht.
+    /// ⚠ UNSERE Zutat sind nur <c>IsProp</c>, <c>Dead</c> und
+    /// <c>NoStructure</c> — Sätze, die es beim Original in dieser Form nicht
+    /// gibt und die auch <see cref="MinenIndex"/> schon aussortiert.</para>
+    ///
+    /// <para><b>Welche Lagerspalte eine Art zeigt</b>, steht ebenfalls im
+    /// Zeichner (Tafeln @0x47C4D0, @0x47C4F4, @0x47C51C, @0x47C544): Waffen bei
+    /// 1/2/6/9/12, Fahrwerk bei 1/3/6/9/12, Spezial bei 1/4/6/9/12, Terranium
+    /// bei 2/3/4/6/10/12/15. Wo eine Art ihre Spalte nicht zeigt, steht −1 —
+    /// <b>nicht 0</b>: »zeigt nichts« und »hat nichts« sind zwei verschiedene
+    /// Aussagen, und genau daran ist am 08.09. schon einmal ein Zeigermerker
+    /// gescheitert (bug-117).</para>
+    ///
+    /// <para><b>Die Statuswörter sind die des Originals</b> (0x502178 usw.),
+    /// und auch die Zuordnung Zustandszahl → Wort: Basis und Flughafen haben
+    /// vier Zustände, Fabriken und Minen fünf, und die Mine sagt bei Zustand 0
+    /// <b>»Aushau«</b> — der Tippfehler steht so in der EXE (0x502170) und
+    /// bleibt. ⚠ UNSER Weg dorthin ist ein anderer: das Original liest den
+    /// Zustand aus typeigenen Laufzeittafeln, wir aus
+    /// <see cref="Entity.State"/>.</para>
+    /// </summary>
+    public List<UI.BuildingListView.Zeile> GebaeudelisteZeilen()
+    {
+        var aus = new List<UI.BuildingListView.Zeile>();
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var b = _entities[i];
+            if (!b.IsBuilding || b.IsProp || b.Dead || b.NoStructure) continue;
+            if (b.Owner != ViewPlayer) continue;
+            int t = b.BType;
+            if (t is 0 or 8 or 11 or 13 or 14 || t > 16) continue;   // @0x47BBF2
+            aus.Add(new UI.BuildingListView.Zeile
+            {
+                Name = BuildingName(b),
+                Hp = b.Hp, HpMax = b.HpMax,
+                Status = GebaeudeStatuswort(t, b.State),
+                StockW = t is 1 or 2 or 6 or 9 or 12 ? b.StockW : -1,
+                StockF = t is 1 or 3 or 6 or 9 or 12 ? b.StockF : -1,
+                StockS = t is 1 or 4 or 6 or 9 or 12 ? b.StockS : -1,
+                StockT = t is 2 or 3 or 4 or 6 or 10 or 12 or 15 ? b.StockT : -1,
+                Slot = b.Slot,
+            });
+        }
+        return aus;
+    }
+
+    /// <summary>
+    /// <b>Die Zeilen der EINHEITENLISTE</b> (Fensterart 22), je Reiter —
+    /// 0 Roboter, 1 Schiffe, 2 Flugzeuge. Siehe <see cref="UI.UnitListView"/>.
+    ///
+    /// <para><b>Der Filter des Originals</b> (@0x476DCB, @0x4777D0, @0x4780B8)
+    /// hängt am Klassenbyte <c>+0x0A</c>: Roboter sind <c>&lt; 4</c>, Schiffe
+    /// 4 oder 5, Flugzeuge stehen in einem eigenen Satzfeld. ⚠ <b>Dieses Byte
+    /// führen wir nicht als Feld</b> — wir haben stattdessen
+    /// <see cref="Entity.Move"/>, und die Weiche lautet darum »Schiff oder
+    /// nicht«. Das ist UNSER Weg zu derselben Einteilung, nicht die Lesung.</para>
+    ///
+    /// <para>⚠⚠ <b>BERICHTIGUNG 09.09.2026 nachmittags.</b> Hier stand, das
+    /// Original stelle mit seinen zwei Durchgängen (<c>word[+0x3E] ≥ 200</c>
+    /// @0x476E17, dann <c>&lt; 200</c> @0x476E97) die »eigenen Erfindungen nach
+    /// oben«. <b>Das war falsch.</b> Die Namen für <c>≥ 200</c> stehen in
+    /// <b>sec36</b> der Kartendatei (500 Sätze à 21 Byte ab Typ 200, virtuelle
+    /// Basis <c>0x82F728</c>), und die ist in <b>allen 36 Kartendateien und in
+    /// <c>game.007</c> leer</b> — <b>keine einzige Karteneinheit hat
+    /// <c>+0x3E ≥ 200</c></b>. Die drei einzigen Schreiber von <c>+0x3E</c>
+    /// (<c>0x4B1AA3</c>, <c>0x4B3659</c>, <c>0x4B2D65</c>) schreiben den
+    /// Entwurfsindex, der immer unter 200 liegt. Der obere Durchgang ist in der
+    /// Auslieferung <b>toter Code</b>; eigene Entwürfe liegen auf 2…40, und die
+    /// Erfindung ändert Bauteile, nicht Einheitentypen. Es gibt hier also
+    /// nichts zu sortieren — die Kartenreihenfolge ist keine Abweichung.</para>
+    ///
+    /// <para><b>−1 heisst »diese Spalte zeigt das Original hier nicht«</b>, und
+    /// das ist etwas anderes als 0 (bug-117). Munition und Sprit fehlen im
+    /// Original der Infanterie (<c>+0x0A ≠ 1</c> @0x477457, @0x477606); bei uns
+    /// entscheidet, ob es überhaupt einen Höchstwert gibt.</para>
+    /// </summary>
+    public List<UI.UnitListView.Zeile> EinheitenlisteZeilen(int reiter)
+    {
+        var aus = new List<UI.UnitListView.Zeile>();
+        if (reiter == 2)
+        {
+            for (int i = 0; i < _special.Count; i++)
+            {
+                var a = _special[i];
+                // ⚠ 09.09.2026: DER TYPFILTER FEHLTE. Das Original prueft
+                // ZUERST `byte[+0x08] != 0` (@0x4780E0) und erst dann den
+                // Besitzer (@0x4780EA) — ein Satz ohne Typ ist ein leerer
+                // Flugzeugplatz, kein Flugzeug. Ohne diese Zeile stand auf
+                // Kampagne 14 eine Zeile »Art 0« mit 0/0 in der Liste, und der
+                // Pruefstand hat sie gefunden.
+                if (a.Dead || a.Kind == 0 || a.Owner != ViewPlayer) continue;
+                aus.Add(new UI.UnitListView.Zeile
+                {
+                    // ⚠ KEIN Rangzeichen bei den Flugzeugen — das Original ruft
+                    // 0x4649F0 nur in den zwei anderen Bloecken.
+                    Rang = -1,
+                    Name = a.Name.Length > 0 ? a.Name
+                         : a.TypeName.Length > 0 ? a.TypeName : AirKindName(a.Kind),
+                    Hp = a.Hp, HpMax = a.HpMax,
+                    Ammo = a.AmmoMax > 0 ? a.Ammo : -1,
+                    AmmoMax = a.AmmoMax > 0 ? a.AmmoMax : -1,
+                    Fuel = a.FuelMax > 0 ? a.Fuel : -1,
+                    FuelMax = a.FuelMax > 0 ? a.FuelMax : -1,
+                    Index = -1,
+                });
+            }
+            return aus;
+        }
+
+        bool schiffe = reiter == 1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || e.NoStructure) continue;
+            if (e.Owner != ViewPlayer) continue;
+            bool istSchiff = e.Move == Simulation.NavGrid.MoveClass.Ship;
+            if (istSchiff != schiffe) continue;
+
+            // ⚠ ComponentPLAIN, nicht ComponentLabel: die Klammer » (n)«
+            // gehoert den Bauteillisten des Erstellungsfensters. Die
+            // Einheitenliste kopiert bei 0x4773FF nur den Namen.
+            string fahrwerk = e.Comp0F != 0 ? UI.UnitStatBook.ComponentPlain(e.Comp0F) : "";
+            string verbess = !schiffe && e.Equipment != 0
+                           ? UI.UnitStatBook.ComponentPlain(e.Equipment) : "";
+            aus.Add(new UI.UnitListView.Zeile
+            {
+                Rang = e.Rating28,
+                Name = LabelOf(e),
+                Hp = e.Hp, HpMax = e.HpMax,
+                Aufbauteil = MountName(e),
+                Fahrwerk = fahrwerk.StartsWith('?') ? "" : fahrwerk,
+                Verbesserung = verbess.StartsWith('?') ? "" : verbess,
+                Ammo = e.AmmoMax > 0 ? e.Ammo : -1,
+                AmmoMax = e.AmmoMax > 0 ? e.AmmoMax : -1,
+                Fuel = e.FuelMax > 0 ? e.Fuel : -1,
+                FuelMax = e.FuelMax > 0 ? e.FuelMax : -1,
+                Index = i,
+            });
+        }
+        return aus;
+    }
+
+    /// <summary>Wo die Einheit mit diesem Listenplatz steht — für den Sprung
+    /// aus der Einheitenliste.</summary>
+    public Vector2? EinheitenPunkt(int index)
+        => index >= 0 && index < _entities.Count ? _entities[index].Pos : null;
+
+    /// <summary>
+    /// <b>Eine Einheit aus der Liste heraus ANWÄHLEN</b> — was der Doppelklick
+    /// in Fensterart 22 tut (09.09.2026, <c>berichte/fensterlisten-fable-2.md</c>).
+    ///
+    /// <para>Das Original hebt erst die bisherige Anwahl auf (<c>0x433010</c>,
+    /// <c>word[0x4FA0C8]</c>) und wählt dann über <c>0x4331E0</c> an — <b>aber
+    /// nur, wenn <c>byte[+0x14] &lt; 0x2D</c></b> (@0x44BE53). Das ist UKOL, der
+    /// Auftragszustand, bei uns <see cref="Entity.Ukol"/>. ⚠ <b>Was die
+    /// Schwelle 45 bedeutet, ist ungelesen</b> — der Leser hält »im Bau oder
+    /// zerstört« für wahrscheinlich, belegt ist es nicht. Wir bauen die
+    /// Schwelle trotzdem nach: eine gelesene Bedingung wegzulassen, weil man
+    /// ihren Sinn nicht kennt, hiesse sie zu überstimmen. Gegenschalter
+    /// <see cref="ListenanwahlOhneSchwelle"/>.</para>
+    /// </summary>
+    /// <returns>false, wenn der Platz nicht taugt oder die Schwelle greift.</returns>
+    public bool EinheitAnwaehlen(int index)
+    {
+        if (index < 0 || index >= _entities.Count) return false;
+        var e = _entities[index];
+        if (e.Dead || e.IsBuilding) return false;
+        if (!ListenanwahlOhneSchwelle && e.Ukol >= 0x2D) return false;   // @0x44BE53
+        _sel.Clear();
+        _sel.Add(index);
+        _selected = index;
+        SetPrimary();
+        return true;
+    }
+
+    /// <summary><c>--listenanwahl-ohne-schwelle</c> — die Schwelle
+    /// <c>UKOL &lt; 0x2D</c> des Originals übergehen. Der Gegenschalter zu einer
+    /// Bedingung, deren Sinn wir NICHT gelesen haben.</summary>
+    public static bool ListenanwahlOhneSchwelle;
+
+    /// <summary>
+    /// Was der Filter der Gebäudeliste WEGGELASSEN hat, nach Art gezählt — für
+    /// <c>--gebaeudeliste-check</c>.
+    ///
+    /// <para>⚠ Ohne diese Zahl misst der Prüfstand nur, dass eine Liste
+    /// entstanden ist, nicht ob der FILTER stimmt. Eine Liste, die alles zeigt,
+    /// sähe genauso gesund aus.</para>
+    /// </summary>
+    public string GebaeudelisteProbe()
+    {
+        int eigene = 0, gezeigt = 0;
+        var weg = new SortedDictionary<int, int>();
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var b = _entities[i];
+            if (!b.IsBuilding || b.IsProp || b.Dead || b.NoStructure) continue;
+            if (b.Owner != ViewPlayer) continue;
+            eigene++;
+            int t = b.BType;
+            if (t is 0 or 8 or 11 or 13 or 14 || t > 16)
+            {
+                weg[t] = weg.TryGetValue(t, out int n) ? n + 1 : 1;
+                continue;
+            }
+            gezeigt++;
+        }
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"eigene Gebaeude {eigene}, davon gezeigt {gezeigt}, "
+                + $"vom Filter weg {eigene - gezeigt}");
+        if (weg.Count > 0)
+        {
+            sb.Append(" (Arten ");
+            foreach (var kv in weg) sb.Append($"{kv.Key}x{kv.Value} ");
+            sb.Append(')');
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>Wo ein Gebäude mit diesem Platz steht — für den Sprung aus der
+    /// Gebäudeliste. Null, wenn es den Platz nicht gibt.</summary>
+    public Vector2? GebaeudePunkt(int slot)
+    {
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var b = _entities[i];
+            if (b.IsBuilding && !b.Dead && b.Slot == slot) return b.Pos;
+        }
+        return null;
+    }
+
+    /// <summary>Das Statuswort der Gebäudeliste, wörtlich aus der EXE. Leer,
+    /// wo das Original für diese Art keines zeigt (5, 6, 7, 12, 16).</summary>
+    private static string GebaeudeStatuswort(int bType, int state) => bType switch
+    {
+        // Basis (0x878E5A) und Flughafen (0x87943A): vier Zustaende
+        1 or 9 => state switch
+        {
+            1 => "Reparieren", 2 => "Ausbau", 3 => "Forschen", _ => "Aktiv",
+        },
+        // Fabriken (0x87A2C2): fuenf
+        2 or 3 or 4 => state switch
+        {
+            1 => "Angehalten", 2 => "Reparieren", 3 => "Ausbau",
+            4 => "Verbessern", _ => "Produktion",
+        },
+        // Mine (0x878AD2): fuenf, und die Null heisst »Aushau« (0x502170) —
+        // der Tippfehler des Originals, nicht unserer.
+        10 or 15 => state switch
+        {
+            1 => "Angehalten", 2 => "Reparieren", 3 => "Ausbau",
+            4 => "Verbessern", _ => "Aushau",
+        },
+        _ => "",
+    };
 
     /// <summary>
     /// ⭐⭐ <b>DAS ANGEBOT DES NACHSCHUBPOSTENS</b> — die zwei Spalten des
@@ -27679,9 +27949,76 @@ public partial class MapEntityLayer : Node2D
     /// Einheit soll den Schritt TUN, damit sie dabei ihre Blickrichtung dreht
     /// und nichts überspringt. Findet sie keinen Weg, bleibt sie stehen — das
     /// ist kein Fehler, sondern eine volle Umgebung.</para></summary>
+    /// <summary>
+    /// <b>Das Ziel, auf das das Original eine austretende Einheit schickt</b>
+    /// (09.09.2026, <c>berichte/tuerauslass-fable.md</c>).
+    ///
+    /// <para>Der Gebäude-Tick gibt ihr <b>sofort</b> einen Marschbefehl, sobald
+    /// sie herauskommt — sie bleibt nicht stehen:</para>
+    /// <code>
+    ///   Basis @0x43DE12  0x40B070(Einheit, x + rand%3,     y + 5 − rand%3, 0)
+    ///   Depot @0x40B016  0x40AFE0        (x + 2 − rand%5,  y + 5 − rand%3)
+    /// </code>
+    /// <para>⚠ Der Würfel ist der der SIMULATION
+    /// (<see cref="Simulation.Determinism"/>), nicht der der Oberfläche — ein
+    /// Netzspiel liefe sonst auseinander.</para>
+    /// </summary>
+    private Vector2I AustrittsZiel(Entity b, bool depot)
+    {
+        int dc = b.Col + b.DoorCol, dr = b.Row + b.DoorRow;
+        int x = depot ? dc + 2 - Simulation.Determinism.Roll(5)
+                      : dc + Simulation.Determinism.Roll(3);
+        int y = dr + 5 - Simulation.Determinism.Roll(3);
+        return new Vector2I(x, y);
+    }
+
+    /// <summary>
+    /// <b>Steht die Tür frei genug, um jemanden herauszulassen?</b> — die
+    /// Bedingung des Originals @0x43E1C6: <b>die Türzelle UND die Zelle
+    /// DARUNTER</b> müssen frei sein. Ist eine von beiden belegt, geschieht
+    /// nichts und der Wartende bleibt, wo er ist.
+    ///
+    /// <para>⭐ Das ist der Satz, der bei uns gefehlt hat. Wir haben nur die
+    /// Türzelle betrachtet und die Einheit trotzdem hingestellt — sie stand dann
+    /// in der Tür (bug-142) und war dort anwählbar (bug-143).</para>
+    /// </summary>
+    private bool TuerLaesstHeraus(Entity b, Entity u, int idx)
+    {
+        if (_nav == null) return false;
+        int dc = b.Col + b.DoorCol, dr = b.Row + b.DoorRow;
+        return _nav.IsFree(dc, dr, u.Move, idx)
+            && _nav.IsFree(dc, dr + 1, u.Move, idx);
+    }
+
     private void StepOutOfDoor(int idx, Entity u, Entity b)
     {
         if (_nav == null || !u.Mobile) return;
+
+        // ⭐⭐ 09.09.2026 — ZUERST die Bedingung des Originals, und erst dann der
+        // Schritt. Vorher lief die Suche unten ohne jede Vorbedingung; fand sie
+        // nichts, blieb die Einheit sichtbar in der Tuer stehen. Jetzt gilt:
+        // ist der Weg nicht frei, geschieht NICHTS — der naechste `TorTakt`
+        // versucht es wieder, und bis dahin ist die Einheit untergestellt, also
+        // unsichtbar und unanklickbar, genau wie im Original.
+        if (!TuerbandAlt && !TuerLaesstHeraus(b, u, idx)) { SpawnedStuckInDoor++; return; }
+
+        // Und das Ziel des Originals: 3..5 Zeilen unter die Tuer, gewuerfelt.
+        if (!TuerbandAlt)
+        {
+            var ziel = AustrittsZiel(b, b.BType == 5);
+            if (_nav.InBounds(ziel.X, ziel.Y) && _nav.IsFree(ziel.X, ziel.Y, u.Move, idx))
+            {
+                var weg = _nav.FindPath(new Vector2I(u.Col, u.Row), ziel, u.Move, idx);
+                if (weg is { Count: > 0 })
+                {
+                    u.Path = weg; u.PathIdx = 0; u.Goal = ziel;
+                    u.Reserved = null; u.WaitTime = 0;
+                    SpawnedSteppedOut++;
+                    return;
+                }
+            }
+        }
+
         int fw = Mathf.Max(1, b.FootW), fh = Mathf.Max(1, b.FootH);
         var mid = new Vector2(b.Col + (fw - 1) * 0.5f, b.Row + (fh - 1) * 0.5f);
         var away = new Vector2(u.Col, u.Row) - mid;

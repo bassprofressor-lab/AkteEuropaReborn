@@ -124,35 +124,308 @@ public partial class MapViewer : Node2D
     /// </summary>
     private UI.PauseMenu? _pause;
 
+    /// <summary>⭐ 09.09.2026 — <b>das HAUPT-MENUE des Originals, Fensterart
+    /// 17</b>, an der Stelle, an der bis gestern <c>PauseMenu</c> stand. Seine
+    /// Bestellung vom 08.09.: »es gibt ein tolles originales Haupt-Menü, was
+    /// sogar das Laden innerhalb des Spieles ermöglicht«. Woher jede Zahl
+    /// stammt, steht im Kopf von <see cref="UI.MainMenuWindow"/>.
+    ///
+    /// <para>⚠ Der Eigenbau bleibt als Rückfalltür: ohne eingelesene Inhalte
+    /// gibt es weder Kacheln noch Schrift, und dann ist ein Godot-Menü besser
+    /// als ein leeres Fenster. Derselbe Griff wie beim Minenfenster.</para>
+    /// </summary>
+    private UI.MainMenuWindow? _hauptmenue;
+
     private void TogglePause()
     {
-        if (_pause != null) { ClosePause(); return; }
+        if (_pause != null || _hauptmenue != null) { ClosePause(); return; }
+        if (UI.MainMenuWindow.Usable && !UI.MainMenuWindow.Alt) { OeffneHauptmenue(); return; }
 
         _pause = new UI.PauseMenu { CanSave = true };
         _pause.Resumed += ClosePause;
-        _pause.SaveRequested += () =>
-        {
-            string name = Core.SaveGame.NewName();
-            string label = $"{MapNames[_mapIndex]} — {System.DateTime.Now:dd.MM.yyyy HH:mm}";
-            string json = _entities.SaveStateJson(MapNames[_mapIndex], label);
-            GD.Print(Core.SaveGame.Write(name, json, out string err)
-                ? $"gespeichert: {label}"
-                : $"Speichern fehlgeschlagen: {err}");
-            ClosePause();
-        };
-        _pause.Restarted += () =>
-        {
-            ClosePause();
-            GetTree().ReloadCurrentScene();
-        };
-        _pause.Quit += () =>
-        {
-            ClosePause();
-            UI.SkirmishSetup.Active = false;
-            Audio.MidiMusic.Stop();
-            GetTree().ChangeSceneToFile(UI.SkirmishSetup.MenuScene);
-        };
+        _pause.SaveRequested += () => { SpielstandSchreiben(); ClosePause(); };
+        _pause.Restarted += () => { ClosePause(); GetTree().ReloadCurrentScene(); };
+        _pause.Quit += () => { ClosePause(); ZumHauptmenue(); };
         (_panelLayer ?? (CanvasLayer)GetTree().Root.GetChild(0)).AddChild(_pause);
+        GetTree().Paused = true;
+    }
+
+    /// <summary>Das Fenster der Gebäudeliste, Fensterart 27 — siehe
+    /// <see cref="UI.BuildingListView"/>.</summary>
+    private UI.BuildingListView? _gebaeudeliste;
+
+    /// <summary>
+    /// <b>Die Gebäudeliste aufmachen</b> (Fensterart 27), aus dem Haupt-Menü.
+    ///
+    /// <para>Sie hängt als GESCHWISTER des Menüs in derselben Schicht, nicht als
+    /// dessen Kind: so bekommt sie ESC zuerst (der zuletzt eingehängte Knoten
+    /// sieht die Taste zuerst) und schliesst sich, ohne das Menü mitzunehmen.
+    /// Das Menü bleibt offen — im Original sind beide eigene Einträge der
+    /// Fensterverwaltung, und das eine schliesst das andere nicht.</para>
+    ///
+    /// <para>⚠ Die Lage ist UNSERE: das Original zeigt keinen Öffner mit
+    /// fester Lage für Art 27, und in der Anlegertafel steht sie auch nicht
+    /// (<see cref="UI.WindowManager.FesteLage"/>). Mittig ist die einzige
+    /// Setzung, die nichts behauptet.</para>
+    /// </summary>
+    private void OeffneGebaeudeliste()
+    {
+        if (_gebaeudeliste != null) return;
+        var l = new UI.BuildingListView();
+        l.Zeige(_entities.GebaeudelisteZeilen());
+        l.OnClose = SchliesseGebaeudeliste;
+        // ⭐ 09.09.2026 nachmittags, nach der Lesung des Klickwegs: der
+        // EINZELKLICK markiert nur (das Fenster setzt seinen Cursor selbst),
+        // der DOPPELKLICK springt und schliesst. ⚠ Fuer Art 27 ist beides
+        // UNSERE Zutat — das Original hat hier gar keinen Zeilenklick, und er
+        // hat entschieden, dass die Verbesserung bleibt. Gegenschalter
+        // --zeilenklick-aus.
+        l.OnActivate = slot =>
+        {
+            var punkt = _entities.GebaeudePunkt(slot);
+            if (punkt != null) { _camera.Position = punkt.Value; ClampCamera(); }
+            SchliesseGebaeudeliste();
+        };
+
+        var wirt = _panelLayer ?? (CanvasLayer)GetTree().Root.GetChild(0);
+        wirt.AddChild(l);
+        var schirm = GetViewportRect().Size;
+        l.Position = ((schirm - l.Size) / 2f).Floor();
+        UI.WindowManager.Oeffnen(UI.BuildingListView.Art, l);
+        // ⚠ Dieselbe Falle wie beim Haupt-Menue: die Aufblende dreht nur
+        // WindowManager.Takt(), und der haengt am SimTick — der STEHT.
+        for (int t = 0; t <= UI.WindowManager.BilderAuf + 1; t++) UI.WindowManager.Takt();
+        _gebaeudeliste = l;
+    }
+
+    /// <summary>Das Fenster der Einheitenliste, Fensterart 22 — siehe
+    /// <see cref="UI.UnitListView"/>. Wie die Gebäudeliste ein GESCHWISTER des
+    /// Menüs, damit ESC erst sie trifft.</summary>
+    private UI.UnitListView? _einheitenliste;
+
+    private void OeffneEinheitenliste()
+    {
+        if (_einheitenliste != null) return;
+        var l = new UI.UnitListView();
+        l.Quelle = _entities.EinheitenlisteZeilen;
+        l.OnClose = SchliesseEinheitenliste;
+        // ⭐⭐ Der gelesene Klickweg (berichte/fensterlisten-fable-2.md):
+        // Einzelklick markiert nur — das erledigt das Fenster selbst, hier ist
+        // nichts zu tun. Der DOPPELKLICK tut die vier Dinge des Originals:
+        // anwaehlen (0x4331E0, mit der Schwelle UKOL < 0x2D), Karte zentrieren
+        // (@0x44BE31) und das Fenster schliessen (@0x44BF2F). Die alte Anwahl
+        // hebt `EinheitAnwaehlen` mit auf, wie 0x433010.
+        l.OnActivate = idx =>
+        {
+            bool gewaehlt = _entities.EinheitAnwaehlen(idx);
+            var punkt = _entities.EinheitenPunkt(idx);
+            if (punkt != null) { _camera.Position = punkt.Value; ClampCamera(); }
+            if (!gewaehlt)
+                GD.Print($"einheitenliste: Platz {idx} nicht anwaehlbar "
+                       + "(UKOL >= 0x2D, Schwelle @0x44BE53)");
+            SchliesseEinheitenliste();
+        };
+        l.Oeffnen();
+
+        var wirt = _panelLayer ?? (CanvasLayer)GetTree().Root.GetChild(0);
+        wirt.AddChild(l);
+        var schirm = GetViewportRect().Size;
+        l.Position = ((schirm - l.Size) / 2f).Floor();
+        UI.WindowManager.Oeffnen(UI.UnitListView.Art, l);
+        for (int t = 0; t <= UI.WindowManager.BilderAuf + 1; t++) UI.WindowManager.Takt();
+        _einheitenliste = l;
+    }
+
+    /// <summary>Das Fenster der Forschungsergebnisse, Fensterart 29 — siehe
+    /// <see cref="UI.ResearchListView"/>.</summary>
+    private UI.ResearchListView? _forschungsliste;
+
+    private void OeffneForschungsliste()
+    {
+        if (_forschungsliste != null) return;
+        var l = new UI.ResearchListView();
+        l.Zeige(_entities.ForschungsergebnisseZeilen());
+        l.OnClose = SchliesseForschungsliste;
+
+        var wirt = _panelLayer ?? (CanvasLayer)GetTree().Root.GetChild(0);
+        wirt.AddChild(l);
+        var schirm = GetViewportRect().Size;
+        l.Position = ((schirm - l.Size) / 2f).Floor();
+        UI.WindowManager.Oeffnen(UI.ResearchListView.Art, l);
+        for (int t = 0; t <= UI.WindowManager.BilderAuf + 1; t++) UI.WindowManager.Takt();
+        _forschungsliste = l;
+    }
+
+    /// <summary>Der CD-Spieler, Fensterart 12 — bei uns die MIDI-Steuerung,
+    /// siehe <see cref="UI.CdPlayerView"/>.</summary>
+    private UI.CdPlayerView? _cdSpieler;
+
+    private void OeffneCdSpieler()
+    {
+        if (_cdSpieler != null) return;
+        var l = new UI.CdPlayerView();
+        l.OnClose = SchliesseCdSpieler;
+
+        var wirt = _panelLayer ?? (CanvasLayer)GetTree().Root.GetChild(0);
+        wirt.AddChild(l);
+        var schirm = GetViewportRect().Size;
+        l.Position = ((schirm - l.Size) / 2f).Floor();
+        UI.WindowManager.Oeffnen(UI.CdPlayerView.Art, l);
+        for (int t = 0; t <= UI.WindowManager.BilderAuf + 1; t++) UI.WindowManager.Takt();
+        _cdSpieler = l;
+    }
+
+    private void SchliesseCdSpieler()
+    {
+        if (_cdSpieler == null) return;
+        UI.WindowManager.Wegnehmen(UI.WindowManager.Offen(UI.CdPlayerView.Art));
+        _cdSpieler.QueueFree();
+        _cdSpieler = null;
+    }
+
+    private void SchliesseForschungsliste()
+    {
+        if (_forschungsliste == null) return;
+        UI.WindowManager.Wegnehmen(UI.WindowManager.Offen(UI.ResearchListView.Art));
+        _forschungsliste.QueueFree();
+        _forschungsliste = null;
+    }
+
+    private void SchliesseEinheitenliste()
+    {
+        if (_einheitenliste == null) return;
+        UI.WindowManager.Wegnehmen(UI.WindowManager.Offen(UI.UnitListView.Art));
+        _einheitenliste.QueueFree();
+        _einheitenliste = null;
+    }
+
+    private void SchliesseGebaeudeliste()
+    {
+        if (_gebaeudeliste == null) return;
+        UI.WindowManager.Wegnehmen(
+            UI.WindowManager.Offen(UI.BuildingListView.Art));
+        _gebaeudeliste.QueueFree();
+        _gebaeudeliste = null;
+    }
+
+    /// <summary>Einen Spielstand wegschreiben — derselbe Weg für den Eigenbau
+    /// und für den Knopf »Spielstand speichern« des Originalfensters.</summary>
+    private void SpielstandSchreiben()
+    {
+        string name = Core.SaveGame.NewName();
+        string label = $"{MapNames[_mapIndex]} — {System.DateTime.Now:dd.MM.yyyy HH:mm}";
+        string json = _entities.SaveStateJson(MapNames[_mapIndex], label);
+        GD.Print(Core.SaveGame.Write(name, json, out string err)
+            ? $"gespeichert: {label}"
+            : $"Speichern fehlgeschlagen: {err}");
+    }
+
+    /// <summary>Zurück ins Startmenü — »Spiel beenden«.</summary>
+    private void ZumHauptmenue()
+    {
+        UI.SkirmishSetup.Active = false;
+        Audio.MidiMusic.Stop();
+        GetTree().ChangeSceneToFile(UI.SkirmishSetup.MenuScene);
+    }
+
+    /// <summary>
+    /// <b>Das Haupt-Menü des Originals aufmachen</b> (Fensterart 17).
+    ///
+    /// <para>Die LAGE ist die des Originals: sein Öffner rechnet
+    /// <c>x = (Schirmbreite − 200)/2</c> @0x44AFF7 und
+    /// <c>y = (Schirmhöhe − 300)/2</c> @0x44B00C — also mittig. Wir geben sie
+    /// hier und nicht in <c>WindowManager.FesteLage</c>, weil dort die
+    /// ANLEGERTAFEL steht und die Art 17 in ihr nicht vorkommt: die Lage kommt
+    /// beim Original aus dem Öffner, nicht aus der Tafel.</para>
+    ///
+    /// <para>⚠ Sieben der zwölf Knöpfe hängen wir ein, fünf zeigen auf Fenster,
+    /// die es bei uns nicht gibt — siehe den Kopf von
+    /// <see cref="UI.MainMenuWindow"/>. Was NICHT eingehängt wird, steht dort
+    /// gedimmt und sagt den Grund.</para>
+    /// </summary>
+    private void OeffneHauptmenue()
+    {
+        var w = new UI.MainMenuWindow();
+        w.OnClose = ClosePause;
+        w.OnRestart = () => { ClosePause(); GetTree().ReloadCurrentScene(); };
+        w.OnSave = () => { SpielstandSchreiben(); ClosePause(); };
+        w.OnQuit = () => { ClosePause(); ZumHauptmenue(); };
+        w.OnSettings = () =>
+        {
+            // ⚠⚠ 09.09.2026, seine Meldung (bug-145): »im original Menu auf
+            // einstellungen … nur wird das dort verschoben angezeigt«.
+            //
+            // Hier stand `w.AddChild(s)`. `SettingsScreen` legt sich mit
+            // `SetAnchorsAndOffsetsPreset(FullRect)` über SEIN ELTERNTEIL —
+            // und das war das Menüfenster, also 400x600 in der Schirmmitte
+            // statt des ganzen Schirms. Genau derselbe Fehler wie damals beim
+            // Pausenmenü (Fehlerliste Punkt 20, »nicht mittig«): ein Schirm,
+            // der sich auf den Elternknoten legt, gehört auch an den
+            // Elternknoten, der den Schirm füllt.
+            //
+            // ⭐ Als GESCHWISTER in derselben Schicht bekommt er ausserdem ESC
+            // zuerst (zuletzt eingehängt = zuerst gefragt), wie die drei
+            // Listenfenster auch.
+            var host = _panelLayer ?? (CanvasLayer)GetTree().Root.GetChild(0);
+            if (host.GetNodeOrNull("Einstellungen") != null) return;
+            var s = new UI.SettingsScreen { InGame = true, Name = "Einstellungen" };
+            s.ProcessMode = Node.ProcessModeEnum.Always;
+            host.AddChild(s);
+        };
+        w.OnEncyclopedia = () =>
+        {
+            var host = _panelLayer ?? (CanvasLayer)GetTree().Root.GetChild(0);
+            if (host.GetNodeOrNull("Enzyklopaedie") != null) return;
+            var e = new UI.EncyclopediaScreen { Name = "Enzyklopaedie" };
+            e.ProcessMode = Node.ProcessModeEnum.Always;
+            host.AddChild(e);
+        };
+        w.OnLoad = () =>
+        {
+            var host = _panelLayer ?? (CanvasLayer)GetTree().Root.GetChild(0);
+            if (host.GetNodeOrNull("Laden") != null) return;
+            var l = new UI.LoadGameScreen { Name = "Laden" };
+            // ⚠ Der Baum STEHT, solange das Menü offen ist. Ohne diese Zeile
+            // bekäme der Ladeschirm keinen Klick und stünde nur da.
+            l.ProcessMode = Node.ProcessModeEnum.Always;
+            host.AddChild(l);
+        };
+        if (UI.BuildingListView.Usable && !UI.BuildingListView.Alt)
+            w.OnBuildingList = OeffneGebaeudeliste;
+        if (UI.UnitListView.Usable && !UI.UnitListView.Alt)
+            w.OnUnitList = OeffneEinheitenliste;
+        if (UI.ResearchListView.Usable && !UI.ResearchListView.Alt)
+            w.OnResearchList = OeffneForschungsliste;
+        if (UI.CdPlayerView.Usable && !UI.CdPlayerView.Alt)
+            w.OnCdPlayer = OeffneCdSpieler;
+
+        // Die Missionsinformation gibt es nur, wo es eine Mission gibt — im
+        // Gefecht ist der Knopf darum gedimmt, und das ist keine Lücke.
+        int mission = UI.SkirmishSetup.CampaignMission;
+        if (mission > 0 && UI.BriefingScreen.For(mission) is { } br)
+            w.OnMissionInfo = () =>
+            {
+                var host = _panelLayer ?? (CanvasLayer)GetTree().Root.GetChild(0);
+                if (host.GetNodeOrNull("Missionsinfo") != null) return;
+                var b = new UI.BriefingScreen(br.Title, br.Paragraphs, () => { }, mission)
+                { Name = "Missionsinfo" };
+                b.ProcessMode = Node.ProcessModeEnum.Always;
+                host.AddChild(b);
+            };
+
+        var wirt = _panelLayer ?? (CanvasLayer)GetTree().Root.GetChild(0);
+        wirt.AddChild(w);
+        var schirm = GetViewportRect().Size;
+        w.Position = ((schirm - w.Size) / 2f).Floor();
+        UI.WindowManager.Oeffnen(UI.MainMenuWindow.Art, w);
+        // ⚠⚠ DIE AUFBLENDE VON HAND ZU ENDE DREHEN — dieselbe Falle, in die
+        // schon `--kaufweg-check` gelaufen ist. `Oeffnen` setzt AufBild = 0,
+        // und `Blende` skaliert den Knoten dann auf 0,001 der Hoehe. Weitergedreht
+        // wird die Blende von `WindowManager.Takt()`, und der haengt am SimTick
+        // — den wir eine Zeile weiter unten ANHALTEN. Ohne diese Schleife stuende
+        // das Menue als flacher Strich da, und jeder Klick ginge daneben.
+        for (int t = 0; t <= UI.WindowManager.BilderAuf + 1; t++) UI.WindowManager.Takt();
+        _hauptmenue = w;
         GetTree().Paused = true;
     }
 
@@ -175,6 +448,22 @@ public partial class MapViewer : Node2D
         GetTree().Paused = false;
         _pause?.QueueFree();
         _pause = null;
+        SchliesseGebaeudeliste();
+        SchliesseEinheitenliste();
+        SchliesseForschungsliste();
+        SchliesseCdSpieler();
+        if (_hauptmenue != null)
+        {
+            // ⚠ `Wegnehmen` und nicht `Schliessen`: Schliessen setzt nur die
+            // Zublende in Gang, und die dreht `WindowManager.Takt()` — der
+            // haengt am SimTick, und der STEHT, solange dieses Menue offen ist.
+            // Der Platz bliebe also belegt, und beim naechsten ESC griffe die
+            // Doppeloeffnungssperre.
+            UI.WindowManager.Wegnehmen(
+                UI.WindowManager.Offen(UI.MainMenuWindow.Art));
+            _hauptmenue.QueueFree();
+            _hauptmenue = null;
+        }
     }
 
     private void ClampCamera()
@@ -589,6 +878,19 @@ public partial class MapViewer : Node2D
             return;
         }
         if (_minenfensterCheck) { _ = MinenfensterLauf(); return; }
+        if (_hauptmenueCheck) { _ = HauptmenueLauf(); return; }
+        if (_gebaeudelisteCheck) { _ = GebaeudelisteLauf(); return; }
+        if (_einheitenlisteCheck) { _ = EinheitenlisteLauf(); return; }
+        if (_forschungslisteCheck) { _ = ForschungslisteLauf(); return; }
+        if (_zeigerfensterCheck) { _ = ZeigerfensterLauf(); return; }
+        if (_cdspielerCheck) { _ = CdSpielerLauf(); return; }
+        if (_tuerauslassCheck) { _ = TuerauslassLauf(); return; }
+        if (_rollbalkenCheck)
+        {
+            GD.Print(UI.WindowChromeCheck.RollbalkenLauf());
+            GetTree().Quit(0);
+            return;
+        }
         if (_plattformCheck)
         {
             GD.Print(_entities.PlattformCheck());
@@ -982,6 +1284,37 @@ public partial class MapViewer : Node2D
     /// <summary><c>--minenfenster-check</c> — siehe
     /// <see cref="MinenfensterCheck"/>.</summary>
     private bool _minenfensterCheck;
+
+    /// <summary><c>--hauptmenue-check</c> — siehe
+    /// <see cref="HauptmenueLauf"/>.</summary>
+    private bool _hauptmenueCheck;
+
+    /// <summary><c>--rollbalken-check</c> — siehe
+    /// <see cref="UI.WindowChromeCheck.RollbalkenLauf"/>.</summary>
+    private bool _rollbalkenCheck;
+
+    /// <summary><c>--gebaeudeliste-check</c> — siehe
+    /// <see cref="GebaeudelisteLauf"/>.</summary>
+    private bool _gebaeudelisteCheck;
+
+    /// <summary><c>--einheitenliste-check</c> — siehe
+    /// <see cref="EinheitenlisteLauf"/>.</summary>
+    private bool _einheitenlisteCheck;
+
+    /// <summary><c>--forschungsliste-check</c> — siehe
+    /// <see cref="ForschungslisteLauf"/>.</summary>
+    private bool _forschungslisteCheck;
+
+    /// <summary><c>--zeigerfenster-check</c> — siehe
+    /// <see cref="ZeigerfensterLauf"/>.</summary>
+    private bool _zeigerfensterCheck;
+
+    /// <summary><c>--cdspieler-check</c> — siehe <see cref="CdSpielerLauf"/>.</summary>
+    private bool _cdspielerCheck;
+
+    /// <summary><c>--tuerauslass-check</c> — siehe
+    /// <see cref="TuerauslassLauf"/>.</summary>
+    private bool _tuerauslassCheck;
     private bool _kaufwegCheck;
     private bool _plattformCheck;
     private bool _hangCheck;
@@ -1079,6 +1412,845 @@ public partial class MapViewer : Node2D
             bild.SavePng(_shotPath);
             GD.Print($"minenfenster-check: Bild nach {_shotPath}");
         }
+        GetTree().Quit(0);
+    }
+
+    /// <summary>
+    /// <c>--hauptmenue-check</c> — <b>macht das Menü auf, wie ESC es aufmacht,
+    /// und misst es dann.</b> (09.09.2026, seine Bestellung vom Vortag: »es
+    /// gibt ein tolles originales Haupt-Menü, was sogar das Laden innerhalb des
+    /// Spieles ermöglicht«.)
+    ///
+    /// <para>Gemessen wird genau das, was falsch sein könnte: <b>womit</b>
+    /// gezeichnet wird (Fensterart 17 oder Godot-Möbel), das <b>Mass</b> gegen
+    /// die 200x300 aus <c>0x45947A</c>/<c>0x459483</c>, ob die
+    /// <b>Aufblende zu Ende</b> gedreht ist (sonst ist das Fenster ein flacher
+    /// Strich und jeder Klick geht daneben), ob der Platz in der
+    /// <b>Fensterverwaltung</b> auf Art 17 steht, wieviele der zwölf Knöpfe
+    /// <b>bedienbar</b> sind — und ob der Knopf »Altes Spiel laden«, um den es
+    /// ihm ging, auf dem Schirm auch wirklich im Fenster liegt.</para>
+    ///
+    /// <para>Das Nullmodell ist <c>--hauptmenue-alt</c>: damit MUSS in der
+    /// Zeile »Godot-Moebel (PauseMenu)« stehen und kein Fenster der Art 17
+    /// offen sein.</para>
+    /// </summary>
+    private async System.Threading.Tasks.Task HauptmenueLauf()
+    {
+        for (int i = 0; i < 5; i++)
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var sb = new System.Text.StringBuilder("hauptmenue-check\n");
+
+        bool alt = UI.MainMenuWindow.Alt;
+        sb.Append($"  Kacheln da: {UI.MainMenuWindow.Usable}"
+                + $", Nullmodell --hauptmenue-alt: {alt}\n");
+
+        TogglePause();
+        for (int i = 0; i < 2; i++) await System.Threading.Tasks.Task.Yield();
+
+        var w = _hauptmenue;
+        bool art17 = UI.WindowManager.Offen(UI.MainMenuWindow.Art) != null;
+        sb.Append($"  gezeichnet mit: {(w != null ? "Fensterart 17 (Kacheln des Originals)" : "Godot-Moebel (PauseMenu)")}\n");
+        sb.Append($"  Fensterverwaltung: Art 17 offen = {art17}, "
+                + $"Fenster gesamt {UI.WindowManager.Anzahl}\n");
+
+        bool ok;
+        if (alt)
+        {
+            sb.Append("  ⚠ NULLMODELL --hauptmenue-alt: hier MUSS "
+                    + "»Godot-Moebel« stehen und Art 17 zu sein\n");
+            ok = w == null && _pause != null && !art17;
+        }
+        else if (w == null)
+        {
+            sb.Append("  kein Originalfenster gebaut\n");
+            ok = false;
+        }
+        else
+        {
+            int erwW = UI.MainMenuWindow.WTiles * UI.WindowChrome.Cell * UI.MainMenuWindow.Scale;
+            int erwH = UI.MainMenuWindow.HTiles * UI.WindowChrome.Cell * UI.MainMenuWindow.Scale;
+            sb.Append($"  Mass {w.Size} (erwartet {erwW}x{erwH} = 10x15 Kacheln, "
+                    + "die 200x300 aus 0x45947A/0x459483)\n");
+            // ⚠ `w.Scale` waere die KONSTANTE MainMenuWindow.Scale (= 2), nicht
+            // die Blendenskalierung des Controls — der Name verdeckt den von
+            // Godot. Der Uebersetzer sagt es hier laut; wer die Zahl nur laese,
+            // saehe eine 2 und hielte einen flachen Strich fuer heil.
+            float blende = ((Control)w).Scale.Y;
+            sb.Append($"  Aufblende: Scale.y = {blende:0.###} (erwartet 1)\n");
+            sb.Append($"  Knoepfe: {UI.MainMenuWindow.Anzahl} gelesen, "
+                    + $"{w.Buttons} bedienbar\n");
+
+            // ⚠ Nicht »ist da«, sondern »liegt im Fenster«: ein Knopffeld, das
+            // die Rechnung neben das Fenster legt, sieht in der Zeile darueber
+            // trotzdem gut aus. Genau dieser Fehler ist am 26.08. beim
+            // Kaufmenue passiert.
+            var laden = w.KnopfFeld(8);           // "Altes Spiel laden"
+            var feld = w.GetGlobalRect();
+            bool drin = laden != null && feld.Encloses(laden.Value);
+            sb.Append($"  Knopf 9 »{UI.MainMenuWindow.Labels[8]}«: "
+                    + $"{(laden == null ? "NICHT DA" : laden.Value.ToString())}, "
+                    + $"im Fenster {feld}: {drin}\n");
+
+            ok = w.Visible && art17 && drin
+                 && Mathf.IsEqualApprox(blende, 1f)
+                 && (int)w.Size.X == erwW && (int)w.Size.Y == erwH
+                 && w.Buttons >= 6;
+        }
+
+        // ⚠ Das Bild VOR der ESC-Probe, sonst ist das Fenster schon zu.
+        if (_shotPath.Length > 0)
+        {
+            for (int i = 0; i < 3; i++)
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            var bild = GetViewport().GetTexture().GetImage();
+            bild.SavePng(_shotPath);
+            GD.Print($"hauptmenue-check: Bild nach {_shotPath}");
+        }
+
+        // ⭐⭐ DIE ESC-PROBE. Solange das Menue offen ist, STEHT der Baum — und
+        // `MapViewer` bekommt die Taste dann gar nicht mehr. Wer das Fenster mit
+        // derselben Taste aufmacht, mit der er es zumacht, muss den Rueckweg
+        // messen, nicht annehmen. Darum geht die Taste durch die NORMALE
+        // Eingabekette (`ParseInputEvent`) und nicht als Aufruf von ClosePause —
+        // die Frage ist ja gerade, wer sie bekommt. Derselbe Griff wie im
+        // Pruefstand von PauseMenu.
+        // ⚠ EscBis statt eines einzelnen Drucks — auf Kampagne 5 und 20 steht
+        // beim Start ein Hilfefenster offen, und das nimmt sich den ersten ESC
+        // (richtig so; bug-137).
+        int drucke = await EscBis(() => _hauptmenue == null && _pause == null
+                                        && UI.WindowManager.Offen(UI.MainMenuWindow.Art) == null
+                                        && !GetTree().Paused);
+        bool zu = drucke >= 0;
+        sb.Append($"  ESC schliesst wieder nach {drucke} Druck(en): {zu} "
+                + $"(Fenster {UI.WindowManager.Anzahl}, Pause {GetTree().Paused})"
+                + (drucke > 1 ? "  (ein Hilfefenster hatte den ersten)" : "")
+                + "\n");
+        ok = ok && zu;
+
+        sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        GD.Print(sb.ToString());
+        GetTree().Quit(0);
+    }
+
+    /// <summary>
+    /// <c>--gebaeudeliste-check</c> — <b>macht das Haupt-Menü auf, drückt den
+    /// Knopf »Gebäudeliste« und misst, was dabei herauskommt</b> (09.09.2026,
+    /// Fensterart 27, gelesen aus <c>0x47BB10</c>).
+    ///
+    /// <para>Gemessen wird, was falsch sein könnte: das <b>Mass</b> gegen die
+    /// 620x300 des Anlegers <c>0x459D29</c>, der <b>Filter</b> (welche
+    /// Gebäudearten das Original weglässt — sonst misst der Lauf nur, dass
+    /// überhaupt eine Liste entstand), die <b>Statuswörter</b> gegen die Tafel
+    /// der EXE, die <b>Lagerspalten</b> (−1 heisst »diese Art zeigt die Spalte
+    /// nicht«, und das ist etwas anderes als 0), und ob der <b>Rollbalken</b>
+    /// genau dann da ist, wenn mehr als 16 Einträge vorliegen.</para>
+    ///
+    /// <para>Das Nullmodell ist <c>--gebaeudeliste-alt</c>: damit MUSS der
+    /// Knopf gedimmt bleiben und kein Fenster der Art 27 aufgehen.</para>
+    /// </summary>
+    private async System.Threading.Tasks.Task GebaeudelisteLauf()
+    {
+        for (int i = 0; i < 5; i++)
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var sb = new System.Text.StringBuilder("gebaeudeliste-check\n");
+        bool alt = UI.BuildingListView.Alt;
+        sb.Append($"  Nullmodell --gebaeudeliste-alt: {alt}\n");
+        sb.Append($"  {_entities.GebaeudelisteProbe()}\n");
+
+        TogglePause();
+        for (int i = 0; i < 2; i++) await System.Threading.Tasks.Task.Yield();
+        var menue = _hauptmenue;
+        if (menue == null)
+        {
+            GD.Print(sb.Append("  kein Haupt-Menue — DURCHGEFALLEN").ToString());
+            GetTree().Quit(0);
+            return;
+        }
+        bool knopfGeht = menue.Geht(2);
+        sb.Append($"  Knopf 3 »{UI.MainMenuWindow.Labels[2]}« bedienbar: {knopfGeht}\n");
+        menue.Ausloesen(2);
+        for (int i = 0; i < 2; i++) await System.Threading.Tasks.Task.Yield();
+
+        var l = _gebaeudeliste;
+        bool art27 = UI.WindowManager.Offen(UI.BuildingListView.Art) != null;
+        bool ok;
+        if (alt)
+        {
+            sb.Append("  ⚠ NULLMODELL: hier MUSS der Knopf gedimmt und Art 27 zu sein\n");
+            ok = !knopfGeht && l == null && !art27;
+        }
+        else if (l == null)
+        {
+            sb.Append("  kein Fenster der Art 27 gebaut\n");
+            ok = false;
+        }
+        else
+        {
+            int erwW = UI.BuildingListView.WTiles * UI.WindowChrome.Cell * UI.BuildingListView.Scale;
+            int erwH = UI.BuildingListView.HTiles * UI.WindowChrome.Cell * UI.BuildingListView.Scale;
+            sb.Append($"  Mass {l.Size} (erwartet {erwW}x{erwH} = 31x15 Kacheln, "
+                    + "die 620x300 aus 0x459D29)\n");
+            sb.Append($"  Aufblende: Scale.y = {((Control)l).Scale.Y:0.###}\n");
+
+            var zeilen = _entities.GebaeudelisteZeilen();
+            sb.Append($"  Zeilen: {l.Anzahl} im Fenster, {zeilen.Count} aus den Daten, "
+                    + $"Rollbalken {l.HatRollbalken} (erwartet {zeilen.Count > 16})\n");
+
+            // ⚠ Die WOERTER gegen die Tafel der EXE, nicht gegen sich selbst.
+            var erlaubt = new System.Collections.Generic.HashSet<string>
+            {
+                "", "Aktiv", "Reparieren", "Ausbau", "Forschen", "Produktion",
+                "Angehalten", "Verbessern", "Aushau",
+            };
+            int fremd = 0, spaltenFehler = 0;
+            foreach (var z in zeilen)
+            {
+                if (!erlaubt.Contains(z.Status)) fremd++;
+                // Eine Spalte, die das Original fuer diese Art nicht zeigt,
+                // MUSS -1 tragen. Wir koennen die Art hier nicht mehr sehen —
+                // also pruefen wir die Regel andersherum: keine Zeile darf in
+                // ALLEN vier Spalten etwas zeigen und zugleich keinen Status
+                // haben (das gaebe es bei keiner Art des Originals).
+                bool alleVier = z.StockW >= 0 && z.StockF >= 0
+                                && z.StockS >= 0 && z.StockT >= 0;
+                if (alleVier && z.Status.Length == 0) spaltenFehler++;
+            }
+            sb.Append($"  Statuswoerter ausserhalb der EXE-Tafel: {fremd} "
+                    + $"(erwartet 0), Spaltenwidersprueche: {spaltenFehler}\n");
+
+            var beispiel = zeilen.Count > 0 ? zeilen[0] : null;
+            if (beispiel != null)
+                sb.Append($"  erste Zeile: »{beispiel.Name}« {beispiel.Hp}/{beispiel.HpMax}"
+                        + $" »{beispiel.Status}« W={beispiel.StockW} F={beispiel.StockF}"
+                        + $" S={beispiel.StockS} T={beispiel.StockT}\n");
+
+            ok = knopfGeht && art27 && l.Visible
+                 && (int)l.Size.X == erwW && (int)l.Size.Y == erwH
+                 && Mathf.IsEqualApprox(((Control)l).Scale.Y, 1f)
+                 && l.Anzahl == zeilen.Count
+                 && l.HatRollbalken == zeilen.Count > 16
+                 && fremd == 0 && spaltenFehler == 0;
+        }
+
+        if (_shotPath.Length > 0)
+        {
+            for (int i = 0; i < 3; i++)
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            GetViewport().GetTexture().GetImage().SavePng(_shotPath);
+            GD.Print($"gebaeudeliste-check: Bild nach {_shotPath}");
+        }
+
+        // ⭐ ESC zuerst: die Liste haengt NACH dem Menue und muss die Taste
+        // zuerst bekommen — sonst schloesse ein Druck beides.
+        int drucke = await EscBis(() => _gebaeudeliste == null);
+        bool listeZu = _gebaeudeliste == null, menueNochDa = _hauptmenue != null;
+        sb.Append($"  ESC nach {drucke} Druck(en): Liste zu {listeZu}, "
+                + $"Menue steht noch {menueNochDa}"
+                + (drucke > 1 ? "  (mehr als einer: ein Hilfefenster hatte den ersten)" : "")
+                + "\n");
+        if (!alt) ok = ok && listeZu && menueNochDa && drucke > 0;
+
+        sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        GD.Print(sb.ToString());
+        GetTree().Quit(0);
+    }
+
+    /// <summary>
+    /// <c>--einheitenliste-check</c> — <b>Fensterart 22, über den Knopf des
+    /// Haupt-Menüs geöffnet und dann in allen DREI Reitern gemessen</b>
+    /// (09.09.2026, Zeichner <c>0x476D00</c>).
+    ///
+    /// <para>Gemessen wird, was falsch sein könnte: das <b>Mass</b> gegen die
+    /// 640x320 des Anlegers <c>0x459AA9</c>; dass der Reiterwechsel die
+    /// <b>Spaltenzahl und die Linienbreite</b> umstellt (7 / 570 bei den
+    /// Robotern, 6 / 490 sonst — das ist der einzige echte Unterschied der drei
+    /// Blöcke); dass jede Zeile <b>Zahlen und Namen</b> trägt statt Platzhalter;
+    /// ob die Schrift die <b>Rangzeichen</b> 0xB4… überhaupt kennt; und ob der
+    /// <b>Rollbalken</b> genau dann erscheint, wenn mehr als 16 Einträge
+    /// vorliegen.</para>
+    ///
+    /// <para>Nullmodell <c>--einheitenliste-alt</c>: der Knopf bleibt gedimmt,
+    /// kein Fenster der Art 22. Dazu <c>--einheitenliste-leer</c>, das unsere
+    /// einzige bewusste Abweichung zurücknimmt (kein Reiter vorgewählt).</para>
+    /// </summary>
+    /// <summary>
+    /// ESC drücken, bis <paramref name="fertig"/> zutrifft — höchstens
+    /// <paramref name="max"/> Mal. Gibt zurück, wieviele Drucke nötig waren
+    /// (0 = war schon erledigt, −1 = hat nicht geklappt).
+    ///
+    /// <para>⚠⚠ 09.09.2026, und das ist die Lehre: <b>EIN ESC ist nicht
+    /// verlässlich EIN Fensterschluss.</b> Steht ein <see cref="UI.HelpWindow"/>
+    /// offen — auf Kampagne 5 tut es das, auf Kampagne 14 nicht —, nimmt dessen
+    /// <c>_UnhandledInput</c> die Taste für sich (»nur das oberste, damit ESC
+    /// nicht die ganze Reihe wegraeumt und dann ins Pausenmenue
+    /// durchschlaegt«). Das ist RICHTIG so; falsch war der Prüfstand, der einen
+    /// einzigen Druck annahm und daraufhin auf zwei von drei Karten durchfiel,
+    /// ohne dass am Fenster etwas gefehlt hätte.</para>
+    /// </summary>
+    private async System.Threading.Tasks.Task<int> EscBis(System.Func<bool> fertig,
+                                                          int max = 3)
+    {
+        if (fertig()) return 0;
+        for (int n = 1; n <= max; n++)
+        {
+            Input.ParseInputEvent(new InputEventKey { Keycode = Key.Escape, Pressed = true });
+            for (int i = 0; i < 4; i++)
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (fertig()) return n;
+        }
+        return -1;
+    }
+
+    private async System.Threading.Tasks.Task EinheitenlisteLauf()
+    {
+        for (int i = 0; i < 5; i++)
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var sb = new System.Text.StringBuilder("einheitenliste-check\n");
+        bool alt = UI.UnitListView.Alt;
+        sb.Append($"  Nullmodell --einheitenliste-alt: {alt}, "
+                + $"--einheitenliste-leer: {UI.UnitListView.LeerAufmachen}\n");
+        for (int r = 0; r < 3; r++)
+            sb.Append($"  Reiter {r} »{UI.UnitListView.Reiter[r]}«: "
+                    + $"{_entities.EinheitenlisteZeilen(r).Count} Zeilen aus den Daten\n");
+
+        TogglePause();
+        for (int i = 0; i < 2; i++) await System.Threading.Tasks.Task.Yield();
+        var menue = _hauptmenue;
+        if (menue == null)
+        {
+            GD.Print(sb.Append("  kein Haupt-Menue — DURCHGEFALLEN").ToString());
+            GetTree().Quit(0);
+            return;
+        }
+        bool knopfGeht = menue.Geht(1);
+        sb.Append($"  Knopf 2 »{UI.MainMenuWindow.Labels[1]}« bedienbar: {knopfGeht}\n");
+        menue.Ausloesen(1);
+        for (int i = 0; i < 2; i++) await System.Threading.Tasks.Task.Yield();
+
+        var l = _einheitenliste;
+        bool art22 = UI.WindowManager.Offen(UI.UnitListView.Art) != null;
+        bool ok, klickOk = true;
+        if (alt)
+        {
+            sb.Append("  ⚠ NULLMODELL: hier MUSS der Knopf gedimmt und Art 22 zu sein\n");
+            ok = !knopfGeht && l == null && !art22;
+        }
+        else if (l == null)
+        {
+            sb.Append("  kein Fenster der Art 22 gebaut\n");
+            ok = false;
+        }
+        else
+        {
+            int erwW = UI.UnitListView.WTiles * UI.WindowChrome.Cell * UI.UnitListView.Scale;
+            int erwH = UI.UnitListView.HTiles * UI.WindowChrome.Cell * UI.UnitListView.Scale;
+            sb.Append($"  Mass {l.Size} (erwartet {erwW}x{erwH} = 32x16 Kacheln, "
+                    + "die 640x320 aus 0x459AA9)\n");
+            sb.Append($"  vorgewaehlter Reiter: {l.Reiterwahl} "
+                    + $"(erwartet {(UI.UnitListView.LeerAufmachen ? -1 : 0)})\n");
+
+            // ⭐ Der EINZIGE echte Unterschied der drei Bloecke: sieben Spalten
+            // und 570 breite Linie bei den Robotern, sechs und 490 sonst. Wer
+            // nur »das Fenster ist da« misst, faende einen Reiterfehler nie.
+            bool spalten = true, leer = false;
+            for (int r = 0; r < 3; r++)
+            {
+                l.Waehle(r);
+                for (int i = 0; i < 2; i++) await System.Threading.Tasks.Task.Yield();
+                int erwS = r == 0 ? 7 : 6, erwL = r == 0 ? 570 : 490;
+                var daten = _entities.EinheitenlisteZeilen(r);
+                bool passt = l.SpaltenZahl == erwS && l.LinieW == erwL
+                             && l.Anzahl == daten.Count
+                             && l.HatRollbalken == daten.Count > 16;
+                sb.Append($"  Reiter {r}: {l.Anzahl} Zeilen, {l.SpaltenZahl} Spalten "
+                        + $"(erwartet {erwS}), Linie {l.LinieW} (erwartet {erwL}), "
+                        + $"Rollbalken {l.HatRollbalken} -> {passt}\n");
+                spalten &= passt;
+                if (daten.Count > 0)
+                {
+                    var z = daten[0];
+                    sb.Append($"    erste Zeile: Rang {z.Rang} »{z.Name}« "
+                            + $"{z.Hp}/{z.HpMax} Teil »{z.Aufbauteil}« "
+                            + $"Muni {z.Ammo}/{z.AmmoMax} Fahrw »{z.Fahrwerk}« "
+                            + $"Sprit {z.Fuel}/{z.FuelMax} Verb »{z.Verbesserung}«\n");
+                    // Ein Name, der leer ist oder nach einer Nummer aussieht,
+                    // waere ein Platzhalter — genau der Fehler aus bug-114.
+                    if (z.Name.Length == 0 || z.HpMax <= 0) leer = true;
+                }
+            }
+            // ⚠ NICHT `RangZeichenDa` allein lesen — die Fahne setzt erst der
+            // ZEICHNER, und der ist hier vielleicht noch nicht gelaufen. Ein
+            // »False«, das nur heisst »noch nicht gemalt«, saehe aus wie eine
+            // fehlende Schrift. Also die Aufloesung selbst fragen.
+            string r0 = UI.UnitListView.RangText(UI.WindowChrome.LegacyFont, 0);
+            string r7 = UI.UnitListView.RangText(UI.WindowChrome.LegacyFont, 254);
+            sb.Append($"  Rangzeichen: Rang 0 → "
+                    + (r0.Length > 0 ? $"U+{char.ConvertToUtf32(r0, 0):X4}" : "KEINS")
+                    + ", Rang 254 → "
+                    + (r7.Length > 0 ? $"U+{char.ConvertToUtf32(r7, 0):X4}" : "KEINS")
+                    + $" (in der Schrift: {UI.UnitListView.RangZeichenDa})\n");
+            sb.Append($"  leere Namen oder HpMax 0: {leer} (erwartet False)\n");
+
+            ok = knopfGeht && art22
+                 && (int)l.Size.X == erwW && (int)l.Size.Y == erwH
+                 && Mathf.IsEqualApprox(((Control)l).Scale.Y, 1f)
+                 && spalten && !leer
+                 && r0.Length > 0;          // der Rang MUSS jetzt da sein
+        }
+
+        if (_shotPath.Length > 0)
+        {
+            if (l != null) l.Waehle(0);
+            for (int i = 0; i < 3; i++)
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            GetViewport().GetTexture().GetImage().SavePng(_shotPath);
+            GD.Print($"einheitenliste-check: Bild nach {_shotPath}");
+        }
+
+        int drucke = await EscBis(() => _einheitenliste == null);
+        bool listeZu = _einheitenliste == null, menueNochDa = _hauptmenue != null;
+        sb.Append($"  ESC nach {drucke} Druck(en): Liste zu {listeZu}, "
+                + $"Menue steht noch {menueNochDa}"
+                + (drucke > 1 ? "  (mehr als einer: ein Hilfefenster hatte den ersten)" : "")
+                + "\n");
+        if (!alt) ok = ok && listeZu && menueNochDa && drucke > 0;
+
+        // ⭐ Zum Schluss der KLICKWEG. Er steht hier, weil der Doppelklick das
+        // Fenster SCHLIESST — also erst noch einmal aufmachen.
+        if (!alt && _hauptmenue != null)
+        {
+            menue.Ausloesen(1);
+            for (int i = 0; i < 2; i++) await System.Threading.Tasks.Task.Yield();
+        }
+        if (!alt && _einheitenliste != null)
+        {
+            // ⭐⭐ DER KLICKWEG, und zwar durch die ECHTE Eingabekette
+            // (Viewport.PushInput) — nicht durch einen Aufruf der Rueckrufe.
+            // Genau daran ist bug-115 gescheitert: die Doppelklickfahne setzt
+            // Godot auf dem zweiten DRUCK, und ein Pruefstand, der die
+            // Simulation statt der EINGABE anfasst, sieht das nie.
+            _einheitenliste!.Waehle(0);
+            for (int i = 0; i < 2; i++) await System.Threading.Tasks.Task.Yield();
+            if (_einheitenliste!.Anzahl == 0)
+                sb.Append("  Klickweg: keine Zeile auf dieser Karte — ungeprueft\n");
+            else
+            {
+                // ⚠⚠ Der Punkt muss in SCHIRMkoordinaten stehen, nicht in
+                // Fensterkoordinaten. Das Fenster haengt in einer CanvasLayer,
+                // und `GetGlobalRect()` gibt die Lage IN dieser Schicht —
+                // `PushInput` erwartet aber die des Sichtfelds.
+                // `GetGlobalTransformWithCanvas()` rechnet die Schicht mit ein;
+                // ohne sie kam der Klick nirgends an (Zeilendrucke 0).
+                var lokal = new Vector2(60, (UI.UnitListView.BalkenY0 + 7)
+                                            * UI.UnitListView.Scale);
+                var punkt = _einheitenliste!.GetGlobalTransformWithCanvas() * lokal;
+
+                // 1. EINZELKLICK: markiert, mehr nicht.
+                // ⚠ `inLocalCoords: true` — sonst rechnet PushInput den Punkt
+                // mit der SCHIRMabbildung um (das Sichtfeld ist gestreckt), und
+                // er landet woanders.
+                GetViewport().PushInput(new InputEventMouseButton
+                {
+                    ButtonIndex = MouseButton.Left, Pressed = true, Position = punkt,
+                }, true);
+                for (int i = 0; i < 2; i++)
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                bool nochOffen = _einheitenliste != null;
+                // ⚠ »Fenster noch offen« stimmt auch, wenn der Klick GAR NICHT
+                // ankam. Erst der Zaehler und der Cursor beweisen, dass er ankam
+                // — dieselbe Lehre wie bei bug-137 mit dem stummen ESC.
+                sb.Append($"  Einzelklick auf Zeile 0: Zeilendrucke "
+                        + $"{UI.UnitListView.Zeilendrucke} (erwartet 1), Cursor "
+                        + $"{_einheitenliste?.Cursor ?? -99} (erwartet 0), "
+                        + $"Fenster noch offen {nochOffen}\n");
+                bool kamAn = UI.UnitListView.Zeilendrucke == 1
+                             && _einheitenliste?.Cursor == 0;
+
+                // 2. DOPPELKLICK: anwaehlen, springen, schliessen.
+                var vorKamera = _camera.Position;
+                GetViewport().PushInput(new InputEventMouseButton
+                {
+                    ButtonIndex = MouseButton.Left, Pressed = true,
+                    DoubleClick = true, Position = punkt,
+                }, true);
+                for (int i = 0; i < 3; i++)
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                bool zu = _einheitenliste == null;
+                bool gewaehlt = _entities.AngewaehlterIndex >= 0;
+                bool bewegt = _camera.Position != vorKamera;
+                sb.Append($"  Doppelklick: Doppeldrucke "
+                        + $"{UI.UnitListView.Doppeldrucke} (erwartet 1), Fenster zu "
+                        + $"{zu}, Einheit angewaehlt {gewaehlt} "
+                        + $"(Platz {_entities.AngewaehlterIndex}), "
+                        + $"Karte bewegt {bewegt}\n");
+                klickOk = kamAn && nochOffen && zu && gewaehlt
+                          && UI.UnitListView.Doppeldrucke == 1;
+            }
+        }
+        ok = ok && klickOk;
+
+        sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        GD.Print(sb.ToString());
+        GetTree().Quit(0);
+    }
+
+    /// <summary>
+    /// <c>--forschungsliste-check</c> — <b>Fensterart 29, und der Lauf ERFINDET
+    /// erst etwas</b> (09.09.2026, Zeichner <c>0x47CA30</c>).
+    ///
+    /// <para>⭐ <b>Warum er erfindet:</b> das Fenster zeigt nur Bauteilzeilen
+    /// mit Techstufe 10, und die setzt allein der Erfindungsvorgang. In einer
+    /// frischen Kampagne ist es also LEER — richtig, aber nicht messbar. Der
+    /// Lauf misst darum zweimal: <b>vorher muss es leer sein</b> (das ist die
+    /// Gegenprobe, dass wir nichts erfinden, was es nicht gibt), <b>nachher muss
+    /// genau der erfundene Name darin stehen</b>. Damit hängt der Prüfstand an
+    /// der ganzen Kette — <c>Erfinden</c> schreibt <c>B[0x24] = 10</c> und den
+    /// Namen auf <c>+0x25</c>, der Filter findet ihn, das Fenster zeigt
+    /// ihn.</para>
+    ///
+    /// <para>Nullmodell <c>--forschungsliste-alt</c>: der Knopf bleibt gedimmt.
+    /// Dazu die zwei Schalter für die zwei Fehler des Originals,
+    /// <c>--forschungsliste-alle</c> und
+    /// <c>--forschungsliste-eigenblock</c>.</para>
+    /// </summary>
+    private async System.Threading.Tasks.Task ForschungslisteLauf()
+    {
+        for (int i = 0; i < 5; i++)
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var sb = new System.Text.StringBuilder("forschungsliste-check\n");
+        bool alt = UI.ResearchListView.Alt;
+        sb.Append($"  Nullmodell --forschungsliste-alt: {alt}, "
+                + $"--forschungsliste-alle: {MapEntityLayer.ForschungslisteAlle}, "
+                + $"--forschungsliste-eigenblock: "
+                + $"{MapEntityLayer.ForschungslisteEigenblock}\n");
+
+        // 1. VORHER: leer. Wer das nicht prueft, weiss nachher nicht, ob die
+        //    Zeile von der Erfindung kommt oder schon da war.
+        var vorher = _entities.ForschungsergebnisseZeilen();
+        int geprueftVor = _entities.ForschungslisteGeprueft;
+        sb.Append($"  vor der Erfindung: {vorher.Count} Zeilen (erwartet 0), "
+                + $"{geprueftVor} Bauteilzeilen angesehen"
+                + (geprueftVor == 0
+                   ? "  ⚠ die Bauteiltafel steht noch nicht — dieses »leer« ist "
+                     + "vacuously wahr und beweist NICHTS"
+                   : "")
+                + "\n");
+
+        // 2. Eine Erfindung machen — dieselben Argumente wie --erfindung-probe.
+        //    Sie legt nebenbei die Bauteiltafel an.
+        var lauf = _entities.Erfinden(_entities.ViewPlayer, 2, 0, techProbe: 5);
+        string erfunden = lauf?.Name ?? "";
+        sb.Append($"  erfunden: »{erfunden}«\n");
+
+        var nachher = _entities.ForschungsergebnisseZeilen();
+        int geprueftNach = _entities.ForschungslisteGeprueft;
+        // ⭐ DIESE Zahl traegt die Gegenprobe: erst wenn der Filter wirklich 70
+        //    Zeilen angesehen hat und genau EINE davon nimmt, heisst »eine
+        //    Zeile« etwas. Vorher hiess es nur »die Tafel ist leer«.
+        int erwGeprueft = MapEntityLayer.ForschungslisteAlle ? 199 : 70;
+        sb.Append($"  nach der Erfindung: {nachher.Count} Zeilen von "
+                + $"{geprueftNach} angesehenen (erwartet {erwGeprueft}), "
+                + $"Blockunterschiede {_entities.ForschungslisteBlockUnterschied}\n");
+        foreach (string n in nachher) sb.Append($"    »{n}«\n");
+
+        TogglePause();
+        for (int i = 0; i < 2; i++) await System.Threading.Tasks.Task.Yield();
+        var menue = _hauptmenue;
+        if (menue == null)
+        {
+            GD.Print(sb.Append("  kein Haupt-Menue — DURCHGEFALLEN").ToString());
+            GetTree().Quit(0);
+            return;
+        }
+        bool knopfGeht = menue.Geht(3);
+        sb.Append($"  Knopf 4 »{UI.MainMenuWindow.Labels[3]}« bedienbar: {knopfGeht}\n");
+        menue.Ausloesen(3);
+        for (int i = 0; i < 2; i++) await System.Threading.Tasks.Task.Yield();
+
+        var l = _forschungsliste;
+        bool art29 = UI.WindowManager.Offen(UI.ResearchListView.Art) != null;
+        bool ok;
+        if (alt)
+        {
+            sb.Append("  ⚠ NULLMODELL: hier MUSS der Knopf gedimmt und Art 29 zu sein\n");
+            ok = !knopfGeht && l == null && !art29;
+        }
+        else if (l == null)
+        {
+            sb.Append("  kein Fenster der Art 29 gebaut\n");
+            ok = false;
+        }
+        else
+        {
+            int erwW = UI.ResearchListView.WTiles * UI.WindowChrome.Cell
+                       * UI.ResearchListView.Scale;
+            int erwH = UI.ResearchListView.HTiles * UI.WindowChrome.Cell
+                       * UI.ResearchListView.Scale;
+            sb.Append($"  Mass {l.Size} (erwartet {erwW}x{erwH} = 11x11 Kacheln, "
+                    + "die 220x220 aus 0x45A359)\n");
+            sb.Append($"  Zeilen im Fenster: {l.Anzahl}, Rollbalken {l.HatRollbalken} "
+                    + $"(erwartet ab 11 Eintraegen)\n");
+
+            bool nameDrin = erfunden.Length > 0 && nachher.Contains(erfunden);
+            sb.Append($"  der erfundene Name steht in der Liste: {nameDrin}\n");
+
+            ok = knopfGeht && art29 && l.Visible
+                 && (int)l.Size.X == erwW && (int)l.Size.Y == erwH
+                 && Mathf.IsEqualApprox(((Control)l).Scale.Y, 1f)
+                 && vorher.Count == 0
+                 && geprueftNach == erwGeprueft
+                 && nachher.Count == 1
+                 && l.Anzahl == nachher.Count
+                 && l.HatRollbalken == nachher.Count > UI.ResearchListView.Zeilen
+                 && nameDrin;
+        }
+
+        if (_shotPath.Length > 0)
+        {
+            for (int i = 0; i < 3; i++)
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            GetViewport().GetTexture().GetImage().SavePng(_shotPath);
+            GD.Print($"forschungsliste-check: Bild nach {_shotPath}");
+        }
+
+        int drucke = await EscBis(() => _forschungsliste == null);
+        bool zu = _forschungsliste == null, menueNochDa = _hauptmenue != null;
+        sb.Append($"  ESC nach {drucke} Druck(en): Fenster zu {zu}, "
+                + $"Menue steht noch {menueNochDa}"
+                + (drucke > 1 ? "  (mehr als einer: ein Hilfefenster hatte den ersten)" : "")
+                + "\n");
+        if (!alt) ok = ok && zu && menueNochDa && drucke > 0;
+
+        sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        GD.Print(sb.ToString());
+        GetTree().Quit(0);
+    }
+
+    /// <summary>
+    /// <c>--zeigerfenster-check</c> — <b>schweigt der Kartenzeiger, sobald die
+    /// Maus über einem Fenster steht?</b> (09.09.2026, seine Meldung bug-141:
+    /// »dann hat man im Gebaeude Menu auch das Einnahme Icon anstatt klassischen
+    /// Mauszeiger«.)
+    ///
+    /// <para>⚠ Die Behebung hängt an einer Annahme, die man glauben ODER messen
+    /// kann: <b>über der blossen Karte meldet <c>GuiGetHoveredControl</c>
+    /// nichts.</b> Wäre dort ein bildschirmfüllender Control mit Mausfilter
+    /// »Stop«, verschwänden ALLE Kartenzeiger — eine schlimmere Krankheit als
+    /// die geheilte. Der Lauf schiebt darum eine echte Mausbewegung erst über
+    /// die Kartenmitte und dann über das Haupt-Menü und liest beide Male nach.</para>
+    /// </summary>
+    private async System.Threading.Tasks.Task ZeigerfensterLauf()
+    {
+        for (int i = 0; i < 5; i++)
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var sb = new System.Text.StringBuilder("zeigerfenster-check\n");
+
+        async System.Threading.Tasks.Task<string> Schweben(Vector2 p)
+        {
+            GetViewport().PushInput(new InputEventMouseMotion { Position = p }, true);
+            for (int i = 0; i < 2; i++)
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            var c = GetViewport().GuiGetHoveredControl();
+            return c == null ? "nichts" : $"{c.Name} ({c.GetType().Name})";
+        }
+
+        // 1. ueber der KARTE — hier darf nichts liegen.
+        var mitte = GetViewportRect().Size * 0.5f;
+        string aufKarte = await Schweben(mitte);
+        sb.Append($"  ueber der Kartenmitte {mitte}: {aufKarte} (erwartet nichts)\n");
+
+        // 2. ueber dem HAUPT-MENUE — hier muss es das Fenster sein.
+        TogglePause();
+        for (int i = 0; i < 2; i++) await System.Threading.Tasks.Task.Yield();
+        string aufFenster = "kein Menue";
+        bool fensterOk = false;
+        if (_hauptmenue != null)
+        {
+            var p = _hauptmenue.GetGlobalTransformWithCanvas()
+                    * (_hauptmenue.Size * 0.5f);
+            aufFenster = await Schweben(p);
+            fensterOk = aufFenster.Contains("MainMenuWindow");
+            sb.Append($"  ueber dem Haupt-Menue {p}: {aufFenster} "
+                    + "(erwartet MainMenuWindow)\n");
+        }
+        else sb.Append("  kein Haupt-Menue gebaut\n");
+
+        bool ok = aufKarte == "nichts" && fensterOk;
+        sb.Append($"  Gegenschalter --zeiger-ueberall-alt: {ZeigerUeberallAlt}\n");
+        sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        GD.Print(sb.ToString());
+        GetTree().Quit(0);
+    }
+
+    /// <summary>
+    /// <c>--cdspieler-check</c> — <b>Fensterart 12, und jeder der sechs Knöpfe
+    /// wird gedrückt</b> (09.09.2026, seine Bestellung: »na die original musik
+    /// einspielen«).
+    ///
+    /// <para>Gemessen wird das Mass gegen die 180x100 des Anlegers
+    /// <c>0x458489</c>, die <b>Anzeige</b> (zweistellig, wie @0x473032), dass
+    /// <c>&lt;</c> und <c>&gt;</c> das Stück wirklich verschieben und an den
+    /// Enden <b>klemmen statt umzubrechen</b>, und dass die drei Modusknöpfe
+    /// eine <b>Radiogruppe</b> sind — genau einer an.</para>
+    ///
+    /// <para>⚠ Ohne Musikdateien kann der Lauf nichts messen und sagt das;
+    /// ein »BESTANDEN« auf einer stummen Anlage wäre gelogen.</para>
+    /// </summary>
+    private async System.Threading.Tasks.Task CdSpielerLauf()
+    {
+        for (int i = 0; i < 5; i++)
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var sb = new System.Text.StringBuilder("cdspieler-check\n");
+        bool alt = UI.CdPlayerView.Alt;
+        sb.Append($"  Nullmodell --cdspieler-alt: {alt}, Stuecke "
+                + $"{Audio.MidiMusic.TrackCount} (waehlbar 1..{UI.CdPlayerView.Letztes})\n");
+
+        TogglePause();
+        for (int i = 0; i < 2; i++) await System.Threading.Tasks.Task.Yield();
+        var menue = _hauptmenue;
+        if (menue == null)
+        {
+            GD.Print(sb.Append("  kein Haupt-Menue — DURCHGEFALLEN").ToString());
+            GetTree().Quit(0); return;
+        }
+        bool knopfGeht = menue.Geht(11);
+        sb.Append($"  Knopf 12 »{UI.MainMenuWindow.Labels[11]}« bedienbar: {knopfGeht}\n");
+        menue.Ausloesen(11);
+        for (int i = 0; i < 2; i++) await System.Threading.Tasks.Task.Yield();
+
+        var w = _cdSpieler;
+        bool art12 = UI.WindowManager.Offen(UI.CdPlayerView.Art) != null;
+        bool ok;
+        if (alt)
+        {
+            sb.Append("  ⚠ NULLMODELL: hier MUSS der Knopf gedimmt und Art 12 zu sein\n");
+            ok = !knopfGeht && w == null && !art12;
+        }
+        else if (w == null) { sb.Append("  kein Fenster der Art 12 gebaut\n"); ok = false; }
+        else
+        {
+            int erwW = UI.CdPlayerView.WTiles * UI.WindowChrome.Cell * UI.CdPlayerView.Scale;
+            int erwH = UI.CdPlayerView.HTiles * UI.WindowChrome.Cell * UI.CdPlayerView.Scale;
+            sb.Append($"  Mass {w.Size} (erwartet {erwW}x{erwH} = 9x5 Kacheln, "
+                    + "die 180x100 aus 0x458489)\n");
+            sb.Append($"  Anzeige: »{UI.CdPlayerView.Anzeige()}«\n");
+
+            if (Audio.MidiMusic.TrackCount <= 2)
+            {
+                sb.Append("  ⚠ weniger als drei Stuecke — die Knoepfe sind nicht "
+                        + "messbar (das Original schaltet die Musik dann selbst ab, "
+                        + "0x4D5240). UNGEPRUEFT\n");
+                ok = knopfGeht && art12
+                     && (int)w.Size.X == erwW && (int)w.Size.Y == erwH;
+            }
+            else
+            {
+                // ⭐ Die Knoepfe ueber `Ausloesen`, also denselben Weg, den auch
+                // der Klick nimmt.
+                Audio.MidiMusic.Waehle(1);
+                w.Ausloesen(2);                       // >
+                int nachVor = Audio.MidiMusic.Gewaehlt;
+                w.Ausloesen(1);                       // <
+                int nachZurueck = Audio.MidiMusic.Gewaehlt;
+                w.Ausloesen(1);                       // < am unteren Ende
+                int amRand = Audio.MidiMusic.Gewaehlt;
+                sb.Append($"  1 →(>) {nachVor} →(<) {nachZurueck} →(<) {amRand} "
+                        + "(erwartet 2, 1, 1 — das Original KLEMMT, es bricht nicht um)\n");
+
+                w.Ausloesen(3);
+                bool einen = UI.CdPlayerView.An(3) && !UI.CdPlayerView.An(4) && !UI.CdPlayerView.An(5);
+                w.Ausloesen(5);
+                bool zufall = UI.CdPlayerView.An(5) && !UI.CdPlayerView.An(3) && !UI.CdPlayerView.An(4);
+                sb.Append($"  Radiogruppe: nach EINEN genau einer an {einen}, "
+                        + $"nach ZUFALL genau einer an {zufall}\n");
+
+                ok = knopfGeht && art12
+                     && (int)w.Size.X == erwW && (int)w.Size.Y == erwH
+                     && Mathf.IsEqualApprox(((Control)w).Scale.Y, 1f)
+                     && nachVor == 2 && nachZurueck == 1 && amRand == 1
+                     && einen && zufall;
+            }
+        }
+
+        if (_shotPath.Length > 0)
+        {
+            for (int i = 0; i < 3; i++)
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            GetViewport().GetTexture().GetImage().SavePng(_shotPath);
+            GD.Print($"cdspieler-check: Bild nach {_shotPath}");
+        }
+
+        int drucke = await EscBis(() => _cdSpieler == null);
+        sb.Append($"  ESC nach {drucke} Druck(en): Fenster zu {_cdSpieler == null}, "
+                + $"Menue steht noch {_hauptmenue != null}\n");
+        if (!alt) ok = ok && _cdSpieler == null && _hauptmenue != null && drucke > 0;
+
+        sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        GD.Print(sb.ToString());
+        GetTree().Quit(0);
+    }
+
+    /// <summary>
+    /// <c>--tuerauslass-check</c> — <b>kommt eine ausgesandte Einheit aus der
+    /// Tür, und ist sie bis dahin unsichtbar?</b> (09.09.2026, seine Meldungen
+    /// bug-142/143.)
+    ///
+    /// <para>Der Lauf sendet eine Einheit aus einem eigenen Gebäude aus und
+    /// verfolgt sie Takt für Takt. Gemessen wird das, worauf es ankommt:</para>
+    /// <list type="number">
+    ///   <item>Solange sie auf der Türzelle steht, ist sie
+    ///   <b>untergestellt</b> — also nicht gezeichnet und nicht anwählbar, wie
+    ///   im Original (Zeichnertor @0x4300E2, Klicktor @0x431CEE).</item>
+    ///   <item>Sie <b>kommt heraus</b> — UKOL fällt auf 0 und sie steht nicht
+    ///   mehr auf der Tür. ⚠⚠ Das ist die Gegenprobe zu der Gefahr, wegen der
+    ///   das Band bis heute eingeengt war: eine unsichtbare Einheit, die nie
+    ///   herauskommt, wäre schlimmer als eine sichtbare in der Tür.</item>
+    /// </list>
+    ///
+    /// <para>Nullmodell <c>--tuerband-alt</c>: damit MUSS sie sichtbar sein
+    /// (nicht untergestellt).</para>
+    /// </summary>
+    private async System.Threading.Tasks.Task TuerauslassLauf()
+    {
+        for (int i = 0; i < 5; i++)
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var sb = new System.Text.StringBuilder("tuerauslass-check\n");
+        bool alt = MapEntityLayer.TuerbandAlt;
+        sb.Append($"  Nullmodell --tuerband-alt: {alt}\n");
+
+        int gi = _entities.ErstesEigenesGaragengebaeude();
+        if (gi < 0)
+        {
+            GD.Print(sb.Append("  kein eigenes Gebaeude mit Tuer — UNGEPRUEFT\n"
+                             + "  DURCHGEFALLEN").ToString());
+            GetTree().Quit(0); return;
+        }
+        sb.Append(_entities.TuerauslassAnstoss(gi));
+
+        // Takt fuer Takt verfolgen — hoechstens 200, das sind vier Sekunden
+        // Spielzeit und mehr als genug fuer einen Schritt aus der Tuer.
+        bool warUntergestellt = false, heraus = false;
+        int takte = 0;
+        for (; takte < 200 && !heraus; takte++)
+        {
+            _entities.SimTickFuerProbe();
+            var st = _entities.TuerauslassStand();
+            if (st == null) break;
+            if (st.Value.AufTuer && st.Value.Untergestellt) warUntergestellt = true;
+            if (!st.Value.AufTuer && st.Value.Ukol == 0) heraus = true;
+        }
+        var ende = _entities.TuerauslassStand();
+        sb.Append($"  war unterwegs untergestellt: {warUntergestellt} "
+                + $"(erwartet {!alt})\n");
+        sb.Append($"  herausgekommen nach {takte} Takten: {heraus}\n");
+        if (ende != null)
+            sb.Append($"  Endstand: UKOL {ende.Value.Ukol}, auf der Tuer "
+                    + $"{ende.Value.AufTuer}, untergestellt {ende.Value.Untergestellt}, "
+                    + $"Weg {ende.Value.WegLaenge}\n");
+
+        bool ok = heraus && warUntergestellt != alt;
+        sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        GD.Print(sb.ToString());
         GetTree().Quit(0);
     }
 
@@ -1596,6 +2768,30 @@ public partial class MapViewer : Node2D
             else if (a == "--neutralklick-alt") MapEntityLayer.NeutralklickAlt = true;
             else if (a == "--minenfenster-alt") UI.BuildingWindow.MinenfensterAlt = true;
             else if (a == "--minenfenster-check") _minenfensterCheck = true;
+            else if (a == "--hauptmenue-alt") UI.MainMenuWindow.Alt = true;
+            else if (a == "--hauptmenue-check") _hauptmenueCheck = true;
+            else if (a == "--rollbalken-alt") UI.WindowChrome.RollbalkenAlt = true;
+            else if (a == "--rollbalken-check") _rollbalkenCheck = true;
+            else if (a == "--gebaeudeliste-alt") UI.BuildingListView.Alt = true;
+            else if (a == "--gebaeudeliste-check") _gebaeudelisteCheck = true;
+            else if (a == "--einheitenliste-alt") UI.UnitListView.Alt = true;
+            else if (a == "--einheitenliste-leer") UI.UnitListView.LeerAufmachen = true;
+            else if (a == "--einheitenliste-check") _einheitenlisteCheck = true;
+            else if (a == "--zeilenklick-aus") UI.BuildingListView.ZeilenklickAus = true;
+            else if (a == "--zeiger-ueberall-alt") ZeigerUeberallAlt = true;
+            else if (a == "--neubaustrom-alt") MapEntityLayer.NeubaustromAlt = true;
+            else if (a == "--cdspieler-alt") UI.CdPlayerView.Alt = true;
+            else if (a == "--tuerband-alt") MapEntityLayer.TuerbandAlt = true;
+            else if (a == "--tuerauslass-check") _tuerauslassCheck = true;
+            else if (a == "--cdspieler-check") _cdspielerCheck = true;
+            else if (a == "--zeigerfenster-check") _zeigerfensterCheck = true;
+            else if (a == "--listenanwahl-ohne-schwelle")
+                MapEntityLayer.ListenanwahlOhneSchwelle = true;
+            else if (a == "--forschungsliste-alt") UI.ResearchListView.Alt = true;
+            else if (a == "--forschungsliste-alle") MapEntityLayer.ForschungslisteAlle = true;
+            else if (a == "--forschungsliste-eigenblock")
+                MapEntityLayer.ForschungslisteEigenblock = true;
+            else if (a == "--forschungsliste-check") _forschungslisteCheck = true;
             else if (a == "--rau-ist-hart") Simulation.NavGrid.RauIstHart = true;
             else if (a == "--fussanker-alt") MapEntityLayer.FussankerAlt = true;
             else if (a == "--panzerung-alt") MapEntityLayer.PanzerungAlt = true;
@@ -5721,6 +6917,11 @@ public partial class MapViewer : Node2D
     private Vector2 _rightStart;
     private Input.CursorShape _cursor = Input.CursorShape.Arrow;
 
+    /// <summary><c>--zeiger-ueberall-alt</c> — der Stand vor dem 09.09.2026:
+    /// die Zeigerwahl laeuft auch dann, wenn die Maus ueber einem Fenster steht
+    /// (bug-141). Der Gegenschalter zu dieser Behebung.</summary>
+    public static bool ZeigerUeberallAlt;
+
     /// <summary>
     /// Der Zeiger sagt, was ein Klick täte.
     ///
@@ -5747,6 +6948,34 @@ public partial class MapViewer : Node2D
             }
             return;
         }
+        // ⚠⚠ 09.09.2026, seine Meldung (bug-141): »das Icon was gerade aktiv war
+        // durch z.B. eine Einheit wirkt sich so aus, dass man dann im Gebaeude
+        // Menu z.B. auch das Einnahme Icon hat anstatt klassischen Mauszeiger«.
+        //
+        // Der Zeiger wurde AUS DER KARTENLAGE gewaehlt, ohne zu fragen, ob die
+        // Maus ueberhaupt auf der Karte steht. Steht sie ueber einem Fenster,
+        // sagt der Einnahmezeiger dort etwas, was ein Klick nie tut — und das
+        // ist genau die Regel, an der wir heute schon zweimal haengengeblieben
+        // sind (Do-Not-Repeat 08.09.: »Bild und Klick muessen dasselbe sagen«).
+        //
+        // Das Original hat das Problem nicht: seine Maussuche 0x446DE0 findet
+        // ERST das Fenster unter dem Zeiger, und die Zeigerwahl (0x4321xx…)
+        // laeuft nur fuer die Karte.
+        // ⚠ `GuiGetHoveredControl` meldet nur Knoten, die die Maus auch
+        // ANNEHMEN (Filter Stop oder Pass) — die Karte ist ein Node2D und
+        // taucht darin gar nicht auf. Ein Treffer heisst also immer »Oberflaeche
+        // unter dem Zeiger«.
+        if (!ZeigerUeberallAlt && GetViewport().GuiGetHoveredControl() != null)
+        {
+            UI.GameCursors.Reset();
+            if (_cursor != Input.CursorShape.Arrow)
+            {
+                _cursor = Input.CursorShape.Arrow;
+                Input.SetDefaultCursorShape(_cursor);
+            }
+            return;
+        }
+
         // ⭐ 31.08.2026 — STRG MACHT DEN ANGRIFFSZEIGER, wie im Original
         // (@0x43201A: Strg gehalten UND Auswahl nicht leer -> Zeigerart 2,
         // OHNE jede Pruefung des Ziels). Siehe Simulation/Bodenangriff.cs.

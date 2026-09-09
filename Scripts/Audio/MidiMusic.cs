@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Audio;
+﻿namespace AkteEuropaReborn.Audio;
 
 using System;
 using System.Runtime.InteropServices;
@@ -130,8 +130,42 @@ public static class MidiMusic
         // 0x4D55C0 faengt MM_MCINOTIFY ab und ruft play(rand()%(Anzahl-1)+1).
         // Wir haben bisher der Reihe nach gespielt; das ist nach dem dritten
         // Durchlauf hoerbar.
-        Play(ZufallsStueck());
+        //
+        // ⭐⭐ 09.09.2026 — und jetzt kann der Spieler die Regel WAEHLEN, wie im
+        // CD-Spieler des Originals (Fensterart 12). Der dortige Notify-Behandler
+        // 0x4585A0 verzweigt ueber byte[0x500E0C] genau so:
+        //   Modus 0 EINEN  @0x4585C8  dieselbe Spur noch einmal
+        //   Modus 1 ALLE   @0x4585E5  Spur < Anzahl ? Spur+1 : 1
+        //   Modus 2 ZUFALL @0x4585FC  rand() % Anzahl + 1
+        Play(Folge switch
+        {
+            FolgeEinen => Track,
+            FolgeAlle => Track + 1 <= TrackCount - 1 ? Track + 1 : 1,
+            _ => ZufallsStueck(),
+        });
     }
+
+    /// <summary>
+    /// Die Folgeregel am Stueckende — die drei Modusknoepfe des CD-Spielers
+    /// (Fensterart 12), <c>byte[0x500E0C]</c> im Original.
+    ///
+    /// <para>⚠ UNSERE Vorgabe ist <see cref="FolgeZufall"/>, weil das die Regel
+    /// ist, nach der wir bisher gespielt haben — eine andere Vorgabe wuerde die
+    /// Musik still veraendern. Welchen Wert das Original beim Start hat, ist
+    /// ungelesen.</para>
+    ///
+    /// <para>⚠ Und noch eine Abweichung, die im Fenster steht: das Original
+    /// bricht bei ALLE auf <b>Spur 1</b> um, wir auf <b>Stueck 1</b> — bei uns
+    /// ist Stueck <b>0</b> dem Menue vorbehalten, im Original war Spur 1 die
+    /// Datenspur der Mixed-Mode-CD (vermutet) und der Start lag auf Spur 2.
+    /// Dieselbe Absicht, andere Zaehlung.</para>
+    /// </summary>
+    public const int FolgeEinen = 0, FolgeAlle = 1, FolgeZufall = 2;
+    public static int Folge = FolgeZufall;
+
+    /// <summary>Laeuft gerade ein Stueck? ⚠ Nicht aus <see cref="Track"/>
+    /// ableiten — der bleibt stehen, wenn der Spieler angehalten hat.</summary>
+    public static bool Laeuft { get; private set; }
 
     /// <summary>The last MCI return code and its own message — kept so a failure
     /// can be reported with a number instead of a shrug.</summary>
@@ -159,12 +193,26 @@ public static class MidiMusic
         if (!Send($"play {Alias} from 0")) { Stop(); return false; }
         Track = track;
         _lastTrack = track;
+        Laeuft = true;
         return true;
     }
 
     /// <summary>Welches Stück zuletzt lief. <see cref="Track"/> wird beim Stoppen
     /// auf -1 gesetzt, das hier bleibt stehen.</summary>
     private static int _lastTrack = -1;
+
+    /// <summary>Das Stueck WAEHLEN, ohne es zu starten — was &lt; und &gt; im
+    /// CD-Spieler tun, solange nichts laeuft (das Original schreibt dann nur
+    /// <c>byte[0x500E08]</c>, @0x472E38).</summary>
+    public static void Waehle(int track)
+    {
+        if (track >= 0) _lastTrack = track;
+    }
+
+    /// <summary>Das GEWAEHLTE Stueck — es ueberlebt ein Anhalten, anders als
+    /// <see cref="Track"/>. Entspricht <c>byte[0x500E08]</c> des Originals, das
+    /// der CD-Spieler anzeigt und mit &lt; und &gt; verschiebt.</summary>
+    public static int Gewaehlt => _lastTrack >= 0 ? _lastTrack : 1;
 
     /// <summary>
     /// "MIDI-Musik an/aus" wieder auf AN: dasselbe Stück noch einmal auflegen.
@@ -288,6 +336,7 @@ public static class MidiMusic
         Send($"close {Alias}", quiet: true);
         _open = false;
         Track = -1;
+        Laeuft = false;
     }
 
     private static bool Send(string command, bool quiet = false)

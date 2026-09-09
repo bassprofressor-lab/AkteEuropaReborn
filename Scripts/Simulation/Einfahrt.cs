@@ -181,7 +181,23 @@ public partial class MapEntityLayer : Node2D
     /// unsichtbar und unanklickbar vor einer verstopften Tuer steht, waere ein
     /// echter Verlust — die Bandgrenze ist darum auf den EINEN Wert eingeengt,
     /// den wir wirklich setzen.
-    public static bool Untergestellt(Entity e) => e.Ukol == UkolUntergestellt;
+    public static bool Untergestellt(Entity e)
+        => e.Ukol == UkolUntergestellt
+           || (!TuerbandAlt && e.Ukol >= 0x32 && e.Ukol < 0x64);
+
+    /// <summary>
+    /// <c>--tuerband-alt</c> — der Stand vor dem 09.09.2026 zurueck: das
+    /// Zeichnertor gilt nur fuer den EINEN Wert 50, und eine austretende
+    /// Einheit (51) steht sichtbar und anklickbar in der Tuer.
+    ///
+    /// <para>⚠⚠ <b>Der Gegenschalter zu einer BERICHTIGUNG einer frueheren
+    /// Entscheidung</b> — darum ist er besonders wichtig. Der Absatz darueber
+    /// stand hier mit guter Begruendung: ohne einen Auslass waere eine
+    /// unsichtbare Einheit vor verstopfter Tuer verloren. Erst seit der
+    /// Tuerauslass gelesen und gebaut ist (`TorTakt` versucht es jeden Takt
+    /// wieder, sobald Tuerzelle UND die Zelle darunter frei sind), ist das Band
+    /// des Originals gefahrlos.</para></summary>
+    public static bool TuerbandAlt;
 
     /// <summary>Wieviele Einfahrten es gab, wieviele an einer vollen Schlange
     /// scheiterten, und wie oft ein Tor aufgegangen ist. ⚠ Ohne diese drei
@@ -245,7 +261,25 @@ public partial class MapEntityLayer : Node2D
             // erst wenn sie die Tuerzelle verlassen hat. Das ist, was der
             // Auftragsarm 0x409B59 tut — wegfahren, dann UKOL 0.
             if (her != null && e.Col == her.Col + her.DoorCol
-                            && e.Row == her.Row + her.DoorRow) continue;
+                            && e.Row == her.Row + her.DoorRow)
+            {
+                // ⭐⭐ 09.09.2026 — DER AUSLASS, jeden Takt neu versucht.
+                //
+                // Das Original holt die Wartenden im GEBAEUDE-TICK heraus
+                // (@0x43DCA6 Basis, @0x43E19E Depot), hoechstens einen je Takt
+                // und nur, wenn Tuerzelle UND die Zelle darunter frei sind.
+                // Hier steht dasselbe: wer noch auf seiner Tuerzelle steht und
+                // keinen Weg hat, bekommt jeden Takt eine neue Gelegenheit.
+                // ⚠ Ohne das waere das Zeichnertor unten toedlich — eine
+                // unsichtbare Einheit vor verstopfter Tuer bliebe fuer immer
+                // stehen. Genau darum war das Band bis heute eingeengt.
+                if (!TuerbandAlt && (e.Path == null || e.Path.Count == 0))
+                {
+                    int ix = _entities.IndexOf(e);
+                    if (ix >= 0) StepOutOfDoor(ix, e, her);
+                }
+                continue;
+            }
             e.Ukol = UkolFrei;
             e.InGebaeude = null;
         }
@@ -605,4 +639,58 @@ public partial class MapEntityLayer : Node2D
             }
         }
     }
+    // ---- Pruefstand --tuerauslass-check ---------------------------------------
+
+    /// <summary>Der Platz der Einheit, die der Tuerauslass-Pruefstand
+    /// verfolgt.</summary>
+    private int _tuerprobeEinheit = -1;
+
+    /// <summary>Das erste eigene Gebaeude mit Tuer (Basis, Depot, Bahnhof) —
+    /// fuer <c>--tuerauslass-check</c>.</summary>
+    public int ErstesEigenesGaragengebaeude()
+    {
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var b = _entities[i];
+            if (!b.IsBuilding || b.IsProp || b.Dead || b.NoStructure) continue;
+            if (b.Owner != ViewPlayer || b.DoorCells.Count == 0) continue;
+            // ⚠ NICHT nur GarageTyp: seine Meldung kam aus dem Depot einer
+            // FABRIK, und die ist keine Garage. Jedes eigene Gebaeude mit Tuer
+            // taugt fuer die Probe.
+            return i;
+        }
+        return -1;
+    }
+
+    /// <summary>Eine Einheit ins Depot legen und aussenden — der Anstoss des
+    /// Pruefstands. ⚠ Er nimmt denselben Weg wie der Spielerknopf
+    /// (<see cref="SendOutOfDepot"/>), damit nichts am Aussenden vorbeigemessen
+    /// wird.</summary>
+    public string TuerauslassAnstoss(int gi)
+    {
+        var b = _entities[gi];
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"  Gebaeude {gi} (Art {b.BType}) auf ({b.Col},{b.Row}), Tuer "
+                + $"({b.Col + b.DoorCol},{b.Row + b.DoorRow})\n");
+        if (b.Depot.Count == 0 && _designs is { Count: > 0 }) b.Depot.Add(0);
+        int vor = _entities.Count;
+        bool ok = SendOutOfDepot(b, 0);
+        _tuerprobeEinheit = ok && _entities.Count > vor ? _entities.Count - 1 : -1;
+        sb.Append($"  ausgesandt: {ok}, Platz {_tuerprobeEinheit}\n");
+        return sb.ToString();
+    }
+
+    /// <summary>Wo die verfolgte Einheit gerade steht.</summary>
+    public (int Ukol, bool AufTuer, bool Untergestellt, int WegLaenge)? TuerauslassStand()
+    {
+        if (_tuerprobeEinheit < 0 || _tuerprobeEinheit >= _entities.Count) return null;
+        var e = _entities[_tuerprobeEinheit];
+        var b = e.InGebaeude;
+        bool aufTuer = b != null && e.Col == b.Col + b.DoorCol && e.Row == b.Row + b.DoorRow;
+        return (e.Ukol, aufTuer, Untergestellt(e), e.Path?.Count ?? 0);
+    }
+
+    /// <summary>Einen Simulationstakt von Hand — nur fuer Pruefstaende.</summary>
+    public void SimTickFuerProbe() => SimTick(1f / SimHz);
+
 }

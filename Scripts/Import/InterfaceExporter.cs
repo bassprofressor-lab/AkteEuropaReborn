@@ -43,6 +43,23 @@ public sealed class InterfaceExporter
 
     public const int GlyphRecord = 131, CellHeight = 13, GlyphCount = 160, AtlasCols = 16;
 
+    /// <summary>Breiter als das kann eine echte Glyphe nicht sein: die Zelle
+    /// hat 130 Byte für <see cref="CellHeight"/> = 13 Zeilen. Die vier letzten
+    /// Sätze von <c>FONT.CWD</c> (0xBC…0xBF) melden 81/71/61/51 — sie sind
+    /// keine Glyphen. Siehe <see cref="WriteFont"/>.</summary>
+    public const int MaxGlyphWidth = 12;
+
+    /// <summary>
+    /// <b>Die PLAKETTEN der Schrift</b> — Zeichen <c>0xAA…0xBB</c> von
+    /// <c>FONT.CWD</c>: zehn Ziffernplaketten und die acht <b>Rangplaketten</b>,
+    /// die die Einheitenliste vor den Namen setzt (<c>0x4649F0</c>).
+    ///
+    /// <para>Sie kommen in den Unicode-Privatbereich, weil sie weder Buchstaben
+    /// noch cp437-Rahmenlinien sind — und weil <c>U+00BA</c>/<c>U+00BB</c> von
+    /// cp437 schon belegt wären. Wer sie sucht, nimmt
+    /// <c>PlaqueBase + Zeichennummer</c>.</para></summary>
+    public const int PlaqueFirst = 0xAA, PlaqueLast = 0xBB, PlaqueBase = 0xE000;
+
     /// <summary>How dark the second colour slot is relative to the first — the
     /// measured mean of the seven pairs the game's own callers pass. Kept as a
     /// number so the Python reference and this agree by construction rather
@@ -87,12 +104,23 @@ public sealed class InterfaceExporter
     public void WriteFont(byte[] font, string name = FontName, string source = "FONT.CWD")
     {
         Directory.CreateDirectory(_ui);
-        int maxW = 1;
-        for (int i = 0; i < GlyphCount; i++)
+        // ⚠⚠ 09.09.2026 — DIE VIER LETZTEN SAETZE SIND KEINE GLYPHEN.
+        //
+        // `FONT.CWD` hat 160 Saetze; die letzten vier (Zeichen 0xBC…0xBF) tragen
+        // die Breiten 81, 71, 61, 51 und eine Zelle aus lauter 0xFF. Real sind es
+        // **156 Glyphen**. Ohne diese Schranke bestimmt die 81 das `maxW`, und
+        // der Bogen wird **1296 x 130 statt 144 x 130** — neunmal so breit fuer
+        // nichts. Gefunden beim Lesen der Rangplaketten
+        // (berichte/fensterlisten-fable-2.md, Abschnitt II).
+        bool Echt(int i)
         {
             int b = i * GlyphRecord;
-            if (b < font.Length) maxW = Math.Max(maxW, font[b]);
+            return b + GlyphRecord <= font.Length && font[b] <= MaxGlyphWidth;
         }
+
+        int maxW = 1;
+        for (int i = 0; i < GlyphCount; i++)
+            if (Echt(i)) maxW = Math.Max(maxW, font[i * GlyphRecord]);
         int rows = (GlyphCount + AtlasCols - 1) / AtlasCols;
         var atlas = Image.CreateEmpty(AtlasCols * maxW, rows * CellHeight, false, Image.Format.Rgba8);
         atlas.Fill(new Color(0, 0, 0, 0));
@@ -103,6 +131,7 @@ public sealed class InterfaceExporter
         {
             int b = i * GlyphRecord;
             if (b + GlyphRecord > font.Length) break;
+            if (!Echt(i)) continue;                  // die vier Muellsaetze, s. o.
             int w = font[b];
             int gx = i % AtlasCols * maxW, gy = i / AtlasCols * CellHeight;
             for (int y = 0; y < CellHeight; y++)
@@ -126,7 +155,19 @@ public sealed class InterfaceExporter
                     atlas.SetPixel(gx + x, gy + y, c);
                 }
             int code = i + 0x20;
-            int uni = code >= 0x80 ? Cp437.Char((byte)code) : code;
+            // ⚠⚠ 09.09.2026 — DIE PLAKETTEN SIND KEINE cp437-ZEICHEN.
+            //
+            // Auf 0xAA…0xB3 stehen zehn ZIFFERNplaketten, auf 0xB4…0xBB die
+            // acht RANGplaketten (Einheitenliste, 0x4649F0). Wer sie durch
+            // cp437 schickt, taufte sie auf Rahmenlinien: Satz 0xB4 wurde zu
+            // `┤` = U+2524, und `UnitListView.RangText` fragte vergeblich nach
+            // U+00B4. Die Glyphen WAREN da, nur unter falschem Namen.
+            //
+            // ⚠ Roh `code` geht nicht: U+00BA und U+00BB sind von cp437 schon
+            // belegt (0xA7 »º«, 0xAF »«). Also in den Privatbereich, wo nichts
+            // kollidiert.
+            int uni = code is >= PlaqueFirst and <= PlaqueLast ? PlaqueBase + code
+                    : code >= 0x80 ? Cp437.Char((byte)code) : code;
             chars.Append($"char id={uni} x={gx} y={gy} width={w} height={CellHeight} ");
             // ⚠⚠ 19.08.2026 — HIER STAND `w + 1`, UND DAS WAR DER GROESSTE
             // ANTEIL AM ZU BREITEN SATZ.

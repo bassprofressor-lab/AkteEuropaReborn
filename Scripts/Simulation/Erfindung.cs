@@ -419,4 +419,89 @@ public partial class MapEntityLayer : Node2D
         var basis = ForschungBasis(l.Basis);
         if (basis != null) NoteEvent(basis, $"Neue Waffe: {lauf.Value.Name}");
     }
+
+    // ---- Fensterart 29: was das Fenster »Forschungsergebnisse« zeigt ----------
+
+    /// <summary><c>--forschungsliste-alle</c> — den ersten Fehler des Originals
+    /// abschalten: statt nur der Zeilen 1…70 wird der ganze Block durchsucht.
+    /// ⚠ Ohne den Schalter suchen wir wie das Original, und die Zeilen 71
+    /// (Transporter) und 72 (G-Technik) fallen heraus.</summary>
+    public static bool ForschungslisteAlle;
+
+    /// <summary><c>--forschungsliste-eigenblock</c> — den zweiten Fehler des
+    /// Originals abschalten: den Namen aus dem Block des Betrachters holen statt
+    /// aus Block 0.</summary>
+    public static bool ForschungslisteEigenblock;
+
+    /// <summary>Wieviele Zeilen der Filter angesehen hat, und ob die zwei
+    /// Fehler des Originals dabei überhaupt etwas verändert hätten — für
+    /// <c>--forschungsliste-check</c>.</summary>
+    public int ForschungslisteGeprueft, ForschungslisteBlockUnterschied;
+
+    /// <summary>
+    /// <b>Die Zeilen der FORSCHUNGSERGEBNISSE</b> (Fensterart 29) — siehe
+    /// <see cref="UI.ResearchListView"/>.
+    ///
+    /// <para>Der Filter ist der des Originals (@0x47CB2F…0x47CB64): jede
+    /// Bauteilzeile <b>k = 1…70</b> im Block des Betrachters, deren Techstufe
+    /// <c>+0x24</c> <b>10</b> ist. Die 10 setzt nur <see cref="Erfinden"/>
+    /// (<c>B[0x24] = 10</c>), so wie im Original nur <c>0x4AB1B6</c> — es ist
+    /// also die Marke »das hier ist erfunden«.</para>
+    ///
+    /// <para>⚠⚠ <b>ZWEI FEHLER DES ORIGINALS, beide nachgebaut.</b> Sie werden
+    /// nicht stillschweigend berichtigt; jeder hat seinen Schalter, und der
+    /// Prüfstand meldet, ob sie hier überhaupt etwas ausmachen:</para>
+    /// <list type="number">
+    ///   <item><b>Die Suche endet bei 70</b> (<c>cmp ax, 0x46; jle</c>
+    ///   @0x47CB60), obwohl je Block 200 Zeilen Platz haben. Zeile 71
+    ///   (Transporter) und 72 (G-Technik) sind damit unerreichbar. Bei uns
+    ///   vergibt <c>ErfindungFreieZeile</c> die Zeilen — liegt eine Erfindung
+    ///   über 70, sieht man sie ohne <c>--forschungsliste-alle</c> nicht.</item>
+    ///   <item><b>Die Prüfung liest im Block des Spielers, den NAMEN aber ohne
+    ///   den Block</b> (<c>0x5045C5 + 58·k</c> @0x47CC53, ohne die 200·P, die
+    ///   andere Namensleser wie <c>0x46CC35</c> sehr wohl addieren). Für Spieler
+    ///   0 ist das folgenlos; für jeden anderen stünde dort ein fremder Name.
+    ///   <c>--forschungsliste-eigenblock</c> nimmt den Namen aus dem eigenen
+    ///   Block.</item>
+    /// </list>
+    /// </summary>
+    public List<string> ForschungsergebnisseZeilen()
+    {
+        var aus = new List<string>();
+        ForschungslisteGeprueft = 0;
+        ForschungslisteBlockUnterschied = 0;
+        if (_bauteile == null) return aus;
+
+        int p = ViewPlayer is >= 0 and <= 7 ? ViewPlayer : 0;
+        if (p >= _bauteile.Length) return aus;
+        var block = _bauteile[p];
+        var block0 = _bauteile[0];
+        int letzte = ForschungslisteAlle ? block.Length - 1 : 70;   // @0x47CB60
+
+        for (int k = 1; k <= letzte && k < block.Length; k++)
+        {
+            ForschungslisteGeprueft++;
+            var b = block[k];
+            if (b == null || b.Length < 58 || b[0x24] != 10) continue;   // @0x47CB3E
+
+            // ⚠ Der Name aus BLOCK 0 — der zweite Fehler des Originals.
+            var quelle = ForschungslisteEigenblock ? b
+                       : (k < block0.Length && block0[k] is { Length: >= 58 } n ? n : b);
+            if (!ReferenceEquals(quelle, b) && NameAus(quelle) != NameAus(b))
+                ForschungslisteBlockUnterschied++;
+            string name = NameAus(quelle);
+            aus.Add(name.Length > 0 ? name : $"Zeile {k}");
+        }
+        return aus;
+    }
+
+    /// <summary>Der lange Bauteilname aus <c>+0x25</c> (@0x47CC53), bis zur
+    /// Null. Dasselbe Feld, in das <see cref="Erfinden"/> den Namen der
+    /// Erfindung schreibt.</summary>
+    private static string NameAus(byte[] b)
+    {
+        int n = 0;
+        while (0x25 + n < b.Length && n < 24 && b[0x25 + n] != 0) n++;
+        return System.Text.Encoding.ASCII.GetString(b, 0x25, n).Trim();
+    }
 }

@@ -156,6 +156,21 @@ public static class UnitStatBook
 
     /// <summary>Der LANGE Bauteilname (Satz +0x25) mit derselben Klammer — das
     /// ist die Schreibweise der drei Listen im Erstellungsfenster.</summary>
+    /// <summary>
+    /// Der kurze Bauteilname (+0x02) <b>OHNE die Klammer</b>.
+    ///
+    /// <para>⚠ 09.09.2026, beim Bau der Einheitenliste (Fensterart 22) gelesen:
+    /// die Klammer <c>" (n)"</c> gehört den drei BAUTEILLISTEN des
+    /// Erstellungsfensters, nicht dem Namen. Die Einheitenliste kopiert bei
+    /// <c>0x4773FF</c> nur <c>[Zeile·58 + 0x5045A2]</c> und hängt nichts an —
+    /// dort steht »Ketten«, nicht »Ketten (0)«.</para></summary>
+    public static string ComponentPlain(int row)
+    {
+        Load();
+        if (_comp == null || row <= 0 || !_comp.TryGetValue(row, out var r)) return "";
+        return Import.Cp437.GetString(r, 0x02, 11);
+    }
+
     public static string ComponentLongLabel(int row)
     {
         Load();
