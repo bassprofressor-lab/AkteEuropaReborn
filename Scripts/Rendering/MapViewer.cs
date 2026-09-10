@@ -885,6 +885,7 @@ public partial class MapViewer : Node2D
         if (_zeigerfensterCheck) { _ = ZeigerfensterLauf(); return; }
         if (_cdspielerCheck) { _ = CdSpielerLauf(); return; }
         if (_tuerauslassCheck) { _ = TuerauslassLauf(); return; }
+        if (_einsteigenCheck) { GD.Print(_entities.EinsteigenCheck()); GetTree().Quit(0); return; }
         if (_rollbalkenCheck)
         {
             GD.Print(UI.WindowChromeCheck.RollbalkenLauf());
@@ -1315,6 +1316,29 @@ public partial class MapViewer : Node2D
     /// <summary><c>--tuerauslass-check</c> — siehe
     /// <see cref="TuerauslassLauf"/>.</summary>
     private bool _tuerauslassCheck;
+
+    /// <summary><c>--einsteigen-check</c> — siehe MapEntityLayer.EinsteigenCheck.</summary>
+    private bool _einsteigenCheck;
+
+    /// <summary><c>--gebaeudeklick-check</c> — siehe MapEntityLayer.GebaeudeklickCheck.</summary>
+    private bool _gebaeudeklickCheck;
+
+    /// <summary><c>--fussklangsatz-check</c> — siehe Simulation/FussklangsatzCheck.cs.</summary>
+    private bool _fussklangsatzCheck;
+
+    /// <summary><c>--werteliste-check</c> — siehe Simulation/WertelisteCheck.cs.</summary>
+    private bool _wertelisteCheck;
+
+    /// <summary><c>--sieg7-check</c> — siehe Simulation/Sieg7Check.cs.</summary>
+    private bool _sieg7Check;
+
+    /// <summary><c>--nebelrest-check</c> — siehe Simulation/NebelrestCheck.cs.</summary>
+    private bool _nebelrestCheck;
+    private bool _sieg7Gestartet;
+
+    /// <summary><c>--absetz-check</c> — siehe Simulation/AbsetzCheck.cs.</summary>
+    private bool _absetzCheck;
+    private bool _absetzGestartet;
     private bool _kaufwegCheck;
     private bool _plattformCheck;
     private bool _hangCheck;
@@ -2782,6 +2806,35 @@ public partial class MapViewer : Node2D
             else if (a == "--neubaustrom-alt") MapEntityLayer.NeubaustromAlt = true;
             else if (a == "--cdspieler-alt") UI.CdPlayerView.Alt = true;
             else if (a == "--tuerband-alt") MapEntityLayer.TuerbandAlt = true;
+            else if (a == "--rampe-fuer-alle") MapEntityLayer.RampeFuerAlle = true;
+            else if (a == "--einsteigen-im-stand") MapEntityLayer.EinsteigenImStand = true;
+            else if (a == "--absetz-check") _absetzCheck = true;
+            else if (a == "--bauwerk-nur-1-16") MapEntityLayer.BauwerkNur1Bis16 = true;
+            else if (a == "--platzhalter-ohne-energie") MapEntityLayer.PlatzhalterOhneEnergie = true;
+            else if (a == "--kulisse-alt") MapEntityLayer.KulisseAlt = true;
+            else if (a == "--bildart-alt") MapEntityLayer.BildartAlt = true;
+            else if (a == "--ruine-allein") MapEntityLayer.RuineAllein = true;
+            else if (a == "--nahweg-trotz-route") MapEntityLayer.NahwegTrotzRoute = true;
+            else if (a == "--sieg7-ohne-wiffer") MapEntityLayer.Sieg7OhneWiffer = true;
+            else if (a == "--fussklang-alt") Audio.GameSounds.FussklangAlt = true;
+            else if (a == "--fussklangsatz-alt") MapEntityLayer.FussklangsatzAlt = true;
+            else if (a == "--fussklangsatz-check") _fussklangsatzCheck = true;
+            else if (a == "--parteifarben-alt") MapEntityLayer.ParteifarbenAlt = true;
+            else if (a == "--nebel-ohne-verbuendete") MapEntityLayer.NebelOhneVerbuendete = true;
+            else if (a == "--nebel-alte-sicht") MapEntityLayer.NebelAlteSicht = true;
+            else if (a == "--nebel-ohne-flugzeuge") MapEntityLayer.NebelOhneFlugzeuge = true;
+            else if (a == "--neutrale-decken-auf") MapEntityLayer.NeutraleDeckenAuf = true;
+            else if (a == "--todes-log") MapEntityLayer.TodesLog = true;
+            else if (a == "--sieg7-check") _sieg7Check = true;
+            else if (a == "--endregel-getrennt") Campaign.MissionScript.EndregelGetrennt = true;
+            else if (a == "--eingefahren-bleibt-gewaehlt") MapEntityLayer.EingefahrenBleibtGewaehlt = true;
+            else if (a == "--gebaeude-ankerzelle") MapEntityLayer.GebaeudeAnkerzelle = true;
+            else if (a == "--gebaeude-nur-lesen") MapEntityLayer.GebaeudeNurLesen = true;
+            else if (a == "--nebelrest-check") _nebelrestCheck = true;
+            else if (a == "--werteliste-nur-roh") UI.UnitStatBook.NurRoheWerteliste = true;
+            else if (a == "--werteliste-check") _wertelisteCheck = true;
+            else if (a == "--einsteigen-check") _einsteigenCheck = true;
+            else if (a == "--gebaeudeklick-check") _gebaeudeklickCheck = true;
             else if (a == "--tuerauslass-check") _tuerauslassCheck = true;
             else if (a == "--cdspieler-check") _cdspielerCheck = true;
             else if (a == "--zeigerfenster-check") _zeigerfensterCheck = true;
@@ -4137,6 +4190,7 @@ public partial class MapViewer : Node2D
             // unterscheiden. Siehe MapEntityLayer.AirDrift (Fehler D6).
             GD.Print(_entities.AirDriftLine());
             GD.Print(_entities.RangeWatchLine());
+            GD.Print(Audio.GameSounds.FussklangZeile());
             if (_belegCheck) GD.Print(_entities.BelegungCheckLine());
             if (_beschussCheck) GD.Print(_entities.BeschussCheckLine());
             if (_forscherProbe) GD.Print(_entities.ForscherProbeLine());
@@ -6180,6 +6234,52 @@ public partial class MapViewer : Node2D
             GD.Print(_entities.ForscherProbeStart());
         }
         if (_forscherGestartet) _entities.ForscherProbeTick();
+
+        // ⚠ NICHT im fruehen Block: der Abschnitt »was das Missionsskript
+        // sieht« braucht das geladene Skript, und das entsteht erst im
+        // MissionScriptTick. Am 10.09. lief er einmal zu frueh und liess den
+        // halben Pruefstand still aus.
+        if (_wertelisteCheck && _entities.ErwartungBereit())
+        {
+            GD.Print(_entities.WertelisteCheck());
+            GetTree().Quit(0);
+            return;
+        }
+
+        if (_fussklangsatzCheck && _entities.ErwartungBereit())
+        {
+            GD.Print(_entities.FussklangsatzCheck());
+            GetTree().Quit(0);
+            return;
+        }
+
+        if (_gebaeudeklickCheck && _entities.ErwartungBereit())
+        {
+            GD.Print(_entities.GebaeudeklickCheck());
+            GetTree().Quit(0);
+            return;
+        }
+
+        if (_nebelrestCheck && _entities.ErwartungBereit())
+        {
+            GD.Print(_entities.NebelrestCheck());
+            GetTree().Quit(0);
+            return;
+        }
+
+        if (_sieg7Check && !_sieg7Gestartet && _entities.ErwartungBereit())
+        {
+            _sieg7Gestartet = true;
+            _entities.Sieg7Start();
+        }
+        if (_sieg7Gestartet) _entities.Sieg7Tick((float)delta);
+
+        if (_absetzCheck && !_absetzGestartet)
+        {
+            _absetzGestartet = true;
+            GD.Print(_entities.AbsetzCheckStart());
+        }
+        if (_absetzGestartet) _entities.AbsetzCheckTick();
 
         if (_rampenProbe && !_rampenGestartet && _entities.ErwartungBereit())
         {

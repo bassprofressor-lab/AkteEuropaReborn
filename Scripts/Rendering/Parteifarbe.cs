@@ -114,6 +114,31 @@ public partial class MapEntityLayer
         0x00f7cf, 0x00dfb3, 0x07c79b, 0x07af87,   // 7 cyan
     };
 
+    /// <summary>
+    /// <b>DIE Farbe einer Partei</b> — die, die das Original nimmt, wo es EINE
+    /// braucht (Uebersichtskarte, Balken, Rahmen). (10.09.2026)
+    ///
+    /// <para>Der Uebersichtsmaler <c>0x4B7ED0</c> rechnet
+    /// <c>lea edx,[eax*4+2]</c> — also den DRITTEN Eintrag der Vierergruppe
+    /// dieses Spielers, Palettenplatz <c>4p+2</c>. Genau diese Gruppen stehen
+    /// schon in <see cref="Bandziel"/>.</para>
+    ///
+    /// <para>⚠⚠ Bis heute hatte <c>MapEntityLayer.Factions</c> dafuer eine
+    /// EIGENE Tafel (»neutral placeholder palette, high-contrast«), und sie
+    /// widersprach dem Original an <b>8 von 8</b> Eintraegen — drei davon
+    /// sinnentstellend: Spieler 1 war ROT statt gruen, Spieler 2 GRUEN statt
+    /// rot, Spieler 7 pink statt cyan. Das Schlachtfeld faerbte seit dem
+    /// 24.08. schon richtig um, die Minikarte nicht — dieselbe Partei hatte
+    /// auf Karte und Uebersicht zwei verschiedene Farben.</para>
+    /// </summary>
+    public static Color Parteifarbe4p2(int spieler)
+    {
+        uint rgb = Bandziel[Mathf.PosMod(spieler, Parteien) * 4 + 2];
+        return new Color(((rgb >> 16) & 0xFF) / 255f,
+                         ((rgb >> 8) & 0xFF) / 255f,
+                         (rgb & 0xFF) / 255f);
+    }
+
     /// <summary>Wie viele Parteien die Tafel trägt — acht, wie das
     /// Einheitenfeld Tausenderblöcke hat.</summary>
     public const int Parteien = 8;
@@ -252,6 +277,20 @@ public partial class MapEntityLayer
             if (zaehl[b] > 0) sb.Append($"{b}={name[b]}:{zaehl[b]}  ");
         sb.Append($"| {FarbeBilder} Bilder umgefaerbt, {FarbePunkte} Punkte, "
                 + $"{FarbeOhneBand} Bilder ohne Bandpunkt");
+        // ⚠⚠ 10.09.2026 — DIE ZWEITE ZAHL: die UEBERSICHTSfarben.
+        // Die Zeile darueber misst die Bandumfaerbung auf dem Schlachtfeld;
+        // die Minikarte, die Balken und die Rahmen nehmen einen anderen Weg
+        // (MapEntityLayer.FactionColor), und genau der wich an 8 von 8
+        // Eintraegen von der Palette ab. Ohne diese Zeile bliebe der
+        // Unterschied unsichtbar, weil die erste Zahl sich nicht ruehrt.
+        int treffer = 0;
+        for (int b = 0; b < Parteien; b++)
+            if (MapEntityLayer.FactionColor(b).IsEqualApprox(Parteifarbe4p2(b))) treffer++;
+        sb.Append($"{(char)10}  Uebersichtsfarben: {treffer} von {Parteien} sind "
+                + $"Palettenplatz 4p+2 (@0x4B81DC)"
+                + (treffer == Parteien ? "   BESTANDEN"
+                   : MapEntityLayer.ParteifarbenAlt ? "   (--parteifarben-alt)"
+                   : "   DURCHGEFALLEN"));
         if (KeineParteifarbe) sb.Append("   (--keine-parteifarbe: AUS)");
         if (FarbeBilder == 0 && !KeineParteifarbe)
             sb.Append("\n  ⚠ nichts umgefaerbt — entweder gehoert alles dem Besitzer 0, "

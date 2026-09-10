@@ -134,7 +134,7 @@ public partial class MapEntityLayer : Node2D
     {
         shooter.FireUntil = _clock + FirePoseSeconds;
         Vector2 dir = (mitte - shooter.Pos).Normalized();
-        Audio.GameSounds.Fire(WeaponRowOf(shooter.Weapon), null, shooter.Col, shooter.Row);
+        SchussKlang(shooter);
 
         int art = Simulation.DesignMath.SoundClass(WeaponRowOf(shooter.Weapon));
         string? flug = FlightKind(art);

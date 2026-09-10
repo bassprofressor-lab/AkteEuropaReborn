@@ -978,6 +978,28 @@ public sealed class ExeTables
         };
     }
 
+    /// <summary>
+    /// <b>Ein Byte einer Bauteilzeile, von der ARRAY-Basis aus gezaehlt.</b>
+    /// (10.09.2026)
+    ///
+    /// <para>⚠ Das ist die Zaehlung, in der die Bauteiltafel beschrieben wird:
+    /// <c>+0x12</c> Angriff, <c>+0x13</c> Panzerung, <c>+0x14</c> Reichweite,
+    /// <c>+0x1E</c> Nachladen, <c>+0x20</c> Preis in Waffenteilen.
+    /// <see cref="Stat.Raw"/> beginnt dagegen erst bei <c>+0x1A</c>, dort ist
+    /// also <c>Raw[4]</c> das Nachladen und NICHT der Angriff — genau diese
+    /// Verwechslung stand bis heute in
+    /// <c>CatalogueExporter.WriteInfantry</c>.</para>
+    ///
+    /// <para>Dieselbe Rechnung wie <see cref="TechOf"/>, nur mit freiem
+    /// Versatz.</para>
+    /// </summary>
+    public int StatFeld(int row, int off)
+    {
+        var b = Read((uint)(StatsBase - (StatsRecord0 - StatsArrayBase)
+                            + row * StatsStride + off), 1);
+        return b.Length == 1 ? b[0] : 0;
+    }
+
     /// <summary>The technology threshold of a component: `+0x24` of the record
     /// counted from the array base, which is what the enable gate @0x419e90
     /// compares against the campaign level.</summary>

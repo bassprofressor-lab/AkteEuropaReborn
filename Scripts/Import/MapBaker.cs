@@ -184,10 +184,27 @@ public sealed class MapBaker
 
         foreach (var b in CwmData.Buildings(_map))
         {
-            // ⚠ Kulisse (IsBuilt == 0) wird NICHT beansprucht — der Zeichner
-            // stellt sie nicht her —, aber ihre Zellen werden gemerkt, damit
-            // der Backofen sie in die zweite Ebene legt statt ins Gelaende.
-            if (b.IsBuilt == 0)
+            // ⚠⚠⚠ 10.09.2026 — HIER STAND `b.IsBuilt == 0`, UND DAS WAR DAS
+            // DRITTE MAL DASSELBE FALSCHE KRITERIUM.
+            //
+            // Am 24.08. kamen die »Kulissenbauten« in die zweite Ebene, weil der
+            // Zeichner sie nicht herstellte (`!e.NoStructure`) — richtig gedacht
+            // fuer den Nebel, aber es machte sie UNZERSTOERBAR IM BILD: was
+            // gebacken ist, kann nicht zur Ruine werden. Genau dagegen wurde
+            // dieser Backofen gebaut (siehe oben: »A destroyed building could
+            // then never stop being drawn«) — die Ausnahme hob den Grund wieder auf.
+            //
+            // `built` heisst »hat Spiellogik« (0x4C91B0 aus Tafel 0x539DB8): es
+            // sperrt Fenster, Einnahme und Tore — NICHT das Zeichnen und nicht
+            // das Beschiessen. Dieselbe Verwechslung stand heute frueh bei den
+            // Trefferpunkten (bug-155) und im Zeichner (BuildingsBackToFront).
+            //
+            // Kulisse ist jetzt nur noch der LEERE Satz: Typ 0, also das, was der
+            // Zerstoerer hinterlaesst (@0x4C9A8E). Der traegt kein Muster und
+            // faellt gleich durch `kt.IsEmpty` heraus — der Zweig ist damit
+            // faktisch still. Er bleibt stehen, weil er die Herleitung traegt.
+            // Seine Meldung: »da fehlt dann nur noch wie er zerstoert aussieht.«
+            if (b.Type <= 0)
             {
                 var kt = _tiles.GetBuildingType(b.Type);
                 if (kt.IsEmpty) continue;

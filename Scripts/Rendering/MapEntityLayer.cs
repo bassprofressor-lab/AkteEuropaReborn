@@ -296,6 +296,34 @@ public partial class MapEntityLayer : Node2D
         public bool NoStructure;
         public string Name = "";   // base name for buildings ("Bolougne")
         public int BType;          // building type (1-based into building_types.json)
+
+        /// <summary>
+        /// <b>Die Art, nach der GEZEICHNET wird</b> — getrennt von
+        /// <see cref="BType"/>, nach dem sich das Missionsskript richtet.
+        ///
+        /// <para>⚠⚠⚠ 10.09.2026, ein Zusammenstoss zweier Behebungen desselben
+        /// Tages. Seit bug-155 setzt <c>Kill</c> beim Tod <c>BType = 0</c> —
+        /// richtig, denn <c>obj_owner</c> liest genau diese Null als
+        /// »zerstoert/leer« (@0x4C9A8E), und daran haengt das Missionsziel.
+        /// Seit bug-158 zeichnet der Zeichner jeden Satz mit <c>BType &gt; 0</c>
+        /// — auch richtig, denn Art 0 ist ein freier Satz ohne Bauwerk. Beides
+        /// zusammen heisst aber: <b>im Augenblick des Todes faellt das Gebaeude
+        /// aus der Zeichenliste</b>, und wo eine Ruine stehen sollte, bleibt
+        /// nackter Boden. Seine Meldung: »wenn die bunker zerstoert sind, also
+        /// die finale grafik, das scheint nicht zu passen, das gleiche bei den
+        /// generatoren«.</para>
+        ///
+        /// <para>⭐ Die zwei Fragen sind eben NICHT dieselbe: »welchen Satz
+        /// fuehrt das Skript hier noch?« und »was ist hier zu sehen?«. Das
+        /// Original trennt sie auch — der Zerstoerer <c>0x4D5D60</c> setzt erst
+        /// die Schadensstufe auf n (damit wird das letzte Muster, die Ruine,
+        /// gestempelt) und nullt den Typ danach.</para>
+        ///
+        /// <para>Also: <see cref="BType"/> wird beim Tod null,
+        /// <see cref="BildArt"/> behaelt die Art und traegt das Ruinenbild.
+        /// </para>
+        /// </summary>
+        public int BildArt;
         public int StockW, StockF, StockS;  // stored Waffen / Fahrwerk / Spezial parts
         public int Deposit = -1;            // Terranium left in the ground (sec28)
         public int DepositStart;            // what it held when the map was saved
@@ -526,6 +554,23 @@ public partial class MapEntityLayer : Node2D
         /// gesetzt fuer einen frisch Ausgestiegenen, der nirgends hin kann.
         /// ⚠ UNSERES; das Original schickt ihn stattdessen weg.</summary>
         public float NichtBeladenBis;
+
+        /// <summary>Hatte diese Einheit im VORIGEN Belade-Takt noch einen Weg?
+        /// Daran erkennt <see cref="MapEntityLayer.BeladeTakt"/> den ANKOMMENDEN
+        /// und unterscheidet ihn vom blossen Danebenstehen — siehe dort.
+        /// </summary>
+        public bool HatteWeg;
+
+        /// <summary>Ist diese Einheit in DIESEM Belade-Takt zum Stehen
+        /// gekommen? Nur sie geht an Bord — siehe
+        /// <see cref="MapEntityLayer.BeladeTakt"/>.</summary>
+        public bool AngekommenJetzt;
+
+        /// <summary>Wurde dieses Gebaeude schon einmal gesehen? ⚠ Nur ein
+        /// Zwischenspeicher fuer <see cref="MapEntityLayer.GebaeudeAufgedeckt"/>
+        /// — das Gedaechtnis selbst liegt im Nebel und ist ohnehin monoton.
+        /// </summary>
+        public bool Aufgedeckt;
 
         /// <summary>Takte bis zum naechsten Versuch, einen Weg zu
         /// <see cref="Goal"/> zu finden — 0 heisst »kein Versuch offen«.
@@ -1374,7 +1419,24 @@ public partial class MapEntityLayer : Node2D
     /// <summary>The faction colours, for anything that has to agree with what is
     /// drawn on the map — the overview map above all, where a side being a
     /// different colour than on the battlefield would be worse than useless.</summary>
-    public static Color FactionColor(int owner) => Factions[Mathf.PosMod(owner, Factions.Length)];
+    /// <summary>
+    /// ⚠⚠ 10.09.2026 — <b>DIE MINIKARTE ZEIGTE ANDERE PARTEIFARBEN ALS DAS
+    /// SCHLACHTFELD.</b> <see cref="Factions"/> war eine eigene Tafel
+    /// (»neutral placeholder palette«) und wich an 8 von 8 Eintraegen von der
+    /// Palette ab; Spieler 1 war rot statt gruen, 2 gruen statt rot, 7 pink
+    /// statt cyan. Das Original nimmt Palettenplatz <c>4p+2</c>
+    /// (<c>lea edx,[eax*4+2]</c> @0x4B81DC) — siehe
+    /// <c>Parteifarbe.Parteifarbe4p2</c>. Gegenschalter
+    /// <c>--parteifarben-alt</c>.
+    /// </summary>
+    public static Color FactionColor(int owner)
+        => ParteifarbenAlt ? Factions[Mathf.PosMod(owner, Factions.Length)]
+                           : Parteifarbe4p2(owner);
+
+    /// <summary><c>--parteifarben-alt</c> — der Stand vor dem 10.09.2026: die
+    /// Minikarte und die Balken nehmen die erfundene Platzhalterpalette.
+    /// </summary>
+    public static bool ParteifarbenAlt;
 
     private static readonly Color PropColor = new(0.75f, 0.75f, 0.80f, 0.8f);
     private static readonly Color MarkerColor = new(1f, 1f, 1f, 0.95f);
@@ -1739,15 +1801,94 @@ public partial class MapEntityLayer : Node2D
     /// <c>UnitRadius(10, 1) = 10 + 1 - 1 = 10</c> — dieselbe Zahl, ohne einen
     /// zweiten Weg durch die Nebelrunde.</para>
     /// </summary>
+    /// <summary><c>--nebel-ohne-verbuendete</c> — der Stand vor dem 10.09.2026:
+    /// nur die eigenen Einheiten und Gebaeude decken auf.</summary>
+    public static bool NebelOhneVerbuendete;
+
+    /// <summary><c>--nebel-alte-sicht</c> — der Stand vor dem 10.09.2026: eine
+    /// Einheit mit Sicht 0 bekommt die erfundene 4, und wer im Gebaeude steht,
+    /// deckt weiter auf.</summary>
+    public static bool NebelAlteSicht;
+
+    /// <summary><c>--nebel-ohne-flugzeuge</c> — der Stand vor dem 10.09.2026:
+    /// Flugzeuge decken gar nichts auf.</summary>
+    public static bool NebelOhneFlugzeuge;
+
+    /// <summary>
+    /// <b>Teilt dieser Spieler seine Sicht mit dem Betrachter?</b>
+    ///
+    /// <para>⚠⚠⚠ 10.09.2026, seine Meldung noch am selben Tag: »jetzt sehe ich
+    /// neutrale einheiten auf der minimap sowie karte, die sind aufgedeckt. das
+    /// darf ja nicht sein, ich muss sie ja erst einnehmen.« Das war eine
+    /// Nebenwirkung von bug-163: seit die Nebelrunde die Buendnismatrix fragt,
+    /// zaehlte auch der NEUTRALE Platz als Verbuendeter — und der ist in jeder
+    /// <c>.DM</c> mit sec53-Tafel <b>mit allen</b> verbuendet
+    /// (<see cref="NeutralSlot"/>).</para>
+    ///
+    /// <para>⭐ Das ist der Unterschied, den die Matrix allein nicht macht:
+    /// »mit allen verbuendet« heisst beim neutralen Platz <b>»greift niemanden
+    /// an und wird von niemandem angegriffen«</b> — es ist eine
+    /// Nichtangriffs-Kennzeichnung, keine Sichtgemeinschaft. Leitete man daraus
+    /// Sichtteilung ab, saehe jeder Spieler vom ersten Takt an alles, was der
+    /// neutrale Platz besitzt: genau die Einheiten und Gebaeude, die man im
+    /// Spiel erst EINNEHMEN muss.</para>
+    ///
+    /// <para>⚠ <b>UNSERE Setzung</b>, und sie ist es ausdruecklich: gelesen ist
+    /// die Buendnisabfrage der Nebelrunde (@0x42071D, @0x420694, @0x42083D),
+    /// nicht die Frage, wie das Original den neutralen Platz dort behandelt.
+    /// Belegt ist sie durch das Spiel — im Original sind diese Einheiten
+    /// verdeckt. Gegenschalter <c>--neutrale-decken-auf</c>.</para>
+    /// </summary>
+    private bool DecktAuf(int besitzer)
+    {
+        if (besitzer is < 0 or > 7) return false;
+        if (besitzer == ViewPlayer) return true;
+        if (!NeutraleDeckenAuf && (besitzer == NeutralSlot || IsStandby(besitzer)))
+            return false;
+        return Allied(besitzer, ViewPlayer);
+    }
+
+    /// <summary>Wieviele Aufdecker der neutrale Platz beigesteuert haette —
+    /// ⚠ ohne diese Zahl ist »es ist wieder verdeckt« nicht von »auf dieser
+    /// Karte gibt es gar keine neutralen Einheiten« zu unterscheiden.</summary>
+    public int NeutraleAufdecker;
+
+    /// <summary><c>--neutrale-decken-auf</c> — der Stand von heute vormittag:
+    /// der neutrale Platz gilt als Verbuendeter und deckt mit auf.</summary>
+    public static bool NeutraleDeckenAuf;
+
     private IEnumerable<(int Col, int Row, int Sight, int Elev)> Watchers()
     {
         foreach (var e in _entities)
         {
             if (e.Dead || e.IsProp) continue;
-            if (e.Owner != ViewPlayer) continue;
+            // ⚠⚠ 10.09.2026 — VERBUENDETE DECKEN MIT AUF.
+            // Hier stand `e.Owner != ViewPlayer`. Das Original prueft an allen
+            // drei Stellen der Nebelrunde die BUENDNISMATRIX (@0x42071D fuer
+            // Einheiten, @0x420694 fuer Gebaeude, @0x42083D fuer Flugzeuge) —
+            // und `RadarWatchers` machte es hier schon richtig, was den
+            // Widerspruch im eigenen Haus stehen liess. Betroffen sind die
+            // neun Missionen mit Verbuendeten (4, 9, 14, 17, 24, 26-29).
+            // Gegenschalter --nebel-ohne-verbuendete.
+            if (e.Owner == NeutralSlot || (e.Owner is >= 0 and <= 7 && IsStandby(e.Owner)))
+                NeutraleAufdecker++;
+            if (NebelOhneVerbuendete ? e.Owner != ViewPlayer
+                                     : !DecktAuf(e.Owner))
+                continue;
             if (!e.IsBuilding)
             {
-                yield return (e.Col, e.Row, e.Sight > 0 ? e.Sight : 4,
+                // ⚠ 10.09.2026 — WER IM GEBAEUDE STEHT, SIEHT NICHTS.
+                // @0x42077D ueberspringt jede Einheit mit UKOL >= 50; bei uns
+                // deckte sie weiter von ihrer alten Zelle aus auf. 198 von 4833
+                // Kartensaetzen tragen UKOL >= 50, dazu jede Einfahrt im Spiel.
+                if (!NebelAlteSicht && (Untergestellt(e) || e.Ukol >= 50)) continue;
+                // ⚠ 10.09.2026 — SICHT 0 IST NICHT SICHT 4.
+                // Hier stand `e.Sight > 0 ? e.Sight : 4` — eine erfundene Vier.
+                // Das Original rechnet `radius = elev + sicht - 1` (@0x4207CF)
+                // und der Stempler bricht bei r < 0 ab; eine Einheit mit Sicht 0
+                // deckt also nur so weit auf, wie ihre Hoehe reicht. 294 von
+                // 4833 Kartensaetzen tragen Sicht 0.
+                yield return (e.Col, e.Row, NebelAlteSicht && e.Sight <= 0 ? 4 : e.Sight,
                               ElevOf(e.Col, e.Row));
                 continue;
             }
@@ -1773,6 +1914,24 @@ public partial class MapEntityLayer : Node2D
         // in keiner Entitaetenliste — im Original haben sie eine eigene Tafel
         // (0x677F30) und werden im Nebeltakt @0x4209AE getrennt durchgegangen.
         // Genau deshalb stehen sie auch hier als eigene Schleife.
+        // ⚠ 10.09.2026 — UND DIE FLUGZEUGE. Die Nebelrunde hat fuer sie einen
+        // eigenen Arm (@0x420806..0x420883): er laeuft ueber die Flugzeugtafel
+        // sec19 (0x6DDF70 — der Kommentar in FogGrid.cs nennt sie faelschlich
+        // »ships«), nimmt `Sicht = +0x24 - 1` und ueberspringt Zustand 0 und 2
+        // (am Boden / im Hangar). Bei uns deckte kein Flugzeug auf.
+        // Gegenschalter --nebel-ohne-flugzeuge.
+        if (!NebelOhneFlugzeuge)
+            foreach (var sp in _special)
+            {
+                if (sp.Stored) continue;                       // im Hangar
+                if (sp.Slot is < 0) continue;
+                int shalter = sp.Slot / 1000;
+                if (!DecktAuf(shalter)) continue;
+                int sicht = sp.Sight - 1;
+                if (sicht < 0) continue;
+                yield return (sp.Col, sp.Row, sicht, ElevOf(sp.Col, sp.Row));
+            }
+
         foreach (var w in RadarWatchers()) yield return w;
     }
 
@@ -3348,8 +3507,37 @@ public partial class MapEntityLayer : Node2D
                 // Herrenlos und unzerstoerbar sind zwei verschiedene Dinge, und
                 // wir hatten sie in EINEM Merker zusammengezogen.
                 bool spieler = owner != 255;
-                bool platzhalter = !spieler && GetI(bd, "built", 0) <= 0;
-                bool real = !platzhalter;
+                // ⚠⚠⚠ 10.09.2026 — UND HIER STAND `built <= 0`, UND DAS HAT
+                // KAMPAGNE 7 GESPERRT. Seine Meldung nach der Behebung vom
+                // 09.09.: »ich kann immer noch nicht die bunker angreifen«.
+                //
+                // Es ist bug-076 eine Stufe tiefer. Am 06.09. wurde das
+                // Kriterium von `owner != 255` auf `built` umgestellt, weil
+                // `built` die 986 herrenlosen Saetze sauber in 386 echte Bauten
+                // und 600 »Platzhalter« zu trennen schien. Am 09.09. wurde
+                // gelesen, was `built` WIRKLICH heisst: **»hat Spiellogik«**
+                // (0x4C91B0 aus der Tafel 0x539DB8) — es sperrt Fenster,
+                // Einnahme und Tore, NICHT das Beschiessen. Der Schadenszweig
+                // @0x40D269 fragt weder Typ noch Besitzer noch `built`.
+                //
+                // ⭐ GEMESSEN in den Kartensaetzen selbst: alle **589** Saetze
+                // mit Besitzer 255 und `built = 0` tragen **hp 700 / hp_max
+                // 700**. Die Null kam allein von dieser Zeile. Auf map_07 sind
+                // das die Bunker Platz 3 (12,7) und Platz 5 (54,10) — und
+                // genau die beiden verlangt die Siegbedingung von Mission 7
+                // (Regel @0x49B16B: obj_owner(3)==12 UND obj_owner(5)==12).
+                //
+                // ⚠ WAS EIN SATZ OHNE BAUWERK IST, sagt der TYP, nicht `built`:
+                // der Zerstoerer stempelt die Ruine und setzt danach
+                // `byte[typ] = 0` (@0x4C9A8E), und `obj_owner` liest genau
+                // diese Null als »zerstoert/leer« (@0x4D076D -> 12). 75 der 589
+                // Saetze tragen Typ 0; sie behalten darum ihre Null, obwohl
+                // auch in ihrem Satz 700 steht — ein freier Satz hat kein
+                // Bauwerk, das man treffen koennte. Gegenschalter
+                // <c>--platzhalter-ohne-energie</c>.
+                bool leer = btype <= 0;
+                bool real = !(PlatzhalterOhneEnergie ? !spieler && GetI(bd, "built", 0) <= 0
+                                                     : leer);
                 // hp and hp_max now come out of the record itself (+0x02 / +0x12,
                 // proven by the repair handler @0x43e070) instead of our table
                 int hpMax = GetI(bd, "hp_max", 0);
@@ -3374,7 +3562,7 @@ public partial class MapEntityLayer : Node2D
                     EffNum = Mathf.Max(1, GetI(bd, "eff_num", 1)),
                     EffDen = Mathf.Max(1, GetI(bd, "eff_den", 1)),
                     UpgradeStep = GetI(bd, "upgrade_step"),
-                    IsBuilding = true, BType = btype,
+                    IsBuilding = true, BType = btype, BildArt = btype,
                     // the capture fields; content exported before 2026-08-06
                     // carries no door, and CaptureDoorsMissing counts that
                     Built = GetI(bd, "built"), Doors = GetI(bd, "doors"),
@@ -4573,7 +4761,7 @@ public partial class MapEntityLayer : Node2D
             {
                 // NoStructure steht fuer die Skripte, nicht auf dem Schirm —
                 // dieselbe Regel wie bei Pick.
-                if (e.IsBuilding && !e.NoStructure) pick.Add(i);
+                if (e.IsBuilding && (!e.NoStructure || Anfassbar(e))) pick.Add(i);
                 continue;
             }
             if (e.IsBuilding) continue;
@@ -6454,7 +6642,7 @@ public partial class MapEntityLayer : Node2D
         if (foot.Dead || foot.Infantry < 0) return;
         if (!IsHostile(driver, foot)) return;          // friendly: driven through
         NoteEvent(foot, "ueberfahren");
-        Kill(footIdx, foot);
+        Kill(footIdx, foot, driver.Owner, "UEBERFAHREN von " + LabelOf(driver));
         _crushed++;
     }
 
@@ -6548,7 +6736,35 @@ public partial class MapEntityLayer : Node2D
         {
             _buildingOrder = new List<Entity>();
             foreach (var e in _entities)
-                if (e.IsBuilding && !e.IsProp && !e.NoStructure) _buildingOrder.Add(e);
+            {
+                // ⚠⚠⚠ 10.09.2026 — HIER STAND `!e.NoStructure`, UND DARUM
+                // KONNTE EIN BUNKER NIE ZUR RUINE WERDEN. Seine Meldung, nachdem
+                // die Bunker beschiessbar waren: »da fehlt dann nur noch wie er
+                // zerstoert aussieht.«
+                //
+                // Ein Bau, den dieser Zeichner nicht stellt, hat kein Bild aus
+                // dem Spiel — seins steckte im gebackenen Objektbild
+                // (MapBaker.Kulisse), und ein gebackenes Bild kann nicht
+                // zerfallen. Genau deshalb hat der Backofen am 24.08. aufgehoert,
+                // ECHTE Gebaeude einzubrennen (MapBaker.BuildingCells): »A
+                // destroyed building could then never stop being drawn.« Fuer die
+                // Arten ueber 16 galt das weiter, weil `built = 0` sie zur
+                // Kulisse machte — dasselbe `built`, das heute frueh schon bei
+                // den Trefferpunkten das falsche Kriterium war (bug-155).
+                //
+                // Der Atlas traegt sie laengst: BuildingPatterns.WriteAtlas
+                // schreibt fuer JEDE Art das stehende Bild, die Schadensauflagen
+                // und die Ruine — »buildable or not«. GEMESSEN auf map_07: Art 57
+                // hat Muster 116..119 und Ruine 119, Art 58 120..123/123, Art 36
+                // 104..107/107, Art 39 108..111/111.
+                //
+                // ⚠ Gezeichnet wird jetzt jeder Satz MIT Bauwerk; leer ist, was
+                // Typ 0 traegt (@0x4C9A8E). Gegenschalter --kulisse-alt.
+                bool malen = KulisseAlt ? !e.NoStructure
+                           : BildartAlt ? e.BType > 0
+                           : e.BildArt > 0;
+                if (e.IsBuilding && !e.IsProp && malen) _buildingOrder.Add(e);
+            }
             _buildingOrder.Sort((a, b) => a.Row != b.Row ? a.Row - b.Row : a.Col - b.Col);
             _buildingOrderStamp = _entities.Count;
         }
@@ -6740,15 +6956,33 @@ public partial class MapEntityLayer : Node2D
         var tex = PatternTexture();
         if (tex == null) return;
 
-        var bt = Patterns.GetBuildingType(e.BType);
+        var bt = Patterns.GetBuildingType(e.BildArt);
         int first = bt.FirstPattern;
         int stack = e.Dead ? 0 : DamageFrame(e);      // wie viele Muster übereinander
         if (e.Dead)
         {
-            int ruin = Import.BuildingPatterns.RuinPattern(Patterns, e.BType);
+            // ⚠⚠⚠ 10.09.2026 — DIE RUINE IST DIE OBERSTE LAGE EINES STAPELS,
+            // NICHT EIN BILD FUER SICH.
+            //
+            // Seine Meldung nach der ersten Behebung: »die bunker zeigen immer
+            // noch teils grass anstatt der korrekten zerstoerten
+            // bunkergrafik«. Hier stand `first = ruin; stack = 1;` — die Ruine
+            // ALLEIN. Wo ihr Muster keine Kachel traegt, blieb blanker Boden
+            // stehen, und genau das ist das Gras.
+            //
+            // Gelesen: der Stempler 0x4C95E0 malt bei Schadensstufe s die
+            // Muster 0..s-1 uebereinander (Schranke k < Stufe @0x4C9905), und
+            // der Zerstoerer 0x4D5D60 setzt die Stufe auf n (@0x4D5D87). Beim
+            // Tod laeuft also der GANZE Satz durch — Grundbild, alle
+            // Schadensauflagen, und zuoberst `erstes + n - 1`, die Ruine. Sie
+            // deckt den Stapel bei 396 von 409 Typen vollstaendig; wo nicht,
+            // steht darunter das Gebaeude und nicht die Wiese.
+            //
+            // Gegenschalter --ruine-allein.
+            int ruin = Import.BuildingPatterns.RuinPattern(Patterns, e.BildArt);
             if (ruin < 0) return;
-            first = ruin;
-            stack = 1;
+            if (RuineAllein) { first = ruin; stack = 1; }
+            else stack = bt.PatternCount;        // Muster 0..n-1, oben die Ruine
         }
         if (first < 0 || stack < 1) return;
 
@@ -6765,9 +6999,26 @@ public partial class MapEntityLayer : Node2D
         // Gebäude, 1..n-2 sind Einzelkachel-Auflagen, n-1 ist die Ruine. Genau
         // deshalb sind die mittleren Muster so klein: in 06.CWP hat Muster 0
         // 37 Kacheln, die Muster 1..19 haben 1 bis 7. Sie sind SCHADENSFLECKEN.
-        for (int k = 0; k < stack; k++)
-            for (int dx = 0; dx < Import.CwpFile.PatternWidth; dx++)
-                for (int dy = 0; dy < Import.CwpFile.PatternHeight; dy++)
+        // ⚠⚠⚠ 10.09.2026 — JE ZELLE NUR DIE OBERSTE BELEGTE LAGE, NICHT EIN
+        // STAPEL VON BILDERN.
+        //
+        // Der erste Wurf von heute nachmittag hat die Muster 0..n-1
+        // UEBEREINANDER gezeichnet. Die Schranke war richtig gelesen
+        // (0x4C95E0, `k < Stufe`), der Schluss daraus nicht: das Original
+        // stempelt in eine ZELLTAFEL und ERSETZT dabei den Eintrag
+        // (@0x41D140) — was am Ende auf dem Schirm landet, ist je Zelle die
+        // OBERSTE belegte Lage, nicht die Summe aller. Der Unterschied faellt
+        // erst beim Tod auf: eine heile Bunkerkachel ist 40x63 und ragt weit
+        // ueber die 40x20 grosse Ruinenkachel hinaus — gezeichnet standen drei
+        // Pfeiler mitten im Truemmerfeld.
+        //
+        // ⭐ Darum von OBEN nach unten und beim ersten Treffer abbrechen. Fuer
+        // ein lebendes Gebaeude ist das Ergebnis dasselbe wie vorher (die
+        // Schadensauflagen decken ihre Zelle), fuer ein totes ist es das
+        // richtige.
+        for (int dx = 0; dx < Import.CwpFile.PatternWidth; dx++)
+            for (int dy = 0; dy < Import.CwpFile.PatternHeight; dy++)
+                for (int k = stack - 1; k >= 0; k--)
                 {
                     int code = BuildingCellTile(first, k, dx, dy, anim);
                     if (code == 0 || !Patterns.TryGetTile(code, out var t)) continue;
@@ -6788,6 +7039,7 @@ public partial class MapEntityLayer : Node2D
                              + Import.MapBaker.BlitAnchor + t.YOff;
                     DrawTextureRectRegion(tex, new Rect2(sx, sy, t.W, t.H),
                                           new Rect2(t.X, t.Y, t.W, t.H));
+                    break;                 // diese Zelle ist erledigt
                 }
     }
 
@@ -9496,6 +9748,37 @@ public partial class MapEntityLayer : Node2D
     // ids so the existing WeaponOf() keeps working; 21..38 are the turrets.
     private const int InfCompBase = 200;
 
+    /// <summary>
+    /// <b>Der Schussklang — und die Weiche, die das Original an dieser Stelle
+    /// HAT.</b> (10.09.2026)
+    ///
+    /// <para>⚠⚠ Hier stand an beiden Schussstellen nur
+    /// <c>GameSounds.Fire(WeaponRowOf(shooter.Weapon), …)</c>. Das ist der Weg
+    /// des FAHRZEUGschusses (<c>0x40C4C0</c>: Klangklasse aus dem Bauteil,
+    /// Zeile der Klangtafel, Grundnummer oder Grundnummer+1 per Zufall).
+    /// <c>WeaponRowOf</c> bildet nur 21..39 ab; ein Fusssoldat traegt
+    /// <c>Weapon = <see cref="InfCompBase"/> + Zeile</c> = 390..399, bekam also
+    /// −1 und blieb STUMM — alle fuenf bewaffneten Arten.</para>
+    ///
+    /// <para>Das Original hat fuer die Infanterie eine eigene Routine mit einer
+    /// FESTEN Nummer je Waffenzeile (<c>0x40EC70</c>, Tafeln <c>0x40EFBC</c> /
+    /// <c>0x40EFA4</c>) — Herleitung und Tafel in
+    /// <see cref="Audio.GameSounds.InfantryFire"/>. Zwei Wege, zwei Tafeln, und
+    /// wir hatten nur einen. Gegenschalter <c>--fussklang-alt</c>.</para>
+    /// </summary>
+    private static void SchussKlang(Entity shooter)
+    {
+        if (shooter.Weapon >= InfCompBase) Audio.GameSounds.FussSchuesseGesamt++;
+        if (!Audio.GameSounds.FussklangAlt && shooter.Weapon >= InfCompBase)
+        {
+            Audio.GameSounds.FussSchuss(shooter.Weapon - InfCompBase,
+                                        shooter.Col, shooter.Row);
+            return;
+        }
+        Audio.GameSounds.Fire(WeaponRowOf(shooter.Weapon), null,
+                              shooter.Col, shooter.Row);
+    }
+
     // The infantry rows carry ranges an order of magnitude below the vehicles'
     // (2..15 against 50..90), so the same /10 tile scaling would leave a rifle
     // at a fifth of a tile.  The floor is OURS.
@@ -10273,6 +10556,12 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Einen Todesfall in die Statistik schreiben: eine Verlust-Kerbe
     /// beim Besitzer, eine Abschuss-Kerbe beim Schuetzen. Gebaeude bleiben
     /// draussen (siehe oben), Requisiten sowieso.</summary>
+    /// <summary><c>--todes-log</c> — jede gestorbene Einheit mit Ort, Hoehe und
+    /// URSACHE. Fuer »er ist einfach tot umgefallen« (bug-150): ohne den Grund
+    /// sind Beschuss, Ueberfahren und ein sell_unit des Missionsskripts nicht zu
+    /// unterscheiden.</summary>
+    public static bool TodesLog;
+
     private void NoteKill(Entity victim, int by)
     {
         if (victim.Dead || victim.IsProp || victim.IsBuilding || victim.HpMax <= 0) return;
@@ -11110,7 +11399,7 @@ public partial class MapEntityLayer : Node2D
         // names a sound class at stats +0x1c, the class picks a row of the
         // fire-sound table @0x4f98f2, and the original plays that number or the
         // next at random (@0x40c4c0). See Audio/GameSounds.Fire.
-        Audio.GameSounds.Fire(WeaponRowOf(shooter.Weapon), null, shooter.Col, shooter.Row);
+        SchussKlang(shooter);
 
         // Ab hier entscheidet die GESCHOSSART, nicht mehr eine Liste im Code.
         // Die Art ist dieselbe Zahl, die schon den Schussklang gewaehlt hat --
@@ -11424,20 +11713,61 @@ public partial class MapEntityLayer : Node2D
             return;
         }
 
-        Kill(vi, victim, shooter?.Owner ?? -1);
+        Kill(vi, victim, shooter?.Owner ?? -1, "Beschuss");
     }
 
     /// <summary>Take an entity off the board: clear its cells, drop it out of
     /// every selection and target, and leave the right remains behind.</summary>
     /// <param name="by">Wer den Todesstoss gefuehrt hat, oder -1. Nur fuer die
     /// Statistik — siehe <see cref="NoteKill"/>.</param>
-    private void Kill(int vi, Entity victim, int by = -1)
+    private void Kill(int vi, Entity victim, int by = -1, string grund = "")
     {
+        // ⚠⚠ 10.09.2026 — »EINFACH UMGEFALLEN« IST KEINE URSACHE, SONDERN DAS
+        // FEHLEN EINER. Seine Meldung zu Cpt.Cossarro steht seit dem 09.09. im
+        // Buglog (bug-150) und war nicht zu verfolgen, weil niemand aufschrieb,
+        // WER die Einheit umgebracht hat. Kill() wird aus neun Richtungen
+        // gerufen — Beschuss, Ueberfahren, Missionsskript (remove_unit /
+        // sell_unit @0x4D0B00/@0x4D0EC0), Einnahme, Tuersperre, Minen. Von
+        // aussen sehen alle gleich aus: die Einheit faellt um.
+        //
+        // ⭐ Der Verdacht, den dieses Protokoll pruefen soll: RunOverFoot. Ein
+        // feindliches Fahrzeug faehrt ueber einen Fusssoldaten, und der ist
+        // ohne Schuss und ohne Klang tot.
+        if (TodesLog && !victim.IsBuilding && !victim.IsProp)
+            GD.Print($"tod: {LabelOf(victim)} (Platz {victim.Slot}, Spieler {victim.Owner}) "
+                   + $"auf ({victim.Col},{victim.Row}) Hoehe {ElevOf(victim.Col, victim.Row)}, "
+                   + $"TP {victim.Hp}/{victim.HpMax}, "
+                   // ⚠ 10.09.2026 — POS GEGEN ZELLMITTE. Seine Meldung: »die
+                   // infanterie stirbt wieder ein paar felder versetzt anstatt
+                   // da wo sie stand«. Der Ankerversatz ist es nicht (bug-093
+                   // haelt, --anker-probe misst konstante 36). Der zweite
+                   // Verdacht ist die BEWEGUNG: waehrend eines Schritts fuehrt
+                   // die Einheit schon die NAECHSTE Zelle in Col/Row, waehrend
+                   // Pos dazwischen interpoliert. Wer beim Tod auf die
+                   // Zellmitte zurueckfaellt, springt genau um diesen Rest.
+                   + $"Pos {victim.Pos.X:0}/{victim.Pos.Y:0} gegen Zellmitte "
+                   + $"{CellCenter(victim.Col, victim.Row).X:0}/"
+                   + $"{CellCenter(victim.Col, victim.Row).Y:0} "
+                   + $"(Abstand {victim.Pos.DistanceTo(CellCenter(victim.Col, victim.Row)):0} px"
+                   + (victim.Path != null ? ", IN BEWEGUNG" : ", im Stand") + "), Grund: "
+                   + (grund.Length > 0 ? grund : "UNBENANNT ⚠")
+                   + (by is >= 0 and <= 7 ? $", durch Spieler {by}" : ", ohne Schuetzen"));
         NoteKill(victim, by);
         // ⭐ 06.09.2026 — ein GEBAEUDE geht mit Bild. Siehe GebaeudeSprengen.
         if (victim.IsBuilding && !victim.IsProp && !victim.Dead) GebaeudeSprengen(victim);
         victim.Hp = 0;
         victim.Dead = true;
+        // ⭐⭐ 09.09.2026 — EIN ZERSTOERTES GEBAEUDE VERLIERT SEINE ART.
+        //
+        // Der Zerstoerer des Originals (0x4D5D60 -> 0x4C95E0) stempelt die Ruine
+        // und setzt danach `byte[typ] = 0` (@0x4C9A8E) — der Satz wird frei. Und
+        // GENAU DARAN haengt das Missionsskript: sein Gebaeudeziel gilt als
+        // erledigt, wenn `typ == 0` (CAMPAIGN_RE, »art 1«). Ohne diese Zeile
+        // kann eine Mission, die ein Bauwerk zerstoert sehen will, nie enden —
+        // gefunden ueber seine Meldung zu Kampagne 7 (bug-152).
+        // ⚠ NUR BType — die Bildart bleibt, sonst verschwindet das Gebaeude,
+        // statt zur Ruine zu werden. Siehe Entity.BildArt.
+        if (victim.IsBuilding && !victim.IsProp && !BauwerkNur1Bis16) victim.BType = 0;
         victim.DeadTime = 0;
         victim.Path = null;
         victim.Target = -1;
@@ -12258,7 +12588,7 @@ public partial class MapEntityLayer : Node2D
             if (e.IsBuilding || e.Dead || e.Slot != slot) continue;
             GD.Print($"Missionsskript: Einheit {slot} " +
                      (sold ? "verkauft (Erloes ungelesen)" : "verschwindet"));
-            Kill(i, e);
+            Kill(i, e, -1, sold ? "Missionsskript sell_unit" : "Missionsskript remove_unit");
             return;
         }
     }
@@ -15533,6 +15863,50 @@ public partial class MapEntityLayer : Node2D
     /// WAFFENZEILE des Entwurfs gefunden, denn die ist es, die beide Tabellen
     /// gemeinsam haben — sec47 +weapon und `infantry.json` `weapon_row`.
     /// </summary>
+    /// <summary>
+    /// <b>Einen erzeugten Fusssoldaten fertig anlegen</b> — Waffe, Satz UND
+    /// Klangsatz. (10.09.2026)
+    ///
+    /// <para>⚠⚠ Bis heute stand an den vier Erzeugerstellen nur
+    /// <c>u.Infantry = inf; u.Weapon = iw;</c>, und <c>u.Chassis</c> behielt,
+    /// was der Entwurf lieferte: <c>d.Derived.ChassisComponent</c> =
+    /// <c>stats[Fahrwerk][0x0D]</c>, und der ist fuer die Infanterie-Fahrwerke
+    /// 148 und 149 <b>0</b>. Die Klangwahl rechnet aber
+    /// <c>(Chassis &gt;&gt; 1) − 1</c> (<c>0x429290</c>) — mit 0 fiel jeder
+    /// erzeugte Fusssoldat auf den Standardsatz 189/193 zurueck.</para>
+    ///
+    /// <para><b>Die Karte macht es richtig</b> und zeigt damit, was gemeint
+    /// ist: dort kommt <c>Chassis</c> aus <c>raw[+0x0B]</c>, dem SPODEK, das
+    /// der Aufsteller des Originals (<c>@0x4B1ABE</c>) aus der Waffenzeile
+    /// schreibt. Genau diese Zahl ist <paramref name="set"/> aus
+    /// <see cref="InfantryFor"/>.</para>
+    ///
+    /// <para>⭐ Gezaehlt: <b>7 von 12</b> Arten sprachen falsch — S-Infanterie,
+    /// Sondereinheit, Cossarro, Hullman, Wiffer, Zivilist, Forscher. Die
+    /// anderen fuenf trafen den Standardsatz zufaellig richtig. Betroffen war
+    /// alles aus Depot, Markt, Dock und Skript (<c>place_unit</c>) — also auch
+    /// der Forscher aus Mission 3.</para>
+    ///
+    /// <para>⚠ Eine Stelle statt vier, aus demselben Grund wie
+    /// <c>BewegungsklasseSetzen</c> bei bug-106: vier Kopien einer Zuweisung
+    /// gehen irgendwann auseinander. Gegenschalter
+    /// <c>--fussklangsatz-alt</c>.</para>
+    /// </summary>
+    /// <returns>Ob es ueberhaupt ein Fusssoldat ist.</returns>
+    private static bool InfanterieAnlegen(Entity u, int designWeapon)
+    {
+        if (!InfantryFor(designWeapon, out int inf, out int iw)) return false;
+        u.Infantry = inf;
+        u.Weapon = iw;
+        if (!FussklangsatzAlt) u.Chassis = inf;
+        return true;
+    }
+
+    /// <summary><c>--fussklangsatz-alt</c> — der Stand vor dem 10.09.2026: ein
+    /// erzeugter Fusssoldat behaelt <c>Chassis = 0</c> und spricht darum mit
+    /// dem Standardsatz.</summary>
+    public static bool FussklangsatzAlt;
+
     private static bool InfantryFor(int designWeapon, out int set, out int weapon)
     {
         set = -1;
@@ -18837,8 +19211,7 @@ public partial class MapEntityLayer : Node2D
                                        d?.Derived.ChassisComponent ?? 0),
             Footprint = CellRect(_ox, _oy, at.X, at.Y, ElevOf(at.X, at.Y)),
         };
-        if (d is { } d2 && InfantryFor(d2.Weapon, out int inf, out int iw))
-        { u.Infantry = inf; u.Weapon = iw; }
+        if (d is { } d2) InfanterieAnlegen(u, d2.Weapon);
         u.Pos = BodyCenterAt(u, u.Col, u.Row);
         _entities.Add(u);
         _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.GameUnitType));
@@ -21265,7 +21638,7 @@ public partial class MapEntityLayer : Node2D
         };
         // Ein Fussoldat traegt seine Waffe aus infantry.json, nicht aus
         // TurretOf — siehe InfantryFor. Ohne das kann er nicht kaempfen.
-        if (InfantryFor(d.Weapon, out int inf, out int iw)) { u.Infantry = inf; u.Weapon = iw; }
+        InfanterieAnlegen(u, d.Weapon);
         u.Pos = BodyCenterAt(u, u.Col, u.Row);
         // Auftrag 52: es steht im Dock und wartet auf eine Ausfahrt.
         u.LeavingDock = _entities.IndexOf(dock);
@@ -25401,12 +25774,114 @@ public partial class MapEntityLayer : Node2D
     /// Steht dort eine ohne Traeger in der Naehe, meldete das Spiel 50 Mal je
     /// Sekunde »abgewiesen« - gemessen mit --klang-log: Klang 140 x2050.
     /// Zurueckgewiesen wird weiter, nur eben still.</param>
+    /// <summary>
+    /// <b>Darf diese Einheit einsteigen?</b>
+    ///
+    /// <para>⚠⚠ 09.09.2026, seine Meldung (bug-153): »die 3 forscher muss man
+    /// wohl auf ein schiff laden, es lassen sich aber nur 2 forscher einladen,
+    /// der dritte will nicht«. Die Ursache war NICHT die Stueckzahl — das
+    /// Original nimmt <b>15 Fusssoldaten</b> (Lastkonto <c>+0x24</c> der Tafel
+    /// <c>0xBBFEF8</c>: Fusssoldat +1 @0x4CEF56, Fahrzeug +5 @0x4CEF05, Grenze
+    /// 15 @0x4CEF4B). Die Ursache war diese Bedingung.</para>
+    ///
+    /// <para>Hier stand <see cref="RampeBeladen"/>, also <b>Lagenbyte ≥ 100
+    /// fuer jeden</b>. Das Original macht zwei Unterschiede:</para>
+    /// <list type="bullet">
+    ///   <item><b>FUSSVOLK braucht gar keine Rampe.</b> Der Fussvolk-Zweig des
+    ///   Senders (@0x43820C) prueft nur, dass die Zelle ans Wasser grenzt —
+    ///   <b>keine Lagenpruefung</b>. Eingestiegen wird von jeder KANTENnachbar-
+    ///   zelle des Schiffs (@0x4091E3).</item>
+    ///   <item><b>FAHRZEUGE brauchen 200, nicht 100</b> (<c>cmp … 0xC8</c>
+    ///   @0x438440). Die 100 aus <see cref="RampeBeladen"/> stammt aus dem
+    ///   BEWEGUNGSschritt <c>0x406CD0</c>, nicht aus dem Ladeweg.</item>
+    /// </list>
+    ///
+    /// <para>⭐ Und genau das liess zwei von drei durch: auf map_07 gibt es in
+    /// Schiffsnaehe <b>eine einzige</b> Zelle mit Lage ≥ 100, naemlich (37,23).
+    /// Wer nicht darauf stand, kam nie an Bord — obwohl eine Infanteriezelle im
+    /// Original <b>neun</b> Mann fasst (@0x433BAB).</para>
+    ///
+    /// <para>⚠ Die Uferpruefung des Originals bauen wir NICHT nach; bei uns
+    /// entscheidet weiter der Abstand zum Traeger. Das ist grosszuegiger,
+    /// verhindert aber nichts, was das Original erlaubt. Gegenschalter
+    /// <c>--rampe-fuer-alle</c>.</para>
+    /// </summary>
+    private bool DarfEinsteigen(Entity u)
+        => RampeFuerAlle ? RampeBeladen(u.Col, u.Row)
+                         : u.Infantry >= 0 || RampeEntladen(u.Col, u.Row);
+
+    /// <summary>
+    /// <c>--einsteigen-check</c> — <b>wer darf an Bord, und woran haengt es?</b>
+    /// (09.09.2026, bug-153.)
+    ///
+    /// <para>Er zaehlt fuer JEDE Einheit der Karte, ob sie nach der alten Regel
+    /// (Rampe fuer alle) und nach der neuen (Fussvolk ohne Rampe, Fahrzeug 200)
+    /// einsteigen duerfte. ⭐ Die Zahl, auf die es ankommt, ist die der
+    /// FUSSSOLDATEN, die vorher NICHT durften und jetzt duerfen — das ist genau
+    /// der dritte Forscher, den er nicht an Bord bekam.</para>
+    /// </summary>
+    public string EinsteigenCheck()
+    {
+        var sb = new System.Text.StringBuilder("einsteigen-check\n");
+        int fuss = 0, fussAlt = 0, fussNeu = 0, fahr = 0, fahrAlt = 0, fahrNeu = 0;
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Dead) continue;
+            bool alt = RampeBeladen(e.Col, e.Row);
+            bool neu = e.Infantry >= 0 || RampeEntladen(e.Col, e.Row);
+            if (e.Infantry >= 0)
+            { fuss++; if (alt) fussAlt++; if (neu) fussNeu++; }
+            else
+            { fahr++; if (alt) fahrAlt++; if (neu) fahrNeu++; }
+        }
+        sb.Append($"  Fussvolk {fuss}: alte Regel liess {fussAlt} zu, neue {fussNeu}\n");
+        sb.Append($"  Fahrzeuge/Schiffe {fahr}: alte Regel {fahrAlt}, neue {fahrNeu} "
+                + "(neu verlangt 200 statt 100)\n");
+        sb.Append($"  ⭐ durch die Behebung neu zugelassenes Fussvolk: {fussNeu - fussAlt}\n");
+        // ⭐⭐ 10.09.2026 — DIE ZWEITE ZAHL, und sie ist die wichtigere.
+        // Seine Meldung: »wenn ich eine einheit auslade, laeuft sie kurz und
+        // beamt sich wieder zurueck in das Transport Schiff.« Die Erlaubnis
+        // oben sagt darueber nichts — sie zaehlt, wer einsteigen DARF. Hier
+        // steht, wen der Belade-Takt tatsaechlich AUFSAUGEN wuerde: jede
+        // stehende Einheit mit einem eigenen Traeger in Reichweite. Genau
+        // diese Zahl ist durch bug-153 explodiert.
+        int stehtDaneben = 0;
+        foreach (var e in _entities)
+        {
+            if (e.IsBuilding || e.IsProp || e.Dead || !e.Mobile) continue;
+            if (e.Path != null || e.Orders.Count > 0) continue;
+            if (!(e.Infantry >= 0 || RampeEntladen(e.Col, e.Row))) continue;
+            if (BeladeGewicht(e) < 0) continue;
+            foreach (var q in _entities)
+            {
+                if (q.Dead || q.IsBuilding || q.IsProp || q.Owner != e.Owner) continue;
+                if (!IstTraeger(q)) continue;
+                if (Mathf.Max(Mathf.Abs(q.Col - e.Col), Mathf.Abs(q.Row - e.Row))
+                    > BeladeReichweite) continue;
+                stehtDaneben++; break;
+            }
+        }
+        sb.Append($"  ⚠ STEHENDE Einheiten mit eigenem Traeger in Reichweite: {stehtDaneben}"
+                + " — so viele wuerde der Takt IM STAND aufsaugen\n");
+        sb.Append("  seit dem 10.09. geht nur an Bord, wer in DIESEM Takt ankommt"
+                + $" (Gegenschalter --einsteigen-im-stand: {EinsteigenImStand})\n");
+        sb.Append($"  Gegenschalter --rampe-fuer-alle: {RampeFuerAlle}\n");
+        bool ok = fuss == 0 || fussNeu == fuss;
+        sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
+    }
+
+    /// <summary><c>--rampe-fuer-alle</c> — der Stand vor dem 09.09.2026: auch
+    /// Fussvolk braucht zum Einsteigen Lagenbyte ≥ 100. Gegenschalter zu
+    /// bug-153.</summary>
+    public static bool RampeFuerAlle;
+
     public int BeladeVersuch(int idx, bool melden = true)
     {
         if (idx < 0 || idx >= _entities.Count) { _order = "keine Einheit"; return -1; }
         var u = _entities[idx];
         if (u.IsBuilding || u.IsProp || u.Dead) { _order = "das geht nicht an Bord"; return -1; }
-        if (!RampeBeladen(u.Col, u.Row))
+        if (!DarfEinsteigen(u))
         {
             _order = "hier ist keine Ladestelle";
             return -1;
@@ -25468,6 +25943,36 @@ public partial class MapEntityLayer : Node2D
 
     private void BeladeTakt()
     {
+        // ⚠⚠⚠ 10.09.2026 — EINSTEIGEN IST EIN UEBERGANG, KEIN ZUSTAND.
+        //
+        // Das Original steigt im BEWEGUNGSSCHRITT ein: 0x406CD0 prueft die
+        // Lagentafel BEIM BETRETEN einer Zelle. Wir fragen einmal je Takt, und
+        // die Frage lautete »steht er auf einer Ladezelle?« — ein ZUSTAND. Der
+        // Unterschied war unsichtbar, solange <see cref="RampeBeladen"/> galt:
+        // Ladezellen waren selten, auf map_07 gibt es in Schiffsnaehe genau
+        // eine. Seit bug-153 braucht Fussvolk gar keine Rampe, und aus der
+        // Zustandsfrage wurde ein Staubsauger: JEDER untaetige Fusssoldat im
+        // Umkreis von <see cref="BeladeReichweite"/> Zellen ging an Bord, immer
+        // wieder, auch der gerade erst Ausgeladene.
+        //
+        // Darum diese erste Schleife: sie fuehrt nur Buch, wer im VORIGEN Takt
+        // noch fuhr. Genommen wird unten dann nur, wer in DIESEM Takt zum
+        // Stehen gekommen ist — der Ankommende, so wie im Original. Wer schon
+        // laenger dasteht, bleibt stehen. Gegenschalter
+        // <c>--einsteigen-im-stand</c>.
+        //
+        // ⚠ Zwei Schleifen und nicht eine: die untere bricht nach dem ersten
+        // Einsteigen ab (die Liste verschiebt sich), und dann waere die
+        // Buchfuehrung fuer alle danach einen Takt alt.
+        if (!EinsteigenImStand)
+            foreach (var e in _entities)
+            {
+                if (e.IsBuilding || e.IsProp) continue;
+                bool faehrt = e.Path != null || e.Orders.Count > 0;
+                e.AngekommenJetzt = e.HatteWeg && !faehrt;
+                e.HatteWeg = faehrt;
+            }
+
         for (int i = _entities.Count - 1; i >= 0; i--)
         {
             var u = _entities[i];
@@ -25476,11 +25981,19 @@ public partial class MapEntityLayer : Node2D
             // ⭐ 08.09.2026 — wer eben erst ausgestiegen ist, wird nicht sofort
             // wieder aufgenommen (siehe WegVomUfer).
             if (u.NichtBeladenBis > _clock) continue;
+            // ⭐⭐ 10.09.2026 — und nur der ANKOMMENDE, siehe Kopf.
+            if (!EinsteigenImStand && !u.AngekommenJetzt) continue;
             if (BeladeGewicht(u) < 0) continue;                      // kann gar nicht
-            if (!RampeBeladen(u.Col, u.Row)) continue;
+            if (!DarfEinsteigen(u)) continue;
             if (BeladeVersuch(i, melden: false) >= 0) return;         // s.o., und STILL
         }
     }
+
+    /// <summary><c>--einsteigen-im-stand</c> — der Stand vor dem 10.09.2026:
+    /// einsteigen darf, wer auf einer Ladezelle STEHT, nicht nur wer eben dort
+    /// angekommen ist. Der Gegenschalter zum Zurueckbeamen des Ausgeladenen.
+    /// </summary>
+    public static bool EinsteigenImStand;
 
     /// <summary>Wie weit der Träger von der Ladezelle stehen darf. ⚠ UNSERE
     /// Zahl — ein Frachter ist 4×4 und liegt am Ufer, die Ladestelle davor.
@@ -25780,6 +26293,17 @@ public partial class MapEntityLayer : Node2D
             u.Reserved = null;
             u.WaitTime = 0;
             u.Block = BlockEnter + Simulation.Determinism.Roll(BlockEnterSpread);
+            // ⚠⚠ 10.09.2026 — DIE SPERRE GEHOERT IN BEIDE ZWEIGE. Seine
+            // Meldung: »wenn ich eine einheit auslade, laeuft sie kurz und
+            // beamt sich wieder zurueck in das Transport Schiff.« Sie stand
+            // seit bug-101 nur unten, im Zweig »kein Platz zum Ausweichen« —
+            // und das reichte, solange <see cref="RampeBeladen"/> galt, denn
+            // eine Ladezelle war fast nirgends. Seit bug-153 braucht Fussvolk
+            // gar keine Rampe mehr: der Ausgestiegene laeuft seine ein, zwei
+            // Zellen, sein Weg endet, und im selben Takt nimmt ihn
+            // <see cref="BeladeTakt"/> wieder auf. Wer eben von Bord ging, ist
+            // drei Sekunden lang tabu — in JEDEM Zweig.
+            u.NichtBeladenBis = _clock + AbsetzSperreSekunden;
             AbgesetztWeggeschickt++;
             return;
         }
@@ -26760,7 +27284,7 @@ public partial class MapEntityLayer : Node2D
                 // erinnert das Gebaeude — das ist der Sinn des dritten
                 // Zustands, und es deckt sich mit »man sieht sie, wenn man
                 // hinfaehrt«.
-                if (FogActive && _fog != null && !_fog.IsSeen(b.Col, b.Row)) continue;
+                if (FogActive && !GebaeudeAufgedeckt(b)) continue;
                 if (_drawSprites && Patterns != null)
                 {
                     // ⚠ Der KOERPER kommt seit dem 26.08. zeilenweise (siehe
@@ -26783,7 +27307,7 @@ public partial class MapEntityLayer : Node2D
                 {
                     // Dieselbe Nebelregel wie im Fach: was nie aufgedeckt war,
                     // wird nicht gezeichnet.
-                    if (FogActive && _fog != null && !_fog.IsSeen(b.Col, b.Row)) continue;
+                    if (FogActive && !GebaeudeAufgedeckt(b)) continue;
                     DrawBuildingTiles(b, flach: false, nurZeile: r);
                 }
 
@@ -27715,6 +28239,16 @@ public partial class MapEntityLayer : Node2D
         return NearestOwned(from, pick);
     }
 
+    /// <summary><c>--nahweg-trotz-route</c> — der Stand vor dem 10.09.2026:
+    /// der Nahweg raeumt ein Lager auch dann leer, wenn ein Transportwagen
+    /// genau dieses Gebaeude als Quelle bedient.</summary>
+    public static bool NahwegTrotzRoute;
+
+    /// <summary>Wie oft der Nahweg einem Wagen den Vortritt gelassen hat.
+    /// ⚠ Ohne die Zahl ist »der Transporter faehrt jetzt voll« nicht von »es
+    /// gibt gar keine Route« zu unterscheiden.</summary>
+    public int NahwegZurueckgetreten;
+
     private void Haul(Entity e)
     {
         if (e.Owner < 0) return;
@@ -27724,6 +28258,9 @@ public partial class MapEntityLayer : Node2D
         {
             // Fährt die Bahn dieses Terranium schon fort? Dann nicht doppelt.
             if (RailCarriesFrom(e.Slot, GoodT)) return;
+            // ⚠ Und ebensowenig, wenn ein WAGEN diese Quelle schon bedient —
+            // siehe den Fabrik-Arm unten, dieselbe Begruendung.
+            if (!NahwegTrotzRoute && KiRouteMitQuelle(e.Owner, e.Slot)) return;
             var f = Consignee(e, x => IsFactory(x) && x.StockT < 2000);
             if (f != null)
             {
@@ -27742,6 +28279,36 @@ public partial class MapEntityLayer : Node2D
             // die es fortfährt (Fabrik → Bahnhof → Basis), macht der Zug es.
             int own = e.BType == 2 ? GoodW : e.BType == 3 ? GoodF : GoodS;
             if (RailCarriesFrom(e.Slot, own)) return;
+            // ⚠⚠⚠ 10.09.2026 — UND DER NAHWEG TRITT AUCH VOR EINEM WAGEN ZURUECK.
+            //
+            // Seine Meldung: »der eine transporter faehrt bei der selben fabrik
+            // dauernd raus und wieder rein, wobei von und nach ziele
+            // unterschiedlich sind« — und dazu »die erste Strecke ging 1a«.
+            //
+            // Das KREISEN selbst ist Originalverhalten: der Wähler 0x4106D0
+            // schickt im letzten Arm (@0x41081C) einen leeren Wagen zu einer
+            // leeren Quelle zurueck. Der Fehler ist, dass die Quelle bei uns
+            // IMMER leer ist. Dieser Nahweg (UNSERE Setzung vom 11.08.) raeumt
+            // mit HaulAmount Teilen je Wirtschaftssekunde ab, waehrend eine
+            // Fabrik nur 0,06 bis 2 Teile je Sekunde macht — er nimmt jedes
+            // Teil in DEMSELBEN UpdateEconomy-Aufruf fort, in dem Produce es
+            // erzeugt. Der Wagen kommt an und findet nie etwas.
+            //
+            // ⭐ Und genau das erklaert seinen ersten Satz: die MINE behaelt
+            // HaulReserve = 30, also die Fassung eines Wagens — eine Route
+            // Mine -> Fabrik laeuft darum sauber, eine Fabrik -> Basis nicht.
+            //
+            // GEMESSEN auf map_DM_5 (Wagen 1015, Fabrik 6 -> Basis 5, 120 s):
+            // Ladung je Besuch hoechstens 1 von 30, mindestens neun
+            // Fabrikbesuche statt zwei bis drei, geladen 9 / abgeladen 9 statt
+            // 60 bis 90.
+            //
+            // ⚠ Der Wähler bleibt unangetastet — er ist das Original. Es
+            // aendert sich nur, wer das Lager leerraeumt: dieselbe Regel, die
+            // schon fuer die Bahn gilt (RailCarriesFrom eine Zeile darueber).
+            // Gegenschalter --nahweg-trotz-route.
+            if (!NahwegTrotzRoute && KiRouteMitQuelle(e.Owner, e.Slot))
+            { NahwegZurueckgetreten++; return; }
             var hq = Consignee(e, x => x.BType == 1);
             if (hq == null) return;
             int n = Mathf.Min(HaulAmount, OwnParts(e) - OwnReserve(e));
@@ -28232,7 +28799,7 @@ public partial class MapEntityLayer : Node2D
         };
         // Ein Fussoldat traegt seine Waffe aus infantry.json, nicht aus
         // TurretOf — siehe InfantryFor. Ohne das kann er nicht kaempfen.
-        if (InfantryFor(d.Weapon, out int inf, out int iw)) { u.Infantry = inf; u.Weapon = iw; }
+        InfanterieAnlegen(u, d.Weapon);
         u.Pos = BodyCenterAt(u, u.Col, u.Row);
         _entities.Add(u);
         // ⚠ Der Rumpf zuerst: SetOccupant stempelt danach die ganze Flaeche.
@@ -28407,7 +28974,7 @@ public partial class MapEntityLayer : Node2D
         };
         // Ein Fussoldat traegt seine Waffe aus infantry.json, nicht aus
         // TurretOf — siehe InfantryFor. Ohne das kann er nicht kaempfen.
-        if (InfantryFor(d.Weapon, out int inf, out int iw)) { u.Infantry = inf; u.Weapon = iw; }
+        InfanterieAnlegen(u, d.Weapon);
         u.Pos = BodyCenterAt(u, u.Col, u.Row);
         _entities.Add(u);
         // ⚠ Der Rumpf zuerst: SetOccupant stempelt danach die ganze Flaeche.
@@ -31164,7 +31731,7 @@ public partial class MapEntityLayer : Node2D
     };
 
     private static Color OwnerColor(int owner)
-        => owner >= 0 && owner < Factions.Length ? Factions[owner] : PropColor;
+        => owner >= 0 && owner < Factions.Length ? FactionColor(owner) : PropColor;
 
     /// <summary>Rumpftyp -> Zahl seiner Blickrichtungen, aus units_index.json.
     /// Fehlt ein Eintrag, gelten acht — das ist der Fall fuer alles ausser den
@@ -32883,10 +33450,73 @@ public partial class MapEntityLayer : Node2D
     /// Fuer bewegliche Sachen zaehlt zusaetzlich, ob die Zelle GERADE
     /// beobachtet wird — ein Panzer faehrt weg, ein Gebaeude nicht.</para>
     /// </summary>
+    /// <summary>
+    /// <b>Ist dieses Gebaeude schon aufgedeckt?</b> — und zwar ueber seinen
+    /// GANZEN Grundriss, nicht ueber die Ankerzelle. (10.09.2026)
+    ///
+    /// <para>⚠⚠ Hier stand <c>_fog.IsSeen(e.Col, e.Row)</c>, also die eine
+    /// Zelle, die der Kartensatz nennt — die linke obere Ecke. Das Original
+    /// deckt ein Gebaeude auf, sobald IRGENDEINE seiner Zellen beobachtet ist:
+    /// der Stempler (@0x420272) und der Saum (@0x41FFEF) rufen beide
+    /// <c>0x41FE20</c>, und das schreibt den ganzen Grundriss ins Gedaechtnis.
+    /// </para>
+    ///
+    /// <para>⭐ Gemessen im Bericht vom 10.09.: fuer ein 6x4-Gebaeude gibt es
+    /// bei Radius 3 / 5 / 10 <b>3,9x / 2,6x / 1,8x</b> weniger Standplaetze,
+    /// von denen aus es aufgedeckt wird. Man musste also naeher heran als im
+    /// Original — auf map_07 betrifft das genau die Bunker, die man finden
+    /// soll.</para>
+    ///
+    /// <para>⚠ Die Regel vom 24.08. (»fremd und nie gesehen heisst verborgen«)
+    /// bleibt richtig; falsch war nur ihr AUSLOESER. Gegenschalter
+    /// <c>--gebaeude-ankerzelle</c>.</para>
+    ///
+    /// <para>Der Merker <see cref="Entity.Aufgedeckt"/> ist nur ein
+    /// Zwischenspeicher: das Nebelgedaechtnis ist monoton, was einmal gesehen
+    /// war, bleibt gesehen.</para>
+    /// </summary>
+    private bool GebaeudeAufgedeckt(Entity e)
+    {
+        if (_fog == null) return true;
+        if (e.Aufgedeckt) return true;
+        if (GebaeudeAnkerzelle) return _fog.IsSeen(e.Col, e.Row);
+        int w = Mathf.Max(1, e.FootW), h = Mathf.Max(1, e.FootH);
+        for (int dx = 0; dx < w; dx++)
+            for (int dy = 0; dy < h; dy++)
+                if (_fog.IsSeen(e.Col + dx, e.Row + dy))
+                {
+                    e.Aufgedeckt = true;
+                    // ⚠⚠ 10.09.2026 — UND DER GANZE FUSSABDRUCK KOMMT INS
+                    // GEDAECHTNIS. bug-164 hat hier nur den Leseriegel gebaut;
+                    // das Original SCHREIBT (0x41FE20, gerufen aus dem Stempler
+                    // @0x420272 und dem Saum @0x41FFEF). Ohne das bleibt die
+                    // Nebeldecke auf den uebrigen Zellen liegen und legt dort
+                    // ihre Graskachel ueber die Ruine — genau sein »teils
+                    // grass«. Gegenschalter --gebaeude-nur-lesen.
+                    if (!GebaeudeNurLesen)
+                        for (int mx = 0; mx < w; mx++)
+                            for (int my = 0; my < h; my++)
+                                _fog.Merken(e.Col + mx, e.Row + my);
+                    return true;
+                }
+        return false;
+    }
+
+    /// <summary><c>--gebaeude-nur-lesen</c> — der Stand von heute mittag: ein
+    /// aufgedecktes Gebaeude gilt als gesehen, aber seine Zellen kommen nicht
+    /// ins Nebelgedaechtnis; auf den ungesehenen bleibt die Graskachel liegen.
+    /// </summary>
+    public static bool GebaeudeNurLesen;
+
+    /// <summary><c>--gebaeude-ankerzelle</c> — der Stand vor dem 10.09.2026:
+    /// ein Gebaeude gilt erst als aufgedeckt, wenn seine ANKERZELLE beobachtet
+    /// wurde.</summary>
+    public static bool GebaeudeAnkerzelle;
+
     private bool ImNebelVerborgen(Entity e)
     {
         if (!FogActive || e.Owner == ViewPlayer) return false;
-        if (e.IsBuilding) return _fog != null && !_fog.IsSeen(e.Col, e.Row);
+        if (e.IsBuilding) return !GebaeudeAufgedeckt(e);
         return !Watched(e.Col, e.Row);
     }
 
@@ -32911,6 +33541,161 @@ public partial class MapEntityLayer : Node2D
             best = i; bestRow = e.Row;
         }
         return best;
+    }
+
+    /// <summary>
+    /// <c>--gebaeudeklick-check</c> — <b>laesst sich jedes Gebaeude der Karte
+    /// anklicken, und wenn nicht, woran liegt es?</b> (10.09.2026, bug-152.)
+    ///
+    /// <para>⚠ Seine Meldung NACH der Behebung vom 09.09.: »ich kann immer noch
+    /// nicht die bunker angreifen«. <see cref="Anfassbar"/> laesst die Arten
+    /// ueber 16 seither durch — aber <see cref="Pick"/> hat mehrere Tore, und
+    /// <see cref="Anfassbar"/> ist nur eines davon. Das naechste ist das
+    /// KLICKFELD: <see cref="BodyRect"/> baut es aus
+    /// <see cref="Entity.FootW"/>/<see cref="Entity.FootH"/> um
+    /// <see cref="Entity.Pos"/>, und die beiden kommen aus
+    /// <see cref="BuildingFootprint"/>, also aus der Mustertafel des
+    /// Kachelsatzes. Wo die Tafel nichts weiss, steht der geratene
+    /// Ruecksprung 5x4 — und ein Rahmen an der falschen Stelle ist von
+    /// »nicht anfassbar« im Spiel nicht zu unterscheiden.
+    /// ⚠ »Ein Gebaeude findet man ueber den FUSSABDRUCK, nicht den Anker.«</para>
+    ///
+    /// <para>Der Pruefstand klickt darum jedes Gebaeude auf die MITTE seines
+    /// eigenen Rahmens und sagt, was zurueckkommt: es selbst, ein anderer oder
+    /// nichts. Der Nebel ist dabei ausgeschaltet — ein kopfloser Lauf hat
+    /// nichts erkundet, und ohne das faellt JEDES fremde Gebaeude durch, ohne
+    /// dass man den eigentlichen Grund saehe. Was der Nebel im Spiel verdecken
+    /// wuerde, steht als eigene Spalte daneben.</para>
+    ///
+    /// <para>Nullmodell: mit <c>--bauwerk-nur-1-16</c> muessen genau die Arten
+    /// ueber 16 durchfallen; faellt dann nichts durch, misst der Stand nicht,
+    /// was er zu messen vorgibt.</para>
+    /// </summary>
+    public string GebaeudeklickCheck()
+    {
+        var sb = new System.Text.StringBuilder("gebaeudeklick-check\n");
+        bool nebelVor = PickOhneNebel;
+        PickOhneNebel = true;
+        int gut = 0, schlecht = 0;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (!e.IsBuilding || e.IsProp || e.Dead) continue;
+            // ⚠ ART 0 IST KEIN BAUWERK, sondern ein FREIER Satz — der
+            // Zerstoerer des Originals setzt genau diesen Typ auf 0
+            // (@0x4C9A8E), und `obj_owner` liest ihn als »zerstoert/leer« (12).
+            // Er hat kein Bild und keine Trefferpunkte, also darf er auch nicht
+            // anklickbar sein. Er wird GEZEIGT, aber nicht GEWERTET — sonst
+            // faellt der Stand auf map_05 an sieben leeren Saetzen durch und
+            // behauptet einen Fehler, den es nicht gibt.
+            var rect = BodyRect(e);
+            int t = Pick(rect.GetCenter());
+            bool ok = t == i;
+            bool leerSatz = e.BType <= 0;
+            if (!leerSatz) { if (ok) gut++; else schlecht++; }
+            var bt = Patterns?.GetBuildingType(e.BType) ?? default;
+            int ruine = Import.BuildingPatterns.RuinPattern(Patterns!, e.BType);
+            // ⚠ 10.09.2026 — WIEVIELE SEINER ZELLEN GELTEN ALS KOERPER?
+            // Die Trennung Boden/aufragend kommt aus der BELEGUNGSKARTE
+            // (imap 60000..60299, siehe _koerperZelle), nicht aus dem Muster.
+            // Traegt ein Bau dort nichts, gelten ALLE seine Kacheln als Boden —
+            // dann liegt er unter den Einheiten statt in seiner Zeile ueber
+            // ihnen. Das ist genau die Frage, die »er verdeckt meine Einheiten«
+            // von »er verschwindet unter ihnen« trennt.
+            // ⚠ 10.09.2026 — WIEVIELE KACHELN ZEIGT DIE RUINE?
+            // »teils Gras« heisst: der Stapel deckt den Grundriss nicht. Die
+            // Zahl dazu ist die der Musterzellen des TODESSTAPELS (Muster
+            // 0..n-1) gegen die des Grundbildes allein.
+            int ruinZellen = 0;
+            if (!bt.IsEmpty)
+                for (int dx = 0; dx < Import.CwpFile.PatternWidth; dx++)
+                    for (int dy = 0; dy < Import.CwpFile.PatternHeight; dy++)
+                        for (int k = 0; k < bt.PatternCount; k++)
+                            if (Patterns!.PatternTile(bt.FirstPattern + k, dx, dy) != 0)
+                            { ruinZellen++; break; }
+            int nurRuine = 0;
+            if (ruine >= 0)
+                for (int dx = 0; dx < Import.CwpFile.PatternWidth; dx++)
+                    for (int dy = 0; dy < Import.CwpFile.PatternHeight; dy++)
+                        if (Patterns!.PatternTile(ruine, dx, dy) != 0) nurRuine++;
+            int mzellen = 0, koerper = 0;
+            if (!bt.IsEmpty)
+                for (int dx = 0; dx < Import.CwpFile.PatternWidth; dx++)
+                    for (int dy = 0; dy < Import.CwpFile.PatternHeight; dy++)
+                    {
+                        if (Patterns!.PatternTile(bt.FirstPattern, dx, dy) == 0) continue;
+                        mzellen++;
+                        if (_koerperZelle.Contains((e.Col + dx, e.Row + dy))) koerper++;
+                    }
+            string muster = bt.IsEmpty
+                ? "KEINE Mustertafel (5x4 geraten)"
+                : $"Muster {bt.FirstPattern}..{bt.FirstPattern + bt.PatternCount - 1} "
+                  + $"({bt.PatternCount}x), Ruine "
+                  + (ruine < 0 ? "FEHLT ⚠" : ruine.ToString());
+            string wer = t < 0 ? "NICHTS"
+                       : t == i ? "sich selbst"
+                       : $"Platz {_entities[t].Slot} (Art {_entities[t].BType})";
+            sb.Append($"  Platz {e.Slot,3} Art {e.BType,3} bei ({e.Col,3},{e.Row,3}) "
+                    + $"Grundriss {e.FootW}x{e.FootH} Rahmen {rect.Size} "
+                    + $"Hp {e.Hp}/{e.HpMax} Besitzer {e.Owner} "
+                    + $"NoStructure {(e.NoStructure ? 1 : 0)} "
+                    + $"Anfassbar {(Anfassbar(e) ? 1 : 0)} "
+                    + $"Nebel {(ImNebelVerborgen(e) ? "verdeckt" : "frei   ")} "
+                    + $"{mzellen} Musterzellen, davon {koerper} Koerper, "
+                    + $"Todesstapel deckt {ruinZellen} (Ruine allein {nurRuine}) "
+                    + $"{muster} -> Klick trifft {wer}"
+                    + (leerSatz ? "   (freier Satz, nicht gewertet)"
+                                : ok ? "" : "   ⚠"));
+            sb.Append((char)10);
+        }
+        PickOhneNebel = nebelVor;
+        sb.Append($"  {gut} von {gut + schlecht} Gebaeuden treffen sich selbst\n");
+        // ⭐⭐ 10.09.2026 — UND DIE GANZE KETTE BIS ZUM MISSIONSZIEL.
+        // Anklicken ist nicht zerstoeren, und zerstoeren ist noch nicht
+        // gewonnen: das Skript von Mission 7 endet erst, wenn
+        // `obj_owner(3) == 12` UND `obj_owner(5) == 12` (Regel @0x49B16B).
+        // Der Weg dorthin geht ueber DREI Glieder — Trefferpunkte > 0, der
+        // Schadenszweig, und `BType = 0` beim Tod (@0x4C9A8E). Gestern war das
+        // zweite Glied gebaut und das erste nicht, und niemand hat es gemerkt,
+        // weil niemand die Kette am Stueck gemessen hat. Also hier, am Stueck:
+        // der Pruefstand schiesst die beobachteten Plaetze ab und liest
+        // hinterher, was das Skript sieht.
+        if (_mscript?.ObjOwner != null)
+        {
+            var beobachtet = _mscript.WatchedSlots();
+            sb.Append($"\n  --- was das Missionsskript sieht ({beobachtet.Count} Plaetze) ---\n");
+            foreach (int platz in beobachtet)
+            {
+                int vor = _mscript.ObjOwner(platz);
+                int vi = -1;
+                for (int i = 0; i < _entities.Count; i++)
+                    if (_entities[i].IsBuilding && _entities[i].Slot == platz) { vi = i; break; }
+                if (vi < 0)
+                {
+                    sb.Append($"  Platz {platz,3}: kein Satz auf der Karte, obj_owner {vor}\n");
+                    continue;
+                }
+                var e = _entities[vi];
+                int hp = e.HpMax;
+                // ueber den ECHTEN Schadensweg, nicht ueber e.Dead = true
+                ApplyHit(-1, vi, e, Mathf.Max(1, e.HpMax));
+                int nach = _mscript.ObjOwner(platz);
+                // ⚠ Ein Satz OHNE Trefferpunkte wird von ApplyHit auch »tot«,
+                // und obj_owner meldet dann brav 12 — aber im Spiel kann
+                // niemand auf ihn schiessen. Die 12 allein ist also kein
+                // Beweis; die Trefferpunkte gehoeren dazu.
+                bool ok = nach == 12 && hp > 0;
+                sb.Append($"  Platz {platz,3} Art {e.BType,3}: {hp} Trefferpunkte, "
+                        + $"obj_owner vorher {vor} -> nach dem Abschuss {nach} "
+                        + $"({(hp <= 0 ? "⚠ OHNE TREFFERPUNKTE — im Spiel unbeschiessbar"
+                              : ok ? "12 = zerstoert/leer, das Ziel zaehlt"
+                                   : "⚠ das Ziel zaehlt NICHT")})"
+                        + "\n");
+                if (!ok) schlecht++;
+            }
+        }
+        sb.Append(schlecht == 0 ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        return sb.ToString();
     }
 
     /// <summary>
@@ -32958,7 +33743,70 @@ public partial class MapEntityLayer : Node2D
     /// aufrufbar« — das sind die vier Zellen aus
     /// <see cref="MarketPads"/>.</para>
     /// </summary>
-    private static bool Anfassbar(Entity e) => e.IsBuilding && e.BType == MarketType;
+    private static bool Anfassbar(Entity e)
+        => e.IsBuilding
+           && (e.BType == MarketType
+               // ⭐⭐ 09.09.2026, seine Meldung (bug-152): »kleine Bunker … die
+               // muss man zerstoeren, das geht aber nicht. ebenso stehen da
+               // solche schutzgeneratoren«.
+               //
+               // Gelesen: **im Original gibt es keine Typgrenze.** Die
+               // Namenstafel 0x4FDCC4 hat sechzehn Eintraege und die
+               // Sprungtafeln sechzehn Arme — aber das sind nur die Stellen, an
+               // denen die Arten 1..16 ZUSAETZLICH Logik haben (Fenster,
+               // Produktion, Name). Trefferpunkte, Schaden und Zerstoerung
+               // laufen fuer Art 57 durch DENSELBEN Code wie fuer Art 1: der
+               // Schadenszweig @0x40D269 fragt weder Typ noch Besitzer, er
+               // sperrt einzig bei Bauphase >= 100 (@0x40D2A0). Die Arten sind
+               // ein Index in die Typtafel des KACHELSATZES (100 Eintraege a 10
+               // Byte, `.CWP`-Lader 0x4C8E80), nicht in eine EXE-Tafel.
+               //
+               // Ihre Trefferpunkte stehen im Kartensatz und sind auf allen 23
+               // Karten dieselben: **700/700, herrenlos (255), built 0**.
+               // `built` heisst dabei NICHT »im Bau«, sondern »hat Spiellogik«
+               // (0x4C91B0 aus der Tafel 0x539DB8) — es sperrt Fenster,
+               // Einnahme und Tore, nicht das Beschiessen.
+               //
+               // ⚠ Wir lassen sie hier ANFASSBAR werden, zeichnen sie aber
+               // weiter nicht selbst: ihr Bild kommt aus der Objektschicht.
+               // Das ist die kleinere Haelfte der Behebung; die groessere waere,
+               // sie aus den Mustern des Kachelsatzes zu zeichnen (dann
+               // verdeckten sie auch keine Einheiten mehr). Gegenschalter
+               // --bauwerk-nur-1-16.
+               || (!BauwerkNur1Bis16 && e.BType > 0 && e.HpMax > 0));
+    /// <summary><c>--ruine-allein</c> — der Stand von heute nachmittag: ein
+    /// zerstoertes Gebaeude zeigt NUR sein Ruinenmuster, ohne den Stapel
+    /// darunter; wo die Ruine keine Kachel hat, bleibt Boden stehen.</summary>
+    public static bool RuineAllein;
+
+
+    /// <summary><c>--bildart-alt</c> — der Stand von heute mittag: der Zeichner
+    /// fragt <c>BType</c> statt <see cref="Entity.BildArt"/>, und ein
+    /// zerstoertes Gebaeude faellt damit im Augenblick seines Todes aus der
+    /// Zeichenliste — statt der Ruine bleibt nackter Boden. Der Gegenschalter
+    /// zu bug-167.</summary>
+    public static bool BildartAlt;
+
+    /// <summary><c>--kulisse-alt</c> — der Stand vor dem 10.09.2026: nur die
+    /// Arten 1..16 werden vom Spiel gezeichnet, alles darueber ist Kulisse aus
+    /// dem gebackenen Objektbild und kann darum nie zur Ruine werden.
+    /// ⚠ Der Schalter wirkt nur, solange die Kartenbilder die Kulisse noch
+    /// eingebrannt haben; nach einem <c>--reexport-maps</c> mit der neuen Regel
+    /// zeigt er gar nichts mehr — dann ist er eine Gegenprobe auf den ZEICHNER,
+    /// nicht auf das Bild.</summary>
+    public static bool KulisseAlt;
+
+    /// <summary><c>--platzhalter-ohne-energie</c> — der Stand vor dem
+    /// 10.09.2026: ein herrenloser Satz mit <c>built = 0</c> gilt als blosser
+    /// Skriptplatz und bekommt keine Energie, obwohl in seinem Kartensatz
+    /// 700/700 steht. Der Gegenschalter zur zweiten Haelfte von bug-152.
+    /// </summary>
+    public static bool PlatzhalterOhneEnergie;
+
+    /// <summary><c>--bauwerk-nur-1-16</c> — der Stand vor dem 09.09.2026: nur
+    /// die Arten 1..16 (und der Handelsposten) sind anfassbar, alles darueber
+    /// ist ein blosser Skriptplatz. Der Gegenschalter zu bug-152.</summary>
+    public static bool BauwerkNur1Bis16;
 
     /// <summary>Der Gebaeudetyp des Handelspostens. Siehe
     /// <see cref="Anfassbar"/>.</summary>
@@ -35769,7 +36617,7 @@ public partial class MapEntityLayer : Node2D
                 if (!b.IsBuilding) continue;
                 var c = b.Pos;
                 var bc = b.Owner >= 0 && b.Owner < Factions.Length
-                    ? Factions[b.Owner] : new Color(0.8f, 0.8f, 0.85f);
+                    ? FactionColor(b.Owner) : new Color(0.8f, 0.8f, 0.85f);
                 if (b.Dead) bc = new Color(0.35f, 0.35f, 0.35f);
                 if (b.IsTarget)
                     DrawArc(c, 13f, 0, Mathf.Tau, 20, new Color(1f, 0.2f, 0.2f, 0.9f), 2f);

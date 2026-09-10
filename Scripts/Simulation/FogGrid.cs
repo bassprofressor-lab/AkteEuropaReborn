@@ -170,6 +170,33 @@ public sealed class FogGrid
         if (i >= 0 && i < _cells.Length) _cells[i] = (byte)Mathf.Clamp(v, 0, Watched);
     }
 
+    /// <summary>
+    /// <b>Eine Zelle ins Gedaechtnis schreiben</b> — »hier war ich schon«.
+    ///
+    /// <para>⚠⚠ 10.09.2026: das Original hat dafuer einen eigenen Weg. Sobald
+    /// eine Grundrisszelle eines Gebaeudes beobachtet wird, rufen der Stempler
+    /// (@0x420272) und der Saum (@0x41FFEF) die Routine 0x41FE20, und die
+    /// schreibt den GANZEN Fussabdruck ins Gedaechtnis. bug-164 hat davon nur
+    /// den LESERIEGEL nachgebaut (ein Gebaeude gilt als aufgedeckt, sobald eine
+    /// seiner Zellen gesehen ist) — der SCHREIBWEG fehlte, und darum blieb der
+    /// Nebel auf den uebrigen Zellen liegen.</para>
+    ///
+    /// <para>Sichtbar wurde das erst an der Ruine: die Nebeldecke legt auf jede
+    /// nie gesehene Zelle eine Graskachel, und waehrend die Randkacheln eines
+    /// heilen Bunkers selbst Wiese sind, ist die Ruine dort Schutt. Seine
+    /// Meldung: »die bunker zeigen immer noch teils grass«.</para>
+    ///
+    /// <para>⭐ Gemessen an der Sehnentafel: bei Sicht 5 lassen 190 von 223
+    /// aufdeckenden Standplaetzen (85 %) mindestens eine flache Zelle des
+    /// Bunkers ungesehen; bei Sicht 3 sind es 97 %.</para>
+    /// </summary>
+    public void Merken(int col, int row)
+    {
+        if (col < 0 || row < 0 || col >= Width || row >= Height) return;
+        int i = row * Width + col;
+        if (_cells[i] == Unseen) { _cells[i] = Seen; Version++; }
+    }
+
     /// <summary>Bumped by a load, so the overlay redraws itself.</summary>
     public void MarkChanged() => Version++;
 

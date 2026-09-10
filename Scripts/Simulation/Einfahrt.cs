@@ -181,6 +181,16 @@ public partial class MapEntityLayer : Node2D
     /// unsichtbar und unanklickbar vor einer verstopften Tuer steht, waere ein
     /// echter Verlust — die Bandgrenze ist darum auf den EINEN Wert eingeengt,
     /// den wir wirklich setzen.
+    /// <summary><c>--eingefahren-bleibt-gewaehlt</c> — der Stand vor dem
+    /// 10.09.2026: eine untergestellte Einheit bleibt angewaehlt, obwohl sie
+    /// nicht mehr auf dem Schirm ist.</summary>
+    public static bool EingefahrenBleibtGewaehlt;
+
+    /// <summary>Wie oft eine Einheit beim Einfahren aus der Auswahl genommen
+    /// wurde. ⚠ Ohne die Zahl ist »der Marker ist weg« nicht von »es faehrt nie
+    /// eine ein« zu unterscheiden.</summary>
+    public static int AuswahlBeimEinfahrenGeraeumt;
+
     public static bool Untergestellt(Entity e)
         => e.Ukol == UkolUntergestellt
            || (!TuerbandAlt && e.Ukol >= 0x32 && e.Ukol < 0x64);
@@ -368,6 +378,28 @@ public partial class MapEntityLayer : Node2D
         u.Ukol = UkolUntergestellt;      // @0x43D657
         u.InGebaeude = b;
         b.Garage.Add(u);
+        // ⚠⚠ 10.09.2026 — UND SIE GEHOERT AUS DER AUSWAHL HERAUS.
+        //
+        // Seine Meldung: »schicke ich eine einheit ins depot, ist sie immer noch
+        // wie angewaehlt und ich sehe wie der marker sich hin und her bewegt
+        // wenn ich einen wegpunkt und so setze.«
+        //
+        // Untergestellt heisst unsichtbar: der Zeichner ueberspringt sie
+        // (`Untergestellt(e)`), `Pick` findet sie nicht, und jede Zielsuche
+        // laesst sie fort — das Original nimmt sie mit @0x43D63E sogar aus der
+        // BELEGUNGSKARTE (0xFFFE). Nur die AUSWAHL hielt sie fest, und darum
+        // zeichnete der Befehlsweg weiter Marken fuer eine Einheit, die
+        // niemand mehr sieht.
+        //
+        // ⚠ Dieselbe Aufraeumarbeit, die oben schon Weg, Auftraege, Ziel und
+        // Belegung erledigt — die Auswahl hat schlicht gefehlt.
+        // Gegenschalter --eingefahren-bleibt-gewaehlt.
+        if (!EingefahrenBleibtGewaehlt && _sel.Remove(ui))
+        {
+            AuswahlBeimEinfahrenGeraeumt++;
+            if (_selected == ui) _selected = _sel.Count > 0 ? System.Linq.Enumerable.First(_sel) : -1;
+            UpdatePanel();
+        }
         Eingefahren++;
         NoteEvent(b, $"{EinheitenWort(u)} untergestellt");
         if (b.Owner == ViewPlayer)

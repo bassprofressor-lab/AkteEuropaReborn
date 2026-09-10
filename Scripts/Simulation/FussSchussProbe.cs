@@ -300,6 +300,17 @@ public partial class MapEntityLayer : Node2D
                        + $"auf ({s.Col},{s.Row}), Aufsatz {s.Weapon}, Waffenfahne {s.Armed}, "
                        + $"Reichweite {RangeOf(s):0.0} (min {RangeMinOf(s):0.0}), "
                        + $"Munition {s.Ammo}/{s.AmmoMax}, Nachladen {ReloadOf(s):0.00}s\n"
+                       // ⚠ 10.09.2026 — DER KLANGSATZ EINES ERZEUGTEN
+                       // FUSSSOLDATEN. Er haengt an `Chassis`, und das war fuer
+                       // alles aus Depot/Markt/Dock/Skript 0 (siehe
+                       // InfanterieAnlegen). Ohne diese Zeile ist der Fehler im
+                       // Lauf unsichtbar: der Standardsatz KLINGT ja.
+                       + $"   Klangsatz: Chassis {s.Chassis} (Spodek), Satzindex "
+                       + $"{(s.Chassis >> 1) - 1} "
+                       + (s.Chassis == 0
+                          ? "= Standard 189/193   ⚠ bei einer Art mit eigenem Satz FALSCH"
+                          : "= eigener Satz")
+                       + (char)10
                        + $"   OPFER Platz {v.Slot} \"{LabelOf(v)}\" auf ({v.Col},{v.Row}), "
                        + $"Abstand {bestD:0.0} Zellen; Befehl abgesetzt: {(ab ? "ja" : "NEIN")}"
                        + (AngriffAbgewiesen.Length > 0 ? $" ({AngriffAbgewiesen})" : ""));

@@ -1253,6 +1253,84 @@ public sealed class MissionScript
     /// Regel uebersetzt« von »die Datei ist kaputt« nicht zu unterscheiden —
     /// genau die Falle, vor der der Kopf dieser Datei warnt. Siehe
     /// <see cref="WhyNoScript"/>.</para></summary>
+    /// <summary>
+    /// <b>DIE ENDREGEL DARF SICH NICHT SELBST DIE BEDINGUNG WEGNEHMEN.</b>
+    /// (10.09.2026, bug-166.)
+    ///
+    /// <para>⚠⚠ Seine Meldung zu Mission 7: »mission liess sich nicht beenden,
+    /// trotz das alles zerstoert«. Gemessen mit <c>--sieg7-check</c>: die zwei
+    /// Bunker fallen, <c>obj_owner(3)</c> und <c>obj_owner(5)</c> gehen brav auf
+    /// 12 — und die Mission laeuft weiter.</para>
+    ///
+    /// <para><b>Der Grund ist unsere eigene Aufteilung.</b> Im Original ist
+    /// <c>@0x49B162</c> EINE Stelle: sie setzt <c>v[102] = 10</c> und ruft gleich
+    /// dahinter <c>mission_end</c> (<c>@0x49B16B</c>, neun Byte weiter, derselbe
+    /// Basisblock). Bei uns sind daraus ZWEI Regeln geworden — die uebersetzte
+    /// Regel mit dem <c>set</c> und die von <c>mission_endrules.py</c>
+    /// angehaengte Endregel mit dem <c>end</c>, beide mit WORTGLEICHEN
+    /// Bedingungen:</para>
+    /// <code>
+    ///   v[102]==2 UND v[12]==2 UND obj_owner(3)==12 UND obj_owner(5)==12
+    /// </code>
+    /// <para>Der Takt laeuft die Regeln der Reihe nach und wendet jede Wirkung
+    /// SOFORT an. Die erste steht vorn, setzt <c>v[102]</c> auf 10 — und die
+    /// Endregel prueft danach <c>v[102] == 2</c>. <b>Sie kann nie feuern</b>,
+    /// und zwar in genau dem Augenblick, in dem sie es sollte.</para>
+    ///
+    /// <para>Darum werden die beiden hier wieder zu EINER Regel: die
+    /// <c>end</c>-Wirkung wandert an die vorangehende, die synthetische faellt
+    /// weg. Das ist naeher am Original als beides einzeln — dort steht nur ein
+    /// Block.</para>
+    ///
+    /// <para>⚠ <b>Eng gefasst</b>, damit nichts anderes hineingeraet: nur eine
+    /// SYNTHETISCHE Endregel (<c>At == 0</c>, also angelegt und nicht aus dem
+    /// Code gelesen), nur gegen ihren UNMITTELBAREN Vorgaenger, nur bei
+    /// WORTGLEICHEN Bedingungen, und nur wenn der Vorgaenger ueberhaupt eine
+    /// Variable schreibt. Gegenschalter <c>--endregel-getrennt</c>.</para>
+    /// </summary>
+    private static void EndregelVerschmelzen(Script s)
+    {
+        if (EndregelGetrennt) return;
+        for (int i = s.Rules.Count - 1; i > 0; i--)
+        {
+            var end = s.Rules[i];
+            if (end.At != 0) continue;                       // aus dem Code gelesen
+            bool endet = false;
+            foreach (var a in end.Then) if (a.Kind == "end") { endet = true; break; }
+            if (!endet) continue;
+
+            var vor = s.Rules[i - 1];
+            if (vor.When.Count == 0 || vor.When.Count != end.When.Count) continue;
+            bool gleich = true;
+            for (int k = 0; k < vor.When.Count && gleich; k++)
+            {
+                var a = vor.When[k];
+                var b = end.When[k];
+                gleich = a.Kind == b.Kind && a.Op == b.Op &&
+                         a.A == b.A && a.B == b.B && a.C == b.C;
+            }
+            if (!gleich) continue;
+            bool schreibt = false;
+            foreach (var a in vor.Then)
+                if (a.Kind is "set" or "inc" or "dec" or "take_var") { schreibt = true; break; }
+            if (!schreibt) continue;
+
+            foreach (var a in end.Then) vor.Then.Add(a);
+            s.Rules.RemoveAt(i);
+            Verschmolzen++;
+        }
+    }
+
+    /// <summary>Wie viele Endregeln mit ihrem Vorgaenger verschmolzen wurden.
+    /// ⚠ Ohne die Zahl ist »die Mission endet jetzt« nicht von »der Zweig wird
+    /// nie erreicht« zu unterscheiden.</summary>
+    public static int Verschmolzen;
+
+    /// <summary><c>--endregel-getrennt</c> — der Stand vor dem 10.09.2026: die
+    /// synthetische Endregel bleibt eigenstaendig und wird von ihrem Vorgaenger
+    /// um ihre eigene Bedingung gebracht.</summary>
+    public static bool EndregelGetrennt;
+
     public static MissionScript? For(int mission)
     {
         var all = Load();
@@ -1568,6 +1646,7 @@ public sealed class MissionScript
                     }
                 s.Rules.Add(rule);
             }
+            EndregelVerschmelzen(s);
             _cache[m] = s;
         }
         // ⚠ Die Zeile nennt jetzt den NENNER und die Luecken. »31 geladen« sagte

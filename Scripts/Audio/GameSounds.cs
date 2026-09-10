@@ -733,6 +733,89 @@ public static class GameSounds
         PlayAt(pick, col, row);
     }
 
+    /// <summary>
+    /// <b>Der Schussklang eines FUSSSOLDATEN</b> — feste Nummer je Waffenzeile.
+    ///
+    /// <para>⚠⚠ 10.09.2026. Die Infanterie schoss bei uns <b>stumm</b>, alle
+    /// fuenf bewaffneten Arten: <see cref="Fire"/> geht ueber
+    /// <c>WeaponRowOf</c>, und das bildet nur die Fahrzeugwaffen 21..39 ab —
+    /// eine Fusssoldatenzeile (190..199) gibt −1, und −1 kehrt ohne Klang um.
+    /// Das ist die naheliegende Ursache von bug-150 (»ich hoere keine Schuesse
+    /// von Cossarro«): sein Klang waere 80.</para>
+    ///
+    /// <para><b>Das Original hat dafuer eine eigene Routine.</b> Die Infanterie
+    /// schiesst durch <c>0x40F0A0</c>, die ueber den Thunk <c>0x40178A</c>
+    /// sechsmal <c>0x40EC70</c> ruft. Dort (<c>0x40ECD2..0x40ED21</c>):
+    /// <c>al = byte[Satz+0x0D]</c> ist die Waffenzeile, <c>sub eax,0xBE;
+    /// cmp eax,9; ja</c> grenzt auf 190..199 ein, und die Bytetafel
+    /// <c>0x40EFBC = [0,1,2,5,3,5,5,5,5,4]</c> waehlt den Arm der Sprungtafel
+    /// <c>0x40EFA4</c>:</para>
+    /// <code>
+    ///   190 Maschinengewehr (L-Infanterie) -> Fall 0 -> push 6
+    ///   191 Laser           (S-Infanterie) -> Fall 1 -> push 0x12 = 18
+    ///   192 Schrotflinte    (Cossarro)     -> Fall 2 -> push 0x50 = 80
+    ///   194 LaserXXL        (Hullman)      -> Fall 3 -> push 0x12 = 18
+    ///   199 Schw.M-Gewehr   (Wiffer)       -> Fall 4 -> push 8
+    ///   193 195 196 197 198                -> Fall 5 -> KEIN Klang (0x40ED24)
+    /// </code>
+    ///
+    /// <para>⚠ <b>Kein <c>rand &amp; 1</c></b> wie beim Fahrzeugschuss
+    /// (<c>0x40C4C0</c>) — die Nummer ist FEST. Wer hier <see cref="Fire"/>
+    /// nachbaute, erfaende einen Zufall, den es an dieser Stelle nicht gibt.</para>
+    ///
+    /// <para>Gegenschalter <c>--fussklang-alt</c>.</para>
+    /// </summary>
+    /// <param name="zeile">Die Waffenzeile 190..199 (Satz <c>+0x0D</c>).</param>
+    /// <returns>Die Klangnummer, oder −1 fuer »diese Waffe klingt nicht«.</returns>
+    public static int InfantryFire(int zeile) => zeile switch
+    {
+        190 => 6,
+        191 => 18,
+        192 => 80,
+        194 => 18,
+        199 => 8,
+        _ => -1,
+    };
+
+    /// <summary><c>--fussklang-alt</c> — der Stand vor dem 10.09.2026: der
+    /// Fusssoldatenschuss laeuft durch <see cref="Fire"/> und bleibt damit
+    /// lautlos.</summary>
+    public static bool FussklangAlt;
+
+    /// <summary>Wieviele Fusssoldatenschuesse geklungen haben und wieviele
+    /// stumm blieben. ⚠ Ohne diese zwei Zahlen ist »es klingt jetzt« nicht von
+    /// »der Zweig wird nie erreicht« zu unterscheiden.</summary>
+    public static int FussklangGespielt, FussklangStumm;
+
+    /// <summary>Wieviele Schuesse ueberhaupt von einem Fusssoldaten kamen —
+    /// die Bezugsgroesse. ⚠ Ohne sie sagt »0 gespielt« im Nullmodell nichts:
+    /// es koennte auch heissen, dass gar kein Fusssoldat geschossen hat.
+    /// </summary>
+    public static int FussSchuesseGesamt;
+
+    /// <summary>Die Zeile fuer das Protokoll — <c>fussklang:</c>.</summary>
+    public static string FussklangZeile()
+        => $"fussklang: {FussSchuesseGesamt} Schuesse von Fusssoldaten, "
+         + $"{FussklangGespielt} mit Klang, {FussklangStumm} stumm "
+         + $"(Waffe ohne Klangnummer im Original); "
+         + $"Gegenschalter --fussklang-alt: {FussklangAlt}"
+         + (FussSchuesseGesamt == 0
+            ? "   ⚠ kein Fusssoldat hat geschossen — die Zahlen sagen NICHTS"
+            : FussklangAlt ? "   (alt: alle stumm)"
+            : FussklangGespielt > 0 ? "   BESTANDEN" : "   DURCHGEFALLEN ⚠");
+
+    /// <summary>Der Schuss eines Fusssoldaten: feste Nummer aus
+    /// <see cref="InfantryFire"/> statt <see cref="Fire"/>. Gibt zurueck, ob
+    /// diese Waffe ueberhaupt klingt.</summary>
+    public static bool FussSchuss(int zeile, float col, float row)
+    {
+        int nr = InfantryFire(zeile);
+        if (nr < 0) { FussklangStumm++; return false; }
+        FussklangGespielt++;
+        PlayAt(nr, col, row);
+        return true;
+    }
+
     /// <summary>Shorthand for the events above.</summary>
     public static void Play(int slot) => SoundBankPlayer.Play(slot);
 

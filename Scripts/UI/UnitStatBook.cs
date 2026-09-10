@@ -239,6 +239,11 @@ public static class UnitStatBook
         return into;
     }
 
+    /// <summary><c>--werteliste-nur-roh</c> — der Stand vor dem 10.09.2026: die
+    /// Werteliste zeigt nur Entwuerfe mit rohem Satz, und das sind seit bug-057
+    /// keine.</summary>
+    public static bool NurRoheWerteliste;
+
     private static void ReadSec47()
     {
         var designs = Section("Maps/unit_designs.json", "designs");
@@ -250,13 +255,29 @@ public static class UnitStatBook
             string name = d.TryGetValue("name", out var nv) ? nv.AsString() : "";
             if (name.Length == 0 || _byName!.ContainsKey(name)) continue;
             string raw = d.TryGetValue("raw", out var rv) ? rv.AsString() : "";
-            if (raw.Length < 0x2e * 2) continue;
-            _byName[name] = new Entry(
-                name,
-                d.TryGetValue("weapon", out var wv) ? wv.AsInt32() : 0,
-                d.TryGetValue("propulsion", out var pv) ? pv.AsInt32() : 0,
-                d.TryGetValue("body", out var bv) ? bv.AsInt32() : 0,
-                Simulation.DesignMath.FromRecordHex(raw));
+            int waffe = d.TryGetValue("weapon", out var wv) ? wv.AsInt32() : 0;
+            int fahrwerk = d.TryGetValue("propulsion", out var pv) ? pv.AsInt32() : 0;
+            int rumpf = d.TryGetValue("body", out var bv) ? bv.AsInt32() : 0;
+            // ⚠⚠ 10.09.2026 — HIER STAND NUR `if (raw.Length < 0x2e*2) continue;`,
+            // UND DAMIT WAR DIE WERTELISTE FUER JEDEN ORIGINAL-ENTWURF LEER.
+            //
+            // Seit bug-057 (05.09.) schreibt WriteDesignsFromExe die Datei
+            // `unit_designs.json` OHNE `raw` — ihre eigene Kopfnote sagt es:
+            // »no raw record is written here«. Der Schwanz war also nicht
+            // fehlerhaft, sondern schlicht nicht mehr da, und diese Zeile sprang
+            // seither ueber ALLE 74 belegten EXE-Saetze hinweg, davon zwoelf
+            // Fusssoldaten. Im Basisfenster stand darum bei jedem
+            // Original-Entwurf weder Energie noch A/V noch Reichweite.
+            //
+            // ⭐ Der Ausweg lag daneben: ReadOwnDesigns und
+            // MapEntityLayer.LoadDesigns rechnen den Schwanz laengst mit
+            // DesignMath.Compute, wenn kein Satz da ist. Genau das hier auch.
+            // Gegenschalter --werteliste-nur-roh.
+            if (raw.Length < 0x2e * 2 && NurRoheWerteliste) continue;
+            var schwanz = raw.Length >= 0x2e * 2
+                        ? Simulation.DesignMath.FromRecordHex(raw)
+                        : Simulation.DesignMath.Compute(waffe, fahrwerk, rumpf);
+            _byName[name] = new Entry(name, waffe, fahrwerk, rumpf, schwanz);
         }
     }
 

@@ -1163,9 +1163,33 @@ public sealed class CatalogueExporter
             sb.Append($"{{\"ordinal\":{ordinal++},\"name\":\"{Esc(d.Name)}\",");
             sb.Append($"\"propulsion\":{d.Propulsion},\"weapon_row\":{d.Weapon},");
             sb.Append($"\"weapon_name\":\"{Esc(w?.Name ?? "")}\",");
-            sb.Append($"\"armed\":{(w != null && w.Raw.Length > 6 && w.Raw[4] > 0 ? "true" : "false")},");
-            sb.Append($"\"damage\":{(w != null && w.Raw.Length > 4 ? w.Raw[4] : 0)},");
-            sb.Append($"\"range_raw\":{(w != null && w.Raw.Length > 6 ? w.Raw[6] : 0)},");
+            // ⚠⚠ 10.09.2026 — ZWEI FELDER TRUGEN DEN FALSCHEN NAMEN.
+            //
+            // Hier stand `damage = w.Raw[4]` und `range_raw = w.Raw[6]`, und die
+            // Kopfnote nannte das selbst »tentative«. `Raw` beginnt aber erst bei
+            // +0x1A der Bauteilzeile: Raw[4] ist +0x1E = NACHLADEN, Raw[6] ist
+            // +0x20 = PREIS in Waffenteilen. An allen zwoelf Zeilen nachgerechnet.
+            //
+            // Was das anrichtete:
+            //   * Der MEMBRANDROID (Zeile 197) blieb unbewaffnet — sein Nachladen
+            //     ist 0, sein ANGRIFF aber 50, und LoadInfantryDesigns bewaffnet
+            //     nach `damage > 0`.
+            //   * bug-150 hielt »Reichweite 6 gegen 15« fuer zwei streitende
+            //     Tafeln; es ist EINE, und die 15 ist der Waffenpreis.
+            //   * Der Cerebrum-Satz zur S-Infanterie (»Reichweite 6, Schaden 15«)
+            //     war doppelt daneben: richtig sind Reichweite 4, Angriff 5,
+            //     Nachladen 15, Preis 6.
+            //
+            // Jetzt aus der Bauteilzeile selbst (StatFeld zaehlt von der
+            // ARRAY-Basis): Angriff +0x12, Reichweite +0x14. Die zwei alten Werte
+            // bleiben erhalten — unter ihrem richtigen Namen.
+            int angriff = _exe?.StatFeld(d.Weapon, 0x12) ?? 0;
+            int reichw = _exe?.StatFeld(d.Weapon, 0x14) ?? 0;
+            sb.Append($"\"armed\":{(angriff > 0 ? "true" : "false")},");
+            sb.Append($"\"damage\":{angriff},");
+            sb.Append($"\"range_raw\":{reichw},");
+            sb.Append($"\"reload\":{(w != null && w.Raw.Length > 4 ? w.Raw[4] : 0)},");
+            sb.Append($"\"price_w\":{(w != null && w.Raw.Length > 6 ? w.Raw[6] : 0)},");
             sb.Append($"\"sets\":[{set},{set + 1}]}}");
             InfantryDesigns++;
         }
