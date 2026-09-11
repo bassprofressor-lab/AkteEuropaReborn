@@ -1174,10 +1174,18 @@ public partial class MapEntityLayer : Node2D
     private void UpdateAiInner(float dt)
     {
         UnarmedWatchTick();
+        // ⭐ 11.09.2026 — der 150er-Zaehler der Teilespende zaehlt in JEDEM
+        // ai_tick, vor der Spielerschleife (@0x4BFBA6..0x4BFBBB).
+        bool spendeFaellig = TeilespendeZaehlen();
         if (!_aiOn) return;
         foreach (var a in _ai)
         {
             if (!AliveAsPlayer(a.Player)) continue;
+
+            // ⭐ 11.09.2026 — TAKT 48, die TEILESPENDE (Simulation/Teilespende.cs).
+            // Sie haengt am Takt, nicht am Denk-Zeitgeber darunter, und hinter
+            // derselben Sperre wie der ganze KI-Zug (@0x4BFBFA).
+            if (spendeFaellig && !AiGesperrt(a.Player)) Teilespende(a.Player);
 
             // Der Einheitendurchlauf haengt NICHT am Denk-Takt. Im Original ist
             // er ein eigener Eintrag der KI-Runde (Takte 16,20,…,44) und laeuft

@@ -1877,33 +1877,68 @@ public partial class MapEntityLayer
             GD.Print($"fire_at: Platz {slot} hat keine Munition — kein Schuss");
             return;
         }
-        ApplyMissionHits(new[] { (col, row) });
+        // ⚠ 11.09.2026 — mit dem SCHUETZEN als Angreifer: fire_at geht durch die
+        // Schussroutine 0x40BB00, der Treffer ist ein Schuss dieser Einheit und
+        // kein Skripttreffer mit 40050.
+        ApplyMissionHits(new[] { (col, row) }, schuetze: _entities.IndexOf(schuetze));
         if (schuetze.AmmoMax > 0) schuetze.Ammo = Mathf.Max(0, schuetze.Ammo - 1);
         GD.Print($"fire_at: Einheit {slot} (Spieler {schuetze.Owner}) feuert auf " +
                  $"({col},{row})");
     }
 
+    /// <summary><c>--skripttreffer-halbe-huelle</c> — der Stand vor dem
+    /// 11.09.2026: ein Skripttreffer (und fire_at) setzt jede Einheit auf die
+    /// halbe Huelle.</summary>
+    public static bool SkripttrefferHalbeHuelle;
+
+    /// <param name="schuetze">Listenplatz der schiessenden Einheit (fire_at),
+    /// oder −1 fuer einen Treffer ohne Satz (SETUP, hit_cell: Angreifer
+    /// 40000 + <paramref name="schaden"/>).</param>
     private void ApplyMissionHits(System.Collections.Generic.IReadOnlyList<(int Col, int Row)> zellen,
-                                 bool funken = true, int schaden = SetupSchaden)
+                                 bool funken = true, int schaden = SetupSchaden, int schuetze = -1)
     {
         if (zellen.Count == 0) return;
         int einheiten = 0, brennt = 0, leer = 0, gebaeude = 0, gebaeudeTot = 0;
+        var sch = schuetze >= 0 && schuetze < _entities.Count ? _entities[schuetze] : null;
         foreach (var (c, r) in zellen)
         {
             bool getroffen = false;
-            for (int i = 0; i < _entities.Count; i++)
+            if (SkripttrefferHalbeHuelle)
             {
-                var e = _entities[i];
-                if (e.Dead || e.IsProp || e.Col != c || e.Row != r) continue;
-                // ⚠ Wieviel Schaden eine Einheit bekommt, ist NICHT gelesen:
-                // fuer einen Getroffenen unter 8000 rechnet Zasah mit Feldern
-                // des Fahrzeugs, die wir nicht alle deuten. Genommen wird die
-                // HAELFTE der Huelle — sichtbar beschaedigt, nicht zerstoert.
-                // ⚠ UNSERE SETZUNG. Fuer den WALD ist der Schaden dagegen
-                // gelesen (50, siehe oben), und darum brennt er.
-                e.Hp = Mathf.Max(1, e.Hp / 2);
-                einheiten++; getroffen = true;
-                break;
+                for (int i = 0; i < _entities.Count; i++)
+                {
+                    var e = _entities[i];
+                    if (e.Dead || e.IsProp || e.Col != c || e.Row != r) continue;
+                    // der alte Stand, WORTGLEICH: die halbe Huelle als Setzung
+                    e.Hp = Mathf.Max(1, e.Hp / 2);
+                    einheiten++; getroffen = true;
+                    break;
+                }
+            }
+            else if (sch != null)
+            {
+                // ⭐⭐ 11.09.2026 — fire_at: ein SCHUSS des Schuetzen auf jede
+                // Einheit der Zelle, ueber denselben Weg wie jeder Schuss
+                // (ShotDamage verzweigt nach dem Opfer). Eigenes und verbuendetes
+                // Fussvolk spart der Infanteriezellen-Arm aus (@0x40D084).
+                // ⚠ Fuer ein FAHRZEUG auf der Zelle ist eine solche Pruefung
+                // nicht gelesen — es wird getroffen.
+                int n = EinheitenAufZelle(c, r, (i, e) =>
+                {
+                    if (e.Infantry >= 0 && e.Owner >= 0 && sch.Owner >= 0 && Allied(sch.Owner, e.Owner)) return;
+                    ApplyHit(schuetze, i, e, 0);
+                });
+                if (n > 0) { einheiten += n; getroffen = true; }
+            }
+            else
+            {
+                // ⭐⭐ 11.09.2026 — HIER STAND DIE HALBE HUELLE, als Setzung, weil
+                // der Einheitenarm fuer einen Angreifer ohne Satz nicht gelesen
+                // war. Er ist es jetzt (0x40CCBD, und fuer Fussvolk 0x40D00C):
+                // Rang 0, Angriff = schaden (40050 -> 50). Gegenschalter
+                // --skripttreffer-halbe-huelle.
+                int n = SkripttrefferEinheiten(c, r, schaden, "SKRIPTTREFFER");
+                if (n > 0) { einheiten += n; getroffen = true; }
             }
 
             // ⭐⭐ 06.09.2026 — UND EIN GEBAEUDE. Seine Meldung aus Kampagne 4:
@@ -1921,10 +1956,19 @@ public partial class MapEntityLayer
             if (GebaeudeAufZelle(c, r) is var bi and >= 0)
             {
                 var b = _entities[bi];
-                SkripttrefferRufe++;
-                int treffer = SkripttrefferSchaden(schaden, b.Armor);
-                if (treffer >= b.Hp) { Kill(bi, b); gebaeudeTot++; }
-                else { b.Hp -= treffer; GebaeudeStufeNachziehen(b); }
+                if (sch != null && !SkripttrefferHalbeHuelle)
+                {
+                    // fire_at: der Schuss des Schuetzen, Gebaeudearm mit seinem Rang
+                    ApplyHit(schuetze, bi, b, 0);
+                    if (b.Dead) gebaeudeTot++;
+                }
+                else
+                {
+                    SkripttrefferRufe++;
+                    int treffer = SkripttrefferSchaden(schaden, b.Armor);
+                    if (treffer >= b.Hp) { Kill(bi, b); gebaeudeTot++; }
+                    else { b.Hp -= treffer; GebaeudeStufeNachziehen(b); }
+                }
                 gebaeude++; getroffen = true;
             }
 

@@ -87,6 +87,53 @@ public sealed class FogGrid
     public const byte Unseen = 0, Seen = 1, Watched = 2;
 
     /// <summary>
+    /// <b>DER SAUM — die Zellen, die nicht gestempelt sind, aber an einer Ecke
+    /// einer gestempelten haengen.</b> (11.09.2026)
+    ///
+    /// <para><b>Gelesen, und die Reihenfolge entscheidet alles.</b> Die
+    /// Nebelrunde ruft am Ende erst das Eckengitter, dann den Saum:</para>
+    /// <code>
+    ///   0x420C57  call 0x401DCF -> 0x41FD60   ; Ecken jeder Zelle mit sec50 != 0
+    ///   0x420C5C  call 0x40168B -> 0x41FF50   ; Saum
+    /// </code>
+    /// <para>Zum Zeitpunkt des Eckengitters stehen in sec50 nur die Einsen des
+    /// Stemplers — das Gitter kennt also nur den STEMPEL (0x41FD60 hat genau
+    /// diesen einen Rufer). Danach setzt 0x41FF50 jede Zelle mit
+    /// <c>sec50 == 0</c>, an der eine der vier Ecken gesetzt ist, auf 2
+    /// (@0x41FFE7 fuer Gebaeudezellen, @0x420013 fuer alle anderen), schreibt
+    /// ihr Kachelwort ins Gedaechtnis (@0x42000A sec52, @0x420026 bekannte
+    /// Karte) und ruft fuer eine Gebaeudezelle 0x41FE20 (@0x41FFFC).</para>
+    ///
+    /// <para>Der Kacheldurchgang zeichnet dann: 1 keine Nebelkachel, <b>2 die
+    /// Uebergangskachel nach dem Eckenmuster</b>, 0 die volle Nebelkachel
+    /// (@0x4B47A8). ⭐ <b>Die Uebergangskante liegt also IM Saum, und die klare
+    /// Flaeche ist genau der Stempel</b> — bei uns zeichnet die Rampe aus
+    /// <c>BuildFogTexture</c> dieselben Zellen, weil <see cref="MarkCorners"/>
+    /// ebenfalls nur den Stempel kennt. ⚠⚠ Der Bericht vom 10.09. schloss aus
+    /// @0x41FDA5 (»sec50 != 0«) auf »Saum inklusive« und daraus auf eine um
+    /// einen Ring zu kleine klare Flaeche (−44/−33/−20 %). Das stimmt nicht: das
+    /// Gitter laeuft VOR dem Saum.</para>
+    ///
+    /// <para><b>Was dem Nachbau wirklich fehlte, ist das SPIELVERHALTEN.</b> In
+    /// allen 22 Zeichenlisten zaehlt 2 als sichtbar, der Saum schreibt das
+    /// Gedaechtnis, und er deckt Gebaeude auf. Bei uns war eine Saumzelle
+    /// »gesehen« oder »nie gesehen« — also Einheiten darin unsichtbar und der
+    /// Wald darin noch synthetischer Boden, bis die Zelle klar wurde. Genau
+    /// dieser Sprung im klaren Gelaende ist »kaestchenweise«.</para>
+    ///
+    /// <para>Gegenschalter <c>--kein-saum</c>.</para>
+    /// </summary>
+    public const byte Saum = 3;
+
+    /// <summary><c>--kein-saum</c> — der Stand vor dem 11.09.2026: kein
+    /// Saum-Zustand, eine Zelle ist erst mit dem Stempel sichtbar.</summary>
+    public static bool KeinSaum;
+
+    /// <summary>Wieviele Zellen die letzte Runde auf <see cref="Saum"/>
+    /// gesetzt hat — fuer den Pruefstand.</summary>
+    public int SaumZellen { get; private set; }
+
+    /// <summary>
     /// <b>DIE ECKENMASKE — vier Bit je Zelle, welche ihrer Ecken »hell« sind.</b>
     ///
     /// <para>Bit 0 = (Spalte, Zeile), Bit 1 = (Spalte+1, Zeile),
@@ -141,7 +188,13 @@ public sealed class FogGrid
     public byte At(int col, int row)
         => col < 0 || row < 0 || col >= Width || row >= Height ? Unseen : _cells[row * Width + col];
 
-    public bool IsWatched(int col, int row) => At(col, row) == Watched;
+    /// <summary>Ist die Zelle gerade sichtbar — gestempelt ODER im Saum? Das
+    /// ist die Frage der 22 Zeichenlisten des Originals (sec50 != 0).</summary>
+    public bool IsWatched(int col, int row) => At(col, row) is Watched or Saum;
+
+    /// <summary>Genau der Stempel, ohne Saum.</summary>
+    public bool IsStamped(int col, int row) => At(col, row) == Watched;
+
     public bool IsSeen(int col, int row) => At(col, row) != Unseen;
 
     /// <summary>Everything visible — for a map with no fog, and for the
@@ -167,7 +220,7 @@ public sealed class FogGrid
 
     public void SetCellAt(int i, int v)
     {
-        if (i >= 0 && i < _cells.Length) _cells[i] = (byte)Mathf.Clamp(v, 0, Watched);
+        if (i >= 0 && i < _cells.Length) _cells[i] = (byte)Mathf.Clamp(v, 0, Saum);
     }
 
     /// <summary>
@@ -205,12 +258,38 @@ public sealed class FogGrid
     /// seen.</summary>
     public void Update(IEnumerable<(int Col, int Row, int Sight)> watchers)
     {
-        for (int i = 0; i < _cells.Length; i++)
-            if (_cells[i] == Watched) _cells[i] = Seen;
-
+        Zuruecksetzen();
         foreach (var (col, row, sight) in watchers) Stamp(col, row, sight);
         MarkCorners();
+        SaumSetzen();
         Version++;
+    }
+
+    /// <summary>Der Anfang jeder Runde: was beobachtet oder im Saum war, ist
+    /// jetzt nur noch »gesehen«. Das Original loescht sec50 ganz
+    /// (@0x4205B0); das Gedaechtnis steht getrennt.</summary>
+    private void Zuruecksetzen()
+    {
+        for (int i = 0; i < _cells.Length; i++)
+            if (_cells[i] is Watched or Saum) _cells[i] = Seen;
+    }
+
+    /// <summary>
+    /// 0x41FF50: jede nicht gestempelte Zelle mit einer gesetzten Ecke wird
+    /// <see cref="Saum"/>. ⚠ Muss NACH <see cref="MarkCorners"/> laufen und
+    /// darf die Ecken nicht mehr veraendern — siehe den Kopf von
+    /// <see cref="Saum"/>.
+    /// </summary>
+    private void SaumSetzen()
+    {
+        SaumZellen = 0;
+        if (KeinSaum || _corner == null) return;
+        for (int i = 0; i < _cells.Length; i++)
+            if (_cells[i] != Watched && _corner[i] != 0)
+            {
+                _cells[i] = Saum;
+                SaumZellen++;
+            }
     }
 
     /// <summary>
@@ -269,21 +348,16 @@ public sealed class FogGrid
     /// the original's ground units are. Each one is stamped with
     /// <see cref="UnitRadius"/>.
     ///
-    /// <para>⚠ Nothing calls this yet. <c>MapEntityLayer.Watchers()</c> yields
-    /// three values and its <c>ElevOf(col, row)</c> is private, so the height
-    /// cannot reach the fog without a change in a file this pass does not own.
-    /// The overload is here so that change is a one-line one, and so the reading
-    /// above does not have to be found again. Until then the fog keeps using the
-    /// bare sight value: one ring too many at sea level, and no reward for the
-    /// hill.</para></summary>
+    /// <para>Das ist der Weg, den <c>MapEntityLayer.Watchers()</c> seit dem
+    /// 11.08.2026 nimmt (die alte Notiz »nothing calls this yet« war
+    /// ueberholt).</para></summary>
     public void Update(IEnumerable<(int Col, int Row, int Sight, int Elev)> watchers)
     {
-        for (int i = 0; i < _cells.Length; i++)
-            if (_cells[i] == Watched) _cells[i] = Seen;
-
+        Zuruecksetzen();
         foreach (var (col, row, sight, elev) in watchers)
             Stamp(col, row, UnitRadius(sight, elev));
         MarkCorners();
+        SaumSetzen();
         Version++;
     }
 
@@ -367,16 +441,20 @@ public sealed class FogGrid
         catch (System.Exception e) { GD.PrintErr("Nebel: sight_circle.json — " + e.Message); }
     }
 
-    /// <summary>How many cells are in each state — for the scripted checks.</summary>
-    public (int Unseen, int Seen, int Watched) Counts()
+    /// <summary>How many cells are in each state — for the scripted checks.
+    /// ⚠ »Watched« ist hier nur der STEMPEL; der Saum wird getrennt gezaehlt,
+    /// damit die gemessenen Stempelzahlen (K7 347, K2 167) vergleichbar
+    /// bleiben.</summary>
+    public (int Unseen, int Seen, int Watched, int Saum) Counts()
     {
-        int u = 0, s = 0, w = 0;
+        int u = 0, s = 0, w = 0, m = 0;
         foreach (byte b in _cells)
         {
             if (b == Unseen) u++;
             else if (b == Seen) s++;
-            else w++;
+            else if (b == Watched) w++;
+            else m++;
         }
-        return (u, s, w);
+        return (u, s, w, m);
     }
 }

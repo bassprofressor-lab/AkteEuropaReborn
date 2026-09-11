@@ -862,6 +862,12 @@ public partial class MapEntityLayer : Node2D
         public bool Dead;
         public float DeadTime;           // seconds since destruction (wreck anim)
 
+        /// <summary>Wie viele Takte ein UEBERFAHRENER Soldat noch in Block 12
+        /// stehen bleibt, bevor er faellt — <c>+0x1C</c> des Originals
+        /// (@0x40B73A: <c>8 + rand&amp;3</c>, nur mit der Flagge 0x4F6308).
+        /// <see cref="HaltenTakt"/> ist der Takt, an dem es begann.</summary>
+        public int Halten, HaltenTakt;
+
         /// <summary>Der Umschlagsatz dieser Einheit — im Original der Zeiger
         /// <c>+0x40</c> in die Tafel sec48 (<c>0x436227</c>).
         ///
@@ -1603,6 +1609,23 @@ public partial class MapEntityLayer : Node2D
     private int _fogDrawn = -1;
     private float _fogTick;
 
+    /// <summary>Die Hoehe je Zelle fuer die Nebeltextur (aus
+    /// <see cref="ElevOf"/>, einmal beim Laden) und die groesste davon — sie
+    /// bestimmt den Rand ueber Zeile 0. Siehe <see cref="BuildFogTexture"/>.
+    /// </summary>
+    private int[] _fogElev = System.Array.Empty<int>();
+    private int _fogElevMax;
+    private int _fogTexW, _fogTexH;
+
+    /// <summary><c>--nebel-flach</c> — der Stand vor dem 11.09.2026: die
+    /// Nebeltextur liegt flach ueber der Karte, ohne Hoehenversatz.</summary>
+    public static bool NebelFlach;
+
+    /// <summary>Texel je Hoehenstufe: 15 px (<c>ElevStep</c>) bei 20 px Zeile
+    /// und <see cref="FogSub"/> = 4 Texeln sind genau 3. ⚠ Geht nur glatt auf,
+    /// solange <c>ElevStep · FogSub</c> durch <c>TileH</c> teilbar ist.</summary>
+    private static int NebelHub => NebelFlach ? 0 : Import.MapBaker.ElevStep * FogSub / TileH;
+
     /// <summary>The original runs its "unexplored" step on every fifth tick
     /// (@0x41678c: `[0x4fa240] % 5 == 1`). At the 25 ticks a second the movies
     /// run at, that is a fifth of a second — the interval is the game's, the
@@ -1979,47 +2002,100 @@ public partial class MapEntityLayer : Node2D
         // tauschen will, braucht dafuer die Tafel 0xBAC72C — und die ist nur
         // aus einem laufenden Spiel oder aus dem Kachelsatz zu holen, nicht aus
         // der EXE. Ohne diesen Grund bitte nichts anfassen.
+        //
+        // ⚠⚠⚠ 11.09.2026 — DER NEBEL LIEGT AUF DEM GELAENDE. Seine Meldung:
+        // »es fuehlt sich an als wuerden wir kaestchenweise aufdecken, manchmal
+        // ein Rechteck Baeume«. Bis heute rasterte diese Textur die Zellen
+        // FLACH, waehrend Boden, Baeume und Gebaeude um Hoehe·15 px angehoben
+        // gezeichnet werden — auf einer Hochflaeche sass der Nebel bis zu 4,5
+        // Zeilen zu tief, und die Baeume erschienen als Block oberhalb der
+        // hellen Flaeche. Das Original hebt jede Nebelkachel wie die
+        // Bodenkachel darunter:
+        //
+        //     0x4B4785  call 0x401AAF -> 0x41D0E0   ; Hoehe der Zelle
+        //     0x4B4791  lea eax,[ecx+ecx*2]         ; ·3
+        //     0x4B479A  lea edx,[eax+eax*4]         ; ·5  => Hoehe·15
+        //     0x4B479F  sub edi, edx                ; Bild-y -= Hoehe·15
+        //
+        // Hier: jede Zelle wird um Hoehe·NebelHub Texel nach oben geschrieben
+        // (15 px = 3 Texel), die Textur bekommt oben einen Rand fuer die hoechste
+        // Stufe, und die Zeilen gehen AUFSTEIGEND — dieselbe Malerreihenfolge
+        // wie der Kacheldurchgang, eine vordere Hochflaeche deckt die Zeilen
+        // dahinter.
+        //
+        // ⚠ UNSERE SETZUNG: die SCHUERZE. Unter einer angehobenen Zelle bleibt
+        // bis zu ihrer flachen Unterkante ein Streifen, den im Bild die
+        // Boeschung der Bodenkachel fuellt. Das Original hat dafuer 19
+        // Hangformen je Nebelkachel (0x41FC60, Tafel 0xBAC72C); wir wiederholen
+        // die unterste Texelzeile der Zelle nach unten. Gegenschalter
+        // --nebel-flach stellt die flache Textur her.
         int n = FogSub;
-        int tw = w * n, th = h * n;
-        _fogPixels ??= new byte[tw * th * 4];
-        float seen = FogDimOld ? 0.45f : FogSeen.A,
-              unseen = FogDimOld ? 1f : FogUnseen.A;
+        int hub = NebelHub;
+        int rand = _fogElevMax * hub;
+        int tw = w * n, th = h * n + rand;
+        int len = tw * th * 4;
+        if (_fogPixels == null || _fogPixels.Length != len) _fogPixels = new byte[len];
+        else System.Array.Clear(_fogPixels, 0, len);   // der Rand oben bleibt leer
+        _fogTexW = tw; _fogTexH = th;
         for (int r = 0; r < h; r++)
             for (int c = 0; c < w; c++)
             {
                 byte zustand = _fog.At(c, r);
-                float voll = zustand switch
-                {
-                    Simulation.FogGrid.Watched => 0f,
-                    Simulation.FogGrid.Seen => seen,
-                    _ => unseen,
-                };
                 int maske = _fog.CornerAt(c, r);
-                // vier Ecken: 1 = hell (kein Nebel), 0 = verhangen
-                float e00 = (maske & 1) != 0 ? 0f : 1f;
-                float e10 = (maske & 2) != 0 ? 0f : 1f;
-                float e01 = (maske & 4) != 0 ? 0f : 1f;
-                float e11 = (maske & 8) != 0 ? 0f : 1f;
-                for (int sy = 0; sy < n; sy++)
+                int lift = _fogElev.Length == w * h ? _fogElev[r * w + c] * hub : 0;
+                int oben = rand + r * n - lift;             // erste Texelzeile der Zelle
+                int unten = rand + (r + 1) * n;             // flache Unterkante = Ende der Schuerze
+                for (int ty = oben; ty < unten; ty++)
                 {
-                    float ty = (sy + 0.5f) / n;
+                    int sy = Mathf.Min(ty - oben, n - 1);   // Schuerze: letzte Zeile wiederholt
                     for (int sx = 0; sx < n; sx++)
                     {
-                        float tx = (sx + 0.5f) / n;
-                        float a = (e00 * (1 - tx) + e10 * tx) * (1 - ty)
-                                + (e01 * (1 - tx) + e11 * tx) * ty;
-                        int p = ((r * n + sy) * tw + (c * n + sx)) * 4;
+                        int p = (ty * tw + (c * n + sx)) * 4;
                         _fogPixels[p] = FogR;
                         _fogPixels[p + 1] = FogG;
                         _fogPixels[p + 2] = FogB;
-                        _fogPixels[p + 3] = (byte)(voll * a * 255f);
+                        _fogPixels[p + 3] = (byte)(Deckung(zustand, maske, sx, sy) * 255f);
                     }
                 }
             }
         var img = Image.CreateFromData(tw, th, false, Image.Format.Rgba8, _fogPixels);
-        if (_fogTex == null) _fogTex = ImageTexture.CreateFromImage(img);
+        // ⚠ Update() nur bei gleicher Groesse — der Rand haengt an der Karte
+        if (_fogTex == null || _fogTex.GetWidth() != tw || _fogTex.GetHeight() != th)
+            _fogTex = ImageTexture.CreateFromImage(img);
         else _fogTex.Update(img);
         _fogDrawn = _fog.Version;
+    }
+
+    /// <summary>
+    /// Die Deckung eines Nebeltexels: Zustand der Zelle mal der Rampe aus ihren
+    /// vier Ecken. EINE Stelle fuer <see cref="BuildFogTexture"/> und den
+    /// Pruefstand <c>--nebelhoehe-check</c>.
+    ///
+    /// <para>⚠ 11.09.2026: der <b>Saum</b> bekommt die Deckung von »gesehen«,
+    /// nicht die klare — er ist genau der Ring, in dem das Original die
+    /// Uebergangskachel zeichnet (@0x4B47A8, sec50 = 2), und die Rampe macht
+    /// ihn aus den Ecken. Siehe <see cref="Simulation.FogGrid.Saum"/>.</para>
+    /// </summary>
+    private static float Deckung(byte zustand, int maske, int sx, int sy)
+    {
+        float seen = FogDimOld ? 0.45f : FogSeen.A,
+              unseen = FogDimOld ? 1f : FogUnseen.A;
+        float voll = zustand switch
+        {
+            Simulation.FogGrid.Watched => 0f,
+            Simulation.FogGrid.Seen or Simulation.FogGrid.Saum => seen,
+            _ => unseen,
+        };
+        if (voll <= 0f) return 0f;
+        // vier Ecken: 1 = hell (kein Nebel), 0 = verhangen
+        float e00 = (maske & 1) != 0 ? 0f : 1f;
+        float e10 = (maske & 2) != 0 ? 0f : 1f;
+        float e01 = (maske & 4) != 0 ? 0f : 1f;
+        float e11 = (maske & 8) != 0 ? 0f : 1f;
+        float tx = (sx + 0.5f) / FogSub, ty = (sy + 0.5f) / FogSub;
+        float a = (e00 * (1 - tx) + e10 * tx) * (1 - ty)
+                + (e01 * (1 - tx) + e11 * tx) * ty;
+        return voll * a;
     }
 
     /// <summary>
@@ -2096,7 +2172,7 @@ public partial class MapEntityLayer : Node2D
                 float a2 = zustand switch
                 {
                     Simulation.FogGrid.Watched => 0f,
-                    Simulation.FogGrid.Seen => FogSeen.A,
+                    Simulation.FogGrid.Seen or Simulation.FogGrid.Saum => FogSeen.A,
                     _ => 1f,                       // nie gesehen: undurchsichtig
                 };
                 int p = (r * w + c) * 4;
@@ -2127,8 +2203,8 @@ public partial class MapEntityLayer : Node2D
     {
         if (_fog == null) return "fog: kein Gitter";
         if (!FogActive) return "fog: abgeschaltet";
-        var (u, s, w) = _fog.Counts();
-        int all = u + s + w;
+        var (u, s, w, saum) = _fog.Counts();
+        int all = u + s + w + saum;
         // ⭐ 24.08.2026 — und was der Nebel gerade VERBIRGT. Gemeldet: »ich
         // sehe immer noch Gebaeude«. Ohne diese Zahl ist »der Riegel greift
         // nicht« nicht von »die Sachen kommen aus dem gebackenen Bild« zu
@@ -2141,7 +2217,7 @@ public partial class MapEntityLayer : Node2D
             else if (ImNebelVerborgen(e)) einhAus++;
         }
         GD.Print($"fog-verborgen: {gebAus} von {gebGes} Gebaeuden, {einhAus} Einheiten");
-        return $"fog: {w} beobachtet, {s} erkundet, {u} unbekannt von {all} Feldern " +
+        return $"fog: {w} beobachtet (+{saum} Saum), {s} erkundet, {u} unbekannt von {all} Feldern " +
                $"({100f * w / all:0.0}% / {100f * s / all:0.0}% / {100f * u / all:0.0}%)";
     }
 
@@ -4019,7 +4095,20 @@ public partial class MapEntityLayer : Node2D
         {
             Simulation.FogGrid.Load();
             _fog = new Simulation.FogGrid(fw, fh);
-            _fogRect = new Rect2(ox, oy, fw * TileW, fh * TileH);
+            // ⚠ 11.09.2026 — die Nebeltextur liegt auf dem Gelaende (siehe
+            // BuildFogTexture): die Hoehe je Zelle einmal festhalten, und das
+            // Rechteck reicht um die hoechste Stufe ueber Zeile 0 hinaus.
+            _fogElev = new int[fw * fh];
+            _fogElevMax = 0;
+            for (int r = 0; r < fh; r++)
+                for (int c = 0; c < fw; c++)
+                {
+                    int el = Mathf.Max(0, ElevOf(c, r));
+                    _fogElev[r * fw + c] = el;
+                    if (el > _fogElevMax) _fogElevMax = el;
+                }
+            int randPx = _fogElevMax * NebelHub * TileH / FogSub;
+            _fogRect = new Rect2(ox, oy - randPx, fw * TileW, fh * TileH + randPx);
             _fogDrawn = -1;
             _fogTick = 0;
             UpdateFog();
@@ -6642,9 +6731,19 @@ public partial class MapEntityLayer : Node2D
         if (foot.Dead || foot.Infantry < 0) return;
         if (!IsHostile(driver, foot)) return;          // friendly: driven through
         NoteEvent(foot, "ueberfahren");
-        Kill(footIdx, foot, driver.Owner, "UEBERFAHREN von " + LabelOf(driver));
         _crushed++;
+        string grund = "UEBERFAHREN von " + LabelOf(driver);
+        if (UeberfahrenLoeschen) { Kill(footIdx, foot, driver.Owner, grund); return; }
+        // ⭐⭐ 11.09.2026 — K3: EIN TREFFER, KEIN LOESCHEN. »drive over«
+        // 0x412A50 setzt die Flagge 0x4F6308, ruft die Schadensroutine mit
+        // Angreifer 40200 (@0x412ABF/@0x412AC4) und leert danach die Zelle. Kein
+        // Schuetze wird gutgeschrieben (Angreifer >= 8000, Spielerbyte 0xFF).
+        _ueberfahrenOpfer.Add(footIdx);
+        InfanterieZellenTreffer(footIdx, foot, 0, 200, grund, ueberfahren: true);
     }
+
+    /// <summary>Wer in diesem Lauf ueberfahren wurde — fuer den Pruefstand.</summary>
+    private readonly HashSet<int> _ueberfahrenOpfer = new();
 
     /// <summary>How many foot soldiers have been run over — for the report line.</summary>
     private int _crushed;
@@ -11545,6 +11644,7 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     private void Erfahren(Entity? shooter, Entity victim, int damage)
     {
+        ErfahrenRufe++;          // fuer --trefferarm-check: der WEG, nicht der Zuwachs
         // Kein Schuetze, kein Schaden, oder ein Gebaeude getroffen: nichts.
         if (shooter == null || damage <= 0 || victim.IsBuilding) return;
         // Wer die Erfahrung bekommt, ist der SCHUETZE (@0x40CEF7 rechnet mit
@@ -11604,6 +11704,21 @@ public partial class MapEntityLayer : Node2D
                 : GebaeudeSchaden(shooter.Rating28,
                                   shooter.Attack + 2 * ElevOf(shooter.Col, shooter.Row),
                                   victim.Armor);
+        // ⭐⭐ 11.09.2026 — EIN SCHUSS AUF FUSSVOLK GEHT DURCH DEN
+        // INFANTERIEZELLEN-ARM. Das Zellwort eines Fusssoldaten ist 10000+Zelle,
+        // und Zasah verzweigt danach (@0x40CCB2 `cmp di,0x1f40 / jae 0x40d00c`)
+        // — nicht in den Einheitenarm, den wir hier fuer alle nahmen. Der
+        // Schuetzenteil ist derselbe ([esp+0x18] Rang, [esp+0x1a] Angriff +
+        // 2·eigene Hoehe @0x40CB91), der Opferteil nicht: siehe InfanterieKern.
+        // Gegenschalter --infanterie-einheitenarm.
+        if (victim.Infantry >= 0 && !InfanterieArmAlt)
+        {
+            int si = InfanterieKern(shooter.Rating28,
+                                    shooter.Attack + 2 * ElevOf(shooter.Col, shooter.Row),
+                                    victim, ElevOf(victim.Col, victim.Row))
+                     - Simulation.Determinism.Roll(5) + Simulation.Determinism.Roll(5);
+            return si < 1 ? Simulation.Determinism.Roll(10) / 7 : si;   // @0x40D1DC
+        }
         // ⚠ BERICHTIGT 14.08.2026 — drei Abweichungen, alle aus dem Rumpf gelesen.
         //
         // Das Original baut beide Seiten SYMMETRISCH, und jede Seite nimmt die
@@ -11663,6 +11778,34 @@ public partial class MapEntityLayer : Node2D
         return offence - defence;
     }
 
+    /// <summary>
+    /// Der WUERFELFREIE Kern des Infanteriezellen-Arms <c>0x40D00C</c>, fuer
+    /// einen Mann — selbst zerlegt am 11.09.2026:
+    /// <code>
+    ///   @0x40D12D  ebp = Hoehe(Opfer) + Verteidigung(+0x27)     ; Hoehe EINFACH
+    ///   @0x40D186  eax = Rang(+0x28) / 2                        ; nicht /5
+    ///   @0x40D190  abwehr = (30 + eax) · ebp / 50
+    ///   @0x40D1A6  (Zweitwert + 30) · Angriff / 40 − abwehr
+    /// </code>
+    /// <para><paramref name="rangA"/>/<paramref name="angriff"/> sind
+    /// <c>[esp+0x18]</c>/<c>[esp+0x1a]</c>: beim Schuss Rang und Angriff + 2·Hoehe
+    /// des Schuetzen, beim Treffer ohne Satz 0 und <c>n − 40000</c>.</para>
+    /// </summary>
+    private static int InfanterieKern(int rangA, int angriff, Entity opfer, int elevV)
+        => (rangA + 30) * angriff / 40 - (30 + opfer.Rating28 / 2) * (opfer.Defence + elevV) / 50;
+
+    /// <summary><c>--infanterie-einheitenarm</c> — der Stand vor dem 11.09.2026:
+    /// ein Schuss auf Fussvolk rechnet mit dem Einheitenarm und gibt Erfahrung.</summary>
+    public static bool InfanterieArmAlt;
+
+    /// <summary>Der Kern des Arms, durch den ein Schuss auf dieses Opfer geht —
+    /// fuer <see cref="HitCheckLine"/>, damit er dieselbe Weiche nimmt wie
+    /// <see cref="ShotDamage"/>.</summary>
+    private static int TrefferKern(Entity shooter, Entity victim, int elevS, int elevV)
+        => victim.Infantry >= 0 && !InfanterieArmAlt
+            ? InfanterieKern(shooter.Rating28, shooter.Attack + 2 * elevS, victim, elevV)
+            : ShotCore(shooter, victim, elevS, elevV);
+
     private void ApplyHit(int si, int vi, Entity victim, int damage)
     {
         // ⚠ 11.08.2026 — WER SCHON TOT IST, WIRD NICHT NOCHMAL GETROFFEN.
@@ -11687,7 +11830,12 @@ public partial class MapEntityLayer : Node2D
         // Unverwundbar: der Treffer wird gezählt und gemeldet wie immer, nur
         // der Schaden bleibt aus — so bleiben Klang, Meldung und Zielwahl heil.
         if (CheatGodMode && Cheated(victim)) damage = 0;
-        Erfahren(shooter, victim, damage);
+        // ⚠ 11.09.2026 — Erfahrung gibt es nur im EINHEITENARM (0x40CEEA). Der
+        // Infanteriezellen-Arm 0x40D00C springt nach dem letzten Mann
+        // @0x40D264 ans Ende, ohne diesen Block — ein Treffer auf Fussvolk
+        // befoerdert niemanden.
+        if (victim.Infantry < 0 || InfanterieArmAlt)
+            Erfahren(shooter, victim, damage);
         bool lethal = !victim.IsBuilding && damage >= victim.Hp && damage > 0;
         victim.Hp -= victim.DugIn ? Mathf.RoundToInt(damage * DugInDamageFactor) : damage;
         if (lethal) victim.Hp = 0;
@@ -11720,7 +11868,9 @@ public partial class MapEntityLayer : Node2D
     /// every selection and target, and leave the right remains behind.</summary>
     /// <param name="by">Wer den Todesstoss gefuehrt hat, oder -1. Nur fuer die
     /// Statistik — siehe <see cref="NoteKill"/>.</param>
-    private void Kill(int vi, Entity victim, int by = -1, string grund = "")
+    /// <param name="ueberfahren">Die Flagge <c>0x4F6308</c>: der Soldat haelt
+    /// 8…11 Takte, und sein Klang kommt am Ende (K3).</param>
+    private void Kill(int vi, Entity victim, int by = -1, string grund = "", bool ueberfahren = false)
     {
         // ⚠⚠ 10.09.2026 — »EINFACH UMGEFALLEN« IST KEINE URSACHE, SONDERN DAS
         // FEHLEN EINER. Seine Meldung zu Cpt.Cossarro steht seit dem 09.09. im
@@ -11807,6 +11957,18 @@ public partial class MapEntityLayer : Node2D
             // erst wenn der Zaehler +0x1C leer ist, kommt @0x406E4D). Wir haben
             // fuer die Fallbilder keinen eigenen Zaehler, also klingt es beim
             // Treffer. Zu frueh, aber nicht falsch gewaehlt.
+            //
+            // ⭐ 11.09.2026 — BERICHTIGT: das Halten gilt NUR dem UEBERFAHRENEN
+            // (die Flagge 0x4F6308 wird allein in 0x412A50 gesetzt und allein
+            // @0x40B732 gelesen). Ein erschossener faellt sofort, und sein
+            // Klang kommt aus @0x40B52F — dort ist »beim Treffer« richtig.
+            // Der Ueberfahrene haelt jetzt, Klang am Ende: UeberfahrenHaltEnde.
+            if (ueberfahren && !UeberfahrenLoeschen)
+            {
+                victim.Halten = 8 + Simulation.Determinism.Roll(4);   // @0x40B73A: 8 + rand&3
+                victim.HaltenTakt = _taktNr;
+                return;
+            }
             Audio.GameSounds.PlayAt(Audio.GameSounds.InfantryDiesPick(),
                                     victim.Col, victim.Row);
             return;
@@ -11834,6 +11996,10 @@ public partial class MapEntityLayer : Node2D
         // Reihenfolge: das Original wirft sie unmittelbar nach dem
         // Explosionsbild (@0x40B615 -> @0x40B61D). Siehe Simulation/Truemmer.cs.
         TruemmerWerfen(victim);
+        // ⭐⭐ 11.09.2026 — K5: UND DIE SPRENGUNG TRIFFT DIE ACHT NACHBARN
+        // (@0x40B6CE..0x40B71F, nur Klasse 0). Simulation/Ueberfahren.cs.
+        if (!victim.IsBuilding && !victim.IsProp && victim.GameUnitType == 0 && !SprengungOhneNachbarn)
+            SprengungTrifftNachbarn(victim);
         // ⚠⚠ 19.08.2026 — EIN SCHIFF HINTERLAESST KEIN WRACK.
         //
         // Die Todesroutine des Originals (»likvid typ:« @0x406F1B) verzweigt
@@ -13321,12 +13487,12 @@ public partial class MapEntityLayer : Node2D
         // Die Profile, die auf dieser Karte tatsaechlich stehen — nicht
         // ausgedachte (Regel 30: ein Pruefstand, der ueberall dasselbe sagt,
         // prueft nichts).
-        var seen = new List<(int Owner, int A, int D, int R, int Hp, int Elev)>();
+        var seen = new List<(int Owner, int A, int D, int R, int Hp, int Elev, bool Inf)>();
         foreach (var e in _entities)
         {
             if (e.IsBuilding || e.IsProp || e.Dead) continue;
             var key = (e.Owner, e.Attack, e.Defence, e.Rating28,
-                       e.HpMax > 0 ? e.HpMax : e.Hp, ElevOf(e.Col, e.Row));
+                       e.HpMax > 0 ? e.HpMax : e.Hp, ElevOf(e.Col, e.Row), e.Infantry >= 0);
             if (!seen.Contains(key)) seen.Add(key);
         }
         if (seen.Count == 0) return "hit-check: keine lebenden Einheiten auf dieser Karte";
@@ -13348,8 +13514,10 @@ public partial class MapEntityLayer : Node2D
                 // ⚠ Gerechnet wird mit DERSELBEN Methode, die im Gefecht laeuft
                 // (Regel 16) — nicht mit einer zweiten Abschrift der Formel.
                 var sh = new Entity { Attack = s.A, Defence = s.D, Rating28 = s.R };
-                var vi = new Entity { Attack = v.A, Defence = v.D, Rating28 = v.R };
-                int core = ShotCore(sh, vi, s.Elev, v.Elev);
+                var vi = new Entity { Attack = v.A, Defence = v.D, Rating28 = v.R,
+                                      Infantry = v.Inf ? 0 : -1 };
+                // ⚠ 11.09.2026 — mit der Weiche nach dem Opfer (TrefferKern)
+                int core = TrefferKern(sh, vi, s.Elev, v.Elev);
                 // Der Erwartungswert des Wuerfelteils ist 0 (zweimal 0..4,
                 // symmetrisch); unter 1 greift die Klemme mit Mittel 1.
                 int typical = core >= 1 ? core : 1;
@@ -28249,9 +28417,47 @@ public partial class MapEntityLayer : Node2D
     /// gibt gar keine Route« zu unterscheiden.</summary>
     public int NahwegZurueckgetreten;
 
+    /// <summary><c>--nahweg</c> — der Stand vor dem 11.09.2026: der Nahweg
+    /// faehrt auch in der KAMPAGNE.</summary>
+    public static bool NahwegKampagne;
+
+    /// <summary><c>--nahweg-aus</c> — der Nahweg faehrt auch im GEFECHT nicht
+    /// (die Gegenprobe zur Wettkampfzutat).</summary>
+    public static bool NahwegAus;
+
+    /// <summary>Wie oft ein Gebaeude mit Ware am gesperrten Nahweg vorbeikam —
+    /// ⚠ ohne die Zahl waere »gefahren 0« nicht von »es gab nichts zu fahren«
+    /// zu unterscheiden.</summary>
+    public int NahwegGesperrt;
+
+    /// <summary>
+    /// <b>FAEHRT DER NAHWEG?</b> (11.09.2026)
+    ///
+    /// <para>⚠⚠ Seine Entscheidung: »wir wollen das wie im original, also muss
+    /// unsere eigene Lösung wohl weg und richtung Original«. Gelesen in
+    /// <c>berichte/nahweg-original.md</c>: ueber die Relokationstafel sind alle
+    /// 168 Zugriffe und 61 Schreiber der vier Lagerfelder erhoben — fuer den
+    /// MENSCHEN bewegen nur der Transportwagen (<c>0x410940</c>) und die Bahn
+    /// (<c>0x4C6410</c>/<c>0x4C69C0</c>) Ware. Kein Foerderband, keine
+    /// Nachbarschaft, kein Sofortuebertrag. Die fahrzeuglose Hilfe des Originals
+    /// gilt nur der KI (Takt 48, siehe <see cref="Teilespende"/>).</para>
+    ///
+    /// <para>Also: in der <b>Kampagne aus</b>. Im <b>Gefecht</b> bleibt er als
+    /// benannte Wettkampfzutat (dort darf abgewichen werden; die DM-Karten haben
+    /// Fabriken ohne Linie). Nichts ist geloescht.</para>
+    /// </summary>
+    private static bool NahwegFaehrt
+        => UI.SkirmishSetup.CampaignMission > 0 ? NahwegKampagne : !NahwegAus;
+
     private void Haul(Entity e)
     {
         if (e.Owner < 0) return;
+        if (!NahwegFaehrt)
+        {
+            if ((IsFactory(e) && OwnParts(e) > 0) || (e.Deposit >= 0 && e.StockT > 0))
+                NahwegGesperrt++;
+            return;
+        }
 
         // mine -> factory (raw Terranium)
         if (e.Deposit >= 0 && e.StockT > HaulReserve)
@@ -30869,7 +31075,13 @@ public partial class MapEntityLayer : Node2D
         {
             var eb = _entities[i];
             if (eb.IsProp) continue;
-            if (eb.Dead) { eb.DeadTime += dt; continue; }
+            if (eb.Dead)
+            {
+                // ⭐ 11.09.2026 — der Ueberfahrene haelt erst (K3, @0x406E3A)
+                if (eb.Halten > 0) { if (--eb.Halten == 0) UeberfahrenHaltEnde(eb); continue; }
+                eb.DeadTime += dt;
+                continue;
+            }
             if (eb.IsBuilding) UpdateProduction(i, eb, dt);
         }
 
@@ -30962,7 +31174,16 @@ public partial class MapEntityLayer : Node2D
                 // @0x433fe0, all friendly) or over him (`prejet` @0x412980,
                 // none friendly, and @0x412a50 clears the cell afterwards)
                 int foot = _nav.CrushableAt(next.X, next.Y, i);
-                if (foot >= 0) RunOverFoot(i, e, foot);
+                // ⭐⭐ 11.09.2026 — WER ÜBERFÄHRT, ENTSCHEIDET DIE KLASSE DES
+                // FAHRERS (K2, Simulation/Ueberfahren.cs). Hier fuhr jeder Mover
+                // ueber jeden Feind.
+                if (foot >= 0 && !UeberfahrenAlle)
+                {
+                    var imWeg = FussvolkImWeg(i, e, _entities[foot]);
+                    if (imWeg != Simulation.NavGrid.Step.Free) { BlockedStep(i, e, imWeg, dt); continue; }
+                    if (e.Infantry < 0) RunOverFoot(i, e, foot);
+                }
+                else if (foot >= 0) RunOverFoot(i, e, foot);
 
                 // ⭐⭐⭐ 08.09.2026 — EIN SCHIFF MERKT SEINE ZIELZELLE NICHT VOR.
                 //
@@ -32532,6 +32753,35 @@ public partial class MapEntityLayer : Node2D
     /// drin, weil unsere acht Bilder verschieden hohe Silhouetten haben; das
     /// Stehbild ist für jede Richtung lückenlos vorhanden (gemessen, siehe
     /// InfBlock).</para></summary>
+    /// <summary>
+    /// <b>WO EIN FUSSSOLDAT GEZEICHNET WIRD — lebend UND tot, an EINER Stelle.</b>
+    /// (11.09.2026, bug-175)
+    ///
+    /// <para>⚠⚠ Seine Meldung: »die infanterie stirbt wieder ein paar felder
+    /// versetzt anstatt da wo sie stand« — das »wieder« war woertlich. bug-093
+    /// (07.09., dieselbe Meldung) hat den Versatz des LEBENDEN auf das Stehbild
+    /// festgelegt; die Leichenzeile stand seit dem 24.08. als
+    /// <c>picC − ComposedAnchor</c> ohne jeden Versatz da. Gemessen
+    /// (berichte/infanterie-tod-versetzt.md, K1): der Versatz ist 36 px in
+    /// 192/192 (Satz, Richtung), die Leiche lag <b>29…36 px = 1,5…1,8 Zeilen</b>
+    /// ueber den Fuessen. <c>--anker-probe</c> hat es nie gesehen, weil sie die
+    /// Funktion misst und nicht die gezeichnete Leiche.</para>
+    ///
+    /// <para>Das Original hat EINEN Zeichenarm fuer Lebende und Tote, mit
+    /// demselben festen Abzug <c>sub di, 0x18</c> (@0x430332) und ohne
+    /// UKOL-Tor; der Sterbe-Anleger <c>0x40B3C0</c> schreibt weder Spalte noch
+    /// Zeile. Darum hier eine Funktion fuer beide Zweige.</para>
+    ///
+    /// <para>Gegenschalter <c>--leichenanker-alt</c>.</para>
+    /// </summary>
+    private Vector2 FussvolkOrt(Entity e)
+        => PictureAnchor(e) - ComposedAnchor
+           + (e.Dead && LeichenankerAlt ? Vector2.Zero : FussVersatzFuer(e));
+
+    /// <summary><c>--leichenanker-alt</c> — der Stand vor dem 11.09.2026: die
+    /// Leiche ohne Fussversatz, 29…36 px ueber den Fuessen.</summary>
+    public static bool LeichenankerAlt;
+
     private Vector2 FussVersatzFuer(Entity e)
     {
         if (FussankerAlt || e.Infantry < 0) return Vector2.Zero;
@@ -36155,7 +36405,10 @@ public partial class MapEntityLayer : Node2D
                 // RICHTUNG ausgewichen statt auf das Stehbild zurückzufallen.
                 // Siehe InfCorpseFacing — das ist die zweite Gestalt von C13.
                 var body = GetInfantryTexture(e.Infantry, InfDrawFacing(e), InfBlock(e));
-                if (body != null) DrawTexture(Parteifarbe(body, e.Owner), picC - ComposedAnchor);
+                // ⚠⚠ 11.09.2026 — bug-175: HIER FEHLTE DER FUSSVERSATZ. Siehe
+                // FussvolkOrt; der Lebende drei Absaetze tiefer hatte ihn seit
+                // bug-075, die Leiche nie.
+                if (body != null) DrawTexture(Parteifarbe(body, e.Owner), FussvolkOrt(e));
             }
             return;
         }
@@ -36240,8 +36493,7 @@ public partial class MapEntityLayer : Node2D
                         if (foot != null) InfBildErsetzt++;
                     }
                     if (foot != null)
-                    { DrawTexture(Parteifarbe(foot, e.Owner),
-                                  picC - ComposedAnchor + FussVersatzFuer(e)); return; }
+                    { DrawTexture(Parteifarbe(foot, e.Owner), FussvolkOrt(e)); return; }
                 }
                 // hull + separately aimed turret (preferred)
                 // ⚠ Die Hangklasse gilt fuer BEIDE. Der Turmsitz wurde schon

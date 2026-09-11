@@ -1334,6 +1334,22 @@ public partial class MapViewer : Node2D
 
     /// <summary><c>--nebelrest-check</c> — siehe Simulation/NebelrestCheck.cs.</summary>
     private bool _nebelrestCheck;
+
+    /// <summary><c>--nebelhoehe-check</c> — siehe Simulation/NebelhoeheCheck.cs.</summary>
+    private bool _nebelhoeheCheck;
+
+    /// <summary><c>--leichenanker-check</c> — siehe Simulation/LeichenankerCheck.cs.</summary>
+    private bool _leichenankerCheck;
+
+    /// <summary><c>--teilespende-check</c> — siehe Simulation/Teilespende.cs.</summary>
+    private bool _teilespendeCheck, _teilespendeGestartet;
+
+    /// <summary><c>--ueberfahren-check</c> / <c>--sprengung-check</c> — siehe
+    /// Simulation/UeberfahrenCheck.cs.</summary>
+    private bool _ueberfahrenCheck, _ueberfahrenGestartet, _sprengungCheck;
+
+    /// <summary><c>--trefferarm-check</c> — siehe Simulation/TrefferArmCheck.cs.</summary>
+    private bool _trefferarmCheck;
     private bool _sieg7Gestartet;
 
     /// <summary><c>--absetz-check</c> — siehe Simulation/AbsetzCheck.cs.</summary>
@@ -2831,6 +2847,26 @@ public partial class MapViewer : Node2D
             else if (a == "--gebaeude-ankerzelle") MapEntityLayer.GebaeudeAnkerzelle = true;
             else if (a == "--gebaeude-nur-lesen") MapEntityLayer.GebaeudeNurLesen = true;
             else if (a == "--nebelrest-check") _nebelrestCheck = true;
+            else if (a == "--nebelhoehe-check") _nebelhoeheCheck = true;
+            else if (a == "--nebel-flach") MapEntityLayer.NebelFlach = true;
+            else if (a == "--kein-saum") Simulation.FogGrid.KeinSaum = true;
+            else if (a == "--leichenanker-check") _leichenankerCheck = true;
+            else if (a == "--leichenanker-alt") MapEntityLayer.LeichenankerAlt = true;
+            else if (a == "--teilespende-check") _teilespendeCheck = true;
+            else if (a == "--teilespende-aus") MapEntityLayer.TeilespendeAus = true;
+            else if (a == "--teilespende-wort") MapEntityLayer.TeilespendeWort = true;
+            else if (a == "--nahweg") MapEntityLayer.NahwegKampagne = true;
+            else if (a == "--nahweg-aus") MapEntityLayer.NahwegAus = true;
+            else if (a == "--ueberfahren-check") _ueberfahrenCheck = true;
+            else if (a.StartsWith("--ueberfahren-faelle="))
+            { _ueberfahrenCheck = true; MapEntityLayer.UeberfahrenFaelle = a["--ueberfahren-faelle=".Length..].ToUpper(); }
+            else if (a == "--sprengung-check") _sprengungCheck = true;
+            else if (a == "--trefferarm-check") _trefferarmCheck = true;
+            else if (a == "--infanterie-einheitenarm") MapEntityLayer.InfanterieArmAlt = true;
+            else if (a == "--skripttreffer-halbe-huelle") MapEntityLayer.SkripttrefferHalbeHuelle = true;
+            else if (a == "--ueberfahren-alle") MapEntityLayer.UeberfahrenAlle = true;
+            else if (a == "--ueberfahren-loeschen") MapEntityLayer.UeberfahrenLoeschen = true;
+            else if (a == "--sprengung-ohne-nachbarn") MapEntityLayer.SprengungOhneNachbarn = true;
             else if (a == "--werteliste-nur-roh") UI.UnitStatBook.NurRoheWerteliste = true;
             else if (a == "--werteliste-check") _wertelisteCheck = true;
             else if (a == "--einsteigen-check") _einsteigenCheck = true;
@@ -4204,6 +4240,8 @@ public partial class MapViewer : Node2D
             if (_fussvolkProbe) GD.Print(_entities.FussvolkProbe());
             if (_zeigerCheck) GD.Print(_entities.ZeigerCheckLine());
             if (_ankerProbe) GD.Print(_entities.AnkerProbe());
+            if (_teilespendeCheck) GD.Print(_entities.TeilespendeCheckLine());
+            if (_ueberfahrenCheck) GD.Print(_entities.UeberfahrenCheckLine());
             if (_zielzelleProbe) GD.Print(_entities.ZielzelleProbe());
             if (_skripttrefferProbe) GD.Print(_entities.SkripttrefferProbe());
             if (_gebaeudebrandProbe) GD.Print(_entities.GebaeudebrandProbe());
@@ -6265,6 +6303,47 @@ public partial class MapViewer : Node2D
             GD.Print(_entities.NebelrestCheck());
             GetTree().Quit(0);
             return;
+        }
+
+        if (_nebelhoeheCheck && _entities.ErwartungBereit())
+        {
+            GD.Print(_entities.NebelhoeheCheck());
+            GetTree().Quit(0);
+            return;
+        }
+
+        if (_leichenankerCheck && _entities.ErwartungBereit())
+        {
+            GD.Print(_entities.LeichenankerCheck());
+            GetTree().Quit(0);
+            return;
+        }
+
+        if (_trefferarmCheck && _entities.ErwartungBereit())
+        {
+            GD.Print(_entities.TrefferArmCheck());
+            GetTree().Quit(0);
+            return;
+        }
+
+        if (_sprengungCheck && _entities.ErwartungBereit())
+        {
+            GD.Print(_entities.SprengungCheck());
+            GetTree().Quit(0);
+            return;
+        }
+
+        if (_ueberfahrenCheck && !_ueberfahrenGestartet && _entities.ErwartungBereit())
+        {
+            _entities.UeberfahrenCheckStart();
+            _ueberfahrenGestartet = true;
+        }
+
+        // laeuft weiter; die Zeile kommt mit dem Abschlussbericht (--quit-after)
+        if (_teilespendeCheck && !_teilespendeGestartet && _entities.ErwartungBereit())
+        {
+            _entities.TeilespendeCheckStart();
+            _teilespendeGestartet = true;
         }
 
         if (_sieg7Check && !_sieg7Gestartet && _entities.ErwartungBereit())
