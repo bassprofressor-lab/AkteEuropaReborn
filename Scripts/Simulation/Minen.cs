@@ -216,7 +216,7 @@ public partial class MapEntityLayer
             // ⚠ UNSERE Deutung von word[+0x06] < 0 — siehe MinenTor
             if (MinenTor && opfer.Path == null) { MinenTorZu++; continue; }
 
-            ApplyHit(-1, vi, opfer, MinenSchaden);
+            ApplyHit(-1, vi, opfer, MinenSchaden, $"MINE von Spieler {m.Player} auf ({m.Col},{m.Row})");
             MinenAusgeloest++;
             m.Aktiv = false;
         }

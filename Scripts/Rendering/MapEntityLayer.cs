@@ -6747,7 +6747,7 @@ public partial class MapEntityLayer : Node2D
         if (p != null && p.Count > 0) { e.Path = p; e.PathIdx = 0; }
     }
 
-    private void RunOverFoot(int driverIdx, Entity driver, int footIdx)
+    private void RunOverFoot(int driverIdx, Entity driver, int footIdx, string wo = "Zielzelle")
     {
         if (footIdx < 0 || footIdx >= _entities.Count) return;
         var foot = _entities[footIdx];
@@ -6755,7 +6755,11 @@ public partial class MapEntityLayer : Node2D
         if (!IsHostile(driver, foot)) return;          // friendly: driven through
         NoteEvent(foot, "ueberfahren");
         _crushed++;
-        string grund = "UEBERFAHREN von " + LabelOf(driver);
+        // ⚠ 11.09.2026 — WO und VON WEM: ein Schraegschritt ueberfaehrt auch die
+        // FLANKEN (@0x4060B2), ohne dass der Wagen dorthin faehrt — fuer den
+        // Spieler sieht das aus wie »einfach umgefallen«.
+        string grund = $"UEBERFAHREN ({wo}) von {LabelOf(driver)} (Spieler {driver.Owner}, "
+                     + $"auf ({driver.Col},{driver.Row}))";
         if (UeberfahrenLoeschen) { Kill(footIdx, foot, driver.Owner, grund); return; }
         // ⭐⭐ 11.09.2026 — K3: EIN TREFFER, KEIN LOESCHEN. »drive over«
         // 0x412A50 setzt die Flagge 0x4F6308, ruft die Schadensroutine mit
@@ -10681,8 +10685,12 @@ public partial class MapEntityLayer : Node2D
     /// <summary><c>--todes-log</c> — jede gestorbene Einheit mit Ort, Hoehe und
     /// URSACHE. Fuer »er ist einfach tot umgefallen« (bug-150): ohne den Grund
     /// sind Beschuss, Ueberfahren und ein sell_unit des Missionsskripts nicht zu
-    /// unterscheiden.</summary>
-    public static bool TodesLog;
+    /// unterscheiden.
+    /// <para>⭐ 11.09.2026 — IMMER AN. Seine zweite Meldung »jetzt ist mein cpt
+    /// wieder einfach umgefallen« kam aus einem Lauf ohne den Schalter, und die
+    /// Ursache war damit verloren. Eine Zeile je Tod kostet nichts.
+    /// <c>--kein-todes-log</c> schaltet ab.</para></summary>
+    public static bool TodesLog = true;
 
     private void NoteKill(Entity victim, int by)
     {
@@ -11832,7 +11840,7 @@ public partial class MapEntityLayer : Node2D
             ? InfanterieKern(shooter.Rating28, shooter.Attack + 2 * elevS, victim, elevV)
             : ShotCore(shooter, victim, elevS, elevV);
 
-    private void ApplyHit(int si, int vi, Entity victim, int damage)
+    private void ApplyHit(int si, int vi, Entity victim, int damage, string quelle = "")
     {
         // ⚠ 11.08.2026 — WER SCHON TOT IST, WIRD NICHT NOCHMAL GETROFFEN.
         //
@@ -11900,7 +11908,31 @@ public partial class MapEntityLayer : Node2D
             return;
         }
 
-        Kill(vi, victim, shooter?.Owner ?? -1, "Beschuss");
+        Kill(vi, victim, shooter?.Owner ?? -1, TrefferGrund(shooter, victim, quelle));
+    }
+
+    /// <summary>
+    /// <b>WER hat geschossen, und konnte der Spieler ihn sehen?</b> (11.09.2026,
+    /// bug-150 zum dritten: »einfach umgefallen … haben wir vielleicht auch ne art
+    /// unsichtbare KI einheit rumfahren?«). Nur fuer die Todeszeile — ein
+    /// Schuetze im Nebel, eine Waffe ohne Flugbild (Sofort-Treffer mit 0,1 s
+    /// Leuchtspur) und ein untergestellter Schuetze sehen fuer den Spieler alle
+    /// gleich aus: niemand hat geschossen.
+    /// </summary>
+    private string TrefferGrund(Entity? s, Entity v, string quelle)
+    {
+        if (s == null) return quelle.Length > 0 ? quelle : "Treffer ohne Schuetzen (Quelle nicht benannt)";
+        int art = Simulation.DesignMath.SoundClass(WeaponRowOf(s.Weapon));
+        string flug = art < 0 ? "Waffe ohne Geschossart"
+                    : FlightKind(art) is { } fk ? $"Geschoss {fk}"
+                    : "OHNE Flugbild — Sofort-Treffer, nur Leuchtspur";
+        int abst = Mathf.Max(Mathf.Abs(s.Col - v.Col), Mathf.Abs(s.Row - v.Row));
+        return $"Beschuss von {LabelOf(s)} (Platz {s.Slot}, Spieler {s.Owner}, auf ({s.Col},{s.Row}), "
+             + $"{abst} Zellen weit, Waffe {s.Weapon} Art {art}, {flug}"
+             + (ImNebelVerborgen(s) ? ", ⚠ SCHUETZE IM NEBEL — fuer den Spieler unsichtbar" : ", Schuetze sichtbar")
+             + (Untergestellt(s) ? ", ⚠ SCHUETZE UNTERGESTELLT" : "")
+             + (s.Dead ? ", Schuetze schon tot" : "")
+             + (quelle.Length > 0 ? ", " + quelle : "") + ")";
     }
 
     /// <summary>Take an entity off the board: clear its cells, drop it out of
@@ -35235,7 +35267,8 @@ public partial class MapEntityLayer : Node2D
                         if (!(CheatAmmo && Cheated(a))) a.Ammo--;
                         _effects.Add(new Effect { Pos = aim - new Vector2(0, 8),
                                                   Kind = "explosion", FrameTime = 0.05f });
-                        ApplyHit(-1, a.Target, t, a.Attack);
+                        ApplyHit(-1, a.Target, t, a.Attack,
+                                 $"LUFTANGRIFF {a.Name} (Art {a.Kind}, Platz {a.Slot}, auf ({a.Col},{a.Row}))");
                         a.TurnPoint = AirTurnPoint(a.Pos);
                     }
                 }

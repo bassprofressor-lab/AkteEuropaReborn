@@ -2856,6 +2856,7 @@ public partial class MapViewer : Node2D
             else if (a == "--nebel-ohne-flugzeuge") MapEntityLayer.NebelOhneFlugzeuge = true;
             else if (a == "--neutrale-decken-auf") MapEntityLayer.NeutraleDeckenAuf = true;
             else if (a == "--todes-log") MapEntityLayer.TodesLog = true;
+            else if (a == "--kein-todes-log") MapEntityLayer.TodesLog = false;
             else if (a == "--sieg7-check") _sieg7Check = true;
             else if (a == "--endregel-getrennt") Campaign.MissionScript.EndregelGetrennt = true;
             else if (a == "--eingefahren-bleibt-gewaehlt") MapEntityLayer.EingefahrenBleibtGewaehlt = true;

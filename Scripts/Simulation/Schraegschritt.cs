@@ -106,7 +106,7 @@ public partial class MapEntityLayer : Node2D
         }
 
         bool gefragt = false;
-        var merk = new List<int>(3);
+        var merk = new List<(int Fuss, string Wo)>(3);
         for (int k = 0; k < 3; k++)
         {
             Vector2I z;
@@ -142,12 +142,12 @@ public partial class MapEntityLayer : Node2D
                 if (k == 2) break;                      // @0x40616B: Flanke B gibt sofort 1
                 continue;
             }
-            if (f >= 0) merk.Add(f);
+            if (f >= 0) merk.Add((f, k == 0 ? "Zielzelle schraeg" : k == 1 ? "Flanke d-1" : "Flanke d+1"));
         }
 
         if (gefragt) { WarteZweig(i, e); return false; }   // Can_go = 1
         SchraegZaehlen(i, 2);
-        foreach (int f in merk) RunOverFoot(i, e, f);       // @0x4060B2: Ziel, d−1, d+1
+        foreach (var (f, wo) in merk) RunOverFoot(i, e, f, wo);   // @0x4060B2: Ziel, d−1, d+1
         return true;
     }
 
