@@ -446,10 +446,34 @@ public partial class MapEntityLayer : Node2D
                     // danach nur noch UKOL 0 vor. Das Original geht genau
                     // diesen Weg: @0x43D48F prueft UKOL == 0x30 UND
                     // satz+0x0F == b und macht daraus 54.
-                    var bb = GebaeudePlatz(r.Fahrziel);
-                    if (bb == null) { u.Ukol = UkolFrei; r.Fahrziel = -1; break; }
-                    if (RouteAngekommen(u, bb, RouteAnfahrt(bb))) RouteAnkunft(i, u, r, bb);
-                    break;
+                    if (RoutentuerAlt)
+                    {
+                        var bb = GebaeudePlatz(r.Fahrziel);
+                        if (bb == null) { u.Ukol = UkolFrei; r.Fahrziel = -1; RouteAnmeldungZurueck++; break; }
+                        if (RouteAngekommen(u, bb, RouteAnfahrt(bb))) RouteAnkunft(i, u, r, bb);
+                        break;
+                    }
+                    // ⭐⭐ 11.09.2026 — DER TUERARM WOERTLICH (0x43D48F..0x43D57C).
+                    // Seine Meldung aus Kampagne 7: »diesmal stand der transporter
+                    // still und die tür von der fabrik war immer wie leicht
+                    // geöffnet«. Hier stand bei leerem Fahrziel `UKOL := 0` — und
+                    // der Tuertakt (er laeuft VOR diesem Takt) meldete den Wagen
+                    // im naechsten Takt wieder an: 48, 0, 48, 0 ..., der
+                    // default-Arm lief nie. »Start« (0x410870) leert das
+                    // Fahrziel, also traf es jeden Wagen, der beim Start auf
+                    // Tuer 0 stand. Das Original prueft nur bei Torzustand 1
+                    // und kennt drei Faelle; UKOL 48 hat im Auftragsband keinen
+                    // Arm (Index 21, 0x409EEE).
+                    var tb = TuerNullGebaeude(u);
+                    if (tb == null) { u.Ukol = UkolFrei; break; }                 // ⚠ UNSER: nicht (mehr) auf Tuer 0
+                    if (tb.TorZustand.Count == 0 || tb.TorZustand[0] != TorEinfahrt) break;   // @0x43D495
+                    if (r.Fahrziel == tb.Slot) RouteAnkunft(i, u, r, tb);        // @0x43D51A -> 54
+                    else if (r.Fahrziel < 0 || GebaeudePlatz(r.Fahrziel) == null)  // @0x43D578; ⚠ ein
+                    {                                                            // totes Ziel gilt bei
+                        r.Fahrziel = tb.Slot;                                    // uns als leer
+                        RouteTuerNachgetragen++;
+                    }
+                    break;                                                       // sonst: bleibt angemeldet
                 }
 
                 default:                                      // UKOL 0 — 0x407F67
@@ -500,6 +524,23 @@ public partial class MapEntityLayer : Node2D
         if (!_nav.ImapGanzFrei(aus.X, aus.Y + 1, u.Move)) return null;
         return aus;
     }
+
+    /// <summary>Das Gebaeude, auf dessen TUER 0 der Wagen steht — die Stelle,
+    /// an der der Tuertakt ihn angemeldet hat (@0x43D57E).</summary>
+    private Entity? TuerNullGebaeude(Entity u)
+    {
+        foreach (var b in _entities)
+        {
+            if (!b.IsBuilding || b.IsProp || b.Dead || b.Built == 0 || b.DoorCells.Count == 0) continue;
+            if (u.Col == b.Col + b.DoorCells[0].Col && u.Row == b.Row + b.DoorCells[0].Row) return b;
+        }
+        return null;
+    }
+
+    /// <summary>Wie oft der Tuerarm ein leeres Fahrziel nachtrug (@0x43D578),
+    /// und wie oft der alte Stand einen angemeldeten Wagen auf UKOL 0
+    /// zuruecksetzte (<c>--routentuer-alt</c>).</summary>
+    public int RouteTuerNachgetragen, RouteAnmeldungZurueck;
 
     /// <summary>Die Ankunft: an der Basis wird gewartet, an Fabrik und Mine
     /// faehrt der Wagen hinein.</summary>

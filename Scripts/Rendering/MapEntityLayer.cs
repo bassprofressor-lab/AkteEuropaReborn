@@ -31074,6 +31074,7 @@ public partial class MapEntityLayer : Node2D
         // Dock-Auslauf), statt sie umzurechnen. Siehe
         // Simulation/MarketTrade.cs, OriginalTick.
         OriginalTick();
+        if (_rtCheckAn) RoutentuerCheckTakt();          // --routentuer-check
 
         PollBuildPanelDemo();
         PollDepotFlow();

@@ -1363,6 +1363,8 @@ public partial class MapViewer : Node2D
     /// <summary><c>--druckwelle-check</c>, <c>--gaswerfer-check</c> — siehe
     /// Simulation/Druckwelle.cs und Simulation/Gaswerfer.cs.</summary>
     private bool _dwCheck, _dwGestartet, _gwCheck, _gwGestartet;
+    /// <summary><c>--routentuer-check</c> — siehe Simulation/RoutentuerCheck.cs.</summary>
+    private bool _rtCheck, _rtGestartet;
     private bool _sieg7Gestartet;
 
     /// <summary><c>--absetz-check</c> — siehe Simulation/AbsetzCheck.cs.</summary>
@@ -2890,6 +2892,8 @@ public partial class MapViewer : Node2D
             else if (a == "--art7-einzeltreffer") MapEntityLayer.Art7Einzeltreffer = true;
             else if (a == "--gaswerfer-check") _gwCheck = true;
             else if (a == "--gaswerfer-als-schuss") MapEntityLayer.GaswerferAlsSchuss = true;
+            else if (a == "--routentuer-check") _rtCheck = true;
+            else if (a == "--routentuer-alt") MapEntityLayer.RoutentuerAlt = true;
             else if (a == "--zasah-sonderfaelle-aus") MapEntityLayer.ZasahSonderfaelleAus = true;
             else if (a == "--infanterie-einheitenarm") MapEntityLayer.InfanterieArmAlt = true;
             else if (a == "--skripttreffer-halbe-huelle") MapEntityLayer.SkripttrefferHalbeHuelle = true;
@@ -4276,6 +4280,7 @@ public partial class MapViewer : Node2D
             if (_svCheck) GD.Print(_entities.SelbstverteidigerCheckLine());
             if (_dwCheck) GD.Print(_entities.DruckwelleCheckLine());
             if (_gwCheck) GD.Print(_entities.GaswerferCheckLine());
+            if (_rtCheck) GD.Print(_entities.RoutentuerCheckLine());
             if (_zielzelleProbe) GD.Print(_entities.ZielzelleProbe());
             if (_skripttrefferProbe) GD.Print(_entities.SkripttrefferProbe());
             if (_gebaeudebrandProbe) GD.Print(_entities.GebaeudebrandProbe());
@@ -6408,6 +6413,12 @@ public partial class MapViewer : Node2D
         {
             _entities.GaswerferCheckStart();
             _gwGestartet = true;
+        }
+
+        if (_rtCheck && !_rtGestartet && _entities.ErwartungBereit())
+        {
+            _entities.RoutentuerCheckStart();
+            _rtGestartet = true;
         }
 
         // laeuft weiter; die Zeile kommt mit dem Abschlussbericht (--quit-after)
