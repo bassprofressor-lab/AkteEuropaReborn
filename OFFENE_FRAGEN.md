@@ -19923,6 +19923,11 @@ Ueberschuss und dort stand nichts.
 ⚠ Der Nachtest im SPIEL steht aus (bug-012, bug-013): stehen die Gegner nach
 der Bruecke noch immer still, und greifen jetzt mehr an als vorher?
 
+✅ **Nachtrag 11.09.2026:** Nachtest bestanden. Sein Spiellauf Kampagne 3 am
+03.09.2026 (durchgespielt): »ja Gegner kommen, das passt soweit«. bug-012/013
+sind im Buglog geschlossen. Getrennt offen bleibt nur »der Gegner unten rechts«
+(STATUS CS).
+
 ## CN — WORAUF EINE EINHEIT VON SELBST SCHIESST (offen, 01.09.2026)
 
 **Gemeldet:** »Raketenwerfer-Einheiten schiessen auch einfach auf eine Basis
