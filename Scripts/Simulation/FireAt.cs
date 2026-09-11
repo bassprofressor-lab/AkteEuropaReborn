@@ -18,7 +18,7 @@ using Godot;
 ///   0x40BD57  Zielpunkt = Zellmitte (20/10), Hoehe·15
 ///   0x40BF64  Reichweite +0x2B·40 < d  oder  +0x2A·40 > d -> kein Schuss
 ///   0x40BFBB  Zwilling; 0x40C288 Streuung je Geschoss; 0x451B40 anlegen
-///             (Art 12 trifft sofort @0x451CF7)
+///             (Art 12, die Blitzschleuder, trifft sofort @0x451CF7)
 ///   0x40C451  Nachladen setzen; 0x40C575 Klang; 0x40C57D Munition −1 (ZBRAN 8 nicht)
 /// </code>
 ///
@@ -30,10 +30,10 @@ using Godot;
 /// ohne Frage. Ausnahmen: Art 7 (Flaechentreffer) und der befohlene Angriff auf
 /// genau diese Einheit.</para>
 ///
-/// <para>⚠ UNSERE SETZUNGEN, benannt: der Gaswerfer (ZBRAN 9, 0x40104B) ist
-/// ungelesen und nimmt die Schussroutine; das Nachladen setzt
-/// <c>ReloadOf</c> wie jeder unserer Schuesse (ohne das <c>rand&amp;3</c>
-/// @0x40C451); der Flaechentreffer der Art 7 (0x454510) ist nicht gebaut.</para>
+/// <para>⚠ UNSERE SETZUNG, benannt: das Nachladen setzt <c>ReloadOf</c> wie
+/// jeder unserer Schuesse (ohne das <c>rand&amp;3</c> @0x40C451). Der Gaswerfer
+/// (ZBRAN 9) steht seit dem 11.09.2026 in Simulation/Gaswerfer.cs, die
+/// Druckwelle der Art 7 (0x454510) in Simulation/Druckwelle.cs.</para>
 ///
 /// <para>Gegenschalter: <c>--fireat-sofort</c> (Sofort-Treffer auf alle Einheiten
 /// der Zelle, der Stand vom Vormittag), <c>--zellgeschoss-ohne-einheit</c> (ein
@@ -79,6 +79,15 @@ public partial class MapEntityLayer : Node2D
         if (s.Weapon <= 0) return Nein("keine Waffe (ZBRAN 0, 0x40C8C0)");
         int zbran = s.Weapon is >= 20 and < 70 ? s.Weapon - 20 : -1;
         if (zbran == 0x12) return Nein("ZBRAN 0x12 — 0x40C8C0 tut nichts");
+        // @0x40C911 — ZBRAN 9 geht an den Gaswerfer 0x439B30: keine Tuer-, Ziel-
+        // oder Reichweitenfrage, x/y bedeutungslos. Simulation/Gaswerfer.cs.
+        if (zbran == 9 && !GaswerferAlsSchuss)
+        {
+            if (!GaswerferAbfeuern(s, out string gasGrund)) return Nein(gasGrund);
+            FireAtSchuesse++;
+            FireAtGrund = "";
+            return true;
+        }
 
         // 0x40BB2E — aus der Tuerzelle wird nicht geschossen
         var hier = CellCenter(s.Col, s.Row);
@@ -106,8 +115,8 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>
     /// Was ein Geschoss auf der Einschlagzelle trifft — die Tafel aus 1.3 des
-    /// Berichts. <paramref name="art"/> 12 (Flamme, sofort @0x451CF7) und 7
-    /// (Flaechentreffer) fragen das Buendnis nicht.
+    /// Berichts. <paramref name="art"/> 12 (Blitzschleuder, sofort @0x451CF7) und 7
+    /// (Druckwelle, nur noch mit --art7-einzeltreffer hier) fragen das Buendnis nicht.
     /// </summary>
     private void ZellEinschlag(int si, int c, int r, int schaden, int art)
     {

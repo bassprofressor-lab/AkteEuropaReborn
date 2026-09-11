@@ -3327,6 +3327,17 @@ public sealed class MissionScript
     public void SetVarFuerProbe(int n, int wert)
     { if (n >= 0 && n < _var.Length) _var[n] = wert; }
 
+    /// <summary>
+    /// Eine Skriptvariable aus dem SPIEL setzen — fuer die Stellen ausserhalb
+    /// des Missionsblocks, die im Original selbst in <c>v[n]</c> schreiben.
+    /// ⭐ 11.09.2026, erster Nutzer: die Trefferroutine Zasah setzt in Mission 17
+    /// <c>v[0] := 1</c>, sobald der Spieler eine Einheit von Spieler 3 trifft
+    /// (@0x40CA1F..0x40CA4F, <c>0xBC5690</c> = v[0]). Siehe
+    /// Simulation/ZasahSonderfaelle.cs.
+    /// </summary>
+    public void SetVar(int n, int wert)
+    { if (n >= 0 && n < _var.Length) _var[n] = wert; }
+
     /// <summary>For the harness: what the script is doing right now.</summary>
     /// <summary>Die Missionsziele, wie der Block sie fuehrt.
     ///

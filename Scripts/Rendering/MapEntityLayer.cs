@@ -926,6 +926,12 @@ public partial class MapEntityLayer : Node2D
         /// <summary>Flughoehe an der Muendung und am Ziel, in Fuenfzehnteln
         /// einer Gelaendestufe. Siehe <see cref="GeschossHoehe"/>.</summary>
         public float HoeheStart, HoeheZiel;
+
+        /// <summary>⭐ 11.09.2026 — nur Art 7 (0x452638): die absolute Flughoehe
+        /// und der Zustand 1 Steigen, 0 Reisen, 2 Stuerzen. Siehe
+        /// Simulation/Druckwelle.cs, Art7Flughoehe.</summary>
+        public bool FlugBegonnen;
+        public int Flughoehe, Steigzustand;
     }
 
     /// <summary>
@@ -1049,6 +1055,7 @@ public partial class MapEntityLayer : Node2D
     /// Muendung zur Zielhoehe, wie im Original (@0x452543 ff.).</summary>
     private float GeschossHoehe(Projectile p)
     {
+        if (Art7Druckwelle(p) && p.FlugBegonnen) return p.Flughoehe;     // 0x452638
         float t = p.Weite <= 1f ? 1f
                 : Mathf.Clamp(1f - p.Pos.DistanceTo(p.Aim) / p.Weite, 0f, 1f);
         return Mathf.Lerp(p.HoeheStart, p.HoeheZiel, t) + BogenHoehe(p);
@@ -11189,10 +11196,13 @@ public partial class MapEntityLayer : Node2D
                     : !HasAmmo(e)
                     ? $"keine Munition ({e.Ammo}/{e.AmmoMax})"
                     : $"SCHUSS auf Platz {t.Slot} in {dist:0.0} Zellen";
-            if (e.Cooldown <= 0 && HasAmmo(e))
+            // ⭐ 11.09.2026 — ein Gaswerfer schiesst hier nie (Gaswerfer.cs), und
+            // die Mittelstreckenrakete verbraucht keine Munition (@0x40C57D).
+            if (e.Cooldown <= 0 && HasAmmo(e) && !GaswerferSchweigt(e))
             {
                 e.Cooldown = ReloadOf(e);
-                if (e.AmmoMax > 0 && !(CheatAmmo && Cheated(e)))
+                if (e.AmmoMax > 0 && !(CheatAmmo && Cheated(e))
+                    && (Art7Einzeltreffer || WeaponRowOf(e.Weapon) != 8))
                     e.Ammo--;                    // one round per shot (@0x40c587)
                 DebugShots++;
                 // ⚠ 24.08.2026 — HIER STAND EIN ABZWEIG FUER DEN MINENLEGER,
@@ -11841,6 +11851,13 @@ public partial class MapEntityLayer : Node2D
         if (victim.Dead) return;
         if (_fireAtCheckAn) _fireAtTreffer.Add((si, vi));                   // --fireat-check
         var shooter = si >= 0 && si < _entities.Count ? _entities[si] : null;
+        // ⭐ 11.09.2026 — der Selbstverteidiger-Eintrag (@0x40CA58, VOR den
+        // Sonderfaellen und vor dem Schaden). Simulation/Selbstverteidiger.cs.
+        if (!GegenschussSofort) SelbstverteidigerEintrag(shooter, si, victim, vi);
+        // ⭐ 11.09.2026 — der Vorspann von Zasah fuer Einheit gegen Einheit:
+        // Mission-17-Ausloeser, Plasma halbiert das Tempo, die Schallkanone
+        // entfernt. Siehe Simulation/ZasahSonderfaelle.cs.
+        if (ZasahVorspann(shooter, vi, victim)) return;
         damage = ShotDamage(shooter, victim, damage);
         // the original destroys the unit outright once a hit is at least what
         // is left of its energie (@0x40cf8d), instead of letting it reach zero
@@ -11867,13 +11884,18 @@ public partial class MapEntityLayer : Node2D
         SpeakHit(victim);
 
         // shoot back: an idle armed unit engages whoever hit it
+        // ⚠ 11.09.2026 — NUR NOCH HINTER --gegenschuss-sofort. Das Original
+        // schiesst nicht sofort zurueck, sondern traegt das Opfer ein und gibt
+        // ihm nach 20 Takten den Angriffsbefehl — ohne Buendnisfrage, nicht fuer
+        // Fussvolk. Siehe Simulation/Selbstverteidiger.cs.
         if (victim.Hp > 0)
         {
-            if (victim.Target < 0 && shooter != null && CanFight(victim) &&
+            if (GegenschussSofort && victim.Target < 0 && shooter != null && CanFight(victim) &&
                 IsHostile(victim, shooter))
             {
                 victim.Target = si;      // return fire, but hold position
                 victim.Ordered = false;
+                if (_svCheckAn) _svAusloesung[vi] = (0, si, false);
             }
             return;
         }
@@ -12017,6 +12039,13 @@ public partial class MapEntityLayer : Node2D
         // (@0x40B6CE..0x40B71F, nur Klasse 0). Simulation/Ueberfahren.cs.
         if (!victim.IsBuilding && !victim.IsProp && victim.GameUnitType == 0 && !SprengungOhneNachbarn)
             SprengungTrifftNachbarn(victim);
+        // ⭐ 11.09.2026 — die Faelle ZBRAN 8 und 9 des Todesanlegers
+        // (@0x40B769 Druckwelle, @0x40B785 Gaswolke). Druckwelle.cs, Gaswerfer.cs.
+        if (!victim.IsBuilding && !victim.IsProp)
+        {
+            TodDerMittelstreckenrakete(victim);
+            TodDesGaswerfers(victim);
+        }
         // ⚠⚠ 19.08.2026 — EIN SCHIFF HINTERLAESST KEIN WRACK.
         //
         // Die Todesroutine des Originals (»likvid typ:« @0x406F1B) verzweigt
@@ -12078,7 +12107,9 @@ public partial class MapEntityLayer : Node2D
             {
                 var t = _entities[p.Target];
                 if (t.Dead || t.IsProp) p.Target = -1;
-                else p.Aim = ShotAim(t);   // dieselbe Bildmitte wie beim Abschuss
+                // ⭐ 11.09.2026 — Art 7 fuehrt NICHT nach, sie rechnet gegen die
+                // beim Abschuss gesetzte Zielzelle (0x452638). Druckwelle.cs.
+                else if (!Art7Druckwelle(p)) p.Aim = ShotAim(t);   // dieselbe Bildmitte wie beim Abschuss
             }
 
             Vector2 d = p.Aim - p.Pos;
@@ -12089,6 +12120,13 @@ public partial class MapEntityLayer : Node2D
             bool gestoppt = false;
             if (dist > step)
             {
+                // ⭐ 11.09.2026 — Steigen/Reisen/Stuerzen der Art 7, mit den
+                // Restschritten VOR dem Schritt (0x4526A6). Druckwelle.cs.
+                if (Art7Druckwelle(p) && step > 0f)
+                {
+                    Art7Flughoehe(ref p, (int)(dist / step));
+                    DwFlugNotieren(p);
+                }
                 p.Pos += d / dist * step;
 
                 // ⭐⭐ 19.08.2026 — SCHLAEGT DAS GESCHOSS UNTERWEGS EIN?
@@ -12114,7 +12152,8 @@ public partial class MapEntityLayer : Node2D
                     bool freund = false;
                     if (!eigen && occ >= 0 && occ < _entities.Count
                         && p.Shooter >= 0 && p.Shooter < _entities.Count)
-                        freund = !IsHostile(_entities[p.Shooter], _entities[occ]);
+                        // Art 7 schuetzt kein Buendnis (@0x452978)
+                        freund = !Art7Druckwelle(p) && !IsHostile(_entities[p.Shooter], _entities[occ]);
                     if (!eigen && !freund && !KeineEinschlagHoehen)
                     {
                         int schwelle = SchwelleAn(zc, zr);
@@ -12163,6 +12202,17 @@ public partial class MapEntityLayer : Node2D
             // impact
             _shots.RemoveAt(i);
             if (_fireAtCheckAn) _fireAtEinschlag[p.Shooter] = _taktNr;     // --fireat-check
+            // ⭐⭐ 11.09.2026 — ART 7 TRIFFT NICHT, SIE ZUENDET: jeder Trefferzweig
+            // des Geschosstakts und die Ankunft rufen 0x454510 statt Zasah — die
+            // Klaenge 410/400 und eine Druckwelle aus sechs Ringen. Kein
+            // Einzeltreffer, kein Gleis, kein ZellWirkung. Simulation/Druckwelle.cs,
+            // Gegenschalter --art7-einzeltreffer.
+            if (Art7Druckwelle(p))
+            {
+                if (CellAt(p.Aim) is { } dwz)
+                    DruckwelleZuenden(Mathf.RoundToInt(dwz.X), Mathf.RoundToInt(dwz.Y));
+                continue;
+            }
             // ⚠ 19.08.2026 — hier stand fuer JEDES Geschoss dasselbe
             // "explosion". Die Geschosstafel hat je Art eine eigene
             // Einschlagfolge (+0x06): 80, 79, 83, 84, 86, 88, 91, 510 ... und
@@ -12298,7 +12348,7 @@ public partial class MapEntityLayer : Node2D
 
         // Die Truemmer fliegen ueber dem Boden, also im selben Durchgang wie
         // Explosion und Muendungsfeuer.
-        if (!ground) TruemmerZeichnen();
+        if (!ground) { TruemmerZeichnen(); GasZeichnen(); }
 
         foreach (var fx in _effects)
         {
@@ -30942,6 +30992,14 @@ public partial class MapEntityLayer : Node2D
         // Was noch abzusetzen ist: EINES je Takt und Traeger. Siehe
         // Entity.UnloadRest — das Original fuehrt denselben Zaehler im Satz.
         FrachtAbsetzenTakt();
+        // ⭐ 11.09.2026 — Station 63 »Self-defenders« (0x411820), jeden Takt,
+        // vor »Buildings« und »Movement«. Simulation/Selbstverteidiger.cs.
+        if (!GegenschussSofort) SelbstverteidigerTakt();
+        // ⭐ 11.09.2026 — der Druckwellenring 0x454600 (wirkt bei Takt % 3 == 0)
+        // und die Gaswolken, Stationen 46/47 samt Gassauger. Simulation/
+        // Druckwelle.cs, Simulation/Gaswerfer.cs.
+        DruckwelleTakt();
+        GasTakt();
         // Erst der Wind, dann der Brand: das Uebergreifen liest die Richtung,
         // und beide muessen im SELBEN Takt stehen, sonst haengt die Ausbreitung
         // wieder an der Bildrate.

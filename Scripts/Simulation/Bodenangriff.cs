@@ -145,7 +145,7 @@ public partial class MapEntityLayer : Node2D
             // Waffe ohne Flugbild: der Treffer sitzt sofort.
             ZellSchaden(zelle.X, zelle.Y, schaden, mitte, art);
             // ⭐ 11.09.2026 — und er trifft auch, was auf der Zelle STEHT
-            // (Simulation/FireAt.cs). Art 12 (Flamme) ohne Buendnisfrage.
+            // (Simulation/FireAt.cs). Art 12 (Blitzschleuder) ohne Buendnisfrage.
             if (!ZellEinschlagAlt) ZellEinschlag(si, zelle.X, zelle.Y, schaden, art);
             return;
         }

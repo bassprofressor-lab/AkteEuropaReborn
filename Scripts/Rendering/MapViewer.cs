@@ -1354,6 +1354,15 @@ public partial class MapViewer : Node2D
     /// <summary><c>--schraegschritt-check</c> / <c>--fireat-check</c> — siehe
     /// Simulation/SchraegschrittCheck.cs und Simulation/FireAt.cs.</summary>
     private bool _schraegCheck, _schraegGestartet, _fireAtCheck, _fireAtGestartet;
+
+    /// <summary><c>--zasah-check</c> — siehe Simulation/ZasahCheck.cs.</summary>
+    private bool _zasahCheck;
+
+    /// <summary><c>--selbstverteidiger-check</c> — siehe Simulation/Selbstverteidiger.cs.</summary>
+    private bool _svCheck, _svGestartet;
+    /// <summary><c>--druckwelle-check</c>, <c>--gaswerfer-check</c> — siehe
+    /// Simulation/Druckwelle.cs und Simulation/Gaswerfer.cs.</summary>
+    private bool _dwCheck, _dwGestartet, _gwCheck, _gwGestartet;
     private bool _sieg7Gestartet;
 
     /// <summary><c>--absetz-check</c> — siehe Simulation/AbsetzCheck.cs.</summary>
@@ -2874,6 +2883,14 @@ public partial class MapViewer : Node2D
             else if (a == "--fireat-sofort") MapEntityLayer.FireAtSofort = true;
             else if (a == "--zellgeschoss-ohne-einheit") MapEntityLayer.ZellEinschlagAlt = true;
             else if (a == "--zellschuss-ohne-zwilling") MapEntityLayer.ZellschussOhneZwilling = true;
+            else if (a == "--zasah-check") _zasahCheck = true;
+            else if (a == "--selbstverteidiger-check") _svCheck = true;
+            else if (a == "--gegenschuss-sofort") MapEntityLayer.GegenschussSofort = true;
+            else if (a == "--druckwelle-check") _dwCheck = true;
+            else if (a == "--art7-einzeltreffer") MapEntityLayer.Art7Einzeltreffer = true;
+            else if (a == "--gaswerfer-check") _gwCheck = true;
+            else if (a == "--gaswerfer-als-schuss") MapEntityLayer.GaswerferAlsSchuss = true;
+            else if (a == "--zasah-sonderfaelle-aus") MapEntityLayer.ZasahSonderfaelleAus = true;
             else if (a == "--infanterie-einheitenarm") MapEntityLayer.InfanterieArmAlt = true;
             else if (a == "--skripttreffer-halbe-huelle") MapEntityLayer.SkripttrefferHalbeHuelle = true;
             else if (a == "--ueberfahren-alle") MapEntityLayer.UeberfahrenAlle = true;
@@ -4256,6 +4273,9 @@ public partial class MapViewer : Node2D
             if (_ueberfahrenCheck) GD.Print(_entities.UeberfahrenCheckLine());
             if (_schraegCheck) GD.Print(_entities.SchraegschrittCheckLine());
             if (_fireAtCheck) GD.Print(_entities.FireAtCheckLine());
+            if (_svCheck) GD.Print(_entities.SelbstverteidigerCheckLine());
+            if (_dwCheck) GD.Print(_entities.DruckwelleCheckLine());
+            if (_gwCheck) GD.Print(_entities.GaswerferCheckLine());
             if (_zielzelleProbe) GD.Print(_entities.ZielzelleProbe());
             if (_skripttrefferProbe) GD.Print(_entities.SkripttrefferProbe());
             if (_gebaeudebrandProbe) GD.Print(_entities.GebaeudebrandProbe());
@@ -6333,6 +6353,13 @@ public partial class MapViewer : Node2D
             return;
         }
 
+        if (_zasahCheck && _entities.ErwartungBereit())
+        {
+            GD.Print(_entities.ZasahCheck());
+            GetTree().Quit(0);
+            return;
+        }
+
         if (_trefferarmCheck && _entities.ErwartungBereit())
         {
             GD.Print(_entities.TrefferArmCheck());
@@ -6363,6 +6390,24 @@ public partial class MapViewer : Node2D
         {
             _entities.FireAtCheckStart();
             _fireAtGestartet = true;
+        }
+
+        if (_svCheck && !_svGestartet && _entities.ErwartungBereit())
+        {
+            _entities.SelbstverteidigerCheckStart();
+            _svGestartet = true;
+        }
+
+        if (_dwCheck && !_dwGestartet && _entities.ErwartungBereit())
+        {
+            _entities.DruckwelleCheckStart();
+            _dwGestartet = true;
+        }
+
+        if (_gwCheck && !_gwGestartet && _entities.ErwartungBereit())
+        {
+            _entities.GaswerferCheckStart();
+            _gwGestartet = true;
         }
 
         // laeuft weiter; die Zeile kommt mit dem Abschlussbericht (--quit-after)
