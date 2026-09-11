@@ -109,12 +109,13 @@ braucht, in **[OFFENE_FRAGEN.md](OFFENE_FRAGEN.md)** — samt der Fälle, in den
 sich eine frühere Erklärung von uns als falsch herausgestellt hat. Beides wird
 mitgeführt, nicht nachträglich geschrieben.
 
-⭐ **Stand heute:** Mission 1 und 2 sind mehrfach durchgespielt; Mission 2 ist
-seit dem 30.08.2026 zum ersten Mal abschliessbar. Aus diesen zwei Missionen
-allein stammen mehr als vierzig belegte Behebungen — darunter das
-Brückengeländer im Nebel, die sieben Angreifer, die wegen eines Absturzes in
-der Wegsuche nie kamen, und ein Gruppenbefehl, der eine Einheit ohne Ziel und
-ohne zweiten Versuch stehenliess.
+⭐ **Stand heute (11.09.2026, Release 0.6.1):** die Missionen 1 bis 7 sind
+durchgespielt. Unterwegs wurde Mission 2 zum ersten Mal abschliessbar, die
+Kraftwerke in Mission 4 und die Bunker in Mission 7 zerstörbar, und der Gegner
+spielt jetzt mit der KI des Originals. **0.6.1 ist ein Halt auf diesem Weg, nicht
+sein Ende** — es fasst alles bisher Behobene in einen Installer, weil sich das
+Spiel jetzt richtig angenehm spielt. Was sich geändert hat, in einfachen Worten:
+[CHANGELOG.de.md](CHANGELOG.de.md).
 
 **Mitmachen ist ausdrücklich erwünscht.** Wer eine Mission spielt und etwas
 bemerkt, das sich im Original anders anfühlt, sollte es auf

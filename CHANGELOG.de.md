@@ -14,6 +14,114 @@ bisher nur dort beschrieben.*
 > **Road to 0.7.0** in der [README](README.de.md). Der Abschnitt unten wächst
 > mit jeder gespielten Mission weiter.
 
+## 0.6.1 — 11.09.2026 · ein Halt auf der Road to 0.7.0
+
+> **0.6.1 ist nicht 0.7.0.** 0.7.0 kommt weiterhin erst, wenn alle 33 Missionen
+> durchgespielt und für sauber befunden sind. Seit 0.6.0 ist aber so viel
+> behoben, dass sich das Spiel jetzt richtig angenehm spielt — darum gibt es den
+> bisherigen Stand als Installer. **Die Missionen 1 bis 7 sind durchgespielt.**
+> Die ausführlichen, technischen Berichte folgen weiter unten.
+
+### Kurz gesagt
+
+- **Missionen, die sich nicht beenden liessen, lassen sich jetzt beenden.**
+  Mission 2 zum ersten Mal, Mission 4 (die Kraftwerke sind angreifbar und der
+  Luftangriff richtet echten Schaden an), Mission 7 (Bunker und
+  Schutzgeneratoren lassen sich zerstören, und die Forscher steigen wieder in
+  den Transporter).
+- **Der Gegner spielt wie im Original.** Er greift in Gruppen an, baut sich
+  eigene Transporter, fährt Nachschub — und schiesst nicht mehr auf seine
+  Verbündeten.
+- **Gebäude lassen sich angreifen** — das ging bisher in keiner Mission.
+- **Viele Fenster des Originals sind zurück:** Haupt-Menü, Gebäude- und
+  Einheitenliste, Forschungsergebnisse, CD-Spieler, Einheitenmenü, Routen- und
+  Minenfenster.
+
+### Die Kampagne spielen
+
+- Nach dem ersten Sieg wird die Kampagne nicht mehr unschaffbar, und Mission 1
+  spielt alle ihre Skriptereignisse ab.
+- Hilfefenster erscheinen im richtigen Moment, einmal je Kampagne — wie im
+  Original.
+- Forschung und Erfindungen funktionieren: der Preis ist zugleich die Dauer, und
+  neue Waffen werden genau so »erfunden« wie im Original.
+- 33 Einheitenentwürfe statt 9, mit ihren deutschen Namen.
+
+### Unterwegs
+
+- Einheiten nutzen jetzt die **Wegsuche des Originals.** Angreifer, die früher
+  hängen blieben, kommen jetzt an.
+- Fußsoldaten gehen über rauen Boden; Wasser bleibt für sie gesperrt.
+- Einheiten können sich **in Basis oder Depot unterstellen** und werden dort
+  repariert. Beim Herausfahren werden Sprit und Munition aufgefüllt.
+- Niemand fährt in ein Gebäude, das noch jemand anderem gehört.
+- Nur Rad- und Kettenfahrzeuge überfahren feindliche Infanterie. Vor eigenen
+  Soldaten warten sie, bis diese ausweichen.
+- Schräge Schritte schneiden keine Ecken mehr an Hindernissen oder Gegnern.
+
+### Transport und Wirtschaft
+
+- **Transporterrouten lassen sich selbst anlegen**, im Routenfenster des
+  Originals: Quelle wählen, Ziel wählen, Start drücken.
+- Ein Transporter, der beim Start auf der Fabriktür steht, fährt jetzt richtig
+  los (vorher blieb er stehen, und die Tür stand halb offen).
+- In der Kampagne bewegen sich Waren nur noch per Transporter oder Bahn — keine
+  unsichtbare Hand trägt mehr Teile von der Fabrik zur Basis.
+- Eine Einheit, der der Sprit ausgeht, meldet sich mit dem Klang des Originals.
+
+### Kampf
+
+- Schüsse auf Gebäude rechnen mit der Panzerung; beschädigte Gebäude brennen,
+  und ein zerstörtes geht mit Explosionen, Trümmern und einer richtigen Ruine.
+- Infanterie nimmt Schaden wie im Original, und tote Soldaten liegen dort, wo sie
+  gefallen sind.
+- Eine untätige Einheit, die getroffen wird, schlägt nach einem kurzen Moment
+  zurück — auch gegen einen Verbündeten, der sie angeschossen hat, wie im
+  Original.
+- Die **Mittelstreckenrakete** steigt, stürzt und löst eine Druckwelle aus, die
+  in mehreren Ringen nach aussen läuft.
+- Der **Gaswerfer** sprüht eine Wolke, die keinen Schaden macht, aber die Tanks
+  der Fahrzeuge leert. Die Gasabwehr schützt davor, der Gassauger zieht die Wolke
+  ein.
+- Der Plasmawerfer bremst sein Ziel, statt es zu beschädigen; der
+  Schallkompressor entfernt es sofort.
+- Skriptschüsse der Missionen fliegen jetzt als echte Geschosse.
+- Schiffe in Mission 5: Reichweite, Beladen und Entladen funktionieren.
+
+### Was man sieht und hört
+
+- **Der Nebel liegt auf dem Gelände** — keine »Kästchen voller Bäume« mehr an
+  Hochflächen, und Einheiten am Nebelrand werden sichtbar wie im Original.
+- Die Übersichtskarte zeigt im Nebel nichts, wie im Original.
+- Brücken, Rampen und Hänge stimmen; der Boden unter entfernten Bäumen und
+  Objekten kommt aus dem Original.
+- Fußsoldaten stehen in der richtigen Höhe und drehen sich zum Ziel; die
+  Infanterie hat ihre Klänge.
+- Waldbrände breiten sich mit dem Wind aus.
+- Der Mauszeiger zeigt über Gebäuden, was ein Klick tut (angreifen, einnehmen,
+  hineinfahren).
+
+### Oberfläche
+
+- Das **Haupt-Menü** des Originals mit seinen Fenstern: Gebäudeliste,
+  Einheitenliste (mit Rang), Forschungsergebnisse und der CD-Spieler, der die
+  Musik des Spiels abspielt.
+- **Einheitenmenü** und **Routenfenster** mit den Kacheln des Originals, ebenso
+  das Minenfenster.
+- Die vier kleinen Knöpfe unten links funktionieren wieder (Übersichtskarte,
+  Gruppen, Lokator, Spielmenü). Der Doppelklick funktioniert.
+- Die Bildschirmauflösung ist einstellbar (4:3 und 16:9), und das Spiel hat ein
+  richtiges Symbol.
+- Der Musikregler schaltet nicht mehr das ganze Spiel stumm.
+
+### Bekannte Grenzen
+
+- In Mission 7 ist ein Captain zweimal ohne sichtbaren Grund umgefallen. Das
+  Spiel schreibt jetzt jeden Tod mit seiner Ursache mit; wem es passiert, dem
+  sagt das Protokoll, was es war.
+- Mehrspieler über das Internet ist noch nicht fertig.
+- Alles noch Offene steht in [OFFENE_FRAGEN.md](OFFENE_FRAGEN.md).
+
 ## Der Prüflauf durch Kampagne 4 (06.09.2026)
 
 ### Auf einen Blick

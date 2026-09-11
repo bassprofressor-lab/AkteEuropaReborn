@@ -12,6 +12,108 @@ your own copy of the 1997 game.
 > has been played through individually and found clean — see **Road to 0.7.0**
 > in the [README](README.md). The section below grows with every mission played.
 
+## 0.6.1 — 2026-09-11 · a stop on the road to 0.7.0
+
+> **0.6.1 is not 0.7.0.** 0.7.0 still ships once all 33 missions have been
+> played through and found clean. But so much has been fixed since 0.6.0 that
+> the game is now genuinely pleasant to play — so here is everything so far, as
+> an installer. **Missions 1 to 7 have been played through.** The detailed,
+> technical write-ups follow further down.
+
+### In short
+
+- **Missions that could not be finished before can now be finished.** Mission 2
+  for the first time, mission 4 (the power plants can be attacked and the air
+  raid does real damage), mission 7 (bunkers and shield generators can be
+  destroyed, and the researchers board the transporter again).
+- **The enemy plays like the original.** It attacks in groups, builds its own
+  transporters, runs supply routes — and no longer shoots its own allies.
+- **Buildings can be attacked** — that never worked before, in any mission.
+- **Lots of original screens are back:** main menu, building and unit lists,
+  research results, CD player, unit menu, route and mine windows.
+
+### Playing the campaign
+
+- The campaign can no longer become unwinnable after the first victory, and
+  mission 1 runs all its scripted events.
+- Help windows appear at the right moments, once per campaign — just like the
+  original.
+- Research and inventions work: the price is also the time it takes, and new
+  weapons are "invented" exactly the way the original does it.
+- 33 unit designs instead of 9, with their German names.
+
+### Moving around
+
+- Units now use the **original pathfinding.** Enemy attackers that used to get
+  stuck now arrive.
+- Foot soldiers cross rough ground; water stays closed to them.
+- Units can **park inside a base or depot** and get repaired there. Driving out
+  again fills up fuel and ammunition.
+- Nobody drives into a building that still belongs to someone else.
+- Only wheeled and tracked vehicles run over enemy infantry. In front of your
+  own soldiers they wait until the soldiers step aside.
+- Diagonal moves no longer cut corners past obstacles or enemies.
+
+### Transport and economy
+
+- **You can set up transporter routes yourself**, in the original route window:
+  pick the source, the destination, press start.
+- A transporter that stands on the factory door when you press start now drives
+  off properly (it used to stay put with the door half open).
+- In the campaign, goods only move by transporter or rail — no more invisible
+  hand carrying parts from the factory to the base.
+- A unit running dry now says so, with the original sound.
+
+### Combat
+
+- Shots at buildings account for armour; damaged buildings burn, and a
+  destroyed one goes down with explosions, debris and a proper ruin.
+- Infantry takes damage the original way, and dead soldiers lie where they fell.
+- An idle unit that gets hit strikes back after a short moment — even against
+  an ally who shot it, as in the original.
+- The **medium-range missile** climbs, dives and sets off a blast wave that
+  rolls outward over several rings.
+- The **gas thrower** sprays a cloud that does no damage but drains vehicles'
+  fuel tanks. The gas shield protects against it, the gas sucker pulls the cloud
+  in.
+- The plasma thrower slows its target down instead of damaging it; the sonic
+  compressor removes it outright.
+- Scripted shots in the missions now fly as real projectiles.
+- Ships in mission 5: range, loading and unloading work.
+
+### What you see and hear
+
+- **Fog lies on the terrain** — no more "boxes of trees" at the edge of high
+  ground, and units at the fog border become visible just like in the original.
+- The overview map shows nothing under fog, as in the original.
+- Bridges, ramps and slopes look right; the ground under removed trees and
+  objects comes from the original.
+- Foot soldiers stand at the correct height and turn towards their target;
+  infantry has its sounds.
+- Forest fires spread with the wind.
+- The mouse pointer shows over buildings what a click will do (attack, capture,
+  enter).
+
+### Interface
+
+- The original **main menu** with its windows: building list, unit list (with
+  rank), research results and the CD player, which plays the game's music.
+- The **unit menu** and the **route window** use the original tiles; the mine
+  window too.
+- The four small buttons at the bottom left work again (overview map, groups,
+  locator, game menu). Double-click works.
+- Screen resolution can be set (4:3 and 16:9), and the game has a proper icon.
+- The music slider no longer mutes the whole game.
+
+### Known issues
+
+- In mission 7 a captain has twice fallen over without any visible cause. The
+  game now records every death with its cause; if it happens to you, the log
+  says what it was.
+- Multiplayer over the internet is not ready yet.
+- Everything still open is listed in
+  [OFFENE_FRAGEN.md](OFFENE_FRAGEN.md) (German).
+
 ## Playing through campaign 4 (2026-09-06)
 
 ### At a glance

@@ -103,12 +103,13 @@ stays open or needs input goes into **[OFFENE_FRAGEN.md](OFFENE_FRAGEN.md)**
 (German) — including the cases where an earlier explanation of ours turned out
 to be wrong. Both are kept as we go, not written afterwards.
 
-⭐ **Where we stand:** missions 1 and 2 have been played through several times;
-mission 2 became completable for the first time on 2026-08-30. Those two
-missions alone account for more than forty documented fixes — among them the
-bridge railing under fog, the seven attackers that never arrived because the
-pathfinder crashed, and a group move order that left a unit with no goal and no
-retry.
+⭐ **Where we stand (2026-09-11, release 0.6.1):** missions 1 to 7 have been
+played through. Along the way mission 2 became completable for the first time,
+the power plants in mission 4 and the bunkers in mission 7 became destructible,
+and the enemy now plays with the original's own AI. **0.6.1 is a stop on this
+road, not its end** — it bundles everything fixed so far into an installer,
+because the game is now genuinely pleasant to play. What changed, in plain
+words: [CHANGELOG.md](CHANGELOG.md).
 
 **Contributions are explicitly welcome.** If you play a mission and something
 feels different from the original, please say so on
