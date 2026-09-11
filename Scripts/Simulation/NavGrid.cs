@@ -174,6 +174,11 @@ public sealed class NavGrid
 
     public int OccupantAt(int c, int r) => InBounds(c, r) ? _occupant[Idx(c, r)] : -1;
 
+    /// <summary>Haelt die Zelle etwas FESTES (Gebaeude, Gegenstand)? — der
+    /// Unterschied, den das Original am imap-Wert liest (ab 14000 fest). Fuer
+    /// die Flankenfrage des Schraegschritts (Simulation/Schraegschritt.cs).</summary>
+    public bool IsImmobileAt(int c, int r) => InBounds(c, r) && _occupant[Idx(c, r)] >= 0 && _immobile[Idx(c, r)];
+
     // ========================================================================
     //  DER RUMPF — ein Schiff ist mehr als eine Zelle
     // ========================================================================

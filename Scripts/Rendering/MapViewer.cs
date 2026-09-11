@@ -1350,6 +1350,10 @@ public partial class MapViewer : Node2D
 
     /// <summary><c>--trefferarm-check</c> — siehe Simulation/TrefferArmCheck.cs.</summary>
     private bool _trefferarmCheck;
+
+    /// <summary><c>--schraegschritt-check</c> / <c>--fireat-check</c> — siehe
+    /// Simulation/SchraegschrittCheck.cs und Simulation/FireAt.cs.</summary>
+    private bool _schraegCheck, _schraegGestartet, _fireAtCheck, _fireAtGestartet;
     private bool _sieg7Gestartet;
 
     /// <summary><c>--absetz-check</c> — siehe Simulation/AbsetzCheck.cs.</summary>
@@ -2862,6 +2866,14 @@ public partial class MapViewer : Node2D
             { _ueberfahrenCheck = true; MapEntityLayer.UeberfahrenFaelle = a["--ueberfahren-faelle=".Length..].ToUpper(); }
             else if (a == "--sprengung-check") _sprengungCheck = true;
             else if (a == "--trefferarm-check") _trefferarmCheck = true;
+            else if (a == "--schraegschritt-check") _schraegCheck = true;
+            else if (a.StartsWith("--schraegschritt-faelle="))
+            { _schraegCheck = true; MapEntityLayer.SchraegschrittFaelle = a["--schraegschritt-faelle=".Length..].ToUpper(); }
+            else if (a == "--ueberfahren-nur-ziel") MapEntityLayer.UeberfahrenNurZiel = true;
+            else if (a == "--fireat-check") _fireAtCheck = true;
+            else if (a == "--fireat-sofort") MapEntityLayer.FireAtSofort = true;
+            else if (a == "--zellgeschoss-ohne-einheit") MapEntityLayer.ZellEinschlagAlt = true;
+            else if (a == "--zellschuss-ohne-zwilling") MapEntityLayer.ZellschussOhneZwilling = true;
             else if (a == "--infanterie-einheitenarm") MapEntityLayer.InfanterieArmAlt = true;
             else if (a == "--skripttreffer-halbe-huelle") MapEntityLayer.SkripttrefferHalbeHuelle = true;
             else if (a == "--ueberfahren-alle") MapEntityLayer.UeberfahrenAlle = true;
@@ -4242,6 +4254,8 @@ public partial class MapViewer : Node2D
             if (_ankerProbe) GD.Print(_entities.AnkerProbe());
             if (_teilespendeCheck) GD.Print(_entities.TeilespendeCheckLine());
             if (_ueberfahrenCheck) GD.Print(_entities.UeberfahrenCheckLine());
+            if (_schraegCheck) GD.Print(_entities.SchraegschrittCheckLine());
+            if (_fireAtCheck) GD.Print(_entities.FireAtCheckLine());
             if (_zielzelleProbe) GD.Print(_entities.ZielzelleProbe());
             if (_skripttrefferProbe) GD.Print(_entities.SkripttrefferProbe());
             if (_gebaeudebrandProbe) GD.Print(_entities.GebaeudebrandProbe());
@@ -6337,6 +6351,18 @@ public partial class MapViewer : Node2D
         {
             _entities.UeberfahrenCheckStart();
             _ueberfahrenGestartet = true;
+        }
+
+        if (_schraegCheck && !_schraegGestartet && _entities.ErwartungBereit())
+        {
+            _entities.SchraegschrittCheckStart();
+            _schraegGestartet = true;
+        }
+
+        if (_fireAtCheck && !_fireAtGestartet && _entities.ErwartungBereit())
+        {
+            _entities.FireAtCheckStart();
+            _fireAtGestartet = true;
         }
 
         // laeuft weiter; die Zeile kommt mit dem Abschlussbericht (--quit-after)

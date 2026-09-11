@@ -233,7 +233,7 @@ public static class UnitStatBook
         foreach (var kv in rows)
         {
             if (!int.TryParse(kv.Key, out int row)) continue;
-            var b = FromHex(kv.Value.AsString());
+            var b = FromHex(Core.JsonMeta.AsS(kv.Value));
             if (b.Length >= Simulation.DesignMath.Stride) into[row] = b;
         }
         return into;
@@ -250,14 +250,13 @@ public static class UnitStatBook
         if (designs == null) return;
         foreach (var kv in designs)
         {
-            if (kv.Value.VariantType != Variant.Type.Dictionary) continue;
-            var d = kv.Value.AsGodotDictionary<string, Variant>();
-            string name = d.TryGetValue("name", out var nv) ? nv.AsString() : "";
+            if (kv.Value is not System.Text.Json.Nodes.JsonObject d) continue;
+            string name = Core.JsonMeta.GetS(d, "name");
             if (name.Length == 0 || _byName!.ContainsKey(name)) continue;
-            string raw = d.TryGetValue("raw", out var rv) ? rv.AsString() : "";
-            int waffe = d.TryGetValue("weapon", out var wv) ? wv.AsInt32() : 0;
-            int fahrwerk = d.TryGetValue("propulsion", out var pv) ? pv.AsInt32() : 0;
-            int rumpf = d.TryGetValue("body", out var bv) ? bv.AsInt32() : 0;
+            string raw = Core.JsonMeta.GetS(d, "raw");
+            int waffe = Core.JsonMeta.GetI(d, "weapon");
+            int fahrwerk = Core.JsonMeta.GetI(d, "propulsion");
+            int rumpf = Core.JsonMeta.GetI(d, "body");
             // ⚠⚠ 10.09.2026 — HIER STAND NUR `if (raw.Length < 0x2e*2) continue;`,
             // UND DAMIT WAR DIE WERTELISTE FUER JEDEN ORIGINAL-ENTWURF LEER.
             //
@@ -312,19 +311,24 @@ public static class UnitStatBook
         }
     }
 
-    private static Godot.Collections.Dictionary<string, Variant>? Section(string rel, string key)
+    /// <summary>
+    /// Ein Abschnitt einer JSON-Datei — mit <c>System.Text.Json</c>, ohne
+    /// Godot-Variants.
+    ///
+    /// <para>⚠⚠ 11.09.2026 — bug-130 KAM HIER WIEDER. Bis heute las diese
+    /// Funktion ueber <c>Json.Parse</c> und lieferte ein
+    /// <c>Godot.Collections.Dictionary</c>; <c>ReadSec47</c> lief dann ueber rund
+    /// 1600 Variant-Paare. Im Abschlussbericht von <c>--fireat-check</c> starb
+    /// der Lauf zweimal von zwei mit »Internal CLR error (0x80131506)« in
+    /// <c>UTF32Encoding.GetChars ← Dictionary.GetKeyValuePair ← ReadSec47</c> —
+    /// dasselbe Rennen im <c>DisposablesTracker</c>, das der Kopf von
+    /// <see cref="Core.JsonMeta"/> beschreibt und das dort am 31.08. fuer den
+    /// Kartenlader behoben wurde. Dieselbe Kur hier.</para>
+    /// </summary>
+    private static System.Text.Json.Nodes.JsonObject? Section(string rel, string key)
     {
-        string path = Core.Content.Path(rel);
-        if (!FileAccess.FileExists(path)) return null;
-        using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
-        if (f == null) return null;
-        var json = new Json();
-        if (json.Parse(f.GetAsText()) != Error.Ok ||
-            json.Data.VariantType != Variant.Type.Dictionary) return null;
-        var root = json.Data.AsGodotDictionary<string, Variant>();
-        if (!root.TryGetValue(key, out var v) || v.VariantType != Variant.Type.Dictionary)
-            return null;
-        return v.AsGodotDictionary<string, Variant>();
+        var root = Core.JsonMeta.Lies(Core.Content.Path(rel));
+        return root.TryGetPropertyValue(key, out var v) && v is System.Text.Json.Nodes.JsonObject o ? o : null;
     }
 
     private static byte[] FromHex(string s)

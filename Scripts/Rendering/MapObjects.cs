@@ -1848,19 +1848,17 @@ public partial class MapEntityLayer
     /// <para>Die Kette dorthin: <c>0x4D0AD0</c> reicht (einheit, x, y, 65000)
     /// an <c>0x40C8C0</c> weiter, das ueber die WAFFE (+0x0D) verzweigt —
     /// Waffe 9 in den »gas-thr«-Zweig, 0 und 0x12 ins Leere, sonst in die
-    /// SCHUSSROUTINE <c>0x40BB00</c>. Dass die zwei Zahlen eine Zielzelle
-    /// sind, ist an der STREUUNG belegt: fuer Waffe 8 wuerfelt das Original
-    /// zweimal <c>10 - rand%20</c> und schlaegt es auf beide auf
-    /// (@0x40BB85..0x40BBB9). Das vierte Argument 65000 wird im Rumpf nicht
-    /// gelesen.</para>
+    /// SCHUSSROUTINE <c>0x40BB00</c>.</para>
     ///
-    /// <para>⚠ WAS UNSERE SETZUNG BLEIBT — dieselbe wie bei den
-    /// SETUP-Treffern: <b>wieviel Schaden ein Schuss macht, ist nicht
-    /// gelesen</b>. Genommen wird die HAELFTE der Huelle, damit die Einheit
-    /// sichtbar beschaedigt und nicht zerstoert ist. ⚠ Und die STREUUNG bauen
-    /// wir NICHT nach: sie haengt am Zufallsstrom des Originals, den wir nicht
-    /// treffen — ein eigener Wuerfel waere kein Nachbau, sondern ein zweiter
-    /// Zufall.</para></summary>
+    /// <para>⚠⚠ 11.09.2026 BERICHTIGT (berichte/fireat-buendnis.md, 3.1): hier
+    /// stand, die Zielzelle sei »an der Streuung fuer Waffe 8 belegt«
+    /// (@0x40BB85..0x40BBB9). Diese Streuung steht im Zweig <c>ziel ==
+    /// 0xFFFF</c> — fire_at uebergibt 65000 und nimmt ihn NIE. Der Beleg fuer
+    /// die Zelle ist 0x40BD57..0x40BD75 (Zellmitte 20/10, Hoehe·15). Und auch
+    /// die zwei Setzungen, die hier standen (die halbe Huelle, keine Streuung),
+    /// sind weg: fire_at ist ein SCHUSS — mit Geschoss, der allgemeinen
+    /// Streuung, Nachladen, Reichweite und der Buendnisfrage beim Einschlag.
+    /// Siehe Simulation/FireAt.cs. Gegenschalter <c>--fireat-sofort</c>.</para></summary>
     private void MissionFireAt(int slot, int col, int row)
     {
         Entity schuetze = null;
@@ -1871,19 +1869,10 @@ public partial class MapEntityLayer
             GD.PrintErr($"fire_at: Einheitenplatz {slot} ist leer");
             return;
         }
-        // Munition: das Original bricht bei +0x39 == 0 ab (@0x40BB44).
-        if (schuetze.Ammo == 0 && schuetze.AmmoMax > 0)
-        {
-            GD.Print($"fire_at: Platz {slot} hat keine Munition — kein Schuss");
-            return;
-        }
-        // ⚠ 11.09.2026 — mit dem SCHUETZEN als Angreifer: fire_at geht durch die
-        // Schussroutine 0x40BB00, der Treffer ist ein Schuss dieser Einheit und
-        // kein Skripttreffer mit 40050.
-        ApplyMissionHits(new[] { (col, row) }, schuetze: _entities.IndexOf(schuetze));
-        if (schuetze.AmmoMax > 0) schuetze.Ammo = Mathf.Max(0, schuetze.Ammo - 1);
-        GD.Print($"fire_at: Einheit {slot} (Spieler {schuetze.Owner}) feuert auf " +
-                 $"({col},{row})");
+        bool geschossen = FireAtAusfuehren(_entities.IndexOf(schuetze), col, row);
+        GD.Print($"fire_at: Einheit {slot} (Spieler {schuetze.Owner}) auf ({col},{row}): "
+               + (geschossen ? (FireAtSofort ? "Sofort-Treffer (--fireat-sofort)" : "Geschoss angelegt")
+                             : "kein Schuss — " + FireAtGrund));
     }
 
     /// <summary><c>--skripttreffer-halbe-huelle</c> — der Stand vor dem

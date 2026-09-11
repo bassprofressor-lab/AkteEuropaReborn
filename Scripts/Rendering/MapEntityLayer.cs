@@ -6637,14 +6637,7 @@ public partial class MapEntityLayer : Node2D
                         // Geduldszweig @0x408BAB, nicht der 1/60-Zweig.
                         Fahrgrund(e, $"Nr. {wer} auf ({naechste.X},{naechste.Y}) weicht NICHT "
                                    + $"aus — Geduld {e.Block}");
-                        if (--e.Block > 0) return;
-                        e.Block = BlockRearm
-                                + Simulation.Determinism.Roll(BlockRearmSpread);
-                        // ⭐ 31.08.2026 — »stay move I« @0x408CF6: erst die
-                        // Frage, ob wir nah genug sind, DANN erst neu planen.
-                        // Siehe Simulation/Aufgeben.cs.
-                        if (AufgebenWeilNahGenug(i, e)) return;
-                        Repath(i, e);
+                        GeduldZweig(i, e);
                         return;
                     }
                     // JA -> Can_go gibt 1. Weiter zum Wurf unten, NICHT `return`.
@@ -6685,10 +6678,7 @@ public partial class MapEntityLayer : Node2D
             // Die Lesung oben stimmt und bleibt stehen. Die UMSTELLUNG bleibt
             // unbelegt, bis der Pruefstand verlaesslich ist, und darum haengt
             // sie hinter `--giveway-warten` statt zu wirken.
-            if (GiveWayWarten) { GiveWayGewartet++; return; }
-            if (Simulation.Determinism.Roll(GiveWayOdds) != 0)
-            { Fahrgrund(e, "jemand im Weg, der ausweichen will — ich warte"); return; }
-            Repath(i, e);
+            WarteZweig(i, e);
             return;
         }
         if (e.Path is { Count: > 0 } && e.PathIdx < e.Path.Count && _nav != null)
@@ -6697,11 +6687,37 @@ public partial class MapEntityLayer : Node2D
             Fahrgrund(e, $"Schritt nach ({nz.X},{nz.Y}) GESPERRT — "
                        + _nav.WarumGesperrt(nz.X, nz.Y, e.Move, i) + $", Geduld {e.Block}");
         }
-        if (--e.Block > 0) return;
-        e.Block = BlockRearm + Simulation.Determinism.Roll(BlockRearmSpread);
         // ⭐ 31.08.2026 — dieselbe Stelle wie oben, hier fuer den Fall, dass
         // gar nicht erst gefragt wurde (Wand, Feind, kein Ausweichen).
+        GeduldZweig(i, e);
+    }
+
+    /// <summary>
+    /// <b>Can_go gab 0</b> — der Geduldszweig @0x408BAB: Geduld herunterzaehlen,
+    /// an ihrem Ende erst fragen, ob wir nah genug sind (»stay move I«
+    /// @0x408CF6, Simulation/Aufgeben.cs), dann neu planen. Herausgeloest am
+    /// 11.09.2026 aus <see cref="BlockedStep"/>, damit der Schraegschritt
+    /// (Simulation/Schraegschritt.cs) denselben Weg nimmt.
+    /// </summary>
+    private void GeduldZweig(int i, Entity e)
+    {
+        if (--e.Block > 0) return;
+        e.Block = BlockRearm + Simulation.Determinism.Roll(BlockRearmSpread);
         if (AufgebenWeilNahGenug(i, e)) return;
+        Repath(i, e);
+    }
+
+    /// <summary>
+    /// <b>Can_go gab 1</b> — jemand wurde gebeten und hat zugesagt: warten, im
+    /// ukol-2-Arm @0x408ABC. Herausgeloest am 11.09.2026, siehe
+    /// <see cref="GeduldZweig"/>; die Begruendung steht in
+    /// <see cref="BlockedStep"/>.
+    /// </summary>
+    private void WarteZweig(int i, Entity e)
+    {
+        if (GiveWayWarten) { GiveWayGewartet++; return; }
+        if (Simulation.Determinism.Roll(GiveWayOdds) != 0)
+        { Fahrgrund(e, "jemand im Weg, der ausweichen will — ich warte"); return; }
         Repath(i, e);
     }
 
@@ -11823,6 +11839,7 @@ public partial class MapEntityLayer : Node2D
         // bei den Eintraegen in _entities auf, ein Flugzeug haelt sein Ziel in
         // seinem eigenen Satz und haette ewig weitergeschossen.
         if (victim.Dead) return;
+        if (_fireAtCheckAn) _fireAtTreffer.Add((si, vi));                   // --fireat-check
         var shooter = si >= 0 && si < _entities.Count ? _entities[si] : null;
         damage = ShotDamage(shooter, victim, damage);
         // the original destroys the unit outright once a hit is at least what
@@ -12145,6 +12162,7 @@ public partial class MapEntityLayer : Node2D
 
             // impact
             _shots.RemoveAt(i);
+            if (_fireAtCheckAn) _fireAtEinschlag[p.Shooter] = _taktNr;     // --fireat-check
             // ⚠ 19.08.2026 — hier stand fuer JEDES Geschoss dasselbe
             // "explosion". Die Geschosstafel hat je Art eine eigene
             // Einschlagfolge (+0x06): 80, 79, 83, 84, 86, 88, 91, 510 ... und
@@ -12173,6 +12191,14 @@ public partial class MapEntityLayer : Node2D
                 var t = _entities[p.Target];
                 if (!t.Dead) ApplyHit(p.Shooter, p.Target, t, p.Damage);
             }
+            // ⭐⭐ 11.09.2026 — EIN GESCHOSS OHNE ZIELEINHEIT (Bodenangriff,
+            // fire_at, oder das Ziel starb im Flug) trifft, was auf der
+            // Einschlagzelle steht — der Geschosstakt 0x452190 ruft Zasah fuer
+            // das Zellwort, mit der Buendnisfrage @0x452944. Hier traf es bis
+            // heute KEINE Einheit. Simulation/FireAt.cs, --zellgeschoss-ohne-einheit.
+            else if (!ZellEinschlagAlt && CellAt(p.Aim) is { } zeZelle)
+                ZellEinschlag(p.Shooter, Mathf.RoundToInt(zeZelle.X), Mathf.RoundToInt(zeZelle.Y),
+                              p.Damage, p.Art);
         }
     }
 
@@ -31168,22 +31194,36 @@ public partial class MapEntityLayer : Node2D
             {
                 var next = e.Path[e.PathIdx];
                 var say = _nav.Ask(next.X, next.Y, e.Move, i);
-                if (say != Simulation.NavGrid.Step.Free) { BlockedStep(i, e, say, dt); continue; }
-                // a foot soldier in the target cell does not stop the move; the
-                // original either drives through him (`pratelska_infa`
-                // @0x433fe0, all friendly) or over him (`prejet` @0x412980,
-                // none friendly, and @0x412a50 clears the cell afterwards)
-                int foot = _nav.CrushableAt(next.X, next.Y, i);
-                // ⭐⭐ 11.09.2026 — WER ÜBERFÄHRT, ENTSCHEIDET DIE KLASSE DES
-                // FAHRERS (K2, Simulation/Ueberfahren.cs). Hier fuhr jeder Mover
-                // ueber jeden Feind.
-                if (foot >= 0 && !UeberfahrenAlle)
+                // ⭐⭐ 11.09.2026 — K4: EIN SCHRAEGSCHRITT FRAGT DREI ZELLEN
+                // (Ziel, d−1, d+1 — Simulation/Schraegschritt.cs). Schiffe haben
+                // eigene Arme, der alte Blockadeweg (--block-old) bleibt wie er war.
+                bool schraeg = Mathf.Abs(next.X - e.Col) == 1 && Mathf.Abs(next.Y - e.Row) == 1
+                               && e.Move != Simulation.NavGrid.MoveClass.Ship
+                               && !UeberfahrenAlle && !UeberfahrenNurZiel && !BlockOld;
+                if (schraeg)
                 {
-                    var imWeg = FussvolkImWeg(i, e, _entities[foot]);
-                    if (imWeg != Simulation.NavGrid.Step.Free) { BlockedStep(i, e, imWeg, dt); continue; }
-                    if (e.Infantry < 0) RunOverFoot(i, e, foot);
+                    if (say == Simulation.NavGrid.Step.Blocked) { BlockedStep(i, e, say, dt); continue; }
+                    if (!SchraegschrittFrei(i, e, next, say)) continue;
                 }
-                else if (foot >= 0) RunOverFoot(i, e, foot);
+                else
+                {
+                    if (say != Simulation.NavGrid.Step.Free) { BlockedStep(i, e, say, dt); continue; }
+                    // a foot soldier in the target cell does not stop the move; the
+                    // original either drives through him (`pratelska_infa`
+                    // @0x433fe0, all friendly) or over him (`prejet` @0x412980,
+                    // none friendly, and @0x412a50 clears the cell afterwards)
+                    int foot = _nav.CrushableAt(next.X, next.Y, i);
+                    // ⭐⭐ 11.09.2026 — WER ÜBERFÄHRT, ENTSCHEIDET DIE KLASSE DES
+                    // FAHRERS (K2, Simulation/Ueberfahren.cs). Hier fuhr jeder Mover
+                    // ueber jeden Feind.
+                    if (foot >= 0 && !UeberfahrenAlle)
+                    {
+                        var imWeg = FussvolkImWeg(i, e, _entities[foot]);
+                        if (imWeg != Simulation.NavGrid.Step.Free) { BlockedStep(i, e, imWeg, dt); continue; }
+                        if (e.Infantry < 0) RunOverFoot(i, e, foot);
+                    }
+                    else if (foot >= 0) RunOverFoot(i, e, foot);
+                }
 
                 // ⭐⭐⭐ 08.09.2026 — EIN SCHIFF MERKT SEINE ZIELZELLE NICHT VOR.
                 //
@@ -31214,6 +31254,7 @@ public partial class MapEntityLayer : Node2D
                 if (!schiffOhneVormerkung)
                     _nav.SetOccupant(next.X, next.Y, i, e.Infantry >= 0);
                 else SchiffOhneVormerkung++;
+                if (_sCheckAn) _sSchritte.Add((i, new Vector2I(e.Col, e.Row), next));   // --schraegschritt-check
                 e.Reserved = next;
                 e.WaitTime = 0;
                 // Ein neuer Schritt faengt an. Der Ausgangspunkt ist die

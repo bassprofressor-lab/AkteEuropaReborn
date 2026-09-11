@@ -144,29 +144,52 @@ public partial class MapEntityLayer : Node2D
         {
             // Waffe ohne Flugbild: der Treffer sitzt sofort.
             ZellSchaden(zelle.X, zelle.Y, schaden, mitte, art);
+            // ⭐ 11.09.2026 — und er trifft auch, was auf der Zelle STEHT
+            // (Simulation/FireAt.cs). Art 12 (Flamme) ohne Buendnisfrage.
+            if (!ZellEinschlagAlt) ZellEinschlag(si, zelle.X, zelle.Y, schaden, art);
             return;
         }
 
         int tempo = Audio.GameSounds.ProjectileSpeed(art);
         float schnell = (tempo > 0 ? tempo : 12) * PxPerProjectileSpeed;
-        // Dieselbe Zielstreuung wie beim Schuss auf eine Einheit (0x40C288).
-        var ziel = mitte + new Vector2(Simulation.Determinism.Roll(20) - 9,
-                                       Simulation.Determinism.Roll(10) - 4);
-        _shots.Add(new Projectile
+
+        // ⭐ 11.09.2026 — DIE ZWILLINGSLAFETTE auch hier. Der Zellschuss ist
+        // dieselbe Schussroutine 0x40BB00 wie der Schuss auf eine Einheit: ist
+        // Feld +0x15 der Geschosstafel gesetzt, zwei Saetze im selben Takt
+        // (0x40C35E / 0x40C449), quer versetzt, jeder mit EIGENER Streuung.
+        // Siehe Fire. Gegenschalter --zellschuss-ohne-zwilling.
+        int zwilling = Audio.GameSounds.TwinOffset(art);
+        var quer = new Vector2(-dir.Y, dir.X * 0.5f).Normalized();
+
+        void Anlegen(float seite)
         {
-            Pos = muendung,
-            Aim = ziel,
-            Target = -1,                       // ⭐ kein Zielgriff — die ZELLE
-            Shooter = si, Damage = schaden,
-            Facing = DirToFacing(dir), Kind = flug, Art = art,
-            Speed = schnell,
-            Weite = muendung.DistanceTo(ziel),
-            Scheitel = Scheitelteiler(art) * muendung.DistanceTo(ziel),
-            HoeheStart = ElevOf(shooter.Col, shooter.Row) * 15
-                         + Mathf.Max(0, Audio.GameSounds.MuzzleHeight(art)),
-            HoeheZiel = ElevOf(zelle.X, zelle.Y) * 15,
-        });
+            var start = muendung + quer * seite;
+            // Dieselbe Zielstreuung wie beim Schuss auf eine Einheit (0x40C288).
+            var ziel = mitte + new Vector2(Simulation.Determinism.Roll(20) - 9,
+                                           Simulation.Determinism.Roll(10) - 4);
+            _shots.Add(new Projectile
+            {
+                Pos = start,
+                Aim = ziel,
+                Target = -1,                       // ⭐ kein Zielgriff — die ZELLE
+                Shooter = si, Damage = schaden,
+                Facing = DirToFacing(dir), Kind = flug, Art = art,
+                Speed = schnell,
+                Weite = start.DistanceTo(ziel),
+                Scheitel = Scheitelteiler(art) * start.DistanceTo(ziel),
+                HoeheStart = ElevOf(shooter.Col, shooter.Row) * 15
+                             + Mathf.Max(0, Audio.GameSounds.MuzzleHeight(art)),
+                HoeheZiel = ElevOf(zelle.X, zelle.Y) * 15,
+            });
+        }
+
+        if (zwilling > 0 && !ZellschussOhneZwilling) { Anlegen(zwilling); Anlegen(-zwilling); }
+        else Anlegen(0f);
     }
+
+    /// <summary><c>--zellschuss-ohne-zwilling</c> — der Stand vor dem
+    /// 11.09.2026: ein Zellschuss legt immer nur EIN Geschoss an.</summary>
+    public static bool ZellschussOhneZwilling;
 
     /// <summary>
     /// <b>Was ein Einschlag der ZELLE antut.</b> Wald und zerstoerbare Objekte
