@@ -1363,6 +1363,15 @@ public partial class MapViewer : Node2D
     /// <summary><c>--druckwelle-check</c>, <c>--gaswerfer-check</c> — siehe
     /// Simulation/Druckwelle.cs und Simulation/Gaswerfer.cs.</summary>
     private bool _dwCheck, _dwGestartet, _gwCheck, _gwGestartet;
+
+    /// <summary><c>--ki-sicht-check</c> — greift die Gefechts-KI nur an, was sie
+    /// gesehen hat? Simulation/KiAufklaerung.cs.</summary>
+    private bool _kiSichtCheck;
+
+    /// <summary><c>--ki-stufen-check</c> — bedeuten leicht/normal/schwer etwas,
+    /// und baut die KI nur, was ihre Techleiter freigibt?
+    /// Simulation/KiStufen.cs.</summary>
+    private bool _kiStufenCheck;
     /// <summary><c>--routentuer-check</c> — siehe Simulation/RoutentuerCheck.cs.</summary>
     private bool _rtCheck, _rtGestartet;
     private bool _sieg7Gestartet;
@@ -2819,6 +2828,7 @@ public partial class MapViewer : Node2D
             else if (a == "--verstaerkungsklasse-alt") MapEntityLayer.VerstaerkungsklasseAlt = true;
             else if (a == "--gebaeudezeiger-alt") MapEntityLayer.GebaeudezeigerAlt = true;
             else if (a == "--einnahmeklick-alt") MapEntityLayer.EinnahmeklickAlt = true;
+            else if (a == "--zivilzeiger-alt") MapEntityLayer.ZivilzeigerAlt = true;
             else if (a == "--tuerlos-alt") MapEntityLayer.TuerlosAlt = true;
             else if (a == "--neutralklick-alt") MapEntityLayer.NeutralklickAlt = true;
             else if (a == "--minenfenster-alt") UI.BuildingWindow.MinenfensterAlt = true;
@@ -2890,6 +2900,26 @@ public partial class MapViewer : Node2D
             else if (a == "--selbstverteidiger-check") _svCheck = true;
             else if (a == "--gegenschuss-sofort") MapEntityLayer.GegenschussSofort = true;
             else if (a == "--druckwelle-check") _dwCheck = true;
+            // Die Aufklaerung der Gefechts-KI, siehe Simulation/KiAufklaerung.cs.
+            else if (a == "--ki-sieht-alles") MapEntityLayer.KiSiehtAlles = true;
+            else if (a == "--ki-sicht-check") _kiSichtCheck = true;
+            else if (a == "--ki-stufen-aus") MapEntityLayer.KiStufenAus = true;
+            else if (a == "--ki-stufen-check") _kiStufenCheck = true;
+            // ⚠ 12.09.2026: die Stufe der Gefechts-KI war von der Befehlszeile
+            // gar nicht zu erreichen — ein Prueflauf mass immer »normal«, und
+            // eine Stufe, die man nicht einstellen kann, kann man auch nicht
+            // messen. Dasselbe fuer den Techstandard, an dem die Leiter haengt.
+            else if (a.StartsWith("--ki-stufe="))
+                UI.SkirmishSetup.Level = a["--ki-stufe=".Length..] switch
+                {
+                    "leicht" or "easy" => MapEntityLayer.AiLevel.Easy,
+                    "schwer" or "hard" => MapEntityLayer.AiLevel.Hard,
+                    _ => MapEntityLayer.AiLevel.Normal,
+                };
+            else if (a.StartsWith("--techstandard="))
+                UI.SkirmishSetup.Techstandard =
+                    Mathf.Clamp((int)a["--techstandard=".Length..].ToFloat(), 1, 8);
+            else if (a == "--ki-grundriss-nicht-merken") MapEntityLayer.KiGrundrissNichtMerken = true;
             else if (a == "--art7-einzeltreffer") MapEntityLayer.Art7Einzeltreffer = true;
             else if (a == "--gaswerfer-check") _gwCheck = true;
             else if (a == "--gaswerfer-als-schuss") MapEntityLayer.GaswerferAlsSchuss = true;
@@ -4280,6 +4310,8 @@ public partial class MapViewer : Node2D
             if (_fireAtCheck) GD.Print(_entities.FireAtCheckLine());
             if (_svCheck) GD.Print(_entities.SelbstverteidigerCheckLine());
             if (_dwCheck) GD.Print(_entities.DruckwelleCheckLine());
+            if (_kiSichtCheck) GD.Print(_entities.KiAufklaerungLine());
+            if (_kiStufenCheck) GD.Print(_entities.KiStufenCheckLine());
             if (_gwCheck) GD.Print(_entities.GaswerferCheckLine());
             if (_rtCheck) GD.Print(_entities.RoutentuerCheckLine());
             if (_zielzelleProbe) GD.Print(_entities.ZielzelleProbe());

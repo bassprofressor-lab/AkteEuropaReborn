@@ -26,6 +26,11 @@ namespace AkteEuropaReborn.Rendering;
 /// dieselben Regeln gebunden wie der Mensch und schummelt nicht bei Rohstoffen,
 /// Sicht oder Tempo.
 ///
+/// ⚠⚠ »Sicht« stimmte bis zum 11.09.2026 NICHT: die Wellenzielwahl lief ueber die
+/// ganze Karte, und eine Mittelstreckenrakete (22 Zellen) schoss auf Fabriken, die
+/// keine Einheit der KI je gesehen hatte. Seitdem fuehrt jede Gefechts-KI ihren
+/// eigenen Nebel — siehe Simulation/KiAufklaerung.cs.
+///
 /// The three difficulties differ only in how fast it thinks, how big a group
 /// it gathers before attacking, and whether it keeps a home guard.
 /// </summary>
@@ -1178,6 +1183,12 @@ public partial class MapEntityLayer : Node2D
         // ai_tick, vor der Spielerschleife (@0x4BFBA6..0x4BFBBB).
         bool spendeFaellig = TeilespendeZaehlen();
         if (!_aiOn) return;
+
+        // ⭐ 12.09.2026 — DIE UHR DER STUFENLEITER (Simulation/KiStufen.cs).
+        // Sie laeuft hier und nicht im Bildtakt, damit Leiter und
+        // Bauentscheidung aus derselben Uhr kommen; im Gefecht zaehlt sie,
+        // in der Kampagne nicht (dort gibt es keine Leiter).
+        if (!InCampaign) _kiSpielzeit += dt;
         foreach (var a in _ai)
         {
             if (!AliveAsPlayer(a.Player)) continue;
@@ -1651,7 +1662,15 @@ public partial class MapEntityLayer : Node2D
                 // with a programme the bases do not choose at all — und in der
                 // Kampagne auch ohne Programm nicht (s.o.)
                 if (planned || stumm) continue;
-                var menu = BuildableBy(e.BType);
+                // ⭐ 12.09.2026 — DAS FREIGABETOR (Simulation/KiStufen.cs,
+                // bug-205). Gemeldet als »die KI sollte nicht von anfang an
+                // solche einheiten haben«: die MS-Rakete ist Techstufe 7 von 8
+                // (stats +0x24), und die Fahrzeugfertigung hat das Tor
+                // @0x419F30 nie gefragt. Die Leiter der KI waechst mit der
+                // Spielzeit, ihr Tempo haengt an leicht/normal/schwer.
+                // ⚠ Nur die KI steht darunter (seine Entscheidung), nur im
+                // Gefecht, und --ki-stufen-aus nimmt es wieder weg.
+                var menu = KiBaumenue(a, BuildableBy(e.BType));
                 if (menu.Count > 0)
                 {
                     e.MenuIndex = AiPickDesign(a, menu);
@@ -1664,6 +1683,7 @@ public partial class MapEntityLayer : Node2D
                         e.BuildIndex = pick;
                         e.BuildTime = BuildSeconds;
                         a.Built++;
+                        KiStufenNotiz(a, chosen);
                     }
                 }
                 continue;
@@ -2457,6 +2477,10 @@ public partial class MapEntityLayer : Node2D
             if (o.Dead || o.IsProp || o.IsBuilding) continue;
             a.SawAny++;
             if (!AiHostile(a.Player, o.Owner)) continue;
+            // ⭐ 11.09.2026 — der Ring reicht bei einer Rakete (Reichweite 22) weit
+            // ueber die eigene Sicht hinaus. Im Gefecht zaehlt nur, was die KI
+            // sieht (Simulation/KiAufklaerung.cs); in der Kampagne gilt KiKennt immer.
+            if (!KiKennt(a.Player, o)) { KiRingVerworfen++; continue; }
             a.SawFoe++;
             if (a.ClassSeen.Count < 8) a.ClassSeen.Add($"{e.GameUnitType}->{o.GameUnitType}");
             if ((o.GameUnitType > AiClassSplit) != high) continue;
@@ -2554,6 +2578,10 @@ public partial class MapEntityLayer : Node2D
             // Ausnahme hätte die Zeile darüber die KI stillgelegt, statt sie
             // höflich zu machen.
             if (Allied(b.Owner, a.Player) && !Herrenlos(b.Owner)) continue;
+            // ⭐ 11.09.2026 — ein FREMDES Gebaeude nur, wenn die KI es gesehen hat;
+            // die herrenlosen einer Eroberungskarte bleiben frei. Unsere Setzung,
+            // siehe Simulation/KiAufklaerung.cs.
+            if (!Herrenlos(b.Owner) && !KiKennt(a.Player, b)) { KiGreiferVerworfen++; continue; }
             foreach (int ui in army)
             {
                 var u = _entities[ui];
@@ -2602,8 +2630,10 @@ public partial class MapEntityLayer : Node2D
                               _entities[i].Owner != a.Player);
 
         // a wave that has a live target keeps going
+        // ⭐ 11.09.2026 — ... und das Ziel noch KENNT: eine Einheit, die aus der
+        // Sicht der KI faehrt, ist verloren; ein gesehenes Gebaeude bleibt bekannt.
         if (a.Wave.Count > 0 && a.TargetIdx >= 0 && a.TargetIdx < _entities.Count &&
-            !_entities[a.TargetIdx].Dead)
+            !_entities[a.TargetIdx].Dead && KiKennt(a.Player, _entities[a.TargetIdx]))
         {
             foreach (int i in a.Wave)
             {
@@ -2625,7 +2655,14 @@ public partial class MapEntityLayer : Node2D
 
         var center = AiCenter(a.Player);
         int target = AiPickTarget(a.Player, center);
-        if (target < 0) return;
+        if (target < 0)
+        {
+            // ⭐ 11.09.2026 — KEIN BEKANNTES ZIEL HEISST SPAEHEN, NICHT STILLHALTEN.
+            // Die Welle faehrt ohne Ziel los und findet unterwegs, was sie angreifen
+            // darf. Simulation/KiAufklaerung.cs.
+            KiSpaehen(a, free, guard, center);
+            return;
+        }
 
         // the units closest to the enemy go first
         free.Sort((x, y) => CellDistance(_entities[x], _entities[target])
@@ -2645,8 +2682,11 @@ public partial class MapEntityLayer : Node2D
             if (_entities[free[k]].GameUnitType == AiInfantryClass) a.MovedInf.Add(free[k]);
         }
         a.TargetIdx = target;
-        a.AttackTimer = 20f;                            // ours: pause between waves
+        // ⭐ 12.09.2026 — die Pause haengt an der Stufe (Simulation/KiStufen.cs):
+        // leicht 40 s, normal 20 s (der bisherige Wert), schwer 10 s.
+        a.AttackTimer = KiStufenAn ? ProfilOf(a.Level).WellenPause : 20f;   // ours
         a.Waves++;
+        KiBuch(a).Wellen++;                                 // --ki-stufen-check
         NoteEvent(_entities[target], $"KI P{a.Player} greift an");
     }
 
@@ -2668,8 +2708,9 @@ public partial class MapEntityLayer : Node2D
     /// for the base rather than chasing a scout across the map.</summary>
     private int AiPickTarget(int p, Vector2 from)
     {
-        int best = -1;
-        float bestScore = float.MaxValue;
+        int best = -1, roh = -1;
+        float bestScore = float.MaxValue, rohScore = float.MaxValue;
+        bool aufklaerung = KiAufklaerungAn;
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
@@ -2677,8 +2718,16 @@ public partial class MapEntityLayer : Node2D
             if (!AiHostile(p, e.Owner)) continue;
             float d = from.DistanceTo(new Vector2(e.Col, e.Row));
             float score = e.IsBuilding ? d * 0.5f : d;
+            if (score < rohScore) { rohScore = score; roh = i; }
+            // ⭐⭐ 11.09.2026 — NUR, WAS DIESE KI GESEHEN HAT. Hier fehlte jede
+            // Frage nach dem Nebel: die Welle nahm das naechste Gebaeude der
+            // ganzen Karte, und eine Rakete in 22 Zellen feuerte sofort.
+            // Simulation/KiAufklaerung.cs, Gegenschalter --ki-sieht-alles.
+            if (aufklaerung && !KiKenntRoh(p, e)) continue;
             if (score < bestScore) { bestScore = score; best = i; }
         }
+        // Messpunkt: haette die alte Wahl ein ungesehenes Ziel genommen?
+        if (!InCampaign && roh >= 0 && !KiKenntRoh(p, _entities[roh])) KiWahlUngesehen++;
         return best;
     }
 
@@ -2725,6 +2774,13 @@ public partial class MapEntityLayer : Node2D
         // Zeile darueber: `AiSend` hat SECHS Rufer, und eine Regel, die nur
         // beim Rufer steht, faellt beim naechsten neuen Rufer wieder auf.
         if (!AiHostile(e.Owner, t.Owner)) { AiSendFreundAbgewehrt++; return; }
+        // ⭐ 11.09.2026 — der Messpunkt von --ki-sicht-check: jeder Angriffsbefehl
+        // der Gefechts-KI, getrennt danach, ob sie das Ziel gesehen hatte.
+        if (!InCampaign && IstKi(e.Owner))
+        {
+            if (KiKenntRoh(e.Owner, t)) KiBefehleGesehen++;
+            else { KiBefehleUngesehen++; if (WeaponRowOf(e.Weapon) == 8) KiRaketenUngesehen++; }
+        }
 
         if (CanFight(e) && CellDistance(e, t) <= WeaponOf(e.Weapon).RangeTiles)
         {

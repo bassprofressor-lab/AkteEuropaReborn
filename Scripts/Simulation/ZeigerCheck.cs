@@ -64,6 +64,10 @@ public partial class MapEntityLayer
 
         int fremdTuer = 0, fremdTuerFalsch = 0, fremdMitte = 0, fremdMitteFalsch = 0;
         int herrenlos = 0, herrenlosFalsch = 0;
+        // ⭐ 12.09.2026, bug-209: das ZIVILE Gebaeude (Besitzer 11) ist der
+        // Preis einer Eroberungskarte und war hier bisher mit der 255 in einem
+        // Topf — auf map_NET02 sind das ALLE 52 Gebaeude mit Tuer.
+        int zivilTuer = 0, zivilTuerFalsch = 0;
         foreach (var b in _entities)
         {
             if (!b.IsBuilding || b.IsProp || b.Dead) continue;
@@ -73,6 +77,7 @@ public partial class MapEntityLayer
             var hTuer = CursorHintAt(tuer);
             var hMitte = CursorHintAt(mitte);
             string art = b.Owner == ViewPlayer ? "eigen"
+                       : b.Owner == NeutralOwner ? "zivil"
                        : b.Owner is < 0 or > 7 ? "herrenlos" : "fremd";
             sb.AppendLine($"  Gebaeude {b.Slot,3} Art {b.BType,2} ({art,9}, Besitzer {b.Owner,3}): "
                         + $"Tuer {hTuer}, Mitte {hMitte}");
@@ -88,6 +93,19 @@ public partial class MapEntityLayer
                 }
                 fremdMitte++;
                 if (hMitte != Hint.Enemy) fremdMitteFalsch++;
+            }
+            else if (art == "zivil")
+            {
+                // Die Tuer MUSS den Einnahmezeiger tragen — das ist der Preis
+                // der Karte. Die Mitte bleibt neutral: ein einfacher Klick soll
+                // nicht die Fabrik beschiessen, die man erobern will (Strg
+                // greift weiter an).
+                if (b.Doors != 0 && b.Built != 0)
+                {
+                    zivilTuer++;
+                    if (hTuer != Hint.Einnahme) zivilTuerFalsch++;
+                }
+                if (hMitte == Hint.Enemy) zivilTuerFalsch++;
             }
             else if (art == "herrenlos")
             {
@@ -109,7 +127,10 @@ public partial class MapEntityLayer
         foreach (var b in _entities)
         {
             if (!b.IsBuilding || b.IsProp || b.Dead) continue;
-            if (b.Owner == ViewPlayer || b.Owner is < 0 or > 7) continue;
+            if (b.Owner == ViewPlayer) continue;
+            // ⭐ 12.09.2026: das ZIVILE Gebaeude gehoert ausdruecklich dazu — auf
+            // einer Eroberungskarte ist es der einzige Klickweg, den es gibt.
+            if (b.Owner != NeutralOwner && b.Owner is < 0 or > 7) continue;
             if (b.Doors == 0 || b.Built == 0) continue;
             probe = b; break;
         }
@@ -176,12 +197,18 @@ public partial class MapEntityLayer
                     + $"{fremdMitteFalsch}");
         sb.AppendLine($"  herrenlose Gebaeude: {herrenlos}, davon mit Angriffszeiger: "
                     + $"{herrenlosFalsch}");
+        sb.AppendLine($"  ZIVILE Gebaeude mit Tuer (Besitzer {NeutralOwner}, der Preis der "
+                    + $"Eroberungskarte): {zivilTuer}, davon falsch: {zivilTuerFalsch}");
         if (MapEntityLayer.GebaeudezeigerAlt)
             sb.AppendLine("  ⚠ NULLMODELL --gebaeudezeiger-alt: die Zeilen MUESSEN hier "
                         + "durchfallen, sonst misst der Pruefstand nichts");
+        if (MapEntityLayer.ZivilzeigerAlt)
+            sb.AppendLine("  ⚠ NULLMODELL --zivilzeiger-alt: die zivile Zeile MUSS hier "
+                        + "durchfallen (bug-209)");
 
         bool alles = fremdTuerFalsch == 0 && fremdMitteFalsch == 0 && herrenlosFalsch == 0
-                  && klickOk && tuerlosOk && (fremdTuer > 0 || herrenlos > 0);
+                  && zivilTuerFalsch == 0
+                  && klickOk && tuerlosOk && (fremdTuer > 0 || herrenlos > 0 || zivilTuer > 0);
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }

@@ -164,18 +164,22 @@ public partial class MapEntityLayer
     }
 
     /// <summary>
-    /// Die Masten als Nebelspäher — sie kommen in <see cref="Watchers"/> mit.
+    /// Die Masten als Nebelspäher — sie kommen in <see cref="Watchers()"/> mit.
     ///
     /// <para>Über die <b>Bündnismatrix</b>, wie das Original (@0x4209D9): ein
     /// Mast eines Verbündeten sieht für mich mit. Deshalb steht hier
     /// <see cref="Allied"/> und nicht <c>Owner == ViewPlayer</c> — der
     /// Unterschied ist genau der Fall, für den es die Matrix gibt.</para></summary>
-    private IEnumerable<(int Col, int Row, int Sight, int Elev)> RadarWatchers()
+    private IEnumerable<(int Col, int Row, int Sight, int Elev)> RadarWatchers() => RadarWatchers(ViewPlayer);
+
+    /// <summary>Dasselbe fuer einen beliebigen Betrachter — die Gefechts-KI
+    /// rechnet seit dem 11.09.2026 ihren eigenen Nebel (KiAufklaerung.cs).</summary>
+    private IEnumerable<(int Col, int Row, int Sight, int Elev)> RadarWatchers(int betrachter)
     {
         foreach (var m in _radarMasts)
         {
             if (m.Owner is < 0 or > 7) continue;
-            if (!Allied(m.Owner, ViewPlayer)) continue;
+            if (!Allied(m.Owner, betrachter)) continue;
             // Elev 1 haelt UnitRadius bei genau der Zehn — dieselbe Zeile wie
             // beim Gebaeude, siehe Watchers().
             yield return (m.Col, m.Row, RadarMastSight, 1);

@@ -58,6 +58,7 @@ public partial class MapEntityLayer : Node2D
         public int Radius;       // +0, 0 = frei
         public int Col, Row;     // +1, +2
         public int Takt;         // nur fuer den Pruefstand
+        public string Quelle;    // nur fuer das Todesprotokoll (11.09.2026, unsere Zutat)
     }
 
     private const int DwPlaetze = 50, DwFenster = 6, DwRinge = 6;
@@ -68,21 +69,37 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>0x454510 — der Vorspann am Einschlag: die zwei Klaenge 410/400
     /// sind genau unser <see cref="Audio.GameSounds.Explosion(float, float)"/>.</summary>
-    private void DruckwelleZuenden(int c, int r)
+    private void DruckwelleZuenden(int c, int r, string quelle = "")
     {
         Audio.GameSounds.Explosion(c, r);
-        DruckwelleAnmelden(c, r);
+        DruckwelleAnmelden(c, r, quelle);
+    }
+
+    /// <summary>Wer die Welle ausgeloest hat — fuer die Zeilen <c>tod:</c> und
+    /// <c>gebaeudetod:</c>. ⚠ 11.09.2026: bis dahin stand dort nur »DRUCKWELLE,
+    /// ohne Schuetzen«, und seine Meldung zu den Raketen der Gefechts-KI war
+    /// daraus nicht zu belegen (siehe KiAufklaerung.cs).</summary>
+    private string DruckwellenQuelle(int schuetze, int c, int r, int ziel = -1)
+    {
+        if (schuetze < 0 || schuetze >= _entities.Count) return "";
+        var s = _entities[schuetze];
+        bool? gesehen = KiZelleGesehen(s.Owner, c, r);
+        if (gesehen == true) KiRaketenEinschlagGesehen++;          // --ki-sicht-check
+        else if (gesehen == false) { KiRaketenEinschlagUngesehen++; KiEinschlagNotieren(s, c, r, ziel); }
+        return $"der Rakete von {LabelOf(s)} (Platz {s.Slot}, Spieler {s.Owner}, auf ({s.Col},{s.Row}))"
+             + (gesehen == false ? " ⚠ ZIELZELLE FUER DIE KI NIE GESEHEN"
+              : gesehen == true ? ", Zielzelle von der KI gesehen" : "");
     }
 
     /// <summary>0x454560</summary>
-    private void DruckwelleAnmelden(int c, int r)
+    private void DruckwelleAnmelden(int c, int r, string quelle = "")
     {
         int k = System.Array.FindIndex(_druckwellen, w => w.Radius == 0);
         if (k < 0) { DwVoll++; return; }                                       // @0x454575
         // 0x4222C0 Lichtquelle (8, 150) — NICHT gebaut, siehe Kopf
         _effects.Add(new Effect { Pos = ZellMitte(c, r), Kind = "sprengung" + Simulation.Determinism.Roll(9),
                                   FrameTime = 0.04f });                        // @0x454596: 510 + rand%9
-        _druckwellen[k] = new DruckwellenPlatz { Radius = 1, Col = c, Row = r, Takt = _taktNr };
+        _druckwellen[k] = new DruckwellenPlatz { Radius = 1, Col = c, Row = r, Takt = _taktNr, Quelle = quelle };
         DwAngemeldet++;
         if (_dwCheckAn) _dwAnmeldungen.Add((k, c, r, _taktNr));
     }
@@ -96,6 +113,8 @@ public partial class MapEntityLayer : Node2D
             int r = _druckwellen[k].Radius;
             if (r == 0) continue;
             int x = _druckwellen[k].Col, y = _druckwellen[k].Row;
+            string grund = string.IsNullOrEmpty(_druckwellen[k].Quelle)
+                ? "DRUCKWELLE" : "DRUCKWELLE " + _druckwellen[k].Quelle;
             int soll = r - 1;
             int n = 0;
             for (int row = y - DwFenster; row <= y + DwFenster; row++)
@@ -113,7 +132,7 @@ public partial class MapEntityLayer : Node2D
                         besatz = _nav.OccupantAt(col, row);
                         if (besatz >= 0 && besatz < _entities.Count) hpVor = _entities[besatz].Hp;
                     }
-                    SkripttrefferZelle(col, row, 200 / (m + 1), "DRUCKWELLE");   // 0x40CC66
+                    SkripttrefferZelle(col, row, 200 / (m + 1), grund);          // 0x40CC66
                     if (besatz >= 0 && besatz < _entities.Count)                 // Pruefstand: Schaden IM Durchgang
                         _dwSchaden[besatz] = _dwSchaden.GetValueOrDefault(besatz) + hpVor - _entities[besatz].Hp;
                     n++;
@@ -165,7 +184,7 @@ public partial class MapEntityLayer : Node2D
     private void TodDerMittelstreckenrakete(Entity v)
     {
         if (Art7Einzeltreffer || WeaponRowOf(v.Weapon) != 8 || v.Cooldown > 0) return;
-        DruckwelleAnmelden(v.Col, v.Row);
+        DruckwelleAnmelden(v.Col, v.Row, $"der zerstoerten Rakete {LabelOf(v)} (Platz {v.Slot}, Spieler {v.Owner})");
     }
 
     // ================= der Pruefstand ==========================================

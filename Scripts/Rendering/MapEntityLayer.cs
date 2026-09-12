@@ -1755,6 +1755,7 @@ public partial class MapEntityLayer : Node2D
         // filter the dots against a grid that RevealAll had just wiped
         if (!FogActive) { _fog.RevealAll(); return; }
         _fog.Update(Watchers());
+        KiNebelAktualisieren();          // ⭐ 11.09.2026, Simulation/KiAufklaerung.cs
     }
 
     /// <summary>
@@ -1869,13 +1870,17 @@ public partial class MapEntityLayer : Node2D
     /// Belegt ist sie durch das Spiel — im Original sind diese Einheiten
     /// verdeckt. Gegenschalter <c>--neutrale-decken-auf</c>.</para>
     /// </summary>
-    private bool DecktAuf(int besitzer)
+    private bool DecktAuf(int besitzer) => DecktAuf(besitzer, ViewPlayer);
+
+    /// <summary>Dasselbe fuer einen beliebigen Betrachter — seit dem 11.09.2026
+    /// rechnet auch jede Gefechts-KI ihren eigenen Nebel (KiAufklaerung.cs).</summary>
+    private bool DecktAuf(int besitzer, int betrachter)
     {
         if (besitzer is < 0 or > 7) return false;
-        if (besitzer == ViewPlayer) return true;
+        if (besitzer == betrachter) return true;
         if (!NeutraleDeckenAuf && (besitzer == NeutralSlot || IsStandby(besitzer)))
             return false;
-        return Allied(besitzer, ViewPlayer);
+        return Allied(besitzer, betrachter);
     }
 
     /// <summary>Wieviele Aufdecker der neutrale Platz beigesteuert haette —
@@ -1887,7 +1892,12 @@ public partial class MapEntityLayer : Node2D
     /// der neutrale Platz gilt als Verbuendeter und deckt mit auf.</summary>
     public static bool NeutraleDeckenAuf;
 
-    private IEnumerable<(int Col, int Row, int Sight, int Elev)> Watchers()
+    private IEnumerable<(int Col, int Row, int Sight, int Elev)> Watchers() => Watchers(ViewPlayer);
+
+    /// <summary>Die Aufdecker fuer einen beliebigen Betrachter. ⭐ 11.09.2026: die
+    /// Gefechts-KI rechnet damit ihren eigenen Nebel (KiAufklaerung.cs) — mit
+    /// denselben Radien und Verbuendeten wie der Spieler.</summary>
+    private IEnumerable<(int Col, int Row, int Sight, int Elev)> Watchers(int betrachter)
     {
         foreach (var e in _entities)
         {
@@ -1900,10 +1910,11 @@ public partial class MapEntityLayer : Node2D
             // Widerspruch im eigenen Haus stehen liess. Betroffen sind die
             // neun Missionen mit Verbuendeten (4, 9, 14, 17, 24, 26-29).
             // Gegenschalter --nebel-ohne-verbuendete.
-            if (e.Owner == NeutralSlot || (e.Owner is >= 0 and <= 7 && IsStandby(e.Owner)))
+            if (betrachter == ViewPlayer
+                && (e.Owner == NeutralSlot || (e.Owner is >= 0 and <= 7 && IsStandby(e.Owner))))
                 NeutraleAufdecker++;
-            if (NebelOhneVerbuendete ? e.Owner != ViewPlayer
-                                     : !DecktAuf(e.Owner))
+            if (NebelOhneVerbuendete ? e.Owner != betrachter
+                                     : !DecktAuf(e.Owner, betrachter))
                 continue;
             if (!e.IsBuilding)
             {
@@ -1956,13 +1967,13 @@ public partial class MapEntityLayer : Node2D
                 if (sp.Stored) continue;                       // im Hangar
                 if (sp.Slot is < 0) continue;
                 int shalter = sp.Slot / 1000;
-                if (!DecktAuf(shalter)) continue;
+                if (!DecktAuf(shalter, betrachter)) continue;
                 int sicht = sp.Sight - 1;
                 if (sicht < 0) continue;
                 yield return (sp.Col, sp.Row, sicht, ElevOf(sp.Col, sp.Row));
             }
 
-        foreach (var w in RadarWatchers()) yield return w;
+        foreach (var w in RadarWatchers(betrachter)) yield return w;
     }
 
     /// <summary>The fog as a W x H texture drawn over the map, the same trick
@@ -10966,6 +10977,10 @@ public partial class MapEntityLayer : Node2D
             float range = RangeOf(e);
             int best = -1;
             float bestDist = range;
+            // ⭐ 11.09.2026 — eine Einheit der GEFECHTS-KI nimmt von selbst nur auf,
+            // was ihre Partei sieht: eine Rakete reicht 22 Zellen, ihre Sicht nur
+            // eine Handvoll. Simulation/KiAufklaerung.cs, --ki-sieht-alles.
+            bool kiSicht = KiAufklaerungAn && IstKi(e.Owner);
             for (int j = 0; j < _entities.Count; j++)
             {
                 if (i == j) continue;
@@ -11001,7 +11016,11 @@ public partial class MapEntityLayer : Node2D
                 // Ziel: die Einheit wuerde es sich merken und dann nie
                 // schiessen. Siehe Entity.RangeMin (@0x40bf7f, `jg`).
                 if (d < RangeMinOf(e)) continue;
-                if (d <= bestDist) { bestDist = d; best = j; }
+                if (d <= bestDist)
+                {
+                    if (kiSicht && !KiKenntRoh(e.Owner, t)) { KiAutoVerworfen++; continue; }
+                    bestDist = d; best = j;
+                }
             }
             if (best >= 0) { e.Target = best; e.Ordered = false; }
             else if (Schussgruende)
@@ -11129,6 +11148,18 @@ public partial class MapEntityLayer : Node2D
         if (t.Dead || t.IsProp)
         {
             if (Schussgruende) e.Schussgrund = "Ziel ist tot oder Kulisse";
+            e.Target = -1; return;
+        }
+        // ⭐ 11.09.2026 — DIE GEFECHTS-KI VERLIERT, WAS IHR AUS DER SICHT FAEHRT.
+        // Ein Ziel wird hier nie wegen der Entfernung fallengelassen, und ein
+        // Raketenwerfer traegt Reichweite 255 — einmal gesehen, verfolgte er ein
+        // Fahrzeug ueber die ganze Karte. Im ersten Messlauf auf NET02 zwei
+        // Einschlaege auf Zellen, die P3 nie gesehen hatte. Ein Gebaeude bleibt
+        // bekannt (KiKenntRoh). Simulation/KiAufklaerung.cs, --ki-sieht-alles.
+        if (KiAufklaerungAn && IstKi(e.Owner) && !KiKenntRoh(e.Owner, t))
+        {
+            KiZieleVerloren++;
+            if (Schussgruende) e.Schussgrund = "Ziel ist aus der Sicht der KI gefahren";
             e.Target = -1; return;
         }
 
@@ -11973,6 +12004,15 @@ public partial class MapEntityLayer : Node2D
                    + (victim.Path != null ? ", IN BEWEGUNG" : ", im Stand") + "), Grund: "
                    + (grund.Length > 0 ? grund : "UNBENANNT ⚠")
                    + (by is >= 0 and <= 7 ? $", durch Spieler {by}" : ", ohne Schuetzen"));
+        // ⭐ 11.09.2026 — AUCH EIN GEBAEUDE KOMMT INS PROTOKOLL. Seine Meldung »die
+        // Raketen ballern instant meine Fabriken weg« war aus dem Protokoll nicht
+        // zu belegen: es kannte nur Einheiten. Siehe Simulation/KiAufklaerung.cs.
+        else if (TodesLog && victim.IsBuilding && !victim.IsProp && !victim.Dead)
+            GD.Print($"gebaeudetod: {(string.IsNullOrEmpty(victim.Name) ? BuildingTypeName(victim.BType) : victim.Name)} "
+                   + $"(Art {victim.BType}, Spieler {victim.Owner}) "
+                   + $"auf ({victim.Col},{victim.Row}), TP {victim.Hp}/{victim.HpMax}, Grund: "
+                   + (grund.Length > 0 ? grund : "UNBENANNT ⚠")
+                   + (by is >= 0 and <= 7 ? $", durch Spieler {by}" : ", ohne Schuetzen"));
         NoteKill(victim, by);
         // ⭐ 06.09.2026 — ein GEBAEUDE geht mit Bild. Siehe GebaeudeSprengen.
         if (victim.IsBuilding && !victim.IsProp && !victim.Dead) GebaeudeSprengen(victim);
@@ -12242,7 +12282,10 @@ public partial class MapEntityLayer : Node2D
             if (Art7Druckwelle(p))
             {
                 if (CellAt(p.Aim) is { } dwz)
-                    DruckwelleZuenden(Mathf.RoundToInt(dwz.X), Mathf.RoundToInt(dwz.Y));
+                {
+                    int dwc = Mathf.RoundToInt(dwz.X), dwr = Mathf.RoundToInt(dwz.Y);
+                    DruckwelleZuenden(dwc, dwr, DruckwellenQuelle(p.Shooter, dwc, dwr, p.Target));
+                }
                 continue;
             }
             // ⚠ 19.08.2026 — hier stand fuer JEDES Geschoss dasselbe
@@ -34409,6 +34452,12 @@ public partial class MapEntityLayer : Node2D
     /// Tuer und auch ueber einem herrenlosen.</summary>
     public static bool GebaeudezeigerAlt;
 
+    /// <summary><c>--zivilzeiger-alt</c> — der Stand vor dem 12.09.2026: ein
+    /// Gebaeude mit dem zivilen Besitzer 11 (<see cref="NeutralOwner"/>) bekommt
+    /// keinen Einnahmezeiger, also auch kein Einnehmen per einfachem Klick. Das
+    /// Nullmodell zu bug-209.</summary>
+    public static bool ZivilzeigerAlt;
+
     /// <summary><b>Steht hier der Einnahmezeiger?</b> — die Frage, die der
     /// KLICKWEG stellt, damit Bild und Klick dasselbe bedeuten.
     ///
@@ -34446,7 +34495,41 @@ public partial class MapEntityLayer : Node2D
     /// die Maus auf der Tuermarke.</summary>
     private bool EinnahmezeigerGilt(Entity b, Vector2 mapPos)
     {
-        if (b.Owner == ViewPlayer || b.Owner is < 0 or > 7) return false;
+        if (b.Owner == ViewPlayer) return false;
+
+        // ⭐⭐⭐ 12.09.2026 — DAS ZIVILE GEBAEUDE DER EROBERUNGSKARTE (bug-209).
+        //
+        // Seine Meldung: »ich sah z.B. nicht das Einnahme Icon von Gebäuden
+        // über dem Tor/Einfahrt, was mich daher denken lässt, das nicht alle
+        // fixes zum gefecht geflossen sind?«
+        //
+        // GEMESSEN, nicht vermutet (`--zeiger-check` auf map_NET02): die
+        // Zeigerwahl war nicht kampagnenabhaengig — es sind die DATEN. Ein
+        // Gebaeude, das keinem Spielerplatz gehoert, traegt in den Karten
+        // <see cref="NeutralOwner"/> = 11, und hier stand `Owner is < 0 or > 7`:
+        // die 11 fiel damit in denselben Topf wie die 255. Auf map_NET02 sind
+        // ALLE 52 Gebaeude mit Tuer Eigner 11 — auf der ganzen Karte konnte
+        // also kein einziger Einnahmezeiger erscheinen, und das sind genau die
+        // Gebaeude, um die die Karte gespielt wird (`NeutralPrizes`, die
+        // »EROBERUNGSKARTE« aus der Startzeile). Ueber alle Gefechtskarten:
+        // **418 von 724 Gebaeuden mit Tuer** tragen die 11.
+        //
+        // ⚠ Das Einnehmen SELBST ging schon: `PostCapture` und `CaptureTick`
+        // fragen den Besitzer gar nicht, nur die Tuer. Es fehlte allein das
+        // BILD — und damit der einfache Rechtsklick, der seit dem 08.09. am
+        // Bild haengt. Ein Weg, den niemand sehen kann, ist keiner.
+        //
+        // ⚠ Was das Original an dieser Stelle mit der 11 tut, ist NICHT
+        // gelesen: der Einnahmezweig @0x4323F5 schlaegt sie in der
+        // Buendnistafel nach (`byte[Besitzer + 40*Betrachter + 0x87B155]`), und
+        // ausgelesen ist nur der Sonderfall `cmp cl,0xff` fuer die 255
+        // (@0x4324ED, Zeigerart 1). Dass die 11 dort KEINEN Sonderfall hat,
+        // ist der Grund fuer diese Zeile — aber der Beleg dafuer, was die
+        // Tafel an Stelle 11 stehen hat, fehlt. Darum der Gegenschalter
+        // --zivilzeiger-alt.
+        bool zivil = b.Owner == NeutralOwner;
+        if (zivil && ZivilzeigerAlt) return false;
+        if (!zivil && b.Owner is < 0 or > 7) return false;
         if (ViewPlayer is < 0 or > 7) return false;
         // ⚠⚠ 08.09.2026 — OHNE TUER GIBT ES DIE MARKE NICHT. Die 0x63 in
         // 0x542E18 schreibt der Bauabschluss @0x43CB12 aus den TUERFELDERN des
@@ -34456,7 +34539,9 @@ public partial class MapEntityLayer : Node2D
         // — DoorCol/DoorRow stehen dort auf 0,0 — und der Klick darauf haette
         // eingenommen statt geschossen.
         if (b.Built == 0 || b.Doors == 0) return false;
-        if (_haveAllies && _allied[ViewPlayer, b.Owner]) return false;
+        // ⚠ Die Buendnistafel ist 8x8 — ein ziviler Besitzer hat dort keine
+        // Zeile, und `_allied[ViewPlayer, 11]` waere ein Griff daneben.
+        if (!zivil && _haveAllies && _allied[ViewPlayer, b.Owner]) return false;
         if (!AufDerTuerOderDarunter(b, mapPos)) return false;
         foreach (int k in _sel)
             if (k >= 0 && k < _entities.Count)
