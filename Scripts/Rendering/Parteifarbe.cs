@@ -157,6 +157,11 @@ public partial class MapEntityLayer
     /// Umfaerbung lief bis dahin nur ueber Einheiten; ein eingenommenes
     /// Gebaeude behielt die Farbe des Vorbesitzers.</summary>
     public static int FarbeGebaeude;
+
+    /// <summary>Dasselbe fuer die TORE (12.09.2026, bug-244) — sie haben eine
+    /// eigene Bildbank und liefen darum an der Umfaerbung vorbei.</summary>
+    public static int FarbeTore;
+    public static readonly HashSet<int> FarbeToreEigner = new();
     public static readonly HashSet<int> FarbeGebaeudeEigner = new();
 
     /// <summary>Ob überhaupt gefärbt wird — <c>--keine-parteifarbe</c> stellt
@@ -294,6 +299,24 @@ public partial class MapEntityLayer
         for (int b = 0; b < Parteien; b++)
             if (MapEntityLayer.FactionColor(b).IsEqualApprox(Parteifarbe4p2(b))) treffer++;
         sb.Append($"{(char)10}  Gebaeudekacheln in Besitzerfarbe: {FarbeGebaeude} gemalt, Besitzer [{string.Join(",", FarbeGebaeudeEigner)}]" + (FarbeGebaeude == 0 ? "  ⚠ KEINE — entweder gehoert kein Gebaeude einem Spieler, oder die Umfaerbung greift nicht" : ""));
+        // ⚠ 12.09.2026 — der Zeichenzaehler laeuft im kopflosen Lauf nicht mit
+        // (dort wird nichts gezeichnet). Darum wird hier die FAEHIGKEIT
+        // gemessen: traegt das Torbild ueberhaupt Bandpunkte, und liefert
+        // Parteifarbe fuer einen echten Besitzer ein ANDERES Bild?
+        int torProben = 0, torWechsel = 0;
+        foreach (var b in _entities)
+        {
+            if (!b.IsBuilding || b.IsProp || b.Dead || b.Doors <= 0) continue;
+            if (b.Owner is < 0 or > 7) continue;
+            var roh = DoorTexture(Import.BuildingPatterns.DoorPicture(b.BType, 0, 0, b.ProdSpeed));
+            if (roh == null) continue;
+            torProben++;
+            if (!ReferenceEquals(Parteifarbe(roh, b.Owner), roh)) torWechsel++;
+        }
+        sb.Append($"{(char)10}  Tore in Besitzerfarbe: {FarbeTore} gemalt; Probe: "
+                + $"{torWechsel} von {torProben} Torbildern wechseln die Farbe"
+                + (torProben == 0 ? "  ⚠ kein Gebaeude mit Tor und echtem Besitzer — sagt NICHTS"
+                   : torWechsel == 0 ? "  ⚠ KEINES — die Umfaerbung greift am Tor nicht" : ""));
         sb.Append($"{(char)10}  Uebersichtsfarben: {treffer} von {Parteien} sind "
                 + $"Palettenplatz 4p+2 (@0x4B81DC)"
                 + (treffer == Parteien ? "   BESTANDEN"

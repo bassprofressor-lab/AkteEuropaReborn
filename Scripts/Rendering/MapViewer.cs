@@ -1380,6 +1380,9 @@ public partial class MapViewer : Node2D
     /// <summary><c>--mole-check</c> — siehe Simulation/Landungsbruecke.cs (bug-219).</summary>
     private bool _moleCheck;
 
+    /// <summary><c>--bruecke-check</c> — siehe Simulation/Pionierbruecke.cs (bug-245).</summary>
+    private bool _brueckeCheck;
+
     /// <summary><c>--m8-regeln</c> — die Missionsregeln im Klartext.</summary>
     private bool _m8Regeln;
     /// <summary><c>--routentuer-check</c> — siehe Simulation/RoutentuerCheck.cs.</summary>
@@ -2873,6 +2876,8 @@ public partial class MapViewer : Node2D
             else if (a == "--rampe-bauzeit") MapEntityLayer.RampeBauzeit = true;
             else if (a == "--fussvolkmenue-alt") MapEntityLayer.FussvolkmenueAlt = true;
             else if (a == "--mole-check") _moleCheck = true;
+            else if (a == "--bruecke-check") _brueckeCheck = true;
+            else if (a == "--bruecke-aus") MapEntityLayer.BrueckeAus = true;
             else if (a == "--m8-regeln") _m8Regeln = true;
             else if (a == "--bauanimation-aus") MapEntityLayer.BauanimationAus = true;
             else if (a == "--absetzen-nur-rampe") MapEntityLayer.AbsetzenNurRampe = true;
@@ -4365,6 +4370,7 @@ public partial class MapViewer : Node2D
             if (_kiStufenCheck) GD.Print(_entities.KiStufenCheckLine());
             if (_flughafenfensterCheck) GD.Print(_entities.FlughafenfensterCheck());
             if (_moleCheck) GD.Print(_entities.MoleCheckLine());
+            if (_brueckeCheck) GD.Print(_entities.BrueckeCheckLine());
             if (_m8Regeln) GD.Print(_entities.MissionsregelnZeile());
             if (_gwCheck) GD.Print(_entities.GaswerferCheckLine());
             if (_rtCheck) GD.Print(_entities.RoutentuerCheckLine());

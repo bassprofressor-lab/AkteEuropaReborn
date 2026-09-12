@@ -6901,9 +6901,21 @@ public partial class MapEntityLayer : Node2D
             have = Mathf.MoveToward(have, want, DoorOpenSpeed * (float)GetProcessDeltaTime());
             _doorPhase[key] = have;
 
-            var tex = DoorTexture(Import.BuildingPatterns.DoorPicture(e.BType, Mathf.RoundToInt(have), k, e.ProdSpeed));
+            // ⭐ 12.09.2026 — DAS TOR GEHOERT MIT UMGEFAERBT (bug-244). Seine
+            // Meldung, nachdem die Gebäude selbst schon wechselten: »nur noch
+            // nicht die tuer wo z.B. 05 drauf steht, die bleibt noch gruen«.
+            // Die Tore haben ihre EIGENE Bildbank (DoorTexture) und liefen
+            // darum an der Umfaerbung von bug-241 vorbei — die Zahl auf dem Tor
+            // ist genau so ein Bandpunkt wie die Streifen am Gebaeude.
+            var tex = Parteifarbe(
+                DoorTexture(Import.BuildingPatterns.DoorPicture(
+                    e.BType, Mathf.RoundToInt(have), k, e.ProdSpeed)),
+                e.Owner);
             if (tex == null) { _doorsNoTex++; continue; }
             _doorsDrawn++;
+            // ⚠ Regel 33: ohne die Zahl waere »das Tor ist jetzt blau« nicht von
+            // »das Tor sah schon immer so aus« zu unterscheiden.
+            if (e.Owner is >= 0 and <= 7) { FarbeTore++; FarbeToreEigner.Add(e.Owner); }
             if (count) continue;
 
             // The original's own placement, @0x42B34B..0x42B379: it starts from
@@ -7093,6 +7105,7 @@ public partial class MapEntityLayer : Node2D
         // Gebaeudeboden: sie gehoeren in denselben Durchgang, vor Gleis und
         // Einheiten (bug-219).
         ZeichneMolen();
+        ZeichneStege();
         foreach (var b in BuildingsBackToFront())
             DrawBuildingTiles(b, flach: true);
         // ⚠ Regel 32/33: die eigene Zeile MUSS im Protokoll stehen, sonst ist

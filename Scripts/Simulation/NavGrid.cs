@@ -973,6 +973,33 @@ public sealed class NavGrid
         return true;
     }
 
+    /// <summary>
+    /// <b>EINE BRUECKENZELLE SETZEN</b> (13.09.2026, bug-245).
+    ///
+    /// <para>Das Original schreibt in <c>0x4CC280</c> je Deckzelle in sec6
+    /// entweder <b>0xFFFE</b> (befahrbar) oder <b>0xFFFF</b> (gesperrt): nur
+    /// der MITTLERE der drei Streifen wird zur Fahrbahn, die beiden aeusseren
+    /// sind das Gelaender. Darum die zwei Faelle hier.</para>
+    ///
+    /// <para>⚠ Anders als <see cref="RampeSetzen"/> gilt das AUCH UEBER
+    /// WASSER — das ist der ganze Sinn einer Bruecke. Der alte Untergrund
+    /// kommt zurueck, geht die Bruecke kaputt; darum gibt diese Methode ihn
+    /// aus, statt ihn zu vergessen.</para>
+    /// <returns>Der Untergrund, der vorher dort stand.</returns></summary>
+    public Ground BrueckeSetzen(int c, int r, bool fahrbahn)
+    {
+        if (!InBounds(c, r)) return Ground.Blocked;
+        var alt = (Ground)_ground[Idx(c, r)];
+        _ground[Idx(c, r)] = (byte)(fahrbahn ? Ground.Free : Ground.Blocked);
+        return alt;
+    }
+
+    /// <summary>Die Bruecke faellt: der alte Untergrund kommt zurueck.</summary>
+    public void BrueckeLoesen(int c, int r, Ground alt)
+    {
+        if (InBounds(c, r)) _ground[Idx(c, r)] = (byte)alt;
+    }
+
     /// <summary><c>--wald-bleibt-sperre</c> — die Gegenprobe: ein abgebrannter
     /// Baum sperrt weiter, wie bis zum 01.09.2026.</summary>
     public static bool WaldBleibtSperre;

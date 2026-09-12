@@ -302,14 +302,10 @@ public partial class MapEntityLayer : Node2D
             case CodeAusbessern:
                 return AusbessernBeginnen();
             case CodeBruecke:
-                // ⚠ NICHT GEBAUT, und der Grund steht hier statt einer
-                // erfundenen Bruecke: die Geometrie in 0x4CCCB0 (Laengen-
-                // zaehlung, vier Richtungsfaelle, das 3x5-Kachelfeld) ist
-                // ausdruecklich NICHT gelesen — berichte/pionier-menue-fable.md
-                // Abschnitt 3 und berichte/landungsbruecke-fable.md Abschnitt 5.
-                // Der Knopf steht trotzdem da, weil das Original ihn zeigt.
-                return "»Bruecke bauen« ist gelesen bis auf ihre Geometrie "
-                     + "(0x4CCCB0) — die Mole/Landungsbruecke geht schon.";
+                // ⭐ 13.09.2026 — GEBAUT (bug-245). Hier stand bis dahin die
+                // Auskunft, dass die Geometrie ungelesen sei; sie ist es seit
+                // berichte/pionier-bruecke-fable.md nicht mehr.
+                return BrueckenbauBeginnen();
             case CodeSelbstzerstoerung:
                 return SelbstzerstoerungAusfuehren();
             case CodeHandsteuerung:

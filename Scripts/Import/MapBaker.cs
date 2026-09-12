@@ -606,6 +606,18 @@ public sealed class MapBaker
     /// waehrend des Spiels gebaute Mole ueberhaupt Pixel hat.</summary>
     public const int RampenKachelBasis = 10723;
 
+    /// <summary>Die erste Kachel des HOLZSTEGS, den der Pionier baut — Bildsatz
+    /// 1 der Brueckenformel <c>10000 + 120·Bildsatz + 54·Variante + 18·Stufe +
+    /// Lage</c> (Zeichner <c>0x4CAE30</c>, Bildsatz als fuenftes Argument von
+    /// <c>0x4CC280</c>). Bildsatz 0 ist Stahl/Stein und steht auf den Karten
+    /// schon im gebackenen Boden.</summary>
+    public const int BrueckenKachelBasis = 10120;
+
+    /// <summary>Wie viele Kacheln dieses Band hat: zwei Varianten mal drei
+    /// Schadensstufen mal achtzehn Lagen, aufgerundet auf den ganzen Bildsatz.
+    /// </summary>
+    public const int BrueckenKachelZahl = 120;
+
     public readonly List<(int Code, int X, int Y, int W, int H, int YOff)> BurntAtlas = new();
 
     private byte[]? _burnt;                 // der Streifen, PixelW x _burntH
@@ -829,6 +841,23 @@ public sealed class MapBaker
         // Karte selbst Rampen hat, ist dabei gleichgueltig — gebaut werden kann
         // auf jeder.
         for (int k = 0; k < 12; k++) Streifenplatz(RampenKachelBasis + k);
+
+        // ⭐⭐ 13.09.2026 — UND DIE KACHELN DER BRUECKE (bug-245). Dasselbe
+        // Problem wie bei der Mole: eine Bruecke, die der Pionier waehrend des
+        // Spiels baut, hat im gebackenen Kartenbild keine Pixel.
+        //
+        // GELESEN (berichte/pionier-bruecke-fable.md): die Kachel ist
+        //   10000 + 120·Bildsatz + 54·Variante + 18·Stufe + Lage
+        // mit Lage 0..17 (waagerecht 3·Streifen+Pos, senkrecht 9+3·Streifen+Pos),
+        // Variante 0/1 und Schadensstufe 0..2. ⭐ Der BILDSATZ ist das fuenfte
+        // Argument von 0x4CC280, und der Pionier uebergibt 1 — den HOLZSTEG.
+        // Bildsatz 0 (Stahl/Stein) steht auf den Karten schon im Boden, die
+        // brauchen wir hier nicht.
+        //
+        // Nullmodell des Lesers: 36 von 36 Kartenkacheln stimmen mit Feld und
+        // Formel. Wir legen das ganze Band des Bildsatzes 1 ab, damit auch eine
+        // angeschlagene Bruecke ihr Bild hat.
+        for (int k = 0; k < BrueckenKachelZahl; k++) Streifenplatz(BrueckenKachelBasis + k);
 
         // passes A and B — backdrop, then the cell's own detail
         for (int r = 0; r < h; r++)

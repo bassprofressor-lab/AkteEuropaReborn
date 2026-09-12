@@ -199,6 +199,13 @@ public partial class MapEntityLayer
             SetMolePreview(col, row, ok);
             return;
         }
+        // ⭐ 13.09.2026 — die BRUECKE ist 3 x (k+2) Zellen und hat ihre
+        // eigene Gueltigkeit (Simulation/Pionierbruecke.cs, bug-245).
+        if (PlacementMode == OrderBruecke)
+        {
+            SetBrueckePreview(col, row, BrueckePlatzOk(col, row, PlacementUnit));
+            return;
+        }
         var off = BuildOffsetOfOrder(PlacementMode);
         if (PlacementMode == OrderFieldMine)
         {
@@ -241,6 +248,8 @@ public partial class MapEntityLayer
         // ANKUNFT (Simulation/Landungsbruecke.cs, bug-219).
         if (order is OrderMole or OrderAusbessern)
             return MoleKlick(idx, col, row, order);
+        if (order == OrderBruecke)
+            return BrueckeKlick(idx, col, row);
 
         int vorkommen = -1;
         if (order == OrderFieldMine)
