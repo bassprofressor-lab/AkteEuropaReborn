@@ -14,7 +14,7 @@
 ;   Godot --path . --headless --export-release "Windows Desktop"
 
 #define AppName        "Akte Europa Reborn"
-#define AppVersion     "0.6.2"
+#define AppVersion     "0.6.3"
 #define AppPublisher   "chr1zZo"
 #define AppExeName     "AkteEuropaReborn.exe"
 #define BuildDir       "..\build\windows"

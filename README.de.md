@@ -109,14 +109,15 @@ braucht, in **[OFFENE_FRAGEN.md](OFFENE_FRAGEN.md)** — samt der Fälle, in den
 sich eine frühere Erklärung von uns als falsch herausgestellt hat. Beides wird
 mitgeführt, nicht nachträglich geschrieben.
 
-⭐ **Stand heute (12.09.2026, Release 0.6.2):** die Missionen 1 bis 7 sind
+⭐ **Stand heute (13.09.2026, Release 0.6.3):** die Missionen 1 bis 9 sind
 durchgespielt. Unterwegs wurde Mission 2 zum ersten Mal abschliessbar, die
 Kraftwerke in Mission 4 und die Bunker in Mission 7 zerstörbar, und der Gegner
-spielt jetzt mit der KI des Originals. **0.6.2 kommt aus dem GEFECHT:** der
+spielt jetzt mit der KI des Originals. **0.6.2 kam aus dem GEFECHT** (der
 Computergegner schummelt nicht mehr bei der Sicht, leicht/normal/schwer
-unterscheiden sich endlich wirklich, und die Gebäude einer Eroberungskarte
-zeigen ihr Einnahme-Symbol. **Beide sind ein Halt auf diesem Weg, nicht sein
-Ende.** Was sich geändert hat, in einfachen Worten:
+unterscheiden sich endlich wirklich); **0.6.3 kommt vom PIONIER** — er baut
+jetzt Landungsbrücken und Brücken, und ohne die sind die Missionen 8 und 9
+nicht zu gewinnen. **Jede davon ist ein Halt auf diesem Weg, nicht sein Ende.**
+Was sich geändert hat, in einfachen Worten:
 [CHANGELOG.de.md](CHANGELOG.de.md).
 
 **Mitmachen ist ausdrücklich erwünscht.** Wer eine Mission spielt und etwas

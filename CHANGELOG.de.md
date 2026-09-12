@@ -14,6 +14,76 @@ bisher nur dort beschrieben.*
 > **Road to 0.7.0** in der [README](README.de.md). Der Abschnitt unten wächst
 > mit jeder gespielten Mission weiter.
 
+## 0.6.3 — 13.09.2026 · der Pionier, und damit Kampagne 8 und 9
+
+> Diese Fassung dreht sich um **eine einzige Einheit**: den Pionier. Er konnte
+> bisher nichts von dem, wofür es ihn gibt — und ohne ihn sind die Missionen 8
+> und 9 nicht zu gewinnen. Jetzt sind beide durchgespielt.
+
+### Kurz gesagt
+
+- **Der Pionier baut Landungsbrücken.** An einer Uferböschung entsteht eine
+  Rampe, über die Fahrzeuge von Bord gehen. Ohne sie kommt in Mission 8 kein
+  einziger Panzer auf die Insel. Er verbraucht sich dabei und verschwindet —
+  kein Wrack, wie im Original.
+- **Der Pionier baut Brücken.** Über einen Fluss von höchstens drei Zellen
+  Breite entsteht ein Holzsteg: eine befahrbare Fahrbahn zwischen zwei
+  Geländern. Am Ende steht er selbst darauf.
+- **Infanterie geht überall an Land**, Fahrzeuge nur an einer Rampe. Genau so
+  bekommt man den Pionier auf die andere Inselseite, damit er dort die Rampe für
+  die Panzer baut.
+- **Gemischte Ladung wird Stück für Stück entladen.** Hat ein Transporter
+  Infanterie *und* Fahrzeuge an Bord, geht an der Küste jetzt wenigstens die
+  Infanterie von Bord, statt dass gar nichts passiert.
+- **Transportern geht nicht mehr der Sprit aus.** Sie tanken bei jedem Umladen
+  voll und können darum endlos pendeln.
+- **Ein Symbol zeigt jetzt an, wo man einladen kann** — das Gegenstück zum
+  Abladesymbol, das es schon gab.
+- **Ein leerer Transporter saugt keine Infanterie mehr ein**, die zufällig am
+  Ufer steht. Er nimmt nur noch mit, was ihm befohlen wurde.
+- **Eingenommene Gebäude nehmen deine Farbe an** — der Anstrich *und* die Zahl
+  auf dem Tor. Bisher blieb beides in der Farbe des Vorbesitzers.
+- **Eingenommen wird nur noch von der Zelle vor dem Tor**, nicht mehr von jeder
+  Torzelle. Damit kann man während einer Einnahme nicht mehr gleichzeitig in die
+  Fabrik hineinfahren.
+- **Der vierte Eintrag im Einheitenmenü ist anklickbar.** Das Fenster hatte eine
+  feste Breite, unter der genau dieser Eintrag im toten Rand lag — und der
+  vierte Eintrag des Pioniers ist »Mole bauen«.
+- **Mission 8 kennt zwei Regeln mehr:** die Nebenmission »Basis erobern«
+  (250 $) und das Nachziehen des Computergegners.
+
+### Für Neugierige, was darunter liegt
+
+- **Wohin eine Rampe darf, stand am Ende nicht in der Regel des Originals.** Das
+  Original liest die vier *Eckhöhen* einer Zelle als Viererbit und schlägt sie
+  in einer Tafel nach. Nur führt unsere Höhenkarte eine Zahl je Zelle, kein
+  Eckraster — eine Böschung innerhalb einer Zelle kann sie nicht ausdrücken.
+  Nachgemessen an den **90 echten Rampen** der Originalkarten hätte die Eckregel
+  **1 von 90** durchgelassen. Die Ersatzregel »an genau einer Seite liegt
+  Wasser« trifft dagegen **69 von 71** — und liefert dieselbe Richtungstafel,
+  die die Eckregel vorhergesagt hatte. Die Tafel stimmte, das Raster nicht.
+- **Wie lang eine Brücke werden darf, verrät ein einzelner Vergleichsbefehl.**
+  Der Zähler des Originals bricht bei fünf ab, also liegen höchstens drei
+  Wasserzellen dazwischen. Zur Gegenprobe: von den **110 Brücken** auf den
+  Originalkarten hat keine einzige eine vierte.
+- **Der leere Tank war ein falsches Feld unter einem richtigen Kommentar.** Beim
+  Umladen wurde die *Munition* aufgefüllt statt des *Sprits* — zwei benachbarte
+  Werte in der Einheit, und der Kommentar daneben nannte die richtige Stelle.
+- **Ein Prüfstand, der grün leuchtete, während der Fehler danebenstand:** die
+  Prüfkarte des Entladens trug ausschließlich Infanterie an Bord, und die ging
+  ja überall von Bord. Er nennt die Ladung jetzt beim Namen und fährt eine
+  eigene Stufe mit einem Fahrzeug an der Rampe.
+- **Mission 8 gewinnt man durch Vernichtung**, nicht durch Einnahme — das
+  »Basis erobern« aus den Videos im Netz ist eine Nebenmission, und »Bauen Sie
+  Landungsbrücken« im Auftragstext ist reiner Text ohne Regel dahinter.
+
+### Bekannte Einschränkung
+
+- Fahrzeuge fahren **flach** über eine Brücke, ohne sich zu neigen. Das Original
+  hebt die Fahrbahn über dem Wasser um eine Höhenstufe an; unsere Höhe steht je
+  Zelle und wird vom Zeichner anders benutzt. Sichtbar ist der Unterschied nur
+  im direkten Vergleich.
+
 ## 0.6.2 — 12.09.2026 · das Gefecht wird spielbar
 
 > Ein kleiner Nachschlag zu 0.6.1, und er betrifft fast nur den **Gefechtsmodus**.

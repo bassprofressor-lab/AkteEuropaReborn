@@ -12,6 +12,72 @@ your own copy of the 1997 game.
 > has been played through individually and found clean — see **Road to 0.7.0**
 > in the [README](README.md). The section below grows with every mission played.
 
+## 0.6.3 — 2026-09-13 · the engineer, and with him missions 8 and 9
+
+> This release is about **a single unit**: the engineer. He could do none of the
+> things he exists for — and without him, missions 8 and 9 cannot be won. Both
+> have now been played through.
+
+### In short
+
+- **The engineer builds landing ramps.** On a shore bank he raises a ramp for
+  vehicles to drive off a transport. Without one, not a single tank reaches the
+  island in mission 8. He is consumed doing it and simply vanishes — no wreck,
+  as in the original.
+- **The engineer builds bridges.** Across a river of at most three cells he
+  raises a wooden footbridge: a drivable roadway between two railings. He ends
+  up standing on it himself.
+- **Infantry disembarks anywhere on the coast**, vehicles only at a ramp. That
+  is exactly how you get the engineer to the far side of the island so he can
+  build the ramp the tanks need.
+- **Mixed cargo unloads piece by piece.** With infantry *and* vehicles aboard,
+  the infantry now goes ashore instead of nothing happening at all.
+- **Transports no longer run out of fuel.** They refuel at every transfer and
+  can therefore shuttle indefinitely.
+- **An icon now shows where you can load** — the counterpart to the unload icon
+  that was already there.
+- **An empty transport no longer vacuums up infantry** standing near the shore.
+  It takes aboard only what it was told to.
+- **Captured buildings take your colour** — the paint *and* the number on the
+  gate. Both used to keep the previous owner's colour.
+- **Capturing now happens only from the cell in front of the gate**, not from
+  every gate cell. You can no longer drive into a factory while capturing it.
+- **The fourth entry of the unit menu is clickable.** The window had a fixed
+  width that left exactly that entry in the dead margin — and the engineer's
+  fourth entry is "build mole".
+- **Mission 8 has two more rules:** the side mission "capture the base" ($250)
+  and the computer opponent's rubber band.
+
+### For the curious, what lies underneath
+
+- **Where a ramp may go turned out not to follow the original's own rule.** The
+  original reads a cell's four *corner heights* as a four-bit code and looks it
+  up in a table. But our height map holds one number per cell, not a corner
+  grid — it cannot express a bank *inside* a cell. Measured against the **90
+  real ramps** on the original maps, the corner rule would have passed **1 of
+  90**. The substitute "water on exactly one side" hits **69 of 71** — and
+  yields the very direction table the corner rule had predicted. The table was
+  right; the grid was wrong.
+- **How long a bridge may be hangs on a single compare instruction.** The
+  original's counter breaks at five, so at most three water cells lie between
+  the banks. As a check: of the **110 bridges** on the original maps, not one
+  spans a fourth.
+- **The empty tank was the wrong field under the right comment.** Transferring
+  cargo refilled *ammunition* instead of *fuel* — two neighbouring values in the
+  unit, with a comment beside them naming the correct one.
+- **A test harness that went green while the bug stood next to it:** the unload
+  test map carried infantry only, and infantry disembarks anywhere. It now names
+  the cargo and runs its own stage with a vehicle at a ramp.
+- **Mission 8 is won by destruction**, not by capture — the "capture the base"
+  seen in playthroughs online is a side mission, and "build landing bridges" in
+  the briefing is pure text with no rule behind it.
+
+### Known limitation
+
+- Vehicles cross a bridge **flat**, without tilting. The original raises the
+  roadway one height step above the water; our height is stored per cell and is
+  used differently by the renderer. The difference shows only side by side.
+
 ## 0.6.2 — 2026-09-12 · skirmish becomes playable
 
 > A small follow-up to 0.6.1, and it is almost entirely about **skirmish mode**.
