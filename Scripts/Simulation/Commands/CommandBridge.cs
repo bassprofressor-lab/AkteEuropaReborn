@@ -1080,10 +1080,32 @@ public partial class MapEntityLayer
     {
         if (CellAt(mapPos) is not { } z)
         { if (EntladeLog) GD.Print("entlade: Klick ausserhalb der Karte"); return false; }
-        if (RampenAbsetzZelle(z.X, z.Y) == null)
+        // ⚠⚠ 12.09.2026, bug-231 — HIER STAND `RampenAbsetzZelle`, UND DAS WAR
+        // DIE DRITTE STELLE. Seine Meldung: »ich sehe das abladen symbol an der
+        // küste, aber ich kann da drücken wie ich will, er entlädt nicht«. Und
+        // genau so war es: der ZEIGER kannte die neue Regel (bug-228) schon,
+        // der KLICK nicht — er brach ab, bevor er den Traeger auch nur ansah.
+        //
+        // ⭐ Die Lehre, und sie ist heute die zweite ihrer Art (beim
+        // Einnahmezeiger war es dasselbe): ein Bild und ein Klick, die
+        // dieselbe Frage verschieden beantworten, sind schlimmer als beide
+        // falsch. Wer die Regel aendert, aendert BEIDE — darum fragt der Klick
+        // jetzt denselben <see cref="AbsetzZelle"/> wie der Zeiger, mit
+        // derselben Fussvolkfrage.
+        bool nurFuss = true;
+        foreach (int i in _sel)
+        {
+            if (i < 0 || i >= _entities.Count) continue;
+            var t = _entities[i];
+            if (t.IsBuilding || t.IsProp || t.Dead || t.Owner != ViewPlayer) continue;
+            if (!IstTraeger(t)) continue;
+            foreach (var q in FrachtAnBord(t.Slot)) if (q.Infantry < 0) nurFuss = false;
+        }
+        if (AbsetzZelle(z.X, z.Y, nurFuss) == null)
         {
             if (EntladeLog)
-                GD.Print($"entlade: Klick auf ({z.X},{z.Y}) — KEINE Rampenzelle, "
+                GD.Print($"entlade: Klick auf ({z.X},{z.Y}) — keine Absetzzelle "
+                       + $"(nur Fussvolk an Bord: {nurFuss}), "
                        + "der Klick geht an Fahren/Angreifen weiter");
             return false;
         }
@@ -1120,7 +1142,10 @@ public partial class MapEntityLayer
             // er die Absetzzelle beruehrt.
             if (!AbsetzenAusDerFerne)
             {
-                var absetz = RampenAbsetzZelle(z.X, z.Y);
+                // ⚠ Auch hier die neue Frage (bug-231): sonst faende das Schiff
+                // zu einer KUESTENzelle keinen Liegeplatz und bliebe liegen,
+                // waehrend der Absetzbefehl schon draussen ist.
+                var absetz = AbsetzZelle(z.X, z.Y, nurFuss);
                 var liege = absetz == null ? null : LiegeplatzAn(e, absetz.Value);
                 bool gefahren = liege != null
                              && PostMoveOne(i, CellCenter(liege.Value.X, liege.Value.Y), queue);
@@ -1191,11 +1216,17 @@ public partial class MapEntityLayer
         var ladung = FrachtAnBord(e.Slot);
         if (ladung.Count == 0) { UnloadNote = "der Traeger ist leer"; return -1; }
 
-        var ziel = RampenAbsetzZelle(rampCol, rampRow);
+        // ⭐ 12.09.2026, bug-228 — FUSSVOLK GEHT UEBERALL AN LAND. Nur wenn
+        // FAHRZEUGE an Bord sind, braucht es eine Rampe. Siehe AbsetzZelle.
+        bool nurFuss = true;
+        foreach (var q in ladung) if (q.Infantry < 0) { nurFuss = false; break; }
+        var ziel = AbsetzZelle(rampCol, rampRow, nurFuss);
         if (ziel == null)
         {
             // Der Wortlaut des Originals, 0x4FAB24.
-            UnloadNote = "Very unique error before unloading units";
+            UnloadNote = nurFuss
+                ? "dort geht niemand an Land — die Zelle ist Wasser, gesperrt oder besetzt"
+                : "Very unique error before unloading units";
             return -1;
         }
         short gepackt = (short)(rampCol * 256 + rampRow);
@@ -1239,7 +1270,12 @@ public partial class MapEntityLayer
         if (e.Owner != c.Player) return false;
 
         int rampCol = (c.P4 >> 8) & 0xFF, rampRow = c.P4 & 0xFF;
-        var ziel = RampenAbsetzZelle(rampCol, rampRow);
+        // ⚠ Dieselbe Frage wie im Absender, sonst verwirft der Behandler jeden
+        // Fussvolk-Absetzer (bug-228). Der Vergleich mit P2/P3 darunter bleibt
+        // die Wache gegen eine erfundene Zelle aus dem Netz.
+        bool nurFuss2 = true;
+        foreach (var q in FrachtAnBord(e.Slot)) if (q.Infantry < 0) { nurFuss2 = false; break; }
+        var ziel = AbsetzZelle(rampCol, rampRow, nurFuss2);
         if (ziel == null) return false;
         if (ziel.Value.X != c.P2 || ziel.Value.Y != c.P3) return false;   // s.o.
 

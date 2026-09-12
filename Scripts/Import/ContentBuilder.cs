@@ -1580,7 +1580,7 @@ public sealed class ContentBuilder
             sb.Append("<karte>.objects.png. VERKOHLT (solange es brennt) = 10666 + ");
             sb.Append("19*((kachel-10381)%57/19) + flag, gelesen an zapal @0x4CACB4..0x4CACE5; ");
             sb.Append("ABGEBRANNT (wenn es aus ist) = dieselbe Rechnung mit 10381, gelesen am ");
-            sb.Append("Brandtakt @0x4CA3F1..0x4CA424. Hoechstens 2x57 je Karte.\",");
+            sb.Append("Brandtakt @0x4CA3F1..0x4CA424. Hoechstens 2x57 je Karte. ⚠ SEIT 12.09.2026 liegen hier AUCH die zwoelf Kacheln der Landungsbruecke (10723..10734, Zeichner 0x4CBB80) — eine im Spiel gebaute Mole hat im gebackenen Kartenbild sonst keine Pixel. Gesucht wird nach CODE.\",");
             sb.Append("\"burnt\":[");
             for (int i = 0; i < b.BurntAtlas.Count; i++)
             {

@@ -58,6 +58,88 @@ public partial class MapEntityLayer : Node2D
                      CodeFeldmine = 0x12, CodeGenerator = 0x13,
                      CodeRadar = 0x14, CodeAnhalten = 0x1A;
 
+    // ---- die Zeilen des FUSSVOLKS (12.09.2026, bug-219) ---------------------
+    //
+    // ⭐ Gelesen in beiden EXE (berichte/pionier-menue-fable.md): die
+    // Befehlsliste 0x4FD660 hat 48 Zeilen à 30 Byte, und das Fussvolk benutzt
+    // eigene — nicht die des Fahrzeugs.
+    public const int CodeBruecke = 0x0D,      // »Bruecke bauen«
+                     CodeMole = 0x0E,         // »Mole bauen«  = die Landungsbruecke
+                     CodeAusbessern = 0x0C,   // »Bruecke/Mole reparieren«
+                     CodeFussAngriff = 0x1F,  // Angreifen, Fussvolkzeile
+                     CodeFussLaufen = 0x20,   // Laufen
+                     CodeFussSchutz = 0x21;   // Beschuetzen
+
+    /// <summary><c>--fussvolkmenue-alt</c> — der Stand vor dem 12.09.2026: das
+    /// Fussvolk bekommt dieselbe Menuetafel wie ein Fahrzeug. Das Nullmodell zu
+    /// bug-219; unter ihm hat der Pionier wieder leere Haende.</summary>
+    public static bool FussvolkmenueAlt;
+
+    /// <summary><b>Der Waffenuntertyp +0x0B</b>, an dem die Fussvolkweiche
+    /// haengt. Bevorzugt das Rohbyte; fehlt es (erzeugte Einheiten tragen
+    /// keinen Rohsatz), gilt der gelesene Zusammenhang
+    /// <c>+0x0B == 2·(Waffenzeile − 190)</c> als Rueckfall.
+    ///
+    /// <para>⚠ Unsere Fusssoldaten fuehren die Waffenzeile als
+    /// <c>Weapon = InfCompBase + Zeile</c> (390…399), das Original als
+    /// <c>+0x0D</c> = 190…201. Beides derselbe Wert, zwei Zaehlweisen.</para>
+    /// <returns>0…22, oder −1 wenn die Einheit kein Fussvolk ist.</returns>
+    public static int WaffenUntertyp(Entity e)
+    {
+        if (e.GameUnitType != 1) return -1;
+        if (e.Comp0B >= 0) return e.Comp0B;
+        int zeile = e.Weapon >= InfCompBase ? e.Weapon - InfCompBase
+                  : e.Comp0D is >= 190 and <= 201 ? e.Comp0D : -1;
+        return zeile < 0 ? -1 : Mathf.Clamp(2 * (zeile - 190), 0, 22);
+    }
+
+    /// <summary>
+    /// <b>DIE VIER ERSTEN PLAETZE EINES FUSSSOLDATEN</b> — die Sprungtafel
+    /// @0x441A60 mit ihren 13 Faellen, in beiden EXE byteweise gleich
+    /// (berichte/pionier-menue-fable.md, Abschnitt 1.2).
+    ///
+    /// <code>
+    ///   Indextafel @0x441A94: nur GERADE +0x0B tragen einen Fall,
+    ///   ungerade landen auf Fall 12 = nichts.
+    ///
+    ///   Fall 0,1,2,4,7,9   (Waffe 190,191,192,194,197,199)  bewaffnet
+    ///        -> 0x1F Angreifen · 0x20 Laufen · 0x21 Beschuetzen
+    ///   Fall 3,5,6,10,11   (Waffe 193,195,196,200,201)      unbewaffnet
+    ///        ->      —     · 0x20 Laufen · 0x21 Beschuetzen
+    ///   Fall 8             (Waffe 198 = PIONIER)
+    ///        -> 0x0C Ausbessern · 0x20 Laufen · 0x0D Bruecke · 0x0E Mole
+    /// </code>
+    ///
+    /// <para>⚠⚠ <b>Alle Fussvolkfaelle springen nach 0x4419F8</b> und
+    /// ueberspringen damit den Block, der beim Fahrzeug c2 = Bewegen, c3 =
+    /// Beschuetzen/Anhalten und das Ein-/Ausgraben setzt. Fussvolk bekommt
+    /// darum <b>nie</b> Handsteuerung (@0x441A28 <c>cmp al,1; je</c>),
+    /// <b>nie</b> Verkaufen (@0x441A3B verlangt +0x0A == 0) und <b>nie</b>
+    /// Ein-/Ausgraben. Bei uns stand genau das drin — <c>Comp0F == 0xAB</c>
+    /// gab jedem Fusssoldaten den Spaten.</para>
+    /// </summary>
+    private static int[] FussvolkCodes(Entity e)
+    {
+        var c = new[] { -1, -1, -1, -1, -1, -1, -1, -1 };
+        int sub = WaffenUntertyp(e);
+        if (sub < 0 || sub > 22 || (sub & 1) != 0) return c;   // Fall 12: nichts
+        int fall = sub / 2;
+        switch (fall)
+        {
+            case 8:                                            // der PIONIER
+                c[0] = CodeAusbessern; c[1] = CodeFussLaufen;
+                c[2] = CodeBruecke;    c[3] = CodeMole;
+                break;
+            case 3: case 5: case 6: case 10: case 11:          // unbewaffnet
+                c[1] = CodeFussLaufen; c[2] = CodeFussSchutz;
+                break;
+            default:                                           // bewaffnet
+                c[0] = CodeFussAngriff; c[1] = CodeFussLaufen; c[2] = CodeFussSchutz;
+                break;
+        }
+        return c;
+    }
+
     /// <summary>Die erste eigene Einheit der Auswahl — im Original
     /// <c>[0x4FA0C8]</c>, die »gewaehlte Einheit«, auf die das Menue sich
     /// bezieht.</summary>
@@ -103,6 +185,19 @@ public partial class MapEntityLayer : Node2D
         var c = new[] { -1, -1, -1, -1, -1, -1, -1, -1 };
         if (idx < 0 || idx >= _entities.Count) return c;
         var e = _entities[idx];
+
+        // ⭐⭐ 12.09.2026 — DIE GATTUNGSWEICHE (bug-219). @0x441877 steht
+        // `cmp byte[+0x0A], 1` VOR allem anderen: Fussvolk geht einen eigenen
+        // Weg, und der endet direkt beim gemeinsamen Teil c5/c6. Siehe
+        // FussvolkCodes. Gegenschalter --fussvolkmenue-alt.
+        bool fussvolk = !FussvolkmenueAlt && e.GameUnitType == 1;
+        if (fussvolk)
+        {
+            c = FussvolkCodes(e);
+            if (e.HpMax > 0 && e.Hp * 100 / e.HpMax > 15) c[4] = CodeSelbstzerstoerung;
+            c[5] = CodeInfo;
+            return c;                       // kein c7, kein c8 — siehe Kopf
+        }
 
         // c1 — die Tafel roh, ohne Deutung.
         c[0] = e.Weapon switch
@@ -188,9 +283,33 @@ public partial class MapEntityLayer : Node2D
                 return "Die Werte stehen im Bedienblock links unten.";
 
             // ---- die ZEIGERMERKER, siehe Simulation/Zeigermerker.cs ------
+            // ⭐ 12.09.2026: das Fussvolk hat eigene Zeilen fuer dieselben drei
+            // Merker (0x1F/0x20/0x21 statt 0/1/2) — die Wirkung ist dieselbe,
+            // nur die Zeile der Befehlsliste ist eine andere.
+            case CodeFussAngriff:
+                return MerkerSetzen(CodeAngreifen);
+            case CodeFussLaufen:
+                return MerkerSetzen(CodeBewegen);
+            case CodeFussSchutz:
+                goto case CodeBeschuetzen;
             case CodeAngreifen:
             case CodeBewegen:
                 return MerkerSetzen(code);
+
+            // ---- was der PIONIER kann (bug-219) --------------------------
+            case CodeMole:
+                return MolenbauBeginnen();
+            case CodeAusbessern:
+                return AusbessernBeginnen();
+            case CodeBruecke:
+                // ⚠ NICHT GEBAUT, und der Grund steht hier statt einer
+                // erfundenen Bruecke: die Geometrie in 0x4CCCB0 (Laengen-
+                // zaehlung, vier Richtungsfaelle, das 3x5-Kachelfeld) ist
+                // ausdruecklich NICHT gelesen — berichte/pionier-menue-fable.md
+                // Abschnitt 3 und berichte/landungsbruecke-fable.md Abschnitt 5.
+                // Der Knopf steht trotzdem da, weil das Original ihn zeigt.
+                return "»Bruecke bauen« ist gelesen bis auf ihre Geometrie "
+                     + "(0x4CCCB0) — die Mole/Landungsbruecke geht schon.";
             case CodeSelbstzerstoerung:
                 return SelbstzerstoerungAusfuehren();
             case CodeHandsteuerung:

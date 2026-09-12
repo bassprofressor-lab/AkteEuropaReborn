@@ -42,8 +42,50 @@ using Godot;
 /// </summary>
 public sealed partial class UnitMenuWindow : Control
 {
-    /// <summary>8 x 6 Kacheln — die 160 x 120 des Originals.</summary>
-    public const int WTiles = 8, HTiles = 6, Scale = 2;
+    /// <summary>
+    /// <b>DAS FENSTER WÄCHST MIT DEN BELEGTEN PLÄTZEN</b> — berichtigt am
+    /// 12.09.2026 (bug-219).
+    ///
+    /// <para>⚠⚠ <b>Hier standen feste 8 × 6 Kacheln (160 × 120), und das hat
+    /// den vierten Platz unbedienbar gemacht.</b> Seine Meldung: »ich kann das
+    /// rampenfeld nicht auswählen«. Der vierte Platz liegt bei x = 140, und die
+    /// Trefferprüfung wirft alles ab <c>w − 20</c> = 140 als FENSTERKÖRPER weg
+    /// (der Ziehgriff). Gezeichnet wurde das Symbol, anklickbar war es nie.
+    /// Aufgefallen ist es erst, als der Pionier als erste Einheit überhaupt
+    /// einen vierten Platz bekam — bis dahin hatte niemand mehr als drei.</para>
+    ///
+    /// <para><b>Das Original rechnet die Breite aus den Plätzen</b>
+    /// (<c>0x4573C0</c>, berichte/pionier-menue-fable.md §1.2): Grundmass
+    /// 80 × 80, und je belegter Spalte 40 mehr — der Pionier bekommt
+    /// <b>200 × 120</b> (»Breite 200, weil c4 belegt; Höhe 120, weil c5
+    /// belegt«). Der Materialtransporter mit drei Symbolen oben und zwei unten
+    /// bekommt 160 × 120, und genau das stand hier vorher fest verdrahtet.</para>
+    ///
+    /// <para>In Kacheln zu 20 Punkten: <c>2 + 2·Spalten</c> breit,
+    /// <c>2 + 2·Zeilen</c> hoch.</para></summary>
+    public int WTiles { get; private set; } = 8;
+    public int HTiles { get; private set; } = 6;
+    public const int Scale = 2;
+
+    /// <summary>Die Maße aus den belegten Plätzen — siehe <see cref="WTiles"/>.
+    /// Eine Zeile zählt, wenn in ihr etwas steht; eine Spalte ebenso.</summary>
+    public void MasseSetzen() => MasseAusCodes();
+
+    private void MasseAusCodes()
+    {
+        int spalten = 0, zeilen = 0;
+        for (int i = 0; i < 8 && i < Codes.Length; i++)
+        {
+            if (Codes[i] < 0) continue;
+            spalten = Mathf.Max(spalten, i % 4 + 1);
+            zeilen = Mathf.Max(zeilen, i / 4 + 1);
+        }
+        WTiles = 2 + 2 * Mathf.Max(1, spalten);
+        HTiles = 2 + 2 * Mathf.Max(1, zeilen);
+        CustomMinimumSize = new Vector2(WTiles * WindowChrome.Cell * Scale,
+                                        HTiles * WindowChrome.Cell * Scale);
+        Size = CustomMinimumSize;
+    }
 
     /// <summary>Die acht Plätze aus dem Zeichner <c>0x463D60</c>.</summary>
     private static readonly (int X, int Y)[] Slots =
@@ -80,9 +122,7 @@ public sealed partial class UnitMenuWindow : Control
 
     public UnitMenuWindow()
     {
-        CustomMinimumSize = new Vector2(WTiles * WindowChrome.Cell * Scale,
-                                        HTiles * WindowChrome.Cell * Scale);
-        Size = CustomMinimumSize;
+        MasseAusCodes();
         MouseFilter = MouseFilterEnum.Stop;
         ProcessMode = ProcessModeEnum.Always;
     }

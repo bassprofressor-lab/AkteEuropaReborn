@@ -334,6 +334,47 @@ public partial class MapEntityLayer : Node2D
         /// </summary>
         public int Comp0D, Comp0F;
 
+        /// <summary><b>Der WAFFENUNTERTYP des Fussvolks, Satz +0x0B</b> — roh,
+        /// ohne Ableitung (12.09.2026, bug-219).
+        ///
+        /// <para>Die Menuezusammenstellung @0x441810 hat vorn eine
+        /// GATTUNGSWEICHE: <c>cmp byte[+0x0A], 1</c>. Ist es Fussvolk, geht sie
+        /// NICHT ueber den Turm +0x0C, sondern ueber dieses Byte in die
+        /// Indextafel @0x441A94 und von dort in eine Sprungtafel mit 13 Faellen.
+        /// Der Pionier ist Fall 8, also +0x0B == 16.</para>
+        ///
+        /// <para>⚠ Es gilt <c>+0x0B == 2·(Waffenzeile − 190)</c>, und genau
+        /// darum steht hier ein Rohbyte und keine Rechnung: am 21.08.2026 hat
+        /// eine solche Ableitung (»ZBRAN = Weapon − 20«) fuenfzehn Tore des
+        /// Kampagnenvorspanns unerfuellbar gemacht. Wo ein Rohbyte daliegt,
+        /// wird es gelesen. Fehlt der Rohsatz, rechnet
+        /// <see cref="MapEntityLayer.WaffenUntertyp"/> als Rueckfall — und sagt
+        /// das.</para></summary>
+        public int Comp0B = -1;
+
+        /// <summary><b>Der laufende Bauauftrag eines Pioniers, Satz +0x40</b>
+        /// (12.09.2026, bug-219): 0 = keiner, 1 = Bruecke, 2 = Mole,
+        /// 4 = Ausbessern. Befehl 16 traegt ihn ein, der UKOL-0-Arm schaltet bei
+        /// der Ankunft auf UKOL 20. Siehe Simulation/Landungsbruecke.cs.</summary>
+        public int Bauart;
+
+        /// <summary>Die Zelle, auf der gebaut werden soll. ⚠ UKOL 20 prueft die
+        /// Zelle, auf der die Einheit WIRKLICH steht — kommt sie woanders an,
+        /// faellt der Auftrag still durch. Darum wird beides verglichen.</summary>
+        public Vector2I BauZelle = new(-1, -1);
+
+        /// <summary>Takte im Arbeitszyklus. Zwei Zyklen à 24 Takte, siehe
+        /// Landungsbruecke.cs.</summary>
+        public int BauTakte;
+
+        /// <summary><b>VERBRAUCHT, nicht gestorben</b> (12.09.2026, bug-219).
+        /// Der Pionier, der eine Mole baut, wird im Original mit
+        /// <c>0x410E60</c> ENTFERNT — er faellt nicht um. Das Lexikon sagt es
+        /// auch: »verarbeitet seine eigenen Bestandteile und wird so
+        /// unbenutzbar«. Wer nur <c>Dead</c> setzt, bekommt die Sterbebilder
+        /// 12..14 und eine Leiche.</summary>
+        public bool Verbraucht;
+
         public int Grade;                   // deposit grade 0..6 (sec28 +0x0a)
         public int StockT;                  // Terranium stored in the building (+0x2e)
         public float EconTimer;             // seconds until the next economy tick
@@ -3471,6 +3512,9 @@ public partial class MapEntityLayer : Node2D
                     // je Einheit, und +0x0E ist NICHT darunter.
                     Comp0D = haveRaw ? HexByte(raw, 0x0d) : 0,
                     Comp0F = haveRaw ? HexByte(raw, 0x0f) : 0,
+                    // +0x0b ist der WAFFENUNTERTYP des Fussvolks, an dem die
+                    // Menuezusammenstellung @0x441810 haengt — siehe Entity.Comp0B.
+                    Comp0B = haveRaw ? HexByte(raw, 0x0b) : -1,
                     // +0x0e ist die BAUTEILZEILE (65..79) — siehe Entity.Part.
                     Part = haveRaw ? HexByte(raw, 0x0e) : 0,
                     Ammo = haveRaw ? HexByte(raw, 0x39) : 0,
@@ -7033,6 +7077,10 @@ public partial class MapEntityLayer : Node2D
         }
         if (!_drawSprites || Patterns == null) return;
         BuildingGroundDrawn = 0;
+        // ⭐ 12.09.2026 — die im Spiel gebauten Molen liegen FLACH, wie ein
+        // Gebaeudeboden: sie gehoeren in denselben Durchgang, vor Gleis und
+        // Einheiten (bug-219).
+        ZeichneMolen();
         foreach (var b in BuildingsBackToFront())
             DrawBuildingTiles(b, flach: true);
         // ⚠ Regel 32/33: die eigene Zeile MUSS im Protokoll stehen, sonst ist
@@ -31374,6 +31422,14 @@ public partial class MapEntityLayer : Node2D
             // ("nebenan +0 TP"), gelesen hätte ich es nicht.
             UnitRepairTick(i, e, dt);
 
+            // ⭐ 12.09.2026 — UKOL 20, der Arbeitstakt des Pioniers
+            // (Simulation/Landungsbruecke.cs, bug-219). Er steht hier und nicht
+            // im Gebaeudetakt, weil er im Original ein Arm des EINHEITEN-
+            // durchgangs ist (0x409460) — derselbe Grund wie bei den zwei
+            // Reparaturen darueber.
+            MoleArbeitTick(i, e);
+            if (e.Dead) continue;              // der Pionier hat sich verbraucht
+
             UpdateCombat(i, e, dt);
 
             if (e.Path == null || e.PathIdx >= e.Path.Count) continue;
@@ -32272,6 +32328,41 @@ public partial class MapEntityLayer : Node2D
     private static readonly int[] InfDeathBlocks = { 12, 13, 14 };
     private const float InfWalkFps = 9f, InfFireFps = 7f;
 
+    /// <summary>
+    /// <b>DIE ARBEITSANIMATION DES PIONIERS</b> (12.09.2026, bug-219).
+    ///
+    /// <para>Seine Beschreibung aus dem Original: »man sieht eine art kleine
+    /// bau animation von ihm und in dem moment wo die landungrampe erscheint
+    /// verschwindet er ohne totesanimation«. Der Leser hat sie in der EXE
+    /// gefunden: <c>+0x47 = 11</c> ist die Arbeitsanimation der Infanterie
+    /// (<c>0x4075EF</c>, F <c>0x40753A</c>), <b>24 Bilder</b>, dann 0 — und
+    /// UKOL 20 wartet zweimal darauf.</para>
+    ///
+    /// <para>⚠⚠ <b>WELCHE Bilder das sind, ist NICHT gelesen</b>, und darum
+    /// steht es hier als Setzung: <c>+0x47</c> ist eine Animationsnummer, keine
+    /// Blocknummer unserer Bank. Genommen sind die drei Blöcke <b>8, 9, 10</b>,
+    /// und das aus drei Gründen — die Bank hat sie für 20 der 24 Sätze; das
+    /// Sterben benutzt genau so drei aufeinanderfolgende Blöcke; und die Bilder
+    /// zeigen im Satz des Pioniers (16) eine gebückte Haltung, die sich vom
+    /// Stehbild 11 deutlich unterscheidet.</para>
+    ///
+    /// <para>⚠ <b>Der Widerspruch, benannt:</b> 9 und 10 sind oben schon als
+    /// FEUERBILDER gedeutet (»an den gezeichneten Bildern abgelesen«). Beides
+    /// zugleich kann nicht stimmen — aber es stört sich nicht: der Pionier ist
+    /// <b>unbewaffnet</b> (Waffenzeile 198, Fall 8 der Fussvolkweiche) und
+    /// kommt nie in den Feuerzweig. Wer die Bank eines Tages sauber ausliest,
+    /// ersetzt hier eine Zeile. Gegenschalter <c>--bauanimation-aus</c>.</para>
+    /// </summary>
+    private static readonly int[] InfWorkBlocks = { 8, 9, 10 };
+
+    /// <summary>Drei Bilder auf 24 Takte, also rund 6 je Sekunde — aus der
+    /// gelesenen Zykluslänge gerechnet, nicht gemessen.</summary>
+    private const float InfWorkFps = 6f;
+
+    /// <summary><c>--bauanimation-aus</c> — der Pionier steht beim Bauen still,
+    /// wie bis zum 12.09.2026.</summary>
+    public static bool BauanimationAus;
+
     /// <summary>Which animation block a foot soldier is showing right now.</summary>
     private const float InfDeathFps = 5f;
 
@@ -32685,6 +32776,12 @@ public partial class MapEntityLayer : Node2D
         // schiessen«. Ein Ziel zu HABEN heisst nicht, darauf zu feuern -- das
         // tut sie erst in Reichweite. `Fire()` setzt darum jetzt eine kurze
         // Frist, und nur solange die laeuft, wird die Pose gezeigt.
+        // ⭐ 12.09.2026 — DER PIONIER BEI DER ARBEIT (bug-219). Er steht auf
+        // seiner Bauzelle und arbeitet; das geht VOR dem Feuerzweig, denn er
+        // ist unbewaffnet, und vor dem Laufzweig, denn sein Weg ist zu Ende.
+        if (!BauanimationAus && e.Bauart != 0
+            && e.Col == e.BauZelle.X && e.Row == e.BauZelle.Y)
+            return InfWorkBlocks[(int)(_clock * InfWorkFps) % InfWorkBlocks.Length];
         if (e.Weapon != 0 && _clock < e.FireUntil)
             return InfFireBlocks[(int)(_clock * InfFireFps) % InfFireBlocks.Length];
         if (e.Path != null)                       // walking: the eight-step cycle
@@ -34400,15 +34497,22 @@ public partial class MapEntityLayer : Node2D
         // Einheit — wer erst nach einem Getroffenen fragt, kommt hier nie an.
         // Bedingung wie im Absender: ein eigener, BELADENER Traeger ist
         // gewaehlt, und unter der Maus liegt eine gueltige Absetzzelle.
-        if (!EntladezeigerAus && _sel.Count > 0 && CellAt(mapPos) is { } rz
-            && RampenAbsetzZelle(rz.X, rz.Y) != null)
+        if (!EntladezeigerAus && _sel.Count > 0 && CellAt(mapPos) is { } rz)
             foreach (int k in _sel)
                 if (k >= 0 && k < _entities.Count)
                 {
                     var t = _entities[k];
-                    if (!t.IsBuilding && !t.IsProp && !t.Dead && t.Owner == ViewPlayer
-                        && IstTraeger(t) && FrachtAnBord(t.Slot).Count > 0)
-                        return Hint.Entladen;
+                    if (t.IsBuilding || t.IsProp || t.Dead || t.Owner != ViewPlayer) continue;
+                    if (!IstTraeger(t)) continue;
+                    var fracht = FrachtAnBord(t.Slot);
+                    if (fracht.Count == 0) continue;
+                    // ⭐ 12.09.2026, bug-228: traegt das Schiff NUR Fussvolk,
+                    // zeigt der Zeiger auch ueber einer gewoehnlichen Landzelle
+                    // »entladen« — sonst faende der Spieler die Stelle nie, an
+                    // der sein Pionier an Land darf.
+                    bool nurFuss = true;
+                    foreach (var q in fracht) if (q.Infantry < 0) { nurFuss = false; break; }
+                    if (AbsetzZelle(rz.X, rz.Y, nurFuss) != null) return Hint.Entladen;
                 }
 
         int i = Pick(mapPos);
@@ -36662,6 +36766,14 @@ public partial class MapEntityLayer : Node2D
 
     private void DrawUnitBody(Entity e)
     {
+        // ⚠⚠ 12.09.2026, ZWEITER Anlauf — seine Meldung kam zweimal: »er stirbt
+        // /faellt wieder um anstatt nach dem bau einfach zu verschwinden«. Beim
+        // ersten Mal habe ich den Haken an der FALSCHEN Zeichenstelle gesetzt
+        // (der Ausweichzweig fuer fehlende Bilder, :36842) — der Leichenzweig
+        // hier oben lief weiter. Er gehoert ganz nach vorn: eine VERBRAUCHTE
+        // Einheit wird ueberhaupt nicht gezeichnet, weder Koerper noch Leiche
+        // noch Auswahlring. Siehe Entity.Verbraucht.
+        if (e.Verbraucht) return;
         Zeichenfolge?.Add(('E', e.Row));
         UnitsDrawnInOrder++;
         var picC = PictureAnchor(e);
@@ -36749,6 +36861,9 @@ public partial class MapEntityLayer : Node2D
                     // erst die Nachbarrichtung, dann das Stehbild. Beides ist
                     // ein vorhandenes Bild desselben Soldaten — geraten wird
                     // nichts.
+                    // ⚠ Ein VERBRAUCHTER Pionier wird nicht gezeichnet — er
+                    // ist entfernt, nicht gefallen (siehe Entity.Verbraucht).
+                    if (e.Verbraucht) return;
                     int blk = InfBlock(e);
                     var foot = GetInfantryTexture(e.Infantry, e.Facing, blk);
                     if (foot == null)

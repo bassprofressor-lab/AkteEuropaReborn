@@ -599,6 +599,13 @@ public sealed class MapBaker
     /// <c>YOff</c> — der Zeichner braucht ihn, um die Kachel gegen die Zelle zu
     /// setzen, und der ist bei der verkohlten Fassung ein anderer als beim
     /// grünen Baum.</para></summary>
+    /// <summary>Die erste Kachel der LANDUNGSBRUECKE (Rampe, sec21) —
+    /// <c>kachel = 10723 + Richtung + 8·Schadensstufe</c>, gelesen am Zeichner
+    /// <c>0x4CBB80</c>. Zwoelf Bilder: vier Richtungen mal drei Stufen. Sie
+    /// kommen in denselben Streifen wie die verkohlten Baeume, damit eine
+    /// waehrend des Spiels gebaute Mole ueberhaupt Pixel hat.</summary>
+    public const int RampenKachelBasis = 10723;
+
     public readonly List<(int Code, int X, int Y, int W, int H, int YOff)> BurntAtlas = new();
 
     private byte[]? _burnt;                 // der Streifen, PixelW x _burntH
@@ -802,6 +809,26 @@ public sealed class MapBaker
             BurntAtlas.Add((tileCode, 0, 0, ks.W, ks.H, ks.YOff));
             return slot;
         }
+
+        // ⭐⭐ 12.09.2026 — DIE KACHELN DER LANDUNGSBRUECKE IN DENSELBEN STREIFEN
+        // (bug-219). Seine Meldung: »ich habe die landungsrampen aber nicht
+        // gesehen«.
+        //
+        // Eine Mole, die der Pionier WAEHREND des Spiels baut, hat im gebackenen
+        // Kartenbild keine Pixel — das Bild entsteht ja hier, beim Import. Die
+        // verkohlten Baeume haben dasselbe Problem und loesen es mit diesem
+        // Streifen; die Rampe braucht nur dieselbe Behandlung.
+        //
+        // Das Band ist GELESEN (berichte/landungsbruecke-fable.md, Zeichner
+        // 0x4CBB80): `kachel = 10723 + Richtung + 8*Schadensstufe`, also
+        // 10723..10734 — vier Richtungen, drei Stufen. Wir legen alle zwoelf
+        // ab, damit auch eine angeschlagene Mole ihr Bild hat.
+        //
+        // ⚠ Es braucht KEINEN eigenen Meta-Schluessel: die Eintraege des
+        // Streifens tragen ihren CODE, und der Zeichner sucht danach. Ob eine
+        // Karte selbst Rampen hat, ist dabei gleichgueltig — gebaut werden kann
+        // auf jeder.
+        for (int k = 0; k < 12; k++) Streifenplatz(RampenKachelBasis + k);
 
         // passes A and B — backdrop, then the cell's own detail
         for (int r = 0; r < h; r++)

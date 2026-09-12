@@ -188,6 +188,17 @@ public partial class MapEntityLayer
     public void PlacementHover(int col, int row)
     {
         if (PlacementMode == 0) return;
+        // ⭐ 12.09.2026 — die Mole ist EINE Zelle und hat ihre eigene
+        // Gueltigkeit (rau, leer, Uferboeschung). Der Zeigerautomat des
+        // Originals verzweigt an genau derselben Stelle nach Bauart
+        // (0x4315D0, Tafel 0x432A10). Simulation/Landungsbruecke.cs.
+        if (PlacementMode is OrderMole or OrderAusbessern)
+        {
+            bool ok = PlacementMode == OrderMole
+                ? MolePlatzOk(col, row) : RampeAn(col, row) != null;
+            SetMolePreview(col, row, ok);
+            return;
+        }
         var off = BuildOffsetOfOrder(PlacementMode);
         if (PlacementMode == OrderFieldMine)
         {
@@ -224,6 +235,12 @@ public partial class MapEntityLayer
 
         if (idx < 0 || idx >= _entities.Count)
         { BuildOrderNote = "die Einheit ist weg"; return false; }
+
+        // ⭐ 12.09.2026 — die zwei Pionierbefehle gehen einen eigenen Weg: sie
+        // setzen kein Gebaeude, sie schicken den Pionier los und bauen bei der
+        // ANKUNFT (Simulation/Landungsbruecke.cs, bug-219).
+        if (order is OrderMole or OrderAusbessern)
+            return MoleKlick(idx, col, row, order);
 
         int vorkommen = -1;
         if (order == OrderFieldMine)

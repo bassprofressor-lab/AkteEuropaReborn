@@ -944,6 +944,35 @@ public sealed class NavGrid
         return true;
     }
 
+    /// <summary>
+    /// <b>DIE LANDUNGSBRÜCKE MACHT EINE RAUE ZELLE BEFAHRBAR</b> (12.09.2026,
+    /// bug-219) — und nimmt es beim Abriss wieder zurück.
+    ///
+    /// <para>Im Original ist das genau ein Wort in der Belegungskarte: der
+    /// Anleger <c>0x4CBEE0</c> schreibt <c>sec6 := 0xFFFE</c> (@0x4CBFA9), und
+    /// <c>Destroy ramp</c> <c>0x4CBAB0</c> schreibt <c>0xFFFD</c> zurück. Bei
+    /// uns sind das die Klassen <see cref="Ground.Free"/> und
+    /// <see cref="Ground.Rough"/> — dieselbe Aussage, anderes Raster.</para>
+    ///
+    /// <para>⚠ Die Wirkung ist der ganze Zweck: <see cref="CanEnter"/> lässt
+    /// über <see cref="Ground.Rough"/> nur Läufer und Schweber, über
+    /// <see cref="Ground.Free"/> jedes Fahrzeug. Im Original hängt derselbe
+    /// Unterschied am Einstieg für Fahrzeuge (<c>sec20 &gt;= 200</c>
+    /// @0x438440) — darum heisst sie Landungsbrücke.</para>
+    /// </summary>
+    /// <returns>true, wenn die Klasse wirklich gewechselt hat.</returns>
+    public bool RampeSetzen(int c, int r, bool an)
+    {
+        if (!InBounds(c, r)) return false;
+        var soll = an ? Ground.Free : Ground.Rough;
+        var ist = (Ground)_ground[Idx(c, r)];
+        // ⚠ Nur zwischen rau und frei. Eine Rampe hebt keine SPERRE auf und
+        // legt kein Wasser trocken — beides waere eine erfundene Wirkung.
+        if (ist != (an ? Ground.Rough : Ground.Free)) return false;
+        _ground[Idx(c, r)] = (byte)soll;
+        return true;
+    }
+
     /// <summary><c>--wald-bleibt-sperre</c> — die Gegenprobe: ein abgebrannter
     /// Baum sperrt weiter, wie bis zum 01.09.2026.</summary>
     public static bool WaldBleibtSperre;

@@ -1376,6 +1376,9 @@ public partial class MapViewer : Node2D
     /// <summary><c>--flughafenfenster-check</c> — siehe
     /// Simulation/FlughafenfensterCheck.cs (bug-211).</summary>
     private bool _flughafenfensterCheck;
+
+    /// <summary><c>--mole-check</c> — siehe Simulation/Landungsbruecke.cs (bug-219).</summary>
+    private bool _moleCheck;
     /// <summary><c>--routentuer-check</c> — siehe Simulation/RoutentuerCheck.cs.</summary>
     private bool _rtCheck, _rtGestartet;
     private bool _sieg7Gestartet;
@@ -2608,7 +2611,12 @@ public partial class MapViewer : Node2D
     private void DoppelklickCheck()
     {
         var sb = new System.Text.StringBuilder("doppelklick-check\n");
-        int idx = _entities.ErsteEigeneEinheit();
+        // ⚠ 12.09.2026: BEVORZUGT einen Pionier — er ist die einzige Einheit
+        // mit einem vierten Platz, und genau der war taub (bug-219). Ein
+        // Pruefstand, der immer die erste beste Einheit nimmt, misst den
+        // Fall nie.
+        int idx = _entities.ErsterPionier();
+        if (idx < 0) idx = _entities.ErsteEigeneEinheit();
         if (idx < 0 || _unitMenu == null)
         {
             GD.Print(sb.Append("  keine eigene Einheit oder kein Menue — nicht stellbar")
@@ -2632,9 +2640,34 @@ public partial class MapViewer : Node2D
         foreach (int c in _unitMenu.Codes) if (c >= 0) belegt++;
         sb.Append($"  Einheit {idx} gewaehlt, Menue vorher {(vorher ? "offen" : "zu")}, "
                 + $"nach dem Doppelklick {(offen ? "OFFEN" : "ZU")}, {belegt} Symbole\n");
-        sb.Append(offen && belegt > 0
-                  ? "  WIE ERWARTET — der Doppelklick oeffnet das Menue"
-                  : "  NICHT wie erwartet — der Doppelklick kommt nicht an");
+
+        // ⭐⭐ 12.09.2026, bug-219 — JEDES BELEGTE SYMBOL MUSS ANKLICKBAR SEIN.
+        // Seine Meldung: »ich kann das rampenfeld nicht auswählen«. Der vierte
+        // Platz wurde gezeichnet, lag aber hinter dem Ziehgriff, weil das
+        // Fenster fest 160 Punkte breit war. Gemessen wird darum nicht »das
+        // Menue ist offen«, sondern die TREFFERPRUEFUNG auf jedem belegten
+        // Platz — die Zeile darueber war seit dem 08.09. gruen und hat den
+        // Fehler nicht gesehen.
+        int klickbar = 0, taub = 0;
+        var tauben = new System.Text.StringBuilder();
+        for (int s = 0; s < _unitMenu.Codes.Length && s < 8; s++)
+        {
+            if (_unitMenu.Codes[s] < 0) continue;
+            // die Mitte des Symbols, in Fensterpunkten mal Skalierung
+            int px = (20 + 40 * (s % 4) + 20) * UI.UnitMenuWindow.Scale;
+            int py = (20 + 40 * (s / 4) + 20) * UI.UnitMenuWindow.Scale;
+            if (_unitMenu.Hit(new Vector2(px, py)) == s + 1) klickbar++;
+            else { taub++; tauben.Append($" Platz {s + 1} (Code {_unitMenu.Codes[s]})"); }
+        }
+        sb.Append($"  Fenster {_unitMenu.WTiles * UI.WindowChrome.Cell}x"
+                + $"{_unitMenu.HTiles * UI.WindowChrome.Cell} Punkte; "
+                + $"anklickbar {klickbar} von {belegt}"
+                + (taub > 0 ? $" — TAUB:{tauben}" : "") + "\n");
+        sb.Append(offen && belegt > 0 && taub == 0
+                  ? "  WIE ERWARTET — der Doppelklick oeffnet das Menue, und jedes Symbol trifft"
+                  : taub > 0
+                    ? "  DURCHGEFALLEN — ein gezeichnetes Symbol, das der Klick nicht erreicht"
+                    : "  NICHT wie erwartet — der Doppelklick kommt nicht an");
         GD.Print(sb.ToString());
         if (offen) _unitMenu.Visible = false;
     }
@@ -2834,6 +2867,11 @@ public partial class MapViewer : Node2D
             else if (a == "--einnahmeklick-alt") MapEntityLayer.EinnahmeklickAlt = true;
             else if (a == "--zivilzeiger-alt") MapEntityLayer.ZivilzeigerAlt = true;
             else if (a == "--flughafenfenster-check") _flughafenfensterCheck = true;
+            else if (a == "--rampe-bauzeit") MapEntityLayer.RampeBauzeit = true;
+            else if (a == "--fussvolkmenue-alt") MapEntityLayer.FussvolkmenueAlt = true;
+            else if (a == "--mole-check") _moleCheck = true;
+            else if (a == "--bauanimation-aus") MapEntityLayer.BauanimationAus = true;
+            else if (a == "--absetzen-nur-rampe") MapEntityLayer.AbsetzenNurRampe = true;
             else if (a == "--tuerlos-alt") MapEntityLayer.TuerlosAlt = true;
             else if (a == "--neutralklick-alt") MapEntityLayer.NeutralklickAlt = true;
             else if (a == "--minenfenster-alt") UI.BuildingWindow.MinenfensterAlt = true;
@@ -4318,6 +4356,7 @@ public partial class MapViewer : Node2D
             if (_kiSichtCheck) GD.Print(_entities.KiAufklaerungLine());
             if (_kiStufenCheck) GD.Print(_entities.KiStufenCheckLine());
             if (_flughafenfensterCheck) GD.Print(_entities.FlughafenfensterCheck());
+            if (_moleCheck) GD.Print(_entities.MoleCheckLine());
             if (_gwCheck) GD.Print(_entities.GaswerferCheckLine());
             if (_rtCheck) GD.Print(_entities.RoutentuerCheckLine());
             if (_zielzelleProbe) GD.Print(_entities.ZielzelleProbe());
@@ -5702,6 +5741,11 @@ public partial class MapViewer : Node2D
         bool etwas = false;
         foreach (int c in _unitMenu.Codes) if (c >= 0) etwas = true;
         if (!etwas) return;
+        // ⚠ 12.09.2026 — DIE MASSE ERST, DANN AUFMACHEN. Das Fenster waechst
+        // mit den belegten Plaetzen (bug-219); ohne diese Zeile bleibt es bei
+        // den alten 160 Punkten, und der vierte Platz liegt hinter dem
+        // Ziehgriff. Siehe UI/UnitMenuWindow.MasseAusCodes.
+        _unitMenu.MasseSetzen();
         _unitMenu.Visible = true;
         _unitMenu.PlaceAt(schirmPos);
         _unitMenu.QueueRedraw();

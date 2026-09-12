@@ -380,6 +380,17 @@ public partial class MapEntityLayer
     public bool RampeEntladen(int col, int row)
         => _rampen.TryGetValue(col * 1024 + row, out int l) && l >= 200;
 
+    /// <summary>Der Platz einer Ersatzkachel im Streifen, nach ihrem CODE —
+    /// gefuellt aus <c>meta["burnt"]</c>. Die verkohlten Baeume finden ihren
+    /// Platz ueber einen Index, die Landungsbruecke ueber diese Tafel: sie wird
+    /// erst im Spiel gebaut, es gibt also keinen Eintrag, der auf sie
+    /// zeigt.</summary>
+    private readonly Dictionary<int, (Rect2 Feld, int YOff)> _streifenNachCode = new();
+
+    /// <summary>Das Rechteck einer Streifenkachel, oder <c>null</c>.</summary>
+    public (Rect2 Feld, int YOff)? StreifenKachel(int code)
+        => _streifenNachCode.TryGetValue(code, out var v) ? v : null;
+
     /// <summary>Die Kachelnummer je Rampenzelle — die Richtung steckt darin.
     /// Siehe <see cref="RampenAbsetzZelle"/>.</summary>
     private readonly Dictionary<int, int> _rampenKachel = new();
@@ -422,6 +433,45 @@ public partial class MapEntityLayer
     /// sondern rechnet.</para>
     /// <para>Gibt <c>null</c>, wenn die Zelle keine Rampe ist oder ihre Kachel
     /// nicht zu den acht gehört.</para></summary>
+    /// <summary>
+    /// <b>WO EINE LADUNG AN LAND GEHT — und warum Fussvolk keine Rampe
+    /// braucht</b> (12.09.2026, bug-228).
+    ///
+    /// <para>Seine Meldung beim Spielen von Kampagne 8: »Infanterie kann man
+    /// immer Abladen vom Transporter ans Land, denn nur so bekommt man den
+    /// Pioneer auf die andere Inselseite um dort eine weitere Landungsrampe zu
+    /// bauen die man widerrum benötigt um Fahrzeuge abzuladen!«</para>
+    ///
+    /// <para>⚠⚠ <b>Und ohne das ist Mission 8 unspielbar</b> — es ist ein
+    /// Henne-und-Ei: die Rampe braucht einen Pionier am Ufer, der Pionier
+    /// kommt nur per Schiff, und das Schiff dürfte ohne Rampe nicht abladen.
+    /// Unser Absetzen ging bisher AUSSCHLIESSLICH über eine Rampenzelle.</para>
+    ///
+    /// <para><b>Die Unterscheidung ist am EINSTIEG schon gelesen</b> (bug-153,
+    /// 09.09.2026, siehe <c>DarfEinsteigen</c>): der Fussvolk-Zweig des Senders
+    /// @0x43820C prüft <b>keine Lage</b>, der Fahrzeugzweig verlangt
+    /// <c>sec20 &gt;= 200</c> (@0x438440). Dass dieselbe Trennung beim ABSETZEN
+    /// gilt, ist <b>nicht gelesen</b> — es ist seine Aussage über das Original
+    /// plus die Unspielbarkeit ohne sie. Darum steht es hier als unsere Setzung
+    /// mit Gegenschalter <c>--absetzen-nur-rampe</c>.</para>
+    ///
+    /// <para>Für Fussvolk gilt: jede Zelle, die ein Läufer betreten kann und
+    /// die frei ist. Für alles andere bleibt es bei der Rampe.</para></summary>
+    public Vector2I? AbsetzZelle(int col, int row, bool nurFussvolk)
+    {
+        var rampe = RampenAbsetzZelle(col, row);
+        if (rampe != null || !nurFussvolk || AbsetzenNurRampe) return rampe;
+        if (_nav == null || !_nav.InBounds(col, row)) return null;
+        if (!_nav.CanEnter(col, row, Simulation.NavGrid.MoveClass.Walker)) return null;
+        if (_nav.OccupantAt(col, row) >= 0) return null;
+        return new Vector2I(col, row);
+    }
+
+    /// <summary><c>--absetzen-nur-rampe</c> — der Stand vor dem 12.09.2026:
+    /// abgesetzt wird nur auf einer Rampe, auch Fussvolk. Das Nullmodell zu
+    /// bug-228; mit ihm ist Mission 8 nicht zu gewinnen.</summary>
+    public static bool AbsetzenNurRampe;
+
     public Vector2I? RampenAbsetzZelle(int col, int row)
     {
         int schluessel = col * 1024 + row;
@@ -479,11 +529,18 @@ public partial class MapEntityLayer
         // Ebene an (MapBaker.BurntAtlas). Eine Karte aus einem älteren Import
         // hat ihn nicht — dann brennt eben nichts, statt dass etwas kaputtgeht.
         var kohle = new List<Rect2>();
+        _streifenNachCode.Clear();
         if (meta["burnt"] is JsonArray bv)
             foreach (var item in bv)
             {
                 if (item is not JObj a) continue;
-                kohle.Add(new Rect2(GetI(a, "x"), GetI(a, "y"), GetI(a, "w"), GetI(a, "h")));
+                var rc = new Rect2(GetI(a, "x"), GetI(a, "y"), GetI(a, "w"), GetI(a, "h"));
+                kohle.Add(rc);
+                // ⭐ 12.09.2026 — derselbe Streifen traegt seit heute auch die
+                // zwoelf Kacheln der Landungsbruecke (10723..10734). Der
+                // Zeichner sucht sie ueber den CODE; siehe
+                // MapEntityLayer.ZeichneMolen und Import/MapBaker.RampenKachelBasis.
+                _streifenNachCode[GetI(a, "code")] = (rc, GetI(a, "yoff"));
             }
 
         // ⭐ 19.08.2026 — DIE RAMPENZELLEN aus Sektion 20. Sie sind die
