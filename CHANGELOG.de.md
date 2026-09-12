@@ -14,6 +14,39 @@ bisher nur dort beschrieben.*
 > **Road to 0.7.0** in der [README](README.de.md). Der Abschnitt unten wächst
 > mit jeder gespielten Mission weiter.
 
+## 0.6.2 — 12.09.2026 · das Gefecht wird spielbar
+
+> Ein kleiner Nachschlag zu 0.6.1, und er betrifft fast nur den **Gefechtsmodus**.
+> Die Kampagne ist unverändert (Stand: Missionen 1 bis 7 durchgespielt).
+
+### Kurz gesagt
+
+- **Der Computergegner schummelt nicht mehr bei der Sicht.** Bisher kannte er
+  die ganze Karte und hat Fabriken mit Langstreckenraketen beschossen, die er
+  nie gesehen hatte. Jetzt führt jeder Computerspieler seinen eigenen Nebel:
+  angegriffen wird nur, was er auch aufgedeckt hat — und wenn er keinen Gegner
+  kennt, schickt er einen Spähtrupp los.
+- **Leicht, normal und schwer bedeuten jetzt etwas.** Bisher unterschieden sich
+  die drei Stufen nur in drei Zahlen. Jetzt klettert der Computergegner eine
+  Techleiter hoch, und wie schnell er das tut, hängt an der Stufe: auf »leicht«
+  kommt er nie an die stärksten Waffen, auf »schwer« nach ein paar Minuten. Auch
+  wie oft er erkundet und angreift, hängt jetzt an der Stufe.
+- **Das Einnahme-Symbol steht endlich über den Toren.** Auf den Gefechtskarten
+  gehören fast alle Gebäude niemandem — sie sind der Preis der Karte. Über ihrem
+  Tor fehlte das Symbol, das sagt »hier kannst du einnehmen«; einnehmen ging,
+  aber man sah es nicht. Auf einer Karte wie NET02 betraf das alle 52 Gebäude.
+- **Am Flughafen geht nur noch EIN Fenster auf**, und zwar das des Originals.
+  Kaufen und Starten stehen jetzt darin.
+
+### Für Neugierige, was darunter liegt
+
+- Die Techstufe jedes Bauteils steht im Original selbst (Bauteiltafel), und die
+  Mittelstreckenrakete ist dort Stufe 7 von 8 — das vorletzte, was jemand
+  bekommt. Ihre auffällige Reichweite von 255 ist **nicht** von uns: sie steht
+  so in der Tafel, und sechs Fahrzeuge auf den Originalkarten tragen sie.
+- Die Karten führen für »gehört niemandem« zwei verschiedene Werte. Wir haben
+  beide gleich behandelt — daran hing das fehlende Einnahme-Symbol.
+
 ## 0.6.1 — 11.09.2026 · ein Halt auf der Road to 0.7.0
 
 > **0.6.1 ist nicht 0.7.0.** 0.7.0 kommt weiterhin erst, wenn alle 33 Missionen

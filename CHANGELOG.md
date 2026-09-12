@@ -12,6 +12,38 @@ your own copy of the 1997 game.
 > has been played through individually and found clean — see **Road to 0.7.0**
 > in the [README](README.md). The section below grows with every mission played.
 
+## 0.6.2 — 2026-09-12 · skirmish becomes playable
+
+> A small follow-up to 0.6.1, and it is almost entirely about **skirmish mode**.
+> The campaign is unchanged (missions 1 to 7 played through).
+
+### In short
+
+- **The computer opponent no longer cheats at vision.** It used to know the
+  whole map and would shell factories with long-range rockets it had never seen.
+  Each computer player now keeps its own fog of war: it only attacks what it has
+  actually uncovered — and when it knows no enemy, it sends out a scouting party.
+- **Easy, normal and hard now mean something.** The three levels used to differ
+  in three numbers only. The computer opponent now climbs a tech ladder, and how
+  fast it climbs depends on the level: on easy it never reaches the strongest
+  weapons, on hard it does after a few minutes. How often it scouts and attacks
+  depends on the level too.
+- **The capture icon finally shows above the gates.** On skirmish maps almost
+  every building belongs to nobody — they are what the map is played for. The
+  icon saying "you can capture this" was missing above their gate; capturing
+  worked, but nothing showed it. On a map like NET02 that was all 52 buildings.
+- **The airfield opens only ONE window now**, the original one. Buying and
+  launching live inside it.
+
+### For the curious, what lies underneath
+
+- Every component's tech level is in the original data itself, and the
+  medium-range rocket sits at level 7 of 8 there — the second-to-last thing
+  anyone gets. Its striking range of 255 is **not** ours: that is what the table
+  says, and six vehicles on the original maps carry it.
+- The maps use two different values for "belongs to nobody". We treated both the
+  same way — that is what the missing capture icon hung on.
+
 ## 0.6.1 — 2026-09-11 · a stop on the road to 0.7.0
 
 > **0.6.1 is not 0.7.0.** 0.7.0 still ships once all 33 missions have been

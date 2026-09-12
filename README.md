@@ -103,12 +103,13 @@ stays open or needs input goes into **[OFFENE_FRAGEN.md](OFFENE_FRAGEN.md)**
 (German) — including the cases where an earlier explanation of ours turned out
 to be wrong. Both are kept as we go, not written afterwards.
 
-⭐ **Where we stand (2026-09-11, release 0.6.1):** missions 1 to 7 have been
+⭐ **Where we stand (2026-09-12, release 0.6.2):** missions 1 to 7 have been
 played through. Along the way mission 2 became completable for the first time,
 the power plants in mission 4 and the bunkers in mission 7 became destructible,
-and the enemy now plays with the original's own AI. **0.6.1 is a stop on this
-road, not its end** — it bundles everything fixed so far into an installer,
-because the game is now genuinely pleasant to play. What changed, in plain
+and the enemy now plays with the original's own AI. **0.6.2 comes out of
+SKIRMISH:** the computer opponent no longer cheats at vision, easy/normal/hard
+finally differ for real, and the buildings of a conquest map show their capture
+icon. **Both are a stop on this road, not its end.** What changed, in plain
 words: [CHANGELOG.md](CHANGELOG.md).
 
 **Contributions are explicitly welcome.** If you play a mission and something
