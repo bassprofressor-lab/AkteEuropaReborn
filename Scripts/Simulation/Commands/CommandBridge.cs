@@ -854,6 +854,18 @@ public partial class MapEntityLayer
         var t0 = _entities[traeger];
         sb.Append($"  Traeger Platz {t0.Slot} auf ({t0.Col},{t0.Row}): {anBord} Stueck an Bord ")
           .Append("— als Einheit gebaut, nicht nur als Platznummer ✔\n");
+        // ⭐⭐ 12.09.2026, bug-237 — WAS FUER LADUNG ES IST. Seine Meldung
+        // »jetzt kann ich keine fahrzeuge mehr an rampen entladen« hat kein
+        // Pruefstand gesehen, weil keiner die GATTUNG der Ladung nannte. Ein
+        // Lauf, der nicht sagt, WAS er absetzt, misst den Fall nicht, um den es
+        // geht.
+        int cFuss = 0, cFahr = 0;
+        foreach (var q in FrachtAnBord(t0.Slot))
+            if (q.GameUnitType == 1) cFuss++; else cFahr++;
+        sb.AppendLine($"  Ladung: {cFuss} Fussvolk, {cFahr} Fahrzeug(e)"
+                    + (cFahr == 0 ? "  ⚠ KEIN FAHRZEUG an Bord — der Rampenfall bleibt "
+                                  + "auf dieser Karte UNGEPRUEFT" : ""));
+
 
         // Eine Rampenzelle mit gueltiger Kachel suchen.
         int rc = -1, rr = -1;
@@ -903,6 +915,63 @@ public partial class MapEntityLayer
         sb.Append("  Gegenprobe — Satz mit fremder Zielzelle: ")
           .Append(verworfen ? "verworfen ✔" : "AUSGEFUEHRT ✘").Append('\n');
         alles &= verworfen;
+
+        // --- ⭐⭐ DER FAHRZEUGFALL, und er hat heute gefehlt -----------------
+        //
+        // Seine Meldung: »jetzt kann ich keine fahrzeuge mehr an rampen
+        // entladen«. Kein Pruefstand hat es gesehen, weil die Ladung dieser
+        // Karte fuenfzehn FUSSSOLDATEN sind — und die duerfen seit bug-228
+        // ueberall an Land, auch ohne Rampe. Der Lauf war also gruen, waehrend
+        // genau der Fall kaputt war, um den es geht.
+        //
+        // ⚠ Der Lauf GREIFT DAFUER EIN: ein eigenes Fahrzeug wird neben den
+        // Traeger gestellt, eingeladen und an der Rampe wieder abgesetzt. Das
+        // steht in der Ausgabe.
+        int fz = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var q = _entities[i];
+            if (q.IsBuilding || q.IsProp || q.Dead || !q.Mobile) continue;
+            if (q.GameUnitType != 0) continue;
+            fz = i; break;                 // ⚠ irgendeines — der Besitzer wird geliehen
+        }
+        if (fz < 0)
+            sb.AppendLine("  Fahrzeug an der Rampe: kein eigenes Fahrzeug auf der Karte — UNGEPRUEFT");
+        else
+        {
+            var v = _entities[fz];
+            int vc = v.Col, vr = v.Row, vo = v.Owner;
+            int tc = t0.Col, tr2 = t0.Row;
+            // ⚠ Der Eingriff, vollstaendig benannt: ein FAHRZEUG darf nur von
+            // einer Rampenzelle aus an Bord (DarfEinsteigen, sec20 >= 200), und
+            // der Traeger muss in Reichweite liegen. Beides wird hier
+            // hergestellt und danach zurueckgesetzt.
+            v.Col = rc; v.Row = rr;                         // auf die RAMPE
+            v.Owner = t0.Owner;                             // und geliehen
+            t0.Col = ziel.Value.X; t0.Row = ziel.Value.Y;   // Traeger daneben
+            int rcode = BeladeVersuch(fz, melden: false);
+            if (rcode < 0)
+            {
+                v.Col = vc; v.Row = vr; v.Owner = vo;
+                t0.Col = tc; t0.Row = tr2;
+                sb.AppendLine($"  Fahrzeug an der Rampe: kam nicht an Bord ({_order}) — UNGEPRUEFT");
+            }
+            else
+            {
+                int vorF = _entities.Count;
+                PostUnload(traeger, rc, rr);
+                int tF = 0;
+                while (tF < 400 && FrachtAnBord(t0.Slot).Count > 0) { SimTick(SimDt); tF++; }
+                bool drin = FrachtAnBord(t0.Slot).Count == 0;
+                t0.Col = tc; t0.Row = tr2;
+                sb.AppendLine($"  ⚠ Eingriff: Fahrzeug Platz {v.Slot} eingeladen und an der "
+                            + $"Rampe ({rc},{rr}) abgesetzt — nach {tF} Takten noch "
+                            + $"{FrachtAnBord(t0.Slot).Count} an Bord "
+                            + (drin ? "✔ (das Fahrzeug ist an Land)"
+                                    : "✘ (es kam NICHT von Bord)"));
+                alles &= drin;
+            }
+        }
 
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
@@ -1092,20 +1161,22 @@ public partial class MapEntityLayer
         // falsch. Wer die Regel aendert, aendert BEIDE — darum fragt der Klick
         // jetzt denselben <see cref="AbsetzZelle"/> wie der Zeiger, mit
         // derselben Fussvolkfrage.
-        bool nurFuss = true;
+        // ⚠ »Fussvolk DABEI«, nicht »nur Fussvolk« — bei gemischter Ladung
+        // soll wenigstens die Infanterie von Bord koennen (bug-234).
+        bool fussDabei = false;
         foreach (int i in _sel)
         {
             if (i < 0 || i >= _entities.Count) continue;
             var t = _entities[i];
             if (t.IsBuilding || t.IsProp || t.Dead || t.Owner != ViewPlayer) continue;
             if (!IstTraeger(t)) continue;
-            foreach (var q in FrachtAnBord(t.Slot)) if (q.Infantry < 0) nurFuss = false;
+            foreach (var q in FrachtAnBord(t.Slot)) if (q.Infantry >= 0) fussDabei = true;
         }
-        if (AbsetzZelle(z.X, z.Y, nurFuss) == null)
+        if (AbsetzZelle(z.X, z.Y, fussDabei) == null)
         {
             if (EntladeLog)
                 GD.Print($"entlade: Klick auf ({z.X},{z.Y}) — keine Absetzzelle "
-                       + $"(nur Fussvolk an Bord: {nurFuss}), "
+                       + $"(Fussvolk dabei: {fussDabei}), "
                        + "der Klick geht an Fahren/Angreifen weiter");
             return false;
         }
@@ -1145,7 +1216,7 @@ public partial class MapEntityLayer
                 // ⚠ Auch hier die neue Frage (bug-231): sonst faende das Schiff
                 // zu einer KUESTENzelle keinen Liegeplatz und bliebe liegen,
                 // waehrend der Absetzbefehl schon draussen ist.
-                var absetz = AbsetzZelle(z.X, z.Y, nurFuss);
+                var absetz = AbsetzZelle(z.X, z.Y, fussDabei);
                 var liege = absetz == null ? null : LiegeplatzAn(e, absetz.Value);
                 bool gefahren = liege != null
                              && PostMoveOne(i, CellCenter(liege.Value.X, liege.Value.Y), queue);
@@ -1218,13 +1289,13 @@ public partial class MapEntityLayer
 
         // ⭐ 12.09.2026, bug-228 — FUSSVOLK GEHT UEBERALL AN LAND. Nur wenn
         // FAHRZEUGE an Bord sind, braucht es eine Rampe. Siehe AbsetzZelle.
-        bool nurFuss = true;
-        foreach (var q in ladung) if (q.Infantry < 0) { nurFuss = false; break; }
-        var ziel = AbsetzZelle(rampCol, rampRow, nurFuss);
+        bool fussDabei = false;
+        foreach (var q in ladung) if (q.Infantry >= 0) { fussDabei = true; break; }
+        var ziel = AbsetzZelle(rampCol, rampRow, fussDabei);
         if (ziel == null)
         {
             // Der Wortlaut des Originals, 0x4FAB24.
-            UnloadNote = nurFuss
+            UnloadNote = fussDabei
                 ? "dort geht niemand an Land — die Zelle ist Wasser, gesperrt oder besetzt"
                 : "Very unique error before unloading units";
             return -1;
@@ -1273,9 +1344,9 @@ public partial class MapEntityLayer
         // ⚠ Dieselbe Frage wie im Absender, sonst verwirft der Behandler jeden
         // Fussvolk-Absetzer (bug-228). Der Vergleich mit P2/P3 darunter bleibt
         // die Wache gegen eine erfundene Zelle aus dem Netz.
-        bool nurFuss2 = true;
-        foreach (var q in FrachtAnBord(e.Slot)) if (q.Infantry < 0) { nurFuss2 = false; break; }
-        var ziel = AbsetzZelle(rampCol, rampRow, nurFuss2);
+        bool fussDabei2 = false;
+        foreach (var q in FrachtAnBord(e.Slot)) if (q.Infantry >= 0) { fussDabei2 = true; break; }
+        var ziel = AbsetzZelle(rampCol, rampRow, fussDabei2);
         if (ziel == null) return false;
         if (ziel.Value.X != c.P2 || ziel.Value.Y != c.P3) return false;   // s.o.
 
@@ -1284,6 +1355,9 @@ public partial class MapEntityLayer
 
         // ⚠ NICHT auf einmal: der Satz traegt eine Stueckzahl, und die braucht
         // nur, wer nacheinander absetzt. Siehe FrachtAbsetzenTakt.
+        // ⭐ 12.09.2026, bug-237 — die HERKUNFT merken, nicht spaeter aus der
+        // Landezelle erraten (siehe Entity.UnloadVonRampe).
+        e.UnloadVonRampe = RampenAbsetzZelle(rampCol, rampRow) != null;
         e.UnloadCell = ziel.Value;
         e.UnloadRest = ladung.Count;
         UpdatePanel();

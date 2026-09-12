@@ -91,6 +91,12 @@ public partial class MapEntityLayer
     /// am Ende befahrbar.</summary>
     public static bool RampeBauzeit;
 
+    /// <summary>Wie oft der Pionier einen zweiten Anlauf auf seine Bauzelle
+    /// nimmt, bevor der Auftrag faellt. ⚠ UNSERE Zutat: das Original verwirft
+    /// beim ersten Fehlschlag. Ohne sie blieb eine seitliche Mole unbaubar,
+    /// weil unsere Wegsuche haeufiger kurz vor dem Ziel haengenbleibt.</summary>
+    private const int MoleAnlaeufe = 3;
+
     /// <summary>Zwei Arbeitszyklen à 24 Takte (+0x47 = 11, Infanterie-
     /// Arbeitsanimation). ⚠ Gerechnet, nicht gemessen.</summary>
     private const int MoleArbeitTakte = 48;
@@ -387,15 +393,39 @@ public partial class MapEntityLayer
         if (e.Path != null && e.PathIdx < e.Path.Count) return;      // noch unterwegs
         if (e.Col != e.BauZelle.X || e.Row != e.BauZelle.Y)
         {
-            // ⚠ Das Original verwirft hier STILL. Wir schreiben eine Zeile:
-            // »der Pionier laeuft hin und tut nichts« war der halbe Tag.
+            // ⚠⚠ 12.09.2026, ZWEITE RUNDE — seine Meldung: »Rampen sehe ich nur
+            // wenn das Wasser unterhalb ist; seitlich sieht man keine«. Die
+            // Karte hat dort reichlich Plaetze (map_08: 181 links, 133 rechts
+            // gegen 124 oben, 108 unten), gebaut wurde aber ueber alle seine
+            // Laeufe NIE einer — im Protokoll stand zweimal »Bauplatz nicht
+            // erreicht«. Er kam schlicht nicht auf die Zelle.
+            //
+            // Das Original verwirft hier still (UKOL 20 prueft die eigene
+            // Zelle, faellt durch, fertig). Bei uns bleibt der Wagen dabei
+            // haeufiger stecken, und ein stilles Nichts ist fuer den Spieler
+            // nicht von »die Mole geht hier nicht« zu unterscheiden. Darum:
+            //   * NOCH EINMAL hinschicken, bis zu MoleAnlaeufe mal — unsere
+            //     Zutat, benannt;
+            //   * und wenn es dann nicht klappt, SAGT er es (Say), statt nur
+            //     ins Protokoll zu schreiben.
+            if (++e.BauAnlauf <= MoleAnlaeufe && MoleGehZu(idx, e.BauZelle.X, e.BauZelle.Y))
+            {
+                if (EntladeLog)
+                    GD.Print($"mole: Pionier Platz {e.Slot} nimmt Anlauf {e.BauAnlauf} "
+                           + $"auf ({e.BauZelle.X},{e.BauZelle.Y})");
+                return;
+            }
             MoleNote = $"Bauplatz nicht erreicht — Pionier steht auf ({e.Col},{e.Row}), "
                      + $"gewollt war ({e.BauZelle.X},{e.BauZelle.Y})";
             GD.Print($"mole: {MoleNote}");
+            Say($"Der Pionier kommt nicht auf ({e.BauZelle.X},{e.BauZelle.Y}) — "
+              + "dort laesst sich keine Mole bauen.");
             e.Bauart = 0;
+            e.BauAnlauf = 0;
             MoleVerworfen++;
             return;
         }
+        e.BauAnlauf = 0;                 // angekommen
         bool ausbessern = e.Bauart == 4;
         // ⭐ DIE BAUPRUEFUNG, nicht die Vorschauregel — siehe MoleBauOk.
         if (!ausbessern && !MoleBauOk(e.Col, e.Row, idx))
@@ -502,7 +532,9 @@ public partial class MapEntityLayer
 
     private void ZeichneMolen()
     {
-        if (_moleSaetze.Count == 0 || ObjektEbene is not { } tex) return;
+        if (ObjektEbene is not { } tex) return;
+        ZeichneMolenVorschau(tex);
+        if (_moleSaetze.Count == 0) return;
         MolenGezeichnet = 0;
         foreach (var r in _moleSaetze)
         {
@@ -526,6 +558,53 @@ public partial class MapEntityLayer
             MolenGezeichnet++;
         }
     }
+
+    /// <summary>
+    /// <b>DIE VORSCHAU ZEIGT DIE RAMPE SELBST</b> (12.09.2026, bug-239).
+    ///
+    /// <para>Seine Meldung, nachdem der Bau seitlich lief: »nur dass das
+    /// platzierungs icon noch waagerecht anzeigt anstatt horizontal«. Und er
+    /// hat recht — unsere Bauvorschau ist ein farbiges Feld ohne Richtung,
+    /// also sah eine Mole nach links genauso aus wie eine nach unten. Erst
+    /// beim Bauen zeigte sich, wohin sie zeigt.</para>
+    ///
+    /// <para>Das Original zeigt an dieser Stelle den <b>Umriss des Objekts</b>
+    /// (Hilfetext 45: »Sehen Sie einen komplett weissen Umriss des Objektes,
+    /// kann es durch einen Klick dorthin gebaut werden«), und der Kartenmaler
+    /// setzt je Listenzelle die Marke 0x90 bzw. 0x9C. ⚠ Die Marken sind als
+    /// NUMMERN gelesen, ihre Bilder nicht — wir zeichnen darum die KACHEL, die
+    /// dort wirklich entstehen wuerde, halb durchsichtig. Das ist unsere
+    /// Fassung des Umrisses: sie zeigt dieselbe Aussage (was kommt hier hin und
+    /// wie herum), ohne ein Bild zu erfinden, das wir nicht kennen.</para>
+    ///
+    /// <para>⚠ Nur ueber einer GUELTIGEN Zelle. Wo nichts hinkann, bleibt es
+    /// beim roten Feld der gewoehnlichen Bauvorschau — sonst sähe man eine
+    /// Rampe, die es nicht geben wird.</para></summary>
+    private void ZeichneMolenVorschau(Texture2D tex)
+    {
+        if (PlacementMode != OrderMole || _previewCol < 0) return;
+        int d = RampenRichtung(_previewCol, _previewRow);
+        if (d < 0 || !MolePlatzOk(_previewCol, _previewRow)) return;
+        // ⚠ Die Zufallsvariante steht erst beim Bauen fest; die Vorschau nimmt
+        // die gerade (2·Richtung) — die Richtung ist, worauf es ankommt.
+        if (StreifenKachel(Import.MapBaker.RampenKachelBasis + 2 * d) is not { } k) return;
+        var ziel = CellRect(_ox, _oy, _previewCol, _previewRow,
+                            ElevOf(_previewCol, _previewRow));
+        DrawTextureRectRegion(tex,
+            new Rect2(new Vector2(ziel.Position.X,
+                                  ziel.Position.Y + Import.MapBaker.BlitAnchor + k.YOff),
+                      k.Feld.Size), k.Feld,
+            new Color(1f, 1f, 1f, 0.55f));
+    }
+
+    /// <summary><c>--m8-regeln</c> — die Regeln der laufenden Mission im
+    /// Klartext, mit ihrem Wahrheitswert. ⚠ Gebaut am 12.09.2026, weil zwei neu
+    /// eingetragene Regeln (bug-243) sonst nur als Zahl »12 statt 10« zu sehen
+    /// waren — und eine Regel, deren Bedingung der Leser gar nicht kennt,
+    /// zaehlt genauso mit.</summary>
+    public string MissionsregelnZeile()
+        => _mscript == null ? "m8-regeln: kein Skript"
+                            : "m8-regeln" + (char)10 + _mscript.RuleCheck();
 
     /// <summary>
     /// <c>--mole-check</c> — <b>DIE GANZE KETTE, wirklich gefahren.</b>
@@ -645,6 +724,22 @@ public partial class MapEntityLayer
                        : "— FALSCH, erwartet mehrere aus {8,9,10}"));
         sb.AppendLine("  5. Kachelbild: Streifenkachel "
                     + Import.MapBaker.RampenKachelBasis + " " + bild);
+        // ⚠ 12.09.2026 — ALLE VIER RICHTUNGEN nennen. Seine Meldung »seitlich
+        // sieht man keine Rampe« liess sich aus einer einzigen Kachelzeile
+        // nicht beantworten; jetzt steht je Richtung da, ob ihr Bild vorhanden
+        // ist. Dieselbe Zeile deckt auch die Vorschau ab, die dasselbe Bild
+        // nimmt (ZeichneMolenVorschau).
+        var namen = new[] { "links", "oben", "rechts", "unten" };
+        var st = new System.Text.StringBuilder("     Richtungen: ");
+        int fehlen = 0;
+        for (int d2 = 0; d2 < 4; d2++)
+        {
+            int code = Import.MapBaker.RampenKachelBasis + 2 * d2;
+            bool da = StreifenKachel(code) != null;
+            if (!da) fehlen++;
+            st.Append($"{namen[d2]} {code} {(da ? "da" : "FEHLT")}  ");
+        }
+        sb.AppendLine(st.ToString().TrimEnd() + (fehlen > 0 ? "  ⚠ diese Richtung bliebe unsichtbar" : ""));
         if (FussvolkmenueAlt)
             sb.Append(menueOk
                 ? "  ⚠ NULLMODELL OHNE BEFUND — mit --fussvolkmenue-alt duerfte das Menue "

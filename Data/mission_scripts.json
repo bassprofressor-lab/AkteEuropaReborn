@@ -27560,6 +27560,78 @@
      ]
     },
     {
+     "_at": "0x49B393",
+     "_quelle": "berichte/mission8-ende-und-einnahme-fable.md, Teil A Punkt 5",
+     "_tut": "v[2]++ je gemeldetem Fahrzeug — die Untermission »250 $, wenn Sie dieses Gebiet besetzen und 15 Fahrzeuge produzieren, innerhalb 30 Min«",
+     "when": [
+      {
+       "a": 0,
+       "b": 0,
+       "kind": "var",
+       "op": "!="
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 0,
+       "b": 1,
+       "kind": "take_flag",
+       "op": "=="
+      }
+     ],
+     "then": [
+      {
+       "a": 2,
+       "kind": "inc"
+      }
+     ]
+    },
+    {
+     "_at": "0x49B45C",
+     "_quelle": "berichte/mission8-ende-und-einnahme-fable.md, Teil A Punkt 6",
+     "_tut": "Init9 (Basis Spieler 2) bekommt 13 Waffen- und 13 Fahrwerkteile, solange Gebaeude 9 nicht dem Spieler gehoert und die KI wenig Fussvolk hat",
+     "when": [
+      {
+       "a": 9,
+       "b": 0,
+       "kind": "obj_owner",
+       "op": "!="
+      },
+      {
+       "a": 1,
+       "b": 2,
+       "c": 6,
+       "kind": "units",
+       "op": "<"
+      },
+      {
+       "a": 1,
+       "b": 0,
+       "c": 3,
+       "kind": "units",
+       "op": ">"
+      }
+     ],
+     "then": [
+      {
+       "a": 9,
+       "b": 5,
+       "c": 13,
+       "kind": "stock"
+      },
+      {
+       "a": 9,
+       "b": 6,
+       "c": 13,
+       "kind": "stock"
+      }
+     ]
+    },
+    {
      "then": [
       {
        "a": 1,

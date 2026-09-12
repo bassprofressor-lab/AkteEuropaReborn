@@ -152,6 +152,13 @@ public partial class MapEntityLayer
     /// Fehler der Umfärbung, sondern eine Lücke in der Ausgabe.</summary>
     public static int FarbeBilder, FarbePunkte, FarbeOhneBand;
 
+    /// <summary>Wie viele GEBAEUDEkacheln in der Farbe ihres Besitzers gemalt
+    /// wurden, und welche Besitzer dabei vorkamen (12.09.2026, bug-241). ⚠ Die
+    /// Umfaerbung lief bis dahin nur ueber Einheiten; ein eingenommenes
+    /// Gebaeude behielt die Farbe des Vorbesitzers.</summary>
+    public static int FarbeGebaeude;
+    public static readonly HashSet<int> FarbeGebaeudeEigner = new();
+
     /// <summary>Ob überhaupt gefärbt wird — <c>--keine-parteifarbe</c> stellt
     /// den Stand von vor dem 24.08. wieder her, damit ein Rückschritt
     /// nachweisbar bleibt.</summary>
@@ -286,6 +293,7 @@ public partial class MapEntityLayer
         int treffer = 0;
         for (int b = 0; b < Parteien; b++)
             if (MapEntityLayer.FactionColor(b).IsEqualApprox(Parteifarbe4p2(b))) treffer++;
+        sb.Append($"{(char)10}  Gebaeudekacheln in Besitzerfarbe: {FarbeGebaeude} gemalt, Besitzer [{string.Join(",", FarbeGebaeudeEigner)}]" + (FarbeGebaeude == 0 ? "  ⚠ KEINE — entweder gehoert kein Gebaeude einem Spieler, oder die Umfaerbung greift nicht" : ""));
         sb.Append($"{(char)10}  Uebersichtsfarben: {treffer} von {Parteien} sind "
                 + $"Palettenplatz 4p+2 (@0x4B81DC)"
                 + (treffer == Parteien ? "   BESTANDEN"

@@ -279,6 +279,17 @@ public partial class MapEntityLayer : Node2D
         return r.Gesamt != 0 ? r.Ziel : r.Quelle[r.Reihum];   // 0x4107EE
     }
 
+    /// <summary><c>--routentank-alt</c> — der Stand vor dem 12.09.2026: der
+    /// Wagen tankt beim Umladen NICHT (er fuellte stattdessen Munition auf).
+    /// Das Nullmodell zu bug-235; mit ihm bleibt ein Routenwagen nach
+    /// hoechstens 440 Zellen liegen.</summary>
+    public static bool RoutentankAlt;
+
+    /// <summary>Wie oft ein Routenwagen beim Umladen vollgetankt hat, und wie
+    /// viel Sprit dabei nachgefuellt wurde — ⚠ ohne die zweite Zahl waere
+    /// »getankt« nicht von »war ohnehin voll« zu unterscheiden.</summary>
+    public int RoutentankMale, RoutentankSumme;
+
     /// <summary>
     /// <b>Umladen</b> — <c>0x410940</c>. Am ZIEL wird alles abgeladen, an einer
     /// QUELLE wird Runde um Runde je ein Stueck genommen, bis die Fassung voll
@@ -290,8 +301,37 @@ public partial class MapEntityLayer : Node2D
         if (ziel == null) return;
         var f = WarenTafel(ziel.BType);
 
-        // 0x4109DE: der Wagen fuellt beim Umladen seinen eigenen Vorrat auf.
-        if (u.AmmoMax > 0) u.Ammo = u.AmmoMax;
+        // ⭐⭐⭐ 0x4109DE — DER WAGEN TANKT BEIM UMLADEN VOLL, und zwar SPRIT.
+        //
+        // ⚠⚠ 12.09.2026 — HIER STAND `u.Ammo = u.AmmoMax`, ALSO DAS FALSCHE
+        // FELD. Seine Meldung: »die haben irgendwann keinen sprit mehr«. Genau
+        // so musste es kommen: unsere Wagen tankten nie, liefen nach hoechstens
+        // 440 Zellen trocken, und `RouteFahrt` faehrt einen Wagen ohne Sprit
+        // nicht mehr.
+        //
+        // GELESEN in beiden EXE (berichte/sprit-transporter-fable.md):
+        //   `+0x2E := +0x30`  @0x4109DE (C) / @0x4107BA (F)
+        // — und zwar VOR der Weiche Ziel/Quelle, also bei JEDEM Umladen, beim
+        // Beladen wie beim Entladen. Nullmodell: von 80 Munitionsverweisen
+        // (+0x39/+0x3A) liegt in beiden Fassungen KEINER im Umladen.
+        //
+        // ⭐ Damit ist auch seine eigentliche Frage beantwortet: ein Wagen mit
+        // gestarteter Route pendelt im Original UNBEGRENZT, ohne dass sich
+        // jemand um Sprit kuemmert. Er tankt nicht »an der Basis«, sondern
+        // weil er umlaedt — die einzigen zwei Rufer sind die Routenarme
+        // UKOL 25 (Basis) und UKOL 53 (aus Fabrik/Mine heraus).
+        //
+        // ⚠ Zum Vergleich die Zahlen: Verbrauch ist 1 je betretener Zelle
+        // (0x407AA7, gerade wie schraeg), Tank eines Transporters auf Fahrwerk
+        // 161 ist 440 — und alle 112 Transporter der Originalkarten stehen auf
+        // genau diesem Fahrwerk. Der Tank muss also nur EINE Teilstrecke
+        // tragen. Gegenschalter --routentank-alt.
+        if (!RoutentankAlt && u.FuelMax > 0)
+        {
+            RoutentankMale++;
+            RoutentankSumme += u.FuelMax - u.Fuel;
+            u.Fuel = u.FuelMax;
+        }
 
         if (b.Slot == r.Ziel)
         {

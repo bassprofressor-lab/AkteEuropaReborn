@@ -1791,6 +1791,10 @@ public sealed class MissionScript
     /// Spezial parts and +0x2e raw Terranium (GAMESTATE_RE 3.82). Mission 5
     /// marks two of them at its start and wins when BOTH have grown — which is
     /// objective #005 word for word, "Wiederaufnahme der Produktion".</summary>
+    /// <summary><c>take_flag(spieler)</c> — der Produktionsmerker, gelesen und
+    /// VERBRAUCHT. Siehe die Bedingung gleichen Namens.</summary>
+    public Func<int, int>? TakeFlag;
+
     public Func<int, int, int>? StoreField;          // building slot, offset -> value
 
     /// <summary>
@@ -2491,6 +2495,17 @@ public sealed class MissionScript
         "var_vs_losses" => LossCount != null && c.A >= 0 && c.A < _var.Length &&
                            Cmp(_var[c.A] + c.C, c.Op, LossCount(c.B)),
         // obj_owner(a) <op> b
+        // ⭐⭐ 12.09.2026, bug-243 — `take_flag(spieler)` @0x4D0700 (F 0x4D02B0):
+        // den PRODUKTIONSMERKER holen UND loeschen. 1 = Fahrzeug, 2 = Fussvolk,
+        // 3 = Schiff, 4 = Flugzeug; geschrieben von der Basisproduktion
+        // 0x4B1840. Siehe berichte/mission8-ende-und-einnahme-fable.md.
+        //
+        // ⚠⚠ EINE FRAGE MIT NEBENWIRKUNG, und die einzige im ganzen Block. Sie
+        // steht darum als LETZTE Bedingung ihrer Regel in der JSON: die
+        // Auswertung bricht beim ersten Nein ab, der Merker wird also nur
+        // geholt, wenn alles davor stimmt — genau wie im Original, wo sie am
+        // Ende der Kette steht (@0x49B393).
+        "take_flag" => TakeFlag != null && Cmp(TakeFlag(c.A), c.Op, c.B),
         "obj_owner" => ObjOwner != null && Cmp(ObjOwner(c.A), c.Op, c.B),
         // g_robot_class_count(a, b) <op> c
         "units" => UnitCount != null && Cmp(UnitCount(c.A, c.B), c.Op, c.C),
@@ -3281,6 +3296,7 @@ public sealed class MissionScript
     {
         "var" => $"v[{c.A}]{c.Op}{c.B}",
         "obj_owner" => $"obj_owner({c.A}){c.Op}{c.B}",
+        "take_flag" => $"take_flag(P{c.A}){c.Op}{c.B}",
         "units" => $"units(Kl{c.A},P{c.B}){c.Op}{c.C}",
         "buildings" => $"buildings(Kl{c.A},P{c.B}){c.Op}{c.C}",
         "objects" => $"objects(Typ{c.A},P{c.B}){c.Op}{c.C}",
@@ -3483,6 +3499,7 @@ public sealed class MissionScript
     {
         "var" or "time_gt" or "time_after" or "event" or "block_gate" => true,
         "obj_owner" => ObjOwner != null,
+        "take_flag" => TakeFlag != null,
         "units" => UnitCount != null,
         "buildings" => BuildingCount != null,
         "objects" => ObjectCount != null,

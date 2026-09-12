@@ -367,6 +367,10 @@ public partial class MapEntityLayer : Node2D
         /// Landungsbruecke.cs.</summary>
         public int BauTakte;
 
+        /// <summary>Wie oft der Pionier schon einen neuen Anlauf auf seine
+        /// Bauzelle genommen hat (Simulation/Landungsbruecke.cs).</summary>
+        public int BauAnlauf;
+
         /// <summary><b>VERBRAUCHT, nicht gestorben</b> (12.09.2026, bug-219).
         /// Der Pionier, der eine Mole baut, wird im Original mit
         /// <c>0x410E60</c> ENTFERNT — er faellt nicht um. Das Lexikon sagt es
@@ -374,6 +378,14 @@ public partial class MapEntityLayer : Node2D
         /// unbenutzbar«. Wer nur <c>Dead</c> setzt, bekommt die Sterbebilder
         /// 12..14 und eine Leiche.</summary>
         public bool Verbraucht;
+
+        /// <summary><b>Kam der Absetzauftrag von einer RAMPE?</b> (12.09.2026,
+        /// bug-237.) ⚠ Die Frage muss an der angeklickten RAMPENzelle haengen,
+        /// nicht an der Zelle, auf der die Ladung landet: <c>RampenAbsetzZelle</c>
+        /// BILDET die eine auf die andere ab, und die Landezelle ist selbst nie
+        /// eine Rampe. Wer sie fragt, laesst nie wieder ein Fahrzeug von Bord.
+        /// </summary>
+        public bool UnloadVonRampe = true;
 
         public int Grade;                   // deposit grade 0..6 (sec28 +0x0a)
         public int StockT;                  // Terranium stored in the building (+0x2e)
@@ -7138,8 +7150,35 @@ public partial class MapEntityLayer : Node2D
     private void DrawBuildingTiles(Entity e, bool? flach, int? nurZeile = null)
     {
         if (!_drawSprites || Patterns == null || e.IsProp) return;
-        var tex = PatternTexture();
+        // ⭐⭐⭐ 12.09.2026 — DAS GEBAEUDE BEKOMMT DIE FARBE SEINES BESITZERS
+        // (bug-241).
+        //
+        // Seine Meldung: »hat ein fabrikgebaeude vorher dem gegner mit der
+        // farbe gruen gehoert, so sind kleine grafiken am gebaeude gruen und
+        // die zahl vorne drauf auch gruen. im original ist es so, wenn ich als
+        // farbe blau die einnehme, dass sich dann auch diese farben an meine
+        // farbe blau anpassen.«
+        //
+        // Die Umfaerbung gibt es seit dem 24.08.2026 (Rendering/Parteifarbe.cs,
+        // der fuenfte Blitter @0x4AC450: Ziel = ((Quelle−1)>>1) + 4·Besitzer + 1)
+        // — sie lief aber nur ueber EINHEITEN: Fussvolk, Rumpf, Turm,
+        // zusammengesetzte Bilder. Die Gebaeudekacheln gingen roh durch, also
+        // in der Farbe, mit der der Atlas gebacken wurde.
+        //
+        // ⚠ Der Atlas ist gross, aber die Umfaerbung haengt an einem
+        // Zwischenspeicher je (Bild, Besitzer) — er wird also hoechstens
+        // achtmal umgerechnet, nicht je Gebaeude und nicht je Bild.
+        //
+        // ⚠ Ein herrenloses Gebaeude (Besitzer 255 oder 11) bleibt, wie es ist:
+        // Parteifarbe gibt ausserhalb 0..7 das Bild unveraendert zurueck. Genau
+        // das ist auch im Original der Fall — die Farbe kommt aus
+        // Besitzer*4 + 2, und die 11 hat dort keine Vierergruppe.
+        var roh = PatternTexture();
+        var tex = Parteifarbe(roh, e.Owner);
         if (tex == null) return;
+        // ⚠ Regel 33: ohne diese Zahl ist »die Fabrik ist jetzt blau« nicht von
+        // »das Bild sah schon immer so aus« zu unterscheiden.
+        if (!ReferenceEquals(tex, roh)) { FarbeGebaeude++; FarbeGebaeudeEigner.Add(e.Owner); }
 
         var bt = Patterns.GetBuildingType(e.BildArt);
         int first = bt.FirstPattern;
@@ -13422,6 +13461,8 @@ public partial class MapEntityLayer : Node2D
                 };
                 // ⚠ add_target ist die ZIELLISTE DES COMPUTERSPIELERS, kein
                 // Eintrag im Missionspanel — siehe SkirmishAi.AddMissionTarget.
+                // ⭐ 12.09.2026, bug-243 — der Produktionsmerker (take_flag).
+                _mscript.TakeFlag = ProduktionsmerkerHolen;
                 _mscript.AddTarget = AddMissionTarget;
                 // Verstaerkung — die Mechanik, an der Mission 14 haengt
                 // ⚠ space_in wirft den Satzindex weg, place_unit nicht — beide
@@ -26286,6 +26327,108 @@ public partial class MapEntityLayer : Node2D
                 + " — so viele wuerde der Takt IM STAND aufsaugen\n");
         sb.Append("  seit dem 10.09. geht nur an Bord, wer in DIESEM Takt ankommt"
                 + $" (Gegenschalter --einsteigen-im-stand: {EinsteigenImStand})\n");
+        // ⭐⭐ 12.09.2026, bug-233 — DER EINLADEZEIGER. Seine Meldung: »es gibt
+        // noch ein icon wenn man fahrzeuge oder infanterie einladen will auf
+        // transporter«. Gemessen wird der echte Weg: eine Einheit anwaehlen und
+        // CursorHintAt ueber dem TRAEGER fragen — dieselbe Stelle, die auch die
+        // Maus fragt, kein Nachbau.
+        int trIdx = -1, gastIdx = -1;
+        for (int i2 = 0; i2 < _entities.Count && (trIdx < 0 || gastIdx < 0); i2++)
+        {
+            var q = _entities[i2];
+            if (q.IsBuilding || q.IsProp || q.Dead || q.Owner != ViewPlayer) continue;
+            if (trIdx < 0 && q.GameUnitType == 4 && IstTraeger(q)) trIdx = i2;
+            else if (gastIdx < 0 && q.GameUnitType is 0 or 1) gastIdx = i2;
+        }
+        if (trIdx < 0 || gastIdx < 0)
+            sb.AppendLine("  Einladezeiger: kein eigener Traeger mit passendem Fahrgast — UNGEPRUEFT");
+        else
+        {
+            var merkenSel = new List<int>(_sel);
+            bool nebelVor2 = PickOhneNebel;
+            PickOhneNebel = true;
+            _sel.Clear(); _sel.Add(gastIdx);
+            var trE = _entities[trIdx];
+            var hin = CursorHintAt(MitteVon(trE.Col, trE.Row));
+            _sel.Clear(); foreach (int k in merkenSel) _sel.Add(k);
+            PickOhneNebel = nebelVor2;
+            bool zOk = EinladezeigerAlt ? hin != Hint.Einsteigen : hin == Hint.Einsteigen;
+            sb.AppendLine($"  Einladezeiger: Fahrgast Platz {_entities[gastIdx].Slot} "
+                    + $"(Gattung {_entities[gastIdx].GameUnitType}) gewaehlt, Zeiger ueber Traeger "
+                    + $"Platz {trE.Slot}: {hin} — {(zOk ? "richtig" : "FALSCH")}"
+                    + (EinladezeigerAlt ? " (--einladezeiger-alt: er darf NICHT kommen)" : ""));
+        }
+        // ⭐ 12.09.2026, bug-234 — DIE GEMISCHTE LADUNG. Gemessen wird die
+        // REGEL auf zwei echten Zellen der Karte: einer Rampenzelle und einer
+        // gewoehnlichen Kuestenzelle.
+        // ⚠ Das ist eine Regelmessung, keine Fahrt — ob ein Schiff mit
+        // gemischter Ladung wirklich nur die Infanterie absetzt, zeigt erst der
+        // Lauf (--entlade-log).
+        Vector2I? kueste = null, rampeZ = null;
+        if (_nav != null)
+            for (int r2 = 0; r2 < _nav.Height && (kueste == null || rampeZ == null); r2++)
+                for (int c2 = 0; c2 < _nav.Width; c2++)
+                {
+                    if (rampeZ == null && RampenAbsetzZelle(c2, r2) != null)
+                        rampeZ = new Vector2I(c2, r2);
+                    if (kueste == null && RampenAbsetzZelle(c2, r2) == null
+                        && _nav.CanEnter(c2, r2, Simulation.NavGrid.MoveClass.Walker)
+                        && _nav.OccupantAt(c2, r2) < 0
+                        && (_nav.GroundAt(c2 + 1, r2) == Simulation.NavGrid.Ground.Water
+                            || _nav.GroundAt(c2, r2 + 1) == Simulation.NavGrid.Ground.Water))
+                        kueste = new Vector2I(c2, r2);
+                    if (kueste != null && rampeZ != null) break;
+                }
+        if (kueste == null)
+            sb.AppendLine("  gemischte Ladung: keine Kuestenzelle gefunden - UNGEPRUEFT");
+        else
+        {
+            var k2 = kueste.Value;
+            bool zelleOk = AbsetzZelle(k2.X, k2.Y, true) != null;
+            bool ohneFuss = AbsetzZelle(k2.X, k2.Y, false) == null;
+            bool fussDarf = DarfHierAnLand(1, k2.X, k2.Y);
+            bool fahrDarf = DarfHierAnLand(0, k2.X, k2.Y);
+            bool rOk = rampeZ == null
+                     || (DarfHierAnLand(0, rampeZ.Value.X, rampeZ.Value.Y)
+                         && DarfHierAnLand(1, rampeZ.Value.X, rampeZ.Value.Y));
+            bool alles = zelleOk && ohneFuss && fussDarf && !fahrDarf && rOk;
+            sb.AppendLine($"  gemischte Ladung an Kuestenzelle ({k2.X},{k2.Y}): Zelle gilt mit "
+                        + $"Fussvolk {zelleOk}, ohne Fussvolk gesperrt {ohneFuss}, Fussvolk darf "
+                        + $"{fussDarf}, Fahrzeug darf {fahrDarf}"
+                        + (rampeZ != null ? $"; auf der Rampe duerfen beide {rOk}"
+                                          : "; keine Rampe auf der Karte")
+                        + $" - {(alles ? "richtig" : "FALSCH")}");
+        }
+        // ⭐⭐ 12.09.2026, bug-240 — WER VON SELBST AN BORD GINGE. Gezaehlt wird
+        // beides: wie viele der Takt nach der ALTEN Regel mitgenommen haette,
+        // und wie viele nach der NEUEN (nur von einer LADEZELLE, Lage >= 100).
+        int sogAlt = 0, sogNeu = 0;
+        foreach (var e2 in _entities)
+        {
+            if (e2.IsBuilding || e2.IsProp || e2.Dead || !e2.Mobile) continue;
+            if (BeladeGewicht(e2) < 0 || !DarfEinsteigen(e2)) continue;
+            bool traegerDa = false;
+            foreach (var q in _entities)
+            {
+                if (q.Dead || q.IsBuilding || q.IsProp || q.Owner != e2.Owner) continue;
+                if (!IstTraeger(q)) continue;
+                if (Mathf.Max(Mathf.Abs(q.Col - e2.Col), Mathf.Abs(q.Row - e2.Row))
+                    > BeladeReichweite) continue;
+                traegerDa = true; break;
+            }
+            if (!traegerDa) continue;
+            sogAlt++;
+            if (RampeBeladen(e2.Col, e2.Row)) sogNeu++;
+        }
+        sb.AppendLine($"  Belade-Automatik: {sogAlt} Einheiten mit Traeger in Reichweite waeren "
+                    + $"nach der ALTEN Regel von selbst mitgekommen, nach der NEUEN (nur von "
+                    + $"einer Ladezelle) noch {sogNeu}"
+                    + (sogAlt == 0
+                       ? "  ⚠ kein Traeger in Reichweite einer eigenen Einheit — die "
+                         + "Zahlen sagen hier NICHTS"
+                       : AutomatikBeladenAlt ? "  (--automatik-beladen-alt: die ALTE gilt)"
+                       : sogAlt > sogNeu ? "  — der Staubsauger ist aus"
+                       : "  (auf dieser Karte macht die neue Regel keinen Unterschied)"));
         sb.Append($"  Gegenschalter --rampe-fuer-alle: {RampeFuerAlle}\n");
         bool ok = fuss == 0 || fussNeu == fuss;
         sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN");
@@ -26362,6 +26505,16 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Ein Takt des Beladens, fuer den Pruefstand.</summary>
     public void BeladeTaktFuerProbe() => BeladeTakt();
 
+    /// <summary><c>--automatik-beladen-alt</c> — der Stand vom 10.09.2026: der
+    /// Belade-Takt nimmt jeden ANKOMMENDEN mit, auch ohne Ladezelle. Das
+    /// Nullmodell zu bug-240.</summary>
+    public static bool AutomatikBeladenAlt;
+
+    /// <summary>Wie oft der Takt jemanden stehen liess, weil er auf keiner
+    /// Ladezelle stand. ⚠ Ohne die Zahl ist »es saugt nicht mehr« nicht von
+    /// »der Takt laeuft gar nicht« zu unterscheiden.</summary>
+    public int BeladeAutomatikVerworfen;
+
     private void BeladeTakt()
     {
         // ⚠⚠⚠ 10.09.2026 — EINSTEIGEN IST EIN UEBERGANG, KEIN ZUSTAND.
@@ -26405,6 +26558,30 @@ public partial class MapEntityLayer : Node2D
             // ⭐⭐ 10.09.2026 — und nur der ANKOMMENDE, siehe Kopf.
             if (!EinsteigenImStand && !u.AngekommenJetzt) continue;
             if (BeladeGewicht(u) < 0) continue;                      // kann gar nicht
+            // ⚠⚠⚠ 12.09.2026 — DER AUTOMATISCHE WEG HAT EINE ANDERE REGEL ALS
+            // DER BEFOHLENE, und wir hatten nur eine.
+            //
+            // Seine Meldung: »wenn ein leerer transporter richtung ufer faehrt,
+            // laedt es wie von alleine infanterie ein, die in der naehe des
+            // ufers steht, wobei ich das nicht befohlen habe«. Und genau so
+            // musste es kommen: naehert sich das Schiff, weicht das Fussvolk
+            // einen Schritt aus, kommt an — und der Takt nahm es mit.
+            //
+            // Das Original kennt ZWEI Wege an Bord:
+            //   * den BEFEHL (der Spieler klickt den Traeger an): Sender
+            //     @0x43820C prueft beim Fussvolk KEINE Lage, beim Fahrzeug
+            //     sec20 >= 200 (@0x438440) — das ist unser DarfEinsteigen,
+            //     gelesen zu bug-153;
+            //   * den BEWEGUNGSSCHRITT: 0x406CD0 prueft die LAGENTAFEL beim
+            //     Betreten der Zelle. Der Kopf dieses Taktes sagt das seit dem
+            //     10.09. selbst — nur gefragt wurde es nie.
+            //
+            // Von SELBST geht also nur an Bord, wer auf eine LADEZELLE tritt
+            // (Lagenbyte >= 100). Wer den Traeger anklickt, kommt weiterhin von
+            // ueberall. Gegenschalter --automatik-beladen-alt stellt den Stand
+            // vom 10.09. wieder her.
+            if (!AutomatikBeladenAlt && !RampeBeladen(u.Col, u.Row))
+            { BeladeAutomatikVerworfen++; continue; }
             if (!DarfEinsteigen(u)) continue;
             if (BeladeVersuch(i, melden: false) >= 0) return;         // s.o., und STILL
         }
@@ -26507,7 +26684,14 @@ public partial class MapEntityLayer : Node2D
     /// die sind als vorhanden gelesen, aber nicht in ihrer Regel.</para>
     /// </summary>
     /// <returns>wie viele Einheiten wirklich abgesetzt wurden.</returns>
-    public int FrachtAbsetzen(int carrierSlot, Vector2I ziel, int hoechstens = int.MaxValue)
+    /// <summary>Wie oft ein Stueck an Bord bleiben musste, weil es auf dieser
+    /// Zelle nicht an Land darf (Fahrzeug ohne Rampe). ⚠ Ohne diese Zahl waere
+    /// »das Schiff laedt nicht ab« nicht von »es ist schon leer« zu
+    /// unterscheiden.</summary>
+    public int AbsetzenBlieb;
+
+    public int FrachtAbsetzen(int carrierSlot, Vector2I ziel, int hoechstens = int.MaxValue,
+                              bool vonRampe = true)
     {
         if (!_fracht.TryGetValue(carrierSlot, out var ladung) || ladung.Count == 0) return 0;
         int traeger = -1;
@@ -26518,6 +26702,18 @@ public partial class MapEntityLayer : Node2D
         int gesetzt = 0;
         for (int k = ladung.Count - 1; k >= 0 && gesetzt < hoechstens; k--)
         {
+            // ⭐⭐ 12.09.2026, bug-234 — DIE FRAGE GEHOERT JE STUECK GESTELLT.
+            // Seine Meldung: bei gemischter Ladung soll »wenigstens die
+            // Infanterie von Board« gehen. Auf einer gewoehnlichen Kuestenzelle
+            // steigt darum nur das Fussvolk aus; die Fahrzeuge bleiben an Bord
+            // und warten auf eine Rampe. Auf einer RAMPE geht beides.
+            // ⚠ Fussvolk darf ueberall; ein Fahrzeug nur, wenn der Auftrag
+            // von einer RAMPE kam. --absetzen-nur-rampe macht daraus wieder
+            // »Rampe fuer alle«.
+            bool darfRaus = AbsetzenNurRampe
+                ? vonRampe
+                : ladung[k].GameUnitType == 1 || vonRampe;
+            if (!darfRaus) { AbsetzenBlieb++; continue; }
             var zelle = FreieZelleUm(ziel);
             if (zelle == null) break;                 // kein Platz mehr
             var u = ladung[k];
@@ -26661,7 +26857,7 @@ public partial class MapEntityLayer : Node2D
                 continue;                       // der Auftrag bleibt stehen
             }
 
-            int n = FrachtAbsetzen(e.Slot, e.UnloadCell, 1);
+            int n = FrachtAbsetzen(e.Slot, e.UnloadCell, 1, e.UnloadVonRampe);
             if (EntladeLog)
                 GD.Print($"entlade: Platz {e.Slot} setzt ab bei ({e.UnloadCell.X},{e.UnloadCell.Y}): "
                        + $"{n} Stueck, noch {FrachtAnBord(e.Slot).Count} an Bord");
@@ -26669,7 +26865,25 @@ public partial class MapEntityLayer : Node2D
             {
                 // Kein Platz — nicht abbrechen, im nächsten Takt noch einmal.
                 // Ist die Ladung leer, ist der Auftrag ohnehin erledigt.
-                if (FrachtAnBord(e.Slot).Count == 0) e.UnloadRest = 0;
+                if (FrachtAnBord(e.Slot).Count == 0) { e.UnloadRest = 0; continue; }
+                // ⚠⚠ 12.09.2026, bug-234 — UND DER ZWEITE AUSGANG: an Bord ist
+                // nur noch, was hier NICHT an Land darf (Fahrzeuge ohne Rampe).
+                // Ohne diesen Zweig probierte der Auftrag das jeden Takt bis in
+                // alle Ewigkeit weiter — ein stiller Dauerlauf, und der Spieler
+                // saehe ein Schiff, das »haengt«.
+                bool jemandKoennte = false;
+                foreach (var q in FrachtAnBord(e.Slot))
+                    if (e.UnloadVonRampe || (!AbsetzenNurRampe && q.GameUnitType == 1))
+                    { jemandKoennte = true; break; }
+                if (!jemandKoennte)
+                {
+                    e.UnloadRest = 0;
+                    _order = "an Land geht hier nur Infanterie — die Fahrzeuge "
+                           + "brauchen eine Landungsbruecke";
+                    if (EntladeLog)
+                        GD.Print($"entlade: Platz {e.Slot} fertig — {FrachtAnBord(e.Slot).Count} "
+                               + "Fahrzeug(e) bleiben an Bord, diese Zelle ist keine Rampe");
+                }
                 continue;
             }
             e.UnloadRest -= n;
@@ -29142,11 +29356,66 @@ public partial class MapEntityLayer : Node2D
         }
         var fertig = _designs[e.BuildIndex % _designs.Count];
         e.Depot.Add(e.BuildIndex);
+        // ⭐⭐ 12.09.2026 — DER PRODUKTIONSMERKER (bug-243). Die Basisproduktion
+        // 0x4B1840 schreibt `byte[0xA9A208 + Spieler]`, und das Missionsskript
+        // liest ihn mit `take_flag` — LESEN UND VERBRAUCHEN. Die Werte sind
+        // gelesen: 1 = Fahrzeug (Fahrwerk >= 150), 2 = Fussvolk, 3 = Schiff,
+        // 4 = Flugzeug. Daran haengt die Untermission von Mission 8 (»15
+        // Fahrzeuge in 30 Minuten«).
+        ProduktionsmerkerSetzen(e.Owner, fertig.Propulsion);
         NoteEvent(e, $"{fertig.Name} fertig");
         _order = $"{fertig.Name} fertig — im Depot ({e.Depot.Count}/{DepotSlots})";
         NextFromQueue(e, fertig.Name);
         UpdatePanel();
         QueueRedraw();
+    }
+
+    /// <summary>
+    /// <b>DER PRODUKTIONSMERKER</b> — <c>byte[0xA9A208 + Spieler]</c>, je einer
+    /// (12.09.2026, bug-243).
+    ///
+    /// <para>Geschrieben von der Basisproduktion (<c>0x4B1840</c>), gelesen und
+    /// VERBRAUCHT von <c>take_flag</c> (<c>0x4D0700</c>, F <c>0x4D02B0</c>) —
+    /// siehe berichte/mission8-ende-und-einnahme-fable.md. Die vier Werte sind
+    /// in beiden EXE gelesen:</para>
+    /// <code>
+    ///   1 = Fahrzeug (Fahrwerk >= 150)   2 = Fussvolk
+    ///   3 = Schiff                       4 = Flugzeug
+    /// </code>
+    /// <para>⚠ Er ist ein EINMAL-Merker, kein Zaehler: wer ihn liest, loescht
+    /// ihn. Daran haengt die Untermission von Mission 8 (»250 $, wenn Sie
+    /// dieses Gebiet besetzen und 15 Fahrzeuge produzieren«) — sie zaehlt, wie
+    /// oft das Skript einen frisch gesetzten Merker abholt.</para></summary>
+    private readonly int[] _produktionsmerker = new int[8];
+
+    /// <summary>Die Grenze, ab der ein Fahrwerk als FAHRZEUG zaehlt
+    /// (<c>0x4B1840</c>). Darunter liegen die zwei Infanterie-Fahrwerke
+    /// 148/149.</summary>
+    private const int MerkerFahrzeugAb = 150;
+
+    private void ProduktionsmerkerSetzen(int spieler, int fahrwerk)
+    {
+        if (spieler is < 0 or > 7) return;
+        // ⚠ Die Reihenfolge zaehlt: die Schiffsrumpfe 150..158 liegen INNERHALB
+        // des Fahrzeugbandes, also werden sie zuerst gefragt. Flugzeuge
+        // entstehen nicht hier (der Flughafen hat seinen eigenen Weg), darum
+        // steht die 4 nicht in dieser Weiche.
+        _produktionsmerker[spieler] =
+              fahrwerk is 148 or 149 ? 2                    // Fussvolk
+            : fahrwerk is >= 150 and <= 158 ? 3             // Schiff
+            : fahrwerk >= MerkerFahrzeugAb ? 1              // Fahrzeug
+            : 1;
+    }
+
+    /// <summary><c>take_flag(spieler)</c> — den Merker holen UND loeschen.
+    /// ⚠ Eine Frage mit Nebenwirkung; sie darf je Takt nur EINMAL gestellt
+    /// werden, und genau so ruft das Skript sie (eine Regel, ein Takt).</summary>
+    public int ProduktionsmerkerHolen(int spieler)
+    {
+        if (spieler is < 0 or > 7) return 0;
+        int v = _produktionsmerker[spieler];
+        _produktionsmerker[spieler] = 0;
+        return v;
     }
 
     /// <summary>Wieviele Einheiten ein Gebäude im Depot halten kann — <b>sechs</b>,
@@ -34481,7 +34750,7 @@ public partial class MapEntityLayer : Node2D
     /// dabei, weil das Original bei eigener INFANTERIE einen anderen Zeiger
     /// nimmt als bei allem anderen Eigenen — siehe
     /// <see cref="UI.GameCursors"/>.</summary>
-    public enum Hint { Ground, Own, OwnFoot, Enemy, Einfahrt, Entladen, Einnahme, Neutral }
+    public enum Hint { Ground, Own, OwnFoot, Enemy, Einfahrt, Entladen, Einnahme, Neutral, Einsteigen }
 
     /// <summary>Reads the cursor hint for a map position: something hostile
     /// under the pointer while one has a selection means the click attacks,
@@ -34510,9 +34779,9 @@ public partial class MapEntityLayer : Node2D
                     // zeigt der Zeiger auch ueber einer gewoehnlichen Landzelle
                     // »entladen« — sonst faende der Spieler die Stelle nie, an
                     // der sein Pionier an Land darf.
-                    bool nurFuss = true;
-                    foreach (var q in fracht) if (q.Infantry < 0) { nurFuss = false; break; }
-                    if (AbsetzZelle(rz.X, rz.Y, nurFuss) != null) return Hint.Entladen;
+                    bool fussDabei = false;
+                    foreach (var q in fracht) if (q.Infantry >= 0) { fussDabei = true; break; }
+                    if (AbsetzZelle(rz.X, rz.Y, fussDabei) != null) return Hint.Entladen;
                 }
 
         int i = Pick(mapPos);
@@ -34554,6 +34823,38 @@ public partial class MapEntityLayer : Node2D
             if (e.IsBuilding && !EinfahrzeigerAlt && Einfahrt_GarageTyp(e)
                 && AufDerTuerzelle(e, mapPos))
                 return Hint.Einfahrt;
+
+            // ⭐⭐ 12.09.2026 — DER EINLADEZEIGER (bug-233). Seine Meldung: »es
+            // gibt noch ein icon wenn man fahrzeuge oder infanterie einladen
+            // will auf transporter, der fehlt noch bei uns«.
+            //
+            // GELESEN in beiden EXE (berichte/einladezeiger-fable.md), und es
+            // ist NICHT das, was ich vermutet hatte: die unbenutzten Zeigerarten
+            // 8 und 9 gehoeren den NACHSCHUBHELIS (Treibstoff bzw. Munition,
+            // Vorbedingung @0x4320D1 ein angewaehlter Flugzeugplatz). Das
+            // Einladen ist **Zeigerart 11 -> Bild 11** — dasselbe Bild wie die
+            // Einfahrt ins Depot, kein eigenes.
+            //
+            // Die Bedingung @0x43206A..0x4320AF, woertlich:
+            //   * das Getroffene ist Gattung +0x0A == 4 und Unterteil
+            //     +0x0B == 0x49 (73 = TRAEGER), und es gehoert mir;
+            //   * und 0x431520: die ANGEWAEHLTE Einheit hat Gattung < 2, also
+            //     0 (Fahrzeug) oder 1 (Fussvolk) — genau sein »Fahrzeuge oder
+            //     Infanterie«, EIN Zeiger fuer beide.
+            //
+            // ⭐ Nullmodell, dass 11 wirklich das Einladen ist: der
+            // Klickverteiler 0x437994[11] ruft 0x4380F0 — die EINSTIEGSfunktion
+            // aus bug-153, deren einziger Rufer das ist. Eintrag 12 ist
+            // Entladen, Eintrag 5 die Einfahrt.
+            //
+            // ⚠ Der Zeiger prueft KEINE Rampe und keine Kapazitaet — die
+            // Lagenpruefung sec20 >= 200 sitzt erst im Klick (@0x438440, unser
+            // DarfEinsteigen). Ein Traeger der Gattung 5 bekommt ihn NICHT;
+            // das ist die Asymmetrie zum Entladen, das 4 und 5 nimmt.
+            if (!e.IsBuilding && !EinladezeigerAlt && e.GameUnitType == 4
+                && IstTraeger(e) && AuswahlKannEinsteigen())
+                return Hint.Einsteigen;
+
             return !e.IsBuilding && e.GameUnitType == 1 ? Hint.OwnFoot : Hint.Own;
         }
 
@@ -34603,6 +34904,32 @@ public partial class MapEntityLayer : Node2D
             if (e.Owner is < 0 or > 7) return Hint.Neutral;
         }
         return _sel.Count > 0 ? Hint.Enemy : Hint.Ground;
+    }
+
+    /// <summary><c>--einladezeiger-alt</c> — der Stand vor dem 12.09.2026: ueber
+    /// einem eigenen Traeger steht der gewoehnliche Eigenzeiger, auch wenn ein
+    /// Fahrzeug oder Fussvolk gewaehlt ist. Das Nullmodell zu bug-233.</summary>
+    public static bool EinladezeigerAlt;
+
+    /// <summary><b>Kann die Auswahl einsteigen?</b> — <c>0x431520</c>: die
+    /// angewaehlte Einheit hat <b>Gattung &lt; 2</b>, also 0 (Fahrzeug) oder
+    /// 1 (Fussvolk); bei einer Gruppe genuegt EIN solches Mitglied.
+    ///
+    /// <para>⚠ Hier wird NICHT gefragt, ob sie auch wirklich an Bord DARF —
+    /// das entscheidet erst der Klick (<see cref="DarfEinsteigen"/>, mit der
+    /// Rampenfrage fuer Fahrzeuge). Der Zeiger des Originals fragt es auch
+    /// nicht; er sagt »hier kann eingeladen werden«, nicht »das klappt«.</para>
+    /// </summary>
+    private bool AuswahlKannEinsteigen()
+    {
+        foreach (int k in _sel)
+        {
+            if (k < 0 || k >= _entities.Count) continue;
+            var t = _entities[k];
+            if (t.IsBuilding || t.IsProp || t.Dead || t.Owner != ViewPlayer) continue;
+            if (t.GameUnitType is 0 or 1) return true;
+        }
+        return false;
     }
 
     /// <summary><c>--gebaeudezeiger-alt</c> — der Stand vor dem 08.09.2026:

@@ -223,13 +223,50 @@ public partial class MapEntityLayer : Node2D
     /// doors and a player will drive to whichever is nearer, so ignoring the
     /// second one would be a dead end he could not see. Door 0 stays first in
     /// the list, so where the original would fire, we fire on the same cell.</summary>
+    /// <summary><c>--einnahme-alle-tueren</c> — der Stand vor dem 12.09.2026:
+    /// eingenommen wird von BEIDEN Zellen JEDER Tuer. Das Nullmodell zu
+    /// bug-242; mit ihm kann man wieder auf der Tuer stehend einnehmen und
+    /// gleichzeitig einfahren.</summary>
+    public static bool EinnahmeAlleTueren;
+
+    /// <summary>
+    /// <b>WO EIN EINDRINGLING STEHEN MUSS</b> — und seit dem 12.09.2026 ist das
+    /// EINE Zelle, nicht vier.
+    ///
+    /// <para>Seine Meldung: »Ich kann außerdem wieder in fabrik türen rein
+    /// fahren während ich diese einnehme.« Der Leser hat nachgesehen
+    /// (berichte/mission8-ende-und-einnahme-fable.md, Teil B): im Original geht
+    /// das NICHT — solange ein Fremder vor Tuer 0 steht, stempelt der
+    /// Einnahmearm jeden Takt <c>imap[Tuer0] := 0xFFFF</c> (@0x43CC29, F
+    /// @0x43BCC9), und daran scheitern Torautomat (&lt; 14000), Anmeldung und
+    /// Einfahrt (&lt; 8000). Die Einfahrt bricht die Einnahme nicht ab, sie
+    /// kommt gar nicht erst zustande.</para>
+    ///
+    /// <para>⚠⚠ <b>Und genommen wird nur von EINER Zelle:</b> der Zeile UNTER
+    /// Tuer 0 (@0x43CBEF). Wir liessen bisher beide Zellen JEDER Tuer gelten —
+    /// darum konnte man bei uns AUF der Tuer stehen und einnehmen, und weil
+    /// unsere Tuersperre (wie das Original) nur Tuer 0 kennt, ging daneben die
+    /// Einfahrt weiter.</para>
+    ///
+    /// <para>⭐ <b>Mission 8 ist selbst das Nullmodell dafuer:</b> ihre Regel
+    /// <c>imap(16,24)</c> zeigt auf genau diese eine Zelle vor der Tuer der
+    /// Basis »Sagres« — das »Gebiet«, das die Untermission besetzt haben
+    /// will.</para></summary>
     private static IEnumerable<Vector2I> CaptureWatchCells(Entity b)
     {
         var cells = b.DoorCells;
         if (cells.Count == 0)
         {
             var (d, f) = CaptureCells(b);
-            yield return f; yield return d;
+            yield return f;
+            if (EinnahmeAlleTueren) yield return d;
+            yield break;
+        }
+        if (!EinnahmeAlleTueren)
+        {
+            // nur die Zelle VOR Tuer 0 — @0x43CBEF
+            var (dc0, dr0) = cells[0];
+            yield return new Vector2I(b.Col + dc0, b.Row + dr0 + 1);
             yield break;
         }
         foreach (var (dc, dr) in cells)

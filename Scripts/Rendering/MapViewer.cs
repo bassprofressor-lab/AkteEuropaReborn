@@ -1379,6 +1379,9 @@ public partial class MapViewer : Node2D
 
     /// <summary><c>--mole-check</c> — siehe Simulation/Landungsbruecke.cs (bug-219).</summary>
     private bool _moleCheck;
+
+    /// <summary><c>--m8-regeln</c> — die Missionsregeln im Klartext.</summary>
+    private bool _m8Regeln;
     /// <summary><c>--routentuer-check</c> — siehe Simulation/RoutentuerCheck.cs.</summary>
     private bool _rtCheck, _rtGestartet;
     private bool _sieg7Gestartet;
@@ -2870,8 +2873,13 @@ public partial class MapViewer : Node2D
             else if (a == "--rampe-bauzeit") MapEntityLayer.RampeBauzeit = true;
             else if (a == "--fussvolkmenue-alt") MapEntityLayer.FussvolkmenueAlt = true;
             else if (a == "--mole-check") _moleCheck = true;
+            else if (a == "--m8-regeln") _m8Regeln = true;
             else if (a == "--bauanimation-aus") MapEntityLayer.BauanimationAus = true;
             else if (a == "--absetzen-nur-rampe") MapEntityLayer.AbsetzenNurRampe = true;
+            else if (a == "--einladezeiger-alt") MapEntityLayer.EinladezeigerAlt = true;
+            else if (a == "--routentank-alt") MapEntityLayer.RoutentankAlt = true;
+            else if (a == "--automatik-beladen-alt") MapEntityLayer.AutomatikBeladenAlt = true;
+            else if (a == "--einnahme-alle-tueren") MapEntityLayer.EinnahmeAlleTueren = true;
             else if (a == "--tuerlos-alt") MapEntityLayer.TuerlosAlt = true;
             else if (a == "--neutralklick-alt") MapEntityLayer.NeutralklickAlt = true;
             else if (a == "--minenfenster-alt") UI.BuildingWindow.MinenfensterAlt = true;
@@ -4357,6 +4365,7 @@ public partial class MapViewer : Node2D
             if (_kiStufenCheck) GD.Print(_entities.KiStufenCheckLine());
             if (_flughafenfensterCheck) GD.Print(_entities.FlughafenfensterCheck());
             if (_moleCheck) GD.Print(_entities.MoleCheckLine());
+            if (_m8Regeln) GD.Print(_entities.MissionsregelnZeile());
             if (_gwCheck) GD.Print(_entities.GaswerferCheckLine());
             if (_rtCheck) GD.Print(_entities.RoutentuerCheckLine());
             if (_zielzelleProbe) GD.Print(_entities.ZielzelleProbe());
@@ -7340,6 +7349,10 @@ public partial class MapViewer : Node2D
                 // ⭐ 07.09.2026 — Zeiger 12 des Originals (@0x432771) ueber
                 // einer Rampe, wenn ein beladener Traeger gewaehlt ist.
                 MapEntityLayer.Hint.Entladen => UI.GameCursors.Entladen,
+                // ⭐ 12.09.2026 — das EINLADEN traegt kein eigenes Bild: Zeigerart 11
+                // fuehrt ueber die Tafel 0x4A9BEC auf Bild 11, dasselbe wie die
+                // Einfahrt (Art 5). Gelesen in beiden EXE, bug-233.
+                MapEntityLayer.Hint.Einsteigen => UI.GameCursors.Einfahrt,
                 // ⭐ 08.09.2026 — Zeigerart 6 des Originals (@0x432478) auf der
                 // Tuerzelle eines fremden Gebaeudes zeigt Zeigerbild 10.
                 MapEntityLayer.Hint.Einnahme => UI.GameCursors.Einnahme,
@@ -7357,6 +7370,7 @@ public partial class MapViewer : Node2D
             MapEntityLayer.Hint.Enemy => Input.CursorShape.Cross,
             MapEntityLayer.Hint.Own or MapEntityLayer.Hint.OwnFoot
                 or MapEntityLayer.Hint.Einfahrt or MapEntityLayer.Hint.Entladen
+                or MapEntityLayer.Hint.Einsteigen
                 or MapEntityLayer.Hint.Einnahme or MapEntityLayer.Hint.Neutral
                 => Input.CursorShape.PointingHand,
             _ => Input.CursorShape.Arrow,

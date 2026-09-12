@@ -195,6 +195,23 @@ public partial class MapEntityLayer : Node2D
                         : abgeladen == 0 ? "GELADEN, ABER NICHTS ABGELADEN (er kam nie am Ziel an)"
                         : "WIE ERWARTET (dieser Wagen hat an der Quelle aufgenommen "
                           + "und am Ziel abgeliefert)"));
+                // ⭐⭐ 12.09.2026, bug-235 — DER TANK. Seine Meldung: »die haben
+                // irgendwann keinen sprit mehr«. Gemessen wird beides: dass der
+                // Wagen beim Umladen wirklich VOLL tankt (0x4109DE, +0x2E :=
+                // +0x30), und dass er ueberhaupt Sprit verbraucht (1 je Zelle,
+                // 0x407AA7) — eine Zahl allein sagte nichts.
+                GD.Print($"   TANK: {u.Fuel}/{u.FuelMax}, beim Umladen vollgetankt "
+                       + $"{RoutentankMale}x (dabei {RoutentankSumme} Sprit nachgefuellt); "
+                       + $"Gegenschalter --routentank-alt: {RoutentankAlt} -> "
+                       + (RoutentankAlt
+                          ? (RoutentankMale == 0
+                             ? "NULLMODELL WIE ERWARTET (er tankt nicht)"
+                             : "⚠ NULLMODELL OHNE BEFUND — er duerfte gar nicht tanken")
+                          : RoutentankMale == 0
+                            ? "NICHT GEMESSEN (er hat in dieser Zeit nie umgeladen)"
+                            : u.Fuel <= 0
+                              ? "DURCHGEFALLEN (getankt und trotzdem leer)"
+                              : "BESTANDEN (er tankt beim Umladen und bleibt fahrbereit)"));
                 GD.Print("   " + RouteWatchLine());
                 _trpStufe = -1;
                 return;

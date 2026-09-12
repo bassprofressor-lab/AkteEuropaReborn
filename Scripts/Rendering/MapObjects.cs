@@ -456,15 +456,41 @@ public partial class MapEntityLayer
     /// mit Gegenschalter <c>--absetzen-nur-rampe</c>.</para>
     ///
     /// <para>Für Fussvolk gilt: jede Zelle, die ein Läufer betreten kann und
-    /// die frei ist. Für alles andere bleibt es bei der Rampe.</para></summary>
-    public Vector2I? AbsetzZelle(int col, int row, bool nurFussvolk)
+    /// die frei ist. Für alles andere bleibt es bei der Rampe.</para>
+    ///
+    /// <para>⚠⚠ <b>BERICHTIGT am selben Abend</b>, seine Meldung: »wenn ein
+    /// transporter gemischte einheiten transportiert … erscheint nicht das
+    /// Entladen Icon an der Küste. Das geht aber im original spiel, so das
+    /// wenigstens die Infanterie von Board geht.« Hier stand zuerst <b>nur
+    /// Fussvolk an Bord</b> — eine Alles-oder-nichts-Frage, wo eine <b>je
+    /// Stück</b> hingehört. Ein einziges Fahrzeug in der Ladung sperrte damit
+    /// die ganze Küste. Jetzt heisst der Haken »<b>Fussvolk DABEI</b>«: die
+    /// Zelle ist gültig, sobald ÜBERHAUPT jemand dort an Land darf — und wer
+    /// von der Ladung wirklich aussteigt, entscheidet
+    /// <see cref="DarfHierAnLand"/> je Stück.</para></summary>
+    public Vector2I? AbsetzZelle(int col, int row, bool fussvolkDabei)
     {
         var rampe = RampenAbsetzZelle(col, row);
-        if (rampe != null || !nurFussvolk || AbsetzenNurRampe) return rampe;
+        if (rampe != null || !fussvolkDabei || AbsetzenNurRampe) return rampe;
         if (_nav == null || !_nav.InBounds(col, row)) return null;
         if (!_nav.CanEnter(col, row, Simulation.NavGrid.MoveClass.Walker)) return null;
         if (_nav.OccupantAt(col, row) >= 0) return null;
         return new Vector2I(col, row);
+    }
+
+    /// <summary><b>Darf DIESES Stück hier an Land?</b> — die Frage je Ladung,
+    /// nicht je Schiff (12.09.2026, bug-234).
+    ///
+    /// <para>Fussvolk: überall, wo ein Läufer hinkann. Fahrzeuge: nur auf einer
+    /// Rampe. So steht es am EINSTIEG gelesen (bug-153: Fussvolk ohne
+    /// Lagenprüfung @0x43820C, Fahrzeug <c>sec20 &gt;= 200</c> @0x438440), und
+    /// so kann bei gemischter Ladung wenigstens die Infanterie von Bord —
+    /// genau das, was er aus dem Original beschreibt.</para></summary>
+    public bool DarfHierAnLand(int gattung, int col, int row)
+    {
+        if (AbsetzenNurRampe) return RampenAbsetzZelle(col, row) != null;
+        if (gattung == 1) return true;                     // Fussvolk: ueberall
+        return RampenAbsetzZelle(col, row) != null;        // Fahrzeug: nur Rampe
     }
 
     /// <summary><c>--absetzen-nur-rampe</c> — der Stand vor dem 12.09.2026:
