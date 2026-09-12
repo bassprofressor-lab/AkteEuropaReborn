@@ -408,18 +408,26 @@ public partial class MapEntityLayer
             //     Zutat, benannt;
             //   * und wenn es dann nicht klappt, SAGT er es (Say), statt nur
             //     ins Protokoll zu schreiben.
+            // ⚠ 13.09.2026 — der Anlauf gilt fuer ALLE DREI Bauarten, und er
+            // meldete sich bis dahin immer als »mole«.  Im Protokoll von
+            // Kampagne 9 stand darum unter einem Brueckenauftrag die Zeile
+            // »mole: Pionier nimmt Anlauf 1«, und eine Absage haette gesagt,
+            // dort liesse sich keine MOLE bauen.  Beides fuehrt beim naechsten
+            // Nachlesen in die Irre — also nennt der Takt das Werk beim Namen.
+            string werk = e.Bauart == BauartBruecke ? "bruecke" : "mole";
+            string ding = e.Bauart == BauartBruecke ? "Bruecke" : "Mole";
             if (++e.BauAnlauf <= MoleAnlaeufe && MoleGehZu(idx, e.BauZelle.X, e.BauZelle.Y))
             {
                 if (EntladeLog)
-                    GD.Print($"mole: Pionier Platz {e.Slot} nimmt Anlauf {e.BauAnlauf} "
+                    GD.Print($"{werk}: Pionier Platz {e.Slot} nimmt Anlauf {e.BauAnlauf} "
                            + $"auf ({e.BauZelle.X},{e.BauZelle.Y})");
                 return;
             }
             MoleNote = $"Bauplatz nicht erreicht — Pionier steht auf ({e.Col},{e.Row}), "
                      + $"gewollt war ({e.BauZelle.X},{e.BauZelle.Y})";
-            GD.Print($"mole: {MoleNote}");
+            GD.Print($"{werk}: {MoleNote}");
             Say($"Der Pionier kommt nicht auf ({e.BauZelle.X},{e.BauZelle.Y}) — "
-              + "dort laesst sich keine Mole bauen.");
+              + $"dort laesst sich keine {ding} bauen.");
             e.Bauart = 0;
             e.BauAnlauf = 0;
             MoleVerworfen++;
