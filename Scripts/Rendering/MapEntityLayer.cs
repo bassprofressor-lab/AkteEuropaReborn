@@ -17211,7 +17211,53 @@ public partial class MapEntityLayer : Node2D
             foreach (int slot in e.Hangar)
                 st.Hangar.Add($"Flugzeug {slot}");
         if (IsSupplyDepot(e)) FuelleAngebot(e, st);
+        if (e.BType == 9) FuelleFlughafenAngebot(e, st);
         return st;
+    }
+
+    /// <summary>
+    /// <b>Was am FLUGHAFEN zu kaufen ist</b> — seit dem 12.09.2026 im
+    /// Originalfenster (Fensterart 5) statt in unserem Baufenster, bug-211.
+    ///
+    /// <para>Seine Meldung: »beim flughafen gehen 2 fenster auf, einmal ein
+    /// eigenbau und einmal das original … das original waere mir lieber, das
+    /// eigenbau ding muss nicht mit aufgehen«. Genau derselbe Fall wie der
+    /// Nachschubposten am 25.08. — und dieselbe Vorsicht: <b>die Anzeige
+    /// wandert, die Logik bleibt.</b> <see cref="Producer"/> gibt den Flughafen
+    /// weiter her, denn an ihm haengt <see cref="BuildPanelPick"/>, und der
+    /// Knopf hier ruft genau den — mit derselben Zeilennummer, die auch
+    /// <see cref="AirMenu"/> vergibt. Ein zweiter Kaufweg waere ein zweiter
+    /// Satz Wahrheiten ueber den Preis.</para>
+    ///
+    /// <para>⚠ <b>Der Flughafen zahlt in TEILEN, nicht in Geld</b>
+    /// (<c>build_in_airport</c> @0x4BB3D0: Lager +0x3C/+0x3E/+0x40 gegen
+    /// Entwurf +0x1F/+0x20/+0x21) — darum <c>PreisText</c> und kein »$«. Beides
+    /// zu verlangen hiesse doppelt zahlen, und genau daran ist der Flughafen am
+    /// 17.08.2026 schon einmal gescheitert (Fehler C12).</para>
+    ///
+    /// <para>⚠ <b>Der volle Hangar ist eine eigene Absage</b> und steht vor dem
+    /// Preis — so prueft es das Original auch (erst Hangar, dann Teile).</para>
+    /// </summary>
+    private void FuelleFlughafenAngebot(Entity e, UI.BuildingWindow.Stand st)
+    {
+        var menu = AirMenu(e);
+        bool hangarVoll = (e.Hangar?.Count ?? 0) >= Mathf.Max(1, e.HangarSize);
+        for (int i = 0; i < menu.Count; i++)
+        {
+            var d = menu[i];
+            int k = i;                       // ⚠ die Zeilennummer FESTHALTEN
+            st.Angebote.Add(new UI.BuildingWindow.Angebot
+            {
+                Name = d.Name,
+                PreisText = $"Teile : W {d.CostW}  F {d.CostF}  S {d.CostS}",
+                Bezahlbar = !hangarVoll
+                         && d.CostW <= e.StockW && d.CostF <= e.StockF && d.CostS <= e.StockS,
+                PreisQuelle = hangarVoll
+                    ? "Leider kein Platz im Hangar vorhanden!"
+                    : "Entwurf +0x1F/+0x20/+0x21 gegen Lager +0x3C/+0x3E/+0x40 (@0x4BB3D0)",
+                Kaufen = () => BuildPanelPick(k),
+            });
+        }
     }
 
     /// <summary>
@@ -18244,7 +18290,15 @@ public partial class MapEntityLayer : Node2D
     /// <b>Der Markt ist damit ein bekannter, benannter Rest — keine
     /// Auslassung.</b></para>
     /// </summary>
-    public bool BuildPanelWanted => Producer() is { } p && !IsSupplyDepot(p);
+    /// <para>⭐ 12.09.2026, bug-211 — <b>DER FLUGHAFEN KOMMT DAZU.</b> Seine
+    /// Meldung: »beim flughafen gehen 2 fenster auf, einmal ein eigenbau und
+    /// einmal das original … das original waere mir lieber«. Dieselbe Lage wie
+    /// beim Posten, nur dass wir Fensterart 5 sogar GEBAUT haben — es gingen
+    /// beide auf. Der Kaufweg ist vorher ins Originalfenster gezogen
+    /// (<see cref="FuelleFlughafenAngebot"/>) samt »Starten«, sonst haette das
+    /// Abschalten ihm die Flugzeuge genommen.</para>
+    public bool BuildPanelWanted =>
+        Producer() is { } p && !IsSupplyDepot(p) && p.BType != 9;
 
     /// <summary>Harness only: the factory <c>--demo-buildpanel</c> is waiting on.
     /// The click happens through the panel the moment a line can be paid for, so

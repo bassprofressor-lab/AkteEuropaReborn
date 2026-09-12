@@ -125,6 +125,13 @@ public sealed partial class BuildingWindow : PanelContainer
         public bool Bezahlbar;
         public System.Action? Kaufen;
 
+        /// <summary>Der Preis als Wort, wenn er NICHT in Geld gerechnet wird.
+        /// Der Nachschubposten zahlt Geld (leer lassen), der FLUGHAFEN zahlt
+        /// TEILE — <c>build_in_airport</c> @0x4BB3D0 haelt Lager +0x3C/+0x3E/
+        /// +0x40 gegen den Entwurf +0x1F/+0x20/+0x21. Beides als »$« zu
+        /// schreiben waere genau der Fehler C12 vom 17.08.2026.</summary>
+        public string PreisText = "";
+
         /// <summary>Woher der Preis stammt — die Adresse der Globalen im
         /// Original. ⚠ Sie steht im Hinweistext des Knopfes, damit ein
         /// Rückfallwert nicht wie ein gelesener aussieht.</summary>
@@ -156,6 +163,12 @@ public sealed partial class BuildingWindow : PanelContainer
     public System.Action? OnStart;
     public System.Action? OnStop;
     public System.Action? OnRepair;
+
+    /// <summary>»Starten« am FLUGHAFEN — die Flugzeuge aus dem Hangar auf die
+    /// Karte. ⚠ Nicht zu verwechseln mit <see cref="OnStart"/>, das den
+    /// GEBAEUDEZUSTAND auf aktiv setzt (Opcode 517, die Mine). Zwei Knoepfe
+    /// mit demselben Wort und zwei ganz verschiedenen Wirkungen.</summary>
+    public System.Action? OnFlugzeugStart;
 
     /// <summary><c>--minenfenster-alt</c> — der Stand vor dem 08.09.2026: die
     /// Mine bekommt wieder unsere Godot-Moebel statt der Kacheln aus
@@ -463,59 +476,34 @@ public sealed partial class BuildingWindow : PanelContainer
                 for (int i = 0; i < s.HangarPlaetze; i++)
                     _mitte.AddChild(Zeile($"    {i + 1}. "
                         + (i < s.Hangar.Count ? s.Hangar[i] : "—")));
+                // ⭐⭐ 12.09.2026, bug-211 — DER KAUFWEG STEHT JETZT HIER.
+                //
+                // Seine Meldung: »beim flughafen gehen 2 fenster auf, einmal
+                // ein eigenbau und einmal das original … das original waere mir
+                // lieber, das eigenbau ding muss nicht mit aufgehen«. Unser
+                // Baufenster geht am Flughafen nicht mehr auf
+                // (<c>BuildPanelWanted</c>) — und damit muss der Kauf hierher,
+                // sonst nimmt die Aenderung ihm die Flugzeuge weg. Genau
+                // derselbe Weg wie beim Nachschubposten am 25.08.: die ANZEIGE
+                // wandert, die LOGIK bleibt (<c>BuildPanelPick</c>).
+                //
+                // ⚠ Der Flughafen zahlt in TEILEN, nicht in Geld
+                // (<c>build_in_airport</c> @0x4BB3D0) — darum steht in der
+                // Spalte <c>PreisText</c> und kein »$«.
+                AngebotSpalten(s);
                 _knoepfe.AddChild(Knopf("Reparieren", OnRepair));
+                // ⚠ »Starten« stand bisher nur in UNSEREM Fenster. Ohne den
+                // Knopf hier waere ein gekauftes Flugzeug im Hangar gefangen —
+                // sichtbar in der Liste darueber und sonst nirgends.
+                _knoepfe.AddChild(s.Hangar.Count > 0
+                    ? Knopf($"Starten ({s.Hangar.Count})", OnFlugzeugStart)
+                    : Knopf("Starten", null, "Der Hangar ist leer."));
                 _knoepfe.AddChild(Knopf("Verbessern", null,
                     "Der Lagerausbau des Flughafens ist nicht gebaut."));
-                _knoepfe.AddChild(Knopf("Produzieren", null,
-                    "Flugzeugbau laeuft bei uns ueber das Baumenue der Basis."));
                 break;
 
             case Art.Nachschubposten:
-                // ⭐ ZWEI SPALTEN NEBENEINANDER, wie im Bild des Spielers und
-                // wie im Zeichner: Name, darunter »Kostet : $n«, darunter der
-                // Knopf »Kaufen«. Die Reihenfolge der Spalten ist die der
-                // Vorlagentabelle (Satz 5 = Sprit-, Satz 6 = Munitionsheli),
-                // nicht unsere Wahl.
-                var spalten = new HBoxContainer();
-                spalten.AddThemeConstantOverride("separation", 16);
-                spalten.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-                _mitte.AddChild(spalten);
-                foreach (var ang in s.Angebote)
-                {
-                    var sp = new VBoxContainer();
-                    sp.AddThemeConstantOverride("separation", 4);
-                    sp.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-                    sp.AddChild(Zeile(ang.Name));
-                    // ⭐ »Kostet : $« ist die Zeichenkette 0x5021C8, und die Zahl
-                    // dahinter kommt aus einer Globalen — nicht aus dem
-                    // Fenster. Welche, steht am Knopf.
-                    sp.AddChild(Zeile($"Kostet : ${ang.Preis}"));
-                    var k = new Button
-                    {
-                        Text = "KAUFEN",
-                        FocusMode = FocusModeEnum.None,
-                        Disabled = ang.Kaufen == null || !ang.Bezahlbar,
-                    };
-                    k.CustomMinimumSize = new Vector2(104, 22);
-                    // ⚠ Der Hinweistext nennt die Herkunft des Preises. Ein
-                    // Rückfallwert soll nicht wie ein gelesener aussehen.
-                    k.TooltipText = ang.Kaufen == null
-                        ? "Kein Kaufweg angeschlossen."
-                        : ang.Bezahlbar
-                            ? $"{ang.Name} fuer ${ang.Preis} kaufen  (Preis: {ang.PreisQuelle})"
-                            : $"Sie besitzen nicht genuegend Geld! ({ang.Name} kostet "
-                              + $"${ang.Preis}, Kontostand ${s.Geld})";
-                    if (!k.Disabled)
-                    {
-                        var tat = ang.Kaufen!;
-                        k.Pressed += () => { tat(); Refresh(); };
-                    }
-                    sp.AddChild(k);
-                    spalten.AddChild(sp);
-                    _knopfZahl++;
-                }
-                if (s.Angebote.Count == 0)
-                    _mitte.AddChild(Zeile("— kein Angebot —"));
+                AngebotSpalten(s);
                 // ⭐ Über die GANZE Breite darunter, wie im Bild. »Kontostand«
                 // ist das Wort, das das Original auch am Geschäftszentrum
                 // benutzt (0x502248).
@@ -542,6 +530,62 @@ public sealed partial class BuildingWindow : PanelContainer
                     "Die Verbesserung der Mine ist nicht gebaut."));
                 break;
         }
+    }
+
+    /// <summary><b>Die Angebotsspalten</b> — je Angebot eine Spalte: Name,
+    /// Preis, Knopf »KAUFEN«. So im Bild des Spielers und so im Zeichner; die
+    /// Reihenfolge ist die der Vorlagentabelle, nicht unsere Wahl.
+    ///
+    /// <para>⚠ Seit dem 12.09.2026 benutzen ZWEI Fenster diesen Block — der
+    /// Nachschubposten (zahlt Geld) und der Flughafen (zahlt Teile, bug-211).
+    /// Der Preis steht darum in <see cref="Angebot.PreisText"/>, wenn er nicht
+    /// in Geld gerechnet wird; das »$« gehoert dem Posten allein.</para></summary>
+    private void AngebotSpalten(Stand s)
+    {
+        var spalten = new HBoxContainer();
+        spalten.AddThemeConstantOverride("separation", 16);
+        spalten.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _mitte.AddChild(spalten);
+        foreach (var ang in s.Angebote)
+        {
+            var sp = new VBoxContainer();
+            sp.AddThemeConstantOverride("separation", 4);
+            sp.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            sp.AddChild(Zeile(ang.Name));
+            // ⭐ »Kostet : $« ist die Zeichenkette 0x5021C8, und die Zahl
+            // dahinter kommt aus einer Globalen — nicht aus dem Fenster.
+            // Welche, steht am Knopf.
+            string preis = ang.PreisText.Length > 0 ? ang.PreisText : $"Kostet : ${ang.Preis}";
+            sp.AddChild(Zeile(preis));
+            var k = new Button
+            {
+                Text = "KAUFEN",
+                FocusMode = FocusModeEnum.None,
+                Disabled = ang.Kaufen == null || !ang.Bezahlbar,
+            };
+            k.CustomMinimumSize = new Vector2(104, 22);
+            // ⚠ Der Hinweistext nennt die Herkunft des Preises. Ein
+            // Rückfallwert soll nicht wie ein gelesener aussehen.
+            k.TooltipText = ang.Kaufen == null
+                ? "Kein Kaufweg angeschlossen."
+                : ang.Bezahlbar
+                    ? $"{ang.Name} kaufen — {preis}  (Preis: {ang.PreisQuelle})"
+                    : ang.PreisText.Length > 0
+                        ? $"Nicht genuegend Teile im Lager! ({ang.Name} {preis}, "
+                          + $"im Lager W {s.StockW}  F {s.StockF}  S {s.StockS})"
+                        : $"Sie besitzen nicht genuegend Geld! ({ang.Name} kostet "
+                          + $"${ang.Preis}, Kontostand ${s.Geld})";
+            if (!k.Disabled)
+            {
+                var tat = ang.Kaufen!;
+                k.Pressed += () => { tat(); Refresh(); };
+            }
+            sp.AddChild(k);
+            spalten.AddChild(sp);
+            _knopfZahl++;
+        }
+        if (s.Angebote.Count == 0)
+            _mitte.AddChild(Zeile("— kein Angebot —"));
     }
 
     /// <summary>Eine Zeile für den Prüfstand. ⚠ Sie nennt die Fensterart als

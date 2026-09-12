@@ -1372,6 +1372,10 @@ public partial class MapViewer : Node2D
     /// und baut die KI nur, was ihre Techleiter freigibt?
     /// Simulation/KiStufen.cs.</summary>
     private bool _kiStufenCheck;
+
+    /// <summary><c>--flughafenfenster-check</c> — siehe
+    /// Simulation/FlughafenfensterCheck.cs (bug-211).</summary>
+    private bool _flughafenfensterCheck;
     /// <summary><c>--routentuer-check</c> — siehe Simulation/RoutentuerCheck.cs.</summary>
     private bool _rtCheck, _rtGestartet;
     private bool _sieg7Gestartet;
@@ -2829,6 +2833,7 @@ public partial class MapViewer : Node2D
             else if (a == "--gebaeudezeiger-alt") MapEntityLayer.GebaeudezeigerAlt = true;
             else if (a == "--einnahmeklick-alt") MapEntityLayer.EinnahmeklickAlt = true;
             else if (a == "--zivilzeiger-alt") MapEntityLayer.ZivilzeigerAlt = true;
+            else if (a == "--flughafenfenster-check") _flughafenfensterCheck = true;
             else if (a == "--tuerlos-alt") MapEntityLayer.TuerlosAlt = true;
             else if (a == "--neutralklick-alt") MapEntityLayer.NeutralklickAlt = true;
             else if (a == "--minenfenster-alt") UI.BuildingWindow.MinenfensterAlt = true;
@@ -4312,6 +4317,7 @@ public partial class MapViewer : Node2D
             if (_dwCheck) GD.Print(_entities.DruckwelleCheckLine());
             if (_kiSichtCheck) GD.Print(_entities.KiAufklaerungLine());
             if (_kiStufenCheck) GD.Print(_entities.KiStufenCheckLine());
+            if (_flughafenfensterCheck) GD.Print(_entities.FlughafenfensterCheck());
             if (_gwCheck) GD.Print(_entities.GaswerferCheckLine());
             if (_rtCheck) GD.Print(_entities.RoutentuerCheckLine());
             if (_zielzelleProbe) GD.Print(_entities.ZielzelleProbe());
@@ -5503,6 +5509,9 @@ public partial class MapViewer : Node2D
         _gebaeudeFenster.Daten = _entities.BuildingWindowData;
         _gebaeudeFenster.OnStart = _entities.BuildingWindowStart;
         _gebaeudeFenster.OnRepair = _entities.BuildingWindowRepair;
+        // ⭐ 12.09.2026, bug-211: derselbe Ruf, den unser Baufenster und die
+        // Taste Y benutzen — das Fenster bekommt keinen eigenen Weg.
+        _gebaeudeFenster.OnFlugzeugStart = () => _entities.LaunchAircraft(_entities.ViewPlayer);
         // ⚠ "Anhalten" ist NICHT angeschlossen, und das ist gelesen, nicht
         // vergessen: die Zustandstafeln bilden vier Auftraege ab (aktiv,
         // reparieren, Lagerausbau, Produktionserweiterung). Einen Befehl, der
