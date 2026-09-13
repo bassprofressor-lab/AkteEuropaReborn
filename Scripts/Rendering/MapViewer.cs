@@ -880,6 +880,7 @@ public partial class MapViewer : Node2D
         if (_minenfensterCheck) { _ = MinenfensterLauf(); return; }
         if (_depotfensterCheck) { _ = DepotfensterLauf(); return; }
         if (_marktfensterCheck) { _ = MarktfensterLauf(); return; }
+        if (_mitnahmefensterCheck) { _ = MitnahmeLauf(); return; }
         if (_fabrikfensterCheck) { _ = FabrikfensterLauf(); return; }
         if (_einheiteninfoCheck) { _ = EinheiteninfoLauf(); return; }
         if (_hauptmenueCheck) { _ = HauptmenueLauf(); return; }
@@ -1136,6 +1137,7 @@ public partial class MapViewer : Node2D
         if (_brueckeAngriffCheck) { _ = BrueckeAngriffLauf(); return; }
         if (_hotelplazaCheck) { _ = HotelPlazaLauf(); return; }
         if (_lieferungCheck) { _ = LieferungLauf(); return; }
+        if (_radarmenueCheck) { _ = RadarMenueLauf(); return; }
         if (_lieferungBild) { _ = LieferungBildLauf(); return; }
         if (_brueckeTrefferCheck)
         {
@@ -1349,6 +1351,15 @@ public partial class MapViewer : Node2D
 
     /// <summary><c>--lieferung-check</c> — siehe Simulation/Frachter.cs.</summary>
     private bool _lieferungCheck;
+
+    private bool _radarmenueCheck;
+
+    private async System.Threading.Tasks.Task RadarMenueLauf()
+    {
+        for (int i = 0; i < 5; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GD.Print(_entities.RadarMenueCheck());
+        GetTree().Quit(0);
+    }
 
     private bool _lieferungBild;
 
@@ -3671,11 +3682,16 @@ public partial class MapViewer : Node2D
             else if (a == "--bruecke-angriff-check") _brueckeAngriffCheck = true;
             else if (a == "--hotelplaza-check") _hotelplazaCheck = true;
             else if (a == "--lieferung-check") _lieferungCheck = true;
+            else if (a == "--radarmenue-check") _radarmenueCheck = true;
+            else if (a == "--radarvorrat-alt") MapEntityLayer.RadarvorratAlt = true;
             else if (a == "--lieferung-bild") _lieferungBild = true;
             else if (a == "--frachter-aus") Campaign.MissionScript.FrachterAus = true;
             else if (a == "--marktanker-alt") MapEntityLayer.MarktankerAlt = true;
             else if (a == "--marktfenster-alt") MapEntityLayer.MarktfensterAlt = true;
             else if (a == "--marktfenster-check") _marktfensterCheck = true;
+            else if (a == "--mitnahmefenster-check") _mitnahmefensterCheck = true;
+            else if (a == "--mitnahme-alt") MapEntityLayer.MitnahmeAlt = true;
+            else if (a == "--marke-alt") MapEntityLayer.MarkeAlt = true;
             else if (a == "--uebernahme-alt") MapEntityLayer.UebernahmeAlt = true;
             else if (a == "--bruecke-nicht-angreifbar") MapEntityLayer.BrueckeNichtAngreifbar = true;
             else if (a == "--bauwerke-unzerstoerbar") MapEntityLayer.BauwerkeUnzerstoerbar = true;
@@ -6586,6 +6602,14 @@ public partial class MapViewer : Node2D
     {
         int plaetze = Campaign.CampaignManager.SpotsFor(_nextMission).Count;
         if (plaetze <= 0) return false;
+        // 13.09.2026 - FENSTERART 38 MIT DEN KACHELN DES ORIGINALS (UI/MitnahmeView.cs,
+        // Simulation/Mitnahme.cs). Bedingung ist NUR n != 0 (0x416A14), auch ohne
+        // ueberlebende Einheit. Gegenschalter --mitnahme-alt.
+        if (!MapEntityLayer.MitnahmeAlt && UI.MitnahmeView.Usable)
+        {
+            MitnahmeOeffnen(plaetze);
+            return true;
+        }
         var roh = _entities.CarryCandidates(_entities.ViewPlayer);
         if (roh.Count == 0) return false;
 

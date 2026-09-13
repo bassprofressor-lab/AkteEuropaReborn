@@ -273,7 +273,11 @@ public static class CampaignManager
         public int Energie = 100;   // Restleben in Prozent
         public string Name = "";
 
-        public string Pack() => $"{Design}|{Energie}|{Name.Replace('|', ' ')}";
+        /// <summary>+0x28, Rang/Erfahrung — reist im Original mit dem 78-Byte-Satz
+        /// (0x43B350 -> Stapel 0x81A410 -> place_carry 0x43B190). 13.09.2026.</summary>
+        public int Rang;
+
+        public string Pack() => $"{Design}|{Energie}|{Name.Replace('|', ' ')}|{Rang}";
 
         public static CarriedUnit? Unpack(string s)
         {
@@ -281,7 +285,10 @@ public static class CampaignManager
             if (t.Length < 2 || !int.TryParse(t[0], out int d) ||
                 !int.TryParse(t[1], out int e)) return null;
             return new CarriedUnit
-            { Design = d, Energie = e, Name = t.Length > 2 ? t[2] : "" };
+            {
+                Design = d, Energie = e, Name = t.Length > 2 ? t[2] : "",
+                Rang = t.Length > 3 && int.TryParse(t[3], out int r) ? r : 0,
+            };
         }
     }
 

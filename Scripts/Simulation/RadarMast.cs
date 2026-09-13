@@ -652,3 +652,54 @@ public partial class MapEntityLayer
                (RadarNote.Length > 0 ? $"; {RadarNote}" : "");
     }
 }
+
+public partial class MapEntityLayer
+{
+    /// <summary><c>--radarmenue-check</c> (13.09.2026): jede eigene Einheit, der das
+    /// Menue »Radar setzen« anbietet, einmal ueber den Menueweg setzen lassen.</summary>
+    /// <summary><c>--radarvorrat-alt</c>: gebaute Einheiten bekommen keinen Vorrat
+    /// (Stand bis 13.09.2026).</summary>
+    public static bool RadarvorratAlt;
+
+    public string RadarMenueCheck()
+    {
+        var sb = new System.Text.StringBuilder("radarmenue-check\n");
+        if (RadarvorratAlt) sb.Append("  ⚠ NULLMODELL --radarvorrat-alt: die GEBAUTE Einheit darf NICHT setzen\n");
+        // EINGRIFF: eine Radar-Einheit wie gebaut aus dem Depot der eigenen Basis aussenden
+        LoadDesigns();
+        int basis = -1, entwurf = -1;
+        for (int i = 0; i < _entities.Count; i++)
+            if (_entities[i].IsBuilding && !_entities[i].Dead && _entities[i].Owner == ViewPlayer && _entities[i].BType == 1) { basis = i; break; }
+        if (_designs != null)
+            for (int k = 0; k < _designs.Count; k++) if (_designs[k].Weapon == RadarKitWeapon) { entwurf = k; break; }
+        if (basis >= 0 && entwurf >= 0)
+        {
+            int vor = _entities.Count;
+            _entities[basis].Depot.Add(entwurf);
+            bool raus = SendOutOfDepot(_entities[basis], _entities[basis].Depot.Count - 1);
+            sb.Append($"  ⚠ EINGRIFF: Entwurf {entwurf} \"{_designs![entwurf].Name}\" aus Basis {_entities[basis].Slot} ausgesandt: {raus} ({_entities.Count - vor} neu)\n");
+            if (raus) _entities[^1].Ukol = 0;
+        }
+        else sb.Append($"  KEIN URTEIL fuer den Bauweg: Basis {basis}, Radarstab-Entwurf {entwurf}\n");
+        int angeboten = 0, gesetzt = 0;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != ViewPlayer) continue;
+            if (System.Array.IndexOf(MenueCodes(i), CodeRadar) < 0) continue;
+            angeboten++;
+            var d = DesignBySlot(e.Mark + 200 * (e.Owner is >= 0 and <= 7 ? e.Owner : 0));
+            int vorher = _radarMasts.Count;
+            WaehleFuerProbe(i);
+            string sagt = MenueAktion(CodeRadar);
+            for (int t = 0; t < 4; t++) SimTickFuerProbe();
+            bool ok = _radarMasts.Count > vorher;
+            if (ok) gesetzt++;
+            sb.Append($"  Platz {e.Slot} \"{LabelOf(e)}\" Aufsatz {e.Weapon} Ausruestung {e.Equipment} Marke {e.Mark} " +
+                      $"Entwurf W{d?.Weapon} E{d?.Equip} -> Vorrat {e.RadarCharges}, Menue sagt \"{sagt}\", " +
+                      $"RadarNote \"{RadarNote}\", Mast {(ok ? "GESETZT" : "NICHT gesetzt")}\n");
+        }
+        sb.Append($"radarmenue-check: {angeboten} angeboten, {gesetzt} gesetzt");
+        return sb.ToString();
+    }
+}

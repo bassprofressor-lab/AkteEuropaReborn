@@ -15,7 +15,7 @@
   },
   "gleich": "Beide Bauten liefern dieselben 108 Plaetze, Mission fuer Mission."
  },
- "_warnung": "Missionen 1..11 haben KEINE Stellplaetze — dort gibt es nichts mitzunehmen. M12 hat drei, alle uebrigen fuenf. M31/M32/M33 setzen ihre fuenf nicht mit fuenf Aufrufen, sondern mit einem in einer Zaehlschleife.",
+ "_warnung": "Missionen 1..11 haben KEINE Stellplaetze — dort gibt es nichts mitzunehmen. M12 hat drei, alle uebrigen fuenf. M31/M32/M33 setzen ihre fuenf nicht mit fuenf Aufrufen, sondern mit einem in einer Zaehlschleife. BERICHTIGT 13.09.2026 (mitnahmefenster-fable.md §5.4): die Zaehlschleifen setzen M31 15 Plaetze (x 0x97..0x9B, y 0xD0..0xD2), M32 20 (x 0x1D..0x21, y 0xEC..0xEF, p=7), M33 20 (x 0xDA..0xDE, y 0xDF..0xE2); Reihenfolge Zeile aussen / Spalte innen ist UNSERE Annahme.",
  "missionen": {
   "12": [
    [
@@ -447,6 +447,46 @@
    [
     155,
     208
+   ],
+   [
+    151,
+    209
+   ],
+   [
+    152,
+    209
+   ],
+   [
+    153,
+    209
+   ],
+   [
+    154,
+    209
+   ],
+   [
+    155,
+    209
+   ],
+   [
+    151,
+    210
+   ],
+   [
+    152,
+    210
+   ],
+   [
+    153,
+    210
+   ],
+   [
+    154,
+    210
+   ],
+   [
+    155,
+    210
    ]
   ],
   "32": [
@@ -469,6 +509,66 @@
    [
     33,
     236
+   ],
+   [
+    29,
+    237
+   ],
+   [
+    30,
+    237
+   ],
+   [
+    31,
+    237
+   ],
+   [
+    32,
+    237
+   ],
+   [
+    33,
+    237
+   ],
+   [
+    29,
+    238
+   ],
+   [
+    30,
+    238
+   ],
+   [
+    31,
+    238
+   ],
+   [
+    32,
+    238
+   ],
+   [
+    33,
+    238
+   ],
+   [
+    29,
+    239
+   ],
+   [
+    30,
+    239
+   ],
+   [
+    31,
+    239
+   ],
+   [
+    32,
+    239
+   ],
+   [
+    33,
+    239
    ]
   ],
   "33": [
@@ -491,6 +591,66 @@
    [
     222,
     223
+   ],
+   [
+    218,
+    224
+   ],
+   [
+    219,
+    224
+   ],
+   [
+    220,
+    224
+   ],
+   [
+    221,
+    224
+   ],
+   [
+    222,
+    224
+   ],
+   [
+    218,
+    225
+   ],
+   [
+    219,
+    225
+   ],
+   [
+    220,
+    225
+   ],
+   [
+    221,
+    225
+   ],
+   [
+    222,
+    225
+   ],
+   [
+    218,
+    226
+   ],
+   [
+    219,
+    226
+   ],
+   [
+    220,
+    226
+   ],
+   [
+    221,
+    226
+   ],
+   [
+    222,
+    226
    ]
   ]
  }

@@ -19353,11 +19353,14 @@ public partial class MapEntityLayer : Node2D
             if (weit <= 3) treffer++;
             int erwartet = 50 + 10 * k;
             int ist = e.HpMax > 0 ? 100 * e.Hp / e.HpMax : 100;
-            if (Mathf.Abs(ist - erwartet) <= 2) schaden++;
+            // ⚠ 13.09.2026: place_carry 0x43B190 REPARIERT (+0x08 := +0x29) —
+            // gezaehlt wird darum »voll«; nur das Nullmodell --mitnahme-alt
+            // erwartet den mitgebrachten Schaden.
+            if (MitnahmeAlt ? Mathf.Abs(ist - erwartet) <= 2 : ist == 100) schaden++;
             sb.AppendLine($"    {name}: steht ({e.Col},{e.Row}), Platz ({c},{r}), " +
                           $"Abstand {weit}; Leben {ist}% (mitgebracht {erwartet}%)");
         }
-        sb.AppendLine($"  an ihrem Platz: {treffer}/{n}; Schaden mitgereist: {schaden}/{n}");
+        sb.AppendLine($"  an ihrem Platz: {treffer}/{n}; " + (MitnahmeAlt ? "Schaden mitgereist" : "voll repariert (0x43B275)") + $": {schaden}/{n}");
 
         bool gut = n0 == 0 && n == soll && treffer == n && schaden == n;
         sb.Append(gut ? "  BESTANDEN" : "  DURCHGEFALLEN");
@@ -30172,6 +30175,24 @@ public partial class MapEntityLayer : Node2D
             AmmoMax = ammo, Ammo = ammo,
             Range = d.Range, Sight = d.Sight, Reload = d.Reload, Speed = d.Speed,
             Facing = DefaultFacing, Mobile = true,
+            // ⭐⭐ 13.09.2026 — DER RADARSTAB-VORRAT, +0x45/+0x46. Der Aufsteller
+            // schreibt ihn beim BAU (0x4B1C2D, F 0x4B156C): Bauteil 75 -> 20/20.
+            // Seine Meldung: »wenn ich da ... radar setzen drücke, passiert nix«.
+            // Ohne diese Zeile loeste RadarChargesOf den Vorrat ueber die Marke
+            // +0x43 auf, und die traegt eine GEBAUTE Einheit bei uns nicht — 0
+            // Masten, und Kommando 27 wurde still verworfen. Gegenschalter
+            // --radarvorrat-alt.
+            RadarCharges = RadarvorratAlt ? -1 : d.Weapon == RadarKitWeapon ? RadarKitCharges : 0,
+            // ⭐⭐ 13.09.2026 — DIE MARKE UND DIE ROHEN BAUTEILBYTES. Der Aufsteller
+            // 0x4B1840 schreibt +0x3E UND +0x43 := Entwurfsnummer (C 0x4B1AA3 /
+            // 0x4B1AB4, F 0x4B13E1 / 0x4B13F0), +0x0D := Waffenzeile (< 50, Weiche
+            // 0x51CE37) und +0x0F := Antrieb. Ohne Marke fiel eine GEBAUTE Einheit
+            // durch die Mitnahme (mitnahmefenster-fable.md §8), ohne +0x0D fehlte
+            // ihr im Menue »Angreifen« und in der Mitnahmeliste der Platz.
+            // Gegenschalter --marke-alt.
+            Mark = MarkeAlt ? -1 : d.Slot >= 0 ? d.Slot % 200 : -1,
+            Comp0D = MarkeAlt ? 0 : d.Weapon is > 0 and < 50 ? d.Weapon : 0,
+            Comp0F = MarkeAlt ? 0 : d.Propulsion,
             // ⭐ 30.08.2026 — sie VERLÄSST GERADE das Gebäude, UKOL 51. Das
             // Original setzt es an genau dieser Stelle: die Aufstellroutine
             // @0x4B1840 ruft »Einheit verlässt das Gebäude« @0x410420, und
@@ -30286,15 +30307,10 @@ public partial class MapEntityLayer : Node2D
         for (int i = 0; i < mit.Count && i < plaetze.Count; i++)
         {
             var (col, row) = plaetze[i];
-            int at = SpawnReinforcement(mit[i].Design, col, row, player);
-            if (at < 0) continue;
-            var e = _entities[^1];
-            // ⚠ MIT IHREM SCHADEN. Das Original nimmt die Einheit mit, wie sie
-            // ist — es repariert sie nicht zwischen den Missionen. Wer eine
-            // angeschlagene mitnimmt, bekommt eine angeschlagene.
-            if (mit[i].Energie is > 0 and < 100 && e.HpMax > 0)
-                e.Hp = Mathf.Max(1, e.HpMax * mit[i].Energie / 100);
-            if (mit[i].Name.Length > 0) e.Name = mit[i].Name;
+            // ⚠⚠ BERICHTIGT 13.09.2026: hier stand »Das Original repariert sie
+            // nicht«. place_carry 0x43B190 setzt Trefferpunkte, Munition und
+            // Sprit auf das Maximum; der Rang reist mit. Siehe Simulation/Mitnahme.cs.
+            if (MitnahmeAufstellen(mit[i], col, row, player) < 0) continue;
             n++;
         }
         GD.Print($"Mitnahme: {n} von {mit.Count} Einheiten aufgestellt " +
@@ -30336,6 +30352,14 @@ public partial class MapEntityLayer : Node2D
                         $"(sec47 {raw}) steht nicht in unit_designs.json");
             return -1;
         }
+        return SpawnAusEntwurf(d, typ, col, row, player);
+    }
+
+    /// <summary>Der Rumpf von <see cref="SpawnReinforcement"/> — herausgezogen am
+    /// 13.09.2026, damit die Mitnahme auch eine Einheit aus einem SELBST
+    /// gezeichneten Entwurf (ohne sec47-Platz) wieder aufstellen kann.</summary>
+    private int SpawnAusEntwurf(Design d, int typ, int col, int row, int player)
+    {
         // 03.09.2026: nach den Aufwertungen DIESES Spielers gerechnet — siehe
         // Simulation/Aufwertung.cs, EntwurfFuer; Rueckfall --entwuerfe-global-alt.
         d = EntwurfFuer(player, d);
@@ -30369,6 +30393,10 @@ public partial class MapEntityLayer : Node2D
             Part = PartRowOf(d.Weapon),
             Chassis = d.Derived.ChassisComponent, GameUnitType = TypeOfChassis(d.Propulsion),
             Mark = typ,                       // record +0x43, written by create_unit
+            // ⭐ 13.09.2026 — +0x0D/+0x0F wie beim Fabrik-Aufsteller (0x4B1840);
+            // ⚠ fuer create_unit 0x4B34E0 ANGENOMMEN, nicht gelesen. --marke-alt.
+            Comp0D = MarkeAlt ? 0 : d.Weapon is > 0 and < 50 ? d.Weapon : 0,
+            Comp0F = MarkeAlt ? 0 : d.Propulsion,
             Attack = d.Attack, Defence = d.Defence,
             Fuel = d.Fuel, FuelMax = d.Fuel,
             AmmoMax = ammo, Ammo = ammo,
