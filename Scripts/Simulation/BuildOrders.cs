@@ -442,7 +442,11 @@ public partial class MapEntityLayer
                 col = e.Col + off.X; row = e.Row + off.Y;
             }
 
-            e.BuildOrder = 0; e.BuildTarget = 0;
+            // ⭐ 13.09.2026 — beim Generator bleibt der Auftrag stehen, bis der Platz
+            // traegt (Rumpf 74 @0x408354: Pruefung scheitert -> weiter, +0x40 bleibt);
+            // Depot/Mine (Rumpf 72) sind darin nicht gelesen. --bauauftrag-alt.
+            bool wartet = order == OrderGenerator && !BauauftragAlt;
+            if (!wartet) { e.BuildOrder = 0; e.BuildTarget = 0; }
 
             // ⚠⚠ ZWEI VERSCHIEDENE ZELLEN, und sie zu verwechseln kostet die
             // Mine: das Original prüft den Platz an der VORKOMMENSZELLE
@@ -459,9 +463,12 @@ public partial class MapEntityLayer
                                               null, skipDeposit: mine))
             {
                 BuildOrdersRefused++;
-                BuildOrderNote = $"{BuildOrderWord(order)}: die Stelle traegt nichts";
+                // Im Original still (keine Absage, @0x408354) — die Zeile bleibt nur
+                // fuer die zwei ungelesenen Rumpf-72-Auftraege.
+                if (!wartet) BuildOrderNote = $"{BuildOrderWord(order)}: die Stelle traegt nichts";
                 continue;
             }
+            e.BuildOrder = 0; e.BuildTarget = 0;
 
             // ⚠⚠ ERST das Fahrzeug weg, DANN das Gebäude — @0x408208 (Auswahl),
             // @0x408211 (entfernen), @0x40822E (setzen). Die Reihenfolge ist
@@ -474,6 +481,8 @@ public partial class MapEntityLayer
             _nav.ClearOccupant(e.Col, e.Row, i);
             e.Dead = true;                                  // 0x410E60
             e.Path = null; e.Orders.Clear();
+            // ⭐ 13.09.2026 — Klang 42, Modus 2, an der Zelle des Bauers (@0x40837A).
+            if (order == OrderGenerator && !BauauftragAlt) Audio.GameSounds.PlayAt(42, e.Col, e.Row);
 
             var bld = PlaceBuilding(Patterns, typ, col, row, owner);
             if (bld == null)
@@ -489,6 +498,9 @@ public partial class MapEntityLayer
             // PlaceBuilding findet dort also nichts, und die Mine bliebe auf
             // ihrem Anfangswert −1 stehen — eine baubare Mine, die nie etwas
             // foerdert. Gemessen hat das --bau-check=mine mit »im Boden -1«.
+            // ⭐ 13.09.2026 — add_building setzt +0x0A := 100 (@0x4C939C): der Bauzustand.
+            // Die drei Geruestbilder haben nur die Typen 5, 7, 15 — genau diese drei.
+            if (!BauzustandAus) bld.Bauzustand = BauzustandStart;
             if (mine && vork >= 0 && vork < _deposits.Count)
             {
                 int menge = _deposits[vork].Amount;

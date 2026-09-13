@@ -399,6 +399,13 @@ public partial class MapEntityLayer : Node2D
         /// (<c>add_building</c> @0x4C8F4C writes 0x64); placed ones carry
         /// whatever the map gives them.</summary>
         public int Condition = 100;
+
+        /// <summary>⭐ 13.09.2026 — der BAUZUSTAND, dasselbe Byte +0x0A ab 100:
+        /// <c>add_building</c> setzt 100, der Gebäudetakt @0x43CA9F erhöht jeden
+        /// zweiten Takt bis 250 und setzt dann 1. Bei uns eigenes Feld (0 = fertig),
+        /// damit <see cref="Condition"/> seine alte Bedeutung behält. Siehe
+        /// Simulation/Bauzustand.cs.</summary>
+        public int Bauzustand;
         public int ProdSpeed;               // sec24 +0x05 Produktionsgeschwindigkeit
         public int Capacity;                // sec24 +0x08 Lagerplatz
         public int CostStore;               // sec24 +0x0a Lagerausbaukosten
@@ -7225,6 +7232,14 @@ public partial class MapEntityLayer : Node2D
         var bt = Patterns.GetBuildingType(e.BildArt);
         int first = bt.FirstPattern;
         int stack = e.Dead ? 0 : DamageFrame(e);      // wie viele Muster übereinander
+        // ⭐ 13.09.2026 — DAS GERUEST. Stempler 0x4C95E0 @0x4C9619: Bauzustand > 99 ->
+        // Bild (b-100)/50, Musterzeile = Typtafel +0x08 (TilePattern) - 2 + Bild.
+        // ⚠ AUSGESETZT (--geruest-bild): im Kachelsatz von map_13 sind die Muster
+        // TilePattern-2/-1 LEER und 264 steht nicht im Atlas — die Lesung der
+        // Musterzeile ist damit nicht bestaetigt. Bis dahin zeigt ein Bau das
+        // fertige Gebaeude (UNSERE Setzung).
+        if (GeruestBild && !e.Dead && e.Bauzustand >= BauzustandStart)
+        { first = GeruestMuster(bt, e.Bauzustand); stack = 1; }
         if (e.Dead)
         {
             // ⚠⚠⚠ 10.09.2026 — DIE RUINE IST DIE OBERSTE LAGE EINES STAPELS,
@@ -12042,6 +12057,8 @@ public partial class MapEntityLayer : Node2D
         // Unverwundbar: der Treffer wird gezählt und gemeldet wie immer, nur
         // der Schaden bleibt aus — so bleiben Klang, Meldung und Zielwahl heil.
         if (GottModusFuer(victim)) damage = 0;
+        // ⭐ 13.09.2026 — im Bauzustand unverwundbar (@0x40D295 `cmp dl, 0x64 / jae`).
+        if (victim.IsBuilding && victim.Bauzustand >= BauzustandStart) damage = 0;
         // ⚠ 11.09.2026 — Erfahrung gibt es nur im EINHEITENARM (0x40CEEA). Der
         // Infanteriezellen-Arm 0x40D00C springt nach dem letzten Mann
         // @0x40D264 ans Ende, ohne diesen Block — ein Treffer auf Fussvolk
@@ -17313,6 +17330,8 @@ public partial class MapEntityLayer : Node2D
     public static UI.BuildingWindow.Art? FensterArtVon(Entity e)
     {
         if (!e.IsBuilding || e.IsProp || e.Dead) return null;
+        // ⭐ 13.09.2026 — im Bau nicht anklickbar (Zeigerwahl 0x4324ED: +0x0A < 100).
+        if (e.Bauzustand >= BauzustandStart) return null;
         return e.BType switch
         {
             6 or 12 => UI.BuildingWindow.Art.Bahnhof,
@@ -17332,6 +17351,8 @@ public partial class MapEntityLayer : Node2D
             5 when !DepotfensterAus && e.Built != 0 => UI.BuildingWindow.Art.Depot,
             // ⭐ 13.09.2026 — DIE FABRIK (Art 2/3/4 -> Fensterart 8).
             2 or 3 or 4 when !FabrikfensterAlt && e.Built != 0 => UI.BuildingWindow.Art.Fabrik,
+            // ⭐ 13.09.2026 — DER GENERATOR (Art 7 -> Fensterart 20), Kampagne 13.
+            7 when !GeneratorfensterAlt && e.Built != 0 => UI.BuildingWindow.Art.Generator,
             // ⭐ 13.09.2026 — DAS GESCHAEFTSZENTRUM (Art 17 -> Fensterart 33). Kein
             // `built`, kein Besitzer: die Zeigerwahl 0x432569 fragt nur die Platten.
             17 when !MarktfensterAlt => UI.BuildingWindow.Art.Geschaeftszentrum,
@@ -17713,6 +17734,14 @@ public partial class MapEntityLayer : Node2D
         if (e.BType == 9) FuelleFlughafenAngebot(e, st);
         if (e.BType == 5) FuelleDepot(e, st);
         if (e.BType is 2 or 3 or 4) FuelleFabrik(e, st);
+        if (e.BType == 7)
+        {
+            // Fensterart 20 (0x476410): sec26-Byte, erbracht/Bedarf des BETRACHTERS.
+            var pw = PowerOf(ViewPlayer);
+            st.StromErzeugung = GeneratorAnzeige(e);
+            st.StromErbracht = pw.Done;
+            st.StromBedarf = pw.Need;
+        }
         return st;
     }
 
@@ -24258,6 +24287,8 @@ public partial class MapEntityLayer : Node2D
     private void UpdateEconomy(int index, Entity e, float dt)
     {
         if (e.Dead) return;
+        // ⭐ 13.09.2026 — im Bauzustand entfaellt der uebrige Gebaeudetakt (@0x43CB24 -> bgend).
+        if (e.Bauzustand >= BauzustandStart) return;
         e.EconTimer -= dt;
         if (e.EconTimer > 0f) return;
         e.EconTimer = EconTick;

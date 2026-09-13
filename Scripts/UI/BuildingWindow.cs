@@ -117,6 +117,11 @@ public sealed partial class BuildingWindow : PanelContainer
         /// Öffner <c>0x443CF0</c>, Zeichner <c>0x47DF70</c>, gebaut am 13.09.2026
         /// für Kampagne 11. Siehe <see cref="MarktView"/>.</summary>
         Geschaeftszentrum = 33,
+
+        /// <summary>⭐ <b>»GENERATOR«</b>, Fensterart <b>20</b> — Gebäudeart 7,
+        /// Öffner <c>0x442FB0</c>, Zeichner <c>0x476410</c>, gebaut am 13.09.2026
+        /// für Kampagne 13. Siehe <see cref="GeneratorView"/>.</summary>
+        Generator = 20,
     }
 
     /// <summary>Eine Zeile des Geschäftszentrums — ein Angebot des Regals
@@ -223,6 +228,10 @@ public sealed partial class BuildingWindow : PanelContainer
         /// <summary>Nur Geschäftszentrum: die Angebote mit Preis &gt; 0, in
         /// Regalreihenfolge (Zählschleife 0x47E06A).</summary>
         public List<MarktZeile> MarktZeilen = new();
+
+        /// <summary>Nur Generator: sec26 +0x02 (»Stromerzeugung«), erbracht und
+        /// Bedarf des Betrachters (0x87A580/0x87A582).</summary>
+        public int StromErzeugung, StromErbracht, StromBedarf;
     }
 
     /// <summary>Die Daten des Geschäftszentrums — über den GEBÄUDEPLATZ
@@ -234,6 +243,10 @@ public sealed partial class BuildingWindow : PanelContainer
     public System.Action<int, int>? OnMarktBestellen;
 
     private MarktView? _markt;
+
+    private GeneratorView? _generator;
+    public GeneratorView? GeneratorAnsicht => _generator;
+    public bool ZeigtOriginalGenerator { get; private set; }
 
     /// <summary>Für den Prüfstand.</summary>
     public MarktView? MarktAnsicht => _markt;
@@ -381,6 +394,11 @@ public sealed partial class BuildingWindow : PanelContainer
         _fabrik.OnKnopf = k => { OnFabrikKnopf?.Invoke(k); Refresh(); };
         AddChild(_fabrik);
 
+        // ⭐ 13.09.2026 — DER GENERATOR (Fensterart 20), ohne Knöpfe.
+        _generator = new GeneratorView { Visible = false };
+        _generator.OnClose = Schliessen;
+        AddChild(_generator);
+
         // ⭐ 13.09.2026 — DAS GESCHÄFTSZENTRUM (Fensterart 33).
         _markt = new MarktView { Visible = false };
         _markt.OnClose = Schliessen;
@@ -527,6 +545,23 @@ public sealed partial class BuildingWindow : PanelContainer
         bool fabrikOriginal = _art == Art.Fabrik && _fabrik != null && FabrikView.Usable;
         if (_depot != null) _depot.Visible = depotOriginal;
         if (_fabrik != null) _fabrik.Visible = fabrikOriginal;
+        bool generatorOriginal = _art == Art.Generator && _generator != null && GeneratorView.Usable;
+        if (_generator != null) _generator.Visible = generatorOriginal;
+        ZeigtOriginalGenerator = generatorOriginal;
+        if (generatorOriginal)
+        {
+            if (_markt != null) _markt.Visible = false;
+            _senk.Visible = false;
+            AddThemeStyleboxOverride("panel", new StyleBoxEmpty());
+            CustomMinimumSize = new Vector2(
+                GeneratorView.WTiles * WindowChrome.Cell * GeneratorView.Scale,
+                GeneratorView.HTiles * WindowChrome.Cell * GeneratorView.Scale);
+            Size = CustomMinimumSize;
+            _generator!.Zeige(s);
+            _titel.Text = "Generator";
+            _knopfZahl = 0;
+            return;
+        }
         bool marktOriginal = _art == Art.Geschaeftszentrum && _markt != null && MarktView.Usable;
         if (_markt != null) _markt.Visible = marktOriginal;
         ZeigtOriginalMarkt = marktOriginal;
@@ -614,6 +649,7 @@ public sealed partial class BuildingWindow : PanelContainer
             Art.Depot => "Depot " + s.Name,
             Art.Fabrik => "Fabrik " + s.Name,
             Art.Geschaeftszentrum => "Geschäftszentrum",
+            Art.Generator => "Generator",
             _ => $"Terranium-Mine — {s.Name}",
         };
         // ⚠ »Energie :« und die Statuszeile teilen sich die drei GEBÄUDEfenster.

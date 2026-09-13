@@ -359,7 +359,12 @@ public partial class MapEntityLayer
             UnitType = -1, Attack = -1, Chassis = -1,
             Hp = hp, HpMax = hp,
             Condition = FreshCondition,
-            IsBuilding = true, BType = typ, Built = 1,
+            // ⭐ 13.09.2026 — Panzerung +0x08 aus der Typtafel 0x539DBA (generator-fable.md §6.2).
+            Armor = PanzerungNeubauAlt ? 0 : NeubauPanzerung(typ),
+            // ⚠⚠ 13.09.2026 — BILDART. Seit 630ea94 (Ruinen, K7) zeichnet der Stapel
+            // nach BildArt statt BType; ein NEUBAU trug BildArt 0 und war damit
+            // UNSICHTBAR. Gefunden am Generator der K13 (--generator-check, Bild).
+            IsBuilding = true, BType = typ, BildArt = typ, Built = 1,
             Elev = _nav.ElevAt(col, row),
             Name = $"Built{slot}",
             Footprint = CellRect(_ox, _oy, col, row, _nav.ElevAt(col, row)),

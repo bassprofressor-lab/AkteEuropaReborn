@@ -881,6 +881,7 @@ public partial class MapViewer : Node2D
         if (_depotfensterCheck) { _ = DepotfensterLauf(); return; }
         if (_marktfensterCheck) { _ = MarktfensterLauf(); return; }
         if (_mitnahmefensterCheck) { _ = MitnahmeLauf(); return; }
+        if (_generatorCheck) { _ = GeneratorLauf(); return; }
         if (_fabrikfensterCheck) { _ = FabrikfensterLauf(); return; }
         if (_einheiteninfoCheck) { _ = EinheiteninfoLauf(); return; }
         if (_hauptmenueCheck) { _ = HauptmenueLauf(); return; }
@@ -3692,6 +3693,12 @@ public partial class MapViewer : Node2D
             else if (a == "--mitnahmefenster-check") _mitnahmefensterCheck = true;
             else if (a == "--mitnahme-alt") MapEntityLayer.MitnahmeAlt = true;
             else if (a == "--marke-alt") MapEntityLayer.MarkeAlt = true;
+            else if (a == "--bauzustand-aus") MapEntityLayer.BauzustandAus = true;
+            else if (a == "--geruest-bild") MapEntityLayer.GeruestBild = true;
+            else if (a == "--bauauftrag-alt") MapEntityLayer.BauauftragAlt = true;
+            else if (a == "--generatorfenster-alt") MapEntityLayer.GeneratorfensterAlt = true;
+            else if (a == "--panzerung-neubau-alt") MapEntityLayer.PanzerungNeubauAlt = true;
+            else if (a == "--generator-check") _generatorCheck = true;
             else if (a == "--uebernahme-alt") MapEntityLayer.UebernahmeAlt = true;
             else if (a == "--bruecke-nicht-angreifbar") MapEntityLayer.BrueckeNichtAngreifbar = true;
             else if (a == "--bauwerke-unzerstoerbar") MapEntityLayer.BauwerkeUnzerstoerbar = true;

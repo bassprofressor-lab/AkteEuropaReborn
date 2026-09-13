@@ -207,6 +207,8 @@ public partial class MapEntityLayer
             GebaeudebrandTakt();
             // ⭐ 13.09.2026 — der Takt-Arm der Art 17 (0x43E90C), Marktfenster.cs.
             MarktfensterTakt();
+            // ⭐ 13.09.2026 — der Bauzustand (0x43CA9F), Bauzustand.cs.
+            if (!BauzustandAus) BauzustandTakt();
         }
     }
 

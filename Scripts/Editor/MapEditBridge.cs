@@ -71,7 +71,7 @@ public partial class MapEntityLayer
         int el = ElevOf(col, row);
         _entities.Add(new Entity
         {
-            Slot = slot, BType = typ, IsBuilding = true, IsProp = false,
+            Slot = slot, BType = typ, BildArt = typ, IsBuilding = true, IsProp = false,   // 13.09.2026: sonst unsichtbar (Zeichnen nach BildArt)
             Col = col, Row = row, Owner = owner, Team = owner,
             Hp = hp, HpMax = hp, Elev = el, UnitType = -1, Attack = -1,
             Footprint = new Rect2(_ox + col * MapBaker.TileW,
