@@ -57,6 +57,66 @@ public partial class MapEntityLayer : Node2D
     /// <summary><c>--kein-bodenangriff</c> — die Gegenprobe.</summary>
     public static bool BodenangriffAn = true;
 
+    /// <summary><c>--bruecke-nicht-angreifbar</c> — der Stand vor dem 13.09.2026
+    /// abends: Strg auf eine Brückenzelle bricht sofort ab.</summary>
+    public static bool BrueckeNichtAngreifbar;
+
+    /// <summary>
+    /// <c>--bruecke-angriff-check</c>: eine eigene bewaffnete Einheit bekommt über
+    /// den echten Absender (<see cref="PostAttackGround"/>) den Strg-Angriff auf
+    /// eine Geländerzelle der ersten Kartenbrücke und darf schiessen, bis die
+    /// Brücke fällt. Nullmodell: <c>--bruecke-nicht-angreifbar</c>.
+    /// </summary>
+    public string BrueckeAngriffCheck()
+    {
+        var sb = new System.Text.StringBuilder("bruecke-angriff-check\n");
+        var st = _stege.Find(s => s.Karte);
+        if (st == null || _nav == null) return sb.Append("  keine Kartenbruecke — ungeprueft").ToString();
+        if (BrueckeNichtAngreifbar) sb.AppendLine("  ⚠ NULLMODELL --bruecke-nicht-angreifbar: hier MUSS sie stehen bleiben");
+        var ziel = new System.Collections.Generic.List<(Vector2I Zelle, int S, int P)>(SatzZellen(st)).Find(z => z.S == 0 && z.P == 1).Zelle;
+        int idx = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != ViewPlayer || !CanFight(e) || Untergestellt(e)) continue;
+            if (e.Weapon == 0 || IsEquipmentMount(e.Weapon) || e.Move != Simulation.NavGrid.MoveClass.Vehicle) continue;
+            idx = i; break;
+        }
+        if (idx < 0) return sb.Append("  keine eigene bewaffnete Einheit — ungeprueft").ToString();
+        var u = _entities[idx];
+        // ⚠ EINGRIFF: die Einheit neben die Bruecke, Munition voll.
+        var platz = _nav.NearestFree(new Vector2I(ziel.X, ziel.Y - 2), u.Move, idx) ?? new Vector2I(u.Col, u.Row);
+        _nav.ClearOccupant(u.Col, u.Row, idx);
+        u.Col = platz.X; u.Row = platz.Y; u.Path = null; u.Pos = BodyCenterAt(u, u.Col, u.Row);
+        _nav.SetOccupant(u.Col, u.Row, idx);
+        u.AmmoMax = System.Math.Max(u.AmmoMax, 999); u.Ammo = u.AmmoMax;
+        sb.AppendLine($"  ⚠ EINGRIFF: {LabelOf(u)} nach ({u.Col},{u.Row}), Ziel Gelaender {ziel} der Bruecke Platz {st.Slot} (TP {st.Tp})");
+        CheatGodMode = true;
+        sb.AppendLine("  ⚠ EINGRIFF: Gottmodus fuer die eigene Einheit — die Gegner in der Naehe sollen die Messung nicht beenden");
+        _sel.Clear(); _sel.Add(idx); _selected = idx;
+        bool ab = PostAttackGround(ZellMitte(ziel.X, ziel.Y));
+        _angriffSteg = st; _angriffEinheit = idx;
+        sb.AppendLine($"  Befehl abgesetzt: {ab}");
+        return sb.ToString();
+    }
+
+    private Steg? _angriffSteg;
+    private int _angriffEinheit = -1;
+
+    /// <summary>Steht die Brücke aus <see cref="BrueckeAngriffCheck"/> noch?</summary>
+    public bool BrueckeAngriffLaeuft => _angriffSteg != null && _stege.Contains(_angriffSteg);
+
+    public string BrueckeAngriffStand(int bilder)
+    {
+        var st = _angriffSteg;
+        if (st == null) return "  DURCHGEFALLEN";
+        bool weg = !_stege.Contains(st);
+        var u = _angriffEinheit >= 0 ? _entities[_angriffEinheit] : null;
+        string zeile = $"  nach {bilder} Bildern: TP {st.Tp}, eingestuerzt {weg}, Bodenschuesse {BodenSchuesse}, "
+                     + $"Auftrag noch aktiv {u?.AngriffsZelle != null}; Einheit auf ({u?.Col},{u?.Row}) Ziel {u?.Target} Munition {u?.Ammo}/{u?.AmmoMax} Nachladen {u?.Cooldown:0.00} tot {u?.Dead} Pfad {u?.Path?.Count}";
+        return zeile + System.Environment.NewLine + (weg != BrueckeNichtAngreifbar ? "  BESTANDEN" : "  DURCHGEFALLEN");
+    }
+
     /// <summary>Wie oft ein Bodenangriff befohlen, wie oft darauf geschossen
     /// und wie oft er mangels Ziel beendet wurde. ⚠ Ohne die drei Zahlen ist
     /// »der Bodenangriff tut nichts« nicht von »er wurde nie befohlen« zu
@@ -122,6 +182,17 @@ public partial class MapEntityLayer : Node2D
     private bool ZelleHatZiel(int col, int row)
     {
         if (IstWaldZelle(col, row) || IstObjektZelle(col, row)) return true;
+        // ⭐ 13.09.2026 — EINE STEHENDE BRUECKE ODER RAMPE IST EIN ZIEL. Seine
+        // Meldung: »brücken gehen jetzt kaputt, aber ich kann sie nicht gezielt
+        // angreifen und mit absicht zerstören, was aber benötigt wird«. Strg auf
+        // die Brueckenzelle kam als Bodenangriff an und brach im selben Takt ab,
+        // weil hier nur Wald, Objekte und Einheiten zaehlten.
+        // ⚠ Die Lesung (brueckenzerstoerung-fable.md §2.2) vermutet, das Original
+        // verwerfe einen Angriff auf 40100+n — der Schreiber der Tafel 0xB13B20
+        // war »nicht gefunden, nicht ausschliessbar«. Er kennt das Original aus
+        // dem Spiel: gezielt zerstoeren geht. Gegenschalter --bruecke-nicht-angreifbar.
+        if (!BrueckeNichtAngreifbar && _rampen.TryGetValue(col * 1024 + row, out int lage)
+            && lage is >= 100 and < 250) return true;
         int wer = _nav?.OccupantAt(col, row) ?? -1;
         return wer >= 0 && wer < _entities.Count && !_entities[wer].Dead;
     }

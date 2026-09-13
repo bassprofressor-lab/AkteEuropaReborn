@@ -161,6 +161,8 @@ public partial class MapEntityLayer
             if (o.Dead || o.IsProp || o.IsBuilding) continue;
             bool drauf = o.Infantry >= 0 ? o.Col == c && o.Row == r : _nav?.OccupantAt(c, r) == i;
             if (!drauf) continue;
+            // Gottmodus: eine eigene Einheit bleibt stehen (unsere Schummelzutat).
+            if (GottModusFuer(o)) { GottModusTodVerhindert++; continue; }
             o.Verbraucht = true;
             o.Hp = 0; o.Dead = true; o.DeadTime = 0; o.Path = null; o.Target = -1;
             _nav?.ClearOccupant(o.Col, o.Row, i);

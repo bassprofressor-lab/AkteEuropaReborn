@@ -110,7 +110,7 @@ public partial class MapEntityLayer : Node2D
                 - Simulation.Determinism.Roll(5) + Simulation.Determinism.Roll(5);
         if (s < 1) s = Simulation.Determinism.Roll(10) / 7;
         SpeakHit(v);                                                     // @0x40D14F, Klangsperre
-        if (CheatGodMode && Cheated(v)) s = 0;
+        if (GottModusFuer(v)) s = 0;
         TrefferNotieren(v, s, angriff);
         if (s < v.Hp) { v.Hp -= s; NoteEvent(v, "unter Beschuss"); return s; }
         Kill(vi, v, -1, grund, ueberfahren);
@@ -213,7 +213,7 @@ public partial class MapEntityLayer : Node2D
         int s = core - Simulation.Determinism.Roll(5) + Simulation.Determinism.Roll(5);
         if (s < 1) s = s <= -2 ? 0 : Simulation.Determinism.Roll(10) / 3;
         SpeakHit(v);
-        if (CheatGodMode && Cheated(v)) s = 0;
+        if (GottModusFuer(v)) s = 0;
         TrefferNotieren(v, s, angriff);
         if (s < v.Hp) { v.Hp -= s; NoteEvent(v, "unter Beschuss"); return s; }
         Kill(vi, v, -1, grund);

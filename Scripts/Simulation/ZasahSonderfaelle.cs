@@ -82,6 +82,9 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     private void EinheitEntfernen(int vi, Entity e, string grund)
     {
+        // Gottmodus (unsere Schummelzutat): auch die Schallkanone nimmt keine
+        // eigene Einheit weg.
+        if (GottModusFuer(e)) { GottModusTodVerhindert++; return; }
         if (TodesLog)
             GD.Print($"tod: {LabelOf(e)} (Platz {e.Slot}, Spieler {e.Owner}) auf ({e.Col},{e.Row}) "
                    + $"ENTFERNT, Grund: {grund}");

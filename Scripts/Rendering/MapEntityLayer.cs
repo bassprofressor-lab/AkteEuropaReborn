@@ -12023,7 +12023,7 @@ public partial class MapEntityLayer : Node2D
         // is left of its energie (@0x40cf8d), instead of letting it reach zero
         // Unverwundbar: der Treffer wird gezählt und gemeldet wie immer, nur
         // der Schaden bleibt aus — so bleiben Klang, Meldung und Zielwahl heil.
-        if (CheatGodMode && Cheated(victim)) damage = 0;
+        if (GottModusFuer(victim)) damage = 0;
         // ⚠ 11.09.2026 — Erfahrung gibt es nur im EINHEITENARM (0x40CEEA). Der
         // Infanteriezellen-Arm 0x40D00C springt nach dem letzten Mann
         // @0x40D264 ans Ende, ohne diesen Block — ein Treffer auf Fussvolk
@@ -12105,6 +12105,15 @@ public partial class MapEntityLayer : Node2D
     /// 8…11 Takte, und sein Klang kommt am Ende (K3).</param>
     private void Kill(int vi, Entity victim, int by = -1, string grund = "", bool ueberfahren = false)
     {
+        // ⭐ 13.09.2026 — GOTTMODUS (unsere Schummelzutat, Strg+Umschalt+G): eine
+        // eigene Einheit stirbt auf KEINEM der neun Wege — Beschuss, Ueberfahren,
+        // Sprengung, Druckwelle, Skript, Minen. Sie behaelt mindestens 1 TP.
+        if (GottModusFuer(victim) && !victim.Dead)
+        {
+            victim.Hp = Mathf.Max(1, victim.Hp);
+            GottModusTodVerhindert++;
+            return;
+        }
         // ⚠⚠ 10.09.2026 — »EINFACH UMGEFALLEN« IST KEINE URSACHE, SONDERN DAS
         // FEHLEN EINER. Seine Meldung zu Cpt.Cossarro steht seit dem 09.09. im
         // Buglog (bug-150) und war nicht zu verfolgen, weil niemand aufschrieb,
@@ -13832,6 +13841,19 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     private bool Cheated(Entity e)
         => ViewPlayer >= 0 && e.Owner >= 0 && Allied(e.Owner, ViewPlayer);
+
+    /// <summary>
+    /// ⭐ 13.09.2026 — <b>WER IST UNVERWUNDBAR?</b> Seine Ansage: »nur auf meine
+    /// Einheiten angewandt« — also NUR die eigenen EINHEITEN des Spielers, nicht
+    /// die Verbündeten und keine Gebäude. (Munition und Sprit bleiben bei
+    /// <see cref="Cheated(Entity)"/>.)
+    /// </summary>
+    private bool GottModusFuer(Entity e)
+        => CheatGodMode && ViewPlayer >= 0 && e.Owner == ViewPlayer
+           && !e.IsBuilding && !e.IsProp;
+
+    /// <summary>Wie oft der Gottmodus einen Tod verhindert hat — für die Zeile.</summary>
+    public static int GottModusTodVerhindert;
 
     /// <summary>Dasselbe für ein Flugzeug. `Special.Owner` ist der Spieler des
     /// Flughafens, dem es gehört — und er ist erst gesetzt, wenn der bekannt
@@ -17293,6 +17315,13 @@ public partial class MapEntityLayer : Node2D
         };
     }
 
+    /// <summary>Das Meldungsfenster öffnen (MapViewer): Zeile 1, Zeile 2,
+    /// Standzeit in Zwanzig-Takt-Schritten, mittig statt an der Maus.</summary>
+    public System.Action<string, string, int, bool>? OnMeldung;
+
+    /// <summary><c>--meldungsfenster-aus</c> — Absagen wieder nur in der Statuszeile.</summary>
+    public static bool MeldungsfensterAus;
+
     /// <summary><c>--fabrikfenster-alt</c> — der Stand vor dem 13.09.2026: die
     /// Fabrik öffnet wieder unseren Basisfenster-Nachbau, 511 schaltet wie
     /// vorher, und Ausbauklänge kommen beim Start.</summary>
@@ -17379,10 +17408,13 @@ public partial class MapEntityLayer : Node2D
             FabrikKnopfBefehle++;
             Emit(Simulation.Commands.CommandRecord.Make(BuildingOpFor(e, job), (byte)ViewPlayer, (short)idx));
         }
-        void Meldung(string text)
+        void Meldung(string text, string zeile2 = "")
         {
             FabrikKnopfMeldungen++;
-            _order = text;
+            // ⭐ 13.09.2026 — das Meldungsfenster (Art 13) an der Maus, Standzeit 3
+            // (0x4469A0(MausX−3, MausY−3, z1, z2, 3, 0)). Ohne Fenster: Statuszeile.
+            if (OnMeldung != null && !MeldungsfensterAus) OnMeldung(text, zeile2, 3, false);
+            else _order = zeile2.Length > 0 ? text + " " + zeile2 : text;
         }
         switch (k)
         {
@@ -17396,7 +17428,7 @@ public partial class MapEntityLayer : Node2D
                 return;
             case 3:
                 if (e.ProdSpeed == 9)
-                { Meldung("Kann nicht erweitern. Sie haben bereits den Maximalwert erreicht."); return; }
+                { Meldung("Kann nicht erweitern.", "Sie haben bereits den Maximalwert erreicht."); return; }
                 if (e.State == FaProdUp) { FabrikKnopfStill++; return; }          // @0x44AE82
                 if (konto >= e.CostProd) Senden(BuildingJob.ExpandProd);         // 510
                 else Meldung("Sie haben leider nicht genug Geld.");

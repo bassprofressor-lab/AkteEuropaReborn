@@ -1132,6 +1132,7 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_brueckeAngriffCheck) { _ = BrueckeAngriffLauf(); return; }
         if (_brueckeTrefferCheck)
         {
             if (_shotPath.Length > 0) { _ = BrueckeBildLauf(); return; }
@@ -1335,6 +1336,24 @@ public partial class MapViewer : Node2D
 
     /// <summary><c>--bruecke-treffer-check</c> — siehe MapEntityLayer.BrueckeTrefferCheck.</summary>
     private bool _brueckeTrefferCheck;
+
+    /// <summary><c>--bruecke-angriff-check</c> — siehe MapEntityLayer.BrueckeAngriffCheck.</summary>
+    private bool _brueckeAngriffCheck;
+
+    private async System.Threading.Tasks.Task BrueckeAngriffLauf()
+    {
+        for (int i = 0; i < 5; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        string kopf = _entities.BrueckeAngriffCheck();
+        int bilder = 0;
+        while (_entities.BrueckeAngriffLaeuft && bilder < 30000)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            bilder++;
+            if (MapEntityLayer.BrueckeNichtAngreifbar && bilder > 600) break;
+        }
+        GD.Print(kopf + _entities.BrueckeAngriffStand(bilder));
+        GetTree().Quit(0);
+    }
 
     /// <summary>Drei Bilder: heil, Stufe 1, eingestürzt (<c>--shot=…</c> wird zu
     /// <c>…_0/_1/_2.png</c>).</summary>
@@ -1662,6 +1681,26 @@ public partial class MapViewer : Node2D
         Soll(_entities.FabrikKnopfBefehle == bef && _entities.FabrikKnopfMeldungen == meld + 1
              && _entities.FabrikZustand(idx).Zustand == 0,
              "Lagerausbau ohne Geld: Meldung, KEIN Befehl, Zustand bleibt 0");
+        // ⭐ das Meldungsfenster (Art 13): steht an der Maus, eine Zeile = 3 Kacheln
+        // hoch, und ist nach Standzeit 3 (3 × 20 Takte + Blende) wieder weg.
+        var mv = LetzteMeldung;
+        if (MapEntityLayer.MeldungsfensterAus)
+            sb.Append("  ⚠ NULLMODELL --meldungsfenster-aus: hier MUSS das Meldungsfenster fehlen\n");
+        Soll(mv != null && mv.Visible && mv.Zeile1 == "Sie haben leider nicht genug Geld." && mv.HTiles == 3,
+             $"Meldungsfenster offen: »{mv?.Zeile1}«, {mv?.WTiles}x{mv?.HTiles} Kacheln");
+        if (mv != null)
+        {
+            if (_shotPath.Length > 0)
+            {
+                for (int t = 0; t <= UI.WindowManager.BilderAuf + 1; t++) UI.WindowManager.Takt();
+                for (int i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                GetViewport().GetTexture().GetImage().SavePng(_shotPath.Replace(".png", "_meldung.png"));
+                sb.Append($"  Bild nach {_shotPath.Replace(".png", "_meldung.png")}\n");
+            }
+            for (int t = 0; t < 3 * UI.WindowManager.StandzeitTakte + UI.WindowManager.BilderZu + 2; t++)
+                UI.WindowManager.Takt();
+            Soll(!mv.Visible, "nach Standzeit 3 wieder zu");
+        }
 
         _entities.FabrikProbeSetzen(idx, 100000, 0);
         await Klick(1);
@@ -3196,6 +3235,7 @@ public partial class MapViewer : Node2D
             else if (a == "--einheiteninfo-check") _einheiteninfoCheck = true;
             else if (a == "--einheiteninfo-alt") MapEntityLayer.EinheiteninfoAlt = true;
             else if (a == "--fabrikfenster-alt") MapEntityLayer.FabrikfensterAlt = true;
+            else if (a == "--meldungsfenster-aus") MapEntityLayer.MeldungsfensterAus = true;
             else if (a == "--minenfenster-check") _minenfensterCheck = true;
             else if (a == "--hauptmenue-alt") UI.MainMenuWindow.Alt = true;
             else if (a == "--hauptmenue-check") _hauptmenueCheck = true;
@@ -3580,6 +3620,8 @@ public partial class MapViewer : Node2D
             else if (a == "--radarmast-check") _radarmastCheck = true;
             else if (a == "--stapellauf-check") _stapellaufCheck = true;
             else if (a == "--bruecke-treffer-check") _brueckeTrefferCheck = true;
+            else if (a == "--bruecke-angriff-check") _brueckeAngriffCheck = true;
+            else if (a == "--bruecke-nicht-angreifbar") MapEntityLayer.BrueckeNichtAngreifbar = true;
             else if (a == "--bauwerke-unzerstoerbar") MapEntityLayer.BauwerkeUnzerstoerbar = true;
             else if (a == "--auslauf-alt") MapEntityLayer.AuslaufAlt = true;
             else if (a == "--radarmast-ewig") MapEntityLayer.RadarMastEwig = true;
@@ -5989,6 +6031,7 @@ public partial class MapViewer : Node2D
         // ⭐ 13.09.2026 — die Einheiten-Info (Fensterart 19) haengt am Menue.
         _fensterEbene = layer;
         _entities.OnEinheitenInfo = griff => EinheitenInfoOeffnen(griff);
+        _entities.OnMeldung = (z1, z2, standzeit, mittig) => MeldungOeffnen(z1, z2, standzeit, mittig);
         UI.UnitMenuWindow.Wort = MapEntityLayer.OrderWord;
         _unitMenu.OnCode = code =>
         {
@@ -6071,6 +6114,49 @@ public partial class MapViewer : Node2D
     /// bekommt <c>mx, my</c>. ⚠ Der Oeffner des Originals ist der DOPPELKLICK
     /// (WM_LBUTTONDBLCLK 0x203 -> 0x4141B4) bzw. die Leertaste; die rechte
     /// Taste scrollt dort die Karte (0x414328).</summary>
+    private readonly System.Collections.Generic.List<(UI.MeldungView View, bool Mittig, int Kennung)> _meldungen = new();
+    private int _meldungKennung = 1_000_000;
+
+    /// <summary>Wie viele Meldungsfenster geöffnet wurden — für den Prüfstand.</summary>
+    public int MeldungenGeoeffnet;
+    public UI.MeldungView? LetzteMeldung;
+
+    /// <summary>
+    /// Der Öffner <c>0x4469A0(x, y, Zeile1, Zeile2, Standzeit, Mittig)</c>:
+    /// an der Maus (−3) ohne Doppelöffnungswache — Meldungen stapeln sich —
+    /// oder mittig (x mittig, y = Schirmhöhe/10), dann schliessen alle alten
+    /// mittigen vorher. ⚠ UNSERE Setzung: y = Höhe/10 in UNSEREN Punkten.
+    /// </summary>
+    public bool MeldungOeffnen(string zeile1, string zeile2, int standzeit, bool mittig)
+    {
+        if (_fensterEbene == null || !UI.MeldungView.Usable) { _entities.Say(zeile1 + " " + zeile2); return false; }
+        if (mittig)
+            foreach (var m in _meldungen)
+                if (m.Mittig) UI.WindowManager.Schliessen(UI.WindowManager.ArtMeldung, m.Kennung);
+        // freie (geschlossene) Ansicht wiederverwenden
+        int platz = _meldungen.FindIndex(m => UI.WindowManager.Offen(UI.WindowManager.ArtMeldung, m.Kennung) == null
+                                              && !m.View.Visible);
+        UI.MeldungView v;
+        if (platz >= 0) { v = _meldungen[platz].View; _meldungen.RemoveAt(platz); }
+        else { v = new UI.MeldungView { Visible = false }; _fensterEbene.AddChild(v); }
+        int kennung = ++_meldungKennung;
+        v.OnClose = () => UI.WindowManager.Schliessen(UI.WindowManager.ArtMeldung, kennung);
+        v.Anlegen(zeile1, zeile2);
+        var f = UI.WindowManager.Oeffnen(UI.WindowManager.ArtMeldung, v, kennung, standzeit);
+        if (f == null) return false;
+        v.Visible = true;
+        _meldungen.Add((v, mittig, kennung));
+        if (mittig)
+        {
+            var schirm = UI.WindowManager.Schirmmass();
+            v.Position = new Vector2((schirm.X - v.Size.X) / 2f, schirm.Y / 10f);
+        }
+        else UI.WindowManager.AnDieMaus(f);
+        MeldungenGeoeffnet++;
+        LetzteMeldung = v;
+        return true;
+    }
+
     private Node? _fensterEbene;
     private readonly System.Collections.Generic.Dictionary<int, UI.EinheitenInfoView> _infoFenster = new();
 
