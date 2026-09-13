@@ -2074,6 +2074,26 @@ public sealed class MissionScript
     {
         public int X = -10, Y, Target, Rest, Player;
         public int[] Types = Array.Empty<int>();
+
+        /// <summary>+0x04 == 0xFF — abgeladen, fliegt nach rechts hinaus
+        /// (@0x4C0710, @0x4C04D6). Siehe Simulation/Frachter.cs.</summary>
+        public bool Abflug;
+    }
+
+    /// <summary>Gegenschalter <c>--frachter-aus</c>: der Frachter verschwindet
+    /// bei der Ankunft, unsichtbar wie bis zum 13.09.2026 — kein Abflug, kein
+    /// Bild, kein Lichtblitz, kein Würfel.</summary>
+    public static bool FrachterAus;
+
+    /// <summary>Kartenbreite in Spalten, <c>dword[0x542DC4]</c> — der Abflug
+    /// endet bei <c>x − 2 &gt; Breite</c> (@0x4C04C6). Setzt die Kartenebene.</summary>
+    public int KartenBreite = 256;
+
+    /// <summary>Die Frachter der Verstärkung, die gerade in der Luft sind —
+    /// für den Zeichner (Art 0x28, <c>0x42F830</c>).</summary>
+    public IEnumerable<(int X, int Y, int Fein)> FrachterInDerLuft()
+    {
+        foreach (var r in _incoming) yield return (r.X, r.Y, r.Rest);
     }
 
     private readonly List<Incoming> _incoming = new();
@@ -2083,7 +2103,17 @@ public sealed class MissionScript
     public const int SpaceInSlots = 20;
 
     /// <summary>How many flights are still on their way — for the harness.</summary>
-    public int Incomings => _incoming.Count;
+    public int Incomings
+    {
+        get
+        {
+            // ⚠ 13.09.2026: nur die, die noch ANKOMMEN — ein abfliegender
+            // Frachter hat nichts mehr an Bord.
+            int n = 0;
+            foreach (var r in _incoming) if (!r.Abflug) n++;
+            return n;
+        }
+    }
 
     /// <summary>
     /// One tick of the queue, in the original's own integer arithmetic
@@ -2104,6 +2134,10 @@ public sealed class MissionScript
         for (int i = _incoming.Count - 1; i >= 0; i--)
         {
             var r = _incoming[i];
+            // @0x4C04C6 — hinter dem rechten Kartenrand: Satz frei.
+            if (r.X - 2 > KartenBreite) { _incoming.RemoveAt(i); continue; }
+            // @0x4C04D6 — abgeladen: eine Spalte je Takt nach rechts.
+            if (r.Abflug) { r.X++; continue; }
             int d = r.Target - r.X;
             if (d > 10) { r.X++; continue; }
             int step = d * 4;
@@ -2112,7 +2146,8 @@ public sealed class MissionScript
             if (r.Rest > 0x27) { r.X += r.Rest / 0x28; r.Rest %= 0x28; }
             if (r.X != r.Target) continue;
             Drop(r);
-            _incoming.RemoveAt(i);
+            if (FrachterAus) _incoming.RemoveAt(i);
+            else r.Abflug = true;                        // @0x4C0710: +0x04 := 0xFF
         }
     }
 
@@ -2129,8 +2164,12 @@ public sealed class MissionScript
     /// the condition it is testing.</summary>
     public int FlushIncoming()
     {
-        int n = _incoming.Count;
-        foreach (var r in _incoming) { r.X = r.Target; Drop(r); }
+        int n = 0;
+        foreach (var r in _incoming)
+        {
+            if (r.Abflug) continue;
+            r.X = r.Target; Drop(r); n++;
+        }
         _incoming.Clear();
         return n;
     }
@@ -2528,6 +2567,16 @@ public sealed class MissionScript
         "var_vs_store" => StoreField != null && c.A >= 0 && c.A < _var.Length &&
                           StoreField(c.B, c.C) >= 0 &&
                           Cmp(_var[c.A], c.Op, StoreField(c.B, c.C)),
+        // v[a] / 2 <op> Lager(b, +c) — Mission 11 @0x49C53A (F 0x49BE4E):
+        //     mov ax, v[9]; cwde; cdq; sub eax, edx; sar eax, 1
+        //     cmp ax, word[Satz 12 + 0x02]; jle raus
+        // Die Haelfte der Energie, die sich das Skript beim Text 214 gemerkt
+        // hat, gegen die Energie des Hotels JETZT. `cdq/sub/sar` ist die
+        // ganzzahlige Teilung zur Null hin — genau C#s `/ 2`. Lesung:
+        // berichte/m11-hotelplaza-fable.md §5 (13.09.2026).
+        "var_half_vs_store" => StoreField != null && c.A >= 0 && c.A < _var.Length &&
+                               StoreField(c.B, c.C) >= 0 &&
+                               Cmp(_var[c.A] / 2, c.Op, StoreField(c.B, c.C)),
         "unit_field" => UnitField != null && c.A >= 0 && c.A < _var.Length &&
                         UnitField(_var[c.A], c.B) >= 0 &&
                         Cmp(UnitField(_var[c.A], c.B), c.Op, c.C),
@@ -3173,7 +3222,7 @@ public sealed class MissionScript
             // `unit_field` fragt die Welt, hängt aber an der Variablen, in der
             // der Einheitenindex steht — also beides: die Bedingung sammeln UND
             // dem Erzeuger dieser Variablen nachgehen.
-            if (c.Kind is "unit_field" or "var_vs_store" or "unit_is_var")
+            if (c.Kind is "unit_field" or "var_vs_store" or "var_half_vs_store" or "unit_is_var")
                 queue.Enqueue(new Cond { Kind = "var", A = c.A, Op = "!=", B = 0 });
             if (c.Kind != "var") { list.Add(c); continue; }
             if (!seen.Add(c.A)) continue;
@@ -3279,7 +3328,7 @@ public sealed class MissionScript
             // Bedingung an einer Variablen hängt, die selbst erst gefüllt werden
             // muss — `var_vs_store` vergleicht v[a] mit einem Lager, und ob
             // v[a] überhaupt gesetzt wurde, ist die eigentliche Frage.
-            if (c.Kind is "var_vs_store" or "unit_field" or "unit_is_var") todo.Enqueue(c.A);
+            if (c.Kind is "var_vs_store" or "var_half_vs_store" or "unit_field" or "unit_is_var") todo.Enqueue(c.A);
             else if (!ok && c.Kind == "var") todo.Enqueue(c.A);
         }
         foreach (var c in r.When) Take(c, "");
@@ -3301,6 +3350,8 @@ public sealed class MissionScript
         "buildings" => $"buildings(Kl{c.A},P{c.B}){c.Op}{c.C}",
         "objects" => $"objects(Typ{c.A},P{c.B}){c.Op}{c.C}",
         "imap" => $"imap({c.A},{c.C})={(ImapAt != null ? ImapAt(c.A, c.C) : -1)}{c.Op}{c.B}",
+        "var_half_vs_store" => $"v[{c.A}]/2={Var(c.A) / 2}{c.Op}Lager({c.B},+0x{c.C:X})=" +
+                               (StoreField != null ? StoreField(c.B, c.C) : -1),
         "var_vs_store" => $"v[{c.A}]={Var(c.A)}{c.Op}Lager({c.B},+0x{c.C:X})=" +
                           (StoreField != null ? StoreField(c.B, c.C) : -1),
         "unit_field" => $"Einheit v[{c.A}]={Var(c.A)} Feld+{c.B}{c.Op}{c.C}",
@@ -3505,7 +3556,7 @@ public sealed class MissionScript
         "objects" => ObjectCount != null,
         "unit_index" or "unit_index_var" => FindUnit != null,
         "unit_field" or "unit_pos" => UnitField != null,
-        "var_vs_store" => StoreField != null,
+        "var_vs_store" or "var_half_vs_store" => StoreField != null,
         "selected" => Selection != null,
         "units_mark" => MarkCount != null,
         "unit_is" or "unit_is_var" => UnitHasMark != null,

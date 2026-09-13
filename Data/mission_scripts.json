@@ -1346,6 +1346,82 @@
      "when": []
     },
     {
+     "_at": "0x49BEA9",
+     "_hinweis": "Text 450 steht in keiner HELPG.TXT (274 Saetze) - das Original oeffnet einen Text, den es nicht gibt; woertlich uebernommen",
+     "_von": "m11-hotelplaza-fable.md §2 (13.09.2026 nachgetragen)",
+     "then": [
+      {
+       "a": 2,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "a": 3,
+       "kind": "set_time"
+      },
+      {
+       "a": 4,
+       "b": 44,
+       "c": -1,
+       "d": 70,
+       "e": 0,
+       "f": 0,
+       "kind": "stock_add"
+      },
+      {
+       "a": 4,
+       "b": 46,
+       "c": -1,
+       "d": 120,
+       "e": 0,
+       "f": 0,
+       "kind": "stock_add"
+      },
+      {
+       "a": 450,
+       "b": 1,
+       "c": 100,
+       "d": 100,
+       "kind": "text"
+      },
+      {
+       "a": 101,
+       "b": 10,
+       "kind": "set"
+      },
+      {
+       "a": 430,
+       "b": 0,
+       "kind": "money"
+      },
+      {
+       "a": 600,
+       "kind": "sound"
+      }
+     ],
+     "when": [
+      {
+       "a": 2,
+       "b": 2,
+       "kind": "var",
+       "op": ">"
+      },
+      {
+       "a": 2,
+       "b": 10,
+       "kind": "var",
+       "op": "<"
+      },
+      {
+       "a": 5000,
+       "b": 57,
+       "c": 0,
+       "kind": "unit_is",
+       "op": "=="
+      }
+     ]
+    },
+    {
      "_at": "0x49BF41",
      "_tut_ausserdem": "place_unit place_unit place_unit place_unit 0x4D0860 0x4D0860 0x4D0860 0x4D0860",
      "then": [
@@ -1764,6 +1840,24 @@
        "kind": "remove_unit"
       },
       {
+       "a": 4,
+       "b": 44,
+       "c": -1,
+       "d": 250,
+       "e": 0,
+       "f": 0,
+       "kind": "stock_add"
+      },
+      {
+       "a": 4,
+       "b": 46,
+       "c": -1,
+       "d": 300,
+       "e": 0,
+       "f": 0,
+       "kind": "stock_add"
+      },
+      {
        "_at": "0x49C25C",
        "a": 601,
        "kind": "sound"
@@ -1835,6 +1929,219 @@
        "b": 10,
        "kind": "time_after",
        "op": ">"
+      }
+     ]
+    },
+    {
+     "_at": "0x49C2BE",
+     "_hinweis": "Die Wegpunktpruefung liest im Original Satz 5000 (Transporter) statt 7000 - Kopierfehler des Skriptautors, in beiden GAME.EXE gleich, woertlich uebernommen; der Agent laeuft darum auf der Uhr",
+     "_von": "m11-hotelplaza-fable.md §3 (13.09.2026 nachgetragen)",
+     "any_groups": [
+      [
+       {
+        "a": 5000,
+        "b": 47,
+        "c": 0,
+        "kind": "unit_pos",
+        "op": "=="
+       },
+       {
+        "a": 5000,
+        "b": 8,
+        "c": 1,
+        "kind": "unit_pos",
+        "op": "<"
+       }
+      ],
+      [
+       {
+        "a": 6,
+        "b": 10,
+        "kind": "time_after",
+        "op": ">"
+       }
+      ]
+     ],
+     "then": [
+      {
+       "a": 5,
+       "b": 2,
+       "kind": "set"
+      },
+      {
+       "a": 6,
+       "kind": "set_time"
+      },
+      {
+       "a": 7000,
+       "b": 35,
+       "c": 22,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 5,
+       "b": 1,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49C310",
+     "_hinweis": "Die Wegpunktpruefung liest im Original Satz 5000 (Transporter) statt 7000 - Kopierfehler des Skriptautors, in beiden GAME.EXE gleich, woertlich uebernommen; der Agent laeuft darum auf der Uhr",
+     "_von": "m11-hotelplaza-fable.md §3 (13.09.2026 nachgetragen)",
+     "any_groups": [
+      [
+       {
+        "a": 5000,
+        "b": 35,
+        "c": 0,
+        "kind": "unit_pos",
+        "op": "=="
+       },
+       {
+        "a": 5000,
+        "b": 23,
+        "c": 1,
+        "kind": "unit_pos",
+        "op": "<"
+       }
+      ],
+      [
+       {
+        "a": 6,
+        "b": 10,
+        "kind": "time_after",
+        "op": ">"
+       }
+      ]
+     ],
+     "then": [
+      {
+       "a": 5,
+       "b": 3,
+       "kind": "set"
+      },
+      {
+       "a": 6,
+       "kind": "set_time"
+      },
+      {
+       "a": 7000,
+       "b": 9,
+       "c": 16,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 5,
+       "b": 2,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49C362",
+     "_hinweis": "Die Wegpunktpruefung liest im Original Satz 5000 (Transporter) statt 7000 - Kopierfehler des Skriptautors, in beiden GAME.EXE gleich, woertlich uebernommen; der Agent laeuft darum auf der Uhr",
+     "_von": "m11-hotelplaza-fable.md §3 (13.09.2026 nachgetragen)",
+     "any_groups": [
+      [
+       {
+        "a": 5000,
+        "b": 9,
+        "c": 0,
+        "kind": "unit_pos",
+        "op": "=="
+       },
+       {
+        "a": 5000,
+        "b": 18,
+        "c": 1,
+        "kind": "unit_pos",
+        "op": "<"
+       }
+      ],
+      [
+       {
+        "a": 6,
+        "b": 10,
+        "kind": "time_after",
+        "op": ">"
+       }
+      ]
+     ],
+     "then": [
+      {
+       "a": 5,
+       "b": 4,
+       "kind": "set"
+      },
+      {
+       "a": 6,
+       "kind": "set_time"
+      },
+      {
+       "a": 7000,
+       "b": 0,
+       "c": 6,
+       "kind": "move"
+      }
+     ],
+     "when": [
+      {
+       "a": 5,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      }
+     ]
+    },
+    {
+     "_at": "0x49C3B4",
+     "_hinweis": "Die Wegpunktpruefung liest im Original Satz 5000 (Transporter) statt 7000 - Kopierfehler des Skriptautors, in beiden GAME.EXE gleich, woertlich uebernommen; der Agent laeuft darum auf der Uhr",
+     "_von": "m11-hotelplaza-fable.md §3 (13.09.2026 nachgetragen)",
+     "any_groups": [
+      [
+       {
+        "a": 5000,
+        "b": 0,
+        "c": 0,
+        "kind": "unit_pos",
+        "op": "=="
+       },
+       {
+        "a": 5000,
+        "b": 6,
+        "c": 1,
+        "kind": "unit_pos",
+        "op": ">"
+       }
+      ],
+      [
+       {
+        "a": 6,
+        "b": 10,
+        "kind": "time_after",
+        "op": ">"
+       }
+      ]
+     ],
+     "then": [
+      {
+       "a": 7000,
+       "kind": "remove_unit"
+      }
+     ],
+     "when": [
+      {
+       "a": 5,
+       "b": 4,
+       "kind": "var",
+       "op": "=="
       }
      ]
     },
@@ -1974,6 +2281,60 @@
        "b": 12,
        "kind": "obj_owner",
        "op": "!="
+      }
+     ]
+    },
+    {
+     "_at": "0x49C53A",
+     "_von": "m11-hotelplaza-fable.md §5 (13.09.2026 nachgetragen)",
+     "then": [
+      {
+       "a": 7,
+       "b": 4,
+       "kind": "set"
+      },
+      {
+       "a": 194,
+       "b": 64,
+       "c": 47,
+       "d": 4,
+       "kind": "place_unit",
+       "v": 17
+      },
+      {
+       "a": 17,
+       "b": 57,
+       "c": 62,
+       "kind": "move_var"
+      },
+      {
+       "a": 194,
+       "b": 69,
+       "c": 43,
+       "d": 4,
+       "kind": "place_unit",
+       "v": 18
+      },
+      {
+       "a": 18,
+       "b": 98,
+       "c": 47,
+       "kind": "move_var"
+      }
+     ],
+     "when": [
+      {
+       "a": 7,
+       "b": 3,
+       "kind": "var",
+       "op": "=="
+      },
+      {
+       "a": 9,
+       "b": 12,
+       "c": 2,
+       "kind": "var_half_vs_store",
+       "op": ">"
       }
      ]
     },

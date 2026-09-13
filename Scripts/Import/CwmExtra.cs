@@ -225,6 +225,12 @@ public static class CwmExtra
         public int Design;
         public int UnitType, GameUnitType, Attack, Defence, Energie, Speed, Sight, Range;
 
+        /// <summary>Satz <b>+0x3E</b> (u16) — die Entwurfsnummer, aus der das
+        /// Geschäftszentrum den NAMEN holt (<c>0x47E321</c>: &lt; 200 → sec47
+        /// <c>typ + 200·Betrachter</c>, sonst sec36). Das Bild kommt aus +0x43.
+        /// 13.09.2026, geschaeftszentrum-fenster-fable.md §2.2.</summary>
+        public int Typ = -1;
+
         /// <summary>Satz <b>+0x28</b> — die ERFAHRUNG der angebotenen Einheit,
         /// und der fehlende Schlüssel zum Preis.
         ///
@@ -296,6 +302,7 @@ public static class CwmExtra
                 Defence = s94[o + 0x27], Speed = s94[o + 0x20],
                 Sight = s94[o + 0x2c], Range = s94[o + 0x2b],
                 Experience = s94[o + 0x28],
+                Typ = BitConverter.ToUInt16(s94, o + 0x3e),
             });
         }
         return list;

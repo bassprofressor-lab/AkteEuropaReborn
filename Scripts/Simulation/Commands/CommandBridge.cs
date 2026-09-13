@@ -774,6 +774,8 @@ public partial class MapEntityLayer
         // FLUGZEUG-Steckplatz, keine Einheitennummer. Owns() würde
         // _entities[P1] befragen — eine ganz andere Einheit.
         CommandOp.OursAirMove => ApplyAirMove(c),
+        // ⚠ Ebenso VOR der Schranke: P1 ist ein REGALPLATZ (Befehl 530).
+        CommandOp.MarktKauf => ApplyMarktKauf(c),
         _ when !Owns(c) => false,
         CommandOp.Move => ApplyMove(c),
         CommandOp.Attack => ApplyAttack(c),

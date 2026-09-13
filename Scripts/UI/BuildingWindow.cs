@@ -112,6 +112,23 @@ public sealed partial class BuildingWindow : PanelContainer
         /// Öffner <c>0x443E00</c>, Zeichner <c>0x46EDC0</c>, gebaut am
         /// 13.09.2026. Siehe <see cref="FabrikView"/>.</summary>
         Fabrik = 8,
+
+        /// <summary>⭐ <b>»GESCHÄFTSZENTRUM«</b>, Fensterart <b>33</b> — Gebäudeart 17,
+        /// Öffner <c>0x443CF0</c>, Zeichner <c>0x47DF70</c>, gebaut am 13.09.2026
+        /// für Kampagne 11. Siehe <see cref="MarktView"/>.</summary>
+        Geschaeftszentrum = 33,
+    }
+
+    /// <summary>Eine Zeile des Geschäftszentrums — ein Angebot des Regals
+    /// (sec94/sec95). Die Werte sind die eines Einheitensatzes, darum dieselbe
+    /// <see cref="DepotZeile"/> wie im Depot (der Werteblock ist derselbe
+    /// Textbaustein, §2.1 der Lesung).</summary>
+    public sealed class MarktZeile
+    {
+        /// <summary>Der Regalplatz — bei uns die Nummer des Angebots.</summary>
+        public int Nr = -1;
+        public int Preis;
+        public DepotZeile Werte = new();
     }
 
     /// <summary>
@@ -202,7 +219,33 @@ public sealed partial class BuildingWindow : PanelContainer
         /// Produktionsgeschwindigkeit (+0x05), Produktionserweiterungskosten
         /// (+0x0C).</summary>
         public int FabrikArt, StromIst, StromSoll, Zustand, Fortschritt, Tempo, ProdKosten;
+
+        /// <summary>Nur Geschäftszentrum: die Angebote mit Preis &gt; 0, in
+        /// Regalreihenfolge (Zählschleife 0x47E06A).</summary>
+        public List<MarktZeile> MarktZeilen = new();
     }
+
+    /// <summary>Die Daten des Geschäftszentrums — über den GEBÄUDEPLATZ
+    /// (<c>+0xACA0</c>), nicht über die Auswahl: das Fenster bleibt am Markt,
+    /// auch wenn der Spieler danach seine Einheit anklickt.</summary>
+    public System.Func<int, Stand?>? MarktDaten;
+
+    /// <summary>»Bestellen« — (Regalplatz, Gebäudeplatz), Befehl 530.</summary>
+    public System.Action<int, int>? OnMarktBestellen;
+
+    private MarktView? _markt;
+
+    /// <summary>Für den Prüfstand.</summary>
+    public MarktView? MarktAnsicht => _markt;
+    public bool ZeigtOriginalMarkt { get; private set; }
+
+    /// <summary>Welche Art gerade offen ist, und für welchen Platz.</summary>
+    public Art OffeneArt => _art;
+    public int Kennung => _kennung;
+
+    /// <summary>Von aussen schliessen, OHNE Klang — der Takt-Arm der Art 17
+    /// (<c>0x43E90C</c> → <c>0x4511D0</c>).</summary>
+    public void SchliessenVonAussen() => Schliessen();
 
     /// <summary>Knopf 1…4 des Fabrikfensters (Treffernummern von 0x45E399).</summary>
     public System.Action<int>? OnFabrikKnopf;
@@ -338,6 +381,13 @@ public sealed partial class BuildingWindow : PanelContainer
         _fabrik.OnKnopf = k => { OnFabrikKnopf?.Invoke(k); Refresh(); };
         AddChild(_fabrik);
 
+        // ⭐ 13.09.2026 — DAS GESCHÄFTSZENTRUM (Fensterart 33).
+        _markt = new MarktView { Visible = false };
+        _markt.OnClose = Schliessen;
+        _markt.OnChanged = Refresh;
+        _markt.OnBestellen = platz => OnMarktBestellen?.Invoke(platz, _kennung);
+        AddChild(_markt);
+
         var kopf = new HBoxContainer();
         _titel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         kopf.AddChild(_titel);
@@ -427,6 +477,7 @@ public sealed partial class BuildingWindow : PanelContainer
         // Ein frisch angelegtes Depotfenster hat keine Markierung (0x459E5F).
         if (art == Art.Depot) _depot?.Neu();
         if (art == Art.Fabrik) _fabrik?.Neu();
+        if (art == Art.Geschaeftszentrum) _markt?.Neu();
         Refresh();
         Show();
     }
@@ -455,7 +506,7 @@ public sealed partial class BuildingWindow : PanelContainer
 
     public void Refresh()
     {
-        var s = Daten?.Invoke();
+        var s = _art == Art.Geschaeftszentrum ? MarktDaten?.Invoke(_kennung) : Daten?.Invoke();
         if (s == null) { Hide(); return; }
 
         // ⭐⭐ 25.08.2026 — DER NACHSCHUBPOSTEN GEHT SEINEN EIGENEN WEG.
@@ -476,7 +527,22 @@ public sealed partial class BuildingWindow : PanelContainer
         bool fabrikOriginal = _art == Art.Fabrik && _fabrik != null && FabrikView.Usable;
         if (_depot != null) _depot.Visible = depotOriginal;
         if (_fabrik != null) _fabrik.Visible = fabrikOriginal;
-        _senk.Visible = !original && !mineOriginal && !depotOriginal && !fabrikOriginal;
+        bool marktOriginal = _art == Art.Geschaeftszentrum && _markt != null && MarktView.Usable;
+        if (_markt != null) _markt.Visible = marktOriginal;
+        ZeigtOriginalMarkt = marktOriginal;
+        _senk.Visible = !original && !mineOriginal && !depotOriginal && !fabrikOriginal && !marktOriginal;
+        if (marktOriginal)
+        {
+            AddThemeStyleboxOverride("panel", new StyleBoxEmpty());
+            CustomMinimumSize = new Vector2(
+                MarktView.WTiles * WindowChrome.Cell * MarktView.Scale,
+                MarktView.HTiles * WindowChrome.Cell * MarktView.Scale);
+            Size = CustomMinimumSize;
+            _markt!.Zeige(s);
+            _titel.Text = "Geschäftszentrum";
+            _knopfZahl = 1;
+            return;
+        }
         ZeigtOriginalDepot = depotOriginal;
         ZeigtOriginalFabrik = fabrikOriginal;
         if (fabrikOriginal)
@@ -547,6 +613,7 @@ public sealed partial class BuildingWindow : PanelContainer
             Art.Nachschubposten => "Angebot des Nachschubpostens",
             Art.Depot => "Depot " + s.Name,
             Art.Fabrik => "Fabrik " + s.Name,
+            Art.Geschaeftszentrum => "Geschäftszentrum",
             _ => $"Terranium-Mine — {s.Name}",
         };
         // ⚠ »Energie :« und die Statuszeile teilen sich die drei GEBÄUDEfenster.
@@ -624,6 +691,12 @@ public sealed partial class BuildingWindow : PanelContainer
 
             case Art.Fabrik:
                 _mitte.AddChild(Zeile("Die Fensterkacheln fehlen (WINDOWS.CWW nicht eingelesen)."));
+                break;
+
+            case Art.Geschaeftszentrum:
+                _mitte.AddChild(Zeile("Die Fensterkacheln fehlen (WINDOWS.CWW nicht eingelesen)."));
+                foreach (var z in s.MarktZeilen)
+                    _mitte.AddChild(Zeile($"    {z.Werte.Name}   ${z.Preis}"));
                 break;
 
             case Art.Depot:

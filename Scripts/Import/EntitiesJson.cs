@@ -273,6 +273,7 @@ public static class EntitiesJson
             // ⚠ +0x28, die Erfahrung — ohne sie ist der Ladenpreis nicht
             // nachrechenbar. Siehe CwmExtra.MarketOffer.Experience.
             w.Num("experience", o.Experience);
+            w.Num("typ", o.Typ);                  // +0x3E, der Name im Geschaeftszentrum
             w.End();
         }
         w.End();

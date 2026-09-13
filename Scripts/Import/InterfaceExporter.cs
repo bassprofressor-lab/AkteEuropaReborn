@@ -633,6 +633,11 @@ public sealed class InterfaceExporter
         // Startrahmen der Folge 95 (5 Rahmen, 495…499, eine flache Scheibe in
         // fünf Neigungen). 0x7A41C6 hat genau diesen einen Leser.
         ("radarstab", 95),
+        // ⭐ 13.09.2026 — DER RAUMFRACHTER und sein LICHTBLITZ. Zeichner 0x42C7E0:
+        // dword[0x815580 + 4·word[0x7A4E82]], 0x7A4E82 = 0x7A4048 + 4·910 + 2 —
+        // Folge 910, ein Bild (Rahmen 1512). Abladen 0x4C158D: 0x435950(…, 0x60) —
+        // Folge 96, sieben Bilder. geschaeftszentrum-lieferung-fable.md §6.
+        ("frachter", 910), ("lichtblitz", 96),
     };
 
     /// <summary>

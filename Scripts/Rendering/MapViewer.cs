@@ -879,6 +879,7 @@ public partial class MapViewer : Node2D
         }
         if (_minenfensterCheck) { _ = MinenfensterLauf(); return; }
         if (_depotfensterCheck) { _ = DepotfensterLauf(); return; }
+        if (_marktfensterCheck) { _ = MarktfensterLauf(); return; }
         if (_fabrikfensterCheck) { _ = FabrikfensterLauf(); return; }
         if (_einheiteninfoCheck) { _ = EinheiteninfoLauf(); return; }
         if (_hauptmenueCheck) { _ = HauptmenueLauf(); return; }
@@ -1133,6 +1134,9 @@ public partial class MapViewer : Node2D
             return;
         }
         if (_brueckeAngriffCheck) { _ = BrueckeAngriffLauf(); return; }
+        if (_hotelplazaCheck) { _ = HotelPlazaLauf(); return; }
+        if (_lieferungCheck) { _ = LieferungLauf(); return; }
+        if (_lieferungBild) { _ = LieferungBildLauf(); return; }
         if (_brueckeTrefferCheck)
         {
             if (_shotPath.Length > 0) { _ = BrueckeBildLauf(); return; }
@@ -1339,6 +1343,50 @@ public partial class MapViewer : Node2D
 
     /// <summary><c>--bruecke-angriff-check</c> — siehe MapEntityLayer.BrueckeAngriffCheck.</summary>
     private bool _brueckeAngriffCheck;
+
+    /// <summary><c>--hotelplaza-check</c> — siehe Simulation/HotelPlazaCheck.cs.</summary>
+    private bool _hotelplazaCheck;
+
+    /// <summary><c>--lieferung-check</c> — siehe Simulation/Frachter.cs.</summary>
+    private bool _lieferungCheck;
+
+    private bool _lieferungBild;
+
+    /// <summary>Drei Bilder: Frachter im Anflug, im Abladetakt (+Blitz), im Abflug.</summary>
+    private async System.Threading.Tasks.Task LieferungBildLauf()
+    {
+        for (int i = 0; i < 5; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GetTree().Paused = true;
+        var p = _entities.LieferungBildVorbereiten(6);
+        if (p != null) _camera.Position = p.Value;
+        async System.Threading.Tasks.Task Bild(int n)
+        {
+            for (int i = 0; i < 4; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            string pfad = _shotPath.Replace(".png", $"_{n}.png");
+            GetViewport().GetTexture().GetImage().SavePng(pfad);
+            GD.Print($"lieferung-bild: {pfad}");
+        }
+        await Bild(0);
+        _entities.LieferungBisAnkunft();
+        await Bild(1);
+        _entities.LieferungBildTakte(12);
+        await Bild(2);
+        GetTree().Quit(0);
+    }
+
+    private async System.Threading.Tasks.Task LieferungLauf()
+    {
+        for (int i = 0; i < 5; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GD.Print(_entities.LieferungCheck());
+        GetTree().Quit(0);
+    }
+
+    private async System.Threading.Tasks.Task HotelPlazaLauf()
+    {
+        for (int i = 0; i < 5; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GD.Print(_entities.HotelPlazaCheck());
+        GetTree().Quit(0);
+    }
 
     private async System.Threading.Tasks.Task BrueckeAngriffLauf()
     {
@@ -3621,6 +3669,14 @@ public partial class MapViewer : Node2D
             else if (a == "--stapellauf-check") _stapellaufCheck = true;
             else if (a == "--bruecke-treffer-check") _brueckeTrefferCheck = true;
             else if (a == "--bruecke-angriff-check") _brueckeAngriffCheck = true;
+            else if (a == "--hotelplaza-check") _hotelplazaCheck = true;
+            else if (a == "--lieferung-check") _lieferungCheck = true;
+            else if (a == "--lieferung-bild") _lieferungBild = true;
+            else if (a == "--frachter-aus") Campaign.MissionScript.FrachterAus = true;
+            else if (a == "--marktanker-alt") MapEntityLayer.MarktankerAlt = true;
+            else if (a == "--marktfenster-alt") MapEntityLayer.MarktfensterAlt = true;
+            else if (a == "--marktfenster-check") _marktfensterCheck = true;
+            else if (a == "--uebernahme-alt") MapEntityLayer.UebernahmeAlt = true;
             else if (a == "--bruecke-nicht-angreifbar") MapEntityLayer.BrueckeNichtAngreifbar = true;
             else if (a == "--bauwerke-unzerstoerbar") MapEntityLayer.BauwerkeUnzerstoerbar = true;
             else if (a == "--auslauf-alt") MapEntityLayer.AuslaufAlt = true;
@@ -5928,6 +5984,22 @@ public partial class MapViewer : Node2D
         // ⭐ 13.09.2026: die vier Knöpfe des Fabrikfensters (Klickarm 0x44ACF1),
         // und »Anhalten« der Mine — 517 ist derselbe Umschalter wie 511.
         _gebaeudeFenster.OnFabrikKnopf = _entities.FabrikKnopf;
+        // ⭐ 13.09.2026: das Geschaeftszentrum (Fensterart 33) — Daten ueber den
+        // Gebaeudeplatz, Kauf als Befehl 530, Neumalen nach dem Kauf (0x451370)
+        // und Schliessen aus dem Takt (0x4511D0).
+        _gebaeudeFenster.MarktDaten = _entities.MarktWindowData;
+        _gebaeudeFenster.OnMarktBestellen = _entities.MarktBestellen;
+        _entities.OnMarktfensterNeu = platz =>
+        {
+            if (_gebaeudeFenster.Visible && _gebaeudeFenster.OffeneArt == UI.BuildingWindow.Art.Geschaeftszentrum
+                && _gebaeudeFenster.Kennung == platz) _gebaeudeFenster.Refresh();
+        };
+        _entities.OnMarktfensterZu = platz =>
+        {
+            if (_gebaeudeFenster.Visible && _gebaeudeFenster.OffeneArt == UI.BuildingWindow.Art.Geschaeftszentrum
+                && _gebaeudeFenster.Kennung == platz) _gebaeudeFenster.SchliessenVonAussen();
+            else UI.WindowManager.Schliessen((int)UI.BuildingWindow.Art.Geschaeftszentrum, platz);
+        };
         _gebaeudeFenster.OnStop = _entities.BuildingWindowStart;
         // ⚠ "Anhalten" ist NICHT angeschlossen, und das ist gelesen, nicht
         // vergessen: die Zustandstafeln bilden vier Auftraege ab (aktiv,
@@ -5949,7 +6021,7 @@ public partial class MapViewer : Node2D
             // Ein Fenster derselben Art fuer ein ANDERES Gebaeude weicht.
             UI.WindowManager.Wegnehmen(UI.WindowManager.Offen(schluessel));
             var f = UI.WindowManager.Oeffnen(schluessel, _gebaeudeFenster, platz);
-            _gebaeudeFenster.Open(art);
+            _gebaeudeFenster.Open(art, platz);
             // ⭐⭐ 26.08.2026 — DIE LAGE. Gemeldet: »unseres oeffnet oben links,
             // im Original neben dem Gebaeude«. Das Original setzt sie auf
             // MAUS-3 und zwingt sie dann in den Schirm; die ganze Herleitung

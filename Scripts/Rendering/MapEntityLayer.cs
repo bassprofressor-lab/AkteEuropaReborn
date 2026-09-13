@@ -4082,6 +4082,7 @@ public partial class MapEntityLayer : Node2D
                     Energie = GetI(mo, "energie"), Speed = GetI(mo, "speed"),
                     Sight = GetI(mo, "sight"), Range = GetI(mo, "range"),
                     Experience = GetI(mo, "experience"),
+                    Typ3E = GetI(mo, "typ", -1),
                 });
             }
 
@@ -5651,6 +5652,10 @@ public partial class MapEntityLayer : Node2D
     /// Fusssoldat nur IM STAND schiesst, feuert sie dann auch nicht.</summary>
     public static bool EntladeklasseAlt;
 
+    /// <summary><c>--marktanker-alt</c>: der Anker des Handelspostens wird wie
+    /// jeder Gebaeudeanker als belegt gestempelt (Stand bis 13.09.2026).</summary>
+    public static bool MarktankerAlt;
+
     /// <summary>Place every entity on its cell and claim that cell on the grid.</summary>
     private void InitEntityMovement()
     {
@@ -5679,6 +5684,15 @@ public partial class MapEntityLayer : Node2D
             if (!e.IsBuilding && !e.IsProp)
                 _nav?.SetHull(i, Simulation.NavGrid.HullSide(e.GameUnitType));
             if (e.IsBuilding && e.BType == 14) _nav?.ClearStatic(e.Col, e.Row);
+            // ⭐ 13.09.2026 — DER HANDELSPOSTEN (17) EBENSO: seine Maske ist in
+            // den vier Ecken (0,0) (3,0) (0,3) (3,3) null, das Original fuehrt
+            // dort 0xFFFE (freies Land, auf allen 13 Kampagnenmaerkten gemessen).
+            // Der Anker IST die linke obere Platte — man faehrt darauf (0x432569),
+            // und der Frachter setzt die gekaufte Einheit dorthin (0x4C13E0,
+            // Ringtafel-Eintrag 0). Mit dem Ankerstempel war die Platte gesperrt
+            // und die Lieferung landete daneben auf (c−1, r−1).
+            // geschaeftszentrum-lieferung-fable.md §9. Gegenschalter --marktanker-alt.
+            else if (e.IsBuilding && e.BType == 17 && !MarktankerAlt) { }
             // ⚠ »unbeweglich« geht MIT: ein Gebaeude oder ein Gegenstand faehrt
             // nie weiter, und wer davor auf »der macht gleich Platz« wartet,
             // wartet bis zum Missionsende. Siehe NavGrid.Ask.
@@ -5775,6 +5789,10 @@ public partial class MapEntityLayer : Node2D
     private void Gebaeudefenster()
     {
         var fg2 = Fenstergebaeude();
+        // ⭐ 13.09.2026 — Zeigerwahl 0x432569: der Handelsposten ist nur mit einem
+        // eigenen FAHRZEUG auf einer seiner vier Platten anklickbar.
+        if (fg2 != null && fg2.BType == 17 && !MarktfensterAlt && !MarktFahrzeugAufPlatte(fg2, ViewPlayer))
+            return;
         var fart = fg2 != null ? FensterArtVon(fg2) : null;
         if (fart != null) OnBuildingWindow?.Invoke(fart.Value, fg2!.Slot,
                                                   OriginalFensterArt(fg2.BType));
@@ -13521,7 +13539,10 @@ public partial class MapEntityLayer : Node2D
                 // ⚠ space_in wirft den Satzindex weg, place_unit nicht — beide
                 // gehen durch denselben Rumpf, aber nur das Original von
                 // place_unit reicht ihn an das Skript zurueck.
-                _mscript.SpaceInSpawn = (t, c, r, p) => SpawnReinforcement(t, c, r, p);
+                // ⭐ 13.09.2026 — nach dem Setzen wuerfelt 0x4C1600 Rumpf und Turm und
+                // setzt den Lichtblitz; place_unit allein (0x4D0810) tut das nicht.
+                _mscript.SpaceInSpawn = (t, c, r, p) => SpaceInAbladen(SpawnReinforcement(t, c, r, p));
+                if (_nav != null) _mscript.KartenBreite = _nav.Width;
                 // place_unit @0x4D0810 — DASSELBE create_unit, nur ohne die
                 // Warteschlange: das Original geht bei space_in
                 // @0x4C0260 -> @0x4C1600 -> @0x4D0810 -> @0x4B34E0, hier faellt
@@ -17311,6 +17332,9 @@ public partial class MapEntityLayer : Node2D
             5 when !DepotfensterAus && e.Built != 0 => UI.BuildingWindow.Art.Depot,
             // ⭐ 13.09.2026 — DIE FABRIK (Art 2/3/4 -> Fensterart 8).
             2 or 3 or 4 when !FabrikfensterAlt && e.Built != 0 => UI.BuildingWindow.Art.Fabrik,
+            // ⭐ 13.09.2026 — DAS GESCHAEFTSZENTRUM (Art 17 -> Fensterart 33). Kein
+            // `built`, kein Besitzer: die Zeigerwahl 0x432569 fragt nur die Platten.
+            17 when !MarktfensterAlt => UI.BuildingWindow.Art.Geschaeftszentrum,
             _ => null,
         };
     }
@@ -17630,7 +17654,7 @@ public partial class MapEntityLayer : Node2D
         11 => 11,             // Hafen / Werft
         13 => 21,             // ⚠ ausserhalb des gelesenen Reviers
         14 => 31,             // Nachschubposten
-        17 => 0,              // ⚠ Oeffner 0x443CF0, Fensterart ungelesen
+        17 => MarktfensterAlt ? 0 : 33,   // Oeffner 0x443CF0, Anleger 0x45AFD0 (13.09.2026)
         _ => 0,               // 8 und 16 gehen auf den Leerarm
     };
 
@@ -17656,7 +17680,8 @@ public partial class MapEntityLayer : Node2D
         // prüft in BEIDEN Zweigen (0x44C2CF / 0x44C37C) NUR
         // `cmp dword [ecx*4 + 0xA9C600], eax` — den Kontostand. Kein Besitzer,
         // kein Hangar, keine Teile.
-        if (e.Owner != ViewPlayer && !IsSupplyDepot(e)) return null;
+        // ⭐ 13.09.2026 — und der Handelsposten (17) gehoert ebenso niemandem.
+        if (e.Owner != ViewPlayer && !IsSupplyDepot(e) && !(e.BType == 17 && !MarktfensterAlt)) return null;
         return FensterArtVon(e) == null ? null : e;
     }
 
@@ -18776,7 +18801,9 @@ public partial class MapEntityLayer : Node2D
     public bool BuildPanelWanted =>
         Producer() is { } p && !IsSupplyDepot(p) && p.BType != 9
         // ⭐ 13.09.2026 — die Fabrik hat ihr eigenes Fenster (Art 8).
-        && (FabrikfensterAlt || p.BType is not (2 or 3 or 4));
+        && (FabrikfensterAlt || p.BType is not (2 or 3 or 4))
+        // ⭐ 13.09.2026 — und der Handelsposten hat sein eigenes (Art 33).
+        && (MarktfensterAlt || p.BType != 17);
 
     /// <summary>Harness only: the factory <c>--demo-buildpanel</c> is waiting on.
     /// The click happens through the panel the moment a line can be paid for, so
@@ -20030,6 +20057,18 @@ public partial class MapEntityLayer : Node2D
     private bool MarketSpawn(MarketOffer o, Vector2I at, int owner)
     {
         if (_nav == null) return false;
+        var u = MarketEinheit(o, at, owner);
+        _entities.Add(u);
+        _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.GameUnitType));
+        _nav.SetOccupant(u.Col, u.Row, _entities.Count - 1);
+        return true;
+    }
+
+    /// <summary>Der Satz, den ein Angebot auf der Karte waere — herausgezogen am
+    /// 13.09.2026, damit das Geschaeftszentrum (Fensterart 33) Bild und Werteblock
+    /// aus DERSELBEN Rechnung zeigt, mit der die Lieferung die Einheit setzt.</summary>
+    private Entity MarketEinheit(MarketOffer o, Vector2I at, int owner)
+    {
         // ⚠ Ueber den PLATZ, nicht ueber die Listenstelle — siehe
         // DesignBySlot. Hier wog der Fehler schwerer als in der Zeilenliste:
         // die gekaufte Einheit haette WAFFE und AUSRUESTUNG eines fremden
@@ -20064,10 +20103,7 @@ public partial class MapEntityLayer : Node2D
         };
         if (d is { } d2) InfanterieAnlegen(u, d2.Weapon);
         u.Pos = BodyCenterAt(u, u.Col, u.Row);
-        _entities.Add(u);
-        _nav.SetHull(_entities.Count - 1, Simulation.NavGrid.HullSide(u.GameUnitType));
-        _nav.SetOccupant(u.Col, u.Row, _entities.Count - 1);
-        return true;
+        return u;
     }
 
     /// <summary>Ein Angebot des Marktes, wie es aus der Karte kommt.</summary>
@@ -20075,6 +20111,17 @@ public partial class MapEntityLayer : Node2D
     {
         public int Slot, Price, Design, UnitType, Attack, Defence, Energie, Speed, Sight, Range;
         public string Name = "";
+
+        /// <summary>Satz +0x3E — die Entwurfsnummer für den Namen im Fenster;
+        /// −1 bei Ware des Nachschubs (die trägt <see cref="Name"/>).</summary>
+        public int Typ3E = -1;
+
+        /// <summary>⭐ 13.09.2026 — die Nummer, unter der Befehl 530 das Angebot
+        /// wiederfindet. Das Original nimmt den Regalplatz 0…49; unser Regal ist
+        /// eine Liste, aus der die Lieferung Sätze entfernt, darum eine feste
+        /// Nummer statt der Listenstelle.</summary>
+        public readonly int Nr = ++_naechsteNr;
+        private static int _naechsteNr;
 
         /// <summary>Satz +0x28, die ERFAHRUNG der angebotenen Einheit.
         ///
@@ -28522,6 +28569,8 @@ public partial class MapEntityLayer : Node2D
             DrawUnitsUpTo(r + 1, ref ui);
             // (2b) die Radarmasten, Ebene Zeile + 2 (0x42F73E). RadarMast.cs.
             RadarMastenZeichnen(r);
+            // (2c) die Raumfrachter, ebenfalls Zeile + 2 (0x42F95F). Frachter.cs.
+            FrachterZeichnen(r);
             // (3) die Gebäude, deren Fach in dieser Zeile liegt.
             while (gi < gebaeude.Count
                    && gebaeude[gi].Row + BuildingDrawRowFor(gebaeude[gi]) <= r)

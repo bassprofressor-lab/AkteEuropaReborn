@@ -1073,7 +1073,8 @@ public static partial class WindowManagerCheck
         {
             (1, 6), (2, 8), (3, 8), (4, 8), (5, 23), (6, 2), (7, 20), (8, 0),
             (9, 5), (10, 18), (11, 11), (12, 2), (13, 21), (14, 31), (15, 18),
-            (16, 0), (17, 0),
+            // ⭐ 13.09.2026: 17 -> 33 gelesen (Anleger 0x45AFD0, geschaeftszentrum-fenster-fable.md).
+            (16, 0), (17, Rendering.MapEntityLayer.MarktfensterAlt ? 0 : 33),
         };
         int falsch = 0;
         foreach (var (bau, soll) in tafel)

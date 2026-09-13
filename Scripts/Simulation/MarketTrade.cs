@@ -205,6 +205,8 @@ public partial class MapEntityLayer
             // mir zu viel und man sieht kein rauch«. Der Ruf des Originals
             // @0x4165C1 sitzt im Haupttakt, zwischen zwei Zeitmessungen.
             GebaeudebrandTakt();
+            // ⭐ 13.09.2026 — der Takt-Arm der Art 17 (0x43E90C), Marktfenster.cs.
+            MarktfensterTakt();
         }
     }
 
@@ -410,11 +412,15 @@ public partial class MapEntityLayer
     /// (@0x4C1526), und ein Effekt <c>0x60</c> läuft an der Stelle.</para>
     ///
     /// <para>⚠ Findet es keinen Platz, meldet es <c>»Incredible error ...no
-    /// free place for new robot«</c> (0x539198) und das Stück ist <b>weg</b> —
-    /// der Ladenplatz wird trotzdem geleert. Bezahlt ist es längst. Wir halten
-    /// den Platz in dem Fall belegt und versuchen es beim nächsten Abholer
-    /// wieder; <b>unsere Abweichung</b>, und zwar eine, die dem Spieler sein
-    /// Geld nicht wegnimmt.</para></summary>
+    /// free place for new robot«</c> (0x539198). ⚠ BERICHTIGT 13.09.2026: hier
+    /// stand, der Ladenplatz werde trotzdem geleert — das steht nicht im Code.
+    /// <c>0x4C1480</c> schreibt bei Fehlschlag nichts, der Platz bleibt
+    /// verkauft (0xFFFF) und fliegt in der nächsten 222-Phase erneut
+    /// (geschaeftszentrum-lieferung-fable.md §8). Genau das tun wir.</para>
+    ///
+    /// <para>⭐ 13.09.2026 — je Stück <b>Rumpf und Turm gewürfelt</b>
+    /// (@0x4C1540/@0x4C1552) und der <b>Lichtblitz</b> Folge 96 an der Zelle
+    /// (@0x4C158D). Siehe Simulation/Frachter.cs.</para></summary>
     private void DeliverCargo(Collector s)
     {
         if (s.Cargo == null || s.Cargo.Count == 0) return;
@@ -431,6 +437,7 @@ public partial class MapEntityLayer
                 continue;
             }
             _market.Remove(o);
+            AbladenSchmuck(_entities.Count - 1);
             geliefert++;
         }
         ShopNote = verschoben == 0
@@ -820,6 +827,10 @@ public partial class MapEntityLayer
         /// <summary>Der Gebäudeplatz, zu dem die Ladung gehört — damit ein
         /// Stück, das keinen Platz fand, wieder in die Schlange kann.</summary>
         public int CargoTarget = -1;
+
+        /// <summary>+0x04 == 0xFF — angekommen, fliegt nach rechts hinaus
+        /// (@0x4C0710, @0x4C04D6). Siehe Simulation/Frachter.cs.</summary>
+        public bool Abflug;
     }
 
     private readonly List<Collector> _collectors = new();
@@ -880,6 +891,11 @@ public partial class MapEntityLayer
             // @0x4C04C6 — über den Kartenrand hinaus: aufgeben.
             if (s.Col - 2 > width) { _collectors.RemoveAt(i); continue; }
 
+            // @0x4C04D6 — ⭐ 13.09.2026: nach dem Abladen fliegt er weiter nach
+            // rechts, eine Spalte je Takt, bis hinter den Rand. Lesung:
+            // berichte/geschaeftszentrum-lieferung-fable.md §3.2.
+            if (s.Abflug) { s.Col++; continue; }
+
             int d = s.Target - s.Col;
             if (d > 10)
             {
@@ -899,7 +915,8 @@ public partial class MapEntityLayer
 
             if (s.Col != s.Target) continue;              // @0x4C0574
 
-            _collectors.RemoveAt(i);
+            if (Campaign.MissionScript.FrachterAus) _collectors.RemoveAt(i);
+            else s.Abflug = true;                         // @0x4C0710: +0x04 := 0xFF
             switch (s.Kind)
             {
                 case 1:                                   // Ankunft, @0x4C05A5

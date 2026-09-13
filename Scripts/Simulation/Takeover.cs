@@ -152,8 +152,28 @@ public partial class MapEntityLayer : Node2D
     /// <summary>The unit changes hands. <c>add_change_owner</c> @0x410F40 drops
     /// whatever it was doing (+0x14, +0x15, +0x1a) before the record moves, so
     /// the order goes with the old owner.</summary>
+    /// <summary>Gegenschalter <c>--uebernahme-alt</c>: der Satz behaelt seinen
+    /// alten Platz (Stand bis 13.09.2026).</summary>
+    public static bool UebernahmeAlt;
+
+    /// <summary>Wie oft ein Uebergelaufener in den Block des neuen Besitzers
+    /// umgezogen ist.</summary>
+    public int UmgezogenZahl { get; private set; }
+
     private void Join(int index, Entity e, int who)
     {
+        // ⭐ 13.09.2026 — DER SATZ ZIEHT UM. Der Bearbeiter 0x411000 kopiert den
+        // 78-Byte-Satz in den ersten freien Platz im Block who·1000 und gibt
+        // den alten frei. Das Skript sieht genau das: Mission 11 @0x49C3F0
+        // fragt »Platz 7000 traegt Marke 194 NICHT mehr« UND
+        // »find_unit(0, 194) findet eine« — mit gebliebenem Platz war das nie
+        // wahr, und die Hotel-Plaza-Kette stand still.
+        // Lesung: berichte/m11-hotelplaza-fable.md §4 und §7 #1/#6.
+        if (!UebernahmeAlt)
+        {
+            int platz = FreeRecord(who);
+            if (platz >= 0) { e.Slot = platz; UmgezogenZahl++; }
+        }
         e.Owner = who;
         e.Team = who;
         e.Path = null;

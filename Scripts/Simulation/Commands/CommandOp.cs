@@ -225,6 +225,16 @@ public static class CommandOp
     public const short Sell = 529;
 
     /// <summary>
+    /// <b>530 = BESTELLEN im Geschäftszentrum.</b> P1 = Regalplatz, P2 = Spieler,
+    /// P3 = Gebäudeplatz des Marktes. Absender Klickarm <c>0x44C6E1</c> (Fenster
+    /// Art 33), Bus-Arm <c>0x4C3C0F</c> → Behandler <c>0x4C1360</c>: Preis &gt;
+    /// Konto oder &lt; 1 → STILL nichts; sonst Konto −= Preis, Käufer, Preis :=
+    /// 0xFFFF, Zielmarkt, Fenster neu malen (<c>0x451370</c>).
+    /// berichte/geschaeftszentrum-fenster-fable.md §4.
+    /// </summary>
+    public const short MarktKauf = 530;
+
+    /// <summary>
     /// <b>27 = RADAR SETZEN.</b> P1 = die Einheit, sonst nichts.
     ///
     /// <para>Der Absender ist der Befehlsmenü-Eintrag <b>20 »Radar setzen«</b>
