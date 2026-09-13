@@ -180,6 +180,8 @@ public partial class MapEntityLayer
             // `[0x4FA240] % 20 == 11`, also eine feste Phase, nicht »irgendwann
             // in zwanzig Takten«.
             if (_origTicks % 20 == 11) ShipLeaveDockTick();
+            // ⭐ 13.09.2026 — und Auftrag 49 laeuft JEDEN Takt (0x409AC2).
+            ShipAuslaufTakt();
             // Die Stromabrechnung — @0x4161C4 prüft `% 50 == 13`, also einmal
             // je Sekunde des Originals. Siehe Simulation/Power.cs.
             if (_origTicks % PowerPeriod == PowerPhase) PowerTick();

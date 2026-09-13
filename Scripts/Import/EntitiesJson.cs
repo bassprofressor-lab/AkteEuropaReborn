@@ -364,6 +364,9 @@ public static class EntitiesJson
             w.Obj();
             w.Key("slot").Num(b.Slot); w.Key("col").Num(b.Col); w.Key("row").Num(b.Row);
             w.Key("dir").Num(b.Dir); w.Key("len").Num(b.Len); w.Key("hp").Num(b.Hp);
+            w.Key("feld").Arr();
+            foreach (int f in b.Feld) w.Num(f);
+            w.End();
             w.End();
         }
         w.End();

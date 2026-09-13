@@ -628,6 +628,11 @@ public sealed class InterfaceExporter
         // looked at: they are doors, and phase 0 against phase 3 is shut
         // against open.
         ("door", 301),
+        // ⭐ 13.09.2026 — DER RADARSTAB. Zeichner 0x42D5FE: Bild =
+        // word[0x7A41C6] + Hangklasse, und 0x7A41C6 = 0x7A404A + 4·95 ist der
+        // Startrahmen der Folge 95 (5 Rahmen, 495…499, eine flache Scheibe in
+        // fünf Neigungen). 0x7A41C6 hat genau diesen einen Leser.
+        ("radarstab", 95),
     };
 
     /// <summary>

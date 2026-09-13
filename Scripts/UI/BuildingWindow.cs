@@ -102,6 +102,43 @@ public sealed partial class BuildingWindow : PanelContainer
         /// Teile, kein Besitzer.</para>
         /// </summary>
         Nachschubposten = 31,
+
+        /// <summary>⭐ <b>»DEPOT«</b>, Fensterart <b>23</b> — Gebäudeart 5,
+        /// Öffner <c>0x4437C0</c>, Zeichner <c>0x4790A0</c>, gebaut am
+        /// 13.09.2026 für Kampagne 10. Siehe <see cref="DepotView"/>.</summary>
+        Depot = 23,
+
+        /// <summary>⭐ <b>»FABRIK«</b>, Fensterart <b>8</b> — Gebäudeart 2/3/4,
+        /// Öffner <c>0x443E00</c>, Zeichner <c>0x46EDC0</c>, gebaut am
+        /// 13.09.2026. Siehe <see cref="FabrikView"/>.</summary>
+        Fabrik = 8,
+    }
+
+    /// <summary>
+    /// <b>Eine Zeile des Depotfensters</b> — eine eingefahrene Einheit, dazu
+    /// alles, was der Infoblock rechts zeigt, wenn genau sie markiert ist
+    /// (<c>0x4790A0</c>, §2 der Lesung). Die Werte kommen aus den Feldern des
+    /// Einheitensatzes; das Fenster rechnet nichts aus.
+    /// </summary>
+    public sealed class DepotZeile
+    {
+        /// <summary>Der Griff der Einheit (bei uns: Entitätsindex).</summary>
+        public int Griff = -1;
+        public int Rang = -1;                      // +0x28
+        public string Name = "";
+        public int Hp, HpMax;                      // +0x08 / +0x29
+        public bool Ausgesandt;                    // UKOL +0x14 == 0x33
+        public int ChassisPic, TurretPic;          // 0x4508A0 Fall 0
+        public bool HatWaffe;                      // +0x0D != 0
+        public string Waffe = "";                  // »Name(n)«
+        public int Nachladen;                      // (16 − ⌊√+0x3D⌋)/2 + 1
+        public string Oberteil = "";               // +0x0E
+        public string Verbesserung = "";           // +0x10
+        public string Antrieb = "";                // +0x0F
+        public bool Zwilling;                      // »2x«
+        public int Angriff, Verteidigung;          // +0x26 / +0x27
+        public int Geschw, Sicht;                  // +0x20 / +0x2C
+        public int Reichw, MinReichw;              // +0x2B / +0x2A
     }
 
     /// <summary>
@@ -156,7 +193,42 @@ public sealed partial class BuildingWindow : PanelContainer
         /// <summary>Was der Nachschubposten anbietet — je Angebot eine Spalte.
         /// Bei den anderen drei Fenstern leer.</summary>
         public List<Angebot> Angebote = new();
+
+        /// <summary>Nur Depot: die belegten Plätze von vorn, höchstens sechs.</summary>
+        public List<DepotZeile> DepotZeilen = new();
+
+        /// <summary>Nur Fabrik (sec24): Art 2/3/4, Strom wirksam/nominal
+        /// (+0x03/+0x04), Zustand (+0x02), Fortschritt (+0x06),
+        /// Produktionsgeschwindigkeit (+0x05), Produktionserweiterungskosten
+        /// (+0x0C).</summary>
+        public int FabrikArt, StromIst, StromSoll, Zustand, Fortschritt, Tempo, ProdKosten;
     }
+
+    /// <summary>Knopf 1…4 des Fabrikfensters (Treffernummern von 0x45E399).</summary>
+    public System.Action<int>? OnFabrikKnopf;
+
+    /// <summary>⭐ Fensterart 8 mit den Möbeln des Originals.</summary>
+    private FabrikView? _fabrik;
+
+    /// <summary>Für den Prüfstand.</summary>
+    public FabrikView? FabrikAnsicht => _fabrik;
+    public bool ZeigtOriginalFabrik { get; private set; }
+
+    /// <summary>»Aussenden« im Depotfenster — die Griffe aller markierten
+    /// Zeilen (Befehl 504 je Zeile, @0x44C083).</summary>
+    public System.Action<List<int>>? OnDepotAussenden;
+
+    /// <summary><c>--depotfenster-aus</c> ist ein Schalter in
+    /// <c>MapEntityLayer</c> (dort öffnet dann kein Fenster); dieser hier
+    /// dagegen zeigt, ob das Depot mit den Kacheln des Originals gezeichnet
+    /// wurde.</summary>
+    public bool ZeigtOriginalDepot { get; private set; }
+
+    /// <summary>⭐ Fensterart 23 mit den Möbeln des Originals.</summary>
+    private DepotView? _depot;
+
+    /// <summary>Für den Prüfstand.</summary>
+    public DepotView? DepotAnsicht => _depot;
 
     public System.Func<Stand?>? Daten;
     public System.Action? OnClose;
@@ -253,6 +325,19 @@ public sealed partial class BuildingWindow : PanelContainer
         _mine.OnRepair = () => { OnRepair?.Invoke(); Refresh(); };
         AddChild(_mine);
 
+        // ⭐ 13.09.2026 — DAS DEPOT (Fensterart 23), dieselbe Bauart.
+        _depot = new DepotView { Visible = false };
+        _depot.OnClose = Schliessen;
+        _depot.OnChanged = Refresh;
+        _depot.OnAussenden = griffe => OnDepotAussenden?.Invoke(griffe);
+        AddChild(_depot);
+
+        // ⭐ 13.09.2026 — DIE FABRIK (Fensterart 8), dieselbe Bauart wie die Mine.
+        _fabrik = new FabrikView { Visible = false };
+        _fabrik.OnClose = Schliessen;
+        _fabrik.OnKnopf = k => { OnFabrikKnopf?.Invoke(k); Refresh(); };
+        AddChild(_fabrik);
+
         var kopf = new HBoxContainer();
         _titel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         kopf.AddChild(_titel);
@@ -339,6 +424,9 @@ public sealed partial class BuildingWindow : PanelContainer
     {
         _art = art;
         _kennung = kennung;
+        // Ein frisch angelegtes Depotfenster hat keine Markierung (0x459E5F).
+        if (art == Art.Depot) _depot?.Neu();
+        if (art == Art.Fabrik) _fabrik?.Neu();
         Refresh();
         Show();
     }
@@ -382,9 +470,39 @@ public sealed partial class BuildingWindow : PanelContainer
         // ⭐ 08.09.2026 — und dasselbe fuer die MINE (Fensterart 18).
         bool mineOriginal = _art == Art.Mine && _mine != null && MineView.Usable
                             && !MinenfensterAlt;
+        bool depotOriginal = _art == Art.Depot && _depot != null && DepotView.Usable;
         if (_posten != null) _posten.Visible = original;
         if (_mine != null) _mine.Visible = mineOriginal;
-        _senk.Visible = !original && !mineOriginal;
+        bool fabrikOriginal = _art == Art.Fabrik && _fabrik != null && FabrikView.Usable;
+        if (_depot != null) _depot.Visible = depotOriginal;
+        if (_fabrik != null) _fabrik.Visible = fabrikOriginal;
+        _senk.Visible = !original && !mineOriginal && !depotOriginal && !fabrikOriginal;
+        ZeigtOriginalDepot = depotOriginal;
+        ZeigtOriginalFabrik = fabrikOriginal;
+        if (fabrikOriginal)
+        {
+            AddThemeStyleboxOverride("panel", new StyleBoxEmpty());
+            CustomMinimumSize = new Vector2(
+                FabrikView.WTiles * WindowChrome.Cell * FabrikView.Scale,
+                FabrikView.HTiles * WindowChrome.Cell * FabrikView.Scale);
+            Size = CustomMinimumSize;
+            _fabrik!.Zeige(s);
+            _titel.Text = FabrikView.Sinnbild(s.FabrikArt) + " Fabrik " + s.Name;
+            _knopfZahl = 4;
+            return;
+        }
+        if (depotOriginal)
+        {
+            AddThemeStyleboxOverride("panel", new StyleBoxEmpty());
+            CustomMinimumSize = new Vector2(
+                DepotView.WTiles * WindowChrome.Cell * DepotView.Scale,
+                DepotView.HTiles * WindowChrome.Cell * DepotView.Scale);
+            Size = CustomMinimumSize;
+            _depot!.Zeige(s);
+            _titel.Text = "Depot " + s.Name;
+            _knopfZahl = 1;
+            return;
+        }
         if (mineOriginal)
         {
             AddThemeStyleboxOverride("panel", new StyleBoxEmpty());
@@ -427,6 +545,8 @@ public sealed partial class BuildingWindow : PanelContainer
             // zweiten Zeichenkette, ist NICHT gemessen — darum steht hier die
             // Kette, wie sie in der EXE steht, und nicht eine umgeformte.
             Art.Nachschubposten => "Angebot des Nachschubpostens",
+            Art.Depot => "Depot " + s.Name,
+            Art.Fabrik => "Fabrik " + s.Name,
             _ => $"Terranium-Mine — {s.Name}",
         };
         // ⚠ »Energie :« und die Statuszeile teilen sich die drei GEBÄUDEfenster.
@@ -500,6 +620,19 @@ public sealed partial class BuildingWindow : PanelContainer
                     : Knopf("Starten", null, "Der Hangar ist leer."));
                 _knoepfe.AddChild(Knopf("Verbessern", null,
                     "Der Lagerausbau des Flughafens ist nicht gebaut."));
+                break;
+
+            case Art.Fabrik:
+                _mitte.AddChild(Zeile("Die Fensterkacheln fehlen (WINDOWS.CWW nicht eingelesen)."));
+                break;
+
+            case Art.Depot:
+                // ⚠ Nur, wenn WINDOWS.CWW nicht eingelesen ist. Keine eigene
+                // Bedienung — das Fenster des Originals IST die Bedienung, und
+                // ohne seine Kacheln sagt diese Zeile, woran es liegt.
+                _mitte.AddChild(Zeile("Die Fensterkacheln fehlen (WINDOWS.CWW nicht eingelesen)."));
+                foreach (var z in s.DepotZeilen)
+                    _mitte.AddChild(Zeile("    " + DepotView.ZeilenText(null, z)));
                 break;
 
             case Art.Nachschubposten:

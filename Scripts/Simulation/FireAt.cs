@@ -155,8 +155,17 @@ public partial class MapEntityLayer : Node2D
         }
 
         // ein Gebaeude — ohne Frage (0x452D1E..0x452DED)
-        if (GebaeudeAufZelle(c, r) is var bi and >= 0)
+        int bi = GebaeudeAufZelle(c, r);
+        bool gebaeude = bi >= 0;
+        if (gebaeude)
             ApplyHit(si, bi, _entities[bi], schaden);
+
+        // ⭐ 13.09.2026 — nichts auf der Zelle: das Geschoss trifft die leere
+        // Bruecken-/Rampenzelle, Zasah(Schuetze, 0xFFFE) @0x452F87 — auch auf dem
+        // Gelaender. Mit Einheiten darauf laeuft der Zellzweig schon in ApplyHit.
+        if (maenner.Count == 0 && !gebaeude && (occ < 0 || occ == si))
+            BauwerkTreffer(c, r, sch?.Rating28 ?? 0,
+                           sch != null ? sch.Attack + 2 * ElevOf(sch.Col, sch.Row) : schaden);
     }
 
     // ================= der Pruefstand ==========================================

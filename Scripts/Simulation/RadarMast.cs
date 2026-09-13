@@ -76,16 +76,46 @@ public partial class MapEntityLayer
     /// Zehn wie bei einem Gebäude.</summary>
     public const int RadarMastSight = 10;
 
+    /// <summary>
+    /// ⭐ 13.09.2026 — <b>DIE LAUFZEIT</b>, Byte <c>+0x04</c> (vorher als
+    /// »Belegtmarke 0xFF« gelesen). Gelesen in <c>berichte/radar-fable.md</c>
+    /// §3.3: der Setzer schreibt <c>0xFF</c> (@0x421BB4), der Minen- und
+    /// Fallentakt <c>0x4216F0</c> (F <c>0x4208B0</c>) zählt bei
+    /// <c>Takt % 25 == 13</c> jeden Mast um eins herunter (@0x421888…0x4218B5,
+    /// F @0x420A48), und bei 0 ist der Platz frei. <b>255 × 25 = 6375 Takte</b>,
+    /// bei 50 Takten/s gut zwei Minuten.
+    ///
+    /// <para>⚠ Das Lexikon sagt »ungefähr 6 Minuten«. Das trifft keine
+    /// Umrechnung und ist KEINE Lesung — gebaut sind die 6375 Takte.</para>
+    /// </summary>
+    public const int RadarMastLaufzeit = 0xFF, RadarMastSchritt = 25, RadarMastPhase = 13;
+
+    /// <summary>Klang 49 beim Setzen, Modus 1 an der Einheit —
+    /// <c>klang(0x31, 1, Einheit, 0)</c> @0x4221DE (F @0x42139E).</summary>
+    public const int RadarMastKlang = 49;
+
+    /// <summary><c>--radarmast-ewig</c> — der Stand vor dem 13.09.2026: ein Mast
+    /// bleibt für immer stehen.</summary>
+    public static bool RadarMastEwig;
+
+    /// <summary>Wieviele Masten abgelaufen sind, wie oft der Setzklang gerufen
+    /// wurde und wieviele Mastbilder der letzte Durchgang gemalt hat.</summary>
+    public int RadarMastsAbgelaufen, RadarMastKlaenge, RadarMastsGezeichnet;
+
     /// <summary>Ein Radarmast — der Satz aus <c>0x677F30</c>.</summary>
     public sealed class RadarMast
     {
         public int Col, Row, Owner;
 
+        /// <summary><c>+0x04</c>, siehe <see cref="RadarMastLaufzeit"/>.</summary>
+        public int Laufzeit = RadarMastLaufzeit;
+
         /// <summary>+0x02 und +0x03, die zwei ausgewürfelten Bytes
-        /// (<c>rand()%20+10</c>, <c>rand()%10+5</c>). ⚠ <b>Wofür sie gut sind,
-        /// ist NICHT gelesen.</b> Sie werden trotzdem mitgeführt und gewürfelt,
-        /// damit der Zufallsstrom denselben Verlauf nimmt wie im Original —
-        /// wer sie wegliesse, verschöbe jeden späteren Wurf.</summary>
+        /// (<c>rand()%20+10</c>, <c>rand()%10+5</c>). ⭐ 13.09.2026 gelesen: sie
+        /// haben im Original KEINEN Leser (Vollerhebung über alle Adressen der
+        /// Tafel, radar-fable.md §3.1) — ein gemeinsamer Bauplan mit den Minen-
+        /// und Fallentafeln. Sie werden trotzdem gewürfelt, damit der
+        /// Zufallsstrom denselben Verlauf nimmt.</summary>
         public int A, B;
     }
 
@@ -184,6 +214,154 @@ public partial class MapEntityLayer
             // beim Gebaeude, siehe Watchers().
             yield return (m.Col, m.Row, RadarMastSight, 1);
         }
+    }
+
+    /// <summary>Der Laufzeittakt — @0x421888: nur bei <c>Takt % 25 == 13</c>,
+    /// dann jeden Mast um eins herunter, bei 0 weg. Wird jeden SimTick
+    /// gerufen, wie das Original ihn aus der Hauptschleife ohne Gatter ruft
+    /// (@0x416513).</summary>
+    private void RadarMastTakt()
+    {
+        if (RadarMastEwig || _radarMasts.Count == 0) return;
+        if (_taktNr % RadarMastSchritt != RadarMastPhase) return;
+        bool weg = false;
+        for (int i = _radarMasts.Count - 1; i >= 0; i--)
+        {
+            if (--_radarMasts[i].Laufzeit > 0) continue;
+            _radarMasts.RemoveAt(i);                   // Platz frei (+0x04 == 0)
+            RadarMastsAbgelaufen++;
+            weg = true;
+        }
+        if (weg) QueueRedraw();
+    }
+
+    /// <summary>
+    /// <b>Das Bild der Masten</b> — Zeichenlistenart 25 (<c>0x42F690</c>,
+    /// F <c>0x42E830</c>), Zeichner <c>0x42D5FE…0x42D65B</c> (F <c>0x42C811</c>):
+    /// Bild = Startrahmen der ANIM.CWA-Folge <b>95</b> + Hangklasse der Zelle
+    /// (<c>0x41D110</c>), Ebene <c>Zeile + 2</c>, y um 10 Punkte und die
+    /// Zellhöhe angehoben. Die fünf Rahmen 495…499 sind eine flache Scheibe in
+    /// fünf Neigungen.
+    ///
+    /// <para>⚠ <b>UNSERE Setzungen:</b> (1) der Ankerpunkt ist die Bildmitte auf
+    /// der Zellmitte, wie bei allen unseren Effekten — was der Blitter
+    /// <c>0x4AC5C0</c> als Ankerpunkt nimmt und was er mit dem Besitzer tut, ist
+    /// ungelesen; (2) ein FREMDER Mast in einer nicht beobachteten Zelle wird
+    /// nicht gezeichnet, wie eine fremde Einheit — ob der Zeichner die
+    /// Nebelmarke prüft, ist ungelesen (in K10 setzt die KI keine Masten).</para>
+    /// </summary>
+    private void RadarMastenZeichnen(int zeile)
+    {
+        if (_radarMasts.Count == 0) return;
+        var bilder = EffectFrames("radarstab");
+        if (bilder.Count == 0) return;
+        foreach (var m in _radarMasts)
+        {
+            if (m.Row + 2 != zeile) continue;
+            if (FogActive && !Allied(m.Owner, ViewPlayer) && !Watched(m.Col, m.Row)) continue;
+            int k = Mathf.Clamp(SlopeClassOf(m.Col, m.Row), 0, bilder.Count - 1);
+            DrawTexture(bilder[k], CellCenter(m.Col, m.Row) - _fxAnchor["radarstab"]
+                                   - new Vector2(0, 10));
+            RadarMastsGezeichnet++;
+        }
+    }
+
+    /// <summary>
+    /// <c>--radarmast-check</c> (13.09.2026) — <b>Laufzeit, Klang und Bild der
+    /// Masten.</b> Ein Mast wird über den echten Befehlsweg gesetzt; dann
+    /// laufen 50 ECHTE Takte (die Laufzeit muss um genau 2 fallen — so ist
+    /// belegt, dass der Takt im SimTick hängt), danach wird der Zähler schnell
+    /// zu Ende gedreht, und der Mast muss weg und der Umkreis dunkel sein.
+    /// Nullmodell: <c>--radarmast-ewig</c> — die Laufzeit bleibt 255.
+    /// </summary>
+    public string RadarMastCheck()
+    {
+        var sb = new System.Text.StringBuilder("radarmast-check\n");
+        bool ok = true;
+        void Soll(bool b, string was) { sb.Append($"  {(b ? "ok  " : "⚠ FALSCH")} {was}\n"); ok &= b; }
+        if (_nav == null || _fog == null) return sb.Append("  KEIN URTEIL: keine Karte").ToString();
+
+        int bilder = EffectFrames("radarstab").Count;
+        Soll(bilder == 5, $"ANIM-Folge 95 als Effects/radarstab: {bilder} Bilder (erwartet 5 — sonst "
+                        + "--reexport-effects laufen lassen)");
+
+        int idx = -1;
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || !e.Mobile || e.Owner != ViewPlayer) continue;
+            if (Untergestellt(e)) continue;
+            idx = i; break;
+        }
+        if (idx < 0) return sb.Append("  KEIN URTEIL: keine eigene Einheit").ToString();
+        var u = _entities[idx];
+        u.RadarCharges = 1;
+        sb.AppendLine($"  ⚠ EINGRIFF: \"{u.Name}\" auf ({u.Col},{u.Row}) bekommt einen Mast Vorrat");
+
+        int klang = RadarMastKlaenge, vor = _radarMasts.Count;
+        bool abgesetzt = PostPlaceRadar(idx);
+        // ⚠ Die ANKUNFT mitmessen: der Ring wirkt nicht zwingend im ersten Takt.
+        int takte = 0;
+        while (_radarMasts.Count == vor && RadarMastKlaenge == klang && takte < 20)
+        { SimTickFuerProbe(); takte++; }
+        sb.AppendLine($"  Befehl abgesetzt: {abgesetzt} ({RadarNote}), angekommen nach {takte} Takten");
+        Soll(_radarMasts.Count == vor + 1, $"Mast gesetzt ({vor} -> {_radarMasts.Count})");
+        Soll(RadarMastKlaenge == klang + 1, "Klang 49 einmal gerufen");
+        if (_radarMasts.Count <= vor) return sb.Append("  DURCHGEFALLEN").ToString();
+        var m = _radarMasts[^1];
+
+        // ⚠ Die Einheit wegnehmen, sonst haelt SIE den Umkreis offen.
+        _nav.ClearOccupant(u.Col, u.Row, idx);
+        u.Dead = true;
+        sb.AppendLine("  ⚠ EINGRIFF: die Einheit wird entfernt — nur der Mast sieht");
+
+        int start = m.Laufzeit;
+        for (int t = 0; t < 2 * RadarMastSchritt; t++) SimTickFuerProbe();
+        int soll50 = RadarMastEwig ? start : start - 2;
+        if (RadarMastEwig) sb.AppendLine("  ⚠ NULLMODELL --radarmast-ewig: hier MUSS die Laufzeit stehen bleiben");
+        Soll(m.Laufzeit == soll50, $"nach 50 echten Takten Laufzeit {start} -> {m.Laufzeit} (erwartet {soll50})");
+
+        UpdateFog();
+        int offen = WatchedAround(m.Col, m.Row, 12);
+        // Schnell zu Ende: denselben Takt ohne den Rest der Simulation.
+        int schritte = 0;
+        while (_radarMasts.Contains(m) && schritte < 400)
+        {
+            do _taktNr++; while (_taktNr % RadarMastSchritt != RadarMastPhase);
+            RadarMastTakt();
+            schritte++;
+        }
+        UpdateFog();
+        int zu = WatchedAround(m.Col, m.Row, 12);
+        int gesamt = 2 + schritte;
+        Soll(!_radarMasts.Contains(m) && gesamt == RadarMastLaufzeit,
+             $"Mast weg nach {gesamt} Zaehlschritten = {gesamt * RadarMastSchritt} Takten (erwartet 255 = 6375)");
+        Soll(offen > 0 && zu < offen, $"Umkreis 12: {offen} Zellen beobachtet mit Mast, {zu} danach");
+        return sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN").ToString();
+    }
+
+    /// <summary>Für das Bild zu <c>--radarmast-check --shot=…</c>: ⚠ EINGRIFF —
+    /// die erste eigene Einheit setzt über den Befehlsweg einen Mast und wird
+    /// danach entfernt, damit die Scheibe frei liegt. Gibt die Bildmitte des
+    /// Mastes zurück.</summary>
+    public Vector2? RadarMastProbeSetzen()
+    {
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || !e.Mobile || e.Owner != ViewPlayer || Untergestellt(e)) continue;
+            e.RadarCharges = 1;
+            int vor = _radarMasts.Count;
+            if (!PostPlaceRadar(i)) return null;
+            for (int t = 0; t < 20 && _radarMasts.Count == vor; t++) SimTickFuerProbe();
+            if (_radarMasts.Count == vor) return null;
+            _nav?.ClearOccupant(e.Col, e.Row, i);
+            e.Dead = true;
+            var m = _radarMasts[^1];
+            GD.Print($"radarmast-bild: Mast auf ({m.Col},{m.Row}), Hangklasse {SlopeClassOf(m.Col, m.Row)}");
+            return CellCenter(m.Col, m.Row);
+        }
+        return null;
     }
 
     // ================= der Prüfstand ==========================================

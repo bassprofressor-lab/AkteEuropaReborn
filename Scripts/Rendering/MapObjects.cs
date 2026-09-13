@@ -731,6 +731,11 @@ public partial class MapEntityLayer
             // siehe MapEntityLayer.Zeichenfolge — nur für --verdeck-check
             Zeichenfolge?.Add(('B', e.Row));
 
+            // ⭐ 13.09.2026 — das GELAENDER einer beschaedigten oder
+            // eingestuerzten Kartenbruecke steht nicht mehr im gebackenen Bild;
+            // seine neue Kachel malt der Bodendurchgang (Bauwerkstreffer.cs).
+            if (BauwerkUeberdeckt(e.Col, e.Row)) continue;
+
             // ⚠⚠ 24.08.2026 — HIER STAND EIN NEBELRIEGEL, UND ER WAR NICHT
             // TRAGFAEHIG. Gemeldet und belegt: im Original zeigt unerkundetes
             // Gebiet keine Baeume, Kisten oder Bauwerke. Der Riegel hat sie

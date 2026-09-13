@@ -80,15 +80,39 @@ public partial class MapEntityLayer
     private void LiesBruecken(JObj root)
     {
         _karteBruecken.Clear();
-        if (root["bridges"] is not JsonArray bv)
-            return;
-        foreach (var item in bv)
-        {
-            if (item is not JObj b) continue;
-            int slot = GetI(b, "slot", -1);
-            if (slot < 0) continue;
-            _karteBruecken[slot] = (GetI(b, "col"), GetI(b, "row"), GetI(b, "hp"));
-        }
+        _stege.Clear();
+        _moleSaetze.Clear();
+        var saetze = new List<(int, int, int, int, int, int, int[])>();
+        if (root["bridges"] is JsonArray bv)
+            foreach (var item in bv)
+            {
+                if (item is not JObj b) continue;
+                int slot = GetI(b, "slot", -1);
+                if (slot < 0) continue;
+                _karteBruecken[slot] = (GetI(b, "col"), GetI(b, "row"), GetI(b, "hp"));
+                var feld = new int[15];
+                if (b["feld"] is JsonArray fv)
+                    for (int f = 0; f < 15 && f < fv.Count; f++) feld[f] = (int)fv[f]!.GetValue<double>();
+                saetze.Add((slot, GetI(b, "col"), GetI(b, "row"), GetI(b, "dir"), GetI(b, "len"),
+                            GetI(b, "hp"), feld));
+            }
+        // ⭐ 13.09.2026 — die Kartenbruecken in die GEMEINSAME Tafel
+        // (Bauwerkstreffer.cs) — sie sind zerstoerbar wie die des Pioniers.
+        KartenStegeAnlegen(saetze);
+        // ⭐ und die Rampen der Karte (sec21) ebenso.
+        if (root["ramps_table"] is JsonArray rv)
+            foreach (var item in rv)
+            {
+                if (item is not JObj r) continue;
+                int mark = GetI(r, "mark", 0xFF);
+                if (mark == 0xFF) continue;
+                _moleSaetze.Add(new Rampe
+                {
+                    Karte = true, Slot = GetI(r, "slot"), Col = GetI(r, "col"), Row = GetI(r, "row"),
+                    Bild = mark, Tp = GetI(r, "count", 200),
+                });
+            }
+        if (saetze.Count == 0) return;
         // Die Zahl gehoert in den Start-Mitschnitt: an ihr haengt, ob die
         // Regel `bridge` schweigt oder feuert, und genau das war der Fehler.
         if (_karteBruecken.Count > 0)
@@ -103,5 +127,12 @@ public partial class MapEntityLayer
     /// Missionsskript vergleicht diesen Wert (<c>kind: "bridge"</c>).
     /// </summary>
     private int BrueckeFeld0(int slot)
-        => _karteBruecken.TryGetValue(slot, out var b) && b.Hp > 0 ? b.Col : 0;
+    {
+        if (BauwerkeUnzerstoerbar)
+            return _karteBruecken.TryGetValue(slot, out var b) && b.Hp > 0 ? b.Col : 0;
+        // ⭐ 13.09.2026 — belegt ist, was in der gemeinsamen Tafel steht; ein
+        // Abriss nimmt den Satz heraus (+0x12 := 0), und die Regel feuert.
+        var st = _stege.Find(s => s.Slot == slot);
+        return st == null ? 0 : st.Karte ? st.Col : BrueckenEcke(st).X;
+    }
 }

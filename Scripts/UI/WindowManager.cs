@@ -69,6 +69,9 @@ public static class WindowManager
     /// eine Standzeit mitbekommt (<c>0x4469A0</c>).</summary>
     public const int ArtMeldung = 13;
 
+    /// <summary>Art 19 — die EINHEITEN-INFO (Anleger <c>0x459670</c>, 140 breit).</summary>
+    public const int ArtEinheitenInfo = 19;
+
     /// <summary>Art 44 — die Statuszeile. Bleibt hinten.</summary>
     public const int ArtStatuszeile = 44;
 
@@ -317,7 +320,12 @@ public static class WindowManager
     /// </summary>
     /// <returns>false, wenn das Fenster eine feste Lage hat oder tot ist —
     /// dann wurde nichts angefasst.</returns>
-    public static bool AnDieMaus(Fenster? f)
+    public static bool AnDieMaus(Fenster? f) => AnDieMaus(f, -MausVersatz);
+
+    /// <summary>Wie oben, mit eigenem Versatz — die Einheiten-Info (Art 19)
+    /// liegt an Maus <b>+</b> 3: der Menüarm <c>0x44885B</c> addiert 3, statt
+    /// wie die Gebäudeöffner 3 abzuziehen.</summary>
+    public static bool AnDieMaus(Fenster? f, int versatz)
     {
         if (Lebend(f) is not Control c) return false;
         var schirm = Schirmmass();
@@ -333,7 +341,7 @@ public static class WindowManager
         //   sitzt das Fenster auf einem gestreckten Schirm daneben, und zwar
         //   umso weiter, je weiter rechts unten geklickt wurde.
         var maus = Mausquelle?.Invoke() ?? c.GetGlobalMousePosition();
-        c.Position = maus - new Vector2(MausVersatz, MausVersatz);
+        c.Position = maus + new Vector2(versatz, versatz);
         InDenSchirm(f, schirm);
         return true;
     }

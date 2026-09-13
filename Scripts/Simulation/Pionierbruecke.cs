@@ -114,6 +114,19 @@ public partial class MapEntityLayer
         /// <summary>Die Zufallsvariante des Bildes, 0 oder 1.</summary>
         public int Variante;
         public int Tp = BrueckeTp;
+
+        /// <summary>⭐ 13.09.2026 — der Platz in der GEMEINSAMEN Tafel (sec17,
+        /// 100 Plätze): <c>sec20 = 100 + Slot</c>. Karten- und Pionierbrücken
+        /// teilen sie (brueckenzerstoerung-fable.md §2.5).</summary>
+        public int Slot;
+
+        /// <summary>Eine Brücke der KARTE: <see cref="Col"/>/<see cref="Row"/>
+        /// sind dann die obere linke Ecke (sec17 <c>+0x00/+0x01</c>),
+        /// <see cref="KartenSenkrecht"/> die Achse (<c>+0x02</c>) und
+        /// <see cref="Feld"/> das 3x5-Kachelfeld.</summary>
+        public bool Karte, KartenSenkrecht;
+        public int[] Feld = new int[15];
+
         /// <summary>Alle Zellen des Satzes — Fahrbahn und Geländer, mit dem
         /// Untergrund, der vorher dort stand.</summary>
         public readonly List<(Vector2I Zelle, bool Mitte, Simulation.NavGrid.Ground Alt)>
@@ -330,15 +343,19 @@ public partial class MapEntityLayer
         int d = BrueckenRichtung(col, row);
         int k = d < 0 ? -1 : BrueckenWeite(col, row, d);
         if (d < 0 || k < 0) return false;
-        if (_stege.Count >= StegPlaetze)
+        // ⭐ 13.09.2026 — der ERSTE FREIE Platz der gemeinsamen Tafel (0x4CC280:
+        // erster Satz mit +0x12 == 0). Hier stand `_stege.Count` — das
+        // kollidierte mit den Plaetzen der Kartenbruecken und rutschte nach
+        // jedem Abriss.
+        int nr = BauwerkeUnzerstoerbar ? _stege.Count : FreierStegPlatz();
+        if (nr < 0 || _stege.Count >= StegPlaetze)
         { BrueckeNote = "kein freier Brueckenplatz (100)"; return false; }
 
         var s = new Steg
         {
             Col = col, Row = row, Richtung = d, Wasser = k,
-            Variante = (int)(GD.Randi() & 1), Tp = BrueckeTp,
+            Variante = (int)(GD.Randi() & 1), Tp = BrueckeTp, Slot = nr,
         };
-        int nr = _stege.Count;
         _stege.Add(s);
 
         int erschlagen = 0;
@@ -379,7 +396,7 @@ public partial class MapEntityLayer
     /// <summary>Die OBERE LINKE Ecke des Satzes — die vier Richtungsfälle des
     /// Originals, wörtlich: <c>(x−1, y−k−1)</c>, <c>(x−1, y)</c>,
     /// <c>(x, y−1)</c>, <c>(x−k−1, y−1)</c>.</summary>
-    private static Vector2I BrueckenEcke(Steg s) => s.Richtung switch
+    private static Vector2I BrueckenEcke(Steg s) => s.Karte ? new Vector2I(s.Col, s.Row) : s.Richtung switch
     {
         0 => new Vector2I(s.Col - 1, s.Row - s.Wasser - 1),   // Lauf −y
         1 => new Vector2I(s.Col - 1, s.Row),                  // Lauf +y
@@ -400,10 +417,13 @@ public partial class MapEntityLayer
     ///
     /// <para>Für eine senkrechte Brücke ist <c>Streifen</c> die Spalte (x−1,
     /// x, x+1), für eine waagerechte die Zeile (y−1, y, y+1).</para></summary>
+    /// <summary>Läuft die Brücke senkrecht (Spalten x0..x0+2)?</summary>
+    private static bool IstSenkrecht(Steg s) => s.Karte ? s.KartenSenkrecht : BrueckenLauf[s.Richtung].Y != 0;
+
     private static (int Pos, int Streifen) BrueckenLage(Steg s, Vector2I z)
     {
         var ecke = BrueckenEcke(s);
-        bool senkrecht = BrueckenLauf[s.Richtung].Y != 0;
+        bool senkrecht = IstSenkrecht(s);
         return senkrecht ? (z.Y - ecke.Y, z.X - ecke.X)
                          : (z.X - ecke.X, z.Y - ecke.Y);
     }
@@ -415,6 +435,15 @@ public partial class MapEntityLayer
     private static int BrueckenKachel(Steg s, Vector2I z)
     {
         var (pos, streifen) = BrueckenLage(s, z);
+        if (s.Karte)
+        {
+            // ⭐ 13.09.2026 — die Kartenbruecke malt ihr eigenes Feld:
+            // 10000 + Feld[s][p] + 18·Stufe (0x4CAE30). Feld liegt als 3x5 ab
+            // +0x03, Streifen s zeilenweise zu fuenf Positionen p.
+            int fs = Mathf.Clamp(streifen, 0, 2), fp = Mathf.Clamp(pos, 0, 4);
+            int stufeK = Mathf.Clamp((BrueckeTp - s.Tp) / 167, 0, 2);
+            return 10000 + s.Feld[FeldIndex(fs, fp)] + 18 * stufeK;
+        }
         // Pos 0/1/2 = Anfang / Mitte / Ende — alles dazwischen ist »Mitte«.
         int p3 = pos <= 0 ? 0 : pos >= s.Wasser + 1 ? 2 : 1;
         int st = Mathf.Clamp(streifen, 0, 2);              // 0,1,2 ab der Ecke
@@ -429,8 +458,14 @@ public partial class MapEntityLayer
     /// ⚠ Das Trümmerbild (<c>10114 + 120·Bildsatz + 0…5</c> an den beiden
     /// Köpfen) zeichnen wir nicht; es ist gelesen, aber im Spiel ist der
     /// Zerfall einer Brücke noch nie vorgekommen.</summary>
+    /// <summary>Lage des Kachelfelds: Streifen s, Position p → Index ab +0x03.
+    /// ⚠ Die Reihenfolge ist am Kartenbild nachzuprüfen (--bruecke-treffer-check
+    /// vergleicht Stufe 0 gegen die gebackene Kachel).</summary>
+    public static int FeldIndex(int s, int p) => s * 5 + p;
+
     public void BrueckeTrifft(int col, int row, int schaden)
     {
+        if (!BauwerkeUnzerstoerbar) { BauwerkTreffer(col, row, 0, schaden); return; }
         var s = StegAn(col, row);
         if (s == null) return;
         s.Tp -= schaden;
@@ -461,9 +496,14 @@ public partial class MapEntityLayer
     {
         if (ObjektEbene is not { } tex) return;
         ZeichneBrueckenVorschau(tex);
+        ZeichneBauwerkKacheln(tex);
         if (_stege.Count == 0) return;
         StegeGezeichnet = 0;
         foreach (var s in _stege)
+        {
+            // Eine Kartenbruecke steht heil im gebackenen Bild — gemalt wird sie
+            // erst, wenn sie eine Schadensstufe hat.
+            if (s.Karte && s.Tp >= BrueckeTp) continue;
             foreach (var (z, _, _) in s.Zellen)
             {
                 if (StreifenKachel(BrueckenKachel(s, z)) is not { } k) continue;
@@ -476,6 +516,7 @@ public partial class MapEntityLayer
                               k.Feld.Size), k.Feld);
                 StegeGezeichnet++;
             }
+        }
     }
 
     /// <summary>Die Vorschau zeigt die BRÜCKE SELBST, halb durchsichtig — wie

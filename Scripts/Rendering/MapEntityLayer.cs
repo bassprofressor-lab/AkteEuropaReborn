@@ -782,6 +782,14 @@ public partial class MapEntityLayer : Node2D
         /// Einheit in der Tür.</para></summary>
         public int LeavingDock = -1;
 
+        /// <summary>⭐ 13.09.2026 — <b>Auftrag 49, das Auslaufen</b>
+        /// (<c>0x409AC2</c>, F <c>0x4099EB</c>): Zellen, die noch zu fahren sind
+        /// (<c>+0x15</c>, 0 = fährt nicht aus), der Versatz <c>+0x06</c> (−80…80,
+        /// +4 je Takt), die Richtung −1 (links) / +1 (rechts) und die Endlage, die
+        /// beim Losfahren schon gestempelt ist.</summary>
+        public int AuslaufZellen, AuslaufV, AuslaufRichtung;
+        public Vector2I AuslaufEnde;
+
         /// <summary>Satz <b>+0x45</b> — wieviele RADARMASTEN diese Einheit noch
         /// setzen kann. <b>−1 = noch nicht bestimmt</b>; siehe
         /// <c>RadarChargesOf</c> in Simulation/RadarMast.cs, das den Wert beim
@@ -6834,6 +6842,9 @@ public partial class MapEntityLayer : Node2D
         // Schuetze wird gutgeschrieben (Angreifer >= 8000, Spielerbyte 0xFF).
         _ueberfahrenOpfer.Add(footIdx);
         InfanterieZellenTreffer(footIdx, foot, 0, 200, grund, ueberfahren: true);
+        // ⭐ 13.09.2026 — der Infanteriezellen-Arm laeuft immer in den Zellzweig:
+        // ueberfahren AUF einer Bruecke kostet sie 200 (Bauwerkstreffer.cs).
+        BauwerkTreffer(foot.Col, foot.Row, 0, 200);
     }
 
     /// <summary>Wer in diesem Lauf ueberfahren wurde — fuer den Pruefstand.</summary>
@@ -9432,7 +9443,17 @@ public partial class MapEntityLayer : Node2D
         }
         if (_selected < 0 || _selected >= _entities.Count) return (0, 0, n, "nichts gewaehlt");
         if (n > 1) return (0, 0, n, "Gruppe — das Original zeigt hier kein Bild");
-        var e = _entities[_selected];
+        return BildDerEinheit(_entities[_selected], n);
+    }
+
+    /// <summary>Das Bild EINER Einheit, unabhängig von der Auswahl — derselbe
+    /// Weg wie <see cref="PanelPortrait"/> (Fall 0 des Bildzeichners
+    /// <c>0x4508A0</c>). Herausgezogen am 13.09.2026 für das Depotfenster
+    /// (Fensterart 23), das das Bild der markierten Zeile zeigt
+    /// (<c>0x4508A0(0, +0x43)</c> @0x47966B) — eine zweite Bildrechnung dort
+    /// liefe früher oder später auseinander.</summary>
+    public (int ChassisPic, int TurretPic, int Selected, string Why) BildDerEinheit(Entity e, int n = 1)
+    {
         if (e.IsProp) return (0, 0, n, "Kulisse");
         // ---- GEBÄUDE: kein Bild, und zwar ORIGINALTREU ----------------------
         // Nicht »ungelesen« (so stand es hier bis zum 13.08.2026) und auch nicht
@@ -12021,6 +12042,16 @@ public partial class MapEntityLayer : Node2D
 
         NoteEvent(victim, victim.Hp > 0 ? "unter Beschuss" : "verloren");
         SpeakHit(victim);
+
+        // ⭐ 13.09.2026 — DER ZELLZWEIG VON ZASAH (0x40D72F): ein Treffer, den das
+        // Ziel UEBERLEBT (Fussvolk immer, 0x40D264), beschaedigt das Bauwerk
+        // unter der Zelle mit den Werten des Schuetzen. Simulation/Bauwerkstreffer.cs.
+        if (victim.Hp > 0 || victim.Infantry >= 0)
+        {
+            int rang = shooter?.Rating28 ?? 0;
+            int angriff = shooter != null ? shooter.Attack + 2 * ElevOf(shooter.Col, shooter.Row) : damage;
+            BauwerkTreffer(victim.Col, victim.Row, rang, angriff);
+        }
 
         // shoot back: an idle armed unit engages whoever hit it
         // ⚠ 11.09.2026 — NUR NOCH HINTER --gegenschuss-sofort. Das Original
@@ -17008,6 +17039,27 @@ public partial class MapEntityLayer : Node2D
             // 0x43FD10 ein Dreissigstel der Trefferpunkte kostet.
             bool umschalter = LeerlaufIstUmschalter(e);
 
+            // ⭐⭐⭐ 13.09.2026 — DER UMSCHALTER HEISST »ANHALTEN«, NICHT
+            // »REPARIEREN«. Gelesen in berichte/fabrikfenster-fable.md §4.2,
+            // beide EXE: 0x43F940 (511, F 0x43E940) und 0x43FB40 (517 Mine):
+            //
+            //     Zustand == 1 -> 0,  sonst -> 1
+            //
+            // und in der Fabrik- UND Minentafel ist 1 = »angehalten« (Statuswort
+            // 0x501C08, Knopf »Start«/»Anhalten« @0x46F9C3, Hilfezeile »Produktion
+            // einstellen«). Die Deutung darunter (1 = reparieren) war falsch —
+            // der Knopf hat eine Reparatur angestossen statt anzuhalten.
+            // ⚠ Seine Entscheidung (13.09.): wörtlich. Aus einem bezahlten Ausbau
+            // (3/4) heraus angehalten, bleibt der Fortschritt stehen, »Start«
+            // setzt 0 — der Ausbau und das Geld sind weg. Gegenschalter
+            // --fabrikfenster-alt.
+            if (umschalter && !FabrikfensterAlt)
+            {
+                e.State = e.State == FaHalt ? StAktiv : FaHalt;
+                _order = e.State == FaHalt ? "Status : angehalten" : "Status : aktiv";
+                return true;
+            }
+
             int rep = JobState(e, BuildingJob.Repair);
             if (e.State == rep)
             {
@@ -17094,7 +17146,12 @@ public partial class MapEntityLayer : Node2D
 
         // ---- die zwei bezahlten Ausbauten ----------------------------------
         bool lager = job == BuildingJob.ExpandStore;
-        if (e.State != StAktiv)
+        // ⭐ 13.09.2026 — der FABRIK-Behandler 509/510 (0x43F820/0x43F8B0) fragt
+        // den Zustand NICHT: Besitzer und Konto, dann Zustand 3/4, Fortschritt 0,
+        // Preis ab. Die Sperre »gleicher Auftrag laeuft« sitzt im Klickarm
+        // (FabrikKnopf). Ein Lagerausbau waehrend einer Reparatur ersetzt sie.
+        bool fabrikWoertlich = e.BType is 2 or 3 or 4 && !FabrikfensterAlt;
+        if (e.State != StAktiv && !fabrikWoertlich)
         {
             _order = "Gebaeude beschaeftigt";
             Audio.GameSounds.Play(Audio.GameSounds.Refused);
@@ -17131,9 +17188,13 @@ public partial class MapEntityLayer : Node2D
         e.State = ziel;
         e.UpgradeStep = 0;
         _order = lager ? $"Lagerausbau $ {cost}" : $"Produktionserw. $ {cost}";
-        // »enlarging« @0x43e794 und »upgrading« @0x43e837
-        Audio.GameSounds.Play(lager ? Audio.GameSounds.Enlarging
-                                    : Audio.GameSounds.Upgrading);
+        // ⚠ 13.09.2026: bei der FABRIK kommt der Klang erst beim ABSCHLUSS
+        // (Takt-Arm @0x43E0E2 = 130, @0x43E163 = 129, nur fuer den Betrachter),
+        // der Behandler selbst ist stumm. Siehe Tick. Fuer die Mine bleibt es
+        // beim alten Stand — ihr Behandler ist nicht neu gelesen.
+        if (!fabrikWoertlich)
+            Audio.GameSounds.Play(lager ? Audio.GameSounds.Enlarging
+                                        : Audio.GameSounds.Upgrading);
         return true;
     }
 
@@ -17220,9 +17281,288 @@ public partial class MapEntityLayer : Node2D
             // es einen, und die zwei Tafeln sagen dasselbe — nachgeprüft in
             // --fenster-check, Messung 9.
             SupplyDepotType => UI.BuildingWindow.Art.Nachschubposten,
+            // ⭐ 13.09.2026 — DAS DEPOT (Art 5 -> Fensterart 23), Kampagne 10.
+            // ⚠ `built != 0`: das Fenster kommt nur für ein fertig gebautes
+            // Gebäude an, weil die Zeigerwahl es vorher aussiebt (@0x432500,
+            // berichte/bauart68-fable.md §2.1). Den Besitzer prüft
+            // Fenstergebaeude.
+            5 when !DepotfensterAus && e.Built != 0 => UI.BuildingWindow.Art.Depot,
+            // ⭐ 13.09.2026 — DIE FABRIK (Art 2/3/4 -> Fensterart 8).
+            2 or 3 or 4 when !FabrikfensterAlt && e.Built != 0 => UI.BuildingWindow.Art.Fabrik,
             _ => null,
         };
     }
+
+    /// <summary><c>--fabrikfenster-alt</c> — der Stand vor dem 13.09.2026: die
+    /// Fabrik öffnet wieder unseren Basisfenster-Nachbau, 511 schaltet wie
+    /// vorher, und Ausbauklänge kommen beim Start.</summary>
+    public static bool FabrikfensterAlt;
+
+    /// <summary>Die Fabrikzahlen fürs Fenster — alle aus Feldern, die wir führen.</summary>
+    private static void FuelleFabrik(Entity e, UI.BuildingWindow.Stand st)
+    {
+        st.FabrikArt = e.BType;
+        st.StromIst = e.EffNum;
+        st.StromSoll = e.EffDen;
+        st.Zustand = e.State;
+        st.Fortschritt = e.State is FaExpand or FaProdUp ? e.UpgradeStep * 100 / UpgradeSteps : e.UpgradeStep;
+        st.Tempo = e.ProdSpeed;
+        st.ProdKosten = e.CostProd;
+    }
+
+    /// <summary>Für <c>--einheiteninfo-check</c>: das erste eigene bewaffnete Landfahrzeug.</summary>
+    public int EigeneBewaffneteEinheit()
+    {
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsBuilding || e.IsProp || e.Dead || e.Owner != ViewPlayer || e.Infantry >= 0) continue;
+            if (e.Weapon == 0 || IsEquipmentMount(e.Weapon) || Untergestellt(e)) continue;
+            return i;
+        }
+        return -1;
+    }
+
+    /// <summary>Für <c>--fabrikfenster-check</c>: die erste eigene, gebaute Fabrik.</summary>
+    public int EigeneFabrik()
+    {
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var b = _entities[i];
+            if (IsFactory(b) && !b.Dead && b.Built != 0 && b.Owner == ViewPlayer) return i;
+        }
+        return -1;
+    }
+
+    /// <summary>Für den Prüfstand: Zustand, Konto, Kapazität, Fortschritt.</summary>
+    public (int Zustand, int Geld, int Kap, int Schritt) FabrikZustand(int idx)
+    {
+        var b = _entities[idx];
+        return (b.State, _money[Mathf.Clamp(b.Owner, 0, 7)], b.Capacity, b.UpgradeStep);
+    }
+
+    /// <summary>⚠ EINGRIFF für den Prüfstand: Konto und Zustand setzen.</summary>
+    public void FabrikProbeSetzen(int idx, int geld, int zustand)
+    {
+        var b = _entities[idx];
+        _money[Mathf.Clamp(b.Owner, 0, 7)] = geld;
+        b.State = zustand;
+        b.UpgradeStep = 0;
+    }
+
+    /// <summary>Wieviele Fabrikknöpfe gedrückt wurden und was daraus wurde — für
+    /// den Prüfstand.</summary>
+    public int FabrikKnopfBefehle, FabrikKnopfStill, FabrikKnopfMeldungen;
+
+    /// <summary>
+    /// <b>Der Klickarm des Fabrikfensters</b> — <c>0x44ACF1…0x44AF7D</c>
+    /// (F <c>0x449CE4…</c>), wörtlich:
+    /// <code>
+    ///   1 Lagerausbau:  Zustand 3 -> still; Konto >= +0x0A -> 509, sonst Meldung Geld
+    ///   2 Start/Anh.:   511, keine Vorbedingung
+    ///   3 Verbessern:   Stufe 9 -> Meldung Maximalwert; Zustand 4 -> still;
+    ///                   Konto >= +0x0C -> 510, sonst Meldung Geld
+    ///   4 Reparieren:   Zustand 2 -> still; sonst 519
+    /// </code>
+    /// <para>⚠ <b>UNSERE Setzung:</b> die zwei Absagen sind im Original ein
+    /// Meldungsfenster (Art 13, <c>0x4469A0</c>) — das haben wir noch nicht
+    /// gebaut. Der Wortlaut steht darum in der Statuszeile.</para>
+    /// </summary>
+    public void FabrikKnopf(int k)
+    {
+        var e = Fenstergebaeude();
+        if (e == null || e.BType is not (2 or 3 or 4)) return;
+        int idx = _entities.IndexOf(e);
+        int konto = _money[Mathf.Clamp(ViewPlayer, 0, 7)];
+        void Senden(BuildingJob job)
+        {
+            FabrikKnopfBefehle++;
+            Emit(Simulation.Commands.CommandRecord.Make(BuildingOpFor(e, job), (byte)ViewPlayer, (short)idx));
+        }
+        void Meldung(string text)
+        {
+            FabrikKnopfMeldungen++;
+            _order = text;
+        }
+        switch (k)
+        {
+            case 1:
+                if (e.State == FaExpand) { FabrikKnopfStill++; return; }          // @0x44AD6D
+                if (konto >= e.CostStore) Senden(BuildingJob.ExpandStore);       // 509
+                else Meldung("Sie haben leider nicht genug Geld.");               // 0x4FBDD0
+                return;
+            case 2:
+                Senden(BuildingJob.Idle);                                         // 511
+                return;
+            case 3:
+                if (e.ProdSpeed == 9)
+                { Meldung("Kann nicht erweitern. Sie haben bereits den Maximalwert erreicht."); return; }
+                if (e.State == FaProdUp) { FabrikKnopfStill++; return; }          // @0x44AE82
+                if (konto >= e.CostProd) Senden(BuildingJob.ExpandProd);         // 510
+                else Meldung("Sie haben leider nicht genug Geld.");
+                return;
+            case 4:
+                if (e.State == FaRepair) { FabrikKnopfStill++; return; }          // @0x44AF3F
+                Senden(BuildingJob.Repair);                                       // 519
+                return;
+        }
+    }
+
+    /// <summary><c>--depotfenster-aus</c> — der Stand vor dem 13.09.2026: ein
+    /// Klick auf ein Depot öffnet kein Fenster.</summary>
+    public static bool DepotfensterAus;
+
+    /// <summary>
+    /// <b>Die Zeilen des Depotfensters</b> — je eingefahrener Einheit eine, in
+    /// Platzreihenfolge, höchstens sechs (<c>0x4790A0</c>, Nr. 6–23 der
+    /// Koordinatentafel in <c>berichte/depotfenster-fable.md</c>).
+    ///
+    /// <para>⚠ Nur <see cref="Entity.Garage"/>: ein Depot hat keine Produktion,
+    /// also liegen dort nie Entwurfsnummern (<see cref="Entity.Depot"/>). Das ist
+    /// die Abweichung 4.5 der Lesung — für Art 5 fällt sie nicht ins Gewicht.</para>
+    /// </summary>
+    /// <summary>»Name(n)« — die Infoblöcke hängen »(« n »)« OHNE Leerzeichen an
+    /// (0x5017E4/0x5017E0); ComponentLabel schreibt » (n)« für die Bauteillisten
+    /// des Erstellungsfensters. Gemeinsam für Depotfenster und Einheiten-Info.</summary>
+    private static string InfoBauteil(int zeile)
+    {
+        string l = UI.UnitStatBook.ComponentLabel(zeile);
+        int p = l.LastIndexOf(" (", System.StringComparison.Ordinal);
+        return p >= 0 ? l.Remove(p, 1) : l;
+    }
+
+    /// <summary>Nachladen: (16 − ⌊√+0x3D⌋)/2 + 1, wörtlich @0x47996C / @0x475431.</summary>
+    private static int InfoNachladen(Entity u)
+        => (16 - (int)System.Math.Sqrt(System.Math.Max(0, u.Reload))) / 2 + 1;
+
+    /// <summary>»2x« — ⚠ UNSER Weg über die Geschossart (Tafel 0x4F98E8 +0x15);
+    /// das Original fragt 0x43B3F0, dieselbe Spalte.</summary>
+    private static bool InfoZwilling(Entity u)
+    {
+        if (u.Weapon == 0 || IsEquipmentMount(u.Weapon)) return false;
+        int art = Simulation.DesignMath.SoundClass(WeaponRowOf(u.Weapon));
+        return art >= 0 && Audio.GameSounds.TwinOffset(art) is > 0 and < 30000;
+    }
+
+    /// <summary><c>--einheiteninfo-alt</c> — der Stand vor dem 13.09.2026: der
+    /// Menüeintrag sagt nur, wo die Werte stehen.</summary>
+    public static bool EinheiteninfoAlt;
+
+    /// <summary>Öffnet das Fenster Art 19 für diese Einheit (MapViewer).</summary>
+    public System.Action<int>? OnEinheitenInfo;
+
+    /// <summary>
+    /// <b>Der Inhalt des Einheiten-Info-Fensters</b> — Zeichner <c>0x474FE0</c>,
+    /// Koordinatentafel und Höhenrechnung aus <c>einheiteninfo-fable.md</c> §2:
+    /// »Energie : a/b«, Waffe(n) + Nachladen oder Oberteil, Bauteil +0x10,
+    /// Antrieb, A/V [2x], Geschw., Sicht, Reichw. (nur r ≠ 0), und nur ohne
+    /// Fussvolk Munition (mit Waffe) und Sprit, zuletzt Auflage (nur Radarstab).
+    ///
+    /// <para>⚠ UNSERE Setzungen: der Name kommt aus <c>LabelOf</c> statt über die
+    /// Entwurfsnummer +0x3E; »Auflage« steht bei jeder Radarstab-Einheit (im
+    /// Original haben Karten- und Skripteinheiten +0x45 = 0xFF und zeigen sie
+    /// nicht), mit dem Nenner 20 aus dem Bau (+0x46).</para>
+    /// </summary>
+    public (int Rang, string Name, List<string> Zeilen, int Hoehe)? EinheitenInfo(int idx)
+    {
+        if (idx < 0 || idx >= _entities.Count) return null;
+        var e = _entities[idx];
+        if (e.IsBuilding || e.IsProp) return null;
+        bool waffe = e.Weapon != 0 && !IsEquipmentMount(e.Weapon);
+        bool ober = !waffe && e.Part > 0;
+        bool fuss = e.Infantry >= 0;                                      // +0x0A == 1
+        bool radar = RadarKitOf(e);
+
+        // Die Höhe, wörtlich @0x4750BD…0x475135.
+        int h = waffe ? 65 : ober ? 50 : 35;
+        if (e.Equipment > 0) h += 15;
+        h += 75;
+        if (!fuss) { if (waffe) h += 15; h += 15; }
+        if (radar) h += 15;
+        h += 30;
+        h = System.Math.Min((h / 20 + 1) * 20, 200);
+
+        var z = new List<string> { $"Energie : {e.Hp}/{e.HpMax}" };
+        if (waffe) { z.Add(InfoBauteil(WeaponRowOf(e.Weapon))); z.Add("Nachladen " + InfoNachladen(e)); }
+        else if (ober) z.Add(InfoBauteil(e.Part));
+        if (e.Equipment > 0) z.Add(InfoBauteil(e.Equipment));
+        z.Add(e.Comp0F > 0 ? InfoBauteil(e.Comp0F) : "");
+        z.Add("A/V " + (InfoZwilling(e) ? "2x" : "") + e.Attack + "/" + e.Defence);
+        z.Add("Geschw. " + e.Speed);
+        z.Add("Sicht " + e.Sight);
+        if (e.Range != 0) z.Add("Reichw. " + e.Range + "/" + e.RangeMin);
+        if (!fuss)
+        {
+            if (waffe) z.Add("Munition " + e.Ammo + "/" + e.AmmoMax);
+            z.Add("Sprit " + e.Fuel + "/" + e.FuelMax);
+        }
+        if (radar) z.Add("Auflage " + RadarChargesOf(idx) + "/" + RadarKitCharges);
+        return (e.Rating28, LabelOf(e), z, h);
+    }
+
+    private void FuelleDepot(Entity b, UI.BuildingWindow.Stand st)
+    {
+        int zahl = System.Math.Min(b.Garage.Count, UI.DepotView.Plaetze);
+        for (int k = 0; k < zahl; k++)
+        {
+            var u = b.Garage[k];
+            var bild = BildDerEinheit(u);
+            bool waffe = u.Weapon != 0 && !IsEquipmentMount(u.Weapon);
+            string Bauteil(int zeile) => InfoBauteil(zeile);
+            st.DepotZeilen.Add(new UI.BuildingWindow.DepotZeile
+            {
+                Griff = _entities.IndexOf(u),
+                Rang = u.Rating28,
+                Name = LabelOf(u),
+                Hp = u.Hp, HpMax = u.HpMax,
+                Ausgesandt = u.Ukol == UkolVerlaesst,
+                ChassisPic = bild.ChassisPic, TurretPic = bild.TurretPic,
+                HatWaffe = waffe,
+                Waffe = waffe ? Bauteil(WeaponRowOf(u.Weapon)) : "",
+                Nachladen = InfoNachladen(u),
+                Oberteil = !waffe && u.Part > 0 ? Bauteil(u.Part) : "",
+                Verbesserung = u.Equipment > 0 ? Bauteil(u.Equipment) : "",
+                Antrieb = u.Comp0F > 0 ? Bauteil(u.Comp0F) : "",
+                // ⚠ UNSER Weg zum »2x«: die Geschossart der Waffe und dort das
+                // Feld +0x15 (Zwillingsversatz). Das Original fragt 0x43B3F0 —
+                // dieselbe Spalte der Tafel 0x4F98E8.
+                Zwilling = InfoZwilling(u),
+                Angriff = u.Attack, Verteidigung = u.Defence,
+                Geschw = u.Speed, Sicht = u.Sight,
+                Reichw = u.Range, MinReichw = u.RangeMin,
+            });
+        }
+    }
+
+    /// <summary>
+    /// <b>»Aussenden« aus dem Depotfenster</b> — Befehl 504 je markierter Zeile
+    /// (@0x44C083) → <c>0x410420</c>: <b>UKOL := 0x33</b>, und die Einheit
+    /// BLEIBT im Depot, bis der Gebäudetakt sie an einer freien Tür herauslässt
+    /// (<see cref="DepotAuslass"/>). Die Zeile zeigt bis dahin » (Ausgesandt)«.
+    ///
+    /// <para>⚠ Das Original sagt dabei NIE ab. Unser alter Weg
+    /// (<see cref="AusfahrenAusGarage"/> sofort, mit Absage »kein freier Platz
+    /// an der Tuer«) steht hinter <c>--aussenden-sofort</c>.</para>
+    /// </summary>
+    public void DepotAussenden(List<int> griffe)
+    {
+        var b = Fenstergebaeude();
+        if (b == null || b.BType != 5) return;
+        foreach (int g in griffe)
+        {
+            if (g < 0 || g >= _entities.Count) continue;
+            var u = _entities[g];
+            int k = b.Garage.IndexOf(u);
+            if (k < 0) continue;
+            DepotAussendenBefehle++;
+            if (AussendenSofort) { AusfahrenAusGarage(b, k); continue; }
+            u.Ukol = UkolVerlaesst;                           // @0x410441
+        }
+        QueueRedraw();
+    }
+
+    /// <summary>Wieviele Befehle 504 aus dem Depotfenster kamen.</summary>
+    public int DepotAussendenBefehle;
 
     /// <summary>
     /// ⭐⭐ <b>Die vollständige Tafel »Gebäudeart → Fensterart«</b> des Originals
@@ -17314,6 +17654,8 @@ public partial class MapEntityLayer : Node2D
                 st.Hangar.Add($"Flugzeug {slot}");
         if (IsSupplyDepot(e)) FuelleAngebot(e, st);
         if (e.BType == 9) FuelleFlughafenAngebot(e, st);
+        if (e.BType == 5) FuelleDepot(e, st);
+        if (e.BType is 2 or 3 or 4) FuelleFabrik(e, st);
         return st;
     }
 
@@ -18400,7 +18742,9 @@ public partial class MapEntityLayer : Node2D
     /// (<see cref="FuelleFlughafenAngebot"/>) samt »Starten«, sonst haette das
     /// Abschalten ihm die Flugzeuge genommen.</para>
     public bool BuildPanelWanted =>
-        Producer() is { } p && !IsSupplyDepot(p) && p.BType != 9;
+        Producer() is { } p && !IsSupplyDepot(p) && p.BType != 9
+        // ⭐ 13.09.2026 — die Fabrik hat ihr eigenes Fenster (Art 8).
+        && (FabrikfensterAlt || p.BType is not (2 or 3 or 4));
 
     /// <summary>Harness only: the factory <c>--demo-buildpanel</c> is waiting on.
     /// The click happens through the panel the moment a line can be paid for, so
@@ -21987,6 +22331,59 @@ public partial class MapEntityLayer : Node2D
         }
     }
 
+    /// <summary>
+    /// <c>--schiffsklang-check</c> (13.09.2026, bug-254) — <b>spricht ein im
+    /// Hafen GEBAUTES Schiff wie eines, das die Karte mitbringt?</b>
+    ///
+    /// <para>Läuft durch den echten <see cref="LaunchShip"/> an der ersten Werft
+    /// der Karte und hält das neue Schiff gegen ein Kartenschiff mit demselben
+    /// Rumpf: +0x0b muss gleich sein, und die zwei Schranken von
+    /// <see cref="SpeakSelected"/>/<see cref="SpeakOrdered"/> müssen einen Klang
+    /// hergeben. Nullmodell: dasselbe Schiff mit dem alten <c>Chassis = -1</c>
+    /// muss schweigen — sonst misst die Zeile nichts.</para>
+    /// </summary>
+    public string SchiffsklangCheck()
+    {
+        var sb = new System.Text.StringBuilder("schiffsklang-check\n");
+        var dock = _entities.Find(b => b.IsBuilding && !b.IsProp && !b.Dead && b.BType == 11);
+        if (dock == null) return sb.Append("  keine Werft auf dieser Karte — ungeprueft").ToString();
+        int vor = _entities.Count;
+        int besitzer = dock.Owner;
+        if (ShipMenu(dock).Count == 0 && besitzer != ViewPlayer)
+        {
+            // ⚠ EINGRIFF: auf K10 gehoert die Werft Spieler 2 und hat keine
+            // freigegebenen Entwuerfe. Sein Fall ist der EROBERTE Hafen — also
+            // bekommt der Spieler sie fuer diesen einen Stapellauf.
+            dock.Owner = ViewPlayer;
+            sb.AppendLine($"  ⚠ EINGRIFF: Werft Platz {dock.Slot} von Spieler {besitzer} an Spieler {ViewPlayer} (wie erobert)");
+        }
+        LaunchShip(dock);
+        dock.Owner = besitzer;
+        if (_entities.Count == vor) return sb.Append($"  LaunchShip hat kein Schiff angelegt (Menue {ShipMenu(dock).Count}) — DURCHGEFALLEN").ToString();
+        var u = _entities[^1];
+        var karte = _entities.Find(x => x != u && !x.IsBuilding && !x.IsProp
+                                        && x.UnitType == u.UnitType && x.Chassis >= 0);
+        var rng = new System.Random(1);
+        bool Spricht(Entity e) => e.Chassis >= 0
+            && Audio.GameSounds.Voice(e.GameUnitType, e.Chassis, e.Field28, rng) >= 0
+            && Audio.GameSounds.OrderVoice(e.GameUnitType, e.Chassis, e.Field28, rng) >= 0;
+        bool gleich = karte == null || karte.Chassis == u.Chassis;
+        sb.AppendLine($"  gebaut: {u.Name}, Rumpf {u.UnitType}, Gattung {u.GameUnitType}, +0x0b {u.Chassis} "
+                    + $"(sec46[{u.UnitType}].+0x0d = {UI.UnitStatBook.IconOf(u.UnitType)})");
+        sb.AppendLine(karte == null
+            ? "  kein Kartenschiff mit diesem Rumpf zum Vergleich"
+            : $"  Kartenschiff Platz {karte.Slot}: Rumpf {karte.UnitType}, +0x0b {karte.Chassis} "
+              + $"-> {(gleich ? "GLEICH" : "⚠ ANDERS")}");
+        bool spricht = Spricht(u);
+        sb.AppendLine($"  Anwahl- und Befehlsklang: {(spricht ? "ja" : "⚠ NEIN")}");
+        int alt = u.Chassis;
+        u.Chassis = -1;
+        bool nullmodell = !Spricht(u);
+        u.Chassis = alt;
+        sb.AppendLine($"  Nullmodell (+0x0b = -1, der Stand vor bug-254) schweigt: {(nullmodell ? "ja" : "⚠ NEIN")}");
+        return sb.Append(spricht && gleich && nullmodell ? "  BESTANDEN" : "  DURCHGEFALLEN").ToString();
+    }
+
     private void LaunchShip(Entity dock)
     {
         if (_nav == null || _shipDesigns == null) return;
@@ -22049,6 +22446,14 @@ public partial class MapEntityLayer : Node2D
             // ohne das hat ein vom Stapel gelaufenes Schiff kein Bild, und die
             // Flak-Barkasse bekaeme das des L.Kreuzers.
             ShipVariant = d.Variant,
+            // ⚠⚠ 13.09.2026, bug-254 — DIE SIEBTE. Seine Meldung: »Boote von
+            // Anfang an haben ihre korrekten Sounds. Bau ich aber Boote im Hafen,
+            // haben diese nicht ihre Unit-Sounds beim Anklicken oder Befehl«.
+            // `Chassis` (+0x0b) blieb -1, und SpeakSelected/SpeakOrdered
+            // schweigen bei `Chassis < 0`. Gelesen in BEIDEN EXE: C @0x4B2D90/
+            // 0x4B2D9D, F @0x4B26C3 — `+0x0b := sec46[Rumpf + 200·p].+0x0d`, die
+            // Bildnummer des Rumpfes (Rumpf 150 -> 70, wie auf map_10).
+            Chassis = UI.UnitStatBook.IconOf(d.Chassis),
             Elev = el, Name = d.Name,
             // energie is the life, the tank and the magazine come straight
             // from the design record (@0x4b2b20 writes +0x08/+0x29, +0x2e/+0x30
@@ -22149,7 +22554,7 @@ public partial class MapEntityLayer : Node2D
                         $"Grundriss {u.FootW}x{u.FootH} (erwartet {seite}x{seite}), " +
                         $"Gattung {u.GameUnitType} (erwartet {gattung}). Daran haengen " +
                         $"Klickfeld, Bildlage und Rumpfmitte.");
-        GD.Print($"launch-ship: {d.Name} (Rumpf {d.Chassis}, Gattung {gattung}, " +
+        GD.Print($"launch-ship: {d.Name} (Rumpf {d.Chassis}, +0x0b {u.Chassis}, Gattung {gattung}, " +
                  $"{seite}x{seite}) steht IM Dock ({dock.Col},{dock.Row}) " +
                  $"auf ({u.Col},{u.Row}) und wartet auf eine Ausfahrt; " +
                  // Fehler D der Liste E: was das Schiff an Bord hat. Ohne diese
@@ -22202,6 +22607,7 @@ public partial class MapEntityLayer : Node2D
             var dock = _entities[u.LeavingDock];
 
             int seite = Simulation.NavGrid.HullSide(u.GameUnitType);
+            if (u.AuslaufZellen > 0) continue;                     // faehrt schon aus
             var cell = ShipExitCellRead(dock, u.GameUnitType, seite);
             if (cell == null)
             {
@@ -22221,6 +22627,48 @@ public partial class MapEntityLayer : Node2D
                 continue;
             }
 
+            if (!AuslaufAlt)
+            {
+                // ⭐⭐ 13.09.2026 — DAS AUSLAUFEN, woertlich @0x409CBC…0x409D36.
+                // Seine Meldung: »kleine Patrouillenboote im Hafen kommen jeweils
+                // aus dem Hafengebaeude links sowie rechts herausgefahren. Bei uns
+                // spawnen die bloss an einer Stelle.« Lesung stapellauf-fable.md.
+                //
+                //   r = 1 (links) / 2 (rechts) aus 0x43F730 (hier: welcher Kandidat)
+                //   Rumpf 8r−4, Richtung 4r−2  -> Blick nach links / rechts
+                //   Zellen 2 (2x2) / 4 (4x4), +0x06 := 0
+                //   Start-Anker (S, Z+1); rechts bei 2x2: (S+2, Z+1)
+                //   Endlage 2x2 (S−2|S+4, Z+1), 4x4 (S−4|S+4, Z+1), SOFORT gestempelt
+                //
+                // ⚠ Pruefrechteck und Endlage sind NICHT dasselbe Rechteck (2x2 eine
+                // Zeile tiefer geprueft, rechts eine Spalte weiter) — so steht es in
+                // C und F, und so bleibt es (seine Entscheidung: woertlich).
+                bool links = cell.Value.X < dock.Col;
+                bool gross = u.GameUnitType == 5;
+                int endeX = links ? dock.Col - (gross ? 4 : 2) : dock.Col + 4;
+                int startX = !links && !gross ? dock.Col + 2 : dock.Col;
+                u.AuslaufRichtung = links ? -1 : 1;
+                u.AuslaufZellen = gross ? 4 : 2;
+                u.AuslaufV = 0;
+                u.AuslaufEnde = new Vector2I(endeX, dock.Row + 1);
+                u.Col = startX; u.Row = dock.Row + 1;
+                u.Facing = DirToFacing(new Vector2(u.AuslaufRichtung * TileW, 0), FacingsOf(u.UnitType));
+                u.Elev = ElevOf(u.Col, u.Row);
+                u.Pos = BodyCenterAt(u, u.Col, u.Row);
+                u.Footprint = CellRect(_ox, _oy, u.Col, u.Row, u.Elev);
+                // Der Endstempel gleich beim Losfahren (0x406C20/0x406C70) — die
+                // Zellen sind ab dem ersten Takt fuer andere gesperrt.
+                _nav?.SetHull(i, seite);
+                _nav?.SetOccupant(endeX, dock.Row + 1, i);
+                ShipLeftDock++;
+                GD.Print($"dock-auslauf: {u.Name} laeuft aus Dock ({dock.Col},{dock.Row}) "
+                       + $"{(links ? "LINKS" : "RECHTS")} aus: Start ({startX},{dock.Row + 1}), "
+                       + $"Endlage ({endeX},{dock.Row + 1}), {u.AuslaufZellen} Zellen, Rumpf {seite}x{seite}, "
+                       + $"Endlage ganz auf Wasser: {(HullOnWater(endeX, dock.Row + 1, seite) ? "JA" : "NEIN")}");
+                QueueRedraw();
+                continue;
+            }
+
             u.Col = cell.Value.X; u.Row = cell.Value.Y;
             u.Elev = ElevOf(u.Col, u.Row);
             u.Pos = BodyCenterAt(u, u.Col, u.Row);
@@ -22236,6 +22684,129 @@ public partial class MapEntityLayer : Node2D
                      $"ganz auf Wasser: {(HullOnWater(u.Col, u.Row, seite) ? "JA" : "NEIN")}");
             QueueRedraw();
         }
+    }
+
+    /// <summary><c>--auslauf-alt</c> — der Stand vor dem 13.09.2026: das Schiff
+    /// wird auf das Pruefrechteck VERSETZT statt herauszufahren.</summary>
+    public static bool AuslaufAlt;
+
+    /// <summary>
+    /// <b>Auftrag 49 je Takt</b> — <c>0x409AC2…0x409B54</c> (F <c>0x4099EB</c>):
+    /// <code>
+    ///   +0x06 += 4
+    ///   +0x06 == 0  -> eine Zelle geschafft (+0x15--)
+    ///   +0x06 == 80 -> +0x06 := −80, Anker eine Zelle weiter
+    ///   +0x15 == 0  -> UKOL 0, +0x06 := 0, Endstempel
+    /// </code>
+    /// 40 Takte je Zelle, unabhängig vom Tempo des Schiffs. Der Zeichner
+    /// <c>0x430E60</c> legt ±v/4 Bildpunkte auf die Zellmitte — die Fahrt ist
+    /// stetig von Zellmitte zu Zellmitte.
+    ///
+    /// <para>⚠ UNSERE Setzung: das Schiff bleibt bis zum Ende nicht befehlbar
+    /// (<c>Mobile = false</c>); was das Original bei einem Befehl während der
+    /// Fahrt tut, ist ungelesen.</para>
+    /// </summary>
+    private void ShipAuslaufTakt()
+    {
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var u = _entities[i];
+            if (u.AuslaufZellen <= 0) continue;
+            if (u.Dead) { u.AuslaufZellen = 0; u.LeavingDock = -1; continue; }
+            u.AuslaufV += 4;                                         // @0x409AC2
+            if (u.AuslaufV == 0) u.AuslaufZellen--;                  // @0x409AD1
+            else if (u.AuslaufV == 80)                               // @0x409AD5
+            {
+                u.AuslaufV = -80;
+                u.Col += u.AuslaufRichtung;
+            }
+            if (u.AuslaufZellen > 0)
+            {
+                u.Pos = BodyCenterAt(u, u.Col, u.Row)
+                      + new Vector2(u.AuslaufRichtung * u.AuslaufV / 4f * (TileW / 40f), 0);
+                continue;
+            }
+            // Ende: UKOL 0 auf der Endlage (@0x409B08).
+            u.Col = u.AuslaufEnde.X; u.Row = u.AuslaufEnde.Y;
+            u.AuslaufV = 0;
+            u.Elev = ElevOf(u.Col, u.Row);
+            u.Pos = BodyCenterAt(u, u.Col, u.Row);
+            u.Footprint = CellRect(_ox, _oy, u.Col, u.Row, u.Elev);
+            u.Goal = new Vector2I(u.Col, u.Row);
+            u.LeavingDock = -1;
+            u.Mobile = true;
+            ShipAuslaufFertig++;
+            QueueRedraw();
+        }
+    }
+
+    /// <summary>Wieviele Schiffe ihre Auslauffahrt beendet haben.</summary>
+    public int ShipAuslaufFertig;
+
+    /// <summary>
+    /// <c>--stapellauf-check</c> (13.09.2026) — <b>drei Boote hintereinander an
+    /// derselben Werft.</b> Gelesen (stapellauf-fable.md §2): Boot 1 läuft
+    /// LINKS aus und liegt dann auf (S−2, Z+1); das sperrt das linke
+    /// Prüfrechteck (S−2, Z+2) → Boot 2 läuft RECHTS aus nach (S+4, Z+1); Boot 3
+    /// wartet im Dock. Gemessen wird dazu, dass die Fahrt 80 Takte dauert und
+    /// die Bildlage dabei stetig wandert. Nullmodell: <c>--auslauf-alt</c>.
+    /// </summary>
+    public string StapellaufCheck()
+    {
+        var sb = new System.Text.StringBuilder("stapellauf-check\n");
+        bool ok = true;
+        void Soll(bool b, string was) { sb.Append($"  {(b ? "ok  " : "⚠ FALSCH")} {was}\n"); ok &= b; }
+        var dock = _entities.Find(b => b.IsBuilding && !b.IsProp && !b.Dead && b.BType == 11);
+        if (dock == null || _nav == null) return sb.Append("  keine Werft auf dieser Karte — ungeprueft").ToString();
+        if (AuslaufAlt) sb.AppendLine("  ⚠ NULLMODELL --auslauf-alt: hier MUSS das Auslaufen fehlen");
+        int besitzer = dock.Owner;
+        dock.Owner = ViewPlayer;
+        sb.AppendLine($"  ⚠ EINGRIFF: Werft Platz {dock.Slot} auf ({dock.Col},{dock.Row}) an Spieler {ViewPlayer}");
+        int S = dock.Col, Z = dock.Row;
+
+        Entity? Bauen()
+        {
+            int vor = _entities.Count;
+            LaunchShip(dock);
+            return _entities.Count > vor ? _entities[^1] : null;
+        }
+        void Takte(int n) { for (int t = 0; t < n; t++) SimTickFuerProbe(); }
+
+        // ---- Boot 1 -------------------------------------------------------
+        var b1 = Bauen();
+        if (b1 == null) { dock.Owner = besitzer; return sb.Append("  LaunchShip legte kein Schiff an — DURCHGEFALLEN").ToString(); }
+        int w = 0;
+        while (b1.AuslaufZellen == 0 && b1.LeavingDock >= 0 && w < 25) { Takte(1); w++; }
+        Soll(b1.AuslaufZellen == 2 && b1.AuslaufRichtung == -1,
+             $"Boot 1 laeuft LINKS aus (Zellen {b1.AuslaufZellen}, Richtung {b1.AuslaufRichtung}) nach {w} Takten");
+        var p0 = b1.Pos;
+        Takte(20);
+        var p20 = b1.Pos;
+        Takte(40);
+        var p60 = b1.Pos;
+        Soll(p20.X < p0.X && p60.X < p20.X && b1.AuslaufZellen > 0,
+             $"Bildlage wandert stetig nach links: {p0.X:0} -> {p20.X:0} -> {p60.X:0}");
+        Takte(25);
+        Soll(b1.AuslaufZellen == 0 && b1.Col == S - 2 && b1.Row == Z + 1 && b1.Mobile,
+             $"Boot 1 liegt nach 80 Takten auf ({b1.Col},{b1.Row}), erwartet ({S - 2},{Z + 1}), befehlbar {b1.Mobile}");
+
+        // ---- Boot 2 -------------------------------------------------------
+        var b2 = Bauen();
+        w = 0;
+        while (b2 != null && b2.AuslaufZellen == 0 && b2.LeavingDock >= 0 && w < 25) { Takte(1); w++; }
+        Soll(b2 != null && b2.AuslaufRichtung == 1, $"Boot 2 laeuft RECHTS aus (Richtung {b2?.AuslaufRichtung})");
+        Takte(90);
+        Soll(b2 != null && b2.Col == S + 4 && b2.Row == Z + 1,
+             $"Boot 2 liegt auf ({b2?.Col},{b2?.Row}), erwartet ({S + 4},{Z + 1})");
+
+        // ---- Boot 3 -------------------------------------------------------
+        var b3 = Bauen();
+        Takte(60);
+        Soll(b3 != null && b3.LeavingDock >= 0 && b3.AuslaufZellen == 0,
+             $"Boot 3 wartet im Dock (Auftrag 52: {b3?.LeavingDock >= 0}, faehrt: {b3?.AuslaufZellen > 0})");
+
+        dock.Owner = besitzer;
+        return sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN").ToString();
     }
 
     // ================= der Prüfstand des Dock-Auslaufs ========================
@@ -23685,13 +24256,22 @@ public partial class MapEntityLayer : Node2D
             {
                 e.Capacity += IsMine(e) ? MineCapacityGain : CapacityGain;
                 e.CostStore = e.CostStore * 3 / 2;
+                // Klang 130 beim Abschluss, nur fuer den Betrachter (@0x43E0E2).
+                if (IsFactory(e) && !FabrikfensterAlt && e.Owner == ViewPlayer)
+                    Audio.GameSounds.Play(Audio.GameSounds.Enlarging);
             }
         }
         else if (fact && st == FaProdUp)                     // Produktionserweiterung
         {
             // Beide zaehlen +0x05 hoch (@0x43E172 Fabrik, @0x43E846 Mine) und
             // verdreifachhalbieren nur ihr EIGENES Preisfeld.
-            if (Advance(e)) { e.ProdSpeed++; e.CostProd = e.CostProd * 3 / 2; }
+            if (Advance(e))
+            {
+                e.ProdSpeed++; e.CostProd = e.CostProd * 3 / 2;
+                // Klang 129 beim Abschluss, nur fuer den Betrachter (@0x43E163).
+                if (IsFactory(e) && !FabrikfensterAlt && e.Owner == ViewPlayer)
+                    Audio.GameSounds.Play(Audio.GameSounds.Upgrading);
+            }
         }
 
         UpdateResearch(e);
@@ -27908,6 +28488,8 @@ public partial class MapEntityLayer : Node2D
             // (2) die EINHEITEN dieser Zeile. DrawUnitsUpTo nimmt `Row < row`,
             // also r+1 für »alle bis einschliesslich r«.
             DrawUnitsUpTo(r + 1, ref ui);
+            // (2b) die Radarmasten, Ebene Zeile + 2 (0x42F73E). RadarMast.cs.
+            RadarMastenZeichnen(r);
             // (3) die Gebäude, deren Fach in dieser Zeile liegt.
             while (gi < gebaeude.Count
                    && gebaeude[gi].Row + BuildingDrawRowFor(gebaeude[gi]) <= r)
@@ -31464,6 +32046,9 @@ public partial class MapEntityLayer : Node2D
         // wieder an der Bildrate.
         TickWind(SimDt);
         BrandTakt();
+        // ⭐ 13.09.2026 — die Laufzeit der Radarmasten (Minen- und Fallentakt
+        // 0x4216F0, jeden Takt). Simulation/RadarMast.cs.
+        RadarMastTakt();
         // ⭐ Der Fenstertakt (BM.11, 0x4505F0 + 0x44FB10): die Blenden je Takt
         // ein Bild, die Lebensdauer alle 20 Takte. ⚠ Er gehoert HIERHER und
         // nicht in _Process: ein Meldungsfenster darf auf einem schnellen

@@ -260,6 +260,12 @@ public partial class MapEntityLayer : Node2D
         {
             if (e.Ukol != UkolVerlaesst) continue;
             var her = e.InGebaeude;
+            // ⭐ 13.09.2026 — AUSGESANDT, ABER NOCH DRIN. Eine Einheit, der das
+            // Depotfenster Befehl 504 gegeben hat, traegt UKOL 0x33 und steht
+            // weiter im Satz, bis DepotAuslass sie an der freien Tuer
+            // herauslaesst. Sie ist noch unsichtbar und darf hier weder
+            // »fertig« werden noch einen Austrittsschritt bekommen.
+            if (her != null && her.Garage.Contains(e)) continue;
             // ⚠⚠ 30.08.2026 — HIER STAND `e.Ukol = UkolFrei` OHNE Bedingung,
             // also genau EIN Takt Schutz. Das reicht nicht, und die Messung hat
             // es gnadenlos gezeigt: Kampagne 10/23/26 meldeten mit und ohne den
@@ -293,6 +299,8 @@ public partial class MapEntityLayer : Node2D
             e.Ukol = UkolFrei;
             e.InGebaeude = null;
         }
+
+        DepotAuslass();
 
         for (int bi = 0; bi < _entities.Count; bi++)
         {
@@ -351,6 +359,64 @@ public partial class MapEntityLayer : Node2D
                 if (u.Ukol != UkolAngemeldet || z != TorEinfahrt) continue;
                 if (u.Owner != b.Owner) continue;            // ⚠ UNSER Tor
                 Einfahren(b, occ, u);
+            }
+        }
+    }
+
+    /// <summary><c>--aussenden-sofort</c> — der Stand vor dem 13.09.2026: das
+    /// Depotfenster laesst eine Einheit sofort heraus und sagt ab, wenn an der
+    /// Tuer kein Platz ist, statt sie mit » (Ausgesandt)« warten zu lassen.</summary>
+    public static bool AussendenSofort;
+
+    /// <summary>Wieviele Ausgesandte der Takt herausgelassen hat und wie oft
+    /// einer warten musste. ⚠ Ohne die zweite Zahl ist »kommt nicht heraus«
+    /// nicht von »wurde nie ausgesandt« zu unterscheiden.</summary>
+    public int DepotAusgelassen, DepotWartetAnTuer;
+
+    /// <summary>
+    /// <b>DER AUSLASS DES DEPOTS</b> — der Gebaeudetakt <c>0x43E19E…0x43E2D1</c>
+    /// (F <c>0x43D1AD</c>), gelesen in <c>berichte/depotfenster-fable.md</c> §4.3.
+    ///
+    /// <code>
+    ///   je Depot einmal je Takt:
+    ///   fuer i in 0..4:                          ; ⚠ nur FUENF Plaetze (cmp ecx,5 @0x43E263)
+    ///       Einheit mit UKOL 0x33?
+    ///         Fahrzeug: nur wenn Tuer 0 frei ist
+    ///         Infanterie: immer
+    ///       -> 0x43C6F0 ausdocken, EINE je Takt
+    /// </code>
+    ///
+    /// <para>⚠ Die Eigenheit »nur Plaetze 0…4« ist WOERTLICH uebernommen: eine
+    /// Einheit auf Platz 5 kommt erst heraus, wenn vor ihr eine gegangen ist
+    /// und die Liste nachgerueckt hat. Das steht in beiden EXE so.</para>
+    ///
+    /// <para>⚠ Das Herauslassen selbst ist unser bestehender Weg
+    /// <see cref="AusfahrenAusGarage"/> (Tuerzelle, Tank und Munition voll,
+    /// Austrittsschritt). Scheitert der an einer belegten Nachbarschaft, bleibt
+    /// die Einheit einfach ausgesandt und versucht es im naechsten Takt — das
+    /// Original sagt nie ab.</para>
+    /// </summary>
+    private void DepotAuslass()
+    {
+        if (AussendenSofort || _nav == null) return;
+        for (int bi = 0; bi < _entities.Count; bi++)
+        {
+            var b = _entities[bi];
+            if (b.BType != 5 || !b.IsBuilding || b.IsProp || b.Dead || b.Garage.Count == 0) continue;
+            int grenze = System.Math.Min(b.Garage.Count, 5);
+            for (int k = 0; k < grenze; k++)
+            {
+                var u = b.Garage[k];
+                if (u.Ukol != UkolVerlaesst) continue;
+                bool fuss = u.Infantry >= 0;
+                int tx = b.Col + b.DoorCol, ty = b.Row + b.DoorRow;
+                if (!fuss && !_nav.IsFree(tx, ty, Simulation.NavGrid.MoveClass.Vehicle))
+                {
+                    DepotWartetAnTuer++;
+                    continue;
+                }
+                if (AusfahrenAusGarage(b, k)) { DepotAusgelassen++; break; }
+                DepotWartetAnTuer++;
             }
         }
     }
@@ -724,5 +790,61 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Einen Simulationstakt von Hand — nur fuer Pruefstaende.</summary>
     public void SimTickFuerProbe() => SimTick(1f / SimHz);
+
+    // ---- fuer --depotfenster-check ---------------------------------------------
+
+    /// <summary>Das erste eigene, fertig gebaute Depot (Art 5), oder −1.</summary>
+    public int DepotIndex()
+    {
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var b = _entities[i];
+            if (b.IsBuilding && !b.IsProp && !b.Dead && b.BType == 5
+                && b.Built != 0 && b.Owner == ViewPlayer) return i;
+        }
+        return -1;
+    }
+
+    /// <summary>⚠ EINGRIFF: stellt <paramref name="n"/> eigene Landfahrzeuge
+    /// ueber die echte <see cref="Einfahren"/> ins Depot — nicht per Liste, damit
+    /// Belegung, Auswahl und UKOL denselben Weg gehen wie im Spiel.</summary>
+    public int DepotProbeBefuellen(int depot, int n)
+    {
+        var b = _entities[depot];
+        int drin = 0;
+        for (int i = 0; i < _entities.Count && drin < n; i++)
+        {
+            var u = _entities[i];
+            if (u.IsBuilding || u.IsProp || u.Dead || u.Owner != b.Owner || !u.Mobile) continue;
+            if (u.Infantry >= 0 || u.Move != Simulation.NavGrid.MoveClass.Vehicle) continue;
+            if (Untergestellt(u) || u.InGebaeude != null) continue;
+            int vor = b.Garage.Count;
+            Einfahren(b, i, u);
+            if (b.Garage.Count > vor) drin++;
+        }
+        return drin;
+    }
+
+    /// <summary>Wieviele im Depot stehen und wieviele davon ausgesandt sind.</summary>
+    public (int Drin, int Ausgesandt) DepotZustand(int depot)
+    {
+        var b = _entities[depot];
+        int aus = 0;
+        foreach (var u in b.Garage) if (u.Ukol == UkolVerlaesst) aus++;
+        return (b.Garage.Count, aus);
+    }
+
+    /// <summary>⚠ EINGRIFF fuer das Nullmodell: die Tuerzelle des Depots mit dem
+    /// Depot selbst als Belegung sperren bzw. wieder freigeben.</summary>
+    public string DepotTuerSperren(int depot, bool sperren)
+    {
+        var b = _entities[depot];
+        int tx = b.Col + b.DoorCol, ty = b.Row + b.DoorRow;
+        if (_nav == null) return "kein Gitter";
+        if (sperren) _nav.SetOccupant(tx, ty, depot, false);
+        else _nav.ClearOccupant(tx, ty, depot);
+        return $"Tuer ({tx},{ty}) frei fuer Fahrzeuge: "
+             + _nav.IsFree(tx, ty, Simulation.NavGrid.MoveClass.Vehicle);
+    }
 
 }

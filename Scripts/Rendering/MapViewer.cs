@@ -878,6 +878,9 @@ public partial class MapViewer : Node2D
             return;
         }
         if (_minenfensterCheck) { _ = MinenfensterLauf(); return; }
+        if (_depotfensterCheck) { _ = DepotfensterLauf(); return; }
+        if (_fabrikfensterCheck) { _ = FabrikfensterLauf(); return; }
+        if (_einheiteninfoCheck) { _ = EinheiteninfoLauf(); return; }
         if (_hauptmenueCheck) { _ = HauptmenueLauf(); return; }
         if (_gebaeudelisteCheck) { _ = GebaeudelisteLauf(); return; }
         if (_einheitenlisteCheck) { _ = EinheitenlisteLauf(); return; }
@@ -1129,6 +1132,32 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_brueckeTrefferCheck)
+        {
+            if (_shotPath.Length > 0) { _ = BrueckeBildLauf(); return; }
+            GD.Print(_entities.BrueckeTrefferCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_stapellaufCheck)
+        {
+            GD.Print(_entities.StapellaufCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_radarmastCheck && _shotPath.Length > 0) { _ = RadarMastBildLauf(); return; }
+        if (_radarmastCheck)
+        {
+            GD.Print(_entities.RadarMastCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_schiffsklangCheck)
+        {
+            GD.Print(_entities.SchiffsklangCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_shipCheck)
         {
             GD.Print(_entities.ShipCheckLine());
@@ -1285,6 +1314,49 @@ public partial class MapViewer : Node2D
     /// <summary><c>--minenfenster-check</c> — siehe
     /// <see cref="MinenfensterCheck"/>.</summary>
     private bool _minenfensterCheck;
+
+    /// <summary><c>--depotfenster-check</c> — siehe <see cref="DepotfensterLauf"/>.</summary>
+    private bool _depotfensterCheck;
+
+    /// <summary><c>--fabrikfenster-check</c> — siehe <see cref="FabrikfensterLauf"/>.</summary>
+    private bool _fabrikfensterCheck;
+
+    /// <summary><c>--einheiteninfo-check</c> — siehe <see cref="EinheiteninfoLauf"/>.</summary>
+    private bool _einheiteninfoCheck;
+
+    /// <summary><c>--schiffsklang-check</c> — siehe MapEntityLayer.SchiffsklangCheck.</summary>
+    private bool _schiffsklangCheck;
+
+    /// <summary><c>--radarmast-check</c> — siehe MapEntityLayer.RadarMastCheck.</summary>
+    private bool _radarmastCheck;
+
+    /// <summary><c>--stapellauf-check</c> — siehe MapEntityLayer.StapellaufCheck.</summary>
+    private bool _stapellaufCheck;
+
+    /// <summary><c>--bruecke-treffer-check</c> — siehe MapEntityLayer.BrueckeTrefferCheck.</summary>
+    private bool _brueckeTrefferCheck;
+
+    /// <summary>Drei Bilder: heil, Stufe 1, eingestürzt (<c>--shot=…</c> wird zu
+    /// <c>…_0/_1/_2.png</c>).</summary>
+    private async System.Threading.Tasks.Task BrueckeBildLauf()
+    {
+        for (int i = 0; i < 5; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var p = _entities.ErsteKartenbrueckeMitte();
+        if (p != null) _camera.Position = p.Value;
+        async System.Threading.Tasks.Task Bild(int n)
+        {
+            for (int i = 0; i < 4; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            string pfad = _shotPath.Replace(".png", $"_{n}.png");
+            GetViewport().GetTexture().GetImage().SavePng(pfad);
+            GD.Print($"bruecke-bild: {pfad}");
+        }
+        await Bild(0);
+        GD.Print(_entities.BrueckeTrefferCheck(nurBisStufe1: true));
+        await Bild(1);
+        GD.Print(_entities.BrueckeTrefferCheckRest());
+        await Bild(2);
+        GetTree().Quit(0);
+    }
 
     /// <summary><c>--hauptmenue-check</c> — siehe
     /// <see cref="HauptmenueLauf"/>.</summary>
@@ -1489,6 +1561,235 @@ public partial class MapViewer : Node2D
             bild.SavePng(_shotPath);
             GD.Print($"minenfenster-check: Bild nach {_shotPath}");
         }
+        GetTree().Quit(0);
+    }
+
+    /// <summary>
+    /// <c>--depotfenster-check</c> (13.09.2026) — <b>das Depotfenster
+    /// (Fensterart 23) vom Klick bis zur Einheit vor der Tür.</b>
+    ///
+    /// <para>Gemessen, nicht angesehen: zwei eigene Fahrzeuge fahren über die
+    /// echte Einfahrt hinein; das Fenster geht über den Klickweg auf; ein
+    /// ECHTER Mausklick (PushInput, mit dem Leinwandfaktor) markiert Zeile 0;
+    /// ein Klick auf eine LEERE Zeile darf nichts markieren (Nullmodell); ein
+    /// Klick auf »Aussenden« bei GESPERRTER Tür lässt die Einheit »(Ausgesandt)«
+    /// warten (Nullmodell zum Auslass); nach dem Freigeben kommt sie heraus;
+    /// ein Rechtsklick schliesst das Fenster.</para>
+    /// </summary>
+    /// <summary><c>--radarmast-check --shot=…</c>: einen Mast setzen, die Kamera
+    /// darauf, und ein Bild — die Zeile des Prüfstands sagt, DASS gezeichnet
+    /// wird, das Bild, WIE.</summary>
+    private async System.Threading.Tasks.Task RadarMastBildLauf()
+    {
+        for (int i = 0; i < 5; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var p = _entities.RadarMastProbeSetzen();
+        if (p != null) _camera.Position = p.Value;
+        for (int i = 0; i < 6; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GetViewport().GetTexture().GetImage().SavePng(_shotPath);
+        GD.Print($"radarmast-bild: {(p == null ? "KEIN MAST" : "Bild nach " + _shotPath)}, "
+               + $"{_entities.RadarMastsGezeichnet} Mastbilder gezeichnet");
+        GetTree().Quit(0);
+    }
+
+    /// <summary>
+    /// <c>--fabrikfenster-check</c> (13.09.2026) — <b>das Fabrikfenster
+    /// (Fensterart 8) mit echten Klicks.</b> Öffnet über den Klickweg, misst
+    /// Mass und dass KEIN Basisfenster mitkommt, und drückt die Knöpfe wie ein
+    /// Spieler: Anhalten/Start (511 schaltet 1⇄0), Lagerausbau ohne Geld
+    /// (Meldung, kein Befehl), mit Geld (Zustand 3, Preis ab), noch einmal
+    /// (still), Anhalten mitten im Ausbau (wörtlich: Auftrag verloren),
+    /// Reparieren, Rechtsklick. Nullmodell: <c>--fabrikfenster-alt</c>.
+    /// </summary>
+    private async System.Threading.Tasks.Task FabrikfensterLauf()
+    {
+        for (int i = 0; i < 5; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var sb = new System.Text.StringBuilder("fabrikfenster-check\n");
+        bool ok = true;
+        void Soll(bool b, string was) { sb.Append($"  {(b ? "ok  " : "⚠ FALSCH")} {was}\n"); ok &= b; }
+        void Ende() { sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN"); GD.Print(sb.ToString()); GetTree().Quit(0); }
+
+        int idx = _entities.EigeneFabrik();
+        var f = _gebaeudeFenster;
+        if (idx < 0 || f == null) { ok = false; sb.Append("  keine eigene Fabrik auf dieser Karte\n"); Ende(); return; }
+        if (MapEntityLayer.FabrikfensterAlt) sb.Append("  ⚠ NULLMODELL --fabrikfenster-alt: hier MUSS das Originalfenster fehlen\n");
+
+        UI.WindowManager.Mausquelle = () => new Vector2(500, 300);
+        _entities.PostenAnwaehlenWieKlick(idx);
+        for (int t = 0; t <= UI.WindowManager.BilderAuf + 1; t++) UI.WindowManager.Takt();
+        for (int i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var fv = f.FabrikAnsicht;
+        sb.Append($"  {f.WatchLine()}\n");
+        var soll = new Vector2(UI.FabrikView.WTiles * UI.WindowChrome.Cell * UI.FabrikView.Scale,
+                               UI.FabrikView.HTiles * UI.WindowChrome.Cell * UI.FabrikView.Scale);
+        Soll(f.Visible && f.ZeigtOriginalFabrik, "Fenster offen, mit den Kacheln des Originals");
+        Soll(f.Size == soll, $"Mass {f.Size} = {soll} (260x240 aus 0x457EC0, Massstab 2)");
+        Soll(!_entities.BuildPanelWanted, "kein Basisfenster-Nachbau dazu");
+        if (fv == null || !f.ZeigtOriginalFabrik) { Ende(); return; }
+        if (_shotPath.Length > 0)
+        {
+            GetViewport().GetTexture().GetImage().SavePng(_shotPath);
+            sb.Append($"  Bild nach {_shotPath}\n");
+        }
+
+        var leinwand = GetViewport().GetVisibleRect().Size;
+        var fenstermass = (Vector2)GetWindow().Size;
+        var faktor = new Vector2(fenstermass.X / leinwand.X, fenstermass.Y / leinwand.Y);
+        async System.Threading.Tasks.Task Klick(int knopf, MouseButton taste = MouseButton.Left)
+        {
+            var r = fv.KnopfAufDemSchirm(knopf);
+            var p = (r.Position + r.Size / 2f) * faktor;
+            GetViewport().PushInput(new InputEventMouseMotion { Position = p, GlobalPosition = p });
+            GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = taste, Pressed = true, Position = p, GlobalPosition = p });
+            GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = taste, Pressed = false, Position = p, GlobalPosition = p });
+            for (int i = 0; i < 2; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            for (int t = 0; t < 3; t++) _entities.SimTickFuerProbe();       // der Ring wirkt nach 2 Takten
+            f.Refresh();
+        }
+
+        _entities.FabrikProbeSetzen(idx, 100000, MapEntityLayer.StAktiv);
+        sb.Append("  ⚠ EINGRIFF: Konto 100000, Zustand aktiv\n");
+        await Klick(2);
+        Soll(fv.LetzterTreffer == 2, $"Klick kam an (Treffer {fv.LetzterTreffer})");
+        Soll(_entities.FabrikZustand(idx).Zustand == 1, $"Anhalten: Zustand {_entities.FabrikZustand(idx).Zustand} (erwartet 1), Status »{fv.StatusZeile}«");
+        await Klick(2);
+        Soll(_entities.FabrikZustand(idx).Zustand == 0, $"Start: Zustand {_entities.FabrikZustand(idx).Zustand} (erwartet 0)");
+
+        var z0 = _entities.FabrikZustand(idx);
+        int kosten = f.FabrikAnsicht != null ? z0.Geld : 0;
+        _entities.FabrikProbeSetzen(idx, 0, 0);
+        int bef = _entities.FabrikKnopfBefehle, meld = _entities.FabrikKnopfMeldungen;
+        await Klick(1);
+        Soll(_entities.FabrikKnopfBefehle == bef && _entities.FabrikKnopfMeldungen == meld + 1
+             && _entities.FabrikZustand(idx).Zustand == 0,
+             "Lagerausbau ohne Geld: Meldung, KEIN Befehl, Zustand bleibt 0");
+
+        _entities.FabrikProbeSetzen(idx, 100000, 0);
+        await Klick(1);
+        var z1 = _entities.FabrikZustand(idx);
+        Soll(z1.Zustand == 3 && z1.Geld < 100000, $"Lagerausbau mit Geld: Zustand {z1.Zustand}, Konto 100000 -> {z1.Geld}");
+        int still = _entities.FabrikKnopfStill;
+        await Klick(1);
+        Soll(_entities.FabrikKnopfStill == still + 1 && _entities.FabrikZustand(idx).Geld == z1.Geld,
+             "zweiter Lagerausbau-Klick waehrend Zustand 3: still, kein Geld");
+
+        for (int t = 0; t < 30; t++) _entities.SimTickFuerProbe();
+        int kap = _entities.FabrikZustand(idx).Kap;
+        await Klick(2);
+        Soll(_entities.FabrikZustand(idx).Zustand == 1, "Anhalten mitten im Ausbau: Zustand 1 (woertlich)");
+        await Klick(2);
+        for (int t = 0; t < 600; t++) _entities.SimTickFuerProbe();
+        var z2 = _entities.FabrikZustand(idx);
+        Soll(z2.Zustand == 0 && z2.Kap == kap, $"Start danach: Zustand {z2.Zustand}, Kapazitaet {kap} -> {z2.Kap} (Ausbau verloren)");
+
+        await Klick(4, MouseButton.Right);
+        for (int t = 0; t <= UI.WindowManager.BilderZu + 1; t++) UI.WindowManager.Takt();
+        Soll(!f.Visible, "Rechtsklick schliesst");
+        _ = kosten;
+        Ende();
+    }
+
+    private async System.Threading.Tasks.Task DepotfensterLauf()
+    {
+        for (int i = 0; i < 5; i++)
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var sb = new System.Text.StringBuilder("depotfenster-check\n");
+        bool ok = true;
+        void Soll(bool b, string was) { sb.Append($"  {(b ? "ok  " : "⚠ FALSCH")} {was}\n"); ok &= b; }
+
+        int idx = _entities.DepotIndex();
+        var f = _gebaeudeFenster;
+        if (idx < 0 || f == null)
+        {
+            GD.Print(sb.Append(idx < 0 ? "  kein eigenes Depot auf dieser Karte — ungeprueft\n"
+                                       : "  kein Gebaeudefenster gebaut\n").Append("  DURCHGEFALLEN"));
+            GetTree().Quit(0);
+            return;
+        }
+        int drin = _entities.DepotProbeBefuellen(idx, 2);
+        sb.Append($"  ⚠ EINGRIFF: {drin} Fahrzeuge ueber die Einfahrt ins Depot gestellt\n");
+
+        UI.WindowManager.Mausquelle = () => new Vector2(400, 300);
+        _entities.PostenAnwaehlenWieKlick(idx);
+        for (int t = 0; t <= UI.WindowManager.BilderAuf + 1; t++) UI.WindowManager.Takt();
+        for (int i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        var dv = f.DepotAnsicht;
+        sb.Append($"  {f.WatchLine()}\n");
+        var soll = new Vector2(UI.DepotView.WTiles * UI.WindowChrome.Cell * UI.DepotView.Scale,
+                               UI.DepotView.HTiles * UI.WindowChrome.Cell * UI.DepotView.Scale);
+        Soll(f.Visible && f.ZeigtOriginalDepot, "Fenster offen, mit den Kacheln des Originals");
+        Soll(f.Size == soll, $"Mass {f.Size} = {soll} (360x260 aus 0x459E7F/0x459E88, Massstab 2)");
+        Soll(dv != null && dv.Zeilen == drin && drin == 2, $"Zeilen {dv?.Zeilen} = {drin} Eingefahrene");
+        if (dv == null) { GD.Print(sb.Append("  DURCHGEFALLEN")); GetTree().Quit(0); return; }
+
+        var leinwand = GetViewport().GetVisibleRect().Size;
+        var fenstermass = (Vector2)GetWindow().Size;
+        var faktor = new Vector2(fenstermass.X / leinwand.X, fenstermass.Y / leinwand.Y);
+        async System.Threading.Tasks.Task Klick(Vector2 punkt, MouseButton knopf = MouseButton.Left)
+        {
+            var p = punkt * faktor;
+            GetViewport().PushInput(new InputEventMouseMotion { Position = p, GlobalPosition = p });
+            GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = knopf, Pressed = true, Position = p, GlobalPosition = p });
+            GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = knopf, Pressed = false, Position = p, GlobalPosition = p });
+            for (int i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+        Vector2 Mitte(Rect2 r) => r.Position + r.Size / 2f;
+
+        int klang = UI.WindowManager.ElementklangGespielt;
+        await Klick(Mitte(dv.FeldAufDemSchirm(2)));
+        Soll(dv.LetzterTreffer == 2, $"Klick auf Zeile 0 kam an (Treffer {dv.LetzterTreffer}, erwartet 2)");
+        Soll(dv.Markiert == 1, $"Zeile 0 markiert ({dv.Markiert})");
+        Soll(dv.InfoblockGezeichnet && dv.Wertezeilen >= 4,
+             $"Infoblock bei genau einer Markierung ({dv.Wertezeilen} Wertezeilen)");
+        Soll(UI.WindowManager.ElementklangGespielt == klang + 1, "Klang 306 einmal");
+
+        if (_shotPath.Length > 0)
+        {
+            var bild = GetViewport().GetTexture().GetImage();
+            bild.SavePng(_shotPath);
+            sb.Append($"  Bild nach {_shotPath}\n");
+        }
+
+        // Nullmodell: der vierte Platz ist leer — dort darf nichts markiert werden.
+        await Klick(Mitte(dv.FeldAufDemSchirm(2 + 3)));
+        Soll(dv.Markiert == 1 && dv.LetzterTreffer == 0,
+             $"Klick auf leere Zeile markiert nichts (Treffer {dv.LetzterTreffer}, markiert {dv.Markiert})");
+
+        sb.Append("  ⚠ EINGRIFF: " + _entities.DepotTuerSperren(idx, true) + "\n");
+        int befehle = _entities.DepotAussendenBefehle;
+        await Klick(Mitte(dv.FeldAufDemSchirm(1)));
+        var z1 = _entities.DepotZustand(idx);
+        Soll(_entities.DepotAussendenBefehle == befehle + 1, "»Aussenden« schickt genau einen Befehl 504");
+        if (MapEntityLayer.AussendenSofort)
+            sb.Append("  ⚠ NULLMODELL --aussenden-sofort: hier MUSS die Absage stehen und keiner warten\n");
+        Soll(MapEntityLayer.AussendenSofort ? z1.Ausgesandt == 0 : z1 == (2, 1),
+             $"Einheit bleibt drin und wartet (drin {z1.Drin}, ausgesandt {z1.Ausgesandt})");
+        for (int t = 0; t < 10; t++) _entities.SimTickFuerProbe();
+        var z2 = _entities.DepotZustand(idx);
+        Soll(z2.Drin == 2, $"bei gesperrter Tuer nach 10 Takten noch drin ({z2.Drin})");
+
+        sb.Append("  " + _entities.DepotTuerSperren(idx, false) + "\n");
+        for (int t = 0; t < 3; t++) _entities.SimTickFuerProbe();
+        var z3 = _entities.DepotZustand(idx);
+        Soll(z3 == (1, 0), $"Tuer frei: sie kommt heraus (drin {z3.Drin}, ausgesandt {z3.Ausgesandt})");
+
+        f.Refresh();
+        for (int i = 0; i < 2; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Soll(dv.Zeilen == 1 && dv.Markiert == 0, $"nach dem Klick: 1 Zeile, Markierung weg ({dv.Zeilen}/{dv.Markiert})");
+
+        int rechts = dv.Rechtsklicks;
+        await Klick(Mitte(dv.FeldAufDemSchirm(2)), MouseButton.Right);
+        // ⚠ Das Schliessen ist eine Blende über BilderZu Bilder (am SimTick) —
+        // der erste Lauf sah nach 3 Bildern nach, mitten in der Blende, und
+        // meldete »bleibt offen«. Die Blende hier von Hand zu Ende drehen.
+        for (int t = 0; t <= UI.WindowManager.BilderZu + 1; t++) UI.WindowManager.Takt();
+        // ⚠ Die ANKUNFT mitmessen (Messfalle 1 vom 09.09.): kam der Rechtsklick
+        // gar nicht an, oder kam er an und schloss nicht?
+        sb.Append($"  Rechtsklick angekommen: {dv.Rechtsklicks - rechts}, Fenster sichtbar {f.Visible}\n");
+        Soll(dv.Rechtsklicks == rechts + 1 && !f.Visible, "Rechtsklick ins Fenster schliesst es");
+
+        sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN");
+        GD.Print(sb.ToString());
         GetTree().Quit(0);
     }
 
@@ -2888,6 +3189,13 @@ public partial class MapViewer : Node2D
             else if (a == "--tuerlos-alt") MapEntityLayer.TuerlosAlt = true;
             else if (a == "--neutralklick-alt") MapEntityLayer.NeutralklickAlt = true;
             else if (a == "--minenfenster-alt") UI.BuildingWindow.MinenfensterAlt = true;
+            else if (a == "--depotfenster-aus") MapEntityLayer.DepotfensterAus = true;
+            else if (a == "--aussenden-sofort") MapEntityLayer.AussendenSofort = true;
+            else if (a == "--depotfenster-check") _depotfensterCheck = true;
+            else if (a == "--fabrikfenster-check") _fabrikfensterCheck = true;
+            else if (a == "--einheiteninfo-check") _einheiteninfoCheck = true;
+            else if (a == "--einheiteninfo-alt") MapEntityLayer.EinheiteninfoAlt = true;
+            else if (a == "--fabrikfenster-alt") MapEntityLayer.FabrikfensterAlt = true;
             else if (a == "--minenfenster-check") _minenfensterCheck = true;
             else if (a == "--hauptmenue-alt") UI.MainMenuWindow.Alt = true;
             else if (a == "--hauptmenue-check") _hauptmenueCheck = true;
@@ -3268,6 +3576,13 @@ public partial class MapViewer : Node2D
             // --ship-check: was ein Schiff belegt und was es belegen muesste.
             // Siehe MapEntityLayer.ShipCheckLine (Simulation/ShipCheck.cs).
             else if (a == "--ship-check") _shipCheck = true;
+            else if (a == "--schiffsklang-check") _schiffsklangCheck = true;
+            else if (a == "--radarmast-check") _radarmastCheck = true;
+            else if (a == "--stapellauf-check") _stapellaufCheck = true;
+            else if (a == "--bruecke-treffer-check") _brueckeTrefferCheck = true;
+            else if (a == "--bauwerke-unzerstoerbar") MapEntityLayer.BauwerkeUnzerstoerbar = true;
+            else if (a == "--auslauf-alt") MapEntityLayer.AuslaufAlt = true;
+            else if (a == "--radarmast-ewig") MapEntityLayer.RadarMastEwig = true;
             // ⚠ --ship-check=<sek>: MIT Zahl laeuft das Spiel erst so lange und
             // prueft DANN. Ohne Zahl prueft es beim Laden und beendet — das
             // sieht die Aufstellung der Karte, aber nie, was nach BEWEGUNG aus
@@ -5566,6 +5881,12 @@ public partial class MapViewer : Node2D
         // ⭐ 12.09.2026, bug-211: derselbe Ruf, den unser Baufenster und die
         // Taste Y benutzen — das Fenster bekommt keinen eigenen Weg.
         _gebaeudeFenster.OnFlugzeugStart = () => _entities.LaunchAircraft(_entities.ViewPlayer);
+        // ⭐ 13.09.2026: »Aussenden« im Depotfenster (Befehl 504, @0x44C083).
+        _gebaeudeFenster.OnDepotAussenden = _entities.DepotAussenden;
+        // ⭐ 13.09.2026: die vier Knöpfe des Fabrikfensters (Klickarm 0x44ACF1),
+        // und »Anhalten« der Mine — 517 ist derselbe Umschalter wie 511.
+        _gebaeudeFenster.OnFabrikKnopf = _entities.FabrikKnopf;
+        _gebaeudeFenster.OnStop = _entities.BuildingWindowStart;
         // ⚠ "Anhalten" ist NICHT angeschlossen, und das ist gelesen, nicht
         // vergessen: die Zustandstafeln bilden vier Auftraege ab (aktiv,
         // reparieren, Lagerausbau, Produktionserweiterung). Einen Befehl, der
@@ -5665,6 +5986,9 @@ public partial class MapViewer : Node2D
         _unitMenu = new UI.UnitMenuWindow { Visible = false };
         layer.AddChild(_unitMenu);
         _unitMenu.OnClose = () => _unitMenu!.Visible = false;
+        // ⭐ 13.09.2026 — die Einheiten-Info (Fensterart 19) haengt am Menue.
+        _fensterEbene = layer;
+        _entities.OnEinheitenInfo = griff => EinheitenInfoOeffnen(griff);
         UI.UnitMenuWindow.Wort = MapEntityLayer.OrderWord;
         _unitMenu.OnCode = code =>
         {
@@ -5747,6 +6071,96 @@ public partial class MapViewer : Node2D
     /// bekommt <c>mx, my</c>. ⚠ Der Oeffner des Originals ist der DOPPELKLICK
     /// (WM_LBUTTONDBLCLK 0x203 -> 0x4141B4) bzw. die Leertaste; die rechte
     /// Taste scrollt dort die Karte (0x414328).</summary>
+    private Node? _fensterEbene;
+    private readonly System.Collections.Generic.Dictionary<int, UI.EinheitenInfoView> _infoFenster = new();
+
+    /// <summary>
+    /// Öffner <c>0x4436E0</c>: je Einheit EIN Fenster der Art 19 (Wache Art +
+    /// Griff), angelegt an Maus + 3, gefüllt mit dem Stand vom Öffnen.
+    /// </summary>
+    public bool EinheitenInfoOeffnen(int griff)
+    {
+        if (griff < 0 || _fensterEbene == null || !UI.EinheitenInfoView.Usable) return false;
+        if (UI.WindowManager.Offen(UI.WindowManager.ArtEinheitenInfo, griff) != null) return false;
+        var info = _entities.EinheitenInfo(griff);
+        if (info == null) return false;
+        if (!_infoFenster.TryGetValue(griff, out var v) || !IsInstanceValid(v))
+        {
+            v = new UI.EinheitenInfoView { Griff = griff, Visible = false };
+            _fensterEbene.AddChild(v);
+            int g = griff;
+            v.OnClose = () => UI.WindowManager.Schliessen(UI.WindowManager.ArtEinheitenInfo, g);
+            _infoFenster[griff] = v;
+        }
+        v.Zeige(info.Value.Rang, info.Value.Name, info.Value.Zeilen, info.Value.Hoehe);
+        var f = UI.WindowManager.Oeffnen(UI.WindowManager.ArtEinheitenInfo, v, griff);
+        v.Visible = true;
+        UI.WindowManager.AnDieMaus(f, UI.WindowManager.MausVersatz);
+        return f != null;
+    }
+
+    /// <summary>
+    /// <c>--einheiteninfo-check</c> (13.09.2026): wählt eine eigene bewaffnete
+    /// Einheit, geht den MENÜWEG (Code 6), und misst Fenster, Mass, Zeilen,
+    /// die Doppelöffnungswache und den Rechtsklick. Nullmodell
+    /// <c>--einheiteninfo-alt</c>.
+    /// </summary>
+    private async System.Threading.Tasks.Task EinheiteninfoLauf()
+    {
+        for (int i = 0; i < 5; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var sb = new System.Text.StringBuilder("einheiteninfo-check\n");
+        bool ok = true;
+        void Soll(bool b, string was) { sb.Append($"  {(b ? "ok  " : "⚠ FALSCH")} {was}\n"); ok &= b; }
+        if (MapEntityLayer.EinheiteninfoAlt) sb.Append("  ⚠ NULLMODELL --einheiteninfo-alt: hier MUSS das Fenster fehlen\n");
+        int idx = _entities.EigeneBewaffneteEinheit();
+        if (idx < 0) { GD.Print(sb.Append("  keine eigene bewaffnete Einheit — DURCHGEFALLEN")); GetTree().Quit(0); return; }
+        _entities.PostenAnwaehlenWieKlick(idx);
+        UI.WindowManager.Mausquelle = () => new Vector2(300, 200);
+        string sagt = _entities.MenueAktion(6);
+        for (int t = 0; t <= UI.WindowManager.BilderAuf + 1; t++) UI.WindowManager.Takt();
+        for (int i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        _infoFenster.TryGetValue(idx, out var v);
+        var info = _entities.EinheitenInfo(idx);
+        Soll(v != null && v.Visible, $"Fenster Art 19 offen ueber Menue Code 6 (Rueckmeldung »{sagt}«)");
+        if (v != null && info != null)
+        {
+            sb.Append($"  Titel »{v.Titel}«, {v.Zeilen.Count} Zeilen: {string.Join(" | ", v.Zeilen)}\n");
+            Soll(v.Size.X == 280 && v.Size.Y == info.Value.Hoehe * 2,
+                 $"Mass {v.Size} = 140 x {info.Value.Hoehe} (Hoehe aus 0x4750BD), Massstab 2");
+            Soll(v.Zeilen.Count > 0 && v.Zeilen[0].StartsWith("Energie : "), "erste Zeile »Energie : a/b«");
+            Soll(System.Linq.Enumerable.Any(v.Zeilen, z => z.StartsWith("Sprit ")) && System.Linq.Enumerable.Any(v.Zeilen, z => z.StartsWith("Munition ")),
+                 "Fahrzeug mit Waffe: Munition und Sprit");
+            var lage = v.Position;
+            Soll(Mathf.Abs(lage.X - 303) < 1 && Mathf.Abs(lage.Y - 203) < 1 || lage != Vector2.Zero,
+                 $"Lage {lage} (Maus 300,200 + 3, in den Schirm gezwaengt)");
+            _entities.MenueAktion(6);
+            int offen = 0;
+            foreach (var w in UI.WindowManager.Liste) if (w.Art == UI.WindowManager.ArtEinheitenInfo) offen++;
+            Soll(offen == 1, $"zweiter Menueklick auf dieselbe Einheit: {offen} Fenster (Wache)");
+
+            var r = v.GetGlobalRect();
+            var leinwand = GetViewport().GetVisibleRect().Size;
+            var faktor = (Vector2)GetWindow().Size / leinwand;
+            var p = (r.Position + r.Size / 2f) * faktor;
+            GetViewport().PushInput(new InputEventMouseMotion { Position = p, GlobalPosition = p });
+            GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Right, Pressed = true, Position = p, GlobalPosition = p });
+            GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Right, Pressed = false, Position = p, GlobalPosition = p });
+            for (int i = 0; i < 2; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            for (int t = 0; t <= UI.WindowManager.BilderZu + 1; t++) UI.WindowManager.Takt();
+            Soll(v.Rechtsklicks == 1 && !v.Visible, $"Rechtsklick kam an ({v.Rechtsklicks}) und schliesst");
+            Soll(EinheitenInfoOeffnen(idx), "danach wieder zu oeffnen");
+        }
+        if (_shotPath.Length > 0 && v != null)
+        {
+            for (int t = 0; t <= UI.WindowManager.BilderAuf + 1; t++) UI.WindowManager.Takt();
+            for (int i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            GetViewport().GetTexture().GetImage().SavePng(_shotPath);
+            sb.Append($"  Bild nach {_shotPath}\n");
+        }
+        GD.Print(sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN"));
+        GetTree().Quit(0);
+    }
+
     private void OeffneEinheitenmenue(Vector2 schirmPos)
     {
         if (_unitMenu == null || _entities == null) return;

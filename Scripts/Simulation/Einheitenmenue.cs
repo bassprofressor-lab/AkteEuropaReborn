@@ -280,7 +280,12 @@ public partial class MapEntityLayer : Node2D
                 PlaceRadarFromPanel();
                 return BuildOrderNote.Length > 0 ? BuildOrderNote : "";
             case CodeInfo:
-                return "Die Werte stehen im Bedienblock links unten.";
+                // ⭐ 13.09.2026 — Menüarm 0x44884E: Menü zu, Öffner 0x4436E0 für
+                // die angewählte Einheit (Fensterart 19, UI/EinheitenInfoView.cs).
+                if (EinheiteninfoAlt || OnEinheitenInfo == null)
+                    return "Die Werte stehen im Bedienblock links unten.";
+                OnEinheitenInfo(MenueEinheit());
+                return "";
 
             // ---- die ZEIGERMERKER, siehe Simulation/Zeigermerker.cs ------
             // ⭐ 12.09.2026: das Fussvolk hat eigene Zeilen fuer dieselben drei

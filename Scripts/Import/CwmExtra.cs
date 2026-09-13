@@ -1153,6 +1153,13 @@ public static class CwmExtra
     public sealed class Bridge
     {
         public int Slot, Col, Row, Dir, Len, Hp;
+
+        /// <summary>⭐ 13.09.2026 — das 3x5-Kachelfeld <c>+0x03…+0x11</c>, roh.
+        /// Der Stufenzeichner <c>0x4CAE30</c> malt je Zelle
+        /// <c>10000 + Feld[s][p] + 18·Stufe</c>, der Abriss <c>0x4CB0A0</c> nimmt
+        /// den Bildsatz aus <c>Feld[0][0] / 120</c>
+        /// (berichte/brueckenzerstoerung-fable.md §2.3/2.4).</summary>
+        public int[] Feld = new int[15];
     }
 
     public const int BridgeStride = 24, BridgeSlots = 100;
@@ -1167,11 +1174,13 @@ public static class CwmExtra
         {
             int o = i * BridgeStride;
             if (s[o + 0x12] == 0) continue;
-            list.Add(new Bridge
+            var br = new Bridge
             {
                 Slot = i, Col = s[o], Row = s[o + 1], Dir = s[o + 2],
                 Len = s[o + 0x13], Hp = BitConverter.ToUInt16(s, o + 0x16),
-            });
+            };
+            for (int f = 0; f < 15; f++) br.Feld[f] = s[o + 3 + f];
+            list.Add(br);
         }
         return list;
     }

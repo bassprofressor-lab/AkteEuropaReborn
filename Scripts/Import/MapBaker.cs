@@ -606,6 +606,9 @@ public sealed class MapBaker
     /// waehrend des Spiels gebaute Mole ueberhaupt Pixel hat.</summary>
     public const int RampenKachelBasis = 10723;
 
+    /// <summary>24 Stufenbilder + 8 Trümmer (10723…10754).</summary>
+    public const int RampenKachelZahl = 32;
+
     /// <summary>Die erste Kachel des HOLZSTEGS, den der Pionier baut — Bildsatz
     /// 1 der Brueckenformel <c>10000 + 120·Bildsatz + 54·Variante + 18·Stufe +
     /// Lage</c> (Zeichner <c>0x4CAE30</c>, Bildsatz als fuenftes Argument von
@@ -840,7 +843,11 @@ public sealed class MapBaker
         // Streifens tragen ihren CODE, und der Zeichner sucht danach. Ob eine
         // Karte selbst Rampen hat, ist dabei gleichgueltig — gebaut werden kann
         // auf jeder.
-        for (int k = 0; k < 12; k++) Streifenplatz(RampenKachelBasis + k);
+        // ⭐ 13.09.2026 — ALLE 32: drei Schadensstufen × 8 (10723…10746) und die
+        // acht Truemmer 10747…10754 (0x4CBB80 / 0x4CBAB0, brueckenzerstoerung-
+        // fable.md §2.4). Vorher lagen nur zwoelf hier, und Stufe 2 und die
+        // Truemmer hatten keine Pixel.
+        for (int k = 0; k < RampenKachelZahl; k++) Streifenplatz(RampenKachelBasis + k);
 
         // ⭐⭐ 13.09.2026 — UND DIE KACHELN DER BRUECKE (bug-245). Dasselbe
         // Problem wie bei der Mole: eine Bruecke, die der Pionier waehrend des
@@ -858,6 +865,13 @@ public sealed class MapBaker
         // Formel. Wir legen das ganze Band des Bildsatzes 1 ab, damit auch eine
         // angeschlagene Bruecke ihr Bild hat.
         for (int k = 0; k < BrueckenKachelZahl; k++) Streifenplatz(BrueckenKachelBasis + k);
+        // ⭐ 13.09.2026 — UND BILDSATZ 0 (10000…10119, Stahl/Stein der Karten)
+        // samt Wasserkacheln 0…7. Die Kartenbruecken stehen zwar im gebackenen
+        // Boden, aber ihre SCHADENSSTUFEN (+18/+36), ihre TRUEMMER (10108…10119)
+        // und das Wasser nach dem Abriss (0x4CB36E: |rand| & 7, bzw. rand%6+1)
+        // hat das Kartenbild nicht.
+        for (int k = 0; k < BrueckenKachelZahl; k++) Streifenplatz(BrueckenKachelBasis - 120 + k);
+        for (int k = 0; k < 8; k++) Streifenplatz(k);
 
         // passes A and B — backdrop, then the cell's own detail
         for (int r = 0; r < h; r++)

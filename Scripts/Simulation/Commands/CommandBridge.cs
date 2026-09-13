@@ -715,7 +715,13 @@ public partial class MapEntityLayer
 
         e.RadarCharges--;                                  // @0x4221AF
         int owner = e.Owner is >= 0 and <= 7 ? e.Owner : 0;
-        if (!PlaceRadarMast(e.Col, e.Row, owner))
+        bool gesetzt = PlaceRadarMast(e.Col, e.Row, owner);
+        // ⭐ 13.09.2026 — Klang 49 an der Einheit, @0x4221DE (F @0x42139E).
+        // ⚠ Er steht HINTER dem Setzen und fragt dessen Ergebnis nicht: das
+        // Original spielt ihn auch, wenn die Zelle abgelehnt hat.
+        RadarMastKlaenge++;
+        Audio.GameSounds.PlayAt(RadarMastKlang, e.Col, e.Row);
+        if (!gesetzt)
         {
             RadarMastsRefused++;
             if (RadarNote.Length == 0) RadarNote = "die Zelle nimmt keinen Mast";

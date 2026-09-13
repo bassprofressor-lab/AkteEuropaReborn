@@ -114,6 +114,12 @@ public partial class MapEntityLayer
         public int Bild;
         /// <summary><c>+3</c>: TREFFERPUNKTE, 200 — kein Bauzähler.</summary>
         public int Tp = 200;
+
+        /// <summary>⭐ 13.09.2026 — Platz in der gemeinsamen Tafel (sec21, 50):
+        /// <c>sec20 = 200 + Slot</c>; <see cref="Karte"/> = aus der Kartendatei
+        /// (steht heil im gebackenen Bild).</summary>
+        public int Slot;
+        public bool Karte;
     }
 
     /// <summary>sec21 zur Laufzeit — höchstens 50, wie im Original.</summary>
@@ -292,7 +298,7 @@ public partial class MapEntityLayer
     {
         int idx = GewaehlterPionier();
         if (idx < 0) return "kein Pionier gewaehlt.";
-        if (_moleSaetze.Count == 0)
+        if (_moleSaetze.Count == 0 && _stege.Count == 0)
             return "es gibt keine Mole und keine Bruecke zum Ausbessern.";
         PlacementMode = OrderAusbessern;
         PlacementUnit = idx;
@@ -330,9 +336,9 @@ public partial class MapEntityLayer
             MoleVerworfen++;
             return false;
         }
-        if (order == OrderAusbessern && RampeAn(col, row) == null)
+        if (order == OrderAusbessern && RampeAn(col, row) == null && StegAn(col, row) == null)
         {
-            BuildOrderNote = "dort steht keine Mole.";
+            BuildOrderNote = "dort steht keine Mole und keine Bruecke.";
             MoleVerworfen++;
             return false;
         }
@@ -462,19 +468,23 @@ public partial class MapEntityLayer
         if (ausbessern)
         {
             if (vorhanden != null) { vorhanden.Tp = 200; MoleAusgebessert++; }
+            // ⭐ 13.09.2026 — und die BRUECKE: +0x16 := 500 (brueckenzerstoerung-
+            // fable.md §2.6), keine anteilige Reparatur.
+            else if (StegAn(col, row) is { } steg) { steg.Tp = BrueckeTp; MoleAusgebessert++; }
             MoleNote = $"Mole ({col},{row}) ausgebessert, Pionier verbraucht";
             Audio.GameSounds.PlayAt(43, col, row);
         }
         else
         {
-            if (_moleSaetze.Count >= RampenPlaetze)
+            int platz = FreierRampenPlatz();
+            if (platz < 0 || _moleSaetze.Count >= RampenPlaetze)
             { MoleNote = "kein freier Rampenplatz (50)"; MoleVerworfen++; return; }
             int d = RampenRichtung(col, row);
             var r = new Rampe
             {
                 Col = col, Row = row,
                 Bild = 2 * Mathf.Max(0, d) + (int)(GD.Randi() & 1),
-                Tp = 200,
+                Tp = 200, Slot = platz,
             };
             _moleSaetze.Add(r);
             // sec6 := 0xFFFE — die Zelle ist ab sofort BEFAHRBAR. Das ist der
@@ -486,7 +496,8 @@ public partial class MapEntityLayer
             // ENTLADEN eines Schiffes (RampeEntladen, >= 200, @0x409383).
             // Ohne diese Zeile waere die neue Mole die einzige Rampe der Karte,
             // auf der kein Schiff abladen darf.
-            _rampen[col * 1024 + row] = 200 + (_moleSaetze.Count - 1);
+            _rampen[col * 1024 + row] = 200 + platz;
+            _bauwerkKachel.Remove(col * 1024 + row);          // Truemmer ueberbaut
             _rampenKachel[col * 1024 + row] = 10723 + r.Bild;
             MoleGebaut++;
             MoleNote = $"Mole ({col},{row}) Richtung {d}, Bild {r.Bild} "
@@ -512,6 +523,7 @@ public partial class MapEntityLayer
     /// wieder rau. ⚠ Das Trümmerbild (10747 + Bild) zeichnen wir nicht.</summary>
     public void RampeTrifft(int col, int row, int schaden)
     {
+        if (!BauwerkeUnzerstoerbar) { BauwerkTreffer(col, row, 0, schaden); return; }
         var r = RampeAn(col, row);
         if (r == null) return;
         r.Tp -= schaden;
@@ -550,6 +562,8 @@ public partial class MapEntityLayer
         MolenGezeichnet = 0;
         foreach (var r in _moleSaetze)
         {
+            // Eine Rampe der Karte steht heil im gebackenen Bild.
+            if (r.Karte && r.Tp >= 200) continue;
             // Die Schadensstufe steckt im Bild: 10723 + Richtung + 8*Stufe.
             int stufe = Mathf.Clamp((200 - r.Tp) / 67, 0, 2);
             if (StreifenKachel(Import.MapBaker.RampenKachelBasis + r.Bild + 8 * stufe)

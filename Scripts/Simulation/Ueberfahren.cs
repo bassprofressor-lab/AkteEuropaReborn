@@ -145,17 +145,24 @@ public partial class MapEntityLayer : Node2D
     {
         if (_nav == null || c < 0 || r < 0 || c >= _nav.Width || r >= _nav.Height) return;
         _sprengLog?.Add((c, r, "Zelle", -1, false));
+        // ⭐ 13.09.2026 — wer auf der Zelle stirbt, beendet Zasah vor dem
+        // Zellzweig (end6/end7); sonst trifft der Treffer auch das Bauwerk.
+        int fahrzeug = _nav.OccupantAt(c, r);
+        var fz = fahrzeug >= 0 && fahrzeug < _entities.Count ? _entities[fahrzeug] : null;
+        bool fzLebte = fz != null && !fz.Dead && !fz.IsBuilding && !fz.IsProp && fz.Infantry < 0;
         SkripttrefferEinheiten(c, r, angriff, grund);
+        bool zellzweig = !(fzLebte && fz!.Dead);
 
         // ein Gebaeude — derselbe Weg wie ApplyMissionHits
         if (GebaeudeAufZelle(c, r) is var bi and >= 0)
         {
             var b = _entities[bi];
             int s = SkripttrefferSchaden(angriff, b.Armor);
-            if (s >= b.Hp) Kill(bi, b, -1, grund);
+            if (s >= b.Hp) { Kill(bi, b, -1, grund); zellzweig = false; }
             else { b.Hp -= s; GebaeudeStufeNachziehen(b); }
             _sprengLog?.Add((c, r, "Gebaeude " + LabelOf(b), s, b.Dead));
         }
+        if (zellzweig) BauwerkTreffer(c, r, 0, angriff);
 
         WaldTreffer(c, r, angriff);
         ObjektTreffer(c, r, angriff);
