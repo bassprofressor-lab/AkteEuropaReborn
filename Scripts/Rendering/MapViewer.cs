@@ -1147,6 +1147,12 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_frachterCheck)
+        {
+            GD.Print(_entities.FrachterCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_stapellaufCheck)
         {
             GD.Print(_entities.StapellaufCheck());
@@ -1340,6 +1346,8 @@ public partial class MapViewer : Node2D
 
     /// <summary><c>--stapellauf-check</c> — siehe MapEntityLayer.StapellaufCheck.</summary>
     private bool _stapellaufCheck;
+    /// <summary><c>--frachter-check</c> — siehe Simulation/FrachterCheck.cs.</summary>
+    private bool _frachterCheck;
 
     /// <summary><c>--bruecke-treffer-check</c> — siehe MapEntityLayer.BrueckeTrefferCheck.</summary>
     private bool _brueckeTrefferCheck;
@@ -3685,6 +3693,9 @@ public partial class MapViewer : Node2D
             else if (a == "--schiffsklang-check") _schiffsklangCheck = true;
             else if (a == "--radarmast-check") _radarmastCheck = true;
             else if (a == "--stapellauf-check") _stapellaufCheck = true;
+            else if (a == "--frachter-check") _frachterCheck = true;
+            else if (a == "--frachtersatz-alt") MapEntityLayer.FrachtersatzAlt = true;
+            else if (a == "--einsteigbefehl-alt") MapEntityLayer.EinsteigbefehlAlt = true;
             else if (a == "--bruecke-treffer-check") _brueckeTrefferCheck = true;
             else if (a == "--bruecke-angriff-check") _brueckeAngriffCheck = true;
             else if (a == "--hotelplaza-check") _hotelplazaCheck = true;
@@ -7509,6 +7520,7 @@ public partial class MapViewer : Node2D
                                        && _entities.PostCapture(GetGlobalMousePosition(),
                                                                 mb.ShiftPressed))
                                   && !_entities.PostUnloadKlick(GetGlobalMousePosition(), mb.ShiftPressed)
+                                  && !_entities.PostBoardKlick(GetGlobalMousePosition(), mb.ShiftPressed)
                                   && !(!_entities.NeutralzeigerHier(GetGlobalMousePosition())
                                        && _entities.PostAttack(GetGlobalMousePosition(),
                                                                mb.ShiftPressed)))

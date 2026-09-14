@@ -786,6 +786,7 @@ public partial class MapEntityLayer
         CommandOp.PlaceBuilding => ApplyPlaceBuilding(c),
         CommandOp.PlaceGenerator => ApplyPlaceBuilding(c),
         CommandOp.Unload => ApplyUnload(c),
+        CommandOp.Board => ApplyBoard(c),
 
         // Die fünfzehn Gebäudebefehle — vier Tafeln, eine je Gebäudeart.
         // Siehe CommandOp und ApplyBuildingJob.
@@ -1707,6 +1708,9 @@ public partial class MapEntityLayer
         // erreicht, saehe wie ein Fehler der Wegsuche aus. Der Auslauf ist ein
         // eigener Schritt (ShipLeaveDockTick) und laeuft weiter.
         if (e.LeavingDock >= 0) return false;
+        // ⭐ 14.09.2026 — ein neuer Fahrbefehl loescht den Einsteigeauftrag; Befehl 17
+        // kommt im selben Satzpaar NACH der 3 und setzt ihn wieder.
+        e.EinsteigTraeger = -1;
 
         int x = Mathf.Clamp((int)c.P2, 0, _nav.Width - 1);
         int y = Mathf.Clamp((int)c.P3, 0, _nav.Height - 1);
@@ -1820,6 +1824,8 @@ public partial class MapEntityLayer
         // lesen.
         int utok = (alt ? c.P2 : c.P4) & 0xFFFF;
         bool queue = alt ? c.P3 != 0 : c[6] != 0;   // P6 hat keinen Namen, nur den Index
+        // ⭐ 14.09.2026 — ein Angriffsbefehl loescht den Einsteigeauftrag (Befehl 17).
+        if (i >= 0 && i < _entities.Count && _entities[i].Owner == c.Player) _entities[i].EinsteigTraeger = -1;
 
         // ⚠ UTOK_NA entschlüsseln. 60000..60299 ist ein GEBÄUDE und wird über
         // seinen Platz gesucht; alles unter 8000 ist eine Einheitennummer und
@@ -1913,6 +1919,7 @@ public partial class MapEntityLayer
         e.Reserved = null;
         e.Orders.Clear();
         e.Target = -1;
+        e.EinsteigTraeger = -1;
         return true;
     }
 }

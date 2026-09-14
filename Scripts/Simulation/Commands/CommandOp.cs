@@ -323,6 +323,14 @@ public static class CommandOp
     public const short Unload = 18;
 
     /// <summary>
+    /// <b>17 = EINSTEIGEN.</b> P1 = die Einheit, P2/P3 = die Zelle, zu der sie
+    /// faehrt, P4 = der Traeger (bei uns sein Index). Absender <c>0x4380F0</c>
+    /// (Klick auf Zeiger 11) schickt je Einheit Befehl 3 und 17; der Behandler
+    /// <c>0x4C3021…0x4C30C3</c> faehrt und setzt <c>+0x36 := Traeger</c>
+    /// (@0x4C309B). Siehe Simulation/Einsteigebefehl.cs.</summary>
+    public const short Board = 17;
+
+    /// <summary>
     /// <b>DIE FÜNFZEHN GEBÄUDEBEFEHLE — vier Tafeln, eine je Gebäudeart.</b>
     /// Gelesen am 21.08.2026, und die Zuordnung schliesst von beiden Seiten.
     ///
@@ -479,6 +487,8 @@ public static class CommandOp
         Attack => "Angreifen",
         OursAttack => "Angreifen (ausgediente eigene Nummer)",
         OursStop => "Anhalten (unsere Setzung)",
+        Board => "Einsteigen",
+        Unload => "Absetzen",
         _ when op >= UnitFirst && op <= UnitLast => "Einheitenbefehl (Bereich A, unbenannt)",
         _ when op >= BuildFirst && op <= BuildLast => "Bau/Kauf (Bereich B, unbenannt)",
         _ when op >= SystemFirst && op <= SystemLast => "System (Bereich C, unbenannt)",

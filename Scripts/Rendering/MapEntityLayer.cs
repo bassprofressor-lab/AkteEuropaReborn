@@ -626,6 +626,11 @@ public partial class MapEntityLayer : Node2D
         /// <see cref="MapEntityLayer.BeladeTakt"/>.</summary>
         public bool AngekommenJetzt;
 
+        /// <summary>Der Traeger (Platz), in den diese Einheit per BEFEHL einsteigen
+        /// soll — <c>+0x36</c> aus Befehl 17 (Behandler @0x4C309B). −1 = keiner.
+        /// Siehe Simulation/Einsteigebefehl.cs.</summary>
+        public int EinsteigTraeger = -1;
+
         /// <summary>Wurde dieses Gebaeude schon einmal gesehen? ⚠ Nur ein
         /// Zwischenspeicher fuer <see cref="MapEntityLayer.GebaeudeAufgedeckt"/>
         /// — das Gedaechtnis selbst liegt im Nebel und ist ohnehin monoton.
@@ -22650,6 +22655,17 @@ public partial class MapEntityLayer : Node2D
         // Tuerschritt. Sie wird beim Auslaufen zurueckgesetzt.
         u.Mobile = false;
         _entities.Add(u);
+        // ⭐⭐ 14.09.2026 — DER TRANSPORTSATZ EINES GEBAUTEN FRACHTERS. Seine Meldung aus
+        // K14: »bei selbstgebauten Frachtern keine Einheiten einladen, bei den
+        // Starteinheiten ging es«. Der Erzeuger 0x4B2B20 (F 0x4B2450) legt fuer Rumpf
+        // 0x49 den Satz an (@0x4B2E9B: +0x40 := 0x4CED60(platz), dort +0x24 := 0) — bei
+        // uns kam _bordDeckel nur aus der Kartendatei (sec37), und BeladeVersuch
+        // uebergeht jeden Traeger ohne Satz. Gegenschalter --frachtersatz-alt.
+        if (!FrachtersatzAlt && u.Chassis == TraegerRumpf && !_bordDeckel.ContainsKey(u.Slot))
+        {
+            _bordDeckel[u.Slot] = 0;
+            FrachtersatzAngelegt++;
+        }
         // ⚠⚠ KEIN SetHull/SetOccupant, solange es im Dock steht. Die Zelle
         // gehoert dem Gebaeude; ein Rumpfabdruck darueber waere ein Schiff, das
         // seine eigene Werft blockiert — und die Ausfahrtspruefung wuerde sich
@@ -27154,7 +27170,7 @@ public partial class MapEntityLayer : Node2D
     /// bug-153.</summary>
     public static bool RampeFuerAlle;
 
-    public int BeladeVersuch(int idx, bool melden = true)
+    public int BeladeVersuch(int idx, bool melden = true, int nurTraeger = -1)
     {
         if (idx < 0 || idx >= _entities.Count) { _order = "keine Einheit"; return -1; }
         var u = _entities[idx];
@@ -27172,6 +27188,7 @@ public partial class MapEntityLayer : Node2D
         {
             if (q.Dead || q.IsBuilding || q.IsProp) continue;
             if (q.Owner != u.Owner) continue;
+            if (nurTraeger >= 0 && q.Slot != nurTraeger) continue;   // Befehl 17: nur dieser
             if (!_bordDeckel.ContainsKey(q.Slot) && FrachtAnBord(q.Slot).Count == 0) continue;
             int dist = Mathf.Max(Mathf.Abs(q.Col - u.Col), Mathf.Abs(q.Row - u.Row));
             if (dist > BeladeReichweite || dist >= besteEntfernung) continue;
@@ -27189,6 +27206,7 @@ public partial class MapEntityLayer : Node2D
         }
 
         _nav?.ClearOccupant(u.Col, u.Row, idx);
+        u.EinsteigTraeger = -1;
         EinheitAusListeNehmen(idx);
         FrachtAufnehmen(besterSlot, u);
         Beladen++;
@@ -27269,6 +27287,16 @@ public partial class MapEntityLayer : Node2D
             // ⭐ 08.09.2026 — wer eben erst ausgestiegen ist, wird nicht sofort
             // wieder aufgenommen (siehe WegVomUfer).
             if (u.NichtBeladenBis > _clock) continue;
+            // ⭐⭐ 14.09.2026 — DER BEFOHLENE PASSAGIER (Befehl 17, Arm UKOL 15 @0x4091E3):
+            // er steht und wartet, bis sein Traeger daneben liegt — ohne Ladezelle und
+            // ohne »eben angekommen«. Siehe Simulation/Einsteigebefehl.cs.
+            if (!EinsteigbefehlAlt && u.EinsteigTraeger >= 0)
+            {
+                if (!EinsteigTraegerDa(u) || !DarfEinsteigen(u)) continue;
+                if (BeladeVersuch(i, melden: false, nurTraeger: u.EinsteigTraeger) >= 0)
+                { EinsteigAngekommen++; return; }
+                continue;
+            }
             // ⭐⭐ 10.09.2026 — und nur der ANKOMMENDE, siehe Kopf.
             if (!EinsteigenImStand && !u.AngekommenJetzt) continue;
             if (BeladeGewicht(u) < 0) continue;                      // kann gar nicht
