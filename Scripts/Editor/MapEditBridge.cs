@@ -69,7 +69,7 @@ public partial class MapEntityLayer
                                   int footW, int footH, int hp)
     {
         int el = ElevOf(col, row);
-        _entities.Add(new Entity
+        var neu = new Entity
         {
             Slot = slot, BType = typ, BildArt = typ, IsBuilding = true, IsProp = false,   // 13.09.2026: sonst unsichtbar (Zeichnen nach BildArt)
             Col = col, Row = row, Owner = owner, Team = owner,
@@ -77,7 +77,11 @@ public partial class MapEntityLayer
             Footprint = new Rect2(_ox + col * MapBaker.TileW,
                                   _oy + row * MapBaker.TileH - el * MapBaker.ElevStep,
                                   footW * MapBaker.TileW, footH * MapBaker.TileH),
-        });
+            // 14.09.2026: Klickrahmen und Rumpfmitte wie beim Kartenlader (sonst Pos (0,0))
+            FootW = System.Math.Max(1, footW), FootH = System.Math.Max(1, footH),
+        };
+        neu.Pos = BodyCenter(neu);
+        _entities.Add(neu);
         QueueRedraw();
     }
 

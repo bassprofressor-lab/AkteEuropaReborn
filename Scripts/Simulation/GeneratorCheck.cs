@@ -106,5 +106,21 @@ public partial class MapEntityLayer
         return sb.ToString();
     }
 
-    public void GeneratorProbeAnklicken(Entity g) => PostenAnwaehlenWieKlick(_entities.IndexOf(g));
+    /// <summary>⚠ 14.09.2026 — ueber den ECHTEN Treffertest (Pick auf die Mitte des
+    /// Klickrahmens), nicht mehr direkt ueber den Index: so ging die Probe am
+    /// Klickfeld vorbei, das bei einem Neubau in der Kartenecke lag (bug-274).
+    /// Gibt zurueck, was der Klick traf (−1 = nichts).</summary>
+    public int IndexOfFuerProbe(Entity e) => _entities.IndexOf(e);
+
+    public int GeneratorProbeAnklicken(Entity g)
+    {
+        // ⚠ NICHT BodyRect(g): das wandert mit einem falschen Pos mit, und das
+        // Nullmodell bestand im ersten Lauf. Geklickt wird, wo das Gebaeude auf der
+        // KARTE steht — aus Zelle und Fussabdrucktafel, ohne Pos/FootW.
+        var foot = BuildingFootprint(g.BType);
+        var p = (CellCenter(g.Col, g.Row) + CellCenter(g.Col + foot.X - 1, g.Row + foot.Y - 1)) * 0.5f;
+        int t = Pick(p);
+        if (t >= 0) PostenAnwaehlenWieKlick(t);
+        return t;
+    }
 }

@@ -73,7 +73,9 @@ public partial class MapViewer
         Soll(g.Bauzustand == 0, $"nach 300 Originaltakten fertig (Bauzustand {g.Bauzustand})");
 
         UI.WindowManager.Mausquelle = () => new Vector2(300, 300);
-        _entities.GeneratorProbeAnklicken(g);
+        int getroffen = _entities.GeneratorProbeAnklicken(g);
+        Soll(getroffen >= 0 && getroffen == _entities.IndexOfFuerProbe(g),
+             $"Klick auf die Mitte des Rahmens trifft den Generator (Pick {getroffen}, Pos {g.Pos}, Fuss {g.FootW}x{g.FootH})");
         for (int t = 0; t <= UI.WindowManager.BilderAuf + 1; t++) UI.WindowManager.Takt();
         await Warten();
         var f = _gebaeudeFenster;

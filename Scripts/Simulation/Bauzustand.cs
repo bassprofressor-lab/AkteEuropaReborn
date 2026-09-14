@@ -32,8 +32,10 @@ public partial class MapEntityLayer
 {
     public static bool BauzustandAus, BauauftragAlt, GeneratorfensterAlt, PanzerungNeubauAlt;
 
-    /// <summary><c>--geruest-bild</c>: das Geruest nach der ungesicherten Musterzeile zeichnen.</summary>
-    public static bool GeruestBild;
+    /// <summary><c>--geruest-aus</c>: kein Geruest, ein Bau zeigt das fertige Gebaeude
+    /// (der Stand bis 14.09.2026). Das Geruest selbst ist seit dem 14.09. gegen die
+    /// Daten geprueft (berichte/bauanimation-fable.md).</summary>
+    public static bool GeruestAus;
 
     public const int BauzustandStart = 100, BauzustandEnde = 250;
 

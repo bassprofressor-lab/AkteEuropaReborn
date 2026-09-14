@@ -297,6 +297,13 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     private void RouteUmladen(Entity u, Transportroute r, Entity b)
     {
+        // ⭐ 14.09.2026 — das Tor des Umladers (0x41096E..0x4109DE, F 0x410770):
+        // Route gestartet und mindestens eine Quelle, sonst geschieht NICHTS —
+        // auch kein Tanken. ⚠ Den Einheitentest R+0x0C == id lassen wir fort: bei
+        // uns haengt der Satz ohnehin an der Einheit (Entity.Route).
+        if (!EinnahmeRoutenAlt
+            && (!r.Gestartet || (r.Quelle[0] < 0 && r.Quelle[1] < 0 && r.Quelle[2] < 0 && r.Quelle[3] < 0)))
+            return;
         var ziel = GebaeudePlatz(r.Ziel);
         if (ziel == null) return;
         var f = WarenTafel(ziel.BType);
@@ -418,7 +425,15 @@ public partial class MapEntityLayer : Node2D
             var u = _entities[i];
             if (u.Dead || u.IsBuilding || u.IsProp) continue;
             var r = RouteVon(u);
-            if (r == null || !r.Gestartet) continue;
+            if (r == null) continue;
+            // ⭐ 14.09.2026 — NUR der UKOL-0-Arm (0x407F7E) und der Umlader
+            // (0x410994) fragen +0x0E. Die Arme 25/54/53/48 laufen auch fuer eine
+            // STEHENDE Route weiter — sonst bliebe ein Wagen, dessen Route die
+            // Einnahme gestrichen hat, fuer immer im Gebaeude
+            // (berichte/einnahme-transporter-fable.md §3.1).
+            if (!r.Gestartet && (EinnahmeRoutenAlt
+                || u.Ukol is not (UkolBasisUmschlag or UkolImGebaeude or UkolAusgang or UkolAngemeldet)))
+                continue;
 
             switch (u.Ukol)
             {
@@ -507,6 +522,9 @@ public partial class MapEntityLayer : Node2D
                     var tb = TuerNullGebaeude(u);
                     if (tb == null) { u.Ukol = UkolFrei; break; }                 // ⚠ UNSER: nicht (mehr) auf Tuer 0
                     if (tb.TorZustand.Count == 0 || tb.TorZustand[0] != TorEinfahrt) break;   // @0x43D495
+                    // @0x43D4F3..0x43D500 (F 0x43C51A): NUR die Basis haelt einen Wagen
+                    // mit stehender Route draussen; an der Fabrik faehrt er noch einmal ein.
+                    if (!EinnahmeRoutenAlt && !r.Gestartet && tb.BType == 1) break;
                     if (r.Fahrziel == tb.Slot) RouteAnkunft(i, u, r, tb);        // @0x43D51A -> 54
                     else if (r.Fahrziel < 0 || GebaeudePlatz(r.Fahrziel) == null)  // @0x43D578; ⚠ ein
                     {                                                            // totes Ziel gilt bei
@@ -521,7 +539,20 @@ public partial class MapEntityLayer : Node2D
                     if (u.Ukol != UkolFrei || u.Path != null) break;
 
                     var b = GebaeudePlatz(r.Fahrziel);
-                    if (b != null && RouteAngekommen(u, b, RouteAnfahrt(b)))
+                    if (b != null && b.BType != 1 && !EinnahmeRoutenAlt)
+                    {
+                        // ⭐⭐ 14.09.2026 — AN FABRIK UND MINE KOMMT MAN NUR UEBER DIE TUER AN.
+                        // Seine Meldung: der gegnerische Wagen fuhr in die eingenommene
+                        // Fabrik »kurz rein und wieder raus«, immer wieder. Die Naehe
+                        // (≤ 1 Zelle) liess ihn von der Zelle VOR der gesperrten Tuer
+                        // (Tuersperre, 0x43CC29) direkt verschwinden. Im Original meldet
+                        // der Tuertakt nur einen Wagen AUF Tuer 0 an (@0x43D5AF), der
+                        // Tuerarm (UKOL 48) macht daraus 54. Steht er auf der Tuer, wartet
+                        // dieser Arm also auf die Anmeldung. Gegenschalter --einnahme-routen-alt.
+                        var t0 = RouteAnfahrt(b);
+                        if (u.Col == t0.X && u.Row == t0.Y) break;
+                    }
+                    else if (b != null && RouteAngekommen(u, b, RouteAnfahrt(b)))
                     {
                         RouteAnkunft(i, u, r, b);
                         break;

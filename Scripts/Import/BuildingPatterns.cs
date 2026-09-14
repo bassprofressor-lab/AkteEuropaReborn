@@ -21,6 +21,16 @@ using GDict = Godot.Collections.Dictionary;
 /// </summary>
 public sealed class BuildingPatterns : IBuildingPatterns
 {
+    /// <summary>Die drei Gerüstmuster <c>TilePattern−2 … TilePattern</c> (Stempler
+    /// 0x4C95E0 @0x4C9619, F 0x4C9190). ⚠ Bei <c>TilePattern &lt; 2</c> läse das
+    /// Original vor der Tafel (10.CWP, 44.CWP, 47.CWP) — das bauen wir nicht nach.</summary>
+    private static void AddScaffold(List<int> wanted, CwpFile.BuildingType bt)
+    {
+        if (bt.TilePattern < 2) return;
+        for (int m = bt.TilePattern - 2; m <= bt.TilePattern; m++)
+            if (!wanted.Contains(m)) wanted.Add(m);
+    }
+
     private readonly Dictionary<int, CwpFile.BuildingType> _types = new();
     private readonly Dictionary<int, ushort[]> _tiles = new();   // pattern -> 60 tiles
     private readonly Dictionary<int, bool[]> _blocks = new();    // pattern -> 60 flags
@@ -117,6 +127,11 @@ public sealed class BuildingPatterns : IBuildingPatterns
             var wanted = new List<int>();
             for (int k = 0; k < bt.PatternCount; k++) wanted.Add(bt.FirstPattern + k);
             if (bt.TilePattern > 0 && !wanted.Contains(bt.TilePattern)) wanted.Add(bt.TilePattern);
+            // ⭐ 14.09.2026 — DIE GERUESTE. Der Stempler nimmt im Bau TilePattern−2…
+            // TilePattern (0x4C95E0 @0x4C9619); auf 13.CWP sind das beim Generator
+            // 262/263/264 und beim Depot 259/260/261, alle voll. Hier fehlten 262/263
+            // (berichte/bauanimation-fable.md §4–5).
+            AddScaffold(wanted, bt);
 
             bool firstPat = true;
             foreach (int pat in wanted)
@@ -430,6 +445,8 @@ public sealed class BuildingPatterns : IBuildingPatterns
             var wanted = new List<int>();
             for (int k = 0; k < bt.PatternCount; k++) wanted.Add(bt.FirstPattern + k);
             wanted.Add(RuinPattern(cwp, typ));
+            // ⭐ 14.09.2026 — auch die Gerüstkacheln (13.CWP: 3392–3502) gehören in den Atlas.
+            AddScaffold(wanted, bt);
             foreach (int pat in wanted)
             {
                 if (pat < 0) continue;

@@ -1538,6 +1538,8 @@ public partial class MapViewer : Node2D
     private bool _m8Regeln;
     /// <summary><c>--routentuer-check</c> — siehe Simulation/RoutentuerCheck.cs.</summary>
     private bool _rtCheck, _rtGestartet;
+    /// <summary><c>--einnahme-check</c> — siehe Simulation/EinnahmeCheck.cs.</summary>
+    private bool _enCheck, _enGestartet;
     private bool _sieg7Gestartet;
 
     /// <summary><c>--absetz-check</c> — siehe Simulation/AbsetzCheck.cs.</summary>
@@ -3309,6 +3311,7 @@ public partial class MapViewer : Node2D
             else if (a == "--zeilenklick-aus") UI.BuildingListView.ZeilenklickAus = true;
             else if (a == "--zeiger-ueberall-alt") ZeigerUeberallAlt = true;
             else if (a == "--neubaustrom-alt") MapEntityLayer.NeubaustromAlt = true;
+            else if (a == "--neubaufeld-alt") MapEntityLayer.NeubauFeldAlt = true;
             else if (a == "--cdspieler-alt") UI.CdPlayerView.Alt = true;
             else if (a == "--tuerband-alt") MapEntityLayer.TuerbandAlt = true;
             else if (a == "--rampe-fuer-alle") MapEntityLayer.RampeFuerAlle = true;
@@ -3389,6 +3392,9 @@ public partial class MapViewer : Node2D
             else if (a == "--gaswerfer-als-schuss") MapEntityLayer.GaswerferAlsSchuss = true;
             else if (a == "--routentuer-check") _rtCheck = true;
             else if (a == "--routentuer-alt") MapEntityLayer.RoutentuerAlt = true;
+            else if (a == "--einnahme-check") _enCheck = true;
+            else if (a == "--einnahme-routen-alt") MapEntityLayer.EinnahmeRoutenAlt = true;
+            else if (a == "--einnahme-insassen-alt") MapEntityLayer.EinnahmeInsassenAlt = true;
             else if (a == "--zasah-sonderfaelle-aus") MapEntityLayer.ZasahSonderfaelleAus = true;
             else if (a == "--infanterie-einheitenarm") MapEntityLayer.InfanterieArmAlt = true;
             else if (a == "--skripttreffer-halbe-huelle") MapEntityLayer.SkripttrefferHalbeHuelle = true;
@@ -3694,7 +3700,7 @@ public partial class MapViewer : Node2D
             else if (a == "--mitnahme-alt") MapEntityLayer.MitnahmeAlt = true;
             else if (a == "--marke-alt") MapEntityLayer.MarkeAlt = true;
             else if (a == "--bauzustand-aus") MapEntityLayer.BauzustandAus = true;
-            else if (a == "--geruest-bild") MapEntityLayer.GeruestBild = true;
+            else if (a == "--geruest-aus") MapEntityLayer.GeruestAus = true;
             else if (a == "--bauauftrag-alt") MapEntityLayer.BauauftragAlt = true;
             else if (a == "--generatorfenster-alt") MapEntityLayer.GeneratorfensterAlt = true;
             else if (a == "--panzerung-neubau-alt") MapEntityLayer.PanzerungNeubauAlt = true;
@@ -4810,6 +4816,7 @@ public partial class MapViewer : Node2D
             if (_m8Regeln) GD.Print(_entities.MissionsregelnZeile());
             if (_gwCheck) GD.Print(_entities.GaswerferCheckLine());
             if (_rtCheck) GD.Print(_entities.RoutentuerCheckLine());
+            if (_enCheck) GD.Print(_entities.EinnahmeCheckLine());
             if (_zielzelleProbe) GD.Print(_entities.ZielzelleProbe());
             if (_skripttrefferProbe) GD.Print(_entities.SkripttrefferProbe());
             if (_gebaeudebrandProbe) GD.Print(_entities.GebaeudebrandProbe());
@@ -7123,6 +7130,12 @@ public partial class MapViewer : Node2D
         {
             _entities.RoutentuerCheckStart();
             _rtGestartet = true;
+        }
+
+        if (_enCheck && !_enGestartet && _entities.ErwartungBereit())
+        {
+            _entities.EinnahmeCheckStart();
+            _enGestartet = true;
         }
 
         // laeuft weiter; die Zeile kommt mit dem Abschlussbericht (--quit-after)

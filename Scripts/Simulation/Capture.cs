@@ -380,7 +380,14 @@ public partial class MapEntityLayer : Node2D
         int old = b.Owner;
         if (old == ViewPlayer) Audio.GameSounds.Play(SoundTakenFrom);
 
+        // ⭐ 14.09.2026 — der erste Schritt des Abschlusses: die Routen dieses
+        // Gebaeudes streichen (0x440190 @C 0x43CD75 / F 0x43BE0A). Siehe
+        // Simulation/EinnahmeAbschluss.cs.
+        RouteGebaeudeStreichen(b.Slot);
         Hand(b, who);
+        // ⭐ 14.09.2026 — eine eingenommene BASIS verliert ihre Insassen
+        // (C 0x43D190 / F 0x43C1B7 -> 0x410E60). Andere Arten behalten sie.
+        EinnahmeInsassenLoeschen(b);
         // a Werft-Station takes its Hafen with it: the dock whose sec29 +0x02
         // names this Werft (@0x43CEEC..0x43CF99, "Error in shipyard" when there
         // is none). Our dock keeps that link in Shipyard, as a building slot.

@@ -416,6 +416,21 @@ public partial class MapEntityLayer
 
         var doors = BuildingDoors(typ);
         bld.Doors = doors.Count;
+        // ⚠⚠ 14.09.2026 — KLICKRAHMEN, RUMPFMITTE UND TUERZELLEN. Seine Meldung aus K13:
+        // »nach dem Bau nicht anwaehlbar«. Pick fragt BodyRect = FootW×FootH um Pos, und
+        // ein Neubau trug FootW/FootH 1 und Pos (0,0): sein Klickfeld lag in der
+        // Kartenecke (generator-check druckte »Pos (0, 0)«). Dieselbe Fehlerklasse wie
+        // die BildArt (bug-269): der Kartenlader setzt diese Felder (MapEntityLayer
+        // ~3774, InitEntityMovement), der Neubau nicht. Die Tuerzellen fehlten ebenso —
+        // ein gebautes Depot hatte keine benutzbare Tuer (Einfahrt, Route, Einnahme).
+        if (!NeubauFeldAlt)
+        {
+            var foot = BuildingFootprint(typ);
+            bld.FootW = foot.X;
+            bld.FootH = foot.Y;
+            bld.Pos = BodyCenter(bld);
+            foreach (var d in doors) bld.DoorCells.Add((d.X, d.Y));
+        }
         _entities.Add(bld);
         int index = _entities.Count - 1;
 
@@ -727,5 +742,10 @@ public partial class MapEntityLayer
     /// selbstgebautes Werk bekommt keinen Strombedarf und bleibt auf 1/1.
     /// Der Gegenschalter zu der Behebung in <c>PlaceBuilding</c>.</summary>
     public static bool NeubaustromAlt;
+
+    /// <summary><c>--neubaufeld-alt</c> — der Stand bis 14.09.2026: ein Neubau hat
+    /// FootW/FootH 1, Pos (0,0) und keine Tuerzellen, und laesst sich darum nicht
+    /// anklicken (bug-274).</summary>
+    public static bool NeubauFeldAlt;
 
 }

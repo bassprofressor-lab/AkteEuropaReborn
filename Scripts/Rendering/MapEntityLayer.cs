@@ -7234,12 +7234,17 @@ public partial class MapEntityLayer : Node2D
         int stack = e.Dead ? 0 : DamageFrame(e);      // wie viele Muster übereinander
         // ⭐ 13.09.2026 — DAS GERUEST. Stempler 0x4C95E0 @0x4C9619: Bauzustand > 99 ->
         // Bild (b-100)/50, Musterzeile = Typtafel +0x08 (TilePattern) - 2 + Bild.
-        // ⚠ AUSGESETZT (--geruest-bild): im Kachelsatz von map_13 sind die Muster
-        // TilePattern-2/-1 LEER und 264 steht nicht im Atlas — die Lesung der
-        // Musterzeile ist damit nicht bestaetigt. Bis dahin zeigt ein Bau das
-        // fertige Gebaeude (UNSERE Setzung).
-        if (GeruestBild && !e.Dead && e.Bauzustand >= BauzustandStart)
-        { first = GeruestMuster(bt, e.Bauzustand); stack = 1; }
+        // ⭐⭐ 14.09.2026 — BESTAETIGT UND AN. Seine Meldung aus K13: »ohne Bauanimation
+        // wie im Original«. Die Muster waren nur in UNSEREM Export leer: der Import
+        // nahm TilePattern-2/-1 und ihre Kacheln nicht mit (13.CWP: 262/263/264 mit
+        // je 12 Kacheln 3467–3502). Die Typtafel wird nach der GEBAEUDEART (+0x04,
+        // @0x4C9640) gefragt, nicht nach der Bildart. Stapel 1: nur das Geruest.
+        // Gegenschalter --geruest-aus (berichte/bauanimation-fable.md).
+        if (!GeruestAus && !e.Dead && e.Bauzustand >= BauzustandStart)
+        {
+            var gt = Patterns.GetBuildingType(e.BType);
+            if (gt.TilePattern >= 2) { first = GeruestMuster(gt, e.Bauzustand); stack = 1; }
+        }
         if (e.Dead)
         {
             // ⚠⚠⚠ 10.09.2026 — DIE RUINE IST DIE OBERSTE LAGE EINES STAPELS,
@@ -12191,6 +12196,9 @@ public partial class MapEntityLayer : Node2D
         NoteKill(victim, by);
         // ⭐ 06.09.2026 — ein GEBAEUDE geht mit Bild. Siehe GebaeudeSprengen.
         if (victim.IsBuilding && !victim.IsProp && !victim.Dead) GebaeudeSprengen(victim);
+        // ⭐ 14.09.2026 — der Gebaeudetod streicht die Routen mit demselben Streicher
+        // wie die Einnahme (0x440190 @C 0x4C9A6C / F 0x4C961C). Simulation/EinnahmeAbschluss.cs.
+        if (victim.IsBuilding && !victim.IsProp && !victim.Dead) RouteGebaeudeStreichen(victim.Slot);
         victim.Hp = 0;
         victim.Dead = true;
         // ⭐⭐ 09.09.2026 — EIN ZERSTOERTES GEBAEUDE VERLIERT SEINE ART.
@@ -32259,6 +32267,7 @@ public partial class MapEntityLayer : Node2D
         // Simulation/MarketTrade.cs, OriginalTick.
         OriginalTick();
         if (_rtCheckAn) RoutentuerCheckTakt();          // --routentuer-check
+        if (_enCheckAn) EinnahmeCheckTakt();            // --einnahme-check
 
         PollBuildPanelDemo();
         PollDepotFlow();
