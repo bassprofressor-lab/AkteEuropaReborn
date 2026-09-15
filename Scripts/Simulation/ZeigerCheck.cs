@@ -68,6 +68,10 @@ public partial class MapEntityLayer
         // Preis einer Eroberungskarte und war hier bisher mit der 255 in einem
         // Topf — auf map_NET02 sind das ALLE 52 Gebaeude mit Tuer.
         int zivilTuer = 0, zivilTuerFalsch = 0;
+        // ⭐ 14.09.2026: das VERBUENDETE Gebaeude hat eine eigene Zeile — ueber ihm steht
+        // im Original die Fahrt (Zeigerart 3), weder Einnahme noch Angriff
+        // (berichte/verbuendete-fable.md §1). Bis heute zaehlte es als »fremd«.
+        int verbuendet = 0, verbuendetFalsch = 0;
         foreach (var b in _entities)
         {
             if (!b.IsBuilding || b.IsProp || b.Dead) continue;
@@ -78,7 +82,8 @@ public partial class MapEntityLayer
             var hMitte = CursorHintAt(mitte);
             string art = b.Owner == ViewPlayer ? "eigen"
                        : b.Owner == NeutralOwner ? "zivil"
-                       : b.Owner is < 0 or > 7 ? "herrenlos" : "fremd";
+                       : b.Owner is < 0 or > 7 ? "herrenlos"
+                       : Allied(ViewPlayer, b.Owner) ? "verbuendet" : "fremd";
             sb.AppendLine($"  Gebaeude {b.Slot,3} Art {b.BType,2} ({art,9}, Besitzer {b.Owner,3}): "
                         + $"Tuer {hTuer}, Mitte {hMitte}");
             if (art == "fremd")
@@ -107,6 +112,12 @@ public partial class MapEntityLayer
                 }
                 if (hMitte == Hint.Enemy) zivilTuerFalsch++;
             }
+            else if (art == "verbuendet")
+            {
+                verbuendet++;
+                bool falsch = hTuer is Hint.Enemy or Hint.Einnahme || hMitte is Hint.Enemy or Hint.Einnahme;
+                if (falsch) verbuendetFalsch++;
+            }
             else if (art == "herrenlos")
             {
                 herrenlos++;
@@ -131,6 +142,7 @@ public partial class MapEntityLayer
             // ⭐ 12.09.2026: das ZIVILE Gebaeude gehoert ausdruecklich dazu — auf
             // einer Eroberungskarte ist es der einzige Klickweg, den es gibt.
             if (b.Owner != NeutralOwner && b.Owner is < 0 or > 7) continue;
+            if (b.Owner is >= 0 and <= 7 && Allied(ViewPlayer, b.Owner)) continue;   // 14.09.: kein Einnahmeziel
             if (b.Doors == 0 || b.Built == 0) continue;
             probe = b; break;
         }
@@ -195,6 +207,8 @@ public partial class MapEntityLayer
                     + $"{fremdTuerFalsch}");
         sb.AppendLine($"  fremde Gebaeude: {fremdMitte}, davon ohne Angriffszeiger in der Mitte: "
                     + $"{fremdMitteFalsch}");
+        sb.AppendLine($"  verbuendete Gebaeude: {verbuendet}, davon mit Angriffs- oder Einnahmezeiger: "
+                    + $"{verbuendetFalsch}{(ZeigerVerbuendetAlt ? "  ⚠ NULLMODELL --zeiger-verbuendet-alt: MUSS hier > 0 sein und durchfallen" : "")}");
         sb.AppendLine($"  herrenlose Gebaeude: {herrenlos}, davon mit Angriffszeiger: "
                     + $"{herrenlosFalsch}");
         sb.AppendLine($"  ZIVILE Gebaeude mit Tuer (Besitzer {NeutralOwner}, der Preis der "
@@ -207,7 +221,7 @@ public partial class MapEntityLayer
                         + "durchfallen (bug-209)");
 
         bool alles = fremdTuerFalsch == 0 && fremdMitteFalsch == 0 && herrenlosFalsch == 0
-                  && zivilTuerFalsch == 0
+                  && zivilTuerFalsch == 0 && verbuendetFalsch == 0
                   && klickOk && tuerlosOk && (fremdTuer > 0 || herrenlos > 0 || zivilTuer > 0);
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();

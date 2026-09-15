@@ -5088,8 +5088,11 @@ public partial class MapEntityLayer : Node2D
         foreach (var e in _entities)
         {
             if (e.IsProp || e.Dead) continue;
+            // ⭐ 14.09.2026 — ein Gebaeude ueber seinen FUSSABDRUCK (GebaeudeAufgedeckt,
+            // bug-164), nicht die Ankerzelle; Gegenschalter --minikarte-anker-alt.
             if (FogActive && e.Owner != ViewPlayer &&
-                !(e.IsBuilding ? _fog!.IsSeen(e.Col, e.Row) : _fog!.IsWatched(e.Col, e.Row)))
+                !(e.IsBuilding ? (MinikarteAnkerAlt ? _fog!.IsSeen(e.Col, e.Row) : GebaeudeAufgedeckt(e))
+                               : _fog!.IsWatched(e.Col, e.Row)))
             { _dotsHidden++; continue; }
             if (e.Owner == ViewPlayer) _dotsMine++; else _dotsForeign++;
             // ⚠ 25.08.2026, auf seine Ansage: ein HERRENLOSES Gebaeude bekommt
@@ -10758,6 +10761,12 @@ public partial class MapEntityLayer : Node2D
         if (b.Owner is < 0 or > 7) return true;
         if (a.Owner is < 0 or > 7) return false;
         if (_standby[a.Owner] || _standby[b.Owner]) return false;
+        // ⭐⭐ 15.09.2026 — AUCH EIN VERBUENDETER IST EIN ZIEL, seine Entscheidung
+        // »ja, das soll wie im Original funktionieren«. Zieluebersetzung und
+        // Behandler fragen kein Buendnis; die Sperren sitzen in der Eingabe
+        // (VerbuendeterHier, StrgAngriffVerweigert — Simulation/VerbuendetenAngriff.cs).
+        // Gegenschalter --kein-angriff-auf-verbuendete.
+        if (!KeinAngriffAufVerbuendete && a.Owner != b.Owner) return true;
         return _haveAllies ? !_allied[a.Owner, b.Owner] : b.Owner != a.Owner;
     }
 
@@ -11324,6 +11333,16 @@ public partial class MapEntityLayer : Node2D
         {
             KiZieleVerloren++;
             if (Schussgruende) e.Schussgrund = "Ziel ist aus der Sicht der KI gefahren";
+            e.Target = -1; return;
+        }
+        // ⭐ 15.09.2026 — DIE INFANTERIEUHR SCHIESST NIE AUF VERBUENDETE (C 0x40F208 /
+        // F 0x40F03A), auch nicht befohlen; nur die Schiessuhr der Fahrzeuge traegt die
+        // Ausnahme. ⚠ UNSERE Setzung: das Ziel wird verworfen statt gehalten.
+        // Simulation/VerbuendetenAngriff.cs.
+        if (!KeinAngriffAufVerbuendete && e.Infantry >= 0 && VerbuendetesZiel(e, t))
+        {
+            FussVerbuendetFallengelassen++;
+            if (Schussgruende) e.Schussgrund = "Fusssoldat schiesst nicht auf Verbuendete";
             e.Target = -1; return;
         }
 
@@ -12413,7 +12432,12 @@ public partial class MapEntityLayer : Node2D
                     if (!eigen && occ >= 0 && occ < _entities.Count
                         && p.Shooter >= 0 && p.Shooter < _entities.Count)
                         // Art 7 schuetzt kein Buendnis (@0x452978)
-                        freund = !Art7Druckwelle(p) && !IsHostile(_entities[p.Shooter], _entities[occ]);
+                        freund = !Art7Druckwelle(p) && !IsHostile(_entities[p.Shooter], _entities[occ])
+                                 // ⭐ 15.09.2026 — ausser der Schuetze fuehrt den befohlenen
+                                 // Angriff genau auf diese Einheit (UKOL 4 + UTOK_NA, C 0x45294F).
+                                 // Gegenschalter --kein-angriff-auf-verbuendete.
+                                 && !(!KeinAngriffAufVerbuendete && _entities[p.Shooter].Ordered
+                                      && _entities[p.Shooter].Target == occ);
                     if (!eigen && !freund && !KeineEinschlagHoehen)
                     {
                         int schwelle = SchwelleAn(zc, zr);
@@ -35673,6 +35697,14 @@ public partial class MapEntityLayer : Node2D
         // herrenlosen Kraftwerke ausdruecklich zerlegen wollen.
         //
         // Gegenschalter --gebaeudezeiger-alt.
+        // ⭐⭐ 14.09.2026 — UEBER EINEM VERBUENDETEN STEHT DIE FAHRT, NICHT DAS
+        // FADENKREUZ. Seine Meldung aus K14: »ich kann die Einheiten anvisieren«. Der
+        // Einheitenarm liest T[Betrachter, Eigner] und verlaesst bei != 0 die Wahl, ohne
+        // die 2 zu setzen (C 0x432842 / F 0x431975); ueber Gebaeuden gibt es gar keinen
+        // Angriffszeiger ausser mit Strg. Zeigerart 3 = Fahrt. Strg bleibt Angriff
+        // (MapViewer). Gegenschalter --zeiger-verbuendet-alt.
+        if (!ZeigerVerbuendetAlt && e.Owner is >= 0 and <= 7 && Allied(ViewPlayer, e.Owner))
+        { ZeigerVerbuendetGezeigt++; return Hint.Ground; }
         if (e.IsBuilding && !GebaeudezeigerAlt)
         {
             if (EinnahmezeigerGilt(e, mapPos)) return Hint.Einnahme;
@@ -35685,6 +35717,21 @@ public partial class MapEntityLayer : Node2D
     /// einem eigenen Traeger steht der gewoehnliche Eigenzeiger, auch wenn ein
     /// Fahrzeug oder Fussvolk gewaehlt ist. Das Nullmodell zu bug-233.</summary>
     public static bool EinladezeigerAlt;
+
+    /// <summary><c>--zeiger-verbuendet-alt</c> — der Stand bis 14.09.2026: ueber einem
+    /// verbuendeten Gebaeude/einer verbuendeten Einheit steht Angriff bzw. Einnahme.</summary>
+    public static bool ZeigerVerbuendetAlt;
+
+    /// <summary><c>--verbuendete-unbeteiligt</c> — der Stand bis 14.09.2026: ein
+    /// Verbuendeter gilt als unbeteiligt und deckt fuer den Spieler nichts auf.</summary>
+    public static bool VerbuendeteUnbeteiligt;
+
+    /// <summary><c>--minikarte-anker-alt</c> — der Stand bis 14.09.2026: ein fremdes
+    /// Gebaeude erscheint auf der Minikarte erst, wenn seine ANKERZELLE gesehen wurde.</summary>
+    public static bool MinikarteAnkerAlt;
+
+    /// <summary>Wie oft ueber einem Verbuendeten die Fahrt statt Angriff stand.</summary>
+    public int ZeigerVerbuendetGezeigt;
 
     /// <summary><b>Kann die Auswahl einsteigen?</b> — <c>0x431520</c>: die
     /// angewaehlte Einheit hat <b>Gattung &lt; 2</b>, also 0 (Fahrzeug) oder
@@ -35756,6 +35803,10 @@ public partial class MapEntityLayer : Node2D
     private bool EinnahmezeigerGilt(Entity b, Vector2 mapPos)
     {
         if (b.Owner == ViewPlayer) return false;
+        // ⭐ 14.09.2026 — beide Einnahmezweige fragen das Buendnisbyte (C 0x4322EE /
+        // F 0x431430, C 0x432403 / F 0x431545): ueber einem VERBUENDETEN Gebaeude
+        // steht kein Einnahmezeiger (berichte/verbuendete-fable.md §1).
+        if (!ZeigerVerbuendetAlt && b.Owner is >= 0 and <= 7 && Allied(ViewPlayer, b.Owner)) return false;
 
         // ⭐⭐⭐ 12.09.2026 — DAS ZIVILE GEBAEUDE DER EROBERUNGSKARTE (bug-209).
         //

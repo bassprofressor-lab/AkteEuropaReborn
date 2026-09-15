@@ -1153,6 +1153,18 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_vkCheck)
+        {
+            GD.Print(_entities.VerbuendetenKiCheck(120));
+            GetTree().Quit(0);
+            return;
+        }
+        if (_vaCheck)
+        {
+            GD.Print(_entities.VerbuendetenAngriffCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_stapellaufCheck)
         {
             GD.Print(_entities.StapellaufCheck());
@@ -1348,6 +1360,10 @@ public partial class MapViewer : Node2D
     private bool _stapellaufCheck;
     /// <summary><c>--frachter-check</c> — siehe Simulation/FrachterCheck.cs.</summary>
     private bool _frachterCheck;
+    /// <summary><c>--verbuendeten-angriff-check</c> — siehe Simulation/VerbuendetenAngriff.cs.</summary>
+    private bool _vaCheck;
+    /// <summary><c>--verbuendeten-ki-check</c> — siehe Simulation/VerbuendetenKi.cs.</summary>
+    private bool _vkCheck;
 
     /// <summary><c>--bruecke-treffer-check</c> — siehe MapEntityLayer.BrueckeTrefferCheck.</summary>
     private bool _brueckeTrefferCheck;
@@ -1548,6 +1564,8 @@ public partial class MapViewer : Node2D
     private bool _rtCheck, _rtGestartet;
     /// <summary><c>--einnahme-check</c> — siehe Simulation/EinnahmeCheck.cs.</summary>
     private bool _enCheck, _enGestartet;
+    /// <summary><c>--verbuendete-check</c> — siehe Simulation/VerbuendeteCheck.cs.</summary>
+    private bool _vbCheck;
     private bool _sieg7Gestartet;
 
     /// <summary><c>--absetz-check</c> — siehe Simulation/AbsetzCheck.cs.</summary>
@@ -3401,6 +3419,10 @@ public partial class MapViewer : Node2D
             else if (a == "--routentuer-check") _rtCheck = true;
             else if (a == "--routentuer-alt") MapEntityLayer.RoutentuerAlt = true;
             else if (a == "--einnahme-check") _enCheck = true;
+            else if (a == "--verbuendete-check") _vbCheck = true;
+            else if (a == "--verbuendete-unbeteiligt") MapEntityLayer.VerbuendeteUnbeteiligt = true;
+            else if (a == "--zeiger-verbuendet-alt") MapEntityLayer.ZeigerVerbuendetAlt = true;
+            else if (a == "--minikarte-anker-alt") MapEntityLayer.MinikarteAnkerAlt = true;
             else if (a == "--einnahme-routen-alt") MapEntityLayer.EinnahmeRoutenAlt = true;
             else if (a == "--einnahme-insassen-alt") MapEntityLayer.EinnahmeInsassenAlt = true;
             else if (a == "--zasah-sonderfaelle-aus") MapEntityLayer.ZasahSonderfaelleAus = true;
@@ -3694,6 +3716,11 @@ public partial class MapViewer : Node2D
             else if (a == "--radarmast-check") _radarmastCheck = true;
             else if (a == "--stapellauf-check") _stapellaufCheck = true;
             else if (a == "--frachter-check") _frachterCheck = true;
+            else if (a == "--verbuendeten-angriff-check") _vaCheck = true;
+            else if (a == "--verbuendeten-ki-check") _vkCheck = true;
+            else if (a == "--verbuendete-ohne-ki") MapEntityLayer.VerbuendeteOhneKi = true;
+            else if (a == "--kein-angriff-auf-verbuendete") MapEntityLayer.KeinAngriffAufVerbuendete = true;
+            else if (a == "--strg-einnahme-alt") MapEntityLayer.StrgEinnahmeAlt = true;
             else if (a == "--frachtersatz-alt") MapEntityLayer.FrachtersatzAlt = true;
             else if (a == "--einsteigbefehl-alt") MapEntityLayer.EinsteigbefehlAlt = true;
             else if (a == "--bruecke-treffer-check") _brueckeTrefferCheck = true;
@@ -4828,6 +4855,7 @@ public partial class MapViewer : Node2D
             if (_gwCheck) GD.Print(_entities.GaswerferCheckLine());
             if (_rtCheck) GD.Print(_entities.RoutentuerCheckLine());
             if (_enCheck) GD.Print(_entities.EinnahmeCheckLine());
+            if (_vbCheck) GD.Print(_entities.VerbuendeteCheck());
             if (_zielzelleProbe) GD.Print(_entities.ZielzelleProbe());
             if (_skripttrefferProbe) GD.Print(_entities.SkripttrefferProbe());
             if (_gebaeudebrandProbe) GD.Print(_entities.GebaeudebrandProbe());
@@ -7473,10 +7501,14 @@ public partial class MapViewer : Node2D
                                 // kennt nur Wald, Objekte und Einheiten). Strg
                                 // auf ein Kraftwerk hiess damit: Befehl
                                 // angenommen, Wirkung keine.
-                                if (!_entities.PostCapture(GetGlobalMousePosition(), mb.ShiftPressed)
-                                 && !_entities.PostAttack(GetGlobalMousePosition(), mb.ShiftPressed)
-                                 && !_entities.PostAttackGround(GetGlobalMousePosition(), mb.ShiftPressed))
-                                    _entities.PostMove(GetGlobalMousePosition(), mb.ShiftPressed);
+                                //
+                                // ⭐⭐ 15.09.2026 — STRG NIMMT NICHT MEHR EIN, und
+                                // Strg greift Verbuendete an wie im Original (seine
+                                // Entscheidungen a und b). Die Kette steht jetzt in
+                                // MapEntityLayer.StrgRechtsklick, damit der
+                                // Pruefstand denselben Weg geht. Gegenschalter
+                                // --strg-einnahme-alt, --kein-angriff-auf-verbuendete.
+                                _entities.StrgRechtsklick(GetGlobalMousePosition(), mb.ShiftPressed);
                             }
                             // ⭐⭐⭐ 08.09.2026 — WO DER EINNAHMEZEIGER STEHT,
                             // NIMMT DER KLICK EIN. Seine Meldung: »das einnahme
@@ -7521,7 +7553,11 @@ public partial class MapViewer : Node2D
                                                                 mb.ShiftPressed))
                                   && !_entities.PostUnloadKlick(GetGlobalMousePosition(), mb.ShiftPressed)
                                   && !_entities.PostBoardKlick(GetGlobalMousePosition(), mb.ShiftPressed)
+                                  // ⭐ 15.09.2026 — ueber einem Verbuendeten ist der
+                                  // gewoehnliche Klick die Fahrt (Zeigerart 3, C 0x4378CB);
+                                  // angegriffen wird er nur mit Strg.
                                   && !(!_entities.NeutralzeigerHier(GetGlobalMousePosition())
+                                       && !_entities.VerbuendeterHier(GetGlobalMousePosition())
                                        && _entities.PostAttack(GetGlobalMousePosition(),
                                                                mb.ShiftPressed)))
                                 _entities.PostMove(GetGlobalMousePosition(), mb.ShiftPressed);

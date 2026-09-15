@@ -51,6 +51,7 @@ public partial class MapEntityLayer : Node2D
         public int Grabber = -1;        // the unit sent to take a building
         public int GrabTarget = -1;     // the building it is going for
         public int Taken;               // buildings this side has taken
+        public int Zuege;               // Denk-Zuege, fuer --verbuendeten-ki-check
 
         /// <summary>The mission's own build programme, when there is one, and
         /// where in it this player stands. RECOVERED, unlike the rest of this
@@ -430,6 +431,7 @@ public partial class MapEntityLayer : Node2D
 
         var foes = new List<int>();
         var standby = new List<int>();
+        var matesAi = new List<int>();
         for (int p = 0; p < 8; p++) _standby[p] = false;
 
         if (read)
@@ -437,8 +439,21 @@ public partial class MapEntityLayer : Node2D
             foreach (int p in live)
             {
                 if (p == human) continue;
-                if (IsNeutralPlayer(p) || Allied(human, p)) { standby.Add(p); _standby[p] = true; }
-                else foes.Add(p);
+                // ⭐⭐ 14.09.2026 — EIN VERBUENDETER IST NICHT UNBETEILIGT. Seine Meldung aus
+                // K14: verbuendete Einheiten nicht auf der Minikarte, nicht sichtbar. Das
+                // Original stempelt Sicht fuer jeden mit Buendnisbyte != 0
+                // (C 0x420720 / F 0x41F8D2: [Besitzer + 40·Betrachter + 0x87B155]); der
+                // Standby-Merker schaltete DecktAuf fuer Spieler 3 ab.
+                // Gegenschalter --verbuendete-unbeteiligt.
+                if (IsNeutralPlayer(p) || (VerbuendeteUnbeteiligt && Allied(human, p)))
+                { standby.Add(p); _standby[p] = true; }
+                else if (!Allied(human, p)) foes.Add(p);
+                // ⭐⭐ 15.09.2026 — UND ER BEKOMMT DIE KI, seine Entscheidung »wenn im
+                // Original die KI selber spielt, setzen wir das so um«. Die KI-Runde
+                // 0x4BFB80 laeuft fuer jeden Rechnerspieler, nicht nur fuer Gegner; alle
+                // ihre Zielquellen ueberspringen T != 0 (berichte/verbuendete-fable.md §6),
+                // bei uns AiHostile/IsHostile. Gegenschalter --verbuendete-ohne-ki.
+                else if (!VerbuendeteOhneKi) matesAi.Add(p);
             }
         }
         else
@@ -455,7 +470,7 @@ public partial class MapEntityLayer : Node2D
                 else { standby.Add(p); _standby[p] = true; }
             }
         }
-        EnableSkirmishAi(foes, level);
+        EnableSkirmishAi(foes.Concat(matesAi), level);
 
         var mates = new List<int>();
         if (read)
@@ -1224,6 +1239,7 @@ public partial class MapEntityLayer : Node2D
             if (a.Think > 0f) continue;
             var (think, waveSize, guard) = AiTuning(a.Level);
             a.Think += think;
+            a.Zuege++;
 
             AiProduce(a);
 
