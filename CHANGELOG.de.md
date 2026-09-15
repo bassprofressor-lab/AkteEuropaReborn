@@ -14,6 +14,69 @@ bisher nur dort beschrieben.*
 > **Road to 0.7.0** in der [README](README.de.md). Der Abschnitt unten wächst
 > mit jeder gespielten Mission weiter.
 
+## 0.6.4 — 15.09.2026 · Kampagne 10 bis 14: Fenster, Frachter und Verbündete
+
+> Fünf Missionen, jede durchgespielt. Unterwegs haben die Gebäude ihre eigenen
+> Fenster bekommen, gebaute Schiffe und Gebäude benehmen sich endlich wie die von
+> der Karte — und Verbündete sind zum ersten Mal wirklich Verbündete.
+
+### Kurz gesagt
+
+- **Verbündete sehen mit und spielen selbst.** Ihre Einheiten sind von Anfang an
+  sichtbar und stehen auf der Minikarte, und der Computer führt sie wie im
+  Original — bisher standen sie still herum und blieben im Nebel.
+- **Über einem Verbündeten steht der Fahrtzeiger**, kein Fadenkreuz mehr und kein
+  Einnahmesymbol.
+- **Strg+Rechtsklick greift an, statt einzunehmen** — wie im Original.
+  Eingenommen wird mit dem gewöhnlichen Rechtsklick auf das Tor. Strg greift
+  jetzt auch Verbündete an, wenn man es will: Fahrzeuge und Gruppen ja, ein
+  einzelner Fußsoldat nicht.
+- **Neue Gebäudefenster wie im Original:** Depot (»Aussenden« wartet an der Tür,
+  statt abzusagen), Fabrik (Anhalten und Fortsetzen wirken wirklich),
+  Einheiten-Info, Generator, Geschäftszentrum, das Mitnahmefenster und das
+  Meldungsfenster für Absagen.
+- **Gebaute Frachter laden** — und Infanterie steigt per Klick auf den eigenen
+  Frachter ein. Dieser Einsteigebefehl fehlte bisher ganz.
+- **Neu gebaute Gebäude sind sichtbar, anwählbar und haben ihre Bauanimation**
+  mit Gerüst, wie im Original.
+- **Stapellauf:** Boote fahren links oder rechts aus dem Hafen, gebaute Schiffe
+  haben ihre Stimme.
+- **Brücken und Rampen sind zerstörbar** — mit Trümmern und Wasser, gezielt per
+  Strg angreifbar, und der Pionier bessert sie wieder aus.
+- **Radarmasten** laufen ab wie im Original, mit eigenem Bild und Klang.
+- **Mission 11 (Hotel Plaza):** sechs fehlende Regeln, dazu der Raumfrachter mit
+  Abflug, Lichtblitz und Schatten.
+- **Nimmt man eine Basis ein, verschwinden die fremden Insassen**, und die
+  Transporter des Gegners pendeln nicht mehr in die eingenommene Fabrik.
+- **Der Gottmodus** (Strg+Umschalt+G) schützt nur noch die eigenen Einheiten.
+
+### Für Neugierige, was darunter liegt
+
+- **Dreimal an einem Tag derselbe Fehler: gebaut ist nicht dasselbe wie von der
+  Karte.** Das Gerüst lag nicht im Export, dem Neubau fehlte der Klickrahmen, dem
+  gebauten Frachter der Transportsatz — jedes Mal füllte nur der Kartenlader ein
+  Feld, das der Bauweg vergaß. Seitdem wird der Neubau Feld für Feld gegen den
+  Kartenlader gelesen.
+- **Ein Befehl, den es nie gab.** Ein alter Vermerk behauptete, der Klick auf
+  einen Transporter führe zum Einsteigen. Nachgesehen: den Weg gab es gar nicht.
+  Das Original hat dafür einen eigenen Befehl (Nr. 17) — jetzt auch wir.
+- **Die Strg-Einnahme war unsere Erfindung.** Im Original setzt Strg immer den
+  Angriffszeiger, ohne das Ziel zu prüfen. Die Bündnisfrage steht allein im
+  Klick: nur ein einzeln gewählter Fußsoldat verweigert den Angriff auf eine
+  verbündete Einheit — und das Geschoss trifft den Verbündeten nur, wenn genau er
+  befohlen wurde.
+- **Warum Verbündete unsichtbar waren:** eine einzige Zeile steckte sie zu den
+  Unbeteiligten, und die decken nichts auf. Das Original zählt jeden, mit dem man
+  verbündet ist, als Aufdecker — an allen fünf Stellen der Nebelrunde.
+
+### Bekannte Einschränkungen
+
+- Beschießt man einen Verbündeten, schießt er nicht zurück. Im Original tut er
+  das nach 20 Takten.
+- Der Einnahmezeiger erscheint nur über dem Tor. Im Original steht er über jeder
+  bereits gesehenen Zelle des Gebäudes.
+- Nimmt man eine Basis ein, bleibt ihre Bauschlange stehen (bewusst so gelassen).
+
 ## 0.6.3 — 13.09.2026 · der Pionier, und damit Kampagne 8 und 9
 
 > Diese Fassung dreht sich um **eine einzige Einheit**: den Pionier. Er konnte

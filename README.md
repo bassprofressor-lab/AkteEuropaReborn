@@ -103,15 +103,17 @@ stays open or needs input goes into **[OFFENE_FRAGEN.md](OFFENE_FRAGEN.md)**
 (German) — including the cases where an earlier explanation of ours turned out
 to be wrong. Both are kept as we go, not written afterwards.
 
-⭐ **Where we stand (2026-09-13, release 0.6.3):** missions 1 to 9 have been
+⭐ **Where we stand (2026-09-15, release 0.6.4):** missions 1 to 14 have been
 played through. Along the way mission 2 became completable for the first time,
 the power plants in mission 4 and the bunkers in mission 7 became destructible,
 and the enemy now plays with the original's own AI. **0.6.2 came out of
 SKIRMISH** (the computer opponent no longer cheats at vision; easy, normal and
-hard finally differ); **0.6.3 comes from the ENGINEER** — he now builds landing
-ramps and bridges, and without those, missions 8 and 9 cannot be won. **Each is
-a stop along this road, not its end.** What changed, in plain words:
-[CHANGELOG.md](CHANGELOG.md).
+hard finally differ); **0.6.3 came from the ENGINEER** — landing ramps and
+bridges, without which missions 8 and 9 cannot be won; **0.6.4 covers missions
+10 to 14** — the buildings' own windows, built ships and buildings that behave
+like the ones on the map, and allies that share their vision and play for
+themselves. **Each is a stop along this road, not its end.** What changed, in
+plain words: [CHANGELOG.md](CHANGELOG.md).
 
 **Contributions are explicitly welcome.** If you play a mission and something
 feels different from the original, please say so on

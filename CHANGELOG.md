@@ -12,6 +12,66 @@ your own copy of the 1997 game.
 > has been played through individually and found clean — see **Road to 0.7.0**
 > in the [README](README.md). The section below grows with every mission played.
 
+## 0.6.4 — 2026-09-15 · missions 10 to 14: windows, freighters and allies
+
+> Five missions, each played through. Along the way the buildings got their own
+> windows, built ships and buildings finally behave like the ones on the map —
+> and allies are, for the first time, really allies.
+
+### In short
+
+- **Allies share their vision and play for themselves.** Their units are
+  visible from the start and show on the minimap, and the computer commands them
+  as in the original — until now they stood idle and stayed in the fog.
+- **Over an ally the cursor shows "move"** — no crosshair and no capture icon.
+- **Ctrl+right-click attacks instead of capturing** — as in the original.
+  Capturing is the ordinary right-click on the gate. Ctrl now also attacks allies
+  if you mean it: vehicles and groups yes, a single foot soldier no.
+- **New building windows as in the original:** depot ("send out" now waits at
+  the door instead of refusing), factory (pause and resume really work), unit
+  info, generator, business centre, the carry window and the message window for
+  refusals.
+- **Built freighters load** — and infantry boards by clicking your own
+  freighter. That boarding order was missing entirely.
+- **Newly built buildings are visible, selectable and show their construction
+  animation** with scaffolding, as in the original.
+- **Launching:** boats leave the harbour to the left or right, built ships have
+  their voice.
+- **Bridges and ramps are destructible** — with debris and water, attackable on
+  purpose with Ctrl, and the engineer repairs them.
+- **Radar masts** run out as in the original, with their own picture and sound.
+- **Mission 11 (Hotel Plaza):** six missing rules, and the space freighter with
+  lift-off, flash and shadow.
+- **Capturing a base removes the enemy's units inside**, and enemy transports no
+  longer shuttle into a captured factory.
+- **God mode** (Ctrl+Shift+G) now protects only your own units.
+
+### For the curious, what lies underneath
+
+- **The same defect three times in one day: built is not the same as from the
+  map.** The scaffolding was missing from the export, the new building had no
+  click frame, the built freighter no transport record — each time only the map
+  loader filled a field the build path forgot. New buildings are now checked
+  field by field against the map loader.
+- **An order that never existed.** An old note claimed that clicking a transport
+  led to boarding. Checked: that path was never there. The original has its own
+  order for it (no. 17) — now so do we.
+- **Ctrl-capture was our own invention.** In the original, Ctrl always sets the
+  attack cursor without checking the target. The alliance check sits in the
+  click alone: only a single selected foot soldier refuses to attack an allied
+  unit — and the shell hits the ally only if exactly that ally was ordered.
+- **Why allies were invisible:** a single line filed them as bystanders, and
+  bystanders reveal nothing. The original counts everyone you are allied with as
+  a revealer, at all five places of the fog pass.
+
+### Known limitations
+
+- An ally you shoot at does not shoot back. In the original it does, after 20
+  ticks.
+- The capture cursor appears only over the gate. In the original it shows over
+  every already-seen cell of the building.
+- Capturing a base leaves its build queue in place (deliberately, for now).
+
 ## 0.6.3 — 2026-09-13 · the engineer, and with him missions 8 and 9
 
 > This release is about **a single unit**: the engineer. He could do none of the
