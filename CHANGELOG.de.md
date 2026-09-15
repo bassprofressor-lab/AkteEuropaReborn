@@ -16,47 +16,151 @@ bisher nur dort beschrieben.*
 
 ## 0.6.4 — 15.09.2026 · Kampagne 10 bis 14: Fenster, Frachter und Verbündete
 
-> Fünf Missionen, jede durchgespielt. Unterwegs haben die Gebäude ihre eigenen
-> Fenster bekommen, gebaute Schiffe und Gebäude benehmen sich endlich wie die von
-> der Karte — und Verbündete sind zum ersten Mal wirklich Verbündete.
+> Fünf Missionen, jede einzeln durchgespielt. Jeder Punkt unten ist ein Befund
+> aus diesen Läufen — was auffiel, was jetzt passiert, und wie das Original es
+> macht.
 
-### Kurz gesagt
+### Kampagne 10 — Depots, Fabriken, Häfen, Radar und Brücken
 
-- **Verbündete sehen mit und spielen selbst.** Ihre Einheiten sind von Anfang an
-  sichtbar und stehen auf der Minikarte, und der Computer führt sie wie im
-  Original — bisher standen sie still herum und blieben im Nebel.
-- **Über einem Verbündeten steht der Fahrtzeiger**, kein Fadenkreuz mehr und kein
-  Einnahmesymbol.
-- **Strg+Rechtsklick greift an, statt einzunehmen** — wie im Original.
-  Eingenommen wird mit dem gewöhnlichen Rechtsklick auf das Tor. Strg greift
-  jetzt auch Verbündete an, wenn man es will: Fahrzeuge und Gruppen ja, ein
-  einzelner Fußsoldat nicht.
-- **Neue Gebäudefenster wie im Original:** Depot (»Aussenden« wartet an der Tür,
-  statt abzusagen), Fabrik (Anhalten und Fortsetzen wirken wirklich),
-  Einheiten-Info, Generator, Geschäftszentrum, das Mitnahmefenster und das
-  Meldungsfenster für Absagen.
-- **Gebaute Frachter laden** — und Infanterie steigt per Klick auf den eigenen
-  Frachter ein. Dieser Einsteigebefehl fehlte bisher ganz.
-- **Neu gebaute Gebäude sind sichtbar, anwählbar und haben ihre Bauanimation**
-  mit Gerüst, wie im Original.
-- **Stapellauf:** Boote fahren links oder rechts aus dem Hafen, gebaute Schiffe
-  haben ihre Stimme.
-- **Brücken und Rampen sind zerstörbar** — mit Trümmern und Wasser, gezielt per
-  Strg angreifbar, und der Pionier bessert sie wieder aus.
-- **Radarmasten** laufen ab wie im Original, mit eigenem Bild und Klang.
-- **Mission 11 (Hotel Plaza):** sechs fehlende Regeln, dazu der Raumfrachter mit
-  Abflug, Lichtblitz und Schatten.
-- **Nimmt man eine Basis ein, verschwinden die fremden Insassen**, und die
-  Transporter des Gegners pendeln nicht mehr in die eingenommene Fabrik.
-- **Der Gottmodus** (Strg+Umschalt+G) schützt nur noch die eigenen Einheiten.
+- **Das Depot hat sein eigenes Fenster.** Auf dieser Karte gibt es zum ersten Mal
+  Depots, und bisher fehlte ihr Menü ganz. Jetzt öffnet sich das Fenster des
+  Originals: eine Liste der eingelagerten Einheiten (sechs Zeilen), in der man mit
+  Umschalt mehrere markiert, ein Knopf »Aussenden« und bei genau einer markierten
+  Einheit deren Angaben. Rechtsklick schließt es.
+- **»Aussenden« wartet an der Tür, statt abzusagen.** Steht draußen gerade etwas
+  im Weg, bleibt die Einheit im Depot vorgemerkt und fährt hinaus, sobald die Tür
+  frei ist — bisher kam eine Absage, und man musste es erneut versuchen.
+- **Fabriken haben das richtige Fenster.** Bisher öffnete sich ein Nachbau des
+  Basisfensters. Jetzt ist es das Fabrikfenster des Originals, das eher dem der
+  Mine ähnelt.
+- **Anhalten und Fortsetzen einer Fabrik wirken wirklich.** Der Knopf schaltet
+  zwischen »angehalten« und »aktiv« um, bei Fabriken wie bei der Mine. Hält man
+  mitten im Ausbau an, geht der angefangene Ausbau verloren (so entschieden).
+- **Ein fertiger Fabrikausbau ist zu hören**, mit dem Klang des Originals.
+- **»Einheiten-Info« im Einheitenmenü** öffnet das Info-Fenster des Originals.
+  Es zeigt den Stand vom Moment des Öffnens.
+- **Gebaute Schiffe haben ihre Stimme.** Boote, die schon auf der Karte lagen,
+  meldeten sich beim Anklicken und bei Befehlen; im Hafen gebaute schwiegen. Der
+  Grund: ihnen fehlte ein Feld, aus dem sich die Stimme ableitet.
+- **Boote laufen links oder rechts aus dem Hafen aus.** Bisher erschienen neue
+  Boote einfach an einer Stelle. Jetzt fahren sie wie im Original sichtbar aus dem
+  Hafengebäude heraus, abwechselnd zur einen und zur anderen Seite, und das
+  nächste wartet, bis der Platz frei ist.
+- **Radarmasten laufen ab.** Bisher standen sie ewig und waren unsichtbar. Jetzt
+  hat ein gesetzter Mast sein Bild, man hört ihn beim Aufstellen, und nach rund
+  zwei Minuten Spielzeit (6375 Takte) ist er wieder weg — so lange wie im Original.
+- **Brücken und Rampen sind zerstörbar.** Treffer richten Schaden an; stürzt eine
+  Brücke ein, bleiben Trümmer und Wasser zurück, und der Boden bekommt seine alte
+  Höhe wieder. Das gilt für Brücken, die auf der Karte liegen, genauso wie für
+  solche, die der Pionier gebaut hat.
+- **Brücken lassen sich gezielt angreifen.** Mit Strg auf eine Brücke oder Rampe
+  schießen die Einheiten, bis sie einstürzt — manche Missionen verlangen genau
+  das. Bisher brach der Befehl sofort ab.
+- **Der Pionier bessert auch Brücken aus**, nicht nur Gebäude.
+- **Absagen kommen im Meldungsfenster.** »Nicht genug Geld« oder »Höchstzahl
+  erreicht« standen nur klein in der Statuszeile. Jetzt erscheint das kleine
+  Meldungsfenster des Originals an der Maus und verschwindet nach kurzer Zeit.
+
+### Kampagne 11 — Hotel Plaza und das Geschäftszentrum
+
+- **Die Nebenmission »Hotel Plaza« lässt sich abschließen.** Das Zerstören des
+  Hotels zählte nicht. Sechs Regeln des Missionsskripts fehlten, darunter der
+  Erfolg des Transporters und das Setzen des VIPs; alle sind jetzt da.
+- **Übernommene Einheiten gehören auch intern dem neuen Besitzer.** Eine
+  übernommene Einheit wird jetzt, wie im Original, in der Liste ihres neuen
+  Besitzers geführt — daran hängen Regeln des Missionsskripts.
+- **Das Geschäftszentrum hat sein eigenes Fenster.** Bisher kam wieder das
+  Basisfenster. Es öffnet sich jetzt wie im Original nur, wenn ein Fahrzeug auf
+  der Platte davor steht, und schließt sich von selbst wieder.
+- **Gekaufte Einheiten kommen mit dem Raumfrachter.** Bisher erschien die
+  Einheit einfach. Jetzt fliegt der Frachter ein, landet mit Lichtblitz und
+  Schatten, setzt die Einheit ab und fliegt nach rechts wieder davon.
+- **Die gekaufte Einheit landet auf der richtigen Platte** des Handelspostens,
+  nicht eine Zelle daneben.
+- **Das Radarfahrzeug setzt Masten, auch wenn man es gebaut hat.** Im
+  Funktionsfenster passierte bei »Radar setzen« nichts, weil ein gebautes Fahrzeug
+  keinen Vorrat an Masten bekam. Jetzt hat es 20, wie eines von der Karte.
+
+### Kampagne 11 → 12 — Einheiten mitnehmen
+
+- **Das Mitnahmefenster ist das des Originals.** Zwischen den Missionen kam
+  bisher ein selbstgebautes Fenster. Jetzt ist es das Original, mit seinem Filter,
+  seinen Knöpfen und seiner Auszahlung.
+- **Gebaute Einheiten gehen bei der Mitnahme nicht mehr verloren.** Ihnen fehlte
+  eine Kennung, über die die nächste Mission sie wieder aufstellt; sie fielen
+  heraus. Außerdem fehlte ihnen dadurch »Angreifen« im Menü.
+- **Mitgenommene Einheiten kommen repariert an und behalten ihren Rang.** Bisher
+  reiste der Schaden mit, und der Rang ging verloren.
+- **Die letzten Missionen haben genug Stellplätze** für mitgenommene Einheiten
+  (15, 20 und 20 statt je 5).
+
+### Kampagne 13 — der Generator und die Einnahme
+
+- **Neu gebaute Gebäude sind sichtbar.** Depot, Mine, Generator und die übrigen
+  Bauten der Basis blieben nach dem Bau unsichtbar — ihnen fehlte die Angabe,
+  welches Bild sie tragen.
+- **Neu gebaute Gebäude lassen sich anwählen.** Der fertige Generator reagierte
+  nicht auf Klicks: ihm fehlten Klickrahmen, Mittelpunkt und Türzellen, die ein
+  Gebäude von der Karte immer hat.
+- **Der Generator hat sein eigenes Fenster**, wie im Original.
+- **Gebäude haben ihre Bauanimation mit Gerüst.** Während des Baus steht jetzt das
+  Gerüst des Originals. Die Bilder dafür lagen im Spiel vor, wurden aber beim
+  Einlesen nicht mit übernommen.
+- **Ein Gebäude im Bau ist unverwundbar und nicht anwählbar**, und seine
+  Wirtschaft ruht, bis es fertig ist (300 Takte, rund sechs Sekunden).
+- **Ist der Bauplatz belegt, wartet der Auftrag still.** Bisher verfiel er mit
+  einer Absage. Jetzt wird gebaut, sobald der Platz frei ist.
+- **Neubauten haben ihre Panzerung.** Bisher hatten sie keine.
+- **Nimmt man eine Basis ein, verschwinden die fremden Insassen.** Eine gegnerische
+  Einheit im Depot der zurückeroberten Basis blieb sichtbar, ließ sich aussenden
+  und danach zerstören. Im Original wird die Basis bei der Einnahme geleert. Ein
+  eigenständiges Depot behält seine Insassen — auch das wie im Original.
+- **Gegnerische Transporter pendeln nicht mehr in eine eingenommene Fabrik.** Ihre
+  Route fiel bei der Einnahme nicht weg, und sie fuhren weiter hinein und hinaus.
+  Jetzt werden Routen gestrichen, sobald ein Gebäude eingenommen oder zerstört
+  wird, und ein Transporter kommt an einer Fabrik oder Mine nur noch an ihrem
+  Haupttor an.
+
+### Kampagne 14 — Frachter und Verbündete
+
+- **In selbst gebaute Frachter lassen sich Einheiten einladen.** Frachter von der
+  Karte gingen, gebaute nicht: ihnen fehlte beim Stapellauf die Ladeliste.
+- **Infanterie steigt in den Frachter ein.** Fahrzeuge gingen an Bord, Infanterie
+  nicht. Der Grund: der Einsteigebefehl des Originals fehlte ganz. Ein Klick mit
+  Fahrzeug oder Fußsoldat auf den eigenen Frachter schickt die Einheit jetzt an
+  eine freie Zelle am Schiff und von dort an Bord — genau in diesen Frachter.
+- **Verbündete sehen mit.** Ihre Einheiten und Gebäude decken für dich auf, sind
+  von Anfang an sichtbar und stehen auf der Minikarte. Bisher blieben sie im
+  Nebel, als gehörten sie niemandem.
+- **Über einem Verbündeten steht der Fahrtzeiger.** Bisher zeigte sich dort das
+  Fadenkreuz oder über ihren Gebäuden sogar das Einnahmesymbol. Ein gewöhnlicher
+  Rechtsklick auf einen Verbündeten ist eine Fahrt dorthin, wie im Original.
+- **Verbündete spielen selbst.** Bisher standen verbündete Computerspieler still.
+  Jetzt führt sie die KI wie jeden Gegner, nur dass sie niemanden angreift, mit
+  dem sie verbündet ist. Das betrifft die Missionen 4, 9, 14, 17, 24 und 26 bis 29.
+- **Strg+Rechtsklick greift an, statt einzunehmen.** Die Strg-Einnahme war eine
+  Erfindung von uns aus der Zeit, bevor der gewöhnliche Rechtsklick auf das Tor
+  einnehmen konnte. Im Original bedeutet Strg immer Angriff.
+- **Mit Strg lassen sich Verbündete angreifen**, wie im Original: Fahrzeuge und
+  Gruppen feuern, ein einzeln gewählter Fußsoldat tut es nicht. Fußsoldaten in
+  einer Gruppe schießen ebenfalls nicht auf Verbündete.
+
+### Überall
+
+- **Der Gottmodus** (Strg+Umschalt+G) schützt nur noch die eigenen Einheiten —
+  bisher auch die des Gegners — und fängt jeden Todesweg ab, auch den Einsturz
+  einer Brücke und die Schallkanone.
 
 ### Für Neugierige, was darunter liegt
 
 - **Dreimal an einem Tag derselbe Fehler: gebaut ist nicht dasselbe wie von der
   Karte.** Das Gerüst lag nicht im Export, dem Neubau fehlte der Klickrahmen, dem
-  gebauten Frachter der Transportsatz — jedes Mal füllte nur der Kartenlader ein
-  Feld, das der Bauweg vergaß. Seitdem wird der Neubau Feld für Feld gegen den
+  gebauten Frachter die Ladeliste — jedes Mal füllte nur der Kartenlader ein Feld,
+  das der Bauweg vergaß. Seitdem wird der Neubau Feld für Feld gegen den
   Kartenlader gelesen.
+- **Ein Prüfstand war grün, und das Bild zeigte den Fehler.** Dass neue Gebäude
+  unsichtbar waren, sah keine Messung — erst ein Bildschirmfoto des
+  Generator-Prüfstands.
 - **Ein Befehl, den es nie gab.** Ein alter Vermerk behauptete, der Klick auf
   einen Transporter führe zum Einsteigen. Nachgesehen: den Weg gab es gar nicht.
   Das Original hat dafür einen eigenen Befehl (Nr. 17) — jetzt auch wir.
@@ -64,10 +168,12 @@ bisher nur dort beschrieben.*
   Angriffszeiger, ohne das Ziel zu prüfen. Die Bündnisfrage steht allein im
   Klick: nur ein einzeln gewählter Fußsoldat verweigert den Angriff auf eine
   verbündete Einheit — und das Geschoss trifft den Verbündeten nur, wenn genau er
-  befohlen wurde.
+  befohlen wurde. Sonst fliegt es über ihn hinweg.
 - **Warum Verbündete unsichtbar waren:** eine einzige Zeile steckte sie zu den
   Unbeteiligten, und die decken nichts auf. Das Original zählt jeden, mit dem man
   verbündet ist, als Aufdecker — an allen fünf Stellen der Nebelrunde.
+- **Wie lange ein Radarmast steht**, sagt ein einziger Zähler des Originals: 6375
+  Takte. Gemessen läuft er bei uns nach genau dieser Zeit ab.
 
 ### Bekannte Einschränkungen
 

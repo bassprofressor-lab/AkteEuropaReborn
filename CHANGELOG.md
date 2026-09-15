@@ -14,45 +14,146 @@ your own copy of the 1997 game.
 
 ## 0.6.4 — 2026-09-15 · missions 10 to 14: windows, freighters and allies
 
-> Five missions, each played through. Along the way the buildings got their own
-> windows, built ships and buildings finally behave like the ones on the map —
-> and allies are, for the first time, really allies.
+> Five missions, each played through on its own. Every point below is a finding
+> from those runs — what stood out, what happens now, and how the original does
+> it.
 
-### In short
+### Mission 10 — depots, factories, harbours, radar and bridges
 
-- **Allies share their vision and play for themselves.** Their units are
-  visible from the start and show on the minimap, and the computer commands them
-  as in the original — until now they stood idle and stayed in the fog.
-- **Over an ally the cursor shows "move"** — no crosshair and no capture icon.
-- **Ctrl+right-click attacks instead of capturing** — as in the original.
-  Capturing is the ordinary right-click on the gate. Ctrl now also attacks allies
-  if you mean it: vehicles and groups yes, a single foot soldier no.
-- **New building windows as in the original:** depot ("send out" now waits at
-  the door instead of refusing), factory (pause and resume really work), unit
-  info, generator, business centre, the carry window and the message window for
-  refusals.
-- **Built freighters load** — and infantry boards by clicking your own
-  freighter. That boarding order was missing entirely.
-- **Newly built buildings are visible, selectable and show their construction
-  animation** with scaffolding, as in the original.
-- **Launching:** boats leave the harbour to the left or right, built ships have
-  their voice.
-- **Bridges and ramps are destructible** — with debris and water, attackable on
-  purpose with Ctrl, and the engineer repairs them.
-- **Radar masts** run out as in the original, with their own picture and sound.
-- **Mission 11 (Hotel Plaza):** six missing rules, and the space freighter with
-  lift-off, flash and shadow.
-- **Capturing a base removes the enemy's units inside**, and enemy transports no
-  longer shuttle into a captured factory.
-- **God mode** (Ctrl+Shift+G) now protects only your own units.
+- **The depot has its own window.** This map has depots for the first time, and
+  their menu was missing entirely. Now the original's window opens: a list of the
+  stored units (six rows) in which Shift marks several, a "send out" button, and
+  the details of the unit when exactly one is marked. Right-click closes it.
+- **"Send out" waits at the door instead of refusing.** If something is in the
+  way outside, the unit stays queued in the depot and drives out as soon as the
+  door is free — until now you got a refusal and had to try again.
+- **Factories have the right window.** Until now a copy of the base window
+  opened. Now it is the original's factory window, closer to the mine's.
+- **Pausing and resuming a factory really work.** The button toggles between
+  "paused" and "active", for factories as for the mine. Pausing in the middle of
+  an upgrade loses that upgrade (a deliberate choice).
+- **A finished factory upgrade can be heard**, with the original's sound.
+- **"Unit info" in the unit menu** opens the original's info window. It shows
+  the state at the moment it was opened.
+- **Built ships have their voice.** Boats placed on the map answered when
+  clicked and ordered; boats built in the harbour stayed silent. They were missing
+  the field the voice is derived from.
+- **Boats leave the harbour to the left or right.** New boats used to simply
+  appear in one spot. Now, as in the original, they visibly sail out of the
+  harbour building, alternating sides, and the next one waits until there is
+  room.
+- **Radar masts run out.** They used to stand forever and were invisible. Now a
+  placed mast has its picture, you hear it go up, and after about two minutes of
+  game time (6375 ticks) it is gone — exactly as long as in the original.
+- **Bridges and ramps are destructible.** Hits do damage; when a bridge
+  collapses, debris and water remain and the ground returns to its old height.
+  This applies to bridges on the map just as to those the engineer built.
+- **Bridges can be attacked on purpose.** Ctrl on a bridge or ramp makes units
+  fire until it collapses — some missions require exactly that. The order used to
+  abort at once.
+- **The engineer repairs bridges too**, not only buildings.
+- **Refusals appear in the message window.** "Not enough money" or "maximum
+  reached" used to show only in small print in the status line. Now the
+  original's small message window appears at the mouse and fades after a moment.
+
+### Mission 11 — Hotel Plaza and the business centre
+
+- **The "Hotel Plaza" side mission can be completed.** Destroying the hotel did
+  not count. Six rules of the mission script were missing, among them the
+  transporter's success and the placing of the VIP; all are in now.
+- **Taken-over units belong to their new owner internally too.** A unit you
+  take over is now, as in the original, kept in its new owner's list — rules of
+  the mission script depend on that.
+- **The business centre has its own window.** The base window used to open
+  again. As in the original it now opens only while a vehicle stands on the plate
+  in front, and closes again by itself.
+- **Purchased units arrive by space freighter.** The unit used to simply appear.
+  Now the freighter flies in, lands with a flash and a shadow, drops the unit and
+  flies off to the right.
+- **The purchased unit lands on the right plate** of the trading post, not one
+  cell next to it.
+- **The radar vehicle places masts even when you built it.** In its function
+  window "place radar" did nothing, because a built vehicle got no stock of masts.
+  Now it has 20, like one from the map.
+
+### Mission 11 → 12 — carrying units over
+
+- **The carry window is the original's.** Between missions a home-made window
+  used to appear. Now it is the original, with its filter, buttons and payout.
+- **Built units are no longer lost when carried over.** They lacked an
+  identifier the next mission uses to place them again, and dropped out. It also
+  cost them "attack" in their menu.
+- **Carried units arrive repaired and keep their rank.** Damage used to travel
+  along, and the rank was lost.
+- **The last missions have enough spots** for carried units (15, 20 and 20
+  instead of 5 each).
+
+### Mission 13 — the generator and capturing
+
+- **Newly built buildings are visible.** Depot, mine, generator and the base's
+  other buildings stayed invisible after construction — they lacked the entry
+  saying which picture they wear.
+- **Newly built buildings can be selected.** The finished generator did not
+  react to clicks: it lacked the click frame, centre and gate cells a building
+  from the map always has.
+- **The generator has its own window**, as in the original.
+- **Buildings show their construction animation with scaffolding.** During
+  construction the original's scaffolding now stands. Its pictures were in the
+  game but were not taken along when the data was read in.
+- **A building under construction is invulnerable and cannot be selected**, and
+  its economy rests until it is finished (300 ticks, about six seconds).
+- **If the building site is occupied, the order waits quietly.** It used to
+  lapse with a refusal. Now construction starts as soon as the site is free.
+- **New buildings have their armour.** They used to have none.
+- **Capturing a base removes the enemy's units inside.** An enemy unit in the
+  depot of a recaptured base stayed visible, could be sent out and then
+  destroyed. In the original the base is emptied on capture. A stand-alone depot
+  keeps its occupants — also as in the original.
+- **Enemy transports no longer shuttle into a captured factory.** Their route
+  survived the capture and they kept driving in and out. Routes are now dropped as
+  soon as a building is captured or destroyed, and a transport arrives at a
+  factory or mine only at its main gate.
+
+### Mission 14 — freighters and allies
+
+- **Units can be loaded into freighters you built yourself.** Freighters from
+  the map worked, built ones did not: they got no cargo list at launch.
+- **Infantry boards the freighter.** Vehicles went aboard, infantry did not. The
+  reason: the original's boarding order was missing entirely. Clicking your own
+  freighter with a vehicle or foot soldier now sends the unit to a free cell by
+  the ship and aboard from there — into exactly that freighter.
+- **Allies share their vision.** Their units and buildings reveal the map for
+  you, are visible from the start and show on the minimap. They used to stay in
+  the fog as if they belonged to nobody.
+- **Over an ally the cursor shows "move".** It used to show the crosshair, and
+  over their buildings even the capture icon. An ordinary right-click on an ally
+  is a move there, as in the original.
+- **Allies play for themselves.** Allied computer players used to stand still.
+  Now the AI commands them like any opponent, except that it attacks nobody it is
+  allied with. This affects missions 4, 9, 14, 17, 24 and 26 to 29.
+- **Ctrl+right-click attacks instead of capturing.** Ctrl-capture was our own
+  invention from before the ordinary right-click on the gate could capture. In
+  the original, Ctrl always means attack.
+- **Ctrl attacks allies**, as in the original: vehicles and groups open fire, a
+  single selected foot soldier does not. Foot soldiers in a group do not fire on
+  allies either.
+
+### Everywhere
+
+- **God mode** (Ctrl+Shift+G) now protects only your own units — it used to
+  protect the enemy's too — and catches every way of dying, including a
+  collapsing bridge and the sonic cannon.
 
 ### For the curious, what lies underneath
 
 - **The same defect three times in one day: built is not the same as from the
   map.** The scaffolding was missing from the export, the new building had no
-  click frame, the built freighter no transport record — each time only the map
-  loader filled a field the build path forgot. New buildings are now checked
-  field by field against the map loader.
+  click frame, the built freighter no cargo list — each time only the map loader
+  filled a field the build path forgot. New buildings are now checked field by
+  field against the map loader.
+- **A harness was green while the picture showed the defect.** No measurement
+  noticed that new buildings were invisible — only a screenshot from the
+  generator harness did.
 - **An order that never existed.** An old note claimed that clicking a transport
   led to boarding. Checked: that path was never there. The original has its own
   order for it (no. 17) — now so do we.
@@ -60,9 +161,12 @@ your own copy of the 1997 game.
   attack cursor without checking the target. The alliance check sits in the
   click alone: only a single selected foot soldier refuses to attack an allied
   unit — and the shell hits the ally only if exactly that ally was ordered.
+  Otherwise it flies over.
 - **Why allies were invisible:** a single line filed them as bystanders, and
   bystanders reveal nothing. The original counts everyone you are allied with as
   a revealer, at all five places of the fog pass.
+- **How long a radar mast stands** is one counter in the original: 6375 ticks.
+  Measured, ours runs out after exactly that.
 
 ### Known limitations
 
