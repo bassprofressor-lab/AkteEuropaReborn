@@ -34,6 +34,12 @@ using Godot;
 ///   &lt;= 20       nichts
 /// </code>
 ///
+/// <para>⭐ <b>AUFGELÖST am 15.09.2026</b> (berichte/flammenwerfer-wald-opus.md §1.2):
+/// A = Rang <c>+0x28</c>, B = Angriff <c>+0x26</c> + 2·Höhe des Schützen, und ein
+/// Flammenwerfer (<c>+0x0D == 12</c>) setzt fest 60 (C 0x40D432). Gebaut in
+/// <c>Bodenangriff.cs</c> (<c>ZasahBrandwert</c>) für jeden Schuss einer Einheit.
+/// Der Absatz darunter gilt nur noch für Treffer ohne Schützen (Skript).</para>
+///
 /// <para>⚠⚠ <b>UNSERE SETZUNG, und sie ist genau eine:</b> WAS in die Bänder
 /// geht. Das Original rechnet @0x40D442 <c>((A + 128) · B) &gt;&gt; 7</c> aus zwei
 /// Wörtern seines Zasah-Rahmens und würfelt <c>− rand()%5 + rand()%5</c> darauf.
@@ -63,14 +69,16 @@ public partial class MapEntityLayer
 
     /// <summary>Der Treffer auf ein zerstoerbares Kartenobjekt — die Bänder von
     /// @0x40D442. Gibt true, wenn etwas geschehen ist.</summary>
-    private bool ObjektTreffer(int col, int row, int schaden)
+    private bool ObjektTreffer(int col, int row, int schaden, bool ohneWurf = false)
     {
         var e = ObjektAn(col, row);
         if (e == null || e.Abgebrannt) return false;
 
-        // ⚠ Der Wurf ist gelesen (@0x40D45F/@0x40D471), die Groesse darunter
-        // ist unsere — siehe Klassenkopf.
-        int wert = schaden - Simulation.Determinism.Roll(5) + Simulation.Determinism.Roll(5);
+        // ⚠ Der Wurf ist gelesen (@0x40D45F/@0x40D471). Kommt der Wert schon aus
+        // ZasahBrandwert (Schuss einer Einheit, 15.09.2026), ist er dort gewuerfelt —
+        // bzw. bei der 60er-Weiche gar nicht — und darf nicht doppelt kommen.
+        int wert = ohneWurf ? schaden
+                 : schaden - Simulation.Determinism.Roll(5) + Simulation.Determinism.Roll(5);
 
         if (wert > ObjZerstoeren) { ObjektZerstoeren(e); return true; }
         if (wert > ObjAnzuenden) return ObjektAnzuenden(e);

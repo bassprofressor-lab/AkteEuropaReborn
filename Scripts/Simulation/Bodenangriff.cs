@@ -148,7 +148,12 @@ public partial class MapEntityLayer : Node2D
         float dist = Mathf.Max(Mathf.Abs(e.Col - z.X), Mathf.Abs(e.Row - z.Y));
         e.AimFacing = DirToFacing(mitte - e.Pos);
 
-        if (dist <= w.RangeTiles && dist >= RangeMinOf(e))
+        // ⭐ 15.09.2026 — die Reichweite der EINHEIT (+0x2B), nicht die der Waffentafel:
+        // FireAtSchuss nimmt s.Range (0x40BF64), der Flammenwerfer traegt 4, die Tafel 8.
+        // berichte/flammenwerfer-wald-opus.md §3C. Gegenschalter --bodenangriff-tafelreichweite.
+        float reichweite = BodenangriffTafelreichweite ? w.RangeTiles
+                         : e.Range > 0 ? e.Range : RangeOf(e);
+        if (dist <= reichweite && dist >= RangeMinOf(e))
         {
             e.Path = null;                       // in Reichweite: stehen und feuern
             if (e.Weapon == 0) e.Facing = e.AimFacing;
@@ -214,7 +219,7 @@ public partial class MapEntityLayer : Node2D
         if (flug == null)
         {
             // Waffe ohne Flugbild: der Treffer sitzt sofort.
-            ZellSchaden(zelle.X, zelle.Y, schaden, mitte, art);
+            ZellSchaden(zelle.X, zelle.Y, schaden, mitte, art, si);
             // ⭐ 11.09.2026 — und er trifft auch, was auf der Zelle STEHT
             // (Simulation/FireAt.cs). Art 12 (Blitzschleuder) ohne Buendnisfrage.
             if (!ZellEinschlagAlt) ZellEinschlag(si, zelle.X, zelle.Y, schaden, art);
@@ -274,9 +279,9 @@ public partial class MapEntityLayer : Node2D
     /// zurueck.</para></summary>
     public static bool ZellSchadenAn = true;
 
-    private void ZellSchaden(int col, int row, int schaden, Vector2 wo, int art)
+    private void ZellSchaden(int col, int row, int schaden, Vector2 wo, int art, int schuetze = -1)
     {
-        ZellWirkung(col, row, schaden);
+        ZellWirkung(col, row, schaden, schuetze);
         string? schlag2 = ImpactKind(art);
         if (schlag2 != null)
             _effects.Add(new Effect { Pos = wo, Kind = schlag2, FrameTime = 0.06f });
@@ -285,15 +290,74 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>Nur die WIRKUNG am Boden, ohne Klang und Bild — der Einschlag
     /// eines Geschosses bringt beides schon selbst mit.</summary>
-    public void ZellWirkung(int col, int row, int schaden)
+    public void ZellWirkung(int col, int row, int schaden, int schuetze = -1)
     {
         if (!ZellSchadenAn) return;
-        switch (WaldTreffer(col, row, schaden))
+        // ⭐⭐ 15.09.2026 — WAS IN DIE BAENDER GEHT, ist nicht der Tafelschaden der Waffe,
+        // sondern der Brandwert von Zasah (siehe ZasahBrandwert). Seine Meldung aus K16:
+        // »den Jungle setzt der Flammenwerfer nicht in Brand«. Mit dem Tafelschaden 1
+        // kam der Flammenwerfer nie ueber 12, und die Raketen (100/120) loeschten den
+        // Wald jedes Mal ohne Feuer. Gegenschalter --wald-waffenschaden.
+        bool mitSchuetze = !WaldWaffenschaden && schuetze >= 0 && schuetze < _entities.Count;
+        int wert = schaden;
+        bool gewuerfelt = false;
+        if (mitSchuetze && ZelleBrennbar(col, row))
+        {
+            wert = ZasahBrandwert(_entities[schuetze]);
+            gewuerfelt = true;
+            if (_entities[schuetze].Comp0D == FlammenwerferZbran && !FlammeOhneSonderfall) FlammenBrandwert++;
+            BrandwertLetzter = wert;
+        }
+        switch (WaldTreffer(col, row, wert))
         {
             case Waldfolge.Feuer: BodenWaldFeuer++; break;
             case Waldfolge.Weg:   BodenWaldWeg++;   break;
         }
-        if (ObjektTreffer(col, row, schaden)) BodenObjekt++;
+        if (ObjektTreffer(col, row, wert, ohneWurf: gewuerfelt)) BodenObjekt++;
+    }
+
+    /// <summary>ZBRAN (+0x0D) des Flammenwerfers — Bauteil 32, Geschossart 11.</summary>
+    public const int FlammenwerferZbran = 12;
+
+    /// <summary><c>--flamme-ohne-sonderfall</c>: die 60er-Weiche fehlt, der
+    /// Flammenwerfer rechnet wie jede Waffe (und zuendet nie).</summary>
+    public static bool FlammeOhneSonderfall;
+
+    /// <summary><c>--wald-waffenschaden</c> — der Stand bis 15.09.2026: in die Wald-
+    /// und Objektbaender geht der Tafelschaden der Waffe.</summary>
+    public static bool WaldWaffenschaden;
+
+    /// <summary><c>--bodenangriff-tafelreichweite</c> — der Stand bis 15.09.2026: der
+    /// Bodenangriff nimmt die Reichweite der Waffentafel statt der Einheit.</summary>
+    public static bool BodenangriffTafelreichweite;
+
+    /// <summary>Wie oft die 60er-Weiche griff, und der letzte Brandwert — fuer den
+    /// Pruefstand.</summary>
+    public int FlammenBrandwert, BrandwertLetzter;
+
+    /// <summary>
+    /// <b>Der Brandwert von Zasah</b> fuer Wald- und Objektarm (C 0x40D649 / F 0x40D484,
+    /// Objektarm C 0x40D432 / F 0x40D26C): ist der Schuetze ein Flammenwerfer
+    /// (<c>+0x0D == 12</c>), fest <b>60</b>, ohne Wurf; sonst
+    /// <c>((Rang +0x28 + 128) · (Angriff +0x26 + 2·Hoehe)) &gt;&gt; 7 − rand%5 + rand%5</c>
+    /// (C 0x40D65B..0x40D699). Rang und Angriff sind dieselben Groessen wie im
+    /// Gebaeudearm (ShotDamage, @0x40CB91). berichte/flammenwerfer-wald-opus.md §1.2.
+    /// </summary>
+    private int ZasahBrandwert(Entity s)
+    {
+        if (s.Comp0D == FlammenwerferZbran && !FlammeOhneSonderfall) return 60;
+        int angriff = s.Attack + 2 * ElevOf(s.Col, s.Row);
+        return ((s.Rating28 + 128) * angriff >> 7)
+               - Simulation.Determinism.Roll(5) + Simulation.Determinism.Roll(5);
+    }
+
+    /// <summary>Steht auf der Zelle Wald oder ein zerstoerbares Objekt? Nur dann
+    /// erreicht das Original den Wald- bzw. Objektarm und wuerfelt.</summary>
+    private bool ZelleBrennbar(int col, int row)
+    {
+        foreach (var e in _objDraw)
+            if (e.Col == col && e.Row == row && (e.IstWald || e.IstObjekt) && !e.Abgebrannt) return true;
+        return false;
     }
 
     /// <summary>Ist ueberhaupt etwas angewaehlt? Das Original fragt an

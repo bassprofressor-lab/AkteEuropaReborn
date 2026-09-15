@@ -1391,7 +1391,10 @@ public partial class MapEntityLayer
     {
         bool fabrik = e.BType is 2 or 3 or 4;
         bool mine = e.BType is 10 or 15;
-        bool flug = e.BType == 5;
+        // ⚠ 15.09.2026 berichtigt: hier stand `BType == 5` — 5 ist das DEPOT, der
+        // Flughafen ist 9 (berichte/gebaeudereparatur-opus.md B4). Ein Flughafen bekam
+        // damit die Nummern der Basis. Nullmodell: die alte Probe »Flughafen, 5«.
+        bool flug = e.BType == 9;
         return job switch
         {
             BuildingJob.ExpandStore => fabrik ? CommandOp.FactoryExpandStore
@@ -1541,7 +1544,7 @@ public partial class MapEntityLayer
         // --- 5. die Nummernwahl je Art --------------------------------------
         sb.Append("  Nummern je Art (reparieren/aktiv):");
         var proben = new[] { ("Fabrik", 2, 519, 511), ("Mine", 10, 522, 517),
-                             ("Flughafen", 5, 520, 524), ("Basis", 1, 521, 525) };
+                             ("Flughafen", 9, 520, 524), ("Basis", 1, 521, 525) };
         foreach (var (name, bt, wantR, wantI) in proben)
         {
             var probe = new Entity { IsBuilding = true, BType = bt };
@@ -1573,7 +1576,16 @@ public partial class MapEntityLayer
     /// Gebäude meint, das es zeigt — dieselbe Zeile, die der Direktweg
     /// hatte.</para></summary>
     public int PostRepairFromPanel()
-    { AimAtPanelBuilding(); return PostBuildingJob(BuildingJob.Repair); }
+    {
+        AimAtPanelBuilding();
+        // ⭐ 15.09.2026 — die Klicksperre des Originals sitzt im KLICKARM, nicht im
+        // Behandler (Basis C 0x449FA2 u. a.): laeuft die Reparatur schon, geschieht
+        // nichts. Reparatur.cs, --reparaturklick-alt.
+        foreach (int i in Selection)
+            if (i >= 0 && i < _entities.Count && _entities[i].IsBuilding && ReparaturKlickGesperrt(_entities[i]))
+                return 0;
+        return PostBuildingJob(BuildingJob.Repair);
+    }
 
     public int PostStopRepairFromPanel()
     { AimAtPanelBuilding(); return PostBuildingJob(BuildingJob.Idle); }

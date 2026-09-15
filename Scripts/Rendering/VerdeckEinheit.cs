@@ -61,7 +61,7 @@ public partial class MapEntityLayer
             var tex = AuswahlBild(e);
             if (tex == null) continue;
             geprueft++;
-            var oben = PictureAnchor(e) - ComposedAnchor;
+            var oben = PictureAnchor(e) - EinheitenAnker(e);   // 15.09.2026, Einheitenanker.cs
             var rechteck = new Rect2(oben, tex.GetSize());
 
             var treffer = new System.Collections.Generic.List<string>();

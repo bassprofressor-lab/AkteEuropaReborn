@@ -1244,9 +1244,9 @@ public partial class MapEntityLayer
     ///
     /// <para>⚠ <b>Der Sonderfall:</b> ein Treffer von einer Einheit mit
     /// <c>+0x0D == 12</c> setzt den Wert fest auf 60 — die fällt also immer ins
-    /// Band »immer Feuer«. Den bauen wir hier NICHT, weil unser einziger
-    /// Aufrufer der SETUP-Block ist und der keine schiessende Einheit kennt;
-    /// wer den allgemeinen Beschuss anschliesst, muss ihn mitnehmen.</para>
+    /// Band »immer Feuer«. ⭐ Seit dem 15.09.2026 gebaut: jeder Schuss einer Einheit
+    /// geht über <c>ZasahBrandwert</c> (Bodenangriff.cs), der die Weiche und die
+    /// Rechnung aus Rang und Angriff trägt. Der Wert kommt hier fertig an.</para>
     ///
     /// <para>⚠ <b>Für unseren einzigen Weg ändert sich nichts</b>, und das ist
     /// Absicht: der SETUP-Schaden ist gelesene <b>50</b> und fällt ins Band

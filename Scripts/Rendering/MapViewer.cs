@@ -1123,6 +1123,37 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_spurenCheck)
+        {
+            if (_shotPath.Length > 0) { _ = SpurBildLauf(); return; }
+            GD.Print(_entities.SpurenCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_reparaturklickCheck)
+        {
+            GD.Print(_entities.ReparaturklickCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_einheitenankerCheck)
+        {
+            GD.Print(_entities.EinheitenankerCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_tuerfachCheck)
+        {
+            GD.Print(_entities.TuerfachCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_flammenwaldCheck)
+        {
+            GD.Print(_entities.FlammenwerferWaldCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_minenbildCheck)
         {
             if (_shotPath.Length > 0) { _ = MinenBildLauf(); return; }
@@ -1708,6 +1739,23 @@ public partial class MapViewer : Node2D
     /// <summary><c>--minenbild-check --shot=…</c> (15.09.2026): Kamera auf die erste
     /// Mine, ein Bild, und die Zaehler des Zeichners — die kopflose Zeile sagt nur, was in
     /// der Liste STEHT, dieser Lauf, ob es auf dem Schirm ANKOMMT.</summary>
+    /// <summary><c>--spuren-check --shot=…</c> (15.09.2026): der Minenraeumer faehrt 5 Zellen,
+    /// nach 2,5 s ein Bild mitten auf die Spur — Differenzbild gegen --spuren-unsichtbar.</summary>
+    private async System.Threading.Tasks.Task SpurBildLauf()
+    {
+        _entities.EnsureMissionScript();
+        for (int i = 0; i < 5; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var p = _entities.SpurBildProbe();
+        if (p != null) { _camera.Position = p.Value; _camera.Zoom = new Vector2(4, 4); }
+        await ToSignal(GetTree().CreateTimer(2.5), SceneTreeTimer.SignalName.Timeout);
+        _entities.QueueRedraw();
+        for (int i = 0; i < 4; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GetViewport().GetTexture().GetImage().SavePng(_shotPath);
+        GD.Print($"spurbild-lauf: {(p == null ? "KEIN RAEUMER" : $"Kamera {p.Value}, Bild nach " + _shotPath)}, "
+               + $"lebende Marken {_entities.SpurMarkenLebend()}, angelegt {_entities.SpurMarkenAngelegt}");
+        GetTree().Quit(0);
+    }
+
     private async System.Threading.Tasks.Task MinenBildLauf()
     {
         _entities.EnsureMissionScript();
@@ -4149,6 +4197,21 @@ public partial class MapViewer : Node2D
             else if (a.StartsWith("--build-preview=")) _buildPreview = a["--build-preview=".Length..].ToInt();
             else if (a == "--fog") MapEntityLayer.ForceFog = true;
             else if (a == "--nebel-aus") MapEntityLayer.NebelAus = true;
+            else if (a == "--tuerfach-alt") MapEntityLayer.TuerfachAlt = true;
+            else if (a == "--einheitenanker-alt") MapEntityLayer.EinheitenankerAlt = true;
+            else if (a == "--reparaturklick-alt") MapEntityLayer.ReparaturklickAlt = true;
+            else if (a == "--spuren-aus") MapEntityLayer.SpurenAus = true;
+            else if (a == "--spuren-ueber-einheiten") MapEntityLayer.SpurenUeberEinheiten = true;
+            else if (a == "--spuren-unsichtbar") MapEntityLayer.SpurenUnsichtbar = true;
+            else if (a == "--spuren-check") _spurenCheck = true;
+            else if (a == "--reparaturstufe-alt") MapEntityLayer.ReparaturstufeAlt = true;
+            else if (a == "--reparaturklick-check") _reparaturklickCheck = true;
+            else if (a == "--einheitenanker-check") _einheitenankerCheck = true;
+            else if (a == "--tuerfach-check") _tuerfachCheck = true;
+            else if (a == "--flamme-ohne-sonderfall") MapEntityLayer.FlammeOhneSonderfall = true;
+            else if (a == "--wald-waffenschaden") MapEntityLayer.WaldWaffenschaden = true;
+            else if (a == "--bodenangriff-tafelreichweite") MapEntityLayer.BodenangriffTafelreichweite = true;
+            else if (a == "--flammenwerfer-wald-check") _flammenwaldCheck = true;
             else if (a == "--buildings") _buildingOverlay = true;
             else if (a == "--rail") _railOverlay = true;
             // Prueflauf fuer die Legeart der Strecke, siehe DrawRailTrack.
@@ -4365,6 +4428,16 @@ public partial class MapViewer : Node2D
     private bool _minenCheck;
     /// <summary><c>--missionsminen-check</c>, <c>--minenfahrt-check</c> — siehe Simulation/MinenRaeumen.cs.</summary>
     private bool _missionsminenCheck, _minenfahrtCheck, _minenbildCheck;
+    /// <summary><c>--flammenwerfer-wald-check</c> — siehe Simulation/FlammenwerferWald.cs.</summary>
+    private bool _flammenwaldCheck;
+    /// <summary><c>--tuerfach-check</c> — siehe Simulation/Tuerfach.cs.</summary>
+    private bool _tuerfachCheck;
+    /// <summary><c>--einheitenanker-check</c> — siehe Simulation/Einheitenanker.cs.</summary>
+    private bool _einheitenankerCheck;
+    /// <summary><c>--reparaturklick-check</c> — siehe Simulation/Reparatur.cs.</summary>
+    private bool _reparaturklickCheck;
+    /// <summary><c>--spuren-check</c> — siehe Simulation/Fahrspuren.cs.</summary>
+    private bool _spurenCheck;
     /// <summary><c>--sprit-check</c>: schickt alle eigenen fahrenden Einheiten
     /// quer ueber die Karte, damit sich messen laesst, OB der Spritabzug beim
     /// Zellwechsel greift. Ohne Befehl faehrt auf einer Kampagnenkarte niemand

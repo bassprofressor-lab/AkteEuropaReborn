@@ -1665,6 +1665,12 @@ public partial class MapEntityLayer : Node2D
     /// where it has one, the old flat interval where it does not.</summary>
     private static float ReloadOf(Entity e)
         => e.Reload > 0 ? e.Reload * ReloadTick : FireInterval;
+    // ⚠ 15.09.2026 — OFFEN, seine Meldung aus K15: »die gegnerische KI schiesst mit ihrem
+    // Flammenwerfer viel schneller als meiner«. Gemessen: KI-Flammenwerfer (gebaut, Reload 1
+    // aus dem Entwurf) 0,06 s, seiner (Karte, +0x3D = 0) die Ersatzzeit 1,10 s. »0 ist echt«
+    // geht NICHT: 0 steht auf den Karten bei allen Waffenarten (L-Raketen 31/56, sonst 100),
+    // ist also ein ungefuellter Wert, den das Original selbst setzt. Woher, ist ungelesen
+    // (OFFENE_FRAGEN BE.9 Nr. 1) — Lesung berichte/nachladezeit-opus.md.
     // ⚠ There is deliberately NO default weapon component any more — see WeaponOf.
     private static Dictionary<int, (string Name, int Damage, float RangeTiles)>? _weapons;
     private readonly List<Effect> _effects = new();
@@ -3260,17 +3266,17 @@ public partial class MapEntityLayer : Node2D
             if (e.Infantry >= 0)
             {
                 tex = GetInfantryTexture(e.Infantry, e.Facing, InfBlock(e));
-                if (tex != null) { what = "Fusssoldat"; at = picC - ComposedAnchor; }
+                if (tex != null) { what = "Fusssoldat"; at = picC - EinheitenAnker(e); }
             }
             if (tex == null)
             {
                 tex = GetHullTexture(e.UnitType, e.Facing, PoseOf(e), SlopeClassOf(e.Col, e.Row));
-                if (tex != null) { what = "Rumpf"; at = picC - ComposedAnchor; }
+                if (tex != null) { what = "Rumpf"; at = picC - EinheitenAnker(e); }
             }
             if (tex == null)
             {
                 tex = GetComposedTexture(e.Combo, e.Facing);
-                if (tex != null) { what = "zusammengesetzt"; at = picC - ComposedAnchor; }
+                if (tex != null) { what = "zusammengesetzt"; at = picC - EinheitenAnker(e); }
             }
             if (tex == null)
             {
@@ -5423,7 +5429,7 @@ public partial class MapEntityLayer : Node2D
         // Dieselbe Bedingung wie im Zeichner (e.Infantry >= 0), und dieselbe
         // Textur — AuswahlBild holt fuer Fussvolk GetInfantryTexture.
         var fuss = FussVersatzFuer(e);
-        return PictureAnchor(e) - ComposedAnchor + fuss + KoerperMitte(tex);
+        return PictureAnchor(e) - EinheitenAnker(e) + fuss + KoerperMitte(tex);
     }
 
     /// <summary>Das Rumpfbauteil des U-Boots — <c>SPODEK</c> 74.</summary>
@@ -11587,7 +11593,7 @@ public partial class MapEntityLayer : Node2D
     private Vector2 ShotOrigin(Entity e)
     {
         int aim = TurmRichtung(e);
-        return PictureAnchor(e) - ComposedAnchor
+        return PictureAnchor(e) - EinheitenAnker(e)
              + TurretOffset(e.UnitType, e.Col, e.Row, e.Facing)
              + TurmBildMitte(e.Weapon, aim, TurmLadePose(e));
     }
@@ -12533,7 +12539,7 @@ public partial class MapEntityLayer : Node2D
                 // zerstoerbare Objekte. Im Original macht Zasah die Baender an
                 // der getroffenen Zelle, gleich woher der Schuss kam — ein
                 // danebengegangener Schuss zuendet also auch Wald an.
-                ZellWirkung(Mathf.RoundToInt(ic.X), Mathf.RoundToInt(ic.Y), p.Damage);
+                ZellWirkung(Mathf.RoundToInt(ic.X), Mathf.RoundToInt(ic.Y), p.Damage, p.Shooter);
             }
             else Audio.GameSounds.Explosion();
             if (p.Target >= 0 && p.Target < _entities.Count)
@@ -16939,7 +16945,10 @@ public partial class MapEntityLayer : Node2D
     {
         var e = Producer();
         if (e == null) return "Reparatur — kein Gebäude gewählt.";
-        if (e.State == StRepair || e.State == FaRepair)
+        // ⚠ 15.09.2026 — FaRepair (2) ist bei der Mine/Fabrik »reparieren«, StRepair (1)
+        // bei Basis/Flughafen — aber bei einer Fabrik ist 1 »angehalten«. Nur der
+        // Zustand, der fuer DIESE Gebaeudeart Reparatur heisst, zaehlt.
+        if (e.State == JobState(e, BuildingJob.Repair))
             return $"Reparatur läuft — {e.Hp} von {e.HpMax} Trefferpunkten.\n" +
                    "Das Gebäude repariert sich SELBST, es braucht keine Einheit.";
         if (e.Hp >= e.HpMax)
@@ -16956,7 +16965,11 @@ public partial class MapEntityLayer : Node2D
     public void StartRepair()
     {
         foreach (int i in new List<int>(_sel))
+        {
+            // ⭐ 15.09.2026 — die Klicksperre des Originals (Reparatur.cs).
+            if (i >= 0 && i < _entities.Count && ReparaturKlickGesperrt(_entities[i])) continue;
             GiveBuildingJob(i, BuildingJob.Repair);
+        }
         UpdatePanel();
         QueueRedraw();
     }
@@ -17251,6 +17264,11 @@ public partial class MapEntityLayer : Node2D
             // Zeichnen aus Hp/HpMax gerechnet (siehe die Formel weiter oben).
             // Das Bild zieht also von selbst nach.
             if (e.Hp > 50) e.Hp = 29 * e.Hp / 30;
+            // ⭐ 15.09.2026 — und doch die Stufe nachziehen (0x4CBBF0(Platz, 0) @0x43FC1D):
+            // der Satz oben galt nur fuers BILD. Die gespeicherte Stufe des Brandes
+            // (Gebaeudebrand.cs) blieb stehen, und der naechste Treffer hielt das fuer
+            // einen Stufenwechsel und zuendete. Reparatur.cs, --reparaturstufe-alt.
+            ReparaturStufe(e);
 
             _order = "Status : reparieren";
             // Kein Klang: die Routine @0x43e196 spielt einen nach »mining 3«,
@@ -18194,6 +18212,7 @@ public partial class MapEntityLayer : Node2D
     {
         var e = Fenstergebaeude();
         if (e == null) return;
+        if (ReparaturKlickGesperrt(e)) return;           // 15.09.2026, Reparatur.cs
         GiveBuildingJob(_entities.IndexOf(e), BuildingJob.Repair);
     }
 
@@ -24425,7 +24444,7 @@ public partial class MapEntityLayer : Node2D
         bool fact = FactoryStates(e);
         int st = e.State;
         if (st == StAktiv) Produce(e);
-        else if (st == (fact ? FaRepair : StRepair)) Repair(e);
+        else if (st == (fact ? FaRepair : StRepair)) { Repair(e); ReparaturStufe(e); }
         else if (fact && st == FaExpand)                     // Lagerausbau
         {
             // ⚠ Die Mine bekommt DREISSIG Plaetze, die Fabrik zehn — gelesen,
@@ -28669,8 +28688,15 @@ public partial class MapEntityLayer : Node2D
         //   Bauplatten der Gegnerbasis im Nebel ab — von ihm gemeldet mit
         //   »leere felder die nicht sauber sind«, mit zwei Bildern belegt.
         NebeldeckeZeichnen();
+        // ⭐ 15.09.2026 — DIE FAHRSPUREN liegen UNTER den Einheiten, seine Beobachtung am
+        // Original: »die Fahrspur legt sich über die Einheiten« (bei uns). Die Reihenfolge
+        // Spur <-> Einheit im Korb ist ungelesen (V); gezeichnet wird darum als Boden, vor
+        // dem Zeilendurchgang. Gegenschalter --spuren-ueber-einheiten. Fahrspuren.cs.
+        if (!SpurenUeberEinheiten) SpurenZeichnenAlle();
 
-        int gi = 0;
+        // ⭐⭐ 15.09.2026 — DIE FAECHER JE ZEILE (Simulation/Tuerfach.cs). Seine Meldung
+        // aus K16: »das Tor verdeckt die davorstehende Einheit«.
+        var fach = FachKoerbe(gebaeude, letzteZeile);
         for (int r = 0; r <= letzteZeile; r++)
         {
             // (1) das Gleis dieser Zeile — es trägt seinen eigenen Versatz
@@ -28681,15 +28707,16 @@ public partial class MapEntityLayer : Node2D
             DrawUnitsUpTo(r + 1, ref ui);
             // (2b) die Radarmasten, Ebene Zeile + 2 (0x42F73E). RadarMast.cs.
             RadarMastenZeichnen(r);
+            // (2b'') die Fahrspuren im Korb Zeile + 2 — nur noch mit --spuren-ueber-einheiten.
+            if (SpurenUeberEinheiten) SpurenZeichnen(r);
             // (2b') die Minen, Korb Zeile + 2 (0x42F2B0). MinenBild.cs.
             MinenZeichnen(r);
             // (2c) die Raumfrachter, ebenfalls Zeile + 2 (0x42F95F). Frachter.cs.
             FrachterZeichnen(r);
             // (3) die Gebäude, deren Fach in dieser Zeile liegt.
-            while (gi < gebaeude.Count
-                   && gebaeude[gi].Row + BuildingDrawRowFor(gebaeude[gi]) <= r)
+            if (fach[r] != null)
+            foreach (var b in fach[r])
             {
-                var b = gebaeude[gi++];
                 // ⭐⭐ 24.08.2026 — EIN GEBAEUDE IM UNERKUNDETEN NEBEL WIRD NICHT
                 // GEZEICHNET.
                 //
@@ -29140,7 +29167,7 @@ public partial class MapEntityLayer : Node2D
                         if (y > y1) y1 = y;
                     }
             if (x1 < x0) continue;
-            var ecke = PictureAnchor(e) - ComposedAnchor;
+            var ecke = PictureAnchor(e) - EinheitenAnker(e);
             var farbe = ecke + new Vector2((x0 + x1 + 1) / 2f, (y0 + y1 + 1) / 2f);
             var alt = e.Pos - new Vector2(0, SelMarkLift);
             var neu = AuswahlMitte(e);
@@ -32492,6 +32519,7 @@ public partial class MapEntityLayer : Node2D
         // »Buildings« (@0x416690) und »Movement« (@0x4166BB) — die
         // Protokollnamen der Bloecke sagen die Reihenfolge.
         MinenTakt();
+        SpurenAltern();                        // »marks« C 0x416804 — Fahrspuren.cs
 
         SchiffDrehTakt();
         SchiffLogTakt(dt);
@@ -32587,6 +32615,7 @@ public partial class MapEntityLayer : Node2D
                     _nav.SetOccupant(next.X, next.Y, i, e.Infantry >= 0);
                 else SchiffOhneVormerkung++;
                 if (_sCheckAn) _sSchritte.Add((i, new Vector2I(e.Col, e.Row), next));   // --schraegschritt-check
+                SpurSchrittbeginn(e, next);        // Fahrspur, C 0x40538F — Fahrspuren.cs
                 e.Reserved = next;
                 e.WaitTime = 0;
                 // Ein neuer Schritt faengt an. Der Ausgangspunkt ist die
@@ -32821,7 +32850,9 @@ public partial class MapEntityLayer : Node2D
                 // durch SimHz zu teilen. Die Teilung schnitt ab (Geschw. 10 ->
                 // 8333 statt 8333,33) und verzog die Zahlen um bis zu 0,5 %.
                 // Erweitert ist die Rechnung exakt und bleibt ganzzahlig.
+                int spurVor = e.Progress;
                 e.Progress += RawSpeedOf(e) * Simulation.NavGrid.OriginalHz * 1000;
+                SpurFahrtakt(e, spurVor, target);  // Fahrspur, C 0x40780F / 0x4079DD — Fahrspuren.cs
                 int full = e.StepCost * SimHz;
                 arrived = e.Progress >= full;
                 if (!arrived)
@@ -34196,7 +34227,7 @@ public partial class MapEntityLayer : Node2D
     /// <para>Gegenschalter <c>--leichenanker-alt</c>.</para>
     /// </summary>
     private Vector2 FussvolkOrt(Entity e)
-        => PictureAnchor(e) - ComposedAnchor
+        => PictureAnchor(e) - EinheitenAnker(e)
            + (e.Dead && LeichenankerAlt ? Vector2.Zero : FussVersatzFuer(e));
 
     /// <summary><c>--leichenanker-alt</c> — der Stand vor dem 11.09.2026: die
@@ -38072,16 +38103,16 @@ public partial class MapEntityLayer : Node2D
                 // sonst nichts.
                 if (GetauchtesBoot(e) is { } getaucht)
                 {
-                    DrawTexture(Parteifarbe(getaucht, e.Owner), picC - ComposedAnchor);
+                    DrawTexture(Parteifarbe(getaucht, e.Owner), picC - EinheitenAnker(e));
                     return;
                 }
                 var hull = GetHullTexture(e.UnitType, e.Facing, PoseOf(e), slope);
                 if (hull != null)
                 {
-                    DrawTexture(Parteifarbe(hull, e.Owner), picC - ComposedAnchor);
+                    DrawTexture(Parteifarbe(hull, e.Owner), picC - EinheitenAnker(e));
                     var turret = GetTurretTexture(e.Weapon, aim, slope, TurmLadePose(e));
                     if (turret != null && !HullCarriesItsOwnGun(e.UnitType))
-                        DrawTexture(Parteifarbe(turret, e.Owner), picC - ComposedAnchor
+                        DrawTexture(Parteifarbe(turret, e.Owner), picC - EinheitenAnker(e)
                                             + TurretOffset(e.UnitType, e.Col, e.Row, e.Facing));
                     return;
                 }
@@ -38089,7 +38120,7 @@ public partial class MapEntityLayer : Node2D
                 if (composed != null)
                 {
                     // fixed 64x56 canvas, anchored at the unit's ground-center
-                    DrawTexture(Parteifarbe(composed, e.Owner), picC - ComposedAnchor);
+                    DrawTexture(Parteifarbe(composed, e.Owner), picC - EinheitenAnker(e));
                     return;
                 }
                 // bare chassis (e.g. a freshly produced design) — the turret is
@@ -38100,7 +38131,7 @@ public partial class MapEntityLayer : Node2D
                     DrawTexture(Parteifarbe(bare, e.Owner), new Vector2(picC.X - bare.GetWidth() / 2f,
                                                   picC.Y - bare.GetHeight()));
                     var turret2 = GetTurretTexture(e.Weapon, aim);
-                    if (turret2 != null) DrawTexture(Parteifarbe(turret2, e.Owner), picC - ComposedAnchor);
+                    if (turret2 != null) DrawTexture(Parteifarbe(turret2, e.Owner), picC - EinheitenAnker(e));
                     return;
                 }
             }

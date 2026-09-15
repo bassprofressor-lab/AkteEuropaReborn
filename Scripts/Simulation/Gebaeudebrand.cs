@@ -115,7 +115,7 @@ public partial class MapEntityLayer : Node2D
     /// Reparatur. Das ist keine Nachlässigkeit von uns, sondern steht so da;
     /// wer es ändert, weicht ab.</para>
     /// </summary>
-    private void GebaeudeStufeNachziehen(Entity b)
+    private void GebaeudeStufeNachziehen(Entity b, bool zuenden = true)
     {
         if (GebaeudebrandAus || !b.IsBuilding || b.IsProp || b.Dead) return;
         if (b.HpMax <= 0) return;
@@ -124,6 +124,9 @@ public partial class MapEntityLayer : Node2D
         if (stufe == b.Schadensstufe) return;
         int vorher = b.Schadensstufe;
         b.Schadensstufe = stufe;
+        // ⭐ 15.09.2026 — 0x4CBBF0(Platz, 0): mit Flag 0 wird nur die Stufe geschrieben,
+        // nichts gezuendet (Reparaturbehandler und Reparaturtakt). Reparatur.cs.
+        if (!zuenden) return;
 
         // Die zwei Tore: das intakte Gebaeude (Stufe 1, @0x4C960D) und der Tod
         // (@0x4C9742) setzen Flag := 0 und zuenden nichts. Der Tod hat seinen
