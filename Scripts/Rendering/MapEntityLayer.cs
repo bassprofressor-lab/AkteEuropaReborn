@@ -1812,7 +1812,11 @@ public partial class MapEntityLayer : Node2D
     /// obeys it, and the setting on this machine has it off.</summary>
     public static bool ForceFog;
 
-    public bool FogActive => _fog != null && (ForceFog || UI.Settings.FogOfWar);
+    public bool FogActive => _fog != null && !NebelAus && (ForceFog || UI.Settings.FogOfWar);
+
+    /// <summary><c>--nebel-aus</c> — Messschalter (15.09.2026): kein Nebel, gleich was die
+    /// Einstellung sagt. Fuer Bildschirmfotos von Stellen, die keine Einheit sieht.</summary>
+    public static bool NebelAus;
 
     /// <summary>Can the player see this cell right now?</summary>
     private bool Watched(int col, int row)
@@ -2047,6 +2051,15 @@ public partial class MapEntityLayer : Node2D
             }
 
         foreach (var w in RadarWatchers(betrachter)) yield return w;
+
+        // ⭐ 15.09.2026 — UND DIE MINEN. Der Nebeltakt ruft fuer jede Mine, deren Leger
+        // mit dem Betrachter verbuendet ist, 0x4200C0(x, y, 0) — Radius 0, nur die
+        // eigene Zelle (C 0x42090D…0x420934 / F 0x41FAC7). Sicht 1, Hoehe 0 gibt
+        // UnitRadius 0. Feindliche Minen decken nie auf. Gegenschalter --minen-nebel-alt.
+        if (!MinenNebelAlt)
+            foreach (var m in _minen)
+                if (m.Aktiv && DecktAuf(m.Player, betrachter))
+                    yield return (m.Col, m.Row, 1, 0);
     }
 
     /// <summary>The fog as a W x H texture drawn over the map, the same trick
@@ -13619,6 +13632,11 @@ public partial class MapEntityLayer : Node2D
                 // sind also VOR dem Missionsbeginn geschehen. Es brennt, aber
                 // es blitzt nicht. Siehe ApplyMissionHits.
                 ApplyMissionHits(_mscript.Treffer, funken: false);
+                // ⭐⭐ 15.09.2026 — DIE MINENFELDER des SETUP-Blocks (lay_mine C 0x421940,
+                // 17 Rufer in M15/M20/M25). Kampagnenkarten bringen keine Minen mit;
+                // ohne diese Zeile lag in Kampagne 15 keine einzige.
+                // Simulation/MinenRaeumen.cs, Gegenschalter --missionsminen-aus.
+                MissionsMinenLegen(_mscript.Minen);
                 var watched = _mscript.WatchedSlots();
                 if (watched.Count > 0)
                 {
@@ -28663,6 +28681,8 @@ public partial class MapEntityLayer : Node2D
             DrawUnitsUpTo(r + 1, ref ui);
             // (2b) die Radarmasten, Ebene Zeile + 2 (0x42F73E). RadarMast.cs.
             RadarMastenZeichnen(r);
+            // (2b') die Minen, Korb Zeile + 2 (0x42F2B0). MinenBild.cs.
+            MinenZeichnen(r);
             // (2c) die Raumfrachter, ebenfalls Zeile + 2 (0x42F95F). Frachter.cs.
             FrachterZeichnen(r);
             // (3) die Gebäude, deren Fach in dieser Zeile liegt.
@@ -32859,6 +32879,13 @@ public partial class MapEntityLayer : Node2D
                 // @0x407aa4 Ablage in +0x1c, @0x407aa7 der Sprit bei +0x2e).
                 // Siehe BlockedStep.
                 e.Block = BlockEnter + Simulation.Determinism.Roll(BlockEnterSpread);
+                // ⭐⭐ 15.09.2026 — DER MINENRAEUMER RAEUMT BEIM UEBERFAHREN, in »on
+                // square« (C 0x407B04 / F 0x407A2E): +0x0E == 0x44 -> 0x421E10, erste
+                // feindliche Mine auf der eigenen Zelle frei, Klang 40. Im Original
+                // steht der Ruf hinter Geduld und Sprit; hier davor, weil der
+                // Spritzweig unten die Ankunftsbehandlung verlaesst — die zwei
+                // beruehren sich nicht. Simulation/MinenRaeumen.cs, --minenraeumen-aus.
+                MinenRaeumerAnkunft(e);
                 // ⭐⭐ 25.08.2026 — UND DER SPRIT. Der Kommentar darueber nennt
                 // @0x407aa7 seit jeher als die Stelle »unmittelbar nach« dem
                 // Geduldszaehler — gebaut war sie nie. Bodenfahrzeuge fuhren

@@ -1117,6 +1117,25 @@ public partial class MapViewer : Node2D
             GetTree().Quit(0);
             return;
         }
+        if (_missionsminenCheck)
+        {
+            GD.Print(_entities.MissionsminenCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_minenbildCheck)
+        {
+            if (_shotPath.Length > 0) { _ = MinenBildLauf(); return; }
+            GD.Print(_entities.MinenbildCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_minenfahrtCheck)
+        {
+            GD.Print(_entities.MinenfahrtCheck());
+            GetTree().Quit(0);
+            return;
+        }
         if (_minenCheck)
         {
             GD.Print(_entities.MinenCheck());
@@ -1686,6 +1705,23 @@ public partial class MapViewer : Node2D
     /// <summary><c>--radarmast-check --shot=…</c>: einen Mast setzen, die Kamera
     /// darauf, und ein Bild — die Zeile des Prüfstands sagt, DASS gezeichnet
     /// wird, das Bild, WIE.</summary>
+    /// <summary><c>--minenbild-check --shot=…</c> (15.09.2026): Kamera auf die erste
+    /// Mine, ein Bild, und die Zaehler des Zeichners — die kopflose Zeile sagt nur, was in
+    /// der Liste STEHT, dieser Lauf, ob es auf dem Schirm ANKOMMT.</summary>
+    private async System.Threading.Tasks.Task MinenBildLauf()
+    {
+        _entities.EnsureMissionScript();
+        for (int i = 0; i < 5; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var p = _entities.MinenBildProbe();
+        if (p != null) { _camera.Position = p.Value; _camera.Zoom = new Vector2(4, 4); }
+        _entities.QueueRedraw();
+        for (int i = 0; i < 8; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GetViewport().GetTexture().GetImage().SavePng(_shotPath);
+        GD.Print($"minenbild-lauf: {(p == null ? "KEINE MINE" : $"Kamera {p.Value}, Bild nach " + _shotPath)}, "
+               + $"gezeichnet: Scheiben {_entities.MinenScheiben}, Punkte {_entities.MinenPunkte}, Umrisse {_entities.MinenUmrisse}");
+        GetTree().Quit(0);
+    }
+
     private async System.Threading.Tasks.Task RadarMastBildLauf()
     {
         for (int i = 0; i < 5; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -3506,6 +3542,16 @@ public partial class MapViewer : Node2D
             else if (a.StartsWith("--sprit-check")) _spritCheck = true;
             else if (a == "--front-check") _frontCheck = true;
             else if (a == "--minen-ohne-tor") MapEntityLayer.MinenTor = false;
+            else if (a == "--missionsminen-check") _missionsminenCheck = true;
+            else if (a == "--minenfahrt-check") _minenfahrtCheck = true;
+            else if (a == "--minenbild-check") _minenbildCheck = true;
+            else if (a == "--minen-unsichtbar") MapEntityLayer.MinenUnsichtbar = true;
+            else if (a == "--minen-nebel-alt") MapEntityLayer.MinenNebelAlt = true;
+            else if (a == "--minen-ausnahme-alt") MapEntityLayer.MinenAusnahmeAlt = true;
+            else if (a == "--minen-legetor-alt") MapEntityLayer.MinenLegetorAlt = true;
+            else if (a == "--missionsminen-aus") MapEntityLayer.MissionsminenAus = true;
+            else if (a == "--minenraeumen-aus") MapEntityLayer.MinenraeumenAus = true;
+            else if (a == "--minen-tor-alt") MapEntityLayer.MinenTorAlt = true;
             else if (a == "--alt-stempel") Simulation.NavGrid.AltStempel = true;
             else if (a == "--nebenmission-check") _nebenCheck = true;
             else if (a.StartsWith("--script-check")) _scriptCheck = 15f;
@@ -4102,6 +4148,7 @@ public partial class MapViewer : Node2D
             else if (a == "--infdeath-check") _infDeathCheck = true;
             else if (a.StartsWith("--build-preview=")) _buildPreview = a["--build-preview=".Length..].ToInt();
             else if (a == "--fog") MapEntityLayer.ForceFog = true;
+            else if (a == "--nebel-aus") MapEntityLayer.NebelAus = true;
             else if (a == "--buildings") _buildingOverlay = true;
             else if (a == "--rail") _railOverlay = true;
             // Prueflauf fuer die Legeart der Strecke, siehe DrawRailTrack.
@@ -4316,6 +4363,8 @@ public partial class MapViewer : Node2D
     private bool _erfindungProbe;
     private bool _befehlsklangGestartet;
     private bool _minenCheck;
+    /// <summary><c>--missionsminen-check</c>, <c>--minenfahrt-check</c> — siehe Simulation/MinenRaeumen.cs.</summary>
+    private bool _missionsminenCheck, _minenfahrtCheck, _minenbildCheck;
     /// <summary><c>--sprit-check</c>: schickt alle eigenen fahrenden Einheiten
     /// quer ueber die Karte, damit sich messen laesst, OB der Spritabzug beim
     /// Zellwechsel greift. Ohne Befehl faehrt auf einer Kampagnenkarte niemand

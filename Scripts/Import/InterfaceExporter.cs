@@ -633,6 +633,12 @@ public sealed class InterfaceExporter
         // Startrahmen der Folge 95 (5 Rahmen, 495…499, eine flache Scheibe in
         // fünf Neigungen). 0x7A41C6 hat genau diesen einen Leser.
         ("radarstab", 95),
+        // ⭐ 15.09.2026 — MINEN UND FALLEN. Zeichner Art 15 C 0x42CEAD / F 0x42C08C:
+        // eigene/verbuendete Mine = word[0x7A41BE] + Gelaendeklasse (Folge 93, fuenf
+        // Neigungen einer grauen Scheibe), feindliche = Schatten von word[0x7A416E]
+        // (Folge 73, ein Bild mit 4 Bildpunkten). Falle Art 16 C 0x42CFAD: Folge 94
+        // bzw. Punkt 61. berichte/minen-opus.md §2.
+        ("mine", 93), ("minenpunkt", 73), ("falle", 94), ("fallenpunkt", 61),
         // ⭐ 13.09.2026 — DER RAUMFRACHTER und sein LICHTBLITZ. Zeichner 0x42C7E0:
         // dword[0x815580 + 4·word[0x7A4E82]], 0x7A4E82 = 0x7A4048 + 4·910 + 2 —
         // Folge 910, ein Bild (Rahmen 1512). Abladen 0x4C158D: 0x435950(…, 0x60) —

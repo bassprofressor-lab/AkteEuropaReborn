@@ -232,6 +232,15 @@ public sealed class MissionScript
         /// (1,39) (9,40) (7,41) (19,52) (36,68), und vier davon tragen auf
         /// map_01 ein Objekt.</para></summary>
         public readonly List<(int Col, int Row)> Treffer = new();
+
+        /// <summary>
+        /// <b>DIE MINENFELDER</b> dieser Mission — <c>[x0, x1, y0, y1, leger, reihe]</c>,
+        /// halboffene Grenzen, aus <c>lay_mine</c> (C 0x421940 / F 0x420B00) im
+        /// SETUP-Block; <c>reihe</c> "yx" = Zeile aussen. Ausgelesen von
+        /// <c>aekernel-tools/mission_minen.py</c>, beide GAME.EXE gleich. M15: 11 Felder,
+        /// M20: 2, M25: 4 (berichte/minen-opus.md §1).
+        /// </summary>
+        public readonly List<(int X0, int X1, int Y0, int Y1, int Leger, bool ZeileAussen)> Minen = new();
     }
 
     // ---- state ------------------------------------------------------------
@@ -945,6 +954,9 @@ public sealed class MissionScript
     /// <summary>Siehe <see cref="Script.Treffer"/>.</summary>
     public IReadOnlyList<(int Col, int Row)> Treffer => _script.Treffer;
 
+    /// <summary>Siehe <see cref="Script.Minen"/>.</summary>
+    public IReadOnlyList<(int X0, int X1, int Y0, int Y1, int Leger, bool ZeileAussen)> Minen => _script.Minen;
+
     public List<Cond> PlaceConds()
     {
         var list = new List<Cond>();
@@ -1555,6 +1567,17 @@ public sealed class MissionScript
                     var q = e.AsGodotArray();
                     if (q.Count < 2) continue;
                     s.Treffer.Add((q[0].AsInt32(), q[1].AsInt32()));
+                }
+            // Die Minenfelder des SETUP-Blocks — siehe Script.Minen.
+            if (body.TryGetValue("minen", out var mnv) &&
+                mnv.VariantType == Variant.Type.Array)
+                foreach (var e in mnv.AsGodotArray())
+                {
+                    if (e.VariantType != Variant.Type.Array) continue;
+                    var q = e.AsGodotArray();
+                    if (q.Count < 6) continue;
+                    s.Minen.Add((q[0].AsInt32(), q[1].AsInt32(), q[2].AsInt32(), q[3].AsInt32(),
+                                 q[4].AsInt32(), q[5].AsString() == "yx"));
                 }
             if (!body.TryGetValue("rules", out var rv) ||
                 rv.VariantType != Variant.Type.Array) continue;

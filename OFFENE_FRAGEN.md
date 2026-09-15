@@ -10866,6 +10866,15 @@ kein Prüfstandsergebnis.
 ⚠ Bemerkenswert: `0x421C40`/`0x421E10` prüfen auf **Bündnis**, nicht auf
 Feindschaft. Das Räumen betrifft also die *eigenen* Minen.
 
+⚠⚠ **BERICHTIGT am 15.09.2026 (berichte/minen-opus.md, beide EXE):** der Absatz
+darüber und die »verbündet«-Spalten der Tafel sind **falsch**. Alle drei
+Zugreifer lesen `T[Leger, p]` und springen mit `test al,al; je Treffer` — Treffer
+bei `T == 0`, also **FEINDSCHAFT**, genau wie der Auslöser. Übergeben wird der
+eigene Spieler der räumenden Einheit (Einheitennummer/1000, C `0x40726F`). Der
+Minenräumer (`+0x0E == 0x44`) räumt beim Erreichen der Zellmitte (»on square«
+C `0x407B04`) die erste **feindliche** Mine auf seiner Zelle. Gebaut in
+`Scripts/Simulation/MinenRaeumen.cs`.
+
 ---
 
 ### 10. ⭐ Der Kartenrand wird nach Geländehöhe gesperrt (`0x422BD0`)

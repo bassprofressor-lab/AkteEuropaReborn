@@ -23,18 +23,20 @@ using Godot;
 /// <b>6 Byte</b> ab <b>0x552E18</b>:
 /// <c>+0x00 Spalte · +0x01 Zeile · +0x02 · +0x03 · +0x04 belegt ·
 /// +0x05 Leger</c>.
-/// ⚠ <b>+0x02 und +0x03 sind TOT.</b> Die Legeroutine würfelt sie
-/// (<c>rand%20+10</c> und <c>rand%10+5</c>) und <b>niemand liest sie je</b> —
-/// über den ganzen <c>.text</c> hat jedes der beiden genau EINE Fundstelle,
-/// nämlich das Schreiben selbst, während <c>+0x04</c> zehn hat und
-/// <c>+0x00</c> elf. Sie werden hier deshalb <b>nicht nachgebaut</b>: ein Feld,
-/// das das Original nicht benutzt, nachzubauen hiesse, ihm eine Bedeutung zu
-/// geben, die es nicht hat.</item>
+/// ⚠⚠ <b>BERICHTIGT am 15.09.2026: +0x02 und +0x03 sind NICHT tot.</b> Die
+/// Legeroutine würfelt sie (<c>rand%20+10</c>, <c>rand%10+5</c>), und der
+/// Zeichenlistenbauer <c>0x42F2B0</c> liest sie über den Satzzeiger
+/// (<c>[ebp−2]</c>/<c>[ebp−1]</c>, C <c>0x42F346</c>/<c>0x42F372</c>) — die Lage
+/// der Mine in ihrer 40×20-Zelle. Der alte Scan sah nur die absolute Form.
+/// Sie werden jetzt gewürfelt und gespeichert (<see cref="Mine.LageX"/>);
+/// gezeichnet wird noch nicht. berichte/minen-opus.md §2.1.</item>
 ///
-/// <item><b>Das Legen</b> (@0x421940, Thunk 0x401302, <b>ein einziger Rufer</b>
-/// @0x408858): die Zielzelle muss in der imap <c>0xFFFE</c> (leer) sein oder
-/// einen Wert <c>≤ 8000</c> tragen (dort steht eine Einheit) — <b>unter eine
-/// Einheit darf man legen</b>. Dann der erste freie der 500 Plätze; ist keiner
+/// <item><b>Das Legen</b> (@0x421940, Thunk 0x401302, <b>18 Rufer</b> — der
+/// Minenleger @0x408858 und 17 im SETUP der Missionen 15, 20, 25; berichtigt
+/// 15.09.2026): die Zielzelle muss in der imap <c>0xFFFE</c> (leer) sein oder
+/// einen Wert <c>≤ 8000</c> tragen (dort steht ein FAHRZEUG) — <b>unter ein
+/// Fahrzeug darf man legen</b>, auf rauen Boden, Wasser, Gebäude und unter
+/// Fussvolk (imap 10000+) nicht. Dann der erste freie der 500 Plätze; ist keiner
 /// frei, druckt es <c>"Too many mines"</c> (@0x4F9198) und legt nichts.</item>
 ///
 /// <item><b>Der Schuss des Minenlegers</b> (@0x4087D0…0x408892): Reichweite
@@ -64,10 +66,10 @@ using Godot;
 /// </list>
 ///
 /// <para>⚠⚠ <b>Was NICHT gebaut ist und warum:</b> die <b>FALLE</b> (zweites
-/// Feld @0x688B58, gleiche Form, Ausnahme 0x45, dazu eine Bedingung auf
-/// <c>+0x20</c>) — sie ist gelesen, aber nicht bestellt. Und die drei weiteren
-/// Fundstellen des Minenfeldes (@0x421C68, @0x421D60, @0x421E27) sind noch
-/// nicht gelesen; dort steckt vermutlich das Räumen und das Speichern.</para>
+/// Feld @0x688B58, gleiche Form, Ausnahme 0x45, Wirkung Geschwindigkeit 0) —
+/// in Kampagne 15 kommt keine vor. Das ZEICHNEN (Art 15, ANIM 93/73) ist
+/// gelesen, aber noch nicht gebaut. Das RÄUMEN ist seit dem 15.09.2026 gebaut
+/// (<see cref="MinenRaeumen"/>). Gelesen in berichte/minen-opus.md.</para>
 /// </summary>
 public partial class MapEntityLayer
 {
@@ -103,13 +105,17 @@ public partial class MapEntityLayer
     /// @0x408876.</summary>
     public const int MinenKlang = 28;
 
-    /// <summary>Ein Minenplatz. ⚠ Die zwei Zufallsbytes des Originals
-    /// (<c>+0x02</c>, <c>+0x03</c>) fehlen mit Absicht — siehe Klassenkopf.
+    /// <summary>Ein Minenplatz, Satz von 6 Byte (sec84). Die zwei Zufallsbytes
+    /// <c>+0x02</c>/<c>+0x03</c> sind die Lage in der Zelle — siehe Klassenkopf.
     /// </summary>
     public struct Mine
     {
         public int Col, Row, Player;
         public bool Aktiv;
+        /// <summary>+0x02 / +0x03: die Lage in der Zelle in Bildpunkten,
+        /// <c>rand%20+10</c> und <c>rand%10+5</c> (@0x421940). Liest der
+        /// Zeichenlistenbauer 0x42F2B0.</summary>
+        public int LageX, LageY;
     }
 
     private readonly Mine[] _minen = new Mine[UrMinen];
@@ -123,6 +129,41 @@ public partial class MapEntityLayer
     /// (<see cref="MinenTor"/>) zu war. Getrennt gezählt — »die Mine ging nicht
     /// hoch« hat drei Gründe, und eine Summe verwischt sie.</summary>
     public int MinenFreund, MinenImmunFall, MinenTorZu;
+
+    /// <summary>Wie oft Fussvolk auf einer Mine stand und NICHT ausloeste — der
+    /// Takt verlangt imap &lt; 8000, Fussvolkzellen tragen 10000..13999.</summary>
+    public int MinenFussvolk;
+
+    /// <summary>Wen die ausgeloesten Minen getroffen haben (Einheitenindex) — fuer die
+    /// Pruefstaende, die sonst fremden Beschuss fuer Minenschaden halten.</summary>
+    public readonly List<int> MinenOpfer = new();
+
+    /// <summary>Wieviele Minen ein Minenraeumer beim Ueberfahren entfernt hat
+    /// (0x421E10, Klang 40), und wieviele beim Legen unter einem Fahrzeug
+    /// landeten.</summary>
+    public int MinenGeraeumt, MinenUnterFahrzeug;
+
+    /// <summary><c>--minen-ausnahme-alt</c> — der Stand bis 15.09.2026: die
+    /// Raeumer-Ausnahme liest <c>Equipment</c> (+0x10) statt <c>Part</c>
+    /// (+0x0E); der Minenraeumer von Kampagne 15 loest dann selbst aus.</summary>
+    public static bool MinenAusnahmeAlt;
+
+    /// <summary><c>--minen-legetor-alt</c> — der Stand bis 15.09.2026: gelegt
+    /// wird auch auf rauen Boden, Wasser und unter Fussvolk.</summary>
+    public static bool MinenLegetorAlt;
+
+    /// <summary><c>--missionsminen-aus</c> — der Stand bis 15.09.2026: die
+    /// Minenfelder des SETUP-Blocks werden nicht gelegt.</summary>
+    public static bool MissionsminenAus;
+
+    /// <summary><c>--minenraeumen-aus</c> — der Stand bis 15.09.2026: der
+    /// Minenraeumer entfernt nichts.</summary>
+    public static bool MinenraeumenAus;
+
+    /// <summary><c>--minen-tor-alt</c> — der Stand bis 15.09.2026: ausgeloest
+    /// wird von jeder FAHRENDEN Einheit auf der Zelle (<c>Path != null</c>),
+    /// auch von Fussvolk, auch beim Anfahren und Wegfahren.</summary>
+    public static bool MinenTorAlt;
 
     /// <summary>
     /// ⚠⚠ <b>DAS EINE, WAS ICH NICHT VERSTANDEN HABE.</b>
@@ -155,6 +196,8 @@ public partial class MapEntityLayer
         for (int i = 0; i < _minen.Length; i++) _minen[i] = default;
         MinenGelegt = MinenKeinPlatz = MinenAusgeloest = 0;
         MinenFreund = MinenImmunFall = MinenTorZu = 0;
+        MinenFussvolk = MinenGeraeumt = MinenUnterFahrzeug = 0;
+        MinenOpfer.Clear();
     }
 
     /// <summary>
@@ -170,15 +213,37 @@ public partial class MapEntityLayer
         // Unsere imap-Entsprechung: frei, oder es steht eine bewegliche Einheit
         // darauf. Festes (Gebäude) schliesst das Original aus.
         int drauf = _nav.BesetztVon(col, row);
-        bool fest = drauf >= 0 && drauf < _entities.Count && _entities[drauf].IsBuilding;
-        if (fest) return false;
-        if (_nav.GroundWord(col, row) is "gesperrt" or "ausserhalb") return false;
+        var ding = drauf >= 0 && drauf < _entities.Count ? _entities[drauf] : null;
+        bool unterFahrzeug = false;
+        if (MinenLegetorAlt)
+        {
+            bool fest = ding != null && ding.IsBuilding;
+            if (fest) return false;
+            if (_nav.GroundWord(col, row) is "gesperrt" or "ausserhalb") return false;
+        }
+        else
+        {
+            // ⭐ 15.09.2026 — DAS TOR DES ORIGINALS (@0x421940): imap == 0xFFFE
+            // (freie Zelle: kein rauer Boden 0xFFFD, kein Wasser 0xFFFC, kein
+            // Gebaeude, kein Wald, kein Objekt) ODER imap <= 8000 (ein FAHRZEUG
+            // steht darauf, auf welchem Boden auch immer). Fussvolk (10000+) sperrt.
+            // M15: 837 Zellen -> 451 frei + 7 unter Fahrzeugen = 458.
+            unterFahrzeug = ding != null && !ding.IsBuilding && !ding.IsProp && !ding.Dead
+                            && ding.Infantry < 0;
+            bool frei = ding == null && _nav.GroundAt(col, row) == Simulation.NavGrid.Ground.Free
+                        && GebaeudeAufZelle(col, row) < 0;
+            if (!frei && !unterFahrzeug) return false;
+        }
 
         for (int i = 0; i < _minen.Length; i++)
         {
             if (_minen[i].Aktiv) continue;
-            _minen[i] = new Mine { Col = col, Row = row, Player = player, Aktiv = true };
+            // +0x02 = rand%20+10, +0x03 = rand%10+5 (@0x421940)
+            int lx = Simulation.Determinism.Roll(20) + 10;
+            int ly = Simulation.Determinism.Roll(10) + 5;
+            _minen[i] = new Mine { Col = col, Row = row, Player = player, Aktiv = true, LageX = lx, LageY = ly };
             MinenGelegt++;
+            if (unterFahrzeug) MinenUnterFahrzeug++;
             return true;
         }
         // @0x42198D: das Original druckt hier "Too many mines" und legt nichts.
@@ -207,15 +272,23 @@ public partial class MapEntityLayer
             var opfer = _entities[vi];
             if (opfer.Dead || opfer.IsProp || opfer.IsBuilding) continue;
 
+            // ⭐ 15.09.2026 — imap < 8000: nur FAHRZEUGE. Fussvolk steht in der imap
+            // als 10000..13999 und loest nie aus (berichte/minen-opus.md §3.1).
+            if (!MinenTorAlt && opfer.Infantry >= 0) { MinenFussvolk++; continue; }
+
             // Diplomatietafel 0x87B155: eigene und verbuendete loesen nicht aus
             if (!MineFeindlich(m.Player, opfer.Owner)) { MinenFreund++; continue; }
 
-            // +0x0E == 0x44: die Ausnahme
-            if (opfer.Equipment == MinenImmun) { MinenImmunFall++; continue; }
+            // +0x0E == 0x44: die Ausnahme. ⚠ 15.09.2026 berichtigt: +0x0E ist bei
+            // uns `Part`, `Equipment` ist +0x10 (MapEntityLayer: HexByte(raw, 0x0e)
+            // bzw. 0x10). Gegenschalter --minen-ausnahme-alt.
+            if ((MinenAusnahmeAlt ? opfer.Equipment : opfer.Part) == MinenImmun) { MinenImmunFall++; continue; }
 
-            // ⚠ UNSERE Deutung von word[+0x06] < 0 — siehe MinenTor
-            if (MinenTor && opfer.Path == null) { MinenTorZu++; continue; }
+            // word[+0x06] < 0 — siehe MinenTor und MinenEinfahrt
+            if (MinenTor && !(MinenTorAlt ? opfer.Path != null : MinenEinfahrt(opfer, m.Col, m.Row)))
+            { MinenTorZu++; continue; }
 
+            MinenOpfer.Add(vi);
             ApplyHit(-1, vi, opfer, MinenSchaden, $"MINE von Spieler {m.Player} auf ({m.Col},{m.Row})");
             MinenAusgeloest++;
             m.Aktiv = false;
@@ -251,6 +324,14 @@ public partial class MapEntityLayer
     ///   ausserhalb des Rechtecks: 0x40257C sucht den naechsten Punkt,
     ///   0x4021A8 faehrt hin; findet sich keiner -> +0x48 = 0, Auftrag zu Ende
     /// </code>
+    ///
+    /// <para>⚠⚠⚠ <b>BERICHTIGT am 15.09.2026 — das Tor GEHT auf.</b> Bus-Befehl
+    /// <b>22</b> (Absender 0x43A110, Behandler C 0x4C33D0) schreibt
+    /// <c>byte[+0x48] = Breite</c>, <c>byte[+0x49] = Höhe</c> (C 0x4C3419/0x4C341F)
+    /// in der absoluten Form <c>[eax+0x6E2710]</c>, die der Scan unten nicht sah;
+    /// HELPG #052 beschreibt den Rahmen. Nicht gebaut, weil Kampagne 15 keinen
+    /// Minenleger hat (berichte/minen-opus.md §4.4). Der Absatz darunter ist
+    /// Geschichte.</para>
     ///
     /// <para>⭐⭐ <b>Und dieses Tor geht im Original NIE auf.</b> Gemessen, mit
     /// 16 Ausrichtungen und auf BEIDEN Auslieferungen:</para>
@@ -307,6 +388,9 @@ public partial class MapEntityLayer
         {
             var e = _entities[i];
             if (e.IsBuilding || e.IsProp || e.Dead || !e.Mobile || e.HpMax <= 0) continue;
+            // ⭐ 15.09.2026 — ein FAHRZEUG ohne Minenraeumer: Fussvolk loest nie aus,
+            // der Raeumer ist gefeit. Beides wird unten eigens geprueft.
+            if (e.Infantry >= 0 || e.Part == MinenImmun) continue;
             opfer = e; oi = i; break;
         }
         if (opfer == null) return sb.Append("  keine bewegliche Einheit — nicht gemessen").ToString();
@@ -327,15 +411,40 @@ public partial class MapEntityLayer
                 + $"{hp0 - opfer.Hp} Schaden, Tor griff {MinenTorZu}x"
                 + (MinenTor && MinenTorZu > 0 ? "  ✔ so gewollt" : "") + "\n");
 
-        // 3. dieselbe Einheit in Bewegung
-        opfer.Path = new List<Vector2I> { new(opfer.Col, opfer.Row) };
+        // ⭐ 15.09.2026 — die EINFAHRT (word[+0x06] < 0): Ziel des Schrittes ist die
+        // Minenzelle, Fortschritt knapp unter bzw. genau bei der halben Strecke.
+        // Mit --minen-tor-alt genuegt ein Weg (der Stand davor).
+        void Einfahrt(bool halb)
+        {
+            opfer.Path = new List<Vector2I> { new(opfer.Col, opfer.Row) };
+            opfer.Reserved = new Vector2I(opfer.Col, opfer.Row);
+            opfer.StepCost = 160_000;
+            long voll = (long)opfer.StepCost * SimHz;
+            opfer.Progress = (int)(halb ? voll / 2 : voll / 2 - 1);
+        }
+        void Stand() { opfer.Path = null; opfer.Reserved = null; opfer.StepCost = 0; opfer.Progress = 0; }
+
+        // 2b. erste Haelfte der Einfahrt — das Tor muss noch halten
+        Einfahrt(halb: false);
+        hp0 = opfer.Hp;
+        int torVor = MinenTorZu;
+        MinenTakt();
+        int frueh = hp0 - opfer.Hp;
+        // ⚠ Nicht umgedreht: mit --minen-tor-alt MUSS dieser Schritt durchfallen.
+        bool fruehOk = frueh == 0 && MinenTorZu > torVor;
+        sb.Append($"  2b. Einheit rollt in die Zelle, knapp VOR der halben Strecke: {frueh} Schaden "
+                + (fruehOk ? "✔ Tor haelt" : $"⚠⚠ erwartet 0 (--minen-tor-alt {MinenTorAlt})") + "\n");
+        if (frueh > 0) { opfer.Hp = opfer.HpMax; MinenLeeren(); MineLegen(opfer.Col, opfer.Row, fremd); }
+
+        // 3. dieselbe Einheit ab der halben Strecke
+        Einfahrt(halb: true);
         hp0 = opfer.Hp;
         MinenTakt();
         int schaden = hp0 - opfer.Hp;
-        sb.Append($"  3. Einheit FAEHRT: {schaden} Schaden "
+        sb.Append($"  3. Einheit rollt in die Zelle, AB der halben Strecke: {schaden} Schaden "
                 + (schaden == MinenSchaden ? $"✔ genau die {MinenSchaden} aus 0x9C72"
                    : $"⚠⚠ erwartet {MinenSchaden}") + "\n");
-        opfer.Path = null;
+        Stand();
 
         // ⚠⚠ 24.08.2026 — DIESE ZWEI ZEILEN HABEN GEFEHLT, und der Pruefstand
         // hat es mir sofort um die Ohren gehauen: die 50 Schaden aus Schritt 3
@@ -358,7 +467,7 @@ public partial class MapEntityLayer
         // 4. die eigene Einheit
         MinenLeeren();
         MineLegen(opfer.Col, opfer.Row, opfer.Owner);
-        opfer.Path = new List<Vector2I> { new(opfer.Col, opfer.Row) };
+        Einfahrt(halb: true);
         hp0 = opfer.Hp;
         MinenTakt();
         int eigen = hp0 - opfer.Hp;
@@ -368,7 +477,24 @@ public partial class MapEntityLayer
         sb.Append($"  4. EIGENE Mine unter der eigenen Einheit: {eigen} Schaden, "
                 + $"{MinenFreund}x als Freund erkannt "
                 + (eigenOk ? "✔" : "⚠⚠ (0 Schaden allein beweist nichts)") + "\n");
-        opfer.Path = null;
+        Stand();
+
+        // 4b. ⭐ 15.09.2026 — der MINENRAEUMER (+0x0E = Part = 0x44) auf feindlicher Mine
+        MinenLeeren();
+        MineLegen(opfer.Col, opfer.Row, fremd);
+        int partVor = opfer.Part;
+        opfer.Part = MinenImmun;
+        Einfahrt(halb: true);
+        hp0 = opfer.Hp;
+        int immunVor = MinenImmunFall;
+        MinenTakt();
+        int raeumerSchaden = hp0 - opfer.Hp;
+        bool raeumerOk = raeumerSchaden == 0 && MinenImmunFall > immunVor;
+        sb.Append($"  4b. MINENRAEUMER (Part 0x44) faehrt ein: {raeumerSchaden} Schaden, Ausnahme {MinenImmunFall - immunVor}x "
+                + (raeumerOk ? "✔" : $"⚠⚠ erwartet 0 (Nullmodell --minen-ausnahme-alt: {MinenAusnahmeAlt})") + "\n");
+        opfer.Part = partVor;
+        opfer.Hp = opfer.HpMax; opfer.Dead = false;
+        Stand();
 
         // 5. die Schranke
         MinenLeeren();
@@ -379,7 +505,7 @@ public partial class MapEntityLayer
                 + (konnte == UrMinen ? $"✔ genau die {UrMinen} aus 0x4217BB" : "⚠⚠") + "\n");
         MinenLeeren();
 
-        bool ok = gelegt && schaden == MinenSchaden && eigenOk && konnte == UrMinen;
+        bool ok = gelegt && fruehOk && schaden == MinenSchaden && eigenOk && raeumerOk && konnte == UrMinen;
         sb.Append(ok ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }
