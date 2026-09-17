@@ -5902,21 +5902,75 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <summary>Map pixel -> cell, honouring the elevation lift of the tiles.</summary>
+    /// <summary><c>--zellprobe-alt</c> — die geratene Zellsuche von vor dem 18.09.2026
+    /// (flache Zeilenkanten, Zeilen +12…−1). Nullmodell zur Zellprobe.</summary>
+    public static bool ZellprobeAlt;
+
+    /// <summary>
+    /// <b>WELCHE ZELLE UNTER DER MAUS LIEGT</b> — Rufer <c>0x4B5280</c> (F
+    /// <c>0x4B4BB0</c>) und Zellprobe <c>0x4B5150</c> (F <c>0x4B4A80</c>).
+    ///
+    /// <para>⭐⭐ 18.09.2026, seine Meldung: »ich habe das Gefühl, dass der Gebäuderahmen,
+    /// der sozusagen dafür sorgt, wo und bis wohin die Zeiger wie Gebäudeeinnehmen
+    /// anzeigt, nicht ganz korrekt ist«. Hier stand eine geratene Suche: flache
+    /// Zeilenkanten (<c>Zeile·20 − Höhe·15</c>) und ein Zeilenfenster von <c>+12…−1</c>.
+    /// An einem HANG lag sie bis zu 15 Bildpunkte daneben — und der Einnahmezeiger hängt
+    /// an dieser Zelle.</para>
+    ///
+    /// <para><b>Das Original probiert acht Zeilen von vorn</b> (<c>yb+7 … yb+0</c>), und
+    /// jede Zelle hat eine nach der Hangart GENEIGTE Ober- und Unterkante:
+    /// <code>
+    ///   unten  = 20·(zeile + 1) − 15·höhe
+    ///   oben   = unten − 1 − c0 + (c0 − c2)·feinX / 40
+    ///   unten2 = unten + 1 − c1 + (c1 − c3)·feinX / 40
+    ///   Treffer ⇔ oben ≤ maus_y ≤ unten2
+    /// </code>
+    /// mit den vier Kantenhöhen aus <see cref="Simulation.Hang.Klickecken"/>. Die
+    /// Division schneidet zur Null hin ab (<c>idiv</c>; C# tut dasselbe). Auf ebenem
+    /// Gelände ergibt das <c>[unten−20, unten+1]</c> — zwei Punkte Überlappung zur
+    /// nächsten Zeile, und die VORDERE gewinnt.</para>
+    ///
+    /// <para>⚠ Findet keine der acht Zeilen etwas, lässt das Original die Zeile
+    /// unverändert (den alten Wert). Wir geben <c>null</c> zurück statt einen Wert zu
+    /// erfinden — eine Setzung, und sie steht hier.</para>
+    ///
+    /// <para>Nachgerechnet hat das eine Emulation beider EXE über 451 440 Fälle:
+    /// C ≠ F null, Modell ≠ EXE null (<c>berichte/zeiger-klickfeld-fable.md</c> §8).</para>
+    /// </summary>
     public Vector2I? CellAt(Vector2 mapPos)
     {
         if (_nav == null || _nav.Width == 0) return null;
         int col = Mathf.FloorToInt((mapPos.X - _ox) / TileW);
         if (col < 0 || col >= _nav.Width) return null;
-        int guess = Mathf.FloorToInt((mapPos.Y - _oy) / TileH);
-        // an elevated tile is drawn higher, so the matching row is at or below the
-        // guess; take the frontmost (largest row) match, like the renderer does.
-        for (int row = Mathf.Min(guess + 12, _nav.Height - 1); row >= Mathf.Max(guess - 1, 0); row--)
+
+        if (ZellprobeAlt)
         {
-            float top = _oy + row * TileH - ElevOf(col, row) * 15;
-            if (mapPos.Y >= top && mapPos.Y < top + TileH) return new Vector2I(col, row);
+            int alt = Mathf.FloorToInt((mapPos.Y - _oy) / TileH);
+            for (int row = Mathf.Min(alt + 12, _nav.Height - 1); row >= Mathf.Max(alt - 1, 0); row--)
+            {
+                float top = _oy + row * TileH - ElevOf(col, row) * 15;
+                if (mapPos.Y >= top && mapPos.Y < top + TileH) return new Vector2I(col, row);
+            }
+            return new Vector2I(col, Mathf.Clamp(alt, 0, _nav.Height - 1));
         }
-        int clamped = Mathf.Clamp(guess, 0, _nav.Height - 1);
-        return new Vector2I(col, clamped);
+
+        int mx = Mathf.FloorToInt(mapPos.X - _ox), my = Mathf.FloorToInt(mapPos.Y - _oy);
+        int feinX = mx - 40 * col;                       // 0…39 ab der linken Zellkante
+        int yb = my / TileH;                             // die Grobzeile, OHNE Hub
+        // wörtlich acht Zeilen von vorn — die vorderste, die trifft, gewinnt.
+        for (int k = 7; k >= 0; k--)
+        {
+            int row = yb + k;
+            if (row < 0 || row >= _nav.Height) continue;
+            int unten = 20 * (row + 1) - 15 * ElevOf(col, row);
+            int art = Mathf.Clamp(HangArt(col, row), 0, Simulation.Hang.Arten - 1);
+            int c0 = Simulation.Hang.Klickecken[art, 0], c1 = Simulation.Hang.Klickecken[art, 1];
+            int c2 = Simulation.Hang.Klickecken[art, 2], c3 = Simulation.Hang.Klickecken[art, 3];
+            int oben = unten - 1 - c0 + (c0 - c2) * feinX / 40;
+            int unten2 = unten + 1 - c1 + (c1 - c3) * feinX / 40;
+            if (my >= oben && my <= unten2) return new Vector2I(col, row);
+        }
+        return null;
     }
 
     // ---- selection ----
@@ -38079,21 +38133,21 @@ public partial class MapEntityLayer : Node2D
         }
     }
 
-    public override void _Draw()
+    /// <summary><c>--fahrlinien-unten</c> — die Fahr- und Auftragslinien wieder im
+    /// Bodendurchgang zeichnen, also unter den Gebäudeböden. Der Stand vor dem
+    /// 18.09.2026 und das Nullmodell zu seiner Meldung.</summary>
+    public static bool FahrlinienUnten;
+
+    /// <summary>
+    /// <b>Die geplante Fahrt der gewählten Einheiten und ihre Warteschlange.</b>
+    ///
+    /// <para>⚠ Eine BEDIENHILFE, kein Weltobjekt — sie gehört über die Gebäudeböden.
+    /// Bis zum 18.09.2026 lief sie im Bodendurchgang mit und wurde von Beton, Schotter
+    /// und Rampe übermalt (die sind im Original Kartenzellen, <c>@0x4C97B4</c>, und
+    /// werden gleich nach diesem Durchgang gezeichnet).</para></summary>
+    private void FahrlinienZeichnen()
     {
-        // sec2 movement/zone overlay (single stretched texture, under everything)
-        if (_showZones && _zoneTex != null)
-            DrawTextureRect(_zoneTex, _zoneRect, false);
-
-        // walkability debug overlay (blue = water, red = props) — key P
-        if (_showNav && _navTex != null)
-            DrawTextureRect(_navTex, _navRect, false);
-
-        // the build-site preview, under the sprites so units stay readable
-        DrawBuildPreview();
-
-
-        // planned routes of the selected units, drawn under the sprites
+        // die geplante Fahrt
         foreach (int i in _sel)
         {
             var e = _entities[i];
@@ -38134,6 +38188,36 @@ public partial class MapEntityLayer : Node2D
                 from = to;
             }
         }
+
+    }
+
+    public override void _Draw()
+    {
+        // sec2 movement/zone overlay (single stretched texture, under everything)
+        if (_showZones && _zoneTex != null)
+            DrawTextureRect(_zoneTex, _zoneRect, false);
+
+        // walkability debug overlay (blue = water, red = props) — key P
+        if (_showNav && _navTex != null)
+            DrawTextureRect(_navTex, _navRect, false);
+
+        // the build-site preview, under the sprites so units stay readable
+        DrawBuildPreview();
+
+
+        // ⭐⭐ 18.09.2026 — DIE FAHRLINIEN SIND HIER RAUS (seine Meldung: »unser
+        // wegpunktsystem (die linien wo der panzer lang faehrt) wird immer von den
+        // bodengrafiken der gebaeude verdeckt«).
+        //
+        // Sie standen in diesem Durchgang, also VOR den Gebaeudeboeden — und Beton,
+        // Schotter und Rampe sind Kartenzellen, die gleich danach kommen und alles
+        // uebermalen, was hier liegt. Die Regel dafuer steht seit dem 17.08. im
+        // Quelltext (BuildUnitDrawOrder): »Auswahlklammern, Besitzerring, Balken und
+        // BEFEHLSLINIEN sind Bedienhilfen und keine Weltobjekte ... sie bleiben im
+        // spaeteren Durchgang und damit oben«. Die Fahrlinien sind Befehlslinien; sie
+        // waren nur nie mit umgezogen. Jetzt stehen sie bei den Auswahlklammern.
+        // Gegenschalter --fahrlinien-unten.
+        if (FahrlinienUnten) FahrlinienZeichnen();
 
         // Buildings first, in their own pass and back to front. They used to be
         // baked into the map picture and therefore behind everything; drawing
@@ -38296,6 +38380,9 @@ public partial class MapEntityLayer : Node2D
             if (!NoUnitOcclusion) continue;
             DrawUnitBodyInline(i, e, baseC, picC, oc);
         }
+        // ⭐ 18.09.2026 — DIE FAHRLINIEN, jetzt hier oben: dieselbe Ebene wie die
+        // Auswahlklammern und die Ziellinie, also über den Gebäudeböden.
+        if (!FahrlinienUnten) FahrlinienZeichnen();
         DrawUnitTail();
     }
 

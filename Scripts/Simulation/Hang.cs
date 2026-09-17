@@ -125,6 +125,34 @@ public static class Hang
     /// das, C# tut es auch. Ein Abrunden (Bitverschiebung) wäre bei den
     /// negativen Teilern −20 und −40 etwas anderes.</para>
     /// </summary>
+    /// <summary>
+    /// <b>DIE VIER KANTENHÖHEN EINER HANGART</b> — Tafel <c>0x538808</c> (F
+    /// <c>0x537848</c>), 19 Zeilen zu vier Bytes, in beiden Fassungen byteweise gleich
+    /// (selbst ausgelesen am 18.09.2026).
+    ///
+    /// <para>Sie gehört zur ZELLPROBE <c>0x4B5150</c> (F <c>0x4B4A80</c>), nicht zur
+    /// Bodenhöhe: <c>c0</c> ist die Oberkante links, <c>c2</c> die Oberkante rechts,
+    /// <c>c1</c> die Unterkante links, <c>c3</c> die Unterkante rechts — je in
+    /// Bildpunkten über der ungehobenen Zeilenunterkante, dazwischen linear in
+    /// <c>feinX</c>. Die Werte 19/34/49 sind <c>20−1</c> plus 0/15/30 Stufen.</para>
+    ///
+    /// <para>⚠ Das ist NICHT das (feinX, feinY)-Paar von <see cref="Versatz"/>: dort
+    /// läuft y Süd→Nord, hier gibt es gar kein feinY — die Maus-y wird unmittelbar in
+    /// Bildpunkten verglichen.</para>
+    ///
+    /// <para>⚠ Die Arten 17 und 18 sind Splitter (an einem Rand leer) und Art 2 ist nur
+    /// 7 Punkte hoch. Das muss so bleiben: sonst fängt die Zelle die Klicks ihres
+    /// Nachbarn ab.</para>
+    /// </summary>
+    public static readonly int[,] Klickecken =
+    {
+        { 19,  0, 19,  0 }, { 19,  0, 34, 15 }, { 19, 15, 19, 15 }, { 34, 15, 19,  0 },
+        { 34,  0, 34,  0 }, { 19, 15, 34, 15 }, { 34, 15, 19, 15 }, { 34, 15, 34,  0 },
+        { 34,  0, 34, 15 }, { 19,  0, 19, 15 }, { 19, 15, 19,  0 }, { 34,  0, 19,  0 },
+        { 19,  0, 34,  0 }, { 34,  0, 19, 15 }, { 19, 15, 34,  0 }, { 49, 15, 34,  0 },
+        { 34,  0, 49, 15 }, { 15, 19, 34, 30 }, { 34, 30, 15, 19 },
+    };
+
     public static int Versatz(int art, int feinX, int feinY)
     {
         if (art < 0 || art >= Arten) return 0;      // ja @0x4B5D01 -> bl bleibt 0

@@ -4281,6 +4281,8 @@ public partial class MapViewer : Node2D
             // Klickfeld und Einnahmezone, siehe berichte/zeiger-klickfeld-fable.md.
             else if (a == "--klickfeld-alt") MapEntityLayer.KlickfeldAlt = true;
             else if (a == "--einnahmezone-alt") MapEntityLayer.EinnahmezoneAlt = true;
+            else if (a == "--fahrlinien-unten") MapEntityLayer.FahrlinienUnten = true;
+            else if (a == "--zellprobe-alt") MapEntityLayer.ZellprobeAlt = true;
             else if (a.StartsWith("--originalhz="))
             {
                 string wert = a["--originalhz=".Length..];
