@@ -163,6 +163,14 @@ public partial class MapEntityLayer : Node2D
         /// Reparateurmoduls — siehe <see cref="MechanicTick"/>.</summary>
         public int MechanicRest, SelfRepairRest;
 
+        /// <summary>⭐ 17.09.2026 — die Reste für Gebäudereparatur und Ausbau. Sie sind neu,
+        /// weil <see cref="TickScale"/> seit der Zeitbasis kein Vielfaches von
+        /// <c>RepairTick</c> (4) und <c>UpgradeTick</c> (5) mehr sein muss: eine
+        /// Ganzzahldivision <c>50/4</c> würde 12 statt 12,5 ergeben und damit 4 % der
+        /// Reparatur still verschlucken. Aufaddieren und abziehen verliert nichts —
+        /// dasselbe Muster wie bei <see cref="MechanicRest"/>.</summary>
+        public int RepairRest, UpgradeRest;
+
         /// <summary>Der eigene Wirtschaftstakt dieser Einheit — siehe
         /// <see cref="UnitRepairTick"/>.</summary>
         public float RepairTimer;
@@ -996,6 +1004,14 @@ public partial class MapEntityLayer : Node2D
         /// <summary>Wann die naechste Rauchwolke faellt, in Sekunden.</summary>
         public float RauchAt;
 
+        /// <summary>⭐ 17.09.2026 (Aufgabe C) — die NEIGUNG der Bahn, in Bildpunkten
+        /// je Originaltakt: wieviel die gezeichnete Lage seit dem letzten Takt
+        /// gestiegen (negativ) oder gefallen (positiv) ist. Daraus waehlt der Zeichner
+        /// den Bildblock.</summary>
+        public float Neigung;
+        public float LetztesZeichenY;
+        public bool HatLetztesY;
+
         /// <summary>Flughoehe an der Muendung und am Ziel, in Fuenfzehnteln
         /// einer Gelaendestufe. Siehe <see cref="GeschossHoehe"/>.</summary>
         public float HoeheStart, HoeheZiel;
@@ -1126,6 +1142,83 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Wie hoch das Geschoss gerade fliegt — Grundhoehe plus Bogen, in
     /// Fuenfzehnteln einer Gelaendestufe. Die Grundhoehe geht linear von der
     /// Muendung zur Zielhoehe, wie im Original (@0x452543 ff.).</summary>
+    /// <summary>
+    /// <b>Die Weite einer Wurfbahn in KARTENmassen</b> — dy verdoppelt, weil die
+    /// Schraegsicht die y-Achse auf die Haelfte staucht. Das Original rechnet den
+    /// Scheitel aus dieser Weite (§2.3 der Lesung), nicht aus dem Bildschirmabstand.
+    /// </summary>
+    private static float WurfWeite(Vector2 a, Vector2 b)
+    {
+        float dx = b.X - a.X, dy = (b.Y - a.Y) * 2f;
+        return Mathf.Sqrt(dx * dx + dy * dy);
+    }
+
+    /// <summary>
+    /// <b>Wie viele Takte zwischen zwei Rauchwolken liegen</b> — 0 heisst: diese Art
+    /// raucht nicht. Tafel <c>0x453248</c> (Lesung §4): nur die Arten 5, 6, 7, 16, 20.
+    /// <para>⚠ Bei Art 7 wuerfelt das Original »2 von 3« statt eines festen Takts; wir
+    /// nehmen 2 Takte und markieren das als unsere Vereinfachung.</para></summary>
+    private static int RauchTakte(int art) => art switch
+    {
+        5 => 3,
+        6 => 2,
+        7 => 2,        // V: im Original `rand()%3 != 0`, hier fest
+        16 => 3,
+        20 => 2,
+        _ => 0,
+    };
+
+    /// <summary>
+    /// <b>Die Bodenhoehe an einem Punkt</b>, in Fuenfzehnteln einer Gelaendestufe —
+    /// das Gegenstueck zu <c>0x4B5CE0</c> (F <c>0x4B5610</c>).
+    ///
+    /// <para>⚠⚠ <b>UNVOLLSTAENDIG, und das mit Absicht.</b> Das Original interpoliert
+    /// INNERHALB der Zelle nach einer <b>Hangklasse</b> (Kartensatz-Byte +3, 19 Klassen,
+    /// Zuschlag 0..30) — auf einer Rampe steigt der Boden also schon zwischen zwei
+    /// Zellmitten. Die Lesung hat die Klassen 0..7 entschluesselt, <b>8..18 nicht</b>
+    /// (§7). Eine halbe Tafel waere schlimmer als keine: sie gaebe auf zwei Dritteln
+    /// der Haenge falsche Zuschlaege. Deshalb rechnet das hier vorerst mit der flachen
+    /// Zellhoehe; der Aufrufer und der Pruefstand sagen das.</para>
+    /// <para>Sobald die Klassen gelesen sind, kommt der Zuschlag NUR hier hinein —
+    /// Aufgabe F der Lesung.</para></summary>
+    /// <summary><c>--boden-spiegeln</c> — den Feinversatz für den Boden als
+    /// <c>20 − feinY</c> hineingeben statt als <c>feinY/2</c>.
+    /// <para>⚠ Das ist der GEGENSCHALTER, nicht die Vorgabe. Das Original reicht im
+    /// Geschossflug ausdrücklich <c>fein_y/2</c> hinein (C <c>0x4528D2</c>/<c>0x4528EF</c>,
+    /// F <c>0x45157C</c>/<c>0x451599</c>; der Trümmerflug <c>0x4AE034</c> ebenso) — weder
+    /// gespiegelt noch auf den vollen Bereich gestreckt, es tastet also immer die
+    /// SÜDhälfte der Zelle ab. Die Satzzeichner reichen dagegen <c>20 − fy</c> hinein.
+    /// Warum, ist ungelesen (V: Altlast aus einem 0…39-Bereich). Wir bauen das Original
+    /// nach und behalten den Schalter, um es im Spiel gegeneinander zu sehen.</para></summary>
+    public static bool BodenSpiegeln;
+
+    private float BodenHoehe(int col, int row, int feinX, int feinY)
+    {
+        // ⚠ Die y-Achse der Bodenroutine läuft SÜD→NORD (fein_y 0 = Südkante), unser
+        // feinY zählt von OBEN. Roh hineingereicht spiegelt das jeden Hang.
+        // Beleg der Lesung: Nachbarstatistik über 605 090 Zellen — Klasse 2 hat zu
+        // 100 % den Südnachbarn eine Stufe höher, Klasse 4 zu 100 % den Nordnachbarn.
+        int fy = BodenSpiegeln ? 20 - feinY : feinY / 2;
+        return Simulation.Hang.Hub(ElevOf(col, row), HangArt(col, row), feinX, fy);
+    }
+
+    /// <summary>Die Bodenhöhe in der ZELLMITTE — für alles, was keine Feinlage hat.</summary>
+    private float BodenHoehe(int col, int row)
+        => BodenHoehe(col, row, Simulation.Hang.MitteX, Simulation.Hang.MitteY);
+
+    /// <summary>
+    /// <b>Die Feinlage eines Bildpunkts in seiner Zelle</b> — <c>feinX</c> 0…39 von der
+    /// West-, <c>feinY</c> 0…19 von der Oberkante. Gegenstück zu <see cref="CellCenter"/>:
+    /// dort wird die Zelle um <see cref="HubOf"/> angehoben, hier wird dieselbe Anhebung
+    /// wieder herausgerechnet, damit der Feinversatz auf der KACHEL liegt und nicht auf
+    /// dem Schirm.</summary>
+    private (int X, int Y) FeinLage(Vector2 pos, int col, int row)
+    {
+        int fx = Mathf.FloorToInt(pos.X - _ox) - col * TileW;
+        int fy = Mathf.FloorToInt(pos.Y - (_oy + row * TileH - ElevOf(col, row) * 15));
+        return (Mathf.Clamp(fx, 0, TileW - 1), Mathf.Clamp(fy, 0, TileH - 1));
+    }
+
     private float GeschossHoehe(Projectile p)
     {
         if (Art7Druckwelle(p) && p.FlugBegonnen) return p.Flughoehe;     // 0x452638
@@ -1582,6 +1675,23 @@ public partial class MapEntityLayer : Node2D
     /// zu unterscheiden.</summary>
     public int GeschossGestoppt;
 
+    /// <summary>Wie viele davon im BODEN steckengeblieben sind statt an einem Hindernis
+    /// — der Zaehler zu Aufgabe A (17.09.2026). Nullmodell <c>--kein-bodentreffer</c>
+    /// muss ihn auf 0 druecken.</summary>
+    public int GeschossBoden;
+
+    /// <summary>Zaehler fuer <c>--geschoss-hoehen-check</c>: wie oft ein Geschoss seinem
+    /// Ziel nachgezogen ist (Soll 0 — das Original tut es nie), der groesste Schritt in
+    /// Bildpunkten je Takt, und welche Neigungsbloecke gezeichnet wurden.</summary>
+    /// <summary>Wie oft ein Geschoss im Boden haette stecken bleiben MUESSEN, es mit
+    /// <c>--kein-bodentreffer</c> aber nicht tat. Das ist die Zahl, an der der Prüfstand
+    /// zeigt, dass die Lage auf dieser Karte ueberhaupt vorkommt.</summary>
+    public int GeschossBodenVerpasst;
+
+    public int GeschossNachgefuehrt;
+    public float GeschossMaxSchritt;
+    public readonly System.Collections.Generic.HashSet<int> GeschossBloecke = new();
+
     /// <summary>
     /// <c>--keine-einschlaghoehen</c> — DIE GEGENPROBE zu den Hoehenschwellen.
     ///
@@ -1655,11 +1765,14 @@ public partial class MapEntityLayer : Node2D
     // fire six times as often as heavy ones, where this used to be a flat 1.1 s
     // for everything.
     //
-    // What stays OURS is only the scale: how long one of those units is in
-    // seconds is not known, so ReloadTick is chosen to put the common value of
-    // 20 at the 1.1 s this ran on before. The RELATIVE rates are the game's.
+    // What stays OURS is only the scale — und seit dem 17.09.2026 steht diese eine Setzung
+    // an EINER Stelle für das ganze Spiel: Simulation/Zeitbasis.cs. Eine Einheit Nachladezeit
+    // ist ein ORIGINALTAKT (+0x32 sinkt genau einen je Takt, 0x4074F7 / F 0x407420), also sind
+    // es 1/OriginalHz Sekunden. Vorher stand hier 1,1/20 = 0,055 s, eine vierte, unbegründete
+    // Zahl: sie war so gewählt, dass der häufige Kartenwert 20 auf die 1,1 s fiel, mit denen
+    // das früher pauschal lief. Die RELATIVEN Raten waren schon immer die des Spiels.
     private const float FireInterval = 1.1f;      // fallback, units without a value
-    private const float ReloadTick = 1.1f / 20f;  // seconds per reload unit — OURS
+    private static float ReloadTick => Simulation.Zeitbasis.NachladeTakt;
 
     /// <summary>Seconds between two shots for this unit: its own reload value
     /// where it has one, the old flat interval where it does not.</summary>
@@ -11532,7 +11645,29 @@ public partial class MapEntityLayer : Node2D
     /// 16 ist so gewaehlt, dass die Raketen (Tempo 10..20) bei ihren bisherigen
     /// rund 190 px/s bleiben; das VERHAELTNIS zwischen den Geschossarten kommt
     /// jetzt aus dem Spiel und nicht mehr aus einer einzigen Konstante.</summary>
-    private const float PxPerProjectileSpeed = 16f;
+    /// <para>⭐ 17.09.2026 — GELESEN und richtiggestellt
+    /// (<c>berichte/geschossflug-hoehe-fable.md</c> §3.4): Tempo <c>+0x0F</c> ist
+    /// <b>Feineinheiten je SPIELTAKT</b>, und eine Feineinheit ist ein Bildpunkt.
+    /// Der Maßstab ist damit keine Setzung mehr, sondern die Taktzahl:
+    /// <c>Tempo · OriginalHz</c> px/s. Bei 50 Takten fliegt die Rakete (Art 5,
+    /// Tempo 12) mit <b>600 px/s</b> statt bisher 192 — wir waren <b>3× zu
+    /// langsam</b>, nicht zu schnell.</para>
+    /// <para>Gegenschalter <c>--geschosstempo-alt</c> stellt die alte 16 zurück.</para>
+    private static float PxPerProjectileSpeed
+        => GeschosstempoAlt ? 16f : Simulation.Zeitbasis.OriginalHz;
+
+    /// <summary><c>--geschosstempo-alt</c> — Geschosse fliegen wieder mit dem alten
+    /// Maßstab 16 px je Tempoeinheit (rund ein Drittel des Originals).</summary>
+    public static bool GeschosstempoAlt;
+
+    /// <summary><c>--geschoss-nachfuehren</c> — das Geschoss zieht dem Ziel wieder
+    /// nach. ⚠ Das tut das Original NICHT: die Zielzelle <c>+0x07</c> hat genau einen
+    /// Schreiber (den Anleger) und keinen im Flugtakt. Nullmodell zu Aufgabe B.</summary>
+    public static bool GeschossNachfuehren;
+
+    /// <summary><c>--kein-bodentreffer</c> — Geschosse fliegen wieder durch Hänge
+    /// hindurch. Nullmodell zu Aufgabe A.</summary>
+    public static bool KeinBodentreffer;
 
     /// <summary>⚠ UNSERE SETZUNG: wie weit die Muendung vor dem Turmdrehpunkt
     /// liegt. Der DREHPUNKT ist gelesen (TurretOffset, Tabelle 0x4FA320), die
@@ -11824,14 +11959,21 @@ public partial class MapEntityLayer : Node2D
                     // Die Wurfbahn: Scheitel = Entfernung mal Faktor, siehe
                     // Scheitelteiler. Bei gerader Bahn bleibt beides 0.
                     Weite = muendung.DistanceTo(ShotAim(victim)),
-                    Scheitel = Scheitelteiler(art) * muendung.DistanceTo(ShotAim(victim)),
+                    // ⭐ 17.09.2026 (Aufgabe H): der Scheitel rechnet mit der Weite in
+                    // KARTENmassen, nicht in Bildschirmpunkten — das Original verdoppelt
+                    // dafuer dy (die Schraegsicht staucht y auf die Haelfte). Vorher war
+                    // der Bogen bei einem Schuss nach oben/unten bis zu 2x zu flach.
+                    Scheitel = Scheitelteiler(art) * WurfWeite(muendung, ShotAim(victim)),
                     // Die Flughoehe. Sie faengt auf der Muendungshoehe ueber dem
                     // Gelaende des SCHUETZEN an (Feld +0x14 der Geschosstafel,
                     // heute frueh als Hoehe geklaert) und laeuft linear auf die
                     // Gelaendehoehe des ZIELS zu.
                     HoeheStart = ElevOf(shooter.Col, shooter.Row) * 15
                                  + Mathf.Max(0, Audio.GameSounds.MuzzleHeight(art)),
-                    HoeheZiel = ElevOf(victim.Col, victim.Row) * 15,
+                    // ⭐ 17.09.2026 (Aufgabe E): das Original zielt auf den Boden am Ziel
+                    // PLUS 10 — eine Einheit wird nicht am Fuss getroffen, sondern am Rumpf
+                    // (Gebaeude ebenso). Die Trefferschwelle 15 deckte das bisher zu.
+                    HoeheZiel = ElevOf(victim.Col, victim.Row) * 15 + 10,
                 });
             }
 
@@ -12407,12 +12549,25 @@ public partial class MapEntityLayer : Node2D
                 if (t.Dead || t.IsProp) p.Target = -1;
                 // ⭐ 11.09.2026 — Art 7 fuehrt NICHT nach, sie rechnet gegen die
                 // beim Abschuss gesetzte Zielzelle (0x452638). Druckwelle.cs.
-                else if (!Art7Druckwelle(p)) p.Aim = ShotAim(t);   // dieselbe Bildmitte wie beim Abschuss
+                // ⭐ 17.09.2026 — DAS NACHFUEHREN IST RAUS (Aufgabe B der Lesung).
+                // Das Original setzt die Zielzelle EINMAL beim Abschuss: +0x07 hat
+                // genau 1 Schreiber (den Anleger) und 0 im Flugtakt. Ein Geschoss,
+                // das seinem Ziel hinterherzieht, kruemmt seine Bahn jeden Takt —
+                // genau das, was er als »fliegen nicht sauber« gemeldet hat.
+                // Gegenschalter --geschoss-nachfuehren.
+                else if (GeschossNachfuehren && !Art7Druckwelle(p))
+                { p.Aim = ShotAim(t); GeschossNachgefuehrt++; }
             }
 
             Vector2 d = p.Aim - p.Pos;
             float dist = d.Length();
             float step = p.Speed * dt;
+            // fuer --geschoss-hoehen-check: der groesste Schritt JE TAKT. Ab 40 px
+            // (einer Zelle) koennte ein Geschoss eine Pruefzelle ueberspringen.
+            {
+                float jeTakt = step / Mathf.Max(0.0001f, dt) / Simulation.Zeitbasis.OriginalHz;
+                if (jeTakt > GeschossMaxSchritt) GeschossMaxSchritt = jeTakt;
+            }
             if (dist > 0.01f) p.Facing = DirToFacing(d);
 
             bool gestoppt = false;
@@ -12460,8 +12615,40 @@ public partial class MapEntityLayer : Node2D
                     if (!eigen && !freund && !KeineEinschlagHoehen)
                     {
                         int schwelle = SchwelleAn(zc, zr);
-                        if (schwelle > 0 &&
-                            GeschossHoehe(p) < ElevOf(zc, zr) * 15 + schwelle)
+                        // ⭐⭐ 17.09.2026 — DER BODENTREFFER (Aufgabe A der Lesung
+                        // berichte/geschossflug-hoehe-fable.md). Hier stand die Pruefung
+                        // NUR fuer `schwelle > 0`, also nur wenn auf der Zelle etwas
+                        // stand — ueber leeres Gelaende flogen unsere Geschosse durch
+                        // jeden Hang hindurch. Das Original hat fuer die leere Zelle
+                        // einen eigenen Zweig (0x452EDC, F 0x451B8C) mit der haertesten
+                        // Bedingung von allen: `Boden >= Hoehe` OHNE Schwelle.
+                        //
+                        // Genau das ist der Fall »Rakete fliegt bei Hoehenunterschieden
+                        // nicht sauber«: von unten nach oben liegt die Flugbahn unter dem
+                        // Kamm und muesste einschlagen.
+                        // Gegenschalter --kein-bodentreffer.
+                        // ⚠ Die BEDINGUNG wird immer gerechnet, auch mit dem
+                        // Gegenschalter — sonst koennte der Pruefstand nie zeigen, dass
+                        // die Lage ueberhaupt eingetreten ist. Nur die WIRKUNG haengt am
+                        // Schalter.
+                        // ⭐ 17.09.2026 (Aufgabe F) — der Boden wird EINMAL je Takt mit der
+                        // FEINLAGE gerechnet: auf einer Rampe steigt er schon innerhalb der
+                        // Zelle, und genau dort entscheidet sich, ob eine flache Bahn noch
+                        // darüber hinwegkommt. Tafel: Simulation/Hang.cs (alle 19 Klassen,
+                        // gegen beide EXE emuliert, 0 Abweichungen in 60 800 Läufen).
+                        var fein = FeinLage(p.Pos, zc, zr);
+                        float boden = BodenHoehe(zc, zr, fein.X, fein.Y);
+                        bool imBoden = schwelle == 0 && GeschossHoehe(p) <= boden;
+                        if (imBoden && KeinBodentreffer) GeschossBodenVerpasst++;
+                        if (imBoden && !KeinBodentreffer)
+                        {
+                            p.Aim = p.Pos;
+                            p.Target = -1;                 // der Boden ist niemand
+                            GeschossBoden++;
+                            GeschossGestoppt++;
+                            gestoppt = true;
+                        }
+                        else if (schwelle > 0 && GeschossHoehe(p) < boden + schwelle)
                         {
                             // Hier ist Schluss. Das Ziel wird das, was im Weg
                             // stand — nicht mehr das urspruengliche. Kein
@@ -12485,12 +12672,30 @@ public partial class MapEntityLayer : Node2D
                 // gilt, ist nicht gelesen; genommen ist der SELTENERE, weil
                 // eine zu dichte Spur schlimmer aussieht als eine zu duenne.
                 // Ein Takt sind 1/50 s, drei also 0,06 s.
-                if (p.Art is >= 5 and <= 20)
+                // ⭐ 17.09.2026 (Aufgabe C) — die Neigung fortschreiben. Gemessen wird
+                // die GEZEICHNETE Lage (Bahn samt Bogen), umgerechnet auf Bildpunkte je
+                // Originaltakt, damit die Schwelle 1 dieselbe Bedeutung hat wie im
+                // Original.
+                float zeichenY = p.Pos.Y - BogenHoehe(p);
+                if (p.HatLetztesY && dt > 0f)
+                    p.Neigung = (zeichenY - p.LetztesZeichenY) / dt
+                                / Simulation.Zeitbasis.OriginalHz;
+                p.LetztesZeichenY = zeichenY;
+                p.HatLetztesY = true;
+
+                // ⭐ 17.09.2026 (Aufgabe G) — die Artenliste ist RICHTIGGESTELLT. »5..20«
+                // war falsch abgeschrieben: die Tafel 0x453248 nennt nur die Arten
+                // 5, 6, 7, 16 und 20. Der Laser (9/10) hat bei uns geraucht und tut es
+                // im Original nicht. Die Taktung steht jetzt auch je Art da.
+                if (RauchTakte(p.Art) > 0)
                 {
                     p.RauchAt -= dt;
                     if (p.RauchAt <= 0f)
                     {
-                        p.RauchAt = 3f / Simulation.SimulationState.TicksPerSecond;
+                        // ⚠ 17.09.2026 — hier stand SimulationState.TicksPerSecond (20), was eine
+                        // dritte Uhr war und den Kommentar »ein Takt sind 1/50 s« direkt darueber
+                        // Luegen strafte. Jetzt die eine Zeitbasis, siehe Simulation/Zeitbasis.cs.
+                        p.RauchAt = RauchTakte(p.Art) / (float)Simulation.Zeitbasis.OriginalHz;
                         _effects.Add(new Effect
                         {
                             Pos = p.Pos - new Vector2(0, BogenHoehe(p)),
@@ -12581,8 +12786,39 @@ public partial class MapEntityLayer : Node2D
     /// zeigen wir lieber dasselbe Bild aus jeder Richtung. Steht in
     /// OFFENE_FRAGEN.md.</para>
     /// </summary>
-    private Texture2D? ProjectileTexture(string kind, int facing)
+    /// <summary>
+    /// <b>Welchen Bildblock ein Geschoss zeigt</b> — 0 flach, 8 Nase RUNTER, 16 Nase HOCH.
+    ///
+    /// <para>⭐ 17.09.2026 (Aufgabe C der Lesung). Das Original waehlt ueber Satzfeld
+    /// <c>+0x1E</c> einen Blockversatz 0/8/16 (Wurfbahn <c>@0x452579</c>, Laser
+    /// <c>@0x452335</c>); unsere Ausfuhr hat die 24 Bilder seit jeher, der Zeichner nahm
+    /// aber immer nur <c>f0..f7</c> — jede Rakete flog waagerecht, auch im steilsten
+    /// Bogen.</para>
+    ///
+    /// <para><b>Welcher Block welcher ist, ist GEMESSEN</b>, nicht geraten: die
+    /// Hauptachse der gesetzten Punkte von <c>flug_64</c> liegt bei
+    /// <c>f2</c> (Block 0) bei −0,9°, bei <c>f10</c> (Block 8) bei +21,4° und bei
+    /// <c>f18</c> (Block 16) bei −22,4°. Bild-y zeigt nach unten, Richtung 2 nach rechts
+    /// (V) — also ist Block 16 die steigende Nase.</para>
+    ///
+    /// <para>Die Schwelle 1 ist die des Originals (<c>v &gt; 1</c> / <c>v &lt; −1</c>),
+    /// gemessen in Bildpunkten je Takt.</para></summary>
+    private static int NeigungsBlock(Projectile p)
     {
+        if (p.Neigung < -1f) return 16;     // steigt -> Nase hoch
+        if (p.Neigung > 1f) return 8;       // faellt -> Nase runter
+        return 0;
+    }
+
+    private Texture2D? ProjectileTexture(string kind, int facing, int block = 0)
+    {
+        // Erst der geneigte Block; hat diese Folge ihn nicht (viele haben nur acht
+        // Bilder), faellt es sauber auf den flachen zurueck.
+        if (block > 0)
+        {
+            var geneigt = ProjectilePng(kind, facing + block);
+            if (geneigt != null) return geneigt;
+        }
         var tex = ProjectilePng(kind, facing);
         return tex ?? (facing == 0 ? null : ProjectilePng(kind, 0));
     }
@@ -12643,7 +12879,10 @@ public partial class MapEntityLayer : Node2D
                 // `xor cl,cl`). Folge 61 zum Beispiel hat ein EINZIGES Bild und
                 // wird von Art 1 und Art 21 benutzt -- ohne diese Schranke
                 // griffe Art 21 daneben.
-                var tex = ProjectileTexture(p.Kind, p.Art is >= 2 and <= 86 ? p.Facing : 0);
+                int block = NeigungsBlock(p);
+                GeschossBloecke.Add(block);
+                var tex = ProjectileTexture(p.Kind, p.Art is >= 2 and <= 86 ? p.Facing : 0,
+                                            block);
                 // Die Bogenhoehe: geschlossene Parabel mit demselben Scheitel,
                 // den das Original ueber seine Takte aufsummiert — siehe
                 // Scheitelteiler. Bei gerader Bahn ist Scheitel 0 und die
@@ -15931,11 +16170,16 @@ public partial class MapEntityLayer : Node2D
         }
 
         public Design(string name, int prop, int equip, int weapon, bool available, int slot,
-                      Simulation.DesignMath.Derived derived)
+                      Simulation.DesignMath.Derived derived, bool selbst = false)
         {
             Name = name; Propulsion = prop; Equip = equip; Weapon = weapon;
-            Available = available; Slot = slot; Derived = derived;
+            Available = available; Slot = slot; Derived = derived; Selbst = selbst;
         }
+
+        /// <summary>Satz <c>+0x01</c> (Schluessel "flags"[1]) — <b>ein selbst erstellter
+        /// Entwurf</b>. Die Bauliste der Basis malt so eine Zeile ganz in Palettenplatz 80;
+        /// siehe UI.BuildPanel.Row.Own. In den ausgelieferten Daten ueberall 0.</summary>
+        public bool Selbst { get; }
 
         public string Name { get; }
         public int Propulsion { get; }
@@ -16085,11 +16329,12 @@ public partial class MapEntityLayer : Node2D
             bool drawable = (prop >= 160 && prop <= 175) || prop == 148 || prop == 149;
             if (nm.Length == 0 || !drawable) continue;
             if (!seen.Add(nm)) continue;
-            bool avail = false;
+            bool avail = false, selbst = false;
             if (d.TryGetValue("flags", out var fv) && fv.VariantType == Variant.Type.Array)
             {
                 var fa = fv.AsGodotArray();
                 avail = fa.Count > 0 && fa[0].AsInt32() != 0;
+                selbst = fa.Count > 1 && fa[1].AsInt32() != 0;   // Satz +0x01
             }
             int slot = int.TryParse(kv.Key, out int sl) ? sl : -1;
             int weapon = GetI(d, "weapon", 0), equip = GetI(d, "body", 0);
@@ -16106,7 +16351,7 @@ public partial class MapEntityLayer : Node2D
             var derived = raw.Length >= 0x2e * 2
                 ? Simulation.DesignMath.FromRecordHex(raw)
                 : Simulation.DesignMath.Compute(weapon, prop, equip);
-            _designs.Add(new Design(nm, prop, equip, weapon, avail, slot, derived));
+            _designs.Add(new Design(nm, prop, equip, weapon, avail, slot, derived, selbst));
         }
         // ⚠ Dieselbe Runde noch einmal, aber OHNE die beiden Filter oben.
         // `_designs` ist eine BAULISTE: ein Name kommt nur einmal vor. sec47 ist
@@ -17436,6 +17681,30 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Das Meldungsfenster öffnen (MapViewer): Zeile 1, Zeile 2,
     /// Standzeit in Zwanzig-Takt-Schritten, mittig statt an der Maus.</summary>
     public System.Action<string, string, int, bool>? OnMeldung;
+
+    /// <summary>
+    /// <b>Eine Absage des BASISFENSTERS als Meldungsfenster</b> (Art 13, Standzeit 3, an
+    /// der Maus) — mit den Wörtern des Originals.
+    ///
+    /// <para>⭐ 17.09.2026, Lesung <c>berichte/basis-bauliste-fable.md</c> §5 und
+    /// <c>meldungsfenster-fable.md</c>: der Produzieren-Knopf ist im Original IMMER
+    /// drückbar und antwortet bei fehlenden Teilen mit »Sie besitzen nicht genügend
+    /// Einzelteile.« / »Verzeihung.« (<c>0x44A769</c>, F <c>0x44975C</c>), bei vollem
+    /// Depot mit »Es gibt keinen Platz mehr im Depot.« (<c>0x44A6E2</c>). Bei uns waren
+    /// beides Statuszeilen, und der Knopf war gesperrt — also sah man den Grund nie.</para>
+    ///
+    /// <para>Ohne Fenster (Prüfstand, <c>--meldungsfenster-aus</c>) bleibt die
+    /// Statuszeile, damit die vorhandenen Prüfstände weiter messen können.</para></summary>
+    public void MeldungBasis(string zeile1, string zeile2 = "")
+    {
+        BasisMeldungen++;
+        if (OnMeldung != null && !MeldungsfensterAus) OnMeldung(zeile1, zeile2, 3, false);
+        else _order = zeile2.Length > 0 ? zeile1 + " " + zeile2 : zeile1;
+    }
+
+    /// <summary>Wie oft das Basisfenster eine Absage gemeldet hat — für den Prüfstand.
+    /// </summary>
+    public int BasisMeldungen;
 
     /// <summary><c>--meldungsfenster-aus</c> — Absagen wieder nur in der Statuszeile.</summary>
     public static bool MeldungsfensterAus;
@@ -20661,7 +20930,7 @@ public partial class MapEntityLayer : Node2D
                 rows.Add(new UI.BuildPanel.Row(
                     d.Name, $"{d.CostW}/{d.CostF}/{d.CostS}",
                     CanAfford(e, d), i == e.MenuIndex % Mathf.Max(1, menu.Count), pic,
-                    d.Propulsion, d.Weapon));
+                    d.Propulsion, d.Weapon, d.Selbst));
             }
             return rows;
         }
@@ -23369,6 +23638,10 @@ public partial class MapEntityLayer : Node2D
             var chosen = _designs[pick];
             if (!CanAfford(e, chosen))
             {
+                // ⭐ 17.09.2026 — die Wörter des Originals, im Meldungsfenster
+                // (0x44A769). Die alte Zeile bleibt als Statuszeile darunter, weil
+                // mehrere Prüfstände die Teilezahlen daraus lesen.
+                MeldungBasis("Sie besitzen nicht genügend Einzelteile.", "Verzeihung.");
                 _order = $"zu wenig Teile: {chosen.Name} kostet " +
                          $"{chosen.CostW}/{chosen.CostF}/{chosen.CostS}";
                 continue;
@@ -24476,17 +24749,25 @@ public partial class MapEntityLayer : Node2D
         Haul(e);
     }
 
-    /// <summary>+1 hp every 4th tick; back to "aktiv" once the building is whole.</summary>
+    /// <summary>+1 hp every 4th tick; back to "aktiv" once the building is whole.
+    /// ⚠ Aufaddiert statt geteilt — siehe <see cref="Entity.RepairRest"/>.</summary>
     private static void Repair(Entity e)
     {
-        e.Hp = Mathf.Min(e.Hp + TickScale / RepairTick, e.HpMax);
+        e.RepairRest += TickScale;
+        int punkte = e.RepairRest / RepairTick;
+        e.RepairRest -= punkte * RepairTick;
+        e.Hp = Mathf.Min(e.Hp + punkte, e.HpMax);
         if (e.Hp >= e.HpMax) e.State = StAktiv;
     }
 
-    /// <summary>One of the 100 upgrade steps; true when the job just finished.</summary>
+    /// <summary>One of the 100 upgrade steps; true when the job just finished.
+    /// ⚠ Aufaddiert statt geteilt — siehe <see cref="Entity.UpgradeRest"/>.</summary>
     private static bool Advance(Entity e)
     {
-        e.UpgradeStep += TickScale / UpgradeTick;
+        e.UpgradeRest += TickScale;
+        int schritte = e.UpgradeRest / UpgradeTick;
+        e.UpgradeRest -= schritte * UpgradeTick;
+        e.UpgradeStep += schritte;
         if (e.UpgradeStep < UpgradeSteps) return false;
         e.UpgradeStep = 0;
         e.State = StAktiv;
@@ -24563,7 +24844,14 @@ public partial class MapEntityLayer : Node2D
     // per upgrade step) are in its own ticks and nothing in the data says how
     // long one was.  This ONE factor is ours; every ratio it scales is
     // original, so the balance between the three stays the game's.
-    private const int TickScale = 16;
+    //
+    // ⭐ 17.09.2026 — die Zahl stand hier fest auf 16 und ist jetzt EINE gemeinsame Setzung
+    // für das ganze Spiel: Simulation/Zeitbasis.cs (Vorgabe 50). Damit rechnen Reparatur,
+    // Produktion, Ausbau, Einnahme, Förderung, Bahn und das Nachladen zum ERSTEN MAL mit
+    // derselben Uhr wie das Missionsskript. Die 16 war gegen diese Uhr 3,1× zu langsam —
+    // genau der Faktor, über den er sich bei der Reparatur beschwert hat (50/16 = 3,125).
+    // ⚠ EconTick ist eine Sekunde, darum ist TickScale unmittelbar die Taktzahl je Sekunde.
+    private static int TickScale => Simulation.Zeitbasis.WirtschaftsHz;
 
     // ---- transport ----
     //
@@ -24965,10 +25253,10 @@ public partial class MapEntityLayer : Node2D
     private const int TrainStepTicksStraight = 5, TrainStepTicksDiagonal = 4;
 
     /// <summary>Sekunden je GERADEM Streckenschritt in unserer Zeitrechnung.</summary>
-    private const float TrainStepSeconds = TrainStepTicksStraight / (float)TickScale;
+    private static float TrainStepSeconds => TrainStepTicksStraight / (float)TickScale;
 
     /// <summary>Sekunden je Halbschritt einer Diagonale.</summary>
-    private const float TrainStepSecondsDiagonal = TrainStepTicksDiagonal / (float)TickScale;
+    private static float TrainStepSecondsDiagonal => TrainStepTicksDiagonal / (float)TickScale;
 
     /// <summary>Welches Bilderband ein Waggon zeigt. ⚠ 13.08.2026 — Waggon 3
     /// stand hier auf 58 (Güterwagen) und ist in Wahrheit eine <b>zweite
@@ -30168,6 +30456,7 @@ public partial class MapEntityLayer : Node2D
             // längst, und eine verfallene Bestellung wäre ein echter Verlust —
             // derselbe Fehler wie C8.
             e.BuildTime = 1f;
+            MeldungBasis(DepotFullWord);            // 0x44A6E2, eine Zeile, Standzeit 3
             _order = DepotFullWord;
             return;
         }

@@ -481,7 +481,11 @@ public partial class MapEntityLayer : Node2D
     /// <see cref="TickScale"/> = 16 Originaltakte je Sekunde, also läuft der
     /// Automat 16/5 = 3,2 mal je Sekunde. Damit ist die <b>Standzeit</b> an
     /// jedem Ende 20 Runden = 6,25 s — gerechnet, nicht gesetzt.</summary>
-    private const float RailTickSeconds = 5f / TickScale;
+    /// <para>⚠ 17.09.2026: <c>const</c> → Eigenschaft, weil <see cref="TickScale"/> seit der
+    /// Zeitbasis keine Konstante mehr ist (Simulation/Zeitbasis.cs). Die 16 im Text oben ist
+    /// damit die ALTE Zahl — mit der Vorgabe 50 läuft der Automat 10 mal je Sekunde und die
+    /// Standzeit beträgt 2,0 s statt 6,25 s.</para>
+    private static float RailTickSeconds => 5f / TickScale;
 
     /// <summary>
     /// <b>⚠ 13.08.2026 — KEINE SETZUNG MEHR.</b> Die Fahrzeit einer Linie ist
@@ -493,7 +497,7 @@ public partial class MapEntityLayer : Node2D
     /// rechnet sie je Linie aus deren eigenen Streckencodes aus, statt eine
     /// Zahl mit der Schrittzahl zu multiplizieren. Diese Konstante ist nur noch
     /// der Rückfall für eine Linie ohne Codes.</summary>
-    private const float RailStepSeconds = TrainStepSeconds;
+    private static float RailStepSeconds => TrainStepSeconds;
 
     /// <summary>
     /// <b>Wieviele TAKTE jeder Waggon hinter Waggon 0 herfährt</b> — gemessen,

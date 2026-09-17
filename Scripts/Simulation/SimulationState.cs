@@ -28,6 +28,14 @@ public struct DeterministicRng
 
 public sealed class SimulationState
 {
+    /// <summary>⚠ <b>DAS IST NICHT DIE UHR DES ORIGINALS.</b> Das hier ist die feste
+    /// Schrittweite der <i>Zwillingssimulation</i> (Core/Game.cs, DeterminismTwinHost) — unser
+    /// eigener Rechenschritt für die Determinismusprobe, nicht der Spieltakt von 1997. Die
+    /// Originaluhr steht seit dem 17.09.2026 an EINER Stelle: <see cref="Zeitbasis"/>.
+    /// <para>Wer hier 20 in 50 ändert, weil »die anderen jetzt auch 50 sind«, ändert die
+    /// Schrittweite eines Prüfwerkzeugs und nicht die Spielgeschwindigkeit. Die eine Stelle,
+    /// die von hier fälschlich eine Originalzeit abgeleitet hat (die Rauchspur in
+    /// MapEntityLayer), ist umgehängt.</para></summary>
     public const int TicksPerSecond = 20;
     public static readonly Fixed TickDuration = Fixed.FromFloat(1f / TicksPerSecond);
 

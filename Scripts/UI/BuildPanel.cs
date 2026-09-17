@@ -55,9 +55,9 @@ public partial class BuildPanel : Control
     public readonly struct Row
     {
         public Row(string name, string cost, bool affordable, bool current, int pic = 0,
-                   int chassis = 0, int weapon = 0)
+                   int chassis = 0, int weapon = 0, bool own = false)
         { Name = name; Cost = cost; Affordable = affordable; Current = current; Pic = pic;
-          Chassis = chassis; Weapon = weapon; }
+          Chassis = chassis; Weapon = weapon; Own = own; }
         public string Name { get; }
 
         /// <summary>
@@ -105,6 +105,16 @@ public partial class BuildPanel : Control
         /// <summary>What the factory would build next — the same pick the N key
         /// steps through, so the two ways of choosing agree.</summary>
         public bool Current { get; }
+
+        /// <summary><b>Ein SELBST ERSTELLTER Entwurf</b> — Satz <c>sec47 +0x01 != 0</c>.
+        /// Das Original malt so eine Zeile ganz in Palettenplatz 80 (255,255,235) statt
+        /// im gewoehnlichen Ton, und die Sinnbilder verlieren dort ihre Farbe
+        /// (<c>0x469D4D</c> / F <c>0x46863D</c>). Belegt am Klickarm: Umbenennen und
+        /// Entfernen pruefen dasselbe Byte und sagen sonst »Vordefinierte Einheiten
+        /// koennen nicht geaendert / geloescht werden!«.
+        /// <para>⚠ In den ausgelieferten Daten ist <c>+0x01</c> ueberall 0 (592 Saetze) —
+        /// sichtbar wird das erst bei einem im Spiel erstellten Entwurf.</para></summary>
+        public bool Own { get; }
     }
 
     private Func<List<Row>>? _rows;

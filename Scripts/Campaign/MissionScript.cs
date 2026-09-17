@@ -294,7 +294,11 @@ public sealed class MissionScript
     /// <c>250 / 5 s = 50 Takte/s</c>. Die Gegenhypothese »der Takt ist in
     /// Wahrheit 250 Hz« hätte eine Sekunde je Zahl verlangt und ist
     /// erledigt.</para></summary>
-    public const int TicksPerSecond = 50;
+    /// <para>⭐ 17.09.2026 — die Zahl steht jetzt in <see cref="Simulation.Zeitbasis"/> und
+    /// gilt für das GANZE Spiel, nicht mehr nur für dieses Skript. Der Grund steht dort:
+    /// die EXE legt keine Taktfrequenz fest, also ist es eine Setzung — und die hier
+    /// gemessenen 50 sind der bestbelegte Wert, den sie bekommen konnte.</para>
+    public static int TicksPerSecond => Simulation.Zeitbasis.OriginalHz;
 
     /// <summary>Alle 100 Takte laeuft der zweite Teil des Missionsblocks: die
     /// Kampagnenfunktion rechnet <c>[0x502988] = Taktzaehler mod 100</c>
@@ -317,7 +321,7 @@ public sealed class MissionScript
     /// <summary>Fuenf reale Sekunden auf eine Spielminute — dieselbe Zahl wie
     /// oben, nur in der Einheit, die eine Anzeige ohne Skript braucht
     /// (<c>250 / 50</c>).</summary>
-    public const double RealSecondsPerGameMinute =
+    public static double RealSecondsPerGameMinute =>
         TicksPerGameMinute / (double)TicksPerSecond;
 
     /// <summary>Takte seit Missionsbeginn. Der Taktzaehler des Originals

@@ -27,8 +27,9 @@ using Godot;
 /// <c>Forschung</c> (0x501a3c), <c>Reparatur</c> (0x501a30). Das Original
 /// setzt sie auf x = 20 / 100 / 180 / 260 bei y = 55, gezeichnet über
 /// 0x401820.</item>
-/// <item>Ein schwarzer Listenkasten. Die Zeilen stehen im Original auf
-/// <b>x = 32, y = 90 + 15·Zeile</b> (@0x46829F: <c>lea edx,[ebx+ebx*2+0x12]</c>
+/// <item>Ein schwarzer Listenkasten (20,80) 220×180, <b>zehn Zeilen</b>. Sie
+/// stehen auf <b>x = 32</b>, in der PRODUKTION bei <b>y = 100 + 15·Zeile</b>,
+/// im DEPOT bei <b>y = 90 + 15·Zeile</b> (@0x46829F: <c>lea edx,[ebx+ebx*2+0x12]</c>
 /// dann <c>lea eax,[edx+edx*4]</c>, also 15·Zeile + 90).</item>
 /// <item>Darunter die drei Teilebestände des Gebäudes.</item>
 /// <item>Vier Knöpfe in zwei Reihen: <c>Umbenennen</c> (0x5019dc),
@@ -43,8 +44,13 @@ using Godot;
 /// Original schreibt sie als gewöhnliche Zeichen in die Zeile und lässt die
 /// Schrift den Rest tun: <c>"Waffen gelagert : ]"</c> @0x501c70,
 /// <c>"Fahrwerke gelagert : ["</c> @0x501c54, <c>"Spezialteile gelagert : {"</c>
-/// @0x501c34, und der Preisdrucker @0x46ee01/08/0f hängt <c>" ]"</c>,
-/// <c>" ["</c>, <c>" {"</c> in genau dieser Reihenfolge aneinander. In
+/// @0x501c34, und der Preisdrucker der Bauliste <c>@0x469D81…0x469F3E</c>
+/// hängt <c>"]"</c>, <c>"["</c>, <c>"{"</c> in genau dieser Reihenfolge
+/// aneinander — <b>ohne Leerzeichen</b>.
+/// <para>⚠ 17.09.2026 berichtigt (berichte/basis-bauliste-fable.md): 
+/// <c>0x46EE01/08/0F</c> ist NICHT der Preisdrucker, sondern der Titel des
+/// FABRIKfensters (Art 2/3/4 → » ]« / » [« / » {«), und <c>0x501C34</c> ist
+/// die Zeichenkette »Spezialteile gelagert : {«.</para> In
 /// FONT.CWD sind <c>]</c>, <c>[</c> und <c>{</c> keine Klammern, sondern die
 /// drei Teilesymbole (und <c>$</c> der Geldsack) — nachgesehen in
 /// <c>UI/akte_font.png</c>. Wir schreiben also dieselben Zeichen und bekommen
@@ -89,15 +95,72 @@ public sealed partial class BaseWindow : PanelContainer
     private static readonly Color WinBg = new(0.30f, 0.28f, 0.25f);
     private static readonly Color WinEdge = new(0.55f, 0.51f, 0.45f);
     private static readonly Color BarBg = new(0.22f, 0.20f, 0.18f);
-    private static readonly Color TitleFg = new(0.88f, 0.86f, 0.80f);
+    /// <summary>Palettenplatz 150 — dasselbe Gold wie das Sinnbild <c>[</c>. Damit malt
+    /// das Original die Titelzeile »Basis &lt;Name&gt;« (<c>0x467DB2</c>, F <c>0x4666A2</c>);
+    /// vorher stand hier ein beiger Wert nach Bildschirmfoto.</summary>
+    private static Color TitleFg => Rendering.MapEntityLayer.BaulisteAlt
+        ? new Color(0.88f, 0.86f, 0.80f) : new Color(244 / 255f, 184 / 255f, 28 / 255f);
     private static readonly Color PlainFg = new(0.84f, 0.83f, 0.76f);
     private static readonly Color BoxBg = new(0.02f, 0.02f, 0.02f);
-    private static readonly Color RowFg = new(0.78f, 0.82f, 0.85f);
-    private static readonly Color RowSelFg = new(1f, 1f, 1f);
-    private static readonly Color RowSelBg = new(0.24f, 0.30f, 0.24f);
-    private static readonly Color RowDearFg = new(0.62f, 0.42f, 0.38f);
-    private static readonly Color IconFg = new(0.85f, 0.20f, 0.14f);
-    private static readonly Color EnergyFg = new(0.85f, 0.85f, 0.82f);
+    // ---- Farben der BAULISTE: ab 17.09.2026 GELESEN, nicht mehr geraten ------
+    //
+    // Seine Meldung: »im original sieht man dahinter die benötigten ressourcen,
+    // bei uns auch, aber im original sind diese FARBIG«. Lesung
+    // berichte/basis-bauliste-fable.md.
+    //
+    // ⭐ Die Farbe haengt am ZEICHEN, nicht am Rohstoff und nicht am Geld. Der
+    // Textzeichner 0x4BA420 (F 0x4B9F20) schlaegt jedes Zeichen in einer
+    // 90-Byte-Tafel 0x4BA504 (F 0x4BA004) nach; sechs Sinnbilder haben dort ein
+    // festes Farbpaar (Haupt/Schatten), alles andere — auch die ZIFFERN — geht
+    // roh mit 254/36. Die Werte unten sind Palettenplaetze aus
+    // Assets/Legacy/DATA/NN.PAL (768 Byte RGB 0..255), in allen 27 Paletten
+    // gleich.
+    //
+    // ⚠ Was hier WEGFAELLT: eine Einfaerbung nach Bezahlbarkeit (frueher
+    // RowDearFg). Die gibt es im Original NICHT — die Zeilenschleife
+    // 0x46912D..0x469FF2 liest vom Entwurf nur +0/+1/+2 und +0x1A..+0x1C, das
+    // Lager kein einziges Mal (Vollerhebung ueber 177 Relokationen).
+    // ⚠ Eigenschaften statt Konstanten, damit --bauliste-alt (Nullmodell zu
+    // --bauliste-check) die geratenen Farben von vor dem 17.09.2026 zurueckholen kann.
+    private static Color RowFg => Rendering.MapEntityLayer.BaulisteAlt
+        ? new Color(0.78f, 0.82f, 0.85f) : new Color(235 / 255f, 231 / 255f, 231 / 255f);
+    private static Color RowSelFg => Rendering.MapEntityLayer.BaulisteAlt ? new Color(1f, 1f, 1f) : RowFg;
+    private static Color RowSelBg => Rendering.MapEntityLayer.BaulisteAlt
+        ? new Color(0.24f, 0.30f, 0.24f) : new Color(127 / 255f, 119 / 255f, 99 / 255f);
+    /// <summary>Platz 80 — eine SELBST ERSTELLTE Einheit, ganze Zeile
+    /// (<c>sec47 +0x01 != 0</c>, Zeichner <c>0x469D4D</c> / F <c>0x46863D</c>).</summary>
+    private static Color RowOwnFg => Rendering.MapEntityLayer.BaulisteAlt
+        ? new Color(0.62f, 0.42f, 0.38f) : new Color(255 / 255f, 255 / 255f, 235 / 255f);
+    /// <summary>Die drei Sinnbilder: <c>]</c> Waffenteil Platz 153, <c>[</c>
+    /// Fahrwerkteil 150, <c>{</c> Spezialteil 124.</summary>
+    /// <summary>Die alte, geratene Sinnbildfarbe: EIN Rot fuer alle drei Teile.</summary>
+    private static readonly Color IconAlt = new(0.85f, 0.20f, 0.14f);
+    private static Color IconWFg => Rendering.MapEntityLayer.BaulisteAlt
+        ? IconAlt : new Color(240 / 255f, 81 / 255f, 49 / 255f);
+    private static Color IconFFg => Rendering.MapEntityLayer.BaulisteAlt
+        ? IconAlt : new Color(244 / 255f, 184 / 255f, 28 / 255f);
+    private static Color IconSFg => Rendering.MapEntityLayer.BaulisteAlt
+        ? IconAlt : new Color(163 / 255f, 163 / 255f, 183 / 255f);
+
+    /// <summary>Für <c>--bauliste-check</c>: jede Farbe der Bauliste mit dem
+    /// <b>Palettenplatz</b>, aus dem sie stammt. Der Prüfstand schlägt die Plätze in
+    /// <c>Assets/Legacy/DATA/NN.PAL</c> nach und vergleicht — damit hängen unsere Werte
+    /// an der Datei des Originals und nicht an einem Bildschirmfoto.</summary>
+    public static (string Was, int Platz, Color Farbe)[] BaulistenFarben() => new[]
+    {
+        ("gewoehnlicher Text und die Zahlen", 254, RowFg),
+        ("] Waffenteil",                      153, IconWFg),
+        ("[ Fahrwerkteil",                    150, IconFFg),
+        ("{ Spezialteil",                     124, IconSFg),
+        ("Auswahlbalken",                     140, RowSelBg),
+        ("selbst erstellter Entwurf",          80, RowOwnFg),
+        ("Titelzeile »Basis …«",              150, TitleFg),
+        ("Energiebalken, Füllung",            140, EnergyFg),
+    };
+    /// <summary>Palettenplatz 140 — die Füllung des Energiebalkens (<c>0x467E5C</c>);
+    /// der Kasten darunter ist Platz 0, also schwarz (<c>0x467DFF</c>).</summary>
+    private static Color EnergyFg => Rendering.MapEntityLayer.BaulisteAlt
+        ? new Color(0.85f, 0.85f, 0.82f) : new Color(127 / 255f, 119 / 255f, 99 / 255f);
     private static readonly Color HintFg = new(0.55f, 0.54f, 0.50f);
 
     // ---- was das Fenster von aussen braucht ---------------------------------
@@ -219,7 +282,10 @@ public sealed partial class BaseWindow : PanelContainer
     private readonly Label _status = new();
     private readonly Button[] _tabs = new Button[TabWords.Length];
     private readonly Sheet _sheet = new();
-    private readonly Label _stock = new();
+    /// <summary>Die Bestandszeile unter der Liste. ⭐ 17.09.2026 ein eigener Zeichner
+    /// statt eines Labels: die drei Sinnbilder tragen dort dieselben Farben wie in der
+    /// Bauliste (Platz 153/150/124), und ein Label kann nur EINE Farbe.</summary>
+    private readonly BestandZeile _stock = new();
     private readonly Button _rename = new(), _remove = new(), _make = new(), _design = new();
 
     /// <summary>Die zwei Fabrikausbauten. ⚠ <b>Sie lagen bis zum 18.08.2026 NUR
@@ -367,8 +433,6 @@ public sealed partial class BaseWindow : PanelContainer
 
         // die Teilebestände des Gebäudes, in derselben Schreibweise wie die
         // Preise darüber
-        _stock.AddThemeColorOverride("font_color", PlainFg);
-        _stock.HorizontalAlignment = HorizontalAlignment.Center;
         left.AddChild(_stock);
 
         var keys = new GridContainer { Columns = 2 };
@@ -452,15 +516,17 @@ public sealed partial class BaseWindow : PanelContainer
             n.AddThemeFontSizeOverride("font_size", size);
         }
         _sheet.SetFont(font, size);
+        _stock.SetFont(font, size);
         _energy.CustomMinimumSize = new Vector2(size * 8, Mathf.Max(6, size / 3));
         // Das Vorschaufeld ist im Original 60×60 Punkte (der Kasten
         // 0x456A50(…,3,3) = 3 Zellen von 20 px) und damit genau so gross wie
         // ein Bild der Bank — mit der Schrift mitskaliert, aber quadratisch.
         float side = PortraitBank.Box * (size / 13f);
         _preview.CustomMinimumSize = new Vector2(side, side);
-        // Der Listenkasten des Originals fasst zwölf Zeilen; die Zeilenhöhe ist
-        // seine eigene (15 px), hier mit der Schrift mitskaliert.
-        _sheet.CustomMinimumSize = new Vector2(size * 14f, _sheet.Step * 12f);
+        // ⭐ 17.09.2026 GELESEN: der Listenkasten ist (20,80) 220×180 und fasst ZEHN
+        // Zeilen (y = 100 + 15·i in der Produktion, 90 + 15·i im Depot). Hier stand
+        // zwölf — geraten. Die Zeilenhöhe ist die des Originals (15 px), mitskaliert.
+        _sheet.CustomMinimumSize = new Vector2(size * 14f, _sheet.Step * ZeilenImReiter);
         Refresh();
     }
 
@@ -509,6 +575,16 @@ public sealed partial class BaseWindow : PanelContainer
     /// eigenem Inhalt und einem Knopf darin — man musste zweimal klicken, und
     /// ein Reiterwechsel brach nichts ab. Beides ist jetzt richtig herum.</para>
     /// </summary>
+    /// <summary>
+    /// Wie viele Zeilen der Listenkasten im gewählten Reiter hoch ist.
+    ///
+    /// <para>⭐ 17.09.2026 (Aufgabe 10): das Original gibt jeder Seite eine eigene Höhe —
+    /// Depot 300, Produktion 340, Forschung 320, <b>Reparatur 100</b>. Die Reparaturseite
+    /// hat gar keine Liste. Unser Fenster hat keine festen Maße, darum wird daraus das,
+    /// was man wirklich sieht: dort schrumpft der Kasten auf drei Zeilen, statt zehn zu
+    /// reservieren.</para></summary>
+    private float ZeilenImReiter => _tab == 3 ? 3f : 10f;
+
     private void SetTab(int which)
     {
         // ⭐⭐ 06.09.2026 — DER KLICK. Seine Meldung: »Es gibt tatsaechlich bei
@@ -623,8 +699,15 @@ public sealed partial class BaseWindow : PanelContainer
             // Im Depot gibt es nichts zu bezahlen — nur etwas zu waehlen.
             0 => OnSendOut == null || _sheet.Selected < 0 ||
                  _sheet.Selected >= rows.Count,
-            1 => _sheet.Selected < 0 || _sheet.Selected >= rows.Count ||
-                 !rows[_sheet.Selected].Affordable,
+            // ⭐ 17.09.2026 GELESEN: der Produzieren-Knopf des Originals ist IMMER
+            // drückbar. Ohne Teile antwortet er mit dem Meldungsfenster »Sie besitzen
+            // nicht genügend Einzelteile. / Verzeihung.« (0x44A769), bei vollem Depot
+            // mit »Es gibt keinen Platz mehr im Depot.« (0x44A6E2) — siehe
+            // MapEntityLayer.MeldungBasis. Ein gesperrter Knopf verschweigt den Grund.
+            // ⚠ Der MARKT läuft über denselben Reiter und zahlt mit GELD; für ihn bleibt
+            // die Sperre, denn seine Absage ist nicht gelesen.
+            1 => _sheet.Selected < 0 || _sheet.Selected >= rows.Count
+                 || (markt && !rows[_sheet.Selected].Affordable),
             // (der Markt laeuft ueber denselben Reiter 1; die Zeile darueber
             //  prueft schon »bezahlbar«, und das ist am Markt der Kontostand)
             _ => true,
@@ -711,6 +794,69 @@ public sealed partial class BaseWindow : PanelContainer
     /// "W300 F400 S200" werden die drei Sinnbilder des Originals; ein
     /// Kontostand ("$1200") bleibt, wie er ist — das Geldzeichen ist in dieser
     /// Schrift ebenfalls ein Bild.</summary>
+    /// <summary>
+    /// <b>Die Bestandszeile</b> — <c>]W[F{S</c> mittig unter der Liste, jedes Sinnbild in
+    /// seiner Farbe (Original: zentriert bei (130, 263), <c>berichte/basis-bauliste-fable.md</c>
+    /// §6 Aufgabe 8). Der Anhang der Fabrik (Platz/Tempo) bleibt im gewöhnlichen Ton stehen —
+    /// er ist unsere Zutat, siehe <see cref="StockLine"/>.
+    /// </summary>
+    private sealed partial class BestandZeile : Control
+    {
+        private Font? _font;
+        private int _size = 13;
+        private string _text = "";
+
+        public string Text
+        {
+            get => _text;
+            set { if (_text == value) return; _text = value; QueueRedraw(); }
+        }
+
+        public void SetFont(Font? f, int size)
+        {
+            _font = f; _size = size;
+            CustomMinimumSize = new Vector2(0, size + 4);
+            QueueRedraw();
+        }
+
+        public override void _Draw()
+        {
+            if (_font == null || _text.Length == 0) return;
+            // Der Text kommt als »]12[10{14« (+ optionaler Anhang nach zwei Leerzeichen).
+            var stueck = new List<(string S, Color C)>();
+            int anhang = _text.IndexOf("  ", StringComparison.Ordinal);
+            string kern = anhang >= 0 ? _text[..anhang] : _text;
+            string rest = anhang >= 0 ? _text[anhang..] : "";
+            var farbe = RowFg;
+            int i = 0;
+            while (i < kern.Length)
+            {
+                char c = kern[i];
+                Color? sinn = c == IconW[0] ? IconWFg
+                            : c == IconF[0] ? IconFFg
+                            : c == IconS[0] ? IconSFg : null;
+                if (sinn is { } sc) { stueck.Add((c.ToString(), sc)); i++; continue; }
+                int j = i;
+                while (j < kern.Length && kern[j] != IconW[0] && kern[j] != IconF[0]
+                       && kern[j] != IconS[0]) j++;
+                stueck.Add((kern[i..j], farbe));
+                i = j;
+            }
+            if (rest.Length > 0) stueck.Add((rest, farbe));
+
+            float breite = 0f;
+            foreach (var (t, _) in stueck) breite += Sheet.W(_font, _size, t);
+            float x = Mathf.Max(0f, (Size.X - breite) / 2f);
+            float grund = _size;
+            foreach (var (t, col) in stueck)
+            {
+                DrawString(_font, new Vector2(x, grund), t,
+                           HorizontalAlignment.Left, -1, _size, col);
+                x += Sheet.W(_font, _size, t);
+            }
+        }
+    }
+
     private static string StockLine(string tail)
     {
         if (tail.Length == 0) return "";
@@ -842,10 +988,18 @@ public sealed partial class BaseWindow : PanelContainer
             _fill = max > 0 ? Mathf.Clamp(hp / (float)max, 0f, 1f) : 0f;
             QueueRedraw();
         }
+        /// <summary>⭐ 17.09.2026 GELESEN: der Kasten ist 260×10 in Platz 0 (schwarz,
+        /// <c>0x467DFF</c>), die Füllung <c>252·hp/max</c> Punkte breit und nur
+        /// <b>2 Punkte hoch</b> in Platz 140 (<c>0x467E5C</c>) — ein dünner Strich in der
+        /// Mitte, kein ausgefüllter Balken. Die 252 von 260 sind der Rand: die Füllung
+        /// sitzt 4 Punkte eingerückt.</summary>
         public override void _Draw()
         {
             DrawRect(new Rect2(Vector2.Zero, Size), BoxBg);
-            DrawRect(new Rect2(Vector2.Zero, new Vector2(Size.X * _fill, Size.Y)), EnergyFg);
+            float rand = Size.X * 4f / 260f;
+            float hoehe = Mathf.Max(2f, Size.Y * 2f / 10f);
+            DrawRect(new Rect2(rand, (Size.Y - hoehe) / 2f,
+                               (Size.X - 2f * rand) * _fill, hoehe), EnergyFg);
         }
     }
 
@@ -988,55 +1142,80 @@ public sealed partial class BaseWindow : PanelContainer
                 int idx = _top + i;
                 var r = _rows[idx];
                 float top = i * Step;
-                if (idx == Selected) DrawRect(new Rect2(0, top, Size.X, Step), RowSelBg);
+                // ⭐ Der Balken des Originals: (30, y) 195×14 — eingerückt und eine Spur
+                // niedriger als die Zeile (15), nicht über die volle Breite
+                // (0x469202, F 0x467AF2).
+                if (idx == Selected)
+                    DrawRect(new Rect2(2, top, Size.X - 4, Step * 14f / 15f), RowSelBg);
                 else if (idx == _hover)
                     DrawRect(new Rect2(0, top, Size.X, Step), new Color(1, 1, 1, 0.07f));
-                var fg = !r.Affordable ? RowDearFg : idx == Selected ? RowSelFg : RowFg;
+                // ⭐ 17.09.2026 — die Zeile wechselt ihre Farbe nur bei einem SELBST
+                // ERSTELLTEN Entwurf (Platz 80). Weder die Auswahl noch fehlendes Geld
+                // faerben sie: die Auswahl ist allein der Balken oben (Platz 140), und
+                // die Bezahlbarkeit liest der Zeichner des Originals gar nicht.
+                var fg = r.Own ? RowOwnFg : RowFg;
                 float baseline = top + Step - Mathf.Max(2f, Step * 0.2f);
-                float costW = DrawCost(r.Cost, Size.X - 4, baseline, fg, measure: true);
+                float costW = DrawCost(r.Cost, Size.X - 4, baseline, fg, r.Own, measure: true);
                 DrawString(_font, new Vector2(4, baseline), r.Name,
                            HorizontalAlignment.Left, Size.X - 10 - costW, _size, fg);
-                DrawCost(r.Cost, Size.X - 4, baseline, fg, measure: false);
+                DrawCost(r.Cost, Size.X - 4, baseline, fg, r.Own, measure: false);
             }
         }
 
-        /// <summary>Den Preis rechtsbündig zeichnen: Sinnbild in Rot, Zahl in
-        /// der Farbe der Zeile — so steht es im Bildschirmfoto. »20/40/0« aus
-        /// der Bauliste wird zu »]20 [40 {0«.</summary>
-        private float DrawCost(string cost, float right, float baseline, Color fg, bool measure)
+        /// <summary>
+        /// Den Preis rechtsbündig zeichnen — <b>jedes Sinnbild in SEINER Farbe</b>,
+        /// die Zahlen im gewöhnlichen Textton.
+        ///
+        /// <para>⭐ 17.09.2026, gelesen (<c>berichte/basis-bauliste-fable.md</c>): der
+        /// Preistext des Originals ist <c>"]" + W + "[" + F + "{" + S</c> — <b>ohne
+        /// Leerzeichen</b> —, gebaut bei <c>0x469D81…0x469F3E</c> und rechtsbündig an
+        /// x = 222 gesetzt (<c>esi = 0xDE − Breite</c>, <c>0x469F77</c> / F
+        /// <c>0x468867</c>). Vorher stand hier »Sinnbild in Rot, Zahl in der Farbe der
+        /// Zeile — so steht es im Bildschirmfoto«: das Rot galt für alle drei, und die
+        /// Zahlen wechselten mit der Zeile. Beides war geraten.</para>
+        ///
+        /// <para>Bei einem selbst erstellten Entwurf (<paramref name="own"/>) malt das
+        /// Original die ganze Zeile in Platz 80 — <b>die Sinnbildfarben fallen dort
+        /// weg</b>, weil der Zeichner dann ein anderer ist
+        /// (<c>0x4020A4(…, 0x50, 0x54)</c> statt <c>0x401041</c>).</para></summary>
+        private float DrawCost(string cost, float right, float baseline, Color fg,
+                               bool own, bool measure)
         {
             if (_font == null || cost.Length == 0) return 0f;
-            var bits = new List<(string Icon, string Text)>();
+            var bits = new List<(string Icon, Color IconCol, string Text)>();
             var parts = cost.Split('/');
             if (parts.Length == 3)
             {
-                bits.Add((IconW, parts[0]));
-                bits.Add((IconF, parts[1]));
-                bits.Add((IconS, parts[2]));
+                bits.Add((IconW, IconWFg, parts[0]));
+                bits.Add((IconF, IconFFg, parts[1]));
+                bits.Add((IconS, IconSFg, parts[2]));
             }
-            else bits.Add(("", cost));
+            else bits.Add(("", fg, cost));
 
+            // ⚠ KEIN Leerzeichen zwischen den drei Teilen — das Original haengt sie
+            // unmittelbar aneinander (0x469D81…0x469F3E).
             float total = 0f;
-            foreach (var (icon, text) in bits)
-                total += W(icon) + W(text) + W(" ");
-            total -= W(" ");
+            foreach (var (icon, _, text) in bits) total += W(icon) + W(text);
             if (measure) return total;
 
             float x = right - total;
-            foreach (var (icon, text) in bits)
+            foreach (var (icon, iconCol, text) in bits)
             {
                 if (icon.Length > 0)
                 {
                     DrawString(_font, new Vector2(x, baseline), icon,
-                               HorizontalAlignment.Left, -1, _size, IconFg);
+                               HorizontalAlignment.Left, -1, _size, own ? fg : iconCol);
                     x += W(icon);
                 }
                 DrawString(_font, new Vector2(x, baseline), text,
                            HorizontalAlignment.Left, -1, _size, fg);
-                x += W(text) + W(" ");
+                x += W(text);
             }
             return total;
         }
+
+        internal static float W(Font? f, int size, string s) =>
+            f == null ? 0f : f.GetStringSize(s, HorizontalAlignment.Left, -1, size).X;
 
         private float W(string s) =>
             _font == null ? 0f : _font.GetStringSize(s, HorizontalAlignment.Left, -1, _size).X;
@@ -1063,9 +1242,11 @@ public sealed partial class BaseWindow : PanelContainer
                 int i = RowAt(mb.Position);
                 if (i >= 0)
                 {
-                    // Ein Klick wählt, ein Doppelklick bestellt — das Original
-                    // hat für das Bestellen den Knopf »Produzieren«, und der ist
-                    // hier der Weg. Der Doppelklick ist UNSERE Abkürzung.
+                    // Ein Klick wählt, ein Doppelklick bestellt.
+                    // ⚠ 17.09.2026 berichtigt: hier stand »der Doppelklick ist UNSERE
+                    // Abkürzung« — er ist KEINE. Das Original löst damit dasselbe
+                    // Element 12 aus wie der Knopf »Produzieren« (0x44A957, V: über
+                    // 0x4485D0). Das Verhalten stimmte also schon, nur die Ansage nicht.
                     if (mb.DoubleClick) OnConfirm?.Invoke(i);
                     else OnPick?.Invoke(i);
                 }

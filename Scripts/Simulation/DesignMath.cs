@@ -179,6 +179,16 @@ public static class DesignMath
         /// adding to the SIGHT.</summary>
         public int Range => B(0x24);
 
+        /// <summary><b>Min-Reichweite</b> — Entwurf <c>+0x22</c>, das Lowbyte des
+        /// Worts aus <c>Σ Bauteil +0x16</c> (@<c>0x4B1FB0</c>, hier Zeile 409).
+        ///
+        /// <para>Das Nachziehen schreibt es in Einheit <c>+0x2A</c> —
+        /// <c>0x4B3BD5</c> (F <c>0x4B3505</c>), »immer«, siehe
+        /// <see cref="MapEntityLayer.NachziehenEiner"/>. Bis zum 17.09.2026 gab
+        /// es hier kein Feld dafür, weil nur der Bauweg die Reichweiten las;
+        /// der Kartenlader braucht es.</para></summary>
+        public int RangeMin => B(0x22);
+
         /// <summary>Sight in tiles — design +0x26, written to entity +0x2c,
         /// the panel's "Sicht".</summary>
         public int Sight => B(0x26);

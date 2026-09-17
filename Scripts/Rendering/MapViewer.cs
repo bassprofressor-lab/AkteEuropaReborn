@@ -582,13 +582,23 @@ public partial class MapViewer : Node2D
         LoadMap(_mapIndex);
 
         // a game picked in the main menu: the map is up, now put the state on it
+        bool ausSpielstand = false;
         if (UI.SkirmishSetup.PendingSave.Length > 0)
         {
             string want = UI.SkirmishSetup.PendingSave;
             UI.SkirmishSetup.PendingSave = "";
             var root = Core.SaveGame.Read(want, out string err);
             if (root == null) GD.PrintErr($"Spielstand: {err}");
-            else { _entities.ApplySaveState(root); GD.Print($"Spielstand {want} geladen"); }
+            else
+            {
+                _entities.ApplySaveState(root);
+                GD.Print($"Spielstand {want} geladen");
+                // ⚠ Ein Spielstand wird NICHT nachgezogen: das Original springt bei
+                // 0x41EE04 (F 0x41DFC3) hinter die Vorbereitung UND hinter mission_init,
+                // die Weiche ist Kopfbyte 3 der Datei (.CWM 23/23 = 1, .DM 13/13 = 2).
+                // Siehe Simulation/Nachziehen.cs.
+                ausSpielstand = true;
+            }
         }
         if (UI.SkirmishSetup.Active)
         {
@@ -609,6 +619,22 @@ public partial class MapViewer : Node2D
             // MapEntityLayer.PlaceCarriedUnits.
             if (UI.SkirmishSetup.CampaignMission > 0)
                 _entities.PlaceCarriedUnits(UI.SkirmishSetup.CampaignMission, me);
+
+            // ⭐⭐ DAS NACHZIEHEN AUF DIE ENTWURFSWERTE — und zwar GENAU HIER.
+            //
+            // Das Original laeuft es dreimal, und der LETZTE Lauf zaehlt: (1) aus
+            // mission_init 0x488300, (2) je KI-Aufwertung, (3) am Ende von »Enemy
+            // upgrade« 0x437E6C. Lauf (3) liegt HINTER place_unit und hinter den
+            // mitgenommenen Einheiten — die werden per 78-Byte-Kopie noch mit den
+            // Werten der VORMISSION aufgestellt und erst dort nachgezogen. Deshalb
+            // steht der Aufruf nach PlaceCarriedUnits und nicht im Kartenlader.
+            // Gelesen: berichte/nachladezeit-nachziehen-fable.md §5.1/§5.5.
+            //
+            // Ein Spielstand ist ausgenommen (siehe oben, Kopfbyte 3).
+            if (!ausSpielstand)
+                _entities.NachziehenNachKarte(
+                    UI.SkirmishSetup.CampaignMission > 0
+                        ? $"Kampagne {UI.SkirmishSetup.CampaignMission}" : "Gefecht");
 
             if (UI.SkirmishSetup.CampaignMission > 0)
             {
@@ -1151,6 +1177,30 @@ public partial class MapViewer : Node2D
         if (_flammenwaldCheck)
         {
             GD.Print(_entities.FlammenwerferWaldCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_nachladezeitCheck)
+        {
+            GD.Print(_entities.NachladezeitCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_zeitbasisCheck)
+        {
+            GD.Print(_entities.ZeitbasisCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_baulisteCheck)
+        {
+            GD.Print(_entities.BaulisteCheck());
+            GetTree().Quit(0);
+            return;
+        }
+        if (_geschossHoehenCheck)
+        {
+            GD.Print(_entities.GeschossHoehenCheck());
             GetTree().Quit(0);
             return;
         }
@@ -4212,6 +4262,32 @@ public partial class MapViewer : Node2D
             else if (a == "--wald-waffenschaden") MapEntityLayer.WaldWaffenschaden = true;
             else if (a == "--bodenangriff-tafelreichweite") MapEntityLayer.BodenangriffTafelreichweite = true;
             else if (a == "--flammenwerfer-wald-check") _flammenwaldCheck = true;
+            // Das Nachziehen auf die Entwurfswerte, siehe Simulation/Nachziehen.cs.
+            else if (a == "--nachziehen-aus") MapEntityLayer.NachziehenAus = true;
+            else if (a == "--nachladezeit-check") _nachladezeitCheck = true;
+            // Die Zeitbasis, siehe Simulation/Zeitbasis.cs.
+            else if (a == "--zeitbasis-alt") Simulation.Zeitbasis.AufAltSetzen();
+            else if (a == "--zeitbasis-check") _zeitbasisCheck = true;
+            // Die Farben der Bauliste, siehe Simulation/BaulisteCheck.cs.
+            else if (a == "--bauliste-alt") MapEntityLayer.BaulisteAlt = true;
+            else if (a == "--bauliste-check") _baulisteCheck = true;
+            // Der Geschossflug ueber Hoehen, siehe Simulation/GeschossHoehenCheck.cs.
+            else if (a == "--kein-bodentreffer") MapEntityLayer.KeinBodentreffer = true;
+            else if (a == "--geschoss-nachfuehren") MapEntityLayer.GeschossNachfuehren = true;
+            else if (a == "--geschosstempo-alt") MapEntityLayer.GeschosstempoAlt = true;
+            else if (a == "--geschoss-hoehen-check") _geschossHoehenCheck = true;
+            else if (a == "--geschoss-spur") MapEntityLayer.GeschossSpur = true;
+            else if (a == "--boden-spiegeln") MapEntityLayer.BodenSpiegeln = true;
+            else if (a.StartsWith("--originalhz="))
+            {
+                string wert = a["--originalhz=".Length..];
+                if (!int.TryParse(wert, out int hz) || !Simulation.Zeitbasis.Setzen(hz))
+                    GD.PrintErr($"--originalhz={wert} ist keine brauchbare Zahl (1..1000) — " +
+                                $"es bleibt bei {Simulation.Zeitbasis.OriginalHz}");
+                else
+                    GD.Print($"--originalhz={hz}: die Zeitbasis ist auf {hz} Originaltakte/s " +
+                             "gesetzt (Vorgabe 50)");
+            }
             else if (a == "--buildings") _buildingOverlay = true;
             else if (a == "--rail") _railOverlay = true;
             // Prueflauf fuer die Legeart der Strecke, siehe DrawRailTrack.
@@ -4430,6 +4506,23 @@ public partial class MapViewer : Node2D
     private bool _missionsminenCheck, _minenfahrtCheck, _minenbildCheck;
     /// <summary><c>--flammenwerfer-wald-check</c> — siehe Simulation/FlammenwerferWald.cs.</summary>
     private bool _flammenwaldCheck;
+
+    /// <summary><c>--nachladezeit-check</c> — siehe Simulation/Nachziehen.cs.
+    /// Nullmodell: <c>--nachziehen-aus</c>.</summary>
+    private bool _nachladezeitCheck;
+
+    /// <summary><c>--zeitbasis-check</c> — siehe Simulation/ZeitbasisCheck.cs.
+    /// Nullmodell: <c>--zeitbasis-alt</c>.</summary>
+    private bool _zeitbasisCheck;
+
+    /// <summary><c>--bauliste-check</c> — siehe Simulation/BaulisteCheck.cs.
+    /// Nullmodell: <c>--bauliste-alt</c>.</summary>
+    private bool _baulisteCheck;
+
+    /// <summary><c>--geschoss-hoehen-check</c> — siehe Simulation/GeschossHoehenCheck.cs.
+    /// Nullmodelle: <c>--kein-bodentreffer</c>, <c>--geschoss-nachfuehren</c>,
+    /// <c>--geschosstempo-alt</c>, <c>--keine-einschlaghoehen</c>.</summary>
+    private bool _geschossHoehenCheck;
     /// <summary><c>--tuerfach-check</c> — siehe Simulation/Tuerfach.cs.</summary>
     private bool _tuerfachCheck;
     /// <summary><c>--einheitenanker-check</c> — siehe Simulation/Einheitenanker.cs.</summary>

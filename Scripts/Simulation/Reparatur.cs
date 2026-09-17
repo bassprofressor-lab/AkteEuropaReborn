@@ -100,9 +100,18 @@ public partial class MapEntityLayer
             int saetze = PostRepairFromPanel();                   // Basisfensterweg durch den Ring
             for (int k = 0; k < 5; k++) SimTickFuerProbe();       // Ring leerlaufen (Ankunft mitmessen)
             int h2 = b.Hp;
-            // Der Reparaturtakt gibt in 5 Takten hoechstens 1..2 TP zurueck — gemessen wird
-            // darum »kein zweiter Abzug«: h2 >= h1.
-            h2 = h2 >= h1 && h2 <= h1 + 5 ? h1 : h2;
+            // Der Reparaturtakt gibt waehrend der Messung TP zurueck — gemessen wird darum
+            // »kein zweiter ABZUG«: h2 >= h1, und nach oben nur so viel, wie der Takt in
+            // dieser Zeit ueberhaupt schafft.
+            //
+            // ⚠ 17.09.2026 — hier stand die feste Zahl 5, und die war die ALTE Uhr: bei
+            // TickScale 16 gibt ein Wirtschaftstakt 16/4 = 4 TP, plus Rest also hoechstens 5.
+            // Mit der Zeitbasis (Vorgabe 50) sind es 12,5 — der Prüfstand fiel darum durch,
+            // OHNE dass an der Klicksperre etwas kaputt war (die Zeile »still verworfen 2x«
+            // stand danebe und war richtig). Zwei verschiedene Dinge in einem Zaehler; die
+            // Schranke wird jetzt aus dem Takt gerechnet und ergibt fuer 16 wieder genau 5.
+            int reparaturSchranke = TickScale / RepairTick + 1;
+            h2 = h2 >= h1 && h2 <= h1 + reparaturSchranke ? h1 : h2;
             _sel.Clear(); _selected = -1;
             Soll(h1 == soll1 && h2 == soll1,
                  $"{name} Platz {b.Slot}: TP {h0} -> erster Klick {h1} (Soll {soll1}) -> zwei weitere Klicks {h2} (Soll {soll1}), "
