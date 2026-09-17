@@ -135,12 +135,24 @@ public sealed partial class BaseWindow : PanelContainer
     /// Fahrwerkteil 150, <c>{</c> Spezialteil 124.</summary>
     /// <summary>Die alte, geratene Sinnbildfarbe: EIN Rot fuer alle drei Teile.</summary>
     private static readonly Color IconAlt = new(0.85f, 0.20f, 0.14f);
-    private static Color IconWFg => Rendering.MapEntityLayer.BaulisteAlt
+    /// <summary>⚠ <b>Öffentlich</b>, weil die Rohstoffleiste oben (<see cref="GameHud"/>)
+    /// dieselben Sinnbilder zeigt und dieselben Farben tragen muss. Seine Meldung vom
+    /// 17.09.2026: »die farben dieser rohstoffe sind in unserer eigenen leiste oben in der
+    /// mitte immer noch einfarbig«.</summary>
+    public static Color IconWFg => Rendering.MapEntityLayer.BaulisteAlt
         ? IconAlt : new Color(240 / 255f, 81 / 255f, 49 / 255f);
-    private static Color IconFFg => Rendering.MapEntityLayer.BaulisteAlt
+    public static Color IconFFg => Rendering.MapEntityLayer.BaulisteAlt
         ? IconAlt : new Color(244 / 255f, 184 / 255f, 28 / 255f);
-    private static Color IconSFg => Rendering.MapEntityLayer.BaulisteAlt
+    public static Color IconSFg => Rendering.MapEntityLayer.BaulisteAlt
         ? IconAlt : new Color(163 / 255f, 163 / 255f, 183 / 255f);
+
+    /// <summary>Palettenplatz 84 — das Sinnbild <c>$</c> (der Geldsack), Farbpaar 84/87
+    /// in der Zeichentafel <c>0x4BA504</c>.</summary>
+    public static Color MoneyIconFg => Rendering.MapEntityLayer.BaulisteAlt
+        ? new Color(0.90f, 0.85f, 0.45f) : new Color(227 / 255f, 199 / 255f, 147 / 255f);
+
+    /// <summary>Palettenplatz 254 — gewöhnlicher Text, also auch alle ZIFFERN.</summary>
+    public static Color TextFg => RowFg;
 
     /// <summary>Für <c>--bauliste-check</c>: jede Farbe der Bauliste mit dem
     /// <b>Palettenplatz</b>, aus dem sie stammt. Der Prüfstand schlägt die Plätze in
@@ -156,6 +168,7 @@ public sealed partial class BaseWindow : PanelContainer
         ("selbst erstellter Entwurf",          80, RowOwnFg),
         ("Titelzeile »Basis …«",              150, TitleFg),
         ("Energiebalken, Füllung",            140, EnergyFg),
+        ("$ Geld (auch in der Leiste oben)",   84, MoneyIconFg),
     };
     /// <summary>Palettenplatz 140 — die Füllung des Energiebalkens (<c>0x467E5C</c>);
     /// der Kasten darunter ist Platz 0, also schwarz (<c>0x467DFF</c>).</summary>

@@ -136,8 +136,17 @@ public sealed partial class GameHud : Control
     // ---- Farben (⚠ unsere Werte, im Ton der übrigen Oberfläche) -------------
     private static readonly Color Plate = new(0.04f, 0.05f, 0.07f, 0.72f);
     private static readonly Color Edge = new(0.42f, 0.40f, 0.36f, 0.85f);
+    /// <summary>⚠ Nur noch der Rückfall für das »T« (Terranium) — ein gewöhnlicher
+    /// Buchstabe, kein Sinnbild. Die drei Teilesymbole holen ihre Farbe seit dem
+    /// 17.09.2026 aus <see cref="BaseWindow"/>, also aus der Palette des Originals:
+    /// <c>]</c> Platz 153, <c>[</c> 150, <c>{</c> 124, <c>$</c> 84. Vorher trugen hier
+    /// ALLE VIER dasselbe Rot — seine Meldung: »die farben dieser rohstoffe sind in
+    /// unserer eigenen leiste oben in der mitte immer noch einfarbig«.</summary>
     private static readonly Color IconFg = new(0.85f, 0.20f, 0.14f);
-    private static readonly Color ValueFg = new(0.92f, 0.91f, 0.85f);
+    /// <summary>⚠ Die ZAHLEN — im Original gewoehnlicher Text, Platz 254. Hier stand ein
+    /// eigener Ton nach Augenmass; er unterschied sich um wenige Prozent, war aber eine
+    /// zweite Wahrheit ueber dieselbe Farbe.</summary>
+    private static Color ValueFg => BaseWindow.TextFg;
     private static readonly Color RiseFg = new(0.55f, 0.85f, 0.50f);
     private static readonly Color FallFg = new(0.90f, 0.45f, 0.40f);
     private static readonly Color FlatFg = new(0.55f, 0.54f, 0.50f);
@@ -226,10 +235,12 @@ public sealed partial class GameHud : Control
         // Erst messen, dann malen: die Platte muss so breit sein wie der Inhalt.
         var cells = new List<(string Icon, Color IconCol, string Val, float Rate)>
         {
-            ("T", IconFg, _now.T.ToString(), r.T),
-            (BaseWindow.IconW, IconFg, _now.W.ToString(), r.W),
-            (BaseWindow.IconF, IconFg, _now.F.ToString(), r.F),
-            (BaseWindow.IconS, IconFg, _now.S.ToString(), r.S),
+            // ⚠ Das »T« ist ein Buchstabe und bleibt im gewöhnlichen Ton; die drei
+            // Sinnbilder tragen die Farben der Palette, wie in der Bauliste der Basis.
+            ("T", BaseWindow.TextFg, _now.T.ToString(), r.T),
+            (BaseWindow.IconW, BaseWindow.IconWFg, _now.W.ToString(), r.W),
+            (BaseWindow.IconF, BaseWindow.IconFFg, _now.F.ToString(), r.F),
+            (BaseWindow.IconS, BaseWindow.IconSFg, _now.S.ToString(), r.S),
         };
 
         // ⚠ 17.08.2026 — DIE VORSILBE. Fehler C1: die Leiste sah aus wie »mein
@@ -272,11 +283,14 @@ public sealed partial class GameHud : Control
                        HorizontalAlignment.Left, -1, _fontSize, RateColour(c.Rate));
             x += W(rt) + gap * 1.5f;
         }
+        // ⭐ 17.09.2026 — auch hier die Palette: das Sinnbild »$« ist Platz 84
+        // (227,199,147), die ZAHL dahinter gewoehnlicher Text (Platz 254). Das Original
+        // faerbt nur das Zeichen, nie die Ziffern (Zeichentafel 0x4BA504).
         DrawString(_font, new Vector2(x, baseline), "$",
-                   HorizontalAlignment.Left, -1, _fontSize, MoneyFg);
+                   HorizontalAlignment.Left, -1, _fontSize, BaseWindow.MoneyIconFg);
         x += W("$") + W(" ");
         DrawString(_font, new Vector2(x, baseline), _now.Money.ToString(),
-                   HorizontalAlignment.Left, -1, _fontSize, MoneyFg);
+                   HorizontalAlignment.Left, -1, _fontSize, BaseWindow.TextFg);
 
         if (build.Length > 0)
             DrawString(_font, new Vector2(gap, baseline + LineH), build,
