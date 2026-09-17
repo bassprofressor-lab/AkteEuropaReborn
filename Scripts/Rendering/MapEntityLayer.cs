@@ -5482,8 +5482,44 @@ public partial class MapEntityLayer : Node2D
     /// is as big as the unit really is. A ship covers 2x2 cells (the imap says
     /// so, see CwmData.UnitFootprints); giving it a one-cell box made it hard to
     /// click and drew a bracket a quarter of its size.</summary>
+    /// <summary><c>--klickfeld-alt</c> — das flache Zellrechteck von vor dem 17.09.2026.
+    /// Nullmodell zu <c>--klickfeld-check</c>.</summary>
+    public static bool KlickfeldAlt;
+
+    /// <summary>
+    /// <b>DAS KLICKFELD</b> — worauf man zeigen muss, damit eine Einheit gemeint ist.
+    ///
+    /// <para>⭐⭐ 17.09.2026, seine Meldung: »nehmen wir das attack icon bei feinden — ich
+    /// muss immer etwas weiter unten ansetzen, um den angriff sauber auszuführen«. Hier
+    /// stand ein flaches Zellrechteck (40×20 um <see cref="Entity.Pos"/>) — geraten. Es
+    /// deckte den FUSSPUNKT, während das Bild der Einheit weit darüber steht.</para>
+    ///
+    /// <para><b>Das Original prüft ein BILDSCHIRMRECHTECK je gezeichnetem Sprite</b>
+    /// (Treffertest <c>0x431C31…</c>, F <c>0x430D71…</c>), nicht die Zelle: beim Fahrzeug
+    /// <c>x ∈ sx−2…sx+39</c>, <c>y ∈ sy+11…sy+59</c> — also <b>42×49</b> Bildpunkte am
+    /// Blitpunkt (sx, sy) der Zeichenliste. Stehend ist <c>sx</c> die linke Zellkante und
+    /// <c>sy = Zellenoberkante − HUB − 35</c> (Erzeuger <c>0x430147</c>, F
+    /// <c>0x42F2D6</c>). In unseren Koordinaten liegt der Kasten damit bei
+    /// <c>Pos + (−22, −34)</c> und ist <c>42 × 49</c> groß — er reicht <b>24 Punkte über
+    /// die Zelle hinaus auf den Körper</b>, und genau diese 24 Punkte hat er beim Zielen
+    /// gefehlt.</para>
+    ///
+    /// <para>⚠ Für das FUSSVOLK nennt die Lesung <b>14×25</b> unter dem Zeichenpunkt; wo
+    /// genau der Kasten dort sitzt, ist nicht ausgelesen. Gesetzt ist er hier mittig über
+    /// derselben Unterkante wie beim Fahrzeug (V).</para>
+    ///
+    /// <para>⚠ GEBÄUDE bleiben beim Fußabdruck: sie findet das Original über die MAUSZELLE
+    /// (Umrechner <c>0x4B5280</c>), nicht über ein Sprite-Rechteck — ein anderes Verfahren,
+    /// und unser Fußabdruck bildet es näher ab als jedes Bildrechteck.</para>
+    /// </summary>
     private static Rect2 BodyRect(Entity e)
     {
+        if (!KlickfeldAlt && !e.IsBuilding && !e.IsProp && e.GameUnitType is 0 or 1)
+        {
+            // Gattung 1 = Fussvolk, sonst Fahrzeug.
+            var groesse = e.GameUnitType == 1 ? new Vector2(14, 25) : new Vector2(42, 49);
+            return new Rect2(e.Pos + new Vector2(-groesse.X / 2f, 14f - groesse.Y), groesse);
+        }
         var size = new Vector2(TileW * Mathf.Max(1, e.FootW), TileH * Mathf.Max(1, e.FootH));
         return new Rect2(e.Pos - size / 2f, size);
     }
@@ -36219,8 +36255,28 @@ public partial class MapEntityLayer : Node2D
     {
         if (CellAt(mapPos) is not { } z) return false;
         int tc = b.Col + b.DoorCol, tr = b.Row + b.DoorRow;
-        return z.X == tc && (z.Y == tr || z.Y == tr + 1);
+        // ⭐⭐ 17.09.2026 — DIE ZONE WAR EINE ZEILE ZU TIEF, und der Körper fehlte ganz.
+        // Seine Meldung: »das gebäudeeinnahme icon wird mir noch unterhalb der tür
+        // angesetzt, und bin ich am oberen ende der tür, wird mir wieder das attack icon
+        // angezeigt«.
+        //
+        // Gelesen (berichte/zeiger-klickfeld-fable.md): EINNAHME II (0x432321…,
+        // F 0x431461…) fragt `[Zelle] == 0x63 || [Zelle+1] == 0x63`. Die Tafel 0x542E18
+        // ist `Spalte<<8 + Zeile` adressiert, `+1` ist also eine Zeile WEITER — geprüft
+        // wird damit die Türzelle und die Zelle DARÜBER (tr−1), nicht darunter. Hier
+        // stand `tr + 1`.
+        //
+        // Und EINNAHME I prüft zusätzlich JEDE gemerkte Grundrisszelle (sec52): die Zone
+        // ist Körper ∪ Tür ∪ Zelle über der Tür. Die Zelle VOR der Tür zeigt Fahrt.
+        if (EinnahmezoneAlt) return z.X == tc && (z.Y == tr || z.Y == tr + 1);
+        if (z.X == tc && (z.Y == tr || z.Y == tr - 1)) return true;
+        int w = Mathf.Max(1, b.FootW), h = Mathf.Max(1, b.FootH);
+        return z.X >= b.Col && z.X < b.Col + w && z.Y >= b.Row && z.Y < b.Row + h;
     }
+
+    /// <summary><c>--einnahmezone-alt</c> — die Zone von vor dem 17.09.2026: nur Türzelle
+    /// und die Zelle DARUNTER, ohne den Gebäudekörper.</summary>
+    public static bool EinnahmezoneAlt;
 
     /// <summary>Die vier Gebaeudearten mit Tor — Tafel <c>0x432A7C</c>, und
     /// dieselbe Menge, die <see cref="GarageTyp"/> aus dem Einfahrweg

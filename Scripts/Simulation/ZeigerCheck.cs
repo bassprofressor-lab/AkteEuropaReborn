@@ -96,8 +96,18 @@ public partial class MapEntityLayer
                     fremdTuer++;
                     if (hTuer != Hint.Einnahme) fremdTuerFalsch++;
                 }
+                // ⭐⭐ 17.09.2026 RICHTIGGESTELLT (berichte/zeiger-klickfeld-fable.md):
+                // hier stand `hMitte != Hint.Enemy` — der Prüfstand verlangte also den
+                // ANGRIFFSZEIGER über der Mitte eines fremden Gebäudes. Das Original
+                // zeigt dort NIE den Angriff ohne Strg: der Einnahmezweig I prüft jede
+                // gemerkte Grundrisszelle (sec52), die Zone ist Körper ∪ Tür ∪ Zelle
+                // über der Tür. Ein Gebäude MIT Tür trägt also auch auf dem Körper den
+                // Einnahmezeiger, eines ohne Tür gar keinen Angriffszeiger.
                 fremdMitte++;
-                if (hMitte != Hint.Enemy) fremdMitteFalsch++;
+                bool mitteFalsch = b.Doors != 0 && b.Built != 0
+                                   ? hMitte != Hint.Einnahme
+                                   : hMitte == Hint.Enemy;
+                if (mitteFalsch) fremdMitteFalsch++;
             }
             else if (art == "zivil")
             {
@@ -205,7 +215,7 @@ public partial class MapEntityLayer
 
         sb.AppendLine($"  fremde Gebaeude: {fremdTuer}, davon ohne Einnahmezeiger auf der Tuer: "
                     + $"{fremdTuerFalsch}");
-        sb.AppendLine($"  fremde Gebaeude: {fremdMitte}, davon ohne Angriffszeiger in der Mitte: "
+        sb.AppendLine($"  fremde Gebaeude: {fremdMitte}, davon mit falschem Zeiger auf dem KOERPER (Soll: Einnahme, wo es eine Tuer gibt, sonst kein Angriff): "
                     + $"{fremdMitteFalsch}");
         sb.AppendLine($"  verbuendete Gebaeude: {verbuendet}, davon mit Angriffs- oder Einnahmezeiger: "
                     + $"{verbuendetFalsch}{(ZeigerVerbuendetAlt ? "  ⚠ NULLMODELL --zeiger-verbuendet-alt: MUSS hier > 0 sein und durchfallen" : "")}");

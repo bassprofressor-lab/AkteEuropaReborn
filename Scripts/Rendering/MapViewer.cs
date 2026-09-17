@@ -4278,6 +4278,9 @@ public partial class MapViewer : Node2D
             else if (a == "--geschoss-hoehen-check") _geschossHoehenCheck = true;
             else if (a == "--geschoss-spur") MapEntityLayer.GeschossSpur = true;
             else if (a == "--boden-spiegeln") MapEntityLayer.BodenSpiegeln = true;
+            // Klickfeld und Einnahmezone, siehe berichte/zeiger-klickfeld-fable.md.
+            else if (a == "--klickfeld-alt") MapEntityLayer.KlickfeldAlt = true;
+            else if (a == "--einnahmezone-alt") MapEntityLayer.EinnahmezoneAlt = true;
             else if (a.StartsWith("--originalhz="))
             {
                 string wert = a["--originalhz=".Length..];
