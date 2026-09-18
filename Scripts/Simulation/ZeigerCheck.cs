@@ -46,7 +46,15 @@ public partial class MapEntityLayer
             var u = _entities[i];
             if (u.IsBuilding || u.IsProp || u.Dead) continue;
             if (u.Owner != ViewPlayer || u.GameUnitType != 0) continue;
-            fahrzeug = i; break;
+            // ⚠⚠ 19.09.2026, bug-298: hier stand `break` beim ERSTEN Fahrzeug.
+            // PostAttack wirft in Teil 2 jede Einheit ohne CanFight() aus der
+            // Auswahl (cnt == 0 -> false). Faellt die Wahl auf ein BAUfahrzeug
+            // (Aufsatz 40..54, Waffenfahne +0x0d = 0), misst Abschnitt 5 nicht
+            // den Angriff, sondern die eigene Auswahl. Also: ein BEWAFFNETES
+            // Fahrzeug bevorzugen, notfalls irgendeines (der Einnahmezweig
+            // @0x4323F5 verlangt nur Klassenbyte 0, nicht die Waffe).
+            if (fahrzeug < 0) fahrzeug = i;
+            if (CanFight(u)) { fahrzeug = i; break; }
         }
         if (fahrzeug < 0)
             return sb.Append("  kein eigenes Fahrzeug auf dieser Karte — "
@@ -60,7 +68,8 @@ public partial class MapEntityLayer
         bool nebelVor = PickOhneNebel;
         PickOhneNebel = true;
         sb.AppendLine($"  gewaehlt: Platz {_entities[fahrzeug].Slot} "
-                    + $"({_entities[fahrzeug].Name}, +0x0a 0)");
+                    + $"({_entities[fahrzeug].Name}, +0x0a 0, Aufsatz {_entities[fahrzeug].Weapon}, "
+                    + $"kann schiessen {(CanFight(_entities[fahrzeug]) ? "ja" : "NEIN")})");
 
         int fremdTuer = 0, fremdTuerFalsch = 0, fremdMitte = 0, fremdMitteFalsch = 0;
         int herrenlos = 0, herrenlosFalsch = 0;
@@ -201,6 +210,15 @@ public partial class MapEntityLayer
             // die Zelle. Ein Bodenangriff tut einem Gebaeude naemlich nichts —
             // er kennt nur Wald, Objekte und Einheiten. Gemessen wird die neue
             // Reihenfolge, sonst misst der Pruefstand den alten Fehler.
+            // ⭐ 19.09.2026, bug-298: die Gruende, aus denen PostAttack `false`
+            // geben kann, werden jetzt EINZELN genannt. Vorher stand nur
+            // »NEIN«, und die Statuszeile trug noch den Satz des vorigen
+            // Schrittes — darum wird `_order` hier zuerst geleert.
+            int trefferA = Pick(anker);
+            var waffe = _entities[fahrzeug];
+            bool kannSchiessen = CanFight(waffe);
+            bool istZiel = trefferA >= 0 && IstAngriffsziel(waffe, _entities[trefferA]);
+            _order = "";
             bool zielt = !schluckt && PostAttack(anker);
             tuerlosOk = !zeigtEin && !schluckt && zielt;
             sb.AppendLine($"  tuerloses Gebaeude {ohneTuer.Slot} (Art {ohneTuer.BType}): "
@@ -208,6 +226,24 @@ public partial class MapEntityLayer
                         + $"PostCapture schluckt den Klick "
                         + $"{(schluckt ? "JA (falsch — Strg kann dann nicht schiessen)" : "nein")}, "
                         + $"Angriffsbefehl nimmt an {(zielt ? "ja" : "NEIN")} — »{_order}«");
+            if (!zielt)
+                sb.AppendLine($"      Grund: Pick auf den Anker trifft "
+                            + $"{(trefferA < 0 ? "NICHTS" : "Platz " + _entities[trefferA].Slot + " (Art " + _entities[trefferA].BType + ")")}, "
+                            + $"gewaehltes Fahrzeug kann schiessen {(kannSchiessen ? "ja" : "NEIN")}, "
+                            + $"IstAngriffsziel {(istZiel ? "ja" : "NEIN")}");
+            if (!zielt && trefferA < 0)
+            {
+                var kasten = BodyRect(ohneTuer);
+                sb.AppendLine($"      Geometrie: Zelle ({ohneTuer.Col},{ohneTuer.Row}) "
+                            + $"Fuss {ohneTuer.FootW}x{ohneTuer.FootH} Hoehe {ElevOf(ohneTuer.Col, ohneTuer.Row)}, "
+                            + $"Pos {ohneTuer.Pos}, Klickfeld {kasten}, gepruefter Punkt {anker}");
+                sb.AppendLine($"      Anhebung HubOf {HubOf(ohneTuer.Col, ohneTuer.Row)} gegen flach "
+                            + $"{ElevOf(ohneTuer.Col, ohneTuer.Row) * 15}, Hangart {HangArt(ohneTuer.Col, ohneTuer.Row)}, "
+                            + $"Zellmitte {CellCenter(ohneTuer.Col, ohneTuer.Row)}, "
+                            + $"Koerpermitte {BodyCenterAt(ohneTuer, ohneTuer.Col, ohneTuer.Row)}, "
+                            + $"CellAt(Punkt) {(CellAt(anker) is { } za ? $"({za.X},{za.Y})" : "nichts")}, "
+                            + $"CellAt(Kastenmitte) {(CellAt(kasten.GetCenter()) is { } zk ? $"({zk.X},{zk.Y})" : "nichts")}");
+            }
         }
 
         _sel.Clear(); foreach (int k in merken) _sel.Add(k);
@@ -239,7 +275,35 @@ public partial class MapEntityLayer
 
     /// <summary>Die Bildmitte einer Zelle — der Zeiger wird in Kartenpunkten
     /// gefragt, nicht in Zellen.</summary>
+    /// <summary><c>--zeigerprobe-flach</c> — die NACHGEBAUTE, flache Hoehenformel
+    /// von vor dem 19.09.2026. Nullmodell zu <see cref="MitteVon"/>: damit muss
+    /// der Pruefstand auf K16 an Gebaeude 13 wieder DURCHFALLEN, sonst misst die
+    /// Berichtigung nichts.</summary>
+    public static bool ZeigerprobeFlach;
+
+    /// <summary>
+    /// <b>DIE BILDMITTE EINER ZELLE</b> — der Punkt, auf den der Pruefstand zeigt.
+    ///
+    /// <para>⚠⚠ 19.09.2026, bug-298. Hier stand eine EIGENE Formel:
+    /// <c>_oy + row*TileH − ElevOf(col,row)*15 + TileH/2</c>. Sie nimmt an, dass
+    /// eine Zelle der Hoehe h stets um <c>15·h</c> angehoben wird — flach, ohne
+    /// die HANGART. Der Zeichner nimmt <see cref="CellCenter"/>, und das fragt
+    /// <c>HubOf(col,row)</c>, also <c>Hang.Hub</c> mit der Hangart der Zelle.</para>
+    ///
+    /// <para>Auf ebenem Grund sind beide Zeichen fuer Zeichen gleich; am HANG
+    /// gehen sie auseinander. Gemessen an K16, Gebaeude 13 (Zelle 76,30, Hoehe 6):
+    /// flach <b>90</b>, <c>HubOf</c> <b>45</b> — <b>45 Bildpunkte</b> Unterschied.
+    /// Der Pruefstand zeigte damit 35 px ueber das Klickfeld des Gebaeudes hinaus,
+    /// <see cref="Pick"/> traf nichts, und Abschnitt 5 meldete »Angriffsbefehl
+    /// nimmt an NEIN« — ein Fehler des Standes, nicht des Spiels.</para>
+    ///
+    /// <para>⚠ Arbeitsweise 24: ein Pruefstand fragt die Stelle, die auch das Spiel
+    /// fragt, und baut die Regel nicht nach. Dieselbe Lehre wie bei
+    /// <c>CellAt</c> am 18.09. (geneigte Klickecken statt flacher Kanten).</para>
+    /// </summary>
     private Vector2 MitteVon(int col, int row)
-        => new(_ox + (col + 0.5f) * TileW,
-               _oy + row * TileH - ElevOf(col, row) * 15 + TileH * 0.5f);
+        => ZeigerprobeFlach
+             ? new(_ox + (col + 0.5f) * TileW,
+                   _oy + row * TileH - ElevOf(col, row) * 15 + TileH * 0.5f)
+             : CellCenter(col, row);
 }

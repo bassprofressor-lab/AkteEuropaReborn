@@ -4283,6 +4283,12 @@ public partial class MapViewer : Node2D
             else if (a == "--einnahmezone-alt") MapEntityLayer.EinnahmezoneAlt = true;
             else if (a == "--fahrlinien-unten") MapEntityLayer.FahrlinienUnten = true;
             else if (a == "--zellprobe-alt") MapEntityLayer.ZellprobeAlt = true;
+            // Nullmodell zu bug-298: die flache Hoehenformel des Pruefstandes.
+            else if (a == "--zeigerprobe-flach") MapEntityLayer.ZeigerprobeFlach = true;
+            // Nullmodell zu bug-298: Gebaeude wieder ueber das Bildrechteck treffen.
+            else if (a == "--gebaeudepick-rechteck") MapEntityLayer.GebaeudepickRechteck = true;
+            // Nullmodell zu bug-301: Fadenkreuz ueber dem tuerlosen fremden Gebaeude.
+            else if (a == "--gebaeudefadenkreuz-alt") MapEntityLayer.GebaeudefadenkreuzAlt = true;
             else if (a.StartsWith("--originalhz="))
             {
                 string wert = a["--originalhz=".Length..];
@@ -7776,8 +7782,11 @@ public partial class MapViewer : Node2D
                                   // ⭐ 15.09.2026 — ueber einem Verbuendeten ist der
                                   // gewoehnliche Klick die Fahrt (Zeigerart 3, C 0x4378CB);
                                   // angegriffen wird er nur mit Strg.
-                                  && !(!_entities.NeutralzeigerHier(GetGlobalMousePosition())
-                                       && !_entities.VerbuendeterHier(GetGlobalMousePosition())
+                                  // ⭐ 19.09.2026, bug-301 — die beiden Ausnahmen sind zu
+                                  // FadenkreuzHier zusammengezogen: der gewoehnliche Klick
+                                  // greift genau dort an, wo auch das Fadenkreuz steht.
+                                  // Damit faellt auch das tuerlose fremde Gebaeude darunter.
+                                  && !(_entities.FadenkreuzHier(GetGlobalMousePosition())
                                        && _entities.PostAttack(GetGlobalMousePosition(),
                                                                mb.ShiftPressed)))
                                 _entities.PostMove(GetGlobalMousePosition(), mb.ShiftPressed);

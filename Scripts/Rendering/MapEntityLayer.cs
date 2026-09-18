@@ -35601,8 +35601,34 @@ public partial class MapEntityLayer : Node2D
         return !Watched(e.Col, e.Row);
     }
 
+    /// <summary><c>--gebaeudepick-rechteck</c> — der Stand vor dem 19.09.2026:
+    /// ein Gebaeude wird ueber das Bildrechteck um <see cref="Entity.Pos"/>
+    /// getroffen statt ueber seine Zellen. Nullmodell zu bug-298: damit muss
+    /// <c>--zeiger-check</c> auf K16 an Gebaeude 13 wieder DURCHFALLEN.</summary>
+    public static bool GebaeudepickRechteck;
+
     private int Pick(Vector2 p)
     {
+        // ⭐⭐ 19.09.2026, bug-298 — EIN GEBAEUDE WIRD UEBER SEINE ZELLEN GETROFFEN.
+        //
+        // Gemessen an K16, Gebaeude 13 (Kraftwerk, Art 13, Zelle 76,30, Fuss 5x6):
+        // der Anker liegt auf Hoehe 6, die Gegenecke (80,35) auf Hoehe 0. Beim Laden
+        // setzt InitEntityMovement `Pos = BodyCenter(e)`, und das MITTELT die beiden
+        // Eckzellen — Pos.y = 780. Die anker-gestuetzte Rechnung BodyCenterAt liefert
+        // 735. Ueber einer Hoehenstufe gehen die beiden also 45 px auseinander, und
+        // das Klickfeld (Pos +- Fuss/2) deckt die oberen Zeilen des Grundrisses nicht
+        // mehr ab. Folge: `Pick` traf auf der Ankerzelle nichts, der Strg-Angriff auf
+        // ein Kraftwerk am Hang fiel aus.
+        //
+        // ⭐ Der Kommentar an BodyRect sagt seit dem 17.09. selbst, wie es das
+        // Original macht: ein GEBAEUDE findet es ueber die MAUSZELLE (Umrechner
+        // 0x4B5280), nicht ueber ein Sprite-Rechteck — anders als eine EINHEIT, die
+        // ueber ihren Bildkasten laeuft (0x431C31). Dieselbe Zellprobe benutzt
+        // AufDerTuerOderDarunter seit dem 17.09. schon fuer die Einnahmezone; sie ist
+        // seit dem 18.09. auch an Haengen richtig (geneigte Klickecken, CellAt).
+        // Damit ist `Pos` fuer den Treffer gleichgueltig, und der Riss zwischen
+        // BodyCenter und BodyCenterAt kann hier nichts mehr anrichten.
+        var pz = GebaeudepickRechteck ? null : CellAt(p);
         int best = -1, bestRow = int.MinValue;
         for (int i = 0; i < _entities.Count; i++)
         {
@@ -35618,7 +35644,19 @@ public partial class MapEntityLayer : Node2D
             // dem Bildschirm — er darf sich auch nicht anwaehlen lassen.
             // ⚠ Ausser dem HANDELSPOSTEN, siehe Anfassbar().
             if (e.NoStructure && !Anfassbar(e)) continue;
-            if (!BodyRect(e).HasPoint(p) || e.Row <= bestRow) continue;
+            if (e.Row <= bestRow) continue;
+            bool treffer;
+            if (e.IsBuilding && !e.IsProp && !GebaeudepickRechteck)
+            {
+                // ⚠ Ohne Zelle unter dem Zeiger (ausserhalb der Karte) trifft
+                // kein Gebaeude — dasselbe Tor wie in AufDerTuerOderDarunter.
+                if (pz is not { } z) continue;
+                int w = Mathf.Max(1, e.FootW), h = Mathf.Max(1, e.FootH);
+                treffer = z.X >= e.Col && z.X < e.Col + w
+                       && z.Y >= e.Row && z.Y < e.Row + h;
+            }
+            else treffer = BodyRect(e).HasPoint(p);
+            if (!treffer) continue;
             best = i; bestRow = e.Row;
         }
         return best;
@@ -36146,6 +36184,36 @@ public partial class MapEntityLayer : Node2D
         {
             if (EinnahmezeigerGilt(e, mapPos)) return Hint.Einnahme;
             if (e.Owner is < 0 or > 7) return Hint.Neutral;
+            // ⭐⭐⭐ 19.09.2026, bug-301 — UEBER EINEM GEBAEUDE STEHT OHNE STRG
+            // NIE DAS FADENKREUZ, auch nicht ueber einem TUERLOSEN.
+            //
+            // ⚠ Punkt 2 im Kommentar darueber (08.09.2026, »das FREMDE Gebaeude
+            // bekommt Zeigerart 10 @0x4328A1«) ist WIDERLEGT. Die Gegenlesung
+            // vom 17.09. (berichte/zeiger-klickfeld-fable.md §3) hat die ganze
+            // Kette 0x4315D9…0x432A00 aufgenommen: 0x4328A1 ist der FLUGZEUG-Arm
+            // (eigen -> 1, fremd + Luftwaffe -> 10), kein Gebaeudearm. Und das
+            // Nullmodell dazu: `mov dword[0x502AD4], 2` steht in der ganzen
+            // Funktion GENAU ZWEIMAL — 0x43202E (Strg) und 0x432886 (der
+            // Einheiten-Treffertest). Aus einem Gebaeude kommt die 2 nie.
+            //
+            // Was ein fremdes Gebaeude OHNE Tuer stattdessen bekommt, Zweig fuer
+            // Zweig: EINNAHME I (0x43224C) verlangt `G+0x34 != 0`, also Tueren —
+            // faellt aus. EINNAHME II (0x432321) verlangt die Tuermarke 0x63 —
+            // faellt aus. Zweig 0x4324A2 setzt die 1 nur fuer eigene Art 14/16,
+            // herrenlos+13 und Art 17 — trifft nicht zu. Bleibt 0x432647:
+            // Zeigerart **3 = FAHRT**. Bei uns ist das Hint.Ground.
+            //
+            // ⚠ Das ist eine spuerbare Aenderung am Spiel: ein feindlicher
+            // Bunker (Art 8) oder eine Geschuetzstellung (Art 11) wird mit dem
+            // gewoehnlichen Rechtsklick nicht mehr beschossen, sondern
+            // angefahren — angegriffen wird er mit STRG. Das ist dieselbe Regel,
+            // die er am 18.09. fuer den Gebaeudekoerper entschieden hat
+            // (»Angreifen nur mit Strg — so lassen, wie gelesen«).
+            //
+            // Gemessen: --zeiger-check fiel auf K13 und K14 an genau diesen vier
+            // Gebaeuden durch (K14: Platz 14 Art 11, 33/34/36 Art 8).
+            // Gegenschalter --gebaeudefadenkreuz-alt.
+            if (!GebaeudefadenkreuzAlt) return Hint.Ground;
         }
         return _sel.Count > 0 ? Hint.Enemy : Hint.Ground;
     }
@@ -36223,6 +36291,37 @@ public partial class MapEntityLayer : Node2D
     /// Sperre, sondern nur die Bedeutung des einfachen Klicks.</para></summary>
     public bool NeutralzeigerHier(Vector2 mapPos)
         => !GebaeudezeigerAlt && !NeutralklickAlt && CursorHintAt(mapPos) == Hint.Neutral;
+
+    /// <summary><c>--gebaeudefadenkreuz-alt</c> — der Stand vor dem 19.09.2026:
+    /// ueber einem fremden Gebaeude OHNE Tuer steht das Fadenkreuz, und der
+    /// gewoehnliche Rechtsklick beschiesst es. Nullmodell zu bug-301: damit muss
+    /// <c>--zeiger-check</c> auf K13 und K14 wieder DURCHFALLEN.</summary>
+    public static bool GebaeudefadenkreuzAlt;
+
+    /// <summary>
+    /// <b>STEHT HIER DAS FADENKREUZ?</b> — und nur dort greift der gewoehnliche
+    /// Rechtsklick an.
+    ///
+    /// <para>Das ist der Grundsatz, der seit dem 08.09.2026 im Klickverteiler
+    /// steht (»wo kein Angriffszeiger steht, greift der einfache Klick auch
+    /// nicht an«), jetzt an EINER Stelle statt als Kette von Ausnahmen. Vorher
+    /// stand dort <c>!NeutralzeigerHier &amp;&amp; !VerbuendeterHier</c> — zwei
+    /// Sonderfaelle, und der dritte (das tuerlose fremde Gebaeude, bug-301)
+    /// fehlte.</para>
+    ///
+    /// <para>⚠ Die alten Gegenschalter behalten ihre Wirkung: mit
+    /// <c>--neutralklick-alt</c> beschiesst der einfache Klick wieder das
+    /// herrenlose Gebaeude, mit <c>--zeiger-verbuendet-alt</c> und
+    /// <c>--gebaeudezeiger-alt</c> gibt <see cref="CursorHintAt"/> dort ohnehin
+    /// wieder <see cref="Hint.Enemy"/> zurueck.</para>
+    /// </summary>
+    public bool FadenkreuzHier(Vector2 mapPos)
+    {
+        if (GebaeudefadenkreuzAlt)
+            return !NeutralzeigerHier(mapPos) && !VerbuendeterHier(mapPos);
+        var h = CursorHintAt(mapPos);
+        return h == Hint.Enemy || (NeutralklickAlt && h == Hint.Neutral);
+    }
 
     /// <summary><c>--neutralklick-alt</c> — der Stand vor dem 08.09.2026: auch
     /// ein herrenloses Gebaeude wird vom einfachen Rechtsklick angegriffen,
