@@ -4294,6 +4294,10 @@ public partial class MapViewer : Node2D
             else if (a == "--gebaeudefadenkreuz-alt") MapEntityLayer.GebaeudefadenkreuzAlt = true;
             // Nullmodell zu bug-303: die Schiffszeilen bleiben die rohe EXE-Vorgabe.
             else if (a == "--schiffszeilen-alt") MapEntityLayer.SchiffszeilenAlt = true;
+            // Nullmodelle zu bug-305, dem Raketenbild (berichte/geschossflug-fable.md).
+            else if (a == "--neigungsblock-alt") MapEntityLayer.NeigungsblockAlt = true;
+            else if (a == "--geschossrichtung-je-takt") MapEntityLayer.GeschossrichtungJeTakt = true;
+            else if (a == "--geschoss-bruchpixel") MapEntityLayer.GeschossBruchpixel = true;
             else if (a.StartsWith("--originalhz="))
             {
                 string wert = a["--originalhz=".Length..];

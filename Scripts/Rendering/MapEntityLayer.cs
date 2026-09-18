@@ -1012,6 +1012,17 @@ public partial class MapEntityLayer : Node2D
         public float LetztesZeichenY;
         public bool HatLetztesY;
 
+        /// <summary>⭐ 19.09.2026 — der zuletzt gewaehlte Bildblock und wie oft er
+        /// waehrend DIESES Fluges gewechselt hat. Ein sauberer Bogen braucht
+        /// hoechstens zwei Wechsel; eine grosse Zahl ist das Flattern, das der
+        /// Spieler als »Wackeln« sieht.</summary>
+        public int LetzterBlock, Blockwechsel, Richtungswechsel;
+
+        /// <summary>Ob der ERSTE Neigungsblock dieses Fluges schon gezaehlt ist.
+        /// Eine Rakete steigt beim Abschuss — dort muss 8 stehen (bug-305).
+        /// ⚠ Kein Feldinitialisierer: Projectile ist eine STRUKTUR.</summary>
+        public bool HatErstenBlock;
+
         /// <summary>Flughoehe an der Muendung und am Ziel, in Fuenfzehnteln
         /// einer Gelaendestufe. Siehe <see cref="GeschossHoehe"/>.</summary>
         public float HoeheStart, HoeheZiel;
@@ -1691,6 +1702,32 @@ public partial class MapEntityLayer : Node2D
     public int GeschossNachgefuehrt;
     public float GeschossMaxSchritt;
     public readonly System.Collections.Generic.HashSet<int> GeschossBloecke = new();
+
+    /// <summary>⭐ 19.09.2026, zu seiner Meldung »als wuerden die Raketen wackeln
+    /// waehrend des Fluges«: wie oft der Neigungsblock insgesamt gewechselt hat, und
+    /// das Schlimmste, was EIN Geschoss auf seinem Flug erlebt hat. Ein Bogen braucht
+    /// hoechstens zwei Wechsel (Nase hoch -> flach -> Nase runter). Alles darueber ist
+    /// Flattern um die Schwelle ±1 herum — und genau das sieht man.</summary>
+    public int GeschossBlockwechsel, GeschossMaxBlockwechsel;
+
+    /// <summary>Dasselbe fuer die RICHTUNG (Achtelsektor): wie oft sie im Flug
+    /// gekippt ist. Soll 0 — eine gerade Bahn hat eine feste Richtung.</summary>
+    public int GeschossRichtungswechsel, GeschossMaxRichtungswechsel;
+
+    /// <summary>Womit die Bahnen ANGEFANGEN haben — die Zahl, an der die Vertauschung
+    /// der Bloecke haengt (bug-305). Eine Wurfbahn steigt beim Abschuss, also gehoert
+    /// jede in die Spalte 8.</summary>
+    public int GeschossErstBlock8, GeschossErstBlock16, GeschossErstBlock0;
+
+    /// <summary><c>--geschossrichtung-je-takt</c> — der Stand vor dem 19.09.2026: die
+    /// Richtung wird je Takt neu gerechnet statt beim Abschuss festgelegt. Nullmodell
+    /// zur Richtungszeile von <c>--geschoss-hoehen-check</c>.</summary>
+    public static bool GeschossrichtungJeTakt;
+
+    /// <summary><c>--geschoss-bruchpixel</c> — der Stand vor dem 19.09.2026: das Geschoss
+    /// wird auf Bruchpixeln gezeichnet statt auf ganzen. ⚠ Wirkung nur gefolgert (V),
+    /// darum entscheidet sein Auge.</summary>
+    public static bool GeschossBruchpixel;
 
     /// <summary>
     /// <c>--keine-einschlaghoehen</c> — DIE GEGENPROBE zu den Hoehenschwellen.
@@ -12658,7 +12695,32 @@ public partial class MapEntityLayer : Node2D
                 float jeTakt = step / Mathf.Max(0.0001f, dt) / Simulation.Zeitbasis.OriginalHz;
                 if (jeTakt > GeschossMaxSchritt) GeschossMaxSchritt = jeTakt;
             }
-            if (dist > 0.01f) p.Facing = DirToFacing(d);
+            // ⭐ 19.09.2026 — DIE RICHTUNG wird hier JE BILD neu gerechnet. Fuer eine
+            // gerade Bahn ist `d` unveraenderlich, sie sollte also stehen bleiben; nahe
+            // am Ziel wird `d` aber klein, und der Achtelsektor kann kippen. Jeder
+            // Wechsel ist ein anderes Sprite mit anderer Groesse, und weil wir ueber
+            // `tex.GetSize()/2` mittig zeichnen, springt dabei die Lage. Zweiter
+            // Verdacht zu seiner Meldung »als wuerden die Raketen wackeln«.
+            // ⭐⭐ 19.09.2026 — DIE RICHTUNG STEHT VOM ABSCHUSS AN FEST. Im Original hat
+            // das Feld +0x0E genau EINEN Schreiber, den Anleger (0x451F48, F 0x450BF8,
+            // nach 0x40130C -> 0x435E00), und zwei Leser, beide Zeichner (0x42B192,
+            // 0x42CC99; F 0x42A37F, 0x42BE78) — im Geschosstakt schreibt sie NIEMAND.
+            // Bei uns wurde sie je Takt neu gerechnet; gemessen kippte sie zwar nie
+            // (0 Wechsel auf K16/K17), aber an einer 22,5°-Grenze koennte sie es, und
+            // das waere ein Wackeln. Also gar nicht erst anfassen.
+            // Gegenschalter --geschossrichtung-je-takt.
+            if (GeschossrichtungJeTakt && dist > 0.01f)
+            {
+                int vorher = p.Facing;
+                p.Facing = DirToFacing(d);
+                if (p.HatLetztesY && p.Facing != vorher)
+                {
+                    p.Richtungswechsel++;
+                    GeschossRichtungswechsel++;
+                    if (p.Richtungswechsel > GeschossMaxRichtungswechsel)
+                        GeschossMaxRichtungswechsel = p.Richtungswechsel;
+                }
+            }
 
             bool gestoppt = false;
             if (dist > step)
@@ -12767,11 +12829,40 @@ public partial class MapEntityLayer : Node2D
                 // Originaltakt, damit die Schwelle 1 dieselbe Bedeutung hat wie im
                 // Original.
                 float zeichenY = p.Pos.Y - BogenHoehe(p);
-                if (p.HatLetztesY && dt > 0f)
+                bool hatteY = p.HatLetztesY;
+                if (hatteY && dt > 0f)
                     p.Neigung = (zeichenY - p.LetztesZeichenY) / dt
                                 / Simulation.Zeitbasis.OriginalHz;
                 p.LetztesZeichenY = zeichenY;
                 p.HatLetztesY = true;
+
+                // ⭐ 19.09.2026 — WIE OFT KIPPT DAS BILD? Seine Meldung: »als wuerden die
+                // Raketen wackeln waehrend des Fluges«. GeschossBloecke sagt nur, WELCHE
+                // Bloecke vorkamen — nicht, wie oft gewechselt wird. Ein Bogen braucht
+                // hoechstens zwei Wechsel (hoch -> flach -> runter); alles darueber ist
+                // Flattern um die Schwelle. ⚠ Die Neigung ist bei uns eine Ableitung von
+                // BILD zu BILD ueber ein schwankendes dt, also verrauscht.
+                int blockJetzt = NeigungsBlock(p);
+                if (!hatteY) { /* erster Takt: noch keine Neigung, nichts zu zaehlen */ }
+                else if (!p.HatErstenBlock)
+                {
+                    // ⭐ DER ERSTE gesetzte Block. Das ist die Zahl, an der die
+                    // Vertauschung haengt: eine Rakete STEIGT beim Abschuss, also muss
+                    // hier 8 stehen (Nase hoch). Stand hier 16, flog sie bergauf mit der
+                    // Nase nach unten — bug-305.
+                    p.HatErstenBlock = true;
+                    if (blockJetzt == 8) GeschossErstBlock8++;
+                    else if (blockJetzt == 16) GeschossErstBlock16++;
+                    else GeschossErstBlock0++;
+                }
+                else if (blockJetzt != p.LetzterBlock)
+                {
+                    p.Blockwechsel++;
+                    GeschossBlockwechsel++;
+                    if (p.Blockwechsel > GeschossMaxBlockwechsel)
+                        GeschossMaxBlockwechsel = p.Blockwechsel;
+                }
+                p.LetzterBlock = blockJetzt;
 
                 // ⭐ 17.09.2026 (Aufgabe G) — die Artenliste ist RICHTIGGESTELLT. »5..20«
                 // war falsch abgeschrieben: die Tafel 0x453248 nennt nur die Arten
@@ -12893,10 +12984,49 @@ public partial class MapEntityLayer : Node2D
     ///
     /// <para>Die Schwelle 1 ist die des Originals (<c>v &gt; 1</c> / <c>v &lt; −1</c>),
     /// gemessen in Bildpunkten je Takt.</para></summary>
+    /// <summary><c>--neigungsblock-alt</c> — die VERTAUSCHTE Zuordnung von vor dem
+    /// 19.09.2026. Nullmodell: damit fliegt die Rakete wieder bergauf mit der Nase nach
+    /// unten, und <c>--geschoss-hoehen-check</c> muss in der Zeile »erster Block«
+    /// durchfallen.</summary>
+    public static bool NeigungsblockAlt;
+
+    /// <summary>
+    /// <b>⭐⭐⭐ 19.09.2026, bug-305 — DIE BEIDEN BLOECKE WAREN VERTAUSCHT.</b>
+    ///
+    /// <para>Seine Meldung: »als wuerden die Raketen wackeln waehrend des Fluges«. Das
+    /// ist kein Flattern (gemessen: 3 Blockwechsel je Flug, Richtungswechsel 0), sondern
+    /// die falsche Nase: die Rakete stieg mit der Nase nach UNTEN und fiel mit der Nase
+    /// nach OBEN. Am Scheitel kippt sie dann in die verkehrte Lage, und das sieht wie ein
+    /// Wackeln aus.</para>
+    ///
+    /// <para><b>Das Original</b> (berichte/geschossflug-fable.md §1): es vergleicht je Takt
+    /// die GANZE Zahl <c>e = dGrund + trunc(v)</c> und setzt
+    /// <c>e &gt; 1 → Block 8</c> (@<c>0x452587…0x45258C</c>, F <c>0x45122F…0x451234</c>),
+    /// <c>e &lt; −1 → Block 16</c> (@<c>0x452579…0x45257E</c>, F <c>0x451221…0x451226</c>).
+    /// Bei <c>y</c> nach unten heisst <c>e &gt; 1</c> FALLEN — also ist <b>8 die Nase
+    /// runter</b>… ⚠ nein, umgekehrt: im Original waechst die gefuehrte Hoehe nach OBEN,
+    /// <c>e &gt; 1</c> ist STEIGEN, und <b>Block 8 ist die Nase HOCH</b>.</para>
+    ///
+    /// <para><b>Und die Bilder belegen es unabhaengig vom Code:</b> in <c>flug_64</c> zeigen
+    /// <c>f10</c>/<c>f14</c> (Block 8) die Nase nach OBEN und <c>f18</c>/<c>f22</c>
+    /// (Block 16) nach UNTEN — die gelbe Flamme ist jeweils das Heck. ⚠ Damit faellt auch
+    /// die alte Begruendung »Richtung 2 nach rechts (V)«: Richtung 2 ist WEST
+    /// (Achtelung <c>0x435E00</c>: 0 = Sued, 2 = West, 4 = Nord, 6 = Ost), und unser
+    /// <c>DirToFacing</c> folgt derselben Regel.</para>
+    ///
+    /// <para>Unser <c>p.Neigung</c> ist in BILDpunkten je Takt gemessen, und Bild-y zeigt
+    /// nach unten: <b>negativ = steigt</b>. Also steigt → 8, faellt → 16.</para>
+    /// </summary>
     private static int NeigungsBlock(Projectile p)
     {
-        if (p.Neigung < -1f) return 16;     // steigt -> Nase hoch
-        if (p.Neigung > 1f) return 8;       // faellt -> Nase runter
+        if (NeigungsblockAlt)
+        {
+            if (p.Neigung < -1f) return 16;
+            if (p.Neigung > 1f) return 8;
+            return 0;
+        }
+        if (p.Neigung < -1f) return 8;      // steigt -> Nase HOCH
+        if (p.Neigung > 1f) return 16;      // faellt -> Nase RUNTER
         return 0;
     }
 
@@ -12977,8 +13107,23 @@ public partial class MapEntityLayer : Node2D
                 // den das Original ueber seine Takte aufsummiert — siehe
                 // Scheitelteiler. Bei gerader Bahn ist Scheitel 0 und die
                 // Rechnung faellt weg.
-                if (tex != null) DrawTexture(tex, p.Pos - tex.GetSize() / 2f
-                                                  - new Vector2(0, BogenHoehe(p)));
+                // ⭐ 19.09.2026 — GANZE BILDPUNKTE. Der Listenbauer des Originals
+                // (0x42ED04…0x42ED43) rechnet die Blitlage in WORTarithmetik
+                // (x = (Zelle−Rollung)·40 + Fein_x − 20, y entsprechend) und schreibt
+                // Lage und Hoehe je Takt um ganze Betraege fort — es gibt dort keine
+                // Bruchlage und keine Zwischenbild-Rechnung. Bei uns lag das Geschoss
+                // auf Bruchpixeln, und ein 1 px duenner Schraegstrich, der bei
+                // texture_filter = nearest und Zoom 1,6…8 je Takt an einer anderen
+                // Bruchlage abgetastet wird, KRIECHT.
+                // ⚠ Das ist der einzige der drei Punkte, dessen Wirkung auf das Wackeln
+                // nur GEFOLGERT ist (V) — aus der EXE nicht belegbar. Darum der
+                // Gegenschalter --geschoss-bruchpixel, damit sein Auge entscheidet.
+                if (tex != null)
+                {
+                    var lage = p.Pos - tex.GetSize() / 2f - new Vector2(0, BogenHoehe(p));
+                    if (!GeschossBruchpixel) lage = lage.Round();
+                    DrawTexture(tex, lage);
+                }
             }
 
         // Die Truemmer fliegen ueber dem Boden, also im selben Durchgang wie

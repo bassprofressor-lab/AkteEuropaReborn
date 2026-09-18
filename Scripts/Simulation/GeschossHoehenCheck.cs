@@ -121,6 +121,9 @@ public partial class MapEntityLayer
         GeschossNachgefuehrt = 0;
         GeschossMaxSchritt = 0f;
         GeschossBloecke.Clear();
+        GeschossBlockwechsel = GeschossMaxBlockwechsel = 0;
+        GeschossRichtungswechsel = GeschossMaxRichtungswechsel = 0;
+        GeschossErstBlock8 = GeschossErstBlock16 = GeschossErstBlock0 = 0;
 
         foreach (var f in faelle)
         {
@@ -240,6 +243,35 @@ public partial class MapEntityLayer
             ? $"     Neigungsblöcke gezeichnet: {{{string.Join(",", GeschossBloecke)}}} " +
               "(0 flach, 8 Nase runter, 16 hoch)"
             : "     Neigungsblöcke: keine — kopflos wird nicht gezeichnet, das sagt hier NICHTS");
+        // ⭐ 19.09.2026 — seine Meldung »als würden die Raketen wackeln während des
+        // Fluges«. Gemessen wird der WECHSEL, nicht die Auswahl: ein sauberer Bogen
+        // braucht höchstens zwei (Nase hoch → flach → Nase runter). ⚠ Noch KEIN
+        // Bestehenskriterium — was das Original hier tut, wird gerade gegengelesen
+        // (berichte/geschossflug-fable.md). Bis dahin ist es ein Befund.
+        sb.AppendLine($"     Blockwechsel im Flug: {GeschossBlockwechsel} insgesamt, "
+                    + $"schlimmstes Geschoss {GeschossMaxBlockwechsel} "
+                    + "(Soll ≤ 2 je Flug; mehr ist Flattern um die Schwelle ±1)");
+        sb.AppendLine($"     Richtungswechsel im Flug: {GeschossRichtungswechsel} insgesamt, "
+                    + $"schlimmstes Geschoss {GeschossMaxRichtungswechsel} "
+                    + "(Soll 0 — eine gerade Bahn hat eine feste Richtung)");
+        // ⭐⭐ 19.09.2026, bug-305 — DIE ZAHL, AN DER DIE VERTAUSCHUNG HING. Eine
+        // Wurfbahn steigt beim Abschuss, also muss JEDE mit Block 8 (Nase hoch)
+        // anfangen. Stand dort 16, flog die Rakete bergauf mit der Nase nach unten.
+        // Nullmodell --neigungsblock-alt dreht die Spalten um.
+        int bahnen = GeschossErstBlock8 + GeschossErstBlock16 + GeschossErstBlock0;
+        sb.AppendLine($"     BEFUND erster Neigungsblock: 8 (Nase hoch) {GeschossErstBlock8}×, "
+                    + $"16 (Nase runter) {GeschossErstBlock16}×, flach {GeschossErstBlock0}× "
+                    + $"von {bahnen} Bahnen"
+                    + (MapEntityLayer.NeigungsblockAlt
+                        ? "   ⚠ NULLMODELL --neigungsblock-alt: die beiden Spalten MUESSEN "
+                          + "gegenueber dem gewoehnlichen Lauf vertauscht sein"
+                        : ""));
+        // ⚠ KEIN Bestehenskriterium, und das ist eine Berichtigung vom selben Tag: hier
+        // stand erst »16 darf nicht vorkommen«. Das ist falsch — ein Schuss auf ein TIEFER
+        // gelegenes Ziel faellt von Anfang an, dort ist 16 richtig (K16: 93 von 176 Bahnen).
+        // Die Vertauschung selbst ist am Maschinencode belegt (0x452587 steigend -> 8,
+        // 0x452579 fallend -> 16) und an den Bildern (f10/f14 Nase oben, f18/f22 unten);
+        // der Pruefstand zeigt hier nur die Verteilung, und das NULLMODELL vertauscht sie.
 
         ok &= nachOk && schrittOk && lageTrat && bodenOk;
         sb.AppendLine(ok
