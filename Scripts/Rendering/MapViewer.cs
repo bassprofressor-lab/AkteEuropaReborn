@@ -3423,6 +3423,9 @@ public partial class MapViewer : Node2D
             else if (a == "--angriff-probe") _angriffProbe = true;
             else if (a == "--fussvolk-probe") _fussvolkProbe = true;
             else if (a == "--zeiger-check") _zeigerCheck = true;
+            // Simulation/SchiffsentwurfCheck.cs — der Stand zu der Entscheidung,
+            // den Schiffszweig des Nachziehens nicht zu bauen (19.09.2026).
+            else if (a == "--schiffsentwurf-check") _schiffsentwurfCheck = true;
             else if (a == "--anker-probe") _ankerProbe = true;
             else if (a == "--zielzelle-probe") _zielzelleProbe = true;
             else if (a == "--skripttreffer-probe") _skripttrefferProbe = true;
@@ -4289,6 +4292,8 @@ public partial class MapViewer : Node2D
             else if (a == "--gebaeudepick-rechteck") MapEntityLayer.GebaeudepickRechteck = true;
             // Nullmodell zu bug-301: Fadenkreuz ueber dem tuerlosen fremden Gebaeude.
             else if (a == "--gebaeudefadenkreuz-alt") MapEntityLayer.GebaeudefadenkreuzAlt = true;
+            // Nullmodell zu bug-303: die Schiffszeilen bleiben die rohe EXE-Vorgabe.
+            else if (a == "--schiffszeilen-alt") MapEntityLayer.SchiffszeilenAlt = true;
             else if (a.StartsWith("--originalhz="))
             {
                 string wert = a["--originalhz=".Length..];
@@ -5065,6 +5070,7 @@ public partial class MapViewer : Node2D
             if (_angriffProbe) GD.Print(_entities.AngriffProbe());
             if (_fussvolkProbe) GD.Print(_entities.FussvolkProbe());
             if (_zeigerCheck) GD.Print(_entities.ZeigerCheckLine());
+            if (_schiffsentwurfCheck) GD.Print(_entities.SchiffsentwurfCheckLine());
             if (_ankerProbe) GD.Print(_entities.AnkerProbe());
             if (_teilespendeCheck) GD.Print(_entities.TeilespendeCheckLine());
             if (_ueberfahrenCheck) GD.Print(_entities.UeberfahrenCheckLine());
@@ -6239,6 +6245,11 @@ public partial class MapViewer : Node2D
     /// <summary><c>--zeiger-check</c> — welches Zeigerbild ueber welchem
     /// Gebaeude steht; siehe Simulation/ZeigerCheck.cs.</summary>
     private bool _zeigerCheck;
+
+    /// <summary><c>--schiffsentwurf-check</c> — traegt jedes Schiff die Energie
+    /// seiner Entwurfszeile, und hat keine freigegebene Zeile Energie 0?
+    /// Siehe Simulation/SchiffsentwurfCheck.cs.</summary>
+    private bool _schiffsentwurfCheck;
     private bool _ankerProbe;
     private bool _zielzelleProbe;
     private bool _skripttrefferProbe;

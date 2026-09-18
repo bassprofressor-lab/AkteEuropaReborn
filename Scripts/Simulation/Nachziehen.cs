@@ -41,12 +41,73 @@ using Godot;
 /// <c>DesignMath.Compute(waffe, fahrwerk, ausrüstung, SPIELER)</c> ab — der Entwurf wird hier
 /// deshalb je Besitzer neu gerechnet und nicht aus der spielerlosen Bauliste genommen.</para>
 ///
-/// <para><b>Nicht gebaut (ausdrücklich offen):</b> die Schiffsfassung <c>0x4B3D70</c>
-/// (F <c>0x4B36A0</c>, Gattung 4/5). Sie ist gelesen (87/87 Befehle, dieselben dreizehn
-/// Schreiber mit der Schiffstafel <c>42·(Entwurf + 10·Spieler)</c>), aber ob <c>+0x43</c> bei
-/// einem Schiff wirklich der Schiffsentwurf 0…9 ist, hat die Gegenlesung <b>nicht</b> gegen die
-/// 45 Schiffe der Karten geprüft (§4, mit V gekennzeichnet). Solange das offen ist, werden
-/// Schiffe hier gezählt und übersprungen, nicht geraten.</para>
+/// <para><b>⭐⭐⭐ NICHT GEBAUT, UND DAS IST EINE ENTSCHEIDUNG — keine Lücke.</b> Die
+/// Schiffsfassung <c>0x4B3D70</c> (F <c>0x4B36A0</c>, Gattung 4/5) bleibt aus. Bis zum
+/// 19.09.2026 stand hier »ausdrücklich offen, ob <c>+0x43</c> beim Schiff der Entwurf 0…9 ist«.
+/// Das ist seither <b>beantwortet</b> (<c>berichte/schiffsentwurf-fable.md</c>, Gegenlesung an
+/// beiden EXE) — und die Antwort macht den ganzen Zweig <b>wirkungslos</b>. Wer ihn dennoch
+/// nachträgt, gewinnt nichts und riskiert, die Energie fremder Schiffe zu verstellen. Die vier
+/// Belege, damit das nicht in einem halben Jahr neu aufgerollt wird:</para>
+///
+/// <list type="number">
+///   <item><b><c>+0x43</c> IST der Schiffsentwurf 0…9.</b> Einziger Schreiber für Gattung 4/5 ist
+///   der Werft-Befehl <c>0x4B2B20</c> (@<c>0x4B2DF2</c>, F <c>0x4B2725</c>) — dasselbe Byte, mit
+///   dem er vorher die sec119-Zeile <c>42·(Entwurf + 10·Spieler)</c> gebildet hat. Zweiter,
+///   unabhängiger Leser mit derselben Rechnung: <c>0x4508A0</c> (@<c>0x450A48</c>). Nullmodell:
+///   <b>137 von 137</b> Kartenschiffen tragen 0…9 (gleichverteilt wären ~5,4), die 3012
+///   Landsätze tragen 47…194 und keiner ≤ 9.</item>
+///
+///   <item><b>Der Zweig LÄUFT in der Kampagne</b> — drei Rufer von <c>0x4B3CD0</c>, darunter
+///   <c>0x437E6C</c> bei JEDEM Levelstart. Er ist also kein toter Code, sondern er tut nichts.</item>
+///
+///   <item><b>Für die meisten Schiffe kann er nichts tun, weil die Zeile schon stimmt.</b>
+///   <c>0x4B23C0</c> rechnet die Schiffszeilen beim Missionsstart aus den Bauteilen
+///   (<c>0x4B25E0</c>: Energie <c>+0x1D</c> = <c>Rumpf.+0x0E + Waffe.+0x0E</c>, nachgebaut in
+///   Simulation/Schiffszeilen.cs). Das Nachziehen schriebe danach jedem unbeschädigten Schiff
+///   genau die Zahl hinein, die es hat. Nullmodell: <b>1040 von 1040</b> sec119-Zeilen aller 13
+///   Spielstände, und <b>172 von 210</b> Kartenschiffen.</item>
+///
+///   <item><b>⚠⚠ UND FÜR DIE ÜBRIGEN 38 WÄRE ER SCHÄDLICH</b> — der eigentliche Grund, und er
+///   kam erst am 19.09. abends heraus (§8 des Berichts, an den Originaldateien BEIDER CDs
+///   gemessen; die erste Lesung hatte nur CD1 und meldete darum fälschlich 137/137). Die
+///   Kampagnenkarten der zweiten CD sind an dieser Stelle <b>ungepflegt</b>: von 210 Schiffen
+///   tragen <b>26</b> in <c>+0x43</c> etwas anderes als im Wort <c>+0x3E</c> (17.CWM 12×0,
+///   20.CWM 1×0, 22.CWM 12×0 und <b>1×103</b>), weitere <b>12</b> liegen in beiden Feldern um
+///   eins daneben. Das Wort <c>+0x3E</c> passt bei <b>210 von 210</b>, bei Landeinheiten stimmen
+///   ohnehin <b>4254 von 4254</b> überein. Und <c>0x4B3D70</c> hat <b>keinen Wächter</b>
+///   (<c>cl = +0x43</c> @<c>0x4B3D96</c>, Zeile <c>(spieler·10 + cl)·42</c>): der Zweig zöge
+///   K17/K20/K22 von 125 auf 90 herunter (Angriff 6 statt 18), K25/K31 von 175 auf 110, K26 von
+///   210 auf 175 — und die <c>103</c> auf Karte 22 läse <c>0x53002A</c>, <b>1386 Byte hinter dem
+///   Tafelende</b>, wo 42 Nullbytes liegen: ein Schiff mit <b>0 Trefferpunkten</b>.</item>
+///
+///   <item><b>Und ein Schiff wird nie besser.</b> Das Forschungsangebot umfasst nur die Bauteile
+///   1…49 (<c>0x4AA9EC cmp si,0x32</c>), die KI-Aufwertung nur 1…19 und 160…174 — Schiffsrümpfe
+///   liegen bei 150…158, Schiffswaffen bei 140…145, beide außerhalb. Und <c>0x4AAA80</c> rechnet
+///   nach einer fertigen Forschung ausdrücklich nur die LANDzeilen neu (<c>0x4B24B0</c>), nie die
+///   Schiffszeilen. Es gibt in diesem Spiel keinen Weg, der die Energie eines Schiffes
+///   verändert — auch nicht über die Waffe.</item>
+/// </list>
+///
+/// <para><b>⚠ Die Gegenprobe</b> (denn »passiert nie« ohne sie ist keine Aussage): herstellbar
+/// ist der Fall nur von außen. Ändert man in <c>PARTS.CWD</c> die Energie eines Rumpfes, hebt die
+/// nächste Mission jedes unbeschädigte Schiff dieses Typs an — auch die gegnerischen. In einer
+/// unveränderten <c>.CWM</c> tritt er nicht ein.</para>
+///
+/// <para><b>Was daraus statt des Zweiges gebaut wurde:</b> die ZEILENRECHNUNG
+/// (Simulation/Schiffszeilen.cs) — die war nämlich wirklich falsch und im Spiel spürbar — und
+/// der Prüfstand <c>--schiffsentwurf-check</c> (Simulation/SchiffsentwurfCheck.cs). Er hält die
+/// Zeilen gegen die unabhängig aus <c>PARTS.CWD</c> gerechneten Energien und meldet die Schiffe,
+/// deren <c>+0x43</c> nicht zu ihrer Zeile passt — die 38 aus Beleg 4. Fällt er durch, ist nicht
+/// dieser Zweig zu bauen, sondern die Zeilenrechnung zu berichtigen.</para>
+///
+/// <para><b>⚠ Wenn ihn doch einmal jemand baut</b>, ist vorher eine Entscheidung zu treffen, die
+/// dem SPIELER gehört: <b>originaltreu</b> <c>+0x43</c> lesen und den Datenfehler mitsamt Hp 0
+/// nachbilden, oder <b>datentreu</b> das Wort <c>+0x3E</c> nehmen (210/210) und bewusst
+/// abweichen. Beides ist begründbar, keines ist selbstverständlich — und solange nichts gebaut
+/// ist, muss die Frage nicht beantwortet werden.</para>
+///
+/// <para>⚠ Schiffe werden hier weiter <b>gezählt</b>, damit die Zeile sichtbar macht, dass sie
+/// bewusst ausgelassen sind.</para>
 /// </summary>
 public partial class MapEntityLayer
 {
@@ -86,6 +147,9 @@ public partial class MapEntityLayer
         {
             if (e.Hp <= 0) continue;                  // +0x09 == 0xFF, der tote Platz
             if (e.Ukol >= 100) continue;              // 0x4B3CFB
+            // ⭐ 19.09.2026 — Gattung 4/5 bleibt bewusst aus, siehe Kopf: der Zweig laeuft im
+            // Original, ist aber wirkungslos, weil die Schiffszeile schon stimmt und nie besser
+            // wird. Geprueft von --schiffsentwurf-check.
             if (e.GameUnitType is 4 or 5) { NachziehenSchiffe++; continue; }
             if (e.GameUnitType is not (0 or 1)) continue;   // 2/3 zieht das Original nicht nach
             NachziehenEiner(e);
@@ -93,7 +157,10 @@ public partial class MapEntityLayer
         GD.Print($"nachziehen ({anlass}): {NachgezogenGesamt} Einheiten auf ihren Entwurf " +
                  $"gezogen, davon {NachgezogenAbweichend} mit abweichenden Kartenwerten" +
                  (NachziehenOhneEntwurf > 0 ? $"; {NachziehenOhneEntwurf} ohne Entwurfszeile" : "") +
-                 (NachziehenSchiffe > 0 ? $"; {NachziehenSchiffe} Schiffe uebersprungen (offen)" : ""));
+                 (NachziehenSchiffe > 0
+                     ? $"; {NachziehenSchiffe} Schiffe ausgelassen (wirkungslos, belegt — "
+                     + "siehe Kopf von Nachziehen.cs und --schiffsentwurf-check)"
+                     : ""));
     }
 
     /// <summary>

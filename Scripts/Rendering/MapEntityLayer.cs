@@ -22673,6 +22673,9 @@ public partial class MapEntityLayer : Node2D
             dv.VariantType == Variant.Type.Array)
         { arr = dv.AsGodotArray(); _shipSource = "GAME.EXE"; }
         if (arr == null) return;
+        // ⚠ VOR dem Fahrplan merken: _shipSource wird gleich ueberschrieben, und
+        // nur hier steht noch, ob die Karte ihre sec119 selbst mitbringt.
+        bool eigeneTafel = _shipSource == "sec119";
 
         _shipDesigns = new List<ShipDesign>();
         // ⭐ 07.09.2026 — die Namenstafel Rumpf -> Entwurf, fuer LabelOf.
@@ -22755,6 +22758,13 @@ public partial class MapEntityLayer : Node2D
             foreach (var d in _shipDesigns) d.Enable = true;
             _shipSource += " + »Alle Einheiten«";
         }
+        // ⭐⭐⭐ 19.09.2026 — DIE ZEILEN WERDEN GERECHNET, NICHT ABGESCHRIEBEN.
+        // Eine .CWM bringt keine sec119 mit und fiel hier auf die EXE-Vorgabe
+        // zurueck; die ist der tote Anfangszustand, den 0x4B23C0 beim
+        // Missionsstart aus den Bauteilen ueberschreibt. Siehe
+        // Simulation/Schiffszeilen.cs — dort stehen die Tafel, das Nullmodell
+        // (13520/13520) und die Folgen, die es im Spiel hatte.
+        SchiffszeilenRechnen(eigeneTafel);
         int on = 0;
         foreach (var d in _shipDesigns) if (d.Enable) on++;
         GD.Print($"ships: {_shipDesigns.Count} Entwuerfe aus {_shipSource}, {on} freigegeben");
