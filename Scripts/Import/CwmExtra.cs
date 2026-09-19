@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Import;
+﻿namespace AkteEuropaReborn.Import;
 
 using System;
 using System.Collections.Generic;
@@ -308,6 +308,15 @@ public static class CwmExtra
         return list;
     }
 
+    /// <summary><c>--geisterflugzeuge</c> — der Stand vor dem 19.09.2026: ein
+    /// sec19-Satz ohne Muster wird trotzdem zum Flugzeug. Das Nullmodell zu
+    /// <see cref="Geister"/>: unter diesem Schalter MUSS die Raute
+    /// wiederkommen, sonst misst der Zaehler nur sich selbst.</summary>
+    public static bool GeisterFlugzeuge;
+
+    /// <summary>Wie viele sec19-Saetze ohne Muster uebergangen wurden.</summary>
+    public static int Geister;
+
     public static List<Special> Specials(CwmFile m)
     {
         var list = new List<Special>();
@@ -317,6 +326,27 @@ public static class CwmExtra
         {
             int o = i * SpecialStride;
             if (AllZero(s, o, SpecialStride)) continue;
+            // ⭐⭐ 19.09.2026 — EIN SATZ OHNE MUSTER IST KEIN FLUGZEUG.
+            //
+            // Seine Meldung: »eine komische raute bewegt sich irgendwie von
+            // alleine durch die karte ... die brauchen wir doch nicht oder?«.
+            // Gemessen auf Karte 20, Platz 0:
+            //     Muster 0, Eigner 0, bei (0,0), HP 0/0, Tempo 0, Name »«
+            // Also ein VOLLSTAENDIG leerer Satz in jedem Feld, das wir lesen —
+            // nur irgendein Byte ausserhalb dieser Felder ist nicht 0, und
+            // deshalb liess ihn `AllZero` durch. Unser Lader machte daraus ein
+            // Flugzeug mit Muster 0: kein Entwurf, kein Name, kein Bild. Es
+            // wurde als tuerkise Raute gezeichnet (der Rueckfall des
+            // Zeichners), von `LaunchAircraft` mitgestartet, weil sein Eigner 0
+            // ist, und kreiste dann in AirPatrol ueber der Karte.
+            //
+            // ⚠ UNSERE SETZUNG ist die BEDINGUNG: welchen Gueltigkeitstest das
+            // Original auf sec19 anwendet, ist UNGELESEN. Gewaehlt ist das
+            // MUSTER, weil daran alles haengt, was ein Flugzeug ausmacht — der
+            // Entwurf in sec120, der Name, das Bauteil und das Bild. Ein
+            // Muster 0 hat keinen Entwurf; es ist kein halbes Flugzeug,
+            // sondern keines. Gegenschalter --geisterflugzeuge.
+            if (s[o + 0x08] == 0 && !GeisterFlugzeuge) { Geister++; continue; }
             int col = BitConverter.ToUInt16(s, o), row = BitConverter.ToUInt16(s, o + 2);
             list.Add(new Special
             {

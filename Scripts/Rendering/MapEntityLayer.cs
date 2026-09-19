@@ -1504,6 +1504,14 @@ public partial class MapEntityLayer : Node2D
         /// Heimkehr, nicht mit einer Warteschleife.</b></para></summary>
         public bool Angriffsauftrag;
 
+        /// <summary>⭐ Diese Maschine ist auf dem WEG NACH HAUSE. Ein Zustand
+        /// und kein einmaliger Ruf: <c>AirHeadHome</c> gibt <c>false</c>
+        /// zurück, solange sie noch fliegt, und ohne diese Fahne würde die
+        /// Warteschleife im nächsten Takt das Heimflugziel überschreiben.
+        /// Siehe die Begründung an der Fundstelle in
+        /// <c>UpdateAircraft</c>.</summary>
+        public bool Heimkehr;
+
         public bool Flying => !Stored && !Dead;
         public bool Armed => Attack > 0 && AmmoMax > 0;
 
@@ -4386,6 +4394,33 @@ public partial class MapEntityLayer : Node2D
             foreach (var item in spv)
             {
                 if (item is not JObj sp2) continue;
+                // ⭐⭐ 19.09.2026 — EIN SATZ OHNE MUSTER IST KEIN FLUGZEUG, und
+                // dieser Filter gehoert HIERHER und nicht in den Ausgeber.
+                //
+                // Erster Anlauf: ich hatte ihn in Import/CwmExtra.Specials
+                // gesetzt — also an der Stelle, die beim BACKEN laeuft. Die
+                // Karten liegen aber schon gebacken im Nutzerordner, und die
+                // Messzeile sagte es sofort: »0 Geister uebergangen« und das
+                // Muster 0 stand weiter da. Ein Filter im Ausgeber haette einen
+                // Datenlauf mit beiden CDs verlangt, um ueberhaupt zu wirken.
+                //
+                // Gemessen auf Karte 20, Platz 0:
+                //     Muster 0, Eigner 0, bei (0,0), HP 0/0, Tempo 0, Name »«
+                // In JEDEM Feld leer. Unser Lader machte daraus ein Flugzeug
+                // ohne Entwurf, ohne Namen und ohne Bild; `LaunchAircraft`
+                // startete es mit, weil sein Eigner 0 ist, und danach kreiste
+                // es in AirPatrol ueber der Karte. Seine Meldung: »eine komische
+                // raute bewegt sich irgendwie von alleine durch die karte ...
+                // die brauchen wir doch nicht oder?«
+                //
+                // ⚠ UNSERE SETZUNG ist die BEDINGUNG: welchen Gueltigkeitstest
+                // das Original auf sec19 anwendet, ist UNGELESEN. Gewaehlt ist
+                // das MUSTER, weil daran alles haengt, was ein Flugzeug
+                // ausmacht — Entwurf (sec120), Name, Bauteil und Bild. Ein
+                // Muster 0 hat keinen Entwurf; es ist kein halbes Flugzeug,
+                // sondern keines. Gegenschalter --geisterflugzeuge.
+                if (GetI(sp2, "kind") == 0 && !Import.CwmExtra.GeisterFlugzeuge)
+                { Import.CwmExtra.Geister++; continue; }
                 int col = GetI(sp2, "col"), row = GetI(sp2, "row");
                 int el = elev.TryGetValue((col, row), out var se) ? se : 0;
                 var sp = new Special
@@ -37234,6 +37269,12 @@ public partial class MapEntityLayer : Node2D
     /// Abweichung, die wie ein Spielobjekt aussieht.</summary>
     private readonly System.Collections.Generic.Dictionary<int, int> _rauten = new();
 
+    /// <summary><c>--raute-fuer-bildlose</c> — zeichnet ein Flugzeug ohne
+    /// Kartenbild wieder als türkise Raute. ⚠ Aus ist der Normalfall: das
+    /// Zeichen ist unsere Zutat und sah für ihn wie ein Spielobjekt aus.
+    /// An ist es ein Werkzeug fürs Suchen.</summary>
+    public static bool RauteFuerBildlose;
+
     private void RauteFuer(int kind)
     {
         _rauten.TryGetValue(kind, out int n);
@@ -37254,13 +37295,35 @@ public partial class MapEntityLayer : Node2D
     {
         var muster = new System.Collections.Generic.SortedSet<int>();
         foreach (var a in _special) if (!a.Dead) muster.Add(a.Kind);
-        if (muster.Count == 0) return "luftbild-check: kein Flugzeug — NICHT GEMESSEN";
+        // ⚠ Die Geisterzahl steht VOR dem Ausstieg: gerade wenn kein Flugzeug
+        // mehr uebrig ist, will man wissen, wie viele uebergangen wurden.
+        if (muster.Count == 0)
+            return $"luftbild-check: {Import.CwmExtra.Geister} Geister uebergangen "
+                 + "(sec19 ohne Muster), sonst kein Flugzeug — NICHT GEMESSEN";
+        // ⚠ 19.09.2026 — JEDER SATZ EINZELN, wenn ein Muster ohne Bild dabei
+        // ist. Sonst bleibt die Frage offen, ob das Bild fehlt oder das
+        // FLUGZEUG nicht existieren duerfte, und das sind zwei ganz
+        // verschiedene Fehler.
+        var zeilen = new System.Text.StringBuilder();
+        foreach (var a in _special)
+        {
+            if (a.Dead || (a.Kind != 0 && _rauten.ContainsKey(a.Kind) == false)) continue;
+            zeilen.Append($"\n    Platz {a.Slot} Muster {a.Kind} Eigner {a.Owner} "
+                        + $"bei ({a.Col},{a.Row}) {(a.Stored ? "im Hangar" : "in der Luft")} "
+                        + $"HP {a.Hp}/{a.HpMax} Tempo {a.Speed} Name »{a.Name}«");
+        }
         var sb = new System.Text.StringBuilder("luftbild-check: ");
+        // ⚠ KONTROLLZAHL: die Zahl der GEISTER (sec19-Saetze ohne Muster, die
+        // uebergangen wurden). Unter --geisterflugzeuge muss sie auf 0 fallen
+        // UND ein Muster 0 muss in der Liste auftauchen — sonst misst der
+        // Zaehler nur sich selbst.
+        sb.Append($"{Import.CwmExtra.Geister} Geister uebergangen (sec19 ohne Muster), ");
         sb.Append($"{muster.Count} Muster in der Luft [");
         sb.Append(string.Join(", ", muster));
         sb.Append("]; ohne Bild: ");
         if (_rauten.Count == 0) sb.Append("keines (Soll)");
         else foreach (var kv in _rauten) sb.Append($"Muster {kv.Key} {kv.Value}x  ");
+        sb.Append(zeilen);
         return sb.ToString();
     }
 
@@ -37974,8 +38037,28 @@ public partial class MapEntityLayer : Node2D
             // Flugziel diagonal UEBER das Ziel hinaus (+1/+1 @0x423B7D, +2/+2
             // @0x423BA5) und fliegt darueber weg, statt darauf stehenzubleiben.
             // Wir setzen a.Goal = t.Pos und parken. Siehe aekernel-tools/AIR_RE.md.
+            // ⚠⚠ 19.09.2026 — HIER STAND DER GRUND, WARUM NIE EINER LANDETE.
+            //
+            // Seine Meldung: »flugzeug landet aber noch nicht«, und vorher
+            // »kreist er wieder um den flughafen«. Der Fehler ist eine Zeile
+            // weiter unten: `AirPatrol` SCHREIBT `a.Goal` (@38224) — und
+            // `AirHeadHome` gibt **false** zurueck, solange die Maschine noch
+            // unterwegs ist. Also setzte AirHeadHome das Heimflugziel, der Takt
+            // lief weiter, und AirPatrol warf es im gleichen Takt wieder weg.
+            // Jeden Takt neu. Die Maschine kreiste fuer immer und erreichte den
+            // Flughafen nie — auch bei leerem Tank oder leerer Munition, also
+            // schon lange vor dem Angriffsknopf von heute.
+            //
+            // Die Regel lautet jetzt: WER HEIMFLIEGT, PATROULLIERT NICHT.
+            // `a.Goal != null` unterscheidet die zwei falschen Rueckgaben von
+            // AirHeadHome — unterwegs (Ziel gesetzt) gegen »kein Flughafen
+            // mehr« (@37854 setzt Goal auf null).
             bool spent = a.Fuel < AirFuelHome || (a.Armed && a.Ammo <= 0);
-            if (spent && AirHeadHome(a)) continue;
+            if (spent)
+            {
+                if (AirHeadHome(a)) continue;        // gelandet und eingelagert
+                if (a.Goal != null) goto move;      // unterwegs nach Hause
+            }
 
             // pick a target inside the aircraft's own sight radius
             if (a.Armed && a.Ammo > 0 && a.Target < 0)
@@ -38027,8 +38110,20 @@ public partial class MapEntityLayer : Node2D
             if (a.Angriffsauftrag && a.Target < 0 && a.PlayerGoal == null)
             {
                 a.Angriffsauftrag = false;
+                a.Heimkehr = true;
                 AngriffHeimkehr++;
-                if (!AngriffOhneHeimkehr && AirHeadHome(a)) continue;
+            }
+            // ⚠ Die Heimkehr ist ein ZUSTAND und kein einmaliger Ruf. Mein
+            // erster Anlauf rief AirHeadHome genau einmal und loeschte die
+            // Fahne dabei — die Maschine war aber noch unterwegs, AirHeadHome
+            // gab false, und im naechsten Takt gab es keine Fahne mehr, die sie
+            // heimgefuehrt haette. Sie kreiste weiter. Darum steht die Fahne,
+            // bis sie EINGELAGERT ist.
+            if (a.Heimkehr && !AngriffOhneHeimkehr)
+            {
+                if (AirHeadHome(a)) { a.Heimkehr = false; continue; }
+                if (a.Goal != null) goto move;
+                a.Heimkehr = false;            // kein Flughafen mehr erreichbar
             }
             if (a.Target < 0 && a.PlayerGoal == null) { AirPatrol(a); goto move; }
 
@@ -39788,8 +39883,17 @@ public partial class MapEntityLayer : Node2D
                 // ⭐ Bis dahin bleibt die Raute — aber sie SAGT es jetzt. Ein
                 // Rueckfall, der aussieht wie ein Spielobjekt, ist schlimmer als
                 // ein fehlendes Bild: der Spieler sucht den Fehler bei sich.
+                // ⭐ 19.09.2026, ZWEITER ANLAUF — DIE RAUTE IST WEG. Seine
+                // Antwort: »die raute ist immer noch da, die brauchen wir doch
+                // nicht oder?«. Er hat recht: sie war UNSERE Zutat, und ein
+                // erfundenes Zeichen ist schlimmer als eine Lücke — er hat es
+                // fuer ein Spielobjekt gehalten. Gemeldet wird der Fall
+                // weiterhin (RauteFuer schreibt die Zeile und zaehlt), nur
+                // gezeichnet wird nichts mehr.
+                // Gegenschalter --raute-fuer-bildlose holt sie zurueck, wenn
+                // man beim Suchen SEHEN will, wo so eine Maschine steckt.
                 RauteFuer(s.Kind);
-                DrawDiamond(air, 8f, new Color(0.1f, 0.9f, 0.95f));
+                if (RauteFuerBildlose) DrawDiamond(air, 8f, new Color(0.1f, 0.9f, 0.95f));
             }
 
             // ⚠ DIE UEBERLAGERUNG ZUR BLICKRICHTUNG (--air-facing-check).
