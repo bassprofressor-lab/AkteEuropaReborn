@@ -33944,6 +33944,7 @@ public partial class MapEntityLayer : Node2D
         // (@0x40DE0A) und die Station aus dem Taktrumpf; beides laeuft je
         // Spieltakt. Siehe Simulation/Flak.cs.
         // ⚠ Die Probe heftet ihren Fall fest und muss darum VOR dem Kegel laufen.
+        StrahlTakt();
         FlakProbeTakt();
         FlakTakt();
         AbsturzTakt();
@@ -37808,12 +37809,17 @@ public partial class MapEntityLayer : Node2D
                     if (t.Dead) { a.Target = -1; }
                     else if (a.Pos.DistanceTo(aim) < TileW * 1.5f && a.Cooldown <= 0f && a.Ammo > 0)
                     {
-                        a.Cooldown = AirFireGap;
+                        // ⭐⭐⭐ 20.09.2026 — DIE SALVE, nach ART getrennt.
+                        // Hier stand eine Explosion aufs Ziel plus ApplyHit, also
+                        // gar kein Schuss. Das Original legt je Art etwas anderes
+                        // an: zwei Geschosse (Jaeger), eines (Bomber) oder einen
+                        // STRAHL (Hubschrauber). Siehe Simulation/Luftschuss.cs.
+                        // ⚠ Nachladen in TAKTEN (3/6/10), nicht in Sekunden.
+                        a.Cooldown = LuftnachladenAlt
+                            ? AirFireGap
+                            : NachladeTakte(a.Kind) * SimDt;
                         if (!(CheatAmmo && Cheated(a))) a.Ammo--;
-                        _effects.Add(new Effect { Pos = aim - new Vector2(0, 8),
-                                                  Kind = "explosion", FrameTime = 0.05f });
-                        ApplyHit(-1, a.Target, t, a.Attack,
-                                 $"LUFTANGRIFF {a.Name} (Art {a.Kind}, Platz {a.Slot}, auf ({a.Col},{a.Row}))");
+                        LuftSalve(a, t, aim);
                         a.TurnPoint = AirTurnPoint(a.Pos);
                     }
                 }

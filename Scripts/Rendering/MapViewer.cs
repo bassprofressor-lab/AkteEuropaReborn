@@ -3905,6 +3905,9 @@ public partial class MapViewer : Node2D
             else if (a == "--gleisbruch-einzeln") MapEntityLayer.GleisbruchEinzeln = true;
             else if (a == "--neubautuer-alt") MapEntityLayer.NeubautuerAlt = true;
             else if (a == "--bautuer-offen") MapEntityLayer.BautuerOffen = true;
+            else if (a == "--luftschuss-alt") MapEntityLayer.LuftschussAlt = true;
+            else if (a == "--heli-strahl-aus") MapEntityLayer.HeliStrahlAus = true;
+            else if (a == "--luftnachladen-alt") MapEntityLayer.LuftnachladenAlt = true;
             else if (a == "--ruine-ohne-gleisschnitt")
                 MapEntityLayer.RuineOhneGleisschnitt = true;
             else if (a == "--vorkommen-unter-mine-alt")
@@ -5026,6 +5029,7 @@ public partial class MapViewer : Node2D
             // gelaufenen Gefecht ist. Siehe Simulation/Flak.cs.
             FlakAusgeben();
             GD.Print(_entities.AbsturzLine());
+            GD.Print(_entities.LuftschussLine());
             // ⭐ 20.09.2026 — der Gleisschnitt einer Ruine. ⚠ Nur wenn ueberhaupt
             // ein Gebaeude gefallen ist: eine 0 ohne Ruine ist kein Befund.
             if (_entities.GebaeudeSprengungen > 0)

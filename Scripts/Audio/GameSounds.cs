@@ -811,6 +811,18 @@ public static class GameSounds
     /// Fester Keim, damit ein Lauf reproduzierbar bleibt.</summary>
     private static readonly System.Random _klangWuerfel = new(20260920);
 
+    /// <summary>Derselbe Wuerfel, oeffentlich — fuer jede Stelle, die einen
+    /// KLANG auswaehlt und dabei den Wuerfelstand der Simulation nicht
+    /// verschieben darf.
+    ///
+    /// <para>⚠⚠ 20.09.2026, und es ist der DRITTE Fall an einem Tag: der
+    /// Luftschuss waehlte seinen Klang mit <c>Determinism.Roll(2)</c>, und
+    /// die A/B gab 32 gegen 28 Salven — zwei verschiedene Gefechte. Vorher
+    /// derselbe Fehler beim Einschlagklang (204 gegen 316) und beim
+    /// Moerser-Taumeln (dort noch rechtzeitig bemerkt). <b>Wer einen Klang
+    /// oder ein Bild auswuerfelt, nimmt DIESEN Wuerfel.</b></para></summary>
+    public static int KlangWuerfel(int n) => n > 0 ? _klangWuerfel.Next(n) : 0;
+
     /// <summary>Was die Einschlaege geklungen haben — die Zeile zum Befund vom
     /// 20.09.2026. ⚠ Sie nennt BEIDE Zahlen und dazu, wie viele Arten die Tafel
     /// stumm stellt: ein Lauf ohne Einschlaege und einer mit lauter stummen
