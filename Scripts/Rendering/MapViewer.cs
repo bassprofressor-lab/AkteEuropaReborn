@@ -3937,6 +3937,8 @@ public partial class MapViewer : Node2D
             else if (a == "--flughafenfenster-bild") _flughafenfensterBild = true;
             else if (a == "--innenrahmen-hohl") UI.WindowChrome.InnenrahmenHohl = true;
             else if (a == "--zielwahl-aus") MapEntityLayer.ZielwahlAus = true;
+            else if (a == "--angriff-ohne-heimkehr") MapEntityLayer.AngriffOhneHeimkehr = true;
+            else if (a == "--luftbild-check") _luftbildCheck = true;
             else if (a == "--zielwahl-check") _zielwahlCheck = true;
             else if (a == "--frachter-aus") Campaign.MissionScript.FrachterAus = true;
             else if (a == "--marktanker-alt") MapEntityLayer.MarktankerAlt = true;
@@ -5096,6 +5098,7 @@ public partial class MapViewer : Node2D
             FlakAusgeben();
             BombeAusgeben();
             ZielwahlAusgeben();
+            LuftbildAusgeben();
             GD.Print(_entities.AbsturzLine());
             GD.Print(_entities.LuftschussLine());
             // ⭐ 20.09.2026 — der Gleisschnitt einer Ruine. ⚠ Nur wenn ueberhaupt
@@ -5311,7 +5314,8 @@ public partial class MapViewer : Node2D
     /// <para>⚠ Im gewoehnlichen Spiel schweigt sie: ohne <c>--flak-check</c>
     /// passiert hier nichts.</para></summary>
     private bool _flakGedruckt, _bombeCheck, _bombeGedruckt,
-                 _zielwahlCheck, _zielwahlGedruckt;
+                 _zielwahlCheck, _zielwahlGedruckt,
+                 _luftbildCheck, _luftbildGedruckt;
 
     private void FlakAusgeben()
     {
@@ -5346,6 +5350,15 @@ public partial class MapViewer : Node2D
             : "zielwahl-check: keine Zielwahl benutzt — NICHT GEMESSEN");
     }
 
+    /// <summary><c>--luftbild-check</c> — welche Flugzeugmuster ohne Bild als
+    /// RAUTE flogen. Am Ausstieg, wie die anderen drei.</summary>
+    private void LuftbildAusgeben()
+    {
+        if (_luftbildGedruckt || !_luftbildCheck) return;
+        _luftbildGedruckt = true;
+        GD.Print(_entities.LuftbildAuskunft());
+    }
+
     public override void _ExitTree()
     {
         // ⚠ Nur die Pruefstaende, und nur wenn sie liefen — im gewoehnlichen
@@ -5353,6 +5366,7 @@ public partial class MapViewer : Node2D
         if (_stuckCheck) StuckAusgeben();
         BombeAusgeben();
         ZielwahlAusgeben();
+        LuftbildAusgeben();
         // ⭐ 20.09.2026 — und die Flugabwehr, siehe FlakAusgeben. Dieser Weg
         // ist der, den ein GESPIELTER Lauf nimmt: Fenster zu oder zurueck ins
         // Menue (ChangeSceneToFile) landen beide hier.

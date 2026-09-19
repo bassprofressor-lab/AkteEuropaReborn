@@ -1484,6 +1484,26 @@ public partial class MapEntityLayer : Node2D
         /// eine bewusste Abweichung, siehe <c>--bombenetikett-kaputt</c>.</para></summary>
         public int Waffenart;
 
+        /// <summary>
+        /// ⭐⭐ 19.09.2026 — <b>DIESER FLUG IST EIN ANGRIFFSAUFTRAG</b>, kein
+        /// Verlegen. Unser Name für Befehl 502 in den Modi <b>7</b> (ein Ziel)
+        /// und <b>1</b> (eine Zelle), wie der Knopf »Angriff« sie schickt.
+        ///
+        /// <para>⚠ <b>Warum es das Feld braucht:</b> der Spielerbefehl-Zweig in
+        /// <c>UpdateAircraft</c> löschte <c>Target</c> — richtig für ein
+        /// Verlegen (»flieg dorthin«, nicht »greif das an«), falsch für einen
+        /// Angriff. Seine Meldung: »wenn der flieger zurueckkommt, kreist er
+        /// wieder um den flughafen, anstatt ordentlich zu landen so das er
+        /// wieder verfuegbar ist im hangar«. Ohne Ziel und ohne Flugziel fiel
+        /// er in <c>AirPatrol</c> und kreiste für immer.</para>
+        ///
+        /// <para>Was das Original an dieser Stelle tut, ist gelesen: der
+        /// Bomberauftrag <c>uk</c> 7 @0x4236AE prüft die Munition (0x6DDF86)
+        /// und geht bei 0 über @0x4236D2 (<c>Ziel := 0xFFFF</c>) auf
+        /// <c>air_back_to_airport</c> @0x4236E3. <b>Ein Auftrag endet mit der
+        /// Heimkehr, nicht mit einer Warteschleife.</b></para></summary>
+        public bool Angriffsauftrag;
+
         public bool Flying => !Stored && !Dead;
         public bool Armed => Attack > 0 && AmmoMax > 0;
 
@@ -37208,6 +37228,42 @@ public partial class MapEntityLayer : Node2D
     private readonly Dictionary<int, bool> _air16 = new();
     private readonly HashSet<int> _air8Said = new();
 
+    /// <summary>Welche Flugzeugmuster als RAUTE gezeichnet wurden, weil ihr
+    /// Bild fehlt — je Muster, wie oft. ⚠ Die Zahl steht in der Zeile
+    /// <c>--luftbild-check</c>; ohne sie ist ein fehlendes Bild eine stille
+    /// Abweichung, die wie ein Spielobjekt aussieht.</summary>
+    private readonly System.Collections.Generic.Dictionary<int, int> _rauten = new();
+
+    private void RauteFuer(int kind)
+    {
+        _rauten.TryGetValue(kind, out int n);
+        _rauten[kind] = n + 1;
+        if (n == 0)
+            GD.Print($"⚠ Luft: Muster {kind} hat KEIN Kartenbild "
+                   + $"(Units/aircraft/{kind}/ fehlt) — es fliegt als tuerkise RAUTE. "
+                   + "Die Tafel Muster->Bauteil in UnitsExporter.AircraftParts kennt nur "
+                   + "1, 2, 3, 10..14; fuer 4..9 ist sie ungelesen.");
+    }
+
+    /// <summary>Die Messzeile <c>--luftbild-check</c>: welche Muster fliegen
+    /// ohne Bild, und wie viele Muster ueberhaupt in der Luft waren.
+    /// ⚠ KONTROLLZAHL ist die Zahl der Muster in der Luft — sie darf sich
+    /// nicht aendern, wenn ein Bild nachgeliefert wird; nur die Rauten muessen
+    /// auf 0 fallen.</summary>
+    public string LuftbildAuskunft()
+    {
+        var muster = new System.Collections.Generic.SortedSet<int>();
+        foreach (var a in _special) if (!a.Dead) muster.Add(a.Kind);
+        if (muster.Count == 0) return "luftbild-check: kein Flugzeug — NICHT GEMESSEN";
+        var sb = new System.Text.StringBuilder("luftbild-check: ");
+        sb.Append($"{muster.Count} Muster in der Luft [");
+        sb.Append(string.Join(", ", muster));
+        sb.Append("]; ohne Bild: ");
+        if (_rauten.Count == 0) sb.Append("keines (Soll)");
+        else foreach (var kv in _rauten) sb.Append($"Muster {kv.Key} {kv.Value}x  ");
+        return sb.ToString();
+    }
+
     /// <summary>Sprite of an aircraft. The part is chosen by the record's KIND,
     /// not by its airframe value: the draw path @0x42b867 switches on +0x08 and
     /// moves a literal part number in (1 -> 114, 2 -> 115, 3 -> 119, 10 -> 112,
@@ -37894,7 +37950,12 @@ public partial class MapEntityLayer : Node2D
             if (a.PlayerGoal is Vector2 pg)
             {
                 a.Goal = pg;
-                a.Target = -1;
+                // ⚠⚠ 19.09.2026 — NUR EIN VERLEGEN LOESCHT DAS ZIEL. Hier stand
+                // `a.Target = -1` ohne Frage, und damit warf der Knopf
+                // »Angriff« sein eigenes Ziel weg: das Flugzeug flog zur Zelle,
+                // schoss nicht, und landete danach in AirPatrol. Siehe
+                // Special.Angriffsauftrag.
+                if (!a.Angriffsauftrag) a.Target = -1;
                 if (a.Pos.DistanceTo(pg) < TileW * 1.5f)
                 { a.PlayerGoal = null; a.Order = 0; AirOrdersReached++; }
                 goto move;
@@ -37953,6 +38014,22 @@ public partial class MapEntityLayer : Node2D
             // NICHT passieren darf: dass er wieder losfliegt, sobald er steht.
             // AirHeadHome lagert ihn am Flughafen ein, und der Parkzweig oben
             // faengt ihn dann ab.
+            // ⭐⭐ 19.09.2026 — EIN ERLEDIGTER ANGRIFFSAUFTRAG FUEHRT NACH HAUSE.
+            // Das ist die Stelle, an der sein »kreist wieder um den flughafen«
+            // entstand: Ziel weg (getroffen oder tot), Flugziel erreicht — und
+            // dann griff die Warteschleife. Das Original beendet einen Auftrag
+            // mit air_back_to_airport (Bomber uk 7 @0x4236AE/@0x4236E3), und
+            // AirHeadHome lagert am Flughafen ein, sodass die Maschine im
+            // Hangar wieder verfuegbar ist.
+            // ⚠ Die Fahne wird VOR dem Heimflug geloescht, damit ein Flugzeug,
+            // das keinen Flughafen mehr findet, nicht in jedem Takt neu heim
+            // geschickt wird. Gegenschalter --angriff-ohne-heimkehr.
+            if (a.Angriffsauftrag && a.Target < 0 && a.PlayerGoal == null)
+            {
+                a.Angriffsauftrag = false;
+                AngriffHeimkehr++;
+                if (!AngriffOhneHeimkehr && AirHeadHome(a)) continue;
+            }
             if (a.Target < 0 && a.PlayerGoal == null) { AirPatrol(a); goto move; }
 
             if (a.Target >= 0)
@@ -39695,7 +39772,25 @@ public partial class MapEntityLayer : Node2D
             DrawColoredPolygon(sh, new Color(0, 0, 0, 0.32f));
             var tex = GetAirframeTexture(s.Kind, s.Facing);
             if (tex != null) DrawTexture(Parteifarbe(tex, s.Owner), air - ComposedAnchor);
-            else DrawDiamond(air, 8f, new Color(0.1f, 0.9f, 0.95f));
+            else
+            {
+                // ⚠⚠ 19.09.2026 — DIE TUERKISE RAUTE IST EIN FLUGZEUG OHNE BILD,
+                // und bis heute schwieg sie. Seine Meldung: »eine komische raute
+                // bewegt sich irgendwie von alleine durch die karte«.
+                //
+                // Die Ursache: die Tafel Muster -> Bauteil in
+                // Import/UnitsExporter.cs (AircraftParts) kennt nur 1, 2, 3 und
+                // 10..14. Der Kampagnenplan gibt in Mission 20 die Muster
+                // 1, 2, 4, 5, 6 frei — fuer 4, 5 und 6 wurde nie ein Bild
+                // ausgegeben, weil niemand weiss, welches Bauteil sie zeichnet.
+                // Die Lesung dazu laeuft (berichte/flugzeugmuster-teile-fable.md).
+                //
+                // ⭐ Bis dahin bleibt die Raute — aber sie SAGT es jetzt. Ein
+                // Rueckfall, der aussieht wie ein Spielobjekt, ist schlimmer als
+                // ein fehlendes Bild: der Spieler sucht den Fehler bei sich.
+                RauteFuer(s.Kind);
+                DrawDiamond(air, 8f, new Color(0.1f, 0.9f, 0.95f));
+            }
 
             // ⚠ DIE UEBERLAGERUNG ZUR BLICKRICHTUNG (--air-facing-check).
             //

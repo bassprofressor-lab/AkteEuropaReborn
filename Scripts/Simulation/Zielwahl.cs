@@ -52,6 +52,16 @@ public partial class MapEntityLayer : Node2D
     /// <summary><c>--zielwahl-aus</c> — »Angriff« startet ohne Ziel.</summary>
     public static bool ZielwahlAus;
 
+    /// <summary><c>--angriff-ohne-heimkehr</c> — das Nullmodell: ein erledigter
+    /// Angriffsauftrag endet NICHT mit der Heimkehr. Unter ihm muss die Zahl
+    /// der Heimkehren gleich bleiben (sie wird gezählt, bevor geflogen wird)
+    /// und die Zahl der eingelagerten Maschinen auf 0 fallen — genau daran
+    /// sieht man, dass die Landung wirkt und nicht nur der Zähler.</summary>
+    public static bool AngriffOhneHeimkehr;
+
+    /// <summary>Wie oft ein Angriffsauftrag mit der Heimkehr geendet hat.</summary>
+    public int AngriffHeimkehr;
+
     /// <summary>Modus 7 — das Ziel ist eine EINHEIT oder ein GEBÄUDE
     /// (<c>0x44F121</c>).</summary>
     public const int ZielModusZiel = 7;
@@ -221,6 +231,11 @@ public partial class MapEntityLayer : Node2D
             a.Target = ziel;                            // +0x2E
             a.Goal = mitte;                             // +0x14/+0x15
             a.PlayerGoal = mitte;
+            // ⭐ 19.09.2026 — DAS IST EIN ANGRIFF, KEIN VERLEGEN. Ohne diese
+            // Fahne loescht der Spielerbefehl-Zweig das Ziel wieder und die
+            // Maschine kreist nach dem Flug ueber dem Flughafen, statt zu
+            // landen. Siehe Special.Angriffsauftrag.
+            a.Angriffsauftrag = true;
             n++;
         }
         return n;
@@ -236,11 +251,17 @@ public partial class MapEntityLayer : Node2D
     {
         int enden = ZielwahlAufZiel + ZielwahlAufZelle + ZielwahlAbgebrochen;
         if (ZielwahlBegonnen == 0 && enden == 0) return "";
+        int gelandet = 0;
+        foreach (var a in _special) if (!a.Dead && a.Stored) gelandet++;
         return $"zielwahl-check: {ZielwahlBegonnen}x begonnen, {ZielwahlAufZiel}x auf ein "
              + $"ZIEL (Modus 7), {ZielwahlAufZelle}x auf eine ZELLE (Modus 1), "
              + $"{ZielwahlAbgebrochen}x abgebrochen = {enden} Enden "
              + (enden == ZielwahlBegonnen ? "(stimmt)" : "⚠ HAENGT")
-             + $" · {ZielwahlMaschinen} Maschinen geschickt"
-             + (ZielwahlAus ? "   [--zielwahl-aus: alles 0 ist das SOLL]" : "");
+             + $" · {ZielwahlMaschinen} Maschinen geschickt, {AngriffHeimkehr}x Auftrag "
+             + $"beendet -> heim, {gelandet} stehen jetzt im Hangar"
+             + (ZielwahlAus ? "   [--zielwahl-aus: alles 0 ist das SOLL]" : "")
+             + (AngriffOhneHeimkehr
+                 ? "   [--angriff-ohne-heimkehr: »heim« bleibt gleich, »im Hangar« MUSS fallen]"
+                 : "");
     }
 }

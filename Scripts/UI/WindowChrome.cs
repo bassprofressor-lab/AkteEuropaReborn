@@ -97,6 +97,27 @@ public static class WindowChrome
     /// ersten — genau wie beim Titel, der 0x96 aus dem Paar 0x96/0xA9
     /// nimmt.</para></summary>
     public static readonly Color LineColour = Color.Color8(127, 119, 99);    // 0x8C
+
+    /// <summary>
+    /// ⭐⭐ <b>Die VERTIEFTE FLÄCHE</b> — Palettenplatz <b>0x8D</b>, der dunkle
+    /// Partner von <c>0x8C</c> darüber.
+    ///
+    /// <para><b>Wie die Zahl gefunden wurde</b> (19.09.2026, dritter Anlauf):
+    /// am Bildabzug wurde die Farbe der Rahmenkacheln gemessen —
+    /// <b>(19, 19, 15)</b> — und in <c>DATA/01.PAL</c> nachgeschlagen. Sie
+    /// trifft Platz <b>0x8D</b> mit Abstand <b>NULL</b>, also exakt. Dass es
+    /// genau der Nachbar von 0x8C ist, passt zur schon belegten Bauart des
+    /// Originals: seine Zeichner nennen PAARE (0x8C/0x8D wie 0x96/0xA9,
+    /// 0x97/0x99, 0x9B/0x9D).</para>
+    ///
+    /// <para>⚠ <b>Warum nicht schwarz:</b> zwei Anläufe vorher stand hier
+    /// <c>(0,0,0)</c> — Platz 0. Das ist <b>dunkler als die Kacheln</b>, und
+    /// darum sah man die Füllung als eigenen Fleck: »der schwarze hintergrund
+    /// passt immer noch nicht, er ist kleiner als das kasten selbst«. Er hat
+    /// keinen zu kleinen Kasten gesehen, sondern <b>zwei verschiedene
+    /// Schwarztöne</b>. Die Lehre steht im Do-Not-Repeat: eine Farbe wird
+    /// NACHGESCHLAGEN, nicht geschätzt.</para></summary>
+    public static readonly Color RecessColour = Color.Color8(19, 19, 15);   // 0x8D
     public static readonly Color WarnColour = Color.Color8(243, 150, 35);    // 0x97
     public static readonly Color AlarmColour = Color.Color8(216, 44, 52);    // 0x9B
 
@@ -307,14 +328,20 @@ public static class WindowChrome
         // das gleiche ist auch unter hangar«. Er hat wieder recht: die
         // Ringkacheln sind DUNKEL, aber nicht schwarz — sie tragen den
         // Kantenschliff —, und genau ihr Streifen blieb sichtbar anders.
-        // Gefuellt wird jetzt der VOLLE Kasten, und der Ring wird DARUEBER
-        // gemalt: so liegt sein Schliff auf schwarzem Grund und nicht auf
-        // einer hellen Naht.
+        // Gefuellt wird der VOLLE Kasten, und der Ring wird DARUEBER gemalt.
+        //
+        // ⚠⚠ DRITTER ANLAUF, 19.09.2026 — DIE FARBE. Zwei Anlaeufe fuellten mit
+        // SCHWARZ (Platz 0), und seine Antwort war beide Male dieselbe: »der
+        // schwarze hintergrund passt immer noch nicht, er ist kleiner als das
+        // kasten selbst«. Er sah keinen zu kleinen Kasten, sondern ZWEI
+        // Schwarztoene: die Kacheln sind gemessen (19, 19, 15) = Platz 0x8D,
+        // meine Fuellung war (0, 0, 0). Jetzt RecessColour, und die Zahl ist
+        // nachgeschlagen statt geschaetzt.
         if (!InnenrahmenHohl)
         {
             ci.DrawRect(new Rect2(x * scale, y * scale,
                                   Cell * wTiles * scale, Cell * hTiles * scale),
-                        new Color(0, 0, 0), true);
+                        RecessColour, true);
             InnenFuellungen++;
         }
 
