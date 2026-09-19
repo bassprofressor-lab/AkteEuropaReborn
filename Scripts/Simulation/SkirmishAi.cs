@@ -79,6 +79,14 @@ public partial class MapEntityLayer : Node2D
         public readonly HashSet<int> PlanAirUnmatched = new();
         public string AirBroke = "";               // woran der Flughafen scheitert
 
+        // und die von ai_air_attack @0x4BDB40 (19.09.2026) — der Weg AUS dem
+        // Hangar, siehe AiAirAttackStep
+        public int SortieLos;                      // Flugzeuge gestartet
+        public int SortieZuWenig;                  // Hangar hatte nicht mehr als 3
+        public int SortieKeinZiel;                 // ai_air_find_target gab 0xFFFF
+        public int SortieKeinFlughafen;            // dieser Spieler hat keinen
+        public string SortieNote = "";             // die letzte Entscheidung im Klartext
+
         /// <summary>
         /// Der Wuerfel dieses Spielers. `find_base` und der Einheitendurchlauf
         /// greifen beide auf `rand()` zurueck; das Wuerfeln selbst ist also
@@ -1078,7 +1086,15 @@ public partial class MapEntityLayer : Node2D
                           ? $", Entwurf unbekannt {a.PlanAirMissed}x: " +
                             string.Join(",", a.PlanAirUnmatched)
                           : "") +
-                      (a.AirBroke.Length > 0 ? $" [zuletzt: {a.AirBroke}]" : ""));
+                      (a.AirBroke.Length > 0 ? $" [zuletzt: {a.AirBroke}]" : "") +
+                      // ⭐ 19.09.2026 — und der Weg AUS dem Hangar, getrennt
+                      // gezaehlt. Ohne diese Zahlen sah ein Lauf, in dem drei
+                      // Hubschrauber gebaut wurden und keiner flog, genauso aus
+                      // wie einer, in dem alles stimmte: die Bauzeile allein
+                      // sagt ueber den Start NICHTS. Siehe AiAirAttackStep.
+                      $"; gestartet {a.SortieLos}x, zu wenig im Hangar " +
+                      $"{a.SortieZuWenig}x, kein Ziel {a.SortieKeinZiel}x" +
+                      (a.SortieNote.Length > 0 ? $" [Sortie: {a.SortieNote}]" : ""));
         }
         // Der Harnisch (MapViewer) druckt genau diese eine Zeile; die Streife
         // haengt darum hier mit dran, statt einen neuen Aufruf dort zu brauchen.
@@ -1298,6 +1314,17 @@ public partial class MapEntityLayer : Node2D
                 // bekommt Mission 9, 13, 15, 20 und 24 ihre Angriffe.
                 AiMissionAttack(a, waveSize, guard);
             }
+
+            // ⭐⭐ 19.09.2026 — DER LUFTANGRIFF, und er steht mit Absicht HIER.
+            // `ai_player_step` C 0x4BE2E0 ruft erst den Bodenzweig (nach der
+            // KI-Stufe aus 0x538BD8), dann @0x4BE305 `ai_air_attack` — und
+            // zwar UNBEDINGT, ganz gleich was der Bodenzweig getan oder
+            // gelassen hat. Deshalb liegt der Ruf hinter beiden Zweigen und
+            // nicht in einem von ihnen: AiFight und AiMissionAttack steigen
+            // beide frueh aus (keine freien Angreifer, kein Ziel, Sperre), und
+            // ein Flughafen soll davon nichts merken.
+            // Siehe den Block bei AiAirAttackStep.
+            AiAirAttackStep(a);
         }
     }
 
@@ -2171,6 +2198,237 @@ public partial class MapEntityLayer : Node2D
         a.Built++;
         if (a.PlanAirNames.Count < 12) a.PlanAirNames.Add(d.Name);
     }
+
+    // ============ ai_air_attack: der Weg AUS dem Hangar ======================
+    //
+    // ⭐⭐⭐ GELESEN am 19.09.2026, auf seine Meldung zu Kampagne 17: »und es
+    // greifen ganz viele helikopter und flugeinheiten an«. Bei uns griff keiner
+    // an, und `--ki-probe` sagte, warum: P2 baute drei Kampfhubschrauber, und
+    // dieselbe Zeile meldete »luft: 0 in der Luft«. Die Flugzeuge standen im
+    // Hangar, denn `LaunchAircraft` wurde bei uns AUSSCHLIESSLICH aus Fenstern,
+    // der Taste Y und Pruefstaenden gerufen — aus der KI nie.
+    //
+    // Gesucht und gefunden wurde der fehlende Ruf ueber die EINZIGE Stelle im
+    // Spiel, die den Auftrag 4 (START) setzt: `air_takeoff`. Der Weg dorthin,
+    // Schritt fuer Schritt, damit er nachvollziehbar bleibt:
+    //
+    //   Schreibstellen auf das Auftragsbyte 0x6DDF80  -> 27, davon genau eine
+    //   mit dem Wert 4: @0x4260E0 in `air_takeoff` C 0x426020 / F 0x425200
+    //   Aufrufer von air_takeoff (relativ, ueber das Sprungbrett 0x4023BA): 6
+    //       0x428C52, 0x4B16EA, 0x4B1721 (in spawn_aircraft, die Nachschubhelis),
+    //       0x4C2B02, 0x4C3773 (Befehlsbus = der Spieler),
+    //       **0x4BDC2A  -> ai_air_attack C 0x4BDB40 / F 0x4BD600**
+    //   Aufrufer von ai_air_attack: einer, @0x4BE305 in ai_player_step
+    //       C 0x4BE2E0: Bodenzweig nach KI-Stufe (0x538BD8), DANN unbedingt
+    //       der Luftangriff, dann 0x4022D4.
+    //
+    // ⚠ Es fuehrt KEIN Weg von der KI zu `air_order` C 0x425E10 (drei Aufrufer:
+    // zweimal die Luftschleife selbst, einmal der Befehlsbus). Die KI startet
+    // ihre Flugzeuge also nicht mit einem Auftrag, sie startet sie MIT ZIEL —
+    // `air_takeoff` bekommt das Ziel als Argument.
+    //
+    // <para><b>Beide GAME.EXE, und das ist hier keine Formsache:</b> `cfind`
+    // bildet ai_air_attack EINDEUTIG ab (95 Befehle, Abstand −0x540) und
+    // air_takeoff ebenso (64 Befehle, −0xE20). In der F-Fassung stehen
+    // dieselben Zahlen an denselben Stellen: `cmp cl,9` (Flughafen) @0x4BD623,
+    // `cmp al,3` (mehr als drei abgestellt) @0x4BD685, `push 7` (m_uk 7 =
+    // Angriff) @0x4BD6E7, `cmp cl,3` (vier je Durchgang) @0x4BD6FA.</para>
+    //
+    // Der Rumpf, woertlich:
+    //
+    //     ai_air_attack(spieler):                          @0x4BDB40
+    //       for b = 0 .. 254:                    ; 255 Gebaeudeplaetze, 0xC06910, 76 B
+    //           if byte[+0x14] != 9:      weiter ; nur FLUGHAEFEN
+    //           if byte[+0x15] != spieler: weiter; und nur eigene
+    //           c = byte[+0x29]                  ; die sec27-Nummer des Hangars
+    //           n = byte[0x87943C + 52*c]        ; Laenge der Hangarliste
+    //           steht = Zahl der Plaetze 0x879443+52*c+i mit Wert != 0xFF
+    //           if steht <= 3:            weiter ; ⭐ ERST AB VIER abgestellten
+    //           ziel = ai_air_find_target(spieler)          @0x4BDA10
+    //           if ziel == 0xFFFF:        FERTIG ; ganze Routine zu Ende
+    //           k = 0
+    //           for i = 0 .. n-1:
+    //               slot = byte[0x879443 + 52*c + i]
+    //               if slot == 0xFF:      dieses Gebaeude fertig
+    //               air_takeoff(slot, 7, zielSpalte, zielZeile, ziel)
+    //               if k++ == 3:          FERTIG ; ⭐ VIER je Durchgang
+    //
+    //     air_takeoff(idx, m_uk, x, y, kunde):             @0x426020
+    //       Ort   := Flughafenzelle + (5, 2)     ; die Startbahn daneben
+    //       dir   := 0xB4 (180 Grad), Stufe := 0
+    //       alt   := Gelaende*15
+    //       Flugziel := (x, y);  Ziel := kunde
+    //       uk := 4 (START);  m_uk := das Argument, hier 7 = Angriff
+    //
+    //     ai_air_find_target(spieler):                     @0x4BDA10
+    //       Stufe 1: alle p mit byte[Spielersatz + 0x15 + p] == 0 sammeln,
+    //                davon einen per ZUFALL  (0x15 ist das Feld, das
+    //                set_relation schreibt — 0 heisst verfeindet)
+    //       Stufe 2: dessen 1000 Einheitenplaetze (Basis p*1000, 78 B):
+    //                +0x09 == 0xFF -> aus (leerer Platz, der Besitzer)
+    //                +0x14 >= 0x2D -> aus (UKOL, der Auftragszustand)
+    //                +0x0D == 0    -> aus (die Waffenzeile: UNBEWAFFNETE NICHT)
+    //                davon einen per ZUFALL; keiner -> 0xFFFF
+    //
+    // ⭐ Damit ist auch belegt, warum es genau in K17 auffiel: die Lesung der
+    // Bauplaene sagt, die Zeilenart 1 (»Build in airp«) kommt in den Missionen
+    // 17, 19, 22, 23, 24, 25, 27 und 34 vor — **M17 ist die erste ueberhaupt**.
+    // Vorher hat nie ein Computerspieler ein Flugzeug gebaut, also konnte auch
+    // nie eines im Hangar stehenbleiben.
+
+    /// <summary><c>--ki-luftangriff-aus</c> — der Stand von vor dem 19.09.2026:
+    /// die Computerspieler starten ihre Flugzeuge nicht.</summary>
+    public static bool KiLuftangriffAus;
+
+    /// <summary>
+    /// <b><c>ai_air_attack(spieler)</c> @0x4BDB40</b> — siehe den Block darueber
+    /// fuer die Herleitung und den Rumpf.
+    ///
+    /// <para><b>UNSERE SETZUNGEN hier, ausdruecklich:</b></para>
+    /// <list type="bullet">
+    /// <item>die Hangarliste ist bei uns <see cref="Entity.Hangar"/> und
+    /// enthaelt nur belegte Plaetze — »Zahl der Eintraege != 0xFF« ist damit
+    /// schlicht <c>Hangar.Count</c>, und die Laenge <c>n</c> braucht es
+    /// nicht;</item>
+    /// <item>die Richtung 0xB4 wird nicht gesetzt: unser Zeichner nimmt die
+    /// Blickrichtung aus dem Flugvektor (siehe <c>AirFacingTrace</c>). Das ist
+    /// der bestehende Stand und wird hier nicht mit angefasst;</item>
+    /// <item><c>alt</c> (die Hoehe) fuehren wir nicht als Feld — der Steigflug
+    /// steckt in <c>UpdateAircraft</c>;</item>
+    /// <item><c>m_uk := 7</c> hat bei uns keine eigene Wirkung: ein gesetztes
+    /// <see cref="Special.Target"/> IST der Angriff. Der Wert wird trotzdem in
+    /// <c>Order/Order2</c> geschrieben, damit ein Prueflauf ihn sehen kann.</item>
+    /// </list></summary>
+    private void AiAirAttackStep(AiPlayer a)
+    {
+        if (KiLuftangriffAus) return;
+
+        bool hatFlughafen = false;
+        // 255 Gebaeudeplaetze in der Reihenfolge der Tafel — der erste
+        // Flughafen mit genug Flugzeugen gewinnt, und danach ist die Routine
+        // zu Ende (das Original kehrt bei »kein Ziel« und bei »vier gestartet«
+        // aus der ganzen Funktion zurueck, nicht nur aus dem Gebaeude).
+        for (int b = 0; b < _entities.Count; b++)
+        {
+            var ap = _entities[b];
+            if (!ap.IsBuilding || ap.IsProp || ap.Dead) continue;
+            if (ap.BType != AiAirportType || ap.Owner != a.Player) continue;
+            hatFlughafen = true;
+
+            int steht = ap.Hangar?.Count ?? 0;
+            if (steht <= AiSortieSchwelle)          // cmp al,3 / jbe
+            {
+                a.SortieZuWenig++;
+                a.SortieNote = $"{ap.Name}: {steht} abgestellt, es braucht mehr als " +
+                               $"{AiSortieSchwelle}";
+                continue;
+            }
+
+            int ziel = AiAirFindTarget(a);
+            if (ziel < 0)                            // 0xFFFF -> FERTIG
+            {
+                a.SortieKeinZiel++;
+                a.SortieNote = "kein taugliches Ziel (lebend, bewaffnet, UKOL < 45)";
+                return;
+            }
+            var t = _entities[ziel];
+
+            int k = 0;
+            // ⚠ Ueber eine KOPIE der Hangarliste: der Start nimmt das Flugzeug
+            // aus ihr heraus, und eine Schleife ueber die laufende Liste
+            // uebersprang jedes zweite.
+            foreach (int slot in new List<int>(ap.Hangar!))
+            {
+                var flz = _special.Find(s => s.Slot == slot && !s.Dead);
+                if (flz == null) continue;           // slot == 0xFF
+                AiAirTakeoff(flz, ap, t, ziel);
+                a.SortieLos++;
+                k++;
+                if (k > AiSortieSchwelle) return;    // cmp cl,3 / je -> vier Stueck
+            }
+        }
+        if (!hatFlughafen) a.SortieKeinFlughafen++;
+    }
+
+    /// <summary>Mehr als so viele Flugzeuge muessen abgestellt sein, und so
+    /// viele plus eines starten je Durchgang — <b>beides dieselbe 3</b>, und
+    /// beide aus dem Code: <c>cmp al,3 / jbe</c> @0x4BDBC5 (C) / @0x4BD685 (F)
+    /// und <c>cmp cl,3 / je</c> @0x4BDC3A (C) / @0x4BD6FA (F). Dass es ein und
+    /// dieselbe Zahl ist, ist kein Zufall der Lesung: die Routine schickt genau
+    /// die vier los, deren Vorhandensein sie vorher verlangt hat.</summary>
+    private const int AiSortieSchwelle = 3;
+
+    /// <summary><b><c>air_takeoff</c> @0x426020</b> — ein Flugzeug verlaesst
+    /// seinen Hangar mit Ziel. Der Ort ist die STARTBAHN neben dem Gebaeude,
+    /// Zelle + <b>(5, 2)</b> (@0x426064 <c>lea ecx,[edx+5]</c> / @0x426075
+    /// <c>lea eax,[ecx+2]</c>) — nicht die Gebaeudemitte, aus der unser
+    /// <see cref="LaunchAircraft"/> startet.</summary>
+    private void AiAirTakeoff(Special flz, Entity ap, Entity ziel, int zielIdx)
+    {
+        flz.Stored = false;
+        ap.Hangar?.Remove(flz.Slot);
+
+        int c = Mathf.Clamp(ap.Col + 5, 0, (_nav?.Width ?? 1) - 1);
+        int r = Mathf.Clamp(ap.Row + 2, 0, (_nav?.Height ?? 1) - 1);
+        flz.Col = c; flz.Row = r;
+        flz.Pos = CellCenter(c, r);
+
+        flz.Target = zielIdx;                 // word[+0x2E] := kunde
+        flz.Goal = ziel.Pos;                  // Flugziel := (x, y)
+        flz.PlayerGoal = null;
+        flz.TurnPoint = null;
+        flz.Order = 4;                        // uk  := 4  (START)
+        flz.Order2 = 7;                       // m_uk := 7 (Angriff)
+    }
+
+    /// <summary><b><c>ai_air_find_target(spieler)</c> @0x4BDA10</b> — zwei
+    /// Stufen, beide mit dem Wuerfel: erst ein zufaelliger VERFEINDETER
+    /// Spieler, dann eine zufaellige taugliche Einheit von ihm.
+    ///
+    /// <para>Die drei Ausschluesse sind die gelesenen Felder des 78-Byte-Satzes,
+    /// und alle drei tragen bei uns schon einen Namen: <b>+0x09</b> ist der
+    /// BESITZER (0xFF = leerer Platz), <b>+0x0D</b> die WAFFENZEILE (0 =
+    /// unbewaffnet, bei uns <see cref="Entity.Armed"/>) und <b>+0x14</b> ist
+    /// UKOL, der Auftragszustand.</para>
+    ///
+    /// <para>⚠ <b>Die Luftwaffe der KI jagt also nur BEWAFFNETE Einheiten</b> —
+    /// kein Techniker, kein Transporter, kein Bauwagen. Das ist gelesen und
+    /// nicht unsere Wahl.</para>
+    ///
+    /// <para>⚠ UNSERE SETZUNGEN: (1) das Original laeuft <c>p = 0..7</c> ab und
+    /// prueft nur den Beziehungswert; ob <c>Beziehung[s][s]</c> je 0 wird, ist
+    /// ungelesen, darum schliesst <see cref="Allied"/> den Spieler selbst aus
+    /// (<c>a == b</c>). (2) Von UKOL fuehren wir nur 0, 48 und 50 (siehe
+    /// <see cref="Entity.Ukol"/>), die Schwelle 45 trifft damit nur die
+    /// Untergestellten — richtig, aber gegen ein duenneres Feld als im
+    /// Original.</para></summary>
+    private int AiAirFindTarget(AiPlayer a)
+    {
+        // Stufe 1 @0x4BDA2E: die verfeindeten Spieler, einer per Zufall
+        var gegner = new List<int>();
+        for (int p = 0; p < 8; p++)
+            if (!Allied(a.Player, p)) gegner.Add(p);
+        if (gegner.Count == 0) return -1;                  // ax := 0xFFFF
+        int wen = gegner[a.Roll(gegner.Count)];
+
+        // Stufe 2 @0x4BDA93: seine tauglichen Einheiten, eine per Zufall
+        var kandidaten = new List<int>();
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var e = _entities[i];
+            if (e.IsProp || e.IsBuilding || e.Dead) continue;   // +0x09 == 0xFF
+            if (e.Owner != wen) continue;
+            if (e.Ukol >= AiZielUkolMax) continue;              // +0x14 >= 0x2D
+            if (!e.Armed) continue;                             // +0x0D == 0
+            kandidaten.Add(i);
+        }
+        if (kandidaten.Count == 0) return -1;                   // ax := 0xFFFF
+        return kandidaten[a.Roll(kandidaten.Count)];
+    }
+
+    /// <summary>UKOL-Schwelle der Zielwahl: <c>cmp byte[+0x14], 0x2D / jae</c>
+    /// @0x4BDAAC. 0x2D = 45.</summary>
+    private const int AiZielUkolMax = 0x2D;
 
     /// <summary>Pick what to build. OURS: prefer something that can actually
     /// shoot — a vehicle turret (weapon 1..19) or an infantry arm (185..199) —
