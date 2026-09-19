@@ -1348,7 +1348,47 @@ public partial class MainMenu : Control
         // stillschweigend weiter, und MoviePlayer.Play gibt dafuer false.
         // ESC ueberspringt. ⚠ --no-briefing schaltet auch den Film ab: ein
         // kopfloser Prueflauf haette sonst minutenlang Kino.
-        if (!_skipBriefing && MoviePlayer.Play(this, m.Index, () => NachDemFilm(m)))
+        // ⚠⚠⚠ 20.09.2026 — HIER STAND »Filmnummer = Missionsnummer«, UND DAS
+        // WAR UM EINS VERSETZT.
+        //
+        // Gemeldet: »die video zuordnung passt nicht. bei uns kommt das video
+        // von k18 bei k17, das hatte ich in den vorherigen kampagnen auch schon
+        // bemerkt« — es betrifft also ALLE Missionen, nicht nur diese.
+        //
+        // NACHGELESEN. Der Filmnamenbauer des Originals ist C 0x4CFD80, gerufen
+        // ueber das Sprungbrett 0x401636 von 0x416B37 — der Briefingfolge
+        // (Marken »BR 1«, »BR 2«, »BR 3« @0x4F7930/28/20). Er setzt den Namen
+        // aus `movies\` (0x539A08) und `.rpl` (0x539A00) zusammen, und die Zahl
+        // dazwischen ist:
+        //
+        //   0x4CFDA6  mov bx, word ptr [0x539934]   ; der Missionszaehler
+        //   0x4CFDB8  inc bl                        ; +1
+        //   0x4CFDFB  mov al, bl                    ; -> in den Dateinamen
+        //
+        // Der Zaehler haelt die Missionsnummer unveraendert — das zeigt der
+        // Vergleich `cmp dword[0x539934], 0x31` @0x48848C in der
+        // Zustandsmaschine, der die Kampagne (1..33) von den NET-Karten (51..58)
+        // trennt. Und dass es der UNveraenderte Zaehler ist, zeigt dieselbe
+        // Briefingfolge zwei Befehle spaeter: »BR 2« gibt bei 0x416BB4 den
+        // Zaehler OHNE die +1 weiter, fuer den Briefingtext derselben Mission.
+        //
+        // ⭐ DREI UNABHAENGIGE STUETZEN fuer »Film N+1 gehoert zu Mission N«:
+        //   1. das `inc bl` oben;
+        //   2. es gibt **34 numerierte Filme fuer 33 Missionen** (1..34 auf
+        //      beiden CDs), und `movies\34.rpl` steht als FESTES Wort im Code
+        //      (0x4FE8B0) — die 34 ist der Film der letzten Mission;
+        //   3. damit ist `1.rpl` frei, und dafuer gibt es die Marke
+        //      »Play intro 2« (0x4F7584) neben »Play intro«: der Vorspann
+        //      laeuft in zwei Teilen, `intro.rpl` und `1.rpl`.
+        //
+        // ⚠ Was damit NICHT behauptet wird: welche Handlung in welchem Film
+        // steckt. Seine Zuordnung (»das ist K18s Video«) und diese Lesung zeigen
+        // in dieselbe Richtung — dass wir um eins zurueckhaengen —, aber der
+        // Beleg hier ist der Code, nicht die Handlung.
+        //
+        // Gegenschalter --filmnummer-alt.
+        int film = MoviePlayer.FilmnummerAlt ? m.Index : m.Index + 1;
+        if (!_skipBriefing && MoviePlayer.Play(this, film, () => NachDemFilm(m)))
             return;
         NachDemFilm(m);
     }
@@ -1425,6 +1465,7 @@ public partial class MainMenu : Control
     {
         foreach (string a in OS.GetCmdlineUserArgs())
             if (a == "--no-briefing") { _skipBriefing = true; MoviePlayer.Disabled = true; }
+            else if (a == "--filmnummer-alt") MoviePlayer.FilmnummerAlt = true;
             else if (a == "--no-movie") MoviePlayer.Disabled = true;
 
         // ⚠ »WEITER« AUS DEM ABSCHLUSSFENSTER. Es lädt die nächste Karte nicht

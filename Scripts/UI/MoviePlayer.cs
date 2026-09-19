@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.UI;
+﻿namespace AkteEuropaReborn.UI;
 
 using System;
 using System.Collections.Generic;
@@ -92,6 +92,12 @@ public partial class MoviePlayer : CanvasLayer
     /// Den Film einer Mission suchen. <c>null</c>, wenn er nirgends liegt —
     /// dann wird stillschweigend übersprungen.
     /// </summary>
+    /// <summary><c>--filmnummer-alt</c> — der Stand von vor dem 20.09.2026:
+    /// Filmnummer = Missionsnummer. Das Original nimmt Missionsnummer + 1
+    /// (Namenbauer C 0x4CFD80, <c>inc bl</c> @0x4CFDB8); siehe die Herleitung
+    /// in <c>UI/MainMenu.StartMission</c>.</summary>
+    public static bool FilmnummerAlt;
+
     public static string? Find(int nummer)
     {
         string name = nummer <= 0 ? "INTRO.RPL" : $"{nummer}.RPL";
