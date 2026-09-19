@@ -90,7 +90,7 @@ public sealed partial class FlughafenView : Control
                       YSpezial = 108, YPlatz = 123, YErweiter = 138, YKonto = 168;
     private const int RechtsX = 320;              // rechtsbuendig
     private const int KontoWertX = 88;
-    private const int LagerKnopfY = 185;
+    private const int LagerKnopfY = 185, LagerKnopfX = 20, LagerKnopf2X = 240;
 
     // ---- Reiter »Hangar« --------------------------------------------------
     private const int ListeX = 20, ListeY = 80, ListeWTiles = 11, ListeHTiles = 9;
@@ -153,6 +153,14 @@ public sealed partial class FlughafenView : Control
     private int _held = -1;
     private int _rollstand;
     private int _prodWahl;
+
+    /// <summary>⚠⚠ 19.09.2026 — <b>DAS ZIEHEN HATTE ICH VERGESSEN.</b> Seine
+    /// Meldung: »allgemein hängt das fenster wie unten am bildschirm, kann es
+    /// auch nicht verschieben«. <see cref="MineView"/> und
+    /// <see cref="DepotView"/> haben dieses Feld von Anfang an; beim Bauen
+    /// dieses Fensters ist es untergegangen, und damit war das grösste Fenster
+    /// des Spiels das einzige, das man nicht wegschieben kann.</summary>
+    private bool _zieht;
 
     /// <summary>Wie viele Knöpfe zuletzt bedienbar waren — für den Prüfstand.
     /// ⚠ Hier gesetzt und nicht erst im Zeichner: der Prüfstand liest die Zahl,
@@ -317,9 +325,15 @@ public sealed partial class FlughafenView : Control
         Text(font, TextX, YKonto, "Kontostand", WindowChrome.TitleColour);
         Text(font, KontoWertX, YKonto, s.Geld.ToString(), WindowChrome.TextColour);
 
-        KnopfFrei(font, 0, LagerKnopfY, "Verbessern", false,
+        // ⚠⚠ 19.09.2026 — HIER STAND EINE 0, und das war ein Fehler beim
+        // Umbenennen der zwei Knopfhelfer: aus dem INDEX 0 (der auf KnopfX[0]
+        // = 20 zeigte) wurde beim Wechsel auf KnopfFrei die X-KOORDINATE 0.
+        // »Verbessern« ragte damit links aus dem Fenster heraus — genau so
+        // gemeldet: »verbessern ragt raus aus dem kasten unter lager«.
+        // Die Lesung sagt (20, 185), 5 Kacheln.
+        KnopfFrei(font, LagerKnopfX, LagerKnopfY, "Verbessern", false,
               "Der Lagerausbau des Flughafens ist bei uns nicht gebaut.");
-        KnopfFrei(font, 240, LagerKnopfY, "Reparieren", true, null);
+        KnopfFrei(font, LagerKnopf2X, LagerKnopfY, "Reparieren", true, null);
     }
 
     // ======================= Reiter »Hangar« ===============================
@@ -590,12 +604,16 @@ public sealed partial class FlughafenView : Control
             if (mb.Pressed)
             {
                 _held = t >= 10 && t <= 15 ? t - 10 : -1;
+                // Ein Druck auf die Flaeche (nicht auf Knopf, Reiter oder
+                // Zeile) beginnt das Ziehen — wie bei Mine und Depot.
+                if (t == 0) _zieht = true;
                 QueueRedraw();
                 AcceptEvent();
                 return;
             }
             _held = -1;
             QueueRedraw();
+            if (_zieht) { _zieht = false; AcceptEvent(); return; }
             AcceptEvent();
             switch (t)
             {
@@ -637,6 +655,29 @@ public sealed partial class FlughafenView : Control
             QueueRedraw();
             AcceptEvent();
         }
+    }
+
+    /// <summary>Die Zugbewegung. ⚠ Verschoben wird der HALTER
+    /// (<see cref="BuildingWindow"/>), nicht dieses Kind — und danach wird in
+    /// den Schirm gezwungen, damit man es nicht hinausziehen kann.</summary>
+    public override void _Input(InputEvent @event)
+    {
+        if (!_zieht) return;
+        if (@event is InputEventMouseMotion mm)
+        {
+            if (GetParent() is Control eltern)
+            {
+                eltern.Position += mm.Relative;
+                var vp = GetViewportRect().Size;
+                eltern.Position = new Vector2(
+                    Mathf.Clamp(eltern.Position.X, 0, Mathf.Max(0, vp.X - eltern.Size.X)),
+                    Mathf.Clamp(eltern.Position.Y, 0, Mathf.Max(0, vp.Y - eltern.Size.Y)));
+            }
+            AcceptEvent();
+        }
+        else if (@event is InputEventMouseButton up
+                 && up.ButtonIndex == MouseButton.Left && !up.Pressed)
+        { _zieht = false; AcceptEvent(); }
     }
 
     public override string _GetTooltip(Vector2 pos) => Hit(pos) switch

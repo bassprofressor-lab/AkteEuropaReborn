@@ -1241,6 +1241,8 @@ public partial class MapViewer : Node2D
         if (_lieferungCheck) { _ = LieferungLauf(); return; }
         if (_radarmenueCheck) { _ = RadarMenueLauf(); return; }
         if (_lieferungBild) { _ = LieferungBildLauf(); return; }
+        if (_flughafenfensterBild && _shotPath.Length > 0)
+        { _ = FlughafenfensterBildLauf(); return; }
         if (_brueckeTrefferCheck)
         {
             if (_shotPath.Length > 0) { _ = BrueckeBildLauf(); return; }
@@ -1487,7 +1489,7 @@ public partial class MapViewer : Node2D
         GetTree().Quit(0);
     }
 
-    private bool _lieferungBild;
+    private bool _lieferungBild, _flughafenfensterBild;
 
     /// <summary>Drei Bilder: Frachter im Anflug, im Abladetakt (+Blitz), im Abflug.</summary>
     private async System.Threading.Tasks.Task LieferungBildLauf()
@@ -1721,6 +1723,60 @@ public partial class MapViewer : Node2D
     /// <para>Das Nullmodell ist <c>--minenfenster-alt</c>: damit MUSS in der
     /// Zeile »Godot-Moebel« stehen und das Mass ein anderes sein.</para>
     /// </summary>
+    /// <summary>
+    /// <b><c>--flughafenfenster-bild</c> — EIN BILD JE REITER.</b>
+    ///
+    /// <para>⚠ Es gibt diesen Lauf, weil er am 19.09.2026 drei Dinge am Aussehen
+    /// gemeldet hat (»verbessern ragt raus aus dem kasten«, »unter produktion
+    /// ist der hintergrund zu klein«, »stehen die Texte auf 2 Hintergruenden«)
+    /// und ich zu jedem eine Vermutung hatte, aber keine Zahl. Eine Zeile mit
+    /// Koordinaten haette sie nicht entschieden: alle drei Reiter passen auf dem
+    /// Papier in ihr Fenster. Was fehlt, ist der ANBLICK — also wird er
+    /// abgezogen, statt ein viertes Mal zu raten.</para>
+    ///
+    /// <para>Nebenher misst er die Zahlen mit, die man dann am Bild
+    /// nachrechnen kann: Lage und Masse des Fensters, Schirmmass, und je Reiter
+    /// die Sollhoehe aus der Lesung.</para>
+    /// </summary>
+    private async System.Threading.Tasks.Task FlughafenfensterBildLauf()
+    {
+        for (int i = 0; i < 5; i++)
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        int idx = _entities.FlughafenIndex();
+        if (idx < 0) { GD.Print("flughafenfenster-bild: kein Flughafen — NICHT GEMESSEN"); GetTree().Quit(0); return; }
+        // ⚠ Der Flughafen gehoert auf den Gefechtskarten niemandem; ohne
+        // Uebergabe zeigt das Fenster keine Kaufzeilen. Das ist ein EINGRIFF
+        // und steht darum in der Zeile.
+        _entities.FlughafenUebergeben(idx, _entities.ViewPlayer);
+        // ⚠ EINGRIFF: alle Hilfetexte als »schon gesehen« merken, sonst deckt
+        // die Kontexthilfe genau die Liste zu, die abgezogen werden soll (beim
+        // ersten Anlauf am 19.09. tat sie das).
+        for (int i = 0; i < 400; i++) UI.HelpWindow.MerkeGezeigt(i);
+        UI.WindowManager.Mausquelle = () => new Vector2(200, 120);
+        _entities.PostenAnwaehlenWieKlick(idx);
+        for (int t = 0; t <= UI.WindowManager.BilderAuf + 1; t++) UI.WindowManager.Takt();
+        for (int i = 0; i < 3; i++) await System.Threading.Tasks.Task.Yield();
+        GetTree().Paused = true;
+
+        var f = _gebaeudeFenster;
+        string[] namen = { "lager", "hangar", "produktion" };
+        for (int r = 0; r < 3; r++)
+        {
+            if (f != null) f.FlughafenReiterSetzen(r);
+            for (int i = 0; i < 4; i++)
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            string pfad = _shotPath.Replace(".png", $"_{namen[r]}.png");
+            GetViewport().GetTexture().GetImage().SavePng(pfad);
+            int soll = UI.FlughafenView.HTilesJeReiter[r] * UI.WindowChrome.Cell
+                       * UI.FlughafenView.Scale;
+            GD.Print($"flughafenfenster-bild: {namen[r]} -> {pfad}   "
+                   + $"Lage {f?.Position} Mass {f?.Size} (Sollhoehe {soll}) "
+                   + $"Innenrahmen {UI.WindowChrome.InnenFuellungen} gefuellt von {UI.WindowChrome.InnenRinge} Ringen "
+                   + $"Schirm {GetViewportRect().Size}");
+        }
+        GetTree().Quit(0);
+    }
+
     private async System.Threading.Tasks.Task MinenfensterLauf()
     {
         for (int i = 0; i < 5; i++)
@@ -3878,6 +3934,8 @@ public partial class MapViewer : Node2D
             else if (a == "--radarmenue-check") _radarmenueCheck = true;
             else if (a == "--radarvorrat-alt") MapEntityLayer.RadarvorratAlt = true;
             else if (a == "--lieferung-bild") _lieferungBild = true;
+            else if (a == "--flughafenfenster-bild") _flughafenfensterBild = true;
+            else if (a == "--innenrahmen-hohl") UI.WindowChrome.InnenrahmenHohl = true;
             else if (a == "--frachter-aus") Campaign.MissionScript.FrachterAus = true;
             else if (a == "--marktanker-alt") MapEntityLayer.MarktankerAlt = true;
             else if (a == "--marktfenster-alt") MapEntityLayer.MarktfensterAlt = true;

@@ -520,6 +520,34 @@ public sealed partial class BuildingWindow : PanelContainer
     /// brauchen ihn, und sie laufen NACH dem Zeichnen.</summary>
     private Stand? _letzterStand;
 
+    /// <summary>Das Fenster ganz in den Schirm zwingen — dieselbe Rechnung wie
+    /// <c>WindowManager.InDenSchirm</c>, aber ohne den Fenstersatz: sie wird
+    /// nach einer GROESSENAENDERUNG gebraucht, und die kennt nur dieses
+    /// Fenster.</summary>
+    /// <summary>Den Reiter des Flughafenfensters von aussen setzen — nur fuer
+    /// <c>--flughafenfenster-bild</c>. ⚠ Derselbe Weg, den der Klick nimmt
+    /// (Feld + <see cref="Refresh"/>), damit der Lauf nicht seine eigene
+    /// Rechnung prueft.</summary>
+    public void FlughafenReiterSetzen(int r)
+    {
+        _flughafenReiter = Mathf.Clamp(r, 0, 2);
+        Refresh();
+    }
+
+    private void InDenSchirmZwingen()
+    {
+        var vp = GetViewportRect().Size;
+        if (vp.X <= 0) return;
+        var g = new Vector2(Mathf.Max(Size.X, CustomMinimumSize.X),
+                            Mathf.Max(Size.Y, CustomMinimumSize.Y));
+        var p = Position;
+        if (p.X + g.X >= vp.X) p.X = vp.X - g.X - 1;
+        if (p.Y + g.Y >= vp.Y) p.Y = vp.Y - g.Y - 1;
+        if (p.X < 0) p.X = 0;
+        if (p.Y < 0) p.Y = 0;
+        Position = p;
+    }
+
     public override void _Ready()
     {
         CustomMinimumSize = new Vector2(320, 200);
@@ -814,14 +842,31 @@ public sealed partial class BuildingWindow : PanelContainer
             s.HangarWahl = System.Math.Clamp(_hangarWahl, 0,
                                System.Math.Max(0, s.HangarZeilen.Count - 1));
             _hangarWahl = s.HangarWahl;
+            // ⚠⚠ 19.09.2026 — DIE REIHENFOLGE IST HIER WESENTLICH.
+            // BuildingWindow ist ein PanelContainer: seine Mindestgroesse kommt
+            // aus den Kindern. Wer zuerst den HALTER kleiner macht und danach
+            // dem KIND die neue Groesse gibt, macht den Halter gegen die ALTE
+            // Kindgroesse kleiner — und der Container zieht ihn wieder hoch.
+            // Gemessen: beim Wechsel Hangar (680) -> Produktion (640) blieb der
+            // Halter auf 680 stehen und malte nur 640, die unteren 40 Punkte
+            // waren leer. Darum geht `Zeige` VORAUS.
+            _letzterStand = s;
+            _flughafen!.OnProdWahl = k => { _prodWahl = k; };
+            _flughafen!.Zeige(s);
             CustomMinimumSize = new Vector2(
                 FlughafenView.WTiles * WindowChrome.Cell * FlughafenView.Scale,
                 FlughafenView.HTilesJeReiter[System.Math.Clamp(s.Reiter, 0, 2)]
                     * WindowChrome.Cell * FlughafenView.Scale);
             Size = CustomMinimumSize;
-            _letzterStand = s;
-            _flughafen!.OnProdWahl = k => { _prodWahl = k; };
-            _flughafen!.Zeige(s);
+            // ⚠⚠ 19.09.2026 — DER REITERWECHSEL AENDERT DIE HOEHE, und damit
+            // kann das Fenster aus dem Schirm wachsen. Seine Meldung: »dadurch
+            // dass das fenster wie am unteren fensterrand klebt, sehe ich nicht
+            // alles im hangar«. WindowManager.InDenSchirm laeuft nur beim
+            // OEFFNEN — hier laeuft es nach jeder Groessenaenderung nach.
+            // Fensterart 5 ist das einzige Fenster des Spiels, das seine Hoehe
+            // im Betrieb aendert (240 -> 340 -> 320), darum fiel das bisher
+            // nirgends auf.
+            InDenSchirmZwingen();
             _titel.Text = "Flughafen " + s.Name;
             _knopfZahl = _flughafen.Buttons;
             return;

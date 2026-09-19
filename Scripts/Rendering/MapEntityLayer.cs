@@ -19587,6 +19587,29 @@ public partial class MapEntityLayer : Node2D
         return -1;
     }
 
+    /// <summary>Der erste lebende Flughafen der Karte — fuer
+    /// <c>--flughafenfenster-bild</c>. −1, wenn keiner steht.</summary>
+    public int FlughafenIndex()
+    {
+        for (int i = 0; i < _entities.Count; i++)
+        {
+            var b = _entities[i];
+            if (b.IsBuilding && !b.IsProp && !b.Dead && b.BType == 9) return i;
+        }
+        return -1;
+    }
+
+    /// <summary>⚠ EIN EINGRIFF, nur fuer den Bildlauf: auf den Gefechtskarten
+    /// gehoert jeder Flughafen niemandem, und ohne Eigner zeigt das Fenster
+    /// keine Kaufzeilen. Er wird NICHT zurueckgesetzt — der Lauf endet
+    /// danach.</summary>
+    public void FlughafenUebergeben(int idx, int spieler)
+    {
+        if (idx < 0 || idx >= _entities.Count) return;
+        _entities[idx].Owner = spieler;
+        if (_airDesigns == null || _airDesigns.Count == 0) FillCampaignAirDesigns();
+    }
+
     public void PostenAnwaehlenWieKlick(int idx)
     {
         _sel.Clear();

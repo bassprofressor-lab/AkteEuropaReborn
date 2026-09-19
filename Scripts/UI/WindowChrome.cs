@@ -256,11 +256,58 @@ public static class WindowChrome
     /// nur gestellt und am Ende wieder auf <c>time(0)</c> gesetzt — ein Rest aus
     /// einer Vorlage, kein Verhalten, das wir nachbauen müssten.</para>
     /// </summary>
+    /// <summary>⭐⭐ 19.09.2026 — <c>--innenrahmen-hohl</c>: der Stand vor
+    /// heute, bei dem <see cref="PaintInnerFrame"/> nur den RING malt und die
+    /// Fläche darin frei lässt.
+    ///
+    /// <para><b>Seine Meldung:</b> »Unter produktion ist der hintergrund zu
+    /// klein, somit stehen die Texte wie Bomber, Spionageflieger usw immer auf
+    /// 2 hintergründen (das ist auch oft so bei anderen
+    /// produktionsstätten)«.</para></summary>
+    public static bool InnenrahmenHohl;
+
+    /// <summary>Wie oft die Fläche gefüllt wurde — Kontrollzahl für die A/B.
+    /// Unter <c>--innenrahmen-hohl</c> muss sie auf 0 fallen, während die Zahl
+    /// der gemalten RINGE gleich bleiben muss.</summary>
+    public static int InnenFuellungen, InnenRinge;
+
     public static void PaintInnerFrame(CanvasItem ci, int x, int y,
                                        int wTiles, int hTiles, int scale)
     {
         if (Atlas == null || wTiles <= 1 || hTiles <= 1) return;   // @0x456A7B/85
         int rechts = x + Cell * (wTiles - 1), unten = y + Cell * (hTiles - 1);
+        InnenRinge++;
+
+        // ⭐⭐ 19.09.2026 — DIE FLAECHE WIRD GEFUELLT, und das ist der ganze
+        // Fehler, den er gemeldet hat.
+        //
+        // Der Ring besteht aus 20-Punkt-Kacheln, und die sind SCHWARZ. Diese
+        // Funktion malte nur den Ring — in der Flaeche blieb die HELLERE
+        // Fensterfuellung aus Paint() stehen. Jede Listenzeile beginnt aber bei
+        // x = 30/32, also noch auf der schwarzen linken Kachel, und endet bei
+        // 222/225, also auf der rechten: sie sass auf ZWEI Hintergruenden, und
+        // die helle Flaeche sah aus wie »ein zu kleiner Hintergrund«.
+        //
+        // ⭐ DER BELEG, dass die Flaeche dunkel gehoert: der 3x3-Bildkasten des
+        // Flughafens (280,80) besteht aus NEUN Kacheln, von denen acht der Ring
+        // sind. Wenn der Ring die richtige Farbe hat, kann die eine Kachel in
+        // der Mitte nicht heller sein — sonst waere ein leerer Bildkasten ein
+        // schwarzer Rahmen mit einem hellen Fleck. Genau so sah er aus.
+        //
+        // ⚠ UNSERE SETZUNG ist die FARBE und der ORT des Fuellens: welcher
+        // Befehl im Original die vertiefte Flaeche anlegt, ist NICHT gelesen
+        // (0x456A70 malt nur den Ring). Schwarz ist gewaehlt, weil es die Farbe
+        // der Ringkacheln selbst ist und weil derselbe Ton schon den
+        // Zustandsbalken fuellt (0x474340, dort gelesen). Gegenschalter
+        // --innenrahmen-hohl.
+        if (!InnenrahmenHohl && wTiles > 2 && hTiles > 2)
+        {
+            ci.DrawRect(new Rect2((x + Cell) * scale, (y + Cell) * scale,
+                                  Cell * (wTiles - 2) * scale,
+                                  Cell * (hTiles - 2) * scale),
+                        new Color(0, 0, 0), true);
+            InnenFuellungen++;
+        }
 
         for (int i = 1; i < wTiles - 1; i++)                       // @0x456ACB
         {
