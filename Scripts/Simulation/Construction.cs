@@ -207,12 +207,64 @@ public partial class MapEntityLayer
                 if (cwp.PatternTile(bt.FirstPattern, dx, dy) == 0) continue;
 
                 int c = col + dx, r = row + dy;
-                bool cellOk = CellTakesBuilding(c, r, builder);
+                bool cellOk = CellTakesBuilding(c, r, builder)
+                              || MineDecktIhrVorkommen(typ, c, r, builder);
                 if (!cellOk) ok = false;
                 collect?.Add(new SiteCell(c, r, cellOk));
             }
         }
         return ok;
+    }
+
+    /// <summary><c>--minengrundriss-alt</c> — der Stand von vor dem 19.09.2026:
+    /// der Grundriss der Feld-Rohstoffmine muss auch auf den Zellen des
+    /// Vorkommens tragen, das sie abbaut.</summary>
+    public static bool MinenGrundrissAlt;
+
+    /// <summary>
+    /// ⭐⭐ 19.09.2026 — <b>EINE MINE DECKT IHR EIGENES VORKOMMEN ZU, UND DAS
+    /// DARF SIE.</b>
+    ///
+    /// <para>Gemeldet zu Kampagne 17: »dann gibt es dort auf der Karte so eine
+    /// Art Grafik, in der Kampagne kann man dort speziell Minen bauen mit den
+    /// gebaeude technikern«. Bei uns ging es nicht. Gemessen mit
+    /// <c>--bau-check=mine</c> auf M17: <c>Vorkommen (17,11): die Ecke (16,9)
+    /// traegt keinen Grundriss — (18,11) Grund Blocked</c>.</para>
+    ///
+    /// <para><b>Und (18,11) ist die Vorkommensgrafik selbst.</b> Ein Vorkommen
+    /// (sec38) ist ein 3x3-Block aufragender Objektkacheln — auf M17 die Codes
+    /// 10240..10248 auf den Spalten 17..19 und Zeilen 11..13, mit (17,11) als
+    /// linker oberer Ecke. Die Mine wird per Versatz <c>(−1,−2)</c> auf (16,9)
+    /// gesetzt, damit ihr Grundriss genau diesen Block ueberdeckt. Dass die
+    /// Zellen im Belegungsraster <c>Blocked</c> sind, ist also kein Hindernis,
+    /// sondern der Zweck.</para>
+    ///
+    /// <para><b>Was das Original tut:</b> gar nichts davon. Es sieht sich fuer
+    /// eine Mine das Gelaende NIE an — <c>0x4205C0</c> fragt nur die
+    /// Vorkommenstafel, und der Grundrisstest an der Ecke ist bei uns
+    /// ausdruecklich als eigene Zutat vermerkt (siehe
+    /// <c>Simulation/BuildOrders.cs</c>). Der Test bleibt trotzdem stehen, denn
+    /// er hat einen Grund, der im Original nicht existiert: unser
+    /// Belegungsraster wuerde sonst ein Gebaeude ueber etwas anderes stempeln.
+    /// <b>Aufgehoben wird er nur fuer die drei Gelaendefragen</b> (Bodenklasse,
+    /// Hangbyte, tragende Ecken) und <b>nur auf dem Fenster eines Vorkommens</b>
+    /// — die Frage nach einem echten Bewohner (<c>OccupantAt</c>) bleibt, sonst
+    /// waere genau der Schutz weg, um dessentwillen der Test da ist.</para>
+    ///
+    /// <para>⚠ <c>CellOnDeposit</c> fragt nach JEDEM Vorkommen, nicht nach dem
+    /// gerade gemeinten. Das ist hier richtig und nicht laessig: wo zwei
+    /// Fenster sich beruehren, deckt die Mine eben beide Grafiken zu, und einen
+    /// Fall, in dem das falsch waere, gibt es nicht — ein Vorkommen ist nie
+    /// etwas, das stehen bleiben muss.</para>
+    ///
+    /// <para>Gegenschalter <c>--minengrundriss-alt</c>.</para></summary>
+    private bool MineDecktIhrVorkommen(int typ, int c, int r, int builder)
+    {
+        if (typ != TypeFieldMine || MinenGrundrissAlt) return false;
+        if (_nav == null || !_nav.InBounds(c, r)) return false;
+        if (!CellOnDeposit(c, r)) return false;
+        int occ = _nav.OccupantAt(c, r);
+        return occ == -1 || occ == builder;
     }
 
     /// <summary>The four per-cell tests, in the original's order.</summary>
