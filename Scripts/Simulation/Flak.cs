@@ -75,6 +75,16 @@ public partial class MapEntityLayer
     /// <c>Aufträge 0</c>, und die Station läuft leer.</summary>
     public static bool FlakKegelAus;
 
+    /// <summary><c>--flak-abstand-alt</c> — der Stand vor dem 19.09.2026: der
+    /// Abstand gerundet und aus der Feinlage statt abgeschnitten und aus
+    /// Zellen. Nullmodell: die Zahl der RINGTREFFER muss sich ändern, die Zahl
+    /// der KEGELPROBEN nicht.</summary>
+    public static bool FlakAbstandAlt;
+
+    /// <summary><c>--flak-uk-alt</c> — ohne den Ausschluss von <c>uk</c> 2 und
+    /// 4 (Startvorgang).</summary>
+    public static bool FlakUkAlt;
+
     /// <summary><c>--flak-treffer-aus</c> — Aufträge werden angelegt, aber nie
     /// abgearbeitet. Damit ist der Kegel (Stück 1) OHNE die Station (Stück 3)
     /// messbar: <c>Aufträge &gt; 0</c> bei <c>Schüsse 0</c>.</summary>
@@ -147,10 +157,56 @@ public partial class MapEntityLayer
     /// Aufbau mit sechs Fällen misst dann fünfmal nichts. Die Regel ist reine
     /// Rechnung und damit für jeden Fall prüfbar; die Kette wird einmal
     /// gemessen.</para></summary>
+    /// <summary>
+    /// ⚠⚠ 19.09.2026 — <b>DIE ZEILE <c>if (dz &lt;= 0) return false;</c> WAR
+    /// UNSERE ZUTAT UND IST WEG.</b>
+    ///
+    /// <para>Gegengelesen (<c>berichte/flak-zielwahl-spion-fable.md</c> A2): das
+    /// Original prüft nur die zwei Ungleichungen, und bei <c>dz == 0</c> heisst
+    /// das <c>0 ≤ d ≤ 0</c> — also <b>d = 0 trifft</b>. Ein Flugzeug in
+    /// Bodennähe genau über der Flakzelle wird getroffen; bei uns war es
+    /// unverwundbar. Das betrifft vor allem die Versorgungshelis, die tief
+    /// fliegen.</para>
+    ///
+    /// <para><b>Und das »Loch in der Mitte« gilt erst ab dz ≥ 3</b>, weil
+    /// <c>dz/3</c> ganzzahlig teilt: dz 1 und 2 geben <c>0 ≤ d ≤ dz</c>, also
+    /// kein Loch. »Senkrecht darüber trifft sie nie« stimmt nur für
+    /// <c>|alt − g| ≥ 39</c>. Das hatte ich zu breit aufgeschrieben.</para>
+    /// </summary>
+    /// <summary>
+    /// <b>DER ABSTAND, EINMAL</b> — und zwar die Rechnung, die der Kegel
+    /// benutzt UND die der Prüfstand fragt.
+    ///
+    /// <para>⚠⚠ 19.09.2026 — es gab davon <b>drei</b>: der Kegel rechnete auf
+    /// Bildpunkten samt Feinlage und rundete, der Prüfstand nahm allein die
+    /// SPALTENdifferenz, und das Original nimmt Zellen und schneidet ab. Die
+    /// A/B zu <c>--flak-abstand-alt</c> meldete darum zweimal »alles ok«, auch
+    /// für einen schrägen Fall, der sie hätte trennen müssen — der Prüfstand
+    /// prüfte seine eigene Formel.</para>
+    ///
+    /// <para><b>Gelesen:</b> das Original nimmt das ZELLBYTE der Einheit
+    /// (<c>+0x00/+0x01</c>) gegen das ZELLWORT des Flugzeugs
+    /// (<c>+0x00/+0x02</c>) und schneidet die Wurzel ab — <c>_ftol</c>
+    /// C <c>0x4D6C2B</c> / F <c>0x4D67BB</c> setzt <c>or ah,0xC</c>, also
+    /// Rundungsmodus 11 (gegen Null). <b>Keine Feinlage.</b></para>
+    ///
+    /// <para>Gemessen: bei <c>dz 10</c> entscheiden <b>33 von 441 Zellen</b>
+    /// anders als unsere alte Rechnung — der Ring des Originals sind die wahren
+    /// Abstände <c>[3, 11)</c>, unser alter <c>[2.5, 10.5)</c>.</para></summary>
+    private static int FlakAbstand(int dc, int dr, Vector2 flugzeug, Vector2 schuetze)
+    {
+        if (FlakAbstandAlt)
+        {
+            float dxz = (flugzeug.X - schuetze.X) / TileW;
+            float dyz = (flugzeug.Y - schuetze.Y) / TileH;
+            return Mathf.RoundToInt(Mathf.Sqrt(dxz * dxz + dyz * dyz));
+        }
+        return (int)Mathf.Sqrt(dc * dc + dr * dr);      // abgeschnitten, aus Zellen
+    }
+
     private static bool FlakImRing(int alt, int g, int d)
     {
         int dz = Mathf.Abs(alt - g) / FlakHoehenTeiler;
-        if (dz <= 0) return false;
         return d >= dz / 3 && d <= dz;
     }
 
@@ -176,6 +232,13 @@ public partial class MapEntityLayer
                 // weiter, und der Abschusszaehler meldete 12 bei sechs
                 // Fliegern — die Kette zaehlte jeden Nachschuss als Abschuss.
                 if (a.Absturz) continue;                     // uk 100
+                // ⭐ 19.09.2026 — die Liste des Originals ist uk ∉ {0, 2, 4, 100}
+                // (C 0x428405..0x428419 / F 0x4275F5..0x427609). Wir hatten nur
+                // 0 (ueber `Stored`) und 100. **uk 2 und uk 4** fehlten: 4 ist
+                // der STARTVORGANG, 2 ist ungelesen. Ein Flugzeug, das gerade
+                // startet, ist im Original also kein Ziel — bei uns war es
+                // eines. Gegenschalter --flak-uk-alt.
+                if (!FlakUkAlt && (a.Order == 2 || a.Order == 4)) continue;
                 if (a.Owner is < 0 or > 7 || Allied(s.Owner, a.Owner)) continue;
 
                 FlakKegelProben++;
@@ -185,10 +248,24 @@ public partial class MapEntityLayer
                 int dz = Mathf.Abs(a.Alt - g) / FlakHoehenTeiler;
                 FlakDzMin = Mathf.Min(FlakDzMin, dz);
                 FlakDzMax = Mathf.Max(FlakDzMax, dz);
-                if (dz <= 0) { FlakDzNull++; continue; }      // kein Ring, kein Treffer
-                float dxz = (a.Pos.X - s.Pos.X) / TileW;
-                float dyz = (a.Pos.Y - s.Pos.Y) / TileH;
-                int d = Mathf.RoundToInt(Mathf.Sqrt(dxz * dxz + dyz * dyz));
+                // ⚠ Kein Ausstieg bei dz == 0 mehr — siehe FlakImRing. Der
+                // Zaehler bleibt, weil die Zahl interessant ist.
+                if (dz <= 0) FlakDzNull++;
+
+                // ⚠⚠ 19.09.2026 — DER ABSTAND WIRD ABGESCHNITTEN UND AUS
+                // ZELLEN GERECHNET, nicht gerundet und nicht aus der Feinlage.
+                //
+                // Gelesen: das Original nimmt das ZELLBYTE der Einheit
+                // (+0x00/+0x01) gegen das ZELLWORT des Flugzeugs (+0x00/+0x02)
+                // und schneidet die Wurzel ab (`_ftol` C 0x4D6C2B / F 0x4D67BB
+                // setzt `or ah,0xC`, Rundungsmodus 11 = gegen Null).
+                //
+                // Wir rechneten mit RoundToInt auf Bildpunkten samt Feinlage.
+                // Der Unterschied ist NICHT kosmetisch: gemessen entscheiden
+                // bei dz 10 **33 von 441 Zellen anders** — der Ring des
+                // Originals sind die wahren Abstaende [3, 11), unser alter
+                // [2.5, 10.5). Gegenschalter --flak-abstand-alt.
+                int d = FlakAbstand(a.Col - s.Col, a.Row - s.Row, a.Pos, s.Pos);
                 FlakDMin = Mathf.Min(FlakDMin, d);
                 FlakDMax = Mathf.Max(FlakDMax, d);
 
@@ -352,7 +429,8 @@ public partial class MapEntityLayer
 
     private bool _flakProbe;
     private int _flakProbeTakte;
-    private int _flakProbeSchuetzeCol, _flakProbeGelaende;
+    private int _flakProbeSchuetzeCol, _flakProbeSchuetzeRow, _flakProbeGelaende;
+    private Vector2 _flakProbeSchuetzePos;
     private readonly List<(string Titel, int Slot, bool Soll)> _flakProbeFaelle = new();
 
     /// <summary>
@@ -399,6 +477,8 @@ public partial class MapEntityLayer
         s.Reload = 0;
         int g = ElevOf(s.Col, s.Row) * 15;
         _flakProbeSchuetzeCol = s.Col;
+        _flakProbeSchuetzeRow = s.Row;
+        _flakProbeSchuetzePos = s.Pos;
         _flakProbeGelaende = g;
 
         int gegner = -1;
@@ -408,15 +488,34 @@ public partial class MapEntityLayer
         GD.Print($"flak-probe: Flak = Platz {s.Slot} auf ({s.Col},{s.Row}), Gelaende*15 = {g}; " +
                  $"Ziele gehoeren Spieler {gegner}");
 
-        // (Titel, Abstand in Zellen, Hoehe, Soll)
-        var faelle = new (string T, int D, int Alt, bool Soll)[]
+        // (Titel, Spaltenabstand, Zeilenabstand, Hoehe, Soll)
+        //
+        // ⚠⚠ 19.09.2026 — DIE ERSTEN SECHS FAELLE KONNTEN DEN ABSTANDSFEHLER
+        // NICHT SEHEN. Sie liegen alle auf GANZEN Zellabstaenden einer Achse,
+        // und dort geben Runden und Abschneiden dasselbe: die A/B zu
+        // --flak-abstand-alt lieferte zweimal »6 von 6 ok«, und genau das ist
+        // die Falle, gegen die das Do-Not-Repeat vom 20.09. geschrieben ist.
+        //
+        // Der siebte Fall ist SCHRAEG und entscheidet:
+        //     dc 10, dr 4  ->  sqrt(116) = 10.77
+        //     Original  (abgeschnitten): 10  ->  IM Ring   (dz 10, Ring 3..10)
+        //     unser alt (gerundet):      11  ->  NICHT im Ring
+        // Ein Fall, der unter beiden Nullmodellen gleich ausfaellt, prueft
+        // nichts.
+        var faelle = new (string T, int Dc, int Dr, int Alt, bool Soll)[]
         {
-            ("2 Zellen, Hoehe 130", 2, 130, false),
-            ("5 Zellen, Hoehe 130", 5, 130, true),
-            ("9 Zellen, Hoehe 130", 9, 130, true),
-            ("12 Zellen, Hoehe 130", 12, 130, false),
-            ("2 Zellen, Hoehe 39", 2, 39, true),
-            ("senkrecht darueber, Hoehe 130", 0, 130, false),
+            ("2 Zellen, Hoehe 130", 2, 0, 130, false),
+            ("5 Zellen, Hoehe 130", 5, 0, 130, true),
+            ("9 Zellen, Hoehe 130", 9, 0, 130, true),
+            ("12 Zellen, Hoehe 130", 12, 0, 130, false),
+            ("2 Zellen, Hoehe 39", 2, 0, 39, true),
+            ("senkrecht darueber, Hoehe 130", 0, 0, 130, false),
+            // ⭐ der Fall, der das Abschneiden von der Rundung trennt
+            ("schraeg 10/4 = 10.77, Hoehe 130", 10, 4, 130, true),
+            // ⭐ und der Gegenfall zur geloeschten Zeile `dz <= 0`: bei Hoehe
+            // GLEICH dem Gelaende ist dz 0, und dann trifft nur d = 0 — das
+            // Original TRIFFT hier, wir hielten es fuer unverwundbar.
+            ("Bodenhoehe senkrecht darueber (dz 0)", 0, 0, 0, true),
         };
         int slot = 0;
         foreach (var x in _special) slot = Mathf.Max(slot, x.Slot + 1);
@@ -426,8 +525,8 @@ public partial class MapEntityLayer
             {
                 Slot = slot++, Kind = 4, Name = "Probeflieger", TypeName = "Probeflieger",
                 Owner = gegner, Stored = false,
-                Col = s.Col + f.D, Row = s.Row,
-                Pos = s.Pos + new Vector2(f.D * TileW, 0f),
+                Col = s.Col + f.Dc, Row = s.Row + f.Dr,
+                Pos = s.Pos + new Vector2(f.Dc * TileW, f.Dr * TileH),
                 Hp = FlakProbeHuelle, HpMax = FlakProbeHuelle, Defence = 0, Attack = 0,
                 Ammo = 0, AmmoMax = 0, Fuel = 9999, FuelMax = 9999,
                 Alt = f.Alt, Sollhoehe = f.Alt,
@@ -489,7 +588,13 @@ public partial class MapEntityLayer
             var (titel, pslot, soll) = _flakProbeFaelle[k];
             var halt = _flakProbeHalt[k];
             var a = _special.Find(x => x.Slot == pslot);
-            int d = Mathf.RoundToInt(Mathf.Abs(halt.Col - _flakProbeSchuetzeCol));
+            // ⚠ DIESELBE Rechnung wie der Kegel, nicht eine eigene — siehe
+            // FlakAbstand. Hier stand `Abs(Col - SchuetzeCol)`, also allein die
+            // SPALTENdifferenz: ein schraeger Fall war damit gar nicht
+            // pruefbar.
+            int d = FlakAbstand(halt.Col - _flakProbeSchuetzeCol,
+                                halt.Row - _flakProbeSchuetzeRow,
+                                halt.Pos, _flakProbeSchuetzePos);
             bool imRing = FlakImRing(halt.Alt, _flakProbeGelaende, d);
             bool passt = imRing == soll;
             if (passt) ok++;

@@ -3941,6 +3941,8 @@ public partial class MapViewer : Node2D
             else if (a == "--luftbild-check") _luftbildCheck = true;
             else if (a == "--raute-fuer-bildlose") MapEntityLayer.RauteFuerBildlose = true;
             else if (a == "--geisterflugzeuge") Import.CwmExtra.GeisterFlugzeuge = true;
+            else if (a == "--flak-abstand-alt") MapEntityLayer.FlakAbstandAlt = true;
+            else if (a == "--flak-uk-alt") MapEntityLayer.FlakUkAlt = true;
             else if (a == "--zielwahl-check") _zielwahlCheck = true;
             else if (a == "--frachter-aus") Campaign.MissionScript.FrachterAus = true;
             else if (a == "--marktanker-alt") MapEntityLayer.MarktankerAlt = true;
