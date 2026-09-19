@@ -3899,6 +3899,7 @@ public partial class MapViewer : Node2D
             else if (a == "--flak-treffer-aus") MapEntityLayer.FlakTrefferAus = true;
             else if (a == "--flak-schaden-klemme") MapEntityLayer.FlakSchadenKlemme = true;
             else if (a == "--flak-check") _flakCheck = true;
+            else if (a == "--flugzeug-nebel-alt") MapEntityLayer.FlugzeugNebelAlt = true;
             else if (a == "--flak-probe") _flakProbeArg = true;
             else if (a == "--generatorfenster-alt") MapEntityLayer.GeneratorfensterAlt = true;
             else if (a == "--panzerung-neubau-alt") MapEntityLayer.PanzerungNeubauAlt = true;

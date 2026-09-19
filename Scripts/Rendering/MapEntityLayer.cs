@@ -2113,6 +2113,21 @@ public partial class MapEntityLayer : Node2D
     /// Flugzeuge decken gar nichts auf.</summary>
     public static bool NebelOhneFlugzeuge;
 
+    /// <summary>Wie viele Flugzeuge in der Nebelrunde wirklich AUFGEDECKT haben
+    /// — je Durchgang und Betrachter. ⚠ Die Zahl ist der Beleg fuer die
+    /// Behebung vom 20.09.2026: vorher zaehlte sie die ganze Luftflotte,
+    /// jetzt nur die eigenen und verbuendeten.</summary>
+    public static int NebelFlugzeuge;
+
+    /// <summary><c>--flugzeug-nebel-alt</c> — der Stand von vor dem 20.09.2026:
+    /// ein fremdes Flugzeug wird auch im unbeobachteten Gebiet gezeichnet.</summary>
+    public static bool FlugzeugNebelAlt;
+
+    /// <summary>Wie oft ein fremdes Flugzeug wegen des Nebels NICHT gezeichnet
+    /// wurde. ⚠ Zaehlt je Bild, nicht je Flugzeug — die Zahl ist ein Beleg,
+    /// dass die Probe greift, kein Bestand.</summary>
+    public static int FlugzeugImNebelVerborgen;
+
     /// <summary>
     /// <b>Teilt dieser Spieler seine Sicht mit dem Betrachter?</b>
     ///
@@ -2233,9 +2248,31 @@ public partial class MapEntityLayer : Node2D
             foreach (var sp in _special)
             {
                 if (sp.Stored) continue;                       // im Hangar
-                if (sp.Slot is < 0) continue;
-                int shalter = sp.Slot / 1000;
-                if (!DecktAuf(shalter, betrachter)) continue;
+                if (sp.Dead) continue;
+                // ⚠⚠⚠ 20.09.2026 — HIER STAND `sp.Slot / 1000`, UND DAS WAR DER
+                // BESITZER EINES FLUGZEUGS NIE.
+                //
+                // Gemeldet: »außerdem decken feindliche helis für mich die karte
+                // auf«. Genau das tat diese Zeile. Die Rechnung `Platz / 1000`
+                // ist die des BODENS — dort ist der Griff `1000*Spieler + k`
+                // (siehe NaechsterFreierPlatz). Ein Flugzeug liegt aber in
+                // sec19, und sein Platz ist ein LAUFENDER INDEX: der Kauf
+                // vergibt `max(Slot)+1` (SkirmishAi @AiProduceAirStep), die
+                // Karte zaehlt ab 0. `Slot / 1000` ist damit praktisch IMMER 0
+                // — jedes Flugzeug galt dem Nebel als Spieler 0, und fuer den
+                // Menschen deckte folglich die ganze feindliche Luftflotte auf.
+                //
+                // Der Besitzer steht im Satz selbst, bei +0x09, und wir fuehren
+                // ihn als <see cref="Special.Owner"/>. Das Original liest im
+                // Nebelarm @0x420806 ebenfalls den Satz, nicht einen Griff.
+                //
+                // ⚠ Ein eigener Gegenschalter kommt nicht dazu: das Nullmodell
+                // fuer diesen ganzen Arm ist --nebel-ohne-flugzeuge, und ein
+                // Schalter fuer »rechne den Besitzer falsch« waere keine
+                // Gegenprobe, sondern ein zweiter Fehler.
+                if (sp.Owner is < 0 or > 7) continue;
+                if (!DecktAuf(sp.Owner, betrachter)) continue;
+                NebelFlugzeuge++;
                 int sicht = sp.Sight - 1;
                 if (sicht < 0) continue;
                 yield return (sp.Col, sp.Row, sicht, ElevOf(sp.Col, sp.Row));
@@ -37976,8 +38013,18 @@ public partial class MapEntityLayer : Node2D
             if (a.Goal is null) ohneZiel++;
             if (a.Fuel <= 0) ohneSprit++;
         }
+        // ⭐ 20.09.2026 — und wie viele davon fuer den Betrachter AUFDECKEN.
+        // Ohne diese Zahl war nicht zu sehen, dass die feindliche Luftflotte
+        // dem Menschen die Karte aufdeckte (Besitzer aus `Slot / 1000` statt
+        // aus dem Satz). Sie steht je Nebelrunde neu.
+        int eigene = 0;
+        foreach (var a in _special)
+            if (!a.Dead && !a.Stored && a.Owner is >= 0 and <= 7 &&
+                DecktAuf(a.Owner, ViewPlayer)) eigene++;
         return $"luft: {frei} in der Luft, {ohneZiel} davon ohne Ziel, " +
-               $"{ohneSprit} ohne Sprit | {AirDrifted} Geradeausschritte gelaufen";
+               $"{ohneSprit} ohne Sprit | {AirDrifted} Geradeausschritte gelaufen" +
+               $" | decken auf fuer Spieler {ViewPlayer}: {eigene} von {frei}" +
+               (NebelOhneFlugzeuge ? "   ⚠ --nebel-ohne-flugzeuge: keines deckt auf" : "");
     }
 
     /// <summary>Send every airworthy aircraft of a player at the nearest enemy.</summary>
@@ -39374,6 +39421,40 @@ public partial class MapEntityLayer : Node2D
         foreach (var s in _special)
         {
             if (s.Stored || s.Dead) continue;          // inside a hangar
+            // ⭐⭐⭐ 20.09.2026 — EIN FREMDES FLUGZEUG IM UNBEOBACHTETEN GEBIET
+            // WIRD NICHT GEZEICHNET.
+            //
+            // Gemeldet: »ich sehe die im fog of war rumfliegen, was nicht sinn
+            // der sache ist«. Das war der zweite Teil des Nebelfehlers; der
+            // erste (die feindliche Flotte deckte AUF) sass im Nebelarm.
+            //
+            // ⚠ Die Probe sitzt im Original NICHT im Zeichner, sondern eine
+            // Stufe davor, im LISTENBAUER 0x42E340 (F 0x42D510) — wer nicht zu
+            // sehen ist, kommt gar nicht in die Zeichenliste, und damit haengen
+            // Rumpf (0x429900 -> 0x42B7E9) und SCHATTEN (0x42C8C0 -> 0x42D666)
+            // am selben Eintrag. Der Schatten hat also KEINE eigene Probe, und
+            // genau darum steht unsere hier vor beidem:
+            //
+            //   0x42E366  cmp bl, dl                          ; Besitzer == Betrachter?
+            //   0x42E368  je  0x42E381                        ; eigenes -> keine Probe
+            //   0x42E373  cmp byte [ebx+edx+0x678B58], 0      ; sec50[X*256 + Y] == 0?
+            //   0x42E37B  je  0x42E467                        ; nicht beobachtet -> KEIN Eintrag
+            //   0x42E386  uk == 0 -> raus  /  0x42E38E  uk == 2 -> raus
+            //
+            // ⭐ Und die Stufe ist die richtige: sec50 (0x678B58) ist die
+            // TAKT-Sicht, nicht das Gedaechtnis. Ein fremdes Flugzeug ueber
+            // ERKUNDETEM, aber gerade nicht beobachtetem Gelaende ist damit
+            // UNSICHTBAR — ueber dem Saum (Wert 2) dagegen sichtbar. Unser
+            // Watched() ist genau das (`IsWatched` = Watched oder Saum); mit
+            // `IsSeen` waere es das Gedaechtnis und damit falsch.
+            //
+            // ⚠ uk 0 ist bei uns `Stored` (oben), uk 2 (die Landung) fuehren
+            // wir nicht — benannte Luecke.
+            // Lesung berichte/flugzeug-nebel-fable.md §1, Nachpruefung dort.
+            // Gegenschalter --flugzeug-nebel-alt.
+            if (!FlugzeugNebelAlt && s.Owner != ViewPlayer && !Allied(ViewPlayer, s.Owner)
+                && !Watched(s.Col, s.Row))
+            { FlugzeugImNebelVerborgen++; continue; }
             var c = s.Pos;
             var air = c - new Vector2(0, AirShadowDrop);
             // flattened ground shadow, drawn as an explicit ellipse so no
