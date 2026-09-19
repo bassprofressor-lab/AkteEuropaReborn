@@ -1372,22 +1372,30 @@ public partial class MainMenu : Control
         // Briefingfolge zwei Befehle spaeter: »BR 2« gibt bei 0x416BB4 den
         // Zaehler OHNE die +1 weiter, fuer den Briefingtext derselben Mission.
         //
-        // ⭐ DREI UNABHAENGIGE STUETZEN fuer »Film N+1 gehoert zu Mission N«:
-        //   1. das `inc bl` oben;
-        //   2. es gibt **34 numerierte Filme fuer 33 Missionen** (1..34 auf
-        //      beiden CDs), und `movies\34.rpl` steht als FESTES Wort im Code
-        //      (0x4FE8B0) — die 34 ist der Film der letzten Mission;
-        //   3. damit ist `1.rpl` frei, und dafuer gibt es die Marke
-        //      »Play intro 2« (0x4F7584) neben »Play intro«: der Vorspann
-        //      laeuft in zwei Teilen, `intro.rpl` und `1.rpl`.
+        // ⚠⚠ ZWEIMAL WIDERLEGT — 19.09. Die Lesung unten (`inc bl`, also Film
+        // N+1) stimmt als BEFEHL, aber sie beantwortet nicht, welche HANDLUNG in
+        // welcher Datei steckt. Das beantworten seine zwei Beobachtungen, und die
+        // sagen beide dasselbe:
+        //     K17 spielte `17.RPL`  ->  »das ist K18s Video«   => Datei 17 = Film 18
+        //     K20 spielte `21.RPL`  ->  »das ist K22s Video«   => Datei 21 = Film 22
+        // Zwei unabhaengige Punkte, gleiche Verschiebung: **Datei N traegt den
+        // Film von Mission N+1**, also braucht Mission M die Datei M-1.
+        // Das ist ABGELEITET AUS SEINER BEOBACHTUNG, nicht gelesen.
         //
-        // ⚠ Was damit NICHT behauptet wird: welche Handlung in welchem Film
-        // steckt. Seine Zuordnung (»das ist K18s Video«) und diese Lesung zeigen
-        // in dieselbe Richtung — dass wir um eins zurueckhaengen —, aber der
-        // Beleg hier ist der Code, nicht die Handlung.
+        // Nebenprobe, die dafuer spricht: Mission 1 ergibt damit Nummer 0, und
+        // MoviePlayer.Find(<=0) liefert `INTRO.RPL` — der Vorspann steht dann
+        // von selbst vor der ersten Mission, ohne Sonderfall.
         //
-        // Gegenschalter --filmnummer-alt.
-        int film = MoviePlayer.FilmnummerAlt ? m.Index : m.Index + 1;
+        // ⚠ UNGEKLAERT bleibt der Widerspruch zum Code: das `inc bl` bei
+        // 0x4CFDB8 (F: Namensbauer 0x4CFD80) addiert nachweislich eins auf
+        // word[0x539934]. Entweder haelt dieser Zaehler an der Stelle NICHT die
+        // Missionsnummer (der Kampagnen-Automat hat 35 Zustaende fuer 33
+        // Missionen), oder das Original spielt den Film an einer anderen Stelle
+        // des Ablaufs als wir. Solange das nicht gelesen ist, gilt seine
+        // Beobachtung — sie ist die Messung, meine Lesung war die Deutung.
+        //
+        // Gegenschalter --filmnummer-alt gibt die schlichte Nummer m.Index.
+        int film = MoviePlayer.FilmnummerAlt ? m.Index : m.Index - 1;
         if (!_skipBriefing && MoviePlayer.Play(this, film, () => NachDemFilm(m)))
             return;
         NachDemFilm(m);
