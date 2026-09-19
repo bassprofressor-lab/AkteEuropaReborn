@@ -1120,7 +1120,58 @@ public sealed class ContentBuilder
             catch (Exception e) { Say($"{tileset:00}: {e.Message}"); missing++; }
         }
         Say($"{ok} Tilesets geschrieben, {missing} uebersprungen");
+        GeruestSelbsttest(Say);
         return ok > 0 && missing == 0;
+    }
+
+    /// <summary>Die Geruestkacheln eines Bauwerks im Bau — drei Muster
+    /// (249/250/251) zu je 30 Kacheln. Gelesen, nicht gewaehlt.</summary>
+    private const int GeruestKachelVon = 2400, GeruestKachelBis = 2489;
+
+    /// <summary>
+    /// ⭐⭐ 20.09.2026 — <b>DECKT DER ATLAS DIE GERUESTKACHELN AB?</b>
+    ///
+    /// <para>Anlass: gemeldet als »die bauanimation ist auch strange« beim
+    /// Minenbau in K17. Nachgezaehlt hatte <c>tileset_17_tiles.json</c>
+    /// 1534 Kacheln und davon <b>0 von 90</b> der Geruestkacheln 2400..2489 —
+    /// der Bau war sechs Sekunden UNSICHTBAR, und die Zellanimation blinkte
+    /// allein darueber. Der Atlas war vom 11.08. und kannte sie nicht.</para>
+    ///
+    /// <para><b>Warum das ohne Zeile nicht auffaellt:</b> eine fehlende Kachel
+    /// gibt kein Bild und keinen Fehler, sondern NICHTS — und »nichts« sieht im
+    /// Spiel wie ein Zeichenfehler aus, nicht wie ein Datenmangel. Darum zaehlt
+    /// der Ausfuhrlauf sie jetzt selbst mit.</para>
+    ///
+    /// <para>⚠⚠ <b>Das ist ausdruecklich KEIN Bestehenskriterium.</b> Nur 16 der
+    /// 35 Kachelsaetze tragen ueberhaupt Geruestkacheln (09, 10, 11, 13, 17,
+    /// 20..26, 32, 33, 43, 47), 19 tragen keine einzige. Das ist die Wahrheit
+    /// der Daten: das Original zeigt in jenen Missionen ebenfalls kein Geruest.
+    /// Ein Selbsttest, der daraus »FALSCH« machte, waere ein luegender
+    /// Pruefstand. Gemeldet wird die VERTEILUNG, damit ein KUENFTIGER Ausfall
+    /// (ein Satz, der seine 90 verliert) an der Zahl zu sehen ist.</para></summary>
+    private void GeruestSelbsttest(Action<string> say)
+    {
+        string dir = _dst + "/Buildings";
+        if (!Directory.Exists(dir)) { say("Geruestkacheln: kein Atlas — nicht geprueft"); return; }
+        var mit = new List<string>();
+        int ohne = 0, gesamt = 0;
+        foreach (string f in Directory.GetFiles(dir, "tileset_*_tiles.json"))
+        {
+            gesamt++;
+            int n = 0;
+            try
+            {
+                string txt = File.ReadAllText(f);
+                for (int code = GeruestKachelVon; code <= GeruestKachelBis; code++)
+                    if (txt.Contains("\"" + code + "\":")) n++;
+            }
+            catch (Exception) { continue; }
+            string name = Path.GetFileName(f).Replace("tileset_", "").Replace("_tiles.json", "");
+            if (n > 0) mit.Add($"{name}({n})"); else ohne++;
+        }
+        say($"Geruestkacheln {GeruestKachelVon}..{GeruestKachelBis}: {mit.Count} von {gesamt} " +
+            $"Kachelsaetzen tragen welche [{string.Join(", ", mit)}], {ohne} keine. " +
+            "⚠ KEIN Sollwert — 19 Saetze tragen von Haus aus keine");
     }
 
     /// <summary>Nur die Effektbilder aus ANIM.CWA neu schreiben. Nötig, sobald
