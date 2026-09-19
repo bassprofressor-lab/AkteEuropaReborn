@@ -114,7 +114,14 @@ public partial class MapEntityLayer
             return true;
         }
 
-        int art = a.Kind == 2 ? ArtBombe : ArtJaeger;
+        // ⭐ 19.09.2026 — DER BOMBER WIRFT, WAS IM SATZ STEHT (+0x2C), nicht
+        // mehr fest die 47: 45 Gasbombe, 46 Loeschmittel, 47 Bombe. Das
+        // Einschlagbild (schlag_120 / schlag_121 / leer) und der Einschlagklang
+        // (16 / 16 / 400 + rand%6) kommen dann von selbst aus der
+        // Geschosstafel, weil beide je ART daraus gelesen werden — hier ist
+        // nichts nachzuziehen. Simulation/Bombensorten.cs, --bombe-fest-47.
+        int art = a.Kind != 2 ? ArtJaeger
+                : (BombeFest47 || a.Waffenart == 0 ? ArtBombe : a.Waffenart);
         string? flug = FlightKind(art);          // 47 -> flug_220, 49 -> keines
         int tempo = Audio.GameSounds.ProjectileSpeed(art);
         int n = SalvenZahl(a.Kind);

@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Rendering;
+﻿namespace AkteEuropaReborn.Rendering;
 
 using System.Collections.Generic;
 using Godot;
@@ -121,6 +121,19 @@ public partial class MapEntityLayer : Node2D
     private void ZellEinschlag(int si, int c, int r, int schaden, int art)
     {
         if (_nav == null || c < 0 || r < 0 || c >= _nav.Width || r >= _nav.Height) return;
+
+        // ⭐⭐ 19.09.2026 — DAS LOESCHMITTEL (Art 46) IST KEINE WAFFE.
+        // Zasah verlaesst sich @0x40CC15 sofort wieder: es ruft den Loeschtrupp
+        // 0x4CA600(x, y) und ist FERTIG — kein Fussvolk, kein Fahrzeug, kein
+        // Gebaeude, kein Wald. Das steht hier oben und nicht als Sonderfall
+        // weiter unten, weil es genau hier im Original steht.
+        // Simulation/Bombensorten.cs, --bombe-fest-47.
+        if (art == Bombensorten.Loeschmittel && !BombeFest47)
+        {
+            LoeschtruppAus(c, r);
+            BombenSchadenUnterdrueckt++;
+            return;
+        }
         var sch = si >= 0 && si < _entities.Count ? _entities[si] : null;
         bool fragen = art != 7 && art != 12 && sch != null;
 
