@@ -243,6 +243,43 @@ public sealed partial class FlughafenView : Control
                    t, HorizontalAlignment.Left, -1, FontSize, c);
     }
 
+    /// <summary>⭐ Wie <see cref="Text"/>, aber jedes SINNBILD in seiner Farbe
+    /// (<c>]</c> Waffenteil, <c>[</c> Fahrwerkteil, <c>{</c> Spezialteil,
+    /// <c>$</c> Geldsack).
+    ///
+    /// <para>⚠ 19.09.2026 — seine Meldung »warum die ressourcen wieder nur
+    /// einfarbig?«. Er hatte dasselbe am 17.09. für die Leiste oben gemeldet,
+    /// und ich habe es in diesem Fenster wieder eingebaut, indem ich die Zeile
+    /// als gewöhnlichen Text malte. Die Farben kommen aus
+    /// <see cref="BaseWindow.Sinnbildfarbe"/> — EINE Quelle, und die prüft
+    /// <c>--bauliste-check</c> gegen die Palettendatei.</para></summary>
+    private void TextSinn(Font f, int x, int y, string t, Color grund)
+    {
+        float px = x * Scale;
+        foreach (var (stueck, col) in BaseWindow.ZerlegeSinnbilder(t, grund))
+        {
+            DrawString(f, new Vector2(px, y * Scale + f.GetAscent(FontSize)),
+                       stueck, HorizontalAlignment.Left, -1, FontSize, col);
+            px += f.GetStringSize(stueck, HorizontalAlignment.Left, -1, FontSize).X;
+        }
+    }
+
+    /// <summary>Rechtsbündig, mit eingefärbten Sinnbildern.</summary>
+    private void TextRechtsSinn(Font f, int rechts, int y, string t, Color grund)
+    {
+        var teile = BaseWindow.ZerlegeSinnbilder(t, grund);
+        float breite = 0f;
+        foreach (var (stueck, _) in teile)
+            breite += f.GetStringSize(stueck, HorizontalAlignment.Left, -1, FontSize).X;
+        float px = rechts * Scale - breite;
+        foreach (var (stueck, col) in teile)
+        {
+            DrawString(f, new Vector2(px, y * Scale + f.GetAscent(FontSize)),
+                       stueck, HorizontalAlignment.Left, -1, FontSize, col);
+            px += f.GetStringSize(stueck, HorizontalAlignment.Left, -1, FontSize).X;
+        }
+    }
+
     private void Rechteck(int x, int y, int w, int h, Color c)
         => DrawRect(new Rect2(x * Scale, y * Scale, w * Scale, h * Scale), c, true);
 
@@ -309,9 +346,9 @@ public sealed partial class FlughafenView : Control
         // ⚠ Die drei Klammern sind die ZEICHEN des Originals fuer die drei
         // Teilearten: ] Waffe, [ Fahrwerk, { Spezial. Sie stehen so in den
         // Zeichenketten und sind keine Verzierung.
-        TextRechts(font, RechtsX, YWaffe, $"] {s.StockW}", WindowChrome.TextColour);
-        TextRechts(font, RechtsX, YFahrwerk, $"[ {s.StockF}", WindowChrome.TextColour);
-        TextRechts(font, RechtsX, YSpezial, $"{{ {s.StockS}", WindowChrome.TextColour);
+        TextRechtsSinn(font, RechtsX, YWaffe, $"] {s.StockW}", WindowChrome.TextColour);
+        TextRechtsSinn(font, RechtsX, YFahrwerk, $"[ {s.StockF}", WindowChrome.TextColour);
+        TextRechtsSinn(font, RechtsX, YSpezial, $"{{ {s.StockS}", WindowChrome.TextColour);
 
         Text(font, TextX, YPlatz, "Lagerplatz", WindowChrome.TitleColour);
         Text(font, WertX, YPlatz, $"{s.HangarZeilen.Count}/{s.HangarPlaetze}",
@@ -477,7 +514,7 @@ public sealed partial class FlughafenView : Control
             // @0x449D14 prueft nur Teile und Hangarplatz — NIE Geld. Beides zu
             // verlangen hiesse doppelt zahlen (Fehler C12 vom 17.08.2026).
             if (a.KostenW >= 0)
-                TextRechts(font, PreisRechtsX, y,
+                TextRechtsSinn(font, PreisRechtsX, y,
                            $"] {a.KostenW} [ {a.KostenF} {{ {a.KostenS}",
                            a.Bezahlbar ? WindowChrome.TextColour : WindowChrome.AlarmColour);
         }
@@ -509,7 +546,7 @@ public sealed partial class FlughafenView : Control
         }
 
         // Die Bestandszeile unten — dieselben drei Zeichen wie im Lagerreiter.
-        Text(font, BalkenX, BestandY, $"] {s.StockW}  [ {s.StockF}  {{ {s.StockS}",
+        TextSinn(font, BalkenX, BestandY, $"] {s.StockW}  [ {s.StockF}  {{ {s.StockS}",
              WindowChrome.TextColour);
 
         bool geht = _prodWahl < liste.Count && liste[_prodWahl].Bezahlbar;

@@ -154,6 +154,46 @@ public sealed partial class BaseWindow : PanelContainer
     /// <summary>Palettenplatz 254 — gewöhnlicher Text, also auch alle ZIFFERN.</summary>
     public static Color TextFg => RowFg;
 
+    /// <summary>
+    /// ⭐⭐ <b>Die Farbe EINES Sinnbildes</b>, oder null für ein gewöhnliches
+    /// Zeichen.
+    ///
+    /// <para>⚠ 19.09.2026 — <b>diese Naht gibt es, weil ich seine Meldung vom
+    /// 17.09. im neuen Flughafenfenster wieder eingebaut habe:</b> »warum die
+    /// ressourcen wieder nur einfarbig?«. Die vier Sinnbilder sind in FONT.CWD
+    /// keine Klammern, sondern Waffenteil, Fahrwerksteil, Spezialteil und
+    /// Geldsack, und jedes hat SEINE Farbe aus der Palette (153, 150, 124, 84).
+    /// Wer sie als Text in einer Farbe malt, macht sie wieder einfarbig.</para>
+    ///
+    /// <para>Sie steht HIER und nicht in <see cref="WindowChrome"/>, damit es
+    /// bei EINER Quelle bleibt: diese Farben prüft <c>--bauliste-check</c>
+    /// gegen die Palettendatei des Originals.</para>
+    /// </summary>
+    public static Color? Sinnbildfarbe(char c)
+        => c == IconW[0] ? IconWFg
+         : c == IconF[0] ? IconFFg
+         : c == IconS[0] ? IconSFg
+         : c == '$' ? MoneyIconFg
+         : null;
+
+    /// <summary>Zerlegt eine Zeile in Stücke gleicher Farbe — jedes Sinnbild
+    /// ein eigenes Stück. Gegenstück zu <see cref="Sinnbildfarbe"/>.</summary>
+    public static List<(string S, Color C)> ZerlegeSinnbilder(string text, Color grund)
+    {
+        var stueck = new List<(string, Color)>();
+        int i = 0;
+        while (i < text.Length)
+        {
+            if (Sinnbildfarbe(text[i]) is { } sc)
+            { stueck.Add((text[i].ToString(), sc)); i++; continue; }
+            int j = i;
+            while (j < text.Length && Sinnbildfarbe(text[j]) == null) j++;
+            stueck.Add((text[i..j], grund));
+            i = j;
+        }
+        return stueck;
+    }
+
     /// <summary>Für <c>--bauliste-check</c>: jede Farbe der Bauliste mit dem
     /// <b>Palettenplatz</b>, aus dem sie stammt. Der Prüfstand schlägt die Plätze in
     /// <c>Assets/Legacy/DATA/NN.PAL</c> nach und vergleicht — damit hängen unsere Werte

@@ -300,11 +300,20 @@ public static class WindowChrome
         // der Ringkacheln selbst ist und weil derselbe Ton schon den
         // Zustandsbalken fuellt (0x474340, dort gelesen). Gegenschalter
         // --innenrahmen-hohl.
-        if (!InnenrahmenHohl && wTiles > 2 && hTiles > 2)
+        // ⚠⚠ 19.09.2026, ZWEITER ANLAUF — DER GANZE KASTEN, NICHT NUR SEIN
+        // INNERES. Der erste Anlauf fuellte nur (wTiles−2)x(hTiles−2), also die
+        // Flaeche INNERHALB des Rings. Seine Antwort darauf: »der schwarze
+        // hintergrund fuellt immer noch nicht voll aus, z.b. unter produktion,
+        // das gleiche ist auch unter hangar«. Er hat wieder recht: die
+        // Ringkacheln sind DUNKEL, aber nicht schwarz — sie tragen den
+        // Kantenschliff —, und genau ihr Streifen blieb sichtbar anders.
+        // Gefuellt wird jetzt der VOLLE Kasten, und der Ring wird DARUEBER
+        // gemalt: so liegt sein Schliff auf schwarzem Grund und nicht auf
+        // einer hellen Naht.
+        if (!InnenrahmenHohl)
         {
-            ci.DrawRect(new Rect2((x + Cell) * scale, (y + Cell) * scale,
-                                  Cell * (wTiles - 2) * scale,
-                                  Cell * (hTiles - 2) * scale),
+            ci.DrawRect(new Rect2(x * scale, y * scale,
+                                  Cell * wTiles * scale, Cell * hTiles * scale),
                         new Color(0, 0, 0), true);
             InnenFuellungen++;
         }

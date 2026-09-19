@@ -3936,6 +3936,8 @@ public partial class MapViewer : Node2D
             else if (a == "--lieferung-bild") _lieferungBild = true;
             else if (a == "--flughafenfenster-bild") _flughafenfensterBild = true;
             else if (a == "--innenrahmen-hohl") UI.WindowChrome.InnenrahmenHohl = true;
+            else if (a == "--zielwahl-aus") MapEntityLayer.ZielwahlAus = true;
+            else if (a == "--zielwahl-check") _zielwahlCheck = true;
             else if (a == "--frachter-aus") Campaign.MissionScript.FrachterAus = true;
             else if (a == "--marktanker-alt") MapEntityLayer.MarktankerAlt = true;
             else if (a == "--marktfenster-alt") MapEntityLayer.MarktfensterAlt = true;
@@ -5093,6 +5095,7 @@ public partial class MapViewer : Node2D
             // gelaufenen Gefecht ist. Siehe Simulation/Flak.cs.
             FlakAusgeben();
             BombeAusgeben();
+            ZielwahlAusgeben();
             GD.Print(_entities.AbsturzLine());
             GD.Print(_entities.LuftschussLine());
             // ⭐ 20.09.2026 — der Gleisschnitt einer Ruine. ⚠ Nur wenn ueberhaupt
@@ -5307,7 +5310,8 @@ public partial class MapViewer : Node2D
     ///
     /// <para>⚠ Im gewoehnlichen Spiel schweigt sie: ohne <c>--flak-check</c>
     /// passiert hier nichts.</para></summary>
-    private bool _flakGedruckt, _bombeCheck, _bombeGedruckt;
+    private bool _flakGedruckt, _bombeCheck, _bombeGedruckt,
+                 _zielwahlCheck, _zielwahlGedruckt;
 
     private void FlakAusgeben()
     {
@@ -5330,12 +5334,25 @@ public partial class MapViewer : Node2D
             : "bombe-check: keine Bombe geworfen und nicht gedreht — NICHT GEMESSEN");
     }
 
+    /// <summary>⭐ <c>--zielwahl-check</c> — wie die zwei darueber am
+    /// Ausstieg: eine Zielwahl sieht man erst, wenn einer sie benutzt.</summary>
+    private void ZielwahlAusgeben()
+    {
+        if (_zielwahlGedruckt || !_zielwahlCheck) return;
+        _zielwahlGedruckt = true;
+        string zeile = _entities.ZielwahlAuskunft();
+        GD.Print(zeile.Length > 0
+            ? zeile
+            : "zielwahl-check: keine Zielwahl benutzt — NICHT GEMESSEN");
+    }
+
     public override void _ExitTree()
     {
         // ⚠ Nur die Pruefstaende, und nur wenn sie liefen — im gewoehnlichen
         // Spiel schweigt diese Stelle.
         if (_stuckCheck) StuckAusgeben();
         BombeAusgeben();
+        ZielwahlAusgeben();
         // ⭐ 20.09.2026 — und die Flugabwehr, siehe FlakAusgeben. Dieser Weg
         // ist der, den ein GESPIELTER Lauf nimmt: Fenster zu oder zurueck ins
         // Menue (ChangeSceneToFile) landen beide hier.
@@ -6286,7 +6303,18 @@ public partial class MapViewer : Node2D
             // Sichtfenster der Minimap die Kamera aus der Karte heraus — jeder
             // andere Weg (Tasten, rechte Maustaste ziehen, Sprung nach Hause)
             // ruft sie, nur dieser eine tat es nicht.
-            world => { _camera.Position = world; ClampCamera(); },
+            // ⭐⭐ 19.09.2026 — SCHWEBT EINE ZIELWAHL, setzt dieser Klick das
+            // ZIEL und springt NICHT mit der Kamera. Das Original oeffnet dafuer
+            // ein eigenes Kartenfenster (Art 3) an der Maus; bei uns steht die
+            // Uebersicht dauerhaft, und die Lesung hat genau diesen Fall als
+            // Gegenschalter --zielwahl-minimap vorgesehen. Simulation/Zielwahl.cs.
+            world =>
+            {
+                if (_entities.ZielwahlSchwebt
+                    && _entities.CellAt(world) is { } z
+                    && _entities.ZielwahlKlick(z.X, z.Y)) return;
+                _camera.Position = world; ClampCamera();
+            },
             // ⚠ Die UEBERSICHT hat ihre eigene Nebelschicht — im nie
             // erkundeten Gebiet undurchsichtig, damit die Objektebene dort
             // nichts zeigt. Herleitung bei FogTextureUebersicht.
@@ -6452,7 +6480,19 @@ public partial class MapViewer : Node2D
         // ⚠ »Angriff« nimmt hier denselben Weg wie »Starten«, weil die Zielwahl
         // ueber den Kartenschirm gelesen, aber noch nicht gebaut ist. Das ist
         // der Zustand --zielwahl-aus, und der Hinweistext des Knopfes sagt es.
-        _gebaeudeFenster.OnAngriff = () => _entities.LaunchAircraft(_entities.ViewPlayer);
+        // ⭐⭐ 19.09.2026 — »ANGRIFF« SCHALTET DIE ZIELWAHL EIN und startet
+        // nicht mehr blind. Gemeldet: »angriff laesst die einheiten nur ueber
+        // dem flughafen kreisen, aber ich sagte dir ja, das ich mit angriff
+        // einen punkt setzen kann auf der minimap und die da dort hinfliegen«.
+        // Simulation/Zielwahl.cs. Faellt die Zielwahl aus (--zielwahl-aus oder
+        // leerer Hangar), bleibt der alte Weg — sonst haette der Knopf gar
+        // keine Wirkung mehr.
+        _gebaeudeFenster.OnAngriff = () =>
+        {
+            if (!_entities.ZielwahlBeginnen(_entities.Fenstergebaeudeplatz(),
+                                            _gebaeudeFenster.StaffelMarke))
+                _entities.LaunchAircraft(_entities.ViewPlayer);
+        };
         _gebaeudeFenster.OnPatrouille =
             () => _entities.PatrouilleKippen(_entities.Fenstergebaeudeplatz());
         _gebaeudeFenster.OnBombeWechseln =
@@ -7748,6 +7788,16 @@ public partial class MapViewer : Node2D
                         //
                         // ⚠ Die LEERTASTE bleibt unberuehrt: sie springt bei uns
                         // zur Auswahl, und das ist gewachsene Bedienung.
+                        // ⭐ Der Klick auf der HAUPTKARTE gilt genauso — das
+                        // ist Original (Zustand 7 -> 0x437994[7]). Er kommt VOR
+                        // allem anderen, sonst raeumt die Karte die Anwahl.
+                        if (_entities.ZielwahlSchwebt
+                            && _entities.CellAt(GetGlobalMousePosition()) is { } zw
+                            && _entities.ZielwahlKlick(zw.X, zw.Y))
+                        {
+                            _leftDown = false;
+                            break;
+                        }
                         if (mb.DoubleClick && _entities.RouteWahlModus == 0
                             && _entities.PlacementMode == 0)
                         {
@@ -7810,6 +7860,14 @@ public partial class MapViewer : Node2D
                     // the ground move, with Shift appended to what the unit
                     // already has. Holding and DRAGGING pans the map instead:
                     // the middle button alone is no use on a laptop trackpad.
+                    // ⭐ 19.09.2026 — ein Rechtsklick bricht zuerst eine
+                    // schwebende ZIELWAHL ab. Ohne diesen Ausweg frisst sie
+                    // jeden Kartenklick, bis einer zufaellig trifft.
+                    if (mb.Pressed && _entities.ZielwahlSchwebt)
+                    {
+                        _entities.ZielwahlAbbrechen();
+                        break;
+                    }
                     if (mb.Pressed)
                     {
                         _rightDown = true;
@@ -8131,6 +8189,14 @@ public partial class MapViewer : Node2D
                     // Esc drueckt, will den Bauauftrag los und nicht das Spiel
                     // anhalten — und haette sonst keinen Weg zurueck ausser
                     // einem Klick, der etwas baut.
+                    // ⭐ 19.09.2026 — und noch davor die ZIELWAHL, aus demselben
+                    // Grund.
+                    if (_entities.ZielwahlSchwebt)
+                    {
+                        _entities.ZielwahlAbbrechen();
+                        UpdateUnitOrderBar();
+                        return;
+                    }
                     if (_entities.PlacementMode != 0)
                     {
                         _entities.CancelPlacement();
@@ -8420,7 +8486,14 @@ public partial class MapViewer : Node2D
         // ⭐ 31.08.2026 — STRG MACHT DEN ANGRIFFSZEIGER, wie im Original
         // (@0x43201A: Strg gehalten UND Auswahl nicht leer -> Zeigerart 2,
         // OHNE jede Pruefung des Ziels). Siehe Simulation/Bodenangriff.cs.
-        var hint = Input.IsKeyPressed(Key.Ctrl) && _entities.HasSelection
+        // ⭐ 19.09.2026 — SOLANGE EINE ZIELWAHL SCHWEBT, steht das
+        // ANGRIFFSKREUZ, egal was unter dem Zeiger liegt. So macht es das
+        // Original im Zielwahl-Modus des Kartenschirms auch, und ohne dieses
+        // Zeichen sieht der Spieler nicht, dass sein naechster Klick ein Ziel
+        // setzt und keine Einheit waehlt. Simulation/Zielwahl.cs.
+        var hint = _entities.ZielwahlSchwebt
+                 ? MapEntityLayer.Hint.Enemy
+                 : Input.IsKeyPressed(Key.Ctrl) && _entities.HasSelection
                  ? MapEntityLayer.Hint.Enemy
                  : _entities.CursorHintAt(mapPos);
         if (UI.GameCursors.Available)

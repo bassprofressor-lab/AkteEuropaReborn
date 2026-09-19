@@ -459,6 +459,11 @@ public sealed partial class BuildingWindow : PanelContainer
     /// <summary>Welche Hangarzeile gewählt ist (<c>+0x16</c> − 1000).</summary>
     private int _hangarWahl;
 
+    /// <summary>Die Staffelmarke des Fensters, wie sie »Angriff« und »Bombe
+    /// wechseln« brauchen — <c>0xFF</c> = keine, dann gilt der ganze
+    /// Hangar.</summary>
+    public int StaffelMarke => _staffelWahl;
+
     /// <summary>»Gruppieren« — der Halter gibt die benutzten Staffelnummern,
     /// wir drehen durch sie hindurch. Rückgabe: die neue Marke.</summary>
     public System.Func<int, int>? OnStaffelWeiter;
