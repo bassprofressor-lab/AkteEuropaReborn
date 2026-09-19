@@ -3907,6 +3907,12 @@ public partial class MapViewer : Node2D
             else if (a == "--bautuer-offen") MapEntityLayer.BautuerOffen = true;
             else if (a == "--luftschuss-alt") MapEntityLayer.LuftschussAlt = true;
             else if (a == "--heli-strahl-aus") MapEntityLayer.HeliStrahlAus = true;
+            // ⭐ 19.09.2026 — die drei Bombensorten, Simulation/Bombensorten.cs
+            else if (a == "--bombe-fest-47") MapEntityLayer.BombeFest47 = true;
+            else if (a == "--bombenetikett-kaputt") MapEntityLayer.BombenetikettKaputt = true;
+            else if (a == "--bombe-check") _bombeCheck = true;
+            else if (a == "--staffel-aus") MapEntityLayer.StaffelAus = true;
+            else if (a == "--flughafenfenster-alt") UI.BuildingWindow.FlughafenfensterAlt = true;
             else if (a == "--luftnachladen-alt") MapEntityLayer.LuftnachladenAlt = true;
             else if (a == "--ruine-ohne-gleisschnitt")
                 MapEntityLayer.RuineOhneGleisschnitt = true;
@@ -5028,6 +5034,7 @@ public partial class MapViewer : Node2D
             // Sofort-Pruefstand, weil die interessante Zahl die aus einem
             // gelaufenen Gefecht ist. Siehe Simulation/Flak.cs.
             FlakAusgeben();
+            BombeAusgeben();
             GD.Print(_entities.AbsturzLine());
             GD.Print(_entities.LuftschussLine());
             // ⭐ 20.09.2026 — der Gleisschnitt einer Ruine. ⚠ Nur wenn ueberhaupt
@@ -5242,7 +5249,7 @@ public partial class MapViewer : Node2D
     ///
     /// <para>⚠ Im gewoehnlichen Spiel schweigt sie: ohne <c>--flak-check</c>
     /// passiert hier nichts.</para></summary>
-    private bool _flakGedruckt;
+    private bool _flakGedruckt, _bombeCheck, _bombeGedruckt;
 
     private void FlakAusgeben()
     {
@@ -5251,11 +5258,26 @@ public partial class MapViewer : Node2D
         GD.Print(_entities.FlakCheckLine());
     }
 
+    /// <summary>⭐ Wie <see cref="FlakAusgeben"/>, und aus demselben Grund am
+    /// Ausstieg: die Bombensorten sieht man erst, wenn einer geworfen hat, und
+    /// das passiert in einem GESPIELTEN Lauf, nicht in zwoelf kopflosen
+    /// Takten. <c>--bombe-check</c>.</summary>
+    private void BombeAusgeben()
+    {
+        if (_bombeGedruckt || !_bombeCheck) return;
+        _bombeGedruckt = true;
+        string zeile = _entities.BombeAuskunft();
+        GD.Print(zeile.Length > 0
+            ? zeile
+            : "bombe-check: keine Bombe geworfen und nicht gedreht — NICHT GEMESSEN");
+    }
+
     public override void _ExitTree()
     {
         // ⚠ Nur die Pruefstaende, und nur wenn sie liefen — im gewoehnlichen
         // Spiel schweigt diese Stelle.
         if (_stuckCheck) StuckAusgeben();
+        BombeAusgeben();
         // ⭐ 20.09.2026 — und die Flugabwehr, siehe FlakAusgeben. Dieser Weg
         // ist der, den ein GESPIELTER Lauf nimmt: Fenster zu oder zurueck ins
         // Menue (ChangeSceneToFile) landen beide hier.
@@ -6368,6 +6390,18 @@ public partial class MapViewer : Node2D
         // ⭐ 12.09.2026, bug-211: derselbe Ruf, den unser Baufenster und die
         // Taste Y benutzen — das Fenster bekommt keinen eigenen Weg.
         _gebaeudeFenster.OnFlugzeugStart = () => _entities.LaunchAircraft(_entities.ViewPlayer);
+        // ⭐⭐ 19.09.2026 — die Knoepfe der Fensterart 5, siehe UI/FlughafenView.cs.
+        // ⚠ »Angriff« nimmt hier denselben Weg wie »Starten«, weil die Zielwahl
+        // ueber den Kartenschirm gelesen, aber noch nicht gebaut ist. Das ist
+        // der Zustand --zielwahl-aus, und der Hinweistext des Knopfes sagt es.
+        _gebaeudeFenster.OnAngriff = () => _entities.LaunchAircraft(_entities.ViewPlayer);
+        _gebaeudeFenster.OnPatrouille =
+            () => _entities.PatrouilleKippen(_entities.Fenstergebaeudeplatz());
+        _gebaeudeFenster.OnBombeWechseln =
+            platz => _entities.BombeWechseln(platz, _entities.Fenstergebaeudeplatz());
+        _gebaeudeFenster.OnStaffelWeiter =
+            marke => _entities.StaffelWeiter(_entities.Fenstergebaeudeplatz(), marke);
+        _gebaeudeFenster.OnStaffelUmschalten = _entities.StaffelUmschalten;
         // ⭐ 13.09.2026: »Aussenden« im Depotfenster (Befehl 504, @0x44C083).
         _gebaeudeFenster.OnDepotAussenden = _entities.DepotAussenden;
         // ⭐ 13.09.2026: die vier Knöpfe des Fabrikfensters (Klickarm 0x44ACF1),

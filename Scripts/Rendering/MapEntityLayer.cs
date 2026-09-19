@@ -463,6 +463,18 @@ public partial class MapEntityLayer : Node2D
         public Vector2I UnloadCell;
         public List<int>? Hangar;           // sec19 slots parked here (Flughafen)
         public int HangarSize;              // sec27 +0x03, +2 per Erweiterung
+
+        /// <summary>⭐ 19.09.2026 — <b>DIE PATROUILLEFLAGGE DES FLUGHAFENS</b>,
+        /// im Original das Gebäudebyte <b><c>+0x43</c></b>: Befehl 537 (Arm
+        /// <c>0x4C3D89</c>) setzt es auf <c>1 − +0x43</c>, und der Knopf trägt
+        /// danach das Etikett »Patrouille AN« bzw. »AUS«.
+        ///
+        /// <para>⚠ <b>Was der Flugtakt mit dem Byte tut, ist UNGELESEN.</b>
+        /// Gelesen sind nur der Knopf, der Befehl und das Kippen. Die WIRKUNG
+        /// bleibt darum unsere <c>AirPatrol</c> — die Flagge ist bis auf
+        /// Weiteres nur ein Schalter für die ANZEIGE, und das steht hier, damit
+        /// sie später nicht als gelesene Mechanik durchgeht.</para></summary>
+        public bool Patrouille;
         public int Shipyard = -1;           // Hafen (typ 11): the Schiffswerft
                                             // (typ 16) sec29 pairs it with
         // ---- being taken (see Simulation/Capture.cs for the whole reading) ----
@@ -1424,8 +1436,60 @@ public partial class MapEntityLayer : Node2D
         /// noch ungelesen.</summary>
         public int Sollhoehe;
 
+        /// <summary>
+        /// ⭐ 19.09.2026 — <b>DIE STAFFEL</b>, Satzfeld <b>+0x26</b> (absolut
+        /// <c>0x6DDF96</c>). <c>0xFF</c> = keine.
+        ///
+        /// <para>Das ist die Nummer, die der Flughafenknopf <b>»Gruppieren«</b>
+        /// (Taste 8, Hilfe #15) vergibt. Sie ist <b>keine eigene Einrichtung</b>:
+        /// beim Beitritt baut das Original die <b>sec81-Spielergruppe</b> dieser
+        /// Nummer neu (<c>0x439170</c> schreibt ihr den Namen
+        /// <c>'Airplanes'</c>), mit allen Flugzeugen dieses Flughafens als
+        /// Griffe <c>20000 + Platz</c>. Es sind also dieselben zehn Gruppen, die
+        /// der Spieler auch am Boden hat — nicht die KI-Gruppen aus sec60/68.</para>
+        ///
+        /// <para>Wozu sie dient: <b>»Angriff« und »Bombe wechseln« wirken
+        /// staffelweit</b>, die Handsteuerung nicht. Der Zeichner malt sie als
+        /// Plakette <c>0xAA + n</c> vor die Hangarzeile und vor das Wort
+        /// »Gruppieren«.</para>
+        ///
+        /// <para>Vollerhebung der Schreiber (<c>fieldwr.py 0x6DDF96</c>): zwei
+        /// feste Schreiber und einer über Zeiger, elf Leser — der Knopf ist
+        /// der einzige Weg, auf dem ein Spieler sie ändert.</para></summary>
+        public int Staffel = 0xFF;
+
+        /// <summary>
+        /// ⭐⭐ 19.09.2026 — <b>DIE BOMBENSORTE</b>, Satzfeld <b>+0x2C</b>
+        /// (absolut <c>0x6DCFFC</c> im Wechsler): <b>45</b> Gasbombe,
+        /// <b>46</b> Löschmittel, <b>47</b> Bombe. 0 = keine (kein Bomber).
+        ///
+        /// <para>Der Knopf <b>»Bombe wechseln«</b> (Taste 6, Befehl 534, Arm
+        /// <c>0x4C3D32</c> → Wechsler <c>0x4513F0</c>, F <c>0x4500A0</c>) dreht
+        /// <b>45 → 46 → 47 → 45</b>. ⚠ Bei gesetzter Staffel dreht er
+        /// <b>nicht</b> die gewählte Zeile, sondern <b>jeden Bomber der
+        /// Staffel</b> (@0x45144F).</para>
+        ///
+        /// <para><b>Nullmodell aus den Daten:</b> in sec19 aller 23
+        /// Kampagnendateien des Projekts steht <b>ein</b> vorgesetztes Flugzeug
+        /// und <b>kein Bomber</b>. Die Sorten 45 und 46 gibt es also
+        /// ausschliesslich über diesen Knopf — die Bombensorte ist eine
+        /// Spielerentscheidung und kein Datenwert. Wer sie aus einer Datei
+        /// erwartet, sucht umsonst.</para>
+        ///
+        /// <para>⚠ Ein Fehler DES ORIGINALS, in beiden Bauten: das Etikett
+        /// unter dem Flugzeugbild (@0x466690) vergleicht <c>+0x2C</c> mit
+        /// <b>0/1/2</b> statt 45/46/47 und zeichnet deshalb immer den Text, der
+        /// noch im Puffer steht. Nur die HANGARZEILE (@0x465CE6) vergleicht
+        /// richtig gegen 0x2D/0x2E/0x2F. Wir zeichnen beide richtig — das ist
+        /// eine bewusste Abweichung, siehe <c>--bombenetikett-kaputt</c>.</para></summary>
+        public int Waffenart;
+
         public bool Flying => !Stored && !Dead;
         public bool Armed => Attack > 0 && AmmoMax > 0;
+
+        /// <summary>Ein BOMBER — Vorlagenart 2. Nur er trägt eine Bombensorte
+        /// und nur für ihn zeigt das Original »Bombe wechseln«.</summary>
+        public bool IstBomber => Kind == 2;
     }
 
     /// <summary>Der Name eines Flugzeug-Kinds — aus der Vorlagentabelle
@@ -13109,6 +13173,15 @@ public partial class MapEntityLayer : Node2D
             else if (!ZellEinschlagAlt && CellAt(p.Aim) is { } zeZelle)
                 ZellEinschlag(p.Shooter, Mathf.RoundToInt(zeZelle.X), Mathf.RoundToInt(zeZelle.Y),
                               p.Damage, p.Art);
+
+            // ⭐ 19.09.2026 — 0x4554F0, die NEBENWIRKUNG des Aufschlags. Sie
+            // haengt an BEIDEN Aufschlagwegen des Originals (0x452F92,
+            // 0x452FED) und kommt NACH Einschlagbild und Klang — darum steht
+            // sie hier unten. Gebaut ist nur der Arm der Gasbombe;
+            // Simulation/Bombensorten.cs sagt, was daran ungelesen ist.
+            if (CellAt(p.Aim) is { } nwZelle)
+                BombenNebenwirkung(p.Art, Mathf.RoundToInt(nwZelle.X),
+                                   Mathf.RoundToInt(nwZelle.Y), 0, 0);
         }
     }
 
@@ -18571,6 +18644,24 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Das angewaehlte Gebaeude, wenn es eines der drei ist und dem
     /// Betrachter gehoert. ⚠ Eigenes Gebaeude: das Original zeigt diese
     /// Fenster nur fuer eigene Bauten — sie enthalten Knoepfe.</summary>
+    /// <summary>Der PLATZ des Gebäudes, an dem das Fenster hängt — das, was
+    /// die Befehle 534 und 537 als <c>+0x08</c> tragen (im Original die
+    /// sec27-Nummer).
+    ///
+    /// <para>⚠⚠ Das ist <c>Entity.Slot</c> und <b>nicht</b> der Listenplatz in
+    /// <c>_entities</c>. Genau daran ist diese Stelle am 19.09.2026 schon
+    /// einmal falsch gebaut worden: <c>Special.HomeSlot</c> vergleicht überall
+    /// gegen <c>Slot</c> (siehe <c>_entities.Find(x =&gt; x.Slot ==
+    /// a.HomeSlot)</c>), und mit dem Listenplatz hätte die Staffelschleife
+    /// niemals eine Maschine gefunden — sie wäre stumm leer geblieben und
+    /// hätte wie ein Fenster ohne Hangar ausgesehen.</para></summary>
+    public int Fenstergebaeudeplatz() => Fenstergebaeude()?.Slot ?? -1;
+
+    /// <summary>Ein Gebäude über seinen <c>Slot</c> — die Kennung, mit der
+    /// Flugzeuge ihren Flughafen merken.</summary>
+    private Entity? GebaeudeMitSlot(int slot)
+        => slot < 0 ? null : _entities.Find(x => x.IsBuilding && x.Slot == slot && !x.Dead);
+
     private Entity? Fenstergebaeude()
     {
         if (_selected < 0 || _selected >= _entities.Count) return null;
@@ -18619,6 +18710,7 @@ public partial class MapEntityLayer : Node2D
         if (e.Hangar != null)
             foreach (int slot in e.Hangar)
                 st.Hangar.Add($"Flugzeug {slot}");
+        if (e.BType == 9) FuelleHangar(e, st);
         if (IsSupplyDepot(e)) FuelleAngebot(e, st);
         if (e.BType == 9) FuelleFlughafenAngebot(e, st);
         if (e.BType == 5) FuelleDepot(e, st);
@@ -18632,6 +18724,59 @@ public partial class MapEntityLayer : Node2D
             st.StromBedarf = pw.Need;
         }
         return st;
+    }
+
+    /// <summary>
+    /// <b>DIE HANGARZEILEN des Flughafenfensters</b> (Zeichner @0x465B11,
+    /// F @0x46471F) — 19.09.2026.
+    ///
+    /// <para>⚠⚠ <b>NUR DIE BELEGTEN PLAETZE.</b> Das Original laeuft die
+    /// Stellplaetze <c>F+0x0B+k</c> bis zum ersten <c>0xFF</c> und zeichnet
+    /// keine leere Zeile. Unser altes Fenster schrieb dort »1. —«, und das
+    /// sah aus wie eine Aussage ueber einen Platz, den es gar nicht
+    /// zeichnet.</para>
+    ///
+    /// <para>⚠ Der Flughafen traegt bei uns <c>+0x43</c> nicht; die
+    /// Patrouilleflagge haengt darum an unserem <c>AirPatrol</c>-Zustand, und
+    /// das ist als SETZUNG in FlughafenView vermerkt.</para>
+    /// </summary>
+    private void FuelleHangar(Entity e, UI.BuildingWindow.Stand st)
+    {
+        st.Patrouille = AirPatrolAn(e);
+        if (e.Hangar == null) return;
+        foreach (int slot in e.Hangar)
+        {
+            var a = FlugzeugAufPlatz(slot);
+            if (a == null) continue;
+            st.HangarZeilen.Add(new UI.BuildingWindow.HangarZeile
+            {
+                Platz = a.Slot,
+                Name = a.Name.Length > 0 ? a.Name : a.KindName,
+                Hp = a.Hp, HpMax = a.HpMax,
+                Staffel = a.Staffel,
+                Bombe = a.Waffenart,
+                Bomber = a.IstBomber,
+                Angriff = a.Attack, Verteidigung = a.Defence,
+                Tempo = a.Speed, Sicht = a.Sight,
+                Bild = UI.PortraitBank.PictureOfAircraft(a.Kind),
+            });
+        }
+    }
+
+    /// <summary>Steht dieser Flughafen auf Patrouille? ⚠ Das Original hat
+    /// dafuer das Gebaeudebyte <c>+0x43</c> (Befehl 537 kippt es); bei uns ist
+    /// es unser eigener <c>AirPatrol</c>-Zustand, weil die WIRKUNG des Bytes im
+    /// Flugtakt ungelesen ist.</summary>
+    private static bool AirPatrolAn(Entity e) => e.Patrouille;
+
+    /// <summary><b>Befehl 537</b> — der Knopf »Patrouille AN/AUS« kippt das
+    /// Byte (@0x4C3D89: <c>+0x43 := 1 − +0x43</c>). Mehr tut der Befehl im
+    /// Original auch nicht; wer hier eine Wirkung einbaut, baut sie frei.</summary>
+    public void PatrouilleKippen(int gebaeude)
+    {
+        var e = GebaeudeMitSlot(gebaeude);
+        if (e == null || e.BType != 9) return;
+        e.Patrouille = !e.Patrouille;
     }
 
     /// <summary>
@@ -18669,6 +18814,13 @@ public partial class MapEntityLayer : Node2D
             {
                 Name = d.Name,
                 PreisText = $"Teile : W {d.CostW}  F {d.CostF}  S {d.CostS}",
+                // ⭐ 19.09.2026 — die drei Teilearten EINZELN, weil das
+                // Original sie einzeln rechtsbuendig an x = 222 schreibt
+                // (] Waffe, [ Fahrwerk, { Spezial).
+                KostenW = d.CostW, KostenF = d.CostF, KostenS = d.CostS,
+                Angriff = d.Attack, Verteidigung = d.Defence,
+                Tempo = d.Speed, Sicht = d.Sight,
+                Bild = UI.PortraitBank.PictureOfAircraft(d.Kind),
                 Bezahlbar = !hangarVoll
                          && d.CostW <= e.StockW && d.CostF <= e.StockF && d.CostS <= e.StockS,
                 PreisQuelle = hangarVoll
@@ -22944,6 +23096,10 @@ public partial class MapEntityLayer : Node2D
             Payload = d.Payload, Airframe = d.Airframe,
             Attack = d.Attack, Defence = d.Defence, Sight = d.Sight,
             Cargo = SupplyCargoFull,
+            // ⭐ 19.09.2026 — ein BOMBER kommt mit der normalen Bombe aus dem
+            // Werk: `spawn_aircraft` setzt +0x2C auf 47 (nur fuer Art 2). 45
+            // und 46 gibt es ausschliesslich ueber den Knopf »Bombe wechseln«.
+            Waffenart = d.Kind == 2 ? Bombensorten.Normal : 0,
         };
         _special.Add(a);
         if (e.Owner is >= 0 and <= 7) _builtCount[e.Owner]++;   // "Gebaute Einheiten"

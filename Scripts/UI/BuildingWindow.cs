@@ -27,8 +27,9 @@ using Godot;
 /// »Produktion« (4,40,180), dazu »Status«, »Teile gelagert«, »Lagerplatz«,
 /// »Erweiterungskosten«, »Kontostand« und die Knöpfe »Verbessern« (5,185,20),
 /// »Reparieren« (5,185,240), »Angriff«, »Patrouille AN«/»AUS«,
-/// »Handsteuerung«, »Bombe wechseln«, »Recycle«,
-/// »Produzieren«.</description></item>
+/// »Handsteuerung«, »Bombe wechseln«, »Recycle«, »Produzieren« und
+/// <b>» Gruppieren«</b> (<c>0x5017F8</c>, am 19.09.2026 nachgetragen — es
+/// fehlte hier, und deshalb fehlte es auch im Fenster).</description></item>
 /// <item><term>Art 18, <c>0x474220</c>, 2808 B</term><description>»Terranium-
 /// Mine«, »Energie :«, »Strom :«, »Rohstoffvorkommen:«, »komplett abgebaut«,
 /// »Status : angehalten«, Knöpfe »Ausbau« (5,150,20), »Verbessern«
@@ -195,6 +196,60 @@ public sealed partial class BuildingWindow : PanelContainer
         /// Original. ⚠ Sie steht im Hinweistext des Knopfes, damit ein
         /// Rückfallwert nicht wie ein gelesener aussieht.</summary>
         public string PreisQuelle = "";
+
+        /// <summary>⭐ 19.09.2026 — die drei TEILEARTEN einzeln, für den
+        /// Produktionsreiter des Flughafens: das Original schreibt sie
+        /// rechtsbündig an x = 222 als <c>]</c>Waffe <c>[</c>Fahrwerk
+        /// <c>{</c>Spezial (Entwurf <c>+0x1F/+0x20/+0x21</c>). −1 = nicht
+        /// gefüllt, dann bleibt <see cref="PreisText"/> der Weg.</summary>
+        public int KostenW = -1, KostenF = -1, KostenS = -1;
+
+        /// <summary>Die Einzelheiten rechts (265, 145…220) — Energie
+        /// <c>+0x23</c>, Ausrüstung <c>+0x24/+0x25</c>, A/V
+        /// <c>+0x26/+0x27</c>, Geschwindigkeit <c>+0x22</c>, Sicht
+        /// <c>+0x28</c>. −1 bzw. leer heisst »zeigt das Original hier
+        /// nicht«.</summary>
+        public int Energie = -1, Angriff = -1, Verteidigung = -1, Tempo = -1, Sicht = -1;
+        public string Ausruestung1 = "", Ausruestung2 = "";
+        public int Bild = -1;
+    }
+
+    /// <summary>
+    /// <b>Eine Zeile der HANGARLISTE</b> — Fensterart 5, Zeichner @0x465B11
+    /// (F @0x46471F), zehn Zeilen à 15 px ab y = 100.
+    ///
+    /// <para>Alle Felder sind aus dem Flugzeugsatz gelesen: Name
+    /// <c>+0x3B</c>, Staffel <c>+0x26</c>, Bombensorte <c>+0x2C</c>, Zustand
+    /// für den Balken rechts, Ausrüstung, A/V, Geschwindigkeit und Sicht für
+    /// die Einzelheiten bei x = 265.</para>
+    /// </summary>
+    public sealed class HangarZeile
+    {
+        /// <summary>Der sec19-Platz — was Befehl 534 und 502 als
+        /// <c>+0x0A</c> tragen.</summary>
+        public int Platz;
+
+        public string Name = "";
+        public int Hp, HpMax;
+
+        /// <summary>Die Staffel, <c>0xFF</c> = keine. Der Zeichner malt sie
+        /// als Plakette <c>0xAA + n</c> bei x = 32.</summary>
+        public int Staffel = 0xFF;
+
+        /// <summary>Die Bombensorte 45/46/47, 0 wenn es kein Bomber ist.
+        /// Siehe <see cref="Rendering.Bombensorten"/>.</summary>
+        public int Bombe;
+
+        /// <summary>Ein Bomber (Vorlagenart 2) — nur für ihn zeigt das
+        /// Original »Bombe wechseln«.</summary>
+        public bool Bomber;
+
+        public string Ausruestung1 = "", Ausruestung2 = "";
+        public int Angriff = -1, Verteidigung = -1, Tempo = -1, Sicht = -1;
+
+        /// <summary>Der Bildindex für den 60×60-Kasten bei (280,80) —
+        /// <see cref="PortraitBank.PictureOfAircraft"/>. −1 = kein Bild.</summary>
+        public int Bild = -1;
     }
 
     /// <summary>Was das Fenster über das Gebäude wissen muss. Ein einziger
@@ -211,6 +266,39 @@ public sealed partial class BuildingWindow : PanelContainer
         public bool Laeuft;                          // Mine: Zustand aktiv?
         public List<string> Hangar = new();          // nur Flughafen
         public int HangarPlaetze;
+
+        /// <summary>⭐ 19.09.2026 — <b>DIE HANGARZEILEN des Originals</b>, mit
+        /// allem, was der Zeichner @0x465B11 in eine Zeile setzt. Die Liste
+        /// <see cref="Hangar"/> darüber bleibt, weil das alte Fenster sie
+        /// benutzt (<c>--flughafenfenster-alt</c>).
+        ///
+        /// <para>⚠ <b>Es sind nur die BELEGTEN Plätze.</b> Das Original
+        /// zeichnet leere Plätze NICHT (Schleife bis zum ersten <c>0xFF</c>) —
+        /// anders als unser altes Fenster, das »1. —« schrieb. Das war keine
+        /// Kleinigkeit: ein leerer Platz sah dort wie eine Aussage aus.</para></summary>
+        public List<HangarZeile> HangarZeilen = new();
+
+        /// <summary>Welche Hangarzeile gewählt ist (Fenster <c>+0x16</c> minus
+        /// 1000). ⚠ Das Original hat <b>immer</b> eine gewählt, solange
+        /// überhaupt eine Maschine steht — es gibt keinen Zustand »nichts
+        /// gewählt«.</summary>
+        public int HangarWahl;
+
+        /// <summary>Die Staffelmarke des FENSTERS (<c>+0x1A</c>), die der Knopf
+        /// »Gruppieren« durchdreht — <b>nicht</b> die Staffel einer Maschine.
+        /// <c>0xFF</c> = keine.</summary>
+        public int StaffelWahl = 0xFF;
+
+        /// <summary>Welcher Reiter offen ist: 0 Lager, 1 Hangar, 2 Produktion.
+        /// Das Fenster ist je Reiter unterschiedlich HOCH (240 / 340 / 320) —
+        /// so setzt es der Zeichner @0x465084/97/AA.</summary>
+        public int Reiter;
+
+        /// <summary>Ob dieser Flughafen auf Patrouille steht — Gebäude
+        /// <c>+0x43</c>, das Byte, das Befehl 537 umschaltet. ⚠ Was der
+        /// Flugtakt damit tut, ist UNGELESEN; das Etikett AN/AUS ist es
+        /// nicht.</summary>
+        public bool Patrouille;
 
         /// <summary>Was der Nachschubposten anbietet — je Angebot eine Spalte.
         /// Bei den anderen drei Fenstern leer.</summary>
@@ -343,6 +431,53 @@ public sealed partial class BuildingWindow : PanelContainer
     /// unser eigenbau«. Siehe <see cref="MineView"/>.</summary>
     private MineView? _mine;
 
+    /// <summary>⭐⭐ Fensterart 5 mit den Möbeln des Originals — auf seine
+    /// Meldung vom 19.09.2026: »wenn ich auf den flughafen anwähle kommt
+    /// irgendein baue von uns, statt das originale«. Siehe
+    /// <see cref="FlughafenView"/>.</summary>
+    private FlughafenView? _flughafen;
+
+    /// <summary><c>--flughafenfenster-alt</c> — der Stand vor dem 19.09.2026:
+    /// der Flughafen bekommt wieder unsere Godot-Möbel.</summary>
+    public static bool FlughafenfensterAlt;
+
+    /// <summary><b>Zeichnet der Flughafen gerade mit den Kacheln des
+    /// Originals?</b> ⚠ Ohne diese Auskunft wäre »gebaut« eine Behauptung —
+    /// dieselbe Falle wie bei <see cref="ZeigtOriginalMine"/>.</summary>
+    public bool ZeigtOriginalFlughafen { get; private set; }
+
+    /// <summary>Welcher Reiter des Flughafens offen ist. ⚠ Er liegt HIER und
+    /// nicht im Zeichner: das Fenster wird bei jedem <c>Refresh</c> neu
+    /// befüllt, und ein Reiter im Zeichner wäre bei jedem Takt wieder auf
+    /// »Lager« gesprungen.</summary>
+    private int _flughafenReiter;
+
+    /// <summary>Die Staffelmarke des Fensters (<c>+0x1A</c>) — aus demselben
+    /// Grund hier.</summary>
+    private int _staffelWahl = 0xFF;
+
+    /// <summary>Welche Hangarzeile gewählt ist (<c>+0x16</c> − 1000).</summary>
+    private int _hangarWahl;
+
+    /// <summary>»Gruppieren« — der Halter gibt die benutzten Staffelnummern,
+    /// wir drehen durch sie hindurch. Rückgabe: die neue Marke.</summary>
+    public System.Func<int, int>? OnStaffelWeiter;
+
+    /// <summary>Der zweite Klick auf die gewählte Zeile: (sec19-Platz, Marke)
+    /// — Beitritt, wenn die Maschine die Marke nicht hat, sonst Austritt.</summary>
+    public System.Action<int, int>? OnStaffelUmschalten;
+
+    /// <summary>»Bombe wechseln« — der sec19-Platz der gewählten
+    /// Maschine.</summary>
+    public System.Action<int>? OnBombeWechseln;
+
+    /// <summary>»Angriff« — bei uns noch ohne Ziel, siehe
+    /// <see cref="FlughafenView"/>.</summary>
+    public System.Action? OnAngriff;
+
+    /// <summary>»Patrouille AN/AUS« (Befehl 537).</summary>
+    public System.Action? OnPatrouille;
+
     private readonly VBoxContainer _mitte = new();
     private readonly HBoxContainer _knoepfe = new();
     private readonly Button _zu = new();
@@ -354,6 +489,36 @@ public sealed partial class BuildingWindow : PanelContainer
     /// ihn »0 Knoepfe« gemeldet und damit wie ein kaputtes Fenster
     /// ausgesehen.</summary>
     private int _knopfZahl;
+
+    /// <summary>Der sec19-Platz der gewählten Hangarzeile — das, was Befehl
+    /// 534 und 502 als <c>+0x0A</c> tragen. −1, wenn nichts steht.</summary>
+    private int GewaehlterPlatz()
+    {
+        var s = _letzterStand;
+        if (s == null || _hangarWahl < 0 || _hangarWahl >= s.HangarZeilen.Count) return -1;
+        return s.HangarZeilen[_hangarWahl].Platz;
+    }
+
+    /// <summary>»Produzieren« im Produktionsreiter — <b>derselbe</b> Kaufweg wie
+    /// bisher (<c>BuildPanelPick</c> über <see cref="Angebot.Kaufen"/>), nur von
+    /// einem anderen Knopf aus. ⚠ Die ANZEIGE wandert, die LOGIK bleibt: genau
+    /// daran ist der Flughafen am 12.09.2026 schon einmal gescheitert
+    /// (bug-211), als der Knopf verschwand und der Kaufweg mit ihm.</summary>
+    private void FlughafenKaufen()
+    {
+        var s = _letzterStand;
+        if (s == null || s.Angebote.Count == 0) return;
+        int k = System.Math.Clamp(_prodWahl, 0, s.Angebote.Count - 1);
+        s.Angebote[k].Kaufen?.Invoke();
+    }
+
+    /// <summary>Welche Produktionszeile gewählt ist. ⚠ Hier und nicht im
+    /// Zeichner, aus demselben Grund wie <c>_flughafenReiter</c>.</summary>
+    private int _prodWahl;
+
+    /// <summary>Der Satz, mit dem zuletzt gezeichnet wurde — die Knopfarme
+    /// brauchen ihn, und sie laufen NACH dem Zeichnen.</summary>
+    private Stand? _letzterStand;
 
     public override void _Ready()
     {
@@ -374,6 +539,36 @@ public sealed partial class BuildingWindow : PanelContainer
         // ⭐⭐ 08.09.2026 — DIE MINE BEKOMMT DIE MOEBEL DES ORIGINALS.
         // Fensterart 18, Anleger 0x459530, Zeichner 0x474220; alle Masse und
         // Zeilen sind dort abgelesen, siehe MineView.
+        // ⭐⭐ 19.09.2026 — DER FLUGHAFEN BEKOMMT DIE MOEBEL DES ORIGINALS.
+        // Fensterart 5, Zeichner 0x465050 (F 0x463940, befehlsgleich); alle
+        // Masse und Zeilen sind dort abgelesen, siehe FlughafenView.
+        _flughafen = new FlughafenView { Visible = false };
+        _flughafen.OnClose = Schliessen;
+        _flughafen.OnRepair = () => { OnRepair?.Invoke(); Refresh(); };
+        _flughafen.OnProduzieren = () => { FlughafenKaufen(); Refresh(); };
+        _flughafen.OnReiter = r => { _flughafenReiter = r; Refresh(); };
+        _flughafen.OnWahl = k => { _hangarWahl = k; Refresh(); };
+        _flughafen.OnStaffelUmschalten = _ =>
+        {
+            int platz = GewaehlterPlatz();
+            if (platz >= 0) OnStaffelUmschalten?.Invoke(platz, _staffelWahl);
+            Refresh();
+        };
+        _flughafen.OnGruppieren = () =>
+        {
+            if (OnStaffelWeiter != null) _staffelWahl = OnStaffelWeiter(_staffelWahl);
+            Refresh();
+        };
+        _flughafen.OnBombeWechseln = () =>
+        {
+            int platz = GewaehlterPlatz();
+            if (platz >= 0) OnBombeWechseln?.Invoke(platz);
+            Refresh();
+        };
+        _flughafen.OnAngriff = () => { OnAngriff?.Invoke(); Refresh(); };
+        _flughafen.OnPatrouille = () => { OnPatrouille?.Invoke(); Refresh(); };
+        AddChild(_flughafen);
+
         _mine = new MineView { Visible = false };
         _mine.OnClose = Schliessen;
         _mine.OnStart = () => { OnStart?.Invoke(); Refresh(); };
@@ -540,8 +735,13 @@ public sealed partial class BuildingWindow : PanelContainer
         bool mineOriginal = _art == Art.Mine && _mine != null && MineView.Usable
                             && !MinenfensterAlt;
         bool depotOriginal = _art == Art.Depot && _depot != null && DepotView.Usable;
+        // ⭐⭐ 19.09.2026 — und dasselbe fuer den FLUGHAFEN (Fensterart 5).
+        bool flughafenOriginal = _art == Art.Flughafen && _flughafen != null
+                                 && FlughafenView.Usable && !FlughafenfensterAlt;
         if (_posten != null) _posten.Visible = original;
         if (_mine != null) _mine.Visible = mineOriginal;
+        if (_flughafen != null) _flughafen.Visible = flughafenOriginal;
+        ZeigtOriginalFlughafen = flughafenOriginal;
         bool fabrikOriginal = _art == Art.Fabrik && _fabrik != null && FabrikView.Usable;
         if (_depot != null) _depot.Visible = depotOriginal;
         if (_fabrik != null) _fabrik.Visible = fabrikOriginal;
@@ -602,6 +802,28 @@ public sealed partial class BuildingWindow : PanelContainer
             _depot!.Zeige(s);
             _titel.Text = "Depot " + s.Name;
             _knopfZahl = 1;
+            return;
+        }
+        if (flughafenOriginal)
+        {
+            _senk.Visible = false;
+            if (_markt != null) _markt.Visible = false;
+            AddThemeStyleboxOverride("panel", new StyleBoxEmpty());
+            s.Reiter = _flughafenReiter;
+            s.StaffelWahl = _staffelWahl;
+            s.HangarWahl = System.Math.Clamp(_hangarWahl, 0,
+                               System.Math.Max(0, s.HangarZeilen.Count - 1));
+            _hangarWahl = s.HangarWahl;
+            CustomMinimumSize = new Vector2(
+                FlughafenView.WTiles * WindowChrome.Cell * FlughafenView.Scale,
+                FlughafenView.HTilesJeReiter[System.Math.Clamp(s.Reiter, 0, 2)]
+                    * WindowChrome.Cell * FlughafenView.Scale);
+            Size = CustomMinimumSize;
+            _letzterStand = s;
+            _flughafen!.OnProdWahl = k => { _prodWahl = k; };
+            _flughafen!.Zeige(s);
+            _titel.Text = "Flughafen " + s.Name;
+            _knopfZahl = _flughafen.Buttons;
             return;
         }
         if (mineOriginal)

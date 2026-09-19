@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Rendering;
+﻿namespace AkteEuropaReborn.Rendering;
 
 using System.Text;
 using Godot;
@@ -126,6 +126,29 @@ public partial class MapEntityLayer
             if (b.Owner != e.Owner) continue;
             basis = i; break;
         }
+        // ⭐⭐ 19.09.2026 — ZEILE 5, UND SIE FEHLTE SIEBEN TAGE.
+        //
+        // Am 12.09. galt dieser Prüfstand als gruen und der Fall als erledigt.
+        // Am 19.09. meldete er: »wenn ich auf den flughafen anwaehle kommt
+        // irgendein baue von uns, statt das originale« — und er hatte recht.
+        // Die vier Zeilen darueber messen, dass EIN Fenster aufgeht und dass
+        // man darin kaufen kann. Keine davon misst, WIE es aussieht.
+        //
+        // ⚠ Was hier gemessen wird, ist die VORBEDINGUNG, nicht die Zeichnung:
+        // ein kopfloser Lauf malt nicht. Gemessen wird also, ob die Kacheln
+        // ueberhaupt da sind (ohne --reexport-effects sind sie es nicht) und ob
+        // der Gegenschalter aus ist. Faellt eines von beiden weg, faellt das
+        // Fenster auf unsere Godot-Moebel zurueck — und das saehe von aussen
+        // genauso aus wie ein nicht gebautes Fenster.
+        bool kacheln = UI.FlughafenView.Usable;
+        bool schalterAus = !UI.BuildingWindow.FlughafenfensterAlt;
+        bool moebelOk = kacheln && schalterAus;
+        sb.Append($"  5. Moebel des Originals (Fensterart 5, Zeichner 0x465050): "
+                + $"Kacheln {(kacheln ? "da" : "FEHLEN — --reexport-effects laeuft nicht")}, "
+                + $"Gegenschalter {(schalterAus ? "aus" : "AN (--flughafenfenster-alt)")} "
+                + $"-> {(moebelOk ? "zeichnet das ORIGINAL" : "faellt auf unsere Moebel zurueck")}"
+                + "   ⚠ VORBEDINGUNG, nicht die Zeichnung: kopflos wird nicht gemalt\n");
+
         bool nullOk = true;
         if (basis < 0) sb.Append("  Nullmodell: keine eigene Basis auf der Karte — NICHT GEMESSEN\n");
         else
@@ -143,7 +166,7 @@ public partial class MapEntityLayer
         _selected = merkeAuswahl;
 
         bool alles = !panelAn && fart != null && prod != null && zeilen > 0
-                  && angebote > 0 && gekauft && nullOk;
+                  && angebote > 0 && gekauft && nullOk && moebelOk;
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }
