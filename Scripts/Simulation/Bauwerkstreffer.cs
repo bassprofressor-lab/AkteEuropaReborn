@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Rendering;
+﻿namespace AkteEuropaReborn.Rendering;
 
 using System.Collections.Generic;
 using Godot;
@@ -69,6 +69,53 @@ public partial class MapEntityLayer
     private readonly HashSet<int> _bauwerkUeberdeckt = new();
 
     public bool BauwerkUeberdeckt(int c, int r) => _bauwerkUeberdeckt.Contains(c * 1024 + r);
+
+    /// <summary>
+    /// ⭐⭐⭐ 20.09.2026 — <b>ZELLEN, DIE EIN GESETZTES GEBAEUDE ZUDECKT.</b>
+    ///
+    /// <para>Eine zweite Menge neben <see cref="_bauwerkUeberdeckt"/>, und mit
+    /// Absicht getrennt: jene wird je Bruecke neu aufgebaut und geleert
+    /// (siehe Zeile 106), diese waechst nur. Ein Gebaeude, das einmal gesetzt
+    /// ist, deckt seine Musterzellen fuer immer zu — im Original, weil das
+    /// Kachelwort ERSETZT wurde und es kein Zurueck gibt.</para>
+    ///
+    /// <para>⚠ Auch eine RUINE deckt weiter zu. Das Original ersetzt das
+    /// Kachelwort beim Setzen, nicht beim Zerstoeren; was darunter lag, ist
+    /// weg. Darum wird hier nie etwas entfernt.</para>
+    ///
+    /// <para>Gemeldet als »man sieht noch diese komische bodengrafik
+    /// durchscheinen« beim Minenbau in K17. Gegenschalter
+    /// <c>--vorkommen-unter-mine-alt</c>.</para></summary>
+    private readonly HashSet<int> _gebaeudeUeberdeckt = new();
+
+    /// <summary><c>--vorkommen-unter-mine-alt</c> — der Stand von vor dem
+    /// 20.09.2026: die Objektebene malt auch ueber ein gesetztes Gebaeude.</summary>
+    public static bool VorkommenUnterMineAlt;
+
+    /// <summary>
+    /// Wie viele Zellen WIRKSAM zugedeckt sind — die Zahl fuer den Pruefstand.
+    ///
+    /// <para>⚠ Es ist ausdruecklich nicht die Groesse der Menge. Der erste
+    /// Anlauf meldete sie, und damit gaben beide A/B-Laeufe dieselbe 30: der
+    /// Gegenschalter betrifft die ABFRAGE, nicht das Fuellen. Eine Zahl, die
+    /// unter dem Nullmodell gleich bleibt, ist keine Messung — gezaehlt wird
+    /// darum, was <see cref="GebaeudeUeberdeckt"/> wirklich antwortet.</para></summary>
+    public int GebaeudeDeckzellen
+    {
+        get
+        {
+            int n = 0;
+            foreach (int key in _gebaeudeUeberdeckt)
+                if (GebaeudeUeberdeckt(key / 1024, key % 1024)) n++;
+            return n;
+        }
+    }
+
+    public void GebaeudeDecktZu(int c, int r) => _gebaeudeUeberdeckt.Add(c * 1024 + r);
+
+    /// <summary>Deckt ein gesetztes Gebaeude diese Zelle zu?</summary>
+    public bool GebaeudeUeberdeckt(int c, int r)
+        => !VorkommenUnterMineAlt && _gebaeudeUeberdeckt.Contains(c * 1024 + r);
 
     public int BauwerkTreffer_, BrueckenAbgerissen, RampenAbgerissen;
 

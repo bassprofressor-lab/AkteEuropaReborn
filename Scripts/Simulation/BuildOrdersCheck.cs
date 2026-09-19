@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Rendering;
+﻿namespace AkteEuropaReborn.Rendering;
 
 using System.Collections.Generic;
 using Godot;
@@ -377,6 +377,36 @@ public partial class MapEntityLayer
               $"Besitzer {neu.Owner}, Huelle {neu.Hp}/{neu.HpMax}" +
               (_bauTyp == TypeFieldMine ? $", im Boden {neu.Deposit}" : "") +
               $" — RICHTIG (Versatz {off.X},{off.Y})");
+
+        // ⭐ 20.09.2026 — UND OB DAS GEBAEUDE SEINE ZELLEN ZUDECKT.
+        // Gemeldet: »erstes sieht man noch diese komische bodengrafik
+        // durchscheinen«. Das Original ersetzt das Kachelwort je Musterzelle
+        // (add_building 0x4C926E); bei uns liegen vier der neun
+        // Vorkommenskacheln in der OBJEKTEBENE, die nach den Gebaeudekacheln
+        // gemalt wird. Ohne diese Zahl ist nicht zu sehen, ob der Vermerk
+        // ueberhaupt entsteht — und genau daran hing der Fehler.
+        // ⭐ 20.09.2026 — UND DAS BAUZUSTANDS-TOR DER ZELLANIMATION. Das ist
+        // reine Rechnung und darum auch kopflos pruefbar, im Gegensatz zum
+        // Zeichnen selbst. Gemeldet als »die bauanimation ist auch strange«:
+        // die Trommel der Mine lief, waehrend das Geruest noch stand.
+        if (neu != null)
+        {
+            bool laeuft = BuildingAnimCells(neu, 0) != null;
+            bool sollLaufen = BauanimZellanimationAlt
+                           || neu.Bauzustand < BauzustandStart;
+            sb.AppendLine($"  {(laeuft == sollLaufen ? "ok  " : "⚠ FALSCH")} " +
+                          $"Zellanimation im Bau: {(laeuft ? "laeuft" : "gesperrt")} " +
+                          $"bei Bauzustand {neu.Bauzustand} " +
+                          $"(Soll {(sollLaufen ? "laeuft" : "gesperrt")}" +
+                          (BauanimZellanimationAlt
+                              ? " — Nullmodell --bauanim-zellanimation-alt)" : ")"));
+        }
+
+        sb.AppendLine($"  zugedeckte Zellen: {GebaeudeDeckzellen} " +
+                      (VorkommenUnterMineAlt
+                          ? "   ⚠ Nullmodell --vorkommen-unter-mine-alt: die Objektebene "
+                            + "malt trotzdem darueber"
+                          : "(Soll > 0 — die Objektebene ueberspringt sie jetzt)"));
 
         // ⚠⚠ DER PREIS. Ohne diese Zeile waere nicht gemessen, dass das Fahrzeug
         // aufgeht — und genau das ist der Befund, der diese Mechanik von einer

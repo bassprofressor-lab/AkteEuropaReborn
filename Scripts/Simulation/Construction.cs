@@ -496,6 +496,29 @@ public partial class MapEntityLayer
                     _nav.SetOccupant(c, r, index, immobile: true);
                 else if (patterns.PatternTile(bt.FirstPattern, dx, dy) != 0)
                     _nav.ClearOccupant(c, r, index);     // drawn, but walkable
+
+                // ⭐⭐⭐ 20.09.2026 — UND DIE ZELLE IST AB JETZT ZUGEDECKT.
+                //
+                // Gemeldet zum Minenbau: »erstes sieht man noch diese komische
+                // bodengrafik durchscheinen«. Das Original hat je Zelle EIN
+                // Kachelwort, und `add_building` ERSETZT es fuer jede
+                // Musterzelle mit Kachel != 0 (C 0x4C926E/0x4C927D -> Setzer
+                // 0x41D140; F 0x4C8E1E/0x4C8E2D -> 0x41C300). Auf 17.CWP sind
+                // die Muster der Art 15 volle 5x6-Bloecke ohne Loch — alle NEUN
+                // Vorkommenskacheln sind im Takt des Setzens weg.
+                //
+                // ⚠ Bei uns gibt es zwei Ebenen, und vier der neun Zellen
+                // tragen Belegung 0xFFFF und liegen darum in
+                // `map_17.objects.png`, das `DrawObjectsUpTo` NACH den
+                // Gebaeudekacheln malt. Darum muss die Zelle hier vermerkt
+                // werden; das Zeilenfach ueberspringt sie dann, genau wie beim
+                // Gelaender einer beschaedigten Bruecke (BauwerkUeberdeckt).
+                //
+                // ⚠ Die Bedingung ist »Kachel != 0«, nicht »blockt«: das
+                // Original ersetzt nach der KACHEL, und eine begehbare
+                // Musterzelle (Rampe, Tuervorplatz) traegt auch eine.
+                if (patterns.PatternTile(bt.FirstPattern, dx, dy) != 0)
+                    GebaeudeDecktZu(c, r);
             }
 
         // The doors last, as the original does (@0x4C90A2) — and they BLOCK.

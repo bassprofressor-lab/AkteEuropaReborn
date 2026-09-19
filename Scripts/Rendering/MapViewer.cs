@@ -3902,6 +3902,10 @@ public partial class MapViewer : Node2D
             else if (a == "--flugzeug-nebel-alt") MapEntityLayer.FlugzeugNebelAlt = true;
             else if (a == "--einschlagklang-alt") Audio.GameSounds.EinschlagklangAlt = true;
             else if (a == "--absturz-aus") MapEntityLayer.AbsturzAus = true;
+            else if (a == "--vorkommen-unter-mine-alt")
+                MapEntityLayer.VorkommenUnterMineAlt = true;
+            else if (a == "--bauanim-zellanimation-alt")
+                MapEntityLayer.BauanimZellanimationAlt = true;
             else if (a == "--flak-probe") _flakProbeArg = true;
             else if (a == "--generatorfenster-alt") MapEntityLayer.GeneratorfensterAlt = true;
             else if (a == "--panzerung-neubau-alt") MapEntityLayer.PanzerungNeubauAlt = true;

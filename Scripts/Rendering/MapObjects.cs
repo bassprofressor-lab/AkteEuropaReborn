@@ -736,6 +736,12 @@ public partial class MapEntityLayer
             // seine neue Kachel malt der Bodendurchgang (Bauwerkstreffer.cs).
             if (BauwerkUeberdeckt(e.Col, e.Row)) continue;
 
+            // ⭐ 20.09.2026 — und dasselbe fuer ein GESETZTES Gebaeude:
+            // seine Musterzellen sind im Original ueberschrieben, die
+            // Objektkachel darunter gibt es nicht mehr. Siehe
+            // Simulation/Bauwerkstreffer.GebaeudeUeberdeckt.
+            if (GebaeudeUeberdeckt(e.Col, e.Row)) continue;
+
             // ⚠⚠ 24.08.2026 — HIER STAND EIN NEBELRIEGEL, UND ER WAR NICHT
             // TRAGFAEHIG. Gemeldet und belegt: im Original zeigt unerkundetes
             // Gebiet keine Baeume, Kisten oder Bauwerke. Der Riegel hat sie

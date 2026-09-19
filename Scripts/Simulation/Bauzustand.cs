@@ -1,4 +1,4 @@
-using Godot;
+﻿using Godot;
 
 namespace AkteEuropaReborn.Rendering;
 
@@ -36,6 +36,18 @@ public partial class MapEntityLayer
     /// (der Stand bis 14.09.2026). Das Geruest selbst ist seit dem 14.09. gegen die
     /// Daten geprueft (berichte/bauanimation-fable.md).</summary>
     public static bool GeruestAus;
+
+    /// <summary>
+    /// <c>--bauanim-zellanimation-alt</c> — der Stand von vor dem 20.09.2026:
+    /// die ZELLANIMATION eines Bauwerks laeuft auch, waehrend das Geruest noch
+    /// steht.
+    ///
+    /// <para>Gemeldet als »die bauanimation ist auch strange«: bei der Mine
+    /// blinkte die Trommel (Kacheln 2286..2288) sechs Sekunden lang ALLEIN
+    /// ueber dem Vorkommen, weil die 90 Geruestkacheln 2400..2489 im Atlas
+    /// fehlen. Das Original sperrt sie, solange der Bauzustand laeuft
+    /// (C 0x4D5D25, F 0x4D58B5). Siehe MapEntityLayer.BuildingAnimCells.</summary>
+    public static bool BauanimZellanimationAlt;
 
     public const int BauzustandStart = 100, BauzustandEnde = 250;
 

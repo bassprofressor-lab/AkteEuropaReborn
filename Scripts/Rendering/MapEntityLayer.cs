@@ -7842,6 +7842,20 @@ public partial class MapEntityLayer : Node2D
     private Dictionary<(int, int), int>? BuildingAnimCells(Entity e, int tick)
     {
         if (Patterns == null || e.Dead) return null;
+        // ⭐⭐ 20.09.2026 — EIN BAUWERK IM BAU LAEUFT NICHT.
+        //
+        // Gemeldet zum Minenbau: »die bauanimation ist auch strange«. Der
+        // sichtbarste Teil davon: die Zellanimation (bei der Mine die Trommel,
+        // Kacheln 2286..2288) lief SCHON, waehrend das Geruest noch stand — und
+        // weil die 90 Geruestkacheln 2400..2489 im Atlas fehlen (0 von 90
+        // nachgezaehlt), blinkte die Trommel sechs Sekunden lang ALLEIN ueber
+        // dem Vorkommen. Das Original sperrt sie, solange der Bauzustand laeuft:
+        // C 0x4D5D25 / F 0x4D58B5 (Tor bei +0x0A >= 100).
+        //
+        // ⚠ Dieselbe Schwelle wie an den anderen drei Stellen im Haus
+        // (Geruestbild, Unverwundbarkeit, Fensterwache) — BauzustandStart.
+        // Lesung berichte/minenbau-fable.md §2. --bauanim-zellanimation-alt.
+        if (!BauanimZellanimationAlt && e.Bauzustand >= BauzustandStart) return null;
         var bt = Patterns.GetBuildingType(e.BType);
         if (bt.AnimCount <= 0) return null;
 
