@@ -3902,6 +3902,9 @@ public partial class MapViewer : Node2D
             else if (a == "--flugzeug-nebel-alt") MapEntityLayer.FlugzeugNebelAlt = true;
             else if (a == "--einschlagklang-alt") Audio.GameSounds.EinschlagklangAlt = true;
             else if (a == "--absturz-aus") MapEntityLayer.AbsturzAus = true;
+            else if (a == "--gleisbruch-einzeln") MapEntityLayer.GleisbruchEinzeln = true;
+            else if (a == "--ruine-ohne-gleisschnitt")
+                MapEntityLayer.RuineOhneGleisschnitt = true;
             else if (a == "--vorkommen-unter-mine-alt")
                 MapEntityLayer.VorkommenUnterMineAlt = true;
             else if (a == "--bauanim-zellanimation-alt")
@@ -5021,6 +5024,14 @@ public partial class MapViewer : Node2D
             // gelaufenen Gefecht ist. Siehe Simulation/Flak.cs.
             FlakAusgeben();
             GD.Print(_entities.AbsturzLine());
+            // ⭐ 20.09.2026 — der Gleisschnitt einer Ruine. ⚠ Nur wenn ueberhaupt
+            // ein Gebaeude gefallen ist: eine 0 ohne Ruine ist kein Befund.
+            if (_entities.GebaeudeSprengungen > 0)
+                GD.Print($"ruine-gleis: {_entities.GebaeudeSprengungen} Gebaeude gesprengt, " +
+                         $"{_entities.RuineGleisbrueche} Gleiszellen dabei gebrochen" +
+                         (MapEntityLayer.RuineOhneGleisschnitt
+                             ? "   ⚠ Nullmodell --ruine-ohne-gleisschnitt: muss 0 sein"
+                             : ""));
             string kl = Audio.GameSounds.KlangAuskunft();
             if (kl.Length > 0) GD.Print(kl);
             string bo = _entities.BodenAuskunft();

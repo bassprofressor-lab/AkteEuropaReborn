@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Godot;
 
 namespace AkteEuropaReborn.Rendering;
@@ -2672,6 +2672,66 @@ public partial class MapEntityLayer : Node2D
                   (mastBroken == 0 ? "  richtig — der Stuetzendurchgang heilt sie (4.DM: 0 von 49)"
                                    : "  ⚠ ein Mastplatz bleibt kaputt") + "\n");
 
+        // ⭐⭐ 20.09.2026 — DIE KASKADE. Der Nachbarlauf laeuft bis zum MAST,
+        // nicht eine Zelle weit; in 4.DM sind 8 von 9 Bruchlaeufen exakt ein
+        // 5-Zellen-Abschnitt PXXXXXP. Die Zeile nennt die LAENGE des Laufs, denn
+        // »die Nachbarn sind mitgerissen« gilt fuer beide Fassungen und
+        // unterscheidet sie darum nicht.
+        int kaputtGesamt = 0;
+        foreach (var c in _railCells) if (c.Broken) kaputtGesamt++;
+        sb.Append($"  Bruchlauf: {GleisbruchZellen} Zellen mitgerissen, " +
+                  $"{GleisbruchAmMastGestoppt}x am Mast gestoppt, " +
+                  $"{kaputtGesamt} Zellen insgesamt kaputt" +
+                  (GleisbruchEinzeln
+                      ? "   ⚠ Nullmodell --gleisbruch-einzeln: mitgerissen muss 0 sein"
+                      : GleisbruchZellen > 0
+                          ? "   (Soll > 0 — der Lauf geht bis zum Mast)"
+                          : "   ⚠ nichts mitgerissen — stand der Mast direkt daneben?") + "\n");
+
+        // ⭐⭐ 20.09.2026 — 2b) DER RUINENSCHNITT, und der Fall wird HERGESTELLT.
+        //
+        // Ein Gebaeude, das an Gleise grenzt, wird gesprengt; danach muessen die
+        // Gleise westlich, noerdlich und oestlich seines Fussabdrucks gebrochen
+        // sein (Stempler 0x4C95E0 -> 0x4B0820 -> 0x4B07C0).
+        //
+        // ⚠⚠ WARUM NICHT IM LAUF GEMESSEN: auf K17 faellt in 400 s KEIN
+        // Gebaeude, und die Zeile `ruine-gleis` kam darum gar nicht. Eine 0 aus
+        // einem Lauf, in dem nichts gesprengt wurde, ist kein Befund ueber den
+        // Schnitt — also stellt der Pruefstand den Fall her, statt auf ihn zu
+        // warten (Arbeitsweise: den Fall herstellen, nicht erschliessen).
+        int ruineVor = RuineGleisbrueche;
+        Entity? nahGleis = null;
+        foreach (var e in _entities)
+        {
+            if (!e.IsBuilding || e.IsProp || e.Dead) continue;
+            int w2 = Mathf.Max(1, e.FootW), h2 = Mathf.Max(1, e.FootH);
+            bool grenzt = false;
+            for (int dx = 0; dx < w2 && !grenzt; dx++)
+                for (int dy = 0; dy < h2 && !grenzt; dy++)
+                    foreach (var rc in _railCells)
+                    {
+                        if (rc.Frame == 255 || rc.Broken || rc.Pylon) continue;
+                        if (rc.Row != e.Row + dy) continue;
+                        if (rc.Col == e.Col + dx - 1 || rc.Col == e.Col + dx + 1)
+                        { grenzt = true; break; }
+                    }
+            if (grenzt) { nahGleis = e; break; }
+        }
+        if (nahGleis == null)
+            sb.Append("  Ruinenschnitt: KEIN URTEIL — kein Gebaeude grenzt hier an heiles Gleis\n");
+        else
+        {
+            GebaeudeSprengen(nahGleis);
+            sb.Append($"  Ruinenschnitt: Gebaeude Platz {nahGleis.Slot} auf " +
+                      $"({nahGleis.Col},{nahGleis.Row}) gesprengt, " +
+                      $"{RuineGleisbrueche - ruineVor} Gleiszellen gebrochen" +
+                      (RuineOhneGleisschnitt
+                          ? "   ⚠ Nullmodell --ruine-ohne-gleisschnitt: muss 0 sein"
+                          : RuineGleisbrueche - ruineVor > 0
+                              ? "   (Soll > 0 — West/Nord/Ost des Fussabdrucks)"
+                              : "   ⚠ nichts gebrochen") + "\n");
+        }
+
         // 3) reparieren
         int brokenBefore = RailBrokenOnLine(pick.Line);
         bool healed = RailRepair(col, row);
@@ -2723,12 +2783,27 @@ public partial class MapEntityLayer : Node2D
     private static readonly (int C, int R)[] RailBreakSpread =
         { (0, -1), (-1, 0), (1, 0), (0, 1) };
 
+    /// <summary><c>--gleisbruch-einzeln</c> — der Stand von vor dem 20.09.2026:
+    /// ein Bruch reisst nur die vier Nachbarn mit, statt bis zum MAST
+    /// weiterzulaufen. Siehe <see cref="RailHit(int,int,int,bool)"/>.</summary>
+    public static bool GleisbruchEinzeln;
+
+    /// <summary>Wie weit der letzte Bruch gelaufen ist und wie oft ein Mast ihn
+    /// angehalten hat — die Zahlen fuer den Pruefstand.</summary>
+    public int GleisbruchZellen, GleisbruchAmMastGestoppt;
+
     private bool RailHit(int col, int row, int damage, bool spread)
     {
         bool broke = false;
         foreach (var c in _railCells)
         {
             if (c.Col != col || c.Row != row || c.Frame == 255 || c.Broken) continue;
+            // ⭐⭐ 20.09.2026 — EIN MAST IST KEIN ZIEL.
+            // In 4.DM sind 0 von 24 Masten kaputt, und die Bruchlaeufe enden an
+            // ihnen (8 von 9 sind exakt ein 5-Zellen-Abschnitt PXXXXXP). Ein
+            // Mast nimmt also keinen Gleisschaden — er ist die GRENZE.
+            // Lesung berichte/bahnschaden-klang-fable.md §3.
+            if (c.Pylon && !GleisbruchEinzeln) { GleisbruchAmMastGestoppt++; continue; }
             if (c.Hp > damage) { c.Hp -= damage; continue; }
             // ⚠ Die Trefferpunkte werden hier NICHT auf null gesetzt. Der erste
             // Anlauf tat das und war erfunden: in 4.DM tragen die zerschossenen
@@ -2743,15 +2818,33 @@ public partial class MapEntityLayer : Node2D
             c.Frame += (10 + Simulation.Determinism.Roll(2)) * 10;
             broke = true;
             if (!spread) continue;
-            // ⚠ 15.08.2026 — EIN BRUCH REISST DIE VIER NACHBARN MIT.
-            // rail_hit @0x4B0460 geht die Tabelle @0x504428 ab und ruft sich
-            // fuer jede Nachbarzelle mit Gleis selbst auf — aber mit
-            // Zweitargument 0 (@0x4B06B0). Das ist die REKURSIONSBREMSE: der
-            // Bruch springt genau eine Zelle weit, nicht die Strecke entlang,
-            // und der mitgerissene Nachbar loest weder Stuetzendurchgang noch
-            // faze-Wechsel aus.
-            foreach (var (dc, dr) in RailBreakSpread)
-                RailHit(col + dc, row + dr, int.MaxValue, false);
+            // ⚠⚠ 20.09.2026 — HIER STAND »DAS IST DIE REKURSIONSBREMSE«, UND
+            // DIE BEGRUENDUNG WAR FALSCH.
+            //
+            // Richtig ist, dass `rail_hit` @0x4B0460 die Tabelle @0x504428
+            // abgeht und sich fuer jede Nachbarzelle mit Gleis selbst aufruft,
+            // und dass das Zweitargument 0 den Stuetzendurchgang und den
+            // faze-Wechsel unterdrueckt (@0x4B06B0). Falsch war der Schluss,
+            // der Bruch springe darum »genau eine Zelle weit«: der Nachbarlauf
+            // ist von diesem Flag UNABHAENGIG und laeuft weiter — bis zu einem
+            // MAST.
+            //
+            // ⭐ Und die Daten sagen es deutlicher als der Code: in `4.DM` sind
+            // **8 von 9 Bruchlaeufen exakt ein 5-Zellen-Mastabschnitt**
+            // `PXXXXXP`, und **0 von 24 Masten** sind kaputt. Ein einzelner
+            // Bruch plus vier Nachbarn haette diese Form nie.
+            // Lesung berichte/bahnschaden-klang-fable.md §3 (Fable).
+            //
+            // ⚠ Gegen die Endlosschleife hilft hier NICHT das Flag, sondern
+            // dass eine gebrochene Zelle oben schon aussteigt (`c.Broken`) —
+            // der Lauf kann keine Zelle zweimal nehmen. Das Flag bleibt
+            // trotzdem, weil es Stuetzendurchgang und faze steuert.
+            if (GleisbruchEinzeln)
+                foreach (var (dc, dr) in RailBreakSpread)
+                    RailHit(col + dc, row + dr, int.MaxValue, false);
+            else
+                foreach (var (dc, dr) in RailBreakSpread)
+                    GleisbruchWeiter(col + dc, row + dr);
             // Und die LINIE wird stillgelegt: faze := 3 (@0x4B06F9). spoj_tick
             // @0x4C7840 faellt bei 3 durch alle Zweige und zaehlt sie nicht
             // hoch -- es faehrt kein neuer Zug los, bis repariert ist.
@@ -2759,6 +2852,42 @@ public partial class MapEntityLayer : Node2D
         }
         if (broke && spread) { RailPylonPass(); _railTiles = null; }
         return broke;
+    }
+
+    /// <summary>
+    /// ⭐⭐ <b>DER BRUCHLAUF, bis zum MAST</b> (20.09.2026).
+    ///
+    /// <para>Er bricht die Zelle und geht von ihr aus weiter — an einem Mast
+    /// hoert er auf, denn der nimmt keinen Schaden und ist die Grenze des
+    /// Abschnitts. Eine schon gebrochene Zelle steigt in
+    /// <see cref="RailHit(int,int,int,bool)"/> selbst aus, darum kann der Lauf
+    /// keine Zelle zweimal nehmen und braucht keine eigene Merkliste.</para>
+    ///
+    /// <para>⚠ Mit Zweitargument <c>false</c>: der mitgerissene Nachbar loest
+    /// weder Stuetzendurchgang noch faze-Wechsel aus (@0x4B06B0). Nur DAS war
+    /// an der alten »Rekursionsbremse« richtig.</para>
+    ///
+    /// <para>⚠ Die Tiefe ist gedeckelt. Nicht aus Treue — das Original braucht
+    /// keine Grenze, weil eine gebrochene Zelle nicht wieder bricht — sondern
+    /// weil ein Fehler in dieser Bedingung sonst das Spiel anhaelt statt eine
+    /// falsche Zahl zu liefern. 3000 ist die Zahl der Gleisplaetze, also die
+    /// natuerliche Obergrenze.</para></summary>
+    /// <summary>Die Obergrenze des Bruchlaufs: 3000, die Zahl der
+    /// Gleisplaetze des Originals. Siehe GleisbruchWeiter.</summary>
+    private const int GleisbruchTiefeMax = 3000;
+
+    private void GleisbruchWeiter(int col, int row, int tiefe = 0)
+    {
+        if (tiefe > GleisbruchTiefeMax) return;
+        bool hier = false;
+        foreach (var c in _railCells)
+            if (c.Col == col && c.Row == row && c.Frame != 255 && !c.Broken && !c.Pylon)
+            { hier = true; break; }
+        if (!hier) return;
+        if (!RailHit(col, row, int.MaxValue, false)) return;
+        GleisbruchZellen++;
+        foreach (var (dc, dr) in RailBreakSpread)
+            GleisbruchWeiter(col + dc, row + dr, tiefe + 1);
     }
 
     /// <summary>

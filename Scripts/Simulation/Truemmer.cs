@@ -215,6 +215,61 @@ public partial class MapEntityLayer
         }
         GebaeudeSprengungen++;
         GebaeudeSprengbilder += n;
+        RuineSchneidetGleise(b);
+    }
+
+    /// <summary><c>--ruine-ohne-gleisschnitt</c> — der Stand von vor dem
+    /// 20.09.2026: eine Ruine lässt die Gleise an ihrem Fußabdruck heil.</summary>
+    public static bool RuineOhneGleisschnitt;
+
+    /// <summary>Wie viele Gleiszellen eine Ruine gebrochen hat — die Zahl für
+    /// den Prüfstand.</summary>
+    public int RuineGleisbrueche;
+
+    /// <summary>
+    /// ⭐⭐⭐ <b>EINE RUINE BRICHT DIE GLEISE AN IHREM FUSSABDRUCK</b>
+    /// (20.09.2026).
+    ///
+    /// <para><b>Anlass:</b> gemeldet als »im original ist bei k17 die
+    /// bahnstrecke teils beschädigt, bei uns ist sie ganz«. Die Lesung
+    /// (<c>berichte/bahnschaden-klang-fable.md</c> §1, Fable) hat zuerst seine
+    /// Annahme berichtigt: bei Missionsstart ist sie im Original AUCH ganz.
+    /// <c>17.CWM</c> sec22 trägt 72 Zellen, <b>0 zerschossen</b>, alle mit
+    /// 150 Trefferpunkten; über alle 39 Leveldateien gibt es nur 49
+    /// zerschossene Zellen, und die liegen in <c>4.DM</c>. Es gibt auch keinen
+    /// Skriptsetzer.
+    ///
+    /// <para><b>Der Schaden entsteht im SPIEL</b>, und dies ist der Weg, der
+    /// uns fehlte: der Gebäude-Stempler <c>0x4C95E0</c> ruft über
+    /// <c>0x4B0820</c> die Routine <c>0x4B07C0</c>, und die bricht die Gleise
+    /// <b>westlich, nördlich und östlich</b> des Fußabdrucks. In K17 grenzen
+    /// <b>15 Gleiszellen an vier Gebäude des Computerspielers 1</b> (Basis,
+    /// zwei Fabriken, Feldbahnhof) — dort entsteht im Kampf genau das Bild, das
+    /// er im Let's Play gesehen hat. <b>Von ihm bestätigt:</b> »die bahnstrecke
+    /// wird tatsächlich im lets play zerstört durch kampf«.</para>
+    ///
+    /// <para>⚠ <b>Drei Richtungen, nicht vier.</b> Der Süden fehlt, und das ist
+    /// gelesen, nicht gewählt. Warum er fehlt, ist ungeklärt — eine Vermutung
+    /// wäre, dass die Ruine dort ihr eigenes Bild trägt; sie steht hier
+    /// ausdrücklich als Vermutung und nicht als Begründung.</para>
+    ///
+    /// <para>⚠ Der Bruch läuft über <see cref="RailHit(int,int,int)"/> mit
+    /// vollem Schaden, also mit allem, was daran hängt: Trümmerbild,
+    /// Stützendurchgang, Stilllegung der Linie und der Bruchlauf bis zum
+    /// MAST.</para></summary>
+    private void RuineSchneidetGleise(Entity b)
+    {
+        if (RuineOhneGleisschnitt) return;
+        int w = Mathf.Max(1, b.FootW), h = Mathf.Max(1, b.FootH);
+        for (int dx = 0; dx < w; dx++)
+            for (int dy = 0; dy < h; dy++)
+            {
+                int c = b.Col + dx, r = b.Row + dy;
+                // West, Nord, Ost — der Süden fehlt, siehe oben
+                if (RailHit(c - 1, r, int.MaxValue)) RuineGleisbrueche++;
+                if (RailHit(c, r - 1, int.MaxValue)) RuineGleisbrueche++;
+                if (RailHit(c + 1, r, int.MaxValue)) RuineGleisbrueche++;
+            }
     }
 
     /// <summary>Wie viele Gebaeude in diesem Lauf gesprengt wurden — fuer den
