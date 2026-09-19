@@ -512,6 +512,32 @@ public sealed class InterfaceExporter
     private static readonly (string Name, int Seq)[] Picked =
     {
         ("muzzle", 232), ("explosion", 48), ("blast", 550), ("wreck", 0),
+        // ⭐⭐⭐ 20.09.2026 — DIE STRAHLPUNKTE, und sie fehlten ganz.
+        //
+        // Gemeldet: »ja die helikopter greifen mich an, sehe aber keine
+        // schuesse von denen.« Die Wirkung war da (vier Tote durch LUFTANGRIFF
+        // in seinem Lauf), das BILD fehlte — und zwar aus zwei Gruenden. Der
+        // erste: ein Kampfhubschrauber (typ 10) erzeugt gar kein GESCHOSS,
+        // sondern zwei STRAHLSAETZE in der Tafel 0x87B448 (44 B x 200, Anleger
+        // 0x455320 / F 0x453FC0). Der Strahltakt 0x454CF0 (F 0x4539A0) rueckt
+        // jeden Strahl 40 Feineinheiten je Takt vor und setzt je Einheit eine
+        // sec42-Animation der Folge 73 — ein gelber 2x2-Punkt. Es entsteht also
+        // eine WACHSENDE PUNKTLINIE, kein fliegendes Geschoss.
+        //
+        // Der zweite Grund ist dieser hier: **Folge 73 und 74 werden von
+        // niemandem ausgegeben.** Dieser Ausgeber schreibt die kuratierte Liste
+        // plus die Flug- und Einschlagfolgen AUS DER GESCHOSSTAFEL — und ein
+        // Strahlpunkt steht in keiner von beiden. Nachgezaehlt: 113 Ordner unter
+        // Effects/, `flug_220` (die Bombe, 32 Bilder) und `schlag_83` sind da,
+        // `73` und `74` gar nicht. Wer den Strahl baut, ohne sie auszugeben,
+        // baut etwas Unsichtbares — dieselbe Falle wie heute bei den 90
+        // Geruestkacheln.
+        //
+        // ⚠ 74 ist der GRUENE Punkt der Boden-Laserhandwaffen. Er kommt hier
+        // mit, weil er dieselbe Sorte ist und aus demselben Loch fiel; benutzt
+        // wird er von diesem Weg noch nicht.
+        // Lesung berichte/luftschuss-fable.md.
+        ("strahlpunkt", 73), ("strahlpunkt_gruen", 74),
         // ⚠ 19.08.2026 — DIE ZWEITE FLAMME. Der Zeichner des Originals
         // @0x42B461 rechnet `edi = (index & 1) * 2 + 0x226`, also **550 ODER
         // 552** je nachdem, ob der Tafelindex des Baums gerade oder ungerade
