@@ -34,6 +34,28 @@ public partial class MapEntityLayer
     private long _bauSim, _bauWartet;
     private System.Text.StringBuilder? _bauLog;
 
+    /// <summary>Die erste Zelle eines Grundrisses, die durchfaellt, samt Grund
+    /// — dieselbe Aufschluesselung, die <c>--terra-check</c> schon hat
+    /// (<see cref="TerraCheckLine"/>). Ohne sie sagt ein »traegt keinen
+    /// Grundriss« nichts darueber, WAS im Weg steht, und auf M17 ist genau das
+    /// die Frage: dort liegt die Vorkommensgrafik selbst im Grundriss.</summary>
+    private string GrundrissGrund(List<SiteCell> zellen)
+    {
+        if (_nav == null) return "kein Gitter";
+        foreach (var s in zellen)
+        {
+            if (s.Ok) continue;
+            string w = !_nav.InBounds(s.Col, s.Row) ? "ausserhalb"
+                : _nav.GroundAt(s.Col, s.Row) != Simulation.NavGrid.Ground.Free
+                    ? "Grund " + _nav.GroundAt(s.Col, s.Row)
+                : _nav.OccupantAt(s.Col, s.Row) != -1 ? "belegt"
+                : _nav.FlagAt(s.Col, s.Row) != 0 ? "Hangbyte " + _nav.FlagAt(s.Col, s.Row)
+                : "Ecken zu flach";
+            return $"({s.Col},{s.Row}) {w}";
+        }
+        return zellen.Count == 0 ? "kein Muster fuer diesen Typ" : "kein einzelner Grund";
+    }
+
     /// <summary><c>--bau-check[=depot|mine|generator]</c> anwerfen. Ohne Angabe
     /// das Depot.
     ///
@@ -121,17 +143,38 @@ public partial class MapEntityLayer
         {
             // ⚠ Die Mine haengt am VORKOMMEN, nicht an einer Zelle. Gesucht wird
             // ein Vorkommen, dessen Ecke traegt, und dazu eine freie Standzelle
-            // dicht daneben — die Einheit faehrt ohnehin zur Vorkommenszelle.
+            // im Band, in dem der Techniker stehen darf.
+            //
+            // ⚠⚠ 19.09.2026 — HIER STAND EINE BEDINGUNG, DIE DAS SPIEL NICHT
+            // HAT: `IsFree(Vorkommenszelle, Vehicle)`. Der Bauauftrag verlangt
+            // das NICHT — <see cref="BuildArrivalTick"/> prueft ein BAND
+            // (@0x40817C: Vorkommen.Spalte−2 .. +4, dasselbe fuer die Zeile),
+            // der Techniker muss also gar nicht auf das Vorkommen fahren. Auf
+            // M17 ist das Vorkommen (17,11) die linke obere Ecke eines 3x3
+            // Objektblocks (Kachelcodes 10240..10248) und damit gesperrt — die
+            // Zeile allein hat dort jedes Urteil verhindert. Das Band ist jetzt
+            // auch die Suchweite der Standzelle: −4..+4 war eine eigene Zahl.
+            //
+            // ⭐ Und der Prueflauf sagt jetzt je Vorkommen, WORAN es scheitert.
+            // Ein »KEIN URTEIL« ohne Grund ist auf genau der Karte, auf der es
+            // auf die Mine ankommt, so gut wie keine Messung.
             var ds = _deposits;
             if (ds.Count == 0)
             { sb.Append("  KEIN URTEIL: diese Karte hat keine Vorkommen"); GD.Print(sb); return; }
+            var warum = new List<string>();
+            var zellen = new List<SiteCell>();
             for (int k = 0; k < ds.Count && platz.X < 0; k++)
             {
                 var e2 = new Vector2I(ds[k].Col + off.X, ds[k].Row + off.Y);
-                if (!CanBuild(Patterns, TypeFieldMine, e2.X, e2.Y, -1, null, true)) continue;
-                if (!_nav.IsFree(ds[k].Col, ds[k].Row, Simulation.NavGrid.MoveClass.Vehicle)) continue;
-                for (int dr = -4; dr <= 4 && start.X < 0; dr++)
-                    for (int dc = -4; dc <= 4; dc++)
+                if (!CanBuild(Patterns, TypeFieldMine, e2.X, e2.Y, -1, zellen, true))
+                {
+                    warum.Add($"Vorkommen ({ds[k].Col},{ds[k].Row}): die Ecke " +
+                              $"({e2.X},{e2.Y}) traegt keinen Grundriss — " +
+                              GrundrissGrund(zellen));
+                    continue;
+                }
+                for (int dr = -2; dr <= 4 && start.X < 0; dr++)
+                    for (int dc = -2; dc <= 4; dc++)
                     {
                         int c = ds[k].Col + dc, r = ds[k].Row + dr;
                         if (dc == 0 && dr == 0) continue;
@@ -139,12 +182,21 @@ public partial class MapEntityLayer
                         if (!_nav.IsFree(c, r, Simulation.NavGrid.MoveClass.Vehicle)) continue;
                         start = new Vector2I(c, r); break;
                     }
-                if (start.X < 0) continue;
+                if (start.X < 0)
+                {
+                    warum.Add($"Vorkommen ({ds[k].Col},{ds[k].Row}): im Band " +
+                              "(−2..+4) steht keine freie Zelle fuer den Techniker");
+                    continue;
+                }
                 platz = new Vector2I(ds[k].Col, ds[k].Row);       // wohin geklickt wird
                 ecke = e2;
             }
             if (platz.X < 0)
-            { sb.Append("  KEIN URTEIL: kein tragfaehiges Vorkommen mit freiem Standplatz"); GD.Print(sb); return; }
+            {
+                sb.Append("  KEIN URTEIL: kein tragfaehiges Vorkommen mit freiem Standplatz");
+                foreach (string z in warum) sb.Append("\n    " + z);
+                GD.Print(sb); return;
+            }
             sb.AppendLine($"  Vorkommen ({platz.X},{platz.Y}), Standplatz ({start.X},{start.Y}) — " +
                           $"die Mine kaeme auf ({ecke.X},{ecke.Y}), Versatz ({off.X},{off.Y})");
         }
@@ -202,15 +254,33 @@ public partial class MapEntityLayer
                       (ws.Count == erwartet ? "— richtig" : $"— FALSCH, erwartet waren {erwartet}"));
 
         // ---- die GEGENPROBE: ein Fahrzeug OHNE das Bauteil ----
+        //
+        // ⚠⚠ 19.09.2026 — HIER STAND »die erste andere eigene Einheit«, und das
+        // war ein LUEGENDER PRUEFSTAND auf genau der Karte, um die es ging.
+        // Kampagne 17 stellt dem Spieler ZWEI Gebaeude-Techniker hin (Antrieb
+        // 163 = Entwurf 70 »Bauer«, Saetze 0 und 1 auf (8,41)/(9,42)). Die
+        // Gegenprobe griff den zweiten, der bot natuerlich seine 2 Auftraege
+        // an, der Befehl wurde angenommen — und der Lauf schrieb »FALSCH«
+        // ueber einen Fall, der voellig richtig ist. Auf M23 fiel es nie auf,
+        // weil dort zufaellig eine Schw.Artillerie die erste war.
+        //
+        // Das ist Regel UU, dieselbe, die im Kopf dieses Blocks schon fuer die
+        // Standzelle steht: wer einen Gegenfall messen will, muss ihn auch
+        // herstellen. Gesucht wird darum eine Einheit, die das Bauteil
+        // WIRKLICH nicht traegt — und traegt sie es keine, entfaellt der Fall,
+        // statt ein Urteil zu erfinden.
         int ohne = -1;
         for (int i = 0; i < _entities.Count; i++)
         {
             var e = _entities[i];
             if (i == idx || e.IsBuilding || e.IsProp || e.Dead) continue;
             if (e.Owner != owner || e.Mark < 0) continue;
+            if (BuildPartOf(e) != 0) continue;          // sie KANN bauen — kein Gegenfall
             ohne = i; break;
         }
-        if (ohne < 0) sb.AppendLine("  Gegenprobe: keine zweite eigene Einheit — der Fall entfaellt");
+        if (ohne < 0)
+            sb.AppendLine("  Gegenprobe: keine eigene Einheit OHNE das Bauteil — " +
+                          "der Fall entfaellt");
         else
         {
             _sel.Clear(); _sel.Add(ohne); _selected = ohne;
