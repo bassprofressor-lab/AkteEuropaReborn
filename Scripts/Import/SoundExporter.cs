@@ -133,7 +133,8 @@ public sealed class SoundExporter
         var pr = t.Projectiles();
         sb.Append("\"_geschoss\":\"0x4f98e8, Schrittweite 22, 91 Zeilen, in beiden ");
         sb.Append("GAME.EXE byteweise gleich. +0 Tempo in Bildpunkten je Takt, +2 Flugfolge, ");
-        sb.Append("+6 Einschlagfolge, +10 Schussklang, +12 Klang Modus 3, +20 Aufschlag auf ");
+        sb.Append("+6 Einschlagfolge, +10 Schussklang, +12 TREFFKLANG (Modus 3; 1000 = leerer ");
+        sb.Append("Platz und damit stumm, 399 = wuerfle 400..405), +20 Aufschlag auf ");
         sb.Append("die Lafettensuche (KEINE Hoehe, siehe ExeTables), +21 Seitenversatz der ");
         sb.Append("Zwillingslafette. 30000 heisst keine.\",");
         void Spalte(string name, Func<ExeTables.Projectile, int> f)
@@ -145,6 +146,16 @@ public sealed class SoundExporter
         Spalte("tempo", p => p.Speed);
         Spalte("flug", p => p.Flight);
         Spalte("einschlag", p => p.Impact);
+        // ⭐ 20.09.2026 — DIE SPALTE, DIE DEN KRACH ERKLAERT. Feld +0x0C
+        // (+12) derselben Zeile ist der TREFFKLANG, und wir haben ihn seit dem
+        // 19.08. gelesen (ExeTables.Projectile.HitSound), nur nie ausgegeben.
+        // Gemeldet: »wenn der flammenwerfer schiesst, kommen massiv
+        // treffersounds, das klingt voll sputzig«. Ueber die 91 Arten steht
+        // dort: 25x 1000 (der Platz ist in SOUNDS.CWN LEER -> stumm), 31x 399
+        // (= 0x18F, die Klangroutine wuerfelt daraus rand()%6 + 0x190, also
+        // 400..405), 30x 0, und fuenf einzelne Werte. Der Flammenwerfer
+        // (Art 11) steht auf 1000.
+        Spalte("treffklang", p => p.HitSound);
         Spalte("hoehe", p => p.MuzzleHeight);
         Spalte("zwilling", p => p.Twin);
         sb.Length--;                       // das letzte Komma

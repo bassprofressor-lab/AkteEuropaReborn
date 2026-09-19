@@ -650,6 +650,7 @@ public static class GameSounds
             _tempo = Column(doc, "tempo");
             _flug = Column(doc, "flug");
             _einschlag = Column(doc, "einschlag");
+            _treffklang = Column(doc, "treffklang");
             _hoehe = Column(doc, "hoehe");
             _zwilling = Column(doc, "zwilling");
         }
@@ -671,7 +672,7 @@ public static class GameSounds
     /// table at 0x4f98f2 (stride 22) — both exported to
     /// <c>Sound/weapon_sounds.json</c>. See
     /// <see cref="Import.ExeTables.FireSoundTable"/> for the disassembly.</summary>
-    private static int[]? _tempo, _flug, _einschlag, _hoehe, _zwilling;
+    private static int[]? _tempo, _flug, _einschlag, _hoehe, _zwilling, _treffklang;
 
     private static int Feld(int[]? sp, int art)
         => sp != null && art >= 0 && art < sp.Length ? sp[art] : -1;
@@ -692,6 +693,145 @@ public static class GameSounds
 
     /// <summary>Bildfolge des Einschlags.</summary>
     public static int ImpactSequence(int art) { LoadWeaponSounds(); return Feld(_einschlag, art); }
+
+    /// <summary>
+    /// ⭐⭐⭐ 20.09.2026 — <b>DER TREFFKLANG EINER GESCHOSSART, UND WARUM DER
+    /// FLAMMENWERFER IM ORIGINAL STUMM EINSCHLAEGT.</b>
+    ///
+    /// <para>Gemeldet: »wenn der flammenwerfer schiesst, kommen massiv
+    /// treffersounds, das klingt voll sputzig«. Bei uns spielte JEDER Einschlag
+    /// hart <c>Explosion(x, y)</c>, also zwei Klaenge (410 und 400, zusammen
+    /// 3 s) — und ein Flammenwerfer erzeugt viele Geschosse. Das Original tut
+    /// etwas anderes: es liest den Klang aus Feld <b>+0x0C</b> der Geschosstafel
+    /// (0x4F98E8, Schrittweite 22) und spielt GENAU EINEN.</para>
+    ///
+    /// <para><b>Ueber die 91 Arten selbst nachgezaehlt</b> (und die Zahlen
+    /// stimmen mit der Lesung ueberein): <b>25 Arten tragen 1000</b> — und
+    /// Platz 1000 ist in SOUNDS.CWN LEER, der Abspieler kehrt bei Offset 0
+    /// zurueck (<c>0x4C1DE3</c>, F <c>0x4C18A3</c>). Diese Arten schlagen also
+    /// <b>stumm</b> ein, darunter Art 11 (Flammenwerfer) und die Kanonen 0, 1,
+    /// 3, 4. <b>31 Arten tragen 399</b> (<c>0x18F</c>); daraus wuerfelt die
+    /// Klangroutine <c>rand()%6 + 0x190</c>, also einen von 400..405. 30 Arten
+    /// tragen 0, fuenf einen Einzelwert.</para>
+    ///
+    /// <para>⚠⚠ <b>Es gibt KEINE Haeufungssperre.</b> Das Original hat einen
+    /// Ring von 20 Kanaelen (<c>0x4C1D3E</c>) und kein »spielt schon«-Tor — es
+    /// vermeidet das Uebereinanderlegen ALLEIN ueber die leere Tafelnummer.
+    /// Darum ist der richtige Griff, die Tafel zu lesen, und nicht, eine
+    /// Abklingzeit zu erfinden, die es nirgends gibt.</para>
+    ///
+    /// <para>⚠ Der leere Platz braucht bei uns keine Sonderbehandlung:
+    /// <c>SoundBankPlayer.Stream</c> gibt fuer einen unbekannten Platz
+    /// <c>null</c>, und <c>PlayAt</c> steigt dann aus. Ein Klang 1000 ist bei
+    /// uns also von selbst still — genau wie im Original.</para>
+    ///
+    /// <para>⚠ Die DRUCKWELLE (Art 7) steht ebenfalls auf 1000 und ist auf
+    /// diesem Weg damit stumm. Sie ist trotzdem zu hoeren, weil sie ihre
+    /// Klaenge im EIGENEN Zweig spielt (Simulation/Druckwelle.cs, 0x454510
+    /// zuendet statt zu treffen). Diese Stelle hier darf ihr das nicht
+    /// wegnehmen.</para>
+    ///
+    /// <para>Lesung <c>berichte/bahnschaden-klang-fable.md</c> §2.
+    /// Gegenschalter <c>--einschlagklang-alt</c>.</para>
+    /// <returns>Der Platz, oder <b>−1</b> fuer »kein Klang«.</returns></summary>
+    public static int HitSound(int art)
+    {
+        LoadWeaponSounds();
+        int v = Feld(_treffklang, art);
+        if (v <= 0) return -1;                       // 30 Arten tragen 0
+        // 0x18F: die Klangroutine wuerfelt 0x190 + rand()%6
+        //
+        // ⚠⚠ UND SIE WUERFELT MIT EINEM EIGENEN WUERFEL, NICHT MIT
+        // `Determinism.Roll`. Das ist eine BEWUSSTE ABWEICHUNG, und sie ist
+        // heute teuer erkauft: der erste Einbau nahm Determinism, und damit
+        // verschob eine KLANGentscheidung den Wuerfelstand der Simulation. Die
+        // A/B gegen --einschlagklang-alt gab daraufhin 204 gegen 316
+        // Einschlaege — zwei verschiedene GEFECHTE, nicht zwei Klangstaende.
+        // Das Original zieht hier aus demselben globalen rand(); bei uns ist
+        // der Determinism-Strom aber die Grundlage von Wiederholbarkeit und
+        // A/B, und ein Klangschalter darf das Spiel nicht aendern.
+        if (v == 0x18F) return 0x190 + _klangWuerfel.Next(6);
+        return v;
+    }
+
+    /// <summary><c>--einschlagklang-alt</c> — der Stand von vor dem 20.09.2026:
+    /// jeder Einschlag spielt das feste Paar <see cref="Explosion(float,float)"/>
+    /// statt des Tafelwerts.</summary>
+    public static bool EinschlagklangAlt;
+
+    /// <summary>Der Einschlag EINER Geschossart an ihrer Stelle — die
+    /// Voreinstellung ist die Tafel, siehe <see cref="HitSound"/>.</summary>
+    public static void Impact(int art, float col, float row)
+    {
+        // ⚠ Auch das Nullmodell ZAEHLT. Ohne diese Zeile gab der Lauf mit
+        // --einschlagklang-alt GAR KEINE Zeile aus (die Summe blieb 0), und
+        // eine fehlende Zeile ist keine Gegenprobe.
+        if (EinschlagklangAlt) { EinschlagGespielt++; Explosion(col, row); return; }
+        // ⚠⚠ DIE SPALTE KANN FEHLEN, und dann darf hier nicht STILL alles
+        // verstummen. `treffklang` ist am 20.09.2026 neu; eine
+        // `weapon_sounds.json` von vorher hat sie nicht, und ohne diese Wache
+        // gaebe die Tafel fuer jede Art 0 — also KEIN Einschlagklang im ganzen
+        // Spiel, und niemand wuesste, dass es an einer alten Datei liegt.
+        // Darum: auf das alte Verhalten zurueckfallen UND es einmal sagen.
+        LoadWeaponSounds();
+        if (_treffklang == null)
+        {
+            if (!_treffklangGewarnt)
+            {
+                _treffklangGewarnt = true;
+                Godot.GD.PrintErr("Einschlagklang: weapon_sounds.json hat keine Spalte " +
+                                  "»treffklang« — alte Ausfuhr. Es bleibt beim festen " +
+                                  "Explosionspaar; ein --reexport-tables=<Ordner mit " +
+                                  "GAME.EXE> holt die Spalte.");
+            }
+            Explosion(col, row);
+            return;
+        }
+        int slot = HitSound(art);
+        if (slot < 0) { EinschlagStumm++; return; }
+        // ⚠ »gespielt« muss HOERBAR heissen, nicht »versucht«. Der erste
+        // Einbau zaehlte jeden Aufruf als gespielt, und weil Platz 1000 leer
+        // ist, meldete der Lauf »0 stumm«, obwohl genau die stummen Arten der
+        // Befund sind. Gefragt wird darum der Bestand, nicht der Wunsch.
+        if (!SoundBankPlayer.Index.ContainsKey(slot)) { EinschlagStumm++; return; }
+        PlayAt(slot, col, row);
+        EinschlagGespielt++;
+    }
+
+    /// <summary>Zwei Zahlen, getrennt: wie oft ein Einschlag einen Klang hatte
+    /// und wie oft er stumm blieb. ⚠ Ohne die zweite Zahl saehe ein Lauf, in
+    /// dem die Tafel gar nicht geladen ist, genauso aus wie einer, in dem alles
+    /// richtig stumm ist.</summary>
+    public static int EinschlagGespielt, EinschlagStumm;
+
+    private static bool _treffklangGewarnt;
+
+    /// <summary>Der Wuerfel NUR fuer Klangauswahl — ausdruecklich nicht
+    /// <see cref="Simulation.Determinism"/>, siehe <see cref="HitSound"/>.
+    /// Fester Keim, damit ein Lauf reproduzierbar bleibt.</summary>
+    private static readonly System.Random _klangWuerfel = new(20260920);
+
+    /// <summary>Was die Einschlaege geklungen haben — die Zeile zum Befund vom
+    /// 20.09.2026. ⚠ Sie nennt BEIDE Zahlen und dazu, wie viele Arten die Tafel
+    /// stumm stellt: ein Lauf ohne Einschlaege und einer mit lauter stummen
+    /// Arten saehen sonst gleich aus.</summary>
+    public static string KlangAuskunft()
+    {
+        if (EinschlagGespielt + EinschlagStumm == 0) return "";
+        LoadWeaponSounds();
+        int stumm = 0, gewuerfelt = 0;
+        if (_treffklang != null)
+            foreach (int v in _treffklang)
+            {
+                if (v == 1000 || v <= 0) stumm++;
+                else if (v == 0x18F) gewuerfelt++;
+            }
+        return $"einschlagklang: {EinschlagGespielt} gespielt, {EinschlagStumm} stumm " +
+               $"(Tafel +0x0C: {stumm} der 91 Arten stumm, {gewuerfelt} wuerfeln 400..405)" +
+               (EinschlagklangAlt
+                   ? "   ⚠ Nullmodell --einschlagklang-alt: alles spielt das feste Paar"
+                   : "");
+    }
 
     /// <summary>⚠ Der <b>Aufschlag auf die Lafettensuche</b> (10..30), Feld
     /// +0x14. Was der Grundwert bedeutet, ist nicht gelesen — deshalb ist das

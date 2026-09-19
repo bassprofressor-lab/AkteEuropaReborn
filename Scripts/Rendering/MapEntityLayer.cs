@@ -13050,7 +13050,15 @@ public partial class MapEntityLayer : Node2D
                 _effects.Add(new Effect { Pos = p.Aim, Kind = schlag, FrameTime = 0.06f });
             if (CellAt(p.Aim) is { } ic)
             {
-                Audio.GameSounds.Explosion(ic.X, ic.Y);
+                // ⭐⭐⭐ 20.09.2026 — DER EINSCHLAGKLANG KOMMT AUS DER TAFEL.
+                // Hier stand `Explosion(ic.X, ic.Y)`, also hart zwei Klaenge
+                // (410 + 400, zusammen 3 s) bei JEDEM Einschlag. Ein
+                // Flammenwerfer erzeugt viele Geschosse, und das war sein
+                // »sputziges« Geprassel. Das Original liest Feld +0x0C der
+                // Geschosstafel und spielt GENAU EINEN Klang — fuer 25 der 91
+                // Arten ist das der leere Platz 1000, also gar keinen.
+                // Siehe Audio.GameSounds.HitSound; --einschlagklang-alt.
+                Audio.GameSounds.Impact(p.Art, ic.X, ic.Y);
                 // Ein Einschlag trifft auch das GLEIS auf dieser Zelle — die
                 // Einschlagsroutine des Originals @0x40D799 laeuft ueber alle
                 // 3000 Gleisplaetze und vergleicht genau diese Zelle.
@@ -13060,6 +13068,13 @@ public partial class MapEntityLayer : Node2D
                 // der getroffenen Zelle, gleich woher der Schuss kam — ein
                 // danebengegangener Schuss zuendet also auch Wald an.
                 ZellWirkung(Mathf.RoundToInt(ic.X), Mathf.RoundToInt(ic.Y), p.Damage, p.Shooter);
+            }
+            // ⚠ Ohne Zellbezug bleibt es beim ortlosen Klang, aber auch der
+            // kommt jetzt aus der Tafel.
+            else if (!Audio.GameSounds.EinschlagklangAlt)
+            {
+                int slot = Audio.GameSounds.HitSound(p.Art);
+                if (slot >= 0) Audio.GameSounds.Play(slot);
             }
             else Audio.GameSounds.Explosion();
             if (p.Target >= 0 && p.Target < _entities.Count)

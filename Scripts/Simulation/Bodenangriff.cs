@@ -285,7 +285,25 @@ public partial class MapEntityLayer : Node2D
         string? schlag2 = ImpactKind(art);
         if (schlag2 != null)
             _effects.Add(new Effect { Pos = wo, Kind = schlag2, FrameTime = 0.06f });
-        Audio.GameSounds.Explosion(col, row);
+        // ⭐⭐⭐ 20.09.2026 — UND HIER SASS DAS GEPRASSEL DES FLAMMENWERFERS.
+        //
+        // Hier stand <c>Explosion(col, row)</c>, also hart zwei Klaenge
+        // (410 + 400, zusammen 3 s) je getroffener ZELLE. Der Flammenwerfer
+        // (Art 11) hat keine Flugfolge, nimmt also nicht den Geschossweg,
+        // sondern genau diesen — und er trifft viele Zellen. Gemeldet: »wenn
+        // der flammenwerfer schiesst, kommen massiv treffersounds, das klingt
+        // voll sputzig«.
+        //
+        // ⚠ Das ist mir beim ersten Anlauf entgangen: ich hatte nur die
+        // Geschossstelle umgestellt, und der Prueflauf sagte »204 gespielt,
+        // 0 stumm« — durch die neue Stelle ging also gar kein Flammenwerfer.
+        // Erst diese Null hat die zweite Stelle gefunden. Eine Zahl, die
+        // NICHTS anzeigt, ist auch ein Befund.
+        //
+        // Das Original liest Feld +0x0C der Geschosstafel; fuer Art 11 steht
+        // dort 1000, und Platz 1000 ist in SOUNDS.CWN LEER — der Einschlag ist
+        // STUMM. Siehe Audio.GameSounds.HitSound, --einschlagklang-alt.
+        Audio.GameSounds.Impact(art, col, row);
     }
 
     /// <summary>Nur die WIRKUNG am Boden, ohne Klang und Bild — der Einschlag

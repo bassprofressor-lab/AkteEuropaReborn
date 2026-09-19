@@ -3900,6 +3900,7 @@ public partial class MapViewer : Node2D
             else if (a == "--flak-schaden-klemme") MapEntityLayer.FlakSchadenKlemme = true;
             else if (a == "--flak-check") _flakCheck = true;
             else if (a == "--flugzeug-nebel-alt") MapEntityLayer.FlugzeugNebelAlt = true;
+            else if (a == "--einschlagklang-alt") Audio.GameSounds.EinschlagklangAlt = true;
             else if (a == "--flak-probe") _flakProbeArg = true;
             else if (a == "--generatorfenster-alt") MapEntityLayer.GeneratorfensterAlt = true;
             else if (a == "--panzerung-neubau-alt") MapEntityLayer.PanzerungNeubauAlt = true;
@@ -5014,6 +5015,8 @@ public partial class MapViewer : Node2D
             // Sofort-Pruefstand, weil die interessante Zahl die aus einem
             // gelaufenen Gefecht ist. Siehe Simulation/Flak.cs.
             FlakAusgeben();
+            string kl = Audio.GameSounds.KlangAuskunft();
+            if (kl.Length > 0) GD.Print(kl);
             string bo = _entities.BodenAuskunft();
             if (bo.Length > 0) GD.Print(bo);
             string aw = _entities.AusweichLine();
