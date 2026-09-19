@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Rendering;
+﻿namespace AkteEuropaReborn.Rendering;
 
 using System.Collections.Generic;
 using Godot;
@@ -36,6 +36,26 @@ using Godot;
 /// </summary>
 public partial class MapEntityLayer
 {
+    /// <summary>
+    /// Der Moerserblock fuer den aktuellen <see cref="Bildzaehler"/> — die
+    /// REGEL, nicht die Zeichnung.
+    ///
+    /// <para>⚠ Warum das eine eigene Probe braucht: die Zaehlung der wirklich
+    /// gezeichneten Bloecke haengt am Zeichner, und ein kopfloser Lauf zeichnet
+    /// nicht. Die Regel dagegen ist reine Rechnung und damit auch kopflos
+    /// pruefbar — und sie ist es, die am 19.09.2026 falsch war.</para>
+    ///
+    /// <para>⚠⚠ Die Neigung wird ausdruecklich auf −9 gesetzt, also STEIGEND.
+    /// Mit einer flachen Bahn gaebe die alte Regel ebenfalls 0, und eine Folge
+    /// »0 0 0 0 0 0« waere dann kein Befund ueber das Taumeln, sondern einer
+    /// ueber die Bahn. Genau so entsteht ein Pruefstand, der nichts
+    /// misst.</para></summary>
+    private static int MoerserBlockProbe()
+    {
+        var p = new Projectile { Art = 16, Neigung = -9f };
+        return NeigungsBlock(p);
+    }
+
     private sealed class HoehenFall
     {
         public string Titel = "";
@@ -243,6 +263,49 @@ public partial class MapEntityLayer
             ? $"     Neigungsblöcke gezeichnet: {{{string.Join(",", GeschossBloecke)}}} " +
               "(0 flach, 8 Nase runter, 16 hoch)"
             : "     Neigungsblöcke: keine — kopflos wird nicht gezeichnet, das sagt hier NICHTS");
+
+        // ⭐⭐ 19.09.2026 — DIE ZWEI NEUEN REGELN, und beide mit der Ansage,
+        // WAS der Lauf über sie aussagen kann.
+        //
+        // ⚠⚠ Die Zähler GeschossRichtungGezogen/Verworfen hängen am ZEICHNER,
+        // und kopflos zeichnet niemand. Sie stehen hier trotzdem, aber mit
+        // ihrem Vorbehalt: eine 0/0 ist KEIN Befund, sondern die Aussage »nicht
+        // gemessen«. Genau diese Falle steckt in den Neigungsblöcken darüber.
+        int rGes = GeschossRichtungGezogen, rVer = GeschossRichtungVerworfen;
+        sb.AppendLine(rGes + rVer > 0
+            ? $"     Richtungstafel 0x42BD80: {rGes}x gezogen, {rVer}x verworfen " +
+              $"({(GeschossrichtungTafelAlt ? "Nullmodell --geschossrichtung-tafel-alt: verworfen nur ausserhalb 2..86" : "Soll: Art 16/17 nie gezogen")})"
+            // ⚠⚠ 19.09.2026 — HIER STAND »kopflos wird nicht gezeichnet«, und das
+            // war eine falsche Erklaerung fuer eine richtige Beobachtung. Gemessen:
+            // auch ein FENSTERLAUF dieses Pruefstands meldet 0/0, und die Zeile
+            // »Neigungsbloecke gezeichnet« darueber bleibt ebenso leer. Die
+            // Schuesse dieses Pruefstands werden also in keinem Lauf gezeichnet —
+            // das ist eine Eigenschaft von ihm und NICHT des kopflosen Betriebs.
+            // Solange das so ist, sagen beide Zeilen ueber den Zeichner nichts;
+            // die REGEL prueft dafuer die Moerserprobe darunter, und die Tafel
+            // selbst ist gegen beide GAME.EXE gelesen (85 Byte identisch).
+            : "     Richtungstafel: 0/0 — in diesem Lauf wurde KEIN Geschoss gezeichnet " +
+              "(auch im Fenster nicht, gemessen); die Zahl sagt hier NICHTS");
+
+        // Die REGEL selbst ist dagegen kopflos prüfbar, und sie ist der Kern:
+        // das Taumeln läuft über den Bildzähler, nicht über den Würfel. Geprüft
+        // wird die Folge über sechs Bilder, mit einer Granate der Art 16, deren
+        // Neigung ausdrücklich NICHT flach ist — sonst könnte eine 0-Folge auch
+        // von der Neigung kommen und wir hätten nichts gemessen.
+        int merk = Bildzaehler;
+        var folge = new System.Collections.Generic.List<int>();
+        for (int i = 0; i < 6; i++)
+        {
+            Bildzaehler = i;
+            folge.Add(MoerserBlockProbe());
+        }
+        Bildzaehler = merk;
+        string ist = string.Join(" ", folge);
+        string soll = MoerserTaumelnAus ? "8 8 8 8 8 8" : "0 1 2 0 1 2";
+        sb.AppendLine($"     {(ist == soll ? "ok  " : "⚠ FALSCH")} Mörserblock (Art 16) über " +
+                      $"sechs Bilder: {ist} (Soll {soll}" +
+                      (MoerserTaumelnAus ? " — Nullmodell --moerser-taumeln-aus: die Neigung" : "") +
+                      ")");
         // ⭐ 19.09.2026 — seine Meldung »als würden die Raketen wackeln während des
         // Fluges«. Gemessen wird der WECHSEL, nicht die Auswahl: ein sauberer Bogen
         // braucht höchstens zwei (Nase hoch → flach → Nase runter). ⚠ Noch KEIN

@@ -3889,6 +3889,10 @@ public partial class MapViewer : Node2D
             else if (a == "--bauauftrag-alt") MapEntityLayer.BauauftragAlt = true;
             else if (a == "--minengrundriss-alt") MapEntityLayer.MinenGrundrissAlt = true;
             else if (a == "--ki-luftangriff-aus") MapEntityLayer.KiLuftangriffAus = true;
+            else if (a == "--moerser-taumeln-aus") MapEntityLayer.MoerserTaumelnAus = true;
+            else if (a == "--geschossrichtung-tafel-alt")
+                MapEntityLayer.GeschossrichtungTafelAlt = true;
+            else if (a == "--flak-bodenschuss-alt") MapEntityLayer.FlakBodenschussAlt = true;
             else if (a == "--generatorfenster-alt") MapEntityLayer.GeneratorfensterAlt = true;
             else if (a == "--panzerung-neubau-alt") MapEntityLayer.PanzerungNeubauAlt = true;
             else if (a == "--generator-check") _generatorCheck = true;

@@ -3093,6 +3093,27 @@ public partial class MapEntityLayer : Node2D
                  $"frei {census.Free} / grob {census.Rough} / wasser {census.Water} / " +
                  $"gesperrt {census.Blocked}" +
                  (_nav.HasTerrain ? $" [imap, {_nav.Inferred} abgeleitet]" : " [Kachelcode-Notbehelf]"));
+
+        // ⭐ 19.09.2026 — DIE FLAK, mit einer Zahl. Ohne sie ist nicht zu sehen,
+        // ob das Tor in CanFight (FlakAufsatz) greift oder ob die Karte einfach
+        // keine Flak hat: beides ergibt »die Flak schiesst nicht«, und nur eines
+        // davon ist ein Befund. Siehe FlakAufsatz.
+        int flak = 0, flakKampf = 0;
+        foreach (var e in _entities)
+        {
+            if (e.IsProp || e.Dead || e.Weapon != FlakAufsatz) continue;
+            flak++;
+            if (CanFight(e)) flakKampf++;
+        }
+        if (flak > 0)
+            GD.Print($"flak: {flak} Einheiten mit Aufsatz {FlakAufsatz}, davon {flakKampf} " +
+                     $"im Bodenkampf zugelassen (Soll 0 — das Original kehrt bei 0x40DE07 um)" +
+                     (FlakBodenschussAlt
+                         ? "   ⚠ Nullmodell --flak-bodenschuss-alt: hier ist die Zahl absichtlich > 0"
+                         : ""));
+        else
+            GD.Print($"flak: keine Einheit mit Aufsatz {FlakAufsatz} auf dieser Karte — " +
+                     "ueber den Bodenschuss sagt dieser Lauf NICHTS");
     }
 
     /// <summary>Where the baked picture's row 0 sits, read off the tiles: a tile
@@ -10726,8 +10747,49 @@ public partial class MapEntityLayer : Node2D
         // Original braucht die Zeile nicht: UKOL 50 hat in der Auftragstafel
         // 0x40A0D8 gar keinen Arm, die Einheit wird also nie angefasst. Bei
         // uns ist es dieses Tor, siehe Simulation/Einfahrt.cs.
+        // ⭐⭐⭐ 19.09.2026 — UND DIE FLAK SCHIESST NIE AM BODEN. Siehe
+        // FlakAufsatz; die Stelle ist mit Absicht hier und nicht im Schuss:
+        // das Original steigt schon beim EINTRITT in den Kampftakt aus, also
+        // vor der Zielsuche, und visiert damit auch nichts an.
         => !e.IsProp && !e.Dead && !Untergestellt(e) && e.Weapon != 0 && e.HpMax > 0 &&
-           (e.Armed || !IsEquipmentMount(e.Weapon));
+           (e.Armed || !IsEquipmentMount(e.Weapon)) &&
+           !(e.Weapon == FlakAufsatz && !FlakBodenschussAlt);
+
+    /// <summary>
+    /// ⭐⭐⭐ 19.09.2026 — <b>DER AUFSATZ DER FLAK, UND SIE SCHIESST NIE AM
+    /// BODEN.</b>
+    ///
+    /// <para>Der Kampftakt des Originals hat fuer sie einen Sonderfall, und der
+    /// KEHRT UM, statt zu schiessen — selbst nachgelesen:</para>
+    /// <code>
+    ///   0x40DDFE  mov cl, byte ptr [edi + 0x6E26D4]   ; Satzfeld +0x0C = der AUFSATZ
+    ///   0x40DE04  cmp cl, 0x26                        ; 38 = die Flak
+    ///   0x40DE07  jne 0x40DE1A                        ; alles andere -> Kampfblock
+    ///   0x40DE09  push ebp
+    ///   0x40DE0A  call 0x40111D                       ; -> jmp 0x428350, der KEGEL
+    ///   0x40DE0F  add esp, 4 / pop / pop / pop / pop / add esp, 0x24
+    ///   0x40DE19  ret                                 ; <== kein Geschoss, nie
+    /// </code>
+    /// <para>Die Flak bekommt also <b>einen</b> Ruf — die Luftraumpruefung — und
+    /// ist damit fuer diesen Takt fertig. Sie erreicht den Geschossblock nicht.
+    /// F-Fassung: <c>0x40DC2E</c>; der Verteiler <c>0x40C8E5</c> (F
+    /// <c>0x40C7A5</c>) sperrt Waffenzeile 18 zusaetzlich.</para>
+    ///
+    /// <para>⚠⚠ <b>Bei uns war sie am Boden eine schnelle Kanone</b>: ueber
+    /// <c>SoundClass(WeaponRowOf(38))</c> fiel sie auf Geschossart 17 und schoss
+    /// <c>flug_71</c> mit Tempo 35 und Schaden 20 auf Bodenziele. Das ist der
+    /// Grund, warum es nie aufgefallen ist, dass ihr eigentlicher Zweck fehlt.
+    /// <b>Das nimmt dem Spieler in Kampagne 17 eine Waffe, die er heute hat</b> —
+    /// es ist aber das Original, und der Gegenschalter
+    /// <c>--flak-bodenschuss-alt</c> stellt den alten Stand wieder her.</para>
+    ///
+    /// <para>Lesung <c>berichte/flak-moerser-fable.md</c> §3.2, meine
+    /// Nachpruefung dort §8.</para></summary>
+    public const int FlakAufsatz = 38;
+
+    /// <summary><c>--flak-bodenschuss-alt</c> — der Stand von vor dem
+    /// 19.09.2026: die Flak nimmt am Bodenkampf teil.</summary>
+    public static bool FlakBodenschussAlt;
 
     /// <summary>Aufsaetze 40..54 sind AUSRUESTUNG, keine Waffen — die Abbildung
     /// Entwurfswaffe 65..79 -&gt; Aufsatz 40..54 ist gelesen, siehe
@@ -13019,6 +13081,12 @@ public partial class MapEntityLayer : Node2D
     /// </summary>
     private static int NeigungsBlock(Projectile p)
     {
+        // ⭐⭐⭐ 19.09.2026 — DER MOERSER NEIGT SICH NICHT, ER KREISELT.
+        // Siehe MoerserTaumelt; steht vor der Neigung, weil das Original im
+        // Moerserzweig gar nicht erst zur Neigungsrechnung kommt.
+        if (p.Art == ArtMoerser && !MoerserTaumelnAus)
+            return Bildzaehler % 3;
+
         if (NeigungsblockAlt)
         {
             if (p.Neigung < -1f) return 16;
@@ -13030,8 +13098,142 @@ public partial class MapEntityLayer : Node2D
         return 0;
     }
 
+    /// <summary>Der Bildzaehler <c>word[0x4FA248]</c> (F <c>0x4F9250</c>) —
+    /// einmal je GEZEICHNETEM Bild, Umbruch 7560. Gezaehlt in
+    /// <see cref="_Process"/>, siehe dort.</summary>
+    public static int Bildzaehler;
+
+    /// <summary>Der Umbruch des Bildzaehlers, aus dem Original.</summary>
+    private const int BildzaehlerUmbruch = 7560;
+
+    /// <summary>Die Geschossart des Moersers.</summary>
+    private const int ArtMoerser = 16;
+
+    /// <summary>Die Geschossart der Flak. Sie kommt am Boden nie vor (siehe
+    /// <see cref="FlakAufsatz"/>), taucht aber in der
+    /// Richtungstafel auf und steht dort wie der Moerser auf 10.</summary>
+    private const int ArtFlak = 17;
+
+    /// <summary>
+    /// ⭐⭐⭐ 19.09.2026 — <b>DAS TAUMELN DER MOERSERGRANATE IST DETERMINISTISCH,
+    /// NICHT GEWUERFELT.</b>
+    ///
+    /// <para>Eine aeltere Notiz sagte »der Moerser TAUMELT im Original:
+    /// <c>rand%3</c> je Takt ueber <c>0x4531E4[0]</c>«. Das hat eine Lesung von
+    /// Fable geprueft und ich danach selbst nachgemessen — und <b>die Haelfte
+    /// davon ist falsch</b>. Der Divisor 3 stimmt, der DIVIDEND nicht:</para>
+    /// <code>
+    ///   0x45259E  mov  cx, 3
+    ///   0x4525A2  mov  ax, word ptr [0x4FA248]      ; der BILDZAEHLER
+    ///   0x4525AA  idiv cx
+    ///   0x4525AD  mov  byte ptr [esi + 0x88474E], dl ; Rest 0..2 -> der Block
+    /// </code>
+    /// <para><c>0x4FA248</c> ist der Bildzaehler (F <c>0x4F9250</c>, erhoeht
+    /// @<c>0x415F2D</c> / F @<c>0x415D6D</c>), <b>nicht</b> <c>rand()</c>.</para>
+    ///
+    /// <para><b>Und das ist kein Haarspalten.</b> Deterministisch heisst:
+    /// <list type="bullet">
+    /// <item>ALLE Moersergranaten auf dem Schirm kreiseln im GLEICHSCHRITT —
+    /// gewuerfelt zittert jede fuer sich, und das sieht voellig anders aus;</item>
+    /// <item>ein Schritt je gezeichnetem BILD, nicht je Takt: bei
+    /// Geschwindigkeit 3 kreiselt sie trotzdem einfach;</item>
+    /// <item>es verschiebt den Wuerfelstand nicht. Mit
+    /// <c>Determinism.Roll(3)</c> gebaut haetten wir jede andere Zufallsfolge im
+    /// Spiel mitverschoben — ein Fehler, der sich nirgends als solcher zeigt.</item>
+    /// </list></para>
+    ///
+    /// <para>⚠ Die drei Werte sind <b>Bildnummern</b>, keine Blockversaetze:
+    /// <c>flug_68</c> hat genau drei Bilder (f0, f1, f2), die drei Taumellagen.
+    /// Darum muss <see cref="ProjectileTexture"/> hier <c>f{block}</c> nehmen
+    /// und nicht <c>f{facing + block}</c> — siehe dort.</para>
+    ///
+    /// <para>⚠ Und der Moerser hat KEINE Richtung (Tafel <c>0x42BD80</c>,
+    /// Art 16 = 10), siehe <see cref="GeschossZiehtRichtung"/>. Beides greift
+    /// zusammen: ohne die Tafel gaebe <c>facing + block</c> fuer eine
+    /// Moersergranate Bilder, die es nicht gibt.</para>
+    ///
+    /// <para>Lesung: <c>berichte/flak-moerser-fable.md</c> §2, meine
+    /// Nachpruefung dort §8.</para>
+    ///
+    /// <para><c>--moerser-taumeln-aus</c> ist das Nullmodell: der alte Stand mit
+    /// Neigungsblock. Die Blockfolge ist damit nicht 0 1 2 0 1 2, sondern 0 oder
+    /// 8/16 — und weil <c>flug_68</c> weder <c>f8</c> noch <c>f16</c> hat, in
+    /// jedem Fall das flache Bild. Genau das war der alte Zustand: die Granate
+    /// kreiselte gar nicht.</para></summary>
+    public static bool MoerserTaumelnAus;
+
+    /// <summary>
+    /// ⭐⭐ <b>DIE RICHTUNGSTAFEL <c>0x42BD80</c></b> (F <c>0x42AF6C</c>,
+    /// 85 Byte, in beiden Fassungen <b>byteweise identisch</b> — selbst
+    /// nachgelesen).
+    ///
+    /// <para>Bisher stand im Zeichner nur die Bereichspruefung
+    /// <c>Art ∈ [2, 86]</c> (@<c>0x42B177</c>: <c>lea ecx,[edi-2]; cmp ecx,0x54;
+    /// ja</c>). Das ist aber nur die ERSTE Stufe. Danach liest das Original
+    /// einen Tafelwert und springt damit:</para>
+    /// <code>
+    ///   0x42B181  mov al, byte[ecx + 0x42BD80]   ; Wert 0..10
+    ///   0x42B187  jmp dword[eax*4 + 0x42BD54]    ; Sprungtafel, 11 Eintraege
+    ///   0x42B18E  xor cl, cl                     ; KEINE Richtung
+    ///   0x42B192  mov cl, byte[edx + 0x88473E]   ; die Richtung des Satzes
+    /// </code>
+    /// <para>⚠ <b>Die Tafel wird also nicht gegen 10 VERGLICHEN, sie ist ein
+    /// INDEX.</b> Nachgelesen habe ich die elf Sprungziele: <b>0..9 gehen alle
+    /// auf 0x42B192, 10 geht auf 0x42B18E</b> — ein Compiler-Schalter mit zehn
+    /// gleichen Zweigen. Eine Ja/Nein-Tafel ist damit originaltreu, und die
+    /// Zehnerteilung ist in dieser Fassung ohne weitere Wirkung: <c>reloc_refs
+    /// --range 0x42BD80 85</c> findet <b>genau eine</b> Lesestelle
+    /// (0x42B181) und keine Schreibstelle.</para>
+    ///
+    /// <para>Die 22 Arten mit Richtung, aus der Tafel gezaehlt (63 stehen auf
+    /// 10). ⚠ Die Lesung nannte hier 24 — das war um zwei zu hoch, die Liste
+    /// darin war richtig.</para>
+    ///
+    /// <para><b>Warum es fuer Kampagne 17 zaehlt:</b> Art 16 (Moerser) und
+    /// Art 17 (Flak) stehen beide auf 10. Bei uns bekam der Moerser eine
+    /// Richtung, und <c>facing + block</c> griff damit in <c>flug_68</c> (drei
+    /// Bilder) ins Leere.</para>
+    ///
+    /// <para>Lesung <c>berichte/flak-moerser-fable.md</c> §1, Nachpruefung §8.
+    /// Nullmodell <c>--geschossrichtung-tafel-alt</c>.</para></summary>
+    private static readonly System.Collections.Generic.HashSet<int> GeschossArtenMitRichtung = new()
+    {
+        2, 5, 6, 7, 9, 10, 20, 45, 46, 47, 57, 58,
+        63, 64, 65, 66, 71, 72, 73, 74, 84, 86,
+    };
+
+    /// <summary><c>--geschossrichtung-tafel-alt</c> — der Stand von vor dem
+    /// 19.09.2026: die Richtung haengt nur an der Bereichspruefung 2..86, ohne
+    /// die Tafel.</summary>
+    public static bool GeschossrichtungTafelAlt;
+
+    /// <summary>Wie oft die Richtung wirklich aus dem Satz gezogen wurde, und
+    /// wie oft sie verworfen wurde. ⚠ Zwei Zahlen, nicht eine: eine Tafel, die
+    /// nie greift, sieht sonst genauso aus wie eine, die alles durchlaesst.</summary>
+    public static int GeschossRichtungGezogen, GeschossRichtungVerworfen;
+
+    /// <summary>Zieht diese Geschossart ihre Richtung aus dem Satz? — die
+    /// zwei Stufen des Originals, siehe <see cref="GeschossArtenMitRichtung"/>.</summary>
+    private static bool GeschossZiehtRichtung(int art)
+    {
+        if (art is < 2 or > 86) return false;                 // @0x42B177
+        if (GeschossrichtungTafelAlt) return true;            // Nullmodell
+        return GeschossArtenMitRichtung.Contains(art);        // @0x42B181/@0x42BD54
+    }
+
     private Texture2D? ProjectileTexture(string kind, int facing, int block = 0)
     {
+        // ⭐ 19.09.2026 — OHNE RICHTUNG IST DER BLOCK EINE BILDNUMMER.
+        // Der Moerser (Art 16) kreiselt ueber drei Bilder f0/f1/f2 von
+        // `flug_68`, und `facing` ist dort immer 0. `facing + block` waere
+        // dasselbe — aber nur solange facing 0 ist, und darauf soll sich hier
+        // nichts verlassen: wer keine Richtung zieht, indiziert direkt.
+        // Siehe MoerserTaumelnAus.
+        if (facing == 0 && block > 0)
+        {
+            var gedreht = ProjectilePng(kind, block);
+            if (gedreht != null) return gedreht;
+        }
         // Erst der geneigte Block; hat diese Folge ihn nicht (viele haben nur acht
         // Bilder), faellt es sauber auf den flachen zurueck.
         if (block > 0)
@@ -13099,10 +13301,14 @@ public partial class MapEntityLayer : Node2D
                 // `xor cl,cl`). Folge 61 zum Beispiel hat ein EINZIGES Bild und
                 // wird von Art 1 und Art 21 benutzt -- ohne diese Schranke
                 // griffe Art 21 daneben.
+                // ⭐ 19.09.2026 — und die Bereichspruefung ist nur die ERSTE
+                // Stufe: danach entscheidet die Tafel 0x42BD80. Siehe
+                // GeschossZiehtRichtung.
                 int block = NeigungsBlock(p);
                 GeschossBloecke.Add(block);
-                var tex = ProjectileTexture(p.Kind, p.Art is >= 2 and <= 86 ? p.Facing : 0,
-                                            block);
+                bool zieht = GeschossZiehtRichtung(p.Art);
+                if (zieht) GeschossRichtungGezogen++; else GeschossRichtungVerworfen++;
+                var tex = ProjectileTexture(p.Kind, zieht ? p.Facing : 0, block);
                 // Die Bogenhoehe: geschlossene Parabel mit demselben Scheitel,
                 // den das Original ueber seine Takte aufsummiert — siehe
                 // Scheitelteiler. Bei gerader Bahn ist Scheitel 0 und die
@@ -32688,6 +32894,21 @@ public partial class MapEntityLayer : Node2D
     {
         if (_nav == null) return;
         float dt = (float)delta;
+
+        // ⭐⭐ 19.09.2026 — DER BILDZAEHLER `word[0x4FA248]`, und er gehoert
+        // hierher und NICHT in SimTick. Im Original steigt er einmal je
+        // Durchlauf von `Main_funct` (@0x415F2D, F @0x415D6D), also je
+        // GEZEICHNETEM Bild, nicht je Spieltakt — daran haengt das Taumeln der
+        // Moersergranate (Bildzaehler mod 3) und die Reihumarbeit der Flugzeuge
+        // ((Bildzaehler + Nummer) % 20 == 0 @0x422EFA).
+        //
+        // ⚠ Er ist damit ausdruecklich NICHT Teil des Spielzustands: bei
+        // Geschwindigkeit 3 laufen drei Takte je Bild, und die Granate kreiselt
+        // trotzdem nur einen Schritt weiter. Wer ihn in SimTick zaehlt, bekommt
+        // bei jeder Geschwindigkeit ein anderes Bild — und misst dann auch
+        // dreifach (Messfalle der Fensterwelt).
+        // ⚠ Umbruch bei 7560, wie im Original (Lesung berichte/flak-moerser-fable.md §2.2).
+        Bildzaehler = (Bildzaehler + 1) % BildzaehlerUmbruch;
 
         // Der Klang laeuft nach der Uhr des RECHNERS, nicht nach der
         // Simulation: er gehoert nicht in den Zustand und darf nicht mitzaehlen.
