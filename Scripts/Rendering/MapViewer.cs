@@ -5013,7 +5013,7 @@ public partial class MapViewer : Node2D
             // ⭐ 19.09.2026 — die Flugabwehr. Sie steht hier und nicht in einem
             // Sofort-Pruefstand, weil die interessante Zahl die aus einem
             // gelaufenen Gefecht ist. Siehe Simulation/Flak.cs.
-            if (_flakCheck) GD.Print(_entities.FlakCheckLine());
+            FlakAusgeben();
             string bo = _entities.BodenAuskunft();
             if (bo.Length > 0) GD.Print(bo);
             string aw = _entities.AusweichLine();
@@ -5199,11 +5199,41 @@ public partial class MapViewer : Node2D
         GD.Print(_entities.StuckCheckLine());
     }
 
+    /// <summary>
+    /// ⭐ 20.09.2026 — <b>DIE FLUGABWEHR-ZEILE KOMMT AUCH, WENN ER SELBST
+    /// BEENDET.</b>
+    ///
+    /// <para>Auf seine Ansage. Sie hing bisher allein am
+    /// <c>--quit-after</c>-Block, und der laeuft nur in einem Prueflauf: wer
+    /// K17 spielt und das Fenster zumacht oder ins Menue zurueckgeht, bekam
+    /// KEINE Zahl. Genau das ist aber der wertvollste Lauf — einer, in dem
+    /// wirklich gespielt wurde.</para>
+    ///
+    /// <para>Das Muster ist von <see cref="StuckAusgeben"/> uebernommen, samt
+    /// Merker gegen die doppelte Ausgabe: ein Lauf mit <c>--quit-after</c>
+    /// durchlaeuft BEIDE Wege (erst den Block, dann <c>_ExitTree</c>), und eine
+    /// Zeile zweimal im Protokoll sieht aus wie zwei Messungen.</para>
+    ///
+    /// <para>⚠ Im gewoehnlichen Spiel schweigt sie: ohne <c>--flak-check</c>
+    /// passiert hier nichts.</para></summary>
+    private bool _flakGedruckt;
+
+    private void FlakAusgeben()
+    {
+        if (_flakGedruckt || !_flakCheck) return;
+        _flakGedruckt = true;
+        GD.Print(_entities.FlakCheckLine());
+    }
+
     public override void _ExitTree()
     {
-        // ⚠ Nur der Pruefstand, und nur wenn er lief — im gewoehnlichen Spiel
-        // schweigt diese Stelle.
+        // ⚠ Nur die Pruefstaende, und nur wenn sie liefen — im gewoehnlichen
+        // Spiel schweigt diese Stelle.
         if (_stuckCheck) StuckAusgeben();
+        // ⭐ 20.09.2026 — und die Flugabwehr, siehe FlakAusgeben. Dieser Weg
+        // ist der, den ein GESPIELTER Lauf nimmt: Fenster zu oder zurueck ins
+        // Menue (ChangeSceneToFile) landen beide hier.
+        FlakAusgeben();
     }
 
     /// <summary>
