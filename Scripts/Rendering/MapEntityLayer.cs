@@ -1408,6 +1408,11 @@ public partial class MapEntityLayer : Node2D
         /// das Feld traegt nur seinen Anfangswert. Eine halb geratene Regelung
         /// waere schlimmer als keine: sie sieht im Bild richtig aus und
         /// verschiebt den Flak-Ring um einen unbekannten Betrag.</para></summary>
+        /// <summary><c>uk</c> 100 — dieses Flugzeug STUERZT. Es ist noch nicht
+        /// tot: es faellt mit -2 je Takt, und erst der Aufprall richtet den
+        /// Schaden an. Siehe Simulation/Absturz.cs.</summary>
+        public bool Absturz;
+
         public int Alt;
 
         /// <summary>Die SOLLHOEHE, Satzfeld <b>+0x13</b> (absolut
@@ -33927,6 +33932,7 @@ public partial class MapEntityLayer : Node2D
         // ⚠ Die Probe heftet ihren Fall fest und muss darum VOR dem Kegel laufen.
         FlakProbeTakt();
         FlakTakt();
+        AbsturzTakt();
 
         // 'unexplored' — auf eigenem, langsamerem Schlag
         _fogTick += dt;
@@ -37670,6 +37676,13 @@ public partial class MapEntityLayer : Node2D
                 // Gelaende·15 stehen. Also auch hier nichts.
                 continue;
             }
+
+            // ⭐ 20.09.2026 — EIN STUERZENDES FLUGZEUG TUT NICHTS MEHR.
+            // Es hat kein Ziel, fliegt kein Flugziel an und steigt nicht: es
+            // faellt, und das erledigt AbsturzTakt mit seiner eigenen Regel.
+            // Ohne diese Zeile griffe darunter die Hoehenregelung (+2 bis 135)
+            // und der Sturz waere ein Steigflug.
+            if (a.Absturz) continue;
 
             FlughoeheTakt(a);
 

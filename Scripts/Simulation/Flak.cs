@@ -171,6 +171,11 @@ public partial class MapEntityLayer
             foreach (var a in _special)
             {
                 if (a.Dead || a.Stored) continue;            // uk 0 / 4
+                // ⚠ 20.09.2026 — UND uk 100: ein STUERZENDER Flieger ist kein
+                // Ziel mehr. Ohne diese Zeile beschiesst ihn die Station
+                // weiter, und der Abschusszaehler meldete 12 bei sechs
+                // Fliegern — die Kette zaehlte jeden Nachschuss als Abschuss.
+                if (a.Absturz) continue;                     // uk 100
                 if (a.Owner is < 0 or > 7 || Allied(s.Owner, a.Owner)) continue;
 
                 FlakKegelProben++;
@@ -225,7 +230,9 @@ public partial class MapEntityLayer
         {
             var auf = _flak[k];
             var ziel = _special.Find(x => x.Slot == auf.Flugzeug);
-            if (ziel == null || ziel.Dead || auf.Schuesse <= 0) { _flak.RemoveAt(k); continue; }
+            // ⚠ Auftrag loeschen bei Hp == 0 ODER uk == 100 — so gelesen.
+            if (ziel == null || ziel.Dead || ziel.Absturz || auf.Schuesse <= 0)
+            { _flak.RemoveAt(k); continue; }
             if (auf.Schuetze < 0 || auf.Schuetze >= _entities.Count) { _flak.RemoveAt(k); continue; }
             var s = _entities[auf.Schuetze];
             if (s.Dead || s.IsProp) { _flak.RemoveAt(k); continue; }
@@ -273,15 +280,16 @@ public partial class MapEntityLayer
     /// tot. Benannte Abweichung; der Absturz waere eine eigene Bauaufgabe.</summary>
     private void FlakAbschuss(Special ziel, Entity schuetze)
     {
-        ziel.Hp = 0;
-        ziel.Dead = true;
-        ziel.Target = -1;
-        ziel.Goal = null;
         FlakAbschuesse++;
-        _effects.Add(new Effect { Pos = ziel.Pos, Kind = "explosion", FrameTime = 0.05f });
-        GD.Print($"flak-abschuss: {ziel.Name} (Platz {ziel.Slot}, Spieler {ziel.Owner}) " +
-                 $"durch Flak Platz {schuetze.Slot} (Spieler {schuetze.Owner}) " +
-                 $"auf ({schuetze.Col},{schuetze.Row}), Hoehe {ziel.Alt}");
+        // ⭐ 20.09.2026 — HIER STAND `Dead = true`, UND DAS WAR ZU FRUEH.
+        // Ein Abschuss macht ein Flugzeug im Original nicht tot, sondern
+        // STUERZEND (uk := 100): es faellt mit -2 je Takt, und erst der
+        // Aufprall richtet Schaden an — 60 auf die Zelle, 50 auf acht
+        // Nachbarn, auch gegen Gebaeude. DAS ist der »Kamikaze«, den er
+        // gemeldet hat. Siehe Simulation/Absturz.cs; --absturz-aus.
+        FlugzeugAbschiessen(ziel,
+            $"Flak Platz {schuetze.Slot} (Spieler {schuetze.Owner}) " +
+            $"auf ({schuetze.Col},{schuetze.Row})");
     }
 
     /// <summary>
@@ -420,7 +428,7 @@ public partial class MapEntityLayer
                 Owner = gegner, Stored = false,
                 Col = s.Col + f.D, Row = s.Row,
                 Pos = s.Pos + new Vector2(f.D * TileW, 0f),
-                Hp = 1000, HpMax = 1000, Defence = 0, Attack = 0,
+                Hp = FlakProbeHuelle, HpMax = FlakProbeHuelle, Defence = 0, Attack = 0,
                 Ammo = 0, AmmoMax = 0, Fuel = 9999, FuelMax = 9999,
                 Alt = f.Alt, Sollhoehe = f.Alt,
             };
@@ -438,6 +446,18 @@ public partial class MapEntityLayer
     /// <summary>Die Zeile der Probe, nach <see cref="FlakProbeTakte"/> Takten.</summary>
     private const int FlakProbeTakte = 120;
 
+    /// <summary>
+    /// Die Huelle eines Probefliegers — <b>60</b>, und die Zahl ist mit Absicht
+    /// klein.
+    ///
+    /// <para>⚠ Sie stand auf 1000, und damit hat die Probe den ABSCHUSS nie
+    /// erreicht: 28 Schuesse nahmen 1000 auf 810 herunter, fuer einen Abschuss
+    /// haette es rund 140 gebraucht. Der Aufprallschaden (Absturz.cs) war so
+    /// nicht messbar — die Kette endete beim Beschuss. Mit 60 fallen innerhalb
+    /// des Messfensters welche, und der ganze Weg vom Kegel bis zum Aufprall
+    /// steht in einer Zeile.</para></summary>
+    private const int FlakProbeHuelle = 60;
+
     private void FlakProbeTakt()
     {
         if (_flakProbe) { FlakProbeAufbauen(); return; }
@@ -448,6 +468,10 @@ public partial class MapEntityLayer
         {
             var a = _special.Find(x => x.Slot == pslot);
             if (a == null || a.Dead) continue;
+            // ⚠⚠ EIN STUERZENDER FLIEGER WIRD NICHT FESTGEHEFTET. Sonst setzt
+            // die Probe seine Hoehe je Takt zurueck, er erreicht den Boden nie
+            // und der Aufprall — der eigentliche Befund — tritt nicht ein.
+            if (a.Absturz) continue;
             a.Pos = pos; a.Col = col; a.Row = row;
             a.Alt = alt; a.Sollhoehe = alt;
             a.Goal = pos; a.PlayerGoal = null; a.TurnPoint = null;
@@ -473,7 +497,7 @@ public partial class MapEntityLayer
                           $"dz {Mathf.Abs(halt.Alt - _flakProbeGelaende) / FlakHoehenTeiler}, " +
                           $"d {d} -> {(imRing ? "im Ring" : "nicht im Ring")} " +
                           $"(Soll {(soll ? "im Ring" : "nicht im Ring")})" +
-                          (a != null ? $"   Huelle {a.Hp}/1000, Hoehe {a.Alt}" : "   WEG"));
+                          (a != null ? $"   Huelle {a.Hp}/{FlakProbeHuelle}, Hoehe {a.Alt}" : "   WEG"));
         }
         sb.AppendLine($"   {ok} von {_flakProbeFaelle.Count} Faellen richtig (die REGEL)");
         // (2) DIE KETTE, einmal. ⚠ Mit EINER Flak kommt je Nachladezeit nur ein
@@ -484,7 +508,7 @@ public partial class MapEntityLayer
         foreach (var (_, pslot, _) in _flakProbeFaelle)
         {
             var a = _special.Find(x => x.Slot == pslot);
-            if (a != null && (a.Dead || a.Hp < 1000)) getroffen++;
+            if (a != null && (a.Dead || a.Absturz || a.Hp < FlakProbeHuelle)) getroffen++;
         }
         sb.Append($"   Kette: Auftraege {FlakAuftraege}, Schuesse {FlakSchuesse}, " +
                   $"Abschuesse {FlakAbschuesse}, beschossene Flieger {getroffen} " +
