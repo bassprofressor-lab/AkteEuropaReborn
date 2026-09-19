@@ -241,10 +241,25 @@ public partial class MapEntityLayer
     /// <b>FLUGZIEL SETZEN</b> — der Rechtsklick für ein angewähltes Flugzeug.
     ///
     /// <para>Gemeldet: »im Gefecht wäre es doch sinnvoll die Einheiten
-    /// eigenständig zu steuern oder nicht?«. Ja — aber es ist eine
-    /// <b>Abweichung</b>, und sie steht bei <see cref="CommandOp.OursAirMove"/>
-    /// mit dem Negativbefund, auf den sie sich stützt: kein Befehlsbehandler
-    /// des Originals schreibt das Zielfeld eines Flugzeugs.</para>
+    /// eigenständig zu steuern oder nicht?«.</para>
+    ///
+    /// <para>⚠⚠ <b>19.09.2026 — DER NEGATIVBEFUND WAR FALSCH.</b> Hier stand,
+    /// kein Befehlsbehandler des Originals schreibe das Zielfeld eines
+    /// Flugzeugs, und darauf stützte sich die Einordnung als Abweichung.
+    /// Gelesen ist jetzt das Gegenteil: <b>Befehl 502</b> (<c>0x4C374B</c> →
+    /// <c>launch_aircraft</c> <c>0x426020</c>, F <c>0x425200</c>) und
+    /// <b>Befehl 6</b> (<c>0x4C2A57</c> → <c>0x426020</c>/<c>0x425E10</c>)
+    /// schreiben genau <c>+0x14</c>/<c>+0x15</c>/<c>+0x2E</c> — Zielspalte,
+    /// Zielzeile, Ziel. Der Weg des Originals ist der Kartenklick mit
+    /// gewähltem Flugzeug (<c>0x427930</c> → Befehl 6, Modus 7 für ein Ziel /
+    /// Modus 1 für eine Zelle).</para>
+    ///
+    /// <para>Der <b>Kern ist damit Original</b>, nicht unsere Zutat; unsere
+    /// bleiben nur die Nummer und der Name. Das <c>Ours</c> vor
+    /// <see cref="CommandOp.OursAirMove"/> darf fallen, sobald Modus 7/1 und
+    /// die Weiche <c>uk 0 → launch</c> / <c>uk 1 → retarget</c> nachgebaut
+    /// sind — bis dahin bleibt es stehen, weil unser Befehl heute WENIGER tut
+    /// als der des Originals und nicht dasselbe.</para>
     ///
     /// <para>Der Weg ist derselbe wie bei jedem anderen Befehl — über den Ring,
     /// wirksam am nächsten Taktanfang. Ein zweiter, direkter Draht für

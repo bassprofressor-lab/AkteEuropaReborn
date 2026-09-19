@@ -1,4 +1,4 @@
-namespace AkteEuropaReborn.Simulation.Commands;
+﻿namespace AkteEuropaReborn.Simulation.Commands;
 
 /// <summary>
 /// DIE OPCODES DES BEFEHLSBUSSES — Bereiche, Schranken und die Nummern, für die
@@ -456,6 +456,10 @@ public static class CommandOp
     /// <para>⚠ Der Befehl wird NUR außerhalb der Kampagne angenommen — siehe
     /// <c>CommandBridge.ApplyAirMove</c>. Die Kampagne bleibt originaltreu,
     /// das Gefecht darf abweichen, und die Abweichung steht hier.</para></summary>
+    /// <para>⚠⚠ 19.09.2026 — die Begründung oben ist BERICHTIGT: das Original
+    /// setzt das Flugziel doch, über Befehl 502 und Befehl 6. Siehe
+    /// <see cref="CommandBridge"/> (Flugziel setzen). Der Name behält das
+    /// <c>Ours</c>, solange unser Befehl die Modi 7/1 nicht kennt.</para>
     public const short OursAirMove = 2003;
 
     /// <summary>Geht dieser Befehl in die Wiederholung? (Schranke des
