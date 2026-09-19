@@ -2373,6 +2373,14 @@ public partial class MapEntityLayer : Node2D
         flz.Col = c; flz.Row = r;
         flz.Pos = CellCenter(c, r);
 
+        // ⭐ 19.09.2026 — die Hoehe beim Start: `alt := Gelaende·15` (@0x4260B0),
+        // die Sollhoehe setzt air_takeoff NICHT. Siehe Special.Alt; gestiegen
+        // wird noch nicht, solange die Regelung gegengelesen wird.
+        flz.Alt = ElevOf(c, r) * 15;
+        // Die Sollhoehe kommt nicht aus air_takeoff, sondern aus air_order
+        // @0x425E6B: 0x87 = 135. Der KI-Start IST ein Auftrag (m_uk 7).
+        flz.Sollhoehe = FlughoeheMax;
+
         flz.Target = zielIdx;                 // word[+0x2E] := kunde
         flz.Goal = ziel.Pos;                  // Flugziel := (x, y)
         flz.PlayerGoal = null;

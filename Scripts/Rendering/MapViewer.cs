@@ -766,6 +766,7 @@ public partial class MapViewer : Node2D
         if (_depotFlow) _entities.DepotFlowStart();
         if (_einfahrtCheck) _entities.EinfahrtCheckStart();
         if (_kiProbe) _entities.KiProbeStart();
+        if (_flakProbeArg) _entities.FlakProbeStart();
         if (_ausweichProbe) _entities.AusweichProbeStart();
         if (_aufgebenProbe) _entities.AufgebenProbeStart();
         if (_bodenangriffProbe) _entities.BodenangriffProbeStart();
@@ -3893,6 +3894,12 @@ public partial class MapViewer : Node2D
             else if (a == "--geschossrichtung-tafel-alt")
                 MapEntityLayer.GeschossrichtungTafelAlt = true;
             else if (a == "--flak-bodenschuss-alt") MapEntityLayer.FlakBodenschussAlt = true;
+            else if (a == "--flughoehe-alt") MapEntityLayer.FlughoeheAlt = true;
+            else if (a == "--flak-kegel-aus") MapEntityLayer.FlakKegelAus = true;
+            else if (a == "--flak-treffer-aus") MapEntityLayer.FlakTrefferAus = true;
+            else if (a == "--flak-schaden-klemme") MapEntityLayer.FlakSchadenKlemme = true;
+            else if (a == "--flak-check") _flakCheck = true;
+            else if (a == "--flak-probe") _flakProbeArg = true;
             else if (a == "--generatorfenster-alt") MapEntityLayer.GeneratorfensterAlt = true;
             else if (a == "--panzerung-neubau-alt") MapEntityLayer.PanzerungNeubauAlt = true;
             else if (a == "--generator-check") _generatorCheck = true;
@@ -4630,6 +4637,11 @@ public partial class MapViewer : Node2D
     private float _placeCheck;
     private bool _freshCampaign;
     private bool _terraCheck;
+    /// <summary>`--flak-check`: die Zeile zur Flugabwehr beim --quit-after.
+    /// ⚠ NICHT sofort drucken und beenden wie --terra-check: die Flak braucht
+    /// Zeit, bis ein Flugzeug in ihren Ring kommt. Siehe Simulation/Flak.cs.</summary>
+    private bool _flakCheck;
+    private bool _flakProbeArg;
     private bool _shipCheck;
     private float _shipCheckAfter;
     private float _placeForce;
@@ -4997,6 +5009,10 @@ public partial class MapViewer : Node2D
             // einem eigenen Prüfstand, weil die interessante Zahl die im
             // NORMALEN Lauf ist: fährt von selbst etwas hinein, das nicht
             // hineinsollte? Siehe Simulation/Einfahrt.cs.
+            // ⭐ 19.09.2026 — die Flugabwehr. Sie steht hier und nicht in einem
+            // Sofort-Pruefstand, weil die interessante Zahl die aus einem
+            // gelaufenen Gefecht ist. Siehe Simulation/Flak.cs.
+            if (_flakCheck) GD.Print(_entities.FlakCheckLine());
             string bo = _entities.BodenAuskunft();
             if (bo.Length > 0) GD.Print(bo);
             string aw = _entities.AusweichLine();

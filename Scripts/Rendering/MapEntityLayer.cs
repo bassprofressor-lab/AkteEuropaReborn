@@ -1384,6 +1384,41 @@ public partial class MapEntityLayer : Node2D
         public bool Dead;
         public string TypeName = "";
 
+        /// <summary>
+        /// ⭐⭐ 19.09.2026 — <b>DIE FLUGHOEHE</b>, Satzfeld <b>+0x0E</b>
+        /// (absolut <c>0x6DDF7E</c>).
+        ///
+        /// <para>Bis heute hatten unsere Flugzeuge keine Hoehe: was man am
+        /// Schirm als Hoehe sieht, war allein der Zeichnerversatz
+        /// (<see cref="AirShadowDrop"/>). Gebraucht wird sie fuer die
+        /// Luftraumpruefung der Flak, die <c>dz = |alt − 15·Gelaende| / 13</c>
+        /// rechnet und daraus einen RING um den Schuetzen macht — ohne echte
+        /// Hoehe ist dieser Ring nicht zu berechnen, und jede Ersatzzahl waere
+        /// eine Erfindung.</para>
+        ///
+        /// <para><b>Gelesen ist bisher:</b> <c>air_takeoff</c> @0x426020 setzt
+        /// <c>alt := Gelaende·15</c> (@0x4260B0 <c>mov cl,0x0F; imul cl</c>);
+        /// der KI-Nachschubspawner @0x4B30D5 setzt <c>Gelaende·15 + 0x46</c>;
+        /// im Startzweig <c>uk</c> 4 steigt sie um <b>+5 je Takt</b>
+        /// (@0x4234DA <c>add cl,5</c>). ⚠ <b>Die Zahl »±2 je Takt« aus
+        /// AIR_RE.md ist damit mindestens fuer den Start falsch</b>; die
+        /// vollstaendige Regelung ueber alle 14 Schreibstellen und gegen die
+        /// Sollhoehe wird gerade gegengelesen (berichte/flughoehe-fable.md).
+        /// <b>Solange das offen ist, wird hier NICHT gestiegen und gesunken</b> —
+        /// das Feld traegt nur seinen Anfangswert. Eine halb geratene Regelung
+        /// waere schlimmer als keine: sie sieht im Bild richtig aus und
+        /// verschiebt den Flak-Ring um einen unbekannten Betrag.</para></summary>
+        public int Alt;
+
+        /// <summary>Die SOLLHOEHE, Satzfeld <b>+0x13</b> (absolut
+        /// <c>0x6DDF83</c>). <c>air_order</c> @0x425E6B setzt sie auf
+        /// <b>0x87 = 135</b>; <c>air_back_to_airport</c> auf Gelaende·15 + 100
+        /// (gedeckelt 135) fuer Flugzeuge, +8 fuer Kampf-/Transporthelis und
+        /// fest 135 fuer die Nachschubhelis. ⚠ <c>air_takeoff</c> schreibt sie
+        /// NICHT — was ein frisch gestartetes Flugzeug als Sollhoehe hat, ist
+        /// noch ungelesen.</summary>
+        public int Sollhoehe;
+
         public bool Flying => !Stored && !Dead;
         public bool Armed => Attack > 0 && AmmoMax > 0;
     }
@@ -33833,6 +33868,14 @@ public partial class MapEntityLayer : Node2D
         // gar nicht gab, und die Wegmarken zeigten auf gestrige Punkte.
         UpdateAircraft(dt);                       // 'Airplanes'
 
+        // ⭐⭐ 19.09.2026 — DIE FLUGABWEHR, gleich hinter den Flugzeugen.
+        // Das Original ruft den Kegel aus dem Kampftakt der Flak-Einheit
+        // (@0x40DE0A) und die Station aus dem Taktrumpf; beides laeuft je
+        // Spieltakt. Siehe Simulation/Flak.cs.
+        // ⚠ Die Probe heftet ihren Fall fest und muss darum VOR dem Kegel laufen.
+        FlakProbeTakt();
+        FlakTakt();
+
         // 'unexplored' — auf eigenem, langsamerem Schlag
         _fogTick += dt;
         if (_fogTick >= FogEverySec)
@@ -37363,9 +37406,99 @@ public partial class MapEntityLayer : Node2D
     }
 
     /// <returns>true, wenn es angekommen und eingelagert ist.</returns>
+    /// <summary><c>--flughoehe-alt</c> — der Stand von vor dem 19.09.2026: die
+    /// Flugzeuge haben gar keine Hoehe, das Feld bleibt auf seinem Anfangswert.
+    /// Nullmodell fuer alles, was an der Hoehe haengt — insbesondere fuer den
+    /// Ring der Flak.</summary>
+    public static bool FlughoeheAlt;
+
+    /// <summary>Die Obergrenze der Flughoehe, <b>135</b> — gelesen an zwei
+    /// Stellen: der Steigflug prueft <c>cmp al,0x87; jae</c> @0x425002
+    /// (F 0x4241D0), die Handsteuerung klemmt @0x4C2CBF. Nach unten gibt es
+    /// keine Klemme ausser dem Absturz.</summary>
+    private const int FlughoeheMax = 135;
+
+    /// <summary>
+    /// ⭐⭐⭐ 19.09.2026 — <b>DIE HOEHENREGELUNG, je SPIELTAKT</b>
+    /// (<c>0x424FCD…0x42502E</c>, F <c>0x42418D…0x4241F6</c>).
+    ///
+    /// <para>Lesung <c>berichte/flughoehe-fable.md</c>; <c>move_airplanes</c>
+    /// C <c>0x422E20</c> → F <c>0x421FE0</c>, von <c>cfind</c> eindeutig
+    /// abgebildet. Der Rumpf, wie gelesen:</para>
+    /// <code>
+    ///   m_uk == 3                       -> alt ±1 auf die Sollhoehe (Rollen)
+    ///   Abstand zum Flugziel > 6 Zellen -> alt += 2, solange alt &lt; 135
+    ///                                      (@0x425008, Schwelle float 0x40C00000)
+    ///   sonst                           -> alt ±1 auf die Sollhoehe, EXAKT
+    ///                                      (@0x425028, kein Ueberschwinger)
+    /// </code>
+    ///
+    /// <para>⚠⚠ <b>Meine eigene Lesung war hier falsch, und die Berichtigung
+    /// kam von der Gegenlesung.</b> Ich hatte im Startzweig <c>add cl,5</c>
+    /// (@0x4234DA) gefunden und daraus »+5 je Takt« gemacht. Das ist ein
+    /// EINMALWERT bei der Uebergabe an die Handsteuerung (Uhr 26, <c>m_uk</c> 6);
+    /// der Start steigt mit <b>+2 je Takt</b> (@0x423544 / @0x42364C).
+    /// ⚠ Und die Zahl »±2 je Takt« aus AIR_RE.md war ebenfalls unvollstaendig:
+    /// ±2 gilt nur fuer Start, Steigflug und Absturz — der <b>Anflug auf die
+    /// Sollhoehe ist ±1</b>. Beides ist dort berichtigt.</para>
+    ///
+    /// <para><b>UNSERE SETZUNGEN, ausdruecklich:</b></para>
+    /// <list type="bullet">
+    /// <item><c>m_uk == 3</c> (das Rollen am Boden) fuehren wir nicht — der
+    /// Zweig fehlt, und damit auch die 100 Takte Sinkflug vor dem Aufsetzen.
+    /// Unsere Landung ist <see cref="AirHeadHome"/> plus das Einlagern;</item>
+    /// <item><c>uk</c> 100 (der Absturz, −2 je Takt bis 0) fehlt, weil wir
+    /// keinen Absturz kennen: ein abgeschossenes Flugzeug ist bei uns sofort
+    /// <c>Dead</c>;</item>
+    /// <item>der Abstand wird an <see cref="Special.Goal"/> gemessen. Ohne Ziel
+    /// gilt »nah«, also der ±1-Zweig — das Original hat dort immer ein
+    /// Flugziel.</item>
+    /// </list></summary>
+    private void FlughoeheTakt(Special a)
+    {
+        if (FlughoeheAlt) return;
+
+        // Abstand zum Flugziel in ZELLEN, Schwelle 6 (@0x425002, float 6.0)
+        float zellen = a.Goal is { } g ? a.Pos.DistanceTo(g) / TileW : 0f;
+
+        if (zellen > FlughoeheSteigAb)
+        {
+            if (a.Alt < FlughoeheMax) a.Alt = Mathf.Min(FlughoeheMax, a.Alt + 2);
+            FlughoeheGestiegen++;
+            return;
+        }
+
+        // ±1 auf die Sollhoehe, exakt — kein Ueberschwinger (@0x425028)
+        if (a.Alt < a.Sollhoehe) { a.Alt++; FlughoeheGeregelt++; }
+        else if (a.Alt > a.Sollhoehe) { a.Alt--; FlughoeheGeregelt++; }
+    }
+
+    /// <summary>Ab so vielen Zellen Abstand zum Flugziel wird gestiegen statt
+    /// geregelt — <c>6.0</c>, der Sofortwert <c>float 0x40C00000</c>
+    /// @0x425002.</summary>
+    private const float FlughoeheSteigAb = 6.0f;
+
+    /// <summary>Zwei Zahlen zur Hoehenregelung, getrennt: wie oft gestiegen und
+    /// wie oft auf die Sollhoehe geregelt wurde. ⚠ Eine Regelung, die nie
+    /// greift, sieht sonst genauso aus wie eine, die nichts aendert.</summary>
+    public static int FlughoeheGestiegen, FlughoeheGeregelt;
+
     private bool AirHeadHome(Special a)
     {
         a.Target = -1;                           // nothing left to shoot at
+
+        // ⭐ 19.09.2026 — DIE SOLLHOEHE DER HEIMKEHR, gelesen in
+        // air_back_to_airport @0x426180: Flugzeuge (typ < 10) bekommen
+        // Gelaende·15 + 100, gedeckelt auf 135; Kampf- und Transporthelis
+        // (10..12) Gelaende·15 + 8; die Nachschubhelis (13/14) fest 135.
+        // ⚠ Das Gelaende ist das des LANDEPLATZES, nicht das unter dem
+        // Flugzeug; wir nehmen die Zelle des Flugzeugs, weil unser Flugziel
+        // erst unten gesetzt wird — eine Abweichung, die mit dem Anflug
+        // verschwindet, weil beide Zellen am Ende dieselben sind.
+        int g = ElevOf(a.Col, a.Row) * 15;
+        a.Sollhoehe = a.IsSupply ? FlughoeheMax
+                    : a.Kind is >= 10 and <= 12 ? g + 8
+                    : Mathf.Min(FlughoeheMax, g + 100);
         // ⚠ EIN NACHSCHUBHELI KEHRT NICHT ZUM FLUGHAFEN HEIM, SONDERN ZUM
         // NACHSCHUB-POSTEN — und das ist der Fehler, den der eigene Zaehler
         // gefunden hat: der erste Einbau schickte alle zum Flughafen, und auf
@@ -37480,8 +37613,13 @@ public partial class MapEntityLayer : Node2D
             {
                 a.Ammo = Mathf.Min(a.AmmoMax, a.Ammo + Mathf.CeilToInt(a.AmmoMax * dt / AirReloadSec));
                 a.Fuel = Mathf.Min(a.FuelMax, a.Fuel + Mathf.CeilToInt(a.FuelMax * dt / AirReloadSec));
+                // ⚠ Im Hangar fasst das Original die Hoehe NICHT an (m_uk 4 -> uk 0,
+                // und uk 0 wird im Kopf der Schleife uebersprungen): alt bleibt auf
+                // Gelaende·15 stehen. Also auch hier nichts.
                 continue;
             }
+
+            FlughoeheTakt(a);
 
             // ⚠ Der Versorgungszweig sprang bis zum 14.08.2026 mit `goto move`
             // an der Heimkehr VORBEI — deshalb kam ein Nachschubheli nie nach
@@ -37856,6 +37994,12 @@ public partial class MapEntityLayer : Node2D
                 a.Stored = false;
                 a.Pos = home.Pos;
                 a.Col = home.Col; a.Row = home.Row;
+                // ⭐ 19.09.2026 — die Hoehe beim Start: air_takeoff @0x4260B9
+                // setzt alt := Gelaende·15. Die Sollhoehe setzt es NICHT; sie
+                // kommt hier aus air_order @0x425E6B, das 0x87 = 135 schreibt —
+                // der Spielerstart ist ein Auftrag. Siehe Special.Alt.
+                a.Alt = ElevOf(a.Col, a.Row) * 15;
+                a.Sollhoehe = FlughoeheMax;
                 // ⚠⚠ 18.08.2026 — DIESE ZEILE FEHLTE, und der Hangar blieb
                 // stehen. `SendOutFromPanel` (der Reiter »Depot«) räumt den
                 // Platz ordentlich weg, dieser Weg hier tat es nicht: das
