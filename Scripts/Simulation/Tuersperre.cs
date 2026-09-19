@@ -109,6 +109,11 @@ public partial class MapEntityLayer : Node2D
     /// Stempels ist damit derselbe wie im Original (<c>@0x43D276</c> gibt frei,
     /// sobald kein Fremder mehr davorsteht).</para>
     /// </summary>
+    /// <summary><c>--bautuer-offen</c> — der Stand von vor dem 20.09.2026:
+    /// die Tuer eines Bauwerks IM BAU ist nicht gesperrt. Nullmodell zu den
+    /// Stufen 1 und 2 des Originals, siehe <see cref="TuersperreTakt"/>.</summary>
+    public static bool BautuerOffen;
+
     private void TuersperreTakt()
     {
         if (_nav == null || Simulation.NavGrid.TuersperreAlt) return;
@@ -123,7 +128,35 @@ public partial class MapEntityLayer : Node2D
             // Die Zelle VOR der Tuer: eine Zeile weiter (@0x43CBEF liest
             // 0xBDEA82, also den naechsten Zellplatz).
             int fremder = BelegerVorDerTuer(tc, tr + 1);
-            bool zu = fremder >= 0 && _entities[fremder].Owner != b.Owner;
+
+            // ⭐⭐⭐ 20.09.2026 — EIN BAUWERK IM BAU HAELT SEINE TUER DICHT.
+            //
+            // Gemeldet: »bei unserer gebauten mine ist die tuer permament offen
+            // angezeigt«. Der sichtbare Teil sass in PlaceBuilding (die Zelle
+            // trug das GEBAEUDE als Beleger, und der Tuerzeichner macht daraus
+            // »da steht was, also auf«). Aber die SPERRE gehoert hierher, und
+            // das hat mich eine Messung gekostet: der erste Griff setzte sie in
+            // PlaceBuilding, und dieser Takt hat sie im naechsten Augenblick
+            // wieder weggeraeumt — die Zeile meldete »Sperre False«.
+            //
+            // ⚠⚠ Im Original sind es DREI verschiedene Stempel auf dieselbe
+            // Zelle, und wir hatten nur den dritten:
+            //   1. beim SETZEN      0xFFFF  (C 0x4C94F2 / F 0x4C90A2) — dicht,
+            //      solange gebaut wird;
+            //   2. bei FERTIGSTELLUNG 0xFFFE + Lage 99 (C 0x43CB08/0x43CB12,
+            //      F 0x43BBA8/0x43BBB2) — ab jetzt benutzbar;
+            //   3. im EINNAHME-Arm  0xFFFF  (C 0x43CC29) — dicht, solange ein
+            //      Fremder davor steht. Das ist die Lesung vom 06.09.
+            // Stufe 1 und 2 sind zusammen genau »dicht, bis der Bauzustand
+            // durch ist« — und als solche stehen sie jetzt hier, an derselben
+            // Stelle wie Stufe 3, damit die drei sich nicht gegenseitig
+            // ueberschreiben.
+            //
+            // Lesung berichte/tuerzustand-fable.md; Nullmodell dort: alle 1527
+            // Kartentueren stehen auf Zustand 0 = zu, und ein Neubau ebenso
+            // (C 0x4C9418). Gegenschalter --bautuer-offen.
+            bool imBau = !BautuerOffen && b.Bauzustand >= BauzustandStart;
+            bool zu = imBau || (fremder >= 0 && _entities[fremder].Owner != b.Owner);
 
             if (_nav.TuerSperre(tc, tr, zu))
             {

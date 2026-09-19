@@ -55,6 +55,12 @@ public partial class MapEntityLayer
     /// <summary>The three buildable types, by the game's numbering.</summary>
     public const int TypeDepot = 5, TypeGenerator = 7, TypeFieldMine = 15;
 
+    /// <summary><c>--neubautuer-alt</c> — der Stand von vor dem 20.09.2026:
+    /// die Tuerzelle eines gesetzten Gebaeudes wird mit dem Gebaeude als
+    /// BELEGER gestempelt, und die Tuer steht dadurch permanent offen.
+    /// Siehe die Stelle in <see cref="PlaceBuilding"/>.</summary>
+    public static bool NeubautuerAlt;
+
     /// <summary>The special part that may build each of them.</summary>
     public const int PartBuildingTech = 72, PartGroundTech = 73, PartGeneratorTech = 74;
 
@@ -532,7 +538,38 @@ public partial class MapEntityLayer
         foreach (var d in doors)
         {
             int c = col + d.X, r = row + d.Y;
-            if (_nav.InBounds(c, r)) _nav.SetOccupant(c, r, index, immobile: true);
+            if (!_nav.InBounds(c, r)) continue;
+            // ⭐⭐⭐ 20.09.2026 — HIER STAND `SetOccupant(…, index)`, UND DAVON
+            // STAND DIE TUER PERMANENT OFFEN.
+            //
+            // Gemeldet: »bei unserer gebauten mine ist die tür permament offen
+            // angezeigt, das nicht korrekt so.«
+            //
+            // ⚠ Der Kommentar darueber sagte schon das Richtige — »0xFFFF ist
+            // ein statischer Objektgriff und stoppt jeden; es ist NICHT frei« —
+            // und die Zeile darunter tat etwas anderes: sie machte das GEBAEUDE
+            // zum BELEGER der Tuerzelle. Und genau daran haengt der Tuerzeichner
+            // (MapEntityLayer.cs, »the game's own rule: something in the cell
+            // opens the door«): `OccupantAt(c, r) >= 0` -> volle Oeffnung. Das
+            // Gebaeude hielt sich seine eigene Tuer auf.
+            //
+            // 0xFFFF ist KEIN Beleger, sondern eine harte Sperre ohne Bewohner —
+            // und die fuehren wir schon, aus der Einnahme-Lesung vom 06.09.:
+            // NavGrid.TuerSperre. Damit ist die Zelle dicht (CanEnter faellt
+            // durch) UND leer (OccupantAt gibt -1), also bleibt die Tuer zu.
+            //
+            // ⚠ BERICHTIGUNG der Adresse im Kommentar darueber: `0x4C90A2` ist
+            // die F-Fassung; in der untersuchten C-Fassung steht der Stempel bei
+            // **0x4C94F2**. Bei Fertigstellung schreibt das Original dann
+            // 0xFFFE + Lage 99 (C 0x43CB08/0x43CB12) — das ist der Weg, ueber
+            // den die Tuer benutzbar wird, und er fehlt uns noch.
+            //
+            // Lesung berichte/tuerzustand-fable.md; Nullmodell dort: 1468/1468
+            // Kartengebaeude und 1527/1527 Tueren stimmen mit der Typtafel
+            // 0x539DB8 ueberein, und ALLE 1527 stehen auf Zustand 0 = zu.
+            // Gegenschalter --neubautuer-alt.
+            if (NeubautuerAlt) _nav.SetOccupant(c, r, index, immobile: true);
+            else _nav.TuerSperre(c, r, true);
         }
 
         if (into != null) StampBuilding(into, patterns, bt.FirstPattern, col, row);

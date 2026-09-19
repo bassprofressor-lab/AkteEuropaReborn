@@ -402,6 +402,29 @@ public partial class MapEntityLayer
                               ? " — Nullmodell --bauanim-zellanimation-alt)" : ")"));
         }
 
+        // ⭐⭐ 20.09.2026 — UND DIE TUER MUSS ZU SEIN.
+        // Gemeldet: »bei unserer gebauten mine ist die tuer permament offen
+        // angezeigt«. Die Ursache war, dass die Tuerzelle das GEBAEUDE als
+        // Beleger trug und der Tuerzeichner daraus »da steht was, also auf«
+        // machte. Gemessen wird darum genau das: traegt die Zelle einen
+        // Beleger? Die Lesung sagt, alle 1527 Kartentueren stehen auf
+        // Zustand 0 = zu, und ein Neubau ebenso (C 0x4C9418).
+        if (neu != null && neu.DoorCells.Count > 0 && _nav != null)
+        {
+            var (dc, dr) = neu.DoorCells[0];
+            int tc = neu.Col + dc, tr = neu.Row + dr;
+            int beleger = _nav.OccupantAt(tc, tr);
+            bool gesperrt = _nav.IstTuerGesperrt(tc, tr);
+            bool zu = beleger < 0;
+            string urteil = zu == !NeubautuerAlt ? "ok  " : "⚠ FALSCH";
+            string lage = zu ? "ZU" : "offen";
+            sb.AppendLine($"  {urteil} Tuer auf ({tc},{tr}): Beleger {beleger}, " +
+                          $"Sperre {gesperrt} -> {lage} " +
+                          (NeubautuerAlt
+                              ? "(Soll offen — Nullmodell --neubautuer-alt)"
+                              : "(Soll ZU: kein Beleger, harte Sperre)"));
+        }
+
         sb.AppendLine($"  zugedeckte Zellen: {GebaeudeDeckzellen} " +
                       (VorkommenUnterMineAlt
                           ? "   ⚠ Nullmodell --vorkommen-unter-mine-alt: die Objektebene "

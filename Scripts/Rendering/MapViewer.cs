@@ -3903,6 +3903,8 @@ public partial class MapViewer : Node2D
             else if (a == "--einschlagklang-alt") Audio.GameSounds.EinschlagklangAlt = true;
             else if (a == "--absturz-aus") MapEntityLayer.AbsturzAus = true;
             else if (a == "--gleisbruch-einzeln") MapEntityLayer.GleisbruchEinzeln = true;
+            else if (a == "--neubautuer-alt") MapEntityLayer.NeubautuerAlt = true;
+            else if (a == "--bautuer-offen") MapEntityLayer.BautuerOffen = true;
             else if (a == "--ruine-ohne-gleisschnitt")
                 MapEntityLayer.RuineOhneGleisschnitt = true;
             else if (a == "--vorkommen-unter-mine-alt")
