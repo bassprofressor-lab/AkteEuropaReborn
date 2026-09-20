@@ -103,7 +103,24 @@ public partial class MapEntityLayer
                 if (b.Doors != 0 && b.Built != 0)
                 {
                     fremdTuer++;
-                    if (hTuer != Hint.Einnahme) fremdTuerFalsch++;
+                    if (hTuer != Hint.Einnahme)
+                    {
+                        fremdTuerFalsch++;
+                        // ⭐ 20.09.2026, bug-302 — SAGEN, WARUM. Die Zahl allein
+                        // ("3 von 6") hat den Fehler ein Jahr lang verdeckt.
+                        int tr = Pick(tuer);
+                        sb.AppendLine($"      ⚠ bug-302: Gebaeude {b.Slot} Art {b.BType} "
+                            + $"({BTypeWort(b.BType)}), Tuerzelle "
+                            + $"({b.DoorCells.Count} Tueren), Fuss {b.FootW}x{b.FootH}, "
+                            + $"gebaut {b.Built}, Zelle ({b.Col},{b.Row}) — Pick auf die Tuer "
+                            + $"trifft {(tr < 0 ? "NICHTS" : "Platz " + _entities[tr].Slot
+                                        + " (Art " + _entities[tr].BType + ")")}, "
+                            + $"Zeiger {hTuer}; Tuerpunkt {tuer}, CellAt dort "
+                            + $"{(CellAt(tuer) is { } zt ? $"({zt.X},{zt.Y})" : "NICHTS")}, "
+                            + $"NoStructure {b.NoStructure}, Anfassbar {Anfassbar(b)}, "
+                            + $"HpMax {b.HpMax}, untergestellt {Untergestellt(b)}, "
+                            + $"Nebel {ImNebelVerborgen(b)}");
+                    }
                 }
                 // ⭐⭐ 17.09.2026 RICHTIGGESTELLT (berichte/zeiger-klickfeld-fable.md):
                 // hier stand `hMitte != Hint.Enemy` — der Prüfstand verlangte also den
@@ -272,6 +289,11 @@ public partial class MapEntityLayer
         sb.Append(alles ? "  BESTANDEN" : "  DURCHGEFALLEN");
         return sb.ToString();
     }
+
+    /// <summary>Der Name einer Gebaeudeart aus der Tafel <c>0x4FDCC4</c>
+    /// (Schrittweite 20, 16 Eintraege). ⭐ <b>Index 0 ist »Basis«</b> — Art 0 ist
+    /// eine ECHTE Gebaeudeart und keine Leermarke.</summary>
+    private static string BTypeWort(int t) => t == 0 ? "Basis" : $"Art {t}";
 
     /// <summary>Die Bildmitte einer Zelle — der Zeiger wird in Kartenpunkten
     /// gefragt, nicht in Zellen.</summary>
