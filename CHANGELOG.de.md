@@ -14,96 +14,192 @@ bisher nur dort beschrieben.*
 > **Road to 0.7.0** in der [README](README.de.md). Der Abschnitt unten wächst
 > mit jeder gespielten Mission weiter.
 
-## 0.6.5 — 20.09.2026 · Kampagne 17 und 20: der Flughafen, die Flak und ein Feld, das jahrelang falsch gelesen wurde
+## 0.6.5 — 20.09.2026 · Kampagne 15 bis 20: Minen, Flugabwehr, die Bahn und der Flughafen
 
-> Zwei Missionen, und ein Fund, der jedes Flugzeug im Spiel betrifft. Jeder Punkt
-> unten ist ein Befund aus diesen Läufen.
+> Sechs Missionen, jede einzeln durchgespielt. Jeder Punkt unten ist ein Befund
+> aus diesen Läufen — was auffiel, was jetzt passiert, und wie das Original es
+> macht.
 
 ### ⚠ Wichtig: die Karten müssen einmal neu eingelesen werden
 
 Diese Fassung liest zwei Werte mehr aus dem Flugzeugsatz. Wer von 0.6.4 kommt,
-lässt einmal den Karteneinleser laufen — sonst wirkt der wichtigste Fund unten
-nur halb. Ohne das fallen die Flugzeuge auf ihr altes Verhalten zurück; kaputt
-geht nichts.
+lässt einmal den Karteneinleser laufen — sonst wirkt der grösste Fund unten nur
+halb. Ohne das fallen die Flugzeuge auf ihr altes Verhalten zurück; kaputt geht
+nichts.
 
-### ⭐ Der grösste Fund: Flugzeuge flogen mit der falschen Zahl als Winkel
+### Kampagne 15 — die Minen
 
-- **Jedes Flugzeug flog in die falsche Richtung — und immer mit Höchsttempo.**
-  Im Satz eines Flugzeugs stehen Richtung und Geschwindigkeitsstufe direkt
-  nebeneinander, und wir hatten die beiden **vertauscht**: als »Richtung« lasen
-  wir die Geschwindigkeitsstufe. Weil deren Werte klein sind (0 bis 25), zeigten
-  **alle** Flugzeuge des Spiels in denselben schmalen Keil von 25 Grad. Die
-  richtige Richtung steht zwei Bytes früher und geht über volle 360 Grad.
-  Gegenprobe an 190 Flugzeugen aus 13 Kartendateien: die richtige Stelle liegt
-  190 von 190 Mal im gültigen Bereich **und** ist 190 von 190 Mal ein Vielfaches
-  von 6 — genau der Schritt, in dem sich ein handgesteuertes Flugzeug dreht. Die
-  alte Stelle trifft diesen Schritt nur 23 von 190 Mal.
-- **Ein startendes Flugzeug steht und fährt hoch**, statt sofort mit Vollgas
-  loszufliegen. Das Original setzt die Stufe beim Start auf null und regelt sie
-  dann um eins je Takt herauf, bis zum Höchstwert des Musters; beim Anflug
-  bremst es wieder ab. Das sieht nicht nur anders aus, es ändert auch den
-  Ausgang eines Gefechts.
-- **Was wir »Tempo« nannten, ist die Obergrenze**, nicht das gefahrene Tempo.
+- **Die Minenfelder der Mission liegen, wo sie liegen sollen.** Bisher fehlten
+  sie ganz; jetzt werden sie aus dem Missionsaufbau gelegt.
+- **Der Minenräumer räumt wirklich** — mit dem Klang des Originals, und die
+  Einfahrt durch das Tor funktioniert dabei.
+- **Minen werden gezeichnet wie im Original:** als Scheibe, als 2×2-Punkt oder
+  als Umriss, je nachdem, wem sie gehören und ob man sie kennt. Eigene Minen
+  decken ihre Zelle auf.
+- **Eine Mine darf ihr eigenes Rohstoffvorkommen zudecken.** Die Sperre, die das
+  verhinderte, war der Zweck des Bauwerks und nicht sein Hindernis — jetzt steht
+  das Gebäude auf dem Vorkommen, und die Vorkommensgrafik verschwindet darunter.
+- **Die Trommel der Mine läuft erst, wenn sie fertig gebaut ist**, nicht schon
+  im Gerüst.
+- **Die Tür einer selbst gebauten Mine stand offen** und liess sich nicht
+  schliessen — das Gebäude belegte seine eigene Türzelle.
+- **Das Baugerüst ist sichtbar.** Dem Kachelatlas fehlten 90 Kacheln; jetzt sind
+  alle 90 da, und ein Selbsttest sagt es künftig, wenn wieder welche fehlen.
 
-### Kampagne 20 — der Flughafen, zum ersten Mal
+### Kampagne 15 und 16 — was dabei sonst auffiel
 
-- **»Handsteuerung« geht.** Der Knopf im Flughafenfenster (und die Taste **H**
-  über einer fliegenden Maschine) gibt das Flugzeug in die eigene Hand: die
-  Pfeiltasten drehen es und regeln seine Geschwindigkeitsstufe, **A** und **Z**
-  ändern die Höhe, **Strg** schiesst. **H**, ein Rechtsklick oder **Esc** geben
-  es wieder ab — dann fliegt es heim und landet.
-- ⚠ **Zwei Dinge daran sehen aus wie Fehler und sind das Original:** es gibt
-  **keine untere Höhengrenze**, man kann sich also in einen Hügel fliegen; und
-  wer weiter sinkt, als es geht, landet schlagartig ganz oben. Beides steht so
-  im Spiel von 1997.
-- ⚠ Die Taste **H** war bisher unser Schalter für die Übersichtskarte. Sie
-  gehört im Original der Handsteuerung, also tritt unsere Zutat zurück und
-  greift nur noch, wenn gerade nichts zu steuern ist.
-- **»Angriff« öffnet einen eigenen Kartenschirm** — das Fenster
-  »Luft-Einsatzplan« geht an der Mausstelle auf, und der Klick darin schickt die
-  Staffel los. Bisher musste man dafür die ständige Übersichtskarte benutzen.
-  Grösse, Rand, Zoomstufen und die Umrechnung des Klicks in eine Kartenzelle
-  sind die des Originals.
-- **»Recycle« geht** und gibt die Teile des Entwurfs zurück — **mal der
-  Gesundheit der Maschine**. Ein halb zerschossener Jagdflieger bringt also die
-  Hälfte. Die Teile gehen an den Flughafen, nicht auf ein Konto; Geld gibt es
-  dafür nicht.
-- **»Patrouille AN« tut zum ersten Mal etwas.** Die Flagge wurde bisher nur
-  angezeigt. Jetzt steigen alle bereiten **Jagdflieger** eines Flughafens auf,
-  sobald ein feindliches Flugzeug näher als 60 Zellen herankommt. ⚠ Geprüft wird
-  nur alle zehn Takte — es dauert also einen Moment, bis sie reagieren. Auch das
-  ist so gelesen.
+- **Fahrspuren im Boden.** Räumer und Fahrzeuge hinterlassen die Spuren des
+  Originals, als eigene Bodenschicht unter den Einheiten.
+- **Der Flammenwerfer zündet den Dschungel an.** Er tat es bisher nicht — sein
+  Brandwert war zu klein und seine Reichweite zu kurz.
+- **Reparieren ist sauber**: der Klick greift auf allen Wegen, die Stufe zieht
+  mit, und der Flughafen zählt dabei richtig als Art 9.
+- **Ein Tor verdeckt keine Einheit mehr** — jede Zeile hat ihr eigenes Fach.
+- **Einheiten stehen mittig in Türen** statt nach links versetzt.
+
+### Kampagne 16 — Zeit, Zeiger und Geschosse
+
+- ⚠ **Alles läuft rund dreimal schneller**: Kampf, Reparatur, Produktion,
+  Ausbau, Einnahme, Förderung und Bahn laufen jetzt auf einer gemeinsamen
+  Zeitbasis statt auf dreien. **Die gewählte Frequenz ist unsere Setzung** — das
+  Spiel von 1997 legt keine fest. Zum Vergleichen gibt es Schalter.
+- **Nachladezeiten kommen aus der Tafel**, nicht mehr aus einer Schätzung.
+- **Geschosse bleiben in Hängen stecken**, statt durch sie hindurchzufliegen,
+  und sie ziehen dem Ziel nicht mehr nach.
+- **Raketen stiegen mit der Nase nach unten** — die zwei Neigungsblöcke waren
+  vertauscht.
+- **Die Rohstoffleiste oben** trägt die Farben der Palette des Originals.
+- **Das Klickfeld einer Einheit sass zu tief.** Es ist jetzt der Bildkasten und
+  reicht 24 Bildpunkte höher auf den Körper; die Einnahmezone lag ebenfalls eine
+  Zeile daneben.
+- **Ein Gebäude wird über seine ZELLEN getroffen**, nicht über ein Rechteck um
+  seine Bildmitte. An einem Hang gingen die beiden bis zu 45 Bildpunkte
+  auseinander — der Strg-Angriff auf ein Kraftwerk am Hang fiel deshalb aus.
+- ⚠ **Über einem Gebäude steht nie das Fadenkreuz.** Ein feindlicher Bunker oder
+  eine Geschützstellung wird mit gewöhnlichem Rechtsklick **angefahren**;
+  angegriffen wird mit **Strg**. So macht es das Original.
+- **Fahrlinien liegen jetzt über dem Boden** statt darunter — Beton und Schotter
+  übermalten sie.
+- **Die Zellsuche rechnet mit geneigten Kanten.** An Hängen lag sie bis zu 15
+  Bildpunkte daneben, und daran hängt der Einnahmezeiger.
+- **Schiffsentwürfe werden aus ihren Bauteilen gerechnet**, statt aus einer
+  Tabelle abgeschrieben, die das Spiel beim Missionsstart ohnehin überschreibt.
+  ⚠ Ein Entwurf hatte dadurch **null Trefferpunkte** — ein dort gebautes Schiff
+  wäre sofort zerstört gewesen. Gegenprobe: 13 520 von 13 520 Feldwerten aus 13
+  Spielständen stimmen jetzt.
 
 ### Kampagne 17 — die Flugabwehr und die Bahn
 
+- **Es gibt Flugabwehr.** Sie war bisher gar nicht gebaut. Die Flak prüft keinen
+  einfachen Umkreis, sondern einen **Ring**, der von der Flughöhe abhängt — und
+  senkrecht über sich trifft sie auf Reiseflughöhe nie.
+- **Flugzeuge haben eine Höhe.** Ohne sie wäre dieser Ring gar nicht zu
+  berechnen.
+- ⚠ **Der »Kamikaze« ist der Absturz.** Ein abgeschossener Hubschrauber ist
+  nicht sofort tot: er fällt und **schlägt ein** — 60 Schaden auf seine Zelle,
+  50 auf die acht Nachbarn, auch auf Gebäude. Die Ursache ist der Abschuss,
+  nicht der Hubschrauber.
+- **Die Flak schiesst nicht auf etwas am Boden.**
+- **Der Mörser kreiselt** — nach dem Bildzähler, wie im Original.
+- **Der Hubschrauber schiesst einen STRAHL**, kein Geschoss. Seine Treffer
+  fehlten bisher ganz.
+- **Ein angreifendes Flugzeug legt an, was zu seiner Art gehört:** der
+  Jagdflieger zwei Geschosse, der Bomber eines, der Hubschrauber den Strahl.
+- **Der Einschlagklang kommt aus der Tafel.** Bisher erklangen bei jedem
+  Einschlag zwei feste Klänge — beim Flammenwerfer wurde daraus ein Geprassel.
+  Jetzt spielt jede Art genau einen Klang, und **184 von 316 Einschlägen sind
+  stumm**: 25 der 91 Arten tragen im Original den leeren Platz.
+- **Feindliche Flugzeuge decken die Karte nicht mehr auf** und sind im
+  Unbeobachteten unsichtbar. ⚠ Über dem Saum sind sie sichtbar — das ist so
+  gelesen.
+- **Die KI startet ihre Hubschrauber.** Sie baute sie und liess sie im Hangar
+  stehen.
+- **Der Bahnschaden entsteht im Gefecht.** Bei Missionsstart ist die Strecke
+  ganz; wird ein Gleis zerschossen, läuft der Bruch **bis zum nächsten Mast**,
+  und eine Gebäuderuine schneidet die Gleise an ihrem Fuss durch.
+
+### Kampagne 18 bis 20 — der Flughafen
+
+- **Der richtige Missionsfilm läuft.** Die Filmdatei mit der Nummer N gehört zur
+  Mission N+1 — es lief also durchgehend der Film der nächsten Mission.
+- **Der Flughafen hat das Fenster des Originals** (Fensterart 5) mit dessen
+  Möbeln: drei Reiter, die Hangarliste mit Auswahlzeile, das Bild der gewählten
+  Maschine und die Knopfleiste. Vier Fehler am Aufbau sind mitbehoben.
+- **»Angriff« setzt ein ZIEL.** Bisher liess der Knopf die Maschinen nur über
+  dem Flughafen kreisen.
+- **Ein erledigter Angriffsauftrag endet mit der Landung**, nicht mit einer
+  Warteschleife — die Maschine ist danach wieder im Hangar verfügbar.
+- **Drei Bombensorten**, und eine davon ist gar keine Waffe: **Gasbombe** (legt
+  30 Gaswolken), **Löschmittel** (löscht Brände und macht **keinen** Schaden)
+  und die gewöhnliche **Bombe**. Der Knopf »Bombe wechseln« dreht durch die
+  drei, bei gesetzter Staffel für jeden Bomber.
+- **Eine Staffel** lässt sich über »Gruppieren« bilden; »Angriff« und »Bombe
+  wechseln« wirken dann staffelweit.
+- **Die türkise Raute, die sich allein über die Karte bewegte**, war ein leerer
+  Kartensatz, den unser Lader für ein Flugzeug hielt.
+- **Der Spionageflieger ist nicht getarnt** — er hat schlicht eine Zelle mehr
+  Sichtweite. Tarnung gibt es im Original nicht.
+
+### 20.09. — der grösste Fund: Flugzeuge flogen mit der falschen Zahl als Winkel
+
+- **Jedes Flugzeug flog in die falsche Richtung — und immer mit Höchsttempo.**
+  Im Satz eines Flugzeugs stehen Richtung und Geschwindigkeitsstufe direkt
+  nebeneinander, und wir hatten die beiden **vertauscht**. Weil die Stufenwerte
+  klein sind (0 bis 25), zeigten **alle** Flugzeuge des Spiels in denselben
+  schmalen Keil von 25 Grad. Gegenprobe an 190 Flugzeugen aus 13 Kartendateien:
+  die richtige Stelle liegt 190 von 190 Mal im gültigen Bereich **und** ist 190
+  von 190 Mal ein Vielfaches von 6 — genau der Schritt, in dem sich ein
+  handgesteuertes Flugzeug dreht. Die alte Stelle trifft ihn nur 23 von 190 Mal.
+- **Ein startendes Flugzeug steht und fährt hoch**, statt sofort mit Vollgas
+  loszufliegen; beim Anflug bremst es wieder ab.
+- **Was wir »Tempo« nannten, ist die Obergrenze**, nicht das gefahrene Tempo.
+
+### 20.09. — Handsteuerung, Kartenschirm, Recycle, Wache
+
+- **»Handsteuerung« geht.** Der Knopf (und die Taste **H** über einer fliegenden
+  Maschine) gibt das Flugzeug in die eigene Hand: die Pfeiltasten drehen es und
+  regeln seine Stufe, **A** und **Z** ändern die Höhe, **Strg** schiesst. **H**,
+  Rechtsklick oder **Esc** geben es ab — dann fliegt es heim und landet.
+- ⚠ **Zwei Dinge daran sehen aus wie Fehler und sind das Original:** es gibt
+  **keine untere Höhengrenze**, man kann sich also in einen Hügel fliegen; und
+  wer weiter sinkt, als es geht, landet schlagartig ganz oben.
+- ⚠ **H** war bisher unser Schalter für die Übersichtskarte. Sie gehört im
+  Original der Handsteuerung, also tritt unsere Zutat zurück.
+- **»Angriff« öffnet einen eigenen Kartenschirm** — das Fenster
+  »Luft-Einsatzplan« geht an der Mausstelle auf, und der Klick darin schickt die
+  Staffel los.
+- **»Recycle« geht** und gibt die Teile des Entwurfs zurück — **mal der
+  Gesundheit der Maschine**. Sie gehen an den Flughafen; Geld gibt es dafür
+  nicht.
+- **»Patrouille AN« tut zum ersten Mal etwas.** Alle bereiten **Jagdflieger**
+  steigen auf, sobald ein feindliches Flugzeug näher als 60 Zellen kommt.
+  ⚠ Geprüft wird nur alle zehn Takte — es dauert also einen Moment.
+
+### 20.09. — Flak und Bahn, nachgerechnet
+
 - **Die Bahnstrecke hält viel länger.** Ein Einschlag auf ein Gleis bekam bei uns
   den vollen Schaden des Geschosses; das Original rechnet dort seine eigene,
-  deutlich kleinere Zahl aus Rang und Angriffswert des Schützen. Über 300
-  gespielte Sekunden gemessen: 246 Einschläge, die bisher zusammen **fünfmal so
-  viel** Schaden angerichtet haben wie jetzt.
-- **Die Flak dreht ihr Rohr auch beim Nachladen** und zuckt damit jedem Flugzeug
-  nach, das in ihren Ring kommt. Das ändert am Gefecht nichts — sie schiesst
-  deswegen nicht öfter —, sieht aber lebendig statt starr aus.
-- **Die Flak schiesst nicht auf eine Maschine, die gerade landet.** Sie
-  verschont vier Zustände: im Hangar, im Startvorgang, im Absturz und — das war
-  bis jetzt unklar — **im Landeanflug**. Zusammen ergibt das eine einfache
-  Regel: sie schiesst nur auf etwas, das richtig fliegt.
-- **Die Schussfolge ist gegen das Original nachgerechnet:** höchstens vier
-  Schüsse je Auftrag, im Mittel zwei Takte zwischen zwei Schüssen, und zwölf bis
-  siebzehn Takte Nachladezeit. Alle drei gemessenen Werte liegen in ihrer
-  Spanne.
+  kleinere Zahl. Über 300 gespielte Sekunden: 246 Einschläge, die zusammen
+  **fünfmal so viel** Schaden angerichtet haben wie jetzt.
+- **Die Flak dreht ihr Rohr auch beim Nachladen** und zuckt jedem Flugzeug nach.
+  Am Gefecht ändert das nichts, es sieht nur lebendig statt starr aus.
+- **Die Flak schiesst nicht auf eine Maschine, die gerade landet.** Sie verschont
+  vier Zustände — im Hangar, im Startvorgang, im Absturz und im Landeanflug.
+  Zusammen: sie schiesst nur auf etwas, das richtig fliegt.
+- **Die Schussfolge ist nachgerechnet:** höchstens vier Schüsse je Auftrag, im
+  Mittel zwei Takte zwischen zwei Schüssen, zwölf bis siebzehn Takte Nachladen.
+  Alle drei gemessenen Werte liegen in ihrer Spanne.
 
 ### Kleineres und Genaueres
 
-- **Die Gas- und die Löschbombe haben ihr Einschlagbild.** Es fehlte bisher in
-  den eingelesenen Daten.
+- **Die Gas- und die Löschbombe haben ihr Einschlagbild.** Es fehlte in den
+  eingelesenen Daten.
 - **Die drei Teilelager eines Flughafens** wurden an der falschen Stelle im
-  Gebäudesatz gesucht. Drei unabhängige Stellen im Spiel von 1997 lesen
-  dieselben drei Werte — der Fehler war eine alte Notiz von uns.
+  Gebäudesatz gesucht — der Fehler war eine alte Notiz von uns.
 - **Der Prüfstand für die Mauszeiger** hielt eigene Einheiten für einen Fehler:
   stand eine davon auf der Tür eines fremden Gebäudes, zeigte der Zeiger richtig
-  »eigene Einheit«, und der Prüfstand meldete trotzdem einen fehlenden
-  Einnahmezeiger. Am Spiel ändert das nichts; es war unsere Messung, die log.
+  »eigene Einheit«, und der Prüfstand meldete trotzdem etwas. Am Spiel ändert
+  das nichts; es war unsere Messung, die log.
 
 ### Was bekannt und noch offen ist
 
@@ -111,8 +207,9 @@ geht nichts.
   kennt (144 Stück auf 18 Karten, mit Ortsnamen wie »Lebork« und »Reda«). Sie
   sind bei uns weder anklickbar noch zerstörbar. Ob sie es sein sollten, ist
   noch nicht entschieden.
-- Ein Hilfetext, der im Spiel angefordert wird, fehlt in den Daten — das
-  Hilfefenster bleibt dann aus.
+- Ein Kontexthilfe-Hinweis am Flughafen zeigt auf einen Hilfetext, den **auch
+  das Original nicht hat** — dessen Textdatei springt von 80 auf 100. Das
+  Fenster bleibt dort aus; im Spiel von 1997 ebenso.
 
 ## 0.6.4 — 15.09.2026 · Kampagne 10 bis 14: Fenster, Frachter und Verbündete
 

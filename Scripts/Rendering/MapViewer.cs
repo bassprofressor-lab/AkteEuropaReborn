@@ -3952,6 +3952,8 @@ public partial class MapViewer : Node2D
             else if (a == "--flak-abstand-alt") MapEntityLayer.FlakAbstandAlt = true;
             else if (a == "--flak-uk-alt") MapEntityLayer.FlakUkAlt = true;
             else if (a == "--flak-drehung-alt") MapEntityLayer.FlakDrehungAlt = true;
+            else if (a == "--hilfetor-ohne-text-wiederholt")
+                MapEntityLayer.HilfetorOhneTextWiederholt = true;
             else if (a == "--gleisschaden-tafelwert")
                 MapEntityLayer.GleisschadenTafelwert = true;
             else if (a == "--zielwahl-check") _zielwahlCheck = true;

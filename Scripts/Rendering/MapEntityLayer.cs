@@ -6411,7 +6411,34 @@ public partial class MapEntityLayer : Node2D
         // ⚠ Die Koordinaten sind NICHT überall gleich: 30 Tore zeigen bei
         // 100/200, die vier Fenster- und Flughafentore bei 70/150. Sie stehen
         // darum am Tor, nicht als feste Zahl hier.
-        if (UI.HelpWindow.Show(this, tor.Text, tor.X, tor.Y) == null) return;
+        // ⭐⭐ 20.09.2026, bug-354 — EIN TOR OHNE TEXT FRAGT SONST EWIG.
+        //
+        // Aus seinem eigenen K20-Lauf: »Hilfetext 81 gibt es nicht — Fenster
+        // faellt aus«, 31x in einer Sitzung. Das Tor ist `flughafen_platz_belegt`
+        // (var 381, text 81); es feuert, sobald der erste Hangarplatz belegt
+        // ist, also auf K20 dauernd.
+        //
+        // ⭐ DER TEXT FEHLT AUCH IM ORIGINAL. Selbst nachgezaehlt in
+        // HELPG.TXT der F-Auslieferung: 273 Marken, und die erste Textgruppe
+        // endet bei **80** — 81 bis 99 fehlen geschlossen. Die Torkarte traegt
+        // diese Warnung sogar schon selbst (`_warnung` in
+        // campaign_hints_raw.json). Im Original bliebe das Fenster hier also
+        // genauso aus; das ist ein Fehler VON 1997, nicht von uns.
+        //
+        // Unser Anteil war nur die Folge: `return` VOR `Gefeuert(tor)` — das
+        // Tor wurde nie vermerkt und fragte bei jeder Anwahl erneut.
+        //
+        // ⚠ UNSERE SETZUNG, und sie ist es ausdruecklich: ein Tor, dessen Text
+        // fehlt, gilt trotzdem als abgearbeitet. Ob das Original seine Variable
+        // 381 auch ohne Fenster setzt, ist NICHT gelesen — der Zweig ist in der
+        // EXE nicht in einem Zug zu belegen. Gegenschalter
+        // --hilfetor-ohne-text-wiederholt stellt das alte Verhalten her.
+        if (UI.HelpWindow.Show(this, tor.Text, tor.X, tor.Y) == null)
+        {
+            if (!HilfetorOhneTextWiederholt) Campaign.CampaignHints.Gefeuert(tor);
+            HilfetorOhneText++;
+            return;
+        }
         Campaign.CampaignHints.Gefeuert(tor);
         KontexthilfeGezeigt++;
 
@@ -6496,6 +6523,17 @@ public partial class MapEntityLayer : Node2D
     /// <summary>Wie oft die Kontexthilfe gefeuert hat — für den Prüfstand.
     /// </summary>
     public int KontexthilfeGezeigt;
+
+    /// <summary>⚠ <c>--hilfetor-ohne-text-wiederholt</c> — ein Kontexthilfe-Tor,
+    /// dessen Hilfetext fehlt, gilt NICHT als abgearbeitet und fragt bei jeder
+    /// Anwahl erneut (der Stand bis zum 20.09.2026, bug-354). Darunter MUSS
+    /// <see cref="HilfetorOhneText"/> weit über 1 steigen.</summary>
+    public static bool HilfetorOhneTextWiederholt;
+
+    /// <summary>Wie oft ein Tor gefeuert hat, dessen Text es nicht gibt.
+    /// ⚠ Ohne den Schalter ist das die Zahl der BETROFFENEN TORE, mit ihm die
+    /// der Anwahlen — genau daran sieht man den Unterschied.</summary>
+    public int HilfetorOhneText;
 
     /// <summary>
     /// <c>--hinweis-check</c> — <b>kommt die Kontexthilfe einmal, und dann nie
