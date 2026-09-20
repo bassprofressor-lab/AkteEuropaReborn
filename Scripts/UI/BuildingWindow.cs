@@ -483,6 +483,11 @@ public sealed partial class BuildingWindow : PanelContainer
     /// <summary>»Patrouille AN/AUS« (Befehl 537).</summary>
     public System.Action? OnPatrouille;
 
+    /// <summary>⭐⭐ »Handsteuerung« (Taste 9, Befehl 502 Modus 6) — bekommt den
+    /// SATZPLATZ der gewaehlten Hangarzeile. ⚠ Sie wirkt auf EINE Maschine,
+    /// nicht auf die Staffel.</summary>
+    public System.Action<int>? OnHandsteuerung;
+
     private readonly VBoxContainer _mitte = new();
     private readonly HBoxContainer _knoepfe = new();
     private readonly Button _zu = new();
@@ -599,6 +604,12 @@ public sealed partial class BuildingWindow : PanelContainer
             Refresh();
         };
         _flughafen.OnAngriff = () => { OnAngriff?.Invoke(); Refresh(); };
+        _flughafen.OnHandsteuerung = () =>
+        {
+            int platz = GewaehlterPlatz();
+            if (platz >= 0) OnHandsteuerung?.Invoke(platz);
+            Refresh();
+        };
         _flughafen.OnPatrouille = () => { OnPatrouille?.Invoke(); Refresh(); };
         AddChild(_flughafen);
 

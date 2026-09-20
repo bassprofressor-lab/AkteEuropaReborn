@@ -781,6 +781,8 @@ public partial class MapViewer : Node2D
         if (_namenCheck) GD.Print(_entities.NamenCheck());
         if (_menueCheck) GD.Print(_entities.EinheitenmenueCheck());
         if (_merkerProbe) GD.Print(_entities.ZeigermerkerProbe());
+        // ⭐⭐ 20.09.2026 — die Handsteuerung Luft wird GEFLOGEN, nicht abgelesen.
+        if (_handLuftProbe) GD.Print(_entities.HandsteuerungLuftProbe());
         if (_sellCheck) _entities.SellCheckStart();
         if (_shopCheckFlag) _entities.ShopCheckStart();
         if (_buyCheckFlag) _entities.BuyCheckStart();
@@ -3978,6 +3980,14 @@ public partial class MapViewer : Node2D
             else if (a == "--bombenetikett-kaputt") MapEntityLayer.BombenetikettKaputt = true;
             else if (a == "--bombe-check") _bombeCheck = true;
             else if (a == "--staffel-aus") MapEntityLayer.StaffelAus = true;
+            // ⭐⭐ 20.09.2026 — die Handsteuerung Luft und das Flugtempo,
+            // Simulation/HandsteuerungLuft.cs und Simulation/Flugtempo.cs
+            else if (a == "--handsteuerung-luft-aus")
+                MapEntityLayer.HandsteuerungLuftAus = true;
+            else if (a == "--handhoehe-ohne-umlauf")
+                MapEntityLayer.HandhoeheOhneUmlauf = true;
+            else if (a == "--handsteuerung-luft-check") _handLuftCheck = true;
+            else if (a == "--handsteuerung-luft-probe") _handLuftProbe = true;
             else if (a == "--flugtempo-alt") MapEntityLayer.FlugtempoAlt = true;
             else if (a == "--flugtempo-check") _flugtempoCheck = true;
             else if (a == "--flughafenfenster-alt") UI.BuildingWindow.FlughafenfensterAlt = true;
@@ -5105,6 +5115,7 @@ public partial class MapViewer : Node2D
             BombeAusgeben();
             ZielwahlAusgeben();
             LuftbildAusgeben();
+            HandLuftAusgeben();
             FlugtempoAusgeben();
             GD.Print(_entities.AbsturzLine());
             GD.Print(_entities.LuftschussLine());
@@ -5323,6 +5334,7 @@ public partial class MapViewer : Node2D
     private bool _flakGedruckt, _bombeCheck, _bombeGedruckt,
                  _zielwahlCheck, _zielwahlGedruckt,
                  _luftbildCheck, _luftbildGedruckt,
+                 _handLuftCheck, _handLuftGedruckt, _handLuftProbe,
                  _flugtempoCheck, _flugtempoGedruckt;
 
     private void FlakAusgeben()
@@ -5358,6 +5370,19 @@ public partial class MapViewer : Node2D
             : "zielwahl-check: keine Zielwahl benutzt — NICHT GEMESSEN");
     }
 
+    /// <summary>⭐⭐ <c>--handsteuerung-luft-check</c> — am Ausstieg, aus
+    /// demselben Grund wie die drei darueber: eine Handsteuerung sieht man
+    /// erst, wenn einer sie geflogen hat.</summary>
+    private void HandLuftAusgeben()
+    {
+        if (_handLuftGedruckt || !_handLuftCheck) return;
+        _handLuftGedruckt = true;
+        string zeile = _entities.HandsteuerungLuftAuskunft();
+        GD.Print(zeile.Length > 0
+            ? zeile
+            : "handsteuerung-luft-check: nie von Hand geflogen — NICHT GEMESSEN");
+    }
+
     /// <summary><c>--flugtempo-check</c> — die Tempostufe und ihre Regelung
     /// (bug-348). Sie laeuft in JEDEM Lauf mit, darum darf sie auch ohne
     /// Handsteuerung eine Zahl haben.</summary>
@@ -5385,6 +5410,7 @@ public partial class MapViewer : Node2D
         BombeAusgeben();
         ZielwahlAusgeben();
         LuftbildAusgeben();
+        HandLuftAusgeben();
         FlugtempoAusgeben();
         // ⭐ 20.09.2026 — und die Flugabwehr, siehe FlakAusgeben. Dieser Weg
         // ist der, den ein GESPIELTER Lauf nimmt: Fenster zu oder zurueck ins
@@ -6528,6 +6554,14 @@ public partial class MapViewer : Node2D
         };
         _gebaeudeFenster.OnPatrouille =
             () => _entities.PatrouilleKippen(_entities.Fenstergebaeudeplatz());
+        // ⭐⭐ 20.09.2026 — die HANDSTEUERUNG LUFT (Taste 9, Befehl 502 Modus 6).
+        // Simulation/HandsteuerungLuft.cs.
+        _gebaeudeFenster.OnHandsteuerung = platz =>
+            _entities.HandsteuerungLuftBeginnen(platz);
+        // Das Original nimmt beim Eintritt die Fenster weg (0x44FE10(0)) und
+        // schaltet den Zeiger aus (byte[0xA182D0] := 0xFF @0x4315D3). Beim
+        // Austritt kommt der Zeiger zurueck; das Fenster nicht — es ist zu.
+        _entities.OnHandsteuerungLuft = an =>
         _gebaeudeFenster.OnBombeWechseln =
             platz => _entities.BombeWechseln(platz, _entities.Fenstergebaeudeplatz());
         _gebaeudeFenster.OnStaffelWeiter =
@@ -7747,6 +7781,32 @@ public partial class MapViewer : Node2D
                 ShowEnd(true, "MISSION ERFUELLT (--end-window)", record: false);
         }
 
+        // ⭐⭐ 20.09.2026 — DIE HANDSTEUERUNG LUFT, und sie geht der am Boden
+        // VOR: im Original schliessen sich beide aus (die eine haengt an uk 3
+        // eines Flugzeugs, die andere an UKOL 1 einer Bodeneinheit), aber wenn
+        // hier je beide zugleich stuenden, soll die Luft gewinnen — sie ist die
+        // einzige, bei der ein verlorener Takt die Maschine in den Hang
+        // fliegt.
+        //
+        // ⚠ Hier werden die Tasten nur GELESEN und abgelegt; gewirkt wird im
+        // SPIELTAKT (MapEntityLayer, bei DebugTicks++). Der Grund steht an
+        // HandTasteLinks: der Stufenschritt haengt am Takt, nicht am Bild.
+        if (_entities != null && _entities.HandLuftIdx >= 0)
+        {
+            _entities.HandTasteLinks   = Input.IsKeyPressed(Key.Left);
+            _entities.HandTasteRechts  = Input.IsKeyPressed(Key.Right);
+            _entities.HandTasteHoch    = Input.IsKeyPressed(Key.Up);
+            _entities.HandTasteRunter  = Input.IsKeyPressed(Key.Down);
+            // ⚠ A und Z sind die Tasten des Originals (VK 0x41 / 0x5A). Das A
+            // ist bei uns sonst eine Kameratasten-Zweitbelegung — solange die
+            // Handsteuerung laeuft, gehoert es ihr, denn diese Stelle kehrt
+            // zurueck, bevor die Kamera drankommt.
+            _entities.HandTasteSteigen = Input.IsKeyPressed(Key.A);
+            _entities.HandTasteSinken  = Input.IsKeyPressed(Key.Z);
+            _entities.HandTasteSchuss  = Input.IsKeyPressed(Key.Ctrl);
+            return;
+        }
+
         // ⭐ 08.09.2026 — DIE HANDSTEUERUNG hat Vorrang vor der Kamera. Im
         // Original schickt 0x433460 je Pfeiltaste Befehl 1 an die gesteuerte
         // Einheit; solange sie laeuft, gehoeren die Pfeile ihr und nicht dem
@@ -7899,6 +7959,15 @@ public partial class MapViewer : Node2D
                     if (mb.Pressed && _entities.ZielwahlSchwebt)
                     {
                         _entities.ZielwahlAbbrechen();
+                        break;
+                    }
+                    // ⭐⭐ 20.09.2026 — und ein Rechtsklick beendet die
+                    // HANDSTEUERUNG LUFT. Im Original ist das Befehl 30
+                    // (0x4144CC -> 0x433010, die Abwahl) und endet in
+                    // air_back_to_airport: die Maschine landet.
+                    if (mb.Pressed && _entities.HandLuftIdx >= 0)
+                    {
+                        _entities.HandsteuerungLuftBeenden("Rechtsklick");
                         break;
                     }
                     if (mb.Pressed)
@@ -8230,6 +8299,17 @@ public partial class MapViewer : Node2D
                         UpdateUnitOrderBar();
                         return;
                     }
+                    // ⭐⭐ 20.09.2026 — ESC beendet die Handsteuerung Luft. Der
+                    // Hilfetext #009 nennt ESC als Ausweg; ⚠ WELCHEN WEG das
+                    // Original dafuer nimmt, ist NICHT gelesen (Bericht §7).
+                    // V: dieselbe Abwahl 0x433010 wie der Rechtsklick — darum
+                    // hier dasselbe Ende.
+                    if (_entities.HandLuftIdx >= 0)
+                    {
+                        _entities.HandsteuerungLuftBeenden("ESC");
+                        UpdateUnitOrderBar();
+                        return;
+                    }
                     if (_entities.PlacementMode != 0)
                     {
                         _entities.CancelPlacement();
@@ -8245,7 +8325,14 @@ public partial class MapViewer : Node2D
                 // Tab jumps to the last thing that happened to us — a unit
                 // taking fire, a finished build
                 case Key.Tab: JumpToEvent(); break;
-                case Key.H:                                  // Uebersichtskarte ein/aus
+                // ⭐⭐ 20.09.2026 — H IST IM ORIGINAL DIE HANDSTEUERUNG LUFT
+                // (@0x433750, Tastentafel 0xA182E8 + 0x48). Unser
+                // Uebersichtskarten-Schalter ist eine eigene Zutat und tritt
+                // darum zurueck: H greift die gewaehlte fliegende Maschine
+                // (und beendet die laufende Handsteuerung wieder). Nur wenn es
+                // nichts zu steuern gibt, bleibt es beim alten Schalter.
+                case Key.H:
+                    if (_entities != null && _entities.HandsteuerungLuftTasteH()) break;
                     _showMinimap = !_showMinimap;
                     if (_minimap != null) _minimap.Visible = _showMinimap;
                     break;

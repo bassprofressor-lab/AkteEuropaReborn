@@ -468,9 +468,16 @@ public sealed partial class FlughafenView : Control
               "Der Knopf und die Flagge (Gebaeude +0x43, Befehl 537) sind gelesen; "
               + "was der Flugtakt mit ihr tut, ist UNGELESEN — die Wirkung bleibt "
               + "unsere AirPatrol.");
-        Knopf(font, 2, KnopfY[2], "Handsteuerung", false,
-              "Gelesen (Befehl 502 Modus 6, uk 3, Pfeile ±6°, A/Z Hoehe ±2, Strg "
-              + "schiesst), aber noch nicht gebaut.");
+        // ⭐⭐ 20.09.2026 — GEBAUT. Simulation/HandsteuerungLuft.cs.
+        Knopf(font, 2, KnopfY[2], "Handsteuerung", hat && !MapEntityLayerHandLuftAus,
+              MapEntityLayerHandLuftAus
+                  ? "--handsteuerung-luft-aus: der Knopf ist gesperrt."
+                  : hat
+                      ? "Pfeile links/rechts drehen um 6°, hoch/runter aendern die "
+                      + "Stufe, A/Z die Hoehe (Deckel 135, KEIN Boden — man kann "
+                      + "sich in den Hang fliegen), Strg schiesst. H, Rechtsklick "
+                      + "oder ESC beenden sie, dann landet die Maschine."
+                      : "Es steht keine Maschine im Hangar.");
         // »Bombe wechseln« zeigt das Original NUR bei einem Bomber.
         if (gewaehlt is { Bomber: true })
             Knopf(font, 3, KnopfY[3], "Bombe wechseln", !MapEntityLayerBombeFest47,
@@ -727,7 +734,8 @@ public sealed partial class FlughafenView : Control
             + "ist gelesen, aber nicht gebaut.",
         11 => "Patrouille (Befehl 537). Die Flagge ist gelesen, ihre Wirkung im "
             + "Flugtakt nicht.",
-        12 => "Handsteuerung — gelesen, noch nicht gebaut.",
+        12 => "Handsteuerung: Pfeile drehen (6°/Takt) und regeln die Stufe, "
+            + "A/Z die Hoehe, Strg schiesst. H / Rechtsklick / ESC beenden.",
         13 => "45 Gasbombe -> 46 Loeschmittel -> 47 Bombe, staffelweit.",
         14 => "Staffelmarke weiterdrehen; zweiter Klick auf die Zeile nimmt auf "
             + "oder heraus.",
@@ -735,6 +743,11 @@ public sealed partial class FlughafenView : Control
         20 => "Der Lagerausbau des Flughafens ist bei uns nicht gebaut.",
         _ => "",
     };
+
+    /// <summary>Gespiegelt wie die zwei darunter:
+    /// <c>--handsteuerung-luft-aus</c>.</summary>
+    private static bool MapEntityLayerHandLuftAus
+        => Rendering.MapEntityLayer.HandsteuerungLuftAus;
 
     // Die zwei Schalter liegen am Betrachter; hierher gespiegelt, damit der
     // Zeichner nicht in Rendering greifen muss.

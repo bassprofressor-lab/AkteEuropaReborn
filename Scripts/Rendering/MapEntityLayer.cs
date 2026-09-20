@@ -33498,9 +33498,20 @@ public partial class MapEntityLayer : Node2D
         // Zahlen der Pruefstaende vergleichbar.
         DebugClock += dt;
         DebugTicks++;
+
+        // ⭐⭐ 20.09.2026 — DIE HANDSTEUERUNG LUFT, je SPIELTAKT.
         // Im Original steht der Sender 0x433460 im Taktrumpf (@0x41685C), also
         // genau hier und nicht im Bildtakt — und das ist kein Schoenheitsfehler:
         // der Stufenschritt haengt an `dword[0x4FA240] & 1`, also am TAKT.
+        // Wer ihn je Bild schickt, bekommt bei 60 Bildern eine andere Steuerung
+        // als bei 30. Die Tasten selbst liest die Oberflaeche und legt sie in
+        // HandTasten ab. Siehe Simulation/HandsteuerungLuft.cs.
+        if (HandLuftIdx >= 0)
+            HandsteuerungLuftTakt(HandTasteLinks, HandTasteRechts,
+                                  HandTasteHoch, HandTasteRunter,
+                                  HandTasteSteigen, HandTasteSinken,
+                                  HandTasteSchuss);
+
         bool moved = false;
 
         _acquireTimer -= dt;
@@ -38057,6 +38068,13 @@ public partial class MapEntityLayer : Node2D
             // und der Sturz waere ein Steigflug.
             if (a.Absturz) continue;
 
+            // ⭐⭐ 20.09.2026 — uk 3: DIE HANDSTEUERUNG HAT GAR KEINEN ZWEIG.
+            // AIR_RE 446. Die Maschine fliegt mit dir und sp geradeaus, sucht
+            // kein Ziel, kreist nicht und kehrt auch bei leerem Tank nicht um
+            // (die Sprit-Heimkehr prueft `uk != 3`, AIR_RE 88) — man kann sie
+            // leerfliegen. Auch die Hoehenregelung bleibt aus: die Hoehe gibt
+            // der Spieler mit A/Z. Siehe Simulation/HandsteuerungLuft.cs.
+            if (IstHandgesteuert(a)) { AirDrift(a, dt); continue; }
 
             FlughoeheTakt(a);
             // ⭐⭐ 20.09.2026, bug-348 — DAS TEMPO WIRD GEREGELT, es ist keine
@@ -38433,11 +38451,24 @@ public partial class MapEntityLayer : Node2D
             if (a.Pos.X < _ox + rand || a.Pos.X > maxX - rand ||
                 a.Pos.Y < _oy + rand || a.Pos.Y > maxY - rand)
             {
+                // ⚠ UNTER HANDSTEUERUNG WIRD NUR GEKLEMMT. Umkehren oder
+                // heimschicken naehme dem Spieler mitten im Flug die Steuerung
+                // aus der Hand — und das Original hat an dieser Stelle gar
+                // keine Sperre (es zaehlt `col` schrankenlos weiter,
+                // @0x4250A4). Benannte Abweichung, siehe HandsteuerungLuft.cs.
+                if (IstHandgesteuert(a))
+                {
+                    a.Pos = new Vector2(Mathf.Clamp(a.Pos.X, _ox + rand, maxX - rand),
+                                        Mathf.Clamp(a.Pos.Y, _oy + rand, maxY - rand));
+                }
+                else
+                {
                 if (AirHeadHome(a)) return;      // ein Flughafen nimmt ihn auf
                 a.Dir = (a.Dir + 180) % 360;     // sonst: kehrtmachen
                 a.Pos = new Vector2(Mathf.Clamp(a.Pos.X, _ox + rand, maxX - rand),
                                     Mathf.Clamp(a.Pos.Y, _oy + rand, maxY - rand));
                 AirTurnedBack++;
+                }
             }
         }
 

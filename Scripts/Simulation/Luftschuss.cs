@@ -95,10 +95,14 @@ public partial class MapEntityLayer
     ///
     /// <para>Gibt zurück, ob geschossen wurde. Der Aufrufer zieht danach die
     /// Munition ab und setzt seinen Wendepunkt.</para></summary>
-    private bool LuftSalve(Special a, Entity ziel, Vector2 aim)
+    /// <param name="ziel">das getroffene Ding — <b>darf null sein</b>. Die
+    /// Handsteuerung schiesst geradeaus, und dann gibt es keines: das Geschoss
+    /// fliegt auf den Punkt. Nur die zwei Zweige, die einen Griff brauchen
+    /// (das Nullmodell und der Helistrahl), verlangen eines.</param>
+    private bool LuftSalve(Special a, Entity? ziel, Vector2 aim)
     {
         LuftSalven++;
-        if (LuftschussAlt)
+        if (LuftschussAlt && ziel != null)
         {
             _effects.Add(new Effect { Pos = aim - new Vector2(0, 8),
                                       Kind = "explosion", FrameTime = 0.05f });
@@ -108,7 +112,7 @@ public partial class MapEntityLayer
         }
 
         // Der Kampfhubschrauber: ein STRAHL, kein Geschoss.
-        if (a.Kind is >= 10 and <= 12 && !HeliStrahlAus)
+        if (a.Kind is >= 10 and <= 12 && !HeliStrahlAus && ziel != null)
         {
             StrahlAnlegen(a, ziel, aim);
             return true;
