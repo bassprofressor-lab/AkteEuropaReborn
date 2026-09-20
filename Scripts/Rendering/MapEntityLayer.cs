@@ -5627,6 +5627,13 @@ public partial class MapEntityLayer : Node2D
 
     /// <summary>The size of the map in the same pixels the entities live in, so
     /// the overview can scale between the two.</summary>
+    /// <summary>⭐ 20.09.2026 — die Kartengrösse in <b>ZELLEN</b>. Der
+    /// Kartenschirm (Fensterart 3) rechnet in Zellen, nicht in Bildpunkten:
+    /// <c>dword[0x542DC4]</c> und <c>dword[0x542DF8]</c> sind die zwei Werte,
+    /// aus denen @0x444E21 die Fenstergrösse macht.</summary>
+    public Vector2I MapZellSize()
+        => _nav == null ? Vector2I.Zero : new Vector2I(_nav.Width, _nav.Height);
+
     public Vector2 MapPixelSize()
         => _nav == null ? Vector2.Zero
                         : new Vector2(_ox * 2 + _nav.Width * TileW, _oy * 2 + _nav.Height * TileH);

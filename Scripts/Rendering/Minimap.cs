@@ -128,7 +128,12 @@ public partial class Minimap : Control
 
     public void Setup(Texture2D terrain, Vector2 mapPixels,
                       Func<List<(Vector2 Pos, int Owner, bool Building)>> dots,
-                      Func<Rect2> view, Func<List<Alarm>> alarms, Action<Vector2> jump,
+                      // ⭐ 20.09.2026 — die drei sind jetzt WEGLASSBAR. Der
+                      // Kartenschirm (Fensterart 3, Modus 2) hat keinen
+                      // Bildausschnitt zu zeigen und springt auch nicht mit der
+                      // Kamera: er waehlt ein ZIEL. Der Zeichner fragt alle drei
+                      // ohnehin auf null ab.
+                      Func<Rect2>? view, Func<List<Alarm>>? alarms, Action<Vector2>? jump,
                       Func<Texture2D?>? fog = null, Func<Vector2?>? home = null,
                       Func<Texture2D?>? objekte = null)
     {

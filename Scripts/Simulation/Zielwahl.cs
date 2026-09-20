@@ -52,6 +52,16 @@ public partial class MapEntityLayer : Node2D
     /// <summary><c>--zielwahl-aus</c> — »Angriff« startet ohne Ziel.</summary>
     public static bool ZielwahlAus;
 
+    /// <summary>⭐⭐ 20.09.2026 — <c>--zielwahl-minimap</c>: die Zielwahl nimmt
+    /// die <b>stehende</b> Übersichtskarte statt des eigenen Kartenschirms
+    /// (Fensterart 3). Das ist der Stand vom 19.09. und genau der Gegenschalter,
+    /// den die Lesung dafür vorgesehen hat. Seit dem 20.09. geht der
+    /// Kartenschirm auf — siehe <c>UI/KartenschirmView.cs</c>.
+    ///
+    /// <para>⚠ Der Klick auf die HAUPTKARTE gilt in beiden Fällen: der ist
+    /// Original (Zustand 7 → <c>0x4376B9</c>).</para></summary>
+    public static bool ZielwahlMinimap;
+
     /// <summary><c>--angriff-ohne-heimkehr</c> — das Nullmodell: ein erledigter
     /// Angriffsauftrag endet NICHT mit der Heimkehr. Unter ihm muss die Zahl
     /// der Heimkehren gleich bleiben (sie wird gezählt, bevor geflogen wird)

@@ -783,6 +783,8 @@ public partial class MapViewer : Node2D
         if (_merkerProbe) GD.Print(_entities.ZeigermerkerProbe());
         // ⭐⭐ 20.09.2026 — die Handsteuerung Luft wird GEFLOGEN, nicht abgelesen.
         if (_handLuftProbe) GD.Print(_entities.HandsteuerungLuftProbe());
+        // ⭐⭐ 20.09.2026 — der Kartenschirm (Fensterart 3), Bauaufgabe 2.
+        if (_kartenschirmProbe) GD.Print(KartenschirmProbeLauf());
         if (_sellCheck) _entities.SellCheckStart();
         if (_shopCheckFlag) _entities.ShopCheckStart();
         if (_buyCheckFlag) _entities.BuyCheckStart();
@@ -3939,6 +3941,8 @@ public partial class MapViewer : Node2D
             else if (a == "--flughafenfenster-bild") _flughafenfensterBild = true;
             else if (a == "--innenrahmen-hohl") UI.WindowChrome.InnenrahmenHohl = true;
             else if (a == "--zielwahl-aus") MapEntityLayer.ZielwahlAus = true;
+            else if (a == "--zielwahl-minimap") MapEntityLayer.ZielwahlMinimap = true;
+            else if (a == "--kartenschirm-probe") _kartenschirmProbe = true;
             else if (a == "--angriff-ohne-heimkehr") MapEntityLayer.AngriffOhneHeimkehr = true;
             else if (a == "--luftbild-check") _luftbildCheck = true;
             else if (a == "--raute-fuer-bildlose") MapEntityLayer.RauteFuerBildlose = true;
@@ -5335,6 +5339,7 @@ public partial class MapViewer : Node2D
                  _zielwahlCheck, _zielwahlGedruckt,
                  _luftbildCheck, _luftbildGedruckt,
                  _handLuftCheck, _handLuftGedruckt, _handLuftProbe,
+                 _kartenschirmProbe,
                  _flugtempoCheck, _flugtempoGedruckt;
 
     private void FlakAusgeben()
@@ -6517,6 +6522,58 @@ public partial class MapViewer : Node2D
     /// <summary>Die Ebene des Fensters: ÜBER dem Bedienfeld (2), aber UNTER den
     /// Hilfefenstern der Mission (90) und der Abrechnung (95) — dieselbe Regel,
     /// die BuildEndBanner sich schon einmal einhandeln musste.</summary>
+    private UI.KartenschirmView? _kartenschirm;
+
+    /// <summary>Der Koerper des Kartenschirms bekommt <b>dieselben Zulieferer</b>
+    /// wie die stehende Uebersichtskarte — Gelaende, Nebel, Objektebene, Punkte,
+    /// Heimatmarke. ⚠ Ohne Sichtfenster und ohne Sprung-Rueckruf: dieses Fenster
+    /// waehlt ein ZIEL, es bewegt die Kamera nicht (Modus 2, nicht Modus 0).</summary>
+    private void FuelleKartenschirm(Minimap m)
+    {
+        if (_sprite.Texture == null) return;
+        m.Setup(_sprite.Texture, _entities.MapPixelSize(),
+                _entities.MinimapDots,
+                view: null,                    // kein Sichtfenster (Modus 2)
+                alarms: _entities.MinimapAlarms,
+                jump: null,                    // und kein Kamerasprung
+                _entities.FogTextureUebersicht,
+                _entities.MinimapHome,
+                () => _entities.ObjektEbene);
+    }
+
+    /// <summary>Den Kartenschirm an dieser Bildschirmstelle oeffnen. Das
+    /// Original nimmt die Mausstelle minus 3 in beiden Achsen
+    /// (@0x449A97/@0x449AA3).</summary>
+    private void KartenschirmAuf(Vector2 stelle, int zoom, int flughafen)
+    {
+        if (_kartenschirm == null) return;
+        var zellen = _entities.MapZellSize();
+        if (zellen.X <= 0 || zellen.Y <= 0) return;
+        _kartenschirm.Zeige(zellen, zoom, flughafen);
+        // ⚠ Auf dem Schirm halten. Das Original oeffnet stur an der Maus; bei
+        // uns ist der Schirm groesser und das Fenster kleiner, aber ein Fenster,
+        // das halb draussen aufgeht, waere kein originalgetreues Fenster,
+        // sondern ein unbedienbares. Benannte Abweichung.
+        var schirm = GetViewport().GetVisibleRect().Size;
+        _kartenschirm.Position = new Vector2(
+            Mathf.Clamp(stelle.X, 0, Mathf.Max(0, schirm.X - _kartenschirm.Size.X)),
+            Mathf.Clamp(stelle.Y, 0, Mathf.Max(0, schirm.Y - _kartenschirm.Size.Y)));
+        _kartenschirm.Visible = true;
+        _kartenschirm.MoveToFront();          // 0x44FC20 @0x444DA0
+        KartenschirmAufgegangen++;
+    }
+
+    private void KartenschirmZu()
+    {
+        if (_kartenschirm == null || !_kartenschirm.Visible) return;
+        _kartenschirm.Visible = false;
+        KartenschirmGeschlossen++;
+    }
+
+    /// <summary>Wie oft der Kartenschirm auf- und zugegangen ist — die
+    /// Kontrollzahl des Pruefstands.</summary>
+    public int KartenschirmAufgegangen, KartenschirmGeschlossen;
+
     private const int BaseWindowLayer = 80;
 
     private void BuildBaseWindow()
@@ -6529,6 +6586,42 @@ public partial class MapViewer : Node2D
         // Die drei Gebaeudefenster teilen sich die Ebene mit dem Baufenster.
         _gebaeudeFenster = new UI.BuildingWindow { Visible = false };
         layer.AddChild(_gebaeudeFenster);
+
+        // ⭐⭐ 20.09.2026 — DER KARTENSCHIRM (Fensterart 3). Er liegt auf
+        // derselben Ebene, aber DAHINTER hinzugefuegt: er geht ueber dem
+        // Flughafenfenster auf, und das Original holt ihn ausdruecklich nach
+        // vorn (0x44FC20 @0x444DA0), wenn er schon offen ist.
+        _kartenschirm = new UI.KartenschirmView { Visible = false };
+        layer.AddChild(_kartenschirm);
+        _kartenschirm.Fuellen = FuelleKartenschirm;
+        _kartenschirm.OnZelle = (c, r) =>
+        {
+            // Das Fenster schliesst NACH dem Klick (Bericht §6, Bauaufgabe 2).
+            // ⚠ Erst schliessen, dann den Klick: ZielwahlKlick ruft OnZielwahl
+            // (false) und wuerde sonst auf ein Fenster treffen, das der eigene
+            // Rueckruf gerade zumacht.
+            KartenschirmZu();
+            _entities.ZielwahlKlick(c, r);
+        };
+        _kartenschirm.OnClose = () =>
+        {
+            KartenschirmZu();
+            _entities.ZielwahlAbbrechen();     // Schliessen IST der Abbruch
+        };
+        // Zoom: das Original SCHLIESST und oeffnet mit neuem Index neu
+        // (@0x448F84), unter Mitnahme von Modus und Flughafenfenster.
+        // ⚠⚠ 20.09.2026 — hier stand nur das Oeffnen, und die Kontrollzahl des
+        // Pruefstands hat es gefunden: »2x auf = 1x zu NEIN«. Ein Fenster, das
+        // aufgeht, ohne dass das alte zugeht, ist nicht nur eine falsche Zahl —
+        // beim naechsten Zaehlerpaar (Zielwahl, Handsteuerung) waere derselbe
+        // Fehler eine haengende Zielwahl. Genau dafuer gibt es die Zahl.
+        _kartenschirm.OnZoom = z =>
+        {
+            var wo = _kartenschirm.Position;
+            int fh = _kartenschirm.Flughafen;
+            KartenschirmZu();
+            KartenschirmAuf(wo, z, fh);
+        };
         _gebaeudeFenster.Daten = _entities.BuildingWindowData;
         _gebaeudeFenster.OnStart = _entities.BuildingWindowStart;
         _gebaeudeFenster.OnRepair = _entities.BuildingWindowRepair;
@@ -6562,6 +6655,29 @@ public partial class MapViewer : Node2D
         // schaltet den Zeiger aus (byte[0xA182D0] := 0xFF @0x4315D3). Beim
         // Austritt kommt der Zeiger zurueck; das Fenster nicht — es ist zu.
         _entities.OnHandsteuerungLuft = an =>
+        {
+            if (!an) return;
+            if (_gebaeudeFenster.Visible) _gebaeudeFenster.SchliessenVonAussen();
+        };
+        // ⭐⭐ 20.09.2026, Bauaufgabe 2 — DER ANGRIFF OEFFNET DEN KARTENSCHIRM.
+        // Das Original ruft 0x444D90(MausX-3, MausY-3, Fenster, 0) direkt aus
+        // dem Knopf (@0x449A8F..0x449AA8) und setzt DANACH byte[0x4FD640] auf
+        // Fenster+1 — bei uns ist das ZielwahlSchwebt, und der Knopf setzt es
+        // zuerst. Die Reihenfolge ist gleichgueltig, weil beides in einem Zug
+        // passiert; die Wirkung ist dieselbe.
+        // ⚠ Unter --zielwahl-minimap bleibt es beim Stand vom 19.09.: die
+        // Zielwahl schwebt, und der Klick auf die STEHENDE Uebersichtskarte
+        // setzt das Ziel. Der Klick auf die HAUPTKARTE gilt in beiden Faellen —
+        // der ist Original (Zustand 7).
+        _entities.OnZielwahl = an =>
+        {
+            if (MapEntityLayer.ZielwahlMinimap) return;
+            if (!an) { KartenschirmZu(); return; }
+            var maus = GetViewport().GetMousePosition()
+                     - new Vector2(UI.KartenschirmView.MausVersatz,
+                                   UI.KartenschirmView.MausVersatz);
+            KartenschirmAuf(maus, 0, _entities.Fenstergebaeudeplatz());
+        };
         _gebaeudeFenster.OnBombeWechseln =
             platz => _entities.BombeWechseln(platz, _entities.Fenstergebaeudeplatz());
         _gebaeudeFenster.OnStaffelWeiter =
